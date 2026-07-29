@@ -19,11 +19,16 @@ export const TEX_KIND = {
   FIRE_FLIP: 3,
   SPARK_STREAK: 4,
   FIREBALL_FLIP: 5,
-  // chip atlas, 2x2, consecutive
+  // chip atlas, 3x3, consecutive
   CHIP: 10,
   LEAF: 11,
   GLASS_SHARD: 12,
   DROPLET: 13,
+  SPLINTER_A: 14,
+  SPLINTER_B: 15,
+  CHIP_B: 16,
+  CHIP_C: 17,
+  GRIT: 18,
   // glow atlas, 4x4, consecutive
   GLOW_SOFT: 20,
   FLASH_STAR_A: 21,
@@ -364,6 +369,47 @@ void genLeaf(vec2 uv, inout Sprite s) {
   s.alpha = mask;
 }
 
+/**
+ * Wood splinter: a long sliver with a torn end.
+ *
+ * Wood does not chip, it splits along the grain, so the fragment it throws is a
+ * needle several times longer than it is wide with a ragged break at one end and
+ * a point at the other. Reusing the stone chip for it is the difference between
+ * splinters and confetti — at the size these fly, the aspect ratio of the
+ * silhouette is the only cue the eye gets about what the wall is made of.
+ */
+void genSplinter(vec2 uv, float variant, inout Sprite s) {
+  vec2 p = uv * 2.0;
+  // Sheared, so the sliver is not a symmetrical spindle lying on the axis.
+  p.y += p.x * (hash12(vec2(variant, 3.1)) - 0.5) * 0.55;
+  float h = sat(p.x * 0.5 + 0.5);
+  // Widest a third of the way from the torn end, tapering to nothing at the tip.
+  float taper = pow(1.0 - h, 0.42) * pow(h, 0.22);
+  // Fibres run the length of the sliver, so the edge frays along it rather than
+  // wobbling like a coastline.
+  float fray = 0.78 + 0.4 * hash12(vec2(floor(p.x * 9.0), variant * 5.3));
+  float halfWidth = 0.19 * taper * fray;
+  float across = abs(p.y) / max(halfWidth, 1e-4);
+  float mask = smoothstep(1.05, 0.7, across) * step(abs(p.x), 1.0);
+  // Long grain lines, and a bright torn end where the fibres pulled apart.
+  float grain = sat(1.0 - abs(fract(p.y * 26.0 + variant) - 0.5) * 5.0) * 0.22;
+  float tear = smoothstep(-1.0, -0.72, p.x) * 0.4;
+  s.color = vec3(0.62 + grain + tear);
+  s.alpha = mask;
+}
+
+/** Grain of sand or grit: barely more than a lit speck with a flat side. */
+void genGrit(vec2 uv, inout Sprite s) {
+  float d = -1.0;
+  for (int k = 0; k < 4; k++) {
+    float fk = float(k);
+    float ang = (fk + hash12(vec2(fk, 2.9))) * 1.5707963;
+    d = max(d, dot(uv, vec2(cos(ang), sin(ang))) - (0.2 + 0.16 * hash12(vec2(fk * 3.1, 6.2))));
+  }
+  s.color = vec3(0.82);
+  s.alpha = smoothstep(0.02, -0.01, d);
+}
+
 void genGlassShard(vec2 uv, inout Sprite s) {
   // A long thin sliver rather than a filled triangle: glass breaks into needles,
   // and what is actually visible of one in flight is the lit edge, not the pane
@@ -656,15 +702,23 @@ void genGlassWeb(vec2 uv, float variant, inout Sprite s) {
 void genDivot(vec2 uv, float variant, float apron, inout Sprite s) {
   float r = length(uv) * 2.0;
   // A round hole punched in dirt is a hole for about a second and a scuff after
-  // that, so the pit stays small and most of the mark is the grit thrown out of
-  // it — which is *paler* than the ground, being dry and freshly turned over.
-  float pit = blob(uv, 0.12, 4.0, 0.32, 0.09, variant);
-  float grit = fbmValue2(uv * 6.0 + variant * 3.0, vec2(512.0), 4);
-  float throwOut = pow(sat(1.0 - r / 0.92), 1.5) * sat(grit * 2.0 - 0.42);
-  float a = sat(pit * 0.9 + throwOut * apron * 1.5);
-  a *= smoothstep(1.0, 0.72, r);
+  // that, so the pit stays shallow and most of the mark is the grit thrown out
+  // of it — which is *paler* than the ground, being dry and freshly turned over.
+  //
+  // The pit has to be a decent fraction of the mark rather than a dot at the
+  // centre of it. A small dark centre inside a pale apron is an annulus, and a
+  // bullet leaves no annulus in sand; a dozen of them down a firing lane read as
+  // spilled coffee rings, which is worse than having no decal at all.
+  float pit = blob(uv, 0.26, 4.0, 0.32, 0.16, variant);
+  float grit = fbmValue2(uv * 7.0 + variant * 3.0, vec2(512.0), 4);
+  // Thresholded hard so the apron breaks into speckle. A smooth radial falloff
+  // is what draws the clean ring; scattered grains are what the ground actually
+  // gets, and they also hide the circular footprint of the quad.
+  float throwOut = pow(sat(1.0 - r / 0.95), 1.1) * sat(grit * 2.2 - 0.9);
+  float a = sat(pit * 0.8 + throwOut * apron * 1.6);
+  a *= smoothstep(1.0, 0.5, r);
   // Damp subsoil in the pit, dry thrown-out grit around it.
-  s.color = vec3(sat(max(0.72, throwOut * 2.4) - pit * 1.9));
+  s.color = vec3(sat(0.88 - pit * 0.42 + throwOut * 0.22));
   s.alpha = a;
 }
 
@@ -791,6 +845,11 @@ Sprite generate(int kind, vec2 uv, float t) {
   else if (kind == 11) genLeaf(uv, s);
   else if (kind == 12) genGlassShard(uv, s);
   else if (kind == 13) genDroplet(uv, s);
+  else if (kind == 14) genSplinter(uv, t, s);
+  else if (kind == 15) genSplinter(uv, t, s);
+  else if (kind == 16) genChip(uv, t, s);
+  else if (kind == 17) genChip(uv, t, s);
+  else if (kind == 18) genGrit(uv, s);
   else if (kind == 20) genGlowSoft(uv, s);
   else if (kind == 21) genFlashStar(uv, 1.0, s);
   else if (kind == 22) genFlashStar(uv, 2.0, s);

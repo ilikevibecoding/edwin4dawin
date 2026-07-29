@@ -2,8 +2,11 @@ import * as THREE from 'three';
 import { SoAPool } from '../core/ObjectPool';
 import { buildParticleShader } from './shaders/ParticleShader';
 
-/** Floats per instance. Six vec4s of spawn state plus one of atlas/curve data. */
-const STRIDE = 28;
+/**
+ * Floats per instance. Six vec4s of spawn state, one of atlas/curve data and one
+ * of per-particle shading and collision state.
+ */
+const STRIDE = 32;
 
 /**
  * Spawn parameters. One shared mutable instance is filled and handed to
@@ -66,9 +69,33 @@ export interface ParticleDesc {
   fadeIn: number;
   /** Depth-fade band in metres for soft particles. */
   softness: number;
+  /**
+   * How much of the sun reaches this particle, 0..1.
+   *
+   * Particles are not in the shadow map, so without this every puff of dust in
+   * a shadowed street is shaded as though it were in full sun — which is most of
+   * why a burst of dust washes out a frame it should barely tint. Emitters probe
+   * occlusion once per effect and hand the answer down; the sun term in the
+   * shader is scaled by it and the ambient term is not, so a shadowed particle
+   * settles onto the sky fill instead of going black.
+   */
+  sunVisibility: number;
+  /**
+   * World height of the ground under this particle, for groups that bounce.
+   *
+   * `NO_FLOOR` disables the collision entirely. Emitters that know where the
+   * floor is — every impact and every explosion already probes it — pass it so
+   * chips and sparks land and settle instead of sinking through the pavement.
+   */
+  floorY: number;
+  /** Restitution of the ground bounce, 0 dead stop to 1 perfectly elastic. */
+  bounce: number;
   /** 0..255; the lowest-priority live particles are recycled first. */
   priority: number;
 }
+
+/** Sentinel `floorY` meaning "this particle never collides". */
+export const NO_FLOOR = -1e9;
 
 export const PD: ParticleDesc = {
   px: 0,
@@ -98,6 +125,9 @@ export const PD: ParticleDesc = {
   frames: 0,
   fadeIn: 0.1,
   softness: 0.5,
+  sunVisibility: 1,
+  floorY: NO_FLOOR,
+  bounce: 0.3,
   priority: 128,
 };
 
@@ -122,6 +152,9 @@ export function resetDesc(): ParticleDesc {
   d.frames = 0;
   d.fadeIn = 0.1;
   d.softness = 0.5;
+  d.sunVisibility = 1;
+  d.floorY = NO_FLOOR;
+  d.bounce = 0.3;
   d.priority = 128;
   return d;
 }
@@ -141,6 +174,17 @@ export interface ParticleGroupOptions {
   ground?: boolean;
   /** Dark texels occlude while bright ones add; for fireballs. */
   soot?: boolean;
+  /**
+   * Drive colour off a cooling ramp instead of a two-stop lerp.
+   *
+   * A linear mix from white-hot to dark red never passes through yellow or
+   * orange: the bright endpoint dominates the interpolation, so the sprite goes
+   * from white to pale pink to dark and the whole impression of something
+   * cooling is lost. The ramp visits the temperatures in order.
+   */
+  blackbody?: boolean;
+  /** Bounce off `floorY` and settle instead of falling through it. */
+  bounce?: boolean;
   turbulence: boolean;
   /** Exponent shaping the birth-size to death-size interpolation. */
   sizeExponent: number;
@@ -217,6 +261,7 @@ export class ParticleGroup {
     this.geometry.setAttribute('aCol1', new THREE.InterleavedBufferAttribute(this.buffer, 4, 16));
     this.geometry.setAttribute('aPhys', new THREE.InterleavedBufferAttribute(this.buffer, 4, 20));
     this.geometry.setAttribute('aMisc', new THREE.InterleavedBufferAttribute(this.buffer, 4, 24));
+    this.geometry.setAttribute('aShade', new THREE.InterleavedBufferAttribute(this.buffer, 4, 28));
     this.geometry.instanceCount = 0;
     // Bounds are meaningless for a GPU-simulated cloud, and the group is a
     // single draw either way.
@@ -231,6 +276,8 @@ export class ParticleGroup {
       turbulence: opts.turbulence,
       straightAlpha: opts.viewmodel,
       soot: opts.soot === true && !opts.viewmodel,
+      blackbody: opts.blackbody === true,
+      bounce: opts.bounce === true,
     });
 
     this.material = new THREE.ShaderMaterial({
@@ -257,6 +304,7 @@ export class ParticleGroup {
         uSunDirView: { value: new THREE.Vector3(0, 1, 0) },
         uSunColor: { value: new THREE.Color(1, 1, 1) },
         uAmbientColor: { value: new THREE.Color(0.2, 0.24, 0.3) },
+        uUpView: { value: new THREE.Vector3(0, 1, 0) },
         uNearFade: { value: new THREE.Vector2(opts.nearFadeStart, opts.nearFadeRange) },
         uDepthMap: { value: null },
         uDepthRange: { value: new THREE.Vector2(0.05, 110) },
@@ -345,6 +393,10 @@ export class ParticleGroup {
     a[o + 25] = d.frames;
     a[o + 26] = d.fadeIn;
     a[o + 27] = d.softness;
+    a[o + 28] = d.sunVisibility;
+    a[o + 29] = d.floorY;
+    a[o + 30] = d.bounce;
+    a[o + 31] = 0;
 
     this.death[index] = spawnTime + d.life;
     this.priority[index] = d.priority;
@@ -518,6 +570,9 @@ export class ParticleSystem {
       // The sun is already expressed in camera space, which is exactly the
       // viewmodel scene's space, so both group kinds share it.
       (u.uSunDirView.value as THREE.Vector3).copy(sun);
+      // Both group kinds shade in the same camera space, so world up is the
+      // gravity vector negated for either of them.
+      (u.uUpView.value as THREE.Vector3).copy(down).negate();
       const gravity = u.uGravityDir.value as THREE.Vector3;
       if (g.viewmodel) gravity.copy(down);
       else gravity.set(0, -1, 0);

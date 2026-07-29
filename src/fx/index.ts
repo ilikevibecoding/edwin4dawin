@@ -47,6 +47,9 @@ const GROUND_FILL_SHARE = 0.45;
  */
 const SKY_FILL_LUMINANCE = 0.3;
 
+/** Ceiling on fixed steps the dev bridge will run for one advance. */
+const MAX_DEV_PHYSICS_STEPS = 900;
+
 export interface FXStats {
   particles: number;
   particleCapacity: number;
@@ -188,18 +191,66 @@ export class FXSystemImpl implements FXSystem, System {
 
     const params = new URLSearchParams(location.search);
     if (params.get('fxdemo') === '1') {
-      this.demo = new FXDemo(this, ctx, this.textures);
+      this.demo = new FXDemo(this, ctx, this.textures, {
+        // Advance the effects clock and the emitters that meter over time,
+        // without the particle upload, the depth capture or a present. The
+        // particles themselves need no stepping at all: each one is a closed-form
+        // function of `uTime`, so moving the clock is enough to see the whole
+        // cloud at the age asked for.
+        step: (dt) => {
+          ctx.time.elapsed += dt;
+          this.deps.now = ctx.time.elapsed;
+          this.deps.tickLightBudget(dt);
+          this.explosions.update(dt);
+          this.volumetrics.update(dt);
+          this.shells.update(dt);
+          this.debris.update(dt);
+          this.contrails.update(dt);
+          this.stepPhysics(dt);
+        },
+        setFloor: (y) => {
+          this.deps.floorOverride = y;
+        },
+        stats: () => this.stats,
+        groups: () => {
+          const counts: Record<string, number> = {};
+          for (const group of this.particles.all) counts[group.name] = group.liveCount;
+          return counts;
+        },
+        light: (position) => ({
+          sun: this.sunColor.toArray(),
+          ambient: this.ambientColor.toArray(),
+          visibility: this.deps.sunVisibility(position),
+        }),
+      });
     }
     if (this.demo || params.get('fxstats') === '1') {
       (window as unknown as { __FX__: unknown }).__FX__ = () => this.stats;
-    }
-    if (this.demo) {
       // Particles cannot be debugged from a screenshot alone: an effect that is
       // absent because nothing spawned looks identical to one that spawned and
       // was then erased by a depth fade or drawn behind the weapon. This reports
       // which of the two it is.
       (window as unknown as { __FXDIAG__: unknown }).__FXDIAG__ = () => this.diagnostics();
     }
+  }
+
+  /**
+   * Dev-only: drive the physics world forward alongside the effects clock.
+   *
+   * The GPU particles need no stepping — each is a closed-form function of the
+   * clock — but hero debris rides real rigid bodies, and the engine only runs
+   * fixed steps while `timeScale` is non-zero. Without this a phase capture
+   * photographs every chunk still sitting at the seat of the blast, which reads
+   * exactly like debris that never got any velocity.
+   */
+  private stepPhysics(dt: number): void {
+    const physics = this.deps.physics;
+    if (!physics?.ready || !physics.fixedUpdate) return;
+    const fixed = this.ctx.time.fixedStep;
+    // Long samples exist to look at settled smoke, by which time every chunk has
+    // retired; simulating minutes of contact solver to find that out is waste.
+    const steps = Math.min(Math.round(dt / fixed), MAX_DEV_PHYSICS_STEPS);
+    for (let i = 0; i < steps; i++) physics.fixedUpdate(fixed, this.ctx);
   }
 
   /** Dev-only: live population per group plus the demo's current staging. */
@@ -271,9 +322,11 @@ export class FXSystemImpl implements FXSystem, System {
 
   explosion(position: THREE.Vector3, radius: number, kind: ExplosionKind): void {
     if (!this.explosions.explode(position, radius, kind)) return;
-    // Hero chunks with real rigid bodies, on top of the GPU ejecta cloud.
+    // Hero chunks with real rigid bodies, on top of the GPU ejecta cloud. They
+    // start outside the fireball, not at the seat of it, or the one opaque thing
+    // in the effect sits over the brightest part of it.
     const count = kind === 'airstrike' ? 80 : kind === 'grenade' ? 20 : 34;
-    this.debris.burst(position, UP, count, 'concrete', 1, true);
+    this.debris.burst(position, UP, count, 'concrete', 1, true, Math.min(radius * 0.5, 2.6));
   }
 
   smoke(position: THREE.Vector3, radius: number, duration: number, color?: number): void {

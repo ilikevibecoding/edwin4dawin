@@ -16,8 +16,17 @@ const STAR_CELLS = [GLOW.STAR_A, GLOW.STAR_B, GLOW.STAR_C, GLOW.STAR_D, GLOW.STA
  * primer really does fire somewhere between frames, so starting the flash a few
  * milliseconds in the past is both cheap and closer to the truth: the spawn frame
  * catches it near its peak instead of at zero.
+ *
+ * Sized to the layers' fade-in and no larger. Overshooting it is worse than
+ * having none: the glow group's envelope falls off steeply from the moment it
+ * peaks, so a lead of twelve milliseconds against a twenty-millisecond core
+ * hands the very first frame a flash that is already two thirds spent, and the
+ * player sees a dim orange smudge instead of the thing going off.
  */
-const IGNITION_LEAD = 0.012;
+const IGNITION_LEAD = 0.005;
+
+/** Beyond this, a muzzle flash's own pool of light is not visible to anyone. */
+const LIGHT_RANGE_SQ = 42 * 42;
 
 /**
  * The muzzle flash.
@@ -68,36 +77,73 @@ export class MuzzleFlashEffects {
     const size = 0.2 * scale * (suppressed ? 0.34 : 1) * (inViewmodelScene ? 1.25 : 1);
     const heat = suppressed ? 0.34 : 1;
 
-    this.star(glow, now, size, heat);
-    this.core(glow, now, size, heat);
+    // Per-shot variation. Real flashes are not a sprite stamped at a fixed
+    // brightness: the charge burns differently every round, and a burst where
+    // every flash is identical reads as a looping animation.
+    const shot = rng.range(0.78, 1.3);
+
+    this.star(glow, now, size * shot, heat * shot, 0);
+    // A second, smaller lobe thrown off-axis. Five star variants at a random
+    // roll are still five *symmetrical* stars; the asymmetry has to come from
+    // something being off-centre, and a real flash is lopsided because the gas
+    // leaves through whatever the muzzle device lets it out of.
+    if (!suppressed && rng.bool(0.72)) {
+      this.star(glow, now, size * rng.range(0.4, 0.7), heat * rng.range(0.5, 0.85), 0.35);
+    }
+    this.core(glow, now, size * shot, heat * shot);
     this.gas(glow, now, size, heat, suppressed);
     this.powder(sparkGroup, now, size, heat, suppressed);
     this.smoke(smokeGroup, now, size, suppressed, inViewmodelScene);
 
     // Weapons already lights the world for the local player's shot, so only
-    // world-space flashes — every AI weapon — request one here.
-    if (!inViewmodelScene && !suppressed) {
-      this.deps.requestLight(
-        position,
-        0xffcb8c,
-        16 + scale * 30,
-        3.6 + scale * 3.2,
-        0.05,
-      );
+    // world-space flashes — every AI weapon, and the chopper's minigun — request
+    // one here. Past its own falloff distance a muzzle light contributes nothing
+    // the player can see and only occupies a pool slot an explosion wants, so a
+    // firefight across the map does not spend the budget on itself.
+    //
+    // Rate limited rather than unconditional. The AI already lights its own
+    // shots, so every hostile rifle round would otherwise put two lights in a
+    // pool of a handful, and a squad firing together evicts the explosion light
+    // that the player actually needs to see. The chopper's minigun has no such
+    // light of its own and is the reason this stays here at all; gated, it still
+    // gets one on most rounds, which at that rate of fire is a continuous glow.
+    if (!inViewmodelScene && !suppressed && this.deps.distanceSqTo(position) < LIGHT_RANGE_SQ) {
+      this.deps.requestSmallLight(position, 0xffcb8c, 18 + scale * 34, 5 + scale * 5, 0.06);
     }
   }
 
   /** The silhouette: a random petal variant at a random roll. */
-  private star(group: ParticleGroup, now: number, size: number, heat: number): void {
+  private star(
+    group: ParticleGroup,
+    now: number,
+    size: number,
+    heat: number,
+    offset: number,
+  ): void {
     const d = resetDesc();
-    d.px = this.point.x;
-    d.py = this.point.y;
-    d.pz = this.point.z;
-    // 40-60 ms. Long enough to survive a frame at 60 Hz, short enough that it
-    // never reads as a lamp hanging off the barrel.
-    d.life = rng.range(0.042, 0.058);
-    d.size0 = size * 0.85;
-    d.size1 = size * 1.7;
+    if (offset > 0) {
+      this.basis.cone(1.4, this.dir);
+      d.px = this.point.x + this.basis.axis.x * size * 0.5 + this.dir.x * size * offset;
+      d.py = this.point.y + this.basis.axis.y * size * 0.5 + this.dir.y * size * offset;
+      d.pz = this.point.z + this.basis.axis.z * size * 0.5 + this.dir.z * size * offset;
+    } else {
+      d.px = this.point.x;
+      d.py = this.point.y;
+      d.pz = this.point.z;
+    }
+    // A shade over two frames at 60 Hz, and the second of them is nearly gone:
+    // the group's fade exponent is well above one, so by two thirds of the way
+    // through only a tenth of the flash is left. Any shorter and which frame
+    // catches it becomes a coin toss — the shot lands somewhere in the sixteen
+    // milliseconds between frames, so the life has to cover that gap or the
+    // flash is missing from perhaps a third of the rounds fired. Longer, and it
+    // tracks with the weapon through the recoil and reads as a lamp bolted to
+    // the barrel rather than as something igniting.
+    d.life = rng.range(0.038, 0.05);
+    // Barely grows. The gas ball is fully formed by the time anything can see
+    // it; a flash that visibly expands looks like a small explosion.
+    d.size0 = size * 1.0;
+    d.size1 = size * 1.22;
     d.roll = rng.range(0, Math.PI * 2);
     d.rollRate = rng.range(-2.5, 2.5);
     // Bright enough to blow out and bloom, not so bright that the petals of the
@@ -124,12 +170,12 @@ export class MuzzleFlashEffects {
     d.px = this.point.x - this.basis.axis.x * size * 0.12;
     d.py = this.point.y - this.basis.axis.y * size * 0.12;
     d.pz = this.point.z - this.basis.axis.z * size * 0.12;
-    d.life = rng.range(0.028, 0.04);
+    d.life = rng.range(0.028, 0.038);
     d.size0 = size * 0.34;
-    d.size1 = size * 0.66;
-    d.r0 = 7.5 * heat;
-    d.g0 = 6.2 * heat;
-    d.b0 = 4.4 * heat;
+    d.size1 = size * 0.6;
+    d.r0 = 9 * heat;
+    d.g0 = 7.4 * heat;
+    d.b0 = 5.2 * heat;
     d.r1 = 2.4 * heat;
     d.g1 = 1.0 * heat;
     d.b1 = 0.3 * heat;
@@ -165,7 +211,7 @@ export class MuzzleFlashEffects {
       d.vx = this.basis.axis.x * speed + this.dir.x * 0.5;
       d.vy = this.basis.axis.y * speed + this.dir.y * 0.5;
       d.vz = this.basis.axis.z * speed + this.dir.z * 0.5;
-      d.life = rng.range(0.06, 0.13) * (suppressed ? 1.8 : 1);
+      d.life = rng.range(0.04, 0.095) * (suppressed ? 2.4 : 1);
       d.size0 = size * (0.32 - t * 0.08);
       d.size1 = size * (0.75 + t * 0.6);
       d.roll = rng.range(0, Math.PI * 2);
@@ -243,6 +289,9 @@ export class MuzzleFlashEffects {
     inViewmodelScene: boolean,
   ): void {
     const count = Math.max(1, Math.round((suppressed ? 5 : 2) * this.density));
+    // World-space muzzle smoke lands in the dust group, which is sun-lit; a
+    // rifle fired from inside a doorway must not puff a brightly lit wisp.
+    const sun = inViewmodelScene ? 1 : this.deps.sunVisibility(this.point);
     for (let i = 0; i < count; i++) {
       const d = resetDesc();
       this.basis.cone(0.5, this.dir);
@@ -277,6 +326,7 @@ export class MuzzleFlashEffects {
       d.cell = (rng.next() * 4) | 0;
       d.fadeIn = 0.2;
       d.softness = 0.35;
+      d.sunVisibility = sun;
       d.priority = 120;
       group.spawn(now, d);
     }

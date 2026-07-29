@@ -58,6 +58,11 @@ export const CHIP = {
   LEAF: 1,
   GLASS: 2,
   DROPLET: 3,
+  SPLINTER_A: 4,
+  SPLINTER_B: 5,
+  CHIP_B: 6,
+  CHIP_C: 7,
+  GRIT: 8,
 } as const;
 
 /** Index of every cell in the blood atlas. */
@@ -118,7 +123,7 @@ export class FXTextures {
       big,
     );
     this.puff = this.atlas(baker, 'fx:puff', TEX_KIND.SMOKE_PUFF, MODE_VARIANTS, 2, 2, big);
-    this.chip = this.atlas(baker, 'fx:chip', TEX_KIND.CHIP, MODE_SEQUENCE, 2, 2, mid);
+    this.chip = this.atlas(baker, 'fx:chip', TEX_KIND.CHIP, MODE_SEQUENCE, 3, 3, mid);
     this.blood = this.atlas(baker, 'fx:blood', TEX_KIND.BLOOD_DROP, MODE_SEQUENCE, 2, 2, mid);
     this.spark = this.single(baker, 'fx:spark', TEX_KIND.SPARK_STREAK, mid);
   }

@@ -33,12 +33,12 @@ export interface FXGroups {
  */
 const SHARE: Record<keyof FXGroups, number> = {
   smoke: 0.22,
-  dust: 0.2,
+  dust: 0.19,
   fire: 0.06,
   fireball: 0.06,
   spark: 0.14,
   debris: 0.12,
-  blood: 0.06,
+  blood: 0.05,
   glow: 0.1,
   ring: 0.02,
   vGlow: 0.014,
@@ -120,6 +120,7 @@ export function buildGroups(
       soft: true,
       lit: false,
       stretch: false,
+      blackbody: true,
       turbulence: true,
       sizeExponent: 0.7,
       colorExponent: 1.3,
@@ -146,6 +147,7 @@ export function buildGroups(
       lit: false,
       stretch: false,
       soot: true,
+      blackbody: true,
       turbulence: true,
       // A detonation front decelerates hard: most of the growth is over in the
       // first fifth of the ball's life.
@@ -176,6 +178,9 @@ export function buildGroups(
       soft: false,
       lit: false,
       stretch: true,
+      // Sparks skitter along the ground and die there. A shower that sinks
+      // through the pavement instead reads as sprites, not as hot metal.
+      bounce: true,
       turbulence: false,
       sizeExponent: 1.0,
       colorExponent: 0.7,
@@ -202,10 +207,13 @@ export function buildGroups(
       lit: false,
       flake: true,
       stretch: false,
+      bounce: true,
       turbulence: false,
       sizeExponent: 1.0,
       colorExponent: 1.0,
-      fadeExponent: 1.4,
+      // Chips land and stay put, so the group holds its opacity to the very end
+      // rather than dissolving a settled chip in mid-shot.
+      fadeExponent: 0.5,
       turbFrequency: 0,
       turbScroll: 0,
       turbOctave: 0,

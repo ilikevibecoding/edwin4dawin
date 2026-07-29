@@ -13,6 +13,7 @@
  * sounding like one sample retriggered thirty times.
  */
 import { Rng } from '../core/MathUtils';
+import { sanitizeRendered } from './synth/Signal';
 import type { SoundLibrary, SoundSpec } from './sounds';
 
 export interface BankEntry {
@@ -144,6 +145,12 @@ export class BufferBank {
       // measurements match what the game actually plays.
       const rng = new Rng((hashString(spec.id) ^ (this.seed + v * 0x9e3779b9)) >>> 0);
       const rendered = spec.render({ sampleRate: this.context.sampleRate, rng, variant: v });
+      const repaired = sanitizeRendered(rendered);
+      if (repaired > 0) {
+        console.warn(
+          `[audio] "${spec.id}" variant ${v} produced ${repaired} non-finite samples; silenced`,
+        );
+      }
       const channels = rendered.channels;
       const frames = channels[0]?.length ?? 0;
       if (frames === 0) continue;

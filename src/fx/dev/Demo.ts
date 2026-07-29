@@ -4,6 +4,7 @@ import type { SurfaceType } from '../../core/GameTypes';
 import { rng } from '../../core/MathUtils';
 import type { EngineContext } from '../../core/System';
 import { FXRange } from './Range';
+import type { FXStats } from '../index';
 import type { FXTextures } from '../Textures';
 
 /** Named states the screenshot harness can drive directly. */
@@ -12,10 +13,13 @@ export type ScenarioName =
   | 'suppressed'
   | 'flash'
   | 'tracers'
+  | 'tracerspan'
   | 'concrete'
   | 'metal'
   | 'glass'
   | 'dirt'
+  | 'sand'
+  | 'gravel'
   | 'wood'
   | 'water'
   | 'blood'
@@ -25,8 +29,26 @@ export type ScenarioName =
   | 'rocket'
   | 'airstrike'
   | 'smoke'
+  | 'wallsmoke'
   | 'fire'
   | 'idle';
+
+/**
+ * The parts of the FX system the dev harness needs and the public interface does
+ * not expose. Built inline where the demo is constructed, so none of it exists
+ * unless `?fxdemo=1` was asked for.
+ */
+export interface FXDevBridge {
+  /** Advance the effects clock and the time-metered emitters, with no render. */
+  step(dt: number): void;
+  /** Pin the floor emitters land debris on, or null to probe the real world. */
+  setFloor(y: number | null): void;
+  stats(): FXStats;
+  /** Live particle count per group. */
+  groups(): Record<string, number>;
+  /** The lighting a particle at this point is shaded with. */
+  light(position: THREE.Vector3): { sun: number[]; ambient: number[]; visibility: number };
+}
 
 /**
  * Where the review camera stands for a scenario.
@@ -54,11 +76,16 @@ const STAGES: Record<ScenarioName, StageSpec> = {
   idle: { mode: 'floor', lift: 1.5, eye: [0, 0, 6], look: [0, 0, 0] },
   flash: { mode: 'floor', lift: 1.2, eye: [0.35, 0.1, 2.6], look: [0, 0, 0] },
   tracers: { mode: 'floor', lift: 1.5, eye: [0, 0.15, 4.5], look: [0, 0, 0] },
+  // Looking along the floor's long axis instead of at the wall, so there is
+  // ninety metres of depth in frame to judge a tracer's width against.
+  tracerspan: { mode: 'floor', lift: 1.6, eye: [-7, 0.2, 7], look: [30, 2.2, 7] },
   concrete: { mode: 'wall', eye: [0, 0.1, 2.8], look: [0, -0.05, 0] },
   metal: { mode: 'wall', eye: [0, 0.1, 2.6], look: [0, -0.05, 0] },
   glass: { mode: 'wall', eye: [0, 0.1, 2.8], look: [0, -0.05, 0] },
   wood: { mode: 'wall', eye: [0, 0.1, 2.6], look: [0, -0.05, 0] },
   dirt: { mode: 'floor', eye: [0, 1.7, 3.6], look: [0, 0.35, 0] },
+  sand: { mode: 'floor', eye: [0, 1.7, 3.6], look: [0, 0.35, 0] },
+  gravel: { mode: 'floor', eye: [0, 1.7, 3.6], look: [0, 0.35, 0] },
   water: { mode: 'floor', eye: [0, 1.8, 4.2], look: [0, 0.45, 0] },
   blood: { mode: 'floor', lift: 1.4, eye: [0, 0.15, 3.2], look: [0, -0.1, 0] },
   decals: { mode: 'wall', eye: [0, 0.1, 4.2], look: [0, -0.05, 0] },
@@ -70,6 +97,9 @@ const STAGES: Record<ScenarioName, StageSpec> = {
   rocket: { mode: 'floor', lift: 3.2, eye: [0, 1.6, 13], look: [0, 1.6, 0] },
   airstrike: { mode: 'floor', lift: 0.8, eye: [0, 4.5, 30], look: [0, 12, 0] },
   smoke: { mode: 'floor', lift: 0.9, eye: [0, 2, 9], look: [0, 2.4, 0] },
+  // Raking, from the side and low: the only angle at which a quad slicing into
+  // the wall and into the floor both show their seams in one frame.
+  wallsmoke: { mode: 'wall', eye: [5.4, 0.5, 6.6], look: [0, -0.7, 0] },
   fire: { mode: 'floor', eye: [0, 1.6, 5.5], look: [0, 1.3, 0] },
 };
 
@@ -152,6 +182,7 @@ export class FXDemo {
     private readonly fx: FXSystem,
     private readonly ctx: EngineContext,
     textures: FXTextures,
+    private readonly bridge: FXDevBridge,
   ) {
     this.rocket.name = 'fx:demoRocket';
     ctx.scene.add(this.rocket);
@@ -160,6 +191,13 @@ export class FXDemo {
     }
     (window as unknown as { __FXSHOT__: (name: string) => Promise<void> }).__FXSHOT__ = (name) =>
       this.scenario(name as ScenarioName);
+    (window as unknown as { __FXPHASE__: unknown }).__FXPHASE__ = {
+      begin: (name: string) => this.phaseBegin(name as ScenarioName),
+      fire: () => this.once(this.held),
+      advance: (seconds: number) => this.phaseAdvance(seconds),
+      report: () => this.phaseReport(),
+      end: () => this.phaseEnd(),
+    };
   }
 
   /** Pin a scenario, park the camera on it, and resolve once frames have drawn. */
@@ -185,6 +223,71 @@ export class FXDemo {
     return new Promise((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // Phase capture
+  // -------------------------------------------------------------------------
+
+  /**
+   * `window.__FXPHASE__` — drive one effect through its own lifetime on a clock
+   * the harness controls.
+   *
+   * A screenshot harness can only wait in wall-clock frames, and that is not
+   * good enough for an explosion. Under the software rasteriser the captures run
+   * on, one frame is about a second of wall clock but only 100 ms of simulation,
+   * because the frame delta is clamped. So "wait six frames after ignition and
+   * shoot" is 600 ms of effect, by which time a grenade's fireball has already
+   * burned out — which is exactly why the QA capture of a detonation showed a
+   * grey smudge and no fireball, and why judging phase timing from it was
+   * impossible. Freezing the clock and stepping it directly makes 8 ms and 12 s
+   * equally reachable, and each sample costs one frame instead of two minutes.
+   */
+  private phaseBegin(name: ScenarioName): void {
+    this.fx.clearAll();
+    this.driven = true;
+    this.held = name;
+    // Nothing runs on its own: every particle in the shot is emitted from inside
+    // `phaseAdvance`, on a step whose size the harness chose.
+    this.hold = 0;
+    this.fireTimer = 0;
+    this.rocketTime = -1;
+    this.trackCamera();
+    this.buildRange();
+    this.setStage(name);
+    this.findViewMuzzle();
+    for (const board of this.atlasBoards) board.visible = name === 'idle';
+    // The range is visual meshes with no colliders, so debris would decide there
+    // is nothing under it and hang in the air. Here is where the floor is.
+    this.bridge.setFloor(this.staged ? this.range.floorCenter.y : null);
+    this.ctx.time.timeScale = 0;
+  }
+
+  private phaseAdvance(seconds: number): void {
+    let left = Math.max(0, seconds);
+    while (left > 1e-6) {
+      const step = Math.min(PHASE_STEP, left);
+      left -= step;
+      // Clock first, so anything emitted on this step carries this step's time.
+      this.bridge.step(step);
+      this.continuous(this.held, step);
+      if (this.rocketTime >= 0) this.flyRocket(step);
+    }
+  }
+
+  private phaseReport(): Record<string, unknown> {
+    return {
+      scenario: this.held,
+      elapsed: Math.round(this.ctx.time.elapsed * 1000) / 1000,
+      groups: this.bridge.groups(),
+      fx: this.bridge.stats(),
+      light: this.bridge.light(this.origin),
+    };
+  }
+
+  private phaseEnd(): void {
+    this.bridge.setFloor(null);
+    this.ctx.time.timeScale = 1;
   }
 
   update(dt: number): void {
@@ -282,6 +385,16 @@ export class FXDemo {
         this.fx.smoke(this.origin, 3.2, 14, 0xd8dade);
         this.fx.dust(this.origin, 2.6, 0.8);
         break;
+      case 'wallsmoke':
+        // Deliberately buried: the cloud centre sits about a metre off the wall
+        // with sprites wider than that, and its base straddles the floor line,
+        // so every sprite in it is intersecting something. If the depth fade is
+        // working there is no straight edge anywhere in the frame.
+        this.scratch.copy(this.origin).addScaledVector(this.originNormal, 1.0);
+        this.scratch.y -= 1.1;
+        this.fx.smoke(this.scratch, 2.2, 14, 0xc9ccd0);
+        this.fx.dust(this.scratch, 2.2, 0.9);
+        break;
       case 'fire':
         this.fx.fire(this.origin, 1.3, 26);
         break;
@@ -306,6 +419,9 @@ export class FXDemo {
       case 'tracers':
         this.fireTimer = 0.05;
         this.crossTracer();
+        break;
+      case 'tracerspan':
+        this.tracerSpan();
         break;
       default:
         break;
@@ -338,6 +454,8 @@ export class FXDemo {
         this.every(dt, 0.07, () => this.strike(name as SurfaceType));
         break;
       case 'dirt':
+      case 'sand':
+      case 'gravel':
       case 'water':
         this.every(dt, 0.1, () => this.strike(name as SurfaceType));
         break;
@@ -426,6 +544,41 @@ export class FXDemo {
     this.scratch2.copy(this.scratch).addScaledVector(this.right, 32);
     this.scratch2.y += rng.range(-0.2, 0.2);
     this.fx.tracer(this.scratch, this.scratch2, 0xffcf8a, 820, 0.05);
+  }
+
+  /**
+   * The same round crossing the view at four depths at once.
+   *
+   * A tracer authored in metres is four centimetres wide, which is well under
+   * one pixel by fifty metres out — so it either disappears or, worse, aliases
+   * into a dotted line. Four in one frame at known distances is the only way to
+   * see where that starts, and whether the fix holds the near ones honest.
+   */
+  private tracerSpan(): void {
+    // Laid out on a level line at eye height, not along the camera's forward
+    // axis: the stage looks slightly down at the floor, so stepping out along
+    // `forward` from a floor-level origin buries the far end of the span under
+    // the ground plane, where the depth test quietly removes it.
+    this.velocity.copy(this.forward).setY(0);
+    if (this.velocity.lengthSq() < 1e-6) this.velocity.set(0, 0, -1);
+    this.velocity.normalize();
+    for (let i = 0; i < TRACER_SPAN.length; i++) {
+      const distance = TRACER_SPAN[i];
+      this.scratch
+        .copy(this.eye)
+        .addScaledVector(this.velocity, distance)
+        .addScaledVector(this.right, -TRACER_SPAN_LEAD);
+      // Held a touch under the eye line so the streak crosses the ground plane
+      // rather than the sky: a bright line on a bright sky is the one place a
+      // tracer's width cannot be judged. Each depth is stepped down a little
+      // further, because four horizontal lines at one height all project to the
+      // same row of pixels and stack into what looks like a single tracer.
+      this.scratch.y = this.eye.y - 0.35 - i * 0.55;
+      this.scratch2
+        .copy(this.scratch)
+        .addScaledVector(this.right, TRACER_SPAN_LEAD + TRACER_SPAN_LEAD);
+      this.fx.tracer(this.scratch, this.scratch2, 0xffcf8a, TRACER_SPAN_SPEED, 0.045);
+    }
   }
 
   /**
@@ -717,3 +870,22 @@ export class FXDemo {
 
 const UP = /* @__PURE__ */ new THREE.Vector3(0, 1, 0);
 const RIGHT = /* @__PURE__ */ new THREE.Vector3(1, 0, 0);
+
+/** Simulation step the phase harness advances in. */
+const PHASE_STEP = 1 / 60;
+
+/** Distances, in metres, the tracer-span scenario puts a round at. */
+const TRACER_SPAN: readonly number[] = [5, 15, 40, 90];
+
+/**
+ * Every round in the span flies the same path length from the same offset, so
+ * one sample catches all four at the same point in their flight. Sizing the
+ * path to the distance instead — the obvious thing — gives the near round a
+ * four-metre trip it finishes in five milliseconds while the far one is still
+ * leaving, and no single frame ever holds more than one of them.
+ *
+ * The heads all reach the centre of the view at `LEAD / SPEED`, which is the
+ * moment worth photographing.
+ */
+const TRACER_SPAN_SPEED = 820;
+const TRACER_SPAN_LEAD = 45;

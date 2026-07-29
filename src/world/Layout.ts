@@ -12,15 +12,53 @@ import {
   buildMinaret,
 } from './kit/Buildings';
 import {
+  basin,
+  bicycle,
+  brassScatter,
+  bucket,
+  buttPatch,
+  cableSpan,
+  cornerSpoil,
+  crateStack,
+  drainCover,
+  grtBank,
+  handcart,
+  hangingRag,
+  kerbDamage,
+  leaningLadder,
+  litterArea,
+  litterBand,
+  type LitterMix,
+  litterPiece,
+  pipeBundle,
+  plasticChair,
+  plasticStool,
+  produceCrate,
+  roadPatch,
+  rubbleCrumbs,
+  sackPile,
+  sandDrift,
+  shadeCloth,
+  spillStain,
+  tiedTarp,
+  tyreSprawl,
+  tyreTracks,
+  wallFoot,
+  wearPath,
+  wheelbarrow,
+  woodPile,
+} from './kit/Clutter';
+import {
   awning,
   buntingLine,
   debrisField,
   groundStain,
   hangingTarp,
+  laundryLine,
   litterField,
   wallPipe,
 } from './kit/Details';
-import { type Rect, type Sink, boxGeometry, placed, transform } from './kit/Kit';
+import { type Rect, type Sink, boxGeometry, inflate, placed, transform } from './kit/Kit';
 import {
   ammoCrate,
   bench,
@@ -37,6 +75,7 @@ import {
   planter,
   powerLine,
   powerPole,
+  rebarCluster,
   roadSign,
   rubbleBerm,
   rubblePile,
@@ -525,6 +564,9 @@ export function buildLayout(sink: Sink, field: TerrainField): void {
   buildSpawns(sink, field, need);
   buildBoundary(sink, field);
   buildScatter(sink, field);
+  // Last, because it asks the builder what ground is already claimed and that
+  // answer is only complete once every set piece has registered its collision.
+  buildGroundClutter(sink, field, need);
 }
 
 function buildBackdrop(sink: Sink): void {
@@ -700,6 +742,25 @@ function buildCentreDistrict(
     if (sink.rng.bool(0.6)) {
       woodCrate(sink, x + (east ? 1.1 : -1.1), sink.ground(x, stallZ[i] + 1.6), stallZ[i] + 1.6, sink.rng.range(0, TAU), 0.7);
     }
+    // Stock hung off the front rail. A stall with nothing hanging on it reads as
+    // a table with a roof; the cloth is what makes it a trader's pitch.
+    const railY = sink.ground(x, stallZ[i]) + 2.2;
+    const front = east ? -1 : 1;
+    for (let k = 0; k < sink.rng.int(1, 3); k++) {
+      hangingRag(
+        sink,
+        x + front * 0.95,
+        railY,
+        stallZ[i] + sink.rng.range(-0.9, 0.9),
+        east ? -Math.PI / 2 : Math.PI / 2,
+        sink.rng.range(0.35, 0.6),
+        sink.rng.range(0.45, 0.85),
+      );
+    }
+    if (sink.rng.bool(0.45)) {
+      basin(sink, x + front * 1.3, stallZ[i] + sink.rng.range(-1.2, 1.2), sink.rng.range(0, TAU));
+    }
+    buttPatch(sink, x + front * 1.5, stallZ[i] + sink.rng.range(-1.4, 1.4));
   }
   buntingLine(
     sink,
@@ -1250,6 +1311,735 @@ function buildScatter(sink: Sink, field: TerrainField): void {
       } else {
         seamWeeds(sink, road.center + offset, road.from + 4, road.center + offset, road.to - 4, 22);
       }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ground clutter
+// ---------------------------------------------------------------------------
+
+/**
+ * The layer that decides whether the town is inhabited or merely dressed.
+ *
+ * Runs last, so `sink.groundClaimed` can reject anything that would land inside
+ * a wall, a wreck or a barrier without every set piece having to publish a
+ * footprint. Nothing here collides except a handful of waist-high stacks placed
+ * at hand-picked positions well clear of the doorways and lanes, so the
+ * navigation graph the AI already solved is untouched.
+ *
+ * The placement rules, in the order they matter:
+ *
+ * 1. Loose matter banks against every wall on the map and heaps at the corners.
+ *    A hard line where masonry meets terrain is the strongest tell there is.
+ * 2. Wear follows the lines people and vehicles actually travel — down the
+ *    lanes, across the crossroads, in and out of every doorway.
+ * 3. What accumulates follows what the building is for: timber and pipe at the
+ *    workshop, produce and chairs at the shops, brass behind the emplacements.
+ * 4. Nothing is square to anything and nothing sits exactly on the ground.
+ */
+function buildGroundClutter(
+  sink: Sink,
+  field: TerrainField,
+  need: (name: string) => BuildingResult,
+): void {
+  dressWallFeet(sink, field, need);
+  dressRoads(sink, field);
+  dressMarketStreet(sink, need);
+  dressYards(sink, need);
+  dressSpans(sink, need);
+  dressEmplacements(sink);
+  dressOpenGround(sink, field);
+}
+
+/**
+ * The ground that is neither a road channel nor a wall foot.
+ *
+ * Those two get dressed thoroughly and between them lies most of the map's open
+ * terrain, carrying nothing — which is what the bare sand in the middle distance
+ * of a shot actually is. This lays a thin scatter over it on a coarse grid where
+ * only a third of the cells draw anything, so it drifts in patches the way blown
+ * rubbish does rather than covering the ground evenly, which would read as noise
+ * printed on the material. Grit-heavy, because away from where people stand it
+ * is mostly stones.
+ *
+ * Free in draw calls: every piece is flagged as clutter, and clutter pools into
+ * the map-wide instance groups the rest of the litter already fills.
+ */
+function dressOpenGround(sink: Sink, field: TerrainField): void {
+  const step = 6;
+  const reach = 44;
+  const mix: LitterMix = { paper: 1, card: 1, can: 1, rag: 1, crumb: 4 };
+  for (let gx = -reach; gx <= reach; gx += step) {
+    for (let gz = -reach; gz <= reach; gz += step) {
+      if (!sink.rng.bool(0.34)) continue;
+      const cx = gx + sink.rng.range(-step / 2, step / 2);
+      const cz = gz + sink.rng.range(-step / 2, step / 2);
+      if (sink.groundClaimed(cx, cz, 0.6)) continue;
+      // The carriageway and its channels are already dressed to their own
+      // density; a second pass over them only doubles the cost where it is
+      // already right.
+      if (field.onRoad(cx, cz, 0.5)) continue;
+      const spread = sink.rng.range(1.2, 2.6);
+      litterArea(
+        sink,
+        { minX: cx - spread, minZ: cz - spread, maxX: cx + spread, maxZ: cz + spread },
+        sink.rng.int(2, 5),
+        { mix, reject: (x, z) => sink.groundClaimed(x, z, 0) },
+      );
+      if (sink.rng.bool(0.45)) rubbleCrumbs(sink, cx, cz, spread * 0.8, sink.rng.int(3, 7));
+    }
+  }
+}
+
+/**
+ * Cables and washing strung between facades across the narrow gaps.
+ *
+ * The single most characteristic thing about a street like this from eye level
+ * is that the sky above it is crossed by wires. It is also nearly free: a
+ * catenary is a dozen segments of tube in the district's existing detail batch,
+ * and it converts an empty band of sky into depth cues at three different
+ * distances. Spans are picked between facades that genuinely face each other
+ * across an alley, so the geometry never floats with nothing to anchor to.
+ */
+function dressSpans(sink: Sink, need: (name: string) => BuildingResult): void {
+  const link = (
+    a: string,
+    aEdge: 'minX' | 'maxX',
+    az: number,
+    b: string,
+    bEdge: 'minX' | 'maxX',
+    bz: number,
+    drop: number,
+    washing: boolean,
+  ): void => {
+    const ra = need(a);
+    const rb = need(b);
+    const from = new THREE.Vector3(ra.footprint[aEdge], ra.roofY - drop, az);
+    const to = new THREE.Vector3(rb.footprint[bEdge], rb.roofY - drop, bz);
+    if (washing) laundryLine(sink, from, to);
+    else cableSpan(sink, from, to, sink.rng.bool(0.3) ? 2 : 1);
+  };
+
+  // West alley, between the apartment block and the market hall.
+  link('apartment_w', 'maxX', 11.5, 'market_hall', 'minX', 11.2, 0.9, true);
+  link('apartment_w', 'maxX', 19.0, 'market_hall', 'minX', 19.4, 1.6, false);
+  link('warehouse', 'maxX', -16.5, 'market_annex', 'minX', -16.2, 1.1, true);
+  link('warehouse', 'maxX', -7.5, 'market_annex', 'minX', -7.8, 0.8, false);
+
+  // South end, across the gap between the row house and the tea house.
+  link('row_house_w', 'maxX', 38.5, 'tea_house', 'minX', 38.2, 0.7, true);
+
+  // East alley, between the south shop row and the mosque compound.
+  link('shop_row_s', 'maxX', 12.0, 'mosque', 'minX', 12.4, 1.2, false);
+  link('shop_row_n', 'maxX', -14.0, 'bombed_house', 'minX', -14.4, 1.4, false);
+  link('municipal', 'maxX', -36.0, 'bombed_house', 'minX', -35.6, 0.9, true);
+
+  // Down the west road, from the pole line into the facades it feeds.
+  for (const [z, name] of [
+    [-16, 'warehouse'],
+    [8, 'apartment_w'],
+    [32, 'row_house_w'],
+  ] as const) {
+    const r = need(name);
+    cableSpan(
+      sink,
+      new THREE.Vector3(-32.2, sink.ground(-32.2, z) + 6.9, z),
+      new THREE.Vector3(r.footprint.minX, r.roofY - 0.8, z + sink.rng.range(-1, 1)),
+      1,
+    );
+  }
+}
+
+/** Litter mix and foot dressing appropriate to what each building is for. */
+function dressWallFeet(
+  sink: Sink,
+  field: TerrainField,
+  need: (name: string) => BuildingResult,
+): void {
+  for (const spec of BUILDINGS) {
+    const result = need(spec.name);
+    const foot = inflate(result.footprint, 0.12);
+    wallFoot(sink, foot, {
+      kind: spec.use === 'workshop' || spec.use === 'store' ? 'yard' : 'street',
+      grit: spec.shelled ? 1.4 : 1,
+    });
+
+    // Something leaned or stacked against one street-facing wall, chosen by
+    // trade. A workshop keeps its offcuts outside; a shop keeps its stock.
+    const spots = streetFacingSpots(sink, field, result.footprint);
+    if (spots.length === 0) continue;
+    const use = spec.use ?? (spec.shelled ? 'derelict' : 'home');
+    for (const spot of spots) {
+      dressWallSpot(sink, use, spot);
+    }
+  }
+}
+
+interface WallSpot {
+  x: number;
+  z: number;
+  /** Yaw with local +Z pointing away from the wall. */
+  yaw: number;
+}
+
+/**
+ * Up to two points on the faces of a footprint that a road runs past.
+ *
+ * Dressing every wall equally wastes the budget on the backs of buildings
+ * nobody walks behind. Asking the road grid which faces are public puts the junk
+ * where it will be seen and read.
+ */
+function streetFacingSpots(sink: Sink, field: TerrainField, r: Rect): WallSpot[] {
+  const faces: Array<{ x: number; z: number; outX: number; outZ: number; yaw: number; span: number }> = [
+    { x: (r.minX + r.maxX) / 2, z: r.minZ, outX: 0, outZ: -1, yaw: Math.PI, span: r.maxX - r.minX },
+    { x: r.maxX, z: (r.minZ + r.maxZ) / 2, outX: 1, outZ: 0, yaw: -Math.PI / 2, span: r.maxZ - r.minZ },
+    { x: (r.minX + r.maxX) / 2, z: r.maxZ, outX: 0, outZ: 1, yaw: 0, span: r.maxX - r.minX },
+    { x: r.minX, z: (r.minZ + r.maxZ) / 2, outX: -1, outZ: 0, yaw: Math.PI / 2, span: r.maxZ - r.minZ },
+  ];
+  const spots: WallSpot[] = [];
+  for (const face of faces) {
+    if (!field.onRoad(face.x + face.outX * 4.5, face.z + face.outZ * 4.5, 1.5)) continue;
+    // One drop per nine metres of frontage: a thirty-metre wall with a single
+    // stack against it is still a bare thirty-metre wall.
+    const drops = Math.max(1, Math.min(4, Math.round(face.span / 9)));
+    for (let i = 0; i < drops; i++) {
+      // Spread along the face and jittered inside its slot, never on its centre
+      // line, which is where the doorway is.
+      const t = (i + 0.5) / drops + sink.rng.range(-0.16, 0.16);
+      if (Math.abs(t - 0.5) < 0.11) continue;
+      const along = (t - 0.5) * face.span;
+      const x = face.x + (face.outZ !== 0 ? along : 0) + face.outX * 0.55;
+      const z = face.z + (face.outX !== 0 ? along : 0) + face.outZ * 0.55;
+      if (sink.groundClaimed(x, z, 0.4)) continue;
+      spots.push({ x, z, yaw: face.yaw });
+    }
+    if (spots.length >= 6) break;
+  }
+  return spots;
+}
+
+function dressWallSpot(sink: Sink, use: string, spot: WallSpot): void {
+  const { x, z, yaw } = spot;
+  // Along the wall, so a group spreads sideways rather than out into the road.
+  const ax = Math.cos(yaw);
+  const az = -Math.sin(yaw);
+  const beside = (d: number): [number, number] => [x + ax * d, z + az * d];
+
+  switch (use) {
+    case 'workshop':
+      if (sink.rng.bool(0.5)) woodPile(sink, x, z, yaw, sink.rng.int(4, 7));
+      else pipeBundle(sink, x, z, yaw, sink.rng.int(3, 6));
+      if (sink.rng.bool(0.6)) bucket(sink, ...beside(0.85), sink.rng.range(0, TAU));
+      if (sink.rng.bool(0.45)) tyreSprawl(sink, ...beside(-1.15), yaw, sink.rng.int(2, 4));
+      if (sink.rng.bool(0.35)) basin(sink, ...beside(1.35), sink.rng.range(0, TAU));
+      break;
+    case 'store':
+      if (sink.rng.bool(0.55)) crateStack(sink, x, z, yaw, sink.rng.int(2, 3));
+      else tyreSprawl(sink, x, z, yaw, sink.rng.int(3, 5));
+      if (sink.rng.bool(0.5)) sackPile(sink, ...beside(1.2), yaw, sink.rng.int(3, 4));
+      if (sink.rng.bool(0.4)) pipeBundle(sink, ...beside(-1.3), yaw, sink.rng.int(3, 5));
+      break;
+    case 'shop':
+      if (sink.rng.bool(0.6)) {
+        produceCrate(sink, x, z, yaw + sink.rng.range(-0.4, 0.4));
+        produceCrate(sink, ...beside(0.62), yaw + sink.rng.range(-0.4, 0.4));
+      } else {
+        sackPile(sink, x, z, yaw, sink.rng.int(3, 5));
+      }
+      if (sink.rng.bool(0.5)) plasticChair(sink, ...beside(-0.95), sink.rng.range(0, TAU));
+      if (sink.rng.bool(0.4)) crateStack(sink, ...beside(1.4), yaw, 2);
+      if (sink.rng.bool(0.3)) bucket(sink, ...beside(-1.5), sink.rng.range(0, TAU));
+      break;
+    case 'hall':
+      if (sink.rng.bool(0.6)) plasticStool(sink, x, z, sink.rng.range(0, TAU));
+      if (sink.rng.bool(0.5)) basin(sink, ...beside(0.75), sink.rng.range(0, TAU));
+      if (sink.rng.bool(0.45)) produceCrate(sink, ...beside(-0.9), yaw + sink.rng.range(-0.4, 0.4));
+      if (sink.rng.bool(0.3)) plasticChair(sink, ...beside(1.5), sink.rng.range(0, TAU));
+      break;
+    case 'derelict':
+      rubbleCrumbs(sink, x, z, 1.5, 14);
+      if (sink.rng.bool(0.5)) leaningLadder(sink, x, z, yaw, 2.6);
+      if (sink.rng.bool(0.45)) tyreSprawl(sink, ...beside(1.2), yaw, sink.rng.int(2, 3));
+      if (sink.rng.bool(0.4)) bucket(sink, ...beside(-1.1), sink.rng.range(0, TAU));
+      break;
+    default:
+      if (sink.rng.bool(0.5)) bucket(sink, x, z, sink.rng.range(0, TAU));
+      if (sink.rng.bool(0.45)) basin(sink, ...beside(0.6), sink.rng.range(0, TAU));
+      if (sink.rng.bool(0.3)) bicycle(sink, ...beside(-0.75), yaw + Math.PI / 2);
+      if (sink.rng.bool(0.35)) plasticStool(sink, ...beside(1.25), sink.rng.range(0, TAU));
+      break;
+  }
+  buttPatch(sink, x + sink.rng.range(-1.6, 1.6), z + sink.rng.range(-0.5, 0.5));
+}
+
+/**
+ * Road wear. Patches and tracks go on the carriageway, drains and broken kerbs
+ * on the channel, and the whole point is that the surface stops being one flat
+ * unbroken tone under the player's feet.
+ */
+function dressRoads(sink: Sink, field: TerrainField): void {
+  for (const road of field.roads) {
+    const along = road.to - road.from;
+    if (along < 8) continue;
+    const paved = road.surface === 'asphalt';
+    const at = (t: number, across: number): [number, number] =>
+      road.axis === 'z'
+        ? [road.center + across, road.from + along * t]
+        : [road.from + along * t, road.center + across];
+
+    // Two wheel paths down the middle of every carriageway.
+    const [tx0, tz0] = at(0.04, 0);
+    const [tx1, tz1] = at(0.96, 0);
+    tyreTracks(sink, tx0, tz0, tx1, tz1, Math.min(2.1, road.halfWidth * 1.25));
+
+    if (paved) {
+      const patches = Math.round(along / 13);
+      for (let i = 0; i < patches; i++) {
+        const [px, pz] = at((i + sink.rng.range(0.2, 0.8)) / patches, sink.rng.range(-1, 1) * road.halfWidth * 0.6);
+        if (sink.groundClaimed(px, pz, 0.2)) continue;
+        roadPatch(sink, px, pz, sink.rng.range(1.1, 2.3));
+      }
+      // Sand lies in the channel and at the crown's edge, never in the wheel path.
+      const drifts = Math.round(along / 18);
+      for (let i = 0; i < drifts; i++) {
+        const side = sink.rng.sign();
+        const [sx, sz] = at((i + sink.rng.range(0.15, 0.85)) / drifts, side * road.halfWidth * sink.rng.range(0.6, 0.95));
+        if (sink.groundClaimed(sx, sz, 0.2)) continue;
+        sandDrift(sink, sx, sz, sink.rng.range(0.8, 1.5));
+      }
+      // Gullies sit in the channel at the kerb, which is where water goes.
+      const drains = Math.max(1, Math.round(along / 26));
+      for (let i = 0; i < drains; i++) {
+        const side = sink.rng.sign();
+        const [dx, dz] = at((i + 0.5) / drains, side * (road.halfWidth - 0.55));
+        if (sink.groundClaimed(dx, dz, 0.3)) continue;
+        drainCover(sink, dx, dz, road.axis === 'z' ? 0 : Math.PI / 2);
+      }
+    }
+
+    if (road.kerb) {
+      const knocks = Math.max(1, Math.round(along / 22));
+      for (let i = 0; i < knocks; i++) {
+        const side = sink.rng.sign();
+        const [kx, kz] = at(sink.rng.range(0.08, 0.92), side * (road.halfWidth + 0.18));
+        if (sink.groundClaimed(kx, kz, 0.25)) continue;
+        kerbDamage(sink, kx, kz, road.axis === 'z' ? Math.PI / 2 : 0);
+      }
+      // Litter collects in the channel, not on the crown of the road.
+      for (const side of [-1, 1]) {
+        const across = side * (road.halfWidth - 0.3);
+        const [ax, az] = at(0.03, across);
+        const [bx, bz] = at(0.97, across);
+        litterBand(sink, ax, az, bx, bz, road.axis === 'z' ? side : 0, road.axis === 'z' ? 0 : side, Math.round(along * 0.42), { reach: 0.9 });
+      }
+    }
+  }
+
+  // Desire paths across the open ground, where the lanes meet and everybody cuts
+  // the corner rather than walking round it.
+  wearPath(sink, 2, 30, 2, 8, 2.2);
+  wearPath(sink, 2, 8, 2, -26, 2.0);
+  wearPath(sink, -19, -24, -19, 22, 1.7);
+  wearPath(sink, 22, -24, 22, 30, 1.8);
+  wearPath(sink, -34, 2, 18, 2, 1.9);
+  wearPath(sink, -12, 26, 14, 26, 1.7);
+  wearPath(sink, 24.5, 15, 38, 15, 1.6);
+}
+
+/**
+ * The market street, which is the view the map is judged on.
+ *
+ * The stall line already zig-zags down it, so the dressing goes in the dead
+ * space the stalls leave: against the shopfronts, in the gaps between stalls, and
+ * spilling out of the arcade. The middle three metres stay clear because that is
+ * the lane the whole level fights down.
+ */
+function dressMarketStreet(sink: Sink, need: (name: string) => BuildingResult): void {
+  const hall = need('market_hall');
+  const shopS = need('shop_row_s');
+  const shopN = need('shop_row_n');
+  const annex = need('market_annex');
+
+  // Goods spilling out of both shop rows, packed against the wall.
+  const westFace = hall.footprint.maxX + 0.5;
+  const eastFace = shopS.footprint.minX - 0.5;
+  const rows: Array<[number, number, number]> = [
+    [westFace, 9.5, -Math.PI / 2],
+    [westFace, 13.6, -Math.PI / 2],
+    [westFace, 18.2, -Math.PI / 2],
+    [westFace, 22.0, -Math.PI / 2],
+    // Between the east stalls, which stand at 8.5, 12, 16, 20 and 24.
+    [eastFace, 10.2, Math.PI / 2],
+    [eastFace, 14.0, Math.PI / 2],
+    [eastFace, 18.1, Math.PI / 2],
+    [eastFace, 22.2, Math.PI / 2],
+  ];
+  for (const [x, z, yaw] of rows) {
+    if (sink.groundClaimed(x, z, 0.3)) continue;
+    const roll = sink.rng.next();
+    if (roll < 0.3) {
+      produceCrate(sink, x, z, yaw + sink.rng.range(-0.35, 0.35));
+      produceCrate(sink, x, z + 0.62, yaw + sink.rng.range(-0.35, 0.35));
+      if (sink.rng.bool(0.5)) produceCrate(sink, x + sink.rng.range(-0.1, 0.1), z + 0.3, yaw, sink.ground(x, z) + 0.2);
+    } else if (roll < 0.5) {
+      sackPile(sink, x, z, yaw, sink.rng.int(3, 5));
+    } else if (roll < 0.66) {
+      crateStack(sink, x, z, yaw, sink.rng.int(2, 3));
+    } else if (roll < 0.78) {
+      plasticStool(sink, x, z, sink.rng.range(0, TAU));
+      plasticChair(sink, x + sink.rng.range(-0.3, 0.3), z + 0.8, sink.rng.range(0, TAU));
+    } else if (roll < 0.88) {
+      tyreSprawl(sink, x, z, yaw, sink.rng.int(3, 5));
+    } else {
+      bucket(sink, x, z, sink.rng.range(0, TAU));
+      basin(sink, x + sink.rng.range(-0.3, 0.3), z + 0.55, sink.rng.range(0, TAU));
+    }
+  }
+
+  // Sweepings against the shopfronts themselves. The lane already carries a
+  // litter band down each gutter line, but that band stops about a metre out
+  // from the stalls, and the strip between the stall line and the masonry is
+  // both where a market's rubbish actually ends up and the ground a player sees
+  // closest, with the wall a metre from their eye.
+  const faces: Array<readonly [number, number, number, number]> = [
+    [hall.footprint.maxX + 0.1, hall.footprint.minZ + 0.8, hall.footprint.maxZ - 0.8, 1],
+    [annex.footprint.maxX + 0.1, annex.footprint.minZ + 0.8, annex.footprint.maxZ - 0.8, 1],
+    [shopS.footprint.minX - 0.1, shopS.footprint.minZ + 0.8, shopS.footprint.maxZ - 0.8, -1],
+    [shopN.footprint.minX - 0.1, shopN.footprint.minZ + 0.8, shopN.footprint.maxZ - 0.8, -1],
+  ];
+  for (const [x, z0, z1, out] of faces) {
+    const run = z1 - z0;
+    if (run < 3) continue;
+    grtBank(sink, x, z0, x, z1, out, 0, Math.round(run * 0.8));
+    litterBand(sink, x, z0, x, z1, out, 0, Math.round(run * 1.2), { reach: 1.6 });
+  }
+
+  // A handcart and a bicycle: the two silhouettes that say people move things
+  // through here by hand.
+  handcart(sink, hall.footprint.maxX + 1.1, 15.8, -Math.PI / 2 + sink.rng.range(-0.3, 0.3));
+  bicycle(sink, shopS.footprint.minX - 0.55, 14.6, Math.PI / 2);
+  bicycle(sink, annex.footprint.maxX + 0.6, -8.5, -Math.PI / 2);
+  wheelbarrow(sink, shopN.footprint.minX - 0.9, -17.5, Math.PI / 2 + 0.3);
+
+  // Awning-height cloth over the two widest gaps, which shades the lane and
+  // breaks the long straight run of roof edge.
+  shadeCloth(sink, 2.2, hall.base + 3.5, 6.4, 0.06, 5.6, 3.0);
+  shadeCloth(sink, 2.0, hall.base + 3.6, 24.6, -0.05, 5.2, 2.8);
+
+  // Rags over the balcony rails and stall frames.
+  for (const [x, y, z, yaw] of [
+    [hall.footprint.maxX + 0.05, hall.base + 3.9, 11.4, -Math.PI / 2],
+    [shopS.footprint.minX - 0.05, shopS.base + 3.9, 17.2, Math.PI / 2],
+    [shopN.footprint.minX - 0.05, shopN.base + 3.9, -13.0, Math.PI / 2],
+  ] as const) {
+    hangingRag(sink, x, y, z, yaw, sink.rng.range(0.45, 0.7), sink.rng.range(0.6, 0.95));
+  }
+
+  // Cables strung across the street between the two rows, which is what makes a
+  // market street read as roofed even where it is open.
+  cableSpan(
+    sink,
+    new THREE.Vector3(hall.footprint.maxX, hall.roofY - 0.6, 8.2),
+    new THREE.Vector3(shopS.footprint.minX, shopS.roofY - 0.5, 8.6),
+    2,
+  );
+  cableSpan(
+    sink,
+    new THREE.Vector3(hall.footprint.maxX, hall.roofY - 0.5, 20.4),
+    new THREE.Vector3(shopS.footprint.minX, shopS.roofY - 0.7, 20.0),
+    2,
+  );
+  cableSpan(
+    sink,
+    new THREE.Vector3(annex.footprint.maxX, annex.roofY - 0.6, -10.5),
+    new THREE.Vector3(shopN.footprint.minX, shopN.roofY - 0.5, -10.2),
+    2,
+  );
+
+  // Litter along both gutter lines of the lane, heaviest where the stalls are.
+  litterBand(sink, -1.0, -26, -1.0, 26, -1, 0, 70, { reach: 1.1 });
+  litterBand(sink, 5.0, -26, 5.0, 26, 1, 0, 70, { reach: 1.1 });
+  litterArea(sink, { minX: -0.6, minZ: 6, maxX: 4.8, maxZ: 26 }, 40, {
+    reject: (x, z) => sink.groundClaimed(x, z, 0.1),
+  });
+
+  dressSouthApproach(sink);
+}
+
+/**
+ * The mouth of the market street where it crosses the south lane.
+ *
+ * This is the first thing the player sees on spawning and the widest expanse of
+ * open ground on the map, which makes it the one place bare surface is
+ * unmissable. Everything goes outside the 2.8 m half-width of the lane so the
+ * approach itself stays clean to walk and shoot down.
+ */
+function dressSouthApproach(sink: Sink): void {
+  // Junction wear: this corner is driven over and cut across by everyone.
+  spillStain(sink, 3.4, 30.6, 1.3, 0x5c554a);
+  tyreTracks(sink, -3, 33.2, 8, 27.4, 1.8);
+  roadPatch(sink, 6.2, 28.8, 2.1);
+  roadPatch(sink, -2.6, 31.9, 1.7);
+  drainCover(sink, -1.4, 26.4, Math.PI / 2);
+  drainCover(sink, 6.6, 33.8, 0);
+
+  // Market overspill on the west shoulder, well clear of the lane.
+  const westX = -1.9;
+  produceCrate(sink, westX - 0.4, 28.6, Math.PI / 2 + 0.2);
+  produceCrate(sink, westX - 0.45, 29.2, Math.PI / 2 - 0.3);
+  crateStack(sink, westX - 0.5, 31.4, 0.5, 3, { collide: true });
+  tiedTarp(sink, westX - 0.5, sink.ground(westX - 0.5, 31.4) + 1.74, 31.4, 0.5, 1.6, 1.6);
+  sackPile(sink, westX - 0.3, 33.0, Math.PI / 2, 4);
+  plasticStool(sink, westX - 1.2, 30.2, 1.1);
+  bucket(sink, westX - 1.0, 32.2, 0.7);
+
+  // East shoulder: the yard side, so tyres, pipe and a barrow.
+  const eastX = 5.9;
+  tyreSprawl(sink, eastX + 0.7, 29.4, 0.3, 5);
+  pipeBundle(sink, eastX + 0.5, 32.4, 0.1, 5);
+  wheelbarrow(sink, eastX + 1.1, 27.2, 2.2);
+  woodPile(sink, eastX + 0.6, 34.2, -Math.PI / 2, 5);
+  bicycle(sink, eastX + 0.9, 25.4, -Math.PI / 2 + 0.2);
+
+  // Cloth overhead, which is what stops the sky reading as a bald gap between
+  // the two shop rows at the very point the player looks through it.
+  shadeCloth(sink, 2.0, sink.ground(2, 28) + 3.9, 28.4, 0.04, 5.4, 3.2);
+
+  // Blown sand across the widest paving on the map. Drifts rather than objects,
+  // because this is the lane the player spawns shooting down: the ground has to
+  // stop reading as a fresh slab without anything standing up in it.
+  for (const [dx, dz, radius] of [
+    [-4.6, 29.0, 1.6],
+    [8.4, 31.4, 1.8],
+    [-3.2, 35.2, 1.4],
+    [7.6, 24.6, 1.2],
+    [2.4, 36.4, 1.3],
+    [-0.4, 32.6, 0.9],
+    [5.6, 34.8, 1.1],
+  ] as const) {
+    sandDrift(sink, dx, dz, radius);
+  }
+
+  // Litter concentrated in the two channels and thinning into the open.
+  litterBand(sink, -1.2, 24, -1.2, 36, -1, 0, 34, { reach: 1.3 });
+  litterBand(sink, 5.2, 24, 5.2, 36, 1, 0, 34, { reach: 1.3 });
+  litterArea(sink, { minX: -6, minZ: 24, maxX: 11, maxZ: 37 }, 46, {
+    reject: (x, z) => sink.groundClaimed(x, z, 0.15),
+  });
+  buttPatch(sink, -1.6, 27.4);
+  buttPatch(sink, 6.4, 31.2);
+  rubbleCrumbs(sink, -2.4, 34.6, 1.3, 10);
+  rubbleCrumbs(sink, 7.1, 26.2, 1.2, 9);
+}
+
+/**
+ * The yards and forecourts: the places the map already uses as arenas, which are
+ * also the places a bare ground plane shows up worst.
+ */
+function dressYards(sink: Sink, need: (name: string) => BuildingResult): void {
+  const workshop = need('workshop');
+  const warehouse = need('warehouse');
+  const tea = need('tea_house');
+  const bombed = need('bombed_house');
+
+  // Workshop yard: metalwork, so tubes, tyres and a soaked patch of ground.
+  pipeBundle(sink, -45.4, -21.0, 0.3, 6);
+  woodPile(sink, workshop.footprint.minX + 1.2, -20.6, Math.PI, 6);
+  tyreSprawl(sink, -50.6, -20.4, 0.7, 5);
+  spillStain(sink, -52.5, -22.4, 1.1, 0x5c554a);
+  leaningLadder(sink, workshop.footprint.maxX + 0.35, -6.5, -Math.PI / 2, 3.6);
+  wheelbarrow(sink, -45.2, -16.5, 1.1);
+  bucket(sink, -46.3, -18.2, 0.4);
+  bucket(sink, -46.0, -17.6, 2.1);
+  litterArea(sink, { minX: -54, minZ: -26, maxX: -43.5, maxZ: -4 }, 46, {
+    reject: (x, z) => sink.groundClaimed(x, z, 0.1),
+  });
+
+  // Container yard: shipping junk, and grit banked against the container flanks.
+  litterArea(sink, { minX: -54, minZ: 6, maxX: -43.5, maxZ: 26 }, 40, {
+    reject: (x, z) => sink.groundClaimed(x, z, 0.1),
+  });
+  tyreSprawl(sink, -52.4, 12.4, 0.2, 4);
+  crateStack(sink, -45.2, 23.6, 0.4, 3, { collide: true });
+  crateStack(sink, -44.8, 22.4, 1.2, 2);
+  tiedTarp(sink, -45.0, sink.ground(-45, 23.6) + 1.72, 23.6, 0.4, 1.5, 1.5);
+  pipeBundle(sink, -52.8, 18.6, 0.1, 4);
+
+  // Warehouse loading side.
+  crateStack(sink, warehouse.footprint.maxX + 1.0, warehouse.footprint.maxZ - 2.4, 0.6, 3, {
+    collide: true,
+  });
+  leaningLadder(sink, warehouse.footprint.maxX + 0.35, warehouse.footprint.maxZ - 5.5, -Math.PI / 2, 3.2);
+  sackPile(sink, warehouse.footprint.maxX + 1.1, warehouse.footprint.minZ + 6.4, -Math.PI / 2, 5);
+
+  // Tea house terrace: chairs and stools round the benches, and the ash of
+  // everyone who has sat there.
+  for (let i = 0; i < 7; i++) {
+    const x = -15.5 + i * 2.2 + sink.rng.range(-0.4, 0.4);
+    const z = 33.2 + sink.rng.range(-0.5, 0.9);
+    if (sink.groundClaimed(x, z, 0.25)) continue;
+    if (sink.rng.bool(0.5)) plasticChair(sink, x, z, sink.rng.range(0, TAU));
+    else plasticStool(sink, x, z, sink.rng.range(0, TAU));
+  }
+  buttPatch(sink, tea.footprint.minX + 5.6, tea.footprint.maxZ + 1.1);
+  buttPatch(sink, tea.footprint.minX + 3.2, tea.footprint.maxZ + 0.9);
+  litterArea(sink, { minX: -16, minZ: 32, maxX: -2, maxZ: 37 }, 34);
+
+  // Construction shell: the one place stacked material is the whole point, so it
+  // gets the full builder's yard — staging, tube, rebar and sheeted scaffold.
+  const shellX = 31;
+  const shellBase = sink.ground(shellX, -12);
+  scaffolding(sink, shellX - 8.1, -8.5, 0, 2.4, 3.6, 3);
+  scaffolding(sink, shellX + 0.5, -21.6, Math.PI / 2, 2.4, 3.2, 2);
+  for (const [rx, rz] of [
+    [shellX - 8.4, -13.2],
+    [shellX - 7.6, -11.4],
+    [shellX + 8.2, -17.8],
+  ] as const) {
+    rebarCluster(sink, rx, sink.ground(rx, rz), rz, sink.rng.int(5, 9), sink.rng.range(0.8, 1.4));
+  }
+  // Sheeting lashed to the outside of the scaffold, which is what a shell in this
+  // condition is always wrapped in and what breaks up its bare frame. It hangs off
+  // the top lift of a specific tower — 2.4 cm tube is invisible at fifty metres, so
+  // sheeting placed anywhere but on a rail reads as a panel floating in the sky.
+  hangingTarp(sink, shellX - 1.1, shellBase + 3.9, -21.6, Math.PI / 2, 2.2, 2.2, 'camo_net');
+  hangingTarp(sink, shellX - 9.3, shellBase + 5.9, -8.5, Math.PI / 2, 3.4, 2.6, 'camo_net');
+  for (let i = 0; i < 3; i++) {
+    ammoCrate(sink, shellX + 6.8, -8.2 + i * 1.05, Math.PI / 2 + sink.rng.range(-0.25, 0.25));
+  }
+  pipeBundle(sink, shellX - 8.4, -19.4, 0.15, 7);
+  pipeBundle(sink, shellX - 8.2, -18.1, 0.05, 5);
+  woodPile(sink, shellX - 8.6, -16.0, Math.PI / 2, 7);
+  crateStack(sink, shellX - 8.2, -4.6, 0.5, 3, { collide: true });
+  tiedTarp(sink, shellX - 8.2, sink.ground(shellX - 8.2, -4.6) + 1.72, -4.6, 0.5, 1.6, 1.6);
+  wheelbarrow(sink, shellX - 6.4, -6.2, 2.4);
+  bucket(sink, shellX - 7.6, -7.4, 0.9);
+  rubbleCrumbs(sink, shellX + 8.4, -12, 4.5, 40);
+  litterArea(sink, { minX: 22, minZ: -22, maxX: 40, maxZ: -2 }, 48, {
+    reject: (x, z) => sink.groundClaimed(x, z, 0.1),
+  });
+
+  // Bombed house: masonry crumbs everywhere, thickest at the collapse.
+  rubbleCrumbs(sink, bombed.footprint.minX - 1.5, -37, 5.5, 55);
+  rubbleCrumbs(sink, bombed.footprint.maxX + 1.0, -34, 3.5, 26);
+  litterArea(sink, { minX: 22, minZ: -44, maxX: 40, maxZ: -30 }, 40, {
+    reject: (x, z) => sink.groundClaimed(x, z, 0.1),
+  });
+
+  // Mosque forecourt: swept, so only the edges collect. Restraint reads too.
+  litterBand(sink, 24.6, 7.0, 24.6, 23.0, -1, 0, 22, { reach: 0.7 });
+  basin(sink, 25.4, 11.6, 0.8);
+  basin(sink, 25.3, 12.4, 2.3);
+
+  // Fuel station forecourt: a poured slab, which is the hardest surface on the
+  // map to make look used, and the one a player crosses at eye level under a
+  // canopy that shades out every long shadow. Everything here follows the two
+  // lines a vehicle takes — in off the road, past a pump, out again — because a
+  // forecourt is worn in exactly those two arcs and swept everywhere else.
+  spillStain(sink, 31, 36.6, 1.5, 0x585045);
+  spillStain(sink, 28.4, 41.2, 1.1, 0x524b41);
+  tyreSprawl(sink, 37.4, 42.4, 0.4, 5);
+  crateStack(sink, 24.6, 42.6, 0.7, 2);
+  for (const [x0, z0, x1, z1] of [
+    [23.4, 45.6, 33.2, 38.0],
+    [33.2, 38.0, 38.6, 33.4],
+    [24.2, 33.6, 30.4, 41.8],
+  ] as const) {
+    tyreTracks(sink, x0, z0, x1, z1, 1.9);
+  }
+  wearPath(sink, 30.6, 44.2, 30.8, 34.6, 1.7);
+  // Drip line where the nozzles hang and where a tank is filled: four small
+  // patches per island rather than one puddle, which is what a decade of spills
+  // between the same two wheel positions actually looks like.
+  for (const dz of [36.8, 41.2]) {
+    for (const dx of [29.4, 32.6]) {
+      spillStain(sink, dx + sink.rng.range(-0.25, 0.25), dz + sink.rng.range(-0.3, 0.3), 0.5, 0x4d463c);
+      spillStain(sink, dx + sink.rng.range(-0.6, 0.6), dz + sink.rng.range(-1.1, 1.1), 0.32, 0x5a5347);
+    }
+  }
+  roadPatch(sink, 27.2, 43.4, 2.0);
+  roadPatch(sink, 34.8, 35.6, 1.6);
+  drainCover(sink, 31.0, 44.1, 0);
+  // Grit banked against the canopy legs, which is the only vertical thing on the
+  // slab and so the only place wind has to drop what it is carrying.
+  for (const [cx, cz] of [
+    [25.9, 34.9],
+    [36.1, 34.9],
+    [25.9, 43.1],
+    [36.1, 43.1],
+  ] as const) {
+    cornerSpoil(sink, cx + (cx < 31 ? 0.3 : -0.3), cz + (cz < 39 ? 0.3 : -0.3), cx < 31 ? 1 : -1, 0);
+    litterPiece(sink, cx + sink.rng.range(-0.7, 0.7), cz + sink.rng.range(-0.7, 0.7));
+  }
+  pipeBundle(sink, 24.4, 36.4, 0.2, 4);
+  bucket(sink, 25.1, 38.0, 1.3);
+  buttPatch(sink, 24.9, 40.6);
+  litterArea(sink, { minX: 23, minZ: 33, maxX: 39, maxZ: 45 }, 48, {
+    reject: (x, z) => sink.groundClaimed(x, z, 0.1),
+  });
+  litterBand(sink, 23.2, 33.4, 23.2, 45.2, -1, 0, 22, { reach: 1.1 });
+
+  // Alley behind the market: the classic place junk goes to die.
+  litterArea(sink, { minX: -21.4, minZ: -22, maxX: -17.2, maxZ: 24 }, 70, {
+    reject: (x, z) => sink.groundClaimed(x, z, 0.1),
+  });
+  for (const z of [-20.5, -14.2, -3.4, 4.2, 11.8, 17.4, 22.2]) {
+    const x = -21.0 + sink.rng.range(0, 0.5);
+    if (sink.groundClaimed(x, z, 0.3)) continue;
+    const roll = sink.rng.next();
+    if (roll < 0.28) crateStack(sink, x, z, sink.rng.range(0, TAU), 2);
+    else if (roll < 0.5) tyreSprawl(sink, x, z, 0.4, 4);
+    else if (roll < 0.68) sackPile(sink, x, z, -Math.PI / 2, 3);
+    else if (roll < 0.84) woodPile(sink, x, z, -Math.PI / 2, 5);
+    else bucket(sink, x, z, sink.rng.range(0, TAU));
+  }
+  for (const z of [-18, -6, 8, 20]) {
+    hangingRag(sink, -17.4, sink.ground(-17.4, z) + 3.6, z, Math.PI / 2, 0.5, 0.8);
+  }
+
+  // East alley.
+  litterArea(sink, { minX: 19.8, minZ: -24, maxX: 24.2, maxZ: 40 }, 62, {
+    reject: (x, z) => sink.groundClaimed(x, z, 0.1),
+  });
+  for (const z of [-18.5, -8.2, 3.6, 14.8, 26.4, 35.2]) {
+    const x = 20.2 + sink.rng.range(0, 0.5);
+    if (sink.groundClaimed(x, z, 0.3)) continue;
+    if (sink.rng.bool(0.4)) tyreSprawl(sink, x, z, 0.2, 4);
+    else if (sink.rng.bool(0.5)) crateStack(sink, x, z, sink.rng.range(0, TAU), 2);
+    else pipeBundle(sink, x, z, Math.PI / 2, 4);
+  }
+}
+
+/** Spent brass and sandbag spill behind every position that has been fought from. */
+function dressEmplacements(sink: Sink): void {
+  const nests: Array<[number, number, number]> = [
+    [-52, -30.5, Math.PI],
+    [-12, 22.5, 0],
+    [2, -6.5, Math.PI],
+    [-28, -48, Math.PI],
+    [28, -48, Math.PI],
+    [-26, 50, 0],
+    [26, 50, 0],
+    [-4, -42.6, Math.PI],
+    [6, -42.6, Math.PI],
+    [-6, 44.6, 0],
+    [8, 44.6, 0],
+    [-43.6, -30, 0],
+    [27, -24.6, 0],
+    [15.5, -31.4, 0],
+    [-12.6, 26.4, 0],
+    [-22.4, 5.5, Math.PI / 2],
+    [-33.4, -33.5, Math.PI / 2],
+  ];
+  for (const [x, z, yaw] of nests) {
+    // Behind the bags, where the shooter stands, not in front of them.
+    const bx = x - Math.sin(yaw) * 1.5;
+    const bz = z - Math.cos(yaw) * 1.5;
+    brassScatter(sink, bx, bz, yaw, sink.rng.int(2, 4));
+    litterPiece(sink, bx + sink.rng.range(-1, 1), bz + sink.rng.range(-0.8, 0.8));
+    if (sink.rng.bool(0.5)) {
+      crateStack(sink, bx - Math.cos(yaw) * 1.8, bz + Math.sin(yaw) * 1.8, yaw, 2);
     }
   }
 }

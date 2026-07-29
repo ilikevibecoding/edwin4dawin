@@ -149,12 +149,34 @@ interface PropBucket {
   colors: Array<THREE.Color | null>;
   tinted: boolean;
   castShadow?: boolean;
+  receiveShadow?: boolean;
   wind: boolean;
+  clutter: boolean;
   /** Destructibles must stay addressable, so their group always instances. */
   forced: boolean;
 }
 
 const WIND_CACHE_KEY = 'world-wind';
+const CLUTTER_CACHE_KEY = 'world-clutter';
+
+/**
+ * Distance band over which a micro-clutter copy shrinks to nothing.
+ *
+ * A crushed can is 8 cm across, so past twenty-five metres it is a single
+ * flickering pixel that costs a shaded fragment and contributes nothing but
+ * aliasing. The four-metre band means it leaves as a shrink rather than a pop.
+ */
+const CLUTTER_NEAR = 21;
+const CLUTTER_FAR = 25;
+
+const CLUTTER_GLSL = /* glsl */ `
+  #ifdef USE_INSTANCING
+    vec3 clutterPivot = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    float clutterKeep =
+      1.0 - smoothstep(uClutterNear, uClutterFar, distance(clutterPivot, uClutterEye));
+    transformed *= clutterKeep;
+  #endif
+`;
 
 const WIND_GLSL = /* glsl */ `
   vec4 windLocal = vec4(transformed, 1.0);
@@ -163,7 +185,12 @@ const WIND_GLSL = /* glsl */ `
   #endif
   vec3 windWorld = (modelMatrix * windLocal).xyz;
   float windPhase = uWindTime + windWorld.x * 0.42 + windWorld.z * 0.31;
-  float windMask = clamp((transformed.y - uWindBase) * uWindScale, 0.0, 1.0);
+  // Distance from the pivot, not height above it: a frond is anchored at its
+  // base and free at the top, a rag is anchored at the line and free at the hem.
+  // Signed, this pinned everything that hangs — every sheet, rag and banner on
+  // the map — to a mask of zero, so all of them paid for the wind material and
+  // stood perfectly still.
+  float windMask = clamp(abs(transformed.y - uWindBase) * uWindScale, 0.0, 1.0);
   windMask *= windMask;
   float windGust = sin(windPhase) * 0.68 + sin(windPhase * 2.37 + 1.7) * 0.32;
   transformed.x += windGust * windMask * uWindStrength;
@@ -198,8 +225,12 @@ export class WorldBuilder implements Sink {
   /** Shared by every wind material; advanced once per frame. */
   readonly windTime = { value: 0 };
 
+  /** Camera position, shared by every clutter material; refreshed once per frame. */
+  readonly clutterEye = { value: new THREE.Vector3() };
+
   private nextDestructibleId = 1;
   private vertexTotal = 0;
+  private claimIndex: Map<number, ColliderRecord[]> | null = null;
 
   constructor(opts: {
     materials: MaterialLibrary;
@@ -246,12 +277,14 @@ export class WorldBuilder implements Sink {
     this.finishGeometry(geometry, tile, 0xffffff, 0, false);
     if (opts.lod) this.finishGeometry(opts.lod, tile, 0xffffff, 0, false);
 
+    const clutter = opts.clutter === true;
     const chunk =
-      tier === 'ground' || opts.global
+      tier === 'ground' || opts.global || clutter
         ? GROUND_CHUNK
         : chunkIndexAt(matrix.elements[12], matrix.elements[14]);
     const wind = opts.wind === true;
-    const key = `${chunk}|${opts.material}|${tier}|${wind ? 'w' : 's'}|${geometry.name || geometry.uuid}`;
+    const variant = wind ? 'w' : clutter ? 'c' : 's';
+    const key = `${chunk}|${opts.material}|${tier}|${variant}|${geometry.name || geometry.uuid}`;
     let bucket = this.propBuckets.get(key);
     if (!bucket) {
       bucket = {
@@ -264,10 +297,13 @@ export class WorldBuilder implements Sink {
         matrices: [],
         colors: [],
         tinted: false,
-        castShadow: opts.castShadow,
+        castShadow: clutter ? false : opts.castShadow,
+        receiveShadow: opts.receiveShadow,
         wind,
-        // Wind lives on a material variant the static batch does not use.
-        forced: wind,
+        clutter,
+        // Wind and clutter both live on material variants the static batch does
+        // not use, so their copies can never be folded into a merged batch.
+        forced: wind || clutter,
       };
       this.propBuckets.set(key, bucket);
     }
@@ -327,6 +363,7 @@ export class WorldBuilder implements Sink {
   // -------------------------------------------------------------------------
 
   addCollider(center: THREE.Vector3, half: THREE.Vector3, yaw: number, spec: ColliderSpec): void {
+    this.claimIndex = null;
     this.colliders.push({
       center: center.clone(),
       half: half.clone(),
@@ -340,6 +377,64 @@ export class WorldBuilder implements Sink {
 
   addTrimesh(mesh: THREE.Mesh, surface: SurfaceType): void {
     this.trimeshes.push({ mesh, surface });
+  }
+
+  /**
+   * Occupancy test against everything solid that reaches the ground here.
+   *
+   * Indexed lazily on a coarse grid and invalidated whenever another collider
+   * arrives, so the clutter pass can query it thousands of times without going
+   * quadratic. Boxes whose underside is well above the ground — parapets, upper
+   * slabs, canopy decks — are deliberately not occupancy: junk piles up under a
+   * fuel-station canopy exactly like it does anywhere else.
+   */
+  groundClaimed(x: number, z: number, pad = 0): boolean {
+    const index = this.claimIndex ?? this.buildClaimIndex();
+    const list = index.get(claimKey(x, z));
+    if (!list) return false;
+    const ground = this.groundFn(x, z);
+    for (const record of list) {
+      if (record.center.y - record.half.y > ground + 1.3) continue;
+      if (record.center.y + record.half.y < ground - 0.25) continue;
+      const cos = Math.cos(record.yaw);
+      const sin = Math.sin(record.yaw);
+      const dx = x - record.center.x;
+      const dz = z - record.center.z;
+      if (Math.abs(dx * cos - dz * sin) > record.half.x + pad) continue;
+      if (Math.abs(dx * sin + dz * cos) > record.half.z + pad) continue;
+      return true;
+    }
+    return false;
+  }
+
+  private buildClaimIndex(): Map<number, ColliderRecord[]> {
+    const index = new Map<number, ColliderRecord[]>();
+    // Every query pads by up to a metre and a half, so cells are seeded with a
+    // matching margin rather than the caller having to probe neighbours.
+    const margin = 1.6;
+    for (const record of this.colliders) {
+      const cos = Math.abs(Math.cos(record.yaw));
+      const sin = Math.abs(Math.sin(record.yaw));
+      const halfX = record.half.x * cos + record.half.z * sin + margin;
+      const halfZ = record.half.x * sin + record.half.z * cos + margin;
+      const x0 = Math.floor((record.center.x - halfX) / CLAIM_CELL);
+      const x1 = Math.floor((record.center.x + halfX) / CLAIM_CELL);
+      const z0 = Math.floor((record.center.z - halfZ) / CLAIM_CELL);
+      const z1 = Math.floor((record.center.z + halfZ) / CLAIM_CELL);
+      for (let cz = z0; cz <= z1; cz++) {
+        for (let cx = x0; cx <= x1; cx++) {
+          const key = cx * 4096 + cz;
+          let list = index.get(key);
+          if (!list) {
+            list = [];
+            index.set(key, list);
+          }
+          list.push(record);
+        }
+      }
+    }
+    this.claimIndex = index;
+    return index;
   }
 
   addWalkable(spec: NavSurfaceSpec): void {
@@ -453,6 +548,46 @@ uniform float uWindScale;`,
     return material;
   }
 
+  /**
+   * Micro-clutter material: the batch material plus a distance collapse.
+   *
+   * One variant per material id, shared by every clutter group on the map, so a
+   * thousand cans across nine districts still resolve to one draw. The cache key
+   * is what keeps this variant from being handed the plain batch variant's
+   * compiled program: the two differ only inside `onBeforeCompile`, which three
+   * cannot see when it hashes the parameters.
+   */
+  private clutterMaterial(id: MaterialId): THREE.MeshStandardMaterial {
+    const key = `clutter|${id}`;
+    const existing = this.customMaterials.get(key);
+    if (existing) return existing;
+
+    const material = this.materials.clone(id);
+    material.name = `world:${key}`;
+    material.vertexColors = true;
+
+    const eye = this.clutterEye;
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uClutterEye = eye;
+      shader.uniforms.uClutterNear = { value: CLUTTER_NEAR };
+      shader.uniforms.uClutterFar = { value: CLUTTER_FAR };
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+uniform vec3 uClutterEye;
+uniform float uClutterNear;
+uniform float uClutterFar;`,
+        )
+        .replace('#include <project_vertex>', `${CLUTTER_GLSL}\n#include <project_vertex>`);
+    };
+    material.customProgramCacheKey = () => CLUTTER_CACHE_KEY;
+    material.needsUpdate = true;
+
+    this.customMaterials.set(key, material);
+    return material;
+  }
+
   /** Vertex-coloured variant used by merged batches and instanced props. */
   private batchMaterial(id: MaterialId): THREE.MeshStandardMaterial {
     const existing = this.batchMaterials.get(id);
@@ -504,7 +639,9 @@ uniform float uWindScale;`,
 
       const material = bucket.wind
         ? this.windMaterial(bucket.material, 0xffffff, true)
-        : this.batchMaterial(bucket.material);
+        : bucket.clutter
+          ? this.clutterMaterial(bucket.material)
+          : this.batchMaterial(bucket.material);
       const mesh = new THREE.InstancedMesh(bucket.geometry, material, count);
       mesh.name = `prop:${bucket.material}:${count}`;
       for (let i = 0; i < count; i++) mesh.setMatrixAt(i, bucket.matrices[i]);
@@ -513,7 +650,7 @@ uniform float uWindScale;`,
         for (let i = 0; i < count; i++) mesh.setColorAt(i, bucket.colors[i] ?? WHITE);
         if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       }
-      applyShadowFlags(mesh, bucket.tier, bucket.castShadow);
+      applyShadowFlags(mesh, bucket.tier, bucket.castShadow, bucket.receiveShadow);
       mesh.computeBoundingSphere();
       this.attach(chunks, bucket.chunk, bucket.tier, mesh);
       tally(bucket.chunk, triangleCount(bucket.geometry) * count);
@@ -526,7 +663,7 @@ uniform float uWindScale;`,
         far.instanceMatrix = mesh.instanceMatrix;
         if (mesh.instanceColor) far.instanceColor = mesh.instanceColor;
         far.count = count;
-        applyShadowFlags(far, bucket.tier, bucket.castShadow);
+        applyShadowFlags(far, bucket.tier, bucket.castShadow, bucket.receiveShadow);
         far.computeBoundingSphere();
         far.visible = false;
         this.attach(chunks, bucket.chunk, bucket.tier, far);
@@ -755,6 +892,13 @@ const SCRATCH_VEC = new THREE.Vector3();
 /** Tiers a chunk owns; `ground` lives in one map-wide group instead. */
 const CHUNK_TIERS = ['structure', 'detail'] as const;
 
+/** Cell size of the collider occupancy index used by `groundClaimed`. */
+const CLAIM_CELL = 4;
+
+function claimKey(x: number, z: number): number {
+  return Math.floor(x / CLAIM_CELL) * 4096 + Math.floor(z / CLAIM_CELL);
+}
+
 function makeChunk(index: number): Chunk {
   const cx = index % CHUNK_COUNT;
   const cz = Math.floor(index / CHUNK_COUNT);
@@ -815,9 +959,14 @@ function hash3(x: number, y: number, z: number): number {
   return n - Math.floor(n);
 }
 
-function applyShadowFlags(mesh: THREE.Mesh, tier: DetailTier, override?: boolean): void {
-  mesh.castShadow = override ?? tier === 'structure';
-  mesh.receiveShadow = true;
+function applyShadowFlags(
+  mesh: THREE.Mesh,
+  tier: DetailTier,
+  cast?: boolean,
+  receive?: boolean,
+): void {
+  mesh.castShadow = cast ?? tier === 'structure';
+  mesh.receiveShadow = receive ?? true;
 }
 
 function triangleCount(geometry: THREE.BufferGeometry): number {

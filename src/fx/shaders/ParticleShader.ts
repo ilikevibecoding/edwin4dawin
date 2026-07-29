@@ -52,6 +52,15 @@ export interface ParticleShaderFlags {
    */
   soot: boolean;
   /**
+   * Drive colour off a cooling ramp rather than a two-stop lerp.
+   *
+   * `aCol0` and `aCol1` change meaning under this flag: `.r` is radiance and
+   * `.g` is a position on the ramp, 0 white-hot to 1 cold soot.
+   */
+  blackbody: boolean;
+  /** Bounce and settle on the per-particle floor height. */
+  bounce: boolean;
+  /**
    * Write straight (unpremultiplied) colour with coverage in alpha.
    *
    * The viewmodel target is composited with `mix(scene, view.rgb, view.a)`,
@@ -71,6 +80,7 @@ attribute vec4 aCol0;  // rgb colour at birth, a peak alpha
 attribute vec4 aCol1;  // rgb colour at death, a additive weight
 attribute vec4 aPhys;  // gravity, drag, turbulence, stretch
 attribute vec4 aMisc;  // atlas cell, flipbook frames, fade-in fraction, softness
+attribute vec4 aShade; // sun visibility, floor height, bounce restitution, spare
 
 uniform float uTime;
 uniform vec3 uGravityDir;
@@ -90,6 +100,87 @@ varying vec2 vUv;
 varying vec2 vLocal;
 varying vec4 vColorA;
 varying vec4 vParams;   // view depth, softness, additive weight, half world size
+varying float vSunVis;
+
+#ifdef BLACKBODY
+/**
+ * Colour of burning gas as it cools.
+ *
+ * Interpolating straight from white-hot to dark red never looks like cooling:
+ * the bright endpoint dominates the mix, so the sprite goes white, then pale
+ * pink, then dark, and skips the yellows and oranges the eye is actually reading
+ * temperature from. Stepping through the stops in order is what makes a fireball
+ * cool rather than merely fade.
+ */
+vec3 heatRamp(float x) {
+  vec3 c = mix(vec3(1.0, 0.97, 0.92), vec3(1.0, 0.86, 0.48), smoothstep(0.0, 0.17, x));
+  c = mix(c, vec3(1.0, 0.50, 0.13), smoothstep(0.15, 0.44, x));
+  c = mix(c, vec3(0.80, 0.17, 0.032), smoothstep(0.42, 0.72, x));
+  // The cold end is warm dark grey, not black. It is soot in daylight, which is
+  // the darkest thing in the frame but still lit; taking it to near-zero is what
+  // turns the tail of a fireball into a black hole punched in the level.
+  c = mix(c, vec3(0.30, 0.235, 0.205), smoothstep(0.68, 1.0, x));
+  return c;
+}
+#endif
+
+#ifdef BOUNCE
+/**
+ * Ballistic flight with an analytic ground bounce.
+ *
+ * Chips and sparks that fade out in mid-air are one of the loudest tells that a
+ * particle system is a billboard sprayer, and a GPU-simulated particle has no
+ * collider to hit. Solving the parabola against a flat floor is closed form, so
+ * four bounces cost a handful of instructions and the ejecta lands, skips and
+ * settles with no CPU involvement at all.
+ *
+ * Drag is kept on the horizontal axes, where it stays exact, and dropped on the
+ * vertical one, where it would make the impact time transcendental. That is a
+ * constraint on the emitters rather than an approximation they can ignore: a
+ * particle in a bouncing group whose fall is meant to be slow has to say so with
+ * weak gravity, because drag will not hold it up.
+ */
+vec3 bounceTrack(
+  vec3 p0, vec3 v0, float g, float k, float floorY, float radius, float e,
+  float age, out vec3 vel, out float spinAge
+) {
+  vec3 p = p0;
+  vec3 v = v0;
+  float t = age;
+  spinAge = age;
+  float rest = floorY + radius * 0.5;
+  float inv = k > 1e-3 ? 1.0 / k : 0.0;
+  for (int i = 0; i < 4; i++) {
+    float dy = p.y - rest;
+    float disc = v.y * v.y + 2.0 * g * dy;
+    if (g <= 1e-4 || disc <= 0.0) break;
+    float hit = (v.y + sqrt(disc)) / g;
+    if (hit <= 1e-4 || hit >= t) break;
+    p.xz += v.xz * (k > 1e-3 ? (1.0 - exp(-k * hit)) * inv : hit);
+    p.y = rest;
+    float impact = g * hit - v.y;
+    if (k > 1e-3) v.xz *= exp(-k * hit);
+    t -= hit;
+    v.y = impact * e;
+    // Tangential friction, so a chip skids a little and then stops.
+    v.xz *= 0.55;
+    if (v.y < 0.4) {
+      vel = vec3(0.0);
+      // Frozen at the instant of rest. A chip that goes on turning where it lies
+      // is worse than one that never landed: the eye reads a stopped object that
+      // is still spinning as a sprite immediately, and the whole point of the
+      // bounce was to stop looking like one.
+      spinAge = age - t;
+      return vec3(p.x, rest, p.z);
+    }
+  }
+  p.xz += v.xz * (k > 1e-3 ? (1.0 - exp(-k * t)) * inv : t);
+  p.y += v.y * t - 0.5 * g * t * t;
+  if (k > 1e-3) v.xz *= exp(-k * t);
+  vel = vec3(v.x, v.y - g * t, v.z);
+  return p;
+}
+#endif
 
 /** Smooth, near-divergence-free swirl. Six sines beat a real curl for cost. */
 vec3 swirl(vec3 q, float phase) {
@@ -114,6 +205,7 @@ void main() {
     vLocal = vec2(0.0);
     vColorA = vec4(0.0);
     vParams = vec4(1.0, 1.0, 0.0, 0.0);
+    vSunVis = 0.0;
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
@@ -121,9 +213,14 @@ void main() {
   float age = t * life;
   vec3 gravity = uGravityDir * aPhys.x;
   float drag = aPhys.y;
+  float size = mix(aSize.x, aSize.y, pow(t, uCurves.x)) * uSizeScale;
 
   vec3 p;
   vec3 vel;
+  float spinAge = age;
+#ifdef BOUNCE
+  p = bounceTrack(aP0.xyz, aV0.xyz, aPhys.x, drag, aShade.y, size, aShade.z, age, vel, spinAge);
+#else
   if (drag > 1e-3) {
     float e = exp(-drag * age);
     vec3 terminal = gravity / drag;
@@ -133,6 +230,7 @@ void main() {
     p = aP0.xyz + aV0.xyz * age + 0.5 * gravity * age * age;
     vel = aV0.xyz + gravity * age;
   }
+#endif
 
 #ifdef TURBULENCE
   if (aPhys.z > 0.0) {
@@ -143,8 +241,7 @@ void main() {
   }
 #endif
 
-  float size = mix(aSize.x, aSize.y, pow(t, uCurves.x)) * uSizeScale;
-  float roll = aSize.z + aSize.w * age;
+  float roll = aSize.z + aSize.w * spinAge;
 
   vec2 corner = position.xy;
   float cs = cos(roll);
@@ -196,7 +293,15 @@ void main() {
   envelope *= smoothstep(0.05, 0.38, incidence);
 #endif
 
-  vec3 tint = mix(aCol0.rgb, aCol1.rgb, pow(t, uCurves.y));
+  float colorT = pow(t, uCurves.y);
+#ifdef BLACKBODY
+  vec3 tint = heatRamp(clamp(mix(aCol0.g, aCol1.g, colorT), 0.0, 1.0))
+    * mix(aCol0.r, aCol1.r, colorT);
+#else
+  vec3 tint = mix(aCol0.rgb, aCol1.rgb, colorT);
+#endif
+
+  vSunVis = aShade.x;
 
 #ifdef FLAKE
   // A billboard has no orientation of its own, so the facing is synthesised from
@@ -209,7 +314,7 @@ void main() {
   float glint = pow(lambert, 22.0) * 1.6;
   // Ambient carries the shadowed side: an unlit face still sees the sky and the
   // ground, so the darkest a chip ever gets is ambient, never black.
-  tint *= uAmbientColor + uSunColor * (lambert * 0.85 + glint);
+  tint *= uAmbientColor + uSunColor * (lambert * 0.85 + glint) * aShade.x;
 #endif
 
   vColorA = vec4(tint, envelope);
@@ -226,6 +331,7 @@ uniform sampler2D uMap;
 uniform vec3 uSunDirView;
 uniform vec3 uSunColor;
 uniform vec3 uAmbientColor;
+uniform vec3 uUpView;
 uniform vec2 uNearFade;
 
 #ifdef SOFT
@@ -238,6 +344,7 @@ varying vec2 vUv;
 varying vec2 vLocal;
 varying vec4 vColorA;
 varying vec4 vParams;
+varying float vSunVis;
 
 void main() {
   vec4 texel = texture2D(uMap, vUv);
@@ -253,13 +360,30 @@ void main() {
   float r2 = min(dot(n2, n2), 1.0);
   vec3 normal = vec3(n2, sqrt(1.0 - r2));
   float ndl = dot(normal, uSunDirView);
-  const float wrap = 0.6;
+  // A narrow wrap. Widening it flattens the sprite towards a single grey value,
+  // and flat grey billboards are the thing this whole term exists to avoid; the
+  // sun side has to be several times the shadow side before the eye reads the
+  // puff as a lit volume rather than as a decal.
+  const float wrap = 0.32;
   float diffuse = clamp((ndl + wrap) / (1.0 + wrap), 0.0, 1.0);
   // Thick centre receives less sun than the wispy rim.
-  float thickness = mix(1.0, 0.6, normal.z);
-  // Forward scattering through the thin edges when back-lit.
-  float through = pow(clamp(-ndl, 0.0, 1.0), 2.5) * (1.0 - normal.z) * 0.8;
-  color *= uAmbientColor + uSunColor * (diffuse * thickness + through);
+  float thickness = mix(1.0, 0.55, normal.z);
+  // Forward scattering through the thin edges when back-lit. Kept small: at any
+  // real strength it lights the shadow side to within a few percent of the sun
+  // side, which cancels out the entire point of shading the sprite at all.
+  float through = pow(clamp(-ndl, 0.0, 1.0), 3.0) * (1.0 - normal.z) * 0.35;
+  // The fill is a hemisphere, not a constant. A flat ambient term is what makes
+  // a shadowed puff the very thing this shading exists to avoid — a uniform grey
+  // billboard — because with the sun occluded it is the *only* term left, and a
+  // cloud in a shadowed street then has no shape at all. Weighting it by how
+  // much sky the implied normal faces keeps the top of every puff brighter than
+  // its underside whether or not the sun reaches it.
+  float sky = mix(0.42, 1.3, 0.5 + 0.5 * dot(normal, uUpView));
+  // Only the sun term is occluded. A cloud in shadow still sees the whole sky
+  // and the ground bounce, so it darkens to the ambient fill rather than to
+  // black, which is what keeps smoke inside a shadowed street looking like
+  // smoke instead of like a hole cut in the frame.
+  color *= uAmbientColor * sky + uSunColor * (diffuse * thickness + through) * vSunVis;
 #endif
 
 #ifdef SOFT
@@ -276,7 +400,14 @@ void main() {
   vec2 q = vLocal * 2.0;
   float profile = sqrt(max(0.0, 1.0 - min(dot(q, q), 1.0)));
   float front = vParams.x - vParams.w * profile;
-  alpha *= clamp((sceneZ - front) / max(vParams.y, 1e-3), 0.0, 1.0);
+  float clear = clamp((sceneZ - front) / max(vParams.y, 1e-3), 0.0, 1.0);
+  // Eased, not linear. The hard line this term exists to hide is a feature of
+  // the last few centimetres before the sprite crosses into the geometry, but
+  // softness is metres wide on a cloud that size — so a straight ramp spends the
+  // whole distance and halves the opacity of every puff within a metre of a
+  // surface. Smoke laid against a wall then reads as a stain on the brickwork
+  // instead of as a volume in front of it.
+  alpha *= clear * (2.0 - clear);
 #endif
 
   // Never let a sprite fill the frame as the camera passes through it.
@@ -318,5 +449,7 @@ export function buildParticleShader(flags: ParticleShaderFlags): {
   if (flags.turbulence) defines.TURBULENCE = true;
   if (flags.straightAlpha) defines.STRAIGHT_ALPHA = true;
   if (flags.soot) defines.SOOT = true;
+  if (flags.blackbody) defines.BLACKBODY = true;
+  if (flags.bounce) defines.BOUNCE = true;
   return { vertexShader: VERTEX, fragmentShader: FRAGMENT, defines };
 }

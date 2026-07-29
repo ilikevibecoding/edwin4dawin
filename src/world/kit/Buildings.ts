@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { MaterialId } from '../../core/Contracts';
-import { laundryLine, roofAc, satelliteDish, waterTank, wallAc, wallPipe, conduitRun, plasterPatch, dustDrift, antennaMast } from './Details';
+import { dressFacade } from './Clutter';
+import { laundryLine, roofAc, satelliteDish, waterTank, plasterPatch, dustDrift, antennaMast } from './Details';
 import { type InteriorUse, dressRoom } from './Interiors';
 import { ladder, rebarCluster } from './Props';
 import { type Opening, buildLowWall, buildWall, buildWallRing } from './Walls';
@@ -225,6 +226,11 @@ export function buildBuilding(sink: Sink, spec: BuildingSpec): BuildingResult {
 
     sink.addInterior(`${spec.name}_f${f}`, interiorBox(interior, y, y + fh - 0.1));
 
+    // The openings themselves, kept apart from the stair wells and partition gaps
+    // that get appended to the same clear-list, so dressing that belongs in a
+    // doorway can find one.
+    const doorways = doorZones.slice();
+
     let rooms: Rect[] = [interior];
     if (spec.partitions && f === 0) {
       const split = addPartitions(sink, spec, interior, y, fh, well);
@@ -245,6 +251,7 @@ export function buildBuilding(sink: Sink, spec: BuildingSpec): BuildingResult {
           use,
           floor: f,
           blockers: doorZones,
+          doors: doorways.filter((d) => insideRoom(room, d)),
           lowOnly: windowZones,
         });
       }
@@ -279,7 +286,10 @@ export function buildBuilding(sink: Sink, spec: BuildingSpec): BuildingResult {
     addRoofDetails(sink, spec, interior, roofY, parapet);
   }
   if (spec.exteriorDetails !== false) {
-    addExteriorDetails(sink, spec, footprint, base, roofY, facades);
+    // A shelled building's top storey is built to a fraction of its height, so
+    // dressing hung relative to `roofY` would float where the wall was blown off.
+    const wallTop = spec.shelled ? roofY - fh * 0.28 : roofY;
+    addExteriorDetails(sink, spec, footprint, base, wallTop, facades);
   }
 
   return {
@@ -417,6 +427,13 @@ function openingZone(footprint: Rect, edge: number, opening: Opening, thickness:
 
 function pad(r: Rect, by: number): Rect {
   return { minX: r.minX - by, minZ: r.minZ - by, maxX: r.maxX + by, maxZ: r.maxZ + by };
+}
+
+/** Whether an opening's approach zone lands in this room rather than its neighbour. */
+function insideRoom(room: Rect, zone: Rect): boolean {
+  const cx = (zone.minX + zone.maxX) / 2;
+  const cz = (zone.minZ + zone.maxZ) / 2;
+  return cx > room.minX - 0.1 && cx < room.maxX + 0.1 && cz > room.minZ - 0.1 && cz < room.maxZ + 0.1;
 }
 
 function roomUse(spec: BuildingSpec, floor: number, top: boolean): InteriorUse {
@@ -1072,9 +1089,12 @@ function addExteriorDetails(
   facades: FacadeSpec[],
 ): void {
   const height = roofY - base;
+  const floorHeight = spec.floorHeight ?? METRICS.floorHeight;
+  const use = spec.use ?? (spec.shelled ? 'derelict' : 'home');
 
   for (let edge = 0; edge < 4; edge++) {
-    if (facades[edge].omit) continue;
+    const facade = facades[edge];
+    if (facade.omit) continue;
     const [x0, z0, x1, z1] = edgeLine(footprint, edge);
     const length = Math.hypot(x1 - x0, z1 - z0);
     const dirX = (x1 - x0) / length;
@@ -1084,40 +1104,33 @@ function addExteriorDetails(
     const outZ = -dirX;
     const yaw = Math.atan2(-dirZ, dirX) + Math.PI;
 
-    // Downpipe just in from the corner.
-    const pipeAt = sink.rng.range(0.5, 1.4);
-    wallPipe(
-      sink,
-      x0 + dirX * pipeAt + outX * 0.09,
-      z0 + dirZ * pipeAt + outZ * 0.09,
+    // Bay centres, derived exactly as the facade builder derives them, so every
+    // sill, infill and doorway lamp lands on the opening it belongs to.
+    const bayCount = facade.bays ?? Math.max(1, Math.min(8, Math.round(length / BAY_SPACING)));
+    const bayWidth = length / bayCount;
+    const bays: number[] = [];
+    for (let i = 0; i < bayCount; i++) bays.push((i + 0.5) * bayWidth);
+
+    dressFacade(sink, {
+      x0,
+      z0,
+      x1,
+      z1,
       yaw,
       base,
-      roofY - 0.1,
-    );
-
-    if (sink.rng.bool(0.55) && length > 4) {
-      const y = base + sink.rng.range(2.6, Math.max(2.8, height - 0.8));
-      conduitRun(
-        sink,
-        x0 + dirX * 0.6 + outX * 0.06,
-        z0 + dirZ * 0.6 + outZ * 0.06,
-        x1 - dirX * 0.6 + outX * 0.06,
-        z1 - dirZ * 0.6 + outZ * 0.06,
-        y,
-        yaw,
-      );
-    }
-
-    if (spec.floors > 1 && sink.rng.bool(0.5)) {
-      const at = sink.rng.range(1.2, length - 1.2);
-      wallAc(
-        sink,
-        x0 + dirX * at + outX * 0.22,
-        base + METRICS.floorHeight + sink.rng.range(0.9, 1.5),
-        z0 + dirZ * at + outZ * 0.22,
-        yaw,
-      );
-    }
+      roofY,
+      floors: spec.floors,
+      floorHeight,
+      use,
+      bays,
+      bayWidth,
+      doors: facade.doors ?? [],
+      blank: facade.blank ?? [],
+      breach: facade.breach ?? [],
+      arcade: facade.arcade === true,
+      wallMaterial: spec.wall,
+      wallTint: spec.tint,
+    });
 
     if (sink.rng.bool(0.6)) {
       const at = sink.rng.range(1.0, Math.max(1.1, length - 1.0));

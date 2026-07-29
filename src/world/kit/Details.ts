@@ -234,31 +234,77 @@ function sheetGeometry(variant: number): THREE.BufferGeometry {
     cloth.rotateX(Math.PI / 2);
     // Pivot at the line, so the sheet hangs below the placement point.
     cloth.translate(0, -drop / 2, 0);
-    return cloth;
+    // Two pegs at the top edge. Eight triangles that cost nothing and are the
+    // difference between washing and a cloth panel floating in the sky: the eye
+    // needs to see the sheet gripped by something before it accepts the cord.
+    return mergeParts([
+      placed(cloth, transform(0, 0, 0)),
+      placed(boxGeometry(0.035, 0.075, 0.03, 0.006, 0.4), transform(-width * 0.36, 0.02, 0)),
+      placed(boxGeometry(0.035, 0.075, 0.03, 0.006, 0.4), transform(width * 0.36, 0.02, 0)),
+    ]);
   });
 }
 
 /** Washing line: rope catenary plus a few sheets that catch the wind shader. */
 export function laundryLine(sink: Sink, from: THREE.Vector3, to: THREE.Vector3): void {
   const sag = from.distanceTo(to) * 0.055;
-  sink.addStatic(catenaryGeometry(from, to, sag, 0.014, 8), {
+  // Dark cord, but thick enough to survive the distance it is usually seen at.
+  // A hairline reads as nothing, and then the washing on it appears to float.
+  sink.addStatic(catenaryGeometry(from, to, sag, 0.022, 8), {
     material: 'metal_rusted',
     tier: 'detail',
-    tint: 0x8a8378,
+    tint: 0x7a7164,
   });
+
+  // A tie-off at each end: a collar on the cord and a short stay dropping away
+  // from it. Without an anchor the eye reads the cord as a scratch on the image
+  // rather than as something the sheets are hanging from.
+  const anchor = cachedGeometry('lineanchor', () =>
+    mergeParts([
+      placed(cylinderGeometry(0.035, 0.035, 0.16, 6, 0.4), transform(0, 0, 0, 0, Math.PI / 2)),
+      placed(cylinderGeometry(0.016, 0.016, 0.44, 4, 0.5), transform(0, -0.19, 0.09, 0, -0.42)),
+    ]),
+  );
+  const ends: ReadonlyArray<readonly [THREE.Vector3, THREE.Vector3]> = [
+    [from, to],
+    [to, from],
+  ];
+  for (const [end, other] of ends) {
+    sink.addProp(
+      anchor,
+      transform(end.x, end.y, end.z, Math.atan2(end.x - other.x, end.z - other.z)),
+      { material: 'metal_rusted', tier: 'detail', tint: 0x6f6659 },
+    );
+  }
 
   const count = Math.max(2, Math.round(from.distanceTo(to) / 1.4));
   const yaw = Math.atan2(-(to.z - from.z), to.x - from.x);
-  const tints = [0xe2dccb, 0xcfc6b2, 0xd8dee2, 0xc9b9a6];
+  // Neutrals with two dyed pieces among them. All-neutral washing against a pale
+  // sky is a row of grey rectangles; one red towel names the whole thing.
+  const tints = [0xe2dccb, 0xcfc6b2, 0xd8dee2, 0xc9b9a6, 0x9fb0bd, 0xb07a6c, 0x8e9a7c];
 
+  // Evenly spaced identical sheets read as a row of plates on a rail, which is
+  // worse than no washing at all. The buffers stay quantised — that is what keeps
+  // every sheet on the map in one draw — and the irregularity is bought with the
+  // three things that are free per instance: where along the cord it hangs, how
+  // big it is, and whether it is there at all.
   for (let i = 0; i < count; i++) {
-    const t = (i + 0.7) / (count + 0.4);
+    if (count > 3 && sink.rng.bool(0.18)) continue;
+    const t = (i + 0.7) / (count + 0.4) + sink.rng.range(-0.35, 0.35) / (count + 0.4);
     const point = from.clone().lerp(to, t);
     point.y -= sag * Math.sin(Math.PI * t);
     const variant = sink.rng.int(0, CLOTH_SIZES.length - 1);
     sink.addProp(
       sheetGeometry(variant),
-      transform(point.x, point.y, point.z, yaw + sink.rng.range(-0.14, 0.14)),
+      transform(
+        point.x,
+        point.y,
+        point.z,
+        yaw + sink.rng.range(-0.22, 0.22),
+        0,
+        0,
+        sink.rng.range(0.8, 1.35),
+      ),
       {
         material: 'fabric_canvas',
         tier: 'detail',
@@ -622,8 +668,12 @@ export function awning(
   rawDepth: number,
   tint = 0xc8552f,
 ): void {
-  const width = snap(rawWidth);
-  const depth = snap(rawDepth);
+  // Half-metre ladder, not the default quarter. Cloth and valance are both
+  // destructible instances, so neither can ever fold into a merged batch: every
+  // distinct size on the map is two more map-wide draw calls, and at a quarter
+  // of a metre the map carried nearly one size per awning.
+  const width = snap(rawWidth, 0.5);
+  const depth = snap(rawDepth, 0.5);
   const dirX = Math.cos(yaw);
   const dirZ = -Math.sin(yaw);
   const perpX = -Math.sin(yaw);
@@ -700,8 +750,8 @@ export function hangingTarp(
   rawDrop: number,
   material: MaterialId = 'camo_net',
 ): void {
-  const width = snap(rawWidth);
-  const drop = snap(rawDrop);
+  const width = snap(rawWidth, 0.5);
+  const drop = snap(rawDrop, 0.5);
   const geometry = cachedGeometry(`tarp|${width.toFixed(2)}|${drop.toFixed(2)}`, () => {
     const cloth = saggingCloth(width, drop, 0.1);
     cloth.rotateX(Math.PI / 2);

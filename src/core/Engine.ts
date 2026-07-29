@@ -11,6 +11,9 @@ export interface EngineOptions {
   config: QualityConfig;
 }
 
+/** Throws tolerated from one system phase before it is dropped for the session. */
+const MAX_SYSTEM_FAULTS = 12;
+
 /**
  * Owns the render loop, the subsystem graph and the adaptive resolution
  * controller. Systems are updated in explicit `order`, with physics on a fixed
@@ -239,16 +242,16 @@ export class Engine {
     if (!this.paused) {
       const fixed = this.time.fixedStep;
       for (let i = 0; i < steps; i++) {
-        for (const s of this.systems) s.fixedUpdate?.(fixed, this.ctx);
+        for (const s of this.systems) this.guard(s, 'fixedUpdate', fixed);
       }
       const dt = this.time.delta;
-      for (const s of this.systems) s.update?.(dt, this.ctx);
-      for (const s of this.systems) s.lateUpdate?.(dt, this.ctx);
+      for (const s of this.systems) this.guard(s, 'update', dt);
+      for (const s of this.systems) this.guard(s, 'lateUpdate', dt);
     } else {
       // Menus and UI still need to animate while paused.
       const dt = this.time.deltaUnscaled;
       for (const s of this.systems) {
-        if (s.name === 'ui' || s.name === 'audio') s.update?.(dt, this.ctx);
+        if (s.name === 'ui' || s.name === 'audio') this.guard(s, 'update', dt);
       }
     }
 
@@ -262,6 +265,38 @@ export class Engine {
 
     if (this.adaptiveEnabled) this.updateAdaptiveScale(performance.now() - frameStart);
   };
+
+  /**
+   * Run one system phase, containing any throw to that system.
+   *
+   * Without this, a single bad frame anywhere in the graph takes down every
+   * system after it in the order — including rendering, which turns a glitch in
+   * a peripheral system into a frozen screen. A system that keeps throwing is
+   * dropped rather than allowed to spend the frame budget on exceptions.
+   */
+  private guard(system: System, phase: 'fixedUpdate' | 'update' | 'lateUpdate', dt: number): void {
+    const fn = system[phase];
+    if (!fn) return;
+    try {
+      fn.call(system, dt, this.ctx);
+    } catch (err) {
+      const key = `${system.name}:${phase}`;
+      const count = (this.faults.get(key) ?? 0) + 1;
+      this.faults.set(key, count);
+      if (count === 1 || count === MAX_SYSTEM_FAULTS) {
+        console.error(
+          `[Engine] ${key} threw (${count}/${MAX_SYSTEM_FAULTS})${
+            count >= MAX_SYSTEM_FAULTS ? ' — disabling this phase' : ''
+          }`,
+          err,
+        );
+      }
+      if (count >= MAX_SYSTEM_FAULTS) system[phase] = undefined;
+    }
+  }
+
+  /** Consecutive-throw counts per system phase, for the fault guard. */
+  private readonly faults = new Map<string, number>();
 
   /**
    * Nudge internal resolution to hold ~60fps. Moves in small steps with a long

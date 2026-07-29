@@ -315,7 +315,7 @@ function fireLayer(sr: number, rng: Rng, spec: BlastSpec): Signal {
   brownNoise(out, rng);
   bandpass(out, 420, 0.8);
   // Slow irregular flutter: burning fuel, not a steady hiss.
-  const flutter = new Signal(out.duration, sr);
+  const flutter = Signal.like(out);
   brownNoise(flutter, rng);
   lowpass(flutter, 12);
   flutter.normalize(1).map((x) => 0.6 + 0.6 * x);

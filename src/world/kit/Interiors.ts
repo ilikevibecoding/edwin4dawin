@@ -1,5 +1,26 @@
 import * as THREE from 'three';
 import type { SurfaceType } from '../../core/GameTypes';
+import { graffiti } from './Details';
+import {
+  bareBulb,
+  basin,
+  beadedCurtain,
+  brokenChair,
+  bucket,
+  ceilingFan,
+  conduitBundle,
+  crateStack,
+  floorDebris,
+  floorLitter,
+  hangingRag,
+  meterBox,
+  plasticChair,
+  plasticStool,
+  produceCrate,
+  sackPile,
+  wallGrime,
+  wallPaper,
+} from './Clutter';
 import {
   type Rect,
   type Sink,
@@ -12,6 +33,7 @@ import {
   placed,
   planeGeometry,
   roundedGeometry,
+  snap,
   transform,
 } from './Kit';
 
@@ -44,6 +66,8 @@ export interface RoomSpec {
   floor: number;
   /** Areas to leave clear: door approaches, stair wells, partition gaps. */
   blockers: readonly Rect[];
+  /** Just the doorways, for the dressing that hangs in one. */
+  doors?: readonly Rect[];
   /**
    * Areas that take nothing taller than a metre.
    *
@@ -82,6 +106,54 @@ interface Slot {
 /** Tallest piece allowed in front of a window. */
 const LOW_LIMIT = 1;
 
+/** Loose object placed on a room floor. None of these collide. */
+type RoomObject = (sink: Sink, x: number, y: number, z: number, yaw: number) => void;
+
+/**
+ * What is lying about in each kind of room.
+ *
+ * Repeats are weights: a store is mostly cartons and sacks, a workshop is drums
+ * and tube, and a home has the two or three things a family leaves out.
+ */
+const ROOM_OBJECTS: Record<InteriorUse, readonly RoomObject[]> = {
+  shop: [
+    (s, x, y, z, yaw) => produceCrate(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => produceCrate(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => plasticStool(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => plasticChair(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => basin(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => crateStack(s, x, z, yaw, s.rng.int(2, 3), { y }),
+  ],
+  store: [
+    (s, x, y, z, yaw) => crateStack(s, x, z, yaw, s.rng.int(2, 4), { y }),
+    (s, x, y, z, yaw) => sackPile(s, x, z, yaw, s.rng.int(3, 5), y),
+    (s, x, y, z, yaw) => produceCrate(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => bucket(s, x, z, yaw, y),
+  ],
+  home: [
+    (s, x, y, z, yaw) => basin(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => bucket(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => plasticStool(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => plasticChair(s, x, z, yaw, y),
+  ],
+  workshop: [
+    (s, x, y, z, yaw) => bucket(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => basin(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => crateStack(s, x, z, yaw, s.rng.int(2, 3), { y }),
+    (s, x, y, z, yaw) => produceCrate(s, x, z, yaw, y),
+  ],
+  hall: [
+    (s, x, y, z, yaw) => plasticStool(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => plasticChair(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => bucket(s, x, z, yaw, y),
+  ],
+  derelict: [
+    (s, x, y, z, yaw) => bucket(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => brokenChair(s, x, y, z, yaw),
+    (s, x, y, z, yaw) => crateStack(s, x, z, yaw, 2, { y }),
+  ],
+};
+
 /**
  * Per-room cap, on top of one piece per sixteen square metres.
  *
@@ -89,12 +161,12 @@ const LOW_LIMIT = 1;
  * and the map needs to be able to shoot through it.
  */
 const MAX_ITEMS: Record<InteriorUse, number> = {
-  shop: 8,
-  store: 9,
-  home: 7,
-  workshop: 7,
-  hall: 4,
-  derelict: 6,
+  shop: 11,
+  store: 12,
+  home: 10,
+  workshop: 10,
+  hall: 5,
+  derelict: 8,
 };
 
 export function dressRoom(sink: Sink, spec: RoomSpec): void {
@@ -105,9 +177,11 @@ export function dressRoom(sink: Sink, spec: RoomSpec): void {
   const taken: Rect[] = spec.blockers.slice();
   const lowOnly = spec.lowOnly ?? [];
   const palette = paletteFor(spec.use, spec.floor);
+  // One piece per eight square metres, which is roughly a room's worth against
+  // the walls without closing the floor the fight needs.
   const budget = Math.max(
-    2,
-    Math.min(MAX_ITEMS[spec.use], Math.round((width * depth) / 16)),
+    3,
+    Math.min(MAX_ITEMS[spec.use], Math.round((width * depth) / 8)),
   );
   let count = 0;
 
@@ -140,6 +214,275 @@ export function dressRoom(sink: Sink, spec: RoomSpec): void {
 
   addCeilingFitting(sink, spec);
   addWallShelf(sink, spec, taken);
+  addRoomClutter(sink, spec, taken);
+}
+
+/**
+ * The layer under and over the furniture.
+ *
+ * None of it collides and none of it stands above knee height except what hangs
+ * from the ceiling, so it can be laid over the whole floor without touching the
+ * budget the furniture pass has to respect or the sightlines the map is built
+ * around. It is also most of what makes a furnished room look lived in rather
+ * than stocked: paper on the floor, something on the walls, a fan turning.
+ */
+function addRoomClutter(sink: Sink, spec: RoomSpec, taken: readonly Rect[]): void {
+  const { rect } = spec;
+  const width = rect.maxX - rect.minX;
+  const depth = rect.maxZ - rect.minZ;
+  const inner: Rect = {
+    minX: rect.minX + 0.3,
+    minZ: rect.minZ + 0.3,
+    maxX: rect.maxX - 0.3,
+    maxZ: rect.maxZ - 0.3,
+  };
+  const area = width * depth;
+  const derelict = spec.use === 'derelict';
+
+  floorLitter(sink, inner, spec.y + 0.004, Math.round(area * (derelict ? 1.5 : 0.9)));
+
+  // Two of the four inside corners drift up. Which two is what stops every room
+  // reading as the same room: swept floor on one side, years of grit on the other.
+  const corners = shuffle(sink, [0, 1, 2, 3]);
+  for (let i = 0; i < 2; i++) {
+    const c = corners[i];
+    const cx = c === 0 || c === 3 ? rect.minX + 0.45 : rect.maxX - 0.45;
+    const cz = c < 2 ? rect.minZ + 0.45 : rect.maxZ - 0.45;
+    floorDebris(sink, cx, spec.y + 0.006, cz, sink.rng.range(0.45, 0.8), sink.rng.int(7, 14));
+  }
+
+  if (derelict) {
+    floorDebris(
+      sink,
+      (rect.minX + rect.maxX) / 2 + sink.rng.range(-1, 1),
+      spec.y + 0.01,
+      (rect.minZ + rect.maxZ) / 2 + sink.rng.range(-1, 1),
+      Math.min(width, depth) * 0.5,
+      Math.round(area * 0.9),
+    );
+    if (sink.rng.bool(0.55)) {
+      const spot = freeSpot(sink, inner, taken);
+      if (spot) brokenChair(sink, spot.x, spec.y, spot.z, sink.rng.range(0, Math.PI * 2));
+    }
+  } else if (sink.rng.bool(0.3)) {
+    const spot = freeSpot(sink, inner, taken);
+    if (spot) brokenChair(sink, spot.x, spec.y, spot.z, sink.rng.range(0, Math.PI * 2));
+  }
+
+  // Loose objects, chosen by what the room is for and pushed back against a wall
+  // where they would actually have been put down.
+  const objects = ROOM_OBJECTS[spec.use];
+  const objectCount = Math.min(5, Math.max(1, Math.round(area / 8)));
+  for (let i = 0; i < objectCount; i++) {
+    const spot = freeWallSpot(sink, rect, taken, 0.42);
+    if (!spot) continue;
+    sink.rng.pick(objects)(sink, spot.x, spec.y, spot.z, spot.yaw + sink.rng.range(-0.5, 0.5));
+  }
+
+  addRoomWalls(sink, spec, width, depth);
+
+  const ceiling = spec.y + spec.headroom;
+  if (!derelict && area > 14 && sink.rng.bool(0.5)) {
+    ceilingFan(
+      sink,
+      (rect.minX + rect.maxX) / 2 + sink.rng.range(-1.2, 1.2),
+      ceiling,
+      (rect.minZ + rect.maxZ) / 2 + sink.rng.range(-1.2, 1.2),
+    );
+  } else if (sink.rng.bool(derelict ? 0.45 : 0.75)) {
+    bareBulb(
+      sink,
+      (rect.minX + rect.maxX) / 2 + sink.rng.range(-1.4, 1.4),
+      ceiling - 0.02,
+      (rect.minZ + rect.maxZ) / 2 + sink.rng.range(-1.4, 1.4),
+      sink.rng.range(0.35, 0.85),
+    );
+  }
+
+  // Cloth hung off the ceiling near a wall: a partition, a drying sheet, shade.
+  // The line goes in first and the cloth goes over it. A rag on its own hangs in
+  // mid-air with nothing holding it, which from below reads as a dark slab
+  // floating clear of the wall.
+  if (sink.rng.bool(spec.use === 'shop' || spec.use === 'hall' ? 0.65 : 0.4)) {
+    const edge = sink.rng.int(0, 3);
+    const wall = WALLS[edge];
+    const along = sink.rng.range(0.3, 0.7);
+    const inset = 0.5;
+    const x =
+      edge === 1 ? rect.maxX - inset : edge === 3 ? rect.minX + inset : rect.minX + along * width;
+    const z =
+      edge === 0 ? rect.minZ + inset : edge === 2 ? rect.maxZ - inset : rect.minZ + along * depth;
+    const y = ceiling - 0.12;
+    const alongX = wall.along === 'x';
+    const run = snap(alongX ? width - 0.3 : depth - 0.3, 0.5);
+    if (run > 0.8) {
+      sink.addStatic(
+        placed(
+          cylinderGeometry(0.014, 0.014, run, 4, 1),
+          transform(
+            alongX ? (rect.minX + rect.maxX) / 2 : x,
+            y,
+            alongX ? z : (rect.minZ + rect.maxZ) / 2,
+            0,
+            alongX ? 0 : Math.PI / 2,
+            alongX ? Math.PI / 2 : 0,
+          ),
+        ),
+        { material: 'metal_rusted', tier: 'detail', tint: 0x7a7164 },
+      );
+      // Two or three pieces spaced along the run rather than one wide sheet: a
+      // single panel occupying the middle of the line reads as a partition, and
+      // the gaps between pieces are what show the line is a line.
+      const pieces = sink.rng.int(2, 3);
+      for (let i = 0; i < pieces; i++) {
+        const t = (i + 0.5) / pieces + sink.rng.range(-0.1, 0.1) - 0.5;
+        hangingRag(
+          sink,
+          alongX ? (rect.minX + rect.maxX) / 2 + t * run : x,
+          y - 0.02,
+          alongX ? z : (rect.minZ + rect.maxZ) / 2 + t * run,
+          wall.yaw,
+          sink.rng.range(0.45, 0.75),
+          sink.rng.range(0.7, 1.25),
+        );
+      }
+    }
+  }
+
+  // Strip curtain over the internal doorways of the rooms people live and trade
+  // in, which is both correct for the setting and the one piece of dressing that
+  // reads at the moment the player walks through it.
+  if (spec.doors && spec.use !== 'derelict' && spec.use !== 'hall') {
+    for (const door of spec.doors) {
+      if (!sink.rng.bool(0.55)) continue;
+      const cx = (door.minX + door.maxX) / 2;
+      const cz = (door.minZ + door.maxZ) / 2;
+      // The zone is the approach in front of the opening, so the opening itself is
+      // on whichever room edge the zone sits closest to.
+      const gaps = [cz - rect.minZ, rect.maxX - cx, rect.maxZ - cz, cx - rect.minX];
+      let edge = 0;
+      for (let i = 1; i < 4; i++) if (gaps[i] < gaps[edge]) edge = i;
+      const alongX = edge === 0 || edge === 2;
+      const run = alongX ? door.maxX - door.minX : door.maxZ - door.minZ;
+      const span = run - 0.7;
+      if (span < 0.7 || span > 1.9) continue;
+      beadedCurtain(
+        sink,
+        edge === 1 ? rect.maxX - 0.07 : edge === 3 ? rect.minX + 0.07 : cx,
+        spec.y + 2.28,
+        edge === 0 ? rect.minZ + 0.07 : edge === 2 ? rect.maxZ - 0.07 : cz,
+        alongX ? 0 : Math.PI / 2,
+        span,
+        sink.rng.range(1.75, 2.0),
+      );
+    }
+  }
+}
+
+/**
+ * The walls of a room, which is the surface a player standing in a doorway sees
+ * most of and the one the furniture pass leaves completely bare.
+ */
+function addRoomWalls(sink: Sink, spec: RoomSpec, width: number, depth: number): void {
+  const { rect } = spec;
+  const derelict = spec.use === 'derelict';
+  const face = (edge: number, along: number): { x: number; z: number; yaw: number } => {
+    const wall = WALLS[edge];
+    return {
+      x: edge === 1 ? rect.maxX : edge === 3 ? rect.minX : rect.minX + along * width,
+      z: edge === 0 ? rect.minZ : edge === 2 ? rect.maxZ : rect.minZ + along * depth,
+      yaw: wall.yaw,
+    };
+  };
+
+  // Walk all four walls and give each an amount of dressing set by its own
+  // length, rather than scattering a fixed handful of items over the room. With
+  // a fixed budget the long wall of a shop draws nothing about half the time,
+  // and the player stands two metres from it: one bare eight-metre wall undoes
+  // an otherwise fully dressed room. All of it is merged overlay, so covering
+  // every wall of every room costs triangles in an existing batch and no draws.
+  for (let edge = 0; edge < 4; edge++) {
+    const wall = WALLS[edge];
+    const run = wall.along === 'x' ? width : depth;
+    if (run < 1.2) continue;
+    const items = Math.max(1, Math.round(run / 2.4));
+    for (let i = 0; i < items; i++) {
+      const p = face(edge, (i + sink.rng.range(0.2, 0.8)) / items);
+      const roll = sink.rng.next();
+      if (roll < 0.3) {
+        wallPaper(sink, p.x, spec.y + sink.rng.range(1.15, 1.9), p.z, p.yaw, sink.rng.int(1, 3));
+      } else if (roll < 0.75) {
+        // Damp wicking up from the skirting, or the smear at shoulder height on
+        // the side of a doorway people push past.
+        const low = sink.rng.bool(0.55);
+        wallGrime(
+          sink,
+          p.x,
+          spec.y + (low ? sink.rng.range(0.25, 0.6) : sink.rng.range(1.3, 2.1)),
+          p.z,
+          p.yaw,
+          sink.rng.range(0.7, Math.max(0.8, Math.min(2.4, run * 0.5))),
+          low ? sink.rng.range(0.4, 0.8) : sink.rng.range(0.6, 1.2),
+        );
+      } else if (derelict && roll < 0.88) {
+        graffiti(sink, p.x, spec.y + sink.rng.range(1.0, 1.7), p.z, p.yaw, sink.rng.range(0.8, 1.6));
+      }
+    }
+  }
+
+  // Surface wiring: a conduit run at picture height with a box on it, because
+  // nothing in this town was wired inside the plaster.
+  const runs = Math.max(width, depth) > 6 ? 2 : 1;
+  for (let i = 0; i < runs; i++) {
+    if (!sink.rng.bool(derelict ? 0.3 : 0.7)) continue;
+    const edge = sink.rng.int(0, 3);
+    const wall = WALLS[edge];
+    if ((wall.along === 'x' ? width : depth) <= 2.2) continue;
+    const a = face(edge, 0.12);
+    const b = face(edge, 0.88);
+    const n = { x: Math.sin(wall.yaw) * 0.035, z: Math.cos(wall.yaw) * 0.035 };
+    const y = spec.y + sink.rng.range(1.9, 2.3);
+    conduitBundle(sink, a.x + n.x, a.z + n.z, b.x + n.x, b.z + n.z, y, wall.yaw, 1);
+    const box = face(edge, sink.rng.range(0.3, 0.7));
+    meterBox(sink, box.x + n.x * 2, spec.y + sink.rng.range(1.4, 1.6), box.z + n.z * 2, wall.yaw);
+  }
+}
+
+/**
+ * A spot against a wall, clear of the furniture and the door approaches.
+ *
+ * Loose objects belong at the edges: the middle of a room somebody uses stays
+ * walkable, and a bucket in the centre of the floor reads as scattered props.
+ */
+function freeWallSpot(
+  sink: Sink,
+  r: Rect,
+  taken: readonly Rect[],
+  inset: number,
+): { x: number; z: number; yaw: number } | null {
+  for (let i = 0; i < 10; i++) {
+    const edge = sink.rng.int(0, 3);
+    const wall = WALLS[edge];
+    const t = sink.rng.range(0.12, 0.88);
+    const x =
+      edge === 1 ? r.maxX - inset : edge === 3 ? r.minX + inset : r.minX + t * (r.maxX - r.minX);
+    const z =
+      edge === 0 ? r.minZ + inset : edge === 2 ? r.maxZ - inset : r.minZ + t * (r.maxZ - r.minZ);
+    if (overlaps(taken, { minX: x - 0.28, minZ: z - 0.28, maxX: x + 0.28, maxZ: z + 0.28 })) continue;
+    return { x, z, yaw: wall.yaw };
+  }
+  return null;
+}
+
+/** A point in the room clear of the furniture, or null if there is no room. */
+function freeSpot(sink: Sink, r: Rect, taken: readonly Rect[]): { x: number; z: number } | null {
+  for (let i = 0; i < 8; i++) {
+    const x = sink.rng.range(r.minX, r.maxX);
+    const z = sink.rng.range(r.minZ, r.maxZ);
+    if (overlaps(taken, { minX: x - 0.3, minZ: z - 0.3, maxX: x + 0.3, maxZ: z + 0.3 })) continue;
+    return { x, z };
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

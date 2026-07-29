@@ -15,6 +15,9 @@ class SmokeSource {
   duration = 0;
   rate = 8;
   accumulator = 0;
+  /** Sun reaching the base of the cloud, and the air a few metres above it. */
+  sunLow = 1;
+  sunHigh = 1;
 }
 
 class FireSource {
@@ -28,10 +31,37 @@ class FireSource {
   smokeAccum = 0;
   hazeAccum = 0;
   flicker = 0;
+  sunLow = 1;
+  sunHigh = 1;
 }
 
 const UP = /* @__PURE__ */ new THREE.Vector3(0, 1, 0);
 const DEFAULT_SMOKE = 0xb6b9bd;
+
+/**
+ * Hard ceilings on sprite diameter, in metres.
+ *
+ * Sizing a flame off the radius of the fire is what turns a burning airstrike
+ * crater into a flat orange smear: a nine-metre fire gets nine-metre flame
+ * billboards, and one quad that wide has no internal structure the eye can read
+ * as burning — it is a colour wash with a soft edge. A large fire is a great many
+ * ordinary flames, so the size is capped and the count carries the volume.
+ */
+const MAX_FLAME_SPRITE = 2.8;
+const MAX_HAZE_SPRITE = 4;
+
+/**
+ * Most particles a source may emit in one step, whatever the step length.
+ *
+ * Emission is metered in particles per second against elapsed time, so the only
+ * thing this guards is a pathological frame — an alt-tab, a shader compile — and
+ * it has to be well above what a normal long frame asks for. A fixed per-frame
+ * drain instead of a burst ceiling is what makes a cloud photograph far thinner
+ * than it plays: under a software rasteriser a frame is a tenth of a second of
+ * simulation, so a source metering forty puffs a second is owed four of them and
+ * a budget of four hands back one.
+ */
+const MAX_BURST = 14;
 
 /**
  * Sustained volumetric effects: smoke clouds, ambient dust and fires.
@@ -82,17 +112,21 @@ export class VolumetricEffects {
     source.radius = r;
     source.duration = Math.max(0.35, duration);
     source.remaining = source.duration;
+    this.probeSun(position, r * 2 + 4, source);
     hexColor(color ?? DEFAULT_SMOKE, source.color);
 
     // Hold enough sprites in the air that the cloud reads as a volume rather
     // than as a handful of billboards, then emit at the rate that sustains it.
+    // The group has 3000 slots at the top tier and a screening cloud is the one
+    // effect that genuinely needs a couple of hundred of them: density here is
+    // the difference between concealment and a light haze.
     const life = this.smokeLife(r);
-    const population = Math.min(110, 16 + r * 12) * this.density;
+    const population = Math.min(240, 30 + r * 32) * this.density;
     source.rate = population / life;
     source.accumulator = 0;
 
     // The initial billow, so the grenade is a cloud immediately.
-    const burst = Math.max(4, Math.round(Math.min(26, 6 + r * 3.5) * this.density));
+    const burst = Math.max(6, Math.round(Math.min(56, 10 + r * 10) * this.density));
     for (let i = 0; i < burst; i++) this.emitSmokePuff(source, true);
   }
 
@@ -109,7 +143,12 @@ export class VolumetricEffects {
     // Seeded across the whole cloud. Filling a radius with sprites the width of
     // that radius is what turns a cloud into three grey billboards; the volume
     // has to come from spreading many smaller puffs through it.
-    const offset = Math.cbrt(rng.next()) * r * (initial ? 0.95 : 0.7);
+    // The seeding volume grows as the source burns. A cloud that keeps emitting
+    // into the same sphere for fifteen seconds is a ball of fixed size with new
+    // puffs appearing inside it, which is not what a screening charge does — it
+    // spreads, and the spread is most of what says the thing is still venting.
+    const spread = initial ? 0.95 : 0.7 + (1 - source.remaining / source.duration) * 0.85;
+    const offset = Math.cbrt(rng.next()) * r * spread;
     d.px = source.position.x + this.dir.x * offset;
     d.py = source.position.y + this.dir.y * offset * 0.6 + r * 0.12;
     d.pz = source.position.z + this.dir.z * offset;
@@ -122,7 +161,10 @@ export class VolumetricEffects {
     d.vz = this.dir.z * push + wind.z * rng.range(0.1, 0.45);
 
     d.life = this.smokeLife(r) * rng.range(0.7, 1.25);
-    d.size0 = Math.min(r * rng.range(0.3, 0.48), 4);
+    // Optical depth goes as sprite area times count, and a screening cloud has
+    // to actually screen: at the previous width the wall grid behind a smoke
+    // grenade was legible straight through the middle of it.
+    d.size0 = Math.min(r * rng.range(0.42, 0.62), 4);
     d.size1 = Math.min(d.size0 * rng.range(1.5, 2.1), 8);
     d.roll = rng.range(0, Math.PI * 2);
     // Barely turning; fast-spinning smoke is one of the classic tells.
@@ -133,7 +175,7 @@ export class VolumetricEffects {
     d.r1 = c.r * 0.78;
     d.g1 = c.g * 0.8;
     d.b1 = c.b * 0.84;
-    d.alpha = rng.range(0.68, 1.0);
+    d.alpha = rng.range(0.6, 0.95);
     // Very slightly buoyant while warm, then neutral.
     d.gravity = -0.12;
     d.drag = 0.65;
@@ -141,7 +183,17 @@ export class VolumetricEffects {
     d.cell = 0;
     d.frames = 16;
     d.fadeIn = 0.22;
-    d.softness = Math.min(r * 0.6, 2.5);
+    // Scaled to the sprite, not to the cloud. The depth fade is there to hide
+    // the straight line a quad cuts where it enters a wall, and that line is a
+    // property of the quad — so a metre-wide puff needs about a metre of fade.
+    // Sizing it off the cloud instead gives a six-metre bank three metres of
+    // fade band, which is wider than most of the sprites in it, and the whole
+    // cloud dissolves as it approaches the surface it is supposed to be piled
+    // against.
+    d.softness = Math.min(d.size0 * 0.85, 2);
+    // Puffs seeded higher in the cloud see more sky, so the top of a cloud
+    // sitting in a shadowed street still catches the sun.
+    d.sunVisibility = this.mixSun(source, saturate((d.py - source.position.y) / (r + 2)));
     d.priority = 210;
     this.deps.groups.smoke.spawn(this.deps.now, d);
   }
@@ -157,6 +209,7 @@ export class VolumetricEffects {
     const r = Math.max(0.2, radius);
     const s = saturate(strength);
     const count = Math.max(2, Math.round((3 + r * 2.2 + s * 6) * this.density));
+    const sun = this.deps.sunVisibility(position);
 
     this.basis.set(UP);
     for (let i = 0; i < count; i++) {
@@ -176,19 +229,20 @@ export class VolumetricEffects {
       d.size1 = Math.min(d.size0 * rng.range(1.8, 2.8), 6);
       d.roll = rng.range(0, Math.PI * 2);
       d.rollRate = rng.range(-0.5, 0.5);
-      d.r0 = 0.44;
-      d.g0 = 0.4;
-      d.b0 = 0.33;
-      d.r1 = 0.24;
-      d.g1 = 0.22;
-      d.b1 = 0.19;
-      d.alpha = rng.range(0.5, 0.95) * (0.45 + s * 0.75);
+      d.r0 = 0.3;
+      d.g0 = 0.27;
+      d.b0 = 0.22;
+      d.r1 = 0.17;
+      d.g1 = 0.155;
+      d.b1 = 0.13;
+      d.alpha = rng.range(0.34, 0.62) * (0.45 + s * 0.75);
       d.gravity = 0.6;
       d.drag = 1.6;
       d.turbulence = 0.35;
       d.cell = (rng.next() * 4) | 0;
       d.fadeIn = 0.14;
-      d.softness = Math.min(r * 0.4, 2);
+      d.softness = Math.min(d.size0 * 0.9, 1.5);
+      d.sunVisibility = sun;
       d.priority = 110;
       groups.dust.spawn(now, d);
     }
@@ -222,6 +276,7 @@ export class VolumetricEffects {
     source.smokeAccum = 0;
     source.hazeAccum = 0;
     source.flicker = 0;
+    this.probeSun(position, r * 3 + 6, source);
 
     this.scorchPoint.copy(position);
     this.scorchPoint.y += 0.01;
@@ -251,16 +306,17 @@ export class VolumetricEffects {
     d.life = rng.range(0.45, 0.85) * (0.75 + r * 0.25);
     // Flames stand well above the fuel bed they come off — a metre of burning
     // ground throws two metres of fire — and they stretch as they detach.
-    d.size0 = r * rng.range(0.8, 1.4);
-    d.size1 = d.size0 * rng.range(1.05, 1.6);
+    d.size0 = Math.min(r * rng.range(0.8, 1.4), MAX_FLAME_SPRITE);
+    d.size1 = Math.min(d.size0 * rng.range(1.05, 1.6), MAX_FLAME_SPRITE * 1.5);
     d.roll = rng.range(0, Math.PI * 2);
     d.rollRate = rng.range(-1.6, 1.6);
-    d.r0 = 5.5;
-    d.g0 = 2.9;
-    d.b0 = 0.85;
-    d.r1 = 0.85;
-    d.g1 = 0.14;
-    d.b1 = 0.03;
+    // Blackbody encoding: radiance and ramp position. A flame is already well
+    // down the ramp at birth — a fuel fire never reaches the white of a
+    // detonation — and it cools to a dull red as it detaches from the bed.
+    d.r0 = 4.2;
+    d.g0 = rng.range(0.24, 0.36);
+    d.r1 = 0.5;
+    d.g1 = rng.range(0.62, 0.78);
     d.alpha = 1;
     d.additive = 0.9;
     // Buoyancy, not gravity: flame accelerates upward as it burns.
@@ -338,6 +394,9 @@ export class VolumetricEffects {
     d.frames = 16;
     d.fadeIn = 0.2;
     d.softness = r * 0.8;
+    // Fire smoke is born well above the fuel bed and climbing, so it sees more
+    // sky than the fire does.
+    d.sunVisibility = this.mixSun(source, 0.7);
     d.priority = 190;
     this.deps.groups.smoke.spawn(this.deps.now, d);
   }
@@ -358,8 +417,8 @@ export class VolumetricEffects {
     d.pz = source.position.z + this.dir.z;
     d.vy = rng.range(1.8, 3.4);
     d.life = rng.range(0.7, 1.4);
-    d.size0 = r * rng.range(0.8, 1.3);
-    d.size1 = d.size0 * rng.range(1.6, 2.4);
+    d.size0 = Math.min(r * rng.range(0.8, 1.3), MAX_HAZE_SPRITE);
+    d.size1 = Math.min(d.size0 * rng.range(1.6, 2.4), MAX_HAZE_SPRITE * 2);
     d.roll = rng.range(0, Math.PI * 2);
     d.rollRate = rng.range(-0.8, 0.8);
     d.r0 = 0.5;
@@ -396,13 +455,11 @@ export class VolumetricEffects {
       // Emission tapers off over the last third so the cloud thins out instead
       // of stopping dead.
       const taper = saturate(s.remaining / (s.duration * 0.34));
-      s.accumulator += s.rate * taper * dt;
-      let budget = 4;
-      while (s.accumulator >= 1 && budget-- > 0) {
+      s.accumulator = Math.min(s.accumulator + s.rate * taper * dt, MAX_BURST);
+      while (s.accumulator >= 1) {
         s.accumulator -= 1;
         this.emitSmokePuff(s, false);
       }
-      if (s.accumulator > 4) s.accumulator = 4;
     }
 
     for (const f of this.fireSources) {
@@ -416,30 +473,30 @@ export class VolumetricEffects {
       const strength = saturate(f.remaining / (f.duration * 0.25));
       const scale = this.density * (0.5 + f.radius * 0.6) * strength;
 
-      f.flameAccum += 24 * scale * dt;
-      let budget = 7;
-      while (f.flameAccum >= 1 && budget-- > 0) {
+      // Rates are capped as well as scaled. A large fire is limited by its share
+      // of the group, not by its area, and emitting past that share only churns
+      // the pool — nine burning craters asking for twelve hundred flames between
+      // them get eight hundred and spend the difference on evictions.
+      f.flameAccum = Math.min(f.flameAccum + Math.min(24 * scale, 70) * dt, MAX_BURST);
+      while (f.flameAccum >= 1) {
         f.flameAccum -= 1;
         this.emitFlame(f);
       }
-      if (f.flameAccum > 3) f.flameAccum = 3;
 
-      f.emberAccum += 8 * scale * dt;
-      budget = 3;
-      while (f.emberAccum >= 1 && budget-- > 0) {
+      f.emberAccum = Math.min(f.emberAccum + Math.min(8 * scale, 22) * dt, MAX_BURST);
+      while (f.emberAccum >= 1) {
         f.emberAccum -= 1;
         this.emitEmber(f);
       }
 
-      f.smokeAccum += 5 * scale * dt;
-      budget = 3;
-      while (f.smokeAccum >= 1 && budget-- > 0) {
+      f.smokeAccum = Math.min(f.smokeAccum + Math.min(5 * scale, 16) * dt, MAX_BURST);
+      while (f.smokeAccum >= 1) {
         f.smokeAccum -= 1;
         this.emitFireSmoke(f);
       }
 
-      f.hazeAccum += 2.4 * scale * dt;
-      if (f.hazeAccum >= 1) {
+      f.hazeAccum = Math.min(f.hazeAccum + 2.4 * scale * dt, MAX_BURST);
+      while (f.hazeAccum >= 1) {
         f.hazeAccum -= 1;
         this.emitHaze(f);
       }
@@ -464,6 +521,26 @@ export class VolumetricEffects {
   clear(): void {
     for (const s of this.smokeSources) s.active = false;
     for (const f of this.fireSources) f.active = false;
+  }
+
+  /**
+   * Probe the sun twice: at the source and at the air above it.
+   *
+   * A cloud in a street is a tall object in a shadowed slot, and one occlusion
+   * value for the whole thing is wrong at both ends — shaded at the base it
+   * would be, but the top of the plume is usually out in the open, and that
+   * bright crown against a dark base is most of what makes a column read as
+   * something rising rather than as a grey shape.
+   */
+  private probeSun(position: THREE.Vector3, height: number, into: SmokeSource | FireSource): void {
+    into.sunLow = this.deps.sunVisibility(position);
+    fxScratch.b.copy(position);
+    fxScratch.b.y += height;
+    into.sunHigh = this.deps.sunVisibility(fxScratch.b);
+  }
+
+  private mixSun(source: SmokeSource | FireSource, height: number): number {
+    return source.sunLow + (source.sunHigh - source.sunLow) * saturate(height);
   }
 
   private acquireSmoke(): SmokeSource {

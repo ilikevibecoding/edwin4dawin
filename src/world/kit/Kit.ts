@@ -60,6 +60,16 @@ export interface PropOptions {
   lod?: THREE.BufferGeometry | null;
   /** Overrides the tier's shadow-casting default (glass must not cast). */
   castShadow?: boolean;
+  /**
+   * Opts a prop out of receiving shadow. Only honoured on instanced groups.
+   *
+   * For thin cloth slung overhead, which is the only thing that wants it. Such a
+   * sheet is inside the shadow it casts, so the face the player stands under is
+   * lit by ambient alone and goes to a dark slab — the opposite of what a canopy
+   * with the sun on it looks like from below. Dropping the shadow lookup and
+   * shading it skyward gets the light through it.
+   */
+  receiveShadow?: boolean;
   /** Animate with the foliage wind shader; forces instancing. */
   wind?: boolean;
   /**
@@ -75,6 +85,20 @@ export interface PropOptions {
    * triangle count or a shadow to project should stay chunked.
    */
   global?: boolean;
+  /**
+   * Micro clutter: pooled, never shadow-casting, and collapsed by the vertex
+   * shader past `CLUTTER_FAR` metres from the camera.
+   *
+   * Litter is the one class of prop where per-chunk culling is the wrong tool.
+   * Thousands of ten-triangle scraps want to be one draw call, which means one
+   * map-wide instanced mesh, which means chunk visibility can never touch them.
+   * Collapsing each copy to its own pivot in the vertex shader gets the effect
+   * culling was for — no raster work for a crushed can forty metres away, and no
+   * shimmering carpet of sub-pixel geometry down the street — while keeping the
+   * single draw call. Forces instancing, since the shader lives on a material the
+   * merged batches do not use.
+   */
+  clutter?: boolean;
 }
 
 /** Handle to one copy of an instanced prop, so destructibles can address it. */
@@ -165,6 +189,15 @@ export interface Sink {
   /** Map-wide object exempt from chunk culling; use sparingly. */
   addOverlay(object: THREE.Object3D): void;
   addCollider(center: THREE.Vector3, half: THREE.Vector3, yaw: number, spec: ColliderSpec): void;
+  /**
+   * True when something solid already stands on the ground at this XZ.
+   *
+   * The collider list is the occupancy map the level already keeps, so a late
+   * scatter pass can reject a position inside a wall, a wreck or a barrier
+   * without every set piece having to declare a footprint of its own. Only valid
+   * once the geometry it should avoid has been emitted.
+   */
+  groundClaimed(x: number, z: number, pad?: number): boolean;
   addTrimesh(mesh: THREE.Mesh, surface: SurfaceType): void;
   addWalkable(spec: NavSurfaceSpec): void;
   addSpawn(x: number, z: number, yaw: number, team: Team, priority?: number): void;

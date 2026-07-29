@@ -34,6 +34,27 @@ export class Signal {
     this.data = new Float32Array(Math.max(1, Math.ceil(seconds * sampleRate)));
   }
 
+  /**
+   * Allocate by sample count. Prefer this over `new Signal(other.duration, sr)`
+   * whenever the result has to be the same length as an existing signal: the
+   * seconds round-trip is not idempotent, because `length / sampleRate * sampleRate`
+   * can land just above the integer it started from and `ceil` then overshoots.
+   * At 44.1 kHz a 221-sample signal round-trips to 222, and code that then
+   * iterates the longer array reads one sample past the shorter one — which on a
+   * Float32Array yields `undefined`, and `undefined` in arithmetic yields NaN.
+   */
+  static ofLength(frames: number, sampleRate: number): Signal {
+    const s = Object.create(Signal.prototype) as { data: Samples; sampleRate: number };
+    s.data = new Float32Array(Math.max(1, Math.floor(frames)));
+    s.sampleRate = sampleRate;
+    return s as Signal;
+  }
+
+  /** An empty signal with exactly the same length and rate as `other`. */
+  static like(other: Signal): Signal {
+    return Signal.ofLength(other.data.length, other.sampleRate);
+  }
+
   static wrap(data: Samples, sampleRate: number): Signal {
     const s = Object.create(Signal.prototype) as { data: Samples; sampleRate: number };
     s.data = data;
@@ -292,4 +313,34 @@ export function renderedPeak(sound: RenderedSound): number {
 
 export function renderedFrames(sound: RenderedSound): number {
   return sound.channels[0]?.length ?? 0;
+}
+
+/**
+ * Replace any non-finite sample with silence and clamp the rest into range.
+ *
+ * A single NaN or Infinity anywhere in an AudioBuffer poisons every node
+ * downstream of it permanently — Web Audio has no recovery path, so the
+ * offending voice, the bus it plays on and any analyser tapping that bus all
+ * emit NaN for the remaining life of the context. Catching it here, where the
+ * sound is created and the id is known, is the only place the fault can still
+ * be attributed to something.
+ *
+ * Returns the number of samples repaired, so a dev build can name the culprit.
+ */
+export function sanitizeRendered(sound: RenderedSound): number {
+  let repaired = 0;
+  for (const ch of sound.channels) {
+    for (let i = 0; i < ch.length; i++) {
+      const s = ch[i];
+      if (!Number.isFinite(s)) {
+        ch[i] = 0;
+        repaired++;
+      } else if (s > 1) {
+        ch[i] = 1;
+      } else if (s < -1) {
+        ch[i] = -1;
+      }
+    }
+  }
+  return repaired;
 }

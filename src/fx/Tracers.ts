@@ -15,10 +15,27 @@ attribute vec4 aStyle;  // rgb colour, a width
 attribute vec4 aExtra;  // trail length, intensity, seed, kind
 
 uniform float uTime;
+/**
+ * World metres per screen pixel at one metre of depth.
+ *
+ * A tracer is 3.5 cm across. At five metres that is a healthy five pixels; at a
+ * hundred it is a quarter of one, so the rasteriser drops most of the streak and
+ * what survives flickers — a round crossing a street simply vanishes halfway.
+ * Widening it in world space by the depth keeps it at a fixed size on screen,
+ * which is what a self-luminous streak does anyway once it is small enough to be
+ * spread by the lens.
+ */
+uniform float uPixelWidth;
+
+/** Screen width a tracer is never allowed to fall below, in pixels. */
+const float MIN_PIXELS = 2.8;
+/** Width, in pixels, at which the cross-section is worth resolving in full. */
+const float SHARP_PIXELS = 9.0;
 
 varying vec2 vUv;
 varying vec4 vColor;
 varying float vKind;
+varying float vSharp;
 
 void main() {
   vec3 delta = aTo.xyz - aFrom.xyz;
@@ -31,6 +48,7 @@ void main() {
     vUv = vec2(0.0);
     vColor = vec4(0.0);
     vKind = 0.0;
+    vSharp = 1.0;
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
@@ -49,7 +67,9 @@ void main() {
   float len = length(screen);
   vec2 axis = len > 1e-5 ? screen / len : vec2(1.0, 0.0);
   vec2 perp = vec2(-axis.y, axis.x);
-  mv.xy += perp * (position.x * aStyle.a);
+  float perPixel = -mv.z * uPixelWidth;
+  float width = max(aStyle.a, perPixel * MIN_PIXELS);
+  mv.xy += perp * (position.x * width);
 
   gl_Position = projectionMatrix * mv;
 
@@ -57,9 +77,21 @@ void main() {
   // a tracer never blinks out mid-air.
   float leave = clamp(travel / max(trail * 0.6, 1e-3), 0.0, 1.0);
   float arrive = 1.0 - clamp((travel - total) / max(trail, 1e-3), 0.0, 1.0);
+  // Widening the streak to keep it on screen must not also make it brighter, or
+  // distant fire glares. Compensating only partly is the honest answer: a very
+  // bright sub-pixel line really does survive being spread over a pixel, just
+  // dimmer than it was.
+  float widen = width / max(aStyle.a, 1e-5);
   vUv = vec2(position.x + 0.5, along);
-  vColor = vec4(aStyle.rgb, aExtra.y * leave * arrive);
+  vColor = vec4(aStyle.rgb, aExtra.y * leave * arrive / pow(max(widen, 1.0), 0.62));
   vKind = aExtra.w;
+  // How much cross-section the rasteriser can actually resolve, which is a
+  // question about pixels and not about whether the width was floored. Keying
+  // it to the floor instead makes the *near* streak the sharp one, and a needle
+  // profile on a four-pixel quad is sampled nowhere near its axis — so the round
+  // at five metres, the one round guaranteed to be on screen, came out as a pale
+  // hairline while the hundred-metre round it was supposed to rescue was fine.
+  vSharp = clamp((width / max(perPixel, 1e-6) - MIN_PIXELS) / (SHARP_PIXELS - MIN_PIXELS), 0.0, 1.0);
 }
 `;
 
@@ -69,11 +101,19 @@ precision highp float;
 varying vec2 vUv;
 varying vec4 vColor;
 varying float vKind;
+varying float vSharp;
 
 void main() {
   float across = abs(vUv.x * 2.0 - 1.0);
-  float core = pow(max(1.0 - across, 0.0), 7.0);
-  float halo = pow(max(1.0 - across, 0.0), 1.8);
+  float edge = max(1.0 - across, 0.0);
+  // The cross-section flattens as the streak is held open to its screen-space
+  // minimum. At its authored width a tracer is a needle with a very tight core,
+  // and that profile is correct while the quad is several pixels across — but
+  // once the quad is down to two, no pixel centre ever lands near enough to the
+  // axis to sample the core, and the round crossing a street at a hundred metres
+  // is drawn entirely from the weak outer falloff. Which is to say: it vanishes.
+  float core = pow(edge, mix(1.7, 7.0, vSharp));
+  float halo = pow(edge, mix(0.85, 1.8, vSharp));
   // Brightest at the head, thinning back down the trail.
   float along = pow(vUv.y, 1.7);
 
@@ -90,8 +130,13 @@ void main() {
   float a = body * vColor.a;
   if (a <= 0.002) discard;
   // The core burns out toward white and carries real HDR headroom so the bloom
-  // pass has something to catch.
-  vec3 hot = mix(vColor.rgb, vec3(1.0), core * 0.72) * (1.0 + core * 3.4);
+  // pass has something to catch. Both are pulled back as the streak is held open
+  // to its screen-space minimum: at that point the quad is no longer resolving a
+  // hot centre and a cooler edge, it is standing in for a whole streak the
+  // rasteriser cannot draw, so every pixel of it takes the burn and a round at a
+  // hundred metres comes out a plain white hairline with none of its colour.
+  float burn = mix(0.22, 0.72, vSharp);
+  vec3 hot = mix(vColor.rgb, vec3(1.0), core * burn) * (1.0 + core * mix(1.3, 3.4, vSharp));
   gl_FragColor = vec4(hot * a, 0.0);
 }
 `;
@@ -149,7 +194,7 @@ export class TracerSystem {
       name: 'fx:tracer',
       vertexShader: VERTEX,
       fragmentShader: FRAGMENT,
-      uniforms: { uTime: { value: 0 } },
+      uniforms: { uTime: { value: 0 }, uPixelWidth: { value: 0.003 } },
       transparent: true,
       depthTest: true,
       depthWrite: false,
@@ -298,6 +343,10 @@ export class TracerSystem {
     }
 
     this.material.uniforms.uTime.value = time;
+    const camera = this.ctx.camera;
+    const height = Math.max(1, this.ctx.size.height);
+    this.material.uniforms.uPixelWidth.value =
+      (2 * Math.tan((camera.fov * Math.PI) / 360)) / height;
     this.geometry.instanceCount = pool.count;
     this.mesh.visible = pool.count > 0;
 

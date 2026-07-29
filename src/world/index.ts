@@ -309,6 +309,9 @@ export class WorldSystemImpl implements WorldSystem, System {
     // Culling runs a frame behind the camera system, which is why the culler
     // dilates the frustum rather than testing it exactly.
     ctx.camera.updateMatrixWorld();
+    if (this.builder) {
+      this.builder.clutterEye.value.setFromMatrixPosition(ctx.camera.matrixWorld);
+    }
     this.culler?.update(ctx.camera, ctx.config);
   }
 

@@ -14,6 +14,8 @@ class Chunk {
   age = 0;
   life = 5;
   size = 0.1;
+  /** Held out of the frame until this age; see `burst`. */
+  revealAt = 0;
   trailAccum = 0;
   smoking = false;
   readonly velocity = new THREE.Vector3();
@@ -83,6 +85,12 @@ export class DebrisField {
   /**
    * Throw `count` hero chunks out of `position`. `count` is the caller's total
    * ejecta count; only a fraction of it is ever promoted to a rigid body.
+   *
+   * `spread` is how far out of `position` the chunks start, in metres. For an
+   * explosion it wants to be about the radius of the fireball: a lit opaque mesh
+   * sitting in the middle of an additive ball punches a black square through the
+   * brightest part of the effect, and a fragment leaving a charge is clear of the
+   * luminous volume long before anything is rendered anyway.
    */
   burst(
     position: THREE.Vector3,
@@ -91,6 +99,7 @@ export class DebrisField {
     surface: SurfaceType,
     energy: number,
     smoking: boolean,
+    spread = 0.12,
   ): void {
     const hero = Math.min(this.capacity, Math.max(1, Math.round(count * 0.2)));
     this.basis.set(normal);
@@ -112,15 +121,22 @@ export class DebrisField {
 
       const mesh = chunk.mesh;
       this.basis.cone(1.1, this.dir);
+      const out = this.clearance(position, spread * rng.range(0.55, 1.15), size);
       mesh.position.set(
-        position.x + this.dir.x * 0.12,
-        position.y + this.dir.y * 0.12 + 0.05,
-        position.z + this.dir.z * 0.12,
+        position.x + this.dir.x * out,
+        position.y + this.dir.y * out + 0.05,
+        position.z + this.dir.z * out,
       );
       mesh.quaternion.set(rng.range(-1, 1), rng.range(-1, 1), rng.range(-1, 1), rng.range(-1, 1));
       mesh.quaternion.normalize();
       mesh.scale.setScalar(size);
-      mesh.visible = true;
+      // Simulated from t=0 but not drawn until the ball has cooled out of white.
+      // The offset alone is not enough on a large charge: a chunk moving at tens
+      // of metres per second still takes a tenth of a second to leave a fireball
+      // several metres across, and for that tenth of a second it is an opaque
+      // shape over the one part of the effect that has to look like light.
+      chunk.revealAt = smoking ? rng.range(0.08, 0.15) : 0;
+      mesh.visible = chunk.revealAt <= 0;
       mesh.matrixAutoUpdate = true;
       this.root.add(mesh);
 
@@ -174,6 +190,11 @@ export class DebrisField {
         continue;
       }
 
+      if (chunk.revealAt > 0 && chunk.age >= chunk.revealAt) {
+        chunk.revealAt = 0;
+        chunk.mesh.visible = true;
+      }
+
       if (chunk.body) chunk.body.getVelocity(chunk.velocity);
       else this.integrate(chunk, dt);
 
@@ -214,13 +235,14 @@ export class DebrisField {
     d.r1 = 0.18;
     d.g1 = 0.17;
     d.b1 = 0.16;
-    d.alpha = rng.range(0.5, 0.8);
+    d.alpha = rng.range(0.35, 0.6);
     d.gravity = -0.3;
     d.drag = 1.6;
     d.turbulence = 0.35;
     d.cell = (rng.next() * 4) | 0;
     d.fadeIn = 0.12;
-    d.softness = 0.3;
+    d.softness = 0.35;
+    d.sunVisibility = this.deps.sunVisibility(p);
     d.priority = 120;
     this.deps.groups.dust.spawn(this.deps.now, d);
   }
@@ -251,18 +273,30 @@ export class DebrisField {
     }
   }
 
-  private probeGround(position: THREE.Vector3): number {
-    const world = this.deps.world;
-    if (world) {
-      const y = world.sampleGround(position.x, position.z);
-      if (y !== null) return y;
-    }
+  /**
+   * Shortens the spawn offset so a chunk never starts on the far side of a wall.
+   * Pushing chunks out of the blast centre is what keeps them from silhouetting
+   * against the fireball, but a rigid body created already intersecting a
+   * collider gets ejected at whatever speed the solver needs to separate it.
+   */
+  private clearance(position: THREE.Vector3, want: number, size: number): number {
+    if (want <= size) return want;
     const physics = this.deps.physics;
-    if (physics && physics.ready) {
-      const hit = physics.raycast(position, this.down, this.rayOptions);
-      if (hit) return hit.point.y;
-    }
-    return position.y - 1.5;
+    if (!physics || !physics.ready) return want;
+    this.rayOptions.maxDistance = want + size;
+    const hit = physics.raycast(position, this.dir, this.rayOptions);
+    if (!hit) return want;
+    return Math.max(0, Math.min(want, hit.distance - size));
+  }
+
+  /**
+   * Shares the emitters' floor probe, which rejects an implausibly distant
+   * answer instead of returning it. Taking the terrain height on trust puts a
+   * chunk thrown off a third-floor balcony on the street below, so it drops
+   * through the balcony it was standing on; never landing is the lesser error.
+   */
+  private probeGround(position: THREE.Vector3): number {
+    return this.deps.groundAt(position.x, position.z, position.y);
   }
 
   private materialFor(surface: SurfaceType): THREE.MeshStandardMaterial {

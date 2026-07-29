@@ -32,7 +32,7 @@
  *    weapon activity, so the score never fights a gunfight it cannot win.
  */
 import { clamp, saturate } from '../core/MathUtils';
-import { generateImpulseResponse, type SpaceId } from './synth';
+import { generateImpulseResponse, sanitizeRendered, type SpaceId } from './synth';
 import type { BusId } from './sounds';
 
 const BUS_IDS: readonly BusId[] = ['sfx', 'weapons', 'ui', 'music', 'ambience'];
@@ -256,6 +256,12 @@ export class MixerGraph {
     let ir = this.irCache.get(space);
     if (!ir) {
       const rendered = generateImpulseResponse(space, this.context.sampleRate);
+      // A non-finite tap in an IR makes the convolver emit NaN for the rest of
+      // the context's life, which then poisons the master bus and every meter.
+      const repaired = sanitizeRendered(rendered);
+      if (repaired > 0) {
+        console.warn(`[audio] IR "${space}" had ${repaired} non-finite taps; silenced`);
+      }
       ir = this.context.createBuffer(
         rendered.channels.length,
         rendered.channels[0].length,
@@ -368,6 +374,15 @@ export class MixerGraph {
 
   /** Duck the music bus to `target` (0..1). Fast down, slow back up. */
   duckMusic(target: number, dt: number): void {
+    // An AudioParam rejects a non-finite value by throwing, and this is an
+    // accumulator, so one bad frame would otherwise throw on every frame after
+    // it. Recover to unity rather than propagating.
+    if (!Number.isFinite(target) || !Number.isFinite(dt)) {
+      this.musicDuckTarget = 1;
+      this.musicDuckValue = 1;
+      this.musicDuck.gain.setTargetAtTime(1, this.now, 0.05);
+      return;
+    }
     this.musicDuckTarget = saturate(target);
     // Asymmetric: a compressor's attack and release, done on the control side.
     const rate = this.musicDuckTarget < this.musicDuckValue ? 26 : 1.6;
@@ -442,10 +457,22 @@ function softCeilingCurve(knee: number, span: number, points: number): Float32Ar
   return curve;
 }
 
+/**
+ * A meter must never hand a non-finite value to control logic. If anything
+ * upstream has gone unstable the analyser will read NaN, and a level that feeds
+ * an accumulator would latch it there forever — the music duck did exactly
+ * that, throwing on every subsequent frame. Reading 0 degrades to "no signal",
+ * which is both recoverable and the safe interpretation.
+ */
 function analyserRms(analyser: AnalyserNode, scratch: Float32Array<ArrayBuffer>): number {
   analyser.getFloatTimeDomainData(scratch);
   const n = scratch.length;
+  if (n === 0) return 0;
   let sum = 0;
-  for (let i = 0; i < n; i++) sum += scratch[i] * scratch[i];
-  return Math.sqrt(sum / n);
+  for (let i = 0; i < n; i++) {
+    const s = scratch[i];
+    if (Number.isFinite(s)) sum += s * s;
+  }
+  const rms = Math.sqrt(sum / n);
+  return Number.isFinite(rms) ? rms : 0;
 }

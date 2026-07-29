@@ -20,8 +20,30 @@ interface ExplosionPreset {
   columnHeight: number;
   /** Upward velocity of the column base, m/s. */
   columnSpeed: number;
-  /** Seconds over which column particles keep spawning. */
+  /**
+   * Seconds over which column particles keep spawning.
+   *
+   * This has to be close to `columnHeight / columnSpeed` — the time the plume
+   * takes to climb — or the column has no stem. Emit for a fraction of the climb
+   * and every puff rises together as one clump, which detaches from the ground
+   * and leaves a dark blob floating over an untouched crater: the single most
+   * obvious way for an explosion to stop looking like one. Emitting for as long
+   * as the plume is climbing means there is smoke at every height at once, which
+   * is what a column is.
+   */
   columnSpawnWindow: number;
+  /**
+   * Seconds a column puff lives.
+   *
+   * This is the number that decides how long a detonation is still visible from
+   * across the map, and the honest values are much larger than a particle system
+   * is usually given: the smoke over a heavy bomb is still standing a minute
+   * later. Long life has to be paid for with low per-puff opacity or the plume
+   * becomes an opaque wall parked over the level.
+   */
+  columnLife: number;
+  /** Puffs in the low dust pall that spreads out around the base. */
+  pallCount: number;
   fireballCount: number;
   smokeCount: number;
   sparkCount: number;
@@ -45,76 +67,84 @@ const PRESETS: Record<ExplosionKind, ExplosionPreset> = {
   grenade: {
     fireRadius: 0.42,
     columnRadius: 0.36,
-    columnHeight: 4,
+    columnHeight: 5,
     columnSpeed: 2.6,
-    columnSpawnWindow: 0.7,
+    columnSpawnWindow: 1.6,
+    columnLife: 5.5,
+    pallCount: 22,
     fireballCount: 16,
-    smokeCount: 20,
+    smokeCount: 46,
     sparkCount: 34,
     chunkCount: 22,
-    dirtCount: 26,
+    dirtCount: 30,
     waveCount: 26,
     waveReach: 1.3,
     lightIntensity: 260,
     burnDuration: 0.9,
-    smokeAlpha: 0.82,
+    smokeAlpha: 0.5,
     scorchScale: 0.75,
     leavesFire: false,
   },
   rocket: {
     fireRadius: 0.46,
     columnRadius: 0.36,
-    columnHeight: 8,
+    columnHeight: 9,
     columnSpeed: 3.4,
-    columnSpawnWindow: 0.9,
+    columnSpawnWindow: 2.2,
+    columnLife: 7,
+    pallCount: 26,
     fireballCount: 20,
-    smokeCount: 28,
+    smokeCount: 60,
     sparkCount: 48,
     chunkCount: 30,
-    dirtCount: 32,
+    dirtCount: 36,
     waveCount: 30,
     waveReach: 1.7,
     lightIntensity: 380,
     burnDuration: 1.6,
-    smokeAlpha: 0.86,
+    smokeAlpha: 0.54,
     scorchScale: 0.9,
     leavesFire: false,
   },
   barrel: {
     fireRadius: 0.5,
     columnRadius: 0.38,
-    columnHeight: 11,
+    columnHeight: 13,
     columnSpeed: 4.2,
-    columnSpawnWindow: 1.4,
+    columnSpawnWindow: 2.6,
+    columnLife: 10,
+    pallCount: 26,
     fireballCount: 22,
-    smokeCount: 32,
+    smokeCount: 66,
     sparkCount: 40,
     chunkCount: 24,
-    dirtCount: 28,
+    dirtCount: 32,
     waveCount: 30,
     waveReach: 1.6,
     lightIntensity: 420,
     burnDuration: 4.5,
-    smokeAlpha: 0.9,
+    smokeAlpha: 0.58,
     scorchScale: 1.0,
     leavesFire: true,
   },
   vehicle: {
     fireRadius: 0.54,
     columnRadius: 0.4,
-    columnHeight: 16,
+    columnHeight: 18,
     columnSpeed: 5,
-    columnSpawnWindow: 2.0,
+    columnSpawnWindow: 3.0,
+    columnLife: 14,
+    pallCount: 34,
     fireballCount: 28,
-    smokeCount: 44,
+    smokeCount: 84,
     sparkCount: 56,
     chunkCount: 40,
-    dirtCount: 38,
+    dirtCount: 42,
     waveCount: 36,
     waveReach: 1.8,
     lightIntensity: 520,
     burnDuration: 7,
-    smokeAlpha: 0.95,
+    smokeAlpha: 0.62,
     scorchScale: 1.2,
     leavesFire: true,
   },
@@ -125,11 +155,16 @@ const PRESETS: Record<ExplosionKind, ExplosionPreset> = {
     // quads is what turns an explosion into a screen-filling smear.
     fireRadius: 0.7,
     columnRadius: 0.46,
-    columnHeight: 46,
-    columnSpeed: 12,
-    columnSpawnWindow: 3.4,
+    columnHeight: 62,
+    columnSpeed: 15,
+    columnSpawnWindow: 4.2,
+    // Half a minute. A carpet of heavy bombs that has stopped being visible six
+    // seconds after the last one landed is the single least convincing thing an
+    // airstrike can do.
+    columnLife: 30,
+    pallCount: 56,
     fireballCount: 56,
-    smokeCount: 110,
+    smokeCount: 180,
     sparkCount: 130,
     chunkCount: 84,
     dirtCount: 92,
@@ -137,7 +172,7 @@ const PRESETS: Record<ExplosionKind, ExplosionPreset> = {
     waveReach: 2.6,
     lightIntensity: 1400,
     burnDuration: 9,
-    smokeAlpha: 1.0,
+    smokeAlpha: 0.66,
     scorchScale: 1.7,
     leavesFire: true,
   },
@@ -213,6 +248,10 @@ export class ExplosionEffects {
   private readonly down = new THREE.Vector3(0, -1, 0);
   private readonly rayOptions = { maxDistance: 6 };
 
+  /** Sun reaching the blast, at the ground and at the top of the plume. */
+  private sunLow = 1;
+  private sunHigh = 1;
+
   /** Scales particle counts with the quality tier's particle budget. */
   density = 1;
   /** Set by the FX system when a persistent fire should be lit. */
@@ -267,11 +306,17 @@ export class ExplosionEffects {
     const now = this.deps.now;
     const groundY = this.findGround(position, r);
 
+    this.sunLow = this.deps.sunVisibility(position);
+    fxScratch.c.copy(position);
+    fxScratch.c.y += r * preset.columnRadius + Math.min(preset.columnHeight, 26) * 0.5;
+    this.sunHigh = this.deps.sunVisibility(fxScratch.c);
+
     this.flash(position, r, preset, now);
     this.fireball(position, r, preset, now);
     this.ejecta(position, r, preset, now, groundY);
     this.groundWave(position, r, preset, now, groundY);
     this.column(position, r, preset, now);
+    this.pall(position, r, preset, now, groundY);
     this.stamp(position, r, preset, groundY);
 
     const instance = this.acquire();
@@ -310,7 +355,11 @@ export class ExplosionEffects {
     if (preset.leavesFire && this.onFire) {
       this.groundPoint.copy(position);
       this.groundPoint.y = groundY + 0.1;
-      this.onFire(this.groundPoint, r * 0.45, preset.burnDuration * 1.6);
+      // Well inside the blast. What burns after a detonation is fuel and broken
+      // material at the seat of it, not the whole area that took damage, and a
+      // fire authored at the damage radius is a lake of flame the width of the
+      // street.
+      this.onFire(this.groundPoint, Math.min(r * 0.28, 4.5), preset.burnDuration * 1.6);
     }
     return true;
   }
@@ -331,23 +380,26 @@ export class ExplosionEffects {
     // damage radius.
     const fireD = Math.min(2 * r * preset.fireRadius, MAX_FIRE_SPRITE * 1.6);
 
+    // The detonation flash proper: white, over almost before it began. It has to
+    // be genuinely shorter than everything else in the sequence or the whole
+    // explosion reads as one long orange event with no punch at the front.
     const core = resetDesc();
     core.px = position.x;
     core.py = position.y;
     core.pz = position.z;
-    core.life = 0.075;
-    core.size0 = fireD * 0.5;
-    core.size1 = fireD * 1.1;
-    core.r0 = 6;
-    core.g0 = 5.2;
-    core.b0 = 3.8;
-    core.r1 = 2.4;
-    core.g1 = 1.1;
-    core.b1 = 0.35;
+    core.life = 0.05;
+    core.size0 = fireD * 0.45;
+    core.size1 = fireD * 1.0;
+    core.r0 = 9;
+    core.g0 = 8.2;
+    core.b0 = 6.6;
+    core.r1 = 2.6;
+    core.g1 = 1.2;
+    core.b1 = 0.38;
     core.alpha = 1;
     core.additive = 1;
     core.cell = GLOW.HOT_CORE;
-    core.fadeIn = 0.06;
+    core.fadeIn = 0.03;
     core.priority = 255;
     groups.glow.spawn(now, core);
 
@@ -355,12 +407,21 @@ export class ExplosionEffects {
     star.px = position.x;
     star.py = position.y;
     star.pz = position.z;
-    star.life = 0.11;
-    star.size0 = fireD * 0.75;
-    star.size1 = fireD * 2.1;
-    star.r0 = 3.6;
-    star.g0 = 2.6;
-    star.b0 = 1.4;
+    // Shorter than the flash core, and much shorter than the fireball. Jetting
+    // is a property of the instant the casing opens; still legible a fortieth of
+    // a second later, once there is a ball of flame for it to be seen against,
+    // it stops reading as gas escaping and starts reading as a firework.
+    star.life = 0.05;
+    star.size0 = fireD * 0.7;
+    // Jetting is real — a casing lets gas out unevenly and it does spike — but a
+    // symmetric radial star is precisely what a firework looks like, and past
+    // about the width of the ball itself that is all the eye sees. On a heavy
+    // charge it also has to be capped outright: proportional growth puts
+    // forty-metre spokes across the frame.
+    star.size1 = Math.min(fireD * 1.15, 15);
+    star.r0 = 2.2;
+    star.g0 = 1.5;
+    star.b0 = 0.8;
     star.r1 = 1.0;
     star.g1 = 0.3;
     star.b1 = 0.07;
@@ -368,29 +429,37 @@ export class ExplosionEffects {
     star.additive = 1;
     star.cell = GLOW.BURST_STAR;
     star.roll = rng.range(0, Math.PI * 2);
-    star.fadeIn = 0.05;
+    star.fadeIn = 0.04;
     star.priority = 250;
     groups.glow.spawn(now, star);
 
-    // Air shock: a thin refractive-looking ring racing outward.
+    // Air shock: a thin refractive smear racing outward, gone before the
+    // fireball has finished growing, which is what makes the two read as
+    // separate events.
+    //
+    // Very faint on purpose. A shock front is a density discontinuity in clear
+    // air: what you actually see is the background bending, a few percent of
+    // contrast at most. Given any real brightness the sprite stops being a
+    // pressure wave and becomes a white glass dome sitting over the blast, and
+    // an additive sphere is a far worse artefact than no shock at all.
     const shock = resetDesc();
     shock.px = position.x;
     shock.py = position.y;
     shock.pz = position.z;
-    shock.life = 0.26;
+    shock.life = 0.2;
     shock.size0 = fireD * 0.6;
-    shock.size1 = r * 2.3;
-    shock.r0 = 2.6;
-    shock.g0 = 2.9;
-    shock.b0 = 3.4;
-    shock.r1 = 0.28;
-    shock.g1 = 0.32;
-    shock.b1 = 0.42;
-    shock.alpha = 0.9;
+    shock.size1 = Math.min(r * 2.2, 26);
+    shock.r0 = 0.55;
+    shock.g0 = 0.62;
+    shock.b0 = 0.75;
+    shock.r1 = 0.07;
+    shock.g1 = 0.08;
+    shock.b1 = 0.11;
+    shock.alpha = 0.26;
     shock.additive = 1;
     shock.cell = GLOW.SHOCK_RING;
     shock.roll = rng.range(0, Math.PI * 2);
-    shock.fadeIn = 0.08;
+    shock.fadeIn = 0.05;
     shock.priority = 240;
     groups.glow.spawn(now, shock);
   }
@@ -417,8 +486,14 @@ export class ExplosionEffects {
     // mass, which is the difference between an explosion and a bag of popcorn.
     const lobe = Math.min(fireD / 2.5, MAX_FIRE_SPRITE);
     const count = Math.max(5, Math.round(preset.fireballCount * this.density));
-    // A large mass takes longer to consume its fuel and longer to cool.
-    const burn = 0.5 + Math.min(fireR, 18) * 0.1;
+    // A large mass takes longer to consume its fuel and longer to cool, so the
+    // duration scales with the ball rather than being one number for every
+    // charge. This is the one place the sequence is deliberately slower than the
+    // truth: a real 9 m blast is luminous for perhaps a fifth of a second, which
+    // at any frame rate a player is running is a dozen frames — long enough to
+    // register that something flashed, nowhere near long enough to read a
+    // fireball cooling and rising, which is the whole point of having one.
+    const burn = 0.2 + Math.min(fireR, 18) * 0.12;
     this.basis.set(UP);
 
     // The first quarter are the core mass: born at the centre, larger, and a
@@ -428,7 +503,7 @@ export class ExplosionEffects {
     for (let i = 0; i < count; i++) {
       const d = resetDesc();
       const core = i < cores;
-      const delay = core ? i * 0.008 : rng.range(0.012, 0.11);
+      const delay = core ? i * 0.005 : rng.range(0.008, 0.085);
       this.basis.cone(2, this.dir);
       // Cube-rooted so the lobes are distributed through the volume rather than
       // shelled onto its surface: a uniform radius picks the outside of the ball
@@ -454,15 +529,14 @@ export class ExplosionEffects {
       d.size1 = target;
       d.roll = rng.range(0, Math.PI * 2);
       d.rollRate = rng.range(-0.9, 0.9);
-      // The flipbook already carries the white-through-red heat ramp and the
-      // soot, so this curve only takes the whole mass down as it cools: a
-      // modest overbright at birth, dim soot at death.
-      d.r0 = 2.4;
-      d.g0 = 1.8;
-      d.b0 = 1.35;
-      d.r1 = 0.4;
-      d.g1 = 0.29;
-      d.b1 = 0.23;
+      // Blackbody encoding: `r` is radiance, `g` is position on the cooling
+      // ramp. Core lobes start white-hot and end deep red; the outer billows
+      // are already cooler at birth and finish as soot, so the ball is hottest
+      // in the middle and sootiest at the limb at every instant of its life.
+      d.r0 = core ? 5.5 : 3.2;
+      d.g0 = core ? 0.02 : rng.range(0.1, 0.26);
+      d.r1 = core ? 0.6 : 0.42;
+      d.g1 = core ? rng.range(0.58, 0.74) : rng.range(0.78, 0.94);
       d.alpha = 1;
       // Nearly all additive where it burns; the soot mask in the fragment shader
       // takes the coverage back on the parts that have already cooled.
@@ -489,23 +563,23 @@ export class ExplosionEffects {
       d.py = position.y + this.dir.y * offset * 0.6 + fireR * 0.2;
       d.pz = position.z + this.dir.z * offset;
       d.vy = fireR * rng.range(0.5, 1.4);
-      d.life = rng.range(0.2, 0.45);
+      d.life = burn * rng.range(0.45, 0.85);
       d.size0 = Math.min(fireD * rng.range(0.4, 0.66), MAX_FIRE_SPRITE);
       d.size1 = Math.min(d.size0 * 1.7, MAX_FIRE_SPRITE * 1.4);
-      d.r0 = 2.0;
-      d.g0 = 1.0;
-      d.b0 = 0.3;
-      d.r1 = 0.4;
-      d.g1 = 0.08;
-      d.b1 = 0.02;
+      d.r0 = 2.6;
+      d.g0 = 1.05;
+      d.b0 = 0.22;
+      d.r1 = 0.34;
+      d.g1 = 0.05;
+      d.b1 = 0.012;
       d.alpha = 0.7;
       d.additive = 1;
       d.cell = GLOW.SOFT;
       d.gravity = -1.2;
       d.drag = 1.4;
-      d.fadeIn = 0.12;
+      d.fadeIn = 0.1;
       d.priority = 220;
-      groups.glow.spawn(now + rng.range(0, 0.1), d);
+      groups.glow.spawn(now + rng.range(0, burn * 0.35), d);
     }
   }
 
@@ -546,6 +620,8 @@ export class ExplosionEffects {
       d.drag = 0.8;
       d.stretch = 0.6;
       d.fadeIn = 0.02;
+      d.floorY = groundY;
+      d.bounce = 0.35;
       d.priority = 190;
       groups.spark.spawn(now + rng.range(0, 0.06), d);
     }
@@ -561,24 +637,74 @@ export class ExplosionEffects {
       d.vx = this.dir.x * speed;
       d.vy = Math.abs(this.dir.y) * speed * 0.9 + rng.range(2, 8);
       d.vz = this.dir.z * speed;
-      d.life = rng.range(1.1, 2.8);
-      d.size0 = rng.range(0.04, 0.16);
+      // Long enough to complete the arc, land, skip and *stay* landed for a
+      // while. A chunk that dissolves at the top of its trajectory is the tell
+      // that gave the old ejecta cloud away, and one that dissolves the instant
+      // it lands is barely better.
+      d.life = rng.range(3.6, 6.5);
+      // Sized off the charge, and weighted so most pieces are small and a few
+      // are not. A fixed 4-16 cm was pitched for a hand grenade, which leaves a
+      // nine-metre blast throwing gravel: once the chunks land, anything under
+      // about a hand's width is sub-pixel at the range these are watched from,
+      // and ejecta that cannot be seen where it lands is indistinguishable from
+      // ejecta that evaporated on the way down.
+      const bulk = Math.pow(rng.next(), 2.2);
+      d.size0 = 0.045 + bulk * (0.1 + Math.min(r, 14) * 0.055);
       d.size1 = d.size0;
       d.roll = rng.range(0, Math.PI * 2);
       d.rollRate = rng.range(-13, 13);
       d.r0 = 0.28;
       d.g0 = 0.25;
       d.b0 = 0.22;
-      d.r1 = 0.16;
-      d.g1 = 0.14;
-      d.b1 = 0.12;
+      d.r1 = 0.2;
+      d.g1 = 0.18;
+      d.b1 = 0.16;
       d.alpha = 1;
       d.gravity = 11;
       d.drag = 0.35;
-      d.cell = CHIP.CHIP;
+      d.cell = CHUNK_CELLS[(rng.next() * CHUNK_CELLS.length) | 0];
       d.fadeIn = 0.02;
+      d.floorY = groundY;
+      d.bounce = 0.26;
+      d.sunVisibility = this.sunLow;
       d.priority = 160;
       groups.debris.spawn(now + rng.range(0, 0.05), d);
+    }
+
+    // Smouldering fragments. A handful of pieces come out still glowing and go
+    // on glowing where they land, which is the only warm thing left in frame
+    // once the fireball is gone and the smoke has taken over.
+    const embers = Math.max(3, Math.round(preset.sparkCount * 0.14 * this.density));
+    for (let i = 0; i < embers; i++) {
+      const d = resetDesc();
+      this.basis.cone(1.2, this.dir);
+      const speed = rng.range(2, 9) * (0.6 + r * 0.06);
+      d.px = position.x;
+      d.py = position.y;
+      d.pz = position.z;
+      d.vx = this.dir.x * speed;
+      d.vy = Math.abs(this.dir.y) * speed * 0.7 + rng.range(2, 7);
+      d.vz = this.dir.z * speed;
+      d.life = rng.range(1.6, 3.8);
+      d.size0 = rng.range(0.03, 0.075);
+      d.size1 = d.size0 * 0.75;
+      d.r0 = 2.6;
+      d.g0 = 0.9;
+      d.b0 = 0.2;
+      d.r1 = 0.32;
+      d.g1 = 0.035;
+      d.b1 = 0.008;
+      d.alpha = 1;
+      d.additive = 1;
+      d.gravity = 10.5;
+      d.drag = 0.5;
+      // Short streaks, not bars: these are tumbling lumps, not tracer rounds.
+      d.stretch = 0.12;
+      d.fadeIn = 0.03;
+      d.floorY = groundY;
+      d.bounce = 0.28;
+      d.priority = 165;
+      groups.spark.spawn(now + rng.range(0, 0.1), d);
     }
 
     // Dirt fountain: heavier, slower, and it lifts a lot of dust with it.
@@ -598,19 +724,21 @@ export class ExplosionEffects {
       d.size1 = Math.min(d.size0 * rng.range(2.2, 3.4), MAX_DUST_SPRITE);
       d.roll = rng.range(0, Math.PI * 2);
       d.rollRate = rng.range(-0.9, 0.9);
-      d.r0 = 0.36;
-      d.g0 = 0.3;
-      d.b0 = 0.24;
-      d.r1 = 0.19;
-      d.g1 = 0.16;
-      d.b1 = 0.13;
-      d.alpha = rng.range(0.62, 0.92);
+      d.r0 = 0.3;
+      d.g0 = 0.25;
+      d.b0 = 0.2;
+      d.r1 = 0.17;
+      d.g1 = 0.145;
+      d.b1 = 0.12;
+      d.alpha = rng.range(0.44, 0.68);
       d.gravity = 3.6;
       d.drag = 1.1;
       d.turbulence = 0.5;
       d.cell = (rng.next() * 4) | 0;
       d.fadeIn = 0.1;
-      d.softness = Math.min(r * 0.3, 2);
+      d.softness = Math.min(r * 0.4, 2.5);
+      // Thrown up out of the crater, so it climbs into whatever light is above.
+      d.sunVisibility = this.mixSun(0.4);
       d.priority = 150;
       groups.dust.spawn(now + rng.range(0, 0.12), d);
     }
@@ -650,19 +778,20 @@ export class ExplosionEffects {
       d.size1 = Math.min(d.size0 * rng.range(2.4, 3.6), MAX_DUST_SPRITE);
       d.roll = rng.range(0, Math.PI * 2);
       d.rollRate = rng.range(-0.6, 0.6);
-      d.r0 = 0.42;
-      d.g0 = 0.37;
-      d.b0 = 0.3;
-      d.r1 = 0.2;
-      d.g1 = 0.18;
-      d.b1 = 0.15;
-      d.alpha = rng.range(0.55, 0.85);
+      d.r0 = 0.34;
+      d.g0 = 0.3;
+      d.b0 = 0.24;
+      d.r1 = 0.17;
+      d.g1 = 0.155;
+      d.b1 = 0.13;
+      d.alpha = rng.range(0.36, 0.58);
       d.gravity = 0.5;
       d.drag = 2.4;
       d.turbulence = 0.45;
       d.cell = (rng.next() * 4) | 0;
       d.fadeIn = 0.12;
-      d.softness = Math.min(r * 0.4, 2);
+      d.softness = Math.min(r * 0.45, 2.5);
+      d.sunVisibility = this.sunLow;
       d.priority = 140;
       groups.dust.spawn(now + rng.range(0, 0.09), d);
     }
@@ -679,24 +808,29 @@ export class ExplosionEffects {
       d.life = (0.42 + i * 0.5) * (1 + preset.fireRadius * 0.6);
       d.size0 = r * 0.35;
       d.size1 = ringReach * (0.85 + i * 0.35);
+      // Both are kept faint. A ring is a circle, and a circle is the one shape
+      // the eye instantly recognises as a texture laid on the floor rather than
+      // as anything happening in the air above it; it can suggest the front
+      // passing, but the moment it is legible as an outline it has given the
+      // whole effect away.
       if (i === 0) {
-        d.r0 = 1.8;
-        d.g0 = 1.9;
-        d.b0 = 2.1;
-        d.r1 = 0.3;
-        d.g1 = 0.32;
-        d.b1 = 0.38;
-        d.alpha = 0.85;
+        d.r0 = 0.85;
+        d.g0 = 0.9;
+        d.b0 = 1.0;
+        d.r1 = 0.14;
+        d.g1 = 0.15;
+        d.b1 = 0.18;
+        d.alpha = 0.34;
         d.additive = 1;
         d.cell = GLOW.SHOCK_RING;
       } else {
-        d.r0 = 0.5;
-        d.g0 = 0.45;
-        d.b0 = 0.37;
-        d.r1 = 0.22;
-        d.g1 = 0.2;
-        d.b1 = 0.17;
-        d.alpha = 0.62;
+        d.r0 = 0.42;
+        d.g0 = 0.38;
+        d.b0 = 0.31;
+        d.r1 = 0.2;
+        d.g1 = 0.18;
+        d.b1 = 0.15;
+        d.alpha = 0.3;
         d.additive = 0.1;
         d.cell = GLOW.SMOKE_RING;
       }
@@ -709,7 +843,7 @@ export class ExplosionEffects {
   }
 
   /**
-   * t = 150 ms onward. Particles keep spawning at the base over the emission
+   * t = 130 ms onward. Particles keep spawning at the base over the emission
    * window and rise, so the column builds upward over seconds instead of
    * appearing all at once. Wind shear pushes the top further than the base.
    */
@@ -730,11 +864,14 @@ export class ExplosionEffects {
     for (let i = 0; i < count; i++) {
       const d = resetDesc();
       const phase = i / Math.max(count, 1);
-      const delay = 0.13 + phase * window + rng.range(0, window * 0.12);
+      // Front-loaded, so the smoke is already dense as the fireball is cooling
+      // into it rather than arriving a second after it has gone, while the tail
+      // of the distribution keeps feeding the base for the whole climb.
+      const delay = 0.06 + Math.pow(phase, 1.5) * window + rng.range(0, window * 0.08);
       const spread = colR * rng.range(0, 0.8) * (1 + phase * 0.7);
       const angle = rng.range(0, Math.PI * 2);
       d.px = position.x + Math.cos(angle) * spread;
-      d.py = position.y + colR * 0.3 + phase * colR * 0.6;
+      d.py = position.y + colR * 0.3;
       d.pz = position.z + Math.sin(angle) * spread;
 
       // Rise slows as the plume cools; later particles inherit less lift.
@@ -743,10 +880,18 @@ export class ExplosionEffects {
       d.vy = rise;
       d.vz = wind.z * rng.range(0.4, 1.5) + Math.sin(angle) * colR * 0.35;
 
-      const life = rng.range(0.45, 1.0) * (preset.columnHeight / Math.max(rise, 0.5)) + 1.2;
-      d.life = Math.min(life, 12);
-      d.size0 = Math.min(colR * rng.range(0.75, 1.15), MAX_SMOKE_SPRITE * 0.45);
-      d.size1 = Math.min(d.size0 * rng.range(1.8, 2.5), MAX_SMOKE_SPRITE);
+      d.life = preset.columnLife * rng.range(0.6, 1.25);
+      // The first puffs are the fireball's own cooled mass, so they are as wide
+      // as the ball was; the ones feeding the stem behind them are the width of
+      // the plume.
+      d.size0 = Math.min(
+        colR * rng.range(0.7, 1.1) * (1.4 - phase * 0.5),
+        MAX_SMOKE_SPRITE * 0.55,
+      );
+      // A plume entrains air the whole way up and ends up several times wider
+      // than it started; growing while thinning is what keeps a long-lived
+      // column from looking like a stack of identical grey balls.
+      d.size1 = Math.min(d.size0 * rng.range(2.6, 4.0), MAX_SMOKE_SPRITE * 1.5);
       d.roll = rng.range(0, Math.PI * 2);
       d.rollRate = rng.range(-0.35, 0.35);
       // Oily black smoke that greys out as it thins and mixes with air. These
@@ -760,7 +905,9 @@ export class ExplosionEffects {
       d.g1 = 0.39;
       d.b1 = 0.37;
       // Deliberately translucent: density comes from puffs overlapping, and a
-      // sprite opaque on its own puts a hard silhouette on the skyline.
+      // sprite opaque on its own puts a hard silhouette on the skyline. The
+      // longer a puff lives the thinner it has to be, or a column that should
+      // still be visible half a minute later is an opaque wall for all of it.
       d.alpha = preset.smokeAlpha * rng.range(0.62, 1.0);
       // Buoyant early, neutral later.
       d.gravity = -0.5 * (1 - phase * 0.7);
@@ -768,11 +915,84 @@ export class ExplosionEffects {
       d.turbulence = 0.75;
       d.cell = 0;
       d.frames = 16;
-      d.fadeIn = 0.18;
+      // Short: a puff of detonation smoke does not ease itself into existence,
+      // it is already there the instant the gas has cooled enough to be opaque.
+      // A long fade-in is what leaves a gap between the fireball going out and
+      // the column arriving, and the eye reads that gap as the explosion ending.
+      d.fadeIn = 0.05;
       d.softness = Math.min(colR * 0.9, 3);
+      // The higher a puff is born the more sky it sees, and the crown of a
+      // column standing out of a shadowed street is genuinely sunlit while its
+      // base is not.
+      d.sunVisibility = this.mixSun(0.25 + phase * 0.85);
       d.priority = 200;
       groups.smoke.spawn(now + delay, d);
     }
+  }
+
+  /**
+   * The dust pall: a low, wide, slowly spreading sheet around the crater.
+   *
+   * Everything else in the sequence is over in a few seconds, but a real
+   * detonation leaves the air over the site loaded with fines that drift for a
+   * long time — and from any distance that pall, not the column, is what says
+   * something was hit here. It is authored very thin: its density comes from
+   * dozens of overlapping sprites, none of which reads as a sprite on its own.
+   */
+  private pall(
+    position: THREE.Vector3,
+    r: number,
+    preset: ExplosionPreset,
+    now: number,
+    groundY: number,
+  ): void {
+    const groups = this.deps.groups;
+    const count = Math.round(preset.pallCount * this.density);
+    const wind = this.deps.wind;
+    const reach = r * 1.1;
+
+    for (let i = 0; i < count; i++) {
+      const d = resetDesc();
+      const angle = (i / Math.max(count, 1)) * Math.PI * 2 + rng.range(-0.4, 0.4);
+      const start = reach * Math.sqrt(rng.next());
+      d.px = position.x + Math.cos(angle) * start;
+      d.py = groundY + r * rng.range(0.08, 0.5);
+      d.pz = position.z + Math.sin(angle) * start;
+      d.vx = Math.cos(angle) * rng.range(0.2, 0.9) + wind.x * rng.range(0.5, 1.4);
+      d.vy = rng.range(0.15, 0.75);
+      d.vz = Math.sin(angle) * rng.range(0.2, 0.9) + wind.z * rng.range(0.5, 1.4);
+      d.life = preset.columnLife * rng.range(0.5, 0.95);
+      d.size0 = Math.min(r * rng.range(0.3, 0.5), MAX_SMOKE_SPRITE * 0.5);
+      d.size1 = Math.min(d.size0 * rng.range(1.8, 2.8), MAX_SMOKE_SPRITE * 1.4);
+      d.roll = rng.range(0, Math.PI * 2);
+      d.rollRate = rng.range(-0.12, 0.12);
+      // Pulverised masonry, not soot: much paler than the column above it, and
+      // the contrast between the two is a large part of the read.
+      const grey = rng.range(0.3, 0.42);
+      d.r0 = grey * 1.08;
+      d.g0 = grey;
+      d.b0 = grey * 0.88;
+      d.r1 = grey * 0.82;
+      d.g1 = grey * 0.78;
+      d.b1 = grey * 0.7;
+      d.alpha = rng.range(0.16, 0.3);
+      d.gravity = 0.08;
+      d.drag = 0.5;
+      d.turbulence = 0.5;
+      d.cell = 0;
+      d.frames = 16;
+      d.fadeIn = 0.07;
+      d.softness = Math.min(r * 0.6, 3);
+      d.sunVisibility = this.mixSun(0.15);
+      d.priority = 175;
+      groups.smoke.spawn(now + 0.12 + rng.range(0, 0.4), d);
+    }
+  }
+
+  /** Blend the two sun probes by height above the blast, 0 base to 1 crown. */
+  private mixSun(height: number): number {
+    const h = height < 0 ? 0 : height > 1 ? 1 : height;
+    return this.sunLow + (this.sunHigh - this.sunLow) * h;
   }
 
   /** Scorch, crater and the pulverised apron around it. */
@@ -809,6 +1029,7 @@ export class ExplosionEffects {
   }
 
   private findGround(position: THREE.Vector3, r: number): number {
+    if (this.deps.floorOverride !== null) return this.deps.floorOverride;
     const world = this.deps.world;
     if (world) {
       const y = world.sampleGround(position.x, position.z);
@@ -880,3 +1101,6 @@ export class ExplosionEffects {
 }
 
 const UP = /* @__PURE__ */ new THREE.Vector3(0, 1, 0);
+
+/** Outlines the ejecta draws from, so a chunk cloud is not one shape repeated. */
+const CHUNK_CELLS = [CHIP.CHIP, CHIP.CHIP_B, CHIP.CHIP_C] as const;

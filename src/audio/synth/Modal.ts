@@ -31,10 +31,10 @@ export interface Mode {
  */
 export function resonate(excitation: Signal, modes: readonly Mode[], gain = 1): Signal {
   const sr = excitation.sampleRate;
-  const out = new Signal(excitation.duration, sr);
+  const out = Signal.like(excitation);
   const src = excitation.data;
   const dst = out.data;
-  const n = dst.length;
+  const n = Math.min(dst.length, src.length);
 
   for (const mode of modes) {
     if (mode.freq <= 0 || mode.freq >= sr * 0.49 || mode.gain === 0) continue;
