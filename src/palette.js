@@ -75,6 +75,77 @@ export const SUN = {
   intensity: 8.8,
 };
 
+// ---------------------------------------------------------------------------
+// The other two hours.
+//
+// These are not the day palette darkened. A night image built by pulling the
+// exposure down on a daylight rig reads as a grey photograph, because the two
+// things that actually say "night" are hue separation — one cool source, one
+// warm source, nothing in between — and a value range that is compressed into
+// the bottom third without touching the floor.
+//
+// So: moonlight is the only ambient, it is genuinely blue, and everything the
+// truck carries is tungsten. Dusk is the crossfade, and gets the largest hue
+// spread of the three because the sun is under the horizon on one side of the
+// frame and the earth's shadow is climbing the other.
+// ---------------------------------------------------------------------------
+
+export const NIGHT = {
+  // Moonlight is sunlight off a 0.12-albedo grey rock, so it is very slightly
+  // *warmer* than the sun in absolute terms. It reads blue because the eye
+  // adapts to the tungsten in the frame, which is what the headlamps supply —
+  // so the blue is put in deliberately rather than measured.
+  moon: 0xaec6ee,
+  moonLow: 0x8aa3d0,
+  skyTop: 0x070d1f,
+  skyHorizon: 0x18253d,
+  // Air over the treeline still scatters moonlight, and that band is the only
+  // thing that puts a silhouette on the far conifers.
+  haze: 0x243651,
+  ground: 0x04060a,
+  cloud: 0x2c3a54,
+  // Fog has to sit *under* the horizon band or the distance glows and the
+  // silhouette goes with it.
+  fog: 0x101a28,
+  hemiSky: 0x2a3d5e,
+  bounce: 0x161c18,
+  shadowTint: 0x1a2b45,
+  starWarm: 0xffe6c8,
+  starCool: 0xc4d8ff,
+  // What the truck's own lamps put back into the air and onto the dirt.
+  lamp: 0xffe3b8,
+  lampCool: 0xfff0d8,
+};
+
+// Dusk had a green hole in it.
+//
+// Measured off a frame rather than judged: a black tyre came back at hue 340
+// and 0.60 saturation — a *magenta* tyre. The cause is that every source in the
+// hour had its green channel below both of the others. The key was a saturated
+// orange (green two fifths of red), and every ambient term that was meant to
+// balance it — hemisphere, shadow tint, fog — was a blue-violet with green
+// below blue as well. Red from the key, blue from the fill, no green from
+// anything, and the whole frame collapses onto the red-magenta axis with the
+// truck's green paint reading as rust.
+//
+// So the warm end is desaturated a little and the cool end is walked off violet
+// towards the blue-green a forest at dusk actually reflects. The hue spread
+// between key and fill is the point of this hour and it survives; what does not
+// survive is both ends agreeing to have no green.
+export const DUSK = {
+  sun: 0xffab6e,
+  sunLow: 0xff7f42,
+  skyTop: 0x2b3f66,
+  skyHorizon: 0xffa066,
+  haze: 0xffb886,
+  ground: 0x120f0d,
+  cloud: 0xffbe98,
+  fog: 0x4c4d54,
+  hemiSky: 0x6d809c,
+  bounce: 0x5a4c36,
+  shadowTint: 0x435070,
+};
+
 export const FOG = {
   near: 18,
   far: 190,
