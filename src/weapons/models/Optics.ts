@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Rng } from '../../core/MathUtils';
 import { blackoutMaterial, reticleMaterial, type GunPalette } from './Materials';
 import { APERTURE_MASK_OVERLAP } from '../ScopeView';
+import { addMarkings } from './Common';
 import {
   boxGeo,
   cylGeoX,
@@ -67,7 +68,7 @@ function mountBlock(
   group.add(mesh(screwGeo(0.0024, 0.0012), pal.metalDark, [width * 0.24, height, z - depth * 0.3]));
 }
 
-/** Lens: a tinted disc set behind a machined rim so it catches an edge light. */
+/** Lens: a coated disc set behind a machined rim so it catches an edge light. */
 function lens(group: THREE.Group, pal: GunPalette, radius: number, z: number, cant = 0.08): void {
   const glass = mesh(discGeo(radius, 24), pal.glass, [0, 0, z], [cant, 0, 0]);
   glass.renderOrder = 4;
@@ -106,7 +107,10 @@ function makeReticle(
   rng: Rng,
 ): ReticleSpec {
   const material = reticleMaterial(kind);
-  material.opacity *= 0.88 + rng.next() * 0.18;
+  // Per-unit brightness-setting variation. It has to ride on the radiance, not on
+  // `opacity`: the viewmodel rewrites opacity every frame from the eyebox fade,
+  // so anything stored there is overwritten before the first frame is drawn.
+  material.color.multiplyScalar(0.88 + rng.next() * 0.22);
   const object = mesh(new THREE.PlaneGeometry(size, size), material);
   object.name = `reticle_${kind}`;
   object.renderOrder = 9;
@@ -209,7 +213,7 @@ export function buildRedDot(pal: GunPalette, rng: Rng): OpticResult {
   // size and the receiver stays in shot. Physical cheek weld would be a third of
   // this, which puts a 30 mm tube across half the screen.
   const eyeRelief = 0.2;
-  const reticle = makeReticle('dot', 0.0155, eyeRelief + (zRear - zFront) * 0.8, rng);
+  const reticle = makeReticle('dot', 0.0135, eyeRelief + (zRear - zFront) * 0.8, rng);
   return { group, sight, reticle, axisHeight, eyeRelief };
 }
 
@@ -270,13 +274,116 @@ export function buildHolo(pal: GunPalette, rng: Rng): OpticResult {
   front.renderOrder = 4;
   hood.add(front);
 
+  // Bolts through the hood and rub-through along the leading edges. Both sit
+  // right under the eye whenever the player aims, which is the one place on the
+  // weapon where an unbroken machined face is most obviously unmanufactured.
+  for (const s of [-1, 1]) {
+    for (const z of [zRear - 0.006, zGlass + 0.012]) {
+      hood.add(
+        mesh(screwGeo(0.0021, 0.0011), pal.metalWorn, [
+          s * (windowW * 0.5 + wall * 0.5),
+          windowH * 0.5 + wall * 0.72,
+          z,
+        ]),
+      );
+    }
+    // Polished corner where the hood meets the bezel, and along the top rail.
+    hood.add(
+      mesh(boxGeo(wall * 0.7, windowH * 0.86, 0.0022, 0.0004), pal.metalWorn, [
+        s * (windowW * 0.5 + wall * 0.62),
+        0,
+        zGlass + 0.0035,
+      ]),
+    );
+    hood.add(
+      mesh(boxGeo(0.0022, wall * 0.9, hoodDepth * 0.62, 0.0005), pal.metalWorn, [
+        s * (windowW * 0.5 + wall * 0.6),
+        windowH * 0.5 + wall * 0.6,
+        hoodMid - 0.004,
+      ]),
+    );
+  }
+
+  // Detail on the rear faces, which are the only ones the eye sees in ADS.
+  //
+  // Everything above is authored for the three-quarter view of a hipfire frame,
+  // and none of it survives the head-on one: the bolts are in the top plate and go
+  // edge-on, the polished corners face sideways, and the two shader terms that
+  // carry the rest — `fwidth` of the normal, and grime on downward faces — both
+  // return nothing on a face pointed straight down the lens. The result was a
+  // sight that measured as fully textured and photographed as a moulded grey box
+  // filling a fifth of the aimed frame.
+  //
+  // A rubbed rim round the rear of the hood and a pair of bolts in the rear of the
+  // emitter housing sit 200 mm from the eye at full size, which is the one place
+  // on the weapon where a few square millimetres of bright steel is worth more
+  // than anything on the far side of it.
+  const rearZ = hoodMid + hoodDepth * 0.5 - 0.0008;
+  hood.add(
+    mesh(boxGeo(windowW + wall * 1.6, wall * 0.85, 0.0016, 0.0004), pal.metalWorn, [
+      0,
+      windowH * 0.5 + wall * 0.7,
+      rearZ,
+    ]),
+  );
+  for (const s of [-1, 1]) {
+    hood.add(
+      mesh(boxGeo(wall * 0.85, windowH + wall * 0.9, 0.0016, 0.0004), pal.metalWorn, [
+        s * (windowW * 0.5 + wall * 0.5),
+        0,
+        rearZ,
+      ]),
+    );
+    hood.add(
+      mesh(screwGeo(0.0016, 0.0009), pal.metalWorn, [
+        s * 0.0055,
+        bodyTop + 0.0032,
+        0.0588,
+      ], [Math.PI / 2, 0, 0]),
+    );
+  }
+
+  // Windage table on the battery housing's flank, and the model number on the
+  // rear of the emitter block.
+  //
+  // The rear one is the only marking on the weapon an aimed frame can show. Every
+  // flank goes edge-on when the eye is behind the sight — measured, the carbine's
+  // five rollmarks contribute zero pixels to the ADS render — and the block under
+  // the window is both square-on to the eye and 200 mm from it, so a 4 mm stencil
+  // there is larger in the aimed frame than a 14 mm one on the receiver is at
+  // hipfire.
+  addMarkings(group, pal, rng, {
+    pos: [-windowW * 0.5 - 0.004, mountH + bodyH * 0.62, 0.014],
+    face: 'left',
+    lines: ['HWS-4', '1 CLICK 12mm'],
+    height: 0.0062,
+    wear: 0.12,
+  });
+  // On the battery body's rear wall rather than the emitter block's, which is
+  // narrower and already carries the two bolts.
+  addMarkings(group, pal, rng, {
+    pos: [0, mountH + bodyH * 0.5, 0.051],
+    face: 'rear',
+    lines: ['HWS-4'],
+    height: 0.0042,
+    color: 0xe2ded4,
+    wear: 0.1,
+  });
+
   const sight = new THREE.Object3D();
   sight.name = 'sight';
   sight.position.set(0, axisHeight, zRear);
   group.add(sight);
 
   const eyeRelief = 0.205;
-  const reticle = makeReticle('holo', 0.0225, eyeRelief + (zRear - zGlass), rng);
+  // Sized off the window rather than off the real optic. The ring sits at 0.62 of
+  // the plane's half-width, so this leaves it a little under 40 per cent of the
+  // glass — an EOTech's 68 MOA circle is nearer a fifth, but a life-size ring is
+  // twenty pixels at this resolution and a game reticle has to survive being
+  // looked at rather than through. Only trimmed, not shrunk: at the previous size
+  // the ring reached most of the way across the window and read as a decal on the
+  // glass instead of a projection floating past it.
+  const reticle = makeReticle('holo', 0.017, eyeRelief + (zRear - zGlass), rng);
   return { group, sight, reticle, axisHeight, eyeRelief };
 }
 

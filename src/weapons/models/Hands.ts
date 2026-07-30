@@ -2,13 +2,60 @@ import * as THREE from 'three';
 import { clamp } from '../../core/MathUtils';
 import type { GunPalette } from './Materials';
 import {
+  GUN_TILE,
   circleProfile,
   framesAlongPath,
   loft,
   ovalProfile,
   roundBoxGeo,
+  scaleUvs,
   smoothPath,
 } from './Parts';
+
+/**
+ * Metres of surface per texture tile on the arms, against `GUN_TILE` elsewhere.
+ *
+ * The library's Cordura is authored for a 0.9 m tile — the right scale for a
+ * sandbag — and `GUN_TILE` shows it at 0.085, which puts its weave cells at
+ * about 17 mm. That is fine on a magazine pouch and it is why the support
+ * forearm photographed as a course of brickwork: at arm's length a 17 mm cell is
+ * masonry, and it was the loudest single thing in the lower third of the frame.
+ * A combat shirt's ripstop grid is nearer 3 mm, so the fabric parts take their
+ * own tile and the palette drops `normalScale` on the two fabric roles by the
+ * same factor, since showing a height field smaller steepens every slope in it.
+ */
+const FABRIC_TILE = 0.0155;
+const FABRIC_UV = GUN_TILE / FABRIC_TILE;
+
+/** Fabric-scale UVs on a geometry authored at the weapon's tile. */
+const fabric = (geometry: THREE.BufferGeometry): THREE.BufferGeometry =>
+  scaleUvs(geometry, FABRIC_UV, FABRIC_UV);
+
+/**
+ * Cross-section of a sleeve rather than of an arm.
+ *
+ * An oval swept along a taper is a cone, and a cone is what the support forearm
+ * kept reading as however its material was tuned — the fabric grain fixed what
+ * the surface was made of and left the form perfectly smooth over 15 cm of frame.
+ * Cloth over a limb is pulled tight across the ulna and slack between, so the
+ * section is a few soft lobes rather than an ellipse, and sweeping those puts
+ * creases down the length of the sleeve. At the scale an arm occupies those
+ * longitudinal creases are the only fold detail large enough to register, and
+ * they cost nothing: the same 22 columns, moved.
+ *
+ * Kept to the third and fifth harmonics deliberately. A ninth would be closer to
+ * real rucking and at 22 columns it is under three samples a cycle, which sweeps
+ * into a beat pattern along the arm rather than into creases.
+ */
+function sleeveProfile(segments: number, rx: number, ry: number): THREE.Vector2[] {
+  const pts: THREE.Vector2[] = [];
+  for (let i = 0; i < segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    const k = 1 + 0.05 * Math.cos(a * 3 + 0.6) + 0.028 * Math.cos(a * 5 - 1.3);
+    pts.push(new THREE.Vector2(Math.cos(a) * rx * k, Math.sin(a) * ry * k));
+  }
+  return pts;
+}
 
 /**
  * Gloved forearms.
@@ -120,8 +167,7 @@ function fingerMesh(
     [rStart, rStart * 1.04, rStart * 0.96, rStart * 1.0, rEnd],
     [rStart * 0.9, rStart * 0.96, rStart * 0.88, rStart * 0.92, rEnd * 0.9],
   );
-  const geometry = loft(circleProfile(12, 1), frames, true, true);
-  const mesh = new THREE.Mesh(geometry, material);
+  const mesh = new THREE.Mesh(fabric(loft(circleProfile(12, 1), frames, true, true)), material);
   mesh.frustumCulled = false;
   return mesh;
 }
@@ -144,7 +190,7 @@ function palmMesh(side: number, x: number, material: THREE.Material): THREE.Mesh
   // a hand sits on a grip rather than clamping it symmetrically.
   const path = ys.map((y) => new THREE.Vector3(x - side * y * 0.05, y, 0.005 - y * 0.09));
   const mesh = new THREE.Mesh(
-    loft(circleProfile(14, 1), framesAlongPath(path, thickness, depth), true, true),
+    fabric(loft(circleProfile(14, 1), framesAlongPath(path, thickness, depth), true, true)),
     material,
   );
   mesh.frustumCulled = false;
@@ -174,14 +220,14 @@ export function buildFist(pal: GunPalette, opts: FistOptions): THREE.Group {
 
   // Thenar mass at the base of the thumb. Sits proud of the palm dome, and is what
   // gives the hand a wide silhouette on the thumb side.
-  const thenar = new THREE.Mesh(roundBoxGeo(0.026, 0.028, 0.026, 0.012, 2), pal.glove);
+  const thenar = new THREE.Mesh(fabric(roundBoxGeo(0.026, 0.028, 0.026, 0.012, 2)), pal.glove);
   thenar.position.set(palmX + side * 0.001, 0.024, -0.001);
   thenar.frustumCulled = false;
   group.add(thenar);
 
   // Padded knuckle guards on the back of the glove, following the dome.
   for (let i = 0; i < 2; i++) {
-    const pad = new THREE.Mesh(roundBoxGeo(0.006, 0.024, 0.03, 0.003, 1), pal.nylon);
+    const pad = new THREE.Mesh(fabric(roundBoxGeo(0.006, 0.024, 0.03, 0.003, 1)), pal.nylon);
     pad.position.set(palmX + side * (0.0108 - i * 0.0008), 0.019 - i * 0.026, 0.001);
     pad.rotation.z = side * (0.06 + i * 0.05);
     pad.frustumCulled = false;
@@ -236,7 +282,7 @@ export function buildFist(pal: GunPalette, opts: FistOptions): THREE.Group {
   // space keeps the fist's orientation, and the fist is rotated to match whatever
   // is being gripped, so on a horizontal handguard it ends up lying across the
   // wrist instead of around it.
-  const wrist = new THREE.Mesh(roundBoxGeo(0.03, 0.026, 0.036, 0.011, 2), pal.glove);
+  const wrist = new THREE.Mesh(fabric(roundBoxGeo(0.03, 0.026, 0.036, 0.011, 2)), pal.glove);
   wrist.position.set(palmX + side * 0.003, -0.05, 0.016);
   wrist.frustumCulled = false;
   group.add(wrist);
@@ -273,13 +319,42 @@ export class ArmRig {
     // hole in it. The step in the radii near the middle is the rolled cuff of the
     // combat shirt, which is the value break that stops the arm being one smooth
     // pale cylinder.
-    const zs = [0.006, 0.045, 0.09, 0.14, 0.16, 0.22, 0.32, FOREARM_LENGTH + 0.01];
-    const radii = [0.0272, 0.0294, 0.0322, 0.036, 0.0412, 0.0428, 0.0452, 0.047];
-    const frames = framesAlongPath(
-      zs.map((z) => new THREE.Vector3(0, 0, z)),
-      radii,
+    // Sampled finely, with the taper carried through the same spline as the length
+    // so that its rate is continuous. The eight-station version read as a length of
+    // ribbed hose, and the reason is that `framesAlongPath` interpolates the radius
+    // series linearly: every station where the rate of taper changed left a hard
+    // crease running right round the arm, and at fourteen sides the facets between
+    // them were plainly visible at the size a support forearm occupies in frame.
+    // Putting the radius in x and smoothing the whole polyline solves both at once.
+    // The one hard line a sleeve does have, the rolled cuff, survives it as the
+    // spline's own overshoot at the step.
+    // The two stations at 0.24 and 0.30 are a gather in the cloth rather than the
+    // arm getting thinner: the taper reverses briefly, which after smoothing is a
+    // soft transverse fold across the widest part of the sleeve. It is the one
+    // horizontal break in an otherwise monotonic profile.
+    const profile = [
+      [0.0264, 0.006],
+      [0.0288, 0.045],
+      [0.0318, 0.09],
+      [0.0356, 0.14],
+      [0.0404, 0.158],
+      [0.0418, 0.175],
+      [0.0446, 0.24],
+      [0.0432, 0.3],
+      [0.047, FOREARM_LENGTH + 0.01],
+    ] as const;
+    const sampled = smoothPath(
+      profile.map(([r, z]) => new THREE.Vector3(r, 0, z)),
+      30,
     );
-    const arm = new THREE.Mesh(loft(ovalProfile(14, 1, 0.87), frames, true, true), pal.sleeve);
+    const frames = framesAlongPath(
+      sampled.map((p) => new THREE.Vector3(0, 0, p.z)),
+      sampled.map((p) => p.x),
+    );
+    const arm = new THREE.Mesh(
+      fabric(loft(sleeveProfile(22, 1, 0.87), frames, true, true)),
+      pal.sleeve,
+    );
     arm.frustumCulled = false;
     this.forearm.add(arm);
 
@@ -290,14 +365,19 @@ export class ArmRig {
       cuffZ.map((z) => new THREE.Vector3(0, 0, z)),
       [0.0292, 0.0312, 0.0338, 0.0322],
     );
-    const cuffMesh = new THREE.Mesh(loft(ovalProfile(14, 1, 0.88), cuffFrames, true, true), pal.glove);
+    const cuffMesh = new THREE.Mesh(
+      fabric(loft(ovalProfile(14, 1, 0.88), cuffFrames, true, true)),
+      pal.glove,
+    );
     cuffMesh.frustumCulled = false;
     this.forearm.add(cuffMesh);
 
-    // Wrist strap over the cuff and the elastic that holds the rolled sleeve.
+    // Wrist strap over the cuff and the elastic that holds the rolled sleeve. Both
+    // darker than the sleeve rather than lighter: at nylon's value they came out
+    // pale and warm against an olive arm and read as rope wrapped round a pole.
     for (const [z, r, thick, material] of [
       [0.052, 0.0322, 0.0028, pal.polymerDark],
-      [0.156, 0.0396, 0.0032, pal.nylon],
+      [0.156, 0.0396, 0.0032, pal.polymerDark],
     ] as const) {
       const strap = new THREE.Mesh(new THREE.TorusGeometry(r, thick, 6, 18), material);
       strap.scale.y = 0.88;
@@ -378,17 +458,30 @@ const SUPPORT_FIST: Record<SupportStyle, Omit<FistOptions, 'gripRadius' | 'side'
  * Where each elbow wants to sit, in view space, per support style.
  *
  * Only the direction from the wrist is used, so these are aiming hints rather
- * than joint positions. They sit well below the weapon and still a good way
- * downrange: goals nearer the shoulder are anatomically truer and look far
- * worse, because the forearm then lies across the bottom third of the frame at a
- * shallow angle instead of dropping out of it.
+ * than joint positions.
+ *
+ * What they are really choosing is how much of the forearm the frame sees, and
+ * the lever is the depth rather than the drop. The tilt limit above already caps
+ * how far off vertical the bone can lie, so the drop is fixed; what the goal
+ * decides is which way that tilt points. Aimed downrange — 40 cm ahead of the
+ * eye, as these were — the tilt goes sideways in screen space and 42 cm of arm
+ * lies unforeshortened across the lower third of the frame from the handguard to
+ * the bottom edge. Measured, the support forearm was 5.4 per cent of the frame
+ * against the barrel's 1.0, which is the "enormous cylinder dominating the lower
+ * centre" of the review — read as a barrel, but it was the arm.
+ *
+ * Aimed back towards the eye instead the tilt points mostly at the camera, the
+ * bone foreshortens to a fraction of its length on screen, and what shows is a
+ * cuff and a hand's width of sleeve behind the magwell before it leaves frame.
+ * That is what a support arm looks like in a shipped first-person shooter, and it
+ * is the same anatomy either way — only the projection changes.
  */
 const LEFT_ELBOW: Record<SupportStyle, readonly [number, number, number]> = {
-  forend: [-0.12, -0.52, -0.4],
-  pump: [-0.12, -0.52, -0.38],
-  vertical: [-0.1, -0.53, -0.34],
-  cup: [0.02, -0.5, -0.3],
-  none: [-0.1, -0.52, -0.34],
+  forend: [0.055, -0.5, -0.06],
+  pump: [0.05, -0.5, -0.06],
+  vertical: [0.03, -0.52, -0.05],
+  cup: [0.07, -0.5, -0.04],
+  none: [0.0, -0.52, -0.06],
 };
 
 export interface HandsOptions {

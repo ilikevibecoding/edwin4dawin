@@ -31,6 +31,7 @@ import { HandsRig } from './models/Hands';
 import { buildGrenadeModel } from './models/Ordnance';
 import type { WeaponModelFactory } from './models';
 import type { WeaponModel } from './models/WeaponModel';
+import { installViewProbe, type ViewProbe } from './dev/ViewProbe';
 import { ScopeView } from './ScopeView';
 import { ViewDebug, viewDebugRequested } from './ViewDebug';
 import { ViewLighting } from './ViewLighting';
@@ -112,31 +113,48 @@ const ELBOW_ADS_L = /* @__PURE__ */ new THREE.Vector3(0.035, -0.06, 0.02);
  * sight at (0, 0, -eyeRelief), so both the swing and the destination mean the
  * same thing on every weapon no matter where its model origin happens to be.
  * Because the swing pivots on the sight, HIP_SIGHT is literally where the sight
- * sits in view space when a reference-length weapon is hipfired: 20.5 cm
- * outboard, 15 cm below the eye, 62.5 cm downrange. At the 62-degree viewmodel
- * FOV that puts a carbine's optic at (+0.31, -0.40) NDC and its muzzle at
- * (+0.11, -0.24), so the weapon lives in the bottom-right quadrant with the bore
- * running up and inboard towards the crosshair, and the whole of the top-left
- * half of the frame stays clear.
+ * sits in view space when a reference-length weapon is hipfired: 26.4 cm
+ * outboard, 26.8 cm below the eye, 70.6 cm downrange. At the 62-degree viewmodel
+ * FOV that puts a carbine's optic at (+0.35, -0.63) NDC and its muzzle at
+ * (+0.17, -0.43), so the weapon lives in the bottom-right corner with the bore
+ * running up and inboard, and everything above the lower third stays clear.
  *
  * The depth is the number to reach for first, because it decides how much gun is
  * on screen. A carbine's buttplate sits 25 cm behind its sight, so at 40 cm the
  * butt is 15 cm off the lens, everything below the bore falls out of frame and
  * the shot becomes a picture of the underside of a handguard. Past about 75 cm
  * the arms are at full stretch and the weapon reads as a prop held out in front
- * of the camera. In between, the drop places it: 15 cm down is what puts the
- * magazine on the bottom edge and the firing hand just inside it.
+ * of the camera.
  *
- * The swing is what makes it read as held rather than floated. 14 degrees of
+ * The drop then places it, and it is the number a first pass gets wrong. At 15 cm
+ * the muzzle sat at -0.23 NDC, a tenth of the frame below the crosshair, so 45 cm
+ * of barrel climbed through the middle of the shot and read as the subject of it.
+ * Every shipped hipfire frame hides almost all of it: the muzzle belongs a third
+ * of the way down the lower half, which is the -0.41 that 26.8 cm buys, and what
+ * is left in shot is the receiver, the magwell and the hands rather than a length
+ * of tube. Measured on the carbine with both poses evaluated in the same frame,
+ * the weapon's screen bounding box went 13.7% of the frame at the framing the
+ * review saw, to 11.4% at 23.5 cm of drop, to 11.0% here, and its filled
+ * silhouette is 1.8% of frame pixels; the drop also lowers the wrists, so the
+ * support forearm crosses less of the frame on its way out of the bottom edge.
+ *
+ * The swing is what makes it read as held rather than floated. 16 degrees of
  * inboard cant is the natural roll of a rifle carried off the cheek, and it is
  * what turns the flat of the receiver towards the eye so the magwell, ejection
- * port and grip are legible instead of foreshortened into a tube. The 6.9-degree
- * inboard yaw and 5.2 of muzzle rise converge the bore on the crosshair;
+ * port and grip are legible instead of foreshortened into a tube. The 6-degree
+ * inboard yaw and 2 of muzzle rise converge the bore on the crosshair;
  * perspective already does most of that, so both stay small — much past this the
  * muzzle crosses the centre of the screen and the rifle reads as aimed left.
  */
-const HIP_SWING = /* @__PURE__ */ new THREE.Euler(0.09, 0.12, 0.25, 'YXZ');
-const HIP_SIGHT = /* @__PURE__ */ new THREE.Vector3(0.205, -0.15, -0.625);
+const HIP_SWING = /* @__PURE__ */ new THREE.Euler(0.035, 0.105, 0.28, 'YXZ');
+const HIP_SIGHT = /* @__PURE__ */ new THREE.Vector3(0.264, -0.268, -0.706);
+
+/**
+ * The framing the review saw, kept so the harness can report the change as a
+ * measurement rather than an assertion. Unused outside `?vmprobe=1`.
+ */
+const LEGACY_HIP_SWING = /* @__PURE__ */ new THREE.Euler(0.09, 0.12, 0.25, 'YXZ');
+const LEGACY_HIP_SIGHT = /* @__PURE__ */ new THREE.Vector3(0.205, -0.15, -0.625);
 
 /** Barrel-to-butt length HIP_SIGHT is authored against: the MK4 carbine. */
 const HIP_REFERENCE_LENGTH = 0.86;
@@ -262,8 +280,13 @@ export class ViewModel {
   private readonly tmpQ2 = new THREE.Quaternion();
   private readonly tmpEuler = new THREE.Euler();
   private readonly tmpBox = new THREE.Box3();
+  /** Scratch for the measurement harness only; see `framingOf`. */
+  private readonly probePosition = new THREE.Vector3();
+  private readonly probeQuaternion = new THREE.Quaternion();
+  private readonly probeNdc = new THREE.Vector3();
   private readonly probeExclude: unknown[] = [null];
   private debug: ViewDebug | null = null;
+  private measure: ViewProbe | null = null;
   private readonly handV = new THREE.Vector3();
   private readonly handV2 = new THREE.Vector3();
   private readonly handQ = new THREE.Quaternion();
@@ -290,6 +313,163 @@ export class ViewModel {
       this.debug = debug;
       this.stack.trace = (name, position, rotation) => debug.layer(name, position, rotation);
     }
+    this.measure = installViewProbe(ctx, () => this.poseReport());
+  }
+
+  /**
+   * Pose numbers for the measurement harness: where the sight anchor lands on
+   * screen (which is the ADS alignment error, in pixels), and the framing of the
+   * bore. Reported from `anchorView` so it is the same transform the ADS solve
+   * produced rather than a second derivation of it.
+   */
+  private poseReport(): unknown {
+    const rig = this.rig;
+    if (!rig) return null;
+    const camera = this.ctx.viewCamera;
+    const width = this.ctx.renderer.domElement.width;
+    const height = this.ctx.renderer.domElement.height;
+    const ndcOf = (anchor: THREE.Object3D): number[] => {
+      this.anchorView(anchor, this.tmpV4);
+      this.tmpV4.z = Math.min(this.tmpV4.z, -0.02);
+      this.tmpV4.applyMatrix4(camera.projectionMatrix);
+      return [this.tmpV4.x, this.tmpV4.y];
+    };
+    const round = (n: number, d = 5): number => Number(n.toFixed(d));
+    const sight = ndcOf(rig.model.anchors.sight);
+    const muzzle = ndcOf(rig.model.anchors.muzzle);
+    return {
+      ads: round(this.adsAmount, 4),
+      adsBlend: round(this.adsBlend, 4),
+      eyeRelief: round(this.eyeRelief, 4),
+      viewFov: round(this.viewFov, 3),
+      weaponLength: round(rig.model.length, 4),
+      sightNdc: [round(sight[0]), round(sight[1])],
+      /** The number that must stay under a pixel when aimed. */
+      sightPixelOffset: [round((sight[0] * width) / 2, 3), round((sight[1] * height) / 2, 3)],
+      muzzleNdc: [round(muzzle[0], 4), round(muzzle[1], 4)],
+      posePosition: [
+        round(this.posePosition.x, 4),
+        round(this.posePosition.y, 4),
+        round(this.posePosition.z, 4),
+      ],
+      hipPosition: [
+        round(this.hipPosition.x, 4),
+        round(this.hipPosition.y, 4),
+        round(this.hipPosition.z, 4),
+      ],
+      framing: {
+        current: this.framingOf(rig.model, HIP_SWING, HIP_SIGHT),
+        legacy: this.framingOf(rig.model, LEGACY_HIP_SWING, LEGACY_HIP_SIGHT),
+      },
+      adsAlignment: this.adsAlignment(rig.model),
+    };
+  }
+
+  /**
+   * Sub-pixel error of the ADS solve, isolated from the layer stack.
+   *
+   * `sightPixelOffset` above is the sight's offset in the frame as delivered, and
+   * it is not the alignment: idle sway, breathing and settling recoil are all
+   * still live while aiming and move it by a pixel or two on purpose. What has to
+   * be exact is the solve underneath — with the model at the aimed pose and
+   * nothing added — because that is what every weapon's zero is derived from and
+   * an error there is a fixed bias no amount of settling removes.
+   */
+  private adsAlignment(model: WeaponModel): unknown {
+    const camera = this.ctx.viewCamera;
+    const root = model.root;
+    const keepPosition = this.tmpV.copy(root.position);
+    const keepQuaternion = this.tmpQ2.copy(root.quaternion);
+
+    root.position.copy(this.adsPosition);
+    root.quaternion.copy(this.adsQuaternion);
+    root.updateMatrixWorld(true);
+    const anchor = model.anchors.sight;
+    anchor.updateWorldMatrix(true, false);
+    this.probeNdc.setFromMatrixPosition(anchor.matrixWorld);
+    this.probeNdc.z = Math.min(this.probeNdc.z, -0.02);
+    this.probeNdc.applyMatrix4(camera.projectionMatrix);
+
+    root.position.copy(keepPosition);
+    root.quaternion.copy(keepQuaternion);
+    root.updateMatrixWorld(true);
+
+    const width = this.ctx.renderer.domElement.width;
+    const height = this.ctx.renderer.domElement.height;
+    const px = (this.probeNdc.x * width) / 2;
+    const py = (this.probeNdc.y * height) / 2;
+    const round = (n: number, d = 6): number => Number(n.toFixed(d));
+    return {
+      ndc: [round(this.probeNdc.x), round(this.probeNdc.y)],
+      pixels: [round(px, 4), round(py, 4)],
+      errorPx: round(Math.hypot(px, py), 4),
+      buffer: [width, height],
+    };
+  }
+
+  /**
+   * Screen coverage of the whole weapon under a candidate hip pose.
+   *
+   * Measured off the model's own bounds rather than off the frame, because that
+   * makes the comparison attributable: identical geometry and identical camera,
+   * with only the two pose constants differing, so the number moves for exactly
+   * one reason. Segmenting the delivered PNG instead would fold in the sky, the
+   * scenery and whatever the exposure did that frame.
+   */
+  private framingOf(model: WeaponModel, swing: THREE.Euler, sight: THREE.Vector3): unknown {
+    const camera = this.ctx.viewCamera;
+    const root = model.root;
+    const keepPosition = this.tmpV.copy(root.position);
+    const keepQuaternion = this.tmpQ2.copy(root.quaternion);
+
+    this.solveHip(model, swing, sight, this.probePosition, this.probeQuaternion);
+    root.position.copy(this.probePosition);
+    root.quaternion.copy(this.probeQuaternion);
+    root.updateMatrixWorld(true);
+    this.tmpBox.setFromObject(root, true);
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      this.tmpV4.set(
+        i & 1 ? this.tmpBox.max.x : this.tmpBox.min.x,
+        i & 2 ? this.tmpBox.max.y : this.tmpBox.min.y,
+        i & 4 ? this.tmpBox.max.z : this.tmpBox.min.z,
+      );
+      // A buttstock can sit behind the eye, where the projection is meaningless.
+      this.tmpV4.z = Math.min(this.tmpV4.z, -0.02);
+      this.tmpV4.applyMatrix4(camera.projectionMatrix);
+      minX = Math.min(minX, this.tmpV4.x);
+      minY = Math.min(minY, this.tmpV4.y);
+      maxX = Math.max(maxX, this.tmpV4.x);
+      maxY = Math.max(maxY, this.tmpV4.y);
+    }
+    const muzzle = this.probeMuzzle(model, camera);
+
+    root.position.copy(keepPosition);
+    root.quaternion.copy(keepQuaternion);
+    root.updateMatrixWorld(true);
+
+    const cl = (n: number): number => clamp(n, -1, 1);
+    const round = (n: number, d = 4): number => Number(n.toFixed(d));
+    return {
+      swing: [swing.x, swing.y, swing.z],
+      sight: [sight.x, sight.y, sight.z],
+      ndc: [round(minX, 3), round(minY, 3), round(maxX, 3), round(maxY, 3)],
+      frameArea: round((((cl(maxX) - cl(minX)) * (cl(maxY) - cl(minY))) / 4) * 100, 2),
+      muzzleNdc: [round(muzzle.x), round(muzzle.y)],
+    };
+  }
+
+  /** Muzzle anchor in NDC for whatever pose the model root currently holds. */
+  private probeMuzzle(model: WeaponModel, camera: THREE.PerspectiveCamera): THREE.Vector3 {
+    const out = this.probeNdc;
+    model.anchors.muzzle.updateWorldMatrix(true, false);
+    out.setFromMatrixPosition(model.anchors.muzzle.matrixWorld);
+    out.z = Math.min(out.z, -0.02);
+    return out.applyMatrix4(camera.projectionMatrix);
   }
 
   // -------------------------------------------------------------------------
@@ -475,18 +655,35 @@ export class ViewModel {
     this.adsPosition.copy(model.sightLocalPosition).applyQuaternion(this.adsQuaternion).negate();
     this.adsPosition.z -= relief;
 
-    this.tmpEuler.set(HIP_SWING.x, HIP_SWING.y, HIP_SWING.z, 'YXZ');
+    this.solveHip(model, HIP_SWING, HIP_SIGHT, this.hipPosition, this.hipQuaternion);
+  }
+
+  /**
+   * Swings the aimed pose off the shoulder into a hip pose.
+   *
+   * Parameterised on the swing and the sight's destination so the measurement
+   * harness can evaluate an alternative framing against the same weapon without
+   * a second build; nothing else has cause to pass anything but the constants.
+   */
+  private solveHip(
+    model: WeaponModel,
+    swing: THREE.Euler,
+    sight: THREE.Vector3,
+    outPosition: THREE.Vector3,
+    outQuaternion: THREE.Quaternion,
+  ): void {
+    this.tmpEuler.set(swing.x, swing.y, swing.z, 'YXZ');
     this.tmpQ.setFromEuler(this.tmpEuler);
-    this.hipQuaternion.copy(this.tmpQ).multiply(this.adsQuaternion);
-    this.tmpV2.set(0, 0, -relief);
-    this.hipPosition
+    outQuaternion.copy(this.tmpQ).multiply(this.adsQuaternion);
+    this.tmpV2.set(0, 0, -this.eyeRelief);
+    outPosition
       .copy(this.adsPosition)
       .sub(this.tmpV2)
       .applyQuaternion(this.tmpQ)
-      .addScaledVector(HIP_SIGHT, hipDistanceScale(model.length))
+      .addScaledVector(sight, hipDistanceScale(model.length))
       .add(model.hipTrim);
     this.tmpEuler.set(model.hipTrimRotation.x, model.hipTrimRotation.y, model.hipTrimRotation.z, 'XYZ');
-    this.hipQuaternion.multiply(this.tmpQ.setFromEuler(this.tmpEuler));
+    outQuaternion.multiply(this.tmpQ.setFromEuler(this.tmpEuler));
   }
 
   /**
@@ -682,6 +879,8 @@ export class ViewModel {
     this.debug?.begin();
     const delta = this.stack.evaluate(dt, s);
     this.compose(delta);
+
+    this.lighting.update();
 
     if (this.rig) {
       this.rig.model.applyParts(this.parts);
@@ -1057,7 +1256,8 @@ export class ViewModel {
       spec.object.position.copy(axis).multiplyScalar(spec.glassDistance);
       spec.object.quaternion.copy(this.tmpQ);
       spec.object.scale.setScalar(spec.baseScale);
-      spec.material.opacity = 0.95 * inBox * lit;
+      // Brightness lives in the material's radiance; this is purely the fade.
+      spec.material.opacity = inBox * lit;
       spec.object.visible = spec.material.opacity > 0.01;
     } else {
       // A scope's reticle is at a focal plane, so it marks the sight axis and
@@ -1182,6 +1382,7 @@ export class ViewModel {
     this.handAnchors.clear();
     this.scope.dispose();
     this.lighting.dispose();
+    this.measure?.dispose();
     this.root.removeFromParent();
     this.ctx.viewCamera.fov = BASE_VIEW_FOV;
     this.ctx.viewCamera.updateProjectionMatrix();

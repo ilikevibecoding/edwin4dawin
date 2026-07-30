@@ -185,17 +185,71 @@ export function buildMk4Carbine({ pal, rng }: RifleContext): WeaponBuild {
 
   // --- markings and wear ---------------------------------------------------
   addMarkings(asm.part('markings'), pal, rng, {
-    pos: [-0.0162, -0.031, 0.072],
+    pos: [-0.0162, -0.0395, 0.078],
     face: 'left',
     lines: ['SAFE FIRE AUTO'],
-    height: 0.0034,
+    height: 0.0044,
   });
-  addSerial(asm.part('markings'), pal, rng, [-0.0162, -0.049, 0.03], 'left');
+  addSerial(asm.part('markings'), pal, rng, [-0.0162, -0.0525, 0.028], 'left');
   addMarkings(asm.part('markings'), pal, rng, {
     pos: [0.0192, -0.006, -0.02],
     face: 'right',
     lines: ['CAL 5.56 NATO'],
     height: 0.003,
+  });
+  // The model stamp, on both flats, and at about four times life size.
+  //
+  // The size is the point. A real 3 mm rollmark works out at roughly one pixel of
+  // glyph height at hipfire range, which is why the review found no markings on a
+  // weapon already carrying four of them: seven rows of glyph inside one pixel
+  // average into a grey smudge however the raster is authored. Every shipped
+  // shooter oversizes the one marking meant to be read with the weapon in the hand
+  // and leaves the rest as fine detail for the aimed view, which is what the
+  // selector letters and the serial are.
+  //
+  // Both flats because which one faces the camera is not a fact this file can
+  // check. Reasoning it out from the hip roll put it on the right, and the frame
+  // then showed the weapon from above and to its *left* — the camera sits inboard
+  // of a weapon held out to the right, so the ejection-port side is the one that
+  // faces away. A rollmark on each side is what a real receiver has anyway.
+  for (const [x, face] of [
+    [-0.0162, 'left'],
+    [0.0192, 'right'],
+  ] as const) {
+    // Stacked rather than one long line. A flank is only ever seen at a slant with
+    // the weapon in the hand, so a marking's width is compressed several times
+    // harder than its height: eight glyphs across 73 mm of receiver arrived as an
+    // 18 mm smear. Two short rows in a square block spend the same height on half
+    // the width and survive the foreshortening, which is why a real rollmark is
+    // laid out this way too.
+    addMarkings(asm.part('markings'), pal, rng, {
+      pos: [x, -0.0225, 0.062],
+      face,
+      lines: ['MK4', 'MOD2'],
+      height: 0.0155,
+      color: 0xe2ded4,
+      wear: 0.14,
+    });
+  }
+  // Rail brand, on the 45-degree shoulder between the handguard's flank and its
+  // rail. The one flat on the weapon that is square-on to the eye at hipfire, and
+  // so the only place a marking there can be read at all — the same stamp on the
+  // flank beside it measures four pixels of smear.
+  //
+  // Three glyphs, not the full stamp. What decides legibility is glyph height in
+  // pixels, and for a fixed quad width that is set by the character count: eight
+  // characters across 44 mm of handguard is 6 mm of glyph, which is four pixels at
+  // the internal resolution this actually renders at. Three characters at the same
+  // width is 9 mm and twelve pixels. The long-form stamp stays on the magwell,
+  // where a weapon carries it anyway. Behind the support hand's anchor at -0.20,
+  // and clear of the slot rows, which sit on the flanks and the underside.
+  addMarkings(asm.part('markings'), pal, rng, {
+    pos: [-0.022, 0.022, -0.112],
+    face: 'upperLeft',
+    lines: ['MK4'],
+    height: 0.0115,
+    color: 0xdcd8cd,
+    wear: 0.1,
   });
   addWear(asm.part('receiver'), pal, rng, { count: 7, center: [0.019, 0.008, 0.06], area: [0.0006, 0.014, 0.09] });
   addWear(asm.part('magWell'), pal, rng, { count: 4, center: [-0.0165, -0.04, 0.02], area: [0.0006, 0.018, 0.03] });

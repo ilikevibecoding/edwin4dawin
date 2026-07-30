@@ -18,10 +18,52 @@ export interface ReticleTexture {
   texture: THREE.DataTexture;
   /** Illuminated reticles are drawn additively; etched glass reticles are not. */
   additive: boolean;
-  color: number;
+  /**
+   * Emitted radiance, in linear working space, at full texture coverage.
+   *
+   * Not a colour in the 0..1 sense and it cannot be: the frame is tonemapped and
+   * auto-exposed in post, and bloom's threshold is 1.15 in *exposed* units, so a
+   * reticle authored at a displayable 0.95 lands below middle grey once the
+   * street outside has set the exposure and can never bloom. A real illuminated
+   * reticle is orders of magnitude brighter than the housing around it; these
+   * are the numbers that reproduce that after exposure rather than before it.
+   */
+  radiance: readonly [number, number, number];
 }
 
 const reticleCache = new Map<ReticleKind, ReticleTexture>();
+
+/**
+ * Peak linear radiance per kind, and the hue.
+ *
+ * Green for the holographic sight: it is what the reference frames show, and it
+ * is also the legibility argument, because the streets this game is set on are
+ * sand and warm brick and a red dot on them is the one colour that disappears.
+ *
+ * The off-hue channels are the part that has to be authored carefully, and it is
+ * counter-intuitive: they belong near zero, not merely lower. A first attempt at
+ * these numbers put green at 14 with red at 1.7 and blue at 4.1 — a defensible
+ * green in ratio — and the delivered frame measured RGB 252/253/236 at the core
+ * with a saturation of 0.07. It was white. Exposure at street level puts the clip
+ * point barely above 1, so every channel over about 0.3 saturates and any ratio
+ * between them is discarded; what survives tonemapping is only the contrast
+ * between the one channel that is allowed to blow out and the two that are not.
+ *
+ * The absolute level then has to come down, for a reason that only shows up once
+ * there is something behind the reticle. These are additive, so the frame value is
+ * the reticle plus the lens, and at green 9.5 the second attempt still measured
+ * 210/216/175 — green in the halo, white in the strokes — because the lens under
+ * it was a bright sky at around 0.5 and lifted red and blue over the clip point on
+ * their own. Four is enough to clear a 1.15 bright pass by three stops and leaves
+ * the off-hue channels room to stay dark against whatever the sight is pointed at.
+ */
+const RETICLE_RADIANCE: Record<ReticleKind, readonly [number, number, number]> = {
+  dot: [4.4, 0.1, 0.07],
+  holo: [0.09, 4, 0.28],
+  chevron: [4, 0.38, 0.04],
+  // Etched glass, lit by whatever comes through the objective; it emits nothing.
+  crosshair: [0, 0, 0],
+};
 
 export function reticleTexture(kind: ReticleKind): ReticleTexture {
   const cached = reticleCache.get(kind);
@@ -73,7 +115,7 @@ export function reticleTexture(kind: ReticleKind): ReticleTexture {
   const result: ReticleTexture = {
     texture,
     additive: !black,
-    color: kind === 'chevron' ? 0xff5a1e : kind === 'crosshair' ? 0x000000 : 0xff2418,
+    radiance: RETICLE_RADIANCE[kind],
   };
   reticleCache.set(kind, result);
   return result;
@@ -106,22 +148,46 @@ function segment(
   return 1 - smoothstep(thickness - aa, thickness + aa, d);
 }
 
+/**
+ * Stroke widths below are in texture units, where 1.0 is half the plane.
+ *
+ * The plane is about 66 px tall on screen at the aimed FOV, so a unit is 33 px
+ * and the ring that used to be authored 0.026 wide was 0.9 px of stroke. Drawn
+ * from a mipped 256 px texture that averages to a smear at a fraction of its
+ * peak, which is most of why the sight photographed empty. Nothing here goes
+ * below about 3 px of delivered stroke.
+ */
+/**
+ * Halo amplitude, as a fraction of the reticle's own radiance.
+ *
+ * Set against the bright pass rather than by eye: a fraction that puts the halo's
+ * own peak just over the bloom threshold near 1.15 blooms at the centre and fades
+ * out of it within a few pixels, which is a glow around crisp strokes. Much above
+ * that and the whole halo is over the line, blooming as hard as the strokes and
+ * burying them in a soft blob — the state the aimed frame was in. Much below and
+ * the strokes have no glow at all and read as a decal painted on the glass.
+ *
+ * Tied to the radiance above rather than fixed, so retuning the reticle's
+ * brightness cannot silently move the halo to the wrong side of the threshold.
+ */
+const RETICLE_GLOW = 0.3;
+
 function dotReticle(px: number, py: number, aa: number): number {
-  const core = disc(px, py, 0.11, aa);
-  const glow = Math.pow(1 - clamp(Math.hypot(px, py) / 0.42, 0, 1), 2.4) * 0.35;
+  const core = disc(px, py, 0.13, aa);
+  const glow = Math.pow(1 - clamp(Math.hypot(px, py) / 0.62, 0, 1), 2.2) * RETICLE_GLOW;
   return Math.max(core, glow);
 }
 
 function holoReticle(px: number, py: number, aa: number): number {
-  let a = Math.max(disc(px, py, 0.075, aa), ring(px, py, 0.62, 0.026, aa));
+  let a = Math.max(disc(px, py, 0.105, aa), ring(px, py, 0.62, 0.05, aa));
   // Four ticks pointing inwards from the ring, EOTech style.
   for (let i = 0; i < 4; i++) {
     const ang = (i / 4) * Math.PI * 2;
     const cx = Math.cos(ang);
     const cy = Math.sin(ang);
-    a = Math.max(a, segment(px, py, cx * 0.62, cy * 0.62, cx * 0.44, cy * 0.44, 0.022, aa));
+    a = Math.max(a, segment(px, py, cx * 0.62, cy * 0.62, cx * 0.42, cy * 0.42, 0.042, aa));
   }
-  const glow = Math.pow(1 - clamp(Math.hypot(px, py) / 0.3, 0, 1), 3) * 0.25;
+  const glow = Math.pow(1 - clamp(Math.hypot(px, py) / 0.46, 0, 1), 2.6) * RETICLE_GLOW;
   return Math.max(a, glow);
 }
 
@@ -134,7 +200,7 @@ function chevronReticle(px: number, py: number, aa: number): number {
   // What a shooter aims with is the visible tip, and the strokes are capsules, so
   // the ink reaches a full stroke radius past where the two centre lines meet.
   // The join therefore has to sit one radius low for the tip to land on the axis.
-  const t = 0.038;
+  const t = 0.05;
   const apex = -t;
   let a = Math.max(
     segment(px, py, 0, apex, -0.26, apex - 0.38, t, aa),
@@ -142,9 +208,10 @@ function chevronReticle(px: number, py: number, aa: number): number {
   );
   // Bullet-drop stadia below the apex.
   for (let i = 1; i <= 3; i++) {
-    a = Math.max(a, disc(px, py + 0.34 + 0.18 * i, 0.028, aa));
+    a = Math.max(a, disc(px, py + 0.34 + 0.18 * i, 0.034, aa));
   }
-  return a;
+  const glow = Math.pow(1 - clamp(Math.hypot(px, py + 0.2) / 0.7, 0, 1), 2.6) * RETICLE_GLOW;
+  return Math.max(a, glow);
 }
 
 function crosshairReticle(px: number, py: number, aa: number): number {
@@ -273,6 +340,22 @@ export function stencilTexture(
   const cg = Math.round(color.g * 255);
   const cb = Math.round(color.b * 255);
 
+  // Colour every texel, including the transparent ones, and let alpha do all the
+  // shaping. This is the difference between a marking that reads and the "one
+  // illegible decal" of the review, and the reason is mipmapping: the paint is
+  // maybe a sixth of the quad by area, so a level that averages ink with an
+  // uncoloured background converges on five-sixths of nothing. A stencil seen
+  // small then arrives as a *dark* smudge — the exact opposite of white paint —
+  // and no amount of enlarging the glyphs fixes it, because the ratio does not
+  // change with size. Flooding the colour makes every mip level the paint's own
+  // colour at the paint's own coverage, which is what a rollmark two hundred
+  // millimetres from the eye actually looks like.
+  for (let i = 0; i < width * height; i++) {
+    data[i * 4] = cr;
+    data[i * 4 + 1] = cg;
+    data[i * 4 + 2] = cb;
+  }
+
   for (let li = 0; li < lines.length; li++) {
     const text = lines[li].toUpperCase();
     for (let ci = 0; ci < text.length; ci++) {
@@ -287,14 +370,15 @@ export function stencilTexture(
           for (let sy = 0; sy < scale; sy++) {
             for (let sx = 0; sx < scale; sx++) {
               const x = cellX * scale + sx;
-              const y = cellY * scale + sy;
+              // Rasterised bottom-up. A DataTexture is the one kind three does not
+              // flip on upload, so row zero is v=0, and glyph rows counted from the
+              // top land the type upside down — which is most of what "illegible"
+              // meant: the markings were sharp, correctly placed and inverted, and a
+              // mirrored rollmark is unreadable at any size or contrast.
+              const y = height - 1 - (cellY * scale + sy);
               const n = hashNoise(x * 7 + seed, y * 13 + seed);
               const a = n < wear * 0.55 ? 0 : 255;
-              const i = (y * width + x) * 4;
-              data[i] = cr;
-              data[i + 1] = cg;
-              data[i + 2] = cb;
-              data[i + 3] = Math.max(data[i + 3], a);
+              data[(y * width + x) * 4 + 3] = Math.max(data[(y * width + x) * 4 + 3], a);
             }
           }
         }
@@ -309,6 +393,10 @@ export function stencilTexture(
   texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.generateMipmaps = true;
+  // A marking on a receiver flank is nearly always seen at a slant, so it is
+  // minified far harder across the glyphs than along them. Isotropic filtering
+  // has to pick one, and picking the safe one throws the type away.
+  texture.anisotropy = 8;
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return { texture, aspect: width / height };

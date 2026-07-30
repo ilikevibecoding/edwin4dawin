@@ -242,7 +242,10 @@ export function buildBarrel(
     profile.push([i % 2 === 0 ? muzzleR * 0.9 : muzzleR * 0.99, threadAt + i * 0.0022]);
   }
   profile.push([muzzleR * 0.88, threadAt + 0.018]);
-  group.add(mesh(latheZ(profile, 18), pal.metalDark));
+  // `barrel`, not `metalDark`: the palette has carried a nitrided barrel finish
+  // with an axial anisotropic striation for a while and nothing ever asked for it,
+  // so every barrel in the game was rendering as generic dark receiver steel.
+  group.add(mesh(latheZ(profile, 18), pal.barrel));
 
   if (opts.fluted) {
     for (let i = 0; i < 6; i++) {
@@ -881,6 +884,86 @@ export function buildChamberedCase(pal: GunPalette, caliber: 'rifle' | 'pistol' 
   return group;
 }
 
+/**
+ * Which way a decal faces.
+ *
+ * The two diagonals are there because the two frames the player spends all their
+ * time in show almost none of the four cardinal faces. Aimed, the eye is on the
+ * bore and every flank is edge-on: measured, the carbine's five flank rollmarks
+ * contribute zero pixels to an ADS render, so `rear` exists for that frame alone.
+ * At hipfire the camera is above and inboard of a weapon rolled 16 degrees
+ * inboard, which leaves the top under its own rail and the left flank still
+ * within a few degrees of edge-on — a 15 mm stamp there measured 44 pixels and
+ * read as a bright fleck. What does face the camera is the 45-degree shoulder
+ * between them, which on a faceted handguard is also a real flat.
+ */
+export type DecalFace = 'left' | 'right' | 'top' | 'rear' | 'upperLeft' | 'upperRight';
+
+const DIAG = Math.SQRT1_2;
+
+/** Outward normal of each decal facing, in weapon space. */
+const DECAL_AXIS: Record<DecalFace, THREE.Vector3> = {
+  left: /* @__PURE__ */ new THREE.Vector3(-1, 0, 0),
+  right: /* @__PURE__ */ new THREE.Vector3(1, 0, 0),
+  top: /* @__PURE__ */ new THREE.Vector3(0, 1, 0),
+  rear: /* @__PURE__ */ new THREE.Vector3(0, 0, 1),
+  upperLeft: /* @__PURE__ */ new THREE.Vector3(-DIAG, DIAG, 0),
+  upperRight: /* @__PURE__ */ new THREE.Vector3(DIAG, DIAG, 0),
+};
+
+/** How far proud of the surface a decal sits. Sub-pixel at any viewing range. */
+const DECAL_STANDOFF = 0.0004;
+
+/**
+ * Lifts a decal onto the surface it is supposed to be printed on.
+ *
+ * The alternative is what was here — one hand-written outward coordinate per
+ * marking, checked by eye against a shell assembled from a dozen primitives — and
+ * measured, it does not work. The carbine carries five markings and the probe
+ * finds them covering three pixels of the delivered viewmodel render: they are
+ * inside their own receiver, and depth-testing removes them completely. That is
+ * the "one illegible decal" of the review, and the reason it survived several
+ * passes of making the markings larger and higher-contrast is that a marking
+ * buried by half a millimetre looks identical in the source to one that is not,
+ * and identical in the frame to one that was never added.
+ *
+ * So the standoff is measured rather than authored: cast back along the decal's
+ * own normal from clear of the weapon and sit it just proud of the first surface
+ * the ray meets. The authored position still chooses where on the part the
+ * marking goes; only the one coordinate that has to agree with the geometry is
+ * taken from the geometry. Every weapon's markings are then correct by
+ * construction, including after a part moves.
+ */
+function placeDecal(
+  parent: THREE.Object3D,
+  decal: THREE.Object3D,
+  pos: readonly [number, number, number],
+  face: DecalFace,
+): void {
+  decal.position.set(pos[0], pos[1], pos[2]);
+  const axis = DECAL_AXIS[face];
+  let root: THREE.Object3D = parent;
+  while (root.parent) root = root.parent;
+  root.updateMatrixWorld(true);
+
+  const origin = parent.localToWorld(new THREE.Vector3(pos[0], pos[1], pos[2]));
+  origin.addScaledVector(axis, 0.3);
+  const hits = new THREE.Raycaster(origin, axis.clone().negate(), 0, 0.6).intersectObject(
+    root,
+    true,
+  );
+  for (const hit of hits) {
+    const mesh = hit.object as THREE.Mesh;
+    const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const name = list[0]?.name ?? '';
+    // Another decal, or anything the marking should be able to sit behind.
+    if (name.startsWith('vm_stencil') || name.startsWith('vm_glass')) continue;
+    const local = parent.worldToLocal(hit.point.clone());
+    decal.position.addScaledVector(axis, local.dot(axis) + DECAL_STANDOFF - decal.position.dot(axis));
+    return;
+  }
+}
+
 /** Selector markings, calibre stencil and serial number. */
 export function addMarkings(
   parent: THREE.Object3D,
@@ -889,16 +972,24 @@ export function addMarkings(
   opts: {
     /** Local position of the decal centre. */
     pos: readonly [number, number, number];
-    /** Which way the decal faces: 'left' | 'right' | 'top'. */
-    face: 'left' | 'right' | 'top';
+    face: DecalFace;
     lines: readonly string[];
     height?: number;
     color?: number;
+    /**
+     * How much of the paint has rubbed off, 0..1. Worth overriding downwards on
+     * anything meant to be read at hipfire range: the speckle is applied per
+     * texel, so at three or four pixels of glyph height it stops looking like a
+     * worn stencil and starts deleting strokes.
+     */
+    wear?: number;
   },
 ): void {
   const { texture, aspect } = stencilTexture(opts.lines, {
-    scale: 4,
-    wear: 0.2 + rng.next() * 0.3,
+    // The raster has to carry several texels per glyph pixel or the mipmap chain
+    // averages the strokes into a smudge, which is how the review read them.
+    scale: 7,
+    wear: opts.wear ?? 0.2 + rng.next() * 0.3,
     seed: rng.int(1, 9999),
     color: opts.color ?? 0xcfcabd,
   });
@@ -907,12 +998,21 @@ export function addMarkings(
   const decal = new THREE.Mesh(plane, stencilMaterial(texture));
   decal.frustumCulled = false;
   decal.renderOrder = 2;
+  // A plane faces +Z, which is already the rear facing. Every other face turns it
+  // about Y first, which sends the text's own axis rearward along the weapon —
+  // the direction it has to run to be read from outboard — and the diagonals then
+  // tilt it up about Z. `ZYX` is what applies those in that order.
+  decal.rotation.order = 'ZYX';
   if (opts.face === 'left') decal.rotation.y = -Math.PI / 2;
   else if (opts.face === 'right') decal.rotation.y = Math.PI / 2;
-  else decal.rotation.x = -Math.PI / 2;
-  decal.position.set(opts.pos[0], opts.pos[1], opts.pos[2]);
+  else if (opts.face === 'top') decal.rotation.x = -Math.PI / 2;
+  else if (opts.face === 'upperLeft') decal.rotation.set(0, -Math.PI / 2, -Math.PI / 4);
+  else if (opts.face === 'upperRight') decal.rotation.set(0, Math.PI / 2, Math.PI / 4);
   void pal;
+  // Added before it is placed: the ray has to be cast against the assembled
+  // weapon, and `parent` is the only handle on it.
   parent.add(decal);
+  placeDecal(parent, decal, opts.pos, opts.face);
 }
 
 export function addSerial(parent: THREE.Object3D, pal: GunPalette, rng: Rng, pos: readonly [number, number, number], face: 'left' | 'right'): void {

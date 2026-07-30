@@ -18,8 +18,24 @@ import {
  * of metres per tile rather than left at the 0..1 range a primitive ships with.
  */
 
-/** Metres of surface per texture tile. Matches the gun material specs. */
-export const GUN_TILE = 0.3;
+/**
+ * Metres of surface per texture tile.
+ *
+ * Not the library's authored `tileMeters`, which for the gun materials is 0.30 to
+ * 0.45. That is the right figure for a crate or a wall and it is what the palette
+ * used, and it is also the reason the weapon photographed as smooth boxes and
+ * cylinders: a receiver is 0.26 m long, so at the authored scale the whole part
+ * sampled less than one tile and the map contributed a single flat value with no
+ * grain anywhere on it. Any texture whose repeat is larger than the object it is
+ * on is indistinguishable from a plain colour.
+ *
+ * Showing the same map at a quarter of the size it was authored for makes its
+ * features four times finer, which for machining marks, mould stipple and fabric
+ * weave is where they should have been anyway — and steepens every slope in the
+ * height field by the same factor, which is why the palette scales `normalScale`
+ * back down per role.
+ */
+export const GUN_TILE = 0.085;
 
 const UV_SCALE = 1 / GUN_TILE;
 

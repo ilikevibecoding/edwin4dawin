@@ -191,6 +191,26 @@ export function buildMp5({ pal, rng }: RifleContext): WeaponBuild {
     lines: ['S E F'],
     height: 0.0032,
   });
+  // The one marking on this weapon meant to be read rather than just seen. The
+  // serial and the selector letters above are 3 mm, which is right for a 9 mm
+  // receiver and four pixels on screen; without something at ten times the area
+  // the gun carries no legible stencil at all, which is the review's "one
+  // illegible decal" for every weapon that is not the carbine.
+  //
+  // On the upper-left of the forend, because that facet is flat — the shell is a
+  // 12-sided lathe, so 12 mm of facet is a plane and a flat quad sits flush on
+  // it, where the same quad across the receiver tube behind would bury its first
+  // and last glyph 2.5 mm deep. Forward of the barrel-nut collar at -0.116 and
+  // behind the support hand at -0.17. The other two flats there carry the slot
+  // rows, which for a two-row forend are the underside and the right.
+  addMarkings(asm.part('markings'), pal, rng, {
+    pos: [-0.014, 0.014, -0.135],
+    face: 'upperLeft',
+    lines: ['MP5'],
+    height: 0.0105,
+    color: 0xdcd8cd,
+    wear: 0.1,
+  });
   addWear(asm.part('receiver'), pal, rng, { count: 7, center: [0.0212, 0.004, 0.08], area: [0.0006, 0.012, 0.09] });
 
   const anchors = {
@@ -311,6 +331,18 @@ export function buildVector({ pal, rng }: RifleContext): WeaponBuild {
   asm.part('rearSight').add(rear);
 
   addSerial(asm.part('markings'), pal, rng, [-0.0215, -0.012, 0.012], 'left');
+  // Calibre on the left flank of the upper, at a size that survives hipfire. This
+  // receiver is a rounded box rather than a tube, so its flank is genuinely flat
+  // and the stencil can be as long as it likes; 43 mm of it sits between the
+  // magwell shoulder and the charging handle slot at 0.101.
+  addMarkings(asm.part('markings'), pal, rng, {
+    pos: [-0.021, 0.016, 0.078],
+    face: 'left',
+    lines: ['.45 ACP'],
+    height: 0.0105,
+    color: 0xdcd8cd,
+    wear: 0.1,
+  });
   addWear(asm.part('receiver'), pal, rng, { count: 5, center: [0.0212, 0.006, 0.05], area: [0.0006, 0.016, 0.08] });
 
   const anchors = {
