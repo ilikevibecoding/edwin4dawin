@@ -49,7 +49,8 @@ const ONLY = arg('only', '')
 /**
  * Each sequence stages a scenario once, fires it, and walks the clock forward.
  * `at` are cumulative effect ages in seconds, so the interesting instants of a
- * detonation can be sampled a few milliseconds apart.
+ * detonation can be sampled a few milliseconds apart. `plate` adds one extra
+ * frame of the staged camera taken before the effect is fired.
  */
 const SEQUENCES = [
   // A frame is a second or more of wall clock on the software rasteriser these
@@ -65,17 +66,53 @@ const SEQUENCES = [
   { name: 'glass', scenario: 'glass', at: [0.25, 1.8] },
   { name: 'concrete', scenario: 'concrete', at: [0.25, 1.8] },
   // 45 m of lead at 820 m/s: the heads are crossing the centre of the view.
-  { name: 'tracerspan', scenario: 'tracerspan', at: [0.03, 0.055] },
-  { name: 'tracers', scenario: 'tracers', at: [0.02] },
+  //
+  // Every emissive sequence takes a plate, because the numbers the fire and the
+  // tracers are argued over cannot be measured without one. A colour rule picked
+  // to find flame finds only the pixels that are already the colour it is looking
+  // for: asked "is the flame orange", a mask seeded on orange answers yes over a
+  // white fireball with an orange fringe, having measured the fringe. Differencing
+  // against the staged backdrop selects the effect by *where it is* instead, so
+  // the white core is inside the region and drags the statistic down exactly as
+  // much as it should.
+  { name: 'tracerspan', scenario: 'tracerspan', at: [0.03, 0.055], plate: true },
+  { name: 'tracers', scenario: 'tracers', at: [0.02], plate: true },
+  // Down the sights of the player's own weapon. 4 ms is the frame the trigger
+  // breaks on, where the round is still beside the barrel it left and the two can
+  // be compared; by 40 ms it is thirty metres out and the origin is unreadable.
+  { name: 'viewfire', scenario: 'viewfire', at: [0.004, 0.04], plate: true },
   { name: 'wallsmoke', scenario: 'wallsmoke', at: [2.0] },
   { name: 'debris', scenario: 'debris', at: [0.4, 1.5, 3.0] },
-  { name: 'grenade', scenario: 'grenade', at: [0.004, 0.05, 0.45, 2.5] },
+  // 0.7 is where the throw and the ground ring are at their widest; 3.0 is where
+  // the scene harness actually freezes, so the pair answers "is it missing or is
+  // it simply over by then" in one sequence.
+  { name: 'grenade', scenario: 'grenade', at: [0.004, 0.05, 0.45, 0.7, 3.0], plate: true },
   // 0 is the frame the trigger breaks on, which is the one the player sees; the
   // ignition lead means the flash is already a few milliseconds old there.
-  { name: 'flash', scenario: 'flash', at: [0.0, 0.016] },
-  { name: 'fire', scenario: 'fire', at: [3.0] },
-  { name: 'smoke', scenario: 'smoke', at: [2.0, 8.0] },
-  { name: 'airstrike', scenario: 'airstrike', at: [0.06, 0.9, 4.0] },
+  { name: 'flash', scenario: 'flash', at: [0.0, 0.016], plate: true },
+  // Not an effect: a board of fireball sprites at known radiances and ramp
+  // positions. One frame of it measures the exposure and the tonemap response
+  // end to end, so fire colour can be authored from a number instead of from
+  // four more capture cycles.
+  { name: 'calib', scenario: 'calib', at: [0.4] },
+  // Also not an effect: the same smoke sprite at six sizes, so the atlas cell's
+  // border fade can be checked at every mip level the chain will ever pick.
+  { name: 'mipwall', scenario: 'mipwall', at: [0.4], plate: true },
+  { name: 'fire', scenario: 'fire', at: [3.0], plate: true },
+  // `plate` photographs the staged camera before anything is emitted into it.
+  // A cloud cannot be masked out of a frame by any rule on the frame alone —
+  // it is grey over a tan wall and over blue sky at once, brighter than one and
+  // darker than the other — so the backdrop has to be photographed rather than
+  // estimated, and then the cloud is simply wherever the two differ.
+  { name: 'smoke', scenario: 'smoke', at: [2.0, 8.0], plate: true },
+  { name: 'backsmoke', scenario: 'backsmoke', at: [2.0, 8.0], plate: true },
+  // One sprite, front-lit and back-lit. The cloud scenarios above cannot settle
+  // whether the smoke is lit from a direction — a pixel in a cloud is coverage
+  // times radiance plus backdrop, and coverage varies with the shape the cloud
+  // happens to have — so these exist to be measured rather than looked at.
+  { name: 'litpuff', scenario: 'litpuff', at: [0.4], plate: true },
+  { name: 'backpuff', scenario: 'backpuff', at: [0.4], plate: true },
+  { name: 'airstrike', scenario: 'airstrike', at: [0.06, 0.9, 4.0], plate: true },
   { name: 'rocket', scenario: 'rocket', at: [1.35] },
   { name: 'gravel', scenario: 'gravel', at: [0.3] },
   { name: 'dirt', scenario: 'dirt', at: [0.3] },
@@ -247,6 +284,11 @@ async function main() {
     await page.evaluate(
       () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
     );
+    if (seq.plate) {
+      const file = `${seq.name}_plate.png`;
+      console.log(`  ${file}`);
+      await capture(path.join(OUT, file));
+    }
     await page.evaluate(() => window.__FXPHASE__.fire());
 
     let clock = 0;
@@ -278,7 +320,9 @@ async function main() {
       const lit = report.light
         ? `  sunvis=${report.light.visibility.toFixed(2)} sun=${report.light.sun
             .map((v) => v.toFixed(2))
-            .join('/')} amb=${report.light.ambient.map((v) => v.toFixed(2)).join('/')}`
+            .join('/')} amb=${report.light.ambient
+            .map((v) => v.toFixed(2))
+            .join('/')} sunview=${(report.light.sunView ?? []).map((v) => v.toFixed(2)).join('/')}`
         : '';
       console.log(
         `  ${file}  particles=${report.fx.particles} draws=${render.calls} fxdraws=${report.fx.drawCalls}  ${live}${lit}`,

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { rng, saturate } from '../core/MathUtils';
-import { Basis, fxScratch, hexColor } from './Emit';
+import { Basis, cloudShadow, fxScratch, hexColor } from './Emit';
 import { resetDesc } from './ParticleSystem';
 import { GLOW } from './Textures';
 import type { FXDeps } from './Shared';
@@ -194,6 +194,13 @@ export class VolumetricEffects {
     // Puffs seeded higher in the cloud see more sky, so the top of a cloud
     // sitting in a shadowed street still catches the sun.
     d.sunVisibility = this.mixSun(source, saturate((d.py - source.position.y) / (r + 2)));
+    d.cloudShadow = cloudShadow(
+      d.px - source.position.x,
+      d.py - source.position.y,
+      d.pz - source.position.z,
+      this.deps.sunDirection,
+      r,
+    );
     d.priority = 210;
     this.deps.groups.smoke.spawn(this.deps.now, d);
   }
@@ -313,12 +320,46 @@ export class VolumetricEffects {
     // Blackbody encoding: radiance and ramp position. A flame is already well
     // down the ramp at birth — a fuel fire never reaches the white of a
     // detonation — and it cools to a dull red as it detaches from the bed.
-    d.r0 = 4.2;
-    d.g0 = rng.range(0.24, 0.36);
-    d.r1 = 0.5;
-    d.g1 = rng.range(0.62, 0.78);
+    //
+    // Radiance is far lower than it was, and that is what makes this read as
+    // fire at all. A fuel flame is a stack of overlapping sprites, so whatever
+    // one of them is authored at, several of them sum to; at the old 4.2 the sum
+    // was far enough up the ACES shoulder that the tonemapper returned near
+    // white with a yellow cast — red/blue 1.24 measured over the flame region —
+    // and the deep orange body simply was not on screen. Held here, the stack
+    // lands where the real thing photographs, and the bright core comes from
+    // where the flames pile up rather than from every sprite being white alone.
+    //
+    // It is not lower still because the coverage below costs brightness: the
+    // flame has to stay lighter than the sunlit ground it stands on or it reads
+    // as a stain rather than as something burning. Sunlit ground here lands
+    // around exposed luminance 0.25, and a flame wants to be three or four times
+    // that — high enough to glow, low enough that the ACES shoulder has not begun
+    // bleaching it, which starts in earnest past 2.
+    //
+    // Hottest at the root. A burning bed is richest in fuel at its middle and
+    // that is also where the most flame stacks over one pixel, so those sprites
+    // start further up the ramp and the ones out at the rim start already deep
+    // orange. Without the split the whole fire came out one even orange — the
+    // right hue and no structure, closer to orange smoke than to something
+    // burning — because at this coverage a stack converges to about 1.3 times a
+    // single sprite and will not build a bright heart on its own.
+    const root = 1 - Math.min(Math.hypot(this.dir.x, this.dir.z) / Math.max(r * 0.55, 1e-3), 1);
+    d.r0 = 2.9 + 1.5 * root;
+    // At the ramp's orange stop rather than beyond it: past 0.6 the green channel
+    // has all but gone and what is left is dark red, not hotter orange.
+    d.g0 = rng.range(0.36, 0.5) - 0.2 * root;
+    d.r1 = 0.34;
+    d.g1 = rng.range(0.66, 0.82);
     d.alpha = 1;
-    d.additive = 0.9;
+    // Part substance, not all light. At 0.9 the flame occluded a tenth of what
+    // was behind it and the floor's grid lines were legible straight through the
+    // fire; a flame that a wall reads through is a stained window. It is also the
+    // coverage and not the colour that sets how orange the flame can measure:
+    // whatever shows through keeps its own blue channel, so a nearly additive
+    // flame is pinned near the background's red/blue however deep the orange
+    // going in.
+    d.additive = 0.22;
     // Buoyancy, not gravity: flame accelerates upward as it burns.
     d.gravity = -2.6;
     d.drag = 1.9;
@@ -345,12 +386,12 @@ export class VolumetricEffects {
     d.life = rng.range(1.1, 2.6);
     d.size0 = rng.range(0.012, 0.032);
     d.size1 = d.size0 * 0.5;
-    d.r0 = 4.5;
-    d.g0 = 1.8;
-    d.b0 = 0.35;
-    d.r1 = 0.85;
-    d.g1 = 0.1;
-    d.b1 = 0.02;
+    d.r0 = 2.6;
+    d.g0 = 0.72;
+    d.b0 = 0.06;
+    d.r1 = 0.7;
+    d.g1 = 0.07;
+    d.b1 = 0.01;
     d.alpha = 1;
     d.additive = 1;
     // Rising on the thermal, then cooling and dropping out of it.

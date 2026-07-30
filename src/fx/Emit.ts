@@ -80,3 +80,40 @@ export const fxScratch = {
 export function hexColor(hex: number, into: THREE.Color): THREE.Color {
   return into.setHex(hex, THREE.SRGBColorSpace);
 }
+
+/**
+ * Optical depth of a smoke cloud across one radius.
+ *
+ * Chosen from what the far side has to look like rather than from a measured
+ * extinction coefficient: across the whole cloud, two radii, this leaves the
+ * shadowed side at just over a fifth of the sun the lit side gets. Any less and
+ * the bank is flat again, which is the entire complaint; much more and the far
+ * side falls to the ambient fill everywhere and the cloud reads as half a cloud
+ * with the other half missing.
+ */
+const CLOUD_EXTINCTION = 0.78;
+
+/**
+ * Sun surviving to one puff through the smoke between it and the sun.
+ *
+ * `offset` is the puff's displacement from the cloud's centre and `radius` the
+ * cloud's, so the dot with the sun direction is how far in from the lit face the
+ * puff sits, measured in radii. Exponential rather than linear because that is
+ * what absorption is, and because the difference shows: linear leaves the middle
+ * of a cloud too dark and its lit face not bright enough.
+ *
+ * A plume passes its horizontal offset only. It is tall and narrow, its puffs
+ * are all born at the base and climb, so a vertical offset taken at spawn says
+ * nothing about where the puff will be — the vertical gradient belongs to the
+ * sun probes, which measure it against the real level.
+ */
+export function cloudShadow(
+  offsetX: number,
+  offsetY: number,
+  offsetZ: number,
+  sun: THREE.Vector3,
+  radius: number,
+): number {
+  const along = (offsetX * sun.x + offsetY * sun.y + offsetZ * sun.z) / Math.max(radius, 0.05);
+  return Math.exp(-CLOUD_EXTINCTION * (1 - Math.max(-1, Math.min(1, along))));
+}

@@ -80,7 +80,7 @@ attribute vec4 aCol0;  // rgb colour at birth, a peak alpha
 attribute vec4 aCol1;  // rgb colour at death, a additive weight
 attribute vec4 aPhys;  // gravity, drag, turbulence, stretch
 attribute vec4 aMisc;  // atlas cell, flipbook frames, fade-in fraction, softness
-attribute vec4 aShade; // sun visibility, floor height, bounce restitution, spare
+attribute vec4 aShade; // sun visibility, floor height, bounce restitution, cloud shadow
 
 uniform float uTime;
 uniform vec3 uGravityDir;
@@ -100,7 +100,8 @@ varying vec2 vUv;
 varying vec2 vLocal;
 varying vec4 vColorA;
 varying vec4 vParams;   // view depth, softness, additive weight, half world size
-varying float vSunVis;
+/** x: sun reaching this point past the level. y: past the rest of its own cloud. */
+varying vec2 vSunVis;
 
 #ifdef BLACKBODY
 /**
@@ -111,15 +112,26 @@ varying float vSunVis;
  * pink, then dark, and skips the yellows and oranges the eye is actually reading
  * temperature from. Stepping through the stops in order is what makes a fireball
  * cool rather than merely fade.
+ *
+ * The stops are chosen for where they land *after* the composite pass, not for
+ * where they look right in linear space. ACES desaturates hard as it approaches
+ * white, and an emissive bright enough to read as hot comes out of it near-white
+ * with a faint tint however warm it went in: a body authored at (1, 0.86, 0.48)
+ * and any real radiance arrives on screen at a red/blue ratio of about 1.3,
+ * which is a white blob with a yellow cast and not fire. Surviving the tonemap
+ * as deep orange takes a linear red/blue ratio in the tens, so everything from
+ * the first stop onward is far more saturated than a naive blackbody fit — and
+ * the emitters pay for it by keeping the *radiance* of the body low and spending
+ * their brightness only on the small white-hot core at the head of the ramp.
  */
 vec3 heatRamp(float x) {
-  vec3 c = mix(vec3(1.0, 0.97, 0.92), vec3(1.0, 0.86, 0.48), smoothstep(0.0, 0.17, x));
-  c = mix(c, vec3(1.0, 0.50, 0.13), smoothstep(0.15, 0.44, x));
-  c = mix(c, vec3(0.80, 0.17, 0.032), smoothstep(0.42, 0.72, x));
+  vec3 c = mix(vec3(1.0, 0.95, 0.86), vec3(1.0, 0.66, 0.24), smoothstep(0.0, 0.13, x));
+  c = mix(c, vec3(1.0, 0.34, 0.055), smoothstep(0.11, 0.38, x));
+  c = mix(c, vec3(0.85, 0.135, 0.011), smoothstep(0.36, 0.66, x));
   // The cold end is warm dark grey, not black. It is soot in daylight, which is
   // the darkest thing in the frame but still lit; taking it to near-zero is what
   // turns the tail of a fireball into a black hole punched in the level.
-  c = mix(c, vec3(0.30, 0.235, 0.205), smoothstep(0.68, 1.0, x));
+  c = mix(c, vec3(0.30, 0.235, 0.205), smoothstep(0.66, 1.0, x));
   return c;
 }
 #endif
@@ -205,7 +217,7 @@ void main() {
     vLocal = vec2(0.0);
     vColorA = vec4(0.0);
     vParams = vec4(1.0, 1.0, 0.0, 0.0);
-    vSunVis = 0.0;
+    vSunVis = vec2(0.0);
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
@@ -246,7 +258,11 @@ void main() {
   vec2 corner = position.xy;
   float cs = cos(roll);
   float sn = sin(roll);
-  vec2 rotated = vec2(corner.x * cs - corner.y * sn, corner.x * sn + corner.y * cs) * size;
+  // The corner where it lands on screen, before size is applied. Shading is
+  // built from this and texturing from the unrotated corner, and the two are not
+  // the same thing once a sprite carries any roll.
+  vec2 spun = vec2(corner.x * cs - corner.y * sn, corner.x * sn + corner.y * cs);
+  vec2 rotated = spun * size;
 
 #ifdef GROUND
   // Flat in the world XZ plane; nothing to billboard against.
@@ -278,7 +294,18 @@ void main() {
   vec2 cellSize = 1.0 / uAtlas;
   vec2 origin = vec2(mod(ci, uAtlas.x), floor(ci / uAtlas.x)) * cellSize;
   vUv = origin + (corner + 0.5) * cellSize;
-  vLocal = corner;
+  // Screen-space, not texture-space.
+  //
+  // Every sprite carries a random roll, and the lit side of an implied sphere
+  // built from the texture-space corner therefore points a random way on screen.
+  // One sprite still looks shaded, but a smoke column is a hundred of them
+  // overlapping, and a hundred gradients pointing in a hundred directions
+  // average to a flat grey disc — which is exactly what the puffs measured:
+  // sun-side over shadow-side 1.05, with the shading term computing a range of
+  // nearly eight to one across each individual sprite. Orienting the frame to
+  // the screen costs nothing and makes every sprite in the column agree about
+  // where the sun is.
+  vLocal = spun;
 
   float fadeIn = clamp(t / max(aMisc.z, 1e-4), 0.0, 1.0);
   float fadeOut = pow(1.0 - t, uCurves.z);
@@ -301,7 +328,7 @@ void main() {
   vec3 tint = mix(aCol0.rgb, aCol1.rgb, colorT);
 #endif
 
-  vSunVis = aShade.x;
+  vSunVis = vec2(aShade.x, aShade.w);
 
 #ifdef FLAKE
   // A billboard has no orientation of its own, so the facing is synthesised from
@@ -333,6 +360,8 @@ uniform vec3 uSunColor;
 uniform vec3 uAmbientColor;
 uniform vec3 uUpView;
 uniform vec2 uNearFade;
+/** Reciprocal of the fraction of the quad the sprite's silhouette fills. */
+uniform float uSphere;
 
 #ifdef SOFT
 uniform sampler2D uDepthMap;
@@ -344,7 +373,7 @@ varying vec2 vUv;
 varying vec2 vLocal;
 varying vec4 vColorA;
 varying vec4 vParams;
-varying float vSunVis;
+varying vec2 vSunVis;
 
 void main() {
   vec4 texel = texture2D(uMap, vUv);
@@ -356,9 +385,29 @@ void main() {
 #ifdef LIT
   // Treat the sprite as a sphere: the implied normal gives a lit limb and a
   // shadowed one, and the implied thickness darkens the dense core.
-  vec2 n2 = vLocal * 2.0;
-  float r2 = min(dot(n2, n2), 1.0);
-  vec3 normal = vec3(n2, sqrt(1.0 - r2));
+  //
+  // The sphere is fitted to the sprite's silhouette, not to its quad. Every
+  // generator draws inside its cell and the smoke flipbook fills between two
+  // thirds and all of one depending on the frame, so a sphere sized to the
+  // corner circle is truncated well short of its limb: the normal never tilts
+  // more than a little off the view axis, the sun side and the shadow side end
+  // up within a few percent of each other, and the puff comes back the flat grey
+  // disc this whole term exists to avoid. uSphere is the reciprocal of the
+  // fraction of the quad the sprite actually covers, so the horizon lands on the
+  // silhouette instead of outside it.
+  vec2 n2 = vLocal * (2.0 * uSphere);
+  float rr = dot(n2, n2);
+  float r2 = min(rr, 1.0);
+  vec3 normal = normalize(vec3(n2, sqrt(max(1.0 - r2, 1e-4))));
+  // Past the implied limb there is no sphere left, and the clamp parks the normal
+  // on the equator for the whole of the rest of the quad. Anything keyed to how
+  // near the limb a fragment is then holds its maximum over a region whose only
+  // boundary is the quad's own — which is a square. The footprint is fitted to
+  // the middle of the flipbook's growth curve, so its late frames genuinely do
+  // carry alpha out there, and that alpha gets the maximum. A rectangular edge
+  // round the smoke is what that looks like from the outside. Windowing the
+  // limb-keyed terms off past the horizon keeps them on the silhouette.
+  float onSphere = 1.0 - smoothstep(1.0, 1.5, rr);
   float ndl = dot(normal, uSunDirView);
   // A narrow wrap. Widening it flattens the sprite towards a single grey value,
   // and flat grey billboards are the thing this whole term exists to avoid; the
@@ -368,10 +417,54 @@ void main() {
   float diffuse = clamp((ndl + wrap) / (1.0 + wrap), 0.0, 1.0);
   // Thick centre receives less sun than the wispy rim.
   float thickness = mix(1.0, 0.55, normal.z);
-  // Forward scattering through the thin edges when back-lit. Kept small: at any
-  // real strength it lights the shadow side to within a few percent of the sun
-  // side, which cancels out the entire point of shading the sprite at all.
-  float through = pow(clamp(-ndl, 0.0, 1.0), 3.0) * (1.0 - normal.z) * 0.35;
+  // The rim: the glowing edge back-lit smoke actually has.
+  //
+  // A forward-scattering term spread over the sprite cannot produce it. Any
+  // strength that lifts the shadow side lifts the sun side with it, so the
+  // diffuse shading underneath cancels out and the puff goes flat again — which
+  // is why the term this replaces had to be kept too small to see. What glows is
+  // the limb, where the view ray leaves through a thin skin of smoke with the sun
+  // directly behind it, so this is keyed to the silhouette rather than to the
+  // normal: strongest exactly where the diffuse term has least to say, and
+  // absent from the interior, which is what lets the two compose.
+  float limb = 1.0 - normal.z;
+  limb *= limb;
+  // View space looks down -Z, so a sun with negative view Z is on the far side
+  // of the puff and only then is there anything to shine through the edge.
+  float behind = smoothstep(0.0, 0.5, -uSunDirView.z);
+  // Weighted toward the side of the limb the sun is nearest, so the rim reads as
+  // a crescent with a direction rather than as an outline traced round a blob.
+  //
+  // It has to fall to nothing on the far side, not to a small constant. A floor
+  // is measured against the ambient fill, not against the rim's own peak: the
+  // fill at the limb is about 0.43 of the sun colour, so a floor of a twelfth
+  // still put the anti-sun limb half again brighter than ambient and the arc
+  // closed into a ring. A ring on every sprite draws the bank's construction --
+  // an isolated puff came back reading as a beach ball. Squaring instead of
+  // flooring keeps the falloff gentle where the crescent is wide and takes the
+  // far limb to zero, and the eye reassembles open crescents into one mass in a
+  // way it will not do with rings.
+  float toward = clamp(0.5 + dot(n2, uSunDirView.xy) * 0.9, 0.0, 1.0);
+  float crescent = toward * toward;
+  // The implied sphere's limb is a perfect circle and a bright arc laid on one
+  // is legible as geometry however it is weighted. This sprite's own coverage is
+  // not a circle -- the flipbook silhouette is ragged, and uSphere parks the
+  // limb where that raggedness is, mid-alpha -- so gating the rim on coverage
+  // as well as on radius scatters the arc along the actual edge of the smoke.
+  // It is also where a rim belongs physically: the thin skin light crosses, not
+  // a fixed distance from the sprite's centre.
+  float skin = smoothstep(0.85, 0.25, texel.a);
+  // Large, because the limb has almost no coverage to spend it through. The rim
+  // lands exactly where the sprite's own alpha has fallen away, so a pixel there
+  // is most of the way to being background whatever radiance the shading hands
+  // it: at 2.6 the computed limb was twelve times the interior and the frame
+  // still measured it only 1.26 times brighter, because a fifth of a pixel of
+  // smoke cannot outvote four fifths of a pixel of sky. To read as an edge that
+  // glows rather than an edge that merely stops darkening, the radiance has to
+  // beat the sky it is seen against, and that takes a multiplier this size.
+  // Squaring the crescent and gating on skin each cost roughly a third of the
+  // peak, hence 7 where an unshaped ring needed 5.
+  float rim = limb * behind * crescent * onSphere * skin * 7.0;
   // The fill is a hemisphere, not a constant. A flat ambient term is what makes
   // a shadowed puff the very thing this shading exists to avoid — a uniform grey
   // billboard — because with the sun occluded it is the *only* term left, and a
@@ -383,30 +476,48 @@ void main() {
   // and the ground bounce, so it darkens to the ambient fill rather than to
   // black, which is what keeps smoke inside a shadowed street looking like
   // smoke instead of like a hole cut in the frame.
-  color *= uAmbientColor * sky + uSunColor * (diffuse * thickness + through) * vSunVis;
+  //
+  // The cloud's own shadow is spent on the diffuse term alone. Diffuse is light
+  // that had to cross the smoke to arrive, so the puffs behind the front of the
+  // cloud get a fraction of it and the bank acquires a lit side — which one
+  // sprite's shading, symmetric about its own centre, can never give it. The rim
+  // is the opposite case: it is lit by whatever came *through*, so shadowing it
+  // by the same amount would remove the one term that is supposed to survive.
+  float lit = diffuse * thickness * vSunVis.y + rim;
+  color *= uAmbientColor * sky + uSunColor * lit * vSunVis.x;
 #endif
 
 #ifdef SOFT
   float packed = unpackRGBAToDepth(texture2D(uDepthMap, gl_FragCoord.xy * uInvResolution));
   float sceneZ = -perspectiveDepthToViewZ(packed, uDepthRange.x, uDepthRange.y);
-  // Fade against the *front* of the sprite's implied sphere, not its centre.
-  // Comparing centre depth is the textbook version and it is wrong for anything
-  // that lives on a surface: a dust puff two centimetres off a wall has its
-  // centre level with the wall, so the whole sprite is erased and the impact
-  // shows nothing at all. Giving the sprite the depth extent its silhouette
-  // already implies means only the part that really penetrates the geometry
-  // fades, so the puff keeps its bright core and loses just the rim that would
-  // have cut a hard line across the brickwork.
+  // Faded against the fragment's own depth, which is the depth the hardware test
+  // compares as well.
+  //
+  // Comparing anything nearer — the front of the sprite's implied sphere, say —
+  // leaves the coverage still high at the instant the depth test starts killing
+  // fragments outright, and the step between the two is a hard straight chord
+  // across the sprite. A camera-facing billboard has one view depth for its whole
+  // quad, so where that plane cuts a flat wall it cuts along a straight line;
+  // spend the fade before reaching it and what is left is the sprite's own
+  // rectangle drawn across the building. A thirteen-metre smoke puff leads its
+  // centre by six metres against a three-metre band, so the fade was over four
+  // times before the cut and the chord was at full opacity.
+  //
+  // The implied sphere still shapes the band, which is what the lead was really
+  // for. The limb is nearly tangent to the view ray and is thin, so it should go
+  // over metres; the dense middle penetrates head-on and holds its coverage until
+  // it is genuinely inside the geometry. That is what keeps smoke laid against a
+  // wall reading as a volume in front of it instead of as a stain on the
+  // brickwork, and it keeps an impact puff a handspan off the brick at full
+  // strength in the core.
   vec2 q = vLocal * 2.0;
   float profile = sqrt(max(0.0, 1.0 - min(dot(q, q), 1.0)));
-  float front = vParams.x - vParams.w * profile;
-  float clear = clamp((sceneZ - front) / max(vParams.y, 1e-3), 0.0, 1.0);
-  // Eased, not linear. The hard line this term exists to hide is a feature of
-  // the last few centimetres before the sprite crosses into the geometry, but
-  // softness is metres wide on a cloud that size — so a straight ramp spends the
-  // whole distance and halves the opacity of every puff within a metre of a
-  // surface. Smoke laid against a wall then reads as a stain on the brickwork
-  // instead of as a volume in front of it.
+  // A band wider than the sprite itself is meaningless, and it is small sprites
+  // sitting on surfaces that suffer most from one.
+  float band = min(vParams.y, vParams.w * 2.0) * mix(1.0, 0.2, profile);
+  float clear = clamp((sceneZ - vParams.x) / max(band, 1e-4), 0.0, 1.0);
+  // Eased, not linear, so the coverage spends most of the band near full and
+  // collapses at the end rather than halving every puff within a metre of a wall.
   alpha *= clear * (2.0 - clear);
 #endif
 
@@ -420,7 +531,21 @@ void main() {
   // burning; the cooled, sooty limb keeps its coverage and occludes.
   float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
   float burning = clamp(lum * 1.1, 0.0, 1.0);
-  gl_FragColor = vec4(color * alpha, alpha * (1.0 - vParams.z * burning));
+  // Thin coverage stays additive however opaque the emitter asked to be, and that
+  // is what holds a fireball together.
+  //
+  // Occlusion is what lets the body be deep orange rather than white, but a
+  // uniform opacity applies it to the wisps between the lobes as well, and those
+  // wisps are what the eye reads as one connected mass. Made opaque they stop
+  // glowing over the background and start dirtying it instead: the ball comes
+  // apart into a white heart with detached orange confetti round it, which is a
+  // different failure from the one being fixed but no better. Optical depth is
+  // the honest discriminator -- a dense lobe transmits nothing and has to
+  // occlude, a wisp transmits nearly everything and only adds -- and the sprite's
+  // own coverage already carries it.
+  float dense = clamp(vColorA.a * texel.a, 0.0, 1.0);
+  float weight = mix(1.0, vParams.z, dense);
+  gl_FragColor = vec4(color * alpha, alpha * (1.0 - weight * burning));
 #elif defined(STRAIGHT_ALPHA)
   // The viewmodel target is resolved with mix(scene, view.rgb, view.a). With
   // premultiplied colour and (ONE, ONE_MINUS_SRC_ALPHA) that resolve is exactly

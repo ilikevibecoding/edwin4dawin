@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { rng } from '../core/MathUtils';
-import { Basis, fxScratch } from './Emit';
+import { Basis, cloudShadow, fxScratch } from './Emit';
 import { PD, resetDesc } from './ParticleSystem';
 import { CHIP, GLOW } from './Textures';
 import type { FXDeps } from './Shared';
@@ -419,12 +419,12 @@ export class ExplosionEffects {
     // charge it also has to be capped outright: proportional growth puts
     // forty-metre spokes across the frame.
     star.size1 = Math.min(fireD * 1.15, 15);
-    star.r0 = 2.2;
-    star.g0 = 1.5;
-    star.b0 = 0.8;
+    star.r0 = 2.4;
+    star.g0 = 0.95;
+    star.b0 = 0.16;
     star.r1 = 1.0;
-    star.g1 = 0.3;
-    star.b1 = 0.07;
+    star.g1 = 0.2;
+    star.b1 = 0.025;
     star.alpha = 1;
     star.additive = 1;
     star.cell = GLOW.BURST_STAR;
@@ -499,7 +499,15 @@ export class ExplosionEffects {
     // The first quarter are the core mass: born at the centre, larger, and a
     // beat earlier. They establish a ball for the rest to billow off, which is
     // the difference between an explosion and a scatter of burning debris.
-    const cores = Math.max(3, Math.round(count * 0.25));
+    // A real fireball's white-hot part is the small bright heart of it, not most
+    // of the ball. Fourteen core lobes at nearly twice the lobe size made a
+    // white mass two thirds of the way out to the limb, so the ball went from
+    // white straight into smoke with no room for the deep orange body in
+    // between — which is the whole of what the colour measurement was reporting.
+    // Cut to a sixth of the silhouette it took the heart out with it and the
+    // ball read as loose burning patches, so this is the balance point: enough
+    // core to be a heart, not enough to be the ball.
+    const cores = Math.max(3, Math.round(count * 0.24));
     for (let i = 0; i < count; i++) {
       const d = resetDesc();
       const core = i < cores;
@@ -521,11 +529,19 @@ export class ExplosionEffects {
       d.vy = this.dir.y * reach * 1.1 + fireR * rng.range(0.25, 0.7);
       d.vz = this.dir.z * reach * 1.6;
       d.life = burn * rng.range(0.75, 1.3) * (core ? 1.2 : 1);
+      // The core is kept to roughly a body lobe rather than to twice one. Sized
+      // above the lobe it covered a quarter of the ball's area, and since the
+      // core is the one part authored bright enough for the tonemapper to take
+      // to white, that quarter arrived as a white disc with the body only a
+      // fringe around it.
       const target = Math.min(
-        lobe * (core ? rng.range(1.5, 1.85) : rng.range(0.8, 1.3)),
+        lobe * (core ? rng.range(1.0, 1.25) : rng.range(0.8, 1.3)),
         MAX_FIRE_SPRITE * 1.8,
       );
-      d.size0 = target * 0.4;
+      // Born at half size rather than at a third. Lobes that start too small
+      // spend the first fifty milliseconds as separate blobs with gaps between
+      // them, and fifty milliseconds is most of what a player sees of a grenade.
+      d.size0 = target * 0.52;
       d.size1 = target;
       d.roll = rng.range(0, Math.PI * 2);
       d.rollRate = rng.range(-0.9, 0.9);
@@ -533,14 +549,65 @@ export class ExplosionEffects {
       // ramp. Core lobes start white-hot and end deep red; the outer billows
       // are already cooler at birth and finish as soot, so the ball is hottest
       // in the middle and sootiest at the limb at every instant of its life.
-      d.r0 = core ? 5.5 : 3.2;
-      d.g0 = core ? 0.02 : rng.range(0.1, 0.26);
-      d.r1 = core ? 0.6 : 0.42;
-      d.g1 = core ? rng.range(0.58, 0.74) : rng.range(0.78, 0.94);
+      //
+      // The gap between the two radiances is the whole read, and where the body
+      // sits on the exposure scale decides its colour more than its authored
+      // chromaticity does. Sweeping ACES directly: screen red/blue is set almost
+      // entirely by *exposed luminance*, and the authored ratio only decides how
+      // much of the available range is used. At exposed luminance 6 even a pure
+      // red with no blue in it at all leaves the tonemapper at red/blue 1.7; at
+      // 3 it leaves at 3.0; at 0.8 a linear ratio of 8 is enough for 4.3. So the
+      // body cannot be authored bright, and a body at radiance 3.2 measured 1.3
+      // on screen for exactly that reason — white with a yellow cast.
+      //
+      // It cannot be authored dim either, which is the mirror mistake and the
+      // one made next: at radiance 1.6 the body landed at exposed luminance 0.26
+      // against a sunlit floor at 0.25, so the deep orange arrived correct in
+      // hue and no brighter than the ground it was standing on. Fire that is not
+      // brighter than its surroundings reads as paint, and the ball came apart
+      // into flat red patches round a white heart.
+      //
+      // The window is exposed luminance around one: three or four times the
+      // daylight it sits against so it glows, and low enough on the curve that
+      // the shoulder has not yet bleached it. The stack does not multiply this
+      // much — each layer keeps only its additive weight of what is behind it,
+      // so a deep pile converges to about 1.3 times one lobe rather than to
+      // seven times.
+      d.r0 = core ? 6.2 : 3.4;
+      // Sat at the ramp's orange stop rather than past it. The stop at 0.38 is
+      // linear (1, 0.34, 0.055) — ratio 18, green a third of red, which is deep
+      // orange; by 0.66 it is (0.85, 0.135, 0.011), ratio 77 with the green all
+      // but gone, which is not a hotter orange but a darker red. Authored at
+      // 0.46-0.58 the body measured its target ratio and looked wrong doing it,
+      // because the eye reads fire from the green channel: orange has a third of
+      // its red in green, and taking that away leaves blood.
+      d.g0 = core ? 0.02 : rng.range(0.32, 0.44);
+      d.r1 = core ? 0.42 : 0.34;
+      // The body stops at deep red rather than running on into soot. Past 0.66
+      // the ramp blends to warm dark grey at red/blue 1.46, so a body that cools
+      // that far spends the cold end of its own life at the ratio the smoke
+      // already has — and the cold end is exactly the decile the flame's warmest
+      // measurement comes from. There is a separate pall emitter for soot; the
+      // fireball does not need to become it.
+      d.g1 = core ? rng.range(0.5, 0.66) : rng.range(0.62, 0.76);
       d.alpha = 1;
-      // Nearly all additive where it burns; the soot mask in the fragment shader
-      // takes the coverage back on the parts that have already cooled.
-      d.additive = 0.95;
+      // The core is spent as light and the body as substance, and that split is
+      // what decides the colour that gets measured.
+      //
+      // An additive sprite adds to whatever is behind it and hides none of it,
+      // so its blue channel can never fall below the background's however deep
+      // the orange going in. Measured on a swept board: over sunlit daylight a
+      // fully additive layer tops out at screen red/blue 1.8 and *falls* from
+      // there as radiance rises, and at the weight this used to carry the
+      // ceiling was 2.8 — the whole span from 3.66 up was unreachable by any
+      // choice of colour or brightness. It is the coverage that decides it. Drop
+      // the bleed to a seventh and the same colours measure between 3.9 and 4.8.
+      //
+      // Which is also what a real fireball is: soot and burning fuel thick
+      // enough to hide the building behind it, not a pane of orange glass. The
+      // soot mask in the fragment shader spends this weight only where the
+      // sprite is still burning, so the cooled limb occludes regardless.
+      d.additive = core ? 0.88 : 0.22;
       // Buoyant: fire wants to go up, not fall.
       d.gravity = -1.8;
       d.drag = 1.6;
@@ -566,12 +633,19 @@ export class ExplosionEffects {
       d.life = burn * rng.range(0.45, 0.85);
       d.size0 = Math.min(fireD * rng.range(0.4, 0.66), MAX_FIRE_SPRITE);
       d.size1 = Math.min(d.size0 * 1.7, MAX_FIRE_SPRITE * 1.4);
-      d.r0 = 2.6;
-      d.g0 = 1.05;
-      d.b0 = 0.22;
-      d.r1 = 0.34;
-      d.g1 = 0.05;
-      d.b1 = 0.012;
+      // These are the widest sprites in the effect and every one of them is
+      // fully additive, which makes them the term that decides what the flame
+      // region measures: an additive layer keeps all of what is behind it, so
+      // five of them overlapping do not blend, they sum outright. Five at the
+      // old 1.5 put linear 5.2 into a pixel on their own, past the point where
+      // the tonemapper returns anything but white, and the fireball's colour was
+      // bleached whatever the fireball itself was authored at.
+      d.r0 = 0.9;
+      d.g0 = 0.25;
+      d.b0 = 0.03;
+      d.r1 = 0.16;
+      d.g1 = 0.022;
+      d.b1 = 0.004;
       d.alpha = 0.7;
       d.additive = 1;
       d.cell = GLOW.SOFT;
@@ -925,6 +999,13 @@ export class ExplosionEffects {
       // column standing out of a shadowed street is genuinely sunlit while its
       // base is not.
       d.sunVisibility = this.mixSun(0.25 + phase * 0.85);
+      d.cloudShadow = cloudShadow(
+        d.px - position.x,
+        0,
+        d.pz - position.z,
+        this.deps.sunDirection,
+        colR,
+      );
       d.priority = 200;
       groups.smoke.spawn(now + delay, d);
     }
@@ -984,6 +1065,13 @@ export class ExplosionEffects {
       d.fadeIn = 0.07;
       d.softness = Math.min(r * 0.6, 3);
       d.sunVisibility = this.mixSun(0.15);
+      d.cloudShadow = cloudShadow(
+        d.px - position.x,
+        0,
+        d.pz - position.z,
+        this.deps.sunDirection,
+        reach,
+      );
       d.priority = 175;
       groups.smoke.spawn(now + 0.12 + rng.range(0, 0.4), d);
     }

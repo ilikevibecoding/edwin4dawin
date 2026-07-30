@@ -147,17 +147,32 @@ export class MuzzleFlashEffects {
     d.roll = rng.range(0, Math.PI * 2);
     d.rollRate = rng.range(-2.5, 2.5);
     // Bright enough to blow out and bloom, not so bright that the petals of the
-    // star clip into one white disc. Past about three the tone map has taken the
+    // star clip into one white disc. Past about four the tone map has taken the
     // whole sprite to white and the shape the generator worked for is gone; the
     // hot core below is what carries the blown-out centre.
-    d.r0 = 3.0 * heat;
-    d.g0 = 2.1 * heat;
-    d.b0 = 1.0 * heat;
+    //
+    // Far more saturated than a flash looks in isolation, because the composite
+    // pass desaturates in proportion to how near white a value lands and these
+    // petals are the brightest thing in the frame. At the pale cream this used to
+    // carry the star measured screen red/blue 1.29 against a linear 3.0 going in,
+    // which is a white smear with a yellow tint and is what the review saw.
+    d.r0 = 3.4 * heat;
+    d.g0 = 1.29 * heat;
+    d.b0 = 0.26 * heat;
     d.r1 = 1.3 * heat;
-    d.g1 = 0.42 * heat;
-    d.b1 = 0.09 * heat;
+    d.g1 = 0.3 * heat;
+    d.b1 = 0.04 * heat;
     d.alpha = 1;
-    d.additive = 1;
+    // Part of the flash occludes, and that is the only thing that lets it have a
+    // colour at all. An additive layer keeps every bit of the background's blue
+    // underneath it, so over a sunlit street its screen red/blue is pinned near
+    // the street's own — swept, a fully additive flash cannot pass 1.8 at any
+    // radiance or chromaticity, and rising radiance makes it worse rather than
+    // better. A muzzle flash is a ball of burning gas dense enough to hide the
+    // wall behind it, so letting the petals cover what they are in front of is
+    // both what the thing does and what makes it read as amber. The white-hot
+    // core below stays fully additive: that one is light, not gas.
+    d.additive = 0.55;
     d.cell = STAR_CELLS[(rng.next() * STAR_CELLS.length) | 0];
     d.fadeIn = 0.12;
     d.priority = 245;
@@ -217,14 +232,19 @@ export class MuzzleFlashEffects {
       d.roll = rng.range(0, Math.PI * 2);
       d.rollRate = rng.range(-3, 3);
       const g = heat * (1 - t * 0.55);
-      d.r0 = 1.5 * g;
-      d.g0 = 1.0 * g;
-      d.b0 = 0.52 * g;
-      d.r1 = 0.26 * g;
-      d.g1 = 0.19 * g;
-      d.b1 = 0.15 * g;
+      d.r0 = 1.7 * g;
+      d.g0 = 0.62 * g;
+      d.b0 = 0.12 * g;
+      // Ends warm grey rather than neutral: this is burning propellant turning
+      // into the smoke the layer below carries on with, and a neutral endpoint
+      // reads as a puff of steam leaving the barrel.
+      d.r1 = 0.3 * g;
+      d.g1 = 0.14 * g;
+      d.b1 = 0.075 * g;
       d.alpha = suppressed ? 0.7 : 0.5;
-      d.additive = suppressed ? 0.45 : 0.8;
+      // Burning gas is thick. Same reasoning as the star: a cone that hides
+      // nothing cannot be any colour but the background's.
+      d.additive = suppressed ? 0.45 : 0.5;
       d.drag = 5.5;
       // Radial puffs, never the directional cone sprite. These are camera-facing
       // billboards at a random roll, so a sprite whose shape points somewhere
@@ -260,13 +280,16 @@ export class MuzzleFlashEffects {
       d.life = rng.range(0.06, 0.24);
       d.size0 = size * rng.range(0.035, 0.08);
       d.size1 = d.size0 * 0.5;
-      d.r0 = 3.6 * heat;
-      d.g0 = 2.3 * heat;
-      d.b0 = 0.8 * heat;
+      d.r0 = 4.2 * heat;
+      d.g0 = 1.6 * heat;
+      d.b0 = 0.24 * heat;
       d.r1 = 0.9 * heat;
       d.g1 = 0.11 * heat;
       d.b1 = 0.02;
       d.alpha = 1;
+      // Left fully additive, unlike the star and the gas. A grain of powder is
+      // well under a pixel across at any range it is visible from, so occluding
+      // with it buys nothing and costs the streak its brightness.
       d.additive = 1;
       d.gravity = 8;
       d.drag = 1.4;
@@ -328,7 +351,13 @@ export class MuzzleFlashEffects {
       d.softness = 0.35;
       d.sunVisibility = sun;
       d.priority = 120;
-      group.spawn(now, d);
+      // Held back until the flash is over. Residue is dark grey and it spawns
+      // half a barrel-length ahead of the muzzle, which is inside the gas ball:
+      // a fifth of a stop of coverage over something as bright as the core reads
+      // as a hole punched in the middle of the flash, and photographed at the
+      // instant of ignition that is exactly what it looked like. It is also the
+      // wrong order of events — the smoke is what the burning gas leaves behind.
+      group.spawn(now + 0.035 + i * 0.012, d);
     }
   }
 }

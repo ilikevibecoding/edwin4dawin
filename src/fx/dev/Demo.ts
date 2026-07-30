@@ -14,6 +14,7 @@ export type ScenarioName =
   | 'flash'
   | 'tracers'
   | 'tracerspan'
+  | 'viewfire'
   | 'concrete'
   | 'metal'
   | 'glass'
@@ -29,8 +30,13 @@ export type ScenarioName =
   | 'rocket'
   | 'airstrike'
   | 'smoke'
+  | 'backsmoke'
+  | 'litpuff'
+  | 'backpuff'
   | 'wallsmoke'
   | 'fire'
+  | 'calib'
+  | 'mipwall'
   | 'idle';
 
 /**
@@ -47,7 +53,32 @@ export interface FXDevBridge {
   /** Live particle count per group. */
   groups(): Record<string, number>;
   /** The lighting a particle at this point is shaded with. */
-  light(position: THREE.Vector3): { sun: number[]; ambient: number[]; visibility: number };
+  light(position: THREE.Vector3): {
+    sun: number[];
+    ambient: number[];
+    visibility: number;
+    sunView: number[];
+  };
+  /** One inert smoke sprite, for measuring the shading model on its own. */
+  puff(position: THREE.Vector3, size: number, alpha: number): void;
+  /**
+   * One inert fireball sprite held at a fixed point on the cooling ramp.
+   *
+   * What a fire emitter can choose is a radiance and a ramp position; what
+   * matters is the red/blue ratio those arrive at on screen, and between the two
+   * sit the sprite's own blending, the bloom, the auto-exposure and an ACES
+   * curve that desaturates everything it takes near white. Solving that chain on
+   * paper needs an exposure nobody can read back, so this photographs it
+   * instead: a board of these at known values turns the whole question into one
+   * measurement.
+   */
+  swatch(
+    position: THREE.Vector3,
+    size: number,
+    ramp: number,
+    radiance: number,
+    additive: number,
+  ): void;
 }
 
 /**
@@ -68,9 +99,57 @@ interface StageSpec {
 
 const PLAYER_STAGE: StageSpec = { mode: 'player', eye: [0, 0, 0], look: [0, 0, 0] };
 
+/**
+ * The calibration board: ramp position across, radiance up.
+ *
+ * Read together with a backdrop sample from the gaps between them, one frame of
+ * this fixes the exposure, confirms the offline tonemap model and says directly
+ * which authored pair lands on a deep orange rather than on white — which is
+ * otherwise four build-and-capture cycles of guessing.
+ */
+const CALIB_RAMPS: readonly number[] = [0.0, 0.18, 0.32, 0.46, 0.62, 0.8];
+const CALIB_RADIANCES: readonly number[] = [0.6, 1.0, 1.6, 2.6, 4.2, 6.5];
+const CALIB_SPACING = 3.4;
+const CALIB_SIZE = 2.5;
+const CALIB_DISTANCE = 34;
+/**
+ * Matches what the fireball body spends, so the board measures the real path.
+ *
+ * Worth keeping in step. The board's whole value is that it reports what an
+ * authored pair actually lands on, and the additive weight turned out to matter
+ * more than either axis the board sweeps: at 0.45 the highest red/blue anywhere on
+ * it was 2.3, and the reason was that 45% of the sky was still showing through
+ * every swatch.
+ */
+const CALIB_ADDITIVE = 0.22;
+
+/**
+ * The mip row: one sprite, halving in screen size across the frame.
+ *
+ * A sprite is one cell of an atlas, and the cell's contents are faded out over a
+ * fixed number of texels at its border so the mip chain cannot bleed the
+ * neighbouring frame in. That fade is a *texel* count, so it halves with every
+ * mip level while the cell does too — by the fourth it is a fraction of a texel
+ * and the cell no longer reaches zero at its own edge. What that would look like
+ * on screen is a sprite with a straight edge round it, and the only honest way
+ * to find out is to photograph the same sprite at every size the chain will pick
+ * for it. Widths are metres; at the distance below they come out near 132, 66,
+ * 33, 17, 8 and 4 pixels, which is mip 1 through 6 of a 256-texel cell.
+ */
+const MIP_SIZES: readonly number[] = [8, 4, 2, 1, 0.5, 0.25];
+const MIP_GAP = 1.6;
+const MIP_DISTANCE = 26;
+
 const STAGES: Record<ScenarioName, StageSpec> = {
   gunfire: PLAYER_STAGE,
   suppressed: PLAYER_STAGE,
+  // The player's own weapon, from the player's eye. Every other firing stage in
+  // this harness shoots across the frame from a world-space muzzle, which is the
+  // right way to judge the shape of a flash and the wrong way to judge where a
+  // round comes from: the barrel the player sees is drawn by a second camera at a
+  // narrower field of view, so "does the tracer leave the muzzle" is a question
+  // about two projections agreeing and is only visible down the sights.
+  viewfire: PLAYER_STAGE,
   // The atlas boards ride in the viewmodel scene; staging only serves to clear
   // the city out from behind them.
   idle: { mode: 'floor', lift: 1.5, eye: [0, 0, 6], look: [0, 0, 0] },
@@ -97,10 +176,34 @@ const STAGES: Record<ScenarioName, StageSpec> = {
   rocket: { mode: 'floor', lift: 3.2, eye: [0, 1.6, 13], look: [0, 1.6, 0] },
   airstrike: { mode: 'floor', lift: 0.8, eye: [0, 4.5, 30], look: [0, 12, 0] },
   smoke: { mode: 'floor', lift: 0.9, eye: [0, 2, 9], look: [0, 2.4, 0] },
+  // The same cloud from the opposite side, which is the only way to see the rim.
+  // Every other stage on the range faces away from the sun — measured, the sun's
+  // view-space Z is positive in all of them — so the back-lit half of the
+  // shading model is unreachable from them and went unverified.
+  backsmoke: { mode: 'floor', lift: 0.9, eye: [0, 2, -9], look: [0, 2.4, 0] },
+  // One sprite, centred, and about a third of the frame across so its limb is
+  // resolved over enough pixels to measure an angular profile around it. Lifted
+  // clear of the floor so the range wall is the only thing behind it, and the
+  // camera aimed at the origin rather than above it — `look` is an offset from
+  // the origin, so giving it the eye's own height puts the sprite that far below
+  // the frame, which is how the first pair of these came back empty.
+  litpuff: { mode: 'floor', lift: 4.2, eye: [0, 0, 6.5], look: [0, 0, 0] },
+  backpuff: { mode: 'floor', lift: 4.2, eye: [0, 0, -6.5], look: [0, 0, 0] },
   // Raking, from the side and low: the only angle at which a quad slicing into
   // the wall and into the floor both show their seams in one frame.
   wallsmoke: { mode: 'wall', eye: [5.4, 0.5, 6.6], look: [0, -0.7, 0] },
   fire: { mode: 'floor', eye: [0, 1.6, 5.5], look: [0, 1.3, 0] },
+  // Square on to the board, far enough back to hold all of it, and lifted so
+  // the backdrop is open sky: the gaps between swatches are the backdrop
+  // sample, and a swatch has to be read against a known one.
+  calib: { mode: 'floor', lift: 9, eye: [0, 0, CALIB_DISTANCE], look: [0, 0, 0] },
+  // Below the row and looking up at it, so every sprite in it is against open
+  // sky. A straight edge on a sprite is only straight against a clean backdrop;
+  // over the range floor the grid lines supply plenty of straight edges of their
+  // own and the measurement cannot tell them apart. Facing away from the wall for
+  // the same reason — from the other side the row came back overlapping it, and a
+  // tiled wall is nothing but straight edges.
+  mipwall: { mode: 'floor', lift: 12, eye: [0, -7, -MIP_DISTANCE], look: [0, 0, 0] },
 };
 
 interface Beat {
@@ -382,8 +485,19 @@ export class FXDemo {
         this.rocketPass();
         break;
       case 'smoke':
+      case 'backsmoke':
         this.fx.smoke(this.origin, 3.2, 14, 0xd8dade);
         this.fx.dust(this.origin, 2.6, 0.8);
+        break;
+      case 'litpuff':
+      case 'backpuff':
+        // Opaque enough that the backdrop through it does not dominate, and one
+        // sprite only: two would overlap and the coverage-matching argument that
+        // makes this measurable would be gone. Sized to about half the frame
+        // height — at 5 m it overflowed the viewport, so the outer radius bands
+        // were sampling the corners of the image rather than the sprite's limb,
+        // and the limb is the whole point of the exercise.
+        this.bridge.puff(this.origin, 3.0, 0.94);
         break;
       case 'wallsmoke':
         // Deliberately buried: the cloud centre sits about a metre off the wall
@@ -397,6 +511,12 @@ export class FXDemo {
         break;
       case 'fire':
         this.fx.fire(this.origin, 1.3, 26);
+        break;
+      case 'calib':
+        this.calibBoard();
+        break;
+      case 'mipwall':
+        this.mipRow();
         break;
       case 'debris':
         this.fx.debrisBurst(this.origin, this.originNormal, 40, 'concrete');
@@ -415,6 +535,11 @@ export class FXDemo {
       case 'flash':
         this.fireTimer = 0.1;
         this.worldFlash(false);
+        break;
+      case 'viewfire':
+        this.fireTimer = 0.086;
+        this.viewFlash(false);
+        this.viewTracer();
         break;
       case 'tracers':
         this.fireTimer = 0.05;
@@ -443,6 +568,10 @@ export class FXDemo {
         break;
       case 'flash':
         this.every(dt, 0.1, () => this.worldFlash(false));
+        break;
+      case 'viewfire':
+        this.every(dt, 0.086, () => this.viewTracer());
+        this.viewFlash(false);
         break;
       case 'tracers':
         this.every(dt, 0.05, () => this.crossTracer());
@@ -533,7 +662,30 @@ export class FXDemo {
       .multiplyScalar(-1.2)
       .addScaledVector(UP, 1.9)
       .addScaledVector(this.up, 0.3);
-    this.fx.shellEject(this.scratch, this.velocity, '5.56x45', false);
+    // Back along the bore to where an ejection port is, not at the crown. Spawned
+    // on the muzzle the case sits inside the flash core for its first few frames,
+    // and a dark tumbling facet over the brightest thing in the frame photographs
+    // as a hole punched in the middle of the flash — which then gets diagnosed as
+    // a flash defect. Combat already ejects from the port; only this bench did not.
+    this.ejectPoint.copy(this.scratch).addScaledVector(this.scratch2, -0.28);
+    this.fx.shellEject(this.ejectPoint, this.velocity, '5.56x45', false);
+  }
+
+  /**
+   * A round leaving the player's own barrel, fired from the weapon's true world
+   * muzzle exactly as combat fires it.
+   *
+   * Deliberately not from `viewMuzzle`: that is already a view-space point and
+   * using it would skip the correction under test. The whole question is whether
+   * a world position handed over by the weapon system arrives on screen under the
+   * barrel the player can see.
+   */
+  private viewTracer(): void {
+    const weapons = this.ctx.tryGet<WeaponSystem>('weapons');
+    if (!weapons) return;
+    weapons.getMuzzlePosition(this.scratch);
+    this.hitPoint.copy(this.scratch).addScaledVector(this.forward, 70);
+    this.fx.tracer(this.scratch, this.hitPoint, 0xffd39a, 820, 0.045);
   }
 
   private crossTracer(): void {
@@ -667,6 +819,55 @@ export class FXDemo {
           .addScaledVector(this.bitangent, row === 0 ? 0.36 : -0.3);
         this.fx.decal(this.hitPoint, this.hitNormal, surfaces[i], row === 0 ? 0.09 : 0.36);
       }
+    }
+  }
+
+  /**
+   * A grid of fireball sprites at known ramp positions and radiances.
+   *
+   * Spaced wider than they are drawn so no two overlap and so the sky between
+   * them can be sampled as the backdrop in the same frame. The top row is the
+   * additive weight the body uses today, the row above it fully opaque, so the
+   * cost of letting the backdrop through is visible alongside everything else.
+   */
+  private calibBoard(): void {
+    const cols = CALIB_RAMPS.length;
+    const rows = CALIB_RADIANCES.length;
+    const left = (-(cols - 1) * CALIB_SPACING) / 2;
+    const bottom = (-(rows - 1) * CALIB_SPACING) / 2;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        this.scratch.set(
+          this.origin.x + left + x * CALIB_SPACING,
+          this.origin.y + bottom + y * CALIB_SPACING,
+          this.origin.z,
+        );
+        this.bridge.swatch(
+          this.scratch,
+          CALIB_SIZE,
+          CALIB_RAMPS[x],
+          CALIB_RADIANCES[y],
+          CALIB_ADDITIVE,
+        );
+      }
+    }
+  }
+
+  /**
+   * One smoke sprite drawn at every size, laid out left to right.
+   *
+   * Centred on the row's own extent rather than on the origin, because the sizes
+   * halve: laid out from the middle the wide one alone would run off the frame
+   * while the last three sat on top of each other.
+   */
+  private mipRow(): void {
+    let span = MIP_GAP * (MIP_SIZES.length - 1);
+    for (const size of MIP_SIZES) span += size;
+    let x = -span / 2;
+    for (const size of MIP_SIZES) {
+      this.scratch.set(this.origin.x + x + size / 2, this.origin.y, this.origin.z);
+      this.bridge.puff(this.scratch, size, 0.94);
+      x += size + MIP_GAP;
     }
   }
 

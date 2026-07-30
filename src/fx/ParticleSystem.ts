@@ -81,6 +81,24 @@ export interface ParticleDesc {
    */
   sunVisibility: number;
   /**
+   * How much of the sun survives the rest of this particle's own cloud, 0..1.
+   *
+   * Every sprite in a cloud is shaded, and the cloud still comes out flat. The
+   * shading is symmetric about each sprite's own centre, so a hundred of them
+   * scattered through a volume put a hundred identical little gradients side by
+   * side and the sum has no gradient at all — which is exactly the "uniformly
+   * grey-brown, no directional lighting" a smoke bank reads as. What is missing
+   * is not per-sprite shading but the cloud shadowing itself: a puff on the far
+   * side is behind several metres of smoke and genuinely receives a fraction of
+   * what the near side does.
+   *
+   * Kept apart from `sunVisibility` because the two attenuate different things.
+   * Geometry occlusion takes the whole sun away, rim included; smoke in front of
+   * smoke does not, since the rim is lit precisely by the light that made it
+   * through. So this scales the diffuse term only.
+   */
+  cloudShadow: number;
+  /**
    * World height of the ground under this particle, for groups that bounce.
    *
    * `NO_FLOOR` disables the collision entirely. Emitters that know where the
@@ -126,6 +144,7 @@ export const PD: ParticleDesc = {
   fadeIn: 0.1,
   softness: 0.5,
   sunVisibility: 1,
+  cloudShadow: 1,
   floorY: NO_FLOOR,
   bounce: 0.3,
   priority: 128,
@@ -153,6 +172,7 @@ export function resetDesc(): ParticleDesc {
   d.fadeIn = 0.1;
   d.softness = 0.5;
   d.sunVisibility = 1;
+  d.cloudShadow = 1;
   d.floorY = NO_FLOOR;
   d.bounce = 0.3;
   d.priority = 128;
@@ -167,6 +187,17 @@ export interface ParticleGroupOptions {
   atlasRows: number;
   soft: boolean;
   lit: boolean;
+  /**
+   * Fraction of the quad's half-width the sprite's silhouette reaches, for lit
+   * groups.
+   *
+   * The sphere the lit shader shades against is only as wide as this: a
+   * generator that draws a puff two thirds of the way to its cell border and a
+   * sphere fitted to the whole quad never reach the same horizon, and a sphere
+   * whose limb sits outside the sprite has no lit side and no dark side inside
+   * the part that is actually drawn.
+   */
+  footprint?: number;
   /** Shade the whole sprite as one tumbling facet; for solid debris. */
   flake?: boolean;
   stretch: boolean;
@@ -306,6 +337,7 @@ export class ParticleGroup {
         uAmbientColor: { value: new THREE.Color(0.2, 0.24, 0.3) },
         uUpView: { value: new THREE.Vector3(0, 1, 0) },
         uNearFade: { value: new THREE.Vector2(opts.nearFadeStart, opts.nearFadeRange) },
+        uSphere: { value: 1 / Math.max(0.35, Math.min(1, opts.footprint ?? 1)) },
         uDepthMap: { value: null },
         uDepthRange: { value: new THREE.Vector2(0.05, 110) },
         uInvResolution: { value: new THREE.Vector2(1 / 1920, 1 / 1080) },
@@ -396,7 +428,7 @@ export class ParticleGroup {
     a[o + 28] = d.sunVisibility;
     a[o + 29] = d.floorY;
     a[o + 30] = d.bounce;
-    a[o + 31] = 0;
+    a[o + 31] = d.cloudShadow;
 
     this.death[index] = spawnTime + d.life;
     this.priority[index] = d.priority;

@@ -79,6 +79,26 @@ const MODE_FLIPBOOK = 2;
 const MODE_VARIANTS = 3;
 
 /**
+ * Border fade for the soft atlases, as a fraction of one cell.
+ *
+ * The default fade is a fixed *texel* count, which is enough at full resolution
+ * and nowhere else: the mip chain halves the cell and the fade together, so by
+ * the second level the fade is under a texel wide and the cell stops reaching
+ * zero at its own border. A sprite drawn from that level then keeps whatever
+ * coverage its content had at the edge of the cell right up to the edge of its
+ * quad, and cuts to nothing outside it — a straight edge round the sprite, four
+ * of them, which is a rectangle.
+ *
+ * Four percent of a cell is ten texels at the top resolution and still over a
+ * texel at mip three, which covers every size a sprite is drawn at where a
+ * straight edge would be visible. Spent only on the soft atlases: smoke, fire
+ * and the puff variants are blobs whose outer few percent is the faintest wisp,
+ * and losing it costs nothing. A chip or a bullet hole has a silhouette that
+ * means something and keeps the tighter fade.
+ */
+const SOFT_EDGE_FADE = 0.04;
+
+/**
  * Bakes the whole FX sprite library on the GPU at boot.
  *
  * Every bake reuses one fragment program, so the twenty-odd textures cost a
@@ -111,8 +131,26 @@ export class FXTextures {
 
     this.glow = this.atlas(baker, 'fx:glow', TEX_KIND.GLOW_SOFT, MODE_SEQUENCE, 4, 4, big);
     this.decal = this.atlas(baker, 'fx:decal', TEX_KIND.HOLE_CONCRETE_A, MODE_SEQUENCE, 4, 4, big);
-    this.smokeFlip = this.atlas(baker, 'fx:smoke', TEX_KIND.SMOKE_FLIP, MODE_FLIPBOOK, 4, 4, big);
-    this.fireFlip = this.atlas(baker, 'fx:fire', TEX_KIND.FIRE_FLIP, MODE_FLIPBOOK, 4, 4, big);
+    this.smokeFlip = this.atlas(
+      baker,
+      'fx:smoke',
+      TEX_KIND.SMOKE_FLIP,
+      MODE_FLIPBOOK,
+      4,
+      4,
+      big,
+      SOFT_EDGE_FADE,
+    );
+    this.fireFlip = this.atlas(
+      baker,
+      'fx:fire',
+      TEX_KIND.FIRE_FLIP,
+      MODE_FLIPBOOK,
+      4,
+      4,
+      big,
+      SOFT_EDGE_FADE,
+    );
     this.fireballFlip = this.atlas(
       baker,
       'fx:fireball',
@@ -121,8 +159,18 @@ export class FXTextures {
       4,
       4,
       big,
+      SOFT_EDGE_FADE,
     );
-    this.puff = this.atlas(baker, 'fx:puff', TEX_KIND.SMOKE_PUFF, MODE_VARIANTS, 2, 2, big);
+    this.puff = this.atlas(
+      baker,
+      'fx:puff',
+      TEX_KIND.SMOKE_PUFF,
+      MODE_VARIANTS,
+      2,
+      2,
+      big,
+      SOFT_EDGE_FADE,
+    );
     this.chip = this.atlas(baker, 'fx:chip', TEX_KIND.CHIP, MODE_SEQUENCE, 3, 3, mid);
     this.blood = this.atlas(baker, 'fx:blood', TEX_KIND.BLOOD_DROP, MODE_SEQUENCE, 2, 2, mid);
     this.spark = this.single(baker, 'fx:spark', TEX_KIND.SPARK_STREAK, mid);
@@ -161,6 +209,7 @@ export class FXTextures {
     cols: number,
     rows: number,
     size: number,
+    minFade = 0,
   ): AtlasInfo {
     const texture = baker.bake(
       FX_TEXTURE_FRAGMENT,
@@ -168,9 +217,10 @@ export class FXTextures {
         uKind: { value: kind },
         uMode: { value: mode },
         uGrid: { value: new THREE.Vector2(cols, rows) },
-        // Fade over ~2 texels of the cell, enough to stop mip bleed without
-        // visibly clipping the sprite.
-        uEdgeFade: { value: (2.5 * cols) / size },
+        // Two and a half texels of the cell is enough to stop bleed at full
+        // resolution; atlases that also have to survive the mip chain ask for a
+        // fraction of the cell instead.
+        uEdgeFade: { value: Math.max((2.5 * cols) / size, minFade) },
       },
       size,
       {

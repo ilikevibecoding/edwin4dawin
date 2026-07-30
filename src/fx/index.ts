@@ -13,7 +13,7 @@ import { ExplosionEffects, type ExplosionKind } from './Explosions';
 import { buildGroups, type FXGroups } from './Groups';
 import { ImpactEffects } from './Impacts';
 import { MuzzleFlashEffects } from './MuzzleFlash';
-import { ParticleSystem, type ParticleFrame } from './ParticleSystem';
+import { ParticleSystem, resetDesc, type ParticleFrame } from './ParticleSystem';
 import { FXDeps } from './Shared';
 import { ShellEjector } from './Shells';
 import { FXTextures } from './Textures';
@@ -221,7 +221,94 @@ export class FXSystemImpl implements FXSystem, System {
           sun: this.sunColor.toArray(),
           ambient: this.ambientColor.toArray(),
           visibility: this.deps.sunVisibility(position),
+          // The rim term keys off the sun's view-space Z, so whether a shot can
+          // show a rim at all is a property of the camera pose, not of the smoke.
+          sunView: this.sunView.toArray(),
         }),
+        // One sprite, at a size and a roll the caller picks. The only way to
+        // measure the shading rather than the cloud.
+        //
+        // Whether a puff is lit from a direction cannot be answered from a
+        // photograph of a hundred overlapping puffs: what a pixel shows is
+        // coverage times the smoke's radiance plus the backdrop through it, and
+        // coverage is unknown per pixel, so every brightness statistic over a
+        // cloud is really a statistic about which way the cloud happens to be
+        // thicker. A single sprite has radially symmetric coverage, so two points
+        // the same distance from its centre are behind the same amount of smoke
+        // by construction, and the difference between them is shading and nothing
+        // else. Deliberately inert -- no drift, no spin, no turbulence, no
+        // growth -- so the sample is the shading model and not the simulation.
+        puff: (position, size, alpha) => {
+          // Emitted as a concentric stack rather than as one sprite, because one
+          // sprite cannot be measured. A single smoke cell peaks well short of
+          // opaque and the wisps between its lobes are transparent outright, so
+          // against the sunlit range wall the sprite landed within four percent
+          // of the backdrop and the shading was under the frame's own noise: the
+          // sun side and the shadow side came back equal to three decimal places
+          // whatever the shading did. Stacking concentric copies drives coverage
+          // to near one in the middle while leaving the limb soft, and it costs
+          // the measurement nothing that matters — identical concentric sprites
+          // are radially symmetric together exactly as one is, which is the only
+          // property the measurement rests on. Rolls are spread evenly so the
+          // composite fills the wisps instead of deepening the same ones.
+          const stack = 6;
+          for (let i = 0; i < stack; i++) {
+            const d = resetDesc();
+            d.px = position.x;
+            d.py = position.y;
+            d.pz = position.z;
+            d.life = 600;
+            d.size0 = size;
+            d.size1 = size;
+            d.r0 = d.r1 = 0.85;
+            d.g0 = d.g1 = 0.855;
+            d.b0 = d.b1 = 0.87;
+            d.alpha = alpha;
+            d.roll = (i * Math.PI * 2) / stack;
+            // Held on one mid-sequence frame rather than run as a flipbook. Frame
+            // zero of the smoke book is a small tight wisp filling a fraction of
+            // its cell, so a sprite authored three metres across drew about sixty
+            // pixels of thin haze that the wall behind it showed straight through
+            // — and the first pair of these measured that haze rather than the
+            // shading. Frame six is the one that fills its cell.
+            d.cell = 6;
+            d.frames = 0;
+            d.fadeIn = 0.001;
+            // No depth fade. The measurement sprite hangs in front of the range
+            // wall, and a fade against it scales coverage by a factor that varies
+            // across the sprite — which is indistinguishable from shading in the
+            // photograph and would be measured as if it were some.
+            d.softness = 0;
+            d.sunVisibility = 1;
+            d.priority = 250;
+            this.groups.smoke.spawn(this.deps.now, d);
+          }
+        },
+        // Held still, held at one flipbook frame and held at one point on the
+        // ramp, so the only thing varying across the board is the pair of
+        // numbers an emitter actually gets to choose. Life is long and the
+        // colour endpoints are identical, which keeps the sample independent of
+        // when in the sequence the harness happens to photograph it.
+        swatch: (position, size, ramp, radiance, additive) => {
+          const d = resetDesc();
+          d.px = position.x;
+          d.py = position.y;
+          d.pz = position.z;
+          d.life = 600;
+          d.size0 = size;
+          d.size1 = size;
+          d.r0 = d.r1 = radiance;
+          d.g0 = d.g1 = ramp;
+          d.alpha = 1;
+          d.additive = additive;
+          // Mid-flipbook: the early frames are a thin shell with almost no
+          // opaque area to measure and the last are already breaking up.
+          d.cell = 6;
+          d.frames = 0;
+          d.fadeIn = 0.001;
+          d.priority = 250;
+          this.groups.fireball.spawn(this.deps.now, d);
+        },
       });
     }
     if (this.demo || params.get('fxstats') === '1') {

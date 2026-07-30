@@ -63,6 +63,10 @@ export function buildGroups(
       atlasRows: textures.smokeFlip.rows,
       soft: true,
       lit: true,
+      // The flipbook's own growth curve takes the puff from about two thirds of
+      // the cell to nearly all of it, so the shaded sphere is fitted to the
+      // middle of that range rather than to either end.
+      footprint: 0.72,
       stretch: false,
       turbulence: true,
       // Fast initial expansion that slows as the puff cools and entrains air.
@@ -92,6 +96,8 @@ export function buildGroups(
       atlasRows: textures.puff.rows,
       soft: true,
       lit: true,
+      // The puff variants are drawn out to a lobed radius just inside the cell.
+      footprint: 0.92,
       stretch: false,
       turbulence: true,
       sizeExponent: 0.45,
@@ -343,6 +349,7 @@ export function buildGroups(
       atlasRows: textures.puff.rows,
       soft: false,
       lit: true,
+      footprint: 0.92,
       stretch: false,
       turbulence: true,
       sizeExponent: 0.5,
