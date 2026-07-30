@@ -44,10 +44,22 @@ interface StrikeControls {
 export interface ShotDefinition {
   name: string;
   description: string;
-  /** Pose the world. May await; the harness waits for convergence afterwards. */
+  /**
+   * Pose the world. Do NOT trigger transient effects here — see `transient`.
+   */
   setup(c: ShotContext): void | Promise<void>;
-  /** Extra frames to settle beyond the default, for slow-building effects. */
+  /** Frames spent converging TAA and auto-exposure on the posed, static scene. */
   settleFrames?: number;
+  /**
+   * Trigger short-lived effects, and run only the few frames needed to catch
+   * them. This exists because convergence is expensive in frames and effects are
+   * short in *time*: under software rendering the engine clamps its frame delta,
+   * so each rendered frame advances simulation by ~100ms. Running a 40-frame
+   * settle after firing meant photographing a 60ms tracer four seconds late.
+   * Anything transient therefore has to be triggered after convergence, not
+   * before it.
+   */
+  transient?(c: ShotContext): void | Promise<void>;
 }
 
 export interface ShotContext {
@@ -360,6 +372,9 @@ const STREET_TARGET = V(2, 3.4, -20);
 
 const UP = /* @__PURE__ */ V(0, 1, 0);
 
+/** Where the current shot's blast goes; set during setup, used during transient. */
+const blastPoint = /* @__PURE__ */ V(0, 0, 0);
+
 /** Six axes used to decide whether a camera position is inside solid geometry. */
 const BURIED_PROBES: readonly THREE.Vector3[] = [
   V(1, 0, 0),
@@ -437,33 +452,38 @@ export const SHOTS: readonly ShotDefinition[] = [
     name: '07_combat',
     description: 'Firefight: muzzle flash, tracers, enemies, impacts',
     settleFrames: 40,
-    setup: async (c) => {
+    setup: (c) => {
       c.weapons?.equip('ar_mk4');
       const eye = V(2, 1.64, 26);
       const lane = c.lookDownLane(eye, 0);
       const dir = c.clearestDirection(eye, { preferYaw: 0 }).direction;
       c.spawnEnemies(eye.clone().addScaledVector(dir, Math.min(22, lane * 0.6)), 5, 6);
-      await c.frames(40);
+    },
+    transient: async (c) => {
+      // A muzzle flash lives about 30ms and a tracer 60ms, so the shutter has to
+      // fall within a frame or two of the shot going off.
       holdFire(c, true);
-      await c.frames(14);
-      holdFire(c, false);
       await c.frames(2);
+      holdFire(c, false);
+      await c.frames(1);
     },
   },
   {
     name: '08_explosion',
     description: 'Detonation with debris and smoke',
-    settleFrames: 24,
-    setup: async (c) => {
+    settleFrames: 26,
+    setup: (c) => {
       c.weapons?.equip('ar_mk4');
       const eye = V(2, 1.64, 26);
       const lane = c.lookDownLane(eye, 0);
       const dir = c.clearestDirection(eye, { preferYaw: 0 }).direction;
       const at = eye.clone().addScaledVector(dir, Math.min(20, Math.max(10, lane * 0.5)));
-      await c.frames(6);
-      const ground = c.world?.sampleGround(at.x, at.z) ?? 0;
+      blastPoint.copy(at);
+    },
+    transient: async (c) => {
+      const ground = c.world?.sampleGround(blastPoint.x, blastPoint.z) ?? 0;
       c.combat?.explode({
-        position: V(at.x, ground + 0.5, at.z),
+        position: V(blastPoint.x, ground + 0.5, blastPoint.z),
         radius: 9,
         damage: 140,
         falloff: 'quadratic',
@@ -471,8 +491,9 @@ export const SHOTS: readonly ShotDefinition[] = [
         kind: 'grenade',
         impulse: 2600,
       });
-      // Catch the fireball at its peak, a few frames after ignition.
-      await c.frames(6);
+      // The fireball lives about 700ms and each rendered frame advances roughly
+      // 100ms, so two frames lands near its peak.
+      await c.frames(2);
     },
   },
   {
@@ -515,12 +536,15 @@ export const SHOTS: readonly ShotDefinition[] = [
       // Stand well back down the street so the whole walked line fits in frame
       // and the strike lands outside the danger-close radius.
       c.look(V(2, 1.64, 46), V(target.x, target.y + 6, target.z));
+      blastPoint.copy(target);
       await c.frames(6);
+    },
+    transient: async (c) => {
       const strike = c.killstreaks as unknown as StrikeControls | undefined;
-      strike?.callAirStrike(target, Math.PI * 0.5, 'carpet');
-      // The sequence runs ~6.2s of game time from call to last detonation.
-      // Frames, not seconds, because software rendering is ~1fps.
-      await c.frames(150);
+      strike?.callAirStrike(blastPoint, Math.PI * 0.5, 'carpet');
+      // Call to first detonation is about 4.75s of game time, and the walked
+      // line finishes at 6.19s; at ~100ms per rendered frame, land mid-chain.
+      await c.frames(55);
     },
   },
   {
@@ -590,12 +614,26 @@ export function installCaptureHooks(ctx: EngineContext): void {
   // resolution it asked for, however slowly that arrives.
   ctx.engine.setAdaptiveResolution(false);
 
-  // The combat shots stage a real firefight and the AI is lethal, so the player
-  // was being killed during the settle and the frame came back as a death
-  // screen. Topping health back up cannot fix that — once the entity is dead it
-  // stays dead — so damage has to be refused rather than healed.
-  const entity = shotCtx.player?.entity as { applyDamage: (info: DamageInfo) => void } | undefined;
-  if (entity) entity.applyDamage = () => {};
+  /**
+   * The combat shots stage a real firefight and the AI is lethal, so frames were
+   * coming back as death screens. Topping health up cannot fix that — once the
+   * entity is dead it stays dead — so damage is refused instead.
+   *
+   * Re-applied before every shot rather than once at install: the player's own
+   * fall-damage path calls its health module directly rather than going through
+   * the entity, and a respawn is free to hand back a differently-wired entity,
+   * so a single interception at startup is not guaranteed to still be in place
+   * several shots later.
+   */
+  const refuseDamage = (): void => {
+    const entity = shotCtx.player?.entity as
+      | { applyDamage: (info: DamageInfo) => void; health: number }
+      | undefined;
+    if (!entity) return;
+    entity.applyDamage = () => {};
+    entity.health = shotCtx.player!.entity.maxHealth;
+  };
+  refuseDamage();
 
   const run = async (name: string): Promise<string> => {
     const shot = byName.get(name);
@@ -605,6 +643,7 @@ export function installCaptureHooks(ctx: EngineContext): void {
     // is the important one: left open it composites over everything and the next
     // three shots all come back as pictures of a map.
     shotCtx.resume();
+    refuseDamage();
     holdFire(shotCtx, false);
     holdAim(shotCtx, false);
     shotCtx.killstreaks?.cancelTargeting();
@@ -615,11 +654,18 @@ export function installCaptureHooks(ctx: EngineContext): void {
 
     await shot.setup(shotCtx);
     // TAA needs a run of frames on a static pose to resolve, and auto-exposure
-    // needs longer than that, so every shot pays a convergence tail.
+    // needs longer than that, so every shot pays a convergence tail first.
     await shotCtx.frames(shot.settleFrames ?? 26);
+    // Only now fire anything short-lived, so it is still alive when captured.
+    if (shot.transient) await shot.transient(shotCtx);
     // Hold the frame still so the screenshot cannot land mid-animation.
     shotCtx.freeze();
     await shotCtx.frames(2);
+    // A death screen covers the frame entirely and has previously been reviewed
+    // as a rendering fault, so say so rather than shipping it silently.
+    if (shotCtx.player && !shotCtx.player.entity.isAlive) {
+      console.warn(`[capture] ${shot.name} captured while the player is dead`);
+    }
     return shot.description;
   };
 
