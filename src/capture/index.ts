@@ -20,6 +20,7 @@ import type {
   FXSystem,
   KillstreakSystem,
   PhysicsSystem,
+  ProcgenSystem,
   PlayerSystem,
   RenderSystem,
   UISystem,
@@ -613,6 +614,14 @@ export function installCaptureHooks(ctx: EngineContext): void {
   // judged for softness that was this line's fault. A capture wants the
   // resolution it asked for, however slowly that arrives.
   ctx.engine.setAdaptiveResolution(false);
+
+  // Bake every remaining material up front. Left to the background drip, they
+  // are baked the first time their surface enters view, and the first two shots
+  // look down the map's longest sightline — so those two frames paid for dozens
+  // of first-touch bakes and came back as HUD over an empty canvas.
+  const procgen = ctx.tryGet<ProcgenSystem & { warmAll?(): number }>('procgen');
+  const baked = procgen?.warmAll?.() ?? 0;
+  if (baked > 0) console.info(`[capture] forced ${baked} pending materials resident`);
 
   /**
    * The combat shots stage a real firefight and the AI is lethal, so frames were

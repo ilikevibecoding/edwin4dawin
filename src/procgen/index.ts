@@ -31,6 +31,8 @@ const BATCH_BUDGET_MS = 20;
 
 /** Frames longer than this are already in trouble; do not add a bake to them. */
 const DRIP_MAX_DT = 0.05;
+/** Bake regardless after this many consecutive frames declined the budget test. */
+const DRIP_MAX_SKIPS = 20;
 
 const MB = 1024 * 1024;
 
@@ -105,6 +107,7 @@ export class ProcgenSystemImpl implements ProcgenSystem, System {
   private env: Environment | null = null;
   private pending: MaterialId[] = [];
   private ready = false;
+  private dripSkipped = 0;
 
   get environmentMap(): THREE.Texture | null {
     return this.env?.environmentMap ?? null;
@@ -160,7 +163,14 @@ export class ProcgenSystemImpl implements ProcgenSystem, System {
    * seconds rather than the first time a surface enters view.
    */
   update(dt: number): void {
-    if (!this.ready || this.pending.length === 0 || dt > DRIP_MAX_DT) return;
+    if (!this.ready || this.pending.length === 0) return;
+    // Deferring on a slow frame is right, but deferring for ever is not: on a
+    // machine where no frame ever comes in under the budget the drip never ran
+    // at all, and every material was instead baked on demand inside the frame
+    // its surface first came into view — which is the worst possible moment and
+    // exactly the hitch the drip exists to prevent. Guarantee progress.
+    if (dt > DRIP_MAX_DT && ++this.dripSkipped < DRIP_MAX_SKIPS) return;
+    this.dripSkipped = 0;
 
     const id = this.pending.shift();
     if (id) this.materials.get(id);
@@ -222,6 +232,18 @@ export class ProcgenSystemImpl implements ProcgenSystem, System {
   /** Forces a set of materials resident now, ahead of the background drip. */
   warm(ids: Iterable<MaterialId>): void {
     for (const id of ids) this.materials.get(id);
+  }
+
+  /**
+   * Bake everything still pending, right now. Used by the capture harness so a
+   * review frame can never be the one that pays for a first-touch bake.
+   * Returns how many were baked.
+   */
+  warmAll(): number {
+    const count = this.pending.length;
+    for (const id of this.pending) this.materials.get(id);
+    this.pending.length = 0;
+    return count;
   }
 
   private buildEnvironment(renderer: THREE.WebGLRenderer, tier: QualityTier): void {
