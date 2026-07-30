@@ -3,6 +3,7 @@ import type { MaterialId } from '../../core/Contracts';
 import { clamp, perlin2, smoothstep } from '../../core/MathUtils';
 import { mergeGeometries } from '../../procgen';
 import { type Sink, cachedGeometry, planeGeometry, slab, transform } from './Kit';
+import { hazardBand, roadStencil } from './Signage';
 
 /**
  * The ground.
@@ -421,6 +422,7 @@ function buildRoad(sink: Sink, field: TerrainField, road: RoadSpec): void {
 
   if (road.kerb) buildKerbs(sink, field, road);
   if (road.markings !== 'none') buildMarkings(sink, field, road);
+  buildRoadStencils(sink, field, road);
   buildRoadFurniture(sink, field, road);
 }
 
@@ -474,6 +476,11 @@ function buildKerbs(sink: Sink, field: TerrainField, road: RoadSpec): void {
 
   for (let side = -1; side <= 1; side += 2) {
     const across = road.center + side * (road.halfWidth + width * 0.5);
+    // Painted kerb banding runs in stretches, the way a real no-parking marking
+    // does: one length of kerb outside a shop, then plain concrete for twenty
+    // metres. A per-segment coin toss would read as noise instead.
+    let banded = sink.rng.bool(0.3);
+    let bandLeft = sink.rng.int(2, 6);
     for (let i = 0; i < count; i++) {
       const along = road.from + (i + 0.5) * ((road.to - road.from) / count);
       const x = road.axis === 'x' ? along : across;
@@ -485,6 +492,23 @@ function buildKerbs(sink: Sink, field: TerrainField, road: RoadSpec): void {
         tier: 'ground',
         tint: sink.rng.bool(0.35) ? 0xdad3c4 : 0xf2ece0,
       });
+      if (banded) {
+        // On the road-facing flank, where a driver and the player both see it.
+        const faceYaw = yaw + (side < 0 ? Math.PI / 2 : -Math.PI / 2);
+        hazardBand(
+          sink,
+          x + Math.sin(faceYaw) * (width * 0.5 + 0.008),
+          y + 0.005,
+          z + Math.cos(faceYaw) * (width * 0.5 + 0.008),
+          faceYaw,
+          segment,
+          height * 0.86,
+        );
+      }
+      if (--bandLeft <= 0) {
+        banded = !banded;
+        bandLeft = banded ? sink.rng.int(2, 6) : sink.rng.int(4, 12);
+      }
     }
   }
 }
@@ -541,6 +565,38 @@ function addPaint(
   geometry.rotateX(-Math.PI / 2);
   geometry.translate(x, field.height(x, z) + lift, z);
   sink.addStatic(geometry, { material, tier: 'ground', tint: 0xd8d2c2, mottle });
+}
+
+/**
+ * Stencils painted flat on the carriageway: lane arrows, SLOW, bus-stop boxes.
+ *
+ * These are the marks that say a road is used rather than laid, and the top-down
+ * tactical view is almost nothing but road surface, so they carry that frame.
+ */
+function buildRoadStencils(sink: Sink, field: TerrainField, road: RoadSpec): void {
+  if (road.surface === 'dirt') return;
+  const length = road.to - road.from;
+  const stride = 21;
+  const count = Math.floor(length / stride);
+  for (let i = 0; i < count; i++) {
+    if (sink.rng.bool(0.28)) continue;
+    const along = road.from + (i + 0.5) * stride + sink.rng.range(-2.4, 2.4);
+    // Off the centreline, in the middle of a notional lane.
+    const lane = road.halfWidth * sink.rng.range(0.3, 0.62) * sink.rng.sign();
+    const x = road.axis === 'x' ? along : road.center + lane;
+    const z = road.axis === 'x' ? road.center + lane : along;
+    if (field.onPad(x, z, 0.5)) continue;
+    // Stencils read along the direction of travel, so they face down the road.
+    const facing = road.axis === 'x' ? (lane > 0 ? Math.PI : 0) : lane > 0 ? -Math.PI / 2 : Math.PI / 2;
+    roadStencil(
+      sink,
+      x,
+      field.height(x, z) + ROAD_LIFT + 0.03,
+      z,
+      facing + sink.rng.range(-0.05, 0.05),
+      sink.rng.range(1.5, 2.4),
+    );
+  }
 }
 
 /** Drains at the kerb line and manhole covers down the centre of the lane. */

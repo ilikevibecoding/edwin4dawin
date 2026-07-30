@@ -9,6 +9,7 @@ import {
   placed,
   transform,
 } from './Kit';
+import { crateMark, unitPlate } from './Signage';
 
 /**
  * Derelict vehicles.
@@ -153,6 +154,36 @@ export function derelictVehicle(
     yaw,
     { surface: 'metal' },
   );
+
+  // Plates at both ends, and a stencilled unit mark on one door of the trucks.
+  // A wreck without a plate is a prop; with one it belonged to somebody.
+  const plateY = base + dims.chassisY - dims.chassisHalf * 0.15;
+  for (const end of [1, -1]) {
+    const faceYaw = yaw + (end > 0 ? 0 : Math.PI);
+    const reach = dims.length / 2 + 0.03;
+    unitPlate(
+      sink,
+      x + Math.cos(yaw) * end * reach * 0.99,
+      plateY,
+      z - Math.sin(yaw) * end * reach * 0.99,
+      faceYaw + Math.PI / 2,
+      0.42,
+    );
+  }
+  if (kind === 'truck' || kind === 'bus') {
+    const side = sink.rng.sign();
+    const flankYaw = yaw + (side > 0 ? Math.PI / 2 : -Math.PI / 2);
+    const nx = Math.sin(flankYaw) * (dims.width / 2 + 0.03);
+    const nz = Math.cos(flankYaw) * (dims.width / 2 + 0.03);
+    crateMark(
+      sink,
+      x + nx + Math.cos(flankYaw) * sink.rng.range(-0.6, 0.6),
+      base + dims.cabY - 0.1,
+      z + nz - Math.sin(flankYaw) * sink.rng.range(-0.6, 0.6),
+      flankYaw,
+      0.6,
+    );
+  }
 }
 
 interface VehicleDims {

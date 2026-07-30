@@ -4,6 +4,7 @@ import type { EventBus } from '../core/EventBus';
 import type { SurfaceType } from '../core/GameTypes';
 import { Rng, clamp } from '../core/MathUtils';
 import type { DestructibleRecord } from './Builder';
+import type { CraterField } from './Craters';
 import type { DestructibleKind } from './kit/Kit';
 
 /**
@@ -15,9 +16,14 @@ import type { DestructibleKind } from './kit/Kit';
  * an airstrike can wreck a whole district in a single frame without a hitch.
  *
  * Each kind fails in the way that reads from ten metres: glass leaves a jagged
- * remnant in the top of the frame and rains shards, crates burst into planks,
- * sandbags slump into a heap instead of vanishing, cloth tears away, lamps go
- * dark. The falling pieces are pooled instanced bursts on a fixed budget.
+ * remnant in the top of the frame and rains shards, crates and drums are thrown
+ * off their base and left lying where they landed, sandbags slump into a heap
+ * instead of vanishing, cloth tears away, lamps go dark. The falling pieces are
+ * pooled instanced bursts on a fixed budget.
+ *
+ * Nothing that a blast reaches is allowed to simply disappear. A prop that
+ * vanishes on damage leaves the street looking untouched, which is the exact
+ * opposite of what an explosion should do to it.
  */
 
 export interface DestructibleEvent {
@@ -45,12 +51,26 @@ type ShardKind = 'glass' | 'wood' | 'stone' | 'cloth' | 'sand';
 const BIN_SIZE = 8;
 const GRAVITY = -16.5;
 
+/** Blast radius above which the overpressure sweep for glass runs at all. */
+const WAVE_MIN_RADIUS = 3;
+
+/**
+ * How much further than the damage radius a blast wave takes out windows.
+ *
+ * Overpressure breaks a pane long before it moves a sandbag, and the difference
+ * is what makes a strike read as a strike: a crater with intact glass around it
+ * looks like a decal, a crater with two streets of blown-out windows looks like
+ * something happened.
+ */
+const WAVE_GLASS_REACH = 2.6;
+
 export class DestructibleField {
   private readonly records: DestructibleRecord[];
   private readonly bins = new Map<number, number[]>();
   private readonly root: THREE.Group;
   private readonly materials: MaterialLibrary;
   private readonly events: EventBus | null;
+  private readonly craters: CraterField | null;
   private readonly rng = new Rng(0x51ce);
 
   private readonly shardGeometry = new Map<ShardKind, THREE.BufferGeometry>();
@@ -67,12 +87,14 @@ export class DestructibleField {
     root: THREE.Group;
     materials: MaterialLibrary;
     events?: EventBus;
+    craters?: CraterField;
     debrisBudget: number;
   }) {
     this.records = opts.records;
     this.root = opts.root;
     this.materials = opts.materials;
     this.events = opts.events ?? null;
+    this.craters = opts.craters ?? null;
     this.shardsPerBurst = clamp(Math.round(opts.debrisBudget / 24), 4, 14);
     this.maxBursts = clamp(Math.round(opts.debrisBudget / 20), 4, 20);
 
@@ -113,6 +135,29 @@ export class DestructibleField {
    * hit deserves a sound.
    */
   damageAt(point: THREE.Vector3, radius: number, amount: number): number {
+    let broke = this.sweep(point, radius, amount, null);
+
+    // The overpressure sweep. Everything the blast could move has already been
+    // dealt with; this second pass only reaches glass, which fails from the
+    // pressure step alone well outside the radius that shifts anything solid.
+    if (radius >= WAVE_MIN_RADIUS) {
+      broke += this.sweep(point, radius * WAVE_GLASS_REACH, 1e6, 'glass');
+    }
+
+    // A big blast dusts everything nearby even where nothing breakable stood.
+    if (radius > 1.6) {
+      this.spawnBurst('stone', point, Math.min(radius * 0.5, 2.2), 1);
+    }
+    this.craters?.add(point, radius);
+    return broke;
+  }
+
+  private sweep(
+    point: THREE.Vector3,
+    radius: number,
+    amount: number,
+    only: DestructibleKind | null,
+  ): number {
     const minX = Math.floor((point.x - radius) / BIN_SIZE);
     const maxX = Math.floor((point.x + radius) / BIN_SIZE);
     const minZ = Math.floor((point.z - radius) / BIN_SIZE);
@@ -129,22 +174,18 @@ export class DestructibleField {
           seen.add(index);
           const record = this.records[index];
           if (record.broken) continue;
+          if (only !== null && record.kind !== only) continue;
           const distance = record.position.distanceTo(point);
           const reach = radius + record.radius;
           if (distance > reach) continue;
           const falloff = 1 - clamp((distance - record.radius) / Math.max(radius, 0.01), 0, 1);
           record.health -= amount * (0.35 + 0.65 * falloff);
           if (record.health <= 0) {
-            this.break(record);
+            this.break(record, point);
             broke++;
           }
         }
       }
-    }
-
-    // A big blast dusts everything nearby even where nothing breakable stood.
-    if (radius > 1.6) {
-      this.spawnBurst('stone', point, Math.min(radius * 0.5, 2.2), 1);
     }
     return broke;
   }
@@ -215,7 +256,7 @@ export class DestructibleField {
   // Breaking
   // -------------------------------------------------------------------------
 
-  private break(record: DestructibleRecord): void {
+  private break(record: DestructibleRecord, from: THREE.Vector3 | null = null): void {
     record.broken = true;
     record.health = 0;
     this.brokenCount++;
@@ -228,16 +269,16 @@ export class DestructibleField {
         this.slumpSandbags(record);
         break;
       case 'crate':
-        this.hideSlots(record);
+        this.topple(record, from, 1);
         this.spawnBurst('wood', record.position, record.radius, 1.15);
         break;
       case 'stall':
-        this.hideSlots(record);
+        this.collapse(record, from);
         this.spawnBurst('wood', record.position, record.radius, 1.35);
         this.spawnBurst('cloth', record.position, record.radius * 0.8, 0.8);
         break;
       case 'barrel':
-        this.hideSlots(record);
+        this.topple(record, from, 1.25);
         this.spawnBurst('stone', record.position, record.radius, 1);
         break;
       case 'lamp':
@@ -305,6 +346,85 @@ export class DestructibleField {
       slot.mesh.instanceMatrix.needsUpdate = true;
     }
     this.spawnBurst('sand', record.position, record.radius, 1);
+  }
+
+  /**
+   * Throws a piece off its base and leaves it lying there.
+   *
+   * The push direction comes from the blast when there was one and is random for
+   * a piece that was simply shot to bits, so a crate someone emptied a magazine
+   * into still ends up on its side. Rotation is about the horizontal axis across
+   * the push, which is the axis a standing object actually falls over.
+   */
+  private topple(record: DestructibleRecord, from: THREE.Vector3 | null, force: number): void {
+    let pushX: number;
+    let pushZ: number;
+    if (from) {
+      pushX = record.position.x - from.x;
+      pushZ = record.position.z - from.z;
+      const length = Math.hypot(pushX, pushZ);
+      if (length < 0.05) {
+        const angle = this.rng.range(0, Math.PI * 2);
+        pushX = Math.cos(angle);
+        pushZ = Math.sin(angle);
+      } else {
+        pushX /= length;
+        pushZ /= length;
+      }
+    } else {
+      const angle = this.rng.range(0, Math.PI * 2);
+      pushX = Math.cos(angle);
+      pushZ = Math.sin(angle);
+    }
+
+    const tip = this.rng.range(0.85, 1.5) * (this.rng.bool(0.85) ? 1 : -1);
+    const slide = record.radius * this.rng.range(0.3, 0.9) * force;
+    // Falling over drops the centre of mass by roughly the difference between
+    // half the height and half the width, which for the kit's crates and drums
+    // is a quarter of their own radius.
+    const drop = record.radius * 0.26 * Math.min(1, Math.abs(tip));
+
+    for (const slot of record.slots) {
+      slot.mesh.getMatrixAt(slot.index, SCRATCH_MATRIX);
+      SCRATCH_MATRIX.decompose(SCRATCH_POS, SCRATCH_QUAT, SCRATCH_SCALE);
+      SCRATCH_AXIS.set(-pushZ, 0, pushX).normalize();
+      TEMP_QUAT.setFromAxisAngle(SCRATCH_AXIS, tip);
+      SCRATCH_QUAT.premultiply(TEMP_QUAT);
+      SCRATCH_POS.x += pushX * slide + this.rng.range(-0.12, 0.12);
+      SCRATCH_POS.z += pushZ * slide + this.rng.range(-0.12, 0.12);
+      SCRATCH_POS.y -= drop;
+      SCRATCH_MATRIX.compose(SCRATCH_POS, SCRATCH_QUAT, SCRATCH_SCALE);
+      slot.mesh.setMatrixAt(slot.index, SCRATCH_MATRIX);
+      slot.mesh.instanceMatrix.needsUpdate = true;
+    }
+    if (record.object) record.object.visible = false;
+  }
+
+  /**
+   * Squashes a piece down onto its own footprint.
+   *
+   * For a stall the frame, the counter and the awning are separate instances of
+   * one record; tipping them all through the same angle pulls the awning out
+   * through the roof. Flattening the whole assembly keeps it together and reads
+   * as the pile of poles and cloth that is left.
+   */
+  private collapse(record: DestructibleRecord, from: THREE.Vector3 | null): void {
+    const lean = from ? Math.atan2(record.position.z - from.z, record.position.x - from.x) : 0;
+    for (const slot of record.slots) {
+      slot.mesh.getMatrixAt(slot.index, SCRATCH_MATRIX);
+      SCRATCH_MATRIX.decompose(SCRATCH_POS, SCRATCH_QUAT, SCRATCH_SCALE);
+      const height = Math.max(0, SCRATCH_POS.y - (record.position.y - record.radius));
+      SCRATCH_POS.y -= height * 0.72;
+      SCRATCH_POS.x += Math.cos(lean) * this.rng.range(0.05, 0.35);
+      SCRATCH_POS.z += Math.sin(lean) * this.rng.range(0.05, 0.35);
+      SCRATCH_EULER.set(this.rng.range(-0.3, 0.3), this.rng.range(-0.4, 0.4), this.rng.range(-0.3, 0.3));
+      SCRATCH_QUAT.multiply(TEMP_QUAT.setFromEuler(SCRATCH_EULER));
+      SCRATCH_SCALE.y *= 0.28;
+      SCRATCH_MATRIX.compose(SCRATCH_POS, SCRATCH_QUAT, SCRATCH_SCALE);
+      slot.mesh.setMatrixAt(slot.index, SCRATCH_MATRIX);
+      slot.mesh.instanceMatrix.needsUpdate = true;
+    }
+    if (record.object) record.object.visible = false;
   }
 
   private hideSlots(record: DestructibleRecord): void {
@@ -479,6 +599,7 @@ const SCRATCH_POS = new THREE.Vector3();
 const SCRATCH_QUAT = new THREE.Quaternion();
 const SCRATCH_SCALE = new THREE.Vector3();
 const SCRATCH_EULER = new THREE.Euler();
+const SCRATCH_AXIS = new THREE.Vector3();
 const TEMP_QUAT = new THREE.Quaternion();
 
 function binKey(x: number, z: number): number {

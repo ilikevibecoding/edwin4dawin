@@ -3,6 +3,15 @@ import type { MaterialId } from '../../core/Contracts';
 import { TAU } from '../../core/MathUtils';
 import { mergeGeometries } from '../../procgen';
 import {
+  crateMark,
+  doorNumber,
+  hazardBand,
+  paintedSign,
+  shopSign,
+  unitPlate,
+  wallStencil,
+} from './Signage';
+import {
   type InstanceRef,
   type Sink,
   bagGeometry,
@@ -92,6 +101,33 @@ export function shippingContainer(
     yaw,
     { surface: 'metal' },
   );
+
+  // Owner's mark on one flank and the unit number by the doors, which is what
+  // makes a container read as freight rather than as a box.
+  const flankZ = CONTAINER_WIDTH / 2 + 0.02;
+  for (const side of [1, -1]) {
+    const faceYaw = yaw + (side > 0 ? 0 : Math.PI);
+    const cx = x + Math.sin(faceYaw) * flankZ;
+    const cz = z + Math.cos(faceYaw) * flankZ;
+    const along = sink.rng.range(-length * 0.22, length * 0.22);
+    crateMark(
+      sink,
+      cx + Math.cos(faceYaw) * along,
+      y + sink.rng.range(0.2, 0.7),
+      cz - Math.sin(faceYaw) * along,
+      faceYaw,
+      sink.rng.range(0.9, 1.3),
+    );
+    const stamp = length * 0.34;
+    unitPlate(
+      sink,
+      cx + Math.cos(faceYaw) * stamp,
+      y + CONTAINER_HEIGHT * 0.28,
+      cz - Math.sin(faceYaw) * stamp,
+      faceYaw,
+      1.1,
+    );
+  }
 
   if (opts.walkable) {
     const cos = Math.abs(Math.cos(yaw));
@@ -227,6 +263,20 @@ export function woodCrate(
       instance: ref,
     });
   }
+  // Stencilled markings on one or two faces. Cheaper than it looks: the quads
+  // merge into the map-wide signage batch, so a hundred crates add no draws.
+  const faces = sink.rng.int(1, 2);
+  for (let i = 0; i < faces; i++) {
+    const faceYaw = yaw + (Math.PI / 2) * sink.rng.int(0, 3);
+    crateMark(
+      sink,
+      x + Math.sin(faceYaw) * (size / 2 + 0.012),
+      y + size * sink.rng.range(0.4, 0.62),
+      z + Math.cos(faceYaw) * (size / 2 + 0.012),
+      faceYaw,
+      size * sink.rng.range(0.5, 0.72),
+    );
+  }
 }
 
 function crateGeometry(size: number): THREE.BufferGeometry {
@@ -353,6 +403,17 @@ export function oilBarrel(
     surface: 'metal',
     instance: ref,
   });
+  if (sink.rng.bool(0.55)) {
+    const faceYaw = yaw + sink.rng.range(0, Math.PI * 2);
+    crateMark(
+      sink,
+      x + Math.sin(faceYaw) * 0.285,
+      base + sink.rng.range(0.34, 0.56),
+      z + Math.cos(faceYaw) * 0.285,
+      faceYaw,
+      0.34,
+    );
+  }
 }
 
 export function jerryCan(sink: Sink, x: number, z: number, yaw: number, y?: number): void {
@@ -394,6 +455,15 @@ export function ammoCrate(sink: Sink, x: number, z: number, yaw: number, y?: num
     new THREE.Vector3(0.46, 0.2, 0.24),
     yaw,
     { surface: 'wood' },
+  );
+  const stencilYaw = yaw + (sink.rng.bool() ? 0 : Math.PI);
+  crateMark(
+    sink,
+    x + Math.sin(stencilYaw) * 0.235,
+    base + 0.19,
+    z + Math.cos(stencilYaw) * 0.235,
+    stencilYaw,
+    0.3,
   );
 }
 
@@ -584,6 +654,27 @@ export function jerseyBarrier(sink: Sink, x: number, z: number, yaw: number, y?:
     yaw,
     { surface: 'concrete' },
   );
+  // Hazard banding on the traffic face, and a stencilled number on the flank:
+  // a bare concrete barrier is the one street object nobody paints.
+  for (const side of [1, -1]) {
+    const faceYaw = yaw + Math.PI / 2 + (side > 0 ? 0 : Math.PI);
+    const nx = Math.sin(faceYaw) * 0.325;
+    const nz = Math.cos(faceYaw) * 0.325;
+    for (const along of [-0.72, 0.72]) {
+      hazardBand(
+        sink,
+        x + nx + Math.cos(faceYaw) * along,
+        base + 0.62,
+        z + nz - Math.sin(faceYaw) * along,
+        faceYaw,
+        0.5,
+        0.42,
+      );
+    }
+    if (side > 0 && sink.rng.bool(0.5)) {
+      doorNumber(sink, x + nx, base + 0.66, z + nz, faceYaw, 0.22);
+    }
+  }
 }
 
 /** Gabion / HESCO style barrier: wire cage packed with fill. */
@@ -607,24 +698,17 @@ export function hescoBarrier(
   const cage = cachedGeometry(`hesco|cage|${length}|${height}`, () => {
     const parts: THREE.BufferGeometry[] = [];
     for (const s of [-1, 1]) {
-      const panel = planeGeometry(length, height, 0.5).clone();
-      panel.rotateY(s > 0 ? 0 : Math.PI);
-      panel.translate(0, 0, s * 0.52);
-      parts.push(panel);
-      const end = planeGeometry(1.04, height, 0.5).clone();
-      end.rotateY(s * Math.PI * 0.5);
-      end.translate(s * (length / 2), 0, 0);
-      parts.push(end);
+      parts.push(placed(wireMesh(length, height, 0.2), transform(0, 0, s * 0.52)));
+      parts.push(placed(wireMesh(1.04, height, 0.2), transform(s * (length / 2), 0, 0, Math.PI / 2)));
     }
     const merged = mergeGeometries(parts, false);
     for (const part of parts) part.dispose();
     return merged ?? parts[0];
   });
   sink.addProp(cage, transform(x, base + height / 2, z, yaw), {
-    material: 'metal_grate',
+    material: 'metal_rusted',
     tier: 'detail',
-    tile: 0.5,
-    tint: 0x9a9384,
+    tint: 0x8e857a,
   });
   sink.addCollider(
     new THREE.Vector3(x, base + height / 2, z),
@@ -657,7 +741,7 @@ export function chainLinkFence(
     cylinderGeometry(0.05, 0.055, height, 7, 1.2).clone(),
   );
   const panel = cachedGeometry(`fence|panel|${bayLength.toFixed(2)}|${height}`, () =>
-    makeDoubleSided(saggingMeshPanel(bayLength - 0.1, height - 0.18)),
+    wireMesh(bayLength - 0.1, height - 0.18, 0.24, 0.011, 0.055),
   );
 
   for (let i = 0; i <= bays; i++) {
@@ -677,10 +761,9 @@ export function chainLinkFence(
     const pz = z0 + dz * t;
     const base = sink.ground(px, pz);
     sink.addProp(panel, transform(px, base + height / 2 - 0.02, pz, yaw), {
-      material: 'metal_grate',
+      material: 'metal_rusted',
       tier: 'structure',
-      tile: 0.42,
-      tint: 0xa9a49a,
+      tint: 0x9e968a,
       castShadow: false,
     });
     // Top rail.
@@ -705,35 +788,57 @@ export function chainLinkFence(
   }
 }
 
-/** Wire mesh panel that bows out between its posts instead of hanging flat. */
-function saggingMeshPanel(width: number, height: number): THREE.BufferGeometry {
-  const cols = 5;
-  const rows = 3;
-  const positions: number[] = [];
-  const uvs: number[] = [];
-  const indices: number[] = [];
-  for (let r = 0; r <= rows; r++) {
-    const v = r / rows;
+/**
+ * Welded wire mesh, as actual wires.
+ *
+ * These used to be alpha-tested planes carrying the walkway-grating texture, and
+ * that is what the review called a placeholder checkerboard. It was not a
+ * placeholder — it was the alpha test losing its argument with the mip chain. The
+ * grating is 70% aperture, so a couple of mip levels down its alpha averages out
+ * right around the 0.5 cutoff, and whole texels then flip between fully opaque
+ * and fully gone as the camera moves: a hard black-and-white grid, which is
+ * exactly what a placeholder checker looks like.
+ *
+ * Solid wires cannot do that. They also cost less than the double-sided alpha
+ * panel they replace, self-shadow properly, and give the fence a silhouette that
+ * thins out honestly with distance instead of stepping to a checker.
+ */
+function wireMesh(
+  width: number,
+  height: number,
+  spacing: number,
+  gauge = 0.014,
+  bow = 0.045,
+): THREE.BufferGeometry {
+  const key = `wiremesh|${width.toFixed(2)}|${height.toFixed(2)}|${spacing.toFixed(2)}|${gauge.toFixed(3)}|${bow.toFixed(3)}`;
+  return cachedGeometry(key, () => {
+    const parts: THREE.BufferGeometry[] = [];
+    const cols = Math.max(2, Math.round(width / spacing));
+    const rows = Math.max(2, Math.round(height / spacing));
+    // Verticals sit proud of the horizontals, which is how a welded panel is made
+    // and what gives it a shadow line of its own.
     for (let c = 0; c <= cols; c++) {
       const u = c / cols;
-      const bow = Math.sin(u * Math.PI) * 0.055 * Math.sin(v * Math.PI * 0.9 + 0.4);
-      positions.push((u - 0.5) * width, (v - 0.5) * height, bow);
-      uvs.push(u * width, v * height);
+      parts.push(
+        placed(
+          boxGeometry(gauge, height, gauge, 0, 0.5),
+          transform((u - 0.5) * width, 0, Math.sin(u * Math.PI) * bow + gauge),
+        ),
+      );
     }
-  }
-  const stride = cols + 1;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const a = r * stride + c;
-      indices.push(a, a + stride, a + 1, a + 1, a + stride, a + stride + 1);
+    for (let r = 0; r <= rows; r++) {
+      const v = r / rows;
+      parts.push(
+        placed(
+          boxGeometry(width, gauge, gauge, 0, 0.5),
+          transform(0, (v - 0.5) * height, Math.sin(v * Math.PI * 0.9 + 0.4) * bow * 0.5),
+        ),
+      );
     }
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-  return geometry;
+    const merged = mergeGeometries(parts, false);
+    for (const part of parts) part.dispose();
+    return merged ?? parts[0];
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -873,6 +978,12 @@ export function roadSign(sink: Sink, x: number, z: number, yaw: number, kind: 's
     surface: 'metal',
     instance: ref,
   });
+  // The legend, on both faces. Applied as a decal rather than modelled into the
+  // panel so the plate keeps its single cached buffer and its instanced group.
+  const size = kind === 'square' ? 0.6 : 0.56;
+  for (const side of [0, Math.PI]) {
+    wallStencil(sink, x, base + 2.16, z, yaw + side, size);
+  }
 }
 
 export function dumpster(sink: Sink, x: number, z: number, yaw: number): void {
@@ -1098,6 +1209,26 @@ export function marketStall(
   if (sink.rng.bool(0.6)) {
     const lx = sink.rng.range(-width / 2, width / 2);
     woodCrate(sink, x + lx * cos, base, z - lx * sin, yaw + sink.rng.range(-0.4, 0.4), 0.6, false);
+  }
+
+  // A trader's board over the counter, hung under the awning rail where it can
+  // be read from the lane, plus prices chalked on the fascia.
+  const frontZ = -(depth / 2 + 0.04);
+  const frontYaw = yaw + Math.PI;
+  const bx = x - frontZ * sin;
+  const bz = z - frontZ * cos;
+  if (sink.rng.bool(0.85)) {
+    shopSign(sink, bx, base + height - 0.28, bz, frontYaw, Math.min(width - 0.3, 2.2));
+  }
+  if (sink.rng.bool(0.5)) {
+    paintedSign(
+      sink,
+      bx,
+      base + 0.62,
+      bz,
+      frontYaw,
+      Math.min(width - 0.5, sink.rng.range(0.9, 1.5)),
+    );
   }
 }
 
@@ -1400,9 +1531,16 @@ export function ladder(
 }
 
 /** Stack of concrete blocks, the mantle-height stepping stone onto low roofs. */
-export function blockStack(sink: Sink, x: number, z: number, yaw: number, rows = 4): void {
+export function blockStack(
+  sink: Sink,
+  x: number,
+  z: number,
+  yaw: number,
+  rows = 4,
+  y?: number,
+): void {
   const block = cachedGeometry('block', () => boxGeometry(0.44, 0.2, 0.22, 0.018, 1.2).clone());
-  const base = sink.ground(x, z);
+  const base = y ?? sink.ground(x, z);
   for (let row = 0; row < rows; row++) {
     const perRow = row % 2 === 0 ? 3 : 2;
     for (let i = 0; i < perRow; i++) {

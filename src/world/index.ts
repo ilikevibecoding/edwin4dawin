@@ -16,6 +16,7 @@ import { ORDER } from '../core/System';
 import { CHUNK_SIZE, type BuildResult, WorldBuilder } from './Builder';
 import { type CullStats, ChunkCuller } from './Culling';
 import { buildCoverPoints } from './CoverBuilder';
+import { CraterField } from './Craters';
 import { DestructibleField } from './Destructibles';
 import { PLAY_HALF, TERRAIN_HALF, buildLayout, createField } from './Layout';
 import { type WorldNavGrid, buildNavGrid } from './NavBuilder';
@@ -107,6 +108,7 @@ export class WorldSystemImpl implements WorldSystem, System {
   private nav: WorldNavGrid | null = null;
   private culler: ChunkCuller | null = null;
   private destruction: DestructibleField | null = null;
+  private craters: CraterField | null = null;
 
   private cover: CoverPoint[] = [];
   private readonly spawnsByTeam = new Map<Team, SpawnPoint[]>();
@@ -160,6 +162,7 @@ export class WorldSystemImpl implements WorldSystem, System {
       config: ctx.config,
       seed: SEED,
       ground: (x, z) => field.height(x, z),
+      sunDirection: this.sunDirection,
     });
     this.builder = builder;
 
@@ -260,11 +263,17 @@ export class WorldSystemImpl implements WorldSystem, System {
     });
     this.cover = buildCoverPoints(result.colliders, { nav: this.nav });
 
+    this.craters = new CraterField({
+      root: this.root,
+      materials,
+      ground: (x, z) => this.sampleGround(x, z),
+    });
     this.destruction = new DestructibleField({
       records: result.destructibles,
       root: this.root,
       materials,
       events: ctx.events,
+      craters: this.craters,
       debrisBudget: ctx.config.debrisBudget,
     });
 
@@ -327,6 +336,7 @@ export class WorldSystemImpl implements WorldSystem, System {
     }
     this.culler?.reset();
     this.destruction?.dispose();
+    this.craters?.dispose();
     this.root.removeFromParent();
     this.root.traverse((child) => {
       const mesh = child as THREE.Mesh;
@@ -343,6 +353,7 @@ export class WorldSystemImpl implements WorldSystem, System {
     this.nav = null;
     this.culler = null;
     this.destruction = null;
+    this.craters = null;
     this.builder = null;
     this.ctx = null;
   }

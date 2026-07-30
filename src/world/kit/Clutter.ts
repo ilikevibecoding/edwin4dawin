@@ -4,6 +4,17 @@ import { TAU } from '../../core/MathUtils';
 import { graffiti, laundryLine, satelliteDish, wallAc, wallPipe } from './Details';
 import { saggingCloth } from './Props';
 import {
+  addDecal,
+  dealCell,
+  doorNumber,
+  paintedSign,
+  shopSign,
+  signAtlas,
+  sprayTag,
+  wallPoster,
+  wallStencil,
+} from './Signage';
+import {
   METRICS,
   type Rect,
   type Sink,
@@ -1085,20 +1096,22 @@ export function posterCluster(
   for (let i = 0; i < count; i++) {
     const u = sink.rng.range(-0.55, 0.55);
     const v = sink.rng.range(-0.28, 0.28);
-    const width = snap(sink.rng.range(0.34, 0.52), 0.04);
-    const height = snap(sink.rng.range(0.44, 0.68), 0.04);
+    const height = snap(sink.rng.range(0.44, 0.72), 0.04);
     const layer = 0.022 + i * 0.003;
+    const px = x + d.x * u + n.x * layer;
+    const pz = z + d.z * u + n.z * layer;
+    const roll = sink.rng.range(-0.09, 0.09);
+    // Most of the stack is printed matter; the rest is the blank paper left
+    // behind when the top layer came off, which is what a fly-posted wall is
+    // mostly made of.
+    if (sink.rng.bool(0.78)) {
+      wallPoster(sink, px - n.x * layer, y + v, pz - n.z * layer, yaw, height);
+      continue;
+    }
     sink.addStatic(
       placed(
-        planeGeometry(width, height, 0.6),
-        transform(
-          x + d.x * u + n.x * layer,
-          y + v,
-          z + d.z * u + n.z * layer,
-          yaw,
-          0,
-          sink.rng.range(-0.09, 0.09),
-        ),
+        planeGeometry(snap(sink.rng.range(0.34, 0.52), 0.04), height, 0.6),
+        transform(px, y + v, pz, yaw, 0, roll),
       ),
       {
         material: sink.rng.bool(0.25) ? 'paint_red' : 'plaster_white',
@@ -1212,6 +1225,24 @@ export function bracketSign(
     // building; these are picked for what comes out the far end of that.
     tint: sink.rng.pick([0xf0e2c0, 0xe8b04a, 0xd8664a, 0x6fa8c8, 0xe4dcd0, 0x76b078]),
   });
+  // Lettering on both faces, a centimetre clear of the plate.
+  const cell = dealCell(sink, signAtlas().panels);
+  const face = Math.min(height * 0.86, (width * 0.9) / cell.aspect);
+  for (const side of [0, Math.PI]) {
+    addDecal(
+      sink,
+      cell,
+      face * cell.aspect,
+      face,
+      transform(
+        x + n.x * width * 0.5 + Math.cos(yaw) * 0.012 * (side === 0 ? 1 : -1),
+        y,
+        z + n.z * width * 0.5 - Math.sin(yaw) * 0.012 * (side === 0 ? 1 : -1),
+        yaw + Math.PI / 2 + side,
+      ),
+      { tier: 'detail' },
+    );
+  }
 }
 
 /**
@@ -1563,10 +1594,50 @@ export function dressFacade(sink: Sink, site: FacadeSite): void {
       }
     }
 
+    // The fascia over a shopfront window, which is where the name of the shop
+    // goes. Boards over the doorways alone leave the rest of a trading street
+    // bare, and it is lettering running the whole length of a facade — not one
+    // sign on it — that makes the street read as a place doing business.
+    if (!doored && !blanked && !breached && glazed) {
+      const board = site.base + 2.78;
+      if (shopfront && sink.rng.bool(0.6) && fits(board, 0.55)) {
+        shopSign(
+          sink,
+          p.x,
+          board + sink.rng.range(-0.12, 0.14),
+          p.z,
+          yaw,
+          Math.min(site.bayWidth * 0.94, sink.rng.range(1.5, 2.4)),
+        );
+      } else if (sink.rng.bool(shopfront ? 0.55 : 0.2) && fits(site.base + 2.62, 0.4)) {
+        paintedSign(
+          sink,
+          p.x,
+          site.base + sink.rng.range(2.42, 2.68),
+          p.z,
+          yaw,
+          Math.min(site.bayWidth * 0.88, sink.rng.range(1.2, 2.0)),
+        );
+      }
+    }
+
     if (doored) {
       // A doorway is where people stand, smoke, hang a light and fly-post.
       if (sink.rng.bool(0.72) && fits(site.base + 2.55, 0.35)) {
         wallLamp(sink, p.x, site.base + 2.55, p.z, yaw);
+      }
+      // The number of the house, beside the door at eye height, and over a shop
+      // the board that says whose it is. A doorway with neither is the single
+      // clearest tell that nobody lives here.
+      if (sink.rng.bool(0.7)) {
+        const q = at(u + sink.rng.sign() * sink.rng.range(0.85, 1.15));
+        doorNumber(sink, q.x, site.base + sink.rng.range(1.9, 2.25), q.z, yaw, 0.26);
+      }
+      if (shopfront && fits(site.base + 2.95, 0.5)) {
+        const boardWidth = Math.min(site.bayWidth * 1.5, sink.rng.range(1.8, 2.8));
+        shopSign(sink, p.x, site.base + sink.rng.range(2.75, 2.95), p.z, yaw, boardWidth);
+      } else if (sink.rng.bool(0.4) && fits(site.base + 2.8, 0.4)) {
+        paintedSign(sink, p.x, site.base + sink.rng.range(2.6, 2.8), p.z, yaw, sink.rng.range(1.3, 2.1));
       }
       if (sink.rng.bool(0.6)) {
         const side = sink.rng.sign() * sink.rng.range(1.0, 1.5);
@@ -1664,27 +1735,42 @@ export function dressFacade(sink: Sink, site: FacadeSite): void {
 
   // Counts scale with the wall, not with a coin flip: a thirty-metre facade with
   // one poster on it is emptier than a four-metre one with the same poster.
-  const signs = shopfront ? Math.max(1, Math.round(length / 11)) : length > 14 ? 1 : 0;
+  const signs = shopfront ? Math.max(1, Math.round(length / 8)) : Math.round(length / 14);
   for (let i = 0; i < signs; i++) {
-    if (!shopfront && sink.rng.bool(0.5)) continue;
+    if (!shopfront && sink.rng.bool(0.35)) continue;
     const y = site.base + sink.rng.range(2.7, 3.2);
     if (!fits(y, 0.6)) continue;
     const p = at(sink.rng.range(1.2, Math.max(1.3, length - 1.2)));
     bracketSign(sink, p.x, y, p.z, yaw, sink.rng.range(0.9, 1.4));
   }
 
-  for (let i = 0; i < Math.max(1, Math.round(length / 7)); i++) {
-    if (sink.rng.bool(0.35)) continue;
+  for (let i = 0; i < Math.max(1, Math.round(length / 5.5)); i++) {
+    if (sink.rng.bool(0.22)) continue;
     const y = site.base + sink.rng.range(1.2, 2.0);
     if (!fits(y, 0.7)) continue;
     const p = at(sink.rng.range(1.0, Math.max(1.1, length - 1.0)));
     posterCluster(sink, p.x, y, p.z, yaw, sink.rng.int(1, 3));
   }
 
-  for (let i = 0; i < Math.max(1, Math.round(length / 12)); i++) {
-    if (sink.rng.bool(0.45)) continue;
+  // Tags at reach height, and the odd stencilled warning where a wall faces a
+  // yard or a checkpoint. Half the tags keep the old paint-stroke scrawl: a
+  // street where every tag is legible lettering reads as a set of labels.
+  for (let i = 0; i < Math.max(1, Math.round(length / 9)); i++) {
+    if (sink.rng.bool(0.32)) continue;
     const p = at(sink.rng.range(1.2, Math.max(1.3, length - 1.2)));
-    graffiti(sink, p.x, site.base + sink.rng.range(0.9, 1.6), p.z, yaw, sink.rng.range(1.0, 2.0));
+    const y = site.base + sink.rng.range(0.9, 1.7);
+    if (sink.rng.bool(0.62)) {
+      sprayTag(sink, p.x, y, p.z, yaw, sink.rng.range(1.1, 2.2));
+    } else {
+      graffiti(sink, p.x, y, p.z, yaw, sink.rng.range(1.0, 2.0));
+    }
+  }
+
+  const stencils = site.use === 'derelict' || site.use === 'store' ? 2 : 1;
+  for (let i = 0; i < stencils; i++) {
+    if (sink.rng.bool(0.4)) continue;
+    const p = at(sink.rng.range(0.9, Math.max(1, length - 0.9)));
+    wallStencil(sink, p.x, site.base + sink.rng.range(1.4, 2.1), p.z, yaw, sink.rng.range(0.5, 0.8));
   }
 
   // Grime patches spread along the wall as well as under its roof edge, because
@@ -1905,7 +1991,11 @@ export function wallPaper(
       {
         material: 'plaster_white',
         tier: 'detail',
-        tint: sink.rng.pick([0xe0d8c2, 0xcfc4a8, 0xc8cdd2, 0xd8c0a8]),
+        // Repair plaster, not fresh paint. Anything lighter than the wall it sits
+        // on reads as a card taped to it — which is what these were doing in the
+        // interior frame — and a patch is skimmed over damage, so it is the one
+        // part of the wall with no sun-bleaching on it yet.
+        tint: sink.rng.pick([0xb4a68c, 0xa89a80, 0xbdae94, 0xa2977f]),
         mottle: 0.3,
       },
     );
@@ -2168,8 +2258,8 @@ export function tyreSprawl(sink: Sink, x: number, z: number, yaw: number, count 
 }
 
 /** Timber offcuts leaned against a wall in a bundle. */
-export function woodPile(sink: Sink, x: number, z: number, yaw: number, count = 6): void {
-  const base = sink.ground(x, z);
+export function woodPile(sink: Sink, x: number, z: number, yaw: number, count = 6, y?: number): void {
+  const base = y ?? sink.ground(x, z);
   const cos = Math.cos(yaw);
   const sin = Math.sin(yaw);
   for (let i = 0; i < count; i++) {
@@ -2195,8 +2285,8 @@ export function woodPile(sink: Sink, x: number, z: number, yaw: number, count = 
 }
 
 /** Scaffold tubes and pipe lengths lying in a heap on the ground. */
-export function pipeBundle(sink: Sink, x: number, z: number, yaw: number, count = 5): void {
-  const base = sink.ground(x, z);
+export function pipeBundle(sink: Sink, x: number, z: number, yaw: number, count = 5, y?: number): void {
+  const base = y ?? sink.ground(x, z);
   const cos = Math.cos(yaw);
   const sin = Math.sin(yaw);
   for (let i = 0; i < count; i++) {
@@ -2387,7 +2477,7 @@ export function handcart(sink: Sink, x: number, z: number, yaw: number): void {
 }
 
 /** Wheelbarrow, tipped forward onto its nose more often than not. */
-export function wheelbarrow(sink: Sink, x: number, z: number, yaw: number): void {
+export function wheelbarrow(sink: Sink, x: number, z: number, yaw: number, y?: number): void {
   const geometry = cachedGeometry('wheelbarrow', () => {
     const parts: THREE.BufferGeometry[] = [
       placed(boxGeometry(0.62, 0.28, 0.82, 0.05, 1.0), transform(0, 0.34, 0.05)),
@@ -2401,7 +2491,7 @@ export function wheelbarrow(sink: Sink, x: number, z: number, yaw: number): void
     parts.push(placed(wheel, transform(0, 0.16, 0.6)));
     return mergeParts(parts);
   });
-  sink.addProp(geometry, transform(x, sink.ground(x, z), z, yaw, 0, sink.rng.range(-0.06, 0.06)), {
+  sink.addProp(geometry, transform(x, y ?? sink.ground(x, z), z, yaw, 0, sink.rng.range(-0.06, 0.06)), {
     material: 'metal_rusted',
     tier: 'detail',
     tint: sink.rng.pick([0x9a8a76, 0x8a7a64]),

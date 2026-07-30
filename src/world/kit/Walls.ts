@@ -52,8 +52,19 @@ export interface WallSpec {
   material: MaterialId;
   /** Interior finish applied as a thin liner on one face. */
   liner?: MaterialId;
+  /** Overrides the default limewash tint on the liner. */
+  linerTint?: number;
+  /** Paint for the dado up the interior face; without one, no dado is built. */
+  dadoPaint?: number;
   /** +1 for the left side of the direction of travel, -1 for the right. */
   linerSide?: 1 | -1;
+  /**
+   * Emissive bounce baked into the liner only.
+   *
+   * The liner is the one part of a wall that is purely interior, so it is the one
+   * part that can carry the fill without lighting up the street outside.
+   */
+  linerFill?: number;
   openings?: Opening[];
   /** Low wall continuing above `height`. */
   parapet?: number;
@@ -153,6 +164,8 @@ export function buildWall(sink: Sink, spec: WallSpec): void {
       const side = spec.linerSide ?? 1;
       const linerThickness = 0.05;
       const w = side * (thickness / 2 - linerThickness / 2 + 0.002);
+      const fill = spec.linerFill ?? 0;
+      if (fill > 0) sink.interiorFill(fill);
       sink.addStatic(
         placed(
           boxGeometry(du - 0.01, dv - 0.01, linerThickness, 0.012, 1),
@@ -164,8 +177,25 @@ export function buildWall(sink: Sink, spec: WallSpec): void {
           reproject: true,
           uvJitter: true,
           mottle: 0.3,
+          tint: spec.linerTint ?? INTERIOR_TINT,
         },
       );
+      if (fill > 0) sink.interiorFill(0);
+    }
+
+    // An enclosing wall names the side its interior is on; a partition has no
+    // outside, so it takes a dado on both faces. Getting this from `linerSide`
+    // rather than from `liner` matters: most buildings have no separate liner, and
+    // painting both faces of their outside wall puts a dado on the street.
+    if (spec.dadoPaint !== undefined && panel.v0 <= 0.05 && dv >= 1.5 && du >= 0.7) {
+      const faces = spec.linerSide === undefined ? [1, -1] : [spec.linerSide];
+      const fill = spec.linerFill ?? 0;
+      if (fill > 0) sink.interiorFill(fill);
+      for (const face of faces) {
+        const off = face * (thickness / 2 + 0.03);
+        addDado(sink, spec, du, localToWorldX(u, off), localToWorldZ(u, off), yaw);
+      }
+      if (fill > 0) sink.interiorFill(0);
     }
   }
 
@@ -438,6 +468,87 @@ export interface WallRingOptions {
   plinth?: boolean;
   band?: number;
 }
+
+/**
+ * Painted dado up the bottom of a lined wall, with a rail along the top of it.
+ *
+ * A liner is one material over one flat rectangle, so however much small dressing
+ * goes on it the wall still reads as a panel — which is what the review caught in
+ * the interior frame. A dado is what the reference has instead: the bottom metre
+ * painted a different colour from the top, and a moulding where the two meet. It
+ * cuts the rectangle in three horizontally and the rail catches a highlight along
+ * its whole length.
+ *
+ * Built here rather than per room because the wall already knows where its
+ * openings are — the liner is split around them — so a dado laid on a liner piece
+ * can never cross a doorway. Rooms do not know about their partitions, and a
+ * partition wall is most of what the player is standing next to indoors.
+ */
+function addDado(sink: Sink, spec: WallSpec, du: number, x: number, z: number, yaw: number): void {
+  sink.addStatic(
+    placed(
+      boxGeometry(du - 0.02, DADO_HEIGHT, 0.055, 0, 1),
+      transform(x, spec.base + DADO_HEIGHT / 2, z, yaw),
+    ),
+    {
+      material: spec.liner ?? spec.material,
+      tier: 'structure',
+      reproject: true,
+      mottle: 0.22,
+      tint: spec.dadoPaint,
+    },
+  );
+  sink.addStatic(
+    placed(boxGeometry(du - 0.02, 0.05, 0.085, 0, 1), transform(x, spec.base + DADO_HEIGHT, z, yaw)),
+    { material: 'wood_painted', tier: 'detail', reproject: true, tint: DADO_RAIL },
+  );
+}
+
+/**
+ * The building's dado colour, from its name rather than the shared rng.
+ *
+ * A building's enclosing walls and its partitions are built by different passes,
+ * and both have to arrive at the same colour or the dado changes shade halfway
+ * across a room. Hashing the name gets them there without either pass having to
+ * be told, and without spending a draw from the rng stream, which would reshuffle
+ * every decision made after it.
+ */
+export function dadoPaintFor(name: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < name.length; i++) {
+    hash ^= name.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return DADO_PAINTS[(hash >>> 0) % DADO_PAINTS.length];
+}
+
+/**
+ * One height for every dado in the map, and one colour per building.
+ *
+ * Varying either per wall looks like more variety and is not: two walls of a room
+ * meet at a corner, and a dado that changes colour or steps in height at the
+ * corner reads as a bug rather than as a room.
+ */
+const DADO_HEIGHT = 0.98;
+
+const DADO_RAIL = 0x6a5c44;
+
+/** Distemper colours: what a room in this town is actually painted. */
+const DADO_PAINTS: readonly number[] = [
+  0x9a8a6a, 0x8a7c5e, 0x7c8478, 0x6e7a80, 0xa08c68, 0x8e7458,
+];
+
+/**
+ * Warm limewash on every interior face that does not ask for something else.
+ *
+ * The liner materials are chosen for what a building is made of, so untinted they
+ * come out as neutral pale grey — and a room's walls are the largest flat thing
+ * in any interior frame, so neutral grey is what the whole room reads as. Which
+ * is what the review saw. A room in this town is painted, and now that the
+ * renderer separates up-facing from down-facing ambient, warmth on a vertical
+ * surface is the difference between a wall and a panel.
+ */
+export const INTERIOR_TINT = 0xc0ad8e;
 
 /**
  * Four walls around a rectangle, wound so that the liner always lands inside.

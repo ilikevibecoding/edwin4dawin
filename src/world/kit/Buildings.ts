@@ -1,10 +1,32 @@
 import * as THREE from 'three';
 import type { MaterialId } from '../../core/Contracts';
-import { dressFacade } from './Clutter';
+import {
+  acCage,
+  crateStack,
+  dressFacade,
+  floorDebris,
+  floorLitter,
+  pipeBundle,
+  produceCrate,
+  sackPile,
+  shadeCloth,
+  tiedTarp,
+  tvAerial,
+  wheelbarrow,
+  woodPile,
+} from './Clutter';
+import { type WindowLight, roomDaylight } from './Daylight';
 import { laundryLine, roofAc, satelliteDish, waterTank, plasterPatch, dustDrift, antennaMast } from './Details';
-import { type InteriorUse, dressRoom } from './Interiors';
-import { ladder, rebarCluster } from './Props';
-import { type Opening, buildLowWall, buildWall, buildWallRing } from './Walls';
+import { type InteriorUse, type WindowSpec, dressRoom, dressWindow } from './Interiors';
+import { blockStack, ladder, oilBarrel, pallet, rebarCluster } from './Props';
+import {
+  INTERIOR_TINT,
+  type Opening,
+  buildLowWall,
+  buildWall,
+  buildWallRing,
+  dadoPaintFor,
+} from './Walls';
 import {
   METRICS,
   type Rect,
@@ -123,6 +145,15 @@ export interface BuildingResult {
 const BAY_SPACING = 3.4;
 
 /**
+ * Metres per tile for exposed poured slabs.
+ *
+ * The floor material draws control joints twice per tile. At its authored 2.4 m
+ * that puts a joint every 1.2 m, which is a grid on the floor rather than a
+ * slab; at 6 m it lands at 3 m, which is what a real bay of screed is.
+ */
+const SLAB_TILE = 6;
+
+/**
  * How far a finished floor stands proud of the ground padded flat beneath it.
  *
  * The layout flattens the terrain under every building to exactly the height the
@@ -168,7 +199,13 @@ export function buildBuilding(sink: Sink, spec: BuildingSpec): BuildingResult {
   addSlab(sink, footprint, base + FLOOR_PROUD, 0.28 + FLOOR_PROUD, spec.floorMaterial ?? 'concrete_floor', {
     walkable: true,
     costMul: 1,
+    tile: SLAB_TILE,
   });
+
+  const fill = spec.dress === false ? 0 : bounceLevel(spec);
+  // One colour for the whole building, drawn before any wall so every room in it
+  // is painted the same. A dado that changes colour at a corner reads as a bug.
+  const dadoPaint = spec.dress === false ? undefined : dadoPaintFor(spec.name);
 
   for (let f = 0; f < spec.floors; f++) {
     const y = floorYs[f];
@@ -176,6 +213,8 @@ export function buildBuilding(sink: Sink, spec: BuildingSpec): BuildingResult {
     const wallHeight = top && spec.shelled ? fh * 0.72 : fh;
     const doorZones: Rect[] = [];
     const windowZones: Rect[] = [];
+    const lights: WindowLight[] = [];
+    const windows: WindowSpec[] = [];
 
     for (let edge = 0; edge < 4; edge++) {
       const facade = facades[edge];
@@ -185,8 +224,13 @@ export function buildBuilding(sink: Sink, spec: BuildingSpec): BuildingResult {
       const openings = facadeOpenings(sink, spec, facade, f, length);
       for (const opening of openings) {
         const zone = openingZone(footprint, edge, opening, thickness);
-        if (opening.kind === 'window') windowZones.push(zone);
-        else doorZones.push(zone);
+        if (opening.kind === 'window') {
+          windowZones.push(zone);
+          windows.push(openingWindow(footprint, edge, opening, thickness, y));
+        } else {
+          doorZones.push(zone);
+        }
+        lights.push(openingLight(footprint, edge, opening, thickness, y, interior));
       }
       buildWall(sink, {
         x0,
@@ -199,8 +243,10 @@ export function buildBuilding(sink: Sink, spec: BuildingSpec): BuildingResult {
         material: spec.wall,
         liner: spec.liner,
         linerSide: 1,
+        linerFill: fill,
+        dadoPaint,
         openings,
-        parapet: top && roofStyle === 'flat' ? parapet : undefined,
+        parapet: top && roofStyle === 'flat' ? parapetOn(spec, parapet, edge) : undefined,
         parapetMaterial: spec.wall,
         plinth: f === 0,
         band: spec.floors > 1 && !top ? wallHeight - 0.14 : undefined,
@@ -213,6 +259,7 @@ export function buildBuilding(sink: Sink, spec: BuildingSpec): BuildingResult {
     // Upper floor slabs double as the ceiling below, so they are poured with the
     // floor above rather than with the one they cap.
     if (f > 0) {
+      if (fill > 0) sink.interiorFill(fill);
       addPiercedSlab(
         sink,
         interior,
@@ -221,10 +268,17 @@ export function buildBuilding(sink: Sink, spec: BuildingSpec): BuildingResult {
         spec.floorMaterial ?? 'concrete_floor',
         well ? well.rect : null,
         spec.stairs ? 1.25 : 1,
+        true,
+        SLAB_TILE,
       );
+      if (fill > 0) sink.interiorFill(0);
     }
 
     sink.addInterior(`${spec.name}_f${f}`, interiorBox(interior, y, y + fh - 0.1));
+
+    // Daylight through the openings, before the dressing, so the pool of light
+    // on the floor sits under whatever gets put down on top of it.
+    roomDaylight(sink, lights);
 
     // The openings themselves, kept apart from the stair wells and partition gaps
     // that get appended to the same clear-list, so dressing that belongs in a
@@ -243,6 +297,8 @@ export function buildBuilding(sink: Sink, spec: BuildingSpec): BuildingResult {
 
     if (spec.dress !== false) {
       const use = roomUse(spec, f, top);
+      if (fill > 0) sink.interiorFill(fill);
+      for (const window of windows) dressWindow(sink, window, use);
       for (const room of rooms) {
         dressRoom(sink, {
           rect: room,
@@ -256,20 +312,28 @@ export function buildBuilding(sink: Sink, spec: BuildingSpec): BuildingResult {
           liner: spec.liner,
         });
       }
+      if (fill > 0) sink.interiorFill(0);
     }
   }
 
   if (roofStyle === 'flat') {
+    // The structural slab carries the interior fill, because its underside is
+    // somebody's ceiling. Its top face is then covered by the roof finish, which
+    // is what keeps the fill off the surface the player walks on.
+    if (fill > 0) sink.interiorFill(fill);
     addPiercedSlab(
       sink,
       interior,
       roofY,
       0.3,
-      'concrete_floor',
+      spec.floorMaterial ?? 'concrete_floor',
       spec.roofAccess && well ? well.rect : null,
       1.1,
       spec.roofWalkable !== false,
+      SLAB_TILE,
     );
+    if (fill > 0) sink.interiorFill(0);
+    addRoofFinish(sink, interior, roofY, spec.roofAccess && well ? well.rect : null);
     if (spec.shelled) addCollapsedRoof(sink, spec, interior, roofY, fh);
   } else {
     addPitchedRoof(sink, spec, footprint, roofY, spec.wall);
@@ -430,6 +494,29 @@ function pad(r: Rect, by: number): Rect {
   return { minX: r.minX - by, minZ: r.minZ - by, maxX: r.maxX + by, maxZ: r.maxZ + by };
 }
 
+/** A window opening restated at its sill, for the dressing that hangs in one. */
+function openingWindow(
+  footprint: Rect,
+  edge: number,
+  opening: Opening,
+  thickness: number,
+  base: number,
+): WindowSpec {
+  const [x0, z0, x1, z1] = edgeLine(footprint, edge);
+  const length = Math.hypot(x1 - x0, z1 - z0);
+  const dirX = (x1 - x0) / length;
+  const dirZ = (z1 - z0) / length;
+  return {
+    x: x0 + dirX * opening.at,
+    z: z0 + dirZ * opening.at,
+    sill: base + opening.sill,
+    width: opening.width,
+    height: opening.height,
+    yaw: Math.atan2(-dirZ, dirX),
+    thickness,
+  };
+}
+
 /** Whether an opening's approach zone lands in this room rather than its neighbour. */
 function insideRoom(room: Rect, zone: Rect): boolean {
   const cx = (zone.minX + zone.maxX) / 2;
@@ -442,6 +529,132 @@ function roomUse(spec: BuildingSpec, floor: number, top: boolean): InteriorUse {
   return spec.use ?? (spec.shelled ? 'derelict' : floor === 0 ? 'shop' : 'home');
 }
 
+/**
+ * Parapet height on one edge of a roof.
+ *
+ * Every roof in the town having the same parapet is half of why the skyline reads
+ * as a grid: the block silhouette against the sky is one straight line at each
+ * height the buildings come in. Real parapets differ per elevation — the street
+ * front is raised for the look of it, the party wall is barely a kerb — so each
+ * edge gets its own, hashed off the building name and the edge so it is stable
+ * across builds. Only ever raised on a walkable roof, where the parapet is the
+ * cover the layout counts on.
+ */
+function parapetOn(spec: BuildingSpec, nominal: number, edge: number): number {
+  if (nominal <= 0) return nominal;
+  const h = hash2(spec.name.length * 7 + spec.centerX * 3.1 + spec.centerZ * 1.7, edge);
+  if (h < 0.22) return nominal + 0.28 + h * 1.2;
+  if (h < 0.4 && !spec.roofWalkable) return Math.max(0.24, nominal - 0.16);
+  return nominal + (h - 0.7) * 0.24;
+}
+
+/** Stable 0..1 from two numbers, so a shape does not shift when the seed does. */
+function hash2(a: number, b: number): number {
+  const n = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;
+  return n - Math.floor(n);
+}
+
+/**
+ * How brightly a room lights itself, as a fraction of the interior bounce.
+ *
+ * Set by how much daylight gets in: an arcade with the street open along one
+ * whole side is nearly as bright as outside, a shuttered store is a gloom, and a
+ * shelled ruin gets the least because its walls are soot.
+ */
+function bounceLevel(spec: BuildingSpec): number {
+  if (spec.shelled) return 0.55;
+  if (spec.facades?.some((f) => f.arcade === true) === true) return 1;
+  switch (spec.use) {
+    case 'hall':
+      return 0.96;
+    case 'store':
+      return 0.72;
+    case 'workshop':
+      return 0.8;
+    default:
+      return 0.87;
+  }
+}
+
+/** Fraction of the daylight an opening lets past its glazing and furniture. */
+function openingStrength(opening: Opening): number {
+  let strength = opening.kind === 'arch' ? 0.8 : 1;
+  if (opening.glass) strength *= 0.55;
+  if (opening.bars) strength *= 0.82;
+  if (opening.shutter) strength *= 0.7;
+  return strength;
+}
+
+/** Describes one facade opening as a source of daylight for the room behind it. */
+function openingLight(
+  footprint: Rect,
+  edge: number,
+  opening: Opening,
+  thickness: number,
+  base: number,
+  interior: Rect,
+): WindowLight {
+  const [x0, z0, x1, z1] = edgeLine(footprint, edge);
+  const length = Math.hypot(x1 - x0, z1 - z0);
+  const dirX = (x1 - x0) / length;
+  const dirZ = (z1 - z0) / length;
+  const acrossRoom =
+    edge === 0 || edge === 2 ? interior.maxZ - interior.minZ : interior.maxX - interior.minX;
+  return {
+    x: x0 + dirX * opening.at,
+    y: base + opening.sill + opening.height / 2,
+    z: z0 + dirZ * opening.at,
+    width: opening.width,
+    height: opening.height,
+    yaw: Math.atan2(-dirZ, dirX),
+    thickness,
+    floor: base + FLOOR_PROUD,
+    reach: Math.max(1.2, acrossRoom - 0.4),
+    strength: openingStrength(opening),
+  };
+}
+
+/**
+ * Screed and whitewash over the structural slab.
+ *
+ * Two reasons, and the second is the one the skyline shot cares about. A poured
+ * floor slab carries control joints on a coarse grid, which is right underfoot in
+ * a warehouse and wrong on a roof: at standing height on a walkable roof the
+ * joints read as a tiling seam every metre or so, which is the single most
+ * synthetic thing on the skyline. And a flat roof in this part of the world is
+ * not exposed structural concrete anyway — it is a sand-cement screed laid to
+ * fall, limewashed, patched wherever it has ever leaked.
+ */
+function addRoofFinish(sink: Sink, interior: Rect, roofY: number, hole: Rect | null): void {
+  const bands: Rect[] = hole ? slabBands(interior, hole) : [interior];
+  for (const band of bands) {
+    const width = band.maxX - band.minX;
+    const depth = band.maxZ - band.minZ;
+    if (width < 0.3 || depth < 0.3) continue;
+    sink.addStatic(
+      slab(
+        (band.minX + band.maxX) / 2,
+        roofY + 0.015,
+        (band.minZ + band.maxZ) / 2,
+        width,
+        0.03,
+        depth,
+        0.008,
+        3.2,
+      ),
+      {
+        material: 'stucco_sand',
+        tier: 'structure',
+        tile: 3.2,
+        reproject: true,
+        uvJitter: true,
+        tint: 0xd8cfba,
+        mottle: 0.42,
+      },
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Slabs
 // ---------------------------------------------------------------------------
@@ -451,6 +664,16 @@ interface SlabOptions {
   costMul?: number;
   /** Skip the collider (used for slab fragments that already have one). */
   noCollide?: boolean;
+  /**
+   * Metres per texture tile.
+   *
+   * Worth overriding on anything the player stands on and looks along: the poured
+   * slab finish carries control joints twice per tile, and at the authored 2.4 m
+   * that is a joint every 1.2 m, which from standing height reads as a grid drawn
+   * on the floor rather than as concrete.
+   */
+  tile?: number;
+  tint?: number;
 }
 
 /** Slab whose top face sits at `top`. */
@@ -469,10 +692,13 @@ function addSlab(
   const cz = (r.minZ + r.maxZ) / 2;
   const cy = top - thickness / 2;
 
-  sink.addStatic(slab(cx, cy, cz, width, thickness, depth, 0.04, 2.6), {
+  const tile = opts.tile ?? 2.6;
+  sink.addStatic(slab(cx, cy, cz, width, thickness, depth, 0.04, tile), {
     material,
     tier: 'structure',
+    tile,
     mottle: 0.3,
+    tint: opts.tint,
   });
   if (!opts.noCollide) {
     sink.addCollider(
@@ -509,11 +735,19 @@ function addPiercedSlab(
   hole: Rect | null,
   costMul = 1,
   walkable = true,
+  tile?: number,
 ): void {
   if (!hole) {
-    addSlab(sink, r, top, thickness, material, { walkable, costMul });
+    addSlab(sink, r, top, thickness, material, { walkable, costMul, tile });
     return;
   }
+  for (const band of slabBands(r, hole)) {
+    addSlab(sink, band, top, thickness, material, { walkable, costMul, tile });
+  }
+}
+
+/** The up-to-four rectangles that tile `r` minus `hole`. */
+function slabBands(r: Rect, hole: Rect): Rect[] {
   const bands: Rect[] = [];
   if (hole.minZ > r.minZ + 0.05) {
     bands.push({ minX: r.minX, minZ: r.minZ, maxX: r.maxX, maxZ: hole.minZ });
@@ -527,7 +761,7 @@ function addPiercedSlab(
   if (hole.maxX < r.maxX - 0.05) {
     bands.push({ minX: hole.maxX, minZ: hole.minZ, maxX: r.maxX, maxZ: hole.maxZ });
   }
-  for (const band of bands) addSlab(sink, band, top, thickness, material, { walkable, costMul });
+  return bands;
 }
 
 // ---------------------------------------------------------------------------
@@ -843,6 +1077,7 @@ function addPartitions(
   const width = interior.maxX - interior.minX;
   const depth = interior.maxZ - interior.minZ;
   const material = spec.liner ?? 'plaster_white';
+  const paint = spec.dress === false ? undefined : dadoPaintFor(spec.name);
   const alongX = width > depth;
   const span = alongX ? depth : width;
   if (span < 4) return null;
@@ -878,6 +1113,8 @@ function addPartitions(
       material,
       openings,
       mottle: 0.3,
+      tint: INTERIOR_TINT,
+      dadoPaint: paint,
     });
     const z = interior.minZ + doorAt;
     return {
@@ -902,6 +1139,8 @@ function addPartitions(
     material,
     openings,
     mottle: 0.3,
+    tint: INTERIOR_TINT,
+    dadoPaint: paint,
   });
   const x = interior.minX + doorAt;
   return {
@@ -1031,41 +1270,134 @@ function addRoofDetails(
   const cx = (interior.minX + interior.maxX) / 2;
   const cz = (interior.minZ + interior.maxZ) / 2;
   const inset = 1.0;
+  const area = width * depth;
+  // A roof nobody can stand on is only ever seen from across the map, so it gets
+  // the silhouette — tanks, dishes, aerials, a head-house — and none of the
+  // ground layer. Grit swept into a parapet corner is invisible at forty metres
+  // and the skyline is short of exactly the things that break the horizon.
+  const distant = spec.roofWalkable === false;
 
-  const spot = (): THREE.Vector2 =>
-    new THREE.Vector2(
-      sink.rng.range(interior.minX + inset, interior.maxX - inset),
-      sink.rng.range(interior.minZ + inset, interior.maxZ - inset),
-    );
+  const taken: Rect[] = [];
+  /** A clear patch of roof `size` metres across, or null if the roof is full. */
+  const spot = (size: number): THREE.Vector2 | null => {
+    for (let tries = 0; tries < 12; tries++) {
+      const x = sink.rng.range(interior.minX + inset, interior.maxX - inset);
+      const z = sink.rng.range(interior.minZ + inset, interior.maxZ - inset);
+      const half = size / 2;
+      const rect: Rect = { minX: x - half, minZ: z - half, maxX: x + half, maxZ: z + half };
+      let clear = true;
+      for (const other of taken) {
+        if (
+          rect.minX < other.maxX &&
+          rect.maxX > other.minX &&
+          rect.minZ < other.maxZ &&
+          rect.maxZ > other.minZ
+        ) {
+          clear = false;
+          break;
+        }
+      }
+      if (!clear) continue;
+      taken.push(rect);
+      return new THREE.Vector2(x, z);
+    }
+    return null;
+  };
 
-  if (width > 4.5 && depth > 4.5) {
-    const p = spot();
-    waterTank(sink, p.x, roofY, p.y, sink.rng.range(0, Math.PI));
+  // Tanks and condensers first, because they are the silhouette: whatever else
+  // goes up here, a roof without a water tank on it does not read as a roof in
+  // this part of the world.
+  const tanks = area > 90 ? 2 : 1;
+  for (let i = 0; i < tanks; i++) {
+    if (width < 4.5 || depth < 4.5) break;
+    const p = spot(1.9);
+    if (p) waterTank(sink, p.x, roofY, p.y, sink.rng.range(0, Math.PI));
   }
-  const acCount = Math.min(3, Math.max(1, Math.floor((width * depth) / 42)));
+  const acCount = Math.max(2, Math.round(area / 26));
   for (let i = 0; i < acCount; i++) {
-    const p = spot();
-    roofAc(sink, p.x, roofY, p.y, sink.rng.range(0, Math.PI * 2));
+    const p = spot(1.5);
+    if (p) roofAc(sink, p.x, roofY, p.y, sink.rng.range(0, Math.PI * 2));
   }
-  if (sink.rng.bool(0.75)) {
-    const p = spot();
-    satelliteDish(sink, p.x, roofY, p.y, sink.rng.range(0, Math.PI * 2));
+  // Dishes and aerials: the tell of a whole block wired for satellite TV, and
+  // several small silhouettes against the sky beat one large one.
+  const dishes = Math.max(1, Math.round(area / 55));
+  for (let i = 0; i < dishes; i++) {
+    const p = spot(1.4);
+    if (p) satelliteDish(sink, p.x, roofY, p.y, sink.rng.range(0, Math.PI * 2));
   }
-  if (sink.rng.bool(0.5)) {
-    const p = spot();
-    antennaMast(sink, p.x, roofY, p.y, sink.rng.range(3.4, 5.6));
+  for (let i = 0; i < Math.max(1, Math.round(area / 70)); i++) {
+    if (!sink.rng.bool(0.7)) continue;
+    const p = spot(0.9);
+    if (p) tvAerial(sink, p.x, roofY, p.y, sink.rng.range(0, Math.PI * 2));
   }
-  if (width > 5 && sink.rng.bool(0.7)) {
-    const y = roofY + parapet + 0.75;
+  if (sink.rng.bool(0.65)) {
+    const p = spot(1.0);
+    if (p) antennaMast(sink, p.x, roofY, p.y, sink.rng.range(3.4, 5.6));
+  }
+
+  // The lived-in layer. A roof in this town is a store room, a laundry and a
+  // place to sit out of an evening, so it carries what a yard would carry.
+  const junk = Math.max(3, Math.round(area / (distant ? 34 : 15)));
+  for (let i = 0; i < junk; i++) {
+    const p = spot(1.3);
+    if (!p) break;
+    const roll = distant ? sink.rng.range(0, 0.78) : sink.rng.next();
+    if (roll < 0.2) crateStack(sink, p.x, p.y, sink.rng.range(0, Math.PI * 2), sink.rng.int(1, 3), { y: roofY });
+    else if (roll < 0.34) sackPile(sink, p.x, p.y, sink.rng.range(0, Math.PI * 2), sink.rng.int(2, 4), roofY);
+    else if (roll < 0.46) pallet(sink, p.x, p.y, sink.rng.range(0, Math.PI * 2), roofY);
+    else if (roll < 0.58) produceCrate(sink, p.x, p.y, sink.rng.range(0, Math.PI * 2), roofY);
+    else if (roll < 0.68) oilBarrel(sink, p.x, p.y, sink.rng.range(0, Math.PI * 2), { y: roofY, tint: 0x7a6a52 });
+    else if (roll < 0.78) acCage(sink, p.x, roofY + 0.45, p.y, sink.rng.range(0, Math.PI * 2));
+    else if (roll < 0.9) {
+      floorDebris(sink, p.x, roofY + 0.01, p.y, sink.rng.range(0.5, 1.1), sink.rng.int(6, 14));
+    } else {
+      tiedTarp(
+        sink,
+        p.x,
+        roofY,
+        p.y,
+        sink.rng.range(0, Math.PI * 2),
+        sink.rng.range(1.2, 2.0),
+        sink.rng.range(1.0, 1.6),
+      );
+    }
+  }
+
+  // Two or three washing lines rather than one, run at different heights and
+  // angles. Cloth moving against the sky is the one bit of roof dressing that
+  // reads from the far side of the map.
+  const lines = width > 5 ? sink.rng.int(1, 3) : 1;
+  for (let i = 0; i < lines; i++) {
+    if (!sink.rng.bool(0.8)) continue;
+    const y = roofY + parapet + sink.rng.range(0.35, 1.0);
+    const t = (i + 0.5) / lines;
+    const acrossX = sink.rng.bool(0.6);
     laundryLine(
       sink,
-      new THREE.Vector3(interior.minX + 0.4, y, cz - depth * 0.2),
-      new THREE.Vector3(interior.maxX - 0.4, y, cz + depth * 0.2),
+      acrossX
+        ? new THREE.Vector3(interior.minX + 0.4, y, interior.minZ + t * depth)
+        : new THREE.Vector3(interior.minX + t * width, y, interior.minZ + 0.4),
+      acrossX
+        ? new THREE.Vector3(interior.maxX - 0.4, y, interior.minZ + t * depth + sink.rng.range(-1.4, 1.4))
+        : new THREE.Vector3(interior.minX + t * width + sink.rng.range(-1.4, 1.4), y, interior.maxZ - 0.4),
     );
+  }
+
+  addRoofStructures(sink, interior, roofY, taken);
+
+  if (!distant) {
+    // Grit, leaf litter and torn bitumen swept into the parapet corners. Cheap,
+    // and it is what stops the surface reading as a poured plane.
+    floorLitter(sink, interior, roofY + 0.02, Math.round(area * 0.22));
+    for (let i = 0; i < 3; i++) {
+      const cornerX = sink.rng.bool() ? interior.minX + 0.5 : interior.maxX - 0.5;
+      const cornerZ = sink.rng.bool() ? interior.minZ + 0.5 : interior.maxZ - 0.5;
+      dustDrift(sink, cornerX, roofY + 0.02, cornerZ, sink.rng.range(0.9, 1.8), sink.rng.range(0, Math.PI));
+    }
   }
 
   // Scupper and a short parapet drain, so rain has somewhere to go.
-  if (parapet > 0.2) {
+  if (!distant && parapet > 0.2) {
     sink.addStatic(
       placed(
         cylinderGeometry(0.05, 0.05, 0.5, 6, 0.8),
@@ -1074,7 +1406,114 @@ function addRoofDetails(
       { material: 'metal_rusted', tier: 'detail', tint: 0x8d8172 },
     );
   }
-  sink.addLandmark(`${spec.name}_roof`, cx, roofY, cz);
+  // Only roofs that can be stood on: a landmark is a patrol target and a strike
+  // reference, and a scenery roof beyond the boundary is neither.
+  if (!distant) sink.addLandmark(`${spec.name}_roof`, cx, roofY, cz);
+}
+
+/**
+ * The block that stands up off a roof, and the shade next to it.
+ *
+ * Two problems, one piece. The skyline is flat because every roof is a plane at
+ * one of four heights, and the top-down view reads as a grid because every edge
+ * in it is parallel; a head-house is the thing that is actually up there — the
+ * stair enclosure or a roof room — and putting it at a few degrees off the
+ * building gives the tactical view an outline that is not square to anything, at
+ * the cost of six boxes and a collider nobody can reach the inside of.
+ */
+function addRoofStructures(sink: Sink, interior: Rect, roofY: number, taken: Rect[]): void {
+  const width = interior.maxX - interior.minX;
+  const depth = interior.maxZ - interior.minZ;
+  const area = width * depth;
+  if (area < 34 || width < 5.5 || depth < 5.5) return;
+
+  const claim = (rect: Rect): boolean => {
+    for (const other of taken) {
+      if (
+        rect.minX < other.maxX &&
+        rect.maxX > other.minX &&
+        rect.minZ < other.maxZ &&
+        rect.maxZ > other.minZ
+      ) {
+        return false;
+      }
+    }
+    taken.push(rect);
+    return true;
+  };
+
+  if (sink.rng.bool(0.72)) {
+    const hw = sink.rng.range(1.3, 1.9);
+    const hd = sink.rng.range(1.1, 1.6);
+    const tall = sink.rng.range(2.1, 2.8);
+    const yaw = sink.rng.pick([-1, 1]) * sink.rng.range(0.14, 0.34);
+    // Against an edge, which is where a stair core comes up, and clear of the
+    // parapet so the roof stays walkable around it.
+    const cornerX = sink.rng.bool() ? interior.minX + hw + 1.1 : interior.maxX - hw - 1.1;
+    const cornerZ = sink.rng.bool() ? interior.minZ + hd + 1.1 : interior.maxZ - hd - 1.1;
+    const reach = Math.hypot(hw, hd) + 0.3;
+    if (
+      claim({ minX: cornerX - reach, minZ: cornerZ - reach, maxX: cornerX + reach, maxZ: cornerZ + reach })
+    ) {
+      const material: MaterialId = sink.rng.bool(0.6) ? 'stucco_sand' : 'brick_red';
+      const tint = sink.rng.pick([0xd8ccb4, 0xcabea4, 0xe0d6c0]);
+      const cos = Math.cos(yaw);
+      const sin = Math.sin(yaw);
+      for (let side = 0; side < 4; side++) {
+        const alongX = side % 2 === 0;
+        const half = alongX ? hw : hd;
+        const off = alongX ? hd : hw;
+        const s = side < 2 ? -1 : 1;
+        const ox = alongX ? s * off * sin : s * off * cos;
+        const oz = alongX ? s * off * cos : -s * off * sin;
+        sink.addStatic(
+          placed(
+            boxGeometry(half * 2, tall, 0.22, 0.02, 1),
+            transform(cornerX + ox, roofY + tall / 2, cornerZ + oz, alongX ? yaw : yaw + Math.PI / 2),
+          ),
+          { material, tier: 'structure', tint, mottle: 0.34, reproject: true, uvJitter: true },
+        );
+      }
+      sink.addStatic(
+        placed(
+          boxGeometry(hw * 2 + 0.4, 0.1, hd * 2 + 0.4, 0.02, 2.2),
+          transform(cornerX, roofY + tall + 0.05, cornerZ, yaw, sink.rng.range(0.04, 0.1)),
+        ),
+        { material: 'metal_corrugated', tier: 'structure', tint: 0xa49883, mottle: 0.36 },
+      );
+      sink.addCollider(
+        new THREE.Vector3(cornerX, roofY + tall / 2, cornerZ),
+        new THREE.Vector3(hw + 0.1, tall / 2, hd + 0.1),
+        yaw,
+        { surface: 'concrete' },
+      );
+    }
+  }
+
+  // Shade over a corner of the roof, at its own angle. Cloth catching low sun is
+  // the loudest thing on a rooftop from street level.
+  if (area > 55 && sink.rng.bool(0.6)) {
+    const hw = sink.rng.range(1.6, 2.4);
+    const hd = sink.rng.range(1.3, 1.9);
+    const x = sink.rng.range(interior.minX + hw + 0.7, interior.maxX - hw - 0.7);
+    const z = sink.rng.range(interior.minZ + hd + 0.7, interior.maxZ - hd - 0.7);
+    if (claim({ minX: x - hw, minZ: z - hd, maxX: x + hw, maxZ: z + hd })) {
+      const yaw = sink.rng.range(-0.45, 0.45);
+      const head = roofY + sink.rng.range(2.0, 2.45);
+      for (const sx of [-1, 1] as const) {
+        for (const sz of [-1, 1] as const) {
+          const px = x + sx * hw * Math.cos(yaw) + sz * hd * Math.sin(yaw);
+          const pz = z - sx * hw * Math.sin(yaw) + sz * hd * Math.cos(yaw);
+          sink.addProp(
+            cylinderGeometry(0.038, 0.045, head - roofY, 6, 1),
+            transform(px, roofY + (head - roofY) / 2, pz),
+            { material: 'metal_rusted', tier: 'detail', tint: 0x87796a },
+          );
+        }
+      }
+      shadeCloth(sink, x, head, z, yaw, hw * 2, hd * 2);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1369,7 +1808,10 @@ export function buildConstructionShell(sink: Sink, spec: ShellSpec): BuildingRes
   for (let f = 0; f < spec.floors; f++) floorYs.push(base + f * fh);
   const roofY = base + spec.floors * fh;
 
-  addSlab(sink, footprint, base + FLOOR_PROUD, 0.3 + FLOOR_PROUD, 'concrete_floor', { costMul: 1 });
+  addSlab(sink, footprint, base + FLOOR_PROUD, 0.3 + FLOOR_PROUD, 'concrete_floor', {
+    costMul: 1,
+    tile: SLAB_TILE,
+  });
 
   for (let f = 0; f < spec.floors; f++) {
     const y = floorYs[f];
@@ -1411,9 +1853,21 @@ export function buildConstructionShell(sink: Sink, spec: ShellSpec): BuildingRes
         minZ: footprint.minZ + spec.depth * 0.5,
         maxZ: footprint.maxZ - 0.6,
       };
-      addPiercedSlab(sink, footprint, y, 0.28, 'concrete_floor', hole, 1);
+      addPiercedSlab(sink, footprint, y, 0.28, 'concrete_floor', hole, 1, true, SLAB_TILE);
+      dressConstructionDeck(sink, footprint, y, hole);
     } else {
-      addPiercedSlab(sink, footprint, y, 0.28, 'concrete_floor', stairHole(footprint), 1);
+      addPiercedSlab(
+        sink,
+        footprint,
+        y,
+        0.28,
+        'concrete_floor',
+        stairHole(footprint),
+        1,
+        true,
+        SLAB_TILE,
+      );
+      dressConstructionDeck(sink, footprint, y, stairHole(footprint));
     }
     sink.addInterior(`${spec.name}_f${f - 1}`, interiorBox(footprint, base + (f - 1) * fh, y - 0.1));
   }
@@ -1442,6 +1896,176 @@ export function buildConstructionShell(sink: Sink, spec: ShellSpec): BuildingRes
     interior: footprint,
     parapet: 0.98,
   };
+}
+
+/**
+ * Materials and mess on a poured deck.
+ *
+ * The east rooftop vantage is this building's top plate, so what is scattered
+ * here is most of what the skyline frame sees in its near field. A working site
+ * deck is never clear: block pallets, cement sacks, drums, offcuts, a tarp over
+ * whatever must not get wet, and swept-up grit everywhere.
+ */
+function dressConstructionDeck(sink: Sink, footprint: Rect, y: number, hole: Rect): void {
+  const inner: Rect = {
+    minX: footprint.minX + 1.1,
+    minZ: footprint.minZ + 1.1,
+    maxX: footprint.maxX - 1.1,
+    maxZ: footprint.maxZ - 1.1,
+  };
+  const width = inner.maxX - inner.minX;
+  const depth = inner.maxZ - inner.minZ;
+  if (width < 2 || depth < 2) return;
+
+  // Screed over the whole deck before the patches. The poured slab under it draws
+  // control joints twice per tile, so even at a six-metre tile it is a hard dark
+  // grid every three metres — which at standing height is the tiling seam the
+  // review picked out of the skyline frame, and no amount of clutter hides a
+  // regular grid. The patches then go on top for tone.
+  addRoofFinish(sink, footprint, y, hole);
+  addScreedPatches(sink, inner, y, hole);
+
+  const count = Math.max(6, Math.round((width * depth) / 6));
+  const cx = (footprint.minX + footprint.maxX) / 2;
+  const cz = (footprint.minZ + footprint.maxZ) / 2;
+  // The deck centre is where the stair arrives and where the player stands to
+  // look out, so it stays clear: a heap in the middle of a roof is both wrong and
+  // directly in front of the eye.
+  const clear = (x: number, z: number, keep: number): boolean => {
+    if (x > hole.minX - 0.8 && x < hole.maxX + 0.8 && z > hole.minZ - 0.8 && z < hole.maxZ + 0.8) {
+      return false;
+    }
+    return Math.hypot(x - cx, z - cz) > keep;
+  };
+
+  for (let i = 0; i < count; i++) {
+    const x = sink.rng.range(inner.minX, inner.maxX);
+    const z = sink.rng.range(inner.minZ, inner.maxZ);
+    // Nothing over the void, and nothing wedged against a column.
+    if (!clear(x, z, 1.5)) continue;
+    const yaw = sink.rng.range(0, Math.PI * 2);
+    const roll = sink.rng.next();
+    if (roll < 0.14) sackPile(sink, x, z, yaw, sink.rng.int(3, 6), y);
+    else if (roll < 0.24) pallet(sink, x, z, yaw, y);
+    else if (roll < 0.34) crateStack(sink, x, z, yaw, sink.rng.int(1, 2), { y });
+    else if (roll < 0.42) oilBarrel(sink, x, z, yaw, { y, tint: 0x6f6250 });
+    else if (roll < 0.48) oilBarrel(sink, x, z, yaw, { y, tipped: true, tint: 0x74654e });
+    else if (roll < 0.6) blockStack(sink, x, z, yaw, sink.rng.int(2, 5), y);
+    else if (roll < 0.72) pipeBundle(sink, x, z, yaw, sink.rng.int(4, 7), y);
+    else if (roll < 0.79) rebarCluster(sink, x, y, z, sink.rng.int(5, 9), sink.rng.range(1.1, 2.2));
+    else if (roll < 0.84) wheelbarrow(sink, x, z, yaw, y);
+    else if (roll < 0.92) {
+      floorDebris(sink, x, y + 0.01, z, sink.rng.range(0.6, 1.3), sink.rng.int(8, 18));
+    } else {
+      tiedTarp(sink, x, y, z, yaw, sink.rng.range(1.4, 2.2), sink.rng.range(1.1, 1.7), 'camo_net');
+    }
+  }
+
+  // Ankle-height litter over the whole deck, the kept-clear centre included. The
+  // clear rule above is about what the player can walk through and see over, and
+  // none of this is above the boot: grit, offcuts and dropped sacking is what a
+  // deck under construction is covered in, and it is what puts edges into the
+  // part of the roof that sits directly under the eye in the skyline frame, where
+  // anything tall would be in the way.
+  const litter = Math.max(6, Math.round((width * depth) / 5));
+  for (let i = 0; i < litter; i++) {
+    const x = sink.rng.range(inner.minX, inner.maxX);
+    const z = sink.rng.range(inner.minZ, inner.maxZ);
+    if (x > hole.minX - 0.6 && x < hole.maxX + 0.6 && z > hole.minZ - 0.6 && z < hole.maxZ + 0.6) {
+      continue;
+    }
+    floorDebris(sink, x, y + 0.01, z, sink.rng.range(0.5, 1.1), sink.rng.int(4, 9));
+  }
+
+  // Silhouette. A deck of low heaps is still a plane from standing height, and
+  // this is the roof the player is put on to look at the skyline: what breaks it
+  // is the few things up here that are taller than a man.
+  // Pushed out to the edges: the silhouette wants them against the sky at the
+  // parapet line, and the middle of the deck has to stay walkable.
+  const verticals = Math.max(2, Math.round((width * depth) / 34));
+  for (let i = 0; i < verticals; i++) {
+    const edge = sink.rng.int(0, 3);
+    const t = sink.rng.range(0.15, 0.85);
+    const x = edge === 1 ? inner.maxX - 0.9 : edge === 3 ? inner.minX + 0.9 : inner.minX + t * width;
+    const z = edge === 0 ? inner.minZ + 0.9 : edge === 2 ? inner.maxZ - 0.9 : inner.minZ + t * depth;
+    if (!clear(x, z, 3.0)) continue;
+    const roll = sink.rng.next();
+    if (roll < 0.4) waterTank(sink, x, y, z, sink.rng.range(0, Math.PI));
+    else if (roll < 0.68) {
+      // Rebar cages stood on end and tied off: the tallest thing on a deck at
+      // this stage of a build.
+      rebarCluster(sink, x, y, z, sink.rng.int(7, 12), sink.rng.range(2.2, 3.2));
+    } else if (roll < 0.86) {
+      antennaMast(sink, x, y, z, sink.rng.range(2.6, 4.2));
+    } else {
+      woodPile(sink, x, z, sink.rng.range(0, Math.PI), sink.rng.int(5, 8), y);
+    }
+  }
+
+  // Washing goes up on a half-built roof the week the slab is poured.
+  if (sink.rng.bool(0.85)) {
+    const t = sink.rng.range(0.3, 0.7);
+    laundryLine(
+      sink,
+      new THREE.Vector3(inner.minX + 0.3, y + sink.rng.range(1.3, 1.9), inner.minZ + t * depth),
+      new THREE.Vector3(
+        inner.maxX - 0.3,
+        y + sink.rng.range(1.2, 1.8),
+        inner.minZ + t * depth + sink.rng.range(-1.6, 1.6),
+      ),
+    );
+  }
+
+  floorLitter(sink, inner, y + 0.02, Math.round(width * depth * 0.3));
+  for (let i = 0; i < 3; i++) {
+    dustDrift(
+      sink,
+      sink.rng.bool() ? inner.minX + 0.4 : inner.maxX - 0.4,
+      y + 0.02,
+      sink.rng.range(inner.minZ, inner.maxZ),
+      sink.rng.range(1.0, 2.1),
+      sink.rng.range(0, Math.PI),
+    );
+  }
+}
+
+/**
+ * Bays of screed part-laid over a bare deck.
+ *
+ * The structural slab carries control joints on a coarse grid, and on a deck the
+ * player stands on and looks along, that grid is the tiling seam the review
+ * picked out of the skyline shot. A finished roof gets a continuous screed from
+ * {@link addRoofFinish}; a deck still being built gets it in bays, which is both
+ * how screed is actually laid and enough to break the grid into something with
+ * edges of its own.
+ */
+function addScreedPatches(sink: Sink, inner: Rect, y: number, hole: Rect): void {
+  const width = inner.maxX - inner.minX;
+  const depth = inner.maxZ - inner.minZ;
+  const bays = Math.max(2, Math.round((width * depth) / 26));
+  for (let i = 0; i < bays; i++) {
+    const w = sink.rng.range(2.4, Math.max(2.6, width * 0.5));
+    const d = sink.rng.range(2.0, Math.max(2.2, depth * 0.5));
+    const cx = sink.rng.range(inner.minX + w / 2, inner.maxX - w / 2);
+    const cz = sink.rng.range(inner.minZ + d / 2, inner.maxZ - d / 2);
+    if (
+      cx + w / 2 > hole.minX - 0.3 &&
+      cx - w / 2 < hole.maxX + 0.3 &&
+      cz + d / 2 > hole.minZ - 0.3 &&
+      cz - d / 2 < hole.maxZ + 0.3
+    ) {
+      continue;
+    }
+    sink.addStatic(slab(cx, y + 0.015, cz, w, 0.03, d, 0.01, 3.2), {
+      material: 'stucco_sand',
+      tier: 'structure',
+      tile: 3.2,
+      reproject: true,
+      uvJitter: true,
+      tint: sink.rng.pick([0xd6cdb8, 0xcdc3ac, 0xdcd3bd]),
+      mottle: 0.5,
+    });
+  }
 }
 
 function stairHole(footprint: Rect): Rect {

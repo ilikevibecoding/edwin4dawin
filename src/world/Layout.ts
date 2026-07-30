@@ -41,6 +41,7 @@ import {
   shadeCloth,
   spillStain,
   tiedTarp,
+  tvAerial,
   tyreSprawl,
   tyreTracks,
   wallFoot,
@@ -56,7 +57,10 @@ import {
   hangingTarp,
   laundryLine,
   litterField,
+  roofAc,
+  satelliteDish,
   wallPipe,
+  waterTank,
 } from './kit/Details';
 import { type Rect, type Sink, boxGeometry, inflate, placed, transform } from './kit/Kit';
 import {
@@ -430,6 +434,8 @@ const BUILDINGS: BuildingSpec[] = [
       { doors: [1], bays: 3 },
       { arcade: true, bays: 4 },
     ],
+    // The dome takes the middle of this roof, and washing lines and satellite
+    // dishes are not what goes on the rest of it.
     roofDetails: false,
   },
   {
@@ -471,7 +477,6 @@ const BUILDINGS: BuildingSpec[] = [
     roofWalkable: true,
     parapet: 0.95,
     facades: [{ bays: 3, glass: true }, { doors: [0], bays: 2 }, { doors: [1], bays: 3 }, { bays: 2, bars: true }],
-    roofDetails: false,
   },
   {
     name: 'south_depot',
@@ -488,7 +493,6 @@ const BUILDINGS: BuildingSpec[] = [
     roofWalkable: true,
     parapet: 0.95,
     facades: [{ doors: [1], bays: 4 }, { bays: 2 }, { doors: [2], bays: 4 }, { bays: 2, blank: [0] }],
-    roofDetails: false,
   },
 ];
 
@@ -556,7 +560,7 @@ export function buildLayout(sink: Sink, field: TerrainField): void {
     return result;
   };
 
-  buildBackdrop(sink);
+  buildBackdrop(sink, field);
   buildWestDistrict(sink, field, need);
   buildCentreDistrict(sink, field, need);
   buildEastDistrict(sink, field, need);
@@ -564,13 +568,34 @@ export function buildLayout(sink: Sink, field: TerrainField): void {
   buildSpawns(sink, field, need);
   buildBoundary(sink, field);
   buildScatter(sink, field);
+  // After the set pieces so it can see what ground they took, before the ground
+  // clutter so the clutter fills around the yards rather than inside them.
+  buildOffAxis(sink, field);
   // Last, because it asks the builder what ground is already claimed and that
   // answer is only complete once every set piece has registered its collision.
   buildGroundClutter(sink, field, need);
 }
 
-function buildBackdrop(sink: Sink): void {
+/**
+ * The out-of-bounds ring, and the one place the grid can be broken outright.
+ *
+ * Every structure inside the playable half is axis-aligned because the navigation
+ * raster, the cover normals and the box colliders all read rectangles. The ring
+ * is different: it stands beyond the boundary walls, nobody walks it, nothing
+ * paths through it, and it is a third of what the tactical top-down view shows.
+ * So a bit under half of it is rebuilt as skewed shells — four walls on arbitrary
+ * lines with a rotated roof — which is enough to take the parallel edges out of
+ * the perimeter without touching a single thing the map is played on.
+ */
+function buildBackdrop(sink: Sink, field: TerrainField): void {
   for (const [x, z, width, depth, floors] of BACKDROP) {
+    // Skewed if it is not one of the corner pieces that has to close the ring
+    // squarely against its neighbours.
+    const yaw = sink.rng.bool(0.8) ? sink.rng.pick([-1, 1]) * sink.rng.range(0.12, 0.3) : 0;
+    if (yaw !== 0) {
+      buildSkewShell(sink, field, x, z, width, depth, floors, yaw);
+      continue;
+    }
     buildBuilding(sink, {
       name: `backdrop_${x}_${z}`,
       centerX: x,
@@ -586,7 +611,7 @@ function buildBackdrop(sink: Sink): void {
       exteriorDetails: false,
       // Nobody gets inside these, so nothing is spent furnishing them.
       dress: false,
-      roofDetails: sink.rng.bool(0.4),
+      roofDetails: true,
       // Glazed even though they are scenery. An unfurnished shell has nothing
       // behind its openings to catch light, so bare holes read as a grid of pure
       // black squares — the cheapest-looking thing on the skyline. A pane picks
@@ -598,6 +623,134 @@ function buildBackdrop(sink: Sink): void {
         { bays: Math.round(depth / 3.4), glass: true },
       ],
     });
+  }
+}
+
+/**
+ * A rotated backdrop block: four walls, a rotated roof, a parapet and a
+ * silhouette.
+ *
+ * Deliberately not `buildBuilding`. That builder pours slabs, threads a stair,
+ * registers walkable rectangles and an interior volume, all of which assume an
+ * axis-aligned footprint — and none of which a shell beyond the boundary wall
+ * needs. What is left is cheap: the walls carry their own collision and cover on
+ * whatever line they are given, so the whole thing is four `buildWall` calls, a
+ * box for the roof and the water tanks that go on top of it.
+ *
+ * Pushed outward far enough that the rotation cannot swing a corner through the
+ * boundary wall, since the rotated footprint is wider than the one it replaces.
+ */
+function buildSkewShell(
+  sink: Sink,
+  field: TerrainField,
+  x: number,
+  z: number,
+  width: number,
+  depth: number,
+  floors: number,
+  yaw: number,
+): void {
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
+  const hw = width / 2;
+  const hd = depth / 2;
+
+  // Rotated half-extents, and the shove outward that keeps the inner face clear
+  // of the boundary line the ring stands behind.
+  const ex = Math.abs(hw * cos) + Math.abs(hd * sin);
+  const ez = Math.abs(hw * sin) + Math.abs(hd * cos);
+  const clearance = PLAY_HALF + 1.6;
+  let cx = x;
+  let cz = z;
+  if (Math.abs(x) > Math.abs(z)) {
+    const inner = Math.abs(x) - ex;
+    if (inner < clearance) cx = Math.sign(x) * (clearance + ex);
+  } else {
+    const inner = Math.abs(z) - ez;
+    if (inner < clearance) cz = Math.sign(z) * (clearance + ez);
+  }
+
+  const at = (lx: number, lz: number): [number, number] => [
+    cx + lx * cos + lz * sin,
+    cz - lx * sin + lz * cos,
+  ];
+  const corners: Array<[number, number]> = [at(-hw, -hd), at(hw, -hd), at(hw, hd), at(-hw, hd)];
+
+  const fh = 3.4;
+  const base = field.height(cx, cz) - 0.3;
+  const height = floors * fh;
+  const material = sink.rng.bool(0.76) ? STUCCO : BRICK;
+  const tint = sink.rng.pick([0xded4bf, 0xe8dcc4, 0xd4cab4]);
+
+  for (let edge = 0; edge < 4; edge++) {
+    const [x0, z0] = corners[edge];
+    const [x1, z1] = corners[(edge + 1) % 4];
+    const length = Math.hypot(x1 - x0, z1 - z0);
+    const bays = Math.max(1, Math.round(length / 3.4));
+    const openings = [];
+    for (let f = 0; f < floors; f++) {
+      for (let b = 0; b < bays; b++) {
+        if (sink.rng.bool(0.14)) continue;
+        openings.push({
+          at: ((b + 0.5) / bays) * length,
+          width: 1.35,
+          sill: f * fh + 0.95,
+          height: 1.35,
+          kind: 'window' as const,
+          glass: true,
+          trim: true,
+        });
+      }
+    }
+    buildWall(sink, {
+      x0,
+      z0,
+      x1,
+      z1,
+      base,
+      height,
+      thickness: 0.36,
+      material,
+      openings,
+      parapet: 0.7,
+      tint,
+      mottle: 0.4,
+      plinth: true,
+    });
+  }
+
+  const roofY = base + height;
+  sink.addStatic(
+    placed(boxGeometry(width, 0.3, depth, 0.05, 3.2), transform(cx, roofY - 0.15, cz, yaw)),
+    { material: 'concrete_floor', tier: 'structure', tile: 3.2, tint: 0xd4ccb8, mottle: 0.3 },
+  );
+  sink.addCollider(
+    new THREE.Vector3(cx, roofY - 0.15, cz),
+    new THREE.Vector3(hw, 0.15, hd),
+    yaw,
+    { surface: 'concrete', noCover: true, noNav: true },
+  );
+
+  // The silhouette, laid out on the shell's own axis so it skews with it.
+  for (let i = 0; i < Math.max(1, Math.round((width * depth) / 60)); i++) {
+    const [px, pz] = at(sink.rng.range(-hw + 1.2, hw - 1.2), sink.rng.range(-hd + 1.2, hd - 1.2));
+    waterTank(sink, px, roofY, pz, yaw + sink.rng.range(-0.4, 0.4));
+  }
+  for (let i = 0; i < Math.max(2, Math.round((width * depth) / 40)); i++) {
+    const [px, pz] = at(sink.rng.range(-hw + 0.9, hw - 0.9), sink.rng.range(-hd + 0.9, hd - 0.9));
+    const roll = sink.rng.next();
+    if (roll < 0.4) satelliteDish(sink, px, roofY, pz, yaw + sink.rng.range(-1, 1));
+    else if (roll < 0.7) roofAc(sink, px, roofY, pz, yaw + sink.rng.range(-0.3, 0.3));
+    else tvAerial(sink, px, roofY, pz, yaw);
+  }
+  if (sink.rng.bool(0.5)) {
+    const [ax, az] = at(-hw + 0.8, -hd + 1.4);
+    const [bx, bz] = at(hw - 0.8, hd - 1.4);
+    laundryLine(
+      sink,
+      new THREE.Vector3(ax, roofY + sink.rng.range(1.0, 1.6), az),
+      new THREE.Vector3(bx, roofY + sink.rng.range(0.9, 1.5), bz),
+    );
   }
 }
 
@@ -2088,6 +2241,317 @@ function dressEmplacements(sink: Sink): void {
       crateStack(sink, bx - Math.cos(yaw) * 1.8, bz + Math.sin(yaw) * 1.8, yaw, 2);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Off-axis infill
+// ---------------------------------------------------------------------------
+
+/**
+ * The pass that takes the town off the grid.
+ *
+ * Everything structural here is axis-aligned by construction: a `Rect` footprint,
+ * a slab registered as a walkable rectangle, a wall along X or Z. That is not a
+ * style choice, it is what the navigation raster and the cover solver read, and
+ * rotating a building people walk through would mean rotating all of it. So the
+ * grid is broken by what can be rotated freely and still be correct: the walled
+ * yards, sheds and canopies that grew into the gaps between the blocks, none of
+ * which anybody enters and all of which take a yaw already.
+ *
+ * From the tactical top-down view that is most of what the eye reads — the
+ * outlines are no longer parallel and the shadows no longer fall in two
+ * directions. Every candidate is tested against the road field and the collider
+ * index first and dropped if it would land on a lane or inside something that is
+ * already there, so a yard can be proposed anywhere without risking the routes.
+ */
+function buildOffAxis(sink: Sink, field: TerrainField): void {
+  for (const yard of OFF_AXIS_YARDS) buildSkewYard(sink, field, yard);
+
+  // Sheds leaned against the blank flanks of the boundary terraces and the
+  // yards, at their own angle to everything.
+  const sheds: Array<[number, number, number, number, number]> = [
+    [-51.5, 30.5, 0.42, 4.2, 2.6],
+    [-45.5, -47.5, -0.5, 3.6, 2.4],
+    [19.5, 41.5, 0.36, 4.6, 2.8],
+    [-24.5, -47.5, 0.28, 4.0, 2.6],
+    [52.5, 40.5, -0.44, 3.8, 2.6],
+    [-52.5, -3.5, 0.3, 3.4, 2.4],
+    [41.5, 47.5, 0.5, 4.2, 2.6],
+    [33.5, -46.5, -0.3, 3.8, 2.5],
+    // The four open corners, where the ground is empty enough that a lean-to is
+    // the obvious thing to have grown there and it becomes cover on a flank.
+    [-46.5, -33.5, -0.38, 3.8, 2.5],
+    [-46.5, 34.5, 0.46, 3.6, 2.4],
+    [46.5, -34.5, 0.34, 4.0, 2.6],
+    [45.5, 33.5, -0.42, 3.6, 2.5],
+    [-33.5, 45.5, 0.5, 3.8, 2.4],
+    [24.5, -45.5, -0.46, 3.6, 2.5],
+  ];
+  for (const [x, z, yaw, width, depth] of sheds) {
+    buildSkewShed(sink, field, x, z, yaw, width, depth);
+  }
+
+  // Wear that cuts the corners the roads do not. A grid of streets read from
+  // above is a grid of parallel edges; the paths people actually walk across the
+  // open ground between them are the diagonals, and they cost ground film only.
+  const tracks: Array<[number, number, number, number, number]> = [
+    [-33.5, -22.5, -17.5, -34.5, 1.6],
+    [-17.5, 8.5, -2.5, -1.5, 1.4],
+    [5.5, -2.5, 19.5, -22.5, 1.5],
+    [19.5, 26.5, 37.5, 6.5, 1.4],
+    [-43.5, 30.5, -33.5, 42.5, 1.7],
+    [5.5, 35.5, 19.5, 44.5, 1.5],
+    [-21.5, -35.5, -6.5, -45.5, 1.6],
+    [24.5, -34.5, 37.5, -45.5, 1.5],
+    [-49.5, -30.5, -43.5, -40.5, 1.4],
+    [37.5, 30.5, 49.5, 40.5, 1.5],
+  ];
+  for (const [x0, z0, x1, z1, width] of tracks) {
+    if (sink.groundClaimed(x0, z0, 0.6) || sink.groundClaimed(x1, z1, 0.6)) continue;
+    wearPath(sink, x0, z0, x1, z1, width);
+    if (sink.rng.bool(0.45)) tyreTracks(sink, x0, z0, x1, z1, sink.rng.range(1.5, 1.9));
+    litterBand(sink, x0, z0, x1, z1, 0, 0, sink.rng.int(6, 12), {
+      reject: (x, z) => sink.groundClaimed(x, z, 0),
+    });
+  }
+}
+
+interface SkewYard {
+  x: number;
+  z: number;
+  width: number;
+  depth: number;
+  /** Radians off axis. Kept well clear of a right angle so it reads as skewed. */
+  yaw: number;
+  /** Which of the four edges carries the gate. */
+  gate: number;
+}
+
+/**
+ * Candidate yards, in the open ground the three lanes and the cross streets do
+ * not run through. Any that fouls a road or an existing structure is dropped.
+ */
+const OFF_AXIS_YARDS: readonly SkewYard[] = [
+  { x: -49, z: 38, width: 10, depth: 7, yaw: 0.34, gate: 1 },
+  { x: 12, z: 39.5, width: 10.5, depth: 6.5, yaw: -0.27, gate: 3 },
+  { x: -9.5, z: -37.5, width: 9, depth: 6, yaw: 0.3, gate: 1 },
+  { x: 52.5, z: 14, width: 6.5, depth: 11, yaw: -0.22, gate: 3 },
+  { x: -49.5, z: -55, width: 9, depth: 6, yaw: 0.4, gate: 2 },
+  { x: 27, z: -55, width: 9.5, depth: 6, yaw: -0.36, gate: 2 },
+  { x: 52.5, z: -13, width: 6.5, depth: 10, yaw: 0.26, gate: 3 },
+  { x: -52, z: 51, width: 7.5, depth: 6, yaw: -0.38, gate: 0 },
+  { x: 46, z: 55, width: 9, depth: 6, yaw: 0.32, gate: 0 },
+  { x: -34, z: 44, width: 8, depth: 6.5, yaw: 0.24, gate: 1 },
+];
+
+/** Skewed walled yard. Silently declines if its walls would foul anything. */
+function buildSkewYard(sink: Sink, field: TerrainField, yard: SkewYard): void {
+  const cos = Math.cos(yard.yaw);
+  const sin = Math.sin(yard.yaw);
+  const hw = yard.width / 2;
+  const hd = yard.depth / 2;
+  const at = (lx: number, lz: number): [number, number] => [
+    yard.x + lx * cos + lz * sin,
+    yard.z - lx * sin + lz * cos,
+  ];
+  const corners: Array<[number, number]> = [at(-hw, -hd), at(hw, -hd), at(hw, hd), at(-hw, hd)];
+
+  for (let edge = 0; edge < 4; edge++) {
+    const [x0, z0] = corners[edge];
+    const [x1, z1] = corners[(edge + 1) % 4];
+    // Eight samples per wall: enough to catch a kerb or a container corner, and
+    // the whole yard goes rather than one wall, because three walls of a yard
+    // reads as a mistake.
+    for (let i = 0; i <= 8; i++) {
+      const t = i / 8;
+      const px = x0 + (x1 - x0) * t;
+      const pz = z0 + (z1 - z0) * t;
+      if (field.onRoad(px, pz, 1.4) || sink.groundClaimed(px, pz, 0.9)) return;
+      if (Math.abs(px) > TERRAIN_HALF - 6 || Math.abs(pz) > TERRAIN_HALF - 6) return;
+    }
+  }
+
+  const base = field.height(yard.x, yard.z) - 0.25;
+  const height = sink.rng.range(2.1, 2.75);
+  const material = sink.rng.bool(0.55) ? STUCCO : BRICK;
+  const gateHalf = 1.5;
+
+  for (let edge = 0; edge < 4; edge++) {
+    const [x0, z0] = corners[edge];
+    const [x1, z1] = corners[(edge + 1) % 4];
+    const length = Math.hypot(x1 - x0, z1 - z0);
+    const openings =
+      edge === yard.gate && length > gateHalf * 2 + 1.6
+        ? [
+            {
+              at: length * sink.rng.range(0.35, 0.65),
+              width: gateHalf * 2,
+              sill: 0,
+              height: Math.min(height - 0.3, 2.4),
+              kind: 'arch' as const,
+            },
+          ]
+        : [];
+    buildWall(sink, {
+      x0,
+      z0,
+      x1,
+      z1,
+      base,
+      height: height - (edge % 2 === 1 ? sink.rng.range(0, 0.35) : 0),
+      thickness: 0.32,
+      material,
+      openings,
+      tint: sink.rng.pick([0xded3bc, 0xd2c7b0, 0xe4dac2]),
+      mottle: 0.45,
+      band: height - 0.26,
+    });
+  }
+
+  // What is kept in a yard like this, laid out along the yard's own axis so the
+  // clutter is skewed with it rather than squared to the map.
+  const inset = 1.3;
+  const spots = sink.rng.int(3, 5);
+  for (let i = 0; i < spots; i++) {
+    const [px, pz] = at(
+      sink.rng.range(-hw + inset, hw - inset),
+      sink.rng.range(-hd + inset, hd - inset),
+    );
+    if (sink.groundClaimed(px, pz, 0.5)) continue;
+    const yaw = yard.yaw + sink.rng.range(-0.4, 0.4);
+    const roll = sink.rng.next();
+    if (roll < 0.2) crateStack(sink, px, pz, yaw, sink.rng.int(2, 3), { collide: true });
+    else if (roll < 0.36) sackPile(sink, px, pz, yaw, sink.rng.int(3, 6));
+    else if (roll < 0.5) woodPile(sink, px, pz, yaw, sink.rng.int(5, 8));
+    else if (roll < 0.62) tyreStack(sink, px, pz, yaw, sink.rng.int(3, 5));
+    else if (roll < 0.74) oilBarrel(sink, px, pz, yaw, { tint: 0x6f6250 });
+    else if (roll < 0.86) rubblePile(sink, px, pz, yaw, sink.rng.range(0.9, 1.3));
+    else pallet(sink, px, pz, yaw);
+  }
+
+  // A shade over one end and washing across it: the two things that say somebody
+  // uses the yard, and both read from above as diagonals.
+  if (sink.rng.bool(0.7)) {
+    const [sx, sz] = at(sink.rng.range(-hw * 0.4, hw * 0.4), hd * sink.rng.range(-0.5, 0.5));
+    shadeCloth(sink, sx, base + height + 0.35, sz, yard.yaw, hw * 1.1, hd * 0.9);
+  }
+  if (sink.rng.bool(0.6)) {
+    const [ax, az] = at(-hw + 0.5, -hd + 1.2);
+    const [bx, bz] = at(hw - 0.5, hd - 1.2);
+    laundryLine(
+      sink,
+      new THREE.Vector3(ax, base + height - 0.2, az),
+      new THREE.Vector3(bx, base + height - 0.35, bz),
+    );
+  }
+  litterArea(
+    sink,
+    { minX: yard.x - hw, minZ: yard.z - hd, maxX: yard.x + hw, maxZ: yard.z + hd },
+    sink.rng.int(14, 26),
+    { reject: (x, z) => sink.groundClaimed(x, z, 0) },
+  );
+  sandDrift(sink, corners[0][0], corners[0][1], sink.rng.range(1.2, 2.2));
+}
+
+/**
+ * A skewed lean-to: three low walls and a single-pitch corrugated roof.
+ *
+ * Too small to enter and registered as one solid box, so it costs the navigation
+ * grid a blocked cell and nothing else, but its roof is a rotated rectangle in
+ * the top-down view and its ridge line throws a diagonal shadow at street level.
+ */
+function buildSkewShed(
+  sink: Sink,
+  field: TerrainField,
+  x: number,
+  z: number,
+  yaw: number,
+  width: number,
+  depth: number,
+): void {
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
+  const at = (lx: number, lz: number): [number, number] => [
+    x + lx * cos + lz * sin,
+    z - lx * sin + lz * cos,
+  ];
+  const hw = width / 2;
+  const hd = depth / 2;
+  for (let i = 0; i < 4; i++) {
+    const [px, pz] = at(i % 2 === 0 ? -hw : hw, i < 2 ? -hd : hd);
+    if (field.onRoad(px, pz, 1.4) || sink.groundClaimed(px, pz, 1.0)) return;
+    if (Math.abs(px) > TERRAIN_HALF - 6 || Math.abs(pz) > TERRAIN_HALF - 6) return;
+  }
+
+  const base = field.height(x, z) - 0.1;
+  const tall = sink.rng.range(2.5, 3.0);
+  const low = tall - sink.rng.range(0.4, 0.75);
+  const material = sink.rng.bool(0.5) ? BRICK : STUCCO;
+  const tint = sink.rng.pick([0xd8ccb4, 0xcdc1a8, 0xe0d5be]);
+
+  // Back wall at the tall side, two returns, front left open.
+  const back: Array<[number, number]> = [at(-hw, -hd), at(hw, -hd)];
+  buildWall(sink, {
+    x0: back[0][0],
+    z0: back[0][1],
+    x1: back[1][0],
+    z1: back[1][1],
+    base,
+    height: tall,
+    thickness: 0.28,
+    material,
+    tint,
+    mottle: 0.45,
+  });
+  for (const side of [-1, 1] as const) {
+    const a = at(side * hw, -hd);
+    const b = at(side * hw, hd);
+    buildWall(sink, {
+      x0: a[0],
+      z0: a[1],
+      x1: b[0],
+      z1: b[1],
+      base,
+      height: low,
+      thickness: 0.26,
+      material,
+      tint,
+      mottle: 0.45,
+    });
+  }
+
+  // Corrugated roof, pitched from the back wall down to the open front.
+  const pitch = Math.atan2(tall - low, depth);
+  const span = Math.hypot(depth, tall - low) + 0.5;
+  sink.addStatic(
+    placed(
+      boxGeometry(width + 0.5, 0.09, span, 0.02, 2.2),
+      transform(x, base + (tall + low) / 2 + 0.1, z, yaw, 0, 0).multiply(
+        new THREE.Matrix4().makeRotationX(pitch),
+      ),
+    ),
+    { material: 'metal_corrugated', tier: 'structure', tint: 0xa89c86, mottle: 0.4 },
+  );
+  sink.addCollider(
+    new THREE.Vector3(x, base + (tall + low) / 2, z),
+    new THREE.Vector3(width / 2 + 0.2, (tall + low) / 2, depth / 2 + 0.2),
+    yaw,
+    { surface: 'metal' },
+  );
+
+  // Under the roof, at the shed's angle.
+  const [ix, iz] = at(sink.rng.range(-hw + 0.7, hw - 0.7), sink.rng.range(-hd + 0.6, hd - 0.6));
+  if (!sink.groundClaimed(ix, iz, 0.4)) {
+    if (sink.rng.bool(0.5)) woodPile(sink, ix, iz, yaw + sink.rng.range(-0.3, 0.3), 6);
+    else sackPile(sink, ix, iz, yaw + sink.rng.range(-0.3, 0.3), sink.rng.int(4, 6));
+  }
+  const [lx, lz] = at(hw + 0.35, sink.rng.range(-hd, hd));
+  if (!sink.groundClaimed(lx, lz, 0.3)) {
+    leaningLadder(sink, lx, lz, yaw - Math.PI / 2, low - 0.3);
+  }
+  litterArea(sink, { minX: x - hw, minZ: z - hd, maxX: x + hw, maxZ: z + hd }, sink.rng.int(6, 14), {
+    reject: (px, pz) => sink.groundClaimed(px, pz, 0),
+  });
 }
 
 // ---------------------------------------------------------------------------

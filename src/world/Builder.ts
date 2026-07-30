@@ -6,6 +6,7 @@ import { Rng, clamp, perlin2 } from '../core/MathUtils';
 import { applyWorldUv, computeTangents, mergeGeometries } from '../procgen';
 import {
   type ColliderSpec,
+  type CustomOptions,
   type DestructibleSpec,
   type DetailTier,
   type InstanceRef,
@@ -138,6 +139,14 @@ interface StaticBucket {
   geometries: THREE.BufferGeometry[];
 }
 
+interface CustomBucket {
+  chunk: number;
+  tier: DetailTier;
+  material: THREE.Material;
+  castShadow: boolean;
+  geometries: THREE.BufferGeometry[];
+}
+
 interface PropBucket {
   key: string;
   chunk: number;
@@ -151,13 +160,42 @@ interface PropBucket {
   castShadow?: boolean;
   receiveShadow?: boolean;
   wind: boolean;
+  transmit: number;
   clutter: boolean;
+  /** Interior bounce level in force when the copies were emitted; 0 outdoors. */
+  fill: number;
   /** Destructibles must stay addressable, so their group always instances. */
   forced: boolean;
 }
 
 const WIND_CACHE_KEY = 'world-wind';
 const CLUTTER_CACHE_KEY = 'world-clutter';
+const TRANSMIT_CACHE_KEY = 'world-transmit';
+
+/** Two-decimal key, so near-identical material variants share one program. */
+const r2 = (v: number): string => v.toFixed(2);
+
+/**
+ * Backlit transmission through a thin leaf.
+ *
+ * A sunlit palm frond is the brightest green thing in a desert town, and it is
+ * bright because the light is behind it, not on it. Shaded as an opaque surface
+ * it comes back near black — which is exactly what the review saw. Real
+ * transmission needs a separate render target the frame budget does not have, so
+ * this adds the term where it actually matters: the leaf glows in proportion to
+ * how much the sun is on its far side and how nearly the camera is looking into
+ * the sun through it. Scaled by the surface's own albedo, so a frond glows green
+ * and dry grass glows straw, with no second texture and no extra draw.
+ */
+const TRANSMIT_GLSL = /* glsl */ `
+  vec3 transmitSun = normalize((viewMatrix * vec4(uTransmitSun, 0.0)).xyz);
+  // Double-sided, so the shading normal already faces the camera; the sun being
+  // behind it therefore means behind the leaf.
+  float transmitBack = max(0.0, -dot(normalize(normal), transmitSun));
+  float transmitAim = max(0.0, dot(normalize(vViewPosition), -transmitSun));
+  totalEmissiveRadiance +=
+    diffuseColor.rgb * uTransmitGain * transmitBack * (0.22 + 0.78 * pow(transmitAim, 1.6));
+`;
 
 /**
  * Distance band over which a micro-clutter copy shrinks to nothing.
@@ -200,11 +238,13 @@ const WIND_GLSL = /* glsl */ `
 export class WorldBuilder implements Sink {
   readonly rng: Rng;
   readonly config: QualityConfig;
+  readonly sunDirection: THREE.Vector3;
 
   private readonly materials: MaterialLibrary;
   private readonly groundFn: (x: number, z: number) => number;
 
   private readonly staticBuckets = new Map<string, StaticBucket>();
+  private readonly customBuckets = new Map<string, CustomBucket>();
   private readonly propBuckets = new Map<string, PropBucket>();
   private readonly loose: Array<{ object: THREE.Object3D; chunk: number; tier: DetailTier }> = [];
   private readonly overlays: THREE.Object3D[] = [];
@@ -231,17 +271,20 @@ export class WorldBuilder implements Sink {
   private nextDestructibleId = 1;
   private vertexTotal = 0;
   private claimIndex: Map<number, ColliderRecord[]> | null = null;
+  private fill = 0;
 
   constructor(opts: {
     materials: MaterialLibrary;
     config: QualityConfig;
     seed: number;
     ground: (x: number, z: number) => number;
+    sunDirection: THREE.Vector3;
   }) {
     this.materials = opts.materials;
     this.config = opts.config;
     this.rng = new Rng(opts.seed);
     this.groundFn = opts.ground;
+    this.sunDirection = opts.sunDirection.clone().normalize();
     this.groundRoot.name = 'ground';
   }
 
@@ -270,6 +313,35 @@ export class WorldBuilder implements Sink {
     this.bucketFor(chunk, opts.material, tier).geometries.push(geometry);
   }
 
+  addCustom(
+    key: string,
+    geometry: THREE.BufferGeometry,
+    material: THREE.Material,
+    opts: CustomOptions = {},
+  ): void {
+    const tier = opts.tier ?? 'detail';
+    this.finishGeometry(geometry, opts.tile ?? 1, opts.tint ?? 0xffffff, opts.mottle ?? 0, true);
+    const chunk =
+      tier === 'ground' || opts.global
+        ? GROUND_CHUNK
+        : opts.chunkAt
+          ? chunkIndexAt(opts.chunkAt.x, opts.chunkAt.z)
+          : chunkIndexOfGeometry(geometry);
+    const id = `${chunk}|${key}`;
+    let bucket = this.customBuckets.get(id);
+    if (!bucket) {
+      bucket = {
+        chunk,
+        tier,
+        material,
+        castShadow: opts.castShadow === true,
+        geometries: [],
+      };
+      this.customBuckets.set(id, bucket);
+    }
+    bucket.geometries.push(geometry);
+  }
+
   addProp(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4, opts: PropOptions): InstanceRef {
     const tier = opts.tier ?? 'structure';
     const tile = opts.tile ?? tileOf(opts.material);
@@ -283,7 +355,11 @@ export class WorldBuilder implements Sink {
         ? GROUND_CHUNK
         : chunkIndexAt(matrix.elements[12], matrix.elements[14]);
     const wind = opts.wind === true;
-    const variant = wind ? 'w' : clutter ? 'c' : 's';
+    const transmit = wind ? (opts.transmit ?? 0) : 0;
+    // Halves, so that the same rack in two rooms of slightly different brightness
+    // still instances as one group.
+    const fill = Math.round(this.fill * 2) / 2;
+    const variant = `${wind ? `w${r2(transmit)}` : clutter ? 'c' : 's'}${r2(fill)}`;
     const key = `${chunk}|${opts.material}|${tier}|${variant}|${geometry.name || geometry.uuid}`;
     let bucket = this.propBuckets.get(key);
     if (!bucket) {
@@ -300,7 +376,9 @@ export class WorldBuilder implements Sink {
         castShadow: clutter ? false : opts.castShadow,
         receiveShadow: opts.receiveShadow,
         wind,
+        transmit,
         clutter,
+        fill,
         // Wind and clutter both live on material variants the static batch does
         // not use, so their copies can never be folded into a merged batch.
         forced: wind || clutter,
@@ -513,8 +591,13 @@ export class WorldBuilder implements Sink {
    * The phase comes from the instance's world position, so one instanced set of
    * cards animates with no per-frame CPU cost and no two plants move together.
    */
-  windMaterial(id: MaterialId, tint: number, doubleSided: boolean): THREE.MeshStandardMaterial {
-    const key = `wind|${id}|${tint.toString(16)}|${doubleSided ? 'ds' : 'fs'}`;
+  windMaterial(
+    id: MaterialId,
+    tint: number,
+    doubleSided: boolean,
+    transmit = 0,
+  ): THREE.MeshStandardMaterial {
+    const key = `wind|${id}|${tint.toString(16)}|${doubleSided ? 'ds' : 'fs'}|${r2(transmit)}`;
     const existing = this.customMaterials.get(key);
     if (existing) return existing;
 
@@ -542,10 +625,39 @@ uniform float uWindScale;`,
         .replace('#include <project_vertex>', `${WIND_GLSL}\n#include <project_vertex>`);
     };
     material.customProgramCacheKey = () => WIND_CACHE_KEY;
+    if (transmit > 0) this.addTransmission(material, transmit);
     material.needsUpdate = true;
 
     this.customMaterials.set(key, material);
     return material;
+  }
+
+  /** Adds the backlit term to a foliage material, on top of whatever it has. */
+  private addTransmission(material: THREE.MeshStandardMaterial, gain: number): void {
+    const sun = this.sunDirection;
+    patchShader(material, `${TRANSMIT_CACHE_KEY}|${r2(gain)}`, (shader) => {
+      shader.uniforms.uTransmitSun = { value: sun };
+      shader.uniforms.uTransmitGain = { value: gain };
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+uniform vec3 uTransmitSun;
+uniform float uTransmitGain;`,
+        )
+        .replace(
+          '#include <emissivemap_fragment>',
+          `#include <emissivemap_fragment>\n${TRANSMIT_GLSL}`,
+        );
+    });
+  }
+
+  interiorFill(level: number): void {
+    this.fill = clamp(level, 0, 1);
+  }
+
+  currentFill(): number {
+    return this.fill;
   }
 
   /**
@@ -557,17 +669,18 @@ uniform float uWindScale;`,
    * compiled program: the two differ only inside `onBeforeCompile`, which three
    * cannot see when it hashes the parameters.
    */
-  private clutterMaterial(id: MaterialId): THREE.MeshStandardMaterial {
-    const key = `clutter|${id}`;
+  private clutterMaterial(id: MaterialId, fill: number): THREE.MeshStandardMaterial {
+    const key = `clutter|${id}|${r2(fill)}`;
     const existing = this.customMaterials.get(key);
     if (existing) return existing;
 
     const material = this.materials.clone(id);
     material.name = `world:${key}`;
     material.vertexColors = true;
+    this.applyFill(material, fill);
 
     const eye = this.clutterEye;
-    material.onBeforeCompile = (shader) => {
+    patchShader(material, CLUTTER_CACHE_KEY, (shader) => {
       shader.uniforms.uClutterEye = eye;
       shader.uniforms.uClutterNear = { value: CLUTTER_NEAR };
       shader.uniforms.uClutterFar = { value: CLUTTER_FAR };
@@ -580,24 +693,62 @@ uniform float uClutterNear;
 uniform float uClutterFar;`,
         )
         .replace('#include <project_vertex>', `${CLUTTER_GLSL}\n#include <project_vertex>`);
-    };
-    material.customProgramCacheKey = () => CLUTTER_CACHE_KEY;
-    material.needsUpdate = true;
+    });
 
     this.customMaterials.set(key, material);
     return material;
   }
 
-  /** Vertex-coloured variant used by merged batches and instanced props. */
+  /**
+   * Vertex-coloured variant used by merged batches and instanced props.
+   *
+   * Carries the interior bounce for every surface it draws, keyed off a per-vertex
+   * level rather than off a second material, which is the only version of this
+   * that is affordable: a fill baked as an emissive colour is a material property,
+   * so one interior finish costs one extra merged batch per district per material —
+   * measured at ninety-six extra draws for a map with sixty rooms in it. As an
+   * attribute the wall of a lit room and the outside face of the same wall merge
+   * into one batch and one draw.
+   */
   private batchMaterial(id: MaterialId): THREE.MeshStandardMaterial {
     const existing = this.batchMaterials.get(id);
     if (existing) return existing;
     const material = this.materials.clone(id);
     material.name = `world:batch:${id}`;
     material.vertexColors = true;
-    material.needsUpdate = true;
+    this.applyFill(material, 0);
     this.batchMaterials.set(id, material);
     return material;
+  }
+
+  /**
+   * Instanced variant carrying the bounce as a uniform.
+   *
+   * Furniture geometry is cached and shared between the copy in a lit room and the
+   * copy in the street, so the level cannot be baked into the buffer. Quantised to
+   * halves instead, which caps this at two variants per material and lets an indoor
+   * rack in one district instance with an indoor rack in another.
+   */
+  private propFillMaterial(id: MaterialId, level: number): THREE.MeshStandardMaterial {
+    const step = Math.max(0.5, Math.round(level * 2) / 2);
+    const key = `propfill|${id}|${step}`;
+    const existing = this.customMaterials.get(key);
+    if (existing) return existing;
+    const material = this.materials.clone(id);
+    material.name = `world:${key}`;
+    material.vertexColors = true;
+    this.applyFill(material, step);
+    this.customMaterials.set(key, material);
+    return material;
+  }
+
+  /** Installs the interior bounce term, at `level` where no vertex carries one. */
+  private applyFill(material: THREE.MeshStandardMaterial, level: number): void {
+    patchShader(material, FILL_CACHE_KEY, (shader) => {
+      shader.uniforms.obFillBase = { value: level };
+      patchFillShader(shader);
+    });
+    material.needsUpdate = true;
   }
 
   // -------------------------------------------------------------------------
@@ -632,16 +783,21 @@ uniform float uClutterFar;`,
           const copy = bucket.geometry.clone();
           copy.userData = {};
           copy.applyMatrix4(matrix);
+          // The instance's fill is baked in here rather than on the shared source
+          // buffer, which the outdoor copies of the same prop also draw from.
+          setFill(copy, bucket.fill);
           target.geometries.push(copy);
         }
         continue;
       }
 
       const material = bucket.wind
-        ? this.windMaterial(bucket.material, 0xffffff, true)
+        ? this.windMaterial(bucket.material, 0xffffff, true, bucket.transmit)
         : bucket.clutter
-          ? this.clutterMaterial(bucket.material)
-          : this.batchMaterial(bucket.material);
+          ? this.clutterMaterial(bucket.material, bucket.fill)
+          : bucket.fill > 0
+            ? this.propFillMaterial(bucket.material, bucket.fill)
+            : this.batchMaterial(bucket.material);
       const mesh = new THREE.InstancedMesh(bucket.geometry, material, count);
       mesh.name = `prop:${bucket.material}:${count}`;
       for (let i = 0; i < count; i++) mesh.setMatrixAt(i, bucket.matrices[i]);
@@ -702,6 +858,30 @@ uniform float uClutterFar;`,
       const mesh = new THREE.Mesh(merged, this.batchMaterial(bucket.material));
       mesh.name = `batch:${bucket.tier}:${bucket.material}`;
       applyShadowFlags(mesh, bucket.tier);
+      this.attach(chunks, bucket.chunk, bucket.tier, mesh);
+      tally(bucket.chunk, triangleCount(merged));
+      batches++;
+    }
+
+    for (const [id, bucket] of this.customBuckets) {
+      if (bucket.geometries.length === 0) continue;
+      const merged =
+        bucket.geometries.length === 1
+          ? bucket.geometries[0]
+          : mergeGeometries(bucket.geometries, false);
+      if (!merged) {
+        console.warn(`[world] merge failed for custom batch ${id}`);
+        continue;
+      }
+      if (bucket.geometries.length > 1) {
+        for (const geometry of bucket.geometries) geometry.dispose();
+      }
+      merged.computeBoundingBox();
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(merged, bucket.material);
+      mesh.name = `custom:${id}`;
+      mesh.castShadow = bucket.castShadow;
+      mesh.receiveShadow = bucket.material.transparent !== true;
       this.attach(chunks, bucket.chunk, bucket.tier, mesh);
       tally(bucket.chunk, triangleCount(merged));
       batches++;
@@ -795,6 +975,7 @@ uniform float uClutterFar;`,
     this.batchMaterials.clear();
     this.customMaterials.clear();
     this.staticBuckets.clear();
+    this.customBuckets.clear();
     this.propBuckets.clear();
   }
 
@@ -848,6 +1029,12 @@ uniform float uClutterFar;`,
     if (!geometry.hasAttribute('normal')) geometry.computeVertexNormals();
     if (!geometry.hasAttribute('tangent')) computeTangents(geometry);
 
+    // Cached prop buffers get a zero level; an instanced copy takes its fill from
+    // the material instead, because the buffer is shared with the outdoor copies.
+    if (rewriteColor || !geometry.hasAttribute('aFill')) {
+      setFill(geometry, rewriteColor ? this.fill : 0);
+    }
+
     if (!rewriteColor && geometry.hasAttribute('color')) return;
 
     const position = geometry.attributes.position;
@@ -882,6 +1069,92 @@ uniform float uClutterFar;`,
     }
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3, true));
   }
+}
+
+/**
+ * Adds a compile hook without discarding the one the material already has.
+ *
+ * The library hands out materials whose facade breakup and UV scaling live in
+ * their own `onBeforeCompile`, and three allows exactly one. Overwriting it
+ * silently strips the large-scale variation off every wall that also wants a
+ * world-side effect, so the hooks are chained and the cache keys concatenated —
+ * three hashes the key to decide two materials can share a compiled program, and
+ * it cannot see injected source.
+ */
+function patchShader(
+  material: THREE.MeshStandardMaterial,
+  key: string,
+  patch: (shader: THREE.WebGLProgramParametersWithUniforms) => void,
+): void {
+  const inner = material.onBeforeCompile;
+  const innerKey = material.customProgramCacheKey();
+  material.onBeforeCompile = (shader, renderer) => {
+    inner.call(material, shader, renderer);
+    patch(shader);
+  };
+  material.customProgramCacheKey = () => `${innerKey}|${key}`;
+  material.needsUpdate = true;
+}
+
+/**
+ * Grey level of the light an interior surface gives back.
+ *
+ * Warm rather than neutral, because the bounce in a room like this is sunlight off
+ * sand-coloured plaster, and it lands on the same surfaces at a fraction of a
+ * strength the daylight quads already establish.
+ */
+const FILL_COLOUR = 0x3a3428;
+
+const FILL_CACHE_KEY = 'fill|a';
+
+/**
+ * Adds the interior bounce as a share of the surface's own albedo.
+ *
+ * Taking the level from a per-vertex byte is what makes this free: `aFill` is zero
+ * on everything outdoors, so a wall's street face and its room face stay in one
+ * merged batch and one draw, where a fill baked as an emissive colour would split
+ * every interior finish in every district into a batch of its own — ninety-six
+ * extra draws, measured, for a map with sixty rooms in it. The uniform is the
+ * floor under it, for the instanced sets whose buffer is shared with the outdoor
+ * copies of the same prop and so has to carry the level on the material.
+ *
+ * Scaling by the albedo is also what keeps it from reading as a glowing panel: the
+ * brick keeps its mortar and the plaster its stains, they are simply lit from
+ * nowhere. Which is what a bounce term is.
+ */
+function patchFillShader(shader: THREE.WebGLProgramParametersWithUniforms): void {
+  shader.vertexShader = `attribute float aFill;\nvarying float vFill;\n${shader.vertexShader}`.replace(
+    '#include <begin_vertex>',
+    '#include <begin_vertex>\n\tvFill = aFill;',
+  );
+  shader.fragmentShader =
+    `varying float vFill;
+uniform float obFillBase;
+const vec3 obFillColour = vec3(${fillChannels()});
+${shader.fragmentShader}`.replace(
+      '#include <emissivemap_fragment>',
+      '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * obFillColour * max(vFill, obFillBase);',
+    );
+}
+
+/**
+ * Writes the interior level onto a geometry as the `aFill` attribute.
+ *
+ * Every geometry that can reach a merged batch gets one, zero included: merging
+ * requires a matching attribute set, so an interior wall and an exterior kerb have
+ * to agree on having the byte at all.
+ */
+function setFill(geometry: THREE.BufferGeometry, level: number): void {
+  const count = geometry.attributes.position.count;
+  const data = new Uint8Array(count);
+  if (level > 0) data.fill(Math.round(clamp(level, 0, 1) * 255));
+  geometry.setAttribute('aFill', new THREE.BufferAttribute(data, 1, true));
+}
+
+/** The fill colour in the renderer's working space, as GLSL literals. */
+function fillChannels(): string {
+  const c = new THREE.Color().setHex(FILL_COLOUR, THREE.SRGBColorSpace);
+  return `${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)}`;
 }
 
 const WHITE = new THREE.Color(1, 1, 1);

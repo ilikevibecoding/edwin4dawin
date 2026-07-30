@@ -73,6 +73,14 @@ export interface PropOptions {
   /** Animate with the foliage wind shader; forces instancing. */
   wind?: boolean;
   /**
+   * Strength of the backlit glow through a thin leaf, 0 for none.
+   *
+   * Only meaningful with `wind`, which is also the flag that gets the geometry
+   * onto a two-sided material — the term needs to be able to shade the face the
+   * sun is not on.
+   */
+  transmit?: number;
+  /**
    * Pools every copy on the map into one instanced draw instead of one per chunk.
    *
    * Chunking exists so a district can be culled wholesale, but it also splits an
@@ -111,6 +119,22 @@ export interface ObjectOptions {
   tier?: DetailTier;
   castShadow?: boolean;
   chunkAt?: THREE.Vector3;
+}
+
+/**
+ * Options for geometry batched under a material the kit owns rather than one the
+ * material library published.
+ */
+export interface CustomOptions {
+  tier?: DetailTier;
+  /** Metres per texture tile, when the geometry arrives without UVs. */
+  tile?: number;
+  tint?: number;
+  mottle?: number;
+  chunkAt?: THREE.Vector3;
+  /** Pool every piece on the map into one batch instead of one per chunk. */
+  global?: boolean;
+  castShadow?: boolean;
 }
 
 export interface ColliderSpec {
@@ -172,6 +196,8 @@ export interface DestructibleSpec {
 export interface Sink {
   readonly rng: Rng;
   readonly config: QualityConfig;
+  /** Unit vector towards the sun, so daylight effects can be aimed at it. */
+  readonly sunDirection: THREE.Vector3;
   /** Terrain height at a world XZ. */
   ground(x: number, z: number): number;
   /** World-space geometry; ownership transfers to the sink. */
@@ -184,6 +210,20 @@ export interface Sink {
     matrix: THREE.Matrix4,
     opts: PropOptions,
   ): InstanceRef;
+  /**
+   * World-space geometry merged into a batch under a caller-supplied material.
+   *
+   * The material library covers surfaces; signage, decals and light shafts need
+   * a texture atlas and a blend mode of their own, which no `MaterialId` can
+   * name. Pieces sharing a `key` merge together exactly as the library-backed
+   * batches do, so a hundred painted signs across a district cost one draw.
+   */
+  addCustom(
+    key: string,
+    geometry: THREE.BufferGeometry,
+    material: THREE.Material,
+    opts?: CustomOptions,
+  ): void;
   /** A loose object kept as-is (glass, cloth, lights, LOD groups). */
   addObject(object: THREE.Object3D, opts?: ObjectOptions): void;
   /** Map-wide object exempt from chunk culling; use sparingly. */
@@ -213,6 +253,19 @@ export interface Sink {
   ownMaterial(key: string, id: MaterialId, setup: (m: THREE.MeshStandardMaterial) => void): THREE.MeshStandardMaterial;
   /** Registers a foliage material for wind animation. */
   windMaterial(id: MaterialId, tint: number, doubleSided: boolean): THREE.MeshStandardMaterial;
+  /**
+   * Bakes an emissive bounce into everything emitted until it is switched off.
+   *
+   * The renderer keeps a fixed pool of point lights, so a lamp in every room is
+   * not on offer — and with the ambient term now as low as it is, an unlit room
+   * comes back as a black rectangle. A surface inside a building instead carries
+   * a share of its own albedo as emission, which is what a bounce term is: the
+   * room lights itself, at the level given here. 0 is outdoors and 1 is a
+   * shopfront with the shutter up; a back room sits around a half.
+   */
+  interiorFill(level: number): void;
+  /** The level in force, so kit-owned materials can match the batch variants. */
+  currentFill(): number;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,6 +331,19 @@ export function disposeGeometryCache(): void {
  * and separates a silhouette from what is behind it. Nothing manufactured in
  * this map has a truly sharp edge.
  */
+/**
+ * Box with chamfered edges, or a plain one when the chamfer cannot be seen.
+ *
+ * A chamfer is thirty-two triangles on top of a box's twelve, spent entirely on
+ * catching a highlight along each edge. That is worth paying on a crate or a
+ * plinth. It is not worth paying on a glazing bar, a fence wire, a shelf slat or
+ * a sign board eight centimetres thick — and those, by count, are most of the
+ * boxes in the map. Below the floor the piece is thinner than the chamfer would
+ * be wide at any range it resolves at, so the chamfer is bought and never seen.
+ *
+ * The offset reproduces `bevelBox`'s half-tile UV shift exactly, so swapping
+ * topology does not slide the texture on a piece that changes path.
+ */
 export function boxGeometry(
   width: number,
   height: number,
@@ -285,9 +351,21 @@ export function boxGeometry(
   bevel: number,
   tile: number,
 ): THREE.BufferGeometry {
-  const key = `box|${r3(width)}|${r3(height)}|${r3(depth)}|${r3(bevel)}|${r3(tile)}`;
-  return cachedGeometry(key, () => bevelBox(width, height, depth, bevel, 1 / tile));
+  const plain = Math.min(width, height, depth) < BEVEL_FLOOR;
+  const key = `box|${r3(width)}|${r3(height)}|${r3(depth)}|${plain ? 'p' : r3(bevel)}|${r3(tile)}`;
+  return cachedGeometry(key, () =>
+    plain
+      ? applyWorldUv(
+          new THREE.BoxGeometry(width, height, depth),
+          tile,
+          new THREE.Vector3(tile / 2, tile / 2, tile / 2),
+        )
+      : bevelBox(width, height, depth, bevel, 1 / tile),
+  );
 }
+
+/** Smallest dimension that still earns a chamfer, in metres. */
+const BEVEL_FLOOR = 0.1;
 
 export function roundedGeometry(
   width: number,
@@ -326,7 +404,14 @@ export function bagGeometry(
 ): THREE.BufferGeometry {
   const key = `bag|${r3(width)}|${r3(height)}|${r3(depth)}|${r3(radius)}`;
   return cachedGeometry(key, () => {
-    const geometry = roundedBoxGeometry(width, height, depth, radius, 3);
+    // One segment, not three. A revetment is the most repeated mesh in the map —
+    // upwards of fifteen hundred bags, the single heaviest thing in the world at
+    // any subdivision — so this one number is worth about a twentieth of the
+    // world's triangles. At half a metre across, one ring of subdivision still
+    // pillows the faces and rounds the corners, and the hessian in the material
+    // supplies everything past that; the rings above it were paying for
+    // silhouette detail no player is close enough to resolve.
+    const geometry = roundedBoxGeometry(width, height, depth, radius, 1);
     const uv = geometry.attributes.uv as THREE.BufferAttribute;
     const u0 = 0.07 / 3;
     const uSpan = 0.86 / 3;
