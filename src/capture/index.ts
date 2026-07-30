@@ -227,7 +227,16 @@ function makeContext(ctx: EngineContext): ShotContext {
         scratch.set(x, ground + eyeHeight, z);
         const above = physics.raycast(scratch, UP, { maxDistance: 8 });
         // A ceiling, not the underside of a distant walkway.
-        if (above && above.distance > 0.6 && above.distance < 6) return scratch.clone();
+        if (!above || above.distance <= 0.6 || above.distance >= 6) continue;
+        // And enclosed on most sides. Without this the search settles in an
+        // open arcade bay, which has a ceiling but is a threshold rather than a
+        // room, and the interior shot then shows neither furniture nor a wall.
+        let walls = 0;
+        for (const dir of BURIED_PROBES) {
+          if (dir.y !== 0) continue;
+          if (physics.raycast(scratch, dir, { maxDistance: 7 })) walls++;
+        }
+        if (walls >= 3) return scratch.clone();
       }
     }
     return null;

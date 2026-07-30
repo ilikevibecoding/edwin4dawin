@@ -74,7 +74,8 @@ async function boot(): Promise<void> {
   const tier = parseQualityOverride() ?? stored ?? detected;
   const config = makeConfig(tier);
 
-  const engine = new Engine({ canvas, config });
+  const capturing = new URLSearchParams(location.search).get('capture') === '1';
+  const engine = new Engine({ canvas, config, preserveDrawingBuffer: capturing });
 
   engine.add(new ProcgenSystemImpl());
   engine.add(new PhysicsSystemImpl());

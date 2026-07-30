@@ -9,6 +9,14 @@ import { clamp } from './MathUtils';
 export interface EngineOptions {
   canvas: HTMLCanvasElement;
   config: QualityConfig;
+  /**
+   * Retain the drawing buffer between frames. Costs bandwidth, so it is off in
+   * play, but the capture harness needs it: the compositor grabs the canvas
+   * asynchronously, and without retention it can sample a buffer that has
+   * already been cleared, producing a frame with the DOM HUD over an empty
+   * canvas.
+   */
+  preserveDrawingBuffer?: boolean;
 }
 
 /** Throws tolerated from one system phase before it is dropped for the session. */
@@ -62,7 +70,7 @@ export class Engine {
       stencil: false,
       depth: true,
       powerPreference: 'high-performance',
-      preserveDrawingBuffer: false,
+      preserveDrawingBuffer: opts.preserveDrawingBuffer ?? false,
       failIfMajorPerformanceCaveat: false,
     });
 
