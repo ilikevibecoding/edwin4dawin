@@ -17,6 +17,7 @@ import { RAPIER } from './Rapier';
 import type { PhysicsUserData, RigidBodyHandle } from '../core/Contracts';
 import type { ColliderRegistry } from './Registry';
 import { groupsForBody } from './Groups';
+import { gate } from './Reentrancy';
 import { PHYS } from './Tuning';
 
 export type BodyShape =
@@ -110,38 +111,48 @@ export class DynamicBody implements RigidBodyHandle {
     this.pqw = this.cqw;
   }
 
+  /**
+   * The mutators below are called from impact and explosion code, which is one
+   * `raycast` away from being inside a Rapier callback, so each of them takes
+   * the deferred path when the world is borrowed. The idle path is unchanged
+   * and still allocates nothing; only the rare deferral costs a closure.
+   */
   applyImpulse(impulse: THREE.Vector3, atPoint?: THREE.Vector3): void {
     if (this.destroyed) return;
-    this.vecA.x = impulse.x;
-    this.vecA.y = impulse.y;
-    this.vecA.z = impulse.z;
-    if (atPoint) {
-      this.vecB.x = atPoint.x;
-      this.vecB.y = atPoint.y;
-      this.vecB.z = atPoint.z;
-      this.body.applyImpulseAtPoint(this.vecA, this.vecB, true);
-    } else {
-      this.body.applyImpulse(this.vecA, true);
-    }
     this.asleep = false;
+    const x = impulse.x;
+    const y = impulse.y;
+    const z = impulse.z;
+    if (!atPoint) {
+      if (gate.busy) gate.defer(() => this.writeImpulse(x, y, z, false, 0, 0, 0));
+      else this.writeImpulse(x, y, z, false, 0, 0, 0);
+      return;
+    }
+    const px = atPoint.x;
+    const py = atPoint.y;
+    const pz = atPoint.z;
+    if (gate.busy) gate.defer(() => this.writeImpulse(x, y, z, true, px, py, pz));
+    else this.writeImpulse(x, y, z, true, px, py, pz);
   }
 
   applyTorqueImpulse(t: THREE.Vector3): void {
     if (this.destroyed) return;
-    this.vecA.x = t.x;
-    this.vecA.y = t.y;
-    this.vecA.z = t.z;
-    this.body.applyTorqueImpulse(this.vecA, true);
     this.asleep = false;
+    const x = t.x;
+    const y = t.y;
+    const z = t.z;
+    if (gate.busy) gate.defer(() => this.writeTorque(x, y, z));
+    else this.writeTorque(x, y, z);
   }
 
   setVelocity(v: THREE.Vector3): void {
     if (this.destroyed) return;
-    this.vecA.x = v.x;
-    this.vecA.y = v.y;
-    this.vecA.z = v.z;
-    this.body.setLinvel(this.vecA, true);
     this.asleep = false;
+    const x = v.x;
+    const y = v.y;
+    const z = v.z;
+    if (gate.busy) gate.defer(() => this.writeVelocity(x, y, z));
+    else this.writeVelocity(x, y, z);
   }
 
   getVelocity(out: THREE.Vector3): THREE.Vector3 {
@@ -152,32 +163,29 @@ export class DynamicBody implements RigidBodyHandle {
 
   setPosition(p: THREE.Vector3, q?: THREE.Quaternion): void {
     if (this.destroyed) return;
-    this.vecA.x = p.x;
-    this.vecA.y = p.y;
-    this.vecA.z = p.z;
-    this.body.setTranslation(this.vecA, true);
-    if (q) {
-      this.rot.x = q.x;
-      this.rot.y = q.y;
-      this.rot.z = q.z;
-      this.rot.w = q.w;
-      this.body.setRotation(this.rot, true);
-    }
-    this.readTransform();
-    this.savePrevious();
     this.asleep = false;
+    const x = p.x;
+    const y = p.y;
+    const z = p.z;
+    const qx = q ? q.x : 0;
+    const qy = q ? q.y : 0;
+    const qz = q ? q.z : 0;
+    const qw = q ? q.w : 1;
+    const rotate = q !== undefined;
+    if (gate.busy) gate.defer(() => this.writePosition(x, y, z, rotate, qx, qy, qz, qw));
+    else this.writePosition(x, y, z, rotate, qx, qy, qz, qw);
   }
 
   sleep(): void {
     if (this.destroyed) return;
-    this.body.sleep();
     this.asleep = true;
+    gate.defer(this.writeSleep);
   }
 
   wake(): void {
     if (this.destroyed) return;
-    this.body.wakeUp();
     this.asleep = false;
+    gate.defer(this.writeWake);
   }
 
   destroy(): void {
@@ -185,6 +193,79 @@ export class DynamicBody implements RigidBodyHandle {
     this.destroyed = true;
     this.manager.remove(this);
   }
+
+  private writeImpulse(
+    x: number,
+    y: number,
+    z: number,
+    atPoint: boolean,
+    px: number,
+    py: number,
+    pz: number,
+  ): void {
+    if (this.destroyed) return;
+    this.vecA.x = x;
+    this.vecA.y = y;
+    this.vecA.z = z;
+    if (!atPoint) {
+      this.body.applyImpulse(this.vecA, true);
+      return;
+    }
+    this.vecB.x = px;
+    this.vecB.y = py;
+    this.vecB.z = pz;
+    this.body.applyImpulseAtPoint(this.vecA, this.vecB, true);
+  }
+
+  private writeTorque(x: number, y: number, z: number): void {
+    if (this.destroyed) return;
+    this.vecA.x = x;
+    this.vecA.y = y;
+    this.vecA.z = z;
+    this.body.applyTorqueImpulse(this.vecA, true);
+  }
+
+  private writeVelocity(x: number, y: number, z: number): void {
+    if (this.destroyed) return;
+    this.vecA.x = x;
+    this.vecA.y = y;
+    this.vecA.z = z;
+    this.body.setLinvel(this.vecA, true);
+  }
+
+  private writePosition(
+    x: number,
+    y: number,
+    z: number,
+    rotate: boolean,
+    qx: number,
+    qy: number,
+    qz: number,
+    qw: number,
+  ): void {
+    if (this.destroyed) return;
+    this.vecA.x = x;
+    this.vecA.y = y;
+    this.vecA.z = z;
+    this.body.setTranslation(this.vecA, true);
+    if (rotate) {
+      this.rot.x = qx;
+      this.rot.y = qy;
+      this.rot.z = qz;
+      this.rot.w = qw;
+      this.body.setRotation(this.rot, true);
+    }
+    this.readTransform();
+    this.savePrevious();
+  }
+
+  private readonly writeSleep = (): void => {
+    if (!this.destroyed) this.body.sleep();
+  };
+
+  private readonly writeWake = (): void => {
+    if (!this.destroyed) this.body.wakeUp();
+  };
 }
 
 export class DynamicBodyManager {
@@ -264,7 +345,7 @@ export class DynamicBodyManager {
     if (!this.bodies.delete(handle.body.handle)) return;
     this.registry.unregister(handle.collider);
     this.registry.unregisterBody(handle.body);
-    this.world.removeRigidBody(handle.body);
+    gate.defer(() => this.world.removeRigidBody(handle.body));
   }
 
   /** Called immediately before `world.step()`. */
@@ -335,6 +416,17 @@ export class DynamicBodyManager {
 
   dispose(): void {
     for (const entry of [...this.bodies.values()]) entry.destroy();
+    this.bodies.clear();
+  }
+
+  /**
+   * Abandon every body without calling into Rapier. Used when the world has
+   * faulted and is being replaced: the handles the game still holds have to
+   * start refusing work, but removing them would go through the very bindings
+   * that failed.
+   */
+  forget(): void {
+    for (const entry of this.bodies.values()) entry.destroyed = true;
     this.bodies.clear();
   }
 

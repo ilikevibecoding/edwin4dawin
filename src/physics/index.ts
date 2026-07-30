@@ -9,6 +9,11 @@
  * The system runs at `ORDER.PHYSICS` (100), so the world has already advanced
  * by the time the player and AI ask their character controllers to move within
  * the same fixed tick.
+ *
+ * Everything that touches Rapier goes through the re-entrancy gate, and every
+ * public entry point contains its own faults: a trap inside the WASM leaves the
+ * whole world unusable, and the answer to that is a new world, not a physics
+ * system the engine quietly switches off. See `Reentrancy.ts` and `rebuild()`.
  */
 import * as THREE from 'three';
 import type { Collider, World } from '@dimforge/rapier3d-compat';
@@ -34,6 +39,7 @@ import { CharacterHandle } from './Character';
 import { DynamicBodyManager, type BodyOptions, type BodyShape } from './Dynamics';
 import { Ragdoll } from './Ragdoll';
 import { DebugRenderer } from './DebugRender';
+import { gate } from './Reentrancy';
 import { PHYS } from './Tuning';
 import { queryGroups } from './Groups';
 
@@ -55,13 +61,30 @@ export interface PhysicsStats {
   /** Scene queries issued in the last second. */
   queriesPerSecond: number;
   debugSegments: number;
+  /** Broad-phase refreshes taken so newly added colliders become queryable. */
+  queryRefreshes: number;
+  /** Mutations that had to wait for an outstanding query to return. */
+  deferredMutations: number;
+  /** Times the world was rebuilt after a Rapier fault. */
+  worldRebuilds: number;
 }
+
+/** A world that faulted this many times is left out of service for good. */
+const MAX_REBUILDS = 3;
+
+/** Gravity for the query-structure refresh; see `refreshIfDirty`. */
+const FROZEN_GRAVITY = { x: 0, y: 0, z: 0 };
 
 /** Deferred registration, in case the map somehow gets in before the WASM does. */
 interface PendingBox {
   center: THREE.Vector3;
   half: THREE.Vector3;
   quaternion: THREE.Quaternion | null;
+  userData: PhysicsUserData | undefined;
+}
+
+interface PendingMesh {
+  mesh: THREE.Mesh;
   userData: PhysicsUserData | undefined;
 }
 
@@ -86,6 +109,9 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
     bodies: 0,
     queriesPerSecond: 0,
     debugSegments: 0,
+    queryRefreshes: 0,
+    deferredMutations: 0,
+    worldRebuilds: 0,
   };
 
   private ctx: EngineContext | null = null;
@@ -99,12 +125,26 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
   private readonly characters = new Set<CharacterHandle>();
   private readonly ragdolls: Ragdoll[] = [];
   private readonly pendingBoxes: PendingBox[] = [];
-  private readonly pendingMeshes: Array<{ mesh: THREE.Mesh; userData?: PhysicsUserData }> = [];
+  private readonly pendingMeshes: PendingMesh[] = [];
+  /**
+   * Everything needed to lay the map's collision back down in a replacement
+   * world. Boxes are ~4.5k small records; meshes are references to Three.js
+   * geometry that stays alive in the scene regardless, so this costs about a
+   * megabyte and is the difference between recovering from a fault and having
+   * the player fall through the floor.
+   */
+  private readonly replayBoxes: PendingBox[] = [];
+  private readonly replayMeshes: PendingMesh[] = [];
 
   private stepIndex = 0;
   private queryWindow = 0;
   private structureDirty = false;
   private lastRefreshFrame = -1;
+  /** True between a Rapier fault and a successful rebuild; nothing may touch the world. */
+  private faulted = false;
+  /** Set once the rebuild budget is spent, so recovery is not retried forever. */
+  private retired = false;
+  private pendingStepDt = 0;
 
   // Reused query/impulse scratch so the hot paths never allocate.
   private readonly blastBall = new RAPIER.Ball(1);
@@ -125,20 +165,7 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
     this.ctx = ctx;
     await initRapier();
 
-    // Gravity is the game-feel value from GAMEPLAY, not 9.81: the jump arc and
-    // the fall of every physics prop have to agree.
-    const world = new RAPIER.World({ x: 0, y: GAMEPLAY.player.gravity, z: 0 });
-    world.timestep = ctx.time.fixedStep;
-    world.integrationParameters.dt = ctx.time.fixedStep;
-    world.numSolverIterations = PHYS.solverIterations;
-    world.numInternalPgsIterations = PHYS.internalPgsIterations;
-    world.maxCcdSubsteps = PHYS.maxCcdSubsteps;
-    world.lengthUnit = 1;
-    this.world = world;
-
-    this.queries = new QueryEngine(world, this.registry);
-    this.statics = new StaticGeometry(world, this.registry);
-    this.dynamics = new DynamicBodyManager(world, this.registry, dynamicCap(ctx.config));
+    this.install(this.makeWorld(ctx.time.fixedStep), dynamicCap(ctx.config));
 
     this.ready = true;
     this.flushPending();
@@ -149,41 +176,101 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
     );
   }
 
+  private makeWorld(dt: number): World {
+    const world = new RAPIER.World({ x: 0, y: GAMEPLAY.player.gravity, z: 0 });
+    world.timestep = dt;
+    world.integrationParameters.dt = dt;
+    world.numSolverIterations = PHYS.solverIterations;
+    world.numInternalPgsIterations = PHYS.internalPgsIterations;
+    world.maxCcdSubsteps = PHYS.maxCcdSubsteps;
+    world.lengthUnit = 1;
+    return world;
+  }
+
+  private install(world: World, cap: number): void {
+    this.world = world;
+    this.queries = new QueryEngine(world, this.registry);
+    this.statics = new StaticGeometry(world, this.registry);
+    this.dynamics = new DynamicBodyManager(world, this.registry, cap);
+  }
+
   fixedUpdate(dt: number, _ctx: EngineContext): void {
+    // Recovery happens here rather than in the fault handler so the rebuild
+    // runs on a clean stack, not while unwinding out of a trap.
+    if (this.faulted) {
+      this.rebuild();
+      return;
+    }
+    if (!this.world) return;
+    // The engine only ever calls this at gate depth zero, but a step taken with
+    // a query outstanding is the one mistake there is no coming back from.
+    this.pendingStepDt = dt;
+    if (gate.busy) {
+      gate.defer(this.deferredStep);
+      return;
+    }
+    this.step(dt);
+  }
+
+  private readonly deferredStep = (): void => {
+    if (this.world && !this.faulted) this.step(this.pendingStepDt);
+  };
+
+  /**
+   * The gate is held across the whole step, not just `world.step()`: read-back
+   * recycles bodies that fell out of the map and ragdoll settling puts corpses
+   * to sleep, and both of those are mutations that belong after the step rather
+   * than interleaved with it.
+   */
+  private step(dt: number): void {
     const world = this.world;
     if (!world) return;
 
-    if (world.timestep !== dt) {
-      world.timestep = dt;
-      world.integrationParameters.dt = dt;
+    gate.enter();
+    try {
+      if (world.timestep !== dt) {
+        world.timestep = dt;
+        world.integrationParameters.dt = dt;
+      }
+
+      this.dynamics?.savePrevious();
+
+      const started = performance.now();
+      world.step();
+      const elapsed = performance.now() - started;
+      this.stats.stepMs =
+        this.stats.stepMs === 0 ? elapsed : this.stats.stepMs * 0.94 + elapsed * 0.06;
+      if (elapsed > this.stats.stepPeakMs) this.stats.stepPeakMs = elapsed;
+
+      this.dynamics?.readBack();
+      this.structureDirty = false;
+      this.stepIndex++;
+
+      if (this.ragdolls.length > 0) this.updateRagdolls(dt);
+    } catch (err) {
+      this.fault('step', err);
+    } finally {
+      gate.leave();
     }
-
-    this.dynamics?.savePrevious();
-
-    const started = performance.now();
-    world.step();
-    const elapsed = performance.now() - started;
-    this.stats.stepMs = this.stats.stepMs === 0 ? elapsed : this.stats.stepMs * 0.94 + elapsed * 0.06;
-    if (elapsed > this.stats.stepPeakMs) this.stats.stepPeakMs = elapsed;
-
-    this.dynamics?.readBack();
-    this.structureDirty = false;
-    this.stepIndex++;
-
-    if (this.ragdolls.length > 0) this.updateRagdolls(dt);
   }
 
   update(dt: number, ctx: EngineContext): void {
     const world = this.world;
-    if (!world) return;
+    if (!world || this.faulted) return;
 
     if (ctx.input.keyPressed('F4')) this.setDebugRender(!this.debugRenderEnabled);
 
-    this.dynamics?.interpolate(ctx.time.alpha);
-    for (let i = 0; i < this.ragdolls.length; i++) this.ragdolls[i].sync();
-
-    this.debug.update(world);
-    this.updateStats(dt);
+    gate.enter();
+    try {
+      this.dynamics?.interpolate(ctx.time.alpha);
+      for (let i = 0; i < this.ragdolls.length; i++) this.ragdolls[i].sync();
+      this.debug.update(world);
+      this.updateStats(dt);
+    } catch (err) {
+      this.fault('update', err);
+    } finally {
+      gate.leave();
+    }
   }
 
   onQualityChanged(config: QualityConfig): void {
@@ -194,12 +281,21 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
 
   dispose(): void {
     this.debug.dispose();
-    for (const character of [...this.characters]) character.destroy();
-    for (const ragdoll of [...this.ragdolls]) ragdoll.destroy();
-    this.dynamics?.dispose();
-    this.statics?.dispose();
+    // Teardown runs on a world that may already have faulted, and every call
+    // below would throw on one. Nothing here needs to succeed for the page to
+    // go away cleanly.
+    try {
+      for (const character of [...this.characters]) character.destroy();
+      for (const ragdoll of [...this.ragdolls]) ragdoll.destroy();
+      this.dynamics?.dispose();
+      this.statics?.dispose();
+      this.world?.free();
+    } catch {
+      /* the world is being dropped either way */
+    }
+    this.characters.clear();
+    this.ragdolls.length = 0;
     this.registry.clear();
-    this.world?.free();
     this.world = null;
     this.queries = null;
     this.statics = null;
@@ -216,9 +312,15 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
     direction: THREE.Vector3,
     options?: RaycastOptions,
   ): PhysicsRaycastHit | null {
-    if (!this.queries) return null;
+    const queries = this.queries;
+    if (!queries || this.faulted) return null;
     this.refreshIfDirty();
-    return this.queries.raycast(origin, direction, options);
+    try {
+      return queries.raycast(origin, direction, options);
+    } catch (err) {
+      this.fault('raycast', err);
+      return null;
+    }
   }
 
   spherecast(
@@ -227,15 +329,27 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
     radius: number,
     options?: RaycastOptions,
   ): PhysicsRaycastHit | null {
-    if (!this.queries) return null;
+    const queries = this.queries;
+    if (!queries || this.faulted) return null;
     this.refreshIfDirty();
-    return this.queries.spherecast(origin, direction, radius, options);
+    try {
+      return queries.spherecast(origin, direction, radius, options);
+    } catch (err) {
+      this.fault('spherecast', err);
+      return null;
+    }
   }
 
   lineOfSight(from: THREE.Vector3, to: THREE.Vector3, groups?: number): boolean {
-    if (!this.queries) return true;
+    const queries = this.queries;
+    if (!queries || this.faulted) return true;
     this.refreshIfDirty();
-    return this.queries.lineOfSight(from, to, groups);
+    try {
+      return queries.lineOfSight(from, to, groups);
+    } catch (err) {
+      this.fault('lineOfSight', err);
+      return true;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -248,13 +362,15 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
     quaternion?: THREE.Quaternion,
     userData?: PhysicsUserData,
   ): void {
+    const record: PendingBox = {
+      center: center.clone(),
+      half: halfExtents.clone(),
+      quaternion: quaternion ? quaternion.clone() : null,
+      userData,
+    };
+    this.replayBoxes.push(record);
     if (!this.statics) {
-      this.pendingBoxes.push({
-        center: center.clone(),
-        half: halfExtents.clone(),
-        quaternion: quaternion ? quaternion.clone() : null,
-        userData,
-      });
+      this.pendingBoxes.push(record);
       return;
     }
     this.statics.addBox(center, halfExtents, quaternion, userData);
@@ -262,8 +378,10 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
   }
 
   addStaticMesh(mesh: THREE.Mesh, userData?: PhysicsUserData): void {
+    const record: PendingMesh = { mesh, userData };
+    this.replayMeshes.push(record);
     if (!this.statics) {
-      this.pendingMeshes.push({ mesh, userData });
+      this.pendingMeshes.push(record);
       return;
     }
     this.statics.addMesh(mesh, userData);
@@ -359,11 +477,21 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
    *
    * Rapier holds a borrow on the body set for the duration of a query callback
    * and panics on any mutation from inside it, so the bodies are collected first
-   * and pushed afterwards.
+   * and pushed afterwards. The gate now enforces that for every other mutator
+   * in the module; this one keeps doing it by hand because collecting handles
+   * is cheaper than queuing one closure per body in a blast.
+   *
+   * Collecting first is only half the rule, though. It protects the blast from
+   * its own query but not from somebody else's: a detonation raised while an
+   * outer cast is still open — impact FX firing from inside a bullet's
+   * raycast, which is exactly how the game reaches this — was still pushing
+   * impulses into a borrowed body set. So the whole push goes through the gate
+   * as well, and the parameters are snapshotted because the scratch fields will
+   * have been reused by then.
    */
   applyRadialImpulse(center: THREE.Vector3, radius: number, strength: number): void {
     const world = this.world;
-    if (!world || radius <= 0 || strength === 0) return;
+    if (!world || this.faulted || radius <= 0 || strength === 0) return;
     this.refreshIfDirty();
 
     this.blastBall.radius = radius;
@@ -375,20 +503,53 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
     this.blastSeen.clear();
     this.blastTargets.length = 0;
 
-    world.intersectionsWithShape(
-      this.blastCenter,
-      IDENTITY_ROT,
-      this.blastBall,
-      this.blastCallback,
-      RAPIER.QueryFilterFlags.EXCLUDE_FIXED |
-        RAPIER.QueryFilterFlags.EXCLUDE_KINEMATIC |
-        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-      queryGroups(COLLISION_GROUP.DYNAMIC | COLLISION_GROUP.DEBRIS | COLLISION_GROUP.RAGDOLL),
-    );
+    gate.enter();
+    try {
+      world.intersectionsWithShape(
+        this.blastCenter,
+        IDENTITY_ROT,
+        this.blastBall,
+        this.blastCallback,
+        RAPIER.QueryFilterFlags.EXCLUDE_FIXED |
+          RAPIER.QueryFilterFlags.EXCLUDE_KINEMATIC |
+          RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+        queryGroups(COLLISION_GROUP.DYNAMIC | COLLISION_GROUP.DEBRIS | COLLISION_GROUP.RAGDOLL),
+      );
+    } catch (err) {
+      this.fault('applyRadialImpulse', err);
+    } finally {
+      gate.leave();
+    }
 
-    for (let i = 0; i < this.blastTargets.length; i++) this.pushBlastTarget(this.blastTargets[i]);
+    if (gate.busy) {
+      const targets = this.blastTargets.slice();
+      gate.defer(() => this.pushBlast(targets, center.x, center.y, center.z, radius, strength));
+    } else {
+      this.pushBlast(this.blastTargets, center.x, center.y, center.z, radius, strength);
+    }
     this.blastSeen.clear();
     this.blastTargets.length = 0;
+  }
+
+  private pushBlast(
+    targets: readonly number[],
+    x: number,
+    y: number,
+    z: number,
+    radius: number,
+    strength: number,
+  ): void {
+    if (!this.world || this.faulted) return;
+    this.blastCenter.x = x;
+    this.blastCenter.y = y;
+    this.blastCenter.z = z;
+    this.blastRadius = radius;
+    this.blastStrength = strength;
+    try {
+      for (let i = 0; i < targets.length; i++) this.pushBlastTarget(targets[i]);
+    } catch (err) {
+      this.fault('applyRadialImpulse', err);
+    }
   }
 
   private collectBlastTarget(collider: Collider): boolean {
@@ -485,25 +646,128 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Fault recovery
+  // -------------------------------------------------------------------------
+
+  /**
+   * A Rapier fault is not recoverable in place. Once the WASM has trapped, the
+   * borrow flags on that world's body and collider sets stay set and every
+   * later call through it fails, which is why one bad step took five engine
+   * phases down with it. A replacement `World` is unaffected, so the answer is
+   * to build one rather than let the engine switch physics off: a session with
+   * no simulation looks like the game is broken, whereas a rebuild costs the
+   * loose debris and any corpses on the ground and keeps everything else.
+   */
+  private fault(where: string, err: unknown): void {
+    if (this.faulted) return;
+    this.faulted = true;
+    console.error(`[physics] rapier fault in ${where}; rebuilding the world`, err);
+  }
+
+  private rebuild(): void {
+    const ctx = this.ctx;
+    if (this.retired || !ctx) return;
+    if (this.stats.worldRebuilds >= MAX_REBUILDS) {
+      this.retired = true;
+      console.error(`[physics] ${MAX_REBUILDS} rebuilds already; leaving the world offline`);
+      return;
+    }
+
+    // Nothing that referenced the dead world may be touched again, deferred
+    // work included: those closures capture bodies that no longer exist. So
+    // every handle is abandoned rather than destroyed — a destroy would call
+    // straight back into the bindings that just failed.
+    gate.reset();
+    const characters = [...this.characters];
+    for (const ragdoll of [...this.ragdolls]) ragdoll.forget();
+    this.ragdolls.length = 0;
+    this.dynamics?.forget();
+    this.registry.clear();
+    // The old world is left to the GC on purpose: `free()` goes through the
+    // same poisoned bindings and would throw.
+    this.world = null;
+
+    const started = performance.now();
+    const world = this.makeWorld(ctx.time.fixedStep);
+    this.install(world, dynamicCap(ctx.config));
+    const queries = this.queries;
+    if (!queries) return;
+
+    for (const box of this.replayBoxes) {
+      this.statics?.addBox(box.center, box.half, box.quaternion ?? undefined, box.userData);
+    }
+    for (const entry of this.replayMeshes) this.statics?.addMesh(entry.mesh, entry.userData);
+    for (const character of characters) character.rebuild(world, queries);
+
+    this.structureDirty = true;
+    this.lastRefreshFrame = -1;
+    this.faulted = false;
+    this.stats.worldRebuilds++;
+    console.warn(
+      `[physics] world rebuilt in ${(performance.now() - started).toFixed(1)} ms — ` +
+        `${this.replayBoxes.length} boxes, ${this.replayMeshes.length} meshes, ` +
+        `${characters.length} characters restored`,
+    );
+  }
+
   /**
    * Rapier 0.19 folded the query pipeline into the broad phase, which is only
    * rebuilt inside `step()`. Colliders added since the last step are therefore
-   * invisible to queries until one runs, so take a near-zero step on demand —
-   * at most once per frame, since anything added later will be picked up by the
-   * next fixed update anyway.
+   * invisible to queries until one runs, so take a step on demand — at most
+   * once per frame, since anything added later will be picked up by the next
+   * fixed update anyway.
+   *
+   * That step has to advance nothing. It used to run at `dt = 1e-6`, which is
+   * not "nearly zero" to a constraint solver: the joint and contact terms are
+   * built from `1 / dt`, so at a microsecond an acceleration-based ragdoll
+   * motor produces corrective velocities around 1e22 m/s and the bodies go
+   * non-finite within about ten frames. The *next* ordinary `world.step()`
+   * then trips an assertion inside the broad phase and the WASM traps with
+   * `RuntimeError: unreachable`, which is where the crash in `shots/v3`
+   * begins. Freezing gravity, both solver loops and CCD makes `dt = 0` safe:
+   * the broad phase is still rebuilt, so new colliders become queryable, and a
+   * settled pile measures zero drift across hundreds of refreshes.
+   *
+   * The other half of the rule is that this must never run inside a query.
+   * `world.step()` re-entered from a query callback does not merely fail — it
+   * leaves borrows outstanding for the life of the world, which is the
+   * "recursive use of an object" cascade in the same log.
    */
   private refreshIfDirty(): void {
-    if (!this.structureDirty) return;
+    if (!this.structureDirty || gate.busy) return;
     const world = this.world;
     const frame = this.ctx?.time.frame ?? 0;
     if (!world || frame === this.lastRefreshFrame) return;
     this.lastRefreshFrame = frame;
     this.structureDirty = false;
+    this.stats.queryRefreshes++;
 
+    const gravity = world.gravity;
     const timestep = world.timestep;
-    world.timestep = 1e-6;
-    world.step();
-    world.timestep = timestep;
+    const solver = world.numSolverIterations;
+    const pgs = world.numInternalPgsIterations;
+    const ccd = world.maxCcdSubsteps;
+    gate.enter();
+    try {
+      world.gravity = FROZEN_GRAVITY;
+      world.timestep = 0;
+      world.numSolverIterations = 0;
+      world.numInternalPgsIterations = 0;
+      world.maxCcdSubsteps = 0;
+      world.step();
+      // Deliberately inside the `try`: if the step threw, this world is being
+      // replaced and restoring its parameters would only throw again.
+      world.gravity = gravity;
+      world.timestep = timestep;
+      world.numSolverIterations = solver;
+      world.numInternalPgsIterations = pgs;
+      world.maxCcdSubsteps = ccd;
+    } catch (err) {
+      this.fault('refresh', err);
+    } finally {
+      gate.leave();
+    }
   }
 
   private updateRagdolls(dt: number): void {
@@ -529,6 +793,8 @@ export class PhysicsSystemImpl implements PhysicsSystem, System {
       stats.colliders = world.colliders.len();
       stats.bodies = world.bodies.len();
     }
+
+    stats.deferredMutations = gate.deferrals;
 
     this.queryWindow += dt;
     if (this.queryWindow >= 1 && this.queries) {

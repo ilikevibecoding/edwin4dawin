@@ -20,6 +20,11 @@
  * own autostep, which only fires at sprint speeds — see the note there. Steps up
  * to `GAMEPLAY.player.stepHeight` are climbed at any walk speed and anything
  * taller is refused, so callers can treat `stepHeight` as an exact limit.
+ *
+ * Every entry point that writes to Rapier — `move`, `setPosition`, `setHeight`,
+ * `destroy` — defers through the re-entrancy gate when a query is outstanding,
+ * so the internals below can write the body directly without each of them
+ * having to re-check. See `Reentrancy.ts`.
  */
 import * as THREE from 'three';
 import type {
@@ -38,6 +43,7 @@ import { DEG2RAD } from '../core/MathUtils';
 import type { ColliderRegistry } from './Registry';
 import type { QueryEngine } from './Queries';
 import { CHARACTER_FILTER, ENEMY_GROUPS, PLAYER_GROUPS, queryGroups } from './Groups';
+import { gate } from './Reentrancy';
 import { PHYS } from './Tuning';
 
 /** Minimum capsule radius, so prone still has a body rather than a point. */
@@ -59,13 +65,14 @@ export class CharacterHandle implements CharacterControllerHandle {
   grounded = false;
   groundSurface: SurfaceType = 'concrete';
 
-  readonly body: RigidBody;
-  readonly collider: Collider;
+  body: RigidBody;
+  collider: Collider;
 
-  private readonly world: World;
+  private world: World;
+  private queries: QueryEngine;
+  private controller: KinematicCharacterController;
   private readonly registry: ColliderRegistry;
-  private readonly queries: QueryEngine;
-  private readonly controller: KinematicCharacterController;
+  private readonly userData: PhysicsUserData | undefined;
   private readonly onDestroy: (handle: CharacterHandle) => void;
   private readonly collisionOut = new RAPIER.CharacterCollision();
   private readonly motion = new THREE.Vector3();
@@ -73,6 +80,9 @@ export class CharacterHandle implements CharacterControllerHandle {
   private readonly probeNormal = new THREE.Vector3(0, 1, 0);
   private readonly desired = { x: 0, y: 0, z: 0 };
   private readonly nextTranslation = { x: 0, y: 0, z: 0 };
+  private readonly colliderOffset = { x: 0, y: 0, z: 0 };
+  private readonly pendingMove = new THREE.Vector3();
+  private moveQueued = false;
   private readonly probeShape: Ball;
   private readonly fitShape: Capsule;
 
@@ -96,6 +106,7 @@ export class CharacterHandle implements CharacterControllerHandle {
     this.world = opts.world;
     this.registry = opts.registry;
     this.queries = opts.queries;
+    this.userData = userData;
     this.onDestroy = opts.onDestroy;
 
     this.height = Math.max(0.3, height);
@@ -106,9 +117,42 @@ export class CharacterHandle implements CharacterControllerHandle {
     this.filterGroups = team === 'enemy' ? ENEMY_GROUPS : PLAYER_GROUPS;
     this.probeGroups = queryGroups(CHARACTER_FILTER);
 
-    this.body = this.world.createRigidBody(
+    this.probeShape = new RAPIER.Ball(this.radius);
+    this.fitShape = new RAPIER.Capsule(this.halfHeight(), this.radius);
+
+    const built = this.build();
+    this.body = built.body;
+    this.collider = built.collider;
+    this.controller = built.controller;
+  }
+
+  /**
+   * Re-create the capsule in a replacement world after a Rapier fault, keeping
+   * this handle's identity so the player and AI never see a null controller.
+   */
+  rebuild(world: World, queries: QueryEngine): void {
+    if (this.destroyed) return;
+    this.world = world;
+    this.queries = queries;
+    const built = this.build();
+    this.body = built.body;
+    this.collider = built.collider;
+    this.controller = built.controller;
+    this.snapEnabled = true;
+    this.grounded = false;
+    // The gate's queue went with the old world, so a move that was waiting on
+    // it will never be drained and the latch has to come back off.
+    this.moveQueued = false;
+  }
+
+  private build(): {
+    body: RigidBody;
+    collider: Collider;
+    controller: KinematicCharacterController;
+  } {
+    const body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.kinematicPositionBased()
-        .setTranslation(position.x, position.y + this.skin, position.z)
+        .setTranslation(this.position.x, this.position.y + this.skin, this.position.z)
         .setCcdEnabled(false),
     );
 
@@ -118,11 +162,8 @@ export class CharacterHandle implements CharacterControllerHandle {
       .setFriction(PHYS.characterFriction)
       .setRestitution(0)
       .setCollisionGroups(this.filterGroups);
-    this.collider = this.world.createCollider(desc, this.body);
-    this.registry.register(this.collider, userData, this, userData?.surface ?? 'flesh');
-
-    this.probeShape = new RAPIER.Ball(this.radius);
-    this.fitShape = new RAPIER.Capsule(this.halfHeight(), this.radius);
+    const collider = this.world.createCollider(desc, body);
+    this.registry.register(collider, this.userData, this, this.userData?.surface ?? 'flesh');
 
     const controller = this.world.createCharacterController(PHYS.characterOffset);
     controller.setUp({ x: 0, y: 1, z: 0 });
@@ -141,12 +182,48 @@ export class CharacterHandle implements CharacterControllerHandle {
     controller.enableSnapToGround(PHYS.characterSnapDistance);
     controller.setApplyImpulsesToDynamicBodies(true);
     controller.setCharacterMass(GAMEPLAY.player.mass);
-    this.controller = controller;
+    return { body, collider, controller };
   }
 
   move(displacement: THREE.Vector3, _dt: number): THREE.Vector3 {
     if (this.destroyed) return this.motion.set(0, 0, 0);
+    // A move sweeps the capsule and then writes the body, so it cannot run
+    // inside somebody else's query. Take it the instant they let go instead;
+    // that is still within the same tick, and the alternative is a mutation the
+    // binding silently discards.
+    if (gate.busy) {
+      this.pendingMove.copy(displacement);
+      if (!this.moveQueued) {
+        this.moveQueued = true;
+        gate.defer(this.runQueuedMove);
+      }
+      return this.motion.set(0, 0, 0);
+    }
+    return this.resolveMove(displacement);
+  }
 
+  private readonly runQueuedMove = (): void => {
+    this.moveQueued = false;
+    if (!this.destroyed) this.resolveMove(this.pendingMove);
+  };
+
+  /**
+   * Held for its whole duration rather than only across the Rapier calls: a
+   * move is a sweep, two step probes and a body write that all assume the world
+   * does not change underneath them, and draining a deferred mutation between
+   * any two of them — a `destroy()` of this very capsule, in the worst case —
+   * would invalidate the ones still to come.
+   */
+  private resolveMove(displacement: THREE.Vector3): THREE.Vector3 {
+    gate.enter();
+    try {
+      return this.resolveMoveLocked(displacement);
+    } finally {
+      gate.leave();
+    }
+  }
+
+  private resolveMoveLocked(displacement: THREE.Vector3): THREE.Vector3 {
     let dx = displacement.x;
     let dy = displacement.y;
     let dz = displacement.z;
@@ -210,31 +287,45 @@ export class CharacterHandle implements CharacterControllerHandle {
   setPosition(p: THREE.Vector3): void {
     if (this.destroyed) return;
     this.position.copy(p);
-    // Both, so the teleport is visible to queries immediately and the kinematic
-    // integrator does not sweep the capsule across the map next step.
-    this.writeBodyTarget(true);
     this.grounded = false;
+    gate.defer(this.runTeleport);
   }
+
+  /**
+   * Both, so the teleport is visible to queries immediately and the kinematic
+   * integrator does not sweep the capsule across the map next step.
+   */
+  private readonly runTeleport = (): void => {
+    if (!this.destroyed) this.writeBodyTarget(true);
+  };
 
   setHeight(height: number): boolean {
     if (this.destroyed) return false;
     const target = Math.max(0.3, height);
     if (Math.abs(target - this.height) < 1e-4) return true;
+    // The clearance test only reads, so its answer is honest even mid-query;
+    // only the capsule resize that follows has to wait.
     if (target > this.height && this.isBlockedAbove(target)) return false;
 
     this.height = target;
     this.radius = clampRadius(target, this.radius);
+    this.probeShape.radius = this.radius;
+    gate.defer(this.runResize);
+    return true;
+  }
+
+  private readonly runResize = (): void => {
+    if (this.destroyed) return;
     this.collider.setRadius(this.radius);
     this.collider.setHalfHeight(this.halfHeight());
-    this.collider.setTranslationWrtParent({ x: 0, y: target * 0.5, z: 0 });
-    this.probeShape.radius = this.radius;
+    this.colliderOffset.y = this.height * 0.5;
+    this.collider.setTranslationWrtParent(this.colliderOffset);
     this.controller.enableAutostep(
       GAMEPLAY.player.stepHeight,
       Math.min(PHYS.characterAutostepMinWidth, this.radius * 0.6),
       true,
     );
-    return true;
-  }
+  };
 
   isBlockedAbove(height: number): boolean {
     if (this.destroyed) return false;
@@ -268,10 +359,14 @@ export class CharacterHandle implements CharacterControllerHandle {
     this.destroyed = true;
     this.registry.unregister(this.collider);
     this.registry.unregisterBody(this.body);
+    this.onDestroy(this);
+    gate.defer(this.runDestroy);
+  }
+
+  private readonly runDestroy = (): void => {
     this.world.removeCharacterController(this.controller);
     this.world.removeRigidBody(this.body);
-    this.onDestroy(this);
-  }
+  };
 
   private halfHeight(): number {
     return Math.max(0.01, this.height * 0.5 - this.radius);
@@ -281,12 +376,19 @@ export class CharacterHandle implements CharacterControllerHandle {
     this.desired.x = dx;
     this.desired.y = dy;
     this.desired.z = dz;
-    this.controller.computeColliderMovement(
-      this.collider,
-      this.desired,
-      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-      this.filterGroups,
-    );
+    // The controller sweeps the capsule through the broad phase and pushes any
+    // dynamic body it hits, so it holds the world exactly as a query does.
+    gate.enter();
+    try {
+      this.controller.computeColliderMovement(
+        this.collider,
+        this.desired,
+        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+        this.filterGroups,
+      );
+    } finally {
+      gate.leave();
+    }
   }
 
   /**
@@ -298,6 +400,10 @@ export class CharacterHandle implements CharacterControllerHandle {
    *
    * Returns the rise applied, having left the resolved horizontal movement in
    * `stepped`, or 0 when no step was taken.
+   *
+   * The order below matters: both probes are read to completion *before* the
+   * capsule is lifted, because a body written while a cast is still outstanding
+   * is a write the binding discards.
    */
   private stepAssist(ndx: number, ndz: number, requested: number): number {
     const maxRise = GAMEPLAY.player.stepHeight;
@@ -355,6 +461,10 @@ export class CharacterHandle implements CharacterControllerHandle {
     return rise;
   }
 
+  /**
+   * Only ever reached at gate depth zero: every public entry point defers while
+   * a query is outstanding, so nothing here has to re-check.
+   */
   private setColliderTranslation(x: number, y: number, z: number): void {
     this.nextTranslation.x = x;
     this.nextTranslation.y = y;

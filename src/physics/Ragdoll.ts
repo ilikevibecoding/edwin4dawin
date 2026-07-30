@@ -29,6 +29,7 @@ import type { PhysicsUserData, RagdollHandle } from '../core/Contracts';
 import type { BodyPart } from '../core/GameTypes';
 import type { ColliderRegistry } from './Registry';
 import { RAGDOLL_GROUPS } from './Groups';
+import { gate } from './Reentrancy';
 import { PHYS } from './Tuning';
 import { rng } from '../core/MathUtils';
 
@@ -248,25 +249,54 @@ export class Ragdoll implements RagdollHandle {
     if (this.destroyed) return;
     const part = this.parts.get(resolvePart(bone)) ?? this.parts.get('chest') ?? this.ordered[0];
     if (!part) return;
-    // A force-slept corpse has every part asleep; the hit limb alone waking up
-    // would drag against ten sleeping neighbours.
-    for (let i = 0; i < this.ordered.length; i++) this.ordered[i].body.wakeUp();
-    this.vec.x = impulse.x;
-    this.vec.y = impulse.y;
-    this.vec.z = impulse.z;
-    if (at) {
-      this.point.x = at.x;
-      this.point.y = at.y;
-      this.point.z = at.z;
-      part.body.applyImpulseAtPoint(this.vec, this.point, true);
-    } else {
-      part.body.applyImpulse(this.vec, true);
-    }
     // The active-time budget is measured from the last disturbance, not from
     // death: shooting a corpse that has already been force-slept has to move it.
     this.settled = false;
     this.settleTimer = 0;
     this.age = 0;
+
+    // Bullet impacts arrive from combat code that has a raycast on the stack,
+    // so the write waits for the query to let go of the world.
+    const x = impulse.x;
+    const y = impulse.y;
+    const z = impulse.z;
+    if (!at) {
+      if (gate.busy) gate.defer(() => this.writeImpulse(part, x, y, z, false, 0, 0, 0));
+      else this.writeImpulse(part, x, y, z, false, 0, 0, 0);
+      return;
+    }
+    const px = at.x;
+    const py = at.y;
+    const pz = at.z;
+    if (gate.busy) gate.defer(() => this.writeImpulse(part, x, y, z, true, px, py, pz));
+    else this.writeImpulse(part, x, y, z, true, px, py, pz);
+  }
+
+  private writeImpulse(
+    part: Part,
+    x: number,
+    y: number,
+    z: number,
+    atPoint: boolean,
+    px: number,
+    py: number,
+    pz: number,
+  ): void {
+    if (this.destroyed) return;
+    // A force-slept corpse has every part asleep; the hit limb alone waking up
+    // would drag against ten sleeping neighbours.
+    for (let i = 0; i < this.ordered.length; i++) this.ordered[i].body.wakeUp();
+    this.vec.x = x;
+    this.vec.y = y;
+    this.vec.z = z;
+    if (atPoint) {
+      this.point.x = px;
+      this.point.y = py;
+      this.point.z = pz;
+      part.body.applyImpulseAtPoint(this.vec, this.point, true);
+    } else {
+      part.body.applyImpulse(this.vec, true);
+    }
   }
 
   /**
@@ -341,16 +371,34 @@ export class Ragdoll implements RagdollHandle {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    for (const joint of this.joints) this.world.removeImpulseJoint(joint, false);
-    this.joints.length = 0;
+    const joints = [...this.joints];
+    const bodies: RigidBody[] = [];
     for (const part of this.ordered) {
       if (part.body.numColliders() > 0) this.registry.unregister(part.body.collider(0));
       this.registry.unregisterBody(part.body);
-      this.world.removeRigidBody(part.body);
+      bodies.push(part.body);
     }
+    this.joints.length = 0;
     this.ordered.length = 0;
     this.parts.clear();
     this.onDestroy(this);
+    gate.defer(() => {
+      for (const joint of joints) this.world.removeImpulseJoint(joint, false);
+      for (const body of bodies) this.world.removeRigidBody(body);
+    });
+  }
+
+  /**
+   * Drop the corpse without calling into Rapier, for when the world has
+   * faulted and is being replaced. The bones keep whatever pose they were last
+   * synced to, which is the same thing that happens when a ragdoll is recycled.
+   */
+  forget(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.joints.length = 0;
+    this.ordered.length = 0;
+    this.parts.clear();
   }
 
   private build(layout: Layout): void {

@@ -7,6 +7,14 @@
  * exclusion set and the returned hit records are all reused. Hit records come
  * from a small ring so a caller can hold a couple of results at once (comparing
  * two casts, for instance) without them aliasing.
+ *
+ * Every method here is bracketed with the re-entrancy gate, because a query
+ * holds a borrow on the body and collider sets for its whole duration and
+ * anything that mutates the world while it is outstanding either silently does
+ * nothing or poisons the world outright. The bracket covers the read-back as
+ * well as the cast: deferred mutations run the moment the gate reaches zero,
+ * and one of them removing the collider we just hit would leave the hit record
+ * resolving against a dead handle. See `Reentrancy.ts`.
  */
 import * as THREE from 'three';
 import type { Ball, Collider, Ray, Shape, World } from '@dimforge/rapier3d-compat';
@@ -15,6 +23,7 @@ import type { PhysicsRaycastHit, PhysicsUserData, RaycastOptions } from '../core
 import type { SurfaceType } from '../core/GameTypes';
 import type { ColliderRegistry } from './Registry';
 import { DEFAULT_QUERY_MASK, DEFAULT_SIGHT_MASK, queryGroups } from './Groups';
+import { gate } from './Reentrancy';
 import { IDENTITY_ROT } from './StaticGeometry';
 
 const HIT_RING = 16;
@@ -84,30 +93,35 @@ export class QueryEngine {
     const filter = this.beginFilter(options);
     this.count++;
 
-    const hit = this.world.castRayAndGetNormal(
-      ray,
-      maxDistance,
-      true,
-      this.flags(options),
-      queryGroups(options?.groups ?? DEFAULT_QUERY_MASK),
-      undefined,
-      undefined,
-      filter,
-    );
-    this.endFilter();
-    if (!hit) return null;
+    gate.enter();
+    try {
+      const hit = this.world.castRayAndGetNormal(
+        ray,
+        maxDistance,
+        true,
+        this.flags(options),
+        queryGroups(options?.groups ?? DEFAULT_QUERY_MASK),
+        undefined,
+        undefined,
+        filter,
+      );
+      this.endFilter();
+      if (!hit) return null;
 
-    const out = this.nextHit();
-    const t = hit.timeOfImpact;
-    out.distance = t;
-    out.point.set(origin.x + dx * t, origin.y + dy * t, origin.z + dz * t);
-    // A ray that starts inside a solid reports a zero normal; facing it back at
-    // the shooter is the only sane answer and keeps impact FX from exploding.
-    const n = hit.normal;
-    if (n.x * n.x + n.y * n.y + n.z * n.z < 1e-8) out.normal.set(-dx, -dy, -dz);
-    else out.normal.set(n.x, n.y, n.z);
-    this.fill(out, hit.collider);
-    return out;
+      const out = this.nextHit();
+      const t = hit.timeOfImpact;
+      out.distance = t;
+      out.point.set(origin.x + dx * t, origin.y + dy * t, origin.z + dz * t);
+      // A ray that starts inside a solid reports a zero normal; facing it back at
+      // the shooter is the only sane answer and keeps impact FX from exploding.
+      const n = hit.normal;
+      if (n.x * n.x + n.y * n.y + n.z * n.z < 1e-8) out.normal.set(-dx, -dy, -dz);
+      else out.normal.set(n.x, n.y, n.z);
+      this.fill(out, hit.collider);
+      return out;
+    } finally {
+      gate.leave();
+    }
   }
 
   spherecast(
@@ -137,32 +151,37 @@ export class QueryEngine {
 
     // stopAtPenetration = false: a grenade that already clips a wall should be
     // allowed to keep travelling out of it rather than freezing at distance 0.
-    const hit = this.world.castShape(
-      this.shapePos,
-      IDENTITY_ROT,
-      this.shapeVel,
-      this.ball,
-      0,
-      maxDistance,
-      false,
-      this.flags(options),
-      queryGroups(options?.groups ?? DEFAULT_QUERY_MASK),
-      undefined,
-      undefined,
-      filter,
-    );
-    this.endFilter();
-    if (!hit) return null;
+    gate.enter();
+    try {
+      const hit = this.world.castShape(
+        this.shapePos,
+        IDENTITY_ROT,
+        this.shapeVel,
+        this.ball,
+        0,
+        maxDistance,
+        false,
+        this.flags(options),
+        queryGroups(options?.groups ?? DEFAULT_QUERY_MASK),
+        undefined,
+        undefined,
+        filter,
+      );
+      this.endFilter();
+      if (!hit) return null;
 
-    const out = this.nextHit();
-    out.distance = hit.time_of_impact;
-    const w = hit.witness1;
-    out.point.set(w.x, w.y, w.z);
-    const n = hit.normal1;
-    if (n.x * n.x + n.y * n.y + n.z * n.z < 1e-8) out.normal.set(-dx, -dy, -dz);
-    else out.normal.set(n.x, n.y, n.z);
-    this.fill(out, hit.collider);
-    return out;
+      const out = this.nextHit();
+      out.distance = hit.time_of_impact;
+      const w = hit.witness1;
+      out.point.set(w.x, w.y, w.z);
+      const n = hit.normal1;
+      if (n.x * n.x + n.y * n.y + n.z * n.z < 1e-8) out.normal.set(-dx, -dy, -dz);
+      else out.normal.set(n.x, n.y, n.z);
+      this.fill(out, hit.collider);
+      return out;
+    } finally {
+      gate.leave();
+    }
   }
 
   /** Boolean visibility test. Cheapest path: no normal, no hit record. */
@@ -183,15 +202,20 @@ export class QueryEngine {
     ray.dir.z = dz * inv;
     this.count++;
 
-    return (
-      this.world.castRay(
-        ray,
-        len,
-        true,
-        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-        queryGroups(groups ?? DEFAULT_SIGHT_MASK),
-      ) === null
-    );
+    gate.enter();
+    try {
+      return (
+        this.world.castRay(
+          ray,
+          len,
+          true,
+          RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+          queryGroups(groups ?? DEFAULT_SIGHT_MASK),
+        ) === null
+      );
+    } finally {
+      gate.leave();
+    }
   }
 
   /** Shape cast used by the character controller's stand-up check. */
@@ -212,20 +236,25 @@ export class QueryEngine {
     this.shapeVel.y = 1;
     this.shapeVel.z = 0;
     this.count++;
-    return (
-      this.world.castShape(
-        this.shapePos,
-        IDENTITY_ROT,
-        this.shapeVel,
-        shape,
-        0,
-        distance,
-        true,
-        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-        groups,
-        excludeCollider,
-      ) !== null
-    );
+    gate.enter();
+    try {
+      return (
+        this.world.castShape(
+          this.shapePos,
+          IDENTITY_ROT,
+          this.shapeVel,
+          shape,
+          0,
+          distance,
+          true,
+          RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+          groups,
+          excludeCollider,
+        ) !== null
+      );
+    } finally {
+      gate.leave();
+    }
   }
 
   /**
@@ -249,19 +278,24 @@ export class QueryEngine {
     ray.dir.y = -1;
     ray.dir.z = 0;
     this.count++;
-    const hit = this.world.castRayAndGetNormal(
-      ray,
-      distance,
-      true,
-      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-      groups,
-      excludeCollider,
-    );
-    if (!hit) return NaN;
-    const n = hit.normal;
-    if (n.x * n.x + n.y * n.y + n.z * n.z > 1e-8) outNormal.set(n.x, n.y, n.z);
-    else outNormal.set(0, 1, 0);
-    return y - hit.timeOfImpact;
+    gate.enter();
+    try {
+      const hit = this.world.castRayAndGetNormal(
+        ray,
+        distance,
+        true,
+        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+        groups,
+        excludeCollider,
+      );
+      if (!hit) return NaN;
+      const n = hit.normal;
+      if (n.x * n.x + n.y * n.y + n.z * n.z > 1e-8) outNormal.set(n.x, n.y, n.z);
+      else outNormal.set(0, 1, 0);
+      return y - hit.timeOfImpact;
+    } finally {
+      gate.leave();
+    }
   }
 
   /** True when `shape` can be placed at the given point without touching anything. */
@@ -277,16 +311,21 @@ export class QueryEngine {
     this.shapePos.y = y;
     this.shapePos.z = z;
     this.count++;
-    return (
-      this.world.intersectionWithShape(
-        this.shapePos,
-        IDENTITY_ROT,
-        shape,
-        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-        groups,
-        excludeCollider,
-      ) === null
-    );
+    gate.enter();
+    try {
+      return (
+        this.world.intersectionWithShape(
+          this.shapePos,
+          IDENTITY_ROT,
+          shape,
+          RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+          groups,
+          excludeCollider,
+        ) === null
+      );
+    } finally {
+      gate.leave();
+    }
   }
 
   /** Downward probe used to resolve the ground surface under a character. */
@@ -307,18 +346,23 @@ export class QueryEngine {
     ray.dir.y = -1;
     ray.dir.z = 0;
     this.count++;
-    const hit = this.world.castRayAndGetNormal(
-      ray,
-      distance,
-      true,
-      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-      groups,
-      excludeCollider,
-    );
-    if (!hit) return null;
-    const n = hit.normal;
-    if (n.y > 0.1) outNormal.set(n.x, n.y, n.z);
-    return this.registry.surfaceOf(hit.collider.handle);
+    gate.enter();
+    try {
+      const hit = this.world.castRayAndGetNormal(
+        ray,
+        distance,
+        true,
+        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+        groups,
+        excludeCollider,
+      );
+      if (!hit) return null;
+      const n = hit.normal;
+      if (n.y > 0.1) outNormal.set(n.x, n.y, n.z);
+      return this.registry.surfaceOf(hit.collider.handle);
+    } finally {
+      gate.leave();
+    }
   }
 
   private flags(options: RaycastOptions | undefined): number {
