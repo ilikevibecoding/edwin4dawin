@@ -156,7 +156,27 @@ export class Engine {
 
   /** Initialise systems in dependency order, reporting progress 0..1. */
   async init(onProgress?: (fraction: number, label: string) => void): Promise<void> {
-    const ordered = this.topoSort();
+    // Check shader links for the whole of init, then drop back to the build
+    // default. Almost every program in the game is created here — procgen's
+    // texture bakes, the post stack, the material patches — and outside DEV
+    // three never asks the driver whether a link succeeded, so a shader that
+    // failed to compile produced nothing but a bare INVALID_OPERATION warning
+    // with no material, file or line. One typo in a bake shader hid behind that
+    // for an entire review cycle.
+    const checkShaders = this.renderer.debug.checkShaderErrors;
+    this.renderer.debug.checkShaderErrors = true;
+    try {
+      await this.initSystems(this.topoSort(), onProgress);
+    } finally {
+      this.renderer.debug.checkShaderErrors = checkShaders;
+    }
+    this.started = true;
+  }
+
+  private async initSystems(
+    ordered: System[],
+    onProgress?: (fraction: number, label: string) => void,
+  ): Promise<void> {
     for (let i = 0; i < ordered.length; i++) {
       const s = ordered[i];
       onProgress?.(i / ordered.length, s.name);
@@ -165,7 +185,6 @@ export class Engine {
       await s.init?.(this.ctx);
     }
     onProgress?.(1, 'ready');
-    this.started = true;
   }
 
   private topoSort(): System[] {

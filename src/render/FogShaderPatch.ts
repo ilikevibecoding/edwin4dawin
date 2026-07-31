@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { probeCompiles } from './ShaderProbe';
 
 /**
  * Aerial perspective, injected into three's fog chunks.
@@ -247,20 +248,7 @@ export function validateFogPatch(renderer: THREE.WebGLRenderer): boolean {
   scene.add(new THREE.Sprite(new THREE.SpriteMaterial({ fog: true })));
   scene.add(new THREE.DirectionalLight(0xffffff, 1));
 
-  let failed = false;
-  const prevCheck = renderer.debug.checkShaderErrors;
-  const prevHandler = renderer.debug.onShaderError;
-  renderer.debug.checkShaderErrors = true;
-  renderer.debug.onShaderError = (): void => {
-    failed = true;
-  };
-  try {
-    renderer.compile(scene, camera);
-  } catch {
-    failed = true;
-  }
-  renderer.debug.checkShaderErrors = prevCheck;
-  renderer.debug.onShaderError = prevHandler;
+  const linked = probeCompiles(renderer, scene, camera);
 
   geometry.dispose();
   for (const m of probes) m.dispose();
@@ -270,7 +258,7 @@ export function validateFogPatch(renderer: THREE.WebGLRenderer): boolean {
   });
   scene.clear();
 
-  if (failed) {
+  if (!linked) {
     console.warn('[render] aerial-perspective fog patch rejected by the driver; using stock fog');
     uninstallFogPatch();
     return false;

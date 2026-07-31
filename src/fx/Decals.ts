@@ -162,7 +162,20 @@ export class DecalSystem {
     this.mesh.visible = false;
     this.root.add(this.mesh);
 
-    this.patchMaterialTemplate = new THREE.ShaderMaterial({
+    this.patchMaterialTemplate = this.clonePatchMaterial();
+  }
+
+  /**
+   * Build a fresh patch material rather than cloning one.
+   *
+   * `ShaderMaterial.copy` runs `cloneUniforms`, which refuses to clone a
+   * render-target texture, warns, and writes null in its place — and the decal
+   * atlas comes off a render target. Every cloned patch therefore sampled
+   * nothing at all, silently, while the instanced batch beside it worked because
+   * its material is constructed directly.
+   */
+  private clonePatchMaterial(): THREE.ShaderMaterial {
+    return new THREE.ShaderMaterial({
       name: 'fx:decalPatch',
       vertexShader: DECAL_VERTEX_PATCH,
       fragmentShader: DECAL_FRAGMENT,
@@ -463,7 +476,7 @@ export class DecalSystem {
     let patch = this.patches[this.patchCursor];
     if (!patch) {
       if (this.patches.length >= this.patchCapacity) return false;
-      patch = new DecalPatch(this.patchMaterialTemplate.clone());
+      patch = new DecalPatch(this.clonePatchMaterial());
       this.patches.push(patch);
       this.root.add(patch.mesh);
     }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { probeCompiles } from './ShaderProbe';
 
 /**
  * Cascaded shadow support injected into three's built-in lighting chunk.
@@ -344,28 +345,13 @@ export function validateCascadePatch(
   }
   scene.add(new THREE.HemisphereLight(0xffffff, 0x404040, 0.2));
 
-  let failed = false;
-  const prevCheck = renderer.debug.checkShaderErrors;
-  const prevHandler = renderer.debug.onShaderError;
-  renderer.debug.checkShaderErrors = true;
-  renderer.debug.onShaderError = (): void => {
-    failed = true;
-  };
-
-  try {
-    renderer.compile(scene, camera);
-  } catch {
-    failed = true;
-  }
-
-  renderer.debug.checkShaderErrors = prevCheck;
-  renderer.debug.onShaderError = prevHandler;
+  const linked = probeCompiles(renderer, scene, camera);
 
   geometry.dispose();
   for (const m of probes) m.dispose();
   scene.clear();
 
-  if (failed) {
+  if (!linked) {
     console.warn('[render] cascade shader patch rejected by the driver; using single-cascade shadows');
     uninstallCascadePatch();
     return false;

@@ -508,7 +508,7 @@ void surface(vec2 uv, inout Surface s) {
   // Walnut is fine-grained and a stock is cut with the grain running its length,
   // so the ring count has to stay well above the drift the field adds — otherwise
   // the figure swamps the rings and the surface reads as marbling, not wood.
-  float coord = ringCoord(uv, 30.0, 0.31, 0.0, 0.35);
+  float coord = grainQuartersawn(uv.x, uv.y, 30.0, 0.31, 0.35);
   float late = latewood(coord, 0.22);
   float lateSoft = latewood(coord, 0.40);
 

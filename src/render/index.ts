@@ -10,6 +10,7 @@ import { EnvironmentCalibration } from './EnvironmentCalibration';
 import { EnvironmentProbe } from './EnvironmentProbe';
 import { Lighting } from './Lighting';
 import { PostFX, type FrameInputs } from './PostFX';
+import { verifyCompile } from './ShaderProbe';
 import { Sky } from './Sky';
 import type { DebugPassName } from './passes/DebugViewPass';
 
@@ -92,6 +93,7 @@ export class RenderSystemImpl implements RenderSystem, System {
 
   init(ctx: EngineContext): void {
     this.ctx = ctx;
+    this.enableShaderDiagnostics();
 
     this.sky.onQualityChanged(ctx.config);
     // Background stays null: the sky is a far-plane pass inside the scene, so
@@ -112,6 +114,27 @@ export class RenderSystemImpl implements RenderSystem, System {
 
     ctx.engine.renderHook = (c) => this.renderFrame(c);
     this.warmUp();
+  }
+
+  /**
+   * Leave three's link check on for the whole session while the capture harness
+   * is driving, not just for our own warm-up.
+   *
+   * Every other system that owns materials initialises after this one, and a
+   * production build leaves `checkShaderErrors` off — so a shader any of them
+   * fails to compile reaches the console as nothing but a bare `useProgram:
+   * program not valid`, with no material, no file and no line, and the draw that
+   * follows silently written by whatever program was still bound. A capture run
+   * is a diagnostic run and can afford the query, which is what puts the
+   * compiler's own error text in the log beside the frame it spoiled.
+   *
+   * Programs already past their first use cannot be reported retroactively,
+   * which is why this cannot cover procgen's bakes: they run during its own
+   * init, before this system exists.
+   */
+  private enableShaderDiagnostics(): void {
+    if (new URLSearchParams(location.search).get('capture') !== '1') return;
+    this.ctx.renderer.debug.checkShaderErrors = true;
   }
 
   private resolveDependencies(): void {
@@ -139,20 +162,32 @@ export class RenderSystemImpl implements RenderSystem, System {
    */
   private warmUp(): void {
     const ctx = this.ctx;
+    const renderer = ctx.renderer;
+    // three only reads a program's link status on its first use, so the warm-up
+    // is the one window where asking for it covers every program this module
+    // owns and still costs nothing per frame. Left off, a pass whose shader the
+    // driver rejected draws with whatever program was bound before it and the
+    // only trace is a bare `useProgram: program not valid`.
+    const previousCheck = renderer.debug.checkShaderErrors;
+    renderer.debug.checkShaderErrors = true;
     try {
-      ctx.renderer.compile(ctx.scene, ctx.camera);
+      const broken = verifyCompile(renderer, ctx.scene, ctx.camera);
       this.updateFrameInputs(1 / 60);
       this.lighting.beforeRender();
       this.postfx.render(this.frameInputs);
       this.postfx.resetTemporal();
+      if (broken > 0) {
+        console.warn(`[render] ${broken} shader program(s) failed to link during warm-up`);
+      }
       this.warmedUp = true;
     } catch (err) {
       // A warm-up failure must never stop the game booting; the passes will
       // compile on demand instead.
       console.warn('[render] shader warm-up failed', err);
     } finally {
-      ctx.renderer.setRenderTarget(null);
-      ctx.renderer.autoClear = true;
+      renderer.debug.checkShaderErrors = previousCheck;
+      renderer.setRenderTarget(null);
+      renderer.autoClear = true;
     }
   }
 
