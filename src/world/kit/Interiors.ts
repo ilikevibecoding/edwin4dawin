@@ -1,0 +1,1805 @@
+import * as THREE from 'three';
+import type { MaterialId } from '../../core/Contracts';
+import type { SurfaceType } from '../../core/GameTypes';
+import { graffiti } from './Details';
+import {
+  bareBulb,
+  basin,
+  beadedCurtain,
+  brokenChair,
+  bucket,
+  ceilingFan,
+  conduitBundle,
+  crateStack,
+  floorDebris,
+  floorLitter,
+  hangingRag,
+  meterBox,
+  plasticChair,
+  plasticStool,
+  produceCrate,
+  sackPile,
+  wallGrime,
+  wallPaper,
+} from './Clutter';
+import { wallPoster } from './Signage';
+import {
+  type Rect,
+  type Sink,
+  bagGeometry,
+  boxGeometry,
+  cachedGeometry,
+  cloneGeometry,
+  cylinderGeometry,
+  mergeParts,
+  placed,
+  planeGeometry,
+  roundedGeometry,
+  snap,
+  transform,
+} from './Kit';
+
+/**
+ * Interior dressing.
+ *
+ * An enterable building whose rooms are empty boxes is worse than one you cannot
+ * enter at all: the player walks in, sees a grey cube, and stops believing the
+ * town. So every room gets furniture against its walls, something on the floor
+ * and something hanging from the ceiling.
+ *
+ * The rules are gameplay rules first. Furniture hugs the walls so the middle of
+ * every room stays walkable and shootable, nothing stands in a doorway or a
+ * stairwell, and the item count is capped — a room a player cannot cross is a
+ * room they will never fight in. Everything is an instanced `detail` prop, so a
+ * couple of hundred pieces across sixty rooms cost a couple of dozen draw calls.
+ */
+
+export type InteriorUse = 'shop' | 'store' | 'home' | 'workshop' | 'hall' | 'derelict';
+
+export interface RoomSpec {
+  /** Inside faces of the enclosing walls. */
+  rect: Rect;
+  /** Walking surface. */
+  y: number;
+  /** Headroom to the underside of the slab above. */
+  headroom: number;
+  use: InteriorUse;
+  /** Storey index; the ground floor is the one that gets the shopfront goods. */
+  floor: number;
+  /** Areas to leave clear: door approaches, stair wells, partition gaps. */
+  blockers: readonly Rect[];
+  /** Just the doorways, for the dressing that hangs in one. */
+  doors?: readonly Rect[];
+  /** Interior wall finish, so staining can be applied in the wall's own material. */
+  liner?: MaterialId;
+  /**
+   * Areas that take nothing taller than a metre.
+   *
+   * Windows go here: a wall of shelving in front of one closes a sightline the
+   * map's whole layout is built around, but a chest of cartons under it is
+   * exactly what should be there.
+   */
+  lowOnly?: readonly Rect[];
+}
+
+/**
+ * One placeable piece.
+ *
+ * `width` runs along the wall and `depth` away from it, which is also the local
+ * geometry convention: local +X along the wall, local +Z into the room.
+ */
+interface Item {
+  width: number;
+  depth: number;
+  height: number;
+  /** Belongs in the middle of a room rather than against a wall. */
+  freestanding?: boolean;
+  build: (sink: Sink, item: Item, x: number, y: number, z: number, yaw: number) => void;
+}
+
+interface Slot {
+  /** On the wall face; items are pushed in by half their depth. */
+  x: number;
+  z: number;
+  /** Yaw that turns local +Z into the room. */
+  yaw: number;
+  /** Metres of wall available around the slot. */
+  span: number;
+}
+
+/** Tallest piece allowed in front of a window. */
+const LOW_LIMIT = 1;
+
+/** Loose object placed on a room floor. None of these collide. */
+type RoomObject = (sink: Sink, x: number, y: number, z: number, yaw: number) => void;
+
+/**
+ * What is lying about in each kind of room.
+ *
+ * Repeats are weights: a store is mostly cartons and sacks, a workshop is drums
+ * and tube, and a home has the two or three things a family leaves out.
+ */
+const ROOM_OBJECTS: Record<InteriorUse, readonly RoomObject[]> = {
+  shop: [
+    (s, x, y, z, yaw) => produceCrate(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => produceCrate(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => plasticStool(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => plasticChair(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => basin(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => crateStack(s, x, z, yaw, s.rng.int(2, 3), { y }),
+  ],
+  store: [
+    (s, x, y, z, yaw) => crateStack(s, x, z, yaw, s.rng.int(2, 4), { y }),
+    (s, x, y, z, yaw) => sackPile(s, x, z, yaw, s.rng.int(3, 5), y),
+    (s, x, y, z, yaw) => produceCrate(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => bucket(s, x, z, yaw, y),
+  ],
+  home: [
+    (s, x, y, z, yaw) => basin(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => bucket(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => plasticStool(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => plasticChair(s, x, z, yaw, y),
+  ],
+  workshop: [
+    (s, x, y, z, yaw) => bucket(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => basin(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => crateStack(s, x, z, yaw, s.rng.int(2, 3), { y }),
+    (s, x, y, z, yaw) => produceCrate(s, x, z, yaw, y),
+  ],
+  hall: [
+    (s, x, y, z, yaw) => plasticStool(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => plasticChair(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => bucket(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => produceCrate(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => produceCrate(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => sackPile(s, x, z, yaw, s.rng.int(3, 5), y),
+  ],
+  derelict: [
+    (s, x, y, z, yaw) => bucket(s, x, z, yaw, y),
+    (s, x, y, z, yaw) => brokenChair(s, x, y, z, yaw),
+    (s, x, y, z, yaw) => crateStack(s, x, z, yaw, 2, { y }),
+  ],
+};
+
+/**
+ * Per-room cap, on top of one piece per eight square metres.
+ *
+ * The hall used to be capped at five, to keep the middle lane's covered street
+ * shootable. Five pieces in two hundred square metres is a warehouse with a
+ * shelf in it, which is exactly the emptiness the review caught, and the cap was
+ * the wrong tool: what the map needs is a clear lane down the middle, not a bare
+ * room. `laneFor` reserves the lane instead, and the cap then only has to stop a
+ * small room being packed solid.
+ */
+const MAX_ITEMS: Record<InteriorUse, number> = {
+  shop: 14,
+  store: 14,
+  home: 11,
+  workshop: 12,
+  hall: 16,
+  derelict: 9,
+};
+
+/**
+ * The strip down the middle of a big room that nothing may stand in.
+ *
+ * Reserved before the furniture pass rather than enforced by starving it, so a
+ * market hall can be dressed to the walls on both sides and still be a lane the
+ * map can shoot down. Small rooms get nothing: they have no middle to spare.
+ */
+function laneFor(rect: Rect, use: InteriorUse): Rect | null {
+  const width = rect.maxX - rect.minX;
+  const depth = rect.maxZ - rect.minZ;
+  const short = Math.min(width, depth);
+  if (short < 5.5) return null;
+  const half = (use === 'hall' ? 1.5 : 1.1) + short * 0.06;
+  const cx = (rect.minX + rect.maxX) / 2;
+  const cz = (rect.minZ + rect.maxZ) / 2;
+  return width > depth
+    ? { minX: rect.minX, maxX: rect.maxX, minZ: cz - half, maxZ: cz + half }
+    : { minX: cx - half, maxX: cx + half, minZ: rect.minZ, maxZ: rect.maxZ };
+}
+
+export function dressRoom(sink: Sink, spec: RoomSpec): void {
+  const width = spec.rect.maxX - spec.rect.minX;
+  const depth = spec.rect.maxZ - spec.rect.minZ;
+  if (width < 2.6 || depth < 2.6) return;
+
+  const taken: Rect[] = spec.blockers.slice();
+  const lane = laneFor(spec.rect, spec.use);
+  if (lane) taken.push(lane);
+  const lowOnly = spec.lowOnly ?? [];
+  const palette = paletteFor(spec.use, spec.floor);
+  // One piece per six square metres, which is roughly a room's worth against the
+  // walls without closing the floor the fight needs.
+  const budget = Math.max(
+    3,
+    Math.min(MAX_ITEMS[spec.use], Math.round((width * depth) / 6)),
+  );
+  let count = 0;
+
+  for (const slot of wallSlots(sink, spec.rect)) {
+    if (count >= budget) break;
+    // Several candidates per slot: most slots are in front of a window, where a
+    // tall piece is refused, and one try per slot leaves rooms half empty.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const item = pick(sink, palette, slot.span, false);
+      if (!item) break;
+      const rect = footprintAt(slot.x, slot.z, slot.yaw, item);
+      if (item.height > LOW_LIMIT && overlaps(lowOnly, rect)) continue;
+      if (!claim(taken, rect)) continue;
+      item.build(sink, item, slot.x, spec.y, slot.z, slot.yaw);
+      count++;
+      break;
+    }
+  }
+
+  // Freestanding pieces off the floor's centreline. One in a small room, and in a
+  // laned room one either side of the lane — a rug and a low table between the
+  // stalls and the walkway is what a covered market floor actually has on it, and
+  // it stops the two halves reading as separate corridors.
+  const spots: Array<[number, number, number]> = [];
+  const midX = (spec.rect.minX + spec.rect.maxX) / 2;
+  const midZ = (spec.rect.minZ + spec.rect.maxZ) / 2;
+  if (lane) {
+    const alongX = width > depth;
+    const run = alongX ? width : depth;
+    const steps = Math.max(1, Math.round((run - 2) / 4.2));
+    for (const s of [-1, 1]) {
+      for (let i = 0; i < steps; i++) {
+        const t = ((i + 0.5) / steps - 0.5) * (run - 2.6);
+        // Squared up to the lane, so the two rows read as a walkway between
+        // pitches rather than as furniture dropped at random.
+        const yaw = (alongX ? 0 : Math.PI / 2) + (s < 0 ? Math.PI : 0) + sink.rng.range(-0.12, 0.12);
+        spots.push(
+          alongX
+            ? [midX + t, midZ + s * (depth * 0.24 + sink.rng.range(-0.3, 0.3)), yaw]
+            : [midX + s * (width * 0.24 + sink.rng.range(-0.3, 0.3)), midZ + t, yaw],
+        );
+      }
+    }
+  } else {
+    spots.push([
+      midX + sink.rng.range(-0.5, 0.5),
+      midZ + sink.rng.range(-0.5, 0.5),
+      sink.rng.range(0, Math.PI * 2),
+    ]);
+  }
+  for (const [cx, cz, yaw] of shuffle(sink, spots)) {
+    const piece = pick(sink, palette, Math.min(width, depth) - 1.4, true);
+    if (!piece) break;
+    if (claim(taken, centredFootprint(cx, cz, piece, yaw))) {
+      piece.build(sink, piece, cx, spec.y, cz, yaw);
+    }
+  }
+
+  addCeilingFitting(sink, spec);
+  addWallShelf(sink, spec, taken);
+  addRoomClutter(sink, spec, taken);
+}
+
+/**
+ * The layer under and over the furniture.
+ *
+ * None of it collides and none of it stands above knee height except what hangs
+ * from the ceiling, so it can be laid over the whole floor without touching the
+ * budget the furniture pass has to respect or the sightlines the map is built
+ * around. It is also most of what makes a furnished room look lived in rather
+ * than stocked: paper on the floor, something on the walls, a fan turning.
+ */
+function addRoomClutter(sink: Sink, spec: RoomSpec, taken: readonly Rect[]): void {
+  const { rect } = spec;
+  const width = rect.maxX - rect.minX;
+  const depth = rect.maxZ - rect.minZ;
+  const inner: Rect = {
+    minX: rect.minX + 0.3,
+    minZ: rect.minZ + 0.3,
+    maxX: rect.maxX - 0.3,
+    maxZ: rect.maxZ - 0.3,
+  };
+  const area = width * depth;
+  const derelict = spec.use === 'derelict';
+
+  floorLitter(sink, inner, spec.y + 0.004, Math.round(area * (derelict ? 1.5 : 0.9)));
+
+  // Two of the four inside corners drift up. Which two is what stops every room
+  // reading as the same room: swept floor on one side, years of grit on the other.
+  const corners = shuffle(sink, [0, 1, 2, 3]);
+  for (let i = 0; i < 2; i++) {
+    const c = corners[i];
+    const cx = c === 0 || c === 3 ? rect.minX + 0.45 : rect.maxX - 0.45;
+    const cz = c < 2 ? rect.minZ + 0.45 : rect.maxZ - 0.45;
+    floorDebris(sink, cx, spec.y + 0.006, cz, sink.rng.range(0.45, 0.8), sink.rng.int(7, 14));
+  }
+
+  if (derelict) {
+    floorDebris(
+      sink,
+      (rect.minX + rect.maxX) / 2 + sink.rng.range(-1, 1),
+      spec.y + 0.01,
+      (rect.minZ + rect.maxZ) / 2 + sink.rng.range(-1, 1),
+      Math.min(width, depth) * 0.5,
+      Math.round(area * 0.9),
+    );
+    if (sink.rng.bool(0.55)) {
+      const spot = freeSpot(sink, inner, taken);
+      if (spot) brokenChair(sink, spot.x, spec.y, spot.z, sink.rng.range(0, Math.PI * 2));
+    }
+  } else if (sink.rng.bool(0.3)) {
+    const spot = freeSpot(sink, inner, taken);
+    if (spot) brokenChair(sink, spot.x, spec.y, spot.z, sink.rng.range(0, Math.PI * 2));
+  }
+
+  // Loose objects, chosen by what the room is for and pushed back against a wall
+  // where they would actually have been put down.
+  const objects = ROOM_OBJECTS[spec.use];
+  const objectCount = Math.min(10, Math.max(1, Math.round(area / 11)));
+  for (let i = 0; i < objectCount; i++) {
+    const spot = freeWallSpot(sink, rect, taken, 0.42);
+    if (!spot) continue;
+    sink.rng.pick(objects)(sink, spot.x, spec.y, spot.z, spot.yaw + sink.rng.range(-0.5, 0.5));
+  }
+
+  addRoomWalls(sink, spec, width, depth);
+
+  const ceiling = spec.y + spec.headroom;
+  if (!derelict && area > 14 && sink.rng.bool(0.5)) {
+    ceilingFan(
+      sink,
+      (rect.minX + rect.maxX) / 2 + sink.rng.range(-1.2, 1.2),
+      ceiling,
+      (rect.minZ + rect.maxZ) / 2 + sink.rng.range(-1.2, 1.2),
+    );
+  } else if (sink.rng.bool(derelict ? 0.45 : 0.75)) {
+    bareBulb(
+      sink,
+      (rect.minX + rect.maxX) / 2 + sink.rng.range(-1.4, 1.4),
+      ceiling - 0.02,
+      (rect.minZ + rect.maxZ) / 2 + sink.rng.range(-1.4, 1.4),
+      sink.rng.range(0.35, 0.85),
+    );
+  }
+
+  // Cloth hung off the ceiling near a wall: a partition, a drying sheet, shade.
+  // The line goes in first and the cloth goes over it. A rag on its own hangs in
+  // mid-air with nothing holding it, which from below reads as a dark slab
+  // floating clear of the wall.
+  if (sink.rng.bool(spec.use === 'shop' || spec.use === 'hall' ? 0.65 : 0.4)) {
+    const edge = sink.rng.int(0, 3);
+    const wall = WALLS[edge];
+    const along = sink.rng.range(0.3, 0.7);
+    const inset = 0.5;
+    const x =
+      edge === 1 ? rect.maxX - inset : edge === 3 ? rect.minX + inset : rect.minX + along * width;
+    const z =
+      edge === 0 ? rect.minZ + inset : edge === 2 ? rect.maxZ - inset : rect.minZ + along * depth;
+    const y = ceiling - 0.12;
+    const alongX = wall.along === 'x';
+    const run = snap(alongX ? width - 0.3 : depth - 0.3, 0.5);
+    if (run > 0.8) {
+      sink.addStatic(
+        placed(
+          cylinderGeometry(0.014, 0.014, run, 4, 1),
+          transform(
+            alongX ? (rect.minX + rect.maxX) / 2 : x,
+            y,
+            alongX ? z : (rect.minZ + rect.maxZ) / 2,
+            0,
+            alongX ? 0 : Math.PI / 2,
+            alongX ? Math.PI / 2 : 0,
+          ),
+        ),
+        { material: 'metal_rusted', tier: 'detail', tint: 0x7a7164 },
+      );
+      // Two or three pieces spaced along the run rather than one wide sheet: a
+      // single panel occupying the middle of the line reads as a partition, and
+      // the gaps between pieces are what show the line is a line.
+      const pieces = sink.rng.int(2, 3);
+      for (let i = 0; i < pieces; i++) {
+        const t = (i + 0.5) / pieces + sink.rng.range(-0.1, 0.1) - 0.5;
+        hangingRag(
+          sink,
+          alongX ? (rect.minX + rect.maxX) / 2 + t * run : x,
+          y - 0.02,
+          alongX ? z : (rect.minZ + rect.maxZ) / 2 + t * run,
+          wall.yaw,
+          sink.rng.range(0.45, 0.75),
+          sink.rng.range(0.7, 1.25),
+        );
+      }
+    }
+  }
+
+  // Strip curtain over the internal doorways of the rooms people live and trade
+  // in, which is both correct for the setting and the one piece of dressing that
+  // reads at the moment the player walks through it.
+  if (spec.doors && spec.use !== 'derelict' && spec.use !== 'hall') {
+    for (const door of spec.doors) {
+      if (!sink.rng.bool(0.55)) continue;
+      const cx = (door.minX + door.maxX) / 2;
+      const cz = (door.minZ + door.maxZ) / 2;
+      // The zone is the approach in front of the opening, so the opening itself is
+      // on whichever room edge the zone sits closest to.
+      const gaps = [cz - rect.minZ, rect.maxX - cx, rect.maxZ - cz, cx - rect.minX];
+      let edge = 0;
+      for (let i = 1; i < 4; i++) if (gaps[i] < gaps[edge]) edge = i;
+      const alongX = edge === 0 || edge === 2;
+      const run = alongX ? door.maxX - door.minX : door.maxZ - door.minZ;
+      const span = run - 0.7;
+      if (span < 0.7 || span > 1.9) continue;
+      beadedCurtain(
+        sink,
+        edge === 1 ? rect.maxX - 0.07 : edge === 3 ? rect.minX + 0.07 : cx,
+        spec.y + 2.28,
+        edge === 0 ? rect.minZ + 0.07 : edge === 2 ? rect.maxZ - 0.07 : cz,
+        alongX ? 0 : Math.PI / 2,
+        span,
+        sink.rng.range(1.75, 2.0),
+      );
+    }
+  }
+}
+
+/**
+ * The walls of a room, which is the surface a player standing in a doorway sees
+ * most of and the one the furniture pass leaves completely bare.
+ */
+function addRoomWalls(sink: Sink, spec: RoomSpec, width: number, depth: number): void {
+  const { rect } = spec;
+  const derelict = spec.use === 'derelict';
+  const face = (edge: number, along: number): { x: number; z: number; yaw: number } => {
+    const wall = WALLS[edge];
+    return {
+      x: edge === 1 ? rect.maxX : edge === 3 ? rect.minX : rect.minX + along * width,
+      z: edge === 0 ? rect.minZ : edge === 2 ? rect.maxZ : rect.minZ + along * depth,
+      yaw: wall.yaw,
+    };
+  };
+
+  // Walk all four walls and give each an amount of dressing set by its own
+  // length, rather than scattering a fixed handful of items over the room. With
+  // a fixed budget the long wall of a shop draws nothing about half the time,
+  // and the player stands two metres from it: one bare eight-metre wall undoes
+  // an otherwise fully dressed room. All of it is merged overlay, so covering
+  // every wall of every room costs triangles in an existing batch and no draws.
+  // The hall is the covered market street and the map has to be able to shoot
+  // through it, so its floor budget is a third of a shop's. That makes its walls
+  // the only place its dressing can go, and it is also the interior the player
+  // spends the most time inside. Same for a derelict, which has no furniture to
+  // look at either. Wall overlay is free — merged into an existing batch, no
+  // draw call, no floor taken — so the sparse-floor rooms get the dense walls.
+  const spacing = spec.use === 'hall' || spec.use === 'derelict' ? 1.7 : 2.0;
+  for (let edge = 0; edge < 4; edge++) {
+    const wall = WALLS[edge];
+    const run = wall.along === 'x' ? width : depth;
+    if (run < 1.2) continue;
+    const items = Math.max(1, Math.round(run / spacing));
+    for (let i = 0; i < items; i++) {
+      const p = face(edge, (i + sink.rng.range(0.2, 0.8)) / items);
+      const roll = sink.rng.next();
+      if (roll < 0.14 && !derelict) {
+        wallHanging(sink, p.x, spec.y + sink.rng.range(1.4, 1.9), p.z, p.yaw, spec.use);
+      } else if (roll < 0.22) {
+        wallPoster(sink, p.x, spec.y + sink.rng.range(1.2, 1.8), p.z, p.yaw, sink.rng.range(0.5, 0.8));
+      } else if (roll < 0.34) {
+        wallPaper(sink, p.x, spec.y + sink.rng.range(1.15, 1.9), p.z, p.yaw, sink.rng.int(1, 3));
+      } else if (roll < 0.75) {
+        // Damp wicking up from the skirting, or the smear at shoulder height on
+        // the side of a doorway people push past.
+        const low = sink.rng.bool(0.55);
+        wallGrime(
+          sink,
+          p.x,
+          spec.y + (low ? sink.rng.range(0.25, 0.6) : sink.rng.range(1.3, 2.1)),
+          p.z,
+          p.yaw,
+          sink.rng.range(0.6, Math.max(0.7, Math.min(1.5, run * 0.35))),
+          low ? sink.rng.range(0.4, 0.8) : sink.rng.range(0.5, 1.0),
+          // In the liner's own finish, warmed rather than greyed. Grey concrete
+          // laid over white plaster reads as a patch of a different wall, and a
+          // neutral grey wash on warm plaster reads as a cold sticker on it;
+          // water carries the plaster's own colour down with it. Kept under a
+          // metre and a half across as well — a two-metre ellipse is one lens on
+          // the wall however well it is tinted, where three small ones are dirt.
+          { material: spec.liner ?? 'plaster_white', tint: 0xe4d8c4 },
+        );
+      } else if (derelict && roll < 0.88) {
+        graffiti(sink, p.x, spec.y + sink.rng.range(1.0, 1.7), p.z, p.yaw, sink.rng.range(0.8, 1.6));
+      }
+    }
+  }
+
+  // Surface wiring: a conduit run at picture height with a box on it, because
+  // nothing in this town was wired inside the plaster.
+  const runs = Math.max(width, depth) > 6 ? 2 : 1;
+  for (let i = 0; i < runs; i++) {
+    if (!sink.rng.bool(derelict ? 0.3 : 0.7)) continue;
+    const edge = sink.rng.int(0, 3);
+    const wall = WALLS[edge];
+    if ((wall.along === 'x' ? width : depth) <= 2.2) continue;
+    const a = face(edge, 0.12);
+    const b = face(edge, 0.88);
+    const n = { x: Math.sin(wall.yaw) * 0.035, z: Math.cos(wall.yaw) * 0.035 };
+    const y = spec.y + sink.rng.range(1.9, 2.3);
+    conduitBundle(sink, a.x + n.x, a.z + n.z, b.x + n.x, b.z + n.z, y, wall.yaw, 1);
+    const box = face(edge, sink.rng.range(0.3, 0.7));
+    meterBox(sink, box.x + n.x * 2, spec.y + sink.rng.range(1.4, 1.6), box.z + n.z * 2, wall.yaw);
+  }
+}
+
+/**
+ * A spot against a wall, clear of the furniture and the door approaches.
+ *
+ * Loose objects belong at the edges: the middle of a room somebody uses stays
+ * walkable, and a bucket in the centre of the floor reads as scattered props.
+ */
+function freeWallSpot(
+  sink: Sink,
+  r: Rect,
+  taken: readonly Rect[],
+  inset: number,
+): { x: number; z: number; yaw: number } | null {
+  for (let i = 0; i < 10; i++) {
+    const edge = sink.rng.int(0, 3);
+    const wall = WALLS[edge];
+    const t = sink.rng.range(0.12, 0.88);
+    const x =
+      edge === 1 ? r.maxX - inset : edge === 3 ? r.minX + inset : r.minX + t * (r.maxX - r.minX);
+    const z =
+      edge === 0 ? r.minZ + inset : edge === 2 ? r.maxZ - inset : r.minZ + t * (r.maxZ - r.minZ);
+    if (overlaps(taken, { minX: x - 0.28, minZ: z - 0.28, maxX: x + 0.28, maxZ: z + 0.28 })) continue;
+    return { x, z, yaw: wall.yaw };
+  }
+  return null;
+}
+
+/** A point in the room clear of the furniture, or null if there is no room. */
+function freeSpot(sink: Sink, r: Rect, taken: readonly Rect[]): { x: number; z: number } | null {
+  for (let i = 0; i < 8; i++) {
+    const x = sink.rng.range(r.minX, r.maxX);
+    const z = sink.rng.range(r.minZ, r.maxZ);
+    if (overlaps(taken, { minX: x - 0.3, minZ: z - 0.3, maxX: x + 0.3, maxZ: z + 0.3 })) continue;
+    return { x, z };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Placement
+// ---------------------------------------------------------------------------
+
+/**
+ * Wall yaws in the edge order the rest of the kit uses: -Z, +X, +Z, -X.
+ *
+ * Each yaw turns a piece's local +Z into the room, which is why furniture is
+ * authored with its front at +Z and its run along X.
+ */
+const WALLS: ReadonlyArray<{ yaw: number; along: 'x' | 'z' }> = [
+  { yaw: 0, along: 'x' },
+  { yaw: -Math.PI / 2, along: 'z' },
+  { yaw: Math.PI, along: 'x' },
+  { yaw: Math.PI / 2, along: 'z' },
+];
+
+/** Candidate positions along the four walls, in a shuffled order. */
+function wallSlots(sink: Sink, r: Rect): Slot[] {
+  const slots: Slot[] = [];
+  const inset = 0.55;
+
+  for (let edge = 0; edge < 4; edge++) {
+    const wall = WALLS[edge];
+    const fixed =
+      edge === 0 ? r.minZ : edge === 1 ? r.maxX : edge === 2 ? r.maxZ : r.minX;
+    const lo = (wall.along === 'x' ? r.minX : r.minZ) + inset;
+    const hi = (wall.along === 'x' ? r.maxX : r.maxZ) - inset;
+    const run = hi - lo;
+    if (run < 1) continue;
+    const steps = Math.max(1, Math.floor(run / 1.5));
+    for (let i = 0; i < steps; i++) {
+      const t = steps === 1 ? 0.5 : (i + 0.5) / steps;
+      const along = lo + t * run;
+      slots.push({
+        x: wall.along === 'x' ? along : fixed,
+        z: wall.along === 'x' ? fixed : along,
+        yaw: wall.yaw,
+        // Wide pieces only fit where there is wall left either side of them.
+        span: 2 * Math.min(along - lo + inset, hi - along + inset),
+      });
+    }
+  }
+  return shuffle(sink, slots);
+}
+
+function shuffle<T>(sink: Sink, items: T[]): T[] {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = sink.rng.int(0, i);
+    const swap = items[i];
+    items[i] = items[j];
+    items[j] = swap;
+  }
+  return items;
+}
+
+/** World footprint of an item whose back sits on the wall at (x, z). */
+function footprintAt(x: number, z: number, yaw: number, item: Item): Rect {
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
+  return centredFootprint(x + sin * (item.depth / 2), z + cos * (item.depth / 2), item, yaw);
+}
+
+function centredFootprint(cx: number, cz: number, item: Item, yaw = 0): Rect {
+  const cos = Math.abs(Math.cos(yaw));
+  const sin = Math.abs(Math.sin(yaw));
+  const halfX = (cos * item.width + sin * item.depth) / 2;
+  const halfZ = (sin * item.width + cos * item.depth) / 2;
+  return { minX: cx - halfX, minZ: cz - halfZ, maxX: cx + halfX, maxZ: cz + halfZ };
+}
+
+/** Reserves a footprint if it is clear, with a hand's width of slack. */
+function claim(taken: Rect[], rect: Rect): boolean {
+  if (overlaps(taken, rect, 0.12)) return false;
+  taken.push(rect);
+  return true;
+}
+
+function overlaps(rects: readonly Rect[], rect: Rect, pad = 0): boolean {
+  for (const other of rects) {
+    if (
+      rect.minX - pad < other.maxX &&
+      rect.maxX + pad > other.minX &&
+      rect.minZ - pad < other.maxZ &&
+      rect.maxZ + pad > other.minZ
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pick(
+  sink: Sink,
+  palette: readonly Item[],
+  span: number,
+  freestanding: boolean,
+): Item | null {
+  const options = palette.filter(
+    (item) => (item.freestanding === true) === freestanding && item.width <= span,
+  );
+  if (options.length === 0) return null;
+  return sink.rng.pick(options);
+}
+
+// ---------------------------------------------------------------------------
+// Palettes
+// ---------------------------------------------------------------------------
+
+const SHELF: Item = { width: 1.12, depth: 0.44, height: 1.86, build: buildShelf };
+const RACK: Item = { width: 1.64, depth: 0.48, height: 1.98, build: buildShelf };
+const COUNTER: Item = { width: 1.85, depth: 0.64, height: 0.94, build: buildCounter };
+const CUPBOARD: Item = { width: 0.94, depth: 0.48, height: 1.62, build: buildCupboard };
+const SACKS: Item = { width: 1.1, depth: 0.7, height: 0.9, build: buildSacks };
+const CARTONS: Item = { width: 0.92, depth: 0.62, height: 0.95, build: buildCartons };
+const CARPET_ROLLS: Item = { width: 0.76, depth: 0.46, height: 1.74, build: buildCarpetRolls };
+const LOW_BENCH: Item = { width: 1.5, depth: 0.46, height: 0.46, build: buildLowBench };
+const BEDROLL: Item = { width: 1.95, depth: 0.94, height: 0.24, build: buildBedroll };
+const WORKBENCH: Item = { width: 2.0, depth: 0.72, height: 0.92, build: buildWorkbench };
+const STOOLS: Item = { width: 0.62, depth: 0.62, height: 0.9, build: buildStoolStack };
+const RUBBLE: Item = { width: 1.5, depth: 1.0, height: 0.5, build: buildInteriorRubble };
+
+// Freestanding, because a market's pitches stand in rows on the floor rather than
+// against the walls — and because every wall in the market hall is windows, and a
+// piece this tall is refused in front of one.
+const STALL: Item = {
+  width: 2.1,
+  depth: 0.95,
+  height: 2.2,
+  freestanding: true,
+  build: buildStall,
+};
+
+const TABLE: Item = { width: 1.06, depth: 0.78, height: 0.5, freestanding: true, build: buildTable };
+const RUG: Item = { width: 2.1, depth: 1.5, height: 0.02, freestanding: true, build: buildRug };
+const CRATE_PILE: Item = {
+  width: 1.12,
+  depth: 1.12,
+  height: 1.06,
+  freestanding: true,
+  build: buildCratePile,
+};
+
+const SHOP_ITEMS: readonly Item[] = [
+  COUNTER,
+  SHELF,
+  RACK,
+  STALL,
+  SACKS,
+  CARTONS,
+  CARPET_ROLLS,
+  RUG,
+  TABLE,
+];
+const STORE_ITEMS: readonly Item[] = [RACK, SHELF, SACKS, CARTONS, CARTONS, CRATE_PILE];
+const HOME_ITEMS: readonly Item[] = [CUPBOARD, SHELF, BEDROLL, LOW_BENCH, CARTONS, RUG, TABLE];
+const WORKSHOP_ITEMS: readonly Item[] = [WORKBENCH, SHELF, CARTONS, SACKS, CRATE_PILE];
+const HALL_ITEMS: readonly Item[] = [
+  STALL,
+  STALL,
+  STOOLS,
+  SACKS,
+  CARTONS,
+  LOW_BENCH,
+  CARPET_ROLLS,
+  RUG,
+  TABLE,
+];
+const DERELICT_ITEMS: readonly Item[] = [RUBBLE, RUBBLE, CARTONS, BEDROLL];
+
+function paletteFor(use: InteriorUse, floor: number): readonly Item[] {
+  switch (use) {
+    // Shops trade on the street; the floors above them are where people live.
+    case 'shop':
+      return floor === 0 ? SHOP_ITEMS : HOME_ITEMS;
+    case 'store':
+      return STORE_ITEMS;
+    case 'home':
+      return HOME_ITEMS;
+    case 'workshop':
+      return WORKSHOP_ITEMS;
+    case 'hall':
+      return HALL_ITEMS;
+    default:
+      return DERELICT_ITEMS;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Furniture
+// ---------------------------------------------------------------------------
+
+/**
+ * Open shelving with stock on it.
+ *
+ * The stock is what makes it read: an empty rack is four sticks and a plank, a
+ * loaded one has a silhouette worth shooting at.
+ */
+function buildShelf(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const steel = sink.rng.bool(0.45);
+  const { width, depth, height } = item;
+  const key = `shelf|${width}|${height}|${steel ? 's' : 'w'}`;
+  const geometry = cachedGeometry(key, () => {
+    const post = steel ? 0.046 : 0.062;
+    const parts: THREE.BufferGeometry[] = [];
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        parts.push(
+          placed(
+            boxGeometry(post, height, post, 0.008, 1.2),
+            transform(sx * (width / 2 - post / 2), height / 2, sz * (depth / 2 - post / 2)),
+          ),
+        );
+      }
+    }
+    const tiers = 4;
+    for (let i = 0; i < tiers; i++) {
+      const shelfY = 0.17 + (i / (tiers - 1)) * (height - 0.36);
+      parts.push(
+        placed(boxGeometry(width - 0.04, 0.032, depth - 0.03, 0.008, 1.4), transform(0, shelfY, 0)),
+      );
+    }
+    // Back brace, so the rack is not see-through from the far side of the room.
+    parts.push(
+      placed(
+        boxGeometry(width - 0.1, height * 0.6, 0.02, 0.006, 1.6),
+        transform(0, height * 0.52, -depth / 2 + 0.02),
+      ),
+    );
+    return mergeParts(parts);
+  });
+
+  sink.addProp(geometry, standing(x, y, z, yaw, depth), {
+    material: steel ? 'steel_brushed' : 'wood_plank',
+    tier: 'detail',
+    tint: steel ? 0xa8a49a : 0xbfae8c,
+  });
+  addStock(sink, item, x, y, z, yaw);
+  boxCollider(sink, item, x, y, z, yaw, steel ? 'metal' : 'wood');
+}
+
+/** A few crates and sacks distributed over a rack's shelves. */
+function addStock(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const crate = boxGeometry(0.34, 0.28, 0.3, 0.014, 1.1);
+  const sack = bagGeometry(0.4, 0.24, 0.28, 0.09);
+  const tiers = 4;
+
+  for (let i = 0; i < 3; i++) {
+    if (sink.rng.bool(0.3)) continue;
+    const tier = sink.rng.int(0, tiers - 2);
+    const shelfY = 0.17 + (tier / (tiers - 1)) * (item.height - 0.36) + 0.016;
+    const bag = sink.rng.bool(0.45);
+    const at = onWall(
+      x,
+      z,
+      yaw,
+      sink.rng.range(-item.width / 2 + 0.3, item.width / 2 - 0.3),
+      item.depth / 2,
+    );
+    sink.addProp(
+      bag ? sack : crate,
+      transform(at.x, y + shelfY + (bag ? 0.13 : 0.155), at.z, yaw + sink.rng.range(-0.22, 0.22)),
+      {
+        material: bag ? 'sandbag' : 'wood_crate',
+        tier: 'detail',
+        tint: bag
+          ? sink.rng.pick([0xd8cdb2, 0xcabfa4, 0xc2b596])
+          : sink.rng.pick([0xd6c6a4, 0xc9b795]),
+      },
+    );
+  }
+}
+
+/** Shop counter: a plinth with an overhanging top, a kick rail and panelling. */
+function buildCounter(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const { width, depth, height } = item;
+  const geometry = cachedGeometry('counter', () => {
+    const parts: THREE.BufferGeometry[] = [
+      placed(
+        boxGeometry(width - 0.08, height - 0.1, depth - 0.1, 0.018, 1.3),
+        transform(0, (height - 0.1) / 2 + 0.04, 0),
+      ),
+      placed(boxGeometry(width, 0.06, depth, 0.014, 1.6), transform(0, height - 0.03, 0)),
+      placed(boxGeometry(width - 0.2, 0.05, depth - 0.16, 0.01, 1.3), transform(0, 0.025, 0)),
+    ];
+    for (const s of [-1, 1]) {
+      parts.push(
+        placed(
+          boxGeometry(width / 2 - 0.18, height - 0.36, 0.02, 0.008, 1.2),
+          transform(s * (width / 4), height / 2, depth / 2 - 0.05),
+        ),
+      );
+    }
+    return mergeParts(parts);
+  });
+
+  sink.addProp(geometry, standing(x, y, z, yaw, depth), {
+    material: 'wood_painted',
+    tier: 'detail',
+    tint: sink.rng.pick([0xb9a684, 0xa8a08c, 0xc0b294]),
+  });
+  const top = standing(x, y, z, yaw, depth);
+  tableware(
+    sink,
+    top.elements[12],
+    y + height + 0.01,
+    top.elements[14],
+    yaw,
+    width - 0.35,
+  );
+  boxCollider(sink, item, x, y, z, yaw, 'wood');
+}
+
+function buildCupboard(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const { width, depth, height } = item;
+  const geometry = cachedGeometry('cupboard', () => {
+    const parts: THREE.BufferGeometry[] = [
+      placed(boxGeometry(width, height, depth, 0.02, 1.3), transform(0, height / 2, 0)),
+      placed(boxGeometry(width + 0.06, 0.04, depth + 0.05, 0.012, 1.4), transform(0, height, 0)),
+    ];
+    for (const s of [-1, 1]) {
+      parts.push(
+        placed(
+          boxGeometry(width / 2 - 0.06, height - 0.16, 0.022, 0.008, 1.1),
+          transform(s * (width / 4), height / 2, depth / 2 + 0.011),
+        ),
+      );
+      parts.push(
+        placed(
+          cylinderGeometry(0.013, 0.013, 0.09, 6, 0.6),
+          transform(s * 0.055, height * 0.56, depth / 2 + 0.035, 0, Math.PI / 2),
+        ),
+      );
+    }
+    return mergeParts(parts);
+  });
+
+  sink.addProp(geometry, standing(x, y, z, yaw, depth), {
+    material: 'wood_painted',
+    tier: 'detail',
+    tint: sink.rng.pick([0x9fa8a2, 0xb8ac92, 0xa89c86]),
+  });
+  boxCollider(sink, item, x, y, z, yaw, 'wood');
+}
+
+/** Grain sacks: fat rounded bags, slumped and stacked. */
+function buildSacks(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const geometry = bagGeometry(0.56, 0.34, 0.4, 0.15);
+  const tints = [0xd8ceb4, 0xc9bda0, 0xd1c4a6, 0xbfb193];
+  const rows = sink.rng.int(2, 3);
+
+  for (let row = 0; row < rows; row++) {
+    const perRow = row === rows - 1 ? 1 : 2;
+    for (let i = 0; i < perRow; i++) {
+      const along = perRow === 1 ? sink.rng.range(-0.12, 0.12) : (i - 0.5) * 0.52;
+      const at = onWall(x, z, yaw, along, 0.34 + sink.rng.range(-0.04, 0.04));
+      sink.addProp(
+        geometry,
+        transform(
+          at.x,
+          y + 0.17 + row * 0.28,
+          at.z,
+          yaw + sink.rng.range(-0.35, 0.35),
+          sink.rng.range(-0.08, 0.08),
+          sink.rng.range(-0.12, 0.12),
+        ),
+        { material: 'sandbag', tier: 'detail', tint: sink.rng.pick(tints) },
+      );
+    }
+  }
+  boxCollider(sink, item, x, y, z, yaw, 'sand', rows * 0.28 + 0.06);
+}
+
+/** Stack of cartons, deliberately not squared up. */
+function buildCartons(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const sizes: ReadonlyArray<readonly [number, number, number]> = [
+    [0.46, 0.34, 0.38],
+    [0.38, 0.3, 0.34],
+    [0.52, 0.26, 0.4],
+  ];
+  let stack = 0;
+  const count = sink.rng.int(2, 3);
+  for (let i = 0; i < count; i++) {
+    const [w, h, d] = sink.rng.pick(sizes);
+    const at = onWall(x, z, yaw, sink.rng.range(-0.14, 0.14), 0.32 + sink.rng.range(-0.05, 0.05));
+    sink.addProp(
+      boxGeometry(w, h, d, 0.012, 1.1),
+      transform(at.x, y + stack + h / 2, at.z, yaw + sink.rng.range(-0.3, 0.3)),
+      {
+        material: 'wood_crate',
+        tier: 'detail',
+        tint: sink.rng.pick([0xcdb894, 0xc2ac88, 0xd4c3a2]),
+      },
+    );
+    stack += h;
+  }
+  boxCollider(sink, item, x, y, z, yaw, 'wood', stack);
+}
+
+/** Rolled carpets stood on end: a strong vertical among all the boxes. */
+function buildCarpetRolls(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const tints = [0x8d4a3a, 0x6b4a52, 0x7d6a44, 0x9a6a4a, 0x5d5a48];
+  const count = sink.rng.int(3, 5);
+  for (let i = 0; i < count; i++) {
+    const length = 1.35 + Math.round(sink.rng.range(0, 3)) * 0.12;
+    const radius = 0.08 + Math.round(sink.rng.range(0, 2)) * 0.018;
+    const geometry = cylinderGeometry(radius, radius * 1.06, length, 8, 0.35);
+    const at = onWall(x, z, yaw, sink.rng.range(-0.24, 0.24), 0.2 + sink.rng.range(0, 0.1));
+    // Leaned into the wall; the tilt is what stops it reading as a pipe rack.
+    sink.addProp(
+      geometry,
+      transform(
+        at.x,
+        y + length / 2 - 0.02,
+        at.z,
+        yaw,
+        sink.rng.range(0.06, 0.13),
+        sink.rng.range(-0.05, 0.05),
+      ),
+      { material: 'fabric_canvas', tier: 'detail', tint: sink.rng.pick(tints) },
+    );
+  }
+  boxCollider(sink, item, x, y, z, yaw, 'wood');
+}
+
+/** Low masonry bench, the kind built into the wall of a tea house. */
+function buildLowBench(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const { width, depth, height } = item;
+  const geometry = cachedGeometry('lowbench', () =>
+    mergeParts([
+      placed(
+        boxGeometry(width, height - 0.07, depth - 0.06, 0.02, 1.4),
+        transform(0, (height - 0.07) / 2, 0),
+      ),
+      placed(boxGeometry(width + 0.06, 0.07, depth, 0.02, 1.6), transform(0, height - 0.035, 0)),
+    ]),
+  );
+  sink.addProp(geometry, standing(x, y, z, yaw, depth), {
+    material: 'plaster_white',
+    tier: 'detail',
+    tint: sink.rng.pick([0xe0d6c2, 0xd2c8b4]),
+  });
+
+  // A cushion, because a bare bench in a tea house is a bench nobody uses.
+  if (sink.rng.bool(0.7)) {
+    const at = onWall(x, z, yaw, sink.rng.range(-0.35, 0.35), depth / 2);
+    sink.addProp(
+      roundedGeometry(0.54, 0.1, 0.4, 0.05, 2, 0.4),
+      transform(at.x, y + height + 0.05, at.z, yaw + sink.rng.range(-0.25, 0.25)),
+      {
+        material: 'fabric_canvas',
+        tier: 'detail',
+        tint: sink.rng.pick([0x8d4a3a, 0x6b5a52, 0x7d6a44]),
+      },
+    );
+  }
+  boxCollider(sink, item, x, y, z, yaw, 'concrete');
+}
+
+/** Bedroll on the floor with a folded blanket at one end. */
+function buildBedroll(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const { width, depth } = item;
+  sink.addProp(
+    roundedGeometry(width, 0.15, depth, 0.07, 2, 0.45),
+    standing(x, y + 0.075, z, yaw, depth),
+    {
+      material: 'fabric_canvas',
+      tier: 'detail',
+      tint: sink.rng.pick([0xbdb49c, 0xa8a08a, 0xc6bca2]),
+    },
+  );
+
+  const at = onWall(x, z, yaw, width / 2 - 0.34, depth / 2);
+  sink.addProp(
+    roundedGeometry(0.56, 0.14, 0.44, 0.06, 2, 0.4),
+    transform(at.x, y + 0.19, at.z, yaw + sink.rng.range(-0.2, 0.2)),
+    {
+      material: 'fabric_canvas',
+      tier: 'detail',
+      tint: sink.rng.pick([0x8d4a3a, 0x6b4a52, 0x7d6a44]),
+    },
+  );
+  boxCollider(sink, item, x, y, z, yaw, 'fabric');
+}
+
+/** Bench with a vice and a length of stock clamped in it. */
+function buildWorkbench(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const { width, depth, height } = item;
+  const geometry = cachedGeometry('workbench', () => {
+    const parts: THREE.BufferGeometry[] = [
+      placed(boxGeometry(width, 0.07, depth, 0.014, 1.5), transform(0, height - 0.035, 0)),
+      placed(boxGeometry(width - 0.3, 0.05, depth - 0.2, 0.01, 1.4), transform(0, 0.34, 0)),
+    ];
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        parts.push(
+          placed(
+            boxGeometry(0.08, height - 0.07, 0.08, 0.01, 1.2),
+            transform(sx * (width / 2 - 0.1), (height - 0.07) / 2, sz * (depth / 2 - 0.1)),
+          ),
+        );
+      }
+    }
+    parts.push(
+      placed(boxGeometry(0.18, 0.16, 0.22, 0.02, 0.9), transform(width / 2 - 0.3, height + 0.07, 0.03)),
+    );
+    parts.push(
+      placed(
+        cylinderGeometry(0.02, 0.02, 0.3, 6, 0.7),
+        transform(width / 2 - 0.3, height + 0.08, 0.2, 0, Math.PI / 2),
+      ),
+    );
+    return mergeParts(parts);
+  });
+
+  sink.addProp(geometry, standing(x, y, z, yaw, depth), {
+    material: 'wood_plank',
+    tier: 'detail',
+    tint: 0xb0a084,
+  });
+  boxCollider(sink, item, x, y, z, yaw, 'wood');
+}
+
+/** Stacked stools, as found against the wall of every tea house. */
+function buildStoolStack(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const geometry = cachedGeometry('stool', () => {
+    const parts: THREE.BufferGeometry[] = [
+      placed(cylinderGeometry(0.2, 0.17, 0.05, 10, 0.8), transform(0, 0.3, 0)),
+    ];
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      parts.push(
+        placed(
+          boxGeometry(0.032, 0.3, 0.032, 0.006, 0.8),
+          transform(Math.cos(a) * 0.14, 0.15, Math.sin(a) * 0.14, 0, 0.05),
+        ),
+      );
+    }
+    return mergeParts(parts);
+  });
+
+  const count = sink.rng.int(3, 5);
+  for (let i = 0; i < count; i++) {
+    const at = onWall(x, z, yaw, sink.rng.range(-0.03, 0.03), 0.31);
+    sink.addProp(
+      geometry,
+      transform(at.x, y + i * 0.11, at.z, yaw + sink.rng.range(0, Math.PI)),
+      {
+        material: 'wood_painted',
+        tier: 'detail',
+        tint: sink.rng.pick([0xa8b0a4, 0xb8a894, 0x9aa8b0]),
+      },
+    );
+  }
+  boxCollider(sink, item, x, y, z, yaw, 'wood', count * 0.11 + 0.35);
+}
+
+/**
+ * Trader's pitch: a trestle counter under a frame, with goods on it and a cloth
+ * slung over the top.
+ *
+ * The one piece of interior furniture that is taller than a man, which is what a
+ * covered market needs — a floor of waist-high heaps still reads as an empty
+ * room from the doorway, because nothing interrupts the far wall. The canopy is
+ * also the only interior element that catches the light coming in high through
+ * the clerestory windows.
+ */
+function buildStall(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const { width, depth, height } = item;
+  const bench = 0.88;
+  const geometry = cachedGeometry('stallframe', () => {
+    const parts: THREE.BufferGeometry[] = [
+      placed(boxGeometry(width - 0.12, 0.055, depth - 0.1, 0.012, 1.4), transform(0, bench, 0)),
+      placed(
+        boxGeometry(width - 0.24, 0.04, depth - 0.24, 0.008, 1.2),
+        transform(0, bench - 0.34, 0),
+      ),
+    ];
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        parts.push(
+          placed(
+            boxGeometry(0.06, height, 0.06, 0.01, 1.2),
+            transform(sx * (width / 2 - 0.05), height / 2, sz * (depth / 2 - 0.05)),
+          ),
+        );
+      }
+    }
+    for (const sz of [-1, 1]) {
+      parts.push(
+        placed(
+          boxGeometry(width - 0.08, 0.05, 0.05, 0.008, 1.2),
+          transform(0, height - 0.04, sz * (depth / 2 - 0.05)),
+        ),
+      );
+    }
+    return mergeParts(parts);
+  });
+
+  sink.addProp(geometry, transform(x, y, z, yaw), {
+    material: 'wood_plank',
+    tier: 'detail',
+    tint: sink.rng.pick([0xb6a684, 0xa89478, 0xc2b090]),
+  });
+
+  // Cloth over the frame, and a valance hanging off the front rail.
+  sink.addProp(
+    cachedGeometry('stallcloth', () => {
+      const plane = cloneGeometry(planeGeometry(width + 0.16, depth + 0.2, 0.5));
+      plane.rotateX(-Math.PI / 2);
+      return plane;
+    }),
+    transform(x, y + height + 0.02, z, yaw),
+    {
+      material: 'fabric_canvas',
+      tier: 'detail',
+      castShadow: false,
+      tint: sink.rng.pick([0xc4a878, 0xb0705a, 0x8a8a6c, 0xc8b48c]),
+    },
+  );
+  const front = onWall(x, z, yaw, 0, depth / 2 + 0.02);
+  sink.addProp(
+    curtainGeometry(widthBucket(width + 0.14), 0),
+    transform(front.x, y + height, front.z, yaw, 0, 0, CURTAIN_SCALE.set(1, 0.32, 1)),
+    {
+      material: 'fabric_canvas',
+      tier: 'detail',
+      castShadow: false,
+      tint: sink.rng.pick([0x8d4a3a, 0x7d6a44, 0x6b4a52]),
+    },
+  );
+
+  tableware(sink, x, y + bench + 0.03, z, yaw, width - 0.5);
+  // Stock at the back of the pitch, where a trader keeps the day's stock.
+  for (let i = 0; i < sink.rng.int(1, 2); i++) {
+    const at = onWall(x, z, yaw, sink.rng.range(-0.6, 0.6), -depth / 2 - 0.3);
+    produceCrate(sink, at.x, at.z, yaw + sink.rng.range(-0.3, 0.3), y);
+  }
+  // Waist-high collision only: the frame above it is a canopy, and a full-height
+  // box would stop a bullet that should pass under the cloth.
+  sink.addCollider(
+    new THREE.Vector3(x, y + bench / 2, z),
+    new THREE.Vector3(width / 2, bench / 2, depth / 2),
+    yaw,
+    { surface: 'wood' },
+  );
+}
+
+/** Low table, the one freestanding piece rooms are allowed. */
+function buildTable(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const { width, depth, height } = item;
+  const geometry = cachedGeometry('table', () => {
+    const parts: THREE.BufferGeometry[] = [
+      placed(boxGeometry(width, 0.05, depth, 0.012, 1.4), transform(0, height - 0.025, 0)),
+    ];
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        parts.push(
+          placed(
+            boxGeometry(0.055, height - 0.05, 0.055, 0.008, 1.1),
+            transform(sx * (width / 2 - 0.08), (height - 0.05) / 2, sz * (depth / 2 - 0.08)),
+          ),
+        );
+      }
+    }
+    return mergeParts(parts);
+  });
+  sink.addProp(geometry, transform(x, y, z, yaw), {
+    material: 'wood_plank',
+    tier: 'detail',
+    tint: sink.rng.pick([0xbfae8c, 0xa89880]),
+  });
+  if (sink.rng.bool(0.75)) tableware(sink, x, y + height + 0.01, z, yaw, width - 0.25);
+  sink.addCollider(
+    new THREE.Vector3(x, y + height / 2, z),
+    new THREE.Vector3(width / 2, height / 2, depth / 2),
+    yaw,
+    { surface: 'wood', noCover: true },
+  );
+}
+
+/** Floor rug. Flat, so it takes no collider and never blocks navigation. */
+function buildRug(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const geometry = cachedGeometry('rug', () => {
+    const plane = cloneGeometry(planeGeometry(item.width, item.depth, 0.42));
+    plane.rotateX(-Math.PI / 2);
+    return plane;
+  });
+  sink.addProp(geometry, transform(x, y + 0.012, z, yaw), {
+    material: 'fabric_canvas',
+    tier: 'detail',
+    tint: sink.rng.pick([0x8d4a3a, 0x6b4a52, 0x7d6a44, 0x8a5a3a]),
+  });
+}
+
+/** Crates on a pallet. */
+function buildCratePile(sink: Sink, item: Item, x: number, y: number, z: number, yaw: number): void {
+  const geometry = cachedGeometry('cratepile', () => {
+    const parts: THREE.BufferGeometry[] = [
+      placed(boxGeometry(1.1, 0.11, 1.1, 0.01, 1.2), transform(0, 0.055, 0)),
+    ];
+    let stack = 0.11;
+    const sizes = [0.62, 0.54, 0.48];
+    for (let i = 0; i < sizes.length; i++) {
+      const s = sizes[i];
+      parts.push(
+        placed(
+          boxGeometry(s, s, s, 0.016, 1.2),
+          transform((i - 1) * 0.08, stack + s / 2, ((i % 2) - 0.5) * 0.1, i * 0.22),
+        ),
+      );
+      stack += s * 0.86;
+    }
+    return mergeParts(parts);
+  });
+  sink.addProp(geometry, transform(x, y, z, yaw), {
+    material: 'wood_crate',
+    tier: 'detail',
+    tint: 0xd0bf9c,
+  });
+  sink.addCollider(
+    new THREE.Vector3(x, y + item.height / 2, z),
+    new THREE.Vector3(item.width / 2, item.height / 2, item.depth / 2),
+    yaw,
+    { surface: 'wood' },
+  );
+}
+
+/** Fallen slab and broken block, for the rooms the shelling reached. */
+function buildInteriorRubble(
+  sink: Sink,
+  item: Item,
+  x: number,
+  y: number,
+  z: number,
+  yaw: number,
+): void {
+  const centre = onWall(x, z, yaw, 0, item.depth / 2);
+  for (let i = 0; i < 7; i++) {
+    const size = 0.14 + Math.round(sink.rng.range(0, 4)) * 0.07;
+    sink.addProp(
+      boxGeometry(size, size * 0.6, size * 0.82, size * 0.1, 1.1),
+      transform(
+        centre.x + sink.rng.range(-0.6, 0.6),
+        y + size * 0.3,
+        centre.z + sink.rng.range(-0.4, 0.4),
+        sink.rng.range(0, Math.PI * 2),
+        sink.rng.range(-0.4, 0.4),
+        sink.rng.range(-0.4, 0.4),
+      ),
+      {
+        material: 'concrete_damaged',
+        tier: 'detail',
+        tint: sink.rng.pick([0xcfc6b6, 0xbdb4a4, 0xd8cfbe]),
+      },
+    );
+  }
+  // One tipped slab gives the pile a silhouette the loose chunks cannot.
+  sink.addProp(
+    boxGeometry(1.1, 0.14, 0.8, 0.02, 1.8),
+    transform(centre.x, y + 0.28, centre.z, yaw + sink.rng.range(-0.5, 0.5), sink.rng.range(0.25, 0.5)),
+    { material: 'concrete_damaged', tier: 'detail', tint: 0xc6bdac },
+  );
+  boxCollider(sink, item, x, y, z, yaw, 'concrete', 0.44);
+}
+
+// ---------------------------------------------------------------------------
+// Fittings
+// ---------------------------------------------------------------------------
+
+/** A bare bulb, a tin shade, or in the wrecked rooms just the flex. */
+function addCeilingFitting(sink: Sink, spec: RoomSpec): void {
+  const cx = (spec.rect.minX + spec.rect.maxX) / 2;
+  const cz = (spec.rect.minZ + spec.rect.maxZ) / 2;
+  const ceiling = spec.y + spec.headroom;
+
+  if (spec.use === 'derelict') {
+    sink.addProp(
+      cylinderGeometry(0.006, 0.006, 0.55, 4, 0.5),
+      transform(cx, ceiling - 0.28, cz),
+      { material: 'metal_rusted', tier: 'detail', tint: 0x4a4438 },
+    );
+    return;
+  }
+
+  const geometry = cachedGeometry('bulb', () => {
+    const bulb = new THREE.SphereGeometry(0.038, 8, 6);
+    bulb.translate(0, -0.03, 0);
+    return mergeParts([
+      placed(cylinderGeometry(0.006, 0.006, 0.42, 4, 0.5), transform(0, 0.21, 0)),
+      placed(cylinderGeometry(0.026, 0.03, 0.05, 8, 0.4), transform(0, 0.025, 0)),
+      bulb,
+    ]);
+  });
+
+  // A run of fittings down the long axis rather than one in the middle. A single
+  // bulb suits the four-by-four rooms this started with; the market hall is over
+  // twenty metres of covered street, and one flex hanging at its centre reads as
+  // a room with the ceiling forgotten. Spacing is uneven and the drops differ,
+  // because nobody hung these with a tape measure.
+  const alongX = spec.rect.maxX - spec.rect.minX > spec.rect.maxZ - spec.rect.minZ;
+  const run = alongX ? spec.rect.maxX - spec.rect.minX : spec.rect.maxZ - spec.rect.minZ;
+  const lamps = Math.max(1, Math.min(5, Math.round(run / 5.5)));
+  for (let i = 0; i < lamps; i++) {
+    const t = lamps === 1 ? 0 : ((i + 0.5) / lamps - 0.5) * run * 0.92 + sink.rng.range(-0.5, 0.5);
+    const px = cx + (alongX ? t : sink.rng.range(-0.4, 0.4));
+    const pz = cz + (alongX ? sink.rng.range(-0.4, 0.4) : t);
+    const drop = ceiling - sink.rng.range(0.38, 0.56);
+    sink.addProp(geometry, transform(px, drop, pz), {
+      material: 'plaster_white',
+      tier: 'detail',
+      tint: sink.rng.pick([0xd8d2c4, 0xcdc6b6, 0xdedac9]),
+    });
+    if (spec.use === 'shop' && sink.rng.bool(0.6)) {
+      sink.addProp(cylinderGeometry(0.05, 0.19, 0.11, 10, 0.7, false), transform(px, drop - 0.02, pz), {
+        material: 'metal_panel',
+        tier: 'detail',
+        tint: 0xa8a094,
+      });
+    }
+  }
+}
+
+/** A plank on two brackets: the flat thing that breaks up bare plaster. */
+function addWallShelf(sink: Sink, spec: RoomSpec, taken: readonly Rect[]): void {
+  const edge = sink.rng.int(0, 3);
+  const wall = WALLS[edge];
+  const wx =
+    edge === 1 ? spec.rect.maxX : edge === 3 ? spec.rect.minX : (spec.rect.minX + spec.rect.maxX) / 2;
+  const wz =
+    edge === 0 ? spec.rect.minZ : edge === 2 ? spec.rect.maxZ : (spec.rect.minZ + spec.rect.maxZ) / 2;
+  const rect: Rect = { minX: wx - 0.5, minZ: wz - 0.5, maxX: wx + 0.5, maxZ: wz + 0.5 };
+  for (const other of taken) {
+    if (
+      rect.minX < other.maxX &&
+      rect.maxX > other.minX &&
+      rect.minZ < other.maxZ &&
+      rect.maxZ > other.minZ
+    ) {
+      return;
+    }
+  }
+
+  const geometry = cachedGeometry('wallshelf', () => {
+    const parts: THREE.BufferGeometry[] = [
+      placed(boxGeometry(0.92, 0.035, 0.24, 0.008, 1.2), transform(0, 0, 0)),
+    ];
+    for (const s of [-1, 1]) {
+      parts.push(placed(boxGeometry(0.03, 0.16, 0.2, 0.005, 1), transform(s * 0.36, -0.09, -0.02)));
+    }
+    return mergeParts(parts);
+  });
+  const at = onWall(wx, wz, wall.yaw, 0, 0.12);
+  sink.addProp(geometry, transform(at.x, spec.y + sink.rng.range(1.25, 1.6), at.z, wall.yaw), {
+    material: 'wood_plank',
+    tier: 'detail',
+    tint: 0xb6a888,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Window dressing
+// ---------------------------------------------------------------------------
+
+/**
+ * A window opening, described from the room's side.
+ *
+ * `yaw` turns local +Z into the room, the same convention the furniture uses, so
+ * a rod, a panel and a sill pot all place off one frame.
+ */
+export interface WindowSpec {
+  x: number;
+  z: number;
+  /** World height of the sill. */
+  sill: number;
+  width: number;
+  height: number;
+  yaw: number;
+  /** Wall thickness, so the fittings clear the reveal. */
+  thickness: number;
+}
+
+/**
+ * Curtains, and what gets left on a sill.
+ *
+ * Every window opening is a sightline the layout is built around, so the panels
+ * are gathered against the reveals rather than drawn across and nothing here
+ * covers more than a third of the glass. That is also how a curtain in a lived-in
+ * room actually hangs in daylight, and it is the arrangement that reads best from
+ * inside: two dark vertical masses framing a blown-out opening.
+ */
+export function dressWindow(sink: Sink, w: WindowSpec, use: InteriorUse): void {
+  if (w.width < 0.8 || w.height < 0.8) return;
+  const head = w.sill + w.height;
+  const inset = w.thickness / 2 + 0.09;
+  const derelict = use === 'derelict';
+
+  if (derelict) {
+    // Nothing is maintained here, so one shred still on its nail.
+    if (!sink.rng.bool(0.5)) return;
+    const at = onWall(w.x, w.z, w.yaw, sink.rng.range(-0.3, 0.3) * w.width, inset);
+    hangingRag(
+      sink,
+      at.x,
+      head - 0.05,
+      at.z,
+      w.yaw,
+      sink.rng.range(0.3, 0.5),
+      sink.rng.range(0.5, w.height * 0.8),
+    );
+    return;
+  }
+  if (!sink.rng.bool(use === 'workshop' || use === 'store' ? 0.4 : 0.85)) return;
+
+  const rodY = head + 0.07;
+  sink.addProp(
+    cylinderGeometry(0.016, 0.016, w.width + 0.3, 5, 0.6),
+    transform(
+      onWall(w.x, w.z, w.yaw, 0, inset).x,
+      rodY,
+      onWall(w.x, w.z, w.yaw, 0, inset).z,
+      w.yaw,
+      0,
+      Math.PI / 2,
+    ),
+    { material: 'metal_rusted', tier: 'detail', tint: 0x8a8175 },
+  );
+
+  const drop = Math.min(w.height + 0.22, w.height * 1.18);
+  const both = sink.rng.bool(0.7);
+  const tint = sink.rng.pick(CURTAIN_TINTS);
+  const panels: number[] = both ? [-1, 1] : [sink.rng.bool(0.5) ? -1 : 1];
+  for (const side of panels) {
+    const share = sink.rng.range(0.24, 0.34);
+    const width = w.width * share;
+    const at = onWall(w.x, w.z, w.yaw, side * (w.width / 2 - width / 2 + 0.04), inset);
+    sink.addProp(
+      curtainGeometry(widthBucket(width), 1),
+      transform(at.x, rodY - 0.03, at.z, w.yaw, 0, 0, CURTAIN_SCALE.set(1, drop, 1)),
+      {
+        material: 'fabric_canvas',
+        tier: 'detail',
+        castShadow: false,
+        tint,
+      },
+    );
+  }
+
+  // A pelmet across the head, which is what stops the two panels reading as a
+  // pair of unrelated sheets hung either side of a hole.
+  if (sink.rng.bool(0.55)) {
+    const at = onWall(w.x, w.z, w.yaw, 0, inset + 0.03);
+    sink.addProp(
+      curtainGeometry(widthBucket(w.width * 0.92), 0),
+      transform(at.x, rodY - 0.02, at.z, w.yaw, 0, 0, CURTAIN_SCALE.set(1, sink.rng.range(0.2, 0.3), 1)),
+      { material: 'fabric_canvas', tier: 'detail', castShadow: false, tint },
+    );
+  }
+
+  // Something put down on the sill: the ledge in a room somebody uses is never
+  // empty, and it sits in the brightest part of the frame.
+  if (w.sill > 0.5 && sink.rng.bool(0.5)) {
+    const at = onWall(w.x, w.z, w.yaw, sink.rng.range(-0.3, 0.3) * w.width, w.thickness / 2 - 0.1);
+    const potted = use === 'home' && sink.rng.bool(0.6);
+    sink.addProp(
+      cachedGeometry(potted ? 'sillplant' : 'silltin', () =>
+        potted ? pottedGeometry() : tinGeometry(),
+      ),
+      transform(at.x, w.sill + 0.02, at.z, sink.rng.range(0, Math.PI * 2)),
+      {
+        material: potted ? 'tile_ceramic' : 'metal_panel',
+        tier: 'detail',
+        tint: potted ? 0xa4694c : 0x9c9488,
+      },
+    );
+  }
+}
+
+const CURTAIN_TINTS: readonly number[] = [
+  0x7a5a4a, 0x5e5648, 0x86664a, 0x4e5a5e, 0x8c7a5c, 0x6a4a4e,
+];
+const CURTAIN_SCALE = new THREE.Vector3();
+
+/** Panel widths the curtain geometry is built at, so the buffers are shared. */
+function widthBucket(width: number): number {
+  return Math.max(0.2, Math.round(width / 0.1) * 0.1);
+}
+
+/**
+ * A hanging cloth panel, of unit drop so one buffer serves every window.
+ *
+ * Built as folds across its width rather than a flat card: at a window the
+ * player is a metre from it and side-lit hard, and the shading down the folds is
+ * the whole reason it reads as cloth. `gather` pinches the bottom in, which is
+ * what a panel pushed against a reveal does.
+ */
+function curtainGeometry(width: number, gather: number): THREE.BufferGeometry {
+  return cachedGeometry(`curtain|${width.toFixed(2)}|${gather}`, () => {
+    const cols = 7;
+    const rows = 4;
+    const positions: number[] = [];
+    const uvs: number[] = [];
+    const indices: number[] = [];
+    const stride = cols + 1;
+    for (let r = 0; r <= rows; r++) {
+      const v = r / rows;
+      for (let c = 0; c <= cols; c++) {
+        const u = c / cols;
+        const fold = Math.sin(u * Math.PI * 3.5) * width * 0.09;
+        const taper = 1 - gather * v * 0.35;
+        positions.push((u - 0.5) * width * taper, -v, fold * (0.5 + v * 0.5));
+        uvs.push(u * width, -v);
+        if (r > 0 && c < cols) {
+          const a = (r - 1) * stride + c;
+          indices.push(a, a + stride, a + 1, a + 1, a + stride, a + stride + 1);
+        }
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    return geometry;
+  });
+}
+
+function pottedGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [
+    placed(cylinderGeometry(0.075, 0.055, 0.13, 9, 0.5), transform(0, 0.065, 0)),
+    placed(cylinderGeometry(0.082, 0.082, 0.02, 9, 0.5), transform(0, 0.135, 0)),
+  ];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    parts.push(
+      placed(
+        boxGeometry(0.02, 0.13, 0.05, 0, 1),
+        transform(Math.cos(a) * 0.035, 0.2, Math.sin(a) * 0.035, a, 0.4),
+      ),
+    );
+  }
+  return mergeParts(parts);
+}
+
+function tinGeometry(): THREE.BufferGeometry {
+  return mergeParts([
+    placed(cylinderGeometry(0.055, 0.055, 0.14, 8, 0.5), transform(0, 0.07, 0)),
+    placed(cylinderGeometry(0.058, 0.058, 0.012, 8, 0.5), transform(0, 0.142, 0)),
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// Wall hangings
+// ---------------------------------------------------------------------------
+
+/**
+ * The thing on the wall at eye height.
+ *
+ * A framed picture, a rug hung as a hanging, or a clock. All three are the same
+ * shape — a bordered rectangle standing off the plaster — and all three are what
+ * the eye looks for to decide whether a room belongs to somebody. Merged detail
+ * geometry, a few dozen triangles each, and they go on the wall the furniture
+ * pass cannot use.
+ */
+function wallHanging(sink: Sink, x: number, y: number, z: number, yaw: number, use: InteriorUse): void {
+  const roll = sink.rng.next();
+  const at = onWall(x, z, yaw, 0, 0.04);
+  if (roll < 0.34) {
+    // Framed picture: a mount, a dark field and a moulding, so the front face
+    // steps twice. One flat rectangle at this size reads as a sticker.
+    const w = sink.rng.range(0.42, 0.72);
+    const h = w * sink.rng.range(0.68, 1.05);
+    sink.addProp(frameGeometry(bucket2(w), bucket2(h)), transform(at.x, y, at.z, yaw), {
+      material: 'wood_painted',
+      tier: 'detail',
+      tint: sink.rng.pick([0x6a5236, 0x8a7248, 0x4e4438, 0xa08a5c]),
+    });
+    sink.addProp(
+      cachedGeometry(`picture|${bucket2(w - 0.1)}|${bucket2(h - 0.1)}`, () => {
+        const plane = cloneGeometry(planeGeometry(bucket2(w - 0.1), bucket2(h - 0.1), 0.7));
+        plane.translate(0, 0, 0.028);
+        return plane;
+      }),
+      transform(at.x, y, at.z, yaw),
+      {
+        material: 'plaster_white',
+        tier: 'detail',
+        tint: sink.rng.pick([0x6c5a3e, 0x4a4636, 0x7a6a4e, 0x5c5442]),
+      },
+    );
+  } else if (roll < 0.78) {
+    // A rug on the wall, which in this part of the world is where the good one
+    // goes. Hung slightly proud at the top so it is not flush with the plaster.
+    const w = sink.rng.range(0.9, 1.5);
+    const h = w * sink.rng.range(0.6, 0.85);
+    sink.addProp(
+      cachedGeometry(`hanging|${bucket2(w)}|${bucket2(h)}`, () => {
+        const plane = cloneGeometry(planeGeometry(bucket2(w), bucket2(h), 0.34));
+        plane.translate(0, 0, 0.02);
+        return plane;
+      }),
+      transform(at.x, y, at.z, yaw, sink.rng.range(-0.02, 0.02)),
+      {
+        material: 'fabric_canvas',
+        tier: 'detail',
+        tint: sink.rng.pick([0x8d4a3a, 0x6b4a52, 0x7d6a44, 0x8a5a3a, 0x5a4a62]),
+      },
+    );
+    sink.addProp(
+      cylinderGeometry(0.014, 0.014, bucket2(w) + 0.12, 5, 0.6),
+      transform(at.x, y + bucket2(h) / 2 + 0.03, at.z, yaw, 0, Math.PI / 2),
+      { material: 'wood_plank', tier: 'detail', tint: 0x8a7c60 },
+    );
+  } else if (use !== 'workshop' && use !== 'store') {
+    sink.addProp(
+      cachedGeometry('wallclock', () =>
+        mergeParts([
+          placed(cylinderGeometry(0.13, 0.13, 0.045, 12, 0.5), transform(0, 0, 0.022, 0, Math.PI / 2)),
+          placed(cylinderGeometry(0.115, 0.115, 0.01, 12, 0.5), transform(0, 0, 0.05, 0, Math.PI / 2)),
+          placed(boxGeometry(0.008, 0.075, 0.006, 0, 1), transform(0, 0.03, 0.056, 0, 0, 0.4)),
+        ]),
+      ),
+      transform(at.x, y, at.z, yaw),
+      { material: 'plaster_white', tier: 'detail', tint: 0xcfc6b2 },
+    );
+  }
+}
+
+/** Frame moulding: a back board and four bevelled sides. */
+function frameGeometry(width: number, height: number): THREE.BufferGeometry {
+  return cachedGeometry(`frame|${width}|${height}`, () => {
+    const rail = 0.055;
+    const parts: THREE.BufferGeometry[] = [
+      placed(boxGeometry(width, height, 0.022, 0.004, 1), transform(0, 0, 0.011)),
+    ];
+    for (const s of [-1, 1]) {
+      parts.push(
+        placed(boxGeometry(width, rail, 0.045, 0.006, 1), transform(0, s * (height / 2 - rail / 2), 0.022)),
+      );
+      parts.push(
+        placed(
+          boxGeometry(rail, height - rail * 2, 0.045, 0.006, 1),
+          transform(s * (width / 2 - rail / 2), 0, 0.022),
+        ),
+      );
+    }
+    return mergeParts(parts);
+  });
+}
+
+function bucket2(v: number): number {
+  return Math.round(v / 0.05) * 0.05;
+}
+
+/**
+ * Pots and bowls on a work surface.
+ *
+ * Everything else in a room is furniture-sized; this is the only object at hand
+ * scale, and a counter or a table with nothing on it is the detail a player
+ * standing over it notices.
+ */
+function tableware(sink: Sink, x: number, y: number, z: number, yaw: number, span: number): void {
+  const pieces = sink.rng.int(2, 4);
+  for (let i = 0; i < pieces; i++) {
+    const along = ((i + 0.5) / pieces - 0.5) * span + sink.rng.range(-0.06, 0.06);
+    const at = onWall(x, z, yaw, along, sink.rng.range(-0.1, 0.1));
+    const roll = sink.rng.next();
+    const geometry =
+      roll < 0.4
+        ? cachedGeometry('bowl', () =>
+            mergeParts([
+              placed(cylinderGeometry(0.105, 0.062, 0.055, 10, 0.4), transform(0, 0.028, 0)),
+              placed(cylinderGeometry(0.108, 0.108, 0.008, 10, 0.4), transform(0, 0.058, 0)),
+            ]),
+          )
+        : roll < 0.75
+          ? cachedGeometry('jug', () =>
+              mergeParts([
+                placed(cylinderGeometry(0.045, 0.072, 0.16, 10, 0.5), transform(0, 0.08, 0)),
+                placed(cylinderGeometry(0.032, 0.032, 0.035, 8, 0.4), transform(0, 0.175, 0)),
+              ]),
+            )
+          : cachedGeometry('glasses', () =>
+              mergeParts([
+                placed(cylinderGeometry(0.032, 0.026, 0.085, 8, 0.4), transform(-0.045, 0.043, 0)),
+                placed(cylinderGeometry(0.032, 0.026, 0.085, 8, 0.4), transform(0.045, 0.043, 0.02)),
+              ]),
+            );
+    sink.addProp(geometry, transform(at.x, y, at.z, sink.rng.range(0, Math.PI * 2)), {
+      material: 'tile_ceramic',
+      tier: 'detail',
+      tint: sink.rng.pick([0xcfc4ae, 0xb8a894, 0xa8623c, 0xd6cdbc, 0x8a7c66]),
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+/** Point `along` the wall and `away` from it, in the wall's local frame. */
+function onWall(
+  x: number,
+  z: number,
+  yaw: number,
+  along: number,
+  away: number,
+): { x: number; z: number } {
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
+  return { x: x + cos * along + sin * away, z: z - sin * along + cos * away };
+}
+
+/** Placement matrix for a piece whose back sits on the wall at (x, z). */
+function standing(x: number, y: number, z: number, yaw: number, depth: number): THREE.Matrix4 {
+  return transform(x + Math.sin(yaw) * (depth / 2), y, z + Math.cos(yaw) * (depth / 2), yaw);
+}
+
+function boxCollider(
+  sink: Sink,
+  item: Item,
+  x: number,
+  y: number,
+  z: number,
+  yaw: number,
+  surface: SurfaceType,
+  height = item.height,
+): void {
+  sink.addCollider(
+    new THREE.Vector3(
+      x + Math.sin(yaw) * (item.depth / 2),
+      y + height / 2,
+      z + Math.cos(yaw) * (item.depth / 2),
+    ),
+    new THREE.Vector3(item.width / 2, height / 2, item.depth / 2),
+    yaw,
+    { surface, noCover: height < 0.45 },
+  );
+}

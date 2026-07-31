@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Operation Blackout — procgen lookdev</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #101214;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+      }
+      #report {
+        position: fixed;
+        left: 10px;
+        top: 10px;
+        color: #d8e2e8;
+        font: 12px/1.5 ui-monospace, monospace;
+        background: rgba(8, 10, 12, 0.62);
+        padding: 8px 11px;
+        border-radius: 4px;
+        white-space: pre;
+        pointer-events: none;
+      }
+      #errors {
+        position: fixed;
+        left: 10px;
+        bottom: 10px;
+        max-height: 40%;
+        max-width: 70vw;
+        overflow: auto;
+        color: #ff9a8b;
+        font: 11px/1.4 ui-monospace, monospace;
+        background: rgba(24, 6, 6, 0.8);
+        padding: 8px 11px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="report">booting…</div>
+    <pre id="errors" hidden></pre>
+    <script type="module" src="./lookdev.ts"></script>
+  </body>
+</html>
