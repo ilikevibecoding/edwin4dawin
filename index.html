@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <title>A Stolen Secret — An Original Space-Opera Cinematic</title>
+    <meta
+      name="description"
+      content="An original, fully procedural browser cinematic inspired by the opening situation of a classic space opera. All geometry, audio and narration generated from code."
+    />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23050608'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%23e8b657' stroke-width='2'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./src/ui/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="stage" aria-label="Cinematic viewport"></canvas>
+
+      <!-- Subtitles -->
+      <div id="subtitles" class="subtitles" aria-live="polite"></div>
+
+      <!-- Prologue text is drawn in WebGL; this is the caption/UI layer only -->
+      <div id="hover-label" class="hover-label" hidden></div>
+
+      <!-- Selection inspector (Explore mode) -->
+      <aside id="inspector" class="inspector" hidden>
+        <header>
+          <h2 id="inspector-title">—</h2>
+          <button id="inspector-close" class="icon-btn" title="Close (Esc)" aria-label="Close">✕</button>
+        </header>
+        <p id="inspector-kind" class="inspector-kind"></p>
+        <p id="inspector-body"></p>
+        <dl id="inspector-facts" class="facts"></dl>
+        <div class="inspector-actions">
+          <button id="act-follow" class="btn small">Follow</button>
+          <button id="act-inspect" class="btn small">Inspect</button>
+          <button id="act-return" class="btn small">Return to cinematic camera</button>
+        </div>
+      </aside>
+
+      <!-- Explore mode hint -->
+      <div id="explore-hint" class="explore-hint" hidden>
+        <strong>Explore mode</strong>
+        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Q</kbd>/<kbd>E</kbd> down/up · drag to look · <kbd>Shift</kbd> boost · click a subject · <kbd>R</kbd> recentre</span>
+      </div>
+
+      <!-- Debug overlay -->
+      <section id="debug" class="debug" hidden>
+        <h3>Diagnostics</h3>
+        <pre id="debug-body"></pre>
+      </section>
+
+      <!-- Transport / control bar -->
+      <div id="hud" class="hud">
+        <div class="hud-top">
+          <div class="chapter-readout">
+            <span class="eyebrow">Chapter <em id="chapter-index">1</em> / 8</span>
+            <span class="chapter-title" id="chapter-title">Prologue</span>
+          </div>
+          <div class="beat-readout" id="beat-readout"></div>
+        </div>
+
+        <div class="scrubber" id="scrubber" role="slider" aria-label="Timeline" tabindex="0"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="scrub-track">
+            <div class="scrub-buffer"></div>
+            <div class="scrub-fill" id="scrub-fill"></div>
+            <div class="scrub-marks" id="scrub-marks"></div>
+            <div class="scrub-head" id="scrub-head"></div>
+          </div>
+          <div class="scrub-tooltip" id="scrub-tooltip" hidden></div>
+        </div>
+
+        <div class="hud-row">
+          <div class="group">
+            <button id="btn-play" class="icon-btn primary" title="Play / Pause (Space)" aria-label="Play or pause">
+              <svg viewBox="0 0 24 24" class="i-play"><path d="M8 5v14l11-7z"/></svg>
+              <svg viewBox="0 0 24 24" class="i-pause"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+            </button>
+            <button id="btn-restart" class="icon-btn" title="Restart (Backspace)" aria-label="Restart">
+              <svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+            </button>
+            <span class="time" id="time-readout">0:00 / 5:42</span>
+          </div>
+
+          <div class="group grow">
+            <label class="field">
+              <span>Chapter</span>
+              <select id="sel-chapter" aria-label="Chapter selector"></select>
+            </label>
+            <div class="mode-toggle" role="group" aria-label="Mode">
+              <button id="mode-cinematic" class="seg active">Cinematic</button>
+              <button id="mode-explore" class="seg">Explore</button>
+            </div>
+          </div>
+
+          <div class="group">
+            <button id="btn-audio" class="icon-btn" title="Audio mixer" aria-label="Audio mixer">
+              <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 2v2a8 8 0 0 1 0 16v2a10 10 0 0 0 0-20z"/></svg>
+            </button>
+            <button id="btn-cc" class="icon-btn active" title="Subtitles (C)" aria-label="Toggle subtitles">
+              <svg viewBox="0 0 24 24"><path d="M3 5h18v14H3V5zm3.5 4.8a2.7 2.7 0 0 0 0 4.4h1.6v-1.3H6.9v-1.8h1.2V9.8H6.5zm7 0a2.7 2.7 0 0 0 0 4.4h1.6v-1.3h-1.2v-1.8h1.2V9.8h-1.6z"/></svg>
+            </button>
+            <button id="btn-settings" class="icon-btn" title="Settings" aria-label="Settings">
+              <svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.9 4a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4 1a7 7 0 0 0-2-1.2L16 3H8l-.4 2.7a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.5A7 7 0 0 0 3.1 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.4-1c.6.5 1.3.9 2 1.2L8 21h8l.4-2.7c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>
+            </button>
+            <button id="btn-help" class="icon-btn" title="Help (H)" aria-label="Help">
+              <svg viewBox="0 0 24 24"><path d="M11 18h2v2h-2v-2zm1-14a4 4 0 0 0-4 4h2a2 2 0 1 1 3.4 1.4l-1.2 1.3A3 3 0 0 0 11 13v2h2v-1.5c0-.6.2-1 .6-1.4l1-1A4 4 0 0 0 12 4z"/></svg>
+            </button>
+            <button id="btn-fullscreen" class="icon-btn" title="Fullscreen (F)" aria-label="Fullscreen">
+              <svg viewBox="0 0 24 24"><path d="M4 9V4h5v2H6v3H4zm11-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm14 0h2v5h-5v-2h3v-3z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Audio mixer popover -->
+      <section id="mixer" class="popover mixer" hidden>
+        <h3>Mix</h3>
+        <label class="slider"><span>Master</span><input id="vol-master" type="range" min="0" max="100" value="85" /><output>85</output></label>
+        <label class="slider"><span>Narration</span><input id="vol-narration" type="range" min="0" max="100" value="100" /><output>100</output></label>
+        <label class="slider"><span>Music</span><input id="vol-music" type="range" min="0" max="100" value="62" /><output>62</output></label>
+        <label class="slider"><span>Effects</span><input id="vol-sfx" type="range" min="0" max="100" value="78" /><output>78</output></label>
+        <p class="hint">Output is compressed and hard-limited; peaks stay well below clipping.</p>
+      </section>
+
+      <!-- Settings popover -->
+      <section id="settings" class="popover settings" hidden>
+        <h3>Presentation</h3>
+        <label class="field wide">
+          <span>Quality</span>
+          <select id="sel-quality">
+            <option value="low">Low — integrated graphics</option>
+            <option value="medium" selected>Medium — balanced</option>
+            <option value="high">High — discrete GPU</option>
+          </select>
+        </label>
+        <p class="hint" id="quality-hint"></p>
+        <label class="check"><input id="chk-subs" type="checkbox" checked /><span>Subtitles</span></label>
+        <label class="check"><input id="chk-debug" type="checkbox" /><span>Diagnostics overlay</span></label>
+        <label class="check"><input id="chk-grain" type="checkbox" checked /><span>Film grain &amp; vignette</span></label>
+        <label class="check"><input id="chk-dof" type="checkbox" checked /><span>Depth cueing</span></label>
+      </section>
+
+      <!-- Help panel -->
+      <section id="help" class="panel help" hidden>
+        <header><h2>Controls &amp; credits</h2><button id="help-close" class="icon-btn" aria-label="Close">✕</button></header>
+        <div class="help-grid">
+          <div>
+            <h4>Playback</h4>
+            <ul class="keys">
+              <li><kbd>Space</kbd> play / pause</li>
+              <li><kbd>←</kbd> <kbd>→</kbd> skip 5 seconds</li>
+              <li><kbd>,</kbd> <kbd>.</kbd> previous / next chapter</li>
+              <li><kbd>Backspace</kbd> restart</li>
+              <li><kbd>1</kbd>–<kbd>8</kbd> jump to chapter</li>
+            </ul>
+          </div>
+          <div>
+            <h4>Display</h4>
+            <ul class="keys">
+              <li><kbd>C</kbd> subtitles</li>
+              <li><kbd>F</kbd> fullscreen</li>
+              <li><kbd>H</kbd> this panel</li>
+              <li><kbd>G</kbd> diagnostics overlay</li>
+              <li><kbd>U</kbd> hide / show interface</li>
+            </ul>
+          </div>
+          <div>
+            <h4>Explore mode</h4>
+            <ul class="keys">
+              <li><kbd>Tab</kbd> toggle explore / cinematic</li>
+              <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move, <kbd>Q</kbd><kbd>E</kbd> down / up</li>
+              <li><kbd>Shift</kbd> move faster</li>
+              <li>Drag to look, wheel to dolly</li>
+              <li>Click a ship, droid or figure to inspect</li>
+              <li><kbd>R</kbd> return to the directed camera</li>
+            </ul>
+          </div>
+        </div>
+        <p class="disclaimer">
+          <strong>An original work.</strong> Every model, texture, animation, note of music, sound effect and
+          spoken line in this piece was generated by the code in this repository. Nothing here is taken from any
+          film, soundtrack or commercial asset library. This is an unaffiliated, non-commercial homage created as a
+          technical demonstration; all trademarks belong to their respective owners.
+        </p>
+      </section>
+
+      <!-- Loading / gate -->
+      <div id="gate" class="gate">
+        <div class="gate-inner">
+          <div class="gate-mark" aria-hidden="true">
+            <svg viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="44" class="ring" />
+              <circle cx="60" cy="60" r="30" class="ring dim" />
+              <path d="M60 8 L60 26 M60 94 L60 112 M8 60 L26 60 M94 60 L112 60" class="tick" />
+            </svg>
+          </div>
+          <h1>A Stolen Secret</h1>
+          <p class="sub">An original space-opera cinematic — rendered entirely from code</p>
+          <div class="loadbar"><div id="loadbar-fill"></div></div>
+          <p class="loadstate" id="loadstate">Preparing…</p>
+          <button id="btn-enter" class="btn enter" disabled>Enter the galaxy</button>
+          <p class="gate-note">Sound is an essential part of this piece. Use headphones if you can.</p>
+        </div>
+      </div>
+
+      <!-- Fatal error boundary -->
+      <div id="fatal" class="fatal" hidden>
+        <div>
+          <h2>The projector jammed.</h2>
+          <p id="fatal-msg"></p>
+          <pre id="fatal-detail"></pre>
+          <button id="fatal-reload" class="btn">Reload</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

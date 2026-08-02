@@ -1,0 +1,26 @@
+{
+  "name": "a-stolen-secret",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "An original, procedurally generated browser cinematic inspired by the opening of Star Wars: A New Hope.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "narration": "node tools/generate-narration.mjs",
+    "qa": "node tools/qa-tour.mjs",
+    "qa:build": "node tools/qa-tour.mjs --build"
+  },
+  "dependencies": {
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "playwright": "^1.56.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  }
+}
