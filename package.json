@@ -1,0 +1,35 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "tts": "node tools/tts.mjs",
+    "shot": "node tools/shot.mjs",
+    "audio": "node tools/render-audio.mjs",
+    "frames": "node tools/render-frames.mjs",
+    "movie": "node tools/make-movie.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ilikevibecoding/edwin4dawin.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ilikevibecoding/edwin4dawin/issues"
+  },
+  "homepage": "https://github.com/ilikevibecoding/edwin4dawin#readme",
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "puppeteer": "^25.4.0",
+    "vite": "^8.2.0"
+  },
+  "type": "module"
+}

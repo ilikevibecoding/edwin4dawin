@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LEGO STAR WARS — A New Spark</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: 'Trebuchet MS', 'Helvetica Neue', Arial, sans-serif; }
+      canvas { display: block; }
+
+      #stage { position: fixed; inset: 0; }
+
+      #subs {
+        position: fixed; left: 50%; bottom: 6.5vh; transform: translateX(-50%);
+        width: min(84vw, 1000px); text-align: center;
+        color: #ffe81f; font-size: clamp(15px, 2.1vw, 27px); font-weight: 600;
+        letter-spacing: .01em; line-height: 1.35;
+        text-shadow: 0 2px 12px #000, 0 0 3px #000;
+        pointer-events: none; opacity: 0; transition: opacity .28s;
+      }
+      #subs.on { opacity: 1; }
+
+      #chapter {
+        position: fixed; left: 3.2vw; top: 3.4vh; color: #9fb6c9;
+        font-size: clamp(10px, 1.15vw, 15px); letter-spacing: .32em; text-transform: uppercase;
+        opacity: 0; transition: opacity .5s; pointer-events: none;
+      }
+      #chapter.on { opacity: .75; }
+
+      #bars { position: fixed; inset: 0; pointer-events: none; }
+      #bars div { position: absolute; left: 0; right: 0; height: 5.2vh; background: #000; }
+      #bars .t { top: 0; } #bars .b { bottom: 0; }
+
+      #ui {
+        position: fixed; right: 2vw; bottom: 2vh; display: flex; gap: 10px; align-items: center;
+        opacity: .25; transition: opacity .25s;
+      }
+      #ui:hover { opacity: .95; }
+      #ui button {
+        background: #10151c; color: #cfe3f5; border: 1px solid #2c3947; border-radius: 6px;
+        padding: 6px 11px; font-size: 12px; letter-spacing: .1em; cursor: pointer;
+      }
+      #ui button:hover { background: #1b2531; }
+      #scrub { width: 220px; accent-color: #ffe81f; }
+      #tc { color: #7f93a6; font: 11px ui-monospace, monospace; min-width: 84px; }
+
+      #start {
+        position: fixed; inset: 0; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 26px; background: #000; z-index: 10;
+        transition: opacity .8s;
+      }
+      #start h1 {
+        color: #ffe81f; font-size: clamp(26px, 6vw, 78px); margin: 0; letter-spacing: .06em;
+        font-weight: 800; text-align: center; line-height: .95;
+        text-shadow: 0 0 40px rgba(255,232,31,.28);
+      }
+      #start h1 small { display: block; font-size: .3em; letter-spacing: .5em; color: #b9c7d4; margin-bottom: .5em; font-weight: 600; }
+      #start p { color: #71818f; font-size: 13px; letter-spacing: .18em; text-transform: uppercase; margin: 0; }
+      #start button {
+        background: none; border: 2px solid #ffe81f; color: #ffe81f; border-radius: 3px;
+        padding: 14px 42px; font-size: 15px; letter-spacing: .34em; cursor: pointer; text-transform: uppercase;
+      }
+      #start button:hover { background: #ffe81f; color: #000; }
+      #start.gone { opacity: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="bars"><div class="t"></div><div class="b"></div></div>
+    <div id="chapter"></div>
+    <div id="subs"></div>
+    <div id="ui">
+      <button id="btn-play">Pause</button>
+      <input id="scrub" type="range" min="0" max="1000" value="0" />
+      <span id="tc">0:00 / 0:00</span>
+    </div>
+    <div id="start">
+      <h1><small>Episode Brick</small>LEGO STAR WARS<br /><span style="font-size:.42em;letter-spacing:.34em;color:#e8eef4">A NEW SPARK</span></h1>
+      <button id="btn-start">Play</button>
+      <p>procedurally generated · three.js · sound on</p>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
