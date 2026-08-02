@@ -29,8 +29,8 @@ const CLASHES = [
 export default {
   id: 'duel',
   duration: DURATION,
-  fadeIn: 1.2,
-  fadeOut: 1.6,
+  fadeIn: 0.8,
+  fadeOut: 1.2,
   cues: [
     music('duel', 1.0, { gain: 0.95 }),
     sfx('roomTone', 0, { dur: 35, vel: 0.8, freq: 48 }),
@@ -122,11 +122,11 @@ export default {
     scene.add(clashLight);
 
     // Lighting: hangar practicals plus a cold spill from the opening.
-    scene.add(new THREE.AmbientLight(0x36485f, 2.6));
-    const spill = new THREE.DirectionalLight(0x9fc4ff, 1.3);
+    scene.add(new THREE.AmbientLight(0x3e5170, 3.6));
+    const spill = new THREE.DirectionalLight(0x9fc4ff, 2.0);
     spill.position.set(0, 20, 200);
     scene.add(spill);
-    const overhead = new THREE.DirectionalLight(0xffeccc, 2.0);
+    const overhead = new THREE.DirectionalLight(0xffeccc, 2.8);
     overhead.position.set(10, 60, -20);
     scene.add(overhead);
 

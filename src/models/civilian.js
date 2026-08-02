@@ -65,14 +65,14 @@ export function freighter({ scale = 1, seed = 8 } = {}) {
   strip.position.set(0, 0.2 * s, -R * 0.96);
   g.add(strip);
   addMesh(strip, box(R * 1.15, 2.1 * s, 1.2 * s), dark);
-  const core = addMesh(strip, box(R * 1.02, 1.15 * s, 0.4 * s), emissive(0xdaf0ff, { blending: THREE.NormalBlending, depthWrite: true }), { pos: [0, 0, -0.5 * s] });
-  const halo = addMesh(strip, new THREE.PlaneGeometry(R * 2.1, 9 * s), glowPlane({ color: 0x9fd6ff, opacity: 0.95 }), { pos: [0, 0, -2.4 * s] });
+  const core = addMesh(strip, box(R * 1.02, 1.05 * s, 0.4 * s), emissive(0x9fd0ee, { blending: THREE.NormalBlending, depthWrite: true }), { pos: [0, 0, -0.5 * s] });
+  const halo = addMesh(strip, new THREE.PlaneGeometry(R * 1.55, 6 * s), glowPlane({ color: 0x9fd6ff, opacity: 0.5 }), { pos: [0, 0, -2.4 * s] });
   halo.renderOrder = 4;
   g.userData.engineGlows = [halo];
   g.userData.engineCores = [core];
   g.userData.setThrottle = (v) => {
     halo.scale.set(1, 0.55 + v * 0.9, 1);
-    halo.material.opacity = 0.25 + v * 0.75;
+    halo.material.opacity = 0.18 + v * 0.4;
     core.material.opacity = 0.55 + v * 0.45;
   };
   g.userData.setThrottle(0.7);

@@ -63,8 +63,8 @@ function rheaPath(t, out = new THREE.Vector3()) {
 export default {
   id: 'trench',
   duration: DURATION,
-  fadeIn: 1.0,
-  fadeOut: 1.6,
+  fadeIn: 0.7,
+  fadeOut: 1.2,
   cues: [
     music('battle', 2.0, { gain: 0.9 }),
     sfx('engineBed', 0, { dur: 52, vel: 0.55, freq: 70, cutoff: 340 }),

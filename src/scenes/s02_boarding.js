@@ -20,8 +20,8 @@ const VASHEK_ENTER = 9.5;
 export default {
   id: 'boarding',
   duration: DURATION,
-  fadeIn: 0.9,
-  fadeOut: 1.0,
+  fadeIn: 0.6,
+  fadeOut: 0.7,
   cues: [
     music('menace', 0.4, { gain: 0.95 }),
     sfx('roomTone', 0, { dur: 30, vel: 0.9 }),

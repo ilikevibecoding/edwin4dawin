@@ -20,8 +20,8 @@ const JUMP_T = 17.6;
 export default {
   id: 'departure',
   duration: DURATION,
-  fadeIn: 1.2,
-  fadeOut: 1.2,
+  fadeIn: 0.7,
+  fadeOut: 0.8,
   cues: [
     music('departure', 0.4, { gain: 0.95 }),
     sfx('wind', 0, { dur: 9, vel: 0.55 }),
@@ -157,8 +157,8 @@ export default {
       { t: 8.401, cut: true, pos: (t) => flight(t).clone().add(new THREE.Vector3(-66, 26, 148)), look: (t) => flight(t), fov: 40 },
       { t: 15.6, pos: (t) => flight(t).clone().add(new THREE.Vector3(-40, 16, 112)), look: (t) => flight(t), fov: 38, ease: Ease.linear },
       // Shot 3: behind the engine as it goes to lightspeed.
-      { t: 15.601, cut: true, pos: (t) => flight(t).clone().add(new THREE.Vector3(2, 9, 96)), look: (t) => flight(t), fov: 44 },
-      { t: DURATION, pos: (t) => flight(t).clone().add(new THREE.Vector3(2, 8, 86)), look: (t) => flight(t), fov: 48, ease: Ease.inQuad },
+      { t: 15.601, cut: true, pos: (t) => flight(t).clone().add(new THREE.Vector3(-34, 15, 88)), look: (t) => flight(t), fov: 44 },
+      { t: DURATION, pos: (t) => flight(t).clone().add(new THREE.Vector3(-26, 12, 78)), look: (t) => flight(t), fov: 48, ease: Ease.inQuad },
     ]);
 
     const forward = new THREE.Vector3();

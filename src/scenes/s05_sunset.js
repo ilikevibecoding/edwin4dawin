@@ -12,6 +12,7 @@ import { speeder } from '../models/civilian.js';
 import { CameraRig } from '../core/camera.js';
 import { glowPlane, emissive, paint } from '../gfx/materials.js';
 import { smokeSprite } from '../gfx/textures.js';
+import { hullFire } from '../fx/combat.js';
 import { clamp, lerp, smoothstep, Ease } from '../util/math.js';
 import { RNG } from '../util/rng.js';
 
@@ -20,8 +21,8 @@ const DURATION = 40;
 export default {
   id: 'sunset',
   duration: DURATION,
-  fadeIn: 1.4,
-  fadeOut: 1.6,
+  fadeIn: 0.8,
+  fadeOut: 1.2,
   cues: [
     music('sunset', 0.6, { gain: 1.0 }),
     sfx('wind', 0, { dur: 39, vel: 0.75 }),
@@ -47,12 +48,12 @@ export default {
       radius: 9000,
       stops: [[0, '#ffb166'], [0.1, '#e8834a'], [0.28, '#b25f52'], [0.55, '#5b4a6e'], [1, '#1b2445']],
     }));
-    const suns = twinSuns({ azimuth: 0.06, elevation: 0.055, separation: 0.052, distance: 7200, scale: 1.5, intensity: 1.25 });
+    const suns = twinSuns({ azimuth: 0.02, elevation: 0.105, separation: 0.052, distance: 7200, scale: 1.4, intensity: 1.15 });
     scene.add(suns);
     desertLights(scene, {
-      azimuth: 0.06, elevation: 0.06,
+      azimuth: 0.02, elevation: 0.09,
       keyColor: 0xffb070, keyIntensity: 4.4,
-      skyColor: 0x9b7fb8, skyIntensity: 1.7,
+      skyColor: 0x8d74ab, skyIntensity: 1.25,
       bounceColor: 0xe09a5e, bounceIntensity: 1.3,
     });
 
@@ -103,6 +104,14 @@ export default {
     // Smoke column for the burned-out farm at the end.
     const smoke = new THREE.Group();
     scene.add(smoke);
+    // Firelight at the homestead, so the last shot is a fire and not a smudge.
+    const fire = hullFire({ count: 7, size: 5, seed: 12 });
+    fire.position.set(-26, h(-26, -34) + 2.5, -30);
+    fire.visible = false;
+    scene.add(fire);
+    const fireLight = new THREE.PointLight(0xff7a30, 0, 90, 2);
+    fireLight.position.set(-26, h(-26, -34) + 4, -30);
+    scene.add(fireLight);
     const puffs = [];
     const rr = new RNG(4);
     for (let i = 0; i < 14; i++) {
@@ -165,10 +174,13 @@ export default {
         suns.position.y = -sink * 260;
 
         // The farm burns in the final shot.
-        const burn = smoothstep(30.5, 33.5, t);
+        const burn = smoothstep(30.2, 32.4, t);
+        fire.visible = burn > 0.02;
+        if (fire.visible) fire.userData.update(t, camera);
+        fireLight.intensity = burn * (260 + Math.sin(t * 7) * 60);
         puffs.forEach((m, i) => {
           const d = m.userData;
-          const age = ((t - 30.5) * 0.1 + d.phase) % 1;
+          const age = ((t - 30.2) * 0.13 + d.phase) % 1;
           if (burn <= 0.01) { m.material.opacity = 0; return; }
           m.position.set(
             -26 + d.sway * age * 26,

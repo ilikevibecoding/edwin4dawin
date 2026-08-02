@@ -73,16 +73,18 @@ export function sun({
   g.position.set(Math.sin(azimuth) * r, y, -Math.cos(azimuth) * r);
   const disc = new THREE.Mesh(
     new THREE.CircleGeometry(size, 28),
+    // Deliberately not pure white: with bloom on, a white disc eats everything
+    // around it and the second sun disappears into the glare.
     new THREE.MeshBasicMaterial({ color, toneMapped: false, fog: false, depthWrite: false }),
   );
   const glow = new THREE.Mesh(
     new THREE.PlaneGeometry(size * halo, size * halo),
-    glowPlane({ color, opacity: 0.85 * intensity }),
+    glowPlane({ color, opacity: 0.42 * intensity }),
   );
   glow.material.fog = false;
   const wide = new THREE.Mesh(
     new THREE.PlaneGeometry(size * halo * 3.4, size * halo * 3.4),
-    glowPlane({ color, opacity: 0.22 * intensity }),
+    glowPlane({ color, opacity: 0.13 * intensity }),
   );
   wide.material.fog = false;
   g.add(wide, glow, disc);
@@ -97,8 +99,8 @@ export function sun({
 /** The pair, with the classic size/colour offset. */
 export function twinSuns({ azimuth = 0.2, elevation = 0.22, separation = 0.055, distance = 7000, scale = 1, intensity = 1 } = {}) {
   const g = new THREE.Group();
-  const a = sun({ color: 0xfff0c8, size: 150 * scale, halo: 7, distance, azimuth: azimuth - separation, elevation, intensity });
-  const b = sun({ color: 0xffb887, size: 96 * scale, halo: 6, distance, azimuth: azimuth + separation * 1.5, elevation: elevation - separation * 0.55, intensity: intensity * 0.85 });
+  const a = sun({ color: 0xffd9a0, size: 150 * scale, halo: 6, distance, azimuth: azimuth - separation, elevation, intensity });
+  const b = sun({ color: 0xffa878, size: 116 * scale, halo: 5, distance, azimuth: azimuth + separation * 1.1, elevation: elevation - separation * 0.62, intensity: intensity * 0.9 });
   g.add(a, b);
   g.userData.a = a;
   g.userData.b = b;

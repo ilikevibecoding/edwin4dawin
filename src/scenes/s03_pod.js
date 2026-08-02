@@ -15,8 +15,8 @@ const DURATION = 28;
 export default {
   id: 'pod',
   duration: DURATION,
-  fadeIn: 0.8,
-  fadeOut: 1.2,
+  fadeIn: 0.6,
+  fadeOut: 0.8,
   cues: [
     music('drift', 0.4, { gain: 0.9 }),
     sfx('clang', 2.1, { vel: 0.55 }),

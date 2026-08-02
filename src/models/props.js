@@ -12,17 +12,17 @@ export function vaporator({ scale = 1, seed = 1 } = {}) {
   const s = scale;
   const metal = paint(0x9a9384, { flat: false });
   const dark = paint(0x4d4740);
-  addMesh(g, cyl(0.5 * s, 0.62 * s, 0.28 * s, 10), dark, { pos: [0, 0.14 * s, 0] });
-  addMesh(g, cyl(0.14 * s, 0.17 * s, 2.5 * s, 8), metal, { pos: [0, 1.4 * s, 0] });
-  addMesh(g, cyl(0.3 * s, 0.24 * s, 0.5 * s, 10), metal, { pos: [0, 2.75 * s, 0] });
-  addMesh(g, dome(0.3 * s, { segments: 10, rings: 5 }), metal, { pos: [0, 2.98 * s, 0] });
+  addMesh(g, cyl(0.72 * s, 0.9 * s, 0.34 * s, 10), dark, { pos: [0, 0.17 * s, 0] });
+  addMesh(g, cyl(0.22 * s, 0.28 * s, 1.7 * s, 8), metal, { pos: [0, 1.0 * s, 0] });
+  addMesh(g, cyl(0.52 * s, 0.42 * s, 0.5 * s, 10), metal, { pos: [0, 2.05 * s, 0] });
+  addMesh(g, dome(0.52 * s, { segments: 10, rings: 5 }), metal, { pos: [0, 2.28 * s, 0] });
   const r = new RNG(seed);
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2 + r.float(0, 1);
-    addMesh(g, box(0.08 * s, 1.5 * s, 0.24 * s), metal,
-      { pos: [Math.cos(a) * 0.32 * s, 1.9 * s, Math.sin(a) * 0.32 * s], rot: [0, -a, 0.06] });
+    addMesh(g, box(0.1 * s, 1.1 * s, 0.5 * s), metal,
+      { pos: [Math.cos(a) * 0.5 * s, 1.3 * s, Math.sin(a) * 0.5 * s], rot: [0, -a, 0.06] });
   }
-  addMesh(g, cyl(0.02 * s, 0.02 * s, 0.7 * s, 4), dark, { pos: [0, 3.35 * s, 0] });
+  addMesh(g, cyl(0.02 * s, 0.02 * s, 0.5 * s, 4), dark, { pos: [0, 2.6 * s, 0] });
   return g;
 }
 

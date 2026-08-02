@@ -18,8 +18,8 @@ const DURATION = 35;
 export default {
   id: 'desert',
   duration: DURATION,
-  fadeIn: 1.4,
-  fadeOut: 1.0,
+  fadeIn: 0.8,
+  fadeOut: 0.6,
   cues: [
     music('desert', 0.5, { gain: 0.95 }),
     sfx('wind', 0, { dur: 34, vel: 1.0 }),
@@ -44,9 +44,9 @@ export default {
       radius: 9000,
       stops: [[0, '#f2d3a4'], [0.14, '#dcb98c'], [0.4, '#8fa2b8'], [1, '#2c4a72']],
     }));
-    const suns = twinSuns({ azimuth: 0.55, elevation: 0.42, separation: 0.05, distance: 7200, scale: 1, intensity: 0.9 });
+    const suns = twinSuns({ azimuth: -0.26, elevation: 0.155, separation: 0.058, distance: 7200, scale: 1, intensity: 0.85 });
     scene.add(suns);
-    desertLights(scene, { azimuth: 0.55, elevation: 0.42, keyIntensity: 3.4, skyIntensity: 1.4, bounceIntensity: 1.0 });
+    desertLights(scene, { azimuth: -0.26, elevation: 0.3, keyIntensity: 3.4, skyIntensity: 1.4, bounceIntensity: 1.0 });
 
     const ground = dunes({ size: 6000, segments: 160, seed: 12, amplitude: 30 });
     scene.add(ground);

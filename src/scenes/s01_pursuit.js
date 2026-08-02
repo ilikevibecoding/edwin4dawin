@@ -29,8 +29,8 @@ const corZ = (t) => COR_Z0 - COR_SPEED * t + smoothstep(24, 34, t) * 1500;
 export default {
   id: 'pursuit',
   duration: DURATION,
-  fadeIn: 1.4,
-  fadeOut: 0.9,
+  fadeIn: 1.0,
+  fadeOut: 0.6,
   cues: [
     music('imperial', 0.2, { gain: 0.9 }),
     sfx('engineBed', 0, { dur: 44, vel: 0.7, freq: 40 }),
