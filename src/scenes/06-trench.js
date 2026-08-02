@@ -1478,8 +1478,8 @@ async function buildSpace() {
   group.add(halo);
   const fireball = new Fireball({
     t0: T.BOOM,
-    life: 4.0,
-    radius: STATION_R * 0.8,
+    life: 2.8,
+    radius: STATION_R * 0.66,
     color: 0xffa940,
     position: core.position.toArray(),
   });
@@ -1489,15 +1489,16 @@ async function buildSpace() {
   const blastLight = new THREE.PointLight(0xffd8a0, 0, STATION_R * 12, 1.0);
   group.add(blastLight);
   // Embers riding out with the bricks: fire distributed through the cloud, not
-  // just a ball behind it.
+  // just a ball behind it. Kept small — at sprite sizes much over ten units
+  // they stop reading as embers and start reading as fog over the bricks.
   const embers = new Sparks({
-    count: 900,
+    count: 800,
     t0: T.BOOM,
     life: 9.4,
     speed: 74,
     gravity: 0,
     color: 0xffa858,
-    size: 22,
+    size: 8.5,
     seed: 29,
     origin: core.position.toArray(),
   });
@@ -1650,7 +1651,11 @@ async function buildSpace() {
       }
       fireball.update(t);
       embers.update(t);
-      blastLight.intensity = 44 * Math.pow(1 - ease.range(t, T.BOOM, T.BOOM + 5.0), 1.6);
+      // Everything from here on belongs to the blast; before it fires, all of it
+      // has to be genuinely off, or the "before" wide shot is lit and hazed by
+      // an explosion that has not happened yet.
+      const lit = t >= T.BOOM;
+      blastLight.intensity = lit ? 44 * Math.pow(1 - ease.range(t, T.BOOM, T.BOOM + 5.0), 1.6) : 0;
 
       // Rings: fast, thin, and gone. Two radii so it does not read as one hoop.
       for (let i = 0; i < rings.length; i++) {
@@ -1671,7 +1676,8 @@ async function buildSpace() {
         hot.material.emissiveIntensity = 2.2 * Math.pow(1 - ease.range(t, T.BOOM, 53.5), 1.4);
       }
       const warmth = 1 - ease.range(t, T.BOOM + 0.4, 52.5);
-      afterglow.material.opacity = 0.5 * Math.pow(warmth, 1.7);
+      afterglow.visible = lit;
+      afterglow.material.opacity = lit ? 0.22 * Math.pow(warmth, 1.7) : 0;
       afterglow.scale.setScalar(STATION_R * (1.6 + 2.6 * ease.range(t, T.BOOM, 50)));
 
       // --- the fighters

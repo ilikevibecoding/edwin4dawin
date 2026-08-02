@@ -79,7 +79,7 @@ async function boot() {
    * later visit to the same moment — which is exactly the reproducibility the
    * parallel renderer depends on.
    */
-  function primeGPU() {
+  async function primeGPU() {
     const seen = new Set();
     for (const inst of film.built.values()) {
       inst.scene.traverse((n) => {
@@ -96,9 +96,24 @@ async function boot() {
           }
         }
       });
+      // Compile with everything visible. three defers objects whose shader is
+      // still linking (KHR_parallel_shader_compile), so a material that first
+      // appears mid-scene would otherwise be missing from exactly one frame.
+      const hidden = [];
+      inst.scene.traverse((n) => {
+        if (n.visible === false) {
+          hidden.push(n);
+          n.visible = true;
+        }
+      });
       try {
-        renderer.compile(inst.scene, inst.camera);
-      } catch {}
+        await renderer.compileAsync(inst.scene, inst.camera);
+      } catch {
+        try {
+          renderer.compile(inst.scene, inst.camera);
+        } catch {}
+      }
+      for (const n of hidden) n.visible = false;
     }
     for (const key of ['map']) {
       for (const m of [film.overlay.subMat, film.overlay.titleMat]) {
@@ -143,7 +158,7 @@ async function boot() {
     // list; render workers only build the slice of the timeline they own.
     if (params.get('all') === '1') await film.buildAll();
     else await film.buildRange(t0, t1);
-    primeGPU();
+    await primeGPU();
     window.FILM = {
       duration: film.duration,
       scenes: film.sceneList(),
@@ -184,7 +199,7 @@ async function boot() {
     loadMsg.textContent = `building ${title.toLowerCase()}…`;
   });
   loadMsg.textContent = 'uploading textures…';
-  primeGPU();
+  await primeGPU();
 
   const audio = new FilmAudio();
   audio.setVoiceWindows(manifest.lines.map((l) => ({ t: l.t, dur: l.dur })));

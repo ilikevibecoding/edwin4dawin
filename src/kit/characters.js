@@ -23,7 +23,7 @@
  * offline renderer can jump to any frame in any order.
  */
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Bricks, brickMaterial, chamferBox, taperBox } from '../engine/brick.js';
 import { COLORS, KIT } from '../engine/palette.js';
 import { hash11, noise1 } from '../engine/rng.js';
@@ -148,6 +148,25 @@ function orientProfile(profile) {
     area += r0 * y1 - r1 * y0;
   }
   return area < 0 ? [...profile].reverse() : profile;
+}
+
+/**
+ * Smooth normals across a lathe's wrap seam, for a lathe that has since been
+ * deformed and so cannot keep its analytical normals.
+ *
+ * `LatheGeometry` duplicates the seam column so the two copies can carry u = 0
+ * and u = 1. `computeVertexNormals` then gives each copy only the faces on its
+ * own side, and a hard crease runs the full length of the part — on a white
+ * robe under a single key that crease is a bright wedge with a straight edge.
+ * Welding by position first (UVs are what forced the split, and these parts
+ * carry no texture) puts the seam back together.
+ */
+function weldNormals(geo) {
+  geo.deleteAttribute('normal');
+  geo.deleteAttribute('uv');
+  const welded = mergeVertices(geo, 1e-4);
+  welded.computeVertexNormals();
+  return welded;
 }
 
 /** Reverse a geometry's triangles and normals, for a mirrored cap. */
@@ -396,19 +415,23 @@ function shellPatch(profile, { yFrom, yTo, halfAngle, offset = 0.008, rows = 10,
   return new THREE.LatheGeometry(pts, segments, -halfAngle, halfAngle * 2);
 }
 
-/** The same idea on a sphere, for the astromech's dome. `theta` is from the pole. */
-function spherePatch(r, yCentre, thetaFrom, thetaTo, halfAngle, segments = 18) {
-  const g = new THREE.SphereGeometry(
-    r,
-    segments,
-    Math.max(4, Math.round(segments * 0.55)),
-    Math.PI / 2 - halfAngle,
-    halfAngle * 2,
-    thetaFrom,
-    thetaTo - thetaFrom
-  );
-  g.translate(0, yCentre, 0);
-  return g;
+/**
+ * A hemisphere's profile, extended a little below its base, as input to
+ * `shellPatch`.
+ *
+ * A print cannot go on a dome with `SphereGeometry`'s own UVs: those run
+ * linearly in the polar angle, and near the pole a polar angle buys almost no
+ * apparent height. Mapping a front elevation that way lands the middle of the
+ * artwork three quarters of the way up the dome. Resampling the same surface
+ * at even steps in y puts every feature where the artist drew it.
+ */
+function domeProfile(r, { below = 0.06, rows = 14 } = {}) {
+  const pts = [[r, -below]];
+  for (let i = 0; i <= rows; i++) {
+    const th = (Math.PI / 2) * (i / rows);
+    pts.push([Math.max(r * Math.sin(th), 0.02), r * Math.cos(th)]);
+  }
+  return pts;
 }
 
 /**
@@ -790,13 +813,35 @@ function leiaBuns(color = COLORS.reddishBrown) {
  */
 function leiaSkirt(color = COLORS.white) {
   const b = new Bricks();
+  const yTop = 0.44;
+  const yHem = -1.3;
   // Down to the ankle, not the knee: stopping halfway leaves two white shins
   // below the hem and she goes back to reading as trousers with an apron over
-  // them. The hem is deep enough (1.44) that a 0.34-radian stride keeps the
-  // legs inside it and only the feet come out from under the robe.
-  b.addGeometry(taperBox(2.08, 1.5, 1.66, 1.44, 0.92, 0.11), { x: 0, y: -0.41, z: 0.02, color });
-  // Hem: a slightly proud lip so the skirt has an edge instead of a fade-out.
-  b.addGeometry(taperBox(2.14, 2.08, 0.14, 1.5, 1.44, 0.05), { x: 0, y: -1.21, z: 0.02, color });
+  // them. Lathed rather than a tapered box — four flat faces put a hard
+  // vertical corner down the front of the robe wherever the key light is, and
+  // cloth does not have corners.
+  const geo = latheShell(
+    [
+      [0.03, yTop],
+      [0.76, yTop],
+      [0.83, 0.1],
+      [0.94, -0.5],
+      [1.04, -1.12],
+      [1.08, yHem + 0.05],
+      [0.03, yHem],
+    ],
+    { segments: 22, close: false }
+  );
+  // Gathered at the waist, round at the hem. One constant squash deep enough
+  // at the hem to clear a stride is also that deep at the belt, and the robe
+  // stands off the hips like a barrel.
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const k = THREE.MathUtils.clamp((yTop - pos.getY(i)) / (yTop - yHem), 0, 1);
+    pos.setZ(i, pos.getZ(i) * (0.6 + 0.15 * k));
+  }
+  pos.needsUpdate = true;
+  b.addGeometry(weldNormals(geo), { x: 0, y: 0, z: 0.02, color });
   return b.build();
 }
 
@@ -1522,8 +1567,12 @@ export async function makeLeia(opts = {}) {
 
   fig.skirt = leiaSkirt(COLORS.white);
   fig.pelvis.add(fig.skirt);
-  /** A robe restricts the stride; scenes should walk her with this amplitude. */
-  fig.walkAmp = 0.34;
+  /**
+   * A robe restricts the stride; scenes should walk her with this amplitude.
+   * Much past it and the shins swing through the front of the hem rather than
+   * only the feet coming out from under it.
+   */
+  fig.walkAmp = 0.3;
 
   // No moulded belt: torso-leia.svg prints the silver belt and its buckle at
   // the right height, and a brick over it only breaks the artwork.
@@ -1971,25 +2020,34 @@ export async function makeAstromech(opts = {}) {
   // --- chassis
   const b = new Bricks();
   b.addGeometry(new THREE.CylinderGeometry(R, R, Y1 - Y0, 24), { x: 0, y: (Y0 + Y1) / 2, z: 0, color: shell, opts: G });
-  // Silver bands top and bottom.
-  for (const y of [Y0 + 0.08, Y1 - 0.07]) {
-    b.addGeometry(new THREE.CylinderGeometry(R + 0.02, R + 0.02, 0.12, 24), { x: 0, y, z: 0, color: STEEL, opts: POLISH });
+  // Silver bands top and bottom, all but flush. A ring standing 0.02 proud of
+  // the barrel shows the camera its top annulus, and the lower one — cut in
+  // half by the centre leg — then reads as two grey crescents sweeping out
+  // from behind the leg, which is to say a moustache.
+  for (const y of [Y0 + 0.09, Y1 - 0.07]) {
+    b.addGeometry(new THREE.CylinderGeometry(R + 0.006, R + 0.006, 0.15, 24), { x: 0, y, z: 0, color: STEEL, opts: POLISH });
   }
 
-  // Blue panel details around the barrel.
-  const panel = (angle, y, w, hh, color, depth = 0.06) =>
-    onCurve(b, angle, y, R - 0.015, 0, (bb) => bb.addGeometry(chamferBox(w, hh, depth, 0.02), { color, opts: G }));
-  panel(0, 1.60, 0.46, 0.28, trim);
+  // Panel details around the barrel, laid on the barrel's own curve. A flat
+  // box wide enough to read as a panel is a chord across a cylinder this
+  // small, so its corners stand 0.07 off the surface and it reads as a brick
+  // glued to the front rather than a panel let into it.
+  const panel = (angle, y, w, hh, color) => {
+    const g = conePatch(R + 0.014, R + 0.014, y - hh / 2, y + hh / 2, w / (2 * R), 7);
+    g.rotateY(angle);
+    b.addGeometry(g, { color, opts: { ...G, side: THREE.DoubleSide } });
+  };
+  panel(0, 1.6, 0.46, 0.28, trim);
   panel(0, 1.18, 0.34, 0.44, trim);
   panel(0, 0.74, 0.4, 0.2, STEEL);
   for (const s of [-1, 1]) {
     panel(s * 0.85, 1.56, 0.34, 0.26, trim);
-    panel(s * 0.85, 1.04, 0.30, 0.50, shell);
-    panel(s * 1.75, 1.38, 0.36, 0.60, trim);
+    panel(s * 0.85, 1.04, 0.3, 0.5, COLORS.lightBluishGray);
+    panel(s * 1.75, 1.38, 0.36, 0.6, trim);
     panel(s * 2.55, 1.18, 0.34, 0.42, dark);
     // Octagonal utility ports low on the front.
     onCurve(b, s * 0.42, 0.62, R - 0.015, 0, (bb) =>
-      bb.addGeometry(new THREE.CylinderGeometry(0.10, 0.10, 0.10, 8), { rot: [Math.PI / 2, 0, 0], color: STEEL, opts: POLISH })
+      bb.addGeometry(new THREE.CylinderGeometry(0.1, 0.1, 0.1, 8), { rot: [Math.PI / 2, 0, 0], color: STEEL, opts: POLISH })
     );
   }
   body.add(b.build());
@@ -2036,10 +2094,13 @@ export async function makeAstromech(opts = {}) {
   projector.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pn);
   dome.add(projector);
 
-  // Dome face: the decal wraps the sphere, so nothing floats at the corners.
-  // The arc is kept narrow on purpose — a front elevation smeared round most
-  // of the dome flattens the radar eye into a letterbox slot.
-  const face = await decalOn('svg/head-astromech.svg', spherePatch(R + 0.012, 0, 0.45, 1.52, 0.62, 22));
+  // Dome face: the decal follows the dome exactly, so nothing floats at the
+  // corners, and it is laid on by height so the radar eye lands halfway up
+  // where it is drawn rather than up by the projectors.
+  const face = await decalOn(
+    'svg/head-astromech.svg',
+    shellPatch(domeProfile(R), { yFrom: -0.02, yTo: 0.47, halfAngle: 0.95, offset: 0.014, rows: 14, segments: 22 })
+  );
   if (face) {
     dome.add(face);
   } else {
@@ -2087,17 +2148,20 @@ export async function makeAstromech(opts = {}) {
     body.add(grp);
   }
 
-  // Retractable centre leg, angled back.
+  // Retractable centre leg. It hangs off the front of the chassis and tips
+  // forward, rather than running up the middle of it: a shaft whose back half
+  // is buried in the barrel has no silhouette of its own and reads as a grey
+  // stripe painted down R2's front.
   const legC = new THREE.Group();
-  legC.position.set(0, 1.19, 0.42);
-  legC.rotation.x = -0.16;
+  legC.position.set(0, 0.98, 0.44);
+  legC.rotation.x = -0.2;
   const c = new Bricks();
-  // Silver shaft: a white one crosses the chassis' lower silver band and
-  // splits it into two curved horns that read as a moustache from the front.
-  c.addGeometry(chamferBox(0.26, 1.02, 0.32, 0.04), { x: 0, y: -0.52, z: 0, color: STEEL, opts: POLISH });
-  c.addGeometry(chamferBox(0.30, 0.10, 0.36, 0.03), { x: 0, y: -0.72, z: 0, color: STEEL, opts: POLISH });
-  c.addGeometry(chamferBox(0.32, 0.2, 0.6, 0.04), { x: 0, y: -1.11, z: 0.1, color: shell, opts: G });
-  c.addGeometry(chamferBox(0.34, 0.08, 0.62, 0.03), { x: 0, y: -1.19, z: 0.1, color: dark, opts: POLISH });
+  // Hinge shoulder, sunk into the barrel so the leg looks hung off it.
+  c.addGeometry(new THREE.CylinderGeometry(0.15, 0.15, 0.3, 12), { x: 0, y: 0, z: -0.03, rot: [0, 0, Math.PI / 2], color: dark, opts: POLISH });
+  c.addGeometry(chamferBox(0.24, 0.78, 0.26, 0.04), { x: 0, y: -0.42, z: 0.02, color: STEEL, opts: POLISH });
+  c.addGeometry(chamferBox(0.28, 0.09, 0.3, 0.03), { x: 0, y: -0.5, z: 0.02, color: dark, opts: POLISH });
+  c.addGeometry(chamferBox(0.3, 0.2, 0.58, 0.04), { x: 0, y: -0.92, z: 0.12, color: shell, opts: G });
+  c.addGeometry(chamferBox(0.32, 0.08, 0.6, 0.03), { x: 0, y: -1.0, z: 0.12, color: dark, opts: POLISH });
   legC.add(c.build());
   body.add(legC);
   const legCY = legC.position.y;

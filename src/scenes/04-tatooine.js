@@ -109,7 +109,7 @@ export async function build(ctx) {
   // The open desert. Three concentric rings of decreasing resolution on one
   // shared grid, so the plate courses read in the foreground and the horizon
   // still costs almost nothing.
-  const dunes = desert({ ox: 0, oz: 0, amp: 1.45 });
+  const dunes = desert({ ox: 0, oz: 0, amp: 1.0, profile: duneProfile });
   duneSet.add(
     dunes.mesh({
       rings: [
@@ -117,28 +117,30 @@ export async function build(ctx) {
         { cell: 12, half: 240 },
         { cell: 48, half: 720 },
       ],
-      studsAt: [12, -18, 56], // studded plates only where the lens gets close
+      studsAt: [6, -26, 44], // studded plates only where the lens gets close
     })
   );
 
   // --- the wreck -----------------------------------------------------------
-  const POD_AT = [20, -50];
+  const POD_AT = [18, -48];
   const pod = ships?.buildEscapePod ? await ships.buildEscapePod() : fallbackPod();
-  fitHeight(pod, 7.0); // about two and a half minifigures across the hull
+  fitHeight(pod, 9.0); // a bit taller than three minifigures
   // Nose down and half-buried: it ploughed in rather than landed.
-  pod.rotation.set(-0.30, 2.42, 0.22);
-  pod.position.set(POD_AT[0], dunes.cellY(POD_AT[0], POD_AT[1]) - 1.6, POD_AT[1]);
+  pod.rotation.set(-0.34, 2.28, 0.20);
+  pod.position.set(POD_AT[0], dunes.cellY(POD_AT[0], POD_AT[1]) - 1.9, POD_AT[1]);
   duneSet.add(pod);
-  duneSet.add(buildScorchTrail(dunes, POD_AT, [66, -104]));
-  // A few outcrops so the horizon has something other than sand on it.
+  duneSet.add(buildScorchTrail(dunes, POD_AT, [62, -98]));
+  // Outcrops on the crest lines, where weathered rock actually surfaces —
+  // scattered over the flats they just read as boxes dropped on a floor.
   duneSet.add(
     buildRocks(dunes, [
-      [-46, -96, 1.5],
-      [-88, -58, 1.1],
-      [62, -46, 0.9],
-      [-18, -150, 1.8],
-      [96, -150, 1.6],
-      [24, -196, 2.2],
+      [-52, -92, 1.2],
+      [-96, -86, 1.5],
+      [58, -84, 0.9],
+      [-24, -146, 1.9],
+      [104, -142, 1.7],
+      [16, -232, 2.6],
+      [-140, -226, 2.4],
     ])
   );
 
@@ -239,7 +241,7 @@ export async function build(ctx) {
   // --- the hologram --------------------------------------------------------
   // Additive blending saturates fast; past about 0.6 the figure stops reading
   // as Leia and turns into a bright smear.
-  const holoMat = hologramMaterial(0x7fe8ff, { opacity: 0.55, scan: 16 });
+  const holoMat = hologramMaterial(0x59c9f0, { opacity: 0.55, scan: 16 });
   const holoLeia = await makeLeia({ seed: 11.3 });
   holoLeia.root.traverse((n) => {
     if (!n.isMesh) return;
@@ -256,13 +258,15 @@ export async function build(ctx) {
   farmSet.add(holoRig);
 
   // The projector cone: narrow at the lens, opening upward to the image.
-  const holoBeam = new Beam({ color: 0x7fe8ff, radiusTop: 0.85, radiusBottom: 0.1, height: 2.4, opacity: 0.16 });
+  const holoBeam = new Beam({ color: 0x59c9f0, radiusTop: 0.7, radiusBottom: 0.08, height: 2.4, opacity: 0.09 });
   farmSet.add(holoBeam.object);
 
   // Cyan bounce on whoever is leaning into it.
   const holoLight = new THREE.PointLight(0x66d8ff, 0, 14, 2);
   farmSet.add(holoLight);
-  const holoGlow = glowSprite(0x9feaff, 3.0, 0);
+  // Small and dim: this is the flare on the projector lens, not a lamp. With
+  // the bloom threshold down at 0.62 anything bigger swallows the figure.
+  const holoGlow = glowSprite(0x9feaff, 1.0, 0);
   farmSet.add(holoGlow);
 
   // =========================================================================
@@ -275,7 +279,7 @@ export async function build(ctx) {
   // A trough between two crests. The lens sits on the near rim, he stands on
   // the far one, and the ground behind him falls away so there is nothing but
   // sky past the skyline.
-  const ridge = desert({ ox: -2400, oz: 800, amp: 0.2, grain: 0.3, profile: ridgeProfile });
+  const ridge = desert({ ox: -2400, oz: 800, amp: 0.35, grain: 0.55, profile: ridgeProfile });
   ridgeSet.add(
     ridge.mesh({
       rings: [
@@ -497,14 +501,16 @@ export async function build(ctx) {
 
     // --- camera
     if (t < T_CRAWLER) {
-      // Very wide, up on a dune: the sand runs off both edges of the frame and
-      // the droids are two specks crossing it.
-      const a = [36, dunes.y(36, 30) + 5.4, 30];
-      const b = [24, dunes.y(24, 14) + 4.4, 14];
+      // Very wide, from the rim of the near dune looking down into the pan:
+      // the crest lines stack away toward the horizon and the droids are two
+      // specks crossing the floor of it. The tilt is chosen to put the suns
+      // just off the top edge — in frame they bloom the whole sky flat.
+      const a = [36, dunes.y(36, 30) + 5.6, 30];
+      const b = [24, dunes.y(24, 12) + 4.6, 12];
       cameraRig(camera, t, {
         pos: [[0, a], [T_CRAWLER, b]],
-        look: [[0, [5, 6.6, -58]], [T_CRAWLER, [-3, 5.4, -52]]],
-        fov: [[0, 54], [T_CRAWLER, 46]],
+        look: [[0, [2, 3.5, -74]], [T_CRAWLER, [-4, 2.0, -66]]],
+        fov: [[0, 50], [T_CRAWLER, 46]],
         ease: ease.smooth,
       });
       handheld(camera, t, 0.06, 0.28, 2);
@@ -567,9 +573,9 @@ export async function build(ctx) {
       // The image floats in the cone, breathing and turning very slowly.
       holo.position.y = Math.sin(t * 1.7) * 0.03;
       holo.rotation.y = -2.3 + Math.sin(t * 0.4) * 0.09;
-      holo.scale.setScalar(0.42 * (0.55 + 0.45 * boot));
+      holo.scale.setScalar(0.46 * (0.55 + 0.45 * boot));
       holoMat.uniforms.uTime.value = t;
-      holoMat.uniforms.uOpacity.value = 0.42 * live;
+      holoMat.uniforms.uOpacity.value = 0.27 * live;
 
       // Leia's plea: a small, contained gesture on "help us".
       poseStand(holoLeia, t, { sway: 0.05 });
@@ -588,9 +594,10 @@ export async function build(ctx) {
 
       holoLight.position.copy(holoRig.position);
       holoLight.intensity = 11 * live;
-      holoGlow.position.copy(holoLight.position);
-      holoGlow.material.opacity = 0.26 * live;
-      holoGlow.scale.setScalar(2.4 + 0.25 * Math.sin(t * 5.3));
+      // The flare sits on the lens itself, not up in the image.
+      holoGlow.position.copy(_v).addScaledVector(_axis, 0.16);
+      holoGlow.material.opacity = 0.20 * live;
+      holoGlow.scale.setScalar(0.75 + 0.08 * Math.sin(t * 5.3));
     } else {
       holoLight.intensity = 0;
     }
@@ -748,6 +755,54 @@ function vnoise2(x, z, salt = 0) {
 }
 
 /**
+ * The dune field, as an explicit train of crests keyed on -z, so the track
+ * reads front-to-back away from the lens.
+ *
+ * Isotropic noise on its own will not do this. Noise gives you a lumpy plain:
+ * from a near-level lens two units off the sand every lump is foreshortened
+ * into nothing and the whole field flattens into a floor. A dune field reads
+ * because *crest lines* stack up between the lens and the horizon and occlude
+ * each other, so they are placed by hand:
+ *
+ *   z ≈ +30   the rim the camera stands on
+ *   z ≈ −30   the pan the pod ploughed into and the droids walk out of
+ *   z ≈ −88   the first crest, the one they are silhouetted against
+ *   z ≈ −140  the crest the sandcrawler comes over
+ *   z ≈ −230  and beyond, successive lines building to the horizon
+ */
+const DUNE_TRAIN = [
+  [-120, 2.0],
+  [-44, 6.6],
+  [-30, 6.2],
+  [-6, 1.0],
+  [14, -2.2],
+  [40, -2.6],
+  [58, -1.6],
+  [72, 1.6],
+  [88, 6.4],
+  [104, 3.2],
+  [118, 1.6],
+  [140, 9.2],
+  [166, 4.2],
+  [196, 3.4],
+  [230, 13.0],
+  [280, 8.0],
+  [340, 17.0],
+  [430, 12.0],
+  [700, 23.0],
+];
+
+function duneProfile(x, z) {
+  // Warp the depth the track is sampled at, rather than adding a height on
+  // top: that bends each crest line into a slow S across the frame instead of
+  // ruling it straight, which is the difference between a dune field and a
+  // flight of terraces.
+  const warp = (vnoise2(x * 0.0115 + 3, z * 0.0035 + 11, 71) - 0.5) * 46;
+  const warp2 = (vnoise2(x * 0.031 + 17, z * 0.011 + 5, 73) - 0.5) * 13;
+  return ease.track(DUNE_TRAIN, -z + warp + warp2, ease.smooth);
+}
+
+/**
  * The 1-D profile of the sunset ridge, in world units, keyed on -z so the
  * track reads front-to-back: the lens sits on the near rim at z ≈ +28, the
  * ground dips into a trough, rises to the crest he stands on at z ≈ -21, and
@@ -766,12 +821,14 @@ const RIDGE = [
   [400, -170.0],
 ];
 function ridgeProfile(x, z) {
-  // A slow lateral wander so the skyline is not a ruled line. Everything here
-  // is deliberately shallow: the crest only has to clear the lens by a couple
-  // of units, and any more gradient than this turns the plate courses into a
-  // flight of stairs.
-  const wander = (vnoise2(x * 0.014 + 41, 0.5, 71) - 0.5) * 1.9;
-  return ease.track(RIDGE, -z, ease.smooth) + wander;
+  // Same trick as the dune field: the crest line is bent in depth rather than
+  // in height, so the skyline meanders instead of ruling straight across the
+  // frame. Everything here stays shallow — the crest only has to clear the
+  // lens by a couple of units, and any more gradient turns the plate courses
+  // into a flight of stairs.
+  const warp = (vnoise2(x * 0.0135 + 41, z * 0.004 + 8, 71) - 0.5) * 15;
+  const lift = (vnoise2(x * 0.037 + 13, z * 0.016 + 2, 77) - 0.5) * 0.8;
+  return ease.track(RIDGE, -z + warp, ease.smooth) + lift;
 }
 
 /**
@@ -799,8 +856,8 @@ function desert({ ox = 0, oz = 0, amp = 1, grain = 0.5, flatR = 0, flatY = 0, pr
     const X = x + ox;
     const Z = z + oz;
     let y =
-      (vnoise2(X * 0.0062, Z * 0.0088, 3) - 0.5) * 15.0 * amp +
-      (vnoise2(X * 0.016 + 5, Z * 0.020 + 3, 16) - 0.5) * 5.0 * amp +
+      (vnoise2(X * 0.0062, Z * 0.0088, 3) - 0.5) * 7.0 * amp +
+      (vnoise2(X * 0.016 + 5, Z * 0.020 + 3, 16) - 0.5) * 3.4 * amp +
       (vnoise2(X * 0.052 + 21, Z * 0.044 + 17, 44) - 0.5) * 2.1 * grain +
       (vnoise2(X * 0.125 + 9, Z * 0.104 + 7, 27) - 0.5) * 0.55 * grain;
     if (profile) y += profile(x, z);
@@ -876,7 +933,16 @@ function buildSandMesh(heightAt, rawAt, { rings, studsAt = null, base = -60 } = 
   const mesh = b.build({ castShadow: false });
   mesh.receiveShadow = true;
   mesh.traverse((n) => {
-    if (n.isMesh) n.receiveShadow = true;
+    if (!n.isMesh) return;
+    n.receiveShadow = true;
+    // Sand is the one surface in the film that must have no specular at all.
+    // Even at roughness 0.92 the standard material keeps a Fresnel lobe, and
+    // with a low sun that lobe draws a mirror path straight up the frame: the
+    // dunes stop reading as dry sand and start reading as a lake. Lambert has
+    // no specular term whatsoever, and the diffuse response is identical.
+    const src = n.material;
+    n.material = new THREE.MeshLambertMaterial({ color: src.color, fog: true });
+    src.dispose();
   });
   return mesh;
 }
@@ -990,35 +1056,41 @@ function buildHomestead(ground) {
   }
 
   // --- the domed entrance on the far rim.
-  // Stacked cylinders of decreasing radius: a stepped LEGO dome rather than a
-  // sphere, and one part per course instead of forty little blocks.
-  const DOME = { x: -3, z: -19, R: 9.0, H: 8.4, courses: 11 };
+  // Stacked discs of decreasing radius: a stepped LEGO dome rather than a
+  // sphere, and one part per course instead of forty little blocks. Thin
+  // courses matter — at three or four the thing reads as a ziggurat, and the
+  // eye wants a dome.
+  const DOME = { x: -14, z: -16, R: 8.2, H: 7.6, courses: 19 };
   for (let s = 0; s < DOME.courses; s++) {
-    const u = s / DOME.courses;
-    const r = DOME.R * Math.cos((u * Math.PI) / 2.35);
-    b.cyl(DOME.x, (u * DOME.H) / PLATE, DOME.z, r, 2.6, s % 2 ? wall : wallDark, { segments: 24 });
+    const u = (s + 0.5) / DOME.courses;
+    // A hemisphere squashed a little flat, which is the silhouette the film's
+    // homestead actually has.
+    const r = DOME.R * Math.sqrt(Math.max(0, 1 - u * u * 0.94));
+    b.cyl(DOME.x, (u * DOME.H) / PLATE - 1, DOME.z, r, 1.4, s % 2 ? wall : wallDark, { segments: 26 });
   }
-  b.cyl(DOME.x, DOME.H / PLATE, DOME.z, DOME.R * 0.16, 2, wall, { segments: 16 });
-  // The entrance porch punched into the front of the dome.
-  b.box(-6.0, 0, -13.6, 6.0, 4, 15, wallDark, { studs: false });
-  b.box(-5.2, 0, -14.2, 4.4, 2.2, 13, 0x18120e, { studs: false });
-  b.box(-6.4, 15, -13.9, 6.8, 4.6, 2, wall, { studs: false });
+  // The entrance: a low porch collar with an arched mouth cut into the front
+  // of the dome, facing the courtyard.
+  b.cyl(DOME.x, -1, DOME.z, DOME.R * 1.06, 3, wallDark, { segments: 26 });
+  b.box(DOME.x - 2.6, 0, DOME.z + 6.4, 5.2, 3.0, 11, wall, { studs: false });
+  b.box(DOME.x - 1.9, 0, DOME.z + 6.0, 3.8, 2.6, 9, 0x140f0b, { studs: false });
+  b.cyl(DOME.x, 9, DOME.z + 7.6, 1.9, 2, wall, { segments: 16 });
 
   // --- a low equipment shed and a stack of crates on the far side
-  b.box(11, 0, -13, 8, 10, 9, wallDark);
-  b.slope(11, 9, -13, 8, 10, 3, wallDark, { dir: '+z' });
+  b.box(12, 0, -12, 8, 9, 8, wallDark);
+  b.slope(12, 8, -12, 8, 9, 3, wallDark, { dir: '+z' });
   for (const [cx, cz, cy] of [[-12, -3, 0], [-12, -3, 3], [-12, -6.5, 0], [-8.5, -5, 0]]) {
     b.box(cx, cy, cz, 3, 3, 3, cy ? COLORS.darkTan : COLORS.reddishBrown);
   }
   g.add(b.build());
 
-  // --- vaporators: thin towers with a fluted head, scattered out on the sand
+  // --- vaporators, kept off the lens axis so they flank the courtyard rather
+  // than growing out of anybody's head
   for (const [x, z, s] of [
-    [-26, -34, 1.0],
-    [19, -38, 0.88],
-    [36, -22, 0.74],
-    [-38, -16, 0.68],
-    [-8, -52, 0.6],
+    [-40, -26, 1.0],
+    [-8, -62, 0.86],
+    [34, -30, 0.8],
+    [-54, -8, 0.72],
+    [12, -74, 0.6],
   ]) {
     const v = buildVaporator();
     v.position.set(x, ground.cellY(x, z), z);
@@ -1038,21 +1110,23 @@ function buildVaporator() {
   const b = new Bricks({ studSegments: 10 });
   const shell = COLORS.lightBluishGray;
   const dark = COLORS.darkBluishGray;
-  b.cyl(0, 0, 0, 2.2, 2, COLORS.darkTan, { segments: 14 });
-  b.cyl(0, 2, 0, 1.4, 3, shell, { segments: 14 });
-  b.cyl(0, 5, 0, 0.7, 14, shell, { segments: 12 });
-  // The condenser: a stack of collector cones with fins between them.
-  b.cone(0, 19, 0, 0.7, 2.1, 5, shell, { segments: 14 });
-  b.cyl(0, 24, 0, 2.1, 2, dark, { segments: 16 });
-  b.cone(0, 26, 0, 2.1, 0.9, 4, shell, { segments: 16 });
-  for (let i = 0; i < 5; i++) {
+  // Squat and solid, not a lamp post: a wide condenser barrel wearing its
+  // vanes carries most of the height, and the cap is small. A thin mast under
+  // a big dark head reads as street furniture from any distance.
+  b.cyl(0, 0, 0, 2.6, 2, COLORS.darkTan, { segments: 16 });
+  b.cyl(0, 2, 0, 2.0, 3, dark, { segments: 16 });
+  b.cyl(0, 5, 0, 1.5, 17, shell, { segments: 16 });
+  // Six condenser vanes standing off the barrel.
+  for (let i = 0; i < 6; i++) {
     b.push();
-    b.rotateY((i / 5) * Math.PI * 2);
-    b.addGeometry(chamferBox(0.28, 2.6, 1.9, 0.05), { x: 0, y: 8.6, z: 1.15, color: shell });
+    b.rotateY((i / 6) * Math.PI * 2 + 0.26);
+    b.addGeometry(chamferBox(0.34, 5.6, 1.5, 0.06), { x: 0, y: 4.6, z: 1.85, color: shell });
     b.pop();
   }
-  b.cyl(0, 30, 0, 0.5, 3, dark, { segments: 10 });
-  b.cyl(0, 33, 0, 0.18, 4, shell, { segments: 8 });
+  b.cyl(0, 22, 0, 1.9, 2, dark, { segments: 16 });
+  b.cone(0, 24, 0, 1.9, 1.1, 3, shell, { segments: 16 });
+  b.cyl(0, 27, 0, 0.34, 4, dark, { segments: 8 });
+  b.cyl(0, 31, 0, 0.7, 1, shell, { segments: 10 });
   return b.build();
 }
 
