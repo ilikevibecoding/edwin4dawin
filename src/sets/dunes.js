@@ -38,10 +38,11 @@ export function duneHeight(x, z, seed, amp) {
  */
 export function duneField(bb, {
   size = 200, cell = 4, seed = 1207, amp = 13,
-  x0 = 0, z0 = 0, step = PLATE, flatten = null, taper = 0.2,
+  x0 = 0, z0 = 0, step = PLATE, flatten = null, taper = 0.2, mask = null,
 } = {}) {
   const n = Math.max(1, Math.round(size / cell));
   const H = new Float32Array(n * n);
+  const skip = mask ? new Uint8Array(n * n) : null;
   const half = size / 2;
 
   for (let j = 0; j < n; j++) {
@@ -60,6 +61,9 @@ export function duneField(bb, {
       }
       if (flatten) h = flatten(x - x0, z - z0, h);
       H[j * n + i] = Math.max(step, Math.round(h / step) * step);
+      // Masked-out cells are holes in the ground, not low ground: something
+      // else (a courtyard, a hangar mouth) is going to occupy the space.
+      if (skip && !mask(x - x0, z - z0)) skip[j * n + i] = 1;
     }
   }
 
@@ -68,8 +72,15 @@ export function duneField(bb, {
 
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
+      if (skip && skip[j * n + i]) continue;
       const h = H[j * n + i];
-      const low = Math.min(at(i - 1, j), at(i + 1, j), at(i, j - 1), at(i, j + 1));
+      // A masked neighbour is a cliff edge: drop this cell to the ground so
+      // the terrain closes off the hole rather than floating over it.
+      const nb = (a, b) => {
+        if (a < 0 || b < 0 || a >= n || b >= n) return 0;
+        return skip && skip[b * n + a] ? 0 : H[b * n + a];
+      };
+      const low = Math.min(nb(i - 1, j), nb(i + 1, j), nb(i, j - 1), nb(i, j + 1));
       const yb = Math.max(0, low - step);
       const x = x0 - half + (i + 0.5) * cell;
       const z = z0 - half + (j + 0.5) * cell;
@@ -103,20 +114,31 @@ export function duneField(bb, {
 
 // ------------------------------------------------------------------ rock
 
-/** Stepped sandstone outcrop: stacked slabs with slope skirts. */
+/**
+ * Stepped sandstone mesa: stacked slabs with slope skirts.
+ *
+ * One tone per outcrop, and the radius only creeps in between courses. Picking
+ * a fresh colour per layer turns the stack into a liquorice allsort, and a
+ * fast taper turns it into a wedding cake -- these want to read as weathered
+ * mesas, wider at the base than they are tall.
+ */
 export function rockOutcrop(bb, x, z, y0, r, tall, rng) {
-  const layers = Math.max(3, Math.round(tall / (BRICK * 1.5)));
+  const tone = rng.next();
+  const body = tone < 0.62 ? C.darkTan : C.mediumNougat;
+  const band = tone < 0.62 ? C.mediumNougat : C.darkTan;
+  const layers = Math.max(3, Math.round(tall / (BRICK * 2.1)));
   let rad = r;
   let y = y0 - PLATE;
   for (let k = 0; k < layers; k++) {
     const w = Math.max(2, Math.round(rad * 2));
-    const d = Math.max(2, Math.round(rad * 2 * rng.range(0.7, 1.25)));
-    const h = BRICK * rng.range(1.0, 1.9);
-    const col = rng.next() < 0.55 ? C.darkTan : (rng.next() < 0.7 ? C.mediumNougat : C.reddishBrown);
-    const ox = rng.range(-1, 1) * rad * 0.22;
-    const oz = rng.range(-1, 1) * rad * 0.22;
+    const d = Math.max(2, Math.round(rad * 2 * rng.range(0.78, 1.2)));
+    const h = BRICK * rng.range(1.4, 2.4);
+    // A darker stratum every few courses reads as bedding in the sandstone.
+    const col = rng.next() < 0.24 ? band : body;
+    const ox = rng.range(-1, 1) * rad * 0.3;
+    const oz = rng.range(-1, 1) * rad * 0.3;
     bb.brick(x + ox, y, z + oz, w, d, { h, color: col, free: true, studs: false });
-    // Skirt slopes so the stack does not look like a wedding cake.
+    // Talus slopes round the bottom courses, where the scree would pile up.
     if (k < 2) {
       for (let s = 0; s < 4; s++) {
         const a = s * Math.PI / 2;
@@ -129,12 +151,12 @@ export function rockOutcrop(bb, x, z, y0, r, tall, rng) {
       }
     }
     y += h;
-    rad *= rng.range(0.62, 0.86);
-    if (rad < 1.2) break;
+    rad *= rng.range(0.8, 0.94);
+    if (rad < 1.6) break;
   }
   // A capstone that reads from a distance.
   bb.slope(x, y, z, Math.max(2, Math.round(rad * 2)), Math.max(2, Math.round(rad * 2)), {
-    h: BRICK, color: C.darkTan, rot: rng.range(0, 6.2), free: true,
+    h: BRICK, color: body, rot: rng.range(0, 6.2), free: true,
   });
   return y;
 }

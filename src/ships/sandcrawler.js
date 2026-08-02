@@ -320,7 +320,7 @@ function windows(bb) {
 function rampPanel() {
   const bb = new BrickBuilder({ studs: false, bevel: true, cullStuds: false });
   const W = RAMP_W, L = RAMP_LEN;
-  bb.brick(0, -RAMP_T, L / 2, W, L, { h: RAMP_T, color: RUST, studs: false });
+  bb.brick(0, -RAMP_T, L / 2, W, L, { h: RAMP_T, color: C.magenta, studs: false });
   for (let i = 1; i * 2.2 < L - 0.6; i++) {
     bb.brick(0, 0, i * 2.2, W - 1.2, 0.9, {
       h: P(1), color: BROWN, studs: false, tile: true, free: true,

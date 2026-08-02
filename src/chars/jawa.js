@@ -76,5 +76,11 @@ export function buildJawa(opts = {}) {
   fig.arms.L.rotation.set(-0.85, 0, 0.34);
   fig.arms.R.rotation.set(-0.85, 0, -0.34);
 
-  return figGroup(fig, { name: 'jawa' });
+  // Everything on a jawa is sackcloth, sleeves included: on the standard character
+  // finish the bevelled darkBrown arm caught the key light and came back grey-olive
+  // against a brown robe.
+  return figGroup(fig, {
+    name: 'jawa',
+    gloss: { clearcoat: 0, clearcoatRoughness: 1, env: 0.18, roughness: 0.95 },
+  });
 }

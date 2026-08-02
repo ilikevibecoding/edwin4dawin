@@ -68,9 +68,13 @@ export function buildHangarBay(opts = {}) {
       const x = -hw + (i + 0.5) * cell;
       const z = zMouth + (j + 0.5) * cell;
       const t = hash2i(i, j, seed + 2);
+      // RUBBER, not SOLID: the standard ABS finish carries a clearcoat, and a
+      // clearcoat lobe on 130 studs of flat deck turns the daylight coming
+      // through the mouth into a blown white pool right in the middle of the
+      // shot. This finish is the only one in the kit without one.
       bb.brick(x, -PLATE, z, cell - 0.2, cell - 0.2, {
         h: PLATE, color: t < 0.24 ? C.darkGray : (t < 0.9 ? C.darkBluishGray : C.black),
-        free: true, studs: false,
+        free: true, studs: false, finish: FINISH.RUBBER,
       });
     }
   }
@@ -226,16 +230,21 @@ export function buildHangarBay(opts = {}) {
     new THREE.PlaneGeometry(mouthW - 1, mouthH - 0.6),
     new THREE.ShaderMaterial({
       uniforms: {
-        top: { value: new THREE.Color(0x9fc8ee).convertSRGBToLinear() },
-        bot: { value: new THREE.Color(0xf2e3c4).convertSRGBToLinear() },
+        top: { value: new THREE.Color(0x8ebde8).convertSRGBToLinear() },
+        bot: { value: new THREE.Color(0xdcc9a4).convertSRGBToLinear() },
+        ground: { value: new THREE.Color(0x4a5340).convertSRGBToLinear() },
       },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }',
-      fragmentShader: `varying vec2 vUv; uniform vec3 top, bot;
+      fragmentShader: `varying vec2 vUv; uniform vec3 top, bot, ground;
         void main(){
           vec3 c = mix(bot, top, pow(clamp(vUv.y, 0.0, 1.0), 0.8));
           // Sun haze up and to the left, where the key light comes from. Kept
           // well off the deck line so it does not wash out the threshold.
-          c += vec3(1.0, 0.94, 0.82) * 0.30 * pow(max(0.0, 1.0 - length((vUv - vec2(0.3, 0.62)) * vec2(1.7, 2.2))), 2.2);
+          c += vec3(1.0, 0.94, 0.82) * 0.26 * pow(max(0.0, 1.0 - length((vUv - vec2(0.3, 0.66)) * vec2(1.7, 2.2))), 2.2);
+          // A treeline along the bottom: without it the mouth is a hole full
+          // of light and the deck appears to run off the edge of the world.
+          float hz = smoothstep(0.20, 0.14, vUv.y);
+          c = mix(c, ground * (0.7 + 0.5 * vUv.y), hz);
           gl_FragColor = vec4(c, 1.0);
         }`,
       toneMapped: true,
@@ -254,13 +263,13 @@ export function buildHangarBay(opts = {}) {
 
   if (bool(opts, 'lights', true)) {
     // Daylight spilling in through the mouth, plus two overhead practicals.
-    const spill = new THREE.DirectionalLight(new THREE.Color(0xfff0d8).convertSRGBToLinear(), 0.85);
-    spill.position.set(-20, 26, zMouth - 60);
+    const spill = new THREE.DirectionalLight(new THREE.Color(0xfff0d8).convertSRGBToLinear(), 0.7);
+    spill.position.set(-34, 30, zMouth - 60);
     spill.target.position.set(0, 6, zBack);
     spill.castShadow = false;
     g.add(spill, spill.target);
-    practical(g, -22, h - 12, zMouth + 34, 0xdfeaff, 620, 120);
-    practical(g, 22, h - 12, zBack - 30, 0xdfeaff, 620, 120);
+    practical(g, -30, h - 10, zMouth + 40, 0xdfeaff, 500, 110);
+    practical(g, 30, h - 10, zBack - 34, 0xdfeaff, 500, 110);
   }
   return g;
 }

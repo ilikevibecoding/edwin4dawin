@@ -22,13 +22,16 @@ const boltGeo = (() => {
 export class BoltPool {
   constructor(scene, {
     max = 96, color = C.transRed, core = 0xffe8e8, radius = 0.14, length = 3.2, speed = 220,
+    intensity, coreIntensity,
   } = {}) {
     this.max = max; this.speed = speed; this.radius = radius; this.length = length;
     this.items = [];
     this.free = [];
 
-    const m = glow(color, 0.85);
-    const cm = glow(core, 1.0);
+    // Capital-ship bolts are metres across on screen; they need to be dimmer
+    // than a hand blaster's or one passing the lens washes the whole frame.
+    const m = glow(color, 0.85, true, intensity);
+    const cm = glow(core, 1.0, true, coreIntensity);
     this.halo = new THREE.InstancedMesh(boltGeo, m, max);
     this.coreMesh = new THREE.InstancedMesh(boltGeo, cm, max);
     for (const im of [this.halo, this.coreMesh]) {

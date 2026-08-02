@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { BrickBuilder, PLATE, BRICK, P, B } from '../lego/brick.js';
+import { BrickBuilder, BRICK, P, B } from '../lego/brick.js';
 import { C, FINISH } from '../lego/palette.js';
 import { RNG } from '../engine/rng.js';
-import { num, bool, clamp, smoothstep, hash2i } from './common.js';
+import { num, bool, smoothstep, hash2i, practical } from './common.js';
 import { duneField, rockOutcrop } from './dunes.js';
 
 /*
@@ -37,9 +37,14 @@ function pitWall(bb, cx, cz, r, top, bottom) {
   const courses = Math.round((top - bottom) / BRICK);
   for (let c = 0; c < courses; c++) {
     const y = bottom + c * BRICK;
-    ring(bb, cx, cz, y, r, BRICK, 2.2, 34, (k) => {
+    // Darker toward the floor: 13 studs of identical tan reads flat, and the
+    // gradient is what makes the courtyard look sunken.
+    const deep = 1 - c / Math.max(1, courses - 1);
+    ring(bb, cx, cz, y, r, BRICK * 1.05, 2.6, 34, (k) => {
       const t = hash2i(k, c, 3031);
-      return t < 0.18 ? C.darkTan : (t < 0.3 ? C.nougat : C.tan);
+      if (t < 0.18 + deep * 0.42) return C.darkTan;
+      if (t < 0.3 + deep * 0.3) return C.mediumNougat;
+      return C.tan;
     }, { phase: (c % 2) * (Math.PI / 34) });
   }
 }
@@ -139,16 +144,19 @@ export function buildMoistureFarm(opts = {}) {
   const flatten = (x, z, hh) => {
     const d = Math.hypot(x, z);
     if (d < RIM_R + 6) return B(1);
-    const t = smoothstep(RIM_R + 6, RIM_R + 34, d);
+    // Back to full dune height by 20 studs out. Blending over a longer run
+    // leaves no room between the yard and the taper for a whole dune, and the
+    // plot ends up ringed by a jagged berm instead of sand.
+    const t = smoothstep(RIM_R + 6, RIM_R + 20, d);
     return B(1) * (1 - t) + hh * t;
   };
   duneField(bb, {
-    size: plot, cell: 4, seed: seed + 17, amp: 11, flatten, taper: 0.24,
+    size: plot, cell: 4, seed: seed + 17, amp: 9, flatten, taper: 0.24,
+    // Punch the courtyard clean out of the terrain. Without this the dune
+    // slab lies across the shaft and the pit reads as a shallow dish.
+    mask: (x, z) => Math.hypot(x, z) > PIT_R + 1.6,
   });
 
-  // Blank out the pit: cut a hole by laying the courtyard floor deep and
-  // walling the shaft. (The dune cells inside the rim are already flat, so
-  // the pit simply replaces them.)
   const floorY = -PIT_D;
   const cell = 3;
   const nn = Math.ceil((PIT_R * 2) / cell);
@@ -214,8 +222,8 @@ export function buildMoistureFarm(opts = {}) {
   const vaps = Math.round(num(opts, 'vaporators', 4));
   for (let k = 0; k < vaps; k++) {
     const a = -0.5 + k * (Math.PI * 1.55 / Math.max(1, vaps - 1));
-    const r = RIM_R + 12 + rng.range(-3, 7);
-    vaporator(bb, Math.cos(a) * r, -Math.sin(a) * r, B(1), rng.range(8, 12), rng);
+    const r = RIM_R + 13 + rng.range(-3, 8);
+    vaporator(bb, Math.cos(a) * r, -Math.sin(a) * r, B(1), rng.range(13, 18), rng);
   }
 
   // A speeder-parking mat and a couple of rocks for scale.
@@ -236,5 +244,14 @@ export function buildMoistureFarm(opts = {}) {
   g.add(door);
   g.userData.nodes.hutDoor = door;
   g.userData.pitDepth = PIT_D;
+
+  if (bool(opts, 'lights', true)) {
+    // A courtyard 13 studs down is in its own shadow for most of the day, and
+    // every rig's shadow camera covers it, so without a bounce the whole yard
+    // -- the reason the set exists -- renders as a black disc. Warm, weak, and
+    // low: this is light coming off sunlit sand walls, not a lamp.
+    practical(g, 0, floorY + 9, 2, 0xffd9a0, 220, 46);
+    practical(g, -7, floorY + 4, -9, 0xffc98a, 70, 26);
+  }
   return g;
 }

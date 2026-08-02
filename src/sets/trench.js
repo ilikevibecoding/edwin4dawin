@@ -29,7 +29,7 @@ const DEPTH = 30;
  */
 export function trenchSegment(bb, {
   index = 0, width = WIDTH, depth = DEPTH, len = SEG, seed = 4477,
-  braces = true, lights = true, z0 = 0,
+  braces = true, lights = true, z0 = 0, shoulder = 10,
 } = {}) {
   const hw = width / 2;
   const s = seed + index * 7919;
@@ -69,7 +69,18 @@ export function trenchSegment(bb, {
     // A skirt of darker plating at the bottom and a capping lip at the top.
     bb.brick(x - side * 0.6, 0, z0, 1.2, len, { h: B(2), color: C.darkBluishGray, free: true, studs: false });
     bb.brick(x - side * 1.1, depth - B(2), z0, 2.2, len, { h: B(2), color: C.darkBluishGray, free: true, studs: false });
-    bb.brick(x + side * 2.5, depth, z0, 5, len, { h: P(2), color: C.lightBluishGray, free: true, studs: false });
+    // Station deck carrying on past the lip. Dark, because a bright rail along
+    // the top of frame pulls the eye off the trench itself. `shoulder` is how
+    // far it runs: wide enough to reach whatever the scene has laid the trench
+    // into, or the join shows as a slot of empty space either side.
+    bb.brick(x + side * (shoulder / 2), depth, z0, shoulder, len, { h: P(2), color: C.darkBluishGray, free: true, studs: false });
+    for (let k = 0; k < Math.round(len / 9); k++) {
+      const z = z0m + (k + 0.5) * (len / Math.round(len / 9));
+      const t = hash2i(index, k, s + 303);
+      bb.brick(x + side * (2.5 + t * (shoulder - 5)), depth + P(2), z, 2 + t * 3, 3 + t * 3, {
+        h: P(1 + Math.floor(t * 4)), color: t < 0.45 ? C.lightBluishGray : C.darkGray, free: true, studs: false,
+      });
+    }
 
     // Heavy greebling over the clear face.
     greebleRect(bb, {
@@ -125,24 +136,22 @@ export function trenchSegment(bb, {
   }
 
   // ------------------------------------------------------- cross-braces
-  if (braces) {
-    const n = 1;
-    for (let k = 0; k < n; k++) {
-      const z = z0m + (k + 0.35) * (len / n);
-      const y = depth - B(4) - hash2i(index, k, s + 99) * 4;
-      bb.brick(0, y, z, width - 1.5, 2.4, { h: B(1.6), color: C.lightBluishGray, free: true, studs: false });
-      bb.brick(0, y - P(1.5), z, width - 1.5, 1.2, { h: P(1.5), color: C.darkBluishGray, free: true, studs: false });
-      // Gusset plates where the brace meets the wall.
-      for (const side of [-1, 1]) {
-        bb.slope(side * (hw - 5), y - B(1.4), z, 6, 2.2, {
-          h: B(1.4), color: C.darkBluishGray, rot: side > 0 ? 0 : Math.PI, free: true,
-        });
-      }
-      // Hanging strut lamps.
-      for (const lx of [-6, 6]) {
-        bb.brick(lx, y - P(2), z, 1.6, 1.6, { h: P(2), color: C.darkGray, free: true, studs: false });
-        bb.cyl(lx, y - P(2.2), z, 0.45, P(0.6), { color: C.transNeonOrange, finish: FINISH.GLOW, seg: 8, stud: false });
-      }
+  // Every other segment only: a bridge across every 60 studs turns the run
+  // into a ladder and hides the far end.
+  if (braces && index % 2 === 0) {
+    const z = z0m + 0.42 * len;
+    const y = depth - B(3) - hash2i(index, 0, s + 99) * 3;
+    bb.brick(0, y, z, width - 1.5, 1.6, { h: B(1.1), color: C.darkBluishGray, free: true, studs: false });
+    bb.brick(0, y - P(1.2), z, width - 1.5, 0.8, { h: P(1.2), color: C.darkGray, free: true, studs: false });
+    // Gusset plates where the brace meets the wall.
+    for (const side of [-1, 1]) {
+      bb.slope(side * (hw - 4), y - B(1.0), z, 5, 1.5, {
+        h: B(1.0), color: C.darkGray, rot: side > 0 ? 0 : Math.PI, free: true,
+      });
+    }
+    for (const lx of [-7, 7]) {
+      bb.brick(lx, y - P(1.6), z, 1.4, 1.4, { h: P(1.6), color: C.darkGray, free: true, studs: false });
+      bb.cyl(lx, y - P(1.8), z, 0.4, P(0.6), { color: C.transNeonOrange, finish: FINISH.GLOW, seg: 8, stud: false });
     }
   }
   return bb;
@@ -188,6 +197,7 @@ export function buildTrenchSegment(opts = {}) {
     depth: num(opts, 'depth', DEPTH),
     len: num(opts, 'len', SEG),
     seed: Math.round(num(opts, 'seed', 4477)),
+    shoulder: num(opts, 'shoulder', 10),
   });
   const g = bb.build();
   g.name = 'trench_segment';
@@ -201,6 +211,7 @@ export function buildTrench(opts = {}) {
   const depth = num(opts, 'depth', DEPTH);
   const seed = Math.round(num(opts, 'seed', 4477));
   const segLen = num(opts, 'seg', SEG);
+  const shoulder = num(opts, 'shoulder', 10);
   const n = Math.max(1, Math.round(length / segLen));
   const total = n * segLen;
 
@@ -211,7 +222,7 @@ export function buildTrench(opts = {}) {
   // Segments run from +Z (near, behind camera) to -Z (far).
   for (let k = 0; k < n; k++) {
     const z = total / 2 - (k + 0.5) * segLen;
-    trenchSegment(bb, { index: k, width, depth, len: segLen, seed, z0: z });
+    trenchSegment(bb, { index: k, width, depth, len: segLen, seed, z0: z, shoulder });
   }
 
   // Exhaust port, a segment and a half from the far end.
@@ -233,25 +244,29 @@ export function buildTrench(opts = {}) {
   g.userData.segmentLength = segLen;
 
   if (bool(opts, 'lights', true)) {
-    // The set carries its own sun. Point lights are useless over 600 studs and
-    // the `dark` rig leaves a canyon this deep essentially black, so a raking
-    // directional lights one wall and leaves the other in shadow -- which is
-    // the shot. Turn it off with lights=0 if a scene brings its own.
-    const sun = new THREE.DirectionalLight(new THREE.Color(0xdbe6ff).convertSRGBToLinear(), 2.1);
-    sun.position.set(-90, 70, 30);
+    // The set carries its own sun: point lights are useless over 600 studs and
+    // the `dark` rig leaves a canyon this deep essentially black. Turn it off
+    // with lights=0 if a scene brings its own.
+    //
+    // The key leans hard toward +Z. Looking down a 600-stud trench you barely
+    // see the walls face-on -- almost every wall pixel is the +Z flank of a
+    // greeble -- so a purely side-raking sun lights surfaces the camera never
+    // sees and the whole canyon goes black.
+    const sun = new THREE.DirectionalLight(new THREE.Color(0xdbe6ff).convertSRGBToLinear(), 2.3);
+    sun.position.set(-45, 62, 78);
     sun.target.position.set(0, 0, 0);
     sun.castShadow = false;
     g.add(sun, sun.target);
-    // A weak bounce off the opposite wall, or the shadowed side goes to pure
-    // black and the trench reads as a single lit plane.
-    const bounce = new THREE.DirectionalLight(new THREE.Color(0x93a8cc).convertSRGBToLinear(), 0.8);
-    bounce.position.set(90, 30, 20);
+    // A bounce off the opposite wall, or the shadowed side goes to pure black
+    // and the trench reads as a single lit plane.
+    const bounce = new THREE.DirectionalLight(new THREE.Color(0x8ea4c8).convertSRGBToLinear(), 1.0);
+    bounce.position.set(78, 22, 46);
     bounce.target.position.set(0, 0, 0);
     bounce.castShadow = false;
     g.add(bounce, bounce.target);
     g.add(new THREE.HemisphereLight(
-      new THREE.Color(0x9db2d8).convertSRGBToLinear(),
-      new THREE.Color(0x2a3242).convertSRGBToLinear(), 1.0,
+      new THREE.Color(0x9fb4d8).convertSRGBToLinear(),
+      new THREE.Color(0x424c60).convertSRGBToLinear(), 1.05,
     ));
     // A red wash coming up out of the port so the far end has a focus.
     practical(g, 0, 4, portZ, 0xff5530, 90, 46);

@@ -101,43 +101,67 @@ function chassis(bb) {
 }
 
 /**
- * The three turbine intakes -- the X-34's signature. Set into the prow face so
- * only the lip stands proud; three loose barrels on the front read as plumbing.
+ * Ring of `n` chunky segments in the XZ-facing plane, centred on (x, y).
+ * cyl() cannot make a hole, so an intake lip has to be built as a ring of
+ * separate parts -- which is how it would be done in bricks anyway.
+ */
+function lipRing(bb, x, y, z, rOuter, thick, depth, color, n = 8) {
+  const rIn = rOuter - thick;
+  const h = Math.PI / n;
+  const pts = [
+    [rIn * Math.cos(-h), rIn * Math.sin(-h)],
+    [rOuter * Math.cos(-h), rOuter * Math.sin(-h)],
+    [rOuter * Math.cos(h), rOuter * Math.sin(h)],
+    [rIn * Math.cos(h), rIn * Math.sin(h)],
+  ];
+  for (let i = 0; i < n; i++) {
+    bb.prism(pts, depth, { rz: (i / n) * Math.PI * 2, x, y, z, color });
+  }
+  return bb;
+}
+
+/**
+ * The three turbine intakes -- the X-34's signature.
+ *
+ * Each one is an open mouth: a lip ring standing proud of the prow with a black
+ * bore set back behind it and a crossed vane over the bore. The tempting way
+ * round cyl()'s lack of a hole is to step solid cylinders forward instead, but
+ * that builds a nose cone with a bright hub in the middle, and three of those
+ * low on the bow read unmistakably as wheels.
  */
 function turbines(bb) {
-  const cy = DECK_Y - P(1.5);
+  const cy = DECK_Y - P(1.75);
 
-  // A single grille plate across the prow ties the three inlets together, so
-  // they read as engine mouths in a bulkhead rather than three loose discs.
-  bb.brick(0, cy - 0.72, PROW_Z + 0.06, 7.2, 0.32, {
-    h: 1.44, color: DARK, studs: false, free: true,
+  // A grille bulkhead across the prow ties the three mouths together, so they
+  // read as openings in a wall rather than as three loose discs.
+  bb.brick(0, cy - 0.85, PROW_Z + 0.06, 7.2, 0.32, {
+    h: 1.7, color: DARK, studs: false, free: true,
   });
 
-  /*
-   * Concentric rings stepping forward: bulkhead / bore / compressor / spinner.
-   * Each ring's front face has to sit ahead of the one outside it, or the wider
-   * cylinder's solid cap covers everything behind it. All solid too -- an open
-   * tube would cull its own inner wall and the inlet would look hollow.
-   */
   const mk = (x, r, name) => {
-    bb.cyl(x, cy, PROW_Z + 0.16, r + 0.22, 0.36, { axis: 'z', color: GRAY, seg: 12, stud: false });
-    bb.cyl(x, cy, PROW_Z - 0.3, r, 1.5, { axis: 'z', color: IRON, seg: 12, stud: false });
-    bb.cyl(x, cy, PROW_Z + 0.42, r * 0.72, 0.24, { axis: 'z', color: GRAY, seg: 10, stud: false });
-    bb.cyl(x, cy, PROW_Z + 0.46, 0.2, 0.3, {
-      axis: 'z', color: C.flatSilver, finish: FINISH.SOLID, seg: 8, stud: false,
+    // Black bore first; its front cap is what shows through the lip.
+    bb.cyl(x, cy, PROW_Z + 0.02, r - 0.24, 0.5, {
+      axis: 'z', color: C.black, seg: 12, stud: false,
     });
+    // Crossed compressor vanes, recessed inside the lip.
+    for (let i = 0; i < 2; i++) {
+      bb.prism([
+        [-(r - 0.3), -0.075], [r - 0.3, -0.075], [r - 0.3, 0.075], [-(r - 0.3), 0.075],
+      ], 0.18, { rz: i * (Math.PI / 2), x, y: cy, z: PROW_Z + 0.36, color: IRON });
+    }
+    lipRing(bb, x, cy, PROW_Z + 0.2, r - 0.06, 0.14, 0.3, IRON);
+    lipRing(bb, x, cy, PROW_Z + 0.42, r, 0.26, 0.52, GRAY);
     bb.node(name, x, cy, PROW_Z + 1.0);
   };
-  mk(0, 0.62, 'intakeC');
-  mk(-TURBINE_X, 0.55, 'intakeL');
-  mk(TURBINE_X, 0.55, 'intakeR');
+  mk(0, 0.74, 'intakeC');
+  mk(-TURBINE_X, 0.66, 'intakeL');
+  mk(TURBINE_X, 0.66, 'intakeR');
 
-  // slats filling the grille between the inlets, so the round mouths read as
-  // part of a vented bulkhead
-  for (const x of [-3.35, -1.25, 1.25, 3.35]) {
+  // slats filling the grille between the mouths
+  for (const x of [-3.4, -1.3, 1.3, 3.4]) {
     for (let i = 0; i < 3; i++) {
-      bb.brick(x, cy - 0.55 + i * 0.42, PROW_Z + 0.12, 1.0, 0.26, {
-        h: 0.24, color: GRAY, studs: false, tile: true, free: true,
+      bb.brick(x, cy - 0.62 + i * 0.48, PROW_Z + 0.12, 0.9, 0.26, {
+        h: 0.26, color: GRAY, studs: false, tile: true, free: true,
       });
     }
   }

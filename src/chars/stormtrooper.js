@@ -70,7 +70,8 @@ export function buildStormtrooper(opts = {}) {
  * @param {{ n?: number, cols?: number, spacing?: number, speed?: number }} [opts]
  */
 export function buildCrowdTroopers(opts = {}) {
-  const n = Math.max(1, Math.min(24, Math.round(num(opts.n, 8))));
+  // a trooper is 3,568 tris, so 22 is the most that fits the 80k crowd budget
+  const n = Math.max(1, Math.min(22, Math.round(num(opts.n, 8))));
   const cols = Math.max(1, Math.min(n, Math.round(num(opts.cols, Math.min(4, n)))));
   const rows = Math.ceil(n / cols);
   const dx = num(opts.spacing, 2.5);

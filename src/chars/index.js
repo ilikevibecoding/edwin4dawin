@@ -25,8 +25,8 @@ export { figGroup, setHeldPitch } from './util.js';
 
 register('vader', (opts) => buildVader(opts), {
   notes: 'Sith lord: brick helmet (dome + flared mask + vocoder grille), shoulder mantle, '
-    + 'cape 2.0x3.4, root scaled 1.08. userData.saber is a red Lightsaber, '
-    + 'sheathed unless opts.saber is given (0..1 extension).',
+    + 'cape 2.0x3.4, root scaled 1.08. userData.saber is a red Lightsaber, lit by '
+    + 'default; pass saber=0..1 for the extension.',
 });
 
 register('leia', (opts) => buildLeia(opts), {

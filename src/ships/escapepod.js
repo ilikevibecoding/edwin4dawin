@@ -54,9 +54,10 @@ function hull(bb) {
 
   // ---- nose: roof steps down over two courses, keel steps up ------------
   // Each ramp is as wide as the course it caps so nothing overhangs into a
-  // wafer-thin flange.
-  bb.slope(0, 2.10, 3.85, halfW(3.4) * 1.2, 0.9, { h: P(1), color: WHITE, rot: Math.PI / 2 });
-  bb.slope(0, 1.30, 4.6, halfW(4.2) * 1.72, 0.8, { h: P(2), color: WHITE, rot: Math.PI / 2 });
+  // wafer-thin flange. rot = 90deg swings the slope's rise onto Z, which also
+  // swaps its w and d: w is the fore-and-aft run, d the width across the hull.
+  bb.slope(0, 2.10, 3.85, 0.9, halfW(3.4) * 1.2, { h: P(1), color: WHITE, rot: Math.PI / 2 });
+  bb.slope(0, 1.30, 4.6, 0.8, halfW(4.2) * 1.72, { h: P(2), color: WHITE, rot: Math.PI / 2 });
   zWedge(bb, 0, halfW(3.4) * 1.2, [
     [3.4, -2.30], [4.3, -1.90], [3.4, -1.90],
   ], { color: DARK });
@@ -68,8 +69,11 @@ function hull(bb) {
   bb.brick(0, -0.80, NOSE_Z - 0.05, halfW(NOSE_Z) * 1.7, 0.5, {
     h: 1.9, color: GRAY, studs: false, free: true,
   });
-  bb.cyl(0, 0.15, NOSE_Z + 0.25, 1.05, 0.4, { axis: 'z', color: DARK, seg: 10, stud: false });
-  bb.cyl(0, 0.15, NOSE_Z + 0.4, 0.7, 0.3, { axis: 'z', color: C.black, seg: 10, stud: false });
+  // Docking collar, capped rather than open: a dark bore this far forward reads
+  // as an engine bell and the pod ends up looking like it flies tail-first.
+  bb.cyl(0, 0.15, NOSE_Z + 0.1, 1.05, 0.4, { axis: 'z', color: DARK, seg: 10, stud: false });
+  bb.cyl(0, 0.15, NOSE_Z + 0.24, 0.78, 0.3, { axis: 'z', color: GRAY, seg: 10, stud: false });
+  bb.cyl(0, 0.15, NOSE_Z + 0.34, 0.26, 0.2, { axis: 'z', color: DARK, seg: 8, stud: false });
   sym(bb, (b, s) => {
     b.slope(s * 1.15, -1.10, 4.1, 0.8, 1.8, { h: P(6), color: GRAY, rot: mrot(s) });
   });
@@ -128,11 +132,13 @@ function fittings(bb) {
   });
 
   // ---- thruster bell + manoeuvring jets ---------------------------------
-  bb.cyl(0, 0.1, TAIL_Z - 0.75, 1.7, 0.9, { axis: 'z', color: GRAY, seg: 12, stud: false });
-  engineNozzle(bb, 'thruster', 0, 0.1, TAIL_Z - 1.45, 1.45, { depth: 1.1, seg: 12 });
+  // Kept tucked in tight: a bell on a long stalk pushes the pod's overall
+  // length half again past the hull and it stops reading as a lifeboat.
+  bb.cyl(0, 0.1, TAIL_Z - 0.42, 1.7, 0.85, { axis: 'z', color: GRAY, seg: 12, stud: false });
+  engineNozzle(bb, 'thruster', 0, 0.1, TAIL_Z - 0.88, 1.45, { depth: 0.8, seg: 12 });
   sym(bb, (b, s) => {
-    b.cyl(s * 1.95, -1.35, TAIL_Z - 0.5, 0.4, 0.5, { axis: 'z', color: DARK, seg: 8, stud: false });
-    b.cyl(s * 1.95, -1.35, TAIL_Z - 0.85, 0.32, 0.24, {
+    b.cyl(s * 1.95, -1.35, TAIL_Z - 0.4, 0.4, 0.5, { axis: 'z', color: DARK, seg: 8, stud: false });
+    b.cyl(s * 1.95, -1.35, TAIL_Z - 0.72, 0.32, 0.24, {
       axis: 'z', color: C.transLightBlue, finish: FINISH.GLOW, seg: 8, stud: false,
     });
   });

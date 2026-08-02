@@ -115,25 +115,37 @@ export const SCRIPT = [
     text: 'But tonight, in a hall of white stone, a farm boy, a smuggler and a princess stand in the light, and the galaxy remembers how to hope.' },
 ];
 
-/** The opening crawl, rendered as receding 3D text. */
+/**
+ * The opening crawl, rendered as receding 3D text.
+ *
+ * Line breaks are part of the design, not an accident of wrapping: the scene
+ * sets the type to whichever line is widest, so ~30 characters is what makes
+ * the copy fill the frame and stay readable at the bottom of the crawl.
+ */
 export const CRAWL = {
   episode: 'Episode IV',
   title: 'A NEW HOPE',
   body: [
-    'War burns across the stars. From a hidden',
-    'base among the outer worlds, a small REBEL',
-    'FLEET has struck the first real blow against',
-    'the Galactic Empire, and lived.',
+    'War burns across the stars.',
+    'From a hidden base among the',
+    'outer worlds, a small REBEL',
+    'FLEET has struck the first',
+    'real blow against the Galactic',
+    'Empire, and lived.',
     '',
-    'Hidden in the memory of a stolen droid are',
-    'the plans to the Empire\'s new battle station:',
-    'a fortress the size of a moon, with power',
-    'enough to end a world.',
+    'Hidden in the memory of a',
+    'stolen droid are the plans',
+    'to the Empire\'s new battle',
+    'station: a fortress the size',
+    'of a moon, with power enough',
+    'to end a world.',
     '',
-    'Pursued by the Emperor\'s agents, PRINCESS',
-    'LEIA runs for home aboard her consular ship,',
-    'carrying the one secret that can still save',
-    'her people....',
+    'Pursued by the Emperor\'s',
+    'agents, PRINCESS LEIA runs',
+    'for home aboard her consular',
+    'ship, carrying the one secret',
+    'that can still save her',
+    'people....',
   ],
 };
 

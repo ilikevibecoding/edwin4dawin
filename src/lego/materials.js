@@ -105,12 +105,13 @@ export function mat(color, finish, opts = {}) {
 }
 
 /** Unlit, additive material for engine glow / blaster bolts / saber cores. */
-export function glow(color, opacity = 1, additive = true) {
+export function glow(color, opacity = 1, additive = true, intensity) {
   return mat(color, FINISH.GLOW, {
     opacity,
     depthWrite: false,
     blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
     side: THREE.DoubleSide,
+    ...(intensity === undefined ? {} : { intensity }),
   });
 }
 

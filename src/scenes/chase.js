@@ -32,27 +32,34 @@ export default {
     root.add(corvette);
     const corvetteEngines = nodesLike(corvette, 'engine');
     const flares = corvetteEngines.map((n) => {
-      const f = engineFlare(C.transLightBlue, 0.55, 5.5);
+      const f = engineFlare(C.transLightBlue, 0.55, 5.5, { intensity: 1.05, coreIntensity: 1.25 });
       n.add(f);
       return f;
     });
 
     const destroyer = await tryMake('stardestroyer', {}, { size: [180, 40, 340], color: C.lightBluishGray });
     root.add(destroyer);
+    // The destroyer is only ever seen from underneath and the space rig keys
+    // from above, so without a bounce the whole hull reads as one flat shape.
+    const belly = new THREE.DirectionalLight(0x9ec4ee, 0.8);
+    belly.position.set(-24, -50, 46);
+    root.add(belly);
     const dEngines = nodesLike(destroyer, 'engine');
-    for (const n of dEngines) n.add(engineFlare(C.transLightBlue, 2.6, 26));
+    for (const n of dEngines) n.add(engineFlare(C.transLightBlue, 2.6, 26, { intensity: 1.2, coreIntensity: 1.6 }));
 
     // ---- effects ------------------------------------------------------
-    const green = new BoltPool(ctx.scene, { max: 40, color: C.transGreen, core: 0xd8ffd0, radius: 0.55, length: 16, speed: 420 });
-    const red = new BoltPool(ctx.scene, { max: 40, color: C.transRed, core: 0xffd8d0, radius: 0.30, length: 9, speed: 380 });
+    const green = new BoltPool(ctx.scene, { max: 40, color: C.transGreen, core: 0xd8ffd0, radius: 0.55, length: 16, speed: 420, intensity: 0.95, coreIntensity: 1.25 });
+    const red = new BoltPool(ctx.scene, { max: 40, color: C.transRed, core: 0xffd8d0, radius: 0.30, length: 9, speed: 380, intensity: 1.2, coreIntensity: 1.6 });
     const boom = new Explosions(ctx.scene, { seed: 31, colors: [C.white, C.lightBluishGray, C.red] });
     const sparks = new SpritePool(ctx.scene, { max: 60, texture: flashTexture() });
 
-    // Tractor beam cone drawn under the destroyer's hangar mouth.
-    const beamGeo = new THREE.CylinderGeometry(17, 4, 1, 20, 1, true);
+    // Tractor beam cone drawn under the destroyer's hangar mouth. Back faces
+    // only: a double-sided additive cone this large reads as a sheet of
+    // pale blue plastic laid across the frame.
+    const beamGeo = new THREE.CylinderGeometry(11, 3, 1, 24, 1, true);
     const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({
-      color: 0x8fd8ff, transparent: true, opacity: 0, depthWrite: false,
-      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
+      color: 0x6fc4f0, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.BackSide, toneMapped: false,
     }));
     root.add(beam);
 
@@ -79,46 +86,42 @@ export default {
       to: [190, 28, 240],
       look: () => corvette.position,
     });
-    // 2. low and behind: the destroyer arrives over the top of frame
+    // The chase runs along +Z, with the destroyer hanging back and above. To
+    // see it arrive the camera has to get out in front and look back down the
+    // chase -- the small ship near the lens is what gives the big one its size.
+    const between = (k) => () => corvette.position.clone().lerp(destroyer.position, k);
+
+    // 2. out ahead on a long lens: the corvette runs at the lens with the
+    //    destroyer stacked behind it. Compression is what sells the size
+    //    difference -- a wide lens just makes the big ship distant.
     shots.add({
-      t: REVEAL, dur: c3 - REVEAL, fov: 46, ease: 'outQuad',
-      pos: (u) => {
-        const p = corvette.position;
-        return [p.x - 26, p.y - 16, p.z - 96 + u * 16];
-      },
-      look: (u) => {
-        const p = corvette.position;
-        return [p.x, p.y + 6 + u * 26, p.z + 40];
-      },
+      t: REVEAL, dur: c3 - REVEAL, fov: 32, ease: 'outQuad',
+      pos: (u) => corvette.position.clone().add(
+        new THREE.Vector3(-16 + u * 5, -20 + u * 4, 150 - u * 40)),
+      look: between(0.30),
       shake: (u) => 0.15 + u * 0.25,
     });
-    // 3. under the belly, turbolasers hammering
+    // 3. right under the belly: the hull runs off every edge of frame while
+    //    the turbolasers come down past the lens
     shots.add({
-      t: c3, dur: TRACTOR - c3, fov: 52, ease: 'linear',
-      pos: (u) => {
-        const p = corvette.position;
-        return [p.x + 40 - u * 20, p.y - 34, p.z - 30];
-      },
-      look: (u) => {
-        const p = corvette.position;
-        return [p.x, p.y + 10, p.z + 30];
-      },
+      t: c3, dur: TRACTOR - c3, fov: 54, ease: 'linear',
+      pos: (u) => destroyer.position.clone().add(
+        new THREE.Vector3(-52 + u * 16, -96 - u * 10, 244 - u * 46)),
+      look: () => destroyer.position.clone().add(new THREE.Vector3(4, -22, 26)),
       shake: 0.5, shakeFreq: 17,
     });
-    // 4. tractor beam: looking up as it is drawn in
+    // 4. tractor beam: looking up the shaft as it is drawn in
     shots.add({
-      t: TRACTOR, dur: ctx.dur - TRACTOR - 5.5, fov: 44, ease: 'inOutCubic',
-      pos: (u) => {
-        const p = corvette.position;
-        return [p.x + 62 - u * 14, p.y - 20 + u * 10, p.z - 18];
-      },
-      look: () => corvette.position,
+      t: TRACTOR, dur: ctx.dur - TRACTOR - 5.5, fov: 46, ease: 'inOutCubic',
+      pos: (u) => corvette.position.clone().add(
+        new THREE.Vector3(50 - u * 12, -18 + u * 6, 40 - u * 8)),
+      look: between(0.26),
       shake: 0.2,
     });
     // 5. final wide: swallowed
     shots.add({
-      t: ctx.dur - 5.5, dur: 5.5, fov: 38, ease: 'inOutQuad',
-      pos: [330, 90, 250], to: [420, 130, 300],
+      t: ctx.dur - 5.5, dur: 5.5, fov: 34, ease: 'inOutQuad',
+      pos: [130, 58, 300], to: [186, 82, 344],
       look: () => destroyer.position,
     });
 
@@ -133,8 +136,8 @@ export default {
     return {
       root,
       shots,
-      exposure: 1.75,
-      grade: { uVignette: 0.4, uGrain: 0.028 },
+      exposure: 1.9,
+      grade: { uVignette: 0.4, uGrain: 0.028, uAberration: 0.0010 },
       slateAt: (t) => ({ text: t < 4 ? '' : '', opacity: 0 }),
       update(t, dt) {
         if (t < lastT) fireIdx = 0;   // rewound (seek/warmup)
@@ -151,8 +154,8 @@ export default {
         for (const f of flares) f.userData.set(throttle * (0.85 + Math.sin(t * 11) * 0.06));
 
         // destroyer: enters from behind and above, closes the gap
-        const dz = lerp(-620, -215, ease.outQuad(clamp(ramp(t, REVEAL - 3.5, TRACTOR + 3), 0, 1)));
-        const dy = lerp(190, 96, ease.outQuad(clamp(ramp(t, REVEAL - 3.5, TRACTOR + 4), 0, 1)));
+        const dz = lerp(-660, -178, ease.outQuad(clamp(ramp(t, REVEAL - 7, TRACTOR + 2), 0, 1)));
+        const dy = lerp(190, 58, ease.outQuad(clamp(ramp(t, REVEAL - 7, TRACTOR + 2), 0, 1)));
         destroyer.position.set(
           corvette.position.x + 26,
           corvette.position.y + dy,
@@ -192,7 +195,8 @@ export default {
 
         // tractor beam
         const tb = env(t, TRACTOR, ctx.dur - 3.2, 1.6, 1.4);
-        beam.material.opacity = tb * 0.11;
+        beam.material.opacity = tb * 0.05;
+        beam.visible = tb > 0.01;
         if (tb > 0.01) {
           const top = destroyer.position.clone().add(new THREE.Vector3(-10, -14, 60));
           const bottom = corvette.position.clone();

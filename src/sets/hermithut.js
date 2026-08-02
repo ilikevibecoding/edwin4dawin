@@ -72,18 +72,27 @@ export function buildHermitHut(opts = {}) {
   }
 
   // ------------------------------------------------------------- walls
+  // Side walls run full height right up to the open front: it is the dome
+  // that gets cut away, not the room, or the hut turns into an amphitheatre.
   const courses = Math.round(wallH / BRICK);
-  for (let c = 0; c < courses; c++) {
-    // Leave the front two thirds of the side walls out of the top courses so
-    // the room stays open to a camera sitting at +Z and slightly above.
-    const cut = open ? (c > courses - 4 ? RZ * 0.15 : null) : null;
-    course(bb, c * BRICK, BRICK, seed + 11, cut);
-  }
+  for (let c = 0; c < courses; c++) course(bb, c * BRICK, BRICK, seed + 11, null);
   if (!open) {
     for (let c = 0; c < courses; c++) {
       bb.brick(0, c * BRICK, frontZ - WALL / 2, (RX + WALL) * 2, WALL, {
         h: BRICK, color: c % 2 ? C.darkTan : C.lightBluishGray, free: true, studs: false,
       });
+    }
+  } else {
+    // Stub returns at the open corners so the missing wall reads as a
+    // proscenium rather than as a hut with a bite taken out of it.
+    for (const sx of [-1, 1]) {
+      for (let c = 0; c < courses; c++) {
+        const t = hash2i(sx, c, seed + 19);
+        bb.brick(sx * (RX - 0.6), c * BRICK, frontZ - WALL / 2, 3.6, WALL, {
+          h: BRICK, color: t < 0.45 ? C.darkTan : (t < 0.78 ? C.lightBluishGray : C.darkBluishGray),
+          free: true, studs: false,
+        });
+      }
     }
   }
 
@@ -128,7 +137,9 @@ export function buildHermitHut(opts = {}) {
     for (let s = 0; s < seg; s++) {
       const a = (s / seg) * Math.PI * 2 + (i % 2) * 0.1;
       const cz = Math.sin(a);
-      if (open && cz > 0.12 && i > 0) continue;      // cut away the near half
+      // Slice the near arc off every ring, ring zero included: leave the
+      // widest course in and it hangs over the room like a hat brim.
+      if (open && cz > 0.14) continue;
       const px = Math.cos(a) * rx, pz = cz * rz;
       const wdt = (2 * Math.PI * Math.max(rx, rz) / seg) * 1.2;
       const tt = hash2i(s, i, seed + 71);
@@ -197,8 +208,13 @@ export function buildHermitHut(opts = {}) {
   if (bool(opts, 'lights', true)) {
     // Warm lamp inside, a hot shaft through the window slit.
     practical(g, -RX * 0.35 + 1.8, 5.4, 1.5, 0xffb464, 90, 34);
-    practical(g, RX - 1, winY + 1.6, 2.5, 0xffe6c0, 70, 26);
-    practical(g, 0, wallH + 2, frontZ + 4, 0xcfe0ff, 60, 40);
+    // Daylight through the window slit: weak and set back off the wall, or it
+    // burns a specular hole through the stonework right at it.
+    practical(g, RX - 4.5, winY + 1.2, 2.5, 0xffe6c0, 26, 18);
+    // Sun spilling in through the missing wall, which is the only thing
+    // lighting the far side of the room.
+    practical(g, -4, wallH + 4, frontZ + 8, 0xffeed2, 200, 60);
+    practical(g, 5, 7, frontZ + 3, 0xdce7ff, 70, 34);
   }
   return g;
 }

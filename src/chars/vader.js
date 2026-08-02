@@ -35,9 +35,10 @@ export function buildVader(opts = {}) {
   fig.setPose(opts.pose || 'saber_guard');
   fig.attach('R', saber.object3D);
   setHeldPitch(fig, 'R', saber.object3D, 0.42);
-  // Sheathed unless a scene asks for it: a lit blade is the brightest thing in
-  // any frame it appears in, and he spends most of this film not using it.
-  saber.setExtension(num(opts.saber, 0));
+  // Lit to match the guard pose, and to match obiwan. Scenes that want the hilt
+  // clipped to his belt instead pass saber: 0 -- a lit blade is the brightest
+  // thing in any frame it appears in, so it is a shot-by-shot decision.
+  saber.setExtension(num(opts.saber, 1));
 
   return figGroup(fig, {
     name: 'vader',

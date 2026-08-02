@@ -28,7 +28,7 @@ export function buildRebelTrooper(opts = {}) {
     headgear: (f) => rebelHelmet(f),
   });
 
-  fig.setPose(opts.pose || 'aim');
+  fig.setPose(opts.pose || 'hold_right');
   const blaster = dh17Blaster();
   fig.attach('R', blaster);
   setHeldPitch(fig, 'R', blaster, -1.45);
