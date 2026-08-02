@@ -84,15 +84,25 @@ const stats = (t) =>
     let sum2 = 0;
     let n = 0;
     let maxL = 0;
+    let blown = 0;
+    let crushed = 0;
     for (let i = 0; i < d.length; i += 4) {
       const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
       sum += l;
       sum2 += l * l;
       if (l > maxL) maxL = l;
+      if (l > 0.96) blown++;
+      if (l < 0.02) crushed++;
       n++;
     }
     const mean = sum / n;
-    return { mean, sd: Math.sqrt(Math.max(0, sum2 / n - mean * mean)), max: maxL };
+    return {
+      mean,
+      sd: Math.sqrt(Math.max(0, sum2 / n - mean * mean)),
+      max: maxL,
+      blown: blown / n,
+      crushed: crushed / n,
+    };
   }, t);
 
 const hash = (s) => createHash('sha1').update(s).digest('hex').slice(0, 10);
@@ -131,7 +141,14 @@ for (const sc of film.scenes) {
 
   const bad = impure > 0 || dead > 0;
   if (bad) problems++;
-  const line = `${bad ? 'FAIL' : ' ok '}  ${sc.id.padEnd(11)} ${fmt(sc.start)}+${sc.duration.toFixed(0)}s   impure ${impure}/${SAMPLES}   dead ${dead}/${SAMPLES}`;
+  const avg = (k) => rows.reduce((a, r) => a + r[k], 0) / rows.length;
+  const worstBlown = Math.max(...rows.map((r) => r.blown));
+  const hot = worstBlown > 0.06;
+  const line =
+    `${bad ? 'FAIL' : ' ok '}  ${sc.id.padEnd(11)} ${fmt(sc.start)}+${sc.duration.toFixed(0).padStart(2)}s   ` +
+    `impure ${impure}/${SAMPLES}  dead ${dead}/${SAMPLES}   ` +
+    `lum ${avg('mean').toFixed(3)}  blown ${(avg('blown') * 100).toFixed(1)}% (worst ${(worstBlown * 100).toFixed(1)}%)` +
+    `${hot ? '  <-- OVEREXPOSED' : ''}`;
   console.log(line);
   report.push({ scene: sc.id, impure, dead, rows });
   for (const r of rows) {

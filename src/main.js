@@ -71,6 +71,47 @@ async function boot() {
   }
 
   let lastStats = { triangles: 0, calls: 0 };
+  /**
+   * Push every texture and shader to the GPU up front.
+   *
+   * Otherwise a texture uploads the first time the object that uses it becomes
+   * visible, and that frame renders microscopically differently from every
+   * later visit to the same moment — which is exactly the reproducibility the
+   * parallel renderer depends on.
+   */
+  function primeGPU() {
+    const seen = new Set();
+    for (const inst of film.built.values()) {
+      inst.scene.traverse((n) => {
+        const mats = Array.isArray(n.material) ? n.material : n.material ? [n.material] : [];
+        for (const m of mats) {
+          for (const key of ['map', 'emissiveMap', 'normalMap', 'roughnessMap', 'alphaMap', 'aoMap']) {
+            const tex = m[key];
+            if (tex && !seen.has(tex.uuid)) {
+              seen.add(tex.uuid);
+              try {
+                renderer.initTexture(tex);
+              } catch {}
+            }
+          }
+        }
+      });
+      try {
+        renderer.compile(inst.scene, inst.camera);
+      } catch {}
+    }
+    for (const key of ['map']) {
+      for (const m of [film.overlay.subMat, film.overlay.titleMat]) {
+        if (m[key]) {
+          try {
+            renderer.initTexture(m[key]);
+          } catch {}
+        }
+      }
+    }
+    return seen.size;
+  }
+
   function drawFrame(t) {
     const inst = film.update(t);
     if (!inst) return false;
@@ -102,6 +143,7 @@ async function boot() {
     // list; render workers only build the slice of the timeline they own.
     if (params.get('all') === '1') await film.buildAll();
     else await film.buildRange(t0, t1);
+    primeGPU();
     window.FILM = {
       duration: film.duration,
       scenes: film.sceneList(),
@@ -141,6 +183,8 @@ async function boot() {
     bar.style.width = `${p * 78}%`;
     loadMsg.textContent = `building ${title.toLowerCase()}…`;
   });
+  loadMsg.textContent = 'uploading textures…';
+  primeGPU();
 
   const audio = new FilmAudio();
   audio.setVoiceWindows(manifest.lines.map((l) => ({ t: l.t, dur: l.dur })));

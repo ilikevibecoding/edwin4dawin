@@ -47,8 +47,12 @@ const PY = PITCH / PLATE;
 // The geometry of the chase
 // ---------------------------------------------------------------------------
 
-/** Height of the destroyer's keel above her flight axis. */
-const BELLY = 38;
+/**
+ * Height of the destroyer's keel above her flight axis. Chosen, not guessed:
+ * the money shot only works if the lowest point of his hull sits a few degrees
+ * above her in the frame, and that angle is BELLY / (distance to his bow).
+ */
+const BELLY = 26;
 /** Airspeed at full throttle, world units per second. */
 const AIR = 150;
 const PLANET_R = 1550;
@@ -56,31 +60,36 @@ const PLANET_POS = [-120, -1750, 1900];
 
 /** Beat clock. Narration starts at 1.60, 8.19 and 17.48 (see ctx.lines). */
 const T = {
-  pass: 1.35, // she overtakes the lens
-  shadow: 8.2, // cut: the locked-off plate the prow will come into
+  pass: 1.7, // she overtakes the lens
+  shadow: 8.2, // the locked-off plate the prow will come into
   under: 14.15, // cut: wide and low, right beneath him
   hits: 17.45, // cut + the turbolasers land
   slew: 21.25, // cut: she is off her heading and smoking
   lock: 25.4, // cut: the tractor beam takes hold
-  lift: 26.5, // she starts to rise
+  lift: 26.4, // she starts to rise
   throat: 30.25, // cut: in tight on the hangar mouth
 };
 
 /**
- * The destroyer's nose in multiples of his own length, so the choreography
+ * The destroyer's nose, in multiples of his own length so the choreography
  * survives a model that is not exactly 260 studs long.
  *
- * He runs her down with an exponentially decaying overtake — fast when he is a
- * shadow behind her, almost station-keeping by the time the beam has her. That
- * is one smooth curve rather than a keyframe track, which matters: a kink in
- * this number is a kink in the descent of a hull edge across the whole frame.
+ * One straight run from t = 0 to the cut at 14.15, then a hard deceleration as
+ * he settles over her. Every change of speed in this track is placed ON a cut:
+ * a kink here is a kink in the descent of a hull edge across the whole frame,
+ * and the only frame you can hide one in is the frame after a cut.
  */
-const SD_END = 0.7; // asymptote: nose 0.70 lengths ahead of her
-const SD_GAP = 3.25; // lengths still to make up at t = 0
-const SD_TAU = 7.27; // seconds to close 1/e of it
+const SD_NOSE = [
+  [0, -2.6],
+  [T.under, 0.5765], // 0.2245 lengths a second, dead straight
+  [T.hits, 0.72],
+  [T.slew, 0.762],
+  [T.lock, 0.776],
+  [40, 0.79],
+];
 
 function sdNoseZ(t, len) {
-  return (SD_END - SD_GAP * Math.exp(-t / SD_TAU)) * len;
+  return ease.track(SD_NOSE, t, LIN) * len;
 }
 
 /** Distance flown along the shared course; the airspeed is its derivative. */
@@ -152,12 +161,23 @@ export async function build(ctx) {
   const lights = standardLights(scene, 'space', { shadows: false });
   const SUN = new THREE.Vector3(-0.38, 0.5, -0.78).normalize();
   lights.key.position.copy(SUN).multiplyScalar(600);
-  lights.key.intensity = 3.3;
-  lights.fill.color.setHex(0xffa864);
+  lights.key.intensity = 3.2;
+  // Planetshine: a warm bounce off fifteen hundred units of orange desert.
+  // Kept weak — at any real strength it turns a grey destroyer into a rusty one.
+  lights.fill.color.setHex(0xffb07a);
   lights.fill.position.set(-0.18, -0.95, -0.26).multiplyScalar(400);
-  lights.fill.intensity = 1.15;
+  lights.fill.intensity = 0.42;
   lights.rim.position.set(0.7, 0.2, 0.66).multiplyScalar(400);
   lights.rim.intensity = 0.95;
+  // The space preset's ground bounce is almost black, which leaves the whole
+  // underside of the destroyer unreadable. Lift it to a cold slate instead, so
+  // his belly stays grey rather than going either black or orange.
+  lights.hemi.groundColor.setHex(0x46536a);
+  lights.hemi.intensity = 0.72;
+  // A cold sidelight so his flank separates from the sky in the money shot.
+  const flank = new THREE.DirectionalLight(0x9fbde8, 0.55);
+  flank.position.set(0.85, -0.32, 0.4).multiplyScalar(400);
+  scene.add(flank);
 
   // -------------------------------------------------------------------- sky
   scene.add(nebulaBackdrop({ radius: 3900, colorA: 0x1c2647, colorB: 0x3a1a2c, density: 0.5 }));
@@ -206,29 +226,29 @@ export async function build(ctx) {
   const LIFT_TOP = BELLY + cv.halfH * 0.6;
 
   // ------------------------------------------------------------- her engines
-  const engines = mainEngines(corvette, cv, 7).map(
-    (p, i) =>
-      new Thruster({
-        color: KIT.engineBlue,
-        radius: cv.len * (i === 0 ? 0.042 : 0.026),
-        length: cv.len * 0.46,
-        position: [p.x, p.y, p.z],
-        dir: [0, 0, 1],
-      })
+  const engines = mainEngines(corvette, cv, 7).map((p, i) =>
+    thruster({
+      color: KIT.engineBlue,
+      radius: cv.len * (i === 0 ? 0.036 : 0.023),
+      length: cv.len * 0.4,
+      position: p,
+      halo: 1.5, // one tight core per bell, not seven overlapping suns
+      haloColor: 0x2c5a86,
+    })
   );
   for (const e of engines) corvette.add(e.object);
 
   // ...and his: the three great bells across the transom, throttled back once
   // he has her. Only the top row, or the pick lands on the trim units.
-  const sdEngines = mainEngines(destroyer, sd, 3, true).map(
-    (p) =>
-      new Thruster({
-        color: 0xcfeaff,
-        radius: sd.len * 0.036,
-        length: sd.len * 0.3,
-        position: [p.x, p.y, p.z],
-        dir: [0, 0, 1],
-      })
+  const sdEngines = mainEngines(destroyer, sd, 3, true).map((p) =>
+    thruster({
+      color: 0xcfeaff,
+      radius: sd.len * 0.032,
+      length: sd.len * 0.26,
+      position: p,
+      halo: 2.0,
+      haloColor: 0x2f5a80,
+    })
   );
   for (const e of sdEngines) destroyer.add(e.object);
 
@@ -238,11 +258,11 @@ export async function build(ctx) {
   destroyerRig.add(hangar.group);
 
   const beam = new Beam({
-    color: 0x9fe8ff,
-    radiusTop: cv.halfW * 0.75,
-    radiusBottom: hangar.width * 0.44,
+    color: 0x8fd8ff,
+    radiusTop: cv.halfW * 0.7,
+    radiusBottom: hangar.width * 0.4,
     height: 1,
-    opacity: 0.5,
+    opacity: 0.3,
   });
   beam.object.rotation.x = Math.PI; // local +y now runs downward, out of the hull
   beam.object.position.set(0, BELLY - 0.4, -HANGAR_BACK);
@@ -363,70 +383,79 @@ export async function build(ctx) {
   ctx.sfx(T.lift + 0.4, 'engine_rumble', { gain: 0.45, rate: 0.7 });
 
   // ----------------------------------------------------------------- camera
-  // Shot changes are 0.04s steps in the tracks, i.e. hard cuts at 24fps.
+  // Seven shots. The cuts are 0.05s steps in the tracks, i.e. hard cuts at
+  // 24fps, and every key here is on a shot boundary or inside one shot.
   //
-  // Shot 2 is the one that matters. The camera sits low and locked at z ≈ -152
-  // with her a speck 152 out; the destroyer's keel is 34 above the lens, so his
-  // nose crosses into the top of frame at about 9.3s and its elevation then
-  // decays towards the horizon while the lens cranes up after it. Grey hull
-  // therefore floods the frame from the top down and she is left in the last
-  // sliver of sky at the bottom, which is the composition the whole scene is
-  // for. Do not retime one of these tracks without the others.
+  // Shot 2 (8.2 – 14.1) is the one that matters, and it is pure geometry. The
+  // lens sits low and locked 268 out behind her, so she subtends about two
+  // degrees — a speck. The lowest point of the destroyer's hull sits at
+  // atan(BELLY - camera.y over the distance to his bow), which falls from about
+  // 15° as his prow crosses the top of frame at 9.3s to about 4.5° by 14.1s.
+  // Meanwhile the lens cranes up 13° and opens from 34mm-wide to 46. Grey hull
+  // therefore floods down from the top of frame until it holds 70% of it and she
+  // is left in the last sliver of sky at the bottom. Retiming any one of these
+  // three tracks without the other two will break the shot.
+  //
+  // The look targets during shot 2 are deliberately only ~100 units ahead of the
+  // lens: at 270 units out a target has to move 60 units to tilt the camera one
+  // degree, and that is not a track anyone can read.
   const CAM = {
     pos: [
-      [0, [20, 15, 74]],
-      [1.0, [18.4, 14, 22]],
-      [T.pass, [17.6, 13.2, -14]],
-      [2.6, [16.6, 11, -54]],
-      [5.0, [14.2, 8, -106]],
-      [T.shadow, [11.5, 4.4, -152]],
-      [10.6, [11.2, 4.3, -153]],
-      [12.4, [10.6, 4.2, -155]],
-      [14.1, [10.0, 4.1, -157]],
-      [T.under, [24, 6, -30]], // cut: under the hull
-      [17.4, [21, 6.6, -8]],
-      [T.hits, [26, 6, -46]], // cut: her flank
-      [21.2, [23, 5.4, -34]],
-      [T.slew, [44, 2.5, -70]], // cut: wider, she is slewing
-      [25.3, [39, 3.2, -56]],
-      [T.lock, [52, 6, -34]], // cut: the beam
-      [30.2, [46, 7.5, -18]],
-      [T.throat, [30, 12, -2]], // cut: the mouth
-      [END, [26, 14.5, 10]],
+      [0, [22, 16, 90]],
+      [1.0, [20, 15, 34]],
+      [T.pass, [18.6, 13, -26]],
+      [2.6, [17.8, 11, -76]],
+      [5.4, [16.4, 7.6, -190]],
+      [T.shadow, [15.5, 5.2, -268]],
+      [10.0, [15.5, 5.2, -269]],
+      [12.0, [15.4, 5.2, -270]],
+      [14.1, [15.3, 5.2, -271]],
+      [T.under, [30, 6, -60]], // cut: under the hull
+      [17.4, [22, 6.4, -52]],
+      [T.hits, [30, 6, -44]], // cut: her flank
+      [21.2, [26, 5.6, -30]],
+      [T.slew, [48, 3, -66]], // cut: wider, she is slewing
+      [25.3, [43, 3.6, -52]],
+      [T.lock, [46, 5, -40]], // cut: the beam
+      [30.2, [40, 7, -20]],
+      [T.throat, [26, 12, 4]], // cut: the mouth
+      [END, [23, 13.5, 15]],
     ],
     look: [
-      [0, [10, 6, 430]],
-      [1.0, [7, 4.5, 300]],
-      [T.pass, [1.5, 1.5, 44]],
-      [2.6, [0, 0.6, 10]],
-      [5.0, [0, 0.8, 5]],
-      [T.shadow, [0, 0.8, 3]],
-      [10.6, [0, 3.4, 7]],
-      [12.4, [0, 12, 12]],
-      [14.1, [0, 27, 18]],
-      [T.under, [0, 34, 34]],
-      [17.4, [0, 62, 26]],
-      [T.hits, [0, 4.5, 6]],
-      [21.2, [0, 5.5, 4]],
-      [T.slew, [0, 12, -8]],
-      [25.3, [0, 14, -4]],
-      [T.lock, [0, 19, -8]],
-      [30.2, [0, 24, -2]],
-      [T.throat, [0, 34, -14]],
-      [END, [0, 36, -8]],
+      [0, [12, 7, 440]],
+      [1.0, [8, 5, 260]],
+      [T.pass, [0, 1, 24]],
+      [2.6, [0, 0.8, 12]],
+      [5.4, [0, 0.9, 6]],
+      [T.shadow, [0, 3, -168]],
+      [10.0, [0, 12, -169]],
+      [12.0, [0, 24, -170]],
+      [14.1, [0, 27, -171]],
+      [T.under, [0, 57, 40]],
+      [17.4, [0, 66, 48]],
+      [T.hits, [0, 8, 6]],
+      [21.2, [0, 9, 4]],
+      [T.slew, [0, 14, -6]],
+      [25.3, [0, 15, -2]],
+      [T.lock, [0, 15, 10]],
+      [30.2, [0, 22, 16]],
+      [T.throat, [0, 30, 20]],
+      [END, [0, 32, 24]],
     ],
     fov: [
-      [0, 44],
-      [2.6, 40],
-      [5.0, 34],
-      [T.shadow, 32],
-      [10.6, 34],
-      [12.4, 37],
-      [14.1, 40],
+      [0, 46],
+      [1.0, 46],
+      [T.pass, 52],
+      [2.6, 44],
+      [5.4, 36],
+      [T.shadow, 34],
+      [10.0, 36],
+      [12.0, 41],
+      [14.1, 46],
       [T.under, 62],
-      [17.4, 60],
-      [T.hits, 34],
-      [21.2, 32],
+      [17.4, 64],
+      [T.hits, 40],
+      [21.2, 38],
       [T.slew, 40],
       [T.lock, 45],
       [30.2, 44],
@@ -465,9 +494,11 @@ export async function build(ctx) {
 
       const c = corvetteAt(t);
       // The beam takes over: she is dragged under the mouth and lifted into it,
-      // losing her yaw as the field straightens her.
+      // losing her yaw as the field straightens her. Most of the rise happens in
+      // shot 6 and the last fifth creeps on through shot 7, so the final frame
+      // still has her moving.
       const align = ease.smooth(ease.range(t, T.lock, 30.5));
-      const lift = ease.smoother(ease.range(t, T.lift, 33.6));
+      const lift = 0.82 * ease.smooth(ease.range(t, T.lift, 30.6)) + 0.18 * ease.smooth(ease.range(t, 30.6, END));
       cvPos.set(
         ease.lerp(c.x, hangarPos.x, align),
         c.y + lift * LIFT_TOP,
@@ -501,7 +532,7 @@ export async function build(ctx) {
       const gap = Math.max(0.5, hangarPos.y - cvPos.y - cv.halfH * 0.35);
       beam.object.visible = grab > 0.01;
       beam.object.scale.set(1, gap, 1);
-      beam.mesh.material.uniforms.uOpacity.value = 0.5 * grab;
+      beam.mesh.material.uniforms.uOpacity.value = 0.3 * grab;
       beam.update(t);
       hangar.update(t, grab);
 
@@ -509,14 +540,33 @@ export async function build(ctx) {
       stars.update(t);
       planet.update(t);
       bolts.update(t, camera);
+      // Once the lens is under the hull the streaks stop reading as speed and
+      // start reading as dirt on the glass, so fade them out with the chase.
       dust.object.position.copy(camera.position);
-      dust.update(travelAt(t), airspeedAt(t));
+      dust.update(travelAt(t), airspeedAt(t), 1 - 0.75 * ease.smooth(ease.range(t, 15, 22)));
     },
   };
 }
 
 /** Which of her bells takes the hit that kills the drive. */
 const DEAD_BELL = 5;
+
+/**
+ * A Thruster with its halo brought under control.
+ *
+ * fx.Thruster sizes its sprite at 4.5x the cone radius and drives it at 0.95
+ * opacity, which is right for a single fighter exhaust and catastrophic for a
+ * bank of eleven: the halos overlap into one white ball the size of the ship and
+ * bloom eats the hull. `base.radius` is only read when scaling the sprite, so
+ * shrinking it afterwards decouples the halo from the flame, and a dimmer sprite
+ * colour pulls the whole thing back under the bloom threshold.
+ */
+function thruster({ color, radius, length, position, halo = 2, haloColor = 0x335f88 }) {
+  const th = new Thruster({ color, radius, length, position: [position.x, position.y, position.z], dir: [0, 0, 1] });
+  th.base.radius = (radius * halo) / 4.5;
+  th.sprite.material.color.setHex(haloColor);
+  return th;
+}
 
 // ---------------------------------------------------------------------------
 // Measuring whatever model turned up
@@ -598,7 +648,7 @@ class SpeedDust {
     this._d = new THREE.Object3D();
     this.object = this.mesh;
   }
-  update(travel, speed) {
+  update(travel, speed, gain = 1) {
     const d = this._d;
     const len = THREE.MathUtils.clamp(speed * 0.055, 0.8, 9);
     for (let i = 0; i < this.count; i++) {
@@ -611,7 +661,7 @@ class SpeedDust {
       this.mesh.setMatrixAt(i, d.matrix);
     }
     this.mesh.instanceMatrix.needsUpdate = true;
-    this.mesh.material.opacity = 0.42 * THREE.MathUtils.clamp(speed / AIR, 0.12, 1);
+    this.mesh.material.opacity = 0.2 * gain * THREE.MathUtils.clamp(speed / AIR, 0.12, 1);
   }
 }
 
@@ -759,12 +809,12 @@ function buildPlanet(sunDir) {
  * the destroyer.
  */
 function buildHangar(cv) {
-  const W = Math.round(cv.halfW * 2 + 7); // studs across the opening
-  const D = Math.round(cv.len * 1.34); // ...and along it, so she fits
+  const W = Math.round(cv.halfW * 2 + 8); // studs across the opening
+  const D = Math.round(cv.len * 1.15); // ...and along it, so she fits
   const b = new Bricks({ studSegments: 6 });
   const grey = COLORS.darkBluishGray;
   const pale = COLORS.lightBluishGray;
-  const lit = { studs: false, finish: 'glow', emissive: 0xffe3a8, emissiveIntensity: 2.6 };
+  const lit = { studs: false, finish: 'glow', emissive: 0xffcf82, emissiveIntensity: 1.1 };
 
   // Housing: a shallow box standing 2 studs below the keel, open at the bottom.
   const DROP = -5; // plates below the belly plane
@@ -782,19 +832,24 @@ function buildHangar(cv) {
       b.box(sx * (W / 2) - (sx > 0 ? 0 : 2.2), DROP - 1.2, z, 2.2, 3, 1.6, grey, { studs: false });
     }
   }
-  // The mouth: opaque and almost black, right at the belly plane.
-  b.tile(-W / 2, 0.1, -D / 2, W, D, 0x070a0e, { studs: false });
-  // Runway strips just below it, and a lit rim around the outside of the lip.
-  for (let i = 0; i < 5; i++) {
-    b.box(-W / 2 + 2, -0.5, -D / 2 + 3 + (i * (D - 6)) / 4, W - 4, 0.6, 0.5, COLORS.transYellow, lit);
+  // The mouth: opaque, right at the belly plane. Almost black, but not black —
+  // a true void reads as a hole in the render rather than a deep bay.
+  b.tile(-W / 2, 0.1, -D / 2, W, D, 0x1b2028, { studs: false });
+  // Runway lights just below it, in short dashes: one long emissive bar at this
+  // scale is a lightsabre lying on the hull.
+  for (let i = 0; i < 6; i++) {
+    const z = -D / 2 + 4 + (i * (D - 8)) / 5;
+    for (const sx of [-1, 1]) b.box(sx * (W / 2 - 4.4) - 1.4, -0.5, z, 2.8, 0.7, 0.5, COLORS.transYellow, lit);
   }
   for (const sx of [-1, 1]) {
-    b.box(sx * (W / 2 + 3) - (sx > 0 ? 0 : 0.9), DROP - 0.4, -D / 2 - 3, 0.9, D + 6, 0.9, COLORS.transYellow, lit);
+    for (let z = -D / 2 - 2; z < D / 2 + 2; z += 7) {
+      b.box(sx * (W / 2 + 3) - (sx > 0 ? 0 : 0.9), DROP - 0.4, z, 0.9, 3.4, 0.9, COLORS.transYellow, lit);
+    }
   }
 
   const group = new THREE.Group();
   group.add(b.build({ castShadow: false, receiveShadow: false }));
-  const spill = glowSprite(0xffdca4, W * 1.8, 0.35);
+  const spill = glowSprite(0x6c5334, W * 1.6, 0.5);
   spill.position.y = -1.2;
   group.add(spill);
 
@@ -802,8 +857,8 @@ function buildHangar(cv) {
     group,
     width: W,
     update(t, grab) {
-      spill.material.opacity = 0.28 + 0.4 * grab + 0.04 * Math.sin(t * 3.1);
-      spill.scale.setScalar(W * (1.7 + 0.5 * grab));
+      spill.material.opacity = 0.35 + 0.35 * grab + 0.04 * Math.sin(t * 3.1);
+      spill.scale.setScalar(W * (1.5 + 0.4 * grab));
     },
   };
 }

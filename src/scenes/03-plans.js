@@ -72,14 +72,15 @@ export async function build(ctx) {
   scene.add(interior);
   const intLights = standardLights(interior, 'interior', { shadowRadius: 26, shadowMap: 2048 });
   intLights.key.position.set(10, 34, 26);
-  intLights.key.intensity = 1.7;
-  intLights.fill.intensity = 0.75;
-  intLights.hemi.intensity = 0.85;
+  intLights.key.intensity = 1.45;
+  intLights.fill.intensity = 0.55;
+  intLights.hemi.intensity = 0.62;
 
   // Ceiling practicals: the corridor is lit by its own strip lights, so the
-  // deck needs real point sources under them.
+  // deck needs real point sources under them. Kept low — white ABS walls under
+  // ACES clip to paper long before the shot looks bright.
   for (const z of [2, -8, -18, -28]) {
-    const lamp = new THREE.PointLight(0xffeccd, 11, 30, 2);
+    const lamp = new THREE.PointLight(0xffeccd, 6.5, 26, 2);
     lamp.position.set(0, 9.4, z);
     interior.add(lamp);
   }
@@ -93,21 +94,31 @@ export async function build(ctx) {
   interior.add(alarmGlow);
 
   // Warm practical bounce off the deck right where the two of them are.
-  const deckLamp = new THREE.PointLight(0xffe6c0, 12, 26, 2);
+  const deckLamp = new THREE.PointLight(0xffe6c0, 6, 20, 2);
   deckLamp.position.set(1.4, 5.2, -5.4);
   interior.add(deckLamp);
 
-  // The protocol droid is gold, and gold needs something to reflect.
-  const goldLamp = new THREE.PointLight(0xffe0a0, 9, 18, 2);
-  goldLamp.position.set(0.6, 5.6, -12.0);
+  // The protocol droid is gold, and gold needs something to reflect. Set back
+  // from him so the metal picks up a highlight instead of a blown white face.
+  const goldLamp = new THREE.PointLight(0xffe0a0, 3.2, 14, 2);
+  goldLamp.position.set(1.6, 4.6, -12.6);
   interior.add(goldLamp);
+
+  // A soft eye light on the camera side of the corridor. Printed minifig faces
+  // are flat decals: without a source facing them they go to shadow and the
+  // character stops having an expression.
+  const faceLamp = new THREE.PointLight(0xf4ecdd, 4.0, 16, 2);
+  faceLamp.position.set(-4.0, 5.4, -3.4);
+  interior.add(faceLamp);
 
   interior.add(buildCorridor());
 
   // --- the cast ------------------------------------------------------------
   const leia = await makeLeia({ seed: 11.3 });
   leia.root.position.set(2.9, 0, -5.5);
-  leia.root.rotation.y = -1.84; // kneeling, turned to face the droid
+  // Just short of square to the droid: the last quarter turn is done by her
+  // head, which keeps a printed minifig face pointed at the lens.
+  leia.root.rotation.y = -1.58;
   interior.add(leia.root);
 
   const r2 = await makeAstromech({ seed: 41.3 });
@@ -173,11 +184,14 @@ export async function build(ctx) {
 
   // The corvette hangs high and left, small and white against empty space, so
   // it never has to compete with the destroyer's hull for the eye.
-  const CORVETTE_AT = new THREE.Vector3(-96, 78, -250);
+  const CORVETTE_AT = new THREE.Vector3(-78, 64, -212);
   const corvette = ships?.buildCorvette ? await ships.buildCorvette() : fallbackCorvette();
-  corvette.scale.setScalar(1.6);
+  corvette.scale.setScalar(1.75);
   corvette.position.copy(CORVETTE_AT);
-  corvette.rotation.set(0.06, -1.05, 0.24);
+  // Pitched away from the lens: a glossy white deck square-on to the key
+  // throws a specular hotspot that blooms into a hole in the frame.
+  corvette.rotation.order = 'YXZ';
+  corvette.rotation.set(-0.12, -2.35, 0.26);
   launchSet.add(corvette);
 
   // Scaled to the real 10:1 ratio against the corvette, so the wedge reads as
@@ -186,22 +200,25 @@ export async function build(ctx) {
   // yawed across the lens and rolled so the lit dorsal plain tips toward us.
   const destroyer = ships?.buildStarDestroyer ? await ships.buildStarDestroyer() : fallbackStarDestroyer();
   destroyer.scale.setScalar(2.4);
-  destroyer.position.set(60, -30, -380);
+  destroyer.position.set(52, 4, -352);
   destroyer.rotation.order = 'YXZ';
-  destroyer.rotation.set(0.05, -1.9, -0.45);
+  destroyer.rotation.set(0.05, -1.76, -0.42);
   launchSet.add(destroyer);
 
   // The tractor beam that makes the corvette a *captured* ship: it reaches up
   // out of the destroyer's dorsal plain to the runner above.
-  const beamFrom = new THREE.Vector3(-10, -8, -330);
+  // Built from the projector outwards: Beam is brightest and narrowest at its
+  // base, and it is additive with tone mapping off, so anchoring the wide end
+  // on the corvette would wrap the ship in a blown white ball.
+  const beamFrom = new THREE.Vector3(-14, 22, -320);
   const beamTo = CORVETTE_AT.clone();
-  const tractor = new Beam({ color: 0x9fe0ff, radiusTop: 5, radiusBottom: 16, height: beamFrom.distanceTo(beamTo), opacity: 0.055 });
-  tractor.object.position.copy(beamTo);
-  tractor.object.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), beamFrom.clone().sub(beamTo).normalize());
+  const tractor = new Beam({ color: 0x9fe0ff, radiusTop: 15, radiusBottom: 4, height: beamFrom.distanceTo(beamTo), opacity: 0.05 });
+  tractor.object.position.copy(beamFrom);
+  tractor.object.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), beamTo.clone().sub(beamFrom).normalize());
   launchSet.add(tractor.object);
 
   // The blow-out at the pod hatch.
-  const EJECT_AT = [-84, 70, -238];
+  const EJECT_AT = [-68, 58, -204];
   const ejectSparks = new Sparks({
     t0: T_EJECT + 0.16,
     life: 1.5,
@@ -269,10 +286,21 @@ export async function build(ctx) {
   facing.position.set(-3.0, 5.0, -12.0);
   turretSet.add(facing);
 
+  // He stands at the rail, back to us, a shape cut out of the planet. Placed
+  // just inside the left edge of frame so the composition still opens on the
+  // window rather than on him.
   const officer = await makeImperialOfficer({ seed: 19.6 });
-  officer.root.position.set(-4.1, 0, 1.6);
-  officer.root.rotation.y = Math.PI;
+  officer.root.position.set(-4.4, 0, -3.2);
+  // Not quite square away from us: the quarter turn puts the peak of his cap
+  // and the line of his jaw into the silhouette instead of a bare skull.
+  officer.root.rotation.y = Math.PI - 0.62;
+  officer.root.scale.setScalar(1.5); // the gun deck is not minifig scale
   turretSet.add(officer.root);
+
+  // A cold edge on his shoulders and cap so he does not vanish into the box.
+  const officerRim = new THREE.PointLight(0x9fc8ff, 3.4, 12, 2);
+  officerRim.position.set(-8.4, 8.4, -7.6);
+  turretSet.add(officerRim);
 
   const planet = buildPlanet();
   planet.position.set(70, TURRET_Y - 420, -1500);
@@ -302,10 +330,10 @@ export async function build(ctx) {
   entrySet.visible = false;
   space.add(entrySet);
   entrySet.add(buildEntryGround());
-  const entryKey = new THREE.DirectionalLight(0xffb066, 2.6);
-  entryKey.position.set(-60, 30, 40);
+  const entryKey = new THREE.DirectionalLight(0xffeacc, 5.0);
+  entryKey.position.set(-260, 120, 180);
   entrySet.add(entryKey);
-  const entryHemi = new THREE.HemisphereLight(0xffc79a, 0x7a4322, 1.1);
+  const entryHemi = new THREE.HemisphereLight(0xffe4c4, 0xd08a50, 3.0);
   entrySet.add(entryHemi);
 
   // =========================================================================
@@ -345,14 +373,14 @@ export async function build(ctx) {
    * exterior sub-sets, jumping between them exactly on the cuts.
    */
   const POD_PATH = [
-    [T_EJECT, [-84, 70, -238]],
-    [T_EJECT + 0.7, [-76, 64, -226]],
-    [T_EJECT + 3.2, [-40, 34, -166]],
-    [T_TURRET - 0.001, [10, -6, -84]],
+    [T_EJECT, [-68, 58, -204]],
+    [T_EJECT + 0.7, [-62, 53, -194]],
+    [T_EJECT + 3.2, [-32, 28, -146]],
+    [T_TURRET - 0.001, [12, -8, -76]],
     [T_TURRET, [-30, TURRET_Y - 16, -290]],
     [T_ENTRY - 0.001, [-8, TURRET_Y - 64, -980]],
-    [T_ENTRY, [-16, ENTRY_Y + 46, -30]],
-    [D, [34, ENTRY_Y - 26, -104]],
+    [T_ENTRY, [-16, ENTRY_Y + 74, -30]],
+    [D, [34, ENTRY_Y - 4, -104]],
   ];
   const podPath = (tt) => ease.track(POD_PATH, tt, ease.smooth);
 
@@ -374,10 +402,12 @@ export async function build(ctx) {
   // Interior
   // -------------------------------------------------------------------------
   function updateInterior(t) {
-    scene.background.setHex(0x12171f);
-    scene.fog.color.setHex(0x12171f);
-    scene.fog.near = 34;
-    scene.fog.far = 110;
+    // Close fog: the corridor's far end is lit by its own strips, and without
+    // this it stacks up into a white wash behind whoever we are shooting.
+    scene.background.setHex(0x0e1219);
+    scene.fog.color.setHex(0x0e1219);
+    scene.fog.near = 12;
+    scene.fog.far = 46;
 
     // Emergency lamp: a slow double pulse, brighter once she starts talking.
     const beat = Math.pow(Math.max(0, Math.sin(t * 1.9)), 3);
@@ -385,7 +415,7 @@ export async function build(ctx) {
     alarm.intensity = (2.5 + 16 * beat) * urgency;
     alarmGlow.material.opacity = (0.16 + 0.7 * beat) * urgency;
     alarmGlow.scale.setScalar(2.6 + 2.4 * beat);
-    deckLamp.intensity = 9 + 3 * Math.sin(t * 0.7);
+    deckLamp.intensity = 5.4 + 1.4 * Math.sin(t * 0.7);
 
     // --- Leia: kneeling beside the droid.
     kneel(leia, t);
@@ -509,7 +539,7 @@ export async function build(ctx) {
     // --- the pod's path, one continuous curve through all three shots.
     const p = podPath(t);
     podRig.position.set(p[0], p[1], p[2]);
-    podRig.scale.setScalar(entry ? 1.15 : 1);
+    if (!turret) podRig.scale.setScalar(entry ? 1.15 : 1);
 
     if (launch) {
       // Kicked sideways off the hull and tumbling.
@@ -544,9 +574,16 @@ export async function build(ctx) {
       bolts.update(t, camera);
       console1.intensity = 5 + 3 * Math.sin(t * 3.1);
       poseOfficer(t);
+      // Four hundred units out the pod is a dozen pixels of grey. It is blown
+      // up here and shrunk back over the beat, so it still *dwindles* while
+      // staying legible; the halo is scaled by distance to hold apparent size.
+      const away = ease.range(t, T_TURRET, T_ENTRY);
+      podRig.scale.setScalar(ease.lerp(3.4, 2.4, away));
       const dist = camera.position.distanceTo(podRig.position);
-      podMarker.material.opacity = 0.3;
-      podMarker.scale.setScalar(dist * 0.032);
+      // The halo fades out as it goes: early on it is a target for the guns,
+      // by the end the pod is meant to be a speck against the planet.
+      podMarker.material.opacity = ease.lerp(0.36, 0.10, away);
+      podMarker.scale.setScalar(dist * 0.05);
     } else {
       podMarker.material.opacity = 0;
     }
@@ -572,8 +609,8 @@ export async function build(ctx) {
       // like a wall rather than a prop.
       tractor.update(t);
       cameraRig(camera, t, {
-        pos: [[T_EJECT, [10, 22, 70]], [T_TURRET, [-6, 14, 54]]],
-        look: [[T_EJECT, [-58, 46, -230]], [T_EJECT + 3.4, [-30, 20, -170]], [T_TURRET, [8, -8, -110]]],
+        pos: [[T_EJECT, [16, 26, 62]], [T_TURRET, [-2, 16, 48]]],
+        look: [[T_EJECT, [-46, 44, -200]], [T_EJECT + 3.4, [-24, 22, -156]], [T_TURRET, [10, -6, -104]]],
         fov: [[T_EJECT, 40], [T_TURRET, 38]],
         shake: [[T_EJECT, 0], [T_EJECT + 0.06, 0.5], [T_EJECT + 1.4, 0]],
         ease: ease.smooth,
@@ -686,8 +723,8 @@ function buildCorridor() {
     b.box(-2, WALL_TOP - 0.9, z + 0.5, 4, 3, 1, COLORS.transClear, {
       studs: false,
       finish: 'glossy',
-      emissive: 0xfff0d2,
-      emissiveIntensity: 2.4,
+      emissive: 0xffeccd,
+      emissiveIntensity: 1.1,
     });
   }
 
@@ -782,7 +819,7 @@ function kneel(fig, t) {
   fig.legR.rotation.x = 0.95;
   fig.torso.position.y = 2.08;
   fig.torso.rotation.set(0.14, -0.12, 0);
-  fig.head.rotation.set(0.22, 0.14, 0);
+  fig.head.rotation.set(0.22, -0.28, 0);
 }
 
 /** C-3PO wringing his hands in front of him. */
@@ -807,18 +844,21 @@ function buildTurret() {
   const black = COLORS.trueBlack;
   const grey = COLORS.darkBluishGray;
 
-  // Deck, ceiling and the two side walls, all boxed around the camera.
-  b.tile(-11, -1, -6, 22, 20, dark);
-  b.panel(-11, 23, -6, 22, 20, 2, dark);
-  for (const sx of [-1, 1]) b.panel(sx * 9, 0, -6, 2, 20, 23, dark);
-  b.panel(-11, 0, 12, 22, 2, 23, black); // wall behind the camera
+  // Deck, ceiling and the two side walls, all boxed around the camera. The
+  // opening is deliberately wider than the lens so its left and right edges
+  // fall outside frame: the shot is a hole in a dark room, not a picture of a
+  // window.
+  b.tile(-14, -1, -6, 28, 20, dark);
+  b.panel(-14, 31, -6, 28, 20, 2, dark);
+  for (const sx of [-1, 1]) b.panel(sx * 12, 0, -6, 2, 20, 31, dark);
+  b.panel(-14, 0, 12, 28, 2, 31, black); // wall behind the camera
 
   // Window: a wide opening with heavy mullions. Only two of them cross the
   // glass, and they are kept off centre so the planet gets one clear pane.
-  b.panel(-11, 18, -6.6, 22, 1.4, 7, dark); // header
-  b.panel(-11, -1, -6.6, 22, 1.4, 4, dark); // sill
-  for (const x of [-9.8, -6.2, 6.2, 9.8]) b.panel(x - 0.4, 3, -6.7, 0.8, 1.6, 15, dark);
-  b.panel(-11, 2.6, -6.5, 22, 1.1, 0.4, grey);
+  b.panel(-14, 24, -6.6, 28, 1.4, 7, dark); // header
+  b.panel(-14, -1, -6.6, 28, 1.4, 4, dark); // sill
+  for (const x of [-8.5, 8.5]) b.panel(x - 0.4, 3, -6.7, 0.8, 1.6, 21, dark);
+  b.panel(-14, 2.6, -6.5, 28, 1.1, 0.4, grey);
 
   // Console bank under the window, with lit readouts.
   b.panel(3.6, 0, -5.4, 5.0, 3.0, 5, black);
@@ -835,6 +875,9 @@ function buildTurret() {
   for (let i = 0; i < 6; i++) {
     b.panel(-9 + i * 3.2, 6 + (i % 2) * 5, 11.2, 2.4, 0.8, 4, i % 2 ? grey : black);
   }
+  // A low rail the officer stands at, which gives his silhouette a base line.
+  b.panel(-9.5, 12, -5.4, 8, 0.6, 0.6, grey);
+  for (const x of [-9.2, -2.1]) b.panel(x, 0, -5.5, 0.6, 0.6, 12, grey);
   return b.build();
 }
 
@@ -855,12 +898,12 @@ function buildPlanet() {
     g.fillStyle = `rgb(${r | 0},${gg | 0},${bb | 0})`;
     g.fillRect(0, y, S, 1);
   }
-  for (let i = 0; i < 240; i++) {
+  for (let i = 0; i < 620; i++) {
     const x = hash11(i, 71) * S;
     const y = hash11(i, 72) * c.height;
-    const r = 6 + hash11(i, 73) * 34;
+    const r = 3 + hash11(i, 73) * 16;
     const dark = hash11(i, 74) > 0.5;
-    g.globalAlpha = 0.14 + hash11(i, 75) * 0.16;
+    g.globalAlpha = 0.07 + hash11(i, 75) * 0.10;
     g.fillStyle = dark ? '#7a4022' : '#f0c58a';
     g.beginPath();
     g.ellipse(x, y, r, r * 0.55, 0, 0, Math.PI * 2);
@@ -916,6 +959,15 @@ function vnoise2(x, z, salt = 0) {
   return lo + (hi - lo) * v;
 }
 
+/** Sand from shadowed trough (0) to sunlit crest (1), as a packed hex. */
+function sandTone(u) {
+  const k = ease.clamp(u, 0, 1);
+  const r = Math.round(0xb4 + (0xff - 0xb4) * k);
+  const g = Math.round(0x8e + (0xf0 - 0x8e) * k);
+  const b = Math.round(0x62 + (0xd2 - 0x62) * k);
+  return (r << 16) | (g << 8) | b;
+}
+
 /** Dune height in [0,1]: two octaves plus a ridge term for the crest lines. */
 function duneHeight(x, z, salt = 0) {
   const a = vnoise2(x * 0.72, z * 0.5, salt);
@@ -954,20 +1006,28 @@ function buildEntryGround() {
   sky.position.y = 40;
   g.add(sky);
 
+  // Cells are long in x and shallow in z, because real dunes are transverse
+  // ridges: a square grid at this distance reads as a chequerboard, whereas
+  // long bars read as crest lines marching away from the lens.
   const b = new Bricks({ studSegments: 4 });
-  const N = 26; // cells per side
-  const CELL = 110; // studs
-  const HALF = (N * CELL) / 2;
-  const BASE = -260;
-  for (let ix = 0; ix < N; ix++) {
-    for (let iz = 0; iz < N; iz++) {
-      const x = ix * CELL - HALF;
-      const z = iz * CELL - HALF - 500; // biased away from the lens
-      const k = duneHeight(ix * 0.5, iz * 0.5, 7);
-      const h = 8 + k * 150; // plates
-      // Crests take the pale sand, troughs the darker damp sand underneath.
-      const c = k > 0.62 ? COLORS.tan : k > 0.36 ? COLORS.darkTan : COLORS.copper;
-      b.box(x, BASE, z, CELL, CELL, h, c, { studs: false });
+  const NX = 20;
+  const NZ = 46;
+  const CX = 240;
+  const CZ = 80;
+  const BASE = -150;
+  for (let ix = 0; ix < NX; ix++) {
+    for (let iz = 0; iz < NZ; iz++) {
+      const x = ix * CX - (NX * CX) / 2;
+      const z = iz * CZ - NZ * CZ + 400; // the field lies ahead of the lens
+      // Height varies fast across the ridges and slowly along them.
+      const k = duneHeight(ix * 0.34, iz * 1.05, 7);
+      const h = 10 + k * 110; // plates
+      // Every top face has the same normal, so lighting cannot tell one cell
+      // from the next. The modelling is painted in instead: pale on the way
+      // up to a crest, dark on the lee side falling away from it.
+      const kPrev = duneHeight(ix * 0.34, (iz - 1) * 1.05, 7);
+      const slope = ease.clamp((k - kPrev) * 2.6 + 0.5, 0, 1);
+      b.box(x, BASE, z, CX, CZ, h, sandTone(k * 0.45 + slope * 0.55), { studs: false });
     }
   }
   g.add(b.build({ castShadow: false }));
@@ -978,17 +1038,19 @@ function buildEntryGround() {
 function buildSheath() {
   const group = new THREE.Group();
   // Bow shock: a squashed additive shell ahead of the heat shield.
+  // A hard-edged additive sphere reads as a plastic disc, so the shock front
+  // is a back-side shell: only its silhouette accumulates, which feathers.
   const shell = new THREE.Mesh(
-    new THREE.SphereGeometry(3.1, 20, 14),
-    additiveMaterial(0xffb14d, { opacity: 0.55, side: THREE.FrontSide })
+    new THREE.SphereGeometry(2.9, 20, 14),
+    additiveMaterial(0xffb14d, { opacity: 0.20, side: THREE.BackSide })
   );
-  shell.scale.set(1.35, 1.35, 0.72);
-  shell.position.z = 2.0;
+  shell.scale.set(1.3, 1.3, 0.7);
+  shell.position.z = 1.9;
   group.add(shell);
 
-  const core = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 12), additiveMaterial(0xfff0c0, { opacity: 0.55 }));
+  const core = new THREE.Mesh(new THREE.SphereGeometry(1.3, 16, 12), additiveMaterial(0xfff0c0, { opacity: 0.22 }));
   core.scale.set(1.05, 1.05, 0.4);
-  core.position.z = 2.9;
+  core.position.z = 2.7;
   group.add(core);
 
   // The trail: two nested additive plumes, the outer one very faint, so the
@@ -1003,8 +1065,8 @@ function buildSheath() {
     trail.add(m);
     return m;
   };
-  const plumeInner = plume(1.5, 34, 0xffb45c, 0.24);
-  const plumeOuter = plume(3.4, 62, 0xff7a30, 0.10);
+  const plumeInner = plume(0.9, 40, 0xffd08c, 0.09);
+  const plumeOuter = plume(2.2, 84, 0xff9a48, 0.035);
 
   const flare = glowSprite(0xffc070, 12, 0.8);
   flare.position.z = 2.2;
@@ -1031,13 +1093,13 @@ function buildSheath() {
     update(s) {
       const u = ease.range(s, 0, 2.6);
       const flick = 0.86 + 0.14 * Math.sin(s * 31) * Math.sin(s * 17.3);
-      shell.material.opacity = 0.5 * u * flick;
-      core.material.opacity = 0.55 * u * flick;
-      plumeInner.material.opacity = 0.26 * u * flick;
-      plumeOuter.material.opacity = 0.11 * u * flick;
+      shell.material.opacity = 0.22 * u * flick;
+      core.material.opacity = 0.24 * u * flick;
+      plumeInner.material.opacity = 0.10 * u * flick;
+      plumeOuter.material.opacity = 0.04 * u * flick;
       trail.scale.set(1, 1, 0.5 + 0.8 * u);
-      flare.material.opacity = 0.7 * u * flick;
-      flare.scale.setScalar(7 + 6 * u);
+      flare.material.opacity = 0.5 * u * flick;
+      flare.scale.setScalar(6 + 5 * u);
       sparks.update(s);
     },
   };

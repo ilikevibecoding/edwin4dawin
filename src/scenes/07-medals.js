@@ -541,6 +541,8 @@ function buildEndCard() {
   // Parented to the camera, so it is always centred and always on top.
   const group = new THREE.Group();
   group.position.set(0, 0.3, -12);
+  // Kept visible with zero opacity from frame one so its textures upload at
+  // startup rather than the first time the card appears.
 
   const plate = (text, opts) => {
     const { texture } = makeTextTexture({
@@ -593,7 +595,6 @@ function buildEndCard() {
       const b = ease.range(t, DISSOLVE + 3.9, DISSOLVE + 5.6);
       title.material.opacity = a;
       sub.material.opacity = b * 0.95;
-      group.visible = a > 0.01;
       const sc = ease.lerp(0.95, 1, ease.outCubic(a));
       title.scale.setScalar(sc);
     },

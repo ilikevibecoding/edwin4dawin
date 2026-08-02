@@ -63,6 +63,13 @@ export async function build(ctx) {
   // and let the cyan do the work.
   rigs.interior.key.color.setHex(0x9fc0e8);
   rigs.interior.hemi.color.setHex(0x4a6484);
+  // Vacuum has no bounce. Trimming the fill and hemisphere gives the station a
+  // real terminator instead of the evenly lit ping-pong ball you get by default.
+  rigs.space.key.intensity = 2.5;
+  rigs.space.hemi.intensity = 0.2;
+  rigs.space.fill.intensity = 0.15;
+  rigs.space.rim.intensity = 0.4;
+  rigs.space.ambient.intensity = 0.07;
 
   const chars = await tryCharacters();
 
@@ -116,7 +123,7 @@ export async function build(ctx) {
     },
     {
       start: 3.35,
-      pos: [[3.35, [-16, 2.8, 19.5]], [T_ZOOM, [-12.5, 4.2, 16.5]]],
+      pos: [[3.35, [-16, 3.8, 22]], [T_ZOOM, [-12.5, 5.0, 18.5]]],
       look: [[3.35, [0, 7.6, 0]], [T_ZOOM, [0, 8.0, 0]]],
       fov: [[3.35, 43]],
       handheld: 0.05,
@@ -132,19 +139,29 @@ export async function build(ctx) {
     // open launch door beyond them, then a low side-on pass as they leave.
     {
       start: T_HANGAR,
-      pos: [[T_HANGAR, [-30, 5.4, -34]], [T_LAUNCH, [-19, 4.4, -18]]],
-      look: [[T_HANGAR, [-2, 5.0, 4]], [T_LAUNCH, [3, 4.6, 12]]],
+      pos: [[T_HANGAR, [-33, 6.2, -46]], [T_LAUNCH, [-29, 5.4, -38]]],
+      look: [[T_HANGAR, [-3, 5.0, 2]], [T_LAUNCH, [0, 4.8, 7]]],
       fov: [[T_HANGAR, 50], [T_LAUNCH, 46]],
       handheld: 0.09,
     },
-    // Reverse angle from down-range, looking back at the deck: the fighters
-    // light up, come at the lens, and the camera tilts up to follow them out.
+    // Three-quarter from beside the near launch lane: the fighters light up and
+    // sweep past the lens.
     {
       start: T_LAUNCH,
-      pos: [[T_LAUNCH, [-30, 2.8, 20]], [T_SPACE, [-25, 7.5, 27]]],
-      look: [[T_LAUNCH, [-7, 4.2, -6]], [14.9, [-2, 7, 18]], [T_SPACE, [0, 22, 76]]],
-      fov: [[T_LAUNCH, 44], [T_SPACE, 50]],
-      shake: [[T_LAUNCH, 0], [T_LAUNCH + 0.35, 0.16], [T_SPACE, 0.05]],
+      pos: [[T_LAUNCH, [-34, 2.9, 8]], [15.8, [-31, 5.4, 13]]],
+      look: [[T_LAUNCH, [-12, 4.0, -10]], [15.8, [-10, 6.8, 22]]],
+      fov: [[T_LAUNCH, 48], [15.8, 46]],
+      shake: [[T_LAUNCH, 0], [T_LAUNCH + 0.35, 0.16], [15.8, 0.05]],
+    },
+    // Straight down the deck's centreline and out through the door. Looking
+    // along +z puts -x on screen right, so anywhere off-centre the jamb eats a
+    // third of the frame; on the centreline the whole frame is open sky.
+    {
+      start: 15.8,
+      pos: [[15.8, [0, 6.2, 6]], [T_SPACE, [0, 8.6, 16]]],
+      look: [[15.8, [0, 8.6, 84]], [T_SPACE, [0, 12.5, 130]]],
+      fov: [[15.8, 38], [T_SPACE, 34]],
+      handheld: 0.05,
     },
     // --- the approach: the camera rides with the formation, so these shots
     // hand off to the set's own rig rather than carrying world-space keys.
@@ -508,7 +525,7 @@ async function pilotRing(chars) {
 // ===========================================================================
 
 const BAY_Z = 42; // z of the launch door
-const SHIP_X = [-22, 0, 22];
+const SHIP_X = [-17, 0, 17];
 
 async function buildHangar(chars) {
   const group = new THREE.Group();
@@ -523,7 +540,7 @@ async function buildHangar(chars) {
 
   // --- three X-wings, foils closed, collapsed to a handful of draw calls
   const ships = [];
-  const engines = new EngineGlow(12, KIT.engineBlue);
+  const engines = new EngineGlow(12, KIT.engineBlue, 0.22);
   group.add(engines.object);
   for (let i = 0; i < SHIP_X.length; i++) {
     const src = await makeXWing(i);
@@ -566,7 +583,7 @@ async function buildHangar(chars) {
         ship.updateMatrixWorld();
         for (const p of ship.userData.enginePoints) {
           enginePos.copy(p).applyMatrix4(ship.matrixWorld);
-          if (engines.set(n, enginePos, ship.quaternion, 1.0, 4 + throttle * 7, throttle, t)) n++;
+          if (engines.set(n, enginePos, ship.quaternion, 0.7, 3 + throttle * 6, throttle, t)) n++;
         }
       }
       engines.flush(n);
@@ -714,10 +731,13 @@ async function deckCrew(chars) {
       runner: true,
     });
   }
+  // Deck hands stay between the lanes and behind the ships' noses: the launch
+  // camera sits off the port side of the near lane and a figure parked there
+  // would fill half the frame.
   for (let i = 0; i < 4; i++) {
     placements.push({
       template: 1,
-      position: [SHIP_X[i % 3] + (i % 2 ? 13 : -13), 0, 8 + hash11(i, 15) * 12],
+      position: [SHIP_X[i % 3] + (i % 2 ? 10 : -10), 0, -16 + hash11(i, 15) * 12],
       rotationY: (i % 2 ? -1 : 1) * 1.5,
       seed: hash11(i, 16) * 6.28,
       runner: false,
@@ -775,7 +795,9 @@ async function buildApproach() {
 
   // --- the squadron: twelve fighters in three ranks, foils still closed
   const squadron = [];
-  const engines = new EngineGlow(48, KIT.engineBlue);
+  // Forty-eight flares in one frame stack up fast under bloom, so these run at
+  // roughly half the opacity of the three in the hangar.
+  const engines = new EngineGlow(48, KIT.engineBlue, 0.26);
   group.add(engines.object);
   const proto = await makeXWing(0);
   proto.userData.setSFoils(0);
@@ -786,7 +808,7 @@ async function buildApproach() {
     const rank = Math.floor(i / 4);
     const file = (i % 4) - 1.5;
     // A shallow V, each rank stepped back and down from the one ahead.
-    ship.userData.slot = [file * 17, -rank * 5 - Math.abs(file) * 1.8, -rank * 26 - Math.abs(file) * 13];
+    ship.userData.slot = [file * 19, -rank * 11 - Math.abs(file) * 2.4, -rank * 34 - Math.abs(file) * 14];
     group.add(ship);
     squadron.push(ship);
   }
@@ -827,18 +849,20 @@ async function buildApproach() {
   };
 
   /**
-   * Three shots on the approach. Offsets are in the formation's own frame, so
-   * the fighters stay put in the frame while the hull swells behind them; `mix`
-   * slides the look target from the lead ship (0) to the station's centre (1),
-   * which is what decides how much of the frame the hull eats.
+   * Three shots on the approach. `back/side/rise` choose the angle we see the
+   * formation from, in the formation's own frame. `frame` then says where the
+   * lead ship should sit on screen in normalised coordinates (-1..1, y up), and
+   * the look target is solved backwards from that — the station is always
+   * roughly ahead of the formation, so pinning the fighters low and to one side
+   * hands the rest of the frame to the hull.
    */
   const SPACE_SHOTS = [
     // the hull nearly filling the frame, the squadron specks against its limb
-    { start: T_SPACE, end: 21.3, back: [120, 100], side: [24, 17], rise: [-2, -5], mix: 0.42, fov: [30, 29] },
+    { start: T_SPACE, end: 21.3, back: [124, 104], side: [18, 13], rise: [4, 2], frame: [-0.34, -0.56], fov: [27, 26] },
     // in close: near enough to read the fighters, hull curving away behind
-    { start: 21.3, end: 24.6, back: [50, 42], side: [18, 11], rise: [-5, -7], mix: 0.2, fov: [44, 42] },
+    { start: 21.3, end: 24.6, back: [72, 60], side: [22, 15], rise: [3, 1], frame: [-0.3, -0.4], fov: [43, 41] },
     // the dive: over the top of the formation, surface swallowing the frame
-    { start: 24.6, end: 28.6, back: [82, 64], side: [17, 12], rise: [12, 8], mix: 0.3, fov: [46, 50] },
+    { start: 24.6, end: 28.6, back: [86, 68], side: [14, 9], rise: [16, 12], frame: [-0.14, -0.46], fov: [46, 50] },
   ];
 
   return {
@@ -858,14 +882,19 @@ async function buildApproach() {
         .addScaledVector(fwd, -back)
         .addScaledVector(right, side)
         .addScaledVector(up, rise);
-      // Aim between the lead ship and the centre of the station.
-      tmp.copy(lead).multiplyScalar(1 - s.mix);
-      camera.up.set(0, 1, 0);
-      camera.lookAt(tmp);
       if (Math.abs(camera.fov - fov) > 1e-4) {
         camera.fov = fov;
         camera.updateProjectionMatrix();
       }
+      // Nudging the look target off the lead ship by one screen-half moves the
+      // ship by one screen-half the other way, which is all the algebra needed.
+      const halfH = Math.tan((fov * Math.PI) / 360);
+      const halfW = halfH * camera.aspect;
+      tmp.copy(lead)
+        .addScaledVector(right, -s.frame[0] * halfW * back)
+        .addScaledVector(up, -s.frame[1] * halfH * back);
+      camera.up.set(0, 1, 0);
+      camera.lookAt(tmp);
     },
     update(t) {
       stars.update(t);
@@ -891,7 +920,7 @@ async function buildApproach() {
         const throttle = 0.85 + 0.15 * Math.sin(t * 6 + i);
         for (const q of enginePoints) {
           wp.copy(q).applyMatrix4(ship.matrixWorld);
-          if (engines.set(n, wp, ship.quaternion, 0.52, 5.5, throttle, t)) n++;
+          if (engines.set(n, wp, ship.quaternion, 0.42, 4.6, throttle, t)) n++;
         }
       }
       engines.flush(n);
@@ -1131,14 +1160,14 @@ function cloneCollapsed(model) {
  * draw calls instead of ninety-six.
  */
 class EngineGlow {
-  constructor(max, color) {
-    const cone = new THREE.ConeGeometry(1, 1, 10, 1, true);
+  constructor(max, color, opacity = 0.5) {
+    const cone = new THREE.ConeGeometry(1, 1, 16, 1, true);
     cone.translate(0, -0.5, 0);
     cone.rotateX(Math.PI / 2); // apex at the nozzle, base trailing along -z
-    this.plume = new THREE.InstancedMesh(cone, additiveMaterial(color, { opacity: 0.5 }), max);
+    this.plume = new THREE.InstancedMesh(cone, additiveMaterial(color, { opacity }), max);
     this.core = new THREE.InstancedMesh(
       new THREE.SphereGeometry(1, 8, 6),
-      additiveMaterial(0xd8f6ff, { opacity: 0.9 }),
+      additiveMaterial(0xd8f6ff, { opacity: Math.min(0.95, opacity * 1.8) }),
       max
     );
     for (const m of [this.plume, this.core]) {

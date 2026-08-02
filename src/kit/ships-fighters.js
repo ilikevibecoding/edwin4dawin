@@ -544,41 +544,51 @@ export async function buildTieFighter(opts = {}) {
 // ===========================================================================
 
 /**
- * A bent hexagonal panel: a vertical centre band with a triangular cap above
- * and below, each folded forward about the band's edge. That fold is exactly
- * what gives the x1 its distinctive side profile.
+ * One bent hexagonal wing panel: a flat-topped hexagon folded along its
+ * horizontal centre line, both halves angled forward. That fold is what gives
+ * the x1 its profile -- from the side the leading edge is a shallow arrowhead
+ * instead of the TIE/ln's straight hexagon.
  *
- * The caps are three-segment cylinders (triangular prisms) squashed to a third
- * of their height, which makes an isoceles triangle whose base matches the
- * hexagon's flats.
+ * Each half is the trapezoid a set would build from one big plate plus a wedge
+ * plate at each end: a rectangle across the hexagon's flats, and a sloped cap
+ * running out to the fore and aft points. `r` is the hexagon's circumradius, so
+ * the points sit at z = +/-r and the flats at y = +/-0.866r.
  */
 function tieBentPanel(b, C, px, r, bend, thick = 0.9) {
-  const halfW = 0.866 * r; // hexagon half-width across the flats
-  const bandH = r; // the band spans y = -r/2 .. +r/2
+  const H = 0.866 * r; // half height, at the flats
+  const cap = r / 2; // z run of each end cap
+  const rot = Math.PI / 6; // the slanted edges are all 30 degrees off vertical
 
-  // centre band: frame slab with the panel standing proud of it
-  cpanel(b, px, (-bandH / 2) * PY, 0, thick, halfW * 2, bandH * PY, C.frame);
-  cpanel(b, px, (-bandH / 2 + 0.12) * PY, 0, thick * 1.4, halfW * 1.86, (bandH - 0.24) * PY, C.panel);
+  /** One trapezoid layer: rectangle plus the two sloped end caps. */
+  const layer = (sy, k, thk, color) => {
+    const h = H * k * PY;
+    const y0 = sy > 0 ? 0 : -h;
+    cpanel(b, 0, y0, 0, thk, cap * 2 * k, h, color);
+    for (const sz of [1, -1]) {
+      cslope(b, 0, y0, sz * (cap + (cap * k) / 2), thk, cap * k, h, color, {
+        dir: sz > 0 ? '+z' : '-z',
+        inverted: sy < 0,
+      });
+    }
+  };
 
   for (const sy of [1, -1]) {
     b.push();
-    b.translate(px, sy * (bandH / 2) * PY, 0); // the fold line
-    b.rotateX(sy * bend);
-    b.push();
-    b.scale(1, 1 / 3, 1);
-    const spin = sy > 0 ? -Math.PI / 2 : Math.PI / 2;
-    xcyl(b, 0, sy * (r / 2) * PY, 0, r, thick, C.frame, { segments: 3, spin, studs: false });
-    xcyl(b, 0, sy * (r / 2 - 0.12) * PY, 0, r * 0.84, thick * 1.4, C.panel, { segments: 3, spin, studs: false });
-    b.pop();
-    // rib running out to the folded tip
-    cpanel(b, 0, sy > 0 ? 0.2 * PY : (-r * 0.42 - 0.2) * PY, 0, thick * 1.9, 0.55, r * 0.42 * PY, C.rib);
+    b.translate(px, 0, 0);
+    b.rotateX(sy * bend); // fold this half forward about the centre line
+    // A grey frame trapezoid with a slightly smaller near-black panel standing
+    // proud of it, so the hexagon keeps a thin trim border on every edge, and
+    // one spine rib out from the hub for the radial pattern.
+    layer(sy, 1, thick, C.rib);
+    layer(sy, 0.86, thick * 1.6, C.panel);
+    cpanel(b, 0, sy > 0 ? 0.3 * PY : -H * PY, 0, thick * 1.8, 0.5, (H - 0.3) * PY, C.rib);
     b.pop();
   }
 
-  // horizontal ribs and hub on the centre band
-  for (const sy of [1, -1]) cpanel(b, px, sy * (bandH / 2 - 0.34) * PY, 0, thick * 1.9, halfW * 1.9, 0.34 * PY, C.rib);
-  xcyl(b, px - Math.sign(px) * 0.75, 0, 0, 1.7, thick * 2.4, C.trim, { segments: 8, studs: false });
-  xcyl(b, px - Math.sign(px) * 1.15, 0, 0, 0.95, thick * 2.6, C.rib, { segments: 8, studs: false });
+  // hub where the pylon lands, on the fold line
+  const inward = -Math.sign(px);
+  xcyl(b, px + inward * 0.7, 0, 0, 1.7, thick * 2.6, C.trim, { segments: 8, studs: false });
+  xcyl(b, px + inward * 1.15, 0, 0, 0.95, thick * 2.8, C.rib, { segments: 8, studs: false });
 }
 
 /** The x1's elongated tail: a tapered box hull, dorsal spine and twin engines. */
@@ -753,9 +763,11 @@ function ywNacelle(b, C, sx, engines) {
   const R = 1.38;
   zcyl(b, x, 0, -4, R, 15.6, C.hull, { segments: 14, studs: false });
 
-  // intake at the front, with a dark recessed cone
-  zcyl(b, x, 0, 4.05, R * 1.06, 1, C.metal, { segments: 14, studs: false });
-  zcyl(b, x, 0, 3.5, R * 0.82, 1.2, C.dark, { segments: 12, studs: false, rTop: R * 0.5 });
+  // Intake at the front: an open lip ring with a dish recessed into it, so the
+  // mouth reads as a dark hollow rather than a flat grey cap.
+  zcyl(b, x, 0, 4.3, R * 1.06, 1.1, C.metal, { segments: 14, studs: false, open: true });
+  b.dish(x, 0, 3.85, R * 0.95, 2.5, C.dark, { segments: 14, rot: [Math.PI / 2, 0, 0] });
+  zcyl(b, x, 0, 3.95, R * 0.34, 0.5, C.metal, { segments: 10, studs: false }); // spinner
 
   // banding
   for (const z of [1.6, -1.4, -7.2]) zcyl(b, x, 0, z, R * 1.03, 0.55, C.metal, { segments: 14, studs: false });
@@ -945,6 +957,379 @@ export async function buildLandspeeder(opts = {}) {
   return finish(root, mesh);
 }
 
+// ===========================================================================
+// BATTLE-STATION TRENCH  --  one tileable section
+// ===========================================================================
+
+/** Deterministic 0..n-1 pick, keyed on a cell index. */
+function pick(i, salt, n) {
+  return Math.min(n - 1, Math.floor(hash11(i, salt) * n));
+}
+/** Deterministic jitter in -amt..+amt, keyed on a cell index. */
+function jit(i, salt, amt) {
+  return (hash11(i, salt) * 2 - 1) * amt;
+}
+
+/**
+ * Trench floor: two greys of plating either side of a raised central rail.
+ *
+ * The walkable surface is y = 0 and the slab hangs below it, so a scene can drop
+ * a section straight onto the origin plane. Every tile lies strictly inside
+ * z = 0..L, which is what makes the sections butt together invisibly.
+ */
+function trenchFloor(b, C, W, L, cells, cz, seed) {
+  cbox(b, 0, -3.2, L / 2, W, L, 2.2, C.wallLow, { studs: false });
+
+  // plating: four lanes either side of the rail, one tile per lane per cell.
+  // The chamfer on each tile is the panel line -- no separate channel needed.
+  const lanes = 4;
+  const inner = 5.4; // half width of the rail and its skirt
+  const laneW = (W / 2 - inner) / lanes;
+  for (const sx of [-1, 1]) {
+    for (let l = 0; l < lanes; l++) {
+      const x = sx * (inner + laneW * (l + 0.5));
+      for (let i = 0; i < cells; i++) {
+        const k = i * 7 + l * 13 + (sx > 0 ? 1 : 5);
+        const s = hash11(k, seed + 3);
+        // mostly mid greys: a light/dark checkerboard would read as a chessboard
+        ctile(b, x, -1, (i + 0.5) * cz, laneW - 0.3, cz - 0.3, s < 0.06 ? C.plateDark : s < 0.56 ? C.wallLow : s < 0.86 ? C.wall2 : C.floor);
+        // a scatter of hatches and inspection panels
+        if (s > 0.86) cpanel(b, x, 0, (i + 0.5) * cz, laneW - 1.6, cz - 1.8, 0.5, C.rib);
+        else if (s < 0.06) ycyl(b, x, 0.3, (i + 0.5) * cz, laneW * 0.3, 0.6, C.rib, { segments: 10, studs: false });
+      }
+    }
+  }
+
+  // raised central rail: skirt, capped top, cross sleepers and cable runs
+  cbox(b, 0, -1, L / 2, 9.6, L, 3, C.wallLow, { studs: false });
+  cbox(b, 0, 2, L / 2, 7.2, L, 2, C.floor, { studs: false });
+  ctile(b, 0, 4, L / 2, 4.4, L, C.plateDark);
+  const sleepers = Math.max(2, Math.round(L / 3));
+  for (let i = 0; i < sleepers; i++) {
+    cpanel(b, 0, 2, (i + 0.5) * (L / sleepers), 10.2, 0.8, 2.2, C.rib);
+  }
+  for (const sx of [-1, 1]) {
+    zcyl(b, sx * 5.4, 1.2, L / 2, 0.42, L, C.pipe, { segments: 8, studs: false });
+    cbox(b, sx * 4.3, 4, L / 2, 0.7, L, 1, C.light, glow(C.light, 1.2));
+  }
+}
+
+/**
+ * One trench wall. The inner face sits at x = sx*W/2 with everything structural
+ * outboard of it, so the trench keeps its nominal width whatever the greebles do.
+ *
+ * Detail is laid out on a grid: one vertical rib per cell along z, and four
+ * horizontal bands between the kerb and the coping. Each slot picks its greeble
+ * from hash11 on the cell index, so the pattern is dense, identical on every run,
+ * and exactly periodic with `cz` -- the seam between two sections looks like any
+ * other rib.
+ */
+function trenchWall(b, C, sx, W, L, H, cells, cz, seed) {
+  const X = W / 2;
+  const hp = (s) => s * PY; // studs of height -> plates
+
+  /** Box on the inner face, `t` studs thick, protruding inward from the face. */
+  const face = (z, dz, y, h, t, color, opts = {}) =>
+    cbox(b, sx * (X - t / 2 - (opts.set || 0)), y, z, t, dz, h, color, { studs: false, ...opts });
+  /** Pipe running along z at height `y` (studs), `t` studs off the face. */
+  const zpipe = (y, r, t, color) =>
+    zcyl(b, sx * (X - r - t), hp(y), L / 2, r, L, color, { segments: 8, studs: false });
+  /** Pipe running up the wall. */
+  const ypipe = (z, y, h, r, t, color) =>
+    ycyl(b, sx * (X - r - t), hp(y + h / 2), z, r, hp(h), color, { segments: 8, studs: false });
+
+  // structural slab (outboard), kerb, coping and the service ledge under it
+  cbox(b, sx * (X + 1.6), 0, L / 2, 3.2, L, hp(H), C.wall, { studs: false });
+  face(L / 2, L, 0, hp(2.2), 1.5, C.wallLow);
+  face(L / 2, L, hp(H - 1.6), hp(1.6), 2.0, C.floor);
+  face(L / 2, L, hp(H - 2.6), hp(1), 1.2, C.wallLow);
+  face(L / 2, L, hp(2.4), hp(0.5), 1.1, C.light, glow(C.light, 1.4)); // kerb light channel
+  zpipe(H - 4.2, 0.5, 0.35, C.pipe);
+  zpipe(12.5, 0.42, 0.3, C.pipe);
+
+  // vertical ribs: one per cell, the trench's repeating rhythm. Their footprint
+  // stays clear of z = 0 and z = L so nothing doubles up at a section joint.
+  for (let i = 0; i < cells; i++) {
+    face(i * cz + 1.0, 1.6, hp(2.2), hp(H - 4.8), 1.2, C.wallLow);
+    face(i * cz + 1.0, 1.9, hp(2.2), hp(1.4), 1.7, C.rib);
+    face(i * cz + 1.0, 1.9, hp(H - 4.4), hp(1.2), 1.7, C.rib);
+  }
+
+  // four bands of machinery between kerb and coping
+  const bands = [
+    { y: 3.6, h: 5.0 },
+    { y: 9.2, h: 5.8 },
+    { y: 15.6, h: 5.8 },
+    { y: 22.0, h: H - 25.0 },
+  ];
+  for (let i = 0; i < cells; i++) {
+    const zc = i * cz + (cz + 2) / 2; // centre of the bay between two ribs
+    const zw = cz - 2.1;
+    for (let j = 0; j < bands.length; j++) {
+      const k = i * 11 + j * 101 + (sx > 0 ? 0 : 977);
+      const { y, h } = bands[j];
+      switch (pick(k, seed + 5, 7)) {
+        case 0: // recessed panel in a raised surround
+          face(zc, zw, hp(y), hp(h), 0.9, C.wallLow);
+          face(zc, zw - 1.4, hp(y + 0.7), hp(h - 1.4), 0.6, C.plateDark, { set: 0.9 });
+          break;
+        case 1: {
+          // machinery housing: a stepped block standing off the wall
+          const w = zw * (0.55 + hash11(k, seed + 9) * 0.45);
+          face(zc, w, hp(y), hp(h - 0.6), 1.9, C.wallLow);
+          face(zc, w - 1.1, hp(y + 0.5), hp(h - 2), 2.6, C.wall2);
+          face(zc, w - 2.2, hp(y + 1.2), hp(0.6), 3.0, C.rib);
+          break;
+        }
+        case 2: {
+          // vent grille
+          face(zc, zw, hp(y), hp(h), 0.7, C.plateDark);
+          const n = 4;
+          for (let g = 0; g < n; g++) face(zc, zw - 0.7, hp(y + 0.5 + (g * (h - 1)) / n), hp(0.55), 1.4, C.rib);
+          break;
+        }
+        case 3: {
+          // pipe bundle up the bay, on a backing plate
+          face(zc, zw, hp(y), hp(h), 0.7, C.wallLow);
+          for (let p = -1; p <= 1; p++) ypipe(zc + p * 1.15, y + 0.3, h - 0.6, 0.4, 0.7, C.pipe);
+          face(zc, zw - 0.4, hp(y + h * 0.45), hp(0.7), 1.7, C.rib); // clamp
+          break;
+        }
+        case 4: {
+          // buttress: a chunky block standing well off the wall
+          const w = 2.0 + hash11(k, seed + 13) * (zw - 2.5);
+          const zj = zc + jit(k, seed + 17, (zw - w) / 2);
+          face(zj, w, hp(y - 0.4), hp(h + 0.8), 2.4, C.wall2);
+          face(zj, w - 1.2, hp(y + h * 0.3), hp(1), 2.9, C.plateDark);
+          break;
+        }
+        case 5: {
+          // patchwork of small plates -- cheap, and it breaks up the surface
+          face(zc, zw, hp(y), hp(h), 0.6, C.wallLow);
+          for (let p = 0; p < 3; p++) {
+            const w = 1 + hash11(k + p, seed + 19) * (zw - 2);
+            face(zc + jit(k + p * 3, seed + 23, (zw - w) / 2), w, hp(y + 0.5 + p * (h - 1.6) * 0.5), hp(1.2), 1.2, p === 1 ? C.floor : C.rib);
+          }
+          break;
+        }
+        default: {
+          // shallow plating with an occasional lit strip
+          face(zc, zw, hp(y), hp(h), 0.8, C.floor);
+          if (hash11(k, seed + 29) > 0.6) {
+            face(zc, zw - 1.6, hp(y + h * 0.5), hp(0.6), 1.2, C.light, glow(C.light, 1.6));
+          }
+          break;
+        }
+      }
+    }
+
+    // a few blocky gantry towers straddling the crest, silhouetted against the
+    // sky in the dive shots
+    if (hash11(i, seed + 31) > 0.82) {
+      const z = i * cz + cz * 0.5;
+      const t = 4;
+      const cx = sx * (X - t / 2 + 1.4);
+      cbox(b, cx, hp(H), z, t, 4.2, hp(1.6), C.wall, { studs: false });
+      cbox(b, cx, hp(H + 1.6), z, t - 1, 3.2, hp(2.4), C.wallLow, { studs: false });
+      cbox(b, cx, hp(H + 2.6), z, t + 0.6, 1.2, hp(0.7), C.rib, { studs: false });
+      cbox(b, cx, hp(H + 4), z, t + 0.4, 3.6, hp(0.6), C.wall2, { studs: false });
+      cbox(b, cx, hp(H + 4.6), z, 1.2, 1.2, hp(0.9), C.plateDark, { studs: false });
+      cbox(b, sx * (X - t + 1.7), hp(H + 2), z, 0.6, 1.6, hp(0.8), C.light, glow(C.light, 1.8));
+    }
+  }
+}
+
+/**
+ * A straight section of the battle-station trench, for tiling end to end along
+ * +z: place copies at z = 0, length, 2*length ...
+ *
+ * The section occupies x = -width/2..+width/2, y = 0..depth (plus crest towers)
+ * and z = 0..length. Nothing crosses z = 0 or z = length, and the greeble
+ * pattern is periodic with the cell size, so the joints are invisible.
+ *
+ * @param {object} opts
+ * @param {number} opts.length  studs along +z (default 120)
+ * @param {number} opts.width   trench width in studs (default 40)
+ * @param {number} opts.depth   wall height in studs (default 30)
+ * @param {number} opts.seed    greeble seed
+ */
+export function buildTrenchSection(opts = {}) {
+  const L = opts.length ?? 120;
+  const W = opts.width ?? 40;
+  const H = opts.depth ?? 30;
+  const seed = opts.seed ?? 7;
+  const C = {
+    wall: opts.wall ?? COLORS.lightBluishGray,
+    wallLow: opts.wallLow ?? COLORS.darkBluishGray,
+    wall2: opts.wall2 ?? COLORS.flatSilver,
+    floor: opts.floor ?? COLORS.lightBluishGray,
+    plateDark: opts.plateDark ?? COLORS.black,
+    rib: opts.rib ?? COLORS.darkBluishGray,
+    pipe: opts.pipe ?? COLORS.flatSilver,
+    light: opts.light ?? 0xffb066,
+  };
+
+  // one cell per rib; the cell size is derived from the length so any length
+  // still comes out exactly periodic
+  const cells = Math.max(2, Math.round(L / 6));
+  const cz = L / cells;
+
+  const b = new Bricks({ studSegments: 6 });
+  trenchFloor(b, C, W, L, cells, cz, seed);
+  for (const sx of [-1, 1]) trenchWall(b, C, sx, W, L, H, cells, cz, seed);
+
+  const root = new THREE.Group();
+  root.name = 'trench-section';
+  const mesh = b.build();
+  root.add(mesh);
+  Object.assign(root.userData, { length: L, width: W, depth: H });
+  return finish(root, mesh);
+}
+
+// ===========================================================================
+// STATION SURFACE  --  a tileable panel of battle-station exterior
+// ===========================================================================
+
+/**
+ * A flat panel of battle-station exterior for the approach shots: plating with
+ * panel-line channels, greeble blocks, domes, dishes and a few towers.
+ *
+ * Centred on the origin and tileable in both x and z: copies at multiples of
+ * `size` line up, because the channels run the full span and every greeble sits
+ * inside its own cell.
+ *
+ * @param {object} opts
+ * @param {number} opts.size  panel size in studs (default 120)
+ * @param {number} opts.seed  greeble seed
+ */
+export function buildStationSurface(opts = {}) {
+  const S = opts.size ?? 120;
+  const seed = opts.seed ?? 3;
+  const C = {
+    hull: opts.hull ?? COLORS.lightBluishGray,
+    hullLow: opts.hullLow ?? COLORS.darkBluishGray,
+    hull2: opts.hull2 ?? COLORS.flatSilver,
+    dark: opts.dark ?? COLORS.black,
+    pipe: opts.pipe ?? COLORS.flatSilver,
+    light: opts.light ?? 0xffb066,
+  };
+  const b = new Bricks({ studSegments: 6 });
+  const h = S / 2;
+  const cells = Math.max(4, Math.round(S / 10));
+  const cw = S / cells;
+
+  // base slab, then one plating tile per cell so the chamfers read as panel lines
+  cbox(b, 0, -3, 0, S, S, 3, C.hullLow, { studs: false });
+  for (let ix = 0; ix < cells; ix++) {
+    for (let iz = 0; iz < cells; iz++) {
+      const k = ix * 31 + iz * 7;
+      const s = hash11(k, seed);
+      const x = -h + (ix + 0.5) * cw;
+      const z = -h + (iz + 0.5) * cw;
+      ctile(b, x, -1, z, cw - 0.4, cw - 0.4, s < 0.22 ? C.hullLow : s < 0.72 ? C.hull : C.hull2);
+      stationGreeble(b, C, x, z, cw, k, seed);
+    }
+  }
+
+  // deep panel-line channels crossing the whole panel, so neighbours line up
+  for (let i = 0; i < cells; i += 3) {
+    const p = -h + i * cw;
+    cbox(b, p, -1.4, 0, 1.2, S, 1, C.dark, { studs: false });
+    cbox(b, 0, -1.4, p, S, 1.2, 1, C.dark, { studs: false });
+  }
+  return finishSurface(b, 'station-surface', { size: S });
+}
+
+/**
+ * One cell of station surface. Types are picked by hash so the layout is fixed:
+ * plating, greeble clusters, a sensor dome, a dish, a vent block or a tower.
+ */
+function stationGreeble(b, C, x, z, cw, k, seed) {
+  const t = pick(k, seed + 41, 10);
+  const jx = jit(k, seed + 43, cw * 0.16);
+  const jz = jit(k, seed + 47, cw * 0.16);
+  switch (t) {
+    case 0:
+    case 1: {
+      // block cluster
+      for (let i = 0; i < 3; i++) {
+        const w = 1.4 + hash11(k + i, seed + 51) * (cw * 0.3);
+        const d = 1.4 + hash11(k + i * 5, seed + 53) * (cw * 0.3);
+        cbox(b, x + jx + jit(k + i, seed + 57, cw * 0.28), 0, z + jz + jit(k + i * 3, seed + 59, cw * 0.28), w, d, 1 + hash11(k + i, seed + 61) * 4, i === 1 ? C.hull2 : C.hullLow, { studs: false });
+      }
+      break;
+    }
+    case 2: {
+      // sensor dome on a collar
+      const r = cw * (0.16 + hash11(k, seed + 63) * 0.1);
+      ycyl(b, x + jx, 0.8, z + jz, r * 1.15, 1.6, C.hullLow, { segments: 12, studs: false });
+      b.sphere(x + jx, 1.6, z + jz, r, C.hull2, { segments: 14, phiLen: Math.PI / 2 });
+      break;
+    }
+    case 3: {
+      // dish on a mast, tipped over
+      const r = cw * 0.2;
+      ycyl(b, x + jx, 0, z + jz, 0.9, 3.2, C.hullLow, { segments: 10, studs: false });
+      b.push();
+      b.translate(x + jx, 3.2, z + jz);
+      b.rotateX(-0.6 + hash11(k, seed + 67) * 0.5);
+      b.dish(0, 0, 0, r, 2.6, C.hull, { segments: 14 });
+      ycyl(b, 0, 0, 0, 0.2, 2.2, C.pipe, { segments: 6, studs: false });
+      b.pop();
+      break;
+    }
+    case 4: {
+      // vent block with louvres
+      const w = cw * 0.6;
+      cbox(b, x + jx, 0, z + jz, w, w * 0.7, 2.4, C.hullLow, { studs: false });
+      for (let i = 0; i < 4; i++) cbox(b, x + jx, 2.4, z + jz - w * 0.28 + i * (w * 0.19), w - 0.8, 0.4, 0.5, C.dark, { studs: false });
+      break;
+    }
+    case 5: {
+      // tower: stepped box with a lamp
+      cbox(b, x + jx, 0, z + jz, cw * 0.34, cw * 0.34, 6, C.hull, { studs: false });
+      cbox(b, x + jx, 6, z + jz, cw * 0.24, cw * 0.24, 5, C.hullLow, { studs: false });
+      cbox(b, x + jx, 11, z + jz, cw * 0.34, cw * 0.34, 1.2, C.hull2, { studs: false });
+      cbox(b, x + jx, 12.2, z + jz, 0.8, 0.8, 0.8, C.light, glow(C.light, 2));
+      break;
+    }
+    case 6: {
+      // pipe run with clamps
+      const len = cw * 0.8;
+      const along = hash11(k, seed + 71) > 0.5;
+      const r = 0.5;
+      if (along) zcyl(b, x + jx, 1.4, z + jz, r, len, C.pipe, { segments: 8, studs: false });
+      else xcyl(b, x + jx, 1.4, z + jz, r, len, C.pipe, { segments: 8, studs: false });
+      for (const s of [-0.3, 0.3]) {
+        cbox(b, x + jx + (along ? 0 : len * s), 0, z + jz + (along ? len * s : 0), 1.4, 1.4, 2, C.hullLow, { studs: false });
+      }
+      break;
+    }
+    case 7: {
+      // recessed bay: a dark floor with a lit rim
+      const w = cw * 0.62;
+      ctile(b, x + jx, -1.6, z + jz, w, w, C.dark);
+      cbox(b, x + jx, -1, z + jz - w / 2, w + 1, 1, 1.4, C.hullLow, { studs: false });
+      cbox(b, x + jx, -1, z + jz + w / 2, w + 1, 1, 1.4, C.hullLow, { studs: false });
+      cbox(b, x + jx - w / 2, -0.4, z + jz, 0.8, w, 0.6, C.light, glow(C.light, 1.4));
+      break;
+    }
+    default:
+      // left as plain plating, so the surface still breathes
+      break;
+  }
+}
+
+/** Shared tail end of the two surface builders. */
+function finishSurface(b, name, data) {
+  const root = new THREE.Group();
+  root.name = name;
+  const mesh = b.build();
+  root.add(mesh);
+  Object.assign(root.userData, data);
+  return finish(root, mesh);
+}
+
 /** Turntable entries for preview.html. */
 export const PREVIEW = {
   xwing: () => buildXWing(),
@@ -962,4 +1347,32 @@ export const PREVIEW = {
   'tie-advanced': () => buildTieAdvanced(),
   ywing: () => buildYWing(),
   landspeeder: () => buildLandspeeder(),
+  trench: () => buildTrenchSection(),
+  /** Three sections nose to tail: the tiling check. */
+  'trench-tiled': () => {
+    const g = new THREE.Group();
+    const first = buildTrenchSection();
+    const L = first.userData.length;
+    for (let i = 0; i < 3; i++) {
+      const s = i === 0 ? first : first.clone();
+      s.position.z = i * L;
+      g.add(s);
+    }
+    return g;
+  },
+  station: () => buildStationSurface(),
+  /** Two by two panels, to check the surface tiles in both axes. */
+  'station-tiled': () => {
+    const g = new THREE.Group();
+    const first = buildStationSurface();
+    const S = first.userData.size;
+    for (let i = 0; i < 2; i++) {
+      for (let j = 0; j < 2; j++) {
+        const s = i === 0 && j === 0 ? first : first.clone();
+        s.position.set(i * S, 0, j * S);
+        g.add(s);
+      }
+    }
+    return g;
+  },
 };

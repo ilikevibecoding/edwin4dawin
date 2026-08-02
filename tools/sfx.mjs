@@ -957,10 +957,12 @@ function blasterRebel({ dur, rng }) {
     perc(0.0005, 0.07)
   );
   const flash = env(hp(whiteNoise(0.012, rng), 3800), perc(0.0012, 0.012));
-  const sum = polish(
-    [softClip(mixBufs(gain(zap, 1), gain(body, 0.6), gain(thud, 0.4), gain(ring, 0.22), gain(flash, 0.22)), 1.7, 0.5)],
-    { thresh: -24, ratio: 3.5, attack: 0.003, release: 0.06, ceil: -13 }
-  )[0];
+  // The comb's output peaks on its first cycle and decays from there, so peak
+  // normalisation alone leaves the shot far quieter than the rest of the library.
+  // Saturation is the right corrective: being memoryless it squashes that one
+  // spike without a release envelope ducking the sweep behind it, and the
+  // harmonics it adds suit a bolt. A compressor here dulled the zap instead.
+  const sum = softClip(mixBufs(gain(zap, 1), gain(body, 0.6), gain(thud, 0.4), gain(ring, 0.22), gain(flash, 0.22)), 4.5, 0.5);
   return reverb(sum, { rt60: 0.22, mix: 0.1, damp: 0.6, size: 0.5 });
 }
 
@@ -987,13 +989,9 @@ function blasterImperial({ dur, rng }) {
     { f: 820, t60: 0.045, gain: 1 },
     { f: 1490, t60: 0.03, gain: 0.5 },
   ]), perc(0.001, 0.06));
-  const sum = polish([softClip(mixBufs(gain(zap, 0.95), gain(body, 0.8), gain(grit, 0.55), gain(ring, 0.22)), 2.2, 0.6)], {
-    thresh: -24,
-    ratio: 3.5,
-    attack: 0.003,
-    release: 0.06,
-    ceil: -13,
-  })[0];
+  // saturated for the same reason as the rebel bolt, but more gently: this shot
+  // is already noise-heavy, so it needs less help to sit at the same loudness
+  const sum = softClip(mixBufs(gain(zap, 0.95), gain(body, 0.8), gain(grit, 0.55), gain(ring, 0.22)), 1.5, 0.6);
   return reverb(sum, { rt60: 0.12, mix: 0.07, damp: 0.6, size: 0.4 });
 }
 
@@ -2316,11 +2314,11 @@ function render(spec) {
   const ch = chans(spec.render({ dur: spec.dur, rng: new Rng(spec.seed), name: spec.name }));
   const trimmed = ch.map((c) => fit(c, nsamp(spec.dur)));
   const cleaned = trimmed.map((c) => (spec.loop ? dcBlockLoop(c, 14) : dcBlock(c, 20).out));
-  // Fade first, then normalise. A percussive effect's loudest sample is inside
-  // the first millisecond, so fading afterwards would scale down the very peak
-  // that had just been set — the explosions were shipping 3 dB under target.
-  // The one-shot fade-in is only long enough to remove a step at sample zero;
-  // any more of it audibly rounds off the attack.
+  // Fades must be applied before normalising: a percussive effect's loudest
+  // sample lies inside the first millisecond, so a fade afterwards would scale
+  // down the very peak that was just set. The one-shot fade-in is therefore
+  // only long enough to remove a step at sample zero — any more of it audibly
+  // rounds off the attack.
   fadeEnds(cleaned, spec.loop ? 0.0008 : 0.0004, spec.loop ? 0.0008 : 0.012);
   normalize(cleaned, PEAK_DB);
   return { ch: cleaned, ms: Date.now() - t0 };
@@ -2344,13 +2342,16 @@ function main() {
       return stats(decodeMp3(mp3, ch.length));
     };
     let st = encode();
-    // Lossy encoding moves peaks around by a decibel or two — a lone sharp
-    // transient can come back either hotter or softer than it went in — so the
-    // encoded result is measured and, if it missed, re-encoded once with a
-    // corrective gain. Without this the library ships with a 3 dB spread of
-    // peaks even though every buffer was normalised to the same level.
-    if (Math.abs(st.peak - PEAK_DB) > 0.5) {
-      const g = Math.min(dbToGain(PEAK_DB - st.peak), 0.95 / Math.max(...ch.map((c) => c.reduce((m, v) => Math.max(m, Math.abs(v)), 0))));
+    // Normalising the PCM is not enough: lossy encoding shifts peaks by a
+    // decibel or two, and a lone sharp transient can come back either hotter or
+    // softer than it went in. So the encoded file is measured and re-encoded with
+    // a corrective gain. One pass does not always land it — the shift is not
+    // proportional to the gain — so this converges over a few tries, each time
+    // capped to keep the float peak clear of full scale.
+    for (let pass = 0; pass < 4 && Math.abs(st.peak - PEAK_DB) > 0.3; pass++) {
+      const floatPeak = Math.max(...ch.map((c) => c.reduce((m, v) => Math.max(m, Math.abs(v)), 0)));
+      const g = Math.min(dbToGain(PEAK_DB - st.peak), 0.95 / floatPeak);
+      if (Math.abs(gainToDb(g)) < 0.02) break;
       for (const c of ch) for (let i = 0; i < c.length; i++) c[i] *= g;
       st = encode();
     }

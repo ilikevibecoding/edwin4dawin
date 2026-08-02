@@ -1018,58 +1018,64 @@ export async function buildEscapePod(opts = {}) {
   const R = 2.2;
 
   function body() {
-    tubeZ(b, 0, 0, -0.6, R, 5.4, hull, { segments: 20 });
-    // ribbed hoops
-    for (const z of [-3.0, -1.6, -0.2, 1.2, 2.0]) {
+    tubeZ(b, 0, 0, -0.6, R, 5.0, hull, { segments: 20 });
+    // Ribbing is confined to the aft two thirds: the hoops all sit on the
+    // constant-radius section so none floats clear of the nose taper, and the
+    // forward bay is left smooth for the viewports.
+    for (const z of [-2.9, -2.1, -1.3, -0.5]) {
       b.torus(0, 0, z, R + 0.06, 0.19, dark, { rot: [0, 0, 0], seg: 20 });
     }
-    // longitudinal strakes
+    // longitudinal strakes between the hoops
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2 + 0.26;
       b.push();
       b.rotateZ(a);
-      b.box(-0.34, PL(R - 0.12), -3.1, 0.68, 5.2, 0.7, metal, { studs: false });
+      b.box(-0.34, PL(R - 0.12), -3.0, 0.68, 2.7, 0.7, metal, { studs: false });
       b.pop();
     }
   }
 
   function nose() {
-    tubeZ(b, 0, 0, 3.0, R, 1.6, hull, { segments: 20, rTop: R * 0.72 });
-    tubeZ(b, 0, 0, 3.9, R * 0.72, 0.5, dark, { segments: 20, rTop: R * 0.66 });
-    b.sphere(0, 0, 4.15, R * 0.68, hull, { segments: 18, phiLen: Math.PI / 2, rot: [-Math.PI / 2, 0, 0] });
-    b.cyl(0, 0, 4.5, 0.28, 2.4, metal, { segments: 8, rot: [Math.PI / 2, 0, 0] });
+    // The cone starts a touch inside the body so the butt joint under the
+    // forward hoop can never open into a gap. rot +x/2 turns the hemisphere so
+    // its dome faces forward.
+    tubeZ(b, 0, 0, 2.55, R, 1.5, hull, { segments: 20, rTop: R * 0.55 });
+    tubeZ(b, 0, 0, 3.4, R * 0.55, 0.35, dark, { segments: 20, rTop: R * 0.52 });
+    b.sphere(0, 0, 3.5, R * 0.55, hull, { segments: 18, phiLen: Math.PI / 2, rot: [Math.PI / 2, 0, 0] });
+    // sensor nub on the tip
+    b.cyl(0, 0, 4.6, 0.22, 0.7, metal, { segments: 8, rot: [Math.PI / 2, 0, 0] });
   }
 
   function viewport() {
-    // A single wraparound port on the upper forward quarter.
-    b.push();
-    b.rotateX(-0.5);
-    b.torus(0, 0, 2.35, R * 0.62, 0.24, dark, { rot: [0, 0, 0], seg: 16 });
-    tubeZ(b, 0, 0, 2.45, R * 0.55, 0.5, glass, { segments: 16, finish: 'trans' });
-    b.pop();
-    // a small hatch on the flank
-    b.push();
-    b.rotateZ(Math.PI / 2);
-    b.cyl(0, PL(R - 0.2), -0.8, 1.0, 1.2, dark, { segments: 14 });
-    b.cyl(0, PL(R + 0.1), -0.8, 0.72, 0.8, glass, { segments: 14, finish: 'trans' });
-    b.pop();
+    // Main port on the upper forward hull. Its axis is the hull normal rather
+    // than a rake, so the collar seats cleanly instead of slicing the nose.
+    b.cyl(0, PL(R - 0.45), 1.2, 1.15, PL(0.85), dark, { segments: 16 });
+    b.cyl(0, PL(R + 0.05), 1.2, 0.86, PL(0.4), glass, { segments: 16, finish: 'trans' });
+    // a matching port on each flank
+    for (const s of [-1, 1]) {
+      b.push();
+      b.rotateZ(s * Math.PI / 2);
+      b.cyl(0, PL(R - 0.35), -0.6, 0.95, PL(0.7), dark, { segments: 14 });
+      b.cyl(0, PL(R + 0.05), -0.6, 0.68, PL(0.35), glass, { segments: 14, finish: 'trans' });
+      b.pop();
+    }
   }
 
   const enginePoints = [];
   function retros() {
-    tubeZ(b, 0, 0, -3.5, R * 0.98, 0.9, dark, { segments: 20 });
+    tubeZ(b, 0, 0, -3.35, R * 0.98, 1.0, dark, { segments: 20 });
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
       const x = Math.cos(a) * 1.15;
       const y = PL(Math.sin(a) * 1.15);
-      enginePoints.push(engineBell(b, x, y, -4.1, 0.62, { shell: dark, collar: metal, len: 1.5, segments: 12 }));
+      enginePoints.push(engineBell(b, x, y, -3.95, 0.62, { shell: dark, collar: metal, len: 1.5, segments: 12 }));
     }
-    b.cyl(0, 0, -4.15, 0.5, 0.5, metal, { segments: 12, rot: [Math.PI / 2, 0, 0] });
+    b.cyl(0, 0, -4.0, 0.5, 0.5, metal, { segments: 12, rot: [Math.PI / 2, 0, 0] });
     // grab handles and a beacon
     for (const s of [-1, 1]) {
       b.push();
       b.rotateZ(s * 1.05);
-      b.box(-0.28, PL(R - 0.05), -2.6, 0.56, 1.0, 1.6, dark, { studs: false });
+      b.box(-0.28, PL(R - 0.05), -2.5, 0.56, 1.0, 1.6, dark, { studs: false });
       b.pop();
     }
     b.cyl(0, PL(R - 0.15), 0.4, 0.34, 1.2, COLORS.transRed, {
@@ -1232,13 +1238,15 @@ export async function buildDeathStar(opts = {}) {
     const { rim, floorR, depth, collar } = CRATER;
     const SEG = 48;
 
-    /** Open cone frustum lying on the sphere of radius R + lift. */
-    const band = (rInner, rOuter, lift, color, o = {}) => {
-      const rad = R + lift;
-      const yLo = yOn(rad, rOuter);
-      const yHi = yOn(rad, rInner);
+    /**
+     * Open cone frustum spanning two radii, each riding its own offset above
+     * the hull, so a step can taper back down flush with the sphere.
+     */
+    const band = (rInner, rOuter, liftIn, liftOut, color) => {
+      const yLo = yOn(R + liftOut, rOuter);
+      const yHi = yOn(R + liftIn, rInner);
       b.cyl(0, PL(yLo), 0, rOuter, PL(yHi - yLo), color, {
-        rTop: rInner, open: true, segments: SEG, side: THREE.DoubleSide, ...o,
+        rTop: rInner, open: true, segments: SEG, side: THREE.DoubleSide,
       });
     };
 
@@ -1258,11 +1266,11 @@ export async function buildDeathStar(opts = {}) {
     // Stepped collar hiding the punched seam: a wide lower step, a riser, and a
     // narrow upper lip that overhangs the crater mouth.
     const mid = rim + (collar - rim) * 0.55;
-    band(mid, collar, 0.5, hull);
+    band(mid, collar, 0.5, 0.15, hull);
     b.cyl(0, PL(yOn(R + 0.5, mid)), 0, mid, PL(yOn(R + 2.0, mid) - yOn(R + 0.5, mid)), dark, {
       open: true, segments: SEG, side: THREE.DoubleSide,
     });
-    band(rim - 0.6, mid, 2.0, hull);
+    band(rim - 0.6, mid, 2.0, 2.0, hull);
     b.cyl(0, PL(yOn(R + 2.0, rim - 0.6) - 1.6), 0, rim - 0.6, PL(1.6), metal, {
       open: true, segments: SEG, side: THREE.DoubleSide,
     });
@@ -1316,8 +1324,9 @@ export async function buildDeathStar(opts = {}) {
       b.rotateY(th + (ring ? 0 : Math.PI / 2));
       const ww = 2 + Math.floor(hash11(i, 419) * 3);
       const dd2 = 2 + Math.floor(hash11(i, 431) * 4);
+      const shiny = hash11(i, 457) > 0.6;
       b.box(-ww / 2, 0, -dd2 / 2, ww, dd2, 1 + Math.floor(hash11(i, 443) * 3),
-        hash11(i, 457) > 0.6 ? metal : dark, { studs: false });
+        shiny ? metal : dark, { studs: !shiny });
       b.pop();
     }
   }
@@ -1647,38 +1656,94 @@ export async function buildSandcrawler(opts = {}) {
 export async function buildTurbolaserTower(opts = {}) {
   const hull = opts.hull ?? COLORS.lightBluishGray;
   const dark = opts.dark ?? COLORS.darkBluishGray;
+  const metal = opts.metal ?? COLORS.flatSilver;
   const colors = { hull, dark };
 
   const root = new THREE.Group();
 
-  const baseB = new Bricks({ studSegments: 10 });
-  // A wider footing than the shipboard version, so it reads as an emplacement.
-  baseB.cyl(0, 0, 0, 4.2, 1, dark, { segments: 16 });
-  baseB.cyl(0, 1, 0, 3.6, 1, hull, { segments: 16 });
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    baseB.push();
-    baseB.rotateY(a);
-    baseB.box(-0.9, 2, 2.4, 1.8, 1.4, 2, dark, { studs: false });
-    baseB.cyl(0, 2, 3.3, 0.5, 3, COLORS.flatSilver, { segments: 8 });
-    baseB.pop();
+  /**
+   * The fixed emplacement: a wider footing than the shipboard turret, ringed
+   * with buttresses, power couplings, ammunition drums and an access ladder.
+   */
+  function emplacement() {
+    const b = new Bricks({ studSegments: 10 });
+    b.cyl(0, 0, 0, 4.2, 1, dark, { segments: 16 });
+    b.cyl(0, 1, 0, 3.6, 1, hull, { segments: 16 });
+    for (let i = 0; i < 6; i++) {
+      b.push();
+      b.rotateY((i / 6) * Math.PI * 2);
+      b.box(-0.9, 2, 2.4, 1.8, 1.4, 2, dark, { studs: false });
+      b.cyl(0, 2, 3.3, 0.5, 3, metal, { segments: 8 });
+      // cable jumper from the coupling head into the pedestal collar; it has to
+      // stop below y = 4 plates, which is where the yoke starts turning
+      b.bar([0, 5 * PLATE, 3.3 * PITCH], [0, 3.4 * PLATE, 2.2 * PITCH], 0.13, dark);
+      b.pop();
+    }
+    // ammunition drums standing between the buttresses
+    for (let i = 0; i < 3; i++) {
+      b.push();
+      b.rotateY((i / 3) * Math.PI * 2 + Math.PI / 6);
+      b.cyl(0, 2, 3.05, 0.8, 5, hull, { segments: 10, stud: true });
+      b.cyl(0, 7, 3.05, 0.5, 1, dark, { segments: 8 });
+      b.pop();
+    }
+    // access ladder up the rear face
+    b.push();
+    b.rotateY(Math.PI);
+    for (const s of [-1, 1]) {
+      b.bar([s * 0.34, 2 * PLATE, 2.7 * PITCH], [s * 0.34, 9 * PLATE, 2.15 * PITCH], 0.1, metal);
+    }
+    for (let r = 0; r <= 4; r++) {
+      const u = r / 4;
+      const y = (2 + u * 7) * PLATE;
+      const z = (2.7 - u * 0.55) * PITCH;
+      b.bar([-0.34, y, z], [0.34, y, z], 0.075, metal);
+    }
+    b.pop();
+    turretBase(b, colors);
+    root.add(b.build());
   }
-  turretBase(baseB, colors);
-  root.add(baseB.build());
 
-  const yaw = new THREE.Group();
-  yaw.position.y = TURRET.yawY * PLATE;
-  root.add(yaw);
-  const yokeB = new Bricks({ studSegments: 10 });
-  turretYoke(yokeB, colors);
-  yaw.add(yokeB.build());
+  /** Rotating yoke, with cooling fins on the flanks and a rangefinder aft. */
+  function yokeAssembly() {
+    const yaw = new THREE.Group();
+    yaw.position.y = TURRET.yawY * PLATE;
+    root.add(yaw);
+    const b = new Bricks({ studSegments: 10 });
+    turretYoke(b, colors);
+    for (const s of [-1, 1]) {
+      for (let i = 0; i < 4; i++) {
+        b.box(s > 0 ? 2.3 : -2.6, 1, -1.9 + i * 0.9, 0.3, 0.55, 3, metal, { studs: false });
+      }
+    }
+    // rangefinder box on the rear deck, with a trans lens facing forward
+    b.box(-1.9, 5, -2.0, 1.5, 1.1, 3, dark, { studs: false });
+    b.cyl(-1.15, 6, -1.9, 0.28, 1, COLORS.transLightBlue, {
+      segments: 8, rot: [Math.PI / 2, 0, 0], finish: 'trans',
+    });
+    b.plate(0.6, 5, -2.0, 1, 1, dark);
+    yaw.add(b.build());
+    return yaw;
+  }
 
-  const pitch = new THREE.Group();
-  pitch.position.set(0, 8 * PLATE, 0.5 * PITCH);
-  yaw.add(pitch);
-  const barrelB = new Bricks({ studSegments: 10 });
-  const muzzles = turretBarrels(barrelB, { ...colors, len: TURRET.barrelLen });
-  pitch.add(barrelB.build());
+  /** Twin barrels plus recoil cylinders, on the elevating trunnion. */
+  function barrelAssembly(yaw) {
+    const pitch = new THREE.Group();
+    pitch.position.set(0, 8 * PLATE, 0.5 * PITCH);
+    yaw.add(pitch);
+    const b = new Bricks({ studSegments: 10 });
+    const muzzles = turretBarrels(b, { ...colors, len: TURRET.barrelLen });
+    for (const s of [-1, 1]) {
+      tubeZ(b, s * 0.85, 2.2, 2.6, 0.2, 2.4, metal, { segments: 8 });
+      b.box(s * 1.35 - 0.2, -1.0, -1.2, 0.4, 2.0, 5, dark, { studs: false });
+    }
+    pitch.add(b.build());
+    return { pitch, muzzles };
+  }
+
+  emplacement();
+  const yaw = yokeAssembly();
+  const { pitch, muzzles } = barrelAssembly(yaw);
 
   yaw.rotation.y = opts.yaw ?? 0;
   pitch.rotation.x = opts.pitch ?? -0.28;

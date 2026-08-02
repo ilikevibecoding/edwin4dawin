@@ -100,10 +100,48 @@ function shellProfile(outer, thickness) {
  * profile already starts and ends on the axis (for solids).
  */
 function latheShell(profile, { segments = 22, openHalf = 0, close = true } = {}) {
-  const pts = profile.map(([r, y]) => new THREE.Vector2(Math.max(r, 0.008), y));
+  const pts = orientProfile(profile).map(([r, y]) => new THREE.Vector2(Math.max(r, 0.008), y));
   if (close && pts[0].distanceTo(pts[pts.length - 1]) > 1e-6) pts.push(pts[0].clone());
   const g = new THREE.LatheGeometry(pts, segments, openHalf, Math.PI * 2 - openHalf * 2);
   g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * `LatheGeometry` winds each quad from the profile order, so a profile listed
+ * top-to-bottom comes out inside-out: back-face culling then hides the near
+ * wall and you see the shaded-from-behind far wall instead, which looks like
+ * a flat dark blob rather than a dome. Treating the profile as a polygon in
+ * (r, y) and forcing it counter-clockwise puts the normals outward whichever
+ * way the caller wrote it.
+ */
+function orientProfile(profile) {
+  let area = 0;
+  for (let i = 0; i < profile.length; i++) {
+    const [r0, y0] = profile[i];
+    const [r1, y1] = profile[(i + 1) % profile.length];
+    area += r0 * y1 - r1 * y0;
+  }
+  return area < 0 ? [...profile].reverse() : profile;
+}
+
+/** Reverse a geometry's triangles and normals, for a mirrored cap. */
+function flipWinding(g) {
+  const idx = g.getIndex();
+  if (idx) {
+    const a = idx.array;
+    for (let i = 0; i < a.length; i += 3) {
+      const t = a[i];
+      a[i] = a[i + 2];
+      a[i + 2] = t;
+    }
+    idx.needsUpdate = true;
+  }
+  const n = g.getAttribute('normal');
+  if (n) {
+    for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+    n.needsUpdate = true;
+  }
   return g;
 }
 
@@ -124,9 +162,10 @@ function latheSector(outer, thickness, { segments = 22, openHalf = 1.0 } = {}) {
   for (const sign of [-1, 1]) {
     // ShapeGeometry lies in XY; rotating by (azimuth - 90 degrees) sends its
     // local +x along the radius at that azimuth, which is where the cut is.
+    // The two caps face opposite ways, so one of them has to be turned round.
     const cap = new THREE.ShapeGeometry(shape);
     cap.rotateY(sign * openHalf - Math.PI / 2);
-    parts.push(cap);
+    parts.push(sign < 0 ? flipWinding(cap) : cap);
   }
   return mergeGeometries(parts);
 }
@@ -192,6 +231,33 @@ function ridgeFin(outline, width) {
   g.translate(width / 2, 0, 0);
   g.computeVertexNormals();
   return g;
+}
+
+/**
+ * Rake the hem of a lathed skirt: below `pivot`, drag the back of it downward
+ * (and very slightly outward) so the hem is short at the front and long at the
+ * back. This buys the asymmetry of a cowl without cutting the lathe into an
+ * open sector, which would leave two flat radial caps in the silhouette.
+ */
+function rakeHem(geo, { drop, pivot, span, power = 1.25, spread = 0.03 }) {
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (y >= pivot) continue;
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+    const r = Math.hypot(x, z);
+    if (r < 1e-4) continue;
+    const back = Math.max(0, -z / r); // 1 dead astern, 0 from the ears forward
+    const depth = Math.min(1, (pivot - y) / span);
+    const k = Math.pow(back, power) * depth;
+    pos.setY(i, y - drop * k);
+    pos.setX(i, x * (1 + spread * k));
+    pos.setZ(i, z * (1 + spread * k));
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
 }
 
 /** Hemisphere cap (or any slice of one), anchored so `y` is the sphere centre. */
@@ -316,6 +382,65 @@ function safeCapeHeight(h) {
 }
 
 /**
+ * Re-drape the kit's cape around the body.
+ *
+ * `cape()` returns a flat plane that only bows backwards, so side-on it is a
+ * paper-thin sliver with no silhouette at all. Re-map the same vertices onto a
+ * superellipse sweep (exponent 1/3, i.e. a rounded rectangle) that clears the
+ * torso's back face and the shoulder caps, widening and trailing towards the
+ * hem. The pristine grid is rebuilt from PlaneGeometry's own `parameters`
+ * because the kit has already deformed the position buffer once by the time we
+ * see the mesh.
+ */
+function drapeCape(mesh, o = {}) {
+  const geo = mesh.geometry;
+  const { width: w, height: h, widthSegments: ws, heightSegments: hs } = geo.parameters;
+  const flat = new THREE.PlaneGeometry(w, h, ws, hs);
+  const base = flat.attributes.position.array.slice();
+  flat.dispose();
+  const pos = geo.attributes.position;
+
+  // Collar values hug the torso corner (0.90 x 0.51) and stay behind the
+  // shoulder caps (which reach back to z = -0.28); the hem flares and trails.
+  const hwTop = o.hwTop ?? 0.95;
+  const hdTop = o.hdTop ?? 0.57;
+  const hwHem = o.hwHem ?? 1.24;
+  const hdHem = o.hdHem ?? 0.78;
+  const spanTop = o.spanTop ?? 1.2;
+  const spanHem = o.spanHem ?? 1.16;
+  const trail = o.trail ?? 0.12;
+  const round = 1 / 3; // superellipse exponent: 1 = ellipse, ->0 = rectangle
+
+  const wave = (t, amt = 1) => {
+    for (let i = 0; i < pos.count; i++) {
+      const x = base[i * 3];
+      const y = base[i * 3 + 1];
+      const v = (h / 2 - y) / h; // 0 at the collar, 1 at the hem
+      const hw = hwTop + (hwHem - hwTop) * v;
+      const hd = hdTop + (hdHem - hdTop) * v;
+      const a = (x / (w / 2)) * (spanTop + (spanHem - spanTop) * v);
+      const sa = Math.sin(a);
+      const ca = Math.cos(a);
+      // Billow grows as v^2 so the collar stays pinned to the shoulders.
+      const flap =
+        (Math.sin(a * 2.6 + t * 2.2) * 0.06 + Math.sin(t * 1.5 + v * 2.6) * 0.08) * v * v * amt;
+      pos.setX(i, Math.sign(sa) * Math.pow(Math.abs(sa), round) * (hw + flap));
+      pos.setY(i, y);
+      pos.setZ(i, -Math.sign(ca) * Math.pow(Math.abs(ca), round) * (hd + flap) - trail * v * v);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    geo.computeBoundingSphere();
+  };
+  mesh.userData.wave = wave;
+  // The sweep is already centred on the torso axis, so drop the kit's own
+  // "push the plane behind the back" offset.
+  mesh.position.z = 0;
+  wave(0, 1);
+  return mesh;
+}
+
+/**
  * Hang a cape from the shoulder line. `cape()` places its own top edge just
  * below its parent's origin, so it needs a mount at shoulder height rather
  * than being dropped straight onto the torso.
@@ -325,6 +450,7 @@ function attachCape(fig, color, opts = {}) {
   mount.position.set(0, FIG.torsoH - 0.06, opts.z ?? 0);
   fig.torso.add(mount);
   const mesh = cape(color, { width: opts.width ?? 2.1, height: safeCapeHeight(opts.height ?? 2.6) });
+  drapeCape(mesh, opts.drape);
   mount.add(mesh);
   fig.cape = mesh;
   /** Pure function of t: `amt` scales the billow (0 indoors, 1 in a corridor draught). */
@@ -422,77 +548,77 @@ export function ghostify(root, color = KIT.hologram) {
 const FACE_TOP = 0.78;
 
 /**
- * Leia's hair: a brown cap high enough to clear the face print, coming down
- * over the ears and nape, plus the two coiled buns. Head-local coordinates
- * (head bottom = 0, top = 1.04, r = 0.645).
+ * Leia's hair: a brown bob that clears the face print at the front and comes
+ * down over the ears and nape, plus the two coiled buns. Head-local
+ * coordinates (head bottom = 0, top = 1.04, r = 0.645).
  */
-function leiaBuns(color = COLORS.brown) {
+function leiaBuns(color = COLORS.reddishBrown) {
   const b = new Bricks();
+  const o = { finish: 'plastic' };
 
-  // Crown, sitting on top of the head.
-  b.addGeometry(domeGeometry(0.695, Math.PI * 0.5, 20), { x: 0, y: FACE_TOP, z: 0, color });
-  // Sides and nape, coming down past the ears but leaving the face clear.
+  // Crown: one solid lathe, closed top and bottom, sitting just clear of the
+  // head. Its rim stops at the brow so the printed face is never masked.
   b.addGeometry(
     latheShell(
-      shellProfile(
-        [
-          [0.695, FACE_TOP + 0.02],
-          [0.70, 0.42],
-          [0.66, 0.24],
-        ],
-        0.09
-      ),
-      { segments: 22, openHalf: 1.02 }
+      [
+        [0.03, FACE_TOP - 0.04],
+        [0.725, FACE_TOP - 0.04],
+        [0.73, 0.95],
+        [0.712, 1.06],
+        [0.63, 1.15],
+        [0.47, 1.22],
+        [0.25, 1.27],
+        [0.03, 1.29],
+      ],
+      { segments: 24, close: false }
     ),
-    { color, opts: { side: THREE.DoubleSide } }
+    { color, opts: o }
   );
-  // Centre-parted fringe across the brow.
+  // Sides and nape, hanging past the ears and round the back of the neck. Its
+  // top overlaps the crown's rim so the two never show a seam.
   b.addGeometry(
-    latheShell(
-      shellProfile(
-        [
-          [0.70, 1.00],
-          [0.715, FACE_TOP],
-        ],
-        0.085
-      ),
-      { segments: 20, openHalf: Math.PI - 1.15 }
+    latheSector(
+      [
+        [0.7, 0.8],
+        [0.705, 0.55],
+        [0.69, 0.34],
+        [0.64, 0.24],
+      ],
+      0.11,
+      { segments: 24, openHalf: 0.98 }
     ),
-    { rot: [0, Math.PI, 0], color, opts: { side: THREE.DoubleSide } }
+    { color, opts: o }
   );
-  b.addGeometry(chamferBox(0.20, 0.24, 0.16, 0.05), { x: 0, y: 0.94, z: 0.66, color });
 
-  // The buns, at ear height and out to the sides where they cannot mask the
-  // face: a ball flattened against the head, wrapped in a coil.
+  // The buns: three concentric rings pressed against the side of the head, so
+  // the coil reads as a braid. A sphere with rings buried inside it just looks
+  // like an earmuff.
   for (const sx of [-1, 1]) {
-    b.push();
-    b.translateWorld(sx * 0.80, 0.44, -0.02);
-    b.scale(0.76, 1, 1);
-    b.addGeometry(new THREE.SphereGeometry(0.40, 16, 12), { color });
-    b.pop();
-    // Coils, so it reads as a braid rather than a stuck-on ball.
-    b.addGeometry(new THREE.TorusGeometry(0.27, 0.095, 7, 18), {
-      x: sx * 0.855,
-      y: 0.44,
-      z: -0.02,
-      rot: [0, Math.PI / 2, 0],
-      color,
-    });
-    b.addGeometry(new THREE.TorusGeometry(0.145, 0.08, 6, 14), {
-      x: sx * 0.89,
-      y: 0.44,
-      z: -0.02,
-      rot: [0, Math.PI / 2, 0],
-      color,
-    });
-    // Short root joining the bun to the crown.
-    b.addGeometry(new THREE.CylinderGeometry(0.26, 0.33, 0.32, 12), {
-      x: sx * 0.58,
-      y: 0.46,
+    b.addGeometry(new THREE.CylinderGeometry(0.27, 0.3, 0.2, 14), {
+      x: sx * 0.6,
+      y: 0.5,
       z: -0.02,
       rot: [0, 0, Math.PI / 2],
       color,
+      opts: o,
     });
+    b.addGeometry(new THREE.TorusGeometry(0.215, 0.1, 8, 20), {
+      x: sx * 0.68,
+      y: 0.5,
+      z: -0.02,
+      rot: [0, Math.PI / 2, 0],
+      color,
+      opts: o,
+    });
+    b.addGeometry(new THREE.TorusGeometry(0.12, 0.085, 7, 16), {
+      x: sx * 0.735,
+      y: 0.5,
+      z: -0.02,
+      rot: [0, Math.PI / 2, 0],
+      color,
+      opts: o,
+    });
+    b.addGeometry(new THREE.SphereGeometry(0.085, 10, 8), { x: sx * 0.775, y: 0.5, z: -0.02, color, opts: o });
   }
   return b.build();
 }
@@ -507,10 +633,6 @@ function leiaSkirt(color = COLORS.white) {
   b.addGeometry(taperBox(1.94, 1.50, 1.44, 1.32, 0.92, 0.11), { x: 0, y: -0.30, z: 0.02, color });
   // Hem: a slightly proud lip so the skirt has an edge instead of a fade-out.
   b.addGeometry(taperBox(2.00, 1.94, 0.14, 1.36, 1.32, 0.05), { x: 0, y: -0.99, z: 0.02, color });
-  // Two soft folds, to break up the flat panel.
-  for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.16, 1.10, 0.14, 0.05), { x: sx * 0.30, y: -0.38, z: 0.58, color });
-  }
   return b.build();
 }
 
@@ -577,18 +699,27 @@ function vaderHelmet({ shell = COLORS.black, mask = COLORS.trueBlack } = {}) {
     { color: shell, opts: g }
   );
 
-  // Neck skirt, in two courses so the hem steps up towards the face instead of
-  // hanging past the jaw in two flat panels: short flanges beside the cheeks,
-  // then the long flare that covers the shoulders from the ears backwards.
+  // Neck flare: one full lathe, raked so the hem is short under the chin and
+  // long over the shoulders. An open sector gives the same asymmetry but
+  // leaves two flat radial caps standing proud of the silhouette side-on, and
+  // its inner wall z-fights the crown. The top ring is a hair wider than the
+  // crown's widest point (0.818) so the join is a clean step, not a seam.
   b.addGeometry(
-    latheSector([[0.79, 0.3], [0.84, 0.1], [0.87, -0.2]], 0.15, { segments: 24, openHalf: 0.92 }),
-    { color: shell, opts: g }
-  );
-  b.addGeometry(
-    latheSector([[0.8, 0.3], [0.85, 0.08], [0.885, -0.12], [0.915, -0.34]], 0.16, {
-      segments: 24,
-      openHalf: 1.3,
-    }),
+    rakeHem(
+      latheShell(
+        [
+          [0.02, 0.3],
+          [0.83, 0.3],
+          [0.868, 0.12],
+          [0.912, -0.06],
+          [0.95, -0.24],
+          [0.9, -0.3],
+          [0.02, -0.26],
+        ],
+        { segments: 26 }
+      ),
+      { drop: 0.3, pivot: 0.3, span: 0.56, power: 1.25 }
+    ),
     { color: shell, opts: g }
   );
 
@@ -1169,7 +1300,7 @@ export async function makeLeia(opts = {}) {
     headStud: false,
   });
 
-  fig.hair = leiaBuns(COLORS.brown);
+  fig.hair = leiaBuns(COLORS.reddishBrown);
   fig.accessory.add(fig.hair);
 
   fig.skirt = leiaSkirt(COLORS.white);
@@ -1177,10 +1308,8 @@ export async function makeLeia(opts = {}) {
   /** A robe restricts the stride; scenes should walk her with this amplitude. */
   fig.walkAmp = 0.34;
 
-  const belt = new Bricks()
-    .addGeometry(chamferBox(1.58, 0.16, 0.98, 0.04), { x: 0, y: 0.14, z: 0, color: SILVER, opts: POLISH })
-    .build();
-  fig.torso.add(belt);
+  // No moulded belt: torso-leia.svg prints the silver belt and its buckle at
+  // the right height, and a brick over it only breaks the artwork.
 
   fig.name = 'leia';
   return fig;
@@ -1294,7 +1423,7 @@ export async function makeStormtrooper(opts = {}) {
     fig.torso.add(b.build());
   }
 
-  giveBlaster(fig, COLORS.trueBlack, { len: 0.9 });
+  giveBlaster(fig, COLORS.trueBlack, { len: 1.25, scope: true });
 
   fig.variant = variant;
   fig.name = 'stormtrooper';
@@ -1621,14 +1750,13 @@ export async function makeAstromech(opts = {}) {
   for (const y of [Y0 + 0.08, Y1 - 0.07]) {
     b.addGeometry(new THREE.CylinderGeometry(R + 0.02, R + 0.02, 0.12, 24), { x: 0, y, z: 0, color: STEEL, opts: POLISH });
   }
-  b.addGeometry(new THREE.CylinderGeometry(R * 0.94, R * 0.86, 0.14, 20), { x: 0, y: Y0 - 0.04, z: 0, color: dark, opts: POLISH });
 
   // Blue panel details around the barrel.
   const panel = (angle, y, w, hh, color, depth = 0.06) =>
     onCurve(b, angle, y, R - 0.015, 0, (bb) => bb.addGeometry(chamferBox(w, hh, depth, 0.02), { color, opts: G }));
   panel(0, 1.60, 0.46, 0.28, trim);
   panel(0, 1.18, 0.34, 0.44, trim);
-  panel(0, 0.72, 0.44, 0.22, dark);
+  panel(0, 0.74, 0.4, 0.2, STEEL);
   for (const s of [-1, 1]) {
     panel(s * 0.85, 1.56, 0.34, 0.26, trim);
     panel(s * 0.85, 1.04, 0.30, 0.50, shell);
@@ -1659,25 +1787,30 @@ export async function makeAstromech(opts = {}) {
   d.addGeometry(new THREE.CylinderGeometry(0.19, 0.21, 0.05, 14), { x: 0, y: R - 0.02, z: 0, color: STEEL, opts: POLISH });
 
   // Holoprojector lens, up and to one side of the eye.
-  const pn = new THREE.Vector3(-0.34, 0.50, 0.30).normalize();
-  const pPos = pn.clone().multiplyScalar(R - 0.03);
+  const pn = new THREE.Vector3(-0.42, 0.72, 0.55).normalize();
+  const pTilt = Math.acos(pn.y);
+  const pYaw = Math.atan2(pn.x, pn.z);
   d.push();
-  d.translateWorld(pPos.x, pPos.y, pPos.z);
-  d.addGeometry(new THREE.CylinderGeometry(0.085, 0.10, 0.10, 12), { color: STEEL, opts: POLISH });
-  d.addGeometry(new THREE.CylinderGeometry(0.055, 0.055, 0.14, 12), {
+  d.rotateY(pYaw);
+  d.rotateX(pTilt);
+  d.translateWorld(0, R - 0.04, 0);
+  d.addGeometry(new THREE.CylinderGeometry(0.075, 0.095, 0.12, 12), { color: STEEL, opts: POLISH });
+  d.addGeometry(new THREE.CylinderGeometry(0.05, 0.05, 0.17, 12), {
     color: KIT.hologram,
     opts: { emissive: KIT.hologram, emissiveIntensity: 1.4, finish: 'glow' },
   });
   d.pop();
   dome.add(d.build());
 
+  // An empty at the lens, +y pointing out along the beam, for scenes to hang a
+  // hologram off.
   const projector = new THREE.Group();
-  projector.position.copy(pn.clone().multiplyScalar(R + 0.03));
+  projector.position.copy(pn.clone().multiplyScalar(R + 0.05));
   projector.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pn);
   dome.add(projector);
 
   // Dome face: the decal wraps the sphere, so nothing floats at the corners.
-  const face = await decalOn('svg/head-astromech.svg', spherePatch(R + 0.012, 0, 0.50, 1.45, 0.95, 22));
+  const face = await decalOn('svg/head-astromech.svg', spherePatch(R + 0.012, 0, 0.6, 1.53, 0.95, 22));
   if (face) {
     dome.add(face);
   } else {
@@ -1727,13 +1860,13 @@ export async function makeAstromech(opts = {}) {
 
   // Retractable centre leg, angled back.
   const legC = new THREE.Group();
-  legC.position.set(0, 1.19, -0.44);
-  legC.rotation.x = 0.20;
+  legC.position.set(0, 1.19, 0.42);
+  legC.rotation.x = -0.16;
   const c = new Bricks();
   c.addGeometry(chamferBox(0.26, 1.02, 0.32, 0.04), { x: 0, y: -0.52, z: 0, color: shell, opts: G });
   c.addGeometry(chamferBox(0.30, 0.10, 0.36, 0.03), { x: 0, y: -0.72, z: 0, color: STEEL, opts: POLISH });
-  c.addGeometry(chamferBox(0.32, 0.20, 0.60, 0.04), { x: 0, y: -1.11, z: 0.06, color: shell, opts: G });
-  c.addGeometry(chamferBox(0.34, 0.08, 0.62, 0.03), { x: 0, y: -1.19, z: 0.06, color: dark, opts: POLISH });
+  c.addGeometry(chamferBox(0.32, 0.2, 0.6, 0.04), { x: 0, y: -1.11, z: 0.1, color: shell, opts: G });
+  c.addGeometry(chamferBox(0.34, 0.08, 0.62, 0.03), { x: 0, y: -1.19, z: 0.1, color: dark, opts: POLISH });
   legC.add(c.build());
   body.add(legC);
   const legCY = legC.position.y;

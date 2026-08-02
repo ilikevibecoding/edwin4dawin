@@ -719,18 +719,15 @@ export async function build(ctx) {
     // clear of the readable zone so the text climbs away rather than just
     // dimming out in place.
     const yEnter = planeYAtNdc(-1.05); // plane-local y just below the frame
-    const keys = [
+    const scroll = monoSpline([
       [T.crawlStart, yEnter],
       [T.p1, PROMINENT_Y[0] + centres[0]],
       [T.p2, PROMINENT_Y[1] + centres[1]],
       [T.p3, PROMINENT_Y[2] + centres[2]],
       [T.crawlExit, contentH + 22],
-    ];
-    const scroll = monoSpline(keys);
+    ]);
 
     return {
-      lines: lineCount,
-      keys,
       update(t) {
         const on = t >= T.crawlStart - 0.2 && t <= T.dissolve[1] + 0.4;
         root.visible = on;
