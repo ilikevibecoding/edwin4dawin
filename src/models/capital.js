@@ -47,7 +47,7 @@ export function starDestroyer({ length = 1600, detail = 1, seed = 42 } = {}) {
     seed: 42,
     repeat: [1, 1],
     emissiveMap: true,
-    emissiveIntensity: 1.15,
+    emissiveIntensity: 0.55,
     windowSeed: 5,
     density: 6,
   });
@@ -96,18 +96,45 @@ export function starDestroyer({ length = 1600, detail = 1, seed = 42 } = {}) {
   // Underside detail + the ventral hangar mouth.
   const under = greebleField({
     seed: seed + 7,
-    count: Math.round(260 * detail),
-    width: W * 0.8,
-    depth: L * 0.8,
+    count: Math.round(520 * detail),
+    width: W * 0.88,
+    depth: L * 0.86,
     y: 0,
-    sizeMin: 3,
-    sizeMax: 18,
-    heightMin: 1,
-    heightMax: 6,
+    sizeMin: 6,
+    sizeMax: 42,
+    heightMin: 3,
+    heightMax: 20,
     mask: (x, z) => Math.abs(x) < topHalf(z) * 1.02,
   });
   under.rotateX(Math.PI); // hang downward
   g.add(new THREE.Mesh(under, greebled({ color: 0xffffff, seed: 19, repeat: [4, 4], base: [126, 130, 136], lights: 0.03 })));
+
+  // Longitudinal trenches down the belly, which is what actually sells the
+  // scale when the ship passes overhead.
+  const bellyParts = [];
+  for (const s2 of [-1, 1]) {
+    for (let i = 0; i < 30; i++) {
+      const z = sternZ + L * 0.06 + (i / 30) * L * 0.82;
+      const hw = topHalf(z);
+      if (hw < 20) continue;
+      const bg = box(hw * 0.14, 10, (L * 0.82) / 30 + 2);
+      bg.translate(s2 * hw * 0.46, -5, z);
+      bellyParts.push([bg, null]);
+      const bg2 = box(hw * 0.06, 16, (L * 0.82) / 30 + 2);
+      bg2.translate(s2 * hw * 0.78, -8, z);
+      bellyParts.push([bg2, null]);
+    }
+  }
+  for (let i = 0; i < 18; i++) {
+    const z = sternZ + L * 0.05 + (i / 18) * L * 0.8;
+    const hw = topHalf(z);
+    if (hw < 20) continue;
+    const bg = box(hw * 1.5, 7, 12);
+    bg.translate(0, -4, z);
+    bellyParts.push([bg, null]);
+  }
+  g.add(new THREE.Mesh(mergeAll(bellyParts), greebled({ color: 0xffffff, seed: 20, repeat: [6, 6], base: [112, 116, 122], lights: 0.02 })));
+  bellyParts.forEach(([b]) => b.dispose());
 
   const bayW = W * 0.13;
   const bayL = L * 0.12;
@@ -121,7 +148,7 @@ export function starDestroyer({ length = 1600, detail = 1, seed = 42 } = {}) {
   const sup = new THREE.Group();
   sup.position.set(0, topY((superFrontZ + superBackZ) / 2) - 4, (superFrontZ + superBackZ) / 2);
   g.add(sup);
-  const supMat = hull({ color: 0xffffff, base: [146, 150, 156], seed: 8, repeat: [2, 2], emissiveMap: true, emissiveIntensity: 1.2, windowSeed: 21, density: 4 });
+  const supMat = hull({ color: 0xffffff, base: [146, 150, 156], seed: 8, repeat: [2, 2], emissiveMap: true, emissiveIntensity: 0.7, windowSeed: 21, density: 4 });
   const blockW = W * 0.34;
   const blockD = L * 0.2;
   addMesh(sup, prismoid(
@@ -153,7 +180,7 @@ export function starDestroyer({ length = 1600, detail = 1, seed = 42 } = {}) {
   engines.position.z = sternZ;
   g.add(engines);
   const bellMat = paint(0x5f656d, { flat: false });
-  const coreMat = emissive(0x9ed2f2, { blending: THREE.NormalBlending, depthWrite: true });
+  const coreMat = emissive(0x7fb8dd, { blending: THREE.NormalBlending, depthWrite: true });
   const mainR = W * 0.09;
   const layout = [
     [0, H * 0.42, mainR],
@@ -168,7 +195,7 @@ export function starDestroyer({ length = 1600, detail = 1, seed = 42 } = {}) {
   for (const [x, y, rad] of layout) {
     addMesh(engines, cyl(rad, rad * 1.05, 14, 20, { alongZ: true }), bellMat, { pos: [x, y, 6] });
     addMesh(engines, new THREE.CircleGeometry(rad * 0.92, 20), coreMat, { pos: [x, y, -1.2], rot: [0, Math.PI, 0] });
-    const halo = addMesh(engines, new THREE.PlaneGeometry(rad * 2.3, rad * 2.3), glowPlane({ color: 0x9fd8ff, opacity: 0.13 }), { pos: [x, y, -5] });
+    const halo = addMesh(engines, new THREE.PlaneGeometry(rad * 2.3, rad * 2.3), glowPlane({ color: 0x9fd8ff, opacity: 0.09 }), { pos: [x, y, -5] });
     halo.renderOrder = 4;
     g.userData.engineGlows.push(halo);
   }

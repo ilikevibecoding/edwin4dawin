@@ -39,9 +39,9 @@ export default {
     // "A long time ago in a galaxy far, far away...."
     const cardTex = textCard({
       w: 2048, h: 256, text: OPENING_CARD,
-      font: '400 76px "News Cycle", Arial, sans-serif', color: '#4bd5ff',
+      font: '400 104px "News Cycle", Arial, sans-serif', color: '#5fdcff',
     });
-    const card = cameraQuad(camera, cardTex, { distance: 10, widthFrac: 0.78, opacity: 0 });
+    const card = cameraQuad(camera, cardTex, { distance: 10, widthFrac: 0.9, opacity: 0 });
 
     // The logo, which starts filling the frame and recedes to a point.
     const logoTex = logoTexture({ w: 2048, h: 1024, top: TITLE.main[0], bottom: TITLE.main[1], sub: TITLE.sub });
@@ -97,7 +97,7 @@ export default {
     // The planet we tilt down to at the end of the crawl: Tessaru, seen from
     // high orbit with its terminator running across the frame.
     const tessaru = planet({ radius: 9000, seed: 21, sunDir: [0.7, 0.25, 0.7], atmosphere: 0x8ec4ff, segments: 48 });
-    tessaru.position.set(1200, -10400, -9000);
+    tessaru.position.set(1200, -13100, -9000);
     scene.add(tessaru);
     const sun = new THREE.DirectionalLight(0xfff2dc, 3.0);
     sun.position.set(9000, 3000, 6000);
@@ -125,8 +125,8 @@ export default {
           // Recede along -Z with a slow-out so it hangs for a beat first.
           const e = Ease.inQuad(clamp(lt));
           const z = lerp(-12, -1500, e);
-          logo.position.set(0, 0, z);
-          const scale = -z * 1.42;   // hold the same screen size ratio at z=-12
+          logo.position.set(0, -z * 0.055, z);
+          const scale = -z * 1.12;   // hold the same screen size ratio at z=-12
           logo.scale.set(scale, scale, 1);
           logo.material.opacity = clamp(smoothstep(0, 0.12, lt)) * (1 - smoothstep(0.86, 1.16, lt));
         } else {

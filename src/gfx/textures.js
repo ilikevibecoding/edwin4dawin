@@ -156,7 +156,7 @@ export function hullPanels({
  * Matching emissive map: black plate with sparse lit windows, so bloom picks out
  * city-lights across a capital ship hull.
  */
-export function hullWindows({ size = 1024, seed = 11, rows = 46, density = 0.4, tint = [255, 220, 150] } = {}) {
+export function hullWindows({ size = 1024, seed = 11, rows = 26, density = 0.24, tint = [255, 220, 150] } = {}) {
   const key = `win:${size}:${seed}:${rows}:${density}:${tint.join(',')}`;
   return memo(key, () => {
     const r = new RNG(seed);
@@ -166,7 +166,7 @@ export function hullWindows({ size = 1024, seed = 11, rows = 46, density = 0.4, 
     g.fillRect(0, 0, size, size);
     const step = size / rows;
     for (let j = 0; j < rows; j++) {
-      if (r.bool(0.45)) continue;
+      if (r.bool(0.62)) continue;
       const y = j * step + step * 0.3;
       const h = Math.max(1, step * 0.28);
       const cols = Math.floor(size / (step * 0.7));

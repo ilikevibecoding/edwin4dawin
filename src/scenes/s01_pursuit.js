@@ -53,7 +53,7 @@ export default {
       lights: { keyIntensity: 4.2, keyDir: [0.8, 0.5, 0.4], fillIntensity: 1.2, ambient: 0x2b3a52, ambientIntensity: 2.6 },
     });
     // Planetshine from below, so the destroyer's belly is not a black hole.
-    const bounce = new THREE.DirectionalLight(0x7fa2d2, 2.6);
+    const bounce = new THREE.DirectionalLight(0x89aeda, 3.4);
     bounce.position.set(-200, -1000, 300);
     scene.add(bounce);
 
@@ -99,12 +99,34 @@ export default {
     booms.schedule(27.15, new THREE.Vector3(0, 4, 0), { size: 34, dur: 2.0 });
 
     // Tractor beam.
+    const beamCanvas = document.createElement('canvas');
+    beamCanvas.width = 32;
+    beamCanvas.height = 256;
+    {
+      const bg = beamCanvas.getContext('2d');
+      // Bright at the emitter, fading out toward the captured ship, with soft
+      // edges across the beam so it never shows a hard silhouette.
+      const v = bg.createLinearGradient(0, 0, 0, 256);
+      v.addColorStop(0, 'rgba(210,238,255,0.95)');
+      v.addColorStop(0.35, 'rgba(150,205,255,0.5)');
+      v.addColorStop(1, 'rgba(90,160,255,0.06)');
+      bg.fillStyle = v;
+      bg.fillRect(0, 0, 32, 256);
+      const h = bg.createLinearGradient(0, 0, 32, 0);
+      h.addColorStop(0, 'rgba(0,0,0,1)');
+      h.addColorStop(0.5, 'rgba(0,0,0,0)');
+      h.addColorStop(1, 'rgba(0,0,0,1)');
+      bg.globalCompositeOperation = 'destination-out';
+      bg.fillStyle = h;
+      bg.fillRect(0, 0, 32, 256);
+    }
+    const beamTex = new THREE.CanvasTexture(beamCanvas);
+    beamTex.colorSpace = THREE.SRGBColorSpace;
     const beamMat = new THREE.MeshBasicMaterial({
-      map: radialGlow({ inner: 'rgba(190,230,255,0.9)', mid: 'rgba(120,190,255,0.3)', outer: 'rgba(0,0,0,0)' }),
-      color: 0x9fd0ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
-      depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+      map: beamTex, color: 0x9fd0ff, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
     });
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(30, 90, 1, 16, 1, true), beamMat);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(26, 78, 1, 20, 1, true), beamMat);
     beam.renderOrder = 8;
     scene.add(beam);
 
@@ -166,7 +188,7 @@ export default {
 
         // Tractor beam from the ventral bay down to the corvette.
         const beamA = smoothstep(31.5, 34, t) * (1 - smoothstep(43, 46, t));
-        beamMat.opacity = beamA * 0.55;
+        beamMat.opacity = beamA * 0.32;
         beam.visible = beamA > 0.01;
         if (beam.visible) {
           const bayPos = new THREE.Vector3(0, SD_Y - 14, nose + 800 + 176);
