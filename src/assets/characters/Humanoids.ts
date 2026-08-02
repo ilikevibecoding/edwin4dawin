@@ -411,7 +411,7 @@ export class DarkLord extends CharacterRig {
         box(0.03, 0.03, 0.02, { pos: [0.06, 0.28, 0.215] }),
         box(0.14, 0.016, 0.02, { pos: [0, 0.21, 0.215] }),
       ]),
-      emissive('vaderChest', 0xff3b2a, 2.6),
+      emissive('vaderChest', 0xff3b2a, 1.1),
     );
     j.chest.add(this.chestLights);
     attach(
@@ -469,13 +469,13 @@ export class DarkLord extends CharacterRig {
     );
 
     // Cape: a curved sheet driven by a small vertex wave.
-    const capeGeo = new THREE.PlaneGeometry(0.68, 1.42, 8, 12);
+    const capeGeo = new THREE.PlaneGeometry(0.68, 1.3, 8, 12);
     const pos = capeGeo.getAttribute('position');
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const y = pos.getY(i);
-      const t = (y + 0.71) / 1.42; // 0 at hem, 1 at shoulders
-      const widen = 0.78 + (1 - t) * 0.5;
+      const t = (y + 0.65) / 1.3; // 0 at hem, 1 at shoulders
+      const widen = 0.74 + (1 - t) * 0.34;
       pos.setX(i, x * widen);
       // Wrap around the back so it drapes instead of hanging like a board.
       pos.setZ(i, -0.14 - Math.pow(Math.abs(x) / 0.42, 2) * 0.3 * widen);
@@ -484,7 +484,7 @@ export class DarkLord extends CharacterRig {
     capeGeo.computeVertexNormals();
     this.capeBase = new Float32Array(pos.array as Float32Array);
     this.cape = new THREE.Mesh(capeGeo, capeMat);
-    this.cape.position.set(0, 0.46 - 0.71, -0.05);
+    this.cape.position.set(0, 0.46 - 0.65, -0.05);
     this.cape.castShadow = true;
     this.cape.name = 'cape';
     j.chest.add(this.cape);
@@ -538,7 +538,7 @@ export class DarkLord extends CharacterRig {
       const bx = this.capeBase[i * 3];
       const by = this.capeBase[i * 3 + 1];
       const bz = this.capeBase[i * 3 + 2];
-      const t = clamp01((0.71 - by) / 1.42);
+      const t = clamp01((0.65 - by) / 1.3);
       const w = Math.sin(elapsed * 2.1 + by * 3.4 + bx * 1.4) * sway * t * t;
       pos.setZ(i, bz - w - t * t * this.speed * 0.11);
       pos.setX(i, bx + w * 0.35);
@@ -550,7 +550,7 @@ export class DarkLord extends CharacterRig {
     const b = Math.sin(this.breathPhase * Math.PI * 2);
     this.joints.chest.scale.set(1 + b * 0.007, 1 + b * 0.005, 1 + b * 0.008);
     (this.chestLights.material as THREE.MeshStandardMaterial).emissiveIntensity =
-      2.2 + 1.2 * Math.max(0, b);
+      0.95 + 0.5 * Math.max(0, b);
 
     const s = this.saberAmount;
     this.saberBlade.visible = s > 0.005;

@@ -316,7 +316,7 @@ export class Corridor {
       box(2.6, 0.1, 0.86, { pos: [0, ceiling + 0.01, 0] }),
     ]);
     const lumFrames = new THREE.InstancedMesh(lumFrameGeo, corridorTrim(), moduleCount);
-    const lums = new THREE.InstancedMesh(lumGeo, emissive('corridorLight', 0xdfe8f5, 1.5), moduleCount);
+    const lums = new THREE.InstancedMesh(lumGeo, emissive('corridorLight', 0xdfe8f5, 0.85), moduleCount);
     lums.name = 'Corridor_Luminaires';
     for (let i = 0; i < moduleCount; i++) {
       const x = xStart + i * CORRIDOR.moduleLength + CORRIDOR.moduleLength / 2;
@@ -331,13 +331,13 @@ export class Corridor {
     const lightCount = opts.lights ?? Math.max(5, Math.round(9 * Math.min(1, detail + 0.35)));
     for (let i = 0; i < lightCount; i++) {
       const x = xStart + 3 + ((xEnd - xStart - 6) * i) / Math.max(1, lightCount - 1);
-      const light = new THREE.PointLight(0xdfe8f5, 26, 22, 1.5);
+      const light = new THREE.PointLight(0xdfe8f5, 8.5, 15, 1.7);
       light.position.set(x, ceiling - 0.35, 0);
       light.castShadow = false;
       this.root.add(light);
       this.luminaires.push({
         light,
-        base: 26,
+        base: 8.5,
         x,
         flickerSeed: rng.range(0, 100),
         damaged: rng.bool(0.22),
@@ -349,10 +349,10 @@ export class Corridor {
       [branchMid, halfWidth + 3.5, 0xdfe8f5],
       [(alc.x0 + alc.x1) / 2, -halfWidth - alc.depth * 0.5, 0xe8eef8],
     ] as Array<[number, number, number]>) {
-      const light = new THREE.PointLight(colour, 22, 20, 1.5);
+      const light = new THREE.PointLight(colour, 7.5, 14, 1.7);
       light.position.set(lx, ceiling - 0.4, lz);
       this.root.add(light);
-      this.luminaires.push({ light, base: 22, x: lx, flickerSeed: rng.range(0, 100), damaged: false });
+      this.luminaires.push({ light, base: 7.5, x: lx, flickerSeed: rng.range(0, 100), damaged: false });
     }
     // Matching luminaire plates in the branch and alcove.
     const extraLums = new THREE.Mesh(
@@ -363,19 +363,19 @@ export class Corridor {
           pos: [(alc.x0 + alc.x1) / 2, ceiling - 0.04, -halfWidth - alc.depth * 0.5],
         }),
       ]),
-      emissive('corridorLight', 0xdfe8f5, 1.5),
+      emissive('corridorLight', 0xdfe8f5, 0.85),
     );
     this.root.add(extraLums);
 
     // ---- Doors ------------------------------------------------------------
     this.blastDoor = new BlastDoor({ width: halfWidth * 2, height: ceiling, thickness: 0.35 });
     this.blastDoor.root.position.set(xStart + 0.2, 0, 0);
-    this.blastDoor.root.rotation.y = -Math.PI / 2;
+    this.blastDoor.root.rotation.y = Math.PI / 2;
     this.root.add(this.blastDoor.root);
 
     this.aftDoor = new BlastDoor({ width: halfWidth * 2, height: ceiling, thickness: 0.3 });
     this.aftDoor.root.position.set(xEnd - 0.4, 0, 0);
-    this.aftDoor.root.rotation.y = Math.PI / 2;
+    this.aftDoor.root.rotation.y = -Math.PI / 2;
     this.root.add(this.aftDoor.root);
 
     // Airlock ring behind the breach door.
@@ -477,15 +477,28 @@ export class Corridor {
     });
     const scorchParts: THREE.BufferGeometry[] = [];
     const dRng = rng.fork('corridor-damage');
+    /** Wall Z at a given height, so scorch marks lie flat on the curve. */
+    const wallZAt = (y: number): number => {
+      for (let i = 0; i < PROFILE.length - 1; i++) {
+        const [y0, z0] = PROFILE[i];
+        const [y1, z1] = PROFILE[i + 1];
+        if (z0 > 0 || z1 > 0) continue;
+        if (y >= Math.min(y0, y1) && y <= Math.max(y0, y1)) {
+          const t = Math.abs(y1 - y0) < 1e-6 ? 0 : (y - y0) / (y1 - y0);
+          return Math.abs(z0 + (z1 - z0) * t);
+        }
+      }
+      return halfWidth;
+    };
     for (let i = 0; i < Math.round(20 * detail); i++) {
       const x = dRng.range(xStart + 2, 26);
       const side = dRng.bool() ? -1 : 1;
-      const y = dRng.range(0.5, 2.6);
-      const s = dRng.range(0.18, 0.62);
+      const y = dRng.range(0.4, 2.3);
+      const s = dRng.range(0.14, 0.48);
       const g = new THREE.CircleGeometry(s, 7);
       g.applyMatrix4(
         placementMatrix({
-          pos: [x, y, side * (halfWidth - 0.05)],
+          pos: [x, y, side * (wallZAt(y) - 0.015)],
           rot: [0, side > 0 ? Math.PI : 0, dRng.range(0, Math.PI)],
           scale: [1, dRng.range(0.6, 1.3), 1],
         }),
@@ -499,13 +512,13 @@ export class Corridor {
     // Loose conduit hanging from a damaged ceiling section.
     const conduit = new THREE.Mesh(
       merge([
-        cyl(0.07, 0.07, 1.1, 6, { pos: [8.4, 2.4, 0.5], rot: [0.4, 0, 0.3] }),
-        box(0.5, 0.1, 0.4, { pos: [8.2, 2.95, 0.4], rot: [0.2, 0, 0.4] }),
+        cyl(0.05, 0.05, 0.85, 6, { pos: [5.6, 2.52, 1.05], rot: [0.35, 0, 0.28] }),
+        box(0.4, 0.08, 0.34, { pos: [5.45, 2.95, 0.98], rot: [0.18, 0, 0.36] }),
       ]),
       darkMechanical(),
     );
     this.root.add(conduit);
-    this.anchors.sparkConduit = anchor(this.root, 'sparkConduit', 8.6, 1.95, 0.66);
+    this.anchors.sparkConduit = anchor(this.root, 'sparkConduit', 5.75, 2.12, 1.18);
 
     // ---- Navigation anchors ----------------------------------------------
     anchorInto(this.anchors, this.root, {
@@ -537,7 +550,7 @@ export class Corridor {
 
   /** Cut the corridor lighting down as power fails. */
   setPowerLevel(v: number): void {
-    for (const l of this.luminaires) l.base = 26 * v;
+    for (const l of this.luminaires) l.base = 8.5 * v;
   }
 
   openPodHatch(open: boolean): void {

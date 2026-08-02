@@ -215,8 +215,8 @@ export function plansChapter(): Chapter<ShowContext> {
       stage.applyCameraRange(ctx.render.camera);
       ctx.render.fade = 0;
       ctx.render.dofEnabled = true;
-      ctx.render.dofRange = 3.2;
-      ctx.render.dofStrength = 1.0;
+      ctx.render.dofRange = 5.5;
+      ctx.render.dofStrength = 0.8;
 
       const { leia, r2, threepio, vader, troopers } = stage.characters;
 

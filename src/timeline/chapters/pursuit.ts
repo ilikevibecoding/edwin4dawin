@@ -265,27 +265,30 @@ export function pursuitChapter(): Chapter<ShowContext> {
           const r = runnerAt(t);
           const d = destroyerAt(t);
           const a = smootherstep(k);
-          out.position.set(r.x + lerp(330, 215, a), r.y + lerp(-52, -26, a), r.z + lerp(178, 126, a));
-          // Aim starts on the corvette and drifts up and back to the oncoming
-          // hull without ever letting the corvette leave the frame.
-          const aim = smootherstep(clamp01((k - 0.1) / 0.62));
+          // Ahead of the corvette looking back down the line of travel, pushing
+          // in as the destroyer closes. The corvette stays small and low; the
+          // hull grows until it owns the top two thirds of the frame.
+          out.position.set(r.x + lerp(880, 330, a), r.y + lerp(-30, -46, a), r.z + lerp(300, 170, a));
+          const aim = smootherstep(clamp01((k - 0.05) / 0.7));
           out.target.set(
-            lerp(r.x, r.x - 520, aim),
-            lerp(r.y + 6, r.y + 150, aim),
-            lerp(r.z, lerp(r.z, d.z, 0.35), aim),
+            lerp(r.x, r.x - 240, aim),
+            lerp(r.y + 4, r.y + 190, aim),
+            lerp(r.z, lerp(r.z, d.z, 0.45), aim),
           );
-          out.fov = lerp(50, 58, a);
+          out.fov = lerp(48, 56, a);
           out.focus = out.position.distanceTo(out.target);
         }),
 
         // 4. Underside: the hull crosses the top of frame, runner tiny below.
-        customShot({ id: 'pursuit.belly', start: S + 46, end: S + 58, fov: 62, handheld: 0.62, blend: 1.2 }, (k, t, out) => {
+        customShot({ id: 'pursuit.belly', start: S + 46, end: S + 58, fov: 64, handheld: 0.62, blend: 1.2 }, (k, t, out) => {
           const r = runnerAt(t);
           const d = destroyerAt(t);
           const a = smootherstep(k);
-          out.position.set(r.x + lerp(150, 60, a), r.y - 78, r.z + lerp(140, 112, a));
-          out.target.set(lerp(d.x - 300, d.x + 420, a), lerp(d.y - 240, d.y - 160, a), d.z + 20);
-          out.fov = 62;
+          // Directly beneath the hull as it slides over: ventral trenches,
+          // greebling and the hangar all pass through frame.
+          out.position.set(r.x + lerp(260, 150, a), r.y - 86, r.z + lerp(150, 96, a));
+          out.target.set(lerp(d.x - 200, d.x + 500, a), lerp(d.y - 250, d.y - 150, a), d.z + 30);
+          out.fov = 64;
           out.focus = out.position.distanceTo(out.target);
         }),
 
@@ -295,9 +298,11 @@ export function pursuitChapter(): Chapter<ShowContext> {
           const d = destroyerAt(t);
           const mid = new THREE.Vector3().addVectors(r, d).multiplyScalar(0.5);
           const a = smootherstep(k);
-          out.position.set(mid.x + lerp(-260, 240, a), mid.y - 90, mid.z + lerp(1500, 1180, a));
-          out.target.copy(mid).add(new THREE.Vector3(0, lerp(-40, 20, a), 0));
-          out.fov = lerp(42, 37, a);
+          // High and to the side, angled down so the planet's surface fills
+          // the bottom of frame behind the exchange of fire.
+          out.position.set(mid.x + lerp(-380, 260, a), mid.y + lerp(520, 380, a), mid.z + lerp(1620, 1280, a));
+          out.target.set(mid.x, mid.y + lerp(-140, -60, a), mid.z - 120);
+          out.fov = lerp(43, 39, a);
           out.focus = out.position.distanceTo(out.target);
         }),
 

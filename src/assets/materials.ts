@@ -144,6 +144,11 @@ export const gunmetal = (): THREE.MeshStandardMaterial =>
 // Interior materials
 // ---------------------------------------------------------------------------
 
+/**
+ * Corridor shell. Rendered two-sided: the shell is an open extruded ribbon
+ * rather than a closed solid, so single-sided culling would punch holes in the
+ * ceiling depending on which way each run was wound.
+ */
 export const corridorWall = (): THREE.MeshStandardMaterial =>
   reg('corridorWall', () => {
     const map = corridorWallMap();
@@ -154,15 +159,16 @@ export const corridorWall = (): THREE.MeshStandardMaterial =>
       roughness: 0.55,
       metalness: 0.08,
       envMapIntensity: 0.5,
+      side: THREE.DoubleSide,
     });
   });
 
 export const corridorTrim = (): THREE.MeshStandardMaterial =>
   reg('corridorTrim', () =>
     new THREE.MeshStandardMaterial({
-      color: 0x9aa0a4,
-      roughness: 0.4,
-      metalness: 0.55,
+      color: 0xd2d6da,
+      roughness: 0.42,
+      metalness: 0.3,
     }),
   );
 

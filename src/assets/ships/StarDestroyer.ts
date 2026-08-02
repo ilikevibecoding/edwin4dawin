@@ -304,13 +304,13 @@ export class StarDestroyer {
     this.root.add(hangarRecess);
     this.hangarGlow = new THREE.Mesh(
       new THREE.PlaneGeometry(hangarW, hangarD),
-      emissive('isdHangar', 0xffd9a0, 2.1),
+      emissive('isdHangar', 0xffd9a0, 0.85),
     );
     this.hangarGlow.rotation.x = Math.PI / 2;
-    this.hangarGlow.position.set(0, hangarY + H * 0.052, hangarZ);
+    this.hangarGlow.position.set(0, hangarY + H * 0.038, hangarZ);
     this.hangarGlow.name = 'ISD_HangarGlow';
     this.root.add(this.hangarGlow);
-    const hangarLight = new THREE.PointLight(0xffd9a0, 6, L * 0.35, 1.8);
+    const hangarLight = new THREE.PointLight(0xffd9a0, 4, L * 0.22, 2);
     hangarLight.position.set(0, hangarY + H * 0.1, hangarZ);
     this.root.add(hangarLight);
     this.anchors.hangar = makeAnchor('hangar', 0, hangarY, hangarZ, this.root);
@@ -505,7 +505,7 @@ export class StarDestroyer {
   }
 
   setHangarGlow(v: number): void {
-    (this.hangarGlow.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.1 * v;
+    (this.hangarGlow.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.85 * v;
   }
 
   setTractorGlow(v: number): void {

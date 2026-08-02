@@ -296,11 +296,14 @@ export abstract class CharacterRig {
     j.hipL.rotation.z = 0.03;
     j.hipR.rotation.z = -0.03;
 
-    // Ground the pelvis on the lowest sole.
+    // Ground the pelvis on the lowest sole. `soleHeight` is measured from the
+    // hip pivot, and the hips already sit `hipHeight` above the body origin,
+    // so the correction is the sum of the two — not just the sole.
     const soleL = soleHeight(p, hipLA, kneeLA);
     const soleR = soleHeight(p, hipRA, kneeRA);
     const lowest = Math.min(soleL, soleR);
-    j.body.position.y = -lowest;
+    const groundOffset = -(p.hipHeight + lowest);
+    j.body.position.y = groundOffset;
 
     // --- torso --------------------------------------------------------------
     const lean = clamp(this.speed * 0.055, 0, 0.2) + crouch * 0.25 + kneel * 0.12;
@@ -394,23 +397,26 @@ export abstract class CharacterRig {
       const target = this.state === 'down' ? 1 : clamp01(this.stateTime / 0.85);
       this.fallProgress = Math.max(this.fallProgress, target);
       const f = easeOutCubic(this.fallProgress);
-      // Slump backwards and settle onto the deck, deliberately non-graphic.
-      j.body.rotation.x = -f * (Math.PI / 2 - 0.12);
-      j.body.position.y = -lowest * (1 - f) + f * (p.hipHeight * 0.82);
-      j.body.position.z = -f * 0.34;
-      j.chest.rotation.x = -f * 0.25;
-      j.hipL.rotation.x = -f * 0.5 + hipLA * (1 - f);
-      j.hipR.rotation.x = -f * 0.3 + hipRA * (1 - f);
-      j.kneeL.rotation.x = -f * 0.55;
-      j.kneeR.rotation.x = -f * 0.3;
-      j.shoulderL.rotation.set(0.5 * f, 0, 0.6 * f);
-      j.shoulderR.rotation.set(0.3 * f, 0, -0.7 * f);
-      j.head.rotation.x = f * 0.35;
+      // Settle onto the back and come to rest flat on the deck. Deliberately
+      // undramatic: no impact, no contortion, nothing graphic.
+      j.body.rotation.x = f * (Math.PI / 2 - 0.15);
+      j.body.position.y = groundOffset * (1 - f) + f * 0.16;
+      j.body.position.z = f * 0.28;
+      j.chest.rotation.x = -f * 0.18;
+      j.hipL.rotation.x = hipLA * (1 - f) - f * 0.22;
+      j.hipR.rotation.x = hipRA * (1 - f) - f * 0.1;
+      j.kneeL.rotation.x = -f * 0.42;
+      j.kneeR.rotation.x = -f * 0.2;
+      j.shoulderL.rotation.set(0.15 * f, 0, 0.85 * f);
+      j.shoulderR.rotation.set(0.1 * f, 0, -0.95 * f);
+      j.elbowL.rotation.x = -0.25 * f;
+      j.elbowR.rotation.x = -0.2 * f;
+      j.head.rotation.set(f * 0.2, f * 0.3, 0);
     } else if (this.fallProgress > 0) {
       this.fallProgress = damp(this.fallProgress, 0, 0.2, dt);
       const f = this.fallProgress;
-      j.body.rotation.x = -f * (Math.PI / 2 - 0.12);
-      j.body.position.z = -f * 0.34;
+      j.body.rotation.x = f * (Math.PI / 2 - 0.15);
+      j.body.position.z = f * 0.28;
     } else {
       j.body.rotation.x = 0;
       j.body.position.z = 0;

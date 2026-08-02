@@ -185,7 +185,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'vader-entrance',
-    time: 272,
+    time: 276,
     chapter: 'corridor',
     camera: 'corridor.vader',
     expectVisible: ['vader'],

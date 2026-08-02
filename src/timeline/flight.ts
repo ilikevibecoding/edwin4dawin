@@ -179,13 +179,16 @@ export const DOCK = new THREE.Vector3(60, 96, -26);
 /** Where the destroyer sits (world space) at absolute timeline time `t`. */
 export function destroyerPositionAt(t: number, out: THREE.Vector3): THREE.Vector3 {
   const PURSUIT = 84;
-  if (t < PURSUIT) return out.set(-5200, 430, -60);
+  if (t < PURSUIT) return out.set(-4200, 430, -60);
   const tau = t - PURSUIT;
 
+  // Closing profile chosen so the hull is directly overhead of the corvette
+  // during the reveal, which is what sells the size difference.
   let x: number;
-  if (tau < 14) x = -3600;
-  else if (tau < 56) x = lerp(-3600, -200, smootherstep((tau - 14) / 42));
-  else x = lerp(-200, 240, smootherstep(clamp01((tau - 56) / 36)));
+  if (tau < 10) x = -2600;
+  else if (tau < 40) x = lerp(-2600, -700, smootherstep((tau - 10) / 30));
+  else if (tau < 62) x = lerp(-700, 100, smootherstep((tau - 40) / 22));
+  else x = lerp(100, 240, smootherstep(clamp01((tau - 62) / 30)));
 
   const y = lerp(430, 332, smootherstep(clamp01((tau - 28) / 50)));
   const z = lerp(-60, -18, smootherstep(clamp01((tau - 30) / 46)));

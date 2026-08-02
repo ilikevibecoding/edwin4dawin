@@ -28,6 +28,14 @@ const DEFENCE = [
   { x: 19.4, z: 1.1, state: 'aim' as const, fallAt: 44.5 },
 ];
 const OFFICER_POST = { x: 22.6, z: -0.2, fallAt: 46.0 };
+/** Analytic path for the dark lord's walk, shared by the camera and the rig. */
+function vaderWalkX(rho: number): number {
+  return lerp(DOOR_X + 0.6, 11.5, smootherstep(clamp01((rho - 52.2) / 15.5)));
+}
+
+/** Where the defenders are standing when the chapter opens. */
+const DEFENCE_START_X = 25.5;
+const OFFICER_START_X = 33.5;
 
 /** Trooper advance lanes; they enter in pairs and take alternating sides. */
 const TROOPER_LANES = [
@@ -40,12 +48,12 @@ const TROOPER_LANES = [
 ];
 /** After the fight they hold the walls so the entrance stays uncluttered. */
 const TROOPER_HOLD = [
-  { x: 3.4, z: -1.3 },
-  { x: 4.6, z: 1.3 },
-  { x: 0.4, z: -1.34 },
-  { x: 1.4, z: 1.34 },
-  { x: -3.0, z: -1.36 },
-  { x: -2.2, z: 1.36 },
+  { x: -0.4, z: -1.32 },
+  { x: 0.8, z: 1.32 },
+  { x: -3.4, z: -1.36 },
+  { x: -2.4, z: 1.36 },
+  { x: -6.4, z: -1.38 },
+  { x: -5.6, z: 1.38 },
 ];
 
 /**
@@ -318,12 +326,15 @@ export function corridorChapter(): Chapter<ShowContext> {
 
         // 7. Vader's entrance: low, wide, patient, and far enough down the
         //    corridor that the boarding party frames him instead of blocking him.
-        customShot({ id: 'corridor.vader', start: S + 52, end: S + 64, fov: 44, handheld: 0.22, blend: 1.6 }, (k, _t, out) => {
+        customShot({ id: 'corridor.vader', start: S + 52, end: S + 64, fov: 44, handheld: 0.2, blend: 1.6 }, (k, t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(15.5, 12.2, a), lerp(0.58, 0.7, a), lerp(0.55, 0.14, a));
-          out.target.set(lerp(-6.5, 1.5, a), lerp(1.45, 1.6, a), 0);
+          const vx = vaderWalkX(t - S);
+          // Low and retreating: the camera gives ground as he advances, and he
+          // grows in frame the whole way.
+          out.position.set(vx + lerp(14.5, 6.2, a), lerp(0.52, 0.74, a), lerp(0.6, 0.1, a));
+          out.target.set(vx + lerp(2.6, 0.5, a), lerp(1.35, 1.55, a), 0);
           out.fov = lerp(46, 42, a);
-          out.focus = lerp(18, 11, a);
+          out.focus = lerp(14, 6.4, a);
           clampCam(out);
         }),
 
@@ -361,21 +372,13 @@ export function corridorChapter(): Chapter<ShowContext> {
       for (let i = 0; i < rebels.length; i++) {
         const r = rebels[i];
         r.root.visible = true;
-        const d = DEFENCE[i];
-        // They start further aft and fall back to their posts in the first
-        // few seconds; after that they are simply at the post.
-        const startX = 27.5 + i * 1.9;
-        r.setPosition(startX, 0, d.z);
         r.clearPath();
         r.setHeading(-Math.PI / 2);
-        r.followPath([[d.x, 0, d.z]], 2.6);
       }
       const officer = stage.characters.officer;
       officer.root.visible = true;
-      officer.setPosition(35.5, 0, 0.4);
       officer.clearPath();
       officer.setHeading(-Math.PI / 2);
-      officer.followPath([[OFFICER_POST.x, 0, OFFICER_POST.z]], 2.3);
 
       for (const t of stage.characters.troopers) {
         t.root.visible = localTime >= FIGHT_START;
@@ -413,8 +416,8 @@ export function corridorChapter(): Chapter<ShowContext> {
       stage.applyCameraRange(ctx.render.camera);
       ctx.render.fade = 1 - ramp(rho, 0, 1.6);
       ctx.render.dofEnabled = true;
-      ctx.render.dofRange = 9;
-      ctx.render.dofStrength = 0.75;
+      ctx.render.dofRange = 16;
+      ctx.render.dofStrength = 0.5;
 
       stage.corridor.setAlarm(rho < FIGHT_END ? 1 : 0.35);
       stage.corridor.setPowerLevel(1 - ramp(rho, BREACH_T, BREACH_T + 6) * 0.35);
@@ -447,10 +450,24 @@ export function corridorChapter(): Chapter<ShowContext> {
       }
 
       // --- defenders ---------------------------------------------------------
+      // Positions are analytic so a scrub lands everyone exactly where a linear
+      // playthrough would have put them.
       const rebels = stage.characters.rebels;
       for (let i = 0; i < rebels.length; i++) {
         const r = rebels[i];
         const d = DEFENCE[i];
+        const fallBack = smootherstep(clamp01((rho - 0.4 - i * 0.35) / 5.4));
+        const postX = lerp(DEFENCE_START_X + i * 1.9, d.x, fallBack);
+        const runningIn = fallBack > 0.005 && fallBack < 0.995;
+        r.root.position.set(rho < d.fallAt ? postX : d.x, 0, d.z);
+        r.speed = rho < d.fallAt && runningIn ? 2.6 : 0;
+        if (runningIn && rho < d.fallAt) {
+          r.setState('run');
+          r.setHeading(-Math.PI / 2);
+          r.aimTarget = null;
+          r.lookTarget = null;
+          continue;
+        }
         if (rho >= d.fallAt) {
           if (r.state !== 'fall' && r.state !== 'down') {
             r.clearPath();
@@ -463,28 +480,31 @@ export function corridorChapter(): Chapter<ShowContext> {
           r.lookTarget = null;
           continue;
         }
-        if (!r.isWalking) {
-          if (rho > BREACH_T - 2) {
-            if (r.state !== 'fire') r.setState(d.state);
-            r.aimTarget = tmpA.set(DOOR_X + 2, 1.25, d.z * 0.4);
-            r.faceTowards(tmpA);
-          } else {
-            r.setState(d.state === 'aim' ? 'aim' : d.state);
-            r.aimTarget = tmpA.set(DOOR_X, 1.4, 0);
-            r.faceTowards(tmpA);
-          }
-        }
+        if (r.state !== 'fire') r.setState(d.state);
+        r.aimTarget = tmpA.set(DOOR_X + 2, rho > BREACH_T - 2 ? 1.25 : 1.4, d.z * 0.4);
+        r.setHeading(-Math.PI / 2);
       }
 
       const officer = stage.characters.officer;
+      const officerIn = smootherstep(clamp01((rho - 0.2) / 5.6));
+      officer.root.position.set(
+        rho < OFFICER_POST.fallAt ? lerp(OFFICER_START_X, OFFICER_POST.x, officerIn) : OFFICER_POST.x,
+        0,
+        OFFICER_POST.z,
+      );
+      officer.speed = rho < OFFICER_POST.fallAt && officerIn > 0.005 && officerIn < 0.995 ? 2.4 : 0;
       if (rho >= OFFICER_POST.fallAt) {
         if (officer.state !== 'fall' && officer.state !== 'down') officer.setState('fall');
         else if (rho > OFFICER_POST.fallAt + 1.4) officer.setState('down');
         officer.aimTarget = null;
-      } else if (!officer.isWalking) {
+      } else if (officer.speed > 0.05) {
+        officer.setState('run');
+        officer.setHeading(-Math.PI / 2);
+        officer.aimTarget = null;
+      } else {
         officer.setState('aim');
         officer.aimTarget = tmpA.set(DOOR_X + 2, 1.3, 0);
-        officer.faceTowards(tmpA);
+        officer.setHeading(-Math.PI / 2);
       }
 
       // --- boarders ----------------------------------------------------------
@@ -554,17 +574,17 @@ export function corridorChapter(): Chapter<ShowContext> {
       const vader = stage.characters.vader;
       if (rho >= 51.5) {
         vader.root.visible = true;
-        const walk = clamp01((rho - 52.5) / 16);
-        const x = lerp(DOOR_X + 0.6, 9.5, smootherstep(walk));
+        const walk = clamp01((rho - 52.2) / 15.5);
+        const x = vaderWalkX(rho);
         vader.root.position.set(x, 0, 0);
-        vader.speed = walk > 0 && walk < 1 ? 1.15 : 0;
+        vader.speed = walk > 0 && walk < 1 ? 1.35 : 0;
         vader.setHeading(Math.PI / 2);
         vader.setState(vader.speed > 0.05 ? 'walk' : 'idle');
         vader.lookTarget = tmpA.set(x + 8, 1.5, 0);
         stage.corridor.setVaderPresence(ramp(rho, 51.5, 56), x);
         // Measured, heavy footfalls locked to the walk cycle.
         if (dt > 0 && vader.speed > 0.05) {
-          const step = Math.floor((rho - 52.5) / 0.62);
+          const step = Math.floor((rho - 52.2) / 0.6);
           if (!fired.has(10000 + step)) {
             fired.add(10000 + step);
             ctx.sfx.footstep({ position: vader.root.position, heavy: true, gain: 0.24, refDistance: 5 });
