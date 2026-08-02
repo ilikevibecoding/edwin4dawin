@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  EPISODE ONE - sub-title plate.
+  Extrusion asset: closed filled paths only, fill-rule="evenodd" for counters.
+  Same skeleton as the title logo but lighter and narrower:
+  cap height 96, stem 23, bar 20, baseline y=128.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 160" width="1200" height="160">
+  <!-- EPISODE ONE -->
+  <path fill="#f2cd37" fill-rule="evenodd" d="M88 32 L160 32 L160 52 L111 52 L111 67.9 L147.5 67.9 L147.5 86.3 L111 86.3 L111 108 L160 108 L160 128 L88 128 Z"/>  <!-- E -->
+  <path fill="#f2cd37" fill-rule="evenodd" d="M186 32 L238.2 32 A23.8 26.7 0 0 1 262 58.7 A23.8 29 0 0 1 238.2 87.7 L209 87.7 L209 128 L186 128 Z M209 52 L232.3 52 A9.7 7.8 0 0 1 242 59.8 A9.7 7.8 0 0 1 232.3 67.7 L209 67.7 Z"/>  <!-- P -->
+  <path fill="#f2cd37" fill-rule="evenodd" d="M288 32 L311 32 L311 128 L288 128 Z"/>  <!-- I -->
+  <path fill="#f2cd37" fill-rule="evenodd" d="M411.5 66.4 A38 28.5 0 1 0 359.5 84.5 L376.2 85.4 A16.8 13.1 0 1 1 360.1 104.5 L338.5 107.2 A38 31.5 0 1 0 386.3 68.4 L365.6 66.9 A16.8 10.1 0 1 1 390.8 55 Z"/>  <!-- S -->
+  <path fill="#f2cd37" fill-rule="evenodd" d="M439 80 A44 50 0 0 1 483 30 A44 50 0 0 1 527 80 A44 50 0 0 1 483 130 A44 50 0 0 1 439 80 Z M461 80 A22 30 0 0 1 483 50 A22 30 0 0 1 505 80 A22 30 0 0 1 483 110 A22 30 0 0 1 461 80 Z"/>  <!-- O -->
+  <path fill="#f2cd37" fill-rule="evenodd" d="M553 30 L593 30 A42 50 0 0 1 635 80 A42 50 0 0 1 593 130 L553 130 Z M576 50 L593 50 A20 30 0 0 1 613 80 A20 30 0 0 1 593 110 L576 110 Z"/>  <!-- D -->
+  <path fill="#f2cd37" fill-rule="evenodd" d="M661 32 L733 32 L733 52 L684 52 L684 67.9 L720.5 67.9 L720.5 86.3 L684 86.3 L684 108 L733 108 L733 128 L661 128 Z"/>  <!-- E -->
+  <path fill="#f2cd37" fill-rule="evenodd" d="M814 80 A44 50 0 0 1 858 30 A44 50 0 0 1 902 80 A44 50 0 0 1 858 130 A44 50 0 0 1 814 80 Z M836 80 A22 30 0 0 1 858 50 A22 30 0 0 1 880 80 A22 30 0 0 1 858 110 A22 30 0 0 1 836 80 Z"/>  <!-- O -->
+  <path fill="#f2cd37" fill-rule="evenodd" d="M928 32 L951 32 L991 72.8 L991 32 L1014 32 L1014 128 L991 128 L951 87.2 L951 128 L928 128 Z"/>  <!-- N -->
+  <path fill="#f2cd37" fill-rule="evenodd" d="M1040 32 L1112 32 L1112 52 L1063 52 L1063 67.9 L1099.5 67.9 L1099.5 86.3 L1063 86.3 L1063 108 L1112 108 L1112 128 L1040 128 Z"/>  <!-- E -->
+</svg>

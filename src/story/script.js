@@ -22,53 +22,70 @@ export const SPEAKERS = {
     lengthScale: 1.04,
     gain: 1.0,
     // A touch of low shelf and room for an epic read.
-    chain: 'highpass=f=70,equalizer=f=180:t=q:w=1.2:g=2.5,equalizer=f=6000:t=q:w=1.4:g=1.5,aecho=0.85:0.35:22:0.16,dynaudnorm=f=200:g=5',
+    chain: 'highpass=f=70,equalizer=f=170:t=q:w=1.1:g=3,equalizer=f=6000:t=q:w=1.4:g=1.5,aecho=0.85:0.35:22:0.16,dynaudnorm=f=200:g=5',
   },
   vader: {
     name: 'Vader',
-    voice: 'en_US-ryan-high',
-    lengthScale: 1.22,
-    gain: 1.0,
-    // Deep, filtered, mask-like: drop the pitch, roll off the top, add space.
-    chain: 'asetrate=22050*0.80,aresample=22050,atempo=1.16,lowpass=f=3400,equalizer=f=110:t=q:w=1:g=6,equalizer=f=2200:t=q:w=2:g=-4,aecho=0.9:0.4:60:0.28,dynaudnorm=f=200:g=5',
+    voice: 'en_GB-alan-medium',
+    lengthScale: 1.06,
+    gain: 1.05,
+    // Drop the pitch to roughly 72 Hz (asetrate), pull the tempo back to
+    // normal (atempo), then chorus + resonance for the mask.
+    chain:
+      'asetrate=22050*0.735,aresample=22050,atempo=1.30,' +
+      'equalizer=f=85:t=q:w=0.9:g=8,equalizer=f=240:t=q:w=1.2:g=3,equalizer=f=1900:t=q:w=2:g=-5,' +
+      'chorus=0.62:0.85:48|63:0.42|0.34:0.28|0.42:2.1|1.4,' +
+      'lowpass=f=3100,acompressor=threshold=0.1:ratio=4:attack=8:release=140,' +
+      'aecho=0.9:0.35:42:0.2,asubboost=dry=1:wet=0.4:decay=0.6,dynaudnorm=f=250:g=5',
   },
   leia: {
     name: 'Leia',
     voice: 'en_US-amy-medium',
-    lengthScale: 1.0,
+    lengthScale: 1.02,
     gain: 1.0,
-    chain: 'asetrate=22050*1.04,aresample=22050,atempo=0.965,highpass=f=140,aecho=0.9:0.25:18:0.1,dynaudnorm=f=200:g=5',
+    // Already a female voice; no pitch shifting, just presence and a room.
+    chain: 'highpass=f=130,equalizer=f=260:t=q:w=1.2:g=-1.5,equalizer=f=3200:t=q:w=1.4:g=2.5,aecho=0.9:0.25:17:0.09,dynaudnorm=f=200:g=5',
   },
   threepio: {
     name: 'C-3PO',
     voice: 'en_GB-alan-medium',
     lengthScale: 0.95,
     gain: 1.0,
-    // Fussy protocol droid: brighter, thinner, slightly metallic.
-    chain: 'asetrate=22050*1.18,aresample=22050,atempo=0.86,highpass=f=300,lowpass=f=6500,equalizer=f=2600:t=q:w=1.6:g=5,aecho=0.9:0.3:14:0.2,dynaudnorm=f=200:g=5',
+    // Fussy protocol droid: a modest pitch lift plus two very short echoes,
+    // which comb-filter the voice into something thin and metallic.
+    chain:
+      'asetrate=22050*1.105,aresample=22050,atempo=0.905,' +
+      'highpass=f=250,lowpass=f=5600,equalizer=f=2400:t=q:w=1.6:g=3.5,equalizer=f=1150:t=q:w=2:g=-3,' +
+      'aecho=0.88:0.42:7|11:0.4|0.26,dynaudnorm=f=200:g=5',
   },
   officer: {
     name: 'Imperial Officer',
-    voice: 'en_GB-northern_english_male-medium',
-    lengthScale: 1.0,
-    gain: 0.95,
-    // Comms chatter over a speaker grille.
-    chain: 'highpass=f=420,lowpass=f=3000,equalizer=f=1800:t=q:w=1.5:g=4,acompressor=threshold=0.08:ratio=6:attack=5:release=90,dynaudnorm=f=200:g=5',
+    voice: 'en_US-ryan-high',
+    lengthScale: 0.98,
+    gain: 0.98,
+    // Comms chatter: telephone band, bit-crushed and squashed like a cheap grille.
+    chain:
+      'highpass=f=460,lowpass=f=3100,equalizer=f=1700:t=q:w=1.4:g=5,' +
+      'acrusher=bits=9:mode=log:aa=1,aexciter=amount=2.5,' +
+      'acompressor=threshold=0.05:ratio=9:attack=3:release=70,dynaudnorm=f=200:g=5',
   },
   pilot: {
     name: 'Red Leader',
     voice: 'en_GB-northern_english_male-medium',
-    lengthScale: 1.0,
+    lengthScale: 0.98,
     gain: 1.0,
-    chain: 'highpass=f=400,lowpass=f=3200,equalizer=f=1500:t=q:w=1.4:g=3,acompressor=threshold=0.08:ratio=6:attack=5:release=90,dynaudnorm=f=200:g=5',
+    chain:
+      'highpass=f=430,lowpass=f=3300,equalizer=f=1400:t=q:w=1.3:g=4,' +
+      'acrusher=bits=10:mode=log:aa=1,aexciter=amount=2,' +
+      'acompressor=threshold=0.06:ratio=8:attack=3:release=80,dynaudnorm=f=200:g=5',
   },
   ben: {
     name: 'Obi-Wan',
-    voice: 'en_GB-alan-medium',
-    lengthScale: 1.16,
-    gain: 0.92,
-    // A voice remembered rather than heard.
-    chain: 'asetrate=22050*0.94,aresample=22050,atempo=1.06,highpass=f=150,lowpass=f=5200,aecho=0.8:0.9:180|320:0.4|0.3,dynaudnorm=f=200:g=5',
+    voice: 'en_US-joe-medium',
+    lengthScale: 1.12,
+    gain: 0.95,
+    // A voice remembered rather than heard: distant, wide, a little unreal.
+    chain: 'asetrate=22050*0.95,aresample=22050,atempo=1.052,highpass=f=95,lowpass=f=6200,equalizer=f=200:t=q:w=1.2:g=2,aecho=0.82:0.85:150|265:0.34|0.24,dynaudnorm=f=200:g=5',
   },
 };
 

@@ -27,6 +27,7 @@ export async function openFilm({
   t1 = null,
   scene = null,
   bloom = true,
+  all = false,
   quiet = false,
   timeout = 240000,
 } = {}) {
@@ -54,6 +55,7 @@ export async function openFilm({
   if (t1 !== null) q.set('t1', String(t1));
   if (scene) q.set('scene', scene);
   if (!bloom) q.set('bloom', '0');
+  if (all) q.set('all', '1');
 
   await page.goto(`${base}/?${q}`, { waitUntil: 'domcontentloaded', timeout });
   try {

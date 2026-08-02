@@ -1,0 +1,141 @@
+{
+  "blaster_rebel": {
+    "file": "audio/sfx/blaster_rebel.mp3",
+    "duration": 0.35
+  },
+  "blaster_imperial": {
+    "file": "audio/sfx/blaster_imperial.mp3",
+    "duration": 0.35
+  },
+  "turbolaser": {
+    "file": "audio/sfx/turbolaser.mp3",
+    "duration": 0.9
+  },
+  "laser_impact": {
+    "file": "audio/sfx/laser_impact.mp3",
+    "duration": 0.6
+  },
+  "torpedo_launch": {
+    "file": "audio/sfx/torpedo_launch.mp3",
+    "duration": 1.2
+  },
+  "explosion_small": {
+    "file": "audio/sfx/explosion_small.mp3",
+    "duration": 1.4
+  },
+  "explosion_big": {
+    "file": "audio/sfx/explosion_big.mp3",
+    "duration": 3.5
+  },
+  "explosion_massive": {
+    "file": "audio/sfx/explosion_massive.mp3",
+    "duration": 6
+  },
+  "brick_scatter": {
+    "file": "audio/sfx/brick_scatter.mp3",
+    "duration": 2.5
+  },
+  "engine_rumble": {
+    "file": "audio/sfx/engine_rumble.mp3",
+    "duration": 6,
+    "loop": true
+  },
+  "ship_pass": {
+    "file": "audio/sfx/ship_pass.mp3",
+    "duration": 1.8
+  },
+  "tie_scream": {
+    "file": "audio/sfx/tie_scream.mp3",
+    "duration": 1.6
+  },
+  "xwing_flyby": {
+    "file": "audio/sfx/xwing_flyby.mp3",
+    "duration": 1.5
+  },
+  "hyperspace_jump": {
+    "file": "audio/sfx/hyperspace_jump.mp3",
+    "duration": 2.2
+  },
+  "pod_launch": {
+    "file": "audio/sfx/pod_launch.mp3",
+    "duration": 1.6
+  },
+  "door_blast": {
+    "file": "audio/sfx/door_blast.mp3",
+    "duration": 1.6
+  },
+  "blast_door_open": {
+    "file": "audio/sfx/blast_door_open.mp3",
+    "duration": 1.2
+  },
+  "footsteps_troopers": {
+    "file": "audio/sfx/footsteps_troopers.mp3",
+    "duration": 3,
+    "loop": true
+  },
+  "vader_breath": {
+    "file": "audio/sfx/vader_breath.mp3",
+    "duration": 4,
+    "loop": true
+  },
+  "saber_on": {
+    "file": "audio/sfx/saber_on.mp3",
+    "duration": 0.8
+  },
+  "saber_hum": {
+    "file": "audio/sfx/saber_hum.mp3",
+    "duration": 4,
+    "loop": true
+  },
+  "r2_beeps_a": {
+    "file": "audio/sfx/r2_beeps_a.mp3",
+    "duration": 1.6
+  },
+  "r2_beeps_b": {
+    "file": "audio/sfx/r2_beeps_b.mp3",
+    "duration": 1.8
+  },
+  "r2_beeps_worried": {
+    "file": "audio/sfx/r2_beeps_worried.mp3",
+    "duration": 1.6
+  },
+  "hologram_on": {
+    "file": "audio/sfx/hologram_on.mp3",
+    "duration": 1
+  },
+  "computer_beeps": {
+    "file": "audio/sfx/computer_beeps.mp3",
+    "duration": 1.2
+  },
+  "wind_desert": {
+    "file": "audio/sfx/wind_desert.mp3",
+    "duration": 8,
+    "loop": true
+  },
+  "sandcrawler": {
+    "file": "audio/sfx/sandcrawler.mp3",
+    "duration": 5,
+    "loop": true
+  },
+  "jawa_chatter": {
+    "file": "audio/sfx/jawa_chatter.mp3",
+    "duration": 2
+  },
+  "crowd_cheer": {
+    "file": "audio/sfx/crowd_cheer.mp3",
+    "duration": 5
+  },
+  "ceremony_ambience": {
+    "file": "audio/sfx/ceremony_ambience.mp3",
+    "duration": 6,
+    "loop": true
+  },
+  "impact_hit": {
+    "file": "audio/sfx/impact_hit.mp3",
+    "duration": 1
+  },
+  "whoosh_transition": {
+    "file": "audio/sfx/whoosh_transition.mp3",
+    "duration": 1.2
+  }
+}

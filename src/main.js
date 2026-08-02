@@ -70,9 +70,11 @@ async function boot() {
     film.bloom = bloom;
   }
 
+  let lastStats = { triangles: 0, calls: 0 };
   function drawFrame(t) {
     const inst = film.update(t);
     if (!inst) return false;
+    renderer.info.reset();
     if (composer) {
       renderPass.scene = inst.scene;
       renderPass.camera = inst.camera;
@@ -87,6 +89,7 @@ async function boot() {
       renderer.clear();
       renderer.render(inst.scene, inst.camera);
     }
+    lastStats = { triangles: renderer.info.render.triangles, calls: renderer.info.render.calls };
     film.overlay.render(renderer);
     return true;
   }
@@ -95,7 +98,10 @@ async function boot() {
   if (RENDER_MODE) {
     const t0 = parseFloat(params.get('t0') || '0');
     const t1 = parseFloat(params.get('t1') || String(film.duration));
-    await film.buildRange(t0, t1);
+    // `all=1` builds every scene so the caller can read the complete sound-cue
+    // list; render workers only build the slice of the timeline they own.
+    if (params.get('all') === '1') await film.buildAll();
+    else await film.buildRange(t0, t1);
     window.FILM = {
       duration: film.duration,
       scenes: film.sceneList(),
@@ -110,10 +116,7 @@ async function boot() {
         drawFrame(t);
         return renderer.domElement.toDataURL('image/jpeg', quality);
       },
-      info: () => ({
-        triangles: renderer.info.render.triangles,
-        calls: renderer.info.render.calls,
-      }),
+      info: () => lastStats,
     };
     drawFrame(t0);
     window.FILM_READY = true;
