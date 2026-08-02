@@ -345,9 +345,11 @@ export function buildShots(stage: Stage): Shot[] {
     handheld: 0.02,
     apply: (ctx, pose) => {
       const k = ctx.progress;
-      ip(1.12, 1.66, lerp(2.6, -0.4, easeInOut(k)), pose.position);
-      ip(-0.3, 1.2, -12.5, pose.target);
-      pose.fov = 44;
+      // Above head height in the middle of the passage: defenders read as
+      // mid-ground silhouettes instead of filling the lens with a face.
+      ip(0.18, 2.05, lerp(4.4, 2.6, easeInOut(k)), pose.position);
+      ip(-0.1, 1.15, -12.5, pose.target);
+      pose.fov = 46;
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
     },
@@ -481,9 +483,11 @@ export function buildShots(stage: Stage): Shot[] {
     handheld: 0.005,
     apply: (ctx, pose) => {
       const k = easeInOut(ctx.progress);
-      ip(lerp(-0.15, -0.55, k), lerp(1.24, 1.02, k), lerp(15.9, 16.2, k), pose.position);
-      ip(-1.9, 0.92, 17.7, pose.target);
-      pose.fov = lerp(40, 36, k);
+      // Side-on two-shot: the princess kneeling on the left of frame, the
+      // droid on the right, and the stream of data visible between them.
+      ip(lerp(0.55, 0.2, k), lerp(1.3, 1.12, k), lerp(15.6, 16.1, k), pose.position);
+      ip(-2.1, 1.05, 17.9, pose.target);
+      pose.fov = lerp(44, 40, k);
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
       pose.dof = 0.6;
@@ -540,9 +544,10 @@ export function buildShots(stage: Stage): Shot[] {
     handheld: 0.01,
     apply: (ctx, pose) => {
       const k = easeInOut(ctx.progress);
-      ip(lerp(3.3, 4.3, k), lerp(1.62, 1.42, k), lerp(19.8, 19.2, k), pose.position);
-      ip(6.6, 1.24, 17.0, pose.target);
-      pose.fov = lerp(48, 44, k);
+      // Shooting through the bay doorway from inside the vestibule.
+      ip(lerp(1.5, 3.3, k), lerp(1.48, 1.36, k), lerp(17.9, 17.4, k), pose.position);
+      ip(6.5, 1.16, 17.0, pose.target);
+      pose.fov = lerp(50, 44, k);
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
       pose.dof = 0.35;

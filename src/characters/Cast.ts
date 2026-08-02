@@ -148,6 +148,13 @@ export class RebelSoldier extends Character implements ArmedCharacter {
     const cheekR = cheekL.clone();
     cheekR.position.x = 0.115;
     helmet.add(cheekL, cheekR);
+    // Goggle band: gives the face a direction without modelling features.
+    const goggles = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.042, 0.06), M.glassDark);
+    goggles.position.set(0, -0.012, -0.105);
+    helmet.add(goggles);
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.03, 0.2), M.blackRubber);
+    strap.position.set(0, -0.012, -0.01);
+    helmet.add(strap);
     rig.head.add(helmet);
 
     const blaster = buildBlaster(M.blackRubber, M.rebelTrim, 0.95);

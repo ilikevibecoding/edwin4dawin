@@ -465,6 +465,16 @@ export class Show {
 
     stage.plans.intensity = smoothstep(302.6, 305.5, t) * (1 - smoothstep(319, 322, t));
     stage.plans.transfer = smoothstep(312, 320, t);
+    // Visible data stream into the droid's dome; this is the plot point, so it
+    // has to read in a single frame.
+    const downlink = smoothstep(311.5, 313.5, t) * (1 - smoothstep(319.5, 321.5, t));
+    if (downlink > 0.01) {
+      stage.r2.root.getWorldPosition(_v);
+      _v.y += 0.92;
+      stage.plans.aimDownlink(_v, downlink);
+    } else {
+      stage.plans.aimDownlink(_v.set(0, 0, 0), 0);
+    }
 
     // Persistent damage: smoke near the ruined door, sparks from a torn conduit.
     if (stage.interior.visible) {

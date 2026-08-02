@@ -259,12 +259,12 @@ export class BlockadeRunner {
       nozzle.position.set(x, y, -1.4);
       engineCluster.add(nozzle);
 
-      const disc = glowDisc(0xa8e6ff, radius * 3.3);
+      const disc = glowDisc(0xa8e6ff, radius * 1.9);
       disc.position.set(x, y, 0.5);
       engineCluster.add(disc);
       this.glows.push(disc);
 
-      const plume = enginePlume(radius * 0.95, radius * 13, 0xdff4ff, 0x3aa4ff);
+      const plume = enginePlume(radius * 0.8, radius * 8, 0xdff4ff, 0x3aa4ff);
       plume.mesh.position.set(x, y, 0.8);
       engineCluster.add(plume.mesh);
       this.plumes.push(plume);
@@ -449,7 +449,7 @@ export class BlockadeRunner {
       const base = g.userData.baseScale ?? (g.userData.baseScale = g.scale.x);
       const s = base * (0.35 + effective * 0.8) * (1 + 0.04 * Math.sin(t * 17 + i));
       g.scale.setScalar(s);
-      (g.material as THREE.MeshBasicMaterial).opacity = clamp(0.25 + effective, 0, 1);
+      (g.material as THREE.MeshBasicMaterial).opacity = clamp(0.18 + effective * 0.8, 0, 1);
     });
     this.engineLight.intensity = effective * 3200;
 

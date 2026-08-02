@@ -195,9 +195,9 @@ export class Tatooine {
     this.hazeMat = new THREE.ShaderMaterial({
       uniforms: {
         sunDirection: { value: new THREE.Vector3(0.62, 0.34, 0.7).normalize() },
-        color: { value: new THREE.Color(0xffb570) },
-        power: { value: 3.6 },
-        strength: { value: 0.6 },
+        color: { value: new THREE.Color(0xffb06a) },
+        power: { value: 4.6 },
+        strength: { value: 0.5 },
       },
       vertexShader: atmoVert,
       fragmentShader: /* glsl */ `
@@ -216,16 +216,16 @@ export class Tatooine {
       depthWrite: false,
       side: THREE.BackSide,
     });
-    const haze = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.022, 96, 48), this.hazeMat);
+    const haze = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.014, 96, 48), this.hazeMat);
     haze.name = 'planetHaze';
     this.root.add(haze);
 
     this.rimMat = new THREE.ShaderMaterial({
       uniforms: {
         sunDirection: { value: new THREE.Vector3(0.62, 0.34, 0.7).normalize() },
-        color: { value: new THREE.Color(0x8fbcf5) },
-        power: { value: 9.0 },
-        strength: { value: 0.42 },
+        color: { value: new THREE.Color(0x93c0f7) },
+        power: { value: 5.5 },
+        strength: { value: 0.38 },
       },
       vertexShader: atmoVert,
       fragmentShader: /* glsl */ `
@@ -246,7 +246,7 @@ export class Tatooine {
       depthWrite: false,
       side: THREE.BackSide,
     });
-    const rim = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.05, 80, 40), this.rimMat);
+    const rim = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.026, 80, 40), this.rimMat);
     rim.name = 'planetRim';
     this.root.add(rim);
   }

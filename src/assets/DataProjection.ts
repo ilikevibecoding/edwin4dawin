@@ -22,6 +22,9 @@ export class DataProjection {
   private glyphMat: THREE.PointsMaterial;
   private scanMat: THREE.ShaderMaterial;
   private scan: THREE.Mesh;
+  private downlink!: THREE.Mesh;
+  private downlinkMat!: THREE.ShaderMaterial;
+  private downlinkStrength = 0;
 
   /** 0 = off, 1 = fully materialised. */
   intensity = 0;
@@ -167,8 +170,60 @@ export class DataProjection {
     this.beam.position.y = -radius * 0.05;
     this.root.add(this.beam);
 
+    // Downlink: the visible stream of data leaving the projection for the
+    // droid. Without it the most important action in the film is invisible.
+    this.downlinkMat = new THREE.ShaderMaterial({
+      uniforms: { strength: { value: 0 }, time: { value: 0 }, color: { value: new THREE.Color(0xbfe8ff) } },
+      vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform float strength, time; uniform vec3 color; varying vec2 vUv;
+        void main() {
+          float core = pow(1.0 - abs(vUv.x - 0.5) * 2.0, 2.2);
+          // Packets running down the beam.
+          float packet = 0.0;
+          for (int i = 0; i < 4; i++) {
+            float phase = fract(time * 1.35 + float(i) * 0.25);
+            packet += exp(-abs(fract(vUv.y + phase) - 0.5) * 26.0);
+          }
+          float a = core * (0.22 + packet * 0.9) * strength;
+          gl_FragColor = vec4(color * a * 2.0, a);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    });
+    const linkGeo = new THREE.CylinderGeometry(0.055, 0.11, 1, 10, 1, true);
+    linkGeo.translate(0, -0.5, 0);
+    this.downlink = new THREE.Mesh(linkGeo, this.downlinkMat);
+    this.downlink.visible = false;
+    this.downlink.frustumCulled = false;
+    this.root.add(this.downlink);
+
     this.root.traverse((o) => (o.renderOrder = 6));
     this.setIntensity(0);
+  }
+
+  /** Point the downlink at a world-space target. */
+  aimDownlink(worldTarget: THREE.Vector3, strength: number): void {
+    this.downlinkStrength = strength;
+    if (strength <= 0.01) {
+      this.downlink.visible = false;
+      return;
+    }
+    const dir = this.root.worldToLocal(worldTarget.clone());
+    const len = Math.max(0.2, dir.length());
+    this.downlink.visible = true;
+    this.downlink.scale.set(1, len, 1);
+    this.downlink.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, -1, 0),
+      dir.normalize(),
+    );
   }
 
   private setIntensity(v: number): void {
@@ -193,6 +248,8 @@ export class DataProjection {
     this.rings.rotation.x = Math.sin(t * 0.3) * 0.1;
     this.scanMat.uniforms.time.value = t;
     this.beamMat.uniforms.time.value = t;
+    this.downlinkMat.uniforms.time.value = t;
+    this.downlinkMat.uniforms.strength.value = this.downlinkStrength;
 
     // During transfer the projection compresses and streams downward.
     const tr = clamp(this.transfer, 0, 1);

@@ -179,7 +179,7 @@ export class EscapePod {
     this.heatMat.uniforms.time.value = t;
     this.heatShell.visible = this.entryHeat > 0.01;
 
-    const beaconScale = clamp(this.cameraDistance * 0.011, 0.9, 90);
+    const beaconScale = clamp(this.cameraDistance * 0.019, 1.1, 140);
     this.beacon.scale.setScalar(beaconScale);
     const glowStrength = clamp(th * 0.5 + this.entryHeat * 0.8 + 0.18, 0, 1);
     (this.beacon.material as THREE.SpriteMaterial).opacity =

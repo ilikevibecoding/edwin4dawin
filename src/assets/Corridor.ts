@@ -214,12 +214,17 @@ export class CorridorSet {
     vestFloor.receiveShadow = true;
     this.root.add(vestFloor);
 
+    // Skirting and ceiling rails only — a full-height rail here would seal the
+    // pod-bay doorway shut.
     const vestTrim = new THREE.Mesh(
       mergeParts([
         boxAt(VESTIBULE_HALF_WIDTH * 2, 0.14, 0.2, 0, 0.07, vestStart + 0.2),
         boxAt(VESTIBULE_HALF_WIDTH * 2, 0.14, 0.2, 0, 0.07, vestEnd - 0.2),
-        boxAt(0.2, CORRIDOR_HEIGHT + 0.3, vestLen, -VESTIBULE_HALF_WIDTH + 0.02, (CORRIDOR_HEIGHT + 0.3) / 2, vestCenterZ),
-        boxAt(0.2, CORRIDOR_HEIGHT + 0.3, vestLen, VESTIBULE_HALF_WIDTH - 0.02, (CORRIDOR_HEIGHT + 0.3) / 2, vestCenterZ),
+        boxAt(0.16, 0.2, vestLen, -VESTIBULE_HALF_WIDTH + 0.06, 0.1, vestCenterZ),
+        boxAt(0.16, 0.2, vestLen, VESTIBULE_HALF_WIDTH - 0.06, 0.1, vestCenterZ),
+        boxAt(0.16, 0.2, vestLen, -VESTIBULE_HALF_WIDTH + 0.16, CORRIDOR_HEIGHT + 0.18, vestCenterZ),
+        boxAt(0.16, 0.2, 7.3, VESTIBULE_HALF_WIDTH - 0.16, CORRIDOR_HEIGHT + 0.18, 11.65),
+        boxAt(0.16, 0.2, 3.3, VESTIBULE_HALF_WIDTH - 0.16, CORRIDOR_HEIGHT + 0.18, 20.35),
       ]),
       M.corridorTrim,
     );

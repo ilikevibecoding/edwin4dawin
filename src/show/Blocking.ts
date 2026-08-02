@@ -27,11 +27,11 @@ export const VADER_ENTRY = 270;
 
 /** Defensive stations, ordered front (nearest the door) to back. */
 const REBEL_STATIONS: Array<[number, number]> = [
-  [-1.05, -7.4],
-  [1.05, -5.2],
-  [-1.0, -2.4],
-  [1.0, 0.4],
-  [-0.6, 4.2],
+  [-1.26, -7.4],
+  [1.26, -5.2],
+  [-1.26, -2.4],
+  [1.26, 0.6],
+  [-1.2, 5.4],
 ];
 
 /**
