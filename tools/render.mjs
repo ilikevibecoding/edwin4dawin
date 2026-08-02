@@ -17,7 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { openFilm } from './browser.mjs';
+import { openFilm, buildAndServe } from './browser.mjs';
 import { buildCues, mixCues } from './mixaudio.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -40,14 +40,25 @@ const NO_AUDIO = has('no-audio');
 const KEEP = has('keep-frames');
 const CRF = arg('crf', '17');
 const FRAMEDIR = arg('framedir', null);
+// Render from a static build by default: the dev server's HMR reloads the page
+// whenever any source file is saved, which would corrupt a long render.
+const USE_DIST = !has('dev');
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
+
+let server = null;
+let BASE = arg('base', 'http://localhost:5173');
+if (USE_DIST) {
+  console.log('building static bundle…');
+  server = await buildAndServe(ROOT);
+  BASE = server.url;
+}
 
 // ---------------------------------------------------------------------------
 // Probe the film once to learn its duration, scene list and sound cues.
 // ---------------------------------------------------------------------------
 console.log('probing film…');
-const probe = await openFilm({ width: 320, height: 180, scene: SCENE, bloom: false, quiet: true, t0: 0, t1: 0.001, all: true });
+const probe = await openFilm({ base: BASE, width: 320, height: 180, scene: SCENE, bloom: false, quiet: true, t0: 0, t1: 0.001, all: true });
 const duration = probe.duration;
 const scenes = probe.scenes;
 const sceneCues = await probe.page.evaluate('window.FILM.cues()');
@@ -100,6 +111,7 @@ await Promise.all(
     const t0 = T0 + shard.from / FPS;
     const t1 = T0 + (shard.to - 1) / FPS + 1e-4;
     const film = await openFilm({
+      base: BASE,
       width: WIDTH,
       height: HEIGHT,
       t0,
@@ -186,6 +198,7 @@ try {
 
 if (!KEEP && !FRAMEDIR) fs.rmSync(frameDir, { recursive: true, force: true });
 else console.log('frames kept in', frameDir);
+server?.close();
 
 function fmt(s) {
   if (!isFinite(s)) return '–';

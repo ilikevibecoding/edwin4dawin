@@ -8,7 +8,6 @@
  *   const leia = await makeLeia();
  *   scene.add(leia.root);
  *   poseWalk(leia, t, { speed: 2.2 });
- *   holdInHand(leia, blaster(), 'R');
  *
  * Per-character extras hang off the same object (`fig.saber`, `fig.cape`,
  * `fig.blaster`, `fig.setSaber`, `fig.waddle`, ...). Accessories are parented
@@ -33,7 +32,6 @@ import {
   poseStand,
   poseWalk,
   holdInHand,
-  hairPiece,
   cape,
   blaster,
   lightsaber,
@@ -49,6 +47,16 @@ const SKIN = COLORS.lightFlesh;
 
 /** LEGO "bright light yellow" — Luke's sandy blond hair. */
 const SANDY_BLOND = 0xdcb679;
+
+/**
+ * Metal parts use a glossy plastic finish rather than `metal`/`chrome`/`gold`.
+ * Nothing in the film sets an environment map, and a MeshStandardMaterial with
+ * high metalness and nothing to reflect renders black; a bright silver or gold
+ * colour with a tight specular reads far more like polished metal.
+ */
+const POLISH = { finish: 'glossy' };
+const SILVER = COLORS.chromeSilver;
+const STEEL = COLORS.flatSilver;
 
 /**
  * Rotation that makes a `blaster()` sit in a minifig hand the way a real one
@@ -84,13 +92,15 @@ function shellProfile(outer, thickness) {
 }
 
 /**
- * Surface of revolution around Y from a closed `[radius, y]` profile, in world
- * units. `openHalf` (radians) leaves a gap centred on +Z — the face opening of
- * a hood, or the front of Vader's helmet skirt where the mask goes.
+ * Surface of revolution around Y from a `[radius, y]` profile, in world units.
+ * `openHalf` (radians) leaves a gap centred on +Z — the face opening of a
+ * hood, or the front of Vader's helmet skirt where the mask goes. `close`
+ * joins the last point back to the first (for shells); leave it off when the
+ * profile already starts and ends on the axis (for solids).
  */
-function latheShell(profile, { segments = 22, openHalf = 0 } = {}) {
+function latheShell(profile, { segments = 22, openHalf = 0, close = true } = {}) {
   const pts = profile.map(([r, y]) => new THREE.Vector2(Math.max(r, 0.008), y));
-  if (pts[0].distanceTo(pts[pts.length - 1]) > 1e-6) pts.push(pts[0].clone());
+  if (close && pts[0].distanceTo(pts[pts.length - 1]) > 1e-6) pts.push(pts[0].clone());
   const g = new THREE.LatheGeometry(pts, segments, openHalf, Math.PI * 2 - openHalf * 2);
   g.computeVertexNormals();
   return g;
@@ -127,6 +137,20 @@ function spherePatch(r, yCentre, thetaFrom, thetaTo, halfAngle, segments = 18) {
   );
   g.translate(0, yCentre, 0);
   return g;
+}
+
+/**
+ * Place a part flat against a surface of revolution: rotate `angle` around Y,
+ * step out to `radius`, then lay the geometry tangentially. Used for the
+ * panels on the astromech's barrel and the features on a curved helmet front.
+ */
+function onCurve(b, angle, y, radius, tilt, fn) {
+  b.push();
+  b.rotateY(angle);
+  b.translateWorld(0, y, radius);
+  if (tilt) b.rotateX(tilt);
+  fn(b);
+  b.pop();
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +256,7 @@ function stripHeadTexture(fig, color) {
   });
 }
 
-/** Clip a prop into a hand and remember it on the figure. */
+/** Clip a blaster into a hand and remember it on the figure. */
 function giveBlaster(fig, color = COLORS.trueBlack, opts = {}) {
   const gun = blaster(color, opts);
   holdInHand(fig, gun, opts.side ?? 'R', { rot: GRIP_BLASTER, y: 0.08, z: 0.05 });
@@ -301,41 +325,81 @@ export function ghostify(root, color = KIT.hologram) {
 // ---------------------------------------------------------------------------
 
 /**
- * Leia's hair: a brown cap over the crown and the back of the head, plus the
- * two coiled side buns. Head-local coordinates (head bottom = 0, top = 1.04,
- * radius 0.645).
+ * The face print occupies head-local y 0.22 to 0.845, with the eyes at 0.59.
+ * Hair, hoods and open-face helmets have to clear the brow at the front —
+ * roughly y = 0.76 — while still coming down over the ears and nape.
+ */
+const FACE_TOP = 0.78;
+
+/**
+ * Leia's hair: a brown cap high enough to clear the face print, coming down
+ * over the ears and nape, plus the two coiled buns. Head-local coordinates
+ * (head bottom = 0, top = 1.04, r = 0.645).
  */
 function leiaBuns(color = COLORS.brown) {
   const b = new Bricks();
-  const H = FIG.headH;
 
-  // Crown: a dome that comes down past the ears, parted at the front.
-  b.addGeometry(domeGeometry(0.71, Math.PI * 0.58, 18), { x: 0, y: H * 0.60, z: 0, color });
-  // Back mass, filling the gap between the dome rim and the nape.
-  b.addGeometry(chamferBox(1.30, 0.72, 0.62, 0.14), { x: 0, y: H * 0.44, z: -0.36, color });
-  // Centre parting: a small ridge over the brow so the front does not read bald.
-  b.addGeometry(chamferBox(1.16, 0.24, 0.30, 0.08), { x: 0, y: H * 0.90, z: 0.44, color });
+  // Crown, sitting on top of the head.
+  b.addGeometry(domeGeometry(0.695, Math.PI * 0.5, 20), { x: 0, y: FACE_TOP, z: 0, color });
+  // Sides and nape, coming down past the ears but leaving the face clear.
+  b.addGeometry(
+    latheShell(
+      shellProfile(
+        [
+          [0.695, FACE_TOP + 0.02],
+          [0.70, 0.42],
+          [0.66, 0.24],
+        ],
+        0.09
+      ),
+      { segments: 22, openHalf: 1.02 }
+    ),
+    { color, opts: { side: THREE.DoubleSide } }
+  );
+  // Centre-parted fringe across the brow.
+  b.addGeometry(
+    latheShell(
+      shellProfile(
+        [
+          [0.70, 1.00],
+          [0.715, FACE_TOP],
+        ],
+        0.085
+      ),
+      { segments: 20, openHalf: Math.PI - 1.15 }
+    ),
+    { rot: [0, Math.PI, 0], color, opts: { side: THREE.DoubleSide } }
+  );
+  b.addGeometry(chamferBox(0.20, 0.24, 0.16, 0.05), { x: 0, y: 0.94, z: 0.66, color });
 
-  // The buns themselves: a flattened ball wrapped in a coil, on each side.
+  // The buns, at ear height and out to the sides where they cannot mask the
+  // face: a ball flattened against the head, wrapped in a coil.
   for (const sx of [-1, 1]) {
     b.push();
-    b.translateWorld(sx * 0.80, H * 0.46, -0.03);
-    b.scale(0.82, 1, 1); // flattened against the head like a real cinnamon bun
-    b.addGeometry(new THREE.SphereGeometry(0.36, 16, 12), { color });
+    b.translateWorld(sx * 0.80, 0.44, -0.02);
+    b.scale(0.76, 1, 1);
+    b.addGeometry(new THREE.SphereGeometry(0.40, 16, 12), { color });
     b.pop();
-    // Coil, so the bun reads as braided rather than as a stuck-on ball.
-    b.addGeometry(new THREE.TorusGeometry(0.235, 0.085, 7, 16), {
+    // Coils, so it reads as a braid rather than a stuck-on ball.
+    b.addGeometry(new THREE.TorusGeometry(0.27, 0.095, 7, 18), {
       x: sx * 0.855,
-      y: H * 0.46,
-      z: -0.03,
+      y: 0.44,
+      z: -0.02,
       rot: [0, Math.PI / 2, 0],
       color,
     });
-    // Short neck joining the bun to the cap.
-    b.addGeometry(new THREE.CylinderGeometry(0.24, 0.28, 0.30, 12), {
-      x: sx * 0.63,
-      y: H * 0.46,
-      z: -0.03,
+    b.addGeometry(new THREE.TorusGeometry(0.145, 0.08, 6, 14), {
+      x: sx * 0.89,
+      y: 0.44,
+      z: -0.02,
+      rot: [0, Math.PI / 2, 0],
+      color,
+    });
+    // Short root joining the bun to the crown.
+    b.addGeometry(new THREE.CylinderGeometry(0.26, 0.33, 0.32, 12), {
+      x: sx * 0.58,
+      y: 0.46,
+      z: -0.02,
       rot: [0, 0, Math.PI / 2],
       color,
     });
@@ -345,239 +409,281 @@ function leiaBuns(color = COLORS.brown) {
 
 /**
  * Leia's robe: a tapered white skirt replacing the visible gap between the
- * legs, so she reads as robed rather than trousered. Pelvis-local, hips
- * occupy y 0..0.46 and the legs hang from y 0 to -1.62.
+ * legs, so she reads as robed rather than trousered. Pelvis-local: the hips
+ * occupy y 0..0.46 and the legs hang from y 0 down to -1.62.
  */
 function leiaSkirt(color = COLORS.white) {
   const b = new Bricks();
-  b.addGeometry(taperBox(1.98, 1.50, 1.42, 1.36, 0.92, 0.11), { x: 0, y: -0.31, z: 0.02, color });
+  b.addGeometry(taperBox(1.94, 1.50, 1.44, 1.32, 0.92, 0.11), { x: 0, y: -0.30, z: 0.02, color });
   // Hem: a slightly proud lip so the skirt has an edge instead of a fade-out.
-  b.addGeometry(taperBox(2.04, 1.98, 0.14, 1.40, 1.36, 0.05), { x: 0, y: -0.99, z: 0.02, color });
-  // A soft fold down the front, to break up the flat panel.
-  b.addGeometry(chamferBox(0.20, 1.16, 0.14, 0.06), { x: 0, y: -0.36, z: 0.62, color });
+  b.addGeometry(taperBox(2.00, 1.94, 0.14, 1.36, 1.32, 0.05), { x: 0, y: -0.99, z: 0.02, color });
+  // Two soft folds, to break up the flat panel.
+  for (const sx of [-1, 1]) {
+    b.addGeometry(chamferBox(0.16, 1.10, 0.14, 0.05), { x: sx * 0.30, y: -0.38, z: 0.58, color });
+  }
   return b.build();
 }
 
 /**
- * Vader's helmet: domed crown, angular face mask, and the flared skirt that
- * comes down over the shoulders at the back and sides. Head-local.
+ * Vader's helmet: an ogival dome, an angular face mask that stands clearly
+ * proud of it, and the flared skirt that comes down over the shoulders at the
+ * back and sides. Head-local.
  */
-function vaderHelmet({ shell = COLORS.trueBlack, trim = COLORS.darkBluishGray } = {}) {
+function vaderHelmet({ shell = COLORS.black, lens = COLORS.trueBlack, trim = COLORS.darkBluishGray } = {}) {
   const b = new Bricks();
   const g = { finish: 'glossy' };
-  const side = { finish: 'glossy', side: THREE.DoubleSide };
+  const dbl = { finish: 'glossy', side: THREE.DoubleSide };
 
-  // --- crown
-  b.addGeometry(domeGeometry(0.80, Math.PI * 0.5, 20), { x: 0, y: 0.70, z: 0, color: shell, opts: g });
-  b.addGeometry(new THREE.CylinderGeometry(0.80, 0.845, 0.46, 20), { x: 0, y: 0.47, z: 0, color: shell, opts: g });
-  // The raised lip where the dome meets the mask.
-  b.addGeometry(new THREE.TorusGeometry(0.845, 0.055, 8, 24), {
-    x: 0,
-    y: 0.255,
-    z: 0,
-    rot: [Math.PI / 2, 0, 0],
-    color: shell,
-    opts: g,
-  });
-
-  // --- skirt: back and sides only, flaring out over the shoulders
+  // --- crown: a single lathed ogive, wide at the brow and tapering upward
+  b.addGeometry(
+    latheShell(
+      [
+        [0.012, 1.44],
+        [0.30, 1.40],
+        [0.52, 1.28],
+        [0.66, 1.08],
+        [0.745, 0.82],
+        [0.792, 0.55],
+        [0.812, 0.36],
+        [0.808, 0.26],
+        [0.012, 0.26],
+      ],
+      { segments: 26, close: false }
+    ),
+    { color: shell, opts: g }
+  );
+  // Flared rim at the base of the dome, back and sides only.
   b.addGeometry(
     latheShell(
       shellProfile(
         [
-          [0.84, 0.30],
-          [0.95, 0.06],
-          [1.10, -0.18],
-          [1.30, -0.44],
+          [0.815, 0.34],
+          [0.905, 0.19],
+          [0.885, 0.11],
         ],
-        0.14
+        0.11
       ),
-      { segments: 24, openHalf: 1.02 }
+      { segments: 24, openHalf: 0.98 }
     ),
-    { x: 0, y: 0, z: 0, color: shell, opts: side }
+    { color: shell, opts: dbl }
   );
 
-  // --- face mask: vertical front face so the decal sits flush
-  b.addGeometry(taperBox(0.66, 1.06, 1.02, 0.62, 0.62, 0.075), { x: 0, y: 0.54, z: 0.42, color: shell, opts: g });
-  // Brow: juts forward over the eyes and ties the mask into the dome.
-  b.addGeometry(chamferBox(1.10, 0.22, 0.46, 0.06), {
+  // --- neck skirt, flaring out over the shoulders
+  b.addGeometry(
+    latheShell(
+      shellProfile(
+        [
+          [0.86, 0.18],
+          [0.98, -0.04],
+          [1.14, -0.26],
+          [1.30, -0.48],
+        ],
+        0.15
+      ),
+      { segments: 26, openHalf: 1.02 }
+    ),
+    { color: shell, opts: dbl }
+  );
+
+  // --- face mask: vertical front face so a flat decal sits flush on it
+  b.addGeometry(taperBox(0.58, 1.00, 0.94, 0.68, 0.68, 0.07), { x: 0, y: 0.56, z: 0.46, color: shell, opts: g });
+  // Brow, jutting forward over the eyes and tying the mask into the dome.
+  b.addGeometry(chamferBox(1.12, 0.20, 0.44, 0.06), {
     x: 0,
-    y: 1.00,
-    z: 0.42,
-    rot: [-0.26, 0, 0],
+    y: 0.99,
+    z: 0.50,
+    rot: [-0.30, 0, 0],
     color: shell,
     opts: g,
   });
-  // Cheek flares, angled back toward the skirt.
+  // Cheek panels, angling back to meet the skirt and widening the mask.
   for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.20, 0.86, 0.50, 0.06), {
-      x: sx * 0.53,
-      y: 0.56,
-      z: 0.30,
-      rot: [0, sx * 0.42, sx * 0.06],
+    b.addGeometry(taperBox(0.22, 0.30, 0.84, 0.62, 0.66, 0.06), {
+      x: sx * 0.51,
+      y: 0.58,
+      z: 0.34,
+      rot: [0, sx * 0.34, 0],
       color: shell,
       opts: g,
     });
   }
-  // Central nose ridge.
-  b.addGeometry(chamferBox(0.17, 0.46, 0.16, 0.04), { x: 0, y: 0.62, z: 0.76, color: shell, opts: g });
-  // Mouth grille: proud of the mask, with slats.
-  b.addGeometry(chamferBox(0.60, 0.26, 0.20, 0.04), { x: 0, y: 0.23, z: 0.76, color: trim, opts: { finish: 'metal' } });
-  for (let i = -2; i <= 2; i++) {
-    b.addGeometry(chamferBox(0.055, 0.24, 0.07, 0.015), {
-      x: i * 0.115,
-      y: 0.23,
-      z: 0.855,
-      color: shell,
+  // A single contour line following the taper of each cheek. Anything bolder
+  // turns into a bright cage across the face under a hard key light.
+  for (const sx of [-1, 1]) {
+    b.addGeometry(chamferBox(0.04, 0.78, 0.045, 0.014), {
+      x: sx * 0.455,
+      y: 0.58,
+      z: 0.805,
+      rot: [0, 0, sx * 0.145],
+      color: trim,
       opts: g,
     });
+  }
+  // Central nose ridge between the lenses.
+  b.addGeometry(taperBox(0.22, 0.17, 0.50, 0.17, 0.14, 0.035), { x: 0, y: 0.58, z: 0.855, color: shell, opts: g });
+  // Mouth grille, proud of the mask, with slats.
+  b.addGeometry(chamferBox(0.60, 0.24, 0.16, 0.04), { x: 0, y: 0.24, z: 0.82, color: trim, opts: g });
+  for (let i = -2; i <= 2; i++) {
+    b.addGeometry(chamferBox(0.06, 0.22, 0.08, 0.015), { x: i * 0.118, y: 0.24, z: 0.885, color: lens, opts: g });
   }
   // Chin, tucking the mask back under the grille.
-  b.addGeometry(taperBox(0.44, 0.62, 0.22, 0.42, 0.60, 0.05), { x: 0, y: 0.05, z: 0.48, color: shell, opts: g });
+  b.addGeometry(taperBox(0.42, 0.60, 0.20, 0.46, 0.66, 0.05), { x: 0, y: 0.07, z: 0.52, color: shell, opts: g });
   // The two "tusk" vents at the outer bottom corners of the mask.
   for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.14, 0.20, 0.18, 0.03), { x: sx * 0.36, y: 0.14, z: 0.66, color: trim, opts: g });
+    b.addGeometry(chamferBox(0.12, 0.20, 0.14, 0.03), { x: sx * 0.35, y: 0.16, z: 0.74, color: trim, opts: g });
   }
-  return b.build();
-}
-
-/** Vader's eyes and brow line, only used when helmet-vader.svg is unavailable. */
-function vaderMaskFallback(shell = COLORS.trueBlack) {
-  const b = new Bricks();
-  const lens = { finish: 'glossy' };
-  for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.34, 0.26, 0.06, 0.03), {
-      x: sx * 0.28,
-      y: 0.74,
-      z: 0.735,
-      rot: [0, 0, sx * 0.22],
-      color: 0x05070a,
-      opts: lens,
-    });
-  }
-  b.addGeometry(chamferBox(0.90, 0.05, 0.05, 0.015), { x: 0, y: 0.90, z: 0.735, color: 0x05070a, opts: lens });
-  void shell;
-  return b.build();
-}
-
-/** The chest control box and belt boxes that give Vader's silhouette its bulk. */
-function vaderChestGear() {
-  const b = new Bricks();
-  const dark = COLORS.trueBlack;
-  const box = { finish: 'glossy' };
-  // Chest panel.
-  b.addGeometry(chamferBox(0.78, 0.44, 0.14, 0.04), { x: 0, y: 1.34, z: 0.54, color: dark, opts: box });
-  const lights = [
-    [-0.26, 1.42, COLORS.red],
-    [-0.09, 1.42, COLORS.brightGreen],
-    [0.09, 1.42, COLORS.blue],
-    [0.26, 1.42, COLORS.white],
-    [-0.17, 1.26, COLORS.red],
-    [0.17, 1.26, COLORS.brightYellow],
-  ];
-  for (const [x, y, c] of lights) {
-    b.addGeometry(new THREE.CylinderGeometry(0.045, 0.045, 0.04, 8), {
-      x,
-      y,
-      z: 0.615,
-      rot: [Math.PI / 2, 0, 0],
-      color: c,
-      opts: { emissive: c, emissiveIntensity: 1.4, finish: 'glossy' },
-    });
-  }
-  // Belt with side boxes.
-  b.addGeometry(chamferBox(1.60, 0.20, 0.98, 0.04), { x: 0, y: 0.16, z: 0, color: dark, opts: box });
-  for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.26, 0.24, 0.24, 0.04), { x: sx * 0.52, y: 0.16, z: 0.44, color: COLORS.darkBluishGray, opts: box });
-  }
-  b.addGeometry(chamferBox(0.30, 0.24, 0.10, 0.03), { x: 0, y: 0.16, z: 0.52, color: COLORS.flatSilver, opts: { finish: 'metal' } });
   return b.build();
 }
 
 /**
- * Stormtrooper helmet: a tapered barrel with a squashed dome on top, so the
- * whole face region lies on a cone that the decal can hug exactly.
+ * Vader's lenses, only used when helmet-vader.svg is unavailable. They are a
+ * smoked grey rather than black: on a black helmet under this film's lighting,
+ * a black lens on black plastic simply disappears.
+ */
+function vaderMaskFallback(lens = 0x36434d) {
+  const b = new Bricks();
+  const o = { finish: 'glossy' };
+  for (const sx of [-1, 1]) {
+    // A trapezoid narrowing toward the nose, tilted like the real lens.
+    b.addGeometry(taperBox(0.30, 0.38, 0.30, 0.07, 0.07, 0.025), {
+      x: sx * 0.265,
+      y: 0.72,
+      z: 0.808,
+      rot: [0, 0, sx * 0.34],
+      color: lens,
+      opts: o,
+    });
+  }
+  return b.build();
+}
+
+/** The chest control box and belt that give Vader's silhouette its bulk. */
+function vaderChestGear() {
+  const b = new Bricks();
+  const dark = COLORS.trueBlack;
+  // Matte, so a hard key light does not blow the flat panels out to grey.
+  const box = { finish: 'plastic' };
+  b.addGeometry(chamferBox(0.70, 0.40, 0.12, 0.035), { x: 0, y: 1.30, z: 0.54, color: dark, opts: box });
+  const lights = [
+    [-0.22, 1.38, COLORS.red],
+    [-0.075, 1.38, COLORS.brightGreen],
+    [0.075, 1.38, COLORS.blue],
+    [0.22, 1.38, COLORS.white],
+    [-0.15, 1.23, COLORS.red],
+    [0.15, 1.23, COLORS.brightYellow],
+  ];
+  for (const [x, y, c] of lights) {
+    b.addGeometry(new THREE.CylinderGeometry(0.042, 0.042, 0.04, 8), {
+      x,
+      y,
+      z: 0.60,
+      rot: [Math.PI / 2, 0, 0],
+      color: c,
+      opts: { emissive: c, emissiveIntensity: 1.2, finish: 'glossy' },
+    });
+  }
+  // Belt with a buckle and two small side boxes.
+  b.addGeometry(chamferBox(1.62, 0.22, 1.00, 0.04), { x: 0, y: 0.15, z: 0, color: dark, opts: box });
+  b.addGeometry(chamferBox(0.30, 0.18, 0.09, 0.03), { x: 0, y: 0.15, z: 0.53, color: STEEL, opts: box });
+  for (const sx of [-1, 1]) {
+    b.addGeometry(chamferBox(0.20, 0.18, 0.18, 0.03), { x: sx * 0.48, y: 0.15, z: 0.44, color: STEEL, opts: box });
+  }
+  return b.build();
+}
+
+/**
+ * Stormtrooper helmet: a squared-off jaw under a tapered face barrel and a
+ * squashed crown, so the whole face region lies on a cone the decal can hug.
  */
 function trooperHelmet({ armour = COLORS.white, dark = COLORS.trueBlack } = {}) {
   const b = new Bricks();
   const o = { finish: 'glossy' };
 
-  // Jaw: narrows toward the chin.
-  b.addGeometry(new THREE.CylinderGeometry(0.805, 0.60, 0.42, 22), { x: 0, y: 0.11, z: 0, color: armour, opts: o });
-  // Face barrel: the surface the decal sits on, r 0.805 -> 0.745 over y 0.32..1.00.
-  b.addGeometry(new THREE.CylinderGeometry(0.745, 0.805, 0.68, 22), { x: 0, y: 0.66, z: 0, color: armour, opts: o });
-  // Crown: a squashed dome.
+  // Jaw: wide and squared off rather than a point.
+  b.addGeometry(new THREE.CylinderGeometry(0.815, 0.70, 0.36, 22), { x: 0, y: 0.12, z: 0, color: armour, opts: o });
+  b.addGeometry(chamferBox(1.16, 0.34, 1.18, 0.22), { x: 0, y: 0.14, z: 0.02, color: armour, opts: o });
+  // Face barrel: the decal surface, r 0.815 -> 0.755 over y 0.30..0.98.
+  b.addGeometry(new THREE.CylinderGeometry(0.755, 0.815, 0.68, 22), { x: 0, y: 0.64, z: 0, color: armour, opts: o });
+  // Crown, squashed so the helmet is not a bullet.
   b.push();
-  b.translateWorld(0, 1.00, 0);
-  b.scale(1, 0.58, 1);
-  b.addGeometry(domeGeometry(0.745, Math.PI * 0.5, 20), { color: armour, opts: o });
+  b.translateWorld(0, 0.98, 0);
+  b.scale(1, 0.50, 1);
+  b.addGeometry(domeGeometry(0.755, Math.PI * 0.5, 20), { color: armour, opts: o });
   b.pop();
   // Back-of-skull bulge, so the profile is not a plain cylinder.
   b.push();
-  b.translateWorld(0, 0.78, -0.24);
-  b.scale(0.92, 0.70, 0.95);
-  b.addGeometry(new THREE.SphereGeometry(0.72, 16, 12), { color: armour, opts: o });
+  b.translateWorld(0, 0.74, -0.26);
+  b.scale(0.92, 0.74, 0.92);
+  b.addGeometry(new THREE.SphereGeometry(0.74, 16, 12), { color: armour, opts: o });
   b.pop();
-  // Central vent ridge running front to back over the crown.
-  b.addGeometry(chamferBox(0.17, 0.14, 1.10, 0.04), { x: 0, y: 1.36, z: -0.06, color: armour, opts: o });
-  b.addGeometry(chamferBox(0.13, 0.10, 0.34, 0.03), { x: 0, y: 1.40, z: 0.36, color: dark, opts: o });
-  // Brow trapezoid.
-  b.addGeometry(taperBox(1.14, 0.94, 0.10, 0.34, 0.30, 0.03), {
+  // Central vent ridge over the crown.
+  b.addGeometry(chamferBox(0.16, 0.13, 1.12, 0.04), { x: 0, y: 1.30, z: -0.08, color: armour, opts: o });
+  b.addGeometry(chamferBox(0.12, 0.10, 0.30, 0.03), { x: 0, y: 1.34, z: 0.34, color: dark, opts: o });
+  // Brow ledge across the front.
+  b.addGeometry(taperBox(1.18, 1.00, 0.11, 0.34, 0.28, 0.035), {
     x: 0,
-    y: 0.99,
-    z: 0.60,
-    rot: [-0.22, 0, 0],
+    y: 0.98,
+    z: 0.58,
+    rot: [-0.26, 0, 0],
     color: armour,
     opts: o,
   });
   // Vocoder "ears".
   for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.14, 0.40, 0.34, 0.05), { x: sx * 0.76, y: 0.56, z: 0.06, color: dark, opts: o });
-    b.addGeometry(new THREE.CylinderGeometry(0.10, 0.10, 0.10, 10), {
-      x: sx * 0.83,
-      y: 0.56,
-      z: 0.06,
+    b.addGeometry(chamferBox(0.15, 0.42, 0.36, 0.05), { x: sx * 0.77, y: 0.54, z: 0.04, color: dark, opts: o });
+    b.addGeometry(new THREE.CylinderGeometry(0.11, 0.11, 0.10, 12), {
+      x: sx * 0.845,
+      y: 0.54,
+      z: 0.04,
       rot: [0, 0, Math.PI / 2],
       color: COLORS.darkBluishGray,
       opts: o,
     });
   }
   // Neck seal below the jaw.
-  b.addGeometry(new THREE.CylinderGeometry(0.58, 0.56, 0.20, 18), { x: 0, y: -0.16, z: 0, color: dark, opts: o });
+  b.addGeometry(new THREE.CylinderGeometry(0.60, 0.57, 0.22, 18), { x: 0, y: -0.16, z: 0, color: dark, opts: o });
   return b.build();
 }
 
-/** Eye lenses and the "frown" vent, only used when helmet-stormtrooper.svg is missing. */
+/** Eyes and the "frown" vent, only used when helmet-stormtrooper.svg is missing. */
 function trooperFaceFallback(armour = COLORS.white) {
   const b = new Bricks();
   const dark = 0x0a0d11;
   const o = { finish: 'glossy' };
-  // Eye lenses, slanting down toward the nose bridge.
+  const R = 0.80;
+
+  // Eye lenses: big, wide-set, wrapping round the curve of the helmet.
   for (const sx of [-1, 1]) {
-    b.push();
-    b.rotateY(sx * 0.30);
-    b.addGeometry(taperBox(0.30, 0.36, 0.28, 0.06, 0.06, 0.02), { x: sx * 0.10, y: 0.74, z: 0.79, color: dark, opts: o });
-    b.pop();
+    for (let i = 0; i < 3; i++) {
+      const a = sx * (0.16 + i * 0.20);
+      onCurve(b, a, 0.76 - i * 0.02, R - 0.02, 0, (bb) =>
+        bb.addGeometry(chamferBox(0.24, 0.30 - i * 0.045, 0.07, 0.025), { color: dark, opts: o })
+      );
+    }
   }
-  // Brow line joining them.
-  b.addGeometry(chamferBox(0.60, 0.055, 0.06, 0.02), { x: 0, y: 0.90, z: 0.79, color: dark, opts: o });
+  // Brow line joining the lenses over the nose.
+  onCurve(b, 0, 0.94, R - 0.02, 0, (bb) => bb.addGeometry(chamferBox(0.70, 0.06, 0.06, 0.02), { color: dark, opts: o }));
   // Nose vent.
-  b.addGeometry(chamferBox(0.14, 0.30, 0.07, 0.02), { x: 0, y: 0.62, z: 0.80, color: dark, opts: o });
-  // The frown: a wide vent with four bars.
-  b.addGeometry(chamferBox(0.62, 0.20, 0.06, 0.02), { x: 0, y: 0.40, z: 0.79, color: dark, opts: o });
+  onCurve(b, 0, 0.62, R - 0.02, 0, (bb) => bb.addGeometry(chamferBox(0.17, 0.34, 0.07, 0.025), { color: dark, opts: o }));
+  // The frown: a wide vent with three bars.
+  onCurve(b, 0, 0.36, R - 0.03, 0, (bb) => bb.addGeometry(chamferBox(0.66, 0.22, 0.07, 0.025), { color: dark, opts: o }));
   for (let i = -1; i <= 1; i++) {
-    b.addGeometry(chamferBox(0.05, 0.20, 0.04, 0.015), { x: i * 0.16, y: 0.40, z: 0.815, color: armour, opts: o });
+    onCurve(b, i * 0.20, 0.36, R + 0.005, 0, (bb) =>
+      bb.addGeometry(chamferBox(0.06, 0.22, 0.05, 0.015), { color: armour, opts: o })
+    );
   }
-  // The two "tears" under the eyes.
+  // The two "tears" under the outer corners of the eyes.
   for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.06, 0.14, 0.05, 0.02), { x: sx * 0.27, y: 0.54, z: 0.80, color: dark, opts: o });
+    onCurve(b, sx * 0.42, 0.54, R - 0.02, 0, (bb) =>
+      bb.addGeometry(chamferBox(0.07, 0.16, 0.06, 0.02), { color: dark, opts: o })
+    );
   }
   return b.build();
 }
 
 /**
- * Rebel Fleet Trooper helmet: an open-face cap with a rim all round, leaving
- * the face visible under the brim.
+ * Rebel Fleet Trooper helmet: an open-face cap with a narrow rim, leaving the
+ * face visible under the brim.
  */
 function rebelHelmet({ shell = COLORS.darkTan, trim = COLORS.sandBlue } = {}) {
   const b = new Bricks();
@@ -586,8 +692,8 @@ function rebelHelmet({ shell = COLORS.darkTan, trim = COLORS.sandBlue } = {}) {
 
   // Squashed crown.
   b.push();
-  b.translateWorld(0, 0.82, -0.02);
-  b.scale(1, 0.62, 1.04);
+  b.translateWorld(0, 0.80, -0.02);
+  b.scale(1, 0.66, 1.04);
   b.addGeometry(domeGeometry(0.78, Math.PI * 0.5, 18), { color: shell, opts: o });
   b.pop();
   // Back and sides, coming down over the ears; the front is left open.
@@ -595,48 +701,49 @@ function rebelHelmet({ shell = COLORS.darkTan, trim = COLORS.sandBlue } = {}) {
     latheShell(
       shellProfile(
         [
-          [0.78, 0.84],
-          [0.78, 0.46],
-          [0.74, 0.20],
+          [0.78, 0.82],
+          [0.78, 0.44],
+          [0.73, 0.18],
         ],
         0.12
       ),
-      { segments: 20, openHalf: 1.02 }
+      { segments: 20, openHalf: 1.04 }
     ),
     { x: 0, y: 0, z: -0.02, color: shell, opts: dbl }
   );
-  // Rim all the way round, dipping slightly at the front into a brim.
+  // Narrow rim all the way round.
   b.addGeometry(
     latheShell(
       shellProfile(
         [
-          [0.80, 0.90],
-          [1.02, 0.82],
-          [1.02, 0.76],
+          [0.80, 0.86],
+          [0.93, 0.80],
         ],
-        0.24
+        0.15
       ),
       { segments: 20 }
     ),
     { x: 0, y: 0, z: -0.02, color: trim, opts: dbl }
   );
-  // Front brim, a touch longer and angled down over the brow.
-  b.addGeometry(chamferBox(0.86, 0.08, 0.34, 0.03), {
+  // Front brim, angled down over the brow.
+  b.addGeometry(chamferBox(0.80, 0.07, 0.26, 0.03), {
     x: 0,
-    y: 0.80,
-    z: 0.78,
-    rot: [-0.30, 0, 0],
+    y: 0.79,
+    z: 0.80,
+    rot: [-0.34, 0, 0],
     color: trim,
     opts: o,
   });
-  // Comms box on the left side of the helmet.
-  b.addGeometry(chamferBox(0.16, 0.22, 0.30, 0.04), { x: -0.74, y: 0.52, z: 0.16, color: COLORS.darkBluishGray, opts: o });
+  // Comms box on the left side.
+  b.addGeometry(chamferBox(0.15, 0.22, 0.30, 0.04), { x: -0.74, y: 0.48, z: 0.14, color: COLORS.darkBluishGray, opts: o });
+  // Chin strap.
+  b.addGeometry(chamferBox(1.30, 0.09, 0.12, 0.03), { x: 0, y: 0.08, z: 0.28, color: COLORS.darkBrown, opts: o });
   return b.build();
 }
 
 /**
  * Rebel pilot flight helmet: white shell with orange bands, a visor tipped up
- * over the brow, and a breather box on the right cheek.
+ * over the brow, and a breather box on the cheek.
  */
 function pilotHelmet({ shell = COLORS.white, band = COLORS.brightOrange, gear = COLORS.darkBluishGray } = {}) {
   const b = new Bricks();
@@ -645,8 +752,8 @@ function pilotHelmet({ shell = COLORS.white, band = COLORS.brightOrange, gear = 
 
   // Crown.
   b.push();
-  b.translateWorld(0, 0.86, -0.02);
-  b.scale(1, 0.66, 1.02);
+  b.translateWorld(0, 0.84, -0.02);
+  b.scale(1, 0.62, 1.02);
   b.addGeometry(domeGeometry(0.80, Math.PI * 0.5, 20), { color: shell, opts: o });
   b.pop();
   // Sides and back, coming down past the ears.
@@ -654,10 +761,10 @@ function pilotHelmet({ shell = COLORS.white, band = COLORS.brightOrange, gear = 
     latheShell(
       shellProfile(
         [
-          [0.80, 0.88],
-          [0.81, 0.44],
-          [0.76, 0.06],
-          [0.70, -0.06],
+          [0.80, 0.86],
+          [0.81, 0.42],
+          [0.76, 0.04],
+          [0.70, -0.08],
         ],
         0.13
       ),
@@ -670,12 +777,12 @@ function pilotHelmet({ shell = COLORS.white, band = COLORS.brightOrange, gear = 
     latheShell(
       shellProfile(
         [
-          [0.81, 0.94],
-          [0.83, 0.82],
+          [0.81, 0.90],
+          [0.83, 0.80],
         ],
-        0.16
+        0.15
       ),
-      { segments: 20, openHalf: Math.PI - 1.02 }
+      { segments: 20, openHalf: Math.PI - 1.05 }
     ),
     { x: 0, y: 0, z: -0.02, rot: [0, Math.PI, 0], color: shell, opts: dbl }
   );
@@ -684,39 +791,39 @@ function pilotHelmet({ shell = COLORS.white, band = COLORS.brightOrange, gear = 
     latheShell(
       shellProfile(
         [
-          [0.835, 0.74],
-          [0.835, 0.56],
+          [0.836, 0.72],
+          [0.836, 0.55],
         ],
-        0.06
+        0.055
       ),
       { segments: 22, openHalf: 1.00 }
     ),
     { x: 0, y: 0, z: -0.02, color: band, opts: dbl }
   );
   // Orange crest over the crown.
-  b.addGeometry(chamferBox(0.20, 0.10, 1.12, 0.03), { x: 0, y: 1.36, z: -0.10, color: band, opts: o });
-  // Raised visor.
-  b.addGeometry(chamferBox(1.34, 0.26, 0.44, 0.07), {
+  b.addGeometry(chamferBox(0.20, 0.09, 1.10, 0.03), { x: 0, y: 1.30, z: -0.10, color: band, opts: o });
+  // Visor, tipped up just clear of the brow.
+  b.addGeometry(chamferBox(1.18, 0.18, 0.32, 0.05), {
     x: 0,
-    y: 1.16,
-    z: 0.42,
-    rot: [-0.62, 0, 0],
+    y: 1.04,
+    z: 0.48,
+    rot: [-0.46, 0, 0],
     color: COLORS.trueBlack,
-    opts: { finish: 'chrome' },
+    opts: { finish: 'glossy' },
   });
-  b.addGeometry(chamferBox(1.40, 0.10, 0.16, 0.03), { x: 0, y: 0.98, z: 0.50, color: shell, opts: o });
-  // Breather box and hose stub on the right cheek.
-  b.addGeometry(chamferBox(0.24, 0.36, 0.30, 0.05), { x: -0.70, y: 0.30, z: 0.36, color: gear, opts: o });
-  b.addGeometry(new THREE.CylinderGeometry(0.09, 0.09, 0.20, 10), {
+  b.addGeometry(chamferBox(1.24, 0.07, 0.10, 0.025), { x: 0, y: 0.93, z: 0.56, color: band, opts: o });
+  // Breather box and hose stub on the cheek.
+  b.addGeometry(chamferBox(0.24, 0.34, 0.28, 0.05), { x: -0.70, y: 0.28, z: 0.34, color: gear, opts: o });
+  b.addGeometry(new THREE.CylinderGeometry(0.085, 0.085, 0.20, 10), {
     x: -0.82,
-    y: 0.24,
-    z: 0.36,
+    y: 0.22,
+    z: 0.34,
     rot: [0, 0, Math.PI / 2],
-    color: COLORS.flatSilver,
-    opts: { finish: 'metal' },
+    color: STEEL,
+    opts: POLISH,
   });
   // Chin strap.
-  b.addGeometry(chamferBox(1.34, 0.10, 0.14, 0.03), { x: 0, y: 0.04, z: 0.30, color: gear, opts: o });
+  b.addGeometry(chamferBox(1.30, 0.10, 0.14, 0.03), { x: 0, y: 0.02, z: 0.28, color: gear, opts: o });
   return b.build();
 }
 
@@ -724,27 +831,27 @@ function pilotHelmet({ shell = COLORS.white, band = COLORS.brightOrange, gear = 
 function officerCap(color = COLORS.trueBlack) {
   const b = new Bricks();
   const o = { finish: 'glossy' };
-  b.addGeometry(new THREE.CylinderGeometry(0.76, 0.71, 0.20, 22), { x: 0, y: 1.02, z: -0.03, color, opts: o });
-  b.addGeometry(new THREE.CylinderGeometry(0.71, 0.69, 0.24, 22), { x: 0, y: 0.84, z: -0.03, color, opts: o });
+  b.addGeometry(new THREE.CylinderGeometry(0.74, 0.70, 0.18, 22), { x: 0, y: 1.00, z: -0.03, color, opts: o });
+  b.addGeometry(new THREE.CylinderGeometry(0.70, 0.68, 0.24, 22), { x: 0, y: 0.84, z: -0.03, color, opts: o });
   // Peak.
-  b.addGeometry(taperBox(0.52, 0.76, 0.07, 0.42, 0.30, 0.03), {
+  b.addGeometry(taperBox(0.52, 0.74, 0.07, 0.40, 0.28, 0.03), {
     x: 0,
     y: 0.76,
-    z: 0.74,
+    z: 0.72,
     rot: [-0.26, 0, Math.PI],
     color,
-    opts: { finish: 'chrome' },
+    opts: o,
   });
-  // Imperial cap badge.
-  b.addGeometry(chamferBox(0.24, 0.10, 0.05, 0.02), { x: 0, y: 0.90, z: 0.70, color: COLORS.flatSilver, opts: { finish: 'metal' } });
+  // Cap badge.
+  b.addGeometry(chamferBox(0.22, 0.09, 0.05, 0.02), { x: 0, y: 0.89, z: 0.69, color: SILVER, opts: POLISH });
   return b.build();
 }
 
 /**
  * A conical hood, built as two lathed shells: an open lower cone that frames
- * the face and a closed upper cone that forms the brow and peak.
+ * the face and a closed upper cone that forms the brow and the peak.
  */
-function hoodPiece({ color, rLow, rBrow, rTip, yLow, yBrow, yTip, openHalf, thickness = 0.13, opts = {} }) {
+function hoodPiece({ color, rLow, rBrow, rTip, yLow, yBrow, yTip, openHalf, thickness = 0.14, opts = {} }) {
   const b = new Bricks();
   const dbl = { ...opts, side: THREE.DoubleSide };
   b.addGeometry(
@@ -756,7 +863,7 @@ function hoodPiece({ color, rLow, rBrow, rTip, yLow, yBrow, yTip, openHalf, thic
         ],
         thickness
       ),
-      { segments: 22, openHalf }
+      { segments: 24, openHalf }
     ),
     { color, opts: dbl }
   );
@@ -765,47 +872,52 @@ function hoodPiece({ color, rLow, rBrow, rTip, yLow, yBrow, yTip, openHalf, thic
       shellProfile(
         [
           [rBrow, yBrow],
-          [rBrow * 0.86, yBrow + (yTip - yBrow) * 0.45],
+          [rBrow * 0.82, yBrow + (yTip - yBrow) * 0.5],
           [rTip, yTip],
         ],
         thickness
       ),
-      { segments: 22 }
+      { segments: 24 }
     ),
     { color, opts: dbl }
   );
   return b;
 }
 
-/** Ben's hood, plus the shoulder mantle of his robe. */
-function benHood(color = COLORS.brown) {
+/** Ben's hood: low and wide, framing the face rather than swallowing it. */
+function benHood(color = COLORS.reddishBrown) {
   const b = hoodPiece({
     color,
-    rLow: 1.02,
-    rBrow: 0.90,
-    rTip: 0.16,
-    yLow: -0.34,
-    yBrow: 0.92,
-    yTip: 1.56,
-    openHalf: 1.06,
+    rLow: 1.06,
+    rBrow: 0.94,
+    rTip: 0.30,
+    yLow: -0.36,
+    yBrow: 0.74,
+    yTip: 1.20,
+    openHalf: 1.18,
+    thickness: 0.17,
     opts: { finish: 'rubber' },
   });
-  // A soft roll around the face opening, so the hood edge reads as cloth.
+  // Rolled edge round the face opening, following the cone rather than
+  // sticking out from it.
   for (const sx of [-1, 1]) {
-    b.addGeometry(new THREE.CylinderGeometry(0.10, 0.13, 1.30, 8), {
-      x: sx * 0.86,
-      y: 0.28,
-      z: 0.46,
-      rot: [0.14, 0, sx * 0.10],
-      color,
-      opts: { finish: 'rubber' },
-    });
+    for (let i = 0; i < 4; i++) {
+      const y = -0.20 + i * 0.30;
+      const r = 1.06 + ((y + 0.36) / 1.10) * (0.94 - 1.06);
+      b.addGeometry(new THREE.SphereGeometry(0.105, 8, 6), {
+        x: sx * r * Math.sin(1.18),
+        y,
+        z: r * Math.cos(1.18),
+        color,
+        opts: { finish: 'rubber' },
+      });
+    }
   }
   return b.build();
 }
 
-/** Ben's robe: a mantle over the shoulders. Torso-local. */
-function benMantle(color = COLORS.brown) {
+/** Ben's robe: a mantle over the shoulders plus the belt. Torso-local. */
+function benMantle(color = COLORS.reddishBrown, under = COLORS.darkTan) {
   const b = new Bricks();
   const o = { finish: 'rubber' };
   const dbl = { finish: 'rubber', side: THREE.DoubleSide };
@@ -813,9 +925,9 @@ function benMantle(color = COLORS.brown) {
     latheShell(
       shellProfile(
         [
-          [0.70, 1.94],
-          [1.02, 1.34],
-          [1.16, 0.86],
+          [0.68, 1.92],
+          [0.98, 1.42],
+          [1.10, 1.02],
         ],
         0.16
       ),
@@ -823,37 +935,39 @@ function benMantle(color = COLORS.brown) {
     ),
     { color, opts: dbl }
   );
-  // Front opening of the robe, as two lapels.
+  // The robe's front edges, leaving the tunic showing between them.
   for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.26, 1.30, 0.16, 0.05), {
-      x: sx * 0.34,
-      y: 1.06,
-      z: 0.53,
-      rot: [0, 0, sx * 0.10],
+    b.addGeometry(taperBox(0.34, 0.30, 1.56, 0.20, 0.22, 0.06), {
+      x: sx * 0.46,
+      y: 0.80,
+      z: 0.50,
+      rot: [0, 0, sx * 0.06],
       color,
       opts: o,
     });
   }
+  // Tunic panel between them.
+  b.addGeometry(chamferBox(0.66, 1.20, 0.10, 0.04), { x: 0, y: 0.92, z: 0.52, color: under, opts: o });
   // Belt.
-  b.addGeometry(chamferBox(1.56, 0.20, 0.96, 0.04), { x: 0, y: 0.16, z: 0, color: COLORS.darkBrown, opts: o });
+  b.addGeometry(chamferBox(1.56, 0.20, 0.96, 0.04), { x: 0, y: 0.14, z: 0, color: COLORS.darkBrown, opts: o });
+  b.addGeometry(chamferBox(0.26, 0.18, 0.10, 0.03), { x: 0, y: 0.14, z: 0.51, color: STEEL, opts: POLISH });
   return b.build();
 }
 
 /** The Jawa's hood, drawn tight so only the glowing eyes show. */
 function jawaHood(color = COLORS.darkBrown) {
-  const b = hoodPiece({
+  return hoodPiece({
     color,
     rLow: 1.06,
-    rBrow: 0.86,
-    rTip: 0.14,
+    rBrow: 0.84,
+    rTip: 0.12,
     yLow: -0.36,
-    yBrow: 0.84,
-    yTip: 1.42,
+    yBrow: 0.86,
+    yTip: 1.46,
     openHalf: 0.64,
-    thickness: 0.14,
+    thickness: 0.15,
     opts: { finish: 'rubber' },
-  });
-  return b.build();
+  }).build();
 }
 
 /** The Jawa's robe: a cone from the shoulders to the floor, hiding the legs. */
@@ -861,26 +975,27 @@ function jawaRobe(color = COLORS.darkBrown, { yTop, yBottom, rTop = 0.78, rBotto
   const b = new Bricks();
   const o = { finish: 'rubber' };
   const h = yTop - yBottom;
-  b.addGeometry(new THREE.CylinderGeometry(rTop, rBottom, h, 20), { x: 0, y: yBottom + h / 2, z: 0, color, opts: o });
+  const rAt = (y) => rTop + ((yTop - y) / h) * (rBottom - rTop);
+  b.addGeometry(new THREE.CylinderGeometry(rTop, rBottom, h, 22), { x: 0, y: yBottom + h / 2, z: 0, color, opts: o });
   // Hem lip.
-  b.addGeometry(new THREE.CylinderGeometry(rBottom, rBottom * 1.02, 0.16, 20), { x: 0, y: yBottom + 0.08, z: 0, color, opts: o });
-  // Bandolier across the chest.
-  b.addGeometry(chamferBox(0.24, 1.5, 0.14, 0.04), {
-    x: 0.05,
-    y: yTop - 0.72,
-    z: 0.66,
-    rot: [0, 0, 0.42],
-    color: COLORS.reddishBrown,
-    opts: o,
-  });
-  for (let i = 0; i < 4; i++) {
-    b.addGeometry(chamferBox(0.12, 0.14, 0.08, 0.02), {
-      x: 0.05 + (i - 1.5) * 0.19,
-      y: yTop - 0.72 + (i - 1.5) * 0.44,
-      z: 0.72,
-      color: COLORS.flatSilver,
-      opts: { finish: 'metal' },
+  b.addGeometry(new THREE.CylinderGeometry(rBottom, rBottom * 1.03, 0.16, 22), { x: 0, y: yBottom + 0.08, z: 0, color, opts: o });
+  // Bandolier across the chest, riding on the outside of the cone.
+  for (let i = 0; i < 6; i++) {
+    const y = yTop - 0.32 - i * 0.30;
+    const x = -0.34 + i * 0.14;
+    const r = rAt(y);
+    const z = Math.sqrt(Math.max(0.02, r * r - x * x)) - 0.02;
+    b.addGeometry(chamferBox(0.30, 0.30, 0.10, 0.03), {
+      x,
+      y,
+      z,
+      rot: [0, 0, 0.45],
+      color: COLORS.reddishBrown,
+      opts: o,
     });
+    if (i % 2 === 0) {
+      b.addGeometry(chamferBox(0.12, 0.14, 0.08, 0.02), { x, y, z: z + 0.07, color: STEEL, opts: POLISH });
+    }
   }
   return b.build();
 }
@@ -902,33 +1017,67 @@ function jawaEyes(color = 0xffd21a) {
   return b.build();
 }
 
+/** Luke's hair: a swept blond cap with a fringe, rather than a helmet. */
+function lukeHair(color = SANDY_BLOND) {
+  const b = new Bricks();
+  // Crown.
+  b.addGeometry(domeGeometry(0.695, Math.PI * 0.54, 18), { x: 0, y: 0.66, z: 0, color });
+  // Nape.
+  b.addGeometry(chamferBox(1.26, 0.60, 0.58, 0.16), { x: 0, y: 0.52, z: -0.34, color });
+  // Fringe: a band hugging the brow, thicker in the middle.
+  b.addGeometry(
+    latheShell(
+      shellProfile(
+        [
+          [0.69, 0.92],
+          [0.705, 0.74],
+        ],
+        0.085
+      ),
+      { segments: 20, openHalf: Math.PI - 1.30 }
+    ),
+    { x: 0, y: 0, z: 0, rot: [0, Math.PI, 0], color, opts: { side: THREE.DoubleSide } }
+  );
+  // Two locks sweeping over the brow.
+  for (const sx of [-1, 1]) {
+    b.addGeometry(chamferBox(0.34, 0.20, 0.16, 0.05), {
+      x: sx * 0.20,
+      y: 0.80,
+      z: 0.63,
+      rot: [0, 0, sx * 0.32],
+      color,
+    });
+    // Sideburns.
+    b.addGeometry(chamferBox(0.14, 0.30, 0.24, 0.05), { x: sx * 0.62, y: 0.54, z: 0.16, color });
+  }
+  return b.build();
+}
+
 /** C-3PO's exposed waist wiring. Torso-local, sitting in the hip gap. */
 function threepioWiring() {
   const b = new Bricks();
   const wires = [COLORS.trueBlack, COLORS.red, COLORS.darkBluishGray, COLORS.blue, COLORS.trueBlack];
   for (let i = 0; i < wires.length; i++) {
     const x = (i - (wires.length - 1) / 2) * 0.26;
-    b.addGeometry(new THREE.CylinderGeometry(0.075, 0.075, 0.42, 8), {
+    b.addGeometry(new THREE.CylinderGeometry(0.075, 0.075, 0.44, 8), {
       x,
-      y: 0.04,
-      z: 0.30 - Math.abs(i - 2) * 0.06,
+      y: 0.02,
+      z: 0.32 - Math.abs(i - 2) * 0.07,
       color: wires[i],
       opts: { finish: 'rubber' },
     });
   }
-  // Two more looping round the back.
-  for (const sz of [-1]) {
-    b.addGeometry(new THREE.TorusGeometry(0.52, 0.06, 6, 14, Math.PI), {
-      x: 0,
-      y: 0.06,
-      z: sz * 0.06,
-      rot: [Math.PI / 2, 0, 0],
-      color: COLORS.trueBlack,
-      opts: { finish: 'rubber' },
-    });
-  }
-  // Waist collar above and below the wiring.
-  b.addGeometry(chamferBox(1.34, 0.14, 0.86, 0.04), { x: 0, y: 0.26, z: 0, color: COLORS.pearlGold, opts: { finish: 'gold' } });
+  // A loom running round the back.
+  b.addGeometry(new THREE.TorusGeometry(0.50, 0.06, 6, 16, Math.PI), {
+    x: 0,
+    y: 0.04,
+    z: 0,
+    rot: [Math.PI / 2, 0, 0],
+    color: COLORS.trueBlack,
+    opts: { finish: 'rubber' },
+  });
+  // Waist collar capping the wiring.
+  b.addGeometry(chamferBox(1.36, 0.16, 0.88, 0.05), { x: 0, y: 0.26, z: 0, color: COLORS.pearlGold, opts: POLISH });
   return b.build();
 }
 
@@ -960,12 +1109,11 @@ export async function makeLeia(opts = {}) {
 
   fig.skirt = leiaSkirt(COLORS.white);
   fig.pelvis.add(fig.skirt);
-  // A robe restricts the stride: scenes should walk her with a smaller amp.
+  /** A robe restricts the stride; scenes should walk her with this amplitude. */
   fig.walkAmp = 0.34;
 
-  // Belt over the robe.
   const belt = new Bricks()
-    .addGeometry(chamferBox(1.58, 0.18, 0.98, 0.04), { x: 0, y: 0.14, z: 0, color: COLORS.flatSilver, opts: { finish: 'metal' } })
+    .addGeometry(chamferBox(1.58, 0.16, 0.98, 0.04), { x: 0, y: 0.14, z: 0, color: SILVER, opts: POLISH })
     .build();
   fig.torso.add(belt);
 
@@ -976,16 +1124,19 @@ export async function makeLeia(opts = {}) {
 /**
  * Darth Vader — taller than the rest, helmeted, caped, red blade off by
  * default. `fig.setSaber(0..1)` extends the blade.
+ *
+ * He is built in LEGO "black" rather than "true black": with no environment
+ * map in the film, true black swallows every form he has.
  */
 export async function makeVader(opts = {}) {
-  const black = COLORS.trueBlack;
+  const shell = opts.shell ?? COLORS.black;
   const fig = await buildMinifig({
-    shirt: black,
-    arms: black,
-    legs: black,
-    hips: black,
-    hands: black,
-    head: black,
+    shirt: shell,
+    arms: shell,
+    legs: shell,
+    hips: COLORS.trueBlack,
+    hands: COLORS.trueBlack,
+    head: shell,
     torsoPrint: 'svg/torso-vader.svg',
     scale: opts.scale ?? 1.14,
     seed: opts.seed ?? 23.7,
@@ -993,22 +1144,22 @@ export async function makeVader(opts = {}) {
     headStud: false,
   });
 
-  stripHeadTexture(fig, black);
+  stripHeadTexture(fig, shell);
 
-  const helmet = vaderHelmet();
+  const helmet = vaderHelmet({ shell });
   fig.accessory.add(helmet);
   fig.helmet = helmet;
 
-  const mask = await decalOn('svg/helmet-vader.svg', flatDecal(1.04, 0.98));
+  const mask = await decalOn('svg/helmet-vader.svg', flatDecal(1.00, 0.94));
   if (mask) {
-    mask.position.set(0, 0.60, 0.734);
+    mask.position.set(0, 0.58, 0.803);
     fig.accessory.add(mask);
   } else {
     fig.accessory.add(vaderMaskFallback());
   }
 
   fig.torso.add(vaderChestGear());
-  attachCape(fig, black, { width: 2.32, height: 3.45 });
+  attachCape(fig, COLORS.trueBlack, { width: 2.375, height: 3.5 });
 
   giveSaber(fig, KIT.saberRed, { on: false, length: 3.3 });
 
@@ -1037,7 +1188,7 @@ export async function makeStormtrooper(opts = {}) {
     hands: armour,
     head: helmetWhite,
     torsoPrint: 'svg/torso-stormtrooper.svg',
-    scale: opts.scale ?? (1 + (h(1) - 0.5) * 0.03),
+    scale: opts.scale ?? 1 + (h(1) - 0.5) * 0.03,
     seed: opts.seed ?? 3.1 + variant * 0.9137,
     finish: 'glossy',
     headStud: false,
@@ -1049,7 +1200,7 @@ export async function makeStormtrooper(opts = {}) {
   fig.accessory.add(helmet);
   fig.helmet = helmet;
 
-  const face = await decalOn('svg/helmet-stormtrooper.svg', conePatch(0.812, 0.752, 0.30, 1.00, 0.95, 20));
+  const face = await decalOn('svg/helmet-stormtrooper.svg', conePatch(0.822, 0.762, 0.28, 1.00, 0.95, 20));
   if (face) fig.accessory.add(face);
   else fig.accessory.add(trooperFaceFallback(helmetWhite));
 
@@ -1092,9 +1243,8 @@ export async function makeRebelTrooper(opts = {}) {
     headStud: false,
   });
 
-  const helmet = rebelHelmet();
-  fig.accessory.add(helmet);
-  fig.helmet = helmet;
+  fig.helmet = rebelHelmet();
+  fig.accessory.add(fig.helmet);
 
   giveBlaster(fig, COLORS.trueBlack, { len: 0.8 });
 
@@ -1119,13 +1269,12 @@ export async function makeLuke(opts = {}) {
     headStud: false,
   });
 
-  fig.hair = hairPiece(SANDY_BLOND, { r: 1.07, y: 0.74 });
+  fig.hair = lukeHair();
   fig.accessory.add(fig.hair);
 
-  // Utility belt.
   const belt = new Bricks()
     .addGeometry(chamferBox(1.56, 0.18, 0.96, 0.04), { x: 0, y: 0.14, z: 0, color: COLORS.reddishBrown })
-    .addGeometry(chamferBox(0.26, 0.20, 0.10, 0.03), { x: 0, y: 0.14, z: 0.50, color: COLORS.flatSilver, opts: { finish: 'metal' } })
+    .addGeometry(chamferBox(0.26, 0.20, 0.10, 0.03), { x: 0, y: 0.14, z: 0.50, color: STEEL, opts: POLISH })
     .build();
   fig.torso.add(belt);
 
@@ -1140,11 +1289,12 @@ export async function makeLuke(opts = {}) {
  * `opts.ghost = true` turns every material translucent additive blue.
  */
 export async function makeBen(opts = {}) {
-  const robe = COLORS.brown;
+  const robe = COLORS.reddishBrown;
+  const tunic = COLORS.darkTan;
   const fig = await buildMinifig({
-    shirt: robe,
+    shirt: COLORS.brown,
     arms: robe,
-    legs: COLORS.darkTan,
+    legs: tunic,
     hips: COLORS.darkBrown,
     hands: SKIN,
     head: SKIN,
@@ -1157,8 +1307,8 @@ export async function makeBen(opts = {}) {
 
   fig.hood = benHood(robe);
   fig.accessory.add(fig.hood);
-  fig.torso.add(benMantle(robe));
-  attachCape(fig, robe, { width: 2.2, height: 3.0 });
+  fig.torso.add(benMantle(robe, tunic));
+  attachCape(fig, robe, { width: 2.25, height: 3.0 });
 
   giveSaber(fig, KIT.saberBlue, { on: opts.saberOn ?? false, length: 3.1 });
 
@@ -1188,16 +1338,15 @@ export async function makePilot(opts = {}) {
     headStud: false,
   });
 
-  const helmet = pilotHelmet();
-  fig.accessory.add(helmet);
-  fig.helmet = helmet;
+  fig.helmet = pilotHelmet();
+  fig.accessory.add(fig.helmet);
 
   // Chest life-support box and harness.
   const b = new Bricks();
-  b.addGeometry(chamferBox(0.86, 0.40, 0.16, 0.04), { x: 0, y: 0.62, z: 0.54, color: COLORS.white });
-  b.addGeometry(chamferBox(0.30, 0.16, 0.06, 0.02), { x: 0, y: 0.62, z: 0.62, color: COLORS.darkBluishGray });
+  b.addGeometry(chamferBox(0.88, 0.42, 0.16, 0.04), { x: 0, y: 0.60, z: 0.54, color: COLORS.white });
+  b.addGeometry(chamferBox(0.32, 0.16, 0.06, 0.02), { x: 0, y: 0.60, z: 0.63, color: COLORS.darkBluishGray });
   for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.20, 1.30, 0.10, 0.03), { x: sx * 0.40, y: 1.30, z: 0.52, color: COLORS.white });
+    b.addGeometry(chamferBox(0.20, 1.28, 0.10, 0.03), { x: sx * 0.40, y: 1.30, z: 0.52, color: COLORS.white });
   }
   fig.torso.add(b.build());
 
@@ -1226,7 +1375,6 @@ export async function makeImperialOfficer(opts = {}) {
   fig.cap = officerCap(COLORS.trueBlack);
   fig.accessory.add(fig.cap);
 
-  // Belt and holster.
   const b = new Bricks();
   b.addGeometry(chamferBox(1.56, 0.20, 0.96, 0.04), { x: 0, y: 0.16, z: 0, color: COLORS.trueBlack, opts: { finish: 'glossy' } });
   b.addGeometry(chamferBox(0.24, 0.34, 0.20, 0.04), { x: -0.72, y: 0.06, z: 0.14, color: COLORS.trueBlack, opts: { finish: 'glossy' } });
@@ -1237,7 +1385,7 @@ export async function makeImperialOfficer(opts = {}) {
 }
 
 /**
- * Jawa — a short cone of robe with two glowing eyes in the dark. Legs are
+ * Jawa — a short cone of robe with two glowing eyes in the dark. The legs are
  * hidden inside the robe; `fig.waddle(t)` is its walk.
  */
 export async function makeJawa(opts = {}) {
@@ -1255,8 +1403,7 @@ export async function makeJawa(opts = {}) {
     headStud: false,
   });
 
-  // The robe reaches the floor, so the legs never show; drop them from the
-  // draw and keep the hip block as the anchor.
+  // The robe reaches the floor, so the legs never show.
   fig.legL.visible = false;
   fig.legR.visible = false;
 
@@ -1267,7 +1414,6 @@ export async function makeJawa(opts = {}) {
   fig.robe = jawaRobe(robe, { yTop: FIG.torsoH - 0.16, yBottom: -FIG.torsoY, rTop: 0.80, rBottom: 1.44 });
   fig.torso.add(fig.robe);
 
-  // Arms hang closer to the body than a human's.
   fig.armL.rotation.z = -0.16;
   fig.armR.rotation.z = 0.16;
 
@@ -1295,47 +1441,48 @@ export async function makeJawa(opts = {}) {
  * and a fidgety idle (`fig.fuss(t)`).
  */
 export async function makeProtocolDroid(opts = {}) {
-  const gold = COLORS.pearlGold;
+  const gold = opts.gold ?? COLORS.chromeGold;
   const fig = await buildMinifig({
     shirt: gold,
     arms: gold,
     legs: opts.silverLeg ? COLORS.chromeSilver : gold,
-    hips: gold,
-    hands: COLORS.chromeGold,
+    hips: COLORS.pearlGold,
+    hands: COLORS.pearlGold,
     head: gold,
     face: 'svg/head-threepio.svg',
     scale: opts.scale ?? 1,
     seed: opts.seed ?? 31.5,
-    finish: 'gold',
+    finish: 'glossy',
     headStud: false,
-  });
-
-  // The head material is built inline by the kit and is not metallic; clone it
-  // rather than mutating, since brickMaterial's cache is shared.
-  fig.head.traverse((n) => {
-    if (n.isMesh && n.material?.map) {
-      n.material = n.material.clone();
-      n.material.metalness = 0.85;
-      n.material.roughness = 0.26;
-    }
   });
 
   fig.torso.add(threepioWiring());
 
-  // Photoreceptor rings, so he reads as 3PO even before the decal exists.
-  const eyes = new Bricks();
+  // Photoreceptors and mouth grille, so he reads as 3PO even before the decal
+  // exists — and so the head keeps some relief once it does.
+  const face = new Bricks();
   for (const sx of [-1, 1]) {
-    eyes.addGeometry(new THREE.TorusGeometry(0.13, 0.045, 6, 14), {
-      x: sx * 0.23,
-      y: 0.58,
+    face.addGeometry(new THREE.TorusGeometry(0.135, 0.05, 6, 14), {
+      x: sx * 0.235,
+      y: 0.60,
       z: 0.60,
       rot: [Math.PI / 2, 0, 0],
-      color: COLORS.chromeGold,
-      opts: { finish: 'gold' },
+      color: COLORS.pearlGold,
+      opts: POLISH,
+    });
+    face.addGeometry(new THREE.CylinderGeometry(0.09, 0.09, 0.05, 12), {
+      x: sx * 0.235,
+      y: 0.60,
+      z: 0.625,
+      rot: [Math.PI / 2, 0, 0],
+      color: COLORS.trueBlack,
+      opts: { finish: 'glossy' },
     });
   }
-  eyes.addGeometry(chamferBox(0.30, 0.10, 0.08, 0.02), { x: 0, y: 0.30, z: 0.62, color: COLORS.darkBluishGray, opts: { finish: 'metal' } });
-  fig.head.add(eyes.build());
+  face.addGeometry(chamferBox(0.34, 0.11, 0.07, 0.02), { x: 0, y: 0.28, z: 0.62, color: COLORS.pearlGold, opts: POLISH });
+  // Brow plate.
+  face.addGeometry(chamferBox(0.72, 0.09, 0.08, 0.02), { x: 0, y: 0.76, z: 0.60, color: COLORS.pearlGold, opts: POLISH });
+  fig.head.add(face.build());
 
   /** Locked-elbow protocol-droid stance. */
   fig.stiff = () => {
@@ -1355,7 +1502,7 @@ export async function makeProtocolDroid(opts = {}) {
     const n = (k, f) => (noise1(t * f + s + k, 17) - 0.5) * 2;
     fig.armL.rotation.set(-0.18 + n(0, 0.85) * 0.42 * a, n(3, 0.55) * 0.2 * a, -0.24 - Math.abs(n(1, 0.7)) * 0.24 * a);
     fig.armR.rotation.set(-0.18 + n(7, 1.05) * 0.42 * a, n(9, 0.45) * 0.2 * a, 0.24 + Math.abs(n(5, 0.8)) * 0.24 * a);
-    fig.head.rotation.set(0.05 + n(13, 0.65) * 0.10 * a, n(11, 0.42) * 0.42 * a, 0);
+    fig.head.rotation.set(0.05 + n(13, 0.65) * 0.1 * a, n(11, 0.42) * 0.42 * a, 0);
     fig.torso.rotation.y = n(17, 0.3) * 0.08 * a;
     fig.body.position.y = Math.sin(t * 1.35 + s) * 0.012 * a;
   };
@@ -1380,10 +1527,8 @@ export async function makeProtocolDroid(opts = {}) {
 export async function makeAstromech(opts = {}) {
   const shell = opts.shell ?? COLORS.white;
   const trim = opts.trim ?? COLORS.blue;
-  const metal = COLORS.flatSilver;
   const dark = COLORS.darkBluishGray;
   const seed = opts.seed ?? 41.3;
-  const M = { finish: 'metal' };
   const G = { finish: 'glossy' };
 
   const root = new THREE.Group();
@@ -1396,39 +1541,28 @@ export async function makeAstromech(opts = {}) {
 
   // --- chassis
   const b = new Bricks();
-  b.addGeometry(new THREE.CylinderGeometry(R, R, Y1 - Y0, 22), { x: 0, y: (Y0 + Y1) / 2, z: 0, color: shell, opts: G });
+  b.addGeometry(new THREE.CylinderGeometry(R, R, Y1 - Y0, 24), { x: 0, y: (Y0 + Y1) / 2, z: 0, color: shell, opts: G });
   // Silver bands top and bottom.
-  for (const y of [Y0 + 0.09, Y1 - 0.10]) {
-    b.addGeometry(new THREE.CylinderGeometry(R + 0.02, R + 0.02, 0.16, 22), { x: 0, y, z: 0, color: metal, opts: M });
+  for (const y of [Y0 + 0.08, Y1 - 0.07]) {
+    b.addGeometry(new THREE.CylinderGeometry(R + 0.02, R + 0.02, 0.12, 24), { x: 0, y, z: 0, color: STEEL, opts: POLISH });
   }
-  // Under-plate, so he does not float.
-  b.addGeometry(new THREE.CylinderGeometry(R * 0.94, R * 0.86, 0.14, 20), { x: 0, y: Y0 - 0.04, z: 0, color: dark, opts: M });
+  b.addGeometry(new THREE.CylinderGeometry(R * 0.94, R * 0.86, 0.14, 20), { x: 0, y: Y0 - 0.04, z: 0, color: dark, opts: POLISH });
 
-  // Blue panel details around the barrel: the front pair, two flanks and the
-  // rear data ports.
-  const panel = (angle, y, w, hh, color, depth = 0.05) => {
-    b.push();
-    b.rotateY(angle);
-    b.translateWorld(0, y, R - 0.01);
-    b.addGeometry(chamferBox(w, hh, depth + 0.04, 0.02), { color, opts: G });
-    b.pop();
-  };
-  panel(0, 1.62, 0.46, 0.30, trim);
-  panel(0, 1.20, 0.34, 0.46, trim);
-  panel(0, 0.74, 0.44, 0.24, dark);
+  // Blue panel details around the barrel.
+  const panel = (angle, y, w, hh, color, depth = 0.06) =>
+    onCurve(b, angle, y, R - 0.015, 0, (bb) => bb.addGeometry(chamferBox(w, hh, depth, 0.02), { color, opts: G }));
+  panel(0, 1.60, 0.46, 0.28, trim);
+  panel(0, 1.18, 0.34, 0.44, trim);
+  panel(0, 0.72, 0.44, 0.22, dark);
   for (const s of [-1, 1]) {
-    panel(s * 0.85, 1.58, 0.34, 0.26, trim);
-    panel(s * 0.85, 1.06, 0.30, 0.52, shell);
-    panel(s * 1.75, 1.40, 0.36, 0.62, trim);
-    panel(s * 2.55, 1.20, 0.34, 0.44, dark);
-  }
-  // Octagonal utility ports low on the front.
-  for (const s of [-1, 1]) {
-    b.push();
-    b.rotateY(s * 0.42);
-    b.translateWorld(0, 0.62, R - 0.01);
-    b.addGeometry(new THREE.CylinderGeometry(0.10, 0.10, 0.10, 8), { rot: [Math.PI / 2, 0, 0], color: metal, opts: M });
-    b.pop();
+    panel(s * 0.85, 1.56, 0.34, 0.26, trim);
+    panel(s * 0.85, 1.04, 0.30, 0.50, shell);
+    panel(s * 1.75, 1.38, 0.36, 0.60, trim);
+    panel(s * 2.55, 1.18, 0.34, 0.42, dark);
+    // Octagonal utility ports low on the front.
+    onCurve(b, s * 0.42, 0.62, R - 0.015, 0, (bb) =>
+      bb.addGeometry(new THREE.CylinderGeometry(0.10, 0.10, 0.10, 8), { rot: [Math.PI / 2, 0, 0], color: STEEL, opts: POLISH })
+    );
   }
   body.add(b.build());
 
@@ -1438,34 +1572,26 @@ export async function makeAstromech(opts = {}) {
   body.add(dome);
 
   const d = new Bricks();
-  d.addGeometry(domeGeometry(R, Math.PI * 0.5, 22), { x: 0, y: 0, z: 0, color: shell, opts: G });
-  d.addGeometry(new THREE.CylinderGeometry(R + 0.015, R + 0.015, 0.09, 22), { x: 0, y: 0.045, z: 0, color: metal, opts: M });
-  // Blue wedges radiating up the dome.
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 + 0.52;
-    d.push();
-    d.rotateY(a);
-    d.translateWorld(0, 0.20, R * 0.92);
-    d.rotateX(-0.42);
-    d.addGeometry(chamferBox(0.20, 0.34, 0.06, 0.02), { color: i % 2 ? trim : dark, opts: G });
-    d.pop();
+  d.addGeometry(domeGeometry(R, Math.PI * 0.5, 24), { x: 0, y: 0, z: 0, color: shell, opts: G });
+  d.addGeometry(new THREE.CylinderGeometry(R + 0.015, R + 0.015, 0.08, 24), { x: 0, y: 0.04, z: 0, color: STEEL, opts: POLISH });
+  // Blue wedges radiating up the dome, skipping the front where the face goes.
+  for (let i = 0; i < 7; i++) {
+    const a = 0.85 + (i / 7) * (Math.PI * 2 - 1.7);
+    onCurve(d, a, 0.20, R * 0.93, -0.42, (bb) =>
+      bb.addGeometry(chamferBox(0.20, 0.34, 0.06, 0.02), { color: i % 2 ? trim : dark, opts: G })
+    );
   }
-  // Crown plate.
-  d.addGeometry(new THREE.CylinderGeometry(0.19, 0.21, 0.05, 14), { x: 0, y: R - 0.02, z: 0, color: metal, opts: M });
+  d.addGeometry(new THREE.CylinderGeometry(0.19, 0.21, 0.05, 14), { x: 0, y: R - 0.02, z: 0, color: STEEL, opts: POLISH });
 
-  // Holoprojector lens, up and to the left of the eye.
-  const pn = new THREE.Vector3(-0.20, 0.42, 0.26).normalize();
-  const pPos = pn.clone().multiplyScalar(R - 0.02);
+  // Holoprojector lens, up and to one side of the eye.
+  const pn = new THREE.Vector3(-0.34, 0.50, 0.30).normalize();
+  const pPos = pn.clone().multiplyScalar(R - 0.03);
   d.push();
   d.translateWorld(pPos.x, pPos.y, pPos.z);
-  d.addGeometry(new THREE.CylinderGeometry(0.085, 0.10, 0.08, 12), {
-    rot: [Math.atan2(pn.z, pn.y) * 0, 0, 0],
-    color: metal,
-    opts: M,
-  });
-  d.addGeometry(new THREE.CylinderGeometry(0.06, 0.06, 0.10, 12), {
+  d.addGeometry(new THREE.CylinderGeometry(0.085, 0.10, 0.10, 12), { color: STEEL, opts: POLISH });
+  d.addGeometry(new THREE.CylinderGeometry(0.055, 0.055, 0.14, 12), {
     color: KIT.hologram,
-    opts: { finish: 'trans', emissive: KIT.hologram, emissiveIntensity: 1.1 },
+    opts: { emissive: KIT.hologram, emissiveIntensity: 1.4, finish: 'glow' },
   });
   d.pop();
   dome.add(d.build());
@@ -1476,56 +1602,42 @@ export async function makeAstromech(opts = {}) {
   dome.add(projector);
 
   // Dome face: the decal wraps the sphere, so nothing floats at the corners.
-  const face = await decalOn('svg/head-astromech.svg', spherePatch(R + 0.012, 0, 0.52, 1.42, 0.92, 20));
+  const face = await decalOn('svg/head-astromech.svg', spherePatch(R + 0.012, 0, 0.50, 1.45, 0.95, 22));
   if (face) {
     dome.add(face);
   } else {
-    // Fallback: the radar eye, a lens and two logic displays.
+    // Fallback: the radar eye and two logic displays.
     const f = new Bricks();
-    f.push();
-    f.translateWorld(0, 0.24, 0.40);
-    f.rotateX(-0.42);
-    f.addGeometry(new THREE.CylinderGeometry(0.15, 0.15, 0.07, 16), { rot: [Math.PI / 2, 0, 0], color: dark, opts: M });
-    f.addGeometry(new THREE.CylinderGeometry(0.10, 0.10, 0.09, 16), {
-      rot: [Math.PI / 2, 0, 0],
-      color: 0x101418,
-      opts: { finish: 'chrome' },
+    onCurve(f, 0, 0.19, R - 0.03, -0.36, (bb) => {
+      bb.addGeometry(new THREE.CylinderGeometry(0.20, 0.20, 0.09, 18), { color: dark, opts: POLISH });
+      bb.addGeometry(new THREE.CylinderGeometry(0.145, 0.145, 0.12, 18), { color: COLORS.trueBlack, opts: { finish: 'glossy' } });
+      bb.addGeometry(new THREE.CylinderGeometry(0.06, 0.06, 0.145, 12), {
+        color: KIT.hologram,
+        opts: { emissive: KIT.hologram, emissiveIntensity: 1.8, finish: 'glow' },
+      });
     });
-    f.addGeometry(new THREE.CylinderGeometry(0.045, 0.045, 0.11, 12), {
-      rot: [Math.PI / 2, 0, 0],
-      color: KIT.hologram,
-      opts: { emissive: KIT.hologram, emissiveIntensity: 1.6, finish: 'glow' },
-    });
-    f.pop();
     for (const s of [-1, 1]) {
-      f.push();
-      f.rotateY(s * 0.52);
-      f.translateWorld(0, 0.14, R * 0.94);
-      f.rotateX(-0.30);
-      f.addGeometry(chamferBox(0.16, 0.12, 0.05, 0.02), { color: 0x101418, opts: G });
-      f.pop();
+      onCurve(f, s * 0.62, 0.13, R - 0.02, -0.26, (bb) =>
+        bb.addGeometry(chamferBox(0.17, 0.13, 0.06, 0.02), { color: COLORS.trueBlack, opts: G })
+      );
     }
     dome.add(f.build());
   }
 
   // --- legs
-  const legMesh = (long) => {
+  const legMesh = () => {
     const g = new Bricks();
     g.addGeometry(new THREE.CylinderGeometry(0.24, 0.24, 0.16, 16), {
-      x: 0,
-      y: 0,
-      z: 0,
       rot: [0, 0, Math.PI / 2],
       color: trim,
       opts: G,
     });
     g.addGeometry(chamferBox(0.26, 0.80, 0.44, 0.05), { x: 0, y: -0.36, z: 0, color: shell, opts: G });
     g.addGeometry(chamferBox(0.30, 0.86, 0.48, 0.05), { x: 0, y: -1.09, z: 0, color: shell, opts: G });
-    g.addGeometry(chamferBox(0.32, 0.10, 0.50, 0.03), { x: 0, y: -0.72, z: 0, color: metal, opts: M });
-    g.addGeometry(chamferBox(0.06, long ? 1.5 : 1.0, 0.16, 0.02), { x: 0.16, y: -0.78, z: 0.14, color: trim, opts: G });
-    // Foot.
+    g.addGeometry(chamferBox(0.32, 0.10, 0.50, 0.03), { x: 0, y: -0.72, z: 0, color: STEEL, opts: POLISH });
+    g.addGeometry(chamferBox(0.06, 1.46, 0.16, 0.02), { x: 0.16, y: -0.78, z: 0.14, color: trim, opts: G });
     g.addGeometry(chamferBox(0.38, 0.22, 0.72, 0.05), { x: 0, y: -1.63, z: 0.05, color: shell, opts: G });
-    g.addGeometry(chamferBox(0.40, 0.09, 0.74, 0.03), { x: 0, y: -1.72, z: 0.05, color: dark, opts: M });
+    g.addGeometry(chamferBox(0.40, 0.09, 0.74, 0.03), { x: 0, y: -1.72, z: 0.05, color: dark, opts: POLISH });
     return g.build();
   };
 
@@ -1534,19 +1646,19 @@ export async function makeAstromech(opts = {}) {
   for (const [grp, sx] of [[legL, 1], [legR, -1]]) {
     grp.position.set(sx * (R + 0.06), 1.74, 0);
     grp.rotation.z = -sx * 0.05; // splayed a little, like a real astromech
-    grp.add(legMesh(true));
+    grp.add(legMesh());
     body.add(grp);
   }
 
   // Retractable centre leg, angled back.
   const legC = new THREE.Group();
-  legC.position.set(0, 1.19, -0.46);
+  legC.position.set(0, 1.19, -0.44);
   legC.rotation.x = 0.20;
   const c = new Bricks();
   c.addGeometry(chamferBox(0.26, 1.02, 0.32, 0.04), { x: 0, y: -0.52, z: 0, color: shell, opts: G });
-  c.addGeometry(chamferBox(0.30, 0.10, 0.36, 0.03), { x: 0, y: -0.72, z: 0, color: metal, opts: M });
+  c.addGeometry(chamferBox(0.30, 0.10, 0.36, 0.03), { x: 0, y: -0.72, z: 0, color: STEEL, opts: POLISH });
   c.addGeometry(chamferBox(0.32, 0.20, 0.60, 0.04), { x: 0, y: -1.11, z: 0.06, color: shell, opts: G });
-  c.addGeometry(chamferBox(0.34, 0.08, 0.62, 0.03), { x: 0, y: -1.19, z: 0.06, color: dark, opts: M });
+  c.addGeometry(chamferBox(0.34, 0.08, 0.62, 0.03), { x: 0, y: -1.19, z: 0.06, color: dark, opts: POLISH });
   legC.add(c.build());
   body.add(legC);
   const legCY = legC.position.y;
@@ -1590,8 +1702,7 @@ export async function makeAstromech(opts = {}) {
       body.position.y = Math.abs(Math.sin(p)) * 0.035 * amt;
       legL.rotation.z = -0.05 - Math.sin(p) * 0.05 * amt;
       legR.rotation.z = 0.05 - Math.sin(p) * 0.05 * amt;
-      dome.rotation.y =
-        Math.sin(t * 0.85 * speed + seed) * 0.34 + (noise1(t * 0.4 + seed, 61) - 0.5) * 1.1;
+      dome.rotation.y = Math.sin(t * 0.85 * speed + seed) * 0.34 + (noise1(t * 0.4 + seed, 61) - 0.5) * 1.1;
     },
   };
   droid.roll(0);
@@ -1615,53 +1726,43 @@ export async function makeMouseDroid(opts = {}) {
 
   const b = new Bricks();
   const G = { finish: 'glossy' };
-  // Body: a low slab with a wedge nose, 0.8 long.
-  b.addGeometry(chamferBox(0.46, 0.20, 0.54, 0.04), { x: 0, y: 0.20, z: -0.05, color: shell, opts: G });
-  b.addGeometry(taperBox(0.46, 0.40, 0.20, 0.26, 0.10, 0.03), {
-    x: 0,
-    y: 0.18,
-    z: 0.30,
-    rot: [-0.55, 0, 0],
-    color: shell,
-    opts: G,
-  });
-  // Top plate and the little sensor bar.
-  b.addGeometry(chamferBox(0.40, 0.05, 0.46, 0.02), { x: 0, y: 0.31, z: -0.06, color: trim, opts: G });
-  b.addGeometry(chamferBox(0.22, 0.07, 0.08, 0.02), { x: 0, y: 0.35, z: 0.10, color: COLORS.trueBlack, opts: G });
+  // A stepped wedge, 0.78 long: tall at the back, tapering to a low nose.
+  b.addGeometry(chamferBox(0.46, 0.22, 0.46, 0.045), { x: 0, y: 0.17, z: -0.15, color: shell, opts: G });
+  b.addGeometry(chamferBox(0.44, 0.17, 0.20, 0.04), { x: 0, y: 0.145, z: 0.16, color: shell, opts: G });
+  b.addGeometry(chamferBox(0.39, 0.12, 0.16, 0.03), { x: 0, y: 0.115, z: 0.32, color: shell, opts: G });
+  // Top plate and sensor bar.
+  b.addGeometry(chamferBox(0.40, 0.05, 0.40, 0.02), { x: 0, y: 0.30, z: -0.15, color: trim, opts: G });
+  b.addGeometry(chamferBox(0.20, 0.07, 0.09, 0.02), { x: 0, y: 0.33, z: 0.02, color: COLORS.trueBlack, opts: G });
   for (const sx of [-1, 1]) {
-    b.addGeometry(new THREE.CylinderGeometry(0.025, 0.025, 0.03, 8), {
+    b.addGeometry(new THREE.CylinderGeometry(0.026, 0.026, 0.03, 8), {
       x: sx * 0.10,
-      y: 0.24,
-      z: 0.29,
+      y: 0.14,
+      z: 0.40,
       rot: [Math.PI / 2, 0, 0],
       color: KIT.laserRed,
-      opts: { emissive: KIT.laserRed, emissiveIntensity: 2.2, finish: 'glow' },
+      opts: { emissive: KIT.laserRed, emissiveIntensity: 2.4, finish: 'glow' },
     });
   }
   // Rear antenna.
-  b.addGeometry(new THREE.CylinderGeometry(0.014, 0.014, 0.30, 6), { x: 0.14, y: 0.47, z: -0.26, color: COLORS.trueBlack });
+  b.addGeometry(new THREE.CylinderGeometry(0.014, 0.014, 0.28, 6), { x: 0.15, y: 0.44, z: -0.28, color: COLORS.trueBlack });
   chassis.add(b.build());
 
   // Wheels on a shared axle group so `roll` can spin them together.
   const wheels = new THREE.Group();
-  wheels.position.set(0, 0.10, -0.02);
+  wheels.position.set(0, 0.095, -0.06);
   const w = new Bricks();
   for (const sx of [-1, 1]) {
-    w.addGeometry(new THREE.CylinderGeometry(0.10, 0.10, 0.06, 14), {
-      x: sx * 0.24,
-      y: 0,
-      z: 0,
+    w.addGeometry(new THREE.CylinderGeometry(0.09, 0.09, 0.055, 14), {
+      x: sx * 0.215,
       rot: [0, 0, Math.PI / 2],
       color: COLORS.trueBlack,
       opts: { finish: 'rubber' },
     });
-    w.addGeometry(new THREE.CylinderGeometry(0.05, 0.05, 0.07, 10), {
-      x: sx * 0.24,
-      y: 0,
-      z: 0,
+    w.addGeometry(new THREE.CylinderGeometry(0.04, 0.04, 0.065, 10), {
+      x: sx * 0.215,
       rot: [0, 0, Math.PI / 2],
       color: trim,
-      opts: { finish: 'metal' },
+      opts: POLISH,
     });
   }
   wheels.add(w.build());
@@ -1682,7 +1783,7 @@ export async function makeMouseDroid(opts = {}) {
     chassis,
     wheels,
     seed,
-    length: 0.8 * scale,
+    length: 0.78 * scale,
     /** Wheel spin plus the nervous little hunt. Pure function of t. */
     roll(t, o = {}) {
       const speed = o.speed ?? 1;
@@ -1772,15 +1873,35 @@ export const PREVIEW = {
   pilot: () => makePilot().then((f) => previewFig(f)),
   officer: () => makeImperialOfficer().then((f) => previewFig(f, (t) => poseStand(f, t))),
   jawa: () => makeJawa().then((f) => previewFig(f, (t) => f.waddle(t))),
-  astromech: () => makeAstromech().then((d) => {
-    d.root.userData.previewUpdate = (t) => d.roll(t);
-    return d.root;
-  }),
+  astromech: () =>
+    makeAstromech().then((d) => {
+      d.root.userData.previewUpdate = (t) => d.roll(t);
+      return d.root;
+    }),
   threepio: () => makeProtocolDroid().then((f) => previewFig(f, (t) => f.fuss(t))),
-  'mouse-droid': () => makeMouseDroid().then((d) => {
-    d.root.userData.previewUpdate = (t) => d.roll(t);
-    return d.root;
-  }),
+  'mouse-droid': () =>
+    makeMouseDroid().then((d) => {
+      d.root.userData.previewUpdate = (t) => d.roll(t);
+      return d.root;
+    }),
   lineup,
   squad,
+  // TEMP-DEBUG
+  'dbg-vader-head': () => makeVader().then(headOnly),
+  'dbg-trooper-head': () => makeStormtrooper().then(headOnly),
+  'dbg-leia-head': () => makeLeia().then(headOnly),
+  'dbg-luke-head': () => makeLuke().then(headOnly),
+  'dbg-ben-head': () => makeBen().then(headOnly),
+  'dbg-pilot-head': () => makePilot().then(headOnly),
+  'dbg-rebel-head': () => makeRebelTrooper().then(headOnly),
+  'dbg-officer-head': () => makeImperialOfficer().then(headOnly),
+  'dbg-jawa-head': () => makeJawa().then(headOnly),
+  'dbg-3po-head': () => makeProtocolDroid().then(headOnly),
 };
+
+// TEMP-DEBUG
+function headOnly(fig) {
+  const g = new THREE.Group();
+  g.add(fig.head);
+  return g;
+}

@@ -1,30 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Rebel Alliance crest - original design.
-  An upswept starbird climbing out of a broken circular ring.
+  An upswept starbird climbing out of a broken circular ring: a narrow head
+  spike on the centre line, two blade wings sweeping up and out with deep
+  crescent notches between wing and body, and a tapered tail.
   Extrusion asset: two closed filled paths, single colour, no strokes.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
 
-  <!-- broken ring: open 108 degrees at the top, ends cut on a slant -->
+  <!-- broken ring: open across the top, ends cut on a slant -->
   <path fill="#c91a09" d="M89.4 168.9
     A206 206 0 1 0 422.6 168.9
     L384.7 182
     A168 168 0 1 1 127.3 182
     Z"/>
 
-  <!-- starbird: central spire, two swept wings, forked tail -->
-  <path fill="#c91a09" d="M256 34
-    C267 76 275 112 285 150
-    C320 126 366 106 418 100
-    C396 152 356 198 306 228
-    C322 286 328 348 316 418
-    L256 376
-    L196 418
-    C184 348 190 286 206 228
-    C156 198 116 152 94 100
-    C146 106 192 126 227 150
-    C237 112 245 76 256 34
+  <!-- starbird -->
+  <path fill="#c91a09" d="M256 44
+    C268 96 276 152 284 206
+    C322 156 380 106 452 74
+    C434 140 392 208 336 254
+    C330 316 320 396 296 468
+    L256 496
+    L216 468
+    C192 396 182 316 176 254
+    C120 208 78 140 60 74
+    C132 106 190 156 228 206
+    C236 152 244 96 256 44
     Z"/>
 
 </svg>

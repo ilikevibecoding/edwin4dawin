@@ -118,7 +118,15 @@ async function boot() {
       },
       info: () => lastStats,
     };
-    drawFrame(t0);
+    // Warm-up. The first draw of a scene differs microscopically from later
+    // ones because shadow maps and texture uploads settle on first use, so
+    // visit every built scene and both ends of this worker's range before
+    // capturing anything. Every shard then starts from the same settled state,
+    // which is what keeps the seams between them invisible.
+    for (const e of film.entries) {
+      if (film.built.has(film.entries.indexOf(e))) drawFrame(e.start + e.duration * 0.5);
+    }
+    for (const warm of [t0, (t0 + t1) / 2, t1, t0]) drawFrame(warm);
     window.FILM_READY = true;
     return;
   }

@@ -43,14 +43,11 @@
     <rect x="276" y="250" width="28" height="22" rx="3" fill="#5a93db"/>
   </g>
 
-  <!-- alliance patch, left shoulder -->
-  <circle cx="86" cy="118" r="46" fill="#e8e2d0"/>
-  <circle cx="86" cy="118" r="38" fill="#c91a09"/>
-  <path fill="#e8e2d0" d="M86 86 C89 100 91 108 94 118
-    C102 110 114 104 128 100 C122 116 110 130 96 138
-    C99 152 100 166 98 180 L86 172 L74 180
-    C72 166 73 152 76 138 C62 130 50 116 44 100
-    C58 104 70 110 78 118 C81 108 83 100 86 86Z"/>
+  <!-- alliance patch, left shoulder: simplified starbird for the small size -->
+  <circle cx="86" cy="118" r="48" fill="#e8e2d0"/>
+  <circle cx="86" cy="118" r="40" fill="#c91a09"/>
+  <path fill="#e8e2d0" d="M86 84 L93 119 L120 94 L105 127 L99 152
+    L86 143 L73 152 L67 127 L52 94 L79 119Z"/>
 
   <!-- belt -->
   <rect x="0" y="404" width="512" height="58" fill="#cfcabc"/>

@@ -1,0 +1,1544 @@
+/**
+ * BRICK WARS -- capital ships and large hardware.
+ *
+ * Every model here is brick-built with the `Bricks` builder and collapsed by
+ * `build()` into a handful of merged meshes, so a 3000-element star destroyer
+ * still costs about six draw calls. Nothing calls Math.random(): all scatter
+ * comes from `hash11`, so the models are byte-identical on every worker of the
+ * offline renderer.
+ *
+ * SHARED CONVENTIONS
+ * ------------------
+ *   +z is forward (the pointy end), +y is up, +x is starboard.
+ *   Builder coordinates are LEGO units: x/z in studs, y in plates.
+ *   1 stud = 1.0 world unit, 1 plate = 0.4 world units, so a vertical distance
+ *   measured in studs must be multiplied by 2.5 to become plates -- `PL()`.
+ *
+ * Every factory returns a THREE.Group whose userData carries attachment
+ * metadata in **model-local world units**:
+ *
+ *   enginePoints  THREE.Vector3[]   nozzle mouths, for `Thruster`
+ *   gunPoints     THREE.Vector3[]   turret muzzles, for `BoltPool`
+ *   triangles     number            merged triangle count
+ *   size          THREE.Vector3     bounding-box size in studs
+ */
+import * as THREE from 'three';
+import { Bricks, PITCH, PLATE } from '../engine/brick.js';
+import { COLORS, KIT } from '../engine/palette.js';
+import { hash11 } from '../engine/rng.js';
+import { svgTexture } from '../engine/svg.js';
+import * as ease from '../engine/ease.js';
+
+// ---------------------------------------------------------------------------
+// Unit helpers
+// ---------------------------------------------------------------------------
+
+/** Vertical distance in studs -> plates (the builder's y unit). */
+const PL = (studs) => (studs * PITCH) / PLATE;
+
+/** LEGO-unit position -> world-unit Vector3. */
+const LU = (x, y, z) => new THREE.Vector3(x * PITCH, y * PLATE, z * PITCH);
+
+const linear = (u) => u;
+
+/** Piecewise profile through [z, halfWidth] keys. */
+function profile(keys, easeFn = ease.smooth) {
+  return (z) => ease.track(keys, z, easeFn);
+}
+
+// ---------------------------------------------------------------------------
+// Swept-plate helpers
+//
+// A long tapering hull is built the way a real set builds one: rectangular
+// plates stepping in width, with wedge plates filling every step so the flank
+// reads as one straight sweep instead of a staircase.
+// ---------------------------------------------------------------------------
+
+// Which corner of the footprint holds the wedge's right angle, per `rot`.
+const CORNER_ROT = { x0z0: 0, x1z0: 1, x1z1: 2, x0z1: 3 };
+
+/**
+ * Right-triangular plate filling exactly x:[x0,x1] * z:[z0,z1].
+ * `corner` names the square corner. The builder's rot=1/3 rotate the geometry
+ * but not the anchor, so those two cases need their dimensions swapped.
+ */
+function wedgeFill(b, x0, x1, z0, z1, y, h, color, corner, opts = {}) {
+  const rot = CORNER_ROT[corner];
+  const w = x1 - x0;
+  const d = z1 - z0;
+  if (w <= 1e-4 || d <= 1e-4) return;
+  if (rot === 0 || rot === 2) {
+    b.wedge(x0, y, z0, w, d, h, color, { ...opts, rot });
+  } else {
+    b.wedge((x0 + x1) / 2 - d / 2, y, (z0 + z1) / 2 - w / 2, d, w, h, color, { ...opts, rot });
+  }
+}
+
+/**
+ * One horizontal course of hull: a flat slab running z0..z1 whose half-width
+ * follows `halfWAt(z)`.
+ *
+ * @param {function} [o.hAt]    height in plates as a function of z (nose ramps)
+ * @param {function} [o.yAt]    bottom y in plates as a function of z
+ * @param {function} [o.gapAt]  half-width of a centre gap (hangar recesses)
+ */
+function taperedSlab(b, o) {
+  const { z0, z1, halfWAt, h, color, step = 4, opts = {}, hAt = null, yAt = null, gapAt = null } = o;
+  const n = Math.max(1, Math.round((z1 - z0) / step));
+  const dz = (z1 - z0) / n;
+  for (let i = 0; i < n; i++) {
+    const za = z0 + i * dz;
+    const zb = za + dz;
+    const zm = (za + zb) / 2;
+    const hh = hAt ? hAt(zm) : h;
+    const y = yAt ? yAt(zm) : o.y;
+    if (hh <= 0.06) continue;
+    const wa = Math.max(0, halfWAt(za));
+    const wb = Math.max(0, halfWAt(zb));
+    const wIn = Math.min(wa, wb);
+    const wOut = Math.max(wa, wb);
+    if (wIn > 0.06) {
+      const gap = gapAt ? Math.max(0, gapAt(zm)) : 0;
+      if (gap > 0 && wIn > gap + 0.5) {
+        b.box(gap, y, za, wIn - gap, dz, hh, color, opts);
+        b.box(-wIn, y, za, wIn - gap, dz, hh, color, opts);
+      } else {
+        b.box(-wIn, y, za, wIn * 2, dz, hh, color, opts);
+      }
+    }
+    if (wOut - wIn > 0.04) {
+      const wideAft = wa > wb;
+      wedgeFill(b, wIn, wOut, za, zb, y, hh, color, wideAft ? 'x0z0' : 'x0z1', opts);
+      wedgeFill(b, -wOut, -wIn, za, zb, y, hh, color, wideAft ? 'x1z0' : 'x1z1', opts);
+    }
+  }
+}
+
+/**
+ * A stack of courses = one rounded hull section. `courses` gives each course a
+ * bottom y, a height and a width factor, which together shape the cross
+ * section (0.45 at the keel, 1.0 amidships, 0.6 at the spine reads as a tube).
+ * `grow` widens every course, which is how the raised drive rings are made.
+ */
+function hullSection(b, o) {
+  const { z0, z1, halfWAt, courses, color, step = 3, opts = {}, grow = 0, gapAt = null, pad = 0 } = o;
+  for (const c of courses) {
+    taperedSlab(b, {
+      z0,
+      z1,
+      y: c.y - pad,
+      h: c.h + pad * 2,
+      color: c.color ?? color,
+      step,
+      halfWAt: (z) => halfWAt(z) * c.f + grow,
+      opts: { studs: false, ...opts, ...(c.opts || {}) },
+      gapAt,
+    });
+  }
+}
+
+/**
+ * Studded deck plates snapped to the stud grid and inset from the hull edge,
+ * so the sweeping tapered border stays smooth while the middle shows studs.
+ * Slab courses are never studded directly: their fractional widths would put
+ * the studs on a different grid in every slice.
+ */
+function deck(b, o) {
+  const { z0, z1, y, halfWAt, color, tile = 4, inset = 1, maxHalf = Infinity, gap = 0, opts = {} } = o;
+  for (let z = Math.ceil(z0); z + tile <= z1; z += tile) {
+    const w = Math.floor(Math.min(halfWAt(z), halfWAt(z + tile), maxHalf) - inset);
+    if (w < 1) continue;
+    if (gap > 0 && w > gap + 1) {
+      b.plate(gap, y, z, w - gap, tile, color, opts);
+      b.plate(-w, y, z, w - gap, tile, color, opts);
+    } else {
+      b.plate(-w, y, z, w * 2, tile, color, opts);
+    }
+  }
+}
+
+/**
+ * A band hugging both flanks -- hull stripes, rub rails, greeble runs. Each
+ * segment is rotated to follow the local taper so the band stays continuous.
+ */
+function flankBand(b, o) {
+  const { z0, z1, halfWAt, y, h, color, step = 3, thickness = 0.55, out = 0, opts = {} } = o;
+  const n = Math.max(1, Math.round((z1 - z0) / step));
+  const dz = (z1 - z0) / n;
+  for (let i = 0; i < n; i++) {
+    const za = z0 + i * dz;
+    const zb = za + dz;
+    const wa = halfWAt(za);
+    const wb = halfWAt(zb);
+    if (Math.min(wa, wb) < 0.4) continue;
+    const theta = Math.atan2(wb - wa, dz);
+    const len = Math.hypot(dz, wb - wa) + 0.05;
+    const mx = (wa + wb) / 2 + out;
+    const mz = (za + zb) / 2;
+    for (const s of [1, -1]) {
+      b.push();
+      b.translate(s * mx, 0, mz);
+      b.rotateY(s > 0 ? theta : -theta);
+      b.box(-thickness / 2, y, -len / 2, thickness, len, h, color, { studs: false, ...opts });
+      b.pop();
+    }
+  }
+}
+
+/**
+ * Deterministic hull greeble: little plates, tiles and cylinders scattered
+ * across a z-range and clipped to the hull plan. Mirrored port/starboard so it
+ * reads as engineering rather than noise.
+ */
+function greeble(b, o) {
+  const {
+    z0, z1, y, halfWAt, seed = 1, n = 40, inset = 1.2,
+    colors = [COLORS.darkBluishGray, COLORS.flatSilver, COLORS.lightBluishGray],
+    maxW = 3, maxD = 5, h = 2, cylChance = 0.22, symmetric = true,
+    centreBias = 0, opts = {},
+  } = o;
+  for (let i = 0; i < n; i++) {
+    const z = Math.round(z0 + hash11(i, seed) * (z1 - z0));
+    const hw = halfWAt(z) - inset;
+    if (hw < 1.2) continue;
+    const w = 1 + Math.floor(hash11(i, seed + 31) * maxW);
+    const d = 1 + Math.floor(hash11(i, seed + 61) * maxD);
+    let u = hash11(i, seed + 97) * 2 - 1;
+    if (centreBias > 0) u = Math.sign(u) * Math.pow(Math.abs(u), 1 + centreBias);
+    const x = Math.round(u * Math.max(0, hw - w / 2));
+    const c = colors[Math.floor(hash11(i, seed + 131) * colors.length) % colors.length];
+    const hh = 1 + Math.floor(hash11(i, seed + 163) * h);
+    const round = hash11(i, seed + 197) < cylChance;
+    const place = (px) => {
+      if (round) b.cyl(px, y, z + d / 2, Math.min(w, d) * 0.45, hh, c, { segments: 8, ...opts });
+      else b.box(px - w / 2, y, z, w, d, hh, c, { studs: false, ...opts });
+    };
+    place(x);
+    if (symmetric && Math.abs(x) > w * 0.55) place(-x);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Round-element helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Cylinder lying along z, centred at (x,y,z) in LEGO units, `len` in studs.
+ * `opts.rTop` is the radius at the +z end.
+ */
+function tubeZ(b, x, y, z, r, len, color, opts = {}) {
+  const h = PL(len);
+  b.cyl(x, y - h / 2, z, r, h, color, { segments: 14, ...opts, rot: [Math.PI / 2, 0, 0] });
+}
+
+/** Cylinder lying along x, centred at (x,y,z). `opts.rTop` is at the -x end. */
+function tubeX(b, x, y, z, r, len, color, opts = {}) {
+  const h = PL(len);
+  b.cyl(x, y - h / 2, z, r, h, color, { segments: 14, ...opts, rot: [0, 0, Math.PI / 2] });
+}
+
+/**
+ * One engine nozzle firing aft: a flared bell with a recessed dark throat and
+ * a glowing disc. The mouth sits on the plane z = zMouth and the bell reaches
+ * forward into the hull. Returns the mouth centre in world units.
+ */
+function engineBell(b, x, y, zMouth, r, o = {}) {
+  const shell = o.shell ?? COLORS.darkBluishGray;
+  const liner = o.liner ?? COLORS.trueBlack;
+  const glow = o.glow ?? KIT.engineBlue;
+  const len = o.len ?? r * 1.5;
+  const seg = o.segments ?? (r > 5 ? 20 : 14);
+  // flared bell: wide at the mouth (-z), narrow at the throat (+z)
+  tubeZ(b, x, y, zMouth + len / 2, r, len, shell, { segments: seg, rTop: r * 0.6 });
+  // dark liner, proud of the mouth so the throat reads as a recess
+  tubeZ(b, x, y, zMouth + len * 0.28, r * 0.8, len * 0.6, liner, { segments: seg, rTop: r * 0.46 });
+  // glowing disc down the throat
+  tubeZ(b, x, y, zMouth + len * 0.16, r * 0.54, len * 0.28, glow, {
+    segments: seg,
+    rTop: r * 0.36,
+    finish: 'glow',
+    emissive: glow,
+    emissiveIntensity: o.emissive ?? 1.7,
+  });
+  // collar ring around the bell mouth
+  b.torus(x, y, zMouth + 0.35, r * 1.02, r * 0.09, o.collar ?? COLORS.flatSilver, {
+    rot: [0, 0, 0],
+    seg: Math.max(10, seg - 4),
+  });
+  return LU(x, y, zMouth - 0.2);
+}
+
+/**
+ * Push a frame whose +y axis points out of a sphere of radius `r` at the given
+ * longitude/latitude, so tangent surface detail can be laid down with ordinary
+ * plate calls. Caller must `b.pop()`.
+ */
+function surfaceFrame(b, lon, lat, r) {
+  b.push();
+  b.rotateY(lon);
+  b.rotateX(-lat);
+  b.translateWorld(0, 0, r * PITCH);
+  b.rotateX(Math.PI / 2);
+}
+
+// ---------------------------------------------------------------------------
+// Turbolaser turret -- shared by the tower, the corvette and the destroyer
+// ---------------------------------------------------------------------------
+
+const TURRET = { baseH: 4, yawY: 4, pitchY: 5, barrelLen: 6 };
+
+/** Fixed pedestal. Local origin sits on the mounting surface, +z forward. */
+function turretBase(b, o = {}) {
+  const hull = o.hull ?? COLORS.lightBluishGray;
+  const dark = o.dark ?? COLORS.darkBluishGray;
+  b.cyl(0, 0, 0, 3.1, 1, dark, { segments: 12 });
+  b.cyl(0, 1, 0, 2.7, 2, hull, { segments: 12 });
+  b.cyl(0, 3, 0, 2.2, 1, dark, { segments: 12, stud: false });
+  // four ammunition boxes around the pedestal
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    b.push();
+    b.rotateY(a);
+    b.box(-0.7, 1, 2.0, 1.4, 1.1, 3, dark, { studs: false });
+    b.pop();
+  }
+  return b;
+}
+
+/** Rotating yoke: sits at y = TURRET.yawY, spins about its own y axis. */
+function turretYoke(b, o = {}) {
+  const hull = o.hull ?? COLORS.lightBluishGray;
+  const dark = o.dark ?? COLORS.darkBluishGray;
+  b.cyl(0, 0, 0, 2.4, 1, dark, { segments: 12 });
+  b.box(-2.3, 1, -2.2, 4.6, 3.6, 3, hull, { studs: false });
+  b.plate(-2, 4, -2, 4, 3, hull);
+  // uprights carrying the trunnion
+  for (const s of [-1, 1]) {
+    b.box(s * 1.5 - 0.55, 4, -0.6, 1.1, 2.2, 5, hull, { studs: false });
+    b.cyl(s * 1.5, 8, 0.5, 0.6, 1, COLORS.flatSilver, { segments: 10, rot: [Math.PI / 2, 0, 0] });
+  }
+  // rear counterweight
+  b.box(-1.4, 4, -3.1, 2.8, 1.2, 4, dark, { studs: false });
+  return b;
+}
+
+/** Twin barrels. Origin is the trunnion; the barrels run along +z. */
+function turretBarrels(b, o = {}) {
+  const hull = o.hull ?? COLORS.lightBluishGray;
+  const dark = o.dark ?? COLORS.darkBluishGray;
+  const len = o.len ?? TURRET.barrelLen;
+  b.box(-1.6, -1.4, -2.4, 3.2, 4.2, 4, hull, { studs: false });
+  b.box(-1.1, 2.8, -2.0, 2.2, 3.0, 1, dark, { studs: false });
+  const muzzles = [];
+  for (const s of [-1, 1]) {
+    tubeZ(b, s * 0.85, 0, 1.6 + len / 2, 0.44, len, dark, { segments: 10, rTop: 0.38 });
+    tubeZ(b, s * 0.85, 0, 1.9, 0.62, 1.6, COLORS.flatSilver, { segments: 10 });
+    tubeZ(b, s * 0.85, 0, 1.6 + len - 0.5, 0.52, 1.1, COLORS.flatSilver, { segments: 10 });
+    muzzles.push(LU(s * 0.85, 0, 1.6 + len + 0.2));
+  }
+  return muzzles;
+}
+
+/**
+ * Merge a whole turret into another builder at the current transform, posed at
+ * a fixed yaw/pitch. Returns the muzzle points in that builder's local space.
+ */
+function mergeTurret(host, { yaw = 0, pitch = -0.25, scale = 1, colors = {}, len } = {}) {
+  const muzzles = [];
+  host.push();
+  host.scale(scale);
+  const base = new Bricks({ studSegments: 8 });
+  turretBase(base, colors);
+  host.merge(base);
+  host.push();
+  host.translate(0, TURRET.yawY, 0);
+  host.rotateY(yaw);
+  const yoke = new Bricks({ studSegments: 8 });
+  turretYoke(yoke, colors);
+  host.merge(yoke);
+  host.push();
+  host.translate(0, 8, 0.5);
+  host.rotateX(pitch);
+  const barrels = new Bricks({ studSegments: 8 });
+  const local = turretBarrels(barrels, { ...colors, len });
+  host.merge(barrels);
+  const m = host.matrix.clone();
+  for (const p of local) muzzles.push(p.clone().applyMatrix4(m));
+  host.pop();
+  host.pop();
+  host.pop();
+  return muzzles;
+}
+
+// ---------------------------------------------------------------------------
+// Common finishing
+// ---------------------------------------------------------------------------
+
+function finish(group, extra = {}) {
+  group.updateWorldMatrix(true, true);
+  const box = new THREE.Box3().setFromObject(group);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  let tris = 0;
+  group.traverse((n) => {
+    if (n.isMesh && n.geometry?.attributes?.position) {
+      const per = n.geometry.attributes.position.count / 3;
+      tris += per * (n.isInstancedMesh ? n.count : 1);
+    }
+  });
+  Object.assign(group.userData, { triangles: Math.round(tris), size, box }, extra);
+  return group;
+}
+
+// ===========================================================================
+// 1. CORVETTE  --  rebel blockade runner (CR90 "Tantive IV")
+// ===========================================================================
+
+/**
+ * ORIENTATION: +z forward. The hammerhead command tower is at +z, the drive
+ * drum and its eleven bells at -z. Origin is amidships; y = 0 is the vertical
+ * centre of the hull. About 60 studs long, 19 wide, 12 tall.
+ */
+export async function buildCorvette(opts = {}) {
+  const hull = opts.hull ?? COLORS.white;
+  const trim = opts.trim ?? COLORS.red;
+  const dark = opts.dark ?? COLORS.darkBluishGray;
+  const metal = opts.metal ?? COLORS.flatSilver;
+  const glass = opts.glass ?? COLORS.transLightBlue;
+
+  const b = new Bricks({ studSegments: 8 });
+  const Z_AFT = -27;
+  const Z_FWD = 29.5;
+
+  // Plan half-width. Fat at the drive, long taper amidships, then the neck
+  // flares hard into the hammerhead.
+  const plan = profile([
+    [-27, 6.6], [-25, 7.5], [-20, 7.7], [-14, 7.4], [-6, 6.7], [2, 5.8],
+    [8, 5.0], [13, 3.9], [17.5, 3.2], [19, 4.6], [20.5, 8.4], [22, 9.6],
+    [26, 9.4], [28, 8.2], [29.5, 5.4],
+  ]);
+
+  // Cross section: a flattened tube, 24 plates from keel to spine.
+  const courses = [
+    { y: -12, h: 3, f: 0.46 },
+    { y: -9, h: 3, f: 0.73 },
+    { y: -6, h: 3, f: 0.91 },
+    { y: -3, h: 3, f: 0.99 },
+    { y: 0, h: 3, f: 1.0 },
+    { y: 3, h: 3, f: 0.97 },
+    { y: 6, h: 3, f: 0.86 },
+    { y: 9, h: 3, f: 0.62 },
+  ];
+  const spineF = 0.62;
+
+  function shell() {
+    hullSection(b, { z0: Z_AFT, z1: Z_FWD, halfWAt: plan, courses, color: hull, step: 2.5 });
+    // keel plate and spine tile, both smooth like a real set's finished edges
+    taperedSlab(b, {
+      z0: Z_AFT, z1: Z_FWD, y: -13, h: 1, color: dark, step: 2.5,
+      halfWAt: (z) => plan(z) * 0.34, opts: { studs: false },
+    });
+  }
+
+  function drive() {
+    // Three raised rings around the drive drum, each a full course stack
+    // grown outward so it stands proud of the white shell.
+    for (const zr of [-25.6, -22.2, -18.8]) {
+      hullSection(b, {
+        z0: zr, z1: zr + 1.4, halfWAt: plan, courses, color: dark,
+        step: 1.4, grow: 0.55, pad: 0.08,
+      });
+    }
+    // Aft bulkhead the bells are set into.
+    hullSection(b, {
+      z0: -27.4, z1: -26.4, halfWAt: plan, courses, color: dark, step: 1, grow: 0.2, pad: 0.08,
+    });
+    // Radiator strakes down the flanks of the drum.
+    flankBand(b, {
+      z0: -26, z1: -14, halfWAt: (z) => plan(z) * 0.99, y: -2, h: 4,
+      color: metal, step: 2, thickness: 0.7, out: 0.15,
+    });
+    greeble(b, {
+      z0: -26, z1: -15, y: 11.5, halfWAt: (z) => plan(z) * spineF, seed: 17, n: 26,
+      colors: [dark, metal], maxW: 2, maxD: 3, h: 2, cylChance: 0.4, inset: 0.6,
+    });
+    greeble(b, {
+      z0: -26, z1: -15, y: -13.6, halfWAt: (z) => plan(z) * 0.36, seed: 23, n: 12,
+      colors: [dark, metal], maxW: 2, maxD: 3, h: 1, cylChance: 0.3, inset: 0.3,
+    });
+  }
+
+  // Eleven bells: one big on the axis, two large abeam, four medium at the
+  // corners and four small outboard -- the CR90's signature cluster.
+  const enginePoints = [];
+  function engines() {
+    const bells = [
+      [0, 0, 2.5],
+      [-4.6, 0, 1.95], [4.6, 0, 1.95],
+      [-2.3, PL(3.3), 1.35], [2.3, PL(3.3), 1.35],
+      [-2.3, PL(-3.3), 1.35], [2.3, PL(-3.3), 1.35],
+      [-6.5, PL(2.4), 1.0], [6.5, PL(2.4), 1.0],
+      [-6.5, PL(-2.4), 1.0], [6.5, PL(-2.4), 1.0],
+    ];
+    for (const [x, y, r] of bells) {
+      enginePoints.push(engineBell(b, x, y, -30.2, r, { shell: dark, collar: metal, len: r * 1.9 }));
+    }
+  }
+
+  function topside() {
+    // Studded spine deck, inset so the swept edge stays smooth.
+    deck(b, {
+      z0: -18, z1: 16, y: 12, halfWAt: (z) => plan(z) * spineF, color: hull, tile: 3, inset: 0.9,
+    });
+    deck(b, {
+      z0: 19.5, z1: 29, y: 10, halfWAt: (z) => plan(z) * 0.82, color: hull, tile: 3, inset: 1.4,
+    });
+    // Sensor and comms clutter along the spine.
+    greeble(b, {
+      z0: -14, z1: 15, y: 13, halfWAt: (z) => plan(z) * spineF, seed: 41, n: 34,
+      colors: [dark, metal, COLORS.lightBluishGray], maxW: 2, maxD: 4, h: 2, cylChance: 0.35, inset: 0.7,
+    });
+    // Dorsal ridge running the length of the hull.
+    taperedSlab(b, {
+      z0: -18, z1: 18, y: 12, h: 2, color: hull, step: 2.5,
+      halfWAt: (z) => Math.min(1.5, plan(z) * 0.24), opts: { studs: false },
+    });
+    // Ventral sensor blister.
+    b.cyl(0, -15, -2, 2.2, 2, dark, { segments: 12 });
+    b.cyl(0, -16.5, -2, 1.4, 2, metal, { segments: 12 });
+  }
+
+  function bridge() {
+    // Hammerhead command tower: two stepped decks with a wraparound viewport.
+    b.box(-5, 12, 19.5, 10, 8.5, 3, hull, { studs: false });
+    b.box(-4.4, 15, 20, 8.8, 7.5, 1, dark, { studs: false });
+    b.box(-4.2, 16, 20.2, 8.4, 7, 3, hull, { studs: false });
+    // viewport band -- front and both cheeks
+    b.box(-3.6, 17, 27.0, 7.2, 0.6, 2, glass, { studs: false, finish: 'trans' });
+    for (const s of [-1, 1]) {
+      b.box(s * 4.2 - 0.3, 17, 21.4, 0.6, 5.6, 2, glass, { studs: false, finish: 'trans' });
+    }
+    b.plate(-4, 19, 20.5, 8, 6, hull);
+    b.box(-2.6, 20, 21.5, 5.2, 4, 2, hull, { studs: false });
+    b.plate(-2, 22, 22, 4, 3, dark);
+    // antenna pair
+    for (const s of [-1, 1]) {
+      b.cyl(s * 1.4, 23, 23.5, 0.24, 7, metal, { segments: 8 });
+      b.cyl(s * 1.4, 30, 23.5, 0.45, 1, COLORS.red, { segments: 8 });
+    }
+    b.dish(0, 23.2, 26.5, 2.2, 3, metal, { segments: 16 });
+    // Hammerhead face detail: docking rings and a chin sensor pod.
+    for (const s of [-1, 1]) {
+      tubeZ(b, s * 5.6, 2, 28.6, 1.5, 2.4, dark, { segments: 12, rTop: 1.1 });
+      tubeZ(b, s * 5.6, 2, 29.4, 0.8, 1.4, COLORS.trueBlack, { segments: 12 });
+    }
+    tubeZ(b, 0, -5, 28.4, 2.0, 3.6, dark, { segments: 14, rTop: 1.4 });
+    tubeZ(b, 0, -5, 29.9, 1.1, 1.0, glass, { segments: 14, finish: 'trans' });
+    // greeble on the hammerhead shoulders
+    greeble(b, {
+      z0: 20, z1: 28, y: 10, halfWAt: (z) => plan(z), seed: 71, n: 22,
+      colors: [dark, metal], maxW: 2, maxD: 3, h: 2, cylChance: 0.3, inset: 5.6,
+    });
+  }
+
+  /**
+   * The red flank stripe. If `svg/hull-rebel-stripe.svg` is available it is
+   * mapped onto a ribbon that follows the hull; otherwise the stripe is laid
+   * in red tiles, which is what the set itself does.
+   */
+  async function stripe() {
+    let tex = null;
+    try {
+      if (typeof document !== 'undefined') {
+        tex = await svgTexture('svg/hull-rebel-stripe.svg', { w: 1024, h: 96 });
+      }
+    } catch {
+      tex = null;
+    }
+    if (!tex) {
+      flankBand(b, {
+        z0: -26.5, z1: 18, halfWAt: (z) => plan(z), y: -1.6, h: 3.2,
+        color: trim, step: 2, thickness: 0.62, out: 0.16,
+      });
+      flankBand(b, {
+        z0: 19.4, z1: 29, halfWAt: (z) => plan(z), y: -1.6, h: 3.2,
+        color: trim, step: 1.6, thickness: 0.62, out: 0.16,
+      });
+      return null;
+    }
+    // Ribbon mesh following the flank, one per side.
+    const group = new THREE.Group();
+    const y0 = -3.4 * PLATE;
+    const y1 = 2.2 * PLATE;
+    for (const s of [1, -1]) {
+      const pos = [];
+      const uv = [];
+      const idx = [];
+      const N = 96;
+      for (let i = 0; i <= N; i++) {
+        const u = i / N;
+        const z = Z_AFT + 0.5 + u * (Z_FWD - Z_AFT - 1);
+        const x = s * (plan(z) + 0.16) * PITCH;
+        pos.push(x, y0, z * PITCH, x, y1, z * PITCH);
+        uv.push(u, 0, u, 1);
+        if (i < N) {
+          const a = i * 2;
+          if (s > 0) idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+          else idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(
+        geo,
+        new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.4, metalness: 0 })
+      );
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+    return group;
+  }
+
+  const gunPoints = [];
+  function turrets() {
+    const mounts = [
+      [0, 12, -8, 0, 0.42],
+      [0, -13, -8, 0, 0.42],
+      [0, 12, 4, 0, -0.3],
+    ];
+    for (const [x, y, z, yaw, pitch] of mounts) {
+      b.push();
+      b.translate(x, y, z);
+      if (y < 0) b.rotateZ(Math.PI);
+      const m = mergeTurret(b, {
+        yaw,
+        pitch,
+        scale: 0.62,
+        len: 5,
+        colors: { hull, dark },
+      });
+      b.pop();
+      for (const p of m) gunPoints.push(p);
+    }
+  }
+
+  shell();
+  drive();
+  engines();
+  topside();
+  bridge();
+  turrets();
+  const decal = await stripe();
+
+  const group = new THREE.Group();
+  group.add(b.build());
+  if (decal) group.add(decal);
+  group.name = 'corvette';
+  return finish(group, { enginePoints, gunPoints, parts: group.children[0].userData.parts });
+}
+
+// ===========================================================================
+// 2. STAR DESTROYER  --  the Imperial wedge
+// ===========================================================================
+
+const SD = { len: 260, beam: 68, nose: 130 };
+const sdPlan = (z) => Math.max(0, (SD.beam * (SD.nose - z)) / SD.len);
+
+/**
+ * ORIENTATION: +z forward (the point of the dagger), stern transom at
+ * z = -130. Origin amidships, y = 0 at the hull's vertical centre.
+ * About 260 studs long, 136 across the stern, 44 tall including the domes.
+ *
+ * The vast hull plates are unstudded -- studs are reserved for the
+ * superstructure, where the camera actually gets close.
+ */
+export async function buildStarDestroyer(opts = {}) {
+  const hull = opts.hull ?? COLORS.lightBluishGray;
+  const dark = opts.dark ?? COLORS.darkBluishGray;
+  const metal = opts.metal ?? COLORS.flatSilver;
+  const glass = opts.glass ?? COLORS.transLightBlue;
+  const shadow = opts.shadow ?? COLORS.trueBlack;
+
+  const b = new Bricks({ studSegments: 6 });
+  const AFT = -SD.nose;
+
+  // Eight courses. Each is a triangle in plan that stops short of the nose,
+  // so the wedge is razor thin at the bow and 21 units deep at the transom.
+  const layers = [
+    { y: -26, h: 6.5, apex: -14, f: 0.78 },
+    { y: -19.5, h: 6.5, apex: 20, f: 0.85 },
+    { y: -13, h: 6.5, apex: 50, f: 0.9 },
+    { y: -6.5, h: 6.5, apex: 74, f: 0.945 },
+    { y: 0, h: 6.5, apex: 94, f: 0.975 },
+    { y: 6.5, h: 6.5, apex: 110, f: 0.995 },
+    { y: 13, h: 6.5, apex: 122, f: 1.0 },
+    { y: 19.5, h: 6.5, apex: 129, f: 0.985 },
+  ];
+  const TOP = 26;
+  const KEEL = -26;
+
+  // Ventral hangar recess, cut out of the two lowest courses.
+  const HANGAR = { z0: -124, z1: -94, half: 17 };
+  const hangarGap = (z) => (z > HANGAR.z0 && z < HANGAR.z1 ? HANGAR.half : 0);
+
+  function primaryHull() {
+    for (let i = 0; i < layers.length; i++) {
+      const L = layers[i];
+      taperedSlab(b, {
+        z0: AFT,
+        z1: L.apex,
+        y: L.y,
+        h: L.h,
+        color: hull,
+        step: 6.5,
+        halfWAt: (z) => sdPlan(z) * L.f,
+        hAt: (z) => L.h * ease.clamp((L.apex - z) / 18, 0, 1),
+        gapAt: i < 2 ? hangarGap : null,
+        opts: { studs: false },
+      });
+    }
+    // Chamfer the top edge of the flanks with a thin dark rub strake, which is
+    // what stops the huge grey slab from reading as a featureless plane.
+    flankBand(b, {
+      z0: AFT + 2, z1: 120, halfWAt: (z) => sdPlan(z) * 0.985, y: TOP - 1.2, h: 1.2,
+      color: dark, step: 8, thickness: 1.1, out: 0.1,
+    });
+    flankBand(b, {
+      z0: AFT + 2, z1: 108, halfWAt: (z) => sdPlan(z) * 0.995, y: 4, h: 2.4,
+      color: dark, step: 8, thickness: 0.9, out: 0.12,
+    });
+  }
+
+  function hangar() {
+    const { z0, z1, half } = HANGAR;
+    // lit ceiling of the bay
+    b.box(-half, -13.4, z0, half * 2, z1 - z0, 1, shadow, { studs: false });
+    b.box(-half + 2, -13.9, z0 + 3, (half - 2) * 2, z1 - z0 - 6, 0.6, COLORS.brightOrange, {
+      studs: false, finish: 'glow', emissive: 0xff9a3c, emissiveIntensity: 1.4,
+    });
+    // ribbed side walls
+    for (const s of [-1, 1]) {
+      for (let z = z0 + 2; z < z1 - 1; z += 4) {
+        b.box(s * half - (s > 0 ? 1.2 : 0), KEEL, z, 1.2, 2.2, 13, dark, { studs: false });
+      }
+    }
+    // deck lip and door runners
+    for (const s of [-1, 1]) {
+      b.box(s * (half + 0.2) - (s > 0 ? 0 : 3), KEEL - 0.6, z0 - 1, 3, z1 - z0 + 2, 1.2, dark, { studs: false });
+    }
+    greeble(b, {
+      z0: z0 + 2, z1: z1 - 2, y: -14.6, halfWAt: () => half - 1, seed: 311, n: 18,
+      colors: [dark, metal], maxW: 3, maxD: 4, h: 2, cylChance: 0.3, inset: 1,
+    });
+  }
+
+  function upperHull() {
+    // Raised central mesa, then the superstructure block on top of it.
+    taperedSlab(b, {
+      z0: AFT, z1: 70, y: TOP, h: 5, color: hull, step: 7,
+      halfWAt: (z) => sdPlan(z) * 0.6,
+      hAt: (z) => 5 * ease.clamp((70 - z) / 20, 0, 1),
+      opts: { studs: false },
+    });
+    taperedSlab(b, {
+      z0: AFT, z1: 40, y: 31, h: 5, color: hull, step: 7,
+      halfWAt: (z) => sdPlan(z) * 0.44,
+      hAt: (z) => 5 * ease.clamp((40 - z) / 18, 0, 1),
+      opts: { studs: false },
+    });
+    // Long recessed trenches either side of the mesa.
+    for (const s of [-1, 1]) {
+      for (let z = AFT + 8; z < 60; z += 9) {
+        const w = sdPlan(z);
+        b.box(s * w * 0.72 - 1.6, TOP - 0.3, z, 3.2, 7, 0.9, dark, { studs: false });
+      }
+    }
+  }
+
+  function superstructure() {
+    const blocks = [
+      { z0: -122, z1: -50, half: 27, y: 36, h: 6 },
+      { z0: -116, z1: -62, half: 21, y: 42, h: 6 },
+      { z0: -112, z1: -80, half: 14, y: 48, h: 6 },
+    ];
+    for (const s of blocks) {
+      b.box(-s.half, s.y, s.z0, s.half * 2, s.z1 - s.z0, s.h, hull, { studs: false });
+      // stud the exposed ledge left by the block above, at the ends only
+      for (const z of [s.z0 + 1, s.z1 - 4]) {
+        b.plate(-s.half + 1, s.y + s.h, z, 8, 3, hull);
+        b.plate(s.half - 9, s.y + s.h, z, 8, 3, hull);
+      }
+    }
+    // command tower
+    b.box(-11, 54, -108, 22, 24, 6, hull, { studs: false });
+    b.box(-10, 60, -106, 20, 20, 5, hull, { studs: false });
+    // bridge deck with its viewport band
+    b.box(-9.5, 65, -104, 19, 16, 4, hull, { studs: false });
+    b.box(-9, 66, -104.6, 18, 0.7, 2.4, glass, { studs: false, finish: 'trans' });
+    for (const s of [-1, 1]) {
+      b.box(s * 9.5 - 0.35, 66, -104, 0.7, 16, 2.4, glass, { studs: false, finish: 'trans' });
+    }
+    b.plate(-9, 69, -104, 18, 16, hull);
+    b.box(-7, 70, -102, 14, 12, 3, hull, { studs: false });
+    b.plate(-6, 73, -101, 12, 10, dark);
+    // deflector shield generator domes on outriggers
+    for (const s of [-1, 1]) {
+      tubeX(b, s * 11.5, 70, -95, 1.9, 5, dark, { segments: 12 });
+      b.sphere(s * 16.5, 72.5, -95, 6.4, hull, { segments: 20 });
+      b.torus(s * 16.5, 66.5, -95, 5.2, 0.8, dark, { seg: 16 });
+      b.cyl(s * 16.5, 62, -95, 3.2, 5, dark, { segments: 14 });
+    }
+    // conning tower mast
+    b.cyl(0, 76, -96, 1.1, 8, metal, { segments: 10 });
+    b.cyl(0, 84, -96, 2.0, 2, dark, { segments: 12 });
+    b.cyl(0, 86, -96, 0.5, 6, metal, { segments: 8 });
+    // greeble across the superstructure decks
+    greeble(b, {
+      z0: -120, z1: -52, y: 42, halfWAt: () => 26, seed: 501, n: 46,
+      colors: [dark, metal, hull], maxW: 3, maxD: 5, h: 3, cylChance: 0.3, inset: 1.5,
+    });
+    greeble(b, {
+      z0: -114, z1: -64, y: 48, halfWAt: () => 20, seed: 523, n: 30,
+      colors: [dark, metal], maxW: 3, maxD: 4, h: 2, cylChance: 0.35, inset: 1.5,
+    });
+    deck(b, { z0: -110, z1: -84, y: 54, halfWAt: () => 13, color: hull, tile: 4, inset: 1.5 });
+  }
+
+  const enginePoints = [];
+  function engines() {
+    // Three great bells across the transom, four smaller below them.
+    for (const [x, y, r] of [[0, 2, 8.6], [-19.5, 2, 8.6], [19.5, 2, 8.6]]) {
+      enginePoints.push(engineBell(b, x, y, AFT - 4.5, r, { shell: dark, collar: metal, len: r * 1.5 }));
+    }
+    for (const [x, y, r] of [[-10.5, -15, 3.4], [10.5, -15, 3.4], [-32, -12, 3.0], [32, -12, 3.0]]) {
+      enginePoints.push(engineBell(b, x, y, AFT - 3, r, { shell: dark, collar: metal, len: r * 1.7 }));
+    }
+    // Transom face: a dense band of machinery either side of the engines.
+    for (const s of [-1, 1]) {
+      for (let i = 0; i < 9; i++) {
+        const x = s * (38 + i * 3.1);
+        const h = 8 + Math.floor(hash11(i, 900 + (s > 0 ? 0 : 7)) * 22);
+        b.box(x - 1.4, -20 + h * 0.1, AFT - 1.6, 2.8, 2.2, h, dark, { studs: false });
+      }
+    }
+    b.box(-SD.beam * 0.79, KEEL + 1, AFT - 2.2, SD.beam * 1.58, 2.4, 3, dark, { studs: false });
+    b.box(-SD.beam * 0.97, TOP - 4, AFT - 2.2, SD.beam * 1.94, 2.4, 3.4, dark, { studs: false });
+  }
+
+  const gunPoints = [];
+  function turrets() {
+    const mounts = [];
+    for (const z of [-104, -68, -30, 12]) {
+      for (const s of [-1, 1]) mounts.push([s * (sdPlan(z) * 0.9 - 4), TOP, z, s > 0 ? 0.5 : -0.5]);
+    }
+    // two heavy mounts flanking the superstructure
+    for (const s of [-1, 1]) mounts.push([s * 34, 31, -90, s > 0 ? 0.9 : -0.9]);
+    for (const [x, y, z, yaw] of mounts) {
+      b.push();
+      b.translate(x, y, z);
+      const m = mergeTurret(b, { yaw, pitch: 0.35, scale: 1.5, len: 7, colors: { hull, dark } });
+      b.pop();
+      for (const p of m) gunPoints.push(p);
+    }
+  }
+
+  function panelling() {
+    // Heavy detail concentrated along the spine and the trailing edge, which
+    // is what sells the scale: hundreds of tiny elements on a vast plate.
+    greeble(b, {
+      z0: AFT + 6, z1: 100, y: TOP, halfWAt: (z) => sdPlan(z) * 0.55, seed: 601, n: 150,
+      colors: [dark, metal, hull], maxW: 4, maxD: 7, h: 3, cylChance: 0.24, inset: 2, centreBias: 0.5,
+    });
+    greeble(b, {
+      z0: AFT + 4, z1: -20, y: TOP, halfWAt: (z) => sdPlan(z) * 0.97, seed: 631, n: 130,
+      colors: [dark, metal, hull], maxW: 4, maxD: 6, h: 2, cylChance: 0.28, inset: 3,
+    });
+    greeble(b, {
+      z0: -20, z1: 96, y: TOP, halfWAt: (z) => sdPlan(z) * 0.96, seed: 659, n: 90,
+      colors: [dark, metal, hull], maxW: 3, maxD: 6, h: 2, cylChance: 0.24, inset: 3,
+    });
+    // underside plating
+    greeble(b, {
+      z0: AFT + 6, z1: 40, y: KEEL - 1.4, halfWAt: (z) => sdPlan(z) * 0.72, seed: 683, n: 90,
+      colors: [dark, metal], maxW: 4, maxD: 7, h: 2, cylChance: 0.2, inset: 3,
+    });
+    // long panel seams down the top surface
+    for (const s of [-1, 1]) {
+      for (let z = AFT + 10; z < 100; z += 12) {
+        const w = sdPlan(z);
+        b.box(s * w * 0.34 - 0.6, TOP - 0.2, z, 1.2, 9, 0.7, dark, { studs: false });
+        if (w > 20) b.box(s * w * 0.86 - 0.7, TOP - 0.2, z + 3, 1.4, 6, 0.7, dark, { studs: false });
+      }
+    }
+    // Smooth tiled runway down the spine. Studs would cost 40k triangles here
+    // and are invisible on a hull this long; they live on the tower instead.
+    for (let z = -78; z < 60; z += 11) {
+      b.box(-5, TOP + 0.5, z, 10, 9, 0.8, metal, { studs: false });
+      b.box(-3.2, TOP + 1.3, z + 1, 6.4, 7, 0.7, dark, { studs: false });
+    }
+    // trailing-edge blocks
+    for (let i = 0; i < 26; i++) {
+      const x = -SD.beam + 1.5 + (i / 25) * (SD.beam * 2 - 3);
+      const h = 3 + Math.floor(hash11(i, 733) * 5);
+      const d = 4 + Math.floor(hash11(i, 751) * 7);
+      b.box(x - 1.6, TOP, AFT + 1, 3.2, d, h, hash11(i, 769) > 0.5 ? dark : metal, { studs: false });
+    }
+  }
+
+  primaryHull();
+  hangar();
+  upperHull();
+  superstructure();
+  engines();
+  panelling();
+  turrets();
+
+  const group = new THREE.Group();
+  const mesh = b.build();
+  group.add(mesh);
+  group.name = 'star-destroyer';
+  return finish(group, { enginePoints, gunPoints, parts: mesh.userData.parts });
+}
+
+// ===========================================================================
+// 3. ESCAPE POD
+// ===========================================================================
+
+/**
+ * ORIENTATION: +z forward, nose cone at +z, retro thrusters at -z.
+ * Origin at the centre of the body, y = 0 on the axis. About 8 studs long.
+ */
+export async function buildEscapePod(opts = {}) {
+  const hull = opts.hull ?? COLORS.white;
+  const dark = opts.dark ?? COLORS.darkBluishGray;
+  const metal = opts.metal ?? COLORS.flatSilver;
+  const glass = opts.glass ?? COLORS.transLightBlue;
+
+  const b = new Bricks({ studSegments: 10 });
+  const R = 2.2;
+
+  function body() {
+    tubeZ(b, 0, 0, -0.6, R, 5.4, hull, { segments: 20 });
+    // ribbed hoops
+    for (const z of [-3.0, -1.6, -0.2, 1.2, 2.0]) {
+      b.torus(0, 0, z, R + 0.06, 0.19, dark, { rot: [0, 0, 0], seg: 20 });
+    }
+    // longitudinal strakes
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.26;
+      b.push();
+      b.rotateZ(a);
+      b.box(-0.34, PL(R - 0.12), -3.1, 0.68, 5.2, 0.7, metal, { studs: false });
+      b.pop();
+    }
+  }
+
+  function nose() {
+    tubeZ(b, 0, 0, 3.0, R, 1.6, hull, { segments: 20, rTop: R * 0.72 });
+    tubeZ(b, 0, 0, 3.9, R * 0.72, 0.5, dark, { segments: 20, rTop: R * 0.66 });
+    b.sphere(0, 0, 4.15, R * 0.68, hull, { segments: 18, phiLen: Math.PI / 2, rot: [-Math.PI / 2, 0, 0] });
+    b.cyl(0, 0, 4.5, 0.28, 2.4, metal, { segments: 8, rot: [Math.PI / 2, 0, 0] });
+  }
+
+  function viewport() {
+    // A single wraparound port on the upper forward quarter.
+    b.push();
+    b.rotateX(-0.5);
+    b.torus(0, 0, 2.35, R * 0.62, 0.24, dark, { rot: [0, 0, 0], seg: 16 });
+    tubeZ(b, 0, 0, 2.45, R * 0.55, 0.5, glass, { segments: 16, finish: 'trans' });
+    b.pop();
+    // a small hatch on the flank
+    b.push();
+    b.rotateZ(Math.PI / 2);
+    b.cyl(0, PL(R - 0.2), -0.8, 1.0, 1.2, dark, { segments: 14 });
+    b.cyl(0, PL(R + 0.1), -0.8, 0.72, 0.8, glass, { segments: 14, finish: 'trans' });
+    b.pop();
+  }
+
+  const enginePoints = [];
+  function retros() {
+    tubeZ(b, 0, 0, -3.5, R * 0.98, 0.9, dark, { segments: 20 });
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const x = Math.cos(a) * 1.15;
+      const y = PL(Math.sin(a) * 1.15);
+      enginePoints.push(engineBell(b, x, y, -4.1, 0.62, { shell: dark, collar: metal, len: 1.5, segments: 12 }));
+    }
+    b.cyl(0, 0, -4.15, 0.5, 0.5, metal, { segments: 12, rot: [Math.PI / 2, 0, 0] });
+    // grab handles and a beacon
+    for (const s of [-1, 1]) {
+      b.push();
+      b.rotateZ(s * 1.05);
+      b.box(-0.28, PL(R - 0.05), -2.6, 0.56, 1.0, 1.6, dark, { studs: false });
+      b.pop();
+    }
+    b.cyl(0, PL(R - 0.15), 0.4, 0.34, 1.2, COLORS.transRed, {
+      segments: 10, finish: 'glow', emissive: 0xff3322, emissiveIntensity: 1.8,
+    });
+  }
+
+  body();
+  nose();
+  viewport();
+  retros();
+
+  const group = new THREE.Group();
+  const mesh = b.build();
+  group.add(mesh);
+  group.name = 'escape-pod';
+  return finish(group, { enginePoints, gunPoints: [], parts: mesh.userData.parts });
+}
+
+// ===========================================================================
+// 4. DEATH STAR
+// ===========================================================================
+
+/**
+ * ORIENTATION: the battle station has no bow, so +z is simply the direction
+ * the superlaser leans toward. Origin at the centre of the sphere; the
+ * equatorial trench lies in the y = 0 plane.
+ *
+ * @param {number} [opts.radius=60]
+ * @param {number} [opts.detail=1]  scales the amount of surface panelling
+ * @param {boolean} [opts.lit]      add emissive window specks
+ */
+export async function buildDeathStar(opts = {}) {
+  const R = opts.radius ?? 60;
+  const detail = opts.detail ?? 1;
+  const hull = opts.hull ?? COLORS.lightBluishGray;
+  const dark = opts.dark ?? COLORS.darkBluishGray;
+  const metal = opts.metal ?? COLORS.flatSilver;
+  const shadow = opts.shadow ?? COLORS.trueBlack;
+  const greys = [hull, dark, metal, COLORS.lightBluishGray, COLORS.darkBluishGray];
+
+  const b = new Bricks({ studSegments: 6 });
+  const seg = Math.max(24, Math.round(R * 0.9));
+  const trench = 0.055; // half-angle of the equatorial band, radians
+  const trenchR = R * 0.945;
+  const yLip = R * Math.sin(trench);
+
+  const DISH = { lon: 0.62, lat: 0.6, r: R * 0.28, depth: R * 0.17 };
+  const dishDir = new THREE.Vector3(
+    Math.cos(DISH.lat) * Math.sin(DISH.lon),
+    Math.sin(DISH.lat),
+    Math.cos(DISH.lat) * Math.cos(DISH.lon)
+  );
+
+  function sphereShell() {
+    // Two caps with the equatorial trench cut between them.
+    b.sphere(0, 0, 0, R, hull, { segments: seg, phi: 0, phiLen: Math.PI / 2 - trench });
+    b.sphere(0, 0, 0, R, hull, { segments: seg, phi: Math.PI / 2 + trench, phiLen: Math.PI / 2 - trench });
+    // trench floor and its two sloped walls
+    b.cyl(0, PL(-yLip), 0, trenchR, PL(yLip * 2), dark, { segments: seg });
+    b.cone(0, PL(yLip - 0.02), 0, trenchR, R * 0.999, PL(R * 0.028), hull);
+    b.cone(0, PL(-yLip - R * 0.028 + 0.02), 0, R * 0.999, trenchR, PL(R * 0.028), hull);
+  }
+
+  function trenchDetail() {
+    // Machinery in the trench, plus the lip rails above and below it.
+    const n = Math.round(78 * detail);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + hash11(i, 21) * 0.04;
+      const yy = (hash11(i, 37) - 0.5) * yLip * 1.1;
+      const w = 0.6 + hash11(i, 53) * R * 0.028;
+      const h = R * (0.012 + hash11(i, 71) * 0.03);
+      b.push();
+      b.rotateY(a);
+      b.translateWorld(0, 0, trenchR * PITCH);
+      b.box(-w, PL(yy), -0.6, w * 2, 1.2, PL(h), hash11(i, 89) > 0.55 ? metal : dark, { studs: false });
+      if (hash11(i, 103) > 0.7) {
+        b.cyl(0, PL(yy - h), 0.9, R * 0.012, PL(h * 2), dark, { segments: 8 });
+      }
+      b.pop();
+    }
+    for (const s of [-1, 1]) {
+      b.torus(0, PL(s * yLip * 1.02), 0, R * 0.997, R * 0.008, dark, { seg: Math.min(64, seg) });
+    }
+  }
+
+  function panels() {
+    // Deterministic tangent panelling. A Fibonacci lattice keeps the coverage
+    // even without any randomness at all.
+    const n = Math.round(560 * detail);
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < n; i++) {
+      const sy = 1 - (i / (n - 1)) * 2;
+      const lat = Math.asin(sy * 0.999);
+      const lon = i * golden;
+      if (Math.abs(sy) < Math.sin(trench) * 1.5) continue;
+      // keep the superlaser crater clear
+      const d = new THREE.Vector3(
+        Math.cos(lat) * Math.sin(lon),
+        Math.sin(lat),
+        Math.cos(lat) * Math.cos(lon)
+      );
+      if (d.dot(dishDir) > Math.cos(DISH.r / R + 0.16)) continue;
+
+      const w = 2 + Math.floor(hash11(i, 211) * R * 0.1);
+      const dd = 2 + Math.floor(hash11(i, 233) * R * 0.13);
+      const c = greys[Math.floor(hash11(i, 257) * greys.length) % greys.length];
+      surfaceFrame(b, lon, lat, R - 0.16);
+      b.rotateY(hash11(i, 271) * Math.PI);
+      const kind = hash11(i, 293);
+      if (kind < 0.16) {
+        b.cyl(0, -0.4, 0, Math.min(w, dd) * 0.4, 1 + Math.floor(hash11(i, 311) * 2), c, { segments: 8 });
+      } else if (kind < 0.28) {
+        b.cyl(0, -0.6, 0, Math.min(w, dd) * 0.5, 1.2, dark, { segments: 10 });
+        b.cyl(0, 0.2, 0, Math.min(w, dd) * 0.3, 1, metal, { segments: 8 });
+      } else {
+        b.box(-w / 2, -0.5, -dd / 2, w, dd, kind > 0.78 ? 2 : 1, c, { studs: false });
+        if (kind > 0.62) b.box(-w / 4, 0.5, -dd / 4, w / 2, dd / 2, 1, dark, { studs: false });
+      }
+      b.pop();
+    }
+  }
+
+  function windows() {
+    if (!opts.lit) return;
+    const n = Math.round(120 * detail);
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < n; i++) {
+      const sy = 1 - ((i + 0.5) / n) * 2;
+      const lat = Math.asin(sy * 0.999);
+      const lon = i * golden * 1.61 + 0.7;
+      if (Math.abs(sy) < Math.sin(trench) * 1.4) continue;
+      surfaceFrame(b, lon, lat, R - 0.1);
+      b.box(-0.35, -0.2, -0.9, 0.7, 1.8, 0.5, COLORS.transYellow, {
+        studs: false, finish: 'glow', emissive: 0xffd98a, emissiveIntensity: 2.0,
+      });
+      b.pop();
+    }
+  }
+
+  function superlaser() {
+    const { lon, lat, r, depth } = DISH;
+    const dd = PL(depth);
+    surfaceFrame(b, lon, lat, R - depth * 0.72);
+    // crater wall and rim
+    b.cone(0, -PL(R * 0.05), 0, r * 1.14, r * 1.3, PL(R * 0.05), dark);
+    b.torus(0, 0, 0, r * 1.22, R * 0.014, dark, { seg: 40 });
+    b.torus(0, PL(-depth * 0.1), 0, r * 1.05, R * 0.01, metal, { seg: 40 });
+    // the concave dish itself, with a slightly proud inner liner
+    b.dish(0, -dd, 0, r, dd, dark, { segments: 40 });
+    b.dish(0, -dd + 0.5, 0, r * 0.94, dd * 0.94, hull, { segments: 40 });
+    // focusing spar cross plus the eight tributary emitters
+    const spar = r * 0.94 * PITCH;
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+      b.bar(
+        [0, -dd * PLATE + R * 0.02, 0],
+        [Math.cos(a) * spar, R * 0.006, Math.sin(a) * spar],
+        R * 0.011,
+        metal
+      );
+    }
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const rr = r * 0.72;
+      const yy = -dd + dd * Math.pow(0.72, 2) + 0.6;
+      b.cyl(Math.cos(a) * rr, yy, Math.sin(a) * rr, R * 0.022, PL(R * 0.02), metal, { segments: 10 });
+      b.cyl(Math.cos(a) * rr, yy + PL(R * 0.02), Math.sin(a) * rr, R * 0.014, PL(R * 0.012), COLORS.transGreen, {
+        segments: 10, finish: 'glow', emissive: 0x9dff7a, emissiveIntensity: 1.8,
+      });
+    }
+    // central emitter
+    b.cyl(0, -dd - 0.2, 0, r * 0.2, PL(R * 0.035), dark, { segments: 16 });
+    b.cyl(0, -dd - 0.2 + PL(R * 0.035), 0, r * 0.13, PL(R * 0.018), COLORS.transGreen, {
+      segments: 16, finish: 'glow', emissive: 0x9dff7a, emissiveIntensity: 2.2,
+    });
+    b.pop();
+    // shadow ring so the crater edge reads even in flat light
+    surfaceFrame(b, lon, lat, R - 0.05);
+    b.torus(0, -0.3, 0, r * 1.3, R * 0.006, shadow, { seg: 40 });
+    b.pop();
+  }
+
+  sphereShell();
+  trenchDetail();
+  panels();
+  windows();
+  superlaser();
+
+  const group = new THREE.Group();
+  const mesh = b.build();
+  group.add(mesh);
+  group.name = 'death-star';
+  return finish(group, {
+    radius: R,
+    trenchY: 0,
+    dishCenter: dishDir.clone().multiplyScalar((R - DISH.depth * 0.6) * PITCH),
+    dishRadius: DISH.r * PITCH,
+    enginePoints: [],
+    gunPoints: [],
+    parts: mesh.userData.parts,
+  });
+}
+
+// ===========================================================================
+// 5. SANDCRAWLER
+// ===========================================================================
+
+/**
+ * ORIENTATION: +z forward -- the sloped bow with the loading ramp faces +z,
+ * the tall vertical stern faces -z. Unlike the starships this is a ground
+ * vehicle, so y = 0 is the ground the treads sit on, not the hull centre.
+ * About 40 studs long, 22 wide, 17 tall.
+ *
+ * `userData.rollTracks(t)` drives the treads; it is a pure function of t.
+ */
+export async function buildSandcrawler(opts = {}) {
+  const body = opts.body ?? COLORS.tan;
+  const trim = opts.trim ?? COLORS.darkTan;
+  const dark = opts.dark ?? COLORS.reddishBrown;
+  const metal = opts.metal ?? COLORS.flatSilver;
+  const grey = opts.grey ?? COLORS.darkBluishGray;
+  const glass = opts.glass ?? COLORS.transYellow;
+
+  const b = new Bricks({ studSegments: 8 });
+
+  const FLOOR = 11; // plates: underside of the hull, sitting on the treads
+  const ROOF = 43; // plates: top of the hull
+  const HALF = 11; // studs: half-beam at the waist
+
+  // The body is a trapezoidal wedge: the bow face leans forward as it rises
+  // and the flanks tuck in, so the whole thing looks like it is nosing down
+  // into the dune. Each entry is one course of the stack.
+  const COURSES = [];
+  for (let i = 0; i < 8; i++) {
+    COURSES.push({
+      y: FLOOR + i * 4,
+      h: 4,
+      z0: -15 - i * 0.5,
+      z1: 12.6 + i * 0.8,
+      w: HALF * (1 - i * 0.026),
+    });
+  }
+  const BOW = COURSES[COURSES.length - 1].z1;
+  const STERN = COURSES[COURSES.length - 1].z0;
+  /** Plan half-width of a course, chamfered at its four corners. */
+  const courseW = (c) => (z) => c.w * Math.max(0.8, Math.min(1, (z - c.z0) / 2.2, (c.z1 - z) / 2.2));
+  /** Half-width of the widest course present at this z, for greeble clipping. */
+  const planAt = (z) => {
+    let w = 0;
+    for (const c of COURSES) if (z > c.z0 && z < c.z1) w = Math.max(w, courseW(c)(z));
+    return w;
+  };
+
+  function tub() {
+    for (const c of COURSES) {
+      taperedSlab(b, {
+        z0: c.z0, z1: c.z1, y: c.y, h: c.h, color: body, step: 2.2,
+        halfWAt: courseW(c), opts: { studs: false },
+      });
+    }
+    // Studded roof, inset from the swept edge.
+    deck(b, {
+      z0: STERN + 1, z1: BOW - 1, y: ROOF, halfWAt: courseW(COURSES[7]), color: body, tile: 3, inset: 1.6,
+    });
+    // Belly skirt over the treads, and the bottom rub rail.
+    const c0 = COURSES[0];
+    b.box(-HALF - 0.6, FLOOR - 3, c0.z0 - 1, (HALF + 0.6) * 2, c0.z1 - c0.z0 + 2, 3, trim, { studs: false });
+    b.box(-HALF - 1, FLOOR - 1.4, c0.z0 - 1.2, (HALF + 1) * 2, c0.z1 - c0.z0 + 2.4, 1.4, grey, { studs: false });
+    // Stern face: heat exchangers and a capping cornice.
+    for (let i = 0; i < 5; i++) {
+      const x = -8 + i * 4;
+      b.cyl(x, FLOOR + 3, STERN - 0.4, 1.5, PL(9), grey, { segments: 12, rot: [Math.PI / 2, 0, 0] });
+      b.cyl(x, FLOOR + 3, STERN - 1.3, 1.05, PL(1.6), metal, { segments: 10, rot: [Math.PI / 2, 0, 0] });
+    }
+    b.box(-HALF + 1, FLOOR + 20, STERN - 1.1, (HALF - 1) * 2, 1.4, 14, trim, { studs: false });
+    b.box(-HALF, ROOF - 2, STERN - 1.6, HALF * 2, 2.2, 3, trim, { studs: false });
+  }
+
+  function panels() {
+    // Ribbed plating down both flanks.
+    for (let z = STERN + 2; z < 11; z += 3.6) {
+      for (const s of [-1, 1]) {
+        const w = planAt(z + 1.2) - 0.2;
+        b.box(s * w - (s > 0 ? 0 : 0.7), FLOOR + 2, z, 0.7, 2.8, 26, trim, { studs: false });
+      }
+    }
+    // Horizontal belt lines.
+    for (const y of [FLOOR + 13, FLOOR + 25]) {
+      for (const s of [-1, 1]) {
+        b.box(s * (HALF - 0.9) - (s > 0 ? 0 : 0.6), y, -14, 0.6, 26, 1.6, trim, { studs: false });
+      }
+    }
+    greeble(b, {
+      z0: STERN + 2, z1: 1, y: ROOF, halfWAt: (z) => planAt(z), seed: 907, n: 42,
+      colors: [trim, grey, metal, dark], maxW: 3, maxD: 4, h: 3, cylChance: 0.35, inset: 1.8,
+    });
+    // dorsal hatches
+    for (const z of [-14, -9, -4]) {
+      b.plate(-3, ROOF, z, 6, 4, trim);
+      b.box(-2, ROOF + 1, z + 0.5, 4, 3, 1, grey, { studs: false });
+    }
+    // crane arm over the stern roof
+    b.cyl(-6.5, ROOF, -12, 1.0, 5, grey, { segments: 10 });
+    b.bar([-6.5, (ROOF + 5) * PLATE, -12], [-6.5, (ROOF + 13) * PLATE, -7.5], 0.34, grey);
+    b.bar([-6.5, (ROOF + 13) * PLATE, -7.5], [-6.5, (ROOF + 9) * PLATE, -7.5], 0.16, metal);
+    b.cyl(-6.5, ROOF + 8, -7.5, 0.5, 1.4, grey, { segments: 8 });
+    // exhaust stacks
+    for (const s of [-1, 1]) {
+      b.cyl(s * 7.5, ROOF, -16, 1.15, 7, grey, { segments: 12 });
+      b.cyl(s * 7.5, ROOF + 7, -16, 1.4, 1.4, COLORS.trueBlack, { segments: 12 });
+    }
+  }
+
+  function bridge() {
+    // Command box jutting out of the top of the bow face.
+    const z0 = 9;
+    const z1 = 20.5;
+    b.box(-5.4, ROOF - 9, z0, 10.8, z1 - z0 - 2, 9, trim, { studs: false });
+    b.box(-4.8, ROOF, z0 + 0.5, 9.6, z1 - z0 - 1, 5, body, { studs: false });
+    // wraparound viewports
+    b.box(-4.4, ROOF + 1.2, z1 - 1.1, 8.8, 0.7, 3, glass, { studs: false, finish: 'trans' });
+    for (const s of [-1, 1]) {
+      b.box(s * 4.8 - 0.35, ROOF + 1.2, z0 + 1.4, 0.7, z1 - z0 - 3, 3, glass, { studs: false, finish: 'trans' });
+    }
+    b.plate(-4.6, ROOF + 5, z0 + 0.5, 9, 10, body);
+    b.box(-2, ROOF + 6, z0 + 2, 4, 4, 1, grey, { studs: false });
+    // sensor mast and dish
+    b.cyl(3.4, ROOF + 6, z0 + 1.8, 0.28, 6, grey, { segments: 8 });
+    b.dish(-2.4, ROOF + 6, z0 + 6.5, 1.7, 2.4, grey, { segments: 14 });
+    // headlamps under the bridge overhang
+    for (const s of [-1, 1]) {
+      b.cyl(s * 4.2, ROOF - 6, z1 - 2.1, 0.85, PL(0.6), grey, { segments: 10, rot: [Math.PI / 2, 0, 0] });
+      b.cyl(s * 4.2, ROOF - 6, z1 - 1.5, 0.6, PL(0.35), COLORS.transYellow, {
+        segments: 10, rot: [Math.PI / 2, 0, 0], finish: 'glow', emissive: 0xffe08a, emissiveIntensity: 1.6,
+      });
+    }
+  }
+
+  // Loading ramp: hinged at the foot of the bow face so scenes can drop it.
+  const RAMP = { len: 11, hingeZ: 12.8, hingeY: FLOOR - 1.5, up: -1.13, down: 0.3 };
+  const ramp = new THREE.Group();
+  function loadingRamp() {
+    const rb = new Bricks({ studSegments: 8 });
+    const w = 6.6;
+    const len = RAMP.len;
+    rb.box(-w, 0, 0, w * 2, len, 1.4, trim, { studs: false });
+    for (let i = 1; i < 6; i++) {
+      rb.box(-w + 0.7, 1.4, (i * len) / 6, w * 2 - 1.4, 0.9, 0.8, dark, { studs: false });
+    }
+    for (const s of [-1, 1]) {
+      rb.box(s * w - (s > 0 ? 0.8 : 0), 1.4, 0.4, 0.8, len - 0.8, 2.4, trim, { studs: false });
+    }
+    rb.box(-w, 0, len - 0.9, w * 2, 0.9, 2.8, grey, { studs: false });
+    rb.cyl(0, 1.4, len - 2.5, 1.0, 1, grey, { segments: 12 });
+    ramp.add(rb.build());
+    ramp.position.set(0, RAMP.hingeY * PLATE, RAMP.hingeZ * PITCH);
+    // Doorway cut into the bow face: jambs, lintel and a dark interior.
+    const lean = 0.8 / 4; // studs of forward lean per plate of height
+    for (let i = 0; i < 7; i++) {
+      const y = FLOOR + i * 4;
+      const z = 12.6 + i * 4 * lean;
+      b.box(-w - 1.2, y, z - 0.6, 1.3, 2.2, 4.2, trim, { studs: false });
+      b.box(w - 0.1, y, z - 0.6, 1.3, 2.2, 4.2, trim, { studs: false });
+      b.box(-w, y, z - 1.4, w * 2, 1.6, 4.2, COLORS.trueBlack, { studs: false });
+    }
+    b.box(-w - 1.2, FLOOR + 28, 18.2, (w + 1.2) * 2, 2.4, 2.2, trim, { studs: false });
+  }
+
+  // --- treads ---------------------------------------------------------------
+  // Each track is a closed stadium loop of identical links. The links live in
+  // two InstancedMeshes (pad + cleat) so 88 of them cost two draw calls, and
+  // `rollTracks(t)` just walks them along the loop.
+  const TRACK = { len: 24, rad: 2.2, x: 8.0, y: 2.2, width: 4.6, links: 44 };
+  const trackMeshes = [];
+  let rollTracks = () => {};
+
+  function treads() {
+    // The link is modelled so that its outermost face sits at local y = 0,
+    // which puts the loop's outer surface exactly on the path radius.
+    const linkB = new Bricks({ studSegments: 6 });
+    const LW = TRACK.width;
+    const LL = 1.5;
+    linkB.box(-LW / 2, -1.8, -LL / 2, LW, LL, 1.1, COLORS.trueBlack, { studs: false });
+    linkB.box(-LW * 0.34, -0.72, -LL * 0.3, LW * 0.68, LL * 0.62, 0.72, grey, { studs: false });
+    const linkGroup = linkB.build();
+
+    const N = TRACK.links * 2;
+    for (const child of linkGroup.children) {
+      const im = new THREE.InstancedMesh(child.geometry, child.material, N);
+      im.castShadow = true;
+      im.receiveShadow = true;
+      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      trackMeshes.push(im);
+    }
+
+    const P = 2 * TRACK.len + Math.PI * 2 * TRACK.rad;
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const pos = new THREE.Vector3();
+    const one = new THREE.Vector3(1, 1, 1);
+
+    // Arc-length parameterisation of the stadium, in world units.
+    function at(s) {
+      let u = ((s % P) + P) % P;
+      const r = TRACK.rad;
+      if (u < TRACK.len) return [-TRACK.len / 2 + u, r, 0];
+      u -= TRACK.len;
+      if (u < Math.PI * r) {
+        const a = u / r;
+        return [TRACK.len / 2 + Math.sin(a) * r, Math.cos(a) * r, a];
+      }
+      u -= Math.PI * r;
+      if (u < TRACK.len) return [TRACK.len / 2 - u, -r, Math.PI];
+      u -= TRACK.len;
+      const a = u / r;
+      return [-TRACK.len / 2 - Math.sin(a) * r, -Math.cos(a) * r, Math.PI + a];
+    }
+
+    rollTracks = (t) => {
+      const shift = t * (TRACK.rad * 1.35);
+      for (let side = 0; side < 2; side++) {
+        const sx = side === 0 ? -TRACK.x : TRACK.x;
+        for (let i = 0; i < TRACK.links; i++) {
+          const [z, y, ang] = at((i / TRACK.links) * P + shift);
+          pos.set(sx, TRACK.y + y, z);
+          q.setFromEuler(new THREE.Euler(ang, 0, 0));
+          m.compose(pos, q, one);
+          for (const im of trackMeshes) im.setMatrixAt(side * TRACK.links + i, m);
+        }
+      }
+      for (const im of trackMeshes) im.instanceMatrix.needsUpdate = true;
+    };
+    rollTracks(0);
+    for (const im of trackMeshes) {
+      im.computeBoundingBox();
+      im.computeBoundingSphere();
+    }
+
+    // Drive sprockets, road wheels and the beam each track hangs from.
+    for (const s of [-1, 1]) {
+      const x = s * TRACK.x;
+      for (const z of [-TRACK.len / 2, TRACK.len / 2]) {
+        b.wheel(x, PL(TRACK.y), z, TRACK.rad - 0.72, TRACK.width - 1.0, COLORS.trueBlack, grey);
+        b.cyl(x + s * (TRACK.width / 2 - 0.3), PL(TRACK.y), z, 0.85, 1.4, metal, {
+          segments: 12, rot: [0, 0, Math.PI / 2],
+        });
+      }
+      for (let i = 0; i < 4; i++) {
+        const z = -TRACK.len / 2 + 3.5 + i * ((TRACK.len - 7) / 3);
+        b.wheel(x, PL(TRACK.y - TRACK.rad + 0.95), z, 0.95, TRACK.width - 1.4, COLORS.trueBlack, grey);
+      }
+      // suspension beam between the sprockets, tucked inside the loop
+      b.box(x - TRACK.width / 2 + 0.9, PL(TRACK.y) - 1.6, -TRACK.len / 2 + 1,
+        TRACK.width - 1.8, TRACK.len - 2, 3.2, grey, { studs: false });
+      // mounting pylons up into the belly
+      for (const z of [-TRACK.len / 2 + 4, 0, TRACK.len / 2 - 4]) {
+        b.box(x - 1.4, PL(TRACK.y + TRACK.rad) - 2, z - 1.2, 2.8, 2.4, 4, grey, { studs: false });
+      }
+    }
+  }
+
+  tub();
+  panels();
+  bridge();
+  loadingRamp();
+  treads();
+
+  const group = new THREE.Group();
+  const mesh = b.build();
+  group.add(mesh);
+  group.add(ramp);
+  for (const im of trackMeshes) group.add(im);
+  group.name = 'sandcrawler';
+
+  /** 0 = stowed flat against the bow face, 1 = fully lowered to the sand. */
+  const setRamp = (a) => {
+    ramp.rotation.x = ease.lerp(RAMP.up, RAMP.down, ease.clamp(a));
+  };
+  setRamp(opts.ramp ?? 0);
+
+  const out = finish(group, {
+    enginePoints: [],
+    gunPoints: [],
+    parts: mesh.userData.parts,
+    rollTracks,
+    setRamp,
+    ramp,
+    previewUpdate: (t) => rollTracks(t),
+  });
+  return out;
+}
+
+// ===========================================================================
+// 6. TURBOLASER TOWER
+// ===========================================================================
+
+/**
+ * ORIENTATION: +z forward, base sitting on y = 0. About 7 studs across and
+ * 8 tall. `userData.yaw` spins about y, `userData.pitch` elevates the barrels;
+ * `userData.muzzles` are in the pitch group's local space, so aim with
+ *   turret.userData.pitch.localToWorld(m.clone())
+ */
+export async function buildTurbolaserTower(opts = {}) {
+  const hull = opts.hull ?? COLORS.lightBluishGray;
+  const dark = opts.dark ?? COLORS.darkBluishGray;
+  const colors = { hull, dark };
+
+  const root = new THREE.Group();
+
+  const baseB = new Bricks({ studSegments: 10 });
+  // A wider footing than the shipboard version, so it reads as an emplacement.
+  baseB.cyl(0, 0, 0, 4.2, 1, dark, { segments: 16 });
+  baseB.cyl(0, 1, 0, 3.6, 1, hull, { segments: 16 });
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    baseB.push();
+    baseB.rotateY(a);
+    baseB.box(-0.9, 2, 2.4, 1.8, 1.4, 2, dark, { studs: false });
+    baseB.cyl(0, 2, 3.3, 0.5, 3, COLORS.flatSilver, { segments: 8 });
+    baseB.pop();
+  }
+  turretBase(baseB, colors);
+  root.add(baseB.build());
+
+  const yaw = new THREE.Group();
+  yaw.position.y = TURRET.yawY * PLATE;
+  root.add(yaw);
+  const yokeB = new Bricks({ studSegments: 10 });
+  turretYoke(yokeB, colors);
+  yaw.add(yokeB.build());
+
+  const pitch = new THREE.Group();
+  pitch.position.set(0, 8 * PLATE, 0.5 * PITCH);
+  yaw.add(pitch);
+  const barrelB = new Bricks({ studSegments: 10 });
+  const muzzles = turretBarrels(barrelB, { ...colors, len: TURRET.barrelLen });
+  pitch.add(barrelB.build());
+
+  yaw.rotation.y = opts.yaw ?? 0;
+  pitch.rotation.x = opts.pitch ?? -0.28;
+  root.name = 'turbolaser';
+
+  return finish(root, {
+    yaw,
+    pitch,
+    muzzles,
+    gunPoints: muzzles,
+    enginePoints: [],
+    previewUpdate: (t) => {
+      yaw.rotation.y = Math.sin(t * 0.6) * 0.8;
+      pitch.rotation.x = -0.3 - Math.sin(t * 0.9) * 0.25;
+    },
+  });
+}
+
+// ===========================================================================
+// Turntable entries
+// ===========================================================================
+
+export const PREVIEW = {
+  corvette: () => buildCorvette(),
+  'star-destroyer': () => buildStarDestroyer(),
+  'escape-pod': () => buildEscapePod(),
+  'death-star': () => buildDeathStar({ lit: true }),
+  sandcrawler: () => buildSandcrawler({ ramp: 1 }),
+  turbolaser: () => buildTurbolaserTower(),
+};

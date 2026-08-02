@@ -1,40 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Imperial crest - original design.
-  A heavy hexagonal outer ring with six blunt teeth on its flats, eight
-  tapered spokes and a solid hub. Sharp, machined, no curves except the hub.
+  A heavy hexagonal ring with a blunt tooth on each of its six flats, eight
+  tapered spokes contained inside the ring, and a solid hub. Sharp and
+  machined; the only curve in the piece is the hub.
   Extrusion asset: closed filled paths, single colour, no strokes.
   The ring uses fill-rule="evenodd" so the inner hexagon reads as a hole.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
 
-  <!-- heavy hexagonal ring, outer R 246 / inner R 206 -->
-  <path fill="#a0a5a9" fill-rule="evenodd" d="M469 133 L256 10 L43 133 L43 379 L256 502 L469 379Z
-    M434.4 153 L256 50 L77.6 153 L77.6 359 L256 462 L434.4 359Z"/>
+  <!-- hexagonal ring, outer R 236 / inner R 196 -->
+  <path fill="#a0a5a9" fill-rule="evenodd" d="M460.4 138 L256 20 L51.6 138 L51.6 374 L256 492 L460.4 374Z
+    M425.7 158 L256 60 L86.3 158 L86.3 354 L256 452 L425.7 354Z"/>
 
-  <!-- six teeth, one on each flat of the hexagon -->
-  <path fill="#a0a5a9" d="M452 226 L508 234 L508 278 L452 286Z"/>
-  <path fill="#a0a5a9" d="M328 71.3 L362.9 26.8 L401.1 48.8 L380 101.3Z"/>
-  <path fill="#a0a5a9" d="M132 101.3 L110.9 48.8 L149.1 26.8 L184 71.3Z"/>
-  <path fill="#a0a5a9" d="M60 286 L4 278 L4 234 L60 226Z"/>
-  <path fill="#a0a5a9" d="M184 440.7 L149.1 485.2 L110.9 463.2 L132 410.7Z"/>
-  <path fill="#a0a5a9" d="M380 410.7 L401.1 463.2 L362.9 485.2 L328 440.7Z"/>
+  <!-- six teeth, one centred on each flat -->
+  <path fill="#a0a5a9" d="M446 210 L504 216 L504 296 L446 302Z"/>
+  <path fill="#a0a5a9" d="M311.2 68.5 L345.4 21.2 L414.6 61.2 L390.8 114.5Z"/>
+  <path fill="#a0a5a9" d="M121.2 114.5 L97.4 61.2 L166.6 21.2 L200.8 68.5Z"/>
+  <path fill="#a0a5a9" d="M66 302 L8 296 L8 216 L66 210Z"/>
+  <path fill="#a0a5a9" d="M200.8 443.5 L166.6 490.8 L97.4 450.8 L121.2 397.5Z"/>
+  <path fill="#a0a5a9" d="M390.8 397.5 L414.6 450.8 L345.4 490.8 L311.2 443.5Z"/>
 
-  <!-- eight spokes, tapering outwards from the hub into the ring -->
-  <path fill="#a0a5a9" d="M322 234 L470 220 L470 292 L322 278Z"/>
-  <path fill="#a0a5a9" d="M287.1 193.8 L381.9 79.2 L432.8 130.1 L318.2 224.9Z"/>
-  <path fill="#a0a5a9" d="M234 190 L220 42 L292 42 L278 190Z"/>
-  <path fill="#a0a5a9" d="M193.8 224.9 L79.2 130.1 L130.1 79.2 L224.9 193.8Z"/>
-  <path fill="#a0a5a9" d="M190 278 L42 292 L42 220 L190 234Z"/>
-  <path fill="#a0a5a9" d="M224.9 318.2 L130.1 432.8 L79.2 381.9 L193.8 287.1Z"/>
-  <path fill="#a0a5a9" d="M278 322 L292 470 L220 470 L234 322Z"/>
-  <path fill="#a0a5a9" d="M318.2 287.1 L432.8 381.9 L381.9 432.8 L287.1 318.2Z"/>
+  <!-- eight spokes, hub out to the inside face of the ring -->
+  <path fill="#a0a5a9" d="M330 234 L448 222 L448 290 L330 278Z"/>
+  <path fill="#a0a5a9" d="M292.8 188.1 L367.7 96.2 L415.8 144.3 L323.9 219.2Z"/>
+  <path fill="#a0a5a9" d="M234 182 L222 64 L290 64 L278 182Z"/>
+  <path fill="#a0a5a9" d="M188.1 219.2 L96.2 144.3 L144.3 96.2 L219.2 188.1Z"/>
+  <path fill="#a0a5a9" d="M182 278 L64 290 L64 222 L182 234Z"/>
+  <path fill="#a0a5a9" d="M219.2 323.9 L144.3 415.8 L96.2 367.7 L188.1 292.8Z"/>
+  <path fill="#a0a5a9" d="M278 330 L290 448 L222 448 L234 330Z"/>
+  <path fill="#a0a5a9" d="M323.9 292.8 L415.8 367.7 L367.7 415.8 L292.8 323.9Z"/>
 
-  <!-- collar ring tying the spokes together, and the solid hub -->
-  <path fill="#a0a5a9" fill-rule="evenodd" d="M110 256
-    A146 146 0 0 0 402 256 A146 146 0 0 0 110 256Z
-    M134 256
-    A122 122 0 0 0 378 256 A122 122 0 0 0 134 256Z"/>
-  <circle cx="256" cy="256" r="78" fill="#a0a5a9"/>
+  <!-- solid hub -->
+  <circle cx="256" cy="256" r="86" fill="#a0a5a9"/>
 
 </svg>

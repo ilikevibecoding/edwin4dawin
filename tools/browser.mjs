@@ -1,5 +1,51 @@
 /** Shared headless-Chrome plumbing for the frame grabbers. */
 import puppeteer from 'puppeteer-core';
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+
+const MIME = {
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
+  '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2',
+};
+
+/**
+ * Serve a directory over HTTP on an ephemeral port.
+ *
+ * Rendering from `dist/` rather than the dev server matters while several
+ * agents are editing the repo: Vite's HMR reloads the page on every save,
+ * which destroys a render half way through.
+ */
+export function startStaticServer(dir) {
+  const root = path.resolve(dir);
+  const server = http.createServer((req, res) => {
+    let p = decodeURIComponent(req.url.split('?')[0]);
+    if (p.endsWith('/')) p += 'index.html';
+    const file = path.join(root, p);
+    if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+      res.writeHead(404);
+      res.end('not found');
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    fs.createReadStream(file).pipe(res);
+  });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      resolve({ url: `http://127.0.0.1:${port}`, close: () => server.close() });
+    });
+  });
+}
+
+/** Build the site and serve `dist/`. Returns the same shape as startStaticServer. */
+export async function buildAndServe(root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')) {
+  execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], { cwd: root, stdio: 'inherit' });
+  return startStaticServer(path.join(root, 'dist'));
+}
 
 export const CHROME = process.env.CHROME_BIN || '/usr/local/bin/google-chrome';
 

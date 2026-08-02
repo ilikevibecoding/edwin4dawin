@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { openFilm } from './browser.mjs';
+import { openFilm, buildAndServe } from './browser.mjs';
 
 const argv = process.argv.slice(2);
 const arg = (k, d = null) => {
@@ -28,10 +28,17 @@ const height = parseInt(arg('h', '720'), 10);
 const n = parseInt(arg('n', '6'), 10);
 const contact = arg('contact', null);
 const bloom = !has('no-bloom');
+// Default to the dev server here: scene authors want their latest edit.
+let server = null;
+let BASE = arg('base', 'http://localhost:5173');
+if (has('dist')) {
+  server = await buildAndServe();
+  BASE = server.url;
+}
 
 fs.mkdirSync(out, { recursive: true });
 
-const film = await openFilm({ width, height, scene, bloom, quiet: false });
+const film = await openFilm({ base: BASE, width, height, scene, bloom, quiet: false });
 console.log(`film duration ${film.duration.toFixed(1)}s, ${film.scenes.length} scene(s)`);
 
 let times;
@@ -87,3 +94,4 @@ if (film.errors.length) {
   for (const e of [...new Set(film.errors)]) console.log('  ' + e);
 }
 await film.browser.close();
+server?.close();

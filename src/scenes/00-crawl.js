@@ -40,12 +40,12 @@ const RAD = Math.PI / 180;
 const FOV_CRAWL = 56; // wide enough for the crawl to converge inside the frame
 const FOV_END = 36; // slow push in on the planet
 const PITCH_CRAWL = 4 * RAD; // the lens looks a little above the horizon
-const PITCH_END = -30 * RAD;
+const PITCH_END = -27 * RAD;
 
 // --- crawl plane ---------------------------------------------------------
 const TILT = 63 * RAD; // plane rotation.x = -TILT  => vanishing point 27 deg up
 const CRAWL_ORIGIN = [0, -9, -13]; // where the plane's local origin sits
-const CRAWL_W = 27.5; // world width of the text panels
+const CRAWL_W = 26; // world width of the text panels
 const TEX_W = 2048; // text texture width in pixels
 const BODY_PX = 92; // body font size
 const BODY_LH = 1.34;
@@ -54,13 +54,20 @@ const HEAD_PX = 104; // "EPISODE I / THE STOLEN PLANS"
 const HEAD_LH = 1.3;
 const HEAD_PAD = 40;
 const CRAWL_YELLOW = '#f2cd37';
-const PROMINENT_Y = 9.0; // plane-local y where a paragraph reads biggest
-const FADE_NEAR = 26; // distance where the crawl starts dissolving
-const FADE_FAR = 45; // distance where it is gone
+// Plane-local height at which each paragraph should read biggest. They climb
+// so the crawl decelerates gently instead of lurching: the first paragraph is
+// caught low and large, the last one is already on its way out.
+const PROMINENT_Y = [6.0, 9.5, 13.0];
+const FADE_NEAR = 33; // distance where the crawl starts dissolving
+const FADE_FAR = 70; // distance where it is gone (~73% up the frame)
+// Bloom threshold is 0.6 and #f2cd37 sits just above it. Knocking the panel
+// back a few percent keeps a warm halo on the letters without the whole lower
+// frame turning into a yellow wash.
+const CRAWL_LEVEL = 0xe2e2e2;
 
 // --- reveal --------------------------------------------------------------
 const PLANET_R = 44;
-const PLANET_DIST = 620;
+const PLANET_DIST = 680;
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -359,15 +366,19 @@ export async function build(ctx) {
     starsUp: [0.7, 3.8],
     cardIn: [L0.t0 - 0.75, L0.t0 + 0.6],
     cardOut: [L0.t1 + 0.5, L0.t1 + 1.55],
-    logoIn: L0.t1 + 1.4, // ~7.5
-    logoHold: L0.t1 + 2.3,
-    logoGone: L0.t1 + 10.9, // ~15.0
-    crawlStart: L1.t0 - 2.6, // heading enters the bottom of frame
-    p1: L1.t0 + 3.4,
-    p2: L2.t0 + 3.4,
-    p3: L3.t0 + 1.6,
-    dissolve: [L3.t1 - 0.05, L3.t1 + 1.75], // ~36.6 -> 38.4
-    tilt: [L3.t1 + 1.15, L3.t1 + 7.55], // ~37.8 -> 44.2
+    logoIn: L0.t1 + 1.4, // ~7.5  slam
+    logoHold: L0.t1 + 2.2, // ~8.3  settled, starts falling away
+    logoSmall: L0.t1 + 4.6, // ~10.7 shrink is essentially done
+    logoGone: L0.t1 + 7.4, // ~13.5 faded out, comfortably before 15
+    // The crawl heading also reads THE STOLEN PLANS, so it must not enter the
+    // frame while the title's subtitle is still down there.
+    crawlStart: L1.t0 - 0.6, // ~8.4  content edge at the bottom of frame
+    p1: L1.t0 + 4.0, // ~13.0
+    p2: L2.t0 + 4.0, // ~22.0
+    p3: L3.t0 + 3.0, // ~31.9
+    crawlExit: L3.t1 + 0.95, // ~37.6 last line has climbed away
+    dissolve: [L3.t1 - 0.95, L3.t1 + 1.55], // ~35.7 -> 38.2
+    tilt: [L3.t1 + 0.55, L3.t1 + 5.15], // ~37.2 -> 41.8
   };
   const END = ctx.duration;
 
@@ -386,19 +397,21 @@ export async function build(ctx) {
   logoFill.position.set(-18, -14, 30);
   scene.add(logoKey, logoRim, logoFill);
 
-  const sunDir = new THREE.Vector3(-0.834, 0.082, -0.546).normalize(); // toward the light
-  const sun = new THREE.DirectionalLight(0xfff0dc, 0);
-  sun.position.copy(sunDir).multiplyScalar(1200);
-  const sunFill = new THREE.DirectionalLight(0x9fc0ff, 0);
-  sunFill.position.set(120, 60, 400);
+  // Raking light from the left: a crescent on the planet, a hard edge on the
+  // ships. The fill is kept low so the planet's night side stays night.
+  const sunDir = new THREE.Vector3(-0.963, 0.166, -0.213).normalize();
+  const sun = new THREE.DirectionalLight(0xfff1de, 0);
+  sun.position.copy(sunDir).multiplyScalar(1500);
+  const sunFill = new THREE.DirectionalLight(0x93b4e6, 0);
+  sunFill.position.set(150, 180, 500);
   scene.add(sun, sunFill);
 
   // =========================================================================
   // buildStars — two shells at different radii, counter-drifting for parallax
   // =========================================================================
   function buildStars() {
-    const near = new Starfield({ count: 2400, radius: 1300, seed: 7, sizeMin: 1.7, sizeMax: 6.2 });
-    const far = new Starfield({ count: 2000, radius: 2600, seed: 61, sizeMin: 2.6, sizeMax: 8.4 });
+    const near = new Starfield({ count: 3800, radius: 1300, seed: 7, sizeMin: 2.0, sizeMax: 7.2 });
+    const far = new Starfield({ count: 3200, radius: 2600, seed: 61, sizeMin: 3.0, sizeMax: 9.5 });
     scene.add(near.object, far.object);
     return {
       update(t, a) {
@@ -531,8 +544,9 @@ export async function build(ctx) {
     }
 
     const camDir = new THREE.Vector3(0, Math.sin(PITCH_CRAWL), -Math.cos(PITCH_CRAWL));
-    const D0 = 31; // slam distance
-    const D1 = 700; // gone
+    const D0 = 31; // slam distance — fills the frame
+    const D1 = 250; // end of the fast fall-away
+    const D2 = 760; // a distant speck by the time it fades
 
     return {
       group,
@@ -540,11 +554,18 @@ export async function build(ctx) {
         const vis = t >= T.logoIn - 0.05 && t <= T.logoGone + 0.3;
         group.visible = vis;
         if (!vis) return;
-        // slam: arrives over-sized and settles, then recedes exponentially so
-        // it shrinks at a constant rate rather than easing to a halt
+        // Distance is interpolated in log space so the logo shrinks at a
+        // steady *rate* rather than easing to a halt. Two segments: a hard
+        // fall-away that clears the frame, then a slow drift to the vanishing
+        // point while the crawl takes over.
         let d;
-        if (t < T.logoHold) d = ease.lerp(D0 * 0.72, D0, ease.outQuint(ease.range(t, T.logoIn, T.logoHold)));
-        else d = D0 * Math.pow(D1 / D0, ease.range(t, T.logoHold, T.logoGone));
+        if (t < T.logoHold) {
+          d = ease.lerp(D0 * 0.7, D0, ease.outQuint(ease.range(t, T.logoIn, T.logoHold)));
+        } else if (t < T.logoSmall) {
+          d = D0 * Math.pow(D1 / D0, ease.range(t, T.logoHold, T.logoSmall));
+        } else {
+          d = D1 * Math.pow(D2 / D1, ease.smooth(ease.range(t, T.logoSmall, T.logoGone)));
+        }
         const pos = camDir.clone().multiplyScalar(d);
         pos.y += (d - D0) * 0.45; // drift toward the crawl's vanishing point
         group.position.copy(pos);
@@ -552,7 +573,7 @@ export async function build(ctx) {
 
         const a =
           Math.min(1, ease.range(t, T.logoIn, T.logoIn + 0.12)) *
-          (1 - ease.smooth(ease.range(t, T.logoGone - 2.6, T.logoGone)));
+          (1 - ease.smooth(ease.range(t, T.logoGone - 2.4, T.logoGone)));
         for (const m of mats) m.opacity = a;
       },
     };
@@ -613,8 +634,10 @@ export async function build(ctx) {
       uFar1: { value: FADE_FAR },
       uGlobal: { value: 1 },
     };
+    // Tone mapping stays ON here: it keeps the yellow just under the bloom
+    // threshold, so the crawl glows at the edges instead of washing the frame.
     const panel = (tex, texH) => {
-      const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false });
+      const m = new THREE.MeshBasicMaterial({ map: tex, color: CRAWL_LEVEL, transparent: true, depthWrite: false });
       m.onBeforeCompile = (shader) => {
         Object.assign(shader.uniforms, fadeU);
         shader.vertexShader = shader.vertexShader
@@ -662,28 +685,37 @@ export async function build(ctx) {
       centres.push(top + (line + n / 2) * lh * px);
       line += n + 1;
     }
+    const contentH = headWorldH + gap + bodyWorldH;
 
-    const yEnter = planeYAtNdc(-1.0); // plane-local y at the bottom of frame
-    const scroll = monoSpline([
+    // Scroll choreography. `content.position.y` is where the top edge of the
+    // crawl currently sits on the plane, so putting paragraph i at plane height
+    // h means position.y = h + centres[i]. The last key carries the whole block
+    // clear of the readable zone so the text climbs away rather than just
+    // dimming out in place.
+    const yEnter = planeYAtNdc(-1.05); // plane-local y just below the frame
+    const keys = [
       [T.crawlStart, yEnter],
-      [T.p1, PROMINENT_Y + centres[0]],
-      [T.p2, PROMINENT_Y + centres[1]],
-      [T.p3, PROMINENT_Y + centres[2]],
-      [T.dissolve[1], PROMINENT_Y + centres[2] + 12.3],
-    ]);
+      [T.p1, PROMINENT_Y[0] + centres[0]],
+      [T.p2, PROMINENT_Y[1] + centres[1]],
+      [T.p3, PROMINENT_Y[2] + centres[2]],
+      [T.crawlExit, contentH + 22],
+    ];
+    const scroll = monoSpline(keys);
 
     return {
       lines: lineCount,
+      keys,
       update(t) {
-        const on = t >= T.crawlStart - 0.2 && t <= T.dissolve[1] + 0.2;
+        const on = t >= T.crawlStart - 0.2 && t <= T.dissolve[1] + 0.4;
         root.visible = on;
         if (!on) return;
         content.position.y = scroll(t);
         // The fade horizon sweeps in toward the lens at the end, dissolving the
-        // crawl from the top down as the last line of narration lands.
+        // crawl from the top down as the last line of narration lands. Combined
+        // with the accelerating scroll, the text is gone by ~38s.
         const d = ease.smooth(ease.range(t, T.dissolve[0], T.dissolve[1]));
-        fadeU.uFar0.value = ease.lerp(FADE_NEAR, 5, d);
-        fadeU.uFar1.value = ease.lerp(FADE_FAR, 12, d);
+        fadeU.uFar0.value = ease.lerp(FADE_NEAR, 13, d);
+        fadeU.uFar1.value = ease.lerp(FADE_FAR, 23, d);
       },
     };
   }
@@ -696,26 +728,30 @@ export async function build(ctx) {
 
     const globe = new THREE.Mesh(
       new THREE.SphereGeometry(PLANET_R, 72, 48),
-      new THREE.MeshStandardMaterial({ map: planetTexture(), roughness: 0.96, metalness: 0.0, envMapIntensity: 0.18 })
+      new THREE.MeshStandardMaterial({ map: planetTexture(), roughness: 0.97, metalness: 0.0, envMapIntensity: 0.06 })
     );
-    globe.rotation.z = 0.19;
-    globe.rotation.y = 1.1;
+    // The camera looks down on the planet, so tip the pole away: we want the
+    // banding to read as latitude bands, not as concentric rings.
+    globe.rotation.set(-0.64, 1.1, 0.16);
 
     const air = new THREE.Mesh(
-      new THREE.SphereGeometry(PLANET_R * 1.055, 48, 32),
-      atmosphereMaterial(0xff8a44, sunDir, 3.0, 1.05)
+      new THREE.SphereGeometry(PLANET_R * 1.075, 48, 32),
+      atmosphereMaterial(0xff9448, sunDir, 2.4, 1.5)
     );
 
     const planet = new THREE.Group();
     planet.add(globe, air);
-    planet.position.copy(polar(-12, -40, PLANET_DIST));
+    planet.position.copy(polar(-15, -33, PLANET_DIST));
     group.add(planet);
 
+    // High and off to the right: keeps the planet, ships and moon off a single
+    // horizontal line so the last frame has a diagonal to read along.
     const moon = new THREE.Mesh(
-      new THREE.SphereGeometry(16, 36, 24),
-      new THREE.MeshStandardMaterial({ map: moonTexture(), roughness: 1.0, metalness: 0.0, envMapIntensity: 0.15 })
+      new THREE.SphereGeometry(12, 36, 24),
+      new THREE.MeshStandardMaterial({ map: moonTexture(), roughness: 1.0, metalness: 0.0, envMapIntensity: 0.06 })
     );
-    moon.position.copy(polar(18, -32, 900));
+    moon.position.copy(polar(26, -21, 900));
+    moon.rotation.set(-0.5, 2.0, 0);
     group.add(moon);
 
     scene.add(group);
@@ -737,46 +773,47 @@ export async function build(ctx) {
 
     // --- rebel corvette: hammerhead bow, tapering hull, four engines --------
     const cb = new Bricks({ studSegments: 6 });
-    cb.panel(-3, 0, -11.5, 6, 2, 3, W, noStud);
-    cb.panel(-1, 0.5, -9.5, 2, 3.5, 2, G, noStud);
-    cb.panel(-2, -0.5, -6, 4, 5, 4, W, noStud);
-    cb.panel(-2.8, -0.5, -1.5, 5.6, 5, 5, W, noStud);
-    cb.panel(-2.2, 2, 0.5, 4.4, 3.5, 2, G, noStud);
-    cb.panel(-3.2, -0.5, 3.5, 6.4, 1.6, 5, DG, noStud);
-    for (const x of [-2.1, -0.7, 0.7, 2.1]) cb.cyl(x, 0.6, 4.6, 0.62, 2.6, DG, { segments: 8 });
+    cb.panel(-3.4, 0, -12.5, 6.8, 2.4, 3, W, noStud);
+    cb.panel(-2.4, 0.6, -11.9, 4.8, 1.2, 1.6, G, noStud);
+    cb.panel(-1.1, 0.4, -10.2, 2.2, 4.2, 2.2, G, noStud);
+    cb.panel(-2.1, -0.6, -6.4, 4.2, 5.4, 4.4, W, noStud);
+    cb.panel(-3, -0.8, -1.6, 6, 5.6, 5.4, W, noStud);
+    cb.panel(-2.3, 2.6, 0.4, 4.6, 3.6, 2, G, noStud);
+    cb.panel(-3.4, -0.8, 4.2, 6.8, 1.8, 5.6, DG, noStud);
+    for (const x of [-2.2, -0.75, 0.75, 2.2]) cb.cyl(x, 0.5, 5.4, 0.66, 2.8, DG, { segments: 8 });
     const corvette = cb.build({ castShadow: false, receiveShadow: false });
 
     // --- imperial destroyer: stepped grey wedge with a bridge tower ---------
     const db = new Bricks({ studSegments: 6 });
-    const SEG = 9;
+    const SEG = 16;
     const LEN = 58;
-    const MAXW = 34;
+    const MAXW = 33;
     for (let i = 0; i < SEG; i++) {
-      const w = Math.max(3, Math.round((MAXW * (i + 0.8)) / SEG));
+      const w = Math.max(2.4, (MAXW * (i + 1.1)) / SEG);
       const z = -LEN / 2 + (LEN / SEG) * i;
-      db.panel(-w / 2, 0, z, w, LEN / SEG + 0.05, 2.2, G, noStud);
-      if (i > 2) {
-        const w2 = Math.round(w * 0.8);
-        db.panel(-w2 / 2, 2.2, z + 0.4, w2, LEN / SEG - 0.8, 1.1, DG, noStud);
-      }
+      db.panel(-w / 2, 0, z, w, LEN / SEG + 0.04, 2.4, G, noStud);
+      // a darker inset deck so the hull is not one flat grey slab
+      const w2 = w * 0.62;
+      if (i > 4) db.panel(-w2 / 2, 2.4, z, w2, LEN / SEG + 0.04, 0.7, DG, noStud);
     }
-    db.panel(-5.5, 3.2, 12, 11, 10, 4, G, noStud);
-    db.panel(-4, 7.2, 15, 8, 6, 4, G, noStud);
-    db.panel(-2.2, 11.2, 16.5, 4.4, 3.4, 3, DG, noStud);
-    db.sphere(-2.9, 15.6, 18.2, 1.15, DG, { segments: 10 });
-    db.sphere(2.9, 15.6, 18.2, 1.15, DG, { segments: 10 });
-    db.panel(-8.5, 1.2, 26.5, 17, 2.4, 6, DG, noStud);
-    for (const x of [-6, -2, 2, 6]) db.cyl(x, 1.6, 28, 1.55, 4, DG, { segments: 10 });
+    db.panel(-6, 3.1, 10, 12, 12, 4, G, noStud);
+    db.panel(-4.2, 7.1, 13.5, 8.4, 7, 4, G, noStud);
+    db.panel(-2.4, 11.1, 15.5, 4.8, 4, 3.4, DG, noStud);
+    db.sphere(-3.1, 15.9, 17.2, 1.2, DG, { segments: 10 });
+    db.sphere(3.1, 15.9, 17.2, 1.2, DG, { segments: 10 });
+    db.panel(-9, 1.4, 25.5, 18, 3.2, 6.5, DG, noStud);
+    for (const x of [-6.2, -2.1, 2.1, 6.2]) db.cyl(x, 1.8, 27.4, 1.6, 4.2, DG, { segments: 10 });
     const destroyer = db.build({ castShadow: false, receiveShadow: false });
 
     // --- placement ----------------------------------------------------------
     const lane = new THREE.Vector3(0.93, 0.05, 0.36).normalize();
-    const leadHome = polar(7, -33.5, 400);
-    const chaseHome = polar(-4, -35, 470);
+    const leadHome = polar(8, -30, 400);
+    const chaseHome = polar(-5, -31.5, 470);
 
     const nose = new THREE.Vector3(0, 0, -1); // both hulls are built bow-to--z
     const lead = new THREE.Group();
     lead.add(corvette);
+    lead.scale.setScalar(1.5);
     lead.quaternion.setFromUnitVectors(nose, lane);
     lead.rotateZ(0.12);
     lead.rotateX(-0.05);
@@ -789,16 +826,16 @@ export async function build(ctx) {
 
     // engine glow
     const leadGlow = new THREE.Group();
-    for (const x of [-2.1, -0.7, 0.7, 2.1]) {
-      const s = glowSprite(0x9fe4ff, 3.2, 0.95);
-      s.position.set(x, 0.85, 5.6);
+    for (const x of [-2.2, -0.75, 0.75, 2.2]) {
+      const s = glowSprite(0xa8e8ff, 2.6, 0.9);
+      s.position.set(x, 0.7, 6.4);
       leadGlow.add(s);
     }
     corvette.add(leadGlow);
     const chaseGlow = new THREE.Group();
-    for (const x of [-6, -2, 2, 6]) {
-      const s = glowSprite(0x88c8ff, 6.4, 0.8);
-      s.position.set(x, 2.2, 30.4);
+    for (const x of [-6.2, -2.1, 2.1, 6.2]) {
+      const s = glowSprite(0x9ed2ff, 4.2, 0.7);
+      s.position.set(x, 2.4, 29.6);
       chaseGlow.add(s);
     }
     destroyer.add(chaseGlow);
@@ -861,14 +898,14 @@ export async function build(ctx) {
     planet.update(t);
     ships.update(t);
     const reveal = ease.smooth(ease.range(t, T.tilt[0] - 1.5, T.tilt[0] + 2.4));
-    sun.intensity = 3.4 * reveal;
-    sunFill.intensity = 0.5 * reveal;
-    ambient.intensity = 0.35 * (1 - reveal) + 0.12 * reveal;
+    sun.intensity = 3.9 * reveal;
+    sunFill.intensity = 0.32 * reveal;
+    ambient.intensity = 0.35 * (1 - reveal) + 0.07 * reveal;
 
     // --- 6. camera ---------------------------------------------------------
     // Locked off through the crawl, then a long tilt down onto the planet with
     // a slow push in on the lens.
-    const k = ease.smoother(ease.range(t, T.tilt[0], T.tilt[1]));
+    const k = ease.smooth(ease.range(t, T.tilt[0], T.tilt[1]));
     const settle = ease.smooth(ease.range(t, T.tilt[1], END));
     camera.rotation.x = ease.lerp(PITCH_CRAWL, PITCH_END, k) - settle * 0.6 * RAD;
     camera.rotation.y = settle * 0.5 * RAD;
@@ -880,6 +917,17 @@ export async function build(ctx) {
   }
 
   update(0);
+  {
+    let tris = 0;
+    scene.traverse((o) => {
+      const g = o.geometry;
+      if (!g) return;
+      const n = g.index ? g.index.count : g.attributes.position?.count ?? 0;
+      if (o.isPoints || o.isSprite) return;
+      tris += n / 3;
+    });
+    console.log('[crawl] triangles', Math.round(tris), 'crawl lines', crawl.lines, 'ship tris', ships.tris);
+  }
   return {
     scene,
     camera,

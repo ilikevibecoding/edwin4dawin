@@ -193,7 +193,7 @@ function brownNoise(dur, rng) {
     s = s * 0.996 + rng.range(-1, 1) * 0.04;
     out[i] = s * 4;
   }
-  return dcBlock(out, 12);
+  return dcBlock(out, 12).out;
 }
 
 /**
@@ -275,8 +275,6 @@ const bell = (dur, up = 0.3, down = 0.5) =>
 const expTo = (a, b, T) => (t) => a * Math.pow(b / a, clamp(t / T, 0, 1));
 /** Linear sweep a→b over `T`, then held. */
 const linTo = (a, b, T) => (t) => lerp(a, b, clamp(t / T, 0, 1));
-/** Sine LFO in [lo,hi]. */
-const lfo = (hz, lo, hi, phase = 0) => (t) => lerp(lo, hi, 0.5 + 0.5 * Math.sin(TAU * hz * t + phase));
 
 // --- filters ---------------------------------------------------------------
 
@@ -329,31 +327,27 @@ const lp = (x, c, q = 0.7071) => svf(x, c, q, 'lp');
 const hp = (x, c, q = 0.7071) => svf(x, c, q, 'hp');
 const bp = (x, c, q = 2) => svf(x, c, q, 'bp');
 
-/** One-pole low pass — gentle, cheap, no resonance. */
-function lp1(x, cutoff) {
-  const cf = K(cutoff);
-  const out = new Float32Array(x.length);
-  let s = 0;
-  for (let i = 0; i < x.length; i++) {
-    const a = 1 - Math.exp((-TAU * clamp(cf(i / SR), 1, SR * 0.45)) / SR);
-    s += a * (x[i] - s);
-    out[i] = s;
-  }
-  return out;
-}
-
 /** Remove DC / infrasonic drift so normalisation is not wasted on offset. */
-function dcBlock(x, hz = 18) {
+function dcBlock(x, hz = 18, state = { x: 0, y: 0 }) {
   const a = Math.exp((-TAU * hz) / SR);
   const out = new Float32Array(x.length);
-  let xPrev = 0, yPrev = 0;
+  let xPrev = state.x, yPrev = state.y;
   for (let i = 0; i < x.length; i++) {
     const y = x[i] - xPrev + a * yPrev;
     out[i] = y;
     xPrev = x[i];
     yPrev = y;
   }
-  return out;
+  return { out, state: { x: xPrev, y: yPrev } };
+}
+
+/**
+ * DC blocker for looping material: one throwaway pass leaves the filter in the
+ * state it would be in halfway through an endless loop, so the second pass has
+ * no start-up transient and the seam stays continuous.
+ */
+function dcBlockLoop(x, hz) {
+  return dcBlock(x, hz, dcBlock(x, hz).state).out;
 }
 
 /**
@@ -428,22 +422,17 @@ function allpass(x, delaySec, g = 0.5) {
   return out;
 }
 
-/** Fixed delay with feedback — slapback echoes, spring-ish tails. */
+/** Damped feedback delay — slap-back echoes and spring-ish tails. */
 function echo(x, delaySec, { fb = 0.4, mix = 0.4, damp = 0.3 } = {}) {
   const d = Math.max(2, Math.round(delaySec * SR));
-  const out = Float32Array.from(x);
+  const line = new Float32Array(x.length + d);
+  const out = new Float32Array(x.length);
   const a = 1 - clamp(damp, 0, 0.99);
   let s = 0;
-  for (let i = d; i < out.length; i++) {
-    s += a * (out[i - d] - s);
-    out[i] += mix * s * (1 + 0 * fb);
-    out[i] += 0;
-  }
-  // second pass gives the repeats their own repeats
-  let s2 = 0;
-  for (let i = d; i < out.length; i++) {
-    s2 += a * (out[i - d] - s2);
-    out[i] += fb * 0.5 * s2;
+  for (let i = 0; i < x.length; i++) {
+    s += a * (line[i] - s); // what was written d samples ago, damped
+    line[i + d] = x[i] + fb * s;
+    out[i] = x[i] + mix * s;
   }
   return out;
 }
@@ -459,14 +448,16 @@ function varDelay(x, outLen, delaySec) {
   return out;
 }
 
+/** Swept short delay mixed back in: motion and metallic sheen. */
 function flanger(x, { hz = 0.4, lowMs = 0.6, highMs = 5, mix = 0.5, fb = 0.3, phase = 0 } = {}) {
-  const out = Float32Array.from(x);
   const d = (t) => lerp(lowMs, highMs, 0.5 + 0.5 * Math.sin(TAU * hz * t + phase)) * 0.001;
-  const wet = varDelay(out, out.length, d);
+  const wet = varDelay(x, x.length, d);
+  const out = new Float32Array(x.length);
   for (let i = 0; i < out.length; i++) out[i] = x[i] + mix * wet[i];
   if (fb > 0) {
+    // a second, detuned pass stands in for feedback round the delay line
     const wet2 = varDelay(out, out.length, (t) => d(t) * 1.37);
-    for (let i = 0; i < out.length; i++) out[i] += fb * wet2[i] * 0.5;
+    for (let i = 0; i < out.length; i++) out[i] += fb * 0.5 * wet2[i];
   }
   return out;
 }
@@ -2268,11 +2259,20 @@ const only = argOf('only');
 const wantMontage = argv.includes('--montage') || argOf('montage') !== null;
 const montagePath = argOf('montage') || '/tmp/sfx_montage.wav';
 
+/** Force a channel to exactly `n` samples, padding with silence if it is short. */
+function fit(c, n) {
+  if (c.length === n) return c;
+  if (c.length > n) return c.subarray(0, n);
+  const out = new Float32Array(n);
+  out.set(c);
+  return out;
+}
+
 function render(spec) {
   const t0 = Date.now();
   const ch = chans(spec.render({ dur: spec.dur, rng: new Rng(spec.seed), name: spec.name }));
-  const trimmed = ch.map((c) => (c.length === nsamp(spec.dur) ? c : c.subarray(0, nsamp(spec.dur))));
-  const cleaned = trimmed.map((c) => dcBlock(c, spec.loop ? 14 : 20));
+  const trimmed = ch.map((c) => fit(c, nsamp(spec.dur)));
+  const cleaned = trimmed.map((c) => (spec.loop ? dcBlockLoop(c, 14) : dcBlock(c, 20).out));
   normalize(cleaned, PEAK_DB);
   // loops get the shortest fade that still kills a start/stop click, so the
   // seam stays inaudible; one-shots can afford a longer tail fade

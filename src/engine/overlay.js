@@ -159,8 +159,10 @@ export class Overlay {
     this.scene.add(this.barTop, this.barBot);
     this.letterbox = 0;
 
-    // Subtitle
-    this._subCanvas = document.createElement('canvas');
+    // Subtitle. Each distinct line gets its own canvas and texture: sharing
+    // one canvas made the rendered frame depend on which subtitle had been
+    // drawn previously, which broke frame-for-frame reproducibility.
+    this._subCache = new Map();
     this._subText = null;
     this.subMat = new THREE.MeshBasicMaterial({ transparent: true, toneMapped: false, depthTest: false });
     this.subPlane = quad(aspect * 2 * 0.92, 0.92 * 2 * (256 / 2048) * (1 / 0.92) * aspect * 0, this.subMat);
@@ -169,7 +171,7 @@ export class Overlay {
     this.scene.add(this.subPlane);
 
     // Title card
-    this._titleCanvas = document.createElement('canvas');
+    this._titleCache = new Map();
     this.titleMat = new THREE.MeshBasicMaterial({ transparent: true, toneMapped: false, depthTest: false });
     this.titlePlane = quad(aspect * 2, 1.2, this.titleMat);
     this.titlePlane.visible = false;
@@ -225,19 +227,25 @@ export class Overlay {
     }
     const W = 1920;
     const H = 340;
-    const { texture } = makeTextTexture({
-      text,
-      width: W,
-      height: H,
-      canvas: this._subCanvas,
-      font: `600 ${opts.size ?? 58}px ${FONT_STACK}`,
-      color: opts.color ?? '#f4f6fa',
-      outline: 9,
-      outlineColor: 'rgba(0,0,0,0.92)',
-      shadow: 14,
-      valign: 'bottom',
-      padding: 60,
-    });
+    const size = opts.size ?? 58;
+    const color = opts.color ?? '#f4f6fa';
+    const key = `${size}|${color}|${text}`;
+    let texture = this._subCache.get(key);
+    if (!texture) {
+      texture = makeTextTexture({
+        text,
+        width: W,
+        height: H,
+        font: `600 ${size}px ${FONT_STACK}`,
+        color,
+        outline: 9,
+        outlineColor: 'rgba(0,0,0,0.92)',
+        shadow: 14,
+        valign: 'bottom',
+        padding: 60,
+      }).texture;
+      this._subCache.set(key, texture);
+    }
     this.subMat.map = texture;
     this.subMat.needsUpdate = true;
     const w = this.aspect * 2 * 0.94;
@@ -260,19 +268,23 @@ export class Overlay {
     }
     const W = 2048;
     const H = opts.height ?? 512;
-    const { texture } = makeTextTexture({
-      text,
-      width: W,
-      height: H,
-      canvas: this._titleCanvas,
-      font: opts.font ?? `800 ${opts.size ?? 140}px ${FONT_STACK}`,
-      color: opts.color ?? '#ffe066',
-      outline: opts.outline ?? 0,
-      shadow: opts.shadow ?? 30,
-      shadowColor: opts.shadowColor ?? 'rgba(0,0,0,0.8)',
-      letterSpacing: opts.letterSpacing ?? 6,
-      valign: 'middle',
-    });
+    const key = `${H}|${opts.font}|${opts.size}|${opts.color}|${text}`;
+    let texture = this._titleCache.get(key);
+    if (!texture) {
+      texture = makeTextTexture({
+        text,
+        width: W,
+        height: H,
+        font: opts.font ?? `800 ${opts.size ?? 140}px ${FONT_STACK}`,
+        color: opts.color ?? '#ffe066',
+        outline: opts.outline ?? 0,
+        shadow: opts.shadow ?? 30,
+        shadowColor: opts.shadowColor ?? 'rgba(0,0,0,0.8)',
+        letterSpacing: opts.letterSpacing ?? 6,
+        valign: 'middle',
+      }).texture;
+      this._titleCache.set(key, texture);
+    }
     this.titleMat.map = texture;
     this.titleMat.needsUpdate = true;
     const w = this.aspect * 2 * 0.9;

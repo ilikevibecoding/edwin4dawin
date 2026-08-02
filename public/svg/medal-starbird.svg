@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Medal of the Alliance - original design.
-  Suspension loop, a beaded rim of 28 bosses, a heavy annular disc and the
-  starbird standing free inside it (its wingtips touch the rim so the piece
-  extrudes as one connected medallion).
+  Suspension loop, a beaded rim of 36 bosses, a heavy annular disc and the
+  starbird standing inside it - its wingtips reach the rim so the whole piece
+  extrudes as one connected medallion.
   Extrusion asset: closed filled paths and circles, single colour, no strokes.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 560" width="512" height="560">
@@ -14,21 +14,25 @@
     M234 74
     A22 22 0 0 0 278 74 A22 22 0 0 0 234 74Z"/>
 
-  <!-- beaded rim: 28 bosses set on the outside of the disc -->
-  <circle cx="256" cy="126" r="12" fill="#dfc48e"/> <circle cx="299.2" cy="130.9" r="12" fill="#dfc48e"/>
-  <circle cx="340.2" cy="145.2" r="12" fill="#dfc48e"/> <circle cx="377" cy="168.3" r="12" fill="#dfc48e"/>
-  <circle cx="407.7" cy="199" r="12" fill="#dfc48e"/> <circle cx="430.8" cy="235.8" r="12" fill="#dfc48e"/>
-  <circle cx="445.1" cy="276.8" r="12" fill="#dfc48e"/> <circle cx="450" cy="320" r="12" fill="#dfc48e"/>
-  <circle cx="445.1" cy="363.2" r="12" fill="#dfc48e"/> <circle cx="430.8" cy="404.2" r="12" fill="#dfc48e"/>
-  <circle cx="407.7" cy="441" r="12" fill="#dfc48e"/> <circle cx="377" cy="471.7" r="12" fill="#dfc48e"/>
-  <circle cx="340.2" cy="494.8" r="12" fill="#dfc48e"/> <circle cx="299.2" cy="509.1" r="12" fill="#dfc48e"/>
-  <circle cx="256" cy="514" r="12" fill="#dfc48e"/> <circle cx="212.8" cy="509.1" r="12" fill="#dfc48e"/>
-  <circle cx="171.8" cy="494.8" r="12" fill="#dfc48e"/> <circle cx="135" cy="471.7" r="12" fill="#dfc48e"/>
-  <circle cx="104.3" cy="441" r="12" fill="#dfc48e"/> <circle cx="81.2" cy="404.2" r="12" fill="#dfc48e"/>
-  <circle cx="66.9" cy="363.2" r="12" fill="#dfc48e"/> <circle cx="62" cy="320" r="12" fill="#dfc48e"/>
-  <circle cx="66.9" cy="276.8" r="12" fill="#dfc48e"/> <circle cx="81.2" cy="235.8" r="12" fill="#dfc48e"/>
-  <circle cx="104.3" cy="199" r="12" fill="#dfc48e"/> <circle cx="135" cy="168.3" r="12" fill="#dfc48e"/>
-  <circle cx="171.8" cy="145.2" r="12" fill="#dfc48e"/> <circle cx="212.8" cy="130.9" r="12" fill="#dfc48e"/>
+  <!-- beaded rim: 36 bosses set on the outside of the disc -->
+  <circle cx="256" cy="124" r="11" fill="#dfc48e"/> <circle cx="290" cy="127" r="11" fill="#dfc48e"/>
+  <circle cx="323" cy="135.8" r="11" fill="#dfc48e"/> <circle cx="354" cy="150.3" r="11" fill="#dfc48e"/>
+  <circle cx="382" cy="169.9" r="11" fill="#dfc48e"/> <circle cx="406.1" cy="194" r="11" fill="#dfc48e"/>
+  <circle cx="425.7" cy="222" r="11" fill="#dfc48e"/> <circle cx="440.2" cy="253" r="11" fill="#dfc48e"/>
+  <circle cx="449" cy="286" r="11" fill="#dfc48e"/> <circle cx="452" cy="320" r="11" fill="#dfc48e"/>
+  <circle cx="449" cy="354" r="11" fill="#dfc48e"/> <circle cx="440.2" cy="387" r="11" fill="#dfc48e"/>
+  <circle cx="425.7" cy="418" r="11" fill="#dfc48e"/> <circle cx="406.1" cy="446" r="11" fill="#dfc48e"/>
+  <circle cx="382" cy="470.1" r="11" fill="#dfc48e"/> <circle cx="354" cy="489.7" r="11" fill="#dfc48e"/>
+  <circle cx="323" cy="504.2" r="11" fill="#dfc48e"/> <circle cx="290" cy="513" r="11" fill="#dfc48e"/>
+  <circle cx="256" cy="516" r="11" fill="#dfc48e"/> <circle cx="222" cy="513" r="11" fill="#dfc48e"/>
+  <circle cx="189" cy="504.2" r="11" fill="#dfc48e"/> <circle cx="158" cy="489.7" r="11" fill="#dfc48e"/>
+  <circle cx="130" cy="470.1" r="11" fill="#dfc48e"/> <circle cx="105.9" cy="446" r="11" fill="#dfc48e"/>
+  <circle cx="86.3" cy="418" r="11" fill="#dfc48e"/> <circle cx="71.8" cy="387" r="11" fill="#dfc48e"/>
+  <circle cx="63" cy="354" r="11" fill="#dfc48e"/> <circle cx="60" cy="320" r="11" fill="#dfc48e"/>
+  <circle cx="63" cy="286" r="11" fill="#dfc48e"/> <circle cx="71.8" cy="253" r="11" fill="#dfc48e"/>
+  <circle cx="86.3" cy="222" r="11" fill="#dfc48e"/> <circle cx="105.9" cy="194" r="11" fill="#dfc48e"/>
+  <circle cx="130" cy="169.9" r="11" fill="#dfc48e"/> <circle cx="158" cy="150.3" r="11" fill="#dfc48e"/>
+  <circle cx="189" cy="135.8" r="11" fill="#dfc48e"/> <circle cx="222" cy="127" r="11" fill="#dfc48e"/>
 
   <!-- disc: annulus, outer R 190 / inner R 148 -->
   <path fill="#dfc48e" fill-rule="evenodd" d="M66 320
@@ -36,18 +40,18 @@
     M108 320
     A148 148 0 0 0 404 320 A148 148 0 0 0 108 320Z"/>
 
-  <!-- starbird, scaled to 0.74 of the crest drawing and centred on the disc -->
-  <path fill="#dfc48e" d="M256 177.9
-    C264.1 209 270.1 235.6 277.5 263.8
-    C303.4 246 337.4 231.2 375.9 226.8
-    C359.6 265.2 330 299.3 293 321.5
-    C304.8 364.4 309.3 410.3 300.4 462.1
-    L256 431
-    L211.6 462.1
-    C202.7 410.3 207.2 364.4 219 321.5
-    C182 299.3 152.4 265.2 136.1 226.8
-    C174.6 231.2 208.6 246 234.5 263.8
-    C241.9 235.6 247.9 209 256 177.9
+  <!-- starbird, scaled to 0.55 of the crest drawing and centred on the disc -->
+  <path fill="#dfc48e" d="M256 195.7
+    C262.6 224.3 267 255.1 271.4 284.8
+    C292.3 257.3 324.2 229.8 363.8 212.2
+    C353.9 248.5 330.8 285.9 300 311.2
+    C296.7 345.3 291.2 389.3 278 428.9
+    L256 444.3
+    L234 428.9
+    C220.8 389.3 215.3 345.3 212 311.2
+    C181.2 285.9 158.1 248.5 148.2 212.2
+    C187.8 229.8 219.7 257.3 240.6 284.8
+    C245 255.1 249.4 224.3 256 195.7
     Z"/>
 
 </svg>
