@@ -254,6 +254,8 @@ export class Fireball {
       new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
     );
     this.ring.rotation.x = o.ringTilt ?? Math.PI / 2;
+    this.ring.visible = o.ring !== false;
+    this.hasRing = o.ring !== false;
     this.group.add(this.core, this.shell, this.ring);
     this.group.visible = false;
     if (parent) parent.add(this.group);
@@ -271,8 +273,10 @@ export class Fireball {
     this.core.material.opacity = clamp(1 - k * 1.5);
     this.shell.scale.setScalar(this.size * (0.2 + e * 1.25));
     this.shell.material.opacity = clamp(0.85 - k * 0.95);
-    this.ring.scale.setScalar(this.size * (0.3 + e * 3.2));
-    this.ring.material.opacity = clamp(0.9 - k * 1.15);
+    if (this.hasRing) {
+      this.ring.scale.setScalar(this.size * (0.3 + e * 3.2));
+      this.ring.material.opacity = clamp(0.9 - k * 1.15);
+    }
     if (this.bricks) this.bricks.update(t - this.t0);
   }
 }

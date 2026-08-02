@@ -19,6 +19,7 @@
  * (`dunesBackdrop`, galaxy band) which stand in for far-field haze.
  */
 import * as THREE from 'three';
+import { RoundedBoxGeometry as RoundedBox } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import {
   brick, plate, tile, slope, prism, wedge, cyl, cone, sphere, ring, dish, bar,
   panel, studGrid, at, rot, group, mirrorX, bake, mat, glow, norm, rng,
@@ -254,7 +255,10 @@ function rawGeo(key, build) {
  * Un-bevelled box, 12 triangles, base at y = 0, centred on X/Z.
  * Greeble currency: use this (not `tile`) when there will be hundreds.
  */
-function boxMesh(w, h, d, material) {
+function boxMesh(w0, h0, d0, material) {
+  // quantised so the geometry cache actually hits when greeble is randomised
+  const q = (v) => Math.max(0.05, Math.round(v * 4) / 4);
+  const w = q(w0), h = q(h0), d = q(d0);
   const g = rawGeo(`bx${w}|${h}|${d}`, () => {
     const b = norm(new THREE.BoxGeometry(w, h, d));
     b.translate(0, h / 2, 0);
@@ -265,8 +269,33 @@ function boxMesh(w, h, d, material) {
   return m;
 }
 
+/** Un-bevelled box centred on all three axes — for rotated greeble. */
+function flat(w0, h0, d0, material) {
+  const q = (v) => Math.max(0.05, Math.round(v * 4) / 4);
+  const w = q(w0), h = q(h0), d = q(d0);
+  const g = rawGeo(`fl${w}|${h}|${d}`, () => norm(new THREE.BoxGeometry(w, h, d)));
+  const m = new THREE.Mesh(g, material);
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
+
+/** Bevelled box centred on all three axes (108 tris) — hero panels and beams. */
+function blk(w0, h0, d0, material) {
+  const q = (v) => Math.max(0.05, Math.round(v * 8) / 8);
+  const w = q(w0), h = q(h0), d = q(d0);
+  const g = rawGeo(`bk${w}|${h}|${d}`, () => {
+    const r = Math.min(0.045, w / 2.5, h / 2.5, d / 2.5);
+    return norm(new RoundedBox(w, h, d, 1, r));
+  });
+  const m = new THREE.Mesh(g, material);
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
+
 /** Cheap open tube / pipe along Y, base at y = 0. */
-function pipeMesh(r, h, material, seg = 10) {
+function pipeMesh(r0, h0, material, seg = 10) {
+  const r = Math.max(0.02, Math.round(r0 * 20) / 20);
+  const h = Math.max(0.05, Math.round(h0 * 4) / 4);
   const g = rawGeo(`pp${r}|${h}|${seg}`, () => {
     const b = norm(new THREE.CylinderGeometry(r, r, h, seg, 1, true));
     b.translate(0, h / 2, 0);
@@ -727,4 +756,1512 @@ export function hyperspaceTunnel({ count = 1400, radius = 90, length = 460, seed
   g.userData.setStretch = (v) => { stretch = clamp(v, 0, 1); write(); };
   g.userData.update = (t) => { scroll = t * length * 0.55; write(); };
   return g;
+}
+
+/* =================================================================== */
+/* PLANETS                                                              */
+/* =================================================================== */
+
+/**
+ * Lat/long surface of revolution with a per-vertex radius function.
+ * theta runs 0 (north pole) .. PI (south pole); lon 0 .. TAU with lon = 0 at
+ * +X and lon = PI/2 at +Z. UVs are equirectangular, v = 1 at the north pole,
+ * which is what a canvas drawn "north at the top" wants.
+ */
+function shellGeometry(thetas, cols, rFn) {
+  const rows = thetas.length;
+  const verts = rows * (cols + 1);
+  const pos = new Float32Array(verts * 3);
+  const uv = new Float32Array(verts * 2);
+  let k = 0;
+  for (let j = 0; j < rows; j++) {
+    const th = thetas[j];
+    const st = Math.sin(th), ct = Math.cos(th);
+    for (let i = 0; i <= cols; i++) {
+      const lon = (i / cols) * TAU;
+      const dx = st * Math.cos(lon), dy = ct, dz = st * Math.sin(lon);
+      const r = rFn(th, lon, dx, dy, dz);
+      pos[k * 3] = dx * r; pos[k * 3 + 1] = dy * r; pos[k * 3 + 2] = dz * r;
+      uv[k * 2] = i / cols;
+      uv[k * 2 + 1] = 1 - th / Math.PI;
+      k++;
+    }
+  }
+  const idx = [];
+  for (let j = 0; j < rows - 1; j++) {
+    for (let i = 0; i < cols; i++) {
+      const a = j * (cols + 1) + i, b = a + 1, c = a + cols + 1, d = c + 1;
+      if (j !== 0) idx.push(a, b, c);
+      if (j !== rows - 2) idx.push(b, d, c);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Sorted, de-duplicated row list with extra rows packed around key latitudes. */
+function packedRows(n, extras) {
+  const set = [];
+  for (let i = 0; i <= n; i++) set.push((i / n) * Math.PI);
+  for (const e of extras) set.push(e);
+  set.sort((a, b) => a - b);
+  const out = [set[0]];
+  for (let i = 1; i < set.length; i++) {
+    if (set[i] - out[out.length - 1] > 1e-4) out.push(set[i]);
+  }
+  return out;
+}
+
+const planetMapCache = new Map();
+
+/**
+ * Colour + bump maps for a planet. One elevation pass feeds both, so the
+ * relief in the bump map always matches the shading in the albedo.
+ */
+function planetMaps(type, seed, w = 1024) {
+  const key = type + '|' + seed + '|' + w;
+  if (planetMapCache.has(key)) return planetMapCache.get(key);
+  const h = w / 2;
+  const rand = rng(seed * 7919 + 13);
+
+  const cont = fbm(seed * 3 + 1, { octaves: 6, base: 4, gain: 0.55 });
+  const detail = fbm(seed * 11 + 7, { octaves: 5, base: 22, gain: 0.5 });
+  const ridge = fbm(seed * 23 + 3, { octaves: 5, base: 9, gain: 0.55, ridged: true });
+  const bandN = fbm(seed * 31 + 5, { octaves: 3, base: 3 });
+  const cloudN = fbm(seed * 47 + 9, { octaves: 6, base: 5, gain: 0.55 });
+  const crackN = fbm(seed * 53 + 17, { octaves: 4, base: 11, gain: 0.5, ridged: true });
+
+  // ---- terrain field (no craters: those are a separate relief pass) ----
+  const base = new Float32Array(w * h);
+  let lo = Infinity, hi = -Infinity;
+  for (let y = 0; y < h; y++) {
+    const v = (y + 0.5) / h;
+    for (let x = 0; x < w; x++) {
+      const u = (x + 0.5) / w;
+      let e = cont(u, v) * 0.58 + detail(u, v) * 0.18 + ridge(u * 0.8, v * 0.8) * 0.2;
+      // weathered strata, stretched along longitude
+      e += (bandN(u * 0.3, v * 2.6) - 0.5) * 0.18;
+      base[y * w + x] = e;
+      if (e < lo) lo = e;
+      if (e > hi) hi = e;
+    }
+  }
+  const inv = 1 / Math.max(1e-6, hi - lo);
+  for (let i = 0; i < base.length; i++) base[i] = (base[i] - lo) * inv;
+
+  // ---- craters: small, many, mostly relief rather than albedo ---------
+  const cr = new Float32Array(w * h);
+  const nCraters = type === 'green' ? 20 : type === 'ice' ? 90 : 190;
+  for (let c = 0; c < nCraters; c++) {
+    const cu = rand();
+    const cv = 0.05 + rand() * 0.9;
+    const lat = (0.5 - cv) * Math.PI;
+    const rad = (0.0022 + Math.pow(rand(), 2.6) * 0.019) * w;   // pixels
+    const depth = 0.1 + rand() * 0.14;
+    const cx = cu * w, cy = cv * h;
+    const sx = rad / Math.max(0.22, Math.cos(lat));             // lon stretch
+    for (let y = Math.floor(cy - rad) - 2; y <= cy + rad + 2; y++) {
+      if (y < 0 || y >= h) continue;
+      for (let x = Math.floor(cx - sx) - 2; x <= cx + sx + 2; x++) {
+        const dx = (x - cx) / sx, dy = (y - cy) / rad;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > 1.3) continue;
+        const xi = ((x % w) + w) % w;
+        let dz;
+        if (d < 0.8) dz = -depth * (1 - Math.pow(d / 0.8, 2) * 0.5);        // bowl
+        else dz = depth * 0.75 * Math.exp(-Math.pow((d - 0.94) / 0.17, 2)); // rim
+        cr[y * w + xi] += dz;
+      }
+    }
+  }
+
+  // ---- palettes -------------------------------------------------------
+  const ramps = {
+    desert: [
+      [0.00, 0x8a5f31], [0.26, 0xa9793f], [0.45, 0xc79a5c],
+      [0.63, 0xdcb87f], [0.82, 0xecd3a4], [1.00, 0xf8ecce],
+    ],
+    ice: [
+      [0.00, 0x5a7f9c], [0.3, 0x8fb4cd], [0.52, 0xc6dcea],
+      [0.7, 0xe8f2f8], [1.00, 0xffffff],
+    ],
+    green: [
+      [0.00, 0x0e3050], [0.40, 0x17456e], [0.55, 0x2b6b8b],
+      [0.575, 0xd8ca97], [0.62, 0x3d7d38], [0.78, 0x66872f],
+      [0.90, 0x86754c], [1.00, 0xd6d9d3],
+    ],
+  };
+  const ramp = ramps[type] || ramps.desert;
+  const rampAt = (t) => {
+    let i = 0;
+    while (i < ramp.length - 2 && t > ramp[i + 1][0]) i++;
+    const a = ramp[i], b = ramp[i + 1];
+    const k = clamp((t - a[0]) / Math.max(1e-6, b[0] - a[0]), 0, 1);
+    return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]), k);
+  };
+  const lut = [];
+  for (let i = 0; i < 256; i++) lut.push(rampAt(i / 255));
+
+  const cloudAmt = type === 'green' ? 0.5 : type === 'ice' ? 0.34 : 0.28;
+  const cloudThr = lerp(0.7, 0.42, cloudAmt);
+  const iceCap = type === 'green' ? 0.76 : type === 'ice' ? 0.5 : 2;
+  const cloudCol = new THREE.Color(0xfdfdff);
+  const frostCol = new THREE.Color(0xf4fbff);
+
+  const map = canvasTex('planetmap' + key, w, h, (ctx) => {
+    const tmp = new THREE.Color();
+    pixels(ctx, w, h, (u, v) => {
+      const x = Math.min(w - 1, Math.floor(u * w)), y = Math.min(h - 1, Math.floor(v * h));
+      const i = y * w + x;
+      const e = clamp(base[i] + cr[i] * 0.4, 0, 1);
+      tmp.copy(lut[Math.round(e * 255)]);
+      // dust / ice fills the crater floors a shade lighter, rims catch the light
+      if (cr[i] > 0.03) tmp.lerp(new THREE.Color(0xffffff), clamp(cr[i], 0, 1) * 0.1);
+      // fracture lines on the ice world
+      if (type === 'ice') {
+        const ck = crackN(u, v);
+        if (ck > 0.74) tmp.lerp(new THREE.Color(0x4d7fa3), smoothclamp((ck - 0.74) / 0.2) * 0.55);
+      }
+      // polar frost / ice caps
+      const lat = Math.abs(0.5 - v) * 2;
+      if (lat > iceCap) {
+        const k = smoothclamp((lat - iceCap) / (1 - iceCap)) * 0.92;
+        tmp.lerp(frostCol, k * clamp(0.4 + e * 0.8, 0, 1));
+      }
+      // cloud wisps, stretched along latitude
+      const cl = cloudN(u * 0.9, v * 3.1) * 0.66 + cloudN(u * 2.3 + 0.31, v * 5.7) * 0.34;
+      const dens = clamp((cl - cloudThr) * 5.5, 0, 1);
+      if (dens > 0) tmp.lerp(cloudCol, Math.pow(dens, 0.8) * 0.85);
+      return [Math.round(tmp.r * 255), Math.round(tmp.g * 255), Math.round(tmp.b * 255)];
+    });
+  }, { wrapT: THREE.ClampToEdgeWrapping, aniso: 8 });
+
+  const bump = canvasTex('planetbump' + key, w, h, (ctx) => {
+    pixels(ctx, w, h, (u, v) => {
+      const x = Math.min(w - 1, Math.floor(u * w)), y = Math.min(h - 1, Math.floor(v * h));
+      const i = y * w + x;
+      let e = base[i];
+      if (type === 'green' && e < 0.5) e = 0.5;         // oceans are flat
+      e = clamp(e * 0.7 + cr[i] * 1.35 + 0.15, 0, 1);
+      const g2 = Math.round(e * 255);
+      return [g2, g2, g2];
+    });
+  }, { wrapT: THREE.ClampToEdgeWrapping, data: true });
+
+  const out = { map, bump };
+  planetMapCache.set(key, out);
+  return out;
+}
+
+const ATMO_VERT = /* glsl */`
+  varying vec3 vN;
+  varying vec3 vV;
+  void main() {
+    vec4 wp = modelMatrix * vec4(position, 1.0);
+    vN = normalize(mat3(modelMatrix) * normal);
+    vV = normalize(cameraPosition - wp.xyz);
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`;
+const ATMO_FRAG = /* glsl */`
+  uniform vec3 uColor;
+  uniform vec3 uSun;
+  uniform float uPow;
+  uniform float uIntensity;
+  varying vec3 vN;
+  varying vec3 vV;
+  void main() {
+    vec3 n = normalize(vN);
+    float rim = pow(1.0 - clamp(dot(n, normalize(vV)), 0.0, 1.0), uPow);
+    // brighter on the lit limb, a thin ember on the terminator, dark behind
+    float sun = clamp(dot(n, normalize(uSun)), -1.0, 1.0);
+    float lit = smoothstep(-0.35, 0.45, sun);
+    float a = rim * uIntensity * (0.12 + 0.95 * lit);
+    gl_FragColor = vec4(uColor * a, a);
+  }
+`;
+
+function atmoShell(radius, scale, color, pow, intensity) {
+  const geo = rawGeo(`atmo${scale}`, () => new THREE.SphereGeometry(1, 48, 24));
+  const m = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(color) },
+      uSun: { value: new THREE.Vector3(1, 0.2, 0.4).normalize() },
+      uPow: { value: pow },
+      uIntensity: { value: intensity },
+    },
+    vertexShader: ATMO_VERT,
+    fragmentShader: ATMO_FRAG,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.BackSide,
+    toneMapped: false,
+  });
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.scale.setScalar(radius * scale);
+  mesh.userData.noBake = true;
+  return mesh;
+}
+
+/**
+ * A planet.
+ *
+ * Anchor: **centre of the sphere at the group origin** (planets are placed by
+ * their centre, not by a resting plane). Surface albedo + relief come from a
+ * procedural canvas pair; nothing is pre-lit, so the director's key light draws
+ * the terminator. Two additive fresnel shells give the atmosphere its rim, and
+ * they know where the sun is — call `setSunDir()` with the same vector you aim
+ * the key light along (world space, pointing *from* the planet *toward* the
+ * light).
+ *
+ * @param {object} o {radius, type:'desert'|'ice'|'green', seed, texSize, seg,
+ *                    atmosphere, atmoColor, spin}
+ * @returns {THREE.Group} userData: {radius, type, body, atmo, sunDir,
+ *                                   setSunDir(v3), update(t)}
+ */
+export function planet({
+  radius = 600, type = 'desert', seed = 9, texSize = 1024, seg = 96,
+  atmosphere = true, atmoColor = null, spin = 0.004,
+} = {}) {
+  const g = new THREE.Group();
+  g.name = 'planet_' + type;
+  const { map, bump } = planetMaps(type, seed, texSize);
+
+  const tint = { desert: 0xffffff, ice: 0xffffff, green: 0xffffff }[type] || 0xffffff;
+  const bodyMat = new THREE.MeshStandardMaterial({
+    map, bumpMap: bump,
+    bumpScale: type === 'green' ? 0.55 : 0.9,
+    roughness: type === 'ice' ? 0.62 : 0.92,
+    metalness: 0,
+    color: tint,
+  });
+  const geo = rawGeo(`planetsph${seg}`, () => new THREE.SphereGeometry(1, seg, Math.round(seg / 2)));
+  const body = new THREE.Mesh(geo, bodyMat);
+  body.scale.setScalar(radius);
+  body.castShadow = body.receiveShadow = true;
+  body.userData.noBake = true;      // rotates
+  g.add(body);
+
+  const atmoHex = atmoColor ?? { desert: 0xffb473, ice: 0x9fd0ff, green: 0x7fb6ff }[type] ?? 0x9fd0ff;
+  const shells = [];
+  if (atmosphere) {
+    shells.push(atmoShell(radius, 1.016, atmoHex, 3.4, 1.25));
+    shells.push(atmoShell(radius, 1.075, atmoHex, 1.9, 0.5));
+    shells.forEach((s) => g.add(s));
+  }
+
+  const sunDir = new THREE.Vector3(1, 0.25, 0.5).normalize();
+  g.userData.radius = radius;
+  g.userData.type = type;
+  g.userData.body = body;
+  g.userData.atmo = shells;
+  g.userData.sunDir = sunDir;
+  g.userData.noBake = true;
+  /** Aim the atmosphere's lit limb; pass the direction toward the key light. */
+  g.userData.setSunDir = (v) => {
+    sunDir.copy(v).normalize();
+    shells.forEach((s) => s.material.uniforms.uSun.value.copy(sunDir));
+    return g;
+  };
+  g.userData.setSunDir(sunDir);
+  g.userData.update = (t) => { body.rotation.y = t * spin; };
+  return g;
+}
+
+/**
+ * Tatooine's twin suns: two glowing discs with layered halos, flare spokes and
+ * an anamorphic streak.
+ *
+ * Anchor: the group sits at the **observer** (put it where the camera is, or at
+ * the origin of the desert set). The suns hang at `dist` along -Z and are
+ * raised by `setElevation(a)`, `a` in **radians above the horizon** — 0 puts
+ * them on the horizon (and reddens them), 0.6 is high noon-ish.
+ *
+ * @param {object} o {sep, dist, size, seed, colors}
+ * @returns {THREE.Group} userData: {suns, sunDir, elevation, setElevation(a),
+ *                                   update(t)}
+ */
+export function twinSuns({
+  sep = 150, dist = 1500, size = 150, seed = 4,
+  colors = [0xfff0c8, 0xffb268],
+} = {}) {
+  const g = new THREE.Group();
+  g.name = 'twinSuns';
+  const sky = new THREE.Group();                 // rotated by elevation
+  g.add(sky);
+
+  const soft = dotTex(0.02, 'soft');
+  const core = dotTex(0.62, 'core');
+  const spec = [
+    { off: [-sep * 0.42, sep * 0.1], s: 1.0, c: colors[0] },
+    { off: [sep * 0.58, -sep * 0.22], s: 0.72, c: colors[1] },
+  ];
+
+  const suns = spec.map((sp, i) => {
+    const s = new THREE.Group();
+    s.position.set(sp.off[0], sp.off[1], -dist);
+    const sc = size * sp.s;
+    const parts = {
+      halo: spriteFx(sc * 6.5, soft, sp.c, 0.2),
+      mid: spriteFx(sc * 2.7, soft, sp.c, 0.42),
+      flare: spriteFx(sc * 5.2, flareTex(), sp.c, 0.5),
+      disc: spriteFx(sc, core, 0xffffff, 1),
+      streak: spriteFx(sc * 9, soft, sp.c, 0.14),
+    };
+    parts.streak.scale.set(sc * 9, sc * 0.35, 1);
+    parts.halo.renderOrder = -400;
+    Object.values(parts).forEach((p) => { p.renderOrder = -400; s.add(p); });
+    // ghost dots along the flare axis, the cheap lens-flare tell
+    for (let k = 1; k <= 3; k++) {
+      const gh = spriteFx(sc * (0.28 + k * 0.12), soft, sp.c, 0.13);
+      gh.position.set(-sp.off[0] * (0.5 + k * 0.55), -sp.off[1] * (0.5 + k * 0.55), 4 * k);
+      gh.renderOrder = -400;
+      s.add(gh);
+    }
+    s.userData.parts = parts;
+    s.userData.baseColor = sp.c;
+    s.userData.scale = sc;
+    sky.add(s);
+    void i;
+    return s;
+  });
+
+  const sunDir = new THREE.Vector3(0, 0, -1);
+  let elev = 0.25;
+  const setElevation = (a) => {
+    elev = a;
+    sky.rotation.x = a;
+    // low sun: redder, dimmer disc, fatter halo — the sunset look
+    const k = smoothclamp(a / 0.42);
+    suns.forEach((s) => {
+      const base = new THREE.Color(s.userData.baseColor);
+      const low = new THREE.Color(0xff5a1e).lerp(base, 0.25);
+      const c = low.clone().lerp(base, k);
+      const p = s.userData.parts;
+      p.disc.material.color.copy(new THREE.Color(0xffffff).lerp(c, 1 - k * 0.65));
+      p.mid.material.color.copy(c);
+      p.halo.material.color.copy(c);
+      p.flare.material.color.copy(c);
+      p.streak.material.color.copy(c);
+      p.halo.material.opacity = lerp(0.34, 0.16, k);
+      p.streak.material.opacity = lerp(0.26, 0.1, k);
+      p.flare.material.opacity = lerp(0.3, 0.55, k);
+      p.disc.material.opacity = lerp(0.85, 1, k);
+    });
+    sunDir.set(0, Math.sin(a), -Math.cos(a)).normalize();
+    return g;
+  };
+  setElevation(elev);
+
+  g.userData.suns = suns;
+  g.userData.sunDir = sunDir;
+  g.userData.dist = dist;
+  g.userData.noBake = true;
+  /** Radians above the horizon. Also reddens the pair as it sets. */
+  g.userData.setElevation = setElevation;
+  Object.defineProperty(g.userData, 'elevation', { get: () => elev });
+  g.userData.update = (t) => {
+    suns.forEach((s, i) => {
+      const f = 1 + 0.035 * Math.sin(t * (1.3 + i * 0.7) + i * 2.1);
+      s.userData.parts.disc.scale.setScalar(s.userData.scale * f);
+      s.userData.parts.flare.material.rotation = t * 0.05 * (i ? -1 : 1);
+    });
+  };
+  return g;
+}
+
+/**
+ * The Empire's armoured moon.
+ *
+ * Anchor: **centre at the group origin**. The detailed face looks toward +Z:
+ * the dish crater is at longitude +Z / 50 deg north and the extruded greeble
+ * clusters on the +Z hemisphere, so `station.rotation.y` aims the "hero" side
+ * at the camera.
+ *
+ * The equatorial trench is real modelled geometry (a revolved groove in the
+ * body shell), not a texture stripe, so a ship can be flown down into it.
+ *
+ * @param {object} o {radius, seed, seg, texSize, greeble}
+ * @returns {THREE.Group} userData: {radius, trenchRadius, trenchDepth,
+ *   trenchWidth, dish, superlaser, lights, update(t)}
+ */
+export function battleStation({ radius = 420, seed = 17, seg = 240, texSize = 2048, greeble = 1 } = {}) {
+  const g = new THREE.Group();
+  g.name = 'battleStation';
+  const rand = rng(seed * 131 + 7);
+
+  const trenchWidth = radius * 0.075;
+  const trenchDepth = radius * 0.05;
+  const halfW = trenchWidth / 2 / radius;          // radians of latitude
+  const wall = halfW * 0.22;                       // wall taper
+
+  const craterLon = Math.PI / 2;                   // faces +Z
+  const craterTheta = Math.PI / 2 - 0.87;          // ~50 deg north
+  const craterR = 0.235;                           // angular radius
+  const craterDepth = radius * 0.085;
+
+  const undulate = fbm(seed * 5 + 3, { octaves: 4, base: 5, gain: 0.5 });
+  const craterDir = new THREE.Vector3(
+    Math.sin(craterTheta) * Math.cos(craterLon),
+    Math.cos(craterTheta),
+    Math.sin(craterTheta) * Math.sin(craterLon),
+  );
+
+  /** Angular distance from the dish centre. */
+  const craterAng = (dx, dy, dz) => Math.acos(clamp(dx * craterDir.x + dy * craterDir.y + dz * craterDir.z, -1, 1));
+
+  const rFn = (th, lon, dx, dy, dz) => {
+    let r = radius;
+    r += (undulate(lon / TAU, th / Math.PI) - 0.5) * radius * 0.008;
+    // equatorial trench: flat floor, steep walls
+    const d = Math.abs(th - Math.PI / 2);
+    if (d < halfW + wall) {
+      const k = 1 - smoothclamp((d - halfW) / wall);
+      r -= trenchDepth * k;
+    }
+    // dish crater: parabolic bowl with a raised rim
+    const a = craterAng(dx, dy, dz) / craterR;
+    if (a < 1.22) {
+      if (a < 0.84) r -= craterDepth * (1 - Math.pow(a / 0.84, 2) * 0.42);
+      else r += craterDepth * 0.13 * Math.exp(-Math.pow((a - 0.96) / 0.13, 2));
+    }
+    return r;
+  };
+
+  const extras = [];
+  for (const s of [-1, 1]) {
+    for (const k of [halfW + wall * 1.6, halfW + wall, halfW + wall * 0.35, halfW,
+      halfW * 0.72, halfW * 0.4, halfW * 0.12, 0.0001]) {
+      extras.push(Math.PI / 2 + s * k);
+    }
+  }
+  for (let i = -14; i <= 14; i++) extras.push(craterTheta + (i / 14) * craterR * 1.3);
+  const thetas = packedRows(Math.round(seg * 0.62), extras.filter((t) => t > 0.001 && t < Math.PI - 0.001));
+
+  const { map, bump } = stationMaps(seed, texSize, {
+    craterU: craterLon / TAU, craterV: 1 - craterTheta / Math.PI, craterR,
+  });
+  const hull = new THREE.MeshStandardMaterial({
+    map, bumpMap: bump, bumpScale: 0.06, roughness: 0.66, metalness: 0.12, color: 0xffffff,
+  });
+  const staticRoot = new THREE.Group();          // everything that gets merged
+  const bodyGeo = shellGeometry(thetas, seg, rFn);
+  const body = new THREE.Mesh(bodyGeo, hull);
+  body.castShadow = body.receiveShadow = true;
+  staticRoot.add(body);
+
+  /* ---- greeble ------------------------------------------------------- */
+  const plateMat = mat(0x8b9096, { rough: 0.6, metal: 0.25 });
+  const darkMat = mat(0x5c6268, { rough: 0.7, metal: 0.2 });
+  const pipeMat = mat(0x9aa0a6, { rough: 0.45, metal: 0.5 });
+  const greebleRoot = new THREE.Group();
+  const put = (mesh, dir, r, spinAngle) => {
+    mesh.position.copy(dir).multiplyScalar(r);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    mesh.rotateY(spinAngle);
+    greebleRoot.add(mesh);
+    return mesh;
+  };
+  const dirAt = (th, lon) => new THREE.Vector3(
+    Math.sin(th) * Math.cos(lon), Math.cos(th), Math.sin(th) * Math.sin(lon),
+  );
+
+  // Greeble comes in districts, not confetti: a sunken sector plate with a
+  // cluster of blocks, towers and pipe runs on top of it.
+  const nDistrict = Math.round(120 * greeble);
+  for (let i = 0; i < nDistrict; i++) {
+    const lon = craterLon + (rand() + rand() - 1) * 1.7;
+    const th = Math.acos(clamp(1 - 2 * rand(), -1, 1));
+    const cDir = dirAt(th, lon);
+    if (craterAng(cDir.x, cDir.y, cDir.z) / craterR < 1.35) continue;   // dish stays clear
+    if (Math.abs(th - Math.PI / 2) < halfW + wall * 4) continue;        // trench stays clear
+    const spread = 0.035 + rand() * 0.055;                              // angular radius
+    const cR = rFn(th, lon, cDir.x, cDir.y, cDir.z);
+    const pad = radius * spread * 1.25;
+    put(boxMesh(pad, 0.6, pad * (0.6 + rand() * 0.7), darkMat), cDir, cR - 0.5, rand() * TAU);
+
+    const n = 7 + Math.round(rand() * 13);
+    for (let k = 0; k < n; k++) {
+      const lon2 = lon + (rand() - 0.5) * spread * 2 / Math.max(0.2, Math.sin(th));
+      const th2 = clamp(th + (rand() - 0.5) * spread * 2, 0.02, Math.PI - 0.02);
+      if (Math.abs(th2 - Math.PI / 2) < halfW + wall * 3) continue;
+      const dir = dirAt(th2, lon2);
+      const r = rFn(th2, lon2, dir.x, dir.y, dir.z);
+      const flat = rand() < 0.5;
+      const w = 2.5 + rand() * 7, d2 = 2.5 + rand() * 7;
+      const hgt = flat ? 0.6 + rand() * 1.2 : 1.6 + rand() * rand() * 7;
+      put(boxMesh(w, hgt, d2, rand() < 0.3 ? darkMat : plateMat), dir, r - 0.3, rand() * TAU);
+      if (!flat && rand() < 0.35) {
+        put(boxMesh(w * 0.55, 0.5 + rand(), d2 * 0.55, darkMat), dir, r + hgt - 0.6, rand() * TAU);
+      }
+      if (rand() < 0.14) {
+        put(pipeMesh(0.3 + rand() * 0.5, 2 + rand() * 6, pipeMat, 8), dir, r + hgt - 0.5, 0);
+      }
+    }
+  }
+
+  // trench interior greeble: reads as texture from orbit, as buildings up close
+  const nTrench = Math.round(520 * greeble);
+  for (let i = 0; i < nTrench; i++) {
+    const lon = rand() * TAU;
+    const side = rand() < 0.5 ? -1 : 1;
+    const inFloor = rand() < 0.45;
+    const th = Math.PI / 2 + side * (inFloor ? rand() * halfW * 0.8 : halfW * (0.85 + rand() * 0.12));
+    const dir = dirAt(th, lon);
+    const r = rFn(th, lon, dir.x, dir.y, dir.z);
+    const m = boxMesh(1.2 + rand() * 3.4, 0.6 + rand() * (inFloor ? 2.2 : 5.5), 1.2 + rand() * 3.4,
+      rand() < 0.35 ? darkMat : plateMat);
+    put(m, dir, r - 0.15, rand() * TAU);
+  }
+
+  // a few surface towers / sensor masts for silhouette interest
+  for (let i = 0; i < Math.round(26 * greeble); i++) {
+    const lon = craterLon + (rand() - 0.5) * 2.6;
+    const th = Math.acos(clamp(1 - 2 * rand(), -1, 1));
+    const dEq = Math.abs(th - Math.PI / 2);
+    if (dEq < halfW * 3) continue;
+    const dir = dirAt(th, lon);
+    const a = craterAng(dir.x, dir.y, dir.z) / craterR;
+    if (a < 1.35) continue;
+    const r = rFn(th, lon, dir.x, dir.y, dir.z);
+    const hgt = 6 + rand() * 14;
+    put(boxMesh(2.4, hgt, 2.4, plateMat), dir, r - 0.5, rand() * TAU);
+    put(pipeMesh(0.16, hgt * 0.5, pipeMat, 6), dir, r + hgt - 0.6, 0);
+    put(boxMesh(5.5, 1.0, 5.5, darkMat), dir, r + hgt - 1.2, rand() * TAU);
+  }
+  staticRoot.add(greebleRoot);
+
+  /* ---- the dish ------------------------------------------------------ */
+  const dishGroup = new THREE.Group();       // static hardware, gets baked
+  const dishFx = new THREE.Group();          // the lens, stays live
+  dishGroup.name = 'superlaserDish';
+  let dishRimR = radius * Math.sin(craterR);
+  {
+    const rimR = dishRimR;
+    const up = craterDir.clone();
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+    dishGroup.quaternion.copy(q);
+    dishGroup.position.copy(up).multiplyScalar(radius * Math.cos(craterR) * 0.995);
+    dishFx.quaternion.copy(q);
+    dishFx.position.copy(dishGroup.position);
+
+    // rim ring, in local XZ
+    const rimGeo = rawGeo('stationRim' + Math.round(rimR), () => {
+      const t = norm(new THREE.TorusGeometry(rimR, radius * 0.012, 8, 96));
+      t.rotateX(Math.PI / 2);
+      return t;
+    });
+    const rimMesh = new THREE.Mesh(rimGeo, plateMat);
+    dishGroup.add(rimMesh);
+
+    // radial struts across the bowl
+    const nStrut = 8;
+    for (let i = 0; i < nStrut; i++) {
+      const a = (i / nStrut) * TAU;
+      const len = rimR * 0.94;
+      const s = boxMesh(radius * 0.016, radius * 0.012, len, darkMat);
+      s.position.set(Math.cos(a) * len * 0.5, -craterDepth * 0.34, Math.sin(a) * len * 0.5);
+      s.rotation.y = -a;
+      dishGroup.add(s);
+    }
+    // rim blocks
+    for (let i = 0; i < 40; i++) {
+      const a = (i / 40) * TAU;
+      const b = boxMesh(radius * 0.02, radius * 0.02 * (0.6 + rand()), radius * 0.03, plateMat);
+      b.position.set(Math.cos(a) * rimR, -radius * 0.004, Math.sin(a) * rimR);
+      b.rotation.y = -a;
+      dishGroup.add(b);
+    }
+    // focusing emitters around a central lens
+    const lensR = rimR * 0.2;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU + 0.2;
+      const e = pipeMesh(radius * 0.014, radius * 0.05, pipeMat, 8);
+      e.position.set(Math.cos(a) * lensR * 2.1, -craterDepth * 0.62, Math.sin(a) * lensR * 2.1);
+      e.lookAt(0, -craterDepth * 0.1, 0);
+      e.rotateX(Math.PI / 2);
+      dishGroup.add(e);
+    }
+    const lensMat = fx(0x9be8ff, 0.85, { blending: THREE.AdditiveBlending });
+    const lens = new THREE.Mesh(rawGeo('lens', () => norm(new THREE.SphereGeometry(1, 20, 12))), lensMat);
+    lens.scale.setScalar(lensR);
+    lens.position.y = -craterDepth * 0.6;
+    keep(lens);
+    dishFx.add(lens);
+    const lensGlow = spriteFx(lensR * 6, dotTex(0.06, 'soft'), 0x8fd8ff, 0.35);
+    lensGlow.position.y = -craterDepth * 0.55;
+    dishFx.add(lensGlow);
+    dishFx.userData.lens = lens;
+    dishFx.userData.glow = lensGlow;
+    dishFx.userData.radius = rimR;
+    dishGroup.userData.radius = rimR;
+  }
+  staticRoot.add(dishGroup);
+
+  /* ---- running lights ------------------------------------------------ */
+  // merged into three blink banks: 3 draw calls instead of 90
+  const banks = [
+    { mat: fx(0xffd48a, 0.95), meshes: new THREE.Group(), phase: 0 },
+    { mat: fx(0x9be8ff, 0.9), meshes: new THREE.Group(), phase: 2.1 },
+    { mat: fx(0xff6a4a, 0.9), meshes: new THREE.Group(), phase: 4.2 },
+  ];
+  for (let i = 0; i < 120; i++) {
+    const lon = rand() * TAU;
+    const th = Math.acos(clamp(1 - 2 * rand(), -1, 1));
+    const inTrench = i % 3 === 0;
+    const th2 = inTrench ? Math.PI / 2 + (rand() < 0.5 ? -1 : 1) * halfW * 0.9 : th;
+    if (!inTrench && Math.abs(th - Math.PI / 2) < halfW * 3) continue;
+    const dir = dirAt(th2, lon);
+    const r = rFn(th2, lon, dir.x, dir.y, dir.z);
+    const bank = banks[i % banks.length];
+    const m = boxMesh(1.25, 0.5, 1.25, bank.mat);
+    m.position.copy(dir).multiplyScalar(r + 0.25);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    bank.meshes.add(m);
+  }
+  const lights = banks.map((b) => {
+    const merged = bake(b.meshes).children[0];
+    if (merged) { merged.userData.noBake = true; merged.userData.phase = b.phase; }
+    return merged;
+  }).filter(Boolean);
+
+  const out = bake(staticRoot);
+  out.name = 'battleStation';
+  out.add(dishFx);
+  lights.forEach((l) => out.add(l));
+
+  const ud = out.userData;
+  ud.radius = radius;
+  ud.trenchRadius = radius - trenchDepth;
+  ud.trenchDepth = trenchDepth;
+  ud.trenchWidth = trenchWidth;
+  ud.dishRadius = dishRimR;
+  ud.dish = dishFx;
+  ud.superlaser = dishFx.userData.lens;
+  ud.lights = lights;
+  ud.update = (t) => {
+    const pulse = 0.65 + 0.35 * Math.sin(t * 0.9);
+    dishFx.userData.lens.material.opacity = 0.5 + 0.45 * pulse;
+    dishFx.userData.glow.material.opacity = 0.18 + 0.3 * pulse;
+    lights.forEach((l) => {
+      l.material.opacity = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t * 2.4 + l.userData.phase));
+    });
+  };
+  return out;
+}
+
+const stationMapCache = new Map();
+
+/** Panelled armour plating for the battle station: colour + bump. */
+function stationMaps(seed, w, o) {
+  const key = 'station' + seed + '|' + w + '|' + JSON.stringify(o);
+  if (stationMapCache.has(key)) return stationMapCache.get(key);
+  const h = w / 2;
+
+  const draw = (bumpMode) => (ctx) => {
+    const rand = rng(seed * 271 + 11);
+    const grime = fbm(seed * 13 + 3, { octaves: 5, base: 6, gain: 0.55 });
+
+    // base plate tone
+    ctx.fillStyle = bumpMode ? 'rgb(150,150,150)' : css(0x8d9298);
+    ctx.fillRect(0, 0, w, h);
+
+    // big sectors
+    for (let i = 0; i < 40; i++) {
+      const x = rand() * w, y = rand() * h;
+      const sw = w * (0.02 + rand() * 0.1), sh = h * (0.03 + rand() * 0.14);
+      const t = 0.5 + (rand() - 0.5) * 0.34;
+      ctx.fillStyle = bumpMode ? `rgb(${Math.round(t * 255)},${Math.round(t * 255)},${Math.round(t * 255)})`
+        : css(mix(0x81868c, 0x9ba0a5, t));
+      ctx.fillRect(x, y, sw, sh);
+    }
+
+    // panel field
+    const cell = w / 128;
+    for (let gyi = 0; gyi < h / cell; gyi++) {
+      const lat = Math.abs(0.5 - (gyi * cell) / h) * 2;
+      const cols = Math.max(6, Math.round((w / cell) * Math.sqrt(Math.max(0.02, 1 - lat * lat * 0.9))));
+      for (let gxi = 0; gxi < cols; gxi++) {
+        if (rand() < 0.22) continue;
+        const x = (gxi / cols) * w, y = gyi * cell;
+        const cw = (w / cols) * (0.55 + rand() * 0.42);
+        const ch = cell * (0.55 + rand() * 0.4);
+        const t = 0.5 + (rand() - 0.5) * 0.75;
+        ctx.fillStyle = bumpMode
+          ? `rgb(${Math.round((0.42 + t * 0.5) * 255)},${Math.round((0.42 + t * 0.5) * 255)},${Math.round((0.42 + t * 0.5) * 255)})`
+          : css(mix(0x7b8086, 0xa4a9ae, t));
+        ctx.fillRect(x, y, cw, ch);
+        if (rand() < 0.3) {
+          ctx.fillStyle = bumpMode ? 'rgb(70,70,70)' : css(0x6a7075);
+          ctx.fillRect(x + cw * 0.15, y + ch * 0.2, cw * 0.3, ch * 0.5);
+        }
+      }
+    }
+
+    // meridian + latitude seams
+    ctx.strokeStyle = bumpMode ? 'rgb(40,40,40)' : css(0x5e646a);
+    ctx.lineWidth = Math.max(1, w / 1400);
+    for (let i = 0; i < 48; i++) {
+      const x = (i / 48) * w;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
+    for (let i = 1; i < 24; i++) {
+      const y = (i / 24) * h;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+
+    // equatorial trench band
+    const eqH = h * 0.045;
+    ctx.fillStyle = bumpMode ? 'rgb(96,96,96)' : css(0x5c6167);
+    ctx.fillRect(0, h / 2 - eqH / 2, w, eqH);
+    ctx.fillStyle = bumpMode ? 'rgb(58,58,58)' : css(0x3c4247);
+    ctx.fillRect(0, h / 2 - eqH * 0.2, w, eqH * 0.4);
+    for (let i = 0; i < 1400; i++) {
+      const x = rand() * w;
+      const y = h / 2 + (rand() - 0.5) * eqH;
+      const t = rand();
+      ctx.fillStyle = bumpMode ? `rgb(${Math.round((0.3 + t * 0.55) * 255)},${Math.round((0.3 + t * 0.55) * 255)},${Math.round((0.3 + t * 0.55) * 255)})`
+        : css(mix(0x33383d, 0x9aa0a6, t));
+      ctx.fillRect(x, y, 1 + rand() * (w / 300), 1 + rand() * (h / 300));
+    }
+    // rails along the trench lip
+    ctx.strokeStyle = bumpMode ? 'rgb(200,200,200)' : css(0xb9bec3);
+    ctx.lineWidth = Math.max(1, w / 1600);
+    for (const s of [-1, 1]) {
+      const y = h / 2 + s * eqH * 0.52;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+
+    // dish crater: concentric rings + radial spokes, drawn in UV space
+    const cx = o.craterU * w, cy = (1 - o.craterV) * h;
+    const rx = (o.craterR / TAU) * w / Math.max(0.25, Math.sin(Math.PI * (1 - o.craterV)));
+    const ry = (o.craterR / Math.PI) * h;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, TAU);
+    ctx.clip();
+    ctx.fillStyle = bumpMode ? 'rgb(120,120,120)' : css(0x71767c);
+    ctx.fillRect(cx - rx, cy - ry, rx * 2, ry * 2);
+    ctx.strokeStyle = bumpMode ? 'rgb(78,78,78)' : css(0x474d52);
+    ctx.lineWidth = Math.max(1, w / 900);
+    for (let i = 1; i <= 7; i++) {
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx * (i / 7), ry * (i / 7), 0, 0, TAU);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * TAU;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = bumpMode ? 'rgb(215,215,215)' : css(0xc3c8cd);
+    ctx.lineWidth = Math.max(1.5, w / 700);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, TAU);
+    ctx.stroke();
+
+    // grime pass
+    if (!bumpMode) {
+      const gw = 256, gh = 128;
+      const cv = document.createElement('canvas');
+      cv.width = gw; cv.height = gh;
+      const g2 = cv.getContext('2d');
+      pixels(g2, gw, gh, (u, v) => {
+        const n = grime(u, v);
+        return [0, 0, 0, Math.round(clamp((0.62 - n) * 1.9, 0, 1) * 90)];
+      });
+      ctx.globalAlpha = 0.75;
+      ctx.drawImage(cv, 0, 0, w, h);
+      ctx.globalAlpha = 1;
+    }
+  };
+
+  const map = canvasTex('stationmap' + key, w, h, draw(false), { wrapT: THREE.ClampToEdgeWrapping });
+  const bump = canvasTex('stationbump' + key, w, h, draw(true), { wrapT: THREE.ClampToEdgeWrapping, data: true });
+  const out = { map, bump };
+  stationMapCache.set(key, out);
+  return out;
+}
+
+/* =================================================================== */
+/* INTERIORS                                                            */
+/* =================================================================== */
+
+/** Corridor floor grating: dark slots between light treads. */
+function gratingTex() {
+  return canvasTex('grate', 128, 128, (ctx, w, h) => {
+    ctx.fillStyle = css(0x74797d);
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = css(0x2a3138);
+    for (let i = 0; i < 8; i++) ctx.fillRect(0, i * 16 + 4, w, 8);
+    ctx.fillStyle = css(0x9aa0a4);
+    for (let i = 0; i < 8; i++) ctx.fillRect(0, i * 16 + 1, w, 2.5);
+    ctx.fillStyle = css(0x1d242a);
+    for (let i = 0; i < 4; i++) ctx.fillRect(i * 32 + 14, 0, 4, h);
+  }, { repeat: [2, 3] });
+}
+
+/** Riveted plate print for interior walls. */
+function wallPlateTex() {
+  return svgTexture(svg([0, 0, 256, 256], `
+    <rect width="256" height="256" fill="#eef0ef"/>
+    <rect x="8" y="8" width="240" height="240" rx="10" fill="#f6f7f6" stroke="#cdd2d4" stroke-width="3"/>
+    <rect x="26" y="30" width="204" height="66" rx="6" fill="#e6e9e9" stroke="#c6cccd" stroke-width="2"/>
+    <rect x="26" y="112" width="94" height="112" rx="6" fill="#e6e9e9" stroke="#c6cccd" stroke-width="2"/>
+    <rect x="136" y="112" width="94" height="52" rx="6" fill="#dfe3e4" stroke="#c6cccd" stroke-width="2"/>
+    <rect x="136" y="176" width="94" height="48" rx="6" fill="#e9ecec" stroke="#c6cccd" stroke-width="2"/>
+    ${Array.from({ length: 12 }, (_, i) => `<circle cx="${20 + (i % 6) * 43}" cy="${i < 6 ? 18 : 238}" r="4" fill="#b9c0c2"/>`).join('')}
+  `), { w: 256, key: 'wallplate' });
+}
+
+/** A shipboard status display. */
+function screenTex(kind = 0) {
+  const bars = Array.from({ length: 7 }, (_, i) => {
+    const wpx = 22 + ((i * 37 + kind * 13) % 78);
+    return `<rect x="18" y="${58 + i * 22}" width="${wpx}" height="12" rx="3" fill="${i % 3 === 0 ? '#ffd23f' : '#63d2ff'}" opacity="${0.55 + (i % 4) * 0.15}"/>`;
+  }).join('');
+  const glyphs = Array.from({ length: 16 }, (_, i) =>
+    `<rect x="${124 + (i % 4) * 22}" y="${58 + Math.floor(i / 4) * 22}" width="16" height="12" rx="2" fill="#8ef0c0" opacity="${0.25 + ((i * 7 + kind) % 5) * 0.15}"/>`).join('');
+  return svgTexture(svg([0, 0, 256, 256], `
+    <rect width="256" height="256" rx="10" fill="#0b1218"/>
+    <rect x="6" y="6" width="244" height="244" rx="8" fill="#0e1a22" stroke="#2b3d49" stroke-width="3"/>
+    <rect x="16" y="18" width="224" height="26" rx="4" fill="#16283a"/>
+    <rect x="24" y="26" width="76" height="10" rx="3" fill="#7fe3ff"/>
+    <rect x="192" y="26" width="40" height="10" rx="3" fill="#ff7a4a"/>
+    ${bars}${glyphs}
+    <path d="M18 228 L52 208 L86 234 L120 200 L154 222 L188 196 L238 218" stroke="#ffd23f" stroke-width="3" fill="none" opacity="0.9"/>
+  `), { w: 256, key: 'screen' + kind });
+}
+
+/** Diagonal hazard stripes, the universal "do not stand here" print. */
+function hazardTex(a = '#f5c518', b = '#1b2a34', label = '') {
+  return svgTexture(svg([0, 0, 512, 128], `
+    <rect width="512" height="128" fill="${a}"/>
+    <g fill="${b}">
+      ${Array.from({ length: 14 }, (_, i) => `<path d="M${i * 48 - 40} 128 L${i * 48} 0 L${i * 48 + 24} 0 L${i * 48 - 16} 128 Z"/>`).join('')}
+    </g>
+    <rect x="0" y="46" width="512" height="36" fill="${b}" opacity="0.92"/>
+    <text x="256" y="72" font-family="Helvetica,Arial,sans-serif" font-size="26" font-weight="700"
+      letter-spacing="6" fill="${a}" text-anchor="middle">${label}</text>
+  `), { w: 512, h: 128, key: 'hazard' + a + b + label });
+}
+
+/**
+ * The corvette's forward corridor.
+ *
+ * Anchor: floor at `y = 0`, centred on X and Z, running along Z. It spans
+ * `z = +length/2` (open mouth) to `z = -length/2`, so a camera at
+ * `(0, 3.4, length/2 - 2)` looking down -Z sees the full receding hallway.
+ * Interior clear width is `width`; the arch tops out at `userData.height`.
+ *
+ * @param {object} o {segments, width, height, segLen, seed}
+ * @returns {THREE.Group} userData: {length, width, height, segLen, lights,
+ *   lightMaterial, setLights(k), update(t)}
+ */
+export function corridor({ segments = 8, width = 12, height = 9, segLen = 10, seed = 33 } = {}) {
+  const g = new THREE.Group();
+  g.name = 'corridor';
+  const hx = width / 2;                 // inner wall x
+  const shoulder = height * 0.7;        // where the wall starts to chamfer in
+  const ceilHalf = hx - 1.9;            // half width of the flat ceiling
+
+  const white = mat(C.white, { rough: 0.4 });
+  const trim = mat(C.lightGray, { rough: 0.45 });
+  const dark = mat(C.darkGray, { rough: 0.55 });
+  const black = mat(C.black, { rough: 0.5 });
+  const silver = mat(C.silver, { rough: 0.3, metal: 0.6 });
+  const grate = mat(0xffffff, { map: gratingTex(), rough: 0.6 });
+  // private, so a scene can brown-out this corridor without touching others
+  const lightMat = new THREE.MeshBasicMaterial({ color: 0xfff4d2, toneMapped: false });
+  const redMat = new THREE.MeshBasicMaterial({ color: 0xff5533, toneMapped: false });
+
+  const chamLen = Math.hypot(hx - ceilHalf, height - shoulder);
+  const chamAng = Math.atan2(height - shoulder, hx - ceilHalf);
+
+  // pipe heights are chosen once for the whole corridor so runs line up
+  const pipeSeed = rng(seed * 61 + 5);
+  const pipeYs = [shoulder - 0.5, shoulder - 1.5, shoulder - 2.4].map((y) => y - pipeSeed() * 0.3);
+
+  const buildSegment = (variant) => () => {
+    const s = new THREE.Group();
+    const rand = rng(seed * 977 + variant * 131 + 7);
+    const z0 = -segLen / 2;
+
+    /* ---- floor ---- */
+    const fl = flat(width - 4.6, 0.3, segLen, grate);
+    fl.position.set(0, 0.15, 0);
+    s.add(fl);
+    for (const sx of [-1, 1]) {
+      const side = blk(2.3, 0.36, segLen, trim);
+      side.position.set(sx * (hx - 1.15), 0.18, 0);
+      s.add(side);
+      // studded strip: the tell that this is a LEGO set
+      const st = plate(2, Math.round(segLen), { color: C.veryLightGray });
+      st.position.set(sx * (hx - 1.15), 0.36 - PLATE, 0);
+      s.add(st);
+      // wall/floor cable channel
+      const ch = flat(0.6, 0.5, segLen, black);
+      ch.position.set(sx * (hx - 0.3), 0.25, 0);
+      s.add(ch);
+      for (let i = 0; i < 5; i++) {
+        const c = flat(0.5, 0.22, 1.1, sx > 0 ? trim : trim);
+        c.position.set(sx * (hx - 0.3), 0.55, z0 + 1 + i * (segLen / 5));
+        s.add(c);
+      }
+    }
+    // floor seam plates
+    for (let i = 0; i < 2; i++) {
+      const sm = flat(width - 4.6, 0.34, 0.35, dark);
+      sm.position.set(0, 0.17, z0 + segLen * (i + 0.5) / 2);
+      s.add(sm);
+    }
+
+    /* ---- walls ---- */
+    for (const sx of [-1, 1]) {
+      const X = sx * hx;
+      // backing slab + kick panel
+      const backing = flat(0.7, shoulder, segLen, white);
+      backing.position.set(X + sx * 0.35, shoulder / 2, 0);
+      s.add(backing);
+      const kick = blk(0.5, 1.4, segLen, trim);
+      kick.position.set(X - sx * 0.2, 0.85, 0);
+      s.add(kick);
+
+      // ribbed pilasters
+      const nRib = 4;
+      for (let i = 0; i < nRib; i++) {
+        const z = z0 + (i + 0.5) * (segLen / nRib);
+        const rib = blk(0.85, shoulder - 1.5, 1.1, trim);
+        rib.position.set(X - sx * 0.42, 1.4 + (shoulder - 1.5) / 2 - 0.05, z);
+        s.add(rib);
+        const cap = blk(1.0, 0.4, 1.35, silver);
+        cap.position.set(X - sx * 0.42, shoulder - 0.2, z);
+        s.add(cap);
+        // recessed panel between ribs
+        const pw = segLen / nRib - 1.5;
+        const rp = blk(0.3, shoulder - 3.4, pw, white);
+        rp.position.set(X - sx * 0.12, 1.6 + (shoulder - 3.4) / 2, z + segLen / nRib / 2);
+        s.add(rp);
+      }
+
+      // recessed light strip: housing + the glowing element inside it
+      const hy = shoulder * 0.78;
+      const hous = flat(0.75, 0.95, segLen, dark);
+      hous.position.set(X - sx * 0.2, hy, 0);
+      s.add(hous);
+      const strip = flat(0.34, 0.5, segLen - 0.4, lightMat);
+      strip.position.set(X - sx * 0.52, hy, 0);
+      s.add(strip);
+      const lipA = blk(0.55, 0.22, segLen, silver);
+      lipA.position.set(X - sx * 0.5, hy + 0.62, 0);
+      s.add(lipA);
+      const lipB = blk(0.55, 0.22, segLen, silver);
+      lipB.position.set(X - sx * 0.5, hy - 0.62, 0);
+      s.add(lipB);
+
+      // chamfer up to the ceiling
+      const cham = blk(chamLen, 0.5, segLen, white);
+      cham.position.set(sx * (hx + ceilHalf) / 2, (shoulder + height) / 2, 0);
+      cham.rotation.z = sx > 0 ? chamAng : -chamAng;
+      s.add(cham);
+
+      // conduit runs under the chamfer
+      pipeYs.forEach((py, k) => {
+        const p = pipeMesh(0.19 + k * 0.05, segLen, k === 1 ? silver : trim, 10);
+        p.rotation.x = Math.PI / 2;
+        p.position.set(X - sx * (0.95 + k * 0.42), py, -segLen / 2);
+        s.add(p);
+      });
+      // one shared clamp block per segment gathers all three runs
+      const cl = flat(1.5, 0.9, 0.7, dark);
+      cl.position.set(X - sx * 1.35, pipeYs[1], z0 + segLen * 0.32);
+      s.add(cl);
+      s.add(at(flat(0.7, 1.1, 0.45, silver), X - sx * 0.75, pipeYs[1], z0 + segLen * 0.32));
+
+      // wall greeble: junction boxes, vents, hand-holds
+      const nG = 6;
+      for (let i = 0; i < nG; i++) {
+        const z = z0 + 0.9 + rand() * (segLen - 1.8);
+        const y = 1.9 + rand() * (shoulder - 4.2);
+        const w2 = 0.45 + rand() * 1.0, h2 = 0.4 + rand() * 0.8;
+        s.add(at(flat(0.26, h2, w2, rand() < 0.4 ? dark : trim), X - sx * 0.33, y, z));
+        if (rand() < 0.4) {
+          s.add(at(flat(0.14, h2 * 0.4, w2 * 0.45, silver), X - sx * 0.5, y, z));
+        }
+      }
+      // floor-level equipment locker
+      if (variant % 2 === 1) {
+        s.add(at(blk(1.2, 2.2, 2.6, trim), X - sx * 0.85, 2.5, z0 + segLen * 0.68));
+        s.add(at(flat(0.3, 0.35, 2.0, dark), X - sx * 1.5, 3.2, z0 + segLen * 0.68));
+      }
+    }
+
+    /* ---- ceiling ---- */
+    const ceil = flat(ceilHalf * 2, 0.55, segLen, white);
+    ceil.position.set(0, height + 0.05, 0);
+    s.add(ceil);
+    for (const sx of [-1, 1]) {
+      const cove = flat(0.9, 0.3, segLen - 0.6, lightMat);
+      cove.position.set(sx * (ceilHalf - 0.95), height - 0.28, 0);
+      s.add(cove);
+      const covelip = blk(0.4, 0.5, segLen, trim);
+      covelip.position.set(sx * (ceilHalf - 0.35), height - 0.35, 0);
+      s.add(covelip);
+    }
+    // cross beam at the segment joint (spans the seam evenly on both sides)
+    const beam = blk(ceilHalf * 2 + 1.2, 0.7, 1.0, trim);
+    beam.position.set(0, height - 0.25, z0);
+    s.add(beam);
+    const beamPipe = pipeMesh(0.22, ceilHalf * 1.9, silver, 8);
+    beamPipe.rotation.z = Math.PI / 2;
+    beamPipe.position.set(-ceilHalf * 0.95, height - 0.75, z0 + 1.1);
+    s.add(beamPipe);
+
+    /* ---- printed detail, varies by segment variant ---- */
+    if (variant % 2 === 0) {
+      const sc = panel(2.6, 1.9, screenTex(variant));
+      sc.rotation.y = Math.PI / 2;
+      sc.position.set(-hx + 0.05, 4.4, z0 + segLen * 0.5);
+      s.add(sc);
+      const frame = blk(0.3, 2.35, 3.05, dark);
+      frame.position.set(-hx + 0.14, 4.4, z0 + segLen * 0.5);
+      s.add(frame);
+    }
+    if (variant % 3 === 1) {
+      const pl = panel(2.4, 1.7, wallPlateTex());
+      pl.rotation.y = -Math.PI / 2;
+      pl.position.set(hx - 0.06, 4.2, z0 + segLen * 0.45);
+      s.add(pl);
+    }
+    if (variant % 3 === 2) {
+      const hz = panel(2.8, 0.7, hazardTex('#f5c518', '#1b2a34', 'DECK 4'));
+      hz.rotation.y = Math.PI / 2;
+      hz.position.set(-hx + 0.05, 2.1, z0 + segLen * 0.7);
+      s.add(hz);
+      const lamp = flat(0.4, 0.4, 0.4, redMat);
+      lamp.position.set(-hx + 0.4, 6.1, z0 + segLen * 0.2);
+      s.add(lamp);
+    }
+    return s;
+  };
+
+  const nVar = 4;
+  const templates = [];
+  for (let v = 0; v < nVar; v++) templates.push(bakedTemplate(buildSegment(v)));
+
+  const order = rng(seed * 13 + 3);
+  for (let i = 0; i < segments; i++) {
+    const t = templates[i === 0 ? 0 : Math.floor(order() * nVar) % nVar];
+    const seg = t();
+    seg.position.z = segLen / 2 + segments * segLen / 2 - (i + 1) * segLen;
+    g.add(seg);
+  }
+
+  const length = segments * segLen;
+  const lights = [];
+  g.traverse((o) => {
+    if (o.isMesh && (o.material === lightMat || o.material === redMat)) lights.push(o);
+  });
+
+  g.userData.length = length;
+  g.userData.width = width;
+  g.userData.height = height;
+  g.userData.segLen = segLen;
+  g.userData.lights = lights;
+  g.userData.lightMaterial = lightMat;
+  g.userData.cameraY = 3.4;
+  /** 1 = full power, 0 = dark. Dim the whole hallway in one call. */
+  g.userData.setLights = (k) => {
+    lightMat.color.setRGB(1 * k, 0.957 * k, 0.824 * k);
+    redMat.color.setRGB(1 * k, 0.33 * k, 0.2 * k);
+  };
+  g.userData.update = (t) => {
+    // barely-visible mains hum, plus one failing tube
+    const k = 0.94 + 0.06 * Math.sin(t * 7.3) * Math.sin(t * 1.7);
+    lightMat.color.setRGB(k, k * 0.957, k * 0.824);
+    const r = 0.55 + 0.45 * (Math.sin(t * 3.1) > 0.2 ? 1 : 0.25);
+    redMat.color.setRGB(r, r * 0.33, r * 0.2);
+  };
+  return g;
+}
+
+/**
+ * A sealed pressure door.
+ *
+ * Anchor: centred on X, base at `y = 0`, sitting in the XY plane and about
+ * `userData.thickness` deep in Z, so it drops straight into a corridor mouth at
+ * whatever z you like. The two halves part along X.
+ *
+ * @param {object} o {width, height, seed, label}
+ * @returns {THREE.Group} userData: {width, height, thickness, halves,
+ *   setOpen(0..1), blowOut(), update(t)}
+ */
+export function blastDoor({ width = 12, height = 9, seed = 44, label = 'SEAL 7' } = {}) {
+  const g = new THREE.Group();
+  g.name = 'blastDoor';
+  const th = 1.1;
+  const hw = width / 2;
+
+  const frameMat = mat(C.bluishGray, { rough: 0.45 });
+  const doorMat = mat(C.veryLightGray, { rough: 0.4 });
+  const dark = mat(C.darkGray, { rough: 0.55 });
+  const silver = mat(C.silver, { rough: 0.28, metal: 0.6 });
+  const lampMat = new THREE.MeshBasicMaterial({ color: 0xff6a3a, toneMapped: false });
+
+  /* ---- frame ---- */
+  const frame = new THREE.Group();
+  for (const sx of [-1, 1]) {
+    frame.add(at(blk(1.5, height + 1.6, th + 0.7, frameMat), sx * (hw + 0.75), (height + 1.6) / 2 - 0.8, 0));
+    for (let i = 0; i < 5; i++) {
+      frame.add(at(flat(0.4, 0.5, 0.5, silver), sx * (hw + 1.4), 1.2 + i * (height / 5), 0));
+    }
+  }
+  frame.add(at(blk(width + 3, 1.5, th + 0.7, frameMat), 0, height + 0.75, 0));
+  frame.add(at(blk(width + 3, 0.5, th + 1.2, dark), 0, 0.25, 0));
+  const hz = panel(width + 2.6, 0.75, hazardTex('#f5c518', '#1b2a34', label));
+  hz.position.set(0, height + 0.75, th / 2 + 0.42);
+  frame.add(hz);
+  g.add(bake(frame));
+
+  /* ---- the two halves ---- */
+  const halves = [];
+  for (const sx of [-1, 1]) {
+    const half = new THREE.Group();
+    const rand = rng(seed * 101 + (sx > 0 ? 3 : 7));
+    half.add(at(blk(hw, height, th, doorMat), sx * hw / 2, height / 2, 0));
+    // stepped armour courses
+    for (let i = 0; i < 4; i++) {
+      const y = 0.9 + i * (height - 1.6) / 4;
+      half.add(at(blk(hw - 0.6, (height - 1.6) / 4 - 0.35, 0.4, i % 2 ? doorMat : frameMat),
+        sx * hw / 2, y + (height - 1.6) / 8, th / 2 + 0.2));
+      half.add(at(blk(hw - 0.6, (height - 1.6) / 4 - 0.35, 0.4, i % 2 ? doorMat : frameMat),
+        sx * hw / 2, y + (height - 1.6) / 8, -th / 2 - 0.2));
+    }
+    // central lock rib along the meeting edge
+    half.add(at(blk(0.8, height - 0.4, th + 0.5, frameMat), sx * 0.4, height / 2, 0));
+    for (let i = 0; i < 4; i++) {
+      half.add(at(flat(0.6, 0.9, th + 0.9, silver), sx * 0.4, 1.4 + i * (height - 2.4) / 3, 0));
+    }
+    // hazard print + greeble
+    const hzp = panel(hw - 1.2, 1.0, hazardTex('#f5c518', '#1b2a34', ''));
+    hzp.position.set(sx * hw / 2, height * 0.62, th / 2 + 0.42);
+    half.add(hzp);
+    for (let i = 0; i < 6; i++) {
+      half.add(at(flat(0.6 + rand() * 1.4, 0.4 + rand() * 0.8, 0.3, dark),
+        sx * (1.4 + rand() * (hw - 2.6)), 1.2 + rand() * (height - 2.4), th / 2 + 0.2));
+    }
+    half.add(at(flat(0.7, 0.35, 0.5, lampMat), sx * (hw - 1.2), height - 0.9, th / 2 + 0.3));
+    const baked = bake(half);
+    baked.userData.noBake = true;
+    halves.push(baked);
+    g.add(baked);
+  }
+
+  let open = 0;
+  const setOpen = (u) => {
+    open = clamp(u, 0, 1);
+    const d = (hw + 1.1) * smoothstep(open);
+    halves[0].position.x = -d;
+    halves[1].position.x = d;
+    return g;
+  };
+  setOpen(0);
+
+  g.userData.width = width;
+  g.userData.height = height;
+  g.userData.thickness = th + 1.4;
+  g.userData.halves = halves;
+  g.userData.setOpen = setOpen;
+  Object.defineProperty(g.userData, 'open', { get: () => open });
+  g.userData.update = (t) => {
+    const k = 0.5 + 0.5 * Math.sin(t * 4.2);
+    lampMat.color.setRGB(1, 0.25 + 0.25 * k, 0.12 + 0.15 * k);
+  };
+
+  /**
+   * Blow the door in. Hides the halves and hands back a group of loose bricks,
+   * each with `userData.vel` / `.spin` / `.home`, plus a convenience
+   * `userData.setT(seconds)` that flings them on a ballistic arc.
+   */
+  g.userData.blowOut = ({ seed: bseed = seed * 3 + 1, count = 34, gravity = 26 } = {}) => {
+    const rand = rng(bseed);
+    const debris = new THREE.Group();
+    debris.name = 'blastDoorDebris';
+    const cols = [C.veryLightGray, C.bluishGray, C.lightGray, C.darkGray, C.silver];
+    const pieces = [];
+    for (let i = 0; i < count; i++) {
+      const sx = rand() < 0.5 ? -1 : 1;
+      const w = 1 + Math.round(rand() * 2);
+      const d = 1 + Math.round(rand() * 2);
+      const p = rand() < 0.45
+        ? plate(w, d, { color: cols[Math.floor(rand() * cols.length)] })
+        : brick(w, d, BRICK, { color: cols[Math.floor(rand() * cols.length)] });
+      const home = new THREE.Vector3(
+        sx * (0.6 + rand() * (hw - 0.8)),
+        0.6 + rand() * (height - 1),
+        (rand() - 0.5) * th,
+      );
+      p.position.copy(home);
+      p.userData.home = home.clone();
+      p.userData.vel = new THREE.Vector3(
+        home.x * (0.55 + rand() * 0.5),
+        4 + rand() * 12,
+        6 + rand() * 26,
+      );
+      p.userData.spin = new THREE.Vector3(
+        (rand() - 0.5) * 14, (rand() - 0.5) * 14, (rand() - 0.5) * 14,
+      );
+      p.userData.noBake = true;
+      pieces.push(p);
+      debris.add(p);
+    }
+    halves.forEach((h) => { h.visible = false; });
+    debris.userData.pieces = pieces;
+    debris.userData.gravity = gravity;
+    /** t in seconds since the breach. */
+    debris.userData.setT = (t) => {
+      for (const p of pieces) {
+        const v = p.userData.vel, home = p.userData.home;
+        p.position.set(
+          home.x + v.x * t,
+          Math.max(0.2, home.y + v.y * t - 0.5 * gravity * t * t),
+          home.z + v.z * t,
+        );
+        p.rotation.set(p.userData.spin.x * t, p.userData.spin.y * t, p.userData.spin.z * t);
+      }
+    };
+    debris.userData.update = debris.userData.setT;
+    return debris;
+  };
+  return g;
+}
+
+/**
+ * Escape-pod launch bay: a clamped cradle aimed down -Z at the launch tube,
+ * warning lights, and a hazard-striped deck.
+ *
+ * Anchor: deck at `y = 0`, centred on X/Z, tube mouth at `-Z`. Park a pod at
+ * `userData.podAnchor` (an Object3D already in the right place and rotation).
+ *
+ * @param {object} o {width, height, depth, seed}
+ * @returns {THREE.Group} userData: {width, height, depth, podAnchor, clamps,
+ *   lights, setClamps(0..1), update(t)}
+ */
+export function podBay({ width = 20, height = 11, depth = 26, seed = 55 } = {}) {
+  const g = new THREE.Group();
+  g.name = 'podBay';
+  const rand = rng(seed);
+  const hw = width / 2, hd = depth / 2;
+
+  const white = mat(C.white, { rough: 0.4 });
+  const trim = mat(C.lightGray, { rough: 0.45 });
+  const dark = mat(C.darkGray, { rough: 0.55 });
+  const black = mat(C.black, { rough: 0.5 });
+  const silver = mat(C.silver, { rough: 0.28, metal: 0.6 });
+  const grate = mat(0xffffff, { map: gratingTex(), rough: 0.6 });
+  const amber = new THREE.MeshBasicMaterial({ color: 0xffb43a, toneMapped: false });
+  const red = new THREE.MeshBasicMaterial({ color: 0xff4a2a, toneMapped: false });
+  const cyan = new THREE.MeshBasicMaterial({ color: 0x8fe8ff, toneMapped: false });
+
+  const stat = new THREE.Group();
+
+  /* ---- deck ---- */
+  stat.add(at(flat(width, 0.4, depth, grate), 0, 0.2, 0));
+  for (const sx of [-1, 1]) {
+    stat.add(at(blk(2.4, 0.5, depth, trim), sx * (hw - 1.2), 0.25, 0));
+    stat.add(at(plate(2, Math.round(depth), { color: C.veryLightGray }), sx * (hw - 1.2), 0.5 - PLATE, 0));
+  }
+  const deckHz = panel(width - 6, 2.2, hazardTex('#f5c518', '#1b2a34', 'POD 7'));
+  deckHz.rotation.x = -Math.PI / 2;
+  deckHz.position.set(0, 0.42, hd - 3.2);
+  stat.add(deckHz);
+
+  /* ---- walls + ceiling ---- */
+  for (const sx of [-1, 1]) {
+    stat.add(at(flat(0.7, height, depth, white), sx * (hw + 0.35), height / 2, 0));
+    for (let i = 0; i < 6; i++) {
+      const z = -hd + 1.6 + i * (depth - 3.2) / 5;
+      stat.add(at(blk(0.7, height - 1.2, 1.1, trim), sx * (hw - 0.3), (height - 1.2) / 2 + 0.4, z));
+    }
+    stat.add(at(flat(0.5, 0.55, depth - 1, amber), sx * (hw - 0.5), height * 0.72, 0));
+    stat.add(at(blk(0.55, 0.25, depth, silver), sx * (hw - 0.55), height * 0.72 + 0.62, 0));
+    stat.add(at(blk(0.55, 0.25, depth, silver), sx * (hw - 0.55), height * 0.72 - 0.62, 0));
+    // control console on the +Z end of each wall
+    stat.add(at(blk(2.4, 3.2, 1.6, trim), sx * (hw - 1.6), 1.6, hd - 2.2));
+    const scr = panel(1.8, 1.3, screenTex(sx > 0 ? 1 : 2));
+    scr.rotation.set(-0.5, sx > 0 ? -Math.PI / 2 : Math.PI / 2, 0);
+    scr.position.set(sx * (hw - 2.85), 3.0, hd - 2.2);
+    stat.add(scr);
+  }
+  stat.add(at(flat(width, 0.6, depth, white), 0, height + 0.3, 0));
+  for (let i = 0; i < 4; i++) {
+    stat.add(at(blk(width, 0.7, 1.0, trim), 0, height - 0.25, -hd + 2 + i * (depth - 4) / 3));
+  }
+  stat.add(at(flat(width - 5, 0.34, depth - 4, cyan), 0, height - 0.5, 0));
+
+  /* ---- launch tube at -Z ---- */
+  const tubeR = Math.min(hw - 1.2, height * 0.44);
+  const tube = new THREE.Group();
+  tube.position.set(0, tubeR + 1.2, -hd);
+  const ringGeo = rawGeo('podring' + Math.round(tubeR * 4), () => {
+    const t = norm(new THREE.TorusGeometry(tubeR, 0.55, 8, 40));
+    return t;
+  });
+  tube.add(new THREE.Mesh(ringGeo, trim));
+  const ring2 = new THREE.Mesh(ringGeo, dark);
+  ring2.scale.setScalar(1.11);
+  tube.add(ring2);
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * TAU;
+    tube.add(at(flat(1.0, 1.0, 0.7, i % 4 === 0 ? silver : trim),
+      Math.cos(a) * tubeR * 1.06, Math.sin(a) * tubeR * 1.06, 0.3));
+  }
+  // blast shield behind the ring so the bay doesn't read as open space
+  const shield = new THREE.Mesh(
+    rawGeo('podshield', () => norm(new THREE.CircleGeometry(1, 32))), black,
+  );
+  shield.scale.setScalar(tubeR * 0.98);
+  shield.position.z = -0.8;
+  tube.add(shield);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * TAU;
+    tube.add(at(rot(flat(tubeR * 1.7, 0.5, 0.4, dark), 0, 0, a), 0, 0, -0.6));
+  }
+  stat.add(tube);
+
+  /* ---- cradle ---- */
+  const cradle = new THREE.Group();
+  cradle.position.set(0, 0.5, 1.2);
+  const cradleY = 2.6;
+  for (const sz of [-1, 1]) {
+    cradle.add(at(blk(9, 1.2, 2.2, dark), 0, 0.6, sz * 4.2));
+    for (const sx of [-1, 1]) {
+      cradle.add(at(blk(1.6, cradleY, 1.8, trim), sx * 3.6, cradleY / 2 + 1.2, sz * 4.2));
+      cradle.add(at(rot(blk(2.6, 0.9, 1.6, silver), 0, 0, sx * 0.5), sx * 2.6, cradleY + 1.5, sz * 4.2));
+    }
+    cradle.add(at(flat(0.5, 0.5, 0.5, red), 0, 1.4, sz * 5.4));
+  }
+  cradle.add(at(blk(3.2, 0.8, 9.5, dark), 0, 0.4, 0));
+  stat.add(cradle);
+
+  /* ---- bay greeble ---- */
+  for (let i = 0; i < 46; i++) {
+    const sx = rand() < 0.5 ? -1 : 1;
+    const z = -hd + 1 + rand() * (depth - 2);
+    const y = 1 + rand() * (height - 2.5);
+    stat.add(at(flat(0.35, 0.4 + rand() * 1.2, 0.5 + rand() * 1.6, rand() < 0.3 ? dark : trim),
+      sx * (hw - 0.35), y, z));
+  }
+  for (let i = 0; i < 3; i++) {
+    const p = pipeMesh(0.28, depth - 1, silver, 10);
+    p.rotation.x = Math.PI / 2;
+    p.position.set(-hw + 1.3 + i * 0.9, height - 1.4, (depth - 1) / 2);
+    stat.add(p);
+  }
+
+  const baked = bake(stat);
+  g.add(baked);
+
+  /* ---- animated: clamps + warning beacons ---- */
+  const clampArms = [];
+  for (const sz of [-1, 1]) {
+    for (const sx of [-1, 1]) {
+      const arm = new THREE.Group();
+      arm.position.set(sx * 3.6, 4.3, 1.2 + sz * 4.2);
+      const a = blk(3.4, 0.9, 1.4, silver);
+      a.position.x = -sx * 1.7;
+      arm.add(a);
+      const pad = blk(1.0, 0.7, 1.6, dark);
+      pad.position.x = -sx * 3.2;
+      arm.add(pad);
+      keep(arm);
+      clampArms.push({ arm, sx });
+      g.add(arm);
+    }
+  }
+  const beacons = [];
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const b = new THREE.Group();
+      b.position.set(sx * (hw - 0.9), height - 1.9, sz * (hd - 3));
+      const dome = new THREE.Mesh(rawGeo('beacon', () => {
+        const s = norm(new THREE.SphereGeometry(1, 12, 8, 0, TAU, 0, Math.PI / 2));
+        return s;
+      }), sx > 0 ? amber : red);
+      dome.scale.setScalar(0.62);
+      b.add(dome);
+      b.add(at(flat(1.5, 0.3, 1.5, dark), 0, -0.1, 0));
+      const halo = spriteFx(3.4, dotTex(0.08, 'soft'), sx > 0 ? 0xffb43a : 0xff4a2a, 0.35);
+      b.add(halo);
+      keep(b);
+      beacons.push({ g: b, halo, phase: sx * 0.9 + sz * 1.7 });
+      g.add(b);
+    }
+  }
+
+  const podAnchor = new THREE.Object3D();
+  podAnchor.position.set(0, 4.0, 1.2);
+  g.add(podAnchor);
+
+  let clampK = 1;
+  const setClamps = (u) => {
+    clampK = clamp(u, 0, 1);
+    clampArms.forEach(({ arm, sx }) => {
+      arm.position.x = sx * (3.6 + (1 - clampK) * 2.6);
+      arm.rotation.z = -sx * (1 - clampK) * 0.5;
+    });
+    return g;
+  };
+  setClamps(1);
+
+  g.userData.width = width;
+  g.userData.height = height;
+  g.userData.depth = depth;
+  g.userData.tubeRadius = tubeR;
+  g.userData.podAnchor = podAnchor;
+  g.userData.clamps = clampArms.map((c) => c.arm);
+  g.userData.lights = beacons.map((b) => b.g);
+  /** 1 = pod clamped, 0 = clamps retracted and clear for launch. */
+  g.userData.setClamps = setClamps;
+  Object.defineProperty(g.userData, 'clamped', { get: () => clampK });
+  g.userData.update = (t) => {
+    beacons.forEach((b, i) => {
+      const k = 0.5 + 0.5 * Math.sin(t * 5 + b.phase);
+      b.halo.material.opacity = 0.12 + 0.45 * k;
+      b.g.rotation.y = t * (i % 2 ? 3 : -3);
+    });
+    amber.color.setRGB(1, 0.55 + 0.25 * Math.sin(t * 5), 0.18);
+    red.color.setRGB(1, 0.2 + 0.12 * Math.sin(t * 5 + 1.9), 0.14);
+  };
+  return g;
+}
+
+/* =================================================================== */
+/* preview harness hook                                                 */
+/* =================================================================== */
+
+/**
+ * `preview.js` calls this if it exists, so every factory animates in the
+ * turntable. It forwards the clock to `userData.update` and, as a convenience,
+ * sweeps the common 0..1 setters from `?t=` (t <= 1 is used directly, larger
+ * values wrap) — that is the whole reason `?t=0.4` shows a half-open blast door
+ * or a mid-life explosion.
+ */
+export function update(obj, t) {
+  const u = obj && obj.userData;
+  if (!u) return;
+  const p = t <= 1 ? Math.max(0, t) : t - Math.floor(t);
+  if (u.setStretch) u.setStretch(p);
+  if (u.setOpen) u.setOpen(p);
+  if (u.setT) u.setT(p);
+  if (u.setClamps) u.setClamps(p);
+  if (u.update) u.update(t);
 }

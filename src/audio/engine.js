@@ -60,10 +60,11 @@ export function exp(param, t, v) { param.exponentialRampToValueAtTime(Math.max(E
  * silence at `t + dur`. Returns the time it finishes.
  */
 export function hit(param, t, peak, a, dur) {
+  const p = Math.max(EPS * 2, peak || 0);
   setAt(param, t, EPS);
-  lin(param, t + a, peak);
-  exp(param, t + dur, EPS * 0.5);
-  setAt(param, t + dur + 0.002, 0);
+  lin(param, t + Math.max(0.0005, a), p);
+  exp(param, t + Math.max(a + 0.002, dur), EPS * 0.5);
+  setAt(param, t + Math.max(a + 0.002, dur) + 0.002, 0);
   return t + dur + 0.002;
 }
 
@@ -73,14 +74,15 @@ export function hit(param, t, peak, a, dur) {
  */
 export function adsr(param, t, peak, { a = 0.05, d = 0.12, s = 0.75, r = 0.25, dur = 1 } = {}) {
   const sus = Math.max(0.004, dur);
+  const p = Math.max(EPS * 2, peak || 0);
   setAt(param, t, 0);
-  lin(param, t + Math.min(a, sus), peak);
+  lin(param, t + Math.min(a, sus), p);
   if (a + d < sus) {
-    exp(param, t + a + d, Math.max(EPS, peak * s));
-    setAt(param, t + sus, Math.max(EPS, peak * s));
+    exp(param, t + a + d, Math.max(EPS, p * s));
+    setAt(param, t + sus, Math.max(EPS, p * s));
   }
-  exp(param, t + sus + r, EPS * 0.5);
-  setAt(param, t + sus + r + 0.002, 0);
+  exp(param, t + sus + Math.max(0.005, r), EPS * 0.5);
+  setAt(param, t + sus + Math.max(0.005, r) + 0.002, 0);
   return t + sus + r + 0.002;
 }
 
