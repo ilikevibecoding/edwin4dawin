@@ -275,13 +275,49 @@ export class Figure {
     this.targetFacing = Math.atan2(dx, dz) + Math.PI;
   }
 
+  /**
+   * Drive the figure from an authored path rather than its own navigation.
+   *
+   * The timeline evaluates every character position as a pure function of show
+   * time, which is what makes scrubbing exact; this method accepts that
+   * position and derives the walk speed and facing from the frame delta, so
+   * the procedural gait still works and the feet still do not skate.
+   */
+  track(x: number, z: number, dt: number, faceMotion = true, facing?: number): void {
+    const dx = x - this.group.position.x;
+    const dz = z - this.group.position.z;
+    const dist = Math.hypot(dx, dz);
+    this.group.position.x = x;
+    this.group.position.z = z;
+    this.navTarget = null;
+    // A large jump means the timeline was scrubbed: snap rather than sprint.
+    if (dt > 0 && dist < this.p.runSpeed * 3 * dt + 0.05) {
+      this.speed = dist / dt;
+      this.gait = (this.gait + dist / (this.state === 'run' ? this.p.stride * 1.55 : this.p.stride)) % 1;
+    } else {
+      this.speed = 0;
+    }
+    if (facing !== undefined) {
+      this.targetFacing = facing;
+      if (dist > this.p.runSpeed * 3 * dt + 0.05) this.facing = facing;
+    } else if (faceMotion && dist > 0.004) {
+      this.targetFacing = Math.atan2(dx, dz) + Math.PI;
+    }
+    this.tracked = true;
+  }
+
+  private tracked = false;
+
   /* ---------------------------------------------------------------- update */
 
   update(dt: number, elapsed: number): void {
     this.stateTime += dt;
 
-    // Navigation
-    if (this.navTarget) {
+    // Navigation. A figure driven by `track()` has already had its position and
+    // speed set for this frame.
+    if (this.tracked) {
+      this.tracked = false;
+    } else if (this.navTarget) {
       const pos = this.group.position;
       const dx = this.navTarget.x - pos.x;
       const dz = this.navTarget.z - pos.z;
@@ -311,11 +347,12 @@ export class Figure {
     this.facing += clamp(turn, -6 * dt, 6 * dt);
     this.group.rotation.y = this.facing;
 
-    // Gait phase advances with distance so feet never skate.
+    // Gait phase advances with distance so feet never skate. Tracked figures
+    // advanced it inside `track()`.
     const strideLen = this.state === 'run' ? this.p.stride * 1.55 : this.p.stride;
-    if (this.speed > 0.02) {
+    if (this.speed > 0.02 && this.navTarget) {
       this.gait = (this.gait + (this.speed * dt) / strideLen) % 1;
-    } else {
+    } else if (this.speed <= 0.02) {
       // Settle to a neutral stance rather than freezing mid-step.
       const toNeutral = angleDelta(this.gait * Math.PI * 2, 0) / (Math.PI * 2);
       this.gait = (this.gait - toNeutral * Math.min(1, dt * 4) + 1) % 1;

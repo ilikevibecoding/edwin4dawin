@@ -1,0 +1,278 @@
+{
+  "generated": "2026-08-02T22:16:32.896Z",
+  "clips": {
+    "p1": {
+      "file": "p1.ogg",
+      "duration": 2.716,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|A civil war burns between the stars.",
+      "words": 7
+    },
+    "p2": {
+      "file": "p2.ogg",
+      "duration": 6.45,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|For a generation, the Empire has answered every question with a fleet, and every objection with silence.",
+      "words": 17
+    },
+    "p3": {
+      "file": "p3.ogg",
+      "duration": 7.25,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|Now a handful of rebels have stolen something it cannot afford to lose. The design of a station large enough to end a world.",
+      "words": 24
+    },
+    "p4": {
+      "file": "p4.ogg",
+      "duration": 4.1,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|One ship carries that secret, and it is running out of dark to hide in.",
+      "words": 15
+    },
+    "t1": {
+      "file": "t1.ogg",
+      "duration": 4.65,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|Above the desert world of Tatooine, a stolen secret races through the dark.",
+      "words": 13
+    },
+    "t2": {
+      "file": "t2.ogg",
+      "duration": 9.15,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|Below, twin suns burn over an ocean of sand. A world so poor, so far from anything that matters, that nobody thinks to look here.",
+      "words": 25
+    },
+    "t3": {
+      "file": "t3.ogg",
+      "duration": 2.042,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|That is precisely why they came.",
+      "words": 6
+    },
+    "t4": {
+      "file": "t4.ogg",
+      "duration": 3.238,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|For eleven more seconds, the sky is empty.",
+      "words": 8
+    },
+    "c1": {
+      "file": "c1.ogg",
+      "duration": 6.45,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|She is a diplomatic corvette. Unarmoured, barely armed, built to carry envoys, not fugitives.",
+      "words": 14
+    },
+    "c2": {
+      "file": "c2.ogg",
+      "duration": 5.25,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|Inside her is a princess of the Alliance, and the plans she was sent to deliver.",
+      "words": 16
+    },
+    "c3": {
+      "file": "c3.ogg",
+      "duration": 1.74,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|She very nearly made it.",
+      "words": 5
+    },
+    "c4": {
+      "file": "c4.ogg",
+      "duration": 5.05,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|The thing behind her is a mile and a half of grey armour, and it is in no hurry at all.",
+      "words": 21
+    },
+    "c5": {
+      "file": "c5.ogg",
+      "duration": 3.508,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|It does not need to be quick. It only needs to be inevitable.",
+      "words": 13
+    },
+    "c6": {
+      "file": "c6.ogg",
+      "duration": 2.588,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|Her deflectors hold for ninety seconds.",
+      "words": 6
+    },
+    "c7": {
+      "file": "c7.ogg",
+      "duration": 4.112,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|Then the turbolasers find her drives, and the small ship goes dark.",
+      "words": 12
+    },
+    "c8": {
+      "file": "c8.ogg",
+      "duration": 3.938,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|There is no distress call. There is nobody close enough to answer one.",
+      "words": 13
+    },
+    "k1": {
+      "file": "k1.ogg",
+      "duration": 6.55,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|Powerless, she is drawn in. Held in a beam she cannot break, against a hull that could swallow her whole.",
+      "words": 20
+    },
+    "k2": {
+      "file": "k2.ogg",
+      "duration": 6.25,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|Magnetic clamps take hold. Somewhere forward, a cutting charge begins to burn through a sealed door.",
+      "words": 16
+    },
+    "k3": {
+      "file": "k3.ogg",
+      "duration": 4.65,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|The crew have perhaps two minutes. They know exactly what they intend to spend them on.",
+      "words": 16
+    },
+    "d1": {
+      "file": "d1.ogg",
+      "duration": 5.25,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|Ship security. Six of them. Flak vests, and carbines meant for pirates.",
+      "words": 12
+    },
+    "d2": {
+      "file": "d2.ogg",
+      "duration": 1.903,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|They take the corridor anyway.",
+      "words": 5
+    },
+    "d3": {
+      "file": "d3.ogg",
+      "duration": 4.45,
+      "voice": "captain",
+      "signature": "en_GB-alan-medium|0.98|comm|Hold this passage. Whatever comes through that door, hold it.",
+      "words": 10
+    },
+    "d4": {
+      "file": "d4.ogg",
+      "duration": 2.565,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|The door does not open. It comes apart.",
+      "words": 8
+    },
+    "d5": {
+      "file": "d5.ogg",
+      "duration": 6.55,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|White armour, moving in pairs, advancing behind its own fire. This is not a boarding action. It is a procedure.",
+      "words": 20
+    },
+    "d6": {
+      "file": "d6.ogg",
+      "duration": 1.926,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|It is finished in under a minute.",
+      "words": 7
+    },
+    "d7": {
+      "file": "d7.ogg",
+      "duration": 2.774,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|And then the shooting stops, which is worse.",
+      "words": 8
+    },
+    "d8": {
+      "file": "d8.ogg",
+      "duration": 2.739,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|He does not hurry either. He has never had to.",
+      "words": 10
+    },
+    "l1": {
+      "file": "l1.ogg",
+      "duration": 4.45,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|While they tear apart the forward decks, she is already moving aft.",
+      "words": 12
+    },
+    "l2": {
+      "file": "l2.ogg",
+      "duration": 7.85,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|In her hand is the complete readout of the station. Every corridor, every conduit, and one flaw its builders never found.",
+      "words": 21
+    },
+    "l3": {
+      "file": "l3.ogg",
+      "duration": 4.45,
+      "voice": "princess",
+      "signature": "en_US-amy-medium|1.02|interior|Every deck. Every shaft. Get this to the surface.",
+      "words": 9
+    },
+    "l4": {
+      "file": "l4.ogg",
+      "duration": 4.85,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|She has seconds, and exactly one courier the Empire will never think to search.",
+      "words": 14
+    },
+    "l5": {
+      "file": "l5.ogg",
+      "duration": 3.238,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|She gives it to a droid, and tells it where to run.",
+      "words": 12
+    },
+    "e1": {
+      "file": "e1.ogg",
+      "duration": 6.45,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|Two droids. One sealed lifeboat. No weapons, no escort, and no plan beyond the surface below.",
+      "words": 16
+    },
+    "e2": {
+      "file": "e2.ogg",
+      "duration": 3.566,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|One of them is terrified. The other has simply decided.",
+      "words": 10
+    },
+    "e3": {
+      "file": "e3.ogg",
+      "duration": 3.387,
+      "voice": "droid",
+      "signature": "en_GB-alan-medium|1.04|droid|Into that? We shall be smashed to atoms.",
+      "words": 8
+    },
+    "e4": {
+      "file": "e4.ogg",
+      "duration": 1.647,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|The clamps release.",
+      "words": 3
+    },
+    "e5": {
+      "file": "e5.ogg",
+      "duration": 4.75,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|To the gunners above it reads as debris. No life signs. Not worth a shot.",
+      "words": 15
+    },
+    "x1": {
+      "file": "x1.ogg",
+      "duration": 8.75,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|And so the most dangerous secret of the war falls toward a desert, inside an unarmed droid that was given one instruction and no doubts at all.",
+      "words": 27
+    },
+    "x2": {
+      "file": "x2.ogg",
+      "duration": 2.414,
+      "voice": "narrator",
+      "signature": "en_US-ryan-high|1.16|cinematic|Everything that comes after begins here.",
+      "words": 6
+    }
+  }
+}

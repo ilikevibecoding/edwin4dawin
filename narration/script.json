@@ -1,0 +1,89 @@
+{
+  "$comment": "Original narration for 'A Stolen Secret'. All text is newly written for this project; nothing here is quoted from any screenplay, crawl or film dialogue. Voices are neutral synthesised readings, not impressions of any performer.",
+  "version": 3,
+  "voices": {
+    "narrator": {
+      "model": "en_US-ryan-high",
+      "lengthScale": 1.16,
+      "noiseScale": 0.55,
+      "noiseW": 0.75,
+      "chain": "cinematic"
+    },
+    "princess": {
+      "model": "en_US-amy-medium",
+      "lengthScale": 1.02,
+      "noiseScale": 0.6,
+      "noiseW": 0.8,
+      "chain": "interior"
+    },
+    "captain": {
+      "model": "en_GB-alan-medium",
+      "lengthScale": 0.98,
+      "noiseScale": 0.6,
+      "noiseW": 0.8,
+      "chain": "comm"
+    },
+    "droid": {
+      "model": "en_GB-alan-medium",
+      "lengthScale": 1.04,
+      "noiseScale": 0.5,
+      "noiseW": 0.7,
+      "chain": "droid"
+    }
+  },
+  "prologueCards": [
+    "A civil war burns between the stars.",
+    "For a generation the Empire has answered every question with a fleet.",
+    "Now a handful of rebels have stolen the design of a station large enough to end a world —",
+    "and one small ship is carrying it, above a desert planet at the edge of everything."
+  ],
+  "epilogueCard": "The fate of a galaxy is now travelling inside an unarmed droid.",
+  "lines": [
+    { "id": "p1", "chapter": 1, "t": 4.0,   "voice": "narrator", "text": "A civil war burns between the stars." },
+    { "id": "p2", "chapter": 1, "t": 9.0,   "voice": "narrator", "text": "For a generation, the Empire has answered every question with a fleet, and every objection with silence." },
+    { "id": "p3", "chapter": 1, "t": 17.5,  "voice": "narrator", "text": "Now a handful of rebels have stolen something it cannot afford to lose. The design of a station large enough to end a world." },
+    { "id": "p4", "chapter": 1, "t": 28.0,  "voice": "narrator", "text": "One ship carries that secret, and it is running out of dark to hide in." },
+
+    { "id": "t1", "chapter": 2, "t": 38.0,  "voice": "narrator", "text": "Above the desert world of Tatooine, a stolen secret races through the dark." },
+    { "id": "t2", "chapter": 2, "t": 45.5,  "voice": "narrator", "text": "Below, twin suns burn over an ocean of sand. A world so poor, so far from anything that matters, that nobody thinks to look here." },
+    { "id": "t3", "chapter": 2, "t": 57.0,  "voice": "narrator", "text": "That is precisely why they came." },
+    { "id": "t4", "chapter": 2, "t": 61.0,  "voice": "narrator", "text": "For eleven more seconds, the sky is empty." },
+
+    { "id": "c1", "chapter": 3, "t": 68.0,  "voice": "narrator", "text": "She is a diplomatic corvette. Unarmoured, barely armed, built to carry envoys, not fugitives." },
+    { "id": "c2", "chapter": 3, "t": 78.0,  "voice": "narrator", "text": "Inside her is a princess of the Alliance, and the plans she was sent to deliver." },
+    { "id": "c3", "chapter": 3, "t": 88.0,  "voice": "narrator", "text": "She very nearly made it." },
+    { "id": "c4", "chapter": 3, "t": 99.0,  "voice": "narrator", "text": "The thing behind her is a mile and a half of grey armour, and it is in no hurry at all." },
+    { "id": "c5", "chapter": 3, "t": 110.0, "voice": "narrator", "text": "It does not need to be quick. It only needs to be inevitable." },
+    { "id": "c6", "chapter": 3, "t": 122.0, "voice": "narrator", "text": "Her deflectors hold for ninety seconds." },
+    { "id": "c7", "chapter": 3, "t": 128.0, "voice": "narrator", "text": "Then the turbolasers find her drives, and the small ship goes dark." },
+    { "id": "c8", "chapter": 3, "t": 140.0, "voice": "narrator", "text": "There is no distress call. There is nobody close enough to answer one." },
+
+    { "id": "k1", "chapter": 4, "t": 154.0, "voice": "narrator", "text": "Powerless, she is drawn in. Held in a beam she cannot break, against a hull that could swallow her whole." },
+    { "id": "k2", "chapter": 4, "t": 166.0, "voice": "narrator", "text": "Magnetic clamps take hold. Somewhere forward, a cutting charge begins to burn through a sealed door." },
+    { "id": "k3", "chapter": 4, "t": 177.5, "voice": "narrator", "text": "The crew have perhaps two minutes. They know exactly what they intend to spend them on." },
+
+    { "id": "d1", "chapter": 5, "t": 190.0, "voice": "narrator", "text": "Ship security. Six of them. Flak vests, and carbines meant for pirates." },
+    { "id": "d2", "chapter": 5, "t": 197.5, "voice": "narrator", "text": "They take the corridor anyway." },
+    { "id": "d3", "chapter": 5, "t": 202.0, "voice": "captain",  "text": "Hold this passage. Whatever comes through that door, hold it." },
+    { "id": "d4", "chapter": 5, "t": 211.0, "voice": "narrator", "text": "The door does not open. It comes apart." },
+    { "id": "d5", "chapter": 5, "t": 218.0, "voice": "narrator", "text": "White armour, moving in pairs, advancing behind its own fire. This is not a boarding action. It is a procedure." },
+    { "id": "d6", "chapter": 5, "t": 231.0, "voice": "narrator", "text": "It is finished in under a minute." },
+    { "id": "d7", "chapter": 5, "t": 237.0, "voice": "narrator", "text": "And then the shooting stops, which is worse." },
+    { "id": "d8", "chapter": 5, "t": 245.5, "voice": "narrator", "text": "He does not hurry either. He has never had to." },
+
+    { "id": "l1", "chapter": 6, "t": 256.0, "voice": "narrator", "text": "While they tear apart the forward decks, she is already moving aft." },
+    { "id": "l2", "chapter": 6, "t": 263.0, "voice": "narrator", "text": "In her hand is the complete readout of the station. Every corridor, every conduit, and one flaw its builders never found." },
+    { "id": "l3", "chapter": 6, "t": 272.0, "voice": "princess", "text": "Every deck. Every shaft. Get this to the surface." },
+    { "id": "l4", "chapter": 6, "t": 277.5, "voice": "narrator", "text": "She has seconds, and exactly one courier the Empire will never think to search." },
+    { "id": "l5", "chapter": 6, "t": 284.0, "voice": "narrator", "text": "She gives it to a droid, and tells it where to run." },
+
+    { "id": "e1", "chapter": 7, "t": 291.0, "voice": "narrator", "text": "Two droids. One sealed lifeboat. No weapons, no escort, and no plan beyond the surface below." },
+    { "id": "e2", "chapter": 7, "t": 300.5, "voice": "narrator", "text": "One of them is terrified. The other has simply decided." },
+    { "id": "e3", "chapter": 7, "t": 306.0, "voice": "droid",    "text": "Into that? We shall be smashed to atoms." },
+    { "id": "e4", "chapter": 7, "t": 311.0, "voice": "narrator", "text": "The clamps release." },
+    { "id": "e5", "chapter": 7, "t": 315.0, "voice": "narrator", "text": "To the gunners above it reads as debris. No life signs. Not worth a shot." },
+
+    { "id": "x1", "chapter": 8, "t": 326.0, "voice": "narrator", "text": "And so the most dangerous secret of the war falls toward a desert, inside an unarmed droid that was given one instruction and no doubts at all." },
+    { "id": "x2", "chapter": 8, "t": 338.0, "voice": "narrator", "text": "Everything that comes after begins here." }
+  ]
+}

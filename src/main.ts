@@ -1,41 +1,67 @@
-import * as THREE from 'three';
-import { Stage } from './core/renderer';
-import { qualityFor } from './core/quality';
-import { Starfield } from './scene/starfield';
-import { Tatooine } from './scene/tatooine';
+/**
+ * Entry point.
+ *
+ * Sets up the error boundary first so that any failure during construction is
+ * reported in the page rather than only in the console, checks for WebGL, then
+ * builds the application and unlocks the gate.
+ */
 
-// Temporary bootstrap used while the scene systems are being brought up.
-const canvas = document.getElementById('stage') as HTMLCanvasElement;
-const q = qualityFor('medium');
-const stage = new Stage({ canvas, quality: q });
-stage.resize(window.innerWidth, window.innerHeight);
+import { App } from './app/app';
 
-const stars = new Starfield(q.starCount, stage.pixelRatio);
-stage.sky.add(stars.group);
+const fatal = (title: string, detail: string): void => {
+  const box = document.getElementById('fatal');
+  const msg = document.getElementById('fatal-msg');
+  const det = document.getElementById('fatal-detail');
+  if (box && msg && det) {
+    box.hidden = false;
+    msg.textContent = title;
+    det.textContent = detail;
+  }
+  const gate = document.getElementById('gate');
+  if (gate) gate.style.display = 'none';
+};
 
-const sunA = new THREE.Vector3(0.6, 0.35, 0.72).normalize();
-const planet = new Tatooine({ segments: q.sphereSegments, sunA, sunB: new THREE.Vector3(0.35, 0.1, 0.93).normalize() });
-planet.group.position.set(0, -1200, -5200);
-stage.sky.add(planet.group);
-
-stage.camera.position.set(0, 0, 0);
-stage.camera.lookAt(0, -300, -5200);
-
-const light = new THREE.DirectionalLight(0xfff0dd, 2.4);
-light.position.copy(sunA).multiplyScalar(500);
-stage.scene.add(light);
-stage.scene.add(new THREE.AmbientLight(0x2a3244, 0.6));
-
-const clock = new THREE.Clock();
-function frame() {
-  const t = clock.getElapsedTime();
-  stars.update(t);
-  planet.update(t);
-  stage.render(t);
-  requestAnimationFrame(frame);
+function hasWebGL(): boolean {
+  try {
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl2') || c.getContext('webgl'));
+  } catch {
+    return false;
+  }
 }
-frame();
 
-window.addEventListener('resize', () => stage.resize(window.innerWidth, window.innerHeight));
-(document.getElementById('gate') as HTMLElement).classList.add('hidden');
-(window as unknown as Record<string, unknown>).__ready = true;
+let app: App | null = null;
+
+window.addEventListener('error', (e) => {
+  if (!app) fatal('The projector jammed before the reel started.', String(e.message ?? e));
+  console.error('[a-stolen-secret]', e.error ?? e.message);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[a-stolen-secret] unhandled rejection', e.reason);
+});
+
+async function boot(): Promise<void> {
+  const canvas = document.getElementById('stage') as HTMLCanvasElement | null;
+  if (!canvas) {
+    fatal('Missing viewport.', 'The page did not provide a <canvas id="stage">.');
+    return;
+  }
+  if (!hasWebGL()) {
+    fatal(
+      'This browser cannot open a WebGL context.',
+      'The piece needs WebGL 1 or 2. Try a recent Chrome, Firefox, Safari or Edge, and make sure hardware acceleration is enabled.',
+    );
+    return;
+  }
+
+  try {
+    app = new App(canvas);
+    await app.prepare();
+  } catch (err) {
+    const detail = err instanceof Error ? `${err.message}\n\n${err.stack ?? ''}` : String(err);
+    fatal('Something went wrong while building the scene.', detail);
+    console.error(err);
+  }
+}
+
+void boot();
