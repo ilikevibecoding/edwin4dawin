@@ -180,6 +180,29 @@ All are constructed once and driven by `update(t)`.
 - `glowSprite(color, size)`, `additiveMaterial(color)`, `radialTexture()`, `flareTexture()`
 - `shake(camera, t, amount, freq, seed)` — call **after** positioning the camera.
 
+## Lighting and camera — `src/engine/stage.js`
+
+Use the shared rigs so the eight scenes look like one film.
+
+```js
+import { standardLights, cameraRig, handheld, nebulaBackdrop } from '../engine/stage.js';
+
+const lights = standardLights(scene, 'space');   // also: interior, desert, hangar, trench, hall
+lights.key.intensity *= 1.2;                     // nudge afterwards if needed
+
+cameraRig(camera, t, {
+  pos:   [[0,[0,6,40]], [4,[0,9,18]], [9,[12,4,6]]],
+  look:  [[0,[0,4,0]],  [9,[2,2,0]]],
+  fov:   [[0,52], [4,34]],
+  shake: [[3,0], [3.2,0.5], [4.2,0]],
+  ease:  ease.inOutCubic,
+});
+handheld(camera, t, 0.05);        // subtle continuous drift, call after positioning
+```
+
+Each preset sets a key/fill/rim/hemisphere rig, a background colour and
+(sometimes) fog, and returns the lights so you can adjust them.
+
 ## SVG — `src/engine/svg.js`
 
 ```js

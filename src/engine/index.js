@@ -23,3 +23,4 @@ export {
   shake,
 } from './fx.js';
 export * as ease from './ease.js';
+export { standardLights, cameraRig, handheld, nebulaBackdrop } from './stage.js';
