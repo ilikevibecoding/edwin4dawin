@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "voices": {
+    "narrator": {
+      "label": "Narrator",
+      "note": "Neutral cinematic narrator. Original synthesized voice, not modelled on any performer.",
+      "rate": 0.92,
+      "pitch": 0.85
+    },
+    "princess": {
+      "label": "Princess Leia",
+      "note": "Original synthesized voice for the character's own lines.",
+      "rate": 1.0,
+      "pitch": 1.15
+    },
+    "protocol": {
+      "label": "Protocol Droid",
+      "note": "Original synthesized voice, processed to sound mechanical.",
+      "rate": 1.05,
+      "pitch": 1.05
+    }
+  },
+  "lines": [
+    {
+      "id": "n01",
+      "chapter": "prologue",
+      "voice": "narrator",
+      "time": 7.5,
+      "text": "Long after the Republic fell, the galaxy learned to speak quietly. Fleets moved between the stars without explanation, and whole worlds simply stopped answering."
+    },
+    {
+      "id": "n02",
+      "chapter": "prologue",
+      "voice": "narrator",
+      "time": 25.0,
+      "text": "In the dark between systems, a rebellion has done something reckless. It has stolen the design of an Imperial station large enough to end a world. Now it is running."
+    },
+    {
+      "id": "n03",
+      "chapter": "tatooine",
+      "voice": "narrator",
+      "time": 51.0,
+      "text": "Above the desert world of Tatooine, a stolen secret races through the dark. Inside a battered diplomatic ship, a princess carries the design of a weapon powerful enough to silence an entire planet."
+    },
+    {
+      "id": "n04",
+      "chapter": "tatooine",
+      "voice": "narrator",
+      "time": 68.0,
+      "text": "The planet below keeps no record of what passes overhead. Sand, wind, and two suns. It does not yet know that its sky is about to become a battlefield."
+    },
+    {
+      "id": "n05",
+      "chapter": "pursuit",
+      "voice": "narrator",
+      "time": 90.0,
+      "text": "The runner's engines are already past their limit. Behind her, something vast has held the same course for nine hours, and has never once fallen behind."
+    },
+    {
+      "id": "n06",
+      "chapter": "pursuit",
+      "voice": "narrator",
+      "time": 111.0,
+      "text": "The Imperial destroyer does not hurry. It simply arrives. A wedge of grey iron more than a mile long, blotting out the stars, and then the planet."
+    },
+    {
+      "id": "n07",
+      "chapter": "pursuit",
+      "voice": "narrator",
+      "time": 134.0,
+      "text": "Turbolasers find the small ship's shields. Every hit is a decision made somewhere on that bridge, and delivered without anger."
+    },
+    {
+      "id": "n08",
+      "chapter": "pursuit",
+      "voice": "narrator",
+      "time": 155.0,
+      "text": "There is no answer to a ship that size. Her shields fail one section at a time, and then her engines go dark."
+    },
+    {
+      "id": "n09",
+      "chapter": "capture",
+      "voice": "narrator",
+      "time": 180.0,
+      "text": "Held in a tractor beam, the diplomatic ship is drawn close enough for the two crews to count each other's windows. Boarding tubes lock onto the hull."
+    },
+    {
+      "id": "n10",
+      "chapter": "capture",
+      "voice": "narrator",
+      "time": 200.0,
+      "text": "Inside, the corridor lights turn red. The people aboard have about ninety seconds."
+    },
+    {
+      "id": "n11",
+      "chapter": "corridor",
+      "voice": "narrator",
+      "time": 219.0,
+      "text": "The defenders are ship's crew, not soldiers. They take the angles they can hold, and they wait for a door that is already turning white."
+    },
+    {
+      "id": "n12",
+      "chapter": "corridor",
+      "voice": "narrator",
+      "time": 243.0,
+      "text": "The boarding party comes through the smoke in white armour, moving like one machine. A corridor this narrow leaves little room to be brave in."
+    },
+    {
+      "id": "n13",
+      "chapter": "corridor",
+      "voice": "narrator",
+      "time": 267.0,
+      "text": "When the shooting stops, something else steps through the breach. The air does not get colder. Everyone aboard feels it anyway. He does not draw a weapon. He has never needed to."
+    },
+    {
+      "id": "n14",
+      "chapter": "plans",
+      "voice": "narrator",
+      "time": 291.0,
+      "text": "Elsewhere on the ship, the princess is doing the only useful thing left. She pulls the stolen plans out of the ship's memory before the Empire can seal it."
+    },
+    {
+      "id": "l01",
+      "chapter": "plans",
+      "voice": "princess",
+      "time": 304.5,
+      "text": "This is the whole design. Every corridor, every reactor line, and the one place it fails."
+    },
+    {
+      "id": "n15",
+      "chapter": "plans",
+      "voice": "narrator",
+      "time": 313.0,
+      "text": "She gives them to a small repair droid. No rank, no clearance, no reason for anyone to search it. Then she adds a message for one old friend on the world below."
+    },
+    {
+      "id": "n16",
+      "chapter": "plans",
+      "voice": "narrator",
+      "time": 327.0,
+      "text": "It is a thin plan. It is the only plan."
+    },
+    {
+      "id": "n17",
+      "chapter": "escape",
+      "voice": "narrator",
+      "time": 334.0,
+      "text": "The droids reach a launch bay near the stern. One of them is certain this is a catastrophic mistake, and says so continuously. The other does not slow down."
+    },
+    {
+      "id": "l02",
+      "chapter": "escape",
+      "voice": "protocol",
+      "time": 347.5,
+      "text": "I want it recorded that I objected. Repeatedly. And in writing."
+    },
+    {
+      "id": "n18",
+      "chapter": "escape",
+      "voice": "narrator",
+      "time": 354.0,
+      "text": "The clamps let go. An unarmed pod drops away from a captured ship, beneath the guns of an Imperial fleet, and not one gunner spends a shot on it."
+    },
+    {
+      "id": "n19",
+      "chapter": "escape",
+      "voice": "narrator",
+      "time": 369.0,
+      "text": "It falls toward the desert. The two ships above it shrink into the dark, and the plans that could break an empire go down into the sand."
+    },
+    {
+      "id": "n20",
+      "chapter": "epilogue",
+      "voice": "narrator",
+      "time": 388.0,
+      "text": "This war will be remembered for its fleets and its heroes. It turned here. Quietly, inside a machine that cannot fight, carrying a secret it does not understand, toward a farm boy no one has thought to ask."
+    }
+  ]
+}
