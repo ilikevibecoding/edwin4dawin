@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LEGO Star Wars — audio probe</title>
+<style>
+  html, body { margin: 0; min-height: 100%; background: #12151a; color: #cfd6dd;
+    font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  main { padding: 18px 22px 60px; }
+  h1 { font-size: 15px; color: #ffd54a; margin: 0 0 4px; letter-spacing: .08em; }
+  h2 { font-size: 12px; color: #9fd0ff; margin: 22px 0 6px; letter-spacing: .12em; text-transform: uppercase; }
+  p.note { color: #7c8894; margin: 0 0 10px; max-width: 70ch; }
+  button { background: #1e2430; color: #cfd6dd; border: 1px solid #33404f; border-radius: 4px;
+    padding: 5px 9px; margin: 0 5px 5px 0; font: inherit; cursor: pointer; }
+  button:hover { background: #27303e; color: #fff; border-color: #4b5f75; }
+  button.cue { border-color: #6b5a2a; }
+  #log { white-space: pre-wrap; color: #8fb98f; border-top: 1px solid #263040; padding-top: 8px; margin-top: 18px; }
+  #err { color: #ff8b7a; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1>AUDIO PROBE</h1>
+  <p class="note">
+    Offline render harness for <code>src/audio/*</code>. <code>window.renderOffline(spec)</code>
+    builds an OfflineAudioContext, schedules the spec at absolute times, renders and returns WAV
+    bytes; <code>tools/audio_probe.mjs</code> drives it headlessly. The buttons below play the same
+    schedule through a live AudioContext, which is only there so a human can listen.
+  </p>
+  <h2>cues</h2>
+  <div id="cues"></div>
+  <h2>sfx</h2>
+  <div id="sfxs"></div>
+  <div><button id="stop">stop live audio</button></div>
+  <div id="err"></div>
+  <pre id="log"></pre>
+</main>
+
+<script type="module">
+import { createAudioEngine } from '/src/audio/engine.js';
+import { CUES, scheduleCue, stopCue, cueDuration, HEROIC, DARK } from '/src/audio/score.js';
+import { SFX, playSfx, sfxDuration, SFX_INFO } from '/src/audio/sfx.js';
+
+const logEl = document.getElementById('log');
+const errEl = document.getElementById('err');
+const errors = [];
+window.__ERRORS__ = errors;
+const log = (...a) => { logEl.textContent += a.join(' ') + '\n'; };
+const fail = (e) => {
+  const m = e && e.stack ? e.stack : String(e);
+  errors.push(m);
+  errEl.textContent += m + '\n';
+};
+addEventListener('error', (e) => fail(e.error || e.message));
+addEventListener('unhandledrejection', (e) => fail(e.reason));
+
+// ---------------------------------------------------------------------------
+// scheduling a spec onto any BaseAudioContext — one code path for offline and
+// live, which is the whole point of the exercise.
+// ---------------------------------------------------------------------------
+
+/**
+ * spec = {
+ *   kind: 'cue' | 'sfx' | 'mix',
+ *   name, when, opts,                       // cue / sfx
+ *   events: [{ type:'cue'|'sfx'|'duck'|'stopCue'|'master', ... }],   // mix
+ *   engine: {...}, sampleRate, channels, tail, length, bits
+ * }
+ */
+function scheduleSpec(audio, spec) {
+  let end = 0;
+  const at = (e) => e.when ?? 0;
+  const events = spec.kind === 'mix' ? (spec.events || []) : [{
+    type: spec.kind, name: spec.name, when: spec.when ?? 0, opts: spec.opts || {},
+  }];
+  for (const e of events) {
+    if (e.type === 'cue') {
+      const d = scheduleCue(audio, e.name, at(e), e.opts || {});
+      end = Math.max(end, at(e) + d);
+    } else if (e.type === 'sfx') {
+      const d = playSfx(audio, e.name, at(e), e.opts || {});
+      end = Math.max(end, at(e) + d);
+    } else if (e.type === 'stopCue') {
+      stopCue(audio, e.name, at(e), e.fade ?? 1);
+      end = Math.max(end, at(e) + (e.fade ?? 1));
+    } else if (e.type === 'duck') {
+      end = Math.max(end, audio.duck(at(e), e.dur ?? 3, e.amount ?? 0.34, e.opts || {}));
+    } else if (e.type === 'master') {
+      audio.setMasterGain(e.value ?? 1, at(e));
+    }
+  }
+  return end;
+}
+
+/** Length of the render, worked out before any context exists. */
+function specLength(spec) {
+  if (spec.length) return spec.length;
+  const tail = spec.tail ?? 0;
+  let end = 0;
+  const events = spec.kind === 'mix' ? (spec.events || []) : [{
+    type: spec.kind, name: spec.name, when: spec.when ?? 0, opts: spec.opts || {},
+  }];
+  for (const e of events) {
+    const w = e.when ?? 0;
+    if (e.type === 'cue') end = Math.max(end, w + cueDuration(e.name, e.opts || {}));
+    else if (e.type === 'sfx') end = Math.max(end, w + sfxDuration(e.name, e.opts || {}));
+    else if (e.type === 'duck') end = Math.max(end, w + (e.dur ?? 3) + 1);
+    else end = Math.max(end, w);
+  }
+  return end + tail;
+}
+
+async function renderSpec(spec) {
+  const sr = spec.sampleRate || 48000;
+  const seconds = specLength(spec);
+  const frames = Math.max(128, Math.round(seconds * sr));
+  const ctx = new OfflineAudioContext(spec.channels || 2, frames, sr);
+  const audio = createAudioEngine(ctx, spec.engine || {});
+  const apiEnd = scheduleSpec(audio, spec);
+  const buf = await ctx.startRendering();
+  return { buf, audio, apiEnd, seconds: frames / sr, sr };
+}
+
+function measure(buf) {
+  let peak = 0, sum = 0, n = 0, bad = 0, dc = 0;
+  const chans = [];
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const d = buf.getChannelData(c);
+    chans.push(d);
+    for (let i = 0; i < d.length; i++) {
+      const v = d[i];
+      if (!Number.isFinite(v)) { bad++; continue; }
+      const a = v < 0 ? -v : v;
+      if (a > peak) peak = a;
+      sum += v * v; dc += v; n++;
+    }
+  }
+  // longest run of samples at (or past) the limiter ceiling — a clipped plateau
+  let clip = 0, run = 0;
+  const d0 = chans[0];
+  for (let i = 0; i < d0.length; i++) {
+    if (Math.abs(d0[i]) >= 0.9399) { run++; if (run > clip) clip = run; } else run = 0;
+  }
+  return {
+    peak, peakDb: peak > 0 ? 20 * Math.log10(peak) : -Infinity,
+    rms: Math.sqrt(sum / Math.max(1, n)),
+    rmsDb: sum > 0 ? 20 * Math.log10(Math.sqrt(sum / Math.max(1, n))) : -Infinity,
+    dc: dc / Math.max(1, n), nonFinite: bad, clipRun: clip, chans,
+  };
+}
+
+/** Energy profile in `bins` slices — cheap way to spot dead air. */
+function profile(buf, bins = 24) {
+  const d = buf.getChannelData(0);
+  const d2 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : d;
+  const out = [];
+  const step = Math.max(1, Math.floor(d.length / bins));
+  for (let b = 0; b < bins; b++) {
+    let s = 0, m = 0;
+    const from = b * step, to = Math.min(d.length, from + step);
+    for (let i = from; i < to; i++) {
+      const v = 0.5 * (d[i] + d2[i]);
+      s += v * v;
+      const a = Math.abs(v); if (a > m) m = a;
+    }
+    out.push(+Math.sqrt(s / Math.max(1, to - from)).toFixed(5));
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// WAV
+// ---------------------------------------------------------------------------
+
+function encodeWav(chans, sampleRate, bits = 16) {
+  const nch = chans.length, frames = chans[0].length;
+  const bytesPer = bits === 32 ? 4 : 2;
+  const dataLen = frames * nch * bytesPer;
+  const out = new ArrayBuffer(44 + dataLen);
+  const v = new DataView(out);
+  const ascii = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+  ascii(0, 'RIFF'); v.setUint32(4, 36 + dataLen, true); ascii(8, 'WAVE');
+  ascii(12, 'fmt '); v.setUint32(16, 16, true);
+  v.setUint16(20, bits === 32 ? 3 : 1, true);
+  v.setUint16(22, nch, true);
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * nch * bytesPer, true);
+  v.setUint16(32, nch * bytesPer, true);
+  v.setUint16(34, bits, true);
+  ascii(36, 'data'); v.setUint32(40, dataLen, true);
+  let off = 44;
+  for (let i = 0; i < frames; i++) {
+    for (let c = 0; c < nch; c++) {
+      const s = chans[c][i];
+      if (bits === 32) { v.setFloat32(off, s, true); off += 4; }
+      else {
+        const x = s < -1 ? -1 : s > 1 ? 1 : s;
+        v.setInt16(off, Math.round(x * 32767), true); off += 2;
+      }
+    }
+  }
+  return new Uint8Array(out);
+}
+
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+function toBase64(bytes) {
+  let s = '';
+  const n = bytes.length;
+  for (let i = 0; i < n; i += 3) {
+    const a = bytes[i], b = i + 1 < n ? bytes[i + 1] : 0, c = i + 2 < n ? bytes[i + 2] : 0;
+    s += B64[a >> 2] + B64[((a & 3) << 4) | (b >> 4)]
+      + (i + 1 < n ? B64[((b & 15) << 2) | (c >> 6)] : '=')
+      + (i + 2 < n ? B64[c & 63] : '=');
+  }
+  return s;
+}
+
+// ---------------------------------------------------------------------------
+// the API tools/audio_probe.mjs drives
+// ---------------------------------------------------------------------------
+
+window.audioMeta = () => ({
+  cues: Object.fromEntries(Object.entries(CUES).map(([k, v]) => [k, { ...v, api: cueDuration(k) }])),
+  sfx: SFX.map((n) => ({ name: n, duration: sfxDuration(n), ...(SFX_INFO[n] || {}) })),
+  motifs: { heroic: HEROIC, dark: DARK },
+});
+
+/** Render a spec and stash the WAV for chunked pickup. Returns the stats. */
+window.renderOffline = async (spec = {}) => {
+  try {
+    const { buf, apiEnd, seconds, sr } = await renderSpec(spec);
+    const m = measure(buf);
+    const wav = encodeWav(m.chans, sr, spec.bits || 16);
+    window.__wav = wav;
+    return {
+      ok: true, name: spec.name || spec.kind, seconds, sampleRate: sr, apiEnd,
+      frames: buf.length, bytes: wav.length,
+      peak: m.peak, peakDb: m.peakDb, rms: m.rms, rmsDb: m.rmsDb,
+      dc: m.dc, nonFinite: m.nonFinite, clipRun: m.clipRun,
+      profile: profile(buf),
+    };
+  } catch (e) {
+    fail(e);
+    return { ok: false, error: e && e.stack ? e.stack : String(e) };
+  }
+};
+
+/** Base64 slice of the last render, so multi-MB WAVs cross the bridge safely. */
+window.wavChunk = (off, len) => toBase64(window.__wav.subarray(off, off + len));
+
+/**
+ * Proof that the schedule is time-invariant and repeatable:
+ *   A vs B  — two identical renders in separate contexts
+ *   A vs C  — same schedule shifted by `offset` seconds inside a longer context
+ *   A vs D  — same schedule in a context that is `pad` seconds longer
+ * All three should differ by exactly zero.
+ */
+window.verifyOffline = async (spec = {}, offset = 1, pad = 3) => {
+  try {
+    const base = await renderSpec(spec);
+    const again = await renderSpec(spec);
+    const sr = base.sr;
+    const shifted = await renderSpec(shiftSpec(spec, offset, base.seconds + offset));
+    const longer = await renderSpec({ ...spec, length: base.seconds + pad });
+    const diff = (a, b, shiftFrames = 0) => {
+      let max = 0;
+      for (let c = 0; c < a.numberOfChannels; c++) {
+        const x = a.getChannelData(c), y = b.getChannelData(c);
+        const n = Math.min(x.length, y.length - shiftFrames);
+        for (let i = 0; i < n; i++) {
+          const d = Math.abs(x[i] - y[i + shiftFrames]);
+          if (d > max) max = d;
+        }
+      }
+      return max;
+    };
+    return {
+      ok: true, name: spec.name || spec.kind, seconds: base.seconds, sampleRate: sr,
+      repeat: diff(base.buf, again.buf),
+      shifted: diff(base.buf, shifted.buf, Math.round(offset * sr)),
+      longerContext: diff(base.buf, longer.buf),
+    };
+  } catch (e) {
+    fail(e);
+    return { ok: false, error: e && e.stack ? e.stack : String(e) };
+  }
+};
+
+function shiftSpec(spec, offset, length) {
+  const s = { ...spec, length };
+  if (spec.kind === 'mix') s.events = (spec.events || []).map((e) => ({ ...e, when: (e.when ?? 0) + offset }));
+  else s.when = (spec.when ?? 0) + offset;
+  return s;
+}
+
+/**
+ * Run the whole schedule through a real (non-offline) AudioContext to prove
+ * the live path takes exactly the same calls. Nothing is captured — the point
+ * is that no scheduling call needs a clock, a frame or a gesture.
+ */
+window.checkLive = async (spec = {}) => {
+  try {
+    const ctx = new AudioContext({ sampleRate: spec.sampleRate || 48000 });
+    const audio = createAudioEngine(ctx, spec.engine || {});
+    audio.setMasterGain(0, 0);                       // silent: this is a scheduling check
+    const end = scheduleSpec(audio, spec);
+    const state = ctx.state;
+    audio.dispose();
+    await ctx.close();
+    return { ok: true, state, end, sampleRate: ctx.sampleRate };
+  } catch (e) {
+    fail(e);
+    return { ok: false, error: e && e.stack ? e.stack : String(e) };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// live buttons (human ears only)
+// ---------------------------------------------------------------------------
+
+let liveCtx = null, liveAudio = null;
+function live() {
+  if (!liveCtx) {
+    liveCtx = new AudioContext({ sampleRate: 48000 });
+    liveAudio = createAudioEngine(liveCtx);
+  }
+  liveCtx.resume();
+  return liveAudio;
+}
+document.getElementById('stop').onclick = () => {
+  if (liveCtx) { liveAudio.dispose(); liveCtx.close(); liveCtx = null; liveAudio = null; }
+};
+for (const name of Object.keys(CUES)) {
+  const b = document.createElement('button');
+  b.className = 'cue';
+  b.textContent = `${name} (${CUES[name].duration}s)`;
+  b.onclick = () => { const a = live(); scheduleCue(a, name, a.ctx.currentTime + 0.1); };
+  document.getElementById('cues').append(b);
+}
+for (const name of SFX) {
+  const b = document.createElement('button');
+  b.textContent = name;
+  b.onclick = () => { const a = live(); playSfx(a, name, a.ctx.currentTime + 0.05); };
+  document.getElementById('sfxs').append(b);
+}
+
+log(`cues: ${Object.keys(CUES).length}   sfx: ${SFX.length}`);
+window.__READY__ = true;
+</script>
+</body>
+</html>

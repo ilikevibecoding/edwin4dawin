@@ -1,0 +1,239 @@
+{
+  "generated": "2026-08-02T21:05:24.356Z",
+  "lines": {
+    "n01": {
+      "id": "n01",
+      "voice": "narrator",
+      "stamp": "cb952b477184",
+      "duration": 3.789,
+      "text": "A long time ago in a galaxy far, far away....",
+      "caption": "A long time ago in a galaxy far, far away....",
+      "speaker": ""
+    },
+    "c01": {
+      "id": "c01",
+      "voice": "narrator",
+      "stamp": "568c863f7442",
+      "duration": 10.097,
+      "text": "It is a time of rebellion. From a hidden base among the outer stars, a ragged fleet has struck the first real blow against the Galactic Empire.",
+      "caption": "It is a time of rebellion. From a hidden base among the outer stars, a ragged fleet has struck the first real blow against the Galactic Empire.",
+      "speaker": ""
+    },
+    "c02": {
+      "id": "c02",
+      "voice": "narrator",
+      "stamp": "91a45c746f67",
+      "duration": 12.001,
+      "text": "In the confusion of that battle, rebel agents seized the plans to the Empire's terrible new battle station. A moon-sized fortress, with power enough to shatter a world.",
+      "caption": "In the confusion of that battle, rebel agents seized the plans to the Empire's terrible new battle station. A moon-sized fortress, with power enough to shatter a world.",
+      "speaker": ""
+    },
+    "c03": {
+      "id": "c03",
+      "voice": "narrator",
+      "stamp": "9af7f9d3e60d",
+      "duration": 10.591,
+      "text": "Now, hunted across the galaxy, Princess Leia runs for home with the stolen plans hidden aboard her ship. And with them, the last hope of freedom that remains.",
+      "caption": "Now, hunted across the galaxy, Princess Leia runs for home with the stolen plans hidden aboard her ship. And with them, the last hope of freedom that remains.",
+      "speaker": ""
+    },
+    "n02": {
+      "id": "n02",
+      "voice": "narrator",
+      "stamp": "9f4c7e9ccd3a",
+      "duration": 4.117,
+      "text": "Above the desert world of Tatooine, the chase came to an end.",
+      "caption": "Above the desert world of Tatooine, the chase came to an end.",
+      "speaker": ""
+    },
+    "n03": {
+      "id": "n03",
+      "voice": "narrator",
+      "stamp": "b48e43f2ff00",
+      "duration": 2.127,
+      "text": "They had run out of sky.",
+      "caption": "They had run out of sky.",
+      "speaker": ""
+    },
+    "o01": {
+      "id": "o01",
+      "voice": "officer",
+      "stamp": "0d506e8338ab",
+      "duration": 3.115,
+      "text": "Tractor beam engaged. Prepare a boarding party.",
+      "caption": "Tractor beam engaged. Prepare a boarding party.",
+      "speaker": "OFFICER"
+    },
+    "n04": {
+      "id": "n04",
+      "voice": "narrator",
+      "stamp": "9c579781f857",
+      "duration": 3.119,
+      "text": "They held the corridor for eleven seconds.",
+      "caption": "They held the corridor for eleven seconds.",
+      "speaker": ""
+    },
+    "r01": {
+      "id": "r01",
+      "voice": "rebel",
+      "stamp": "02ea91b1f64e",
+      "duration": 1.71,
+      "text": "Hold the line! Hold it!",
+      "caption": "Hold the line! Hold it!",
+      "speaker": "REBEL"
+    },
+    "t01": {
+      "id": "t01",
+      "voice": "trooper",
+      "stamp": "e8b2522f8f9e",
+      "duration": 1.455,
+      "text": "Move in. Take the ship.",
+      "caption": "Move in. Take the ship.",
+      "speaker": "TROOPER"
+    },
+    "v01": {
+      "id": "v01",
+      "voice": "vader",
+      "stamp": "701380653643",
+      "duration": 3.273,
+      "text": "The plans were transmitted to this ship. Find them.",
+      "caption": "The plans were transmitted to this ship. Find them.",
+      "speaker": "VADER"
+    },
+    "v02": {
+      "id": "v02",
+      "voice": "vader",
+      "stamp": "2fb4e21fd7d4",
+      "duration": 3.083,
+      "text": "Tear this vessel apart, piece by piece.",
+      "caption": "Tear this vessel apart, piece by piece.",
+      "speaker": "VADER"
+    },
+    "n05": {
+      "id": "n05",
+      "voice": "narrator",
+      "stamp": "4c12af3f2917",
+      "duration": 6.088,
+      "text": "While the Empire searched the upper decks, the princess found the only couriers left to her.",
+      "caption": "While the Empire searched the upper decks, the princess found the only couriers left to her.",
+      "speaker": ""
+    },
+    "l01": {
+      "id": "l01",
+      "voice": "leia",
+      "stamp": "8a6f31e1f3a3",
+      "duration": 3.821,
+      "text": "Take this. Get it off the ship. Everything depends on you now.",
+      "caption": "Take this. Get it off the ship. Everything depends on you now.",
+      "speaker": "LEIA"
+    },
+    "p01": {
+      "id": "p01",
+      "voice": "threepio",
+      "stamp": "7b8aa1df9bbc",
+      "duration": 3.617,
+      "text": "Oh, this is madness! Absolute madness!",
+      "caption": "Oh, this is madness! Absolute madness!",
+      "speaker": "C-3PO"
+    },
+    "p02": {
+      "id": "p02",
+      "voice": "threepio",
+      "stamp": "e78cbd43d660",
+      "duration": 4.727,
+      "text": "Wait! Where are you going? We are certainly not authorised to leave!",
+      "caption": "Wait! Where are you going? We are certainly not authorised to leave!",
+      "speaker": "C-3PO"
+    },
+    "n06": {
+      "id": "n06",
+      "voice": "narrator",
+      "stamp": "6aa9a2d86f8b",
+      "duration": 7.196,
+      "text": "One escape pod, one little astromech, and the whole future of the galaxy rattling around inside him.",
+      "caption": "One escape pod, one little astromech, and the whole future of the galaxy rattling around inside him.",
+      "speaker": ""
+    },
+    "n07": {
+      "id": "n07",
+      "voice": "narrator",
+      "stamp": "9e012e04f407",
+      "duration": 4.947,
+      "text": "They came down in the dune sea, under two suns and no shade at all.",
+      "caption": "They came down in the dune sea, under two suns and no shade at all.",
+      "speaker": ""
+    },
+    "p03": {
+      "id": "p03",
+      "voice": "threepio",
+      "stamp": "649f70149b03",
+      "duration": 3.902,
+      "text": "We are going to be melted down. I just know it.",
+      "caption": "We are going to be melted down. I just know it.",
+      "speaker": "C-3PO"
+    },
+    "n08": {
+      "id": "n08",
+      "voice": "narrator",
+      "stamp": "def865b43256",
+      "duration": 5.363,
+      "text": "And so the fate of a galaxy went walking across the sand, arguing all the way.",
+      "caption": "And so the fate of a galaxy went walking across the sand, arguing all the way.",
+      "speaker": ""
+    },
+    "n09": {
+      "id": "n09",
+      "voice": "narrator",
+      "stamp": "b9bb2a95d2f8",
+      "duration": 8.674,
+      "text": "The plans reached the Rebellion. The Rebellion found one weakness. A thermal exhaust port, two metres wide.",
+      "caption": "The plans reached the Rebellion. The Rebellion found one weakness. A thermal exhaust port, two metres wide.",
+      "speaker": ""
+    },
+    "k01": {
+      "id": "k01",
+      "voice": "luke",
+      "stamp": "c8455632589f",
+      "duration": 1.884,
+      "text": "I'm going in. Cover me.",
+      "caption": "I'm going in. Cover me.",
+      "speaker": "LUKE"
+    },
+    "b01": {
+      "id": "b01",
+      "voice": "ben",
+      "stamp": "50881f4e2422",
+      "duration": 2.446,
+      "text": "Let go. Trust yourself.",
+      "caption": "Let go. Trust yourself.",
+      "speaker": "BEN"
+    },
+    "k02": {
+      "id": "k02",
+      "voice": "luke",
+      "stamp": "1fc66dd3d4db",
+      "duration": 2.198,
+      "text": "That's it. Torpedoes away!",
+      "caption": "That's it. Torpedoes away!",
+      "speaker": "LUKE"
+    },
+    "n10": {
+      "id": "n10",
+      "voice": "narrator",
+      "stamp": "4a6ded80647a",
+      "duration": 3.559,
+      "text": "Two metres wide. And that was enough.",
+      "caption": "Two metres wide. And that was enough.",
+      "speaker": ""
+    },
+    "n11": {
+      "id": "n11",
+      "voice": "narrator",
+      "stamp": "c3d1314b3549",
+      "duration": 6.417,
+      "text": "A galaxy far, far away. Built, brick by brick, out of nothing but code.",
+      "caption": "A galaxy far, far away. Built, brick by brick, out of nothing but code.",
+      "speaker": ""
+    }
+  }
+}
