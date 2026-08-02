@@ -1,0 +1,33 @@
+{
+  "name": "lego-star-wars-brickfilm",
+  "version": "1.0.0",
+  "description": "A procedurally generated LEGO Star Wars brickfilm rendered in three.js, with narration.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "shot": "node tools/shot.mjs",
+    "capture": "node tools/capture.mjs",
+    "audio": "node tools/build-audio.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ilikevibecoding/edwin4dawin.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ilikevibecoding/edwin4dawin/issues"
+  },
+  "homepage": "https://github.com/ilikevibecoding/edwin4dawin#readme",
+  "devDependencies": {
+    "puppeteer": "^25.4.0",
+    "vite": "^8.2.0"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "type": "module"
+}
