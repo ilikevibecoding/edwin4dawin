@@ -127,8 +127,8 @@ export default {
     far.add(station);
 
     const debris = debrisField({
-      count: 220, radius: 5200, seed: 12, size: [8, 90],
-      material: greebled({ seed: 66, repeat: [1, 1], base: [116, 120, 128] }),
+      count: 260, radius: 5200, seed: 12, size: [8, 90],
+      material: greebled({ seed: 66, repeat: [1, 1], base: [138, 128, 118] }),
     });
     debris.position.copy(station.position);
     debris.visible = false;
@@ -147,6 +147,37 @@ export default {
     boomRing.position.copy(station.position);
     boomRing.renderOrder = 9;
     far.add(boomRing);
+    const boomRing2 = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), glowPlane({ color: 0xffb060, opacity: 0 }));
+    boomRing2.position.copy(station.position);
+    boomRing2.renderOrder = 9;
+    far.add(boomRing2);
+    // Embers: hot fragments that keep the frame alive after the flash.
+    const embers = [];
+    {
+      const er = new RNG(51);
+      for (let i = 0; i < 26; i++) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), glowPlane({ color: 0xff9a44, opacity: 0 }));
+        const p2 = er.onSphere({});
+        m.userData = { dir: new THREE.Vector3(p2.x, p2.y, p2.z).multiplyScalar(er.float(0.3, 1)), size: er.float(300, 1400), ph: er.float(0, 6) };
+        m.renderOrder = 8;
+        far.add(m);
+        embers.push(m);
+      }
+    }
+    // Secondary detonations across the surface just before the main blast.
+    const preBooms = [];
+    {
+      const pr = new RNG(63);
+      for (let i = 0; i < 9; i++) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), glowPlane({ color: 0xffc070, opacity: 0 }));
+        const p2 = pr.onSphere({});
+        m.position.copy(station.position).add(new THREE.Vector3(p2.x, p2.y, p2.z).multiplyScalar(5400));
+        m.userData = { t: BOOM_T - 2.6 + pr.float(0, 2.4), size: pr.float(700, 2200) };
+        m.renderOrder = 8;
+        far.add(m);
+        preBooms.push(m);
+      }
+    }
 
     // --- the trench set (shots 2-6) ------------------------------------------
     const set = new THREE.Group();
@@ -157,6 +188,30 @@ export default {
     const apron = new THREE.Mesh(new THREE.BoxGeometry(9000, 40, 12000), surfMat);
     apron.position.set(0, -20, -2800);
     set.add(apron);
+    // Surface complexes: without these the approach reads as a flat black plane
+    // with runway stripes.
+    {
+      const sr2 = new RNG(77);
+      const geo = new THREE.BoxGeometry(1, 1, 1);
+      const inst = new THREE.InstancedMesh(geo, greebled({ seed: 73, repeat: [1, 1], base: [128, 133, 142], lights: 0.05 }), 1500);
+      const d = new THREE.Object3D();
+      let n = 0;
+      for (let i = 0; i < 1500; i++) {
+        const x = sr2.gauss(0, 1300);
+        const z = sr2.float(-7200, 3200);
+        if (Math.abs(x) < TRENCH_HALF + 70) continue;   // keep the trench clear
+        const w = sr2.float(8, 90);
+        const hgt = sr2.float(4, 70) * (sr2.bool(0.12) ? 2.4 : 1);
+        d.position.set(x, hgt * 0.5 - 2, z);
+        d.rotation.set(0, sr2.bool(0.2) ? sr2.float(0, 1.6) : 0, 0);
+        d.scale.set(w, hgt, w * sr2.float(0.4, 2.6));
+        d.updateMatrix();
+        inst.setMatrixAt(n++, d.matrix);
+      }
+      inst.count = n;
+      inst.instanceMatrix.needsUpdate = true;
+      set.add(inst);
+    }
     // Cut the trench out of the apron by simply placing the walls on top of it.
     const segs = [];
     for (let i = 0; i < SEGMENTS; i++) {
@@ -188,23 +243,23 @@ export default {
 
     // --- craft ---------------------------------------------------------------
     const rhea = xwing({ scale: 1.0, stripe: 0xd0402c });
-    set.add(rhea);
+    scene.add(rhea);
     const wingmen = [];
     for (let i = 0; i < 3; i++) {
       const w = i === 2 ? ywing({ scale: 1.0 }) : xwing({ scale: 1.0, stripe: i ? 0xd8b13a : 0x3a7fd0 });
-      set.add(w);
+      scene.add(w);
       wingmen.push(w);
     }
     const ties = [];
     for (let i = 0; i < 3; i++) {
       const tie = tieFighter({ scale: 1.6, advanced: i === 0 });
-      set.add(tie);
+      scene.add(tie);
       ties.push(tie);
     }
     const falcon = freighter({ scale: 1.0 });
     falcon.userData.setGear(false);
     falcon.visible = false;
-    set.add(falcon);
+    scene.add(falcon);
 
     // --- weapons -------------------------------------------------------------
     const redBolts = new BoltPool({ max: 70, color: 0xff4530, length: 22, radius: 1.0, speed: 1500 });
@@ -304,7 +359,9 @@ export default {
       { t: 48.6, pos: chase(0, 3.6, 18), look: at(0, 0, -180), fov: 62, ease: Ease.linear },
       // Shot 8: outside again, the station coming apart.
       { t: 48.601, cut: true, pos: [1500, 700, 2600], look: [0, 0, -13000], fov: 40 },
-      { t: DURATION, pos: [2500, 1100, 3600], look: [0, 0, -13000], fov: 44, ease: Ease.linear },
+      { t: 56.0, pos: [1900, 900, 3100], look: [0, 0, -13000], fov: 44, ease: Ease.linear },
+      { t: 56.001, cut: true, pos: (t) => rhea.position.clone().add(new THREE.Vector3(-46, 16, 74)), look: () => rhea.position.clone(), fov: 44 },
+      { t: DURATION, pos: (t) => rhea.position.clone().add(new THREE.Vector3(-30, 11, 52)), look: () => rhea.position.clone(), fov: 42, ease: Ease.linear },
     ]);
 
     // Schedule the fights.
@@ -345,6 +402,7 @@ export default {
 
         const p = rheaPath(t, rheaPos);
         if (inTrench) rhea.visible = true;
+        else if (t < 6) rhea.visible = false;
         rhea.position.copy(p);
         dir.subVectors(p, prevRhea);
         if (dir.lengthSq() > 1e-6) aimAlong(rhea, dir, up, -Math.sin((t - RUN_START) * 0.55) * 0.5);
@@ -431,28 +489,52 @@ export default {
             boomCore.material.color.setRGB(1, 0.8 - b * 0.5, 0.45 - b * 0.4);
             boomRing.visible = true;
             boomRing.quaternion.copy(camera.quaternion);
-            boomRing.material.opacity = clamp(0.9 - b * 1.1);
-            boomRing.scale.setScalar(4000 + Ease.outQuart(b) * 52000);
+            boomRing.material.opacity = clamp(0.95 - b * 0.85);
+            boomRing.scale.setScalar(4000 + Ease.outQuart(b) * 62000);
+            boomRing2.visible = true;
+            boomRing2.quaternion.copy(camera.quaternion);
+            boomRing2.material.opacity = clamp(0.8 - b * 0.7) * 0.8;
+            boomRing2.scale.setScalar(2000 + Ease.outQuint(b) * 34000);
+            for (const m of embers) {
+              const age = clamp(b * 1.15);
+              m.position.copy(station.position).add(m.userData.dir.clone().multiplyScalar(3000 + age * 26000));
+              m.scale.setScalar(m.userData.size * (1 + age * 2.2));
+              m.quaternion.copy(camera.quaternion);
+              m.material.opacity = clamp(1 - age) * (0.5 + 0.5 * Math.sin(t * 6 + m.userData.ph)) * 0.8;
+            }
             this.flash = Math.exp(-Math.max(0, t - BOOM_T) * 3.5) * 1.4;
           } else {
             station.visible = true;
             boomFlash.material.opacity = 0;
             boomCore.material.opacity = 0;
             boomRing.material.opacity = 0;
+            boomRing2.material.opacity = 0;
+            for (const m of embers) m.material.opacity = 0;
+            // Secondary detonations walking across the surface.
+            for (const m of preBooms) {
+              const age = (t - m.userData.t) / 1.3;
+              const on = age > 0 && age < 1;
+              m.visible = on;
+              if (on) {
+                m.quaternion.copy(camera.quaternion);
+                m.scale.setScalar(m.userData.size * (0.4 + age * 2.6));
+                m.material.opacity = Math.exp(-age * 3.4);
+              }
+            }
             this.flash = 0;
           }
           // Survivors streaking away from the blast.
           rhea.visible = t > 48.6;
           if (rhea.visible) {
             const u = clamp((t - 48.6) / 15);
-            rhea.position.set(lerp(-600, 900, u), lerp(-200, 260, u), lerp(-9000, 2600, Ease.inQuad(u)));
+            rhea.position.set(lerp(-600, 620, u), lerp(-200, 190, u), lerp(-9000, 900, Ease.inOutQuad(u)));
             aimAlong(rhea, new THREE.Vector3(0.12, 0.03, 1), up, Math.sin(t) * 0.2);
             rhea.userData.setThrottle(1);
           }
           falcon.visible = t > 49.6;
           if (falcon.visible) {
             const u = clamp((t - 49.6) / 14);
-            falcon.position.set(lerp(-900, 400, u), lerp(-320, 120, u), lerp(-10000, 2200, Ease.inQuad(u)));
+            falcon.position.set(lerp(-1400, -160, u), lerp(-420, 60, u), lerp(-10000, 640, Ease.inOutQuad(u)));
             aimAlong(falcon, new THREE.Vector3(0.1, 0.03, 1), up, 0.1);
             falcon.userData.setThrottle(1);
           }

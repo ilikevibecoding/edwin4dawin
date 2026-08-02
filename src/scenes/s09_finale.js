@@ -74,34 +74,34 @@ export default {
     const logo = cameraQuad(camera, logoTex, { distance: 10, widthFrac: 0.62, opacity: 0 });
     const creditTex = textCard({
       w: 2048, h: 512, lines: END_CARDS[1].lines,
-      font: '400 50px "News Cycle", Arial, sans-serif', color: '#9fd8ff', lineGap: 1.5,
+      font: '400 62px "News Cycle", Arial, sans-serif', color: '#dceaf5', lineGap: 1.55,
     });
-    const credit = cameraQuad(camera, creditTex, { distance: 10, widthFrac: 0.7, opacity: 0, y: -0.02 });
+    const credit = cameraQuad(camera, creditTex, { distance: 10, widthFrac: 0.82, opacity: 0, y: -0.01 });
 
     const rig = new CameraRig(camera);
     const dir = new THREE.Vector3();
     const up = new THREE.Vector3(0, 1, 0);
 
     const flight = (t, i) => {
-      const u = t * 260;
-      const lane = [[0, 0, 0], [46, 14, 120], [-52, -10, 190], [30, -34, 320]][i];
+      const u = t * 150;
+      const lane = [[0, 0, 0], [34, 11, 74], [-40, -8, 122], [26, -26, 210]][i];
       return new THREE.Vector3(
-        lane[0] + Math.sin(t * 0.35 + i) * 14,
-        lane[1] + Math.sin(t * 0.27 + i * 2) * 9,
-        4200 - u + lane[2],
+        lane[0] + Math.sin(t * 0.35 + i) * 12,
+        lane[1] + Math.sin(t * 0.27 + i * 2) * 7,
+        900 - u + lane[2],
       );
     };
 
     rig.setTrack([
       // Shot 1: they pass the camera, planet behind.
-      { t: 0, pos: [180, 40, 1400], look: (t) => flight(t, 0), fov: 40 },
-      { t: 8.0, pos: [90, 20, 900], look: (t) => flight(t, 0), fov: 36, ease: Ease.linear },
+      { t: 0, pos: (t) => flight(t, 0).clone().add(new THREE.Vector3(52, 15, 62)), look: (t) => flight(t, 0), fov: 44 },
+      { t: 8.0, pos: (t) => flight(t, 0).clone().add(new THREE.Vector3(30, 8, 40)), look: (t) => flight(t, 0), fov: 40, ease: Ease.linear },
       // Shot 2: riding alongside.
-      { t: 8.001, cut: true, pos: (t) => flight(t, 0).clone().add(new THREE.Vector3(-24, 6, 30)), look: (t) => flight(t, 0), fov: 42 },
+      { t: 8.001, cut: true, pos: (t) => flight(t, 0).clone().add(new THREE.Vector3(-22, 5.5, 27)), look: (t) => flight(t, 0), fov: 42 },
       { t: 16.0, pos: (t) => flight(t, 0).clone().add(new THREE.Vector3(-16, 4, 22)), look: (t) => flight(t, 0), fov: 40, ease: Ease.linear },
       // Shot 3: hold on the starfield for the titles.
-      { t: 16.001, cut: true, pos: (t) => flight(t, 0).clone().add(new THREE.Vector3(0, 60, -700)), look: (t) => flight(t, 0).clone().add(new THREE.Vector3(0, 0, -3000)), fov: 44 },
-      { t: DURATION, pos: (t) => flight(t, 0).clone().add(new THREE.Vector3(0, 90, -1400)), look: (t) => flight(t, 0).clone().add(new THREE.Vector3(0, 0, -4000)), fov: 42, ease: Ease.linear },
+      { t: 16.001, cut: true, pos: (t) => flight(t, 0).clone().add(new THREE.Vector3(0, 40, 260)), look: (t) => flight(t, 0).clone().add(new THREE.Vector3(0, 0, -2600)), fov: 44 },
+      { t: DURATION, pos: (t) => flight(t, 0).clone().add(new THREE.Vector3(0, 66, 620)), look: (t) => flight(t, 0).clone().add(new THREE.Vector3(0, 0, -3400)), fov: 42, ease: Ease.linear },
     ]);
 
     const prev = [flight(0, 0).clone(), flight(0, 1).clone(), flight(0, 2).clone(), flight(0, 3).clone()];
@@ -120,7 +120,7 @@ export default {
           if (dir.lengthSq() > 1e-6) aimAlong(s, dir, up, Math.sin(t * 0.5 + i) * 0.12);
           prev[i].copy(p);
           s.userData.setThrottle?.(0.85);
-          s.visible = t < 18;
+          s.visible = t < 17.2;
         });
 
         const titleA = smoothstep(TITLE_T, TITLE_T + 1.6, t) * (1 - smoothstep(CREDIT_T - 2.2, CREDIT_T - 0.4, t));
