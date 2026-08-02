@@ -69,7 +69,16 @@ export class Film {
     const ctx = {
       scene, camera: this.camera, renderer: this.renderer,
       width: this.width, height: this.height, quality: this.quality,
-      film: this,
+      film: this, mod, lines: mod.lines || [], dur: mod.dur,
+      /** Local start time of a narration line, by id. */
+      cue(id, fallback = 0) {
+        const l = (mod.lines || []).find((x) => x.id === id);
+        return l ? l.local : fallback;
+      },
+      cueEnd(id, fallback = 0) {
+        const l = (mod.lines || []).find((x) => x.id === id);
+        return l ? l.local + l.dur : fallback;
+      },
     };
     const inst = await mod.build(ctx);
     inst.scene = inst.scene || scene;
@@ -140,6 +149,8 @@ export class Film {
     }
     this.post.render(t);
     this.time = t;
+    this.activeInst = inst;
+    this.activeLocal = local;
     return inst;
   }
 

@@ -1,0 +1,335 @@
+{
+  "provisional": true,
+  "duration": 331.682,
+  "chapters": [
+    {
+      "id": "title",
+      "start": 0,
+      "dur": 51.132
+    },
+    {
+      "id": "chase",
+      "start": 51.132,
+      "dur": 35.591
+    },
+    {
+      "id": "boarding",
+      "start": 86.723,
+      "dur": 41.373
+    },
+    {
+      "id": "message",
+      "start": 128.095,
+      "dur": 29.277
+    },
+    {
+      "id": "dunes",
+      "start": 157.373,
+      "dur": 23.723
+    },
+    {
+      "id": "twinsuns",
+      "start": 181.095,
+      "dur": 32.223
+    },
+    {
+      "id": "saber",
+      "start": 213.318,
+      "dur": 34.355
+    },
+    {
+      "id": "trench",
+      "start": 247.673,
+      "dur": 54.827
+    },
+    {
+      "id": "medals",
+      "start": 302.5,
+      "dur": 29.182
+    }
+  ],
+  "lines": [
+    {
+      "id": "t1",
+      "ch": "title",
+      "who": "narrator",
+      "start": 1.2,
+      "dur": 4.086,
+      "text": "A long time ago, in a galaxy far, far away."
+    },
+    {
+      "id": "t2",
+      "ch": "title",
+      "who": "narrator",
+      "start": 8.886,
+      "dur": 2.268,
+      "text": "Episode Four. A New Hope."
+    },
+    {
+      "id": "t3",
+      "ch": "title",
+      "who": "narrator",
+      "start": 12.055,
+      "dur": 10.632,
+      "text": "War burns across the stars. From a hidden base among the outer worlds, a small rebel fleet has struck the first real blow against the Empire, and lived."
+    },
+    {
+      "id": "t4",
+      "ch": "title",
+      "who": "narrator",
+      "start": 23.386,
+      "dur": 11.723,
+      "text": "Hidden in the memory of a stolen droid are the plans to the Empire's new battle station: a fortress the size of a moon, with power enough to end a world."
+    },
+    {
+      "id": "t5",
+      "ch": "title",
+      "who": "narrator",
+      "start": 35.809,
+      "dur": 7.723,
+      "text": "Pursued by the Emperor's agents, Princess Leia runs for home, carrying the one secret that can still save her people."
+    },
+    {
+      "id": "c1",
+      "ch": "chase",
+      "who": "narrator",
+      "start": 52.532,
+      "dur": 5.177,
+      "text": "Above a forgotten desert world, a rebel corvette is running for its life."
+    },
+    {
+      "id": "c2",
+      "ch": "chase",
+      "who": "narrator",
+      "start": 60.109,
+      "dur": 5.541,
+      "text": "And out of the dark behind it comes something the size of a city."
+    },
+    {
+      "id": "c3",
+      "ch": "chase",
+      "who": "officer",
+      "start": 68.45,
+      "dur": 4.814,
+      "text": "Hull breach on deck four! They have us in a tractor beam!"
+    },
+    {
+      "id": "c4",
+      "ch": "chase",
+      "who": "narrator",
+      "start": 74.164,
+      "dur": 3.359,
+      "text": "Eleven thousand tonnes of consular ship, swallowed whole."
+    },
+    {
+      "id": "b1",
+      "ch": "boarding",
+      "who": "narrator",
+      "start": 87.723,
+      "dur": 4.814,
+      "text": "The corridor goes very quiet. Then the doors come off their hinges."
+    },
+    {
+      "id": "b2",
+      "ch": "boarding",
+      "who": "narrator",
+      "start": 96.636,
+      "dur": 7.359,
+      "text": "And through the smoke walks the thing every soldier aboard had heard about, and hoped was only a rumour."
+    },
+    {
+      "id": "b3",
+      "ch": "boarding",
+      "who": "vader",
+      "start": 106.395,
+      "dur": 5.177,
+      "text": "Where are the plans you intercepted? I will not ask a second time."
+    },
+    {
+      "id": "b4",
+      "ch": "boarding",
+      "who": "officer",
+      "start": 112.473,
+      "dur": 6.268,
+      "text": "This is a consular ship. We carry no transmissions, we are on a diplomatic mission to..."
+    },
+    {
+      "id": "b5",
+      "ch": "boarding",
+      "who": "vader",
+      "start": 119.091,
+      "dur": 1.905,
+      "text": "Tear the ship apart."
+    },
+    {
+      "id": "m1",
+      "ch": "message",
+      "who": "narrator",
+      "start": 129.095,
+      "dur": 6.995,
+      "text": "But the plans are already gone, folded into the memory of one small astromech with a stubborn streak."
+    },
+    {
+      "id": "m2",
+      "ch": "message",
+      "who": "leia",
+      "start": 138.391,
+      "dur": 6.268,
+      "text": "Find the old man on the desert world. Give him this. You are my only hope."
+    },
+    {
+      "id": "m3",
+      "ch": "message",
+      "who": "narrator",
+      "start": 147.559,
+      "dur": 4.814,
+      "text": "One escape pod, no life signs aboard. The gunners let it fall."
+    },
+    {
+      "id": "d1",
+      "ch": "dunes",
+      "who": "narrator",
+      "start": 158.573,
+      "dur": 4.45,
+      "text": "Two droids. A thousand kilometres of sand. And no plan whatsoever."
+    },
+    {
+      "id": "d2",
+      "ch": "dunes",
+      "who": "threepio",
+      "start": 165.023,
+      "dur": 5.177,
+      "text": "We are doomed. Do you hear me? Doomed. And I blame you entirely."
+    },
+    {
+      "id": "d3",
+      "ch": "dunes",
+      "who": "narrator",
+      "start": 173.1,
+      "dur": 2.995,
+      "text": "By dusk, a sandcrawler had them both."
+    },
+    {
+      "id": "s1",
+      "ch": "twinsuns",
+      "who": "narrator",
+      "start": 182.695,
+      "dur": 9.541,
+      "text": "On a moisture farm at the edge of nowhere, a boy watches two suns go down, the way he has every evening of his life."
+    },
+    {
+      "id": "s2",
+      "ch": "twinsuns",
+      "who": "luke",
+      "start": 195.236,
+      "dur": 5.177,
+      "text": "There is a whole galaxy out there. And I am here, fixing evaporators."
+    },
+    {
+      "id": "s3",
+      "ch": "twinsuns",
+      "who": "narrator",
+      "start": 203.014,
+      "dur": 5.905,
+      "text": "He does not know it yet, but the war has already come looking for him."
+    },
+    {
+      "id": "k1",
+      "ch": "saber",
+      "who": "narrator",
+      "start": 214.518,
+      "dur": 5.905,
+      "text": "An old hermit in the hills. A locked chest. A weapon from a cleaner age."
+    },
+    {
+      "id": "k2",
+      "ch": "saber",
+      "who": "obiwan",
+      "start": 222.623,
+      "dur": 6.268,
+      "text": "Your father's lightsaber. He would have wanted you to have it, when you were old enough."
+    },
+    {
+      "id": "k3",
+      "ch": "saber",
+      "who": "obiwan",
+      "start": 231.291,
+      "dur": 8.086,
+      "text": "The Force surrounds us. It binds the galaxy together. Learn to listen, and it will tell you what your eyes cannot."
+    },
+    {
+      "id": "k4",
+      "ch": "saber",
+      "who": "luke",
+      "start": 240.477,
+      "dur": 2.995,
+      "text": "Then teach me. I want to learn."
+    },
+    {
+      "id": "r1",
+      "ch": "trench",
+      "who": "narrator",
+      "start": 248.673,
+      "dur": 2.268,
+      "text": "Thirty pilots against a moon."
+    },
+    {
+      "id": "r2",
+      "ch": "trench",
+      "who": "narrator",
+      "start": 251.841,
+      "dur": 7.359,
+      "text": "The trench is two metres wide and eleven kilometres long, and every gun on that station is watching it."
+    },
+    {
+      "id": "r3",
+      "ch": "trench",
+      "who": "pilot",
+      "start": 261.4,
+      "dur": 4.086,
+      "text": "Red Five, standing by. Cutting in now, stay on me."
+    },
+    {
+      "id": "r4",
+      "ch": "trench",
+      "who": "vader",
+      "start": 269.086,
+      "dur": 4.45,
+      "text": "The Force is strong with this one. I have you now."
+    },
+    {
+      "id": "r5",
+      "ch": "trench",
+      "who": "ghost",
+      "start": 276.536,
+      "dur": 1.905,
+      "text": "Let go. Trust yourself."
+    },
+    {
+      "id": "r6",
+      "ch": "trench",
+      "who": "narrator",
+      "start": 280.741,
+      "dur": 3.359,
+      "text": "He switched off the targeting computer. And fired."
+    },
+    {
+      "id": "f1",
+      "ch": "medals",
+      "who": "narrator",
+      "start": 305.5,
+      "dur": 4.814,
+      "text": "The battle station burns. The war is not over. Not by years."
+    },
+    {
+      "id": "f2",
+      "ch": "medals",
+      "who": "narrator",
+      "start": 312.414,
+      "dur": 10.268,
+      "text": "But tonight, in a hall of white stone, a farm boy, a smuggler and a princess stand in the light, and the galaxy remembers how to hope."
+    }
+  ],
+  "sfx": [],
+  "music": []
+}

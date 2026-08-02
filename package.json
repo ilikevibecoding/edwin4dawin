@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "shot": "node tools/shot.mjs",
     "capture": "node tools/capture.mjs",
-    "audio": "node tools/build-audio.mjs"
+    "audio": "node tools/build-audio.mjs",
+    "frame": "node tools/frame.mjs"
   },
   "repository": {
     "type": "git",

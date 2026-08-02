@@ -1,3 +1,103 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>Brickfilm</title></head>
-<body><canvas id="c"></canvas><script type="module" src="/src/main.js"></script></body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LEGO Star Wars — A New Hope (brick-built)</title>
+<link rel="icon" href="./favicon.svg" />
+<style>
+  @font-face {
+    font-family: 'CrawlSans';
+    src: url('./fonts/NewsCycle-Bold.ttf') format('truetype');
+    font-weight: 700; font-display: block;
+  }
+  @font-face {
+    font-family: 'CrawlSans';
+    src: url('./fonts/NewsCycle-Regular.ttf') format('truetype');
+    font-weight: 400; font-display: block;
+  }
+  @font-face {
+    font-family: 'TitleGothic';
+    src: url('./fonts/PathwayGothicOne-Regular.ttf') format('truetype');
+    font-weight: 400; font-display: block;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; background: #000; overflow: hidden;
+    font-family: 'CrawlSans', system-ui, sans-serif;
+  }
+  #stage {
+    position: fixed; inset: 0; display: grid; place-items: center; background: #000;
+  }
+  #frame { position: relative; background: #000; overflow: hidden; }
+  canvas#c { display: block; width: 100%; height: 100%; }
+
+  #overlay { position: absolute; inset: 0; pointer-events: none; }
+
+  .hud-card {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 78%; text-align: center; color: #3f7fd8;
+    font-size: 2.05vw; letter-spacing: 0.06em; line-height: 1.5; opacity: 0;
+    text-shadow: 0 0 18px rgba(50,110,220,0.35);
+  }
+  .hud-sub {
+    position: absolute; left: 50%; bottom: 8.5%; transform: translateX(-50%);
+    width: 76%; text-align: center; opacity: 0;
+    font-size: 1.55vw; line-height: 1.35; letter-spacing: 0.035em;
+    color: #f2f4f8; text-shadow: 0 2px 6px rgba(0,0,0,0.95), 0 0 22px rgba(0,0,0,0.8);
+    transition: opacity 90ms linear;
+  }
+  .hud-who { color: #ffd24a; font-weight: 700; letter-spacing: 0.09em; }
+  .hud-sub[data-who="vader"] .hud-who { color: #ff5b4a; }
+  .hud-sub[data-who="leia"] .hud-who { color: #9fd0ff; }
+  .hud-sub[data-who="ghost"] .hud-who { color: #a8d8ff; }
+  .hud-slate {
+    position: absolute; left: 6%; bottom: 20%; opacity: 0;
+    font-family: 'TitleGothic', sans-serif; font-size: 2.2vw;
+    letter-spacing: 0.34em; color: #ffd24a; text-transform: uppercase;
+    text-shadow: 0 2px 10px #000;
+  }
+
+  #boot {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    background: #000; color: #ffd24a; z-index: 20; transition: opacity 0.6s;
+  }
+  #boot .inner { text-align: center; }
+  #boot h1 {
+    font-family: 'TitleGothic', sans-serif; font-weight: 400; margin: 0 0 6px;
+    font-size: 3.1vw; letter-spacing: 0.4em; text-indent: 0.4em;
+  }
+  #boot p { margin: 0.3em 0 1.4em; color: #7f8a9b; font-size: 1.05vw; letter-spacing: 0.18em; }
+  #bar { width: 34vw; height: 3px; background: #1b1f27; margin: 0 auto; overflow: hidden; }
+  #bar i { display: block; height: 100%; width: 0%; background: #ffd24a; transition: width 0.25s; }
+  #boot button {
+    margin-top: 2.1em; background: none; border: 1px solid #ffd24a; color: #ffd24a;
+    font-family: 'TitleGothic', sans-serif; font-size: 1.25vw; letter-spacing: 0.3em;
+    padding: 0.7em 2.2em; cursor: pointer; text-transform: uppercase;
+  }
+  #boot button:hover { background: #ffd24a; color: #000; }
+  #boot button[disabled] { opacity: 0.35; cursor: default; }
+  #boot .lbl { font-size: 0.85vw; color: #55606f; letter-spacing: 0.2em; margin-top: 1em; }
+  .hidden { opacity: 0 !important; pointer-events: none; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="frame">
+      <canvas id="c"></canvas>
+      <div id="overlay"></div>
+      <div id="boot">
+        <div class="inner">
+          <h1>A NEW HOPE</h1>
+          <p>BRICK-BUILT · PROCEDURAL · THREE.JS</p>
+          <div id="bar"><i></i></div>
+          <div class="lbl" id="bootlbl">building the galaxy…</div>
+          <button id="play" disabled>Play</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

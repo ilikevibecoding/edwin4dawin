@@ -23,7 +23,8 @@ const W = +(args.w || 1100), H = +(args.h || 700);
 const server = await createServer({
   root: resolve(import.meta.dirname, '..'),
   configFile: false,
-  server: { port: 0, host: '127.0.0.1', strictPort: false },
+  // Random port: several agents run this tool at the same time.
+  server: { port: 20000 + Math.floor(Math.random() * 30000), host: '127.0.0.1', strictPort: false },
   logLevel: 'error',
 });
 await server.listen();
