@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { register } from '../registry.js';
 import { BrickBuilder } from '../lego/brick.js';
 import { quadTurret } from './turret.js';
+import { mulberry32 } from '../engine/rng.js';
 import {
-  recentre, taperSlab, edgeStripe, engineNozzle, litTile, glowRig,
+  recentre, taperSlab, edgeStripe, engineNozzle, greebleField, glowRig,
   PLATE, BRICK, P, C, FINISH,
 } from './_util.js';
 
@@ -36,8 +37,8 @@ function spineHalf(z) {
   return 6;
 }
 
-const RIDGE_Z0 = -11, RIDGE_Z1 = 32;
-const ridgeHalf = (z) => (z < 16 ? 3.5 : lerp(3.5, 2, (z - 16) / (RIDGE_Z1 - 16)));
+const RIDGE_Z0 = -11, RIDGE_Z1 = 28.5;
+const ridgeHalf = (z) => (z < 14 ? 2.6 : lerp(2.6, 1.8, (z - 14) / (RIDGE_Z1 - 14)));
 
 const ENG_Z0 = -32, ENG_Z1 = -11, ENG_HW = 9;
 const SPINE_TOP = 6.4, HEAD_TOP = 4.8;
@@ -52,8 +53,8 @@ const WHITE = C.white, GRAY = C.lightBluishGray, DARK = C.darkBluishGray;
 
 function hammerhead(bb) {
   const layers = [
-    { y: 2.0, h: P(1), inset: 2.2, color: DARK },
-    { y: 2.4, h: P(3), inset: 0.0, color: WHITE },
+    { y: 1.6, h: P(1), inset: 2.6, color: DARK },
+    { y: 2.0, h: P(4), inset: 0.0, color: WHITE },
     { y: 3.6, h: P(2), inset: 1.6, color: GRAY },
     { y: 4.4, h: P(1), inset: 3.2, color: WHITE, studs: true },
   ];
@@ -66,23 +67,24 @@ function hammerhead(bb) {
   }
   // Red leading-edge stripe, one tile per stepped band so it never overhangs.
   edgeStripe(bb, {
-    z0: HEAD_Z0, z1: HEAD_Z1 - 1, step: 2, y: 3.6, w: 1.6, color: C.red,
+    z0: HEAD_Z0, z1: HEAD_Z1 - 1, step: 2, y: 3.6, w: 1.6, color: C.red, finish: FINISH.SOLID,
     halfW: (z) => headHalf(z),
   });
-  edgeStripe(bb, {
-    z0: HEAD_Z0 + 2, z1: HEAD_Z1 - 3, step: 2, y: HEAD_TOP, w: 1, color: C.red,
-    halfW: (z) => headHalf(z) - 3.2,
-  });
   // Blunt prow.
-  bb.brick(0, 2.4, HEAD_Z1 - 0.4, 4, 1.6, { h: P(3), color: WHITE, studs: false });
-  bb.slope(0, 3.6, HEAD_Z1 - 1.2, 1.6, 4, { h: P(2), color: C.red, rot: -Math.PI / 2 });
-  bb.tile(0, 2.0, HEAD_Z1 - 2.6, 5, 5, { color: DARK });
+  bb.brick(0, 2.0, HEAD_Z1 - 0.4, 4, 1.6, { h: P(4), color: WHITE, studs: false });
+  bb.slope(0, 3.6, HEAD_Z1 - 1.2, 1.6, 4, {
+    h: P(2), color: C.red, finish: FINISH.SOLID, rot: -Math.PI / 2,
+  });
+  bb.tile(0, 1.6, HEAD_Z1 - 2.6, 5, 5, { color: DARK });
+  // Forward sensor cluster on the centreline ahead of the ridge.
+  bb.tile(0, HEAD_TOP, RIDGE_Z1 + 2.2, 4, 3.5, { color: GRAY });
+  bb.cyl(0, HEAD_TOP, RIDGE_Z1 + 2.4, 0.7, P(2), { color: DARK, seg: 10, stud: false });
 
   // Sensor pits out on the wide part of the head.
   bb.mirrorX((b) => {
     b.cyl(6.4, 4.4, HEAD_Z0 + 3.6, 0.85, P(1), { color: DARK, seg: 10, stud: false });
     b.cyl(6.4, HEAD_TOP, HEAD_Z0 + 3.6, 0.6, P(1), { color: C.flatSilver, finish: FINISH.METAL, seg: 10, stud: false });
-    b.tile(4.5, HEAD_TOP, HEAD_Z0 + 9, 1, 6, { color: C.red });
+    b.tile(4.5, HEAD_TOP, HEAD_Z0 + 9, 1, 6, { color: C.red, finish: FINISH.SOLID });
   });
 }
 
@@ -94,14 +96,16 @@ function dorsalRidge(bb) {
   const base = HEAD_TOP;      // ridge floor over the head
   taperSlab(bb, {
     z0: RIDGE_Z0, z1: RIDGE_Z1, y: base, h: P(3), step: 2.5,
-    halfW: ridgeHalf, minHalfW: 1.5, color: WHITE, grid: 0.5,
+    halfW: ridgeHalf, minHalfW: 1.5, color: GRAY, grid: 0.5,
   });
   taperSlab(bb, {
     z0: RIDGE_Z0, z1: RIDGE_Z1 - 2, y: base + P(3), h: P(1), step: 2.5,
-    halfW: (z) => ridgeHalf(z) - 0.8, minHalfW: 1, color: GRAY, studs: true, grid: 0.5,
+    halfW: (z) => ridgeHalf(z) - 0.6, minHalfW: 1, color: WHITE, studs: true, grid: 0.5,
   });
+  // Ridge ends in a slope so the prow stays a clean arrowhead.
+  bb.slope(0, base, RIDGE_Z1 + 1.1, 2.2, 3.4, { h: P(4), color: GRAY, rot: Math.PI / 2 });
   edgeStripe(bb, {
-    z0: 8, z1: RIDGE_Z1 - 2, step: 2.5, y: base + P(3), w: 0.8, color: C.red,
+    z0: 8, z1: RIDGE_Z1 - 2, step: 2.5, y: base + P(3), w: 0.8, color: C.red, finish: FINISH.SOLID,
     halfW: ridgeHalf, grid: 0.5,
   });
 
@@ -130,7 +134,7 @@ function neck(bb) {
   bb.mirrorX((b) => {
     b.slope(3.5, 2.0, 14.0, 1, 4.4, { h: P(6), color: GRAY });
     b.slope(3.0, 1.2, 11.0, 1, 4.4, { h: P(7), color: GRAY });
-    b.tile(2.7, 4.4, 12.4, 1.2, 8.8, { color: C.red });
+    b.tile(2.7, 4.4, 12.4, 1.2, 8.8, { color: C.red, finish: FINISH.SOLID });
   });
 }
 
@@ -150,7 +154,7 @@ function spine(bb) {
     });
   }
   edgeStripe(bb, {
-    z0: 9.6, z1: ENG_Z1, step: 2.4, y: 4.8, w: 1, color: C.red,
+    z0: 9.6, z1: ENG_Z1, step: 2.4, y: 4.8, w: 1, color: C.red, finish: FINISH.SOLID,
     halfW: (z) => spineHalf(z) - 0.5,
   });
   // Escape-pod hatches down the flanks: this is where Leia's pod launches.
@@ -159,7 +163,7 @@ function spine(bb) {
       b.cyl(5.7, 3.8, z, 0.8, P(1), { axis: 'x', color: C.veryLightGray, seg: 10, stud: false });
       b.cyl(5.95, 3.8, z, 0.42, P(1), { axis: 'x', color: DARK, seg: 8, stud: false });
     }
-    b.brick(6.05, 1.6, -2, 0.4, 16, { h: P(2), color: C.red, studs: false, free: true });
+    b.brick(6.05, 1.6, -2, 0.4, 16, { h: P(2), color: C.red, finish: FINISH.SOLID, studs: false, free: true });
   });
 }
 
@@ -170,11 +174,11 @@ function engineBlock(bb) {
     { y: -0.4, h: P(2), hw: ENG_HW - 2.5, color: DARK },
     { y: 0.4, h: P(3), hw: ENG_HW - 1, color: GRAY },
     { y: 1.6, h: P(13), hw: ENG_HW, color: WHITE },
-    { y: 6.8, h: P(2), hw: ENG_HW - 1, color: C.red },
+    { y: 6.8, h: P(2), hw: ENG_HW - 1, color: C.red, finish: FINISH.SOLID },
     { y: 7.6, h: P(1), hw: ENG_HW - 3, color: WHITE, studs: true },
   ];
   for (const L of layers) {
-    bb.brick(0, L.y, zc, L.hw * 2, zd, { h: L.h, color: L.color, studs: L.studs ?? false });
+    bb.brick(0, L.y, zc, L.hw * 2, zd, { h: L.h, color: L.color, finish: L.finish, studs: L.studs ?? false });
   }
   // Shoulders blending the narrow spine into the wide block.
   bb.mirrorX((b) => {
@@ -187,11 +191,11 @@ function engineBlock(bb) {
     for (let z = ENG_Z1 - 3.5; z > ENG_Z0 + 1; z -= 4.2) {
       b.brick(ENG_HW - 0.1, 1.6, z, 0.5, 1.4, { h: P(11), color: GRAY, studs: false, free: true });
     }
-    b.brick(ENG_HW - 0.05, 1.6, zc, 0.4, zd - 1.5, { h: P(1), color: C.red, studs: false, free: true });
+    b.brick(ENG_HW - 0.05, 1.6, zc, 0.4, zd - 1.5, { h: P(1), color: C.red, finish: FINISH.SOLID, studs: false, free: true });
   });
   // Roof plating, dishes, stub mast.
   for (let i = -2; i <= 2; i++) {
-    bb.tile(i * 3.2, 8.0, ENG_Z1 - 4.5, 2, 4, { color: i === 0 ? C.red : DARK });
+    bb.tile(i * 3.2, 8.0, ENG_Z1 - 4.5, 2, 4, { color: i === 0 ? C.red : DARK, finish: FINISH.SOLID });
     bb.tile(i * 3.2, 8.0, ENG_Z1 - 9.5, 2, 4, { color: C.veryLightGray });
   }
   bb.cyl(0, 8.0, ENG_Z0 + 4.5, 0.75, P(3), { color: GRAY, seg: 10 });
@@ -207,8 +211,8 @@ function engineBlock(bb) {
     bb.cyl(x, y, ENG_Z0 - 0.9, 1.45, 0.6, { axis: 'z', color: C.darkGray, seg: 12, stud: false });
     engineNozzle(bb, `engine${i}`, x, y, ENG_Z0 - 2.1, 1.3, { depth: 2.6, seg: 12 });
   });
-  litTile(bb, -ENG_HW + 0.7, 8.0, ENG_Z0 + 1.6, 1, 1, { color: C.transRed });
-  litTile(bb, ENG_HW - 0.7, 8.0, ENG_Z0 + 1.6, 1, 1, { color: C.transGreen });
+  bb.tile(-ENG_HW + 0.7, 8.0, ENG_Z0 + 1.6, 1, 1, { color: C.red, finish: FINISH.SOLID });
+  bb.tile(ENG_HW - 0.7, 8.0, ENG_Z0 + 1.6, 1, 1, { color: C.brightGreen });
 }
 
 function underside(bb) {
@@ -219,6 +223,17 @@ function underside(bb) {
   });
   bb.tile(0, 1.6, HEAD_Z0 + 5, 7, 9, { color: DARK });
   bb.tile(0, 0.0, -1, 4, 10, { color: DARK });
+  // Ventral comms array under the chin of the head.
+  bb.brick(0, 1.2, HEAD_Z0 + 3.5, 5, 5, { h: P(1), color: C.darkGray, studs: false });
+  bb.mirrorX((b) => {
+    b.cyl(1.4, 0.9, HEAD_Z0 + 3.5, 0.7, P(1), { color: DARK, seg: 10, stud: false });
+    b.cyl(4.5, 0.4, -5, 0.55, P(2), { color: C.darkGray, seg: 8, stud: false });
+  });
+  const belly = mulberry32(90210);
+  greebleField(bb, belly, {
+    x0: -5, x1: 5, z0: -10, z1: 8, y: 0.4, count: 46, maxW: 3, maxD: 3, down: true,
+    colors: [DARK, C.darkGray, C.black, C.flatSilver],
+  });
 }
 
 function buildCorvette() {
@@ -232,11 +247,10 @@ function buildCorvette() {
   const shell = bb.build();
 
   // The turbolaser turrets stay live rigs so scenes can track them.
-  const dorsal = quadTurret({ scale: 0.85 });
+  const dorsal = quadTurret({ scale: 1.0 });
   dorsal.position.set(0, SPINE_TOP, -6.5);
-  const ventral = quadTurret({ scale: 0.85 });
+  const ventral = quadTurret({ scale: 1.0, flip: true });
   ventral.position.set(0, 0.4, -6.5);
-  ventral.rotation.set(Math.PI, Math.PI, 0);
 
   const inner = new THREE.Group();
   inner.add(shell, dorsal, ventral);

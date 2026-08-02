@@ -16,6 +16,13 @@ const _box = new THREE.Box3();
 const _size = new THREE.Vector3();
 const _mid = new THREE.Vector3();
 
+/*
+ * C.red and C.transRed are the same hex in the palette, so defaultFinish()
+ * treats every red brick as trans-red. Opaque red has to say so out loud.
+ */
+export const OPAQUE = FINISH.SOLID;
+export const RED = { color: C.red, finish: FINISH.SOLID };
+
 /**
  * Wrap a built model so its origin sits at the natural centre.
  * @param {THREE.Object3D} inner result of BrickBuilder.build()
@@ -93,7 +100,7 @@ export function taperSlab(bb, o) {
     const ha = hwOf(za), hb = hwOf(zb);
     const lo = Math.min(ha, hb), hi = Math.max(ha, hb);
     bb.brick(o.x ?? 0, y, (za + zb) / 2, lo * 2, Math.abs(dz), {
-      h, color, studs: o.studs ?? false, tile: o.tile, free: o.free,
+      h, color, finish: o.finish, studs: o.studs ?? false, tile: o.tile, free: o.free,
     });
     if (hi - lo > 0.35) {
       const zWide = ha > hb ? za : zb;
@@ -204,7 +211,8 @@ export function edgeStripe(bb, o) {
     if (hw - w < 0.4) continue;
     for (const s of [-1, 1]) {
       bb.brick(s * (hw - w / 2), y, (za + zb) / 2, w, Math.abs(dz), {
-        h: o.h ?? PLATE, color: o.color ?? C.red, tile: true, studs: false, free: true,
+        h: o.h ?? PLATE, color: o.color ?? C.red, finish: o.finish ?? OPAQUE,
+        tile: true, studs: false, free: true,
       });
     }
   }

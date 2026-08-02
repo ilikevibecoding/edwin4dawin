@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { BrickBuilder } from '../lego/brick.js';
 import { C, FINISH } from '../lego/palette.js';
 import { mat } from '../lego/materials.js';
+import { boxGeo } from '../lego/parts.js';
 import { FIG } from '../lego/minifig.js';
 
 /*
@@ -93,37 +94,38 @@ export function vaderHelmet(fig) {
   bb.custom(shell({ r: 1.03, rTop: 1.0, y0: -0.30, y1: -0.22, from: 0.78, to: Math.PI * 2 - 0.78 }),
     { color: DG });
 
-  // --- mask frame: brow lip, cheek flares, jaw ----------------------------
-  const zf = 0.50;   // front plane of the mask frame
-  bb.prism([[-0.50, 0.94], [0.50, 0.94], [0.46, 0.78], [-0.46, 0.78]], 0.20,
-    { z: zf + 0.02, color: BK });
-  bb.prism([[-0.48, 0.80], [0.48, 0.80], [0.44, 0.72], [-0.44, 0.72]], 0.17,
-    { z: zf + 0.04, color: DG });
-  // cheek flares: wide at the brow, tapering to the chin -> triangular mask
+  // --- mask frame ---------------------------------------------------------
+  // Everything here hugs the head so the printed mask underneath stays legible:
+  // the frame supplies the flared triangular silhouette, the print the lenses.
+  // brow overhang, kicking out over the eyes
+  bb.custom(shell({ r: 0.635, rTop: 0.73, y0: faceY(60), y1: faceY(18), from: faceTheta(178), to: faceTheta(334) }),
+    { color: BK });
+  bb.custom(shell({ r: 0.745, rTop: 0.745, y0: faceY(30), y1: faceY(16), from: faceTheta(178), to: faceTheta(334) }),
+    { color: DG });
+  // mask sides: narrow at the brow, flaring out to the jaw
   bb.mirrorX((b) => {
-    b.prism([[-0.50, 0.92], [-0.36, 0.90], [-0.20, 0.10], [-0.32, 0.06]], 0.16,
-      { z: zf, color: BK });
-    b.prism([[-0.50, 0.92], [-0.44, 0.90], [-0.28, 0.10], [-0.34, 0.08]], 0.13,
-      { z: zf + 0.05, color: DG });
+    b.custom(shell({ r: 0.84, rTop: 0.635, y0: faceY(238), y1: faceY(46), from: faceTheta(170), to: faceTheta(206) }),
+      { color: BK });
+    b.custom(shell({ r: 0.86, rTop: 0.66, y0: faceY(238), y1: faceY(60), from: faceTheta(174), to: faceTheta(186) }),
+      { color: DG });
   });
-  // jaw / chin plate
-  bb.prism([[-0.30, 0.12], [0.30, 0.12], [0.22, -0.06], [-0.22, -0.06]], 0.20,
-    { z: zf + 0.01, color: BK });
-  bb.prism([[-0.24, 0.08], [0.24, 0.08], [0.18, -0.02], [-0.18, -0.02]], 0.16,
-    { z: zf + 0.06, color: DG });
+  // jaw plate across the bottom of the mask
+  bb.custom(shell({ r: 0.80, rTop: 0.64, y0: faceY(250), y1: faceY(206), from: faceTheta(206), to: faceTheta(306) }),
+    { color: BK });
+  g.add(twoSided(ring(0.64, 0.80, faceY(250), 20), BK));
 
   // --- vocoder grille, proud of the face ----------------------------------
-  const gy = faceY(196), gy2 = faceY(140);
-  bb.brick(0, gy, zf + 0.10, 0.36, 0.10, { h: gy2 - gy, color: C.trueBlack, studs: false });
+  const gy = faceY(198), gy2 = faceY(138);
+  bb.brick(0, gy, 0.615, 0.34, 0.11, { h: gy2 - gy, color: C.trueBlack, studs: false });
   for (let i = 0; i < 4; i++) {
-    bb.brick(-0.135 + i * 0.09, gy + 0.02, zf + 0.14, 0.035, 0.05,
-      { h: gy2 - gy - 0.06, color: SL, studs: false, finish: FINISH.METAL });
+    bb.brick(-0.126 + i * 0.084, gy + 0.02, 0.655, 0.034, 0.05,
+      { h: gy2 - gy - 0.055, color: SL, studs: false, finish: FINISH.METAL });
   }
 
   // --- breather pipes down the sides of the jaw ---------------------------
   bb.mirrorX((b) => {
-    b.cyl(-0.44, -0.10, 0.30, 0.06, 0.42, { color: DG, stud: false, seg: 8 });
-    b.sphere(-0.44, 0.32, 0.30, 0.075, { color: SL, seg: 8, rings: 6, finish: FINISH.METAL });
+    b.cyl(-0.48, -0.14, 0.26, 0.055, 0.46, { color: DG, stud: false, seg: 8 });
+    b.sphere(-0.48, 0.32, 0.26, 0.07, { color: SL, seg: 8, rings: 6, finish: FINISH.METAL });
   });
 
   g.add(bb.build());
@@ -137,21 +139,20 @@ export function vaderMantle() {
   const BK = C.black, DG = C.darkBluishGray;
   const yTop = FIG.torsoH;            // 1.95
 
-  // shoulder pads, angled out and down
+  // shoulder pads, angled out and down over the tops of the arms
   bb.mirrorX((b) => {
-    b.prism([[0.30, yTop - 0.02], [1.02, yTop - 0.30], [1.06, yTop - 0.52], [0.30, yTop - 0.26]], 0.86,
+    b.prism([[0.24, yTop + 0.10], [0.92, yTop - 0.16], [0.94, yTop - 0.34], [0.24, yTop - 0.12]], 0.84,
       { color: BK });
-    b.prism([[0.34, yTop - 0.06], [0.98, yTop - 0.32], [1.00, yTop - 0.40], [0.34, yTop - 0.14]], 0.80,
+    b.prism([[0.30, yTop + 0.04], [0.88, yTop - 0.19], [0.89, yTop - 0.27], [0.30, yTop - 0.04]], 0.78,
       { color: DG });
   });
-  // collar yoke across the chest and back
-  bb.prism([[-0.58, yTop + 0.04], [0.58, yTop + 0.04], [0.52, yTop - 0.34], [-0.52, yTop - 0.34]], 0.14,
+  // armour yoke across the chest and back
+  bb.prism([[-0.52, yTop + 0.06], [0.52, yTop + 0.06], [0.46, yTop - 0.30], [-0.46, yTop - 0.30]], 0.13,
     { z: FIG.torsoD / 2 + 0.02, color: BK });
-  bb.prism([[-0.58, yTop + 0.04], [0.58, yTop + 0.04], [0.52, yTop - 0.30], [-0.52, yTop - 0.30]], 0.14,
+  bb.prism([[-0.52, yTop + 0.06], [0.52, yTop + 0.06], [0.46, yTop - 0.26], [-0.46, yTop - 0.26]], 0.13,
     { z: -FIG.torsoD / 2 - 0.02, color: BK });
-  // raised collar around the neck
-  bb.custom(shell({ r: 0.44, rTop: 0.40, y0: yTop - 0.04, y1: yTop + 0.30, seg: 18 }), { color: BK });
-  bb.custom(shell({ r: 0.45, rTop: 0.45, y0: yTop + 0.22, y1: yTop + 0.30, seg: 18 }), { color: DG });
+  // neck ring under the helmet flare
+  bb.cyl(0, yTop - 0.02, 0, 0.40, 0.12, { seg: 16, color: C.darkBluishGray, stud: false });
 
   g.add(bb.build());
   return g;
@@ -191,13 +192,10 @@ export function leiaHair(fig) {
 
   g.add(bb.build());
 
-  // white hood, thrown back off the head
-  const hood = builder();
-  hood.custom(shell({ r: 0.80, rTop: 0.66, y0: -0.30, y1: 0.70, from: 1.85, to: Math.PI * 2 - 1.85 }),
-    { color: C.white });
-  g.add(twoSided(shell({ r: 0.80, rTop: 0.66, y0: -0.30, y1: 0.70, from: 1.85, to: Math.PI * 2 - 1.85 }),
+  // white hood of the gown, thrown back off the head
+  g.add(twoSided(shell({ r: 0.82, rTop: 0.60, y0: -0.34, y1: 0.86, from: 1.95, to: Math.PI * 2 - 1.95, seg: 24 }),
     C.white));
-  g.add(twoSided(ring(0.66, 0.80, -0.30, 20), C.white));
+  g.add(twoSided(ring(0.66, 0.82, -0.34, 20), C.white));
   return g;
 }
 
@@ -388,10 +386,9 @@ export function officerCap(fig) {
   bb.custom(shell({ r: 0.655, rTop: 0.74, y0: 1.18, y1: 1.42, seg: 22 }), { color: CAP });
   bb.cyl(0, 1.40, 0, 0.745, 0.06, { seg: 22, color: CAP, stud: false });
   bb.cyl(0, 1.42, 0, 0.70, 0.04, { seg: 22, color: C.darkGray, stud: false });
-  // peak
-  bb.prism([[-0.34, 0.06], [0.34, 0.06], [0.26, -0.02], [-0.26, -0.02]], 0.34,
-    { z: 0.80, y: 1.00, rx: 0.22, color: BAND });
-  bb.prism([[-0.40, 1.10], [0.40, 1.10], [0.34, 1.02], [-0.34, 1.02]], 0.24, { z: 0.68, color: BAND });
+  // peak, drooping over the brow
+  bb.custom(boxGeo(0.90, 0.055, 0.46, 0.02), { x: 0, y: 1.02, z: 0.74, rx: -0.24, color: BAND });
+  bb.custom(boxGeo(0.94, 0.05, 0.20, 0.02), { x: 0, y: 1.06, z: 0.56, color: BAND });
   // rank disc on the band
   bb.cyl(0, 1.06, 0.60, 0.075, 0.05, { seg: 10, axis: 'z', color: C.flatSilver, finish: FINISH.METAL, stud: false });
   g.add(bb.build());

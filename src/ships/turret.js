@@ -1,83 +1,74 @@
 import * as THREE from 'three';
 import { register } from '../registry.js';
 import { BrickBuilder } from '../lego/brick.js';
-import { PLATE, BRICK, P, C, FINISH } from './_util.js';
+import { PLATE, BRICK, P, C } from './_util.js';
 
 /*
  * Quad laser turret. Bolted to the corvette's spine and to the ledges of the
- * Star Destroyer's dorsal trench, so it is built as a reusable rig rather than
- * a one-off: a fixed ring, a yawing housing, and an elevating gun cradle.
+ * Star Destroyer's dorsal trench, so it is a reusable rig: a yawing housing
+ * (the mounting ring rides along, being round) and an elevating gun cradle.
  *
- * Barrels point at +Z at rest. y = 0 is the bottom of the mounting ring.
+ * Barrels point at +Z at rest, y = 0 is the bottom of the ring, and the whole
+ * thing is deliberately built from two merged meshes to stay cheap enough to
+ * scatter a dozen of them along a trench.
  */
 
-const SCALES = { small: 0.62, normal: 1, big: 1.5 };
-
 export function quadTurret(opts = {}) {
-  const s = SCALES[opts.size] || opts.scale || 1;
   const body = opts.color ?? C.lightBluishGray;
   const dark = opts.dark ?? C.darkBluishGray;
   const trim = opts.trim ?? C.darkRed;
+  const steel = opts.steel ?? C.flatSilver;
 
   const root = new THREE.Group();
   root.name = 'turret';
 
-  // ---- fixed ring -------------------------------------------------------
-  const base = new BrickBuilder({ studs: true, studSeg: 8 });
-  base.cyl(0, 0, 0, 2.0, P(1), { color: dark, stud: false });
-  base.cyl(0, P(1), 0, 1.65, P(2), { color: dark, stud: false, seg: 12 });
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    base.brick(Math.cos(a) * 1.75, 0, Math.sin(a) * 1.75, 1, 1, {
-      h: P(1), color: C.darkGray, tile: true, free: true,
-    });
-  }
-  root.add(base.build());
-
-  // ---- yawing housing ---------------------------------------------------
   const yaw = new THREE.Group();
-  yaw.position.y = P(3);
   root.add(yaw);
 
-  const hb = new BrickBuilder({ studs: true, studSeg: 8 });
-  hb.cyl(0, 0, 0, 1.5, P(1), { color: dark, stud: false, seg: 12 });
-  hb.brick(0, P(1), 0, 3, 3, { h: P(2), color: body, studs: false });
-  hb.brick(0, P(3), -0.5, 2, 2, { h: BRICK, color: body });
-  // shoulder cheeks the cradle pivots between
+  // ---- mounting ring + yawing housing (one mesh) -------------------------
+  const hb = new BrickBuilder({ studs: true, studSeg: 8, vertexColors: true });
+  hb.cyl(0, 0, 0, 2.0, P(1), { color: dark, stud: false, seg: 12 });
+  hb.cyl(0, P(1), 0, 1.7, P(2), { color: C.darkGray, stud: false, seg: 12 });
+  hb.brick(0, P(3), 0, 3, 3, { h: P(2), color: body, studs: false });
+  hb.brick(0, P(5), -0.5, 2, 2, { h: BRICK, color: body });
+  hb.tile(0, P(5) + BRICK, -0.5, 2, 1, { color: trim });
   hb.mirrorX((b) => {
-    b.brick(1.25, P(3), 0.3, 1, 2, { h: BRICK, color: dark, studs: false });
-    b.cyl(1.25, P(3) + BRICK * 0.5, 0.3, 0.42, P(1), { color: C.flatSilver, finish: FINISH.METAL, axis: 'x', stud: false, seg: 8 });
+    b.brick(1.25, P(5), 0.45, 1, 2, { h: BRICK, color: dark, studs: false });
+    b.cyl(1.55, P(5) + BRICK * 0.5, 0.45, 0.34, P(1), {
+      axis: 'x', color: steel, finish: 'solid', seg: 8, stud: false,
+    });
   });
-  hb.brick(0, P(3) + BRICK, -0.5, 2, 1, { h: P(1), color: trim, tile: true });
   yaw.add(hb.build());
 
-  // ---- elevating cradle -------------------------------------------------
+  // ---- elevating cradle (one mesh) --------------------------------------
   const pitch = new THREE.Group();
-  pitch.position.set(0, P(3) + BRICK * 0.5, 0.3);
+  pitch.position.set(0, P(5) + BRICK * 0.5, 0.45);
   yaw.add(pitch);
 
-  const gb = new BrickBuilder({ studs: true, studSeg: 8 });
-  gb.brick(0, -P(1), 0.2, 2, 3, { h: P(2), color: dark, studs: false });
-  gb.brick(0, P(1), 0.2, 1, 2, { h: P(1), color: trim, tile: true });
-  // four barrels, LEGO bar + tip
+  const gb = new BrickBuilder({ studs: true, studSeg: 8, vertexColors: true });
+  gb.brick(0, -P(1.5), 0.3, 2, 3, { h: P(3), color: dark, studs: false });
+  gb.tile(0, P(1.5), 0.3, 1, 2, { color: trim });
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
-      const bx = sx * 0.52, by = sy * 0.42 - P(1) * 0.2;
-      gb.cyl(bx, by, 1.5, 0.2, 1.0, { axis: 'z', color: dark, seg: 8, stud: false });
-      gb.bar(bx, by, 2.9, 0.115, 3.4, { rx: Math.PI / 2, color: C.flatSilver, finish: FINISH.METAL, seg: 8 });
-      gb.cyl(bx, by, 4.55, 0.16, 0.35, { axis: 'z', color: C.transRed, finish: FINISH.TRANS, seg: 8, stud: false });
+      const bx = sx * 0.55, by = sy * 0.45;
+      gb.cyl(bx, by, 1.4, 0.24, 1.2, { axis: 'z', color: dark, seg: 8, stud: false });
+      gb.cyl(bx, by, 3.1, 0.115, 2.4, { axis: 'z', color: steel, finish: 'solid', seg: 8, stud: false });
+      gb.cyl(bx, by, 4.4, 0.17, 0.35, { axis: 'z', color: C.red, finish: 'solid', seg: 8, stud: false });
     }
   }
-  gb.node('muzzle', 0, 0, 4.8);
-  const gunMesh = gb.build();
-  pitch.add(gunMesh);
+  gb.node('muzzle', 0, 0, 4.7);
+  const guns = gb.build();
+  pitch.add(guns);
 
-  root.scale.setScalar(s);
-  root.userData.nodes = { ...gunMesh.userData.nodes, turret: root, yaw, pitch };
+  if (opts.scale) root.scale.setScalar(opts.scale);
+  if (opts.flip) root.rotation.set(Math.PI, Math.PI, 0);
+
+  root.userData.nodes = { ...guns.userData.nodes, turret: root, yaw, pitch };
   root.userData.aim = (y = 0, p = 0) => {
     yaw.rotation.y = y;
-    pitch.rotation.x = -THREE.MathUtils.clamp(p, -0.35, 1.25);
+    pitch.rotation.x = -THREE.MathUtils.clamp(p, -0.4, 1.3);
   };
+  root.userData.aim(0, 0);
   return root;
 }
 
@@ -87,4 +78,4 @@ register('turret', () => {
     t.userData.aim(Math.sin(time * 0.6) * 0.9, 0.35 + Math.sin(time * 1.1) * 0.3);
   };
   return t;
-}, { notes: 'quad laser turret, 4 studs wide, base at y=0, userData.aim(yaw,pitch), node muzzle' });
+}, { notes: 'quad laser turret, 4 studs wide, ring bottom at y=0, userData.aim(yaw,pitch), node muzzle' });

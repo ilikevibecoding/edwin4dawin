@@ -14,16 +14,14 @@ import { num, fbm2, clamp, lerp } from './common.js';
  */
 
 const BANDS = [
-  [0.00, [214, 158, 96]],
-  [0.12, [232, 186, 124]],
-  [0.24, [206, 142, 78]],
-  [0.36, [236, 198, 140]],
-  [0.47, [222, 166, 104]],
-  [0.55, [244, 214, 160]],
-  [0.64, [214, 150, 88]],
-  [0.76, [232, 182, 118]],
-  [0.88, [200, 134, 74]],
-  [1.00, [226, 178, 118]],
+  [0.00, [238, 210, 168]],
+  [0.14, [204, 146, 82]],
+  [0.30, [232, 190, 132]],
+  [0.44, [188, 122, 64]],
+  [0.56, [240, 204, 152]],
+  [0.70, [196, 132, 70]],
+  [0.85, [226, 182, 122]],
+  [1.00, [234, 202, 158]],
 ];
 
 function bandColor(v) {
@@ -50,18 +48,26 @@ function surfaceTexture(seed) {
       for (let x = 0; x < W; x++) {
         const u = x / W;
         // Warp the band boundaries so they are not dead-straight lines.
-        const warp = (fbm2(u * 9, lat * 5, { seed, octaves: 3 }) - 0.5) * 0.055
-          + (fbm2(u * 26, lat * 14, { seed: seed + 7, octaves: 2 }) - 0.5) * 0.018;
-        const [r, g, b] = bandColor(clamp(lat + warp, 0, 1));
+        const warp = (fbm2(u * 4, lat * 2.4, { seed, octaves: 3 }) - 0.5) * 0.19
+          + (fbm2(u * 17, lat * 9, { seed: seed + 7, octaves: 3 }) - 0.5) * 0.035;
+        const lv = clamp(lat + warp, 0, 1);
+        const [r, g, b] = bandColor(lv);
+
+        // Wind-stretched streaks: high frequency in longitude, low in latitude.
+        const streak = fbm2(u * 62, lat * 9, { seed: seed + 23, octaves: 3 });
         // Mottling: dust storms and cratered plains.
-        const m = fbm2(u * 46, lat * 24, { seed: seed + 31, octaves: 4 });
-        const k = 0.86 + m * 0.28;
-        const dark = fbm2(u * 6 + 11, lat * 3 + 4, { seed: seed + 53, octaves: 3 });
-        const dk = dark < 0.36 ? lerp(0.72, 1.0, dark / 0.36) : 1.0;
+        const m = fbm2(u * 44, lat * 26, { seed: seed + 31, octaves: 4 });
+        const k = (0.80 + m * 0.36) * (0.90 + streak * 0.2);
+
+        // Dry sea basins and lava scars, painted straight into the albedo.
+        const dark = fbm2(u * 5 + 11, lat * 3 + 4, { seed: seed + 53, octaves: 4 });
+        const dk = dark < 0.46 ? lerp(0.55, 1.0, dark / 0.46) : 1.0;
+        const rock = dark < 0.46 ? (1 - dark / 0.46) * 0.62 : 0;
+
         const i = (y * W + x) * 4;
-        d[i] = clamp(r * k * dk, 0, 255);
-        d[i + 1] = clamp(g * k * dk, 0, 255);
-        d[i + 2] = clamp(b * k * dk, 0, 255);
+        d[i] = clamp(lerp(r * k * dk, 118 * k, rock), 0, 255);
+        d[i + 1] = clamp(lerp(g * k * dk, 70 * k, rock), 0, 255);
+        d[i + 2] = clamp(lerp(b * k * dk, 44 * k, rock), 0, 255);
         d[i + 3] = 255;
       }
     }
@@ -159,8 +165,8 @@ export function buildDesertPlanet(opts = {}) {
       uniforms: {
         uColor: { value: new THREE.Color(0xffd9a0).convertSRGBToLinear() },
         uSun: { value: sun.clone() },
-        uPower: { value: 3.4 },
-        uIntensity: { value: 0.95 },
+        uPower: { value: 2.6 },
+        uIntensity: { value: 1.35 },
       },
       vertexShader: RIM_VERT,
       fragmentShader: RIM_FRAG,
@@ -179,8 +185,8 @@ export function buildDesertPlanet(opts = {}) {
       uniforms: {
         uColor: { value: new THREE.Color(0xa8d4ff).convertSRGBToLinear() },
         uSun: { value: sun.clone() },
-        uPower: { value: 7.5 },
-        uIntensity: { value: 1.5 },
+        uPower: { value: 3.8 },
+        uIntensity: { value: 2.4 },
       },
       vertexShader: RIM_VERT,
       fragmentShader: RIM_FRAG,
