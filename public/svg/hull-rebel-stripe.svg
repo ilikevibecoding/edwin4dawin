@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hull decal: corvette identification stripe.
+  Raster asset, transparent background.
+  A long red band with a chamfered leading end and a thin darker outline.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- darker backing, offset one unit outside the band -->
+  <path fill="#8f1206" d="M8 200 L400 200 L504 256 L400 312 L8 312Z"/>
+
+  <!-- main band -->
+  <path fill="#c91a09" d="M14 208 L396 208 L488 256 L396 304 L14 304Z"/>
+
+  <!-- highlight along the top edge -->
+  <path fill="#e2523f" d="M14 208 L396 208 L410 215 L14 215Z"/>
+
+  <!-- tail cap and two register marks -->
+  <rect x="0" y="200" width="16" height="112" fill="#8f1206"/>
+  <rect x="44" y="228" width="14" height="56" fill="#8f1206"/>
+  <rect x="76" y="228" width="14" height="56" fill="#8f1206"/>
+
+</svg>

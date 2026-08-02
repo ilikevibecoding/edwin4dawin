@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hooded scavenger face print.
+  Raster asset. NOT transparent: the black field is the inside of the hood,
+  so it covers the whole head. Two glowing almond eyes.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- hood shadow: full field -->
+  <rect x="0" y="0" width="512" height="512" fill="#000000"/>
+
+  <!-- glowing eyes -->
+  <path fill="#f2cd37" d="M132 210 C158 182 214 182 236 208
+    C214 236 158 238 132 210Z"/>
+  <path fill="#f2cd37" d="M380 210 C354 182 298 182 276 208
+    C298 236 354 238 380 210Z"/>
+
+  <!-- inner highlight -->
+  <path fill="#fff2a8" d="M156 208 C172 194 200 194 214 206
+    C200 218 172 220 156 208Z"/>
+  <path fill="#fff2a8" d="M356 208 C340 194 312 194 298 206
+    C312 218 340 220 356 208Z"/>
+
+</svg>

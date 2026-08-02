@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Torso print: imperial officer tunic.
+  Raster asset, transparent background.
+  High collar, double row of buttons, rank plaque on the left chest.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- tunic -->
+  <path fill="#6c6e68" d="M0 26 L512 26 L512 512 L0 512Z"/>
+
+  <!-- high collar -->
+  <path fill="#4a4d4a" d="M162 0 L350 0 L350 34 L302 74 L210 74 L162 34Z"/>
+  <path fill="#5a5d59" d="M186 0 L326 0 L326 24 L292 54 L220 54 L186 24Z"/>
+
+  <!-- tunic centre seam and placket -->
+  <rect x="248" y="70" width="16" height="330" fill="#5a5d59"/>
+
+  <!-- double row of buttons -->
+  <g fill="#3a3d3a">
+    <circle cx="212" cy="122" r="12"/>
+    <circle cx="212" cy="182" r="12"/>
+    <circle cx="212" cy="242" r="12"/>
+    <circle cx="212" cy="302" r="12"/>
+    <circle cx="300" cy="122" r="12"/>
+    <circle cx="300" cy="182" r="12"/>
+    <circle cx="300" cy="242" r="12"/>
+    <circle cx="300" cy="302" r="12"/>
+  </g>
+
+  <!-- shoulder seams -->
+  <g fill="none" stroke="#4a4d4a" stroke-width="9" stroke-linecap="round">
+    <path d="M44 66 C96 46 132 46 158 62"/>
+    <path d="M468 66 C416 46 380 46 354 62"/>
+  </g>
+
+  <!-- rank plaque, left chest -->
+  <rect x="80" y="140" width="118" height="66" rx="6" fill="#3a3d3a"/>
+  <g>
+    <rect x="94" y="154" width="26" height="18" fill="#c91a09"/>
+    <rect x="126" y="154" width="26" height="18" fill="#5a93db"/>
+    <rect x="158" y="154" width="26" height="18" fill="#f2cd37"/>
+    <rect x="94" y="178" width="26" height="18" fill="#4b9f4a"/>
+    <rect x="126" y="178" width="26" height="18" fill="#c91a09"/>
+    <rect x="158" y="178" width="26" height="18" fill="#a0a5a9"/>
+  </g>
+
+  <!-- code cylinders on the right chest -->
+  <g fill="#a0a5a9">
+    <rect x="330" y="140" width="16" height="80" rx="7"/>
+    <rect x="356" y="140" width="16" height="80" rx="7"/>
+  </g>
+
+  <!-- belt -->
+  <rect x="0" y="404" width="512" height="54" fill="#3a3d3a"/>
+  <rect x="216" y="396" width="80" height="70" rx="6" fill="#a0a5a9"/>
+  <rect x="234" y="414" width="44" height="34" rx="4" fill="#6c6e68"/>
+
+</svg>

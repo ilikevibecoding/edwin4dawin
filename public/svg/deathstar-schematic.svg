@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Technical readout: battle station.
+  Raster asset, transparent background, stroked line art only.
+  Outer hull circle, inner shell, offset superlaser dish with crosshairs,
+  equatorial trench, radial measurement ticks, a bracket callout on the
+  thermal port and abstract data blocks.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+
+  <g fill="none" stroke="#7fe8ff" stroke-width="3" stroke-linecap="round">
+
+    <!-- hull and inner shell -->
+    <circle cx="400" cy="400" r="300" stroke-width="5"/>
+    <circle cx="400" cy="400" r="252"/>
+    <circle cx="400" cy="400" r="188" stroke-width="2"/>
+
+    <!-- superlaser dish, offset to the upper left -->
+    <circle cx="292" cy="286" r="92" stroke-width="5"/>
+    <circle cx="292" cy="286" r="62"/>
+    <circle cx="292" cy="286" r="20" stroke-width="2"/>
+    <path d="M292 172 L292 400"/>
+    <path d="M178 286 L406 286"/>
+    <path d="M226 220 L358 352"/>
+    <path d="M358 220 L226 352"/>
+
+    <!-- equatorial trench -->
+    <path d="M104 386 L696 386" stroke-width="4"/>
+    <path d="M112 414 L688 414" stroke-width="4"/>
+    <path d="M136 400 L664 400" stroke-width="1.5"/>
+
+    <!-- meridian trench -->
+    <path d="M400 100 L400 700" stroke-width="1.5"/>
+
+    <!-- latitude guides -->
+    <path d="M170 250 C280 214 520 214 630 250" stroke-width="1.5"/>
+    <path d="M170 550 C280 586 520 586 630 550" stroke-width="1.5"/>
+
+    <!-- radial measurement ticks -->
+    <path stroke-width="3" d="M718 400L744 400 M715.3 441.5L728.2 443.2 M707.2 482.3L719.7 485.7 M693.8 521.7L705.8 526.7 M675.4 559L697.9 572 M652.3 593.6L662.6 601.5 M624.9 624.9L634.1 634.1 M593.6 652.3L601.5 662.6 M559 675.4L572 697.9 M521.7 693.8L526.7 705.8 M482.3 707.2L485.7 719.7 M441.5 715.3L443.2 728.2 M400 718L400 744 M358.5 715.3L356.8 728.2 M317.7 707.2L314.3 719.7 M278.3 693.8L273.3 705.8 M241 675.4L228 697.9 M206.4 652.3L198.5 662.6 M175.1 624.9L165.9 634.1 M147.7 593.6L137.4 601.5 M124.6 559L102.1 572 M106.2 521.7L94.2 526.7 M92.8 482.3L80.3 485.7 M84.7 441.5L71.8 443.2 M82 400L56 400 M84.7 358.5L71.8 356.8 M92.8 317.7L80.3 314.3 M106.2 278.3L94.2 273.3 M124.6 241L102.1 228 M147.7 206.4L137.4 198.5 M175.1 175.1L165.9 165.9 M206.4 147.7L198.5 137.4 M241 124.6L228 102.1 M278.3 106.2L273.3 94.2 M317.7 92.8L314.3 80.3 M358.5 84.7L356.8 71.8 M400 82L400 56 M441.5 84.7L443.2 71.8 M482.3 92.8L485.7 80.3 M521.7 106.2L526.7 94.2 M559 124.6L572 102.1 M593.6 147.7L601.5 137.4 M624.9 175.1L634.1 165.9 M652.3 206.4L662.6 198.5 M675.4 241L697.9 228 M693.8 278.3L705.8 273.3 M707.2 317.7L719.7 314.3 M715.3 358.5L728.2 356.8"/>
+
+    <!-- bracket callout on the thermal exhaust port -->
+    <circle cx="556" cy="400" r="16" stroke-width="4"/>
+    <circle cx="556" cy="400" r="5" stroke-width="3"/>
+    <path d="M556 384 L556 300 L640 300"/>
+    <path d="M556 416 L556 500 L640 500"/>
+    <path d="M634 288 L634 312"/>
+    <path d="M634 488 L634 512"/>
+    <path d="M572 400 L700 400" stroke-width="1.5"/>
+    <path d="M700 388 L700 412"/>
+
+  </g>
+
+  <!-- abstract data blocks -->
+  <g fill="#7fe8ff">
+    <rect x="648" y="252" width="112" height="10"/>
+    <rect x="648" y="270" width="76" height="10"/>
+    <rect x="648" y="530" width="112" height="10"/>
+    <rect x="648" y="548" width="52" height="10"/>
+    <rect x="648" y="566" width="88" height="10"/>
+    <rect x="40" y="620" width="120" height="10"/>
+    <rect x="40" y="638" width="86" height="10"/>
+    <rect x="40" y="656" width="104" height="10"/>
+    <rect x="40" y="674" width="60" height="10"/>
+  </g>
+  <g fill="none" stroke="#7fe8ff" stroke-width="2">
+    <rect x="30" y="606" width="150" height="86"/>
+    <rect x="638" y="240" width="132" height="52"/>
+    <rect x="638" y="518" width="132" height="70"/>
+  </g>
+
+</svg>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Protocol droid face print.
+  Raster asset. Transparent background - the gold head shows through.
+  Round photoreceptors, a barred mouth grille and panel seams.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- brow plate seam -->
+  <path fill="#aa7f2e" d="M70 108 L442 108 L442 132 L70 132Z"/>
+  <path fill="#101418" d="M70 136 L442 136 L442 144 L70 144Z"/>
+
+  <!-- photoreceptors -->
+  <circle cx="182" cy="216" r="62" fill="#aa7f2e"/>
+  <circle cx="330" cy="216" r="62" fill="#aa7f2e"/>
+  <circle cx="182" cy="216" r="44" fill="#101418"/>
+  <circle cx="330" cy="216" r="44" fill="#101418"/>
+  <circle cx="182" cy="216" r="20" fill="#aa7f2e"/>
+  <circle cx="330" cy="216" r="20" fill="#aa7f2e"/>
+
+  <!-- nose ridge -->
+  <path fill="#aa7f2e" d="M244 180 L268 180 L276 300 L236 300Z"/>
+  <path fill="#101418" d="M252 196 L260 196 L264 292 L248 292Z"/>
+
+  <!-- mouth grille with vertical bars -->
+  <path fill="#101418" fill-rule="evenodd" d="M146 330 L366 330 L366 424 L146 424Z
+    M164 346 L182 346 L182 408 L164 408Z
+    M196 346 L214 346 L214 408 L196 408Z
+    M228 346 L246 346 L246 408 L228 408Z
+    M260 346 L278 346 L278 408 L260 408Z
+    M292 346 L310 346 L310 408 L292 408Z
+    M324 346 L342 346 L342 408 L324 408Z"/>
+
+  <!-- cheek panel lines -->
+  <g stroke="#aa7f2e" stroke-width="8" stroke-linecap="round" fill="none">
+    <path d="M92 292 L120 320 L120 396"/>
+    <path d="M420 292 L392 320 L392 396"/>
+    <path d="M150 448 L362 448"/>
+  </g>
+
+</svg>

@@ -13,6 +13,7 @@
  * jump to any frame.
  */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Bricks, brickMaterial, chamferBox, taperBox } from '../engine/brick.js';
 import { COLORS } from '../engine/palette.js';
 import { svgImage } from '../engine/svg.js';
@@ -371,6 +372,22 @@ export async function buildMinifig(o = {}) {
 
   if (o.scale) root.scale.setScalar(o.scale);
 
+  // Named so that cheap crowd clones can still be posed:
+  // `clone.getObjectByName('armL')`.
+  root.name = 'figRoot';
+  body.name = 'body';
+  pelvis.name = 'pelvis';
+  legL.name = 'legL';
+  legR.name = 'legR';
+  torso.name = 'torso';
+  armL.name = 'armL';
+  armR.name = 'armR';
+  handL.name = 'handL';
+  handR.name = 'handR';
+  neck.name = 'neck';
+  head.name = 'head';
+  accessory.name = 'accessory';
+
   const fig = {
     root,
     body,
@@ -445,6 +462,129 @@ export function poseAim(fig, t = 0, opts = {}) {
 export function poseArmsUp(fig, t = 0, amount = 1) {
   fig.armL.rotation.set(0, 0, -2.2 * amount);
   fig.armR.rotation.set(0, 0, 2.2 * amount);
+}
+
+/**
+ * Wrap a cloned figure root so the pose helpers work on it.
+ * Cloning is far cheaper than building another minifig, which is how crowds
+ * of forty are affordable.
+ */
+export function figFromClone(root, seed = 0) {
+  const get = (n) => root.getObjectByName(n);
+  return {
+    root,
+    body: get('body'),
+    pelvis: get('pelvis'),
+    legL: get('legL'),
+    legR: get('legR'),
+    torso: get('torso'),
+    armL: get('armL'),
+    armR: get('armR'),
+    handL: get('handL'),
+    handR: get('handR'),
+    neck: get('neck'),
+    head: get('head'),
+    accessory: get('accessory'),
+    height: FIG.height,
+    seed,
+  };
+}
+
+/**
+ * Bake a posed figure down to a flat list of `{geometry, material}` in the
+ * figure's own space. Used to turn characters into instanced crowd extras.
+ */
+export function bakeFigure(fig) {
+  fig.root.updateWorldMatrix(true, true);
+  const inv = new THREE.Matrix4().copy(fig.root.matrixWorld).invert();
+  const byMat = new Map();
+  fig.root.traverse((n) => {
+    if (!n.isMesh || !n.geometry) return;
+    const g = (n.geometry.index ? n.geometry.toNonIndexed() : n.geometry).clone();
+    g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, n.matrixWorld));
+    for (const name of Object.keys(g.attributes)) {
+      if (name !== 'position' && name !== 'normal' && name !== 'uv') g.deleteAttribute(name);
+    }
+    if (!g.attributes.uv) {
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    }
+    if (!g.attributes.normal) g.computeVertexNormals();
+    const key = n.material.uuid;
+    if (!byMat.has(key)) byMat.set(key, { material: n.material, geos: [] });
+    byMat.get(key).geos.push(g);
+  });
+  const out = [];
+  for (const { material, geos } of byMat.values()) {
+    const merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
+    if (merged) out.push({ geometry: merged, material });
+  }
+  return out;
+}
+
+/**
+ * A crowd of extras drawn with instancing.
+ *
+ * A hall full of forty figures as individual minifigs costs several hundred
+ * draw calls, which the software renderer cannot afford. Baking each template
+ * into a handful of instanced meshes brings that down to a dozen.
+ *
+ *   const crowd = new Crowd([bakeFigure(figA), bakeFigure(figB)], placements);
+ *   scene.add(crowd.object);
+ *   crowd.update(t, (i, seed, out) => { out.y = Math.abs(Math.sin(t*4+seed))*0.2; });
+ */
+export class Crowd {
+  /**
+   * @param {Array<Array<{geometry,material}>>} baked  one entry per template
+   * @param {Array<{template:number,position:[number,number,number],rotationY:number,scale?:number,seed?:number}>} placements
+   */
+  constructor(baked, placements, opts = {}) {
+    this.object = new THREE.Group();
+    this.placements = placements;
+    this.groups = [];
+    for (let ti = 0; ti < baked.length; ti++) {
+      const members = placements.map((p, i) => ({ p, i })).filter(({ p }) => p.template === ti);
+      if (!members.length) continue;
+      const meshes = baked[ti].map(({ geometry, material }) => {
+        const im = new THREE.InstancedMesh(geometry, material, members.length);
+        im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        im.castShadow = opts.castShadow ?? true;
+        im.receiveShadow = opts.receiveShadow ?? true;
+        im.frustumCulled = false;
+        this.object.add(im);
+        return im;
+      });
+      this.groups.push({ members, meshes });
+    }
+    this._d = new THREE.Object3D();
+    this._out = { y: 0, rotY: 0, tilt: 0, scale: 1, x: 0, z: 0 };
+  }
+
+  /**
+   * @param {number} t
+   * @param {(index:number, seed:number, out:{y,rotY,tilt,scale,x,z}) => void} fn
+   */
+  update(t, fn) {
+    const d = this._d;
+    const out = this._out;
+    for (const g of this.groups) {
+      for (let k = 0; k < g.members.length; k++) {
+        const { p, i } = g.members[k];
+        out.y = 0;
+        out.rotY = 0;
+        out.tilt = 0;
+        out.x = 0;
+        out.z = 0;
+        out.scale = p.scale ?? 1;
+        fn?.(i, p.seed ?? 0, out);
+        d.position.set(p.position[0] + out.x, p.position[1] + out.y, p.position[2] + out.z);
+        d.rotation.set(out.tilt, (p.rotationY ?? 0) + out.rotY, 0);
+        d.scale.setScalar(out.scale);
+        d.updateMatrix();
+        for (const m of g.meshes) m.setMatrixAt(k, d.matrix);
+      }
+      for (const m of g.meshes) m.instanceMatrix.needsUpdate = true;
+    }
+  }
 }
 
 /** Turn the head (and optionally the torso) toward a world position. */

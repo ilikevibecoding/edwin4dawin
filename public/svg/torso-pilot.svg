@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Torso print: orange flight suit.
+  Raster asset, transparent background.
+  Harness straps and buckles, a chest life-support box and a small alliance
+  patch on the left shoulder.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- flight suit -->
+  <path fill="#f47b20" d="M0 26 L512 26 L512 512 L0 512Z"/>
+  <path fill="#d9631a" d="M188 0 L324 0 L324 42 L286 80 L226 80 L188 42Z"/>
+
+  <!-- zip line -->
+  <rect x="250" y="80" width="12" height="286" fill="#d9631a"/>
+
+  <!-- harness straps -->
+  <path fill="#cfcabc" d="M120 60 L176 52 L286 372 L226 380Z"/>
+  <path fill="#cfcabc" d="M392 60 L336 52 L226 372 L286 380Z"/>
+  <g fill="#a9a496">
+    <path d="M120 60 L176 52 L180 68 L124 76Z"/>
+    <path d="M392 60 L336 52 L332 68 L388 76Z"/>
+  </g>
+
+  <!-- buckles on the straps -->
+  <g fill="#3a3a3a">
+    <rect x="150" y="152" width="66" height="34" rx="5"/>
+    <rect x="296" y="152" width="66" height="34" rx="5"/>
+    <rect x="222" y="300" width="68" height="40" rx="6"/>
+  </g>
+  <g fill="#a0a5a9">
+    <rect x="162" y="162" width="42" height="14" rx="3"/>
+    <rect x="308" y="162" width="42" height="14" rx="3"/>
+    <rect x="236" y="312" width="40" height="16" rx="3"/>
+  </g>
+
+  <!-- life-support box on the chest -->
+  <rect x="196" y="196" width="120" height="90" rx="8" fill="#e8e8e8"/>
+  <rect x="208" y="208" width="96" height="30" rx="4" fill="#3a3a3a"/>
+  <g>
+    <rect x="208" y="250" width="26" height="22" rx="3" fill="#c91a09"/>
+    <rect x="242" y="250" width="26" height="22" rx="3" fill="#4b9f4a"/>
+    <rect x="276" y="250" width="28" height="22" rx="3" fill="#5a93db"/>
+  </g>
+
+  <!-- alliance patch, left shoulder -->
+  <circle cx="86" cy="118" r="46" fill="#e8e2d0"/>
+  <circle cx="86" cy="118" r="38" fill="#c91a09"/>
+  <path fill="#e8e2d0" d="M86 86 C89 100 91 108 94 118
+    C102 110 114 104 128 100 C122 116 110 130 96 138
+    C99 152 100 166 98 180 L86 172 L74 180
+    C72 166 73 152 76 138 C62 130 50 116 44 100
+    C58 104 70 110 78 118 C81 108 83 100 86 86Z"/>
+
+  <!-- belt -->
+  <rect x="0" y="404" width="512" height="58" fill="#cfcabc"/>
+  <rect x="0" y="404" width="512" height="10" fill="#a9a496"/>
+  <rect x="212" y="396" width="88" height="74" rx="6" fill="#3a3a3a"/>
+  <rect x="230" y="414" width="52" height="38" rx="4" fill="#a0a5a9"/>
+
+  <!-- thigh pouches -->
+  <rect x="64" y="470" width="96" height="42" rx="6" fill="#d9631a"/>
+  <rect x="352" y="470" width="96" height="42" rx="6" fill="#d9631a"/>
+
+</svg>

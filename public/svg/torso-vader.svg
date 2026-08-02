@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Torso print: dark lord chest box.
+  Raster asset, transparent background.
+  Black chest, control panel of coloured buttons, two silver plates and a
+  wide belt with square boxes.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- cape shoulders and chest -->
+  <path fill="#101418" d="M0 30 L512 30 L512 512 L0 512Z"/>
+  <path fill="#1b2a34" d="M170 0 L342 0 L342 40 L302 78 L210 78 L170 40Z"/>
+
+  <!-- chest armour edge -->
+  <path fill="#2a2f36" d="M96 86 L416 86 L416 110 L96 110Z"/>
+
+  <!-- control panel -->
+  <rect x="150" y="132" width="212" height="150" rx="10" fill="#2a2f36"/>
+  <rect x="164" y="146" width="184" height="34" rx="5" fill="#101418"/>
+
+  <!-- buttons -->
+  <g>
+    <rect x="176" y="198" width="34" height="26" rx="4" fill="#c91a09"/>
+    <rect x="222" y="198" width="34" height="26" rx="4" fill="#4b9f4a"/>
+    <rect x="268" y="198" width="34" height="26" rx="4" fill="#5a93db"/>
+    <rect x="314" y="198" width="20" height="26" rx="4" fill="#f2cd37"/>
+    <rect x="176" y="238" width="20" height="26" rx="4" fill="#5a93db"/>
+    <rect x="208" y="238" width="34" height="26" rx="4" fill="#c91a09"/>
+    <rect x="254" y="238" width="34" height="26" rx="4" fill="#4b9f4a"/>
+    <rect x="300" y="238" width="34" height="26" rx="4" fill="#c91a09"/>
+  </g>
+
+  <!-- silver plates flanking the panel -->
+  <rect x="62" y="150" width="70" height="118" rx="6" fill="#a0a5a9"/>
+  <rect x="380" y="150" width="70" height="118" rx="6" fill="#a0a5a9"/>
+  <g fill="#6c6e68">
+    <rect x="74" y="166" width="46" height="12"/>
+    <rect x="74" y="192" width="46" height="12"/>
+    <rect x="392" y="166" width="46" height="12"/>
+    <rect x="392" y="192" width="46" height="12"/>
+  </g>
+
+  <!-- wide belt with square boxes -->
+  <rect x="24" y="356" width="464" height="86" fill="#1b2a34"/>
+  <rect x="24" y="356" width="464" height="10" fill="#2a2f36"/>
+  <g fill="#2a2f36">
+    <rect x="52" y="374" width="56" height="52" rx="4"/>
+    <rect x="130" y="374" width="56" height="52" rx="4"/>
+    <rect x="228" y="366" width="56" height="68" rx="4"/>
+    <rect x="326" y="374" width="56" height="52" rx="4"/>
+    <rect x="404" y="374" width="56" height="52" rx="4"/>
+  </g>
+  <rect x="244" y="384" width="24" height="32" rx="3" fill="#a0a5a9"/>
+
+</svg>

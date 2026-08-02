@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Trooper helmet front print.
+  Raster asset. Transparent background - the white helmet piece shows through.
+  Brow band, angular lenses, vented breather and cheek intakes.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- brow band across the top of the visor -->
+  <path fill="#1b2a34" d="M54 96 L458 96 L446 150 L392 138 L120 138 L66 150Z"/>
+
+  <!-- angular eye lenses -->
+  <path fill="#1b2a34" d="M96 166 L216 158 L226 232 L188 268 L118 262 L92 214Z"/>
+  <path fill="#1b2a34" d="M416 166 L296 158 L286 232 L324 268 L394 262 L420 214Z"/>
+
+  <!-- bridge between the lenses -->
+  <path fill="#1b2a34" d="M234 168 L278 168 L272 248 L240 248Z"/>
+
+  <!-- cheek intakes -->
+  <path fill="#6c6e68" d="M92 292 L182 300 L178 330 L88 320Z"/>
+  <path fill="#6c6e68" d="M420 292 L330 300 L334 330 L424 320Z"/>
+
+  <!-- breather / frown, with vent slots cut through it -->
+  <path fill="#1b2a34" fill-rule="evenodd" d="M154 340 L358 340 L326 452 L186 452Z
+    M186 362 L200 362 L192 430 L178 430Z
+    M214 362 L228 362 L224 430 L210 430Z
+    M242 362 L256 362 L256 430 L242 430Z
+    M270 362 L284 362 L288 430 L274 430Z
+    M298 362 L312 362 L320 430 L306 430Z"/>
+
+  <!-- lower lip line -->
+  <rect x="176" y="464" width="160" height="16" rx="6" fill="#6c6e68"/>
+
+</svg>

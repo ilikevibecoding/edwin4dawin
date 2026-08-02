@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minifigure face print: old hermit.
+  Raster asset. Transparent background.
+  Grey beard and moustache fill the lower half, crow's feet at the eyes.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- beard: broad at the cheeks, tapering to a rounded point -->
+  <path fill="#c8c8c8" d="M128 262
+    C122 336 140 410 186 452 C214 478 298 478 326 452
+    C372 410 390 336 384 262
+    C368 292 340 306 306 308 C282 310 230 310 206 308
+    C172 306 144 292 128 262Z"/>
+
+  <!-- moustache, drawn over the beard -->
+  <path fill="#c8c8c8" d="M256 282
+    C232 264 196 258 168 268 C186 292 214 306 244 306
+    C250 306 262 306 268 306 C298 306 326 292 344 268
+    C316 258 280 264 256 282Z"/>
+
+  <!-- mouth slot between moustache and beard -->
+  <path fill="none" stroke="#8e8e8e" stroke-width="9" stroke-linecap="round"
+        d="M212 324 C238 340 274 340 300 324"/>
+
+  <!-- eyes -->
+  <ellipse cx="196" cy="206" rx="24" ry="28" fill="#1b2a34"/>
+  <ellipse cx="316" cy="206" rx="24" ry="28" fill="#1b2a34"/>
+
+  <!-- brows -->
+  <path fill="#c8c8c8" d="M150 158 C176 140 214 142 232 154 L228 172
+    C208 162 176 162 154 176Z"/>
+  <path fill="#c8c8c8" d="M362 158 C336 140 298 142 280 154 L284 172
+    C304 162 336 162 358 176Z"/>
+
+  <!-- crow's feet -->
+  <g stroke="#8e8e8e" stroke-width="7" stroke-linecap="round" fill="none">
+    <path d="M162 196 L136 186"/>
+    <path d="M160 212 L132 212"/>
+    <path d="M162 228 L136 238"/>
+    <path d="M350 196 L376 186"/>
+    <path d="M352 212 L380 212"/>
+    <path d="M350 228 L376 238"/>
+  </g>
+
+</svg>

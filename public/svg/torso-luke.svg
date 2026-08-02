@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Torso print: farm boy tunic.
+  Raster asset, transparent background.
+  Rough tan tunic with a wrapped V front, wide brown belt and a small pouch.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- tunic body -->
+  <path fill="#c2a06a" d="M0 26 L512 26 L512 512 L0 512Z"/>
+
+  <!-- undershirt at the neck -->
+  <path fill="#e4dcc4" d="M196 0 L316 0 L316 40 L282 76 L230 76 L196 40Z"/>
+
+  <!-- wrapped front: right panel laid over the left -->
+  <path fill="#b08c56" d="M196 34 L256 108 L256 386 L120 386 L120 150Z"/>
+  <path fill="#cfb07c" d="M316 34 L256 108 L256 386 L392 386 L392 150Z"/>
+  <path fill="#8f6a3a" d="M316 34 L256 108 L248 100 L306 30Z"/>
+  <path fill="#8f6a3a" d="M196 34 L256 108 L264 100 L206 30Z"/>
+
+  <!-- sleeve seams -->
+  <g fill="none" stroke="#8f6a3a" stroke-width="8" stroke-linecap="round">
+    <path d="M62 66 C58 160 62 260 70 340"/>
+    <path d="M450 66 C454 160 450 260 442 340"/>
+  </g>
+
+  <!-- cloth folds -->
+  <g fill="none" stroke="#8f6a3a" stroke-width="5" stroke-linecap="round">
+    <path d="M158 190 C154 250 156 310 162 366"/>
+    <path d="M354 190 C358 250 356 310 350 366"/>
+    <path d="M206 240 C202 290 204 336 208 372"/>
+    <path d="M306 240 C310 290 308 336 304 372"/>
+  </g>
+
+  <!-- wide brown belt -->
+  <rect x="0" y="386" width="512" height="72" fill="#5c4326"/>
+  <rect x="0" y="386" width="512" height="12" fill="#7a5c33"/>
+  <rect x="0" y="446" width="512" height="12" fill="#3d2c19"/>
+  <rect x="214" y="378" width="84" height="88" rx="6" fill="#a0a5a9"/>
+  <rect x="232" y="400" width="48" height="44" rx="4" fill="#6c6e68"/>
+
+  <!-- hip pouch -->
+  <rect x="330" y="452" width="104" height="60" rx="8" fill="#7a5c33"/>
+  <rect x="330" y="452" width="104" height="20" rx="6" fill="#5c4326"/>
+  <circle cx="382" cy="486" r="9" fill="#3d2c19"/>
+
+</svg>

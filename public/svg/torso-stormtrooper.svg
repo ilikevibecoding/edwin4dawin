@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Torso print: trooper armour.
+  Raster asset, transparent background.
+  Chest plate, abdominal segments, black shoulder joints, chest control box.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- black undersuit showing at the neck and shoulder joints -->
+  <path fill="#1b2a34" d="M196 0 L316 0 L316 46 L280 74 L232 74 L196 46Z"/>
+  <path fill="#1b2a34" d="M0 34 L92 20 L108 132 L0 148Z"/>
+  <path fill="#1b2a34" d="M512 34 L420 20 L404 132 L512 148Z"/>
+
+  <!-- chest plate -->
+  <path fill="#f4f4f4" d="M96 62 L204 44 L256 92 L308 44 L416 62
+    L432 236 L80 236Z"/>
+  <path fill="#c9ced1" d="M96 62 L204 44 L256 92 L308 44 L416 62 L412 82
+    L306 66 L256 112 L206 66 L100 82Z"/>
+
+  <!-- pectoral split -->
+  <path fill="#c9ced1" d="M248 100 L264 100 L264 236 L248 236Z"/>
+
+  <!-- abdominal segments -->
+  <g fill="#f4f4f4">
+    <rect x="86" y="248" width="340" height="58" rx="10"/>
+    <rect x="92" y="316" width="328" height="58" rx="10"/>
+    <rect x="100" y="384" width="312" height="54" rx="10"/>
+  </g>
+  <g fill="#c9ced1">
+    <rect x="86" y="294" width="340" height="12" rx="6"/>
+    <rect x="92" y="362" width="328" height="12" rx="6"/>
+    <rect x="100" y="426" width="312" height="12" rx="6"/>
+  </g>
+
+  <!-- belt -->
+  <rect x="70" y="448" width="372" height="52" fill="#1b2a34"/>
+  <rect x="206" y="440" width="100" height="68" rx="6" fill="#f4f4f4"/>
+  <rect x="224" y="458" width="64" height="32" rx="4" fill="#6c6e68"/>
+
+  <!-- control box on the left chest -->
+  <rect x="118" y="120" width="104" height="80" rx="8" fill="#6c6e68"/>
+  <rect x="130" y="132" width="80" height="24" rx="4" fill="#1b2a34"/>
+  <g fill="#c91a09"><rect x="130" y="166" width="20" height="20" rx="3"/></g>
+  <g fill="#4b9f4a"><rect x="160" y="166" width="20" height="20" rx="3"/></g>
+  <g fill="#5a93db"><rect x="190" y="166" width="20" height="20" rx="3"/></g>
+
+</svg>

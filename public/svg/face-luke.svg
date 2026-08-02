@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minifigure face print: young pilot.
+  Raster asset. Transparent background.
+  Catch-lights in the eyes, light brows, open half smile.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- brows, light brown, slightly arched -->
+  <path fill="#8a5a2b" d="M156 156 C180 138 214 138 234 148 L232 166
+    C212 158 182 158 160 172Z"/>
+  <path fill="#8a5a2b" d="M356 156 C332 138 298 138 278 148 L280 166
+    C300 158 330 158 352 172Z"/>
+
+  <!-- eyes with catch-lights -->
+  <ellipse cx="196" cy="212" rx="26" ry="32" fill="#1b2a34"/>
+  <ellipse cx="316" cy="212" rx="26" ry="32" fill="#1b2a34"/>
+  <circle cx="187" cy="200" r="9" fill="#ffffff"/>
+  <circle cx="307" cy="200" r="9" fill="#ffffff"/>
+
+  <!-- open half smile: filled mouth with a lifted right corner -->
+  <path fill="#1b2a34" d="M186 292 C206 296 288 300 330 276
+    C330 306 300 344 254 344 C216 344 194 320 186 292Z"/>
+  <path fill="#a04a4a" d="M212 322 C232 338 278 338 300 318
+    C286 336 226 340 212 322Z"/>
+
+</svg>

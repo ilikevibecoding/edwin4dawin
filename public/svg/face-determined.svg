@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minifigure face print: determined.
+  Raster asset. Transparent background.
+  Brows drive down towards the nose, mouth is a flat set line.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- brows, angled down towards the bridge of the nose -->
+  <path fill="#1b2a34" d="M150 146 L232 184 L232 208 L150 172Z"/>
+  <path fill="#1b2a34" d="M362 146 L280 184 L280 208 L362 172Z"/>
+
+  <!-- eyes, set slightly low under the brows -->
+  <ellipse cx="196" cy="224" rx="25" ry="29" fill="#1b2a34"/>
+  <ellipse cx="316" cy="224" rx="25" ry="29" fill="#1b2a34"/>
+
+  <!-- flat mouth -->
+  <rect x="204" y="306" width="104" height="16" rx="8" fill="#1b2a34"/>
+
+</svg>

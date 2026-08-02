@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Dark lord mask front print.
+  Raster asset. Transparent background.
+  Angular lenses with a red-brown tint, a triangular ridged grille and
+  side cheek panels.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- brow ridge -->
+  <path fill="#101418" d="M46 84 L256 54 L466 84 L448 146 L256 118 L64 146Z"/>
+
+  <!-- eye sockets -->
+  <path fill="#101418" d="M62 158 L232 140 L244 224 L196 268 L104 258 L58 208Z"/>
+  <path fill="#101418" d="M450 158 L280 140 L268 224 L316 268 L408 258 L454 208Z"/>
+
+  <!-- tinted lenses inside the sockets -->
+  <path fill="#2a1416" d="M86 178 L216 164 L224 220 L188 248 L118 240 L84 206Z"/>
+  <path fill="#2a1416" d="M426 178 L296 164 L288 220 L324 248 L394 240 L428 206Z"/>
+
+  <!-- nose ridge -->
+  <path fill="#2a2f36" d="M240 150 L272 150 L282 300 L230 300Z"/>
+
+  <!-- cheek panels -->
+  <path fill="#2a2f36" d="M56 240 L150 276 L138 372 L60 330Z"/>
+  <path fill="#2a2f36" d="M456 240 L362 276 L374 372 L452 330Z"/>
+
+  <!-- triangular grille with horizontal ridges -->
+  <path fill="#101418" d="M164 300 L348 300 L292 470 L220 470Z"/>
+  <g fill="#2a2f36">
+    <rect x="176" y="316" width="160" height="12"/>
+    <rect x="182" y="344" width="148" height="12"/>
+    <rect x="191" y="372" width="130" height="12"/>
+    <rect x="200" y="400" width="112" height="12"/>
+    <rect x="209" y="428" width="94" height="12"/>
+  </g>
+
+  <!-- chin plate -->
+  <path fill="#2a2f36" d="M206 480 L306 480 L296 502 L216 502Z"/>
+
+</svg>

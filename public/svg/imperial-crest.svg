@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Imperial crest - original design.
+  A heavy hexagonal outer ring with six blunt teeth on its flats, eight
+  tapered spokes and a solid hub. Sharp, machined, no curves except the hub.
+  Extrusion asset: closed filled paths, single colour, no strokes.
+  The ring uses fill-rule="evenodd" so the inner hexagon reads as a hole.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- heavy hexagonal ring, outer R 246 / inner R 206 -->
+  <path fill="#a0a5a9" fill-rule="evenodd" d="M469 133 L256 10 L43 133 L43 379 L256 502 L469 379Z
+    M434.4 153 L256 50 L77.6 153 L77.6 359 L256 462 L434.4 359Z"/>
+
+  <!-- six teeth, one on each flat of the hexagon -->
+  <path fill="#a0a5a9" d="M452 226 L508 234 L508 278 L452 286Z"/>
+  <path fill="#a0a5a9" d="M328 71.3 L362.9 26.8 L401.1 48.8 L380 101.3Z"/>
+  <path fill="#a0a5a9" d="M132 101.3 L110.9 48.8 L149.1 26.8 L184 71.3Z"/>
+  <path fill="#a0a5a9" d="M60 286 L4 278 L4 234 L60 226Z"/>
+  <path fill="#a0a5a9" d="M184 440.7 L149.1 485.2 L110.9 463.2 L132 410.7Z"/>
+  <path fill="#a0a5a9" d="M380 410.7 L401.1 463.2 L362.9 485.2 L328 440.7Z"/>
+
+  <!-- eight spokes, tapering outwards from the hub into the ring -->
+  <path fill="#a0a5a9" d="M322 234 L470 220 L470 292 L322 278Z"/>
+  <path fill="#a0a5a9" d="M287.1 193.8 L381.9 79.2 L432.8 130.1 L318.2 224.9Z"/>
+  <path fill="#a0a5a9" d="M234 190 L220 42 L292 42 L278 190Z"/>
+  <path fill="#a0a5a9" d="M193.8 224.9 L79.2 130.1 L130.1 79.2 L224.9 193.8Z"/>
+  <path fill="#a0a5a9" d="M190 278 L42 292 L42 220 L190 234Z"/>
+  <path fill="#a0a5a9" d="M224.9 318.2 L130.1 432.8 L79.2 381.9 L193.8 287.1Z"/>
+  <path fill="#a0a5a9" d="M278 322 L292 470 L220 470 L234 322Z"/>
+  <path fill="#a0a5a9" d="M318.2 287.1 L432.8 381.9 L381.9 432.8 L287.1 318.2Z"/>
+
+  <!-- collar ring tying the spokes together, and the solid hub -->
+  <path fill="#a0a5a9" fill-rule="evenodd" d="M110 256
+    A146 146 0 0 0 402 256 A146 146 0 0 0 110 256Z
+    M134 256
+    A122 122 0 0 0 378 256 A122 122 0 0 0 134 256Z"/>
+  <circle cx="256" cy="256" r="78" fill="#a0a5a9"/>
+
+</svg>

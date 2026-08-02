@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Torso print: white senatorial robe.
+  Raster asset, transparent background.
+  Soft V neckline, thin grey fold lines, silver belt with a round buckle.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- robe body -->
+  <path fill="#f4f4f4" d="M0 26 L512 26 L512 512 L0 512Z"/>
+
+  <!-- V neckline, showing the collar edge -->
+  <path fill="#dfe3e6" d="M168 0 L206 0 L256 96 L306 0 L344 0 L288 132 L224 132Z"/>
+  <path fill="#f4f4f4" d="M206 0 L306 0 L256 92Z"/>
+
+  <!-- shoulder yoke -->
+  <path fill="none" stroke="#cfd3d6" stroke-width="7" stroke-linecap="round"
+        d="M28 62 C96 40 148 44 186 66"/>
+  <path fill="none" stroke="#cfd3d6" stroke-width="7" stroke-linecap="round"
+        d="M484 62 C416 40 364 44 326 66"/>
+
+  <!-- fold lines -->
+  <g fill="none" stroke="#cfd3d6" stroke-width="6" stroke-linecap="round">
+    <path d="M92 120 C86 210 90 300 104 372"/>
+    <path d="M148 142 C142 232 146 312 158 378"/>
+    <path d="M420 120 C426 210 422 300 408 372"/>
+    <path d="M364 142 C370 232 366 312 354 378"/>
+    <path d="M228 168 C224 244 226 312 232 372"/>
+    <path d="M284 168 C288 244 286 312 280 372"/>
+  </g>
+
+  <!-- skirt folds below the belt -->
+  <g fill="none" stroke="#cfd3d6" stroke-width="6" stroke-linecap="round">
+    <path d="M110 452 L104 512"/>
+    <path d="M186 452 L182 512"/>
+    <path d="M326 452 L330 512"/>
+    <path d="M402 452 L408 512"/>
+  </g>
+
+  <!-- silver belt -->
+  <rect x="0" y="386" width="512" height="56" fill="#a0a5a9"/>
+  <rect x="0" y="386" width="512" height="10" fill="#c9ced1"/>
+  <rect x="0" y="432" width="512" height="10" fill="#6c6e68"/>
+  <circle cx="256" cy="414" r="42" fill="#c9ced1"/>
+  <circle cx="256" cy="414" r="26" fill="#6c6e68"/>
+  <circle cx="256" cy="414" r="12" fill="#dfe3e6"/>
+
+</svg>

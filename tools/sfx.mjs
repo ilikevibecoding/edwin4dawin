@@ -568,18 +568,48 @@ function bitcrush(x, bits = 6, hold = 1) {
   return out;
 }
 
-/**
- * Feed-forward compressor / soft limiter. The big layered effects live or die on
- * this: without it the first low transient sets the normalisation level and every
- * detail layer behind it — crackle, debris, shrapnel — vanishes.
- */
-function compress(x, { thresh = -14, ratio = 4, attack = 0.004, release = 0.18, knee = 6 } = {}) {
+/** out[i] = max(|x[i..i+w]|) — the look-ahead detector for `compress`. */
+function slidingMax(x, w) {
   const out = new Float32Array(x.length);
-  const aA = Math.exp(-1 / (attack * SR));
-  const aR = Math.exp(-1 / (release * SR));
+  const dq = new Int32Array(x.length);
+  let head = 0, tail = 0;
+  for (let i = x.length - 1; i >= 0; i--) {
+    while (tail > head && dq[head] > i + w) head++;
+    const a = Math.abs(x[i]);
+    while (tail > head && Math.abs(x[dq[tail - 1]]) <= a) tail--;
+    dq[tail++] = i;
+    out[i] = Math.abs(x[dq[head]]);
+  }
+  return out;
+}
+
+/**
+ * Feed-forward compressor / limiter with optional look-ahead. The big layered
+ * effects live or die on this: a single one-sample click can otherwise set the
+ * normalisation level and push every detail layer — crackle, debris, shrapnel —
+ * 20 dB down. Look-ahead lets it catch those clicks instead of chasing them.
+ */
+function compress(
+  x,
+  { thresh = -14, ratio = 4, attack = 0.004, release = 0.18, knee = 6, lookahead = 0, detect = 'peak', window = 0.012 } = {}
+) {
+  const out = new Float32Array(x.length);
+  const aA = Math.exp(-1 / Math.max(1, attack * SR));
+  const aR = Math.exp(-1 / Math.max(1, release * SR));
+  const det = lookahead > 0 ? slidingMax(x, Math.round(lookahead * SR)) : null;
+  const aW = Math.exp(-1 / Math.max(1, window * SR));
+  let ms = 0;
   let e = 0;
   for (let i = 0; i < x.length; i++) {
-    const a = Math.abs(x[i]);
+    let a;
+    if (detect === 'rms') {
+      // an RMS detector ignores lone one-sample clicks, so the body of the sound
+      // is not ducked for 50 ms every time a grain lands
+      ms = aW * ms + (1 - aW) * x[i] * x[i];
+      a = Math.sqrt(ms);
+    } else {
+      a = det ? det[i] : Math.abs(x[i]);
+    }
     e = a > e ? aA * e + (1 - aA) * a : aR * e + (1 - aR) * a;
     const over = gainToDb(e) - thresh;
     let gr = 0;
@@ -591,6 +621,23 @@ function compress(x, { thresh = -14, ratio = 4, attack = 0.004, release = 0.18, 
     out[i] = x[i] * dbToGain(gr);
   }
   return out;
+}
+
+/**
+ * Bus polish for the percussive effects: compress, then limit with look-ahead so
+ * the transients stop stealing the headroom the body needs.
+ */
+function polish(chs, { thresh = -16, ratio = 3.5, attack = 0.006, release = 0.16, ceil = -8 } = {}) {
+  return chs.map((c) =>
+    compress(compress(c, { thresh, ratio, attack, release, detect: 'rms' }), {
+      thresh: ceil,
+      ratio: 12,
+      attack: 0.0004,
+      release: 0.04,
+      knee: 3,
+      lookahead: 0.0018,
+    })
+  );
 }
 
 /** Shelving EQ by parallel filter: g > 0 lifts, g < 0 cuts. */
@@ -847,7 +894,7 @@ function boom(
     crack = 1,
   } = {}
 ) {
-  const flash = env(hp(whiteNoise(Math.min(dur, 0.3), rng), hi * 0.6), perc(0.0006, 0.04 + decay * 0.06));
+  const flash = env(hp(whiteNoise(Math.min(dur, 0.3), rng), hi * 0.6), perc(0.0016, 0.045 + decay * 0.07));
   const mid = env(bp(whiteNoise(dur, rng), expTo(hi * 0.55, lo * 2.4, decay * 0.55), 0.8), perc(0.0015, decay * 0.65, curve));
   const air = env(svf(pinkNoise(dur, rng), expTo(hi * 0.5, lo, decay * 0.7), 0.9, 'lp'), perc(0.004, decay, curve));
   const low = env(osc(dur, expTo(subF0, subF1, subDecay * 0.8), { shape: 'sine' }), perc(0.006, subDecay, 0.9));
@@ -900,9 +947,10 @@ function metalClick(rng, { base = 2400, t60 = 0.05 } = {}) {
  * sweep gives it body and a short modal ring adds the bolt's metallic twang.
  */
 function blasterRebel({ dur, rng }) {
-  const ex = exciter(dur, rng, { burst: 0.003, tau: 0.0008 });
+  // a modest impulse: a huge one would set the peak and leave the sweep quiet
+  const ex = exciter(dur, rng, { burst: 0.004, tau: 0.0012, click: 0.45 });
   // the sweep is the sound: 3.5 kHz down to ~190 Hz, and it must stay dominant
-  const zap = env(combFB(ex, expTo(0.00028, 0.0052, 0.15), { fb: 0.91, damp: 0.2 }), perc(0.001, 0.16, 0.75));
+  const zap = env(combFB(ex, expTo(0.00028, 0.0052, 0.15), { fb: 0.93, damp: 0.18 }), perc(0.002, 0.22, 0.75));
   let body = osc(dur, expTo(2600, 175, 0.13), { shape: 'square', pw: 0.42 });
   body = ringMod(body, 780, 0.25);
   env(body, perc(0.0015, 0.11, 0.8));
@@ -917,12 +965,11 @@ function blasterRebel({ dur, rng }) {
     ]),
     perc(0.0005, 0.07)
   );
-  const flash = env(hp(whiteNoise(0.012, rng), 3800), perc(0.0004, 0.01));
-  const sum = softClip(
-    mixBufs(gain(zap, 1), gain(body, 0.55), gain(thud, 0.3), gain(ring, 0.25), gain(flash, 0.4)),
-    1.7,
-    0.5
-  );
+  const flash = env(hp(whiteNoise(0.012, rng), 3800), perc(0.0012, 0.012));
+  const sum = polish(
+    [softClip(mixBufs(gain(zap, 1), gain(body, 0.6), gain(thud, 0.4), gain(ring, 0.22), gain(flash, 0.22)), 1.7, 0.5)],
+    { thresh: -24, ratio: 3.5, attack: 0.003, release: 0.06, ceil: -13 }
+  )[0];
   return reverb(sum, { rt60: 0.22, mix: 0.1, damp: 0.6, size: 0.5 });
 }
 
@@ -932,8 +979,8 @@ function blasterRebel({ dur, rng }) {
  * touch of bit-crushing so the shot spits rather than sings.
  */
 function blasterImperial({ dur, rng }) {
-  const ex = exciter(dur, rng, { burst: 0.007, tau: 0.0022, click: 0.7 });
-  const zap = env(combFB(ex, expTo(0.0006, 0.0092, 0.14), { fb: 0.88, damp: 0.42 }), perc(0.001, 0.24, 0.8));
+  const ex = exciter(dur, rng, { burst: 0.008, tau: 0.0026, click: 0.4 });
+  const zap = env(combFB(ex, expTo(0.0006, 0.0092, 0.16), { fb: 0.9, damp: 0.42 }), perc(0.002, 0.24, 0.8));
   let body = osc(dur, expTo(1450, 92, 0.11), { shape: 'saw' });
   body = softClip(body, 4, 0.85);
   env(body, perc(0.002, 0.1, 0.8));
@@ -941,11 +988,17 @@ function blasterImperial({ dur, rng }) {
   grit = bitcrush(grit, 5, 2);
   env(grit, perc(0.0015, 0.13, 0.8));
   const ring = env(modal(ex, [
-    { f: 820, t60: 0.09, gain: 1 },
-    { f: 1490, t60: 0.06, gain: 0.5 },
-  ]), perc(0.001, 0.12));
-  const sum = softClip(mixBufs(gain(zap, 0.9), gain(body, 0.6), gain(grit, 0.5), gain(ring, 0.4)), 2.2, 0.6);
-  return reverb(sum, { rt60: 0.4, mix: 0.16, damp: 0.55, size: 0.6 });
+    { f: 820, t60: 0.06, gain: 1 },
+    { f: 1490, t60: 0.04, gain: 0.5 },
+  ]), perc(0.001, 0.08));
+  const sum = polish([softClip(mixBufs(gain(zap, 0.95), gain(body, 0.7), gain(grit, 0.5), gain(ring, 0.3)), 2.2, 0.6)], {
+    thresh: -24,
+    ratio: 3.5,
+    attack: 0.003,
+    release: 0.06,
+    ceil: -13,
+  })[0];
+  return reverb(sum, { rt60: 0.28, mix: 0.12, damp: 0.6, size: 0.55 });
 }
 
 /**
@@ -959,11 +1012,12 @@ function turbolaser({ dur, rng }) {
   let body = osc(dur, expTo(720, 44, 0.5), { shape: 'saw' });
   env(body, perc(0.008, 0.42, 0.9));
   body = softClip(body, 3.2, 0.8);
-  const sub = env(osc(dur, expTo(98, 26, 0.55), { shape: 'sine' }), perc(0.01, 0.5, 0.9));
+  const sub = env(osc(dur, expTo(98, 26, 0.55), { shape: 'sine' }), perc(0.01, 0.62, 0.9));
+  const sub2 = env(osc(dur, expTo(150, 38, 0.4), { shape: 'sine' }), perc(0.006, 0.4, 0.9));
   const air = env(svf(whiteNoise(dur, rng), expTo(5400, 240, 0.5), 1.1, 'lp'), perc(0.003, 0.38, 0.9));
-  const flash = env(hp(whiteNoise(0.03, rng), 5000), perc(0.0006, 0.022));
+  const flash = env(hp(whiteNoise(0.03, rng), 5000), perc(0.0015, 0.024));
   const sum = softClip(
-    mixBufs(gain(sweep, 0.85), gain(body, 0.7), gain(sub, 1.0), gain(air, 0.6), gain(flash, 0.5)),
+    mixBufs(gain(sweep, 0.8), gain(body, 0.75), gain(sub, 1.9), gain(sub2, 0.8), gain(air, 0.5), gain(flash, 0.35)),
     2.2,
     0.6
   );
@@ -985,23 +1039,24 @@ function laserImpact({ dur, rng }) {
     ]),
     perc(0.0004, 0.06)
   );
-  place(chs, gain(crack, 0.9), { at: 0 });
+  place(chs, gain(crack, 1.1), { at: 0 });
   const flash = env(bp(whiteNoise(0.09, rng), expTo(4200, 900, 0.06), 1.2), perc(0.0006, 0.05));
-  place(chs, gain(flash, 0.7), { at: 0.001 });
-  const thump = env(osc(0.25, expTo(130, 52, 0.09), { shape: 'sine' }), perc(0.002, 0.16));
-  place(chs, gain(thump, 0.8), { at: 0.002 });
+  place(chs, gain(flash, 0.9), { at: 0.001 });
+  const thump = env(osc(0.35, expTo(130, 52, 0.09), { shape: 'sine' }), perc(0.002, 0.24));
+  place(chs, gain(thump, 1.5), { at: 0.002 });
   // debris: metal fragments raining away, thinning out over half a second
   for (let i = 0; i < 34; i++) {
     const t = rng.curved(0.02, 0.5, 1.8);
-    const g = 0.28 * Math.exp(-t * 3.2) * rng.range(0.4, 1);
+    const g = 0.22 * Math.exp(-t * 3.2) * rng.range(0.4, 1);
     place(chs, metalClick(rng, { base: rng.range(1500, 5200), t60: rng.range(0.015, 0.05) }), {
       at: t,
       gain: g,
       pan: rng.range(-0.8, 0.8),
     });
   }
-  const wet = reverb(mixBufs(chs[0], chs[1]), { rt60: 0.55, mix: 0.2, damp: 0.5, size: 0.8 });
-  return [mixBufs(chs[0], gain(wet[0], 0.5)), mixBufs(chs[1], gain(wet[1], 0.5))];
+  const [dryL, dryR] = polish(chs, { thresh: -22, ratio: 3, ceil: -10 });
+  const wet = reverb(mixBufs(dryL, dryR), { rt60: 0.55, mix: 0.2, damp: 0.5, size: 0.8 });
+  return [mixBufs(dryL, gain(wet[0], 0.5)), mixBufs(dryR, gain(wet[1], 0.5))];
 }
 
 /**
@@ -1012,8 +1067,8 @@ function laserImpact({ dur, rng }) {
 function torpedoLaunch({ dur, rng }) {
   const chs = [mono(dur), mono(dur)];
   // launch thump + tube clank
-  const thump = env(osc(0.4, expTo(140, 46, 0.1), { shape: 'sine' }), perc(0.003, 0.26));
-  place(chs, gain(thump, 1.0), { at: 0 });
+  const thump = env(osc(0.5, expTo(140, 46, 0.12), { shape: 'sine' }), perc(0.003, 0.34));
+  place(chs, gain(thump, 2.4), { at: 0 });
   const clank = env(
     modal(exciter(0.3, rng, { burst: 0.003, tau: 0.0009 }), [
       { f: 320, t60: 0.13, gain: 1 },
@@ -1045,20 +1100,19 @@ function torpedoLaunch({ dur, rng }) {
  */
 function explosionSmall({ dur, rng }) {
   const chs = [mono(dur), mono(dur)];
-  place(chs, gain(boom(dur, rng, { hi: 5200, lo: 220, decay: 0.75, subF0: 95, subF1: 34, subDecay: 0.55 }), 1), {
+  place(chs, boom(dur, rng, { hi: 5200, lo: 220, decay: 0.75, subF0: 95, subF1: 34, subDecay: 0.6, sub: 2.2, crack: 1.1 }), {
     at: 0,
   });
-  const crack = env(hp(whiteNoise(0.03, rng), 3200), perc(0.0004, 0.02));
-  place(chs, gain(crack, 0.6), { at: 0 });
+  const crack = env(hp(whiteNoise(0.03, rng), 3200), perc(0.0012, 0.022));
+  place(chs, gain(crack, 0.4), { at: 0 });
   // crackle: little burning fragments, density falling away
   for (let i = 0; i < 130; i++) {
     const t = rng.curved(0.03, 1.2, 1.6);
-    const g = 0.5 * Math.exp(-t * 1.9) * rng.range(0.3, 1);
+    const g = 0.3 * Math.exp(-t * 1.9) * rng.range(0.3, 1);
     const gr = env(bp(whiteNoise(0.02, rng), rng.range(900, 5200), 2.5), perc(0.0004, rng.range(0.004, 0.016)));
     place(chs, gr, { at: t, gain: g, pan: rng.range(-0.75, 0.75) });
   }
-  const dryL = compress(chs[0], { thresh: -16, ratio: 3.5, attack: 0.006, release: 0.16 });
-  const dryR = compress(chs[1], { thresh: -16, ratio: 3.5, attack: 0.006, release: 0.16 });
+  const [dryL, dryR] = polish(chs, { thresh: -18, ratio: 3.5, ceil: -9 });
   const wet = reverb(mixBufs(dryL, dryR), { rt60: 0.9, mix: 0.24, damp: 0.5, size: 1 });
   return [mixBufs(dryL, gain(wet[0], 0.45)), mixBufs(dryR, gain(wet[1], 0.45))];
 }
@@ -1070,9 +1124,9 @@ function explosionSmall({ dur, rng }) {
  */
 function explosionBig({ dur, rng }) {
   const chs = [mono(dur), mono(dur)];
-  const flash = env(hp(whiteNoise(0.05, rng), 4200), perc(0.0004, 0.035));
-  place(chs, gain(flash, 0.7), { at: 0 });
-  place(chs, boom(dur, rng, { hi: 6000, lo: 170, decay: 1.6, subF0: 80, subF1: 24, subDecay: 1.3, drive: 2.8 }), {
+  const flash = env(hp(whiteNoise(0.05, rng), 4200), perc(0.0014, 0.038));
+  place(chs, gain(flash, 0.5), { at: 0 });
+  place(chs, boom(dur, rng, { hi: 6000, lo: 170, decay: 1.6, subF0: 80, subF1: 24, subDecay: 1.5, sub: 2.4, drive: 2.8 }), {
     at: 0,
     gain: 1,
   });
@@ -1091,24 +1145,29 @@ function explosionBig({ dur, rng }) {
   }
   // sub drop
   const sub = env(osc(dur, expTo(70, 20, 1.8), { shape: 'sine' }), perc(0.02, 1.7, 0.9));
-  place(chs, softClip(gain(sub, 1.0), 2, 0.5), { at: 0.01 });
+  place(chs, softClip(gain(sub, 2.2), 2, 0.5), { at: 0.01 });
   // roar: turbulent rumble that outlasts the blast, with debris tumbling in it
   const turb = smoothNoise(dur, rng, 7);
   const roar = svf(brownNoise(dur, rng), (t) => 130 + 380 * turb(t), 1.2, 'lp');
   env(roar, (t) => perc(0.05, 2.2, 0.85)(t) * (0.55 + 0.45 * turb(t * 1.7)));
   place(chs, gain(roar, 1.0), { at: 0.02 });
   const grit = env(bp(whiteNoise(dur, rng), (t) => 900 + 1600 * turb(t), 1.1), perc(0.03, 1.8, 1.05));
-  place(chs, gain(grit, 0.3), { at: 0.02 });
+  place(chs, gain(grit, 0.22), { at: 0.02 });
   for (let i = 0; i < 60; i++) {
     const t = rng.curved(0.1, dur - 0.3, 1.5);
     place(chs, metalClick(rng, { base: rng.range(800, 4200), t60: rng.range(0.02, 0.09) }), {
       at: t,
-      gain: 0.34 * Math.exp(-t * 0.9) * rng.range(0.3, 1),
+      gain: 0.24 * Math.exp(-t * 0.9) * rng.range(0.3, 1),
       pan: rng.range(-0.9, 0.9),
     });
   }
-  const dryL = compress(softClip(chs[0], 1.6, 0.4), { thresh: -17, ratio: 4, attack: 0.008, release: 0.2 });
-  const dryR = compress(softClip(chs[1], 1.6, 0.4), { thresh: -17, ratio: 4, attack: 0.008, release: 0.2 });
+  const [dryL, dryR] = polish([softClip(chs[0], 1.6, 0.4), softClip(chs[1], 1.6, 0.4)], {
+    thresh: -19,
+    ratio: 4,
+    attack: 0.008,
+    release: 0.2,
+    ceil: -9,
+  });
   const wet = reverb(mixBufs(dryL, dryR), { rt60: 2.6, mix: 0.3, damp: 0.42, size: 1.4, wetHp: 60 });
   return [mixBufs(dryL, gain(wet[0], 0.5)), mixBufs(dryR, gain(wet[1], 0.5))];
 }
@@ -1159,30 +1218,35 @@ function explosionMassive({ dur, rng }) {
   place(chs, gain(tear, 0.4), { at: 0.06, pan: 0.15 });
   // 3. colossal sub-bass drop
   const sub1 = env(osc(dur, expTo(88, 16, 2.4), { shape: 'sine' }), seg([[0, 0], [0.08, 1], [2.4, 0.42, 1.3], [dur - 0.6, 0, 1.6]]));
-  place(chs, softClip(gain(sub1, 1.2), 2.4, 0.6), { at: 0.45 });
+  place(chs, softClip(gain(sub1, 2.6), 2.4, 0.6), { at: 0.45 });
   const sub2 = env(osc(dur, expTo(58, 13, 3), { shape: 'sine' }), seg([[0, 0], [0.25, 0.8], [2.6, 0.28, 1.3], [dur - 1.1, 0, 1.6]]));
-  place(chs, softClip(gain(sub2, 1.0), 2, 0.5), { at: 0.9 });
+  place(chs, softClip(gain(sub2, 1.9), 2, 0.5), { at: 0.9 });
   // 4. roaring debris tail
   const turb = smoothNoise(dur, rng, 5.5);
   const turb2 = smoothNoise(dur, rng, 1.7);
   const roar = svf(brownNoise(dur, rng), (t2) => 110 + 520 * turb(t2) * (0.4 + 0.6 * turb2(t2)), 1.3, 'lp');
   env(roar, (t2) => perc(0.12, 4.2, 0.95)(t2) * (0.5 + 0.5 * turb(t2 * 1.3)));
-  place(chs, gain(roar, 1.1), { at: 0.05 });
+  place(chs, gain(roar, 2.1), { at: 0.05 });
   const hiss = bp(whiteNoise(dur, rng), (t2) => 800 + 2200 * turb2(t2), 1.1);
   env(hiss, perc(0.1, 3.6, 1.1));
-  place(chs, gain(hiss, 0.6), { at: 0.1 });
+  place(chs, gain(hiss, 0.4), { at: 0.1 });
   // fragments: hull plating and bricks tumbling past for five seconds
   for (let i = 0; i < 320; i++) {
     const t2 = rng.curved(0.3, dur - 0.3, 1.3);
-    const g = 0.62 * Math.exp(-(t2 - 0.3) * 0.42) * rng.range(0.25, 1);
+    const g = 0.42 * Math.exp(-(t2 - 0.3) * 0.42) * rng.range(0.25, 1);
     const grain =
       rng.f() < 0.55
         ? metalClick(rng, { base: rng.range(700, 4600), t60: rng.range(0.02, 0.12) })
         : brickClick(rng, rng.range(0.2, 0.9));
     place(chs, grain, { at: t2, gain: g, pan: rng.range(-0.95, 0.95) });
   }
-  const dryL = compress(softClip(chs[0], 1.5, 0.45), { thresh: -19, ratio: 4.5, attack: 0.01, release: 0.25 });
-  const dryR = compress(softClip(chs[1], 1.5, 0.45), { thresh: -19, ratio: 4.5, attack: 0.01, release: 0.25 });
+  const [dryL, dryR] = polish([softClip(chs[0], 1.5, 0.45), softClip(chs[1], 1.5, 0.45)], {
+    thresh: -21,
+    ratio: 4.5,
+    attack: 0.01,
+    release: 0.25,
+    ceil: -9,
+  });
   const wet = reverb(mixBufs(dryL, dryR), { rt60: 4, mix: 0.32, damp: 0.4, size: 1.6, wetHp: 50 });
   return [mixBufs(dryL, gain(wet[0], 0.5)), mixBufs(dryR, gain(wet[1], 0.5))];
 }
@@ -1230,8 +1294,7 @@ function brickScatter({ dur, rng }) {
     });
   }
   // compression is what turns a spray of clicks into a solid mass of plastic
-  const dryL = compress(chs[0], { thresh: -22, ratio: 3.2, attack: 0.003, release: 0.09 });
-  const dryR = compress(chs[1], { thresh: -22, ratio: 3.2, attack: 0.003, release: 0.09 });
+  const [dryL, dryR] = polish(chs, { thresh: -26, ratio: 3.2, attack: 0.003, release: 0.09, ceil: -11 });
   const wet = reverb(mixBufs(dryL, dryR), { rt60: 0.5, mix: 0.18, damp: 0.55, size: 0.8, wetHp: 250 });
   return [mixBufs(dryL, gain(wet[0], 0.45)), mixBufs(dryR, gain(wet[1], 0.45))];
 }
@@ -1264,8 +1327,8 @@ function engineRumble({ dur, rng }) {
     }
     const warm = softClip(lp(tone, (t) => 210 + 90 * gust(t), 0.9), 2.4, 0.55);
     const rumble = gain(lp(brownNoise(d, rng), (t) => 95 + 80 * gust(t)), (t) => 0.9 + 0.4 * gust2(t));
-    const whine = norm1(bp(whiteNoise(d, rng), (t) => 780 + 260 * gust2(t), 6), 0.1);
-    const air = gain(lp(pinkNoise(d, rng), 1500), 0.14);
+    const whine = norm1(bp(whiteNoise(d, rng), (t) => 780 + 260 * gust2(t), 6), 0.2);
+    const air = gain(lp(pinkNoise(d, rng), 2200), 0.2);
     const sum = softClip(mixBufs(gain(warm, 0.9), rumble, whine, air), 1.6, 0.35);
     gain(sum, (t) => 0.86 + 0.14 * Math.sin(TAU * F(3) * t)); // slow ion throb
     return toStereo(sum, 0.35);
@@ -1366,7 +1429,10 @@ function xwingFlyby({ dur, rng }) {
   }
   const turb = smoothNoise(len, rng, 7);
   const air = gain(lp(pinkNoise(len, rng), (t) => 900 + 700 * turb(t)), (t) => 0.8 + 0.4 * turb(t * 1.3));
-  const whine = gain(osc(len, (t) => 2250 - 240 * (t / len), { shape: 'sine' }), 0.07);
+  const whine = mixBufs(
+    gain(osc(len, (t) => 2250 - 240 * (t / len), { shape: 'sine' }), 0.14),
+    gain(osc(len, (t) => 1490 - 150 * (t / len), { shape: 'sine' }), 0.09)
+  );
   const src = softClip(mixBufs(gain(eng, 0.9), gain(air, 0.8), whine), 2.4, 0.6);
   const out = flyBy(src, dur, { speed: 145, miss: 6, tc: dur * 0.45, spread: 0.9, air: 12000, curve: 1.35, pre });
   const thump = env(osc(0.3, expTo(150, 48, 0.12), { shape: 'sine' }), perc(0.01, 0.2));
@@ -1438,8 +1504,9 @@ function podLaunch({ dur, rng }) {
   const rumble = gain(lp(brownNoise(dur, rng), (t) => 130 + 220 * away(t)), (t) => away(t) * 0.9);
   const motor = softClip(mixBufs(gain(hiss, 0.9), rumble), 1.6, 0.35);
   place(chs, motor, { at: 0.03, gain: 0.85, pan: (t) => clamp(0.1 + t * 0.45, -1, 0.8) });
-  const wet = reverb(mixBufs(chs[0], chs[1]), { rt60: 1.3, mix: 0.2, damp: 0.5, size: 1.1 });
-  return [mixBufs(chs[0], gain(wet[0], 0.45)), mixBufs(chs[1], gain(wet[1], 0.45))];
+  const [dryL, dryR] = polish(chs, { thresh: -18, ratio: 3, ceil: -9 });
+  const wet = reverb(mixBufs(dryL, dryR), { rt60: 1.3, mix: 0.2, damp: 0.5, size: 1.1 });
+  return [mixBufs(dryL, gain(wet[0], 0.45)), mixBufs(dryR, gain(wet[1], 0.45))];
 }
 
 // ===========================================================================
@@ -1453,9 +1520,9 @@ function podLaunch({ dur, rng }) {
  */
 function doorBlast({ dur, rng }) {
   const chs = [mono(dur), mono(dur)];
-  const blast = boom(dur, rng, { hi: 4200, lo: 200, decay: 0.6, subF0: 84, subF1: 36, subDecay: 0.4 });
-  place(chs, gain(Float32Array.from(blast), 0.85), { at: 0 });
-  place(chs, gain(env(hp(whiteNoise(0.03, rng), 4000), perc(0.0003, 0.022)), 0.5), { at: 0 });
+  const blast = boom(dur, rng, { hi: 4200, lo: 200, decay: 0.6, subF0: 84, subF1: 36, subDecay: 0.5, sub: 2.2 });
+  place(chs, gain(Float32Array.from(blast), 0.9), { at: 0 });
+  place(chs, gain(env(hp(whiteNoise(0.03, rng), 4000), perc(0.0012, 0.024)), 0.35), { at: 0 });
   // the door: a big steel plate rung by the blast
   const plate = env(
     modal(blast, [
@@ -1468,18 +1535,21 @@ function doorBlast({ dur, rng }) {
     ]),
     perc(0.001, 1.2, 0.9)
   );
-  place(chs, norm1(plate, 0.95), { at: 0.002, pan: -0.05 });
+  place(chs, norm1(plate, 1.4), { at: 0.002, pan: -0.05 });
   // shrapnel
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 110; i++) {
     const t = rng.curved(0.04, dur - 0.2, 1.7);
-    place(chs, metalClick(rng, { base: rng.range(900, 5000), t60: rng.range(0.02, 0.09) }), {
+    place(chs, metalClick(rng, { base: rng.range(700, 4200), t60: rng.range(0.02, 0.09) }), {
       at: t,
-      gain: 0.3 * Math.exp(-t * 1.8) * rng.range(0.3, 1),
+      gain: 0.3 * Math.exp(-t * 1.6) * rng.range(0.3, 1),
       pan: rng.range(-0.95, 0.95),
     });
   }
-  const dryL = softClip(chs[0], 1.5, 0.35);
-  const dryR = softClip(chs[1], 1.5, 0.35);
+  const [dryL, dryR] = polish([softClip(chs[0], 1.5, 0.35), softClip(chs[1], 1.5, 0.35)], {
+    thresh: -20,
+    ratio: 3.5,
+    ceil: -10,
+  });
   const wet = reverb(mixBufs(dryL, dryR), { rt60: 1.7, mix: 0.3, damp: 0.45, size: 1 });
   return [mixBufs(dryL, gain(wet[0], 0.5)), mixBufs(dryR, gain(wet[1], 0.5))];
 }
@@ -1542,7 +1612,7 @@ function footstepsTroopers({ dur, rng }) {
       ]),
       perc(0.0006, 0.16)
     );
-    return norm1(mixBufs(gain(body, 1), gain(smack, 0.5), gain(leather, 0.3), gain(deck, 0.45)), 1);
+    return norm1(mixBufs(gain(body, 0.5), gain(smack, 1), gain(leather, 0.6), gain(deck, 0.9)), 1);
   };
   // five troopers, each with a fixed offset from the beat and their own weight
   const squad = [
@@ -1565,13 +1635,15 @@ function footstepsTroopers({ dur, rng }) {
   }
   // deck ambience: a hollow metal room, rendered circularly by reverbing the
   // already-wrapped signal twice as long and folding the tail back on itself
-  const both = mixBufs(chs[0], chs[1]);
+  const stepsL = polish([chs[0]], { thresh: -24, ratio: 3, attack: 0.004, release: 0.12, ceil: -12 })[0];
+  const stepsR = polish([chs[1]], { thresh: -24, ratio: 3, attack: 0.004, release: 0.12, ceil: -12 })[0];
+  const both = mixBufs(stepsL, stepsR);
   const wet = reverb(mixBufs(both, both), { rt60: 1.1, mix: 0.28, damp: 0.5, size: 1 });
   const foldedL = mono(dur);
   const foldedR = mono(dur);
   addWrap(foldedL, wet[0], 0, 0.4);
   addWrap(foldedR, wet[1], 0, 0.4);
-  return [mixBufs(chs[0], foldedL), mixBufs(chs[1], foldedR)];
+  return [mixBufs(stepsL, foldedL), mixBufs(stepsR, foldedR)];
 }
 
 /**
@@ -1666,7 +1738,11 @@ function saberOn({ dur, rng }) {
     const t = rng.curved(0.01, 0.55, 1.5);
     add(spits, env(hp(whiteNoise(0.03, rng), rng.range(2500, 7000)), perc(0.0004, rng.range(0.004, 0.02))), t, rng.range(0.1, 0.35));
   }
-  const dry = softClip(mixBufs(gain(snap, 0.8), gain(crack, 0.55), gain(hum, 0.85), gain(hiss, 0.3), gain(spits, 0.5)), 1.6, 0.35);
+  const dry = softClip(
+    mixBufs(gain(snap, 1), gain(crack, 0.8), shelfHi(gain(hum, 0.8), 500, 0.5), gain(hiss, 0.5), gain(spits, 0.7)),
+    1.6,
+    0.35
+  );
   const wet = reverb(dry, { rt60: 0.7, mix: 0.18, damp: 0.5, size: 0.8 });
   return wet;
 }
@@ -1688,20 +1764,22 @@ function saberHum({ dur, rng }) {
   return loopBed(dur, X, (d) => {
     const tone = mono(d);
     for (const p of [
-      { f: F(48.75), g: 0.3, s: 'sine' },
-      { f: F(97.5), g: 0.5, s: 'saw' },
-      { f: F(146.25), g: 0.3, s: 'sine' },
-      { f: F(195.25), g: 0.2, s: 'saw' },
-      { f: F(292.75), g: 0.12, s: 'sine' },
-      { f: F(390.5), g: 0.07, s: 'saw' },
+      { f: F(48.75), g: 0.16, s: 'sine' },
+      { f: F(97.5), g: 0.45, s: 'saw' },
+      { f: F(146.25), g: 0.34, s: 'sine' },
+      { f: F(195.25), g: 0.28, s: 'saw' },
+      { f: F(292.75), g: 0.2, s: 'sine' },
+      { f: F(390.5), g: 0.13, s: 'saw' },
+      { f: F(585.5), g: 0.07, s: 'saw' },
     ]) {
       add(tone, osc(d, (t) => p.f * wob(t), { shape: p.s, phase: rng.f() }), 0, p.g);
     }
     let v = softClip(tone, 2.6, 0.6);
     // electric edge: a resonant band drifting slowly
-    const edge = norm1(svf(v, (t) => 880 + 260 * Math.sin(TAU * F(0.75) * t), 5, 'bpq'), 0.45);
-    const hiss = gain(bp(whiteNoise(d, rng), (t) => 3200 + 900 * Math.sin(TAU * F(1.5) * t), 1.2), (t) => 0.05 + 0.03 * Math.sin(TAU * F(2.25) * t));
-    v = mixBufs(gain(lp(v, 2600), 0.9), edge, hiss);
+    const edge = norm1(svf(v, (t) => 900 + 280 * Math.sin(TAU * F(0.75) * t), 5, 'bpq'), 0.7);
+    const edge2 = norm1(svf(v, (t) => 1750 + 420 * Math.sin(TAU * F(1.25) * t + 1), 7, 'bpq'), 0.35);
+    const hiss = gain(bp(whiteNoise(d, rng), (t) => 3200 + 900 * Math.sin(TAU * F(1.5) * t), 1.2), (t) => 0.12 + 0.06 * Math.sin(TAU * F(2.25) * t));
+    v = mixBufs(gain(lp(v, 3200), 0.8), edge, edge2, hiss);
     gain(v, (t) => 0.88 + 0.12 * Math.sin(TAU * F(4.5) * t) * Math.sin(TAU * F(7.25) * t));
     return toStereo(softClip(v, 1.5, 0.3), 0.25);
   });
@@ -1876,12 +1954,13 @@ function windDesert({ dur, rng }) {
   const g3 = periodicNoise(dur, rng, { partials: 4, lowHz: 0.1, highHz: 0.4 });
   const side = (seed) => (d) => {
     const r = new Rng(seed);
-    const body = gain(svf(pinkNoise(d, r), (t) => 260 * Math.pow(3.6, g1(t)), 1.1, 'bp'), (t) => 0.22 + 0.78 * Math.pow(g1(t), 1.4));
-    const hiss = gain(hp(whiteNoise(d, r), 3200), (t) => 0.04 + 0.34 * Math.pow(g2(t), 2));
+    const body = gain(svf(pinkNoise(d, r), (t) => 300 * Math.pow(3.8, g1(t)), 1.1, 'bp'), (t) => 0.22 + 0.78 * Math.pow(g1(t), 1.4));
+    const hiss = gain(hp(whiteNoise(d, r), 2600), (t) => 0.05 + 0.28 * Math.pow(g2(t), 2));
     const whistle = norm1(svf(whiteNoise(d, r), (t) => 1500 + 950 * g3(t), 17, 'bpq'), 1);
-    gain(whistle, (t) => 0.03 + 0.2 * Math.pow(g3(t), 3));
-    const low = gain(lp(brownNoise(d, r), 135), (t) => 0.45 + 0.55 * g2(t));
-    return softClip(mixBufs(gain(body, 1), gain(hiss, 0.5), whistle, gain(low, 0.55)), 1.4, 0.25);
+    gain(whistle, (t) => 0.04 + 0.22 * Math.pow(g3(t), 3));
+    // the dunes rumble under it, but only just: this is dry, thin desert air
+    const low = gain(lp(brownNoise(d, r), 130), (t) => 0.45 + 0.55 * g2(t));
+    return softClip(mixBufs(gain(body, 1.15), gain(hiss, 0.4), whistle, gain(low, 0.34)), 1.4, 0.25);
   };
   return [loopBedMono(dur, X, side(4401)), loopBedMono(dur, X, side(4402))];
 }
@@ -1901,10 +1980,12 @@ function sandcrawler({ dur, rng }) {
     let treads = combFB(hp(pinkNoise(d, r), 220), 0.0034, { fb: 0.6, damp: 0.3 });
     treads = norm1(treads, 1);
     gain(treads, (t) => 0.3 + 0.7 * Math.pow(grind(t), 1.3));
-    const diesel = gain(lp(brownNoise(d, r), (t) => 105 + 70 * grind(t)), 1.1);
-    const groan = norm1(svf(whiteNoise(d, r), (t) => 155 + 250 * creak(t), 18, 'bpq'), 0.55);
-    const dust = gain(hp(whiteNoise(d, r), 4200), (t) => 0.025 + 0.05 * grind(t));
-    return toStereo(softClip(mixBufs(gain(treads, 0.85), diesel, groan, dust), 1.8, 0.4), 0.4);
+    const diesel = gain(lp(brownNoise(d, r), (t) => 105 + 70 * grind(t)), 0.45);
+    const groan = norm1(svf(whiteNoise(d, r), (t) => 155 + 250 * creak(t), 18, 'bpq'), 0.5);
+    // shale crunching under the treads
+    const crunch = gain(bp(whiteNoise(d, r), (t) => 1400 + 900 * grind(t), 1.2), (t) => 0.1 + 0.22 * Math.pow(grind(t), 1.5));
+    const dust = gain(hp(whiteNoise(d, r), 4200), (t) => 0.04 + 0.09 * grind(t));
+    return toStereo(softClip(mixBufs(gain(treads, 1.15), diesel, groan, crunch, dust), 1.8, 0.4), 0.4);
   });
   // engine chugs: exact count per loop, wrap-mixed
   const chugs = Math.round(dur * 4.8);
@@ -1968,7 +2049,7 @@ function jawaChatter({ dur, rng }) {
     let t = t0;
     for (let i = 0; i < syls; i++) {
       const len = rng.range(0.07, 0.15);
-      const base = rng.range(300, 430) * (rise ? 1 + (0.5 * i) / syls : 1);
+      const base = rng.range(420, 600) * (rise ? 1 + (0.5 * i) / syls : 1);
       const a = rng.pick([V.u, V.i, V.e, V.a, V.o]);
       const b = rng.pick([V.i, V.e, V.u, V.a]);
       add(dry, syllable(len, base, base * rng.range(0.8, 1.5), a, b), t, rng.range(0.6, 1));
@@ -2000,8 +2081,8 @@ function crowdCheer({ dur, rng }) {
   let t = 0;
   while (t < dur - 0.05) {
     const density = 26 + 120 * swell(t);
-    const clap = norm1(env(bp(whiteNoise(0.03, rng), rng.range(1100, 3600), 1.6), perc(0.0006, rng.range(0.005, 0.02))), 1);
-    place(chs, clap, { at: t, gain: 0.1 * swell(t) * rng.range(0.35, 1.15), pan: rng.range(-1, 1) });
+    const clap = norm1(env(bp(whiteNoise(0.03, rng), rng.range(1300, 4200), 1.5), perc(0.0006, rng.range(0.005, 0.02))), 1);
+    place(chs, clap, { at: t, gain: 0.2 * swell(t) * rng.range(0.35, 1.15), pan: rng.range(-1, 1) });
     t += (1 / density) * rng.range(0.35, 1.7);
   }
   // voices
@@ -2046,8 +2127,8 @@ function ceremonyAmbience({ dur, rng }) {
   const F = (hz) => Math.round(hz * dur) / dur;
   return loopBed(dur, X, (d) => {
     const r = new Rng(4801);
-    const body = gain(svf(pinkNoise(d, r), (t) => 190 + 140 * drift(t), 0.9, 'lp'), (t) => 0.75 + 0.25 * drift(t));
-    const airy = gain(bp(whiteNoise(d, r), (t) => 2600 + 700 * drift2(t), 0.8), 0.05);
+    const body = gain(svf(pinkNoise(d, r), (t) => 230 + 180 * drift(t), 0.9, 'lp'), (t) => 0.55 + 0.2 * drift(t));
+    const airy = gain(bp(whiteNoise(d, r), (t) => 2600 + 700 * drift2(t), 0.8), 0.1);
     // faint room modes
     const modes = mono(d);
     add(modes, osc(d, F(55), { shape: 'sine' }), 0, 0.1);
@@ -2085,7 +2166,8 @@ function ceremonyAmbience({ dur, rng }) {
 function impactHit({ dur, rng }) {
   const sub = env(osc(dur, expTo(120, 33, 0.4), { shape: 'sine' }), perc(0.004, 0.75, 0.9));
   const sub2 = env(osc(dur, expTo(62, 26, 0.6), { shape: 'sine' }), perc(0.01, 0.9, 0.9));
-  const thwack = env(bp(whiteNoise(0.2, rng), expTo(1900, 400, 0.08), 1.2), perc(0.001, 0.09));
+  const thwack = env(bp(whiteNoise(0.2, rng), expTo(2400, 400, 0.1), 1.1), perc(0.0015, 0.11));
+  const knock = env(bp(whiteNoise(0.3, rng), expTo(700, 220, 0.15), 1, 'bp'), perc(0.002, 0.22));
   const body = env(
     modal(exciter(dur, rng, { burst: 0.003, tau: 0.001 }), [
       { f: 58, t60: 0.8, gain: 1 },
@@ -2094,7 +2176,10 @@ function impactHit({ dur, rng }) {
     ]),
     perc(0.001, 0.9)
   );
-  const dry = softClip(mixBufs(gain(sub, 1.1), gain(sub2, 0.7), gain(thwack, 0.5), norm1(body, 0.6)), 2.2, 0.55);
+  const dry = polish(
+    [softClip(mixBufs(gain(sub, 1.1), gain(sub2, 0.7), gain(thwack, 0.8), gain(knock, 0.45), norm1(body, 0.6)), 2.2, 0.55)],
+    { thresh: -15, ratio: 3, attack: 0.004, release: 0.2, ceil: -7 }
+  )[0];
   return reverb(dry, { rt60: 1.8, mix: 0.3, damp: 0.45, size: 1.3, wetHp: 60 });
 }
 
