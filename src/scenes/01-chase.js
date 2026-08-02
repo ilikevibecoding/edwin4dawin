@@ -6,12 +6,12 @@
  *    0.00 –  8.15  she rips past the lens and runs for Tatooine
  *    8.20 – 14.10  THE SHOT: his prow slides into the top of frame and keeps
  *                  coming while the camera cranes up after it
- *   14.15 – 17.40  cut: wide and low right beneath him, nothing but grey hull
- *                  grinding overhead
+ *   14.15 – 17.40  cut: hard under his keel, looking up and forward — nothing
+ *                  in frame but belly plate widening overhead
  *   17.45 – 21.20  cut: medium on her flank as the turbolasers land
  *   21.25 – 25.30  she yaws off her heading with a bell out and smoking
- *   25.40 – 30.20  the tractor beam reaches down and takes her
- *   30.25 –  END   tight and low on the hangar mouth as it swallows her
+ *   25.40 – 30.20  cut: wide from below, the beam reaching down out of the bay
+ *   30.25 –  END   cut: in on the hangar mouth as it swallows her
  *
  * FRAME OF REFERENCE
  * ------------------
@@ -52,7 +52,17 @@ const PY = PITCH / PLATE;
  * the money shot only works if the lowest point of his hull sits a few degrees
  * above her in the frame, and that angle is BELLY / (distance to his bow).
  */
-const BELLY = 26;
+const BELLY = 22;
+/**
+ * Where the ventral bay sits, in lengths aft of the bow. Not a free parameter:
+ * the model has a ventral recess of its own at about 0.88 lengths aft, and its
+ * ceiling is emissive at 1.4 — put the lens under that and it flares into a
+ * white hole three times the size of anything this scene builds. So the bay goes
+ * far enough forward that every shot which needs it can also keep that recess
+ * behind the lens, and no further forward than the point where the wedge's
+ * lowest courses run out from under it.
+ */
+const HANGAR_AT = 0.665;
 /** Airspeed at full throttle, world units per second. */
 const AIR = 150;
 const PLANET_R = 1550;
@@ -74,18 +84,29 @@ const T = {
  * The destroyer's nose, in multiples of his own length so the choreography
  * survives a model that is not exactly 260 studs long.
  *
- * One straight run from t = 0 to the cut at 14.15, then a hard deceleration as
- * he settles over her. Every change of speed in this track is placed ON a cut:
- * a kink here is a kink in the descent of a hull edge across the whole frame,
- * and the only frame you can hide one in is the frame after a cut.
+ * Two hard constraints shape this track, and they pull against each other:
+ *
+ *  - Through shot 2 his stern must stay BEHIND the lens. The moment it passes,
+ *    the shot becomes his transom and three engine bells coming at you, which is
+ *    a ship leaving, not a ship arriving. So zN < camera.z + length until 14.1.
+ *  - By shot 6 his ventral bay has to be directly over her, and the bay can only
+ *    live on the part of the keel that actually exists (see buildHangar), about
+ *    0.67 lengths aft of the bow. So zN ≈ 0.67 lengths at 25.4.
+ *
+ * Between those two he therefore has to cover most of his own length, which is
+ * the overtake, and it lands in shots 3–5 where the lens is under him and the
+ * hull sliding overhead is the whole point. Every change of speed sits ON a cut:
+ * a kink here is a kink in the descent of a hull edge across the frame, and the
+ * only frame you can hide one in is the frame after a cut.
  */
 const SD_NOSE = [
-  [0, -2.6],
-  [T.under, 0.5765], // 0.2245 lengths a second, dead straight
-  [T.hits, 0.72],
-  [T.slew, 0.762],
-  [T.lock, 0.776],
-  [40, 0.79],
+  [0, -1.1],
+  [T.under, -0.075], // 19 units a second, dead straight, all through shot 2
+  [T.hits, 0.32], // the overtake, under his keel
+  [T.slew, 0.5],
+  [T.lock, HANGAR_AT], // bay over her
+  [T.throat, HANGAR_AT + 0.035],
+  [40, HANGAR_AT + 0.05],
 ];
 
 function sdNoseZ(t, len) {
@@ -161,22 +182,26 @@ export async function build(ctx) {
   const lights = standardLights(scene, 'space', { shadows: false });
   const SUN = new THREE.Vector3(-0.38, 0.5, -0.78).normalize();
   lights.key.position.copy(SUN).multiplyScalar(600);
-  lights.key.intensity = 3.2;
+  // The space preset's 3.1 is set for grey hulls. She is white — albedo 0.93 —
+  // and at bloom threshold 0.6 anything much over 2 turns her bridge and her
+  // turret domes into featureless white blobs the moment she is close to camera.
+  lights.key.intensity = 2.1;
   // Planetshine: a warm bounce off fifteen hundred units of orange desert.
   // Kept weak — at any real strength it turns a grey destroyer into a rusty one.
   lights.fill.color.setHex(0xffb07a);
   lights.fill.position.set(-0.18, -0.95, -0.26).multiplyScalar(400);
-  lights.fill.intensity = 0.42;
+  lights.fill.intensity = 0.28;
   lights.rim.position.set(0.7, 0.2, 0.66).multiplyScalar(400);
   lights.rim.intensity = 0.95;
   // The space preset's ground bounce is almost black, which leaves the whole
-  // underside of the destroyer unreadable. Lift it to a cold slate instead, so
-  // his belly stays grey rather than going either black or orange.
-  lights.hemi.groundColor.setHex(0x46536a);
-  lights.hemi.intensity = 0.72;
+  // underside of the destroyer unreadable — and the warm fill on its own turns
+  // that underside rust-orange. A cold slate ground bounce, strong enough to
+  // dominate the warm one, is what keeps a grey ship grey.
+  lights.hemi.groundColor.setHex(0x76839a);
+  lights.hemi.intensity = 1.0;
   // A cold sidelight so his flank separates from the sky in the money shot.
-  const flank = new THREE.DirectionalLight(0x9fbde8, 0.55);
-  flank.position.set(0.85, -0.32, 0.4).multiplyScalar(400);
+  const flank = new THREE.DirectionalLight(0x9fbde8, 0.6);
+  flank.position.set(0.85, -0.3, 0.42).multiplyScalar(400);
   scene.add(flank);
 
   // -------------------------------------------------------------------- sky
@@ -184,7 +209,7 @@ export async function build(ctx) {
   const stars = new Starfield({ count: 2100, radius: 3000, seed: 19, sizeMin: 5, sizeMax: 26 });
   scene.add(stars.object);
 
-  const dust = new SpeedDust({ count: 220, radius: 210, depth: 640, ahead: 450, size: 0.42 });
+  const dust = new SpeedDust({ count: 160, radius: 210, depth: 640, ahead: 450, size: 0.3 });
   scene.add(dust.object);
 
   const planet = buildPlanet(SUN);
@@ -220,10 +245,16 @@ export async function build(ctx) {
   destroyerRig.add(destroyer);
   scene.add(destroyerRig);
 
-  /** Where the tractor beam comes out: 0.62 lengths aft of the nose. */
-  const HANGAR_BACK = sd.len * 0.62;
-  /** How high she is lifted — far enough for the mouth to hide most of her. */
-  const LIFT_TOP = BELLY + cv.halfH * 0.6;
+  /** Distance from his bow back to the bay, in world units. */
+  const HANGAR_BACK = sd.len * HANGAR_AT;
+  /**
+   * How high she ends up: her spine one unit above the bay roof, which is the
+   * occluder. Her belly then still hangs a couple of units below the mouth on
+   * the last frame, so she reads as swallowed rather than as deleted.
+   */
+  const LIFT_TOP = BELLY - cv.halfH + 1;
+  /** World y of the bay mouth — where the tractor beam comes out. */
+  const MOUTH_Y = BELLY - BAY_DEEP * PLATE;
 
   // ------------------------------------------------------------- her engines
   const engines = mainEngines(corvette, cv, 7).map((p, i) =>
@@ -257,15 +288,19 @@ export async function build(ctx) {
   hangar.group.position.set(0, BELLY, -HANGAR_BACK);
   destroyerRig.add(hangar.group);
 
+  // The tractor field. fx.Beam is an additive cone with a ring pattern baked in
+  // at 40 cycles over its length: keep it narrow and faint or from anywhere
+  // inside about 60 units it stops being a shaft of light and becomes a striped
+  // plastic tube. Every shot it appears in is framed from at least 50 units out.
   const beam = new Beam({
-    color: 0x8fd8ff,
-    radiusTop: cv.halfW * 0.7,
-    radiusBottom: hangar.width * 0.4,
+    color: 0x9fe0ff,
+    radiusTop: cv.halfW * 0.45,
+    radiusBottom: cv.halfW * 1.15,
     height: 1,
-    opacity: 0.3,
+    opacity: 0.17,
   });
-  beam.object.rotation.x = Math.PI; // local +y now runs downward, out of the hull
-  beam.object.position.set(0, BELLY - 0.4, -HANGAR_BACK);
+  beam.object.rotation.x = Math.PI; // local +y now runs downward, out of the bay
+  beam.object.position.set(0, MOUTH_Y + 0.6, -HANGAR_BACK);
   destroyerRig.add(beam.object);
 
   // ------------------------------------------------------------------- fire
@@ -312,10 +347,13 @@ export async function build(ctx) {
   }
 
   // The four that connect, and the damage they leave on her flank.
+  // Fireball radius is deliberately small: its flare sprite grows to five times
+  // this, so anything above about 0.05 of her length puts a white disc across the
+  // whole ship once bloom has had it.
   const HITS = [
-    { t: T.hits + 0.15, at: [cv.halfW * 0.9, 1.6, -cv.len * 0.18], gun: 0, r: cv.len * 0.11 },
-    { t: 18.6, at: [-cv.halfW * 0.85, -1.2, cv.len * 0.06], gun: 2, r: cv.len * 0.08 },
-    { t: 19.9, at: [cv.halfW * 0.8, 2.4, -cv.len * 0.34], gun: 4, r: cv.len * 0.1 },
+    { t: T.hits + 0.15, at: [cv.halfW * 0.9, 1.6, -cv.len * 0.18], gun: 0, r: cv.len * 0.05 },
+    { t: 18.6, at: [-cv.halfW * 0.85, -1.2, cv.len * 0.06], gun: 2, r: cv.len * 0.036 },
+    { t: 19.9, at: [cv.halfW * 0.8, 2.4, -cv.len * 0.34], gun: 4, r: cv.len * 0.045 },
     { t: 21.6, at: [-cv.halfW * 0.7, 1.0, -cv.len * 0.3], gun: 1, r: 0 },
   ];
   const fireballs = [];
@@ -347,17 +385,19 @@ export async function build(ctx) {
   // The dead bell smoulders. Puffs drift back down the slipstream, so the smoke
   // group is tipped over to make its local "up" the ship's aft.
   const deadBell = (engines[DEAD_BELL] ?? engines[0]).object.position.clone().add(cvOffset);
-  const smokes = [[18.9, 8], [24.6, 9.5]].map(([t0, life]) => {
+  const smokes = [[18.9, 9], [24.6, 10]].map(([t0, life]) => {
     const sm = new Smoke({
-      count: 6,
+      count: 7,
       t0,
       life,
       origin: [0, 0, 0],
-      rise: cv.len * 0.22,
+      rise: cv.len * 0.2,
       spread: cv.halfW * 0.5,
-      size: cv.len * 0.15,
-      color: 0x4a4f57,
-      opacity: 0.5,
+      size: cv.len * 0.16,
+      // Pale, not dark: in vacuum against black sky a dark grey puff is invisible,
+      // and what light there is here is sunlit dust.
+      color: 0xa39a90,
+      opacity: 0.4,
       seed: Math.round(t0 * 7),
     });
     sm.object.position.copy(deadBell);
@@ -387,14 +427,15 @@ export async function build(ctx) {
   // 24fps, and every key here is on a shot boundary or inside one shot.
   //
   // Shot 2 (8.2 – 14.1) is the one that matters, and it is pure geometry. The
-  // lens sits low and locked 268 out behind her, so she subtends about two
-  // degrees — a speck. The lowest point of the destroyer's hull sits at
-  // atan(BELLY - camera.y over the distance to his bow), which falls from about
-  // 15° as his prow crosses the top of frame at 9.3s to about 4.5° by 14.1s.
-  // Meanwhile the lens cranes up 13° and opens from 34mm-wide to 46. Grey hull
-  // therefore floods down from the top of frame until it holds 70% of it and she
-  // is left in the last sliver of sky at the bottom. Retiming any one of these
-  // three tracks without the other two will break the shot.
+  // lens sits low and locked 268 out behind her, so she subtends about 2.5° — a
+  // speck. His stern is still just behind the lens, so what fills the top of
+  // frame is his underside receding away forward, and its lowest point is his
+  // bow, at atan(BELLY - camera.y over the distance to it). That falls from
+  // about 13.5° as the prow crosses into frame at 8.9s to 8° by 14.1s while the
+  // lens cranes up 13° and opens from 34° to 46°. Grey hull therefore floods
+  // down from the top until it holds two thirds of the frame and she is left in
+  // the last sliver of sky at the bottom. Retiming any one of these three tracks
+  // without the other two will break the shot.
   //
   // The look targets during shot 2 are deliberately only ~100 units ahead of the
   // lens: at 270 units out a target has to move 60 units to tilt the camera one
@@ -410,16 +451,22 @@ export async function build(ctx) {
       [10.0, [15.5, 5.2, -269]],
       [12.0, [15.4, 5.2, -270]],
       [14.1, [15.3, 5.2, -271]],
-      [T.under, [30, 6, -60]], // cut: under the hull
-      [17.4, [22, 6.4, -52]],
+      [T.under, [6, 8, -128]], // cut: hard under his keel
+      [17.4, [1, 8.5, -122]],
       [T.hits, [30, 6, -44]], // cut: her flank
-      [21.2, [26, 5.6, -30]],
-      [T.slew, [48, 3, -66]], // cut: wider, she is slewing
-      [25.3, [43, 3.6, -52]],
-      [T.lock, [46, 5, -40]], // cut: the beam
-      [30.2, [40, 7, -20]],
-      [T.throat, [26, 12, 4]], // cut: the mouth
-      [END, [23, 13.5, 15]],
+      [21.2, [26, 5.6, -31]],
+      [T.slew, [48, 3, -50]], // cut: wider, she is slewing
+      [25.3, [43, 3.6, -38]],
+      // Shots 6 and 7 are boxed in on three sides. The lens has to sit inside
+      // his plan (|x| under his half-beam at that station) or there is no hull
+      // overhead for the bay to be a hole in; it has to stay forward of his own
+      // ventral recess or that flares out the top of frame; and it wants to be
+      // far enough down and out that she is a small thing under a big one. What
+      // is left is a narrow wedge of positions well below his keel.
+      [T.lock, [50, -46, -30]], // cut: wide from below, the beam takes her
+      [30.2, [42, -34, -22]],
+      [T.throat, [36, -26, -18]], // cut: in on the mouth
+      [END, [28, -16, -8]],
     ],
     look: [
       [0, [12, 7, 440]],
@@ -431,16 +478,19 @@ export async function build(ctx) {
       [10.0, [0, 12, -169]],
       [12.0, [0, 24, -170]],
       [14.1, [0, 27, -171]],
-      [T.under, [0, 57, 40]],
-      [17.4, [0, 66, 48]],
+      // Shot 3 looks up and forward along his keel at about 55°, easing down to
+      // 44° as the wedge widens overhead. The lens is inside his plan the whole
+      // time, so there is nothing in frame but belly plate sliding by.
+      [T.under, [-2, 82, -76]],
+      [17.4, [-1, 62, -60]],
       [T.hits, [0, 8, 6]],
       [21.2, [0, 9, 4]],
       [T.slew, [0, 14, -6]],
       [25.3, [0, 15, -2]],
-      [T.lock, [0, 15, 10]],
-      [30.2, [0, 22, 16]],
-      [T.throat, [0, 30, 20]],
-      [END, [0, 32, 24]],
+      [T.lock, [0, 20, -12]],
+      [30.2, [0, 22, -4]],
+      [T.throat, [0, 22, 0]],
+      [END, [0, 24, 6]],
     ],
     fov: [
       [0, 46],
@@ -452,15 +502,15 @@ export async function build(ctx) {
       [10.0, 36],
       [12.0, 41],
       [14.1, 46],
-      [T.under, 62],
+      [T.under, 66],
       [17.4, 64],
       [T.hits, 40],
       [21.2, 38],
       [T.slew, 40],
-      [T.lock, 45],
-      [30.2, 44],
-      [T.throat, 44],
-      [END, 42],
+      [T.lock, 52],
+      [30.2, 48],
+      [T.throat, 46],
+      [END, 44],
     ],
     shake: [
       [T.hits + 0.1, 0],
@@ -508,11 +558,14 @@ export async function build(ctx) {
       corvetteRig.rotation.set(c.pitch * (1 - align * 0.8), c.yaw, c.roll * (1 - align * 0.7));
 
       // --- 3. engines ------------------------------------------------------
-      // One bell dies first and hard, then the rest gutter out; a flicker on
-      // the way down so it reads as failure rather than a switch.
+      // One bell dies first and hard, the outboard ones gutter out behind it,
+      // and the centre bell is left burning at a quarter throttle until the
+      // tractor field has her — a dead-black transom for nine straight seconds
+      // reads as an unlit prop rather than as a crippled ship.
       for (let i = 0; i < engines.length; i++) {
-        const die = i === DEAD_BELL ? 18.7 : 19.5 + i * 0.35;
-        let th = 1 - ease.range(t, die, die + (i === DEAD_BELL ? 0.35 : 1.6));
+        const die = i === DEAD_BELL ? 18.7 : 19.3 + i * 0.16;
+        const out = i === DEAD_BELL ? 0.35 : 1.1;
+        let th = i === 0 ? 1 - 0.76 * ease.range(t, die, die + out) - 0.24 * ease.range(t, 24.2, 25.6) : 1 - ease.range(t, die, die + out);
         if (i === DEAD_BELL) th *= 1 - 0.5 * ease.range(t, die - 0.9, die) * (0.5 + 0.5 * Math.sin(t * 33));
         else th *= 0.86 + 0.14 * Math.sin(t * 11 + i);
         engines[i].throttle = Math.max(0, th);
@@ -529,10 +582,14 @@ export async function build(ctx) {
       for (const s of smokes) s.update(t);
 
       const grab = ease.smooth(ease.range(t, T.lock, T.lock + 1.4));
-      const gap = Math.max(0.5, hangarPos.y - cvPos.y - cv.halfH * 0.35);
-      beam.object.visible = grab > 0.01;
-      beam.object.scale.set(1, gap, 1);
-      beam.mesh.material.uniforms.uOpacity.value = 0.3 * grab;
+      // A cone squashed to nothing and seen close to end-on stops being a shaft
+      // and becomes a bullseye of concentric rings sitting on the hull, so the
+      // beam is faded out as the mouth closes on her and then switched off.
+      const gap = hangarPos.y + hangar.mouth - cvPos.y - cv.halfH * 0.3;
+      const shaft = grab * ease.smooth(ease.range(gap, 2.5, 13));
+      beam.object.visible = shaft > 0.02;
+      beam.object.scale.set(1, Math.max(0.5, gap), 1);
+      beam.mesh.material.uniforms.uOpacity.value = 0.26 * shaft;
       beam.update(t);
       hangar.update(t, grab);
 
@@ -540,10 +597,10 @@ export async function build(ctx) {
       stars.update(t);
       planet.update(t);
       bolts.update(t, camera);
-      // Once the lens is under the hull the streaks stop reading as speed and
-      // start reading as dirt on the glass, so fade them out with the chase.
+      // Once there is hull behind them the streaks stop reading as speed and
+      // start reading as scratches on the print, so take them all the way out.
       dust.object.position.copy(camera.position);
-      dust.update(travelAt(t), airspeedAt(t), 1 - 0.75 * ease.smooth(ease.range(t, 15, 22)));
+      dust.update(travelAt(t), airspeedAt(t), 1 - ease.smooth(ease.range(t, 13.4, 16.4)));
     },
   };
 }
@@ -797,68 +854,109 @@ function buildPlanet(sunDir) {
   };
 }
 
+/** How far the bay hangs below the keel, in plates. */
+const BAY_DEEP = 26;
+
 /**
- * The ventral hangar she is swallowed by: a housing standing proud of the keel,
- * a black mouth inside it, lit runway strips and a spill of light on the
- * plates.
+ * The ventral hangar she is swallowed by: a housing hung UNDER the keel, open at
+ * the bottom, with her own length of dark ribbed bay inside it.
  *
- * The mouth tile is the trick that makes her vanish. It is opaque and spans the
- * whole opening, so from any camera below the keel everything that rises above
- * the belly plane is hidden — by the tile inside the opening and by the hull
- * itself outside it. That is why every shot from T.lock on keeps the lens under
- * the destroyer.
+ * Why underslung rather than recessed. The scene cannot cut a hole in the
+ * destroyer — ships-capital.js is another agent's file, and its hull plating is
+ * one merged mesh. Anything built as a recess above the keel plane is therefore
+ * hidden behind keel plate that is still there, which is exactly what a first
+ * pass at this looked like: she rose and vanished behind a flat grey belly with
+ * no opening anywhere in it. Hanging the bay proud of the keel instead gives a
+ * real mouth, a real throat and a real silhouette, and needs nothing from the
+ * model but a flat place to bolt it to.
+ *
+ * Local origin is on the keel plane at the centre of the footprint, +y up.
+ *
+ *  - The ROOF is at y = 0 and is opaque. It is the occluder: her hull crosses it
+ *    and she is simply gone. It is also 10 plates thick, which beds the housing
+ *    into whichever of the wedge's eight courses happens to be lowest at this
+ *    station, so there is never a gap between bay and hull.
+ *  - The interior is near-black against a lit grey belly, because contrast is
+ *    what makes it read as a hole from eighty units away — not size.
  */
 function buildHangar(cv) {
-  const W = Math.round(cv.halfW * 2 + 8); // studs across the opening
+  const W = Math.round(cv.halfW * 2 + 10); // studs across the opening
   const D = Math.round(cv.len * 1.15); // ...and along it, so she fits
+  const LOW = -BAY_DEEP; // plates: the mouth plane
+  const ROOF = 10; // plates of roof, to bed into the hull above
   const b = new Bricks({ studSegments: 6 });
   const grey = COLORS.darkBluishGray;
   const pale = COLORS.lightBluishGray;
-  const lit = { studs: false, finish: 'glow', emissive: 0xffcf82, emissiveIntensity: 1.1 };
+  const shade = 0x191d23;
+  // Bay lighting. At bloom threshold 0.6 a big emissive face at 1.0 flares into
+  // a white slab, so the roof is lit by narrow ribs rather than one panel.
+  const roofLit = { studs: false, finish: 'glow', emissive: 0xff9a3c, emissiveIntensity: 0.55 };
+  const dash = { studs: false, finish: 'glow', emissive: 0xffc266, emissiveIntensity: 1.25 };
+  const WALL = 3; // studs of outer wall
+  const LINER = 1.2; // studs of dark inner liner
 
-  // Housing: a shallow box standing 2 studs below the keel, open at the bottom.
-  const DROP = -5; // plates below the belly plane
+  // --- roof: the occluder, and the strip lights under it
+  b.box(-W / 2 - WALL, 0, -D / 2 - WALL, W + WALL * 2, D + WALL * 2, ROOF, grey, { studs: false });
+  b.box(-W / 2, -0.7, -D / 2, W, D, 0.7, shade, { studs: false });
+  for (let i = 0; i < 9; i++) {
+    const z = -D / 2 + 4 + (i * (D - 8)) / 8;
+    b.box(-W / 2 + 4, -1.3, z, W - 8, 1.8, 0.6, COLORS.brightOrange, roofLit);
+  }
+
+  // --- walls: grey outside, dark and ribbed inside, stepped at the bottom so
+  //     the housing is not a plain box bolted to a warship.
   for (const sx of [-1, 1]) {
-    b.box(sx * (W / 2) - (sx > 0 ? 0 : 3), DROP, -D / 2 - 3, 3, D + 6, 9, grey, { studs: false });
-    b.box(sx * (W / 2 + 0.6) - (sx > 0 ? 0 : 1.6), DROP - 0.8, -D / 2, 1.6, D, 1.4, pale, { studs: false });
+    const out = sx * (W / 2 + WALL) - (sx > 0 ? 0 : WALL);
+    b.box(out, LOW + 6, -D / 2 - WALL, WALL, D + WALL * 2, BAY_DEEP - 6, grey, { studs: false });
+    b.box(out + (sx > 0 ? -0.9 : 0.9), LOW, -D / 2 - WALL + 2, WALL, D + WALL * 2 - 4, 6.2, grey, { studs: false });
+    b.box(sx * (W / 2) - (sx > 0 ? 0 : LINER), LOW, -D / 2, LINER, D, BAY_DEEP, shade, { studs: false });
+    for (let z = -D / 2 + 2; z < D / 2 - 1; z += 4.5) {
+      b.box(sx * (W / 2 - 0.9) - (sx > 0 ? 0 : 0.9), LOW + 3, z, 0.9, 2.4, BAY_DEEP - 5, grey, { studs: false });
+    }
   }
   for (const sz of [-1, 1]) {
-    b.box(-W / 2 - 3, DROP, sz * (D / 2) - (sz > 0 ? 0 : 3), W + 6, 3, 9, grey, { studs: false });
+    const out = sz * (D / 2 + WALL) - (sz > 0 ? 0 : WALL);
+    b.box(-W / 2 - WALL, LOW + 6, out, W + WALL * 2, WALL, BAY_DEEP - 6, grey, { studs: false });
+    b.box(-W / 2 - WALL + 2, LOW, out + (sz > 0 ? -0.9 : 0.9), W + WALL * 2 - 4, WALL, 6.2, grey, { studs: false });
+    b.box(-W / 2, LOW, sz * (D / 2) - (sz > 0 ? 0 : LINER), W, LINER, BAY_DEEP, shade, { studs: false });
   }
-  // Door runners: two rows of stubby blocks along the lip, so the opening does
-  // not read as a plain rectangle cut in a plate.
+
+  // --- deck runway: dashes down both sides, receding up into the throat
+  for (let i = 0; i < 7; i++) {
+    const z = -D / 2 + 4 + (i * (D - 8)) / 6;
+    for (const sx of [-1, 1]) b.box(sx * (W / 2 - 2.6) - 1.1, -5, z, 2.2, 1.6, 0.7, COLORS.transYellow, dash);
+  }
+
+  // --- the lip: door runners round the mouth with a marker light every third,
+  //     which is what tells the eye at a glance that this is an opening.
   for (const sx of [-1, 1]) {
-    for (let z = -D / 2 + 2; z < D / 2 - 2; z += 5) {
-      b.box(sx * (W / 2) - (sx > 0 ? 0 : 2.2), DROP - 1.2, z, 2.2, 3, 1.6, grey, { studs: false });
+    let k = 0;
+    for (let z = -D / 2 - 3; z < D / 2 + 3; z += 4.5) {
+      b.box(sx * (W / 2 + 1) - (sx > 0 ? 0 : 2.8), LOW - 1.6, z, 2.8, 2.6, 1.8, grey, { studs: false });
+      if (k++ % 3 === 1) b.box(sx * (W / 2 + 2.2) - 0.5, LOW - 2.3, z + 0.8, 1, 1, 0.7, COLORS.transYellow, dash);
     }
+    b.box(sx * (W / 2 + 0.4) - (sx > 0 ? 0 : 1.4), LOW - 0.9, -D / 2 - 2, 1.4, D + 4, 1.2, pale, { studs: false });
   }
-  // The mouth: opaque, right at the belly plane. Almost black, but not black —
-  // a true void reads as a hole in the render rather than a deep bay.
-  b.tile(-W / 2, 0.1, -D / 2, W, D, 0x1b2028, { studs: false });
-  // Runway lights just below it, in short dashes: one long emissive bar at this
-  // scale is a lightsabre lying on the hull.
-  for (let i = 0; i < 6; i++) {
-    const z = -D / 2 + 4 + (i * (D - 8)) / 5;
-    for (const sx of [-1, 1]) b.box(sx * (W / 2 - 4.4) - 1.4, -0.5, z, 2.8, 0.7, 0.5, COLORS.transYellow, lit);
-  }
-  for (const sx of [-1, 1]) {
-    for (let z = -D / 2 - 2; z < D / 2 + 2; z += 7) {
-      b.box(sx * (W / 2 + 3) - (sx > 0 ? 0 : 0.9), DROP - 0.4, z, 0.9, 3.4, 0.9, COLORS.transYellow, lit);
-    }
+  for (const sz of [-1, 1]) {
+    b.box(-W / 2 - 1, LOW - 1.6, sz * (D / 2 + 1) - (sz > 0 ? 0 : 2.8), W + 2, 2.8, 1.8, grey, { studs: false });
   }
 
   const group = new THREE.Group();
   group.add(b.build({ castShadow: false, receiveShadow: false }));
-  const spill = glowSprite(0x6c5334, W * 1.6, 0.5);
-  spill.position.y = -1.2;
-  group.add(spill);
+  // One depth-tested additive glow up in the throat, for her to go dark against.
+  // Kept narrower than the opening: a sprite wider than the mouth escapes past
+  // the walls and washes a hundred units of grey belly warm orange.
+  const inner = glowSprite(0xffb066, W * 0.8, 0.3);
+  inner.position.y = -2.2;
+  group.add(inner);
 
   return {
     group,
     width: W,
+    /** World y of the mouth plane, relative to the keel. */
+    mouth: LOW * PLATE,
     update(t, grab) {
-      spill.material.opacity = 0.35 + 0.35 * grab + 0.04 * Math.sin(t * 3.1);
-      spill.scale.setScalar(W * (1.5 + 0.4 * grab));
+      inner.material.opacity = 0.26 + 0.16 * grab + 0.04 * Math.sin(t * 3.1) + 0.02 * Math.sin(t * 7.7);
     },
   };
 }

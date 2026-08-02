@@ -8,7 +8,9 @@
  *
  * CONVENTIONS
  *   - +z is forward for every craft, +y is up, and each craft is centred on
- *     the origin.
+ *     the origin. The two set pieces are laid out for tiling instead: a trench
+ *     section runs z = 0..length (copies go at multiples of length), and a
+ *     station surface panel is centred on the origin and tiles in x and z.
  *   - Coordinates passed to the builder are LEGO units: x/z in studs,
  *     y in plates (1 stud = 2.5 plates). Vertical dimensions that want to be
  *     "n studs tall" are written `n * PY`.
@@ -62,17 +64,14 @@ function cslope(b, cx, y, cz, w, d, h, color, opts = {}) {
   const D = spun ? w : d;
   return b.slope(cx - W / 2, y, cz - D / 2, W, D, h, color, { ...opts, dir });
 }
-function cwedge(b, cx, y, cz, w, d, h, color, opts) {
-  return b.wedge(cx - w / 2, y, cz - d / 2, w, d, h, color, opts);
-}
-
 /**
- * Mirror-safe right-triangular plate, centred at (+/-cx, cz). The right angle
- * sits at the inboard corner so the hypotenuse reads as a swept edge; the
- * square edge is aft by default, or forward with `opts.forward`.
+ * Mirror-safe right-triangular plate (wedge plate), centred at (sx*cx, cz) with
+ * a footprint of `w` studs in x by `d` studs in z. The right angle sits at the
+ * inboard corner, so the hypotenuse reads as a swept edge: square edge aft by
+ * default, or forward with `opts.forward`.
  *
- * Mirroring uses quarter turns rather than a negative scale (which would invert
- * face winding). A quarter turn also swaps the wedge's own w/d, so those are
+ * Mirroring uses quarter turns rather than a negative scale, which would invert
+ * face winding. A quarter turn also swaps the wedge's own w/d, so those are
  * exchanged before the call.
  */
 function cornerWedge(b, sx, cx, y, cz, w, d, h, color, opts = {}) {
@@ -83,11 +82,6 @@ function cornerWedge(b, sx, cx, y, cz, w, d, h, color, opts = {}) {
   const D = swap ? w : d;
   const x = sx > 0 ? cx : -cx;
   return b.wedge(x - W / 2, y, cz - D / 2, W, D, h, color, { ...opts, rot });
-}
-
-/** Swept leading edge: wide at the aft end, tapering to a point outboard. */
-function sweepWedge(b, sx, cx, y, cz, w, d, h, color, opts = {}) {
-  return cornerWedge(b, sx, cx, y, cz, w, d, h, color, opts);
 }
 
 /**
@@ -202,7 +196,7 @@ function xwEngines(b, C, points) {
       const x = sx * 2.0;
       const y = sy * 1.15 * PY;
       zcyl(b, x, y, -8.0, R, 5.6, C.hull, { segments: 14, studs: false });
-      // black intake ring at the front, dark band aft of it
+      // dark intake ring at the front with a tapered throat behind it
       zcyl(b, x, y, -5.35, R * 1.04, 0.7, C.metal, { segments: 14, studs: false });
       zcyl(b, x, y, -5.0, R * 0.8, 0.5, C.gunMetal, { segments: 12, studs: false, rTop: R * 0.62 });
       zcyl(b, x, y, -6.4, R * 1.03, 0.5, C.trim, { segments: 14, studs: false });
@@ -238,7 +232,9 @@ function xwNose(b, C) {
     cpanel(b, sx * 1.78, -1.6, 3.6, 0.24, 1.8, 3.2, C.trim);
     cpanel(b, sx * 1.42, -1.2, 5.5, 0.22, 1.4, 2.4, C.trim);
   }
-  ctile(b, 0, 2.5, 3.4, 1.4, 1.8, C.trim);
+  // dorsal flash, kept forward of the windscreen's footprint so it is not seen
+  // through two layers of trans glass
+  ctile(b, 0, 2.5, 3.75, 1.4, 1.6, C.trim);
   ctile(b, 0, 2, 5.4, 1, 1, C.metal);
 
   // long thin front cannon
@@ -253,23 +249,24 @@ function xwCockpit(b, C) {
   cpanel(b, 0, 3, 0.7, 3.5, 4.6, 0.7, C.metal);
   cpanel(b, 0, 3, -2.6, 2.8, 2.2, 0.7, C.metal);
 
-  // pilot bay: a seat and an instrument block, visible through the canopy
+  // pilot bay: seat, headrest and instrument block, visible through the canopy.
+  // All greys -- a coloured element in here tints the whole canopy.
   cpanel(b, 0, 3.7, -0.6, 1.5, 0.5, 2.4, C.metal);
   cpanel(b, 0, 3.7, 0.3, 1.6, 1.4, 0.8, C.gunMetal);
   cpanel(b, 0, 3.7, 1.8, 1.7, 0.8, 1.6, C.metal);
-  ctile(b, 0, 4.5, 1.8, 1.2, 0.8, C.trim);
+  ctile(b, 0, 4.5, 1.8, 1.2, 0.8, C.gunMetal);
 
-  // bubble canopy: a squashed hemisphere with a sloped windscreen in front
+  // bubble canopy: a stretched hemisphere with a sloped windscreen in front
   b.push();
   b.translate(0, 3.7, 0.4);
-  b.scale(1, 0.6, 1.4);
+  b.scale(1, 0.86, 1.4);
   b.sphere(0, 0, 0, 1.5, C.glass, { segments: 18, phiLen: Math.PI / 2, finish: 'trans', opacity: 0.55 });
   b.pop();
-  cslope(b, 0, 3.7, 2.35, 2.6, 1.5, 2.6, C.glass, { dir: '+z', finish: 'trans', opacity: 0.55 });
+  cslope(b, 0, 3.7, 2.2, 2.6, 1.3, 3.0, C.glass, { dir: '+z', finish: 'trans', opacity: 0.55 });
 
   // canopy frame ribs and the rear fairing that blends into the droid socket
-  for (const sx of [-1, 1]) cpanel(b, sx * 1.42, 3.7, 0.5, 0.22, 4.2, 1.4, C.metal);
-  xcyl(b, 0, 5.7, -1.3, 0.16, 2.7, C.metal, { segments: 8, studs: false });
+  for (const sx of [-1, 1]) cpanel(b, sx * 1.42, 3.7, 0.5, 0.22, 4.2, 2.2, C.metal);
+  xcyl(b, 0, 6.5, -1.2, 0.16, 2.7, C.metal, { segments: 8, studs: false });
   cslope(b, 0, 3.7, -2.1, 2.4, 1.4, 2.2, C.hull, { dir: '-z' });
 
   // astromech socket + the droid's dome poking out of it
@@ -300,14 +297,14 @@ function xwWing(sx, sy, C) {
   // plus one big wedge plate for the swept leading edge -- exactly how a set
   // does it, and it keeps the silhouette a clean straight line.
   cbox(b, X(5.45), Y(-1, 2), -1.05, 6.1, 2.9, 2, C.hull, { studs: false });
-  sweepWedge(b, sx, 5.45, Y(-1, 2), 1.4, 6.1, 2, 2, C.hull, { studs: false });
+  cornerWedge(b, sx, 5.45, Y(-1, 2), 1.4, 6.1, 2, 2, C.hull, { studs: false });
 
   // outward face: studded plate, red squadron stripe, and a smaller wedge in a
   // second grey (similar triangle, so its edge stays parallel to the sweep)
   cplate(b, X(4.0), Y(1, 1), -1.0, 3, 3, C.hull);
   ctile(b, X(6.4), Y(1, 1), -1.0, 2, 3, C.trim);
   ctile(b, X(7.9), Y(1, 1), -1.2, 1, 2, C.metal);
-  sweepWedge(b, sx, 4.69, Y(1, 1), 1.15, 4.58, 1.5, 1, C.hullLow, { studs: false });
+  cornerWedge(b, sx, 4.69, Y(1, 1), 1.15, 4.58, 1.5, 1, C.hullLow, { studs: false });
 
   // tip block and the wingtip cannon
   cpanel(b, X(8.8), -1, -1.05, 1.2, 2.9, 2, C.metal);
@@ -405,10 +402,16 @@ export async function buildXWing(opts = {}) {
 // TIE FIGHTER  --  ball cockpit, two pylons, two hexagonal solar panels
 // ===========================================================================
 
-/** A hexagon vertex points up when an x-axis cylinder is rolled a quarter turn. */
-const HEX_UP = -Math.PI / 2;
-/** ...and a flat edge sits on top after another 30 degrees. */
-const HEX_FLAT = Math.PI / 6;
+// Rolls that put a flat edge on top of a 6-segment cylinder used as a hexagonal
+// plate -- the orientation both a TIE solar panel and its viewport want. zcyl
+// and xcyl roll about different axes, so the value differs by 30 degrees
+// depending on which way the hexagon faces. (Only the value mod 60 degrees
+// matters, since that is the hexagon's own symmetry.)
+
+/** Hexagon facing fore/aft: flat top and bottom, points to port and starboard. */
+const HEX_FLAT_Z = Math.PI / 6;
+/** Hexagon facing sideways: flat top and bottom, points fore and aft. */
+const HEX_FLAT_X = 0;
 
 /**
  * The ball cockpit: a sphere with a raised equator band, the hexagonal front
@@ -423,15 +426,15 @@ function tieBall(b, C, R, guns, engines, opts = {}) {
 
   // hexagonal window: raised frame, a black backing so the glass reads dark
   // instead of showing the light hull through it, then the glass itself
-  zcyl(b, 0, 0, R * 0.78, 2.1, 0.8, C.trim, { segments: 6, spin: HEX_FLAT, studs: false });
-  zcyl(b, 0, 0, R * 0.8, 1.78, 0.55, C.frame, { segments: 6, spin: HEX_FLAT, studs: false });
-  zcyl(b, 0, 0, R * 0.9, 1.62, 0.3, C.glass, { segments: 6, spin: HEX_FLAT, studs: false, finish: 'glossy' });
+  zcyl(b, 0, 0, R * 0.78, 2.1, 0.8, C.trim, { segments: 6, spin: HEX_FLAT_Z, studs: false });
+  zcyl(b, 0, 0, R * 0.8, 1.78, 0.55, C.frame, { segments: 6, spin: HEX_FLAT_Z, studs: false });
+  zcyl(b, 0, 0, R * 0.9, 1.62, 0.3, C.glass, { segments: 6, spin: HEX_FLAT_Z, studs: false, finish: 'glossy' });
   for (const sx of [-0.6, 0.6]) cpanel(b, sx, -1.4 * PY, R * 0.94, 0.2, 0.26, 2.8 * PY, C.trim);
   cpanel(b, 0, -0.15 * PY, R * 0.94, 3, 0.26, 0.3 * PY, C.trim);
 
-  // top hatch
+  // top hatch: a short collar with a sensor dish seated on it
   ycyl(b, 0, R * 0.95 * PY, -0.2, 0.95, 0.8, C.trim, { segments: 12, studs: false });
-  b.dish(0, (R * 0.95 + 0.35) * PY, -0.2, 0.85, 1.3, C.trim);
+  b.dish(0, R * 0.95 * PY + 0.35, -0.2, 0.85, 1.3, C.trim);
 
   // twin chin cannons
   for (const sx of [-1, 1]) {
@@ -444,7 +447,7 @@ function tieBall(b, C, R, guns, engines, opts = {}) {
   // ion engine cluster: a dark hexagonal plate with four glowing nozzles
   // (the x1 puts its engines in the tail instead)
   if (opts.rearEngines !== false) {
-    zcyl(b, 0, 0, -R * 0.82, 1.85, 0.8, C.frame, { segments: 6, spin: HEX_FLAT, studs: false });
+    zcyl(b, 0, 0, -R * 0.82, 1.85, 0.8, C.frame, { segments: 6, spin: HEX_FLAT_Z, studs: false });
     for (const sy of [-1, 1]) {
       for (const sx of [-1, 1]) {
         zcyl(b, sx * 0.72, sy * 0.72 * PY, -R * 0.95, 0.42, 0.5, C.trim, { segments: 8, studs: false });
@@ -464,20 +467,27 @@ function tieBall(b, C, R, guns, engines, opts = {}) {
 /**
  * One hexagonal solar panel: a frame hexagon, a slightly smaller panel that
  * stands proud of it, six radial ribs and a hub. `px` is the panel centre.
+ *
+ * The panel sits flat-edge-up with its points fore and aft, which is the
+ * TIE/ln's real wing orientation and matches the x1's bent panels.
  */
 function tieWingPanel(b, C, px, r, opts = {}) {
-  const spin = opts.spin ?? HEX_UP;
+  const spin = opts.spin ?? HEX_FLAT_X;
   const thick = opts.thick ?? 0.9;
   const inward = opts.inward ?? -Math.sign(px) * 0.55; // hub bulges toward the ball
   xcyl(b, px, 0, 0, r, thick, C.frame, { segments: 6, spin, studs: false });
   xcyl(b, px, 0, 0, r * 0.9, thick * 1.35, C.panel, { segments: 6, spin, studs: false });
 
-  // radial ribs, thick enough to stand out on both faces
+  // Six radial ribs splitting the panel into the trapezoidal cells a real TIE
+  // wing has, thick enough to stand proud on both faces. A rib at rotateX(a)
+  // points along (y, z) = (cos a, sin a), and the hexagon's corners sit at
+  // (sin(60k - spin), cos(60k - spin)), so the ribs land on the corners at
+  // a = 60k + 90 + spin.
   b.push();
   b.translate(px, 0, 0);
   for (let k = 0; k < 6; k++) {
     b.push();
-    b.rotateX((k * Math.PI) / 3 + (spin === HEX_UP ? 0 : Math.PI / 6));
+    b.rotateX((k * Math.PI) / 3 + Math.PI / 2 + spin);
     cbox(b, 0, 1.15 * PY, 0, thick * 1.9, 0.6, (r * 0.88 - 1.15) * PY, C.rib, { studs: false });
     b.pop();
   }
@@ -519,7 +529,7 @@ export async function buildTieFighter(opts = {}) {
     cpanel(b, sx * 4.5, -1.0 * PY, 0, 4.6, 2.05, 2 * PY, C.trim);
     xcyl(b, sx * 4.5, 0, 0, 1.15, 4.9, C.trim, { segments: 10, studs: false });
     xcyl(b, sx * 3.3, 0, 0, 1.4, 0.7, C.frame, { segments: 8, studs: false });
-    xcyl(b, sx * 6.35, 0, 0, 1.5, 1.1, C.frame, { segments: 6, spin: HEX_UP, studs: false });
+    xcyl(b, sx * 6.35, 0, 0, 1.5, 1.1, C.frame, { segments: 6, spin: HEX_FLAT_X, studs: false });
     cpanel(b, sx * 4.6, 1.02 * PY, 0, 2.6, 1.3, 0.5 * PY, C.frame);
     cpanel(b, sx * 4.6, -1.52 * PY, 0, 2.6, 1.3, 0.5 * PY, C.frame);
     cpanel(b, sx * 5.6, -0.55 * PY, 1.15, 1.4, 0.5, 1.1 * PY, C.frame);
@@ -557,7 +567,6 @@ export async function buildTieFighter(opts = {}) {
 function tieBentPanel(b, C, px, r, bend, thick = 0.9) {
   const H = 0.866 * r; // half height, at the flats
   const cap = r / 2; // z run of each end cap
-  const rot = Math.PI / 6; // the slanted edges are all 30 degrees off vertical
 
   /** One trapezoid layer: rectangle plus the two sloped end caps. */
   const layer = (sy, k, thk, color) => {
@@ -908,7 +917,7 @@ export async function buildLandspeeder(opts = {}) {
   for (const sx of [-1, 1]) {
     cpanel(b, sx * 2.7, -2, -1, 1.4, 7.2, 3.2, C.pod);
     zcyl(b, sx * 2.95, 1.2, -1, 0.68, 7.2, C.pod, { segments: 12, studs: false });
-    sweepWedge(b, sx, 2.7, -2, 3, 1.4, 0.9, 3.2, C.pod, { studs: false });
+    cornerWedge(b, sx, 2.7, -2, 3, 1.4, 0.9, 3.2, C.pod, { studs: false });
     cornerWedge(b, sx, 2.7, -2, -5, 1.4, 0.9, 3.2, C.pod, { studs: false, forward: true });
     cpanel(b, sx * 2.55, -2.3, -1.6, 1.5, 5.4, 0.6, C.metal); // skirt
     ctile(b, sx * 2.4, 1.6, -3.6, 1, 3, C.trimDark);
@@ -1226,108 +1235,152 @@ export function buildStationSurface(opts = {}) {
       const s = hash11(k, seed);
       const x = -h + (ix + 0.5) * cw;
       const z = -h + (iz + 0.5) * cw;
-      ctile(b, x, -1, z, cw - 0.4, cw - 0.4, s < 0.22 ? C.hullLow : s < 0.72 ? C.hull : C.hull2);
+      ctile(b, x, -1, z, cw - 0.4, cw - 0.4, s < 0.09 ? C.hullLow : s < 0.55 ? C.hull : C.hull2);
       stationGreeble(b, C, x, z, cw, k, seed);
     }
   }
 
-  // deep panel-line channels crossing the whole panel, so neighbours line up
-  for (let i = 0; i < cells; i += 3) {
+  // Deep panel-line channels on every second cell boundary. Starting at i = 1
+  // keeps them off the panel edge, and their spacing divides the panel size, so
+  // a neighbouring copy continues the same rhythm.
+  for (let i = 1; i < cells; i += 2) {
     const p = -h + i * cw;
     cbox(b, p, -1.4, 0, 1.2, S, 1, C.dark, { studs: false });
     cbox(b, 0, -1.4, p, S, 1.2, 1, C.dark, { studs: false });
   }
-  return finishSurface(b, 'station-surface', { size: S });
+  const root = new THREE.Group();
+  root.name = 'station-surface';
+  const mesh = b.build();
+  root.add(mesh);
+  root.userData.size = S;
+  return finish(root, mesh);
 }
 
 /**
- * One cell of station surface. Types are picked by hash so the layout is fixed:
- * plating, greeble clusters, a sensor dome, a dish, a vent block or a tower.
+ * One cell of station surface: a greeble cluster, sensor dome, dish, vent block,
+ * tower, pipe run, recessed bay or surface channel, chosen by hash.
+ *
+ * Everything goes through `gb` / `gc`, which clamp a part into its own cell.
+ * That is what keeps the panel tileable -- a greeble that spilled over the edge
+ * would collide with its neighbour's when two panels are laid side by side.
  */
 function stationGreeble(b, C, x, z, cw, k, seed) {
-  const t = pick(k, seed + 41, 10);
-  const jx = jit(k, seed + 43, cw * 0.16);
-  const jz = jit(k, seed + 47, cw * 0.16);
-  switch (t) {
+  const R = cw / 2 - 0.3; // usable half-cell
+  const fit = (d, half) => {
+    const m = Math.max(0, R - half);
+    return d < -m ? -m : d > m ? m : d;
+  };
+  /** Box at cell offset (dx, dz), clamped inside the cell. */
+  const gb = (dx, dz, w, d, y, h, color, opts) =>
+    cbox(b, x + fit(dx, w / 2), y, z + fit(dz, d / 2), Math.min(w, 2 * R), Math.min(d, 2 * R), h, color, {
+      studs: false,
+      ...opts,
+    });
+  /** Clamped centre for a round part of radius `r`. */
+  const gc = (dx, dz, r) => [x + fit(dx, r), z + fit(dz, r)];
+
+  const jx = jit(k, seed + 43, cw * 0.2);
+  const jz = jit(k, seed + 47, cw * 0.2);
+  switch (pick(k, seed + 41, 10)) {
     case 0:
-    case 1: {
+    case 1:
       // block cluster
       for (let i = 0; i < 3; i++) {
         const w = 1.4 + hash11(k + i, seed + 51) * (cw * 0.3);
         const d = 1.4 + hash11(k + i * 5, seed + 53) * (cw * 0.3);
-        cbox(b, x + jx + jit(k + i, seed + 57, cw * 0.28), 0, z + jz + jit(k + i * 3, seed + 59, cw * 0.28), w, d, 1 + hash11(k + i, seed + 61) * 4, i === 1 ? C.hull2 : C.hullLow, { studs: false });
+        const hgt = 1 + hash11(k + i, seed + 61) * 4;
+        gb(jx + jit(k + i, seed + 57, cw * 0.28), jz + jit(k + i * 3, seed + 59, cw * 0.28), w, d, 0, hgt, i === 1 ? C.hull2 : C.hullLow);
       }
       break;
-    }
     case 2: {
       // sensor dome on a collar
       const r = cw * (0.16 + hash11(k, seed + 63) * 0.1);
-      ycyl(b, x + jx, 0.8, z + jz, r * 1.15, 1.6, C.hullLow, { segments: 12, studs: false });
-      b.sphere(x + jx, 1.6, z + jz, r, C.hull2, { segments: 14, phiLen: Math.PI / 2 });
+      const [cx, cz] = gc(jx, jz, r * 1.15);
+      ycyl(b, cx, 0.8, cz, r * 1.15, 1.6, C.hullLow, { segments: 12, studs: false });
+      b.sphere(cx, 1.6, cz, r, C.hull2, { segments: 14, phiLen: Math.PI / 2 });
       break;
     }
     case 3: {
-      // dish on a mast, tipped over
-      const r = cw * 0.2;
-      ycyl(b, x + jx, 0, z + jz, 0.9, 3.2, C.hullLow, { segments: 10, studs: false });
+      // radar dish on a mast, tipped off vertical, with a feed horn
+      const r = cw * 0.18;
+      const [cx, cz] = gc(jx, jz, r * 1.4);
+      gb(cx - x, cz - z, 2.6, 2.6, 0, 1.6, C.hullLow);
+      ycyl(b, cx, 1.6, cz, 0.8, 2.4, C.hull2, { segments: 10, studs: false });
       b.push();
-      b.translate(x + jx, 3.2, z + jz);
-      b.rotateX(-0.6 + hash11(k, seed + 67) * 0.5);
-      b.dish(0, 0, 0, r, 2.6, C.hull, { segments: 14 });
-      ycyl(b, 0, 0, 0, 0.2, 2.2, C.pipe, { segments: 6, studs: false });
+      b.translate(cx, 4, cz);
+      b.rotateX(-0.3 - hash11(k, seed + 67) * 0.3);
+      b.dish(0, 0, 0, r, 1.9, C.hull, { segments: 16 });
+      ycyl(b, 0, 0, 0, 0.18, 2.6, C.pipe, { segments: 6, studs: false });
+      ycyl(b, 0, 2.6, 0, 0.42, 0.6, C.hullLow, { segments: 8, studs: false });
       b.pop();
       break;
     }
     case 4: {
       // vent block with louvres
-      const w = cw * 0.6;
-      cbox(b, x + jx, 0, z + jz, w, w * 0.7, 2.4, C.hullLow, { studs: false });
-      for (let i = 0; i < 4; i++) cbox(b, x + jx, 2.4, z + jz - w * 0.28 + i * (w * 0.19), w - 0.8, 0.4, 0.5, C.dark, { studs: false });
+      const w = Math.min(cw * 0.6, 2 * R);
+      const d = w * 0.7;
+      const cx = fit(jx, w / 2);
+      const cz = fit(jz, d / 2);
+      gb(cx, cz, w, d, 0, 2.4, C.hullLow);
+      for (let i = 0; i < 4; i++) gb(cx, cz - d * 0.34 + i * (d * 0.23), w - 0.8, 0.4, 2.4, 0.5, C.dark);
       break;
     }
-    case 5: {
-      // tower: stepped box with a lamp
-      cbox(b, x + jx, 0, z + jz, cw * 0.34, cw * 0.34, 6, C.hull, { studs: false });
-      cbox(b, x + jx, 6, z + jz, cw * 0.24, cw * 0.24, 5, C.hullLow, { studs: false });
-      cbox(b, x + jx, 11, z + jz, cw * 0.34, cw * 0.34, 1.2, C.hull2, { studs: false });
-      cbox(b, x + jx, 12.2, z + jz, 0.8, 0.8, 0.8, C.light, glow(C.light, 2));
+    case 5:
+      // tower: stepped box with a lamp on top
+      gb(jx, jz, cw * 0.34, cw * 0.34, 0, 6, C.hull);
+      gb(jx, jz, cw * 0.24, cw * 0.24, 6, 5, C.hullLow);
+      gb(jx, jz, cw * 0.34, cw * 0.34, 11, 1.2, C.hull2);
+      gb(jx, jz, 0.8, 0.8, 12.2, 0.8, C.light, glow(C.light, 2));
       break;
-    }
     case 6: {
-      // pipe run with clamps
-      const len = cw * 0.8;
+      // pipe run on two clamps
+      const len = Math.min(cw * 0.8, 2 * R);
       const along = hash11(k, seed + 71) > 0.5;
-      const r = 0.5;
-      if (along) zcyl(b, x + jx, 1.4, z + jz, r, len, C.pipe, { segments: 8, studs: false });
-      else xcyl(b, x + jx, 1.4, z + jz, r, len, C.pipe, { segments: 8, studs: false });
-      for (const s of [-0.3, 0.3]) {
-        cbox(b, x + jx + (along ? 0 : len * s), 0, z + jz + (along ? len * s : 0), 1.4, 1.4, 2, C.hullLow, { studs: false });
+      const cx = fit(jx, along ? 0.5 : len / 2);
+      const cz = fit(jz, along ? len / 2 : 0.5);
+      if (along) zcyl(b, x + cx, 1.4, z + cz, 0.5, len, C.pipe, { segments: 8, studs: false });
+      else xcyl(b, x + cx, 1.4, z + cz, 0.5, len, C.pipe, { segments: 8, studs: false });
+      for (const s of [-0.32, 0.32]) {
+        gb(cx + (along ? 0 : len * s), cz + (along ? len * s : 0), 1.4, 1.4, 0, 2, C.hullLow);
       }
       break;
     }
     case 7: {
-      // recessed bay: a dark floor with a lit rim
-      const w = cw * 0.62;
-      ctile(b, x + jx, -1.6, z + jz, w, w, C.dark);
-      cbox(b, x + jx, -1, z + jz - w / 2, w + 1, 1, 1.4, C.hullLow, { studs: false });
-      cbox(b, x + jx, -1, z + jz + w / 2, w + 1, 1, 1.4, C.hullLow, { studs: false });
-      cbox(b, x + jx - w / 2, -0.4, z + jz, 0.8, w, 0.6, C.light, glow(C.light, 1.4));
+      // recessed bay with a lit rim
+      const w = Math.min(cw * 0.62, 2 * R - 1);
+      const cx = fit(jx, w / 2 + 0.5);
+      const cz = fit(jz, w / 2 + 0.5);
+      gb(cx, cz, w, w, -1.6, 1, C.dark);
+      for (const s of [-1, 1]) gb(cx, cz + (s * w) / 2, w + 1, 1, -1, 1.4, C.hullLow);
+      gb(cx - w / 2, cz, 0.8, w, -0.4, 0.6, C.light, glow(C.light, 1.4));
+      break;
+    }
+    case 8: {
+      // surface channel: a recessed slot with cross ribs -- the station's own
+      // small-scale trenches
+      const len = Math.min(cw * 0.86, 2 * R);
+      const w = cw * 0.26;
+      const along = hash11(k, seed + 73) > 0.5;
+      const sw = along ? w : len;
+      const sd = along ? len : w;
+      const cx = fit(jx * 0.4, sw / 2);
+      const cz = fit(jz * 0.4, sd / 2);
+      gb(cx, cz, sw, sd, -1.8, 1, C.dark);
+      for (let i = 0; i < 5; i++) {
+        const o = (i / 4 - 0.5) * len * 0.84;
+        gb(cx + (along ? 0 : o), cz + (along ? o : 0), along ? w - 0.4 : 0.7, along ? 0.7 : w - 0.4, -1.2, 0.7, C.hullLow);
+      }
       break;
     }
     default:
-      // left as plain plating, so the surface still breathes
+      // low plating detail, so no cell is completely bare
+      for (let i = 0; i < 3; i++) {
+        const w = 1.6 + hash11(k + i * 9, seed + 77) * (cw * 0.34);
+        const d = w * (0.4 + hash11(k + i, seed + 89) * 0.6);
+        gb(jit(k + i, seed + 79, cw * 0.3), jit(k + i * 7, seed + 83, cw * 0.3), w, d, 0, 0.6 + hash11(k + i, seed + 97) * 1.2, i === 0 ? C.hull2 : C.hullLow);
+      }
       break;
   }
-}
-
-/** Shared tail end of the two surface builders. */
-function finishSurface(b, name, data) {
-  const root = new THREE.Group();
-  root.name = name;
-  const mesh = b.build();
-  root.add(mesh);
-  Object.assign(root.userData, data);
-  return finish(root, mesh);
 }
 
 /** Turntable entries for preview.html. */

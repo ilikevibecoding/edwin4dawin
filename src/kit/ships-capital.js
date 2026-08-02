@@ -39,8 +39,6 @@ const PL = (studs) => (studs * PITCH) / PLATE;
 /** LEGO-unit position -> world-unit Vector3. */
 const LU = (x, y, z) => new THREE.Vector3(x * PITCH, y * PLATE, z * PITCH);
 
-const linear = (u) => u;
-
 /** Piecewise profile through [z, halfWidth] keys. */
 function profile(keys, easeFn = ease.smooth) {
   return (z) => ease.track(keys, z, easeFn);
@@ -435,6 +433,37 @@ function finish(group, extra = {}) {
   });
   Object.assign(group.userData, { triangles: Math.round(tris), size, box }, extra);
   return group;
+}
+
+/**
+ * Gather the `userData.parts` of every merged sub-assembly and re-express them
+ * in the root's local space. Models whose pieces hang off posed groups (a
+ * lowered ramp, a trained turret) need this or `BrickBurst` would scatter their
+ * bricks from the wrong places.
+ */
+function collectParts(root) {
+  root.updateWorldMatrix(true, true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const rel = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const s = new THREE.Vector3();
+  const t = new THREE.Vector3();
+  const out = [];
+  root.traverse((n) => {
+    const parts = n.userData?.parts;
+    if (!parts?.length) return;
+    rel.multiplyMatrices(inv, n.matrixWorld);
+    rel.decompose(t, q, s);
+    for (const p of parts) {
+      out.push({
+        ...p,
+        position: p.position.clone().applyMatrix4(rel),
+        quaternion: q.clone().multiply(p.quaternion),
+        size: p.size.clone().multiply(s),
+      });
+    }
+  });
+  return out;
 }
 
 // ===========================================================================
@@ -1049,14 +1078,14 @@ export async function buildEscapePod(opts = {}) {
   function viewport() {
     // Main port on the upper forward hull. Its axis is the hull normal rather
     // than a rake, so the collar seats cleanly instead of slicing the nose.
-    b.cyl(0, PL(R - 0.45), 1.2, 1.15, PL(0.85), dark, { segments: 16 });
-    b.cyl(0, PL(R + 0.05), 1.2, 0.86, PL(0.4), glass, { segments: 16, finish: 'trans' });
+    b.cyl(0, PL(R - 0.5), 0.95, 0.85, PL(0.65), dark, { segments: 16 });
+    b.cyl(0, PL(R - 0.05), 0.95, 0.62, PL(0.35), glass, { segments: 16, finish: 'trans' });
     // a matching port on each flank
     for (const s of [-1, 1]) {
       b.push();
-      b.rotateZ(s * Math.PI / 2);
-      b.cyl(0, PL(R - 0.35), -0.6, 0.95, PL(0.7), dark, { segments: 14 });
-      b.cyl(0, PL(R + 0.05), -0.6, 0.68, PL(0.35), glass, { segments: 14, finish: 'trans' });
+      b.rotateZ((s * Math.PI) / 2);
+      b.cyl(0, PL(R - 0.4), 0.95, 0.72, PL(0.55), dark, { segments: 14 });
+      b.cyl(0, PL(R - 0.05), 0.95, 0.52, PL(0.3), glass, { segments: 14, finish: 'trans' });
       b.pop();
     }
   }
@@ -1078,7 +1107,8 @@ export async function buildEscapePod(opts = {}) {
       b.box(-0.28, PL(R - 0.05), -2.5, 0.56, 1.0, 1.6, dark, { studs: false });
       b.pop();
     }
-    b.cyl(0, PL(R - 0.15), 0.4, 0.34, 1.2, COLORS.transRed, {
+    // rescue beacon, forward on the nose taper and clear of the viewports
+    b.cyl(0, PL(1.8), 2.15, 0.3, 1.3, COLORS.transRed, {
       segments: 10, finish: 'glow', emissive: 0xff3322, emissiveIntensity: 1.8,
     });
   }
@@ -1117,7 +1147,7 @@ export async function buildDeathStar(opts = {}) {
   const greys = [hull, dark, metal, COLORS.lightBluishGray, COLORS.darkBluishGray];
 
   const b = new Bricks({ studSegments: 6 });
-  const seg = Math.max(24, Math.round(R * 0.9));
+  const seg = Math.max(40, Math.round(R * 0.9));
   const trench = 0.055; // half-angle of the equatorial band, radians
   const trenchR = R * 0.945;
   const yLip = R * Math.sin(trench);
@@ -1130,9 +1160,13 @@ export async function buildDeathStar(opts = {}) {
     rim: R * 0.28,
     floorR: R * 0.2,
     depth: R * 0.17,
-    collar: R * 0.42,
   };
   CRATER.cut = Math.asin(CRATER.rim / R);
+  // Cutting the hole on a lat/long grid leaves a seam that can wander up to
+  // about one quad past `cut`, and the quads grow as `opts.radius` shrinks, so
+  // the collar is sized from the tessellation rather than being a fixed ratio.
+  const quad = 1.15 * Math.max(Math.PI / seg, ((2 * Math.PI) / seg) * Math.cos(DISH.lat));
+  CRATER.collar = Math.max(R * 0.42, R * Math.sin(CRATER.cut + quad) + R * 0.02);
   const dishDir = sphereDir(DISH.lon, DISH.lat);
   /** Height above the sphere centre, in studs, of a point at lateral `rho`. */
   const yOn = (rad, rho) => Math.sqrt(Math.max(0, rad * rad - rho * rho));
@@ -1145,7 +1179,9 @@ export async function buildDeathStar(opts = {}) {
     b.addGeometry(punchedSphere(R, seg, seg, 0, Math.PI / 2 - trench, dishDir, CRATER.cut), {
       color: hull,
     });
-    b.sphere(0, 0, 0, R, hull, { segments: seg, phi: Math.PI / 2 + trench, phiLen: Math.PI / 2 - trench });
+    b.addGeometry(punchedSphere(R, seg, seg, Math.PI / 2 + trench, Math.PI / 2 - trench, null, 0), {
+      color: hull,
+    });
     // trench floor and its two sloped walls
     b.cyl(0, PL(-yLip), 0, trenchR, PL(yLip * 2), dark, { segments: seg });
     b.cone(0, PL(yLip - 0.02), 0, trenchR, R * 0.999, PL(R * 0.028), hull);
@@ -1237,6 +1273,10 @@ export async function buildDeathStar(opts = {}) {
   function superlaser() {
     const { rim, floorR, depth, collar } = CRATER;
     const SEG = 48;
+    // Step heights are quoted against the default 60-stud station, then scaled,
+    // so a smaller `opts.radius` gets a proportionally shallow lip rather than
+    // a collar standing a quarter of the hull proud.
+    const u = R / 60;
 
     /**
      * Open cone frustum spanning two radii, each riding its own offset above
@@ -1254,24 +1294,26 @@ export async function buildDeathStar(opts = {}) {
 
     // Crater wall: an outward-flaring funnel from the dish floor up through the
     // hole in the hull, double sided so the inside of the crater is visible.
-    b.cyl(0, PL(yFloor), 0, floorR, PL(yRim - yFloor + 1.4), dark, {
+    b.cyl(0, PL(yFloor), 0, floorR, PL(yRim - yFloor + 1.4 * u), dark, {
       rTop: rim, open: true, segments: SEG, side: THREE.DoubleSide,
     });
     // Concave dish floor, and a ribbed collector ring just inside the wall.
     b.dish(0, PL(yFloor - depth * 0.42), 0, floorR, PL(depth * 0.42), dark, { segments: SEG });
-    b.cyl(0, PL(yFloor - 0.4), 0, floorR * 1.02, PL(1.1), metal, {
+    b.cyl(0, PL(yFloor - 0.4 * u), 0, floorR * 1.02, PL(1.1 * u), metal, {
       rTop: floorR * 0.96, open: true, segments: SEG, side: THREE.DoubleSide,
     });
 
     // Stepped collar hiding the punched seam: a wide lower step, a riser, and a
     // narrow upper lip that overhangs the crater mouth.
     const mid = rim + (collar - rim) * 0.55;
-    band(mid, collar, 0.5, 0.15, hull);
-    b.cyl(0, PL(yOn(R + 0.5, mid)), 0, mid, PL(yOn(R + 2.0, mid) - yOn(R + 0.5, mid)), dark, {
+    const lipR = rim - 0.6 * u;
+    band(mid, collar, 0.5 * u, 0.15 * u, hull);
+    b.cyl(0, PL(yOn(R + 0.5 * u, mid)), 0, mid,
+      PL(yOn(R + 2.0 * u, mid) - yOn(R + 0.5 * u, mid)), dark, {
       open: true, segments: SEG, side: THREE.DoubleSide,
     });
-    band(rim - 0.6, mid, 2.0, 2.0, hull);
-    b.cyl(0, PL(yOn(R + 2.0, rim - 0.6) - 1.6), 0, rim - 0.6, PL(1.6), metal, {
+    band(lipR, mid, 2.0 * u, 2.0 * u, hull);
+    b.cyl(0, PL(yOn(R + 2.0 * u, lipR) - 1.6 * u), 0, lipR, PL(1.6 * u), metal, {
       open: true, segments: SEG, side: THREE.DoubleSide,
     });
 
@@ -1281,7 +1323,7 @@ export async function buildDeathStar(opts = {}) {
       const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
       b.bar(
         [0, sparY * PITCH, 0],
-        [Math.cos(a) * rim * 0.99 * PITCH, (yRim + 0.5) * PITCH, Math.sin(a) * rim * 0.99 * PITCH],
+        [Math.cos(a) * rim * 0.99 * PITCH, (yRim + 0.5 * u) * PITCH, Math.sin(a) * rim * 0.99 * PITCH],
         R * 0.014,
         metal
       );
@@ -1306,26 +1348,28 @@ export async function buildDeathStar(opts = {}) {
     b.pop();
 
     // Chunky greeble blocks bedded into the collar so the ring is not a plain
-    // smooth donut. Each is placed tangent to the hull at its own lon/lat.
-    const u = new THREE.Vector3(0, 1, 0).cross(dishDir).normalize();
-    const w = new THREE.Vector3().crossVectors(dishDir, u).normalize();
+    // smooth donut. Each is placed tangent to the hull at its own lon/lat, found
+    // by walking `alpha` out from the dish axis along an orthonormal basis.
+    const ax = new THREE.Vector3(0, 1, 0).cross(dishDir).normalize();
+    const az = new THREE.Vector3().crossVectors(dishDir, ax).normalize();
     const p = new THREE.Vector3();
     const nBlock = Math.round(46 * detail);
+    const brick = (n) => Math.max(1, Math.round(n * u));
     for (let i = 0; i < nBlock; i++) {
       const th = (i / nBlock) * Math.PI * 2;
       const ring = hash11(i, 401) > 0.5;
       const rho = ring ? mid + (collar - mid) * 0.5 : rim + (mid - rim) * 0.45;
       const alpha = Math.asin(THREE.MathUtils.clamp(rho / R, -1, 1));
       p.copy(dishDir).multiplyScalar(Math.cos(alpha));
-      p.addScaledVector(u, Math.cos(th) * Math.sin(alpha));
-      p.addScaledVector(w, Math.sin(th) * Math.sin(alpha));
+      p.addScaledVector(ax, Math.cos(th) * Math.sin(alpha));
+      p.addScaledVector(az, Math.sin(th) * Math.sin(alpha));
       const { lon, lat } = dirToLonLat(p.normalize());
-      surfaceFrame(b, lon, lat, R + (ring ? 0.5 : 2.0) - 0.1);
+      surfaceFrame(b, lon, lat, R + (ring ? 0.5 : 2.0) * u - 0.1 * u);
       b.rotateY(th + (ring ? 0 : Math.PI / 2));
-      const ww = 2 + Math.floor(hash11(i, 419) * 3);
-      const dd2 = 2 + Math.floor(hash11(i, 431) * 4);
+      const ww = brick(2 + Math.floor(hash11(i, 419) * 3));
+      const dd2 = brick(2 + Math.floor(hash11(i, 431) * 4));
       const shiny = hash11(i, 457) > 0.6;
-      b.box(-ww / 2, 0, -dd2 / 2, ww, dd2, 1 + Math.floor(hash11(i, 443) * 3),
+      b.box(-ww / 2, 0, -dd2 / 2, ww, dd2, brick(1 + Math.floor(hash11(i, 443) * 3)),
         shiny ? metal : dark, { studs: !shiny });
       b.pop();
     }
@@ -1634,7 +1678,7 @@ export async function buildSandcrawler(opts = {}) {
   const out = finish(group, {
     enginePoints: [],
     gunPoints: [],
-    parts: mesh.userData.parts,
+    parts: collectParts(group),
     rollTracks,
     setRamp,
     ramp,
@@ -1755,6 +1799,7 @@ export async function buildTurbolaserTower(opts = {}) {
     muzzles,
     gunPoints: muzzles,
     enginePoints: [],
+    parts: collectParts(root),
     previewUpdate: (t) => {
       yaw.rotation.y = Math.sin(t * 0.6) * 0.8;
       pitch.rotation.x = -0.3 - Math.sin(t * 0.9) * 0.25;

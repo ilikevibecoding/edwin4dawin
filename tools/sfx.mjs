@@ -2364,7 +2364,12 @@ function main() {
     if (size < 3000) warnings.push(`${spec.name}: only ${size} bytes`);
   }
 
-  // index: rebuilt in registry order, keeping entries that were not re-rendered
+  // Index, rebuilt in registry order, keeping entries that were not re-rendered.
+  // `duration` is the decoded length, which is what Web Audio plays: ffmpeg reads
+  // the encoder's gapless metadata and drops the delay and padding frames. A
+  // container-level probe reports 30-50 ms more than this because it counts that
+  // padding, so an effect can only ever run marginally longer than advertised —
+  // the safe direction for anything scheduling the next cue off these numbers.
   const indexPath = path.join(OUT_DIR, 'index.json');
   const prev = fs.existsSync(indexPath) ? JSON.parse(fs.readFileSync(indexPath, 'utf8')) : {};
   const index = {};

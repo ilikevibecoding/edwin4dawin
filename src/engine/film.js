@@ -48,7 +48,18 @@ export class Film {
       t += duration;
     }
     this.duration = t;
-    this.lines = manifest?.lines ?? [];
+
+    // Narration times are stored per scene, then rebased onto this film's
+    // timeline. That keeps subtitles correct when only a subset of scenes is
+    // loaded (`?scene=trench`), which is how scenes get previewed.
+    this.lines = [];
+    for (const e of this.entries) {
+      for (const l of manifest?.lines ?? []) {
+        if (l.scene !== e.meta.id) continue;
+        this.lines.push({ ...l, t: e.start + l.local });
+      }
+    }
+    this.lines.sort((a, b) => a.t - b.t);
   }
 
   entryAt(t) {
@@ -144,7 +155,7 @@ export class Film {
       const label = isCharacter && line.speakerName ? `${line.speakerName.toUpperCase()}:  ${line.text}` : line.text;
       this.overlay.setSubtitle(label, {
         color: isCharacter ? '#ffe08a' : '#eef2f8',
-        size: 44,
+        size: 38,
       });
       const dt = t - line.t;
       const fadeIn = Math.min(1, dt / 0.22);

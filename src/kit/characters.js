@@ -46,8 +46,12 @@ import {
 /** Skin used for the human faces, so the whole cast matches. */
 const SKIN = COLORS.lightFlesh;
 
-/** LEGO "bright light yellow" — Luke's sandy blond hair. */
-const SANDY_BLOND = 0xdcb679;
+/**
+ * Luke's sandy blond. Deliberately a shade or two darker and warmer than
+ * `lightFlesh`; at the palette's own bright-light-yellow the hair and the head
+ * are close enough in value that the hairline disappears at film distance.
+ */
+const SANDY_BLOND = 0xc79a4e;
 
 /**
  * Metal parts use a glossy plastic finish rather than `metal`/`chrome`/`gold`.
@@ -58,6 +62,15 @@ const SANDY_BLOND = 0xdcb679;
 const POLISH = { finish: 'glossy' };
 const SILVER = COLORS.chromeSilver;
 const STEEL = COLORS.flatSilver;
+
+/**
+ * The protocol droid's gold. For the same reason as above, the palette's own
+ * golds cannot be used raw here: `pearlGold` is a dark brown under diffuse
+ * light and `chromeGold` a pale beige, and either way he stops reading as gold
+ * and starts reading as a naked minifig. A saturated brass carries it.
+ */
+const DROID_GOLD = 0xd9a520;
+const DROID_GOLD_DARK = 0xa97a14;
 
 /**
  * Rotation that makes a `blaster()` sit in a minifig hand the way a real one
@@ -102,9 +115,11 @@ function shellProfile(outer, thickness) {
 function latheShell(profile, { segments = 22, openHalf = 0, close = true } = {}) {
   const pts = orientProfile(profile).map(([r, y]) => new THREE.Vector2(Math.max(r, 0.008), y));
   if (close && pts[0].distanceTo(pts[pts.length - 1]) > 1e-6) pts.push(pts[0].clone());
-  const g = new THREE.LatheGeometry(pts, segments, openHalf, Math.PI * 2 - openHalf * 2);
-  g.computeVertexNormals();
-  return g;
+  // No computeVertexNormals here: LatheGeometry derives its normals from the
+  // profile tangent, which is smooth across the wrap seam and exact at every
+  // profile vertex. Re-deriving them from the faces welds nothing across the
+  // seam and leaves a crease straight down the front of every dome.
+  return new THREE.LatheGeometry(pts, segments, openHalf, Math.PI * 2 - openHalf * 2);
 }
 
 /**
@@ -182,11 +197,12 @@ function latheSector(outer, thickness, { segments = 22, openHalf = 1.0 } = {}) {
  * narrow lip. The front face stays exactly on z = 0, so a decal at z = +eps
  * sits flush instead of floating at the corners.
  */
-function taperShield(half, depth, spread = [1.15, 1], centre = [0, 0]) {
+function taperShield(half, depth, spread = [1.15, 1], centre = [0, 0], bow = 0) {
   const [sx, sy] = spread;
   const outline = [...half, ...half.slice(1, -1).reverse().map(([x, y]) => [-x, y])];
   const n = outline.length;
-  const front = outline.map(([x, y]) => [x, y, 0]);
+  const xMax = Math.max(...outline.map(([x]) => Math.abs(x))) || 1;
+  const front = outline.map(([x, y]) => [x, y, -bowAt(x, xMax, bow)]);
   const back = outline.map(([x, y]) => [
     centre[0] + (x - centre[0]) * sx,
     centre[1] + (y - centre[1]) * sy,
@@ -278,6 +294,42 @@ function conePatch(rBottom, rTop, yBottom, yTop, halfAngle, segments = 18) {
   return g;
 }
 
+/** Outermost radius of a lathe profile at height `y`, or 0 if `y` misses it. */
+function radiusAt(profile, y) {
+  let r = 0;
+  for (let i = 0; i < profile.length - 1; i++) {
+    const [r0, y0] = profile[i];
+    const [r1, y1] = profile[i + 1];
+    if (y0 === y1 || y < Math.min(y0, y1) || y > Math.max(y0, y1)) continue;
+    r = Math.max(r, r0 + ((r1 - r0) * (y - y0)) / (y1 - y0));
+  }
+  return r;
+}
+
+/**
+ * A decal surface that follows a lathe profile exactly: the shell the helmet
+ * is made from, resampled to even steps in y so a flat SVG lands undistorted
+ * vertically, pushed out along the surface normal and cut to an arc across the
+ * front. `conePatch` is enough for a gently curved shell, but a straight cone
+ * chord-cuts a barrelled one and the middle of the print sinks inside it.
+ */
+function shellPatch(profile, { yFrom, yTo, halfAngle, offset = 0.008, rows = 10, segments = 20 }) {
+  const raw = [];
+  for (let i = 0; i <= rows; i++) {
+    const y = yFrom + ((yTo - yFrom) * i) / rows;
+    raw.push(new THREE.Vector2(radiusAt(profile, y), y));
+  }
+  const pts = raw.map((p, i) => {
+    const a = raw[Math.max(0, i - 1)];
+    const b = raw[Math.min(raw.length - 1, i + 1)];
+    const tx = b.x - a.x;
+    const ty = b.y - a.y;
+    const len = Math.hypot(tx, ty) || 1;
+    return new THREE.Vector2(p.x + (ty / len) * offset, p.y - (tx / len) * offset);
+  });
+  return new THREE.LatheGeometry(pts, segments, -halfAngle, halfAngle * 2);
+}
+
 /** The same idea on a sphere, for the astromech's dome. `theta` is from the pole. */
 function spherePatch(r, yCentre, thetaFrom, thetaTo, halfAngle, segments = 18) {
   const g = new THREE.SphereGeometry(
@@ -365,6 +417,24 @@ async function decalOn(url, geometry) {
 /** Flat decal plate, for the mask fronts that are genuinely flat. */
 function flatDecal(w, h) {
   return new THREE.PlaneGeometry(w, h);
+}
+
+/** How far back a bowed face plate falls at |x|, quadratically from the centre. */
+function bowAt(x, xMax, bow) {
+  return bow * (x / xMax) * (x / xMax);
+}
+
+/**
+ * A decal plate curved to match `taperShield`'s bow, so a print laid on a mask
+ * whose cheeks fall away stays on the surface instead of burying its edges.
+ */
+function bowedDecal(w, h, bow, cols = 6) {
+  const g = new THREE.PlaneGeometry(w, h, cols, 1);
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setZ(i, -bowAt(pos.getX(i), w / 2, bow));
+  pos.needsUpdate = true;
+  g.computeVertexNormals();
+  return g;
 }
 
 // ---------------------------------------------------------------------------
@@ -562,13 +632,13 @@ function leiaBuns(color = COLORS.reddishBrown) {
     latheShell(
       [
         [0.03, FACE_TOP - 0.04],
-        [0.725, FACE_TOP - 0.04],
-        [0.73, 0.95],
-        [0.712, 1.06],
-        [0.63, 1.15],
-        [0.47, 1.22],
-        [0.25, 1.27],
-        [0.03, 1.29],
+        [0.715, FACE_TOP - 0.04],
+        [0.72, 0.9],
+        [0.7, 1.0],
+        [0.615, 1.08],
+        [0.45, 1.14],
+        [0.24, 1.17],
+        [0.03, 1.18],
       ],
       { segments: 24, close: false }
     ),
@@ -590,35 +660,39 @@ function leiaBuns(color = COLORS.reddishBrown) {
     { color, opts: o }
   );
 
-  // The buns: three concentric rings pressed against the side of the head, so
-  // the coil reads as a braid. A sphere with rings buried inside it just looks
-  // like an earmuff.
+  // The buns. They have to clear the hair shell (r 0.705 at ear height) or the
+  // coil is swallowed and only a small knob shows; the disc is sized so the
+  // pair widen the head's silhouette by about half again, which is what makes
+  // the character read from across a room. Rings of falling radius rather than
+  // a sphere, so it is a coiled braid and not an earmuff.
+  const Y = 0.52;
+  const Z = -0.06;
   for (const sx of [-1, 1]) {
-    b.addGeometry(new THREE.CylinderGeometry(0.27, 0.3, 0.2, 14), {
-      x: sx * 0.6,
-      y: 0.5,
-      z: -0.02,
+    b.addGeometry(new THREE.CylinderGeometry(0.32, 0.35, 0.16, 16), {
+      x: sx * 0.66,
+      y: Y,
+      z: Z,
       rot: [0, 0, Math.PI / 2],
       color,
       opts: o,
     });
-    b.addGeometry(new THREE.TorusGeometry(0.215, 0.1, 8, 20), {
-      x: sx * 0.68,
-      y: 0.5,
-      z: -0.02,
+    b.addGeometry(new THREE.TorusGeometry(0.255, 0.095, 8, 22), {
+      x: sx * 0.73,
+      y: Y,
+      z: Z,
       rot: [0, Math.PI / 2, 0],
       color,
       opts: o,
     });
-    b.addGeometry(new THREE.TorusGeometry(0.12, 0.085, 7, 16), {
-      x: sx * 0.735,
-      y: 0.5,
-      z: -0.02,
+    b.addGeometry(new THREE.TorusGeometry(0.155, 0.085, 7, 18), {
+      x: sx * 0.795,
+      y: Y,
+      z: Z,
       rot: [0, Math.PI / 2, 0],
       color,
       opts: o,
     });
-    b.addGeometry(new THREE.SphereGeometry(0.085, 10, 8), { x: sx * 0.775, y: 0.5, z: -0.02, color, opts: o });
+    b.addGeometry(new THREE.SphereGeometry(0.09, 10, 8), { x: sx * 0.84, y: Y, z: Z, color, opts: o });
   }
   return b.build();
 }
@@ -660,7 +734,7 @@ const VADER_MASK_OUTLINE = [
  * the only way the top edge of a flat plate stays close to a domed helmet
  * instead of standing off it as a shelf.
  */
-const VADER_MASK_AT = { y: 0.47, z: 0.84, tilt: -0.12, w: 1.1, h: 1.1 };
+const VADER_MASK_AT = { y: 0.47, z: 0.85, tilt: -0.16, w: 1.1, h: 1.1, bow: 0.1 };
 
 /**
  * Vader's helmet, head-local (head bottom = 0, top = 1.04, r = 0.645).
@@ -723,9 +797,11 @@ function vaderHelmet({ shell = COLORS.black, mask = COLORS.trueBlack } = {}) {
     { color: shell, opts: g }
   );
 
-  // Face plate. The taper sinks its edges back into the dome, so the mask
-  // grows out of the helmet rather than being screwed onto the front of it.
-  b.addGeometry(taperShield(VADER_MASK_OUTLINE, 0.42, [1.2, 0.94], [0, -0.05]), {
+  // Face plate. The taper sinks its edges back into the dome and the bow
+  // curves the cheeks away, so the mask grows out of the helmet instead of
+  // being a slab screwed onto the front of it — side-on, a flat plate leaves a
+  // shoebox of exposed side wall standing off the curve.
+  b.addGeometry(taperShield(VADER_MASK_OUTLINE, 0.42, [1.2, 0.94], [0, -0.05], VADER_MASK_AT.bow), {
     x: 0,
     y: VADER_MASK_AT.y,
     z: VADER_MASK_AT.z,
@@ -764,38 +840,46 @@ function vaderMaskFallback(lens = 0x39454f) {
 }
 
 /**
+ * Outline of the trooper shell, head-local (head bottom = 0, top = 1.04).
+ * Squat and barrelled, widest down at the ear line rather than at the crown:
+ * a shell whose widest point is up near the temples reads as a bike helmet.
+ * Shared with the print, which is laid on this exact curve by `shellPatch`.
+ */
+const TROOPER_SHELL = [
+  [0.03, 1.28],
+  [0.26, 1.258],
+  [0.47, 1.185],
+  [0.625, 1.07],
+  [0.715, 0.93],
+  [0.762, 0.77],
+  [0.778, 0.6],
+  [0.772, 0.42],
+  [0.74, 0.25],
+  [0.665, 0.1],
+  [0.5, 0.015],
+  [0.03, 0.0],
+];
+
+/**
+ * Where the print sits on the shell. The artwork fills the middle 75% of the
+ * SVG's height, so the band is sized to land the brow just under the crown and
+ * the lip just above the neck seal; the empty margins run on up over the dome.
+ */
+const TROOPER_FACE_AT = { yFrom: 0.16, yTo: 1.13, halfAngle: 0.95 };
+
+/**
  * Stormtrooper helmet, head-local.
  *
- * One solid of revolution does all the work: a rounded crown, a straight
- * vertical band from the brow to the jaw for the print to sit on, and a
- * rounded chin. The straight band matters — the print is laid on a cone, and
- * a barrelled shell would swallow it in the middle and leave it floating at
- * the ends. Everything on the face (brow band, lenses, cheek intakes, frown)
- * is printed by helmet-stormtrooper.svg.
+ * A solid of revolution does most of the work; the character comes from the
+ * proportions (wide at the ears, tapering to a small chin) plus the crown rib
+ * and the ear plates. Everything on the face — brow band, lenses, cheek
+ * intakes, frown — is printed by helmet-stormtrooper.svg.
  */
 function trooperHelmet({ armour = COLORS.white, dark = COLORS.trueBlack, trim = COLORS.darkBluishGray } = {}) {
   const b = new Bricks();
   const o = { finish: 'glossy' };
 
-  b.addGeometry(
-    latheShell(
-      [
-        [0.03, 1.32],
-        [0.31, 1.285],
-        [0.56, 1.195],
-        [0.72, 1.075],
-        [0.8, 0.96],
-        [0.775, 0.72],
-        [0.745, 0.48],
-        [0.715, 0.24],
-        [0.66, 0.11],
-        [0.5, 0.02],
-        [0.03, 0.0],
-      ],
-      { segments: 26, close: false }
-    ),
-    { color: armour, opts: o }
-  );
+  b.addGeometry(latheShell(TROOPER_SHELL, { segments: 26, close: false }), { color: armour, opts: o });
 
   // The rib over the crown. Lathing a narrow slice of a closed cross-section
   // is the only way to get a rib that follows a curved shell exactly; a run of
@@ -803,41 +887,40 @@ function trooperHelmet({ armour = COLORS.white, dark = COLORS.trueBlack, trim = 
   b.addGeometry(
     ridgeFin(
       [
-        [-0.68, 1.06],
-        [-0.568, 1.215],
-        [-0.314, 1.307],
-        [0.0, 1.342],
-        [0.314, 1.307],
-        [0.568, 1.215],
-        [0.68, 1.06],
-        [0.62, 1.03],
-        [0.541, 1.149],
-        [0.302, 1.236],
-        [0.0, 1.27],
-        [-0.302, 1.236],
-        [-0.541, 1.149],
-        [-0.62, 1.03],
+        [-0.703, 0.991],
+        [-0.602, 1.138],
+        [-0.36, 1.262],
+        [0.0, 1.333],
+        [0.36, 1.262],
+        [0.602, 1.138],
+        [0.703, 0.991],
+        [0.645, 0.955],
+        [0.552, 1.09],
+        [0.33, 1.203],
+        [0.0, 1.268],
+        [-0.33, 1.203],
+        [-0.552, 1.09],
+        [-0.645, 0.955],
       ],
-      0.11
+      0.14
     ),
     { color: armour, opts: o }
   );
 
-  // Ear covers: a shallow plate with a boss, flat against the shell.
+  // Ear plates: the trooper's most legible profile feature after the frown —
+  // a shallow raised panel with three vent bars, on the widest point of the
+  // shell. Kept low; a proud plate throws a shadow and reads as a headphone.
   for (const sx of [-1, 1]) {
-    onCurve(b, sx * (Math.PI / 2 + 0.14), 0.55, 0.71, 0, (bb) => {
-      bb.addGeometry(chamferBox(0.26, 0.34, 0.07, 0.04), { color: armour, opts: o });
-      bb.addGeometry(new THREE.CylinderGeometry(0.075, 0.075, 0.04, 10), {
-        z: 0.04,
-        rot: [Math.PI / 2, 0, 0],
-        color: trim,
-        opts: o,
-      });
+    onCurve(b, sx * (Math.PI / 2 + 0.1), 0.52, 0.78, 0, (bb) => {
+      bb.addGeometry(taperBox(0.3, 0.24, 0.46, 0.06, 0.06, 0.035), { color: armour, opts: o });
+      for (let i = -1; i <= 1; i++) {
+        bb.addGeometry(chamferBox(0.052, 0.28, 0.04, 0.015), { x: i * 0.082, z: 0.032, color: trim, opts: o });
+      }
     });
   }
 
   // Neck seal below the jaw, so the helmet does not end in a bare white hole.
-  b.addGeometry(new THREE.CylinderGeometry(0.58, 0.55, 0.26, 18), { x: 0, y: -0.14, z: 0, color: dark, opts: o });
+  b.addGeometry(new THREE.CylinderGeometry(0.56, 0.52, 0.24, 18), { x: 0, y: -0.11, z: 0, color: dark, opts: o });
   return b.build();
 }
 
@@ -881,7 +964,7 @@ function trooperFaceFallback(armour = COLORS.white) {
  * Rebel Fleet Trooper helmet: an open-face cap with a narrow rim, leaving the
  * face visible under the brim.
  */
-function rebelHelmet({ shell = COLORS.darkTan, trim = COLORS.sandBlue } = {}) {
+function rebelHelmet({ shell = COLORS.tan, trim = COLORS.sandBlue } = {}) {
   const b = new Bricks();
   const o = { finish: 'plastic' };
   const dbl = { finish: 'plastic', side: THREE.DoubleSide };
@@ -996,8 +1079,31 @@ function pilotHelmet({ shell = COLORS.white, band = COLORS.brightOrange, gear = 
     ),
     { x: 0, y: 0, z: -0.02, color: band, opts: dbl }
   );
-  // Orange crest over the crown.
-  b.addGeometry(chamferBox(0.20, 0.09, 1.10, 0.03), { x: 0, y: 1.30, z: -0.10, color: band, opts: o });
+  // Orange crest running front to back over the crown. A straight box laid on
+  // top is tangent to the dome and juts out fore and aft like an aerial, so
+  // this follows the crown's own ellipse.
+  b.addGeometry(
+    ridgeFin(
+      [
+        [-0.847, 0.974],
+        [-0.721, 1.139],
+        [-0.448, 1.292],
+        [-0.02, 1.361],
+        [0.408, 1.292],
+        [0.681, 1.139],
+        [0.807, 0.974],
+        [0.768, 0.968],
+        [0.648, 1.125],
+        [0.388, 1.27],
+        [-0.02, 1.336],
+        [-0.428, 1.27],
+        [-0.688, 1.125],
+        [-0.808, 0.968],
+      ],
+      0.2
+    ),
+    { color: band, opts: o }
+  );
   // Visor, tipped up just clear of the brow.
   b.addGeometry(chamferBox(1.18, 0.18, 0.32, 0.05), {
     x: 0,
@@ -1050,25 +1156,30 @@ function officerCap(color = COLORS.trueBlack) {
 function hoodPiece({ color, rLow, rBrow, rTip, yLow, yBrow, yTip, openHalf, thickness = 0.14, opts = {} }) {
   const b = new Bricks();
   const dbl = { ...opts, side: THREE.DoubleSide };
+  // latheSector, not latheShell: the sector caps the two cut ends, which is
+  // what gives the face opening a rolled edge with thickness to it.
   b.addGeometry(
-    latheShell(
-      shellProfile(
-        [
-          [rLow, yLow],
-          [rBrow, yBrow],
-        ],
-        thickness
-      ),
+    latheSector(
+      [
+        [rLow, yLow],
+        [rBrow, yBrow],
+      ],
+      thickness,
       { segments: 24, openHalf }
     ),
     { color, opts: dbl }
   );
+  // The cap overlaps the cowl and sits a hair outside it. Butting the two at
+  // the same ring leaves the cowl's top annulus lit and facing the sky, which
+  // reads as a bright band drawn round the brow.
+  const overlap = 0.14;
+  const rJoin = rBrow + ((rLow - rBrow) * overlap) / (yBrow - yLow) + 0.015;
   b.addGeometry(
     latheShell(
       shellProfile(
         [
-          [rBrow, yBrow],
-          [rBrow * 0.82, yBrow + (yTip - yBrow) * 0.5],
+          [rJoin, yBrow - overlap],
+          [rBrow * 0.84, yBrow + (yTip - yBrow) * 0.45],
           [rTip, yTip],
         ],
         thickness
@@ -1082,34 +1193,18 @@ function hoodPiece({ color, rLow, rBrow, rTip, yLow, yBrow, yTip, openHalf, thic
 
 /** Ben's hood: low and wide, framing the face rather than swallowing it. */
 function benHood(color = COLORS.reddishBrown) {
-  const b = hoodPiece({
+  return hoodPiece({
     color,
-    rLow: 1.06,
-    rBrow: 0.94,
-    rTip: 0.30,
-    yLow: -0.36,
-    yBrow: 0.74,
-    yTip: 1.20,
-    openHalf: 1.18,
-    thickness: 0.17,
+    rLow: 0.95,
+    rBrow: 0.84,
+    rTip: 0.26,
+    yLow: -0.3,
+    yBrow: 0.82,
+    yTip: 1.28,
+    openHalf: 1.1,
+    thickness: 0.15,
     opts: { finish: 'rubber' },
-  });
-  // Rolled edge round the face opening, following the cone rather than
-  // sticking out from it.
-  for (const sx of [-1, 1]) {
-    for (let i = 0; i < 4; i++) {
-      const y = -0.20 + i * 0.30;
-      const r = 1.06 + ((y + 0.36) / 1.10) * (0.94 - 1.06);
-      b.addGeometry(new THREE.SphereGeometry(0.105, 8, 6), {
-        x: sx * r * Math.sin(1.18),
-        y,
-        z: r * Math.cos(1.18),
-        color,
-        opts: { finish: 'rubber' },
-      });
-    }
-  }
-  return b.build();
+  }).build();
 }
 
 /** Ben's robe: a mantle over the shoulders plus the belt. Torso-local. */
@@ -1213,39 +1308,58 @@ function jawaEyes(color = 0xffd21a) {
   return b.build();
 }
 
-/** Luke's hair: a swept blond cap with a fringe, rather than a helmet. */
+/**
+ * Luke's hair: one swept blond cap. Everything is above the hairline — an
+ * earlier version hung a separate fringe ring across the brow and it read
+ * dead-on as a pair of goggles, which is exactly the wrong character.
+ */
 function lukeHair(color = SANDY_BLOND) {
   const b = new Bricks();
-  // Crown.
-  b.addGeometry(domeGeometry(0.695, Math.PI * 0.54, 18), { x: 0, y: 0.66, z: 0, color });
-  // Nape.
-  b.addGeometry(chamferBox(1.26, 0.60, 0.58, 0.16), { x: 0, y: 0.52, z: -0.34, color });
-  // Fringe: a band hugging the brow, thicker in the middle.
+  const o = { finish: 'plastic' };
+
+  // Cap, sitting on the head with its rim just above the printed brow.
   b.addGeometry(
     latheShell(
-      shellProfile(
-        [
-          [0.69, 0.92],
-          [0.705, 0.74],
-        ],
-        0.085
-      ),
-      { segments: 20, openHalf: Math.PI - 1.30 }
+      [
+        [0.03, FACE_TOP + 0.02],
+        [0.7, FACE_TOP + 0.02],
+        [0.706, 0.92],
+        [0.675, 1.02],
+        [0.585, 1.11],
+        [0.42, 1.17],
+        [0.22, 1.2],
+        [0.03, 1.21],
+      ],
+      { segments: 22, close: false }
     ),
-    { x: 0, y: 0, z: 0, rot: [0, Math.PI, 0], color, opts: { side: THREE.DoubleSide } }
+    { color, opts: o }
   );
-  // Two locks sweeping over the brow.
-  for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.34, 0.20, 0.16, 0.05), {
-      x: sx * 0.20,
-      y: 0.80,
-      z: 0.63,
-      rot: [0, 0, sx * 0.32],
-      color,
-    });
-    // Sideburns.
-    b.addGeometry(chamferBox(0.14, 0.30, 0.24, 0.05), { x: sx * 0.62, y: 0.54, z: 0.16, color });
-  }
+  // Nape and sideburns: the hair is longer behind the ears than in front. Its
+  // top ring tucks under the cap's rim rather than meeting it — two shells
+  // ending on the same radius z-fight into a sawtooth along the join.
+  b.addGeometry(
+    latheSector(
+      [
+        [0.694, 0.79],
+        [0.698, 0.58],
+        [0.678, 0.42],
+        [0.63, 0.34],
+      ],
+      0.1,
+      { segments: 20, openHalf: 1.15 }
+    ),
+    { color, opts: o }
+  );
+  // Side-parted fringe: one lock lying on the crown and falling to the left,
+  // proud enough to catch a highlight without crossing the face print.
+  b.addGeometry(taperBox(0.86, 0.62, 0.16, 0.3, 0.22, 0.05), {
+    x: 0.1,
+    y: 0.88,
+    z: 0.5,
+    rot: [0.42, 0, 0.22],
+    color,
+    opts: o,
+  });
   return b.build();
 }
 
@@ -1273,7 +1387,7 @@ function threepioWiring() {
     opts: { finish: 'rubber' },
   });
   // Waist collar capping the wiring.
-  b.addGeometry(chamferBox(1.36, 0.16, 0.88, 0.05), { x: 0, y: 0.26, z: 0, color: COLORS.pearlGold, opts: POLISH });
+  b.addGeometry(chamferBox(1.36, 0.16, 0.88, 0.05), { x: 0, y: 0.26, z: 0, color: DROID_GOLD_DARK, opts: POLISH });
   return b.build();
 }
 
@@ -1352,7 +1466,10 @@ export async function makeVader(opts = {}) {
   maskAt.position.set(0, VADER_MASK_AT.y, VADER_MASK_AT.z);
   maskAt.rotation.x = VADER_MASK_AT.tilt;
   fig.accessory.add(maskAt);
-  const mask = await decalOn('svg/helmet-vader.svg', flatDecal(VADER_MASK_AT.w, VADER_MASK_AT.h));
+  const mask = await decalOn(
+    'svg/helmet-vader.svg',
+    bowedDecal(VADER_MASK_AT.w, VADER_MASK_AT.h, VADER_MASK_AT.bow)
+  );
   if (mask) {
     mask.position.z = 0.006;
     maskAt.add(mask);
@@ -1404,7 +1521,10 @@ export async function makeStormtrooper(opts = {}) {
   fig.accessory.add(helmet);
   fig.helmet = helmet;
 
-  const face = await decalOn('svg/helmet-stormtrooper.svg', conePatch(0.728, 0.812, 0.23, 0.97, 0.88, 22));
+  const face = await decalOn(
+    'svg/helmet-stormtrooper.svg',
+    shellPatch(TROOPER_SHELL, { ...TROOPER_FACE_AT, rows: 12, segments: 22 })
+  );
   if (face) fig.accessory.add(face);
   else fig.accessory.add(trooperFaceFallback(helmetWhite));
 
@@ -1645,13 +1765,13 @@ export async function makeJawa(opts = {}) {
  * and a fidgety idle (`fig.fuss(t)`).
  */
 export async function makeProtocolDroid(opts = {}) {
-  const gold = opts.gold ?? COLORS.chromeGold;
+  const gold = opts.gold ?? DROID_GOLD;
   const fig = await buildMinifig({
     shirt: gold,
     arms: gold,
     legs: opts.silverLeg ? COLORS.chromeSilver : gold,
-    hips: COLORS.pearlGold,
-    hands: COLORS.pearlGold,
+    hips: DROID_GOLD_DARK,
+    hands: DROID_GOLD_DARK,
     head: gold,
     face: 'svg/head-threepio.svg',
     scale: opts.scale ?? 1,
@@ -1671,7 +1791,7 @@ export async function makeProtocolDroid(opts = {}) {
       y: 0.60,
       z: 0.60,
       rot: [Math.PI / 2, 0, 0],
-      color: COLORS.pearlGold,
+      color: DROID_GOLD_DARK,
       opts: POLISH,
     });
     face.addGeometry(new THREE.CylinderGeometry(0.09, 0.09, 0.05, 12), {
@@ -1683,9 +1803,9 @@ export async function makeProtocolDroid(opts = {}) {
       opts: { finish: 'glossy' },
     });
   }
-  face.addGeometry(chamferBox(0.34, 0.11, 0.07, 0.02), { x: 0, y: 0.28, z: 0.62, color: COLORS.pearlGold, opts: POLISH });
+  face.addGeometry(chamferBox(0.34, 0.11, 0.07, 0.02), { x: 0, y: 0.28, z: 0.62, color: DROID_GOLD_DARK, opts: POLISH });
   // Brow plate.
-  face.addGeometry(chamferBox(0.72, 0.09, 0.08, 0.02), { x: 0, y: 0.76, z: 0.60, color: COLORS.pearlGold, opts: POLISH });
+  face.addGeometry(chamferBox(0.72, 0.09, 0.08, 0.02), { x: 0, y: 0.76, z: 0.60, color: DROID_GOLD_DARK, opts: POLISH });
   fig.head.add(face.build());
 
   /** Locked-elbow protocol-droid stance. */
@@ -1776,7 +1896,9 @@ export async function makeAstromech(opts = {}) {
 
   const d = new Bricks();
   d.addGeometry(domeGeometry(R, Math.PI * 0.5, 24), { x: 0, y: 0, z: 0, color: shell, opts: G });
-  d.addGeometry(new THREE.CylinderGeometry(R + 0.015, R + 0.015, 0.08, 24), { x: 0, y: 0.04, z: 0, color: STEEL, opts: POLISH });
+  // The base band sits level with the dome's rim; any higher and it cuts off
+  // the bottom of the print.
+  d.addGeometry(new THREE.CylinderGeometry(R + 0.015, R + 0.015, 0.08, 24), { x: 0, y: 0, z: 0, color: STEEL, opts: POLISH });
   // Blue wedges radiating up the dome, skipping the front where the face goes.
   for (let i = 0; i < 7; i++) {
     const a = 0.85 + (i / 7) * (Math.PI * 2 - 1.7);
@@ -1810,7 +1932,9 @@ export async function makeAstromech(opts = {}) {
   dome.add(projector);
 
   // Dome face: the decal wraps the sphere, so nothing floats at the corners.
-  const face = await decalOn('svg/head-astromech.svg', spherePatch(R + 0.012, 0, 0.6, 1.53, 0.95, 22));
+  // The arc is kept narrow on purpose — a front elevation smeared round most
+  // of the dome flattens the radar eye into a letterbox slot.
+  const face = await decalOn('svg/head-astromech.svg', spherePatch(R + 0.012, 0, 0.45, 1.52, 0.62, 22));
   if (face) {
     dome.add(face);
   } else {
@@ -1863,7 +1987,9 @@ export async function makeAstromech(opts = {}) {
   legC.position.set(0, 1.19, 0.42);
   legC.rotation.x = -0.16;
   const c = new Bricks();
-  c.addGeometry(chamferBox(0.26, 1.02, 0.32, 0.04), { x: 0, y: -0.52, z: 0, color: shell, opts: G });
+  // Silver shaft: a white one crosses the chassis' lower silver band and
+  // splits it into two curved horns that read as a moustache from the front.
+  c.addGeometry(chamferBox(0.26, 1.02, 0.32, 0.04), { x: 0, y: -0.52, z: 0, color: STEEL, opts: POLISH });
   c.addGeometry(chamferBox(0.30, 0.10, 0.36, 0.03), { x: 0, y: -0.72, z: 0, color: STEEL, opts: POLISH });
   c.addGeometry(chamferBox(0.32, 0.2, 0.6, 0.04), { x: 0, y: -1.11, z: 0.1, color: shell, opts: G });
   c.addGeometry(chamferBox(0.34, 0.08, 0.62, 0.03), { x: 0, y: -1.19, z: 0.1, color: dark, opts: POLISH });
