@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.env
+.env.*
+!.env.example
+
+# Piper voice models are large and are downloaded on demand by
+# `npm run narration` (see README). The rendered narration audio under
+# public/audio/narration IS committed so the project runs offline.
+voices/
+
+# QA output
+qa/screenshots/
+qa/report.json
