@@ -19,7 +19,7 @@ export default {
     const rng = new RNG(818);
     setupScene(ctx, 'desert', {
       background: 0xe0b070,
-      envIntensity: 0.7,
+      envIntensity: 0.39,
       fog: [0xe6bd85, 90, 460],
       shadowSize: 90,
     });

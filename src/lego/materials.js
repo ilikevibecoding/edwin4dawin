@@ -74,8 +74,10 @@ export function mat(color, finish, opts = {}) {
       });
       break;
     case FINISH.GLOW:
+      // Emissive parts are written above 1.0 so the bloom threshold can sit
+      // high enough that ordinary white ABS does not smear.
       m = new THREE.MeshBasicMaterial({
-        color: base.color,
+        color: base.color.clone().multiplyScalar(opts.intensity ?? 2.4),
         toneMapped: false,
         transparent: !!opts.opacity && opts.opacity < 1,
         opacity: opts.opacity ?? 1,

@@ -22,7 +22,7 @@ export default {
     const root = new THREE.Group();
     const rng = new RNG(5150);
     const rig = setupScene(ctx, 'dark', {
-      background: 0x05070b, envIntensity: 0.32,
+      background: 0x05070b, envIntensity: 0.18,
       fog: [0x06080d, 30, 190],
     });
 

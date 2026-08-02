@@ -21,7 +21,7 @@ export default {
   async build(ctx) {
     const root = new THREE.Group();
     const rng = new RNG(66613);
-    setupScene(ctx, 'space', { background: 0x04060b, envIntensity: 0.4 });
+    setupScene(ctx, 'space', { background: 0x04060b, envIntensity: 0.22 });
     root.add(starfield({ count: 1600, radius: 5000, seed: 5, size: 2.6 }));
 
     const surface = await tryMake('deathstar_surface', { size: 900 }, { size: [900, 4, 900], color: C.darkBluishGray });

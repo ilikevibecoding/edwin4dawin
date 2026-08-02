@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Post } from './engine/fx.js';
-import { makeEnv, lightingRig } from './engine/lighting.js';
+import { makeEnv, lightingRig, EXPOSURE } from './engine/lighting.js';
 import { whenPrintsReady } from './lego/svg.js';
 import { BrickBuilder, PLATE } from './lego/brick.js';
 import { mat as matFor } from './lego/materials.js';
@@ -28,7 +28,7 @@ renderer.setPixelRatio(1);
 renderer.setSize(W, H, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.95;
+renderer.toneMappingExposure = EXPOSURE;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
@@ -41,14 +41,14 @@ const bgColors = {
   interior: 0x1a222c, sunset: 0x4a2a26, dark: 0x070a10, hangar: 0x141922,
 };
 scene.background = new THREE.Color(bgColors[bgKind] ?? 0x1b2028);
-makeEnv(renderer, bgKind === 'studio' ? 'studio' : bgKind, 0.55);
+makeEnv(renderer, bgKind === 'studio' ? 'studio' : bgKind, 0.28);
 scene.add(lightingRig(bgKind, { shadowSize: +(q.get('shadow') || 40) }));
 
 const post = new Post(renderer, scene, camera, { width: W, height: H, quality: q.get('quality') || 'high' });
 post.grade.uniforms.uVignette.value = 0.26;
 post.grade.uniforms.uGrain.value = 0.010;
 post.grade.uniforms.uAberration.value = 0.0006;
-if (post.bloom) { post.bloom.strength = 0.34; post.bloom.threshold = 0.85; post.bloom.radius = 0.5; }
+if (post.bloom) { post.bloom.strength = 0.55; post.bloom.threshold = 1.3; post.bloom.radius = 0.5; }
 
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
@@ -109,8 +109,12 @@ async function load(id) {
     scene.add(baseplate(plate));
   }
 
+  const m = measure(model);
   hud.textContent = `${id}\nsize ${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)} studs`
-    + `\n(${(size.x * 8).toFixed(0)} x ${(size.y * 8).toFixed(0)} x ${(size.z * 8).toFixed(0)} mm)`;
+    + `\n(${(size.x * 8).toFixed(0)} x ${(size.y * 8).toFixed(0)} x ${(size.z * 8).toFixed(0)} mm)`
+    + `\n${m.tris.toLocaleString()} tris · ${m.meshes} meshes · ${m.materials} materials`
+    + (m.instances ? ` · ${m.instances} instances` : '')
+    + `\ncentre ${center.x.toFixed(1)}, ${center.y.toFixed(1)}, ${center.z.toFixed(1)}`;
   return model;
 }
 
@@ -138,17 +142,25 @@ function renderAt(t) {
     if (model.userData.update) model.userData.update(t, 1 / 60);
   }
   if (noPost) renderer.render(scene, camera); else post.render(t);
-  if (q.get('diag') === '1') {
-    let casters = 0, receivers = 0, shadowLights = 0;
-    scene.traverse((o) => {
-      if (o.isMesh && o.castShadow) casters++;
-      if (o.isMesh && o.receiveShadow) receivers++;
-      if (o.isLight && o.castShadow) shadowLights++;
-    });
-    hud.textContent += `\nshadowMap=${renderer.shadowMap.enabled} type=${renderer.shadowMap.type}`
-      + `\ncasters=${casters} receivers=${receivers} shadowLights=${shadowLights}`
-      + `\ncalls=${renderer.info.render.calls} tris=${renderer.info.render.triangles}`;
-  }
+}
+
+/** Model complexity, measured off the geometry rather than the last GL pass. */
+function measure(obj) {
+  let tris = 0, meshes = 0, verts = 0, instances = 0;
+  const mats = new Set();
+  obj?.traverse?.((o) => {
+    if (!o.isMesh && !o.isPoints) return;
+    const g = o.geometry;
+    if (!g) return;
+    const count = g.index ? g.index.count : (g.attributes.position?.count || 0);
+    const n = o.isInstancedMesh ? o.count : 1;
+    if (o.isInstancedMesh) instances += o.count;
+    if (o.isMesh) tris += (count / 3) * n;
+    verts += (g.attributes.position?.count || 0);
+    meshes++;
+    for (const m of (Array.isArray(o.material) ? o.material : [o.material])) if (m) mats.add(m.uuid);
+  });
+  return { tris: Math.round(tris), meshes, verts, materials: mats.size, instances };
 }
 
 function loop() {

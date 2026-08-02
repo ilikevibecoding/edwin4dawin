@@ -52,11 +52,27 @@ export function makeEnv(renderer, kind = 'studio', intensity = 0.8) {
  * Reusable three-point-ish lighting rigs.
  * Returns a Group you drop into the scene, plus named lights in userData.
  */
+/**
+ * Global scene radiance scale.
+ *
+ * Bloom runs on raw linear values before tone mapping, so the rigs are dialled
+ * back until a fully-lit white brick lands just under 1.0 and only genuine
+ * emitters (engines, bolts, sabers) cross the bloom threshold. Perceived
+ * brightness is put back with renderer.toneMappingExposure.
+ */
+export const LIGHT_SCALE = 0.58;
+export const EXPOSURE = 1.65;
+
 export function lightingRig(kind = 'studio', opts = {}) {
   const g = new THREE.Group();
   g.name = `rig_${kind}`;
   const L = {};
-  const add = (name, light) => { L[name] = light; g.add(light); return light; };
+  const add = (name, light) => {
+    light.intensity *= (opts.scale ?? LIGHT_SCALE);
+    L[name] = light;
+    g.add(light);
+    return light;
+  };
 
   const shadowSize = opts.shadowSize ?? 60;
   const setupShadow = (l, size = shadowSize, res = opts.shadowRes ?? 1024) => {

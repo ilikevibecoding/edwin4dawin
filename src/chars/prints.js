@@ -38,16 +38,16 @@ export const FACE_VADER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
   <path d="M198 62 L256 46 L314 62" fill="none" stroke="#67727a" stroke-width="4"/>
   <!-- eye lenses: light-grey rim, near-black glass, cold highlight -->
   <g>
-    <path d="M203 70 L249 58 L254 114 L207 130 Z" fill="#525d65"/>
-    <path d="M209 77 L245 67 L249 107 L212 121 Z" fill="#0c1114"/>
-    <path d="M213 81 L242 72 L243 84 L215 92 Z" fill="#2f3b45"/>
-    <path d="M309 70 L263 58 L258 114 L305 130 Z" fill="#525d65"/>
-    <path d="M303 77 L267 67 L263 107 L300 121 Z" fill="#0c1114"/>
-    <path d="M299 81 L270 72 L269 84 L297 92 Z" fill="#2f3b45"/>
+    <path d="M198 64 L250 48 L257 118 L203 136 Z" fill="#6b767e"/>
+    <path d="M204 73 L246 59 L251 110 L209 125 Z" fill="#0b1013"/>
+    <path d="M209 79 L243 66 L244 78 L211 90 Z" fill="#39454f"/>
+    <path d="M314 64 L262 48 L255 118 L309 136 Z" fill="#6b767e"/>
+    <path d="M308 73 L266 59 L261 110 L303 125 Z" fill="#0b1013"/>
+    <path d="M303 79 L269 66 L268 78 L301 90 Z" fill="#39454f"/>
   </g>
-  <!-- nose ridge -->
-  <path d="M248 62 L264 62 L268 138 L244 138 Z" fill="#333f47"/>
-  <path d="M256 66 L256 134" stroke="#5d686f" stroke-width="3"/>
+  <!-- nose ridge, kept dark so the head's highlight does not blow it out -->
+  <path d="M249 60 L263 60 L267 136 L245 136 Z" fill="#1e2a33"/>
+  <path d="M256 64 L256 132" stroke="#414d56" stroke-width="3"/>
   <!-- cheek tusks flanking the vocoder -->
   <path d="M212 132 L236 140 L240 200 L220 210 Z" fill="#313d45"/>
   <path d="M300 132 L276 140 L272 200 L292 210 Z" fill="#313d45"/>
@@ -253,11 +253,10 @@ export const FACE_TROOPER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 
 /** Rebel fleet trooper: moustache, chin strap of the tall helmet. */
 export const FACE_REBEL = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 256">
-  <!-- helmet chin strap -->
-  <path d="M190 20 L204 22 L206 150 Q222 190 256 200 Q290 190 306 150 L308 22 L322 20
-           L320 156 Q296 208 256 216 Q216 208 192 156 Z" fill="#5f6a72" opacity="0.95"/>
-  <path d="M204 24 L206 148 Q222 186 256 196 Q290 186 306 148 L308 24" fill="none"
-        stroke="#8b959b" stroke-width="3"/>
+  <!-- helmet chin strap: side rails only, so it frames the face instead of
+       swallowing it -->
+  <path d="M188 16 L206 20 L204 178 L186 176 Z" fill="#6b757c"/>
+  <path d="M324 16 L306 20 L308 178 L326 176 Z" fill="#6b757c"/>
   <g stroke="#4c3316" stroke-width="8" stroke-linecap="round" fill="none">
     <path d="M210 80 Q226 70 246 76"/>
     <path d="M302 80 Q286 70 266 76"/>
@@ -270,11 +269,13 @@ export const FACE_REBEL = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
     <circle cx="228" cy="103" r="3.5"/><circle cx="292" cy="103" r="3.5"/>
   </g>
   <path d="M253 126 Q246 140 257 146" fill="none" stroke="#c9a52c" stroke-width="4"/>
-  <!-- moustache -->
-  <path d="M222 148 Q256 138 290 148 Q288 172 256 164 Q224 172 222 148 Z" fill="#4c3316"/>
-  <path d="M256 150 Q250 158 256 164" fill="none" stroke="#2f1f0c" stroke-width="3"/>
-  <!-- mouth under it -->
-  <path d="M238 172 Q256 180 274 172 Q256 186 238 172 Z" fill="#3a2213"/>
+  <!-- moustache: a flat bar under the nose, well clear of the mouth -->
+  <path d="M226 148 Q256 141 286 148 L286 160 Q256 154 226 160 Z" fill="#4c3316"/>
+  <!-- mouth -->
+  <path d="M234 176 L278 176 L276 183 L236 183 Z" fill="#7a3f2c"/>
+  <path d="M234 176 Q256 171 278 176" fill="none" stroke="#5a2c1c" stroke-width="2.5"/>
+  <!-- chin shading -->
+  <path d="M240 200 Q256 208 272 200" fill="none" stroke="#c9a52c" stroke-width="3"/>
 </svg>`;
 
 /** Imperial officer: stern, humourless. */

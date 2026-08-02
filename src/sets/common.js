@@ -40,12 +40,16 @@ export function hash2i(x, y, seed = 0) {
 
 export function hash1i(x, seed = 0) { return hash2i(x, 0x5bf03635, seed); }
 
+export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+/** Quintic fade -- second-derivative continuous, so the lattice stops showing. */
+const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+
 /** Smoothed value noise. */
 export function noise2(x, y, seed = 0) {
   const xi = Math.floor(x), yi = Math.floor(y);
-  const xf = x - xi, yf = y - yi;
-  const u = xf * xf * (3 - 2 * xf);
-  const v = yf * yf * (3 - 2 * yf);
+  const u = fade(x - xi);
+  const v = fade(y - yi);
   const a = hash2i(xi, yi, seed), b = hash2i(xi + 1, yi, seed);
   const c = hash2i(xi, yi + 1, seed), d = hash2i(xi + 1, yi + 1, seed);
   return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
@@ -62,13 +66,42 @@ export function fbm2(x, y, { seed = 0, octaves = 4, gain = 0.5, lacunarity = 2.0
   return sum / norm;
 }
 
+/**
+ * Value noise that wraps on the X axis every `px` lattice cells. Anything
+ * mapped around a sphere or tiled edge-to-edge needs this or it shows a seam.
+ */
+export function noise2p(x, y, px, seed = 0) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const u = fade(x - xi);
+  const v = fade(y - yi);
+  const w0 = ((xi % px) + px) % px;
+  const w1 = ((xi + 1) % px + px) % px;
+  const a = hash2i(w0, yi, seed), b = hash2i(w1, yi, seed);
+  const c = hash2i(w0, yi + 1, seed), d = hash2i(w1, yi + 1, seed);
+  return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+}
+
+/** fbm over `u` in [0,1) that closes seamlessly at u = 1. */
+export function fbm2p(u, y, { seed = 0, octaves = 4, gain = 0.5, period = 4 } = {}) {
+  let amp = 1, f = 1, sum = 0, norm = 0;
+  for (let i = 0; i < octaves; i++) {
+    sum += amp * noise2p(u * period * f, y * f, period * f, seed + i * 101);
+    norm += amp;
+    amp *= gain;
+    f *= 2;
+  }
+  return sum / norm;
+}
+
+/** Expand fbm's narrow mid-band distribution so the detail actually shows. */
+export const ctr = (v, k) => clamp(0.5 + (v - 0.5) * k, 0, 1);
+
 /** Ridged noise -- sharper crests, good for dune spines and rock. */
 export function ridge2(x, y, opts = {}) {
   const n = fbm2(x, y, opts);
   return 1 - Math.abs(n * 2 - 1);
 }
 
-export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const smoothstep = (a, b, x) => {
   const t = clamp((x - a) / (b - a || 1e-6), 0, 1);

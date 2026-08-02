@@ -17,7 +17,7 @@ export default {
   async build(ctx) {
     const root = new THREE.Group();
     setupScene(ctx, 'interior', {
-      background: 0x0c1118, envIntensity: 0.55, fog: [0x161c26, 90, 400], shadowSize: 60,
+      background: 0x0c1118, envIntensity: 0.3, fog: [0x161c26, 90, 400], shadowSize: 60,
     });
 
     const hall = await tryMake('throneroom', {}, { size: [70, 30, 140], color: C.white });

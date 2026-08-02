@@ -38,8 +38,8 @@ function buildBody(bb) {
   bb.cyl(0, BODY_Y0, 0, BODY_R, BODY_Y1 - BODY_Y0, { seg: 26, color: W, stud: false });
   bb.cyl(0, BODY_Y1 - 0.02, 0, BODY_R * 0.99, 0.06, { seg: 26, color: LG, stud: false });
   // waist band and lower vents
-  bb.custom(panel({ r: BODY_R + 0.012, y0: 1.42, y1: 1.56, from: 0, to: Math.PI * 2 }),
-    { color: SL, finish: FINISH.METAL });
+  bb.custom(panel({ r: BODY_R + 0.012, y0: 1.42, y1: 1.56, from: 0, to: Math.PI * 2 }), { color: LG });
+  bb.custom(panel({ r: BODY_R + 0.014, y0: 1.46, y1: 1.52, from: 0, to: Math.PI * 2 }), { color: SL });
   bb.custom(panel({ r: BODY_R + 0.012, y0: 0.66, y1: 0.78, from: 0, to: Math.PI * 2 }), { color: DG });
 
   // --- front panelling ----------------------------------------------------
@@ -92,8 +92,7 @@ function buildDome(bb) {
   const W = C.white, BL = C.blue, SL = C.flatSilver, DG = C.darkBluishGray, LG = C.lightBluishGray;
 
   bb.sphere(0, 0, 0, DOME_R, { dome: true, sy: 0.82, seg: 26, rings: 10, color: W });
-  bb.custom(panel({ r: DOME_R + 0.008, y0: 0.0, y1: 0.10, from: 0, to: Math.PI * 2 }),
-    { color: SL, finish: FINISH.METAL });
+  bb.custom(panel({ r: DOME_R + 0.008, y0: 0.0, y1: 0.10, from: 0, to: Math.PI * 2 }), { color: LG });
   // blue panel band round the dome
   bb.mirrorX((b) => {
     b.custom(panel({ r: DOME_R * 0.995, y0: 0.10, y1: 0.34, from: -1.05, to: -0.42 }), { color: BL });
@@ -108,7 +107,7 @@ function buildDome(bb) {
   bb.cyl(0, 0.30, 0.76, 0.185, 0.05, { axis: 'z', seg: 16, color: C.trueBlack, stud: false });
 
   // holo projector + antennae on the crown
-  bb.cyl(0, 0.62, 0.14, 0.10, 0.10, { seg: 10, color: SL, finish: FINISH.METAL, stud: false });
+  bb.cyl(0, 0.62, 0.14, 0.10, 0.10, { seg: 10, color: LG, stud: false });
   bb.cyl(0, 0.72, 0.14, 0.06, 0.05, { seg: 10, color: C.transLightBlue, finish: FINISH.TRANS, stud: false });
   bb.bar(0.22, 0.74, -0.10, 0.025, 0.30, { color: LG });
   bb.bar(-0.20, 0.72, -0.14, 0.025, 0.24, { color: LG });

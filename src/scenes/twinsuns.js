@@ -18,7 +18,7 @@ export default {
     const root = new THREE.Group();
     setupScene(ctx, 'sunset', {
       background: 0xd97a3c,
-      envIntensity: 0.6,
+      envIntensity: 0.33,
       fog: [0xd98a54, 70, 420],
       shadowSize: 70,
     });

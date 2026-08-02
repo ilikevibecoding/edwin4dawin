@@ -428,19 +428,29 @@ export class Lightsaber {
     h.add(emitter);
     this.root.add(h);
 
+    // Core is only lightly tinted toward white so the blade keeps its colour
+    // once bloom smears it; a pure white core reads as a white sabre.
     this.blade = new THREE.Group();
     this.blade.position.y = 1.0;
-    const core = new THREE.Mesh(cylGeo(0.075, 0.075, 1, 8), glow(coreColor, 1));
+    const coreTint = new THREE.Color(color).lerp(new THREE.Color(coreColor), 0.55).getHex();
+    const core = new THREE.Mesh(cylGeo(0.072, 0.072, 1, 8), mat(coreTint, FINISH.GLOW, {
+      intensity: 2.1, depthWrite: false, side: THREE.DoubleSide,
+    }));
     core.position.y = 0.5;
-    const halo = new THREE.Mesh(cylGeo(0.155, 0.155, 1, 8), glow(color, 0.55));
+    const halo = new THREE.Mesh(cylGeo(0.16, 0.16, 1, 8), mat(color, FINISH.GLOW, {
+      intensity: 2.6, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    }));
     halo.position.y = 0.5;
-    const tip = new THREE.Mesh(sphereGeo(0.075, 8, 6), glow(coreColor, 1));
+    const tip = new THREE.Mesh(sphereGeo(0.072, 8, 6), mat(coreTint, FINISH.GLOW, {
+      intensity: 2.1, depthWrite: false,
+    }));
     tip.position.y = 1;
     this.core = core; this.halo = halo; this.tip = tip;
     this.blade.add(core, halo, tip);
     this.root.add(this.blade);
 
-    this.light = new THREE.PointLight(color, 0, 9, 2);
+    this.light = new THREE.PointLight(color, 0, 11, 2);
     this.light.position.y = 2.2;
     this.root.add(this.light);
 
@@ -455,7 +465,7 @@ export class Lightsaber {
     this.core.scale.y = L; this.core.position.y = L / 2;
     this.halo.scale.y = L; this.halo.position.y = L / 2;
     this.tip.position.y = L;
-    this.light.intensity = this.on * 14;
+    this.light.intensity = this.on * 5.5;
     this.light.position.y = 1 + L * 0.5;
   }
 
@@ -463,7 +473,7 @@ export class Lightsaber {
     if (this.on > 0.01) {
       const flick = 1 + Math.sin(t * 47) * 0.02 + Math.sin(t * 31.3) * 0.015;
       this.halo.scale.x = this.halo.scale.z = flick;
-      this.light.intensity = this.on * (13 + Math.sin(t * 23) * 1.5);
+      this.light.intensity = this.on * (5.2 + Math.sin(t * 23) * 0.7);
     }
   }
 

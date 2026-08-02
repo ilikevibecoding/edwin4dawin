@@ -24,6 +24,27 @@ export const OPAQUE = FINISH.SOLID;
 export const RED = { color: C.red, finish: FINISH.SOLID };
 
 /**
+ * Emit a sub-assembly on both sides of the centreline.
+ *
+ * Use this instead of BrickBuilder.mirrorX(): that path bakes a negative-scale
+ * matrix and then flips the normal attribute, which leaves the mirrored half
+ * with normals pointing the opposite way to its winding -- the port side of a
+ * ship ends up lit from underneath. Calling the builder twice with a sign costs
+ * nothing extra after the merge and keeps the shading right.
+ *
+ * @param {BrickBuilder} bb
+ * @param {(bb, s:1|-1) => void} fn multiply every x by s
+ */
+export function sym(bb, fn) {
+  fn(bb, 1);
+  fn(bb, -1);
+  return bb;
+}
+
+/** Mirror a yaw angle across the X axis (slope `rot` values). */
+export const mrot = (s, r = 0) => (s > 0 ? r : Math.PI - r);
+
+/**
  * Wrap a built model so its origin sits at the natural centre.
  * @param {THREE.Object3D} inner result of BrickBuilder.build()
  * @param {{x?:boolean, z?:boolean, y?:'centre'|'bottom'|'none'}} how

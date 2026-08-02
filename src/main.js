@@ -86,7 +86,7 @@ const ready = (async () => {
   ]).catch(() => {});
   await document.fonts.ready;
 
-  makeEnv(film.renderer, 'space', 0.5);
+  makeEnv(film.renderer, 'space', 0.28);
   await film.preload((p, id) => {
     bar.style.width = `${(p * 100).toFixed(0)}%`;
     bootlbl.textContent = `building ${id}…`;

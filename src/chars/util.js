@@ -8,10 +8,11 @@ import * as THREE from 'three';
  *   group.userData.fig     the live Minifig -- pose it, walk it, lookAt with it
  *   group.userData.update  (t, dt) => void, called once a frame
  */
-export function figGroup(fig, { name, extras = [], userData = {} } = {}) {
+export function figGroup(fig, { name, extras = [], userData = {}, gloss = {} } = {}) {
   const g = new THREE.Group();
   g.name = name || fig.root.name || 'character';
   g.add(fig.object3D);
+  if (gloss !== false) softenGloss(g, gloss);
   Object.assign(g.userData, userData);
   g.userData.fig = fig;
   g.userData.update = (t, dt) => {
@@ -45,6 +46,47 @@ export function flag(v, dflt = false) {
 export function num(v, dflt) {
   const n = typeof v === 'string' ? parseFloat(v) : v;
   return Number.isFinite(n) ? n : dflt;
+}
+
+/*
+ * The kit's ABS material carries a clearcoat (0.45) for the plastic sheen. On a
+ * minifig-sized curved part that reads beautifully, but a large flat panel aimed
+ * at the studio key light turns into a white mirror -- a dark brown hood came
+ * back at 223,223,223. Characters therefore get their clearcoat pulled back, and
+ * anything meant to be cloth loses it entirely. Materials are shared through a
+ * cache so a squad of troopers still ends up with one white ABS material.
+ */
+const glossCache = new Map();
+
+function tweak(src, cc, ccr, env, rough) {
+  const k = `${src.uuid}|${cc}|${ccr}|${env}|${rough ?? ''}`;
+  let m = glossCache.get(k);
+  if (!m) {
+    m = src.clone();
+    m.clearcoat = cc;
+    m.clearcoatRoughness = ccr;
+    if ('envMapIntensity' in m) m.envMapIntensity = env;
+    if (rough !== undefined) m.roughness = rough;
+    m.userData = { ...m.userData, gloss: k };
+    glossCache.set(k, m);
+  }
+  return m;
+}
+
+/** Pull the clearcoat back so flat panels stop blowing out to white. */
+export function softenGloss(root, { clearcoat = 0.15, clearcoatRoughness = 0.42, env = 0.5, roughness } = {}) {
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material || Array.isArray(o.material)) return;
+    const src = o.material;
+    if (!('clearcoat' in src) || src.userData?.gloss) return;
+    o.material = tweak(src, clearcoat, clearcoatRoughness, env, roughness);
+  });
+  return root;
+}
+
+/** Cloth: robes, hoods, cowls. No clearcoat at all, and rough. */
+export function makeCloth(root) {
+  return softenGloss(root, { clearcoat: 0, clearcoatRoughness: 1, env: 0.32, roughness: 0.92 });
 }
 
 /** Triangle count of a subtree -- used to keep characters inside budget. */

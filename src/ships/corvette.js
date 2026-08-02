@@ -4,7 +4,7 @@ import { BrickBuilder } from '../lego/brick.js';
 import { quadTurret } from './turret.js';
 import { mulberry32 } from '../engine/rng.js';
 import {
-  recentre, taperSlab, edgeStripe, engineNozzle, greebleField, glowRig,
+  recentre, taperSlab, edgeStripe, engineNozzle, greebleField, glowRig, sym, mrot,
   PLATE, BRICK, P, C, FINISH,
 } from './_util.js';
 
@@ -81,10 +81,10 @@ function hammerhead(bb) {
   bb.cyl(0, HEAD_TOP, RIDGE_Z1 + 2.4, 0.7, P(2), { color: DARK, seg: 10, stud: false });
 
   // Sensor pits out on the wide part of the head.
-  bb.mirrorX((b) => {
-    b.cyl(6.4, 4.4, HEAD_Z0 + 3.6, 0.85, P(1), { color: DARK, seg: 10, stud: false });
-    b.cyl(6.4, HEAD_TOP, HEAD_Z0 + 3.6, 0.6, P(1), { color: C.flatSilver, finish: FINISH.METAL, seg: 10, stud: false });
-    b.tile(4.5, HEAD_TOP, HEAD_Z0 + 9, 1, 6, { color: C.red, finish: FINISH.SOLID });
+  sym(bb, (b, s) => {
+    b.cyl(s * 6.4, 4.4, HEAD_Z0 + 3.6, 0.85, P(1), { color: DARK, seg: 10, stud: false });
+    b.cyl(s * 6.4, HEAD_TOP, HEAD_Z0 + 3.6, 0.6, P(1), { color: C.flatSilver, finish: FINISH.METAL, seg: 10, stud: false });
+    b.tile(s * 4.5, HEAD_TOP, HEAD_Z0 + 9, 1, 6, { color: C.red, finish: FINISH.SOLID });
   });
 }
 
@@ -112,17 +112,17 @@ function dorsalRidge(bb) {
   // Bridge: windscreen wrapped round the front of the ridge, dome behind it.
   const bz = RIDGE_Z1 - 1.2;
   bb.brick(0, base, bz + 0.5, 3.6, 1.4, { h: P(3), color: C.transLightBlue, finish: FINISH.TRANS, studs: false });
-  bb.mirrorX((b) => {
-    b.brick(1.9, base, bz - 0.8, 0.7, 2.4, { h: P(3), color: C.transLightBlue, finish: FINISH.TRANS, studs: false });
-    b.slope(2.3, base, bz - 0.8, 0.9, 2.4, { h: P(3), color: WHITE });
+  sym(bb, (b, s) => {
+    b.brick(s * 1.9, base, bz - 0.8, 0.7, 2.4, { h: P(3), color: C.transLightBlue, finish: FINISH.TRANS, studs: false });
+    b.slope(s * 2.3, base, bz - 0.8, 0.9, 2.4, { h: P(3), color: WHITE, rot: mrot(s) });
   });
   bb.tile(0, base + P(3), bz + 0.2, 3, 2.4, { color: GRAY });
   bb.node('cockpit', 0, base + P(1.5), bz + 1.4);
 
   bb.cyl(0, base + P(3), RIDGE_Z1 - 7, 1.0, P(1), { color: DARK, seg: 12, stud: false });
   bb.sphere(0, base + P(4) + 0.3, RIDGE_Z1 - 7, 0.95, { color: C.veryLightGray, dome: true, seg: 12, rings: 5 });
-  bb.mirrorX((b) => {
-    b.cyl(2.0, base + P(3), RIDGE_Z1 - 11, 0.4, P(2), { color: C.darkGray, seg: 8, stud: false });
+  sym(bb, (b, s) => {
+    b.cyl(s * 2.0, base + P(3), RIDGE_Z1 - 11, 0.4, P(2), { color: C.darkGray, seg: 8, stud: false });
   });
 }
 
@@ -131,10 +131,10 @@ function neck(bb) {
   bb.brick(0, 2.0, 14.0, 6, 4.4, { h: P(6), color: WHITE, studs: false });
   bb.brick(0, 1.2, 11.0, 7, 4.4, { h: P(7), color: WHITE, studs: false });
   bb.brick(0, 0.8, 9.6, 6, 2.4, { h: P(2), color: DARK, studs: false });
-  bb.mirrorX((b) => {
-    b.slope(3.5, 2.0, 14.0, 1, 4.4, { h: P(6), color: GRAY });
-    b.slope(3.0, 1.2, 11.0, 1, 4.4, { h: P(7), color: GRAY });
-    b.tile(2.7, 4.4, 12.4, 1.2, 8.8, { color: C.red, finish: FINISH.SOLID });
+  sym(bb, (b, s) => {
+    b.slope(s * 3.5, 2.0, 14.0, 1, 4.4, { h: P(6), color: GRAY, rot: mrot(s) });
+    b.slope(s * 3.0, 1.2, 11.0, 1, 4.4, { h: P(7), color: GRAY, rot: mrot(s) });
+    b.tile(s * 2.7, 4.4, 12.4, 1.2, 8.8, { color: C.red, finish: FINISH.SOLID });
   });
 }
 
@@ -158,12 +158,12 @@ function spine(bb) {
     halfW: (z) => spineHalf(z) - 0.5,
   });
   // Escape-pod hatches down the flanks: this is where Leia's pod launches.
-  bb.mirrorX((b) => {
+  sym(bb, (b, s) => {
     for (const z of [2, -1, -4, -7]) {
-      b.cyl(5.7, 3.8, z, 0.8, P(1), { axis: 'x', color: C.veryLightGray, seg: 10, stud: false });
-      b.cyl(5.95, 3.8, z, 0.42, P(1), { axis: 'x', color: DARK, seg: 8, stud: false });
+      b.cyl(s * 5.7, 3.8, z, 0.8, P(1), { axis: 'x', color: C.veryLightGray, seg: 10, stud: false });
+      b.cyl(s * 5.95, 3.8, z, 0.42, P(1), { axis: 'x', color: DARK, seg: 8, stud: false });
     }
-    b.brick(6.05, 1.6, -2, 0.4, 16, { h: P(2), color: C.red, finish: FINISH.SOLID, studs: false, free: true });
+    b.brick(s * 6.05, 1.6, -2, 0.4, 16, { h: P(2), color: C.red, finish: FINISH.SOLID, studs: false, free: true });
   });
 }
 
@@ -181,17 +181,17 @@ function engineBlock(bb) {
     bb.brick(0, L.y, zc, L.hw * 2, zd, { h: L.h, color: L.color, finish: L.finish, studs: L.studs ?? false });
   }
   // Shoulders blending the narrow spine into the wide block.
-  bb.mirrorX((b) => {
-    b.prism([[6, ENG_Z1 + 0.4], [9, ENG_Z1 - 4.5], [9, ENG_Z1 + 0.4]], P(13), {
+  sym(bb, (b, s) => {
+    b.prism([[s * 6, ENG_Z1 + 0.4], [s * 9, ENG_Z1 - 4.5], [s * 9, ENG_Z1 + 0.4]], P(13), {
       rx: Math.PI / 2, y: 1.6 + P(6.5), color: GRAY,
     });
-    b.slope(9, 6.8, ENG_Z1 - 2.2, 3, 3.6, { h: P(2), color: GRAY, rot: -Math.PI / 2 });
-    b.slope(9, 0.4, ENG_Z1 - 2.2, 3, 3.6, { h: P(3), color: GRAY, rot: -Math.PI / 2, inverted: true });
+    b.slope(s * 9, 6.8, ENG_Z1 - 2.2, 3, 3.6, { h: P(2), color: GRAY, rot: -Math.PI / 2 });
+    b.slope(s * 9, 0.4, ENG_Z1 - 2.2, 3, 3.6, { h: P(3), color: GRAY, rot: -Math.PI / 2, inverted: true });
     // panel ribs, kept below the red band so they read as plating not stripes
     for (let z = ENG_Z1 - 3.5; z > ENG_Z0 + 1; z -= 4.2) {
-      b.brick(ENG_HW - 0.1, 1.6, z, 0.5, 1.4, { h: P(11), color: GRAY, studs: false, free: true });
+      b.brick(s * (ENG_HW - 0.1), 1.6, z, 0.5, 1.4, { h: P(11), color: GRAY, studs: false, free: true });
     }
-    b.brick(ENG_HW - 0.05, 1.6, zc, 0.4, zd - 1.5, { h: P(1), color: C.red, finish: FINISH.SOLID, studs: false, free: true });
+    b.brick(s * (ENG_HW - 0.05), 1.6, zc, 0.4, zd - 1.5, { h: P(1), color: C.red, finish: FINISH.SOLID, studs: false, free: true });
   });
   // Roof plating, dishes, stub mast.
   for (let i = -2; i <= 2; i++) {
@@ -200,9 +200,9 @@ function engineBlock(bb) {
   }
   bb.cyl(0, 8.0, ENG_Z0 + 4.5, 0.75, P(3), { color: GRAY, seg: 10 });
   bb.bar(0, 8.0 + P(3) + 0.9, ENG_Z0 + 4.5, 0.1, 1.8, { color: C.flatSilver, finish: FINISH.METAL });
-  bb.mirrorX((b) => {
-    b.cyl(5.5, 8.0, ENG_Z0 + 4.5, 0.5, P(2), { color: DARK, seg: 10, stud: false });
-    b.sphere(5.5, 8.0 + P(2), ENG_Z0 + 4.5, 1.0, { color: C.veryLightGray, dome: true, seg: 10, rings: 4, sy: 0.45 });
+  sym(bb, (b, s) => {
+    b.cyl(s * 5.5, 8.0, ENG_Z0 + 4.5, 0.5, P(2), { color: DARK, seg: 10, stud: false });
+    b.sphere(s * 5.5, 8.0 + P(2), ENG_Z0 + 4.5, 1.0, { color: C.veryLightGray, dome: true, seg: 10, rings: 4, sy: 0.45 });
   });
 
   // Rear bulkhead + the eleven nozzles.
@@ -216,18 +216,18 @@ function engineBlock(bb) {
 }
 
 function underside(bb) {
-  bb.mirrorX((b) => {
-    b.tile(3, 0.0, -6, 4, 8, { color: DARK });
-    b.tile(2.5, 0.0, 3, 3, 8, { color: C.darkGray });
-    b.cyl(4.5, 0.4 - P(2), 7.5, 0.9, P(2), { color: C.flatSilver, finish: FINISH.METAL, seg: 10, stud: false });
+  sym(bb, (b, s) => {
+    b.tile(s * 3, 0.0, -6, 4, 8, { color: DARK });
+    b.tile(s * 2.5, 0.0, 3, 3, 8, { color: C.darkGray });
+    b.cyl(s * 4.5, 0.4 - P(2), 7.5, 0.9, P(2), { color: C.flatSilver, finish: FINISH.METAL, seg: 10, stud: false });
   });
   bb.tile(0, 1.6, HEAD_Z0 + 5, 7, 9, { color: DARK });
   bb.tile(0, 0.0, -1, 4, 10, { color: DARK });
   // Ventral comms array under the chin of the head.
   bb.brick(0, 1.2, HEAD_Z0 + 3.5, 5, 5, { h: P(1), color: C.darkGray, studs: false });
-  bb.mirrorX((b) => {
-    b.cyl(1.4, 0.9, HEAD_Z0 + 3.5, 0.7, P(1), { color: DARK, seg: 10, stud: false });
-    b.cyl(4.5, 0.4, -5, 0.55, P(2), { color: C.darkGray, seg: 8, stud: false });
+  sym(bb, (b, s) => {
+    b.cyl(s * 1.4, 0.9, HEAD_Z0 + 3.5, 0.7, P(1), { color: DARK, seg: 10, stud: false });
+    b.cyl(s * 4.5, 0.4, -5, 0.55, P(2), { color: C.darkGray, seg: 8, stud: false });
   });
   const belly = mulberry32(90210);
   greebleField(bb, belly, {

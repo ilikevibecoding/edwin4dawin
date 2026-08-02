@@ -84,9 +84,9 @@ export class Post {
     if (quality !== 'low') {
       this.bloom = new UnrealBloomPass(
         new THREE.Vector2(width, height),
-        quality === 'high' ? 0.62 : 0.5, // strength
-        0.72,                            // radius
-        0.72,                            // threshold
+        quality === 'high' ? 0.78 : 0.6, // strength
+        0.48,                            // radius
+        1.30,                            // threshold: only real light sources
       );
       this.composer.addPass(this.bloom);
     }

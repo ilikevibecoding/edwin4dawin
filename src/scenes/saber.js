@@ -17,7 +17,7 @@ export default {
   async build(ctx) {
     const root = new THREE.Group();
     setupScene(ctx, 'interior', {
-      background: 0x1a120c, envIntensity: 0.35, fog: [0x1a120c, 40, 200],
+      background: 0x1a120c, envIntensity: 0.19, fog: [0x1a120c, 40, 200],
       shadowSize: 34,
     });
 

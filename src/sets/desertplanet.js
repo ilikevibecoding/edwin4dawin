@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RNG } from '../engine/rng.js';
 import { canvasTexture } from '../lego/svg.js';
-import { num, fbm2, clamp, lerp } from './common.js';
+import { num, fbm2p, ctr, clamp, lerp } from './common.js';
 
 /*
  * The desert world the opening chase happens over.
@@ -14,14 +14,14 @@ import { num, fbm2, clamp, lerp } from './common.js';
  */
 
 const BANDS = [
-  [0.00, [238, 210, 168]],
-  [0.14, [204, 146, 82]],
-  [0.30, [232, 190, 132]],
-  [0.44, [188, 122, 64]],
-  [0.56, [240, 204, 152]],
-  [0.70, [196, 132, 70]],
-  [0.85, [226, 182, 122]],
-  [1.00, [234, 202, 158]],
+  [0.00, [222, 190, 146]],
+  [0.14, [190, 132, 72]],
+  [0.30, [216, 172, 114]],
+  [0.44, [174, 110, 56]],
+  [0.56, [224, 184, 128]],
+  [0.70, [182, 118, 60]],
+  [0.85, [210, 164, 106]],
+  [1.00, [218, 182, 134]],
 ];
 
 function bandColor(v) {
@@ -38,36 +38,47 @@ function bandColor(v) {
   ];
 }
 
-function surfaceTexture(seed) {
-  const W = 1024, H = 512;
+function surfaceTexture(seed, W, H) {
   return canvasTexture(W, H, (ctx) => {
     const img = ctx.createImageData(W, H);
     const d = img.data;
+    // Hoisted so the inner loop allocates nothing: at two million pixels the
+    // option objects cost more than the noise itself.
+    // Periods are lattice cells per full turn of longitude, so every band
+    // closes on itself at u = 1 and the map has no seam.
+    const O_WARP = { seed, octaves: 3, period: 4 };
+    const O_FINE = { seed: seed + 7, octaves: 3, period: 16 };
+    const O_STREAK = { seed: seed + 23, octaves: 3, period: 64 };
+    const O_MOTTLE = { seed: seed + 31, octaves: 3, period: 96 };
+    const O_DARK = { seed: seed + 53, octaves: 4, period: 5 };
+    const O_GRAIN = { seed: seed + 71, octaves: 2, period: 256 };
     for (let y = 0; y < H; y++) {
       const lat = y / (H - 1);
       for (let x = 0; x < W; x++) {
         const u = x / W;
         // Warp the band boundaries so they are not dead-straight lines.
-        const warp = (fbm2(u * 4, lat * 2.4, { seed, octaves: 3 }) - 0.5) * 0.19
-          + (fbm2(u * 17, lat * 9, { seed: seed + 7, octaves: 3 }) - 0.5) * 0.035;
+        const warp = (fbm2p(u, lat * 2.4, O_WARP) - 0.5) * 0.20
+          + (fbm2p(u, lat * 9, O_FINE) - 0.5) * 0.05;
         const lv = clamp(lat + warp, 0, 1);
         const [r, g, b] = bandColor(lv);
 
         // Wind-stretched streaks: high frequency in longitude, low in latitude.
-        const streak = fbm2(u * 62, lat * 9, { seed: seed + 23, octaves: 3 });
+        const streak = ctr(fbm2p(u, lat * 9, O_STREAK), 2.0);
         // Mottling: dust storms and cratered plains.
-        const m = fbm2(u * 44, lat * 26, { seed: seed + 31, octaves: 4 });
-        const k = (0.80 + m * 0.36) * (0.90 + streak * 0.2);
+        const m = ctr(fbm2p(u, lat * 48, O_MOTTLE), 1.9);
+        // Grain: the sand-blasted detail you only see when the camera is close.
+        const gr = ctr(fbm2p(u, lat * 128, O_GRAIN), 1.8);
+        const k = (0.86 + m * 0.26) * (0.92 + streak * 0.17) * (0.95 + gr * 0.11);
 
         // Dry sea basins and lava scars, painted straight into the albedo.
-        const dark = fbm2(u * 5 + 11, lat * 3 + 4, { seed: seed + 53, octaves: 4 });
+        const dark = ctr(fbm2p(u, lat * 3 + 4, O_DARK), 1.7);
         const dk = dark < 0.46 ? lerp(0.55, 1.0, dark / 0.46) : 1.0;
         const rock = dark < 0.46 ? (1 - dark / 0.46) * 0.62 : 0;
 
         const i = (y * W + x) * 4;
-        d[i] = clamp(lerp(r * k * dk, 118 * k, rock), 0, 255);
-        d[i + 1] = clamp(lerp(g * k * dk, 70 * k, rock), 0, 255);
-        d[i + 2] = clamp(lerp(b * k * dk, 44 * k, rock), 0, 255);
+        d[i] = clamp(lerp(r * k * dk, 122 * k, rock), 0, 255);
+        d[i + 1] = clamp(lerp(g * k * dk, 74 * k, rock), 0, 255);
+        d[i + 2] = clamp(lerp(b * k * dk, 46 * k, rock), 0, 255);
         d[i + 3] = 255;
       }
     }
@@ -89,7 +100,7 @@ function surfaceTexture(seed) {
     ctx.globalAlpha = 0.16;
     for (let i = 0; i < 14; i++) {
       const cx = r.range(0, W), cy = r.range(H * 0.16, H * 0.84);
-      const rx = r.range(30, 130), ry = rx * r.range(0.28, 0.6);
+      const rx = r.range(30, 130) * (W / 1024), ry = rx * r.range(0.28, 0.6);
       const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rx);
       g.addColorStop(0, 'rgba(120,74,40,0.9)');
       g.addColorStop(1, 'rgba(120,74,40,0)');
@@ -104,7 +115,7 @@ function surfaceTexture(seed) {
       ctx.restore();
     }
     ctx.globalAlpha = 1;
-  }, { key: 'dp_surf_' + seed });
+  }, { key: `dp_surf_${seed}_${W}` });
 }
 
 const RIM_VERT = /* glsl */`
@@ -145,10 +156,11 @@ export function buildDesertPlanet(opts = {}) {
     num(opts, 'sunx', -0.62), num(opts, 'suny', 0.42), num(opts, 'sunz', 0.52),
   ).normalize();
 
+  const texW = Math.round(num(opts, 'tex', 2048));
   const body = new THREE.Mesh(
     new THREE.SphereGeometry(R, 72, 44),
     new THREE.MeshStandardMaterial({
-      map: surfaceTexture(seed),
+      map: surfaceTexture(seed, texW, texW / 2),
       roughness: 0.96,
       metalness: 0.0,
     }),
@@ -178,15 +190,16 @@ export function buildDesertPlanet(opts = {}) {
   );
   group.add(haze);
 
-  // Outer rim: the thin cold-blue line that sells "atmosphere".
+  // Outer rim: the cold-blue halo that wraps the limb. Front-facing so it
+  // fades into the disc instead of drawing a hard ring around it.
   const rim = new THREE.Mesh(
-    new THREE.SphereGeometry(R * 1.035, 64, 40),
+    new THREE.SphereGeometry(R * 1.024, 64, 40),
     new THREE.ShaderMaterial({
       uniforms: {
-        uColor: { value: new THREE.Color(0xa8d4ff).convertSRGBToLinear() },
+        uColor: { value: new THREE.Color(0x9ec8ff).convertSRGBToLinear() },
         uSun: { value: sun.clone() },
-        uPower: { value: 3.8 },
-        uIntensity: { value: 2.4 },
+        uPower: { value: 5.0 },
+        uIntensity: { value: 1.9 },
       },
       vertexShader: RIM_VERT,
       fragmentShader: RIM_FRAG,

@@ -20,7 +20,7 @@ export default {
   async build(ctx) {
     const root = new THREE.Group();
     const rng = new RNG(2077);
-    setupScene(ctx, 'space', { background: 0x01030a, envIntensity: 0.45 });
+    setupScene(ctx, 'space', { background: 0x01030a, envIntensity: 0.25 });
 
     root.add(starfield({ count: 2200, radius: 4000, seed: 91, size: 3.0 }));
 

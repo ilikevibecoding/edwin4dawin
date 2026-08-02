@@ -3,6 +3,7 @@ import { Post } from './fx.js';
 import { ShotList } from './camera.js';
 import { clamp, ramp } from './util.js';
 import { whenPrintsReady } from '../lego/svg.js';
+import { EXPOSURE } from './lighting.js';
 
 /**
  * The film engine.
@@ -31,7 +32,7 @@ export class Film {
     renderer.setSize(width, height, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.08;
+    renderer.toneMappingExposure = EXPOSURE;
     renderer.shadowMap.enabled = quality !== 'low';
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.shadowMap.autoUpdate = true;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { register } from '../registry.js';
 import { BrickBuilder } from '../lego/brick.js';
-import { PLATE, BRICK, P, C } from './_util.js';
+import { sym, PLATE, BRICK, P, C } from './_util.js';
 
 /*
  * Quad laser turret. Bolted to the corvette's spine and to the ledges of the
@@ -32,9 +32,9 @@ export function quadTurret(opts = {}) {
   hb.brick(0, P(3), 0, 3, 3, { h: P(2), color: body, studs: false });
   hb.brick(0, P(5), -0.5, 2, 2, { h: BRICK, color: body });
   hb.tile(0, P(5) + BRICK, -0.5, 2, 1, { color: trim });
-  hb.mirrorX((b) => {
-    b.brick(1.25, P(5), 0.45, 1, 2, { h: BRICK, color: dark, studs: false });
-    b.cyl(1.55, P(5) + BRICK * 0.5, 0.45, 0.34, P(1), {
+  sym(hb, (b, s) => {
+    b.brick(s * 1.25, P(5), 0.45, 1, 2, { h: BRICK, color: dark, studs: false });
+    b.cyl(s * 1.55, P(5) + BRICK * 0.5, 0.45, 0.34, P(1), {
       axis: 'x', color: steel, finish: 'solid', seg: 8, stud: false,
     });
   });
