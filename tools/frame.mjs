@@ -31,11 +31,14 @@ try {
   process.stdout.write(`film ${dur.toFixed(1)}s, built in ${((Date.now() - t0) / 1000).toFixed(1)}s\n`);
   for (const c of chapters) process.stdout.write(`  ${c.id.padEnd(10)} ${c.start.toFixed(1).padStart(7)} +${c.dur.toFixed(1)}\n`);
 
+  let prev = 0;
   for (const t of times) {
     const p0 = Date.now();
-    // two passes: the first settles dt-dependent state, the second is the keeper
-    await page.evaluate((x) => window.__film.renderAt(Math.max(0, x - 1 / 30)), t);
+    // Run the chapter forward at the real frame rate first: effect pools are
+    // stateful, and a cold seek shows either none of them or all of them.
+    await page.evaluate(([a, b]) => window.__film.warm(a, b), [prev, Math.max(0, t - 1 / 30)]);
     await page.evaluate((x) => window.__film.renderAt(x), t);
+    prev = t;
     const file = out && times.length === 1 ? out : join(dir || '/tmp/frames', `t${t.toFixed(2).replace('.', '_')}.png`);
     mkdirSync(dirname(file), { recursive: true });
     await page.screenshot({ path: file });

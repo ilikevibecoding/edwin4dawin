@@ -31,7 +31,9 @@ const WORK = resolve(args.work || join(ROOT, 'render/segments'));
 const AUDIO = args.audio === '0' ? null
   : resolve(args.audio || (existsSync(join(ROOT, 'public/audio/master.wav'))
     ? join(ROOT, 'public/audio/master.wav') : join(ROOT, 'public/audio/master.mp3')));
-const WARMUP = +(args.warmup ?? 1.5);
+// Warm from the chapter's own start by default: __film.warm clamps the lower
+// bound to the chapter boundary, so 0 means "everything this chapter has done".
+const WARMUP = +(args.warmup ?? 0);
 
 mkdirSync(dirname(OUT), { recursive: true });
 mkdirSync(WORK, { recursive: true });
@@ -56,7 +58,8 @@ async function renderSegment(index, tStart, tEnd, onProgress) {
   try {
     await openFilm(page, port, { width: W, height: H, quality: QUALITY });
     // Warm simulation state so a mid-film segment matches a single-pass render.
-    await page.evaluate((a, b) => window.__film.warm(a, b, 1 / 30), Math.max(0, tStart - WARMUP), tStart);
+    await page.evaluate((a, b) => window.__film.warm(a, b, 1 / 30),
+      WARMUP > 0 ? Math.max(0, tStart - WARMUP) : 0, tStart);
 
     const total = Math.round((tEnd - tStart) * FPS);
     for (let i = 0; i < total; i++) {

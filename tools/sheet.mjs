@@ -43,10 +43,15 @@ try {
   process.stdout.write(`film ${duration.toFixed(1)}s -- ${times.length} frames every ${every}s\n`);
 
   const t0 = Date.now();
+  let prev = 0;
   for (let i = 0; i < times.length; i++) {
     const t = times[i];
-    await page.evaluate((x) => window.__film.renderAt(Math.max(0, x - 1 / 30)), t);
+    // Step the simulation at the real frame rate between samples. Without this
+    // the pooled effects never age: a sheet of the corridor firefight shows
+    // eighty blaster bolts hanging in the air at once.
+    await page.evaluate(([a, b]) => window.__film.warm(a, b), [prev, Math.max(0, t - 1 / 30)]);
     await page.evaluate((x) => window.__film.renderAt(x), t);
+    prev = t;
     await page.screenshot({ path: join(frames, `${String(i).padStart(3, '0')}_${t.toFixed(2)}.png`) });
     if (i % 10 === 9) {
       const per = (Date.now() - t0) / (i + 1) / 1000;

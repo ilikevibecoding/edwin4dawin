@@ -139,7 +139,9 @@ export function corridorSection(bb, zc, len = CORRIDOR.section, idx = 0) {
     bb.brick(s * (halfW + 0.12), 4.6 - (k % 2) * 0.45, zc - 3.2 + k * 0.45, 0.24, 0.3, {
       h: 0.3, ...F,
       color: [C.transRed, C.transGreen, C.transYellow, C.transLightBlue][(k + idx) % 4],
-      finish: FINISH.GLOW,
+      // Just under the bloom threshold: these are indicator lamps, and a pass
+      // close to the wall used to wash the whole shot in one of their colours.
+      finish: FINISH.GLOW, matOpts: { intensity: 1.15 },
     });
   }
   if (h < 0.5) {

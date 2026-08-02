@@ -25,41 +25,52 @@ export default {
     // --- interior half ----------------------------------------------------
     const interior = new THREE.Group();
     root.add(interior);
+    // The corridor kit is modelled from z = 0 back to z = -length, so it gets
+    // pushed forward to put the cast inside the set instead of out in space.
     const alcove = await tryMake('corridor', { length: 60, alcove: true }, { size: [20, 15, 60], color: C.lightBluishGray });
+    alcove.position.z = 30;
     interior.add(alcove);
 
     const leia = await tryMake('leia', {}, { size: [1.8, 5, 1], color: C.white });
-    leia.position.set(-1.6, 0, 4);
-    leia.rotation.y = Math.PI * 0.92;
+    leia.position.set(-1.0, 0, 4.0);
+    leia.rotation.y = Math.PI * 0.06;
     interior.add(leia);
 
     const r2 = await tryMake('r2', {}, { size: [2, 3.4, 2], color: C.white });
-    r2.position.set(2.2, 0, 3.2);
-    r2.rotation.y = -Math.PI * 0.42;
+    r2.position.set(0.9, 0, 8.6);
+    r2.rotation.y = Math.PI * 1.06;
     interior.add(r2);
 
     const threepio = await tryMake('c3po', {}, { size: [1.8, 5, 1], color: C.pearlGold });
-    threepio.position.set(5.6, 0, 6.6);
-    threepio.rotation.y = -Math.PI * 0.75;
+    threepio.position.set(-3.6, 0, 7.8);
+    threepio.rotation.y = Math.PI * 0.62;
     interior.add(threepio);
 
-    // hologram of the battle station plans, projected off R2's dome
+    // Hologram of the battle station plans: a wireframe sphere with an
+    // equatorial trench and the dish, so it reads as the thing they stole.
     const holoSource = new THREE.Group();
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(1.5, 0.06, 6, 40),
-      new THREE.MeshBasicMaterial({ color: 0x9fe0ff }),
-    );
-    ring.rotation.x = Math.PI / 2;
     const shell = new THREE.Mesh(
-      new THREE.SphereGeometry(1.35, 18, 12),
+      new THREE.SphereGeometry(1.15, 20, 14),
       new THREE.MeshBasicMaterial({ color: 0x74d8ff, wireframe: true }),
     );
-    const dish = new THREE.Mesh(
-      new THREE.SphereGeometry(0.42, 12, 8),
-      new THREE.MeshBasicMaterial({ color: 0x9fe0ff, wireframe: true }),
+    const trench = new THREE.Mesh(
+      new THREE.TorusGeometry(1.16, 0.05, 5, 44),
+      new THREE.MeshBasicMaterial({ color: 0xd8f4ff }),
     );
-    dish.position.set(-0.55, 0.6, 0.7);
-    holoSource.add(ring, shell, dish);
+    trench.rotation.x = Math.PI / 2;
+    const dish = new THREE.Mesh(
+      new THREE.SphereGeometry(0.34, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xd8f4ff, wireframe: true }),
+    );
+    dish.position.set(-0.42, 0.82, 0.55);
+    dish.rotation.set(-0.5, 0, -0.4);
+    // A survey grid sweeping the sphere sells it as a schematic, not a ball.
+    const grid = new THREE.Mesh(
+      new THREE.TorusGeometry(1.32, 0.02, 4, 40),
+      new THREE.MeshBasicMaterial({ color: 0x9fe0ff }),
+    );
+    grid.rotation.set(Math.PI / 2, 0, 0.5);
+    holoSource.add(shell, trench, dish, grid);
     const holo = makeHologram(holoSource, { color: 0x86dcff, scale: 1.0 });
     const holoNode = r2.userData?.nodes?.holoOrigin;
     const holoAnchor = new THREE.Group();
@@ -68,7 +79,7 @@ export default {
     interior.add(holoAnchor);
     holo.position.set(0, 2.4, 0);
     holoAnchor.add(holo);
-    const cone = projectorCone(1.5, 2.2, 0x74d8ff);
+    const cone = projectorCone(0.95, 1.9, 0x74d8ff);
     holoAnchor.add(cone);
     const holoLight = new THREE.PointLight(0x9fd0e8, 0, 22, 2);
     holoLight.position.set(0, 2.4, 0);
@@ -110,16 +121,18 @@ export default {
     const LAUNCH = m3 + 0.7;
 
     const shots = new ShotList();
-    shots.add({           // 1. over Leia's shoulder onto the droid
-      t: 0, dur: m2 - 0.6, fov: 36, ease: 'linear',
-      pos: [-6.4, 6.2, 10.5], to: [-5.2, 5.6, 9.0],
-      look: () => r2.position.clone().add(new THREE.Vector3(0, 2.6, 0)),
+    shots.add({           // 1. down the alcove: Leia, the droid and the plans
+      t: 0, dur: m2 - 0.6, fov: 40, ease: 'linear',
+      pos: [2.6, 5.4, -2.4], to: [2.1, 5.2, -0.6],
+      look: [-0.2, 3.4, 6.6],
       handheld: 0.3,
     });
-    shots.add({           // 2. on Leia, hologram light on her face
-      t: m2 - 0.6, dur: (CUT) - (m2 - 0.6), fov: 30, ease: 'inOutQuad',
-      pos: [5.0, 5.4, 8.6], to: [4.2, 5.2, 7.4],
-      look: () => leia.position.clone().add(new THREE.Vector3(0, 4.6, 0)),
+    shots.add({           // 2. reverse onto Leia's face for her last order.
+                          // High enough that R2 falls out of the bottom of
+                          // frame instead of masking her.
+      t: m2 - 0.6, dur: (CUT) - (m2 - 0.6), fov: 32, ease: 'inOutQuad',
+      pos: [3.4, 6.6, 11.6], to: [2.9, 6.3, 10.3],
+      look: () => leia.position.clone().add(new THREE.Vector3(0, 4.7, 0)),
       handheld: 0.28,
     });
     shots.add({           // 3. exterior: the pod drops away
@@ -149,20 +162,22 @@ export default {
 
         if (interiorOn) {
           // the plans go in
-          const load = clamp(ramp(t, m1 + 0.6, m1 + 3.2), 0, 1);
-          const on = clamp(ramp(t, m1 + 2.6, m1 + 4.4), 0, 1);
+          // The plans come up while the narrator describes them, then collapse
+          // back into the droid so the reverse onto Leia has a clean field.
+          const on = clamp(ramp(t, m1 + 1.4, m1 + 3.0), 0, 1)
+            * (1 - clamp(ramp(t, m2 - 1.6, m2 - 0.5), 0, 1));
           holo.visible = on > 0.01;
           cone.visible = on > 0.01;
-          cone.material.opacity = 0.07 * on;
+          cone.material.opacity = 0.09 * on;
           holoLight.intensity = 11 * on * (0.85 + Math.sin(t * 31) * 0.12);
-          holo.scale.setScalar(0.15 + 0.85 * ease.outBack(on));
+          holo.scale.setScalar(0.15 + 0.95 * ease.outBack(clamp(ramp(t, m1 + 1.4, m1 + 3.0), 0, 1)) * on);
           holo.rotation.y = t * 0.55;
           holo.userData.update?.(t, dt);
 
           const lf = leia.userData.fig;
           if (lf) {
             lf.setPose(t < m2 - 0.3 ? 'reach' : 'hold_right', 0.08);
-            lf.lookAt(r2.position.clone().setY(3.0), 0.8);
+            lf.lookAt(r2.position.clone().setY(3.2), 0.55);
             lf.update(dt, t);
           }
           r2.userData.spinDome?.(Math.sin(t * 1.1) * 0.5);

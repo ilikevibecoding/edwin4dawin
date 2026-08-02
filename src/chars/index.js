@@ -25,7 +25,8 @@ export { figGroup, setHeldPitch } from './util.js';
 
 register('vader', (opts) => buildVader(opts), {
   notes: 'Sith lord: brick helmet (dome + flared mask + vocoder grille), shoulder mantle, '
-    + 'cape 2.0x3.4, root scaled 1.08. userData.saber is a red Lightsaber.',
+    + 'cape 2.0x3.4, root scaled 1.08. userData.saber is a red Lightsaber, '
+    + 'sheathed unless opts.saber is given (0..1 extension).',
 });
 
 register('leia', (opts) => buildLeia(opts), {
@@ -76,6 +77,7 @@ register('rebelpilot', (opts) => buildRebelPilot(opts), {
 });
 
 register('crowd_troopers', (opts) => buildCrowdTroopers(opts), {
-  notes: 'N stormtroopers (default 8) in formation sharing helmet/blaster geometry and '
-    + 'prints. userData.marchAt(t) drives the synchronised march.',
+  notes: 'N stormtroopers (default 8, clamped to 22 = the 80k triangle budget) in formation, '
+    + 'sharing helmet/blaster geometry and prints. userData.marchAt(t) drives the '
+    + 'synchronised march; opts are { n, cols, spacing, speed }.',
 });
