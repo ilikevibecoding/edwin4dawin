@@ -154,16 +154,18 @@ export const FACE_PILOT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
 
 /** Obi-Wan the hermit: white beard, hooded eyes, weathered. */
 export const FACE_OBIWAN = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 256">
-  <!-- beard: jaw to jaw, past the chin, with sideburns up to the temples -->
+  <!-- Beard: jaw to jaw, past the chin, with sideburns up to the temples. The
+       greys are kept well off white; drawn near #e8e8e2 the studio rig clipped
+       the whole beard to one flat white blob and every strand disappeared. -->
   <path d="M192 62 L204 56 L206 120 Q206 168 226 196 Q256 224 286 196 Q306 168 306 120
-           L308 56 L320 62 L318 140 Q312 206 256 240 Q200 206 194 140 Z" fill="#e8e8e2"/>
+           L308 56 L320 62 L318 140 Q312 206 256 240 Q200 206 194 140 Z" fill="#cbcbc3"/>
   <path d="M206 118 Q206 166 226 194 Q256 220 286 194 Q306 166 306 118
-           Q286 136 256 136 Q226 136 206 118 Z" fill="#dededa"/>
+           Q286 136 256 136 Q226 136 206 118 Z" fill="#b4b4ac"/>
   <!-- moustache -->
-  <path d="M216 138 Q256 128 296 138 Q292 168 256 162 Q220 168 216 138 Z" fill="#f2f2ee"/>
-  <path d="M256 140 Q248 152 256 160" fill="none" stroke="#c9c9c2" stroke-width="3"/>
+  <path d="M216 138 Q256 128 296 138 Q292 168 256 162 Q220 168 216 138 Z" fill="#dcdcd4"/>
+  <path d="M256 140 Q248 152 256 160" fill="none" stroke="#9a9a92" stroke-width="3"/>
   <!-- beard strands -->
-  <g stroke="#c4c4bc" stroke-width="3" fill="none" opacity="0.9">
+  <g stroke="#94948c" stroke-width="3" fill="none">
     <path d="M228 176 Q234 202 244 220"/>
     <path d="M256 178 L256 228"/>
     <path d="M284 176 Q278 202 268 220"/>
@@ -171,9 +173,9 @@ export const FACE_OBIWAN = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
     <path d="M300 130 Q298 168 284 190"/>
   </g>
   <!-- mouth in the beard -->
-  <path d="M238 158 Q256 168 274 158 Q256 172 238 158 Z" fill="#5d4636"/>
+  <path d="M238 158 Q256 168 274 158 Q256 174 238 158 Z" fill="#4a3628"/>
   <!-- heavy brows -->
-  <g stroke="#dededa" stroke-width="10" stroke-linecap="round" fill="none">
+  <g stroke="#c0c0b8" stroke-width="10" stroke-linecap="round" fill="none">
     <path d="M204 76 Q224 66 246 74"/>
     <path d="M308 76 Q288 66 266 74"/>
   </g>
@@ -253,10 +255,8 @@ export const FACE_TROOPER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 
 /** Rebel fleet trooper: moustache, chin strap of the tall helmet. */
 export const FACE_REBEL = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 256">
-  <!-- helmet chin strap: side rails only, so it frames the face instead of
-       swallowing it -->
-  <path d="M188 16 L206 20 L204 178 L186 176 Z" fill="#6b757c"/>
-  <path d="M324 16 L306 20 L308 178 L326 176 Z" fill="#6b757c"/>
+  <!-- No painted chin strap: the helmet's dark tan cheek guards cover exactly
+       this band, and an earlier grey strap showed through as bright cheek pads. -->
   <g stroke="#4c3316" stroke-width="8" stroke-linecap="round" fill="none">
     <path d="M210 80 Q226 70 246 76"/>
     <path d="M302 80 Q286 70 266 76"/>
@@ -268,14 +268,15 @@ export const FACE_REBEL = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
   <g fill="#ffffff" opacity="0.9">
     <circle cx="228" cy="103" r="3.5"/><circle cx="292" cy="103" r="3.5"/>
   </g>
-  <path d="M253 126 Q246 140 257 146" fill="none" stroke="#c9a52c" stroke-width="4"/>
-  <!-- moustache: a flat bar under the nose, well clear of the mouth -->
-  <path d="M226 148 Q256 141 286 148 L286 160 Q256 154 226 160 Z" fill="#4c3316"/>
-  <!-- mouth -->
-  <path d="M234 176 L278 176 L276 183 L236 183 Z" fill="#7a3f2c"/>
-  <path d="M234 176 Q256 171 278 176" fill="none" stroke="#5a2c1c" stroke-width="2.5"/>
+  <path d="M253 124 Q245 140 257 148" fill="none" stroke="#c9a52c" stroke-width="4"/>
+  <!-- moustache: tapered wings dipping either side of the philtrum -->
+  <path d="M256 152 Q272 144 292 150 Q286 164 268 163 Q260 162 256 158
+           Q252 162 244 163 Q226 164 220 150 Q240 144 256 152 Z" fill="#4c3316"/>
+  <!-- mouth: a thin closed line, nothing that could read as bared teeth -->
+  <path d="M236 180 Q256 189 276 180" fill="none" stroke="#8a4a2e" stroke-width="4.5"
+        stroke-linecap="round"/>
   <!-- chin shading -->
-  <path d="M240 200 Q256 208 272 200" fill="none" stroke="#c9a52c" stroke-width="3"/>
+  <path d="M240 204 Q256 211 272 204" fill="none" stroke="#c9a52c" stroke-width="3"/>
 </svg>`;
 
 /** Imperial officer: stern, humourless. */
@@ -314,12 +315,12 @@ export const FACE_OFFICER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 export const FACE_C3PO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 256">
   <!-- face plate seam -->
   <path d="M192 0 L320 0 L326 120 Q302 216 256 246 Q210 216 186 120 Z"
-        fill="#e2c469" stroke="#8f7526" stroke-width="3"/>
+        fill="#c5a341" stroke="#675214" stroke-width="3"/>
   <!-- brow bar -->
-  <path d="M192 46 Q256 28 320 46 L316 72 Q256 56 196 72 Z" fill="#c9a949"
-        stroke="#8f7526" stroke-width="2.5"/>
+  <path d="M192 46 Q256 28 320 46 L316 72 Q256 56 196 72 Z" fill="#a3862a"
+        stroke="#675214" stroke-width="2.5"/>
   <!-- photoreceptor sockets -->
-  <g fill="#2b2415" stroke="#8f7526" stroke-width="3">
+  <g fill="#2b2415" stroke="#675214" stroke-width="3">
     <circle cx="220" cy="106" r="26"/>
     <circle cx="292" cy="106" r="26"/>
   </g>
@@ -331,21 +332,21 @@ export const FACE_C3PO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5
     <circle cx="215" cy="100" r="5"/><circle cx="287" cy="100" r="5"/>
   </g>
   <!-- nose plate -->
-  <path d="M247 128 L265 128 L269 168 L243 168 Z" fill="#c9a949" stroke="#8f7526" stroke-width="2"/>
+  <path d="M247 128 L265 128 L269 168 L243 168 Z" fill="#a3862a" stroke="#675214" stroke-width="2"/>
   <!-- mouth grille -->
   <path d="M222 174 L290 174 L284 208 L228 208 Z" fill="#2b2415"/>
-  <g stroke="#e2c469" stroke-width="4">
+  <g stroke="#c5a341" stroke-width="4">
     <path d="M231 180 L233 202"/><path d="M242 179 L243 203"/>
     <path d="M256 178 L256 204"/>
     <path d="M270 179 L269 203"/><path d="M281 180 L279 202"/>
   </g>
   <!-- cheek panel lines + rivets -->
-  <g fill="none" stroke="#8f7526" stroke-width="2.5">
+  <g fill="none" stroke="#675214" stroke-width="2.5">
     <path d="M196 78 Q200 150 222 196"/>
     <path d="M316 78 Q312 150 290 196"/>
     <path d="M236 218 Q256 230 276 218"/>
   </g>
-  <g fill="#8f7526">
+  <g fill="#675214">
     <circle cx="200" cy="90" r="4"/><circle cx="312" cy="90" r="4"/>
     <circle cx="204" cy="150" r="4"/><circle cx="308" cy="150" r="4"/>
   </g>
@@ -379,21 +380,28 @@ export const FACE_JAWA = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5
 // ---------------------------------------------------------------------------
 
 /** Vader: chest control box, shoulder armour, wide belt with boxes. */
+/*
+ * Vader is black-on-black, which means the print has to stay genuinely dark --
+ * an earlier pass drew the armour in #202d36..#39444c and the whole torso came
+ * back reading as a mid blue-grey vest next to his black legs. The plate tones
+ * now sit at or below C.black and only the seams, the control box and the belt
+ * buckle are allowed to climb into grey.
+ */
 export const TORSO_VADER_FRONT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 192">
   <!-- neck ring + armour collar -->
-  <rect x="0" y="0" width="128" height="192" fill="${BLACK}"/>
-  <path d="M40 0 L88 0 L88 12 Q64 22 40 12 Z" fill="#39444c"/>
-  <path d="M4 6 L36 0 L34 40 L2 52 Z" fill="#22303a" stroke="#3f4a52" stroke-width="1.6"/>
-  <path d="M124 6 L92 0 L94 40 L126 52 Z" fill="#22303a" stroke="#3f4a52" stroke-width="1.6"/>
+  <rect x="0" y="0" width="128" height="192" fill="#131d24"/>
+  <path d="M40 0 L88 0 L88 12 Q64 22 40 12 Z" fill="#2c383f"/>
+  <path d="M4 6 L36 0 L34 40 L2 52 Z" fill="#0f181e" stroke="#2b353d" stroke-width="1.6"/>
+  <path d="M124 6 L92 0 L94 40 L126 52 Z" fill="#0f181e" stroke="#2b353d" stroke-width="1.6"/>
   <!-- chest plate seam -->
-  <path d="M22 26 Q64 14 106 26 L104 96 L24 96 Z" fill="#202d36" stroke="#454f57" stroke-width="1.8"/>
+  <path d="M22 26 Q64 14 106 26 L104 96 L24 96 Z" fill="#18242c" stroke="#39444c" stroke-width="1.8"/>
   <!-- control box -->
-  <rect x="34" y="34" width="60" height="46" rx="4" fill="#2c383f" stroke="#69737a" stroke-width="2"/>
-  <rect x="38" y="38" width="52" height="16" rx="2" fill="#101820"/>
+  <rect x="34" y="34" width="60" height="46" rx="4" fill="#24303a" stroke="#78828a" stroke-width="2"/>
+  <rect x="38" y="38" width="52" height="16" rx="2" fill="#080d11"/>
   <g>
-    <rect x="41" y="41" width="9" height="10" fill="#c91a09"/>
-    <rect x="53" y="41" width="9" height="10" fill="#0055bf"/>
-    <rect x="65" y="41" width="9" height="10" fill="#4b9f4a"/>
+    <rect x="41" y="41" width="9" height="10" fill="#e02010"/>
+    <rect x="53" y="41" width="9" height="10" fill="#1668d8"/>
+    <rect x="65" y="41" width="9" height="10" fill="#5ab659"/>
     <rect x="77" y="41" width="9" height="10" fill="#f2cd37"/>
   </g>
   <g fill="${SILVER}">
@@ -401,36 +409,36 @@ export const TORSO_VADER_FRONT = `<svg xmlns="http://www.w3.org/2000/svg" viewBo
     <rect x="39" y="66" width="14" height="4"/>
     <rect x="69" y="58" width="20" height="4"/>
   </g>
-  <g fill="#c91a09"><circle cx="63" cy="68" r="3"/></g>
+  <g fill="#e02010"><circle cx="63" cy="68" r="3"/></g>
   <g fill="${LT_GRAY}"><circle cx="76" cy="68" r="3"/><circle cx="85" cy="68" r="3"/></g>
   <!-- ribbed abdomen -->
-  <g stroke="#3d474f" stroke-width="2.5" fill="none">
+  <g stroke="#2d3841" stroke-width="2.5" fill="none">
     <path d="M28 104 Q64 98 100 104"/>
     <path d="M28 114 Q64 108 100 114"/>
     <path d="M28 124 Q64 118 100 124"/>
     <path d="M28 134 Q64 128 100 134"/>
   </g>
   <!-- belt -->
-  <rect x="0" y="144" width="128" height="26" fill="#141f27" stroke="#3d474f" stroke-width="1.5"/>
-  <rect x="48" y="146" width="32" height="22" fill="#2c383f" stroke="${SILVER}" stroke-width="2"/>
+  <rect x="0" y="144" width="128" height="26" fill="#0c141a" stroke="#333e46" stroke-width="1.5"/>
+  <rect x="48" y="146" width="32" height="22" fill="#26313a" stroke="${SILVER}" stroke-width="2"/>
   <g fill="${SILVER}"><rect x="56" y="152" width="16" height="4"/><rect x="56" y="160" width="16" height="3"/></g>
-  <g fill="#39444c" stroke="#5c666e" stroke-width="1.4">
+  <g fill="#1d2830" stroke="#4d585f" stroke-width="1.4">
     <rect x="10" y="147" width="24" height="20" rx="2"/>
     <rect x="94" y="147" width="24" height="20" rx="2"/>
   </g>
-  <rect x="0" y="170" width="128" height="22" fill="#18242c"/>
+  <rect x="0" y="170" width="128" height="22" fill="#101a21"/>
 </svg>`;
 
 export const TORSO_VADER_BACK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 192">
-  <rect x="0" y="0" width="128" height="192" fill="${BLACK}"/>
-  <path d="M20 20 Q64 8 108 20 L104 140 L24 140 Z" fill="#202d36" stroke="#454f57" stroke-width="1.8"/>
-  <rect x="46" y="30" width="36" height="60" rx="3" fill="#2c383f" stroke="#5c666e" stroke-width="1.8"/>
-  <g stroke="#3d474f" stroke-width="2.5" fill="none">
+  <rect x="0" y="0" width="128" height="192" fill="#131d24"/>
+  <path d="M20 20 Q64 8 108 20 L104 140 L24 140 Z" fill="#18242c" stroke="#39444c" stroke-width="1.8"/>
+  <rect x="46" y="30" width="36" height="60" rx="3" fill="#222d36" stroke="#4d585f" stroke-width="1.8"/>
+  <g stroke="#2d3841" stroke-width="2.5" fill="none">
     <path d="M30 100 Q64 94 98 100"/><path d="M30 112 Q64 106 98 112"/>
     <path d="M30 124 Q64 118 98 124"/>
   </g>
-  <rect x="0" y="144" width="128" height="26" fill="#141f27" stroke="#3d474f" stroke-width="1.5"/>
-  <rect x="0" y="170" width="128" height="22" fill="#18242c"/>
+  <rect x="0" y="144" width="128" height="26" fill="#0c141a" stroke="#333e46" stroke-width="1.5"/>
+  <rect x="0" y="170" width="128" height="22" fill="#101a21"/>
 </svg>`;
 
 /** Leia: white senatorial gown, hood yoke, silver disc belt. */
@@ -664,39 +672,45 @@ export const TORSO_TROOPER_BACK = `<svg xmlns="http://www.w3.org/2000/svg" viewB
 </svg>`;
 
 /** Rebel fleet trooper: tan flak vest over the blue-grey uniform. */
+/*
+ * The vest was drawn in C.tan (#e4cd9e) and the studio rig pushed it to near
+ * white, so it read as a lab coat. It now sits a couple of stops down, in
+ * dark-tan territory, and keeps its contrast against the blue-grey uniform.
+ */
 export const TORSO_REBEL_FRONT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 192">
+  <!-- base is C.sandBlue exactly, so the printed shirt and the plain sleeves match -->
   <rect x="0" y="0" width="128" height="192" fill="#6074a1"/>
   <!-- collar -->
-  <path d="M38 0 L64 22 L90 0 L90 10 L64 34 L38 10 Z" fill="#4e6088"/>
+  <path d="M38 0 L64 22 L90 0 L90 10 L64 34 L38 10 Z" fill="#4a5c85"/>
   <!-- tan flak vest, open down the middle -->
-  <path d="M0 0 L44 10 L40 168 L0 168 Z" fill="#e4cd9e" stroke="#b09a68" stroke-width="2"/>
-  <path d="M128 0 L84 10 L88 168 L128 168 Z" fill="#e4cd9e" stroke="#b09a68" stroke-width="2"/>
-  <g stroke="#c3ad7c" stroke-width="2" fill="none">
+  <path d="M0 0 L44 10 L40 168 L0 168 Z" fill="#bda876" stroke="#8d7a4d" stroke-width="2"/>
+  <path d="M128 0 L84 10 L88 168 L128 168 Z" fill="#bda876" stroke="#8d7a4d" stroke-width="2"/>
+  <g stroke="#a08d5e" stroke-width="2" fill="none">
     <path d="M14 20 Q10 92 16 164"/>
     <path d="M114 20 Q118 92 112 164"/>
   </g>
   <!-- vest pockets -->
-  <g fill="#d6bd88" stroke="#a8925f" stroke-width="1.6">
+  <g fill="#ad975f" stroke="#7d6b41" stroke-width="1.6">
     <rect x="8" y="46" width="26" height="24" rx="2"/>
     <rect x="94" y="46" width="26" height="24" rx="2"/>
     <rect x="8" y="88" width="26" height="24" rx="2"/>
     <rect x="94" y="88" width="26" height="24" rx="2"/>
   </g>
-  <g stroke="#a8925f" stroke-width="1.6">
+  <g stroke="#7d6b41" stroke-width="1.6">
     <path d="M8 54 L34 54"/><path d="M94 54 L120 54"/>
     <path d="M8 96 L34 96"/><path d="M94 96 L120 96"/>
   </g>
   <!-- uniform placket + buttons -->
-  <path d="M64 30 L64 146" stroke="#4e6088" stroke-width="4"/>
-  <g fill="#3d4c6d"><circle cx="64" cy="52" r="3.4"/><circle cx="64" cy="76" r="3.4"/><circle cx="64" cy="100" r="3.4"/></g>
+  <path d="M64 30 L64 146" stroke="#4a5c85" stroke-width="4"/>
+  <g fill="#35446a"><circle cx="64" cy="52" r="3.4"/><circle cx="64" cy="76" r="3.4"/><circle cx="64" cy="100" r="3.4"/></g>
   <!-- belt -->
-  <rect x="0" y="146" width="128" height="24" fill="#3d2614" stroke="#241608" stroke-width="1.6"/>
-  <rect x="48" y="148" width="32" height="20" fill="${SILVER}" stroke="#6f737c" stroke-width="1.8"/>
-  <g fill="#2b1a0c">
+  <rect x="0" y="146" width="128" height="24" fill="#33200f" stroke="#1c1206" stroke-width="1.6"/>
+  <rect x="48" y="148" width="32" height="20" fill="#8e9199" stroke="#5f636b" stroke-width="1.8"/>
+  <g fill="#241608">
     <rect x="16" y="149" width="20" height="18" rx="2"/>
     <rect x="92" y="149" width="20" height="18" rx="2"/>
   </g>
-  <rect x="0" y="170" width="128" height="22" fill="#556a95"/>
+  <rect x="0" y="170" width="128" height="22" fill="#57699a"/>
 </svg>`;
 
 /** Imperial officer: olive-grey tunic, rank plaque, code cylinders. */
@@ -740,20 +754,20 @@ export const TORSO_OFFICER_FRONT = `<svg xmlns="http://www.w3.org/2000/svg" view
 
 /** C-3PO: gold plating with the exposed wiring at the midriff. */
 export const TORSO_C3PO_FRONT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 192">
-  <rect x="0" y="0" width="128" height="192" fill="#dcbe61"/>
+  <rect x="0" y="0" width="128" height="192" fill="#b8963a"/>
   <!-- neck collar ring -->
-  <path d="M36 0 L92 0 L92 14 Q64 24 36 14 Z" fill="#c9a949" stroke="#8f7526" stroke-width="1.8"/>
+  <path d="M36 0 L92 0 L92 14 Q64 24 36 14 Z" fill="#a3862a" stroke="#675214" stroke-width="1.8"/>
   <!-- shoulder plates -->
-  <path d="M0 0 L32 4 L28 46 L0 52 Z" fill="#e6ca75" stroke="#8f7526" stroke-width="1.8"/>
-  <path d="M128 0 L96 4 L100 46 L128 52 Z" fill="#e6ca75" stroke="#8f7526" stroke-width="1.8"/>
+  <path d="M0 0 L32 4 L28 46 L0 52 Z" fill="#cfae4a" stroke="#675214" stroke-width="1.8"/>
+  <path d="M128 0 L96 4 L100 46 L128 52 Z" fill="#cfae4a" stroke="#675214" stroke-width="1.8"/>
   <!-- chest plates -->
-  <path d="M26 18 Q64 32 102 18 L100 92 L28 92 Z" fill="#e2c469" stroke="#8f7526" stroke-width="2"/>
-  <path d="M64 30 L64 92" stroke="#8f7526" stroke-width="1.8"/>
-  <g fill="none" stroke="#8f7526" stroke-width="1.6">
+  <path d="M26 18 Q64 32 102 18 L100 92 L28 92 Z" fill="#c5a341" stroke="#675214" stroke-width="2"/>
+  <path d="M64 30 L64 92" stroke="#675214" stroke-width="1.8"/>
+  <g fill="none" stroke="#675214" stroke-width="1.6">
     <path d="M32 48 Q64 58 96 48"/>
     <path d="M34 70 Q64 80 94 70"/>
   </g>
-  <g fill="#a8862e">
+  <g fill="#7a6119">
     <circle cx="34" cy="26" r="3"/><circle cx="94" cy="26" r="3"/>
     <circle cx="34" cy="88" r="3"/><circle cx="94" cy="88" r="3"/>
   </g>
@@ -766,27 +780,27 @@ export const TORSO_C3PO_FRONT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox
     <path d="M72 100 Q84 122 74 136" stroke="#4b9f4a"/>
     <path d="M86 104 Q98 118 88 132" stroke="#a5a9b4"/>
   </g>
-  <g fill="#5c4a1c">
+  <g fill="#463710">
     <rect x="24" y="96" width="80" height="5"/>
     <rect x="24" y="135" width="80" height="5"/>
   </g>
   <!-- hip plate + pelvic panel -->
-  <rect x="0" y="142" width="128" height="26" fill="#d8b957" stroke="#8f7526" stroke-width="1.8"/>
-  <rect x="46" y="144" width="36" height="22" rx="2" fill="#c9a949" stroke="#8f7526" stroke-width="1.6"/>
-  <rect x="0" y="168" width="128" height="24" fill="#e2c469"/>
-  <path d="M40 168 L40 192" stroke="#8f7526" stroke-width="1.8"/>
-  <path d="M88 168 L88 192" stroke="#8f7526" stroke-width="1.8"/>
+  <rect x="0" y="142" width="128" height="26" fill="#b08f31" stroke="#675214" stroke-width="1.8"/>
+  <rect x="46" y="144" width="36" height="22" rx="2" fill="#a3862a" stroke="#675214" stroke-width="1.6"/>
+  <rect x="0" y="168" width="128" height="24" fill="#c5a341"/>
+  <path d="M40 168 L40 192" stroke="#675214" stroke-width="1.8"/>
+  <path d="M88 168 L88 192" stroke="#675214" stroke-width="1.8"/>
 </svg>`;
 
 export const TORSO_C3PO_BACK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 192">
-  <rect x="0" y="0" width="128" height="192" fill="#dcbe61"/>
-  <path d="M36 0 L92 0 L92 14 Q64 24 36 14 Z" fill="#c9a949" stroke="#8f7526" stroke-width="1.8"/>
-  <path d="M24 16 Q64 30 104 16 L102 100 L26 100 Z" fill="#e2c469" stroke="#8f7526" stroke-width="2"/>
-  <path d="M64 26 L64 100" stroke="#8f7526" stroke-width="1.8"/>
-  <rect x="30" y="104" width="68" height="36" rx="3" fill="#c9a949" stroke="#8f7526" stroke-width="1.8"/>
-  <g stroke="#8f7526" stroke-width="1.6"><path d="M30 116 L98 116"/><path d="M30 128 L98 128"/></g>
-  <rect x="0" y="142" width="128" height="26" fill="#d8b957" stroke="#8f7526" stroke-width="1.8"/>
-  <rect x="0" y="168" width="128" height="24" fill="#e2c469"/>
+  <rect x="0" y="0" width="128" height="192" fill="#b8963a"/>
+  <path d="M36 0 L92 0 L92 14 Q64 24 36 14 Z" fill="#a3862a" stroke="#675214" stroke-width="1.8"/>
+  <path d="M24 16 Q64 30 104 16 L102 100 L26 100 Z" fill="#c5a341" stroke="#675214" stroke-width="2"/>
+  <path d="M64 26 L64 100" stroke="#675214" stroke-width="1.8"/>
+  <rect x="30" y="104" width="68" height="36" rx="3" fill="#a3862a" stroke="#675214" stroke-width="1.8"/>
+  <g stroke="#675214" stroke-width="1.6"><path d="M30 116 L98 116"/><path d="M30 128 L98 128"/></g>
+  <rect x="0" y="142" width="128" height="26" fill="#b08f31" stroke="#675214" stroke-width="1.8"/>
+  <rect x="0" y="168" width="128" height="24" fill="#c5a341"/>
 </svg>`;
 
 /** Jawa: layered brown robe, bandolier of scavenged junk. */

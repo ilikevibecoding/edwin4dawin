@@ -1,51 +1,51 @@
 {
-  "provisional": true,
-  "duration": 331.682,
+  "generated": "2026-08-02T22:27:04.147Z",
+  "duration": 314.87,
   "chapters": [
     {
       "id": "title",
       "start": 0,
-      "dur": 51.132
+      "dur": 49.254
     },
     {
       "id": "chase",
-      "start": 51.132,
-      "dur": 35.591
+      "start": 49.254,
+      "dur": 32.616
     },
     {
       "id": "boarding",
-      "start": 86.723,
-      "dur": 41.373
+      "start": 81.87,
+      "dur": 37.497
     },
     {
       "id": "message",
-      "start": 128.095,
-      "dur": 29.277
+      "start": 119.367,
+      "dur": 27.121
     },
     {
       "id": "dunes",
-      "start": 157.373,
-      "dur": 23.723
+      "start": 146.488,
+      "dur": 23.747
     },
     {
       "id": "twinsuns",
-      "start": 181.095,
-      "dur": 32.223
+      "start": 170.235,
+      "dur": 28.734
     },
     {
       "id": "saber",
-      "start": 213.318,
-      "dur": 34.355
+      "start": 198.969,
+      "dur": 33.855
     },
     {
       "id": "trench",
-      "start": 247.673,
-      "dur": 54.827
+      "start": 232.824,
+      "dur": 53.477
     },
     {
       "id": "medals",
-      "start": 302.5,
-      "dur": 29.182
+      "start": 286.301,
+      "dur": 28.569
     }
   ],
   "lines": [
@@ -53,283 +53,666 @@
       "id": "t1",
       "ch": "title",
       "who": "narrator",
+      "text": "A long time ago, in a galaxy far, far away.",
       "start": 1.2,
-      "dur": 4.086,
-      "text": "A long time ago, in a galaxy far, far away."
+      "dur": 3.775
     },
     {
       "id": "t2",
       "ch": "title",
       "who": "narrator",
-      "start": 8.886,
-      "dur": 2.268,
-      "text": "Episode Four. A New Hope."
+      "text": "Episode Four. A New Hope.",
+      "start": 8.575,
+      "dur": 2.286
     },
     {
       "id": "t3",
       "ch": "title",
       "who": "narrator",
-      "start": 12.055,
-      "dur": 10.632,
-      "text": "War burns across the stars. From a hidden base among the outer worlds, a small rebel fleet has struck the first real blow against the Empire, and lived."
+      "text": "War burns across the stars. From a hidden base among the outer worlds, a small rebel fleet has struck the first real blow against the Empire, and lived.",
+      "start": 11.761,
+      "dur": 10.216
     },
     {
       "id": "t4",
       "ch": "title",
       "who": "narrator",
-      "start": 23.386,
-      "dur": 11.723,
-      "text": "Hidden in the memory of a stolen droid are the plans to the Empire's new battle station: a fortress the size of a moon, with power enough to end a world."
+      "text": "Hidden in the memory of a stolen droid are the plans to the Empire's new battle station: a fortress the size of a moon, with power enough to end a world.",
+      "start": 22.677,
+      "dur": 9.628
     },
     {
       "id": "t5",
       "ch": "title",
       "who": "narrator",
-      "start": 35.809,
-      "dur": 7.723,
-      "text": "Pursued by the Emperor's agents, Princess Leia runs for home, carrying the one secret that can still save her people."
+      "text": "Pursued by the Emperor's agents, Princess Leia runs for home, carrying the one secret that can still save her people.",
+      "start": 33.005,
+      "dur": 7.649
     },
     {
       "id": "c1",
       "ch": "chase",
       "who": "narrator",
-      "start": 52.532,
-      "dur": 5.177,
-      "text": "Above a forgotten desert world, a rebel corvette is running for its life."
+      "text": "Above a forgotten desert world, a rebel corvette is running for its life.",
+      "start": 50.654,
+      "dur": 4.493
     },
     {
       "id": "c2",
       "ch": "chase",
       "who": "narrator",
-      "start": 60.109,
-      "dur": 5.541,
-      "text": "And out of the dark behind it comes something the size of a city."
+      "text": "And out of the dark behind it comes something the size of a city.",
+      "start": 57.547,
+      "dur": 4.053
     },
     {
       "id": "c3",
       "ch": "chase",
       "who": "officer",
-      "start": 68.45,
-      "dur": 4.814,
-      "text": "Hull breach on deck four! They have us in a tractor beam!"
+      "text": "Hull breach on deck four! They have us in a tractor beam!",
+      "start": 64.4,
+      "dur": 2.77
     },
     {
       "id": "c4",
       "ch": "chase",
       "who": "narrator",
-      "start": 74.164,
-      "dur": 3.359,
-      "text": "Eleven thousand tonnes of consular ship, swallowed whole."
+      "text": "Eleven thousand tonnes of consular ship, swallowed whole.",
+      "start": 68.07,
+      "dur": 3.6
     },
     {
       "id": "b1",
       "ch": "boarding",
       "who": "narrator",
-      "start": 87.723,
-      "dur": 4.814,
-      "text": "The corridor goes very quiet. Then the doors come off their hinges."
+      "text": "The corridor goes very quiet. Then the doors come off their hinges.",
+      "start": 82.87,
+      "dur": 4.707
     },
     {
       "id": "b2",
       "ch": "boarding",
       "who": "narrator",
-      "start": 96.636,
-      "dur": 7.359,
-      "text": "And through the smoke walks the thing every soldier aboard had heard about, and hoped was only a rumour."
+      "text": "And through the smoke walks the thing every soldier aboard had heard about, and hoped was only a rumour.",
+      "start": 91.677,
+      "dur": 6.483
     },
     {
       "id": "b3",
       "ch": "boarding",
       "who": "vader",
-      "start": 106.395,
-      "dur": 5.177,
-      "text": "Where are the plans you intercepted? I will not ask a second time."
+      "text": "Where are the plans you intercepted? I will not ask a second time.",
+      "start": 100.56,
+      "dur": 3.435
     },
     {
       "id": "b4",
       "ch": "boarding",
       "who": "officer",
-      "start": 112.473,
-      "dur": 6.268,
-      "text": "This is a consular ship. We carry no transmissions, we are on a diplomatic mission to..."
+      "text": "This is a consular ship. We carry no transmissions, we are on a diplomatic mission to...",
+      "start": 104.895,
+      "dur": 4.377
     },
     {
       "id": "b5",
       "ch": "boarding",
       "who": "vader",
-      "start": 119.091,
-      "dur": 1.905,
-      "text": "Tear the ship apart."
+      "text": "Tear the ship apart.",
+      "start": 109.622,
+      "dur": 1.645
     },
     {
       "id": "m1",
       "ch": "message",
       "who": "narrator",
-      "start": 129.095,
-      "dur": 6.995,
-      "text": "But the plans are already gone, folded into the memory of one small astromech with a stubborn streak."
+      "text": "But the plans are already gone, folded into the memory of one small astromech with a stubborn streak.",
+      "start": 120.367,
+      "dur": 6.55
     },
     {
       "id": "m2",
       "ch": "message",
       "who": "leia",
-      "start": 138.391,
-      "dur": 6.268,
-      "text": "Find the old man on the desert world. Give him this. You are my only hope."
+      "text": "Find the old man on the desert world. Give him this. You are my only hope.",
+      "start": 129.217,
+      "dur": 3.852
     },
     {
       "id": "m3",
       "ch": "message",
       "who": "narrator",
-      "start": 147.559,
-      "dur": 4.814,
-      "text": "One escape pod, no life signs aboard. The gunners let it fall."
+      "text": "One escape pod, no life signs aboard. The gunners let it fall.",
+      "start": 135.969,
+      "dur": 4.519
     },
     {
       "id": "d1",
       "ch": "dunes",
       "who": "narrator",
-      "start": 158.573,
-      "dur": 4.45,
-      "text": "Two droids. A thousand kilometres of sand. And no plan whatsoever."
+      "text": "Two droids. A thousand kilometres of sand. And no plan whatsoever.",
+      "start": 147.688,
+      "dur": 5.377
     },
     {
       "id": "d2",
       "ch": "dunes",
       "who": "threepio",
-      "start": 165.023,
-      "dur": 5.177,
-      "text": "We are doomed. Do you hear me? Doomed. And I blame you entirely."
+      "text": "We are doomed. Do you hear me? Doomed. And I blame you entirely.",
+      "start": 155.065,
+      "dur": 3.558
     },
     {
       "id": "d3",
       "ch": "dunes",
       "who": "narrator",
-      "start": 173.1,
-      "dur": 2.995,
-      "text": "By dusk, a sandcrawler had them both."
+      "text": "By dusk, a sandcrawler had them both.",
+      "start": 161.523,
+      "dur": 2.712
     },
     {
       "id": "s1",
       "ch": "twinsuns",
       "who": "narrator",
-      "start": 182.695,
-      "dur": 9.541,
-      "text": "On a moisture farm at the edge of nowhere, a boy watches two suns go down, the way he has every evening of his life."
+      "text": "On a moisture farm at the edge of nowhere, a boy watches two suns go down, the way he has every evening of his life.",
+      "start": 171.835,
+      "dur": 7.835
     },
     {
       "id": "s2",
       "ch": "twinsuns",
       "who": "luke",
-      "start": 195.236,
-      "dur": 5.177,
-      "text": "There is a whole galaxy out there. And I am here, fixing evaporators."
+      "text": "There is a whole galaxy out there. And I am here, fixing evaporators.",
+      "start": 182.67,
+      "dur": 4.223
     },
     {
       "id": "s3",
       "ch": "twinsuns",
       "who": "narrator",
-      "start": 203.014,
-      "dur": 5.905,
-      "text": "He does not know it yet, but the war has already come looking for him."
+      "text": "He does not know it yet, but the war has already come looking for him.",
+      "start": 189.493,
+      "dur": 4.076
     },
     {
       "id": "k1",
       "ch": "saber",
       "who": "narrator",
-      "start": 214.518,
-      "dur": 5.905,
-      "text": "An old hermit in the hills. A locked chest. A weapon from a cleaner age."
+      "text": "An old hermit in the hills. A locked chest. A weapon from a cleaner age.",
+      "start": 200.169,
+      "dur": 5.713
     },
     {
       "id": "k2",
       "ch": "saber",
       "who": "obiwan",
-      "start": 222.623,
-      "dur": 6.268,
-      "text": "Your father's lightsaber. He would have wanted you to have it, when you were old enough."
+      "text": "Your father's lightsaber. He would have wanted you to have it, when you were old enough.",
+      "start": 208.082,
+      "dur": 5.855
     },
     {
       "id": "k3",
       "ch": "saber",
       "who": "obiwan",
-      "start": 231.291,
-      "dur": 8.086,
-      "text": "The Force surrounds us. It binds the galaxy together. Learn to listen, and it will tell you what your eyes cannot."
+      "text": "The Force surrounds us. It binds the galaxy together. Learn to listen, and it will tell you what your eyes cannot.",
+      "start": 216.337,
+      "dur": 8.21
     },
     {
       "id": "k4",
       "ch": "saber",
       "who": "luke",
-      "start": 240.477,
-      "dur": 2.995,
-      "text": "Then teach me. I want to learn."
+      "text": "Then teach me. I want to learn.",
+      "start": 225.647,
+      "dur": 1.977
     },
     {
       "id": "r1",
       "ch": "trench",
       "who": "narrator",
-      "start": 248.673,
-      "dur": 2.268,
-      "text": "Thirty pilots against a moon."
+      "text": "Thirty pilots against a moon.",
+      "start": 233.824,
+      "dur": 2.002
     },
     {
       "id": "r2",
       "ch": "trench",
       "who": "narrator",
-      "start": 251.841,
-      "dur": 7.359,
-      "text": "The trench is two metres wide and eleven kilometres long, and every gun on that station is watching it."
+      "text": "The trench is two metres wide and eleven kilometres long, and every gun on that station is watching it.",
+      "start": 236.726,
+      "dur": 6.709
     },
     {
       "id": "r3",
       "ch": "trench",
       "who": "pilot",
-      "start": 261.4,
-      "dur": 4.086,
-      "text": "Red Five, standing by. Cutting in now, stay on me."
+      "text": "Red Five, standing by. Cutting in now, stay on me.",
+      "start": 245.635,
+      "dur": 3.244
     },
     {
       "id": "r4",
       "ch": "trench",
       "who": "vader",
-      "start": 269.086,
-      "dur": 4.45,
-      "text": "The Force is strong with this one. I have you now."
+      "text": "The Force is strong with this one. I have you now.",
+      "start": 252.479,
+      "dur": 2.837
     },
     {
       "id": "r5",
       "ch": "trench",
       "who": "ghost",
-      "start": 276.536,
-      "dur": 1.905,
-      "text": "Let go. Trust yourself."
+      "text": "Let go. Trust yourself.",
+      "start": 258.316,
+      "dur": 2.631
     },
     {
       "id": "r6",
       "ch": "trench",
       "who": "narrator",
-      "start": 280.741,
-      "dur": 3.359,
-      "text": "He switched off the targeting computer. And fired."
+      "text": "He switched off the targeting computer. And fired.",
+      "start": 263.247,
+      "dur": 3.654
     },
     {
       "id": "f1",
       "ch": "medals",
       "who": "narrator",
-      "start": 305.5,
-      "dur": 4.814,
-      "text": "The battle station burns. The war is not over. Not by years."
+      "text": "The battle station burns. The war is not over. Not by years.",
+      "start": 289.301,
+      "dur": 4.713
     },
     {
       "id": "f2",
       "ch": "medals",
       "who": "narrator",
-      "start": 312.414,
-      "dur": 10.268,
-      "text": "But tonight, in a hall of white stone, a farm boy, a smuggler and a princess stand in the light, and the galaxy remembers how to hope."
+      "text": "But tonight, in a hall of white stone, a farm boy, a smuggler and a princess stand in the light, and the galaxy remembers how to hope.",
+      "start": 296.114,
+      "dur": 8.756
     }
   ],
-  "sfx": [],
-  "music": []
+  "sfx": [
+    {
+      "cue": "hall_ambience",
+      "start": 0,
+      "dur": 6,
+      "loop": true
+    },
+    {
+      "cue": "engine_rumble",
+      "start": 49.25,
+      "dur": 32.62,
+      "loop": true
+    },
+    {
+      "cue": "engine_pass",
+      "start": 55.55
+    },
+    {
+      "cue": "laser_turbolaser",
+      "start": 59.15
+    },
+    {
+      "cue": "laser_turbolaser",
+      "start": 60.45
+    },
+    {
+      "cue": "explosion_small",
+      "start": 61.15
+    },
+    {
+      "cue": "alarm_klaxon",
+      "start": 63.5,
+      "dur": 9,
+      "loop": true
+    },
+    {
+      "cue": "explosion_small",
+      "start": 65.6
+    },
+    {
+      "cue": "laser_turbolaser",
+      "start": 66.5
+    },
+    {
+      "cue": "blaster_impact",
+      "start": 67.4
+    },
+    {
+      "cue": "hyperspace_jump",
+      "start": 68.67
+    },
+    {
+      "cue": "alarm_klaxon",
+      "start": 81.87,
+      "dur": 14,
+      "loop": true
+    },
+    {
+      "cue": "door_slam",
+      "start": 87.88
+    },
+    {
+      "cue": "explosion_small",
+      "start": 87.92
+    },
+    {
+      "cue": "door_hiss",
+      "start": 88.48
+    },
+    {
+      "cue": "blaster_b",
+      "start": 89.13
+    },
+    {
+      "cue": "blaster_a",
+      "start": 89.36
+    },
+    {
+      "cue": "blaster_rebel",
+      "start": 89.6
+    },
+    {
+      "cue": "blaster_a",
+      "start": 89.89
+    },
+    {
+      "cue": "blaster_b",
+      "start": 90.08
+    },
+    {
+      "cue": "blaster_rebel",
+      "start": 90.4
+    },
+    {
+      "cue": "blaster_b",
+      "start": 90.72
+    },
+    {
+      "cue": "blaster_a",
+      "start": 90.98
+    },
+    {
+      "cue": "blaster_rebel",
+      "start": 91.3
+    },
+    {
+      "cue": "blaster_a",
+      "start": 91.63
+    },
+    {
+      "cue": "blaster_b",
+      "start": 91.98
+    },
+    {
+      "cue": "blaster_rebel",
+      "start": 92.28
+    },
+    {
+      "cue": "blaster_b",
+      "start": 92.63
+    },
+    {
+      "cue": "blaster_a",
+      "start": 93.08
+    },
+    {
+      "cue": "blaster_rebel",
+      "start": 93.48
+    },
+    {
+      "cue": "vader_breath_loop",
+      "start": 90.48,
+      "dur": 28.89,
+      "loop": true
+    },
+    {
+      "cue": "console_beep",
+      "start": 100.06
+    },
+    {
+      "cue": "door_hiss",
+      "start": 110.92
+    },
+    {
+      "cue": "console_beep",
+      "start": 119.87
+    },
+    {
+      "cue": "holo_shimmer",
+      "start": 122.57
+    },
+    {
+      "cue": "r2_beep_a",
+      "start": 123.37
+    },
+    {
+      "cue": "r2_worried",
+      "start": 133.32
+    },
+    {
+      "cue": "door_hiss",
+      "start": 134.47
+    },
+    {
+      "cue": "engine_pass",
+      "start": 136.67
+    },
+    {
+      "cue": "engine_rumble",
+      "start": 137.07,
+      "dur": 9.42,
+      "loop": true
+    },
+    {
+      "cue": "wind_desert",
+      "start": 146.49,
+      "dur": 23.75,
+      "loop": true
+    },
+    {
+      "cue": "r2_beep_c",
+      "start": 149.69
+    },
+    {
+      "cue": "r2_alarm",
+      "start": 158.92
+    },
+    {
+      "cue": "sandcrawler_treads",
+      "start": 159.92,
+      "dur": 10.31,
+      "loop": true
+    },
+    {
+      "cue": "wind_desert",
+      "start": 170.24,
+      "dur": 28.73,
+      "loop": true
+    },
+    {
+      "cue": "hall_ambience",
+      "start": 198.97,
+      "dur": 33.85,
+      "loop": true
+    },
+    {
+      "cue": "console_beep",
+      "start": 209.08
+    },
+    {
+      "cue": "saber_on",
+      "start": 211.88
+    },
+    {
+      "cue": "saber_hum",
+      "start": 212.98,
+      "dur": 19.84,
+      "loop": true
+    },
+    {
+      "cue": "saber_swing",
+      "start": 219.54
+    },
+    {
+      "cue": "engine_rumble",
+      "start": 232.82,
+      "dur": 53.48,
+      "loop": true
+    },
+    {
+      "cue": "engine_pass",
+      "start": 237.73
+    },
+    {
+      "cue": "tie_scream",
+      "start": 246.83
+    },
+    {
+      "cue": "blaster_rebel",
+      "start": 248.48
+    },
+    {
+      "cue": "blaster_a",
+      "start": 249.18
+    },
+    {
+      "cue": "blaster_rebel",
+      "start": 249.98
+    },
+    {
+      "cue": "blaster_a",
+      "start": 250.88
+    },
+    {
+      "cue": "blaster_rebel",
+      "start": 251.58
+    },
+    {
+      "cue": "blaster_a",
+      "start": 252.68
+    },
+    {
+      "cue": "blaster_rebel",
+      "start": 253.48
+    },
+    {
+      "cue": "blaster_a",
+      "start": 254.58
+    },
+    {
+      "cue": "blaster_rebel",
+      "start": 255.68
+    },
+    {
+      "cue": "blaster_a",
+      "start": 256.48
+    },
+    {
+      "cue": "blaster_rebel",
+      "start": 257.88
+    },
+    {
+      "cue": "blaster_a",
+      "start": 258.68
+    },
+    {
+      "cue": "tie_scream",
+      "start": 250.48
+    },
+    {
+      "cue": "explosion_small",
+      "start": 254.88
+    },
+    {
+      "cue": "tie_scream",
+      "start": 257.48
+    },
+    {
+      "cue": "console_beep",
+      "start": 259.72
+    },
+    {
+      "cue": "blaster_rebel",
+      "start": 267.1
+    },
+    {
+      "cue": "explosion_big",
+      "start": 268.2
+    },
+    {
+      "cue": "explosion_massive",
+      "start": 269.8
+    },
+    {
+      "cue": "hall_ambience",
+      "start": 286.3,
+      "dur": 28.57,
+      "loop": true
+    },
+    {
+      "cue": "crowd_cheer",
+      "start": 298.51
+    },
+    {
+      "cue": "r2_happy",
+      "start": 300.11
+    }
+  ],
+  "music": [
+    {
+      "cue": "main_fanfare",
+      "start": 5.6,
+      "dur": 23
+    },
+    {
+      "cue": "hope_theme",
+      "start": 26,
+      "dur": 24.45
+    },
+    {
+      "cue": "chase",
+      "start": 49.65,
+      "dur": 33.42
+    },
+    {
+      "cue": "imperial_menace",
+      "start": 82.87,
+      "dur": 36
+    },
+    {
+      "cue": "mystic",
+      "start": 119.87,
+      "dur": 27
+    },
+    {
+      "cue": "desert_wander",
+      "start": 146.79,
+      "dur": 24.65
+    },
+    {
+      "cue": "binary_sunset",
+      "start": 171.24,
+      "dur": 28.93
+    },
+    {
+      "cue": "mystic",
+      "start": 199.47,
+      "dur": 27
+    },
+    {
+      "cue": "hope_theme",
+      "start": 218.97,
+      "dur": 15.05
+    },
+    {
+      "cue": "battle",
+      "start": 233.32,
+      "dur": 52
+    },
+    {
+      "cue": "triumph",
+      "start": 286.9,
+      "dur": 29.17
+    }
+  ]
 }

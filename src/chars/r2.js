@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { BrickBuilder } from '../lego/brick.js';
 import { C, FINISH } from '../lego/palette.js';
-import { glow } from '../lego/materials.js';
+import { mat } from '../lego/materials.js';
 import { cylGeo } from '../lego/parts.js';
-import { num } from './util.js';
+import { num, softenGloss } from './util.js';
 
 /*
  * R2-D2. Not a minifig: a brick-built astromech about 3.3 studs tall (R2 is
@@ -123,22 +123,32 @@ export function buildR2(opts = {}) {
 
   const bb = builder();
   buildBody(bb);
-  group.add(bb.build());
+  group.add(softenGloss(bb.build(), { clearcoat: 0.2, clearcoatRoughness: 0.35, roughness: 0.5 }));
 
   const domePivot = new THREE.Group();
   domePivot.position.y = BODY_Y1 - 0.04;
   const db = builder();
   buildDome(db);
-  domePivot.add(db.build());
+  domePivot.add(softenGloss(db.build(), { clearcoat: 0.2, clearcoatRoughness: 0.35, roughness: 0.5 }));
 
-  // the eye keeps its own material so it can flicker
-  const lensMat = glow(C.transLightBlue, 0.9).clone();
-  const lens = new THREE.Mesh(cylGeo(0.155, 0.155, 0.05, 14), lensMat);
+  // The eye keeps its own material so it can flicker. The lens itself is opaque
+  // rather than additive: additive on top of an already-lit white dome bleached
+  // the whole front of the head, and only a small hot core is allowed to bloom.
+  const lensMat = mat(C.transLightBlue, FINISH.GLOW, {
+    intensity: 0.8, blending: THREE.NormalBlending, side: THREE.FrontSide,
+  }).clone();
+  const lens = new THREE.Mesh(cylGeo(0.15, 0.15, 0.05, 14), lensMat);
   lens.rotation.x = Math.PI / 2;
-  lens.position.set(0, 0.30, 0.80);
+  lens.position.set(0, 0.30, 0.785);
   domePivot.add(lens);
-  const eyeLight = new THREE.PointLight(C.transLightBlue, 1.4, 3.0, 2);
-  eyeLight.position.set(0, 0.30, 1.05);
+  const core = new THREE.Mesh(cylGeo(0.055, 0.055, 0.04, 10), mat(C.transLightBlue, FINISH.GLOW, {
+    intensity: 2.2, blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  core.rotation.x = Math.PI / 2;
+  core.position.set(0, 0.30, 0.80);
+  domePivot.add(core);
+  const eyeLight = new THREE.PointLight(C.transLightBlue, 0.18, 1.1, 2);
+  eyeLight.position.set(0, 0.30, 0.95);
   domePivot.add(eyeLight);
 
   const holoOrigin = new THREE.Object3D();
@@ -162,8 +172,8 @@ export function buildR2(opts = {}) {
     domePivot.position.y = baseY + Math.sin(t * 1.7) * 0.022;
     if (!manual) domePivot.rotation.y = Math.sin(t * 0.42) * 0.55 + Math.sin(t * 1.13) * 0.12;
     const f = 0.62 + 0.3 * Math.abs(Math.sin(t * 5.3)) + 0.08 * Math.sin(t * 23.1);
-    lensMat.opacity = THREE.MathUtils.clamp(f, 0.25, 1);
-    eyeLight.intensity = 0.7 + f * 1.6;
+    core.scale.setScalar(THREE.MathUtils.clamp(f, 0.3, 1.1));
+    eyeLight.intensity = 0.08 + f * 0.18;
   };
   group.userData.update(0);
   return group;

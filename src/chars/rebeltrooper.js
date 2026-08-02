@@ -18,7 +18,7 @@ export function buildRebelTrooper(opts = {}) {
     torso: C.sandBlue,
     arms: C.sandBlue,
     hands: C.yellow,
-    hips: C.darkBrown,
+    hips: C.sandBlue,
     legs: C.sandBlue,
     boots: C.darkBrown,
     collar: C.darkTan,

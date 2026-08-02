@@ -104,7 +104,7 @@ export default {
     // 3. low, tilting up as he steps through
     shots.add({
       t: VADER_IN - 1.4, dur: (b3 - 0.6) - (VADER_IN - 1.4), fov: 40, ease: 'outCubic',
-      pos: [0.8, 1.5, -8], to: [0.4, 2.6, -1],
+      pos: [1.0, 2.4, 6], to: [0.6, 3.4, 12],
       look: () => vader.position.clone().add(new THREE.Vector3(0, 3.0, 0)),
       lookTo: () => vader.position.clone().add(new THREE.Vector3(0, 5.4, 0)),
       handheld: 0.28,
@@ -112,7 +112,7 @@ export default {
     // 4. over-shoulder on the officer as Vader closes
     shots.add({
       t: b3 - 0.6, dur: (LIFT) - (b3 - 0.6), fov: 34, ease: 'linear',
-      pos: [4.6, 5.6, -2.0], to: [4.2, 5.7, -3.2],
+      pos: [5.4, 5.6, -3.0], to: [4.8, 5.7, -4.6],
       look: () => vader.position.clone().add(new THREE.Vector3(0, 4.6, 0)),
       handheld: 0.3,
     });
@@ -126,7 +126,7 @@ export default {
     // 6. push in on the mask
     shots.add({
       t: b5 - 0.5, dur: ctx.dur - (b5 - 0.5), fov: 30, ease: 'outQuad',
-      pos: [0.9, 5.9, -6.2], to: [0.5, 5.85, -8.6],
+      pos: [0.9, 5.9, -7.6], to: [0.5, 5.85, -10.0],
       look: () => vader.position.clone().add(new THREE.Vector3(0, 5.2, 0)),
       handheld: 0.22,
     });
@@ -217,7 +217,7 @@ export default {
 
         // Vader walks in
         const vin = clamp(ramp(t, VADER_IN, VADER_IN + 5.2), 0, 1);
-        vader.position.z = lerp(-CORRIDOR_LEN * 0.45, -10.5, ease.inOutQuad(vin));
+        vader.position.z = lerp(-CORRIDOR_LEN * 0.45, -14, ease.inOutQuad(vin));
         vader.rotation.y = Math.PI;
         if (vaderFig) {
           if (vin > 0.01 && vin < 0.99) vaderFig.walk(dt, 0.72);

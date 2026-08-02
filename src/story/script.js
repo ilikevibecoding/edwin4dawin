@@ -11,7 +11,7 @@
 
 export const VOICES = {
   narrator: { voice: 'en_GB-alan-medium', rate: 1.0, pitch: -1.5, reverb: 0.22, gain: 1.0 },
-  vader: { voice: 'en_US-ryan-high', rate: 0.82, pitch: -7.5, reverb: 0.3, gain: 1.05, breath: true, growl: true },
+  vader: { voice: 'en_US-ryan-high', rate: 0.88, pitch: -4.5, reverb: 0.3, gain: 1.05, breath: true, growl: true },
   leia: { voice: 'en_GB-jenny_dioco-medium', rate: 1.02, pitch: 1.0, reverb: 0.16, gain: 1.0 },
   luke: { voice: 'en_US-joe-medium', rate: 1.0, pitch: 2.0, reverb: 0.14, gain: 1.0 },
   obiwan: { voice: 'en_GB-alan-medium', rate: 0.9, pitch: -3.0, reverb: 0.26, gain: 1.0 },

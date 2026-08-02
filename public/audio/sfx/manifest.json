@@ -1,0 +1,187 @@
+{
+  "blaster_a": {
+    "file": "sfx/blaster_a.wav",
+    "dur": 0.34,
+    "peak": 0.705
+  },
+  "blaster_b": {
+    "file": "sfx/blaster_b.wav",
+    "dur": 0.34,
+    "peak": 0.705
+  },
+  "blaster_rebel": {
+    "file": "sfx/blaster_rebel.wav",
+    "dur": 0.34,
+    "peak": 0.705
+  },
+  "laser_turbolaser": {
+    "file": "sfx/laser_turbolaser.wav",
+    "dur": 1.5,
+    "peak": 0.705
+  },
+  "blaster_impact": {
+    "file": "sfx/blaster_impact.wav",
+    "dur": 0.5,
+    "peak": 0.705
+  },
+  "ricochet": {
+    "file": "sfx/ricochet.wav",
+    "dur": 0.42,
+    "peak": 0.705
+  },
+  "explosion_small": {
+    "file": "sfx/explosion_small.wav",
+    "dur": 1.5,
+    "peak": 0.705
+  },
+  "explosion_big": {
+    "file": "sfx/explosion_big.wav",
+    "dur": 3,
+    "peak": 0.705
+  },
+  "explosion_massive": {
+    "file": "sfx/explosion_massive.wav",
+    "dur": 6.5,
+    "peak": 0.705
+  },
+  "saber_hum": {
+    "file": "sfx/saber_hum.wav",
+    "dur": 3.65,
+    "peak": 0.497
+  },
+  "saber_on": {
+    "file": "sfx/saber_on.wav",
+    "dur": 1.4,
+    "peak": 0.681
+  },
+  "saber_off": {
+    "file": "sfx/saber_off.wav",
+    "dur": 0.9,
+    "peak": 0.705
+  },
+  "saber_swing": {
+    "file": "sfx/saber_swing.wav",
+    "dur": 0.85,
+    "peak": 0.655
+  },
+  "tie_scream": {
+    "file": "sfx/tie_scream.wav",
+    "dur": 2.4,
+    "peak": 0.705
+  },
+  "engine_rumble": {
+    "file": "sfx/engine_rumble.wav",
+    "dur": 5.2,
+    "peak": 0.493
+  },
+  "engine_pass": {
+    "file": "sfx/engine_pass.wav",
+    "dur": 3.2,
+    "peak": 0.705
+  },
+  "hyperspace_jump": {
+    "file": "sfx/hyperspace_jump.wav",
+    "dur": 3,
+    "peak": 0.705
+  },
+  "vader_breath_in": {
+    "file": "sfx/vader_breath_in.wav",
+    "dur": 1.5,
+    "peak": 0.61
+  },
+  "vader_breath_out": {
+    "file": "sfx/vader_breath_out.wav",
+    "dur": 1.8,
+    "peak": 0.573
+  },
+  "vader_breath_loop": {
+    "file": "sfx/vader_breath_loop.wav",
+    "dur": 4.35,
+    "peak": 0.546
+  },
+  "r2_beep_a": {
+    "file": "sfx/r2_beep_a.wav",
+    "dur": 0.48,
+    "peak": 0.705
+  },
+  "r2_beep_b": {
+    "file": "sfx/r2_beep_b.wav",
+    "dur": 0.495,
+    "peak": 0.705
+  },
+  "r2_beep_c": {
+    "file": "sfx/r2_beep_c.wav",
+    "dur": 0.48,
+    "peak": 0.705
+  },
+  "r2_beep_d": {
+    "file": "sfx/r2_beep_d.wav",
+    "dur": 0.54,
+    "peak": 0.705
+  },
+  "r2_beep_e": {
+    "file": "sfx/r2_beep_e.wav",
+    "dur": 0.42,
+    "peak": 0.705
+  },
+  "r2_worried": {
+    "file": "sfx/r2_worried.wav",
+    "dur": 0.78,
+    "peak": 0.705
+  },
+  "r2_happy": {
+    "file": "sfx/r2_happy.wav",
+    "dur": 0.51,
+    "peak": 0.705
+  },
+  "r2_alarm": {
+    "file": "sfx/r2_alarm.wav",
+    "dur": 0.6,
+    "peak": 0.705
+  },
+  "door_hiss": {
+    "file": "sfx/door_hiss.wav",
+    "dur": 1.1,
+    "peak": 0.598
+  },
+  "door_slam": {
+    "file": "sfx/door_slam.wav",
+    "dur": 1.4,
+    "peak": 0.705
+  },
+  "alarm_klaxon": {
+    "file": "sfx/alarm_klaxon.wav",
+    "dur": 3.8,
+    "peak": 0.61
+  },
+  "console_beep": {
+    "file": "sfx/console_beep.wav",
+    "dur": 0.23,
+    "peak": 0.497
+  },
+  "holo_shimmer": {
+    "file": "sfx/holo_shimmer.wav",
+    "dur": 2.2,
+    "peak": 0.459
+  },
+  "wind_desert": {
+    "file": "sfx/wind_desert.wav",
+    "dur": 8.8,
+    "peak": 0.395
+  },
+  "sandcrawler_treads": {
+    "file": "sfx/sandcrawler_treads.wav",
+    "dur": 5.6,
+    "peak": 0.459
+  },
+  "hall_ambience": {
+    "file": "sfx/hall_ambience.wav",
+    "dur": 7,
+    "peak": 0.272
+  },
+  "crowd_cheer": {
+    "file": "sfx/crowd_cheer.wav",
+    "dur": 7,
+    "peak": 0.546
+  }
+}

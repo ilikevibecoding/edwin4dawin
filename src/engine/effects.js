@@ -391,13 +391,19 @@ export class Explosions {
 // ------------------------------------------------------------ engine trails
 
 /** A stretched additive cone behind an engine nozzle. */
-export function engineFlare(color = C.transLightBlue, radius = 0.6, length = 6) {
+export function engineFlare(color = C.transLightBlue, radius = 0.6, length = 6, opts = {}) {
   const g = new THREE.Group();
   const coneG = cylGeo(radius, radius * 0.15, length, 10, true).clone();
   coneG.rotateX(-Math.PI / 2);
   coneG.translate(0, 0, -length / 2);
-  const flame = new THREE.Mesh(coneG, glow(color, 0.55));
-  const hot = new THREE.Mesh(sphereGeo(radius * 0.85, 10, 8), glow(0xffffff, 0.95));
+  const flame = new THREE.Mesh(coneG, mat(color, FINISH.GLOW, {
+    intensity: opts.intensity ?? 1.5, opacity: 0.5, depthWrite: false,
+    side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+  }));
+  const hot = new THREE.Mesh(sphereGeo(radius * 0.62, 10, 8), mat(
+    new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.7).getHex(), FINISH.GLOW,
+    { intensity: opts.coreIntensity ?? 1.9, opacity: 0.9, depthWrite: false },
+  ));
   hot.scale.z = 0.45;
   g.add(flame, hot);
   g.userData.set = (amount) => {

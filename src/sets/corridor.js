@@ -116,14 +116,14 @@ export function corridorSection(bb, zc, len = CORRIDOR.section, idx = 0) {
   const cribs = Math.round(len / 5);
   for (let k = 0; k < cribs; k++) {
     const zr = zc - half + len / cribs * (k + 0.5);
-    bb.brick(0, ceilY - 0.34, zr, halfW * 2, 0.9, { h: 0.34, color: C.darkBluishGray, ...F });
-    bb.brick(0, ceilY - 0.5, zr, 1.6, 0.7, { h: 0.16, color: C.lightBluishGray, ...F });
+      bb.brick(0, ceilY - 0.34, zr, halfW * 2, 0.9, { h: 0.34, color: C.lightBluishGray, ...F });
+    bb.brick(0, ceilY - 0.5, zr, 1.6, 0.7, { h: 0.16, color: C.darkBluishGray, ...F });
     // Ceiling light panels either side of each rib. Emissive rather than
     // FINISH.GLOW: unlit additive panels this large wash the whole frame cyan.
     for (const s of [-1, 1]) {
       bb.brick(s * 2.2, ceilY - 0.18, zr + 2.5, 1.3, 2.6, {
         h: 0.18, color: C.white, ...F,
-        matOpts: { emissive: 0xbcdcf4, emissiveIntensity: 0.85, roughness: 0.5 },
+        matOpts: { emissive: 0xbcdcf4, emissiveIntensity: 0.75, roughness: 0.5 },
       });
     }
   }
@@ -277,8 +277,10 @@ export function buildCorridor(opts = {}) {
   if (bool(opts, 'light', true)) {
     const nl = Math.max(1, Math.round(num(opts, 'lights', 4)));
     for (let i = 0; i < nl; i++) {
-      practical(group, 0, 8.4, -total * (i + 0.5) / nl, 0xdfeaff, 150, 78);
+      practical(group, 0, 8.4, -total * (i + 0.5) / nl, 0xdfeaff, 62, 62);
     }
+    // Something to walk into when the far door opens.
+    practical(group, 0, 5.0, zFar - 6.0, 0x86c8ff, 26, 22);
   }
 
   let farV = clamp(num(opts, 'door', 0), 0, 1);

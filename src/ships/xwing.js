@@ -199,9 +199,6 @@ function buildXwing() {
   }
   inner.userData.nodes = nodes;
 
-  const model = recentre(inner, { y: 'centre' });
-  const glow = glowRig(shell, ...pivots.map((p) => p.pivot));
-
   let open = 1;
   const apply = () => {
     for (const { pivot, sx, sv } of pivots) {
@@ -209,9 +206,14 @@ function buildXwing() {
       pivot.rotation.z = sx * sv * SFOIL_ANGLE * open;
     }
   };
+  // Roll the wings out before measuring, or the origin lands off the centreline.
+  apply();
+
+  const model = recentre(inner, { y: 'centre' });
+  const glow = glowRig(shell, ...pivots.map((p) => p.pivot));
+
   model.userData.setSFoils = (v) => { open = THREE.MathUtils.clamp(v, 0, 1); apply(); };
   model.userData.getSFoils = () => open;
-  apply();
 
   model.userData.update = (t) => {
     glow.set(0.9 + Math.sin(t * 6.4) * 0.09 + Math.sin(t * 15.1) * 0.04);

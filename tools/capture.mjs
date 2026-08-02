@@ -28,7 +28,9 @@ const QUALITY = args.quality || 'high';
 const JPEG_Q = +(args.jpegq || 94);
 const OUT = resolve(args.out || join(ROOT, 'render/film.mp4'));
 const WORK = resolve(args.work || join(ROOT, 'render/segments'));
-const AUDIO = args.audio === '0' ? null : resolve(args.audio || join(ROOT, 'public/audio/master.wav'));
+const AUDIO = args.audio === '0' ? null
+  : resolve(args.audio || (existsSync(join(ROOT, 'public/audio/master.wav'))
+    ? join(ROOT, 'public/audio/master.wav') : join(ROOT, 'public/audio/master.mp3')));
 const WARMUP = +(args.warmup ?? 1.5);
 
 mkdirSync(dirname(OUT), { recursive: true });

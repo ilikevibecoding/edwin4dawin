@@ -93,26 +93,26 @@ export default {
     });
     shots.add({            // 2. chase cam, entering the trench
       t: DIVE_END - 1.0, dur: (r4 - 1.2) - (DIVE_END - 1.0), fov: 58, ease: 'linear',
-      pos: () => hero.position.clone().add(new THREE.Vector3(0, 3.4, 17)),
-      look: () => hero.position.clone().add(new THREE.Vector3(0, 0.4, -30)),
+      pos: () => hero.position.clone().add(new THREE.Vector3(0, 4.6, 36)),
+      look: () => hero.position.clone().add(new THREE.Vector3(0, 1.0, -40)),
       shake: 0.35, shakeFreq: 22,
     });
     shots.add({            // 3. reverse: looking back at the pursuing TIEs
       t: r4 - 1.2, dur: 5.0, fov: 52, ease: 'linear',
-      pos: () => hero.position.clone().add(new THREE.Vector3(0, 1.6, -13)),
+      pos: () => hero.position.clone().add(new THREE.Vector3(0, 3.2, -34)),
       look: () => ties[0].position,
       shake: 0.4, shakeFreq: 20,
     });
     shots.add({            // 4. tight on the cockpit side
       t: r4 + 3.8, dur: (r6 - 0.6) - (r4 + 3.8), fov: 44, ease: 'linear',
-      pos: () => hero.position.clone().add(new THREE.Vector3(9.5, 1.6, 3.5)),
+      pos: () => hero.position.clone().add(new THREE.Vector3(17, 3.4, 10)),
       look: () => hero.position.clone().add(new THREE.Vector3(0, 0.6, -6)),
       shake: 0.45, shakeFreq: 24,
     });
     shots.add({            // 5. down the barrel of the trench to the port
       t: r6 - 0.6, dur: (BLOW) - (r6 - 0.6), fov: 62, ease: 'linear',
-      pos: () => hero.position.clone().add(new THREE.Vector3(0, 2.2, 12)),
-      look: () => hero.position.clone().add(new THREE.Vector3(0, -1.2, -60)),
+      pos: () => hero.position.clone().add(new THREE.Vector3(0, 3.4, 32)),
+      look: () => hero.position.clone().add(new THREE.Vector3(0, -1.6, -80)),
       shake: 0.5, shakeFreq: 26,
     });
     shots.add({            // 6. pull out, the station goes

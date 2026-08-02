@@ -140,6 +140,24 @@ export function taperSlab(bb, o) {
 }
 
 /**
+ * Wedge running fore-and-aft: a prism whose profile is drawn in the (z, y)
+ * plane and extruded `w` studs across X.
+ *
+ * Needed because BrickBuilder's `inverted: true` slope is a plain box -- there
+ * is no stock part for material that hangs from the top of a course, which is
+ * exactly what a hull chamfer under the nose is.
+ *
+ * @param {Array<[number,number]>} pts profile as [z, y], counter-clockwise
+ */
+export function zWedge(bb, x, w, pts, o = {}) {
+  // ry = 90deg maps prism-local +x onto world -z, so the profile flips in z.
+  bb.prism(pts.map(([z, y]) => [-z, y]), w, {
+    ry: Math.PI / 2, x, color: o.color ?? C.lightBluishGray, finish: o.finish, bevel: o.bevel,
+  });
+  return bb;
+}
+
+/**
  * Engine nozzle: dark housing ring, a band of trans plastic, a hot core.
  * Exhaust fires toward -Z. Returns the node so scenes can pulse it.
  */

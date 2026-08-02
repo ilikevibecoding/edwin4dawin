@@ -1,0 +1,319 @@
+{
+  "lines": [
+    {
+      "id": "t1",
+      "ch": "title",
+      "who": "narrator",
+      "text": "A long time ago, in a galaxy far, far away.",
+      "file": "vo/t1.wav",
+      "dur": 3.775,
+      "hash": "f27eea2a36b6"
+    },
+    {
+      "id": "t2",
+      "ch": "title",
+      "who": "narrator",
+      "text": "Episode Four. A New Hope.",
+      "file": "vo/t2.wav",
+      "dur": 2.286,
+      "hash": "1a1c60f024ef"
+    },
+    {
+      "id": "t3",
+      "ch": "title",
+      "who": "narrator",
+      "text": "War burns across the stars. From a hidden base among the outer worlds, a small rebel fleet has struck the first real blow against the Empire, and lived.",
+      "file": "vo/t3.wav",
+      "dur": 10.216,
+      "hash": "2f655ac9ba88"
+    },
+    {
+      "id": "t4",
+      "ch": "title",
+      "who": "narrator",
+      "text": "Hidden in the memory of a stolen droid are the plans to the Empire's new battle station: a fortress the size of a moon, with power enough to end a world.",
+      "file": "vo/t4.wav",
+      "dur": 9.628,
+      "hash": "7417753f4787"
+    },
+    {
+      "id": "t5",
+      "ch": "title",
+      "who": "narrator",
+      "text": "Pursued by the Emperor's agents, Princess Leia runs for home, carrying the one secret that can still save her people.",
+      "file": "vo/t5.wav",
+      "dur": 7.649,
+      "hash": "bea640ec4182"
+    },
+    {
+      "id": "c1",
+      "ch": "chase",
+      "who": "narrator",
+      "text": "Above a forgotten desert world, a rebel corvette is running for its life.",
+      "file": "vo/c1.wav",
+      "dur": 4.493,
+      "hash": "f6fc2865862b"
+    },
+    {
+      "id": "c2",
+      "ch": "chase",
+      "who": "narrator",
+      "text": "And out of the dark behind it comes something the size of a city.",
+      "file": "vo/c2.wav",
+      "dur": 4.053,
+      "hash": "0a95b7bb1e2f"
+    },
+    {
+      "id": "c3",
+      "ch": "chase",
+      "who": "officer",
+      "text": "Hull breach on deck four! They have us in a tractor beam!",
+      "file": "vo/c3.wav",
+      "dur": 2.77,
+      "hash": "7bcd1348e767"
+    },
+    {
+      "id": "c4",
+      "ch": "chase",
+      "who": "narrator",
+      "text": "Eleven thousand tonnes of consular ship, swallowed whole.",
+      "file": "vo/c4.wav",
+      "dur": 3.6,
+      "hash": "569edc0c9578"
+    },
+    {
+      "id": "b1",
+      "ch": "boarding",
+      "who": "narrator",
+      "text": "The corridor goes very quiet. Then the doors come off their hinges.",
+      "file": "vo/b1.wav",
+      "dur": 4.707,
+      "hash": "7dabc1591dea"
+    },
+    {
+      "id": "b2",
+      "ch": "boarding",
+      "who": "narrator",
+      "text": "And through the smoke walks the thing every soldier aboard had heard about, and hoped was only a rumour.",
+      "file": "vo/b2.wav",
+      "dur": 6.483,
+      "hash": "25171ac0b8ee"
+    },
+    {
+      "id": "b3",
+      "ch": "boarding",
+      "who": "vader",
+      "text": "Where are the plans you intercepted? I will not ask a second time.",
+      "file": "vo/b3.wav",
+      "dur": 3.435,
+      "hash": "1ad149d8d8cc"
+    },
+    {
+      "id": "b4",
+      "ch": "boarding",
+      "who": "officer",
+      "text": "This is a consular ship. We carry no transmissions, we are on a diplomatic mission to...",
+      "file": "vo/b4.wav",
+      "dur": 4.377,
+      "hash": "032f5a113bb7"
+    },
+    {
+      "id": "b5",
+      "ch": "boarding",
+      "who": "vader",
+      "text": "Tear the ship apart.",
+      "file": "vo/b5.wav",
+      "dur": 1.645,
+      "hash": "19f038d827d9"
+    },
+    {
+      "id": "m1",
+      "ch": "message",
+      "who": "narrator",
+      "text": "But the plans are already gone, folded into the memory of one small astromech with a stubborn streak.",
+      "file": "vo/m1.wav",
+      "dur": 6.55,
+      "hash": "d481aabb3ab9"
+    },
+    {
+      "id": "m2",
+      "ch": "message",
+      "who": "leia",
+      "text": "Find the old man on the desert world. Give him this. You are my only hope.",
+      "file": "vo/m2.wav",
+      "dur": 3.852,
+      "hash": "8c791a3a0882"
+    },
+    {
+      "id": "m3",
+      "ch": "message",
+      "who": "narrator",
+      "text": "One escape pod, no life signs aboard. The gunners let it fall.",
+      "file": "vo/m3.wav",
+      "dur": 4.519,
+      "hash": "a64542217c24"
+    },
+    {
+      "id": "d1",
+      "ch": "dunes",
+      "who": "narrator",
+      "text": "Two droids. A thousand kilometres of sand. And no plan whatsoever.",
+      "file": "vo/d1.wav",
+      "dur": 5.377,
+      "hash": "481d6bb52e49"
+    },
+    {
+      "id": "d2",
+      "ch": "dunes",
+      "who": "threepio",
+      "text": "We are doomed. Do you hear me? Doomed. And I blame you entirely.",
+      "file": "vo/d2.wav",
+      "dur": 3.558,
+      "hash": "1acbd37aafeb"
+    },
+    {
+      "id": "d3",
+      "ch": "dunes",
+      "who": "narrator",
+      "text": "By dusk, a sandcrawler had them both.",
+      "file": "vo/d3.wav",
+      "dur": 2.712,
+      "hash": "4beafc743a8e"
+    },
+    {
+      "id": "s1",
+      "ch": "twinsuns",
+      "who": "narrator",
+      "text": "On a moisture farm at the edge of nowhere, a boy watches two suns go down, the way he has every evening of his life.",
+      "file": "vo/s1.wav",
+      "dur": 7.835,
+      "hash": "a5bde5756038"
+    },
+    {
+      "id": "s2",
+      "ch": "twinsuns",
+      "who": "luke",
+      "text": "There is a whole galaxy out there. And I am here, fixing evaporators.",
+      "file": "vo/s2.wav",
+      "dur": 4.223,
+      "hash": "7366697afefe"
+    },
+    {
+      "id": "s3",
+      "ch": "twinsuns",
+      "who": "narrator",
+      "text": "He does not know it yet, but the war has already come looking for him.",
+      "file": "vo/s3.wav",
+      "dur": 4.076,
+      "hash": "df8cc0ce8f4f"
+    },
+    {
+      "id": "k1",
+      "ch": "saber",
+      "who": "narrator",
+      "text": "An old hermit in the hills. A locked chest. A weapon from a cleaner age.",
+      "file": "vo/k1.wav",
+      "dur": 5.713,
+      "hash": "672e08742aea"
+    },
+    {
+      "id": "k2",
+      "ch": "saber",
+      "who": "obiwan",
+      "text": "Your father's lightsaber. He would have wanted you to have it, when you were old enough.",
+      "file": "vo/k2.wav",
+      "dur": 5.855,
+      "hash": "828eaaf229da"
+    },
+    {
+      "id": "k3",
+      "ch": "saber",
+      "who": "obiwan",
+      "text": "The Force surrounds us. It binds the galaxy together. Learn to listen, and it will tell you what your eyes cannot.",
+      "file": "vo/k3.wav",
+      "dur": 8.21,
+      "hash": "771f68777e0d"
+    },
+    {
+      "id": "k4",
+      "ch": "saber",
+      "who": "luke",
+      "text": "Then teach me. I want to learn.",
+      "file": "vo/k4.wav",
+      "dur": 1.977,
+      "hash": "6425d2e8c171"
+    },
+    {
+      "id": "r1",
+      "ch": "trench",
+      "who": "narrator",
+      "text": "Thirty pilots against a moon.",
+      "file": "vo/r1.wav",
+      "dur": 2.002,
+      "hash": "ae1ae07f6a9f"
+    },
+    {
+      "id": "r2",
+      "ch": "trench",
+      "who": "narrator",
+      "text": "The trench is two metres wide and eleven kilometres long, and every gun on that station is watching it.",
+      "file": "vo/r2.wav",
+      "dur": 6.709,
+      "hash": "0c57ff8551d8"
+    },
+    {
+      "id": "r3",
+      "ch": "trench",
+      "who": "pilot",
+      "text": "Red Five, standing by. Cutting in now, stay on me.",
+      "file": "vo/r3.wav",
+      "dur": 3.244,
+      "hash": "f9f3546696bc"
+    },
+    {
+      "id": "r4",
+      "ch": "trench",
+      "who": "vader",
+      "text": "The Force is strong with this one. I have you now.",
+      "file": "vo/r4.wav",
+      "dur": 2.837,
+      "hash": "499170cb6c43"
+    },
+    {
+      "id": "r5",
+      "ch": "trench",
+      "who": "ghost",
+      "text": "Let go. Trust yourself.",
+      "file": "vo/r5.wav",
+      "dur": 2.631,
+      "hash": "0cf1161893a6"
+    },
+    {
+      "id": "r6",
+      "ch": "trench",
+      "who": "narrator",
+      "text": "He switched off the targeting computer. And fired.",
+      "file": "vo/r6.wav",
+      "dur": 3.654,
+      "hash": "451b4c8e954b"
+    },
+    {
+      "id": "f1",
+      "ch": "medals",
+      "who": "narrator",
+      "text": "The battle station burns. The war is not over. Not by years.",
+      "file": "vo/f1.wav",
+      "dur": 4.713,
+      "hash": "9fc465c6b5cc"
+    },
+    {
+      "id": "f2",
+      "ch": "medals",
+      "who": "narrator",
+      "text": "But tonight, in a hall of white stone, a farm boy, a smuggler and a princess stand in the light, and the galaxy remembers how to hope.",
+      "file": "vo/f2.wav",
+      "dur": 8.756,
+      "hash": "78d60510eb4b"
+    }
+  ]
+}

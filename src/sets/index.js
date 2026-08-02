@@ -6,6 +6,7 @@ import { buildStarfield } from './starfield.js';
 import { buildDesertPlanet } from './desertplanet.js';
 import { buildTwinSuns } from './twinsuns.js';
 import { buildCorridor, buildCorridorSection } from './corridor.js';
+import { buildDunes } from './dunes.js';
 
 /*
  * Sets are big, so every id goes through here: pass tris=1 (e.g.
@@ -43,4 +44,8 @@ reg('corridor_section', (o) => buildCorridorSection(o), {
 
 reg('corridor', (o) => buildCorridor(o), {
   notes: '8 chained sections = 120 studs of hallway with blast doors; nodes doorFar/doorNear, userData.setDoor/blowDoor',
+});
+
+reg('dunes', (o) => buildDunes(o), {
+  notes: 'Tatooine dune sea, 200x200 studs of plate-stepped contours + rock outcrops, bones and scatter',
 });

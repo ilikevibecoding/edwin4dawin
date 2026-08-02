@@ -222,7 +222,8 @@ export function lukeHair(fig) {
   if (fig) fig.topStud.visible = false;
   const g = new THREE.Group();
   const bb = builder();
-  const H = C.brightLightOrange, HS = C.darkOrange;
+  // sandy blond, not ginger: tan mass with warm gold only in the fringe shadow
+  const H = C.tan, HS = C.brightLightOrange;
 
   bb.sphere(0, 0.92, 0, 0.638, { dome: true, sy: 0.80, seg: 24, rings: 9, color: H });
   bb.custom(shell({ r: 0.638, y0: 0.56, y1: 0.96, from: 0.92, to: TWO_PI - 0.92 }), { color: H });
@@ -250,54 +251,67 @@ export function lukeHair(fig) {
 // HOODS
 // ---------------------------------------------------------------------------
 
-/** Obi-Wan: heavy Jedi cowl, brim overhanging and shadowing the face. */
+/*
+ * Hoods are the hardest thing in here. The trap is to model the front opening as
+ * a cone that flares up and OUT, which renders as a cardinal's hat: a wide flat
+ * brim with a face under it. A hood reads as a hood when the opening is a narrow
+ * collar that stands only slightly proud of the head, the mass sits BEHIND and
+ * ABOVE the skull, and the front edges drop down close to the cheeks.
+ */
+
+/** Obi-Wan: heavy Jedi cowl, its mouth standing just proud of the brow. */
 export function obiwanHood(fig) {
   if (fig) fig.topStud.visible = false;
   const g = new THREE.Group();
   const OUT = C.reddishBrown, IN = C.darkBrown;
 
   // outer cowl, flaring onto the shoulders, and its dark lining
-  g.add(twoSided(shell({ r: 1.02, rTop: 0.54, y0: -0.58, y1: 1.26, from: 1.04, to: TWO_PI - 1.04, seg: 30 }), OUT));
-  g.add(twoSided(shell({ r: 0.92, rTop: 0.52, y0: -0.52, y1: 1.18, from: 1.14, to: TWO_PI - 1.14, seg: 26 }), IN));
+  g.add(twoSided(shell({ r: 1.00, rTop: 0.60, y0: -0.58, y1: 1.16, from: 1.00, to: TWO_PI - 1.00, seg: 30 }), OUT));
+  g.add(twoSided(shell({ r: 0.90, rTop: 0.575, y0: -0.52, y1: 1.10, from: 1.10, to: TWO_PI - 1.10, seg: 26 }), IN));
 
   const bb = builder();
-  // peak of the hood
-  bb.sphere(0, 0.98, -0.16, 0.54, { dome: true, sy: 0.72, seg: 22, rings: 8, color: OUT });
-  // brim: a cone flaring up and out over the brow
-  bb.custom(shell({ r: 0.64, rTop: 0.90, y0: 0.82, y1: 1.16, from: faceTheta(138), to: faceTheta(374) }),
+  // crown of the hood, pushed back off the forehead
+  bb.sphere(0, 0.86, -0.14, 0.66, { dome: true, sy: 0.62, seg: 24, rings: 8, color: OUT });
+  // mouth of the hood: a collar barely wider than the head, tipped forward so it
+  // overhangs the brow and drops the face into shadow
+  bb.custom(shell({ r: 0.66, rTop: 0.70, y0: 0.90, y1: 1.20, from: faceTheta(150), to: faceTheta(362) }),
     { color: OUT });
-  bb.custom(shell({ r: 0.63, rTop: 0.80, y0: 0.76, y1: 0.98, from: faceTheta(146), to: faceTheta(366) }),
+  bb.custom(shell({ r: 0.645, rTop: 0.665, y0: 0.84, y1: 1.06, from: faceTheta(158), to: faceTheta(354) }),
     { color: IN });
-  // front edges of the cowl falling past the jaw
+  // front edges of the cowl falling past the cheeks
   bb.mirrorX((b) => {
-    b.custom(shell({ r: 0.98, rTop: 0.68, y0: -0.55, y1: 1.00, from: faceTheta(112), to: faceTheta(188) }),
+    b.custom(shell({ r: 0.80, rTop: 0.685, y0: -0.30, y1: 1.02, from: faceTheta(132), to: faceTheta(186) }),
       { color: OUT });
+    b.custom(shell({ r: 0.755, rTop: 0.66, y0: -0.24, y1: 0.98, from: faceTheta(140), to: faceTheta(184) }),
+      { color: IN });
   });
   g.add(bb.build());
   makeCloth(g);
   return g;
 }
 
-/** Jawa: tall pointed hood, nothing inside it but the eyes. */
+/** Jawa: tall soft-pointed hood, nothing inside it but the eyes. */
 export function jawaHood(fig) {
   if (fig) fig.topStud.visible = false;
   const g = new THREE.Group();
-  const OUT = C.darkBrown, IN = C.trueBlack;
+  // reddishBrown rather than darkBrown: the hood faces up and away from the key
+  // light, and in darkBrown the whole thing read as a black bucket
+  const OUT = C.reddishBrown, IN = C.trueBlack;
 
-  g.add(twoSided(shell({ r: 1.06, rTop: 0.36, y0: -0.62, y1: 1.46, from: 0.94, to: TWO_PI - 0.94, seg: 28 }), OUT));
-  g.add(twoSided(shell({ r: 0.94, rTop: 0.32, y0: -0.56, y1: 1.36, from: 1.04, to: TWO_PI - 1.04, seg: 24 }), IN));
+  // The cowl comes further round the face than Obi-Wan's (0.80 rather than 0.96)
+  // so it can do the framing itself: separate front flaps sat outside the cone's
+  // profile and stuck out as two pale blades either side of the head.
+  g.add(twoSided(shell({ r: 1.00, rTop: 0.34, y0: -0.62, y1: 1.34, from: 0.80, to: TWO_PI - 0.80, seg: 28 }), OUT));
+  g.add(twoSided(shell({ r: 0.89, rTop: 0.31, y0: -0.56, y1: 1.28, from: 0.90, to: TWO_PI - 0.90, seg: 24 }), IN));
 
   const bb = builder();
-  bb.cone(0, 1.24, -0.10, 0.36, 0.52, { seg: 16, color: OUT });
-  // deep brim so only the glow gets out
-  bb.custom(shell({ r: 0.66, rTop: 0.98, y0: 0.80, y1: 1.20, from: faceTheta(126), to: faceTheta(386) }),
+  // soft peak leaning back off the crown
+  bb.sphere(0, 1.06, -0.12, 0.34, { dome: true, sy: 1.55, seg: 16, rings: 8, color: OUT });
+  // hood mouth: tight to the head so only the glow gets out
+  bb.custom(shell({ r: 0.66, rTop: 0.74, y0: 0.86, y1: 1.20, from: faceTheta(142), to: faceTheta(370) }),
     { color: OUT });
-  bb.custom(shell({ r: 0.64, rTop: 0.86, y0: 0.74, y1: 0.98, from: faceTheta(134), to: faceTheta(378) }),
+  bb.custom(shell({ r: 0.645, rTop: 0.70, y0: 0.80, y1: 1.08, from: faceTheta(150), to: faceTheta(362) }),
     { color: IN });
-  bb.mirrorX((b) => {
-    b.custom(shell({ r: 1.00, rTop: 0.70, y0: -0.58, y1: 1.04, from: faceTheta(104), to: faceTheta(190) }),
-      { color: OUT });
-  });
   g.add(bb.build());
   makeCloth(g);
   return g;
@@ -362,31 +376,35 @@ export function trooperHelmet(fig) {
   return g;
 }
 
-/** Rebel fleet trooper: short open-crowned combat helmet with a padded rim. */
+/**
+ * Rebel fleet trooper: the short open-crowned combat helmet. Earlier passes made
+ * this too tall and too warm and it read as a brass bucket, so the drum barely
+ * clears the head now and the trim is dark brown leather rather than tan.
+ */
 export function rebelHelmet(fig) {
   if (fig) fig.topStud.visible = false;
   const g = new THREE.Group();
-  const SH = C.darkTan, RIM = C.reddishBrown;
+  const SH = C.darkTan, RIM = C.darkBrown;
 
   // open-topped drum: from above you look straight into it
-  g.add(twoSided(shell({ r: 0.70, rTop: 0.665, y0: 0.78, y1: 1.36, seg: 26 }), SH));
-  g.add(twoSided(ring(0.60, 0.665, 1.36, 26), SH));
+  g.add(twoSided(shell({ r: 0.705, rTop: 0.675, y0: 0.80, y1: 1.24, seg: 26 }), SH));
+  g.add(twoSided(ring(0.615, 0.675, 1.24, 26), RIM));
 
   const bb = builder();
   // inner crown so the open top never shows daylight through the head
-  bb.sphere(0, 0.98, 0, 0.60, { dome: true, sy: 0.40, seg: 20, rings: 6, color: C.darkBrown });
-  // padded rim at the brow and a band at the crown
-  bb.custom(shell({ r: 0.75, rTop: 0.72, y0: 0.76, y1: 0.90, seg: 26 }), { color: RIM });
-  bb.custom(shell({ r: 0.72, y0: 1.24, y1: 1.34, seg: 26 }), { color: RIM });
+  bb.sphere(0, 1.00, 0, 0.60, { dome: true, sy: 0.32, seg: 20, rings: 6, color: C.darkBrown });
+  // padded leather rim at the brow
+  bb.custom(shell({ r: 0.755, rTop: 0.725, y0: 0.78, y1: 0.90, seg: 26 }), { color: RIM });
   // front badge
-  bb.custom(shell({ r: 0.712, y0: 1.00, y1: 1.20, from: faceTheta(238), to: faceTheta(274) }), { color: C.darkGray });
+  bb.custom(shell({ r: 0.716, y0: 0.98, y1: 1.16, from: faceTheta(238), to: faceTheta(274) }), { color: C.darkGray });
   // cheek guards, hugging the head
   bb.mirrorX((b) => {
-    b.custom(shell({ r: 0.66, rTop: 0.68, y0: 0.34, y1: 0.86, from: faceTheta(140), to: faceTheta(192) }),
+    b.custom(shell({ r: 0.655, rTop: 0.675, y0: 0.38, y1: 0.86, from: faceTheta(144), to: faceTheta(190) }),
       { color: SH });
+    b.custom(shell({ r: 0.665, y0: 0.38, y1: 0.46, from: faceTheta(144), to: faceTheta(190) }), { color: RIM });
   });
   g.add(bb.build());
-  softenGloss(g, { clearcoat: 0.06, clearcoatRoughness: 0.7, env: 0.3, roughness: 0.8 });
+  softenGloss(g, { clearcoat: 0.04, clearcoatRoughness: 0.8, env: 0.22, roughness: 0.86 });
   return g;
 }
 

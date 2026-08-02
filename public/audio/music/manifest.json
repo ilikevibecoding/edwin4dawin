@@ -1,0 +1,47 @@
+{
+  "main_fanfare": {
+    "file": "music/main_fanfare.wav",
+    "dur": 23,
+    "peak": 0.683
+  },
+  "chase": {
+    "file": "music/chase.wav",
+    "dur": 42,
+    "peak": 0.683
+  },
+  "imperial_menace": {
+    "file": "music/imperial_menace.wav",
+    "dur": 36,
+    "peak": 0.683
+  },
+  "hope_theme": {
+    "file": "music/hope_theme.wav",
+    "dur": 32,
+    "peak": 0.683
+  },
+  "binary_sunset": {
+    "file": "music/binary_sunset.wav",
+    "dur": 30,
+    "peak": 0.683
+  },
+  "desert_wander": {
+    "file": "music/desert_wander.wav",
+    "dur": 30,
+    "peak": 0.683
+  },
+  "mystic": {
+    "file": "music/mystic.wav",
+    "dur": 27,
+    "peak": 0.683
+  },
+  "battle": {
+    "file": "music/battle.wav",
+    "dur": 52,
+    "peak": 0.683
+  },
+  "triumph": {
+    "file": "music/triumph.wav",
+    "dur": 32,
+    "peak": 0.683
+  }
+}
