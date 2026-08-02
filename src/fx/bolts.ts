@@ -63,7 +63,7 @@ class BoltPool {
     this.mesh.frustumCulled = false;
     this.mesh.name = `Bolts-${color}`;
 
-    const glowMat = additiveMaterial(`boltGlow-${color}`, color, 0.55, glowSprite(0.3)).clone();
+    const glowMat = additiveMaterial(`boltGlow-${color}`, color, 0.75, glowSprite(0.3)).clone();
     this.glow = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), glowMat, capacity);
     this.glow.frustumCulled = false;
     this.glow.name = `BoltGlow-${color}`;
@@ -135,7 +135,7 @@ class BoltPool {
       this.quat.setFromRotationMatrix(
         new THREE.Matrix4().lookAt(b.pos, camera.position, b.dir),
       );
-      this.scale.set(b.radius * 7, b.length * 2.1, 1);
+      this.scale.set(b.radius * 8.5, b.length * 2.4, 1);
       this.matrix.compose(b.pos, this.quat, this.scale);
       this.glow.setMatrixAt(i, this.matrix);
       dirty = true;

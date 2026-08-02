@@ -27,6 +27,9 @@ import type { Prologue, EpilogueCard } from './prologue';
 import type { CharState, Figure } from '../characters/figure';
 import { SECTION_LENGTH } from '../interior/corridor';
 
+/** Corridor station of the pod bay's centre. */
+const BAY_Z = CORRIDOR_SECTIONS * SECTION_LENGTH + 3.1;
+
 /* ========================================================================== *
  *  Chapter plan
  * ========================================================================== */
@@ -468,9 +471,9 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     { t: 286, x: 0.55, z: CORRIDOR_MARKS.transfer, state: 'idle', facing: 0 },
     { t: 288.5, x: 0.55, z: CORRIDOR_MARKS.transfer, state: 'walk', facing: Math.PI },
     { t: 296, x: 0.3, z: CORRIDOR_MARKS.bayDoor - 1.5, state: 'walk', facing: Math.PI },
-    { t: 300.5, x: -1.6, z: CORRIDOR_SECTIONS * SECTION_LENGTH + 3.1, state: 'walk', facing: -Math.PI / 2 },
-    { t: 303.5, x: -4.4, z: CORRIDOR_SECTIONS * SECTION_LENGTH + 3.1, state: 'idle', facing: -Math.PI / 2 },
-    { t: 400, x: -4.4, z: CORRIDOR_SECTIONS * SECTION_LENGTH + 3.1, state: 'idle', facing: -Math.PI / 2 },
+    { t: 300.5, x: -1.4, z: BAY_Z, state: 'walk', facing: -Math.PI / 2 },
+    { t: 303.6, x: -3.5, z: BAY_Z, state: 'idle', facing: -Math.PI / 2 },
+    { t: 400, x: -3.5, z: BAY_Z, state: 'idle', facing: -Math.PI / 2 },
   ];
 
   const c3poTrack: TrackKey[] = [
@@ -478,10 +481,10 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     { t: 288, x: -1.0, z: CORRIDOR_MARKS.transfer - 2.4, state: 'cower', facing: 0.5 },
     { t: 290.5, x: -1.0, z: CORRIDOR_MARKS.transfer - 2.0, state: 'walk', facing: Math.PI },
     { t: 299, x: -0.8, z: CORRIDOR_MARKS.bayDoor - 2.6, state: 'walk', facing: Math.PI },
-    { t: 302, x: -0.4, z: CORRIDOR_SECTIONS * SECTION_LENGTH + 1.4, state: 'cower', facing: -Math.PI / 2 },
-    { t: 305.5, x: -3.0, z: CORRIDOR_SECTIONS * SECTION_LENGTH + 2.6, state: 'walk', facing: -Math.PI / 2 },
-    { t: 307.5, x: -4.2, z: CORRIDOR_SECTIONS * SECTION_LENGTH + 3.0, state: 'idle', facing: -Math.PI / 2 },
-    { t: 400, x: -4.2, z: CORRIDOR_SECTIONS * SECTION_LENGTH + 3.0, state: 'idle', facing: -Math.PI / 2 },
+    { t: 302, x: -0.3, z: BAY_Z - 1.7, state: 'cower', facing: -Math.PI / 2 },
+    { t: 305.6, x: -2.2, z: BAY_Z - 0.5, state: 'walk', facing: -Math.PI / 2 },
+    { t: 307.6, x: -3.4, z: BAY_Z, state: 'idle', facing: -Math.PI / 2 },
+    { t: 400, x: -3.4, z: BAY_Z, state: 'idle', facing: -Math.PI / 2 },
   ];
 
   timeline.addContinuous((t, dt) => {
@@ -552,8 +555,8 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     // The plans: revealed, studied, then poured into the droid.
     const reveal = smootherstep(259, 266, t) * (1 - smootherstep(277, 282.5, t));
     world.plans.setReveal(reveal);
-    world.plans.setScale(0.42 * (1 - smootherstep(277, 282.5, t) * 0.72));
-    world.plans.group.position.y = 1.15 - smootherstep(277, 282.5, t) * 0.34;
+    world.plans.setScale(0.68 * (1 - smootherstep(277, 282.5, t) * 0.78));
+    world.plans.group.position.y = 1.22 - smootherstep(277, 282.5, t) * 0.42;
 
     // Pod bay hatch and the pod sitting in its tube.
     world.podBay.setHatch(smootherstep(305.5, 308.2, t));
@@ -749,9 +752,9 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
         rng.range(-0.1, 0.1),
         2.7 - progress(st, 195, 206) * 2.2,
       );
-      world.interiorSparks.burst(p, Math.round(14 * world.quality.particleScale), {
-        speed: 4.4, spread: Math.PI * 0.55, normal: new THREE.Vector3(0, -0.3, 1),
-        color: '#ffb45c', size: 2.4, life: 0.85,
+      world.interiorSparks.burst(p, Math.round(22 * world.quality.particleScale), {
+        speed: 5.2, spread: Math.PI * 0.55, normal: new THREE.Vector3(0, -0.3, 1),
+        color: '#ffb45c', size: 3.0, life: 1.1,
       });
       world.smoke.emit(p, 1, { speed: 0.5, size: 0.5, life: 3.4, opacity: 0.2 });
       sfx.sparks({ at: p, ref: 6 }, 0.6);
@@ -760,14 +763,17 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
   ev(206.5, 'door-breach', () => {
     const p = world.corridorPoint(CORRIDOR_MARKS.breachDoor, 0, 1.4);
     sfx.doorBreach({ at: p, ref: 9 });
-    world.interiorDebris.burst(p, Math.round(30 * world.quality.particleScale), {
-      speed: 9, size: 0.24, life: 3, direction: new THREE.Vector3(0, 0.25, 1), spread: 0.65,
+    world.interiorDebris.burst(p, Math.round(34 * world.quality.particleScale), {
+      speed: 9, size: 0.32, life: 6, direction: new THREE.Vector3(0, 0.25, 1), spread: 0.65,
     });
     world.interiorSparks.burst(p, Math.round(120 * world.quality.particleScale), {
       speed: 12, spread: Math.PI, color: '#ffb45c', size: 3.4, life: 1.3,
     });
-    world.smoke.emit(p, Math.round(26 * world.quality.particleScale), {
-      speed: 3.2, size: 1.5, life: 8, opacity: 0.4, direction: new THREE.Vector3(0, 0.35, 1), spread: 0.9,
+    world.smoke.emit(p, Math.round(46 * world.quality.particleScale), {
+      speed: 3.4, size: 2.1, life: 12, opacity: 0.85, direction: new THREE.Vector3(0, 0.3, 1), spread: 1.0,
+    });
+    world.smoke.emit(world.corridorPoint(CORRIDOR_MARKS.breachDoor + 1.6, 0, 1.2), Math.round(22 * world.quality.particleScale), {
+      speed: 2.2, size: 2.4, life: 16, opacity: 0.68, direction: new THREE.Vector3(0, 0.5, 0.7), spread: 0.9,
     });
     director.impulse(1.05);
     torchLoop?.stop(0.15);
@@ -775,12 +781,23 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     alarmLoop?.setLevel(0.42, 0.4);
   });
   // Lingering smoke in the doorway.
-  for (let t = 208; t < 250; t += 1.4) {
+  for (let t = 207.4; t < 252; t += 0.9) {
     const st = t;
     ev(st, `breach-smoke-${st.toFixed(1)}`, () => {
-      world.smoke.emit(world.corridorPoint(CORRIDOR_MARKS.breachDoor + 0.4, rng.range(-0.7, 0.7), 0.4), 2, {
-        speed: 0.5, size: 1.2, life: 9, opacity: 0.16, direction: new THREE.Vector3(0, 1, 0.2), spread: 0.5,
+      world.smoke.emit(world.corridorPoint(CORRIDOR_MARKS.breachDoor + 0.5, rng.range(-0.9, 0.9), 0.35), 2, {
+        speed: 0.7, size: 1.6, life: 11, opacity: 0.4, direction: new THREE.Vector3(0, 1, 0.25), spread: 0.6,
       });
+    });
+  }
+  // Embers dying in the doorway.
+  for (let t = 208.4; t < 236; t += 1.7) {
+    const st = t;
+    ev(st, `breach-ember-${st.toFixed(1)}`, () => {
+      const p = world.corridorPoint(CORRIDOR_MARKS.breachDoor + 0.2, rng.range(-1.3, 1.3), rng.range(0.1, 2.2));
+      world.interiorSparks.burst(p, Math.round(7 * world.quality.particleScale), {
+        speed: 1.4, spread: Math.PI, color: '#ff9a44', size: 1.8, life: 1.4,
+      });
+      sfx.sparks({ at: p, ref: 6 }, 0.35);
     });
   }
 
@@ -797,8 +814,10 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
       const aim = to.clone().add(new THREE.Vector3(fRng.range(-spread, spread), fRng.range(-spread * 0.7, spread * 0.7), fRng.range(-0.5, 0.5)));
       const dir = aim.clone().sub(from).normalize();
       world.interiorBolts.fire({
-        origin: from, direction: dir, speed: 62, color: colour,
-        length: 1.1, radius: 0.055, life: 2.2, hitAt: aim,
+        // Slow enough that the eye can follow a shot across the corridor:
+        // visible travel time is what makes an exchange of fire readable.
+        origin: from, direction: dir, speed: 31, color: colour,
+        length: 1.9, radius: 0.095, life: 2.2, hitAt: aim,
         onEnd: (pos) => {
           world.interiorSparks.burst(pos, Math.round(12 * world.quality.particleScale), {
             speed: 3.4, spread: Math.PI * 0.8, color: colour === '#7dff6a' ? '#c8ffb0' : '#ffb0a0',
@@ -810,7 +829,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
       sfx.blaster({ at: from, ref: 6, gain: 0.55 }, pitch);
     };
 
-    for (let t = 208.6; t < 233; t += 0.16 + fRng.next() * 0.34) {
+    for (let t = 208.6; t < 233; t += 0.09 + fRng.next() * 0.2) {
       const st = t;
       const imperial = fRng.chance(0.62);
       ev(st, `ff-${st.toFixed(2)}`, () => {
@@ -1234,9 +1253,10 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     start: 214, end: 229, region: 'interior', near: 0.05, far: 220, fov: 40, blend: 1.2,
     apply(c) {
       const k = Ease.sine(c.u);
-      // Slow lateral dolly across the middle of the fight.
-      c.eye.copy(cp(lerp(15.2, 17.6, k), lerp(1.28, -1.28, k), 1.62));
-      c.target.copy(cp(lerp(11.5, 9.5, k), lerp(-0.5, 0.5, k), 1.4));
+      // Over the shoulder of the defensive line: rebels in the foreground,
+      // stormtroopers advancing beyond them, bolts crossing between.
+      c.eye.copy(cp(lerp(25.5, 22.4, k), lerp(1.15, -1.05, k), lerp(1.82, 1.62, k)));
+      c.target.copy(cp(lerp(12.5, 10.5, k), lerp(-0.35, 0.4, k), 1.38));
     },
   });
   shots.push({
@@ -1256,10 +1276,10 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     apply(c) {
       const k = Ease.sine(c.u);
       // Low and central: he has to be the tallest thing in the frame.
-      c.eye.copy(cp(lerp(17.0, 12.4, k), 0.05, lerp(0.68, 0.98, k)));
+      c.eye.copy(cp(lerp(16.4, 10.2, k), 0.05, lerp(0.66, 1.0, k)));
       const vz = world.vader.group.visible ? world.vader.group.position.z - IO.z : CORRIDOR_MARKS.breachDoor;
       c.target.copy(cp(vz + 0.4, 0, lerp(1.35, 1.62, k)));
-      c.fov = lerp(34, 30, k);
+      c.fov = lerp(36, 28, k);
     },
   });
 
@@ -1281,8 +1301,9 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     start: 263, end: 276, region: 'interior', near: 0.03, far: 220, fov: 34, blend: 1.6,
     apply(c) {
       const k = Ease.sine(c.u);
-      c.eye.copy(cp(CORRIDOR_MARKS.transfer + lerp(2.0, 1.35, k), lerp(-1.15, -0.85, k), lerp(1.5, 1.32, k)));
-      c.target.copy(cp(CORRIDOR_MARKS.transfer - 0.85, 0.0, 1.16));
+      // Across the projection to Leia, so we are looking at her face.
+      c.eye.copy(cp(CORRIDOR_MARKS.transfer + lerp(2.5, 1.9, k), lerp(0.95, 0.62, k), lerp(1.62, 1.44, k)));
+      c.target.copy(cp(CORRIDOR_MARKS.transfer - 0.95, lerp(-0.15, -0.3, k), 1.2));
     },
   });
   shots.push({
@@ -1291,8 +1312,8 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     start: 276, end: 285, region: 'interior', near: 0.03, far: 220, fov: 32, blend: 1.4,
     apply(c) {
       const k = Ease.sine(c.u);
-      c.eye.copy(cp(CORRIDOR_MARKS.transfer + lerp(1.55, 1.25, k), lerp(-1.1, -0.7, k), lerp(1.15, 0.92, k)));
-      c.target.copy(cp(CORRIDOR_MARKS.transfer - 0.15, 0.3, lerp(0.95, 0.72, k)));
+      c.eye.copy(cp(CORRIDOR_MARKS.transfer + lerp(1.9, 1.5, k), lerp(0.7, 0.35, k), lerp(1.2, 0.95, k)));
+      c.target.copy(cp(CORRIDOR_MARKS.transfer - 0.35, 0.35, lerp(1.0, 0.74, k)));
     },
   });
   shots.push({
@@ -1321,23 +1342,21 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
   shots.push({
     id: 'bay',
     name: 'Pod bay',
-    start: 299, end: 306, region: 'interior', near: 0.05, far: 220, fov: 44, blend: 1.4,
+    start: 299, end: 306, region: 'interior', near: 0.05, far: 220, fov: 52, blend: 1.4,
     apply(c) {
       const k = Ease.sine(c.u);
-      const bayZ = CORRIDOR_SECTIONS * SECTION_LENGTH + 3.1;
-      c.eye.copy(cp(bayZ + lerp(2.6, 2.0, k), lerp(2.6, 2.1, k), lerp(2.1, 1.75, k)));
-      c.target.copy(cp(bayZ - 0.1, -2.6, 1.35));
+      c.eye.copy(cp(BAY_Z + lerp(2.7, 2.1, k), lerp(2.2, 1.5, k), lerp(1.95, 1.6, k)));
+      c.target.copy(cp(BAY_Z - 0.15, lerp(-4.2, -5.4, k), 1.35));
     },
   });
   shots.push({
     id: 'tube',
     name: 'Launch tube',
-    start: 306, end: 309.5, region: 'interior', near: 0.05, far: 220, fov: 40, blend: 1.0,
+    start: 306, end: 309.5, region: 'interior', near: 0.05, far: 220, fov: 46, blend: 1.0,
     apply(c) {
       const k = Ease.inCubic(c.u);
-      const bayZ = CORRIDOR_SECTIONS * SECTION_LENGTH + 3.1;
-      c.eye.copy(cp(bayZ + lerp(2.2, 1.5, k), lerp(1.4, 0.6, k), lerp(1.9, 1.62, k)));
-      c.target.copy(cp(bayZ, lerp(-4.0, -6.4, k), 1.5));
+      c.eye.copy(cp(BAY_Z + lerp(2.4, 1.7, k), lerp(1.2, 0.2, k), lerp(1.95, 1.66, k)));
+      c.target.copy(cp(BAY_Z, lerp(-5.0, -8.0, k), 1.5));
     },
   });
   shots.push({

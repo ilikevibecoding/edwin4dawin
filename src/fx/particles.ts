@@ -217,26 +217,52 @@ export class SmokeSystem {
   private rng = new Rng('smoke');
   private matrix = new THREE.Matrix4();
   private hidden = new THREE.Matrix4().makeScale(0, 0, 0);
-  private colorAttr: THREE.InstancedBufferAttribute;
-  private tint = new THREE.Color('#8a8a8a');
+  private alphaAttr: THREE.InstancedBufferAttribute;
+  private material: THREE.ShaderMaterial;
+  private tint = new THREE.Color('#9aa0a6');
   /** Drift applied to every puff — vents blow smoke down a corridor. */
   readonly wind = new THREE.Vector3(0, 0.25, 0);
 
   constructor(capacity: number) {
     const cap = Math.max(8, capacity);
-    const mat = new THREE.MeshBasicMaterial({
-      map: smokeSprite(),
+    // A per-instance alpha, not a per-instance colour: modulating colour on a
+    // normally-blended sprite turns fading smoke into fading *black* smoke.
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uMap: { value: smokeSprite() },
+        uTint: { value: this.tint },
+      },
+      vertexShader: /* glsl */ `
+        attribute float aAlpha;
+        varying vec2 vUv;
+        varying float vAlpha;
+        void main() {
+          vUv = uv;
+          vAlpha = aAlpha;
+          gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D uMap;
+        uniform vec3 uTint;
+        varying vec2 vUv;
+        varying float vAlpha;
+        void main() {
+          float a = texture2D(uMap, vUv).a * vAlpha;
+          if (a < 0.004) discard;
+          gl_FragColor = vec4(uTint, a);
+        }
+      `,
       transparent: true,
       depthWrite: false,
-      opacity: 1,
       blending: THREE.NormalBlending,
-      toneMapped: true,
     });
+    this.material = mat;
     this.mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), mat, cap);
     this.mesh.frustumCulled = false;
     this.mesh.name = 'Smoke';
-    this.colorAttr = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
-    this.mesh.instanceColor = this.colorAttr;
+    this.alphaAttr = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1);
+    this.mesh.geometry.setAttribute('aAlpha', this.alphaAttr);
     for (let i = 0; i < cap; i++) {
       this.puffs.push({
         pos: new THREE.Vector3(),
@@ -256,6 +282,7 @@ export class SmokeSystem {
 
   setTint(hex: string): void {
     this.tint.set(hex);
+    (this.material.uniforms.uTint.value as THREE.Color).copy(this.tint);
   }
 
   emit(
@@ -313,6 +340,7 @@ export class SmokeSystem {
       p.life -= p.decay * dt;
       if (p.life <= 0) {
         this.mesh.setMatrixAt(i, this.hidden);
+        this.alphaAttr.setX(i, 0);
         continue;
       }
       p.vel.addScaledVector(this.wind, dt);
@@ -326,13 +354,12 @@ export class SmokeSystem {
       this.matrix.compose(p.pos, rot, scale);
       this.mesh.setMatrixAt(i, this.matrix);
       // Fade in fast, out slowly.
-      const a = clamp(Math.min(1, (1 - p.life) * 6) * p.life * p.opacity, 0, 1);
-      this.colorAttr.setXYZ(i, this.tint.r * a, this.tint.g * a, this.tint.b * a);
+      const a = clamp(Math.min(1, (1 - p.life) * 5) * Math.pow(p.life, 0.75) * p.opacity, 0, 1);
+      this.alphaAttr.setX(i, a);
     }
     if (dirty) {
       this.mesh.instanceMatrix.needsUpdate = true;
-      this.colorAttr.needsUpdate = true;
-      (this.mesh.material as THREE.MeshBasicMaterial).opacity = 1;
+      this.alphaAttr.needsUpdate = true;
     }
   }
 
@@ -340,8 +367,10 @@ export class SmokeSystem {
     for (let i = 0; i < this.puffs.length; i++) {
       this.puffs[i].life = 0;
       this.mesh.setMatrixAt(i, this.hidden);
+      this.alphaAttr.setX(i, 0);
     }
     this.mesh.instanceMatrix.needsUpdate = true;
+    this.alphaAttr.needsUpdate = true;
   }
 }
 

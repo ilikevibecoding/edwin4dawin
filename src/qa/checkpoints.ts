@@ -31,6 +31,11 @@ export interface Checkpoint {
   /** Human-readable description of what must be visible. */
   expect: string;
   file: string;
+  /**
+   * Seconds of show time to run before capturing, so transient effects
+   * (bolts in flight, sparks, smoke) are present in the frame.
+   */
+  preroll?: number;
   /** Returns a list of failure messages; empty means the checkpoint passed. */
   assert(c: CheckpointContext): string[];
 }
@@ -123,6 +128,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'destroyer-overhead',
+    preroll: 1.2,
     t: 112,
     chapter: 'pursuit',
     shot: 'destroyer-reveal',
@@ -132,6 +138,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'battle-profile',
+    preroll: 2.2,
     t: 126,
     chapter: 'pursuit',
     shot: 'battle-profile',
@@ -146,6 +153,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'drives-hit',
+    preroll: 2.2,
     t: 138,
     chapter: 'pursuit',
     shot: 'engines-hit',
@@ -192,6 +200,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'defender-eye',
+    preroll: 2.0,
     t: 202,
     chapter: 'corridor',
     shot: 'defender-eye',
@@ -201,6 +210,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'breach',
+    preroll: 1.9,
     t: 208.4,
     chapter: 'corridor',
     shot: 'door-breach',
@@ -210,6 +220,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'firefight',
+    preroll: 2.4,
     t: 220,
     chapter: 'corridor',
     shot: 'firefight',
@@ -223,6 +234,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'vader-entrance',
+    preroll: 2.0,
     t: 246,
     chapter: 'corridor',
     shot: 'vader-entrance',
@@ -251,6 +263,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'transfer',
+    preroll: 1.6,
     t: 280,
     chapter: 'plans',
     shot: 'transfer',
@@ -283,6 +296,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'pod-away',
+    preroll: 1.6,
     t: 313,
     chapter: 'pod',
     shot: 'pod-away',

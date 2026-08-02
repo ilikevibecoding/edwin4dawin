@@ -230,8 +230,8 @@ export class World {
     this.interior.add(this.interiorDebris.mesh);
 
     this.plans = new DataProjection(quality, 'plans');
-    this.plans.setScale(0.42);
-    this.plans.group.position.set(0.1, 1.15, CORRIDOR_MARKS.transfer - 0.9);
+    this.plans.setScale(0.68);
+    this.plans.group.position.set(0.05, 1.22, CORRIDOR_MARKS.transfer - 0.95);
     this.plans.setReveal(0);
     this.interior.add(this.plans.group);
 

@@ -156,8 +156,8 @@ export class BlastDoor {
       // Torn off the runners: the leaves tumble inward and end up flat-ish on
       // the deck, leaning against the frame rather than hovering.
       const b = this.blown;
-      const blowZ = b * (2.4 + i * 0.6);
-      const blowX = b * s * 0.5;
+      const blowZ = b * (1.5 + i * 0.5);
+      const blowX = b * s * 0.42;
       const drop = -b * (h - 0.28) * 0.42;
 
       leaf.position.set(rest.x + slide + blowX + shudder, rest.y + drop, rest.z + blowZ);
@@ -179,7 +179,8 @@ export class BlastDoor {
 
     this.heatMat.emissiveIntensity = this.blown > 0.02 ? 1.6 : this.cutAmount * 3.4;
 
-    const glow = cutting ? this.cutAmount : this.blown > 0.02 ? Math.max(0, 1 - this.blown * 1.2) : 0;
+    // Embers keep glowing in the frame long after the leaves have gone.
+    const glow = cutting ? this.cutAmount : this.blown > 0.02 ? 0.34 + Math.sin(elapsed * 3.1) * 0.05 : 0;
     this.glowCard.visible = glow > 0.01;
     this.glowMat.opacity = glow * 0.55;
     this.breachLight.intensity = glow * 26;

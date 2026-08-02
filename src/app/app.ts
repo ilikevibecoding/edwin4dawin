@@ -408,9 +408,14 @@ export class App {
         case 'ArrowRight':
           this.seek(this.timeline.time + 5);
           break;
-        case 'Comma':
-          this.seekChapter(this.timeline.chapterAt(this.timeline.time - 1.5).index - 1);
+        case 'Comma': {
+          // Like a track-skip button: restart this chapter unless we only just
+          // entered it, in which case step back one.
+          const cur = this.timeline.chapterAt(this.timeline.time);
+          const into = this.timeline.time - cur.start;
+          this.seekChapter(into > 2.5 ? cur.index : cur.index - 1);
           break;
+        }
         case 'Period':
           this.seekChapter(this.timeline.chapterAt(this.timeline.time).index + 1);
           break;
@@ -502,6 +507,29 @@ export class App {
     this.director.update(t, dt, this.stage.camera);
     this.world.update(dt, t, this.stage.camera);
     this.stage.render(t);
+  }
+
+  /**
+   * Advance the show by `seconds` in fixed steps without rendering.
+   *
+   * The QA tour uses this to run a moment of the piece before capturing it, so
+   * screenshots contain bolts, sparks and smoke rather than the empty scene a
+   * bare seek produces. Because the step is fixed, the result is identical on
+   * every machine.
+   */
+  simulate(seconds: number, step = 1 / 30): void {
+    const wasPlaying = this.timeline.playing;
+    if (!wasPlaying) this.timeline.play();
+    const steps = Math.min(1200, Math.max(1, Math.round(seconds / step)));
+    for (let i = 0; i < steps; i++) {
+      const t = this.timeline.update(step);
+      this.director.update(t, step, this.stage.camera);
+      this.world.update(step, t, this.stage.camera);
+    }
+    if (!wasPlaying) {
+      this.timeline.pause();
+      this.ui.setPlaying(false);
+    }
   }
 
   private updateAudioListener(): void {
@@ -617,7 +645,9 @@ export class App {
       version: 1,
       duration: SHOW_DURATION,
       chapters: CHAPTER_PLAN.map((c) => ({ ...c })),
-      checkpoints: CHECKPOINTS.map((c) => ({ id: c.id, t: c.t, chapter: c.chapter, shot: c.shot, expect: c.expect, file: c.file })),
+      checkpoints: CHECKPOINTS.map((c) => ({
+        id: c.id, t: c.t, chapter: c.chapter, shot: c.shot, expect: c.expect, file: c.file, preroll: c.preroll ?? 0,
+      })),
       shots: () => this.director.all.map((s) => ({ id: s.id, name: s.name, start: s.start, end: s.end, region: s.region })),
       seek: (t: number) => {
         this.timeline.pause();
@@ -655,6 +685,7 @@ export class App {
         missingNarration: this.narrator.missingClips(),
         narrationFallback: this.narrator.usingFallback,
         events: `${this.timeline.firedCount()}/${this.timeline.eventCount}`,
+        bolts: this.world.exteriorBolts.activeCount + this.world.interiorBolts.activeCount,
         duplicateEventIds: this.timeline.duplicateEventIds(),
         selection: this.lastSelectable?.id ?? null,
       }),
@@ -688,6 +719,8 @@ export class App {
       resetWorstFrame: () => {
         this.worstFrameMs = 0;
       },
+      /** Run `seconds` of show time in fixed steps, then hold. */
+      simulate: (seconds: number, step?: number) => this.simulate(seconds, step),
     };
     (window as unknown as Record<string, unknown>).__show = api;
     (window as unknown as Record<string, unknown>).__ready = true;

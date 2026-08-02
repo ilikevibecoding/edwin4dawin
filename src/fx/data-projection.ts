@@ -121,7 +121,7 @@ export class DataProjection {
     this.station.add(wire);
 
     // Equatorial construction trench.
-    const trench = new THREE.Mesh(new THREE.TorusGeometry(1.005, 0.035, 6, 64), makeHoloMat(0.85));
+    const trench = new THREE.Mesh(new THREE.TorusGeometry(1.005, 0.052, 6, 64), makeHoloMat(1.15));
     trench.rotation.x = Math.PI / 2;
     this.station.add(trench);
     const trenchRail = new THREE.Line(
@@ -173,7 +173,7 @@ export class DataProjection {
       this.station.add(plate);
     }
 
-    this.station.scale.setScalar(0.62);
+    this.station.scale.setScalar(0.78);
     this.group.add(this.station);
 
     /* ---- annotation rings ---- */
@@ -221,7 +221,8 @@ export class DataProjection {
     this.beam.position.y = -1.2;
     this.group.add(this.beam);
 
-    this.light = new THREE.PointLight(colour, 0, 5, 2);
+    // The projection is a practical light: it is what lights her face.
+    this.light = new THREE.PointLight(colour, 0, 6.5, 2);
     this.group.add(this.light);
   }
 
@@ -252,6 +253,6 @@ export class DataProjection {
     }
     for (const m of this.lineMaterials) m.opacity = Math.min(1, m.opacity);
     this.beamMat.opacity = 0.09 * this.reveal * flicker;
-    this.light.intensity = 2.2 * this.reveal * flicker;
+    this.light.intensity = 7.5 * this.reveal * flicker;
   }
 }

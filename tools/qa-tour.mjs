@@ -178,7 +178,13 @@ if (!controlsOnly) {
   const list = manifest.checkpoints.filter((c) => !only.length || only.includes(c.id));
   console.log(`\nCapturing ${list.length} checkpoints…`);
   for (const cp of list) {
-    await page.evaluate((t) => window.__show.seek(t), cp.t);
+    // Seek a little early and run the intervening seconds deterministically so
+    // transient effects are present when the frame is captured.
+    const pre = cp.preroll ?? 0;
+    await page.evaluate(({ t, pre: p }) => {
+      window.__show.seek(t - p);
+      if (p > 0) window.__show.simulate(p);
+    }, { t: cp.t, pre });
     await settle();
     const state = await page.evaluate(() => window.__show.state());
     const assertions = await page.evaluate((id) => window.__show.checkpointAssert(id), cp.id);
@@ -315,16 +321,20 @@ if (!skipControls) {
   });
 
   await control('quality switching', async () => {
+    await page.click('#btn-settings');
+    await page.waitForSelector('#settings:not([hidden])');
     for (const q of ['low', 'high', 'medium']) {
       await page.selectOption('#sel-quality', q);
       await settle(6);
       const s = await page.evaluate(() => window.__show.state());
       if (!Number.isFinite(s.drawCalls)) throw new Error('renderer stopped reporting after a quality change');
     }
+    await page.click('#btn-settings');
   });
 
   await control('diagnostics overlay', async () => {
     await page.click('#btn-settings');
+    await page.waitForSelector('#settings:not([hidden])');
     await page.check('#chk-debug');
     await settle(4);
     const visible = await page.evaluate(() => !document.getElementById('debug').hidden);
@@ -338,9 +348,9 @@ if (!skipControls) {
 
   await control('help panel', async () => {
     await page.click('#btn-help');
-    await page.waitForSelector('#help:not([hidden])');
+    await page.waitForSelector('#help', { state: 'visible' });
     await page.click('#help-close');
-    await page.waitForSelector('#help[hidden]');
+    await page.waitForSelector('#help', { state: 'hidden' });
   });
 
   await control('explore mode: orbit, pick and inspect', async () => {
