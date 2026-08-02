@@ -474,7 +474,7 @@ function tieBall(b, C, R, guns, engines, opts = {}) {
 function tieWingPanel(b, C, px, r, opts = {}) {
   const spin = opts.spin ?? HEX_FLAT_X;
   const thick = opts.thick ?? 0.9;
-  const inward = opts.inward ?? -Math.sign(px) * 0.55; // hub bulges toward the ball
+  const inboard = -Math.sign(px); // toward the ball, where the pylon lands
   xcyl(b, px, 0, 0, r, thick, C.frame, { segments: 6, spin, studs: false });
   xcyl(b, px, 0, 0, r * 0.9, thick * 1.35, C.panel, { segments: 6, spin, studs: false });
 
@@ -493,9 +493,11 @@ function tieWingPanel(b, C, px, r, opts = {}) {
   }
   b.pop();
 
-  // hub where the pylon lands
-  xcyl(b, px + inward * 0.5, 0, 0, 1.75, thick * 2.4, C.trim, { segments: 8, studs: false });
-  xcyl(b, px + inward, 0, 0, 0.95, thick * 2.6, C.frame, { segments: 8, studs: false });
+  // Hub: a boss bulging inboard to meet the pylon, and a round housing on the
+  // outer face so the ribs converge on something instead of just petering out.
+  xcyl(b, px + inboard * 0.28, 0, 0, 1.75, thick * 2.4, C.trim, { segments: 8, studs: false });
+  xcyl(b, px + inboard * 0.55, 0, 0, 0.95, thick * 2.6, C.frame, { segments: 8, studs: false });
+  xcyl(b, px - inboard * 0.5, 0, 0, 1.3, thick * 0.9, C.trim, { segments: 10, studs: false });
 }
 
 /**
