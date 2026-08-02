@@ -279,7 +279,7 @@ export function corridorWallTexture(seed = 'wall'): THREE.Texture {
     const size = 512;
     const rng = new Rng(seed);
     const { c, g } = makeCanvas(size, size);
-    g.fillStyle = '#dcd9d2';
+    g.fillStyle = '#e6e4dd';
     g.fillRect(0, 0, size, size);
 
     const cols = 4;
@@ -319,8 +319,8 @@ export function corridorWallTexture(seed = 'wall'): THREE.Texture {
       for (let x = 0; x < size; x++) {
         const i = (y * size + x) * 4;
         const dirt = fbm2(x / 60, y / 60, 4, s) * 0.5 + fbm2(x / 14, y / 200, 3, s + 3) * 0.5;
-        const floorBias = Math.pow(y / size, 2.2) * 0.35;
-        const k = 1 - Math.max(0, dirt - 0.44) * 0.85 - floorBias * 0.5;
+        const floorBias = Math.pow(y / size, 2.4) * 0.26;
+        const k = 1 - Math.max(0, dirt - 0.52) * 0.6 - floorBias * 0.4;
         d[i] *= k;
         d[i + 1] *= k * 0.99;
         d[i + 2] *= k * 0.965;

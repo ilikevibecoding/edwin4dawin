@@ -18,7 +18,7 @@ import {
 } from './textures';
 
 /** Anything at or above this luminance blooms. Keep hull albedo below it. */
-export const BLOOM_THRESHOLD = 0.86;
+export const BLOOM_THRESHOLD = 1.0;
 
 export const PALETTE = {
   rebelHull: '#d8d6cf',
@@ -34,11 +34,11 @@ export const PALETTE = {
   laserBlue: '#63c8ff',
   amber: '#e8b657',
   hologram: '#7fdcff',
-  vaderBlack: '#131417',
+  vaderBlack: '#1b1d22',
   stormtrooperWhite: '#eceff2',
   rebelUniform: '#3d4a5c',
   rebelVest: '#6d5a44',
-  leiaWhite: '#f3f1ec',
+  leiaWhite: '#e9e6de',
   goldDroid: '#d9a83c',
   r2Blue: '#3f7fc4',
   r2White: '#dfe3e8',
