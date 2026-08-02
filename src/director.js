@@ -125,7 +125,10 @@ export class Director {
     const chap = document.getElementById('chapter');
     if (subs) {
       let text = '';
+      // during the crawl the words are already on screen; a subtitle would fight them
+      const silent = s.id === 'crawl' && T > 8;
       for (const l of this.lines) {
+        if (silent) break;
         const d = this.voiceBuffers.get(l.id)?.duration || l.text.length / 14;
         if (T >= l.t - 0.12 && T < l.t + d + 0.35) { text = l.text; break; }
       }

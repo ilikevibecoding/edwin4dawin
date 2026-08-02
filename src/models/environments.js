@@ -193,6 +193,36 @@ function flareTex() {
   }, { wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping });
 }
 
+/**
+ * Filamentary nebula cloud. Wide spectral content so it still shows structure
+ * when a single billboard covers a third of the sky.
+ */
+function nebulaTex(seed) {
+  return canvasTex('neb' + seed, 512, 512, (ctx, w, h) => {
+    const soft = fbm(seed * 3 + 1, { octaves: 7, base: 4, gain: 0.62 });
+    const fil = fbm(seed * 61 + 13, { octaves: 6, base: 6, gain: 0.58, ridged: true });
+    const warp = fbm(seed * 17 + 5, { octaves: 3, base: 3 });
+    pixels(ctx, w, h, (u, v) => {
+      const wx = (warp(u, v) - 0.5) * 0.22;
+      const wy = (warp(v + 0.37, u) - 0.5) * 0.22;
+      const dx = u - 0.5, dy = v - 0.5;
+      const r = Math.sqrt(dx * dx + dy * dy) * 2;
+      const fall = Math.pow(smoothclamp(1.05 - r), 1.6);
+      const s = soft(u + wx, v + wy);
+      const f = fil(u * 1.4 + wx, v * 1.4 + wy);
+      let d = clamp((s * 0.62 + f * 0.55) - 0.42, 0, 1) * 2.1 * fall;
+      d = clamp(d, 0, 1);
+      const core = Math.pow(d, 2.4);
+      return [
+        Math.round(lerp(150, 255, core)),
+        Math.round(lerp(120, 236, core)),
+        Math.round(lerp(190, 226, core)),
+        Math.round(clamp(d * 1.15, 0, 1) * 255),
+      ];
+    });
+  }, { wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping });
+}
+
 /** Wispy cloud puff, used for nebulae, smoke and fireballs. */
 function puffTex(seed = 7) {
   return canvasTex('puff' + seed, 256, 256, (ctx, w, h) => {
@@ -437,23 +467,31 @@ export function starfield({ count = 6000, radius = 4000, seed = 11 } = {}) {
  *
  * @param {object} o {seed, color, radius, count, scale}
  */
-export function nebula({ seed = 3, color = 0x5b3f9d, radius = 3400, count = 5, scale = 1 } = {}) {
+export function nebula({ seed = 3, color = 0x5b3f9d, radius = 3400, count = 7, scale = 1 } = {}) {
   const g = new THREE.Group();
   g.name = 'nebula';
   const rand = rng(seed);
   const base = new THREE.Color(color);
   const clouds = [];
-  for (let i = 0; i < count; i++) {
-    const u = rand() * 1.3 - 0.65;
+  // clouds cluster into two or three regions, the way real nebulae do
+  const hubs = [];
+  for (let i = 0; i < 3; i++) {
+    const u = rand() * 1.4 - 0.7;
     const th = rand() * TAU;
+    hubs.push([th, u]);
+  }
+  for (let i = 0; i < count; i++) {
+    const hub = hubs[i % hubs.length];
+    const th = hub[0] + (rand() - 0.5) * 0.75;
+    const u = clamp(hub[1] + (rand() - 0.5) * 0.5, -0.95, 0.95);
     const s = Math.sqrt(Math.max(0.02, 1 - u * u));
-    const rr = radius * lerp(0.6, 0.95, rand());
+    const rr = radius * lerp(0.62, 0.95, rand());
     const tint = base.clone()
-      .offsetHSL((rand() - 0.5) * 0.16, (rand() - 0.5) * 0.25, (rand() - 0.5) * 0.12);
-    const size = radius * lerp(0.55, 1.15, rand()) * scale;
-    const m = billboard(size, fx(tint.getHex(), lerp(0.1, 0.26, rand()), {
-      map: puffTex(seed * 7 + i * 13 + 1),
-    }));
+      .offsetHSL((rand() - 0.5) * 0.22, (rand() - 0.5) * 0.3, (rand() - 0.5) * 0.1);
+    const size = radius * lerp(0.34, 0.82, rand()) * scale;
+    const m = billboard(size, fx(tint.getHex(), lerp(0.3, 0.62, rand()), {
+      map: nebulaTex(seed * 7 + i * 13 + 1),
+    }), size * lerp(0.55, 1, rand()));
     m.position.set(Math.cos(th) * s * rr, u * rr, Math.sin(th) * s * rr);
     m.lookAt(0, 0, 0);
     m.rotateZ(rand() * TAU);

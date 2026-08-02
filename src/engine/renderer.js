@@ -17,8 +17,8 @@ const FilmShader = {
     tDiffuse: { value: null },
     uTime: { value: 0 },
     uFade: { value: 0 },
-    uGrain: { value: 0.045 },
-    uVignette: { value: 0.9 },
+    uGrain: { value: 0.018 },
+    uVignette: { value: 0.78 },
     uFlash: { value: 0 },
     uFlashColor: { value: new THREE.Color(1, 1, 1) },
     uChroma: { value: 0.0 },
@@ -78,7 +78,7 @@ export function createRenderer(container, opts = {}) {
 
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(opts.width || innerWidth, opts.height || innerHeight),
-    0.85, 0.55, 0.72
+    0.58, 0.42, 0.90
   );
   composer.addPass(bloom);
 
