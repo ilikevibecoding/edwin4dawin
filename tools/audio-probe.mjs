@@ -22,6 +22,7 @@
  *   --opts     JSON options object forwarded to the effect
  *   --bus      JSON options object forwarded to createBus
  *   --sr       sample rate (default 48000)
+ *   --ducks    apply the scene's narration duck windows to a single section
  *   --seed     score seed (default 20250802)
  *   --out      output wav path (default /tmp/audio/<what>.wav)
  *   --pcm16    write 16-bit PCM instead of 32-bit float
@@ -241,6 +242,7 @@ try {
     what: WHAT, section: SECTION, name: NAME, sr: SR, seed: SEED,
     dur: DUR ?? undefined, secDur: SECDUR ?? undefined,
     opts: OPTS, bus: BUSOPTS, cues: CUES ?? undefined, pcm16: PCM16,
+    ducks: has('ducks'),
   });
 
   if (!result || !result.ok) throw new Error(result ? result.error : 'render returned nothing');
@@ -294,6 +296,10 @@ if (result.plan && result.plan.sections) {
   for (const s of result.plan.sections) {
     console.log(`    ${String(s.id).padEnd(9)} start ${String(s.start.toFixed(2)).padStart(7)}  dur ${String(s.dur.toFixed(2)).padStart(6)}  notes ${String(s.notes).padStart(5)}`);
   }
+}
+if (result.plan && result.plan.duckWindows) {
+  console.log(`  ducks       ${result.plan.ducks} lines -> ${result.plan.duckWindows.length} merged windows`);
+  console.log('    ' + result.plan.duckWindows.map((w) => `${w.a}–${w.b}`).join('  '));
 }
 if (result.plan && result.plan.laid) {
   console.log('  effects');

@@ -8,6 +8,7 @@
  */
 import * as THREE from 'three';
 import { rng } from '../lego/bricks.js';
+import { planet } from '../models/environments.js';
 
 export const id = 'crawl';
 
@@ -189,28 +190,16 @@ export async function build(ctx) {
   crawl.position.y = -82;
   holder.add(crawl);
 
-  // the planet the camera tilts down onto at the end
-  const planetGeo = new THREE.SphereGeometry(150, 48, 32);
-  const pc = document.createElement('canvas');
-  pc.width = 512; pc.height = 256;
-  const pg = pc.getContext('2d');
-  const pr = rng(4242);
-  pg.fillStyle = '#c9a06a';
-  pg.fillRect(0, 0, 512, 256);
-  for (let i = 0; i < 900; i++) {
-    const y = pr() * 256;
-    pg.fillStyle = `rgba(${150 + pr() * 70 | 0},${110 + pr() * 60 | 0},${60 + pr() * 50 | 0},0.5)`;
-    pg.fillRect(pr() * 512, y, 20 + pr() * 90, 1 + pr() * 4);
-  }
-  const ptex = new THREE.CanvasTexture(pc);
-  ptex.colorSpace = THREE.SRGBColorSpace;
-  const planet = new THREE.Mesh(planetGeo, new THREE.MeshStandardMaterial({ map: ptex, roughness: 1 }));
-  planet.position.set(26, -300, -300);
-  scene.add(planet);
+  // the planet the camera tilts down onto at the end, handing off to the chase
+  const world = planet({ radius: 150, type: 'desert', seed: 4242, seg: 80, texSize: 1024 });
+  world.position.set(26, -300, -300);
+  const sunDir = new THREE.Vector3(200, 120, 60).normalize();
+  world.userData.setSunDir(sunDir);
+  scene.add(world);
   const sun = new THREE.DirectionalLight(0xfff0d0, 3.0);
-  sun.position.set(200, 120, 60);
+  sun.position.copy(sunDir).multiplyScalar(600);
   scene.add(sun);
-  scene.add(new THREE.AmbientLight(0x223044, 0.6));
+  scene.add(new THREE.AmbientLight(0x223044, 0.5));
 
   const camera = { fov: 42 };
 
@@ -256,7 +245,7 @@ export async function build(ctx) {
       cam.updateProjectionMatrix();
 
       stars.rotation.z = t * 0.0015;
-      planet.rotation.y = t * 0.006;
+      world.userData.update?.(t);
     },
   };
 }

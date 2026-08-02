@@ -972,9 +972,13 @@ export function macrobinoculars(o = {}) {
 /* characters                                                          */
 /* ------------------------------------------------------------------ */
 
-/** Attach a prop and remember it on the figure. */
+/**
+ * Attach a prop and remember it on the figure. Props ride an animated hand, so
+ * they are tagged noBake to survive a bake() by scene code.
+ */
 function hold(fig, prop, side = 'R') {
   attachToHand(fig, prop, side);
+  markNoBake(prop);
   fig.userData.props = fig.userData.props || {};
   fig.userData.props[prop.name || 'prop'] = prop;
   return prop;
@@ -1347,6 +1351,7 @@ export function smuggler(o = {}) {
     if (!leg) continue;
     const sx = leg === q.legR ? 1 : -1;
     leg.add(paint(at(tile(0.05, 0.5, 1.0), sx * 0.34, -1.1, -0.05), C.darkRed));
+    markNoBake(leg);
   }
   if (o.prop !== false) hold(fig, blaster(), 'R');
   pose(fig, { armR: 0.3, armL: 0.14, handR: -0.4, torsoY: -0.04 });
@@ -1594,11 +1599,16 @@ export function astromech(o = {}) {
   }
   markNoBake(centre);
 
+  // Retracting pulls the foot UP into the body; the other sign would sink the
+  // whole droid half a unit below the floor.
+  const HEEL = 0.41;                           // rear sole corner, z
   const setCenterFoot = (u) => {
     const k = Math.max(0, Math.min(1, u));
-    centre.position.y = BODY_Y - (1 - k) * 0.6;
+    centre.position.y = BODY_Y + (1 - k) * 0.72;
     centre.visible = k > 0.02;
-    lean.rotation.x = (1 - k) * 0.12;          // rocks back onto two legs
+    // rocks back onto the two side legs, pivoting on their rear wheels
+    lean.rotation.x = (1 - k) * 0.12;
+    lean.position.y = HEEL * Math.sin(lean.rotation.x);
     lean.position.z = (1 - k) * -0.05;
   };
   g.userData.dome = dome;
@@ -1683,98 +1693,163 @@ export function mouseDroid(o = {}) {
   const g = new THREE.Group();
   g.name = 'mouseDroid';
   const wheels = [];
+  const WHEEL_R = 0.075;
+  const DECK = 0.06;
+  // slope() puts its ramp along X and extrudes along Z, so the width and depth
+  // arguments swap when it is turned to face -Z.
   const solids = [
-    // wedge: tall at the back, sloping down toward -Z
-    paint(at(rot(slope(0.56, 0.9, 0.34, 0.12), 0, Math.PI / 2, 0), 0, 0.12, 0), body),
-    paint(at(tile(0.6, 0.96, 0.12), 0, 0, 0), C.darkGray),
-    paint(at(tile(0.4, 0.16, 0.1), 0, 0.46, 0.24), C.bluishGray),
-    paint(at(tile(0.16, 0.1, 0.16), 0.16, 0.44, -0.3), C.silver),
+    paint(at(rot(slope(0.9, 0.56, 0.34, 0.13), 0, Math.PI / 2, 0), 0, DECK + 0.08, 0), body),
+    paint(at(tile(0.58, 0.92, 0.1), 0, DECK, 0), C.darkGray),
+    // grey skirt band and rear sensor housing
+    paint(at(tile(0.6, 0.14, 0.07), 0, DECK + 0.03, -0.36), C.bluishGray),
+    paint(at(tile(0.34, 0.14, 0.09), 0, DECK + 0.42, 0.3), C.bluishGray),
   ];
-  g.add(assemble(solids));
-  // sensor lamp
-  g.add(at(rot(cyl(0.05, 0.03, { seg: 10, glow: true, color: C.red }), Math.PI / 2, 0, 0), -0.14, 0.2, -0.46));
-  g.add(paint(at(rot(cyl(0.02, 0.3, { seg: 6 }), -0.3, 0, 0), 0.2, 0.46, 0.1), C.silver));
+  // The nose is only 0.13 tall, so the print goes on the sloping deck instead:
+  // face it up and tilt it by the ramp angle so it sits flush.
+  // slope() bevels its outline outward, so the real deck sits ~0.03 above the
+  // nominal surface; the decal has to clear that before it will show at all
+  const RAMP = Math.atan2(0.34 - 0.13, 0.9);
+  const LIFT = 0.05;
+  const deck = panel(0.46, 0.8, mouseDeckTex(), {});
+  rot(deck, -(Math.PI / 2 + RAMP), 0, 0);
+  at(deck, 0, DECK + 0.315 + Math.cos(RAMP) * LIFT, -Math.sin(RAMP) * LIFT);
+  deck.userData.noBake = true;
+  deck.castShadow = false;
+  g.add(assemble(solids, [deck]));
+  // nose lamp and a stub antenna canted back
+  g.add(at(rot(cyl(0.045, 0.03, { seg: 10, glow: true, color: C.red }), Math.PI / 2, 0, 0),
+    -0.14, DECK + 0.14, -0.47));
+  g.add(paint(at(rot(cyl(0.022, 0.26, { seg: 6 }), -0.26, 0, 0), 0.16, DECK + 0.4, 0.22), C.bluishGray));
   for (const sx of [1, -1]) {
-    for (const dz of [-0.24, 0.26]) {
-      const w = paint(at(rot(cyl(0.09, 0.06, { seg: 10 }), 0, 0, Math.PI / 2), sx * 0.28, 0.09, dz), C.darkGray);
+    for (const dz of [-0.26, 0.26]) {
+      const w = paint(at(rot(cyl(WHEEL_R, 0.06, { seg: 10 }), 0, 0, Math.PI / 2),
+        sx * 0.26, WHEEL_R, dz), C.darkGray);
+      markNoBake(w);
       g.add(w);
       wheels.push(w);
     }
   }
-  g.userData.roll = (d) => { for (const w of wheels) w.rotation.x = d / 0.09; };
+  g.userData.roll = (d) => { for (const w of wheels) w.rotation.x = d / WHEEL_R; };
   g.userData.wheels = wheels;
-  g.userData.height = 0.46;
+  g.userData.height = DECK + 0.42;
   g.userData.char = 'mouseDroid';
   return g;
+}
+
+/** Mouse droid deck plate: hatch, vents and a warning flash. viewBox 74 x 128. */
+function mouseDeckTex() {
+  const line = '#6b757d';
+  return flatTex([
+    `<rect width="74" height="128" fill="#1b232a"/>`,
+    // recessed hatch
+    `<rect x="8" y="26" width="58" height="60" rx="4" fill="#141a20" stroke="${line}" stroke-width="2"/>`,
+    `<path d="M37 26 L37 86" stroke="${line}" stroke-width="1.6" opacity="0.7"/>`,
+    // louvred vents toward the tail
+    `<g fill="${line}" opacity="0.85">`
+    + `<rect x="14" y="94" width="46" height="4" rx="2"/><rect x="14" y="102" width="46" height="4" rx="2"/>`
+    + `<rect x="14" y="110" width="46" height="4" rx="2"/></g>`,
+    // hazard flash and sensor strip at the nose
+    `<rect x="10" y="8" width="54" height="10" rx="3" fill="#f2cd37"/>`,
+    `<g fill="#141a20"><rect x="12" y="8" width="5" height="10"/><rect x="26" y="8" width="5" height="10"/>`
+    + `<rect x="40" y="8" width="5" height="10"/><rect x="54" y="8" width="5" height="10"/></g>`,
+    `<circle cx="20" cy="44" r="4" fill="#57d0ff"/>`,
+    `<circle cx="54" cy="44" r="4" fill="#c91a09"/>`,
+  ].join(''), { vw: 74, vh: 128, w: 296, h: 512 });
 }
 
 /* ------------------------------------------------------------------ */
 /* contact sheet + rig checks                                          */
 /* ------------------------------------------------------------------ */
 
-/** Every character in the film, in a row, facing -Z, 4 units apart. */
-export const ROSTER = [
-  ['stormtrooper', stormtrooper],
-  ['sandtrooper', sandtrooper],
-  ['vader', vader],
-  ['rebelTrooper', rebelTrooper],
-  ['princess', princess],
-  ['pilot', pilot],
-  ['imperialOfficer', imperialOfficer],
-  ['jawa', jawa],
-  ['farmBoy', farmBoy],
-  ['smuggler', smuggler],
-  ['oldMan', oldMan],
-  ['protocolDroid', protocolDroid],
-  ['astromech', astromech],
-  ['mouseDroid', mouseDroid],
-];
+/** Spawn-by-name table, in film order. */
+export const CHARACTERS = {
+  stormtrooper, sandtrooper, vader, rebelTrooper, princess, pilot,
+  imperialOfficer, jawa, farmBoy, smuggler, oldMan,
+  protocolDroid, astromech, mouseDroid,
+};
 
+/** Character names in the order cast() lays them out. */
+export const ROSTER = Object.keys(CHARACTERS);
+
+/** Resolve a factory from a name, a factory, or nothing. */
+function factory(which, fallback) {
+  if (typeof which === 'function') return which;
+  if (typeof which === 'string' && CHARACTERS[which]) return CHARACTERS[which];
+  return fallback;
+}
+
+/** Every character in the film, in a row, facing -Z, 4 units apart. */
 export function cast(o = {}) {
   const gap = o.gap ?? 4;
+  const names = o.only || ROSTER;
   const g = new THREE.Group();
   g.name = 'cast';
-  const n = ROSTER.length;
-  ROSTER.forEach(([name, make], i) => {
-    const c = make();
-    at(c, (i - (n - 1) / 2) * gap, 0, 0);
+  names.forEach((name, i) => {
+    const c = CHARACTERS[name]();
+    at(c, (i - (names.length - 1) / 2) * gap, 0, 0);
     c.userData.char = name;
     g.add(c);
   });
   return g;
 }
 
-/** Rig check: one figure at a given walk phase. */
+/**
+ * Rig check: one figure at a given walk phase.
+ *   preview.html?m=/src/models/characters.js&f=walkTest&args=[0.25]
+ *   preview.html?m=/src/models/characters.js&f=walkTest&args=[0.25,{"char":"vader"}]
+ */
 export function walkTest(phase = 0, o = {}) {
-  const fig = o.char === 'trooper' ? stormtrooper() : farmBoy();
+  const fig = factory(o.char || o.make, rebelTrooper)();
   walk(fig, phase, o);
+  if (o.char === 'vader') capeSim(fig, phase * 1.2, [0, 0, -4]);
+  return fig;
+}
+
+/** The named poses the rig ships with, for rig checks and for scene authors. */
+const POSES = {
+  rest: (f) => pose(f, {}),
+  walk0: (f) => walk(f, 0),
+  walk25: (f) => walk(f, 0.25),
+  walk50: (f) => walk(f, 0.5),
+  walk75: (f) => walk(f, 0.75),
+  run0: (f) => run(f, 0),
+  run15: (f) => run(f, 0.15),
+  run25: (f) => run(f, 0.25),
+  idle: (f) => idle(f, 1.4, 9),
+  aim: (f) => aimBlaster(f, { pitch: 0 }),
+  aimUp: (f) => aimBlaster(f, { pitch: 0.55, twoHanded: true }),
+  aimDown: (f) => aimBlaster(f, { pitch: -0.4 }),
+  aimLeft: (f) => {
+    const p = f.userData.props && Object.values(f.userData.props)[0];
+    if (p) attachToHand(f, p, 'L');
+    return aimBlaster(f, { side: 'L', pitch: 0.25 });
+  },
+  sit: (f) => sit(f),
+  fall20: (f) => fall(f, 0.2),
+  fall45: (f) => fall(f, 0.45),
+  fall120: (f) => fall(f, 1.2),
+};
+
+/**
+ * Rig check: one figure in one named pose, for a tight single-figure render.
+ *   preview.html?m=/src/models/characters.js&f=poseTest&args=["aimUp"]
+ */
+export function poseTest(name = 'rest', o = {}) {
+  const fig = factory(o.char || o.make, rebelTrooper)();
+  (POSES[name] || POSES.rest)(fig);
   return fig;
 }
 
 /** Rig check: one figure through the whole animation set, side by side. */
 export function poseSheet(o = {}) {
-  const make = o.make || rebelTrooper;
-  const items = [
-    (f) => f,
-    (f) => walk(f, 0),
-    (f) => walk(f, 0.25),
-    (f) => walk(f, 0.5),
-    (f) => walk(f, 0.75),
-    (f) => run(f, 0.1),
-    (f) => run(f, 0.35),
-    (f) => aimBlaster(f, { pitch: 0 }),
-    (f) => aimBlaster(f, { pitch: 0.55, twoHanded: true }),
-    (f) => idle(f, 1.4, 9),
-    (f) => sit(f),
-    (f) => fall(f, 0.35),
-    (f) => fall(f, 1.2),
-  ];
+  const make = factory(o.char || o.make, rebelTrooper);
+  const names = o.poses || Object.keys(POSES);
   const g = new THREE.Group();
   g.name = 'poseSheet';
-  items.forEach((fn, i) => {
+  names.forEach((n, i) => {
     const f = make();
-    fn(f);
-    at(f, (i - (items.length - 1) / 2) * 3.4, 0, 0);
+    (POSES[n] || POSES.rest)(f);
+    at(f, (i - (names.length - 1) / 2) * (o.gap ?? 3.4), 0, 0);
     g.add(f);
   });
   return g;

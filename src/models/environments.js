@@ -198,6 +198,57 @@ function normalFromGray(key, tex, strength = 1, o = {}) {
   return normalTex(key, w, h, (x, y) => data[(y * w + x) * 4] / 255, strength, o);
 }
 
+/**
+ * Draw armour plating: bands of varying height, each split into plates of
+ * varying width, over a dark base that shows through as shadow gaps. This is
+ * what stops hull texture reading as ruled graph paper — no seam ever runs the
+ * full width, and no two plates are the same size.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} w
+ * @param {number} h
+ * @param {()=>number} rand seeded
+ * @param {object} o {gap, band:[min,max], plate:[min,max], tone(t01)->css,
+ *   gapColor, ventColor, widen(v01)->scale, detail}
+ */
+function plateField(ctx, w, h, rand, o) {
+  const gap = o.gap ?? 2;
+  const [bMin, bMax] = o.band;
+  const [pMin, pMax] = o.plate;
+  const widen = o.widen || (() => 1);
+  ctx.fillStyle = o.gapColor;
+  ctx.fillRect(0, 0, w, h);
+  let y = 0;
+  while (y < h) {
+    const v = (y + 0.5) / h;
+    const k = widen(v);
+    const bandH = bMin + rand() * (bMax - bMin);
+    const baseW = (pMin + rand() * (pMax - pMin)) * k;
+    let x = -rand() * baseW;
+    while (x < w) {
+      const pw = baseW * (0.55 + rand() * 1.5);
+      const t = 0.42 + Math.pow(rand(), 1.4) * 0.5;
+      ctx.fillStyle = o.tone(t);
+      ctx.fillRect(x, y, pw - gap, bandH - gap);
+      if (o.detail !== false && pw > baseW * 0.9 && bandH > bMin * 1.3 && rand() < 0.72) {
+        const inset = Math.min(pw, bandH) * 0.18;
+        if (rand() < 0.5) {
+          ctx.fillStyle = o.tone(clamp(t + (rand() - 0.5) * 0.34, 0.1, 1));
+          ctx.fillRect(x + inset, y + inset, (pw - gap) * (0.3 + rand() * 0.45), (bandH - gap) - inset * 2);
+        } else {
+          ctx.fillStyle = o.ventColor;
+          const vh = (bandH - gap) * 0.26;
+          for (let i = 0; i < 3; i++) {
+            ctx.fillRect(x + inset, y + inset + i * vh * 1.5, (pw - gap) * 0.5, vh * 0.7);
+          }
+        }
+      }
+      x += pw;
+    }
+    y += bandH;
+  }
+}
+
 /** Soft round dot — the workhorse sprite for stars, glows and sparks. */
 function dotTex(hardness = 0.25, key = 'dot') {
   return canvasTex(key + hardness, 64, 64, (ctx, w) => {
@@ -1176,8 +1227,9 @@ export function twinSuns({
   const setElevation = (a) => {
     elev = a;
     sky.rotation.x = a;
-    // low sun: redder, dimmer disc, fatter halo — the sunset look
-    const k = smoothclamp(a / 0.42);
+    // low sun: redder, dimmer disc, fatter halo — the sunset look. The default
+    // elevation is a sunset, so the reddening has to still be strong at 0.25.
+    const k = smoothclamp(a / 0.62);
     suns.forEach((s) => {
       const base = new THREE.Color(s.userData.baseColor);
       const low = new THREE.Color(0xff5a1e).lerp(base, 0.25);
@@ -1297,10 +1349,12 @@ export function battleStation({ radius = 420, seed = 17, seg = 240, texSize = 20
   staticRoot.add(body);
 
   /* ---- greeble ------------------------------------------------------- */
-  // kept close to the hull's own mid-tone: brighter greeble reads as confetti
-  const plateMat = mat(0x7d8389, { rough: 0.6, metal: 0.25 });
-  const darkMat = mat(0x565c62, { rough: 0.7, metal: 0.2 });
-  const pipeMat = mat(0x9aa0a6, { rough: 0.45, metal: 0.5 });
+  // Deliberately darker than the hull's mid-tone and rougher than you would
+  // guess: a greeble box shows the key light a flat face while the sphere
+  // around it curves away, so matching albedo still reads as bright confetti.
+  const plateMat = mat(0x686e74, { rough: 0.78, metal: 0.14 });
+  const darkMat = mat(0x494f55, { rough: 0.84, metal: 0.1 });
+  const pipeMat = mat(0x7e848a, { rough: 0.6, metal: 0.35 });
   const greebleRoot = new THREE.Group();
   const put = (mesh, dir, r, spinAngle) => {
     mesh.position.copy(dir).multiplyScalar(r);
@@ -1315,14 +1369,15 @@ export function battleStation({ radius = 420, seed = 17, seg = 240, texSize = 20
 
   // Greeble comes in districts, not confetti: a sunken sector plate with a
   // cluster of blocks, towers and pipe runs on top of it.
-  const nDistrict = Math.round(120 * greeble);
+  // Fewer, bigger, denser districts. Many small ones scatter into lichen.
+  const nDistrict = Math.round(72 * greeble);
   for (let i = 0; i < nDistrict; i++) {
     const lon = craterLon + (rand() + rand() - 1) * 1.7;
     const th = Math.acos(clamp(1 - 2 * rand(), -1, 1));
     const cDir = dirAt(th, lon);
     if (craterAng(cDir.x, cDir.y, cDir.z) / craterR < 1.35) continue;   // dish stays clear
     if (Math.abs(th - Math.PI / 2) < halfW + wall * 4) continue;        // trench stays clear
-    const spread = 0.035 + rand() * 0.055;                              // angular radius
+    const spread = 0.045 + rand() * 0.07;                               // angular radius
     const cR = rFn(th, lon, cDir.x, cDir.y, cDir.z);
     // sunken pads, not one big card: a thin plate this wide on a sphere this
     // size lifts its own corners off the hull and reads as floating paper
@@ -1337,7 +1392,7 @@ export function battleStation({ radius = 420, seed = 17, seg = 240, texSize = 20
         dP, rFn(thP, lonP, dP.x, dP.y, dP.z) - 1.1, rand() * TAU);
     }
 
-    const n = 6 + Math.round(rand() * 11);
+    const n = 12 + Math.round(rand() * 14);
     for (let k = 0; k < n; k++) {
       const lon2 = lon + (rand() - 0.5) * spread * 2 / Math.max(0.2, Math.sin(th));
       const th2 = clamp(th + (rand() - 0.5) * spread * 2, 0.02, Math.PI - 0.02);
@@ -1546,41 +1601,17 @@ function stationMaps(seed, w, o) {
       ? `rgb(${Math.round(t * 255)},${Math.round(t * 255)},${Math.round(t * 255)})`
       : css(mix(0x74797f, 0xb3b8bd, t)));
 
-    ctx.fillStyle = bumpMode ? 'rgb(52,52,52)' : css(0x4e545a);   // seam gaps
-    ctx.fillRect(0, 0, w, h);
-
     const gap = Math.max(1.5, w / 1100);
-    let y = 0;
-    while (y < h) {
-      const v = (y + 0.5) / h;                        // 0 north pole, 1 south
-      const sinTh = Math.max(0.16, Math.sin(Math.PI * v));
-      const bandH = h * (0.012 + rand() * 0.03);
+    plateField(ctx, w, h, rand, {
+      gap,
+      band: [h * 0.012, h * 0.042],
+      plate: [w * 0.012, w * 0.047],
       // plates are widened toward the poles so they stay square on the sphere
-      const baseW = w * (0.012 + rand() * 0.035) / sinTh;
-      let x = -rand() * baseW;
-      while (x < w) {
-        const pw = baseW * (0.55 + rand() * 1.5);
-        const t = 0.42 + Math.pow(rand(), 1.4) * 0.5;
-        ctx.fillStyle = grey(t);
-        ctx.fillRect(x, y, pw - gap, bandH - gap);
-        // sub-plates and vents inside the bigger plates
-        if (pw > baseW * 0.9 && bandH > h * 0.02 && rand() < 0.72) {
-          const inset = Math.min(pw, bandH) * 0.18;
-          if (rand() < 0.5) {
-            ctx.fillStyle = grey(clamp(t + (rand() - 0.5) * 0.34, 0.1, 1));
-            ctx.fillRect(x + inset, y + inset, (pw - gap) * (0.3 + rand() * 0.45), (bandH - gap) - inset * 2);
-          } else {
-            ctx.fillStyle = bumpMode ? 'rgb(30,30,30)' : css(0x3f4449);
-            const vh = (bandH - gap) * 0.26;
-            for (let k = 0; k < 3; k++) {
-              ctx.fillRect(x + inset, y + inset + k * vh * 1.5, (pw - gap) * 0.5, vh * 0.7);
-            }
-          }
-        }
-        x += pw;
-      }
-      y += bandH;
-    }
+      widen: (v) => 1 / Math.max(0.16, Math.sin(Math.PI * v)),
+      tone: grey,
+      gapColor: bumpMode ? 'rgb(52,52,52)' : css(0x4e545a),
+      ventColor: bumpMode ? 'rgb(30,30,30)' : css(0x3f4449),
+    });
 
     // a handful of oversized sector plates to break the band rhythm
     for (let i = 0; i < 34; i++) {
@@ -1774,9 +1805,18 @@ function hazardTex(a = '#f5c518', b = '#1b2a34', label = '') {
  * `(0, 3.4, length/2 - 2)` looking down -Z sees the full receding hallway.
  * Interior clear width is `width`; the arch tops out at `userData.height`.
  *
- * @param {object} o {segments, width, height, segLen, seed}
- * @returns {THREE.Group} userData: {length, width, height, segLen, lights,
- *   lightMaterial, setLights(k), update(t)}
+ * Camera notes: eye height `userData.cameraY` (3.4, minifig eyeline) with a
+ * 35-50 degree lens, `near` no larger than 0.2. Stay inside |x| < 4 so the
+ * conduit runs do not clip the frustum. The far end is deliberately open — park
+ * a `blastDoor()` at `z = -length/2` if a shot needs it capped.
+ *
+ * The set is enclosed, so a single exterior key never reaches the floor: pass
+ * `practicals: 3` (or more) to have the corridor light itself from its own
+ * ceiling coves.
+ *
+ * @param {object} o {segments, width, height, segLen, seed, practicals}
+ * @returns {THREE.Group} userData: {length, width, height, segLen, cameraY,
+ *   lights, lamps, lightMaterial, setLights(k), update(t)}
  */
 export function corridor({
   segments = 8, width = 12, height = 9, segLen = 10, seed = 33, practicals = 0,
@@ -2191,11 +2231,14 @@ export function blastDoor({ width = 12, height = 9, seed = 44, label = 'SEAL 7' 
  * Anchor: deck at `y = 0`, centred on X/Z, tube mouth at `-Z`. Park a pod at
  * `userData.podAnchor` (an Object3D already in the right place and rotation).
  *
- * @param {object} o {width, height, depth, seed}
+ * `practicals` adds that many bay floods, for shots that sit inside the roofed
+ * bay where a single exterior key cannot reach.
+ *
+ * @param {object} o {width, height, depth, seed, practicals}
  * @returns {THREE.Group} userData: {width, height, depth, podAnchor, clamps,
- *   lights, setClamps(0..1), update(t)}
+ *   lights, lamps, setClamps(0..1), update(t)}
  */
-export function podBay({ width = 20, height = 11, depth = 26, seed = 55 } = {}) {
+export function podBay({ width = 20, height = 11, depth = 26, seed = 55, practicals = 0 } = {}) {
   const g = new THREE.Group();
   g.name = 'podBay';
   const rand = rng(seed);
@@ -2351,6 +2394,15 @@ export function podBay({ width = 20, height = 11, depth = 26, seed = 55 } = {}) 
   podAnchor.position.set(0, 4.0, 1.2);
   g.add(podAnchor);
 
+  const lamps = [];
+  for (let i = 0; i < practicals; i++) {
+    const p = new THREE.PointLight(0xffeccd, 40, depth * 2.4, 2);
+    p.position.set(0, height * 0.7, hd - (i + 0.5) * (depth / practicals));
+    p.userData.noBake = true;
+    lamps.push(p);
+    g.add(p);
+  }
+
   let clampK = 1;
   const setClamps = (u) => {
     clampK = clamp(u, 0, 1);
@@ -2369,6 +2421,7 @@ export function podBay({ width = 20, height = 11, depth = 26, seed = 55 } = {}) 
   g.userData.podAnchor = podAnchor;
   g.userData.clamps = clampArms.map((c) => c.arm);
   g.userData.lights = beacons.map((b) => b.g);
+  g.userData.lamps = lamps;
   /** 1 = pod clamped, 0 = clamps retracted and clear for launch. */
   g.userData.setClamps = setClamps;
   Object.defineProperty(g.userData, 'clamped', { get: () => clampK });
@@ -2389,9 +2442,9 @@ export function podBay({ width = 20, height = 11, depth = 26, seed = 55 } = {}) 
 /* =================================================================== */
 
 /**
- * Stud relief for baseplates: a bump tile of 4x4 studs. Applied as a bump map
- * with a big `repeat`, so a 900-unit dune field still reads as LEGO without
- * paying for 810,000 stud cylinders.
+ * Stud relief for baseplates: a 4x4 stud tile as a tangent-space normal map,
+ * repeated hard across the ground. A 900-unit dune field then still reads as
+ * LEGO without paying for 810,000 stud cylinders.
  */
 function studNormalTex() {
   const N = 256, studs = 4, cell = N / studs;
@@ -2452,8 +2505,10 @@ export function desert({ size = 900, seg = 240, seed = 77, amp = 13, rocks = 44,
   // period is always kept longer than the field so the noise never visibly
   // tiles.
   const cellFor = (c) => c * Math.max(8, Math.ceil((size * 1.3) / c));
+  const P0 = cellFor(340);        // slow swells, so a wide shot has big forms
   const P1 = cellFor(120);        // primary dunes, ~120-stud crests
   const P2 = cellFor(58);         // secondary ridges
+  const swell = fbm(seed * 3 + 17, { octaves: 2, base: Math.round(P0 / 340), gain: 0.5 });
   const dune = fbm(seed * 7 + 1, { octaves: 4, base: Math.round(P1 / 120), gain: 0.5 });
   const crest = fbm(seed * 19 + 5, { octaves: 3, base: Math.round(P2 / 58), gain: 0.48, ridged: true });
   const grain = fbm(seed * 41 + 3, { octaves: 3, base: Math.round(P2 / 22), gain: 0.5 });
@@ -2463,7 +2518,8 @@ export function desert({ size = 900, seg = 240, seed = 77, amp = 13, rocks = 44,
   const heightAt = (x, z) => {
     const u1 = x / P1, v1 = z / P1;
     const u2 = x / P2, v2 = z / P2;
-    let h = (dune(u1, v1) - 0.5) * 2 * amp;
+    let h = (swell(x / P0, z / P0) - 0.5) * amp * 1.7;
+    h += (dune(u1, v1) - 0.5) * 2 * amp;
     h += (crest(u2, v2) - 0.5) * amp * 0.42;
     // wind ripples running across the dune faces: regular, and coarse enough
     // that the ground mesh can actually resolve them
@@ -2706,14 +2762,20 @@ export function dunesBackdrop({ seed = 91, layers = 4, radius = 1500, haze = 0xc
  * `z = -length`**. Fly a camera from `(0, ~12, +40)` straight down -Z. The walls
  * are `width` apart and `userData.height` tall.
  *
+ * Camera notes: `userData.cameraY` (12) is the sweet spot — low enough that the
+ * walls tower, high enough to clear the floor conduit. Keep |x| under 10 so the
+ * wall brackets stay outside the frustum, roll the camera a few degrees for the
+ * classic look, and use `near` 0.5 / `far` past `length`. The exhaust port sits
+ * on the floor at `userData.exhaustPort.position`, dead centre.
+ *
  * Sections are authored once, merged, then cloned end to end, and every feature
  * is contained inside its own section, so it tiles seamlessly for as long as you
  * like. Pipe runs and course heights are chosen once for the whole trench so
  * they line up across variants.
  *
  * @param {object} o {length, width, height, secLen, seed, variants}
- * @returns {THREE.Group} userData: {length, width, height, secLen, exhaustPort,
- *   wallLights, lightBanks, turrets, update(t)}
+ * @returns {THREE.Group} userData: {length, width, height, secLen, sections,
+ *   cameraY, exhaustPort, wallLights, lightBanks, update(t)}
  */
 export function trench({
   length = 1400, width = 34, height = 46, secLen = 100, seed = 101, variants = 6,
@@ -2866,6 +2928,19 @@ export function trench({
         const y = 2.5 + rand() * (height - 6);
         const bank = lampMats[Math.floor(rand() * 3)];
         s.add(at(flat(0.34, 0.5, 0.5, bank), X - sx * 2.9, y, z));
+      }
+
+      /* brackets reaching well into the channel: the closest thing to the
+         camera on a run, so they are what actually sells the speed */
+      for (let i = 0; i < 3; i++) {
+        const z = z0 + secLen * (0.16 + i * 0.34) + rand() * 8;
+        if (alcoveSlot >= 0 && Math.abs(z - (z0 + (alcoveSlot + 1) * slotLen)) < 10) continue;
+        const reach = 4.5 + rand() * 2.5;
+        const y = 6 + rand() * (height - 14);
+        s.add(at(flat(reach, 1.1, 1.5, hullC), X - sx * reach / 2, y, z));
+        s.add(at(flat(1.3, 2.6, 2.2, hullA), X - sx * reach, y - 0.2, z));
+        s.add(at(rot(flat(3.2, 0.9, 1.1, deep), 0, 0, sx * 0.7), X - sx * reach * 0.55, y - 1.9, z));
+        s.add(at(flat(0.6, 0.6, 0.6, lampMats[i % 3]), X - sx * (reach + 0.2), y + 1.2, z));
       }
 
       /* top rim: ledge, kerb and railing posts */
@@ -3050,29 +3125,26 @@ export function stationSurface({ size = 900, seed = 131, slotWidth = 0, density 
   const half = size / 2;
   const slotHalf = slotWidth / 2;
 
+  // same plating language as the battle station hull, so a wide shot of the
+  // sphere and a dive onto the deck read as the same object
   const panelTex = canvasTex('stationplate' + seed, 1024, 1024, (ctx, w, h) => {
     const r2 = rng(seed * 97 + 5);
-    ctx.fillStyle = css(0x8f959b);
-    ctx.fillRect(0, 0, w, h);
-    for (let i = 0; i < 2600; i++) {
-      const x = r2() * w, y = r2() * h;
-      const pw = 8 + r2() * 78, ph = 8 + r2() * 78;
-      ctx.fillStyle = css(mix(0x7d838a, 0xa8aeb4, r2()));
-      ctx.fillRect(x, y, pw, ph);
+    plateField(ctx, w, h, r2, {
+      gap: 3,
+      band: [34, 96],
+      plate: [40, 165],
+      tone: (t) => css(mix(0x74797f, 0xb3b8bd, t)),
+      gapColor: css(0x4e545a),
+      ventColor: css(0x3f4449),
+    });
+    // a couple of service walkways crossing the plating
+    ctx.fillStyle = css(0x646a71);
+    for (let i = 0; i < 2; i++) {
+      const ww = 12 + r2() * 8;
+      ctx.fillRect(r2() * w, 0, ww, h);
+      ctx.fillRect(0, r2() * h, w, ww);
     }
-    ctx.strokeStyle = css(0x686e75);
-    ctx.lineWidth = 2;
-    for (let i = 0; i <= 32; i++) {
-      ctx.beginPath(); ctx.moveTo((i / 32) * w, 0); ctx.lineTo((i / 32) * w, h); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, (i / 32) * h); ctx.lineTo(w, (i / 32) * h); ctx.stroke();
-    }
-    ctx.strokeStyle = css(0xb0b6bc);
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 260; i++) {
-      const x = r2() * w, y = r2() * h;
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (r2() - 0.5) * 200, y); ctx.stroke();
-    }
-  }, { repeat: [size / 90, size / 90] });
+  }, { repeat: [size / 150, size / 150] });
 
   const hullA = mat(0x9298a0, { rough: 0.62, metal: 0.2 });
   const hullB = mat(0x7d838b, { rough: 0.66, metal: 0.2 });
@@ -3213,15 +3285,25 @@ function fireTex(seed = 5) {
   }, { wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping });
 }
 
-/** Flat expanding shock ring, brightest at its rim. */
-function ringTex() {
-  return canvasTex('shockring', 256, 256, (ctx, w) => {
+/**
+ * Flat expanding shock ring, brightest at its rim. `thin` gives a narrow
+ * annulus with a fully clear core — a tilted ring needs that, or it reads as a
+ * grey soap bubble sitting over the fireball instead of a shock front.
+ */
+function ringTex(thin = false) {
+  return canvasTex('shockring' + (thin ? 'T' : ''), 256, 256, (ctx, w) => {
     const c = w / 2;
     const g = ctx.createRadialGradient(c, c, 0, c, c, c);
     g.addColorStop(0, 'rgba(255,255,255,0)');
-    g.addColorStop(0.62, 'rgba(255,214,150,0.05)');
-    g.addColorStop(0.85, 'rgba(255,236,200,0.85)');
-    g.addColorStop(0.95, 'rgba(255,255,255,0.95)');
+    if (thin) {
+      g.addColorStop(0.8, 'rgba(255,214,150,0)');
+      g.addColorStop(0.9, 'rgba(255,240,205,0.9)');
+      g.addColorStop(0.96, 'rgba(255,255,255,1)');
+    } else {
+      g.addColorStop(0.62, 'rgba(255,214,150,0.04)');
+      g.addColorStop(0.85, 'rgba(255,236,200,0.8)');
+      g.addColorStop(0.95, 'rgba(255,255,255,0.95)');
+    }
     g.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, w);
@@ -3264,12 +3346,15 @@ export function explosionBurst({
   g.name = 'explosionBurst';
   const rand = rng(seed * 199 + 13);
 
-  /* ---- fireball: three nested shells that peel outward ---- */
+  /* ---- fireball core: two nested shells, kept inside the lobe cluster ---- */
+  // These carry the hot body only. A textured sphere seen from outside averages
+  // its front and back faces and always reads smooth, so it must never be the
+  // widest thing here or the whole blast looks like a beach ball.
   const shells = [];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
     const m = new THREE.Mesh(
       rawGeo('fbsph', () => norm(new THREE.SphereGeometry(1, 20, 14))),
-      fx(i === 0 ? 0xffffff : i === 1 ? 0xffc247 : 0xff6a1e, 1, { map: fireTex(seed + i) }),
+      fx(i === 0 ? 0xffffff : 0xffb43c, 1, { map: fireTex(seed + i) }),
     );
     m.material.side = THREE.DoubleSide;
     m.rotation.set(rand() * TAU, rand() * TAU, rand() * TAU);
@@ -3282,6 +3367,23 @@ export function explosionBurst({
   const core = spriteFx(size * 1.2, dotTex(0.5, 'core'), 0xffffff, 1);
   g.add(core);
 
+  /* ---- flame lobes: these define the silhouette ---- */
+  // Small blobs pushed far out and big blobs held near the middle, so the
+  // outline is genuinely lumpy instead of a smooth disc of overlapping sprites.
+  const lobes = [];
+  for (let i = 0; i < 14; i++) {
+    const out = rand();
+    const s = spriteFx(size, fireTex(seed + 11 + (i % 7) * 3), out < 0.4 ? 0xffd9a0 : 0xff8a3c, 1);
+    const a = rand() * TAU, e = Math.asin(rand() * 2 - 1);
+    s.userData.dir = new THREE.Vector3(Math.cos(a) * Math.cos(e), Math.sin(e) * 0.85, Math.sin(a) * Math.cos(e));
+    s.userData.reach = 0.25 + out * 1.15;
+    s.userData.sz = lerp(1.05, 0.5, out) * (0.8 + rand() * 0.4);
+    s.userData.life = 0.34 + rand() * 0.22;
+    s.userData.spin = (rand() - 0.5) * 1.6;
+    lobes.push(s);
+    g.add(s);
+  }
+
   /* ---- shock ring ---- */
   const ring1 = new THREE.Mesh(
     rawGeo('quad', () => new THREE.PlaneGeometry(1, 1)),
@@ -3290,7 +3392,7 @@ export function explosionBurst({
   ring1.rotation.x = -Math.PI / 2;
   keep(ring1);
   g.add(ring1);
-  const ring2 = new THREE.Mesh(ring1.geometry, fx(0xffffff, 1, { map: ringTex() }));
+  const ring2 = new THREE.Mesh(ring1.geometry, fx(0xffffff, 1, { map: ringTex(true) }));
   ring2.rotation.set(1.15, rand() * TAU, 0.4);
   keep(ring2);
   g.add(ring2);
@@ -3343,13 +3445,24 @@ export function explosionBurst({
     // fireball: fast punch out, then collapse into soot
     const grow = Math.pow(smoothclamp(t / 0.42), 0.55);
     shells.forEach((m, i) => {
-      const s = size * (0.18 + grow * (1.15 + i * 0.42));
-      m.scale.setScalar(s);
-      const fade = clamp(1 - (t - 0.1 - i * 0.05) / (0.42 + i * 0.12), 0, 1);
-      m.material.opacity = Math.pow(fade, 1.3) * (i === 0 ? 1 : 0.85);
-      m.rotation.y += 0;
+      m.scale.setScalar(size * (0.16 + grow * (0.78 + i * 0.3)));
+      // fully out by t=0.5 — a lingering additive shell reads as a flat brown
+      // ball once its opacity drops, which is worse than no fireball at all
+      const fade = clamp(1 - (t - 0.08 - i * 0.03) / (0.27 + i * 0.06), 0, 1);
+      m.material.opacity = Math.pow(fade, 1.4) * (i === 0 ? 1 : 0.8);
       m.visible = m.material.opacity > 0.01;
     });
+    lobes.forEach((s, i) => {
+      const d = s.userData.dir;
+      const dist = size * grow * 1.45 * s.userData.reach;
+      s.position.set(d.x * dist, d.y * dist, d.z * dist);
+      s.scale.setScalar(size * (0.3 + grow * 1.0) * s.userData.sz);
+      // hold full brightness through the punch-out, then fall at its own rate
+      s.material.opacity = Math.pow(clamp(1 - (t - 0.2 - i * 0.012) / s.userData.life, 0, 1), 1.25);
+      s.material.rotation = s.userData.spin * t;
+      s.visible = s.material.opacity > 0.01;
+    });
+
     const fl = Math.pow(clamp(1 - t / 0.2, 0, 1), 1.6);
     flash.material.opacity = fl;
     flash.scale.setScalar(size * (2 + t * 9));
@@ -3359,19 +3472,23 @@ export function explosionBurst({
     const rs = size * (0.4 + Math.pow(t, 0.55) * 7.5);
     ring1.scale.set(rs, rs, 1);
     ring1.material.opacity = Math.pow(clamp(1 - t / 0.55, 0, 1), 1.5) * 0.9;
-    ring1.visible = ring1.material.opacity > 0.01;
-    const rs2 = size * (0.3 + Math.pow(t, 0.5) * 5.2);
+    ring1.visible = ring1.material.opacity > 0.03;
+    // deliberately short and tight: a wide faint ring is just a grey hoop
+    const rs2 = size * (0.3 + Math.pow(t, 0.5) * 3.2);
     ring2.scale.set(rs2, rs2, 1);
-    ring2.material.opacity = Math.pow(clamp(1 - t / 0.4, 0, 1), 1.6) * 0.65;
-    ring2.visible = ring2.material.opacity > 0.01;
+    ring2.material.opacity = Math.pow(clamp(1 - t / 0.18, 0, 1), 1.3);
+    ring2.visible = ring2.material.opacity > 0.05;
 
+    // Soot is opaque, so it starts out at the fireball's rim and moves outward
+    // from there. Spawning it at the origin paints grey over the hot core and
+    // kills the blast. It also holds off until the flames are past their peak.
     puffs.forEach((s, i) => {
-      const st = clamp((t - 0.06 - i * 0.02) / 0.94, 0, 1);
+      const st = clamp((t - 0.3 - i * 0.03) / 0.68, 0, 1);
       const d = s.userData.dir;
-      const dist = size * st * 1.5 * s.userData.rate;
+      const dist = size * (0.95 + st * 2.1) * s.userData.rate;
       s.position.set(d.x * dist, d.y * dist, d.z * dist);
-      s.scale.setScalar(size * (0.5 + st * 2.1) * s.userData.rate);
-      s.material.opacity = Math.pow(smoothclamp(st / 0.18), 1) * Math.pow(clamp(1 - (st - 0.3) / 0.7, 0, 1), 1.4) * 0.8;
+      s.scale.setScalar(size * (0.35 + st * 1.3) * s.userData.rate);
+      s.material.opacity = smoothclamp(st / 0.5) * Math.pow(clamp(1 - (st - 0.4) / 0.6, 0, 1), 1.3) * 0.8;
       s.material.rotation = s.userData.spin * st;
       s.visible = s.material.opacity > 0.01;
     });

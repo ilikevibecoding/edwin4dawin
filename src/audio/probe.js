@@ -132,6 +132,15 @@ export function storyDucks() {
   return voiceLines().map((l) => ({ t: l.t, dur: estimateVoiceLength(l.text), id: l.id }));
 }
 
+/** The same windows for one music id, rebased so the scene starts at zero. */
+export function sceneDucks(musicId) {
+  const scene = SCENES.find((s) => s.music === musicId);
+  if (!scene) return [];
+  return scene.lines.map((l, i) => ({
+    t: l.t, dur: estimateVoiceLength(l.text), id: `${scene.id}_${i}`,
+  }));
+}
+
 /**
  * The effects track. Times are absolute film seconds. This is a plausible cue
  * sheet for the seven scenes and it exercises all 31 effects, so `--what film`
@@ -200,11 +209,11 @@ export function filmCues() {
   add(127.6, 'targetingLock', { dur: 1.4, lock: 0.35, gain: 0.3 });
 
   // V — twin suns (131–163)
-  add(131.0, 'wind', { dur: 31.6, gain: 0.34, fade: 2.2 });
+  add(131.0, 'wind', { dur: 31.6, gain: 0.12, fade: 2.2 });
   add(141.2, 'droidBeep', { n: 5, pan: -0.3, seed: 5 });
   add(142.6, 'droidWorry', { pan: 0.3, dur: 1.2 });
   add(144.2, 'protocolFuss', { syllables: 8, pan: 0.3, seed: 7 });
-  add(148.2, 'sandcrawlerRumble', { dur: 13.5, gain: 0.5 });
+  add(148.2, 'sandcrawlerRumble', { dur: 13.5, gain: 0.22 });
   add(152.4, 'jawaChatter', { pan: -0.35 });
   add(154.1, 'jawaChatter', { pan: 0.4, seed: 3, n: 8 });
   add(156.2, 'droidWorry', { pan: -0.1 });
@@ -338,12 +347,8 @@ async function schedule(ctx, bus, cfg) {
 
   if (what === 'score' || what === 'film') {
     const { scheduleScore } = await import('./score.js');
-    let sections;
-    if (what === 'film' || section === 'all' || section === 'film') {
-      sections = storySections();
-    } else {
-      sections = [{ id: section, start: 0, dur: cfg.secDur }];
-    }
+    const whole = what === 'film' || section === 'all' || section === 'film';
+    const sections = whole ? storySections() : [{ id: section, start: 0, dur: cfg.secDur }];
     const res = scheduleScore(ctx, bus, sections, { seed });
     info.sections = res.sections;
     info.scoreNotes = res.notes;
@@ -354,9 +359,16 @@ async function schedule(ctx, bus, cfg) {
       const cues = filmCues();
       end = Math.max(end, scheduleCues(ctx, bus, cues));
       info.cues = cues.length;
-      const ducks = storyDucks();
+    }
+    // `--ducks` on a single section re-bases the scene's narration cues to a
+    // local timeline so the dip can be measured without a full film render.
+    if (what === 'film' || cfg.ducks) {
+      const ducks = whole ? storyDucks() : sceneDucks(section);
       for (const d of ducks) bus.duckVoice(d.t, d.dur);
       info.ducks = ducks.length;
+      info.duckWindows = bus.duckWindows().map((w) => ({
+        a: +w.a.toFixed(2), b: +w.b.toFixed(2), amount: w.amount,
+      }));
     }
     return { end, info };
   }
@@ -430,6 +442,7 @@ self.audioProbe = {
   filmCues,
   storySections,
   storyDucks,
+  sceneDucks,
   estimateVoiceLength,
   async names() {
     const [{ SFX_NAMES }, { SECTION_IDS }] = await Promise.all([import('./sfx.js'), import('./score.js')]);

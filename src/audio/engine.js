@@ -182,9 +182,15 @@ export function noiseBuffer(ctx, seconds = 2, seed = 1) {
 }
 
 /**
- * A synthetic room: exponentially decaying seeded noise with a one-pole
- * absorption filter that closes as the tail dies, plus a handful of discrete
- * early reflections. Used by `createBus(..., {reverb: 'convolver'})`.
+ * A synthetic room, written into an AudioBuffer with a seeded PRNG: seeded
+ * noise under an exponential decay envelope, a one-pole absorption filter that
+ * closes as the tail dies so the room darkens with age, and a handful of
+ * discrete early reflections mirrored between the channels for width.
+ *
+ * This is what `createBus` convolves with by default. It is a pure FIR, so
+ * unlike a feedback network it reproduces exactly: the tail is fully determined
+ * by `seed`, and a one-ULP difference at the input stays a one-ULP difference
+ * at the output instead of recirculating.
  */
 export function impulseResponse(ctx, seconds = 2.4, decay = 2.6, seed = 7) {
   const secs = Math.max(0.05, seconds);
@@ -193,29 +199,31 @@ export function impulseResponse(ctx, seconds = 2.4, decay = 2.6, seed = 7) {
     const len = Math.max(2, Math.round(secs * sr));
     const buf = ctx.createBuffer(2, len, sr);
     const r = rng(seed);
-    const build = Math.max(1, Math.round(0.010 * sr));
+    const build = Math.max(1, Math.round(0.014 * sr));
     for (let ch = 0; ch < 2; ch++) {
       const d = buf.getChannelData(ch);
       let lp = 0;
       let sum = 0;
       for (let i = 0; i < len; i++) {
         const frac = i / len;
-        const a = 0.62 - 0.52 * frac;                 // darkens with age
+        const a = 0.66 - 0.56 * frac;                 // darkens with age
         lp += a * ((r() * 2 - 1) - lp);
+        // Diffusion builds over the first few milliseconds instead of starting
+        // at full density, which is what stops it sounding like a noise burst.
         const v = lp * Math.pow(1 - frac, decay) * Math.min(1, i / build);
         d[i] = v;
         sum += v;
       }
       const mean = sum / len;
-      // Early reflections, mirrored between channels for a sense of width.
       const early = [[0.0071, 0.42], [0.0134, -0.33], [0.0192, 0.27],
-                     [0.0271, -0.21], [0.0363, 0.17], [0.0478, -0.13]];
-      let peak = 0;
-      for (let i = 0; i < len; i++) { d[i] -= mean; }
+                     [0.0271, -0.21], [0.0363, 0.17], [0.0478, -0.13],
+                     [0.0611, 0.10], [0.0783, -0.08]];
+      for (let i = 0; i < len; i++) d[i] -= mean;
       for (const [ms, amp] of early) {
         const idx = Math.round(ms * (ch ? 1.09 : 1) * sr);
         if (idx < len) d[idx] += amp * (ch ? -1 : 1);
       }
+      let peak = 0;
       for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(d[i]));
       if (peak > 0) for (let i = 0; i < len; i++) d[i] /= peak;
     }
@@ -334,19 +342,26 @@ function fdnReverb(ctx, { seconds = 2.6, damp = 2400, preDelay = 0.02, width = 0
   return { input, output, kind: 'fdn' };
 }
 
-function convolverReverb(ctx, { seconds = 2.4, decay = 2.6, seed = 7 } = {}) {
+/**
+ * Seeded-IR convolution room. A highpass in front keeps the low end out of the
+ * tail, which is what stops a big reverb turning the mix to mud.
+ */
+function convolverReverb(ctx, { seconds = 2.4, decay = 2.6, seed = 7, highpass = 170, drive = 1 } = {}) {
   const input = ctx.createGain();
+  input.gain.value = drive;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = highpass; hp.Q.value = 0.6;
   const conv = ctx.createConvolver();
   conv.normalize = true;
   conv.buffer = impulseResponse(ctx, seconds, decay, seed);
   const output = ctx.createGain();
-  input.connect(conv); conv.connect(output);
+  input.connect(hp); hp.connect(conv); conv.connect(output);
   return { input, output, kind: 'convolver' };
 }
 
 function makeReverb(ctx, kind, opts) {
-  if (kind === 'convolver') return convolverReverb(ctx, opts);
-  return fdnReverb(ctx, opts);
+  if (kind === 'fdn' || kind === 'algorithmic') return fdnReverb(ctx, opts);
+  return convolverReverb(ctx, opts);
 }
 
 /* ------------------------------------------------------------------ *
@@ -377,11 +392,15 @@ export function createBus(ctx, {
   voiceGain = 1.0,
   masterGain = 1.0,
   seed = 90210,
-  reverb = 'algorithmic',            // 'algorithmic' | 'convolver' | 'none'
-  hallSeconds = 3.0,
-  roomSeconds = 1.4,
-  hallWet = 0.34,
-  roomWet = 0.30,
+  // 'convolver'   seeded synthetic impulse response — the default, because it
+  //               is an FIR and therefore bit-reproducible (see below)
+  // 'algorithmic' feedback delay network, denser but not reproducible in Chrome
+  // 'none'        dry
+  reverb = 'convolver',
+  hallSeconds = 2.9,
+  roomSeconds = 1.5,
+  hallWet = 0.40,
+  roomWet = 0.34,
   limiter = true,
   compress = true,
   duck = {},
@@ -436,17 +455,17 @@ export function createBus(ctx, {
   let hall = null;
   let room = null;
   if (reverb !== 'none') {
-    hall = makeReverb(ctx, reverb === 'convolver' ? 'convolver' : 'fdn', {
-      seconds: hallSeconds, decay: 2.4, damp: 2100, preDelay: 0.028,
-      width: 0.026, drive: 0.16, seed,
+    hall = makeReverb(ctx, reverb, {
+      seconds: hallSeconds, decay: 2.2, damp: 2100, preDelay: 0.028,
+      width: 0.026, drive: 0.16, highpass: 170, seed,
     });
     const hw = ctx.createGain(); hw.gain.value = hallWet;
     musicFx.connect(hall.input); hall.output.connect(hw); hw.connect(musicDuck);
     hall.wet = hw;
 
-    room = makeReverb(ctx, reverb === 'convolver' ? 'convolver' : 'fdn', {
+    room = makeReverb(ctx, reverb, {
       seconds: roomSeconds, decay: 3.0, damp: 3400, preDelay: 0.012,
-      width: 0.019, drive: 0.16, seed: seed ^ 0x5bd1,
+      width: 0.019, drive: 0.16, highpass: 230, seed: seed ^ 0x5bd1,
     });
     const rw = ctx.createGain(); rw.gain.value = roomWet;
     fx.connect(room.input); room.output.connect(rw); rw.connect(mix);

@@ -65,6 +65,7 @@ const UPPER_ARM = 0.58;
 const FOREARM = 0.5;
 const ARM_FLARE = 0.16;                            // shoulder splay, radians
 const TOE = 0.66;                                  // sole corner ahead of the hip pivot
+const SOLE_X = 0.75;                               // outer sole corner off the centre line
 /** Torso print size: 1.92 x 1.62 covers the whole trapezoid, shoulders included. */
 export const TORSO_PRINT_W = 1.92;
 export const TORSO_PRINT_H = 1.62;
@@ -514,8 +515,18 @@ export function pose(fig, p = {}) {
   if (num(p.torsoZ)) q.torso.rotation.z = p.torsoZ;
   if (num(p.sway)) q.hips.rotation.z = p.sway;
   if (num(p.turn)) q.hips.rotation.y = p.turn;
-  if (num(p.hipsY)) q.hips.position.y = fig.userData.hipRest + p.hipsY;
+  // rigid legs mean any leg swing or hip sway rocks the figure onto a sole
+  // corner, so the pelvis has to ride up to keep the feet on the floor
+  q.hips.position.y = plant(fig, legSwing(q), 1, q.hips.rotation.z) + (p.hipsY || 0);
   return fig;
+}
+
+/** Largest absolute leg swing currently posed, in radians. */
+function legSwing(q) {
+  return Math.max(
+    q.legR ? Math.abs(q.legR.rotation.x) : 0,
+    q.legL ? Math.abs(q.legL.rotation.x) : 0
+  );
 }
 
 /** Drop every joint back to the neutral standing pose. */
@@ -555,18 +566,20 @@ export function walk(fig, phase, opts = {}) {
   q.torso.rotation.set(-(opts.lean ?? 0.05), -twist * s, 0);
   q.head.rotation.set(0, twist * 0.5 * s, 0);
   q.hips.rotation.set(0, twist * 0.35 * s, (opts.sway ?? 0.03) * c);
-  q.hips.position.y = plant(fig, stride * s, opts.plant);
+  q.hips.position.y = plant(fig, stride * s, opts.plant, q.hips.rotation.z);
   return fig;
 }
 
 /**
  * Pelvis height that keeps the lowest sole corner on y = 0 for a leg swung by
- * `a` radians. Rigid legs with big flat feet have to rock up onto heel and toe,
- * which is exactly where the LEGO waddle comes from.
+ * `a` radians with the pelvis rolled by `sway`. Rigid legs with big flat feet
+ * have to rock up onto heel and toe, which is exactly where the LEGO waddle
+ * comes from.
  */
-function plant(fig, a, k = 1) {
+function plant(fig, a, k = 1, sway = 0) {
   const L = fig.userData.legLen;
-  return L * Math.cos(a) + TOE * Math.abs(Math.sin(a)) * k;
+  return L * Math.cos(a) + TOE * Math.abs(Math.sin(a)) * k
+    + SOLE_X * Math.abs(Math.sin(sway));
 }
 
 /**
@@ -591,7 +604,7 @@ export function run(fig, phase, opts = {}) {
   q.head.rotation.set(lean * 0.7, 0.07 * s, 0);
   q.hips.rotation.set(0, 0.16 * s, 0.05 * c);
   const hop = (opts.hop ?? 0.16) * Math.max(0, Math.sin(phase * Math.PI * 4));
-  q.hips.position.y = plant(fig, stride * s, opts.plant) + hop;
+  q.hips.position.y = plant(fig, stride * s, opts.plant, q.hips.rotation.z) + hop;
   return fig;
 }
 
@@ -615,9 +628,9 @@ export function idle(fig, t = 0, seed = 1) {
   q.handL.rotation.set(0, 0, 0);
   q.head.rotation.set(0.012 * b, 0.1 * b3, 0.01 * b2);
   q.hips.rotation.set(0, 0.012 * b2, 0.006 * b3);
-  q.hips.position.y = fig.userData.hipRest - 0.012 + 0.012 * b;
   if (q.legR) q.legR.rotation.set(0.02 * b2, 0, 0);
   if (q.legL) q.legL.rotation.set(-0.02 * b2, 0, 0);
+  q.hips.position.y = plant(fig, 0.02 * b2, 1, q.hips.rotation.z);
   return fig;
 }
 
@@ -644,7 +657,7 @@ function seedBank(seed) {
  * that pitch adds straight onto the shoulder swing: the barrel is level at
  * pitch = 0 and rises for positive pitch.
  * @param {THREE.Group} fig
- * @param {object} [o] {side:'R'|'L', pitch, yaw, twoHanded, lean, crouch}
+ * @param {object} [o] {side:'R'|'L', pitch, yaw, twoHanded, lean, stance, crouch}
  */
 export function aimBlaster(fig, o = {}) {
   const q = fig.userData.parts;
@@ -669,9 +682,13 @@ export function aimBlaster(fig, o = {}) {
     off.rotation.set(0.22, 0, -sx * 0.1);
     offHand.rotation.set(0, 0, 0);
   }
-  if (q.legR) q.legR.rotation.set(-0.14, 0, 0);
-  if (q.legL) q.legL.rotation.set(0.2, 0, 0);
-  q.hips.position.y = plant(fig, 0.17) - (o.crouch ?? 0.04);
+  // braced stance: rear leg back, lead leg forward. Rigid legs cannot crouch
+  // without lifting a sole, so `crouch` defaults to 0 and is opt-in.
+  const stance = o.stance ?? 0.2;
+  if (q.legR) q.legR.rotation.set(-stance * 0.7 * sx, 0, 0);
+  if (q.legL) q.legL.rotation.set(stance * 0.7 * sx, 0, 0);
+  q.hips.rotation.z = 0;
+  q.hips.position.y = plant(fig, stance * 0.7) - (o.crouch ?? 0);
   // twist the wrist so the barrel ends up exactly on the requested pitch/yaw
   aimHand(fig, mainHand, pitch, yaw);
   return fig;
@@ -707,7 +724,9 @@ export function fall(fig, t = 0) {
   const jolt = Math.exp(-t * 7) * Math.sin(t * 34) * 0.16;
 
   q.root.rotation.set(e * 1.52 + jolt * (1 - e), 0, jolt * 0.4);
-  q.root.position.set(0, 0.6 * e + bell * 0.14, e * 0.5);
+  // the lift is what keeps the flung-out arms and the helmet clear of the floor
+  // as the body goes over; it has to peak mid-topple and settle, not just ramp
+  q.root.position.set(0, 0.69 * e + bell * e * 0.42, e * 0.5);
   q.torso.rotation.set(0.3 * bell - 0.05 * e, 0.1 * e, 0);
   // arms fly up on the hit, then flop out to the sides and lie flat
   q.armR.rotation.set(-1.9 * bell - 0.2 * e - jolt, 0, 0.35 * bell + 0.5 * e);
@@ -717,6 +736,7 @@ export function fall(fig, t = 0) {
   if (q.legR) q.legR.rotation.set(-0.55 * bell + 0.12 * e, 0, 0.12 * e);
   if (q.legL) q.legL.rotation.set(-0.2 * bell - 0.16 * e, 0, -0.12 * e);
   q.head.rotation.set(0.16 * e, -0.18 * e, 0.1 * e);
+  q.hips.rotation.z = 0;
   q.hips.position.y = fig.userData.hipRest - 0.06 * e;
   return fig;
 }

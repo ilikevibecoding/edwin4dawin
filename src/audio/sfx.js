@@ -484,7 +484,7 @@ function enginePass(ctx, bus, t, o = {}) {
 
 /** Bed: the deck plates humming under an engine room. */
 function engineRumble(ctx, bus, t, o = {}) {
-  const { gain = 0.45, pan = 0, send = 0.18, dur = 4, fade = 0.5, pitch = 1 } = o;
+  const { gain = 0.28, pan = 0, send = 0.18, dur = 4, fade = 0.5, pitch = 1 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const sd = seedFrom('engineRumble', t);
   const r = rng(sd);
@@ -966,7 +966,7 @@ function jawaChatter(ctx, bus, t, o = {}) {
 
 /** A building the size of a building, walking. */
 function sandcrawlerRumble(ctx, bus, t, o = {}) {
-  const { gain = 0.38, pan = 0, send = 0.3, dur = 6, fade = 0.9, tread = 0.78 } = o;
+  const { gain = 0.20, pan = 0, send = 0.3, dur = 6, fade = 0.9, tread = 0.78 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const sd = seedFrom('sandcrawlerRumble', t);
   const r = rng(sd);
@@ -1010,7 +1010,7 @@ function sandcrawlerRumble(ctx, bus, t, o = {}) {
 
 /** Open desert: a moving band of noise with a low bed under it. */
 function wind(ctx, bus, t, o = {}) {
-  const { gain = 0.4, pan = 0, send = 0.25, dur = 6, fade = 1.2, gust = 1 } = o;
+  const { gain = 0.22, pan = 0, send = 0.25, dur = 6, fade = 1.2, gust = 1 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const sd = seedFrom('wind', t);
   const r = rng(sd);
@@ -1081,7 +1081,7 @@ function alarm(ctx, bus, t, o = {}) {
 
 /** Explosive bolts, hiss, then something small getting very far away fast. */
 function podLaunch(ctx, bus, t, o = {}) {
-  const { gain = 0.85, pan = 0, send = 0.4 } = o;
+  const { gain = 0.62, pan = 0, send = 0.4 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const sd = seedFrom('podLaunch', t);
   const r = rng(sd);
