@@ -261,14 +261,22 @@ function allpass(ctx, delayTime, g) {
 }
 
 /**
- * Six damped comb filters per channel into two series allpasses. Delay lengths
- * are offset between channels so the two sides decorrelate. Every feedback
- * loop is far longer than one 128-sample render quantum, which is what Web
- * Audio requires for a cycle to be legal.
+ * Feedback delay network: two banks of comb filters per channel feeding three
+ * series allpasses. Delay lengths are offset between channels so the two sides
+ * decorrelate, and every feedback loop is far longer than one 128-sample
+ * render quantum, which is what Web Audio requires for a cycle to be legal.
+ *
+ * The damping deliberately sits *outside* the feedback loops. A
+ * `BiquadFilterNode` placed inside a Web Audio cycle is not stable in Chrome —
+ * a bare delay+gain comb decays exactly as designed, but the same comb with a
+ * lowpass in the loop grows without bound even at a feedback gain of 0.93.
+ * Instead the tail darkens over time the way a real room does by splitting the
+ * network in two: a bright bank with a short decay that dies away early, and a
+ * lowpassed bank with the full decay that outlives it.
  */
-function fdnReverb(ctx, { seconds = 2.6, damp = 6200, preDelay = 0.02, width = 0.024, drive = 0.10, seed = 1 } = {}) {
+function fdnReverb(ctx, { seconds = 2.6, damp = 2400, preDelay = 0.02, width = 0.024, drive = 0.10, seed = 1 } = {}) {
   const sr = ctx.sampleRate;
-  const minDelay = 192 / sr;
+  const minDelay = 168 / sr;
   const input = ctx.createGain();
   input.channelCount = 1;
   input.channelCountMode = 'explicit';
@@ -276,35 +284,51 @@ function fdnReverb(ctx, { seconds = 2.6, damp = 6200, preDelay = 0.02, width = 0
 
   const pre = ctx.createDelay(0.5); pre.delayTime.value = Math.max(minDelay, preDelay);
   const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 170; hp.Q.value = 0.6;
-  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 8200; lp.Q.value = 0.6;
-  input.connect(pre); pre.connect(hp); hp.connect(lp);
+  input.connect(pre); pre.connect(hp);
+
+  const bright = ctx.createBiquadFilter();
+  bright.type = 'lowpass'; bright.frequency.value = 7600; bright.Q.value = 0.4;
+  const dark = ctx.createBiquadFilter();
+  dark.type = 'lowpass'; dark.frequency.value = damp; dark.Q.value = 0.4;
+  hp.connect(bright); hp.connect(dark);
 
   const merger = ctx.createChannelMerger(2);
-  const COMB = [0.02974, 0.03715, 0.04117, 0.04371, 0.05053, 0.05689];
-  const AP = [0.00521, 0.00374];
+  //                early / bright                       late / dark
+  const BANKS = [
+    { src: bright, times: [0.02251, 0.02671, 0.03019, 0.03307], rt: seconds * 0.38, lvl: 0.62 },
+    { src: dark, times: [0.03571, 0.03967, 0.04409, 0.04871], rt: seconds, lvl: 1.0 },
+  ];
+  const AP = [0.00613, 0.00477, 0.00411];
   const r = rng(seed);
 
   for (let ch = 0; ch < 2; ch++) {
     const sum = ctx.createGain();
     sum.gain.value = drive;
-    for (const base of COMB) {
-      const dt = base * (1 + (ch ? width : 0)) * (1 + (r() - 0.5) * 0.012);
-      const d = ctx.createDelay(0.25); d.delayTime.value = dt;
-      const damper = ctx.createBiquadFilter();
-      damper.type = 'lowpass'; damper.frequency.value = damp; damper.Q.value = 0.35;
-      const fb = ctx.createGain();
-      fb.gain.value = clamp(Math.pow(10, (-3 * dt) / seconds), 0, 0.93);
-      lp.connect(d);
-      d.connect(damper); damper.connect(fb); fb.connect(d);
-      d.connect(sum);
+    for (const bank of BANKS) {
+      const bg = ctx.createGain();
+      bg.gain.value = bank.lvl;
+      bg.connect(sum);
+      for (const base of bank.times) {
+        const dt = base * (1 + (ch ? width : 0)) * (1 + (r() - 0.5) * 0.012);
+        const d = ctx.createDelay(0.25);
+        d.delayTime.value = dt;
+        const fb = ctx.createGain();
+        fb.gain.value = clamp(Math.pow(10, (-3 * dt) / Math.max(0.05, bank.rt)), 0, 0.93);
+        bank.src.connect(d);
+        d.connect(fb); fb.connect(d);
+        d.connect(bg);
+      }
     }
     let node = sum;
-    for (const apt of AP) {
-      const ap = allpass(ctx, Math.max(minDelay, apt * (1 + (ch ? width * 1.8 : 0))), 0.62);
+    for (let i = 0; i < AP.length; i++) {
+      const ap = allpass(ctx, Math.max(minDelay, AP[i] * (1 + (ch ? width * 1.8 : 0))), 0.62);
       node.connect(ap.input);
       node = ap.output;
     }
-    node.connect(merger, 0, ch);
+    const smooth = ctx.createBiquadFilter();
+    smooth.type = 'lowpass'; smooth.frequency.value = 9000; smooth.Q.value = 0.4;
+    node.connect(smooth);
+    smooth.connect(merger, 0, ch);
   }
   merger.connect(output);
   return { input, output, kind: 'fdn' };
@@ -379,11 +403,11 @@ export function createBus(ctx, {
   let comp = null;
   if (compress) {
     comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -15;
-    comp.knee.value = 14;
-    comp.ratio.value = 3;
-    comp.attack.value = 0.006;
-    comp.release.value = 0.24;
+    comp.threshold.value = -10;
+    comp.knee.value = 12;
+    comp.ratio.value = 2.5;
+    comp.attack.value = 0.008;
+    comp.release.value = 0.26;
     comp.connect(tail);
     tail = comp;
   }
@@ -413,16 +437,16 @@ export function createBus(ctx, {
   let room = null;
   if (reverb !== 'none') {
     hall = makeReverb(ctx, reverb === 'convolver' ? 'convolver' : 'fdn', {
-      seconds: hallSeconds, decay: 2.4, damp: 5200, preDelay: 0.028,
-      width: 0.026, drive: 0.10, seed,
+      seconds: hallSeconds, decay: 2.4, damp: 2100, preDelay: 0.028,
+      width: 0.026, drive: 0.16, seed,
     });
     const hw = ctx.createGain(); hw.gain.value = hallWet;
     musicFx.connect(hall.input); hall.output.connect(hw); hw.connect(musicDuck);
     hall.wet = hw;
 
     room = makeReverb(ctx, reverb === 'convolver' ? 'convolver' : 'fdn', {
-      seconds: roomSeconds, decay: 3.0, damp: 7400, preDelay: 0.012,
-      width: 0.019, drive: 0.10, seed: seed ^ 0x5bd1,
+      seconds: roomSeconds, decay: 3.0, damp: 3400, preDelay: 0.012,
+      width: 0.019, drive: 0.16, seed: seed ^ 0x5bd1,
     });
     const rw = ctx.createGain(); rw.gain.value = roomWet;
     fx.connect(room.input); room.output.connect(rw); rw.connect(mix);

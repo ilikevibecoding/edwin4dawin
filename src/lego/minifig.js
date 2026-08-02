@@ -131,27 +131,42 @@ export function arcShell(r, h, o = {}) {
 }
 
 /**
+ * The kit's prism() extrudes a top-down footprint upward. slab() needs it in a
+ * different orientation, and the fix has to live in the geometry rather than
+ * in the mesh transform: at() and rot() *overwrite* position and rotation, so a
+ * correction parked on the mesh would vanish the moment a caller wrote
+ * `at(slab(...), x, y, z)`. Geometries are cached, hence the clone.
+ */
+const slabCache = new Map();
+function reframed(pts, h, o, key, fix) {
+  const ck = key + JSON.stringify(pts) + h + (o.bevel ?? 0.03);
+  let geo = slabCache.get(ck);
+  if (!geo) {
+    geo = prism(pts, h, o).geometry.clone();
+    fix(geo);
+    geo.computeVertexNormals();
+    slabCache.set(ck, geo);
+  }
+  const m = new THREE.Mesh(geo, mat(o.color ?? C.lightGray, o));
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
+
+/**
  * Extrude a front-view outline along Z: trapezoidal torsos, cape plates,
- * side-view wedges. Corrects prism()'s vertical offset so the outline's own
- * y = 0 is the mesh's y = 0, and centres the extrusion on z = 0.
+ * side-view wedges. The outline's own y = 0 is the mesh's y = 0 and the
+ * extrusion is centred on z = 0, so `at()` places the outline where you drew it.
  * @param {Array<[number,number]>} pts outline as [x, y], +y up
  * @param {number} depth extrusion depth along Z
  */
 export function slab(pts, depth, o = {}) {
   const b = o.bevel ?? 0.03;
-  const m = prism(pts, depth, o);
-  rot(m, Math.PI / 2, 0, 0);
-  m.position.z = -(1.5 * depth - 2 * b);
-  return m;
+  return reframed(pts, depth, o, 'z', (g) => {
+    g.rotateX(Math.PI / 2);
+    g.translate(0, 0, -(1.5 * depth - 2 * b));
+  });
 }
 
-/** Extruded top-down outline (world XZ), base at y = 0. */
-export function slabXZ(pts, h, o = {}) {
-  const b = o.bevel ?? 0.03;
-  const m = prism(pts.map(([x, z]) => [x, -z]), h, o);
-  m.position.y = -(h - 2 * b);
-  return m;
-}
 
 /**
  * Force a mesh onto the canonical cached material for a colour.

@@ -163,10 +163,12 @@ function brass(S, g, t, midi, dur, o = {}) {
     s.connect(sg); sg.connect(amp);
     s.start(t); s.stop(stop);
   }
-  const fc = clamp(f * bright, 240, 11000);
-  setAt(lpf.frequency, t, clamp(f * 1.15, 160, 9000));
+  // Brass keeps its harmonics down in the tuba register: the cutoff tracks
+  // pitch but never collapses onto the fundamental the way `bright * f` does.
+  const fc = clamp(bright * (f + 320), 320, 12000);
+  setAt(lpf.frequency, t, clamp(fc * 0.42, 220, 9000));
   exp(lpf.frequency, t + attack * 1.5, fc);
-  exp(lpf.frequency, t + dur + release, clamp(f * 1.25, 180, 9000));
+  exp(lpf.frequency, t + dur + release, clamp(fc * 0.5, 220, 9000));
   adsr(amp.gain, t, vel, { a: attack, d: 0.10, s: 0.86, r: release, dur });
   return t + dur + release;
 }
@@ -196,9 +198,10 @@ function strings(S, g, t, midi, dur, o = {}) {
     s.connect(sg); sg.connect(amp);
     s.start(t); s.stop(stop);
   }
-  setAt(lpf.frequency, t, clamp(f * 1.4, 200, 8000));
-  exp(lpf.frequency, t + Math.min(dur, attack * 2.4), clamp(f * bright, 300, 11000));
-  exp(lpf.frequency, t + dur + release, clamp(f * 1.5, 200, 8000));
+  const fc = clamp(bright * (f + 180), 280, 12000);
+  setAt(lpf.frequency, t, clamp(fc * 0.4, 200, 9000));
+  exp(lpf.frequency, t + Math.min(dur, attack * 2.4), fc);
+  exp(lpf.frequency, t + dur + release, clamp(fc * 0.45, 200, 9000));
   adsr(amp.gain, t, vel, { a: attack, d: 0.35, s: 0.82, r: release, dur });
   return t + dur + release;
 }
@@ -211,7 +214,7 @@ function tremolo(S, g, t, midis, dur, o = {}) {
   amp.gain.value = 0;
   const lpf = ctx.createBiquadFilter();
   lpf.type = 'lowpass';
-  lpf.frequency.value = clamp(NOTE.freq(midis[0]) * bright, 400, 9000);
+  lpf.frequency.value = clamp(bright * (NOTE.freq(midis[0]) + 180), 400, 10000);
   lpf.Q.value = 0.8;
   amp.connect(lpf); lpf.connect(g);
   const stop = S.stop(t + dur + release + 0.06);
@@ -401,7 +404,8 @@ function pluck(S, g, t, midi, dur, o = {}) {
   amp.gain.value = 0;
   const bp = ctx.createBiquadFilter();
   bp.type = 'lowpass';
-  bp.frequency.value = clamp(f * bright, 400, 9000);
+  const fc = clamp(bright * (f + 120), 320, 10000);
+  bp.frequency.value = fc;
   bp.Q.value = 2.2;
   amp.connect(bp); bp.connect(g);
   const life = Math.min(dur, 0.9) * decay;
@@ -416,7 +420,7 @@ function pluck(S, g, t, midi, dur, o = {}) {
     s.connect(sg); sg.connect(amp);
     s.start(t); s.stop(stop);
   }
-  exp(bp.frequency, t + life, clamp(f * 1.6, 250, 6000));
+  exp(bp.frequency, t + life, clamp(fc * 0.35, 250, 6000));
   hit(amp.gain, t, vel, 0.004, life);
   return t + life;
 }
@@ -459,9 +463,10 @@ function lead(S, g, t, midi, dur, o = {}) {
     s.connect(sg); sg.connect(amp);
     s.start(t); s.stop(stop);
   }
-  setAt(lpf.frequency, t, clamp(f * 1.5, 220, 8000));
-  exp(lpf.frequency, t + Math.min(dur * 0.5, 0.7), clamp(f * bright, 400, 10000));
-  exp(lpf.frequency, t + dur + release, clamp(f * 1.4, 220, 8000));
+  const fc = clamp(bright * (f + 150), 320, 11000);
+  setAt(lpf.frequency, t, clamp(fc * 0.45, 220, 8000));
+  exp(lpf.frequency, t + Math.min(dur * 0.5, 0.7), fc);
+  exp(lpf.frequency, t + dur + release, clamp(fc * 0.42, 220, 8000));
   adsr(amp.gain, t, vel, { a: attack, d: 0.2, s: 0.88, r: release, dur });
   return t + dur + release;
 }
@@ -498,14 +503,20 @@ function pedal(S, g, t, midi, dur, o = {}) {
  * Section scaffolding
  * ------------------------------------------------------------------ */
 
+/**
+ * Per-section defaults. `level` is the mix balance between sections, measured
+ * rather than guessed: each one is trimmed so the loud tuttis land near
+ * -30 dBFS RMS on the music bus with about 25 dB of crest left for the hits,
+ * and the quiet scenes sit a deliberate 3–5 dB below that.
+ */
 const DEFAULTS = {
-  fanfare: { tempo: 100, fadeIn: 0.02, tailFade: 0.70, level: 1.00 },
-  chase: { tempo: 150, fadeIn: 0.02, tailFade: 0.35, level: 0.96 },
-  imperial: { tempo: 84, fadeIn: 0.45, tailFade: 0.55, level: 0.98 },
-  droids: { tempo: 132, fadeIn: 0.05, tailFade: 0.40, level: 0.92 },
-  desert: { tempo: 60, fadeIn: 1.30, tailFade: 0.90, level: 0.90 },
-  battle: { tempo: 152, fadeIn: 0.05, tailFade: 0.28, level: 1.00 },
-  finale: { tempo: 96, fadeIn: 0.01, tailFade: 0.90, level: 1.00 },
+  fanfare: { tempo: 100, fadeIn: 0.02, tailFade: 0.70, level: 0.385 },
+  chase: { tempo: 150, fadeIn: 0.02, tailFade: 0.35, level: 0.400 },
+  imperial: { tempo: 84, fadeIn: 0.45, tailFade: 0.55, level: 0.320 },
+  droids: { tempo: 132, fadeIn: 0.05, tailFade: 0.40, level: 1.150 },
+  desert: { tempo: 60, fadeIn: 1.30, tailFade: 0.90, level: 0.400 },
+  battle: { tempo: 152, fadeIn: 0.05, tailFade: 0.28, level: 0.371 },
+  finale: { tempo: 96, fadeIn: 0.01, tailFade: 0.90, level: 0.337 },
 };
 
 export const SECTION_IDS = Object.keys(DEFAULTS);
@@ -659,7 +670,7 @@ function sFanfare(S) {
     hi: S.group('hi', { send: 0.55, gain: 0.42 }),
     perc: S.group('perc', { send: 0.26, gain: 0.72 }),
     harp: S.group('harp', { send: 0.62, gain: 0.44 }),
-    sub: S.group('sub', { send: 0.05, gain: 0.60 }),
+    sub: S.group('sub', { send: 0.05, gain: 0.40 }),
   };
   const t0 = S.t0;
   const T = (s) => t0 + s;
@@ -675,7 +686,7 @@ function sFanfare(S) {
     S.play(fm, g.harp, T(tt), m, 1.5, { vel: 0.20, ratio: 4.02, index: 3.4, decay: 1 });
   }
   S.roll(g.perc, T(3.15), 1.6, { rate: 15, from: 0.03, to: 0.5, tone: 1500, accent: 0 });
-  S.hitAt(timpani, g.perc, T(3.2), BB3 - 24, { vel: 0.28, decay: 1.7 });
+  S.hitAt(timpani, g.perc, T(3.2), BB3 - 12, { vel: 0.28, decay: 1.7 });
   S.perc(cymbal, g.perc, T(3.05), { vel: 0.34, dur: 1.75 });
 
   // --- 4.8 : the hit -----------------------------------------------
@@ -685,13 +696,13 @@ function sFanfare(S) {
     S.play(brass, m < BB3 ? g.low : g.brass, T(H), m, 2.0 * S.spb, { vel: 0.62, attack: 0.03, bright: 3.2, rip: 55 });
     S.play(strings, g.str, T(H), m + 12, 2.2 * S.spb, { vel: 0.24, attack: 0.05, release: 0.4 });
   }
-  S.hitAt(timpani, g.perc, T(H), BB3 - 24, { vel: 1.0, decay: 1.6 });
-  S.hitAt(timpani, g.perc, T(H), BB3 - 17, { vel: 0.5, decay: 1.1 });
+  S.hitAt(timpani, g.perc, T(H), BB3 - 12, { vel: 1.0, decay: 1.6 });
+  S.hitAt(timpani, g.perc, T(H), BB3 - 5, { vel: 0.5, decay: 1.1 });
   S.perc(cymbal, g.perc, T(H), { vel: 0.5, dur: 2.6, crash: true });
   for (const m of [BB3 - 12, BB3, BB3 + 7]) {
     S.play(brass, g.brass, T(H + 2.5 * S.spb), m, 0.55 * S.spb, { vel: 0.55, attack: 0.02, bright: 3.4, rip: 60 });
   }
-  S.hitAt(timpani, g.perc, T(H + 2.5 * S.spb), BB3 - 24, { vel: 0.55, decay: 0.8 });
+  S.hitAt(timpani, g.perc, T(H + 2.5 * S.spb), BB3 - 12, { vel: 0.55, decay: 0.8 });
   S.play(pedal, g.sub, T(H), BB3 - 24, 3.4, { vel: 0.30, fade: 0.5 });
 
   // --- 6.9 : heroic motif, full brass -------------------------------
@@ -714,8 +725,8 @@ function sFanfare(S) {
     S.play(brass, g.low, T(ts), root - 12, len - 0.1, { vel: 0.34, attack: 0.06, bright: 2.0 });
   }
   for (let i = 0; i < 4; i++) {
-    S.hitAt(timpani, g.perc, T(H + 2.4 * (i + 1)), i % 2 ? BB3 - 17 : BB3 - 24, { vel: 0.55, decay: 1.1 });
-    S.hitAt(timpani, g.perc, T(H + 2.4 * (i + 1) + 1.2), BB3 - 24, { vel: 0.30, decay: 0.7 });
+    S.hitAt(timpani, g.perc, T(H + 2.4 * (i + 1)), i % 2 ? BB3 - 5 : BB3 - 12, { vel: 0.55, decay: 1.1 });
+    S.hitAt(timpani, g.perc, T(H + 2.4 * (i + 1) + 1.2), BB3 - 12, { vel: 0.30, decay: 0.7 });
     S.roll(g.perc, T(H + 2.4 * (i + 1) + 1.5), 0.85, { rate: 16, from: 0.08, to: 0.26, accent: 4 });
   }
 
@@ -728,7 +739,7 @@ function sFanfare(S) {
   for (const [b, semi, len] of tagNotes) {
     S.play(brass, g.brass, T(tag + b * S.spb), BB3 + semi, len * S.spb * 0.95, { vel: 0.60, attack: 0.05, bright: 2.9 });
   }
-  S.hitAt(timpani, g.perc, T(tag), BB3 - 24, { vel: 0.9, decay: 1.5 });
+  S.hitAt(timpani, g.perc, T(tag), BB3 - 12, { vel: 0.9, decay: 1.5 });
   S.perc(cymbal, g.perc, T(tag), { vel: 0.4, dur: 2.4, crash: true });
   for (const [ts, root, q, len] of [[tag, BB3, Q.maj, 2.4], [tag + 2.4, BB3 + 5, Q.maj, 1.2],
                                      [tag + 3.6, BB3 + 7, Q.dom7, 1.2]]) {
@@ -785,7 +796,7 @@ function sChase(S) {
     brass: S.group('brass', { send: 0.26, gain: 0.56 }),
     trem: S.group('trem', { send: 0.34, gain: 0.50 }),
     perc: S.group('perc', { send: 0.22, gain: 0.68 }),
-    sub: S.group('sub', { send: 0.05, gain: 0.55 }),
+    sub: S.group('sub', { send: 0.05, gain: 0.34 }),
   };
   const nBars = Math.ceil(S.dur / (4 * S.spb));
 
@@ -810,7 +821,7 @@ function sChase(S) {
       const semi = PATTERN[e % 8];
       const vel = 0.34 * (bar < 2 ? 0.55 : bar < 4 ? 0.78 : 1) * (e % 2 === 0 ? 1 : 0.72) * (collapse ? 0.7 : 1);
       S.play(pluck, g.ost, t, D3 - 12 + rootOff + semi, S.spb * 0.44, { vel, bright: 4.2, decay: 0.85 });
-      S.play(pluck, g.ost, t, D3 + rootOff + semi, S.spb * 0.44, { vel: vel * 0.45, bright: 3.4, decay: 0.7 });
+      S.play(pluck, g.ost, t, D3 + rootOff + semi, S.spb * 0.44, { vel: vel * 0.6, bright: 4.4, decay: 0.7 });
     }
     S.play(pedal, g.sub, S.bar(bar), D3 - 24 + rootOff, 4 * S.spb, { vel: collapse ? 0.30 : 0.22, fade: 0.35 });
   }
@@ -819,8 +830,8 @@ function sChase(S) {
   for (let bar = 0; bar < nBars; bar++) {
     if (bar >= 16) break;
     const heavy = bar >= 8;
-    S.hitAt(timpani, g.perc, S.bar(bar, 0), D3 - 24, { vel: bar < 2 ? 0.4 : 0.8, decay: 1.0 });
-    if (heavy) S.hitAt(timpani, g.perc, S.bar(bar, 2), D3 - 19, { vel: 0.5, decay: 0.8 });
+    S.hitAt(timpani, g.perc, S.bar(bar, 0), D3 - 12, { vel: bar < 2 ? 0.4 : 0.8, decay: 1.0 });
+    if (heavy) S.hitAt(timpani, g.perc, S.bar(bar, 2), D3 - 7, { vel: 0.5, decay: 0.8 });
     if (bar >= 4 && bar < 15) {
       S.roll(g.perc, S.bar(bar), 4 * S.spb, {
         rate: 8, from: heavy ? 0.20 : 0.10, to: heavy ? 0.26 : 0.13, accent: 2, grain: 0.05,
@@ -835,7 +846,7 @@ function sChase(S) {
     const [rootOff, q] = chordAt(bar);
     const v = voice(D3 + rootOff, q, { n: 3, low: 62, high: 84, prev });
     prev = v;
-    S.play(tremolo, g.trem, S.bar(bar), v, 4 * S.spb * 0.96, { vel: bar >= 12 ? 0.20 : 0.13, bright: 3.2 });
+    S.play(tremolo, g.trem, S.bar(bar), v, 4 * S.spb * 0.96, { vel: bar >= 12 ? 0.22 : 0.15, bright: 4.2 });
   }
 
   // --- the wedge arrives: menacing motif at bar 8 -------------------
@@ -856,7 +867,7 @@ function sChase(S) {
   for (const m of [D3 + 12, D3 + 13, D3 + 18]) {
     S.play(brass, g.brass, S.bar(13, 0), m, 3.4 * S.spb, { vel: 0.30, attack: 0.09, bright: 2.6 });
   }
-  S.hitAt(timpani, g.perc, S.bar(13, 0), D3 - 24, { vel: 0.95, decay: 1.6 });
+  S.hitAt(timpani, g.perc, S.bar(13, 0), D3 - 12, { vel: 0.95, decay: 1.6 });
   S.perc(cymbal, g.perc, S.bar(12, 2), { vel: 0.34, dur: 2.6 });
 
   // --- bars 14+ : ion fire, everything comes apart ------------------
@@ -870,7 +881,7 @@ function sChase(S) {
     S.play(strings, g.trem, S.bar(16), m, 3.6 * S.spb, { vel: 0.15, attack: 1.1, release: 1.4, bright: 1.9 });
   }
   S.play(pedal, g.sub, S.bar(16), D3 - 24, S.dur - 16 * 4 * S.spb - 0.2, { vel: 0.26, fade: 1.0 });
-  S.hitAt(timpani, g.perc, S.bar(16), D3 - 24, { vel: 0.6, decay: 2.2 });
+  S.hitAt(timpani, g.perc, S.bar(16), D3 - 12, { vel: 0.6, decay: 2.2 });
   S.perc(cymbal, g.perc, S.bar(16, 2), { vel: 0.16, dur: 3.0 });
 }
 
@@ -884,7 +895,7 @@ function sImperial(S) {
     brass: S.group('brass', { send: 0.30, gain: 0.54 }),
     str: S.group('str', { send: 0.40, gain: 0.50 }),
     perc: S.group('perc', { send: 0.24, gain: 0.72 }),
-    sub: S.group('sub', { send: 0.04, gain: 0.62 }),
+    sub: S.group('sub', { send: 0.04, gain: 0.36 }),
   };
   const bar = (n, b = 0) => S.bar(n, b);
   const nBars = Math.ceil(S.dur / (4 * S.spb));
@@ -898,12 +909,13 @@ function sImperial(S) {
     S.perc(bassDrum, g.perc, bar(n, 0), { vel: v, decay: 0.9 });
     if (!hush) S.perc(bassDrum, g.perc, bar(n, 2), { vel: v * 0.8, decay: 0.8 });
     if (soft || hush || under) continue;
-    // Dotted military figure.
-    for (const [b, vv] of [[0, 0.34], [0.75, 0.20], [1, 0.26], [1.5, 0.18], [2, 0.34], [2.75, 0.20], [3, 0.26], [3.5, 0.22], [3.75, 0.26]]) {
-      S.perc(snare, g.perc, bar(n, b), { vel: vv * (n >= 5 ? 1.25 : 1), decay: 0.14 });
+    // Dotted military figure. Tuned bright: the snare is the only thing in
+    // this section carrying presence above 1 kHz.
+    for (const [b, vv] of [[0, 0.46], [0.75, 0.27], [1, 0.35], [1.5, 0.24], [2, 0.46], [2.75, 0.27], [3, 0.35], [3.5, 0.30], [3.75, 0.35]]) {
+      S.perc(snare, g.perc, bar(n, b), { vel: vv * (n >= 5 ? 1.25 : 1), decay: 0.14, tone: 2600 });
     }
-    S.hitAt(timpani, g.perc, bar(n, 0), D3 - 24, { vel: 0.7, decay: 1.4 });
-    if (n >= 5) S.hitAt(timpani, g.perc, bar(n, 2), D3 - 19, { vel: 0.5, decay: 1.0 });
+    S.hitAt(timpani, g.perc, bar(n, 0), D3 - 12, { vel: 0.7, decay: 1.4 });
+    if (n >= 5) S.hitAt(timpani, g.perc, bar(n, 2), D3 - 7, { vel: 0.5, decay: 1.0 });
   }
   for (let n = 0; n < nBars; n++) {
     S.play(pedal, g.sub, bar(n), D3 - 24, 4 * S.spb, { vel: n >= 5 ? 0.30 : 0.20, fade: 0.5 });
@@ -925,6 +937,7 @@ function sImperial(S) {
   for (const b of [2 * 4 + 1, 2 * 4 + 3, 3 * 4 + 1, 3 * 4 + 3]) {
     for (const m of [D3 + 3, D3 + 7]) {
       S.play(brass, g.brass, S.b(b), m, S.spb * 0.7, { vel: 0.22, attack: 0.03, bright: 2.6, rip: 50 });
+      S.play(brass, g.brass, S.b(b), m + 12, S.spb * 0.6, { vel: 0.09, attack: 0.03, bright: 3.0, rip: 50 });
     }
   }
 
@@ -962,7 +975,7 @@ function sImperial(S) {
     for (const m of v) S.play(strings, g.str, bar(Math.floor(n), (n % 1) * 4), m, len, { vel: 0.19, attack: 0.4, release: 1.0 });
     S.play(brass, g.low, bar(Math.floor(n), (n % 1) * 4), root - 12, len * 0.92, { vel: 0.42, attack: 0.07, bright: 1.9 });
   }
-  S.hitAt(timpani, g.perc, bar(10), D3 - 24, { vel: 1.0, decay: 2.4 });
+  S.hitAt(timpani, g.perc, bar(10), D3 - 12, { vel: 1.0, decay: 2.4 });
   S.perc(cymbal, g.perc, bar(10), { vel: 0.24, dur: 3.2, crash: true });
   S.play(pedal, g.sub, bar(10), D3 - 24, S.dur - 10 * 4 * S.spb - 0.3, { vel: 0.30, fade: 1.2 });
 }
@@ -975,9 +988,9 @@ const F3 = NOTE.midi('F3');   // 53
 
 function sDroids(S) {
   const g = {
-    pluck: S.group('pluck', { send: 0.20, gain: 0.55 }),
-    cel: S.group('cel', { send: 0.34, gain: 0.46 }),
-    reed: S.group('reed', { send: 0.24, gain: 0.42 }),
+    pluck: S.group('pluck', { send: 0.20, gain: 0.42 }),
+    cel: S.group('cel', { send: 0.34, gain: 0.60 }),
+    reed: S.group('reed', { send: 0.24, gain: 0.46 }),
     str: S.group('str', { send: 0.36, gain: 0.44 }),
     perc: S.group('perc', { send: 0.20, gain: 0.50 }),
     low: S.group('low', { send: 0.18, gain: 0.52 }),
@@ -1035,8 +1048,8 @@ function sDroids(S) {
   S.motif(pluck, g.cel, 10 * 4, heroic(F3 + 12, { scale: S_MAJ, take: 7 }), { vel: 0.30, bright: 6.5, decay: 0.5 });
   S.motif(pluck, g.pluck, 10 * 4, heroic(F3, { scale: S_MAJ, take: 7 }), { vel: 0.16, bright: 4.0, decay: 0.6 });
 
-  // The officer speaks: three notes of the wrong motif, very quietly.
-  S.motif(brass, g.low, 12 * 4 + 2, menace(F3 - 24, { take: 4 }), { vel: 0.22, attack: 0.14, bright: 1.5, rip: 12 });
+  // The officer speaks: four notes of the wrong motif, very quietly.
+  S.motif(brass, g.low, 12 * 4 + 2, menace(F3 - 12, { take: 4 }), { vel: 0.22, attack: 0.14, bright: 1.6, rip: 12 });
 
   // Cheeky cadence.
   S.motif(pluck, g.cel, 13 * 4 + 2, heroic(F3 + 12, { scale: S_MAJ, from: 6, take: 4, resolve: true }),
@@ -1059,7 +1072,7 @@ function sDesert(S) {
     harp: S.group('harp', { send: 0.65, gain: 0.40 }),
     perc: S.group('perc', { send: 0.35, gain: 0.55 }),
     horn: S.group('horn', { send: 0.55, gain: 0.44 }),
-    sub: S.group('sub', { send: 0.05, gain: 0.55 }),
+    sub: S.group('sub', { send: 0.05, gain: 0.40 }),
   };
   const T = (s) => S.t0 + s;
   const D = S.dur;
@@ -1069,6 +1082,9 @@ function sDesert(S) {
   S.play(strings, g.drone, T(0), D3 - 12, D - 1.4, { vel: 0.15, attack: 3.0, release: 2.2, bright: 1.8, voices: 2 });
   S.play(strings, g.drone, T(0.4), D3 - 5, D - 2.0, { vel: 0.11, attack: 3.4, release: 2.2, bright: 2.0, voices: 2 });
   S.play(strings, g.str, T(1.0), D3 + 19, D - 3.0, { vel: 0.055, attack: 4.5, release: 3.0, bright: 3.6, voices: 2 });
+  // Heat haze: two harmonics so high they read as air rather than as notes.
+  S.play(strings, g.str, T(2.2), D3 + 31, D - 5.0, { vel: 0.022, attack: 6.0, release: 4.0, bright: 6.5, voices: 2 });
+  S.play(strings, g.str, T(6.5), D3 + 38, D - 11.0, { vel: 0.012, attack: 6.0, release: 4.5, bright: 6.5, voices: 2 });
   S.play(fm, g.harp, T(2.0), D3 + 26, 3.2, { vel: 0.11, ratio: 4.02, index: 3.2 });
 
   // The solo. D · Eb · F# · G — phrygian dominant, and no hurry at all.
@@ -1099,16 +1115,16 @@ function sDesert(S) {
 
   // The sandcrawler, arriving the way weather arrives.
   for (let i = 0; i < 5; i++) {
-    S.hitAt(timpani, g.perc, T(17.0 + i * 2.4), D3 - 24, { vel: 0.20 + i * 0.045, decay: 2.1, rich: false });
+    S.hitAt(timpani, g.perc, T(17.0 + i * 2.4), D3 - 12, { vel: 0.20 + i * 0.045, decay: 2.1, rich: false });
   }
   S.play(pedal, g.sub, T(17.0), D3 - 26, 10.0, { vel: 0.18, fade: 2.5 });
 
   // A few grains of sand.
   const HIJ = [0, 1, 4, 5, 7, 8, 10];
-  for (let i = 0; i < 7; i++) {
-    const ts = 20.4 + i * 0.85 + S.r() * 0.4;
-    const m = D3 + 24 + HIJ[Math.floor(S.r() * HIJ.length)];
-    S.play(fm, g.harp, T(ts), m, 1.6 + S.r() * 0.9, { vel: 0.08 + S.r() * 0.05, ratio: 4.02, index: 3.2 });
+  for (let i = 0; i < 11; i++) {
+    const ts = 8.4 + i * 1.85 + S.r() * 0.5;
+    const m = D3 + 24 + HIJ[Math.floor(S.r() * HIJ.length)] + (S.r() < 0.35 ? 12 : 0);
+    S.play(fm, g.harp, T(ts), m, 1.6 + S.r() * 0.9, { vel: 0.07 + S.r() * 0.05, ratio: 4.02, index: 3.4 });
   }
 
   // The plans keep travelling: the heroic motif, quiet, in the natural minor.
@@ -1132,7 +1148,7 @@ function sBattle(S) {
     hi: S.group('hi', { send: 0.34, gain: 0.50 }),
     trem: S.group('trem', { send: 0.34, gain: 0.46 }),
     perc: S.group('perc', { send: 0.20, gain: 0.72 }),
-    sub: S.group('sub', { send: 0.04, gain: 0.58 }),
+    sub: S.group('sub', { send: 0.04, gain: 0.34 }),
     solo: S.group('solo', { send: 0.62, gain: 0.48 }),
   };
   const nBars = Math.ceil(S.dur / (4 * S.spb));
@@ -1160,14 +1176,16 @@ function sBattle(S) {
     const [root] = at(n);
     const k = key(n) + root;
     S.play(pedal, g.sub, S.bar(n), k - 24, 4 * S.spb, { vel: still(n) ? 0.20 : n < 4 ? 0.20 : 0.28, fade: 0.35 });
-    if (still(n) || n < 4) continue;
+    if (still(n)) continue;
     const heavy = n >= 12;
-    for (let e = 0; e < 8; e++) {
+    // Bars 0–3 run at quarter density: a pulse, not yet a chase.
+    const step = n < 4 ? 2 : 1;
+    for (let e = 0; e < 8; e += step) {
       const t = S.bar(n, e * 0.5);
       const semi = FIG[e];
-      const vel = 0.30 * (n < 8 ? 0.7 : 1) * (e % 2 === 0 ? 1 : 0.7) * (heavy ? 1.15 : 1);
+      const vel = 0.30 * (n < 4 ? 0.5 : n < 8 ? 0.82 : 1) * (e % 2 === 0 ? 1 : 0.7) * (heavy ? 1.15 : 1);
       S.play(pluck, g.ost, t, k - 12 + semi, S.spb * 0.42, { vel, bright: 4.0, decay: 0.8 });
-      if (heavy) S.play(pluck, g.ost, t, k + semi, S.spb * 0.42, { vel: vel * 0.4, bright: 3.2, decay: 0.65 });
+      if (n >= 8) S.play(pluck, g.ost, t, k + semi, S.spb * 0.42, { vel: vel * (heavy ? 0.5 : 0.32), bright: 3.2, decay: 0.65 });
     }
   }
 
@@ -1176,15 +1194,18 @@ function sBattle(S) {
     if (still(n)) { if (n === STILL_A) S.perc(cymbal, g.perc, S.bar(n), { vel: 0.10, dur: 3.4 }); continue; }
     const stage = n < 4 ? 0 : n < 8 ? 1 : n < 12 ? 2 : n < 16 ? 3 : n < 20 ? 4 : 5;
     const v = [0.28, 0.45, 0.62, 0.80, 0.92, 1.0][stage];
-    S.hitAt(timpani, g.perc, S.bar(n, 0), key(n) + at(n)[0] - 24, { vel: 0.55 * v + 0.25, decay: 1.1 });
-    if (stage >= 2) S.hitAt(timpani, g.perc, S.bar(n, 2), key(n) - 19, { vel: 0.45 * v, decay: 0.9 });
+    S.hitAt(timpani, g.perc, S.bar(n, 0), key(n) + at(n)[0] - 12, { vel: 0.55 * v + 0.25, decay: 1.1 });
+    if (stage >= 2) S.hitAt(timpani, g.perc, S.bar(n, 2), key(n) - 7, { vel: 0.45 * v, decay: 0.9 });
     if (stage >= 3) S.perc(bassDrum, g.perc, S.bar(n, 3), { vel: 0.45 * v, decay: 0.6 });
     if (stage >= 1) {
       S.roll(g.perc, S.bar(n), 4 * S.spb, {
         rate: stage >= 3 ? 16 : 8, from: 0.09 * v, to: 0.13 * v, accent: stage >= 3 ? 4 : 2, grain: 0.045,
       });
     }
-    if (stage === 0) S.perc(snare, g.perc, S.bar(n, 2), { vel: 0.14, decay: 0.10, tone: 3200 });
+    if (stage === 0) {
+      S.perc(snare, g.perc, S.bar(n, 2), { vel: 0.14, decay: 0.10, tone: 3200 });
+      S.roll(g.perc, S.bar(n), 4 * S.spb, { rate: 8, from: 0.035, to: 0.05, accent: 4, grain: 0.03, tone: 3600 });
+    }
   }
   // Crescendo rolls at the section joins.
   S.roll(g.perc, S.bar(15, 2), 2 * S.spb, { rate: 18, from: 0.12, to: 0.55, accent: 0 });
@@ -1194,12 +1215,14 @@ function sBattle(S) {
 
   // --- tremolo strings ------------------------------------------------
   let prev = null;
-  for (let n = 8; n < nBars; n++) {
+  for (let n = 2; n < nBars; n++) {
     if (still(n)) continue;
     const [root, q] = at(n);
     const v = voice(key(n) + root, q, { n: 3, low: 64, high: 86, prev });
     prev = v;
-    S.play(tremolo, g.trem, S.bar(n), v, 4 * S.spb * 0.96, { vel: n >= 16 ? 0.19 : 0.12, bright: 3.0 });
+    S.play(tremolo, g.trem, S.bar(n), v, 4 * S.spb * 0.96, {
+      vel: n < 4 ? 0.05 : n < 8 ? 0.085 : n >= 16 ? 0.19 : 0.12, bright: 3.0,
+    });
   }
 
   // --- the menacing motif owns the middle -----------------------------
@@ -1229,7 +1252,7 @@ function sBattle(S) {
   S.motif(brass, g.solo, STILL_A * 4 + 6, heroic(D3, { scale: S_MIN, take: 4, stretch: 1.5 }), {
     vel: 0.26, attack: 0.22, bright: 1.9, release: 0.8, rip: 14,
   });
-  S.hitAt(timpani, g.perc, S.bar(STILL_B - 1, 3), D3 - 24, { vel: 0.35, decay: 1.4 });
+  S.hitAt(timpani, g.perc, S.bar(STILL_B - 1, 3), D3 - 12, { vel: 0.35, decay: 1.4 });
 
   // --- bars 23+ : up a tone, and everything at once -------------------
   const E3 = D3 + 2;
@@ -1237,11 +1260,11 @@ function sBattle(S) {
   S.motif(brass, g.brass, 23 * 4 + 3.5, heroic(E3, { scale: S_MIN }), { vel: 0.30, attack: 0.07, bright: 2.4 });
   S.motif(brass, g.low, 24 * 4, menace(E3 - 12, { take: 4 }), { vel: 0.44, attack: 0.05, bright: 2.0 });
   S.perc(cymbal, g.perc, S.bar(23), { vel: 0.34, dur: 2.8, crash: true });
-  S.hitAt(timpani, g.perc, S.bar(23), E3 - 24, { vel: 1.0, decay: 1.7 });
+  S.hitAt(timpani, g.perc, S.bar(23), E3 - 12, { vel: 1.0, decay: 1.7 });
 
   // Torpedoes away.
   S.perc(cymbal, g.perc, S.bar(25, 2), { vel: 0.30, dur: 2.4, crash: true });
-  S.hitAt(timpani, g.perc, S.bar(25, 2), E3 - 24, { vel: 0.95, decay: 1.6 });
+  S.hitAt(timpani, g.perc, S.bar(25, 2), E3 - 12, { vel: 0.95, decay: 1.6 });
 
   // --- the last three bars : one long crescendo into the finale -------
   const lastStart = Math.max(0, nBars - 3);
@@ -1251,7 +1274,7 @@ function sBattle(S) {
   S.perc(cymbal, g.perc, cresT, { vel: 0.42, dur: cresDur + 0.1 });
   for (let i = 0; i < 6; i++) {
     const t = cresT + (cresDur * i) / 6;
-    S.hitAt(timpani, g.perc, t, E3 - 24, { vel: 0.45 + i * 0.09, decay: 0.9 });
+    S.hitAt(timpani, g.perc, t, E3 - 12, { vel: 0.45 + i * 0.09, decay: 0.9 });
   }
   // A rising cluster over an F pedal — the dominant of the finale's B♭.
   const FF = NOTE.midi('F2');
@@ -1263,7 +1286,7 @@ function sBattle(S) {
     });
   }
   // Land the last accent early enough that the crescendo decays, not cuts.
-  S.hitAt(timpani, g.perc, S.end - 0.40, FF - 12, { vel: 1.0, decay: 0.42 });
+  S.hitAt(timpani, g.perc, S.end - 0.40, FF, { vel: 1.0, decay: 0.42 });
   S.perc(cymbal, g.perc, S.end - 0.40, { vel: 0.42, dur: 0.40, crash: true });
 }
 
@@ -1280,7 +1303,7 @@ function sFinale(S) {
     hi: S.group('hi', { send: 0.55, gain: 0.44 }),
     perc: S.group('perc', { send: 0.24, gain: 0.70 }),
     harp: S.group('harp', { send: 0.60, gain: 0.44 }),
-    sub: S.group('sub', { send: 0.05, gain: 0.60 }),
+    sub: S.group('sub', { send: 0.05, gain: 0.42 }),
   };
   const bar = (n, b = 0) => S.bar(n, b);
 
@@ -1289,7 +1312,7 @@ function sFinale(S) {
     S.play(brass, m < BB3 - 5 ? g.low : g.brass, bar(0), m, 3.2 * S.spb, { vel: 0.60, attack: 0.025, bright: 3.2, rip: 60 });
     if (m >= BB3) S.play(strings, g.str, bar(0), m + 12, 3.6 * S.spb, { vel: 0.22, attack: 0.06, release: 0.6 });
   }
-  S.hitAt(timpani, g.perc, bar(0), BB3 - 24, { vel: 1.0, decay: 1.8 });
+  S.hitAt(timpani, g.perc, bar(0), BB3 - 12, { vel: 1.0, decay: 1.8 });
   S.perc(cymbal, g.perc, bar(0), { vel: 0.50, dur: 3.0, crash: true });
 
   // --- bars 0–4 : first statement, full brass -------------------------
@@ -1313,8 +1336,8 @@ function sFinale(S) {
   };
   harmony(PROG1);
   for (let n = 0; n < 5; n++) {
-    S.hitAt(timpani, g.perc, bar(n), BB3 - 24, { vel: n === 0 ? 1.0 : 0.62, decay: 1.3 });
-    S.hitAt(timpani, g.perc, bar(n, 2), BB3 - 17, { vel: 0.38, decay: 0.9 });
+    S.hitAt(timpani, g.perc, bar(n), BB3 - 12, { vel: n === 0 ? 1.0 : 0.62, decay: 1.3 });
+    S.hitAt(timpani, g.perc, bar(n, 2), BB3 - 5, { vel: 0.38, decay: 0.9 });
     S.roll(g.perc, bar(n, 2.5), 1.5 * S.spb, { rate: 16, from: 0.10, to: 0.30, accent: 4 });
   }
 
@@ -1334,7 +1357,7 @@ function sFinale(S) {
   S.motif(brass, g.brass, 17.5, heroic(BB3, { from: 0, take: 4 }), { vel: 0.30, attack: 0.07, bright: 2.6 });
   S.motif(brass, g.brass, 25.5, heroic(BB3 + 5, { from: 0, take: 4 }), { vel: 0.30, attack: 0.07, bright: 2.6 });
   for (let n = 4; n < 8; n++) {
-    S.hitAt(timpani, g.perc, bar(n), BB3 - 24, { vel: 0.42, decay: 1.2 });
+    S.hitAt(timpani, g.perc, bar(n), BB3 - 12, { vel: 0.42, decay: 1.2 });
     S.roll(g.perc, bar(n, 3), 1 * S.spb, { rate: 16, from: 0.07, to: 0.22, accent: 4 });
   }
   // Harp, sweeping up under the middle.
@@ -1354,8 +1377,8 @@ function sFinale(S) {
     [44, BB3 + 7, Q.dom7, 4],
   ], { vel: 0.26, bass: 0.40 });
   for (let n = 8; n < 12; n++) {
-    S.hitAt(timpani, g.perc, bar(n), BB3 - 24, { vel: 0.78, decay: 1.4 });
-    S.hitAt(timpani, g.perc, bar(n, 2), BB3 - 17, { vel: 0.48, decay: 1.0 });
+    S.hitAt(timpani, g.perc, bar(n), BB3 - 12, { vel: 0.78, decay: 1.4 });
+    S.hitAt(timpani, g.perc, bar(n, 2), BB3 - 5, { vel: 0.48, decay: 1.0 });
     S.roll(g.perc, bar(n, 2), 2 * S.spb, { rate: 16, from: 0.12, to: 0.34, accent: 4 });
     S.perc(cymbal, g.perc, bar(n), { vel: n === 8 ? 0.34 : 0.16, dur: 2.4, crash: n === 8 });
   }
@@ -1370,7 +1393,7 @@ function sFinale(S) {
   }
   S.play(strings, g.hi, warm, BB3 + 24, rest * 0.92, { vel: 0.10, attack: 1.6, release: 1.4, bright: 3.4, voices: 2 });
   S.play(pedal, g.sub, warm, BB3 - 24, rest, { vel: 0.24, fade: 1.5 });
-  S.hitAt(timpani, g.perc, warm, BB3 - 24, { vel: 0.55, decay: 2.6 });
+  S.hitAt(timpani, g.perc, warm, BB3 - 12, { vel: 0.55, decay: 2.6 });
   S.perc(cymbal, g.perc, warm, { vel: 0.14, dur: Math.min(4.0, rest) });
   for (let i = 0; i < 6; i++) {
     S.play(fm, g.harp, warm + 0.35 + i * 0.34, BB3 + 12 + [0, 4, 7, 11, 14, 19][i], 2.6, {

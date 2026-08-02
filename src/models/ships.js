@@ -995,7 +995,7 @@ export function starDestroyer(opt = {}) {
   ];
   for (const [x, y, r] of bells) {
     const b = engineBell({
-      r, depth: r * 0.42, color: 0xc9f0ff, plume: r * 2.6, plumeOpacity: 0.2,
+      r, depth: r * 0.42, color: 0xc9f0ff, plume: r * 1.9, plumeOpacity: 0.14,
       seg: r > 8 ? 26 : 14, shell: C.bluishGray,
     }).place(x, y, 150.6);
     S.add(b.shell);
@@ -1095,6 +1095,954 @@ export function escapePod(opt = {}) {
 }
 
 /* ================================================================== */
+/* X-wing                                                             */
+/* ================================================================== */
+
+/**
+ * T-65 X-wing.  Four S-foils on independent pivots, four wing-tip cannons,
+ * astromech socket, transparent canopy, red squadron decals.
+ *
+ * userData: length 26, setSFoils(t) 0 = closed / 1 = open, sFoils (0..1),
+ *   cannonTips[4] (Object3D at each muzzle, use getWorldPosition),
+ *   engines[4], wings[4], setThrottle(v), anchors {pilot, droid, nose}
+ */
+export function xwing(opt = {}) {
+  const seed = opt.seed ?? 5;
+  const g = new THREE.Group();
+  g.name = 'xwing';
+  const S = new THREE.Group();
+  const LIVE = new THREE.Group();
+
+  const markTex = svgTex('xmark', SVG_XWING_MARK, { repeat: [1, 1] });
+  const rebelTex = svgTex('rebel', SVG_REBEL, { repeat: [1, 1] });
+  const screenTex = svgTex('screen', SVG_SCREEN, { repeat: [1, 1] });
+  const panelTex = svgTex('panelx', SVG_PANEL, { repeat: [1 / 4, 1 / 4] });
+  const bodyMat = mapMat('xwBody', 0xe9eae6, panelTex, { rough: 0.45 });
+  const greyMat = mapMat('xwGrey', 0x8f9290, panelTex, { rough: 0.5 });
+  const glass = mat(0xdcf0ff, { color: 0xdcf0ff, transparent: true, opacity: 0.36, rough: 0.08 });
+
+  // ---- fuselage ----
+  const F = [
+    [-13, 0.34], [-11.6, 0.72], [-8.5, 0.98], [-5, 1.18], [-2.6, 1.5],
+    [1.6, 1.62], [5, 1.72], [9.4, 1.78], [12, 1.6], [12.8, 1.2],
+  ];
+  S.add(slab(section(F, -13, 12.8, 0.2), 0.7, -1.0, { material: greyMat }));
+  S.add(slab(F, 0.85, -0.3, { material: bodyMat }));
+  S.add(slab(section(F, -12.6, 12.6, 0.26), 0.6, 0.55, { material: bodyMat }));
+  S.add(slab(section(F, -9, 11.4, 0.62), 0.5, 1.15, { material: bodyMat }));
+  // nose taper cap + sensor tip
+  S.add(at(rot(cone(0.42, 0.12, 0.9, { color: C.darkGray, seg: 10 }), -Math.PI / 2, 0, 0), 0, 0.1, -13.0));
+  S.add(at(tile(1, 4, 0.34, { color: C.darkGray }), 0, 0.55, -10.6));
+  for (const s of [1, -1]) {
+    // four nose vents
+    for (const [zz, ln] of [[-9.6, 2], [-6.6, 2]]) {
+      S.add(at(tile(1, ln, 0.42, { color: C.black }), s * 0.72, -0.34, zz));
+      S.add(at(tile(1, ln, 0.3, { color: C.darkGray }), s * 0.62, 0.62, zz));
+    }
+    S.add(at(tile(1, 7, 0.34, { color: C.red }), s * 0.62, 0.66, -5.6));
+    S.add(at(tile(1, 2, 0.36, { color: C.bluishGray }), s * 1.15, -0.28, 3.4));
+    // nose stripe decals
+    const d = decal(3.6, 0.95, markTex, 'xmark');
+    d.rotation.y = (s * Math.PI) / 2;
+    d.position.set(s * (widthAt(F, -7.0) + 0.03), 0.15, -7.0);
+    S.add(d);
+  }
+  // rebel insignia behind the cockpit
+  const ins = decal(2.1, 2.1, rebelTex, 'rebel');
+  ins.rotation.x = -Math.PI / 2;
+  ins.position.set(0, 1.67, 5.4);
+  S.add(ins);
+
+  // ---- cockpit ----
+  S.add(slab([[-3.0, 1.42], [-1.4, 1.55], [1.4, 1.55], [2.4, 1.3]], 0.6, 1.65, { color: C.bluishGray }));
+  const scr = decal(1.9, 1.0, screenTex, 'screen');
+  scr.rotation.x = -0.95;
+  scr.position.set(0, 2.1, -2.1);
+  S.add(scr);
+  S.add(at(tile(1, 1, 0.5, { color: C.darkGray }), 0, 2.25, -0.4));   // seat back
+  S.add(at(tile(2, 1, 0.22, { color: C.black }), 0, 2.25, -1.2));
+  // canopy: frame + glass
+  const canopy = new THREE.Group();
+  canopy.add(hull([[-1.5, -3.1], [1.5, -3.1], [1.6, 1.1], [-1.6, 1.1]], 0.16, 2.25, { color: C.bluishGray }));
+  canopy.add(hull([[-1.28, -2.9], [1.28, -2.9], [1.36, 0.9], [-1.36, 0.9]], 1.0, 2.3, { material: glass }));
+  const nosePane = at(rot(slope(1.2, 2.7, 1.0, 0.15, { color: 0xdcf0ff }), 0, -Math.PI / 2, 0), 0, 2.3, -3.6);
+  nosePane.material = glass;
+  canopy.add(nosePane);
+  canopy.add(at(tile(3, 1, 0.24, { color: C.bluishGray }), 0, 3.28, 0.6));
+  canopy.add(at(tile(1, 5, 0.2, { color: C.bluishGray }), 0, 3.3, -1.4));
+  S.add(canopy);
+
+  // ---- astromech socket ----
+  S.add(at(cyl(1.05, 0.4, { color: C.darkGray, seg: 14 }), 0, 1.6, 3.0));
+  S.add(at(cyl(0.92, 0.5, { color: C.black, seg: 14 }), 0, 1.9, 3.0));
+  const dome = at(sphere(0.85, { color: C.veryLightGray, seg: 14 }), 0, 1.55, 3.0);
+  S.add(dome);
+  S.add(at(cyl(0.86, 0.22, { color: C.bluishGray, seg: 14 }), 0, 2.28, 3.0));
+  S.add(at(rot(cyl(0.2, 0.5, { color: C.black, seg: 8 }), Math.PI / 2, 0, 0), -0.22, 2.7, 2.2));
+  S.add(at(tile(1, 1, 0.2, { color: C.azure }), 0.36, 2.72, 2.4));
+
+  // ---- rear engine deck + fins ----
+  S.add(slab([[9.0, 1.9], [12.4, 1.7], [13.0, 1.0]], 2.0, -0.9, { material: greyMat }));
+  S.add(at(tile(3, 2, 0.5, { color: C.darkGray }), 0, 1.75, 11.0));
+  S.add(hull([[-0.35, 6.0], [0.35, 6.0], [0.35, 12.6], [-0.35, 12.6]], 1.5, 1.75, { color: C.veryLightGray }));
+  greebles(S, {
+    x0: -1.4, x1: 1.4, z0: 6.6, z1: 12.2, y: 1.75, seed, count: 16,
+    colors: [C.bluishGray, C.darkGray, C.veryLightGray], hMax: 0.55, maxW: 2, grid: 0.5,
+    test: (x) => Math.abs(x) > 0.55,
+  });
+
+  // ---- four S-foils ----
+  const wings = [];
+  const cannonTips = [];
+  const engines = [];
+  for (const s of [1, -1]) {
+    for (const up of [1, -1]) {
+      const W = new THREE.Group();  // static wing parts, pivot-local
+      const px = s * 1.45, py = up * 0.42, pz = 6.4;
+      const plate = [[s * -0.7, -2.5], [s * 10.9, -3.3], [s * 11.1, 1.0], [s * -0.7, 1.7]];
+      W.add(hull(plate, 0.46, -0.23, { material: bodyMat }));
+      // red squadron flash: a tip band and a leading-edge stripe
+      W.add(hull([[s * 8.7, -3.2], [s * 10.9, -3.3], [s * 11.0, 0.95], [s * 8.7, 0.85]], 0.2, 0.23, { color: C.red }));
+      W.add(hull([[s * 2.6, -2.8], [s * 8.7, -3.2], [s * 8.7, -2.2], [s * 2.6, -1.9]], 0.2, 0.23, { color: C.red }));
+      W.add(hull([[s * 8.7, -3.2], [s * 10.9, -3.3], [s * 11.0, 0.95], [s * 8.7, 0.85]], 0.2, -0.43, { color: C.red }));
+      W.add(at(tile(1, 3, 0.22, { color: C.bluishGray }), s * 6.4, 0.23, 0.0));
+      W.add(at(tile(1, 3, 0.22, { color: C.bluishGray }), s * 4.0, -0.45, 0.2));
+      const wd = decal(2.2, 0.85, markTex, 'xmark');
+      wd.rotation.set(-Math.PI / 2, 0, s > 0 ? 0 : Math.PI);
+      wd.position.set(s * 5.6, 0.25, 1.05);
+      W.add(wd);
+      // engine nacelle
+      W.add(at(rot(cyl(0.98, 5.8, { color: C.veryLightGray, seg: 14 }), Math.PI / 2, 0, 0), s * 1.85, 0, -1.9));
+      W.add(at(rot(cyl(1.04, 0.5, { color: C.bluishGray, seg: 14 }), Math.PI / 2, 0, 0), s * 1.85, 0, -2.0));
+      W.add(at(rot(cyl(1.04, 0.4, { color: C.bluishGray, seg: 14 }), Math.PI / 2, 0, 0), s * 1.85, 0, 1.6));
+      W.add(at(rot(cone(0.9, 0.5, 1.0, { color: C.darkGray, seg: 14 }), -Math.PI / 2, 0, 0), s * 1.85, 0, -1.9));
+      W.add(at(tile(1, 4, 0.3, { color: C.darkGray }), s * 1.85, 0.94, -0.4));
+      W.add(at(tile(1, 4, 0.3, { color: C.red }), s * 1.85, -1.24, -0.4));
+      // wing-tip cannon
+      W.add(at(rot(cyl(0.34, 2.2, { color: C.bluishGray, seg: 10 }), Math.PI / 2, 0, 0), s * 10.4, 0, -2.0));
+      W.add(at(rot(cyl(0.19, 11.6, { color: C.lightGray, seg: 8 }), Math.PI / 2, 0, 0), s * 10.4, 0, -12.4));
+      W.add(at(rot(cyl(0.26, 0.7, { color: C.darkGray, seg: 8 }), Math.PI / 2, 0, 0), s * 10.4, 0, -12.7));
+      W.add(at(rot(cyl(0.24, 1.6, { color: C.darkGray, seg: 8 }), Math.PI / 2, 0, 0), s * 10.4, 0, 0.6));
+      W.add(at(rot(cyl(0.22, 0.9, { color: C.bluishGray, seg: 8 }), Math.PI / 2, 0, 0), s * 10.4, 0, -6.4));
+
+      const pivot = new THREE.Group();
+      pivot.name = `sfoil_${s > 0 ? 'R' : 'L'}${up > 0 ? 'T' : 'B'}`;
+      pivot.position.set(px, py, pz);
+      pivot.add(bake(W));
+      const tip = new THREE.Object3D();
+      tip.position.set(s * 10.4, 0, -12.8);
+      pivot.add(tip);
+      cannonTips.push(tip);
+      const b = engineBell({ r: 0.86, depth: 0.5, color: 0xd6f2ff, plume: 3.4, plumeOpacity: 0.3, seg: 12 })
+        .place(s * 1.85, 0, 4.2);
+      pivot.add(b.shell);
+      pivot.add(b.live);
+      engines.push(b.core);
+      pivot.userData.sign = s;
+      pivot.userData.up = up;
+      wings.push(pivot);
+      g.add(pivot);
+    }
+  }
+
+  g.add(bake(S));
+  g.add(LIVE);
+  anchor(g, 'pilot', 0, 2.4, -1.4);
+  anchor(g, 'droid', 0, 2.3, 3.0);
+  anchor(g, 'nose', 0, 0, -13.2);
+
+  g.userData.length = 26;
+  g.userData.width = 21.6;
+  g.userData.anchor = 'center';
+  g.userData.wings = wings;
+  g.userData.cannonTips = cannonTips;
+  g.userData.sFoils = 0;
+  g.userData.setSFoils = (t) => {
+    const k = Math.max(0, Math.min(1, t));
+    g.userData.sFoils = k;
+    const a = 0.30 * k;
+    for (const w of wings) w.rotation.z = w.userData.sign * w.userData.up * a;
+  };
+  g.userData.setSFoils(1);
+  return wireEngines(g, engines, 1);
+}
+
+/* ================================================================== */
+/* TIE fighter                                                         */
+/* ================================================================== */
+
+/**
+ * Bar lying in the YZ plane, running from (y0,z0) to (y1,z1).
+ * `w` is its width across the plane, `thick` its X extent (centred on `x`).
+ */
+function yzBar(x, y0, z0, y1, z1, w, thick, o) {
+  const dy = y1 - y0;
+  const dz = z1 - z0;
+  const len = Math.hypot(dy, dz);
+  const t = tile(w, 1, thick, o);
+  t.scale.z = len;
+  return at(rot(t, Math.atan2(-dy, dz), 0, Math.PI / 2),
+    x + thick / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+}
+
+/** Studded plate whose studs face outward along X (s = +1 or -1). */
+function studPlateX(w, d, s, x, y, z, o = {}) {
+  return at(rot(brick(w, d, PLATE, o), 0, 0, (-s * Math.PI) / 2), x, y, z);
+}
+
+/** Cylinder/cone lying along X, spanning x0..x1 (rBase at x0, rTop at x1). */
+function xCyl(rBase, rTop, x0, x1, y, z, o = {}) {
+  const s = x1 >= x0 ? 1 : -1;
+  return at(rot(cone(rBase, rTop, Math.abs(x1 - x0), o), 0, 0, (-s * Math.PI) / 2), x0, y, z);
+}
+
+/**
+ * Bar lying flat in the XZ plane from (x0,z0) to (x1,z1), `h` tall in Y.
+ * Wrap a group of these in `rot(g, -Math.PI/2)` to stand them up facing -Z.
+ */
+function xzBar(x0, z0, x1, z1, w, h, o) {
+  const dx = x1 - x0;
+  const dz = z1 - z0;
+  const t = tile(w, 1, h, o);
+  t.scale.z = Math.hypot(dx, dz);
+  return at(rot(t, 0, Math.atan2(dx, dz), 0), (x0 + x1) / 2, 0, (z0 + z1) / 2);
+}
+
+/** Regular hexagon of radius r in XZ, flat-topped when `flat` (default pointy). */
+function hexPts(r, phase = Math.PI / 6) {
+  const p = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + phase;
+    p.push([Math.cos(a) * r, Math.sin(a) * r]);
+  }
+  return p;
+}
+
+/** Flat panel standing in the YZ plane: pts are [height, depth]. */
+function flatPanel(pts, thick, o = {}) {
+  const holder = new THREE.Group();
+  const m = prism(pts.map(([a, b]) => [a, -b]), thick, o);
+  if (o.material) m.material = o.material;
+  m.position.y = -(thick - 2 * PB) - thick / 2;
+  holder.add(m);
+  holder.rotation.z = Math.PI / 2;
+  const g = new THREE.Group();
+  g.add(holder);
+  return g;
+}
+
+/**
+ * TIE/ln fighter: ball cockpit with a hexagonal window frame, two hexagonal
+ * wing panels on struts, twin chin cannons, twin red drive glow.
+ *
+ * userData: width 20, cannonTips[2], engines[2], anchors {pilot}
+ */
+export function tiefighter(opt = {}) {
+  const seed = opt.seed ?? 17;
+  const g = new THREE.Group();
+  g.name = 'tiefighter';
+  const S = new THREE.Group();
+  const LIVE = new THREE.Group();
+
+  const gt = svgTex('greeble', SVG_GREEBLE, { repeat: [1 / 7, 1 / 7] });
+  const cellMat = mapMat('tieCell', 0x4a5058, gt, { rough: 0.62 });
+  const frameMat = M(0xa8adaa, { rough: 0.5 });
+  const ballMat = mapMat('tieBall', 0x9ba1a2, gt, { rough: 0.5 });
+  const glassMat = mat(C.transClear, { color: C.transClear, transparent: true, opacity: 0.35, rough: 0.1 });
+
+  // ---- ball cockpit ----
+  const BR = 2.45;
+  const ball = at(sphere(BR, { color: 0x9ba1a2, seg: 20 }), 0, -BR, 0);
+  ball.material = ballMat;
+  S.add(ball);
+  S.add(at(rot(cyl(BR * 0.99, 0.5, { color: C.darkGray, seg: 20 }), Math.PI / 2, 0, 0), 0, 0, -0.25));
+  // hexagonal window frame on the nose: built flat in XZ, then stood upright
+  const face = new THREE.Group();
+  const hexOuter = hexPts(2.0);
+  face.add(hull(hexPts(1.78), 0.16, 0.16, { material: glassMat }));
+  for (let i = 0; i < 6; i++) {
+    const [ax, az] = hexOuter[i];
+    const [bx, bz] = hexOuter[(i + 1) % 6];
+    face.add(xzBar(ax, az, bx, bz, 0.62, 0.36, { color: C.black }));
+  }
+  // mullions: one upright, two across
+  for (const zz of [-0.78, 0.78]) {
+    const b = tile(1, 0.34, 0.3, { color: C.black });
+    b.scale.x = 2.6;
+    face.add(at(b, 0, 0, zz));
+  }
+  const up = tile(0.34, 1, 0.3, { color: C.black });
+  up.scale.z = 3.1;
+  face.add(at(up, 0, 0, 0));
+  face.rotation.x = -Math.PI / 2;
+  face.position.set(0, 0, -BR + 0.02);
+  S.add(face);
+  greebles(S, {
+    x0: -1.4, x1: 1.4, z0: 1.4, z1: 2.1, y: 1.3, seed, count: 8,
+    colors: [C.darkGray, C.bluishGray], hMax: 0.5, maxW: 2, grid: 0.5,
+  });
+  S.add(at(rot(cyl(1.5, 0.5, { color: C.darkGray, seg: 14 }), Math.PI / 2, 0, 0), 0, 0, BR - 0.3));
+  S.add(at(rot(cyl(1.15, 0.5, { color: C.black, seg: 14 }), Math.PI / 2, 0, 0), 0, 0, BR + 0.1));
+  S.add(at(brick(2, 2, PLATE, { color: C.lightGray }), 0, 1.98, 0.1));
+  S.add(at(rot(brick(2, 2, PLATE, { color: C.lightGray }), Math.PI, 0, 0), 0, -1.98, 0.1));
+
+  // ---- chin cannons ----
+  const cannonTips = [];
+  for (const s of [1, -1]) {
+    S.add(at(brick(1, 2, 0.5, { color: C.darkGray }), s * 1.05, -2.05, -1.5));
+    S.add(at(rot(cyl(0.36, 1.3, { color: C.darkGray, seg: 10 }), Math.PI / 2, 0, 0), s * 1.05, -1.9, -2.9));
+    S.add(at(rot(cyl(0.2, 2.9, { color: C.silver, seg: 8 }), Math.PI / 2, 0, 0), s * 1.05, -1.9, -5.1));
+    S.add(at(rot(cyl(0.29, 0.45, { color: C.black, seg: 8 }), Math.PI / 2, 0, 0), s * 1.05, -1.9, -5.1));
+    const tip = new THREE.Object3D();
+    tip.position.set(s * 1.05, -1.9, -5.2);
+    g.add(tip);
+    cannonTips.push(tip);
+  }
+
+  // ---- wings ----
+  // Classic TIE/ln hexagon seen side-on: flat top and bottom edges, a point
+  // fore and aft.  Panel plane is at x = +-HW, height along Y, depth along Z.
+  const HW = 9.6;
+  const PH = 5.55; // half height
+  const PD = 3.55; // half depth at the fore/aft points
+  const PT = 2.3;  // half depth of the top/bottom edges
+  const hex = [
+    [PH, -PT], [PH, PT], [0, PD], [-PH, PT], [-PH, -PT], [0, -PD],
+  ];
+  const PANEL_T = 0.5; // cell panel thickness
+  const FRAME_T = 1.0; // frame / spoke thickness (stands proud of the cells)
+  for (const s of [1, -1]) {
+    // strut: tapered pylon from the ball out to the panel hub
+    S.add(xCyl(1.12, 0.72, s * 1.9, s * (HW - 1.1), 0, 0, { color: C.lightGray, seg: 12 }));
+    S.add(xCyl(1.3, 1.3, s * 2.1, s * 2.9, 0, 0, { color: C.darkGray, seg: 14 }));
+    S.add(xCyl(1.15, 1.15, s * (HW - 1.4), s * (HW - 0.5), 0, 0, { color: 0xa8adaa, seg: 16 }));
+
+    // dark solar-cell panel
+    const panel = flatPanel(hex, PANEL_T, { material: cellMat });
+    panel.position.x = s * HW;
+    S.add(panel);
+
+    // raised frame around the rim
+    for (let i = 0; i < 6; i++) {
+      const [ay, az] = hex[i];
+      const [by, bz] = hex[(i + 1) % 6];
+      S.add(yzBar(s * HW, ay, az, by, bz, 0.78, FRAME_T, { material: frameMat }));
+    }
+    // radial spokes from the hub out to each corner
+    for (const [vy, vz] of hex) {
+      const l = Math.hypot(vy, vz);
+      S.add(yzBar(s * HW, (vy / l) * 1.0, (vz / l) * 1.0, vy * 0.93, vz * 0.93, 0.5, FRAME_T * 0.8, { material: frameMat }));
+    }
+    // hub caps either side, plus outboard sensor stub
+    for (const t of [1, -1]) {
+      S.add(xCyl(1.3, 1.15, s * HW + t * 0.25, s * HW + t * 0.72, 0, 0, { color: 0xa8adaa, seg: 16 }));
+      S.add(xCyl(0.62, 0.5, s * HW + t * 0.72, s * HW + t * 1.02, 0, 0, { color: C.darkGray, seg: 12 }));
+      // studded plates on the frame so the panels still read as LEGO
+      for (const py of [PH - 0.95, -PH + 0.95]) {
+        S.add(studPlateX(2, 2, t, s * HW + t * (FRAME_T / 2), py, 0, { color: 0xa8adaa }));
+      }
+      for (const pz of [PD - 2.0, -PD + 2.0]) {
+        S.add(studPlateX(1, 3, t, s * HW + t * (FRAME_T / 2), 0, pz, { color: 0xa8adaa }));
+      }
+    }
+  }
+
+  // ---- twin drives ----
+  const engines = [];
+  for (const s of [1, -1]) {
+    const b = engineBell({ r: 0.6, depth: 0.5, color: 0xff6a2e, plume: 1.5, plumeOpacity: 0.2, seg: 12, shell: C.darkGray })
+      .place(s * 0.92, 0, BR + 0.35);
+    S.add(b.shell);
+    LIVE.add(b.live);
+    engines.push(b.core);
+  }
+
+  g.add(bake(S));
+  g.add(LIVE);
+  anchor(g, 'pilot', 0, 0, -0.6);
+
+  g.userData.length = 9.4;
+  g.userData.width = 21.4;
+  g.userData.height = 11.9;
+  g.userData.anchor = 'center';
+  g.userData.cannonTips = cannonTips;
+  return wireEngines(g, engines, 1);
+}
+
+/* ================================================================== */
+/* Millennium Falcon                                                   */
+/* ================================================================== */
+
+/**
+ * Light freighter: round saucer, forward mandible fork, starboard cockpit
+ * tube, dorsal + ventral quad turrets, wide rear engine glow strip.
+ *
+ * userData: length 34, engines[5], turrets[2] (aimable groups),
+ *   setThrottle(v), anchors {cockpit, rampTop, turretTop}
+ */
+export function falcon(opt = {}) {
+  const seed = opt.seed ?? 29;
+  const g = new THREE.Group();
+  g.name = 'falcon';
+  const S = new THREE.Group();
+  const LIVE = new THREE.Group();
+  const R = rng(seed);
+
+  const gt = svgTex('greeble', SVG_GREEBLE, { repeat: [1 / 10, 1 / 10] });
+  const hullMat = mapMat('flHull', 0xb9bcb8, gt, { rough: 0.5 });
+  const lowMat = mapMat('flLow', 0x8d918c, gt, { rough: 0.55 });
+  const glassMat = mat(C.transClear, { color: C.transClear, transparent: true, opacity: 0.4, rough: 0.1 });
+
+  const CR = 12.6;      // saucer radius
+  const CZ = 3.6;       // saucer centre
+  const yb = 0.5;       // keel
+
+  // ---- saucer ----
+  const disc = (r, h, y, m, seg = 40) => {
+    const c = at(cyl(r, h, { color: C.lightGray, seg }), 0, y, CZ);
+    if (m) c.material = m;
+    return c;
+  };
+  S.add(disc(11.4, 1.0, yb, lowMat));
+  S.add(disc(CR, 1.5, yb + 1.0, hullMat));
+  S.add(disc(11.6, 0.9, yb + 2.5, hullMat));
+  S.add(disc(8.6, 1.0, yb + 3.4, hullMat));
+  S.add(disc(4.6, 0.7, yb + 4.4, hullMat));
+  S.add(disc(9.8, 0.9, yb - 0.9, lowMat, 32));
+  S.add(disc(5.4, 0.8, yb - 1.7, lowMat, 24));
+  // rim band
+  S.add(disc(CR + 0.12, 0.5, yb + 1.5, null, 40));
+
+  // ---- mandible fork ----
+  // Roots reach back inside the saucer so the prongs grow out of the hull;
+  // the notch between them is the classic rectangular slot.
+  const NOTCH = 2.6;
+  for (const s of [1, -1]) {
+    const arm = [
+      [s * NOTCH, -17.6], [s * NOTCH, -9.4], [s * 3.7, -3.4],
+      [s * 7.0, -3.4], [s * 7.6, -11.2], [s * 6.9, -17.2],
+    ];
+    S.add(hull(arm, 2.8, yb + 0.6, { material: hullMat }));
+    S.add(hull(arm.map(([x, z]) => [x * 0.93, z]), 0.4, yb + 3.4, { color: C.veryLightGray }));
+    // blunt tip cap + forward sensor lances
+    S.add(hull([[s * NOTCH, -17.6], [s * 6.9, -17.2], [s * 6.7, -18.4], [s * 3.0, -18.6]], 1.9, yb + 1.0,
+      { color: C.bluishGray }));
+    S.add(at(rot(cyl(0.24, 3.2, { color: C.silver, seg: 8 }), -Math.PI / 2, 0, 0), s * 5.4, yb + 2.4, -18.4));
+    S.add(at(tile(2, 4, 0.5, { color: C.bluishGray }), s * 5.0, yb + 3.8, -13.6));
+    S.add(at(brick(2, 3, PLATE, { color: C.veryLightGray }), s * 4.3, yb + 3.8, -8.0));
+    greebles(S, {
+      x0: s > 0 ? NOTCH + 0.3 : -7.2, x1: s > 0 ? 7.2 : -NOTCH - 0.3, z0: -17.0, z1: -5.0, y: yb + 3.4,
+      seed: seed + (s > 0 ? 1 : 2), count: 34,
+      colors: [C.bluishGray, C.darkGray, C.veryLightGray], hMax: 0.8, maxW: 2, grid: 0.5,
+      test: (x, z, r) => Math.abs(x) > NOTCH + 0.4 + r || z > -9.0,
+    });
+  }
+  // fork throat: recessed cargo mouth set back between the prongs
+  S.add(hull([[-NOTCH, -9.4], [NOTCH, -9.4], [NOTCH, -4.0], [-NOTCH, -4.0]], 1.9, yb + 0.9, { color: C.bluishGray }));
+  S.add(at(rot(cyl(1.15, 0.7, { color: C.darkGray, seg: 14 }), -Math.PI / 2, 0, 0), 0, yb + 1.9, -9.4));
+  S.add(at(tile(5, 1, 1.4, { color: C.darkGray }), 0, yb + 1.0, -9.9));
+
+  // ---- starboard cockpit tube (built along -Z, then swung outboard) ----
+  const tube = new THREE.Group();
+  const tubeLen = 6.6;
+  const zc = (r, h, z, col) => at(rot(cyl(r, h, { color: col, seg: 14 }), -Math.PI / 2, 0, 0), 0, 0, z);
+  tube.add(zc(1.15, tubeLen, 0.6, C.veryLightGray));
+  tube.add(zc(1.34, 0.7, -0.4, C.bluishGray));
+  tube.add(zc(1.34, 0.7, -3.4, C.bluishGray));
+  tube.add(zc(1.5, 0.5, -tubeLen + 2.0, C.lightGray));
+  tube.add(zc(1.42, 1.5, -tubeLen + 1.5, C.black));
+  tube.add(zc(1.5, 0.5, -tubeLen, C.lightGray));
+  tube.add(at(rot(cone(1.5, 1.05, 0.9, { color: C.veryLightGray, seg: 14 }), Math.PI / 2, 0, 0), 0, 0, -tubeLen - 0.4));
+  const cw = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 1.5, 16, 1, true, Math.PI * 0.1, Math.PI * 1.4), glassMat);
+  cw.rotation.set(Math.PI / 2, 0, 0);
+  tube.add(at(cw, 0, 0, -tubeLen + 1.5));
+  // window mullions: short bars along the pod axis, spaced around the band
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+    const b = tile(0.3, 1, 0.26, { color: C.lightGray });
+    b.scale.z = 1.6;
+    tube.add(at(rot(b, 0, 0, -a), Math.sin(a) * 1.46, Math.cos(a) * 1.46, -tubeLen + 0.78));
+  }
+  tube.add(at(tile(1, 2, 0.3, { color: C.bluishGray }), 0, 1.4, -tubeLen + 1.1));
+  tube.rotation.y = -0.44;
+  tube.position.set(6.4, yb + 2.3, -2.4);
+  S.add(tube);
+  S.add(xCyl(2.1, 1.6, 4.2, 7.2, yb + 2.3, -1.6, { color: C.lightGray, seg: 14 }));
+
+  // ---- top plating: greebles, panels, dish ----
+  const topY = yb + 4.4;
+  const rad = (x, z) => Math.hypot(x, z - CZ);
+  const inDisc = (x, z, r, R2) => rad(x, z) < R2 - r;
+  const gCol = [C.bluishGray, C.lightGray, C.veryLightGray, C.darkGray, 0x9ea19c];
+  // ring 1: crown deck, between the boarding-ring hub and the 8.6 step
+  greebles(S, {
+    x0: -9, x1: 9, z0: -6, z1: 13, y: topY, seed: seed + 3, count: 210,
+    colors: gCol, hMin: 0.2, hMax: 1.3, maxW: 3, studChance: 0.34,
+    test: (x, z) => rad(x, z) > 5.3 && rad(x, z) < 8.1, grid: 0.5,
+  });
+  // ring 2: mid deck
+  greebles(S, {
+    x0: -12, x1: 12, z0: -9, z1: 16, y: yb + 3.4, seed: seed + 5, count: 240,
+    colors: gCol, hMin: 0.2, hMax: 1.0, maxW: 3, studChance: 0.34,
+    test: (x, z) => rad(x, z) > 9.1 && rad(x, z) < 11.2, grid: 0.5,
+  });
+  // ring 3: outer rim shelf
+  greebles(S, {
+    x0: -13, x1: 13, z0: -10, z1: 17, y: yb + 2.5, seed: seed + 7, count: 150,
+    colors: [C.bluishGray, C.darkGray, C.lightGray], hMin: 0.2, hMax: 0.5, maxW: 2, studChance: 0.2,
+    test: (x, z) => rad(x, z) > 11.9 && rad(x, z) < 12.3, grid: 0.5,
+  });
+  // hub deck around the dorsal turret
+  greebles(S, {
+    x0: -4.5, x1: 4.5, z0: -1, z1: 8, y: topY + 0.7, seed: seed + 9, count: 50,
+    colors: gCol, hMin: 0.2, hMax: 0.7, maxW: 2, studChance: 0.4,
+    test: (x, z) => rad(x, z) > 2.5 && rad(x, z) < 4.1, grid: 0.5,
+  });
+  // radial panel lines on the mid deck
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    S.add(at(rot(tile(0.5, 6, 0.34, { color: 0x6f736e }), 0, -a, 0),
+      Math.sin(a) * 9.9, yb + 3.4, CZ + Math.cos(a) * 9.9));
+    if (i % 2 === 0) {
+      S.add(at(rot(tile(1, 3, 0.3, { color: C.darkGray }), 0, -a, 0),
+        Math.sin(a) * 12.05, yb + 2.5, CZ + Math.cos(a) * 12.05));
+    }
+  }
+  // studded deck bands + the two big dorsal boxes
+  S.add(at(brick(4, 6, PLATE, { color: C.veryLightGray }), 5.0, topY, 8.6));
+  S.add(at(brick(3, 3, PLATE, { color: C.lightGray }), -6.6, yb + 3.4, -1.0));
+  S.add(at(brick(4, 3, PLATE, { color: C.lightGray }), 6.9, yb + 3.4, 12.0));
+  S.add(slabBox(5.2, 3.4, 1.1, topY, -4.6, 1.2, { color: C.veryLightGray }));
+  S.add(at(brick(4, 2, PLATE, { color: C.bluishGray }), -4.6, topY + 1.1, 1.2));
+  S.add(slabBox(3.6, 4.6, 0.9, topY, 6.2, 3.0, { color: 0x9ea19c }));
+  // sensor rectifier dish
+  S.add(at(cyl(1.5, 0.5, { color: C.darkGray, seg: 14 }), -5.8, topY, 9.4));
+  S.add(radar(2.6, 0.9, -5.8, topY + 0.5, 9.4, { color: C.veryLightGray }));
+  S.add(at(bar(1.5, 0.09, { color: C.silver }), -5.8, topY + 0.5, 9.4));
+
+  // ---- quad turrets ----
+  const turrets = [];
+  for (const up of [1, -1]) {
+    const T = new THREE.Group();
+    T.add(at(cyl(2.0, 0.6, { color: C.bluishGray, seg: 16 }), 0, 0, 0));
+    const yoke = new THREE.Group();
+    yoke.add(at(cyl(1.5, 0.9, { color: C.lightGray, seg: 14 }), 0, 0.6, 0));
+    yoke.add(at(sphere(1.15, { color: C.darkGray, seg: 14 }), 0, 0.7, 0));
+    const gunP = new THREE.Group();
+    gunP.position.set(0, 1.5, 0);
+    for (const sx of [1, -1]) {
+      for (const sy of [0.34, -0.34]) {
+        gunP.add(at(rot(cyl(0.13, 5.0, { color: C.veryLightGray, seg: 8 }), Math.PI / 2, 0, 0), sx * 0.42, sy, -3.2));
+      }
+      gunP.add(at(rot(cyl(0.36, 1.2, { color: C.darkGray, seg: 8 }), Math.PI / 2, 0, 0), sx * 0.42, 0, -0.9));
+    }
+    yoke.add(gunP);
+    T.add(yoke);
+    T.userData.yoke = yoke;
+    T.userData.guns = gunP;
+    T.userData.noBake = true;
+    T.scale.y = up;
+    T.position.set(0, up > 0 ? topY + 0.7 : yb - 1.7, CZ);
+    T.name = up > 0 ? 'turretTop' : 'turretBottom';
+    g.add(T);
+    turrets.push(T);
+  }
+
+  // ---- rear engine strip ----
+  const engines = [];
+  S.add(hull([[-8.6, 14.2], [8.6, 14.2], [8.0, 16.6], [-8.0, 16.6]], 2.6, yb + 1.2, { color: C.darkGray }));
+  for (let i = 0; i < 5; i++) {
+    const w = 2.7;
+    const x = (i - 2) * 3.1;
+    const b = engineSlab(w, 1.7, { color: 0xd8f4ff }).place(x, yb + 2.4, 16.5);
+    LIVE.add(b.live);
+    engines.push(b.core);
+    S.add(at(tile(1, 1, 2.2, { color: C.bluishGray }), x + 1.55, yb + 1.4, 16.2));
+  }
+  S.add(at(tile(18, 1, 0.6, { color: C.bluishGray }), 0, yb + 3.7, 15.8));
+  S.add(at(tile(18, 1, 0.6, { color: C.bluishGray }), 0, yb + 1.0, 15.8));
+
+  g.add(bake(S));
+  g.add(LIVE);
+  anchor(g, 'cockpit', 10.4, yb + 2.1, -8.4);
+  anchor(g, 'rampTop', -3.4, yb, -6.0);
+  anchor(g, 'turretTop', 0, topY + 2.2, CZ);
+
+  g.userData.length = 34;
+  g.userData.width = 25.2;
+  g.userData.anchor = 'keel';
+  g.userData.turrets = turrets;
+  g.userData.aimTurrets = (target) => {
+    const v = new THREE.Vector3();
+    for (const T of turrets) {
+      T.updateWorldMatrix(true, false);
+      const l = T.worldToLocal(v.copy(target));
+      T.userData.yoke.rotation.y = Math.atan2(-l.x, -l.z);
+      T.userData.guns.rotation.x = Math.max(-0.2, Math.min(1.3,
+        Math.atan2(l.y - 1.5, Math.hypot(l.x, l.z))));
+    }
+  };
+  return wireEngines(g, engines, 1);
+}
+
+/* ================================================================== */
+/* sandcrawler                                                         */
+/* ================================================================== */
+
+/**
+ * Corellian mining crawler: trapezoidal rust-brown fortress on two huge
+ * treads, front loading ramp, lit portholes.
+ *
+ * userData: length 46, ramp, setRamp(0..1), treadScroll(t), engines[2],
+ *   anchors {rampFoot, roof, cabin}
+ */
+export function sandcrawler(opt = {}) {
+  const seed = opt.seed ?? 41;
+  const g = new THREE.Group();
+  g.name = 'sandcrawler';
+  const S = new THREE.Group();
+  const LIVE = new THREE.Group();
+
+  const gt = svgTex('greeble', SVG_GREEBLE, { repeat: [1 / 12, 1 / 12] });
+  const bodyMat = mapMat('scBody', 0x8a5433, gt, { rough: 0.72 });
+  const darkMat = mapMat('scDark', 0x5e3a24, gt, { rough: 0.75 });
+  const winTex = svgTex('scwin', SVG_WINDOWS, { repeat: [2, 1] });
+  const winMat = litMat('scWin', winTex, 0xffc46a, 1.5);
+
+  // ---- treads ----
+  const treadTex = svgTex('tread', SVG_TREAD, { repeat: [1, 1] }).clone();
+  treadTex.wrapS = treadTex.wrapT = THREE.RepeatWrapping;
+  treadTex.repeat.set(9, 1);
+  treadTex.needsUpdate = true;
+  const treadMat = new THREE.MeshStandardMaterial({ color: 0x8b8f8c, map: treadTex, roughness: 0.7 });
+  const TH = 4.6;
+  for (const s of [1, -1]) {
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(4.4, TH, 42), treadMat);
+    belt.position.set(s * 10.4, TH / 2, 0);
+    belt.castShadow = belt.receiveShadow = true;
+    S.add(belt);
+    // rounded ends
+    for (const z of [-21, 21]) {
+      const e = new THREE.Mesh(new THREE.CylinderGeometry(TH / 2, TH / 2, 4.4, 18), treadMat);
+      e.rotation.z = Math.PI / 2;
+      e.position.set(s * 10.4, TH / 2, z);
+      S.add(e);
+    }
+    S.add(at(tile(1, 40, 1.4, { color: C.darkGray }), s * 8.0, 1.6, 0));
+    for (let i = 0; i < 7; i++) {
+      S.add(at(rot(cyl(1.3, 0.6, { color: C.bluishGray, seg: 12 }), 0, 0, Math.PI / 2), s * 7.7, TH / 2, -18 + i * 6));
+    }
+    S.add(at(tile(2, 44, 1.0, { color: 0x6d4224 }), s * 11.6, TH + 0.2, 0));
+  }
+
+  // ---- stepped trapezoid body ----
+  const N = 8;
+  const yBase = TH + 0.2;
+  const H = 19.4;
+  for (let i = 0; i < N; i++) {
+    const y = yBase + (i * H) / N;
+    const h = H / N + 0.02;
+    const t = i / (N - 1);
+    const hw = 12.6 - t * 2.2;
+    const zf = -21.5 + t * 12.5;
+    const zr = 21.5 - t * 0.8;
+    S.add(hull(rect(hw * 2, zr - zf, 0, (zf + zr) / 2), h, y, { material: i % 2 ? bodyMat : darkMat }));
+    // rivet strip along the step
+    S.add(at(tile(Math.round(hw * 2) - 2, 1, 0.4, { color: 0x6d4224 }), 0, y + h, zf + 0.6));
+    for (const s of [1, -1]) {
+      S.add(at(tile(1, Math.max(2, Math.round(zr - zf) - 3), 0.5, { color: 0x6d4224 }), s * (hw - 0.4), y + h - 0.9, (zf + zr) / 2 + 1));
+    }
+  }
+  const topY = yBase + H;
+  // roof clutter
+  greebles(S, {
+    x0: -9, x1: 9, z0: -8, z1: 19, y: topY, seed, count: 60,
+    colors: [0x6d4224, C.darkTan, C.darkGray, C.brown], hMax: 1.6, maxW: 4, grid: 0.5,
+  });
+  S.add(at(brick(6, 8, 1.2, { color: 0x6d4224 }), -4, topY, 12));
+  S.add(at(tile(4, 4, 2.2, { color: C.darkGray }), 5, topY, 14));
+  S.add(at(rot(cyl(1.6, 3.0, { color: 0x8a5433, seg: 14 }), 0, 0, 0), 5.4, topY, 4));
+  S.add(at(cyl(0.2, 4.0, { color: C.darkGray, seg: 8 }), -8, topY, 17));
+  S.add(radar(2.2, 0.8, -8, topY + 4.0, 17, { color: C.darkTan }));
+  S.add(at(tile(20, 2, 0.5, { color: 0x6d4224 }), 0, topY, -6.2));
+
+  // ---- front face: ramp opening, portholes ----
+  const openW = 11, openH = 8.6;
+  S.add(hull(rect(openW + 2.6, 1.4, 0, -21.4), openH + 2.4, yBase, { material: darkMat }));
+  S.add(hull(rect(openW, 1.2, 0, -21.9), openH, yBase, { color: C.black }));
+  for (const s of [1, -1]) {
+    S.add(at(tile(1, 1, openH, { color: 0x6d4224 }), s * (openW / 2 + 0.8), yBase, -21.6));
+  }
+  S.add(at(tile(Math.round(openW) + 3, 1, 0.8, { color: 0x6d4224 }), 0, yBase + openH + 1.6, -21.6));
+  // portholes
+  const pw = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.1), winMat);
+  pw.position.set(0, yBase + 13.6, -16.1);
+  pw.rotation.y = Math.PI;
+  S.add(pw);
+  for (const s of [1, -1]) {
+    for (const [yy, zz, ww] of [[9.0, 8, 7], [14.0, -2, 5]]) {
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(ww, 0.9), winMat);
+      p.rotation.y = (s * Math.PI) / 2;
+      const t = (yy - 0) / H;
+      p.position.set(s * (12.6 - t * 2.2 + 0.06), yBase + yy, zz);
+      S.add(p);
+    }
+  }
+
+  // ---- ramp (hinged at the bottom of the front face) ----
+  const ramp = new THREE.Group();
+  ramp.name = 'ramp';
+  const RL = 10.5;
+  ramp.add(hull(rect(openW - 0.4, RL, 0, -RL / 2), 0.5, -0.5, { material: bodyMat }));
+  ramp.add(at(brick(Math.round(openW) - 1, Math.round(RL) - 1, PLATE, { color: 0x8a5433 }), 0, 0, -RL / 2));
+  for (const s of [1, -1]) {
+    ramp.add(at(tile(1, Math.round(RL), 0.7, { color: 0x6d4224 }), s * (openW / 2 - 0.9), 0, -RL / 2));
+  }
+  for (let i = 0; i < 4; i++) {
+    ramp.add(at(tile(Math.round(openW) - 2, 1, 0.35, { color: C.darkGray }), 0, 0.4, -1.6 - i * 2.6));
+  }
+  ramp.userData.noBake = true;
+  ramp.position.set(0, yBase + 0.2, -21.7);
+  g.add(ramp);
+
+  // ---- exhaust stacks ----
+  const engines = [];
+  for (const s of [1, -1]) {
+    S.add(at(rot(cyl(1.0, 2.4, { color: C.darkGray, seg: 12 }), 0, 0, 0), s * 6.0, topY, 18.4));
+    const b = engineBell({ r: 0.85, depth: 0.5, color: 0xff9a3c, plume: 2.2, plumeOpacity: 0.22, seg: 12, shell: C.darkGray })
+      .place(s * 6.0, topY + 3.4, 18.4);
+    b.shell.rotation.x = -Math.PI / 2;
+    b.live.rotation.x = -Math.PI / 2;
+    S.add(b.shell);
+    LIVE.add(b.live);
+    engines.push(b.core);
+  }
+
+  g.add(bake(S));
+  g.add(LIVE);
+  anchor(g, 'rampFoot', 0, 0, -32);
+  anchor(g, 'roof', 0, topY, 6);
+  anchor(g, 'cabin', 0, yBase + 13.6, -16);
+
+  g.userData.length = 46;
+  g.userData.width = 25.6;
+  g.userData.height = topY + 6;
+  g.userData.anchor = 'keel';
+  g.userData.ramp = ramp;
+  g.userData.rampOpen = 0;
+  g.userData.setRamp = (t) => {
+    const k = Math.max(0, Math.min(1, t));
+    g.userData.rampOpen = k;
+    ramp.rotation.x = (1 - k) * Math.PI * 0.5;
+  };
+  g.userData.treadScroll = (t) => { treadTex.offset.x = -t; };
+  g.userData.setRamp(0);
+  return wireEngines(g, engines, 0.5);
+}
+
+/* ================================================================== */
+/* turbolaser tower                                                    */
+/* ================================================================== */
+
+/**
+ * Stubby twin-barrel surface turret for the battle station.
+ * userData: aim(vec3 worldTarget), fire() -> world muzzle position,
+ *   yoke, guns, muzzles[2], height
+ */
+export function turbolaserTower(opt = {}) {
+  const seed = opt.seed ?? 61;
+  const g = new THREE.Group();
+  g.name = 'turbolaserTower';
+  const S = new THREE.Group();
+
+  const gt = svgTex('greeble', SVG_GREEBLE, { repeat: [1 / 5, 1 / 5] });
+  const baseMat = mapMat('tlBase', 0x8f9290, gt, { rough: 0.55 });
+  const hazTex = svgTex('haz', SVG_HAZARD, { repeat: [4, 1], w: 256, h: 64 });
+
+  // ---- base ----
+  S.add(hull(rect(9, 9), 1.0, 0, { material: baseMat }));
+  S.add(at(cyl(4.0, 1.0, { color: C.bluishGray, seg: 16 }), 0, 1.0, 0));
+  S.add(at(cyl(3.2, 0.5, { color: C.darkGray, seg: 16 }), 0, 2.0, 0));
+  for (const s of [1, -1]) {
+    const h = new THREE.Mesh(new THREE.PlaneGeometry(9, 0.7), decal(1, 1, hazTex, 'haz').material);
+    h.rotation.y = (s * Math.PI) / 2;
+    h.position.set(s * 4.53, 0.4, 0);
+    S.add(h);
+    const h2 = new THREE.Mesh(new THREE.PlaneGeometry(9, 0.7), decal(1, 1, hazTex, 'haz').material);
+    h2.rotation.y = s > 0 ? 0 : Math.PI;
+    h2.position.set(0, 0.4, s * 4.53);
+    S.add(h2);
+  }
+  greebles(S, {
+    x0: -4, x1: 4, z0: -4, z1: 4, y: 1.0, seed, count: 18,
+    colors: [C.bluishGray, C.darkGray, C.veryLightGray], hMax: 0.6, maxW: 2, grid: 0.5,
+    test: (x, z, r) => Math.hypot(x, z) > 3.2 + r && Math.hypot(x, z) < 4.2 - r,
+  });
+
+  // ---- rotating yoke ----
+  const yoke = new THREE.Group();
+  yoke.name = 'yoke';
+  yoke.add(at(cyl(2.6, 1.4, { color: C.lightGray, seg: 16 }), 0, 0, 0));
+  yoke.add(at(tile(5, 4, 1.6, { color: C.veryLightGray }), 0, 1.4, 0.9));
+  yoke.add(at(tile(3, 3, 0.5, { color: C.bluishGray }), 0, 3.0, 1.2));
+  for (const s of [1, -1]) {
+    yoke.add(at(tile(1, 3, 2.4, { color: C.lightGray }), s * 1.9, 1.4, -0.6));
+    yoke.add(at(rot(cyl(0.5, 0.5, { color: C.darkGray, seg: 12 }), 0, 0, Math.PI / 2), s * 2.3, 2.9, -0.6));
+  }
+  yoke.add(at(cyl(0.5, 1.4, { color: C.darkGray, seg: 10 }), 0, 3.5, 1.4));
+  yoke.add(radar(1.2, 0.5, 0, 4.9, 1.4, { color: C.veryLightGray }));
+
+  // ---- elevating barrels ----
+  const guns = new THREE.Group();
+  guns.name = 'guns';
+  guns.position.set(0, 2.9, -0.6);
+  guns.add(at(tile(4, 3, 1.0, { color: C.bluishGray }), 0, -0.5, -0.4));
+  const muzzles = [];
+  for (const s of [1, -1]) {
+    guns.add(at(rot(cyl(0.42, 7.2, { color: C.veryLightGray, seg: 12 }), Math.PI / 2, 0, 0), s * 1.0, 0, -5.0));
+    guns.add(at(rot(cyl(0.56, 1.2, { color: C.darkGray, seg: 12 }), Math.PI / 2, 0, 0), s * 1.0, 0, -1.4));
+    guns.add(at(rot(cyl(0.5, 1.0, { color: C.darkGray, seg: 12 }), Math.PI / 2, 0, 0), s * 1.0, 0, -8.0));
+    guns.add(at(rot(cyl(0.3, 1.6, { color: C.bluishGray, seg: 10 }), Math.PI / 2, 0, 0), s * 1.0, 0, 0.6));
+    const mz = new THREE.Object3D();
+    mz.position.set(s * 1.0, 0, -8.3);
+    guns.add(mz);
+    muzzles.push(mz);
+    const fl = at(rot(cone(1.0, 0.1, 2.2, { color: 0x9ff0ff, glow: true, seg: 10 }), -Math.PI / 2, 0, 0), s * 1.0, 0, -8.3);
+    fl.material = additive(0xa8f2ff, 0.7);
+    fl.visible = false;
+    fl.userData.noBake = true;
+    guns.add(fl);
+    muzzles[muzzles.length - 1].userData.flash = fl;
+  }
+  yoke.add(guns);
+  yoke.position.set(0, 2.5, 0);
+  g.add(bake(S));
+  g.add(yoke);
+
+  const tmp = new THREE.Vector3();
+  const wp = new THREE.Vector3();
+  g.userData.height = 6.0;
+  g.userData.width = 9;
+  g.userData.anchor = 'keel';
+  g.userData.yoke = yoke;
+  g.userData.guns = guns;
+  g.userData.muzzles = muzzles;
+  g.userData.aim = (target) => {
+    g.updateWorldMatrix(true, false);
+    const l = g.worldToLocal(tmp.copy(target));
+    yoke.rotation.y = Math.atan2(-(l.x - yoke.position.x), -(l.z - yoke.position.z));
+    guns.updateWorldMatrix(true, false);
+    guns.getWorldPosition(wp);
+    const dy = target.y - wp.y;
+    const dh = Math.hypot(target.x - wp.x, target.z - wp.z);
+    guns.rotation.x = Math.max(-0.25, Math.min(1.35, Math.atan2(dy, dh)));
+    return g;
+  };
+  g.userData.fire = (on = true) => {
+    for (const m of muzzles) m.userData.flash.visible = !!on;
+    return muzzles[0].getWorldPosition(new THREE.Vector3());
+  };
+  g.userData.aim(new THREE.Vector3(0, 30, -60));
+  return g;
+}
+
+/* ================================================================== */
+/* imperial hangar shuttle                                             */
+/* ================================================================== */
+
+/**
+ * Small imperial troop transport with folding wings.
+ * userData: length 15, setWings(t) 0 = folded up (flight) / 1 = down (landed),
+ *   wings[2], engines[3], anchors {ramp, cockpit}
+ */
+export function hangarShuttle(opt = {}) {
+  const seed = opt.seed ?? 71;
+  const g = new THREE.Group();
+  g.name = 'hangarShuttle';
+  const S = new THREE.Group();
+  const LIVE = new THREE.Group();
+
+  const gt = svgTex('greeble', SVG_GREEBLE, { repeat: [1 / 6, 1 / 6] });
+  const hullMat = mapMat('hsHull', 0xb0b3b0, gt, { rough: 0.5 });
+  const winMat = litMat('hsWin', svgTex('bwin', SVG_BRIDGEWIN, { repeat: [1, 1] }), 0x9fd8ff, 1.4);
+
+  const F = [[-7.5, 0.5], [-6, 1.4], [-3, 2.0], [2, 2.3], [6, 2.2], [7.2, 1.6]];
+  S.add(slab(section(F, -7.5, 7.2, 0.3), 0.9, 0.0, { color: C.bluishGray }));
+  S.add(slab(F, 1.5, 0.9, { material: hullMat }));
+  S.add(slab(section(F, -6.6, 6.8, 0.5), 1.1, 2.4, { material: hullMat }));
+  S.add(slab(section(F, -4.4, 6.4, 1.1), 0.5, 3.5, { color: C.veryLightGray }));
+  const st = deckStuds(poly(section(F, -4.4, 6.4, 1.1)), 4.0, { color: C.veryLightGray, inset: 0.55 });
+  if (st) S.add(st);
+  // cockpit
+  S.add(at(rot(slope(2.2, 3.0, 1.4, 0.2, { color: C.lightGray }), 0, Math.PI / 2, 0), 0, 2.4, -5.4));
+  const cw = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.8), winMat);
+  cw.position.set(0, 3.0, -6.55);
+  cw.rotation.set(0.35, Math.PI, 0);
+  S.add(cw);
+  for (const s of [1, -1]) {
+    const sw = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.7), winMat);
+    sw.rotation.y = (s * Math.PI) / 2;
+    sw.position.set(s * 1.62, 2.9, -4.4);
+    S.add(sw);
+    S.add(at(tile(1, 4, 0.5, { color: C.darkGray }), s * 2.05, 1.4, 1.0));
+  }
+  // dorsal fin
+  S.add(hull([[-0.4, -1.0], [0.4, -1.0], [0.4, 5.6], [-0.4, 5.6]], 5.2, 4.0, { color: C.lightGray }));
+  S.add(hull([[-0.28, 0.4], [0.28, 0.4], [0.28, 4.6], [-0.28, 4.6]], 2.2, 9.2, { color: C.veryLightGray }));
+  S.add(at(tile(1, 2, 0.4, { color: C.darkGray }), 0, 11.4, 2.6));
+  greebles(S, {
+    x0: -1.6, x1: 1.6, z0: 3.0, z1: 6.2, y: 4.0, seed, count: 14,
+    colors: [C.bluishGray, C.darkGray], hMax: 0.6, maxW: 2, grid: 0.5,
+    test: (x) => Math.abs(x) > 0.55,
+  });
+
+  // folding wings
+  const wings = [];
+  for (const s of [1, -1]) {
+    const W = new THREE.Group();
+    W.add(hull([[s * 0.3, -1.2], [s * 7.4, 1.0], [s * 7.4, 4.6], [s * 0.3, 4.0]], 0.5, -0.25, { material: hullMat }));
+    W.add(hull([[s * 5.4, 1.2], [s * 7.2, 1.4], [s * 7.2, 4.4], [s * 5.4, 4.0]], 0.24, 0.25, { color: C.darkGray }));
+    W.add(at(rot(cyl(0.4, 3.2, { color: C.bluishGray, seg: 10 }), Math.PI / 2, 0, 0), s * 6.6, 0, 1.4));
+    W.add(at(tile(1, 4, 0.3, { color: C.bluishGray }), s * 3.0, 0.25, 2.0));
+    const pivot = new THREE.Group();
+    pivot.position.set(s * 1.5, 1.5, 1.4);
+    pivot.add(bake(W));
+    pivot.userData.sign = s;
+    g.add(pivot);
+    wings.push(pivot);
+  }
+
+  // engines
+  const engines = [];
+  for (const [x, y, r] of [[0, 1.9, 0.9], [-1.5, 1.7, 0.6], [1.5, 1.7, 0.6]]) {
+    const b = engineBell({ r, depth: 0.5, color: 0xbfe8ff, plume: r * 3.0, plumeOpacity: 0.3, seg: 12 })
+      .place(x, y, 7.3);
+    S.add(b.shell);
+    LIVE.add(b.live);
+    engines.push(b.core);
+  }
+
+  g.add(bake(S));
+  g.add(LIVE);
+  anchor(g, 'ramp', 0, 0, -8.0);
+  anchor(g, 'cockpit', 0, 3.0, -5.6);
+
+  g.userData.length = 15;
+  g.userData.width = 18;
+  g.userData.height = 12;
+  g.userData.anchor = 'keel';
+  g.userData.wings = wings;
+  g.userData.wingsOpen = 1;
+  g.userData.setWings = (t) => {
+    const k = Math.max(0, Math.min(1, t));
+    g.userData.wingsOpen = k;
+    for (const w of wings) w.rotation.z = w.userData.sign * (1.15 - 1.62 * k);
+  };
+  g.userData.setWings(1);
+  return wireEngines(g, engines, 1);
+}
+
+/* ================================================================== */
 /* laser bolt                                                          */
 /* ================================================================== */
 
@@ -1143,8 +2091,73 @@ export function proximityBolt(opt = {}) {
   return g;
 }
 
+/* ================================================================== */
+/* contact sheet                                                       */
+/* ================================================================== */
+
+/** Every hull in the library, keyed by name. */
+const SHIPS = {
+  starDestroyer, corvette, falcon, sandcrawler, xwing, tiefighter,
+  hangarShuttle, escapePod, turbolaserTower, proximityBolt,
+};
+
+/**
+ * Contact sheet: one of every ship, laid out in rows and spaced by their own
+ * size, all noses pointing -Z.  Keel/centre planes are kept at y = 0.
+ * @param {object} [o] {skip: string[], gap: number, rows: string[][]}
+ */
+export function fleet(o = {}) {
+  const skip = new Set(o.skip || []);
+  const gap = o.gap ?? 0.28;
+  const rows = o.rows || [
+    ['starDestroyer'],
+    ['corvette', 'sandcrawler', 'falcon'],
+    ['xwing', 'tiefighter', 'hangarShuttle', 'escapePod', 'turbolaserTower', 'proximityBolt'],
+  ];
+  const g = new THREE.Group();
+  g.name = 'fleet';
+  const box = new THREE.Box3();
+  const size = new THREE.Vector3();
+  const centre = new THREE.Vector3();
+  let z = 0;
+  const built = [];
+  for (const row of rows) {
+    const items = [];
+    let rowW = 0;
+    let rowD = 0;
+    for (const name of row) {
+      if (skip.has(name) || !SHIPS[name]) continue;
+      const ship = name === 'proximityBolt'
+        ? SHIPS[name]({ color: 0xff3b1f, len: 6, radius: 0.4 })
+        : SHIPS[name]();
+      box.setFromObject(ship);
+      box.getSize(size);
+      box.getCenter(centre);
+      items.push({ ship, w: size.x, d: size.z, cx: centre.x, minZ: box.min.z });
+      rowW += size.x * (1 + gap);
+      rowD = Math.max(rowD, size.z);
+    }
+    if (!items.length) continue;
+    let x = -rowW / 2;
+    for (const it of items) {
+      const pad = it.w * gap;
+      x += pad / 2;
+      it.ship.position.x = x + it.w / 2 - it.cx;
+      it.ship.position.z = z - it.minZ - rowD / 2 + (rowD - it.d) / 2;
+      g.add(it.ship);
+      built.push(it.ship);
+      x += it.w + pad / 2;
+    }
+    z += rowD * (1 + gap);
+  }
+  g.userData.ships = built;
+  g.userData.length = z;
+  g.userData.anchor = 'keel';
+  return g;
+}
+
 /* TEMPORARY inspection helper — remove before delivery. */
-const ZOOMABLE = { corvette, starDestroyer, escapePod, proximityBolt };
+const ZOOMABLE = SHIPS;
 export function __zoom(name, x, y, z) {
   const ship = ZOOMABLE[name]();
   ship.position.set(-x, -y, -z);

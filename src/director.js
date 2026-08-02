@@ -13,28 +13,14 @@ import * as THREE from 'three';
 import { timeline, voiceLines, DURATION } from './story.js';
 import { texturesReady } from './lego/svgtex.js';
 import { SCENE_MODULES } from './scenes/index.js';
+import { stubScene } from './scenes/_stub.js';
 
-/**
- * The audio modules are loaded lazily so the picture side of the film still
- * renders if the soundtrack fails to load for any reason.
- */
-let AUDIO = null;
-export async function loadAudioModules() {
-  if (AUDIO) return AUDIO;
-  try {
-    const base = new URL('./audio/', import.meta.url).href;
-    const [engine, score, sfx] = await Promise.all([
-      import(/* @vite-ignore */ base + 'engine.js'),
-      import(/* @vite-ignore */ base + 'score.js'),
-      import(/* @vite-ignore */ base + 'sfx.js'),
-    ]);
-    AUDIO = { createBus: engine.createBus, scheduleScore: score.scheduleScore, scheduleCues: sfx.scheduleCues };
-  } catch (e) {
-    console.warn('soundtrack modules unavailable:', e.message);
-    AUDIO = { createBus: null };
-  }
-  return AUDIO;
-}
+import { createBus } from './audio/engine.js';
+import { scheduleScore } from './audio/score.js';
+import { scheduleCues } from './audio/sfx.js';
+
+const AUDIO = { createBus, scheduleScore, scheduleCues };
+export async function loadAudioModules() { return AUDIO; }
 
 const FADE = 0.55;
 
@@ -66,7 +52,10 @@ export class Director {
     for (const s of this.tl.scenes) {
       const mod = SCENE_MODULES[s.id];
       if (!mod) { console.warn('no scene module for', s.id); continue; }
-      const built = await mod.build({ ...ctx, dur: s.dur, id: s.id, start: s.start });
+      // `only` builds a single scene, so shot work doesn't pay for the whole film
+      const built = this.opts.only && this.opts.only !== s.id
+        ? stubScene(s.id, s.dur, s.id)
+        : await mod.build({ ...ctx, dur: s.dur, id: s.id, start: s.start });
       built.scene.userData.id = s.id;
       this.scenes.set(s.id, { ...s, ...built });
       for (const c of built.cues || []) {
@@ -178,7 +167,6 @@ export class Director {
       g.connect(actx.destination);
       return { voice: g, master: g };
     }
-    const { createBus, scheduleScore, scheduleCues } = AUDIO;
     const bus = createBus(actx, {});
     const sections = this.tl.scenes
       .filter((s) => s.end > from)

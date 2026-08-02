@@ -109,17 +109,25 @@ function lfo(ctx, t, dur, rate, depth, { type = 'sine', phase = 0 } = {}) {
  * Damped feedback comb — the metallic "twang" behind blaster bolts, ricochets
  * and lightsaber clashes. Loop length is clamped above one render quantum,
  * which is the shortest legal delay inside a Web Audio cycle.
+ *
+ * The loop is a bare delay and gain. A `BiquadFilterNode` inside a Web Audio
+ * cycle is not stable in Chrome: with a lowpass in the loop this comb ran away
+ * to 1e38 over about fifteen seconds and took the whole mix to NaN, because the
+ * filter's measured DC gain sits a hair above unity and the loop integrates it.
+ * Damping and DC blocking therefore both sit outside the loop, and the input is
+ * highpassed so the comb has no DC to integrate in the first place.
  */
 function comb(ctx, freq, decay, damp = 5200) {
   const dt = Math.max(200 / ctx.sampleRate, 1 / Math.max(20, freq));
-  const input = gn(ctx, 1);
+  const input = bq(ctx, 'highpass', Math.min(400, Math.max(90, freq * 0.35)), 0.6);
   const d = ctx.createDelay(0.2);
   d.delayTime.value = dt;
-  const fb = gn(ctx, clamp(Math.pow(10, (-3 * dt) / Math.max(0.02, decay)), 0, 0.94));
-  const lp = bq(ctx, 'lowpass', damp, 0.4);
+  const fb = gn(ctx, clamp(Math.pow(10, (-3 * dt) / Math.max(0.02, decay)), 0, 0.9));
   input.connect(d);
-  d.connect(lp); lp.connect(fb); fb.connect(d);
-  return { input, output: d };
+  d.connect(fb); fb.connect(d);
+  const lp = bq(ctx, 'lowpass', damp, 0.5);
+  d.connect(lp);
+  return { input, output: lp };
 }
 
 /** Dense amplitude automation: a list of [time, attack, peak, decay] grains. */

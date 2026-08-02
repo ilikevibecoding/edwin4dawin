@@ -22,7 +22,7 @@ const stage = createRenderer(document.getElementById('stage'), {
   pixelRatio: RENDER ? 1 : Math.min(devicePixelRatio, 1.5),
 });
 
-const director = new Director(stage, { mode: RENDER ? 'render' : 'live' });
+const director = new Director(stage, { mode: RENDER ? 'render' : 'live', only: q.get('only') || null });
 
 const tc = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const $ = (id) => document.getElementById(id);
@@ -62,6 +62,7 @@ async function boot() {
       for (let i = 0; i < s.length; i++) bin += String.fromCharCode(s[i]);
       return btoa(bin);
     };
+    window.__director = director;
     $('start').style.display = 'none';
     $('ui').style.display = 'none';
     window.__ready = true;
