@@ -1,0 +1,62 @@
+{
+  "$comment": "Original narration for 'Starfall: The Stolen Design'. All text is newly written for this fan project. It does not quote the Star Wars screenplay, opening crawl, or any film dialogue. Voices are generic open TTS voices; no actor is imitated.",
+  "voices": {
+    "narrator": { "model": "en_US-ryan-high", "lengthScale": 1.12, "noiseScale": 0.6, "treatment": "narrator" },
+    "leia": { "model": "en_US-amy-medium", "lengthScale": 1.0, "noiseScale": 0.65, "treatment": "comm" },
+    "officer": { "model": "en_US-lessac-medium", "lengthScale": 0.98, "noiseScale": 0.667, "treatment": "comm" },
+    "threepio": { "model": "en_US-lessac-medium", "lengthScale": 1.06, "noiseScale": 0.6, "treatment": "droid" }
+  },
+  "cues": [
+    { "id": "p1", "chapter": "prologue", "time": 5.0, "voice": "narrator", "speaker": "NARRATOR", "text": "A galactic civil war burns across ten thousand worlds." },
+    { "id": "p2", "chapter": "prologue", "time": 11.5, "voice": "narrator", "speaker": "NARRATOR", "text": "In the shadow of a broken peace, the Empire has finished a station large enough to break a planet apart." },
+    { "id": "p3", "chapter": "prologue", "time": 22.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Rebel agents stole its design, and ran." },
+    { "id": "p4", "chapter": "prologue", "time": 28.5, "voice": "narrator", "speaker": "NARRATOR", "text": "Above the desert world of Tatooine, a stolen secret races through the dark." },
+    { "id": "p5", "chapter": "prologue", "time": 36.0, "voice": "narrator", "speaker": "NARRATOR", "text": "This is the hour the war turns, and almost no one alive will know it happened." },
+
+    { "id": "t1", "chapter": "tatooine", "time": 52.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Tatooine. Twin suns, endless sand, and nothing an empire would bother to want." },
+    { "id": "t2", "chapter": "tatooine", "time": 60.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Which is exactly why the plans were brought here." },
+    { "id": "t3", "chapter": "tatooine", "time": 67.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Inside a battered diplomatic ship, a princess carries the design of a weapon powerful enough to silence an entire world." },
+    { "id": "t4", "chapter": "tatooine", "time": 77.5, "voice": "narrator", "speaker": "NARRATOR", "text": "For a few more seconds, the sky above her is empty." },
+
+    { "id": "u1", "chapter": "pursuit", "time": 90.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Her corvette runs with every engine open." },
+    { "id": "u2", "chapter": "pursuit", "time": 96.0, "voice": "narrator", "speaker": "NARRATOR", "text": "The dark behind her is not empty." },
+    { "id": "u3", "chapter": "pursuit", "time": 103.0, "voice": "narrator", "speaker": "NARRATOR", "text": "A shadow climbs into the frame. Wedge shaped, gray, and vast. An Imperial destroyer, a city of guns, hunting a single courier." },
+    { "id": "u4", "chapter": "pursuit", "time": 116.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Turbolasers reach across the gap with a lag you can watch." },
+    { "id": "u5", "chapter": "pursuit", "time": 123.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Shields flare, hold, and begin to fail." },
+    { "id": "u6", "chapter": "pursuit", "time": 130.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Hull plating tears away. The corvette answers with the few guns she carries, and it changes nothing." },
+    { "id": "u7", "chapter": "pursuit", "time": 141.0, "voice": "narrator", "speaker": "NARRATOR", "text": "There is no outrunning something that size. There is only the time it buys." },
+    { "id": "u8", "chapter": "pursuit", "time": 149.5, "voice": "narrator", "speaker": "NARRATOR", "text": "And time is exactly what the princess needs." },
+
+    { "id": "c1", "chapter": "capture", "time": 162.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Her engines die." },
+    { "id": "c2", "chapter": "capture", "time": 166.0, "voice": "narrator", "speaker": "NARRATOR", "text": "The great ship draws alongside and takes up the whole of the sky." },
+    { "id": "c3", "chapter": "capture", "time": 174.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Magnetic clamps close. A boarding ring seals against rebel steel." },
+    { "id": "c4", "chapter": "capture", "time": 182.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Whatever happens now, happens inside." },
+    { "id": "c5", "chapter": "capture", "time": 187.5, "voice": "narrator", "speaker": "NARRATOR", "text": "Somewhere in the corridors ahead, a plan is already moving." },
+
+    { "id": "d1", "chapter": "corridor", "time": 200.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Inside, the corridor lights turn red." },
+    { "id": "d2", "chapter": "corridor", "time": 205.0, "voice": "officer", "speaker": "REBEL OFFICER", "text": "Hold this line. Nothing gets past us to the archive." },
+    { "id": "d3", "chapter": "corridor", "time": 211.0, "voice": "narrator", "speaker": "NARRATOR", "text": "They know exactly what is coming through that door, and they hold the line anyway." },
+    { "id": "d4", "chapter": "corridor", "time": 219.0, "voice": "narrator", "speaker": "NARRATOR", "text": "The seal glows. The metal bends." },
+    { "id": "d5", "chapter": "corridor", "time": 225.0, "voice": "narrator", "speaker": "NARRATOR", "text": "White armor floods the passage. The fight is short, and it is never close." },
+    { "id": "d6", "chapter": "corridor", "time": 236.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Then the shooting stops." },
+    { "id": "d7", "chapter": "corridor", "time": 241.0, "voice": "narrator", "speaker": "NARRATOR", "text": "And something worse steps through the smoke." },
+    { "id": "d8", "chapter": "corridor", "time": 248.0, "voice": "narrator", "speaker": "NARRATOR", "text": "A figure in black, breathing through a machine. The Empire keeps him for problems it cannot solve with soldiers." },
+    { "id": "d9", "chapter": "corridor", "time": 257.0, "voice": "narrator", "speaker": "NARRATOR", "text": "He has come for the thing that was stolen." },
+
+    { "id": "l1", "chapter": "plans", "time": 266.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Two decks away, the princess is working faster than a boarding party can walk." },
+    { "id": "l2", "chapter": "plans", "time": 274.0, "voice": "narrator", "speaker": "NARRATOR", "text": "The stolen schematics fold down into a small astromech droid. Every tower, every corridor, and one flaw at the heart of it." },
+    { "id": "l3", "chapter": "plans", "time": 285.0, "voice": "narrator", "speaker": "NARRATOR", "text": "With them she records a message she may not live to send." },
+    { "id": "l4", "chapter": "plans", "time": 292.0, "voice": "leia", "speaker": "PRINCESS", "text": "You are carrying more than a message. Get it to the surface. Do not stop for me." },
+    { "id": "l5", "chapter": "plans", "time": 299.5, "voice": "narrator", "speaker": "NARRATOR", "text": "A weapon's blueprint and a call for help, hidden inside a machine nobody thinks to search." },
+
+    { "id": "e1", "chapter": "escape", "time": 310.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Two droids run for the launch bays. One of them is certain." },
+    { "id": "e2", "chapter": "escape", "time": 316.5, "voice": "threepio", "speaker": "PROTOCOL DROID", "text": "That is not a lifeboat. That is a very small can with an engine." },
+    { "id": "e3", "chapter": "escape", "time": 323.5, "voice": "narrator", "speaker": "NARRATOR", "text": "Clamps release. An unarmed pod drops away from the captured ship. No weapons, no crew, no reason to fire on it." },
+    { "id": "e4", "chapter": "escape", "time": 334.0, "voice": "narrator", "speaker": "NARRATOR", "text": "On the destroyer, a gunnery officer checks for life signs, finds none, and holds his fire." },
+    { "id": "e5", "chapter": "escape", "time": 342.5, "voice": "narrator", "speaker": "NARRATOR", "text": "The pod falls toward the desert, a small bright point against a very old world." },
+
+    { "id": "x1", "chapter": "epilogue", "time": 355.0, "voice": "narrator", "speaker": "NARRATOR", "text": "The Empire will search that captured ship for hours, and find nothing." },
+    { "id": "x2", "chapter": "epilogue", "time": 362.0, "voice": "narrator", "speaker": "NARRATOR", "text": "The fate of the galaxy left before they ever boarded." },
+    { "id": "x3", "chapter": "epilogue", "time": 368.0, "voice": "narrator", "speaker": "NARRATOR", "text": "It is falling through a desert sky right now, inside an unarmed droid." }
+  ]
+}

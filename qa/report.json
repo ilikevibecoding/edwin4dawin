@@ -1,0 +1,1010 @@
+{
+  "generatedAt": "2026-08-02T23:14:07.640Z",
+  "url": "http://127.0.0.1:5173/?qa=1&quality=medium",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "quality": "medium",
+  "checkpointCount": 9,
+  "failureCount": 0,
+  "consoleErrors": [],
+  "pageErrors": [],
+  "controlResults": [],
+  "playbackSamples": [
+    {
+      "time": 100.68329999999996,
+      "fps": 2.5187366017205766,
+      "draws": 69,
+      "tris": 11705,
+      "issues": 2
+    },
+    {
+      "time": 101.76659999999991,
+      "fps": 3.0134803018837597,
+      "draws": 69,
+      "tris": 11705,
+      "issues": 2
+    },
+    {
+      "time": 102.75009999999988,
+      "fps": 6.36816483640892,
+      "draws": 70,
+      "tris": 11837,
+      "issues": 2
+    },
+    {
+      "time": 103.65009999999982,
+      "fps": 6.9232899473829965,
+      "draws": 71,
+      "tris": 11981,
+      "issues": 2
+    },
+    {
+      "time": 104.93359999999976,
+      "fps": 6.383250351078772,
+      "draws": 71,
+      "tris": 11981,
+      "issues": 2
+    },
+    {
+      "time": 106.06689999999969,
+      "fps": 6.2502604275178095,
+      "draws": 73,
+      "tris": 14129,
+      "issues": 2
+    },
+    {
+      "time": 107.16679999999963,
+      "fps": 5.908380709793467,
+      "draws": 73,
+      "tris": 14129,
+      "issues": 2
+    },
+    {
+      "time": 108.11679999999957,
+      "fps": 6.054083142741827,
+      "draws": 73,
+      "tris": 14129,
+      "issues": 2
+    },
+    {
+      "time": 109.05029999999952,
+      "fps": 6.067633892454559,
+      "draws": 79,
+      "tris": 14609,
+      "issues": 2
+    },
+    {
+      "time": 110.10029999999946,
+      "fps": 6.013630896699185,
+      "draws": 87,
+      "tris": 15211,
+      "issues": 2
+    }
+  ],
+  "meanFps": 5.550091110768187,
+  "results": [
+    {
+      "checkpoint": {
+        "id": "03-tatooine-establish",
+        "time": 54,
+        "chapter": "tatooine",
+        "shot": "tat-1",
+        "scene": "space",
+        "expects": [
+          "Tatooine limb",
+          "atmospheric haze",
+          "starfield"
+        ],
+        "assertions": [
+          {
+            "kind": "onScreen",
+            "target": "tatooine"
+          },
+          {
+            "kind": "brightness",
+            "min": 0.05
+          },
+          {
+            "kind": "noIssues"
+          }
+        ],
+        "notes": "The planet must read as a sphere with a bright limb, not a flat disc."
+      },
+      "report": {
+        "time": 54,
+        "chapter": "tatooine",
+        "chapterIndex": 1,
+        "shot": "tat-1",
+        "shotLabel": "Wide planetary establishing",
+        "scene": "space",
+        "beat": "planet establishing drift",
+        "subtitle": "Tatooine. Twin suns, endless sand, and nothing an empire would bother to want.",
+        "narrationCue": "t1",
+        "issues": [
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
+          },
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
+          }
+        ],
+        "fps": 3.8923487544471884,
+        "drawCalls": 27,
+        "triangles": 15075,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -1.871609607424871,
+              5.576915837781291
+            ],
+            "distance": 9851.129249922988
+          },
+          "destroyer": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.6359066802096234,
+              2.197846545663047
+            ],
+            "distance": 23487.080248369246
+          },
+          "pod": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -1.8651341450615275,
+              5.554746986014269
+            ],
+            "distance": 9883.067480506128
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.042419144667992605,
+              -3.325963311912128
+            ],
+            "distance": 256484.8744844524
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 1470,
+          "interiorSparks": 1050,
+          "overflow": true
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.7025017798338768,
+        "p95": 0.97472,
+        "clipped": 0.0005902777777777778
+      },
+      "screenshot": "03-tatooine-establish.png"
+    },
+    {
+      "checkpoint": {
+        "id": "05-pursuit-tracking",
+        "time": 92,
+        "chapter": "pursuit",
+        "shot": "pur-1",
+        "scene": "space",
+        "expects": [
+          "blockade runner large in frame",
+          "engine glow"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "runner",
+            "minScreenFraction": 0.01
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 92,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-1",
+        "shotLabel": "Tracking the blockade runner",
+        "scene": "space",
+        "beat": "corvette at full burn",
+        "subtitle": "Her corvette runs with every engine open.",
+        "narrationCue": "u1",
+        "issues": [
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
+          },
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
+          }
+        ],
+        "fps": 3.8977237293414992,
+        "drawCalls": 69,
+        "triangles": 11705,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.30521938245272107,
+            "onScreen": true,
+            "ndc": [
+              0.056583706533996476,
+              -0.031038451827830525
+            ],
+            "distance": 292.4328635854266
+          },
+          "destroyer": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.6961876229060534,
+              -0.443954999305685
+            ],
+            "distance": 5162.563995606596
+          },
+          "pod": {
+            "screenFraction": 0.0023833906241130846,
+            "onScreen": true,
+            "ndc": [
+              0.183694278088288,
+              -0.09292829867958145
+            ],
+            "distance": 267.8719620971292
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.0007569197500815413,
+              -31.57890021628883
+            ],
+            "distance": 252028.44955940984
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 1470,
+          "interiorSparks": 1050,
+          "overflow": true
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.09538064822982367,
+        "p95": 0.5939772549019608,
+        "clipped": 0
+      },
+      "screenshot": "05-pursuit-tracking.png"
+    },
+    {
+      "checkpoint": {
+        "id": "06-destroyer-reveal",
+        "time": 112,
+        "chapter": "pursuit",
+        "shot": "pur-2",
+        "scene": "space",
+        "expects": [
+          "destroyer bow entering frame",
+          "blockade runner small below"
+        ],
+        "assertions": [
+          {
+            "kind": "onScreen",
+            "target": "destroyer"
+          },
+          {
+            "kind": "onScreen",
+            "target": "runner"
+          },
+          {
+            "kind": "noIssues"
+          }
+        ],
+        "notes": "The scale relationship is the point of this frame."
+      },
+      "report": {
+        "time": 112,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-2",
+        "shotLabel": "Low angle — destroyer reveal",
+        "scene": "space",
+        "beat": "destroyer bow crosses frame",
+        "subtitle": "A shadow climbs into the frame. Wedge shaped, gray, and vast. An Imperial destroyer, a city of guns, hunting a single courier.",
+        "narrationCue": null,
+        "issues": [
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
+          },
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
+          }
+        ],
+        "fps": 4.2474607571556104,
+        "drawCalls": 92,
+        "triangles": 16001,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.03454439457730546,
+            "onScreen": true,
+            "ndc": [
+              0.07770063801610701,
+              -0.6719592510230694
+            ],
+            "distance": 550.9881940476341
+          },
+          "destroyer": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.022113497940818877,
+              0.7564144760288012
+            ],
+            "distance": 1308.4508967994248
+          },
+          "pod": {
+            "screenFraction": 0.00020366251537601296,
+            "onScreen": true,
+            "ndc": [
+              0.026500491115933382,
+              -0.6362120605592669
+            ],
+            "distance": 517.6012736116838
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.0001867208707223614,
+              6.080250620737039
+            ],
+            "distance": 251958.04192418908
+          }
+        },
+        "boltsActive": 1,
+        "particleBudget": {
+          "spaceSparks": 1470,
+          "interiorSparks": 1050,
+          "overflow": true
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.05892919678648572,
+        "p95": 0.2980321568627451,
+        "clipped": 0
+      },
+      "screenshot": "06-destroyer-reveal.png"
+    },
+    {
+      "checkpoint": {
+        "id": "07-under-the-hull",
+        "time": 126,
+        "chapter": "pursuit",
+        "shot": "pur-3",
+        "scene": "space",
+        "expects": [
+          "destroyer underside filling frame",
+          "turbolaser fire"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "destroyer",
+            "minScreenFraction": 0.2
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 126,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-3",
+        "shotLabel": "Under the hull",
+        "scene": "space",
+        "beat": "belly fills the sky",
+        "subtitle": "Shields flare, hold, and begin to fail.",
+        "narrationCue": "u5",
+        "issues": [
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
+          },
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
+          }
+        ],
+        "fps": 4.26639361747481,
+        "drawCalls": 77,
+        "triangles": 13167,
+        "measurements": {
+          "runner": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -26.42029216219235,
+              6.492263501410362
+            ],
+            "distance": 126.98657707178387
+          },
+          "destroyer": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.00587584554661037,
+              0.1307931764197087
+            ],
+            "distance": 1369.3829712173165
+          },
+          "pod": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              3.162651064154795,
+              -1.11568688402392
+            ],
+            "distance": 102.61849947391245
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.001294738196152914,
+              3.8947845695191705
+            ],
+            "distance": 251996.10907773717
+          }
+        },
+        "boltsActive": 2,
+        "particleBudget": {
+          "spaceSparks": 1470,
+          "interiorSparks": 1050,
+          "overflow": true
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.49781071768792945,
+        "p95": 0.6977827450980392,
+        "clipped": 0
+      },
+      "screenshot": "07-under-the-hull.png"
+    },
+    {
+      "checkpoint": {
+        "id": "08-battle-profile",
+        "time": 139,
+        "chapter": "pursuit",
+        "shot": "pur-4",
+        "scene": "space",
+        "expects": [
+          "both ships in profile",
+          "bolts in flight",
+          "impact flashes"
+        ],
+        "assertions": [
+          {
+            "kind": "onScreen",
+            "target": "destroyer"
+          },
+          {
+            "kind": "onScreen",
+            "target": "runner"
+          },
+          {
+            "kind": "boltsActive",
+            "min": 1
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 139,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-4",
+        "shotLabel": "Battle profile — both ships",
+        "scene": "space",
+        "beat": "turbolaser exchange",
+        "subtitle": "Shields flare, hold, and begin to fail.",
+        "narrationCue": null,
+        "issues": [
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
+          },
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
+          }
+        ],
+        "fps": 4.072184834326131,
+        "drawCalls": 129,
+        "triangles": 16667,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.007749340316432915,
+            "onScreen": true,
+            "ndc": [
+              0.4067398525376639,
+              -0.307880303861214
+            ],
+            "distance": 2506.544935802121
+          },
+          "destroyer": {
+            "screenFraction": 0.6157223394885587,
+            "onScreen": true,
+            "ndc": [
+              -0.3646580038222216,
+              0.3875044546018395
+            ],
+            "distance": 2548.0922411722204
+          },
+          "pod": {
+            "screenFraction": 0.00004772720171670553,
+            "onScreen": true,
+            "ndc": [
+              0.429658672517871,
+              -0.3067317183332002
+            ],
+            "distance": 2501.468543545076
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.17415434760610288,
+              -187.2346195413838
+            ],
+            "distance": 252288.16099519728
+          }
+        },
+        "boltsActive": 1,
+        "particleBudget": {
+          "spaceSparks": 1470,
+          "interiorSparks": 1050,
+          "overflow": true
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.5299166147195171,
+        "p95": 0.9753694117647058,
+        "clipped": 0.030243055555555554
+      },
+      "screenshot": "08-battle-profile.png"
+    },
+    {
+      "checkpoint": {
+        "id": "09-corvette-hit",
+        "time": 149,
+        "chapter": "pursuit",
+        "shot": "pur-5",
+        "scene": "space",
+        "expects": [
+          "corvette taking hits",
+          "sparks and smoke"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "runner",
+            "minScreenFraction": 0.02
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 149,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-5",
+        "shotLabel": "Corvette under fire",
+        "scene": "space",
+        "beat": "shields failing",
+        "subtitle": "Shields flare, hold, and begin to fail.",
+        "narrationCue": null,
+        "issues": [
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
+          },
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
+          }
+        ],
+        "fps": 4.030524505588792,
+        "drawCalls": 88,
+        "triangles": 14061,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.7367432833217876,
+            "onScreen": true,
+            "ndc": [
+              -0.05913926503706438,
+              -0.08252228840215427
+            ],
+            "distance": 225.55722803449552
+          },
+          "destroyer": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              2.8587481197637423,
+              2.7574270660343103
+            ],
+            "distance": 1214.9265846141548
+          },
+          "pod": {
+            "screenFraction": 0.006251549698935859,
+            "onScreen": true,
+            "ndc": [
+              -0.2536776003353914,
+              -0.20462716138391027
+            ],
+            "distance": 205.96317394846696
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.2155698787359984,
+              -13.59950344261811
+            ],
+            "distance": 252051.20989311754
+          }
+        },
+        "boltsActive": 1,
+        "particleBudget": {
+          "spaceSparks": 1470,
+          "interiorSparks": 1050,
+          "overflow": true
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.1726589408225047,
+        "p95": 0.1988721568627451,
+        "clipped": 0
+      },
+      "screenshot": "09-corvette-hit.png"
+    },
+    {
+      "checkpoint": {
+        "id": "10-engines-dead",
+        "time": 155,
+        "chapter": "pursuit",
+        "shot": "pur-6",
+        "scene": "space",
+        "expects": [
+          "engine block blown out",
+          "debris"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "runner",
+            "minScreenFraction": 0.01
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 155,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-6",
+        "shotLabel": "Engines knocked out",
+        "scene": "space",
+        "beat": "drives knocked out",
+        "subtitle": "Shields flare, hold, and begin to fail.",
+        "narrationCue": null,
+        "issues": [
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
+          },
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
+          }
+        ],
+        "fps": 4.02991089419245,
+        "drawCalls": 106,
+        "triangles": 14443,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.2672559004981553,
+            "onScreen": true,
+            "ndc": [
+              -0.14350070256490763,
+              0.06678790456716452
+            ],
+            "distance": 306.80837877307675
+          },
+          "destroyer": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.5813682459873923,
+              1.3430424796136653
+            ],
+            "distance": 1191.4653744488865
+          },
+          "pod": {
+            "screenFraction": 0.0019622631731322213,
+            "onScreen": true,
+            "ndc": [
+              -0.03054659909593746,
+              0.0047510811695643295
+            ],
+            "distance": 282.19430394385097
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.0111789063400158,
+              -17.18720503747713
+            ],
+            "distance": 252036.1896400118
+          }
+        },
+        "boltsActive": 1,
+        "particleBudget": {
+          "spaceSparks": 1470,
+          "interiorSparks": 1050,
+          "overflow": true
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.180785908265293,
+        "p95": 0.22014274509803916,
+        "clipped": 0
+      },
+      "screenshot": "10-engines-dead.png"
+    },
+    {
+      "checkpoint": {
+        "id": "11-capture-two-shot",
+        "time": 165,
+        "chapter": "capture",
+        "shot": "cap-1",
+        "scene": "space",
+        "expects": [
+          "destroyer above",
+          "corvette below",
+          "tractor beam"
+        ],
+        "assertions": [
+          {
+            "kind": "onScreen",
+            "target": "destroyer"
+          },
+          {
+            "kind": "onScreen",
+            "target": "runner"
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 165,
+        "chapter": "capture",
+        "chapterIndex": 3,
+        "shot": "cap-1",
+        "shotLabel": "Captured — scale two-shot",
+        "scene": "space",
+        "beat": "held in the beam",
+        "subtitle": "Shields flare, hold, and begin to fail.",
+        "narrationCue": null,
+        "issues": [
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
+          },
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
+          }
+        ],
+        "fps": 2.7579951214130736,
+        "drawCalls": 142,
+        "triangles": 16607,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.02297776532094862,
+            "onScreen": true,
+            "ndc": [
+              0.09166382520109823,
+              -0.30498368406288057
+            ],
+            "distance": 1321.7257331035382
+          },
+          "destroyer": {
+            "screenFraction": 0.7942001277063179,
+            "onScreen": true,
+            "ndc": [
+              -0.3871158957591078,
+              0.15051080904641917
+            ],
+            "distance": 1845.7661220200607
+          },
+          "pod": {
+            "screenFraction": 0.00014336719969037438,
+            "onScreen": true,
+            "ndc": [
+              0.128231935295575,
+              -0.30801607976168816
+            ],
+            "distance": 1311.91962873696
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.00183360548442469,
+              9.667217057428694
+            ],
+            "distance": 251803.8400085899
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 1470,
+          "interiorSparks": 1050,
+          "overflow": true
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.8162939879631624,
+        "p95": 0.9876847058823528,
+        "clipped": 0.0946701388888889
+      },
+      "screenshot": "11-capture-two-shot.png"
+    },
+    {
+      "checkpoint": {
+        "id": "12-umbilical",
+        "time": 191,
+        "chapter": "capture",
+        "shot": "cap-3",
+        "scene": "space",
+        "expects": [
+          "boarding umbilical",
+          "corvette dorsal hull"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "runner",
+            "minScreenFraction": 0.05
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 191,
+        "chapter": "capture",
+        "chapterIndex": 3,
+        "shot": "cap-3",
+        "shotLabel": "Boarding umbilical",
+        "scene": "space",
+        "beat": "umbilical extends",
+        "subtitle": "Somewhere in the corridors ahead, a plan is already moving.",
+        "narrationCue": "c5",
+        "issues": [
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
+          },
+          {
+            "code": "particle-overflow",
+            "severity": "warning",
+            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
+          }
+        ],
+        "fps": 2.395796176309302,
+        "drawCalls": 50,
+        "triangles": 13665,
+        "measurements": {
+          "runner": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.15728463751774047,
+              -1.7794436808830403
+            ],
+            "distance": 53.70089983547256
+          },
+          "destroyer": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -1.2305260404675873,
+              2.1847872473035324
+            ],
+            "distance": 379.94927881722793
+          },
+          "pod": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              1.421373971652536,
+              -2.877182790298933
+            ],
+            "distance": 48.00132819040514
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.00019192054592046995,
+              19.44774141597128
+            ],
+            "distance": 252020.71298441282
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 1470,
+          "interiorSparks": 1050,
+          "overflow": true
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.13801318449064187,
+        "p95": 0.28245176470588235,
+        "clipped": 0
+      },
+      "screenshot": "12-umbilical.png"
+    }
+  ]
+}
