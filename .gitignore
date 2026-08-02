@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+
+# Piper TTS voice models are large third-party binaries used only at build time.
+# Fetch them with: node tools/fetch-voice.mjs
+tools/voices/
+
+# QA screenshot output (regenerate with: npm run qa)
+qa-output/

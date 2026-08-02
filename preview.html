@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Asset preview</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #05070c; overflow: hidden; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+      #label { position: fixed; left: 12px; top: 10px; color: #cfd8e3; font: 12px ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+    <div id="label"></div>
+    <script type="module" src="/src/dev/preview.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "shadow-of-the-first-star",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A procedural, browser-based interactive cinematic retelling the opening situation of Star Wars: A New Hope. Original fan work; all geometry, audio and narration generated from code.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "narration": "node tools/build-narration.mjs",
+    "qa": "node tools/qa-capture.mjs",
+    "qa:build": "npm run build && node tools/qa-capture.mjs --preview"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.0",
+    "puppeteer-core": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.0.0"
+  }
+}
