@@ -548,8 +548,7 @@ export async function build(ctx) {
         const pos = camDir.clone().multiplyScalar(d);
         pos.y += (d - D0) * 0.45; // drift toward the crawl's vanishing point
         group.position.copy(pos);
-        group.lookAt(0, 0, 0);
-        group.rotateY(Math.PI); // lookAt aims +z at the camera; keep text readable
+        group.lookAt(0, 0, 0); // faces of the extrusion are on +z, so this is front-on
 
         const a =
           Math.min(1, ease.range(t, T.logoIn, T.logoIn + 0.12)) *
@@ -615,7 +614,7 @@ export async function build(ctx) {
       uGlobal: { value: 1 },
     };
     const panel = (tex, texH) => {
-      const m = textPanel(tex, CRAWL_W, TEX_W, texH).material;
+      const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false });
       m.onBeforeCompile = (shader) => {
         Object.assign(shader.uniforms, fadeU);
         shader.vertexShader = shader.vertexShader
@@ -656,7 +655,7 @@ export async function build(ctx) {
     scene.add(root);
 
     // Distance from the content's top edge down to each paragraph's centre.
-    const top = (headWorldH + gap + BODY_PAD * px + (bodyH - blockH - BODY_PAD * 2) * 0.5 * px);
+    const top = headWorldH + gap + ((bodyH - blockH) / 2) * px;
     const centres = [];
     let line = 0;
     for (const n of paraLines) {
@@ -775,16 +774,17 @@ export async function build(ctx) {
     const leadHome = polar(7, -33.5, 400);
     const chaseHome = polar(-4, -35, 470);
 
+    const nose = new THREE.Vector3(0, 0, -1); // both hulls are built bow-to--z
     const lead = new THREE.Group();
     lead.add(corvette);
-    lead.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), lane); // nose is -z
+    lead.quaternion.setFromUnitVectors(nose, lane);
     lead.rotateZ(0.12);
     lead.rotateX(-0.05);
 
     const chase = new THREE.Group();
     chase.add(destroyer);
     chase.scale.setScalar(1.25);
-    chase.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), lane);
+    chase.quaternion.setFromUnitVectors(nose, lane);
     chase.rotateZ(-0.06);
 
     // engine glow

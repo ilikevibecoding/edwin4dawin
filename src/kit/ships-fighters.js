@@ -54,6 +54,17 @@ function cwedge(b, cx, y, cz, w, d, h, color, opts) {
   return b.wedge(cx - w / 2, y, cz - d / 2, w, d, h, color, opts);
 }
 
+/**
+ * Wedge plate for a swept leading edge: the right angle sits at the inboard-aft
+ * corner and the hypotenuse sweeps back as it goes outboard. `sx` picks the
+ * side. Mirroring uses a quarter turn (which swaps the wedge's own w/d) rather
+ * than a negative scale, so face winding stays correct.
+ */
+function sweepWedge(b, sx, cx, y, cz, w, d, h, color, opts = {}) {
+  if (sx > 0) return b.wedge(cx - w / 2, y, cz - d / 2, w, d, h, color, { ...opts, rot: 0 });
+  return b.wedge(-cx - d / 2, y, cz - w / 2, d, w, h, color, { ...opts, rot: 1 });
+}
+
 /** Cylinder lying along z (fore/aft), centred at (cx, cy, cz). `len` in studs. */
 function zcyl(b, cx, cy, cz, r, len, color, opts = {}) {
   const h = len * PY;
@@ -144,9 +155,10 @@ function xwFuselage(b, C) {
   for (const sx of [-1, 1]) cpanel(b, sx * 1.3, -3.5, -3.6, 0.9, 1.6, 0.6, C.metal);
 
   // dorsal spine detail between the cockpit and the engines
-  ctile(b, 0, 3, -5.6, 1, 2, C.trim);
-  ctile(b, 0, 3, -7.4, 1, 2, C.trim);
-  cplate(b, 0, 3, -9.4, 2, 2, C.metal);
+  ctile(b, 0, 3, -5.4, 1, 2, C.trim);
+  ctile(b, 0, 3, -8.0, 1, 2, C.trim);
+  ctile(b, 0, 3, -6.7, 1, 1, C.metal);
+  cplate(b, 0, 3, -9.6, 2, 1.6, C.metal);
   for (const sx of [-1, 1]) {
     ctile(b, sx * 1.5, 3, -4.6, 1, 2, C.metal);
     ctile(b, sx * 1.5, 3, -8.4, 1, 3, C.metal);
@@ -248,39 +260,32 @@ function xwWing(sx, sy, C) {
   const b = new Bricks({ studSegments: 8 });
   const X = (u) => sx * u; // outboard distance -> local x
   const Y = (y, h) => (sy > 0 ? y : -y - h); // flip a bottom-anchored y span
-  const wedgeRot = (r) => (sx > 0 ? r : r === 0 ? 1 : r === 1 ? 0 : r === 2 ? 3 : 2);
 
-  // hinge block
-  cpanel(b, X(1.5), -1.3, -0.1, 1.8, 5, 2.6, C.metal);
-  xcyl(b, X(0.9), 0, -0.1, 0.55, 1.6, C.gunMetal, { segments: 10, studs: false });
+  // hinge block: kept inside the +/-1 plate envelope so the closed foils meet
+  // instead of intersecting
+  cpanel(b, X(1.5), -1, -0.1, 1.8, 5, 2, C.metal);
+  xcyl(b, X(1.1), 0, -0.1, 0.45, 1.4, C.gunMetal, { segments: 10, studs: false });
 
-  // main wing: three panels whose leading edge sweeps back toward the tip
-  // (trailing edge stays straight, like the real T-65)
-  cbox(b, X(3.5), Y(-1, 2), -0.15, 2.4, 4.7, 2, C.hull, { studs: false });
-  cbox(b, X(5.7), Y(-1, 2), -0.45, 2, 4.1, 2, C.hull, { studs: false });
-  cbox(b, X(7.6), Y(-1, 2), -0.8, 1.8, 3.4, 2, C.hullLow, { studs: false });
+  // Main wing: a rectangular plate with a straight trailing edge at z = -2.5,
+  // plus one big wedge plate for the swept leading edge -- exactly how a set
+  // does it, and it keeps the silhouette a clean straight line.
+  cbox(b, X(5.45), Y(-1, 2), -1.05, 6.1, 2.9, 2, C.hull, { studs: false });
+  sweepWedge(b, sx, 5.45, Y(-1, 2), 1.4, 6.1, 2, 2, C.hull, { studs: false });
 
-  // wedge plates fill the sweep steps, slopes knife-edge the leading edge
-  cwedge(b, X(5.7), Y(-1, 2), 2.0, 2, 0.5, 2, C.hull, { rot: wedgeRot(0) });
-  cwedge(b, X(7.6), Y(-1, 2), 1.5, 1.8, 0.6, 2, C.hullLow, { rot: wedgeRot(0) });
-  const front = sy > 0 ? { dir: '+z' } : { dir: '+z', inverted: true };
-  cslope(b, X(3.5), Y(-1, 2), 2.65, 2.4, 0.9, 2, C.hull, front);
-  cslope(b, X(5.7), Y(-1, 2), 2.35, 2, 0.9, 2, C.hull, front);
-  cslope(b, X(7.6), Y(-1, 2), 1.7, 1.8, 0.9, 2, C.hullLow, front);
-
-  // studded plates and red stripes on the outward-facing surface
-  cplate(b, X(3.6), Y(1, 1), -0.5, 2, 3, C.hull);
-  ctile(b, X(6.0), Y(1, 1), -0.7, 2, 3, C.trim);
-  ctile(b, X(7.8), Y(1, 1), -1.0, 1, 2, C.metal);
-  cplate(b, X(2.6), Y(1, 1), -0.6, 1, 2, C.metal);
-  cpanel(b, X(4.6), Y(-1.6, 0.7), -1.4, 1.4, 2, 0.7, C.metal); // underside greeble
+  // outward face: studded plate, red squadron stripe, and a smaller wedge in a
+  // second grey (similar triangle, so its edge stays parallel to the sweep)
+  cplate(b, X(4.0), Y(1, 1), -1.0, 3, 3, C.hull);
+  ctile(b, X(6.4), Y(1, 1), -1.0, 2, 3, C.trim);
+  ctile(b, X(7.9), Y(1, 1), -1.2, 1, 2, C.metal);
+  sweepWedge(b, sx, 4.69, Y(1, 1), 1.15, 4.58, 1.5, 1, C.hullLow, { studs: false });
 
   // tip block and the wingtip cannon
-  cpanel(b, X(8.9), -1.2, -0.9, 1.2, 3.2, 2.4, C.metal);
-  zcyl(b, X(9.3), 0, 1.1, 0.24, 9, C.gunMetal, { segments: 10, studs: false });
-  zcyl(b, X(9.3), 0, 5.3, 0.34, 0.9, C.metal, { segments: 10, studs: false });
-  zcyl(b, X(9.3), 0, 1.9, 0.32, 0.6, C.trim, { segments: 10, studs: false });
-  zcyl(b, X(9.3), 0, -3.2, 0.3, 0.7, C.metal, { segments: 10, studs: false });
+  cpanel(b, X(8.8), -1, -1.05, 1.2, 2.9, 2, C.metal);
+  cpanel(b, X(8.8), Y(1, 0.8), -1.2, 1, 2, 0.8, C.metal);
+  zcyl(b, X(9.1), 0, 1.1, 0.24, 9, C.gunMetal, { segments: 10, studs: false });
+  zcyl(b, X(9.1), 0, 5.3, 0.34, 0.9, C.metal, { segments: 10, studs: false });
+  zcyl(b, X(9.1), 0, 1.9, 0.32, 0.6, C.trim, { segments: 10, studs: false });
+  zcyl(b, X(9.1), 0, -3.2, 0.3, 0.7, C.metal, { segments: 10, studs: false });
   return b;
 }
 
@@ -332,7 +337,7 @@ export async function buildXWing(opts = {}) {
       pivot.add(xwWing(sx, sy, C).build());
       root.add(pivot);
       pivots.push(pivot);
-      gunLocal.push(lego(sx * 9.3, 0, 5.9));
+      gunLocal.push(lego(sx * 9.1, 0, 5.9));
       gunPoints.push(new THREE.Vector3());
     }
   }

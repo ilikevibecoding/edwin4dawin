@@ -97,8 +97,11 @@ export function mixCues(cues, duration, outWav, opts = {}) {
  * Assemble the full cue list from the manifest, the scene sfx cues and the
  * music index. `sceneCues` is what `window.FILM.cues()` returns.
  */
+/** Must match `MIX_GAINS` in src/main.js so live and exported audio agree. */
+export const MIX_GAINS = { voice: 1.0, sfx: 0.62, music: 0.34 };
+
 export function buildCues({ root, manifest, sceneCues, scenes, gains = {} }) {
-  const g = { voice: 1.0, sfx: 0.62, music: 0.34, ...gains };
+  const g = { ...MIX_GAINS, ...gains };
   const cues = [];
 
   for (const l of manifest.lines) {

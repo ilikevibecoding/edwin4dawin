@@ -258,11 +258,17 @@ function fitCanvas() {
   el.style.height = `${Math.floor(H * scale)}px`;
 }
 
-/** Narration + sfx + music, merged into one scheduled cue list. */
+/**
+ * Narration + sfx + music, merged into one scheduled cue list.
+ * These gains must match `MIX_GAINS` in tools/mixaudio.mjs so the live page
+ * and the exported film sound identical.
+ */
+const MIX_GAINS = { voice: 1.0, sfx: 0.62, music: 0.34 };
+
 async function buildCueList(film, manifest) {
   const cues = [];
   for (const l of manifest.lines) {
-    cues.push({ t: l.t, url: l.url, gain: 1.0, kind: 'voice' });
+    cues.push({ t: l.t, url: l.url, gain: MIX_GAINS.voice, kind: 'voice' });
   }
   const sfxIndex = await fetch('audio/sfx/index.json')
     .then((r) => (r.ok ? r.json() : {}))
@@ -270,14 +276,14 @@ async function buildCueList(film, manifest) {
   for (const cue of film.sfxCues) {
     const entry = sfxIndex[cue.name];
     if (!entry) continue;
-    cues.push({ t: cue.t, url: entry.file, gain: cue.gain ?? 1, rate: cue.rate ?? 1, kind: 'sfx' });
+    cues.push({ t: cue.t, url: entry.file, gain: MIX_GAINS.sfx * (cue.gain ?? 1), rate: cue.rate ?? 1, kind: 'sfx' });
   }
   const musicIndex = await fetch('audio/music/index.json')
     .then((r) => (r.ok ? r.json() : {}))
     .catch(() => ({}));
   for (const e of film.entries) {
     const m = musicIndex[e.meta.id];
-    if (m) cues.push({ t: e.start, url: m.file, gain: 0.5, kind: 'music' });
+    if (m) cues.push({ t: e.start, url: m.file, gain: MIX_GAINS.music, kind: 'music' });
   }
   return cues;
 }

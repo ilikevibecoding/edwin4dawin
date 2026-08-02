@@ -1420,8 +1420,8 @@ function xwingFlyby({ dur, rng }) {
   const len = dur + pre;
   const eng = mono(len);
   for (const p of [
-    { f: 41, g: 0.5, s: 'sine' },
-    { f: 82, g: 0.45, s: 'saw' },
+    { f: 41, g: 0.9, s: 'sine' },
+    { f: 82, g: 0.7, s: 'saw' },
     { f: 123.5, g: 0.3, s: 'saw' },
     { f: 164, g: 0.14, s: 'sine' },
   ]) {
@@ -1463,7 +1463,7 @@ function hyperspaceJump({ dur, rng }) {
   );
   const sub = env(osc(dur, expTo(210, 28, 0.55), { shape: 'sine' }), perc(0.02, 0.9, 0.9));
   const subBuf = mono(dur);
-  add(subBuf, softClip(gain(sub, 1.2), 2.2, 0.6), riseEnd - 0.05);
+  add(subBuf, softClip(gain(sub, 2.6), 2.2, 0.6), riseEnd - 0.05);
   // 3. departure thump and tail
   const thump = env(osc(0.5, expTo(90, 30, 0.2), { shape: 'sine' }), perc(0.004, 0.35));
   const thumpBuf = mono(dur);
@@ -1494,8 +1494,8 @@ function podLaunch({ dur, rng }) {
     perc(0.0005, 0.34)
   );
   place(chs, norm1(clank, 1), { at: 0, gain: 0.85, pan: -0.1 });
-  place(chs, gain(env(osc(0.4, expTo(120, 44, 0.1), { shape: 'sine' }), perc(0.002, 0.24)), 0.7), { at: 0 });
-  place(chs, gain(env(hp(whiteNoise(0.04, rng), 3500), perc(0.0004, 0.03)), 0.35), { at: 0 });
+  place(chs, gain(env(osc(0.5, expTo(120, 44, 0.12), { shape: 'sine' }), perc(0.002, 0.32)), 1.9), { at: 0 });
+  place(chs, gain(env(hp(whiteNoise(0.04, rng), 3500), perc(0.0012, 0.032)), 0.25), { at: 0 });
   // receding rocket: hiss + rumble, both closing down and fading with distance
   const away = (t) => Math.max(0.04, 1 / (1 + Math.pow(Math.max(0, t - 0.05) * 2.6, 1.7)));
   const turb = smoothNoise(dur, rng, 11);
@@ -1535,13 +1535,13 @@ function doorBlast({ dur, rng }) {
     ]),
     perc(0.001, 1.2, 0.9)
   );
-  place(chs, norm1(plate, 1.4), { at: 0.002, pan: -0.05 });
+  place(chs, norm1(plate, 2.6), { at: 0.002, pan: -0.05 });
   // shrapnel
   for (let i = 0; i < 110; i++) {
     const t = rng.curved(0.04, dur - 0.2, 1.7);
     place(chs, metalClick(rng, { base: rng.range(700, 4200), t60: rng.range(0.02, 0.09) }), {
       at: t,
-      gain: 0.3 * Math.exp(-t * 1.6) * rng.range(0.3, 1),
+      gain: 0.18 * Math.exp(-t * 1.6) * rng.range(0.3, 1),
       pan: rng.range(-0.95, 0.95),
     });
   }
@@ -1612,7 +1612,7 @@ function footstepsTroopers({ dur, rng }) {
       ]),
       perc(0.0006, 0.16)
     );
-    return norm1(mixBufs(gain(body, 0.5), gain(smack, 1), gain(leather, 0.6), gain(deck, 0.9)), 1);
+    return norm1(mixBufs(gain(body, 1.4), gain(smack, 0.7), gain(leather, 0.4), gain(deck, 0.55)), 1);
   };
   // five troopers, each with a fixed offset from the beat and their own weight
   const squad = [
@@ -1663,10 +1663,10 @@ function vaderBreath({ dur, rng }) {
     // the mask: rising formants, because a sharp intake gets brighter
     let air = formants(nz, [
       { f: linTo(430, 760, 0.62), q: 3.2, gain: 1 },
-      { f: linTo(1120, 1700, 0.62), q: 4.5, gain: 0.5 },
-      { f: 2650, q: 6, gain: 0.16 },
+      { f: linTo(1120, 1700, 0.62), q: 4.5, gain: 0.34 },
+      { f: 2650, q: 6, gain: 0.09 },
     ]);
-    add(air, lp(nz, 320), 0, 0.55);
+    add(air, lp(nz, 320), 0, 0.8);
     air = combFB(air, 0.0023, { fb: 0.45, damp: 0.35 }); // hollow tube
     env(air, seg([[0, 0], [0.085, 1, 0.55], [0.34, 0.72], [0.62, 0.06, 1.7], [len, 0]]));
     gain(air, (t) => 1 + 0.11 * Math.sin(TAU * 33 * t)); // valve flutter
@@ -1678,10 +1678,10 @@ function vaderBreath({ dur, rng }) {
     const nz = whiteNoise(len, r);
     let air = formants(nz, [
       { f: linTo(300, 210, 0.85), q: 2.6, gain: 1 },
-      { f: linTo(680, 480, 0.85), q: 3.6, gain: 0.55 },
-      { f: linTo(1450, 1150, 0.85), q: 5, gain: 0.2 },
+      { f: linTo(680, 480, 0.85), q: 3.6, gain: 0.4 },
+      { f: linTo(1450, 1150, 0.85), q: 5, gain: 0.12 },
     ]);
-    add(air, lp(nz, 240), 0, 0.8);
+    add(air, lp(nz, 240), 0, 1.1);
     air = combFB(air, 0.0031, { fb: 0.4, damp: 0.45 });
     env(air, seg([[0, 0], [0.16, 0.95, 0.7], [0.5, 0.85], [0.9, 0.05, 1.6], [len, 0]]));
     gain(air, (t) => 1 + 0.07 * Math.sin(TAU * 21 * t));
@@ -1877,7 +1877,7 @@ function hologramOn({ dur, rng }) {
   for (let i = 0; i < 30; i++) {
     const t = rng.curved(0, 0.34, 1.5);
     const g = bitcrush(env(hp(whiteNoise(0.02, rng), rng.range(2200, 7000)), perc(0.0003, rng.range(0.002, 0.012))), 4, 3);
-    add(crackle, g, t, rng.range(0.15, 0.6) * Math.exp(-t * 4));
+    add(crackle, g, t, rng.range(0.3, 1) * Math.exp(-t * 3.4));
   }
   // shimmering resonant chord
   const shimmer = mono(dur);
@@ -1981,11 +1981,11 @@ function sandcrawler({ dur, rng }) {
     treads = norm1(treads, 1);
     gain(treads, (t) => 0.3 + 0.7 * Math.pow(grind(t), 1.3));
     const diesel = gain(lp(brownNoise(d, r), (t) => 105 + 70 * grind(t)), 0.45);
-    const groan = norm1(svf(whiteNoise(d, r), (t) => 155 + 250 * creak(t), 18, 'bpq'), 0.5);
+    const groan = norm1(svf(whiteNoise(d, r), (t) => 155 + 250 * creak(t), 18, 'bpq'), 0.6);
     // shale crunching under the treads
-    const crunch = gain(bp(whiteNoise(d, r), (t) => 1400 + 900 * grind(t), 1.2), (t) => 0.1 + 0.22 * Math.pow(grind(t), 1.5));
-    const dust = gain(hp(whiteNoise(d, r), 4200), (t) => 0.04 + 0.09 * grind(t));
-    return toStereo(softClip(mixBufs(gain(treads, 1.15), diesel, groan, crunch, dust), 1.8, 0.4), 0.4);
+    const crunch = gain(bp(whiteNoise(d, r), (t) => 1400 + 900 * grind(t), 1.2), (t) => 0.05 + 0.1 * Math.pow(grind(t), 1.5));
+    const dust = gain(hp(whiteNoise(d, r), 4200), (t) => 0.012 + 0.03 * grind(t));
+    return toStereo(softClip(mixBufs(shelfLo(gain(treads, 0.8), 400, 0.6), gain(diesel, 1.5), groan, crunch, dust), 1.8, 0.4), 0.4);
   });
   // engine chugs: exact count per loop, wrap-mixed
   const chugs = Math.round(dur * 4.8);
@@ -2127,8 +2127,8 @@ function ceremonyAmbience({ dur, rng }) {
   const F = (hz) => Math.round(hz * dur) / dur;
   return loopBed(dur, X, (d) => {
     const r = new Rng(4801);
-    const body = gain(svf(pinkNoise(d, r), (t) => 230 + 180 * drift(t), 0.9, 'lp'), (t) => 0.55 + 0.2 * drift(t));
-    const airy = gain(bp(whiteNoise(d, r), (t) => 2600 + 700 * drift2(t), 0.8), 0.1);
+    const body = gain(svf(pinkNoise(d, r), (t) => 230 + 180 * drift(t), 0.9, 'lp'), (t) => 0.8 + 0.3 * drift(t));
+    const airy = gain(bp(whiteNoise(d, r), (t) => 2600 + 700 * drift2(t), 0.8), 0.05);
     // faint room modes
     const modes = mono(d);
     add(modes, osc(d, F(55), { shape: 'sine' }), 0, 0.1);
@@ -2150,8 +2150,7 @@ function ceremonyAmbience({ dur, rng }) {
       add(murmur, gain(vv, (t) => 0.05 * Math.pow(gate(t), 2.5)), 0, 1);
     }
     const dry = mixBufs(gain(body, 0.55), airy, modes, murmur);
-    const wet = reverb(dry, { rt60: 3.2, mix: 0.75, damp: 0.35, size: 1.7, wetHp: 70 });
-    return wet;
+    return reverb(dry, { rt60: 3.2, mix: 0.75, damp: 0.62, size: 1.7, wetHp: 70 });
   });
 }
 
