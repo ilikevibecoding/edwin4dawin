@@ -516,7 +516,11 @@ export class Bricks {
       const merged = bucket.geos.length === 1 ? bucket.geos[0] : mergeGeometries(bucket.geos, false);
       if (!merged) continue;
       merged.computeBoundingSphere();
-      const mesh = new THREE.Mesh(merged, brickMaterial(bucket.color, bucket.opts));
+      // Each built model gets its own material instances. Scenes animate
+      // opacity and emissive on the materials they are handed, and sharing
+      // cached instances across models made one scene's fade leak into
+      // another's -- which broke frame-for-frame reproducibility.
+      const mesh = new THREE.Mesh(merged, brickMaterial(bucket.color, bucket.opts).clone());
       mesh.castShadow = opts.castShadow ?? true;
       mesh.receiveShadow = opts.receiveShadow ?? true;
       if (bucket.opts.transparent || (bucket.opts.opacity ?? 1) < 1 || bucket.opts.finish === 'trans') {

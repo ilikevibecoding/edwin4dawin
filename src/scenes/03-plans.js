@@ -114,13 +114,13 @@ export async function build(ctx) {
   r2.root.position.set(-0.7, 0, -6.6);
   // Turned a little toward camera as well as toward her, so the card slot on
   // his chest is actually visible when she loads the plans.
-  r2.root.rotation.y = 1.05;
+  r2.root.rotation.y = 0.78;
   r2.setCenterLeg(1);
   interior.add(r2.root);
 
   const threepio = await makeProtocolDroid({ seed: 31.5 });
-  threepio.root.position.set(-1.7, 0, -14.6);
-  threepio.root.rotation.y = 0.34;
+  threepio.root.position.set(-1.4, 0, -15.4);
+  threepio.root.rotation.y = 0.30;
   interior.add(threepio.root);
 
   // --- the plans -----------------------------------------------------------
@@ -171,32 +171,37 @@ export async function build(ctx) {
   const launchSet = new THREE.Group();
   space.add(launchSet);
 
+  // The corvette hangs high and left, small and white against empty space, so
+  // it never has to compete with the destroyer's hull for the eye.
+  const CORVETTE_AT = new THREE.Vector3(-96, 78, -250);
   const corvette = ships?.buildCorvette ? await ships.buildCorvette() : fallbackCorvette();
-  corvette.scale.setScalar(1.7);
-  corvette.position.set(56, 22, -158);
-  corvette.rotation.set(0.05, -1.26, 0.20);
+  corvette.scale.setScalar(1.6);
+  corvette.position.copy(CORVETTE_AT);
+  corvette.rotation.set(0.06, -1.05, 0.24);
   launchSet.add(corvette);
 
   // Scaled to the real 10:1 ratio against the corvette, so the wedge reads as
-  // a kilometre and a half of hull rather than a big model.
-  // Yawed broadside to the lens and rolled so its lit dorsal plain faces us:
-  // 676 units of hull that overruns the frame in both directions.
+  // a kilometre and a half of hull rather than a big model. YXZ order lets the
+  // three numbers mean heading / pitch / roll about the hull's own axis: it is
+  // yawed across the lens and rolled so the lit dorsal plain tips toward us.
   const destroyer = ships?.buildStarDestroyer ? await ships.buildStarDestroyer() : fallbackStarDestroyer();
-  destroyer.scale.setScalar(2.6);
-  destroyer.position.set(-40, 26, -330);
-  destroyer.rotation.set(0.36, 1.52, 0.07);
+  destroyer.scale.setScalar(2.4);
+  destroyer.position.set(60, -30, -380);
+  destroyer.rotation.order = 'YXZ';
+  destroyer.rotation.set(0.05, -1.9, -0.45);
   launchSet.add(destroyer);
 
-  // The tractor beam that makes the corvette a *captured* ship.
-  const beamFrom = new THREE.Vector3(30, 74, -300);
-  const beamTo = new THREE.Vector3(56, 22, -158);
-  const tractor = new Beam({ color: 0x9fe0ff, radiusTop: 4, radiusBottom: 10, height: beamFrom.distanceTo(beamTo), opacity: 0.08 });
+  // The tractor beam that makes the corvette a *captured* ship: it reaches up
+  // out of the destroyer's dorsal plain to the runner above.
+  const beamFrom = new THREE.Vector3(-10, -8, -330);
+  const beamTo = CORVETTE_AT.clone();
+  const tractor = new Beam({ color: 0x9fe0ff, radiusTop: 5, radiusBottom: 16, height: beamFrom.distanceTo(beamTo), opacity: 0.055 });
   tractor.object.position.copy(beamTo);
   tractor.object.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), beamFrom.clone().sub(beamTo).normalize());
   launchSet.add(tractor.object);
 
   // The blow-out at the pod hatch.
-  const EJECT_AT = [44, 12, -146];
+  const EJECT_AT = [-84, 70, -238];
   const ejectSparks = new Sparks({
     t0: T_EJECT + 0.16,
     life: 1.5,
@@ -256,8 +261,8 @@ export async function build(ctx) {
   space.add(turretSet);
   turretSet.add(buildTurret());
 
-  const console1 = new THREE.PointLight(0x66ff88, 6, 16, 2);
-  console1.position.set(4.6, 2.4, -1.0);
+  const console1 = new THREE.PointLight(0x66ff88, 2.6, 14, 2);
+  console1.position.set(5.2, 2.2, -2.0);
   turretSet.add(console1);
   // Cold light from outside, so the officer reads as a backlit silhouette.
   const facing = new THREE.PointLight(0xbfd8ff, 5.0, 26, 2);
@@ -331,16 +336,19 @@ export async function build(ctx) {
   const FORWARD = new THREE.Vector3(0, 0, 1);
   const fogColor = new THREE.Color();
   const bgColor = new THREE.Color();
+  // Must match the entry sky dome's two stops, or the horizon shows a seam.
+  const SKY_HIGH = new THREE.Color(0x6d2f14);
+  const SKY_LOW = new THREE.Color(0xe8a35f);
 
   /**
    * Where the pod is at time t. One curve carries it through all three
    * exterior sub-sets, jumping between them exactly on the cuts.
    */
   const POD_PATH = [
-    [T_EJECT, [44, 12, -146]],
-    [T_EJECT + 0.6, [38, 9, -142]],
-    [T_EJECT + 3.0, [4, -6, -122]],
-    [T_TURRET - 0.001, [-74, -40, -78]],
+    [T_EJECT, [-84, 70, -238]],
+    [T_EJECT + 0.7, [-76, 64, -226]],
+    [T_EJECT + 3.2, [-40, 34, -166]],
+    [T_TURRET - 0.001, [10, -6, -84]],
     [T_TURRET, [-30, TURRET_Y - 16, -290]],
     [T_ENTRY - 0.001, [-8, TURRET_Y - 64, -980]],
     [T_ENTRY, [-16, ENTRY_Y + 46, -30]],
@@ -420,30 +428,33 @@ export async function build(ctx) {
     if (t > T_THREEPIO - 0.6) wringHands(threepio, t);
 
     // --- camera
+    // Everything is shot from the port side of the corridor, so the droid sits
+    // near the lens and the Princess reads a little further off across it: a
+    // clean two-shot down the diagonal rather than an over-the-shoulder mass.
     if (t < T_SPEECH) {
-      // Slow push in from the corridor mouth to a two-shot.
+      // Slow push in from the corridor mouth to the two-shot.
       cameraRig(camera, t, {
-        pos: [[0, [3.4, 6.2, 9.0]], [T_SPEECH, [2.4, 3.5, 1.6]]],
-        look: [[0, [0.2, 2.6, -7.0]], [T_SPEECH, [0.7, 2.0, -6.4]]],
+        pos: [[0, [-5.2, 6.0, 10.0]], [T_SPEECH, [-4.2, 3.2, 3.0]]],
+        look: [[0, [0.6, 2.2, -6.4]], [T_SPEECH, [1.0, 1.7, -6.0]]],
         fov: [[0, 46], [T_SPEECH, 40]],
         ease: ease.smooth,
       });
       handheld(camera, t, 0.05, 0.4, 1);
     } else if (t < T_THREEPIO) {
-      // Closer, angled onto the droid's chest as the plans go in.
+      // Push through to a tight single on the droid as the plans go in.
       cameraRig(camera, t, {
-        pos: [[T_SPEECH, [3.2, 3.1, 1.0]], [T_SLOT, [2.6, 2.6, -0.7]], [T_THREEPIO, [2.3, 2.4, -1.2]]],
-        look: [[T_SPEECH, [0.1, 1.9, -6.5]], [T_SLOT, [-0.4, 1.6, -6.6]], [T_THREEPIO, [-0.5, 1.5, -6.6]]],
-        fov: [[T_SPEECH, 40], [T_SLOT, 35], [T_THREEPIO, 33]],
+        pos: [[T_SPEECH, [-4.0, 3.0, 2.2]], [T_SLOT, [-3.4, 2.5, -0.2]], [T_THREEPIO, [-3.2, 2.4, -0.8]]],
+        look: [[T_SPEECH, [0.6, 1.6, -6.2]], [T_SLOT, [-0.2, 1.5, -6.5]], [T_THREEPIO, [-0.4, 1.5, -6.5]]],
+        fov: [[T_SPEECH, 40], [T_SLOT, 34], [T_THREEPIO, 32]],
         ease: ease.inOutCubic,
       });
       handheld(camera, t, 0.035, 0.5, 4);
     } else {
-      // Down the corridor onto the fretting protocol droid.
+      // Down the corridor onto the fretting protocol droid, full figure.
       cameraRig(camera, t, {
-        pos: [[T_THREEPIO, [2.6, 4.0, -7.8]], [T_EJECT, [2.0, 3.7, -9.2]]],
-        look: [[T_THREEPIO, [-1.6, 3.5, -14.4]], [T_EJECT, [-1.7, 3.4, -14.5]]],
-        fov: [[T_THREEPIO, 38], [T_EJECT, 34]],
+        pos: [[T_THREEPIO, [2.6, 3.8, -6.2]], [T_EJECT, [2.1, 3.5, -7.6]]],
+        look: [[T_THREEPIO, [-1.3, 2.6, -15.3]], [T_EJECT, [-1.4, 2.5, -15.4]]],
+        fov: [[T_THREEPIO, 40], [T_EJECT, 36]],
         ease: ease.smooth,
       });
       handheld(camera, t, 0.07, 0.55, 9);
@@ -469,31 +480,36 @@ export async function build(ctx) {
     // Vacuum has no fog; the entry does, and it is what sells the altitude.
     if (entry) {
       const u = ease.range(t, T_ENTRY, T_ENTRY + 4.2);
-      // Fog and background share a colour, so the horizon dissolves into haze
-      // instead of ending on a hard line.
-      fogColor.setHex(0x201007).lerp(new THREE.Color(0xc98047), ease.smooth(u));
+      // The sky dome carries the horizon; fog only thickens the middle
+      // distance so the far dunes recede rather than stacking flat.
+      fogColor.setHex(0xb5793f).lerp(SKY_LOW, ease.smooth(u));
       scene.fog.color.copy(fogColor);
-      scene.fog.near = ease.lerp(200, 70, u);
-      scene.fog.far = ease.lerp(1600, 620, u);
-      bgColor.copy(fogColor);
+      scene.fog.near = ease.lerp(400, 240, u);
+      scene.fog.far = ease.lerp(3200, 2000, u);
+      bgColor.copy(SKY_HIGH);
       scene.background.copy(bgColor);
-      spaceLights.key.intensity = ease.lerp(2.6, 0.9, u);
-      spaceLights.hemi.intensity = ease.lerp(0.45, 0.2, u);
+      spaceLights.key.intensity = 0;
+      spaceLights.hemi.intensity = 0;
+      spaceLights.fill.intensity = 0;
+      spaceLights.rim.intensity = 0;
     } else {
+      spaceLights.rim.intensity = 1.3;
       scene.fog.near = 4000;
       scene.fog.far = 20000;
       scene.background.setHex(0x03050a);
       // Inside the gun position the rig is pulled down hard: the officer and
       // the window frame want to be shapes cut out of the planet's glare.
-      spaceLights.key.intensity = turret ? 1.5 : 3.0;
-      spaceLights.hemi.intensity = turret ? 0.16 : 0.55;
-      spaceLights.fill.intensity = turret ? 0.18 : 0.6;
+      // Outside, light grey hull under a strong key clips to paper white, so
+      // the launch beat is keyed low and carried by the rim instead.
+      spaceLights.key.intensity = turret ? 1.5 : 1.5;
+      spaceLights.hemi.intensity = turret ? 0.16 : 0.30;
+      spaceLights.fill.intensity = turret ? 0.18 : 0.34;
     }
 
     // --- the pod's path, one continuous curve through all three shots.
     const p = podPath(t);
     podRig.position.set(p[0], p[1], p[2]);
-    podRig.scale.setScalar(entry ? 1.9 : 1);
+    podRig.scale.setScalar(entry ? 1.15 : 1);
 
     if (launch) {
       // Kicked sideways off the hull and tumbling.
@@ -551,26 +567,29 @@ export async function build(ctx) {
 
     // --- camera
     if (launch) {
-      // Locked-off wide: the pod is a speck against the destroyer's flank.
+      // Near-locked wide. The lens holds still on the hull and lets the pod
+      // cross it, which is what makes six hundred units of Imperial grey feel
+      // like a wall rather than a prop.
       tractor.update(t);
       cameraRig(camera, t, {
-        pos: [[T_EJECT, [16, 10, 86]], [T_TURRET, [-16, 0, 62]]],
-        look: [[T_EJECT, [46, 14, -150]], [T_EJECT + 3.0, [6, -2, -130]], [T_TURRET, [-46, -24, -96]]],
-        fov: [[T_EJECT, 42], [T_TURRET, 36]],
+        pos: [[T_EJECT, [10, 22, 70]], [T_TURRET, [-6, 14, 54]]],
+        look: [[T_EJECT, [-58, 46, -230]], [T_EJECT + 3.4, [-30, 20, -170]], [T_TURRET, [8, -8, -110]]],
+        fov: [[T_EJECT, 40], [T_TURRET, 38]],
         shake: [[T_EJECT, 0], [T_EJECT + 0.06, 0.5], [T_EJECT + 1.4, 0]],
         ease: ease.smooth,
       });
       handheld(camera, t, 0.09, 0.35, 2);
     } else if (turret) {
-      // Inside the gun position, looking out past the officer.
+      // Inside the gun position, looking out past the officer. The lens sits
+      // close to the glass so the opening, not the room, carries the frame.
       cameraRig(camera, t, {
-        pos: [[T_TURRET, [1.6, TURRET_Y + 4.4, 10.5]], [T_ENTRY, [-0.6, TURRET_Y + 4.0, 6.6]]],
+        pos: [[T_TURRET, [1.8, TURRET_Y + 6.0, 7.6]], [T_ENTRY, [-0.4, TURRET_Y + 5.6, 4.6]]],
         look: [
-          [T_TURRET, [-3.0, TURRET_Y + 3.4, -30]],
-          [28.5, [-6.0, TURRET_Y + 1.0, -70]],
-          [T_ENTRY, [-2.0, TURRET_Y - 6.0, -90]],
+          [T_TURRET, [-2.4, TURRET_Y + 4.6, -30]],
+          [28.5, [-5.0, TURRET_Y + 2.4, -70]],
+          [T_ENTRY, [-1.6, TURRET_Y - 4.0, -90]],
         ],
-        fov: [[T_TURRET, 42], [T_ENTRY, 36]],
+        fov: [[T_TURRET, 44], [T_ENTRY, 37]],
         ease: ease.smooth,
       });
       handheld(camera, t, 0.05, 0.45, 6);
@@ -719,27 +738,29 @@ function buildCorridor() {
 function buildDataBrick() {
   const group = new THREE.Group();
   const b = new Bricks();
+  // Emissives are kept modest: bloom threshold is 0.72, so anything much
+  // brighter than this stops being a brick and becomes a white hole.
   b.tile(-0.5, 0, -1, 1, 2, COLORS.transLightBlue, {
     finish: 'trans',
-    emissive: 0x7fe8ff,
-    emissiveIntensity: 3.4,
+    emissive: 0x4fbcd8,
+    emissiveIntensity: 0.9,
   });
   b.tile(-0.36, 1, -0.86, 0.72, 1.7, COLORS.transClear, {
     finish: 'trans',
-    emissive: 0xd8faff,
-    emissiveIntensity: 4.2,
+    emissive: 0x9fdcea,
+    emissiveIntensity: 1.2,
   });
   const mesh = b.build();
-  mesh.scale.setScalar(0.55);
+  mesh.scale.setScalar(0.42);
   group.add(mesh);
-  const halo = glowSprite(0x8fe6ff, 1.5, 0.55);
+  const halo = glowSprite(0x8fe6ff, 0.8, 0.3);
   group.add(halo);
   return {
     group,
     update(t, fly) {
-      const pulse = 0.42 + 0.24 * Math.sin(t * 6.4);
+      const pulse = 0.20 + 0.10 * Math.sin(t * 6.4);
       halo.material.opacity = pulse * (1 - fly * 0.4);
-      halo.scale.setScalar(1.2 + 0.35 * Math.sin(t * 5.1));
+      halo.scale.setScalar(0.62 + 0.14 * Math.sin(t * 5.1));
     },
   };
 }
@@ -792,21 +813,22 @@ function buildTurret() {
   for (const sx of [-1, 1]) b.panel(sx * 9, 0, -6, 2, 20, 23, dark);
   b.panel(-11, 0, 12, 22, 2, 23, black); // wall behind the camera
 
-  // Window: a wide opening with heavy mullions.
-  b.panel(-11, 17, -6.6, 22, 1.4, 8, dark); // header
-  b.panel(-11, -1, -6.6, 22, 1.4, 5, dark); // sill
-  for (const x of [-9.6, -3.4, 3.4, 9.6]) b.panel(x - 0.45, 4, -6.7, 0.9, 1.6, 13, dark);
-  b.panel(-11, 3.6, -6.5, 22, 1.1, 0.4, grey);
+  // Window: a wide opening with heavy mullions. Only two of them cross the
+  // glass, and they are kept off centre so the planet gets one clear pane.
+  b.panel(-11, 18, -6.6, 22, 1.4, 7, dark); // header
+  b.panel(-11, -1, -6.6, 22, 1.4, 4, dark); // sill
+  for (const x of [-9.8, -6.2, 6.2, 9.8]) b.panel(x - 0.4, 3, -6.7, 0.8, 1.6, 15, dark);
+  b.panel(-11, 2.6, -6.5, 22, 1.1, 0.4, grey);
 
   // Console bank under the window, with lit readouts.
-  b.panel(3.2, 0, -5.6, 5.4, 3.2, 6, black);
-  b.slope(3.2, 6, -5.6, 5.4, 3.2, 2, black, { dir: '-z' });
+  b.panel(3.6, 0, -5.4, 5.0, 3.0, 5, black);
+  b.slope(3.6, 5, -5.4, 5.0, 3.0, 2, black, { dir: '-z' });
   for (let i = 0; i < 5; i++) {
-    b.box(3.6 + i * 0.9, 6.4, -5.2, 0.6, 1.2, 0.6, COLORS.transGreen, {
+    b.box(4.0 + i * 0.85, 5.4, -5.0, 0.5, 1.0, 0.5, COLORS.transGreen, {
       studs: false,
       finish: 'trans',
-      emissive: i % 3 ? 0x44ff66 : 0xffaa33,
-      emissiveIntensity: 2.6,
+      emissive: i % 3 ? 0x2aa844 : 0xaa6a1e,
+      emissiveIntensity: 1.1,
     });
   }
   // Pipes and greebles on the back wall so the silhouette is not a plain box.
@@ -878,29 +900,75 @@ function buildPlanet() {
   return group;
 }
 
-/** Dune ridges seen from high altitude, plus the ground haze plane. */
+/** Deterministic 2-D value noise on an integer lattice, in [0,1]. Pure in x,z. */
+function vnoise2(x, z, salt = 0) {
+  const xi = Math.floor(x);
+  const zi = Math.floor(z);
+  const u = (x - xi) * (x - xi) * (3 - 2 * (x - xi));
+  const v = (z - zi) * (z - zi) * (3 - 2 * (z - zi));
+  const at = (a, c) => hash11(a * 7919 + c * 104729, salt);
+  const a0 = at(xi, zi);
+  const a1 = at(xi + 1, zi);
+  const b0 = at(xi, zi + 1);
+  const b1 = at(xi + 1, zi + 1);
+  const lo = a0 + (a1 - a0) * u;
+  const hi = b0 + (b1 - b0) * u;
+  return lo + (hi - lo) * v;
+}
+
+/** Dune height in [0,1]: two octaves plus a ridge term for the crest lines. */
+function duneHeight(x, z, salt = 0) {
+  const a = vnoise2(x * 0.72, z * 0.5, salt);
+  const b = vnoise2(x * 1.9 + 11, z * 1.55 + 7, salt + 13);
+  const ridge = 1 - Math.abs(vnoise2(x * 0.33 - 3, z * 0.27 + 5, salt + 29) * 2 - 1);
+  return Math.min(1, a * 0.44 + b * 0.18 + ridge * 0.44);
+}
+
+/**
+ * The desert seen from the top of the atmosphere: a coarse brick heightfield
+ * plus a gradient sky dome. Everything here is three hundred units below the
+ * lens, so the cells are enormous and studless — it is the *silhouette* of the
+ * ridge lines that has to read, not the plate courses.
+ */
 function buildEntryGround() {
-  const b = new Bricks({ studSegments: 4 });
   const g = new THREE.Group();
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(4200, 4200),
-    new THREE.MeshStandardMaterial({ color: 0xd8a066, roughness: 1 })
+
+  // Sky dome. Unfogged, so it survives the entry haze and gives the frame a
+  // real horizon instead of dissolving into the flat background colour.
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(3200, 32, 24),
+    new THREE.ShaderMaterial({
+      uniforms: {
+        uHigh: { value: new THREE.Color(0x6d2f14) },
+        uLow: { value: new THREE.Color(0xe8a35f) },
+      },
+      vertexShader: `varying float vY;
+        void main(){ vY = normalize(position).y; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+      fragmentShader: `uniform vec3 uHigh; uniform vec3 uLow; varying float vY;
+        void main(){ gl_FragColor = vec4(mix(uLow, uHigh, clamp(vY*1.5+0.12, 0.0, 1.0)), 1.0); }`,
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false,
+    })
   );
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -330;
-  g.add(ground);
-  // Big lazy dune ridges, coarse on purpose: they are 300 units away.
-  for (let i = 0; i < 90; i++) {
-    const x = (hash11(i, 21) - 0.5) * 3000;
-    const z = -hash11(i, 22) * 2600 - 100;
-    const w = 60 + hash11(i, 23) * 150;
-    const d = 220 + hash11(i, 24) * 420;
-    const h = 6 + hash11(i, 25) * 26;
-    b.push();
-    b.translateWorld(x, -330, z);
-    b.rotateY(hash11(i, 26) * 0.7 - 0.35);
-    b.box(-w / 2, 0, -d / 2, w, d, h, i % 3 ? COLORS.tan : COLORS.darkTan, { studs: false });
-    b.pop();
+  sky.position.y = 40;
+  g.add(sky);
+
+  const b = new Bricks({ studSegments: 4 });
+  const N = 26; // cells per side
+  const CELL = 110; // studs
+  const HALF = (N * CELL) / 2;
+  const BASE = -260;
+  for (let ix = 0; ix < N; ix++) {
+    for (let iz = 0; iz < N; iz++) {
+      const x = ix * CELL - HALF;
+      const z = iz * CELL - HALF - 500; // biased away from the lens
+      const k = duneHeight(ix * 0.5, iz * 0.5, 7);
+      const h = 8 + k * 150; // plates
+      // Crests take the pale sand, troughs the darker damp sand underneath.
+      const c = k > 0.62 ? COLORS.tan : k > 0.36 ? COLORS.darkTan : COLORS.copper;
+      b.box(x, BASE, z, CELL, CELL, h, c, { studs: false });
+    }
   }
   g.add(b.build({ castShadow: false }));
   return g;

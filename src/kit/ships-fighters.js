@@ -263,9 +263,9 @@ function xwCockpit(b, C) {
   b.push();
   b.translate(0, 3.7, 0.4);
   b.scale(1, 0.6, 1.4);
-  b.sphere(0, 0, 0, 1.5, C.glass, { segments: 18, phiLen: Math.PI / 2, finish: 'trans', opacity: 0.42 });
+  b.sphere(0, 0, 0, 1.5, C.glass, { segments: 18, phiLen: Math.PI / 2, finish: 'trans', opacity: 0.55 });
   b.pop();
-  cslope(b, 0, 3.7, 2.35, 2.6, 1.5, 2.6, C.glass, { dir: '+z', finish: 'trans', opacity: 0.42 });
+  cslope(b, 0, 3.7, 2.35, 2.6, 1.5, 2.6, C.glass, { dir: '+z', finish: 'trans', opacity: 0.55 });
 
   // canopy frame ribs and the rear fairing that blends into the droid socket
   for (const sx of [-1, 1]) cpanel(b, sx * 1.42, 3.7, 0.5, 0.22, 4.2, 1.4, C.metal);
@@ -851,10 +851,20 @@ function lsCockpit(b, C) {
   xcyl(b, 0, 3.5, 1.9, 0.14, 1.5, C.metal, { segments: 8, studs: false }); // yoke
   for (const sx of [-1, 1]) cpanel(b, sx * 0.72, 3.2, 1.9, 0.18, 0.7, 0.9, C.metal);
 
-  // windscreen: a raked trans slope in a dark frame
-  cslope(b, 0, 2.4, 3.1, 3.5, 1.5, 2.3, C.glass, { dir: '+z', finish: 'trans', opacity: 0.42 });
-  for (const sx of [-1, 1]) cpanel(b, sx * 1.72, 2.4, 3.1, 0.22, 1.5, 2.3, C.trimDark);
-  cpanel(b, 0, 2.2, 3.86, 3.6, 0.3, 0.6, C.trimDark);
+  // Windscreen: three raked facets, the outer pair swung aft, so the top edge
+  // reads as the X-34's wrapped curve rather than a flat pane. Each facet
+  // carries its own dark top rail, which is what makes the glass legible.
+  const facet = (cx, cz, w, ry) => {
+    b.push();
+    b.translate(cx, 0, cz);
+    b.rotateY(ry);
+    cslope(b, 0, 2.2, 0, w, 1.3, 2.6, C.glass, { dir: '+z', finish: 'trans', opacity: 0.5 });
+    cpanel(b, 0, 4.8, -0.5, w, 0.42, 0.42, C.trimDark);
+    b.pop();
+  };
+  facet(0, 3.15, 2.0, 0);
+  for (const sx of [-1, 1]) facet(sx * 1.42, 2.75, 1.35, sx * -0.62);
+  cpanel(b, 0, 1.9, 3.7, 3.4, 0.4, 0.5, C.trimDark); // sill the screen clips into
 }
 
 /** @param {object} opts colours (`hull`, `pod`, `seat`) */
@@ -875,7 +885,9 @@ export async function buildLandspeeder(opts = {}) {
   cpanel(b, 0, -2.4, 0, 4, 10.8, 2.4, C.hull);
   cpanel(b, 0, 0, 0, 4.2, 10.8, 1.6, C.hull);
   cplate(b, 0, 1.6, -3.2, 4, 4, C.hull);
-  ctile(b, 0, 2.6, -4, 2.4, 2.4, C.metal);
+  // engine cover: a dark bay plate with cooling ribs across it
+  ctile(b, 0, 2.6, -4, 2.6, 2.6, C.metal);
+  for (let i = 0; i < 4; i++) cpanel(b, 0, 3.6, -3.1 - i * 0.62, 2.2, 0.3, 0.4, C.trimDark);
   cslope(b, 0, 1.6, -5.6, 4, 1.2, 1, C.hull, { dir: '-z' });
   cslope(b, 0, -2.4, -5.6, 4, 1.2, 1.4, C.hull, { dir: '-z', inverted: true });
 
@@ -891,19 +903,27 @@ export async function buildLandspeeder(opts = {}) {
     for (let i = 0; i < 3; i++) cpanel(b, sx * 3.4, -0.6, 1.6 - i * 0.9, 0.24, 0.5, 1.4, C.trimDark);
   }
 
-  // --- nose: slightly tapered front deck with the three turbine intakes
-  cpanel(b, 0, -2.2, 5.7, 3.8, 1, 4.2, C.hull);
-  cslope(b, 0, 1.6, 5.3, 4, 1.4, 1, C.hull, { dir: '+z' });
-  cslope(b, 0, -2.4, 5.3, 4, 1.4, 1.2, C.hull, { dir: '+z', inverted: true });
-  for (const x of [-1.34, 0, 1.34]) {
-    zcyl(b, x, -0.4, 5.9, 0.66, 1.4, C.metal, { segments: 12, studs: false });
-    zcyl(b, x, -0.4, 6.2, 0.5, 1, C.dark, { segments: 12, studs: false, rTop: 0.34 });
-    zcyl(b, x, -0.4, 6.5, 0.7, 0.34, C.trimDark, { segments: 12, studs: false });
+  // --- nose: the deck steps down, the chin sweeps up, and the three turbine
+  // intakes sit in the front face
+  cpanel(b, 0, -1.6, 6.0, 3.6, 1.6, 3.2, C.hull); // z 5.2 .. 6.8
+  cslope(b, 0, -2.4, 5.6, 3.8, 0.8, 0.8, C.hull, { dir: '+z', inverted: true }); // chin
+  cslope(b, 0, 0.8, 6.4, 3.4, 0.8, 0.8, C.hull, { dir: '+z' }); // nose taper
+  ctile(b, 0, 1.6, 5.6, 3.2, 0.8, C.hull);
+  for (const x of [-1.2, 0, 1.2]) {
+    zcyl(b, x, -0.2, 6.55, 0.58, 1.2, C.metal, { segments: 12, studs: false });
+    zcyl(b, x, -0.2, 6.95, 0.62, 0.4, C.trimDark, { segments: 12, studs: false });
+    zcyl(b, x, -0.2, 6.8, 0.44, 0.8, C.dark, { segments: 12, studs: false, rTop: 0.3 });
   }
 
-  // --- surface detail and a rear bumper
+  // --- surface detail, rear bumper and the turbine exhausts
   for (const sx of [-1, 1]) cpanel(b, sx * 1.4, -2.9, 3.2, 1, 2.4, 0.5, C.metal);
   cpanel(b, 0, -1.2, -6.1, 3.4, 0.5, 2.4, C.metal);
+  // rectangular exhaust louvres, not round -- round ones read as wheels, and
+  // this thing hovers
+  for (const sx of [-1, 1]) {
+    cpanel(b, sx * 1.1, -0.9, -6.3, 1.3, 0.6, 2, C.metal);
+    for (let i = 0; i < 3; i++) cpanel(b, sx * 1.1, -0.6 + i * 0.55, -6.62, 1.1, 0.3, 0.32, C.dark);
+  }
   ctile(b, 0, 1.6, 4.7, 2, 1, C.trimDark);
   lsCockpit(b, C);
 

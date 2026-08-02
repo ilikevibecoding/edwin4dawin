@@ -2316,10 +2316,13 @@ function render(spec) {
   const ch = chans(spec.render({ dur: spec.dur, rng: new Rng(spec.seed), name: spec.name }));
   const trimmed = ch.map((c) => fit(c, nsamp(spec.dur)));
   const cleaned = trimmed.map((c) => (spec.loop ? dcBlockLoop(c, 14) : dcBlock(c, 20).out));
+  // Fade first, then normalise. A percussive effect's loudest sample is inside
+  // the first millisecond, so fading afterwards would scale down the very peak
+  // that had just been set — the explosions were shipping 3 dB under target.
+  // The one-shot fade-in is only long enough to remove a step at sample zero;
+  // any more of it audibly rounds off the attack.
+  fadeEnds(cleaned, spec.loop ? 0.0008 : 0.0004, spec.loop ? 0.0008 : 0.012);
   normalize(cleaned, PEAK_DB);
-  // loops get the shortest fade that still kills a start/stop click, so the
-  // seam stays inaudible; one-shots can afford a longer tail fade
-  fadeEnds(cleaned, spec.loop ? 0.0008 : 0.0015, spec.loop ? 0.0008 : 0.012);
   return { ch: cleaned, ms: Date.now() - t0 };
 }
 
@@ -2335,10 +2338,23 @@ function main() {
     const { ch, ms } = render(spec);
     const wav = path.join(tmpDir, `${spec.name}.wav`);
     const mp3 = path.join(OUT_DIR, `${spec.name}.mp3`);
-    writeWav(wav, ch);
-    ff(['-y', '-loglevel', 'error', '-i', wav, '-b:a', '160k', mp3]);
+    const encode = () => {
+      writeWav(wav, ch);
+      ff(['-y', '-loglevel', 'error', '-i', wav, '-b:a', '160k', mp3]);
+      return stats(decodeMp3(mp3, ch.length));
+    };
+    let st = encode();
+    // Lossy encoding moves peaks around by a decibel or two — a lone sharp
+    // transient can come back either hotter or softer than it went in — so the
+    // encoded result is measured and, if it missed, re-encoded once with a
+    // corrective gain. Without this the library ships with a 3 dB spread of
+    // peaks even though every buffer was normalised to the same level.
+    if (Math.abs(st.peak - PEAK_DB) > 0.5) {
+      const g = Math.min(dbToGain(PEAK_DB - st.peak), 0.95 / Math.max(...ch.map((c) => c.reduce((m, v) => Math.max(m, Math.abs(v)), 0))));
+      for (const c of ch) for (let i = 0; i < c.length; i++) c[i] *= g;
+      st = encode();
+    }
     fs.rmSync(wav);
-    const st = stats(decodeMp3(mp3, ch.length));
     const size = fs.statSync(mp3).size;
     rows.push({ name: spec.name, ch: ch.length, loop: !!spec.loop, size, ms, ...st });
     if (st.peak > -0.6) warnings.push(`${spec.name}: peak ${st.peak.toFixed(2)} dBFS is close to clipping`);

@@ -116,7 +116,9 @@ function latheShell(profile, { segments = 22, openHalf = 0, close = true } = {})
  * profile polygon makes it read as a moulded part with a visible edge.
  */
 function latheSector(outer, thickness, { segments = 22, openHalf = 1.0 } = {}) {
-  const profile = shellProfile(outer, thickness);
+  // `thickness` of 0 means the caller has already supplied a closed loop, for
+  // ribs and other cross-sections that are not a constant-thickness wall.
+  const profile = thickness ? shellProfile(outer, thickness) : outer;
   const parts = [latheShell(profile, { segments, openHalf })];
   const shape = new THREE.Shape(profile.map(([r, y]) => new THREE.Vector2(r, y)));
   for (const sign of [-1, 1]) {
@@ -173,6 +175,21 @@ function taperShield(half, depth, spread = [1.15, 1], centre = [0, 0]) {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * A thin fin standing in the ZY plane: `outline` is a closed loop of [z, y]
+ * pairs, extruded `width` across x and centred on x = 0. Used for ridges that
+ * run front-to-back over a domed helmet, where a lathe slice leaves a notch at
+ * the pole and a row of boxes floats off the curve.
+ */
+function ridgeFin(outline, width) {
+  const shape = new THREE.Shape(outline.map(([z, y]) => new THREE.Vector2(z, y)));
+  const g = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: false, curveSegments: 1, steps: 1 });
+  g.rotateY(-Math.PI / 2);
+  g.translate(width / 2, 0, 0);
   g.computeVertexNormals();
   return g;
 }
@@ -616,56 +633,80 @@ function vaderMaskFallback(lens = 0x39454f) {
 }
 
 /**
- * Stormtrooper helmet: a squared-off jaw under a tapered face barrel and a
- * squashed crown, so the whole face region lies on a cone the decal can hug.
+ * Stormtrooper helmet, head-local.
+ *
+ * One solid of revolution does all the work: a rounded crown, a straight
+ * vertical band from the brow to the jaw for the print to sit on, and a
+ * rounded chin. The straight band matters — the print is laid on a cone, and
+ * a barrelled shell would swallow it in the middle and leave it floating at
+ * the ends. Everything on the face (brow band, lenses, cheek intakes, frown)
+ * is printed by helmet-stormtrooper.svg.
  */
-function trooperHelmet({ armour = COLORS.white, dark = COLORS.trueBlack } = {}) {
+function trooperHelmet({ armour = COLORS.white, dark = COLORS.trueBlack, trim = COLORS.darkBluishGray } = {}) {
   const b = new Bricks();
   const o = { finish: 'glossy' };
 
-  // Jaw: wide and squared off rather than a point.
-  b.addGeometry(new THREE.CylinderGeometry(0.815, 0.70, 0.36, 22), { x: 0, y: 0.12, z: 0, color: armour, opts: o });
-  b.addGeometry(chamferBox(1.16, 0.34, 1.18, 0.22), { x: 0, y: 0.14, z: 0.02, color: armour, opts: o });
-  // Face barrel: the decal surface, r 0.815 -> 0.755 over y 0.30..0.98.
-  b.addGeometry(new THREE.CylinderGeometry(0.755, 0.815, 0.68, 22), { x: 0, y: 0.64, z: 0, color: armour, opts: o });
-  // Crown, squashed so the helmet is not a bullet.
-  b.push();
-  b.translateWorld(0, 0.98, 0);
-  b.scale(1, 0.50, 1);
-  b.addGeometry(domeGeometry(0.755, Math.PI * 0.5, 20), { color: armour, opts: o });
-  b.pop();
-  // Back-of-skull bulge, so the profile is not a plain cylinder.
-  b.push();
-  b.translateWorld(0, 0.74, -0.26);
-  b.scale(0.92, 0.74, 0.92);
-  b.addGeometry(new THREE.SphereGeometry(0.74, 16, 12), { color: armour, opts: o });
-  b.pop();
-  // Central vent ridge over the crown.
-  b.addGeometry(chamferBox(0.16, 0.13, 1.12, 0.04), { x: 0, y: 1.30, z: -0.08, color: armour, opts: o });
-  b.addGeometry(chamferBox(0.12, 0.10, 0.30, 0.03), { x: 0, y: 1.34, z: 0.34, color: dark, opts: o });
-  // Brow ledge across the front.
-  b.addGeometry(taperBox(1.18, 1.00, 0.11, 0.34, 0.28, 0.035), {
-    x: 0,
-    y: 0.98,
-    z: 0.58,
-    rot: [-0.26, 0, 0],
-    color: armour,
-    opts: o,
-  });
-  // Vocoder "ears".
+  b.addGeometry(
+    latheShell(
+      [
+        [0.03, 1.32],
+        [0.31, 1.285],
+        [0.56, 1.195],
+        [0.72, 1.075],
+        [0.8, 0.96],
+        [0.775, 0.72],
+        [0.745, 0.48],
+        [0.715, 0.24],
+        [0.66, 0.11],
+        [0.5, 0.02],
+        [0.03, 0.0],
+      ],
+      { segments: 26, close: false }
+    ),
+    { color: armour, opts: o }
+  );
+
+  // The rib over the crown. Lathing a narrow slice of a closed cross-section
+  // is the only way to get a rib that follows a curved shell exactly; a run of
+  // straight boxes is tangent to the crown and floats off it at both ends.
+  b.addGeometry(
+    ridgeFin(
+      [
+        [-0.68, 1.06],
+        [-0.568, 1.215],
+        [-0.314, 1.307],
+        [0.0, 1.342],
+        [0.314, 1.307],
+        [0.568, 1.215],
+        [0.68, 1.06],
+        [0.62, 1.03],
+        [0.541, 1.149],
+        [0.302, 1.236],
+        [0.0, 1.27],
+        [-0.302, 1.236],
+        [-0.541, 1.149],
+        [-0.62, 1.03],
+      ],
+      0.11
+    ),
+    { color: armour, opts: o }
+  );
+
+  // Ear covers: a shallow plate with a boss, flat against the shell.
   for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.15, 0.42, 0.36, 0.05), { x: sx * 0.77, y: 0.54, z: 0.04, color: dark, opts: o });
-    b.addGeometry(new THREE.CylinderGeometry(0.11, 0.11, 0.10, 12), {
-      x: sx * 0.845,
-      y: 0.54,
-      z: 0.04,
-      rot: [0, 0, Math.PI / 2],
-      color: COLORS.darkBluishGray,
-      opts: o,
+    onCurve(b, sx * (Math.PI / 2 + 0.14), 0.55, 0.71, 0, (bb) => {
+      bb.addGeometry(chamferBox(0.26, 0.34, 0.07, 0.04), { color: armour, opts: o });
+      bb.addGeometry(new THREE.CylinderGeometry(0.075, 0.075, 0.04, 10), {
+        z: 0.04,
+        rot: [Math.PI / 2, 0, 0],
+        color: trim,
+        opts: o,
+      });
     });
   }
-  // Neck seal below the jaw.
-  b.addGeometry(new THREE.CylinderGeometry(0.60, 0.57, 0.22, 18), { x: 0, y: -0.16, z: 0, color: dark, opts: o });
+
+  // Neck seal below the jaw, so the helmet does not end in a bare white hole.
+  b.addGeometry(new THREE.CylinderGeometry(0.58, 0.55, 0.26, 18), { x: 0, y: -0.14, z: 0, color: dark, opts: o });
   return b.build();
 }
 
@@ -1234,7 +1275,7 @@ export async function makeStormtrooper(opts = {}) {
   fig.accessory.add(helmet);
   fig.helmet = helmet;
 
-  const face = await decalOn('svg/helmet-stormtrooper.svg', conePatch(0.822, 0.762, 0.28, 1.00, 0.95, 20));
+  const face = await decalOn('svg/helmet-stormtrooper.svg', conePatch(0.728, 0.812, 0.23, 0.97, 0.88, 22));
   if (face) fig.accessory.add(face);
   else fig.accessory.add(trooperFaceFallback(helmetWhite));
 

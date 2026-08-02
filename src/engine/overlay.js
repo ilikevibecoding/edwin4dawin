@@ -132,7 +132,12 @@ export function makeTextTexture(opts = {}) {
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  // No mipmaps: text planes are drawn roughly 1:1 and mipmap generation on a
+  // detached canvas was a source of frame-to-frame drift.
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
   tex.needsUpdate = true;
   return { texture: tex, canvas: c, lines: lines.length };
 }

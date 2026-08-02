@@ -156,9 +156,7 @@ function textPanel(texture, width, texW, texH, opts = {}) {
     toneMapped: false,
     color: opts.tint ?? 0xffffff,
   });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, (width * texH) / texW), mat);
-  mesh.material = mat;
-  return mesh;
+  return new THREE.Mesh(new THREE.PlaneGeometry(width, (width * texH) / texW), mat);
 }
 
 /** Text texture at crawl quality: crisp, mip-mapped, heavily anisotropic. */
@@ -383,9 +381,9 @@ export async function build(ctx) {
   const END = ctx.duration;
 
   // ---- lighting -----------------------------------------------------------
-  // Two rigs share the scene: a title rig for the gold logo (up to ~16s) and a
-  // sun for the planet reveal (from ~36s). Intensities are keyed off t so they
-  // never light each other's beat.
+  // Two rigs share the scene: a title rig for the gold logo (up to ~13.5s) and
+  // a sun for the planet reveal (from ~37s). Intensities are keyed off t so
+  // they never light each other's beat.
   const ambient = new THREE.HemisphereLight(0x5b7ba8, 0x0a0d14, 0.35);
   scene.add(ambient);
 
@@ -422,8 +420,8 @@ export async function build(ctx) {
       const m = o.material;
       if (!m) return;
       if (m.uniforms?.uGain) {
-        revealGains.push({ set: (a) => (m.uniforms.uGain.value = m.userData.gain0 * a) });
-        m.userData.gain0 = m.uniforms.uGain.value;
+        const g0 = m.uniforms.uGain.value;
+        revealGains.push({ set: (a) => (m.uniforms.uGain.value = g0 * a) });
       } else if (o.isSprite) {
         const o0 = m.opacity;
         revealGains.push({ set: (a) => (m.opacity = o0 * a) });
@@ -975,20 +973,6 @@ export async function build(ctx) {
   }
 
   update(0);
-  {
-    let tris = 0;
-    scene.traverse((o) => {
-      const g = o.geometry;
-      if (!g) return;
-      const n = g.index ? g.index.count : g.attributes.position?.count ?? 0;
-      if (o.isPoints || o.isSprite) return;
-      tris += n / 3;
-    });
-    const speeds = crawl.keys
-      .slice(1)
-      .map((k, i) => ((k[1] - crawl.keys[i][1]) / (k[0] - crawl.keys[i][0])).toFixed(2));
-    console.log('[crawl] triangles', Math.round(tris), 'lines', crawl.lines, 'scroll u/s', speeds.join(' '));
-  }
   return {
     scene,
     camera,

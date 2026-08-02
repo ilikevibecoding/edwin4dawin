@@ -1,16 +1,17 @@
 /**
  * Scene 1 — The Chase.
  *
- * Five shots, cut the way the source material opens:
+ * Seven shots, cut the way the source material opens:
  *
- *    0.0 –  8.2  the corvette overtakes the lens and runs for Tatooine
- *    8.2 – 14.2  the destroyer's prow slides in from the top of frame and just
- *                keeps coming, until the camera has tilted up into nothing but
- *                grey hull
- *   14.2 – 17.5  a wide low angle beneath that hull, the corvette a speck under
- *                it, green turbolaser fire raking past her
- *   17.5 – 25.5  the hits land: sparks, a dead engine bell, a slow yaw
- *   25.5 – END   the tractor beam takes her up into the ventral hangar
+ *    0.00 –  8.15  she rips past the lens and runs for Tatooine
+ *    8.20 – 14.10  THE SHOT: his prow slides into the top of frame and keeps
+ *                  coming while the camera cranes up after it
+ *   14.15 – 17.40  cut: wide and low right beneath him, nothing but grey hull
+ *                  grinding overhead
+ *   17.45 – 21.20  cut: medium on her flank as the turbolasers land
+ *   21.25 – 25.30  she yaws off her heading with a bell out and smoking
+ *   25.40 – 30.20  the tractor beam reaches down and takes her
+ *   30.25 –  END   tight and low on the hangar mouth as it swallows her
  *
  * FRAME OF REFERENCE
  * ------------------
@@ -46,53 +47,51 @@ const PY = PITCH / PLATE;
 // The geometry of the chase
 // ---------------------------------------------------------------------------
 
-const BELLY = 38; // destroyer underside, above the corvette's flight axis
-const AIR = 150; // airspeed at full throttle, world units per second
-const PLANET_R = 1450;
-const PLANET_POS = [-300, -1620, 2060];
+/** Height of the destroyer's keel above her flight axis. */
+const BELLY = 38;
+/** Airspeed at full throttle, world units per second. */
+const AIR = 150;
+const PLANET_R = 1550;
+const PLANET_POS = [-120, -1750, 1900];
 
 /** Beat clock. Narration starts at 1.60, 8.19 and 17.48 (see ctx.lines). */
 const T = {
-  pass: 1.05, // she overtakes the lens
-  reveal: 8.2, // his prow starts to slide into frame
-  tilt: 11.6, // the camera begins to crane up his hull
-  hull: 14.15, // nothing but grey brick
-  under: 14.2, // cut: wide and low, right beneath him
-  hits: 17.5, // the turbolasers land
-  lock: 25.4, // the tractor beam takes hold
-  lift: 26.6, // she starts to rise
-  throat: 29.7, // cut: in tight on the hangar mouth
+  pass: 1.35, // she overtakes the lens
+  shadow: 8.2, // cut: the locked-off plate the prow will come into
+  under: 14.15, // cut: wide and low, right beneath him
+  hits: 17.45, // cut + the turbolasers land
+  slew: 21.25, // cut: she is off her heading and smoking
+  lock: 25.4, // cut: the tractor beam takes hold
+  lift: 26.5, // she starts to rise
+  throat: 30.25, // cut: in tight on the hangar mouth
 };
 
 /**
- * The destroyer's nose, keyed in multiples of his own length so the
- * choreography survives a model that is not exactly 260 studs. He overhauls
- * her, then matches speed for the tractor lock.
+ * The destroyer's nose in multiples of his own length, so the choreography
+ * survives a model that is not exactly 260 studs long.
+ *
+ * He runs her down with an exponentially decaying overtake — fast when he is a
+ * shadow behind her, almost station-keeping by the time the beam has her. That
+ * is one smooth curve rather than a keyframe track, which matters: a kink in
+ * this number is a kink in the descent of a hull edge across the whole frame.
  */
-const SD_NOSE = [
-  [0, -2.7],
-  [T.reveal, -0.96],
-  [9.6, -0.61],
-  [13.6, 0.0],
-  [17.4, 0.385],
-  [21, 0.54],
-  [26, 0.615],
-  [40, 0.65],
-];
+const SD_END = 0.7; // asymptote: nose 0.70 lengths ahead of her
+const SD_GAP = 3.25; // lengths still to make up at t = 0
+const SD_TAU = 7.27; // seconds to close 1/e of it
+
+function sdNoseZ(t, len) {
+  return (SD_END - SD_GAP * Math.exp(-t / SD_TAU)) * len;
+}
 
 /** Distance flown along the shared course; the airspeed is its derivative. */
 const TRAVEL = [
   [0, 0],
   [T.hits, T.hits * AIR],
-  [21, 3045],
-  [26, 3400],
-  [30, 3540],
-  [40, 3760],
+  [21, 3040],
+  [26, 3390],
+  [30, 3530],
+  [40, 3750],
 ];
-
-function sdNoseZ(t, len) {
-  return ease.track(SD_NOSE, t, LIN) * len;
-}
 
 function travelAt(t) {
   return ease.track(TRAVEL, t, LIN);
@@ -120,13 +119,13 @@ function corvetteAt(t) {
   const roll =
     (Math.sin(t * 1.31) * 0.045 + (fbm1(t * 0.7, 3, 5) - 0.5) * 0.1) * buffet +
     kick(t, T.hits + 0.1, 0.22, 7.4, 1.5) +
-    kick(t, 18.5, -0.17, 6.1, 1.3) +
-    kick(t, 19.6, 0.13, 8.2, 1.6) +
+    kick(t, 18.6, -0.17, 6.1, 1.3) +
+    kick(t, 19.9, 0.13, 8.2, 1.6) +
     kick(t, 5.4, 0.05, 9.0, 2.6);
   const pitch = (fbm1(t * 0.53 + 9, 3, 11) - 0.5) * 0.05 * buffet + kick(t, T.hits + 0.1, -0.07, 6.2, 1.4);
-  // With the drive gone she slews off her heading; the tractor field then
+  // With a bell gone she slews off her heading; the tractor field then
   // straightens her out again.
-  const off = ease.smooth(ease.range(t, 18.4, 24.4));
+  const off = ease.smooth(ease.range(t, 18.5, 24.4));
   return {
     x: Math.sin(t * 0.41) * 0.6 + off * 3.4,
     y: Math.sin(t * 0.67 + 1.2) * 0.5 * buffet,
@@ -144,27 +143,28 @@ function corvetteAt(t) {
 export async function build(ctx) {
   const END = ctx.duration;
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(30, ctx.aspect, 0.5, 9000);
+  const camera = new THREE.PerspectiveCamera(44, ctx.aspect, 0.5, 9000);
 
   // ------------------------------------------------------------------ light
-  // The sun sits over the camera's left shoulder so both hulls and the planet
-  // are lit from the same side; the fill is dropped underneath to keep the
-  // destroyer's underside readable in the money shot.
+  // One hard sun from behind their left shoulder, and a warm fill from below
+  // standing in for the bounce off fifteen hundred units of orange desert —
+  // without it the destroyer's underside is a black hole in the money shot.
   const lights = standardLights(scene, 'space', { shadows: false });
-  const SUN = new THREE.Vector3(-0.34, 0.52, -0.78).normalize();
+  const SUN = new THREE.Vector3(-0.38, 0.5, -0.78).normalize();
   lights.key.position.copy(SUN).multiplyScalar(600);
   lights.key.intensity = 3.3;
-  lights.fill.position.set(-0.2, -0.92, -0.34).multiplyScalar(400);
-  lights.fill.intensity = 0.9;
-  lights.rim.position.set(0.72, 0.18, 0.62).multiplyScalar(400);
-  lights.rim.intensity = 0.9;
+  lights.fill.color.setHex(0xffa864);
+  lights.fill.position.set(-0.18, -0.95, -0.26).multiplyScalar(400);
+  lights.fill.intensity = 1.15;
+  lights.rim.position.set(0.7, 0.2, 0.66).multiplyScalar(400);
+  lights.rim.intensity = 0.95;
 
   // -------------------------------------------------------------------- sky
   scene.add(nebulaBackdrop({ radius: 3900, colorA: 0x1c2647, colorB: 0x3a1a2c, density: 0.5 }));
   const stars = new Starfield({ count: 2100, radius: 3000, seed: 19, sizeMin: 5, sizeMax: 26 });
   scene.add(stars.object);
 
-  const dust = new SpeedDust({ count: 240, radius: 200, depth: 620, ahead: 430, size: 0.4 });
+  const dust = new SpeedDust({ count: 220, radius: 210, depth: 640, ahead: 450, size: 0.42 });
   scene.add(dust.object);
 
   const planet = buildPlanet(SUN);
@@ -184,40 +184,43 @@ export async function build(ctx) {
   const cv = measure(corvette);
   const sd = measure(destroyer);
 
-  // Both models are wrapped so the scene drives a convenient local origin: the
-  // corvette about her own centre, the destroyer about his nose and belly.
+  // Both models are wrapped so the scene drives a convenient local origin.
+  // Corvette: her own bounding-box centre, at the origin of her frame.
   const corvetteRig = new THREE.Group();
   const cvOffset = new THREE.Vector3(-cv.mid.x, -cv.mid.y, -cv.mid.z);
   corvette.position.copy(cvOffset);
   corvetteRig.add(corvette);
   scene.add(corvetteRig);
 
+  // Destroyer: his nose at rig z = 0 and his keel at world y = BELLY, so the
+  // only thing update() has to drive is how far forward his nose has got.
   const destroyerRig = new THREE.Group();
-  const sdOffset = new THREE.Vector3(-sd.mid.x, -sd.box.min.y, -sd.box.max.z);
+  const sdOffset = new THREE.Vector3(-sd.mid.x, BELLY - sd.box.min.y, -sd.box.max.z);
   destroyer.position.copy(sdOffset);
   destroyerRig.add(destroyer);
   scene.add(destroyerRig);
 
-  /** Where the tractor beam comes out: aft of centre, on the underside. */
-  const HANGAR_BACK = sd.len * 0.6;
-  /** How high she is lifted: far enough for the hangar mouth to swallow her. */
-  const LIFT_TOP = BELLY - cv.halfH * 0.15;
+  /** Where the tractor beam comes out: 0.62 lengths aft of the nose. */
+  const HANGAR_BACK = sd.len * 0.62;
+  /** How high she is lifted — far enough for the mouth to hide most of her. */
+  const LIFT_TOP = BELLY + cv.halfH * 0.6;
 
   // ------------------------------------------------------------- her engines
-  const engines = enginePoints(corvette, cv, 5).map(
+  const engines = mainEngines(corvette, cv, 7).map(
     (p, i) =>
       new Thruster({
         color: KIT.engineBlue,
-        radius: cv.len * (i === 0 ? 0.036 : 0.028),
-        length: cv.len * 0.44,
+        radius: cv.len * (i === 0 ? 0.042 : 0.026),
+        length: cv.len * 0.46,
         position: [p.x, p.y, p.z],
         dir: [0, 0, 1],
       })
   );
   for (const e of engines) corvette.add(e.object);
 
-  // ...and his: three big bells, throttled back once he has her.
-  const sdEngines = enginePoints(destroyer, sd, 3).map(
+  // ...and his: the three great bells across the transom, throttled back once
+  // he has her. Only the top row, or the pick lands on the trim units.
+  const sdEngines = mainEngines(destroyer, sd, 3, true).map(
     (p) =>
       new Thruster({
         color: 0xcfeaff,
@@ -230,43 +233,49 @@ export async function build(ctx) {
   for (const e of sdEngines) destroyer.add(e.object);
 
   // ------------------------------------------------------------- the hangar
-  const hangar = buildHangar(sd);
+  const hangar = buildHangar(cv);
   hangar.group.position.set(0, BELLY, -HANGAR_BACK);
   destroyerRig.add(hangar.group);
 
   const beam = new Beam({
     color: 0x9fe8ff,
-    radiusTop: cv.halfW * 0.8,
-    radiusBottom: hangar.width * 0.42,
+    radiusTop: cv.halfW * 0.75,
+    radiusBottom: hangar.width * 0.44,
     height: 1,
     opacity: 0.5,
   });
   beam.object.rotation.x = Math.PI; // local +y now runs downward, out of the hull
-  beam.object.position.set(0, BELLY - 0.6, -HANGAR_BACK);
+  beam.object.position.set(0, BELLY - 0.4, -HANGAR_BACK);
   destroyerRig.add(beam.object);
 
   // ------------------------------------------------------------------- fire
-  const bolts = new BoltPool({ color: KIT.laserGreen, length: cv.len * 0.3, width: 0.55, max: 48, glow: 1.2 });
+  const bolts = new BoltPool({ color: KIT.laserGreen, length: cv.len * 0.32, width: 0.6, max: 48, glow: 1.2 });
   scene.add(bolts.object);
 
   // Turbolaser volleys. Every shot is declared up front and its muzzle is
   // sampled from the destroyer's own motion at the moment of firing, so the
   // pool stays a pure function of t.
   const guns = gunPoints(destroyer, sd, 6);
+  /** Muzzle i in world space at time t. */
   const gunAt = (i, t) => {
     const g = guns[i % guns.length];
-    return [g.x + sdOffset.x, g.y + sdOffset.y + BELLY, g.z + sdOffset.z + sdNoseZ(t, sd.len)];
+    return [g.x + sdOffset.x, g.y + sdOffset.y, g.z + sdOffset.z + sdNoseZ(t, sd.len)];
+  };
+  /** A point on her hull, in world space at time t. */
+  const onHull = (at, t) => {
+    const c = corvetteAt(t);
+    return [at[0] + c.x, at[1] + c.y, at[2] + c.z];
   };
   // Ranging shots from off-screen before he is revealed, then volleys that rake
   // past her once he is in frame.
   const VOLLEYS = [
-    { t: 4.3, n: 2, from: [-26, 30, -430], to: [-11, -3, 20], spread: 7 },
-    { t: 6.0, n: 2, from: [30, 26, -450], to: [13, 6, 24], spread: 8 },
-    { t: 10.3, gun: 0, n: 3, to: [-16, 5, 26], spread: 9 },
-    { t: 11.6, gun: 1, n: 2, to: [15, -6, 18], spread: 10 },
-    { t: 13.0, gun: 2, n: 3, to: [-13, 9, -4], spread: 8 },
-    { t: 15.0, gun: 3, n: 3, to: [17, 4, 12], spread: 11 },
-    { t: 16.3, gun: 4, n: 3, to: [-19, -7, 8], spread: 9 },
+    { t: 4.4, n: 2, from: [-30, 34, -460], to: [-13, -3, 22], spread: 8 },
+    { t: 6.2, n: 2, from: [34, 30, -480], to: [14, 7, 26], spread: 9 },
+    { t: 10.5, gun: 0, n: 3, to: [-17, 5, 28], spread: 10 },
+    { t: 11.9, gun: 1, n: 2, to: [16, -6, 18], spread: 11 },
+    { t: 13.2, gun: 2, n: 3, to: [-14, 9, -6], spread: 9 },
+    { t: 15.0, gun: 3, n: 3, to: [18, 4, 14], spread: 12 },
+    { t: 16.4, gun: 4, n: 3, to: [-20, -7, 10], spread: 10 },
   ];
   for (let v = 0; v < VOLLEYS.length; v++) {
     const s = VOLLEYS[v];
@@ -277,23 +286,23 @@ export async function build(ctx) {
       from: s.from ?? gunAt(s.gun, s.t),
       to: s.to,
       spread: s.spread,
-      speed: 460,
+      speed: 470,
       seed: v + 3,
     });
   }
 
   // The four that connect, and the damage they leave on her flank.
   const HITS = [
-    { t: T.hits, at: [cv.halfW * 0.9, 1.6, -cv.len * 0.18], gun: 0, r: cv.len * 0.11 },
-    { t: 18.5, at: [-cv.halfW * 0.85, -1.2, cv.len * 0.06], gun: 2, r: cv.len * 0.08 },
-    { t: 19.6, at: [cv.halfW * 0.8, 2.4, -cv.len * 0.34], gun: 4, r: cv.len * 0.1 },
-    { t: 21.4, at: [-cv.halfW * 0.7, 1.0, -cv.len * 0.3], gun: 1, r: 0 },
+    { t: T.hits + 0.15, at: [cv.halfW * 0.9, 1.6, -cv.len * 0.18], gun: 0, r: cv.len * 0.11 },
+    { t: 18.6, at: [-cv.halfW * 0.85, -1.2, cv.len * 0.06], gun: 2, r: cv.len * 0.08 },
+    { t: 19.9, at: [cv.halfW * 0.8, 2.4, -cv.len * 0.34], gun: 4, r: cv.len * 0.1 },
+    { t: 21.6, at: [-cv.halfW * 0.7, 1.0, -cv.len * 0.3], gun: 1, r: 0 },
   ];
   const fireballs = [];
   const sparks = [];
   for (let i = 0; i < HITS.length; i++) {
     const h = HITS[i];
-    bolts.add({ t0: h.t - 0.42, from: gunAt(h.gun, h.t - 0.42), to: h.at, speed: 460 });
+    bolts.add({ t0: h.t - 0.42, from: gunAt(h.gun, h.t - 0.42), to: onHull(h.at, h.t), speed: 470 });
     const sp = new Sparks({
       count: 130,
       t0: h.t,
@@ -317,31 +326,31 @@ export async function build(ctx) {
 
   // The dead bell smoulders. Puffs drift back down the slipstream, so the smoke
   // group is tipped over to make its local "up" the ship's aft.
-  const deadBell = (engines[1] ?? engines[0]).object.position.clone().add(cvOffset);
-  const smokes = [[18.8, 8], [24.6, 9.5]].map(([t0, life]) => {
+  const deadBell = (engines[DEAD_BELL] ?? engines[0]).object.position.clone().add(cvOffset);
+  const smokes = [[18.9, 8], [24.6, 9.5]].map(([t0, life]) => {
     const sm = new Smoke({
-      count: 10,
+      count: 6,
       t0,
       life,
       origin: [0, 0, 0],
-      rise: cv.len * 0.2,
+      rise: cv.len * 0.22,
       spread: cv.halfW * 0.5,
-      size: cv.len * 0.13,
+      size: cv.len * 0.15,
       color: 0x4a4f57,
       opacity: 0.5,
       seed: Math.round(t0 * 7),
     });
     sm.object.position.copy(deadBell);
-    sm.object.rotation.x = Math.PI / 2; // local +y becomes ship-aft
+    sm.object.rotation.x = -Math.PI / 2; // local +y becomes ship-aft
     corvetteRig.add(sm.object);
     return sm;
   });
 
   // ------------------------------------------------------------------ sound
   for (let i = 0; i * 5.5 < END; i++) ctx.sfx(i * 5.5, 'engine_rumble', { gain: 0.3 });
-  ctx.sfx(T.pass - 0.35, 'ship_pass', { gain: 0.95 });
-  ctx.sfx(9.4, 'ship_pass', { gain: 0.7, rate: 0.55 });
-  ctx.sfx(T.hull - 1.4, 'ship_pass', { gain: 0.9, rate: 0.4 });
+  ctx.sfx(T.pass - 0.5, 'ship_pass', { gain: 0.95 });
+  ctx.sfx(9.6, 'ship_pass', { gain: 0.7, rate: 0.5 });
+  ctx.sfx(T.under - 0.9, 'ship_pass', { gain: 0.9, rate: 0.38 });
   for (const s of VOLLEYS) ctx.sfx(s.t - 0.1, 'turbolaser', { gain: 0.7 });
   for (let i = 0; i < HITS.length; i++) {
     const h = HITS[i];
@@ -349,68 +358,89 @@ export async function build(ctx) {
     ctx.sfx(h.t, 'laser_impact', { gain: 0.9 });
     if (h.r > 0) ctx.sfx(h.t + 0.02, 'explosion_small', { gain: 0.85 - i * 0.1 });
   }
-  ctx.sfx(T.hits + 0.02, 'impact_hit', { gain: 0.9 });
-  ctx.sfx(T.lock - 0.3, 'whoosh_transition', { gain: 0.5, rate: 0.7 });
+  ctx.sfx(T.hits + 0.17, 'impact_hit', { gain: 0.9 });
+  ctx.sfx(T.lock - 0.4, 'whoosh_transition', { gain: 0.5, rate: 0.7 });
   ctx.sfx(T.lift + 0.4, 'engine_rumble', { gain: 0.45, rate: 0.7 });
 
   // ----------------------------------------------------------------- camera
   // Shot changes are 0.04s steps in the tracks, i.e. hard cuts at 24fps.
+  //
+  // Shot 2 is the one that matters. The camera sits low and locked at z ≈ -152
+  // with her a speck 152 out; the destroyer's keel is 34 above the lens, so his
+  // nose crosses into the top of frame at about 9.3s and its elevation then
+  // decays towards the horizon while the lens cranes up after it. Grey hull
+  // therefore floods the frame from the top down and she is left in the last
+  // sliver of sky at the bottom, which is the composition the whole scene is
+  // for. Do not retime one of these tracks without the others.
   const CAM = {
     pos: [
-      [0, [46, 15, 96]],
-      [T.pass, [40, 12, 6]],
-      [2.6, [31, 10, -60]],
-      [5.0, [19, 8, -138]],
-      [T.reveal, [10, 6.5, -228]],
-      [12.2, [6, 5.5, -248]],
-      [T.hull, [3, 7, -258]],
-      [T.under, [18, 12, -108]], // cut
-      [17.46, [8, 11, -86]],
-      [T.hits, [34, 5, -96]], // cut
-      [21.0, [26, 7, -80]],
-      [25.36, [20, 9, -66]],
-      [T.lock + 0.1, [50, -8, -44]], // cut
-      [29.66, [40, -2, -16]],
-      [T.throat, [34, 1, 30]], // cut
-      [END, [36, 0, 38]],
+      [0, [20, 15, 74]],
+      [1.0, [18.4, 14, 22]],
+      [T.pass, [17.6, 13.2, -14]],
+      [2.6, [16.6, 11, -54]],
+      [5.0, [14.2, 8, -106]],
+      [T.shadow, [11.5, 4.4, -152]],
+      [10.6, [11.2, 4.3, -153]],
+      [12.4, [10.6, 4.2, -155]],
+      [14.1, [10.0, 4.1, -157]],
+      [T.under, [24, 6, -30]], // cut: under the hull
+      [17.4, [21, 6.6, -8]],
+      [T.hits, [26, 6, -46]], // cut: her flank
+      [21.2, [23, 5.4, -34]],
+      [T.slew, [44, 2.5, -70]], // cut: wider, she is slewing
+      [25.3, [39, 3.2, -56]],
+      [T.lock, [52, 6, -34]], // cut: the beam
+      [30.2, [46, 7.5, -18]],
+      [T.throat, [30, 12, -2]], // cut: the mouth
+      [END, [26, 14.5, 10]],
     ],
     look: [
-      [0, [30, 11, 420]],
-      [T.pass, [26, 9, 300]],
-      [2.6, [0, 0, 0]],
-      [T.reveal, [0, 1, 2]],
-      [T.tilt, [0, 4, 6]],
-      [T.hull, [0, 42, -180]],
-      [T.under, [0, 22, -40]],
-      [17.46, [0, 20, -26]],
-      [T.hits, [0, 4, -4]],
-      [21.0, [0, 3, 2]],
-      [25.36, [0, 5, 4]],
-      [T.lock + 0.1, [4, 20, 6]],
-      [29.66, [2, 31, 6]],
-      [T.throat, [0, 33, 6]],
-      [END, [0, 34, 6]],
+      [0, [10, 6, 430]],
+      [1.0, [7, 4.5, 300]],
+      [T.pass, [1.5, 1.5, 44]],
+      [2.6, [0, 0.6, 10]],
+      [5.0, [0, 0.8, 5]],
+      [T.shadow, [0, 0.8, 3]],
+      [10.6, [0, 3.4, 7]],
+      [12.4, [0, 12, 12]],
+      [14.1, [0, 27, 18]],
+      [T.under, [0, 34, 34]],
+      [17.4, [0, 62, 26]],
+      [T.hits, [0, 4.5, 6]],
+      [21.2, [0, 5.5, 4]],
+      [T.slew, [0, 12, -8]],
+      [25.3, [0, 14, -4]],
+      [T.lock, [0, 19, -8]],
+      [30.2, [0, 24, -2]],
+      [T.throat, [0, 34, -14]],
+      [END, [0, 36, -8]],
     ],
     fov: [
-      [0, 30],
-      [T.reveal, 34],
-      [11.5, 46],
-      [T.hull, 50],
-      [T.under, 48],
-      [T.hits, 44],
-      [21.0, 40],
-      [T.lock + 0.1, 46],
-      [T.throat, 40],
-      [END, 38],
+      [0, 44],
+      [2.6, 40],
+      [5.0, 34],
+      [T.shadow, 32],
+      [10.6, 34],
+      [12.4, 37],
+      [14.1, 40],
+      [T.under, 62],
+      [17.4, 60],
+      [T.hits, 34],
+      [21.2, 32],
+      [T.slew, 40],
+      [T.lock, 45],
+      [30.2, 44],
+      [T.throat, 44],
+      [END, 42],
     ],
     shake: [
-      [T.hits - 0.05, 0],
-      [T.hits + 0.08, 0.9],
-      [T.hits + 1.1, 0.12],
-      [19.6, 0.6],
-      [20.6, 0.05],
-      [21.4, 0.3],
-      [22.2, 0],
+      [T.hits + 0.1, 0],
+      [T.hits + 0.25, 0.85],
+      [T.hits + 1.3, 0.12],
+      [19.9, 0.55],
+      [20.9, 0.05],
+      [21.6, 0.28],
+      [22.4, 0],
     ],
     ease: ease.inOutCubic,
   };
@@ -426,7 +456,7 @@ export async function build(ctx) {
     update(t) {
       // --- 1. camera, first: the bolt halos and the dust field need it -----
       cameraRig(camera, t, CAM);
-      handheld(camera, t, t < T.reveal ? 0.1 : 0.06, 0.45, 5);
+      handheld(camera, t, t < T.shadow ? 0.1 : 0.06, 0.45, 5);
 
       // --- 2. where everybody is ------------------------------------------
       const sdZ = sdNoseZ(t, sd.len);
@@ -437,22 +467,22 @@ export async function build(ctx) {
       // The beam takes over: she is dragged under the mouth and lifted into it,
       // losing her yaw as the field straightens her.
       const align = ease.smooth(ease.range(t, T.lock, 30.5));
-      const lift = ease.smoother(ease.range(t, T.lift, 33.4));
+      const lift = ease.smoother(ease.range(t, T.lift, 33.6));
       cvPos.set(
         ease.lerp(c.x, hangarPos.x, align),
         c.y + lift * LIFT_TOP,
-        ease.lerp(c.z, hangarPos.z, align * 0.92)
+        ease.lerp(c.z, hangarPos.z, align)
       );
       corvetteRig.position.copy(cvPos);
       corvetteRig.rotation.set(c.pitch * (1 - align * 0.8), c.yaw, c.roll * (1 - align * 0.7));
 
       // --- 3. engines ------------------------------------------------------
-      // The aftmost bell dies first, then the rest gutter out; a flicker on the
-      // way down so it reads as failure rather than a switch.
+      // One bell dies first and hard, then the rest gutter out; a flicker on
+      // the way down so it reads as failure rather than a switch.
       for (let i = 0; i < engines.length; i++) {
-        const die = i === 1 ? 18.6 : 19.4 + i * 0.5;
-        let th = 1 - ease.range(t, die, die + (i === 1 ? 0.35 : 1.6));
-        if (i === 1) th *= 1 - 0.5 * ease.range(t, die - 0.9, die) * (0.5 + 0.5 * Math.sin(t * 33));
+        const die = i === DEAD_BELL ? 18.7 : 19.5 + i * 0.35;
+        let th = 1 - ease.range(t, die, die + (i === DEAD_BELL ? 0.35 : 1.6));
+        if (i === DEAD_BELL) th *= 1 - 0.5 * ease.range(t, die - 0.9, die) * (0.5 + 0.5 * Math.sin(t * 33));
         else th *= 0.86 + 0.14 * Math.sin(t * 11 + i);
         engines[i].throttle = Math.max(0, th);
         engines[i].update(t);
@@ -468,7 +498,7 @@ export async function build(ctx) {
       for (const s of smokes) s.update(t);
 
       const grab = ease.smooth(ease.range(t, T.lock, T.lock + 1.4));
-      const gap = Math.max(0.5, hangarPos.y - cvPos.y - cv.halfH * 0.4);
+      const gap = Math.max(0.5, hangarPos.y - cvPos.y - cv.halfH * 0.35);
       beam.object.visible = grab > 0.01;
       beam.object.scale.set(1, gap, 1);
       beam.mesh.material.uniforms.uOpacity.value = 0.5 * grab;
@@ -485,6 +515,9 @@ export async function build(ctx) {
   };
 }
 
+/** Which of her bells takes the hit that kills the drive. */
+const DEAD_BELL = 5;
+
 // ---------------------------------------------------------------------------
 // Measuring whatever model turned up
 // ---------------------------------------------------------------------------
@@ -498,14 +531,24 @@ function measure(model) {
 }
 
 /**
- * Engine nozzles in model space, capped so a ship with a bank of eleven bells
- * does not cost twenty draw calls: the ones nearest the centreline read as the
- * main drive. Falls back to the tail centre if the model publishes none.
+ * The bells worth putting a Thruster on, in model space. A CR90 has eleven and
+ * a destroyer has seven; each Thruster is two draw calls, so take the main
+ * cluster nearest the centreline and leave the trim units dark.
+ *
+ * `topRowOnly` keeps just the bells level with the highest one, which is how
+ * you get the destroyer's three big transom bells instead of its little
+ * ventral pair.
  */
-function enginePoints(model, m, max = 5) {
-  const pts = (model.userData.enginePoints || []).map((p) => new THREE.Vector3().copy(p));
+function mainEngines(model, m, max = 5, topRowOnly = false) {
+  let pts = (model.userData.enginePoints || []).map((p) => new THREE.Vector3().copy(p));
   if (!pts.length) return [new THREE.Vector3(m.mid.x, m.mid.y, m.box.min.z - m.len * 0.02)];
-  pts.sort((a, b) => Math.abs(a.x) + Math.abs(a.y) - (Math.abs(b.x) + Math.abs(b.y)));
+  if (topRowOnly) {
+    const top = Math.max(...pts.map((p) => p.y));
+    pts = pts.filter((p) => p.y > top - m.size.y * 0.06);
+    pts.sort((a, b) => Math.abs(a.x) - Math.abs(b.x));
+  } else {
+    pts.sort((a, b) => Math.abs(a.x) + Math.abs(a.y) * 0.5 - (Math.abs(b.x) + Math.abs(b.y) * 0.5));
+  }
   return pts.slice(0, max);
 }
 
@@ -568,7 +611,7 @@ class SpeedDust {
       this.mesh.setMatrixAt(i, d.matrix);
     }
     this.mesh.instanceMatrix.needsUpdate = true;
-    this.mesh.material.opacity = 0.42 * THREE.MathUtils.clamp(speed / AIR, 0.15, 1);
+    this.mesh.material.opacity = 0.42 * THREE.MathUtils.clamp(speed / AIR, 0.12, 1);
   }
 }
 
@@ -697,50 +740,70 @@ function buildPlanet(sunDir) {
   return {
     group,
     update(t) {
-      // She is in orbit, so the deserts turn underneath rather than approach.
-      globe.rotation.y = 1.15 + t * 0.0075;
-      group.position.x = PLANET_POS[0] + t * 1.4;
-      group.position.z = PLANET_POS[2] - t * 2.2;
+      // They are in orbit, so the deserts turn underneath rather than approach.
+      globe.rotation.y = 1.15 + t * 0.03;
+      group.position.x = PLANET_POS[0] - t * 4;
     },
   };
 }
 
 /**
- * The ventral hangar she is swallowed by: a bay lip standing a little proud of
- * the belly, a black mouth inside it and a spill of light on the plates. Built
- * here rather than in the ship so the beam has a mouth to come out of whatever
- * model lands — and because an opaque mouth tile is what makes her vanish, by
- * occluding everything that rises above the belly plane.
+ * The ventral hangar she is swallowed by: a housing standing proud of the keel,
+ * a black mouth inside it, lit runway strips and a spill of light on the
+ * plates.
+ *
+ * The mouth tile is the trick that makes her vanish. It is opaque and spans the
+ * whole opening, so from any camera below the keel everything that rises above
+ * the belly plane is hidden — by the tile inside the opening and by the hull
+ * itself outside it. That is why every shot from T.lock on keeps the lens under
+ * the destroyer.
  */
-function buildHangar(sd) {
-  const W = Math.max(24, sd.size.x * 0.2); // studs across the opening
-  const D = Math.max(30, sd.len * 0.14);
+function buildHangar(cv) {
+  const W = Math.round(cv.halfW * 2 + 7); // studs across the opening
+  const D = Math.round(cv.len * 1.34); // ...and along it, so she fits
   const b = new Bricks({ studSegments: 6 });
   const grey = COLORS.darkBluishGray;
-  const lit = { studs: false, finish: 'glow', emissive: 0xffe3a8, emissiveIntensity: 2.8 };
+  const pale = COLORS.lightBluishGray;
+  const lit = { studs: false, finish: 'glow', emissive: 0xffe3a8, emissiveIntensity: 2.6 };
 
-  // Bay lip: four walls standing 1.6 studs below the belly plane.
-  for (const sx of [-1, 1]) b.box(sx * (W / 2) - (sx > 0 ? 0 : 2), -4, -D / 2 - 2, 2, D + 4, 5, grey, { studs: false });
-  for (const sz of [-1, 1]) b.box(-W / 2 - 2, -4, sz * (D / 2) - (sz > 0 ? 0 : 2), W + 4, 2, 5, grey, { studs: false });
-  // The mouth itself: opaque and almost black, so anything lifted above the
-  // belly plane is hidden behind it.
-  b.tile(-W / 2, 0.2, -D / 2, W, D, 0x080a0d, { studs: false });
-  // Landing strips inside the lip, and a lit rim around the outside.
-  for (let i = 0; i < 4; i++) b.box(-W / 2 + 1.5, 0.1, -D / 2 + 3 + i * (D - 6) / 3, W - 3, 0.5, 0.5, COLORS.transYellow, lit);
-  for (const sx of [-1, 1]) b.box(sx * (W / 2 + 2) - (sx > 0 ? 0 : 0.8), -4.2, -D / 2 - 2, 0.8, D + 4, 0.8, COLORS.transYellow, lit);
+  // Housing: a shallow box standing 2 studs below the keel, open at the bottom.
+  const DROP = -5; // plates below the belly plane
+  for (const sx of [-1, 1]) {
+    b.box(sx * (W / 2) - (sx > 0 ? 0 : 3), DROP, -D / 2 - 3, 3, D + 6, 9, grey, { studs: false });
+    b.box(sx * (W / 2 + 0.6) - (sx > 0 ? 0 : 1.6), DROP - 0.8, -D / 2, 1.6, D, 1.4, pale, { studs: false });
+  }
+  for (const sz of [-1, 1]) {
+    b.box(-W / 2 - 3, DROP, sz * (D / 2) - (sz > 0 ? 0 : 3), W + 6, 3, 9, grey, { studs: false });
+  }
+  // Door runners: two rows of stubby blocks along the lip, so the opening does
+  // not read as a plain rectangle cut in a plate.
+  for (const sx of [-1, 1]) {
+    for (let z = -D / 2 + 2; z < D / 2 - 2; z += 5) {
+      b.box(sx * (W / 2) - (sx > 0 ? 0 : 2.2), DROP - 1.2, z, 2.2, 3, 1.6, grey, { studs: false });
+    }
+  }
+  // The mouth: opaque and almost black, right at the belly plane.
+  b.tile(-W / 2, 0.1, -D / 2, W, D, 0x070a0e, { studs: false });
+  // Runway strips just below it, and a lit rim around the outside of the lip.
+  for (let i = 0; i < 5; i++) {
+    b.box(-W / 2 + 2, -0.5, -D / 2 + 3 + (i * (D - 6)) / 4, W - 4, 0.6, 0.5, COLORS.transYellow, lit);
+  }
+  for (const sx of [-1, 1]) {
+    b.box(sx * (W / 2 + 3) - (sx > 0 ? 0 : 0.9), DROP - 0.4, -D / 2 - 3, 0.9, D + 6, 0.9, COLORS.transYellow, lit);
+  }
 
   const group = new THREE.Group();
   group.add(b.build({ castShadow: false, receiveShadow: false }));
-  const spill = glowSprite(0xffe6b0, W * 1.8, 0.35);
-  spill.position.y = -0.8;
+  const spill = glowSprite(0xffdca4, W * 1.8, 0.35);
+  spill.position.y = -1.2;
   group.add(spill);
 
   return {
     group,
     width: W,
     update(t, grab) {
-      spill.material.opacity = 0.3 + 0.4 * grab + 0.04 * Math.sin(t * 3.1);
-      spill.scale.setScalar(W * (1.6 + 0.5 * grab));
+      spill.material.opacity = 0.28 + 0.4 * grab + 0.04 * Math.sin(t * 3.1);
+      spill.scale.setScalar(W * (1.7 + 0.5 * grab));
     },
   };
 }

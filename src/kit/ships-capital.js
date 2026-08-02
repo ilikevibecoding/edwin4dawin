@@ -288,6 +288,46 @@ function surfaceFrame(b, lon, lat, r) {
   b.rotateX(Math.PI / 2);
 }
 
+/** Unit direction for a longitude/latitude, matching `surfaceFrame`. */
+function sphereDir(lon, lat) {
+  return new THREE.Vector3(
+    Math.cos(lat) * Math.sin(lon),
+    Math.sin(lat),
+    Math.cos(lat) * Math.cos(lon)
+  );
+}
+
+/** Longitude/latitude of a unit vector, inverse of `sphereDir`. */
+function dirToLonLat(d) {
+  return { lon: Math.atan2(d.x, d.z), lat: Math.asin(THREE.MathUtils.clamp(d.y, -1, 1)) };
+}
+
+/**
+ * Sphere shell with a conical hole cut through it, so a crater can be genuinely
+ * recessed rather than buried under a closed hull. A triangle survives only if
+ * all three of its corners lie outside the cone, which guarantees the ragged
+ * lat/long seam always sits *outside* `half` and can be covered by a collar.
+ */
+function punchedSphere(rStuds, wSeg, hSeg, phi, phiLen, axis, half) {
+  const g = new THREE.SphereGeometry(rStuds * PITCH, wSeg, hSeg, 0, Math.PI * 2, phi, phiLen);
+  if (!axis) return g;
+  const pos = g.attributes.position;
+  const src = g.index.array;
+  const cosHalf = Math.cos(half);
+  const keep = [];
+  const v = new THREE.Vector3();
+  for (let i = 0; i < src.length; i += 3) {
+    let outside = 0;
+    for (let k = 0; k < 3; k++) {
+      v.fromBufferAttribute(pos, src[i + k]).normalize();
+      if (v.dot(axis) <= cosHalf) outside++;
+    }
+    if (outside === 3) keep.push(src[i], src[i + 1], src[i + 2]);
+  }
+  g.setIndex(keep);
+  return g;
+}
+
 // ---------------------------------------------------------------------------
 // Turbolaser turret -- shared by the tower, the corvette and the destroyer
 // ---------------------------------------------------------------------------
@@ -1068,7 +1108,6 @@ export async function buildDeathStar(opts = {}) {
   const hull = opts.hull ?? COLORS.lightBluishGray;
   const dark = opts.dark ?? COLORS.darkBluishGray;
   const metal = opts.metal ?? COLORS.flatSilver;
-  const shadow = opts.shadow ?? COLORS.trueBlack;
   const greys = [hull, dark, metal, COLORS.lightBluishGray, COLORS.darkBluishGray];
 
   const b = new Bricks({ studSegments: 6 });
@@ -1077,16 +1116,29 @@ export async function buildDeathStar(opts = {}) {
   const trenchR = R * 0.945;
   const yLip = R * Math.sin(trench);
 
-  const DISH = { lon: 0.62, lat: 0.6, r: R * 0.28, depth: R * 0.17 };
-  const dishDir = new THREE.Vector3(
-    Math.cos(DISH.lat) * Math.sin(DISH.lon),
-    Math.sin(DISH.lat),
-    Math.cos(DISH.lat) * Math.cos(DISH.lon)
-  );
+  // The superlaser crater. `rim` is the radius of the hole in the hull, `floorR`
+  // the radius of the dish at the bottom of it, and `collar` the outer edge of
+  // the stepped ring that covers the punched seam.
+  const DISH = { lon: 0.62, lat: 0.6 };
+  const CRATER = {
+    rim: R * 0.28,
+    floorR: R * 0.2,
+    depth: R * 0.17,
+    collar: R * 0.42,
+  };
+  CRATER.cut = Math.asin(CRATER.rim / R);
+  const dishDir = sphereDir(DISH.lon, DISH.lat);
+  /** Height above the sphere centre, in studs, of a point at lateral `rho`. */
+  const yOn = (rad, rho) => Math.sqrt(Math.max(0, rad * rad - rho * rho));
+  const yRim = yOn(R, CRATER.rim);
+  const yFloor = yRim - CRATER.depth;
 
   function sphereShell() {
-    // Two caps with the equatorial trench cut between them.
-    b.sphere(0, 0, 0, R, hull, { segments: seg, phi: 0, phiLen: Math.PI / 2 - trench });
+    // Two caps with the equatorial trench cut between them. The northern cap
+    // also has the superlaser crater cut out of it.
+    b.addGeometry(punchedSphere(R, seg, seg, 0, Math.PI / 2 - trench, dishDir, CRATER.cut), {
+      color: hull,
+    });
     b.sphere(0, 0, 0, R, hull, { segments: seg, phi: Math.PI / 2 + trench, phiLen: Math.PI / 2 - trench });
     // trench floor and its two sloped walls
     b.cyl(0, PL(-yLip), 0, trenchR, PL(yLip * 2), dark, { segments: seg });
@@ -1132,7 +1184,7 @@ export async function buildDeathStar(opts = {}) {
         Math.sin(lat),
         Math.cos(lat) * Math.cos(lon)
       );
-      if (d.dot(dishDir) > Math.cos(DISH.r / R + 0.16)) continue;
+      if (d.dot(dishDir) > Math.cos(Math.asin(CRATER.collar / R) + 0.05)) continue;
 
       const w = 2 + Math.floor(hash11(i, 211) * R * 0.1);
       const dd = 2 + Math.floor(hash11(i, 233) * R * 0.13);
@@ -1170,47 +1222,104 @@ export async function buildDeathStar(opts = {}) {
     }
   }
 
+  /**
+   * The superlaser. Everything is a surface of revolution about the dish axis,
+   * so it is built in a frame whose origin is the sphere centre and whose +y is
+   * the dish normal -- then "height above the centre" is just local y and every
+   * ring can be made to hug the hull exactly.
+   */
   function superlaser() {
-    const { lon, lat, r, depth } = DISH;
-    const dd = PL(depth);
-    surfaceFrame(b, lon, lat, R - depth * 0.72);
-    // crater wall and rim
-    b.cone(0, -PL(R * 0.05), 0, r * 1.14, r * 1.3, PL(R * 0.05), dark);
-    b.torus(0, 0, 0, r * 1.22, R * 0.014, dark, { seg: 40 });
-    b.torus(0, PL(-depth * 0.1), 0, r * 1.05, R * 0.01, metal, { seg: 40 });
-    // the concave dish itself, with a slightly proud inner liner
-    b.dish(0, -dd, 0, r, dd, dark, { segments: 40 });
-    b.dish(0, -dd + 0.5, 0, r * 0.94, dd * 0.94, hull, { segments: 40 });
-    // focusing spar cross plus the eight tributary emitters
-    const spar = r * 0.94 * PITCH;
+    const { rim, floorR, depth, collar } = CRATER;
+    const SEG = 48;
+
+    /** Open cone frustum lying on the sphere of radius R + lift. */
+    const band = (rInner, rOuter, lift, color, o = {}) => {
+      const rad = R + lift;
+      const yLo = yOn(rad, rOuter);
+      const yHi = yOn(rad, rInner);
+      b.cyl(0, PL(yLo), 0, rOuter, PL(yHi - yLo), color, {
+        rTop: rInner, open: true, segments: SEG, side: THREE.DoubleSide, ...o,
+      });
+    };
+
+    surfaceFrame(b, DISH.lon, DISH.lat, 0);
+
+    // Crater wall: an outward-flaring funnel from the dish floor up through the
+    // hole in the hull, double sided so the inside of the crater is visible.
+    b.cyl(0, PL(yFloor), 0, floorR, PL(yRim - yFloor + 1.4), dark, {
+      rTop: rim, open: true, segments: SEG, side: THREE.DoubleSide,
+    });
+    // Concave dish floor, and a ribbed collector ring just inside the wall.
+    b.dish(0, PL(yFloor - depth * 0.42), 0, floorR, PL(depth * 0.42), dark, { segments: SEG });
+    b.cyl(0, PL(yFloor - 0.4), 0, floorR * 1.02, PL(1.1), metal, {
+      rTop: floorR * 0.96, open: true, segments: SEG, side: THREE.DoubleSide,
+    });
+
+    // Stepped collar hiding the punched seam: a wide lower step, a riser, and a
+    // narrow upper lip that overhangs the crater mouth.
+    const mid = rim + (collar - rim) * 0.55;
+    band(mid, collar, 0.5, hull);
+    b.cyl(0, PL(yOn(R + 0.5, mid)), 0, mid, PL(yOn(R + 2.0, mid) - yOn(R + 0.5, mid)), dark, {
+      open: true, segments: SEG, side: THREE.DoubleSide,
+    });
+    band(rim - 0.6, mid, 2.0, hull);
+    b.cyl(0, PL(yOn(R + 2.0, rim - 0.6) - 1.6), 0, rim - 0.6, PL(1.6), metal, {
+      open: true, segments: SEG, side: THREE.DoubleSide,
+    });
+
+    // Focusing spar cross: four arms from the crater lip down to the emitter.
+    const sparY = yFloor + depth * 0.62;
     for (let k = 0; k < 4; k++) {
       const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
       b.bar(
-        [0, -dd * PLATE + R * 0.02, 0],
-        [Math.cos(a) * spar, R * 0.006, Math.sin(a) * spar],
-        R * 0.011,
+        [0, sparY * PITCH, 0],
+        [Math.cos(a) * rim * 0.99 * PITCH, (yRim + 0.5) * PITCH, Math.sin(a) * rim * 0.99 * PITCH],
+        R * 0.014,
         metal
       );
     }
+    // Eight tributary emitters standing on the dish floor.
     for (let k = 0; k < 8; k++) {
       const a = (k / 8) * Math.PI * 2;
-      const rr = r * 0.72;
-      const yy = -dd + dd * Math.pow(0.72, 2) + 0.6;
-      b.cyl(Math.cos(a) * rr, yy, Math.sin(a) * rr, R * 0.022, PL(R * 0.02), metal, { segments: 10 });
-      b.cyl(Math.cos(a) * rr, yy + PL(R * 0.02), Math.sin(a) * rr, R * 0.014, PL(R * 0.012), COLORS.transGreen, {
+      const rr = floorR * 0.66;
+      const yy = yFloor - depth * 0.42 + depth * 0.42 * Math.pow(0.66, 2);
+      b.cyl(Math.cos(a) * rr, PL(yy), Math.sin(a) * rr, R * 0.02, PL(R * 0.03), metal, { segments: 10 });
+      b.cyl(Math.cos(a) * rr, PL(yy + R * 0.03), Math.sin(a) * rr, R * 0.013, PL(R * 0.014), COLORS.transGreen, {
         segments: 10, finish: 'glow', emissive: 0x9dff7a, emissiveIntensity: 1.8,
       });
     }
-    // central emitter
-    b.cyl(0, -dd - 0.2, 0, r * 0.2, PL(R * 0.035), dark, { segments: 16 });
-    b.cyl(0, -dd - 0.2 + PL(R * 0.035), 0, r * 0.13, PL(R * 0.018), COLORS.transGreen, {
-      segments: 16, finish: 'glow', emissive: 0x9dff7a, emissiveIntensity: 2.2,
+    // Central emitter stack.
+    const yEm = yFloor - depth * 0.42;
+    b.cyl(0, PL(yEm), 0, floorR * 0.3, PL(depth * 0.55), dark, { segments: 18 });
+    b.cyl(0, PL(yEm + depth * 0.55), 0, floorR * 0.2, PL(depth * 0.2), metal, { segments: 18 });
+    b.cyl(0, PL(yEm + depth * 0.75), 0, floorR * 0.13, PL(R * 0.02), COLORS.transGreen, {
+      segments: 18, finish: 'glow', emissive: 0x9dff7a, emissiveIntensity: 2.2,
     });
     b.pop();
-    // shadow ring so the crater edge reads even in flat light
-    surfaceFrame(b, lon, lat, R - 0.05);
-    b.torus(0, -0.3, 0, r * 1.3, R * 0.006, shadow, { seg: 40 });
-    b.pop();
+
+    // Chunky greeble blocks bedded into the collar so the ring is not a plain
+    // smooth donut. Each is placed tangent to the hull at its own lon/lat.
+    const u = new THREE.Vector3(0, 1, 0).cross(dishDir).normalize();
+    const w = new THREE.Vector3().crossVectors(dishDir, u).normalize();
+    const p = new THREE.Vector3();
+    const nBlock = Math.round(46 * detail);
+    for (let i = 0; i < nBlock; i++) {
+      const th = (i / nBlock) * Math.PI * 2;
+      const ring = hash11(i, 401) > 0.5;
+      const rho = ring ? mid + (collar - mid) * 0.5 : rim + (mid - rim) * 0.45;
+      const alpha = Math.asin(THREE.MathUtils.clamp(rho / R, -1, 1));
+      p.copy(dishDir).multiplyScalar(Math.cos(alpha));
+      p.addScaledVector(u, Math.cos(th) * Math.sin(alpha));
+      p.addScaledVector(w, Math.sin(th) * Math.sin(alpha));
+      const { lon, lat } = dirToLonLat(p.normalize());
+      surfaceFrame(b, lon, lat, R + (ring ? 0.5 : 2.0) - 0.1);
+      b.rotateY(th + (ring ? 0 : Math.PI / 2));
+      const ww = 2 + Math.floor(hash11(i, 419) * 3);
+      const dd2 = 2 + Math.floor(hash11(i, 431) * 4);
+      b.box(-ww / 2, 0, -dd2 / 2, ww, dd2, 1 + Math.floor(hash11(i, 443) * 3),
+        hash11(i, 457) > 0.6 ? metal : dark, { studs: false });
+      b.pop();
+    }
   }
 
   sphereShell();
@@ -1226,8 +1335,10 @@ export async function buildDeathStar(opts = {}) {
   return finish(group, {
     radius: R,
     trenchY: 0,
-    dishCenter: dishDir.clone().multiplyScalar((R - DISH.depth * 0.6) * PITCH),
-    dishRadius: DISH.r * PITCH,
+    // The emitter at the bottom of the crater, plus the axis it fires along.
+    dishCenter: dishDir.clone().multiplyScalar(yFloor * PITCH),
+    dishNormal: dishDir.clone(),
+    dishRadius: CRATER.rim * PITCH,
     enginePoints: [],
     gunPoints: [],
     parts: mesh.userData.parts,

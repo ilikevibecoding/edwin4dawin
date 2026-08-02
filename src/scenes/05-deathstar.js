@@ -137,10 +137,12 @@ export async function build(ctx) {
       fov: [[T_HANGAR, 50], [T_LAUNCH, 46]],
       handheld: 0.09,
     },
+    // Reverse angle from down-range, looking back at the deck: the fighters
+    // light up, come at the lens, and the camera tilts up to follow them out.
     {
       start: T_LAUNCH,
-      pos: [[T_LAUNCH, [-32, 3.0, 12]], [T_SPACE, [-27, 8.5, 22]]],
-      look: [[T_LAUNCH, [-2, 4.0, 16]], [15.2, [0, 11, 42]], [T_SPACE, [0, 26, 92]]],
+      pos: [[T_LAUNCH, [-30, 2.8, 20]], [T_SPACE, [-25, 7.5, 27]]],
+      look: [[T_LAUNCH, [-7, 4.2, -6]], [14.9, [-2, 7, 18]], [T_SPACE, [0, 22, 76]]],
       fov: [[T_LAUNCH, 44], [T_SPACE, 50]],
       shake: [[T_LAUNCH, 0], [T_LAUNCH + 0.35, 0.16], [T_SPACE, 0.05]],
     },
@@ -526,7 +528,7 @@ async function buildHangar(chars) {
   for (let i = 0; i < SHIP_X.length; i++) {
     const src = await makeXWing(i);
     src.userData.setSFoils(0);
-    const ship = collapse(src);
+    const ship = collapse(src, 1, 0.16);
     ship.userData.enginePoints = src.userData.enginePoints.map((p) => p.clone());
     ship.position.set(SHIP_X[i], 2.4, -6 + i * 3);
     group.add(ship);
@@ -554,9 +556,11 @@ async function buildHangar(chars) {
         const spool = ease.range(t, t0 - 1.6, t0 - 0.1);
         const up = ease.range(t, t0, t0 + 3.4);
         const run = ease.outCubic(up);
-        ship.position.y = 2.4 + run * 9 + ease.inCubic(up) * 22;
-        ship.position.z = -6 + i * 3 + ease.inQuad(up) * 150;
-        ship.rotation.x = -run * 0.26;
+        // Lift clear of the deck, then accelerate out of the door. The opening
+        // is 24 units tall, so the climb has to stay well under that.
+        ship.position.y = 2.4 + run * 6.5 + ease.inCubic(up) * 5;
+        ship.position.z = -6 + i * 3 + ease.inQuad(up) * 190;
+        ship.rotation.x = -run * 0.2;
         ship.rotation.z = Math.sin(t * 1.4 + i) * 0.05 - run * 0.12 * (i - 1);
         const throttle = spool * (0.35 + 0.65 * up) * (1 + 0.5 * ease.pulse(t, t0, 0.2, 0.4, 0.8));
         ship.updateMatrixWorld();
@@ -761,7 +765,7 @@ async function buildApproach() {
     capital = null;
   }
   const station = capital?.buildDeathStar
-    ? await capital.buildDeathStar({ radius: STATION_R, detail: 1, lit: true })
+    ? await capital.buildDeathStar({ radius: STATION_R, detail: 0.7, lit: true })
     : fallbackStation(STATION_R);
   group.add(station);
 
@@ -775,7 +779,7 @@ async function buildApproach() {
   group.add(engines.object);
   const proto = await makeXWing(0);
   proto.userData.setSFoils(0);
-  const flat = collapse(proto, 0.78);
+  const flat = collapse(proto, 0.78, 0.45);
   const enginePoints = proto.userData.enginePoints.map((p) => p.clone());
   for (let i = 0; i < 12; i++) {
     const ship = i === 0 ? flat : cloneCollapsed(flat);
@@ -787,16 +791,18 @@ async function buildApproach() {
     squadron.push(ship);
   }
 
-  // The whole run in, as one path. Radius falls from 455 to 180 while the
-  // heading swings from high over the northern hemisphere down toward the
-  // equator, so the last shot looks along the trench.
+  // The whole run in, as one path. Distance from the station's centre falls
+  // from 620 to 200 (its radius is 150) while the heading swings down from high
+  // over the northern hemisphere toward the equator, so the last shot looks
+  // along the trench. The approach is on the key light's side of the sphere;
+  // fly in over the terminator and the finish is a black frame.
   const PATH = [
-    [-282, 250, 255],
-    [-227, 196, 265],
-    [-170, 142, 258],
-    [-118, 94, 236],
-    [-76, 56, 204],
-    [-45, 29, 172],
+    [273, 273, 485],
+    [220, 214, 432],
+    [171, 160, 372],
+    [128, 115, 311],
+    [91, 78, 248],
+    [60, 48, 185],
   ];
   const lead = new THREE.Vector3();
   const fwd = new THREE.Vector3();
@@ -813,8 +819,10 @@ async function buildApproach() {
     fwd.set(...ease.spline(PATH, Math.min(1, u + 0.02))).sub(lead);
     if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
     fwd.normalize();
-    right.crossVectors(_UP, fwd).normalize();
-    up.crossVectors(fwd, right).normalize();
+    // Screen-space basis: +right is frame-right for a camera looking along fwd,
+    // so a positive `side` offset slides the subject toward frame-left.
+    right.crossVectors(fwd, _UP).normalize();
+    up.crossVectors(right, fwd).normalize();
     return u;
   };
 
@@ -826,11 +834,11 @@ async function buildApproach() {
    */
   const SPACE_SHOTS = [
     // the hull nearly filling the frame, the squadron specks against its limb
-    { start: T_SPACE, end: 21.3, back: [150, 128], side: [-30, -22], rise: [16, 11], mix: 0.55, fov: [30, 29] },
+    { start: T_SPACE, end: 21.3, back: [120, 100], side: [24, 17], rise: [-2, -5], mix: 0.42, fov: [30, 29] },
     // in close: near enough to read the fighters, hull curving away behind
-    { start: 21.3, end: 24.6, back: [50, 42], side: [-24, -14], rise: [8, 5], mix: 0.2, fov: [44, 42] },
+    { start: 21.3, end: 24.6, back: [50, 42], side: [18, 11], rise: [-5, -7], mix: 0.2, fov: [44, 42] },
     // the dive: over the top of the formation, surface swallowing the frame
-    { start: 24.6, end: 28.6, back: [84, 66], side: [26, 16], rise: [28, 20], mix: 0.42, fov: [48, 50] },
+    { start: 24.6, end: 28.6, back: [82, 64], side: [17, 12], rise: [12, 8], mix: 0.3, fov: [46, 50] },
   ];
 
   return {
@@ -861,7 +869,9 @@ async function buildApproach() {
     },
     update(t) {
       stars.update(t);
-      station.rotation.y = -0.045 + t * 0.004;
+      // Yawed so the superlaser crater sits three-quarters-on to the approach.
+      // Face-on it flattens into a pale disc and stops reading as a crater.
+      station.rotation.y = 0.78 + t * 0.004;
       const u = frameAt(t);
 
       let n = 0;
@@ -1046,7 +1056,7 @@ async function makeXWing(i) {
  * attribute collapses it to three: hull, glow and glass. Roughness and
  * metalness flatten to plain ABS, which is invisible at these distances.
  */
-function collapse(root, tint = 1) {
+function collapse(root, tint = 1, glowTint = 1) {
   root.updateWorldMatrix(true, true);
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const local = new THREE.Matrix4();
@@ -1063,8 +1073,11 @@ function collapse(root, tint = 1) {
     }
     if (!g.attributes.normal) g.computeVertexNormals();
 
+    // A baked glow is a flat unlit colour, so a kit part authored at emissive
+    // intensity 2.2 clips to pure white. `glowTint` pulls the engine nozzles
+    // back to something that reads as cold metal until the plumes light them.
     const emissive = m.emissive && m.emissiveIntensity > 0 && m.emissive.getHex() !== 0x000000;
-    if (emissive) c.copy(m.emissive).multiplyScalar(Math.min(1.8, m.emissiveIntensity ?? 1));
+    if (emissive) c.copy(m.emissive).multiplyScalar(Math.min(1.8, m.emissiveIntensity ?? 1) * glowTint);
     else c.copy(m.color).multiplyScalar(tint);
 
     const count = g.attributes.position.count;

@@ -58,6 +58,10 @@
     <path d="M40 240 L230 240" stroke-width="2" fill="none"/>
     <path d="M218 232 L230 240 L218 248" fill="none"/>
 
+    <!-- leader from the upper callout down to the trench lip -->
+    <path d="M612 78 L578 100 L552 116" stroke-width="2" fill="none"/>
+    <circle cx="552" cy="116" r="5" stroke-width="2" fill="none"/>
+
   </g>
 
   <!-- annotation blocks -->
@@ -70,9 +74,14 @@
   <rect x="646" y="362" width="98" height="9" fill="#7fe8ff"/>
   <rect x="40" y="204" width="76" height="9" fill="#7fe8ff"/>
   <rect x="40" y="220" width="52" height="9" fill="#7fe8ff"/>
+  <!-- upper callout, balances the sheet against the reactor at lower centre -->
+  <rect x="624" y="38" width="140" height="9" fill="#7fe8ff"/>
+  <rect x="624" y="54" width="96" height="9" fill="#7fe8ff"/>
+  <rect x="624" y="70" width="120" height="9" fill="#7fe8ff"/>
   <g stroke="#7fe8ff" stroke-width="2">
     <rect x="30" y="318" width="150" height="76" fill="none"/>
     <rect x="636" y="318" width="134" height="60" fill="none"/>
+    <rect x="612" y="26" width="168" height="64" fill="none"/>
   </g>
 
 </svg>
