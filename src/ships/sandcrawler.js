@@ -45,6 +45,7 @@ const sternAt = (y) => STERN_Z + Math.max(0, y - HULL_Y0) * 0.10;
 
 const RAMP_W = 15.0;
 const RAMP_LEN = 15.5;        // long enough to reach the sand when lowered
+const RAMP_T = 1.2;           // panel hangs this far below its own hinge plane
 const HINGE_Y = HULL_Y0 + 0.6;
 
 /* ------------------------------------------------------------------ tracks */
@@ -319,7 +320,7 @@ function windows(bb) {
 function rampPanel() {
   const bb = new BrickBuilder({ studs: false, bevel: true, cullStuds: false });
   const W = RAMP_W, L = RAMP_LEN;
-  bb.brick(0, -P(3), L / 2, W, L, { h: P(3), color: RUST, studs: false });
+  bb.brick(0, -RAMP_T, L / 2, W, L, { h: RAMP_T, color: RUST, studs: false });
   for (let i = 1; i * 2.2 < L - 0.6; i++) {
     bb.brick(0, 0, i * 2.2, W - 1.2, 0.9, {
       h: P(1), color: BROWN, studs: false, tile: true, free: true,
@@ -332,7 +333,7 @@ function rampPanel() {
     b.cyl(s * (W / 2 - 1.4), -P(2), 0.2, 0.55, 2.2, { axis: 'x', color: IRON, seg: 8, stud: false });
   });
   // lip that bites into the sand
-  bb.brick(0, -P(3), L - 0.3, W - 1.0, 0.9, {
+  bb.brick(0, -RAMP_T, L - 0.3, W - 1.0, 0.9, {
     h: P(2), color: IRON, studs: false, tile: true, free: true,
   });
 
@@ -394,13 +395,19 @@ function buildSandcrawler() {
   model.userData.nodes = nodes;
 
   /*
-   * Rotating the panel about X sends its tip, local (0, 0, L), to
-   * (y, z) = (-L sin phi, L cos phi).
-   *   open   -- tip drops exactly HINGE_Y to reach the sand
-   *   stowed -- tip runs up the bow, so y : z has to match the rake 1 : -RAKE,
-   *             which puts phi in the third quadrant
+   * Rotating the panel about X by phi sends its far underside corner, local
+   * (0, -RAMP_T, L), down by RAMP_T cos phi + L sin phi.
+   *   open   -- that drop equals the hinge's height above the sand, so the
+   *             ramp lies on the ground rather than through it. Solving
+   *             T cos phi + L sin phi = h gives the asin form below.
+   *   stowed -- the panel runs up the bow, so its y : z has to match the rake
+   *             1 : -RAKE, which puts phi in the third quadrant.
+   * The hinge height is read after recentring, since dropping the tracks onto
+   * y = 0 lifts everything by the height of half a track link.
    */
-  const OPEN = Math.asin(Math.min(0.99, hingeY / RAMP_LEN));
+  const hingeAboveSand = hingeY + inner.position.y;
+  const reach = Math.hypot(RAMP_T, RAMP_LEN);
+  const OPEN = Math.asin(Math.min(0.999, hingeAboveSand / reach)) - Math.atan2(RAMP_T, RAMP_LEN);
   const STOWED = Math.atan2(RAKE, 1) - Math.PI;
   let ramped = 0;
   const apply = () => { pivot.rotation.x = THREE.MathUtils.lerp(STOWED, OPEN, ramped); };

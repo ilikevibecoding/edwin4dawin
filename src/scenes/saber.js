@@ -25,11 +25,11 @@ export default {
     root.add(hut);
 
     // warm daylight through the doorway
-    const shaft = lightShaft(2.2, 7.5, 16, 0xffd9a0, 0.09);
+    const shaft = lightShaft(1.4, 4.4, 14, 0xffd9a0, 0.035);
     shaft.position.set(-6, 8, 6);
     shaft.rotation.z = 0.35;
     root.add(shaft);
-    const key = new THREE.PointLight(0xffcf96, 90, 44, 2);
+    const key = new THREE.PointLight(0xffcf96, 26, 40, 2);
     key.position.set(-5, 9, 8);
     root.add(key);
 
@@ -47,7 +47,7 @@ export default {
     const saber = new Lightsaber({ color: C.transLightBlue, coreColor: 0xeaf6ff, len: 4.6 });
     root.add(saber.object3D);
 
-    const glowFromBlade = new THREE.PointLight(0x9fd8ff, 0, 30, 2);
+    const glowFromBlade = new THREE.PointLight(0x9fd8ff, 0, 26, 2);
     root.add(glowFromBlade);
 
     const motes = new Motes(ctx.scene, { count: 130, box: [16, 10, 16], size: 0.055, color: 0xffe0b8, seed: 44, speed: 0.28 });
@@ -73,7 +73,7 @@ export default {
     });
     shots.add({          // 3. ignition, close on the blade
       t: IGNITE - 0.7, dur: 4.2, fov: 30, ease: 'outQuad',
-      pos: [4.6, 5.0, 7.2], to: [3.6, 5.6, 6.2],
+      pos: [5.6, 5.2, 9.0], to: [4.4, 5.6, 7.6],
       look: () => saber.object3D.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 2.0, 0)),
       handheld: 0.25,
     });
@@ -85,7 +85,7 @@ export default {
     });
     shots.add({          // 5. Luke's face, resolved
       t: k4 - 0.6, dur: ctx.dur - (k4 - 0.6), fov: 28, ease: 'inOutQuad',
-      pos: [-1.6, 5.4, 7.4], to: [-0.8, 5.3, 6.4],
+      pos: [-2.6, 5.6, 9.2], to: [-1.6, 5.5, 8.0],
       look: () => luke.position.clone().add(new THREE.Vector3(0, 4.5, 0)),
       handheld: 0.2,
     });
@@ -93,6 +93,7 @@ export default {
     return {
       root,
       shots,
+      exposure: 1.15,
       grade: { uVignette: 0.5, uGrain: 0.036, uSaturation: 1.05 },
       update(t, dt) {
         const of = obiwan.userData.fig;
@@ -129,9 +130,9 @@ export default {
         saber.update(dt, t);
         const bladeMid = saber.object3D.position.clone().add(new THREE.Vector3(0, 2.4 * ign, 0));
         glowFromBlade.position.copy(bladeMid);
-        glowFromBlade.intensity = 140 * ign * (0.9 + Math.sin(t * 27) * 0.08);
+        glowFromBlade.intensity = 30 * ign * (0.9 + Math.sin(t * 27) * 0.08);
 
-        key.intensity = 90 * (0.96 + Math.sin(t * 0.7) * 0.04);
+        key.intensity = 26 * (0.96 + Math.sin(t * 0.7) * 0.04);
         motes.update(t);
         hut.userData.update?.(t, dt);
       },

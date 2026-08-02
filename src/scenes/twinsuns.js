@@ -27,7 +27,7 @@ export default {
     setupScene(ctx, 'sunset', {
       background: 0xd97a3c,
       envIntensity: 0.33,
-      fog: [0xd98a54, 70, 420],
+      fog: [0xb06a3c, 190, 820],
       shadowSize: 70,
     });
 
@@ -86,6 +86,7 @@ export default {
     return {
       root,
       shots,
+      exposure: 0.85,
       grade: { uVignette: 0.4, uGrain: 0.028, uSaturation: 1.16, uContrast: 1.06 },
       update(t, dt) {
         faceCamera(suns, ctx.camera);
@@ -113,7 +114,7 @@ export default {
           lights.key.color.setHex(set > 0.55 ? 0xff6a2a : 0xff9b4a);
           if (lights.fill) lights.fill.intensity = lerp(0.85, 0.4, set);
         }
-        if (ctx.scene.fog) ctx.scene.fog.color.setHex(set > 0.55 ? 0xa8532c : 0xd98a54);
+        if (ctx.scene.fog) ctx.scene.fog.color.setHex(set > 0.55 ? 0x8a4426 : 0xb06a3c);
         if (ctx.scene.background?.setHex) ctx.scene.background.setHex(set > 0.55 ? 0xa8532c : 0xd97a3c);
 
         dust.update(t);

@@ -24,11 +24,11 @@ export default {
     root.add(hall);
 
     for (const x of [-16, 16]) {
-      const s = lightShaft(3, 12, 30, 0xfff0d0, 0.06);
+      const s = lightShaft(2.4, 9, 30, 0xfff0d0, 0.028);
       s.position.set(x, 16, -20);
       root.add(s);
     }
-    const keyA = new THREE.PointLight(0xfff2dc, 220, 130, 2);
+    const keyA = new THREE.PointLight(0xfff2dc, 70, 130, 2);
     keyA.position.set(0, 26, -46);
     root.add(keyA);
 
@@ -65,7 +65,7 @@ export default {
     });
     shots.add({          // 2. the medal, close
       t: f2 - 1.2, dur: 8.0, fov: 30, ease: 'inOutQuad',
-      pos: [-4.4, 6.4, -21], to: [-3.2, 6.2, -24],
+      pos: [-7.0, 6.6, -19], to: [-5.6, 6.4, -22],
       look: () => luke.position.clone().add(new THREE.Vector3(0, 4.6, 0)),
       handheld: 0.18,
     });
@@ -78,6 +78,7 @@ export default {
     return {
       root,
       shots,
+      exposure: 1.45,
       grade: { uVignette: 0.36, uGrain: 0.026, uSaturation: 1.04 },
       update(t, dt) {
         const bow = clamp(ramp(t, f2 - 0.4, f2 + 1.6), 0, 1);

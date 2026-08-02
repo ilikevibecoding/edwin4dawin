@@ -26,9 +26,9 @@ export default {
     const root = new THREE.Group();
     const rng = new RNG(818);
     setupScene(ctx, 'desert', {
-      background: 0xe0b070,
+      background: 0xd7a266,
       envIntensity: 0.39,
-      fog: [0xe6bd85, 90, 460],
+      fog: [0xc79a63, 210, 900],
       shadowSize: 90,
     });
 
@@ -86,6 +86,7 @@ export default {
     return {
       root,
       shots,
+      exposure: 0.8,
       grade: { uVignette: 0.34, uGrain: 0.03, uSaturation: 1.12 },
       update(t, dt) {
         faceCamera(suns, ctx.camera);
@@ -136,8 +137,8 @@ export default {
           if (sun.fill) sun.fill.intensity = lerp(1.05, 0.55, dusk);
         }
         if (ctx.scene.fog) {
-          ctx.scene.fog.color.setHex(dusk > 0.5 ? 0xd08a52 : 0xe6bd85);
-          ctx.scene.background?.setHex?.(dusk > 0.5 ? 0xc47a48 : 0xe0b070);
+          ctx.scene.fog.color.setHex(dusk > 0.5 ? 0xa9703f : 0xc79a63);
+          ctx.scene.background?.setHex?.(dusk > 0.5 ? 0xb06a3c : 0xd7a266);
         }
 
         crawler.position.x = lerp(120, 96, dusk);

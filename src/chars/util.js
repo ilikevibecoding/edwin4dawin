@@ -116,6 +116,37 @@ export function makeCloth(root) {
   return softenGloss(root, { clearcoat: 0, clearcoatRoughness: 1, env: 0.22, roughness: 0.92 });
 }
 
+const metalCache = new Map();
+
+/**
+ * Pull a near-pure metal back to a half-metal.
+ *
+ * pearlGold is in METAL_COLORS, so mat() gives it metalness 0.9 and the part shows
+ * almost nothing but the environment: C-3PO's flat-fronted legs mirrored the dark
+ * studio backdrop at rgb(125,81,9) while his bevel-normalled arms caught the key
+ * light at rgb(247,228,146) -- same colour, same material, unrecognisably
+ * different. Restoring a diffuse term makes one gold read across the whole figure.
+ * softenGloss cannot do this: MeshStandardMaterial has no clearcoat to soften.
+ */
+export function temperMetal(root, { metalness = 0.42, roughness = 0.44 } = {}) {
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material || Array.isArray(o.material)) return;
+    const src = o.material;
+    if (!('metalness' in src) || src.metalness < 0.5 || src.userData?.tempered) return;
+    const k = `${src.uuid}|${metalness}|${roughness}`;
+    let m = metalCache.get(k);
+    if (!m) {
+      m = src.clone();
+      m.metalness = metalness;
+      m.roughness = roughness;
+      m.userData = { ...m.userData, tempered: k };
+      metalCache.set(k, m);
+    }
+    o.material = m;
+  });
+  return root;
+}
+
 /** Triangle count of a subtree -- used to keep characters inside budget. */
 export function triCount(root) {
   let n = 0;

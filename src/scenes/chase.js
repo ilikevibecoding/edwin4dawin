@@ -49,7 +49,7 @@ export default {
     const sparks = new SpritePool(ctx.scene, { max: 60, texture: flashTexture() });
 
     // Tractor beam cone drawn under the destroyer's hangar mouth.
-    const beamGeo = new THREE.CylinderGeometry(26, 5, 1, 20, 1, true);
+    const beamGeo = new THREE.CylinderGeometry(17, 4, 1, 20, 1, true);
     const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({
       color: 0x8fd8ff, transparent: true, opacity: 0, depthWrite: false,
       blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
@@ -133,6 +133,7 @@ export default {
     return {
       root,
       shots,
+      exposure: 1.75,
       grade: { uVignette: 0.4, uGrain: 0.028 },
       slateAt: (t) => ({ text: t < 4 ? '' : '', opacity: 0 }),
       update(t, dt) {
@@ -191,7 +192,7 @@ export default {
 
         // tractor beam
         const tb = env(t, TRACTOR, ctx.dur - 3.2, 1.6, 1.4);
-        beam.material.opacity = tb * 0.30;
+        beam.material.opacity = tb * 0.11;
         if (tb > 0.01) {
           const top = destroyer.position.clone().add(new THREE.Vector3(-10, -14, 60));
           const bottom = corvette.position.clone();

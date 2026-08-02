@@ -10,7 +10,8 @@
     "shot": "node tools/shot.mjs",
     "capture": "node tools/capture.mjs",
     "audio": "node tools/build-audio.mjs",
-    "frame": "node tools/frame.mjs"
+    "frame": "node tools/frame.mjs",
+    "sheet": "node tools/sheet.mjs"
   },
   "repository": {
     "type": "git",

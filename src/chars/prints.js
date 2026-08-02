@@ -154,30 +154,36 @@ export const FACE_PILOT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
 
 /** Obi-Wan the hermit: white beard, hooded eyes, weathered. */
 export const FACE_OBIWAN = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 256">
-  <!-- Beard: jaw to jaw, past the chin, with sideburns up to the temples. The
-       greys are kept well off white; drawn near #e8e8e2 the studio rig clipped
-       the whole beard to one flat white blob and every strand disappeared. -->
-  <path d="M192 62 L204 56 L206 120 Q206 168 226 196 Q256 224 286 196 Q306 168 306 120
-           L308 56 L320 62 L318 140 Q312 206 256 240 Q200 206 194 140 Z" fill="#cbcbc3"/>
-  <path d="M206 118 Q206 166 226 194 Q256 220 286 194 Q306 166 306 118
-           Q286 136 256 136 Q226 136 206 118 Z" fill="#b4b4ac"/>
-  <!-- moustache -->
-  <path d="M216 138 Q256 128 296 138 Q292 168 256 162 Q220 168 216 138 Z" fill="#dcdcd4"/>
-  <path d="M256 140 Q248 152 256 160" fill="none" stroke="#9a9a92" stroke-width="3"/>
+  <!-- Beard, as one U: two strips of hair down in front of the ears joined by a
+       nearly level moustache line at y 126. Drawn instead with a scooped top edge
+       the boundary between skin and beard read as one enormous grin. The greys are
+       kept well off white; near #e8e8e2 the studio rig clipped the whole beard to a
+       flat blob and every strand disappeared. -->
+  <path d="M192 58 L212 52 L214 126 L298 126 L300 52 L320 58 L318 150
+           Q310 214 256 244 Q202 214 194 150 Z" fill="#cbcbc3"/>
+  <!-- shadow under the mouth so the chin beard separates from the moustache -->
+  <path d="M212 152 Q256 146 300 152 L298 174 Q288 224 256 240 Q224 224 214 174 Z"
+        fill="#b3b3ab"/>
+  <!-- moustache, dipped at the philtrum and drooping past the corners of the mouth -->
+  <path d="M212 128 Q234 118 254 132 Q274 118 300 128 Q298 152 256 148 Q214 152 212 128 Z"
+        fill="#deded6"/>
+  <!-- mouth: a thin closed line, all that shows through the whiskers -->
+  <path d="M234 155 Q256 161 278 155" fill="none" stroke="#4a3628" stroke-width="4.5"
+        stroke-linecap="round"/>
   <!-- beard strands -->
-  <g stroke="#94948c" stroke-width="3" fill="none">
-    <path d="M228 176 Q234 202 244 220"/>
-    <path d="M256 178 L256 228"/>
-    <path d="M284 176 Q278 202 268 220"/>
-    <path d="M212 130 Q214 168 228 190"/>
-    <path d="M300 130 Q298 168 284 190"/>
+  <g stroke="#93938b" stroke-width="3" fill="none" stroke-linecap="round">
+    <path d="M230 178 Q234 208 242 226"/>
+    <path d="M256 180 L256 234"/>
+    <path d="M282 178 Q278 208 270 226"/>
+    <path d="M204 132 Q204 172 216 200"/>
+    <path d="M308 132 Q308 172 296 200"/>
+    <path d="M226 138 Q222 142 224 146"/>
+    <path d="M286 138 Q290 142 288 146"/>
   </g>
-  <!-- mouth in the beard -->
-  <path d="M238 158 Q256 168 274 158 Q256 174 238 158 Z" fill="#4a3628"/>
   <!-- heavy brows -->
   <g stroke="#c0c0b8" stroke-width="10" stroke-linecap="round" fill="none">
-    <path d="M204 76 Q224 66 246 74"/>
-    <path d="M308 76 Q288 66 266 74"/>
+    <path d="M206 78 Q224 68 244 76"/>
+    <path d="M306 78 Q288 68 268 76"/>
   </g>
   <!-- eyes, hooded -->
   <g fill="${INK}">
@@ -187,12 +193,12 @@ export const FACE_OBIWAN = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
   <g fill="#ffffff" opacity="0.85">
     <circle cx="227" cy="100" r="3"/><circle cx="291" cy="100" r="3"/>
   </g>
-  <!-- crow's feet and creases -->
+  <!-- crow's feet, forehead lines and the nose -->
   <g stroke="#b8912a" stroke-width="3" fill="none" opacity="0.85">
-    <path d="M206 96 L214 100"/><path d="M306 96 L298 100"/>
-    <path d="M208 112 L216 110"/><path d="M304 112 L296 110"/>
-    <path d="M212 60 Q232 52 250 58"/><path d="M300 60 Q280 52 262 58"/>
-    <path d="M250 118 Q244 130 252 136"/>
+    <path d="M218 94 L224 98"/><path d="M294 94 L288 98"/>
+    <path d="M218 114 L226 112"/><path d="M294 114 L286 112"/>
+    <path d="M222 44 Q244 36 258 42"/><path d="M290 44 Q268 36 254 42"/>
+    <path d="M250 104 Q244 118 254 122"/>
   </g>
 </svg>`;
 

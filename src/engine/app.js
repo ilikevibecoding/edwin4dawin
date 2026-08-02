@@ -142,6 +142,11 @@ export class Film {
     inst.shots.apply(this.camera, local);
     this.camera.updateMatrixWorld();
 
+    // Chapters set their own exposure: a corridor at night and a desert at
+    // noon cannot share one stop.
+    const want = typeof inst.exposure === 'function' ? inst.exposure(local) : (inst.exposure ?? EXPOSURE);
+    if (this.renderer.toneMappingExposure !== want) this.renderer.toneMappingExposure = want;
+
     this.post.setScene(inst.scene, this.camera);
     const g = this.post.grade.uniforms;
     g.uFade.value = this.fadeOverride ?? this.fadeAt(t, c);

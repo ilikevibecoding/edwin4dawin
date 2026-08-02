@@ -68,9 +68,9 @@ export default {
     interior.add(holoAnchor);
     holo.position.set(0, 2.4, 0);
     holoAnchor.add(holo);
-    const cone = projectorCone(1.8, 2.4, 0x74d8ff);
+    const cone = projectorCone(1.5, 2.2, 0x74d8ff);
     holoAnchor.add(cone);
-    const holoLight = new THREE.PointLight(0x74d8ff, 0, 26, 2);
+    const holoLight = new THREE.PointLight(0x9fd0e8, 0, 22, 2);
     holoLight.position.set(0, 2.4, 0);
     holoAnchor.add(holoLight);
 
@@ -139,6 +139,7 @@ export default {
     return {
       root,
       shots,
+      exposure: 2.2,
       grade: { uVignette: 0.44, uGrain: 0.034 },
       update(t, dt) {
         const interiorOn = t < CUT + 0.02;
@@ -152,8 +153,8 @@ export default {
           const on = clamp(ramp(t, m1 + 2.6, m1 + 4.4), 0, 1);
           holo.visible = on > 0.01;
           cone.visible = on > 0.01;
-          cone.material.opacity = 0.14 * on;
-          holoLight.intensity = 34 * on * (0.85 + Math.sin(t * 31) * 0.12);
+          cone.material.opacity = 0.07 * on;
+          holoLight.intensity = 11 * on * (0.85 + Math.sin(t * 31) * 0.12);
           holo.scale.setScalar(0.15 + 0.85 * ease.outBack(on));
           holo.rotation.y = t * 0.55;
           holo.userData.update?.(t, dt);

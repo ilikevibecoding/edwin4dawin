@@ -19,9 +19,9 @@ import { num, bool, hash2i, q, GREY_PANEL, pickFrom } from './common.js';
 function deckColor(i, j, N, seed) {
   const h = hash2i(((i / 5) | 0) % N, ((j / 5) | 0) % N, seed + 5);
   const s = hash2i(i % N, j % N, seed + 6);
-  if (s < 0.07) return C.darkBluishGray;
-  if (s > 0.955) return C.veryLightGray;
-  return h < 0.34 ? C.darkBluishGray : (h < 0.78 ? C.lightBluishGray : C.veryLightGray);
+  if (s < 0.05) return C.darkBluishGray;
+  if (s > 0.94) return C.veryLightGray;
+  return h < 0.22 ? C.darkBluishGray : (h < 0.66 ? C.lightBluishGray : C.veryLightGray);
 }
 
 /** One surface tile: raised panel stack, and now and then a tower or a dish. */
@@ -34,11 +34,38 @@ function panelCell(bb, cx, cz, cell, i, j, N, seed, opts) {
   const h4 = wrap(i, j, seed + 131);
   const h5 = wrap(i, j, seed + 211);
 
-  const base = deckColor(i, j, N, seed);
-  bb.brick(cx, -PLATE, cz, cell, cell, { h: PLATE, color: base, free: true, studs: false });
+  // Macro relief: 4x4-cell blocks step up or down together, which is what
+  // stops 1600 identical-scale greebles from reading as noise. The block hash
+  // wraps on N/4 so the plate still tiles.
+  const NB = Math.max(1, N >> 2);
+  const blk = hash2i(((i >> 2) % NB + NB) % NB, ((j >> 2) % NB + NB) % NB, seed + 907);
+  const lvl = blk > 0.74 ? B(1) : (blk < 0.14 ? -P(3) : 0);
 
-  // Channels: every so often a whole cell stays bare, which reads as one of
-  // the deep service trenches criss-crossing the station.
+  // Service channels running the full width every 10 cells.
+  const channel = (i % 10 === 3) || (j % 10 === 7);
+
+  const base = deckColor(i, j, N, seed);
+  const deckY = channel ? -B(1.2) : lvl - PLATE;
+  bb.brick(cx, deckY, cz, cell, cell, {
+    h: PLATE, color: channel ? C.darkGray : base, free: true, studs: false,
+  });
+  if (lvl > 0 && !channel) {
+    bb.brick(cx, -PLATE, cz, cell, cell, { h: lvl, color: C.darkBluishGray, free: true, studs: false });
+  }
+
+  if (channel) {
+    // Pipes and conduit running along the bottom of the channel.
+    const along = (i % 10 === 3);
+    for (let k = -1; k <= 1; k++) {
+      const off = k * cell * 0.24;
+      const c = k === 0 ? C.flatSilver : C.darkBluishGray;
+      if (along) bb.brick(cx + off, deckY + PLATE, cz, 1.1, cell, { h: 1.0, color: c, free: true, studs: false });
+      else bb.brick(cx, deckY + PLATE, cz + off, cell, 1.1, { h: 1.0, color: c, free: true, studs: false });
+    }
+    return;
+  }
+
+  // Every so often a cell stays bare, which breaks up the grid.
   if (h0 > 0.9) return;
 
   const m = cell * (0.06 + h3 * 0.1);           // margin keeps the panel in-cell
@@ -46,7 +73,7 @@ function panelCell(bb, cx, cz, cell, i, j, N, seed, opts) {
   const d = q(cell - m * 2 - (h1 < 0.3 ? cell * 0.3 : 0), 0.1);
   const rise = q(P(1 + Math.floor(h2 * 3)), 0.1);
   const col = pickFrom(GREY_PANEL, h1);
-  bb.brick(cx + (h3 - 0.5) * m, 0, cz + (h4 - 0.5) * m, w, d, {
+  bb.brick(cx + (h3 - 0.5) * m, lvl, cz + (h4 - 0.5) * m, w, d, {
     h: rise, color: col, free: true, studs: false,
   });
 
@@ -54,7 +81,7 @@ function panelCell(bb, cx, cz, cell, i, j, N, seed, opts) {
   if (h2 > 0.32) {
     const w2 = q(w * (0.3 + h4 * 0.42), 0.1);
     const d2 = q(d * (0.32 + h3 * 0.4), 0.1);
-    bb.brick(cx + (h1 - 0.5) * (w - w2) * 0.7, rise, cz + (h5 - 0.5) * (d - d2) * 0.7, w2, d2, {
+    bb.brick(cx + (h1 - 0.5) * (w - w2) * 0.7, lvl + rise, cz + (h5 - 0.5) * (d - d2) * 0.7, w2, d2, {
       h: q(P(1 + Math.floor(h5 * 4)), 0.1), color: pickFrom(GREY_PANEL, h4), free: true, studs: false,
     });
   }
@@ -62,35 +89,37 @@ function panelCell(bb, cx, cz, cell, i, j, N, seed, opts) {
   // Ribbed strip: three thin plates in a row, the classic greeble filler.
   if (h3 < 0.22) {
     for (let k = -1; k <= 1; k++) {
-      bb.brick(cx + k * cell * 0.24, rise, cz, q(cell * 0.14, 0.1), q(d * 0.8, 0.1), {
+      bb.brick(cx + k * cell * 0.24, lvl + rise, cz, q(cell * 0.14, 0.1), q(d * 0.8, 0.1), {
         h: P(1), color: C.darkBluishGray, free: true, studs: false,
       });
     }
   }
 
   if (!opts.detail) return;
+  const y = lvl + rise;
 
-  // Sensor tower. Rare, and short enough that a ship at y=10 clears it.
+  // Sensor tower. Rare, and short enough that a ship at y = 10 clears it.
   if (h4 > 0.972) {
     const th = B(2 + Math.floor(h5 * 4));
-    bb.brick(cx, rise, cz, q(cell * 0.3, 0.1), q(cell * 0.3, 0.1), {
+    bb.brick(cx, y, cz, q(cell * 0.3, 0.1), q(cell * 0.3, 0.1), {
       h: th, color: C.lightBluishGray, free: true, studs: false,
     });
-    bb.brick(cx, rise + th, cz, q(cell * 0.44, 0.1), q(cell * 0.44, 0.1), {
+    bb.brick(cx, y + th, cz, q(cell * 0.44, 0.1), q(cell * 0.44, 0.1), {
       h: P(2), color: C.darkBluishGray, free: true, studs: false,
     });
-    bb.cyl(cx, rise + th + P(2), cz, 0.28, B(1.5), { color: C.flatSilver, finish: FINISH.METAL, seg: 8, stud: false });
+    bb.cyl(cx, y + th + P(2), cz, 0.28, B(1.5), { color: C.flatSilver, finish: FINISH.METAL, seg: 8, stud: false });
   } else if (h5 > 0.966) {
     // Dish emplacement.
     const r = cell * 0.22;
-    bb.cyl(cx, rise, cz, q(r * 0.42, 0.1), B(1), { color: C.darkBluishGray, seg: 10, stud: false });
-    bb.sphere(cx, rise + B(1), cz, q(r, 0.1), {
+    bb.cyl(cx, y, cz, q(r * 0.42, 0.1), B(1), { color: C.darkBluishGray, seg: 10, stud: false });
+    bb.sphere(cx, y + B(1), cz, q(r, 0.1), {
       color: C.veryLightGray, dome: true, seg: 12, rings: 4, sy: 0.5,
     });
   } else if (h1 > 0.955) {
     // Vent grille glowing from inside the hull.
-    bb.brick(cx, rise, cz, q(cell * 0.3, 0.1), q(cell * 0.18, 0.1), {
+    bb.brick(cx, y, cz, q(cell * 0.3, 0.1), q(cell * 0.18, 0.1), {
       h: P(0.6), color: C.transNeonOrange, finish: FINISH.GLOW, free: true, studs: false,
+      matOpts: { intensity: 1.8 },
     });
   }
 }
@@ -120,12 +149,13 @@ export function buildDeathStarSurface(opts = {}) {
 
   // Equator-style seam lines every 8 cells, in both directions. They are what
   // gives the eye a sense of scale when a ship crosses the plate.
+  // The far edge is left out: it is the same line as the near edge of the
+  // next copy, and drawing both would double the seam when the plate tiles.
   const gap = cell * 8;
-  for (let k = 0; k * gap <= size; k++) {
+  for (let k = 0; k * gap < size; k++) {
     const a = -half + k * gap;
-    if (a > half) break;
-    bb.brick(a, 0, 0, 0.9, size, { h: P(1.2), color: C.darkBluishGray, free: true, studs: false });
-    bb.brick(0, 0, a, size, 0.9, { h: P(1.2), color: C.darkBluishGray, free: true, studs: false });
+    bb.brick(a, B(1), 0, 0.9, size, { h: P(1.2), color: C.darkBluishGray, free: true, studs: false });
+    bb.brick(0, B(1), a, size, 0.9, { h: P(1.2), color: C.darkBluishGray, free: true, studs: false });
   }
 
   const g = bb.build();

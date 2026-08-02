@@ -183,8 +183,11 @@ export function leiaHair(fig) {
   const bb = builder();
   const H = C.darkBrown, HL = C.reddishBrown;
 
-  // crown + back of the head
-  bb.sphere(0, 0.94, 0, 0.638, { dome: true, sy: 0.74, seg: 26, rings: 9, color: H });
+  // Crown + back of the head. The band is not optional: a dome alone narrows
+  // faster than the head cylinder does, so the head's own rim came out as a
+  // yellow crescent above the fringe.
+  bb.custom(shell({ r: 0.638, y0: 0.94, y1: 1.20, seg: 26 }), { color: H });
+  bb.sphere(0, 1.18, 0, 0.638, { dome: true, sy: 0.44, seg: 26, rings: 7, color: H });
   bb.custom(shell({ r: 0.638, y0: 0.40, y1: 0.98, from: 1.12, to: TWO_PI - 1.12 }), { color: H });
   // fringe swept back off the forehead, plus the parting
   bb.custom(shell({ r: 0.652, rTop: 0.642, y0: 0.94, y1: 1.14, from: faceTheta(176), to: faceTheta(336) }),
@@ -199,11 +202,15 @@ export function leiaHair(fig) {
   bb.mirrorX((b) => {
     b.custom(shell({ r: 0.648, y0: 0.50, y1: 1.00, from: faceTheta(146), to: faceTheta(194) }), { color: H });
   });
-  // the buns
+  // The buns. Coiled at ear height, which is also eye height, so without the
+  // spiral rings and the wedge of hair joining them to the crown they came back
+  // reading as a pair of headphones clamped on the sides of the head.
   bb.mirrorX((b) => {
-    b.sphere(-0.74, 0.62, -0.04, 0.30, { seg: 16, rings: 11, sx: 0.68, color: H });
-    b.custom(torusAt(0.21, 0.075, -0.82, 0.62, -0.04), { color: HL });
-    b.custom(torusAt(0.12, 0.06, -0.855, 0.62, -0.04), { color: HL });
+    b.sphere(-0.66, 0.70, -0.06, 0.20, { seg: 12, rings: 8, sx: 0.9, color: H });
+    b.sphere(-0.74, 0.70, -0.06, 0.29, { seg: 16, rings: 11, sx: 0.70, color: H });
+    b.custom(torusAt(0.225, 0.055, -0.80, 0.70, -0.06), { color: HL });
+    b.custom(torusAt(0.150, 0.050, -0.835, 0.70, -0.06), { color: HL });
+    b.custom(torusAt(0.075, 0.045, -0.858, 0.70, -0.06), { color: HL });
   });
   g.add(bb.build());
 
@@ -222,24 +229,30 @@ export function lukeHair(fig) {
   if (fig) fig.topStud.visible = false;
   const g = new THREE.Group();
   const bb = builder();
-  // sandy blond, not ginger: tan mass with warm gold only in the fringe shadow
-  const H = C.tan, HS = C.brightLightOrange;
+  // Sandy blond, not ginger. One tone only: every attempt at painting individual
+  // locks in a second colour (brightLightOrange, then darkTan) came back as flat
+  // rectangles stamped on the forehead, because a shell's arc ends square.
+  const H = C.tan;
 
-  bb.sphere(0, 0.92, 0, 0.638, { dome: true, sy: 0.80, seg: 24, rings: 9, color: H });
+  // band up to the top of the head, then a shallow cap: see leiaHair
+  bb.custom(shell({ r: 0.638, y0: 0.92, y1: 1.20, seg: 24 }), { color: H });
+  bb.sphere(0, 1.18, 0, 0.638, { dome: true, sy: 0.46, seg: 24, rings: 7, color: H });
   bb.custom(shell({ r: 0.638, y0: 0.56, y1: 0.96, from: 0.92, to: TWO_PI - 0.92 }), { color: H });
-  // sideburn tabs in front of the ears
+  // sideburn tabs, stopping at the top of the ear
   bb.mirrorX((b) => {
-    b.custom(shell({ r: 0.648, y0: 0.48, y1: 0.98, from: faceTheta(144), to: faceTheta(196) }), { color: H });
+    b.custom(shell({ r: 0.644, y0: 0.74, y1: 0.98, from: faceTheta(152), to: faceTheta(182) }), { color: H });
   });
-  // fringe: three overlapping locks, each a shell kicked out a little further
-  bb.custom(shell({ r: 0.652, rTop: 0.645, y0: 0.94, y1: 1.16, from: faceTheta(174), to: faceTheta(338) }),
+  // fringe: a continuous band above the brow so the mass stays solid...
+  bb.custom(shell({ r: 0.650, rTop: 0.644, y0: 0.96, y1: 1.20, from: faceTheta(168), to: faceTheta(344) }),
     { color: H });
-  bb.custom(shell({ r: 0.668, rTop: 0.648, y0: 1.00, y1: 1.20, from: faceTheta(188), to: faceTheta(268) }),
+  // ...then three tabs hanging off it with a sliver of forehead between them. The
+  // jagged hairline is the fringe detail that actually survives at film scale.
+  bb.custom(shell({ r: 0.660, rTop: 0.652, y0: 0.90, y1: 1.06, from: faceTheta(170), to: faceTheta(218) }),
     { color: H });
-  bb.custom(shell({ r: 0.664, rTop: 0.646, y0: 0.98, y1: 1.18, from: faceTheta(282), to: faceTheta(334) }),
+  bb.custom(shell({ r: 0.668, rTop: 0.656, y0: 0.85, y1: 1.06, from: faceTheta(228), to: faceTheta(286) }),
     { color: H });
-  bb.custom(shell({ r: 0.676, rTop: 0.652, y0: 1.08, y1: 1.24, from: faceTheta(206), to: faceTheta(250) }),
-    { color: HS });
+  bb.custom(shell({ r: 0.660, rTop: 0.652, y0: 0.89, y1: 1.06, from: faceTheta(296), to: faceTheta(344) }),
+    { color: H });
   // tuft at the crown
   bb.sphere(0.12, 1.16, -0.10, 0.24, { seg: 12, rings: 8, sy: 0.7, color: H });
   g.add(bb.build());
@@ -270,13 +283,15 @@ export function obiwanHood(fig) {
   g.add(twoSided(shell({ r: 0.90, rTop: 0.575, y0: -0.52, y1: 1.10, from: 1.10, to: TWO_PI - 1.10, seg: 26 }), IN));
 
   const bb = builder();
-  // crown of the hood, pushed back off the forehead
-  bb.sphere(0, 0.86, -0.14, 0.66, { dome: true, sy: 0.62, seg: 24, rings: 8, color: OUT });
+  // crown of the hood: tall and pushed back off the forehead, so it reads as a
+  // cowl with cloth bunched behind the head rather than a flat-brimmed hat
+  bb.sphere(0, 0.80, -0.20, 0.68, { dome: true, sy: 0.98, seg: 24, rings: 9, color: OUT });
+  bb.sphere(0, 0.56, -0.44, 0.56, { dome: true, sy: 1.05, seg: 20, rings: 8, color: OUT });
   // mouth of the hood: a collar barely wider than the head, tipped forward so it
   // overhangs the brow and drops the face into shadow
-  bb.custom(shell({ r: 0.66, rTop: 0.70, y0: 0.90, y1: 1.20, from: faceTheta(150), to: faceTheta(362) }),
+  bb.custom(shell({ r: 0.66, rTop: 0.70, y0: 0.99, y1: 1.26, from: faceTheta(150), to: faceTheta(362) }),
     { color: OUT });
-  bb.custom(shell({ r: 0.645, rTop: 0.665, y0: 0.84, y1: 1.06, from: faceTheta(158), to: faceTheta(354) }),
+  bb.custom(shell({ r: 0.645, rTop: 0.665, y0: 0.93, y1: 1.14, from: faceTheta(158), to: faceTheta(354) }),
     { color: IN });
   // front edges of the cowl falling past the cheeks
   bb.mirrorX((b) => {
@@ -502,7 +517,10 @@ export function c3poHead(fig) {
 
   // dome, sitting flush on the head
   bb.sphere(0, 0.98, 0, 0.605, { dome: true, sy: 0.78, seg: 24, rings: 9, color: GOLD, finish: FINISH.METAL });
-  bb.custom(shell({ r: 0.607, y0: 0.94, y1: 1.02 }), { color: C.copper, finish: FINISH.METAL });
+  // plate seam where the dome meets the face. In copper and 0.08 tall it read as a
+  // headband, so it is gold with only a hairline of shadow under it.
+  bb.custom(shell({ r: 0.607, y0: 0.94, y1: 1.02 }), { color: GOLD, finish: FINISH.METAL });
+  bb.custom(shell({ r: 0.609, y0: 0.925, y1: 0.945 }), { color: C.copper, finish: FINISH.METAL });
   // low crest along the crown
   bb.sphere(0, 1.30, -0.02, 0.30, { dome: true, sy: 0.5, sx: 0.35, seg: 12, rings: 6, color: GOLD, finish: FINISH.METAL });
 

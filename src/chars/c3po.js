@@ -2,7 +2,7 @@ import { C } from '../lego/palette.js';
 import { Minifig } from '../lego/minifig.js';
 import { FACE_C3PO, TORSO_C3PO_FRONT, TORSO_C3PO_BACK } from './prints.js';
 import { c3poHead } from './headgear.js';
-import { figGroup } from './util.js';
+import { figGroup, temperMetal } from './util.js';
 
 /**
  * C-3PO: pearl gold from head to foot, brick-built droid dome over a printed
@@ -34,5 +34,7 @@ export function buildC3po(opts = {}) {
   fig.arms.L.rotation.set(-0.30, 0, 0.22);
   fig.arms.R.rotation.set(-0.30, 0, -0.22);
 
-  return figGroup(fig, { name: 'c3po' });
+  // he is pearl gold everywhere, and at metalness 0.9 each panel reflected a
+  // different part of the room instead of reading as one plated droid
+  return temperMetal(figGroup(fig, { name: 'c3po' }));
 }

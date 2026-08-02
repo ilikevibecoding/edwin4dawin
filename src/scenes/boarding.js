@@ -36,7 +36,11 @@ export default {
     alertR.position.set(0, 11, -70);
     const doorGlow = new THREE.PointLight(0xffd0a0, 0, 90, 2);
     doorGlow.position.set(0, 7, -CORRIDOR_LEN * 0.46);
-    root.add(alertL, alertR, doorGlow);
+    // A cold practical over the standoff so the figures are not pure silhouette.
+    const standoffKey = new THREE.SpotLight(0xdce8ff, 0, 46, 0.85, 0.6, 1.6);
+    standoffKey.position.set(3.5, 13, -4);
+    standoffKey.target.position.set(0, 3, -12);
+    root.add(alertL, alertR, doorGlow, standoffKey, standoffKey.target);
 
     // ---- cast -----------------------------------------------------------
     const rebels = [];
@@ -109,18 +113,20 @@ export default {
       lookTo: () => vader.position.clone().add(new THREE.Vector3(0, 5.4, 0)),
       handheld: 0.28,
     });
-    // 4. over-shoulder on the officer as Vader closes
+    // 4. over the officer's shoulder as Vader closes. The corridor's interior
+    //    is only 9 studs wide, so every camera here has to stay inside
+    //    |x| < 4.2 or it ends up buried in a wall looking at nothing.
     shots.add({
-      t: b3 - 0.6, dur: (LIFT) - (b3 - 0.6), fov: 34, ease: 'linear',
-      pos: [5.4, 5.6, -3.0], to: [4.8, 5.7, -4.6],
-      look: () => vader.position.clone().add(new THREE.Vector3(0, 4.6, 0)),
+      t: b3 - 0.6, dur: (LIFT) - (b3 - 0.6), fov: 40, ease: 'linear',
+      pos: [3.5, 5.4, -2.2], to: [3.2, 5.5, -3.6],
+      look: () => vader.position.clone().add(new THREE.Vector3(0, 4.8, 0)),
       handheld: 0.3,
     });
-    // 5. the lift
+    // 5. the lift, shot past Vader's shoulder so he reads as a silhouette
     shots.add({
-      t: LIFT, dur: (b5 - 0.5) - LIFT, fov: 38, ease: 'inOutQuad',
-      pos: [-5.4, 4.2, -5.5], to: [-6.6, 5.6, -8.4],
-      look: () => officer.position.clone().add(new THREE.Vector3(0, 3.2, 0)),
+      t: LIFT, dur: (b5 - 0.5) - LIFT, fov: 46, ease: 'inOutQuad',
+      pos: [-3.1, 3.2, -19.4], to: [-3.4, 4.0, -18.0],
+      look: () => officer.position.clone().add(new THREE.Vector3(-0.3, 3.1, 0)),
       handheld: 0.35,
     });
     // 6. push in on the mask
@@ -142,6 +148,7 @@ export default {
     return {
       root,
       shots,
+      exposure: 2.5,
       grade: { uVignette: 0.5, uGrain: 0.045, uAberration: 0.0018, uContrast: 1.09 },
       update(t, dt) {
         if (t < lastT) idx = 0;
@@ -149,10 +156,12 @@ export default {
 
         // alert lighting
         const alert = 0.5 + 0.5 * Math.sin(t * 2.6);
-        alertL.intensity = 42 * (0.35 + alert * 0.65);
-        alertR.intensity = 42 * (0.35 + (1 - alert) * 0.65);
-        doorGlow.intensity = 260 * env(t, BLOW - 0.06, BLOW + 5.5, 0.08, 3.4)
-          + 60 * clamp(ramp(t, BLOW, BLOW + 1), 0, 1);
+        alertL.intensity = 26 * (0.35 + alert * 0.65);
+        alertR.intensity = 26 * (0.35 + (1 - alert) * 0.65);
+        doorGlow.intensity = 90 * env(t, BLOW - 0.06, BLOW + 5.5, 0.08, 3.4)
+          + 34 * clamp(ramp(t, BLOW, BLOW + 1), 0, 1);
+
+        standoffKey.intensity = 130 * clamp(ramp(t, VADER_IN - 1.0, VADER_IN + 2.4), 0, 1);
 
         // the door
         corridor.userData.setDoor?.(clamp(ramp(t, BLOW, BLOW + 0.5), 0, 1));

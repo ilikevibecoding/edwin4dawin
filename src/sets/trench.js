@@ -44,7 +44,7 @@ export function trenchSegment(bb, {
     const z = z0m + (k + 0.5) * (len / tiles);
     const h = hash2i(index, k, s + 3);
     bb.brick(0, -PLATE, z, width - 0.4, len / tiles - 0.4, {
-      h: PLATE, color: h < 0.3 ? C.darkGray : (h < 0.8 ? C.darkBluishGray : C.black),
+      h: PLATE, color: h < 0.34 ? C.darkBluishGray : (h < 0.82 ? C.lightBluishGray : C.darkGray),
       free: true, studs: false,
     });
     if (h > 0.62) {
@@ -56,7 +56,7 @@ export function trenchSegment(bb, {
   bb.brick(0, 0, z0, 3.2, len - 0.4, { h: P(1), color: C.darkBluishGray, free: true, studs: false });
   for (let k = 0; k < tiles; k += 2) {
     bb.brick(0, P(1), z0m + (k + 0.5) * (len / tiles), 1.2, 2.4, {
-      h: P(0.5), color: C.darkGray, free: true, studs: false,
+      h: P(0.5), color: C.veryLightGray, free: true, studs: false,
     });
   }
 
@@ -126,7 +126,7 @@ export function trenchSegment(bb, {
 
   // ------------------------------------------------------- cross-braces
   if (braces) {
-    const n = 2;
+    const n = 1;
     for (let k = 0; k < n; k++) {
       const z = z0m + (k + 0.35) * (len / n);
       const y = depth - B(4) - hash2i(index, k, s + 99) * 4;
@@ -237,14 +237,21 @@ export function buildTrench(opts = {}) {
     // the `dark` rig leaves a canyon this deep essentially black, so a raking
     // directional lights one wall and leaves the other in shadow -- which is
     // the shot. Turn it off with lights=0 if a scene brings its own.
-    const sun = new THREE.DirectionalLight(new THREE.Color(0xdbe6ff).convertSRGBToLinear(), 1.35);
-    sun.position.set(-70, 90, 40);
+    const sun = new THREE.DirectionalLight(new THREE.Color(0xdbe6ff).convertSRGBToLinear(), 2.1);
+    sun.position.set(-90, 70, 30);
     sun.target.position.set(0, 0, 0);
     sun.castShadow = false;
     g.add(sun, sun.target);
+    // A weak bounce off the opposite wall, or the shadowed side goes to pure
+    // black and the trench reads as a single lit plane.
+    const bounce = new THREE.DirectionalLight(new THREE.Color(0x93a8cc).convertSRGBToLinear(), 0.8);
+    bounce.position.set(90, 30, 20);
+    bounce.target.position.set(0, 0, 0);
+    bounce.castShadow = false;
+    g.add(bounce, bounce.target);
     g.add(new THREE.HemisphereLight(
-      new THREE.Color(0x7f93bb).convertSRGBToLinear(),
-      new THREE.Color(0x141a26).convertSRGBToLinear(), 0.55,
+      new THREE.Color(0x9db2d8).convertSRGBToLinear(),
+      new THREE.Color(0x2a3242).convertSRGBToLinear(), 1.0,
     ));
     // A red wash coming up out of the port so the far end has a focus.
     practical(g, 0, 4, portZ, 0xff5530, 90, 46);

@@ -227,6 +227,7 @@ export default {
     return {
       root,
       shots,
+      exposure: 1.6,
       // the crawl is its own subtitle
       subtitlesAt: (t) => t < crawlIn - 0.5,
       grade: { uVignette: 0.34, uGrain: 0.03, uAberration: 0.0008 },

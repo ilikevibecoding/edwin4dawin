@@ -19,13 +19,15 @@ import {
 
 const GRAY = C.lightBluishGray;
 const DARK = C.darkBluishGray;
-const TAN = C.darkTan;
+const TAN = C.tan;            // sun-bleached cowl panels
+const HIDE = C.reddishBrown;  // seat upholstery
 const IRON = C.darkGray;
 
 const NOSE_Z = 8.0;
+const PROW_Z = 7.6;           // prow face; the intake lips stand proud of it
 const TAIL_Z = -7.6;
 const DECK_Y = 0.0;           // top of the main deck plates
-const TURBINE_X = 3.15;       // outboard intake centres
+const TURBINE_X = 2.45;       // outboard intake centres, inboard of the fenders
 
 /** Hull half width: waisted at the cockpit, flaring out to the fenders. */
 function halfW(z) {
@@ -58,23 +60,21 @@ function chassis(bb) {
     });
   });
 
-  // ---- prow: a raised block the three intakes are set into ---------------
-  bb.brick(0, DECK_Y - P(4), 5.9, 7.8, 4.4, { h: P(5), color: GRAY, studs: false, free: true });
-  // roof of the prow slopes down to the intake lips
-  zWedge(bb, 0, 7.8, [
-    [3.7, DECK_Y + P(1)], [NOSE_Z - 0.5, DECK_Y - P(1)],
-    [NOSE_Z - 0.5, DECK_Y - P(2)], [3.7, DECK_Y - P(2)],
+  // ---- prow: a low block with a tan cowl over a grille of intakes ---------
+  bb.brick(0, DECK_Y - P(3), 5.65, 7.6, 3.9, { h: P(3), color: GRAY, studs: false, free: true });
+  zWedge(bb, 0, 7.6, [
+    [3.7, DECK_Y], [PROW_Z, DECK_Y], [PROW_Z, DECK_Y + P(0.5)], [3.7, DECK_Y + P(1.2)],
   ], { color: TAN });
-  // keel of the prow rises toward the nose
-  zWedge(bb, 0, 7.8, [
-    [3.7, DECK_Y - P(4)], [NOSE_Z - 0.5, DECK_Y - P(3)],
-    [NOSE_Z - 0.5, DECK_Y - P(4)],
+  // Keel chamfers up toward the nose, so the front face starts well above the
+  // bottom of the hull: an inlet down at keel level reads as a wheel.
+  zWedge(bb, 0, 7.6, [
+    [3.4, DECK_Y - P(5)], [PROW_Z, DECK_Y - P(3)], [PROW_Z, DECK_Y - P(5)],
   ], { color: DARK });
   sym(bb, (b, s) => {
     // corners chamfered off the prow so it is not a plain slab
     b.prism([
-      [s * 3.9, 3.6], [s * 3.9, 6.4], [s * 2.9, NOSE_Z - 0.5], [s * 2.9, 3.6],
-    ], P(4), { rx: Math.PI / 2, y: DECK_Y - P(2), color: GRAY });
+      [s * 3.8, 3.6], [s * 3.8, 6.2], [s * 2.8, PROW_Z], [s * 2.8, 3.6],
+    ], P(3), { rx: Math.PI / 2, y: DECK_Y - P(1.5), color: GRAY });
     // fender shoulder running back from the prow to the tail
     b.brick(s * 3.55, DECK_Y - P(4), -1.4, 0.8, 8.0, {
       h: P(2), color: DARK, studs: false, free: true,
@@ -105,28 +105,49 @@ function chassis(bb) {
  * only the lip stands proud; three loose barrels on the front read as plumbing.
  */
 function turbines(bb) {
-  const face = NOSE_Z - 0.45;
+  const cy = DECK_Y - P(1.5);
+
+  // A single grille plate across the prow ties the three inlets together, so
+  // they read as engine mouths in a bulkhead rather than three loose discs.
+  bb.brick(0, cy - 0.72, PROW_Z + 0.06, 7.2, 0.32, {
+    h: 1.44, color: DARK, studs: false, free: true,
+  });
+
+  /*
+   * Concentric rings stepping forward: bulkhead / bore / compressor / spinner.
+   * Each ring's front face has to sit ahead of the one outside it, or the wider
+   * cylinder's solid cap covers everything behind it. All solid too -- an open
+   * tube would cull its own inner wall and the inlet would look hollow.
+   */
   const mk = (x, r, name) => {
-    bb.cyl(x, DECK_Y - P(2), face + 0.2, r + 0.2, 0.5, {
-      axis: 'z', color: DARK, seg: 12, stud: false,
-    });                                                   // lip ring
-    bb.cyl(x, DECK_Y - P(2), face - 0.5, r, 1.6, { axis: 'z', color: C.black, seg: 12, stud: false });
-    bb.cyl(x, DECK_Y - P(2), face - 0.9, r * 0.8, 0.4, { axis: 'z', color: IRON, seg: 10, stud: false });
-    bb.cyl(x, DECK_Y - P(2), face - 0.75, 0.26, 0.5, {
+    bb.cyl(x, cy, PROW_Z + 0.16, r + 0.22, 0.36, { axis: 'z', color: GRAY, seg: 12, stud: false });
+    bb.cyl(x, cy, PROW_Z - 0.3, r, 1.5, { axis: 'z', color: IRON, seg: 12, stud: false });
+    bb.cyl(x, cy, PROW_Z + 0.42, r * 0.72, 0.24, { axis: 'z', color: GRAY, seg: 10, stud: false });
+    bb.cyl(x, cy, PROW_Z + 0.46, 0.2, 0.3, {
       axis: 'z', color: C.flatSilver, finish: FINISH.SOLID, seg: 8, stud: false,
-    });                                                   // spinner
-    bb.node(name, x, DECK_Y - P(2), face + 0.8);
+    });
+    bb.node(name, x, cy, PROW_Z + 1.0);
   };
-  mk(0, 1.2, 'intakeC');
-  mk(-TURBINE_X, 1.05, 'intakeL');
-  mk(TURBINE_X, 1.05, 'intakeR');
+  mk(0, 0.62, 'intakeC');
+  mk(-TURBINE_X, 0.55, 'intakeL');
+  mk(TURBINE_X, 0.55, 'intakeR');
+
+  // slats filling the grille between the inlets, so the round mouths read as
+  // part of a vented bulkhead
+  for (const x of [-3.35, -1.25, 1.25, 3.35]) {
+    for (let i = 0; i < 3; i++) {
+      bb.brick(x, cy - 0.55 + i * 0.42, PROW_Z + 0.12, 1.0, 0.26, {
+        h: 0.24, color: GRAY, studs: false, tile: true, free: true,
+      });
+    }
+  }
 }
 
 /** Open tub with two seats, dash and windscreen. */
 function cockpit(bb) {
   const cz = 0.2;
   // tub floor and the coaming round it
-  bb.brick(0, DECK_Y - P(2), cz, 6.4, 6.4, { h: P(1), color: TAN, studs: false, free: true });
+  bb.brick(0, DECK_Y - P(2), cz, 6.4, 6.4, { h: P(1), color: DARK, studs: false, free: true });
   sym(bb, (b, s) => {
     b.brick(s * 3.55, DECK_Y - P(2), cz, 0.7, 6.4, { h: P(4), color: GRAY, studs: false, free: true });
     b.brick(s * 3.55, DECK_Y + P(2), cz, 0.9, 6.4, {
@@ -140,10 +161,10 @@ function cockpit(bb) {
     const sx = s * 1.6;
     b.brick(sx, DECK_Y - P(1), cz - 0.4, 2.4, 2.4, { h: P(1), color: IRON, studs: false, free: true });
     b.brick(sx, DECK_Y, cz - 0.4, 2.1, 2.1, {
-      h: P(1), color: TAN, studs: false, tile: true, free: true,
+      h: P(1), color: HIDE, studs: false, tile: true, free: true,
     });
     b.brick(sx, DECK_Y - P(1), cz - 1.8, 2.4, 0.6, { h: P(5), color: IRON, studs: false, free: true });
-    b.brick(sx, DECK_Y, cz - 1.9, 2.0, 0.3, { h: P(3), color: TAN, studs: false, free: true });
+    b.brick(sx, DECK_Y, cz - 1.9, 2.0, 0.3, { h: P(3), color: HIDE, studs: false, free: true });
     b.node(s > 0 ? 'seatR' : 'seatL', sx, DECK_Y + P(1), cz - 0.3);
   });
 
@@ -177,7 +198,19 @@ function cockpit(bb) {
 
 /** Weathering stripes and the odd panel, so it is not a bare grey shell. */
 function trim(bb) {
+  // raised spine and panel seams breaking up the cowl
+  bb.brick(0, DECK_Y + P(0.4), 5.3, 2.2, 3.0, {
+    h: P(1), color: GRAY, studs: false, tile: true, free: true,
+  });
+  for (const z of [4.1, 6.4]) {
+    bb.brick(0, DECK_Y + P(0.3), z, 7.4, 0.3, {
+      h: P(1), color: DARK, studs: false, tile: true, free: true,
+    });
+  }
   sym(bb, (b, s) => {
+    b.brick(s * 2.55, DECK_Y - P(1) + 0.04, 5.2, 0.3, 3.4, {
+      h: P(1), color: DARK, studs: false, tile: true, free: true,
+    });
     b.brick(s * 3.5, DECK_Y - P(4) + P(2), -3.0, 0.8, 3.2, {
       h: P(1), color: TAN, studs: false, tile: true, free: true,
     });
@@ -191,8 +224,8 @@ function trim(bb) {
   // hover-field emitters under the fenders: the reason it has no wheels
   sym(bb, (b, s) => {
     for (const z of [4.6, -0.6, -5.0]) {
-      b.cyl(s * 3.0, DECK_Y - P(5), z, 0.75, P(1), { color: IRON, seg: 8, stud: false });
-      b.cyl(s * 3.0, DECK_Y - P(6), z, 0.6, P(1), {
+      b.cyl(s * 3.0, DECK_Y - P(5), z, 0.85, P(1), { color: IRON, seg: 8, stud: false });
+      b.cyl(s * 3.0, DECK_Y - P(5.6), z, 0.45, P(0.6), {
         color: C.transLightBlue, finish: FINISH.GLOW, seg: 8, stud: false,
       });
     }

@@ -45,10 +45,20 @@ export const EMBLEM_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
     Z" />
 </svg>`;
 
-/** Ring of laurel dots around the starbird -- reads as an official seal. */
+/**
+ * Concentric bands around the starbird -- an official seal.
+ *
+ * Authored as explicit annuli, outer subpath clockwise and inner
+ * counter-clockwise, because SVGLoader turns `fill="none" stroke=...` circles
+ * into filled discs and would bury the emblem behind a gold plate.
+ */
 export const RING_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <circle cx="256" cy="256" r="240" fill="none" stroke="#000" stroke-width="14"/>
-  <circle cx="256" cy="256" r="212" fill="none" stroke="#000" stroke-width="6"/>
+  <path fill="#000" d="
+    M 6,256 a 250,250 0 1,0 500,0 a 250,250 0 1,0 -500,0 Z
+    M 20,256 a 236,236 0 1,1 472,0 a 236,236 0 1,1 -472,0 Z" />
+  <path fill="#000" d="
+    M 48,256 a 208,208 0 1,0 416,0 a 208,208 0 1,0 -416,0 Z
+    M 56,256 a 200,200 0 1,1 400,0 a 200,200 0 1,1 -400,0 Z" />
 </svg>`;
 
 // ------------------------------------------------------------------ parts
@@ -83,12 +93,14 @@ function floorTiles(bb, w, len, z0, aisle) {
       const inAisle = Math.abs(x) < aisle / 2;
       const chk = (i + j) % 2 === 0;
       const h = hash2i(i, j, 5150);
-      // Low contrast on purpose: a hard black-and-white chequer over 90 studs
-      // of floor fights the dais for attention.
+      // Low contrast on purpose: a hard chequer over 90 studs of floor fights
+      // the dais for attention. The grey only comes in near the walls, which
+      // is enough to read as ranks of tiles without turning into a chessboard.
+      const edge = Math.abs(x) > w / 2 - 14;
       let color = inAisle
         ? (chk ? C.white : C.veryLightGray)
-        : (chk ? C.veryLightGray : C.lightBluishGray);
-      if (!inAisle && h > 0.98) color = C.darkBluishGray;
+        : (edge && chk ? C.lightBluishGray : (chk ? C.veryLightGray : C.white));
+      if (!inAisle && h > 0.985) color = C.darkBluishGray;
       bb.brick(x, -PLATE, z, cell - 0.12, cell - 0.12, { h: PLATE, color, free: true, studs: false });
     }
   }
@@ -218,8 +230,11 @@ export function buildThroneRoom(opts = {}) {
   for (let k = 0; k < 5; k++) {
     const z = zBack + 34 + k * ((len - 46) / 4);
     bb.brick(0, h - B(2), z, 34, 4.4, { h: P(2), color: C.lightBluishGray, free: true, studs: false });
+    // Kept under the 1.3 bloom threshold: a full-strength GLOW strip this long
+    // smears across half the frame.
     bb.brick(0, h - B(2) - P(0.8), z, 30, 3.2, {
       h: P(0.8), color: C.transClear, finish: FINISH.GLOW, free: true, studs: false,
+      matOpts: { intensity: 1.05 },
     });
   }
 
@@ -264,9 +279,11 @@ export function buildThroneRoom(opts = {}) {
   g.userData.nodes.dais = dais;
 
   if (bool(opts, 'lights', true)) {
-    practical(g, 0, h - 8, zBack + 26, 0xfff4e2, 900, 150);
-    practical(g, 0, h - 10, zBack + 90, 0xe8f0ff, 700, 150);
-    practical(g, 0, 14, zBack + 12, 0xffe8c8, 260, 70);
+    // Off the centreline so the emblem gets a raking light instead of a
+    // specular hot spot straight back at the camera.
+    practical(g, -26, h - 14, zBack + 30, 0xfff4e2, 700, 130);
+    practical(g, 26, h - 14, zBack + 30, 0xe8f0ff, 420, 130);
+    practical(g, 0, h - 12, zBack + 96, 0xe8f0ff, 700, 150);
   }
   return g;
 }

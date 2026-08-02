@@ -38,6 +38,7 @@ function lightRig(bb, z, w, y) {
     bb.brick(x, y - P(2), z, 7, 2.6, { h: P(2), color: C.lightBluishGray, free: true, studs: false });
     bb.brick(x, y - P(3), z, 6.2, 1.8, {
       h: P(1), color: C.transClear, finish: FINISH.GLOW, free: true, studs: false,
+      matOpts: { intensity: 1.1 },
     });
   }
   // Hanger struts up to the ceiling.
@@ -173,9 +174,10 @@ export function buildHangarBay(opts = {}) {
 
   // ------------------------------------------------------------- crates
   const crateRng = rng;
-  for (let i = 0; i < 22; i++) {
+  for (let i = 0; i < 26; i++) {
     const side = crateRng.next() < 0.5 ? -1 : 1;
-    const x = side * crateRng.range(hw * 0.55, hw * 0.9);
+    // Pulled in off the walls so they actually appear in a shot down the bay.
+    const x = side * crateRng.range(hw * 0.34, hw * 0.86);
     const z = crateRng.range(zMouth + 12, zBack - 12);
     const cw = crateRng.range(4, 8), cd = crateRng.range(4, 7);
     const ch = B(crateRng.range(1.6, 3.4));
@@ -189,7 +191,7 @@ export function buildHangarBay(opts = {}) {
   // Fuel drums.
   for (let i = 0; i < 8; i++) {
     const side = i % 2 ? -1 : 1;
-    const x = side * crateRng.range(hw * 0.6, hw * 0.88);
+    const x = side * crateRng.range(hw * 0.4, hw * 0.84);
     const z = crateRng.range(zMouth + 16, zBack - 16);
     bb.cyl(x, 0, z, 1.5, B(2.6), { color: C.oliveGreen, seg: 12, stud: false });
     bb.cyl(x, B(2.6), z, 1.6, P(1), { color: C.darkBluishGray, seg: 12, stud: false });
@@ -230,12 +232,13 @@ export function buildHangarBay(opts = {}) {
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }',
       fragmentShader: `varying vec2 vUv; uniform vec3 top, bot;
         void main(){
-          vec3 c = mix(bot, top, pow(clamp(vUv.y, 0.0, 1.0), 0.75));
-          // A pale sun haze low and left, where the key light comes from.
-          c += vec3(1.0, 0.92, 0.78) * 0.55 * pow(max(0.0, 1.0 - length((vUv - vec2(0.34, 0.22)) * vec2(1.8, 2.6))), 2.5);
+          vec3 c = mix(bot, top, pow(clamp(vUv.y, 0.0, 1.0), 0.8));
+          // Sun haze up and to the left, where the key light comes from. Kept
+          // well off the deck line so it does not wash out the threshold.
+          c += vec3(1.0, 0.94, 0.82) * 0.30 * pow(max(0.0, 1.0 - length((vUv - vec2(0.3, 0.62)) * vec2(1.7, 2.2))), 2.2);
           gl_FragColor = vec4(c, 1.0);
         }`,
-      toneMapped: false,
+      toneMapped: true,
       depthWrite: false,
     }),
   );
@@ -251,13 +254,13 @@ export function buildHangarBay(opts = {}) {
 
   if (bool(opts, 'lights', true)) {
     // Daylight spilling in through the mouth, plus two overhead practicals.
-    const spill = new THREE.DirectionalLight(new THREE.Color(0xfff0d8).convertSRGBToLinear(), 1.5);
+    const spill = new THREE.DirectionalLight(new THREE.Color(0xfff0d8).convertSRGBToLinear(), 0.85);
     spill.position.set(-20, 26, zMouth - 60);
     spill.target.position.set(0, 6, zBack);
+    spill.castShadow = false;
     g.add(spill, spill.target);
-    practical(g, 0, h - 10, zMouth + 30, 0xdfeaff, 900, 130);
-    practical(g, 0, h - 10, zBack - 26, 0xdfeaff, 800, 130);
-    practical(g, 0, 8, zMouth + 6, 0xffe9c6, 420, 90);
+    practical(g, -22, h - 12, zMouth + 34, 0xdfeaff, 620, 120);
+    practical(g, 22, h - 12, zBack - 30, 0xdfeaff, 620, 120);
   }
   return g;
 }

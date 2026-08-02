@@ -125,10 +125,13 @@ export function lightingRig(kind = 'studio', opts = {}) {
       break;
     }
     case 'dark': {
-      add('fill', new THREE.HemisphereLight(0x30405e, 0x05070a, 0.42));
-      const key = add('key', new THREE.DirectionalLight(0x9fb8e0, 0.85));
+      add('fill', new THREE.HemisphereLight(0x3d4a5e, 0x0a0c10, 0.5));
+      const key = add('key', new THREE.DirectionalLight(0xd6dcE6, 1.15));
       key.position.set(-25, 40, 20);
       if (opts.shadows !== false) setupShadow(key, opts.shadowSize ?? 45);
+      // a warm bounce keeps yellow ABS skin from reading green under a cool key
+      const warm = add('bounce', new THREE.DirectionalLight(0xffcf9e, 0.55));
+      warm.position.set(22, 12, 26);
       break;
     }
     default: { // studio

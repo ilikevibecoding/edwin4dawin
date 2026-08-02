@@ -135,6 +135,7 @@ export default {
     return {
       root,
       shots,
+      exposure: 1.8,
       grade: { uVignette: 0.44, uGrain: 0.032, uAberration: 0.0022 },
       update(t, dt) {
         if (t < lastT) { ti = 0; wi = 0; fired = false; hitDone = false; blown = false; }
