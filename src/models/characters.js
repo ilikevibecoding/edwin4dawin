@@ -82,12 +82,21 @@ function flatTex(body, o = {}) {
     { w: o.w ?? 512, h: o.h ?? 512 });
 }
 
-/** Dome / hemisphere with the equator on y = 0 and the crown at y = h. */
-function domeMesh(r, h, color, seg = 20) {
+/**
+ * Dome / hemisphere with the equator on y = 0 and the crown at y = h.
+ *
+ * SphereGeometry puts u = 0 at -X, which is a quarter turn away from
+ * CylinderGeometry's u = 0 at +Z. Rotating the geometry lines the two up, so a
+ * dome print uses exactly the same wrap convention as a head print: x = 256 of
+ * a 512-wide viewBox is dead front, x = 128 the figure's right, x = 384 its
+ * left. v runs crown -> equator.
+ */
+function domeMesh(r, h, color, seg = 20, map = null) {
   const g = norm(new THREE.SphereGeometry(r, seg, Math.max(4, Math.round(seg / 2)),
     0, Math.PI * 2, 0, Math.PI / 2));
+  g.rotateY(Math.PI / 2);
   g.scale(1, h / r, 1);
-  const m = new THREE.Mesh(g, mat(color));
+  const m = new THREE.Mesh(g, map ? texMat(map) : mat(color));
   m.castShadow = m.receiveShadow = true;
   return m;
 }
@@ -209,32 +218,37 @@ function vaderHelmetTex() {
   const base = 0x161c22;
   const edge = '#98a2a9';
   const soft = '#6a747c';
-  const lens = '#3b454d';
   return wrapTex([
     bg(base),
     `<rect x="0" y="0" width="118" height="128" fill="#000" opacity="0.4"/>`,
     `<rect x="394" y="0" width="118" height="128" fill="#000" opacity="0.4"/>`,
-    // faceplate: the shape that has to read across a smoky corridor
+    // faceplate. The print carries the performance, so the shapes are built
+    // from separated values rather than outlines: dark mask, mid-grey cheeks,
+    // near-black lenses, bright grille.
     `<path d="M256 6 L322 18 L344 58 L334 104 L256 124 L178 104 L168 58 L190 18 Z"`
-    + ` fill="#222a31" stroke="${edge}" stroke-width="4" stroke-linejoin="round"/>`,
+    + ` fill="#2b343c" stroke="${edge}" stroke-width="3" stroke-linejoin="round"/>`,
     // brow bar
-    `<path d="M188 28 L256 18 L324 28 L320 44 L256 33 L192 44 Z" fill="#0d1115" stroke="${edge}" stroke-width="3"/>`,
-    // triangular eye lenses
-    `<path d="M190 50 L250 56 L236 84 L196 72 Z" fill="${lens}" stroke="${edge}" stroke-width="3.5"/>`,
-    `<path d="M322 50 L262 56 L276 84 L316 72 Z" fill="${lens}" stroke="${edge}" stroke-width="3.5"/>`,
-    `<path d="M196 55 L244 60 L241 68 L199 61 Z" fill="#c3cbd0" opacity="0.55"/>`,
-    `<path d="M316 55 L268 60 L271 68 L313 61 Z" fill="#c3cbd0" opacity="0.55"/>`,
-    // nose ridge
-    `<path d="M256 26 L270 58 L264 88 L248 88 L242 58 Z" fill="#2c353c" stroke="${edge}" stroke-width="2.5"/>`,
-    // mouth grille
-    `<path d="M226 90 L286 90 L280 114 L232 114 Z" fill="#0a0d10" stroke="${edge}" stroke-width="3"/>`,
-    `<g fill="${edge}">`
-    + `<rect x="234" y="93" width="5" height="18"/><rect x="244" y="93" width="5" height="18"/>`
-    + `<rect x="254" y="93" width="5" height="18"/><rect x="264" y="93" width="5" height="18"/>`
-    + `<rect x="274" y="93" width="5" height="18"/></g>`,
+    `<path d="M186 26 L256 15 L326 26 L322 46 L256 33 L190 46 Z" fill="#0a0e12"/>`,
+    // triangular eye lenses, deep-set
+    `<path d="M186 48 L252 56 L236 88 L192 74 Z" fill="#05080a" stroke="${edge}" stroke-width="3"/>`,
+    `<path d="M326 48 L260 56 L276 88 L320 74 Z" fill="#05080a" stroke="${edge}" stroke-width="3"/>`,
+    `<path d="M194 54 L246 61 L243 70 L197 61 Z" fill="#aeb8bf" opacity="0.5"/>`,
+    `<path d="M318 54 L266 61 L269 70 L315 61 Z" fill="#aeb8bf" opacity="0.5"/>`,
+    // nose ridge, catching the light
+    `<path d="M256 24 L272 58 L266 90 L246 90 L240 58 Z" fill="#4a555e" stroke="${edge}" stroke-width="2"/>`,
+    `<path d="M256 30 L263 58 L259 86 L253 86 L249 58 Z" fill="#6d7982"/>`,
+    // mouth grille: the brightest thing on the mask
+    `<path d="M224 90 L288 90 L281 116 L231 116 Z" fill="#05080a"/>`,
+    `<g fill="#c9d2d8">`
+    + `<rect x="232" y="93" width="6" height="20"/><rect x="243" y="93" width="6" height="20"/>`
+    + `<rect x="254" y="93" width="6" height="20"/><rect x="265" y="93" width="6" height="20"/>`
+    + `<rect x="276" y="93" width="5" height="20"/></g>`,
+    `<path d="M224 90 L288 90 L281 116 L231 116 Z" fill="none" stroke="${edge}" stroke-width="3"/>`,
     // cheek plates flaring to the jaw
-    `<path d="M184 60 L172 98 L198 108 L206 76 Z" fill="#151b21" stroke="${edge}" stroke-width="3"/>`,
-    `<path d="M328 60 L340 98 L314 108 L306 76 Z" fill="#151b21" stroke="${edge}" stroke-width="3"/>`,
+    `<path d="M182 58 L170 100 L200 110 L208 76 Z" fill="#1b2228" stroke="${edge}" stroke-width="2.5"/>`,
+    `<path d="M330 58 L342 100 L312 110 L304 76 Z" fill="#1b2228" stroke="${edge}" stroke-width="2.5"/>`,
+    // jaw line under the grille
+    `<path d="M206 112 Q256 128 306 112" fill="none" stroke="${soft}" stroke-width="3"/>`,
     // temple vents
     `<g stroke="${soft}" stroke-width="3">`
     + `<path d="M152 40 L152 92"/><path d="M138 48 L138 84"/>`
@@ -547,19 +561,22 @@ function vaderHelmet() {
   const black = C.black;
   const mask = cyl(0.68, 0.82, { seg: 26, rTop: 0.66 });
   mask.material = texMat(vaderHelmetTex());
+  // Radii are stepped so nothing interpenetrates: mask 0.68 -> 0.66, the brow
+  // hood flares out to 0.78 and back in to the 0.715 crown rim, and the dome
+  // equator sits at 0.70 just inside that rim.
   const parts = [
     at(mask, 0, 0.14, 0),
     at(domeMesh(0.7, 0.56, black, 24), 0, 0.94, 0),
     // brow hood: flares forward over the lenses
-    paint(at(arcShell(0.76, 0.2, { span: 3.5, center: Math.PI, rTop: 0.68, seg: 18 }), 0, 0.72, 0), black),
-    paint(at(arcShell(0.78, 0.05, { span: 3.5, center: Math.PI, seg: 18 }), 0, 0.69, 0), C.darkGray),
+    paint(at(arcShell(0.78, 0.16, { span: 3.5, center: Math.PI, rTop: 0.715, seg: 18 }), 0, 0.7, 0), black),
+    paint(at(arcShell(0.79, 0.05, { span: 3.5, center: Math.PI, seg: 18 }), 0, 0.67, 0), C.darkGray),
+    // crown rim, ringing the base of the dome
+    paint(at(arcShell(0.715, 0.08, { span: Math.PI * 2, seg: 26 }), 0, 0.86, 0), C.darkGray),
     // rear neck skirt: sits low, over the shoulders, clear of the mask
     paint(at(arcShell(0.94, 0.46, { span: 2.9, center: 0, rTop: 0.7, seg: 20 }), 0, -0.26, 0), black),
     paint(at(arcShell(0.96, 0.07, { span: 2.9, center: 0, seg: 20 }), 0, -0.32, 0), C.darkGray),
     // chin cup
     paint(at(cone(0.56, 0.66, 0.16, { seg: 22 }), 0, 0.0, 0), black),
-    // crown ridge
-    paint(at(arcShell(0.69, 0.07, { span: 6.28, seg: 24 }), 0, 0.9, 0), C.darkGray),
   ];
   // angular jaw flares either side of the mask
   for (const sx of [1, -1]) {
@@ -594,48 +611,83 @@ function rebelHelmet(o = {}) {
   ]);
 }
 
-/** Rebel pilot helmet with squadron stripes and a smoked visor. */
+/**
+ * Rebel pilot helmet: printed brow band, cheek guards down either side of an
+ * open face, and a smoked visor pushed up onto the brow. Keeping the face
+ * visible is what makes the figure read as a person rather than a bollard.
+ */
 function pilotHelmet(o = {}) {
   const stripe = o.color ?? C.red;
-  const shell = cyl(0.71, 0.88, { seg: 26 });
-  shell.material = texMat(pilotHelmetTex(stripe));
+  const R = 0.715;
+  // The head's eyes sit at local y 0.61 and its mouth at 0.34, so the printed
+  // brow band has to bottom out at 0.66 to leave the whole face clear.
+  const BROW = 0.66;
+  const band = cyl(R, 0.4, { seg: 26 });
+  band.material = texMat(pilotHelmetTex(stripe));
+  // face opening: 105 degrees of clear air at the front
+  const OPEN = 1.83;
   return assemble([
-    at(shell, 0, 0.12, 0),
-    at(domeMesh(0.71, 0.4, C.white, 22), 0, 1.0, 0),
-    // visor brow + smoked visor
-    paint(at(arcShell(0.735, 0.1, { span: 3.1, center: Math.PI, seg: 18 }), 0, 0.62, 0), C.white),
-    at(arcShell(0.725, 0.3, { span: 3.0, center: Math.PI, seg: 18, color: X.smoke, rough: 0.12 }), 0, 0.34, 0),
-    // ear pads and comm boom
-    paint(at(rot(cyl(0.22, 0.12, { seg: 14 }), 0, 0, Math.PI / 2), 0.72, 0.5, 0), C.darkGray),
-    paint(at(rot(cyl(0.22, 0.12, { seg: 14 }), 0, 0, -Math.PI / 2), -0.72, 0.5, 0), C.darkGray),
-    paint(at(rot(cyl(0.05, 0.42, { seg: 8 }), 0, 0, -1.1), -0.62, 0.34, -0.42), C.darkGray),
-    paint(at(cyl(0.09, 0.1, { seg: 10 }), -0.3, 0.2, -0.62), C.black),
-    // chin cup
-    paint(at(cone(0.6, 0.7, 0.14, { seg: 22 }), 0, -0.02, 0), C.white),
+    at(band, 0, BROW, 0),
+    at(domeMesh(R, 0.4, C.white, 24, pilotDomeTex(stripe)), 0, BROW + 0.4, 0),
+    // cheek guards, wrapping the back and coming down beside the jaw
+    paint(at(arcShell(R, BROW + 0.02, { span: Math.PI * 2 - OPEN, center: 0, seg: 24 }), 0, -0.02, 0), C.white),
+    paint(at(arcShell(R + 0.012, 0.08, { span: Math.PI * 2 - OPEN, center: 0, seg: 24 }), 0, -0.06, 0), C.bluishGray),
+    // smoked visor, pushed up onto the brow
+    at(arcShell(R + 0.03, 0.18, { span: 2.1, center: Math.PI, seg: 18, color: X.smoke, rough: 0.12 }),
+      0, BROW + 0.02, 0),
+    paint(at(arcShell(R + 0.045, 0.055, { span: 2.1, center: Math.PI, seg: 18 }), 0, BROW - 0.03, 0), C.bluishGray),
+    // ear pads and comm boom curving toward the mouth
+    paint(at(rot(cyl(0.2, 0.11, { seg: 14 }), 0, 0, Math.PI / 2), 0.72, 0.42, 0.02), C.darkGray),
+    paint(at(rot(cyl(0.2, 0.11, { seg: 14 }), 0, 0, -Math.PI / 2), -0.72, 0.42, 0.02), C.darkGray),
+    paint(at(rot(cyl(0.045, 0.52, { seg: 8 }), 0.55, 0, -1.15), -0.68, 0.4, -0.16), C.darkGray),
+    paint(at(cyl(0.075, 0.09, { seg: 10 }), -0.3, 0.28, -0.6), C.black),
   ]);
 }
 
+/**
+ * Pilot brow band print. The 512 x 128 viewBox is squeezed onto a 0.4-tall
+ * band, so y = 0 is the crown seam and y = 128 the brow line.
+ */
 function pilotHelmetTex(stripe) {
   const s = hx(stripe);
   return wrapTex([
     bg(C.white),
     `<rect x="0" y="0" width="100" height="128" fill="#000" opacity="0.12"/>`,
     `<rect x="412" y="0" width="100" height="128" fill="#000" opacity="0.12"/>`,
-    // crown stripes running front to back
-    `<rect x="0" y="6" width="512" height="12" fill="${s}"/>`,
-    `<rect x="0" y="22" width="512" height="5" fill="#2b3238"/>`,
-    // front chevrons
-    `<path d="M226 34 L256 30 L286 34 L286 46 L256 42 L226 46 Z" fill="${s}"/>`,
-    `<path d="M236 52 L256 49 L276 52 L276 60 L256 57 L236 60 Z" fill="#2b3238"/>`,
+    // squadron stripes ringing the helmet
+    `<rect x="0" y="14" width="512" height="26" fill="${s}"/>`,
+    `<rect x="0" y="44" width="512" height="8" fill="#2b3238"/>`,
+    // front chevron over the visor
+    `<path d="M210 58 L256 48 L302 58 L302 82 L256 72 L210 82 Z" fill="${s}"/>`,
     // rebel starbird on the figure's left temple
-    `<g fill="${s}" transform="translate(352 62) scale(0.42)">`
+    `<g fill="${s}" transform="translate(362 86) scale(0.52)">`
     + `<path d="M0 -46 C 16 -22 30 -8 40 0 C 30 8 16 22 0 46 C -16 22 -30 8 -40 0 C -30 -8 -16 -22 0 -46 Z"/></g>`,
     // vent slots on the right temple
-    `<g fill="#2b3238" opacity="0.8">`
-    + `<rect x="140" y="48" width="34" height="6" rx="3"/><rect x="140" y="60" width="34" height="6" rx="3"/>`
-    + `<rect x="140" y="72" width="34" height="6" rx="3"/></g>`,
-    // grey lower band
-    `<rect x="0" y="110" width="512" height="18" fill="#8f9599"/>`,
+    `<g fill="#2b3238" opacity="0.85">`
+    + `<rect x="130" y="66" width="44" height="9" rx="4"/><rect x="130" y="84" width="44" height="9" rx="4"/>`
+    + `<rect x="130" y="102" width="44" height="9" rx="4"/></g>`,
+    // grey rim along the brow
+    `<rect x="0" y="118" width="512" height="10" fill="#8f9599"/>`,
+  ].join(''));
+}
+
+/**
+ * Crown stripe running front to back over the pilot's dome. Each bar is a
+ * meridian of the wrap, so it climbs the dome and meets its partner at the pole.
+ */
+function pilotDomeTex(stripe) {
+  const s = hx(stripe);
+  return wrapTex([
+    bg(C.white),
+    // over the forehead
+    `<rect x="234" y="0" width="44" height="128" fill="${s}"/>`,
+    `<rect x="226" y="0" width="8" height="128" fill="#2b3238"/>`,
+    `<rect x="278" y="0" width="8" height="128" fill="#2b3238"/>`,
+    // over the nape, meeting it at the crown
+    `<rect x="0" y="0" width="22" height="128" fill="${s}"/>`,
+    `<rect x="490" y="0" width="22" height="128" fill="${s}"/>`,
+    `<rect x="22" y="0" width="8" height="128" fill="#2b3238"/>`,
+    `<rect x="482" y="0" width="8" height="128" fill="#2b3238"/>`,
   ].join(''));
 }
 
@@ -692,28 +744,39 @@ function robeHood(o = {}) {
   ]);
 }
 
-/** Swept hair piece. */
+/**
+ * Swept hair piece.
+ *
+ * The printed eyebrows occupy local y 0.73..0.79 on the head, so the hairline
+ * across the brow has to stay above 0.80 or the figure loses its expression.
+ * The sides and nape drop much lower, which is what stops the piece reading as
+ * a bald cap and gives the buns some hair to emerge from.
+ */
 function hairPiece(o = {}) {
   const color = o.color ?? X.brownHair;
+  const R = 0.638;
+  const front = o.front ?? 0.82;
+  const sides = o.sides ?? (o.buns ? 0.34 : 0.52);
   const parts = [
-    at(domeMesh(0.63, 0.44, color, 20), 0, 0.92, 0),
-    paint(at(arcShell(0.635, 0.34, { span: 5.6, center: 0.35, seg: 22 }), 0, 0.8, 0), color),
-    // fringe over the brow
-    paint(at(arcShell(0.645, 0.24, { span: 2.6, center: Math.PI - 0.3, seg: 16 }), 0, 0.72, 0), color),
-    paint(at(arcShell(0.645, 0.16, { span: 1.5, center: Math.PI + 0.45, seg: 12 }), 0, 0.68, 0), color),
-    // sideburns
-    paint(at(tile(0.1, 0.3, 0.3), 0.58, 0.5, 0.02), color),
-    paint(at(tile(0.1, 0.3, 0.3), -0.58, 0.5, 0.02), color),
+    at(domeMesh(R, 0.42, color, 24), 0, 0.98, 0),
+    paint(at(arcShell(R, 0.98 - front, { span: Math.PI * 2, seg: 26 }), 0, front, 0), color),
+    paint(at(arcShell(R, front - sides, { span: 4.1, center: 0, seg: 22 }), 0, sides, 0), color),
+    // fringe swept toward the figure's right, sitting proud of the hairline
+    paint(at(arcShell(R + 0.02, 0.16, { span: 1.7, center: Math.PI + 0.4, seg: 14 }), 0, front, 0), color),
   ];
   if (o.buns) {
-    // side buns, the princess silhouette
+    // Side buns: three coils stacked outward along X. The rotation sign has to
+    // follow the side, or one bun ends up pointing into the skull.
     for (const sx of [1, -1]) {
-      parts.push(paint(at(rot(cyl(0.32, 0.3, { seg: 16 }), 0, 0, Math.PI / 2), sx * 0.72, 0.58, 0.06), color));
-      parts.push(paint(at(rot(cyl(0.22, 0.12, { seg: 14 }), 0, 0, Math.PI / 2), sx * 0.9, 0.58, 0.06), color));
+      const spin = -sx * Math.PI / 2;
+      parts.push(paint(at(rot(cyl(0.32, 0.2, { seg: 18 }), 0, 0, spin), sx * 0.48, 0.56, 0.06), color));
+      parts.push(paint(at(rot(cyl(0.24, 0.12, { seg: 16 }), 0, 0, spin), sx * 0.68, 0.56, 0.06), color));
+      parts.push(paint(at(rot(cyl(0.11, 0.07, { seg: 12 }), 0, 0, spin), sx * 0.8, 0.56, 0.06), 0x2a1608));
     }
   }
   if (o.long) {
-    parts.push(paint(at(arcShell(0.66, 0.6, { span: 3.4, center: 0, seg: 20, rTop: 0.72 }), 0, 0.2, 0), color));
+    parts.push(paint(at(arcShell(R + 0.01, sides - 0.02, { span: 3.2, center: 0, seg: 20, rTop: 0.72 }),
+      0, 0.02, 0), color));
   }
   return assemble(parts);
 }
@@ -822,6 +885,8 @@ export function holodisc(o = {}) {
   g.add(beam);
   g.userData.beam = beam;
   g.userData.gripOffset = [0, -0.02, 0.05];
+  // tip the puck back in the palm so the printed face and the beam both read
+  g.userData.gripRot = [-1.0, 0, 0];
   g.name = 'holodisc';
   return g;
 }
@@ -1104,7 +1169,8 @@ export function princess(o = {}) {
     hat: hairPiece({ color: o.hair ?? X.brownHair, buns: true, long: true }),
   });
   if (o.prop !== false) hold(fig, holodisc(), 'L');
-  pose(fig, { armR: 0.1, armL: 0.66, handL: -0.9, handR: 0 });
+  // arm out to the side, not across the chest, so the gown print stays visible
+  pose(fig, { armR: 0.12, armL: { x: 0.46, z: -0.3 }, handL: -0.5, handR: 0 });
   fig.userData.char = 'princess';
   return fig;
 }
@@ -1486,14 +1552,16 @@ export function astromech(o = {}) {
       paint(at(rot(cyl(0.34, 0.2, { seg: 18 }), 0, 0, Math.PI / 2), sx * -0.1, SHOULDER_Y, 0), C.silver),
       paint(at(rot(cyl(0.15, 0.09, { seg: 12 }), 0, 0, Math.PI / 2), sx * 0.08, SHOULDER_Y, 0), C.darkGray),
       // shin: deep enough to read as a leg from the side, tapering downward
-      paint(at(slab([[-0.26, 0], [0.26, 0], [0.22, shin], [-0.22, shin]], 0.62), 0, FOOT_H, 0), shell),
-      // shin greeblies on the leading edge
-      paint(at(tile(0.22, 0.12, 0.46), 0, shin - 0.16, -0.32), trim),
-      paint(at(tile(0.32, 0.1, 0.1), 0, shin - 0.3, -0.32), C.bluishGray),
-      paint(at(tile(0.16, 0.1, 0.3), 0, FOOT_H + 0.14, 0.31), C.bluishGray),
+      paint(at(slab([[-0.26, 0], [0.26, 0], [0.22, shin], [-0.22, shin]], 0.54), 0, FOOT_H, 0), shell),
+      // shin greeblies on the leading edge and the outer face
+      paint(at(tile(0.22, 0.12, 0.46), 0, shin - 0.16, -0.28), trim),
+      paint(at(tile(0.32, 0.1, 0.1), 0, shin - 0.3, -0.28), C.bluishGray),
+      paint(at(tile(0.16, 0.1, 0.3), 0, FOOT_H + 0.14, 0.27), C.bluishGray),
+      paint(at(tile(0.06, 0.34, 0.62), sx * 0.26, FOOT_H + 0.34, 0), C.bluishGray),
+      paint(at(tile(0.06, 0.3, 0.12), sx * 0.26, shin - 0.22, 0), trim),
       // foot: boxy, wheels recessed under it
-      paint(at(tile(0.54, 0.92, FOOT_H - 0.12), 0, 0.12, -0.06), shell),
-      paint(at(tile(0.46, 0.82, 0.13), 0, 0.0, -0.06), C.bluishGray),
+      paint(at(tile(0.54, 0.88, FOOT_H - 0.12), 0, 0.12, -0.06), shell),
+      paint(at(tile(0.46, 0.78, 0.13), 0, 0.0, -0.06), C.bluishGray),
       paint(at(tile(0.28, 0.2, 0.14), 0, FOOT_H - 0.02, -0.42), trim),
       paint(at(rot(cyl(0.09, 0.1, { seg: 12 }), Math.PI / 2, 0, 0), 0, 0.24, -0.52), C.darkGray),
     ];

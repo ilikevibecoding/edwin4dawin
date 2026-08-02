@@ -678,7 +678,8 @@ export function corvette(opt = {}) {
   ];
   for (const row of rows) {
     for (const x of row.xs) {
-      const b = engineBell({ r: row.r, depth: 1.1, color: 0xb8ecff, plume: 5.4, seg: 14 }).place(x, row.y, 32.0);
+      const b = engineBell({ r: row.r, depth: 1.1, color: 0xb8ecff, plume: 3.6, plumeOpacity: 0.22, seg: 14 })
+        .place(x, row.y, 32.0);
       S.add(b.shell);
       LIVE.add(b.live);
       engines.push(b.core);
@@ -1058,8 +1059,8 @@ export function escapePod(opt = {}) {
     S.add(at(rot(cyl(R * 1.02, 0.22, { color: C.bluishGray, seg: 18 }), Math.PI / 2, 0, 0), 0, cy, z));
   }
   // dorsal fairing + hatch (studs read as LEGO)
-  S.add(at(tile(3, 5, 0.34, { color: C.veryLightGray }), 0, cy + R - 0.46, 0.9));
-  S.add(at(brick(2, 4, PLATE, { color: C.white }), 0, cy + R - 0.14, 0.9));
+  S.add(at(tile(3, 4, 0.34, { color: C.veryLightGray }), 0, cy + R - 0.46, 0.4));
+  S.add(at(brick(2, 3, PLATE, { color: C.white }), 0, cy + R - 0.14, 0.4));
   S.add(at(cyl(0.62, 0.24, { color: C.bluishGray, seg: 12, studs: true }), 0, cy + R - 0.1, -0.9));
   S.add(at(cyl(0.2, 0.45, { color: C.darkGray, seg: 8 }), 0, cy + R + 0.24, 2.2));
   // ventral skid rails: puts the keel on y = 0
@@ -1076,7 +1077,7 @@ export function escapePod(opt = {}) {
   const engines = [];
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
-    const b = engineBell({ r: 0.5, depth: 0.4, color: 0xffd9a0, plume: 1.1, plumeOpacity: 0.26, seg: 10, shell: C.bluishGray })
+    const b = engineBell({ r: 0.5, depth: 0.4, color: 0xffe9c8, plume: 0.9, plumeOpacity: 0.18, seg: 10, shell: C.bluishGray })
       .place(Math.cos(a) * R * 0.6, cy + Math.sin(a) * R * 0.6, 4.5);
     S.add(b.shell);
     LIVE.add(b.live);
@@ -1141,6 +1142,12 @@ export function xwing(opt = {}) {
     }
     S.add(at(tile(1, 7, 0.34, { color: C.red }), s * 0.62, 0.66, -5.6));
     S.add(at(tile(1, 2, 0.36, { color: C.bluishGray }), s * 1.15, -0.28, 3.4));
+    // flank panel lines and vents
+    for (const [zz, dd] of [[-11.0, 3], [-4.2, 4], [1.0, 3], [8.6, 4]]) {
+      S.add(at(tile(1, dd, 0.34, { color: 0x6f736e }), s * (widthAt(F, zz) - 0.42), -0.1, zz));
+    }
+    S.add(at(tile(1, 2, 0.5, { color: C.black }), s * (widthAt(F, 9.6) - 0.4), 0.7, 9.6));
+    S.add(at(brick(1, 3, PLATE, { color: C.veryLightGray }), s * 0.62, 1.65, -8.6));
     // nose stripe decals
     const d = decal(3.6, 0.95, markTex, 'xmark');
     d.rotation.y = (s * Math.PI) / 2;
@@ -1201,15 +1208,19 @@ export function xwing(opt = {}) {
       const px = s * 1.45, py = up * 0.42, pz = 6.4;
       const plate = [[s * -0.7, -2.5], [s * 10.9, -3.3], [s * 11.1, 1.0], [s * -0.7, 1.7]];
       W.add(hull(plate, 0.46, -0.23, { material: bodyMat }));
-      // red squadron flash: a tip band and a leading-edge stripe
-      W.add(hull([[s * 8.7, -3.2], [s * 10.9, -3.3], [s * 11.0, 0.95], [s * 8.7, 0.85]], 0.2, 0.23, { color: C.red }));
-      W.add(hull([[s * 2.6, -2.8], [s * 8.7, -3.2], [s * 8.7, -2.2], [s * 2.6, -1.9]], 0.2, 0.23, { color: C.red }));
-      W.add(hull([[s * 8.7, -3.2], [s * 10.9, -3.3], [s * 11.0, 0.95], [s * 8.7, 0.85]], 0.2, -0.43, { color: C.red }));
+      // red squadron flashes: two chordwise bands, top and bottom
+      for (const band of [
+        [[s * 9.2, -3.16], [s * 10.4, -3.25], [s * 10.4, 1.05], [s * 9.2, 1.12]],
+        [[s * 5.2, -2.89], [s * 6.1, -2.95], [s * 6.1, 1.31], [s * 5.2, 1.36]],
+      ]) {
+        W.add(hull(band, 0.2, 0.23, { color: C.red }));
+        W.add(hull(band, 0.2, -0.43, { color: C.red }));
+      }
       W.add(at(tile(1, 3, 0.22, { color: C.bluishGray }), s * 6.4, 0.23, 0.0));
       W.add(at(tile(1, 3, 0.22, { color: C.bluishGray }), s * 4.0, -0.45, 0.2));
-      const wd = decal(2.2, 0.85, markTex, 'xmark');
+      const wd = decal(1.8, 0.7, markTex, 'xmark');
       wd.rotation.set(-Math.PI / 2, 0, s > 0 ? 0 : Math.PI);
-      wd.position.set(s * 5.6, 0.25, 1.05);
+      wd.position.set(s * 7.8, 0.25, -1.4);
       W.add(wd);
       // engine nacelle
       W.add(at(rot(cyl(0.98, 5.8, { color: C.veryLightGray, seg: 14 }), Math.PI / 2, 0, 0), s * 1.85, 0, -1.9));
@@ -1233,7 +1244,7 @@ export function xwing(opt = {}) {
       tip.position.set(s * 10.4, 0, -12.8);
       pivot.add(tip);
       cannonTips.push(tip);
-      const b = engineBell({ r: 0.86, depth: 0.5, color: 0xd6f2ff, plume: 3.4, plumeOpacity: 0.3, seg: 12 })
+      const b = engineBell({ r: 0.86, depth: 0.5, color: 0xd6f2ff, plume: 2.0, plumeOpacity: 0.2, seg: 12 })
         .place(s * 1.85, 0, 4.2);
       pivot.add(b.shell);
       pivot.add(b.live);
@@ -1294,6 +1305,12 @@ function studPlateX(w, d, s, x, y, z, o = {}) {
 function xCyl(rBase, rTop, x0, x1, y, z, o = {}) {
   const s = x1 >= x0 ? 1 : -1;
   return at(rot(cone(rBase, rTop, Math.abs(x1 - x0), o), 0, 0, (-s * Math.PI) / 2), x0, y, z);
+}
+
+/** Cylinder/cone lying along Z, spanning z0..z1 (rBase at z0, rTop at z1). */
+function zCyl(rBase, rTop, z0, z1, x, y, o = {}) {
+  const s = z1 >= z0 ? 1 : -1;
+  return at(rot(cone(rBase, rTop, Math.abs(z1 - z0), o), (s * Math.PI) / 2, 0, 0), x, y, z0);
 }
 
 /**
@@ -1714,7 +1731,7 @@ export function sandcrawler(opt = {}) {
   treadTex.wrapS = treadTex.wrapT = THREE.RepeatWrapping;
   treadTex.repeat.set(9, 1);
   treadTex.needsUpdate = true;
-  const treadMat = new THREE.MeshStandardMaterial({ color: 0x8b8f8c, map: treadTex, roughness: 0.7 });
+  const treadMat = new THREE.MeshStandardMaterial({ color: 0xcdd1cd, map: treadTex, roughness: 0.7 });
   const TH = 4.6;
   for (const s of [1, -1]) {
     const belt = new THREE.Mesh(new THREE.BoxGeometry(4.4, TH, 42), treadMat);
@@ -1728,27 +1745,58 @@ export function sandcrawler(opt = {}) {
       e.position.set(s * 10.4, TH / 2, z);
       S.add(e);
     }
-    S.add(at(tile(1, 40, 1.4, { color: C.darkGray }), s * 8.0, 1.6, 0));
-    for (let i = 0; i < 7; i++) {
-      S.add(at(rot(cyl(1.3, 0.6, { color: C.bluishGray, seg: 12 }), 0, 0, Math.PI / 2), s * 7.7, TH / 2, -18 + i * 6));
+    // sprockets and road wheels on the outer face
+    for (const z of [-21, 21]) {
+      S.add(xCyl(1.5, 1.5, s * 12.62, s * 13.2, TH / 2, z, { color: C.darkGray, seg: 14 }));
+      S.add(xCyl(0.5, 0.5, s * 13.2, s * 13.5, TH / 2, z, { color: C.bluishGray, seg: 10 }));
     }
+    for (let i = 0; i < 6; i++) {
+      S.add(xCyl(1.1, 1.1, s * 12.62, s * 13.05, TH / 2, -17 + i * 6.8, { color: C.darkGray, seg: 12 }));
+    }
+    S.add(at(tile(1, 40, 1.4, { color: C.darkGray }), s * 8.0, 1.6, 0));
     S.add(at(tile(2, 44, 1.0, { color: 0x6d4224 }), s * 11.6, TH + 0.2, 0));
   }
 
   // ---- stepped trapezoid body ----
+  // The bow rakes back; the ramp is a slanted door recessed into that rake, so
+  // the tiers it crosses get a rectangular notch cut out of their front edge.
   const N = 8;
   const yBase = TH + 0.2;
   const H = 19.4;
+  const BOW = 12.5;
+  const TILT = Math.atan2(BOW, H);
+  const openW = 14.6;
+  const RL = 13.0;
+  const hingeY = yBase + 0.3;
+  const hingeZ = -21.7;
+  const jamb = openW / 2 + 0.9;
+  const doorTop = hingeY + RL * Math.cos(TILT);
+  const doorZ = (y) => hingeZ + (y - hingeY) * Math.tan(TILT);
+  const tierOf = (y) => Math.max(0, Math.min(N - 1, Math.floor((y - yBase) / (H / N) + 1e-6)));
+  const hwAt = (y) => 12.6 - (tierOf(y) / (N - 1)) * 2.2;
+  const zfAt = (y) => -21.5 + (tierOf(y) / (N - 1)) * BOW;
   for (let i = 0; i < N; i++) {
     const y = yBase + (i * H) / N;
     const h = H / N + 0.02;
     const t = i / (N - 1);
     const hw = 12.6 - t * 2.2;
-    const zf = -21.5 + t * 12.5;
+    const zf = -21.5 + t * BOW;
     const zr = 21.5 - t * 0.8;
-    S.add(hull(rect(hw * 2, zr - zf, 0, (zf + zr) / 2), h, y, { material: i % 2 ? bodyMat : darkMat }));
-    // rivet strip along the step
-    S.add(at(tile(Math.round(hw * 2) - 2, 1, 0.4, { color: 0x6d4224 }), 0, y + h, zf + 0.6));
+    const zn = doorZ(y) + 1.4;
+    const notched = y < doorTop && zn > zf + 0.2;
+    const pts = notched
+      ? [[-hw, zf], [-jamb, zf], [-jamb, zn], [jamb, zn], [jamb, zf], [hw, zf], [hw, zr], [-hw, zr]]
+      : rect(hw * 2, zr - zf, 0, (zf + zr) / 2);
+    S.add(hull(pts, h, y, { material: i % 2 ? bodyMat : darkMat }));
+    // rivet strip along the step lip
+    if (notched) {
+      for (const s of [1, -1]) {
+        const w = Math.max(1, Math.round(hw - jamb));
+        S.add(at(tile(w, 1, 0.4, { color: 0x6d4224 }), s * (jamb + (hw - jamb) / 2), y + h, zf + 0.6));
+      }
+    } else {
+      S.add(at(tile(Math.round(hw * 2) - 2, 1, 0.4, { color: 0x6d4224 }), 0, y + h, zf + 0.6));
+    }
     for (const s of [1, -1]) {
       S.add(at(tile(1, Math.max(2, Math.round(zr - zf) - 3), 0.5, { color: 0x6d4224 }), s * (hw - 0.4), y + h - 0.9, (zf + zr) / 2 + 1));
     }
@@ -1766,44 +1814,58 @@ export function sandcrawler(opt = {}) {
   S.add(radar(2.2, 0.8, -8, topY + 4.0, 17, { color: C.darkTan }));
   S.add(at(tile(20, 2, 0.5, { color: 0x6d4224 }), 0, topY, -6.2));
 
-  // ---- front face: ramp opening, portholes ----
-  const openW = 11, openH = 8.6;
-  S.add(hull(rect(openW + 2.6, 1.4, 0, -21.4), openH + 2.4, yBase, { material: darkMat }));
-  S.add(hull(rect(openW, 1.2, 0, -21.9), openH, yBase, { color: C.black }));
+  // ---- bow: slanted doorway recess, jambs, portholes ----
+  // Everything in `bay` is laid out in the door plane: local -Z runs up the
+  // slope, local +Y goes deeper into the hull.
+  const bay = new THREE.Group();
+  bay.rotation.x = Math.PI / 2 + TILT;
+  bay.position.set(0, hingeY, hingeZ);
+  bay.add(hull(rect(openW, RL + 0.6, 0, -RL / 2 - 0.3), 0.5, 1.1, { color: 0x2a1c12 }));
+  bay.add(hull(rect(openW - 1.6, RL - 1.6, 0, -RL / 2 - 0.3), 0.4, 0.7, { color: C.black }));
   for (const s of [1, -1]) {
-    S.add(at(tile(1, 1, openH, { color: 0x6d4224 }), s * (openW / 2 + 0.8), yBase, -21.6));
+    bay.add(hull(rect(1.8, RL + 1.4, s * (openW / 2 + 0.9), -RL / 2 - 0.3), 1.9, -0.5, { material: darkMat }));
+    bay.add(at(tile(1, Math.max(2, Math.round(RL)), 0.5, { color: 0x6d4224 }), s * (openW / 2 + 0.9), -0.5, -RL / 2 - 0.3));
   }
-  S.add(at(tile(Math.round(openW) + 3, 1, 0.8, { color: 0x6d4224 }), 0, yBase + openH + 1.6, -21.6));
-  // portholes
-  const pw = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.1), winMat);
-  pw.position.set(0, yBase + 13.6, -16.1);
-  pw.rotation.y = Math.PI;
-  S.add(pw);
+  bay.add(hull(rect(openW + 3.6, 1.8, 0, -RL - 0.9), 1.9, -0.5, { material: darkMat }));
+  bay.add(at(tile(Math.round(openW) + 3, 1, 0.5, { color: 0x6d4224 }), 0, -0.5, -RL - 0.9));
+  S.add(bay);
+
+  // portholes, set flush on whichever tier face they land on
+  for (const [yy, ww] of [[13.6, 9], [16.4, 5]]) {
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(ww, 1.1), winMat);
+    p.position.set(0, yBase + yy, zfAt(yBase + yy) - 0.06);
+    p.rotation.y = Math.PI;
+    S.add(p);
+  }
   for (const s of [1, -1]) {
-    for (const [yy, zz, ww] of [[9.0, 8, 7], [14.0, -2, 5]]) {
+    for (const [yy, zz, ww] of [[6.6, 8, 7], [11.5, -2, 5], [16.4, 10, 4]]) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(ww, 0.9), winMat);
       p.rotation.y = (s * Math.PI) / 2;
-      const t = (yy - 0) / H;
-      p.position.set(s * (12.6 - t * 2.2 + 0.06), yBase + yy, zz);
+      p.position.set(s * (hwAt(yBase + yy) + 0.06), yBase + yy, zz);
       S.add(p);
     }
   }
 
-  // ---- ramp (hinged at the bottom of the front face) ----
+  // ---- ramp (hinged along the bottom of the bow) ----
   const ramp = new THREE.Group();
   ramp.name = 'ramp';
-  const RL = 10.5;
-  ramp.add(hull(rect(openW - 0.4, RL, 0, -RL / 2), 0.5, -0.5, { material: bodyMat }));
-  ramp.add(at(brick(Math.round(openW) - 1, Math.round(RL) - 1, PLATE, { color: 0x8a5433 }), 0, 0, -RL / 2));
+  ramp.add(hull(rect(openW - 0.5, RL, 0, -RL / 2), 0.55, -0.55, { material: bodyMat }));
+  ramp.add(at(brick(Math.round(openW) - 2, Math.round(RL) - 2, PLATE, { color: 0x8a5433 }), 0, 0, -RL / 2));
   for (const s of [1, -1]) {
-    ramp.add(at(tile(1, Math.round(RL), 0.7, { color: 0x6d4224 }), s * (openW / 2 - 0.9), 0, -RL / 2));
+    ramp.add(at(tile(1, Math.round(RL), 0.7, { color: 0x6d4224 }), s * (openW / 2 - 1.0), 0, -RL / 2));
   }
-  for (let i = 0; i < 4; i++) {
-    ramp.add(at(tile(Math.round(openW) - 2, 1, 0.35, { color: C.darkGray }), 0, 0.4, -1.6 - i * 2.6));
+  for (let i = 0; i < 5; i++) {
+    ramp.add(at(tile(Math.round(openW) - 4, 1, 0.35, { color: C.darkGray }), 0, 0.4, -1.6 - i * 2.4));
+  }
+  // hinge knuckles
+  for (const s of [1, -1]) {
+    ramp.add(at(rot(cyl(0.55, 1.6, { color: C.darkGray, seg: 10 }), 0, 0, Math.PI / 2), s * (openW / 2 - 0.4), -0.28, -0.3));
   }
   ramp.userData.noBake = true;
-  ramp.position.set(0, yBase + 0.2, -21.7);
+  ramp.position.set(0, hingeY, hingeZ);
   g.add(ramp);
+  const RAMP_SHUT = Math.PI / 2 + TILT;          // flush against the raked bow
+  const RAMP_DOWN = -Math.asin(hingeY / RL);     // tip resting on the ground
 
   // ---- exhaust stacks ----
   const engines = [];
@@ -1833,10 +1895,10 @@ export function sandcrawler(opt = {}) {
   g.userData.setRamp = (t) => {
     const k = Math.max(0, Math.min(1, t));
     g.userData.rampOpen = k;
-    ramp.rotation.x = (1 - k) * Math.PI * 0.5;
+    ramp.rotation.x = RAMP_SHUT + k * (RAMP_DOWN - RAMP_SHUT);
   };
   g.userData.treadScroll = (t) => { treadTex.offset.x = -t; };
-  g.userData.setRamp(0);
+  g.userData.setRamp(opt.ramp ?? 0);
   return wireEngines(g, engines, 0.5);
 }
 
@@ -1883,36 +1945,50 @@ export function turbolaserTower(opt = {}) {
   const yoke = new THREE.Group();
   yoke.name = 'yoke';
   yoke.add(at(cyl(2.6, 1.4, { color: C.lightGray, seg: 16 }), 0, 0, 0));
-  yoke.add(at(tile(5, 4, 1.6, { color: C.veryLightGray }), 0, 1.4, 0.9));
-  yoke.add(at(tile(3, 3, 0.5, { color: C.bluishGray }), 0, 3.0, 1.2));
+  yoke.add(slabBox(5.2, 4.4, 1.7, 1.4, 0, 0.9, { material: baseMat }));
+  yoke.add(at(brick(4, 3, PLATE, { color: C.veryLightGray }), 0, 3.1, 1.2));
+  yoke.add(at(tile(5, 1, 0.4, { color: C.darkGray }), 0, 3.1, 2.7));
   for (const s of [1, -1]) {
-    yoke.add(at(tile(1, 3, 2.4, { color: C.lightGray }), s * 1.9, 1.4, -0.6));
-    yoke.add(at(rot(cyl(0.5, 0.5, { color: C.darkGray, seg: 12 }), 0, 0, Math.PI / 2), s * 2.3, 2.9, -0.6));
+    // trunnion cheeks the barrels pivot between
+    yoke.add(slabBox(1.3, 3.2, 2.6, 1.4, s * 1.95, -0.5, { material: baseMat }));
+    yoke.add(xCyl(0.55, 0.45, s * 2.6, s * 3.0, 2.9, -0.6, { color: C.darkGray, seg: 12 }));
+    yoke.add(at(tile(1, 2, 0.3, { color: C.darkGray }), s * 1.95, 4.0, -0.6));
   }
-  yoke.add(at(cyl(0.5, 1.4, { color: C.darkGray, seg: 10 }), 0, 3.5, 1.4));
-  yoke.add(radar(1.2, 0.5, 0, 4.9, 1.4, { color: C.veryLightGray }));
+  greebles(yoke, {
+    x0: -2.2, x1: 2.2, z0: -0.4, z1: 2.9, y: 3.1, seed: seed + 4, count: 16,
+    colors: [C.bluishGray, C.darkGray, C.veryLightGray], hMax: 0.5, maxW: 2, grid: 0.5,
+  });
+  yoke.add(at(cyl(0.5, 1.4, { color: C.darkGray, seg: 10 }), 0, 3.5, 2.4));
+  yoke.add(radar(1.2, 0.5, 0, 4.9, 2.4, { color: C.veryLightGray }));
 
   // ---- elevating barrels ----
   const guns = new THREE.Group();
   guns.name = 'guns';
   guns.position.set(0, 2.9, -0.6);
-  guns.add(at(tile(4, 3, 1.0, { color: C.bluishGray }), 0, -0.5, -0.4));
+  // mantlet / recoil housing
+  guns.add(slabBox(4.6, 3.0, 2.2, -1.1, 0, -0.3, { material: baseMat }));
+  guns.add(at(tile(3, 1, 0.4, { color: C.darkGray }), 0, 1.1, -0.4));
   const muzzles = [];
   for (const s of [1, -1]) {
-    guns.add(at(rot(cyl(0.42, 7.2, { color: C.veryLightGray, seg: 12 }), Math.PI / 2, 0, 0), s * 1.0, 0, -5.0));
-    guns.add(at(rot(cyl(0.56, 1.2, { color: C.darkGray, seg: 12 }), Math.PI / 2, 0, 0), s * 1.0, 0, -1.4));
-    guns.add(at(rot(cyl(0.5, 1.0, { color: C.darkGray, seg: 12 }), Math.PI / 2, 0, 0), s * 1.0, 0, -8.0));
-    guns.add(at(rot(cyl(0.3, 1.6, { color: C.bluishGray, seg: 10 }), Math.PI / 2, 0, 0), s * 1.0, 0, 0.6));
+    guns.add(zCyl(0.44, 0.4, -1.0, -8.4, s * 1.1, 0, { color: C.veryLightGray, seg: 12 }));
+    guns.add(zCyl(0.62, 0.62, -0.4, -2.2, s * 1.1, 0, { color: C.darkGray, seg: 12 }));
+    guns.add(zCyl(0.56, 0.5, -6.6, -8.0, s * 1.1, 0, { color: C.darkGray, seg: 12 }));
+    guns.add(zCyl(0.52, 0.52, -8.0, -8.5, s * 1.1, 0, { color: C.black, seg: 12 }));
+    guns.add(zCyl(0.34, 0.34, 0.4, 1.9, s * 1.1, 0, { color: C.bluishGray, seg: 10 }));
+    // cooling sleeve rings
+    for (let i = 0; i < 4; i++) {
+      guns.add(zCyl(0.54, 0.54, -3.0 - i * 1.0, -3.3 - i * 1.0, s * 1.1, 0, { color: C.bluishGray, seg: 12 }));
+    }
     const mz = new THREE.Object3D();
-    mz.position.set(s * 1.0, 0, -8.3);
+    mz.position.set(s * 1.1, 0, -8.6);
     guns.add(mz);
     muzzles.push(mz);
-    const fl = at(rot(cone(1.0, 0.1, 2.2, { color: 0x9ff0ff, glow: true, seg: 10 }), -Math.PI / 2, 0, 0), s * 1.0, 0, -8.3);
+    const fl = at(rot(cone(0.95, 0.1, 2.2, { color: 0x9ff0ff, glow: true, seg: 10 }), -Math.PI / 2, 0, 0), s * 1.1, 0, -8.6);
     fl.material = additive(0xa8f2ff, 0.7);
     fl.visible = false;
     fl.userData.noBake = true;
     guns.add(fl);
-    muzzles[muzzles.length - 1].userData.flash = fl;
+    mz.userData.flash = fl;
   }
   yoke.add(guns);
   yoke.position.set(0, 2.5, 0);
@@ -1986,30 +2062,48 @@ export function hangarShuttle(opt = {}) {
     S.add(sw);
     S.add(at(tile(1, 4, 0.5, { color: C.darkGray }), s * 2.05, 1.4, 1.0));
   }
-  // dorsal fin
-  S.add(hull([[-0.4, -1.0], [0.4, -1.0], [0.4, 5.6], [-0.4, 5.6]], 5.2, 4.0, { color: C.lightGray }));
-  S.add(hull([[-0.28, 0.4], [0.28, 0.4], [0.28, 4.6], [-0.28, 4.6]], 2.2, 9.2, { color: C.veryLightGray }));
-  S.add(at(tile(1, 2, 0.4, { color: C.darkGray }), 0, 11.4, 2.6));
+  // dorsal fin: stepped taper with a swept leading edge (Lambda silhouette)
+  const finTiers = [[-1.2, 5.8, 0.9, 4.0, 2.6], [0.1, 5.6, 0.74, 6.6, 2.2],
+    [1.5, 5.3, 0.6, 8.8, 1.8], [2.6, 5.0, 0.5, 10.6, 1.0]];
+  for (const [z0, z1, th, y, h] of finTiers) {
+    S.add(hull(rect(th, z1 - z0, 0, (z0 + z1) / 2), h, y, { material: hullMat }));
+    S.add(at(tile(1, Math.max(1, Math.round(z1 - z0) - 2), 0.34, { color: C.bluishGray }), 0, y + h, (z0 + z1) / 2));
+  }
+  const impTex = svgTex('imp', SVG_IMPERIAL, { repeat: [1, 1], w: 128, h: 128 });
+  for (const s of [1, -1]) {
+    S.add(at(rot(decal(2.2, 2.2, impTex, 'impDark', { color: 0x39434e }), 0, (s * Math.PI) / 2, 0),
+      s * 0.47, 5.4, 2.6));
+  }
+  S.add(at(tile(1, 2, 0.4, { color: C.darkGray }), 0, 11.6, 3.6));
+  S.add(at(bar(1.4, 0.08, { color: C.silver }), 0, 12.0, 3.6));
   greebles(S, {
-    x0: -1.6, x1: 1.6, z0: 3.0, z1: 6.2, y: 4.0, seed, count: 14,
+    x0: -1.6, x1: 1.6, z0: 2.6, z1: 6.0, y: 4.0, seed, count: 16,
     colors: [C.bluishGray, C.darkGray], hMax: 0.6, maxW: 2, grid: 0.5,
-    test: (x) => Math.abs(x) > 0.55,
+    test: (x) => Math.abs(x) > 0.6,
   });
 
-  // folding wings
+  // folding wings: built about their own hinge so rotation.z is the fold angle
   const wings = [];
+  const HX = 1.5, HY = 1.6, HZ = 1.6;
   for (const s of [1, -1]) {
     const W = new THREE.Group();
-    W.add(hull([[s * 0.3, -1.2], [s * 7.4, 1.0], [s * 7.4, 4.6], [s * 0.3, 4.0]], 0.5, -0.25, { material: hullMat }));
-    W.add(hull([[s * 5.4, 1.2], [s * 7.2, 1.4], [s * 7.2, 4.4], [s * 5.4, 4.0]], 0.24, 0.25, { color: C.darkGray }));
-    W.add(at(rot(cyl(0.4, 3.2, { color: C.bluishGray, seg: 10 }), Math.PI / 2, 0, 0), s * 6.6, 0, 1.4));
-    W.add(at(tile(1, 4, 0.3, { color: C.bluishGray }), s * 3.0, 0.25, 2.0));
+    const w0 = s * 0.2, w1 = s * 6.6;
+    W.add(hull([[w0, -2.0], [w1, 0.6], [w1, 3.2], [w0, 2.6]], 0.52, -0.26, { material: hullMat }));
+    W.add(hull([[s * 4.4, 1.0], [w1 - s * 0.2, 1.3], [w1 - s * 0.2, 3.0], [s * 4.4, 2.5]], 0.26, 0.26,
+      { color: C.darkGray }));
+    W.add(at(tile(1, 3, 0.3, { color: C.bluishGray }), s * 2.6, 0.26, 0.4));
+    // wingtip cannon
+    W.add(zCyl(0.42, 0.42, 0.8, 3.2, w1, 0, { color: C.bluishGray, seg: 10 }));
+    W.add(zCyl(0.2, 0.2, -3.2, 0.9, w1, 0, { color: C.silver, seg: 8 }));
     const pivot = new THREE.Group();
-    pivot.position.set(s * 1.5, 1.5, 1.4);
+    pivot.position.set(s * HX, HY, HZ);
     pivot.add(bake(W));
     pivot.userData.sign = s;
+    pivot.userData.noBake = true;
     g.add(pivot);
     wings.push(pivot);
+    // hinge fairing on the hull
+    S.add(xCyl(0.85, 0.7, s * (HX - 0.6), s * (HX + 0.9), HY, HZ, { color: C.darkGray, seg: 12 }));
   }
 
   // engines
@@ -2038,7 +2132,7 @@ export function hangarShuttle(opt = {}) {
     g.userData.wingsOpen = k;
     for (const w of wings) w.rotation.z = w.userData.sign * (1.15 - 1.62 * k);
   };
-  g.userData.setWings(1);
+  g.userData.setWings(opt.wings ?? 1);
   return wireEngines(g, engines, 1);
 }
 
@@ -2077,8 +2171,8 @@ export function proximityBolt(opt = {}) {
   const radius = opt.radius ?? 0.14;
   const g = new THREE.Group();
   g.name = 'bolt';
-  const core = new THREE.Mesh(capsuleGeo(radius, len, 6), boltCoreMat(color));
-  const sheath = new THREE.Mesh(capsuleGeo(radius * 2.7, len * 1.1, 6), additive(color, 0.4));
+  const core = new THREE.Mesh(capsuleGeo(radius, len, 8), boltCoreMat(color));
+  const sheath = new THREE.Mesh(capsuleGeo(radius * 2.7, len * 1.1, 8), additive(color, 0.4));
   core.castShadow = sheath.castShadow = false;
   g.add(core);
   g.add(sheath);

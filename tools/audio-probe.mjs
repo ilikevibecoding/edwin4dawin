@@ -90,6 +90,7 @@ function serve(port) {
     const srv = createServer(async (req, res) => {
       try {
         const url = new URL(req.url, 'http://localhost');
+        if (url.pathname === '/favicon.ico') { res.writeHead(204).end(); return; }
         const rel = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '');
         const path = join(ROOT, rel === '/' ? '/audio-probe.html' : rel);
         if (!path.startsWith(ROOT)) { res.writeHead(403).end(); return; }
@@ -198,6 +199,9 @@ async function images(file, base) {
 const srv = await serve(PORT);
 const browser = await puppeteer.launch({
   headless: true,
+  // The full-film pass renders 243 s of audio in one shot and comfortably
+  // outlives puppeteer's default 180 s protocol timeout.
+  protocolTimeout: 30 * 60 * 1000,
   args: [
     '--no-sandbox',
     '--disable-dev-shm-usage',

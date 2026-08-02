@@ -56,6 +56,12 @@ async function boot() {
       window.__wav = wav;
       return wav.length;
     };
+    window.__renderChunk = async (from, dur, tail, sr) => {
+      const wav = await director.renderSoundtrackChunk(from, dur, tail ?? 3.5, sr || 48000);
+      window.__wav = wav;
+      return wav.length;
+    };
+    window.__scenes = director.tl.scenes.map((s) => ({ id: s.id, start: s.start, dur: s.dur }));
     window.__wavChunk = (off, len) => {
       const s = window.__wav.subarray(off, off + len);
       let bin = '';

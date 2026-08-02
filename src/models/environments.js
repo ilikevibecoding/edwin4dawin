@@ -1297,8 +1297,9 @@ export function battleStation({ radius = 420, seed = 17, seg = 240, texSize = 20
   staticRoot.add(body);
 
   /* ---- greeble ------------------------------------------------------- */
-  const plateMat = mat(0x8b9096, { rough: 0.6, metal: 0.25 });
-  const darkMat = mat(0x5c6268, { rough: 0.7, metal: 0.2 });
+  // kept close to the hull's own mid-tone: brighter greeble reads as confetti
+  const plateMat = mat(0x7d8389, { rough: 0.6, metal: 0.25 });
+  const darkMat = mat(0x565c62, { rough: 0.7, metal: 0.2 });
   const pipeMat = mat(0x9aa0a6, { rough: 0.45, metal: 0.5 });
   const greebleRoot = new THREE.Group();
   const put = (mesh, dir, r, spinAngle) => {
@@ -1323,21 +1324,31 @@ export function battleStation({ radius = 420, seed = 17, seg = 240, texSize = 20
     if (Math.abs(th - Math.PI / 2) < halfW + wall * 4) continue;        // trench stays clear
     const spread = 0.035 + rand() * 0.055;                              // angular radius
     const cR = rFn(th, lon, cDir.x, cDir.y, cDir.z);
-    const pad = radius * spread * 1.25;
-    put(boxMesh(pad, 0.6, pad * (0.6 + rand() * 0.7), darkMat), cDir, cR - 0.5, rand() * TAU);
+    // sunken pads, not one big card: a thin plate this wide on a sphere this
+    // size lifts its own corners off the hull and reads as floating paper
+    const pad = radius * spread * 0.62;
+    for (let k = 0; k < 2 + Math.round(rand() * 2); k++) {
+      const off = spread * 0.75;
+      const lonP = lon + (rand() - 0.5) * off * 2 / Math.max(0.2, Math.sin(th));
+      const thP = clamp(th + (rand() - 0.5) * off * 2, 0.02, Math.PI - 0.02);
+      if (Math.abs(thP - Math.PI / 2) < halfW + wall * 3) continue;
+      const dP = dirAt(thP, lonP);
+      put(flat(pad * (0.6 + rand() * 0.7), 1.5, pad * (0.6 + rand() * 0.7), darkMat),
+        dP, rFn(thP, lonP, dP.x, dP.y, dP.z) - 1.1, rand() * TAU);
+    }
 
-    const n = 7 + Math.round(rand() * 13);
+    const n = 6 + Math.round(rand() * 11);
     for (let k = 0; k < n; k++) {
       const lon2 = lon + (rand() - 0.5) * spread * 2 / Math.max(0.2, Math.sin(th));
       const th2 = clamp(th + (rand() - 0.5) * spread * 2, 0.02, Math.PI - 0.02);
       if (Math.abs(th2 - Math.PI / 2) < halfW + wall * 3) continue;
       const dir = dirAt(th2, lon2);
       const r = rFn(th2, lon2, dir.x, dir.y, dir.z);
-      const flat = rand() < 0.5;
-      const w = 2.5 + rand() * 7, d2 = 2.5 + rand() * 7;
-      const hgt = flat ? 0.6 + rand() * 1.2 : 1.6 + rand() * rand() * 7;
+      const lowProfile = rand() < 0.35;
+      const w = 4 + rand() * 11, d2 = 4 + rand() * 11;
+      const hgt = lowProfile ? 1.1 + rand() * 1.9 : 2.4 + rand() * rand() * 8;
       put(boxMesh(w, hgt, d2, rand() < 0.3 ? darkMat : plateMat), dir, r - 0.3, rand() * TAU);
-      if (!flat && rand() < 0.35) {
+      if (!lowProfile && rand() < 0.35) {
         put(boxMesh(w * 0.55, 0.5 + rand(), d2 * 0.55, darkMat), dir, r + hgt - 0.6, rand() * TAU);
       }
       if (rand() < 0.14) {
@@ -1346,18 +1357,38 @@ export function battleStation({ radius = 420, seed = 17, seg = 240, texSize = 20
     }
   }
 
-  // trench interior greeble: reads as texture from orbit, as buildings up close
-  const nTrench = Math.round(520 * greeble);
+  // Trench interior: the groove has to read as a groove from orbit, so the
+  // detail hugs the two walls and the floor stays a dark, legible channel.
+  const nTrench = Math.round(360 * greeble);
   for (let i = 0; i < nTrench; i++) {
     const lon = rand() * TAU;
     const side = rand() < 0.5 ? -1 : 1;
-    const inFloor = rand() < 0.45;
-    const th = Math.PI / 2 + side * (inFloor ? rand() * halfW * 0.8 : halfW * (0.85 + rand() * 0.12));
+    const th = Math.PI / 2 + side * halfW * (0.72 + rand() * 0.26);
     const dir = dirAt(th, lon);
     const r = rFn(th, lon, dir.x, dir.y, dir.z);
-    const m = boxMesh(1.2 + rand() * 3.4, 0.6 + rand() * (inFloor ? 2.2 : 5.5), 1.2 + rand() * 3.4,
-      rand() < 0.35 ? darkMat : plateMat);
-    put(m, dir, r - 0.15, rand() * TAU);
+    put(flat(1 + rand() * 2.6, 0.5 + rand() * 2.6, 1 + rand() * 2.6,
+      rand() < 0.45 ? darkMat : plateMat), dir, r - 0.15, rand() * TAU);
+  }
+  // continuous rails along both lips, which is what actually sells the trench
+  // at a distance — a bright line either side of a dark band
+  const xA = new THREE.Vector3(), m4 = new THREE.Matrix4();
+  for (const s of [-1, 1]) {
+    const nSeg = 300;
+    const th = Math.PI / 2 + s * (halfW + wall * 0.55);
+    for (let i = 0; i < nSeg; i++) {
+      const lon = (i / nSeg) * TAU;
+      const dir = dirAt(th, lon);
+      const r = rFn(th, lon, dir.x, dir.y, dir.z);
+      // local Z has to follow the rail, so build the basis rather than trusting
+      // a shortest-arc rotation, which twists as it goes round
+      const zA = new THREE.Vector3(-Math.sin(lon), 0, Math.cos(lon));
+      xA.crossVectors(dir, zA).normalize();
+      m4.makeBasis(xA, dir, zA);
+      const m = flat(1.6, 1.2, (TAU * radius * Math.sin(th)) / nSeg * 1.04, plateMat);
+      m.position.copy(dir).multiplyScalar(r - 0.15);
+      m.quaternion.setFromRotationMatrix(m4);
+      greebleRoot.add(m);
+    }
   }
 
   // a few surface towers / sensor masts for silhouette interest
@@ -1508,52 +1539,61 @@ function stationMaps(seed, w, o) {
     const rand = rng(seed * 271 + 11);
     const grime = fbm(seed * 13 + 3, { octaves: 5, base: 6, gain: 0.55 });
 
-    // base plate tone
-    ctx.fillStyle = bumpMode ? 'rgb(150,150,150)' : css(0x8d9298);
+    // The armour is drawn as plates over a dark shadow-gap base, never as a
+    // grid of ruled lines: bands of varying height, each split into plates of
+    // varying width, so no seam runs pole to pole and no two plates match.
+    const grey = (t) => (bumpMode
+      ? `rgb(${Math.round(t * 255)},${Math.round(t * 255)},${Math.round(t * 255)})`
+      : css(mix(0x74797f, 0xb3b8bd, t)));
+
+    ctx.fillStyle = bumpMode ? 'rgb(52,52,52)' : css(0x4e545a);   // seam gaps
     ctx.fillRect(0, 0, w, h);
 
-    // big sectors
-    for (let i = 0; i < 40; i++) {
-      const x = rand() * w, y = rand() * h;
-      const sw = w * (0.02 + rand() * 0.1), sh = h * (0.03 + rand() * 0.14);
-      const t = 0.5 + (rand() - 0.5) * 0.34;
-      ctx.fillStyle = bumpMode ? `rgb(${Math.round(t * 255)},${Math.round(t * 255)},${Math.round(t * 255)})`
-        : css(mix(0x81868c, 0x9ba0a5, t));
-      ctx.fillRect(x, y, sw, sh);
-    }
-
-    // panel field
-    const cell = w / 128;
-    for (let gyi = 0; gyi < h / cell; gyi++) {
-      const lat = Math.abs(0.5 - (gyi * cell) / h) * 2;
-      const cols = Math.max(6, Math.round((w / cell) * Math.sqrt(Math.max(0.02, 1 - lat * lat * 0.9))));
-      for (let gxi = 0; gxi < cols; gxi++) {
-        if (rand() < 0.22) continue;
-        const x = (gxi / cols) * w, y = gyi * cell;
-        const cw = (w / cols) * (0.55 + rand() * 0.42);
-        const ch = cell * (0.55 + rand() * 0.4);
-        const t = 0.5 + (rand() - 0.5) * 0.75;
-        ctx.fillStyle = bumpMode
-          ? `rgb(${Math.round((0.42 + t * 0.5) * 255)},${Math.round((0.42 + t * 0.5) * 255)},${Math.round((0.42 + t * 0.5) * 255)})`
-          : css(mix(0x7b8086, 0xa4a9ae, t));
-        ctx.fillRect(x, y, cw, ch);
-        if (rand() < 0.3) {
-          ctx.fillStyle = bumpMode ? 'rgb(70,70,70)' : css(0x6a7075);
-          ctx.fillRect(x + cw * 0.15, y + ch * 0.2, cw * 0.3, ch * 0.5);
+    const gap = Math.max(1.5, w / 1100);
+    let y = 0;
+    while (y < h) {
+      const v = (y + 0.5) / h;                        // 0 north pole, 1 south
+      const sinTh = Math.max(0.16, Math.sin(Math.PI * v));
+      const bandH = h * (0.012 + rand() * 0.03);
+      // plates are widened toward the poles so they stay square on the sphere
+      const baseW = w * (0.012 + rand() * 0.035) / sinTh;
+      let x = -rand() * baseW;
+      while (x < w) {
+        const pw = baseW * (0.55 + rand() * 1.5);
+        const t = 0.42 + Math.pow(rand(), 1.4) * 0.5;
+        ctx.fillStyle = grey(t);
+        ctx.fillRect(x, y, pw - gap, bandH - gap);
+        // sub-plates and vents inside the bigger plates
+        if (pw > baseW * 0.9 && bandH > h * 0.02 && rand() < 0.72) {
+          const inset = Math.min(pw, bandH) * 0.18;
+          if (rand() < 0.5) {
+            ctx.fillStyle = grey(clamp(t + (rand() - 0.5) * 0.34, 0.1, 1));
+            ctx.fillRect(x + inset, y + inset, (pw - gap) * (0.3 + rand() * 0.45), (bandH - gap) - inset * 2);
+          } else {
+            ctx.fillStyle = bumpMode ? 'rgb(30,30,30)' : css(0x3f4449);
+            const vh = (bandH - gap) * 0.26;
+            for (let k = 0; k < 3; k++) {
+              ctx.fillRect(x + inset, y + inset + k * vh * 1.5, (pw - gap) * 0.5, vh * 0.7);
+            }
+          }
         }
+        x += pw;
       }
+      y += bandH;
     }
 
-    // meridian + latitude seams
-    ctx.strokeStyle = bumpMode ? 'rgb(40,40,40)' : css(0x5e646a);
-    ctx.lineWidth = Math.max(1, w / 1400);
-    for (let i = 0; i < 48; i++) {
-      const x = (i / 48) * w;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-    }
-    for (let i = 1; i < 24; i++) {
-      const y = (i / 24) * h;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    // a handful of oversized sector plates to break the band rhythm
+    for (let i = 0; i < 34; i++) {
+      const v = 0.08 + rand() * 0.84;
+      const sinTh = Math.max(0.2, Math.sin(Math.PI * v));
+      const sw = w * (0.03 + rand() * 0.085) / sinTh, sh = h * (0.05 + rand() * 0.1);
+      const x = rand() * w, y2 = v * h - sh / 2;
+      ctx.fillStyle = grey(0.36 + rand() * 0.28);
+      ctx.fillRect(x, y2, sw - gap * 2, sh - gap * 2);
+      ctx.fillStyle = bumpMode ? 'rgb(40,40,40)' : css(0x474d53);
+      ctx.fillRect(x + sw * 0.1, y2 + sh * 0.14, (sw - gap * 2) * 0.34, (sh - gap * 2) * 0.2);
+      ctx.fillStyle = grey(0.72 + rand() * 0.25);
+      ctx.fillRect(x + sw * 0.1, y2 + sh * 0.5, (sw - gap * 2) * 0.6, (sh - gap * 2) * 0.1);
     }
 
     // equatorial trench band
@@ -3197,7 +3237,9 @@ function smokeTex(seed = 9) {
       const r = Math.sqrt(dx * dx + dy * dy) * 2;
       const lump = n(u, v);
       const a = Math.pow(smoothclamp(1.02 - r * (0.75 + lump * 0.55)), 1.5) * (0.45 + lump * 0.75);
-      const g2 = Math.round(lerp(90, 190, lump));
+      // smoke sprites are unlit, so the texture carries its own value range;
+      // tint the material down for soot rather than darkening this
+      const g2 = Math.round(lerp(150, 245, lump));
       return [g2, Math.round(g2 * 0.96), Math.round(g2 * 0.92), Math.round(clamp(a, 0, 1) * 255)];
     });
   }, { wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping });
@@ -3279,7 +3321,9 @@ export function explosionBurst({
     p.scale.setScalar(sc);
     const a = rand() * TAU;
     const e = Math.asin(rand() * 2 - 1);
-    const speed = size * (1.1 + rand() * 2.4) * spread;
+    // fast enough that the bricks outrun the fireball well before it fades —
+    // the shrapnel is the joke, so it has to end up outside the flames
+    const speed = size * (1.7 + rand() * 3.1) * spread;
     p.userData.vel = new THREE.Vector3(
       Math.cos(a) * Math.cos(e) * speed,
       Math.sin(e) * speed * 0.8 + size * 0.5,
@@ -3338,12 +3382,12 @@ export function explosionBurst({
       const v = p.userData.vel;
       const drag = 1 - Math.exp(-life * 2.6);
       p.position.set(
-        v.x * drag * 0.38,
-        v.y * drag * 0.38 - 0.5 * gravity * life * life,
-        v.z * drag * 0.38,
+        v.x * drag * 0.95,
+        v.y * drag * 0.95 - 0.5 * gravity * life * life,
+        v.z * drag * 0.95,
       );
       p.rotation.set(p.userData.spin.x * life, p.userData.spin.y * life, p.userData.spin.z * life);
-      const fade = clamp(1 - (t - 0.62) / 0.38, 0, 1);
+      const fade = clamp(1 - (t - 0.74) / 0.26, 0, 1);
       p.scale.setScalar(p.userData.sc * fade);
       p.visible = fade > 0.02;
     });
@@ -3369,7 +3413,7 @@ export function explosionBurst({
  *
  * @param {object} o {size, seed, count, rise, color}
  */
-export function smokePuff({ size = 6, seed = 12, count = 5, rise = 1, color = 0x9a938c } = {}) {
+export function smokePuff({ size = 6, seed = 12, count = 5, rise = 1, color = 0xb0a89e } = {}) {
   const g = new THREE.Group();
   g.name = 'smokePuff';
   const rand = rng(seed * 89 + 5);
@@ -3468,7 +3512,7 @@ export function sparkBurst({
   const emberGeo = new THREE.BufferGeometry();
   emberGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
   const emberMat = new THREE.PointsMaterial({
-    size: 2.6, sizeAttenuation: false, map: dotTex(0.35, 'star'), color,
+    size: 5, sizeAttenuation: false, map: dotTex(0.35, 'star'), color,
     transparent: true, opacity: 1, blending: THREE.AdditiveBlending,
     depthWrite: false, toneMapped: false,
   });
@@ -3492,7 +3536,9 @@ export function sparkBurst({
       const x = v.x * drag * 0.42;
       const y = v.y * drag * 0.42 - 0.5 * gravity * t * t;
       const z = v.z * drag * 0.42;
-      const tail = 0.055 * (1 - t * 0.5);
+      // WebGL will not widen a line, so length is the only way a streak reads:
+      // keep the tail long while the spark is hot
+      const tail = 0.13 * (1 - t * 0.55);
       const j = i * 6;
       p[j] = x; p[j + 1] = y; p[j + 2] = z;
       p[j + 3] = x - v.x * tail; p[j + 4] = y - v.y * tail; p[j + 5] = z - v.z * tail;
@@ -3501,9 +3547,9 @@ export function sparkBurst({
     geo.attributes.position.needsUpdate = true;
     emberGeo.attributes.position.needsUpdate = true;
     geo.computeBoundingSphere();
-    lineMat.opacity = Math.pow(clamp(1 - t / 0.75, 0, 1), 1.3);
-    emberMat.opacity = Math.pow(clamp(1 - t, 0, 1), 1.8) * 0.9;
-    emberMat.size = 2.6 * (1 - t * 0.5);
+    lineMat.opacity = Math.pow(clamp(1 - t / 0.85, 0, 1), 0.8);
+    emberMat.opacity = Math.pow(clamp(1 - t, 0, 1), 1.4);
+    emberMat.size = 5 * (1 - t * 0.55);
     flash.material.opacity = Math.pow(clamp(1 - t / 0.14, 0, 1), 1.5);
     flash.scale.setScalar(size * (1 + t * 3));
     return g;
@@ -3548,30 +3594,40 @@ export function laserImpact({ color = 0xff3b1f, size = 3.4, seed = 19 } = {}) {
   const scorch = new THREE.Mesh(
     rawGeo('quad', () => new THREE.PlaneGeometry(1, 1)),
     new THREE.MeshBasicMaterial({
-      map: smokeTex(seed), color: 0x120d0a, transparent: true, opacity: 0,
+      map: smokeTex(seed), color: 0x1d1512, transparent: true, opacity: 0,
       depthWrite: false, toneMapped: false,
     }),
   );
-  scorch.scale.setScalar(size * 1.5);
-  scorch.position.z = 0.02;
+  scorch.scale.setScalar(size * 1.25);
+  scorch.position.z = 0.01;
   keep(scorch);
   g.add(scorch);
+
+  // all of these are depth-write-free transparents at almost the same depth, so
+  // the sort order has to be stated: soot on the wall, fire in front of it
+  scorch.renderOrder = 1;
+  ring.renderOrder = 2;
+  flash.renderOrder = 3;
+  star.renderOrder = 4;
+  coreS.renderOrder = 5;
+  [flash, coreS, star].forEach((s) => { s.position.z = 0.06; });
+  ring.position.z = 0.04;
 
   let tNow = 0;
   const setT = (u) => {
     tNow = clamp(u, 0, 1);
     const t = tNow;
-    flash.material.opacity = Math.pow(clamp(1 - t / 0.34, 0, 1), 1.4);
+    flash.material.opacity = Math.pow(clamp(1 - t / 0.5, 0, 1), 1.4);
     flash.scale.setScalar(size * (1.4 + t * 3.4));
-    coreS.material.opacity = Math.pow(clamp(1 - t / 0.14, 0, 1), 1.2);
+    coreS.material.opacity = Math.pow(clamp(1 - t / 0.24, 0, 1), 1.2);
     coreS.scale.setScalar(size * (0.7 + t * 1.4));
-    star.material.opacity = Math.pow(clamp(1 - t / 0.24, 0, 1), 1.6) * 0.9;
+    star.material.opacity = Math.pow(clamp(1 - t / 0.4, 0, 1), 1.6) * 0.9;
     star.scale.setScalar(size * (2.6 + t * 6));
     star.material.rotation = t * 1.2;
     const rs = size * (0.6 + Math.pow(t, 0.5) * 5);
     ring.scale.set(rs, rs, 1);
     ring.material.opacity = Math.pow(clamp(1 - t / 0.5, 0, 1), 1.5) * 0.8;
-    scorch.material.opacity = smoothclamp(t / 0.2) * 0.75;
+    scorch.material.opacity = smoothclamp(t / 0.3) * 0.45;
     sparks.userData.setT(clamp(t * 1.3, 0, 1));
     return g;
   };
@@ -3700,9 +3756,11 @@ export function update(obj, t) {
   const u = obj && obj.userData;
   if (!u) return;
   const p = t <= 1 ? Math.max(0, t) : t - Math.floor(t);
-  if (u.setStretch) u.setStretch(p);
-  if (u.setOpen) u.setOpen(p);
-  if (u.setT) u.setT(p);
-  if (u.setClamps) u.setClamps(p);
-  if (u.update) u.update(t);
+  let posed = false;
+  for (const k of ['setStretch', 'setOpen', 'setT', 'setClamps']) {
+    if (u[k]) { u[k](p); posed = true; }
+  }
+  // `update` would re-pose anything driven by a 0..1 setter on its own clock,
+  // so it only runs for the things that have no setter (lights, flicker, drift)
+  if (u.update && !posed) u.update(t);
 }

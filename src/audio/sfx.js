@@ -149,7 +149,7 @@ function laser(ctx, bus, t, o = {}) {
   const { gain = 0.8, pan = 0, send = 0.24, pitch = 1, len = 0.30 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const body = gn(ctx, 0);
-  const bp = bq(ctx, 'bandpass', 2400, 5.5);
+  const bp = bq(ctx, 'bandpass', 2400, 3.0);
   body.connect(bp); bp.connect(g);
 
   for (const [type, det, lvl] of [['sawtooth', 0, 0.7], ['square', 9, 0.35]]) {
@@ -162,20 +162,20 @@ function laser(ctx, bus, t, o = {}) {
   hit(body.gain, t, 1, 0.0015, len);
 
   // Wire twang, the part that makes it read as Star Wars rather than sci-fi.
-  const c = comb(ctx, 300 * pitch, 0.22);
+  const c = comb(ctx, 300 * pitch, 0.30);
   const tw = gn(ctx, 0);
   const tn = noise(ctx, t, 0.02, { seed: seedFrom('laser', t), offset: (t * 7.3) % 2.5 });
   const thp = bq(ctx, 'highpass', 700, 0.7);
   tn.connect(thp); thp.connect(tw); tw.connect(c.input);
-  hit(tw.gain, t, 0.9, 0.001, 0.02);
-  const cg = gn(ctx, 0.5);
+  hit(tw.gain, t, 1.1, 0.001, 0.02);
+  const cg = gn(ctx, 0.8);
   c.output.connect(cg); cg.connect(g);
   return t + len + 0.12;
 }
 
 /** Capital-ship gun: everything an inch lower and four times as heavy. */
 function turbolaser(ctx, bus, t, o = {}) {
-  const { gain = 0.95, pan = 0, send = 0.38, len = 1.0 } = o;
+  const { gain = 0.52, pan = 0, send = 0.38, len = 1.0 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const body = gn(ctx, 0);
   const bp = bq(ctx, 'bandpass', 900, 3.2);
@@ -248,8 +248,8 @@ function ricochet(ctx, bus, t, o = {}) {
   n.connect(nhp); nhp.connect(ng); ng.connect(g);
   hit(ng.gain, t, 0.7, 0.0008, 0.03);
 
-  const c = comb(ctx, 620 + r() * 320, 0.18);
-  const cg = gn(ctx, 0.35);
+  const c = comb(ctx, 620 + r() * 320, 0.26);
+  const cg = gn(ctx, 1.1);
   ng.connect(c.input); c.output.connect(cg); cg.connect(g);
   return t + 0.34;
 }
@@ -260,7 +260,7 @@ function ricochet(ctx, bus, t, o = {}) {
 
 function boom(ctx, bus, t, o, big) {
   const {
-    gain = big ? 1.0 : 0.8,
+    gain = big ? 0.42 : 0.42,
     pan = 0,
     send = big ? 0.55 : 0.34,
   } = o;
@@ -335,7 +335,7 @@ function bigExplosion(ctx, bus, t, o = {}) { return boom(ctx, bus, t, o, true); 
 
 /** Something heavy hits the hull: thump plus the plating ringing it off. */
 function hullImpact(ctx, bus, t, o = {}) {
-  const { gain = 0.75, pan = 0, send = 0.32 } = o;
+  const { gain = 0.52, pan = 0, send = 0.32 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const sd = seedFrom('hullImpact', t, o.seed || 0);
   const r = rng(sd);
@@ -363,7 +363,7 @@ function hullImpact(ctx, bus, t, o = {}) {
 
 /** Breaching charge on a blast door. */
 function doorBlast(ctx, bus, t, o = {}) {
-  const { gain = 0.9, pan = 0, send = 0.45 } = o;
+  const { gain = 0.6, pan = 0, send = 0.45 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const sd = seedFrom('doorBlast', t);
   const r = rng(sd);
@@ -441,7 +441,7 @@ function engineWhoosh(ctx, bus, t, o = {}) {
 
 /** Doppler fly-by with a real stereo move. */
 function enginePass(ctx, bus, t, o = {}) {
-  const { gain = 0.7, send = 0.28, dur = 2.2, from = -0.85, to = 0.85, pitch = 1 } = o;
+  const { gain = 0.30, send = 0.28, dur = 2.2, from = -0.85, to = 0.85, pitch = 1 } = o;
   const g = ctx.createGain();
   g.gain.value = gain;
   const p = ctx.createStereoPanner();
@@ -514,7 +514,7 @@ function engineRumble(ctx, bus, t, o = {}) {
 
 /** Ion cannon charging / the flagship's field: electric, tritone-ish, wrong. */
 function ionDrone(ctx, bus, t, o = {}) {
-  const { gain = 0.42, pan = 0, send = 0.35, dur = 3, fade = 0.45 } = o;
+  const { gain = 0.75, pan = 0, send = 0.35, dur = 3, fade = 0.45 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const amp = gn(ctx, 0);
   amp.connect(g);
@@ -545,7 +545,7 @@ function ionDrone(ctx, bus, t, o = {}) {
 
 /** Rising whine that snaps into a huge whoosh and a receding star-line. */
 function hyperspaceJump(ctx, bus, t, o = {}) {
-  const { gain = 0.9, pan = 0, send = 0.5 } = o;
+  const { gain = 0.38, pan = 0, send = 0.5 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const sd = seedFrom('hyperspaceJump', t);
   const r = rng(sd);
@@ -887,14 +887,14 @@ function droidWorry(ctx, bus, t, o = {}) {
 
 /** Protocol droid: a formant pair moving in a fussy speech rhythm. */
 function protocolFuss(ctx, bus, t, o = {}) {
-  const { gain = 0.42, pan = 0, send = 0.22, syllables = 6, speed = 1 } = o;
+  const { gain = 1.35, pan = 0, send = 0.22, syllables = 6, speed = 1 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const sd = seedFrom('protocolFuss', t, o.seed || 0);
   const r = rng(sd);
 
   const src = gn(ctx, 0);
-  const f1 = bq(ctx, 'bandpass', 620, 7);
-  const f2 = bq(ctx, 'bandpass', 1720, 9);
+  const f1 = bq(ctx, 'bandpass', 620, 4.5);
+  const f2 = bq(ctx, 'bandpass', 1720, 6);
   const f1g = gn(ctx, 1.0);
   const f2g = gn(ctx, 0.65);
   src.connect(f1); f1.connect(f1g); f1g.connect(g);
@@ -966,7 +966,7 @@ function jawaChatter(ctx, bus, t, o = {}) {
 
 /** A building the size of a building, walking. */
 function sandcrawlerRumble(ctx, bus, t, o = {}) {
-  const { gain = 0.55, pan = 0, send = 0.3, dur = 6, fade = 0.9, tread = 0.78 } = o;
+  const { gain = 0.38, pan = 0, send = 0.3, dur = 6, fade = 0.9, tread = 0.78 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const sd = seedFrom('sandcrawlerRumble', t);
   const r = rng(sd);
@@ -1152,7 +1152,7 @@ function commBeep(ctx, bus, t, o = {}) {
 
 /** Squadron radio between lines. */
 function radioStatic(ctx, bus, t, o = {}) {
-  const { gain = 0.32, pan = 0, send = 0.08, dur = 0.8, crackle = 1 } = o;
+  const { gain = 0.62, pan = 0, send = 0.08, dur = 0.8, crackle = 1 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const sd = seedFrom('radioStatic', t);
   const r = rng(sd);
@@ -1221,7 +1221,7 @@ function targetingLock(ctx, bus, t, o = {}) {
 
 /** Pure low-frequency pressure. Use under impacts and reveals. */
 function rumbleSub(ctx, bus, t, o = {}) {
-  const { gain = 0.7, pan = 0, send = 0.05, dur = 2, f0 = 48, f1 = 27 } = o;
+  const { gain = 0.46, pan = 0, send = 0.05, dur = 2, f0 = 48, f1 = 27 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const amp = gn(ctx, 0);
   amp.connect(g);
@@ -1241,7 +1241,7 @@ function rumbleSub(ctx, bus, t, o = {}) {
 
 /** Hangar full of people who did not expect to survive the afternoon. */
 function crowdCheer(ctx, bus, t, o = {}) {
-  const { gain = 0.5, pan = 0, send = 0.5, dur = 3.6 } = o;
+  const { gain = 0.85, pan = 0, send = 0.5, dur = 3.6 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const sd = seedFrom('crowdCheer', t);
   const r = rng(sd);

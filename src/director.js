@@ -161,7 +161,7 @@ export class Director {
    * Identical code path for live playback and the offline film render, so the
    * mix you hear in the browser is the mix that lands in the MP4.
    */
-  scheduleAll(actx, t0, from = 0) {
+  scheduleAll(actx, t0, from = 0, to = Infinity) {
     if (!AUDIO || !AUDIO.createBus) {
       const g = actx.createGain();
       g.connect(actx.destination);
@@ -169,13 +169,13 @@ export class Director {
     }
     const bus = createBus(actx, {});
     const sections = this.tl.scenes
-      .filter((s) => s.end > from)
+      .filter((s) => s.end > from && s.start < to)
       .map((s) => ({ id: s.music, start: t0 + Math.max(s.start, from) - from, dur: s.end - Math.max(s.start, from), from: Math.max(0, from - s.start) }));
     scheduleScore(actx, bus, sections, { seed: 1337 });
-    scheduleCues(actx, bus, this.cues.filter((c) => c.t >= from).map((c) => ({ ...c, t: t0 + c.t - from })));
+    scheduleCues(actx, bus, this.cues.filter((c) => c.t >= from && c.t < to).map((c) => ({ ...c, t: t0 + c.t - from })));
     for (const l of this.lines) {
       const buf = this.voiceBuffers.get(l.id);
-      if (!buf || l.t < from) continue;
+      if (!buf || l.t < from || l.t >= to) continue;
       const src = actx.createBufferSource();
       src.buffer = buf;
       const g = actx.createGain();
@@ -219,6 +219,20 @@ export class Director {
     const len = Math.ceil((this.duration + 3) * sampleRate);
     const octx = new OfflineAudioContext(2, len, sampleRate);
     this.scheduleAll(octx, 0.05, 0);
+    const buf = await octx.startRendering();
+    return encodeWav(buf);
+  }
+
+  /**
+   * Render one slice of the soundtrack, plus a tail so reverb and long notes
+   * decay naturally. Slices are cut on scene boundaries, where the score starts
+   * a fresh section anyway, and are mixed back onto one timeline by the tool.
+   */
+  async renderSoundtrackChunk(from, dur, tail = 3.5, sampleRate = 48000) {
+    await loadAudioModules();
+    const len = Math.ceil((dur + tail) * sampleRate);
+    const octx = new OfflineAudioContext(2, len, sampleRate);
+    this.scheduleAll(octx, 0.05, from, from + dur);
     const buf = await octx.startRendering();
     return encodeWav(buf);
   }
