@@ -2,7 +2,7 @@
 // into a context at an absolute time, no real-time processing, so the offline
 // render is sample-identical to live playback.
 
-import { noiseSource, getNoise } from './synth.js';
+import { noiseSource } from './synth.js';
 
 function gainNode(ctx, v = 1) {
   const g = ctx.createGain();

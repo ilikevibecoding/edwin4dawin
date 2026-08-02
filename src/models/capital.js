@@ -3,7 +3,7 @@
 // "it just keeps coming" shot works without cheating the scale.
 
 import * as THREE from 'three';
-import { prismoid, box, cyl, dome, greebleField, mergeAll, mat, addMesh, ngonPlate } from '../gfx/build.js';
+import { prismoid, box, cyl, dome, greebleField, mergeAll, addMesh } from '../gfx/build.js';
 import { hull, paint, emissive, glowPlane, greebled } from '../gfx/materials.js';
 import { radialGlow } from '../gfx/textures.js';
 import { RNG } from '../util/rng.js';

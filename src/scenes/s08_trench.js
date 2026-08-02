@@ -3,17 +3,16 @@
 
 import * as THREE from 'three';
 import { makeStage } from '../core/film.js';
-import { spaceStage, music, vo, sfx, cameraQuad } from './kit.js';
+import { music, vo, sfx, cameraQuad } from './kit.js';
 import { kyberStation, trenchSegment, exhaustPort } from '../models/station.js';
 import { xwing, ywing, tieFighter } from '../models/fighters.js';
 import { freighter } from '../models/civilian.js';
 import { turret } from '../models/props.js';
-import { BoltPool, ExplosionPool, SparkPool } from '../fx/combat.js';
+import { BoltPool, ExplosionPool } from '../fx/combat.js';
 import { starfield, nebulaSky, debrisField } from '../worlds/space.js';
 import { CameraRig, aimAlong } from '../core/camera.js';
 import { greebled, emissive, glowPlane, paint } from '../gfx/materials.js';
-import { radialGlow } from '../gfx/textures.js';
-import { clamp, lerp, smoothstep, Ease, shakeNoise } from '../util/math.js';
+import { clamp, lerp, smoothstep, Ease } from '../util/math.js';
 import { RNG } from '../util/rng.js';
 
 const DURATION = 64;

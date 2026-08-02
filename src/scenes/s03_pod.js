@@ -5,9 +5,7 @@ import { spaceStage, music, vo, sfx } from './kit.js';
 import { escapePod, corvette, starDestroyer } from '../models/capital.js';
 import { planet } from '../worlds/planet.js';
 import { CameraRig } from '../core/camera.js';
-import { glowPlane, emissive } from '../gfx/materials.js';
-import { radialGlow } from '../gfx/textures.js';
-import { RNG } from '../util/rng.js';
+import { glowPlane } from '../gfx/materials.js';
 import { clamp, lerp, smoothstep, Ease } from '../util/math.js';
 
 const DURATION = 28;

@@ -2,7 +2,7 @@
 // the scrap haulers' sandcrawler, and a farm speeder.
 
 import * as THREE from 'three';
-import { box, cyl, dome, prismoid, ngonPlate, greebleField, mergeAll, mat, addMesh } from '../gfx/build.js';
+import { box, cyl, dome, prismoid, ngonPlate, greebleField, addMesh } from '../gfx/build.js';
 import { hull, paint, emissive, glowPlane, glass, greebled } from '../gfx/materials.js';
 import { RNG } from '../util/rng.js';
 

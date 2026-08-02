@@ -3,10 +3,10 @@
 
 import * as THREE from 'three';
 import { makeStage } from '../core/film.js';
-import { starfield, nebulaSky, spaceLights, sunBillboard } from '../worlds/space.js';
+import { starfield, nebulaSky, spaceLights } from '../worlds/space.js';
 import { voDur } from '../data/vo-manifest.js';
 import { LINES, CAST } from '../data/script.js';
-import { clamp, smoothstep, lerp, Ease } from '../util/math.js';
+import { clamp, smoothstep } from '../util/math.js';
 
 /**
  * Attaches a full-frame quad to the camera. Used for the "A long time ago"

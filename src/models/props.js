@@ -2,8 +2,8 @@
 // there (or, in the Empire's case, shoots from there).
 
 import * as THREE from 'three';
-import { box, cyl, dome, prismoid, ngonPlate, addMesh, mergeAll, mat, greebleField } from '../gfx/build.js';
-import { hull, paint, emissive, glowPlane, greebled, glass, stone, plaster } from '../gfx/materials.js';
+import { box, cyl, dome, prismoid, addMesh } from '../gfx/build.js';
+import { hull, paint, emissive, glowPlane, greebled, stone, plaster } from '../gfx/materials.js';
 import { RNG } from '../util/rng.js';
 
 /** Moisture vaporator: the only crop on a desert farm. */

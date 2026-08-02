@@ -2,9 +2,8 @@
 
 import * as THREE from 'three';
 import { sandTexture, radialGlow } from '../gfx/textures.js';
-import { glowPlane, paint } from '../gfx/materials.js';
+import { glowPlane } from '../gfx/materials.js';
 import { makeNoise2D, RNG } from '../util/rng.js';
-import { clamp, lerp } from '../util/math.js';
 
 /** Displaced ground plane. Returns the mesh plus a height() sampler. */
 export function dunes({

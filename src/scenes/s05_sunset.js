@@ -5,15 +5,14 @@ import * as THREE from 'three';
 import { makeStage } from '../core/film.js';
 import { music, vo, sfx } from './kit.js';
 import { dunes, skyDome, twinSuns, desertLights, sandDrift, scatterRocks } from '../worlds/desert.js';
-import { vaporator, desertHut, rockSpire } from '../models/props.js';
+import { vaporator, desertHut } from '../models/props.js';
 import { astromech } from '../models/droids.js';
-import { hero, robedFigure, idle, walk } from '../models/chars.js';
+import { hero, robedFigure, idle } from '../models/chars.js';
 import { speeder } from '../models/civilian.js';
 import { CameraRig } from '../core/camera.js';
-import { glowPlane, emissive, paint } from '../gfx/materials.js';
 import { smokeSprite } from '../gfx/textures.js';
 import { hullFire } from '../fx/combat.js';
-import { clamp, lerp, smoothstep, Ease } from '../util/math.js';
+import { lerp, smoothstep, Ease } from '../util/math.js';
 import { RNG } from '../util/rng.js';
 
 const DURATION = 40;

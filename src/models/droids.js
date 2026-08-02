@@ -2,9 +2,8 @@
 // else on the ground.
 
 import * as THREE from 'three';
-import { box, cyl, dome, addMesh, ngonPlate } from '../gfx/build.js';
-import { paint, emissive, glass, glowPlane } from '../gfx/materials.js';
-import { RNG } from '../util/rng.js';
+import { box, cyl, dome, addMesh } from '../gfx/build.js';
+import { paint, emissive } from '../gfx/materials.js';
 
 /**
  * Astromech: 1.1 m barrel, rotating dome, two outboard legs and a retractable

@@ -2,7 +2,7 @@
 // userData.setThrottle(0..1) so the sequences can flare the engines on a break.
 
 import * as THREE from 'three';
-import { box, cyl, dome, ngonPlate, prismoid, addMesh, mergeAll, mat, mirrorPoly } from '../gfx/build.js';
+import { box, cyl, dome, ngonPlate, prismoid, addMesh, mergeAll, mirrorPoly } from '../gfx/build.js';
 import { hull, paint, emissive, glowPlane, glass, greebled, solarArray } from '../gfx/materials.js';
 import { RNG } from '../util/rng.js';
 

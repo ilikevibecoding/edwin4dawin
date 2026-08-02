@@ -6,7 +6,6 @@
 // frame for frame.
 
 import * as THREE from 'three';
-import { emissive, glowPlane, paint } from '../gfx/materials.js';
 import { radialGlow, shockRing, smokeSprite, boltSprite } from '../gfx/textures.js';
 import { RNG } from '../util/rng.js';
 import { clamp, smoothstep, TAU } from '../util/math.js';

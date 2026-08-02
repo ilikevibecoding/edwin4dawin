@@ -7,7 +7,7 @@ import { starfield, nebulaSky } from '../worlds/space.js';
 import { planet } from '../worlds/planet.js';
 import { textCard, logoTexture, crawlTexture } from '../gfx/textures.js';
 import { OPENING_CARD, TITLE, CRAWL } from '../data/script.js';
-import { cameraQuad, music, sfx } from './kit.js';
+import { cameraQuad, music } from './kit.js';
 import { clamp, smoothstep, lerp, Ease } from '../util/math.js';
 
 const DURATION = 51;

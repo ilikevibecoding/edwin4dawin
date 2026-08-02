@@ -2,15 +2,13 @@
 // that keeps entering frame long after you thought it had finished.
 
 import * as THREE from 'three';
-import { spaceStage, music, vo, sfx, cameraQuad } from './kit.js';
+import { spaceStage, music, vo, sfx } from './kit.js';
 import { starDestroyer, corvette } from '../models/capital.js';
 import { planet } from '../worlds/planet.js';
 import { sunBillboard } from '../worlds/space.js';
 import { BoltPool, ExplosionPool, turbolaserPool, hullFire } from '../fx/combat.js';
-import { evalTrack, CameraRig } from '../core/camera.js';
-import { clamp, lerp, smoothstep, Ease, shakeNoise } from '../util/math.js';
-import { glowPlane, emissive } from '../gfx/materials.js';
-import { radialGlow } from '../gfx/textures.js';
+import { CameraRig } from '../core/camera.js';
+import { lerp, smoothstep, Ease } from '../util/math.js';
 
 const DURATION = 46;
 

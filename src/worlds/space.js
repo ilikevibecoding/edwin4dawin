@@ -2,7 +2,7 @@
 // lighting rig that every orbital sequence starts from.
 
 import * as THREE from 'three';
-import { nebulaTexture, starSprite, radialGlow } from '../gfx/textures.js';
+import { nebulaTexture, starSprite } from '../gfx/textures.js';
 import { glowPlane } from '../gfx/materials.js';
 import { RNG } from '../util/rng.js';
 

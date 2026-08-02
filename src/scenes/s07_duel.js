@@ -12,7 +12,6 @@ import { SparkPool } from '../fx/combat.js';
 import { CameraRig } from '../core/camera.js';
 import { starfield } from '../worlds/space.js';
 import { clamp, lerp, smoothstep, Ease } from '../util/math.js';
-import { RNG } from '../util/rng.js';
 
 const DURATION = 36;
 const IGNITE_T = 13.4;

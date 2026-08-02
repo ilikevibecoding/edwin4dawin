@@ -11,7 +11,7 @@ import { greebled } from '../gfx/materials.js';
 import { logoTexture, textCard } from '../gfx/textures.js';
 import { TITLE, END_CARDS } from '../data/script.js';
 import { CameraRig, aimAlong } from '../core/camera.js';
-import { clamp, lerp, smoothstep, Ease } from '../util/math.js';
+import { smoothstep, Ease } from '../util/math.js';
 
 const DURATION = 42;
 const TITLE_T = 17.5;
@@ -29,8 +29,7 @@ export default {
     sfx('flyby', 6.4, { vel: 0.75, dur: 1.2 }),
     vo('n20', 8.6),
     music('endTitle', 24.5, { gain: 0.9 }),
-    vo('n20b', 99),   // placeholder, ignored (no such line)
-  ].filter((c) => c.id !== 'n20b'),
+  ],
 
   build() {
     const { scene, camera } = makeStage({ background: 0x02040a, fov: 40, near: 1, far: 120000 });

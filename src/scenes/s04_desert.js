@@ -10,8 +10,7 @@ import { sandcrawler } from '../models/civilian.js';
 import { rockSpire } from '../models/props.js';
 import { escapePod } from '../models/capital.js';
 import { CameraRig } from '../core/camera.js';
-import { clamp, lerp, smoothstep, Ease } from '../util/math.js';
-import { RNG } from '../util/rng.js';
+import { clamp, lerp, Ease } from '../util/math.js';
 
 const DURATION = 35;
 

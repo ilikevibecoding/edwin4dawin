@@ -3,13 +3,12 @@
 import * as THREE from 'three';
 import { makeStage } from '../core/film.js';
 import { music, vo, sfx } from './kit.js';
-import { dunes, skyDome, twinSuns, desertLights, sandDrift } from '../worlds/desert.js';
+import { dunes, skyDome, twinSuns, desertLights } from '../worlds/desert.js';
 import { landingPad, rockSpire, crates } from '../models/props.js';
 import { freighter } from '../models/civilian.js';
 import { planet } from '../worlds/planet.js';
 import { starfield, nebulaSky } from '../worlds/space.js';
 import { CameraRig } from '../core/camera.js';
-import { glowPlane, emissive } from '../gfx/materials.js';
 import { radialGlow, smokeSprite } from '../gfx/textures.js';
 import { clamp, lerp, smoothstep, Ease } from '../util/math.js';
 import { RNG } from '../util/rng.js';

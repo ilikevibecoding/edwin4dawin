@@ -3,9 +3,8 @@
 // small rig: hips -> torso -> head, with two-segment arms and legs.
 
 import * as THREE from 'three';
-import { box, cyl, dome, addMesh, mergeAll, mat } from '../gfx/build.js';
-import { paint, emissive, glass, gloss } from '../gfx/materials.js';
-import { clamp, lerp } from '../util/math.js';
+import { box, cyl, dome, addMesh } from '../gfx/build.js';
+import { paint, emissive, gloss } from '../gfx/materials.js';
 
 /**
  * @returns {THREE.Group} with userData.rig = { hips, torso, head, arms:[{shoulder,elbow,hand}], legs:[{hip,knee,foot}] }

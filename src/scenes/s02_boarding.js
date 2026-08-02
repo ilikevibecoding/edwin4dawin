@@ -6,10 +6,10 @@ import { makeStage } from '../core/film.js';
 import { music, vo, sfx } from './kit.js';
 import { corridorSection, blastDoor } from '../models/props.js';
 import { stormtrooper, vashek, rigHumanoid, walk, idle } from '../models/chars.js';
-import { BoltPool, SparkPool, ExplosionPool } from '../fx/combat.js';
+import { BoltPool, SparkPool } from '../fx/combat.js';
 import { CameraRig } from '../core/camera.js';
 import { paint, emissive, glowPlane } from '../gfx/materials.js';
-import { radialGlow, smokeSprite } from '../gfx/textures.js';
+import { smokeSprite } from '../gfx/textures.js';
 import { clamp, lerp, smoothstep, Ease } from '../util/math.js';
 import { RNG } from '../util/rng.js';
 

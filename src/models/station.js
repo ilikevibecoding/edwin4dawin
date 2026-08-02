@@ -2,9 +2,9 @@
 // trench pieces used for the attack run and the hangar interior for the duel.
 
 import * as THREE from 'three';
-import { box, cyl, dome, dish, prismoid, ngonPlate, addMesh, mergeAll, mat, greebleField } from '../gfx/build.js';
-import { hull, paint, emissive, glowPlane, greebled, glass } from '../gfx/materials.js';
-import { stationSurface, greebleTexture, radialGlow } from '../gfx/textures.js';
+import { box, cyl, dish, addMesh, mergeAll, greebleField } from '../gfx/build.js';
+import { paint, emissive, glowPlane, greebled } from '../gfx/materials.js';
+import { stationSurface } from '../gfx/textures.js';
 import { RNG } from '../util/rng.js';
 import { TAU } from '../util/math.js';
 
