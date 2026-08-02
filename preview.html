@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>BRICK WARS — model preview</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #12161d; overflow: hidden; font-family: 'Inter', sans-serif; color: #cfd8e6; }
+      #stage { position: fixed; inset: 0; display: grid; place-items: center; }
+      #label { position: fixed; top: 10px; left: 14px; font-size: 13px; letter-spacing: .1em; color: #f2cd37; z-index: 5; }
+      #list { position: fixed; top: 34px; left: 14px; font-size: 11px; color: #7d8798; z-index: 5; line-height: 1.6; max-width: 300px; }
+      #list a { color: #9fb0c8; text-decoration: none; margin-right: 10px; }
+      #list a:hover { color: #f2cd37; }
+      #stats { position: fixed; bottom: 10px; left: 14px; font-size: 11px; color: #6c7788; z-index: 5; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="label"></div>
+    <div id="list"></div>
+    <div id="stats"></div>
+    <script type="module" src="/src/preview.js"></script>
+  </body>
+</html>

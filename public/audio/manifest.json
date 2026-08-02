@@ -1,0 +1,452 @@
+{
+  "scenes": {
+    "crawl": {
+      "id": "crawl",
+      "title": "A Long Time Ago",
+      "start": 0,
+      "duration": 46
+    },
+    "chase": {
+      "id": "chase",
+      "title": "The Chase",
+      "start": 46,
+      "duration": 34
+    },
+    "boarding": {
+      "id": "boarding",
+      "title": "Boarders",
+      "start": 80,
+      "duration": 34
+    },
+    "plans": {
+      "id": "plans",
+      "title": "The Little Droid",
+      "start": 114,
+      "duration": 40
+    },
+    "tatooine": {
+      "id": "tatooine",
+      "title": "Twin Suns",
+      "start": 154,
+      "duration": 40
+    },
+    "deathstar": {
+      "id": "deathstar",
+      "title": "The Battle Station",
+      "start": 194,
+      "duration": 28
+    },
+    "trench": {
+      "id": "trench",
+      "title": "The Trench",
+      "start": 222,
+      "duration": 54
+    },
+    "medals": {
+      "id": "medals",
+      "title": "Medals",
+      "start": 276,
+      "duration": 30
+    }
+  },
+  "lines": [
+    {
+      "id": "crawl_00_narrator",
+      "scene": "crawl",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "A long time ago, in a galaxy far, far away...",
+      "subtitle": false,
+      "local": 2.2,
+      "dur": 3.918,
+      "url": "audio/lines/crawl_00_narrator.mp3",
+      "t": 2.2
+    },
+    {
+      "id": "crawl_01_narrator",
+      "scene": "crawl",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "It is a time of rebellion. A scattered alliance of worlds has struck the first blow against the Empire that rules the stars.",
+      "subtitle": false,
+      "local": 9,
+      "dur": 8.307,
+      "url": "audio/lines/crawl_01_narrator.mp3",
+      "t": 9
+    },
+    {
+      "id": "crawl_02_narrator",
+      "scene": "crawl",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "In the confusion of that battle, rebel agents seized the plans for the Emperor’s newest weapon: a battle station the size of a moon, built to break planets whole.",
+      "subtitle": false,
+      "local": 18.007,
+      "dur": 10.188,
+      "url": "audio/lines/crawl_02_narrator.mp3",
+      "t": 18.007
+    },
+    {
+      "id": "crawl_03_narrator",
+      "scene": "crawl",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "Hunted across the dark, Princess Leia runs for home with the stolen plans, and with the last hope of a galaxy in chains.",
+      "subtitle": false,
+      "local": 28.895,
+      "dur": 7.758,
+      "url": "audio/lines/crawl_03_narrator.mp3",
+      "t": 28.895
+    },
+    {
+      "id": "chase_00_narrator",
+      "scene": "chase",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "Above the burnt orange deserts of Tatooine, a rebel corvette ran with its engines wide open.",
+      "subtitle": true,
+      "local": 1.6,
+      "dur": 6.087,
+      "url": "audio/lines/chase_00_narrator.mp3",
+      "t": 47.6
+    },
+    {
+      "id": "chase_01_narrator",
+      "scene": "chase",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "And behind it came a shadow with no end: an Imperial destroyer, a wedge of grey brick a mile from nose to tail.",
+      "subtitle": true,
+      "local": 8.187,
+      "dur": 7.288,
+      "url": "audio/lines/chase_01_narrator.mp3",
+      "t": 54.187
+    },
+    {
+      "id": "chase_02_narrator",
+      "scene": "chase",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "Her shields buckled. Her engines went dark. And the great ship swallowed her whole.",
+      "subtitle": true,
+      "local": 17.375,
+      "dur": 6.296,
+      "url": "audio/lines/chase_02_narrator.mp3",
+      "t": 63.375
+    },
+    {
+      "id": "boarding_00_narrator",
+      "scene": "boarding",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "The rebels braced in the corridor, blasters up, counting the seconds.",
+      "subtitle": true,
+      "local": 1.4,
+      "dur": 4.65,
+      "url": "audio/lines/boarding_00_narrator.mp3",
+      "t": 81.4
+    },
+    {
+      "id": "boarding_01_narrator",
+      "scene": "boarding",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "The door came apart in a hail of bricks.",
+      "subtitle": true,
+      "local": 7.75,
+      "dur": 2.9,
+      "url": "audio/lines/boarding_01_narrator.mp3",
+      "t": 87.75
+    },
+    {
+      "id": "boarding_02_narrator",
+      "scene": "boarding",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "Then the shooting stopped, the smoke parted, and something tall and black stepped through it.",
+      "subtitle": true,
+      "local": 14.049,
+      "dur": 5.721,
+      "url": "audio/lines/boarding_02_narrator.mp3",
+      "t": 94.049
+    },
+    {
+      "id": "boarding_03_vader",
+      "scene": "boarding",
+      "speaker": "vader",
+      "speakerName": "Vader",
+      "text": "The plans are aboard this ship. Tear her apart, stud by stud, until you find them.",
+      "subtitle": true,
+      "local": 21.17,
+      "dur": 5.669,
+      "url": "audio/lines/boarding_03_vader.mp3",
+      "t": 101.17
+    },
+    {
+      "id": "plans_00_narrator",
+      "scene": "plans",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "Deep in the hold, the Princess knelt beside a small blue and white astromech.",
+      "subtitle": true,
+      "local": 1.2,
+      "dur": 5.251,
+      "url": "audio/lines/plans_00_narrator.mp3",
+      "t": 115.2
+    },
+    {
+      "id": "plans_01_leia",
+      "scene": "plans",
+      "speaker": "leia",
+      "speakerName": "Leia",
+      "text": "Everything the Alliance needs is inside you now. Do not stop for anyone.",
+      "subtitle": true,
+      "local": 6.951,
+      "dur": 5.433,
+      "url": "audio/lines/plans_01_leia.mp3",
+      "t": 120.951
+    },
+    {
+      "id": "plans_02_threepio",
+      "scene": "plans",
+      "speaker": "threepio",
+      "speakerName": "C-3PO",
+      "text": "Oh, we are doomed. Absolutely, comprehensively doomed.",
+      "subtitle": true,
+      "local": 12.784,
+      "dur": 4.389,
+      "url": "audio/lines/plans_02_threepio.mp3",
+      "t": 126.784
+    },
+    {
+      "id": "plans_03_narrator",
+      "scene": "plans",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "An escape pod fell away from the captured ship, carrying two droids and the fate of the galaxy.",
+      "subtitle": true,
+      "local": 18.273,
+      "dur": 6.426,
+      "url": "audio/lines/plans_03_narrator.mp3",
+      "t": 132.273
+    },
+    {
+      "id": "plans_04_officer",
+      "scene": "plans",
+      "speaker": "officer",
+      "speakerName": "Imperial Officer",
+      "text": "Hold your fire. There are no life forms aboard.",
+      "subtitle": true,
+      "local": 25.199,
+      "dur": 3.239,
+      "url": "audio/lines/plans_04_officer.mp3",
+      "t": 139.199
+    },
+    {
+      "id": "tatooine_00_narrator",
+      "scene": "tatooine",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "They came down in the dunes of Tatooine, under two suns that never quite set together.",
+      "subtitle": true,
+      "local": 1.6,
+      "dur": 5.303,
+      "url": "audio/lines/tatooine_00_narrator.mp3",
+      "t": 155.6
+    },
+    {
+      "id": "tatooine_01_narrator",
+      "scene": "tatooine",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "A sandcrawler took them in, and traded them away, to a moisture farm at the edge of nowhere.",
+      "subtitle": true,
+      "local": 7.503,
+      "dur": 6.008,
+      "url": "audio/lines/tatooine_01_narrator.mp3",
+      "t": 161.503
+    },
+    {
+      "id": "tatooine_02_narrator",
+      "scene": "tatooine",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "And there a farm boy named Luke found a message hidden in the little droid’s memory.",
+      "subtitle": true,
+      "local": 14.211,
+      "dur": 5.198,
+      "url": "audio/lines/tatooine_02_narrator.mp3",
+      "t": 168.211
+    },
+    {
+      "id": "tatooine_03_leia",
+      "scene": "tatooine",
+      "speaker": "leia",
+      "speakerName": "Leia",
+      "text": "This recording is our last hope. Please. Help us.",
+      "subtitle": true,
+      "local": 19.909,
+      "dur": 4.702,
+      "url": "audio/lines/tatooine_03_leia.mp3",
+      "t": 173.909
+    },
+    {
+      "id": "tatooine_04_narrator",
+      "scene": "tatooine",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "That evening he watched two suns go down, and knew that he could not stay.",
+      "subtitle": true,
+      "local": 25.511,
+      "dur": 4.885,
+      "url": "audio/lines/tatooine_04_narrator.mp3",
+      "t": 179.511
+    },
+    {
+      "id": "deathstar_00_narrator",
+      "scene": "deathstar",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "The stolen plans showed a single flaw: a thermal exhaust port, two metres wide, running straight down to the reactor.",
+      "subtitle": true,
+      "local": 1.4,
+      "dur": 7.863,
+      "url": "audio/lines/deathstar_00_narrator.mp3",
+      "t": 195.4
+    },
+    {
+      "id": "deathstar_01_narrator",
+      "scene": "deathstar",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "Thirty small ships launched against a moon of grey brick. Very few of them would come back.",
+      "subtitle": true,
+      "local": 9.863,
+      "dur": 6.165,
+      "url": "audio/lines/deathstar_01_narrator.mp3",
+      "t": 203.863
+    },
+    {
+      "id": "trench_00_pilot",
+      "scene": "trench",
+      "speaker": "pilot",
+      "speakerName": "Red Leader",
+      "text": "Cut the chatter, Red Squadron. Lock S-foils in attack position.",
+      "subtitle": true,
+      "local": 1.2,
+      "dur": 3.709,
+      "url": "audio/lines/trench_00_pilot.mp3",
+      "t": 223.2
+    },
+    {
+      "id": "trench_01_narrator",
+      "scene": "trench",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "They dropped into the trench with the walls a grey blur on either side.",
+      "subtitle": true,
+      "local": 5.409,
+      "dur": 4.493,
+      "url": "audio/lines/trench_01_narrator.mp3",
+      "t": 227.409
+    },
+    {
+      "id": "trench_02_narrator",
+      "scene": "trench",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "Behind them came the black fighter and its two escorts, and one by one the rebels fell.",
+      "subtitle": true,
+      "local": 12.502,
+      "dur": 5.878,
+      "url": "audio/lines/trench_02_narrator.mp3",
+      "t": 234.502
+    },
+    {
+      "id": "trench_03_vader",
+      "scene": "trench",
+      "speaker": "vader",
+      "speakerName": "Vader",
+      "text": "The Force is strong with this one.",
+      "subtitle": true,
+      "local": 18.78,
+      "dur": 2.273,
+      "url": "audio/lines/trench_03_vader.mp3",
+      "t": 240.78
+    },
+    {
+      "id": "trench_04_narrator",
+      "scene": "trench",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "At the last moment the boy switched off his targeting computer, closed his eyes, and listened.",
+      "subtitle": true,
+      "local": 22.253,
+      "dur": 6.296,
+      "url": "audio/lines/trench_04_narrator.mp3",
+      "t": 244.253
+    },
+    {
+      "id": "trench_05_ben",
+      "scene": "trench",
+      "speaker": "ben",
+      "speakerName": "Obi-Wan",
+      "text": "Let go, Luke. Trust yourself.",
+      "subtitle": true,
+      "local": 28.848,
+      "dur": 3.788,
+      "url": "audio/lines/trench_05_ben.mp3",
+      "t": 250.848
+    },
+    {
+      "id": "trench_06_narrator",
+      "scene": "trench",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "Two torpedoes went down the shaft. The station lit up from the inside...",
+      "subtitle": true,
+      "local": 34.136,
+      "dur": 5.355,
+      "url": "audio/lines/trench_06_narrator.mp3",
+      "t": 256.136
+    },
+    {
+      "id": "trench_07_narrator",
+      "scene": "trench",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "and came apart into ten thousand pieces.",
+      "subtitle": true,
+      "local": 40.891,
+      "dur": 3.396,
+      "url": "audio/lines/trench_07_narrator.mp3",
+      "t": 262.891
+    },
+    {
+      "id": "medals_00_narrator",
+      "scene": "medals",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "They gave out medals in a hall of white brick, and for one bright afternoon the galaxy belonged to the people who had saved it.",
+      "subtitle": true,
+      "local": 2,
+      "dur": 8.176,
+      "url": "audio/lines/medals_00_narrator.mp3",
+      "t": 278
+    },
+    {
+      "id": "medals_01_narrator",
+      "scene": "medals",
+      "speaker": "narrator",
+      "speakerName": null,
+      "text": "Every last one of them built from two by four bricks, and a little bit of hope.",
+      "subtitle": true,
+      "local": 10.976,
+      "dur": 5.12,
+      "url": "audio/lines/medals_01_narrator.mp3",
+      "t": 286.976
+    }
+  ],
+  "generatedAt": "2026-08-02T20:53:18.925Z",
+  "duration": 306
+}

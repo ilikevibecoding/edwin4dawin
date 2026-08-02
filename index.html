@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BRICK WARS — a LEGO-brick Star Wars story, rendered in three.js</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; height: 100%; background: #05070c; overflow: hidden;
+        font-family: 'Inter', 'Arimo', 'Liberation Sans', system-ui, sans-serif;
+        color: #e8ecf4;
+      }
+      #stage { position: fixed; inset: 0; display: grid; place-items: center; }
+      canvas { display: block; max-width: 100%; max-height: 100%; background: #000; }
+      #loader {
+        position: fixed; inset: 0; display: grid; place-items: center;
+        background: #05070c; z-index: 40; transition: opacity .6s ease;
+      }
+      #loader .inner { text-align: center; width: min(560px, 82vw); }
+      #loader h1 {
+        font-size: clamp(30px, 6vw, 58px); letter-spacing: .16em; margin: 0 0 6px;
+        color: #f2cd37; font-weight: 800;
+      }
+      #loader h2 {
+        font-size: 13px; letter-spacing: .34em; text-transform: uppercase;
+        color: #7b8798; font-weight: 600; margin: 0 0 30px;
+      }
+      #bar { height: 4px; background: #1a2130; border-radius: 3px; overflow: hidden; }
+      #bar i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg,#f2cd37,#ffe58a); transition: width .25s ease; }
+      #loadMsg { margin-top: 12px; font-size: 12px; color: #67728a; letter-spacing: .08em; height: 16px; }
+      #startBtn {
+        margin-top: 26px; padding: 13px 30px; font-size: 14px; letter-spacing: .2em;
+        text-transform: uppercase; font-weight: 700; border: 1px solid #f2cd37; color: #f2cd37;
+        background: transparent; border-radius: 3px; cursor: pointer; transition: all .18s ease;
+      }
+      #startBtn:hover { background: #f2cd37; color: #10141c; }
+      #startBtn[disabled] { opacity: .3; cursor: default; border-color: #444; color: #666; }
+      #hud {
+        position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px 12px;
+        display: flex; gap: 14px; align-items: center; z-index: 30;
+        background: linear-gradient(transparent, rgba(4,7,12,.82));
+        opacity: 0; transition: opacity .25s ease; pointer-events: none;
+      }
+      #hud.show { opacity: 1; pointer-events: auto; }
+      #hud button {
+        background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14);
+        color: #dfe6f2; border-radius: 4px; padding: 6px 11px; cursor: pointer; font-size: 12px;
+      }
+      #hud button:hover { background: rgba(255,255,255,.16); }
+      #scrub { flex: 1; accent-color: #f2cd37; cursor: pointer; }
+      #time { font-variant-numeric: tabular-nums; font-size: 12px; color: #9fadc4; min-width: 96px; }
+      #chapter { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: #f2cd37; min-width: 150px; }
+      #hint {
+        position: fixed; top: 12px; right: 14px; font-size: 11px; color: #56637a;
+        z-index: 30; text-align: right; line-height: 1.7; opacity: 0; transition: opacity .3s;
+      }
+      #hint.show { opacity: 1; }
+      body.render #hud, body.render #hint, body.render #loader { display: none !important; }
+      body.render #stage { place-items: start; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+
+    <div id="hud">
+      <button id="playBtn" title="Play / pause (space)">Pause</button>
+      <button id="prevBtn" title="Previous scene (←)">◀</button>
+      <button id="nextBtn" title="Next scene (→)">▶</button>
+      <input id="scrub" type="range" min="0" max="1000" value="0" />
+      <span id="time">0:00 / 0:00</span>
+      <span id="chapter"></span>
+      <button id="muteBtn" title="Mute (m)">Sound on</button>
+    </div>
+
+    <div id="hint">
+      space play/pause &nbsp;·&nbsp; ← → scene &nbsp;·&nbsp; 1-8 jump &nbsp;·&nbsp; m mute
+    </div>
+
+    <div id="loader">
+      <div class="inner">
+        <h1>BRICK WARS</h1>
+        <h2>A LEGO-brick Star Wars story</h2>
+        <div id="bar"><i></i></div>
+        <div id="loadMsg">building the galaxy…</div>
+        <button id="startBtn" disabled>Play</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

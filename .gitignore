@@ -1,0 +1,9 @@
+node_modules/
+dist/
+tools/voices/
+tools/.cache/
+out/frames/
+out/*.mp4
+out/*.png
+.DS_Store
+*.log
