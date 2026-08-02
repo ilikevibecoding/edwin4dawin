@@ -19,7 +19,7 @@
  */
 
 import {
-  rng, seedFrom, noiseBuffer, clamp, setAt, lin, exp, hit, NOTE,
+  rng, seedFrom, noiseBuffer, clamp, setAt, lin, exp, hit, NOTE, fanIn,
 } from './engine.js';
 
 /* ------------------------------------------------------------------ *
@@ -29,10 +29,17 @@ import {
 const NOISE_SECS = 3;
 const T = (t) => Math.max(0, t);
 
-/** Output chain for one effect: level -> [pan] -> bus.sfx (+ reverb send). */
+/**
+ * Output chain for one effect: level -> [pan] -> bus.sfx (+ reverb send).
+ *
+ * Effects hang their layers on `g.in()` rather than on `g`. Most have four or
+ * five — a body, a transient, a tail, a sub — and four inputs on one node is
+ * the point at which Chrome stops summing reproducibly (see `fanIn`).
+ */
 function out(ctx, bus, { gain = 1, pan = 0, send = 0.18 } = {}) {
   const g = ctx.createGain();
   g.gain.value = gain;
+  g.in = fanIn(ctx, g);
   let node = g;
   if (pan) {
     const p = ctx.createStereoPanner();
@@ -40,12 +47,12 @@ function out(ctx, bus, { gain = 1, pan = 0, send = 0.18 } = {}) {
     g.connect(p);
     node = p;
   }
-  node.connect(bus.sfx);
+  node.connect(bus.sfxIn ? bus.sfxIn() : bus.sfx);
   if (send > 0 && bus.fx) {
     const s = ctx.createGain();
     s.gain.value = send;
     node.connect(s);
-    s.connect(bus.fx);
+    s.connect(bus.fxIn ? bus.fxIn() : bus.fx);
   }
   return g;
 }
@@ -83,7 +90,13 @@ function bq(ctx, type, freq, Q = 1, gainDb = 0) {
   return f;
 }
 
-function gn(ctx, v = 1) { const g = ctx.createGain(); g.gain.value = v; return g; }
+/** A gain, with a summing chain (`g.in()`) for when several layers meet on it. */
+function gn(ctx, v = 1) {
+  const g = ctx.createGain();
+  g.gain.value = v;
+  g.in = fanIn(ctx, g);
+  return g;
+}
 
 /** Sweep an AudioParam exponentially from a to b between t and t+dur. */
 function sweep(param, t, a, b, dur) {
@@ -99,7 +112,7 @@ function lfo(ctx, t, dur, rate, depth, { type = 'sine', phase = 0 } = {}) {
   // A phase offset is faked with a small start delay; keeps everything deterministic.
   const d = phase ? (phase / (2 * Math.PI)) / Math.max(0.001, rate) : 0;
   const g = gn(ctx, depth);
-  o.connect(g);
+  o.connect(g.in());
   o.start(T(t - d));
   o.stop(T(t) + Math.max(0.01, dur) + 0.05);
   return g;
@@ -150,13 +163,13 @@ function laser(ctx, bus, t, o = {}) {
   const g = out(ctx, bus, { gain, pan, send });
   const body = gn(ctx, 0);
   const bp = bq(ctx, 'bandpass', 2400, 3.0);
-  body.connect(bp); bp.connect(g);
+  body.connect(bp); bp.connect(g.in());
 
   for (const [type, det, lvl] of [['sawtooth', 0, 0.7], ['square', 9, 0.35]]) {
     const s = osc(ctx, type, 2500 * pitch, t, len + 0.05, det);
     sweep(s.frequency, t, 2500 * pitch, 150 * pitch, 0.10);
     const lg = gn(ctx, lvl);
-    s.connect(lg); lg.connect(body);
+    s.connect(lg); lg.connect(body.in());
   }
   sweep(bp.frequency, t, 3400 * pitch, 420 * pitch, 0.12);
   hit(body.gain, t, 1, 0.0015, len);
@@ -169,7 +182,7 @@ function laser(ctx, bus, t, o = {}) {
   tn.connect(thp); thp.connect(tw); tw.connect(c.input);
   hit(tw.gain, t, 1.1, 0.001, 0.02);
   const cg = gn(ctx, 0.8);
-  c.output.connect(cg); cg.connect(g);
+  c.output.connect(cg); cg.connect(g.in());
   return t + len + 0.12;
 }
 
@@ -179,11 +192,11 @@ function turbolaser(ctx, bus, t, o = {}) {
   const g = out(ctx, bus, { gain, pan, send });
   const body = gn(ctx, 0);
   const bp = bq(ctx, 'bandpass', 900, 3.2);
-  body.connect(bp); bp.connect(g);
+  body.connect(bp); bp.connect(g.in());
   for (const [type, det, lvl] of [['sawtooth', -7, 0.8], ['sawtooth', 11, 0.5], ['square', 0, 0.25]]) {
     const s = osc(ctx, type, 820, t, len + 0.1, det);
     sweep(s.frequency, t, 820, 52, 0.42);
-    const lg = gn(ctx, lvl); s.connect(lg); lg.connect(body);
+    const lg = gn(ctx, lvl); s.connect(lg); lg.connect(body.in());
   }
   sweep(bp.frequency, t, 1500, 130, 0.45);
   hit(body.gain, t, 1, 0.004, len);
@@ -191,13 +204,13 @@ function turbolaser(ctx, bus, t, o = {}) {
   const sub = osc(ctx, 'sine', 120, t, 0.9);
   sweep(sub.frequency, t, 120, 38, 0.5);
   const sg = gn(ctx, 0);
-  sub.connect(sg); sg.connect(g);
+  sub.connect(sg); sg.connect(g.in());
   hit(sg.gain, t, 0.85, 0.006, 0.85);
 
   const n = noise(ctx, t, 0.35, { seed: seedFrom('tl', t), offset: (t * 3.1) % 2.5 });
   const nf = bq(ctx, 'lowpass', 2600, 0.9);
   const ng = gn(ctx, 0);
-  n.connect(nf); nf.connect(ng); ng.connect(g);
+  n.connect(nf); nf.connect(ng); ng.connect(g.in());
   sweep(nf.frequency, t, 3200, 300, 0.3);
   hit(ng.gain, t, 0.5, 0.002, 0.3);
   return t + len + 0.2;
@@ -209,20 +222,20 @@ function blaster(ctx, bus, t, o = {}) {
   const g = out(ctx, bus, { gain, pan, send });
   const body = gn(ctx, 0);
   const bp = bq(ctx, 'bandpass', 1800, 4.0);
-  body.connect(bp); bp.connect(g);
+  body.connect(bp); bp.connect(g.in());
   const s = osc(ctx, 'sawtooth', 3200 * pitch, t, len + 0.04);
   sweep(s.frequency, t, 3200 * pitch, 280 * pitch, 0.065);
   const s2 = osc(ctx, 'square', 3200 * pitch, t, len + 0.04, 17);
   sweep(s2.frequency, t, 3200 * pitch, 280 * pitch, 0.065);
-  const s2g = gn(ctx, 0.35); s2.connect(s2g); s2g.connect(body);
-  s.connect(body);
+  const s2g = gn(ctx, 0.35); s2.connect(s2g); s2g.connect(body.in());
+  s.connect(body.in());
   sweep(bp.frequency, t, 4200 * pitch, 600 * pitch, 0.08);
   hit(body.gain, t, 0.85, 0.001, len);
 
   const n = noise(ctx, t, 0.05, { seed: seedFrom('blaster', t), offset: (t * 11.7) % 2.5 });
   const nhp = bq(ctx, 'highpass', 2600, 0.8);
   const ng = gn(ctx, 0);
-  n.connect(nhp); nhp.connect(ng); ng.connect(g);
+  n.connect(nhp); nhp.connect(ng); ng.connect(g.in());
   hit(ng.gain, t, 0.5, 0.001, 0.05);
   return t + len + 0.08;
 }
@@ -239,18 +252,18 @@ function ricochet(ctx, bus, t, o = {}) {
   sweep(z.frequency, t, f0, f0 * 0.22, 0.24);
   const zbp = bq(ctx, 'bandpass', f0, 6);
   sweep(zbp.frequency, t, f0 * 1.2, f0 * 0.3, 0.24);
-  z.connect(zbp); zbp.connect(zg); zg.connect(g);
+  z.connect(zbp); zbp.connect(zg); zg.connect(g.in());
   hit(zg.gain, t, 0.9, 0.001, 0.26);
 
   const n = noise(ctx, t, 0.03, { seed: seedFrom('ric', t), offset: r() * 2.5 });
   const nhp = bq(ctx, 'highpass', 3000, 0.8);
   const ng = gn(ctx, 0);
-  n.connect(nhp); nhp.connect(ng); ng.connect(g);
+  n.connect(nhp); nhp.connect(ng); ng.connect(g.in());
   hit(ng.gain, t, 0.7, 0.0008, 0.03);
 
   const c = comb(ctx, 620 + r() * 320, 0.26);
   const cg = gn(ctx, 1.1);
-  ng.connect(c.input); c.output.connect(cg); cg.connect(g);
+  ng.connect(c.input); c.output.connect(cg); cg.connect(g.in());
   return t + 0.34;
 }
 
@@ -273,7 +286,7 @@ function boom(ctx, bus, t, o, big) {
   const c = noise(ctx, t, 0.09, { seed: sd, offset: r() * 2.4 });
   const chp = bq(ctx, 'highpass', big ? 1200 : 1900, 0.7);
   const cg = gn(ctx, 0);
-  c.connect(chp); chp.connect(cg); cg.connect(g);
+  c.connect(chp); chp.connect(cg); cg.connect(g.in());
   hit(cg.gain, t, big ? 0.55 : 0.45, 0.0012, 0.08);
 
   // Body: broadband noise pulled down through a closing lowpass.
@@ -281,7 +294,7 @@ function boom(ctx, bus, t, o, big) {
   const b = noise(ctx, t, bDur + 0.1, { seed: sd ^ 0x51, offset: r() * 2.4, rate: big ? 0.72 : 1 });
   const blp = bq(ctx, 'lowpass', 6000, 0.9);
   const bg = gn(ctx, 0);
-  b.connect(blp); blp.connect(bg); bg.connect(g);
+  b.connect(blp); blp.connect(bg); bg.connect(g.in());
   sweep(blp.frequency, t, big ? 7000 : 5200, big ? 110 : 170, big ? 1.5 : 0.85);
   setAt(bg.gain, t, 1e-4);
   lin(bg.gain, t + (big ? 0.02 : 0.008), big ? 1.0 : 0.9);
@@ -292,7 +305,7 @@ function boom(ctx, bus, t, o, big) {
   const s = osc(ctx, 'sine', big ? 84 : 100, t, big ? 1.6 : 1.15);
   sweep(s.frequency, t, big ? 84 : 100, big ? 24 : 33, big ? 1.1 : 0.55);
   const sg = gn(ctx, 0);
-  s.connect(sg); sg.connect(g);
+  s.connect(sg); sg.connect(g.in());
   hit(sg.gain, t + (big ? 0.02 : 0.004), big ? 1.0 : 0.75, big ? 0.03 : 0.008, big ? 1.5 : 1.05);
 
   if (big) {
@@ -300,7 +313,7 @@ function boom(ctx, bus, t, o, big) {
     const s2 = osc(ctx, 'sine', 62, t + 0.34, 1.5);
     sweep(s2.frequency, t + 0.34, 62, 21, 1.2);
     const s2g = gn(ctx, 0);
-    s2.connect(s2g); s2g.connect(g);
+    s2.connect(s2g); s2g.connect(g.in());
     hit(s2g.gain, t + 0.34, 0.7, 0.05, 1.4);
   }
 
@@ -309,7 +322,7 @@ function boom(ctx, bus, t, o, big) {
   const dn = noise(ctx, t, tail, { seed: sd ^ 0x9a, offset: r() * 2.4 });
   const dbp = bq(ctx, 'bandpass', big ? 1500 : 2200, 1.1);
   const dg = gn(ctx, 0);
-  dn.connect(dbp); dbp.connect(dg); dg.connect(g);
+  dn.connect(dbp); dbp.connect(dg); dg.connect(g.in());
   const list = [];
   for (let i = 0; i < nGrains; i++) {
     const gt = t + (big ? 0.18 : 0.12) + Math.pow(r(), 0.7) * (tail * 0.8);
@@ -323,7 +336,7 @@ function boom(ctx, bus, t, o, big) {
   const rn = noise(ctx, t, tail, { seed: sd ^ 0x33, offset: r() * 2.4, rate: 0.5 });
   const rlp = bq(ctx, 'lowpass', big ? 320 : 460, 0.8);
   const rg = gn(ctx, 0);
-  rn.connect(rlp); rlp.connect(rg); rg.connect(g);
+  rn.connect(rlp); rlp.connect(rg); rg.connect(g.in());
   setAt(rg.gain, t, 1e-4);
   lin(rg.gain, t + 0.09, big ? 0.55 : 0.34);
   exp(rg.gain, t + tail, 1e-4);
@@ -343,7 +356,7 @@ function hullImpact(ctx, bus, t, o = {}) {
   const s = osc(ctx, 'sine', 130, t, 0.6);
   sweep(s.frequency, t, 130, 44, 0.14);
   const sg = gn(ctx, 0);
-  s.connect(sg); sg.connect(g);
+  s.connect(sg); sg.connect(g.in());
   hit(sg.gain, t, 0.95, 0.003, 0.55);
 
   const n = noise(ctx, t, 0.62, { seed: sd, offset: r() * 2.4 });
@@ -351,12 +364,12 @@ function hullImpact(ctx, bus, t, o = {}) {
     const f2 = f * (0.92 + r() * 0.16);
     const bp = bq(ctx, 'bandpass', f2, q);
     const bg = gn(ctx, 0);
-    n.connect(bp); bp.connect(bg); bg.connect(g);
+    n.connect(bp); bp.connect(bg); bg.connect(g.in());
     hit(bg.gain, t, lvl, 0.002, dec);
   }
   const hp = bq(ctx, 'highpass', 2400, 0.8);
   const hg = gn(ctx, 0);
-  n.connect(hp); hp.connect(hg); hg.connect(g);
+  n.connect(hp); hp.connect(hg); hg.connect(g.in());
   hit(hg.gain, t, 0.22, 0.001, 0.42);
   return t + 0.72;
 }
@@ -371,14 +384,14 @@ function doorBlast(ctx, bus, t, o = {}) {
   const n = noise(ctx, t, 1.15, { seed: sd, offset: r() * 2.3 });
   const lp = bq(ctx, 'lowpass', 4200, 1.0);
   const bg = gn(ctx, 0);
-  n.connect(lp); lp.connect(bg); bg.connect(g);
+  n.connect(lp); lp.connect(bg); bg.connect(g.in());
   sweep(lp.frequency, t, 4600, 210, 0.55);
   hit(bg.gain, t, 1.0, 0.002, 0.7);
 
   const s = osc(ctx, 'sine', 96, t, 0.9);
   sweep(s.frequency, t, 96, 30, 0.42);
   const sg = gn(ctx, 0);
-  s.connect(sg); sg.connect(g);
+  s.connect(sg); sg.connect(g.in());
   hit(sg.gain, t, 0.9, 0.004, 0.85);
 
   // Metal tearing.
@@ -387,14 +400,14 @@ function doorBlast(ctx, bus, t, o = {}) {
   const mbp = bq(ctx, 'bandpass', 1400, 7);
   sweep(mbp.frequency, t + 0.03, 1700, 500, 0.3);
   const mg = gn(ctx, 0);
-  m.connect(mbp); mbp.connect(mg); mg.connect(g);
+  m.connect(mbp); mbp.connect(mg); mg.connect(g.in());
   hit(mg.gain, t + 0.03, 0.35, 0.004, 0.3);
 
   // Debris skittering away.
   const dn = noise(ctx, t + 0.12, 1.0, { seed: sd ^ 0x7, offset: r() * 2.3 });
   const dbp = bq(ctx, 'bandpass', 2600, 1.4);
   const dg = gn(ctx, 0);
-  dn.connect(dbp); dbp.connect(dg); dg.connect(g);
+  dn.connect(dbp); dbp.connect(dg); dg.connect(g.in());
   const list = [];
   for (let i = 0; i < 14; i++) {
     const gt = t + 0.14 + Math.pow(r(), 0.6) * 0.85;
@@ -418,7 +431,7 @@ function engineWhoosh(ctx, bus, t, o = {}) {
   const n = noise(ctx, t, dur + 0.12, { seed: sd, offset: r() * 2.2 });
   const bp = bq(ctx, 'bandpass', 300, 1.5);
   const ng = gn(ctx, 0);
-  n.connect(bp); bp.connect(ng); ng.connect(g);
+  n.connect(bp); bp.connect(ng); ng.connect(g.in());
   setAt(bp.frequency, t, 260);
   exp(bp.frequency, t + dur * 0.45, 2500);
   exp(bp.frequency, t + dur, 200);
@@ -429,7 +442,7 @@ function engineWhoosh(ctx, bus, t, o = {}) {
   const th = osc(ctx, 'sawtooth', 58, t, dur + 0.1);
   const tlp = bq(ctx, 'lowpass', 260, 1.2);
   const tg = gn(ctx, 0);
-  th.connect(tlp); tlp.connect(tg); tg.connect(g);
+  th.connect(tlp); tlp.connect(tg); tg.connect(g.in());
   setAt(th.frequency, t, 48);
   exp(th.frequency, t + dur * 0.45, 78);
   exp(th.frequency, t + dur, 42);
@@ -442,12 +455,14 @@ function engineWhoosh(ctx, bus, t, o = {}) {
 /** Doppler fly-by with a real stereo move. */
 function enginePass(ctx, bus, t, o = {}) {
   const { gain = 0.30, send = 0.28, dur = 2.2, from = -0.85, to = 0.85, pitch = 1 } = o;
-  const g = ctx.createGain();
-  g.gain.value = gain;
+  const g = gn(ctx, gain);
   const p = ctx.createStereoPanner();
   g.connect(p);
-  p.connect(bus.sfx);
-  if (send > 0 && bus.fx) { const s = gn(ctx, send); p.connect(s); s.connect(bus.fx); }
+  p.connect(bus.sfxIn ? bus.sfxIn() : bus.sfx);
+  if (send > 0 && bus.fx) {
+    const s = gn(ctx, send);
+    p.connect(s); s.connect(bus.fxIn ? bus.fxIn() : bus.fx);
+  }
   setAt(p.pan, t, clamp(from, -1, 1));
   p.pan.linearRampToValueAtTime(clamp(to, -1, 1), T(t + dur));
 
@@ -458,7 +473,7 @@ function enginePass(ctx, bus, t, o = {}) {
   const n = noise(ctx, t, dur + 0.1, { seed: sd, offset: r() * 2.2 });
   const lp = bq(ctx, 'lowpass', 700, 1.1);
   const ng = gn(ctx, 0);
-  n.connect(lp); lp.connect(ng); ng.connect(g);
+  n.connect(lp); lp.connect(ng); ng.connect(g.in());
   setAt(lp.frequency, t, 620);
   exp(lp.frequency, mid, 5200);
   exp(lp.frequency, t + dur, 420);
@@ -474,7 +489,7 @@ function enginePass(ctx, bus, t, o = {}) {
     exp(s.frequency, t + dur * 0.66, f * pitch * 0.86);
     const flp = bq(ctx, 'lowpass', 900, 1.3);
     const sg = gn(ctx, 0);
-    s.connect(flp); flp.connect(sg); sg.connect(g);
+    s.connect(flp); flp.connect(sg); sg.connect(g.in());
     setAt(sg.gain, t, 1e-4);
     exp(sg.gain, mid, lvl);
     exp(sg.gain, t + dur, 1e-4);
@@ -489,7 +504,7 @@ function engineRumble(ctx, bus, t, o = {}) {
   const sd = seedFrom('engineRumble', t);
   const r = rng(sd);
   const amp = gn(ctx, 0);
-  amp.connect(g);
+  amp.connect(g.in());
   setAt(amp.gain, t, 1e-4);
   lin(amp.gain, t + fade, 1);
   setAt(amp.gain, t + dur - fade, 1);
@@ -498,13 +513,13 @@ function engineRumble(ctx, bus, t, o = {}) {
   const n = noise(ctx, t, dur + 0.05, { seed: sd, offset: r() * 2.2, rate: 0.6 });
   const nlp = bq(ctx, 'lowpass', 190, 0.9);
   const ng = gn(ctx, 0.9);
-  n.connect(nlp); nlp.connect(ng); ng.connect(amp);
+  n.connect(nlp); nlp.connect(ng); ng.connect(amp.in());
 
   for (const [f, lvl, det] of [[46, 0.55, 0], [69, 0.30, 7], [92, 0.16, -9]]) {
     const s = osc(ctx, 'sawtooth', f * pitch, t, dur + 0.05, det);
     const lp = bq(ctx, 'lowpass', 300, 1.4);
     const sg = gn(ctx, lvl);
-    s.connect(lp); lp.connect(sg); sg.connect(amp);
+    s.connect(lp); lp.connect(sg); sg.connect(amp.in());
   }
   // Slow wobble so it never sounds like a static tone.
   const w = lfo(ctx, t, dur, 0.23, 0.16);
@@ -517,14 +532,14 @@ function ionDrone(ctx, bus, t, o = {}) {
   const { gain = 0.75, pan = 0, send = 0.35, dur = 3, fade = 0.45 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const amp = gn(ctx, 0);
-  amp.connect(g);
+  amp.connect(g.in());
   setAt(amp.gain, t, 1e-4);
   lin(amp.gain, t + fade, 1);
   setAt(amp.gain, t + dur - fade, 1);
   lin(amp.gain, t + dur, 0);
 
   const bp = bq(ctx, 'bandpass', 380, 5);
-  bp.connect(amp);
+  bp.connect(amp.in());
   const sw = lfo(ctx, t, dur, 0.17, 260);
   sw.connect(bp.frequency);
 
@@ -536,7 +551,7 @@ function ionDrone(ctx, bus, t, o = {}) {
   // Ring-modulated whine on top.
   const w = osc(ctx, 'sine', 1240, t, dur + 0.05);
   const wg = gn(ctx, 0.0);
-  w.connect(wg); wg.connect(amp);
+  w.connect(wg); wg.connect(amp.in());
   setAt(wg.gain, t, 0.05);
   const rm = lfo(ctx, t, dur, 37, 0.045);
   rm.connect(wg.gain);
@@ -555,7 +570,7 @@ function hyperspaceJump(ctx, bus, t, o = {}) {
   // --- the whine ---------------------------------------------------
   const wbp = bq(ctx, 'bandpass', 220, 9);
   const wg = gn(ctx, 0);
-  wbp.connect(wg); wg.connect(g);
+  wbp.connect(wg); wg.connect(g.in());
   for (const [mul, lvl, det] of [[1, 0.7, 0], [1.5, 0.3, 6], [2.01, 0.18, -8]]) {
     const s = osc(ctx, 'sawtooth', 190 * mul, t, charge + 0.12, det);
     setAt(s.frequency, t, 190 * mul);
@@ -574,7 +589,7 @@ function hyperspaceJump(ctx, bus, t, o = {}) {
   const cn = noise(ctx, t, charge + 0.1, { seed: sd, offset: r() * 2.2 });
   const cbp = bq(ctx, 'bandpass', 400, 4);
   const cg = gn(ctx, 0);
-  cn.connect(cbp); cbp.connect(cg); cg.connect(g);
+  cn.connect(cbp); cbp.connect(cg); cg.connect(g.in());
   setAt(cbp.frequency, t, 380);
   exp(cbp.frequency, jump, 6800);
   setAt(cg.gain, t, 1e-4);
@@ -585,13 +600,13 @@ function hyperspaceJump(ctx, bus, t, o = {}) {
   const flash = noise(ctx, jump, 0.35, { seed: sd ^ 0x2, offset: r() * 2.2 });
   const fhp = bq(ctx, 'highpass', 3800, 0.8);
   const fg = gn(ctx, 0);
-  flash.connect(fhp); fhp.connect(fg); fg.connect(g);
+  flash.connect(fhp); fhp.connect(fg); fg.connect(g.in());
   hit(fg.gain, jump, 0.7, 0.001, 0.3);
 
   const whoosh = noise(ctx, jump, 2.3, { seed: sd ^ 0x3, offset: r() * 2.2, rate: 0.8 });
   const wlp = bq(ctx, 'lowpass', 12000, 0.9);
   const whg = gn(ctx, 0);
-  whoosh.connect(wlp); wlp.connect(whg); whg.connect(g);
+  whoosh.connect(wlp); wlp.connect(whg); whg.connect(g.in());
   sweep(wlp.frequency, jump, 13000, 90, 1.8);
   setAt(whg.gain, jump, 1e-4);
   lin(whg.gain, jump + 0.03, 1.0);
@@ -600,7 +615,7 @@ function hyperspaceJump(ctx, bus, t, o = {}) {
   const sub = osc(ctx, 'sine', 130, jump, 1.9);
   sweep(sub.frequency, jump, 130, 26, 1.4);
   const sg = gn(ctx, 0);
-  sub.connect(sg); sg.connect(g);
+  sub.connect(sg); sg.connect(g.in());
   hit(sg.gain, jump, 0.95, 0.02, 1.8);
   return jump + 2.45;
 }
@@ -621,7 +636,7 @@ function saberHum(ctx, bus, t, o = {}) {
   const amp = gn(ctx, 0);
   const lp = bq(ctx, 'lowpass', 1500, 3.2);
   const pk = bq(ctx, 'peaking', 2100, 2.5, 6);
-  amp.connect(lp); lp.connect(pk); pk.connect(g);
+  amp.connect(lp); lp.connect(pk); pk.connect(g.in());
 
   setAt(amp.gain, t, 1e-4);
   lin(amp.gain, t + fade, level * 0.62);
@@ -633,7 +648,7 @@ function saberHum(ctx, bus, t, o = {}) {
     const s = osc(ctx, 'sawtooth', base * mul, t, dur + 0.03, d);
     det.connect(s.detune);
     const sg = gn(ctx, lvl);
-    s.connect(sg); sg.connect(amp);
+    s.connect(sg); sg.connect(amp.in());
   }
   // Two wobbles: the slow breathing one and the faster blade shimmer.
   const slow = lfo(ctx, t, dur, 0.85, level * 0.085);
@@ -652,12 +667,12 @@ function saberOn(ctx, bus, t, o = {}) {
   const n = noise(ctx, t, 0.10, { seed: sd, offset: r() * 2.2 });
   const nhp = bq(ctx, 'highpass', 1800, 0.7);
   const ng = gn(ctx, 0);
-  n.connect(nhp); nhp.connect(ng); ng.connect(g);
+  n.connect(nhp); nhp.connect(ng); ng.connect(g.in());
   hit(ng.gain, t, 0.55, 0.0015, 0.09);
 
   const bp = bq(ctx, 'bandpass', 300, 4);
   const wg = gn(ctx, 0);
-  bp.connect(wg); wg.connect(g);
+  bp.connect(wg); wg.connect(g.in());
   for (const [mul, lvl] of [[1, 0.7], [2, 0.3], [3, 0.15]]) {
     const s = osc(ctx, 'sawtooth', 180 * mul, t, 0.32);
     setAt(s.frequency, t, 180 * mul);
@@ -682,12 +697,12 @@ function saberOff(ctx, bus, t, o = {}) {
 
   const lp = bq(ctx, 'lowpass', 1600, 3);
   const amp = gn(ctx, 0);
-  amp.connect(lp); lp.connect(g);
+  amp.connect(lp); lp.connect(g.in());
   for (const [mul, lvl] of [[1, 0.75], [1.5, 0.4], [2.01, 0.2], [0.5, 0.3]]) {
     const s = osc(ctx, 'sawtooth', base * mul, t, dur + 0.05);
     setAt(s.frequency, t, base * mul);
     exp(s.frequency, t + dur, base * mul * 0.32);
-    const sg = gn(ctx, lvl); s.connect(sg); sg.connect(amp);
+    const sg = gn(ctx, lvl); s.connect(sg); sg.connect(amp.in());
   }
   sweep(lp.frequency, t, 1700, 220, dur);
   setAt(amp.gain, t, 0.62);
@@ -696,7 +711,7 @@ function saberOff(ctx, bus, t, o = {}) {
   const n = noise(ctx, t, dur, { seed: sd, offset: r() * 2.2 });
   const nbp = bq(ctx, 'bandpass', 2200, 2);
   const ng = gn(ctx, 0);
-  n.connect(nbp); nbp.connect(ng); ng.connect(g);
+  n.connect(nbp); nbp.connect(ng); ng.connect(g.in());
   sweep(nbp.frequency, t, 2600, 500, dur);
   setAt(ng.gain, t, 0.30);
   exp(ng.gain, t + dur * 0.8, 1e-4);
@@ -714,7 +729,7 @@ function saberClash(ctx, bus, t, o = {}) {
                                   [3410, 26, 0.26, 0.24], [4900, 30, 0.18, 0.16]]) {
     const bp = bq(ctx, 'bandpass', f * (0.94 + r() * 0.12), q);
     const bg = gn(ctx, 0);
-    n.connect(bp); bp.connect(bg); bg.connect(g);
+    n.connect(bp); bp.connect(bg); bg.connect(g.in());
     hit(bg.gain, t, lvl, 0.0015, dec);
   }
   // The energy discharge itself.
@@ -723,14 +738,14 @@ function saberClash(ctx, bus, t, o = {}) {
   const zbp = bq(ctx, 'bandpass', 2400, 5);
   sweep(zbp.frequency, t, 3200, 700, 0.10);
   const zg = gn(ctx, 0);
-  z.connect(zbp); zbp.connect(zg); zg.connect(g);
+  z.connect(zbp); zbp.connect(zg); zg.connect(g.in());
   hit(zg.gain, t, 0.55, 0.001, 0.14);
 
   // Low shove, and the blades flaring afterwards.
   const s = osc(ctx, 'sine', 150, t, 0.35);
   sweep(s.frequency, t, 150, 62, 0.16);
   const sg = gn(ctx, 0);
-  s.connect(sg); sg.connect(g);
+  s.connect(sg); sg.connect(g.in());
   hit(sg.gain, t, 0.45, 0.003, 0.3);
   saberHum(ctx, bus, t + 0.02, { gain: gain * 0.7, pan, send, base, dur: 0.5, fade: 0.05, level: 1.25 });
   return t + 0.6;
@@ -765,7 +780,7 @@ function vaderBreath(ctx, bus, t, o = {}) {
   const bp1 = bq(ctx, 'bandpass', 360, 6.5);
   const pk1 = bq(ctx, 'peaking', 1350, 1.6, 7);
   const g1 = gn(ctx, 0);
-  air1.connect(bp1); bp1.connect(pk1); pk1.connect(g1); g1.connect(g);
+  air1.connect(bp1); bp1.connect(pk1); pk1.connect(g1); g1.connect(g.in());
   setAt(bp1.frequency, t, 340);
   exp(bp1.frequency, t + inDur * 0.62, 780);
   exp(bp1.frequency, t + inDur, 520);
@@ -776,7 +791,7 @@ function vaderBreath(ctx, bus, t, o = {}) {
 
   const wh1 = bq(ctx, 'bandpass', 1150, 9);
   const wg1 = gn(ctx, 0);
-  air1.connect(wh1); wh1.connect(wg1); wg1.connect(g);
+  air1.connect(wh1); wh1.connect(wg1); wg1.connect(g.in());
   setAt(wh1.frequency, t, 980);
   exp(wh1.frequency, t + inDur, 1450);
   setAt(wg1.gain, t, 1e-4);
@@ -792,7 +807,7 @@ function vaderBreath(ctx, bus, t, o = {}) {
   const bp2 = bq(ctx, 'bandpass', 600, 5.0);
   const pk2 = bq(ctx, 'peaking', 720, 1.1, 7);
   const g2 = gn(ctx, 0);
-  air2.connect(bp2); bp2.connect(pk2); pk2.connect(g2); g2.connect(g);
+  air2.connect(bp2); bp2.connect(pk2); pk2.connect(g2); g2.connect(g.in());
   setAt(bp2.frequency, t2, 640);
   exp(bp2.frequency, t2 + exDur * 0.55, 330);
   exp(bp2.frequency, t2 + exDur, 235);
@@ -803,14 +818,14 @@ function vaderBreath(ctx, bus, t, o = {}) {
 
   const wh2 = bq(ctx, 'bandpass', 1750, 8);
   const wg2 = gn(ctx, 0);
-  air2.connect(wh2); wh2.connect(wg2); wg2.connect(g);
+  air2.connect(wh2); wh2.connect(wg2); wg2.connect(g.in());
   setAt(wg2.gain, t2, 1e-4);
   lin(wg2.gain, t2 + exDur * 0.22, 0.18);
   exp(wg2.gain, t2 + exDur * 0.9, 1e-4);
 
   const chest = osc(ctx, 'sine', 78, t2, exDur + 0.05);
   const cg = gn(ctx, 0);
-  chest.connect(cg); cg.connect(g);
+  chest.connect(cg); cg.connect(g.in());
   setAt(cg.gain, t2, 1e-4);
   lin(cg.gain, t2 + exDur * 0.25, 0.15);
   exp(cg.gain, t2 + exDur, 1e-4);
@@ -828,13 +843,13 @@ function droidBeep(ctx, bus, t, o = {}) {
 
   const amp = gn(ctx, 0);
   const bp = bq(ctx, 'bandpass', 1400, 1.1);
-  amp.connect(bp); bp.connect(g);
+  amp.connect(bp); bp.connect(g.in());
   const dur = 0.11 / speed;
   const total = n * dur * 1.18;
   const car = osc(ctx, 'triangle', 800, t, total + 0.08);
   const sq = osc(ctx, 'square', 800, t, total + 0.08, 5);
   const sqg = gn(ctx, 0.22);
-  car.connect(amp); sq.connect(sqg); sqg.connect(amp);
+  car.connect(amp.in()); sq.connect(sqg); sqg.connect(amp.in());
 
   let last = rootMidi;
   const list = [];
@@ -860,12 +875,12 @@ function droidWorry(ctx, bus, t, o = {}) {
   const g = out(ctx, bus, { gain, pan, send });
   const amp = gn(ctx, 0);
   const bp = bq(ctx, 'bandpass', 1100, 1.4);
-  amp.connect(bp); bp.connect(g);
+  amp.connect(bp); bp.connect(g.in());
 
   const s = osc(ctx, 'triangle', 900, t, dur + 0.06);
   const s2 = osc(ctx, 'sine', 900, t, dur + 0.06, 12);
   const s2g = gn(ctx, 0.4);
-  s.connect(amp); s2.connect(s2g); s2g.connect(amp);
+  s.connect(amp.in()); s2.connect(s2g); s2g.connect(amp.in());
   setAt(s.frequency, t, 980);
   exp(s.frequency, t + dur, 300);
   setAt(s2.frequency, t, 980);
@@ -897,8 +912,8 @@ function protocolFuss(ctx, bus, t, o = {}) {
   const f2 = bq(ctx, 'bandpass', 1720, 6);
   const f1g = gn(ctx, 1.0);
   const f2g = gn(ctx, 0.65);
-  src.connect(f1); f1.connect(f1g); f1g.connect(g);
-  src.connect(f2); f2.connect(f2g); f2g.connect(g);
+  src.connect(f1); f1.connect(f1g); f1g.connect(g.in());
+  src.connect(f2); f2.connect(f2g); f2g.connect(g.in());
 
   const total = syllables * 0.24 / speed;
   const saw = osc(ctx, 'sawtooth', 150, t, total + 0.1);
@@ -933,7 +948,7 @@ function jawaChatter(ctx, bus, t, o = {}) {
   const src = gn(ctx, 0);
   const bp = bq(ctx, 'bandpass', 1500, 3.5);
   const pk = bq(ctx, 'peaking', 2800, 2, 7);
-  src.connect(bp); bp.connect(pk); pk.connect(g);
+  src.connect(bp); bp.connect(pk); pk.connect(g.in());
 
   const step = 0.115 / speed;
   const total = n * step;
@@ -971,7 +986,7 @@ function sandcrawlerRumble(ctx, bus, t, o = {}) {
   const sd = seedFrom('sandcrawlerRumble', t);
   const r = rng(sd);
   const amp = gn(ctx, 0);
-  amp.connect(g);
+  amp.connect(g.in());
   setAt(amp.gain, t, 1e-4);
   lin(amp.gain, t + fade, 1);
   setAt(amp.gain, t + Math.max(fade + 0.05, dur - fade), 1);
@@ -980,13 +995,13 @@ function sandcrawlerRumble(ctx, bus, t, o = {}) {
   const n = noise(ctx, t, dur + 0.05, { seed: sd, offset: r() * 2.1, rate: 0.45 });
   const lp = bq(ctx, 'lowpass', 250, 0.9);
   const ng = gn(ctx, 0.85);
-  n.connect(lp); lp.connect(ng); ng.connect(amp);
+  n.connect(lp); lp.connect(ng); ng.connect(amp.in());
 
   for (const [f, lvl] of [[31, 0.7], [46.5, 0.35], [23.2, 0.4]]) {
     const s = osc(ctx, 'sawtooth', f, t, dur + 0.05);
     const flp = bq(ctx, 'lowpass', 130, 1.3);
     const sg = gn(ctx, lvl);
-    s.connect(flp); flp.connect(sg); sg.connect(amp);
+    s.connect(flp); flp.connect(sg); sg.connect(amp.in());
   }
   const w = lfo(ctx, t, dur, 0.31, 0.2);
   w.connect(amp.gain);
@@ -997,7 +1012,7 @@ function sandcrawlerRumble(ctx, bus, t, o = {}) {
   for (const [f, q, lvl] of [[1350, 9, 0.20], [2650, 14, 0.11]]) {
     const bp = bq(ctx, 'bandpass', f, q);
     const cg = gn(ctx, 0);
-    cn.connect(bp); bp.connect(cg); cg.connect(amp);
+    cn.connect(bp); bp.connect(cg); cg.connect(amp.in());
     const list = [];
     for (let i = 0; i < nClank; i++) {
       const gt = t + 0.3 + i * tread + (r() - 0.5) * 0.05;
@@ -1015,14 +1030,14 @@ function wind(ctx, bus, t, o = {}) {
   const sd = seedFrom('wind', t);
   const r = rng(sd);
   const amp = gn(ctx, 0);
-  amp.connect(g);
+  amp.connect(g.in());
   setAt(amp.gain, t, 1e-4);
   lin(amp.gain, t + fade, 0.75);
 
   const n = noise(ctx, t, dur + 0.05, { seed: sd, offset: r() * 2.0 });
   const bp = bq(ctx, 'bandpass', 700, 1.5);
   const ng = gn(ctx, 1);
-  n.connect(bp); bp.connect(ng); ng.connect(amp);
+  n.connect(bp); bp.connect(ng); ng.connect(amp.in());
   const s1 = lfo(ctx, t, dur, 0.13, 380);
   const s2 = lfo(ctx, t, dur, 0.291, 220);
   s1.connect(bp.frequency); s2.connect(bp.frequency);
@@ -1030,7 +1045,7 @@ function wind(ctx, bus, t, o = {}) {
   const lo = noise(ctx, t, dur + 0.05, { seed: sd ^ 0x5, offset: r() * 2.0, rate: 0.7 });
   const llp = bq(ctx, 'lowpass', 380, 0.9);
   const lg = gn(ctx, 0.55);
-  lo.connect(llp); llp.connect(lg); lg.connect(amp);
+  lo.connect(llp); llp.connect(lg); lg.connect(amp.in());
 
   // Gusts, as automation on the shared amp rather than extra nodes.
   const nG = Math.max(1, Math.round((dur / 2.6) * gust));
@@ -1054,11 +1069,11 @@ function alarm(ctx, bus, t, o = {}) {
   const g = out(ctx, bus, { gain, pan, send });
   const amp = gn(ctx, 0);
   const lp = bq(ctx, 'lowpass', 2400, 2.5);
-  amp.connect(lp); lp.connect(g);
+  amp.connect(lp); lp.connect(g.in());
   const s = osc(ctx, 'square', hi, t, dur + 0.06);
   const s2 = osc(ctx, 'sawtooth', hi, t, dur + 0.06, 8);
   const s2g = gn(ctx, 0.3);
-  s.connect(amp); s2.connect(s2g); s2g.connect(amp);
+  s.connect(amp.in()); s2.connect(s2g); s2g.connect(amp.in());
 
   const n = Math.max(1, Math.floor(dur / period));
   const list = [];
@@ -1090,19 +1105,19 @@ function podLaunch(ctx, bus, t, o = {}) {
   const bn = noise(ctx, t, 0.3, { seed: sd, offset: r() * 2.1 });
   const bbp = bq(ctx, 'bandpass', 1500, 4);
   const bg = gn(ctx, 0);
-  bn.connect(bbp); bbp.connect(bg); bg.connect(g);
+  bn.connect(bbp); bbp.connect(bg); bg.connect(g.in());
   grains(bg.gain, [[t, 0.001, 0.85, 0.08], [t + 0.055, 0.001, 0.7, 0.07], [t + 0.10, 0.001, 0.6, 0.09]]);
   const thump = osc(ctx, 'sine', 110, t, 0.5);
   sweep(thump.frequency, t, 110, 38, 0.2);
   const tg = gn(ctx, 0);
-  thump.connect(tg); tg.connect(g);
+  thump.connect(tg); tg.connect(g.in());
   hit(tg.gain, t, 0.8, 0.003, 0.45);
 
   // Pressure hiss.
   const hn = noise(ctx, t + 0.04, 0.55, { seed: sd ^ 0x4, offset: r() * 2.1 });
   const hhp = bq(ctx, 'highpass', 1600, 0.8);
   const hg = gn(ctx, 0);
-  hn.connect(hhp); hhp.connect(hg); hg.connect(g);
+  hn.connect(hhp); hhp.connect(hg); hg.connect(g.in());
   setAt(hg.gain, t + 0.04, 1e-4);
   lin(hg.gain, t + 0.09, 0.45);
   exp(hg.gain, t + 0.55, 1e-4);
@@ -1111,7 +1126,7 @@ function podLaunch(ctx, bus, t, o = {}) {
   const wn = noise(ctx, t + 0.10, 1.3, { seed: sd ^ 0x8, offset: r() * 2.1 });
   const wbp = bq(ctx, 'bandpass', 240, 1.4);
   const wg = gn(ctx, 0);
-  wn.connect(wbp); wbp.connect(wg); wg.connect(g);
+  wn.connect(wbp); wbp.connect(wg); wg.connect(g.in());
   sweep(wbp.frequency, t + 0.10, 220, 2100, 0.8);
   setAt(wg.gain, t + 0.10, 1e-4);
   lin(wg.gain, t + 0.55, 0.9);
@@ -1125,7 +1140,7 @@ function podLaunch(ctx, bus, t, o = {}) {
     const lp = bq(ctx, 'lowpass', 1400, 1.2);
     sweep(lp.frequency, t + 0.15, 1600, 220, 2.0);
     const sg = gn(ctx, 0);
-    s.connect(lp); lp.connect(sg); sg.connect(g);
+    s.connect(lp); lp.connect(sg); sg.connect(g.in());
     setAt(sg.gain, t + 0.15, 1e-4);
     lin(sg.gain, t + 0.5, lvl);
     exp(sg.gain, t + 2.35, 1e-4);
@@ -1139,11 +1154,11 @@ function commBeep(ctx, bus, t, o = {}) {
   const g = out(ctx, bus, { gain, pan, send });
   const amp = gn(ctx, 0);
   const bp = bq(ctx, 'bandpass', 1400, 1.6);
-  amp.connect(bp); bp.connect(g);
+  amp.connect(bp); bp.connect(g.in());
   const s = osc(ctx, 'square', f1, t, len * 2 + 0.09);
   const sn = osc(ctx, 'sine', f1, t, len * 2 + 0.09);
   const sg = gn(ctx, 0.35);
-  s.connect(sg); sg.connect(amp); sn.connect(amp);
+  s.connect(sg); sg.connect(amp.in()); sn.connect(amp.in());
   setAt(s.frequency, t, f1); setAt(sn.frequency, t, f1);
   setAt(s.frequency, t + len + 0.02, f2); setAt(sn.frequency, t + len + 0.02, f2);
   grains(amp.gain, [[t, 0.004, 0.8, len], [t + len + 0.02, 0.004, 0.8, len]]);
@@ -1158,7 +1173,7 @@ function radioStatic(ctx, bus, t, o = {}) {
   const r = rng(sd);
   const hpf = bq(ctx, 'highpass', 420, 0.8);
   const lpf = bq(ctx, 'lowpass', 3000, 0.8);
-  hpf.connect(lpf); lpf.connect(g);
+  hpf.connect(lpf); lpf.connect(g.in());
 
   const bed = noise(ctx, t, dur + 0.03, { seed: sd, offset: r() * 2.0 });
   const bg = gn(ctx, 0);
@@ -1189,11 +1204,11 @@ function targetingLock(ctx, bus, t, o = {}) {
   const g = out(ctx, bus, { gain, pan, send });
   const amp = gn(ctx, 0);
   const bp = bq(ctx, 'bandpass', 1900, 2.2);
-  amp.connect(bp); bp.connect(g);
+  amp.connect(bp); bp.connect(g.in());
   const s = osc(ctx, 'square', 1500, t, dur + lock + 0.12);
   const sn = osc(ctx, 'sine', 1500, t, dur + lock + 0.12);
   const sg = gn(ctx, 0.3);
-  s.connect(sg); sg.connect(amp); sn.connect(amp);
+  s.connect(sg); sg.connect(amp.in()); sn.connect(amp.in());
 
   const list = [];
   // Geometric acceleration: the gaps shrink toward the lock.
@@ -1224,13 +1239,13 @@ function rumbleSub(ctx, bus, t, o = {}) {
   const { gain = 0.46, pan = 0, send = 0.05, dur = 2, f0 = 48, f1 = 27 } = o;
   const g = out(ctx, bus, { gain, pan, send });
   const amp = gn(ctx, 0);
-  amp.connect(g);
+  amp.connect(g.in());
   for (const [mul, lvl] of [[1, 0.8], [1.5, 0.22], [2, 0.1]]) {
     const s = osc(ctx, 'sine', f0 * mul, t, dur + 0.05);
     setAt(s.frequency, t, f0 * mul);
     exp(s.frequency, t + dur, f1 * mul);
     const sg = gn(ctx, lvl);
-    s.connect(sg); sg.connect(amp);
+    s.connect(sg); sg.connect(amp.in());
   }
   setAt(amp.gain, t, 1e-4);
   lin(amp.gain, t + Math.min(0.25, dur * 0.25), 1);
@@ -1246,7 +1261,7 @@ function crowdCheer(ctx, bus, t, o = {}) {
   const sd = seedFrom('crowdCheer', t);
   const r = rng(sd);
   const amp = gn(ctx, 0);
-  amp.connect(g);
+  amp.connect(g.in());
   setAt(amp.gain, t, 1e-4);
   lin(amp.gain, t + dur * 0.16, 1.0);
   setAt(amp.gain, t + dur * 0.5, 0.9);
@@ -1256,14 +1271,14 @@ function crowdCheer(ctx, bus, t, o = {}) {
   for (const [f, q, lvl] of [[480, 1.2, 0.6], [1150, 1.6, 0.45], [2500, 2.0, 0.25]]) {
     const bp = bq(ctx, 'bandpass', f, q);
     const bg = gn(ctx, lvl);
-    n.connect(bp); bp.connect(bg); bg.connect(amp);
+    n.connect(bp); bp.connect(bg); bg.connect(amp.in());
     const sw = lfo(ctx, t, dur, 0.4 + r() * 0.5, f * 0.18);
     sw.connect(bp.frequency);
   }
   const roar = noise(ctx, t, dur + 0.05, { seed: sd ^ 0x9, offset: r() * 2.0, rate: 0.8 });
   const rlp = bq(ctx, 'lowpass', 420, 0.9);
   const rg = gn(ctx, 0.4);
-  roar.connect(rlp); rlp.connect(rg); rg.connect(amp);
+  roar.connect(rlp); rlp.connect(rg); rg.connect(amp.in());
 
   // A handful of individual voices poking out of the wash.
   for (let i = 0; i < 7; i++) {
@@ -1275,7 +1290,7 @@ function crowdCheer(ctx, bus, t, o = {}) {
     exp(s.frequency, gt + len, f0 * (0.72 + r() * 0.5));
     const bp = bq(ctx, 'bandpass', 800 + r() * 900, 4);
     const sg = gn(ctx, 0);
-    s.connect(bp); bp.connect(sg); sg.connect(amp);
+    s.connect(bp); bp.connect(sg); sg.connect(amp.in());
     const vb = lfo(ctx, gt, len, 5 + r() * 3, 22);
     vb.connect(s.frequency);
     setAt(sg.gain, gt, 1e-4);

@@ -36,7 +36,7 @@ const SH_WALK = 5.0;
 const SH_TRACK = 8.4;
 const SH_ARGUE = 11.5;
 const SH_SPLIT = 13.9;
-const SH_CREST = 18.0;
+const SH_CREST = 17.3;
 const SH_SWARM = 20.9;
 const SH_ZAP = 23.3;
 const SH_RAMP = 26.2;
@@ -75,8 +75,11 @@ const WALK_DIR = [-0.18, -0.9836];          // ... and the line they trudge alon
 const ASTRO_DIR = [0.9836, -0.18];          // dead perpendicular, so the joke reads
 const PROTO_DIR = [-0.9836, 0.18];
 
-const POD_AT = [46, 101];
-const SCAR_FROM = [196, 222];
+// far enough off the walk line that it never sits behind the astromech once
+// the camera turns round to face the crawler
+const POD_AT = [2, 90];
+const SCAR_DIR = [0.7784, 0.6278];          // from the pod back up its own furrow
+const SCAR_FROM = [POD_AT[0] + SCAR_DIR[0] * 193, POD_AT[1] + SCAR_DIR[1] * 193];
 
 const CRAWL_VEC = [-0.55, -0.835];          // the bearing it grinds in on
 const CRAWL_IN = head(CRAWL_VEC[0], CRAWL_VEC[1]);
@@ -148,7 +151,8 @@ export async function build(ctx) {
   scene.add(backdrop);
   const ridgeBands = backdrop.children.map((m) => ({ m, base: m.material.color.clone() }));
 
-  const suns = twinSuns({ sep: 300, dist: 2620, size: 122, colors: [0xfff0c8, 0xffb268] });
+  // wide separation and a small disc, or the two halos fuse into one blob
+  const suns = twinSuns({ sep: 620, dist: 2620, size: 104, colors: [0xfff0c8, 0xffb268] });
   suns.rotation.y = CRAWL_OUT;
   suns.traverse((o) => {
     if (o.material) { o.material.fog = false; o.material.needsUpdate = true; }
@@ -183,9 +187,9 @@ export async function build(ctx) {
   scene.add(sandBerm(POD_AT, POD_YAW, ground, rand));
 
   const podSmoke = new Smoke(scene, {
-    t0: -4, count: 46, origin: [POD_AT[0] - 0.6, POD_Y + 4.4, POD_AT[1] + 1.8],
-    spread: 3.0, size: 5.2, rise: 1.25, life: 8, opacity: 0.42,
-    color: 0x6b5f55, spawnWindow: 38, seed: 17,
+    t0: -6, count: 60, origin: [POD_AT[0] - 0.6, POD_Y + 4.4, POD_AT[1] + 1.8],
+    spread: 3.4, size: 6.4, rise: 1.55, life: 10, opacity: 0.5,
+    color: 0x5a4f47, spawnWindow: 40, seed: 17,
   });
 
   /* ---- the two droids: where they are, at any t --------------------- */
@@ -224,7 +228,7 @@ export async function build(ctx) {
   const MOUTH = [C_STOP[0] + CRAWL_VEC[0] * 18, C_STOP[1] + CRAWL_VEC[1] * 18];
 
   const vCrawl = (t) => 9.6 * smoothstep(12.4, 14.2, t) * (1 - smoothstep(18.9, T_STOP, t))
-    + 5.4 * smoothstep(T_ROLL, T_ROLL + 2.0, t);
+    + 12.5 * smoothstep(T_ROLL, T_ROLL + 1.8, t);
   const hCrawl = (t) => lerp(CRAWL_IN, CRAWL_OUT, smoothstep(T_PIVOT, T_PIVOT + 1.4, t));
   const crawlPath = drive({
     t0: 11.0, t1: END, speed: vCrawl, heading: hCrawl,
@@ -235,27 +239,57 @@ export async function build(ctx) {
   crawler.rotation.order = 'YXZ';
   scene.add(crawler);
 
-  // dust is laid down where the treads were, not carried with them, so the
-  // trail hangs: one emitter per sampled moment of the drive, at each tread
+  /* ---- the dust it drags with it ------------------------------------
+   * Dust is laid down where the treads were rather than carried along, so
+   * the trail hangs behind and settles.  The plumes sit just outboard of
+   * the hull: anything inside its 27-unit width is simply hidden by it in
+   * the head-on shots. */
   const dust = [];
-  for (let i = 0; i < 32; i++) {
-    const t = i < 15 ? 14.2 + i * 0.42 : T_ROLL + 0.3 + (i - 15) * 0.26;
+  const puff = (t, x, z, o) => dust.push(new Smoke(scene, {
+    t0: t, count: o.count, origin: [x, ground(x, z) + o.up, z], spread: o.spread,
+    size: o.size, rise: o.rise, life: o.life, opacity: o.opacity,
+    color: o.color ?? 0xc99a63, spawnWindow: 0.4, seed: o.seed,
+  }));
+  for (let i = 0; i < 36; i++) {
+    const t = i < 22 ? 13.4 + i * 0.32 : T_ROLL + 0.1 + (i - 22) * 0.32;
     const p = crawlPath(t);
     const fx = -Math.sin(p.h), fz = -Math.cos(p.h);
+    const cx = Math.cos(p.h), cz = -Math.sin(p.h);
     for (const s of [1, -1]) {
-      // both treads, at the contact patch, sloughing sideways and back
-      const x = p.x - fx * 6 + Math.cos(p.h) * s * 12.5;
-      const z = p.z - fz * 6 - Math.sin(p.h) * s * 12.5;
-      dust.push(new Smoke(scene, {
-        t0: t, count: 5, origin: [x, ground(x, z) + 1.8, z], spread: 12,
-        size: 11, rise: 0.28, life: 5.0, opacity: 0.30,
-        color: 0xe4c898, spawnWindow: 0.4, seed: 60 + i * 3 + s,
-      }));
+      // the bow wave the treads push ahead of themselves — the only dust the
+      // lens can see at all when it is square onto the front of the hull
+      const nx = p.x + fx * 19 + cx * s * 12, nz = p.z + fz * 19 + cz * s * 12;
+      puff(t, nx, nz, {
+        count: 5, spread: 15, size: 8, rise: 0.42, life: 2.8, opacity: 0.4,
+        up: 0.9, seed: 1600 + i * 7 + s,
+      });
+      // what rolls off the treads: low, and thrown wide enough to break the
+      // hull's own silhouette
+      const wx = p.x - fx * 4 + cx * s * 15, wz = p.z - fz * 4 + cz * s * 15;
+      puff(t, wx, wz, {
+        count: 5, spread: 19, size: 9, rise: 0.34, life: 3.4, opacity: 0.42,
+        up: 1.1, seed: 60 + i * 7 + s,
+      });
+      // and the billow that climbs the flanks.  It has to get well up the
+      // side of a 30-unit hull to clear the near dune crest in the low
+      // shots, where the lens is only a couple of bricks off the sand.
+      const bx = p.x - fx * 3 + cx * s * 22, bz = p.z - fz * 3 + cz * s * 22;
+      puff(t, bx, bz, {
+        count: 5, spread: 18, size: 16, rise: 1.5, life: 5.0, opacity: 0.30,
+        up: 10.5, seed: 900 + i * 7 + s,
+      });
     }
+    // a low wide skirt astern, which is the part that is still hanging later
+    puff(t, p.x - fx * 24, p.z - fz * 24, {
+      count: 5, spread: 26, size: 14, rise: 0.16, life: 7.5, opacity: 0.17,
+      up: 1.4, color: 0xb2854f, seed: 400 + i * 3,
+    });
   }
 
-  /* ---- the far outcrop the protocol droid stalks toward ------------- */
-  const RIDGE_AT = [SPLIT[0] + PROTO_DIR[0] * 265, SPLIT[1] + PROTO_DIR[1] * 265];
+  /* ---- the far outcrop the protocol droid stalks toward -------------
+   * Far enough out that the fog does most of the work on it: closer than
+   * this and a single butte swings into the wide shots as a grey slab. */
+  const RIDGE_AT = [SPLIT[0] + PROTO_DIR[0] * 430, SPLIT[1] + PROTO_DIR[1] * 430];
   scene.add(rockRidge(RIDGE_AT, ground, 3311));
 
   /* ---- cast --------------------------------------------------------- */
@@ -308,23 +342,34 @@ export async function build(ctx) {
   };
 
   /**
-   * Sit a long vehicle on the sand: mean of its four corners, plus slope.
-   * Something 46 units long grinds through a dune rather than teetering over
-   * it, so the measured slope is deliberately under-applied.
+   * Sit a long vehicle on the sand.  Something 46 units long grinds through a
+   * dune rather than teetering over it, so the measured slope is deliberately
+   * under-applied — but then the hull is dropped only as far as the highest
+   * sand under its footprint, so a tread never sinks into a crest.  The model
+   * has its origin at the bottom of its treads, which makes that exact.
    */
-  const sitBig = (o, x, z, yaw, hl, hw, lift = 0.1) => {
+  const grid = [];
+  for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) grid.push([a / 2, b / 2]);
+  const sitBig = (o, x, z, yaw, hl, hw, lift = 0.05) => {
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
     const rx = Math.cos(yaw), rz = -Math.sin(yaw);
-    const hF = ground(x + fx * hl, z + fz * hl);
-    const hB = ground(x - fx * hl, z - fz * hl);
-    const hR = ground(x + rx * hw, z + rz * hw);
-    const hL = ground(x - rx * hw, z - rz * hw);
-    o.position.set(x, (hF + hB + hR + hL) / 4 + lift, z);
-    o.rotation.set(
-      Math.atan2(hF - hB, 2 * hl) * 0.62,
-      yaw,
-      Math.atan2(hR - hL, 2 * hw) * 0.62,
-    );
+    // least-squares slope of the sand under the whole footprint
+    let su = 0, sv = 0, suu = 0, svv = 0;
+    const hs = [];
+    for (const [u, v] of grid) {
+      const h = ground(x + fx * hl * u + rx * hw * v, z + fz * hl * u + rz * hw * v);
+      hs.push(h);
+      su += u * h; sv += v * h; suu += u * u; svv += v * v;
+    }
+    const pitch = Math.atan2(su / suu, hl) * 0.85;
+    const roll = Math.atan2(sv / svv, hw) * 0.85;
+    const sp = Math.sin(pitch), sr = Math.sin(roll);
+    // rest on the sand a hair below the highest sample: the treads bite into
+    // a crest rather than perching the whole hull on top of it
+    const res = hs.map((h, i) => h - sp * hl * grid[i][0] - sr * hw * grid[i][1]);
+    res.sort((a, b) => a - b);
+    o.position.set(x, res[Math.round((res.length - 1) * 0.88)] + lift, z);
+    o.rotation.set(pitch, yaw, roll);
   };
 
   /* ---- sound -------------------------------------------------------- */
@@ -554,9 +599,10 @@ function focusOf(t, p) {
 
 function shoot(t, cam, w) {
   const G = w.gs;
-  /** Landscape framing: stand at (x,z), face bearing phi, tilt by `pitch`. */
-  const face = (x, up, z, phi, pitch, fov, roll = 0) => {
-    const y = G(x, z) + up;
+  /** Sand height under (x,z), smoothed, so a moving eye does not ride ripples. */
+  const S = (x, z) => G(x, z);
+  /** Landscape framing: eye at (x,y,z), face bearing phi, tilt by `pitch`. */
+  const face = (x, y, z, phi, pitch, fov, roll = 0) => {
     cam.position.set(x, y, z);
     cam.lookAt(
       x + Math.sin(phi) * Math.cos(pitch) * 100,
@@ -566,9 +612,9 @@ function shoot(t, cam, w) {
     cam.fov = fov;
     if (roll) cam.rotateZ(roll);
   };
-  /** Subject framing: stand at (x,z), look at a point, `ty` is above its sand. */
-  const on = (x, up, z, tx, ty, tz, fov, roll = 0) => {
-    cam.position.set(x, G(x, z) + up, z);
+  /** Subject framing: eye at (x,y,z), look at a point `ty` above its sand. */
+  const on = (x, y, z, tx, ty, tz, fov, roll = 0) => {
+    cam.position.set(x, y, z);
     cam.lookAt(tx, G(tx, tz) + ty, tz);
     cam.fov = fov;
     if (roll) cam.rotateZ(roll);
@@ -577,75 +623,96 @@ function shoot(t, cam, w) {
   const V = CRAWL_VEC, P = [-V[1], V[0]];      // crawler forward / its left
 
   if (t < SH_POD) {
-    /* --- the world: suns at the left third, the pod and its scar at the
-           right, the horizon down at two thirds and nothing else ------- */
+    /* --- the world.  The eye stands in the pod's own skid furrow and
+           looks down it: the scar draws the bottom of the frame to the
+           pod at the left third, the suns burn at the right third, and
+           the horizon sits low so most of the frame is sky. ----------- */
     const k = beat(t, SH_WORLD, SH_POD);
-    const d = 86 - k * 13;
-    face(pd[0] - d * 0.42, 8.5 - k * 0.7, pd[1] + d * 0.907, 0.10, 0.118 - k * 0.008, 42);
+    const d = 78 - k * 15;
+    face(
+      pd[0] + SCAR_DIR[0] * d, S(pd[0], pd[1]) + 6.1, pd[1] + SCAR_DIR[1] * d,
+      -0.600, 0.058 - k * 0.019, 44,
+    );
   } else if (t < SH_WALK) {
-    /* --- the pod: near, side-lit, the scar running off to the horizon
-           behind it.  The only shot in the scene facing away from the
-           suns, so the pod itself is warm instead of a silhouette. ----- */
+    /* --- the pod: near, and the one shot in the scene that faces away
+           from the suns, so it is warm instead of a silhouette. ------- */
     const k = beat(t, SH_POD, SH_WALK);
-    const d = 19 - k * 3;
+    const d = 31 - k * 4.5;
     on(
-      pd[0] - 0.968 * d, 2.6, pd[1] - 0.249 * d,
-      pd[0] + 1.6, 3.2, pd[1] + 0.6,
-      42 - k * 3,
+      pd[0] - 0.968 * d, S(pd[0], pd[1]) + 5.6 + k * 0.6, pd[1] - 0.249 * d,
+      pd[0] + 1.2, 4.2, pd[1] + 0.4,
+      40 - k * 2,
     );
   } else if (t < SH_TRACK) {
     /* --- the walk, wide: two specks and two very long shadows --------- */
     const k = beat(t, SH_WALK, SH_TRACK);
-    face(a[0] + 5 + k * 3.5, 7.5 - k * 2, a[1] + 33 - k * 2, -0.135, -0.062 - k * 0.006, 36);
+    face(a[0] + 5 + k * 3.5, S(a[0], a[1]) + 8.4 - k * 2.2, a[1] + 33 - k * 2,
+      -0.135, -0.062 - k * 0.006, 36);
   } else if (t < SH_ARGUE) {
-    /* --- sand level, tracking: the crest cuts across the frame -------- */
+    /* --- sand level, tracking.  The eye rides two and a half bricks off
+           the sand, so the pair break the skyline and the near crest
+           cuts the bottom of the frame. ------------------------------ */
     const k = beat(t, SH_TRACK, SH_ARGUE);
-    on(a[0] + 7.0 - k * 1.2, 1.3, a[1] + 14.0, a[0] + 3.4, 4.2, a[1] - 11, 41);
+    face(a[0] + 8.2 - k * 0.9, S(a[0], a[1]) + 2.6, a[1] + 14.0 - k * 0.8,
+      -0.455, -0.035, 41);
   } else if (t < SH_SPLIT) {
     /* --- the argument: nose to nose, and neither of them listening ---- */
     const k = beat(t, SH_ARGUE, SH_SPLIT);
     const mx = (a[0] + pr[0]) / 2, mz = (a[1] + pr[1]) / 2;
-    on(mx + 3.4 + k, 3.1, mz + 14.6 - k * 1.4, mx - 1.2, 2.9, mz - 3, 35);
+    on(mx + 3.4 + k, S(mx, mz) + 4.0, mz + 14.6 - k * 1.4, mx - 1.2, 2.9, mz - 3, 35);
   } else if (t < SH_CREST) {
-    /* --- held wide: they leave the frame in opposite directions ------- */
-    const k = beat(t, SH_SPLIT, SH_CREST);
+    /* --- the joke, held wide.  The eye is square to the line they split
+           along, so the two of them slide out through opposite edges of
+           a frame that never moves.  Suns high, horizon at the top
+           third, both droids down in the sand at the bottom third. ---- */
     const s = w.split;
-    face(s[0] + 6.5, 6.5 + k * 0.6, s[1] + 35.5 + k * 3, -0.176, 0.078, 31);
+    const D = 32;
+    face(
+      s[0] - WALK_DIR[0] * D, S(s[0], s[1]) + 7.0, s[1] - WALK_DIR[1] * D,
+      -0.181, -0.050, 34,
+    );
   } else if (t < SH_SWARM) {
     /* --- low and wide: it is by far the biggest thing on this planet -- */
     const k = beat(t, SH_CREST, SH_SWARM);
     const g = w.caught;
-    const cx = g[0] + V[0] * (15 + k * 3) + P[0] * 13.5;
-    const cz = g[1] + V[1] * (15 + k * 3) + P[1] * 13.5;
-    on(cx, 1.35 + k * 0.5, cz, lerp(g[0], cr.x, 0.46), 8.5 - k * 1.5, lerp(g[1], cr.z, 0.46), 40 - k * 2);
+    const cx = g[0] + V[0] * (27 + k * 4) + P[0] * 15;
+    const cz = g[1] + V[1] * (27 + k * 4) + P[1] * 15;
+    on(cx, S(cx, cz) + 2.9 + k * 0.6, cz,
+      lerp(g[0], cr.x, 0.46), 8.5 - k * 1.5, lerp(g[1], cr.z, 0.46), 40 - k * 2);
   } else if (t < SH_ZAP) {
     /* --- jawas down the ramp, eyes lit under the hoods ---------------- */
     const k = beat(t, SH_SWARM, SH_ZAP);
     const g = w.caught;
     const cx = g[0] + V[0] * 12.5 - P[0] * 12.5;
     const cz = g[1] + V[1] * 12.5 - P[1] * 12.5;
-    on(cx, 1.7, cz, lerp(g[0], w.ramp[0], 0.3), 2.8, lerp(g[1], w.ramp[1], 0.3), 38 - k * 4);
+    on(cx, S(g[0], g[1]) + 2.4, cz,
+      lerp(g[0], w.ramp[0], 0.3), 2.8, lerp(g[1], w.ramp[1], 0.3), 38 - k * 4);
   } else if (t < SH_RAMP) {
     /* --- the zap, then the haul up the ramp --------------------------- */
     const k = beat(t, SH_ZAP, SH_RAMP);
     const dx = w.drag[0], dz = w.drag[1];
+    const cx = dx + V[0] * 12 - P[0] * (12 + k * 4);
+    const cz = dz + V[1] * 12 - P[1] * (12 + k * 4);
     on(
-      dx + V[0] * 12 - P[0] * (12 + k * 4), 1.7 + k * 1.6, dz + V[1] * 12 - P[1] * (12 + k * 4),
+      cx, S(dx, dz) + 2.4 + k * 1.6, cz,
       lerp(dx, w.ramp[0], 0.4), 2.0 + k * 3.4, lerp(dz, w.ramp[1], 0.4), 37 + k * 4, -0.016,
     );
   } else if (t < SH_AWAY) {
     /* --- the ramp seals, the treads bite ------------------------------ */
     const k = beat(t, SH_RAMP, SH_AWAY);
-    on(
-      cr.x + V[0] * 40 - P[0] * (58 + k * 6), 4.0 + k * 1.4, cr.z + V[1] * 40 - P[1] * (58 + k * 6),
-      cr.x + V[0] * 6, 10 + k * 2, cr.z + V[1] * 6, 36,
-    );
+    const cx = cr.x + V[0] * 40 - P[0] * (58 + k * 6);
+    const cz = cr.z + V[1] * 40 - P[1] * (58 + k * 6);
+    on(cx, S(cr.x, cr.z) + 4.6 + k * 1.4, cz, cr.x + V[0] * 6, 10 + k * 2, cr.z + V[1] * 6, 36);
   } else {
-    /* --- the long goodbye: small, black, going into the light --------- */
+    /* --- the long goodbye.  A held frame with the machine small and
+           black in it, walking away into the glare, its own dust still
+           hanging over the track it cut. ----------------------------- */
     const k = beat(t, SH_AWAY, END);
     const e = w.last;
-    const d = 186;
-    face(e.x - d * 0.1068, 6.5, e.z + d * 0.9943, SUN_PHI + 0.22, 0.125 - k * 0.006, 31 - k * 2.5);
+    const d = 335, q = 58;                     // back down the sun line, and aside
+    const cx = e.x - SUN_AZ.x * d - SUN_AZ.z * q;
+    const cz = e.z - SUN_AZ.z * d + SUN_AZ.x * q;
+    face(cx, S(cx, cz) + 11.5, cz, SUN_PHI - 0.010, 0.022 - k * 0.004, 33);
   }
 }
 
@@ -715,17 +782,17 @@ function skidScar(from, to, ground) {
   const pos = [], col = [], idx = [];
   for (let i = 0; i <= N; i++) {
     const s = i / N;
-    const wander = Math.sin(s * 6.4 + 1.1) * 1.9 + Math.sin(s * 2.1) * 2.8;
-    const wid = lerp(2.2, 6.6, Math.pow(s, 0.6)) * (1 - 0.5 * Math.pow(1 - s, 5));
+    const wander = Math.sin(s * 6.4 + 1.1) * 2.6 + Math.sin(s * 2.1) * 3.4;
+    const wid = lerp(3.0, 9.2, Math.pow(s, 0.6)) * (1 - 0.5 * Math.pow(1 - s, 5));
     const cx = from[0] + ux * len * s + nx * wander;
     const cz = from[1] + uz * len * s + nz * wander;
-    const fade = smoothstep(0, 0.25, s) * (0.5 + 0.5 * s);
+    const fade = smoothstep(0, 0.22, s) * (0.45 + 0.55 * s);
     for (const side of [-1.0, -0.34, 0.34, 1.0]) {
       const px = cx + nx * wid * side;
       const pz = cz + nz * wid * side;
-      const core = Math.abs(side) < 0.5 ? 1 : 0.35;
+      const core = Math.abs(side) < 0.5 ? 1 : 0.3;
       pos.push(px, ground(px, pz) + 0.16, pz);
-      col.push(0.24, 0.17, 0.11, fade * 0.85 * core);
+      col.push(0.085, 0.058, 0.040, fade * core);
     }
   }
   for (let i = 0; i < N; i++) {
@@ -748,20 +815,25 @@ function skidScar(from, to, ground) {
   return m;
 }
 
-/** Sand ploughed up around the buried pod. */
+/**
+ * The lip of sand the pod ploughed up around itself.  Kept low, tight to the
+ * hull and close to the sand's own colour: taller mounds read as pale
+ * pancakes against the rippled dune texture.
+ */
 function sandBerm(at, yaw, ground, rand) {
   const g = new THREE.Group();
-  const m = new THREE.MeshStandardMaterial({ color: 0xd8bf90, roughness: 1 });
+  const m = new THREE.MeshStandardMaterial({ color: 0xbb8f5c, roughness: 1 });
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-  for (let i = 0; i < 9; i++) {
-    const s = (i / 8) * 2 - 1;
+  for (let i = 0; i < 11; i++) {
+    const s = (i / 10) * 2 - 1;
     const side = i % 2 ? 1 : -1;
-    const x = at[0] + fx * (1.5 + s * 3.5) - fz * side * (2.6 + rand() * 1.6);
-    const z = at[1] + fz * (1.5 + s * 3.5) + fx * side * (2.6 + rand() * 1.6);
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(1.7 + rand() * 1.5, 12, 8), m);
-    mesh.position.set(x, ground(x, z) - 0.75, z);
-    mesh.scale.set(1.3 + rand() * 0.8, 0.4, 1.0 + rand() * 0.7);
-    mesh.rotation.y = yaw + (rand() - 0.5);
+    const out = 2.9 + rand() * 1.1 - Math.abs(s) * 0.8;
+    const x = at[0] + fx * (1.2 + s * 4.2) - fz * side * out;
+    const z = at[1] + fz * (1.2 + s * 4.2) + fx * side * out;
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(1.5 + rand() * 1.2, 14, 9), m);
+    mesh.position.set(x, ground(x, z) - 1.05, z);
+    mesh.scale.set(1.5 + rand() * 0.7, 0.30, 0.85 + rand() * 0.5);
+    mesh.rotation.y = yaw + (rand() - 0.5) * 0.8;
     mesh.castShadow = mesh.receiveShadow = true;
     g.add(mesh);
   }

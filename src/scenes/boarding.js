@@ -29,7 +29,7 @@ const S_BREACH = 3.5;      // torches start on the door seam
 const BOOM = 4.72;         // the charge goes off, just under narration line 2
 const S_FIGHT = 6.5;
 const S_CUT = 9.7;         // second angle, down the length of the barricade
-const S_AFTER = 12.6;      // "then the smoke parts" lands at 12.5
+const S_AFTER = 12.45;     // cut lands under "then the smoke parts" at 12.5
 const S_ARRIVE = 18.8;     // Vader is planted before he speaks at 20.0
 const S_WALK = 26.5;
 const END = 33;
@@ -48,13 +48,15 @@ const BLUE = 0x4fc3ff;
 const RED = 0xff3b1f;
 
 /* --- the cast ------------------------------------------------------- */
-// staggered in depth: four minifigs abreast in a 7.4-wide corridor is a solid
-// wall, and every camera behind it sees nothing but backs
+// A minifig is 2.4 wide and the walkable grate is 7.4, so four of them abreast
+// is a solid wall. The two on the wings hold the barricade itself and the
+// middle pair stand a stride back, which gives every camera some depth to
+// shoot through instead of a row of backs.
 const REBELS = [
-  { x: -3.35, z: LINE_Z + 1.5, seed: 3, stop: 12.2 },
-  { x: -1.15, z: LINE_Z - 0.3, seed: 9, stop: 12.2 },
-  { x: 1.15, z: LINE_Z + 1.1, seed: 17, hit: 11.35 },
-  { x: 3.35, z: LINE_Z - 0.6, seed: 25, hit: 9.85 },
+  { x: -3.40, z: LINE_Z - 0.5, seed: 3, hit: 9.85 },
+  { x: -1.55, z: LINE_Z + 1.3, seed: 9, hit: 11.35 },
+  { x: 1.55, z: LINE_Z + 0.9, seed: 17, stop: 12.2 },
+  { x: 3.40, z: LINE_Z - 0.7, seed: 25, stop: 12.2 },
 ];
 
 /** Entry time, the station they fight from, and their slot in the formation. */
@@ -182,7 +184,7 @@ export async function build(ctx) {
   /* ---- the light beyond the doorway ------------------------------ */
   // three stacked cards make a soft box of light that Vader walks out of
   const glowMats = [];
-  [[9.5, 7.4, 4.5, 0xffe6c0, 0.30], [7.4, 6.2, 7.5, 0xffd8a8, 0.22], [5.4, 5.0, 11.0, 0xffc890, 0.15]]
+  [[10.5, 7.8, 3.5, 0xffe6c0, 0.42], [8.2, 6.6, 6.5, 0xffd8a8, 0.30], [6.0, 5.4, 10.0, 0xffc890, 0.2]]
     .forEach(([w, h, back, col, o]) => {
       const m = new THREE.MeshBasicMaterial({
         color: col, transparent: true, opacity: 0, depthWrite: false,
@@ -204,6 +206,13 @@ export async function build(ctx) {
   vaderKey.position.set(2.9, 5.6, -8.5);
   vaderKey.target.position.set(0, 3.2, VADER_HOLD_Z);
   scene.add(vaderKey, vaderKey.target);
+
+  // the sealed door is what everyone in shot one is aiming at, so it gets its
+  // own light until the moment it stops existing
+  const doorSpot = new THREE.SpotLight(0xe8f0ff, 0, 26, 0.5, 0.7, 1.5);
+  doorSpot.position.set(0, 7.4, DOOR_Z + 9);
+  doorSpot.target.position.set(0, 3.4, DOOR_Z);
+  scene.add(doorSpot, doorSpot.target);
 
   /* ---- practical shadow casters ---------------------------------- */
   // deliberately cool, so the white bricks do not go sepia under the practicals
@@ -230,7 +239,7 @@ export async function build(ctx) {
   scene.add(spotB, spotB.target);
 
   /* ---- red emergency lighting ------------------------------------ */
-  const ALARM_Z = [30, 20, 10, 0, -10, -19];
+  const ALARM_Z = [32, 21, 11, -1, -12, -20];
   const alarms = ALARM_Z.map((z, i) => {
     const sx = i % 2 ? 1 : -1;
     const lamp = new THREE.MeshBasicMaterial({ color: 0xff2a12 });
@@ -244,7 +253,7 @@ export async function build(ctx) {
     g.add(at(tile(0.55, 0.85, 0.85, { color: C.darkGray }), sx * 0.4, -0.42, 0));
     g.position.set(sx * 5.35, 7.0, z);
     scene.add(g);
-    const light = new THREE.PointLight(0xff3413, 0, 22, 2);
+    const light = new THREE.PointLight(0xff3413, 0, 17, 2);
     light.position.set(sx * 4.2, 6.2, z);
     scene.add(light);
     return { lamp, halo, light, i };
@@ -298,42 +307,44 @@ export async function build(ctx) {
     let n = 0;
     while (ft < stop) {
       const v = volley({
-        t0: ft, count: 2, interval: 0.13,
+        t0: ft, count: 3, interval: 0.11,
         from: [rb.x + 0.5, 3.34, rb.z - 1.1],
-        to: [rb.x * 0.4 + ((n * 5) % 7 - 3) * 1.1, 2.5, -17.5],
+        to: [rb.x * 0.4 + ((n * 5) % 7 - 3) * 1.1, 2.5, -18.5],
         speed: 100, color: BLUE, len: 4.6, thick: 0.13, seed: 40 + i * 11 + n, spread: 2.6,
       });
       rebelShots.push(...v);
       rb.shots.push(...v.map((s) => s.t0));
-      ft += 0.56 + ((n * 13) % 5) * 0.13;
+      ft += 0.44 + ((n * 13) % 5) * 0.1;
       n++;
     }
   });
 
   const trooperShots = [];
   troopers.forEach((tr, i) => {
-    let ft = tr.t0 + 1.1;
+    let ft = tr.t0 + 0.8;
     let n = 0;
     while (ft < 12.1) {
       const v = volley({
-        t0: ft, count: 2, interval: 0.12,
+        t0: ft, count: 3, interval: 0.11,
         from: [tr.fx * 0.9, 3.42, tr.fz + 1.3],
         to: [tr.fx * 0.3 + ((n * 3) % 7 - 3) * 1.2, 2.7, BARR_Z + 0.5],
         speed: 110, color: RED, len: 5.0, thick: 0.14, seed: 200 + i * 13 + n, spread: 3.0,
       });
       trooperShots.push(...v);
       tr.shots.push(...v.map((s) => s.t0));
-      ft += 0.6 + ((n * 17) % 5) * 0.12;
+      ft += 0.5 + ((n * 17) % 5) * 0.1;
       n++;
     }
   });
 
   const bolts = new Bolts(scene, [...rebelShots, ...trooperShots]);
-  const hits = bolts.impacts().filter((_, i) => i % 2 === 0);
+  // only every third round gets a flash, and small: a bolt that misses ends in
+  // open air, and a fat sprite hanging there reads as a floating ball
+  const hits = bolts.impacts().filter((_, i) => i % 3 === 0);
   const impacts = new Impacts(scene, hits.map((h) => ({
-    t: h.t, pos: [h.pos.x, h.pos.y, h.pos.z], size: 0.65,
+    t: h.t, pos: [h.pos.x, h.pos.y, h.pos.z], size: 0.42,
     color: h.color === BLUE ? 0xa8e6ff : 0xffb27a,
-  })), { dur: 0.3 });
+  })), { dur: 0.2 });
 
   /* ---- breach effects --------------------------------------------- */
   const seamMat = new THREE.MeshBasicMaterial({
@@ -367,9 +378,9 @@ export async function build(ctx) {
     { t: 7.9, p: [5.4, 3.2, 0], c: 0xffb27a },
     { t: 8.6, p: [-5.4, 2.4, 3], c: 0xa8e6ff },
     { t: 9.3, p: [5.3, 5.0, -8], c: 0xffb27a },
-    { t: 9.85, p: [3.9, 3.2, LINE_Z - 0.5], c: 0xffd0a0 },
+    { t: 9.85, p: [-3.9, 3.2, LINE_Z - 0.9], c: 0xffd0a0 },
     { t: 10.6, p: [-5.4, 4.0, -2], c: 0xa8e6ff },
-    { t: 11.35, p: [1.8, 3.3, LINE_Z - 0.5], c: 0xffd0a0 },
+    { t: 11.35, p: [-2.0, 3.3, LINE_Z + 0.9], c: 0xffd0a0 },
     { t: 11.9, p: [5.3, 2.6, 4], c: 0xffb27a },
   ];
   const wallSparks = WALL_HITS.map((h, i) => {
@@ -405,28 +416,34 @@ export async function build(ctx) {
     return { ...r, g };
   });
 
-  // the bank that sits in the blown doorway for the rest of the scene
+  // the bank that fills the blown doorway. It is thick from the breach until
+  // 12.5 — the troopers arrive out of it and the narration calls it — and then
+  // opens up into the rectangle of haze Vader walks through
   const DOORWAY = [
-    { t0: 5.6, dur: 13, x: 0, y: 1.8, size: 8.5, seed: 51 },
-    { t0: 10.5, dur: 15, x: -1.3, y: 2.2, size: 8.0, seed: 57 },
-    { t0: 15.0, dur: 15, x: 1.5, y: 1.6, size: 7.6, seed: 63 },
-    { t0: 20.0, dur: 14, x: -0.5, y: 2.0, size: 7.2, seed: 69 },
+    { t0: 5.2, dur: 9.0, x: 0, y: 1.8, size: 9.5, z: -1.4, seed: 51 },
+    { t0: 6.4, dur: 9.0, x: -2.0, y: 2.6, size: 9.0, z: -0.2, seed: 57 },
+    { t0: 7.6, dur: 9.5, x: 2.2, y: 1.5, size: 9.0, z: -0.6, seed: 63 },
+    { t0: 9.0, dur: 10.0, x: -0.6, y: 2.9, size: 8.6, z: -2.2, seed: 69 },
+    { t0: 12.0, dur: 13.0, x: 1.4, y: 1.9, size: 8.0, z: -1.8, seed: 75 },
+    { t0: 17.5, dur: 15.0, x: -1.1, y: 2.1, size: 7.6, z: -1.0, seed: 81 },
+    { t0: 23.0, dur: 14.0, x: 0.8, y: 1.7, size: 7.2, z: -1.6, seed: 87 },
   ];
   const doorway = DOORWAY.map((d) => {
     const g = smokePuff({ size: d.size, seed: d.seed, count: 5, rise: 0.09, color: 0xa9a49c });
-    g.position.set(d.x, DECK + d.y, DOOR_Z - 1.2);
+    g.position.set(d.x, DECK + d.y, DOOR_Z + d.z);
     scene.add(g);
     return { ...d, g };
   });
 
   // thin drifting haze so nothing in the corridor reads as clean air
   const groundHaze = new Smoke(scene, {
-    t0: BOOM + 0.4, count: 18, origin: [0, DECK + 1.8, -10], spread: 16, size: 7,
-    rise: 0.16, life: 12, opacity: 0.10, color: 0x5b626b, spawnWindow: 8, seed: 12,
+    t0: BOOM + 0.4, count: 20, origin: [0, DECK + 1.8, -11], spread: 17, size: 7,
+    rise: 0.16, life: 12, opacity: 0.13, color: 0x5b626b, spawnWindow: 8, seed: 12,
   });
+  // what the formation marches through for the rest of the scene
   const lateHaze = new Smoke(scene, {
-    t0: 13.5, count: 16, origin: [0, DECK + 2.2, -16], spread: 14, size: 7.5,
-    rise: 0.11, life: 15, opacity: 0.09, color: 0x6d747d, spawnWindow: 8, seed: 26,
+    t0: 11.6, count: 24, origin: [0, DECK + 2.4, -15], spread: 17, size: 8,
+    rise: 0.11, life: 17, opacity: 0.2, color: 0xd6d1c7, spawnWindow: 11, seed: 26,
   });
 
   /* ------------------------------------------------------------------ */
@@ -521,17 +538,22 @@ export async function build(ctx) {
       /* ---------------- the set ---------------- */
       corr.userData.update(t);
       // the mains are browned out for the whole scene: this is a ship on alert
-      const mains = 0.26 + 0.02 * Math.sin(t * 5.7) + 0.16 * smoothstep(12.4, 17.5, t);
+      const wake = smoothstep(12.4, 17.5, t);
+      const mains = 0.27 + 0.02 * Math.sin(t * 5.7) + 0.07 * wake;
       corr.userData.setLights(mains);
-      for (const l of corr.userData.lamps) l.intensity = 9 + 7 * smoothstep(12.4, 17.5, t);
+      // the practicals are what flattens this set out, so they stay low and the
+      // light coming through the blown doorway does the modelling
+      for (const l of corr.userData.lamps) l.intensity = 4 + 2.5 * wake;
 
       for (const a of alarms) {
         const k = 0.5 + 0.5 * Math.sin(t * 3.1 - a.i * 0.85);
         const e = Math.pow(k, 2.4);
-        const fade = 1 - 0.45 * smoothstep(17, 22, t);
+        // they carry the first half of the scene and then get out of the way,
+        // or every wall near the lens turns into a red card
+        const fade = 1 - 0.62 * smoothstep(15.5, 20.5, t);
         a.lamp.color.setRGB(0.26 + 0.74 * e, 0.04 + 0.08 * e, 0.02 + 0.03 * e);
-        a.halo.opacity = (0.03 + 0.13 * e) * fade;
-        a.light.intensity = (1 + 7 * e) * fade;
+        a.halo.opacity = (0.03 + 0.12 * e) * fade;
+        a.light.intensity = (0.7 + 4.2 * e) * fade;
       }
 
       /* ---------------- the door ---------------- */
@@ -556,16 +578,17 @@ export async function build(ctx) {
       // the doorway light box comes up with the breach and stays for Vader
       const doorLit = smoothstep(BOOM, BOOM + 1.4, t) * (0.35 + 0.65 * smoothstep(11.5, 17.5, t));
       glowMats.forEach((g, i) => { g.m.opacity = g.peak * doorLit * (1 - i * 0.06); });
-      backLight.intensity = 150 * doorLit;
+      backLight.intensity = 200 * doorLit;
+      doorSpot.intensity = 60 * (1 - smoothstep(BOOM - 0.15, BOOM + 0.1, t));
       vaderKey.intensity = 26 * smoothstep(20.4, 23.0, t) * (1 - 0.3 * beat(t, 30, END));
       vaderKey.target.position.set(0, 3.2, vaderZ(t));
 
-      spotA.intensity = 46 * (0.5 + 0.5 * clamp(1 - beat(t, 12.0, 15.0)));
-      spotB.intensity = 58 * (0.35 + 0.65 * smoothstep(6.0, 9.0, t));
+      spotA.intensity = 58 * (0.5 + 0.5 * clamp(1 - beat(t, 12.0, 15.0)));
+      spotB.intensity = 40 * (0.35 + 0.65 * smoothstep(6.0, 9.0, t));
 
       /* ---------------- smoke ---------------- */
       // "then the smoke parts" at 12.5: the bank in the doorway opens up
-      const thin = 1 - 0.55 * smoothstep(12.3, 15.2, t);
+      const thin = 1 - 0.5 * smoothstep(12.4, 15.0, t);
       for (const r of rolls) {
         const k = (t - r.t0) / r.dur;
         r.g.visible = k >= 0 && k < 1;
@@ -581,7 +604,7 @@ export async function build(ctx) {
         d.g.visible = k >= 0 && k < 1;
         if (!d.g.visible) continue;
         d.g.userData.setT(k);
-        for (const s of d.g.children) s.material.opacity *= 0.75 * thin;
+        for (const s of d.g.children) s.material.opacity *= thin;
       }
       groundHaze.update(t);
       lateHaze.update(t);
@@ -732,45 +755,46 @@ export async function build(ctx) {
        * of a character and becomes a shot of a shoulder.
        */
       if (t < S_BREACH) {
-        /* --- the line: low, behind the left of the barricade, three-quarter
-               so the four of them recede instead of walling off the hall --- */
+        /* --- the line: helmet height behind the barricade, tilted just enough
+               that the top half of the sealed door clears their heads --- */
         const e = smoothstep(0, 1, beat(t, S_LINE, S_BREACH));
-        cam.position.set(-4.55 + e * 0.25, 2.75 + e * 0.16, 15.9 - e * 1.2);
+        cam.position.set(-1.4 + e * 0.35, 4.85 - e * 0.1, 18.6 - e * 1.3);
         handheld(cam, t, 0.05, 1);
-        cam.lookAt(0.9, 3.3, -13);
+        cam.lookAt(0.4, 3.6, -20);
         cam.rotateZ(noise(t * 1.6, 5) * 0.006);
-        cam.fov = 45 - e * 2;
+        cam.fov = 41 - e * 2;
       } else if (t < S_FIGHT) {
-        /* --- the breach: out in front of the line at their eye level, so the
-               door owns the frame and the debris comes at us --- */
+        /* --- the breach: out in the corridor ahead of the line, so the door
+               owns the frame and the debris comes at us --- */
         const e = smoothstep(0, 1, beat(t, S_BREACH, S_FIGHT));
         const sh = t >= BOOM ? Math.exp(-(t - BOOM) * 2.4) : 0;
-        cam.position.set(1.7 - e * 0.5, 2.6 + e * 0.25, 3.6 - e * 0.9);
+        cam.position.set(2.3 - e * 0.4, 2.95 + e * 0.2, 2.4 - e * 1.4);
         handheld(cam, t, 0.05 + sh * 0.55, 9);
-        cam.lookAt(-0.2, 3.9 + sh * 0.45, DOOR_Z + 2);
+        cam.lookAt(-0.3, 4.1 + sh * 0.45, DOOR_Z - 1);
         cam.rotateZ(noise(t * 8, 13) * 0.05 * sh + noise(t * 1.5, 3) * 0.006);
-        cam.fov = 40 - e * 4;
+        cam.fov = 42 - e * 3;
       } else if (t < S_CUT) {
-        /* --- firefight, off the right shoulder of the line --- */
+        /* --- firefight, in among the line at helmet height: the middle pair
+               flank the lens and the hall stays open above them --- */
         const e = smoothstep(0, 1, beat(t, S_FIGHT, S_CUT));
-        cam.position.set(4.4 - e * 0.5, 2.85 + e * 0.3, 14.6 - e * 1.4);
+        cam.position.set(0.35 - e * 0.2, 4.35 - e * 0.12, 16.2 - e * 1.1);
         handheld(cam, t, 0.2, 21);
-        cam.lookAt(-1.4, 3.25, -10);
+        cam.lookAt(-0.4, 3.5, -12);
         cam.rotateZ(noise(t * 2.3, 27) * 0.016);
-        cam.fov = 46 - e * 3;
+        cam.fov = 45 - e * 2;
       } else if (t < S_AFTER) {
-        /* --- firefight, forward and to the left, looking back over the
-               barricade as the incoming fire crosses camera --- */
+        /* --- firefight, down on the deck behind the line: fall() topples them
+               backwards, which from here is straight at camera --- */
         const e = smoothstep(0, 1, beat(t, S_CUT, S_AFTER));
-        cam.position.set(-4.4 + e * 0.55, 3.45 + e * 0.2, 0.9 + e * 1.2);
+        cam.position.set(-2.25 + e * 0.55, 1.4 + e * 0.15, 20.7 - e * 1.5);
         handheld(cam, t, 0.24, 35);
-        cam.lookAt(1.3, 2.85, 9.4);
-        cam.rotateZ(-0.04 + noise(t * 2.7, 41) * 0.026);
-        cam.fov = 46;
+        cam.lookAt(0.4, 3.4, -6);
+        cam.rotateZ(-0.045 + noise(t * 2.7, 41) * 0.026);
+        cam.fov = 48;
       } else if (t < S_ARRIVE) {
         /* --- aftermath: push toward the blown doorway --- */
         const e = smoothstep(0, 1, beat(t, S_AFTER, S_ARRIVE));
-        cam.position.set(1.1 - e * 1.2, 3.55 - e * 0.35, 4.0 - e * 7.4);
+        cam.position.set(1.7 - e * 1.9, 3.6 - e * 0.4, 4.4 - e * 7.8);
         handheld(cam, t, 0.07, 53);
         cam.lookAt(0, 3.9, DOOR_Z + 1);
         cam.rotateZ(noise(t * 1.4, 57) * 0.007);

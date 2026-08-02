@@ -152,7 +152,10 @@ export function filmCues() {
   const r = rng(4242);
 
   // I — crawl (0–41)
-  add(0.2, 'rumbleSub', { dur: 3.2, gain: 0.55, f0: 42, f1: 24 });
+  // Kept in the 30–55 Hz range rather than sweeping to 24: below about 30 Hz
+  // this only spends peak headroom on something almost nothing reproduces,
+  // and it was burying the opening chord on the meter.
+  add(0.2, 'rumbleSub', { dur: 3.2, gain: 0.34, f0: 55, f1: 30 });
 
   // II — the chase (41–71)
   add(41.0, 'engineRumble', { dur: 28, gain: 0.30, fade: 2.5 });
@@ -405,17 +408,21 @@ async function schedule(ctx, bus, cfg) {
   }
 
   if (what === 'reverb') {
-    // Impulse into both sends so the tails can be measured directly.
+    // Impulse into both sends so the tails can be measured directly. A
+    // normalised convolver answers a unit impulse about 68 dB down, so the
+    // test impulse is scaled up to put the tail on the meter.
+    const amp = opts.amp ?? 220;
     const b = ctx.createBuffer(1, 64, ctx.sampleRate);
-    b.getChannelData(0)[0] = 1;
-    for (const [dest, t] of [[bus.musicFx, lead], [bus.fx, lead + 2.2]]) {
+    b.getChannelData(0)[0] = amp;
+    for (const [dest, t] of [[bus.musicFx, lead], [bus.fx, lead + 4.5]]) {
       if (!dest) continue;
       const s = ctx.createBufferSource();
       s.buffer = b;
       s.connect(dest);
       s.start(t);
-      end = Math.max(end, t + 4.0);
+      end = Math.max(end, t + 4.4);
     }
+    info.impulseAmp = amp;
     return { end, info };
   }
 

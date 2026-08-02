@@ -56,9 +56,9 @@ const SH = 0.55;            // ship scale
 /* ------------------------------------------------------------------ */
 
 const SPEED = [
-  [B_TRENCH, 88], [12, 106], [16, 118], [20, 124], [24, 118],
-  [27, 106], [T_OFF, 100], [B_RUN, 108], [36.6, 140], [B_AWAY, 162],
-  [T_HIT, 172], [END, 130],
+  [B_TRENCH, 92], [12, 108], [16, 120], [20, 126], [24, 118],
+  [27, 106], [T_OFF, 100], [B_RUN, 114], [36.6, 146], [B_AWAY, 168],
+  [T_HIT, 180], [43.6, 74], [44.6, 14], [END, 6],
 ];
 const CUM = [0];
 for (let i = 1; i < SPEED.length; i++) {
@@ -92,9 +92,35 @@ function speedAt(t) {
   return SPEED[SPEED.length - 1][1];
 }
 
-/* Trench coordinates: the port sits well beyond where the fighters pull up. */
-const PORT_Q = scroll(T_HIT) + 380;
-const TORP_Q0 = scroll(T_LAUNCH) + 37;
+/* ------------------------------------------------------------------ */
+/* the dive, in closed form, so the surface guns can be aimed at the    */
+/* lens while the scene is still being built                            */
+/* ------------------------------------------------------------------ */
+
+/** Height and depth of the formation during the dive. */
+function divePose(t) {
+  const k = clamp((t - B_DIVE) / (B_TRENCH - B_DIVE));
+  return { k, y: lerp(250, 40, Math.pow(k, 0.8)), z: lerp(-70, -640, k * k * (3 - 2 * k)) };
+}
+const B_DIVE2 = 6.3;   // the dive cuts to the deck here
+const TOWER_AT = [[-96, -190], [78, -286], [-38, -392], [122, -474], [-140, -560]];
+const HERO_TOWER = TOWER_AT[2];
+/** Where the lens is during the dive — bolts are aimed just past it. */
+function diveCamPos(t) {
+  const d = divePose(t);
+  if (t < B_DIVE2) {
+    const p = clamp((t - B_DIVE) / (B_DIVE2 - B_DIVE));
+    return [13 - p * 8, d.y + 62 - p * 22, d.z + 138 - p * 30];
+  }
+  const p = clamp((t - B_DIVE2) / (B_TRENCH - B_DIVE2));
+  return [HERO_TOWER[0] + 24 - p * 9, 7 + p * 6, HERO_TOWER[1] + 46 - p * 16];
+}
+
+/* The port sits 300 units down the pipe at the moment the torpedoes reach it;
+   the run bleeds off after that, so it is still ahead of us on the way out. */
+const PORT_D = 300;
+const PORT_Q = scroll(T_HIT) + PORT_D;
+const TORP_Q0 = scroll(T_LAUNCH) + 33;
 
 /* ------------------------------------------------------------------ */
 /* the targeting computer, drawn as SVG                                */
@@ -181,11 +207,11 @@ function readoutSvg(v, locked) {
     if (g[6]) S(4, 20, 20, 4);
     return o.join('');
   };
-  const row = (label, n, y) => {
+  const row = (label, n, y, k) => {
     let out = `<text x="14" y="${y + 32}" font-family="Helvetica, Arial, sans-serif" font-size="27"`
       + ` fill="${col}" fill-opacity="0.9" letter-spacing="4">${label}</text>`;
     for (let i = 0; i < n; i++) {
-      const d = locked ? (i * 3 + v) % 10 : Math.floor(r() * 10);
+      const d = locked ? (i * 3 + v + k * 7) % 10 : Math.floor(r() * 10);
       out += digit(d, 200 + i * 40, y + 4, 1.25);
     }
     return out;
@@ -194,7 +220,7 @@ function readoutSvg(v, locked) {
     <rect x="0" y="0" width="384" height="240" fill="#04140c" fill-opacity="0.42"/>
     <rect x="0" y="0" width="384" height="3" fill="${col}" fill-opacity="0.6"/>
     <rect x="0" y="237" width="384" height="3" fill="${col}" fill-opacity="0.35"/>
-    ${row('RANGE', 4, 14)}${row('DELTA', 4, 94)}${row('YIELD', 4, 174)}
+    ${row('RANGE', 4, 14, 0)}${row('DELTA', 4, 94, 1)}${row('YIELD', 4, 174, 2)}
   </g>`, { w: 384, h: 240 });
 }
 
@@ -261,54 +287,49 @@ function torpedo() {
   return g;
 }
 
-/** Overhead braces + wall outcrops: the things that whip past the lens. */
-function speedLayer(len, seed) {
-  const g = new THREE.Group();
+/**
+ * Overhead braces and wall outcrops: the things that whip past the lens and do
+ * most of the work of selling the speed.  Returned as one group per band so the
+ * per-section culling in `update` can drop them along with the trench sections
+ * they sit in — a single group would be one object at z = 0 and would blink out
+ * for most of the run.
+ */
+function speedBands(len, step, seed) {
+  const out = [];
   const r = rng(seed);
   const bar = new THREE.MeshStandardMaterial({ color: 0x969ca4, roughness: 0.5, metalness: 0.35 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x4b5158, roughness: 0.7 });
   const lamp = new THREE.MeshBasicMaterial({ color: 0xd88a30, toneMapped: false });
   const lamp2 = new THREE.MeshBasicMaterial({ color: 0x4aa8d8, toneMapped: false });
   const box = (w, h, d, m) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-  const step = 46;
-  for (let z = -len + 6; z < 0; z += step) {
-    const jz = z + r() * 14;
+  const add = (g, m, x, y, z) => { m.position.set(x, y, z); g.add(m); };
+  for (let i = 0; i * step < len; i++) {
+    const g = new THREE.Group();
+    g.position.z = -(i + 0.5) * step;
+    const jz = (r() - 0.5) * step * 0.5;
     // a gantry spanning the canyon, high enough to pass over the ships
-    const y = HEIGHT * (0.7 + r() * 0.22);
-    const beam = box(WIDTH + 2, 1.5, 3.0, bar);
-    beam.position.set(0, y, jz);
-    g.add(beam);
-    const beam2 = box(WIDTH + 2, 0.7, 1.1, dark);
-    beam2.position.set(0, y - 1.4, jz);
-    g.add(beam2);
+    const y = HEIGHT * (0.68 + r() * 0.24);
+    add(g, box(WIDTH + 2, 1.5, 3.0, bar), 0, y, jz);
+    add(g, box(WIDTH + 2, 0.7, 1.1, dark), 0, y - 1.4, jz);
     for (const sx of [-1, 1]) {
-      const hang = box(1.2, 5.5, 1.2, bar);
-      hang.position.set(sx * (HX - 4.5), y + 3, jz);
-      g.add(hang);
-      const l = box(1.0, 0.5, 0.9, lamp);
-      l.position.set(sx * (HX - 8), y - 1.9, jz);
-      g.add(l);
+      add(g, box(1.2, 5.5, 1.2, bar), sx * (HX - 4.5), y + 3, jz);
+      add(g, box(1.0, 0.5, 0.9, lamp), sx * (HX - 8), y - 1.9, jz);
     }
     // wall outcrops that reach well into the canyon, alternating sides
     const sx = r() < 0.5 ? -1 : 1;
     const oy = 5 + r() * 26;
-    const out = 3.5 + r() * 3.5;
-    const pod = box(out, 2.2 + r() * 3.4, 4 + r() * 6, r() < 0.4 ? dark : bar);
-    pod.position.set(sx * (HX - out / 2), oy, jz + 12);
-    g.add(pod);
-    const strip = box(0.6, 0.5, 7, lamp2);
-    strip.position.set(sx * (HX - out - 0.4), oy, jz + 12);
-    g.add(strip);
-    // a low kerb block near the floor on the other side
-    const kerb = box(2.6, 1.6 + r() * 2.4, 5 + r() * 7, dark);
-    kerb.position.set(-sx * (HX - 3.6), 1.6, jz + 26);
-    g.add(kerb);
-    // a light strip running along the wall at pilot height
-    const rail = box(0.5, 0.45, 20, r() < 0.5 ? lamp : lamp2);
-    rail.position.set(-sx * (HX - 1.4), 12 + r() * 10, jz + 30);
-    g.add(rail);
+    const w = 3.5 + r() * 3.5;
+    add(g, box(w, 2.2 + r() * 3.4, 4 + r() * 6, r() < 0.4 ? dark : bar),
+      sx * (HX - w / 2), oy, jz - step * 0.26);
+    add(g, box(0.6, 0.5, 7, lamp2), sx * (HX - w - 0.4), oy, jz - step * 0.26);
+    // a pipe run stood off the far wall, right where the lens will clip it
+    add(g, box(1.5, 1.5, step * 0.8, bar), -sx * (HX - 2.4), 8 + r() * 22, jz);
+    // a low kerb block near the floor, and a lit rail at pilot height
+    add(g, box(2.6, 1.6 + r() * 2.4, 5 + r() * 7, dark), -sx * (HX - 3.6), 1.6, jz + step * 0.3);
+    add(g, box(0.5, 0.45, 20, r() < 0.5 ? lamp : lamp2), -sx * (HX - 1.4), 12 + r() * 10, jz + step * 0.34);
+    out.push(g);
   }
-  return g;
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -346,11 +367,10 @@ export async function build(ctx) {
   /* ---- beat B: the armoured plain, and the guns on it --------------- */
   const diveGrp = new THREE.Group();
   scene.add(diveGrp);
-  const plain = stationSurface({ size: 1500, seed: 131, density: 0.4 });
-  plain.position.set(0, 0, -400);
+  const plain = stationSurface({ size: 2100, seed: 131, density: 0.3 });
+  plain.position.set(0, 0, -450);
   diveGrp.add(plain);
   const towers = [];
-  const TOWER_AT = [[-96, -190], [78, -286], [-38, -392], [122, -474], [-140, -560]];
   TOWER_AT.forEach((p, i) => {
     const tw = turbolaserTower({ seed: 61 + i * 7 });
     tw.scale.setScalar(2.1);
@@ -359,23 +379,28 @@ export async function build(ctx) {
     diveGrp.add(tw);
   });
 
-  /* ---- the trench itself: one tile, two clones, wrapped ------------- */
+  /* ---- the trench itself: one tile, cloned end to end, wrapped ------ */
   const tile = trench({ length: LEN, width: WIDTH, height: HEIGHT, secLen: SEC, seed: 101, variants: 6 });
   const port = tile.userData.exhaustPort;
   tile.remove(port);
-  tile.add(speedLayer(LEN, 909));
+  for (const b of speedBands(LEN, 46, 909)) tile.add(b);
 
+  // One clone sits *behind* the wrap origin so the look-back shots always have
+  // canyon to look down; the rest run ahead far enough to outrun the fog.
   const road = new THREE.Group();
   scene.add(road);
-  road.add(tile);
-  const tileB = tile.clone();
-  tileB.position.z = -LEN;
-  road.add(tileB);
+  const tiles = [];
+  for (const off of [LEN, 0, -LEN, -2 * LEN, -3 * LEN]) {
+    const g = off === 0 ? tile : tile.clone();
+    g.position.z = off;
+    road.add(g);
+    tiles.push([g, off]);
+  }
 
   // flat list of tile sections with their (road-local) z, so they can be
   // culled by hand instead of pushing the shared camera's far plane about
   const sections = [];
-  for (const [grp, off] of [[tile, 0], [tileB, -LEN]]) {
+  for (const [grp, off] of tiles) {
     for (const ch of grp.children) sections.push({ o: ch, z: ch.position.z + off });
   }
 
@@ -395,10 +420,10 @@ export async function build(ctx) {
   maw.position.y = 1.42;
   portRig.add(maw);
   // reads through fog from a kilometre away, which is the whole point of it
-  const portFlare = flareSprite(46, 0xffa040, 0.9);
+  const portFlare = flareSprite(52, 0xffa040, 0.9);
   portFlare.position.set(0, 7, 0);
   portRig.add(portFlare);
-  const portBlast = explosionBurst({ size: 54, seed: 23, shards: 26, gravity: -3, spread: 1.3 });
+  const portBlast = explosionBurst({ size: 66, seed: 23, shards: 30, gravity: -3, spread: 1.35 });
   portBlast.position.y = 3;
   portBlast.visible = false;
   portRig.add(portBlast);
@@ -435,12 +460,12 @@ export async function build(ctx) {
   const wreck = new THREE.Group();
   scene.add(wreck);
   const wreckFire = new Fireball(wreck, {
-    t0: T_KILL, pos: [-15.5, 12.5, 0], size: 8, dur: 1.7, seed: 31,
-    brickCount: 26, gravity: -3, ring: true,
+    t0: T_KILL, pos: [-15.5, 12.5, 0], size: 13, dur: 1.9, seed: 31,
+    brickCount: 30, gravity: -3, ring: true,
   });
   const wreckBricks = new BrickBurst(wreck, {
-    t0: T_KILL, origin: [-15.5, 12.5, 0], count: 44, speed: 22, size: 1.0,
-    seed: 61, life: 3.2, gravity: -7, stagger: 0.14,
+    t0: T_KILL, origin: [-15.5, 12.5, 0], count: 52, speed: 26, size: 1.7,
+    seed: 61, life: 3.2, gravity: -7, stagger: 0.16,
   });
   const wreckSmoke = new Smoke(wreck, {
     t0: T_KILL + 0.1, count: 16, origin: [-15, 12, 0], spread: 8, size: 9,
@@ -485,18 +510,26 @@ export async function build(ctx) {
   /* ordnance                                                            */
   /* ================================================================== */
 
-  /* beat B — the surface guns, firing up at the diving squadron */
+  /* beat B — the surface guns, firing up past the lens at the squadron.
+     Every burst is aimed at wherever the camera will be when it gets there,
+     so the green fire always crosses frame instead of leaving on the horizon. */
   const diveShots = [];
   const diveHits = [];
-  for (let i = 0; i < 14; i++) {
-    const tw = towers[i % towers.length];
-    const t0 = 4.7 + i * 0.29;
-    diveHits.push({ t: t0, tw: i % towers.length });
+  for (let i = 0; i < 22; i++) {
+    const ti = i % towers.length;
+    const tw = towers[ti];
+    const t0 = 4.45 + i * 0.196;
+    // the tower the deck camera sits beside keeps hammering through shot two
+    const deck = t0 > B_DIVE2;
+    const aimTw = deck ? towers[2] : tw;
+    if (deck && ti !== 2 && i % 2) continue;
+    diveHits.push({ t: t0, tw: deck ? 2 : ti });
+    const c = diveCamPos(Math.min(t0 + 0.45, B_TRENCH));
     diveShots.push(...volley({
-      t0, count: 2, interval: 0.12,
-      from: [tw.position.x, 13, tw.position.z],
-      to: [tw.position.x * 0.3 + (i % 5 - 2) * 30, 120 + (i % 4) * 46, tw.position.z + 190],
-      speed: 620, color: 0x63ff4a, len: 30, thick: 0.66, seed: 3 + i, spread: 34, fromSpread: 8,
+      t0, count: 2, interval: 0.1,
+      from: [aimTw.position.x, 14, aimTw.position.z],
+      to: [c[0] + (i % 5 - 2) * 30, c[1] + 24 + (i % 3) * 34, c[2] + 76],
+      speed: 700, color: 0x63ff4a, len: 34, thick: 0.62, seed: 3 + i, spread: 30, fromSpread: 7,
     }));
   }
   const diveBolts = new Bolts(diveGrp, diveShots);
@@ -523,7 +556,7 @@ export async function build(ctx) {
   const redBolts = new Bolts(scene, redShots);
 
   /* green: the TIEs behind, firing past the lens */
-  const tieMuz = [[-8.6, 15.0, 22], [10.4, 11.6, 30], [0.4, 18.4, 48]];
+  const tieMuz = [[-9.6, 12.6, 15], [10.8, 17.4, 25], [0.6, 9.8, 39]];
   const greenShots = [];
   const TIE_BURSTS = [16.6, 17.4, 18.3, 19.3, 20.6, 22.2, 23.2, 34.6, 35.4, 36.2, 37.0, 37.8, 38.5, 39.2, 40.1, 41.0];
   TIE_BURSTS.forEach((t0, i) => {
@@ -549,7 +582,7 @@ export async function build(ctx) {
   /* the burst that kills the wingman */
   const killShots = volley({
     t0: 19.94, count: 4, interval: 0.09,
-    from: [-8.6, 15.0, 22], to: [-12.0, 11.5, -46],
+    from: tieMuz[0], to: [-12.0, 11.5, -46],
     speed: 640, color: 0x63ff4a, len: 24, thick: 0.5, seed: 5, spread: 2.5,
   });
   greenShots.push(...killShots);
@@ -598,10 +631,11 @@ export async function build(ctx) {
       { t: 0.04, sfx: 'engineRumble', opts: { gain: 0.55, dur: 4.4 } },
       { t: 0.10, sfx: 'engineWhoosh', opts: { gain: 0.75, dur: 1.8 } },
       { t: 0.55, sfx: 'radioStatic', opts: { gain: 0.4, dur: 1.3 } },
-      { t: 2.10, sfx: 'enginePass', opts: { gain: 1.0, dur: 0.9, from: -0.9, to: 0.9 } },
-      { t: 2.32, sfx: 'enginePass', opts: { gain: 0.92, dur: 0.9, from: 0.85, to: -0.85 } },
-      { t: 2.60, sfx: 'enginePass', opts: { gain: 0.95, dur: 0.9, from: -0.7, to: 0.7, pitch: 1.12 } },
-      { t: 3.24, sfx: 'enginePass', opts: { gain: 0.85, dur: 1.0, from: 0.8, to: -0.6, pitch: 0.95 } },
+      { t: 1.72, sfx: 'enginePass', opts: { gain: 0.95, dur: 0.8, from: -0.9, to: 0.9 } },
+      { t: 1.86, sfx: 'enginePass', opts: { gain: 1.0, dur: 0.8, from: 0.85, to: -0.85 } },
+      { t: 2.02, sfx: 'enginePass', opts: { gain: 0.95, dur: 0.8, from: -0.7, to: 0.7, pitch: 1.12 } },
+      { t: 2.30, sfx: 'enginePass', opts: { gain: 0.9, dur: 0.9, from: 0.8, to: -0.8, pitch: 0.95 } },
+      { t: 2.58, sfx: 'enginePass', opts: { gain: 0.85, dur: 0.9, from: -0.6, to: 0.8, pitch: 1.06 } },
       { t: 3.42, sfx: 'commBeep', opts: { gain: 0.5 } },
       { t: 3.56, sfx: 'radioStatic', opts: { gain: 0.35, dur: 1.0 } },
       /* the dive */
@@ -692,25 +726,27 @@ export async function build(ctx) {
       portRig.position.z = portZ;
       rimGrp.position.z = portZ;
 
-      spaceGrp.visible = t < B_DIVE + 0.05;
-      diveGrp.visible = t >= B_DIVE - 0.45 && t < B_TRENCH;
+      spaceGrp.visible = t < B_DIVE;
+      diveGrp.visible = t >= B_DIVE && t < B_TRENCH;
       road.visible = inTrench;
-      portRig.visible = inTrench && portZ > -2400;
-      rimGrp.visible = t > 38.0;
+      portRig.visible = inTrench && portZ > -2600;
+      // the rim plate straddles the slot, so it only reads once we are near it
+      rimGrp.visible = t > T_HIT - 0.6;
       hud.visible = t > B_COMP + 0.6 && t < T_OFF + 0.9;
       wreck.visible = t > T_KILL - 0.05 && t < T_KILL + 4.0;
 
       /* lighting: hard sun outside, slot light inside */
-      spaceKey.intensity = t < B_TRENCH ? 3.4 : 0;
-      lights.key.intensity = t < B_TRENCH ? 0.8 : 3.0;
-      lights.fill.intensity = t < B_TRENCH ? 0.6 : 1.7;
-      lights.rim.intensity = t < B_TRENCH ? 0.8 : 2.0;
-      lights.amb.intensity = t < B_TRENCH ? 0.45 : 1.85;
-      sky.visible = t < B_TRENCH || t > 42.6;
+      const out = clamp(beat(t, T_OUT, T_OUT + 1.6));
+      spaceKey.intensity = t < B_TRENCH ? 3.4 : out * 2.6;
+      lights.key.intensity = t < B_TRENCH ? 0.8 : 3.0 - out * 0.9;
+      lights.fill.intensity = t < B_TRENCH ? 0.6 : 1.7 - out * 0.9;
+      lights.rim.intensity = t < B_TRENCH ? 0.8 : 2.0 - out * 1.0;
+      lights.amb.intensity = t < B_TRENCH ? 0.45 : 1.85 - out * 1.1;
+      sky.visible = t < B_TRENCH || t > T_HIT - 0.5;
       if (t < B_TRENCH) { fog.near = 3000; fog.far = 40000; }
-      else if (t > T_OUT) { fog.near = 400; fog.far = 2100 + (t - T_OUT) * 700; }
-      else if (t > B_RUN) { fog.near = 170; fog.far = 1550; }
-      else { fog.near = 70; fog.far = 820; }
+      else if (t > T_OUT) { fog.near = 600 + out * 900; fog.far = 2400 + out * 3200; }
+      else if (t > B_RUN) { fog.near = 190; fog.far = 1500; }
+      else { fog.near = 70; fog.far = 860; }
 
       /* ---- ordnance (declarative, so order does not matter) -------- */
       diveBolts.update(t);
@@ -726,7 +762,7 @@ export async function build(ctx) {
 
       flash(c.stage, t, [
         ...[4.7, 6.15, 7.6].map((tt) => ({ t: tt, dur: 0.16, amount: 0.13, color: 0x9dffb0 })),
-        { t: T_KILL, dur: 0.42, amount: 0.38, color: 0xffd9a0 },
+        { t: T_KILL, dur: 0.34, amount: 0.22, color: 0xffd9a0 },
         { t: T_LOCK, dur: 0.24, amount: 0.14, color: 0xffb0a0 },
         { t: T_LAUNCH, dur: 0.28, amount: 0.2, color: 0xffe8c0 },
         { t: T_HIT, dur: 0.55, amount: 0.62, color: 0xfff0cc },
@@ -737,33 +773,46 @@ export async function build(ctx) {
        * A — the target
        * ============================================================== */
       if (t < B_DIVE) {
-        for (const o of xw) { o.visible = true; o.userData.setSFoils(clamp(beat(t, 3.3, 4.4))); setEngineGlow(o, 0.9); }
+        for (const o of xw) { o.visible = true; o.userData.setSFoils(clamp(beat(t, 3.0, 4.3))); setEngineGlow(o, 0.68); }
         for (const o of ties) o.visible = false;
 
-        if (t < 2.1) {
-          /* the squadron drops away from the lens toward a grey moon */
-          const p = t / 2.1;
-          const lead = 26 - 210 * t;
+        if (t < 1.75) {
+          /* the station, and the squadron already running for it */
+          const p = t / 1.75;
+          const lead = 10 - 190 * t;
           const slot = [[0, 0, 0], [-17, -3.5, 22], [17, -2.5, 26], [-33, 2.5, 46], [33, 3.5, 50]];
           xw.forEach((o, i) => {
             const sl = slot[i];
             place(o, sl[0] + noise(t * 0.8, i) * 2.2, sl[1] + 2 + noise(t * 0.7, i + 5) * 1.6,
               lead + sl[2], -0.02, 0, noise(t * 0.7, i + 11) * 0.16);
           });
-          camAt(cam, 4 + p * 3, 10 - p * 2, 62 - p * 16, 0, 2 - p * 6, -260, 44 - p * 5,
+          camAt(cam, 4 + p * 3, 10 - p * 2, 56 - p * 14, 0, 2 - p * 6, -260, 44 - p * 5,
             -0.03 + p * 0.02);
-        } else {
-          /* the lens pass: they come over the camera and dive for the moon */
-          const p = beat(t, 2.1, B_DIVE);
-          const start = [230, 158, 96, 520, 700];
-          const lat = [[-15, 7], [13, -6], [-25, -9], [21, 10], [-6, 13]];
+        } else if (t < 2.95) {
+          /* the lens pass: five ships come over the camera one after another,
+             close enough to hear.  Lateral offsets stay put, so each ship grows
+             and swings out of frame the way a real pass does. */
+          const p = beat(t, 1.75, 2.95);
+          const start = [150, 108, 66, 240, 320];
+          const lat = [[-9, 6], [8, -5], [-13, -3], [11, 7], [-6, 9]];
           xw.forEach((o, i) => {
-            const z = start[i] - 420 * (t - 2.1);
-            const near = clamp(1 - Math.abs(z - 30) / 220);
-            place(o, lat[i][0] * (0.55 + near * 0.9), lat[i][1] * (0.6 + near * 0.9) + 2, z,
-              -0.03, 0, (i % 2 ? 0.3 : -0.28) * near + noise(t * 0.9, i + 3) * 0.14);
+            const z = start[i] - 300 * (t - 1.75);
+            const near = clamp(1 - Math.abs(z - 40) / 150);
+            place(o, lat[i][0], lat[i][1] + 4, z,
+              -0.03, 0, (i % 2 ? 0.34 : -0.32) * near + noise(t * 0.9, i + 3) * 0.14);
           });
-          camAt(cam, 0.5, 3.5, 44, 1.5, 2.5, -300, 62 - p * 8, 0.05 - p * 0.09);
+          camAt(cam, 0.5, 4.0, 40, 1.5, 3.0, -300, 62 - p * 6, 0.06 - p * 0.11);
+        } else {
+          /* behind the squadron now, S-foils cracking, the moon filling the frame */
+          const p = beat(t, 2.95, B_DIVE);
+          const slot = [[0, 3, 0], [-16, 7, 26], [15, 6, 30], [-29, 12, 54], [28, 11, 58]];
+          xw.forEach((o, i) => {
+            const sl = slot[i];
+            place(o, sl[0] + noise(t * 0.7, i) * 2.0, sl[1] + 4 + noise(t * 0.6, i + 5) * 1.8,
+              -96 - p * 76 + sl[2], -0.10 - p * 0.18, 0, noise(t * 0.7, i + 11) * 0.2);
+          });
+          camAt(cam, 5 - p * 2.4, 20 - p * 3, 22 - p * 8, 0, 0 - p * 24, -280, 48 + p * 6,
+            -0.04 + p * 0.05);
         }
         station.rotation.y = 0.5 + t * 0.004;
         cam.updateProjectionMatrix();
@@ -774,39 +823,39 @@ export async function build(ctx) {
        * B — the dive
        * ============================================================== */
       if (t < B_TRENCH) {
-        const k = beat(t, B_DIVE, B_TRENCH);
-        const sf = clamp(beat(t, B_DIVE + 0.25, B_DIVE + 1.8));
-        for (const o of xw) { o.visible = true; o.userData.setSFoils(sf); setEngineGlow(o, 1.05); }
+        const d = divePose(t);
+        const k = d.k;
+        const sf = clamp(beat(t, B_DIVE + 0.2, B_DIVE + 1.6));
+        for (const o of xw) { o.visible = true; o.userData.setSFoils(sf); setEngineGlow(o, 0.8); }
         for (const o of ties) o.visible = false;
 
         // the squadron falls out of the sky and levels off over the plain
-        const y0 = lerp(215, 40, Math.pow(k, 0.72));
-        const zc = lerp(-110, -600, smoothstep(0, 1, k));
-        const pitch = -0.52 * (1 - smoothstep(0.4, 1, k));
-        const slot = [[0, 0, 0], [-21, 7, 30], [21, 6, 36], [-40, 14, 62], [40, 13, 68]];
+        const pitch = -0.68 * (1 - smoothstep(0.35, 1, k));
+        const slot = [[0, 0, 0], [-17, 6, 26], [17, 5, 32], [-32, 11, 54], [32, 10, 60]];
         xw.forEach((o, i) => {
           const sl = slot[i];
           place(o,
             sl[0] + noise(t * 0.7, i) * 2.6,
-            y0 + sl[1] * (1 - k * 0.45) + noise(t * 0.6, i + 4) * 2.6,
-            zc + sl[2], pitch, 0, noise(t * 0.6, i + 9) * 0.22);
+            d.y + sl[1] * (1 - k * 0.45) + noise(t * 0.6, i + 4) * 2.6,
+            d.z + sl[2], pitch, 0, noise(t * 0.6, i + 9) * 0.22);
         });
         towers.forEach((tw, i) => {
           tw.userData.aim(tmp.set(xw[i % 5].position.x, xw[i % 5].position.y, xw[i % 5].position.z));
           tw.userData.fire(diveHits.some((h) => h.tw === i && t - h.t > -0.02 && t - h.t < 0.16));
         });
 
-        if (t < 6.45) {
-          /* over the shoulder of the formation, the plain rushing up */
-          const p = beat(t, B_DIVE, 6.45);
-          camAt(cam, 8 - p * 5, y0 + 40 - p * 18, zc + 108 - p * 20,
-            0, y0 - 34 - p * 40, zc - 150, 54 + p * 8, 0.05 - p * 0.07);
+        const c = diveCamPos(t);
+        if (t < B_DIVE2) {
+          /* over the shoulder, pitched down the throat of the dive: the deck
+             fills the frame and the formation falls into it */
+          const p = beat(t, B_DIVE, B_DIVE2);
+          camAt(cam, c[0], c[1], c[2],
+            2, d.y - 250 + p * 90, d.z - 170, 56 + p * 8, 0.07 - p * 0.1);
         } else {
           /* low on the deck: a tower hammering away right past the lens */
-          const p = beat(t, 6.45, B_TRENCH);
-          const tw = towers[3];
-          camAt(cam, tw.position.x + 34 - p * 8, 10 + p * 6, tw.position.z + 62 - p * 14,
-            tw.position.x - 4, 46 + p * 74, tw.position.z - 60, 62 - p * 6, -0.06 + p * 0.06);
+          const p = beat(t, B_DIVE2, B_TRENCH);
+          camAt(cam, c[0], c[1], c[2],
+            HERO_TOWER[0] + 12, 22 + p * 40, HERO_TOWER[1] - 180, 64 - p * 8, -0.08 + p * 0.08);
         }
         cam.updateProjectionMatrix();
         return;
@@ -815,9 +864,9 @@ export async function build(ctx) {
       /* ================================================================
        * inside the trench (C onward) — shared setup
        * ============================================================== */
-      const burn = 0.62 + (v - 88) / 260;
+      const burn = 0.42 + (v - 92) / 420;
       xw.forEach((o, i) => { o.visible = i < 3; o.userData.setSFoils(1); setEngineGlow(o, burn); });
-      for (const o of ties) { o.visible = t > B_CHASE - 0.2 && t < 42.0; setEngineGlow(o, 0.9); }
+      for (const o of ties) { o.visible = t > B_CHASE - 0.2 && t < 42.2; setEngineGlow(o, 0.75); }
 
       /* formation: hero nearest the lens, the other two staggered ahead */
       fly(HERO, t, 0.9, 12.6, -30, 1, 1);
@@ -836,25 +885,28 @@ export async function build(ctx) {
 
       ties.forEach((o, i) => {
         const m = tieMuz[i];
-        const enter = smoothstep(0, 1, beat(t, B_CHASE, B_CHASE + 1.4));
-        fly(o, t, m[0], m[1] + (1 - enter) * 40, m[2] + (1 - enter) * 70, 40 + i * 9, 1.2);
+        const enter = smoothstep(0, 1, beat(t, B_CHASE - 0.3, B_CHASE + 1.4));
+        fly(o, t, m[0], m[1] + (1 - enter) * 40, m[2] + (1 - enter) * 62, 40 + i * 9, 1.6);
       });
 
       /* torpedoes: they pull away from the ship and drop into the well */
       const tk = beat(t, T_LAUNCH, T_HIT);
-      const tEase = 0.72 * tk + 0.28 * tk * tk;
+      const tEase = Math.pow(tk, 1.35);
       const torpQ = lerp(TORP_Q0, PORT_Q, tEase);
-      const dive = smoothstep(0.72, 1, tk);
+      const dive = smoothstep(0.74, 1, tk);
       torps.forEach((tp, i) => {
-        const live = t >= T_LAUNCH && t < T_HIT + 0.04;
+        const live = t >= T_LAUNCH && t < T_HIT + 0.03;
         tp.visible = live;
         if (!live) return;
         const sgn = i ? 1 : -1;
+        // they start under the wings, converge on the centreline, then drop in
+        const conv = Math.pow(clamp(tk * 1.5), 0.8);
         tp.position.set(
-          lerp(0.9 + sgn * 6.0, 0, Math.pow(dive, 0.7)),
-          lerp(12.0, 2.6, Math.pow(dive, 1.4)),
-          -(torpQ - s) + i * 3);
-        tp.rotation.set(-dive * 0.6, 0, 0);
+          lerp(0.9 + sgn * 6.4, 0, conv),
+          lerp(12.2, 2.4, Math.pow(dive, 1.3)),
+          -(torpQ - s) + i * 4);
+        tp.rotation.set(-dive * 0.72, 0, 0);
+        tp.scale.setScalar(1 + 1.8 * tk);
       });
 
       /* the wreck rides the wall it hit, so it recedes with the trench */
@@ -864,17 +916,17 @@ export async function build(ctx) {
       const pk = clamp((t - T_HIT) / 2.6);
       portBlast.visible = t > T_HIT - 0.02 && t < T_HIT + 3.0;
       if (portBlast.visible) portBlast.userData.setT(clamp((t - T_HIT) / 3.0));
-      const near = clamp(1 - (-portZ) / 900);
+      const near = clamp(1 - (-portZ) / 1400);
       portFlare.material.opacity = t > T_HIT
-        ? 0.9 + 1.2 * Math.pow(1 - pk, 1.4)
-        : (0.35 + 0.5 * near) * (0.8 + 0.2 * Math.sin(t * 3.4));
-      portFlare.scale.setScalar(t > T_HIT ? 46 + 220 * Math.pow(pk, 0.4) : 46);
+        ? 0.9 + 1.3 * Math.pow(1 - pk, 1.4)
+        : (0.30 + 0.6 * near * near) * (0.82 + 0.18 * Math.sin(t * 3.4));
+      portFlare.scale.setScalar(t > T_HIT ? 52 + 300 * Math.pow(pk, 0.4) : 52);
       throatMat.opacity = t > T_HIT ? clamp(1 - pk * 0.5) : 0.5 + 0.35 * Math.sin(t * 3.4);
-      throat.scale.setScalar(t > T_HIT ? 1 + pk * 2.2 : 1);
+      throat.scale.setScalar(t > T_HIT ? 1 + pk * 2.6 : 1);
 
       /* which way the shot is pointed, for hand-rolled section culling */
       let viewDir = -1;
-      if ((t >= 11.4 && t < 13.5) || (t >= B_CHASE && t < 17.7)
+      if ((t >= 11.3 && t < 13.4) || (t >= B_CHASE && t < 17.7)
         || (t >= 21.45 && t < 22.6) || (t >= 36.3 && t < 37.6)) viewDir = 1;
 
       /* ================================================================
@@ -882,60 +934,60 @@ export async function build(ctx) {
        * ============================================================== */
       let camZ = 0;
       if (t < B_CHASE) {
-        if (t < 11.4) {
-          const p = beat(t, B_TRENCH, 11.4);
-          camAt(cam, 0.6, 15.4 - p * 1.2, -4, 0.6, 12.2, -80, 66,
+        if (t < 11.3) {
+          const p = beat(t, B_TRENCH, 11.3);
+          camAt(cam, 0.6, 15.4 - p * 1.4, -8 - p * 2, 0.6, 12.2, -80, 66,
             noise(t * 1.6, 2) * 0.012);
-          camZ = -4;
-        } else if (t < 13.5) {
-          /* looking back up the trench at them coming */
-          const p = beat(t, 11.4, 13.5);
-          camAt(cam, -1.5 + p * 3, 13.6, -104 - p * 6, 0.4, 13.0, 40, 62,
-            0.03 - p * 0.05);
-          camZ = -104 - p * 6;
+          camZ = -8 - p * 2;
+        } else if (t < 13.4) {
+          /* looking back up the trench at them coming: the near ship fills it */
+          const p = beat(t, 11.3, 13.4);
+          camAt(cam, 6.5 - p * 3.0, 10.4 + p * 1.6, -84 - p * 5, 2.0, 13.6, 30, 62,
+            0.04 - p * 0.07);
+          camZ = -84 - p * 5;
         } else {
           /* skimming the starboard wall, greebles inches from the lens */
-          const p = beat(t, 13.5, B_CHASE);
-          camAt(cam, 14.6 - p * 1.5, 9.6 + p * 3.6, -16 + p * 4, 2.0, 12.4, -110, 70 - p * 4,
-            -0.08 + p * 0.05);
-          camZ = -16 + p * 4;
+          const p = beat(t, 13.4, B_CHASE);
+          camAt(cam, 16.2 - p * 2.4, 8.4 + p * 4.0, -20 + p * 6, 1.0, 12.8, -120, 72 - p * 5,
+            -0.10 + p * 0.06);
+          camZ = -20 + p * 6;
         }
       } else if (t < B_COMP) {
         /* ==============================================================
          * D — pursuit
          * ============================================================ */
         if (t < 17.7) {
-          /* look back: three TIEs fall into the canyon behind */
+          /* look back: three TIEs drop over the rim and close right up */
           const p = beat(t, B_CHASE, 17.7);
-          camAt(cam, 2.4, 15.2 - p * 0.6, -18, 0.5, 14.6 + p * 1.0, 60, 58 + p * 4,
-            -0.04 + p * 0.07);
-          camZ = -18;
+          camAt(cam, 2.0, 13.4 + p * 0.8, -9, 0.5, 19.0 - p * 4.0, 44, 62 - p * 4,
+            -0.05 + p * 0.09);
+          camZ = -9;
         } else if (t < 20.2) {
           /* chase cam again, red fire going out, green coming in */
           const p = beat(t, 17.7, 20.2);
-          camAt(cam, -3.2 + p * 2.0, 14.0 + p * 1.4, -2 - p * 2, -1.5, 12.0, -90, 68,
+          camAt(cam, -4.4 + p * 3.0, 14.4 + p * 1.4, -8 - p * 3, -1.5, 12.0, -90, 68,
             0.02 + noise(t * 2.2, 4) * 0.02);
-          camZ = -2 - p * 2;
+          camZ = -8 - p * 3;
         } else if (t < 21.45) {
-          /* the wingman goes in: hold on him from the far side */
+          /* the wingman goes in: hold on him from the far side of the canyon */
           const p = beat(t, 20.2, 21.45);
           const shake = Math.max(0, 1 - Math.abs(t - T_KILL) * 3.0);
-          camAt(cam, 13.0 + noise(t * 6, 9) * shake * 1.6, 15.0 + noise(t * 6, 12) * shake * 1.6,
-            -6 - p * 2, -9.0, 12.4, -60, 62,
-            -0.05 + p * 0.03 + noise(t * 7, 15) * shake * 0.05);
-          camZ = -6 - p * 2;
+          camAt(cam, 14.5 + noise(t * 6, 9) * shake * 1.6, 14.4 + noise(t * 6, 12) * shake * 1.6,
+            -12 - p * 3, -11.0, 12.4, -52, 60,
+            -0.06 + p * 0.04 + noise(t * 7, 15) * shake * 0.05);
+          camZ = -12 - p * 3;
         } else if (t < 22.6) {
           /* look back at the fire falling away behind them */
           const p = beat(t, 21.45, 22.6);
           const shake = Math.max(0, 1 - Math.abs(t - T_KILL) * 1.6);
-          camAt(cam, 2.0, 16.4, -22, -4.0 - p * 3, 13.0, 70, 60 + p * 4,
-            0.06 - p * 0.09 + noise(t * 7, 17) * shake * 0.03);
-          camZ = -22;
+          camAt(cam, 3.0, 15.4, -44, -8.0 - p * 4, 12.6, 40, 62 + p * 4,
+            0.07 - p * 0.1 + noise(t * 7, 17) * shake * 0.03);
+          camZ = -44;
         } else {
           /* back on the hero, tighter */
           const p = beat(t, 22.6, B_COMP);
-          camAt(cam, 6.2 - p * 4.0, 16.6 - p * 1.6, -7, 0.6, 12.4, -95, 64, 0.05 - p * 0.06);
-          camZ = -7;
+          camAt(cam, 7.4 - p * 4.4, 16.6 - p * 1.8, -11, 0.6, 12.4, -95, 64, 0.05 - p * 0.06);
+          camZ = -11;
         }
       } else if (t < B_RUN) {
         /* ==============================================================
@@ -944,85 +996,86 @@ export async function build(ctx) {
         if (t < T_LOCK + 0.4) {
           /* tight on the lead ship as the boxes converge */
           const p = beat(t, B_COMP, T_LOCK + 0.4);
-          camAt(cam, 10.4 - p * 5.6, 14.8 - p * 0.8, -12 + p * 2.0, 1.4, 12.6, -46, 46 - p * 5,
+          camAt(cam, 12.6 - p * 4.2, 15.6 - p * 1.0, -3 + p * 1.5, 1.2, 12.8, -60, 44 - p * 3,
             0.03 - p * 0.04);
-          camZ = -12 + p * 2.0;
+          camZ = -3 + p * 1.5;
         } else {
-          /* settle: a slow push toward the cockpit, everything quiet */
+          /* settle: a slow drift in on the cockpit, everything quiet */
           const p = smoothstep(0, 1, beat(t, T_LOCK + 0.4, B_RUN));
-          camAt(cam, 4.8 - p * 1.8, 14.2 - p * 0.4, -14.5 + p * 2.4, 0.9, 12.9, -40, 41 - p * 5,
-            -0.01 + p * 0.015);
-          camZ = -14.5 + p * 2.4;
+          camAt(cam, 8.4 - p * 2.2, 14.6 - p * 0.5, -1.5 - p * 3.0, 1.0, 12.9, -64, 41 - p * 4,
+            -0.01 + p * 0.02);
+          camZ = -1.5 - p * 3.0;
         }
       } else if (t < B_AWAY) {
         /* ==============================================================
          * F — the run
          * ============================================================ */
         if (t < 36.3) {
+          /* wall-skimming chase: the port already a spark at the vanishing point */
           const p = beat(t, B_RUN, 36.3);
-          camAt(cam, 0.9, 14.8 - p * 1.4, -2, 0.6, 11.4 - p * 1.4, -200, 68 - p * 5,
-            noise(t * 2.4, 6) * 0.014);
-          camZ = -2;
+          camAt(cam, 5.6 - p * 4.4, 9.0 + p * 4.6, -6 - p * 2, 0.6, 11.6 - p * 1.6, -240, 70 - p * 4,
+            -0.05 + p * 0.06 + noise(t * 2.4, 6) * 0.014);
+          camZ = -6 - p * 2;
         } else if (t < 37.6) {
           /* one last look back: the TIEs still there, cannon fire past */
           const p = beat(t, 36.3, 37.6);
-          camAt(cam, -2.0, 15.4, -24, 1.0, 14.0, 54, 60, 0.05 - p * 0.09);
-          camZ = -24;
+          camAt(cam, -3.0, 12.6 + p * 1.6, -6, 1.0, 14.6, 40, 64, 0.06 - p * 0.11);
+          camZ = -6;
         } else {
           /* down the pipe, lens tightening onto the port */
           const p = beat(t, 37.6, B_AWAY);
-          camAt(cam, 0.6, 13.6 + p * 1.4, 2 - p * 4, 0.4, 10.0, -260, 60 - p * 8,
+          camAt(cam, 0.6, 13.6 + p * 1.2, -4 - p * 6, 0.4, 10.4, -300, 62 - p * 10,
             noise(t * 2.8, 8) * 0.012);
-          camZ = 2 - p * 4;
+          camZ = -4 - p * 6;
         }
       } else {
         /* ==============================================================
          * G — away
          * ============================================================ */
-        if (t < 40.9) {
-          /* the launch, from above and behind the hero */
-          const p = beat(t, B_AWAY, 40.9);
-          camAt(cam, 2.6 - p * 1.2, 16.4 - p * 1.0, 6 - p * 4, 0.6, 10.6, -170, 62 - p * 4,
-            0.03 - p * 0.04);
-          camZ = 6 - p * 4;
-        } else if (t < 42.35) {
-          /* over the top of the ship, watching them go */
-          const p = beat(t, 40.9, 42.35);
-          camAt(cam, 0.9, 20.6 - p * 3.0, -4 - p * 4, 0.5, 8.4, -300, 54 - p * 4,
+        if (t < 40.7) {
+          /* the launch, close behind the hero: two lights ignite and go */
+          const p = beat(t, B_AWAY, 40.7);
+          camAt(cam, 3.2 - p * 1.8, 15.8 - p * 1.2, -12 - p * 3, 0.7, 11.4, -160, 60 - p * 4,
+            0.04 - p * 0.05);
+          camZ = -12 - p * 3;
+        } else if (t < 42.3) {
+          /* over the top of the ship, watching them run away down the pipe */
+          const p = beat(t, 40.7, 42.3);
+          camAt(cam, 0.9, 19.4 - p * 4.2, -18 - p * 4, 0.5, 8.6, -320, 52 - p * 8,
             noise(t * 2.2, 11) * 0.01);
-          camZ = -4 - p * 4;
+          camZ = -18 - p * 4;
         } else if (t < T_OUT) {
-          /* the flash at the end of the pipe */
-          const p = beat(t, 42.35, T_OUT);
+          /* the hit: the lens is already tight on the end of the pipe */
+          const p = beat(t, 42.3, T_OUT);
           const shake = Math.max(0, 1 - Math.abs(t - T_HIT) * 3.0);
-          camAt(cam, 0.9 + noise(t * 9, 3) * shake * 1.8, 13.6 + noise(t * 9, 6) * shake * 1.8, -12,
-            0.4, 6.4, -340, 46 + p * 6, noise(t * 11, 9) * shake * 0.05);
-          camZ = -12;
+          camAt(cam, 0.7 + noise(t * 9, 3) * shake * 1.8, 12.4 + noise(t * 9, 6) * shake * 1.8, -24,
+            0.4, 7.0, -360, 42 - p * 6, noise(t * 11, 9) * shake * 0.05);
+          camZ = -24;
         } else {
-          /* up and out, into open space, the port burning below */
-          const p = smoothstep(0, 1, beat(t, T_OUT, END));
-          const climb = Math.pow(p, 0.72);
-          camZ = -12 + p * 40;
+          /* up and out: the slot falls away, the plain opens out, stars above */
+          const p = smoothstep(0, 1, beat(t, T_OUT, END - 0.4));
+          const climb = Math.pow(p, 0.62);
+          camZ = -24 + climb * 96;
           camAt(cam,
-            0.9 + climb * 62, 13.6 + climb * 235, camZ,
-            lerp(0.4, 30, p), lerp(6.4, -6, p), lerp(-340, portZ + 40, smoothstep(0, 1, p * 1.15)),
-            50 + p * 14, 0.02 + p * 0.20);
+            0.7 + climb * 70, 12.4 + climb * 250, camZ,
+            lerp(0.4, 26, p), lerp(7.0, 118, p), lerp(-360, portZ - 60, p),
+            42 + p * 22, 0.02 + p * 0.16);
         }
         /* the fighters pull up with the camera */
-        const up = smoothstep(0, 1, beat(t, 42.5, 45.4));
+        const up = smoothstep(0, 1, beat(t, 42.6, 45.6));
         if (up > 0) {
-          const lift = Math.pow(up, 0.8);
-          place(HERO, 0.9 - lift * 16, 12.6 + lift * 176, -30 - lift * 46, 0.62 * lift, -0.12 * lift, 0.5 * lift);
-          place(WINGR, 12.6 + lift * 26, 15.6 + lift * 150, -62 - lift * 30, 0.58 * lift, 0.1 * lift, -0.4 * lift);
-          setEngineGlow(HERO, 1.15);
-          setEngineGlow(WINGR, 1.15);
+          const lift = Math.pow(up, 0.85);
+          place(HERO, 0.9 - lift * 30, 12.6 + lift * 210, -30 - lift * 30, 0.7 * lift, -0.16 * lift, 0.55 * lift);
+          place(WINGR, 12.6 + lift * 40, 15.6 + lift * 176, -62 + lift * 10, 0.64 * lift, 0.12 * lift, -0.45 * lift);
+          setEngineGlow(HERO, 0.85);
+          setEngineGlow(WINGR, 0.85);
         }
       }
 
       /* hand-rolled section culling around the camera */
       const rz = road.position.z;
-      const backLim = t > T_OUT ? 1500 : 180;
-      const fwdLim = t > B_RUN ? 1700 : 900;
+      const backLim = t > T_OUT ? 1700 : 220;
+      const fwdLim = t > T_OUT ? 2700 : t > B_RUN ? 1700 : 940;
       for (let i = 0; i < sections.length; i++) {
         const sec = sections[i];
         const rel = (sec.z + rz - camZ) * viewDir;
@@ -1082,16 +1135,18 @@ export async function build(ctx) {
         });
 
         const pi = Math.floor(t * 13) % panels.length;
+        const px = -a + 0.60, py = -0.60;
+        const pon = alive * 0.95;
         panels.forEach((q, i) => {
-          q.position.set(-a + 0.46, -0.70, 0.003);
-          q.material.opacity = !locked && i === pi ? alive * 0.95 : 0;
+          q.position.set(px, py, 0.003);
+          q.material.opacity = !locked && i === pi ? pon : 0;
         });
-        panelLock.position.set(-a + 0.46, -0.70, 0.003);
-        panelLock.material.opacity = locked ? alive * 0.95 : 0;
+        panelLock.position.set(px, py, 0.003);
+        panelLock.material.opacity = locked ? pon : 0;
 
-        wordAcq.position.set(0, 0.80, 0.004);
+        wordAcq.position.set(0, 0.74, 0.004);
         wordAcq.material.opacity = !locked ? alive * (0.55 + 0.45 * Math.sign(Math.sin(t * 6))) : 0;
-        wordLock.position.set(0, 0.80, 0.004);
+        wordLock.position.set(0, 0.74, 0.004);
         wordLock.material.opacity = locked ? alive * blink : 0;
       }
 

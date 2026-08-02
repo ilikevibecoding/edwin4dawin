@@ -167,7 +167,7 @@ const titleTex = () => tex('fin_title', 2048, 1024, (g, W) => {
   g.fillStyle = gold(154, 262);
   g.fillText('L E G O', W / 2, 208);
 
-  const big = fitFont(g, 'STAR WARS', 800, 320, W * 0.84);
+  const big = fitFont(g, 'STAR WARS', 800, 320, W * 0.78);
   g.font = `800 ${big}px ${FONT}`;
   g.fillStyle = gold(470 - big * 0.5, 470 + big * 0.55);
   g.strokeStyle = '#8a6a00';
@@ -272,7 +272,9 @@ export async function build(ctx) {
   const lights = lightRig(scene, 'battle', { shadows: false, fog: false });
   lights.key.position.set(620, 760, 980);
   lights.fill.position.set(-560, -180, -320);
-  lights.rim.position.set(-240, 200, 900);
+  // rim sits behind the action, not beside the lens, so cranking it during the
+  // blast puts light on trailing edges instead of flooding the front of a hull
+  lights.rim.position.set(-300, -160, -880);
   const KEY = lights.key.intensity, FILL = lights.fill.intensity;
   const RIM = lights.rim.intensity, AMB = lights.amb.intensity;
 
@@ -286,6 +288,12 @@ export async function build(ctx) {
   const backLight = new THREE.DirectionalLight(0xffc487, 0);
   backLight.position.copy(CAM3).multiplyScalar(-1);
   scene.add(backLight, backLight.target);
+  // the quiet beat has no fire left in shot but the wreck, so the wreck gets to
+  // be a source: a low warm wash from its bearing, which keeps five grey models
+  // on black from looking unlit
+  const wreckLight = new THREE.DirectionalLight(0xff9a52, 0);
+  wreckLight.position.set(-2600, -420, -1400);
+  scene.add(wreckLight, wreckLight.target);
 
   /* --- sky --------------------------------------------------------- */
   // both fields ride the camera, so they read as infinity
@@ -293,6 +301,11 @@ export async function build(ctx) {
   scene.add(skyRig);
   const sky = spaceBackdrop({ seed: 61, radius: 6000, count: 6400, color: 0x3d2f74 });
   skyRig.add(sky);
+  // the backdrop is built for a scene that wants a view; this one wants black,
+  // so the galaxy lane and the nebulae are pulled almost all the way down —
+  // `spaceBackdrop.update` rewrites both every frame, so scaling them is pure
+  const skyBand = sky.userData.band.material;
+  const skyClouds = sky.userData.clouds.userData.clouds.map((c) => c.material);
 
   // a plain field for the card: black, stars, nothing else
   const tStars = (() => {
@@ -390,6 +403,7 @@ export async function build(ctx) {
     t: c.t, dur: 0.9 + c.size * 0.011, p: chainPos[i].toArray(),
     size: c.size * 2.6, gain: 0.95, color: 0xffd7a0,
   })), fireTex());
+  const chainBalls = chainFx.flatMap((f) => [f.core.material, f.shell.material]);
 
   // the trench itself catches fire and stays lit
   const embers = [];
@@ -408,19 +422,24 @@ export async function build(ctx) {
     }
   }
 
-  // vents blowing straight off the hull
+  // gas venting off the hull. A cone read as a hard yellow wedge from the side,
+  // so each vent is a short stack of billboards instead — always soft, and it
+  // never shows an edge whatever the camera does.
+  const VENT_F = [0.05, 0.26, 0.52, 0.84];
   const vents = [];
   {
     const r = rng(9091);
-    for (let i = 0; i < 8; i++) {
-      const dir = sph((r() - 0.5) * 0.1, PORT_LON + (r() * 2 - 1) * 0.7, 1);
-      const g = new THREE.Group();
-      g.position.copy(dir.clone().multiplyScalar(FLOOR - 2));
-      g.quaternion.setFromUnitVectors(V3(0, 1, 0), dir);
-      const cone = jetFx(0xffd48a);
-      g.add(cone);
-      station.add(g);
-      vents.push({ mesh: cone, t0: 1.4 + r() * 3.1, len: 34 + r() * 96, wide: 5 + r() * 9, ph: r() * 6.3 });
+    for (let i = 0; i < 9; i++) {
+      const dir = sph((r() - 0.5) * 0.12, PORT_LON + (r() * 2 - 1) * 0.75, 1);
+      const puffs = VENT_F.map(() => {
+        const s = spark(1, glowTex(), 0xffbb74, 0);
+        station.add(s);
+        return s;
+      });
+      vents.push({
+        dir, puffs, t0: 1.2 + r() * 3.2,
+        len: 52 + r() * 130, wide: 13 + r() * 15, ph: r() * 6.3,
+      });
     }
   }
 
@@ -434,15 +453,24 @@ export async function build(ctx) {
   const burst = explosionBurst({ size: 460, seed: 17, shards: 240, gravity: 0, spread: 1.0 });
   burst.quaternion.setFromUnitVectors(V3(0, 0, 1), CAM3.clone().normalize());
   blastRig.add(burst);
-  // its soot veil and its own two shock rings fight the composition in vacuum,
-  // and its flare sprites alone are enough to white out the frame for a second
+  // In vacuum its soot veil paints the whole frame grey and its own two rings
+  // fight the big one below, so both go. Its wide glare sprite is sized for a
+  // small blast; at 460 it covers the lens in cream, so that gets pulled down
+  // too — but the fourteen flame lobes stay, they are what makes the silhouette
+  // lumpy. Lobes are the additive sprites carrying a direction.
   const burstSoot = burst.children.filter((o) => o.isSprite && o.material.blending === THREE.NormalBlending);
   const burstRings = burst.children.filter((o) => o.isMesh && o.geometry.type === 'PlaneGeometry');
-  const burstGlare = burst.children.filter((o) => o.isSprite && o.material.blending === THREE.AdditiveBlending);
+  const burstWash = burst.children.filter((o) => o.isSprite
+    && o.material.blending === THREE.AdditiveBlending && !o.userData.dir);
+  const burstShell = burst.children.filter((o) => o.isMesh && o.geometry.type !== 'PlaneGeometry');
 
   const hot = spark(1, glowTex(), 0xffffff, 0);
+  // two copies of the same cloud at different sizes and counter-rotations: one
+  // sprite alone is unmistakably a flat cut-out once it cools to deep orange
   const fireball = spark(1, fireTex(), 0xffa64a, 0);
-  blastRig.add(hot, fireball);
+  const fireball2 = spark(1, fireTex(), 0xff7c22, 0);
+  fireball2.material.rotation = 1.9;
+  blastRig.add(hot, fireball, fireball2);
 
   // secondaries on a stagger: the station keeps coming apart for five seconds
   const secs = [];
@@ -462,15 +490,21 @@ export async function build(ctx) {
     }
   }
   const secFlares = new Flares(blastRig, secFlare, fireTex());
+  // `Fireball` draws additive spheres, and a half-faded additive sphere in front
+  // of black is unmistakably a beach ball. Keep its bricks and its light, hand
+  // the flames to the textured flares above.
+  const secBalls = secs.flatMap((f) => [f.core.material, f.shell.material]);
 
-  // the brick storm: BrickBurst fans upward from its origin, so six copies are
-  // rotated onto six axes to fill a sphere with debris.
+  // The brick storm: BrickBurst fans upward from its origin, so six copies are
+  // rotated onto six axes to fill a sphere with debris. Each starts a station
+  // radius out along its own axis, so frame one already has a shell of bricks
+  // the size of the thing that just blew up rather than a clump at the middle.
   const storm = [];
   {
     const spec = [
-      { count: 84, size: 12, speed: 500, life: 11 },
-      { count: 60, size: 26, speed: 320, life: 12 },
-      { count: 24, size: 56, speed: 175, life: 13 },
+      { count: 90, size: 12, speed: 760, life: 11 },
+      { count: 66, size: 26, speed: 520, life: 12 },
+      { count: 30, size: 56, speed: 300, life: 13 },
     ];
     const spin = [
       [0, 0, 0], [0, 0, Math.PI], [0, 0, Math.PI / 2], [0, 0, -Math.PI / 2],
@@ -483,8 +517,8 @@ export async function build(ctx) {
         g.rotation.set(rt[0], rt[1], rt[2]);
         blastRig.add(g);
         storm.push(new BrickBurst(g, {
-          t0: DET, origin: [0, 0, 0], count: Math.round(s.count / 6), size: s.size,
-          speed: s.speed, life: s.life, gravity: 0, stagger: 0.55, seed: 500 + k++ * 13,
+          t0: DET, origin: [0, R * 0.5, 0], count: Math.round(s.count / 6), size: s.size,
+          speed: s.speed, life: s.life, gravity: 0, stagger: 0.4, seed: 500 + k++ * 13,
           colors: [0xf2f3f2, 0xa3a2a4, 0x545955, 0x6c6e68, 0xc91a09],
         }));
       }
@@ -496,11 +530,24 @@ export async function build(ctx) {
   scene.add(ringRig);
   const BLAST_VIEW = sph(0.26, 1.47, 1);
   const ringNormal = (mix) => V3(0, 1, 0).multiplyScalar(1 - mix).addScaledVector(BLAST_VIEW, mix).normalize();
+  // tipped well off the blast camera's up axis: nearer edge-on than this and a
+  // flat ring reads as a plate the debris is sitting on
   const shock = flatFx(shockTex(), 0xffd9a0, 0);
-  shock.quaternion.setFromUnitVectors(V3(0, 0, 1), ringNormal(0.22));
+  shock.quaternion.setFromUnitVectors(V3(0, 0, 1), ringNormal(0.40));
   const shock2 = flatFx(shockTex(), 0xffe8c8, 0);
-  shock2.quaternion.setFromUnitVectors(V3(0, 0, 1), ringNormal(0.55));
+  shock2.quaternion.setFromUnitVectors(V3(0, 0, 1), ringNormal(0.66));
   ringRig.add(shock, shock2);
+
+  // Once we are clear, the wreck is scenery, and it needs its own copy: the
+  // blast rings are nearly edge-on to the escape camera, which turns them into
+  // a stripe. This one is tipped to read as a ring, parked low and left.
+  const wreck = new THREE.Group();
+  scene.add(wreck);
+  const wreckRing = flatFx(shockTex(), 0xff9438, 0);
+  wreckRing.rotation.set(-1.02, 0.24, 0.16);
+  wreckRing.scale.set(1220, 1220, 1);
+  const wreckGlow = spark(900, fireTex(), 0xff6a18, 0);
+  wreck.add(wreckRing, wreckGlow);
 
   /* --- the ships --------------------------------------------------- */
   const SHIP = 3.0;   // ships are LEGO-set scale; these shots need them bigger
@@ -516,14 +563,18 @@ export async function build(ctx) {
   const ships = [fal, ...xws];
   const FAL_LIFT = 9;   // the Falcon is anchored on its keel, not its centre
 
-  // beat 3: described relative to the locked-off camera — zf in front of the
-  // lens, xf right, yf up, each a quadratic in (t - pass time).
+  // Beat 3: described relative to the locked-off camera — zf in front of the
+  // lens, xf right, yf up, each a quadratic in (t - pass time). `t0` is when the
+  // hull appears out of the fire, about a second and a third before it passes,
+  // which is four hundred units out — far enough to read as emerging, close
+  // enough that it is already a shape rather than a speck. Lateral offsets stay
+  // small so every pass crosses the fireball and silhouettes against it.
   const RUN = [
-    { ship: fal, t: 13.5, z: [100, -190, 5], x: [62, 78, -3], y: [-26, -26, -0.6], bank: 0.85 },
-    { ship: xws[0], t: 14.15, z: [120, -215, 6], x: [-74, -96, 4], y: [36, 22, -0.5], bank: -0.7 },
-    { ship: xws[1], t: 14.7, z: [104, -205, 6], x: [70, 104, -4], y: [-40, 20, 0.4], bank: 0.65 },
-    { ship: xws[2], t: 15.2, z: [136, -225, 6], x: [-58, -88, 3], y: [-18, -28, -0.4], bank: -0.55 },
-    { ship: xws[3], t: 15.7, z: [150, -235, 6], x: [46, 82, -3], y: [50, 26, 0.5], bank: 0.5 },
+    { ship: xws[0], t0: 10.25, t: 11.4, z: [148, -212, 6], x: [-28, -80, 3], y: [24, 16, -0.4], bank: -0.6 },
+    { ship: xws[1], t0: 10.95, t: 12.3, z: [132, -204, 6], x: [36, 86, -3], y: [-28, 18, 0.4], bank: 0.6 },
+    { ship: fal, t0: 11.95, t: 13.4, z: [110, -172, 4], x: [8, 84, -3], y: [-14, -26, -0.6], bank: 0.95 },
+    { ship: xws[2], t0: 13.2, t: 14.5, z: [104, -198, 6], x: [-32, -78, 3], y: [-6, -28, -0.4], bank: -0.55 },
+    { ship: xws[3], t0: 14.2, t: 15.4, z: [116, -202, 6], x: [24, 72, -3], y: [32, 22, 0.45], bank: 0.5 },
   ];
   const runPaths = RUN.map((r) => (tt) => {
     const u = tt - r.t;
@@ -533,14 +584,15 @@ export async function build(ctx) {
       .addScaledVector(UP3, r.y[0] + r.y[1] * u + r.y[2] * u * u);
   });
 
-  // beat 4/5: the formation, camera-relative again. A little yaw and pitch on
-  // each hull turns a dull tail-on view into a three-quarter one.
+  // Beat 4/5: the formation, camera-relative. Dead astern the Falcon is a grey
+  // disc, so every hull carries a big yaw for the hold — enough to show a flank
+  // and the fork — and the yaw eases out as they line up for the jump.
   const FORM = [
-    { ship: fal, x: 44, y: -30, z: 190, ry: 0.34, rx: -0.13 },
-    { ship: xws[0], x: -86, y: 16, z: 250, ry: -0.2, rx: -0.08 },
-    { ship: xws[1], x: 126, y: 34, z: 340, ry: 0.16, rx: -0.06 },
-    { ship: xws[2], x: -148, y: -14, z: 300, ry: -0.26, rx: -0.05 },
-    { ship: xws[3], x: 20, y: 50, z: 430, ry: 0.1, rx: -0.04 },
+    { ship: fal, x: -26, y: -15, z: 205, ry: 0.66 },
+    { ship: xws[0], x: -120, y: 27, z: 330, ry: 0.52 },
+    { ship: xws[1], x: 98, y: 33, z: 302, ry: 0.58 },
+    { ship: xws[2], x: 172, y: -46, z: 428, ry: 0.46 },
+    { ship: xws[3], x: -32, y: 57, z: 470, ry: 0.5 },
   ];
 
   /* --- lightspeed -------------------------------------------------- */
@@ -573,16 +625,16 @@ export async function build(ctx) {
     { t: DET + 3.4, sfx: 'bigExplosion', opts: { gain: 0.5 } },
     { t: DET + 4.4, sfx: 'explosion', opts: { gain: 0.4 } },
     { t: OUT + 0.15, sfx: 'engineWhoosh', opts: { gain: 0.5, dur: 2.6 } },
-    { t: 12.3, sfx: 'enginePass', opts: { gain: 0.6, dur: 2.4, from: -0.5, to: 0.5 } },
-    { t: 13.0, sfx: 'enginePass', opts: { gain: 0.95, dur: 1.3, from: -0.8, to: 0.9, pitch: 0.8 } },
-    { t: 13.8, sfx: 'enginePass', opts: { gain: 0.7, dur: 0.9, from: 0.7, to: -0.8 } },
-    { t: 14.35, sfx: 'enginePass', opts: { gain: 0.7, dur: 0.9, from: -0.8, to: 0.8 } },
-    { t: 14.85, sfx: 'enginePass', opts: { gain: 0.65, dur: 0.9, from: 0.8, to: -0.7 } },
-    { t: 15.35, sfx: 'enginePass', opts: { gain: 0.6, dur: 1.0, from: -0.6, to: 0.8 } },
+    // one pass per hull, panned the way it crosses; the Falcon is the loud one
+    { t: 10.95, sfx: 'enginePass', opts: { gain: 0.6, dur: 1.1, from: 0.4, to: -0.8 } },
+    { t: 11.85, sfx: 'enginePass', opts: { gain: 0.65, dur: 1.1, from: -0.5, to: 0.8 } },
+    { t: 12.7, sfx: 'enginePass', opts: { gain: 0.95, dur: 1.6, from: -0.7, to: 0.9, pitch: 0.8 } },
+    { t: 14.05, sfx: 'enginePass', opts: { gain: 0.7, dur: 1.0, from: 0.3, to: -0.85 } },
+    { t: 14.95, sfx: 'enginePass', opts: { gain: 0.65, dur: 1.0, from: -0.4, to: 0.85 } },
     { t: CALM + 0.3, sfx: 'ionDrone', opts: { gain: 0.24, dur: 6.4 } },
     { t: CALM + 0.9, sfx: 'crowdCheer', opts: { gain: 0.17, dur: 5.2, send: 0.7 } },
     { t: SNAP - 0.15, sfx: 'engineWhoosh', opts: { gain: 0.55, dur: 1.9 } },
-    { t: JUMP - 1.3, sfx: 'hyperspaceJump', opts: { gain: 0.95, charge: 1.3 } },
+    { t: JUMP - 1.3, sfx: 'hyperspaceJump', opts: { gain: 0.95, send: 0.6 } },
     { t: JUMP + 0.05, sfx: 'rumbleSub', opts: { gain: 0.8, dur: 2.4 } },
     { t: DROP - 0.05, sfx: 'engineWhoosh', opts: { gain: 0.3, dur: 1.5 } },
     { t: TITLE + 0.1, sfx: 'ionDrone', opts: { gain: 0.14, dur: 6.8 } },
@@ -613,35 +665,40 @@ export async function build(ctx) {
 
       const heat = beat(t, 0, DET);
       const flick = 0.84 + 0.16 * Math.sin(t * 19);
-      portCore.scale.setScalar(lerp(3.4, 15, Math.pow(heat, 1.5)) * flick);
-      portCore.material.opacity = lerp(0.55, 1, heat);
-      portHalo.scale.setScalar(lerp(17, 210, Math.pow(heat, 1.45)) * flick);
-      portHalo.material.opacity = lerp(0.5, 1, heat);
+      portCore.scale.setScalar(lerp(9, 20, Math.pow(heat, 1.4)) * flick);
+      portCore.material.opacity = lerp(0.75, 1, heat);
+      portHalo.scale.setScalar(lerp(52, 230, Math.pow(heat, 1.35)) * flick);
+      portHalo.material.opacity = lerp(0.7, 1, heat);
       const jet = Math.pow(beat(t, 1.3, DET), 1.8) * flick;
       portJet.material.opacity = jet * 0.8;
       portJet.scale.set(7 + jet * 17, 8 + jet * 170, 7 + jet * 17);
       portJet.position.y = portJet.scale.y * 0.5;
       for (const v of vents) {
-        const k = clamp((t - v.t0) / 0.8);
-        v.mesh.material.opacity = k * 0.5 * (0.72 + 0.28 * Math.sin(t * 12 + v.ph));
-        v.mesh.scale.set(v.wide * k, v.len * k, v.wide * k);
-        v.mesh.position.y = v.mesh.scale.y * 0.5;
+        const k = clamp((t - v.t0) / 0.7);
+        const fl = 0.74 + 0.26 * Math.sin(t * 11 + v.ph);
+        for (let j = 0; j < VENT_F.length; j++) {
+          const f = VENT_F[j], s = v.puffs[j];
+          s.position.copy(v.dir).multiplyScalar(FLOOR - 8 + f * v.len * k);
+          s.scale.setScalar(v.wide * (1 + f * 2.6) * (0.4 + k * 0.6));
+          s.material.opacity = k * fl * 0.42 * (1 - f * 0.62);
+        }
       }
       for (const e of embers) {
         const k = clamp((t - e.t0) / 0.35);
         e.s.material.opacity = k * (0.42 + 0.3 * Math.sin(t * 7 + e.ph));
       }
       for (const f of chainFx) f.update(t);
+      for (const m of chainBalls) m.opacity *= 0.34;
       chainFlare.update(t);
 
       // practicals
-      portLight.intensity = alive ? lerp(2600, 16000, Math.pow(heat, 1.3)) : 0;
+      portLight.intensity = alive ? lerp(700, 4200, Math.pow(heat, 1.3)) : 0;
       let bw = 0, bi = -1;
       for (let i = 0; i < chain.length; i++) {
         const w = clamp(1 - Math.abs(t - chain[i].t) / 0.5) * Math.min(1, chain[i].size / 44);
         if (w > bw) { bw = w; bi = i; }
       }
-      chainLight.intensity = alive ? bw * 26000 : 0;
+      chainLight.intensity = alive ? bw * 7000 : 0;
       if (bi >= 0) chainLight.position.copy(chainPos[bi]);
 
       /* ---- the blast --------------------------------------------- */
@@ -650,27 +707,43 @@ export async function build(ctx) {
         burst.userData.setT(clamp(boom / 5.0));
         for (const o of burstSoot) o.visible = false;
         for (const o of burstRings) o.visible = false;
-        for (const o of burstGlare) o.material.opacity *= 0.55;
+        for (const o of burstWash) o.material.opacity *= 0.22;
+        for (const o of burstShell) o.material.opacity *= 0.5;
         for (const f of secs) f.update(t);
+        for (const m of secBalls) m.opacity *= 0.22;
         secFlares.update(t);
         for (const s of storm) s.update(t);
         // core: a white flare that cools into a huge lumpy fireball, then into
         // the wall of fire the rebels fly out of
-        const hk = clamp(boom / 0.8);
-        hot.material.opacity = boom < 0 ? 0 : Math.pow(1 - hk, 2.2);
-        hot.scale.setScalar(lerp(240, 1300, Math.pow(hk, 0.55)));
+        // it has to be wider than the station was within a couple of frames,
+        // or the cut from a 640-wide sphere to a debris cloud reads as a shrink
+        const hk = clamp(boom / 0.75);
+        hot.material.opacity = boom < 0 ? 0 : Math.pow(1 - hk, 2.4);
+        hot.scale.setScalar(lerp(430, 1500, Math.pow(hk, 0.42)));
+        // Two additive fire clouds stacked at full strength saturate the middle
+        // of the frame to flat white, and white for two seconds is a hole, not
+        // an explosion. The core stays blown for about a second — long enough
+        // to feel like the biggest image in the film — then cools hard into
+        // deep orange so the texture and the bricks come back.
         fireball.material.opacity = boom < 0 ? 0
-          : Math.min(1, boom * 3.5) * lerp(0.95, 0.52, smoothstep(0.6, 4.5, boom))
-            * (1 - smoothstep(9.5, 12.2, boom));
-        fireball.scale.setScalar(lerp(480, 1240, Math.pow(clamp(boom / 4), 0.5))
-          * lerp(1, 0.78, smoothstep(5, 12, boom)));
-        fireball.material.color.copy(FIREC).lerp(EMBERC, smoothstep(1.5, 7, boom));
+          : Math.min(1, boom * 7) * lerp(1, 0.44, smoothstep(0.55, 3.1, boom))
+            * (1 - smoothstep(9.5, 12.4, boom));
+        // it only collapses part of the way: the last hulls out still have to
+        // have something to be silhouetted against six seconds later
+        const fbR = lerp(780, 1660, Math.pow(clamp(boom / 2.6), 0.5))
+          * lerp(1, 0.72, smoothstep(3.5, 12, boom));
+        fireball.scale.setScalar(fbR);
+        fireCol.copy(FIREC).lerp(EMBERC, smoothstep(0.35, 2.5, boom));
+        fireball.material.color.copy(fireCol);
+        fireball.material.rotation = -0.32 - boom * 0.035;
+        fireball2.material.opacity = fireball.material.opacity * 0.6;
+        fireball2.scale.setScalar(fbR * 0.72);
+        fireball2.material.rotation = 1.9 + boom * 0.055;
       }
 
       /* ---- the shock ring ---------------------------------------- */
-      const ringR = 140 + 1210 * (1 - Math.exp(-Math.max(boom, 0) / 1.25));
-      const ringFade = boom < 0 ? 0
-        : clamp(boom / 0.2) * lerp(1, 0.34, smoothstep(0.5, 9.0, boom)) * (1 - beat(t, SNAP, SNAP + 0.8));
+      const ringR = 300 + 1320 * (1 - Math.exp(-Math.max(boom, 0) / 0.85));
+      const ringFade = boom < 0 ? 0 : clamp(boom / 0.2) * lerp(1, 0.42, smoothstep(0.5, 9.0, boom));
       ringCol.copy(HOTC).lerp(COOLC, smoothstep(0.1, 4.0, boom));
       shock.material.color.copy(ringCol);
       shock2.material.color.copy(ringCol);
@@ -678,17 +751,34 @@ export async function build(ctx) {
       shock.material.opacity = ringFade * 0.9;
       shock2.scale.set(ringR * 0.6, ringR * 0.6, 1);
       shock2.material.opacity = ringFade * 0.4 * (1 - smoothstep(1.6, 6.5, boom));
-      ringRig.visible = ringFade > 0.004;
+      ringRig.visible = t < CALM && ringFade > 0.004;
+
+      // and its stand-in once we are away from it — strictly after the cut, it
+      // is placed relative to the beat-4 camera and lands nowhere near beat 3
+      const far = smoothstep(CALM + 0.1, CALM + 1.8, t) * (1 - smoothstep(SNAP + 0.4, JUMP - 0.4, t));
+      wreck.visible = far > 0.004;
+      wreckRing.material.opacity = far * 0.46;
+      wreckGlow.material.opacity = far * 0.14;
 
       /* ---- light ------------------------------------------------- */
       blastLight.intensity = boom < 0 ? 0
         : 17 * Math.pow(clamp(1 - boom / 0.5), 1.5) + 6.5 * Math.pow(clamp(1 - boom / 13), 1.3);
       const silhouette = smoothstep(DET - 0.1, DET + 0.4, t) * (1 - smoothstep(CALM - 1.5, CALM + 0.5, t));
-      const open = 1 - heat;   // beat 1 needs more bounce to read at all
-      lights.key.intensity = KEY * lerp(1, 0.26, silhouette);
-      lights.fill.intensity = FILL * lerp(1, 0.45, silhouette) * (1 + open * 1.6);
-      lights.rim.intensity = RIM * lerp(1, 2.3, silhouette);
-      lights.amb.intensity = AMB * lerp(1, 0.5, silhouette) * (1 + open * 1.8);
+      const open = 1 - heat;   // beat 1 needs a little more bounce to read at all
+      // The quiet beat is the only shot lit for the models rather than for the
+      // fire, and it is the one that catches the rig out: some of the baked hull
+      // shells answer to the rim light on faces the lens can see, so at its rig
+      // strength of 1.6 a white X-wing turns into one blown highlight. It comes
+      // most of the way off here and the key carries the shot; during the blast
+      // the dedicated back light does the edge work instead of a rim boost.
+      const quiet = smoothstep(CALM - 1.0, CALM + 1.4, t) * (1 - smoothstep(DROP - 0.4, DROP, t));
+      lights.key.intensity = KEY * lerp(1, 0.3, silhouette) * lerp(1, 0.8, quiet);
+      lights.fill.intensity = FILL * lerp(1, 0.4, silhouette) * (1 + open * 0.8) * lerp(1, 1.6, quiet);
+      lights.rim.intensity = RIM * lerp(1, 1.25, silhouette) * lerp(1, 0.12, quiet);
+      lights.amb.intensity = AMB * lerp(1, 0.45, silhouette) * (1 + open * 1.0) * lerp(1, 1.35, quiet);
+      // the blast itself as a back light, so the escaping hulls get hot edges
+      backLight.intensity = 4.6 * silhouette;
+      wreckLight.intensity = quiet * 1.1;
 
       /* ---- ships ------------------------------------------------- */
       const flying = t >= OUT - 0.5;
@@ -701,23 +791,27 @@ export async function build(ctx) {
           const r = RUN[i];
           const p = runPaths[i];
           const zf = p(t).sub(CAM3).dot(VIEW3);
-          r.ship.visible = zf > 16;
+          r.ship.visible = t > r.t0 && zf > 16;
           if (!r.ship.visible) continue;
           r.ship.scale.setScalar(SHIP);
           flyAlong(r.ship, t, p, { bank: r.bank * 4, wobble: 0.02 });
-          r.ship.userData.setThrottle(1.35);
+          r.ship.userData.setThrottle(0.78);
         }
       } else if (flying) {
         /* formation, then the snap and the jump */
         const run = clamp((t - (SNAP + 0.35)) / (JUMP - SNAP - 0.35));
         const away = 1 + 15 * Math.pow(run, 3.1);
         const stretch = Math.pow(clamp((t - (JUMP - 0.18)) / 0.5), 1.6);
-        const thr = t < SNAP ? 0.85 + 0.09 * Math.sin(t * 2.3)
-          : lerp(0.9, 1.4, smoothstep(SNAP, SNAP + 1.6, t));
+        // an X-wing seen down its four bells blooms into one white blob above
+        // about a third throttle, and the Falcon's engine bar is worse
+        const thr = t < SNAP ? 0.34 + 0.04 * Math.sin(t * 2.3)
+          : lerp(0.4, 1.1, smoothstep(SNAP, SNAP + 1.6, t));
+        // the hold is three-quarter; by the jump every hull is dead ahead
+        const turn = 1 - smoothstep(SNAP - 1.0, SNAP + 0.7, t);
         for (let i = 0; i < FORM.length; i++) {
           const f = FORM[i];
           const s = f.ship;
-          s.visible = t < JUMP + 0.42;
+          s.visible = t < JUMP + 0.1;
           if (!s.visible) continue;
           const drift = 1 + 0.05 * Math.sin(t * 0.5 + i * 1.9);
           s.position.set(
@@ -727,11 +821,11 @@ export async function build(ctx) {
           );
           s.rotation.set(
             noise(t * 0.27 + i, 3) * 0.05,
-            noise(t * 0.24 + i, 4) * 0.05,
-            noise(t * 0.21 + i, 5) * 0.09,
+            f.ry * turn + noise(t * 0.24 + i, 4) * 0.05,
+            noise(t * 0.21 + i, 5) * 0.09 - f.ry * turn * 0.22,
           );
           s.scale.set(SHIP, SHIP, SHIP * (1 + 26 * stretch));
-          s.userData.setThrottle(thr + stretch * 1.2);
+          s.userData.setThrottle(thr);
         }
       }
 
@@ -744,10 +838,10 @@ export async function build(ctx) {
         tunnel.userData.update(t - SNAP);
         tunnel.userData.setStretch(warp);
         // the tube is written for a POV shot; pull it back so it never clips
-        tStreak.material.opacity *= 0.45;
-        for (const s of tHalo) s.material.opacity *= 0.3;
+        tStreak.material.opacity *= 0.42;
+        for (const s of tHalo) s.material.opacity *= 0.22;
       }
-      chroma(c.stage, warp * 1.3 * (t > JUMP - 0.8 ? 1 : 0.25));
+      chroma(c.stage, warp * 0.8 * (t > JUMP - 0.8 ? 1 : 0.25));
 
       /* ---- the card ---------------------------------------------- */
       const res = smoothstep(TITLE, TITLE + 1.6, t);
@@ -756,7 +850,11 @@ export async function build(ctx) {
       creditCard.material.opacity = smoothstep(TITLE + 2.7, TITLE + 4.1, t);
       cardRig.visible = t > TITLE - 0.1;
       sky.visible = t < DROP;
-      if (sky.visible) sky.userData.update(t);
+      if (sky.visible) {
+        sky.userData.update(t);
+        skyBand.opacity *= 0.06;
+        for (const m of skyClouds) m.opacity *= 0.16;
+      }
       tStars.visible = t > DROP - 0.4;
 
       /* ---- camera ------------------------------------------------ */
@@ -766,12 +864,12 @@ export async function build(ctx) {
         const k2 = beat(t, DET, OUT);
         const shake = 0.55 * clamp(1 - Math.abs(boom) / 1.7) + 0.3 * chainShake(t, chain);
         const dist = t < DET
-          ? lerp(R + 20, 1180, Math.pow(k1, 1.75))
-          : 1180 + 970 * Math.pow(k2, 2.2);
+          ? lerp(R + 185, 1060, Math.pow(k1, 1.55))
+          : 1060 + 1090 * Math.pow(k2, 2.1);
         const lon = t < DET
-          ? PORT_LON + lerp(0.145, 0.40, smoothstep(0, 1, k1))
-          : PORT_LON + lerp(0.40, 0.50, k2);
-        const lat = t < DET ? lerp(0.030, 0.275, Math.pow(k1, 1.15)) : lerp(0.275, 0.20, k2);
+          ? PORT_LON + lerp(0.115, 0.41, smoothstep(0, 1, k1))
+          : PORT_LON + lerp(0.41, 0.50, k2);
+        const lat = t < DET ? lerp(0.115, 0.27, Math.pow(k1, 1.1)) : lerp(0.27, 0.20, k2);
         cam.position.copy(sph(lat, lon, dist));
         const sh = 3.5 * shake * (1 + dist * 0.006);
         cam.position.x += noise(t * 2.6, 1) * sh;
@@ -790,13 +888,14 @@ export async function build(ctx) {
         cam.rotateZ(-0.03 + k * 0.05);
         cam.fov = lerp(52, 48, k);
       } else if (t < DROP) {
-        // calm, then the jump: locked to the axis of travel
+        // calm: a slow slide across the formation, which is all the parallax a
+        // shot this quiet needs. Then the jump, locked to the axis of travel.
         const k = beat(t, CALM, SNAP);
         const push = smoothstep(SNAP, JUMP, t);
         cam.position.set(
-          CAM4.x + noise(t * 0.19, 7) * 8,
-          CAM4.y + 5 + noise(t * 0.17, 8) * 6,
-          CAM4.z + 34 * k - push * 110,
+          CAM4.x - 28 + 56 * k + noise(t * 0.19, 7) * 7,
+          CAM4.y + 14 - 18 * k + noise(t * 0.17, 8) * 5,
+          CAM4.z + 40 * k - push * 110,
         );
         cam.lookAt(cam.position.x + noise(t * 0.15, 9) * 5, cam.position.y - 3, cam.position.z - 400);
         cam.rotateZ(0.02 * Math.sin(t * 0.32) + push * 0.03);
@@ -818,11 +917,8 @@ export async function build(ctx) {
         tunnel.position.copy(cam.position);
         tunnel.quaternion.copy(cam.quaternion);
       }
-      if (t < CALM) ringRig.position.set(0, 0, 0);
-      else {
-        // once we are away, the wreck is a backdrop: park it where it composes
-        ringRig.position.copy(cam.position)
-          .add(V3(-2150 + noise(t * 0.12, 31) * 40, -560, -7000));
+      if (wreck.visible) {
+        wreck.position.copy(cam.position).add(V3(-4600, -700, -10500));
       }
 
       /* ---- post -------------------------------------------------- */
@@ -830,16 +926,16 @@ export async function build(ctx) {
         ...chain.filter((_, i) => i % 4 === 0).map((ch) => ({
           t: ch.t, dur: 0.24, amount: 0.05 + Math.min(ch.size, 60) / 620, color: 0xffdca8,
         })),
-        { t: DET, dur: 0.55, amount: 1.0, pow: 3.0, color: 0xffffff },
-        { t: DET + 1.05, dur: 0.5, amount: 0.36, pow: 2.4, color: 0xffe2b0 },
-        { t: DET + 3.4, dur: 0.5, amount: 0.2, pow: 2.4, color: 0xffd8a0 },
-        { t: JUMP, dur: 0.5, amount: 1.0, pow: 2.6, color: 0xffffff },
-        { t: DROP - 0.05, dur: 0.62, amount: 0.95, pow: 2.2, color: 0xf4faff },
+        { t: DET, dur: 0.42, amount: 1.0, pow: 3.4, color: 0xffffff },
+        { t: DET + 1.05, dur: 0.45, amount: 0.3, pow: 2.6, color: 0xffe2b0 },
+        { t: DET + 3.4, dur: 0.45, amount: 0.17, pow: 2.6, color: 0xffd8a0 },
+        { t: JUMP - 0.02, dur: 0.4, amount: 0.92, pow: 3.0, color: 0xffffff },
+        { t: DROP - 0.05, dur: 0.55, amount: 0.9, pow: 2.4, color: 0xf4faff },
       ]);
       c.stage.bloom.strength = t < DET ? 0.58 + 0.12 * heat
-        : t < CALM ? 0.68 + 0.42 * Math.pow(clamp(1 - boom / 5), 1.6)
-          : t < DROP ? lerp(0.6, 0.8, smoothstep(SNAP, JUMP, t))
-            : lerp(0.68, 0.58, smoothstep(END - 2.5, END - 1.0, t));
+        : t < CALM ? 0.66 + 0.4 * Math.pow(clamp(1 - boom / 5), 1.6)
+          : t < DROP ? lerp(0.36, 0.3, smoothstep(SNAP, JUMP, t))
+            : lerp(0.66, 0.56, smoothstep(END - 2.5, END - 1.0, t));
     },
   };
 }

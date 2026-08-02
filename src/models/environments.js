@@ -1280,7 +1280,7 @@ export function twinSuns({
  *
  * @param {object} o {radius, seed, seg, texSize, greeble}
  * @returns {THREE.Group} userData: {radius, trenchRadius, trenchDepth,
- *   trenchWidth, dish, superlaser, lights, update(t)}
+ *   trenchWidth, dishRadius, dish, dishDir, superlaser, lights, update(t)}
  */
 export function battleStation({ radius = 420, seed = 17, seg = 240, texSize = 2048, greeble = 1 } = {}) {
   const g = new THREE.Group();
@@ -1352,9 +1352,9 @@ export function battleStation({ radius = 420, seed = 17, seg = 240, texSize = 20
   // Deliberately darker than the hull's mid-tone and rougher than you would
   // guess: a greeble box shows the key light a flat face while the sphere
   // around it curves away, so matching albedo still reads as bright confetti.
-  const plateMat = mat(0x686e74, { rough: 0.78, metal: 0.14 });
-  const darkMat = mat(0x494f55, { rough: 0.84, metal: 0.1 });
-  const pipeMat = mat(0x7e848a, { rough: 0.6, metal: 0.35 });
+  const plateMat = mat(0x767c82, { rough: 0.76, metal: 0.15 });
+  const darkMat = mat(0x50565c, { rough: 0.82, metal: 0.1 });
+  const pipeMat = mat(0x878d93, { rough: 0.55, metal: 0.35 });
   const greebleRoot = new THREE.Group();
   const put = (mesh, dir, r, spinAngle) => {
     mesh.position.copy(dir).multiplyScalar(r);
@@ -1399,9 +1399,11 @@ export function battleStation({ radius = 420, seed = 17, seg = 240, texSize = 20
       if (Math.abs(th2 - Math.PI / 2) < halfW + wall * 3) continue;
       const dir = dirAt(th2, lon2);
       const r = rFn(th2, lon2, dir.x, dir.y, dir.z);
+      // relief on a hull this size reads through cast shadow, not albedo, so
+      // the tall blocks are worth their height
       const lowProfile = rand() < 0.35;
       const w = 4 + rand() * 11, d2 = 4 + rand() * 11;
-      const hgt = lowProfile ? 1.1 + rand() * 1.9 : 2.4 + rand() * rand() * 8;
+      const hgt = lowProfile ? 1.2 + rand() * 2.2 : 3.4 + rand() * rand() * 11;
       put(boxMesh(w, hgt, d2, rand() < 0.3 ? darkMat : plateMat), dir, r - 0.3, rand() * TAU);
       if (!lowProfile && rand() < 0.35) {
         put(boxMesh(w * 0.55, 0.5 + rand(), d2 * 0.55, darkMat), dir, r + hgt - 0.6, rand() * TAU);
@@ -1569,6 +1571,10 @@ export function battleStation({ radius = 420, seed = 17, seg = 240, texSize = 20
   ud.trenchWidth = trenchWidth;
   ud.dishRadius = dishRimR;
   ud.dish = dishFx;
+  /** Unit vector to the dish. Extruded greeble is concentrated within roughly
+   *  ±1.7 rad of this longitude, so face this side at camera for the detailed
+   *  hemisphere; the far side is panel texture only. */
+  ud.dishDir = craterDir.clone();
   ud.superlaser = dishFx.userData.lens;
   ud.lights = lights;
   ud.update = (t) => {
@@ -2234,9 +2240,13 @@ export function blastDoor({ width = 12, height = 9, seed = 44, label = 'SEAL 7' 
  * `practicals` adds that many bay floods, for shots that sit inside the roofed
  * bay where a single exterior key cannot reach.
  *
+ * Camera notes: the bay is roofed on all sides bar the `+Z` end, so put the
+ * camera inside it — `(0, 5.5, depth/2 - 2)` looking down -Z frames the cradle
+ * against the launch tube.
+ *
  * @param {object} o {width, height, depth, seed, practicals}
- * @returns {THREE.Group} userData: {width, height, depth, podAnchor, clamps,
- *   lights, lamps, setClamps(0..1), update(t)}
+ * @returns {THREE.Group} userData: {width, height, depth, tubeRadius, podAnchor,
+ *   clamps, clamped, lights, lamps, setClamps(0..1), update(t)}
  */
 export function podBay({ width = 20, height = 11, depth = 26, seed = 55, practicals = 0 } = {}) {
   const g = new THREE.Group();
@@ -2288,7 +2298,15 @@ export function podBay({ width = 20, height = 11, depth = 26, seed = 55, practic
   for (let i = 0; i < 4; i++) {
     stat.add(at(blk(width, 0.7, 1.0, trim), 0, height - 0.25, -hd + 2 + i * (depth - 4) / 3));
   }
-  stat.add(at(flat(width - 5, 0.34, depth - 4, cyan), 0, height - 0.5, 0));
+  // ceiling lighting as discrete panels: one slab this size reads as a lit
+  // ceiling-shaped hole rather than as light fittings
+  const panelLit = glow(0xdcf3ff);
+  for (let i = 0; i < 4; i++) {
+    const z = -hd + 3.2 + i * (depth - 6.4) / 3;
+    stat.add(at(flat(width - 7, 0.3, 2.6, panelLit), 0, height - 0.5, z));
+    stat.add(at(blk(width - 6.2, 0.42, 0.5, trim), 0, height - 0.56, z - 1.7));
+    stat.add(at(blk(width - 6.2, 0.42, 0.5, trim), 0, height - 0.56, z + 1.7));
+  }
 
   /* ---- launch tube at -Z ---- */
   const tubeR = Math.min(hw - 1.2, height * 0.44);
@@ -2298,18 +2316,25 @@ export function podBay({ width = 20, height = 11, depth = 26, seed = 55, practic
     const t = norm(new THREE.TorusGeometry(tubeR, 0.55, 8, 40));
     return t;
   });
-  tube.add(new THREE.Mesh(ringGeo, trim));
-  const ring2 = new THREE.Mesh(ringGeo, dark);
-  ring2.scale.setScalar(1.11);
+  tube.add(new THREE.Mesh(ringGeo, silver));
+  const ring2 = new THREE.Mesh(ringGeo, trim);
+  ring2.scale.setScalar(1.09);
   tube.add(ring2);
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * TAU;
     tube.add(at(flat(1.0, 1.0, 0.7, i % 4 === 0 ? silver : trim),
       Math.cos(a) * tubeR * 1.06, Math.sin(a) * tubeR * 1.06, 0.3));
+    // running lights around the aperture so it reads as a launch tube
+    if (i % 2 === 0) {
+      tube.add(at(flat(0.4, 0.4, 0.3, amber),
+        Math.cos(a) * tubeR * 0.86, Math.sin(a) * tubeR * 0.86, 0.5));
+    }
   }
-  // blast shield behind the ring so the bay doesn't read as open space
+  // The sealed blast hatch behind the ring. Flat black here reads as a hole
+  // punched in the set, so it gets real plating and iris leaves.
   const shield = new THREE.Mesh(
-    rawGeo('podshield', () => norm(new THREE.CircleGeometry(1, 32))), black,
+    rawGeo('podshield', () => norm(new THREE.CircleGeometry(1, 32))),
+    mat(0xffffff, { map: platingTex(4), rough: 0.6, metal: 0.25 }),
   );
   shield.scale.setScalar(tubeR * 0.98);
   shield.position.z = -0.8;
@@ -2318,6 +2343,8 @@ export function podBay({ width = 20, height = 11, depth = 26, seed = 55, practic
     const a = (i / 6) * TAU;
     tube.add(at(rot(flat(tubeR * 1.7, 0.5, 0.4, dark), 0, 0, a), 0, 0, -0.6));
   }
+  // hub cap over the middle of the iris
+  tube.add(at(rot(pipeMesh(tubeR * 0.2, 0.4, dark, 12), Math.PI / 2, 0, 0), 0, 0, -0.45));
   stat.add(tube);
 
   /* ---- cradle ---- */
@@ -2491,8 +2518,8 @@ function rockMesh(r, rand, material) {
  * is exact rather than approximate.
  *
  * @param {object} o {size, seg, seed, amp, rocks, bones}
- * @returns {THREE.Group} userData: {size, yRange, heightAt(x,z), ground,
- *   normalAt(x,z)}
+ * @returns {THREE.Group} userData: {size, width, length, yRange, ground,
+ *   heightAt(x,z), normalAt(x,z)}
  */
 export function desert({ size = 900, seg = 240, seed = 77, amp = 13, rocks = 44, bones = 3 } = {}) {
   const g = new THREE.Group();
@@ -2760,7 +2787,8 @@ export function dunesBackdrop({ seed = 91, layers = 4, radius = 1500, haze = 0xc
  *
  * Anchor: floor at `y = 0`, centred on X, **mouth at `z = 0` and far end at
  * `z = -length`**. Fly a camera from `(0, ~12, +40)` straight down -Z. The walls
- * are `width` apart and `userData.height` tall.
+ * are `width` apart and `userData.height` tall. The only geometry below `y = 0`
+ * is the exhaust port's recessed well, which sinks to about `y = -2.7`.
  *
  * Camera notes: `userData.cameraY` (12) is the sweet spot — low enough that the
  * walls tower, high enough to clear the floor conduit. Keep |x| under 10 so the
@@ -3111,12 +3139,13 @@ export function trench({
 /**
  * The armoured plain above the trench, for the dive-in shot.
  *
- * Anchor: top surface at `y = 0`, centred on X/Z. Set `slotWidth` to leave a
- * gap along the Z axis so the plate can straddle a `trench()` placed at
- * `y = -trench.userData.height`.
+ * Anchor: deck plating at `y = 0`, centred on X/Z; greeble, superstructures and
+ * sensor towers stand above it (up to roughly `y = 66`), and the plate itself is
+ * 3 deep. Set `slotWidth` to leave a gap along the Z axis so the plate can
+ * straddle a `trench()` placed at `y = -trench.userData.height`.
  *
  * @param {object} o {size, seed, slotWidth, density}
- * @returns {THREE.Group} userData: {size, slotWidth, lights, update(t)}
+ * @returns {THREE.Group} userData: {size, slotWidth, lights, vents, update(t)}
  */
 export function stationSurface({ size = 900, seed = 131, slotWidth = 0, density = 1 } = {}) {
   const g = new THREE.Group();
@@ -3137,13 +3166,8 @@ export function stationSurface({ size = 900, seed = 131, slotWidth = 0, density 
       gapColor: css(0x4e545a),
       ventColor: css(0x3f4449),
     });
-    // a couple of service walkways crossing the plating
-    ctx.fillStyle = css(0x646a71);
-    for (let i = 0; i < 2; i++) {
-      const ww = 12 + r2() * 8;
-      ctx.fillRect(r2() * w, 0, ww, h);
-      ctx.fillRect(0, r2() * h, w, ww);
-    }
+    // No walkways drawn here: anything long and straight in a tiling texture
+    // repeats into an obvious grid across a plain this size. They are geometry.
   }, { repeat: [size / 150, size / 150] });
 
   const hullA = mat(0x9298a0, { rough: 0.62, metal: 0.2 });
@@ -3168,15 +3192,58 @@ export function stationSurface({ size = 900, seed = 131, slotWidth = 0, density 
 
   const inSlot = (x) => slotWidth > 0 && Math.abs(x) < slotHalf + 3;
 
+  // Superstructures first: a plain this wide needs features big enough to read
+  // as scale references while the camera is still high up in the dive.
+  for (let i = 0; i < Math.round(9 * density); i++) {
+    // kept well inside the plate so nothing overhangs the deck edge
+    const cx = (rand() - 0.5) * size * 0.68;
+    const cz = (rand() - 0.5) * size * 0.68;
+    if (slotWidth > 0 && Math.abs(cx) < slotHalf + 40) continue;
+    const along = rand() < 0.5;
+    const len = 50 + rand() * 130, wide = 22 + rand() * 26;
+    const bw = along ? wide : len, bd = along ? len : wide;
+    const bh = 7 + rand() * 13;
+    stat.add(at(flat(bw + 5, 1.2, bd + 5, deep), cx, 0.6, cz));
+    stat.add(at(flat(bw, bh, bd, rand() < 0.5 ? hullA : hullB), cx, bh / 2 + 0.5, cz));
+    // stepped roof clutter so the top is not a bare slab from above
+    const steps = 3 + Math.round(rand() * 4);
+    for (let k = 0; k < steps; k++) {
+      const sw = bw * (0.16 + rand() * 0.3), sd = bd * (0.16 + rand() * 0.3);
+      const sh = 1.5 + rand() * 5;
+      stat.add(at(flat(sw, sh, sd, rand() < 0.4 ? hullC : deep),
+        cx + (rand() - 0.5) * (bw - sw), bh + sh / 2 + 0.5, cz + (rand() - 0.5) * (bd - sd)));
+    }
+    const pl = pipeMesh(0.8, len * 0.8, metal, 8);
+    pl.rotation.set(along ? Math.PI / 2 : 0, 0, along ? 0 : Math.PI / 2);
+    pl.position.set(cx - (along ? 0 : len * 0.4), bh * 0.55, cz - (along ? len * 0.4 : 0));
+    stat.add(pl);
+  }
+
+  // service walkways as geometry, at irregular offsets — see the texture note
+  for (let i = 0; i < 4; i++) {
+    const along = i % 2 === 0;
+    const off = (rand() - 0.5) * size * 0.78;
+    if (along && slotWidth > 0 && Math.abs(off) < slotHalf + 8) continue;
+    const ww = 5 + rand() * 5;
+    stat.add(along
+      ? at(flat(ww, 0.7, size, deep), off, 0.35, 0)
+      : at(flat(size, 0.7, ww, deep), 0, 0.35, off));
+    for (const s of [-1, 1]) {
+      stat.add(along
+        ? at(blk(0.8, 0.9, size, hullC), off + s * (ww / 2 - 0.4), 0.75, 0)
+        : at(blk(size, 0.9, 0.8, hullC), 0, 0.75, off + s * (ww / 2 - 0.4)));
+    }
+  }
+
   // districts of greeble, matched to the trench walls so the two read as one
-  const nD = Math.round(size * size / 5200 * density);
+  const nD = Math.round(size * size / 3600 * density);
   for (let i = 0; i < nD; i++) {
-    const cx = (rand() - 0.5) * size * 0.97;
-    const cz = (rand() - 0.5) * size * 0.97;
+    const cx = (rand() - 0.5) * size * 0.9;
+    const cz = (rand() - 0.5) * size * 0.9;
     if (inSlot(cx)) continue;
     const spread = 8 + rand() * 26;
     stat.add(at(flat(spread * 1.4, 0.7, spread * (0.7 + rand() * 0.8), deep), cx, 0.35, cz));
-    const n = 4 + Math.round(rand() * 9);
+    const n = 6 + Math.round(rand() * 11);
     for (let k = 0; k < n; k++) {
       const x = cx + (rand() - 0.5) * spread * 1.3;
       const z = cz + (rand() - 0.5) * spread * 1.3;
@@ -3628,8 +3695,12 @@ export function sparkBurst({
 
   const emberGeo = new THREE.BufferGeometry();
   emberGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+  // A 1px line is all WebGL will give us, and that alone reads as a limp
+  // dandelion. The heads are points, which are textured quads, so they carry
+  // most of the brightness.
   const emberMat = new THREE.PointsMaterial({
-    size: 5, sizeAttenuation: false, map: dotTex(0.35, 'star'), color,
+    size: 9, sizeAttenuation: false, map: dotTex(0.35, 'star'),
+    color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.45).getHex(),
     transparent: true, opacity: 1, blending: THREE.AdditiveBlending,
     depthWrite: false, toneMapped: false,
   });
@@ -3637,6 +3708,16 @@ export function sparkBurst({
   embers.frustumCulled = false;
   keep(embers);
   g.add(embers);
+
+  const haloMat = new THREE.PointsMaterial({
+    size: 20, sizeAttenuation: false, map: dotTex(0.08, 'soft'), color,
+    transparent: true, opacity: 1, blending: THREE.AdditiveBlending,
+    depthWrite: false, toneMapped: false,
+  });
+  const halos = new THREE.Points(emberGeo, haloMat);
+  halos.frustumCulled = false;
+  keep(halos);
+  g.add(halos);
 
   const flash = spriteFx(size * 1.6, dotTex(0.1, 'soft'), color, 1);
   g.add(flash);
@@ -3666,7 +3747,9 @@ export function sparkBurst({
     geo.computeBoundingSphere();
     lineMat.opacity = Math.pow(clamp(1 - t / 0.85, 0, 1), 0.8);
     emberMat.opacity = Math.pow(clamp(1 - t, 0, 1), 1.4);
-    emberMat.size = 5 * (1 - t * 0.55);
+    emberMat.size = 9 * (1 - t * 0.5);
+    haloMat.opacity = Math.pow(clamp(1 - t / 0.6, 0, 1), 1.6) * 0.5;
+    haloMat.size = 20 * (1 - t * 0.4);
     flash.material.opacity = Math.pow(clamp(1 - t / 0.14, 0, 1), 1.5);
     flash.scale.setScalar(size * (1 + t * 3));
     return g;
@@ -3692,12 +3775,14 @@ export function laserImpact({ color = 0xff3b1f, size = 3.4, seed = 19 } = {}) {
   g.name = 'laserImpact';
   const hot = new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.55).getHex();
 
-  const flash = spriteFx(size * 2.4, dotTex(0.06, 'soft'), color, 1);
-  const coreS = spriteFx(size * 0.9, dotTex(0.55, 'core'), hot, 1);
+  // the halo is tinted toward the hot colour: a saturated halo outliving the
+  // core leaves a dull maroon bubble with nothing burning inside it
+  const flash = spriteFx(size * 2.4, dotTex(0.06, 'soft'), hot, 1);
+  const coreS = spriteFx(size * 0.9, dotTex(0.55, 'core'), 0xffffff, 1);
   const star = spriteFx(size * 4.2, flareTex(), color, 1);
   const ring = new THREE.Mesh(
     rawGeo('quad', () => new THREE.PlaneGeometry(1, 1)),
-    fx(color, 1, { map: ringTex() }),
+    fx(color, 1, { map: ringTex(true) }),
   );
   keep(ring);
   g.add(flash, coreS, star, ring);
@@ -3734,16 +3819,17 @@ export function laserImpact({ color = 0xff3b1f, size = 3.4, seed = 19 } = {}) {
   const setT = (u) => {
     tNow = clamp(u, 0, 1);
     const t = tNow;
-    flash.material.opacity = Math.pow(clamp(1 - t / 0.5, 0, 1), 1.4);
-    flash.scale.setScalar(size * (1.4 + t * 3.4));
-    coreS.material.opacity = Math.pow(clamp(1 - t / 0.24, 0, 1), 1.2);
-    coreS.scale.setScalar(size * (0.7 + t * 1.4));
+    flash.material.opacity = Math.pow(clamp(1 - t / 0.42, 0, 1), 1.4);
+    flash.scale.setScalar(size * (1.3 + t * 2.1));
+    // the core has to outlive the halo, or the hit has no heat in it
+    coreS.material.opacity = Math.pow(clamp(1 - t / 0.5, 0, 1), 1.1);
+    coreS.scale.setScalar(size * (0.85 + t * 1.1));
     star.material.opacity = Math.pow(clamp(1 - t / 0.4, 0, 1), 1.6) * 0.9;
     star.scale.setScalar(size * (2.6 + t * 6));
     star.material.rotation = t * 1.2;
-    const rs = size * (0.6 + Math.pow(t, 0.5) * 5);
+    const rs = size * (0.6 + Math.pow(t, 0.5) * 4.2);
     ring.scale.set(rs, rs, 1);
-    ring.material.opacity = Math.pow(clamp(1 - t / 0.5, 0, 1), 1.5) * 0.8;
+    ring.material.opacity = Math.pow(clamp(1 - t / 0.44, 0, 1), 1.2);
     scorch.material.opacity = smoothclamp(t / 0.3) * 0.45;
     sparks.userData.setT(clamp(t * 1.3, 0, 1));
     return g;
@@ -3764,7 +3850,12 @@ export function laserImpact({ color = 0xff3b1f, size = 3.4, seed = 19 } = {}) {
  * unrotated. `userData.setThrottle(0..1)` scales length and brightness;
  * `userData.update(t)` adds the flicker.
  *
+ * Built from soft additive ribbons plus a nozzle glow, so it reads the same from
+ * any angle. `radius` sets the plume's width at the nozzle.
+ *
  * @param {object} o {color, length, radius, seed}
+ * @returns {THREE.Group} userData: {length, radius, throttle, setThrottle(0..1),
+ *   update(t)}
  */
 export function engineTrail({ color = 0x7fd8ff, length = 14, radius = 0.8, seed = 23 } = {}) {
   const g = new THREE.Group();
@@ -3779,43 +3870,47 @@ export function engineTrail({ color = 0x7fd8ff, length = 14, radius = 0.8, seed 
       c.translate(0, 0, 0.5);
       return c;
     }),
-    fx(hot, 0.95),
+    fx(hot, 0.6),
   );
-  inner.scale.set(radius * 0.62, radius * 0.62, length * 0.42);
+  // short: this is only the hot throat, and it sits inside the nozzle glow
+  inner.scale.set(radius * 0.55, radius * 0.55, length * 0.26);
   keep(inner);
   g.add(inner);
 
-  const outer = new THREE.Mesh(inner.geometry, fx(color, 0.5));
-  outer.scale.set(radius, radius, length);
-  keep(outer);
-  g.add(outer);
+  // No outer cone. Cone geometry has a knife-sharp silhouette at any opacity,
+  // and that one line was what made the plume read as a solid glass wedge; the
+  // soft ribbons below carry the outline instead.
 
   // soft tapering trail, two crossed quads with a gradient
+  // Soft in both axes. Filling each row with a hard rect tapers the plume but
+  // leaves a knife edge down both sides, which reads as a solid glass wedge.
   const trailTex = canvasTex('trail', 64, 256, (ctx, w, h) => {
-    const grd = ctx.createLinearGradient(0, 0, 0, h);
-    grd.addColorStop(0, 'rgba(255,255,255,0.95)');
-    grd.addColorStop(0.18, 'rgba(255,255,255,0.5)');
-    grd.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = grd;
-    for (let y = 0; y < h; y++) {
-      const t = y / h;
-      const ww = w * (1 - Math.pow(t, 0.75)) * 0.92;
-      ctx.fillRect(w / 2 - ww / 2, y, ww, 1);
-    }
+    pixels(ctx, w, h, (u, v) => {
+      const lenFade = Math.pow(clamp(1 - v, 0, 1), 0.85) * (v < 0.16 ? 1 : 0.72 + 0.28 * (1 - v));
+      const halfW = (1 - Math.pow(v, 0.7)) * 0.47;
+      const d = Math.abs(u - 0.5) / Math.max(1e-3, halfW);
+      const edge = Math.pow(smoothclamp(1 - d), 1.4);
+      return [255, 255, 255, Math.round(clamp(lenFade * edge, 0, 1) * 255)];
+    });
   }, { wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping });
+  // Four ribbons, 45 deg apart around the axis. Two crossed quads look solid
+  // from one angle and vanish from another — at a glancing view both go
+  // edge-on at once and the plume collapses to the bare cone.
   const quads = [];
-  for (let i = 0; i < 2; i++) {
-    const q = new THREE.Mesh(rawGeo('quad', () => new THREE.PlaneGeometry(1, 1)), fx(color, 0.55, { map: trailTex }));
+  const RIBBONS = 4;
+  for (let i = 0; i < RIBBONS; i++) {
+    const q = new THREE.Mesh(rawGeo('quad', () => new THREE.PlaneGeometry(1, 1)),
+      fx(color, 0.52, { map: trailTex }));
     // the quad's local +Y is its length; -90 deg about X lays that along +Z
     q.rotation.x = -Math.PI / 2;
     q.position.z = length / 2;
-    q.scale.set(radius * 2.6, length, 1);
+    q.scale.set(radius * 3.1, length, 1);
     keep(q);
     quads.push(q);
-    // roll the second ribbon upright around the trail axis, which leaves its
-    // length on +Z (a Z rotation cannot tip the Z axis over)
+    // roll each ribbon around the trail axis, which leaves its length on +Z
+    // (a Z rotation cannot tip the Z axis over)
     const holder = new THREE.Group();
-    holder.rotation.z = i * Math.PI / 2;
+    holder.rotation.z = (i / RIBBONS) * Math.PI;
     holder.userData.noBake = true;
     holder.add(q);
     g.add(holder);
@@ -3828,15 +3923,13 @@ export function engineTrail({ color = 0x7fd8ff, length = 14, radius = 0.8, seed 
   let throttle = 1, flick = 1;
   const apply = () => {
     const k = throttle * flick;
-    inner.scale.set(radius * 0.62 * throttle, radius * 0.62 * throttle, length * 0.42 * k);
-    outer.scale.set(radius * throttle, radius * throttle, length * k);
+    inner.scale.set(radius * 0.55 * throttle, radius * 0.55 * throttle, length * 0.26 * k);
     quads.forEach((q) => {
-      q.scale.set(radius * 2.6 * throttle, length * k, 1);
+      q.scale.set(radius * 3.1 * throttle, length * k, 1);
       q.position.z = length * k / 2;
-      q.material.opacity = 0.5 * throttle;
+      q.material.opacity = 0.52 * throttle;
     });
-    inner.material.opacity = 0.95 * throttle;
-    outer.material.opacity = 0.5 * throttle;
+    inner.material.opacity = 0.6 * throttle;
     glowS.scale.setScalar(radius * 5 * throttle * flick);
     glowS.material.opacity = 0.65 * throttle;
     diskS.scale.setScalar(radius * 2.1 * throttle);

@@ -15,6 +15,10 @@
  *                         Face landmarks: brow 32, eyes 50, nose 66, mouth 84.
  *   torso prints          viewBox 152 x 128 clipped to the torso trapezoid,
  *                         79 px per world unit, neck at the top, belt near 108.
+ *                         x = 0 is the figure's own right, front and back alike,
+ *                         so a shoulder flash keeps the same x on both prints.
+ *                         (A back print therefore looks mirrored in a back
+ *                         render, exactly as a real back does.)
  *   hips prints           viewBox 160 x 56.
  *
  * Characters expose the rig on `userData.parts`, anything held on
@@ -67,6 +71,18 @@ function torsoTex(body) {
     `<defs><clipPath id="t"><polygon points="${TORSO_POLY}"/></clipPath></defs>`
     + `<g clip-path="url(#t)">${body}</g>`, { w: 608, h: 512 });
   return svgTexture(s, { w: 608, h: 512 });
+}
+
+/**
+ * Back print, same trapezoid as torsoTex.
+ *
+ * A +Z-facing decal shows its u = 0 edge at -X, which would put the drawing's
+ * left on the figure's left — the opposite of the front convention. Mirroring
+ * the body fixes that, so both prints are authored the same way: x = 0 is the
+ * figure's own right. (The clip polygon is symmetric, so it survives the flip.)
+ */
+function backTex(body) {
+  return torsoTex(`<g transform="translate(152,0) scale(-1,1)">${body}</g>`);
 }
 
 /** Hips / belt print. */
@@ -535,6 +551,224 @@ function protocolTorsoTex() {
 }
 
 /* ------------------------------------------------------------------ */
+/* back prints                                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Stormtrooper back plate: shoulder blades, spine ridge, kidney armour.
+ * The back is what the camera sees most in the corridor chase, so it carries
+ * as much detail as the chest.
+ */
+function trooperBackTex(o = {}) {
+  const shell = o.color ?? C.white;
+  const line = '#8f9599';
+  const ink = '#141a1f';
+  return backTex([
+    `<rect width="152" height="128" fill="${hx(shell)}"/>`,
+    // undersuit showing at the neck and arm sockets
+    `<path d="M42 0 L110 0 L104 14 L48 14 Z" fill="${ink}"/>`,
+    `<path d="M0 22 L18 18 L26 44 L2 50 Z" fill="${ink}"/>`,
+    `<path d="M152 22 L134 18 L126 44 L150 50 Z" fill="${ink}"/>`,
+    // shoulder blade plates, lifted a shade off the shell so they read as plates
+    `<path d="M20 24 L66 17 L70 56 L24 62 Z" fill="#f7f8f6" stroke="${line}" stroke-width="3"/>`,
+    `<path d="M132 24 L86 17 L82 56 L128 62 Z" fill="#f7f8f6" stroke="${line}" stroke-width="3"/>`,
+    // spine ridge: darker channel with a raised strip down it
+    `<rect x="66" y="12" width="20" height="92" fill="#b9bdbf"/>`,
+    `<rect x="70" y="14" width="12" height="88" fill="#f7f8f6" stroke="${line}" stroke-width="2"/>`,
+    `<g fill="${line}">`
+    + `<rect x="72" y="26" width="8" height="5"/><rect x="72" y="42" width="8" height="5"/>`
+    + `<rect x="72" y="58" width="8" height="5"/><rect x="72" y="74" width="8" height="5"/>`
+    + `<rect x="72" y="90" width="8" height="5"/></g>`,
+    // kidney plate
+    `<path d="M26 66 L126 66 L122 100 L30 100 Z" fill="#dcdfdd" stroke="${line}" stroke-width="3"/>`,
+    `<g stroke="${line}" stroke-width="2.5">`
+    + `<path d="M30 83 L66 83"/><path d="M86 83 L122 83"/>`
+    + `<path d="M46 66 L45 100"/><path d="M107 66 L106 100"/></g>`,
+    // belt with the power pack box
+    `<rect x="22" y="103" width="108" height="15" fill="#c9cdcf" stroke="${line}" stroke-width="2"/>`,
+    `<rect x="56" y="99" width="40" height="24" rx="2" fill="${ink}"/>`,
+    `<g fill="#b9bdbf"><rect x="61" y="104" width="30" height="5"/>`
+    + `<rect x="61" y="112" width="18" height="5"/></g>`,
+    `<rect x="30" y="120" width="92" height="8" fill="${ink}" opacity="0.85"/>`,
+    o.dirty ? `<g opacity="0.42" fill="${hx(0xa08a5e)}">`
+      + `<path d="M26 72 q34 20 76 8 l4 30 -86 4 z"/>`
+      + `<path d="M118 18 q16 18 12 34 l-14 -4 z"/></g>` : '',
+  ].join(''));
+}
+
+/** Pilot life-support pack: ribbed box, hoses over the shoulders, warning label. */
+function pilotBackTex(o = {}) {
+  const stripe = hx(o.color ?? C.red);
+  return backTex([
+    `<rect width="152" height="128" fill="${hx(C.orange)}"/>`,
+    // harness straps coming over the shoulders into the pack
+    `<path d="M50 0 L64 0 L60 34 L44 30 Z" fill="#2b3238"/>`,
+    `<path d="M102 0 L88 0 L92 34 L108 30 Z" fill="#2b3238"/>`,
+    // life-support pack
+    `<rect x="26" y="26" width="100" height="66" rx="5" fill="#d8dbdc" stroke="#2b3238" stroke-width="3"/>`,
+    `<rect x="32" y="32" width="88" height="24" rx="3" fill="#eceff0" stroke="#8f9599" stroke-width="2"/>`,
+    // ribbing across the lower half of the pack
+    `<g fill="#b7bcbe">`
+    + `<rect x="32" y="62" width="88" height="6"/><rect x="32" y="72" width="88" height="6"/>`
+    + `<rect x="32" y="82" width="88" height="6"/></g>`,
+    // gauges and the warning flash
+    `<circle cx="46" cy="44" r="8" fill="#2b3238"/><circle cx="46" cy="44" r="4" fill="#57d0ff"/>`,
+    `<circle cx="68" cy="44" r="8" fill="#2b3238"/><circle cx="68" cy="44" r="4" fill="${stripe}"/>`,
+    `<rect x="84" y="36" width="32" height="16" rx="2" fill="${stripe}"/>`,
+    `<g fill="#eceff0"><rect x="88" y="40" width="10" height="3"/><rect x="88" y="46" width="22" height="3"/></g>`,
+    // hoses curling out of the pack top toward the shoulders
+    `<path d="M40 28 q-16 -12 -30 -6" fill="none" stroke="#575d61" stroke-width="7"/>`,
+    `<path d="M112 28 q16 -12 30 -6" fill="none" stroke="#575d61" stroke-width="7"/>`,
+    // belt
+    `<rect x="22" y="98" width="108" height="15" fill="#4a5157"/>`,
+    `<rect x="60" y="95" width="32" height="21" rx="2" fill="#c8cacb" stroke="#2b3238" stroke-width="2"/>`,
+    `<g fill="${stripe}"><rect x="28" y="102" width="18" height="6"/><rect x="106" y="102" width="18" height="6"/></g>`,
+  ].join(''));
+}
+
+/** Rebel fleet trooper back: vest panel, cross strap, field pouch. */
+function rebelBackTex() {
+  return backTex([
+    `<rect width="152" height="128" fill="${hx(X.rebelTan)}"/>`,
+    // vest back, one broad panel
+    `<path d="M40 0 L18 14 L12 128 L140 128 L134 14 L112 0 Z" fill="#3c4650"/>`,
+    `<path d="M46 0 L106 0 L98 14 L54 14 Z" fill="#c2ab82"/>`,
+    // yoke seam and centre seam
+    `<path d="M22 26 q54 16 108 0" fill="none" stroke="#2f3840" stroke-width="3"/>`,
+    `<path d="M76 26 L76 100" stroke="#2f3840" stroke-width="3"/>`,
+    // pale shoulder strap crossing to the belt
+    `<path d="M58 16 L96 112 L82 118 L44 22 Z" fill="#eceade" opacity="0.9"/>`,
+    // field pouch
+    `<rect x="24" y="56" width="30" height="28" rx="3" fill="#2f3840" stroke="#20272e" stroke-width="2"/>`,
+    `<rect x="28" y="62" width="22" height="5" fill="#6d757d"/>`,
+    // belt
+    `<rect x="16" y="100" width="120" height="15" fill="#eceade"/>`,
+    `<rect x="16" y="115" width="120" height="8" fill="#c2ab82"/>`,
+  ].join(''));
+}
+
+/** Smuggler back: black vest over the white shirt, single centre seam. */
+function smugglerBackTex() {
+  return backTex([
+    `<rect width="152" height="128" fill="#f4f5f2"/>`,
+    // vest back
+    `<path d="M42 0 L18 16 L12 128 L140 128 L134 16 L110 0 Z" fill="#1b2129"/>`,
+    // shirt collar showing above it
+    `<path d="M44 0 L108 0 L100 14 L52 14 Z" fill="#e6e7e3"/>`,
+    `<path d="M52 14 q24 10 48 0" fill="none" stroke="#c9cbc7" stroke-width="3"/>`,
+    // vest yoke + centre seam
+    `<path d="M24 30 q52 14 104 0" fill="none" stroke="#3d454d" stroke-width="2.5"/>`,
+    `<path d="M76 30 L76 100" stroke="#3d454d" stroke-width="2.5"/>`,
+    `<g fill="none" stroke="#3d454d" stroke-width="2"><path d="M52 34 L48 126"/><path d="M100 34 L104 126"/></g>`,
+    // belt
+    `<rect x="14" y="100" width="124" height="15" fill="#3a2a1c"/>`,
+    `<rect x="14" y="115" width="124" height="7" fill="#2a1c12"/>`,
+  ].join(''));
+}
+
+/** Imperial officer back: plain tunic, yoke seam, belt. */
+function officerBackTex(o = {}) {
+  const cloth = hx(o.color ?? X.officer);
+  return backTex([
+    `<rect width="152" height="128" fill="${cloth}"/>`,
+    `<path d="M44 0 L108 0 L100 16 L52 16 Z" fill="#5f665f"/>`,
+    `<path d="M22 24 q54 14 108 0" fill="none" stroke="#5f665f" stroke-width="3"/>`,
+    `<path d="M76 24 L76 98" stroke="#5f665f" stroke-width="3"/>`,
+    `<g stroke="#5f665f" stroke-width="2.5" opacity="0.8">`
+    + `<path d="M30 30 q6 34 2 66"/><path d="M122 30 q-6 34 -2 66"/></g>`,
+    `<rect x="16" y="98" width="120" height="16" fill="#20272e"/>`,
+    `<rect x="20" y="114" width="112" height="14" fill="#20272e"/>`,
+  ].join(''));
+}
+
+/** Farm boy back: tunic with a centre seam and the belt carrying over. */
+function farmBoyBackTex() {
+  return backTex([
+    `<rect width="152" height="128" fill="${hx(X.cream)}"/>`,
+    `<path d="M44 0 L108 0 L98 14 L54 14 Z" fill="#d6c8a4"/>`,
+    `<path d="M22 22 q54 14 108 0" fill="none" stroke="#bcae8c" stroke-width="3"/>`,
+    `<path d="M76 22 L76 100" stroke="#bcae8c" stroke-width="3"/>`,
+    `<g stroke="#bcae8c" stroke-width="2.5" opacity="0.9">`
+    + `<path d="M26 26 q6 38 2 72"/><path d="M126 26 q-6 38 -2 72"/></g>`,
+    `<rect x="18" y="100" width="116" height="15" fill="#4b3520"/>`,
+    `<rect x="18" y="115" width="116" height="8" fill="#3a2818"/>`,
+  ].join(''));
+}
+
+/** Robe back for the old man: over-robe panels and a hanging fold. */
+function robeBackTex(o = {}) {
+  const cloth = hx(o.color ?? C.tan);
+  const dark = hx(o.dark ?? 0xa8926a);
+  return backTex([
+    `<rect width="152" height="128" fill="${cloth}"/>`,
+    `<path d="M0 16 L26 10 L20 128 L0 128 Z" fill="${hx(o.outer ?? C.brown)}"/>`,
+    `<path d="M152 16 L126 10 L132 128 L152 128 Z" fill="${hx(o.outer ?? C.brown)}"/>`,
+    // hood gathered across the shoulders
+    `<path d="M40 0 L112 0 L104 26 Q76 40 48 26 Z" fill="${hx(o.outer ?? C.brown)}" opacity="0.85"/>`,
+    `<g stroke="${dark}" stroke-width="3" opacity="0.85">`
+    + `<path d="M76 34 L76 100"/><path d="M52 40 q4 30 0 58"/><path d="M100 40 q-4 30 0 58"/></g>`,
+    `<rect x="20" y="98" width="112" height="14" fill="#4b3520"/>`,
+  ].join(''));
+}
+
+/** Jawa back: the bandolier crossing under the hood's shadow. */
+function jawaBackTex() {
+  return backTex([
+    `<rect width="152" height="128" fill="${hx(X.jawaBrown)}"/>`,
+    `<path d="M28 0 L124 0 L114 34 Q76 48 38 34 Z" fill="#000" opacity="0.45"/>`,
+    `<path d="M122 14 L34 98 L52 118 L140 34 Z" fill="#2f2118" stroke="#7a5a34" stroke-width="2"/>`,
+    `<g stroke="#2a1c12" stroke-width="3" opacity="0.8">`
+    + `<path d="M22 58 q10 30 6 70"/><path d="M130 58 q-10 30 -6 70"/></g>`,
+    `<rect x="18" y="104" width="116" height="12" fill="#2a1c12"/>`,
+  ].join(''));
+}
+
+/** Princess gown back: drape lines under the fall of hair, silver belt. */
+function princessBackTex() {
+  return backTex([
+    `<rect width="152" height="128" fill="#f6f7f4"/>`,
+    `<path d="M40 0 L112 0 L104 20 L48 20 Z" fill="#e8eae6"/>`,
+    `<path d="M24 24 q52 14 104 0" fill="none" stroke="#cfd2ce" stroke-width="3"/>`,
+    `<g stroke="#cfd2ce" stroke-width="3">`
+    + `<path d="M76 26 L76 98"/><path d="M22 28 q10 40 6 70"/><path d="M130 28 q-10 40 -6 70"/>`
+    + `<path d="M52 34 L50 98"/><path d="M100 34 L102 98"/></g>`,
+    `<rect x="24" y="100" width="104" height="12" fill="#b8bcbe"/>`,
+    `<g fill="#8b949a">`
+    + `<rect x="34" y="102" width="14" height="8" rx="2"/><rect x="56" y="102" width="14" height="8" rx="2"/>`
+    + `<rect x="78" y="102" width="14" height="8" rx="2"/><rect x="100" y="102" width="14" height="8" rx="2"/></g>`,
+  ].join(''));
+}
+
+/** Protocol droid back: vertebra segments and the exposed spine wiring. */
+function protocolBackTex() {
+  const gold = hx(X.pearlGold);
+  const dark = '#8a6a20';
+  return backTex([
+    `<rect width="152" height="128" fill="${gold}"/>`,
+    `<path d="M40 0 L112 0 L106 14 L46 14 Z" fill="#c1912f"/>`,
+    // shoulder plates
+    `<path d="M46 14 L106 14 L112 46 L40 46 Z" fill="none" stroke="${dark}" stroke-width="3"/>`,
+    `<g fill="none" stroke="${dark}" stroke-width="2.5"><path d="M22 22 L34 48"/><path d="M130 22 L118 48"/></g>`,
+    // spine: stacked vertebra blocks over a dark channel
+    `<rect x="64" y="16" width="24" height="88" fill="#20262b"/>`,
+    `<g fill="#c79c33" stroke="${dark}" stroke-width="1.5">`
+    + `<rect x="66" y="20" width="20" height="12" rx="2"/><rect x="66" y="36" width="20" height="12" rx="2"/>`
+    + `<rect x="66" y="52" width="20" height="12" rx="2"/><rect x="66" y="68" width="20" height="12" rx="2"/>`
+    + `<rect x="66" y="84" width="20" height="12" rx="2"/></g>`,
+    // wiring bundles either side of the spine
+    `<g fill="none" stroke-width="3">`
+    + `<path d="M40 54 q10 14 0 28" stroke="#c91a09"/>`
+    + `<path d="M48 54 q10 14 0 28" stroke="#0055bf"/>`
+    + `<path d="M112 54 q-10 14 0 28" stroke="#f2cd37"/>`
+    + `<path d="M104 54 q-10 14 0 28" stroke="#c91a09"/></g>`,
+    `<g fill="#8b949a"><rect x="34" y="50" width="8" height="36"/><rect x="110" y="50" width="8" height="36"/></g>`,
+    // hip plates
+    `<path d="M30 90 L122 90 L118 116 L34 116 Z" fill="none" stroke="${dark}" stroke-width="3"/>`,
+    `<rect x="22" y="118" width="108" height="10" fill="#c1912f"/>`,
+  ].join(''));
+}
+
+/* ------------------------------------------------------------------ */
 /* headgear                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -691,17 +925,31 @@ function pilotDomeTex(stripe) {
   ].join(''));
 }
 
-/** Imperial peaked cap. */
+/**
+ * Imperial peaked cap.
+ *
+ * The head barrel runs local y 0..1.0 and the printed brows sit at 0.75..0.83,
+ * so the band has to bottom out at 0.85: any higher and the cap floats above
+ * the skull like a lid, any lower and it eats the eyebrows.
+ */
 function officerCap(o = {}) {
   const cloth = o.color ?? X.officer;
+  const BAND = 0.86;                                 // bottom of the black band
+  const TOP = BAND + 0.17 + 0.22;                    // top of the grey crown
   return assemble([
-    paint(at(cyl(0.66, 0.3, { seg: 22, rTop: 0.7 }), 0, 1.0, 0), cloth),
-    paint(at(cyl(0.7, 0.06, { seg: 22 }), 0, 1.3, 0), cloth),
-    paint(at(arcShell(0.68, 0.14, { span: 6.28, seg: 22 }), 0, 0.94, 0), C.black),
-    // peak: a flattened disc sweeping forward over the brow
-    paint(at(rot(sqDisc(0.6, 0.07, C.black), 0.12, 0, 0), 0, 0.92, -0.42), C.black),
-    // cap badge
-    paint(at(cyl(0.1, 0.05, { seg: 12 }), 0, 1.06, -0.64), C.silver),
+    // black band gripping the head just above the brow
+    paint(at(cyl(0.625, 0.17, { seg: 22 }), 0, BAND, 0), C.black),
+    // shallow crown, then the flat top plate that makes it a peaked cap.
+    // The plate stays inside the peak's reach, or the two merge in silhouette
+    // and the cap reads as a sun hat from the side.
+    paint(at(cyl(0.635, 0.22, { seg: 22, rTop: 0.72 }), 0, BAND + 0.17, 0), cloth),
+    paint(at(cyl(0.74, 0.07, { seg: 22 }), 0, TOP, 0), cloth),
+    paint(at(arcShell(0.745, 0.04, { span: 6.28, seg: 22 }), 0, TOP - 0.01, 0), 0x5f665f),
+    // peak: a flattened disc sweeping forward and tipping down over the brow
+    paint(at(rot(sqDisc(0.68, 0.075, C.black, 22), -0.15, 0, 0), 0, BAND + 0.02, -0.44), C.black),
+    // cap badge on the band, with a silver cord across it
+    paint(at(cyl(0.09, 0.05, { seg: 12 }), 0, BAND + 0.08, -0.62), C.silver),
+    paint(at(arcShell(0.635, 0.03, { span: 2.6, center: Math.PI, seg: 16 }), 0, BAND + 0.015, 0), C.silver),
   ]);
 }
 
@@ -734,8 +982,9 @@ function robeHood(o = {}) {
   const cloth = o.color ?? C.brown;
   return assemble([
     // crown and back of the hood, opening a wide 150 degrees at the front
-    paint(at(arcShell(0.76, 1.0, { span: 3.6, center: 0, seg: 22, rTop: 0.58 }), 0, 0.34, 0), cloth),
-    paint(at(cone(0.6, 0.18, 0.3, { seg: 20 }), 0, 1.3, 0), cloth),
+    paint(at(arcShell(0.76, 0.94, { span: 3.6, center: 0, seg: 22, rTop: 0.62 }), 0, 0.34, 0), cloth),
+    // rounded peak: a cone tapering to a point reads as a wizard's hat from behind
+    at(domeMesh(0.62, 0.32, cloth, 20), 0, 1.28, 0),
     // rolled edge of the opening, framing the face without shading it
     paint(at(arcShell(0.8, 0.16, { span: 3.6, center: 0, seg: 22 }), 0, 0.3, 0), 0x40291a),
     // cowl over the shoulders
@@ -1011,6 +1260,7 @@ export function stormtrooper(o = {}) {
     hips: C.black,
     boots: shell,
     torsoTex: trooperTorsoTex({ color: shell, dirty: o.dirty }),
+    backTex: trooperBackTex({ color: shell, dirty: o.dirty }),
     legTex: trooperHipsTex({ dirty: o.dirty }),
     hat: trooperHelmet({ color: shell, dirty: o.dirty }),
   });
@@ -1136,6 +1386,7 @@ export function rebelTrooper(o = {}) {
     hips: C.sandBlue,
     boots: C.darkGray,
     torsoTex: rebelTorsoTex(),
+    backTex: rebelBackTex(),
     legTex: hipsTex([
       `<rect width="160" height="56" fill="${hx(C.sandBlue)}"/>`,
       `<rect x="0" y="0" width="160" height="18" fill="#eceade"/>`,
@@ -1162,6 +1413,7 @@ export function princess(o = {}) {
     arms: C.white,
     hands: o.skin ?? C.yellow,
     torsoTex: princessTorsoTex(),
+    backTex: princessBackTex(),
     legTex: hipsTex([
       `<rect width="160" height="56" fill="#f6f7f4"/>`,
       `<rect x="0" y="0" width="160" height="14" fill="#b8bcbe"/>`,
@@ -1192,6 +1444,7 @@ export function pilot(o = {}) {
     hips: C.darkGray,
     boots: C.darkGray,
     torsoTex: pilotTorsoTex({ color: stripe }),
+    backTex: pilotBackTex({ color: stripe }),
     legTex: hipsTex([
       `<rect width="160" height="56" fill="${hx(C.orange)}"/>`,
       `<rect x="0" y="0" width="160" height="16" fill="#4a5157"/>`,
@@ -1220,6 +1473,7 @@ export function imperialOfficer(o = {}) {
     legs: C.black,
     hips: C.black,
     torsoTex: officerTorsoTex({ color: cloth }),
+    backTex: officerBackTex({ color: cloth }),
     legTex: hipsTex([
       `<rect width="160" height="56" fill="${hx(C.black)}"/>`,
       `<rect x="0" y="0" width="160" height="12" fill="#20272e"/>`,
@@ -1247,6 +1501,7 @@ export function jawa(o = {}) {
     legs: cloth,
     hips: cloth,
     torsoTex: jawaTorsoTex(),
+    backTex: jawaBackTex(),
     hat: jawaHood({ color: cloth }),
   });
   const q = fig.userData.parts;
@@ -1306,6 +1561,7 @@ export function farmBoy(o = {}) {
     hips: C.veryLightGray,
     boots: C.reddishBrown,
     torsoTex: farmBoyTorsoTex(),
+    backTex: farmBoyBackTex(),
     legTex: hipsTex([
       `<rect width="160" height="56" fill="${hx(C.veryLightGray)}"/>`,
       `<rect x="0" y="0" width="160" height="15" fill="#4b3520"/>`,
@@ -1332,6 +1588,7 @@ export function smuggler(o = {}) {
     hips: C.darkBlue,
     boots: C.reddishBrown,
     torsoTex: smugglerTorsoTex(),
+    backTex: smugglerBackTex(),
     legTex: hipsTex([
       `<rect width="160" height="56" fill="${hx(C.darkBlue)}"/>`,
       `<rect x="0" y="0" width="160" height="14" fill="#3a2a1c"/>`,
@@ -1379,6 +1636,7 @@ export function oldMan(o = {}) {
     hips: C.brown,
     boots: C.reddishBrown,
     torsoTex: robeTorsoTex({ color: C.tan, outer: C.brown }),
+    backTex: robeBackTex({ color: C.tan, outer: C.brown }),
     legTex: hipsTex([
       `<rect width="160" height="56" fill="${hx(C.brown)}"/>`,
       `<rect x="0" y="0" width="160" height="16" fill="#4b3520"/>`,
@@ -1419,6 +1677,7 @@ export function protocolDroid(o = {}) {
     hips: gold,
     boots: gold,
     torsoTex: protocolTorsoTex(),
+    backTex: protocolBackTex(),
     legTex: hipsTex([
       `<rect width="160" height="56" fill="${hx(gold)}"/>`,
       `<rect x="0" y="0" width="160" height="12" fill="#c1912f"/>`,

@@ -28,7 +28,7 @@
  * `ctx.currentTime`, nothing uses timers, nothing uses `Math.random()`.
  */
 
-import { NOTE, rng, clamp, setAt, lin, exp, hit, adsr } from './engine.js';
+import { NOTE, rng, clamp, setAt, lin, exp, hit, adsr, fanIn } from './engine.js';
 
 const S_MAJ = NOTE.SCALE.major;
 const S_MIN = NOTE.SCALE.minor;
@@ -101,6 +101,9 @@ function menace(tonic, { stretch = 1, from = 0, take = 99, oct = 0 } = {}) {
 /* ------------------------------------------------------------------ *
  * Voicing
  * ------------------------------------------------------------------ */
+
+/** Where a note should hang itself on its group — see `S.group`. */
+const into = (g) => (g && g.slot ? g.slot() : g);
 
 /** Chord tones inside a register, chosen close to the previous voicing. */
 function voice(rootMidi, quality, { n = 4, low = 50, high = 79, prev = null } = {}) {
@@ -218,6 +221,7 @@ function tremolo(S, g, t, midis, dur, o = {}) {
   lpf.Q.value = 0.8;
   amp.connect(lpf); lpf.connect(g);
   const stop = S.stop(t + dur + release + 0.06);
+  const ampIn = fanIn(ctx, amp);            // a chord's worth of voices meets here
   for (const m of midis) {
     for (const det of [-detune, detune]) {
       const s = ctx.createOscillator();
@@ -226,7 +230,7 @@ function tremolo(S, g, t, midis, dur, o = {}) {
       s.detune.value = det;
       const sg = ctx.createGain();
       sg.gain.value = 0.5 / midis.length;
-      s.connect(sg); sg.connect(amp);
+      s.connect(sg); sg.connect(ampIn());
       s.start(t); s.stop(stop);
     }
   }
@@ -243,9 +247,13 @@ function timpani(S, g, t, midi, o = {}) {
   const { vel = 0.85, decay = 1.5, rich = true } = o;
   const ctx = S.ctx;
   const f = NOTE.freq(midi);
+  // Thump, partial and transient meet here rather than on the group, so a
+  // drum presents its group one connection like every other instrument.
+  const mix = ctx.createGain();
+  mix.connect(g);
   const body = ctx.createGain();
   body.gain.value = 0;
-  body.connect(g);
+  body.connect(mix);
   const s = ctx.createOscillator();
   s.type = 'sine';
   s.frequency.setValueAtTime(f * 1.07, t);
@@ -260,7 +268,7 @@ function timpani(S, g, t, midi, o = {}) {
     p.frequency.value = f * 2.41;
     const pg = ctx.createGain();
     pg.gain.value = 0;
-    p.connect(pg); pg.connect(g);
+    p.connect(pg); pg.connect(mix);
     p.start(t); p.stop(S.stop(t + decay * 0.4 + 0.04));
     hit(pg.gain, t, vel * 0.18, 0.003, decay * 0.38);
   }
@@ -269,7 +277,7 @@ function timpani(S, g, t, midi, o = {}) {
   bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q.value = 0.9;
   const ng = ctx.createGain();
   ng.gain.value = 0;
-  n.connect(bp); bp.connect(ng); ng.connect(g);
+  n.connect(bp); bp.connect(ng); ng.connect(mix);
   hit(ng.gain, t, vel * 0.42, 0.001, 0.075);
   return t + decay;
 }
@@ -278,13 +286,15 @@ function timpani(S, g, t, midi, o = {}) {
 function bassDrum(S, g, t, o = {}) {
   const { vel = 0.9, decay = 0.75 } = o;
   const ctx = S.ctx;
+  const mix = ctx.createGain();
+  mix.connect(g);
   const s = ctx.createOscillator();
   s.type = 'sine';
   s.frequency.setValueAtTime(88, t);
   s.frequency.exponentialRampToValueAtTime(36, t + 0.11);
   const gg = ctx.createGain();
   gg.gain.value = 0;
-  s.connect(gg); gg.connect(g);
+  s.connect(gg); gg.connect(mix);
   s.start(t); s.stop(S.stop(t + decay + 0.04));
   hit(gg.gain, t, vel, 0.004, decay);
   const n = S.noise(t, 0.05);
@@ -292,7 +302,7 @@ function bassDrum(S, g, t, o = {}) {
   lp.type = 'lowpass'; lp.frequency.value = 1400; lp.Q.value = 0.7;
   const ng = ctx.createGain();
   ng.gain.value = 0;
-  n.connect(lp); lp.connect(ng); ng.connect(g);
+  n.connect(lp); lp.connect(ng); ng.connect(mix);
   hit(ng.gain, t, vel * 0.3, 0.001, 0.045);
   return t + decay;
 }
@@ -533,8 +543,10 @@ function makeSection(ctx, bus, spec, o) {
 
   const dry = ctx.createGain();
   const send = ctx.createGain();
-  dry.connect(bus.music);
-  if (bus.musicFx) send.connect(bus.musicFx);
+  dry.connect(bus.musicIn ? bus.musicIn() : bus.music);
+  if (bus.musicFx) send.connect(bus.musicFxIn ? bus.musicFxIn() : bus.musicFx);
+  const dryIn = fanIn(ctx, dry);
+  const sendIn = fanIn(ctx, send);
   for (const p of [dry.gain, send.gain]) {
     const fi = Math.max(0.005, spec.fadeIn ?? d.fadeIn);
     setAt(p, Math.max(0, t0 - 0.002), 0);
@@ -590,13 +602,17 @@ function makeSection(ctx, bus, spec, o) {
       if (groups.has(name)) return groups.get(name);
       const g = ctx.createGain();
       g.gain.value = opts.gain ?? 1;
-      g.connect(dry);
+      g.connect(dryIn());
       const sendAmt = opts.send ?? 0.22;
       if (sendAmt > 0 && bus.musicFx) {
         const w = ctx.createGain();
         w.gain.value = sendAmt;
-        g.connect(w); w.connect(send);
+        g.connect(w); w.connect(sendIn());
       }
+      // A busy group collects one connection per note — the battle ostinato
+      // alone brings 340 — so notes are handed a summing slot rather than the
+      // group node itself. `slot` is read by the dispatchers below.
+      g.slot = fanIn(ctx, g);
       groups.set(name, g);
       return g;
     },
@@ -605,24 +621,24 @@ function makeSection(ctx, bus, spec, o) {
       if (t < t0 - 1e-6 || t >= end - 0.01) return t;
       const clipped = Math.max(0.02, Math.min(len, end + tailFade - t - 0.02));
       notes++;
-      return fn(S, g, t, midi, clipped, opts);
+      return fn(S, into(g), t, midi, clipped, opts);
     },
     /** Same, for the percussion signatures that take no pitch. */
     perc(fn, g, t, opts) {
       if (t < t0 - 1e-6 || t >= end - 0.01) return t;
       notes++;
-      return fn(S, g, t, opts);
+      return fn(S, into(g), t, opts);
     },
     /** Rolls carry a duration, so they get their own dispatcher. */
     roll(g, t, dur, opts) {
       if (t < t0 - 1e-6 || t >= end - 0.01) return t;
       notes++;
-      return snareRoll(S, g, t, Math.min(dur, end + tailFade - t - 0.02), opts);
+      return snareRoll(S, into(g), t, Math.min(dur, end + tailFade - t - 0.02), opts);
     },
     hitAt(fn, g, t, midi, opts) {
       if (t < t0 - 1e-6 || t >= end - 0.01) return t;
       notes++;
-      return fn(S, g, t, midi, opts);
+      return fn(S, into(g), t, midi, opts);
     },
     /** Lay a motif (list of {midi, beat, len, vel}) starting at `startBeat`. */
     motif(fn, g, startBeat, list, opts = {}) {

@@ -1309,6 +1309,7 @@ export function xwing(opt = {}) {
 
   g.userData.length = 26;
   g.userData.width = 21.6;
+  g.userData.height = 7.9;   // S-foils open; ~5.2 closed
   g.userData.anchor = 'center';
   g.userData.wings = wings;
   g.userData.cannonTips = cannonTips;
@@ -1319,7 +1320,7 @@ export function xwing(opt = {}) {
     const a = 0.30 * k;
     for (const w of wings) w.rotation.z = w.userData.sign * w.userData.up * a;
   };
-  g.userData.setSFoils(1);
+  g.userData.setSFoils(opt.sfoils ?? 1);
   return wireEngines(g, engines, 1);
 }
 
@@ -1911,7 +1912,10 @@ export function sandcrawler(opt = {}) {
   ramp.position.set(0, hingeY, hingeZ);
   g.add(ramp);
   const RAMP_SHUT = Math.PI / 2 + TILT;          // flush against the raked bow
-  const RAMP_DOWN = -Math.asin(hingeY / RL);     // tip resting on the ground
+  // Fully open: the far corner of the ramp's *underside* rests on y = 0, so the
+  // deck's own thickness has to come out of the swing.
+  const RT = 0.55;
+  const RAMP_DOWN = -(Math.asin(hingeY / Math.hypot(RL, RT)) - Math.atan2(RT, RL));
 
   // ---- exhaust stacks ----
   const engines = [];
@@ -2220,10 +2224,11 @@ export function proximityBolt(opt = {}) {
   const color = opt.color ?? 0xff3b1f;
   const len = opt.len ?? 3.4;
   const radius = opt.radius ?? 0.14;
+  const seg = opt.seg ?? 12;   // drop to 6-8 for far-field swarms
   const g = new THREE.Group();
   g.name = 'bolt';
-  const core = new THREE.Mesh(capsuleGeo(radius, len, 8), boltCoreMat(color));
-  const sheath = new THREE.Mesh(capsuleGeo(radius * 2.7, len * 1.1, 8), additive(color, 0.4));
+  const core = new THREE.Mesh(capsuleGeo(radius, len, seg), boltCoreMat(color));
+  const sheath = new THREE.Mesh(capsuleGeo(radius * 2.7, len * 1.1, seg), additive(color, 0.4));
   core.castShadow = sheath.castShadow = false;
   g.add(core);
   g.add(sheath);
@@ -2313,21 +2318,5 @@ export function fleet(o = {}) {
   g.userData.width = totalW;
   g.userData.length = Math.max(...laid.map((c) => c.colD));
   g.userData.anchor = 'keel';
-  return g;
-}
-
-/* TEMPORARY inspection helper — remove before delivery. */
-const ZOOMABLE = SHIPS;
-export function __zoom(name, x, y, z) {
-  const ship = ZOOMABLE[name]();
-  ship.position.set(-x, -y, -z);
-  const g = new THREE.Group();
-  g.add(ship);
-  const b = new THREE.Box3().setFromObject(ship);
-  const r = Math.max(Math.abs(b.min.x), b.max.x, Math.abs(b.min.y), b.max.y, Math.abs(b.min.z), b.max.z);
-  const mk = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.01), glow(0x000000, 0.001));
-  mk.visible = false;
-  for (const s of [-1, 1]) { const c = mk.clone(); c.position.set(s * r, s * r, s * r); g.add(c); }
-  g.userData.frameScale = 4.68 * r; // visible height = frameScale * z
   return g;
 }

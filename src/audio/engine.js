@@ -49,6 +49,43 @@ export const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 export const dbToGain = (db) => Math.pow(10, db / 20);
 export const gainToDb = (g) => 20 * Math.log10(Math.max(1e-9, g));
 
+/**
+ * Bounded fan-in.
+ *
+ * Chrome keeps a node's inputs in a container it does not order, and it only
+ * happens to sum them reproducibly while there are three or fewer. Measured on
+ * this build: four sawtooths into one gain rendered three distinct results in
+ * four runs, the same four through a tree of two-input gains rendered one.
+ * Floating-point addition is commutative but not associative, which is exactly
+ * the difference — with two or three terms any order gives the same bits, with
+ * four the grouping starts to matter.
+ *
+ * `fanIn(ctx, dest)` returns a function that hands out somewhere to connect.
+ * The first two callers get `dest` itself, so nothing is spent where nothing is
+ * needed; after that it chains summing gains two at a time, leaving every node
+ * in the chain with three inputs at most and the addition tree fixed.
+ *
+ *   const slot = fanIn(ctx, mixNode);
+ *   for (const v of voices) v.connect(slot());
+ */
+export function fanIn(ctx, dest) {
+  let head = dest;
+  let used = 0;
+  // Two callers per node, never three: the third input is reserved for the
+  // next link in the chain.
+  return function slot() {
+    if (used >= 2) {
+      const next = ctx.createGain();
+      next.gain.value = 1;
+      next.connect(head);
+      head = next;
+      used = 0;
+    }
+    used++;
+    return head;
+  };
+}
+
 /** Exponential ramps blow up on zero. Everything goes through these. */
 const EPS = 1e-4;
 export function setAt(param, t, v) { param.setValueAtTime(Math.max(v, 0) || 0, Math.max(0, t)); }
@@ -248,7 +285,20 @@ export function softClipCurve(th = 0.7, ceiling = 0.97, n = 2049) {
 }
 
 /* ------------------------------------------------------------------ *
- * Reverb — feedback delay network, no convolution, no impulse files
+ * Reverb — no impulse files, no external assets. Two implementations:
+ *
+ *   'convolver'    (default) convolution against `impulseResponse()`, a room
+ *                  written into an AudioBuffer by the seeded PRNG above
+ *   'algorithmic'  a feedback delay network of combs and allpasses
+ *
+ * The convolver is the default for one measured reason. Chrome sums a node's
+ * inputs in an order that is not stable across processes once three or more
+ * connections arrive at the same node, so identical graphs can differ by one
+ * ULP. An FIR carries that one ULP straight through; a feedback network
+ * recirculates it, and over half a minute the FDN turned a -150 dBFS
+ * difference into a -23 dBFS one — same reverb, audibly different tail. With
+ * the convolver the whole film reproduces to within -124 dBFS. The FDN is kept
+ * because it is denser and cheaper to describe, and is fine for realtime.
  * ------------------------------------------------------------------ */
 
 /** Schroeder allpass: y = -g·v + v[n-M], v = x + g·v[n-M]. */
@@ -380,11 +430,14 @@ function makeReverb(ctx, kind, opts) {
  * Sources connect their dry signal to `bus.music` / `bus.sfx` / `bus.voice`
  * and their reverb send to `bus.musicFx` / `bus.fx`. The send buses carry the
  * same fader value as their dry counterparts, so a send stays at a fixed
- * proportion of the dry level.
+ * proportion of the dry level. Callers scheduling more than a couple of
+ * sources should connect to `bus.musicIn()` / `bus.sfxIn()` / … instead, which
+ * hands out a summing slot — see `fanIn`.
  *
  * @returns {{ctx, master, music, sfx, voice, duckVoice: (t0:number, dur:number, o?:object)=>void}}
  *          plus `mix`, `comp`, `limiter`, `fx`, `musicFx`, `hall`, `room`,
- *          `setMusicGain`, `duckWindows`, `nodeCount`.
+ *          `musicIn`, `musicFxIn`, `sfxIn`, `fxIn`, `voiceIn`,
+ *          `setMusicGain`, `setSfxGain`, `duckWindows`, `reverbKind`.
  */
 export function createBus(ctx, {
   musicGain = 0.55,
@@ -434,22 +487,23 @@ export function createBus(ctx, {
   const mix = ctx.createGain();
   mix.gain.value = 1;
   mix.connect(tail);
+  const mixIn = fanIn(ctx, mix);
 
   // --- music -------------------------------------------------------
   const music = ctx.createGain(); music.gain.value = musicGain;
   const musicFx = ctx.createGain(); musicFx.gain.value = musicGain;
   const musicDuck = ctx.createGain(); musicDuck.gain.value = 1;
   music.connect(musicDuck);
-  musicDuck.connect(mix);
+  musicDuck.connect(mixIn());
 
   // --- sfx ---------------------------------------------------------
   const sfx = ctx.createGain(); sfx.gain.value = sfxGain;
   const fx = ctx.createGain(); fx.gain.value = sfxGain;
-  sfx.connect(mix);
+  sfx.connect(mixIn());
 
   // --- voice -------------------------------------------------------
   const voice = ctx.createGain(); voice.gain.value = voiceGain;
-  voice.connect(mix);
+  voice.connect(mixIn());
 
   // --- reverb ------------------------------------------------------
   let hall = null;
@@ -468,7 +522,7 @@ export function createBus(ctx, {
       width: 0.019, drive: 0.16, highpass: 230, seed: seed ^ 0x5bd1,
     });
     const rw = ctx.createGain(); rw.gain.value = roomWet;
-    fx.connect(room.input); room.output.connect(rw); rw.connect(mix);
+    fx.connect(room.input); room.output.connect(rw); rw.connect(mixIn());
     room.wet = rw;
   }
 
@@ -529,6 +583,16 @@ export function createBus(ctx, {
     ctx, master, music, sfx, voice, duckVoice,
     mix, comp, limiter: shaper, musicDuck,
     fx, musicFx, hall, room,
+    // Summing slots. `bus.music` and friends are ordinary nodes and connecting
+    // to them directly works, but a fader that ends up with four or more
+    // sources is the one thing that stops a render being reproducible, so
+    // anything scheduling in bulk should ask for a slot instead. `score.js`
+    // and `sfx.js` both do.
+    musicIn: fanIn(ctx, music),
+    musicFxIn: fanIn(ctx, musicFx),
+    sfxIn: fanIn(ctx, sfx),
+    fxIn: fanIn(ctx, fx),
+    voiceIn: fanIn(ctx, voice),
     reverbKind: reverb === 'none' ? 'none' : (hall ? hall.kind : 'none'),
     setMusicGain(v) { music.gain.value = v; musicFx.gain.value = v; },
     setSfxGain(v) { sfx.gain.value = v; fx.gain.value = v; },
