@@ -43,16 +43,24 @@ export class AudioEngine {
     return this.started && !!this.ctx && this.ctx.state === 'running';
   }
 
+  /** True once the graph exists, whether or not it is running. */
+  get built(): boolean {
+    return !!this.ctx;
+  }
+
   get currentTime(): number {
     return this.ctx?.currentTime ?? 0;
   }
 
-  /** Must be called from a user gesture. Safe to call more than once. */
-  async start(): Promise<boolean> {
-    if (this.started && this.ctx) {
-      if (this.ctx.state === 'suspended') await this.ctx.resume();
-      return this.ctx.state === 'running';
-    }
+  /**
+   * Build the graph without resuming it.
+   *
+   * A suspended context can still decode audio, so narration is decoded during
+   * loading and the context is only resumed later, inside the user gesture
+   * that the autoplay policy requires.
+   */
+  prepare(): boolean {
+    if (this.ctx) return true;
     try {
       const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!Ctor) return false;
@@ -103,13 +111,24 @@ export class AudioEngine {
         ctx.listener.upZ.value = 0;
       }
 
-      await ctx.resume();
-      this.started = true;
-      return ctx.state === 'running';
+      return true;
     } catch {
       this.ctx = null;
       return false;
     }
+  }
+
+  /** Must be called from a user gesture. Safe to call more than once. */
+  async start(): Promise<boolean> {
+    if (!this.ctx && !this.prepare()) return false;
+    const ctx = this.ctx!;
+    try {
+      if (ctx.state !== 'running') await ctx.resume();
+    } catch {
+      return false;
+    }
+    this.started = true;
+    return ctx.state === 'running';
   }
 
   setLevel(bus: keyof MixLevels, value: number): void {

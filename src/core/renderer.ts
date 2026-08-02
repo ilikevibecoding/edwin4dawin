@@ -133,7 +133,7 @@ export class Stage {
     });
     this.renderer.setClearColor(0x000000, 1);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.14;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = o.quality.shadows;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;

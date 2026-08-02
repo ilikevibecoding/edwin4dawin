@@ -28,7 +28,7 @@ const vert = /* glsl */ `
     vAlpha = tw * uBrightness;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = aSize * uPixelRatio * tw;
+    gl_PointSize = max(1.0, aSize * uPixelRatio * tw);
   }
 `;
 
@@ -85,12 +85,13 @@ export class Starfield {
       const f = t - Math.floor(t);
       // Magnitude distribution: many faint, a few bright.
       const mag = Math.pow(rng.next(), 3.1);
-      const lum = 0.28 + mag * 0.95 + band * 0.1;
+      const lum = 0.45 + mag * 1.35 + band * 0.12;
       colors[i * 3] = (lo[0] + (hi[0] - lo[0]) * f) * lum;
       colors[i * 3 + 1] = (lo[1] + (hi[1] - lo[1]) * f) * lum;
       colors[i * 3 + 2] = (lo[2] + (hi[2] - lo[2]) * f) * lum;
 
-      sizes[i] = 90 + mag * 300;
+      // Screen-space size in CSS pixels: a real star is a point, not a blob.
+      sizes[i] = 1.25 + mag * 3.1 + band * 0.35;
       phases[i] = rng.next();
     }
 

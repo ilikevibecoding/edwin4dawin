@@ -104,19 +104,22 @@ export function runnerVelocity(t: number, out = new THREE.Vector3()): THREE.Vect
 
 /** Offset of the destroyer from the corvette. Positive Z is astern. */
 const DESTROYER_KEYS: Array<[number, number, number, number]> = [
-  [0, 0, 620, 9000],
-  [70, 0, 600, 7200],
-  [88, 0, 540, 4200],
-  [98, 0, 470, 2050],
-  [106, 0, 400, 800],
-  [116, 20, 350, -240],
-  [126, 90, 322, -620],
-  [140, 210, 300, -790],
-  [152, 320, 276, -800],
-  [166, 420, 232, -600],
-  [178, 452, 200, -400],
-  [196, 460, 196, -360],
-  [SHOW_DURATION + 10, 462, 194, -352],
+  [0, 0, 470, 9000],
+  [70, 0, 450, 6600],
+  [88, 0, 380, 3000],
+  [96, 0, 300, 1400],
+  [101, 0, 258, 620],
+  // Between 101 and 116 the bow passes over the camera and 1.6 km of hull
+  // streams overhead: this is the reveal.
+  [110, 8, 232, -260],
+  [118, 34, 226, -680],
+  [128, 110, 236, -800],
+  [140, 220, 248, -840],
+  [152, 320, 258, -830],
+  [166, 412, 236, -620],
+  [178, 450, 208, -430],
+  [196, 458, 202, -380],
+  [SHOW_DURATION + 10, 460, 200, -372],
 ];
 
 export function destroyerOffset(t: number, out = new THREE.Vector3()): THREE.Vector3 {
@@ -134,7 +137,25 @@ export function destroyerPosition(t: number, out = new THREE.Vector3()): THREE.V
 }
 
 /** Direction from the ships toward the planet, used for the pod's descent. */
-export const PLANET_DIRECTION = new THREE.Vector3(-700, -3060, -1500).normalize();
+export const PLANET_DIRECTION = new THREE.Vector3(-2200, -5400, -1800).normalize();
+
+/** Compass bearing of the planet, used to build sky-relative framings. */
+const PLANET_AZIMUTH = new THREE.Vector2(PLANET_DIRECTION.x, PLANET_DIRECTION.z).normalize();
+
+/**
+ * A unit direction at `elevationDeg` above the horizon, on the planet's
+ * bearing rotated by `bearingOffsetDeg`. Chapter two is framed entirely with
+ * this, so moving the planet never breaks the shots.
+ */
+function skyDirection(elevationDeg: number, bearingOffsetDeg = 0, out = new THREE.Vector3()): THREE.Vector3 {
+  const b = (bearingOffsetDeg * Math.PI) / 180;
+  const cosB = Math.cos(b);
+  const sinB = Math.sin(b);
+  const ax = PLANET_AZIMUTH.x * cosB - PLANET_AZIMUTH.y * sinB;
+  const az = PLANET_AZIMUTH.x * sinB + PLANET_AZIMUTH.y * cosB;
+  const e = (elevationDeg * Math.PI) / 180;
+  return out.set(ax * Math.cos(e), Math.sin(e), az * Math.cos(e)).normalize();
+}
 
 /** Escape-pod trajectory after launch. */
 export function podPosition(t: number, out = new THREE.Vector3()): THREE.Vector3 {
@@ -208,7 +229,9 @@ const _sample: TrackSample = { x: 0, z: 0, state: 'idle', facing: undefined };
 function driveFigure(fig: Figure, keys: TrackKey[], t: number, dt: number): void {
   const s = sampleTrack(keys, t, _sample);
   fig.setState(s.state);
-  fig.track(s.x + INTERIOR_ORIGIN.x, s.z + INTERIOR_ORIGIN.z, dt, s.facing === undefined, s.facing);
+  // Figures are children of the interior group, so tracks are authored — and
+  // applied — in corridor-local coordinates.
+  fig.track(s.x, s.z, dt, s.facing === undefined, s.facing);
 }
 
 /* ========================================================================== *
@@ -327,9 +350,10 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     const beam = smoothstep(151, 156, t) * (1 - smoothstep(178, 183, t));
     world.destroyer.setTractorBeam(beam > 0.01 ? _rPos : null, beam);
 
-    // Lighting mood: full sun during the chase, then the corvette falls into
-    // the destroyer's shadow as it is drawn alongside.
-    const shadowed = smoothstep(158, 178, t);
+    // Lighting mood: full sun during the chase, a dip as 1.6 km of hull slides
+    // between the corvette and the star, then permanent shadow once captured.
+    const eclipse = smoothstep(103, 110, t) * (1 - smoothstep(124, 134, t)) * 0.75;
+    const shadowed = Math.max(eclipse, smoothstep(158, 178, t));
     world.setExteriorMood(1 - shadowed * 0.55, 1 - shadowed * 0.35);
 
     // Escape pod.
@@ -389,7 +413,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
 
   const trooperTracks: TrackKey[][] = world.troopers.map((_, i) => {
     const side = i % 2 === 0 ? -1 : 1;
-    const lane = side * (0.85 + (i % 3) * 0.12);
+    const lane = side * (0.72 + (i % 3) * 0.1);
     const stop = CORRIDOR_MARKS.troopAdvance + Math.floor(i / 2) * 2.0;
     const enter = 207.4 + i * 0.55;
     return [
@@ -398,9 +422,9 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
       { t: enter + 2.6, x: lane, z: stop - 2.4, state: 'aim', facing: Math.PI },
       { t: enter + 6.5, x: lane, z: stop, state: 'aim', facing: Math.PI },
       { t: 234, x: lane, z: stop, state: 'aim', facing: Math.PI },
-      { t: 238, x: lane * 1.6, z: stop + 0.6, state: 'alert', facing: Math.PI },
-      { t: 252, x: lane * 1.6, z: stop + 0.6, state: 'alert', facing: Math.PI },
-      { t: 262, x: lane * 1.6, z: stop + 8 + i, state: 'walk', facing: Math.PI },
+      { t: 238, x: lane * 1.35, z: stop + 0.6, state: 'alert', facing: Math.PI },
+      { t: 252, x: lane * 1.35, z: stop + 0.6, state: 'alert', facing: Math.PI },
+      { t: 262, x: lane * 1.35, z: stop + 8 + i, state: 'walk', facing: Math.PI },
       { t: 284, x: lane * 1.4, z: CORRIDOR_MARKS.midCorridor + 4 + i * 1.4, state: 'walk', facing: Math.PI },
       { t: 300, x: lane * 1.4, z: CORRIDOR_MARKS.leiaStart - 6 + i * 1.2, state: 'walk', facing: Math.PI },
       { t: 400, x: lane * 1.4, z: CORRIDOR_MARKS.leiaStart - 4 + i * 1.2, state: 'aim', facing: Math.PI },
@@ -523,7 +547,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     world.corridor.setAlarm(t < 236 ? smoothstep(186, 188, t) : lerp(1, 0.25, progress(t, 236, 244)));
     world.podBay.setAlarm(t > 296 ? 1 : 0);
     const vaderPresence = smoothstep(238, 246, t) * (1 - smoothstep(288, 300, t) * 0.6);
-    world.setInteriorMood(1 - vaderPresence * 0.3, vaderPresence);
+    world.setInteriorMood(1 - vaderPresence * 0.24, vaderPresence);
 
     // The plans: revealed, studied, then poured into the droid.
     const reveal = smootherstep(259, 266, t) * (1 - smootherstep(277, 282.5, t));
@@ -995,9 +1019,10 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     apply(c) {
       prologue.setVisible(false);
       const k = Ease.sine(c.u);
-      c.eye.set(0, 20, 700);
-      // Pitch down from empty sky onto the planet's lit limb.
-      c.target.set(lerp(60, -260, k), lerp(1400, -520, k), -3200);
+      c.eye.set(Math.sin(c.t * 0.05) * 20, 30, 640);
+      // A long, unhurried tilt from empty sky down onto the lit limb.
+      const dir = skyDirection(lerp(16, -45, k), lerp(-6, 0, k));
+      c.target.copy(c.eye).addScaledVector(dir, 3000);
     },
   });
   shots.push({
@@ -1005,9 +1030,11 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     name: 'Tatooine — high drift',
     start: 49, end: 62, region: 'exterior', near: 1, far: 40000, fov: 40, blend: 2.2,
     apply(c) {
-      const k = c.u;
-      c.eye.set(lerp(-120, 220, k), 40, 700);
-      c.target.set(lerp(-500, -80, k), -700, -3200);
+      const k = Ease.sine(c.u);
+      c.eye.set(lerp(-40, 120, k), 30, 640);
+      // Hold on the day side and let the world turn under us.
+      const dir = skyDirection(lerp(-47, -41, k), lerp(0, 15, k));
+      c.target.copy(c.eye).addScaledVector(dir, 3000);
     },
   });
   shots.push({
@@ -1016,8 +1043,11 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     start: 62, end: 66, region: 'exterior', near: 1, far: 40000, fov: 36, blend: 1.6,
     apply(c) {
       runnerPosition(c.t, rp);
-      c.eye.set(rp.x + 40, rp.y + 30, rp.z - 260);
-      c.target.set(rp.x, rp.y + 40, rp.z + 900);
+      const k = Ease.sine(c.u);
+      c.eye.set(rp.x + 40, rp.y + 30, rp.z - 240);
+      // Tilt up off the limb into the empty sky the corvette will come out of.
+      const dir = skyDirection(lerp(-30, -4, k), 22);
+      c.target.copy(c.eye).addScaledVector(dir, 3000);
     },
   });
 
@@ -1059,18 +1089,23 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
   shots.push({
     id: 'destroyer-reveal',
     name: 'Destroyer — overhead reveal',
-    start: 99, end: 118, region: 'exterior', near: 0.6, far: 40000, fov: 46, blend: 2.6,
+    start: 99, end: 118, region: 'exterior', near: 0.6, far: 40000, fov: 48, blend: 2.6,
     apply(c) {
       runnerPosition(c.t, rp);
-      destroyerPosition(c.t, dp);
       const k = Ease.sine(c.u);
-      // Hold low and behind the corvette; the destroyer arrives from over our
-      // shoulder and simply keeps arriving.
-      c.eye.set(rp.x + 22, rp.y - 34 - k * 12, rp.z + 210);
-      // Pan from the corvette up to the belly passing overhead.
-      const look = new THREE.Vector3().copy(rp).lerp(dp.clone().setZ(rp.z - 260), smoothstep(0.1, 0.85, c.u) * 0.62);
-      c.target.copy(look);
-      c.fov = lerp(46, 54, k);
+      // Low and behind the corvette, tilted up into the empty sky it is about
+      // to lose. The destroyer arrives from over our shoulder and simply keeps
+      // arriving; the camera only has to hold still and let it.
+      c.eye.set(rp.x + 74, rp.y - 40 - k * 10, rp.z + 215);
+      // Aim ahead and above: elevation climbs as the hull fills the frame.
+      const elevation = lerp(0.10, 0.46, smoothstep(0.05, 0.62, c.u));
+      const ahead = 620;
+      c.target.set(
+        rp.x + 34,
+        c.eye.y + ahead * Math.tan(elevation),
+        c.eye.z - ahead,
+      );
+      c.fov = lerp(48, 58, k);
     },
   });
   shots.push({
@@ -1221,7 +1256,7 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     apply(c) {
       const k = Ease.sine(c.u);
       // Low and central: he has to be the tallest thing in the frame.
-      c.eye.copy(cp(lerp(19.5, 15.0, k), 0.05, lerp(0.72, 1.05, k)));
+      c.eye.copy(cp(lerp(17.0, 12.4, k), 0.05, lerp(0.68, 0.98, k)));
       const vz = world.vader.group.visible ? world.vader.group.position.z - IO.z : CORRIDOR_MARKS.breachDoor;
       c.target.copy(cp(vz + 0.4, 0, lerp(1.35, 1.62, k)));
       c.fov = lerp(34, 30, k);

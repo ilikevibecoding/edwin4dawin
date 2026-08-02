@@ -43,6 +43,9 @@ const NOISE = /* glsl */ `
     }
     return s / n;
   }
+  // Expand a noise field around its mid-point. fbm averages toward 0.5, so
+  // without this every feature washes out into the same beige.
+  float ct(float v, float c) { return clamp((v - 0.5) * c + 0.5, 0.0, 1.0); }
   // Ridged variant — gives the sharp escarpments that read as canyon country.
   float ridged(vec3 p, int oct) {
     float a = 0.5, s = 0.0, n = 0.0;
@@ -90,50 +93,57 @@ const surfaceFrag = /* glsl */ `
     vec3 p = vObjPos;
 
     // --- Terrain field ------------------------------------------------------
-    float continents = fbm(p * 1.7 * uDetail, 5);
-    float duneField  = fbm(p * 9.0 * uDetail + vec3(11.0), 4);
-    float fineDunes  = fbm(p * 46.0 * uDetail, 4);
-    float canyons    = ridged(p * 5.2 * uDetail + vec3(3.7), 5);
-    float saltMask   = smoothstep(0.56, 0.72, fbm(p * 2.6 * uDetail + vec3(31.0), 4));
+    float continents = fbm(p * 3.1 * uDetail, 5);
+    float duneField  = fbm(p * 17.0 * uDetail + vec3(11.0), 5);
+    float fineDunes  = fbm(p * 95.0 * uDetail, 4);
+    float canyons    = ridged(p * 11.0 * uDetail + vec3(3.7), 6);
+    float saltMask   = smoothstep(0.54, 0.70, fbm(p * 4.6 * uDetail + vec3(31.0), 4));
 
     // Latitude drives a subtle cooler, paler polar band.
     float lat = abs(p.y);
     float polar = smoothstep(0.72, 0.97, lat);
 
     // --- Palette ------------------------------------------------------------
-    vec3 duneOchre   = vec3(0.78, 0.58, 0.34);
-    vec3 duneLight   = vec3(0.90, 0.75, 0.50);
-    vec3 rustRock    = vec3(0.52, 0.31, 0.19);
-    vec3 darkRock    = vec3(0.30, 0.21, 0.16);
-    vec3 saltFlat    = vec3(0.87, 0.82, 0.70);
-    vec3 polarPale   = vec3(0.83, 0.80, 0.74);
+    vec3 duneOchre   = vec3(0.80, 0.56, 0.29);
+    vec3 duneLight   = vec3(0.93, 0.77, 0.48);
+    vec3 rustRock    = vec3(0.49, 0.26, 0.14);
+    vec3 darkRock    = vec3(0.24, 0.16, 0.12);
+    vec3 saltFlat    = vec3(0.90, 0.85, 0.72);
+    vec3 polarPale   = vec3(0.84, 0.81, 0.75);
 
-    vec3 albedo = mix(duneOchre, duneLight, duneField);
-    albedo = mix(albedo, rustRock, smoothstep(0.42, 0.78, continents) * 0.75);
-    albedo = mix(albedo, darkRock, smoothstep(0.60, 0.92, canyons) * 0.62);
-    albedo = mix(albedo, saltFlat, saltMask * 0.7);
-    albedo = mix(albedo, polarPale, polar * 0.55);
-    albedo *= 0.92 + fineDunes * 0.16;
+    float land  = ct(continents, 2.6);
+    float dunes = ct(duneField, 2.0);
+    float rock  = ct(canyons, 2.4);
+    float fine  = ct(fineDunes, 1.8);
+
+    vec3 albedo = mix(duneOchre, duneLight, dunes);
+    albedo = mix(albedo, rustRock, smoothstep(0.40, 0.86, land));
+    albedo = mix(albedo, darkRock, smoothstep(0.52, 0.96, rock) * 0.9);
+    albedo = mix(albedo, saltFlat, saltMask * 0.8);
+    albedo = mix(albedo, polarPale, polar * 0.5);
+    // Fine ripple contrast is what stops the surface reading as a smooth egg.
+    albedo *= 0.74 + fine * 0.54;
+    albedo *= 0.84 + dunes * 0.32;
 
     // --- Relief -------------------------------------------------------------
     // Perturb the normal with the gradient of the fine dune field so the
     // terminator picks up ripple detail instead of looking like a smooth ball.
-    float e = 0.0016;
-    float h0 = duneField * 0.6 + canyons * 0.8 + fineDunes * 0.25;
-    float hx = fbm((p + vec3(e,0.0,0.0)) * 9.0 * uDetail + vec3(11.0), 4) * 0.6
-             + ridged((p + vec3(e,0.0,0.0)) * 5.2 * uDetail + vec3(3.7), 5) * 0.8;
-    float hy = fbm((p + vec3(0.0,e,0.0)) * 9.0 * uDetail + vec3(11.0), 4) * 0.6
-             + ridged((p + vec3(0.0,e,0.0)) * 5.2 * uDetail + vec3(3.7), 5) * 0.8;
-    float hz = fbm((p + vec3(0.0,0.0,e)) * 9.0 * uDetail + vec3(11.0), 4) * 0.6
-             + ridged((p + vec3(0.0,0.0,e)) * 5.2 * uDetail + vec3(3.7), 5) * 0.8;
+    float e = 0.0009;
+    float h0 = duneField * 0.6 + canyons * 0.8;
+    float hx = fbm((p + vec3(e,0.0,0.0)) * 17.0 * uDetail + vec3(11.0), 5) * 0.6
+             + ridged((p + vec3(e,0.0,0.0)) * 11.0 * uDetail + vec3(3.7), 6) * 0.8;
+    float hy = fbm((p + vec3(0.0,e,0.0)) * 17.0 * uDetail + vec3(11.0), 5) * 0.6
+             + ridged((p + vec3(0.0,e,0.0)) * 11.0 * uDetail + vec3(3.7), 6) * 0.8;
+    float hz = fbm((p + vec3(0.0,0.0,e)) * 17.0 * uDetail + vec3(11.0), 5) * 0.6
+             + ridged((p + vec3(0.0,0.0,e)) * 11.0 * uDetail + vec3(3.7), 6) * 0.8;
     vec3 grad = vec3(hx - h0, hy - h0, hz - h0) / e;
-    vec3 N = normalize(vNormalW - (grad - dot(grad, vNormalW) * vNormalW) * 0.0022);
+    vec3 N = normalize(vNormalW - (grad - dot(grad, vNormalW) * vNormalW) * 0.0016);
 
     // --- Binary illumination ------------------------------------------------
     // Wrap diffuse keeps the day/night boundary from being a hard knife edge.
-    float wrapA = clamp((dot(N, normalize(uSunA)) + 0.22) / 1.22, 0.0, 1.0);
-    float wrapB = clamp((dot(N, normalize(uSunB)) + 0.22) / 1.22, 0.0, 1.0);
-    vec3 light = uSunAColor * pow(wrapA, 1.25) + uSunBColor * pow(wrapB, 1.4) * 0.42;
+    float wrapA = clamp((dot(N, normalize(uSunA)) + 0.10) / 1.10, 0.0, 1.0);
+    float wrapB = clamp((dot(N, normalize(uSunB)) + 0.10) / 1.10, 0.0, 1.0);
+    vec3 light = uSunAColor * pow(wrapA, 1.55) + uSunBColor * pow(wrapB, 1.7) * 0.4;
 
     // Rough desert scatters back toward the viewer at grazing sun angles.
     float backscatter = pow(clamp(dot(normalize(uSunA), -vViewDir), 0.0, 1.0), 5.0) * 0.16;
@@ -144,11 +154,11 @@ const surfaceFrag = /* glsl */ `
     float fres = pow(1.0 - clamp(dot(N, vViewDir), 0.0, 1.0), 2.6);
     float dayside = max(wrapA, wrapB * 0.5);
     // Warm haze thickening toward the limb on the lit side.
-    col += vec3(0.95, 0.62, 0.34) * fres * dayside * 0.55;
+    col += vec3(0.95, 0.66, 0.40) * fres * dayside * 0.34;
     // Thin cool arc that survives just past the terminator.
-    col += vec3(0.35, 0.42, 0.62) * fres * smoothstep(0.0, 0.35, dayside) * (1.0 - dayside) * 0.5;
+    col += vec3(0.42, 0.44, 0.58) * fres * smoothstep(0.0, 0.30, dayside) * (1.0 - dayside) * 0.62;
     // Faint night-side ambience so the dark limb never becomes a void.
-    col += albedo * 0.018;
+    col += albedo * 0.012;
 
     col *= uExposure;
     gl_FragColor = vec4(col, 1.0);
@@ -181,7 +191,7 @@ const atmosphereFrag = /* glsl */ `
 
   void main() {
     vec3 N = normalize(vNormalW);
-    float fres = pow(1.0 - clamp(dot(N, vViewDir), 0.0, 1.0), 3.2);
+    float fres = pow(1.0 - clamp(dot(N, vViewDir), 0.0, 1.0), 5.0);
     float sun = clamp(dot(N, normalize(uSunA)) + 0.32, 0.0, 1.0);
 
     // Forward scattering: the limb blazes where we look through the most air
@@ -266,8 +276,8 @@ export class Tatooine {
       uniforms: {
         uSunA: { value: sunA },
         uSunB: { value: sunB },
-        uSunAColor: { value: new THREE.Color('#fff1d8').multiplyScalar(1.28) },
-        uSunBColor: { value: new THREE.Color('#ffb072').multiplyScalar(0.9) },
+        uSunAColor: { value: new THREE.Color('#fff0d0').multiplyScalar(1.34) },
+        uSunBColor: { value: new THREE.Color('#ffa860').multiplyScalar(0.82) },
         uTime: { value: 0 },
         uDetail: { value: 1 },
         uExposure: { value: 1 },
@@ -284,7 +294,7 @@ export class Tatooine {
       uniforms: {
         uSunA: { value: sunA },
         uTime: { value: 0 },
-        uOpacity: { value: 0.5 },
+        uOpacity: { value: 0.62 },
       },
       vertexShader: dustVert,
       fragmentShader: dustFrag,
@@ -302,9 +312,9 @@ export class Tatooine {
     this.atmosphereMat = new THREE.ShaderMaterial({
       uniforms: {
         uSunA: { value: sunA },
-        uColorDay: { value: new THREE.Color('#ffd2a0') },
-        uColorRim: { value: new THREE.Color('#5f7fb8') },
-        uIntensity: { value: 1.15 },
+        uColorDay: { value: new THREE.Color('#ffcf9c') },
+        uColorRim: { value: new THREE.Color('#6d86ad') },
+        uIntensity: { value: 0.78 },
         uCenter: { value: new THREE.Vector3() },
       },
       vertexShader: atmosphereVert,
@@ -315,7 +325,7 @@ export class Tatooine {
       side: THREE.BackSide,
     });
     this.atmosphere = new THREE.Mesh(
-      new THREE.SphereGeometry(PLANET_RADIUS * 1.055, Math.max(48, o.segments / 2), Math.max(24, o.segments / 4)),
+      new THREE.SphereGeometry(PLANET_RADIUS * 1.026, Math.max(48, o.segments / 2), Math.max(24, o.segments / 4)),
       this.atmosphereMat,
     );
     this.atmosphere.name = 'TatooineAtmosphere';

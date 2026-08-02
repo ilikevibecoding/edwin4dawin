@@ -111,12 +111,16 @@ export function runSanityChecks(input: SanityInput): Issue[] {
     const bayZ = CORRIDOR_SECTIONS * SECTION_LENGTH + 3.1;
     for (const [name, obj, visible] of figures) {
       if (!visible) continue;
-      const local = obj.position.clone().sub(INTERIOR_ORIGIN);
+      // Figures are children of the interior group, so their transform is
+      // already expressed in corridor-local space.
+      const local = obj.position;
       if (Math.abs(local.y) > 0.08) {
         issues.push({ severity: 'error', code: 'figure-off-floor', detail: `${name} y=${local.y.toFixed(2)}` });
       }
       const inBay = local.z > bayZ - 3.6;
-      const halfW = inBay ? 3.6 : CORRIDOR_WIDTH / 2;
+      // The launch tube extends beyond the bay's side wall; droids boarding
+      // legitimately stand inside it.
+      const halfW = inBay ? 5.4 : CORRIDOR_WIDTH / 2;
       if (Math.abs(local.x) > halfW) {
         issues.push({ severity: 'warn', code: 'figure-in-wall', detail: `${name} x=${local.x.toFixed(2)}` });
       }

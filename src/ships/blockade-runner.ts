@@ -92,7 +92,9 @@ export class BlockadeRunner {
     const structure = metalMaterial('runnerStruct', '#787b78', 0.55, 0.68);
     const dark = metalMaterial('runnerShadow', '#3a3d40', 0.8, 0.4);
     this.windowMat = emissiveMaterial('runnerWin', '#cfe6ff', 0.85).clone();
-    this.engineMat = emissiveMaterial('runnerEngine', PALETTE.engineCore, 2.6).clone();
+    // Just over the bloom threshold and distinctly blue: a pure-white core at
+    // high intensity blooms into one shapeless ball from astern.
+    this.engineMat = emissiveMaterial('runnerEngine', '#a8d8ff', 1.2).clone();
 
     /* ------------------------------------------------------------ main body */
     // Full amidships, gently waisted toward the stern, tapering to the neck.
@@ -247,10 +249,15 @@ export class BlockadeRunner {
     );
     engineBlock.position.z = ENGINE_BLOCK_Z;
     this.group.add(engineBlock);
-    const engineRing = new THREE.Mesh(new THREE.CylinderGeometry(10.7, 10.7, 2.6, 24), structure);
+    // An open collar rather than a solid plate, so the bells sit in a recess.
+    const engineRing = new THREE.Mesh(new THREE.CylinderGeometry(10.5, 10.9, 5.2, 26, 1, true), structure);
     engineRing.rotation.x = Math.PI / 2;
-    engineRing.position.z = CLUSTER_Z - 1.6;
+    engineRing.position.z = CLUSTER_Z - 2.4;
+    engineRing.material = structure;
     this.group.add(engineRing);
+    const engineBack = new THREE.Mesh(new THREE.CircleGeometry(10.4, 26), dark);
+    engineBack.position.z = CLUSTER_Z - 4.6;
+    this.group.add(engineBack);
 
     const cluster = new THREE.Object3D();
     cluster.name = 'EngineCluster';
@@ -280,13 +287,17 @@ export class BlockadeRunner {
       cluster.add(core);
       this.engineCores.push(core);
 
-      const flare = new THREE.Mesh(
-        new THREE.PlaneGeometry(r * 2.6, r * 2.6),
-        additiveMaterial(`runnerFlare${r}`, '#7fbdff', 0.3, flareTex).clone(),
-      );
-      flare.position.set(x, y, 1.4);
-      cluster.add(flare);
-      this.engineFlares.push(flare);
+      // Only the larger bells get a flare card; eleven overlapping additive
+      // sprites bloom into one featureless ball at any distance.
+      if (r > 2) {
+        const flare = new THREE.Mesh(
+          new THREE.PlaneGeometry(r * 2.4, r * 2.4),
+          additiveMaterial(`runnerFlare${r}`, '#7fbdff', 0.16, flareTex).clone(),
+        );
+        flare.position.set(x, y, 1.4);
+        cluster.add(flare);
+        this.engineFlares.push(flare);
+      }
 
       // One tapered plume per bell. The apex points aft (+Z) so the exhaust
       // narrows as it leaves the nozzle.
@@ -435,9 +446,9 @@ export class BlockadeRunner {
     const flicker = 0.9 + Math.sin(elapsed * 21.7) * 0.05 + Math.sin(elapsed * 7.3) * 0.05;
     const level = power * flicker;
 
-    this.engineMat.emissiveIntensity = 0.12 + level * 2.6;
+    this.engineMat.emissiveIntensity = 0.1 + level * 1.15;
     for (const f of this.engineFlares) {
-      (f.material as THREE.MeshBasicMaterial).opacity = 0.3 * level;
+      (f.material as THREE.MeshBasicMaterial).opacity = 0.16 * level;
       f.visible = level > 0.01;
     }
     for (const m of this.plumeMats) m.uniforms.uIntensity.value = 0.5 * level;

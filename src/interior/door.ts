@@ -153,14 +153,18 @@ export class BlastDoor {
         : 0;
 
       const slide = this.openAmount * (leafW + 0.1) * s;
-      const blowZ = this.blown * (2.6 + i * 0.7);
-      const blowX = this.blown * s * 0.55;
+      // Torn off the runners: the leaves tumble inward and end up flat-ish on
+      // the deck, leaning against the frame rather than hovering.
+      const b = this.blown;
+      const blowZ = b * (2.4 + i * 0.6);
+      const blowX = b * s * 0.5;
+      const drop = -b * (h - 0.28) * 0.42;
 
-      leaf.position.set(rest.x + slide + blowX + shudder, rest.y + this.blown * -0.15, rest.z + blowZ);
+      leaf.position.set(rest.x + slide + blowX + shudder, rest.y + drop, rest.z + blowZ);
       leaf.rotation.set(
-        this.blown * (0.5 + i * 0.35),
-        this.blown * s * 0.7,
-        this.blown * s * (0.35 + i * 0.2) + shudder * 0.6,
+        b * (1.12 + i * 0.16),
+        b * s * 0.42,
+        b * s * (0.22 + i * 0.14) + shudder * 0.6,
       );
     }
 

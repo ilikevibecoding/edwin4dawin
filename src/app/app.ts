@@ -225,6 +225,9 @@ export class App {
   /** Decode narration, run the GPU probe, then unlock the gate. */
   async prepare(): Promise<void> {
     this.ui.setLoadProgress(0.05, 'Building the galaxy…');
+    // The audio graph is created (but left suspended) up front so narration
+    // can be decoded during loading rather than after the gate opens.
+    this.audio.prepare();
     // Render a few frames so shaders compile before we time anything.
     this.timeline.seek(0);
     for (let i = 0; i < 3; i++) {
@@ -280,8 +283,8 @@ export class App {
       this.audio.setLevel('music', this.prefs.music);
       this.audio.setLevel('sfx', this.prefs.sfx);
       this.audio.setLevel('narration', this.prefs.narration);
-      // Narration is decoded lazily if the context was not available earlier.
-      await this.narrator.load();
+    } else {
+      console.warn('[audio] the browser refused to start an AudioContext; running silent.');
     }
     this.ui.hideGate();
     this.timeline.seek(0);

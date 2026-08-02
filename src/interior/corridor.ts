@@ -36,6 +36,8 @@ export class CorridorSection {
     this.group.name = 'CorridorSection';
     const rng = new Rng(seed);
     const wall = corridorWallMaterial(`wall${variant % 3}`);
+    const wallInside = corridorWallMaterial(`wall-in${variant % 3}`);
+    wallInside.side = THREE.BackSide;
     const floorMat = corridorFloorMaterial();
     const struct = metalMaterial('corridorStruct', '#8d9096', 0.5, 0.55);
     const dark = metalMaterial('corridorDark', '#41454b', 0.7, 0.5);
@@ -74,17 +76,18 @@ export class CorridorSection {
       // Quarter-cylinder shoulder. After rotating the cylinder's axis onto −Z,
       // theta = 0 faces up and theta = ±π/2 faces ±X, so a quarter sweep from
       // vertical to horizontal is exactly what we want.
+      // The cylinder's faces point outward, so it is drawn back-side to be
+      // visible from inside the corridor.
       const shoulder = new THREE.Mesh(
         new THREE.CylinderGeometry(
-          shoulderR, shoulderR, SECTION_LENGTH, 12, 1, true,
+          shoulderR, shoulderR, SECTION_LENGTH, 14, 1, true,
           s > 0 ? 0 : -Math.PI / 2,
           Math.PI / 2,
         ),
-        wall,
+        wallInside,
       );
       shoulder.rotation.x = -Math.PI / 2;
       shoulder.position.set(s * ceilingHalf, wallTop, SECTION_LENGTH / 2);
-      shoulder.material = wall;
       this.group.add(shoulder);
     }
 
@@ -222,8 +225,8 @@ export class Corridor {
     for (const z of [SECTION_LENGTH * 1.5, this.length * 0.5, this.length - SECTION_LENGTH * 1.5]) {
       for (const s of [-1, 1]) {
         const m = alarmMat.clone();
-        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 6), m);
-        dome.position.set(s * (CORRIDOR_WIDTH / 2 - 0.08), CORRIDOR_HEIGHT - 0.55, z);
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 6), m);
+        dome.position.set(s * (CORRIDOR_WIDTH / 2 - 0.06), CORRIDOR_HEIGHT - 0.75, z);
         this.group.add(dome);
         this.alarmMats.push(m);
       }
@@ -302,7 +305,7 @@ export class Corridor {
     for (const l of this.lights) l.intensity = base;
 
     const strobe = this.alarm * (0.5 + 0.5 * Math.sin(elapsed * 4.2));
-    for (const m of this.alarmMats) m.emissiveIntensity = strobe * 5;
+    for (const m of this.alarmMats) m.emissiveIntensity = strobe * 2.4;
     for (const l of this.alarmLights) l.intensity = strobe * 7;
   }
 }

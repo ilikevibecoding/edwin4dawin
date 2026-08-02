@@ -101,9 +101,9 @@ export class ImperialDestroyer {
       normalScale: 0.35,
     });
     const hullDark = hullMaterial('isdDark', {
-      color: PALETTE.imperialHullDark,
+      color: '#6b7178',
       grimeTint: 'cool',
-      grime: 0.34,
+      grime: 0.3,
       cell: 52,
       roughness: 0.72,
       metalness: 0.5,
@@ -122,6 +122,9 @@ export class ImperialDestroyer {
       repeat: 2,
     });
     const trimMetal = metalMaterial('isdTrim', PALETTE.imperialTrim, 0.5, 0.82);
+    // A lighter grey for ventral detail: without a value break from the keel
+    // itself, the underside reads as one featureless plate.
+    const bellyDetail = metalMaterial('isdBelly', '#787e85', 0.66, 0.55);
     const deepShadow = metalMaterial('isdDeep', '#23272c', 0.86, 0.35);
     this.windowMat = emissiveMaterial('isdWin', '#b9d6ff', 0.9).clone();
     this.engineMat = emissiveMaterial('isdEngine', '#d5ebff', 2.4).clone();
@@ -311,6 +314,48 @@ export class ImperialDestroyer {
     this.hangarLight.position.set(0, hangarY - 20, hangarZ);
     this.group.add(this.hangarLight);
 
+    // Longitudinal keel ribs and grooves. Long straight lines give a hull this
+    // size a readable direction and a sense of length. Each is trimmed to the
+    // station where the keel is actually wide enough to carry it, otherwise it
+    // hangs off the edge of the ship in mid-space.
+    const keelHalfWidthAt = (z: number) => hullHalfWidth((z - 66) / 0.9) * 0.6;
+    const ribSpan = (x: number, margin: number): [number, number] | null => {
+      let zStart = STERN_Z;
+      for (let z = BOW_Z; z < STERN_Z; z += 10) {
+        if (keelHalfWidthAt(z) > Math.abs(x) + margin) {
+          zStart = z;
+          break;
+        }
+      }
+      const zEnd = STERN_Z - 40;
+      return zEnd - zStart > 90 ? [zStart, zEnd] : null;
+    };
+    for (const [x, w, mat, dy] of [
+      [-196, 22, bellyDetail, 4],
+      [-100, 22, bellyDetail, 4],
+      [100, 22, bellyDetail, 4],
+      [196, 22, bellyDetail, 4],
+      [-150, 26, deepShadow, 8],
+      [-50, 26, deepShadow, 8],
+      [50, 26, deepShadow, 8],
+      [150, 26, deepShadow, 8],
+    ] as Array<[number, number, THREE.Material, number]>) {
+      const span = ribSpan(x, w);
+      if (!span) continue;
+      const len = span[1] - span[0];
+      const rib = new THREE.Mesh(roundedBox(w, dy > 5 ? 8 : 13, len, 3), mat);
+      rib.position.set(x, -keelDepth + dy, (span[0] + span[1]) / 2);
+      this.group.add(rib);
+    }
+    // Transverse frames every 150 m, trimmed to the keel outline.
+    for (let z = -340; z < 620; z += 150) {
+      const hw2 = keelHalfWidthAt(z) - 22;
+      if (hw2 < 40) continue;
+      const frame = new THREE.Mesh(roundedBox(hw2 * 2, 9, 15, 3), bellyDetail);
+      frame.position.set(0, -keelDepth + 3, z);
+      this.group.add(frame);
+    }
+
     // Main reactor bulb aft of the hangar.
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(70, 20, 14), hullDark);
     bulb.position.set(0, -96, 540);
@@ -403,13 +448,13 @@ export class ImperialDestroyer {
       });
       this.group.add(bowGreeble);
 
-      const bellyGreeble = greebleField(hullDark, {
-        count: Math.round(260 * quality.greebleScale),
-        area: { x: [-240, 240], z: [-360, 620] },
+      const bellyGreeble = greebleField(bellyDetail, {
+        count: Math.round(420 * quality.greebleScale),
+        area: { x: [-250, 250], z: [-420, 640] },
         y: -keelDepth + 2,
-        minSize: 6,
-        maxSize: 18,
-        maxHeight: 7,
+        minSize: 8,
+        maxSize: 26,
+        maxHeight: 11,
         seed: `${seed}-belly`,
         mask: (x, z) => {
           const hw = hullHalfWidth((z - 66) / 0.9) * 0.6 - 24;
@@ -419,6 +464,50 @@ export class ImperialDestroyer {
       });
       bellyGreeble.scale.y = -1;
       this.group.add(bellyGreeble);
+    }
+
+    /* ------------------------------------------------------- hull lighting */
+    // Rows of small running lights along the flanks and keel. On a hull this
+    // large they are the single clearest scale cue: the eye counts them.
+    {
+      const lampGeo = new THREE.SphereGeometry(1.7, 6, 4);
+      const lampMat = emissiveMaterial('isdRunning', '#cfe2ff', 1.5);
+      const positions: THREE.Vector3[] = [];
+      const rows = 84;
+      for (let i = 0; i < rows; i++) {
+        const z = THREE.MathUtils.lerp(BOW_Z + 90, STERN_Z - 40, i / (rows - 1));
+        const hw = hullHalfWidth(z);
+        if (hw < 20) continue;
+        for (const s of [-1, 1]) {
+          // Just inboard of the chine, on the shoulder between deck and flank.
+          positions.push(new THREE.Vector3(s * (hw - 14), 6, z));
+          if (i % 2 === 0) positions.push(new THREE.Vector3(s * (hw * 0.62 - 9), -keelDepth + 9, z));
+          if (i % 3 === 0) positions.push(new THREE.Vector3(s * (hw * 0.7 * DECK_X_SCALE), DECK_Y - 2, z * 0.94 + DECK_Z_OFFSET));
+        }
+      }
+      const lamps = new THREE.InstancedMesh(lampGeo, lampMat, positions.length);
+      const m4 = new THREE.Matrix4();
+      positions.forEach((p, i) => lamps.setMatrixAt(i, m4.makeTranslation(p.x, p.y, p.z)));
+      lamps.instanceMatrix.needsUpdate = true;
+      lamps.frustumCulled = false;
+      lamps.name = 'RunningLights';
+      this.group.add(lamps);
+
+      // Broad, dim floodlights washing the keel so the belly is never a void.
+      const floodMat = additiveMaterial('isdFlood', '#8fb4e8', 0.09, flareTex).clone();
+      for (const z of [-380, -80, 220, 520]) {
+        const hw = hullHalfWidth((z - 66) / 0.9) * 0.6;
+        const flood = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(120, hw * 1.9), 300), floodMat);
+        flood.rotation.x = Math.PI / 2;
+        flood.position.set(0, -keelDepth + 4, z);
+        this.group.add(flood);
+      }
+      // Ventral spotlights that actually light the greebling.
+      for (const z of [-420, -160, 120, 400, 620]) {
+        const l = new THREE.PointLight(0xb4cdf0, 14000, 900, 2);
+        l.position.set(0, -keelDepth - 40, z);
+        this.group.add(l);
+      }
     }
 
     /* ------------------------------------------------------------- turrets */

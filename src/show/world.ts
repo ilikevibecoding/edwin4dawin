@@ -132,7 +132,9 @@ export class World {
     });
     this.planet.setDetail(1);
     // Below and ahead: the ships fly above the day/night terminator.
-    this.planet.group.position.set(-700, -PLANET_RADIUS * 1.02, -1500);
+    // Below and a little ahead: the ships run above the terminator. Far enough
+    // that the sphere reads as a sphere (it subtends roughly 59°).
+    this.planet.group.position.set(-2200, -5400, -1800);
     sky.add(this.planet.group);
 
     this.sunPrimary = makeSunDisc('#fff4e0', 1400, 'SunPrimary');
@@ -150,15 +152,16 @@ export class World {
     this.keyLight.position.copy(this.sunDirection).multiplyScalar(4000);
     this.keyLight.castShadow = false;
     this.exterior.add(this.keyLight);
-    // Warm bounce from the planet below.
-    this.fillLight = new THREE.DirectionalLight(0xd08a4a, 0.72);
-    this.fillLight.position.set(-500, -3000, -1200);
+    // Planetshine from below. Without a strong bounce the destroyer's
+    // underside — the shot the whole reveal depends on — is a black wedge.
+    this.fillLight = new THREE.DirectionalLight(0xdccdbb, 2.15);
+    this.fillLight.position.set(-700, -3000, -1400);
     this.exterior.add(this.fillLight);
-    // Cold rim from the star field opposite.
-    this.rimLight = new THREE.DirectionalLight(0x8fb4ff, 0.6);
+    // Cold rim from the opposite side of the sky.
+    this.rimLight = new THREE.DirectionalLight(0x9dc0ff, 1.15);
     this.rimLight.position.set(-1800, 900, 2400);
     this.exterior.add(this.rimLight);
-    this.spaceAmbient = new THREE.HemisphereLight(0x35404f, 0x2a1c12, 0.5);
+    this.spaceAmbient = new THREE.HemisphereLight(0x54637d, 0x51402d, 0.9);
     this.exterior.add(this.spaceAmbient);
 
     this.runner = new BlockadeRunner(quality, 'runner');
@@ -500,8 +503,8 @@ export class World {
   setExteriorMood(sunlit: number, shadowFill: number): void {
     this.keyLight.intensity = 3.0 * sunlit;
     this.fillLight.intensity = 0.72 * (0.5 + shadowFill);
-    this.rimLight.intensity = 0.6 * (0.4 + shadowFill * 1.1);
-    this.spaceAmbient.intensity = 0.5 * (0.6 + shadowFill * 0.8);
+    this.rimLight.intensity = 0.95 * (0.5 + shadowFill * 0.9);
+    this.spaceAmbient.intensity = 0.62 * (0.6 + shadowFill * 0.8);
   }
 
   setInteriorMood(level: number, vaderPresence: number): void {
@@ -509,7 +512,7 @@ export class World {
     this.podBay.setLightLevel(level);
     this.interiorAmbient.intensity = 0.55 * level * (1 - vaderPresence * 0.45);
     this.vaderKey.intensity = vaderPresence * 26;
-    this.corridor.setTint('#ff5a3a', vaderPresence * 0.5);
+    this.corridor.setTint('#ff6a48', vaderPresence * 0.34);
   }
 
   setVaderKeyPosition(worldZ: number): void {
