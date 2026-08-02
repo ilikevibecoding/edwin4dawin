@@ -15,37 +15,29 @@
   <rect x="20" y="24" width="120" height="6" fill="#f2cd37"/>
 
   <!-- left column: rows of data bars -->
-  <g fill="#4b9f4a">
-    <rect x="24" y="48" width="150" height="12" rx="3"/>
-    <rect x="24" y="70" width="96" height="12" rx="3"/>
-    <rect x="24" y="92" width="132" height="12" rx="3"/>
-    <rect x="24" y="114" width="68" height="12" rx="3"/>
-    <rect x="24" y="136" width="158" height="12" rx="3"/>
-    <rect x="24" y="158" width="110" height="12" rx="3"/>
-    <rect x="24" y="180" width="140" height="12" rx="3"/>
-    <rect x="24" y="202" width="80" height="12" rx="3"/>
-  </g>
-  <g fill="#f2cd37">
-    <rect x="182" y="48" width="30" height="12" rx="3"/>
-    <rect x="128" y="70" width="30" height="12" rx="3"/>
-    <rect x="164" y="92" width="30" height="12" rx="3"/>
-    <rect x="190" y="136" width="22" height="12" rx="3"/>
-    <rect x="172" y="180" width="22" height="12" rx="3"/>
-  </g>
+  <rect x="24" y="48" width="150" height="12" rx="3" fill="#4b9f4a"/>
+  <rect x="24" y="70" width="96" height="12" rx="3" fill="#4b9f4a"/>
+  <rect x="24" y="92" width="132" height="12" rx="3" fill="#4b9f4a"/>
+  <rect x="24" y="114" width="68" height="12" rx="3" fill="#4b9f4a"/>
+  <rect x="24" y="136" width="158" height="12" rx="3" fill="#4b9f4a"/>
+  <rect x="24" y="158" width="110" height="12" rx="3" fill="#4b9f4a"/>
+  <rect x="24" y="180" width="140" height="12" rx="3" fill="#4b9f4a"/>
+  <rect x="24" y="202" width="80" height="12" rx="3" fill="#4b9f4a"/>
+  <rect x="182" y="48" width="30" height="12" rx="3" fill="#f2cd37"/>
+  <rect x="128" y="70" width="30" height="12" rx="3" fill="#f2cd37"/>
+  <rect x="164" y="92" width="30" height="12" rx="3" fill="#f2cd37"/>
+  <rect x="190" y="136" width="22" height="12" rx="3" fill="#f2cd37"/>
+  <rect x="172" y="180" width="22" height="12" rx="3" fill="#f2cd37"/>
 
   <!-- lower ladder bars -->
-  <g fill="#123040">
-    <rect x="24" y="234" width="188" height="10" rx="3"/>
-    <rect x="24" y="252" width="188" height="10" rx="3"/>
-    <rect x="24" y="270" width="188" height="10" rx="3"/>
-    <rect x="24" y="288" width="188" height="10" rx="3"/>
-  </g>
-  <g fill="#4b9f4a">
-    <rect x="24" y="234" width="122" height="10" rx="3"/>
-    <rect x="24" y="252" width="164" height="10" rx="3"/>
-    <rect x="24" y="270" width="72" height="10" rx="3"/>
-    <rect x="24" y="288" width="140" height="10" rx="3"/>
-  </g>
+  <rect x="24" y="234" width="188" height="10" rx="3" fill="#123040"/>
+  <rect x="24" y="252" width="188" height="10" rx="3" fill="#123040"/>
+  <rect x="24" y="270" width="188" height="10" rx="3" fill="#123040"/>
+  <rect x="24" y="288" width="188" height="10" rx="3" fill="#123040"/>
+  <rect x="24" y="234" width="122" height="10" rx="3" fill="#4b9f4a"/>
+  <rect x="24" y="252" width="164" height="10" rx="3" fill="#4b9f4a"/>
+  <rect x="24" y="270" width="72" height="10" rx="3" fill="#4b9f4a"/>
+  <rect x="24" y="288" width="140" height="10" rx="3" fill="#4b9f4a"/>
 
   <!-- waveform panel -->
   <rect x="236" y="44" width="152" height="106" fill="none" stroke="#123040" stroke-width="3"/>
@@ -58,37 +50,29 @@
   <circle cx="428" cy="222" r="64" fill="#08161f" stroke="#123040" stroke-width="4"/>
   <circle cx="428" cy="222" r="48" fill="none" stroke="#123040" stroke-width="2"/>
   <g stroke="#4b9f4a" stroke-width="4" stroke-linecap="round">
-    <path d="M380 222 L392 222"/>
-    <path d="M394 188 L403 197"/>
-    <path d="M428 174 L428 186"/>
-    <path d="M462 188 L453 197"/>
-    <path d="M476 222 L464 222"/>
+    <path d="M380 222 L392 222" fill="none"/>
+    <path d="M394 188 L403 197" fill="none"/>
+    <path d="M428 174 L428 186" fill="none"/>
+    <path d="M462 188 L453 197" fill="none"/>
+    <path d="M476 222 L464 222" fill="none"/>
   </g>
   <path fill="none" stroke="#f2cd37" stroke-width="5" stroke-linecap="round"
         d="M428 222 L462 190"/>
   <circle cx="428" cy="222" r="9" fill="#f2cd37"/>
 
   <!-- gauge label bars -->
-  <g fill="#123040">
-    <rect x="368" y="298" width="120" height="8" rx="3"/>
-  </g>
+  <rect x="368" y="298" width="120" height="8" rx="3" fill="#123040"/>
   <rect x="368" y="298" width="46" height="8" rx="3" fill="#4b9f4a"/>
 
   <!-- right hand status pips -->
-  <g fill="#4b9f4a">
-    <rect x="404" y="52" width="16" height="16" rx="3"/>
-    <rect x="428" y="52" width="16" height="16" rx="3"/>
-  </g>
-  <g fill="#f2cd37">
-    <rect x="452" y="52" width="16" height="16" rx="3"/>
-    <rect x="404" y="76" width="16" height="16" rx="3"/>
-  </g>
-  <g fill="#123040">
-    <rect x="428" y="76" width="16" height="16" rx="3"/>
-    <rect x="452" y="76" width="16" height="16" rx="3"/>
-    <rect x="404" y="100" width="16" height="16" rx="3"/>
-    <rect x="428" y="100" width="16" height="16" rx="3"/>
-    <rect x="452" y="100" width="16" height="16" rx="3"/>
-  </g>
+  <rect x="404" y="52" width="16" height="16" rx="3" fill="#4b9f4a"/>
+  <rect x="428" y="52" width="16" height="16" rx="3" fill="#4b9f4a"/>
+  <rect x="452" y="52" width="16" height="16" rx="3" fill="#f2cd37"/>
+  <rect x="404" y="76" width="16" height="16" rx="3" fill="#f2cd37"/>
+  <rect x="428" y="76" width="16" height="16" rx="3" fill="#123040"/>
+  <rect x="452" y="76" width="16" height="16" rx="3" fill="#123040"/>
+  <rect x="404" y="100" width="16" height="16" rx="3" fill="#123040"/>
+  <rect x="428" y="100" width="16" height="16" rx="3" fill="#123040"/>
+  <rect x="452" y="100" width="16" height="16" rx="3" fill="#123040"/>
 
 </svg>

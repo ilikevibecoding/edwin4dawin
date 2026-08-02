@@ -6,9 +6,19 @@
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
 
-  <!-- brows: outer end high, inner end dropped -->
-  <path fill="#1b2a34" d="M148 150 L226 178 L226 198 L148 172Z"/>
-  <path fill="#1b2a34" d="M364 150 L286 178 L286 198 L364 172Z"/>
+  <!-- brows: arched, outer ends lifted into a point, inner ends level and set
+       well clear of the eyes. Determined uses straight wedges that plunge to
+       the nose - these have to read differently or the two faces collide. -->
+  <path fill="#1b2a34" d="M142 144
+    C172 152 206 164 228 168
+    L228 186
+    C204 182 174 172 150 166
+    Z"/>
+  <path fill="#1b2a34" d="M370 144
+    C340 152 306 164 284 168
+    L284 186
+    C308 182 338 172 362 166
+    Z"/>
 
   <!-- small round eyes -->
   <circle cx="198" cy="226" r="21" fill="#1b2a34"/>

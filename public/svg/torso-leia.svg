@@ -20,21 +20,21 @@
         d="M484 62 C416 40 364 44 326 66"/>
 
   <!-- fold lines -->
-  <g fill="none" stroke="#cfd3d6" stroke-width="6" stroke-linecap="round">
-    <path d="M92 120 C86 210 90 300 104 372"/>
-    <path d="M148 142 C142 232 146 312 158 378"/>
-    <path d="M420 120 C426 210 422 300 408 372"/>
-    <path d="M364 142 C370 232 366 312 354 378"/>
-    <path d="M228 168 C224 244 226 312 232 372"/>
-    <path d="M284 168 C288 244 286 312 280 372"/>
+  <g stroke="#cfd3d6" stroke-width="6" stroke-linecap="round">
+    <path d="M92 120 C86 210 90 300 104 372" fill="none"/>
+    <path d="M148 142 C142 232 146 312 158 378" fill="none"/>
+    <path d="M420 120 C426 210 422 300 408 372" fill="none"/>
+    <path d="M364 142 C370 232 366 312 354 378" fill="none"/>
+    <path d="M228 168 C224 244 226 312 232 372" fill="none"/>
+    <path d="M284 168 C288 244 286 312 280 372" fill="none"/>
   </g>
 
   <!-- skirt folds below the belt -->
-  <g fill="none" stroke="#cfd3d6" stroke-width="6" stroke-linecap="round">
-    <path d="M110 452 L104 512"/>
-    <path d="M186 452 L182 512"/>
-    <path d="M326 452 L330 512"/>
-    <path d="M402 452 L408 512"/>
+  <g stroke="#cfd3d6" stroke-width="6" stroke-linecap="round">
+    <path d="M110 452 L104 512" fill="none"/>
+    <path d="M186 452 L182 512" fill="none"/>
+    <path d="M326 452 L330 512" fill="none"/>
+    <path d="M402 452 L408 512" fill="none"/>
   </g>
 
   <!-- silver belt -->

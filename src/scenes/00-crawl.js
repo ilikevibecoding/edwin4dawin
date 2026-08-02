@@ -57,7 +57,7 @@ const CRAWL_YELLOW = '#f2cd37';
 // Plane-local height at which each paragraph should read biggest. They climb
 // so the crawl decelerates gently instead of lurching: the first paragraph is
 // caught low and large, the last one is already on its way out.
-const PROMINENT_Y = [6.0, 9.5, 13.0];
+const PROMINENT_Y = [7.5, 11.0, 15.5];
 const FADE_NEAR = 33; // distance where the crawl starts dissolving
 const FADE_FAR = 70; // distance where it is gone (~73% up the frame)
 // Bloom threshold is 0.6 and #f2cd37 sits just above it. Knocking the panel
@@ -186,9 +186,9 @@ function envTexture() {
   const g = c.getContext('2d');
   g.fillStyle = '#04060b';
   g.fillRect(0, 0, 512, 256);
-  const warm = g.createRadialGradient(150, 60, 0, 150, 60, 210);
-  warm.addColorStop(0, '#ffe6bd');
-  warm.addColorStop(0.3, '#8a6634');
+  const warm = g.createRadialGradient(150, 60, 0, 150, 60, 230);
+  warm.addColorStop(0, '#cfae7d');
+  warm.addColorStop(0.34, '#6d4f26');
   warm.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = warm;
   g.fillRect(0, 0, 512, 256);
@@ -372,13 +372,13 @@ export async function build(ctx) {
     logoGone: L0.t1 + 7.4, // ~13.5 faded out, comfortably before 15
     // The crawl heading also reads THE STOLEN PLANS, so it must not enter the
     // frame while the title's subtitle is still down there.
-    crawlStart: L1.t0 - 0.6, // ~8.4  content edge at the bottom of frame
-    p1: L1.t0 + 4.0, // ~13.0
+    crawlStart: L1.t0 - 1.0, // ~8.0  content edge just below the frame
+    p1: L1.t0 + 4.9, // ~13.9
     p2: L2.t0 + 4.0, // ~22.0
     p3: L3.t0 + 3.0, // ~31.9
     crawlExit: L3.t1 + 0.95, // ~37.6 last line has climbed away
     dissolve: [L3.t1 - 0.95, L3.t1 + 1.55], // ~35.7 -> 38.2
-    tilt: [L3.t1 + 0.55, L3.t1 + 5.15], // ~37.2 -> 41.8
+    tilt: [L3.t1 + 0.25, L3.t1 + 5.75], // ~36.9 -> 42.4
   };
   const END = ctx.duration;
 
@@ -389,11 +389,11 @@ export async function build(ctx) {
   const ambient = new THREE.HemisphereLight(0x5b7ba8, 0x0a0d14, 0.35);
   scene.add(ambient);
 
-  const logoKey = new THREE.DirectionalLight(0xfff2d8, 3.1);
+  const logoKey = new THREE.DirectionalLight(0xfff2d8, 2.5);
   logoKey.position.set(26, 34, 40);
-  const logoRim = new THREE.DirectionalLight(0xffc06a, 4.4);
+  const logoRim = new THREE.DirectionalLight(0xffc06a, 3.2);
   logoRim.position.set(-40, 26, -34);
-  const logoFill = new THREE.DirectionalLight(0x88b6ff, 0.9);
+  const logoFill = new THREE.DirectionalLight(0x88b6ff, 0.8);
   logoFill.position.set(-18, -14, 30);
   scene.add(logoKey, logoRim, logoFill);
 
@@ -405,6 +405,34 @@ export async function build(ctx) {
   const sunFill = new THREE.DirectionalLight(0x93b4e6, 0);
   sunFill.position.set(150, 180, 500);
   scene.add(sun, sunFill);
+
+  // Everything belonging to the final reveal lives here. The crawl camera is
+  // wide enough to catch objects a long way below the lens axis, so the group
+  // is not merely unlit during the crawl — it is faded out entirely, otherwise
+  // an unlit moon would sit in the corner of frame quietly eating stars.
+  const revealRoot = new THREE.Group();
+  revealRoot.visible = false;
+  scene.add(revealRoot);
+  const revealMats = []; // surfaces: plain opacity
+  const revealGains = []; // additive shells and sprites: scaled by their own gain
+
+  /** Register everything under `obj` with the reveal fade. */
+  function fadeWithReveal(obj) {
+    obj.traverse((o) => {
+      const m = o.material;
+      if (!m) return;
+      if (m.uniforms?.uGain) {
+        revealGains.push({ set: (a) => (m.uniforms.uGain.value = m.userData.gain0 * a) });
+        m.userData.gain0 = m.uniforms.uGain.value;
+      } else if (o.isSprite) {
+        const o0 = m.opacity;
+        revealGains.push({ set: (a) => (m.opacity = o0 * a) });
+      } else {
+        m.transparent = true;
+        revealMats.push(m);
+      }
+    });
+  }
 
   // =========================================================================
   // buildStars — two shells at different radii, counter-drifting for parallax
@@ -459,9 +487,9 @@ export async function build(ctx) {
     const gold = new THREE.MeshStandardMaterial({
       color: 0xd7a63f,
       metalness: 0.92,
-      roughness: 0.26,
-      envMapIntensity: 1.5,
-      emissive: 0x2a1a04,
+      roughness: 0.32,
+      envMapIntensity: 1.25,
+      emissive: 0x180e02,
       emissiveIntensity: 1,
     });
     const plateMat = new THREE.MeshStandardMaterial({
@@ -736,7 +764,7 @@ export async function build(ctx) {
 
     const air = new THREE.Mesh(
       new THREE.SphereGeometry(PLANET_R * 1.075, 48, 32),
-      atmosphereMaterial(0xff9448, sunDir, 2.4, 1.5)
+      atmosphereMaterial(0xff9448, sunDir, 2.4, 1.9)
     );
 
     const planet = new THREE.Group();
@@ -750,11 +778,12 @@ export async function build(ctx) {
       new THREE.SphereGeometry(12, 36, 24),
       new THREE.MeshStandardMaterial({ map: moonTexture(), roughness: 1.0, metalness: 0.0, envMapIntensity: 0.06 })
     );
-    moon.position.copy(polar(26, -21, 900));
+    moon.position.copy(polar(25, -30, 900));
     moon.rotation.set(-0.5, 2.0, 0);
     group.add(moon);
 
-    scene.add(group);
+    revealRoot.add(group);
+    fadeWithReveal(group);
     return {
       update(t) {
         globe.rotation.y = 1.1 + t * 0.0032; // barely turning, but not frozen
@@ -784,6 +813,9 @@ export async function build(ctx) {
     const corvette = cb.build({ castShadow: false, receiveShadow: false });
 
     // --- imperial destroyer: stepped grey wedge with a bridge tower ---------
+    // Built as slices along z so the plan view is a clean triangle, with a
+    // darker ventral hull under it so the silhouette has real thickness when
+    // the wedge is rolled toward the light.
     const db = new Bricks({ studSegments: 6 });
     const SEG = 16;
     const LEN = 58;
@@ -791,38 +823,47 @@ export async function build(ctx) {
     for (let i = 0; i < SEG; i++) {
       const w = Math.max(2.4, (MAXW * (i + 1.1)) / SEG);
       const z = -LEN / 2 + (LEN / SEG) * i;
-      db.panel(-w / 2, 0, z, w, LEN / SEG + 0.04, 2.4, G, noStud);
-      // a darker inset deck so the hull is not one flat grey slab
-      const w2 = w * 0.62;
-      if (i > 4) db.panel(-w2 / 2, 2.4, z, w2, LEN / SEG + 0.04, 0.7, DG, noStud);
+      const d = LEN / SEG + 0.04;
+      db.panel(-w / 2, 0, z, w, d, 2.6, G, noStud); // dorsal plating
+      db.panel(-w * 0.44, -2.4, z, w * 0.88, d, 2.4, DG, noStud); // ventral hull
+      // a raised spine and inset trenches so it is not one flat grey slab
+      if (i > 3) {
+        db.panel(-w * 0.31, 2.6, z, w * 0.62, d, 0.6, DG, noStud);
+        db.panel(-w * 0.11, 3.2, z, w * 0.22, d, 0.8, G, noStud);
+      }
     }
-    db.panel(-6, 3.1, 10, 12, 12, 4, G, noStud);
-    db.panel(-4.2, 7.1, 13.5, 8.4, 7, 4, G, noStud);
-    db.panel(-2.4, 11.1, 15.5, 4.8, 4, 3.4, DG, noStud);
-    db.sphere(-3.1, 15.9, 17.2, 1.2, DG, { segments: 10 });
-    db.sphere(3.1, 15.9, 17.2, 1.2, DG, { segments: 10 });
-    db.panel(-9, 1.4, 25.5, 18, 3.2, 6.5, DG, noStud);
-    for (const x of [-6.2, -2.1, 2.1, 6.2]) db.cyl(x, 1.8, 27.4, 1.6, 4.2, DG, { segments: 10 });
+    // superstructure
+    db.panel(-6.2, 3.2, 9.5, 12.4, 12.5, 4.2, G, noStud);
+    db.panel(-4.3, 7.4, 13, 8.6, 7.5, 4.2, G, noStud);
+    db.panel(-2.5, 11.6, 15.2, 5, 4.2, 3.6, DG, noStud);
+    db.sphere(-3.2, 16.6, 16.9, 1.25, DG, { segments: 10 });
+    db.sphere(3.2, 16.6, 16.9, 1.25, DG, { segments: 10 });
+    // engine block and bells
+    db.panel(-9.2, 0.4, 25.6, 18.4, 3.4, 6.8, DG, noStud);
+    for (const x of [-6.4, -2.2, 2.2, 6.4]) db.cyl(x, 1.4, 27.5, 1.7, 4.6, DG, { segments: 10 });
     const destroyer = db.build({ castShadow: false, receiveShadow: false });
 
     // --- placement ----------------------------------------------------------
-    const lane = new THREE.Vector3(0.93, 0.05, 0.36).normalize();
-    const leadHome = polar(8, -30, 400);
-    const chaseHome = polar(-5, -31.5, 470);
+    // The lane climbs to the right, so the corvette sits high and the destroyer
+    // trails low and left, near the planet: a diagonal, not a row.
+    const lane = new THREE.Vector3(0.9, 0.25, 0.36).normalize();
+    const leadHome = polar(12, -26.5, 400);
+    const chaseHome = polar(-6, -33.5, 530);
 
     const nose = new THREE.Vector3(0, 0, -1); // both hulls are built bow-to--z
     const lead = new THREE.Group();
     lead.add(corvette);
-    lead.scale.setScalar(1.5);
+    lead.scale.setScalar(1.7);
     lead.quaternion.setFromUnitVectors(nose, lane);
-    lead.rotateZ(0.12);
-    lead.rotateX(-0.05);
+    lead.rotateZ(0.14);
+    lead.rotateX(-0.06);
 
     const chase = new THREE.Group();
     chase.add(destroyer);
-    chase.scale.setScalar(1.25);
+    chase.scale.setScalar(1.3);
     chase.quaternion.setFromUnitVectors(nose, lane);
-    chase.rotateZ(-0.06);
+    chase.rotateZ(-0.24); // rolled so the lit flank and the ventral hull read
+    chase.rotateX(0.1);
 
     // engine glow
     const leadGlow = new THREE.Group();
@@ -842,16 +883,21 @@ export async function build(ctx) {
 
     const group = new THREE.Group();
     group.add(lead, chase);
-    scene.add(group);
+    revealRoot.add(group);
 
-    const tris = (corvette.userData.triangles || 0) + (destroyer.userData.triangles || 0);
+    // The warm title environment map would turn the grey hulls khaki; the sun
+    // is the only thing that should be colouring them.
+    group.traverse((o) => {
+      if (o.material && 'envMapIntensity' in o.material) o.material.envMapIntensity = 0.2;
+    });
+    fadeWithReveal(group);
+
     return {
-      tris,
       update(t) {
         // far away and slowly closing: the destroyer runs a little faster
         const u = ease.range(t, T.tilt[0] - 6, END);
         lead.position.copy(leadHome).addScaledVector(lane, -14 + u * 30);
-        chase.position.copy(chaseHome).addScaledVector(lane, -18 + u * 41);
+        chase.position.copy(chaseHome).addScaledVector(lane, -18 + u * 44);
       },
     };
   }
@@ -887,25 +933,37 @@ export async function build(ctx) {
     // --- 3. logo -----------------------------------------------------------
     logo.update(t);
     const titleLit = 1 - ease.smooth(ease.range(t, T.logoGone - 1.5, T.logoGone + 0.4));
-    logoKey.intensity = 3.1 * titleLit;
-    logoRim.intensity = 4.4 * titleLit;
-    logoFill.intensity = 0.9 * titleLit;
+    logoKey.intensity = 2.5 * titleLit;
+    logoRim.intensity = 3.2 * titleLit;
+    logoFill.intensity = 0.8 * titleLit;
 
     // --- 4. crawl ----------------------------------------------------------
     crawl.update(t);
 
     // --- 5. the reveal -----------------------------------------------------
-    planet.update(t);
-    ships.update(t);
-    const reveal = ease.smooth(ease.range(t, T.tilt[0] - 1.5, T.tilt[0] + 2.4));
-    sun.intensity = 3.9 * reveal;
-    sunFill.intensity = 0.32 * reveal;
-    ambient.intensity = 0.35 * (1 - reveal) + 0.07 * reveal;
+    // The planet, moon and ships fade up out of nothing as the tilt starts, so
+    // there is never an unlit body sitting in the corner of the crawl frame.
+    const revealA = ease.smooth(ease.range(t, T.tilt[0], T.tilt[0] + 2.2));
+    revealRoot.visible = revealA > 0.004;
+    if (revealRoot.visible) {
+      planet.update(t);
+      ships.update(t);
+      for (const m of revealMats) m.opacity = revealA;
+      for (const g of revealGains) g.set(revealA);
+    }
+    const reveal = ease.smooth(ease.range(t, T.tilt[0], T.tilt[0] + 3.2));
+    sun.intensity = 3.6 * reveal;
+    sunFill.intensity = 0.34 * reveal;
+    // The hemisphere fill only ever exists to soften the gold title, so it is
+    // keyed off the title rather than left burning through the crawl.
+    ambient.intensity = 0.34 * titleLit + 0.08 * reveal;
 
     // --- 6. camera ---------------------------------------------------------
     // Locked off through the crawl, then a long tilt down onto the planet with
-    // a slow push in on the lens.
-    const k = ease.smooth(ease.range(t, T.tilt[0], T.tilt[1]));
+    // a slow push in on the lens. The ease leaves and arrives at rest but is
+    // front-loaded, so the empty starfield between the crawl and the planet is
+    // crossed quickly.
+    const k = Math.pow(ease.smooth(ease.range(t, T.tilt[0], T.tilt[1])), 0.62);
     const settle = ease.smooth(ease.range(t, T.tilt[1], END));
     camera.rotation.x = ease.lerp(PITCH_CRAWL, PITCH_END, k) - settle * 0.6 * RAD;
     camera.rotation.y = settle * 0.5 * RAD;
@@ -926,7 +984,10 @@ export async function build(ctx) {
       if (o.isPoints || o.isSprite) return;
       tris += n / 3;
     });
-    console.log('[crawl] triangles', Math.round(tris), 'crawl lines', crawl.lines, 'ship tris', ships.tris);
+    const speeds = crawl.keys
+      .slice(1)
+      .map((k, i) => ((k[1] - crawl.keys[i][1]) / (k[0] - crawl.keys[i][0])).toFixed(2));
+    console.log('[crawl] triangles', Math.round(tris), 'lines', crawl.lines, 'scroll u/s', speeds.join(' '));
   }
   return {
     scene,

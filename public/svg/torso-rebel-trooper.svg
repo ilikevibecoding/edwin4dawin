@@ -14,12 +14,10 @@
   <path fill="#b48b52" d="M452 40 L330 26 L272 104 L272 400 L452 400Z"/>
 
   <!-- vest edge shading -->
-  <g fill="#8f6a3a">
-    <path d="M240 104 L252 118 L252 400 L240 400Z"/>
-    <path d="M272 104 L260 118 L260 400 L272 400Z"/>
-    <path d="M60 384 L240 384 L240 400 L60 400Z"/>
-    <path d="M272 384 L452 384 L452 400 L272 400Z"/>
-  </g>
+  <path d="M240 104 L252 118 L252 400 L240 400Z" fill="#8f6a3a"/>
+  <path d="M272 104 L260 118 L260 400 L272 400Z" fill="#8f6a3a"/>
+  <path d="M60 384 L240 384 L240 400 L60 400Z" fill="#8f6a3a"/>
+  <path d="M272 384 L452 384 L452 400 L272 400Z" fill="#8f6a3a"/>
 
   <!-- chest pockets -->
   <rect x="94" y="176" width="112" height="112" rx="6" fill="#a07e48"/>
@@ -30,9 +28,9 @@
   <circle cx="362" cy="196" r="8" fill="#5c4326"/>
 
   <!-- shoulder seams -->
-  <g stroke="#8f6a3a" stroke-width="9" stroke-linecap="round" fill="none">
-    <path d="M74 96 L158 78"/>
-    <path d="M438 96 L354 78"/>
+  <g stroke="#8f6a3a" stroke-width="9" stroke-linecap="round">
+    <path d="M74 96 L158 78" fill="none"/>
+    <path d="M438 96 L354 78" fill="none"/>
   </g>
 
   <!-- belt -->

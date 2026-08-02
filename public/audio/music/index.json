@@ -1,0 +1,34 @@
+{
+  "crawl": {
+    "file": "audio/music/crawl.mp3",
+    "duration": 46
+  },
+  "chase": {
+    "file": "audio/music/chase.mp3",
+    "duration": 34
+  },
+  "boarding": {
+    "file": "audio/music/boarding.mp3",
+    "duration": 34
+  },
+  "plans": {
+    "file": "audio/music/plans.mp3",
+    "duration": 40
+  },
+  "tatooine": {
+    "file": "audio/music/tatooine.mp3",
+    "duration": 40
+  },
+  "deathstar": {
+    "file": "audio/music/deathstar.mp3",
+    "duration": 28
+  },
+  "trench": {
+    "file": "audio/music/trench.mp3",
+    "duration": 54
+  },
+  "medals": {
+    "file": "audio/music/medals.mp3",
+    "duration": 30
+  }
+}

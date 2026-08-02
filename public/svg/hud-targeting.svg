@@ -7,63 +7,61 @@
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
 
-  <g fill="none" stroke="#77ff66" stroke-width="4" stroke-linecap="square">
+  <g stroke="#77ff66" stroke-width="4" stroke-linecap="square">
 
     <!-- central reticle box -->
-    <rect x="176" y="176" width="160" height="160" stroke-width="3"/>
+    <rect x="176" y="176" width="160" height="160" stroke-width="3" fill="none"/>
 
     <!-- corner brackets -->
-    <path d="M144 190 L144 144 L190 144" stroke-width="6"/>
-    <path d="M368 190 L368 144 L322 144" stroke-width="6"/>
-    <path d="M144 322 L144 368 L190 368" stroke-width="6"/>
-    <path d="M368 322 L368 368 L322 368" stroke-width="6"/>
+    <path d="M144 190 L144 144 L190 144" stroke-width="6" fill="none"/>
+    <path d="M368 190 L368 144 L322 144" stroke-width="6" fill="none"/>
+    <path d="M144 322 L144 368 L190 368" stroke-width="6" fill="none"/>
+    <path d="M368 322 L368 368 L322 368" stroke-width="6" fill="none"/>
 
     <!-- centre crosshair -->
-    <path d="M256 226 L256 286" stroke-width="3"/>
-    <path d="M226 256 L286 256" stroke-width="3"/>
-    <path d="M240 256 L272 256" stroke-width="6"/>
-    <path d="M256 240 L256 272" stroke-width="6"/>
+    <path d="M256 226 L256 286" stroke-width="3" fill="none"/>
+    <path d="M226 256 L286 256" stroke-width="3" fill="none"/>
+    <path d="M240 256 L272 256" stroke-width="6" fill="none"/>
+    <path d="M256 240 L256 272" stroke-width="6" fill="none"/>
 
     <!-- horizontal scale with ticks -->
-    <path d="M64 430 L448 430" stroke-width="3"/>
+    <path d="M64 430 L448 430" stroke-width="3" fill="none"/>
     <path d="M64 430 L64 412 M96 430 L96 420 M128 430 L128 420 M160 430 L160 412
              M192 430 L192 420 M224 430 L224 420 M256 430 L256 404
              M288 430 L288 420 M320 430 L320 420 M352 430 L352 412
-             M384 430 L384 420 M416 430 L416 420 M448 430 L448 412" stroke-width="3"/>
-    <path d="M256 442 L246 456 L266 456Z" stroke-width="3"/>
+             M384 430 L384 420 M416 430 L416 420 M448 430 L448 412" stroke-width="3" fill="none"/>
+    <path d="M256 442 L246 456 L266 456Z" stroke-width="3" fill="none"/>
 
     <!-- vertical range bars -->
-    <rect x="60" y="150" width="22" height="220" stroke-width="3"/>
-    <rect x="430" y="150" width="22" height="220" stroke-width="3"/>
+    <rect x="60" y="150" width="22" height="220" stroke-width="3" fill="none"/>
+    <rect x="430" y="150" width="22" height="220" stroke-width="3" fill="none"/>
     <path d="M48 190 L60 190 M48 230 L60 230 M48 270 L60 270 M48 310 L60 310
-             M48 350 L60 350" stroke-width="3"/>
+             M48 350 L60 350" stroke-width="3" fill="none"/>
     <path d="M452 190 L464 190 M452 230 L464 230 M452 270 L464 270
-             M452 310 L464 310 M452 350 L464 350" stroke-width="3"/>
+             M452 310 L464 310 M452 350 L464 350" stroke-width="3" fill="none"/>
 
     <!-- corner markers -->
-    <circle cx="40" cy="40" r="14" stroke-width="3"/>
-    <circle cx="472" cy="40" r="14" stroke-width="3"/>
-    <circle cx="40" cy="472" r="14" stroke-width="3"/>
-    <circle cx="472" cy="472" r="14" stroke-width="3"/>
-    <path d="M40 20 L40 60 M20 40 L60 40" stroke-width="2"/>
-    <path d="M472 20 L472 60 M452 40 L492 40" stroke-width="2"/>
-    <path d="M40 452 L40 492 M20 472 L60 472" stroke-width="2"/>
-    <path d="M472 452 L472 492 M452 472 L492 472" stroke-width="2"/>
+    <circle cx="40" cy="40" r="14" stroke-width="3" fill="none"/>
+    <circle cx="472" cy="40" r="14" stroke-width="3" fill="none"/>
+    <circle cx="40" cy="472" r="14" stroke-width="3" fill="none"/>
+    <circle cx="472" cy="472" r="14" stroke-width="3" fill="none"/>
+    <path d="M40 20 L40 60 M20 40 L60 40" stroke-width="2" fill="none"/>
+    <path d="M472 20 L472 60 M452 40 L492 40" stroke-width="2" fill="none"/>
+    <path d="M40 452 L40 492 M20 472 L60 472" stroke-width="2" fill="none"/>
+    <path d="M472 452 L472 492 M452 472 L492 472" stroke-width="2" fill="none"/>
 
     <!-- lock-on sweep marks -->
-    <path d="M100 100 L140 100 L140 84" stroke-width="3"/>
-    <path d="M412 100 L372 100 L372 84" stroke-width="3"/>
+    <path d="M100 100 L140 100 L140 84" stroke-width="3" fill="none"/>
+    <path d="M412 100 L372 100 L372 84" stroke-width="3" fill="none"/>
 
   </g>
 
   <!-- filled range fill and status pips -->
-  <g fill="#77ff66">
-    <rect x="64" y="286" width="14" height="80"/>
-    <rect x="434" y="230" width="14" height="136"/>
-    <rect x="176" y="88" width="34" height="8"/>
-    <rect x="218" y="88" width="34" height="8"/>
-    <rect x="260" y="88" width="34" height="8"/>
-    <rect x="302" y="88" width="12" height="8"/>
-  </g>
+  <rect x="64" y="286" width="14" height="80" fill="#77ff66"/>
+  <rect x="434" y="230" width="14" height="136" fill="#77ff66"/>
+  <rect x="176" y="88" width="34" height="8" fill="#77ff66"/>
+  <rect x="218" y="88" width="34" height="8" fill="#77ff66"/>
+  <rect x="260" y="88" width="34" height="8" fill="#77ff66"/>
+  <rect x="302" y="88" width="12" height="8" fill="#77ff66"/>
 
 </svg>

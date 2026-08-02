@@ -47,22 +47,47 @@ function ctile(b, cx, y, cz, w, d, color, opts = {}) {
 function cpanel(b, cx, y, cz, w, d, h, color, opts = {}) {
   return cbox(b, cx, y, cz, w, d, h, color, { ...opts, studs: false });
 }
-function cslope(b, cx, y, cz, w, d, h, color, opts) {
-  return b.slope(cx - w / 2, y, cz - d / 2, w, d, h, color, opts);
+/**
+ * Slope centred in x/z. `w` is always the width across x and `d` the run along
+ * z, whichever way the slope faces.
+ *
+ * The builder authors its ramp descending toward +x and spins it a quarter turn
+ * for the '+z'/'-z' facings, which swaps the geometry's own w/d -- so those are
+ * exchanged here and the caller never has to think about it.
+ */
+function cslope(b, cx, y, cz, w, d, h, color, opts = {}) {
+  const dir = opts.dir || '+x';
+  const spun = dir === '+z' || dir === '-z';
+  const W = spun ? d : w;
+  const D = spun ? w : d;
+  return b.slope(cx - W / 2, y, cz - D / 2, W, D, h, color, { ...opts, dir });
 }
 function cwedge(b, cx, y, cz, w, d, h, color, opts) {
   return b.wedge(cx - w / 2, y, cz - d / 2, w, d, h, color, opts);
 }
 
 /**
- * Wedge plate for a swept leading edge: the right angle sits at the inboard-aft
- * corner and the hypotenuse sweeps back as it goes outboard. `sx` picks the
- * side. Mirroring uses a quarter turn (which swaps the wedge's own w/d) rather
- * than a negative scale, so face winding stays correct.
+ * Mirror-safe right-triangular plate, centred at (+/-cx, cz). The right angle
+ * sits at the inboard corner so the hypotenuse reads as a swept edge; the
+ * square edge is aft by default, or forward with `opts.forward`.
+ *
+ * Mirroring uses quarter turns rather than a negative scale (which would invert
+ * face winding). A quarter turn also swaps the wedge's own w/d, so those are
+ * exchanged before the call.
  */
+function cornerWedge(b, sx, cx, y, cz, w, d, h, color, opts = {}) {
+  // right-angle corner: rot 0 = (-x,-z), 1 = (+x,-z), 2 = (+x,+z), 3 = (-x,+z)
+  const rot = sx > 0 ? (opts.forward ? 3 : 0) : opts.forward ? 2 : 1;
+  const swap = rot === 1 || rot === 3;
+  const W = swap ? d : w;
+  const D = swap ? w : d;
+  const x = sx > 0 ? cx : -cx;
+  return b.wedge(x - W / 2, y, cz - D / 2, W, D, h, color, { ...opts, rot });
+}
+
+/** Swept leading edge: wide at the aft end, tapering to a point outboard. */
 function sweepWedge(b, sx, cx, y, cz, w, d, h, color, opts = {}) {
-  if (sx > 0) return b.wedge(cx - w / 2, y, cz - d / 2, w, d, h, color, { ...opts, rot: 0 });
-  return b.wedge(-cx - d / 2, y, cz - w / 2, d, w, h, color, { ...opts, rot: 1 });
+  return cornerWedge(b, sx, cx, y, cz, w, d, h, color, opts);
 }
 
 /**
@@ -552,8 +577,8 @@ function tieBentPanel(b, C, px, r, bend, thick = 0.9) {
 
   // horizontal ribs and hub on the centre band
   for (const sy of [1, -1]) cpanel(b, px, sy * (bandH / 2 - 0.34) * PY, 0, thick * 1.9, halfW * 1.9, 0.34 * PY, C.rib);
-  xcyl(b, px - Math.sign(px) * 0.3, 0, 0, 1.7, thick * 2.4, C.trim, { segments: 8, studs: false });
-  xcyl(b, px - Math.sign(px) * 0.7, 0, 0, 0.95, thick * 2.6, C.frame, { segments: 8, studs: false });
+  xcyl(b, px - Math.sign(px) * 0.75, 0, 0, 1.7, thick * 2.4, C.trim, { segments: 8, studs: false });
+  xcyl(b, px - Math.sign(px) * 1.15, 0, 0, 0.95, thick * 2.6, C.rib, { segments: 8, studs: false });
 }
 
 /** The x1's elongated tail: a tapered box hull, dorsal spine and twin engines. */
@@ -566,7 +591,7 @@ function taTail(b, C, engines) {
   // dorsal spine
   cpanel(b, 0, 1.3 * PY, -4.0, 0.85, 5.2, 1.7 * PY, C.trim);
   cslope(b, 0, 1.3 * PY, -1.4, 0.85, 1.2, 1.7 * PY, C.trim, { dir: '+z' });
-  cpanel(b, 0, 2.9 * PY, -4.4, 0.6, 3.2, 0.4 * PY, C.frame);
+  cpanel(b, 0, 2.9 * PY, -4.4, 0.6, 3.2, 0.4 * PY, C.rib);
   // ventral keel
   cpanel(b, 0, -2.4 * PY, -4.2, 0.85, 4.4, 1.1 * PY, C.trim);
 
@@ -578,8 +603,9 @@ function taTail(b, C, engines) {
   }
   // greeble plates along the tail flanks
   for (const sx of [-1, 1]) {
-    cpanel(b, sx * 1.4, 0.5 * PY, -2.6, 1.1, 1.6, 0.5 * PY, C.frame);
-    cpanel(b, sx * 1.2, -2.0 * PY, -5.6, 1.2, 1.4, 0.5 * PY, C.frame);
+    cpanel(b, sx * 1.4, 0.5 * PY, -2.6, 1.1, 1.6, 0.5 * PY, C.rib);
+    cpanel(b, sx * 1.2, -2.0 * PY, -5.6, 1.2, 1.4, 0.5 * PY, C.rib);
+    cpanel(b, sx * 1.78, 0.1 * PY, -4.5, 0.3, 2.4, 0.9 * PY, C.rib);
   }
 }
 
@@ -632,6 +658,273 @@ export async function buildTieAdvanced(opts = {}) {
   return finish(root, mesh);
 }
 
+// ===========================================================================
+// Y-WING  --  long boxy hull, exposed spine, two engine nacelles, a turret
+// ===========================================================================
+
+/** Forward hull: blunt prow, cockpit bubble and the twin nose cannons. */
+function ywNose(b, C, guns) {
+  cpanel(b, 0, -3.4, 8.2, 4.2, 4.4, 6.8, C.hull);
+  cslope(b, 0, 1.4, 10.4, 3.6, 1.6, 2, C.hull, { dir: '+z' });
+  cslope(b, 0, -3.4, 10.4, 3.6, 1.6, 2, C.hull, { dir: '+z', inverted: true });
+  cpanel(b, 0, -1.6, 11.3, 2.6, 0.6, 3.2, C.metal);
+  for (const sx of [-1, 1]) {
+    cpanel(b, sx * 2.14, -0.4, 8.4, 0.28, 3.6, 2, C.trim);
+    cpanel(b, sx * 2.14, -3.2, 8.4, 0.28, 3.6, 1.4, C.metal);
+  }
+
+  // cockpit: dark sill, bubble canopy, and a headrest fairing behind it
+  cpanel(b, 0, 3.4, 8.4, 3.4, 3.8, 0.7, C.metal);
+  b.push();
+  b.translate(0, 4.1, 8.3);
+  b.scale(1, 0.62, 1.3);
+  b.sphere(0, 0, 0, 1.42, C.glass, { segments: 16, phiLen: Math.PI / 2, finish: 'trans', opacity: 0.42 });
+  b.pop();
+  cslope(b, 0, 4.1, 9.9, 2.4, 1.4, 2.4, C.glass, { dir: '+z', finish: 'trans', opacity: 0.42 });
+  cslope(b, 0, 4.1, 6.2, 2.6, 1.4, 2.2, C.hull, { dir: '-z' });
+
+  // twin forward laser cannons under the prow
+  for (const sx of [-1, 1]) {
+    zcyl(b, sx * 1.35, -2.2, 10.8, 0.3, 3.4, C.metal, { segments: 10, studs: false });
+    zcyl(b, sx * 1.35, -2.2, 12.6, 0.2, 1.2, C.gunMetal, { segments: 8, studs: false });
+    guns.push(lego(sx * 1.35, -2.2, 13.2));
+  }
+}
+
+/**
+ * The famous stripped-hull spine: a raised keel with pipe runs, tanks and
+ * greeble plates scattered by hash11 so it is busy but identical every run.
+ */
+function ywSpine(b, C, seed) {
+  const z0 = -3.2;
+  const z1 = 4.4;
+  const zc = (z0 + z1) / 2;
+  const len = z1 - z0;
+  cpanel(b, 0, 2.2, zc, 2.8, len, 1.6, C.metal); // keel plate the machinery sits on
+  for (const sx of [-1, 1]) {
+    zcyl(b, sx * 1.02, 4.5, zc, 0.36, len, C.pipe, { segments: 8, studs: false }); // pipe runs
+    cpanel(b, sx * 1.5, 2.6, zc, 0.34, len - 0.4, 2.8, C.metal);
+  }
+  zcyl(b, 0, 5.3, zc + 0.4, 0.52, len - 2.4, C.metal, { segments: 10, studs: false });
+
+  // deterministic greebles: tanks, junction boxes and short pipes
+  for (let i = 0; i < 18; i++) {
+    const z = z0 + 0.5 + (i / 18) * (len - 1) + hash11(i, seed) * 0.3;
+    const sx = hash11(i, seed + 11) < 0.5 ? -1 : 1;
+    const kind = Math.floor(hash11(i, seed + 21) * 3);
+    const w = 0.5 + hash11(i, seed + 31) * 0.5;
+    if (kind === 0) cpanel(b, sx * (0.5 + hash11(i, seed + 41) * 0.7), 3.8, z, w, 0.9, 1.9, C.metal);
+    else if (kind === 1) ycyl(b, sx * 0.9, 5.2, z, 0.34, 2, C.pipe, { segments: 8, studs: false });
+    else zcyl(b, sx * 0.6, 5.0, z, 0.44, 1.1, C.metal, { segments: 8, studs: false });
+  }
+  // ribs across the spine, like exposed frame members
+  for (let i = 0; i < 5; i++) cpanel(b, 0, 3.8, z0 + 0.7 + i * 1.7, 3.1, 0.35, 2.1, C.metal);
+}
+
+/**
+ * Dorsal ion turret: a ring base, a domed housing and twin barrels tilted up
+ * so they clear the canopy in front of it.
+ */
+function ywTurret(b, C, guns) {
+  const z = 4.6;
+  const tilt = -0.55; // radians, nose-up
+  ycyl(b, 0, 3.2, z, 1.4, 1.6, C.metal, { segments: 12, studs: false });
+  ycyl(b, 0, 4.6, z, 1.15, 1.2, C.trim, { segments: 12, studs: false });
+  b.sphere(0, 5.9, z, 1.15, C.hull, { segments: 14, phiLen: Math.PI / 2 });
+  cpanel(b, 0, 5.4, z, 2.5, 1.4, 1.2, C.metal);
+
+  b.push();
+  b.translate(0, 5.9, z);
+  b.rotateX(tilt);
+  for (const sx of [-1, 1]) {
+    zcyl(b, sx * 0.52, 0, 1.9, 0.22, 3.8, C.gunMetal, { segments: 8, studs: false });
+    zcyl(b, sx * 0.52, 0, 3.5, 0.3, 0.7, C.metal, { segments: 8, studs: false });
+  }
+  b.pop();
+  const axis = new THREE.Vector3(1, 0, 0);
+  for (const sx of [-1, 1]) {
+    guns.push(lego(sx * 0.52, 0, 4).applyAxisAngle(axis, tilt).add(lego(0, 5.9, z)));
+  }
+}
+
+/** One engine nacelle: intake, banded tube, greeble blocks, flared nozzle. */
+function ywNacelle(b, C, sx, engines) {
+  const x = sx * 5.3;
+  const R = 1.38;
+  zcyl(b, x, 0, -4, R, 15.6, C.hull, { segments: 14, studs: false });
+
+  // intake at the front, with a dark recessed cone
+  zcyl(b, x, 0, 4.05, R * 1.06, 1, C.metal, { segments: 14, studs: false });
+  zcyl(b, x, 0, 3.5, R * 0.82, 1.2, C.dark, { segments: 12, studs: false, rTop: R * 0.5 });
+
+  // banding
+  for (const z of [1.6, -1.4, -7.2]) zcyl(b, x, 0, z, R * 1.03, 0.55, C.metal, { segments: 14, studs: false });
+  zcyl(b, x, 0, -5.2, R * 1.02, 0.7, C.trim, { segments: 14, studs: false });
+
+  // upper engine block and fin, lower greeble pods
+  cpanel(b, x, R * 0.72 * PY, -6.6, 1.9, 5.2, 1.1 * PY, C.metal);
+  cpanel(b, x, R * 1.2 * PY, -7.4, 0.55, 3.4, 1.1 * PY, C.trim);
+  cpanel(b, x, -R * 1.28 * PY, -3.4, 1.5, 3.2, 0.7 * PY, C.metal);
+  cpanel(b, x - sx * R * 0.98, -0.6 * PY, 0.4, 0.6, 2.6, 1.2 * PY, C.metal);
+  ctile(b, x, R * 1.05 * PY, 1.4, 1, 3, C.trim);
+
+  // flared exhaust nozzle: dark throat with a small glowing core inside it
+  zcyl(b, x, 0, -11.4, R * 1.18, 1.6, C.metal, { segments: 14, studs: false, rTop: R * 0.96 });
+  zcyl(b, x, 0, -11.95, R * 0.94, 0.8, C.dark, { segments: 12, studs: false });
+  zcyl(b, x, 0, -12.2, R * 0.55, 0.25, C.engine, { segments: 12, ...glow(C.engine, 1.5) });
+  engines.push(lego(x, 0, -12.5));
+}
+
+/** @param {object} opts colours (`hull`, `trim`, `metal`) and `seed` */
+export async function buildYWing(opts = {}) {
+  const C = {
+    hull: opts.hull ?? COLORS.lightBluishGray,
+    trim: opts.trim ?? COLORS.yellow,
+    metal: opts.metal ?? COLORS.darkBluishGray,
+    dark: opts.dark ?? COLORS.trueBlack,
+    pipe: opts.pipe ?? COLORS.flatSilver,
+    gunMetal: opts.gunMetal ?? COLORS.flatSilver,
+    glass: opts.glass ?? COLORS.transLightBlue,
+    engine: opts.engine ?? 0x88ddff,
+  };
+  const seed = opts.seed ?? 7;
+  const b = new Bricks({ studSegments: 8 });
+  const gunPoints = [];
+  const enginePoints = [];
+
+  // --- main fuselage: belly, core, deck
+  cpanel(b, 0, -3.4, 1.4, 4, 19.2, 1.6, C.hull);
+  cpanel(b, 0, -1.8, 1.4, 4, 19.2, 3, C.hull);
+  cplate(b, 0, 1.2, 1.4, 4, 19.2, C.hull);
+  cpanel(b, 0, 2.2, -5.6, 3.4, 6, 1, C.hull);
+  for (const sx of [-1, 1]) {
+    cpanel(b, sx * 2.06, -3, 1.4, 0.3, 18, 4.4, C.metal);
+    ctile(b, sx * 1.2, 2.2, 7.4, 1, 2, C.trim);
+    cpanel(b, sx * 1.1, -3.9, -2.4, 1, 6, 0.6, C.metal); // belly greebles
+    cpanel(b, sx * 1.3, -3.9, 5.6, 0.8, 3.4, 0.5, C.metal);
+  }
+  // aft reactor block, tapering into the tail
+  cpanel(b, 0, -2.6, -8.4, 3.6, 3.6, 5.4, C.metal);
+  cslope(b, 0, -2.6, -10.6, 3, 1.6, 5.4, C.metal, { dir: '-z' });
+  for (const sx of [-1, 1]) ycyl(b, sx * 1.05, -0.4, -9.6, 0.42, 2.6, C.pipe, { segments: 8, studs: false });
+
+  ywNose(b, C, gunPoints);
+  ywSpine(b, C, seed);
+  ywTurret(b, C, gunPoints);
+
+  // --- outriggers out to each nacelle
+  for (const sx of [-1, 1]) {
+    cpanel(b, sx * 3.7, -1.4, -0.6, 3.6, 4.6, 2.2, C.hull);
+    cpanel(b, sx * 3.7, -2.6, -0.6, 2.6, 3.4, 1.2, C.metal);
+    ctile(b, sx * 3.7, 0.8, -0.6, 1, 3, C.trim);
+    ctile(b, sx * 3.7, 0.8, 1.4, 2, 1, C.metal);
+    xcyl(b, sx * 3.7, -0.3, -3.4, 0.42, 3.4, C.metal, { segments: 8, studs: false });
+    ywNacelle(b, C, sx, enginePoints);
+  }
+
+  const root = new THREE.Group();
+  root.name = 'ywing';
+  const mesh = b.build();
+  root.add(mesh);
+  root.userData.gunPoints = gunPoints;
+  root.userData.enginePoints = enginePoints;
+  const cockpit = new THREE.Group();
+  cockpit.position.copy(lego(0, 4.4, 8.2));
+  root.add(cockpit);
+  root.userData.cockpit = cockpit;
+  return finish(root, mesh);
+}
+
+// ===========================================================================
+// LANDSPEEDER  --  X-34: open two-seater, three turbine intakes, no wheels
+// ===========================================================================
+
+/** Open cockpit tub: seats, dashboard, control yoke and the raked windscreen. */
+function lsCockpit(b, C) {
+  cpanel(b, 0, 1.4, 1.2, 3.6, 4.4, 0.5, C.metal); // floor of the tub
+  for (const sx of [-1, 1]) {
+    ctile(b, sx * 1.0, 1.9, 0.6, 1.5, 1.6, C.seat); // seat pan
+    cslope(b, sx * 1.0, 1.9, -0.7, 1.5, 1.1, 2.4, C.seat, { dir: '+z' }); // back rest
+  }
+  cpanel(b, 0, 1.9, 2.6, 3.4, 1, 1.2, C.metal); // dash
+  ctile(b, 0, 3.1, 2.6, 2.2, 0.8, C.trimDark);
+  xcyl(b, 0, 3.5, 1.9, 0.14, 1.5, C.metal, { segments: 8, studs: false }); // yoke
+  for (const sx of [-1, 1]) cpanel(b, sx * 0.72, 3.2, 1.9, 0.18, 0.7, 0.9, C.metal);
+
+  // windscreen: a raked trans slope in a dark frame
+  cslope(b, 0, 2.4, 3.1, 3.5, 1.5, 2.3, C.glass, { dir: '+z', finish: 'trans', opacity: 0.42 });
+  for (const sx of [-1, 1]) cpanel(b, sx * 1.72, 2.4, 3.1, 0.22, 1.5, 2.3, C.trimDark);
+  cpanel(b, 0, 2.2, 3.86, 3.6, 0.3, 0.6, C.trimDark);
+}
+
+/** @param {object} opts colours (`hull`, `pod`, `seat`) */
+export async function buildLandspeeder(opts = {}) {
+  const C = {
+    hull: opts.hull ?? COLORS.orange,
+    pod: opts.pod ?? COLORS.brightOrange,
+    seat: opts.seat ?? COLORS.tan,
+    metal: opts.metal ?? COLORS.darkBluishGray,
+    trimDark: opts.trimDark ?? COLORS.black,
+    dark: opts.dark ?? COLORS.trueBlack,
+    gunMetal: opts.gunMetal ?? COLORS.flatSilver,
+    glass: opts.glass ?? COLORS.transLightBlue,
+  };
+  const b = new Bricks({ studSegments: 8 });
+
+  // --- central hull: belly, core and a studded rear deck
+  cpanel(b, 0, -2.4, 0, 4, 10.8, 2.4, C.hull);
+  cpanel(b, 0, 0, 0, 4.2, 10.8, 1.6, C.hull);
+  cplate(b, 0, 1.6, -3.2, 4, 4, C.hull);
+  ctile(b, 0, 2.6, -4, 2.4, 2.4, C.metal);
+  cslope(b, 0, 1.6, -5.6, 4, 1.2, 1, C.hull, { dir: '-z' });
+  cslope(b, 0, -2.4, -5.6, 4, 1.2, 1.4, C.hull, { dir: '-z', inverted: true });
+
+  // --- side pods: a block with a rounded top rail and tapered ends, which is
+  // what gives the X-34 its fat-hipped plan view
+  for (const sx of [-1, 1]) {
+    cpanel(b, sx * 2.7, -2, -1, 1.4, 7.2, 3.2, C.pod);
+    zcyl(b, sx * 2.95, 1.2, -1, 0.68, 7.2, C.pod, { segments: 12, studs: false });
+    sweepWedge(b, sx, 2.7, -2, 3, 1.4, 0.9, 3.2, C.pod, { studs: false });
+    cornerWedge(b, sx, 2.7, -2, -5, 1.4, 0.9, 3.2, C.pod, { studs: false, forward: true });
+    cpanel(b, sx * 2.55, -2.3, -1.6, 1.5, 5.4, 0.6, C.metal); // skirt
+    ctile(b, sx * 2.4, 1.6, -3.6, 1, 3, C.trimDark);
+    for (let i = 0; i < 3; i++) cpanel(b, sx * 3.4, -0.6, 1.6 - i * 0.9, 0.24, 0.5, 1.4, C.trimDark);
+  }
+
+  // --- nose: slightly tapered front deck with the three turbine intakes
+  cpanel(b, 0, -2.2, 5.7, 3.8, 1, 4.2, C.hull);
+  cslope(b, 0, 1.6, 5.3, 4, 1.4, 1, C.hull, { dir: '+z' });
+  cslope(b, 0, -2.4, 5.3, 4, 1.4, 1.2, C.hull, { dir: '+z', inverted: true });
+  for (const x of [-1.34, 0, 1.34]) {
+    zcyl(b, x, -0.4, 5.9, 0.66, 1.4, C.metal, { segments: 12, studs: false });
+    zcyl(b, x, -0.4, 6.2, 0.5, 1, C.dark, { segments: 12, studs: false, rTop: 0.34 });
+    zcyl(b, x, -0.4, 6.5, 0.7, 0.34, C.trimDark, { segments: 12, studs: false });
+  }
+
+  // --- surface detail and a rear bumper
+  for (const sx of [-1, 1]) cpanel(b, sx * 1.4, -2.9, 3.2, 1, 2.4, 0.5, C.metal);
+  cpanel(b, 0, -1.2, -6.1, 3.4, 0.5, 2.4, C.metal);
+  ctile(b, 0, 1.6, 4.7, 2, 1, C.trimDark);
+  lsCockpit(b, C);
+
+  // --- repulsorlift pads instead of wheels
+  for (const [x, z] of [[0, 4], [-1.9, -3.4], [1.9, -3.4]]) {
+    ycyl(b, x, -2.7, z, 0.9, 0.6, C.metal, { segments: 12, studs: false });
+    ycyl(b, x, -3.1, z, 0.64, 0.3, C.dark, { segments: 12, studs: false });
+  }
+
+  const root = new THREE.Group();
+  root.name = 'landspeeder';
+  const mesh = b.build();
+  root.add(mesh);
+  const cockpit = new THREE.Group();
+  cockpit.position.copy(lego(-1.0, 4.6, 0.6));
+  root.add(cockpit);
+  root.userData.cockpit = cockpit;
+  root.userData.seats = [lego(-1.0, 2.4, 0.6), lego(1.0, 2.4, 0.6)];
+  return finish(root, mesh);
+}
+
 /** Turntable entries for preview.html. */
 export const PREVIEW = {
   xwing: () => buildXWing(),
@@ -647,4 +940,6 @@ export const PREVIEW = {
   },
   tie: () => buildTieFighter(),
   'tie-advanced': () => buildTieAdvanced(),
+  ywing: () => buildYWing(),
+  landspeeder: () => buildLandspeeder(),
 };

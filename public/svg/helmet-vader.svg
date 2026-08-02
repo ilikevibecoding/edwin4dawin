@@ -27,13 +27,11 @@
 
   <!-- triangular grille with horizontal ridges -->
   <path fill="#101418" d="M164 300 L348 300 L292 470 L220 470Z"/>
-  <g fill="#2a2f36">
-    <rect x="176" y="316" width="160" height="12"/>
-    <rect x="182" y="344" width="148" height="12"/>
-    <rect x="191" y="372" width="130" height="12"/>
-    <rect x="200" y="400" width="112" height="12"/>
-    <rect x="209" y="428" width="94" height="12"/>
-  </g>
+  <rect x="176" y="316" width="160" height="12" fill="#2a2f36"/>
+  <rect x="182" y="344" width="148" height="12" fill="#2a2f36"/>
+  <rect x="191" y="372" width="130" height="12" fill="#2a2f36"/>
+  <rect x="200" y="400" width="112" height="12" fill="#2a2f36"/>
+  <rect x="209" y="428" width="94" height="12" fill="#2a2f36"/>
 
   <!-- chin plate -->
   <path fill="#2a2f36" d="M206 480 L306 480 L296 502 L216 502Z"/>

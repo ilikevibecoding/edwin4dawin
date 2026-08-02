@@ -143,6 +143,7 @@ async function boot() {
   });
 
   const audio = new FilmAudio();
+  audio.setVoiceWindows(manifest.lines.map((l) => ({ t: l.t, dur: l.dur })));
   const cues = await buildCueList(film, manifest);
   loadMsg.textContent = 'loading sound…';
   await audio.load(cues, (p) => {
@@ -271,7 +272,7 @@ function fitCanvas() {
  * These gains must match `MIX_GAINS` in tools/mixaudio.mjs so the live page
  * and the exported film sound identical.
  */
-const MIX_GAINS = { voice: 1.0, sfx: 0.62, music: 0.34 };
+const MIX_GAINS = { voice: 1.0, sfx: 0.62, music: 0.60 };
 
 async function buildCueList(film, manifest) {
   const cues = [];

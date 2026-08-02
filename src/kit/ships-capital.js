@@ -119,9 +119,11 @@ function taperedSlab(b, o) {
  * bottom y, a height and a width factor, which together shape the cross
  * section (0.45 at the keel, 1.0 amidships, 0.6 at the spine reads as a tube).
  * `grow` widens every course, which is how the raised drive rings are made.
+ * `vAt(z)` scales the whole section vertically about y = 0, which is what gives
+ * a hull a waisted side profile instead of a constant-depth loaf.
  */
 function hullSection(b, o) {
-  const { z0, z1, halfWAt, courses, color, step = 3, opts = {}, grow = 0, gapAt = null, pad = 0 } = o;
+  const { z0, z1, halfWAt, courses, color, step = 3, opts = {}, grow = 0, gapAt = null, pad = 0, vAt = null } = o;
   for (const c of courses) {
     taperedSlab(b, {
       z0,
@@ -131,6 +133,8 @@ function hullSection(b, o) {
       color: c.color ?? color,
       step,
       halfWAt: (z) => halfWAt(z) * c.f + grow,
+      yAt: vAt ? (z) => c.y * vAt(z) - pad : null,
+      hAt: vAt ? (z) => c.h * vAt(z) + pad * 2 : null,
       opts: { studs: false, ...opts, ...(c.opts || {}) },
       gapAt,
     });
@@ -144,15 +148,16 @@ function hullSection(b, o) {
  * the studs on a different grid in every slice.
  */
 function deck(b, o) {
-  const { z0, z1, y, halfWAt, color, tile = 4, inset = 1, maxHalf = Infinity, gap = 0, opts = {} } = o;
+  const { z0, z1, y, halfWAt, color, tile = 4, inset = 1, maxHalf = Infinity, gap = 0, vAt = null, opts = {} } = o;
   for (let z = Math.ceil(z0); z + tile <= z1; z += tile) {
     const w = Math.floor(Math.min(halfWAt(z), halfWAt(z + tile), maxHalf) - inset);
     if (w < 1) continue;
+    const yy = vAt ? y * Math.min(vAt(z), vAt(z + tile)) : y;
     if (gap > 0 && w > gap + 1) {
-      b.plate(gap, y, z, w - gap, tile, color, opts);
-      b.plate(-w, y, z, w - gap, tile, color, opts);
+      b.plate(gap, yy, z, w - gap, tile, color, opts);
+      b.plate(-w, yy, z, w - gap, tile, color, opts);
     } else {
-      b.plate(-w, y, z, w * 2, tile, color, opts);
+      b.plate(-w, yy, z, w * 2, tile, color, opts);
     }
   }
 }
@@ -162,7 +167,7 @@ function deck(b, o) {
  * segment is rotated to follow the local taper so the band stays continuous.
  */
 function flankBand(b, o) {
-  const { z0, z1, halfWAt, y, h, color, step = 3, thickness = 0.55, out = 0, opts = {} } = o;
+  const { z0, z1, halfWAt, y, h, color, step = 3, thickness = 0.55, out = 0, vAt = null, opts = {} } = o;
   const n = Math.max(1, Math.round((z1 - z0) / step));
   const dz = (z1 - z0) / n;
   for (let i = 0; i < n; i++) {
@@ -175,11 +180,12 @@ function flankBand(b, o) {
     const len = Math.hypot(dz, wb - wa) + 0.05;
     const mx = (wa + wb) / 2 + out;
     const mz = (za + zb) / 2;
+    const v = vAt ? vAt(mz) : 1;
     for (const s of [1, -1]) {
       b.push();
       b.translate(s * mx, 0, mz);
       b.rotateY(s > 0 ? theta : -theta);
-      b.box(-thickness / 2, y, -len / 2, thickness, len, h, color, { studs: false, ...opts });
+      b.box(-thickness / 2, y * v, -len / 2, thickness, len, h * v, color, { studs: false, ...opts });
       b.pop();
     }
   }
@@ -192,13 +198,14 @@ function flankBand(b, o) {
  */
 function greeble(b, o) {
   const {
-    z0, z1, y, halfWAt, seed = 1, n = 40, inset = 1.2,
+    z0, z1, halfWAt, seed = 1, n = 40, inset = 1.2,
     colors = [COLORS.darkBluishGray, COLORS.flatSilver, COLORS.lightBluishGray],
     maxW = 3, maxD = 5, h = 2, cylChance = 0.22, symmetric = true,
-    centreBias = 0, opts = {},
+    centreBias = 0, yAt = null, opts = {},
   } = o;
   for (let i = 0; i < n; i++) {
     const z = Math.round(z0 + hash11(i, seed) * (z1 - z0));
+    const y = yAt ? yAt(z) : o.y;
     const hw = halfWAt(z) - inset;
     if (hw < 1.2) continue;
     const w = 1 + Math.floor(hash11(i, seed + 31) * maxW);
@@ -410,12 +417,18 @@ export async function buildCorvette(opts = {}) {
   const Z_AFT = -27;
   const Z_FWD = 29.5;
 
-  // Plan half-width. Fat at the drive, long taper amidships, then the neck
-  // flares hard into the hammerhead.
+  // Plan half-width. Fat at the drive, long taper amidships, then a narrow
+  // neck that flares hard into the hammerhead.
   const plan = profile([
-    [-27, 6.6], [-25, 7.5], [-20, 7.7], [-14, 7.4], [-6, 6.7], [2, 5.8],
-    [8, 5.0], [13, 3.9], [17.5, 3.2], [19, 4.6], [20.5, 8.4], [22, 9.6],
-    [26, 9.4], [28, 8.2], [29.5, 5.4],
+    [-27, 7.2], [-25, 8.2], [-20, 8.4], [-16, 8.0], [-10, 6.9], [-2, 5.9],
+    [6, 4.9], [11, 3.7], [15.5, 3.0], [17, 3.6], [18.5, 7.4], [20, 9.6],
+    [25, 9.5], [27.5, 8.4], [29.5, 5.2],
+  ]);
+  // Vertical scale of the whole cross section: deep at the drive, waisted at
+  // the neck, then flat and wide through the hammerhead.
+  const vert = profile([
+    [-27, 0.94], [-24, 1.0], [-17, 1.0], [-8, 0.93], [2, 0.82], [10, 0.68],
+    [15.5, 0.58], [17.5, 0.6], [20, 0.68], [26, 0.68], [29.5, 0.48],
   ]);
 
   // Cross section: a flattened tube, 24 plates from keel to spine.
@@ -430,13 +443,16 @@ export async function buildCorvette(opts = {}) {
     { y: 9, h: 3, f: 0.62 },
   ];
   const spineF = 0.62;
+  const spineY = (z) => 12 * vert(z);
 
   function shell() {
-    hullSection(b, { z0: Z_AFT, z1: Z_FWD, halfWAt: plan, courses, color: hull, step: 2.5 });
-    // keel plate and spine tile, both smooth like a real set's finished edges
+    hullSection(b, { z0: Z_AFT, z1: Z_FWD, halfWAt: plan, courses, color: hull, step: 2, vAt: vert });
+    // keel plate, smooth like a real set's finished underside
     taperedSlab(b, {
-      z0: Z_AFT, z1: Z_FWD, y: -13, h: 1, color: dark, step: 2.5,
-      halfWAt: (z) => plan(z) * 0.34, opts: { studs: false },
+      z0: Z_AFT, z1: Z_FWD, y: -13, h: 1, color: dark, step: 2,
+      halfWAt: (z) => plan(z) * 0.34,
+      yAt: (z) => -13 * vert(z),
+      opts: { studs: false },
     });
   }
 
@@ -446,17 +462,17 @@ export async function buildCorvette(opts = {}) {
     for (const zr of [-25.6, -22.2, -18.8]) {
       hullSection(b, {
         z0: zr, z1: zr + 1.4, halfWAt: plan, courses, color: dark,
-        step: 1.4, grow: 0.55, pad: 0.08,
+        step: 1.4, grow: 0.55, pad: 0.09, vAt: vert,
       });
     }
     // Aft bulkhead the bells are set into.
     hullSection(b, {
-      z0: -27.4, z1: -26.4, halfWAt: plan, courses, color: dark, step: 1, grow: 0.2, pad: 0.08,
+      z0: -27.4, z1: -26.4, halfWAt: plan, courses, color: dark, step: 1, grow: 0.2, pad: 0.09, vAt: vert,
     });
     // Radiator strakes down the flanks of the drum.
     flankBand(b, {
-      z0: -26, z1: -14, halfWAt: (z) => plan(z) * 0.99, y: -2, h: 4,
-      color: metal, step: 2, thickness: 0.7, out: 0.15,
+      z0: -26, z1: -15, halfWAt: (z) => plan(z) * 0.99, y: -5.5, h: 4,
+      color: metal, step: 2, thickness: 0.7, out: 0.15, vAt: vert,
     });
     greeble(b, {
       z0: -26, z1: -15, y: 11.5, halfWAt: (z) => plan(z) * spineF, seed: 17, n: 26,
@@ -473,12 +489,12 @@ export async function buildCorvette(opts = {}) {
   const enginePoints = [];
   function engines() {
     const bells = [
-      [0, 0, 2.5],
-      [-4.6, 0, 1.95], [4.6, 0, 1.95],
-      [-2.3, PL(3.3), 1.35], [2.3, PL(3.3), 1.35],
-      [-2.3, PL(-3.3), 1.35], [2.3, PL(-3.3), 1.35],
-      [-6.5, PL(2.4), 1.0], [6.5, PL(2.4), 1.0],
-      [-6.5, PL(-2.4), 1.0], [6.5, PL(-2.4), 1.0],
+      [0, 0, 2.4],
+      [-4.4, 0, 1.85], [4.4, 0, 1.85],
+      [-2.2, PL(2.9), 1.25], [2.2, PL(2.9), 1.25],
+      [-2.2, PL(-2.9), 1.25], [2.2, PL(-2.9), 1.25],
+      [-6.2, PL(2.0), 0.95], [6.2, PL(2.0), 0.95],
+      [-6.2, PL(-2.0), 0.95], [6.2, PL(-2.0), 0.95],
     ];
     for (const [x, y, r] of bells) {
       enginePoints.push(engineBell(b, x, y, -30.2, r, { shell: dark, collar: metal, len: r * 1.9 }));
@@ -488,103 +504,120 @@ export async function buildCorvette(opts = {}) {
   function topside() {
     // Studded spine deck, inset so the swept edge stays smooth.
     deck(b, {
-      z0: -18, z1: 16, y: 12, halfWAt: (z) => plan(z) * spineF, color: hull, tile: 3, inset: 0.9,
+      z0: -18, z1: 14, y: 12, halfWAt: (z) => plan(z) * spineF, color: hull, tile: 3, inset: 0.9, vAt: vert,
     });
     deck(b, {
-      z0: 19.5, z1: 29, y: 10, halfWAt: (z) => plan(z) * 0.82, color: hull, tile: 3, inset: 1.4,
+      z0: 18.5, z1: 28, y: 12, halfWAt: (z) => plan(z) * 0.86, color: hull, tile: 3, inset: 1.6, vAt: vert,
     });
     // Sensor and comms clutter along the spine.
     greeble(b, {
-      z0: -14, z1: 15, y: 13, halfWAt: (z) => plan(z) * spineF, seed: 41, n: 34,
+      z0: -14, z1: 13, halfWAt: (z) => plan(z) * spineF, yAt: (z) => spineY(z) + 1, seed: 41, n: 34,
       colors: [dark, metal, COLORS.lightBluishGray], maxW: 2, maxD: 4, h: 2, cylChance: 0.35, inset: 0.7,
     });
     // Dorsal ridge running the length of the hull.
     taperedSlab(b, {
-      z0: -18, z1: 18, y: 12, h: 2, color: hull, step: 2.5,
-      halfWAt: (z) => Math.min(1.5, plan(z) * 0.24), opts: { studs: false },
+      z0: -18, z1: 16, h: 2, color: hull, step: 2,
+      halfWAt: (z) => Math.min(1.5, plan(z) * 0.24),
+      yAt: (z) => spineY(z), opts: { studs: false },
     });
     // Ventral sensor blister.
-    b.cyl(0, -15, -2, 2.2, 2, dark, { segments: 12 });
-    b.cyl(0, -16.5, -2, 1.4, 2, metal, { segments: 12 });
+    b.cyl(0, -spineY(-2) - 1.4, -2, 2.2, 2, dark, { segments: 12 });
+    b.cyl(0, -spineY(-2) - 2.9, -2, 1.4, 2, metal, { segments: 12 });
   }
 
   function bridge() {
     // Hammerhead command tower: two stepped decks with a wraparound viewport.
-    b.box(-5, 12, 19.5, 10, 8.5, 3, hull, { studs: false });
-    b.box(-4.4, 15, 20, 8.8, 7.5, 1, dark, { studs: false });
-    b.box(-4.2, 16, 20.2, 8.4, 7, 3, hull, { studs: false });
+    const y0 = Math.round(spineY(23));
+    b.box(-5, y0, 19.5, 10, 8, 3, hull, { studs: false });
+    b.box(-4.4, y0 + 3, 20, 8.8, 7, 1, dark, { studs: false });
+    b.box(-4.2, y0 + 4, 20.2, 8.4, 6.6, 3, hull, { studs: false });
     // viewport band -- front and both cheeks
-    b.box(-3.6, 17, 27.0, 7.2, 0.6, 2, glass, { studs: false, finish: 'trans' });
+    b.box(-3.6, y0 + 5, 26.5, 7.2, 0.6, 2, glass, { studs: false, finish: 'trans' });
     for (const s of [-1, 1]) {
-      b.box(s * 4.2 - 0.3, 17, 21.4, 0.6, 5.6, 2, glass, { studs: false, finish: 'trans' });
+      b.box(s * 4.2 - 0.3, y0 + 5, 21.2, 0.6, 5.3, 2, glass, { studs: false, finish: 'trans' });
     }
-    b.plate(-4, 19, 20.5, 8, 6, hull);
-    b.box(-2.6, 20, 21.5, 5.2, 4, 2, hull, { studs: false });
-    b.plate(-2, 22, 22, 4, 3, dark);
+    b.plate(-4, y0 + 7, 20.5, 8, 6, hull);
+    b.box(-2.6, y0 + 8, 21.5, 5.2, 4, 2, hull, { studs: false });
+    b.plate(-2, y0 + 10, 22, 4, 3, dark);
     // antenna pair
     for (const s of [-1, 1]) {
-      b.cyl(s * 1.4, 23, 23.5, 0.24, 7, metal, { segments: 8 });
-      b.cyl(s * 1.4, 30, 23.5, 0.45, 1, COLORS.red, { segments: 8 });
+      b.cyl(s * 1.4, y0 + 11, 23.5, 0.22, 5, metal, { segments: 8 });
+      b.cyl(s * 1.4, y0 + 16, 23.5, 0.42, 1, COLORS.red, { segments: 8 });
     }
-    b.dish(0, 23.2, 26.5, 2.2, 3, metal, { segments: 16 });
-    // Hammerhead face detail: docking rings and a chin sensor pod.
+    b.cyl(0, y0 + 10, 25.6, 0.5, 2, metal, { segments: 8 });
+    b.dish(0, y0 + 12, 25.6, 1.5, 2.0, metal, { segments: 16, rot: [-0.5, 0, 0] });
+    // Hammerhead face: two small docking ports and a chin sensor pod.
     for (const s of [-1, 1]) {
-      tubeZ(b, s * 5.6, 2, 28.6, 1.5, 2.4, dark, { segments: 12, rTop: 1.1 });
-      tubeZ(b, s * 5.6, 2, 29.4, 0.8, 1.4, COLORS.trueBlack, { segments: 12 });
+      tubeZ(b, s * 6.4, 0, 28.0, 1.05, 2.0, dark, { segments: 12, rTop: 0.85 });
+      tubeZ(b, s * 6.4, 0, 28.9, 0.55, 1.2, COLORS.trueBlack, { segments: 12 });
     }
-    tubeZ(b, 0, -5, 28.4, 2.0, 3.6, dark, { segments: 14, rTop: 1.4 });
-    tubeZ(b, 0, -5, 29.9, 1.1, 1.0, glass, { segments: 14, finish: 'trans' });
+    tubeZ(b, 0, -3.6, 28.2, 1.7, 3.2, dark, { segments: 14, rTop: 1.2 });
+    tubeZ(b, 0, -3.6, 29.6, 0.95, 1.0, glass, { segments: 14, finish: 'trans' });
     // greeble on the hammerhead shoulders
     greeble(b, {
-      z0: 20, z1: 28, y: 10, halfWAt: (z) => plan(z), seed: 71, n: 22,
+      z0: 19.5, z1: 28, halfWAt: (z) => plan(z), yAt: (z) => spineY(z), seed: 71, n: 24,
       colors: [dark, metal], maxW: 2, maxD: 3, h: 2, cylChance: 0.3, inset: 5.6,
     });
   }
 
+  // Outer face of the red rail at a given z, in studs.
+  const RAIL = { out: 0.3, thick: 0.95, halfH: 2.6 };
+  const railFace = (z) => plan(z) + RAIL.out + RAIL.thick / 2 + 0.05;
+
   /**
-   * The red flank stripe. If `svg/hull-rebel-stripe.svg` is available it is
-   * mapped onto a ribbon that follows the hull; otherwise the stripe is laid
-   * in red tiles, which is what the set itself does.
+   * The red flank stripe. The band itself is always brick-built -- a chunky
+   * rail whose top face catches the key light, because a flat dark red decal
+   * disappears against white ABS. When `svg/hull-rebel-stripe.svg` is present
+   * its artwork (outline, register marks, chamfered leading end) is printed
+   * onto the rail as a decal ribbon, exactly the way a set prints a tile.
    */
   async function stripe() {
+    for (const seg of [[-26.5, 17.5, 2], [18, 29.2, 1.4]]) {
+      flankBand(b, {
+        z0: seg[0], z1: seg[1], halfWAt: plan, y: -RAIL.halfH, h: RAIL.halfH * 2,
+        color: trim, step: seg[2], thickness: RAIL.thick, out: RAIL.out, vAt: vert,
+      });
+      flankBand(b, {
+        z0: seg[0], z1: seg[1], halfWAt: plan, y: RAIL.halfH, h: 0.7,
+        color: hull, step: seg[2], thickness: RAIL.thick - 0.1, out: RAIL.out - 0.04, vAt: vert,
+      });
+    }
+
     let tex = null;
     try {
       if (typeof document !== 'undefined') {
-        tex = await svgTexture('svg/hull-rebel-stripe.svg', { w: 1024, h: 96 });
+        tex = await svgTexture('svg/hull-rebel-stripe.svg', { w: 1024, h: 512 });
       }
     } catch {
       tex = null;
     }
-    if (!tex) {
-      flankBand(b, {
-        z0: -26.5, z1: 18, halfWAt: (z) => plan(z), y: -1.6, h: 3.2,
-        color: trim, step: 2, thickness: 0.62, out: 0.16,
-      });
-      flankBand(b, {
-        z0: 19.4, z1: 29, halfWAt: (z) => plan(z), y: -1.6, h: 3.2,
-        color: trim, step: 1.6, thickness: 0.62, out: 0.16,
-      });
-      return null;
-    }
-    // Ribbon mesh following the flank, one per side.
+    if (!tex) return null;
+
+    // The artwork's band occupies rows 200..312 of a 512-tall canvas, so the
+    // ribbon samples only that slice of the texture.
+    const V0 = 312 / 512;
+    const V1 = 200 / 512;
     const group = new THREE.Group();
-    const y0 = -3.4 * PLATE;
-    const y1 = 2.2 * PLATE;
     for (const s of [1, -1]) {
       const pos = [];
       const uv = [];
       const idx = [];
-      const N = 96;
+      // Only over the main hull: across the hammerhead flare the plan changes
+      // too fast for a flat ribbon to stay flush with the stepped rail.
+      const N = 100;
+      const zA = -26.2;
+      const zB = 16.4;
       for (let i = 0; i <= N; i++) {
         const u = i / N;
-        const z = Z_AFT + 0.5 + u * (Z_FWD - Z_AFT - 1);
-        const x = s * (plan(z) + 0.16) * PITCH;
-        pos.push(x, y0, z * PITCH, x, y1, z * PITCH);
-        uv.push(u, 0, u, 1);
+        const z = zA + u * (zB - zA);
+        const x = s * railFace(z) * PITCH;
+        const hy = RAIL.halfH * vert(z) * PLATE;
+        pos.push(x, -hy, z * PITCH, x, hy, z * PITCH);
+        uv.push(u, V0, u, V1);
         if (i < N) {
           const a = i * 2;
-          if (s > 0) idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
-          else idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+          if (s > 0) idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+          else idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
         }
       }
       const geo = new THREE.BufferGeometry();
@@ -594,7 +627,15 @@ export async function buildCorvette(opts = {}) {
       geo.computeVertexNormals();
       const mesh = new THREE.Mesh(
         geo,
-        new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.4, metalness: 0 })
+        new THREE.MeshStandardMaterial({
+          map: tex,
+          transparent: true,
+          roughness: 0.42,
+          metalness: 0,
+          polygonOffset: true,
+          polygonOffsetFactor: -3,
+          polygonOffsetUnits: -3,
+        })
       );
       mesh.castShadow = false;
       mesh.receiveShadow = true;
@@ -606,9 +647,9 @@ export async function buildCorvette(opts = {}) {
   const gunPoints = [];
   function turrets() {
     const mounts = [
-      [0, 12, -8, 0, 0.42],
-      [0, -13, -8, 0, 0.42],
-      [0, 12, 4, 0, -0.3],
+      [0, spineY(-9) - 0.4, -9, 0, 0.42],
+      [0, -spineY(-9) + 0.4, -9, 0, 0.42],
+      [0, spineY(3) - 0.4, 3, 0, -0.3],
     ];
     for (const [x, y, z, yaw, pitch] of mounts) {
       b.push();
@@ -760,10 +801,12 @@ export async function buildStarDestroyer(opts = {}) {
   }
 
   function superstructure() {
+    // A stepped ziggurat carrying a genuinely tall conning tower -- the ISD
+    // silhouette lives or dies on how far the bridge stands off the hull.
     const blocks = [
-      { z0: -122, z1: -50, half: 27, y: 36, h: 6 },
-      { z0: -116, z1: -62, half: 21, y: 42, h: 6 },
-      { z0: -112, z1: -80, half: 14, y: 48, h: 6 },
+      { z0: -122, z1: -50, half: 27, y: 36, h: 7 },
+      { z0: -116, z1: -62, half: 21, y: 43, h: 7 },
+      { z0: -112, z1: -78, half: 15.5, y: 50, h: 7 },
     ];
     for (const s of blocks) {
       b.box(-s.half, s.y, s.z0, s.half * 2, s.z1 - s.z0, s.h, hull, { studs: false });
@@ -772,40 +815,53 @@ export async function buildStarDestroyer(opts = {}) {
         b.plate(-s.half + 1, s.y + s.h, z, 8, 3, hull);
         b.plate(s.half - 9, s.y + s.h, z, 8, 3, hull);
       }
+      // side buttresses
+      for (const sx of [-1, 1]) {
+        b.box(sx * s.half - (sx > 0 ? 1.4 : 0), s.y, s.z0 + 3, 1.4, s.z1 - s.z0 - 6, s.h - 1, dark, { studs: false });
+      }
     }
-    // command tower
-    b.box(-11, 54, -108, 22, 24, 6, hull, { studs: false });
-    b.box(-10, 60, -106, 20, 20, 5, hull, { studs: false });
-    // bridge deck with its viewport band
-    b.box(-9.5, 65, -104, 19, 16, 4, hull, { studs: false });
-    b.box(-9, 66, -104.6, 18, 0.7, 2.4, glass, { studs: false, finish: 'trans' });
+    // conning tower neck
+    b.box(-10.5, 57, -108, 21, 22, 13, hull, { studs: false });
+    for (const sx of [-1, 1]) {
+      b.box(sx * 10.5 - (sx > 0 ? 1.2 : 0), 58, -106, 1.2, 18, 11, dark, { studs: false });
+    }
+    // bridge deck, overhanging the neck, with its viewport band
+    b.box(-13, 70, -110, 26, 26, 6, hull, { studs: false });
+    b.box(-12.5, 71.5, -110.7, 25, 0.8, 3, glass, { studs: false, finish: 'trans' });
     for (const s of [-1, 1]) {
-      b.box(s * 9.5 - 0.35, 66, -104, 0.7, 16, 2.4, glass, { studs: false, finish: 'trans' });
+      b.box(s * 13 - 0.4, 71.5, -109, 0.8, 23, 3, glass, { studs: false, finish: 'trans' });
     }
-    b.plate(-9, 69, -104, 18, 16, hull);
-    b.box(-7, 70, -102, 14, 12, 3, hull, { studs: false });
-    b.plate(-6, 73, -101, 12, 10, dark);
-    // deflector shield generator domes on outriggers
+    deck(b, { z0: -109, z1: -85, y: 76, halfWAt: () => 12, color: hull, tile: 4, inset: 1 });
+    b.box(-9, 77, -107, 18, 20, 3, hull, { studs: false });
+    b.plate(-7, 80, -105, 14, 16, dark);
+    // deflector shield generator domes on outriggers either side of the bridge
     for (const s of [-1, 1]) {
-      tubeX(b, s * 11.5, 70, -95, 1.9, 5, dark, { segments: 12 });
-      b.sphere(s * 16.5, 72.5, -95, 6.4, hull, { segments: 20 });
-      b.torus(s * 16.5, 66.5, -95, 5.2, 0.8, dark, { seg: 16 });
-      b.cyl(s * 16.5, 62, -95, 3.2, 5, dark, { segments: 14 });
+      tubeX(b, s * 15, 74, -97, 2.2, 6, dark, { segments: 12 });
+      b.cyl(s * 18.5, 66, -97, 3.6, 8, dark, { segments: 14 });
+      b.torus(s * 18.5, 74, -97, 5.6, 0.9, dark, { seg: 16 });
+      b.sphere(s * 18.5, 76, -97, 6.6, hull, { segments: 20 });
     }
-    // conning tower mast
-    b.cyl(0, 76, -96, 1.1, 8, metal, { segments: 10 });
-    b.cyl(0, 84, -96, 2.0, 2, dark, { segments: 12 });
-    b.cyl(0, 86, -96, 0.5, 6, metal, { segments: 8 });
+    // conning masts
+    b.cyl(0, 81, -101, 1.2, 9, metal, { segments: 10 });
+    b.cyl(0, 90, -101, 2.2, 2, dark, { segments: 12 });
+    b.cyl(0, 92, -101, 0.5, 7, metal, { segments: 8 });
+    for (const s of [-1, 1]) {
+      b.cyl(s * 5, 81, -95, 0.5, 12, metal, { segments: 8 });
+      b.dish(s * 5, 93, -95, 2.4, 3, metal, { segments: 14, rot: [0.5, 0, 0] });
+    }
     // greeble across the superstructure decks
     greeble(b, {
-      z0: -120, z1: -52, y: 42, halfWAt: () => 26, seed: 501, n: 46,
-      colors: [dark, metal, hull], maxW: 3, maxD: 5, h: 3, cylChance: 0.3, inset: 1.5,
+      z0: -120, z1: -52, y: 43, halfWAt: () => 26, seed: 501, n: 54,
+      colors: [dark, metal, hull], maxW: 3, maxD: 5, h: 5, cylChance: 0.3, inset: 1.5,
     });
     greeble(b, {
-      z0: -114, z1: -64, y: 48, halfWAt: () => 20, seed: 523, n: 30,
-      colors: [dark, metal], maxW: 3, maxD: 4, h: 2, cylChance: 0.35, inset: 1.5,
+      z0: -114, z1: -64, y: 50, halfWAt: () => 20, seed: 523, n: 38,
+      colors: [dark, metal], maxW: 3, maxD: 4, h: 4, cylChance: 0.35, inset: 1.5,
     });
-    deck(b, { z0: -110, z1: -84, y: 54, halfWAt: () => 13, color: hull, tile: 4, inset: 1.5 });
+    greeble(b, {
+      z0: -110, z1: -80, y: 57, halfWAt: () => 15, seed: 547, n: 26,
+      colors: [dark, metal], maxW: 3, maxD: 4, h: 3, cylChance: 0.4, inset: 1.2,
+    });
   }
 
   const enginePoints = [];

@@ -19,17 +19,17 @@
   <path fill="#8f6a3a" d="M196 34 L256 108 L264 100 L206 30Z"/>
 
   <!-- sleeve seams -->
-  <g fill="none" stroke="#8f6a3a" stroke-width="8" stroke-linecap="round">
-    <path d="M62 66 C58 160 62 260 70 340"/>
-    <path d="M450 66 C454 160 450 260 442 340"/>
+  <g stroke="#8f6a3a" stroke-width="8" stroke-linecap="round">
+    <path d="M62 66 C58 160 62 260 70 340" fill="none"/>
+    <path d="M450 66 C454 160 450 260 442 340" fill="none"/>
   </g>
 
   <!-- cloth folds -->
-  <g fill="none" stroke="#8f6a3a" stroke-width="5" stroke-linecap="round">
-    <path d="M158 190 C154 250 156 310 162 366"/>
-    <path d="M354 190 C358 250 356 310 350 366"/>
-    <path d="M206 240 C202 290 204 336 208 372"/>
-    <path d="M306 240 C310 290 308 336 304 372"/>
+  <g stroke="#8f6a3a" stroke-width="5" stroke-linecap="round">
+    <path d="M158 190 C154 250 156 310 162 366" fill="none"/>
+    <path d="M354 190 C358 250 356 310 350 366" fill="none"/>
+    <path d="M206 240 C202 290 204 336 208 372" fill="none"/>
+    <path d="M306 240 C310 290 308 336 304 372" fill="none"/>
   </g>
 
   <!-- wide brown belt -->

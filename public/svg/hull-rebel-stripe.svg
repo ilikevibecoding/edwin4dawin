@@ -6,14 +6,14 @@
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
 
-  <!-- darker backing, offset one unit outside the band -->
-  <path fill="#8f1206" d="M8 200 L400 200 L504 256 L400 312 L8 312Z"/>
+  <!-- darker backing, offset 8 outside the band on every edge -->
+  <path fill="#8f1206" d="M8 200 L451.3 200 L496 244.7 L496 267.3 L451.3 312 L8 312Z"/>
 
-  <!-- main band -->
-  <path fill="#c91a09" d="M14 208 L396 208 L488 256 L396 304 L14 304Z"/>
+  <!-- main band: 45 deg chamfers off both leading corners, 16 wide end face -->
+  <path fill="#c91a09" d="M14 208 L448 208 L488 248 L488 264 L448 304 L14 304Z"/>
 
   <!-- highlight along the top edge -->
-  <path fill="#e2523f" d="M14 208 L396 208 L410 215 L14 215Z"/>
+  <path fill="#e2523f" d="M14 208 L448 208 L455 215 L14 215Z"/>
 
   <!-- tail cap and two register marks -->
   <rect x="0" y="200" width="16" height="112" fill="#8f1206"/>

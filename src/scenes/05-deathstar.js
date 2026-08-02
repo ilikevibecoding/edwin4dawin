@@ -43,7 +43,9 @@ const T_SPACE = 17.0; // cut to the approach
 
 const HOLO = KIT.hologram;
 const HOLO_Y = 7.6; // world height of the hologram's centre
-const STATION_R = 90;
+// Big enough that the hull reads as a horizon rather than a ball. The camera
+// never gets closer than ~190 to the centre, so the curvature stays gentle.
+const STATION_R = 150;
 
 export async function build(ctx) {
   const D = ctx.duration;
@@ -114,56 +116,37 @@ export async function build(ctx) {
     },
     {
       start: 3.35,
-      pos: [[3.35, [-11.5, 3.2, 14.5]], [T_ZOOM, [-8.2, 4.4, 11.6]]],
-      look: [[3.35, [0, 8.0, 0]], [T_ZOOM, [0, 8.2, 0]]],
-      fov: [[3.35, 40]],
+      pos: [[3.35, [-16, 2.8, 19.5]], [T_ZOOM, [-12.5, 4.2, 16.5]]],
+      look: [[3.35, [0, 7.6, 0]], [T_ZOOM, [0, 8.0, 0]]],
+      fov: [[3.35, 43]],
       handheld: 0.05,
     },
     {
       start: T_ZOOM,
-      pos: [[T_ZOOM, [0.4, 8.6, 15.5]], [T_HANGAR, [0.1, 7.8, 7.4]]],
-      look: [[T_ZOOM, [0, 8.0, 0]], [T_HANGAR, [0.3, 7.5, 0]]],
-      fov: [[T_ZOOM, 44], [8.2, 33], [T_HANGAR, 30]],
+      pos: [[T_ZOOM, [-5, 9.8, 27]], [T_HANGAR, [-1.5, 8.6, 19]]],
+      look: [[T_ZOOM, [0, 8.0, 0]], [T_HANGAR, [0.2, 8.1, 0]]],
+      fov: [[T_ZOOM, 44], [8.4, 37], [T_HANGAR, 35]],
       handheld: 0.035,
     },
-    // --- hangar deck
+    // --- hangar deck: three-quarter from behind the line of ships, with the
+    // open launch door beyond them, then a low side-on pass as they leave.
     {
       start: T_HANGAR,
-      pos: [[T_HANGAR, [-46, 14, -40]], [T_LAUNCH, [-31, 10.5, -26]]],
-      look: [[T_HANGAR, [-4, 5, 6]], [T_LAUNCH, [0, 5.5, 10]]],
-      fov: [[T_HANGAR, 46], [T_LAUNCH, 42]],
-      handheld: 0.08,
+      pos: [[T_HANGAR, [-30, 5.4, -34]], [T_LAUNCH, [-19, 4.4, -18]]],
+      look: [[T_HANGAR, [-2, 5.0, 4]], [T_LAUNCH, [3, 4.6, 12]]],
+      fov: [[T_HANGAR, 50], [T_LAUNCH, 46]],
+      handheld: 0.09,
     },
     {
       start: T_LAUNCH,
-      pos: [[T_LAUNCH, [3.5, 3.0, -25]], [T_SPACE, [7, 9.5, -16]]],
-      look: [[T_LAUNCH, [0, 4.4, 4]], [15.4, [0, 8, 18]], [T_SPACE, [0, 15, 30]]],
-      fov: [[T_LAUNCH, 40], [T_SPACE, 46]],
+      pos: [[T_LAUNCH, [-32, 3.0, 12]], [T_SPACE, [-27, 8.5, 22]]],
+      look: [[T_LAUNCH, [-2, 4.0, 16]], [15.2, [0, 11, 42]], [T_SPACE, [0, 26, 92]]],
+      fov: [[T_LAUNCH, 44], [T_SPACE, 50]],
       shake: [[T_LAUNCH, 0], [T_LAUNCH + 0.35, 0.16], [T_SPACE, 0.05]],
     },
-    // --- the approach
-    {
-      start: T_SPACE,
-      pos: [[T_SPACE, [-250, 96, -470]], [21.4, [-196, 74, -404]]],
-      look: [[T_SPACE, [-40, 18, -120]], [21.4, [-20, 10, -70]]],
-      fov: [[T_SPACE, 40], [21.4, 36]],
-      handheld: 0.5,
-    },
-    {
-      start: 21.4,
-      pos: [[21.4, [-96, 26, -258]], [24.5, [-78, 20, -212]]],
-      look: [[21.4, [-30, 6, -150]], [24.5, [-16, 2, -104]]],
-      fov: [[21.4, 44]],
-      handheld: 0.35,
-    },
-    {
-      start: 24.5,
-      pos: [[24.5, [-58, 30, -164]], [D, [-30, 34, -122]]],
-      look: [[24.5, [-18, 6, -96]], [D, [-6, 12, -70]]],
-      fov: [[24.5, 50], [D, 44]],
-      handheld: 0.3,
-      shake: [[24.5, 0.04], [D, 0.12]],
-    },
+    // --- the approach: the camera rides with the formation, so these shots
+    // hand off to the set's own rig rather than carrying world-space keys.
+    { start: T_SPACE, rig: space.rig, handheld: 0.5, rate: 0.3 },
   ];
 
   // ------------------------------------------------------------------ update
@@ -207,13 +190,16 @@ export async function build(ctx) {
 function playShots(camera, t, shots) {
   let shot = shots[0];
   for (const s of shots) if (t >= s.start) shot = s;
-  cameraRig(camera, t, {
-    pos: shot.pos,
-    look: shot.look,
-    fov: shot.fov,
-    shake: shot.shake,
-    ease: shot.ease || ease.inOutCubic,
-  });
+  if (shot.rig) shot.rig(t, camera);
+  else {
+    cameraRig(camera, t, {
+      pos: shot.pos,
+      look: shot.look,
+      fov: shot.fov,
+      shake: shot.shake,
+      ease: shot.ease || ease.inOutCubic,
+    });
+  }
   if (shot.handheld) handheld(camera, t, shot.handheld, shot.rate ?? 0.4, shot.start);
   return shot;
 }
@@ -261,10 +247,21 @@ async function buildBriefing(chars) {
   const dishDir = new THREE.Vector3(-0.42, 0.44, 0.79).normalize();
   for (const r of [2.15, 1.45, 0.6]) {
     rb.addGeometry(new THREE.TorusGeometry(r, r > 1 ? 0.075 : 0.11, 5, 40), {
-      x: dishDir.x * 5.85,
-      y: dishDir.y * 5.85,
-      z: dishDir.z * 5.85,
-      rot: [Math.atan2(-dishDir.y, dishDir.z) + Math.PI / 2, 0, 0],
+      x: dishDir.x * 5.8,
+      y: dishDir.y * 5.8,
+      z: dishDir.z * 5.8,
+      rot: alignZ(dishDir),
+      color: HOLO,
+      opts: ringOpts,
+    });
+  }
+  // Cross-hairs over the dish, so it reads as a targeted feature.
+  for (const spin of [0, Math.PI / 2]) {
+    rb.addGeometry(new THREE.BoxGeometry(0.06, 5.4, 0.06), {
+      x: dishDir.x * 5.8,
+      y: dishDir.y * 5.8,
+      z: dishDir.z * 5.8,
+      rot: alignZ(dishDir, spin + Math.PI / 2),
       color: HOLO,
       opts: ringOpts,
     });
@@ -289,7 +286,7 @@ async function buildBriefing(chars) {
   crossPlate.add(marker);
 
   // --- projector: a dais on the floor and the cone of light above it
-  const beam = new Beam({ color: HOLO, radiusTop: 7.6, radiusBottom: 0.75, height: HOLO_Y + 5.4, opacity: 0.2 });
+  const beam = new Beam({ color: HOLO, radiusTop: 6.8, radiusBottom: 0.75, height: HOLO_Y + 4.4, opacity: 0.1 });
   beam.object.position.y = 1.3;
   group.add(beam.object);
   const lens = glowSprite(HOLO, 3.4, 0.75);
@@ -509,7 +506,7 @@ async function pilotRing(chars) {
 // ===========================================================================
 
 const BAY_Z = 42; // z of the launch door
-const SHIP_X = [-29, 0, 29];
+const SHIP_X = [-22, 0, 22];
 
 async function buildHangar(chars) {
   const group = new THREE.Group();
@@ -554,18 +551,18 @@ async function buildHangar(chars) {
       for (let i = 0; i < ships.length; i++) {
         const ship = ships[i];
         const t0 = T_LAUNCH + i * 0.42;
-        const spool = ease.range(t, t0 - 1.1, t0 + 0.2);
-        const up = ease.range(t, t0, t0 + 2.6);
+        const spool = ease.range(t, t0 - 1.6, t0 - 0.1);
+        const up = ease.range(t, t0, t0 + 3.4);
         const run = ease.outCubic(up);
-        ship.position.y = 2.4 + run * 26 + ease.inCubic(up) * 8;
-        ship.position.z = -6 + i * 3 + ease.inQuad(up) * 210;
-        ship.rotation.x = -run * 0.34;
+        ship.position.y = 2.4 + run * 9 + ease.inCubic(up) * 22;
+        ship.position.z = -6 + i * 3 + ease.inQuad(up) * 150;
+        ship.rotation.x = -run * 0.26;
         ship.rotation.z = Math.sin(t * 1.4 + i) * 0.05 - run * 0.12 * (i - 1);
         const throttle = spool * (0.35 + 0.65 * up) * (1 + 0.5 * ease.pulse(t, t0, 0.2, 0.4, 0.8));
         ship.updateMatrixWorld();
         for (const p of ship.userData.enginePoints) {
           enginePos.copy(p).applyMatrix4(ship.matrixWorld);
-          engines.set(n++, enginePos, ship.quaternion, 1.05, 5.2 + throttle * 5, throttle, t);
+          if (engines.set(n, enginePos, ship.quaternion, 1.0, 4 + throttle * 7, throttle, t)) n++;
         }
       }
       engines.flush(n);
@@ -592,10 +589,11 @@ function hangarDeck() {
       b.tile(x, -1, z, 8, 8, c);
     }
   }
+  // Lane markings under each ship, sparse enough to read as guides.
   for (const sx of SHIP_X) {
-    for (let z = -40; z < BAY_Z - 4; z += 6) {
-      b.tile(sx - 7, 0, z, 1, 4, COLORS.yellow);
-      b.tile(sx + 6, 0, z, 1, 4, COLORS.yellow);
+    for (let z = -24; z < BAY_Z - 8; z += 12) {
+      b.tile(sx - 8, 0, z, 1, 5, COLORS.yellow);
+      b.tile(sx + 7, 0, z, 1, 5, COLORS.yellow);
     }
   }
 
@@ -612,10 +610,10 @@ function hangarDeck() {
         emissiveIntensity: 0.65,
         finish: 'glow',
       });
-      b.box(sx * (WALL - 1.4) - (sx > 0 ? 0 : 1.2), 14, z + 1, 1.2, 5, 4, COLORS.transNeonOrange, {
+      b.box(sx * (WALL - 1.4) - (sx > 0 ? 0 : 1.2), 16, z + 2.5, 1.2, 2, 3, COLORS.transNeonOrange, {
         studs: false,
-        emissive: 0xd07a20,
-        emissiveIntensity: 0.5,
+        emissive: 0x9c5a17,
+        emissiveIntensity: 0.35,
         finish: 'glow',
       });
     }
@@ -644,20 +642,21 @@ function hangarDeck() {
     b.tile(x + 2, 0, BAY_Z - 5, 2, 4, dark);
   }
 
-  // Floodlight masts: a dark post with a big glowing pan on top.
+  // Floodlight masts, pushed back against the walls so their glare never sits
+  // in the middle of the frame. The pan faces the deck, away from camera.
   for (const sx of [-1, 1]) {
-    for (const z of [-30, 2, 30]) {
+    for (const z of [-38, -6, 26]) {
       b.push();
-      b.translate(sx * (WALL - 8), 0, z);
-      b.cyl(0, 0, 0, 0.9, 56, grey, { segments: 10, studs: false });
+      b.translate(sx * (WALL - 5), 0, z);
+      b.cyl(0, 0, 0, 0.9, 62, grey, { segments: 10, studs: false });
       b.push();
-      b.translate(0, 56, 0);
-      b.rotateZ(sx * 0.5);
+      b.translate(0, 62, 0);
+      b.rotateZ(sx * 0.6);
       b.box(-2.6, 0, -2.2, 5.2, 4.4, 2, dark, { studs: false });
       b.box(-2.2, -0.7, -1.8, 4.4, 3.6, 0.8, COLORS.transClear, {
         studs: false,
-        emissive: 0xffeec6,
-        emissiveIntensity: 1.2,
+        emissive: 0xffe6b4,
+        emissiveIntensity: 0.5,
         finish: 'glow',
       });
       b.pop();
@@ -766,68 +765,123 @@ async function buildApproach() {
     : fallbackStation(STATION_R);
   group.add(station);
 
-  // A rim light hugging the terminator makes the sphere read as a moon.
-  const limb = glowSprite(0x9fc6ff, STATION_R * 2.6, 0.16);
-  limb.position.set(-STATION_R * 0.25, STATION_R * 0.18, STATION_R * 0.1);
+  // A faint halo sitting behind the hull separates it from the starfield.
+  const limb = glowSprite(0x8fb4e8, STATION_R * 2.35, 0.1);
   group.add(limb);
 
-  // --- the squadron: nine fighters in a loose V, foils still closed
+  // --- the squadron: twelve fighters in three ranks, foils still closed
   const squadron = [];
-  const engines = new EngineGlow(36, KIT.engineBlue);
+  const engines = new EngineGlow(48, KIT.engineBlue);
   group.add(engines.object);
   const proto = await makeXWing(0);
   proto.userData.setSFoils(0);
-  const flat = collapse(proto);
+  const flat = collapse(proto, 0.78);
   const enginePoints = proto.userData.enginePoints.map((p) => p.clone());
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 12; i++) {
     const ship = i === 0 ? flat : cloneCollapsed(flat);
-    const row = Math.floor(i / 3);
-    const col = (i % 3) - 1;
-    ship.userData.slot = [col * 34 + row * 9, row * -7 - hash11(i, 21) * 4, row * -46 - hash11(i, 22) * 12];
+    const rank = Math.floor(i / 4);
+    const file = (i % 4) - 1.5;
+    // A shallow V, each rank stepped back and down from the one ahead.
+    ship.userData.slot = [file * 17, -rank * 5 - Math.abs(file) * 1.8, -rank * 26 - Math.abs(file) * 13];
     group.add(ship);
     squadron.push(ship);
   }
 
+  // The whole run in, as one path. Radius falls from 455 to 180 while the
+  // heading swings from high over the northern hemisphere down toward the
+  // equator, so the last shot looks along the trench.
+  const PATH = [
+    [-282, 250, 255],
+    [-227, 196, 265],
+    [-170, 142, 258],
+    [-118, 94, 236],
+    [-76, 56, 204],
+    [-45, 29, 172],
+  ];
+  const lead = new THREE.Vector3();
+  const fwd = new THREE.Vector3();
+  const right = new THREE.Vector3();
+  const up = new THREE.Vector3();
+  const tmp = new THREE.Vector3();
   const p = new THREE.Vector3();
   const wp = new THREE.Vector3();
 
+  /** Formation frame at scene time t: lead point plus a forward/right/up basis. */
+  const frameAt = (t) => {
+    const u = ease.range(t, T_SPACE, meta.duration + 1.2);
+    lead.set(...ease.spline(PATH, u));
+    fwd.set(...ease.spline(PATH, Math.min(1, u + 0.02))).sub(lead);
+    if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+    fwd.normalize();
+    right.crossVectors(_UP, fwd).normalize();
+    up.crossVectors(fwd, right).normalize();
+    return u;
+  };
+
+  /**
+   * Three shots on the approach. Offsets are in the formation's own frame, so
+   * the fighters stay put in the frame while the hull swells behind them; `mix`
+   * slides the look target from the lead ship (0) to the station's centre (1),
+   * which is what decides how much of the frame the hull eats.
+   */
+  const SPACE_SHOTS = [
+    // the hull nearly filling the frame, the squadron specks against its limb
+    { start: T_SPACE, end: 21.3, back: [150, 128], side: [-30, -22], rise: [16, 11], mix: 0.55, fov: [30, 29] },
+    // in close: near enough to read the fighters, hull curving away behind
+    { start: 21.3, end: 24.6, back: [50, 42], side: [-24, -14], rise: [8, 5], mix: 0.2, fov: [44, 42] },
+    // the dive: over the top of the formation, surface swallowing the frame
+    { start: 24.6, end: 28.6, back: [84, 66], side: [26, 16], rise: [28, 20], mix: 0.42, fov: [48, 50] },
+  ];
+
   return {
     group,
+    rig(t, camera) {
+      frameAt(t);
+      let s = SPACE_SHOTS[0];
+      for (const c of SPACE_SHOTS) if (t >= c.start) s = c;
+      const k = ease.smooth(ease.range(t, s.start, s.end));
+      const back = ease.lerp(s.back[0], s.back[1], k);
+      const side = ease.lerp(s.side[0], s.side[1], k);
+      const rise = ease.lerp(s.rise[0], s.rise[1], k);
+      const fov = ease.lerp(s.fov[0], s.fov[1], k);
+
+      camera.position
+        .copy(lead)
+        .addScaledVector(fwd, -back)
+        .addScaledVector(right, side)
+        .addScaledVector(up, rise);
+      // Aim between the lead ship and the centre of the station.
+      tmp.copy(lead).multiplyScalar(1 - s.mix);
+      camera.up.set(0, 1, 0);
+      camera.lookAt(tmp);
+      if (Math.abs(camera.fov - fov) > 1e-4) {
+        camera.fov = fov;
+        camera.updateProjectionMatrix();
+      }
+    },
     update(t) {
       stars.update(t);
       station.rotation.y = -0.045 + t * 0.004;
-
-      // One long dive: the formation runs in from deep space and drops toward
-      // the surface, so the three shots all watch the same move.
-      const u = ease.range(t, T_SPACE, meta.duration + 1.5);
-      const lead = ease.spline(
-        [
-          [-330, 150, -900],
-          [-250, 96, -600],
-          [-176, 56, -366],
-          [-108, 24, -218],
-          [-62, 6, -132],
-          [-34, -6, -86],
-        ],
-        u
-      );
-      const bank = Math.sin(t * 0.7) * 0.1 - u * 0.5;
+      const u = frameAt(t);
 
       let n = 0;
       for (let i = 0; i < squadron.length; i++) {
         const ship = squadron[i];
         const [ox, oy, oz] = ship.userData.slot;
-        const wob = Math.sin(t * (0.8 + hash11(i, 23) * 0.5) + i) * 2.4;
-        p.set(lead[0] + ox * (1 - u * 0.55), lead[1] + oy + wob, lead[2] + oz * (1 - u * 0.4));
+        const wob = Math.sin(t * (0.8 + hash11(i, 23) * 0.5) + i) * 1.1;
+        p.copy(lead)
+          .addScaledVector(right, ox)
+          .addScaledVector(up, oy + wob)
+          .addScaledVector(fwd, oz);
         ship.position.copy(p);
-        // Nose along the flight direction: down and inbound toward the station.
-        ship.lookAt(0, -STATION_R * 0.32, -20);
-        ship.rotation.z += bank + Math.sin(t * 1.1 + i * 2.1) * 0.09;
+        ship.lookAt(tmp.copy(p).addScaledVector(fwd, 60));
+        // Bank into the dive as the hull comes up under them.
+        ship.rotateZ(Math.sin(t * 0.9 + i * 2.1) * 0.07 + ease.inQuad(u) * 0.3 * Math.sign(ox || 1));
         ship.updateMatrixWorld();
         const throttle = 0.85 + 0.15 * Math.sin(t * 6 + i);
         for (const q of enginePoints) {
           wp.copy(q).applyMatrix4(ship.matrixWorld);
-          engines.set(n++, wp, ship.quaternion, 1.1, 7.5, throttle, t);
+          if (engines.set(n, wp, ship.quaternion, 0.52, 5.5, throttle, t)) n++;
         }
       }
       engines.flush(n);
@@ -860,18 +914,20 @@ function fallbackStation(R) {
     const r = Math.sqrt(Math.max(0.02, R * R - y * y));
     b.addGeometry(new THREE.TorusGeometry(r, R * 0.0035, 4, 72), { y, rot: [Math.PI / 2, 0, 0], color: dark, opts });
   }
-  for (let i = 0; i < 460; i++) {
+  // Surface panels, each laid flat against the hull: build the rotation that
+  // takes +y onto the surface normal, then spin the panel about it.
+  for (let i = 0; i < 620; i++) {
     const uy = hash11(i, 41) * 2 - 1;
     const th = hash11(i, 42) * Math.PI * 2;
-    if (Math.abs(uy) < 0.05) continue; // keep the trench clear
+    if (Math.abs(uy) < 0.055) continue; // keep the trench clear
     const rr = Math.sqrt(1 - uy * uy);
     const n = new THREE.Vector3(Math.cos(th) * rr, uy, Math.sin(th) * rr);
-    const s = R * (0.02 + hash11(i, 43) * 0.05);
+    const s = R * (0.018 + hash11(i, 43) * 0.045);
     b.push();
-    b.translateWorld(n.x * R * 0.995, n.y * R * 0.995, n.z * R * 0.995);
-    b.addGeometry(new THREE.BoxGeometry(s * 2, s * 0.35, s * (1 + hash11(i, 44))), {
-      rot: [Math.atan2(n.z, n.y) * 0 + hash11(i, 45) * 0.4, hash11(i, 46) * 3.14, 0],
-      color: hash11(i, 47) > 0.7 ? dark : hull,
+    b.translateWorld(n.x * R * 0.993, n.y * R * 0.993, n.z * R * 0.993);
+    b.addGeometry(new THREE.BoxGeometry(s * 2.1, R * 0.016, s * (1.1 + hash11(i, 44))), {
+      rot: alignY(n, hash11(i, 46) * Math.PI),
+      color: hash11(i, 47) > 0.68 ? dark : hull,
       opts,
     });
     b.pop();
@@ -879,13 +935,28 @@ function fallbackStation(R) {
   // Superlaser dish: a recessed bowl in the northern hemisphere.
   const dishDir = new THREE.Vector3(-0.34, 0.5, 0.79).normalize();
   b.push();
-  b.translateWorld(dishDir.x * R * 0.9, dishDir.y * R * 0.9, dishDir.z * R * 0.9);
-  b.addGeometry(new THREE.SphereGeometry(R * 0.27, 28, 16), { color: dark, opts });
-  b.addGeometry(new THREE.TorusGeometry(R * 0.27, R * 0.015, 6, 40), {
-    rot: [Math.atan2(-dishDir.y, dishDir.z) + Math.PI / 2, 0, 0],
-    color: hull,
-    opts,
-  });
+  b.translateWorld(dishDir.x * R * 0.895, dishDir.y * R * 0.895, dishDir.z * R * 0.895);
+  b.addGeometry(new THREE.SphereGeometry(R * 0.26, 30, 18), { color: dark, opts });
+  for (const [r, tube, c] of [
+    [R * 0.262, R * 0.014, hull],
+    [R * 0.19, R * 0.008, dark],
+  ]) {
+    b.addGeometry(new THREE.TorusGeometry(r, tube, 6, 44), { rot: alignZ(dishDir), color: c, opts });
+  }
+  // The eight focusing lenses round the rim of the dish.
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const t1 = new THREE.Vector3(0, 1, 0).cross(dishDir).normalize();
+    const t2 = new THREE.Vector3().crossVectors(dishDir, t1);
+    const off = t1.multiplyScalar(Math.cos(a) * R * 0.2).add(t2.multiplyScalar(Math.sin(a) * R * 0.2));
+    b.addGeometry(new THREE.SphereGeometry(R * 0.026, 10, 8), {
+      x: off.x,
+      y: off.y,
+      z: off.z,
+      color: COLORS.transGreen,
+      opts: { studs: false, emissive: 0x2c6a3a, emissiveIntensity: 0.8, finish: 'glow' },
+    });
+  }
   b.pop();
 
   const model = b.build({ castShadow: false, receiveShadow: false });
@@ -897,6 +968,28 @@ function fallbackStation(R) {
 // ===========================================================================
 // Shared helpers
 // ===========================================================================
+
+const _UP = new THREE.Vector3(0, 1, 0);
+const _FWD = new THREE.Vector3(0, 0, 1);
+
+/**
+ * Euler triple that rotates a +y-up element onto `dir` (then spins it about
+ * its own axis). `Bricks.addGeometry` only takes Euler angles in the default
+ * XYZ order, which is exactly what `Euler.setFromQuaternion` produces.
+ */
+function alignY(dir, spin = 0) {
+  return alignAxis(_UP, dir, spin);
+}
+/** The same for a +z-facing element, e.g. a torus lying in the XY plane. */
+function alignZ(dir, spin = 0) {
+  return alignAxis(_FWD, dir, spin);
+}
+function alignAxis(axis, dir, spin) {
+  const q = new THREE.Quaternion().setFromUnitVectors(axis, dir);
+  if (spin) q.multiply(new THREE.Quaternion().setFromAxisAngle(axis, spin));
+  const e = new THREE.Euler().setFromQuaternion(q);
+  return [e.x, e.y, e.z];
+}
 
 async function tryCharacters() {
   try {
@@ -953,7 +1046,7 @@ async function makeXWing(i) {
  * attribute collapses it to three: hull, glow and glass. Roughness and
  * metalness flatten to plain ABS, which is invisible at these distances.
  */
-function collapse(root) {
+function collapse(root, tint = 1) {
   root.updateWorldMatrix(true, true);
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const local = new THREE.Matrix4();
@@ -972,7 +1065,7 @@ function collapse(root) {
 
     const emissive = m.emissive && m.emissiveIntensity > 0 && m.emissive.getHex() !== 0x000000;
     if (emissive) c.copy(m.emissive).multiplyScalar(Math.min(1.8, m.emissiveIntensity ?? 1));
-    else c.copy(m.color);
+    else c.copy(m.color).multiplyScalar(tint);
 
     const count = g.attributes.position.count;
     const arr = new Float32Array(count * 3);
@@ -1045,18 +1138,25 @@ class EngineGlow {
     this.object.renderOrder = 4;
     this._d = new THREE.Object3D();
   }
-  /** Place flare `i` at a world position, oriented by the ship's quaternion. */
+  /**
+   * Place flare `i` at a world position, oriented by the ship's quaternion.
+   * Returns false for a cold engine so the caller can skip the slot entirely —
+   * a zero-length cone still draws its hot core, which reads as a stray blob.
+   */
   set(i, position, quaternion, radius, length, throttle, t) {
-    const f = Math.max(0, throttle) * (0.88 + 0.12 * Math.sin(t * 41 + i * 2.3) * Math.sin(t * 17 + i));
+    if (throttle <= 0.02) return false;
+    const f = throttle * (0.88 + 0.12 * Math.sin(t * 41 + i * 2.3) * Math.sin(t * 17 + i));
     const d = this._d;
     d.position.copy(position);
     d.quaternion.copy(quaternion);
-    d.scale.set(radius * (0.7 + f * 0.4), radius * (0.7 + f * 0.4), Math.max(0.001, length * f));
+    const r = radius * (0.55 + f * 0.5);
+    d.scale.set(r, r, Math.max(0.001, length * f));
     d.updateMatrix();
     this.plume.setMatrixAt(i, d.matrix);
-    d.scale.setScalar(radius * (0.55 + f * 0.5));
+    d.scale.setScalar(radius * (0.2 + f * 0.5));
     d.updateMatrix();
     this.core.setMatrixAt(i, d.matrix);
+    return true;
   }
   flush(n) {
     this.plume.count = n;

@@ -50,6 +50,39 @@ export class FilmAudio {
     );
   }
 
+  /** Narration windows, used to duck the music. Set by the caller. */
+  setVoiceWindows(windows) {
+    this.voiceWindows = windows.slice().sort((a, b) => a.t - b.t);
+  }
+
+  /**
+   * Ramp a music cue's gain down while narration plays.
+   * `t` is the film time playback started from; `cue.t` is the cue's film time.
+   */
+  scheduleDuck(gainNode, base, cue, t, dur) {
+    if (!this.voiceWindows?.length) return;
+    const DUCK = 0.52;
+    const LEAD = 0.12;
+    const TAIL = 0.55;
+    const cueStart = Math.max(cue.t, t);
+    const cueEnd = cue.t + dur;
+    const clock = (filmTime) => this.startedAt + Math.max(0, filmTime - t);
+    for (const w of this.voiceWindows) {
+      const a = w.t - LEAD;
+      const b = w.t + w.dur + TAIL;
+      if (b < cueStart || a > cueEnd) continue;
+      const down = clock(Math.max(a, cueStart));
+      const bottom = down + 0.18;
+      const up = clock(Math.min(b, cueEnd));
+      try {
+        gainNode.gain.setValueAtTime(base, down);
+        gainNode.gain.linearRampToValueAtTime(base * (1 - DUCK), bottom);
+        gainNode.gain.setValueAtTime(base * (1 - DUCK), up);
+        gainNode.gain.linearRampToValueAtTime(base, up + 0.9);
+      } catch {}
+    }
+  }
+
   stopAll() {
     for (const s of this.active) {
       try {
@@ -80,7 +113,11 @@ export class FilmAudio {
       src.buffer = buf;
       src.playbackRate.value = rate;
       const g = this.ctx.createGain();
-      g.gain.value = (cue.gain ?? 1) * (this.muted ? 0 : 1);
+      const base = (cue.gain ?? 1) * (this.muted ? 0 : 1);
+      g.gain.value = base;
+      // Duck the score under narration, matching what tools/mixaudio.mjs does
+      // offline so the page and the exported film sound the same.
+      if (cue.kind === 'music') this.scheduleDuck(g, base, cue, t, dur);
       src.connect(g).connect(this.master);
       try {
         src.start(when, offset);

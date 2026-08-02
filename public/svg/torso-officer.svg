@@ -17,39 +17,33 @@
   <rect x="248" y="70" width="16" height="330" fill="#5a5d59"/>
 
   <!-- double row of buttons -->
-  <g fill="#3a3d3a">
-    <circle cx="212" cy="122" r="12"/>
-    <circle cx="212" cy="182" r="12"/>
-    <circle cx="212" cy="242" r="12"/>
-    <circle cx="212" cy="302" r="12"/>
-    <circle cx="300" cy="122" r="12"/>
-    <circle cx="300" cy="182" r="12"/>
-    <circle cx="300" cy="242" r="12"/>
-    <circle cx="300" cy="302" r="12"/>
-  </g>
+  <circle cx="212" cy="122" r="12" fill="#3a3d3a"/>
+  <circle cx="212" cy="182" r="12" fill="#3a3d3a"/>
+  <circle cx="212" cy="242" r="12" fill="#3a3d3a"/>
+  <circle cx="212" cy="302" r="12" fill="#3a3d3a"/>
+  <circle cx="300" cy="122" r="12" fill="#3a3d3a"/>
+  <circle cx="300" cy="182" r="12" fill="#3a3d3a"/>
+  <circle cx="300" cy="242" r="12" fill="#3a3d3a"/>
+  <circle cx="300" cy="302" r="12" fill="#3a3d3a"/>
 
   <!-- shoulder seams -->
-  <g fill="none" stroke="#4a4d4a" stroke-width="9" stroke-linecap="round">
-    <path d="M44 66 C96 46 132 46 158 62"/>
-    <path d="M468 66 C416 46 380 46 354 62"/>
+  <g stroke="#4a4d4a" stroke-width="9" stroke-linecap="round">
+    <path d="M44 66 C96 46 132 46 158 62" fill="none"/>
+    <path d="M468 66 C416 46 380 46 354 62" fill="none"/>
   </g>
 
   <!-- rank plaque, left chest -->
   <rect x="80" y="140" width="118" height="66" rx="6" fill="#3a3d3a"/>
-  <g>
-    <rect x="94" y="154" width="26" height="18" fill="#c91a09"/>
-    <rect x="126" y="154" width="26" height="18" fill="#5a93db"/>
-    <rect x="158" y="154" width="26" height="18" fill="#f2cd37"/>
-    <rect x="94" y="178" width="26" height="18" fill="#4b9f4a"/>
-    <rect x="126" y="178" width="26" height="18" fill="#c91a09"/>
-    <rect x="158" y="178" width="26" height="18" fill="#a0a5a9"/>
-  </g>
+  <rect x="94" y="154" width="26" height="18" fill="#c91a09"/>
+  <rect x="126" y="154" width="26" height="18" fill="#5a93db"/>
+  <rect x="158" y="154" width="26" height="18" fill="#f2cd37"/>
+  <rect x="94" y="178" width="26" height="18" fill="#4b9f4a"/>
+  <rect x="126" y="178" width="26" height="18" fill="#c91a09"/>
+  <rect x="158" y="178" width="26" height="18" fill="#a0a5a9"/>
 
   <!-- code cylinders on the right chest -->
-  <g fill="#a0a5a9">
-    <rect x="330" y="140" width="16" height="80" rx="7"/>
-    <rect x="356" y="140" width="16" height="80" rx="7"/>
-  </g>
+  <rect x="330" y="140" width="16" height="80" rx="7" fill="#a0a5a9"/>
+  <rect x="356" y="140" width="16" height="80" rx="7" fill="#a0a5a9"/>
 
   <!-- belt -->
   <rect x="0" y="404" width="512" height="54" fill="#3a3d3a"/>

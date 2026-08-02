@@ -21,16 +21,12 @@
   <path fill="#c9ced1" d="M248 100 L264 100 L264 236 L248 236Z"/>
 
   <!-- abdominal segments -->
-  <g fill="#f4f4f4">
-    <rect x="86" y="248" width="340" height="58" rx="10"/>
-    <rect x="92" y="316" width="328" height="58" rx="10"/>
-    <rect x="100" y="384" width="312" height="54" rx="10"/>
-  </g>
-  <g fill="#c9ced1">
-    <rect x="86" y="294" width="340" height="12" rx="6"/>
-    <rect x="92" y="362" width="328" height="12" rx="6"/>
-    <rect x="100" y="426" width="312" height="12" rx="6"/>
-  </g>
+  <rect x="86" y="248" width="340" height="58" rx="10" fill="#f4f4f4"/>
+  <rect x="92" y="316" width="328" height="58" rx="10" fill="#f4f4f4"/>
+  <rect x="100" y="384" width="312" height="54" rx="10" fill="#f4f4f4"/>
+  <rect x="86" y="294" width="340" height="12" rx="6" fill="#c9ced1"/>
+  <rect x="92" y="362" width="328" height="12" rx="6" fill="#c9ced1"/>
+  <rect x="100" y="426" width="312" height="12" rx="6" fill="#c9ced1"/>
 
   <!-- belt -->
   <rect x="70" y="448" width="372" height="52" fill="#1b2a34"/>
@@ -40,8 +36,8 @@
   <!-- control box on the left chest -->
   <rect x="118" y="120" width="104" height="80" rx="8" fill="#6c6e68"/>
   <rect x="130" y="132" width="80" height="24" rx="4" fill="#1b2a34"/>
-  <g fill="#c91a09"><rect x="130" y="166" width="20" height="20" rx="3"/></g>
-  <g fill="#4b9f4a"><rect x="160" y="166" width="20" height="20" rx="3"/></g>
-  <g fill="#5a93db"><rect x="190" y="166" width="20" height="20" rx="3"/></g>
+  <rect x="130" y="166" width="20" height="20" rx="3" fill="#c91a09"/>
+  <rect x="160" y="166" width="20" height="20" rx="3" fill="#4b9f4a"/>
+  <rect x="190" y="166" width="20" height="20" rx="3" fill="#5a93db"/>
 
 </svg>

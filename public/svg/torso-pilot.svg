@@ -17,37 +17,37 @@
   <!-- harness straps -->
   <path fill="#cfcabc" d="M120 60 L176 52 L286 372 L226 380Z"/>
   <path fill="#cfcabc" d="M392 60 L336 52 L226 372 L286 380Z"/>
-  <g fill="#a9a496">
-    <path d="M120 60 L176 52 L180 68 L124 76Z"/>
-    <path d="M392 60 L336 52 L332 68 L388 76Z"/>
-  </g>
+  <path d="M120 60 L176 52 L180 68 L124 76Z" fill="#a9a496"/>
+  <path d="M392 60 L336 52 L332 68 L388 76Z" fill="#a9a496"/>
 
   <!-- buckles on the straps -->
-  <g fill="#3a3a3a">
-    <rect x="150" y="152" width="66" height="34" rx="5"/>
-    <rect x="296" y="152" width="66" height="34" rx="5"/>
-    <rect x="222" y="300" width="68" height="40" rx="6"/>
-  </g>
-  <g fill="#a0a5a9">
-    <rect x="162" y="162" width="42" height="14" rx="3"/>
-    <rect x="308" y="162" width="42" height="14" rx="3"/>
-    <rect x="236" y="312" width="40" height="16" rx="3"/>
-  </g>
+  <rect x="150" y="152" width="66" height="34" rx="5" fill="#3a3a3a"/>
+  <rect x="296" y="152" width="66" height="34" rx="5" fill="#3a3a3a"/>
+  <rect x="222" y="300" width="68" height="40" rx="6" fill="#3a3a3a"/>
+  <rect x="162" y="162" width="42" height="14" rx="3" fill="#a0a5a9"/>
+  <rect x="308" y="162" width="42" height="14" rx="3" fill="#a0a5a9"/>
+  <rect x="236" y="312" width="40" height="16" rx="3" fill="#a0a5a9"/>
 
   <!-- life-support box on the chest -->
   <rect x="196" y="196" width="120" height="90" rx="8" fill="#e8e8e8"/>
   <rect x="208" y="208" width="96" height="30" rx="4" fill="#3a3a3a"/>
-  <g>
-    <rect x="208" y="250" width="26" height="22" rx="3" fill="#c91a09"/>
-    <rect x="242" y="250" width="26" height="22" rx="3" fill="#4b9f4a"/>
-    <rect x="276" y="250" width="28" height="22" rx="3" fill="#5a93db"/>
-  </g>
+  <rect x="208" y="250" width="26" height="22" rx="3" fill="#c91a09"/>
+  <rect x="242" y="250" width="26" height="22" rx="3" fill="#4b9f4a"/>
+  <rect x="276" y="250" width="28" height="22" rx="3" fill="#5a93db"/>
 
-  <!-- alliance patch, left shoulder: simplified starbird for the small size -->
+  <!-- alliance patch, left shoulder: the crest starbird at 0.12 -->
   <circle cx="86" cy="118" r="48" fill="#e8e2d0"/>
   <circle cx="86" cy="118" r="40" fill="#c91a09"/>
-  <path fill="#e8e2d0" d="M86 84 L93 119 L120 94 L105 127 L99 152
-    L86 143 L73 152 L67 127 L52 94 L79 119Z"/>
+  <path fill="#e8e2d0" d="M86 98.8
+    C87.7 102.2 89.2 105.8 90.1 109.6
+    C93.9 104.6 102.3 98.3 111.7 94.2
+    C109.5 104.6 102.8 112 90.8 118.2
+    C89.6 125 88.2 132.4 86 141.8
+    C83.8 132.4 82.4 125 81.2 118.2
+    C69.2 112 62.5 104.6 60.3 94.2
+    C69.7 98.3 78.1 104.6 81.9 109.6
+    C82.8 105.8 84.3 102.2 86 98.8
+    Z"/>
 
   <!-- belt -->
   <rect x="0" y="404" width="512" height="58" fill="#cfcabc"/>

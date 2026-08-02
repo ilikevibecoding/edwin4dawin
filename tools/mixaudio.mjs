@@ -33,11 +33,52 @@ function decode(file) {
  * @param {number} duration seconds
  * @param {string} outWav
  */
+/**
+ * Build a 0..1 "someone is talking" envelope from the voice cues, with a fast
+ * attack and a slow release, sampled at `RATE / STEP`.
+ */
+const DUCK_STEP = 256;
+export function duckEnvelope(cues, frames, { attack = 0.18, release = 0.9, lookahead = 0.12 } = {}) {
+  const n = Math.ceil(frames / DUCK_STEP) + 1;
+  const env = new Float32Array(n);
+  for (const c of cues) {
+    if (c.kind !== 'voice') continue;
+    const dur = c.duration ?? 0;
+    const a = Math.max(0, Math.floor(((c.t - lookahead) * RATE) / DUCK_STEP));
+    const b = Math.min(n - 1, Math.ceil(((c.t + dur) * RATE) / DUCK_STEP));
+    for (let i = a; i <= b; i++) env[i] = 1;
+  }
+  // Smooth: fast in, slow out.
+  const dt = DUCK_STEP / RATE;
+  const ka = Math.exp(-dt / attack);
+  const kr = Math.exp(-dt / release);
+  let v = 0;
+  for (let i = 0; i < n; i++) {
+    const target = env[i];
+    v = target > v ? ka * v + (1 - ka) * target : kr * v + (1 - kr) * target;
+    env[i] = v;
+  }
+  return env;
+}
+
 export function mixCues(cues, duration, outWav, opts = {}) {
   const frames = Math.ceil((duration + 1.0) * RATE);
   const mix = new Float32Array(frames * CH);
   let placed = 0;
   let missing = 0;
+
+  // Measure the narration lengths so the ducker knows when a voice is present.
+  for (const c of cues) {
+    if (c.kind === 'voice' && c.duration === undefined && fs.existsSync(c.file)) {
+      try {
+        c.duration = decode(c.file).length / CH / RATE;
+      } catch {
+        c.duration = 0;
+      }
+    }
+  }
+  const duck = duckEnvelope(cues, frames);
+  const duckAmount = opts.duck ?? 0.52; // how far music drops under speech
 
   for (const cue of cues) {
     if (!fs.existsSync(cue.file)) {
@@ -56,12 +97,14 @@ export function mixCues(cues, duration, outWav, opts = {}) {
     const n = Math.floor(pcm.length / CH);
     const fadeIn = Math.round((cue.fadeIn ?? 0) * RATE);
     const fadeOut = Math.round((cue.fadeOut ?? 0) * RATE);
+    const ducked = cue.kind === 'music';
     for (let i = 0; i < n; i++) {
       const o = start + i;
       if (o >= frames) break;
       let g = gain;
       if (fadeIn && i < fadeIn) g *= i / fadeIn;
       if (fadeOut && i > n - fadeOut) g *= Math.max(0, (n - i) / fadeOut);
+      if (ducked) g *= 1 - duckAmount * duck[(o / DUCK_STEP) | 0];
       mix[o * CH] += pcm[i * CH] * g;
       mix[o * CH + 1] += pcm[i * CH + 1] * g;
     }
@@ -98,7 +141,7 @@ export function mixCues(cues, duration, outWav, opts = {}) {
  * music index. `sceneCues` is what `window.FILM.cues()` returns.
  */
 /** Must match `MIX_GAINS` in src/main.js so live and exported audio agree. */
-export const MIX_GAINS = { voice: 1.0, sfx: 0.62, music: 0.34 };
+export const MIX_GAINS = { voice: 1.0, sfx: 0.62, music: 0.60 };
 
 export function buildCues({ root, manifest, sceneCues, scenes, gains = {} }) {
   const g = { ...MIX_GAINS, ...gains };

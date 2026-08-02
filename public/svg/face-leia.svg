@@ -14,13 +14,13 @@
   <ellipse cx="316" cy="210" rx="24" ry="30" fill="#1b2a34"/>
 
   <!-- lashes at the outer corners -->
-  <g stroke="#1b2a34" stroke-width="9" stroke-linecap="round" fill="none">
-    <path d="M170 190 L148 176"/>
-    <path d="M166 206 L142 202"/>
-    <path d="M170 224 L148 232"/>
-    <path d="M342 190 L364 176"/>
-    <path d="M346 206 L370 202"/>
-    <path d="M342 224 L364 232"/>
+  <g stroke="#1b2a34" stroke-width="9" stroke-linecap="round">
+    <path d="M170 190 L148 176" fill="none"/>
+    <path d="M166 206 L142 202" fill="none"/>
+    <path d="M170 224 L148 232" fill="none"/>
+    <path d="M342 190 L364 176" fill="none"/>
+    <path d="M346 206 L370 202" fill="none"/>
+    <path d="M342 224 L364 232" fill="none"/>
   </g>
 
   <!-- brows: fine arcs -->

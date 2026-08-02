@@ -7,74 +7,72 @@
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
 
-  <g fill="none" stroke="#7fe8ff" stroke-width="3" stroke-linecap="round">
+  <g stroke="#7fe8ff" stroke-width="3" stroke-linecap="round">
 
     <!-- surface line -->
-    <path d="M20 120 L250 120" stroke-width="4"/>
-    <path d="M550 120 L780 120" stroke-width="4"/>
+    <path d="M20 120 L250 120" stroke-width="4" fill="none"/>
+    <path d="M550 120 L780 120" stroke-width="4" fill="none"/>
 
     <!-- trench walls in profile -->
-    <path d="M250 120 L250 300 L550 300 L550 120" stroke-width="5"/>
-    <path d="M282 120 L282 300" stroke-width="1.5"/>
-    <path d="M518 120 L518 300" stroke-width="1.5"/>
+    <path d="M250 120 L250 300 L550 300 L550 120" stroke-width="5" fill="none"/>
+    <path d="M282 120 L282 300" stroke-width="1.5" fill="none"/>
+    <path d="M518 120 L518 300" stroke-width="1.5" fill="none"/>
 
     <!-- wall greebles -->
     <path d="M250 150 L282 150 M250 186 L282 186 M250 222 L282 222 M250 258 L282 258"
-          stroke-width="1.5"/>
+          stroke-width="1.5" fill="none"/>
     <path d="M518 150 L550 150 M518 186 L550 186 M518 222 L550 222 M518 258 L550 258"
-          stroke-width="1.5"/>
-    <path d="M300 300 L300 282 L340 282 L340 300" stroke-width="1.5"/>
-    <path d="M460 300 L460 282 L500 282 L500 300" stroke-width="1.5"/>
+          stroke-width="1.5" fill="none"/>
+    <path d="M300 300 L300 282 L340 282 L340 300" stroke-width="1.5" fill="none"/>
+    <path d="M460 300 L460 282 L500 282 L500 300" stroke-width="1.5" fill="none"/>
 
     <!-- exhaust port and shaft -->
-    <path d="M372 300 L372 268 L428 268 L428 300" stroke-width="4"/>
-    <path d="M376 300 L376 400" stroke-width="4"/>
-    <path d="M424 300 L424 400" stroke-width="4"/>
-    <path d="M400 268 L400 400" stroke-width="1.5"/>
+    <path d="M372 300 L372 268 L428 268 L428 300" stroke-width="4" fill="none"/>
+    <path d="M376 300 L376 400" stroke-width="4" fill="none"/>
+    <path d="M424 300 L424 400" stroke-width="4" fill="none"/>
+    <path d="M400 268 L400 400" stroke-width="1.5" fill="none"/>
 
     <!-- reactor -->
-    <circle cx="400" cy="428" r="34" stroke-width="5"/>
-    <circle cx="400" cy="428" r="16"/>
-    <path d="M366 428 L434 428" stroke-width="1.5"/>
-    <path d="M400 394 L400 462" stroke-width="1.5"/>
+    <circle cx="400" cy="428" r="34" stroke-width="5" fill="none"/>
+    <circle cx="400" cy="428" r="16" fill="none"/>
+    <path d="M366 428 L434 428" stroke-width="1.5" fill="none"/>
+    <path d="M400 394 L400 462" stroke-width="1.5" fill="none"/>
 
     <!-- dimension arrow across the trench -->
-    <path d="M250 90 L550 90" stroke-width="2"/>
-    <path d="M262 82 L250 90 L262 98"/>
-    <path d="M538 82 L550 90 L538 98"/>
-    <path d="M250 76 L250 104" stroke-width="1.5"/>
-    <path d="M550 76 L550 104" stroke-width="1.5"/>
+    <path d="M250 90 L550 90" stroke-width="2" fill="none"/>
+    <path d="M262 82 L250 90 L262 98" fill="none"/>
+    <path d="M538 82 L550 90 L538 98" fill="none"/>
+    <path d="M250 76 L250 104" stroke-width="1.5" fill="none"/>
+    <path d="M550 76 L550 104" stroke-width="1.5" fill="none"/>
 
     <!-- dimension arrow down the shaft -->
-    <path d="M600 268 L600 428" stroke-width="2"/>
-    <path d="M592 280 L600 268 L608 280"/>
-    <path d="M592 416 L600 428 L608 416"/>
-    <path d="M586 268 L614 268" stroke-width="1.5"/>
-    <path d="M586 428 L614 428" stroke-width="1.5"/>
-    <path d="M428 268 L586 268" stroke-width="1"/>
-    <path d="M434 428 L586 428" stroke-width="1"/>
+    <path d="M600 268 L600 428" stroke-width="2" fill="none"/>
+    <path d="M592 280 L600 268 L608 280" fill="none"/>
+    <path d="M592 416 L600 428 L608 416" fill="none"/>
+    <path d="M586 268 L614 268" stroke-width="1.5" fill="none"/>
+    <path d="M586 428 L614 428" stroke-width="1.5" fill="none"/>
+    <path d="M428 268 L586 268" stroke-width="1" fill="none"/>
+    <path d="M434 428 L586 428" stroke-width="1" fill="none"/>
 
     <!-- approach vector -->
-    <path d="M40 240 L230 240" stroke-width="2"/>
-    <path d="M218 232 L230 240 L218 248"/>
+    <path d="M40 240 L230 240" stroke-width="2" fill="none"/>
+    <path d="M218 232 L230 240 L218 248" fill="none"/>
 
   </g>
 
   <!-- annotation blocks -->
-  <g fill="#7fe8ff">
-    <rect x="40" y="330" width="120" height="9"/>
-    <rect x="40" y="346" width="86" height="9"/>
-    <rect x="40" y="362" width="104" height="9"/>
-    <rect x="40" y="378" width="58" height="9"/>
-    <rect x="646" y="330" width="114" height="9"/>
-    <rect x="646" y="346" width="76" height="9"/>
-    <rect x="646" y="362" width="98" height="9"/>
-    <rect x="40" y="204" width="76" height="9"/>
-    <rect x="40" y="220" width="52" height="9"/>
-  </g>
-  <g fill="none" stroke="#7fe8ff" stroke-width="2">
-    <rect x="30" y="318" width="150" height="76"/>
-    <rect x="636" y="318" width="134" height="60"/>
+  <rect x="40" y="330" width="120" height="9" fill="#7fe8ff"/>
+  <rect x="40" y="346" width="86" height="9" fill="#7fe8ff"/>
+  <rect x="40" y="362" width="104" height="9" fill="#7fe8ff"/>
+  <rect x="40" y="378" width="58" height="9" fill="#7fe8ff"/>
+  <rect x="646" y="330" width="114" height="9" fill="#7fe8ff"/>
+  <rect x="646" y="346" width="76" height="9" fill="#7fe8ff"/>
+  <rect x="646" y="362" width="98" height="9" fill="#7fe8ff"/>
+  <rect x="40" y="204" width="76" height="9" fill="#7fe8ff"/>
+  <rect x="40" y="220" width="52" height="9" fill="#7fe8ff"/>
+  <g stroke="#7fe8ff" stroke-width="2">
+    <rect x="30" y="318" width="150" height="76" fill="none"/>
+    <rect x="636" y="318" width="134" height="60" fill="none"/>
   </g>
 
 </svg>

@@ -23,6 +23,7 @@
  * offline renderer can jump to any frame in any order.
  */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Bricks, brickMaterial, chamferBox, taperBox } from '../engine/brick.js';
 import { COLORS, KIT } from '../engine/palette.js';
 import { hash11, noise1 } from '../engine/rng.js';
@@ -102,6 +103,76 @@ function latheShell(profile, { segments = 22, openHalf = 0, close = true } = {})
   const pts = profile.map(([r, y]) => new THREE.Vector2(Math.max(r, 0.008), y));
   if (close && pts[0].distanceTo(pts[pts.length - 1]) > 1e-6) pts.push(pts[0].clone());
   const g = new THREE.LatheGeometry(pts, segments, openHalf, Math.PI * 2 - openHalf * 2);
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * `latheShell` with the two cut faces closed off.
+ *
+ * A gapped lathe of a closed profile is an open tube: from any angle where the
+ * cut shows you look straight down the inside of the shell, which is what
+ * turns a helmet skirt into a pair of bat wings. Capping the ends with the
+ * profile polygon makes it read as a moulded part with a visible edge.
+ */
+function latheSector(outer, thickness, { segments = 22, openHalf = 1.0 } = {}) {
+  const profile = shellProfile(outer, thickness);
+  const parts = [latheShell(profile, { segments, openHalf })];
+  const shape = new THREE.Shape(profile.map(([r, y]) => new THREE.Vector2(r, y)));
+  for (const sign of [-1, 1]) {
+    // ShapeGeometry lies in XY; rotating by (azimuth - 90 degrees) sends its
+    // local +x along the radius at that azimuth, which is where the cut is.
+    const cap = new THREE.ShapeGeometry(shape);
+    cap.rotateY(sign * openHalf - Math.PI / 2);
+    parts.push(cap);
+  }
+  return mergeGeometries(parts);
+}
+
+/**
+ * A tapered armour plate. `half` is the right-hand half of an outline in XY
+ * (top-centre down to bottom-centre); it is mirrored into a closed loop, laid
+ * flat at z = 0 and joined to a copy scaled by `spread` about `centre` at
+ * z = -depth.
+ *
+ * The taper is the point. A straight extrusion planted on a curved helmet
+ * leaves a broad horizontal shelf at the brow that catches the key light as a
+ * white bar; sloping the sides back into the shell turns that shelf into a
+ * narrow lip. The front face stays exactly on z = 0, so a decal at z = +eps
+ * sits flush instead of floating at the corners.
+ */
+function taperShield(half, depth, spread = [1.15, 1], centre = [0, 0]) {
+  const [sx, sy] = spread;
+  const outline = [...half, ...half.slice(1, -1).reverse().map(([x, y]) => [-x, y])];
+  const n = outline.length;
+  const front = outline.map(([x, y]) => [x, y, 0]);
+  const back = outline.map(([x, y]) => [
+    centre[0] + (x - centre[0]) * sx,
+    centre[1] + (y - centre[1]) * sy,
+    -depth,
+  ]);
+  const pos = [];
+  const tri = (a, b, c) => pos.push(...a, ...b, ...c);
+  // The outline runs clockwise seen from +z, so these windings face outward.
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    tri(front[i], back[j], back[i]);
+    tri(front[i], front[j], back[j]);
+  }
+  for (const ring of [front, back]) {
+    const c = [
+      ring.reduce((a, p) => a + p[0], 0) / n,
+      ring.reduce((a, p) => a + p[1], 0) / n,
+      ring[0][2],
+    ];
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      if (ring === front) tri(c, ring[j], ring[i]);
+      else tri(c, ring[i], ring[j]);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.computeVertexNormals();
   return g;
 }
@@ -194,7 +265,9 @@ async function decalOn(url, geometry) {
     new THREE.MeshStandardMaterial({
       map: tex,
       transparent: true,
-      roughness: 0.34,
+      // Printed decoration, not a lacquered surface: a tight specular here
+      // turns every light-grey shape in the art into a white sticker.
+      roughness: 0.62,
       metalness: 0,
       polygonOffset: true,
       polygonOffsetFactor: -3,
@@ -425,168 +498,119 @@ function leiaSkirt(color = COLORS.white) {
 }
 
 /**
- * Vader's helmet: an ogival dome, an angular face mask that stands clearly
- * proud of it, and the flared skirt that comes down over the shoulders at the
- * back and sides. Head-local.
+ * Right-hand half of Vader's face-mask outline, in mask-local units (the mask
+ * centre is the origin), running top-centre down to bottom-centre. Sized so
+ * that every mark in helmet-vader.svg lands inside the plate: wide across the
+ * brow, straight down the cheeks, then angling hard in to the chin.
  */
-function vaderHelmet({ shell = COLORS.black, lens = COLORS.trueBlack, trim = COLORS.darkBluishGray } = {}) {
-  const b = new Bricks();
-  const g = { finish: 'glossy' };
-  const dbl = { finish: 'glossy', side: THREE.DoubleSide };
+const VADER_MASK_OUTLINE = [
+  [0.0, 0.517],
+  [0.29, 0.494],
+  [0.512, 0.395],
+  [0.5, 0.056],
+  [0.485, -0.169],
+  [0.465, -0.282],
+  [0.244, -0.442],
+  [0.132, -0.55],
+  [0.0, -0.564],
+];
 
-  // --- crown: a single lathed ogive, wide at the brow and tapering upward
+/**
+ * Where the mask sits on the head, and how big the print on it is. The tilt is
+ * negative — brow back, grille forward — which is both the real profile and
+ * the only way the top edge of a flat plate stays close to a domed helmet
+ * instead of standing off it as a shelf.
+ */
+const VADER_MASK_AT = { y: 0.47, z: 0.84, tilt: -0.12, w: 1.1, h: 1.1 };
+
+/**
+ * Vader's helmet, head-local (head bottom = 0, top = 1.04, r = 0.645).
+ *
+ * Three pieces and no more: an ogival crown whose widest point is down at
+ * cheek height, a flared skirt over the neck and shoulders, and the angular
+ * face plate. Everything else about the mask — brow, lenses, nose, grille,
+ * chin — is printed by helmet-vader.svg, so moulding it as well only produces
+ * a bright clutter of grey edges where the character wants a black void.
+ */
+function vaderHelmet({ shell = COLORS.black, mask = COLORS.trueBlack } = {}) {
+  const b = new Bricks();
+  // Matte. A glossy black helmet under a hard key light grows a blown-out
+  // white bar along every facet, which on this silhouette reads as a visor.
+  const g = { finish: 'rubber' };
+
+  // Crown: one solid lathed ogive, so the silhouette is an unbroken curve from
+  // the apex down past the ears however you look at it.
   b.addGeometry(
     latheShell(
       [
-        [0.012, 1.44],
-        [0.30, 1.40],
-        [0.52, 1.28],
-        [0.66, 1.08],
-        [0.745, 0.82],
-        [0.792, 0.55],
-        [0.812, 0.36],
-        [0.808, 0.26],
-        [0.012, 0.26],
+        [0.015, 1.56],
+        [0.225, 1.51],
+        [0.42, 1.4],
+        [0.585, 1.22],
+        [0.7, 1.01],
+        [0.772, 0.79],
+        [0.806, 0.56],
+        [0.818, 0.37],
+        [0.805, 0.23],
+        [0.755, 0.13],
+        [0.015, 0.115],
       ],
       { segments: 26, close: false }
     ),
     { color: shell, opts: g }
   );
-  // Flared rim at the base of the dome, back and sides only.
+
+  // Neck skirt, in two courses so the hem steps up towards the face instead of
+  // hanging past the jaw in two flat panels: short flanges beside the cheeks,
+  // then the long flare that covers the shoulders from the ears backwards.
   b.addGeometry(
-    latheShell(
-      shellProfile(
-        [
-          [0.815, 0.34],
-          [0.905, 0.19],
-          [0.885, 0.11],
-        ],
-        0.11
-      ),
-      { segments: 24, openHalf: 0.98 }
-    ),
-    { color: shell, opts: dbl }
+    latheSector([[0.79, 0.3], [0.84, 0.1], [0.87, -0.2]], 0.15, { segments: 24, openHalf: 0.92 }),
+    { color: shell, opts: g }
+  );
+  b.addGeometry(
+    latheSector([[0.8, 0.3], [0.85, 0.08], [0.885, -0.12], [0.915, -0.34]], 0.16, {
+      segments: 24,
+      openHalf: 1.3,
+    }),
+    { color: shell, opts: g }
   );
 
-  // --- neck skirt, flaring out over the shoulders
-  b.addGeometry(
-    latheShell(
-      shellProfile(
-        [
-          [0.86, 0.18],
-          [0.98, -0.04],
-          [1.14, -0.26],
-          [1.30, -0.48],
-        ],
-        0.15
-      ),
-      { segments: 26, openHalf: 1.02 }
-    ),
-    { color: shell, opts: dbl }
-  );
-
-  // --- face mask: vertical front face so a flat decal sits flush on it
-  b.addGeometry(taperBox(0.58, 1.00, 0.94, 0.68, 0.68, 0.07), { x: 0, y: 0.56, z: 0.46, color: shell, opts: g });
-  // Brow, jutting forward over the eyes and tying the mask into the dome.
-  b.addGeometry(chamferBox(1.12, 0.20, 0.44, 0.06), {
+  // Face plate. The taper sinks its edges back into the dome, so the mask
+  // grows out of the helmet rather than being screwed onto the front of it.
+  b.addGeometry(taperShield(VADER_MASK_OUTLINE, 0.42, [1.2, 0.94], [0, -0.05]), {
     x: 0,
-    y: 0.99,
-    z: 0.50,
-    rot: [-0.30, 0, 0],
-    color: shell,
+    y: VADER_MASK_AT.y,
+    z: VADER_MASK_AT.z,
+    rot: [VADER_MASK_AT.tilt, 0, 0],
+    color: mask,
     opts: g,
   });
-  // Cheek panels, angling back to meet the skirt and widening the mask.
-  for (const sx of [-1, 1]) {
-    b.addGeometry(taperBox(0.22, 0.30, 0.84, 0.62, 0.66, 0.06), {
-      x: sx * 0.51,
-      y: 0.58,
-      z: 0.34,
-      rot: [0, sx * 0.34, 0],
-      color: shell,
-      opts: g,
-    });
-  }
-  // A single contour line following the taper of each cheek. Anything bolder
-  // turns into a bright cage across the face under a hard key light.
-  for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.04, 0.78, 0.045, 0.014), {
-      x: sx * 0.455,
-      y: 0.58,
-      z: 0.805,
-      rot: [0, 0, sx * 0.145],
-      color: trim,
-      opts: g,
-    });
-  }
-  // Central nose ridge between the lenses.
-  b.addGeometry(taperBox(0.22, 0.17, 0.50, 0.17, 0.14, 0.035), { x: 0, y: 0.58, z: 0.855, color: shell, opts: g });
-  // Mouth grille, proud of the mask, with slats.
-  b.addGeometry(chamferBox(0.60, 0.24, 0.16, 0.04), { x: 0, y: 0.24, z: 0.82, color: trim, opts: g });
-  for (let i = -2; i <= 2; i++) {
-    b.addGeometry(chamferBox(0.06, 0.22, 0.08, 0.015), { x: i * 0.118, y: 0.24, z: 0.885, color: lens, opts: g });
-  }
-  // Chin, tucking the mask back under the grille.
-  b.addGeometry(taperBox(0.42, 0.60, 0.20, 0.46, 0.66, 0.05), { x: 0, y: 0.07, z: 0.52, color: shell, opts: g });
-  // The two "tusk" vents at the outer bottom corners of the mask.
-  for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.12, 0.20, 0.14, 0.03), { x: sx * 0.35, y: 0.16, z: 0.74, color: trim, opts: g });
-  }
   return b.build();
 }
 
 /**
- * Vader's lenses, only used when helmet-vader.svg is unavailable. They are a
- * smoked grey rather than black: on a black helmet under this film's lighting,
+ * Vader's lenses and grille, only used when helmet-vader.svg is unavailable.
+ * Smoked grey rather than black: on a black helmet under this film's lighting
  * a black lens on black plastic simply disappears.
  */
-function vaderMaskFallback(lens = 0x36434d) {
+function vaderMaskFallback(lens = 0x39454f) {
   const b = new Bricks();
   const o = { finish: 'glossy' };
   for (const sx of [-1, 1]) {
     // A trapezoid narrowing toward the nose, tilted like the real lens.
-    b.addGeometry(taperBox(0.30, 0.38, 0.30, 0.07, 0.07, 0.025), {
-      x: sx * 0.265,
-      y: 0.72,
-      z: 0.808,
-      rot: [0, 0, sx * 0.34],
+    b.addGeometry(taperBox(0.34, 0.42, 0.3, 0.05, 0.05, 0.025), {
+      x: sx * 0.245,
+      y: 0.19,
+      z: 0.008,
+      rot: [0, 0, sx * 0.32],
       color: lens,
       opts: o,
     });
   }
-  return b.build();
-}
-
-/** The chest control box and belt that give Vader's silhouette its bulk. */
-function vaderChestGear() {
-  const b = new Bricks();
-  const dark = COLORS.trueBlack;
-  // Matte, so a hard key light does not blow the flat panels out to grey.
-  const box = { finish: 'plastic' };
-  b.addGeometry(chamferBox(0.70, 0.40, 0.12, 0.035), { x: 0, y: 1.30, z: 0.54, color: dark, opts: box });
-  const lights = [
-    [-0.22, 1.38, COLORS.red],
-    [-0.075, 1.38, COLORS.brightGreen],
-    [0.075, 1.38, COLORS.blue],
-    [0.22, 1.38, COLORS.white],
-    [-0.15, 1.23, COLORS.red],
-    [0.15, 1.23, COLORS.brightYellow],
-  ];
-  for (const [x, y, c] of lights) {
-    b.addGeometry(new THREE.CylinderGeometry(0.042, 0.042, 0.04, 8), {
-      x,
-      y,
-      z: 0.60,
-      rot: [Math.PI / 2, 0, 0],
-      color: c,
-      opts: { emissive: c, emissiveIntensity: 1.2, finish: 'glossy' },
-    });
-  }
-  // Belt with a buckle and two small side boxes.
-  b.addGeometry(chamferBox(1.62, 0.22, 1.00, 0.04), { x: 0, y: 0.15, z: 0, color: dark, opts: box });
-  b.addGeometry(chamferBox(0.30, 0.18, 0.09, 0.03), { x: 0, y: 0.15, z: 0.53, color: STEEL, opts: box });
-  for (const sx of [-1, 1]) {
-    b.addGeometry(chamferBox(0.20, 0.18, 0.18, 0.03), { x: sx * 0.48, y: 0.15, z: 0.44, color: STEEL, opts: box });
+  // Triangular grille, five slats narrowing downward.
+  for (let i = 0; i < 5; i++) {
+    const w = 0.36 - i * 0.05;
+    b.addGeometry(chamferBox(w, 0.035, 0.04, 0.012), { x: 0, y: -0.16 - i * 0.075, z: 0.008, color: lens, opts: o });
   }
   return b.build();
 }
@@ -1140,7 +1164,9 @@ export async function makeVader(opts = {}) {
     torsoPrint: 'svg/torso-vader.svg',
     scale: opts.scale ?? 1.14,
     seed: opts.seed ?? 23.7,
-    finish: 'glossy',
+    // Matte: a glossy near-black torso picks up big white speculars that read
+    // as pale grey armour instead of black.
+    finish: 'plastic',
     headStud: false,
   });
 
@@ -1150,15 +1176,23 @@ export async function makeVader(opts = {}) {
   fig.accessory.add(helmet);
   fig.helmet = helmet;
 
-  const mask = await decalOn('svg/helmet-vader.svg', flatDecal(1.00, 0.94));
+  // The print and the moulded lenses share the plate's frame, so both sit
+  // flush on the tilted face however the plate is positioned.
+  const maskAt = new THREE.Group();
+  maskAt.position.set(0, VADER_MASK_AT.y, VADER_MASK_AT.z);
+  maskAt.rotation.x = VADER_MASK_AT.tilt;
+  fig.accessory.add(maskAt);
+  const mask = await decalOn('svg/helmet-vader.svg', flatDecal(VADER_MASK_AT.w, VADER_MASK_AT.h));
   if (mask) {
-    mask.position.set(0, 0.58, 0.803);
-    fig.accessory.add(mask);
+    mask.position.z = 0.006;
+    maskAt.add(mask);
   } else {
-    fig.accessory.add(vaderMaskFallback());
+    maskAt.add(vaderMaskFallback());
   }
 
-  fig.torso.add(vaderChestGear());
+  // No moulded chest box or belt: torso-vader.svg prints the control panel,
+  // the silver plates and the belt, and a brick on top of them only fights
+  // the artwork.
   attachCape(fig, COLORS.trueBlack, { width: 2.375, height: 3.5 });
 
   giveSaber(fig, KIT.saberRed, { on: false, length: 3.3 });

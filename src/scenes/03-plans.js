@@ -27,7 +27,7 @@ import * as THREE from 'three';
 import { Bricks, chamferBox } from '../engine/brick.js';
 import { COLORS, KIT } from '../engine/palette.js';
 import { standardLights, cameraRig, handheld } from '../engine/stage.js';
-import { Starfield, BoltPool, Thruster, Sparks, glowSprite, additiveMaterial, radialTexture } from '../engine/fx.js';
+import { Starfield, BoltPool, Beam, Thruster, Sparks, glowSprite, additiveMaterial } from '../engine/fx.js';
 import { hash11 } from '../engine/rng.js';
 import * as ease from '../engine/ease.js';
 import { makeLeia, makeAstromech, makeProtocolDroid, makeImperialOfficer } from '../kit/characters.js';
@@ -71,10 +71,18 @@ export async function build(ctx) {
   const interior = new THREE.Group();
   scene.add(interior);
   const intLights = standardLights(interior, 'interior', { shadowRadius: 26, shadowMap: 2048 });
-  intLights.key.position.set(6, 34, 8);
-  intLights.key.intensity = 1.5;
-  intLights.fill.intensity = 0.5;
-  intLights.hemi.intensity = 0.5;
+  intLights.key.position.set(10, 34, 26);
+  intLights.key.intensity = 1.7;
+  intLights.fill.intensity = 0.75;
+  intLights.hemi.intensity = 0.85;
+
+  // Ceiling practicals: the corridor is lit by its own strip lights, so the
+  // deck needs real point sources under them.
+  for (const z of [2, -8, -18, -28]) {
+    const lamp = new THREE.PointLight(0xffeccd, 11, 30, 2);
+    lamp.position.set(0, 9.4, z);
+    interior.add(lamp);
+  }
 
   // A red emergency lamp on the wall, and the light it throws.
   const alarm = new THREE.PointLight(0xff2a18, 0, 44, 2);
@@ -86,26 +94,33 @@ export async function build(ctx) {
 
   // Warm practical bounce off the deck right where the two of them are.
   const deckLamp = new THREE.PointLight(0xffe6c0, 12, 26, 2);
-  deckLamp.position.set(1.0, 6.0, -5.0);
+  deckLamp.position.set(1.4, 5.2, -5.4);
   interior.add(deckLamp);
+
+  // The protocol droid is gold, and gold needs something to reflect.
+  const goldLamp = new THREE.PointLight(0xffe0a0, 9, 18, 2);
+  goldLamp.position.set(0.6, 5.6, -12.0);
+  interior.add(goldLamp);
 
   interior.add(buildCorridor());
 
   // --- the cast ------------------------------------------------------------
   const leia = await makeLeia({ seed: 11.3 });
-  leia.root.position.set(2.35, 0, -5.1);
-  leia.root.rotation.y = -Math.PI / 2 - 0.22;
+  leia.root.position.set(2.9, 0, -5.5);
+  leia.root.rotation.y = -1.84; // kneeling, turned to face the droid
   interior.add(leia.root);
 
   const r2 = await makeAstromech({ seed: 41.3 });
-  r2.root.position.set(-0.7, 0, -5.7);
-  r2.root.rotation.y = Math.PI / 2 + 0.18;
+  r2.root.position.set(-0.7, 0, -6.6);
+  // Turned a little toward camera as well as toward her, so the card slot on
+  // his chest is actually visible when she loads the plans.
+  r2.root.rotation.y = 1.05;
   r2.setCenterLeg(1);
   interior.add(r2.root);
 
   const threepio = await makeProtocolDroid({ seed: 31.5 });
-  threepio.root.position.set(3.1, 0, -13.6);
-  threepio.root.rotation.y = -2.15;
+  threepio.root.position.set(-1.7, 0, -14.6);
+  threepio.root.rotation.y = 0.34;
   interior.add(threepio.root);
 
   // --- the plans -----------------------------------------------------------
@@ -137,8 +152,15 @@ export async function build(ctx) {
   space.visible = false;
   scene.add(space);
   const spaceLights = standardLights(space, 'space', { shadows: false });
-  spaceLights.key.intensity = 2.6;
-  spaceLights.rim.intensity = 1.15;
+  // The camera always looks down -z here, so the key needs a strong +z
+  // component or every surface we can see is a silhouette.
+  spaceLights.key.position.set(0.46, 0.52, 0.72).multiplyScalar(400);
+  spaceLights.key.intensity = 3.0;
+  spaceLights.fill.position.set(-0.8, -0.2, 0.35).multiplyScalar(400);
+  spaceLights.fill.intensity = 0.6;
+  spaceLights.rim.position.set(-0.4, 0.5, -0.78).multiplyScalar(400);
+  spaceLights.rim.intensity = 1.3;
+  spaceLights.hemi.intensity = 0.55;
 
   const stars = new Starfield({ count: 1300, radius: 900, sizeMax: 3.6 });
   space.add(stars.object);
@@ -150,18 +172,31 @@ export async function build(ctx) {
   space.add(launchSet);
 
   const corvette = ships?.buildCorvette ? await ships.buildCorvette() : fallbackCorvette();
-  corvette.scale.setScalar(2.2);
-  corvette.position.set(96, 26, -215);
-  corvette.rotation.set(0.06, -1.02, 0.22);
+  corvette.scale.setScalar(1.7);
+  corvette.position.set(56, 22, -158);
+  corvette.rotation.set(0.05, -1.26, 0.20);
   launchSet.add(corvette);
 
+  // Scaled to the real 10:1 ratio against the corvette, so the wedge reads as
+  // a kilometre and a half of hull rather than a big model.
+  // Yawed broadside to the lens and rolled so its lit dorsal plain faces us:
+  // 676 units of hull that overruns the frame in both directions.
   const destroyer = ships?.buildStarDestroyer ? await ships.buildStarDestroyer() : fallbackStarDestroyer();
-  destroyer.scale.setScalar(2.9);
-  destroyer.position.set(-330, 150, -760);
-  destroyer.rotation.set(-0.10, 0.62, 0.05);
+  destroyer.scale.setScalar(2.6);
+  destroyer.position.set(-40, 26, -330);
+  destroyer.rotation.set(0.36, 1.52, 0.07);
   launchSet.add(destroyer);
 
+  // The tractor beam that makes the corvette a *captured* ship.
+  const beamFrom = new THREE.Vector3(30, 74, -300);
+  const beamTo = new THREE.Vector3(56, 22, -158);
+  const tractor = new Beam({ color: 0x9fe0ff, radiusTop: 4, radiusBottom: 10, height: beamFrom.distanceTo(beamTo), opacity: 0.08 });
+  tractor.object.position.copy(beamTo);
+  tractor.object.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), beamFrom.clone().sub(beamTo).normalize());
+  launchSet.add(tractor.object);
+
   // The blow-out at the pod hatch.
+  const EJECT_AT = [44, 12, -146];
   const ejectSparks = new Sparks({
     t0: T_EJECT + 0.16,
     life: 1.5,
@@ -171,12 +206,12 @@ export async function build(ctx) {
     color: 0xffd08a,
     size: 1.9,
     seed: 12,
-    origin: [86, 18, -206],
-    cone: { axis: [-0.85, -0.2, 0.5], spread: 0.55 },
+    origin: EJECT_AT,
+    cone: { axis: [-0.85, -0.3, 0.45], spread: 0.55 },
   });
   launchSet.add(ejectSparks.object);
   const ejectFlash = glowSprite(0xfff0c8, 26, 0);
-  ejectFlash.position.set(86, 18, -206);
+  ejectFlash.position.set(...EJECT_AT);
   launchSet.add(ejectFlash);
 
   // --- the pod (shared by every exterior beat) -----------------------------
@@ -203,9 +238,16 @@ export async function build(ctx) {
   );
   for (const th of retros) podSpin.add(th.object);
 
-  // Plasma sheath for the atmosphere entry, parented to the pod.
+  // Plasma sheath for the atmosphere entry. The shock front rides the hull,
+  // but the wake belongs to the flight path, not to the tumbling body.
   const sheath = buildSheath();
   podSpin.add(sheath.group);
+  podRig.add(sheath.trail);
+
+  // At turret range the pod is twenty pixels of grey; a halo keeps the eye on
+  // it. Scaled by distance so its apparent size never changes.
+  const podMarker = glowSprite(0xd8ecff, 1, 0);
+  podRig.add(podMarker);
 
   // --- sub-set 2: the destroyer's gun position -----------------------------
   const turretSet = new THREE.Group();
@@ -215,10 +257,11 @@ export async function build(ctx) {
   turretSet.add(buildTurret());
 
   const console1 = new THREE.PointLight(0x66ff88, 6, 16, 2);
-  console1.position.set(3.4, 2.2, 1.2);
+  console1.position.set(4.6, 2.4, -1.0);
   turretSet.add(console1);
-  const facing = new THREE.PointLight(0xbfd8ff, 3.2, 20, 2);
-  facing.position.set(-1.5, 4.6, -3.0);
+  // Cold light from outside, so the officer reads as a backlit silhouette.
+  const facing = new THREE.PointLight(0xbfd8ff, 5.0, 26, 2);
+  facing.position.set(-3.0, 5.0, -12.0);
   turretSet.add(facing);
 
   const officer = await makeImperialOfficer({ seed: 19.6 });
@@ -285,8 +328,25 @@ export async function build(ctx) {
   // =========================================================================
   const _v = new THREE.Vector3();
   const _w = new THREE.Vector3();
+  const FORWARD = new THREE.Vector3(0, 0, 1);
   const fogColor = new THREE.Color();
   const bgColor = new THREE.Color();
+
+  /**
+   * Where the pod is at time t. One curve carries it through all three
+   * exterior sub-sets, jumping between them exactly on the cuts.
+   */
+  const POD_PATH = [
+    [T_EJECT, [44, 12, -146]],
+    [T_EJECT + 0.6, [38, 9, -142]],
+    [T_EJECT + 3.0, [4, -6, -122]],
+    [T_TURRET - 0.001, [-74, -40, -78]],
+    [T_TURRET, [-30, TURRET_Y - 16, -290]],
+    [T_ENTRY - 0.001, [-8, TURRET_Y - 64, -980]],
+    [T_ENTRY, [-16, ENTRY_Y + 46, -30]],
+    [D, [34, ENTRY_Y - 26, -104]],
+  ];
+  const podPath = (tt) => ease.track(POD_PATH, tt, ease.smooth);
 
   return {
     scene,
@@ -306,10 +366,10 @@ export async function build(ctx) {
   // Interior
   // -------------------------------------------------------------------------
   function updateInterior(t) {
-    scene.background.setHex(0x0a0d12);
-    scene.fog.color.setHex(0x0a0d12);
-    scene.fog.near = 26;
-    scene.fog.far = 78;
+    scene.background.setHex(0x12171f);
+    scene.fog.color.setHex(0x12171f);
+    scene.fog.near = 34;
+    scene.fog.far = 110;
 
     // Emergency lamp: a slow double pulse, brighter once she starts talking.
     const beat = Math.pow(Math.max(0, Math.sin(t * 1.9)), 3);
@@ -363,27 +423,27 @@ export async function build(ctx) {
     if (t < T_SPEECH) {
       // Slow push in from the corridor mouth to a two-shot.
       cameraRig(camera, t, {
-        pos: [[0, [7.8, 5.4, 6.6]], [T_SPEECH, [5.6, 3.5, -0.4]]],
-        look: [[0, [0.6, 2.4, -6.0]], [T_SPEECH, [0.9, 2.0, -5.6]]],
-        fov: [[0, 44], [T_SPEECH, 38]],
+        pos: [[0, [3.4, 6.2, 9.0]], [T_SPEECH, [2.4, 3.5, 1.6]]],
+        look: [[0, [0.2, 2.6, -7.0]], [T_SPEECH, [0.7, 2.0, -6.4]]],
+        fov: [[0, 46], [T_SPEECH, 40]],
         ease: ease.smooth,
       });
       handheld(camera, t, 0.05, 0.4, 1);
     } else if (t < T_THREEPIO) {
-      // Closer, angled down onto the droid as the plans go in.
+      // Closer, angled onto the droid's chest as the plans go in.
       cameraRig(camera, t, {
-        pos: [[T_SPEECH, [3.4, 3.0, -1.9]], [T_SLOT, [1.9, 2.6, -3.1]], [T_THREEPIO, [1.2, 2.2, -3.4]]],
-        look: [[T_SPEECH, [0.4, 2.1, -5.6]], [T_SLOT, [-0.5, 1.7, -5.7]], [T_THREEPIO, [-0.7, 1.5, -5.7]]],
-        fov: [[T_SPEECH, 36], [T_SLOT, 30], [T_THREEPIO, 28]],
+        pos: [[T_SPEECH, [3.2, 3.1, 1.0]], [T_SLOT, [2.6, 2.6, -0.7]], [T_THREEPIO, [2.3, 2.4, -1.2]]],
+        look: [[T_SPEECH, [0.1, 1.9, -6.5]], [T_SLOT, [-0.4, 1.6, -6.6]], [T_THREEPIO, [-0.5, 1.5, -6.6]]],
+        fov: [[T_SPEECH, 40], [T_SLOT, 35], [T_THREEPIO, 33]],
         ease: ease.inOutCubic,
       });
       handheld(camera, t, 0.035, 0.5, 4);
     } else {
-      // Past Leia's shoulder onto the fretting protocol droid.
+      // Down the corridor onto the fretting protocol droid.
       cameraRig(camera, t, {
-        pos: [[T_THREEPIO, [6.1, 4.3, -7.4]], [T_EJECT, [5.2, 4.0, -9.0]]],
-        look: [[T_THREEPIO, [3.2, 3.4, -13.4]], [T_EJECT, [3.1, 3.2, -13.5]]],
-        fov: [[T_THREEPIO, 34], [T_EJECT, 31]],
+        pos: [[T_THREEPIO, [2.6, 4.0, -7.8]], [T_EJECT, [2.0, 3.7, -9.2]]],
+        look: [[T_THREEPIO, [-1.6, 3.5, -14.4]], [T_EJECT, [-1.7, 3.4, -14.5]]],
+        fov: [[T_THREEPIO, 38], [T_EJECT, 34]],
         ease: ease.smooth,
       });
       handheld(camera, t, 0.07, 0.55, 9);
@@ -404,15 +464,18 @@ export async function build(ctx) {
     planet.visible = turret;
     bolts.object.visible = turret;
     sheath.group.visible = entry;
+    sheath.trail.visible = entry;
 
     // Vacuum has no fog; the entry does, and it is what sells the altitude.
     if (entry) {
       const u = ease.range(t, T_ENTRY, T_ENTRY + 4.2);
-      fogColor.setHex(0x1b0f0a).lerp(new THREE.Color(0xc4753a), u);
+      // Fog and background share a colour, so the horizon dissolves into haze
+      // instead of ending on a hard line.
+      fogColor.setHex(0x201007).lerp(new THREE.Color(0xc98047), ease.smooth(u));
       scene.fog.color.copy(fogColor);
-      scene.fog.near = ease.lerp(200, 60, u);
-      scene.fog.far = ease.lerp(1400, 520, u);
-      bgColor.setHex(0x05070c).lerp(new THREE.Color(0x9c5a2c), ease.smooth(u));
+      scene.fog.near = ease.lerp(200, 70, u);
+      scene.fog.far = ease.lerp(1600, 620, u);
+      bgColor.copy(fogColor);
       scene.background.copy(bgColor);
       spaceLights.key.intensity = ease.lerp(2.6, 0.9, u);
       spaceLights.hemi.intensity = ease.lerp(0.45, 0.2, u);
@@ -420,25 +483,15 @@ export async function build(ctx) {
       scene.fog.near = 4000;
       scene.fog.far = 20000;
       scene.background.setHex(0x03050a);
-      spaceLights.key.intensity = 2.6;
-      spaceLights.hemi.intensity = 0.45;
+      // Inside the gun position the rig is pulled down hard: the officer and
+      // the window frame want to be shapes cut out of the planet's glare.
+      spaceLights.key.intensity = turret ? 1.5 : 3.0;
+      spaceLights.hemi.intensity = turret ? 0.16 : 0.55;
+      spaceLights.fill.intensity = turret ? 0.18 : 0.6;
     }
 
     // --- the pod's path, one continuous curve through all three shots.
-    const p = ease.track(
-      [
-        [T_EJECT, [86, 18, -206]],
-        [T_EJECT + 0.55, [78, 15, -202]],
-        [T_EJECT + 2.6, [40, 2, -186]],
-        [T_TURRET - 0.001, [-58, -30, -158]],
-        [T_TURRET, [-26, TURRET_Y - 14, -260]],
-        [T_ENTRY - 0.001, [-6, TURRET_Y - 60, -900]],
-        [T_ENTRY, [-16, ENTRY_Y + 46, -30]],
-        [D, [34, ENTRY_Y - 26, -104]],
-      ],
-      t,
-      ease.smooth
-    );
+    const p = podPath(t);
     podRig.position.set(p[0], p[1], p[2]);
     podRig.scale.setScalar(entry ? 1.9 : 1);
 
@@ -475,18 +528,35 @@ export async function build(ctx) {
       bolts.update(t, camera);
       console1.intensity = 5 + 3 * Math.sin(t * 3.1);
       poseOfficer(t);
+      const dist = camera.position.distanceTo(podRig.position);
+      podMarker.material.opacity = 0.3;
+      podMarker.scale.setScalar(dist * 0.032);
+    } else {
+      podMarker.material.opacity = 0;
     }
-    if (entry) sheath.update(t - T_ENTRY);
+    if (entry) {
+      sheath.update(t - T_ENTRY);
+      // Aim the wake down the flight path: sample the same track a moment
+      // ahead and behind, which keeps it a pure function of t.
+      const a = podPath(Math.max(T_ENTRY, t - 0.12));
+      const b = podPath(t + 0.12);
+      _v.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      if (_v.lengthSq() > 1e-6) {
+        _v.normalize();
+        sheath.trail.quaternion.setFromUnitVectors(FORWARD, _v);
+      }
+    }
 
     stars.update(t);
 
     // --- camera
     if (launch) {
       // Locked-off wide: the pod is a speck against the destroyer's flank.
+      tractor.update(t);
       cameraRig(camera, t, {
-        pos: [[T_EJECT, [26, 14, 64]], [T_TURRET, [-6, 4, 40]]],
-        look: [[T_EJECT, [40, 6, -180]], [T_EJECT + 3.0, [10, -4, -178]], [T_TURRET, [-30, -18, -168]]],
-        fov: [[T_EJECT, 40], [T_TURRET, 34]],
+        pos: [[T_EJECT, [16, 10, 86]], [T_TURRET, [-16, 0, 62]]],
+        look: [[T_EJECT, [46, 14, -150]], [T_EJECT + 3.0, [6, -2, -130]], [T_TURRET, [-46, -24, -96]]],
+        fov: [[T_EJECT, 42], [T_TURRET, 36]],
         shake: [[T_EJECT, 0], [T_EJECT + 0.06, 0.5], [T_EJECT + 1.4, 0]],
         ease: ease.smooth,
       });
@@ -710,27 +780,29 @@ function wringHands(fig, t) {
 /** The Star Destroyer's gun position: a dark box with one big window. */
 function buildTurret() {
   const b = new Bricks({ studSegments: 6 });
-  const dark = COLORS.darkBluishGray;
+  // The interior is a silhouette: everything here is near-black so the
+  // window, the planet and the console glow carry the frame.
+  const dark = COLORS.trueBlack;
   const black = COLORS.trueBlack;
-  const grey = COLORS.lightBluishGray;
+  const grey = COLORS.darkBluishGray;
 
   // Deck, ceiling and the two side walls, all boxed around the camera.
   b.tile(-11, -1, -6, 22, 20, dark);
-  b.panel(-11, 21, -6, 22, 20, 2, dark);
-  for (const sx of [-1, 1]) b.panel(sx * 9, 0, -6, 2, 20, 21, dark);
-  b.panel(-11, 0, 12, 22, 2, 21, black); // wall behind the camera
+  b.panel(-11, 23, -6, 22, 20, 2, dark);
+  for (const sx of [-1, 1]) b.panel(sx * 9, 0, -6, 2, 20, 23, dark);
+  b.panel(-11, 0, 12, 22, 2, 23, black); // wall behind the camera
 
   // Window: a wide opening with heavy mullions.
-  b.panel(-11, 15, -6.6, 22, 1.4, 8, dark); // header
-  b.panel(-11, -1, -6.6, 22, 1.4, 6, dark); // sill
-  for (const x of [-8.4, -2.2, 2.2, 8.4]) b.panel(x - 0.45, 5, -6.7, 0.9, 1.6, 10, dark);
-  b.panel(-11, 4.6, -6.5, 22, 1.1, 0.5, grey);
+  b.panel(-11, 17, -6.6, 22, 1.4, 8, dark); // header
+  b.panel(-11, -1, -6.6, 22, 1.4, 5, dark); // sill
+  for (const x of [-9.6, -3.4, 3.4, 9.6]) b.panel(x - 0.45, 4, -6.7, 0.9, 1.6, 13, dark);
+  b.panel(-11, 3.6, -6.5, 22, 1.1, 0.4, grey);
 
   // Console bank under the window, with lit readouts.
-  b.panel(1.4, 0, -5.6, 7, 3.4, 8, black);
-  b.slope(1.4, 8, -5.6, 7, 3.4, 3, black, { dir: '-z' });
-  for (let i = 0; i < 7; i++) {
-    b.box(1.8 + i * 0.9, 8.4, -5.2, 0.6, 1.2, 0.6, COLORS.transGreen, {
+  b.panel(3.2, 0, -5.6, 5.4, 3.2, 6, black);
+  b.slope(3.2, 6, -5.6, 5.4, 3.2, 2, black, { dir: '-z' });
+  for (let i = 0; i < 5; i++) {
+    b.box(3.6 + i * 0.9, 6.4, -5.2, 0.6, 1.2, 0.6, COLORS.transGreen, {
       studs: false,
       finish: 'trans',
       emissive: i % 3 ? 0x44ff66 : 0xffaa33,
@@ -846,21 +918,28 @@ function buildSheath() {
   shell.position.z = 2.0;
   group.add(shell);
 
-  const core = new THREE.Mesh(new THREE.SphereGeometry(2.0, 16, 12), additiveMaterial(0xfff0c0, { opacity: 0.8 }));
-  core.scale.set(1.15, 1.15, 0.5);
-  core.position.z = 2.6;
+  const core = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 12), additiveMaterial(0xfff0c0, { opacity: 0.55 }));
+  core.scale.set(1.05, 1.05, 0.4);
+  core.position.z = 2.9;
   group.add(core);
 
-  // The trail: a long additive plume behind, plus a sprite for the bloom.
-  const trailGeo = new THREE.ConeGeometry(2.4, 46, 14, 1, true);
-  trailGeo.translate(0, -23, 0);
-  trailGeo.rotateX(-Math.PI / 2);
-  const trail = new THREE.Mesh(trailGeo, additiveMaterial(0xff8a3c, { opacity: 0.4 }));
-  trail.position.z = 0.5;
-  group.add(trail);
+  // The trail: two nested additive plumes, the outer one very faint, so the
+  // wake feathers out instead of reading as a solid cone. Its +z is the
+  // direction of travel; the scene aims it along the flight path.
+  const trail = new THREE.Group();
+  const plume = (r, len, color, opacity) => {
+    const g = new THREE.ConeGeometry(r, len, 14, 1, true);
+    g.translate(0, -len / 2, 0);
+    g.rotateX(-Math.PI / 2);
+    const m = new THREE.Mesh(g, additiveMaterial(color, { opacity }));
+    trail.add(m);
+    return m;
+  };
+  const plumeInner = plume(1.5, 34, 0xffb45c, 0.24);
+  const plumeOuter = plume(3.4, 62, 0xff7a30, 0.10);
 
   const flare = glowSprite(0xffc070, 12, 0.8);
-  flare.position.z = 2.4;
+  flare.position.z = 2.2;
   group.add(flare);
 
   const sparks = new Sparks({
@@ -879,16 +958,18 @@ function buildSheath() {
 
   return {
     group,
+    trail,
     /** `s` is seconds since the entry began. */
     update(s) {
       const u = ease.range(s, 0, 2.6);
       const flick = 0.86 + 0.14 * Math.sin(s * 31) * Math.sin(s * 17.3);
-      shell.material.opacity = 0.62 * u * flick;
-      core.material.opacity = 0.85 * u * flick;
-      trail.material.opacity = 0.45 * u * flick;
+      shell.material.opacity = 0.5 * u * flick;
+      core.material.opacity = 0.55 * u * flick;
+      plumeInner.material.opacity = 0.26 * u * flick;
+      plumeOuter.material.opacity = 0.11 * u * flick;
       trail.scale.set(1, 1, 0.5 + 0.8 * u);
-      flare.material.opacity = 0.95 * u * flick;
-      flare.scale.setScalar(9 + 7 * u);
+      flare.material.opacity = 0.7 * u * flick;
+      flare.scale.setScalar(7 + 6 * u);
       sparks.update(s);
     },
   };
