@@ -1,0 +1,34 @@
+{
+  "name": "lego-star-wars-cinematic",
+  "version": "1.0.0",
+  "description": "A procedurally generated LEGO Star Wars cinematic rendered in three.js, with a fully synthesized soundtrack and narration.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "shot": "node tools/shot.mjs",
+    "render": "node tools/render.mjs",
+    "vo": "node tools/vo.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ilikevibecoding/edwin4dawin.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ilikevibecoding/edwin4dawin/issues"
+  },
+  "homepage": "https://github.com/ilikevibecoding/edwin4dawin#readme",
+  "dependencies": {
+    "three": "^0.171.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.62.1",
+    "vite": "^6.4.3"
+  },
+  "private": true,
+  "type": "module"
+}

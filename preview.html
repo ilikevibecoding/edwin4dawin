@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LEGO Star Wars — parts preview</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14171a; color: #cfd6dd;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; }
+  #c { display: block; width: 100vw; height: 100vh; }
+  #hud { position: fixed; left: 12px; top: 10px; pointer-events: none;
+    text-shadow: 0 1px 3px #000; white-space: pre; }
+  #hud b { color: #ffd54a; }
+  #err { position: fixed; left: 12px; bottom: 12px; right: 12px; color: #ff8b7a;
+    white-space: pre-wrap; max-height: 40vh; overflow: auto; }
+  #list { position: fixed; right: 12px; top: 10px; text-align: right; max-height: 92vh;
+    overflow: auto; opacity: .8; }
+  #list a { color: #9fd0ff; text-decoration: none; display: block; }
+  #list a:hover { color: #fff; }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hud"></div>
+  <div id="list"></div>
+  <div id="err"></div>
+  <script type="module" src="/src/preview.js"></script>
+</body>
+</html>

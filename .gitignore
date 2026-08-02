@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.vite/
+tmp/
+*.log
+render/frames/
+render/out/
+.DS_Store
