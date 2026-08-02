@@ -22,11 +22,12 @@ const W = +(args.w || 1100), H = +(args.h || 700);
 
 const server = await createServer({
   root: resolve(import.meta.dirname, '..'),
-  server: { port: 0, host: '127.0.0.1' },
-  logLevel: 'warn',
+  configFile: false,
+  server: { port: 0, host: '127.0.0.1', strictPort: false },
+  logLevel: 'error',
 });
 await server.listen();
-const port = server.config.server.port || server.httpServer.address().port;
+const port = server.httpServer.address().port;
 
 const browser = await puppeteer.launch({
   headless: true,
