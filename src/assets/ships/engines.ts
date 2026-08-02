@@ -79,7 +79,7 @@ export class EngineBank {
       const pCol = new Float32Array(pPos.count * 3);
       for (let vi = 0; vi < pPos.count; vi++) {
         const t = Math.min(1, Math.max(0, -pPos.getZ(vi) / plumeLen));
-        const f = Math.pow(1 - t, 1.9);
+        const f = Math.pow(1 - t, 2.6);
         pCol[vi * 3] = f;
         pCol[vi * 3 + 1] = f;
         pCol[vi * 3 + 2] = f;
@@ -91,7 +91,7 @@ export class EngineBank {
           color: new THREE.Color(opts.color),
           vertexColors: true,
           transparent: true,
-          opacity: 0.42,
+          opacity: 0.3,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
           side: THREE.DoubleSide,
@@ -169,7 +169,7 @@ export class EngineBank {
     for (const plume of this.plumes) {
       const s = (0.25 + 0.75 * t) * flicker;
       plume.scale.set(1, 1, Math.max(0.001, s));
-      (plume.material as THREE.MeshBasicMaterial).opacity = 0.42 * clamp01(t * 1.2);
+      (plume.material as THREE.MeshBasicMaterial).opacity = 0.3 * clamp01(t * 1.2);
       plume.visible = t > 0.02;
     }
     if (this.light) this.light.intensity = this.baseIntensity * t * flicker;

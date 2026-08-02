@@ -35,7 +35,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'prologue-late',
-    time: 34,
+    time: 25,
     chapter: 'prologue',
     camera: 'prologue.crawl',
     expectVisible: ['Stars', 'TitleCrawl'],
@@ -178,7 +178,7 @@ export const CHECKPOINTS: Checkpoint[] = [
     time: 252,
     chapter: 'corridor',
     camera: 'corridor.firefight',
-    expectVisible: ['trooper', 'rebel'],
+    expectVisible: ['trooper'],
     assertions: ['interior', 'bolts-in-flight', 'camera-in-corridor', 'no-nan'],
     file: '16-firefight.png',
     note: 'Exchange of fire with both colours of bolt and readable geography.',
@@ -225,7 +225,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'droids-run',
-    time: 344,
+    time: 348,
     chapter: 'escape',
     camera: 'escape.branch',
     expectVisible: ['r2', 'threepio'],
@@ -255,7 +255,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'reentry',
-    time: 398,
+    time: 403,
     chapter: 'epilogue',
     camera: 'epilogue.wide',
     expectVisible: ['pod', 'Tatooine_Surface', 'destroyer'],

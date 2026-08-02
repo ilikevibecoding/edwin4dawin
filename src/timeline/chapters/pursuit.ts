@@ -257,20 +257,24 @@ export function pursuitChapter(): Chapter<ShowContext> {
           handheld: 0.55,
         }),
 
-        // 3. The reveal: low and behind, looking back and up as the bow arrives.
-        customShot({ id: 'pursuit.reveal', start: S + 26, end: S + 46, fov: 50, handheld: 0.5, blend: 0 }, (k, t, out) => {
+        // 3. The reveal. The camera sits ahead of and below the runner looking
+        //    back down the line of travel, so the corvette stays anchored in
+        //    the lower frame while the destroyer's bow grows over the top of
+        //    it. That contrast is the whole point of the shot.
+        customShot({ id: 'pursuit.reveal', start: S + 26, end: S + 46, fov: 52, handheld: 0.45, blend: 0 }, (k, t, out) => {
           const r = runnerAt(t);
           const d = destroyerAt(t);
           const a = smootherstep(k);
-          out.position.set(r.x - 250 + a * 60, r.y - 56 - a * 14, r.z + 138 - a * 22);
-          // Aim drifts from the runner up to the oncoming hull.
-          const aim = clamp01((k - 0.12) / 0.55);
+          out.position.set(r.x + lerp(330, 215, a), r.y + lerp(-52, -26, a), r.z + lerp(178, 126, a));
+          // Aim starts on the corvette and drifts up and back to the oncoming
+          // hull without ever letting the corvette leave the frame.
+          const aim = smootherstep(clamp01((k - 0.1) / 0.62));
           out.target.set(
-            lerp(r.x, lerp(r.x, d.x - 380, 0.55), aim),
-            lerp(r.y, d.y - 120, aim * 0.85),
-            lerp(r.z, d.z + 40, aim * 0.5),
+            lerp(r.x, r.x - 520, aim),
+            lerp(r.y + 6, r.y + 150, aim),
+            lerp(r.z, lerp(r.z, d.z, 0.35), aim),
           );
-          out.fov = lerp(48, 58, a);
+          out.fov = lerp(50, 58, a);
           out.focus = out.position.distanceTo(out.target);
         }),
 
@@ -279,8 +283,8 @@ export function pursuitChapter(): Chapter<ShowContext> {
           const r = runnerAt(t);
           const d = destroyerAt(t);
           const a = smootherstep(k);
-          out.position.set(r.x - 120 - a * 40, r.y - 76, r.z + 118 + a * 26);
-          out.target.set(lerp(d.x - 500, d.x + 260, a), d.y - 210 + a * 40, d.z + 30);
+          out.position.set(r.x + lerp(150, 60, a), r.y - 78, r.z + lerp(140, 112, a));
+          out.target.set(lerp(d.x - 300, d.x + 420, a), lerp(d.y - 240, d.y - 160, a), d.z + 20);
           out.fov = 62;
           out.focus = out.position.distanceTo(out.target);
         }),

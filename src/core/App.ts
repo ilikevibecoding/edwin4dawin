@@ -49,7 +49,7 @@ export class App {
 
   private prefs: Preferences;
   private ctx: ShowContext;
-  private clock = new THREE.Clock();
+  private lastFrameTime = 0;
   private elapsed = 0;
   private rafId = 0;
   private running = false;
@@ -223,9 +223,10 @@ export class App {
       this.hidden = document.hidden;
       if (this.hidden) {
         void this.audio.setSuspended(true);
-      } else if (this.timeline.playing) {
-        void this.audio.setSuspended(false);
-        this.clock.getDelta();
+      } else {
+        // Drop the accumulated hidden time so the timeline does not jump.
+        this.lastFrameTime = performance.now();
+        if (this.timeline.playing) void this.audio.setSuspended(false);
       }
     });
     window.addEventListener('keydown', (ev) => this.onKey(ev));
@@ -340,7 +341,7 @@ export class App {
   start(): void {
     if (this.running) return;
     this.running = true;
-    this.clock.start();
+    this.lastFrameTime = performance.now();
     const loop = (): void => {
       this.rafId = requestAnimationFrame(loop);
       this.frame();
@@ -466,7 +467,9 @@ export class App {
   // ------------------------------------------------------------------ frame
 
   private frame(): void {
-    const rawDt = this.clock.getDelta();
+    const now = performance.now();
+    const rawDt = Math.max(0, (now - this.lastFrameTime) / 1000);
+    this.lastFrameTime = now;
     // Skip expensive work while the tab is hidden.
     if (this.hidden) return;
     const dt = Math.min(0.06, rawDt);

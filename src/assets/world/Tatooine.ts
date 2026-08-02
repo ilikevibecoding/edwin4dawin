@@ -101,8 +101,8 @@ export class Tatooine {
       uniforms: {
         uColor: { value: new THREE.Color(0xffb877) },
         uSunDir: { value: this.sunDir.clone() },
-        uIntensity: { value: 1.55 },
-        uPower: { value: 3.1 },
+        uIntensity: { value: 1.05 },
+        uPower: { value: 3.9 },
         uNightFill: { value: 0.06 },
       },
       vertexShader: atmosphereVert,
@@ -113,7 +113,7 @@ export class Tatooine {
       depthWrite: false,
       toneMapped: false,
     });
-    this.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(R * 1.055, 64, 32), atmoMat);
+    this.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(R * 1.022, 64, 32), atmoMat);
     this.atmosphere.name = 'Tatooine_Atmosphere';
     this.atmosphere.renderOrder = 2;
     this.root.add(this.atmosphere);
@@ -121,9 +121,9 @@ export class Tatooine {
     // A faint front-facing haze softens the disc near the edge.
     const hazeMat = atmoMat.clone();
     hazeMat.side = THREE.FrontSide;
-    hazeMat.uniforms.uIntensity.value = 0.42;
-    hazeMat.uniforms.uPower.value = 2.1;
-    this.innerHaze = new THREE.Mesh(new THREE.SphereGeometry(R * 1.012, 64, 32), hazeMat);
+    hazeMat.uniforms.uIntensity.value = 0.14;
+    hazeMat.uniforms.uPower.value = 3.2;
+    this.innerHaze = new THREE.Mesh(new THREE.SphereGeometry(R * 1.006, 64, 32), hazeMat);
     this.innerHaze.name = 'Tatooine_Haze';
     this.innerHaze.renderOrder = 1;
     this.root.add(this.innerHaze);

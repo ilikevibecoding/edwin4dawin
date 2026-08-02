@@ -27,11 +27,13 @@ function fatal(message: string, detail = ''): void {
 if (!canvas || !uiRoot) {
   fatal('Could not find the viewport', 'index.html did not provide #stage and #ui-root.');
 } else {
-  const probe = canvas.getContext('webgl2', { failIfMajorPerformanceCaveat: false });
+  // Probe on a throwaway canvas: a canvas can only ever hand out one context,
+  // so testing on the real one would poison it for the renderer.
+  const probeCanvas = document.createElement('canvas');
+  const probe = probeCanvas.getContext('webgl2');
   if (!probe) {
     fatal('WebGL 2 is not available', 'Enable hardware acceleration or try a different browser.');
   } else {
-    // Release the probe context so the renderer can take the canvas.
     probe.getExtension('WEBGL_lose_context')?.loseContext();
     void bootstrap(canvas, uiRoot);
   }
@@ -66,6 +68,7 @@ async function bootstrap(canvas: HTMLCanvasElement, uiRoot: HTMLElement): Promis
   try {
     app = new App(canvas, uiRoot, setProgress);
   } catch (err) {
+    console.error('[Shadow of the First Star] build failed', err);
     preload.remove();
     fatal('Failed to build the scene', err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err));
     return;

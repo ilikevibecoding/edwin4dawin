@@ -146,7 +146,9 @@ export class SanityChecker {
 
   /** Is a named object currently inside the camera frustum? */
   static isOnScreen(object: THREE.Object3D, camera: THREE.PerspectiveCamera): boolean {
-    if (!object.visible) return false;
+    for (let n: THREE.Object3D | null = object; n; n = n.parent) {
+      if (!n.visible) return false;
+    }
     camera.updateMatrixWorld();
     _mat.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     _frustum.setFromProjectionMatrix(_mat);

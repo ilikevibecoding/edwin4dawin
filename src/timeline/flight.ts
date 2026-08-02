@@ -195,16 +195,21 @@ export function destroyerPositionAt(t: number, out: THREE.Vector3): THREE.Vector
   return out.set(x, y + heave, z);
 }
 
-/** Escape pod path once launched (absolute time). */
+/**
+ * Escape pod path once launched (absolute time).
+ *
+ * Tuned so the pod is still ~450 m above the surface when the cinematic ends —
+ * it must be visibly entering the atmosphere, never intersecting the planet.
+ */
 export function podPositionAt(t: number, launchT: number, out: THREE.Vector3): THREE.Vector3 {
   const s = Math.max(0, t - launchT);
   const bay = new THREE.Vector3(DOCK.x + 6, DOCK.y - 9, DOCK.z + 12);
-  // Kick clear of the hull, then a long powered fall toward the planet.
   const push = smootherstep(clamp01(s / 2.6));
   const fall = Math.max(0, s - 1.6);
+  const drop = Math.min(1780, 0.6 * fall * fall + 3.2 * fall);
   return out.set(
-    bay.x + push * 26 + fall * 3.4,
-    bay.y - push * 16 - fall * fall * 1.55 - fall * 6,
-    bay.z + push * 46 + fall * 9.5,
+    bay.x + push * 24 + fall * 1.4,
+    bay.y - push * 14 - drop,
+    bay.z + push * 40 + fall * 3.6,
   );
 }

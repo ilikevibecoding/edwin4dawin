@@ -45,36 +45,57 @@ export function tatooineChapter(): Chapter<ShowContext> {
     ],
 
     shots(ctx) {
-      const stage = ctx.stage;
+      const centre = ctx.stage.planetPivot.position.clone();
+      const radius = ctx.stage.planet.radius;
+      /**
+       * Place the camera on a sphere around the planet. `azimuth` and
+       * `elevation` orbit it; `distance` is measured in planet radii so the
+       * framing stays correct if the planet is ever resized.
+       */
+      const orbit = (
+        out: { position: THREE.Vector3; target: THREE.Vector3 },
+        azimuth: number,
+        elevation: number,
+        radii: number,
+        aimOffsetY: number,
+      ): void => {
+        const d = radius * radii;
+        const ce = Math.cos(elevation);
+        out.position.set(
+          centre.x + Math.sin(azimuth) * ce * d,
+          centre.y + Math.sin(elevation) * d,
+          centre.z + Math.cos(azimuth) * ce * d,
+        );
+        out.target.set(centre.x, centre.y + aimOffsetY, centre.z);
+      };
+
       return [
+        // 1. The whole body in frame: unmistakably a sphere with a terminator.
         customShot(
-          { id: 'tatooine.wide', start: TATOOINE_START, end: TATOOINE_START + 21, fov: 44, handheld: 0.35, blend: 0 },
+          { id: 'tatooine.wide', start: TATOOINE_START, end: TATOOINE_START + 21, fov: 44, handheld: 0.3, blend: 0 },
           (k, _t, out) => {
-            // High, slow drift with the limb across the lower third.
             const a = smootherstep(k);
-            out.position.set(lerp(-520, 260, a), lerp(430, 300, a), lerp(2150, 1580, a));
-            out.target.set(lerp(0, 120, a), lerp(-620, -520, a), lerp(-500, -900, a));
-            out.fov = lerp(46, 41, a);
-            out.focus = 2000;
+            orbit(out, lerp(1.24, 1.06, a), lerp(0.34, 0.24, a), lerp(3.75, 2.7, a), lerp(0, 900, a));
+            out.fov = lerp(45, 42, a);
+            out.focus = out.position.distanceTo(out.target);
           },
         ),
+        // 2. Fall toward the day side; the limb opens up and the surface fills
+        //    the lower frame, setting up the altitude the chase happens at.
         customShot(
           {
             id: 'tatooine.limb',
             start: TATOOINE_START + 21,
             end: TATOOINE_START + TATOOINE_DURATION,
             fov: 40,
-            handheld: 0.3,
-            blend: 2.4,
+            handheld: 0.32,
+            blend: 2.6,
           },
           (k, _t, out) => {
             const a = smootherstep(k);
-            const centre = stage.planetPivot.position;
-            // Skim the terminator so the atmosphere reads as a bright arc.
-            out.position.set(lerp(900, 1500, a), lerp(180, 90, a), lerp(1250, 900, a));
-            out.target.set(centre.x + lerp(-1400, -2200, a), centre.y + 12600, centre.z - 2600);
-            out.fov = lerp(42, 38, a);
-            out.focus = 2400;
+            orbit(out, lerp(1.02, 0.72, a), lerp(0.22, 0.1, a), lerp(2.62, 1.3, a), lerp(1200, 7200, a));
+            out.fov = lerp(42, 46, a);
+            out.focus = out.position.distanceTo(out.target);
           },
         ),
       ];

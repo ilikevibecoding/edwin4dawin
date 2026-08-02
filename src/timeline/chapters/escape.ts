@@ -204,10 +204,13 @@ export function escapeChapter(): Chapter<ShowContext> {
           const p = podAt(t);
           const d = destroyerPositionAt(t, new THREE.Vector3());
           const a = smootherstep(k);
-          out.position.set(p.x + lerp(-34, -16, a), p.y + lerp(16, 9, a), p.z + lerp(44, 26, a));
-          out.target.copy(p).lerp(d, lerp(0.0, 0.05, a));
-          out.fov = lerp(42, 38, a);
+          // Trail the pod and let the fleet drift up out of frame behind it.
+          out.position.set(p.x + lerp(-40, -78, a), p.y + lerp(26, 62, a), p.z + lerp(54, 118, a));
+          // Aim just above the pod so the destroyer stays visible at the top.
+          out.target.set(p.x, p.y + lerp(6, 34, a), p.z);
+          out.fov = lerp(42, 40, a);
           out.focus = out.position.distanceTo(out.target);
+          void d;
           void stage;
         }),
       ];

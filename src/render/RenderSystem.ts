@@ -58,7 +58,7 @@ export class RenderSystem {
     this.renderer.setClearColor(0x000000, 1);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 0.95;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.info.autoReset = false;
 

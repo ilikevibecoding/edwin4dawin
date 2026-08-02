@@ -331,13 +331,13 @@ export class Corridor {
     const lightCount = opts.lights ?? Math.max(5, Math.round(9 * Math.min(1, detail + 0.35)));
     for (let i = 0; i < lightCount; i++) {
       const x = xStart + 3 + ((xEnd - xStart - 6) * i) / Math.max(1, lightCount - 1);
-      const light = new THREE.PointLight(0xdfe8f5, 5.5, 16, 1.9);
+      const light = new THREE.PointLight(0xdfe8f5, 26, 22, 1.5);
       light.position.set(x, ceiling - 0.35, 0);
       light.castShadow = false;
       this.root.add(light);
       this.luminaires.push({
         light,
-        base: 5.5,
+        base: 26,
         x,
         flickerSeed: rng.range(0, 100),
         damaged: rng.bool(0.22),
@@ -349,10 +349,10 @@ export class Corridor {
       [branchMid, halfWidth + 3.5, 0xdfe8f5],
       [(alc.x0 + alc.x1) / 2, -halfWidth - alc.depth * 0.5, 0xe8eef8],
     ] as Array<[number, number, number]>) {
-      const light = new THREE.PointLight(colour, 5.0, 14, 1.9);
+      const light = new THREE.PointLight(colour, 22, 20, 1.5);
       light.position.set(lx, ceiling - 0.4, lz);
       this.root.add(light);
-      this.luminaires.push({ light, base: 5.0, x: lx, flickerSeed: rng.range(0, 100), damaged: false });
+      this.luminaires.push({ light, base: 22, x: lx, flickerSeed: rng.range(0, 100), damaged: false });
     }
     // Matching luminaire plates in the branch and alcove.
     const extraLums = new THREE.Mesh(
@@ -537,7 +537,7 @@ export class Corridor {
 
   /** Cut the corridor lighting down as power fails. */
   setPowerLevel(v: number): void {
-    for (const l of this.luminaires) l.base = 5.5 * v;
+    for (const l of this.luminaires) l.base = 26 * v;
   }
 
   openPodHatch(open: boolean): void {

@@ -31,12 +31,21 @@ const OFFICER_POST = { x: 22.6, z: -0.2, fallAt: 46.0 };
 
 /** Trooper advance lanes; they enter in pairs and take alternating sides. */
 const TROOPER_LANES = [
-  { z: -0.95, stopX: 2.4, delay: 0.0 },
-  { z: 0.95, stopX: 3.4, delay: 0.45 },
-  { z: -0.55, stopX: -0.6, delay: 1.3 },
-  { z: 0.6, stopX: 0.2, delay: 1.75 },
-  { z: -1.15, stopX: -3.2, delay: 2.7 },
-  { z: 1.15, stopX: -2.4, delay: 3.1 },
+  { z: -1.16, stopX: 1.6, delay: 0.0 },
+  { z: 1.16, stopX: 2.6, delay: 0.45 },
+  { z: -1.2, stopX: -1.8, delay: 1.3 },
+  { z: 1.2, stopX: -1.0, delay: 1.75 },
+  { z: -1.24, stopX: -4.6, delay: 2.7 },
+  { z: 1.24, stopX: -3.8, delay: 3.1 },
+];
+/** After the fight they hold the walls so the entrance stays uncluttered. */
+const TROOPER_HOLD = [
+  { x: 3.4, z: -1.3 },
+  { x: 4.6, z: 1.3 },
+  { x: 0.4, z: -1.34 },
+  { x: 1.4, z: 1.34 },
+  { x: -3.0, z: -1.36 },
+  { x: -2.2, z: 1.36 },
 ];
 
 /**
@@ -247,12 +256,12 @@ export function corridorChapter(): Chapter<ShowContext> {
 
       return [
         // 1. Establish the geography before anything happens in it.
-        customShot({ id: 'corridor.establish', start: S, end: S + 8.5, fov: 52, handheld: 0.5, blend: 0 }, (k, _t, out) => {
+        customShot({ id: 'corridor.establish', start: S, end: S + 8.5, fov: 52, handheld: 0.45, blend: 0 }, (k, _t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(33, 26.5, a), lerp(2.1, 1.85, a), lerp(0.35, 0.05, a));
-          out.target.set(lerp(6, -6, a), 1.55, 0);
-          out.fov = lerp(54, 50, a);
-          out.focus = 22;
+          out.position.set(lerp(38.5, 33, a), lerp(2.2, 1.95, a), lerp(0.55, 0.1, a));
+          out.target.set(lerp(12, -6, a), 1.5, 0);
+          out.fov = lerp(56, 52, a);
+          out.focus = 24;
           clampCam(out);
         }),
 
@@ -307,25 +316,26 @@ export function corridorChapter(): Chapter<ShowContext> {
           clampCam(out);
         }),
 
-        // 7. Vader's entrance: low, wide, and patient.
-        customShot({ id: 'corridor.vader', start: S + 52, end: S + 64, fov: 44, handheld: 0.28, blend: 1.6 }, (k, _t, out) => {
+        // 7. Vader's entrance: low, wide, patient, and far enough down the
+        //    corridor that the boarding party frames him instead of blocking him.
+        customShot({ id: 'corridor.vader', start: S + 52, end: S + 64, fov: 44, handheld: 0.22, blend: 1.6 }, (k, _t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(6.2, 4.4, a), lerp(0.52, 0.62, a), lerp(0.42, 0.18, a));
-          out.target.set(lerp(-8, -3.2, a), lerp(1.35, 1.55, a), 0);
-          out.fov = lerp(46, 40, a);
-          out.focus = 9;
+          out.position.set(lerp(15.5, 12.2, a), lerp(0.58, 0.7, a), lerp(0.55, 0.14, a));
+          out.target.set(lerp(-6.5, 1.5, a), lerp(1.45, 1.6, a), 0);
+          out.fov = lerp(46, 42, a);
+          out.focus = lerp(18, 11, a);
           clampCam(out);
         }),
 
         // 8. Tracking backwards ahead of him.
-        customShot({ id: 'corridor.vaderWalk', start: S + 64, end: S + CORRIDOR_DURATION, fov: 42, handheld: 0.35, blend: 1.2 }, (k, _t, out) => {
+        customShot({ id: 'corridor.vaderWalk', start: S + 64, end: S + CORRIDOR_DURATION, fov: 42, handheld: 0.3, blend: 1.2 }, (k, _t, out) => {
           vader.root.updateWorldMatrix(true, false);
           const p = vader.root.position;
           const a = smootherstep(k);
-          out.position.set(p.x + lerp(5.4, 4.2, a), lerp(1.42, 1.5, a), lerp(0.5, -0.15, a));
-          out.target.set(p.x + 0.3, 1.5, p.z);
+          out.position.set(p.x + lerp(6.2, 4.6, a), lerp(1.5, 1.32, a), lerp(0.62, -0.2, a));
+          out.target.set(p.x + 0.4, 1.45, p.z);
           out.fov = 42;
-          out.focus = 5;
+          out.focus = 5.2;
           clampCam(out);
         }),
       ];
@@ -354,7 +364,7 @@ export function corridorChapter(): Chapter<ShowContext> {
         const d = DEFENCE[i];
         // They start further aft and fall back to their posts in the first
         // few seconds; after that they are simply at the post.
-        const startX = 25 + i * 2.4;
+        const startX = 27.5 + i * 1.9;
         r.setPosition(startX, 0, d.z);
         r.clearPath();
         r.setHeading(-Math.PI / 2);
@@ -362,7 +372,7 @@ export function corridorChapter(): Chapter<ShowContext> {
       }
       const officer = stage.characters.officer;
       officer.root.visible = true;
-      officer.setPosition(31, 0, 0.4);
+      officer.setPosition(35.5, 0, 0.4);
       officer.clearPath();
       officer.setHeading(-Math.PI / 2);
       officer.followPath([[OFFICER_POST.x, 0, OFFICER_POST.z]], 2.3);
@@ -485,10 +495,14 @@ export function corridorChapter(): Chapter<ShowContext> {
         const visible = rho >= FIGHT_START + lane.delay - 0.2;
         t.root.visible = visible;
         if (!visible) continue;
-        const targetX = trooperTargetX(i, rho);
-        const moving = Math.abs(targetX - t.root.position.x) > 0.05 && rho < FIGHT_START + lane.delay + 3.6;
-        t.root.position.set(targetX, 0, lane.z);
-        t.speed = moving ? 2.4 : 0;
+        const advanceX = trooperTargetX(i, rho);
+        const moving = Math.abs(advanceX - t.root.position.x) > 0.05 && rho < FIGHT_START + lane.delay + 3.6;
+        // After the corridor falls quiet they step aside onto the walls, which
+        // clears the centre line for the entrance that follows.
+        const hold = TROOPER_HOLD[i];
+        const clear = smootherstep(clamp01((rho - FIGHT_END - 1) / 4));
+        t.root.position.set(lerp(advanceX, hold.x, clear), 0, lerp(lane.z, hold.z, clear));
+        t.speed = moving ? 2.4 : clear > 0.02 && clear < 0.98 ? 0.7 : 0;
         t.setHeading(Math.PI / 2);
         if (moving) {
           t.setState('run');
@@ -497,8 +511,8 @@ export function corridorChapter(): Chapter<ShowContext> {
           if (t.state !== 'fire') t.setState('aim');
           t.aimTarget = tmpB.set(16, 1.2, lane.z * 0.5);
         } else {
-          t.setState('aim');
-          t.aimTarget = tmpB.set(30, 1.4, 0);
+          t.setState(clear > 0.02 && clear < 0.98 ? 'walk' : 'aim');
+          t.aimTarget = clear > 0.9 ? tmpB.set(30, 1.4, 0) : null;
         }
       }
 

@@ -20,6 +20,13 @@ export const PROLOGUE_PARAGRAPHS: string[] = [
 const CANVAS_W = 1024;
 const CANVAS_H = 4096;
 
+/** Camera framing the crawl geometry was built for. */
+export const CRAWL_CAMERA = {
+  position: [0, 0, 0] as [number, number, number],
+  target: [0, 1.5, -60] as [number, number, number],
+  fov: 52,
+};
+
 export class TitleCrawl {
   readonly root = new THREE.Group();
   private mesh: THREE.Mesh;
@@ -46,7 +53,7 @@ export class TitleCrawl {
 
     for (let i = 0; i < PROLOGUE_PARAGRAPHS.length; i++) {
       const isHeadline = i === 0 || i === PROLOGUE_PARAGRAPHS.length - 1;
-      const size = isHeadline ? 92 : 76;
+      const size = isHeadline ? 86 : 70;
       g.font = font(size, isHeadline ? 700 : 500);
       const lines = wrapText(g, PROLOGUE_PARAGRAPHS[i], wrapWidth);
       for (const line of lines) {
@@ -67,7 +74,7 @@ export class TitleCrawl {
       uniforms: {
         uMap: { value: this.texture },
         uOffset: { value: 0 },
-        uWindow: { value: 0.34 },
+        uWindow: { value: 0.52 },
         uOpacity: { value: 0 },
         uColor: { value: new THREE.Color(0xf3c46a) },
       },
@@ -86,14 +93,14 @@ export class TitleCrawl {
         uniform vec3 uColor;
         varying vec2 vUv;
         void main() {
-          vec2 uv = vec2(vUv.x, 1.0 - (vUv.y * uWindow + uOffset));
+          vec2 uv = vec2(vUv.x, vUv.y * uWindow + uOffset);
           if (uv.y < 0.0 || uv.y > 1.0) discard;
           vec4 tex = texture2D(uMap, uv);
           // Fade toward the vanishing point and just above the bottom edge.
-          float fade = smoothstep(1.0, 0.62, vUv.y) * smoothstep(0.0, 0.05, vUv.y);
+          float fade = smoothstep(0.92, 0.58, vUv.y) * smoothstep(0.0, 0.04, vUv.y);
           float a = tex.a * fade * uOpacity;
           if (a < 0.004) discard;
-          gl_FragColor = vec4(uColor * (0.55 + 0.45 * tex.r), a);
+          gl_FragColor = vec4(uColor * (0.72 + 0.42 * tex.r), a);
         }
       `,
       transparent: true,
@@ -103,10 +110,14 @@ export class TitleCrawl {
       toneMapped: false,
     });
 
-    const geo = new THREE.PlaneGeometry(62, 150, 1, 24);
+    // Geometry is tuned against CRAWL_CAMERA below: with the camera at the
+    // origin looking very slightly above the horizon, the plane's near edge
+    // lands just under the bottom of frame and its far edge compresses toward
+    // a vanishing point about ten degrees up.
+    const geo = new THREE.PlaneGeometry(64, 200, 1, 40);
     this.mesh = new THREE.Mesh(geo, this.material);
-    this.mesh.rotation.x = -Math.PI / 2 + 0.42;
-    this.mesh.position.set(0, -4, -18);
+    this.mesh.rotation.x = -Math.PI / 2 + 0.32;
+    this.mesh.position.set(0, 9.5, -140);
     this.mesh.renderOrder = 20;
     this.mesh.frustumCulled = false;
     this.root.add(this.mesh);
@@ -114,10 +125,13 @@ export class TitleCrawl {
   }
 
   /** `progress` 0..1 scrolls the whole prologue past the vanishing point. */
+  /**
+   * Slide the texture window down the canvas. The text band occupies roughly
+   * v 0.18..0.74, so the window starts just above it and ends just below.
+   */
   setProgress(progress: number): void {
     if (this.disposed) return;
-    const w = this.material.uniforms.uWindow.value as number;
-    this.material.uniforms.uOffset.value = -w + progress * (1 + w);
+    this.material.uniforms.uOffset.value = 0.78 - 0.78 * progress;
   }
 
   setOpacity(v: number): void {

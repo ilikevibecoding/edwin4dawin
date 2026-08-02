@@ -55,7 +55,6 @@ export function epilogueChapter(): Chapter<ShowContext> {
         id: 'closing-line',
         fire(ctx) {
           ctx.music.setCue('epilogue');
-          ctx.setCard(EPILOGUE_CARD);
         },
       },
       {
@@ -83,22 +82,25 @@ export function epilogueChapter(): Chapter<ShowContext> {
         }),
 
         // 2. Pull back to a wide: the fleet above, the spark below.
-        customShot({ id: 'epilogue.wide', start: S + 11, end: S + EPILOGUE_DURATION, fov: 38, handheld: 0.32, blend: 2.2 }, (k, t, out) => {
+        customShot({ id: 'epilogue.wide', start: S + 11, end: S + EPILOGUE_DURATION, fov: 38, handheld: 0.3, blend: 2.2 }, (k, t, out) => {
           const p = podAt(t);
           const d = destroyerPositionAt(t, new THREE.Vector3());
           const a = smootherstep(k);
-          const mid = new THREE.Vector3().lerpVectors(p, d, 0.55);
-          out.position.set(mid.x + lerp(-420, -980, a), mid.y + lerp(150, 300, a), mid.z + lerp(760, 1520, a));
-          out.target.copy(mid).add(new THREE.Vector3(0, lerp(-40, -120, a), 0));
-          out.fov = lerp(40, 44, a);
+          // Sit level with the fleet and look down the pod's fall so both the
+          // ships and the descending spark stay inside the frame.
+          const mid = new THREE.Vector3().lerpVectors(p, d, 0.62);
+          out.position.set(d.x + lerp(-900, -1750, a), d.y + lerp(120, 210, a), d.z + lerp(1500, 2450, a));
+          out.target.copy(mid);
+          out.fov = lerp(42, 46, a);
           out.focus = out.position.distanceTo(out.target);
         }),
       ];
     },
 
-    enter(ctx) {
+    enter(ctx, localTime) {
       const stage = ctx.stage;
       stage.setLocation('space');
+      ctx.setCard(localTime >= 15 ? EPILOGUE_CARD : null);
       stage.pod.root.visible = true;
       stage.pod.releaseClamps();
       stage.runner.root.visible = true;
@@ -157,6 +159,10 @@ export function epilogueChapter(): Chapter<ShowContext> {
         });
         stage.fx.flash({ origin: tmpA, size: 4 + reentry * 8, color: 0xffb070, life: 0.25 });
       }
+
+      // The closing line is continuous state, not a one-shot: it must appear
+      // identically whether the viewer played here or scrubbed here.
+      ctx.setCard(t >= 15 ? EPILOGUE_CARD : null);
 
       // Fade out at the very end so Explore mode opens on a calm frame.
       ctx.render.fade = ramp(t, EPILOGUE_DURATION - 2.5, EPILOGUE_DURATION - 0.2) * 0.55;

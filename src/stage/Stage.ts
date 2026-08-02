@@ -80,6 +80,7 @@ export class Stage {
   readonly rimLight: THREE.DirectionalLight;
   readonly spaceAmbient: THREE.AmbientLight;
   readonly interiorAmbient: THREE.HemisphereLight;
+  readonly interiorFill: THREE.AmbientLight;
   readonly sunDirection = new THREE.Vector3(0.62, 0.26, -0.74).normalize();
 
   private tier: QualityTier;
@@ -122,27 +123,33 @@ export class Stage {
     this.spaceRoot.add(this.pod.root);
 
     // ---- Lighting ---------------------------------------------------------
-    this.sunLight = new THREE.DirectionalLight(0xfff2df, 3.4);
+    this.sunLight = new THREE.DirectionalLight(0xfff2df, 2.15);
     this.sunLight.position.copy(this.sunDirection).multiplyScalar(4000);
     this.sunLight.castShadow = false;
     this.scene.add(this.sunLight);
     this.scene.add(this.sunLight.target);
 
-    // Bounce from the planet: warm, from below.
-    this.fillLight = new THREE.DirectionalLight(0xffb877, 0.85);
+    // Bounce from the planet: warm but desaturated, from below. A saturated
+    // bounce turns the destroyer's belly copper, which reads as rust.
+    this.fillLight = new THREE.DirectionalLight(0xe4cbb0, 0.5);
     this.fillLight.position.set(-0.2, -1, 0.2);
     this.scene.add(this.fillLight);
 
-    this.rimLight = new THREE.DirectionalLight(0x8fb6ff, 1.15);
+    this.rimLight = new THREE.DirectionalLight(0x9fc0ff, 1.5);
     this.rimLight.position.set(-0.7, 0.35, 0.62);
     this.scene.add(this.rimLight);
 
-    this.spaceAmbient = new THREE.AmbientLight(0x2a3550, 0.85);
+    this.spaceAmbient = new THREE.AmbientLight(0x2e3a52, 0.6);
     this.scene.add(this.spaceAmbient);
 
-    this.interiorAmbient = new THREE.HemisphereLight(0xdfe6f2, 0x3b3f45, 0.9);
+    // Interiors are lit far more generously than space: the brief is a bright
+    // white Rebel corridor, and nothing important may hide in shadow.
+    this.interiorAmbient = new THREE.HemisphereLight(0xe6ecf6, 0x5a616a, 1.9);
     this.interiorAmbient.visible = false;
     this.scene.add(this.interiorAmbient);
+    this.interiorFill = new THREE.AmbientLight(0xbcc9dc, 0.7);
+    this.interiorFill.visible = false;
+    this.scene.add(this.interiorFill);
 
     // ---- Interior ---------------------------------------------------------
     step('Building a corridor', 0.68);
@@ -281,6 +288,7 @@ export class Stage {
     this.rimLight.visible = space;
     this.spaceAmbient.visible = space;
     this.interiorAmbient.visible = !space;
+    this.interiorFill.visible = !space;
     this.scene.background = space ? new THREE.Color(0x02030a) : new THREE.Color(0x05070a);
   }
 

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Chapter } from '../Timeline';
 import type { ShowContext } from '../context';
 import { customShot } from '../../camera/CameraDirector';
+import { CRAWL_CAMERA } from '../../stage/TitleCrawl';
 import { clamp01, ramp, smootherstep } from '../../core/math';
 
 export const PROLOGUE_START = 0;
@@ -54,13 +55,14 @@ export function prologueChapter(): Chapter<ShowContext> {
     shots(ctx) {
       void ctx;
       return [
-        customShot({ id: 'prologue.crawl', start: 0, end: PROLOGUE_DURATION, fov: 52, handheld: 0.12 }, (k, _t, out) => {
-          // A slow, almost imperceptible rise so the text drifts rather than sits.
-          const rise = smootherstep(k) * 5.5;
-          out.position.set(0, -6.5 + rise, 26);
-          out.target.set(0, 6 + rise * 1.6, -34);
-          out.fov = 52;
-          out.focus = 40;
+        customShot({ id: 'prologue.crawl', start: 0, end: PROLOGUE_DURATION, fov: CRAWL_CAMERA.fov, handheld: 0.1 }, (k, _t, out) => {
+          // Almost locked off: a sub-degree drift keeps the frame alive without
+          // breaking the framing the crawl geometry was authored against.
+          const drift = smootherstep(k);
+          out.position.set(CRAWL_CAMERA.position[0], CRAWL_CAMERA.position[1] + drift * 1.2, CRAWL_CAMERA.position[2]);
+          out.target.set(CRAWL_CAMERA.target[0], CRAWL_CAMERA.target[1] + drift * 2.4, CRAWL_CAMERA.target[2]);
+          out.fov = CRAWL_CAMERA.fov;
+          out.focus = 140;
         }),
       ];
     },

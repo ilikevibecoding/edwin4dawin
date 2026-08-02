@@ -36,7 +36,7 @@ const has = (name) => args.includes(`--${name}`);
 const BASE = flag('url', has('preview') ? 'http://127.0.0.1:4173' : 'http://127.0.0.1:5173');
 const [W, H] = (flag('size', '1600x900')).split('x').map(Number);
 const only = flag('only') ? new Set(flag('only').split(',')) : null;
-const outDir = resolve(flag('out', join(repo, 'qa-output', 'tour')));
+const outDir = resolve(flag('out', join(repo, 'qa-output', has('clean') ? 'clean' : 'tour')));
 
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
@@ -83,10 +83,16 @@ try {
       /enter the galaxy/i.test(b.textContent || ''),
     );
     btn?.click();
-    await new Promise((r) => setTimeout(r, 900));
+    await new Promise((r) => setTimeout(r, 1400));
     window.__SW.setPlaying(false);
     window.__SW.setDebug(false);
+    // Pin the tier: the startup benchmark would otherwise drop to Low on a
+    // software rasteriser and change what the screenshots show.
+    window.__SW.setQuality('medium');
+    await new Promise((r) => setTimeout(r, 900));
+    document.getElementById('toast').classList.remove('visible');
   });
+  if (has('clean')) await page.evaluate(() => window.__SW.hideUi(true));
 
   const checkpoints = await page.evaluate(() => window.__SW.checkpoints);
   console.log(`> ${checkpoints.length} checkpoints`);
