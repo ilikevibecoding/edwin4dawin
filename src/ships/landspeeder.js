@@ -58,15 +58,27 @@ function chassis(bb) {
     });
   });
 
-  // ---- bow: chamfered nose over the intakes -----------------------------
-  zWedge(bb, 0, halfW(6.0) * 2, [
-    [4.6, DECK_Y], [NOSE_Z - 0.4, DECK_Y - P(3)], [NOSE_Z - 0.4, DECK_Y - P(4)], [4.6, DECK_Y - P(4)],
-  ], { color: GRAY });
+  // ---- prow: a raised block the three intakes are set into ---------------
+  bb.brick(0, DECK_Y - P(4), 5.9, 7.8, 4.4, { h: P(5), color: GRAY, studs: false, free: true });
+  // roof of the prow slopes down to the intake lips
+  zWedge(bb, 0, 7.8, [
+    [3.7, DECK_Y + P(1)], [NOSE_Z - 0.5, DECK_Y - P(1)],
+    [NOSE_Z - 0.5, DECK_Y - P(2)], [3.7, DECK_Y - P(2)],
+  ], { color: TAN });
+  // keel of the prow rises toward the nose
+  zWedge(bb, 0, 7.8, [
+    [3.7, DECK_Y - P(4)], [NOSE_Z - 0.5, DECK_Y - P(3)],
+    [NOSE_Z - 0.5, DECK_Y - P(4)],
+  ], { color: DARK });
   sym(bb, (b, s) => {
-    // fender tips sweeping forward past the nose
+    // corners chamfered off the prow so it is not a plain slab
     b.prism([
-      [s * 3.9, 3.0], [s * 3.9, 6.2], [s * 2.5, 7.4], [s * 2.5, 3.0],
-    ], P(2), { rx: Math.PI / 2, y: DECK_Y - P(2) + P(1), color: GRAY });
+      [s * 3.9, 3.6], [s * 3.9, 6.4], [s * 2.9, NOSE_Z - 0.5], [s * 2.9, 3.6],
+    ], P(4), { rx: Math.PI / 2, y: DECK_Y - P(2), color: GRAY });
+    // fender shoulder running back from the prow to the tail
+    b.brick(s * 3.55, DECK_Y - P(4), -1.4, 0.8, 8.0, {
+      h: P(2), color: DARK, studs: false, free: true,
+    });
   });
 
   // ---- stern deck -------------------------------------------------------
@@ -88,27 +100,26 @@ function chassis(bb) {
   bb.node('exhaust', 0, DECK_Y - P(1), TAIL_Z - 0.6);
 }
 
-/** The three turbine intakes -- the X-34's signature. */
+/**
+ * The three turbine intakes -- the X-34's signature. Set into the prow face so
+ * only the lip stands proud; three loose barrels on the front read as plumbing.
+ */
 function turbines(bb) {
-  const mk = (x, z, r, name) => {
-    bb.cyl(x, DECK_Y - P(2), z - 0.9, r, 2.6, { axis: 'z', color: GRAY, seg: 12, stud: false });
-    bb.cyl(x, DECK_Y - P(2), z + 0.45, r + 0.16, 0.55, { axis: 'z', color: DARK, seg: 12, stud: false });
-    bb.cyl(x, DECK_Y - P(2), z + 0.7, r * 0.82, 0.4, { axis: 'z', color: C.black, seg: 12, stud: false });
-    // compressor face set back inside the lip
-    bb.cyl(x, DECK_Y - P(2), z + 0.15, r * 0.7, 0.3, { axis: 'z', color: IRON, seg: 10, stud: false });
-    bb.cyl(x, DECK_Y - P(2), z + 0.3, 0.28, 0.5, { axis: 'z', color: C.flatSilver, finish: FINISH.SOLID, seg: 8, stud: false });
-    bb.node(name, x, DECK_Y - P(2), z + 1.1);
+  const face = NOSE_Z - 0.45;
+  const mk = (x, r, name) => {
+    bb.cyl(x, DECK_Y - P(2), face + 0.2, r + 0.2, 0.5, {
+      axis: 'z', color: DARK, seg: 12, stud: false,
+    });                                                   // lip ring
+    bb.cyl(x, DECK_Y - P(2), face - 0.5, r, 1.6, { axis: 'z', color: C.black, seg: 12, stud: false });
+    bb.cyl(x, DECK_Y - P(2), face - 0.9, r * 0.8, 0.4, { axis: 'z', color: IRON, seg: 10, stud: false });
+    bb.cyl(x, DECK_Y - P(2), face - 0.75, 0.26, 0.5, {
+      axis: 'z', color: C.flatSilver, finish: FINISH.SOLID, seg: 8, stud: false,
+    });                                                   // spinner
+    bb.node(name, x, DECK_Y - P(2), face + 0.8);
   };
-  mk(0, NOSE_Z - 0.6, 1.55, 'intakeC');
-  mk(-TURBINE_X, 6.5, 1.3, 'intakeL');
-  mk(TURBINE_X, 6.5, 1.3, 'intakeR');
-  // nacelle fairings behind the outboard intakes
-  sym(bb, (b, s) => {
-    b.brick(s * TURBINE_X, DECK_Y - P(4), 3.6, 2.5, 3.2, {
-      h: P(4), color: GRAY, studs: false, free: true,
-    });
-    b.slope(s * TURBINE_X, DECK_Y, 3.4, 2.5, 2.8, { h: P(2), color: DARK, rot: -Math.PI / 2 });
-  });
+  mk(0, 1.2, 'intakeC');
+  mk(-TURBINE_X, 1.05, 'intakeL');
+  mk(TURBINE_X, 1.05, 'intakeR');
 }
 
 /** Open tub with two seats, dash and windscreen. */
@@ -124,42 +135,44 @@ function cockpit(bb) {
   });
   bb.brick(0, DECK_Y - P(2), cz - 3.6, 7.2, 0.8, { h: P(4), color: GRAY, studs: false, free: true });
 
-  // ---- two seats --------------------------------------------------------
+  // ---- two seats: dark frames, tan cushions -----------------------------
   sym(bb, (b, s) => {
     const sx = s * 1.6;
-    b.brick(sx, DECK_Y - P(1), cz - 0.4, 2.4, 2.4, { h: P(2), color: TAN, studs: false, free: true });
-    b.brick(sx, DECK_Y - P(1), cz - 1.8, 2.4, 0.7, { h: P(6), color: TAN, studs: false, free: true });
-    b.brick(sx, DECK_Y + P(5), cz - 1.8, 1.8, 0.6, {
-      h: P(2), color: DARK, studs: false, tile: true, free: true,
+    b.brick(sx, DECK_Y - P(1), cz - 0.4, 2.4, 2.4, { h: P(1), color: IRON, studs: false, free: true });
+    b.brick(sx, DECK_Y, cz - 0.4, 2.1, 2.1, {
+      h: P(1), color: TAN, studs: false, tile: true, free: true,
     });
+    b.brick(sx, DECK_Y - P(1), cz - 1.8, 2.4, 0.6, { h: P(5), color: IRON, studs: false, free: true });
+    b.brick(sx, DECK_Y, cz - 1.9, 2.0, 0.3, { h: P(3), color: TAN, studs: false, free: true });
     b.node(s > 0 ? 'seatR' : 'seatL', sx, DECK_Y + P(1), cz - 0.3);
   });
 
-  // ---- dash, steering yoke and windscreen -------------------------------
-  bb.brick(0, DECK_Y - P(1), cz + 2.5, 6.0, 1.3, { h: P(4), color: DARK, studs: false, free: true });
+  // ---- dash, steering yoke ----------------------------------------------
+  bb.brick(0, DECK_Y - P(1), cz + 2.5, 6.0, 1.2, { h: P(3), color: DARK, studs: false, free: true });
   sym(bb, (b, s) => {
-    litTile(b, s * 1.7, DECK_Y + P(3) - 0.05, cz + 2.5, 1.6, 0.9, { color: C.transLightBlue, h: P(1) });
+    litTile(b, s * 1.6, DECK_Y + P(2) - 0.04, cz + 2.5, 1.5, 0.8, { color: C.transLightBlue, h: P(1) });
   });
-  bb.cyl(-1.6, DECK_Y + P(3), cz + 2.0, 0.7, P(1), { color: IRON, seg: 10, stud: false });
-  bb.cyl(-1.6, DECK_Y + P(3) - 0.5, cz + 2.0, 0.16, 0.6, { color: IRON, seg: 6, stud: false });
+  bb.cyl(-1.6, DECK_Y + P(2), cz + 1.95, 0.62, P(1), { color: IRON, seg: 10, stud: false });
+  bb.cyl(-1.6, DECK_Y + P(2) - 0.4, cz + 1.95, 0.15, 0.45, { color: IRON, seg: 6, stud: false });
 
-  // wraparound screen: a low trans band, opaque frame
-  bb.brick(0, DECK_Y + P(3), cz + 3.15, 6.2, 0.34, {
-    h: 1.15, color: C.transLightBlue, finish: FINISH.TRANS, studs: false, free: true,
+  // ---- low wraparound screen --------------------------------------------
+  // Kept short: the X-34's screen is a lip you look over, not a windshield.
+  bb.brick(0, DECK_Y + P(2), cz + 3.1, 5.6, 0.3, {
+    h: 0.75, color: C.transLightBlue, finish: FINISH.TRANS, studs: false, free: true,
   });
-  sym(bb, (b, s) => {
-    b.brick(s * 3.1, DECK_Y + P(3), cz + 3.15, 0.44, 0.44, {
-      h: 1.25, color: GRAY, studs: false, free: true,
-    });
-    // screen shoulders angling back to the coaming
-    b.prism([
-      [s * 3.1, cz + 3.15], [s * 3.55, cz + 3.15], [s * 3.55, cz + 1.6],
-    ], 1.1, { rx: Math.PI / 2, y: DECK_Y + P(3) + 0.55, color: GRAY });
-  });
-  bb.brick(0, DECK_Y + P(3) + 1.15, cz + 3.15, 6.2, 0.5, {
+  bb.brick(0, DECK_Y + P(2) + 0.75, cz + 3.1, 5.8, 0.42, {
     h: P(1), color: DARK, studs: false, tile: true, free: true,
   });
-  bb.node('cockpit', 0, DECK_Y + P(3), cz - 0.3);
+  sym(bb, (b, s) => {
+    // screen shoulders angling back to the coaming
+    b.prism([
+      [s * 2.8, cz + 3.1], [s * 3.5, cz + 3.1], [s * 3.5, cz + 1.5],
+    ], 0.75, { rx: Math.PI / 2, y: DECK_Y + P(2) + 0.375, color: C.transLightBlue, finish: FINISH.TRANS });
+    b.brick(s * 3.15, DECK_Y + P(2), cz + 3.1, 1.3, 0.42, {
+      h: 0.9, color: GRAY, studs: false, free: true, rot: 0,
+    });
+  });
+  bb.node('cockpit', 0, DECK_Y + P(2), cz - 0.3);
 }
 
 /** Weathering stripes and the odd panel, so it is not a bare grey shell. */

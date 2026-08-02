@@ -11,6 +11,14 @@ import { RNG } from '../engine/rng.js';
  * Stepped-plate dune country under a hard double sun, then dusk.
  */
 
+
+/** The twin-suns asset is a wide sky backdrop card; keep it facing the camera. */
+function faceCamera(card, camera) {
+  const d = new THREE.Vector3();
+  camera.getWorldDirection(d);
+  card.rotation.y = Math.atan2(-d.x, -d.z);
+}
+
 export default {
   id: 'dunes',
   dur: 24,
@@ -28,7 +36,7 @@ export default {
     root.add(dunes);
 
     const suns = await tryMake('twinsuns', {}, { size: [30, 30, 1], color: C.brightLightYellow });
-    suns.position.set(-40, 0, -380);
+    suns.position.set(0, 0, 0);
     suns.userData.setHeight?.(0.62);
     root.add(suns);
 
@@ -80,6 +88,7 @@ export default {
       shots,
       grade: { uVignette: 0.34, uGrain: 0.03, uSaturation: 1.12 },
       update(t, dt) {
+        faceCamera(suns, ctx.camera);
         const u = clamp(t / (DUSK + 3), 0, 1);
         const p = walkFrom.clone().lerp(walkTo, ease.inOutQuad(u));
 

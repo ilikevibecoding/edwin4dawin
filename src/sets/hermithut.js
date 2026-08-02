@@ -1,0 +1,204 @@
+import * as THREE from 'three';
+import { BrickBuilder, PLATE, BRICK, P, B } from '../lego/brick.js';
+import { C, FINISH } from '../lego/palette.js';
+import { RNG } from '../engine/rng.js';
+import { num, bool, hash2i, practical } from './common.js';
+
+/*
+ * Ben Kenobi's hut: a small stone-brick dome in dark tan and light bluish
+ * gray, built as a filming set rather than a real building -- the +Z wall is
+ * missing and the dome over it is cut away, so a camera outside can shoot the
+ * whole interior. From behind (-Z) it still reads as a closed hut.
+ *
+ * Interior floor at y = 0, roughly 20 x 18 studs of room.
+ */
+
+const RX = 11;   // interior half-width
+const RZ = 9.5;  // interior half-depth
+const WALL = 2;  // stone thickness
+
+/** One course of stone: staggered blocks with a random cool/warm mix. */
+function course(bb, y, h, seed, cut) {
+  const step = 2.6;
+  const outerX = RX + WALL, outerZ = RZ + WALL;
+  const place = (x, z, w, d, k) => {
+    const t = hash2i(k, Math.round(y * 10), seed);
+    const color = t < 0.42 ? C.darkTan : (t < 0.72 ? C.lightBluishGray : (t < 0.9 ? C.darkBluishGray : C.tan));
+    bb.brick(x, y, z, w, d, { h, color, free: true, studs: false });
+  };
+  const jitter = (y / BRICK) % 2 < 1 ? 0 : step / 2;
+
+  // Back wall (-Z) full width; side walls up to the open front.
+  let k = 0;
+  for (let x = -outerX + step / 2 + jitter * 0.5; x <= outerX; x += step) {
+    place(Math.min(x, outerX - step / 2), -outerZ + WALL / 2, step - 0.12, WALL, k++);
+  }
+  for (const sx of [-1, 1]) {
+    for (let z = -outerZ + WALL + step / 2 + jitter; z <= (cut ?? outerZ); z += step) {
+      if (z > outerZ - step / 2) break;
+      place(sx * (outerX - WALL / 2), z, WALL, step - 0.12, k++);
+    }
+  }
+}
+
+export function buildHermitHut(opts = {}) {
+  const seed = Math.round(num(opts, 'seed', 1919));
+  const rng = new RNG(seed);
+  const wallH = num(opts, 'wallHeight', 9.6);
+  const open = bool(opts, 'open', true);   // fourth wall removed for filming
+  const frontZ = RZ + WALL;
+
+  const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false });
+
+  // ------------------------------------------------------------- floor
+  const cell = 2.5;
+  const nx = Math.ceil((RX + WALL) * 2 / cell), nz = Math.ceil((RZ + WALL) * 2 / cell);
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) {
+      const x = -(RX + WALL) + (i + 0.5) * cell;
+      const z = -(RZ + WALL) + (j + 0.5) * cell;
+      const t = hash2i(i, j, seed + 3);
+      bb.brick(x, -PLATE, z, cell - 0.1, cell - 0.1, {
+        h: PLATE, color: t < 0.42 ? C.darkTan : (t < 0.86 ? C.tan : C.lightBluishGray),
+        free: true, studs: false,
+      });
+    }
+  }
+  // Sand apron so the hut is not floating on a hard edge.
+  for (let k = 0; k < 3; k++) {
+    bb.brick(0, -PLATE - (k + 1) * P(1), 0, (RX + WALL) * 2 + 6 + k * 7, (RZ + WALL) * 2 + 6 + k * 7, {
+      h: P(1), color: k % 2 ? C.tan : C.darkTan, free: true, studs: false,
+    });
+  }
+
+  // ------------------------------------------------------------- walls
+  const courses = Math.round(wallH / BRICK);
+  for (let c = 0; c < courses; c++) {
+    // Leave the front two thirds of the side walls out of the top courses so
+    // the room stays open to a camera sitting at +Z and slightly above.
+    const cut = open ? (c > courses - 4 ? RZ * 0.15 : null) : null;
+    course(bb, c * BRICK, BRICK, seed + 11, cut);
+  }
+  if (!open) {
+    for (let c = 0; c < courses; c++) {
+      bb.brick(0, c * BRICK, frontZ - WALL / 2, (RX + WALL) * 2, WALL, {
+        h: BRICK, color: c % 2 ? C.darkTan : C.lightBluishGray, free: true, studs: false,
+      });
+    }
+  }
+
+  // Low doorway in the back-left, with a heavy lintel: even with the fourth
+  // wall gone the hut needs a door to read as a dwelling.
+  const doorX = -RX * 0.42;
+  bb.brick(doorX, 0, -RZ - WALL / 2, 5.2, WALL + 0.4, { h: B(4.6), color: C.black, free: true, studs: false });
+  bb.brick(doorX, B(4.6), -RZ - WALL / 2, 6.6, WALL + 0.8, { h: B(0.9), color: C.darkBluishGray, free: true, studs: false });
+  for (const s of [-1, 1]) {
+    bb.brick(doorX + s * 3.1, 0, -RZ - WALL / 2, 1.2, WALL + 0.8, {
+      h: B(4.6), color: C.darkBluishGray, free: true, studs: false,
+    });
+  }
+
+  // Window slit in the +X wall, glowing with hot outside light.
+  const winY = B(3.4);
+  bb.brick(RX + WALL / 2, winY, 2.5, WALL + 0.5, 5.2, { h: B(1.8), color: C.black, free: true, studs: false });
+  // Just a pale plate, not a GLOW part: an emissive slit this size blows out
+  // under bloom and eats the whole right-hand side of the frame.
+  bb.brick(RX + WALL / 2 - 0.3, winY + P(1), 2.5, 0.4, 4.4, {
+    h: B(1.8) - P(2), color: C.veryLightGray, free: true, studs: false,
+  });
+  for (let k = 0; k < 3; k++) {
+    bb.bar(RX + WALL / 2 - 0.4, winY + B(0.9), 1.0 + k * 1.5, 0.13, B(1.8) - P(2), { color: C.darkBluishGray });
+  }
+  bb.brick(RX + WALL / 2, winY + B(1.8), 2.5, WALL + 0.9, 6.4, {
+    h: P(2), color: C.darkTan, free: true, studs: false,
+  });
+
+  // -------------------------------------------------------------- dome
+  // Stepped rings of stone. The front arc is dropped when `open` so the
+  // camera can see in over the wall.
+  const rings = 7;
+  const domeH = num(opts, 'domeHeight', 9);
+  const rise = domeH / rings;
+  for (let i = 0; i < rings; i++) {
+    const t = (i + 0.5) / rings;
+    const k = Math.cos(t * Math.PI / 2);
+    const rx = (RX + WALL) * k, rz = (RZ + WALL) * k;
+    const y = wallH + Math.sin(t * Math.PI / 2) * domeH - rise * 1.4;
+    const seg = Math.max(10, Math.round(30 * k));
+    for (let s = 0; s < seg; s++) {
+      const a = (s / seg) * Math.PI * 2 + (i % 2) * 0.1;
+      const cz = Math.sin(a);
+      if (open && cz > 0.12 && i > 0) continue;      // cut away the near half
+      const px = Math.cos(a) * rx, pz = cz * rz;
+      const wdt = (2 * Math.PI * Math.max(rx, rz) / seg) * 1.2;
+      const tt = hash2i(s, i, seed + 71);
+      // Courses are twice their own rise so consecutive rings overlap; leave
+      // a gap and the dome reads as a stack of hoops with daylight between.
+      bb.brick(px, y, pz, 2.6, wdt, {
+        h: rise * 2.2, rot: -Math.atan2(cz * rz, Math.cos(a) * rx),
+        color: tt < 0.45 ? C.darkTan : (tt < 0.78 ? C.lightBluishGray : C.darkBluishGray),
+        free: true, studs: false,
+      });
+    }
+  }
+  if (!open) {
+    bb.sphere(0, wallH + domeH - P(2), 0, 3.4, {
+      color: C.darkTan, dome: true, seg: 14, rings: 5, sy: 0.7,
+    });
+  } else {
+    // Back half of the crown only, so the silhouette still closes from -Z.
+    for (let s = 0; s < 8; s++) {
+      const a = Math.PI + (s / 7) * Math.PI * 0.9 - Math.PI * 0.45;
+      bb.brick(Math.cos(a) * 2.6, wallH + domeH - P(2), Math.sin(a) * 2.2, 2.2, 2.4, {
+        h: P(3), color: s % 2 ? C.darkTan : C.lightBluishGray, rot: -a, free: true, studs: false,
+      });
+    }
+  }
+
+  // ---------------------------------------------------------- interior
+  // Chest: reddish brown with a hinged dark lid, standing against -Z.
+  const chestX = RX * 0.45, chestZ = -RZ + 3.2;
+  bb.brick(chestX, 0, chestZ, 6, 3.6, { h: B(2), color: C.reddishBrown, free: true, studs: false });
+  bb.brick(chestX, B(2), chestZ, 6.4, 4, { h: P(2), color: C.darkBrown, free: true, studs: false });
+  for (const s of [-1, 1]) {
+    bb.brick(chestX + s * 2.4, 0, chestZ, 0.5, 4, { h: B(2), color: C.pearlGold, finish: FINISH.METAL, free: true, studs: false });
+  }
+  bb.brick(chestX, B(1.1), chestZ + 1.9, 1.4, 0.4, { h: P(2), color: C.pearlGold, finish: FINISH.METAL, free: true, studs: false });
+
+  // Low table with a lamp, a mat, and a shelf of odds and ends.
+  bb.brick(-RX * 0.35, 0, 1.5, 7, 5, { h: P(1), color: C.darkTan, free: true, studs: false });
+  bb.brick(-RX * 0.35, P(1), 1.5, 5, 3.4, { h: B(1.4), color: C.reddishBrown, free: true, studs: false });
+  bb.brick(-RX * 0.35, P(1) + B(1.4), 1.5, 6, 4.2, { h: P(1), color: C.darkTan, free: true, studs: false });
+  bb.cyl(-RX * 0.35 + 1.8, P(1) + B(1.4) + P(1), 1.5, 0.55, B(1), { color: C.darkBluishGray, seg: 10, stud: false });
+  bb.sphere(-RX * 0.35 + 1.8, P(1) + B(1.4) + P(1) + B(1), 1.5, 0.75, {
+    color: C.transNeonOrange, finish: FINISH.GLOW, seg: 10, rings: 6,
+  });
+
+  bb.brick(-RX - WALL / 2 + WALL, B(3), -3, 0.9, 8, { h: P(2), color: C.darkTan, free: true, studs: false });
+  for (let k = 0; k < 4; k++) {
+    const z = -6 + k * 2.2;
+    bb.cyl(-RX + 1.2, B(3) + P(2), z, 0.42, B(rng.range(0.8, 1.6)), {
+      color: k % 2 ? C.darkBluishGray : C.reddishBrown, seg: 8, stud: false,
+    });
+  }
+  // Sleeping mat.
+  bb.brick(RX * 0.4, 0, 4.5, 4.4, 8, { h: P(1), color: C.darkTan, free: true, studs: false });
+  bb.brick(RX * 0.4, P(1), 1.4, 3.2, 1.8, { h: P(2), color: C.tan, free: true, studs: false });
+
+  const g = bb.build();
+  g.name = 'hermithut';
+  g.userData.nodes = bb.nodes;
+
+  const inside = new THREE.Object3D();
+  inside.position.set(0, 3, 0);
+  g.add(inside);
+  g.userData.nodes.interior = inside;
+
+  if (bool(opts, 'lights', true)) {
+    // Warm lamp inside, a hot shaft through the window slit.
+    practical(g, -RX * 0.35 + 1.8, 5.4, 1.5, 0xffb464, 90, 34);
+    practical(g, RX - 1, winY + 1.6, 2.5, 0xffe6c0, 70, 26);
+    practical(g, 0, wallH + 2, frontZ + 4, 0xcfe0ff, 60, 40);
+  }
+  return g;
+}

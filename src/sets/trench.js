@@ -108,8 +108,16 @@ export function trenchSegment(bb, {
         const z = z0m + (k + 0.5) * (len / guns) + hash2i(index, k, s + 77) * 6 - 3;
         const y = depth * (0.45 + hash2i(index, k, s + 88) * 0.3);
         bb.brick(x - side * 1.6, y - 1.6, z, 3.2, 5.2, { h: 3.2, color: C.darkBluishGray, free: true, studs: false });
-        bb.brick(x - side * 3.0, y - 1.0, z, 1.2, 3.4, { h: 2.0, color: C.transRed, finish: FINISH.GLOW, free: true, studs: false });
-        bb.cyl(x - side * 3.6, y, z, 0.32, 2.6, {
+        bb.brick(x - side * 2.9, y - 1.3, z, 1.0, 4.0, { h: 2.6, color: C.darkGray, free: true, studs: false });
+        // Small round lens rather than a slab: a big flat GLOW rectangle just
+        // reads as a red sticker once bloom gets hold of it.
+        bb.cyl(x - side * 3.5, y, z - 1.0, 0.42, 0.3, {
+          color: C.transRed, finish: FINISH.GLOW, axis: 'x', seg: 8, stud: false,
+        });
+        bb.cyl(x - side * 3.5, y, z + 1.0, 0.42, 0.3, {
+          color: C.transRed, finish: FINISH.GLOW, axis: 'x', seg: 8, stud: false,
+        });
+        bb.cyl(x - side * 3.9, y, z, 0.32, 2.6, {
           color: C.darkGray, axis: 'x', seg: 8, finish: FINISH.METAL, stud: false,
         });
       }
@@ -131,8 +139,10 @@ export function trenchSegment(bb, {
         });
       }
       // Hanging strut lamps.
-      bb.brick(-6, y - P(1), z, 1.4, 1.4, { h: P(1), color: C.transNeonOrange, finish: FINISH.GLOW, free: true, studs: false });
-      bb.brick(6, y - P(1), z, 1.4, 1.4, { h: P(1), color: C.transNeonOrange, finish: FINISH.GLOW, free: true, studs: false });
+      for (const lx of [-6, 6]) {
+        bb.brick(lx, y - P(2), z, 1.6, 1.6, { h: P(2), color: C.darkGray, free: true, studs: false });
+        bb.cyl(lx, y - P(2.2), z, 0.45, P(0.6), { color: C.transNeonOrange, finish: FINISH.GLOW, seg: 8, stud: false });
+      }
     }
   }
   return bb;
@@ -171,7 +181,7 @@ function exhaustPort(bb, x, z, r = 3.2) {
 // -------------------------------------------------------------- factories
 
 export function buildTrenchSegment(opts = {}) {
-  const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false });
+  const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false, castShadow: false, receiveShadow: false });
   trenchSegment(bb, {
     index: Math.round(num(opts, 'index', 0)),
     width: num(opts, 'width', WIDTH),
@@ -194,7 +204,9 @@ export function buildTrench(opts = {}) {
   const n = Math.max(1, Math.round(length / segLen));
   const total = n * segLen;
 
-  const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false });
+  // 600 studs is far outside any shadow camera the rigs set up, so a shadow
+  // pass here buys nothing and costs a second draw of every triangle.
+  const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false, castShadow: false, receiveShadow: false });
 
   // Segments run from +Z (near, behind camera) to -Z (far).
   for (let k = 0; k < n; k++) {
@@ -221,11 +233,21 @@ export function buildTrench(opts = {}) {
   g.userData.segmentLength = segLen;
 
   if (bool(opts, 'lights', true)) {
-    // Two cool bounce lights well down the trench: the dark rig alone leaves
-    // the walls almost black, and a flying camera needs something to read.
-    practical(g, 0, depth * 0.55, total * 0.28, 0x9fc4ff, 260, 150);
-    practical(g, 0, depth * 0.55, -total * 0.12, 0x9fc4ff, 240, 150);
-    practical(g, 0, 6, portZ + 10, 0xff6a4a, 120, 70);
+    // The set carries its own sun. Point lights are useless over 600 studs and
+    // the `dark` rig leaves a canyon this deep essentially black, so a raking
+    // directional lights one wall and leaves the other in shadow -- which is
+    // the shot. Turn it off with lights=0 if a scene brings its own.
+    const sun = new THREE.DirectionalLight(new THREE.Color(0xdbe6ff).convertSRGBToLinear(), 1.35);
+    sun.position.set(-70, 90, 40);
+    sun.target.position.set(0, 0, 0);
+    sun.castShadow = false;
+    g.add(sun, sun.target);
+    g.add(new THREE.HemisphereLight(
+      new THREE.Color(0x7f93bb).convertSRGBToLinear(),
+      new THREE.Color(0x141a26).convertSRGBToLinear(), 0.55,
+    ));
+    // A red wash coming up out of the port so the far end has a focus.
+    practical(g, 0, 4, portZ, 0xff5530, 90, 46);
   }
   return g;
 }

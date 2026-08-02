@@ -9,3 +9,4 @@ public/audio/vo/*.wav
 public/audio/sfx/*.wav
 public/audio/music/*.wav
 public/audio/master.wav
+tools/.cache/

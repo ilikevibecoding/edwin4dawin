@@ -6,7 +6,7 @@ import {
 } from './prints.js';
 import { trooperHelmet } from './headgear.js';
 import { e11Blaster } from './weapons.js';
-import { figGroup, setHeldPitch, num } from './util.js';
+import { figGroup, setHeldPitch, num, groundFeet, softenGloss } from './util.js';
 
 /*
  * Stormtroopers come in crowds, so the helmet and the E-11 are each built once
@@ -50,14 +50,15 @@ export function stormtrooperFig() {
 /**
  * Imperial stormtrooper: white plastoid armour, brick-built helmet, E-11.
  *
- * @param {{ pose?: string, blaster?: boolean }} [opts]
+ * @param {{ pose?: string, pitch?: number }} [opts]
  */
 export function buildStormtrooper(opts = {}) {
   const fig = stormtrooperFig();
-  fig.setPose(opts.pose || 'hold_two');
+  fig.setPose(opts.pose || 'hold_right');
   const blaster = sharedE11();
   fig.attach('R', blaster);
-  setHeldPitch(fig, 'R', blaster, -1.28);
+  // barrel just under horizontal, so the rifle reads in silhouette from the front
+  setHeldPitch(fig, 'R', blaster, num(opts.pitch, -1.5));
   return figGroup(fig, { name: 'stormtrooper', userData: { blaster } });
 }
 
@@ -89,9 +90,10 @@ export function buildCrowdTroopers(opts = {}) {
     fig.attach('R', blaster);
     setHeldPitch(fig, 'R', blaster, -0.55);   // rifle shouldered, barrel up
     fig.setPosition((col - (cols - 1) / 2) * dx, 0, -(row - (rows - 1) / 2) * dz);
-    group.add(fig.object3D);
+    group.add(groundFeet(fig.object3D));
     figs.push(fig);
   }
+  softenGloss(group);
 
   const marchAt = (t) => {
     for (const fig of figs) {

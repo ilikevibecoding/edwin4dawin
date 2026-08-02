@@ -192,31 +192,65 @@ function roof(bb) {
   bb.node('roofHatch', 0, ROOF_Y + 2.0, tz + 12.0);
 }
 
-/** Raised surround round the bow hatch, stepped to follow the rake. */
+/**
+ * The bow hatch. The hull courses staircase back from the rake line, so a flat
+ * ramp resting on them would float clear of every tread. The jambs and lintel
+ * here are raked parallelograms that stand out to the true rake line and bridge
+ * the steps, giving the stowed ramp one flat plane to close against.
+ */
 function bowFace(bb) {
-  const yTop = HINGE_Y + 15.0;
-  const step = 1.5;
-  for (let y = HINGE_Y; y < yTop; y += step) {
-    const z = bowAt(y + step) + 0.6;
-    sym(bb, (b, s) => {
-      b.brick(s * (RAMP_W / 2 + 1.0), y, z, 2.0, 1.8, {
-        h: step, color: BROWN, studs: false, free: true,
-      });
-    });
-    // the recessed doorway the ramp closes over
-    bb.brick(0, y, z - 0.5, RAMP_W, 1.4, { h: step, color: C.black, studs: false, free: true });
-  }
-  // lintel across the top of the hatch
-  bb.brick(0, yTop, bowAt(yTop + 1.6) + 0.7, RAMP_W + 4.6, 2.2, {
-    h: 1.6, color: BROWN, studs: false, free: true,
+  const y0 = HINGE_Y, y1 = HINGE_Y + 15.0;
+  /** Parallelogram following the rake between two heights, `d` deep. */
+  const raked = (ya, yb, d, off = 0) => [
+    [bowAt(ya) + off, ya], [bowAt(yb) + off, yb],
+    [bowAt(yb) + off - d, yb], [bowAt(ya) + off - d, ya],
+  ];
+
+  sym(bb, (b, s) => {
+    zWedge(b, s * (RAMP_W / 2 + 1.1), 2.2, raked(y0, y1 + 1.6, 3.0), { color: BROWN });
   });
+  // the recessed doorway the ramp closes over
+  zWedge(bb, 0, RAMP_W, raked(y0, y1, 2.6, -0.7), { color: C.black });
+  // lintel
+  zWedge(bb, 0, RAMP_W + 4.4, raked(y1, y1 + 1.7, 3.0), { color: BROWN });
+  // sill the ramp hinges off
+  zWedge(bb, 0, RAMP_W + 4.4, raked(y0 - 1.1, y0, 3.0), { color: IRON });
+
   // bow shoulder ribs either side of the hatch
   sym(bb, (b, s) => {
-    for (let y = HINGE_Y + 2; y < ROOF_Y - 3; y += 5.0) {
-      b.brick(s * 11.0, y, bowAt(y + 1.2) + 0.5, 3.4, 1.2, {
-        h: 1.2, color: OCHRE, studs: false, free: true,
+    for (let y = HINGE_Y + 2; y < ROOF_Y - 3.5; y += 5.0) {
+      zWedge(b, s * 11.2, 3.4, raked(y, y + 1.3, 2.2), { color: OCHRE });
+    }
+  });
+}
+
+/**
+ * Flank plating. Without this the sides are a 40-stud blank wall; ribs and
+ * hatches give the light something to catch and sell the scale.
+ */
+function flanks(bb) {
+  sym(bb, (b, s) => {
+    const x = bodyHalfW(16.0);
+    // vertical ribs, each stopping where the raked bow cuts it off
+    for (let z = 22; z > -28; z -= 5.6) {
+      const yTop = Math.min(ROOF_Y - 1.2, HULL_Y0 + (BOW_Z - z) / RAKE - 1.4);
+      if (yTop < HULL_Y0 + 4) continue;
+      b.brick(s * x, HULL_Y0 + 0.8, z, 0.55, 1.5, {
+        h: yTop - HULL_Y0 - 0.8, color: BROWN, studs: false, free: true,
+      });
+      b.brick(s * x, yTop, z, 0.75, 2.1, { h: 0.9, color: IRON, studs: false, free: true });
+    }
+    // service hatches
+    for (const [z, y] of [[16, 12.0], [4, 12.0], [-8, 12.0], [-20, 15.0]]) {
+      b.brick(s * x, y, z, 0.4, 3.4, { h: 4.4, color: OCHRE, studs: false, free: true });
+      b.brick(s * (x + 0.2), y + 0.5, z, 0.3, 2.4, {
+        h: 3.4, color: BROWN, studs: false, free: true,
       });
     }
+    // a long rubbing strake low down
+    b.brick(s * (x + 0.1), HULL_Y0 + 1.4, -2.0, 0.5, 44.0, {
+      h: 1.0, color: IRON, studs: false, free: true,
+    });
   });
 }
 
@@ -317,6 +351,7 @@ function buildSandcrawler() {
   courses(bb);
   roof(bb);
   bowFace(bb);
+  flanks(bb);
   stern(bb, rand);
   windows(bb);
   bb.node('cockpit', 0, ROOF_Y - 4.0, bowAt(ROOF_Y - 4.0) - 2.0);
@@ -335,9 +370,20 @@ function buildSandcrawler() {
   // the origin forward with it.
   const model = recentre(inner, { y: 'bottom' });
 
+  /*
+   * The panel hangs below its own local plane, and stowing it rotates that
+   * thickness outward, so the hinge is set back along the bow normal by a bit
+   * more than the panel is thick. Otherwise the closed ramp bulges out of the
+   * door frame.
+   */
+  const nl = Math.hypot(RAKE, 1);
+  const inset = 0.95;
+  const hingeY = HINGE_Y - inset * (RAKE / nl);
+  const hingeZ = bowAt(HINGE_Y) - inset * (1 / nl);
+
   const pivot = new THREE.Group();
   pivot.name = 'rampPivot';
-  pivot.position.set(0, HINGE_Y, bowAt(HINGE_Y) + 0.5);
+  pivot.position.set(0, hingeY, hingeZ);
   const ramp = rampPanel();
   pivot.add(ramp);
   inner.add(pivot);
@@ -354,7 +400,7 @@ function buildSandcrawler() {
    *   stowed -- tip runs up the bow, so y : z has to match the rake 1 : -RAKE,
    *             which puts phi in the third quadrant
    */
-  const OPEN = Math.asin(Math.min(0.99, HINGE_Y / RAMP_LEN));
+  const OPEN = Math.asin(Math.min(0.99, hingeY / RAMP_LEN));
   const STOWED = Math.atan2(RAKE, 1) - Math.PI;
   let ramped = 0;
   const apply = () => { pivot.rotation.x = THREE.MathUtils.lerp(STOWED, OPEN, ramped); };

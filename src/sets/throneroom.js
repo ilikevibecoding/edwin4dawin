@@ -83,10 +83,12 @@ function floorTiles(bb, w, len, z0, aisle) {
       const inAisle = Math.abs(x) < aisle / 2;
       const chk = (i + j) % 2 === 0;
       const h = hash2i(i, j, 5150);
+      // Low contrast on purpose: a hard black-and-white chequer over 90 studs
+      // of floor fights the dais for attention.
       let color = inAisle
-        ? (chk ? C.veryLightGray : C.white)
-        : (chk ? C.white : C.lightBluishGray);
-      if (!inAisle && h > 0.965) color = C.darkBluishGray;
+        ? (chk ? C.white : C.veryLightGray)
+        : (chk ? C.veryLightGray : C.lightBluishGray);
+      if (!inAisle && h > 0.98) color = C.darkBluishGray;
       bb.brick(x, -PLATE, z, cell - 0.12, cell - 0.12, { h: PLATE, color, free: true, studs: false });
     }
   }
@@ -103,7 +105,7 @@ function floorTiles(bb, w, len, z0, aisle) {
 export function buildThroneRoom(opts = {}) {
   const w = num(opts, 'width', 88);          // clear floor width
   const len = num(opts, 'length', 150);      // near lip (+Z) to back wall (-Z)
-  const h = num(opts, 'height', 46);
+  const h = num(opts, 'height', 52);
   const aisle = num(opts, 'aisle', 26);
   const zBack = -len;
 
@@ -149,56 +151,75 @@ export function buildThroneRoom(opts = {}) {
 
   // --------------------------------------------------------- back wall
   bb.brick(0, 0, zBack - 2, w + 8, 4, { h, color: C.white, free: true, studs: false });
-  // Pilaster frame around the emblem.
+  // Pilaster frame either side of the emblem.
   for (const side of [-1, 1]) {
-    bb.brick(side * 22, 0, zBack + 0.6, 3.2, 2.4, { h: h - B(4), color: C.lightBluishGray, free: true, studs: false });
+    bb.brick(side * 30, 0, zBack + 0.6, 3.2, 2.4, { h: h - B(3), color: C.lightBluishGray, free: true, studs: false });
+    bb.brick(side * 38, 0, zBack + 0.6, 2.0, 1.6, { h: h - B(3), color: C.veryLightGray, free: true, studs: false });
   }
-  bb.brick(0, h - B(6), zBack + 0.6, 52, 2.4, { h: B(1.4), color: C.lightBluishGray, free: true, studs: false });
   // Deep header courses so the wall is not a blank slab.
-  for (let k = 0; k < 5; k++) {
-    bb.brick(0, B(2) + k * B(3), zBack + 0.3, w + 4, 1.2, {
+  for (let k = 0; k < 3; k++) {
+    bb.brick(0, B(1.5) + k * B(2.6), zBack + 0.3, w + 4, 1.2, {
       h: P(1), color: C.lightBluishGray, free: true, studs: false,
     });
   }
 
   // --------------------------------------------------------------- dais
-  const steps = 5;
-  const daisW = 46, daisD = 20;
+  // Deliberately big: from 150 studs down the aisle a low platform vanishes.
+  const steps = 6;
+  const daisW = 56, daisD = 26;
   for (let k = 0; k < steps; k++) {
     const t = k / steps;
-    bb.brick(0, k * P(3), zBack + 3 + t * 3.4, daisW - k * 5, daisD - k * 3.2, {
-      h: P(3), color: k % 2 ? C.veryLightGray : C.white, free: true, studs: false,
+    bb.brick(0, k * P(4), zBack + 3 + t * 4.6, daisW - k * 5.2, daisD - k * 3.6, {
+      h: P(4), color: k % 2 ? C.veryLightGray : C.white, free: true, studs: false,
+    });
+    // Grey nosing on each tread, which is what makes the steps read at range.
+    bb.brick(0, k * P(4) + P(4) - P(0.5), zBack + 3 + t * 4.6 + (daisD - k * 3.6) / 2 - 0.5, daisW - k * 5.2, 1.0, {
+      h: P(0.5), color: C.lightBluishGray, free: true, studs: false,
     });
   }
-  const daisTop = steps * P(3);
-  // Tile the top of the dais and edge it in grey.
-  bb.brick(0, daisTop, zBack + 3 + 3.4, daisW - steps * 5 - 0.6, daisD - steps * 3.2 - 0.6, {
+  const daisTop = steps * P(4);
+  bb.brick(0, daisTop, zBack + 3 + 4.6, daisW - steps * 5.2 - 0.6, daisD - steps * 3.6 - 0.6, {
     h: P(0.6), color: C.veryLightGray, free: true, studs: false,
   });
 
   // A lectern, because a ceremony needs something to stand behind.
-  bb.brick(0, daisTop, zBack + 8, 6, 3, { h: B(2.4), color: C.lightBluishGray, free: true, studs: false });
-  bb.slope(0, daisTop + B(2.4), zBack + 8, 3, 6.4, { h: P(2), color: C.veryLightGray, rot: Math.PI / 2, free: true });
+  bb.brick(0, daisTop, zBack + 9, 7, 3.4, { h: B(2.4), color: C.lightBluishGray, free: true, studs: false });
+  bb.slope(0, daisTop + B(2.4), zBack + 9, 3.4, 7.4, { h: P(2), color: C.veryLightGray, rot: Math.PI / 2, free: true });
 
   // ------------------------------------------------------------ banners
+  // Hung from the cornice down the side walls, clear of the wall top.
   for (const side of [-1, 1]) {
-    for (let k = 0; k < 3; k++) {
-      const z = zBack + 22 + k * 34;
-      bb.brick(side * (hw - 1.2), h - B(9), z, 0.5, 9, {
-        h: 16, color: k % 2 ? C.darkRed : C.darkBlue, free: true, studs: false,
+    for (let k = 0; k < 4; k++) {
+      const z = zBack + 26 + k * 30;
+      const top = h - B(5);
+      bb.brick(side * (hw - 1.0), top - 20, z, 0.5, 9, {
+        h: 20, color: k % 2 ? C.darkRed : C.darkBlue, free: true, studs: false,
       });
-      bb.brick(side * (hw - 1.3), h - B(9), z, 0.7, 9.8, {
+      bb.brick(side * (hw - 1.1), top - P(1.5), z, 0.7, 9.8, {
         h: P(1.5), color: C.pearlGold, finish: FINISH.METAL, free: true, studs: false,
+      });
+      // Weighted hem.
+      bb.brick(side * (hw - 1.1), top - 20, z, 0.7, 9.8, {
+        h: P(1.2), color: C.pearlGold, finish: FINISH.METAL, free: true, studs: false,
       });
     }
   }
 
+  // ------------------------------------------------------------ ceiling
+  bb.brick(0, h, zBack + len / 2, w + 12, len + 6, { h: B(2), color: C.veryLightGray, free: true, studs: false });
+  for (let k = 0; k < 9; k++) {
+    const z = zBack + 8 + k * ((len - 12) / 8);
+    bb.brick(0, h - P(2), z, w, 2.6, { h: P(2), color: C.lightBluishGray, free: true, studs: false });
+  }
+
   // ----------------------------------------------------- ceiling lights
-  for (let k = 0; k < 6; k++) {
-    const z = zBack + 12 + k * ((len - 20) / 5);
-    bb.brick(0, h - B(2), z, 30, 3.4, { h: P(2), color: C.lightBluishGray, free: true, studs: false });
-    bb.brick(0, h - B(2) - P(1), z, 26, 2.4, {
-      h: P(1), color: C.transClear, finish: FINISH.GLOW, free: true, studs: false,
+  // Kept away from the back wall so nothing crosses the emblem, and narrow
+  // enough that they read as coffers rather than as strip lights.
+  for (let k = 0; k < 5; k++) {
+    const z = zBack + 34 + k * ((len - 46) / 4);
+    bb.brick(0, h - B(2), z, 34, 4.4, { h: P(2), color: C.lightBluishGray, free: true, studs: false });
+    bb.brick(0, h - B(2) - P(0.8), z, 30, 3.2, {
+      h: P(0.8), color: C.transClear, finish: FINISH.GLOW, free: true, studs: false,
     });
   }
 
@@ -206,15 +227,19 @@ export function buildThroneRoom(opts = {}) {
   g.name = 'throneroom';
 
   // ------------------------------------------------------------ emblem
-  // Extruded relief rather than a printed tile: at 40 studs across it catches
-  // the key light and reads from the far end of the aisle.
-  const emblemSize = num(opts, 'emblem', 40);
-  const emblemY = h - B(13);
+  // Extruded relief rather than a printed tile: gold catches the key light and
+  // reads from 150 studs down the aisle in a way a flat print never would.
+  const emblemSize = num(opts, 'emblem', 26);
+  const emblemY = num(opts, 'emblemY', 30);
   {
     const bb2 = new BrickBuilder({ studs: false, bevel: false, cullStuds: false });
-    // Backing disc, recessed a touch so the relief sits proud of it.
-    bb2.cyl(0, 0, zBack + 0.9, emblemSize * 0.78, 0.8, {
-      color: C.lightBluishGray, seg: 40, axis: 'z', stud: false,
+    // Dark recessed disc inside a pale surround: the gold needs something to
+    // read against, and a bright backing just turns into a moon behind it.
+    bb2.cyl(0, 0, zBack + 0.25, emblemSize * 0.82, 0.5, {
+      color: C.lightBluishGray, seg: 44, axis: 'z', stud: false,
+    });
+    bb2.cyl(0, 0, zBack + 0.7, emblemSize * 0.72, 0.5, {
+      color: C.darkBluishGray, seg: 44, axis: 'z', stud: false,
     });
     const g2 = bb2.build();
     g2.position.set(0, emblemY, 0);

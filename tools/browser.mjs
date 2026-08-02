@@ -8,7 +8,12 @@ export async function startServer() {
   const server = await createServer({
     root: ROOT,
     configFile: false,
-    server: { port: 20000 + Math.floor(Math.random() * 30000), host: '127.0.0.1', strictPort: false },
+    // Random port: several agents run this tool at once. HMR is off so an edit
+    // landing mid-render cannot reload the page out from under us.
+    server: {
+      port: 20000 + Math.floor(Math.random() * 30000), host: '127.0.0.1', strictPort: false,
+      hmr: false, watch: null,
+    },
     logLevel: 'error',
   });
   await server.listen();
@@ -35,7 +40,7 @@ export async function launch({ width, height, quiet = false } = {}) {
   page.on('console', (m) => {
     const s = `[${m.type()}] ${m.text()}`;
     logs.push(s);
-    if (!quiet && /error/i.test(m.type())) process.stderr.write(s + '\n');
+    if (!quiet && /error|warn/i.test(m.type())) process.stderr.write(s + '\n');
   });
   page.on('pageerror', (e) => {
     const s = `[pageerror] ${e.message}`;

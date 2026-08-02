@@ -11,6 +11,14 @@ import { ramp, ease, clamp, lerp } from '../engine/util.js';
  * one ridge, two suns, and a slow crane up as the light goes.
  */
 
+
+/** The twin-suns asset is a wide sky backdrop card; keep it facing the camera. */
+function faceCamera(card, camera) {
+  const d = new THREE.Vector3();
+  camera.getWorldDirection(d);
+  card.rotation.y = Math.atan2(-d.x, -d.z);
+}
+
 export default {
   id: 'twinsuns',
   dur: 32,
@@ -32,7 +40,7 @@ export default {
     root.add(farm);
 
     const suns = await tryMake('twinsuns', {}, { size: [30, 30, 1], color: C.brightLightYellow });
-    suns.position.set(6, 0, -360);
+    suns.position.set(0, 0, 0);
     root.add(suns);
 
     const luke = await tryMake('luke', {}, { size: [1.8, 5, 1], color: C.white });
@@ -80,6 +88,7 @@ export default {
       shots,
       grade: { uVignette: 0.4, uGrain: 0.028, uSaturation: 1.16, uContrast: 1.06 },
       update(t, dt) {
+        faceCamera(suns, ctx.camera);
         const w = clamp(ramp(t, 0.6, ARRIVE - 0.4), 0, 1);
         luke.position.copy(from).lerp(to, ease.inOutQuad(w));
         luke.rotation.y = lerp(Math.atan2(to.x - from.x, to.z - from.z), Math.PI, clamp(ramp(t, ARRIVE - 1.4, ARRIVE + 0.6), 0, 1));

@@ -2,10 +2,26 @@ import * as THREE from 'three';
 import { C, FINISH } from '../lego/palette.js';
 import { mat, glow } from '../lego/materials.js';
 import { sphereGeo } from '../lego/parts.js';
-import { Minifig } from '../lego/minifig.js';
+import { Minifig, FIG } from '../lego/minifig.js';
 import { FACE_JAWA, TORSO_JAWA_FRONT } from './prints.js';
 import { jawaHood, faceX, faceY, faceTheta, HEAD_R } from './headgear.js';
-import { figGroup, num } from './util.js';
+import { figGroup, num, makeCloth } from './util.js';
+
+/**
+ * Robe hem hung off the hips. Without it the jawa reads as a hooded torso on two
+ * black posts; with it the silhouette is the sack-shaped robe it should be. Like
+ * Leia's gown it is a static cone, so the legs still animate underneath.
+ */
+function robeHem() {
+  const h = FIG.legH * 0.78;
+  const geo = new THREE.CylinderGeometry(0.86, 1.16, h, 20, 1, true);
+  geo.translate(0, 0.34 - h / 2, 0);
+  const m = mat(C.reddishBrown, FINISH.SOLID).clone();
+  m.side = THREE.DoubleSide;
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.castShadow = mesh.receiveShadow = true;
+  return makeCloth(mesh);
+}
 
 /** Two hot yellow points in the dark of the hood, plus the light they throw. */
 function glowEyes(fig) {
@@ -53,6 +69,7 @@ export function buildJawa(opts = {}) {
   });
 
   glowEyes(fig);
+  fig.hips.add(robeHem());
   fig.root.scale.setScalar(num(opts.scale, 0.75));
   fig.setPose(opts.pose || 'idle');
   // short arms held in front, the way jawas carry their loot

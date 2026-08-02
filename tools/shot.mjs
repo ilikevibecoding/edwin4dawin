@@ -24,7 +24,10 @@ const server = await createServer({
   root: resolve(import.meta.dirname, '..'),
   configFile: false,
   // Random port: several agents run this tool at the same time.
-  server: { port: 20000 + Math.floor(Math.random() * 30000), host: '127.0.0.1', strictPort: false },
+  server: {
+    port: 20000 + Math.floor(Math.random() * 30000), host: '127.0.0.1', strictPort: false,
+    hmr: false, watch: null,
+  },
   logLevel: 'error',
 });
 await server.listen();

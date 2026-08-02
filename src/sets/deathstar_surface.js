@@ -103,7 +103,11 @@ export function buildDeathStarSurface(opts = {}) {
   const N = Math.max(1, Math.round(size / cell));
   const half = size / 2;
 
-  const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false });
+  // No shadow pass: at 400 studs across, every rig's shadow camera covers a
+  // fraction of the plate, so shadows would only appear in one corner.
+  const bb = new BrickBuilder({
+    studs: false, bevel: false, cullStuds: false, castShadow: false, receiveShadow: false,
+  });
 
   // Hull slab. Only the top matters, but the depth gives the horizon a lip.
   bb.brick(0, -B(4), 0, size, size, { h: B(4) - PLATE, color: C.darkBluishGray, free: true, studs: false });
