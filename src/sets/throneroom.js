@@ -93,21 +93,30 @@ function floorTiles(bb, w, len, z0, aisle) {
       const inAisle = Math.abs(x) < aisle / 2;
       const chk = (i + j) % 2 === 0;
       const h = hash2i(i, j, 5150);
-      // Low contrast on purpose: a hard chequer over 90 studs of floor fights
-      // the dais for attention. The grey only comes in near the walls, which
-      // is enough to read as ranks of tiles without turning into a chessboard.
-      const edge = Math.abs(x) > w / 2 - 14;
-      let color = inAisle
-        ? (chk ? C.white : C.veryLightGray)
-        : (edge && chk ? C.lightBluishGray : (chk ? C.veryLightGray : C.white));
-      if (!inAisle && h > 0.985) color = C.darkBluishGray;
+      // Two near-identical whites, and nothing else. The camera shoots the
+      // full length of this floor down a one-point perspective, which stacks
+      // the ranks into a dense grid at the far end; any real value difference
+      // between alternating tiles becomes a chessboard that pulls the eye off
+      // the dais. The floor is read from the tile gaps, not from the colour.
+      let color = chk ? C.white : C.veryLightGray;
+      if (!inAisle && h > 0.99) color = C.lightBluishGray;
       bb.brick(x, -PLATE, z, cell - 0.12, cell - 0.12, { h: PLATE, color, free: true, studs: false });
     }
   }
-  // Aisle border lines.
+  // A darker border course along each wall, in place of a chequer, so the
+  // floor still has a rank structure without the alternation.
   for (const s of [-1, 1]) {
-    bb.brick(s * aisle / 2, 0, z0 - len / 2, 0.6, len, {
-      h: P(0.4), color: C.darkBluishGray, free: true, studs: false,
+    bb.brick(s * (w / 2 - cell / 2), 0, z0 - len / 2, cell - 0.12, len, {
+      h: P(0.4), color: C.lightBluishGray, free: true, studs: false,
+    });
+  }
+  // Aisle border inlay. Light, not dark: the strip is a tenth of a stud tall
+  // and 150 long, so from the far end of the hall you see its side rather than
+  // its top, and a dark side draws two hard black lines straight down the
+  // middle of the shot.
+  for (const s of [-1, 1]) {
+    bb.brick(s * aisle / 2, 0, z0 - len / 2, 0.9, len, {
+      h: P(0.4), color: C.lightBluishGray, free: true, studs: false,
     });
   }
 }
@@ -172,6 +181,48 @@ export function buildThroneRoom(opts = {}) {
   for (let k = 0; k < 3; k++) {
     bb.brick(0, B(1.5) + k * B(2.6), zBack + 0.3, w + 4, 1.2, {
       h: P(1), color: C.lightBluishGray, free: true, studs: false,
+    });
+  }
+
+  // ----------------------------------------------------- entrance wall
+  /*
+   * The +Z end of the hall was left open, which is invisible in any shot that
+   * faces the dais and fatal in the one that turns round: from the dais the
+   * lens looks straight out of the building, and the whole middle of the frame
+   * -- above the far end of the floor, below the ceiling -- is the clear
+   * colour. Fog does not help, because there is no geometry there to fog.
+   *
+   * The opening is a recess, not a passage. The nearest camera is a hundred
+   * studs away and square on to it, so a panel set back three studs behind a
+   * pair of jambs reads as a doorway, and nothing has to exist beyond it.
+   */
+  const doorW = aisle + 8;
+  const doorH = 30;
+  const pierW = (w + 8 - doorW) / 2;
+  for (const side of [-1, 1]) {
+    bb.brick(side * (doorW + pierW) / 2, 0, 1.6, pierW, 3.2, {
+      h, color: C.white, free: true, studs: false,
+    });
+  }
+  bb.brick(0, doorH, 1.6, doorW, 3.2, { h: h - doorH, color: C.white, free: true, studs: false });
+  bb.brick(0, 0, 4.4, doorW - 0.6, 2.6, { h: doorH, color: C.lightBluishGray, free: true, studs: false });
+  // Jambs and a lintel band, so the recess has an edge to catch the light
+  // instead of being a grey rectangle painted on a white wall.
+  for (const side of [-1, 1]) {
+    bb.brick(side * (doorW / 2 - 0.8), 0, 2.6, 1.6, 1.4, {
+      h: doorH + 1.2, color: C.veryLightGray, free: true, studs: false,
+    });
+  }
+  bb.brick(0, doorH - 1.2, 2.6, doorW - 0.4, 1.4, {
+    h: P(3), color: C.lightBluishGray, free: true, studs: false,
+  });
+  // Two narrow strips down the jambs. Small and dim on purpose: this sits at
+  // the vanishing point of the reverse, and anything brighter becomes the
+  // subject of a shot whose subject is the room saluting.
+  for (const side of [-1, 1]) {
+    bb.brick(side * (doorW / 2 - 1.5), B(2), 3.0, 0.5, 0.4, {
+      h: doorH - B(5), color: C.transClear, finish: FINISH.GLOW, free: true, studs: false,
+      matOpts: { intensity: 0.85 },
     });
   }
 
@@ -289,9 +340,22 @@ export function buildThroneRoom(opts = {}) {
   if (bool(opts, 'lights', true)) {
     // Off the centreline so the emblem gets a raking light instead of a
     // specular hot spot straight back at the camera.
-    practical(g, -26, h - 14, zBack + 30, 0xfff4e2, 700, 130);
-    practical(g, 26, h - 14, zBack + 30, 0xe8f0ff, 420, 130);
-    practical(g, 0, h - 12, zBack + 96, 0xe8f0ff, 700, 150);
+    practical(g, -26, h - 14, zBack + 30, 0xfff4e2, 620, 130);
+    practical(g, 26, h - 14, zBack + 30, 0xe8f0ff, 380, 130);
+    practical(g, 0, h - 12, zBack + 96, 0xe8f0ff, 620, 150);
+    // Hung in front of the entrance wall and reaching nothing else: that wall
+    // is 120 studs from the nearest of the other three lamps and would
+    // otherwise sit unlit at the exact centre of the reverse.
+    practical(g, 0, 24, -9, 0xffe9c8, 420, 62);
+    // Three lamps cannot reach 150 studs of ceiling, and the ceiling is what
+    // the top of every shot down this aisle is made of: coffers face straight
+    // down, so with nothing but point lights the roof above the lens goes to
+    // navy while the middle of the hall blows out. The ground half of the
+    // hemisphere is standing in for the bounce off all that white floor.
+    g.add(new THREE.HemisphereLight(
+      new THREE.Color(0xe4ecfa).convertSRGBToLinear(),
+      new THREE.Color(0x9aa4b4).convertSRGBToLinear(), 1.5,
+    ));
   }
   return g;
 }

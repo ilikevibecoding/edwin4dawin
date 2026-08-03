@@ -114,6 +114,30 @@ export default {
       o.material.roughness = Math.max(m.roughness ?? 0.34, 0.62);
     });
 
+    // A runner down the aisle. Twenty-six studs of white tile run the length of
+    // the hall and every lens in the chapter points along them: in the crane
+    // that is the bottom third of the frame and in the reverse it is the whole
+    // middle, and in both it was the largest empty area in the picture. Red
+    // because the banners are the only other colour in the room, and matte
+    // because a clearcoat here would mirror the ceiling coffers straight back.
+    const runnerMat = mat(C.red, FINISH.SOLID, { roughness: 0.88 }).clone();
+    runnerMat.clearcoat = 0;
+    const runner = new THREE.Mesh(new THREE.BoxGeometry(13, 0.18, 128), runnerMat);
+    runner.position.set(0, 0.09, -66);
+    runner.receiveShadow = true;
+    hall.add(runner);
+    // Gold edging, which is what stops it reading as a strip of tape: the
+    // runner is seen almost edge-on from every camera, so its own long sides
+    // are barely a pixel and the trim is doing all the work of finding them.
+    for (const s of [-1, 1]) {
+      const trim = new THREE.Mesh(
+        new THREE.BoxGeometry(0.7, 0.22, 128),
+        mat(C.pearlGold, FINISH.SOLID, { roughness: 0.34 }),
+      );
+      trim.position.set(s * 6.15, 0.11, -66);
+      hall.add(trim);
+    }
+
     for (const x of [-17, 17]) {
       const s = lightShaft(2.2, 7, 30, 0xfff0d0, 0.022);
       s.position.set(x, 16, -114);
@@ -130,6 +154,7 @@ export default {
 
     const luke = await tryMake('luke', {}, { size: [1.8, 5, 1], color: C.white });
     const leia = await tryMake('leia', {}, { size: [1.8, 5, 1], color: C.white });
+    const han = await tryMake('han', {}, { size: [1.8, 5, 1], color: C.darkBlue });
     const pilot = await tryMake('rebelpilot', {}, { size: [1.8, 5, 1], color: C.orange });
     const r2 = await tryMake('r2', {}, { size: [2, 3.4, 2], color: C.white });
     const threepio = await tryMake('c3po', {}, { size: [1.8, 5, 1], color: C.pearlGold });
@@ -143,6 +168,13 @@ export default {
     luke.rotation.y = 1.02;
     leia.position.set(1.15, 0, -128.6);
     leia.rotation.y = -0.85;
+    // Han is next in the line, on Leia's far side. The narration names three
+    // people and the hall only had two, so he has to be here -- but he cannot
+    // be anywhere the two-shot or the single can see him, or he stands in the
+    // corner of both with nothing to do. From x = 5.6 he is past the right
+    // edge of every lens that holds the hand-off, and squarely in the wides.
+    han.position.set(5.6, 0, -126.6);
+    han.rotation.y = -1.16;
     // Everyone else is kept well off the aisle's centre line -- that is the
     // corridor the lens looks down, and a droid parked in it is a wall in front
     // of the ceremony -- but close enough to be in the wides.
@@ -152,10 +184,18 @@ export default {
     threepio.rotation.y = 1.45;
     r2.position.set(-11.8, 0, -122.6);
     r2.rotation.y = 1.5;
-    for (const o of [luke, leia, pilot, r2, threepio]) root.add(o);
+    for (const o of [luke, leia, han, pilot, r2, threepio]) root.add(o);
 
     const medal = makeMedal();
     root.add(medal);
+
+    // Han is already wearing his. One medal is animated across because one is
+    // all the beat has room for; giving him a second one that is simply on
+    // says she started at his end of the line, which is both true to the film
+    // and cheaper than a second hand-off nobody has time to watch.
+    const worn = makeMedal();
+    worn.position.set(0, FIG.torsoH - 0.62, FIG.torsoD / 2 + 0.10);
+    (han.userData.fig?.torso ?? han).add(worn);
 
     // Ranks of fleet troopers lining the aisle, facing the dais -- so the
     // reverse down the hall is a wall of faces rather than of backs. The
@@ -170,10 +210,15 @@ export default {
         // ceremony, so no single frame could ever contain both. And nothing
         // upstage of z = -115 -- the two-shot and the single both stand at
         // -119 or beyond, and a trooper level with the lens is a blur.
-        for (let row = 0; row < 4; row++) {
+        //
+        // Six ranks deep rather than four. The reverse looks the length of the
+        // aisle, so the far ranks are what converges toward the doorway at the
+        // vanishing point; with four the two blocks sat out at the frame edges
+        // and the middle of the shot was thirty studs of bare floor.
+        for (let row = 0; row < 6; row++) {
           const g = await tryMake('rebeltrooper', { pose: 'stand_wide' },
             { size: [1.8, 5, 1], color: C.sandBlue });
-          g.position.set(sx * (10.0 + col * 4.0), 0, -101.0 - row * 4.6);
+          g.position.set(sx * (10.0 + col * 4.0), 0, -91.8 - row * 4.6);
           g.rotation.y = Math.PI - sx * 0.16;
           crowd.add(g);
           guards.push(g);
@@ -197,8 +242,11 @@ export default {
       // Starts high enough to hold the whole starbird, then tilts off it as it
       // drops -- the emblem crops either way at this focal length, so it may as
       // well crop on a move that is going somewhere.
+      // Stops at -86, short of the front rank: the guard now stands eight
+      // studs further downstage than it used to and a crane that ran to -94
+      // would end with its lens between two of them.
       t: 0, dur: f2 - 1.2, fov: 44, ease: 'inOutQuad',
-      pos: [0, 17, -66], to: [0, 9.0, -94],
+      pos: [0, 17, -66], to: [0, 9.0, -86],
       look: [0, 27, -146], lookTo: [0, 6.0, -130],
     });
     shots.add({          // 2. the medal: two-shot across the eyeline
@@ -216,18 +264,27 @@ export default {
       look: () => head(luke).add(new THREE.Vector3(-0.85, -0.62, -0.12)),
       handheld: 0.18,
     });
-    shots.add({          // 4. the hall salutes, ranks flanking the two of them
-      // Shot back up the aisle, not down it. Down the aisle the ranks face away
-      // and the hall's open end sits dead centre of frame as a black hole; from
-      // here the salute comes toward the lens and the dais closes the frame.
-      t: f2 + 9.2, dur: 4.7, fov: 46, ease: 'inOutQuad',
-      pos: [2.6, 10.8, -95.0], to: [1.2, 9.6, -101.0],
-      look: [0, 5.8, -127.0], lookTo: [0, 5.4, -128.0],
+    shots.add({          // 4. the reverse: the hall salutes, past the three of them
+      // The ranks are drawn up facing the dais, so a lens anywhere down the
+      // aisle only ever sees the backs of their heads -- which is what this
+      // shot used to be, and the salute may as well not have happened. The
+      // only camera that catches it is one standing on the dais looking back,
+      // and that same position puts Luke, Leia and Han across the bottom of
+      // the frame as foreground. Seven studs up, which is the whole range
+      // available: any lower and the three of them mask the ranks, any higher
+      // and all that is left of them is three hair pieces on the bottom edge.
+      t: f2 + 9.2, dur: 4.7, fov: 44, ease: 'inOutQuad',
+      pos: [1.8, 7.0, -137.2], to: [1.6, 7.5, -134.6],
+      look: [0.6, 5.2, -112.0], lookTo: [0.5, 5.5, -108.0],
     });
     shots.add({          // 5. crane out for the last image of the film
+      // Cuts across the line from shot 4, deliberately: it is a different
+      // setup at a different scale on the last beat of the film, which is
+      // where an audience expects the picture to open out. Starting high
+      // rather than craning up into it keeps it from reading as a whip round.
       t: f2 + 13.9, dur: ctx.dur - (f2 + 13.9), fov: 42, ease: 'inOutCubic',
-      pos: [7, 9.5, -96], to: [0, 31, -60],
-      look: [0, 8.5, -132], lookTo: [0, 18, -143],
+      pos: [6, 13, -104], to: [0, 30, -62],
+      look: [0, 8.0, -131], lookTo: [0, 18, -143],
     });
 
     const _a = new THREE.Vector3(), _b = new THREE.Vector3();
@@ -298,6 +355,16 @@ export default {
         medal.position.y += Math.sin(across * Math.PI) * 0.3;
         // Turned in her hands to face the room, then square on his chest.
         medal.rotation.y = lerp(leia.rotation.y, luke.rotation.y, across);
+
+        const hf = han.userData.fig;
+        if (hf) {
+          poseChain(hf, [
+            ['idle', 1],
+            ['salute', ramp(t, SALUTE + 0.35, SALUTE + 1.1)],
+          ]);
+          hf.lookAt(head(luke).lerp(OPEN, 0.22), 0.7);
+          hf.update(dt, t);
+        }
 
         const pf = pilot.userData.fig;
         if (pf) {
