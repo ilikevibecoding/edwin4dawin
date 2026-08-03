@@ -115,6 +115,24 @@ export default {
     key.position.set(6.6, 8.4, 8.4);
     root.add(key);
 
+    // Noon on the sand bank behind the back doorway. The hut is built with a
+    // real opening and a dune a few studs beyond it rather than a black panel
+    // stuck on the stonework, but the set's own practicals are switched off
+    // here -- so without a lamp of its own that opening is a rectangle of pure
+    // black over Ben's shoulder through half the coverage, which is the one
+    // thing a doorway must never be.
+    //
+    // Stood inside the room rather than out in the sand with the thing it is
+    // lighting. The bank is thirteen studs across and its lit face points back
+    // at the hut, so a lamp tucked in behind the threshold is a stud and a half
+    // off it and inverse square takes the edges to nothing -- one hot streak
+    // down the middle of the opening. From this side the throw is six studs and
+    // even, and the spill lands on the inner face of the back wall, which is
+    // the surface Ben's cowl was disappearing into.
+    const outside = new THREE.PointLight(0xffdca8, 26, 26, 2);
+    outside.position.set(-4.6, 4.6, -7.6);
+    root.add(outside);
+
     // Back-right corner. Everything else in here comes from the open front, so
     // without this the wall Ben stands against goes to black and he sinks into
     // it; from behind him it also gives the cowl an edge. Directional and far
