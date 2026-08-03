@@ -152,9 +152,35 @@ Things the harness cannot judge, checked by eye against the captured frames:
 - [x] Master output is compressed and limited; no cue peaks painfully
 - [x] The interface does not cover the subject of any shot
 
+## Last full run
+
+Against `dist/` served by `vite preview`:
+
+```
+checkpoints  26/26 passed
+controls     14/14 passed
+console      0 error(s), 0 warning(s)
+result       PASS
+```
+
+The `--realtime` playthrough of the same build completed the full 344 s
+timeline with no NaN transforms, no WebGL errors and no duplicate audio, and
+found two defects that the checkpoint sweep could not: the interior region was
+being switched on half a second before the cut that hides it, and the protocol
+droid's climb key was placed short of the boarding ramp so he lerped into the
+air over the last half-metre of deck. Both are fixed.
+
 ## Known environment caveat
 
-The QA container has no GPU, so Chrome runs on SwiftShader and reports about
-10 fps. Every checkpoint therefore logs a `low-fps` warning, which is expected
-and not a failure of the piece. Frame-rate figures for real hardware have to be
-taken from a desktop browser.
+The QA container has no GPU, so Chrome runs on SwiftShader. Every checkpoint
+logs a `low-fps` warning, which is expected here and is not a property of the
+piece. Two consequences worth knowing about:
+
+- The render loop clamps its own delta at 0.1 s, so below ten frames a second
+  the show plays in slow motion rather than skipping. The realtime pass
+  therefore reports a `speedRatio` and watches for a stall instead of enforcing
+  a wall-clock budget; on this hardware it runs at about 0.09× real time.
+- Frame-rate figures for real hardware have to be taken from a desktop browser.
+  What can be measured here is the draw-call budget, which peaks at about 800
+  calls in the corridor and 1 700 in the chapter where the holographic
+  schematic and the whole cast are on screen at once.

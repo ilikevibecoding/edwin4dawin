@@ -51,6 +51,19 @@ than for its own bundle and the narration audio in `public/audio/`.
 | `npm run qa:build` | The same tour against `dist/` via `vite preview` |
 | `npm run narration` | Regenerates the narration audio from `narration/script.json` |
 
+Three development tools sit alongside those, all driving the running app
+through `window.__show`:
+
+```bash
+node tools/frames.mjs --out=qa/output/look --t=44,112:1.2,220:2.4   # still frames, with preroll
+node tools/clip.mjs --from=246 --to=250 --fps=15 --out=qa/clips/a.mp4  # a span of show time as video
+node tools/bounds.mjs                                               # bounding boxes of a preview asset
+```
+
+`clip.mjs` advances the show by exactly 1/fps between captures rather than
+recording in real time, so it produces a smooth clip even on a machine that
+renders at two frames a second.
+
 There is also a development-only asset viewer at `/preview.html`:
 
 ```
