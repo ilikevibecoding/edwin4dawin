@@ -9,8 +9,16 @@ automated tour, the audio test and the demo video all ran through Chrome's Swift
 rasteriser, which renders the exact same frames but at roughly 2–6 fps at 1080p. Consequences:
 
 - Frame rates quoted in `qa/report.json` are software-rasteriser numbers and say nothing useful
-  about real hardware. The 60 fps target is a design target derived from the draw-call and
-  triangle budgets (~85 draws, ~1–2 M triangles at Medium), not a measurement on a GPU.
+  about real hardware. The 60 fps target is a design target derived from the measured geometry
+  budget, not a measurement on a GPU.
+- That budget, taken from the final tour at Medium: exterior chapters run 25–137 draw calls and
+  13–31 k triangles; interior chapters run 256–770 draw calls and 45–89 k triangles. The triangle
+  load is trivial; the cost is draw calls, and the peak is the pod bay looking back down the full
+  length of the corridor with the whole cast in frustum.
+- **The cast is draw-call expensive.** Every figure is an articulated hierarchy of primitives —
+  roughly 25 meshes each, moving relative to one another, so they cannot be merged without giving
+  up the rig. Fifteen figures in one frustum is most of that 770. Skinning them into one mesh each
+  would be the right fix and is not done here.
 - The startup benchmark's thresholds (downgrade above 42 ms/frame, upgrade below 9 ms/frame) were
   chosen analytically rather than tuned against a spread of real GPUs.
 - The demo video was rendered frame by frame rather than captured in real time. It is the real
