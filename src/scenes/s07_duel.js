@@ -256,11 +256,17 @@ export default {
           lr.arms[1].elbow.rotation.x = -0.3;
           clashLight.intensity = 0;
           // The robe collapses.
-          const fall = clamp((t - KILL_T) / 1.1);
-          old.scale.set(1, lerp(1, 0.16, Ease.inQuad(fall)), 1);
-          old.position.y = lerp(0, -0.02, fall);
-          old.rotation.z = fall * 0.2;
-          if (fall > 0.98) old.visible = false;
+          const fall = clamp((t - KILL_T) / 1.35);
+          // Cloth spreads as it drops: squash vertically, widen horizontally,
+          // and let the upper body fold away first.
+          const sq = Ease.inQuad(fall);
+          old.scale.set(1 + sq * 0.55, lerp(1, 0.07, sq), 1 + sq * 0.55);
+          old.position.y = lerp(0, -0.05, fall);
+          old.rotation.z = fall * 0.28;
+          old.rotation.x = fall * 0.12;
+          rr.torso.scale.setScalar(Math.max(0.001, 1 - sq * 1.1));
+          rr.head.scale.setScalar(Math.max(0.001, 1 - sq * 1.4));
+          if (fall > 0.995) old.visible = false;
         }
 
         // The girl watches, then reacts.

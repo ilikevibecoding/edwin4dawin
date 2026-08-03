@@ -142,6 +142,26 @@ export default {
     const boomCore = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), emissive(0xffc060, { opacity: 0 }));
     boomCore.position.copy(station.position);
     far.add(boomCore);
+    // A single additive sphere reads as a flat disc. Overlapping puffs at
+    // different scales and rates give the fireball some structure.
+    const puffs = [];
+    {
+      const pr2 = new RNG(88);
+      for (let i = 0; i < 16; i++) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+          glowPlane({ color: i % 3 === 0 ? 0xfff0c0 : (i % 3 === 1 ? 0xffa845 : 0xff6a20), opacity: 0 }));
+        const d2 = pr2.onSphere({});
+        m.userData = {
+          dir: new THREE.Vector3(d2.x, d2.y, d2.z).multiplyScalar(pr2.float(0.25, 1)),
+          size: pr2.float(2600, 8200),
+          rate: pr2.float(0.7, 1.6),
+          delay: pr2.float(0, 0.16),
+        };
+        m.renderOrder = 8;
+        far.add(m);
+        puffs.push(m);
+      }
+    }
     const boomRing = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), glowPlane({ color: 0xffe0a0, opacity: 0 }));
     boomRing.position.copy(station.position);
     boomRing.renderOrder = 9;
@@ -486,6 +506,13 @@ export default {
             boomCore.material.opacity = clamp(1 - b * 2.4);
             boomCore.scale.setScalar(1800 + Ease.outQuart(b) * 6800);
             boomCore.material.color.setRGB(1, 0.8 - b * 0.5, 0.45 - b * 0.4);
+            for (const m of puffs) {
+              const u2 = clamp((b - m.userData.delay) * m.userData.rate * 1.7);
+              m.position.copy(station.position).add(m.userData.dir.clone().multiplyScalar(2200 + u2 * 16000));
+              m.scale.setScalar(m.userData.size * (0.5 + u2 * 2.4));
+              m.quaternion.copy(camera.quaternion);
+              m.material.opacity = u2 > 0 ? clamp(1 - u2 * 1.35) * 0.75 : 0;
+            }
             boomRing.visible = true;
             boomRing.quaternion.copy(camera.quaternion);
             boomRing.material.opacity = clamp(0.95 - b * 0.85);
@@ -510,6 +537,7 @@ export default {
             boomRing.material.opacity = 0;
             boomRing2.material.opacity = 0;
             for (const m of embers) m.material.opacity = 0;
+            for (const m of puffs) m.material.opacity = 0;
             // Secondary detonations walking across the surface.
             for (const m of preBooms) {
               const age = (t - m.userData.t) / 1.3;

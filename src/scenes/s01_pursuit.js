@@ -128,6 +128,11 @@ export default {
     beam.renderOrder = 8;
     scene.add(beam);
 
+    // The capture happens under the destroyer, in its own shadow; without a
+    // practical here the corvette simply vanishes into black.
+    const bayLight = new THREE.PointLight(0xffca88, 0, 900, 2);
+    scene.add(bayLight);
+
     const rig = new CameraRig(camera);
     rig.impulse(24.05, 0.5, 0.8);
     rig.impulse(27.15, 0.9, 1.1);
@@ -197,6 +202,9 @@ export default {
           beam.scale.set(1, Math.max(1, len), 1);
           beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tmp.subVectors(target, bayPos).normalize());
         }
+
+        bayLight.position.set(0, SD_Y - 30, nose + 800 + 176);
+        bayLight.intensity = smoothstep(29, 33, t) * 320000;
 
         green.update(t, camera);
         red.update(t, camera);

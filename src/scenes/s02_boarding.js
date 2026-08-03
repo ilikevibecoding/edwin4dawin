@@ -62,7 +62,7 @@ export default {
 
     // The breach: a glowing cut, then a hole with smoke pouring through.
     const cutMat = emissive(0xff9c3a, { opacity: 0, blending: THREE.AdditiveBlending });
-    const cut = new THREE.Mesh(new THREE.RingGeometry(1.05, 1.25, 24), cutMat);
+    const cut = new THREE.Mesh(new THREE.RingGeometry(1.12, 1.2, 40), cutMat);
     cut.position.set(0, 1.6, -45.7);
     cut.renderOrder = 6;
     scene.add(cut);
@@ -136,9 +136,17 @@ export default {
     scene.add(backLight);
 
     const bolts = new BoltPool({ max: 60, color: 0xff4a30, length: 2.6, radius: 0.12, speed: 130 });
-    const sparks = new SparkPool({ bursts: 10, per: 20, size: 0.14, color: 0xffc27a });
+    const sparks = new SparkPool({ bursts: 14, per: 20, size: 0.14, color: 0xffc27a });
     scene.add(bolts.group, sparks.group);
     const rng = new RNG(9);
+    // Sparks running around the cut, then a shower when the plate falls in.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      sparks.schedule(BREACH_T - 2.3 + i * 0.28,
+        new THREE.Vector3(Math.cos(-a) * 1.16, 1.6 + Math.sin(-a) * 1.16, -45.6),
+        { speed: 2.6, dur: 0.5, gravity: 5, color: 0xffb060 });
+    }
+    sparks.schedule(BREACH_T + 0.02, new THREE.Vector3(0, 1.4, -45.4), { speed: 7, dur: 0.8, gravity: 6, color: 0xffd090 });
     for (let i = 0; i < 22; i++) {
       const t = BREACH_T + 0.6 + i * 0.22 + rng.float(0, 0.1);
       const fromTrooper = i % 2 === 0;
@@ -180,8 +188,13 @@ export default {
       update(t, dt) {
         // Breach.
         const cutT = clamp((t - (BREACH_T - 2.4)) / 2.4);
+        // A travelling hot spot runs around the ring as the charge cuts.
         cutMat.opacity = cutT * (1 - smoothstep(BREACH_T, BREACH_T + 0.4, t)) * 0.9;
-        cut.scale.setScalar(0.3 + cutT * 0.75);
+        cut.scale.setScalar(1);
+        cut.rotation.z = -cutT * Math.PI * 2;
+        const arc = Math.max(0.06, (1 - cutT) * 0.35 + 0.06);
+        cut.geometry.dispose();
+        cut.geometry = new THREE.RingGeometry(1.12, 1.22, 28, 1, 0, Math.PI * 2 * Math.min(1, cutT * 1.05));
         hole.visible = t > BREACH_T;
         breachGlow.material.opacity = smoothstep(BREACH_T - 0.2, BREACH_T + 0.3, t) * (0.55 - smoothstep(BREACH_T, BREACH_T + 8, t) * 0.42);
         breachLight.intensity = smoothstep(BREACH_T - 0.3, BREACH_T + 0.2, t) * (160 - smoothstep(BREACH_T, BREACH_T + 6, t) * 120);
