@@ -579,20 +579,31 @@ export class Corridor {
     this.anchors.podHatch = anchor(this.podHatch, 'podHatchCentre', 0, 1.5, -0.2);
 
     // ---- Alarm strips -----------------------------------------------------
+    const alarmHousings: THREE.BufferGeometry[] = [];
     for (let i = 0; i < 6; i++) {
       const x = xStart + 5 + i * 6.5;
       const strip = new THREE.Mesh(
-        box(0.5, 0.16, 0.12, { pos: [0, 0, 0] }),
+        box(0.34, 0.1, 0.05, { pos: [0, 0, 0] }),
         emissive('corridorAlarm', 0xff3a24, 0),
       );
-      strip.position.set(x, 2.45, halfWidth - 0.05);
+      strip.position.set(x, 2.45, halfWidth - 0.12);
       this.root.add(strip);
       this.alarmLights.push(strip);
+      // Recessed shroud, so the lamp reads as a fitting instead of a glowing
+      // rectangle floating on a white wall.
+      alarmHousings.push(
+        box(0.46, 0.2, 0.14, { pos: [x, 2.45, halfWidth - 0.05] }),
+        box(0.5, 0.05, 0.2, { pos: [x, 2.56, halfWidth - 0.09] }),
+      );
     }
+    const alarmShroud = new THREE.Mesh(merge(alarmHousings), darkMechanical());
+    alarmShroud.castShadow = false;
+    this.root.add(alarmShroud);
     // Local spill only. A long-range red light turns the whole white corridor
-    // pink, which reads as a colour-grading mistake rather than as an alarm.
-    this.alarmPoint = new THREE.PointLight(0xff3a22, 0, 9, 2.2);
-    this.alarmPoint.position.set(14, 2.3, halfWidth - 0.3);
+    // pink, which reads as a colour-grading mistake rather than as an alarm,
+    // and a bright lamp pressed against the wall just burns a hole in it.
+    this.alarmPoint = new THREE.PointLight(0xff3a22, 0, 8, 2);
+    this.alarmPoint.position.set(14, 2.25, halfWidth - 0.75);
     this.root.add(this.alarmPoint);
 
     // Cold fill light that rises when Vader enters.
@@ -718,9 +729,9 @@ export class Corridor {
     const pulse = Math.max(0, Math.sin(elapsed * 3.4));
     const alarmValue = this.alarmActive * pulse;
     for (const s of this.alarmLights) {
-      (s.material as THREE.MeshStandardMaterial).emissiveIntensity = 4.5 * alarmValue;
+      (s.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.35 * alarmValue;
     }
-    this.alarmPoint.intensity = alarmValue * 6;
+    this.alarmPoint.intensity = alarmValue * 3.2;
     for (const c of this.consoles) c.update(elapsed);
   }
 }

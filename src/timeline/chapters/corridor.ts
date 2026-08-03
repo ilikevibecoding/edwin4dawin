@@ -313,10 +313,12 @@ export function corridorChapter(): Chapter<ShowContext> {
         customShot({ id: 'corridor.firefight', start: S + 31, end: S + 45, fov: 48, handheld: 1.1, blend: 0.7 }, (k, t, out) => {
           const a = smootherstep(k);
           const sway = Math.sin((t - S) * 0.6) * 0.12;
-          out.position.set(lerp(18.6, 15.2, a), 1.58, lerp(-1.05, -0.5, a) + sway);
-          out.target.set(lerp(1, -3.5, a), 1.35, lerp(-0.1, 0.15, a));
-          out.fov = 48;
-          out.focus = 13;
+          // Held back off the fallen defenders: a body cropped at the lens
+          // reads as debris, and a longer lens gives the boarding party size.
+          out.position.set(lerp(20.2, 17.8, a), 1.56, lerp(-1.05, -0.66, a) + sway);
+          out.target.set(lerp(3, -1.5, a), 1.3, lerp(-0.12, 0.12, a));
+          out.fov = lerp(44, 40, a);
+          out.focus = 15;
           clampCam(out);
         }),
 
