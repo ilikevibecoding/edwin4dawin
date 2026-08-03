@@ -3,6 +3,7 @@ import { DisposalRegistry } from '../core/disposal';
 import { RenderSystem } from '../core/Renderer';
 import { QUALITY_ORDER, QUALITY_PRESETS, benchmarkSuggestion, type QualityLevel } from '../core/Quality';
 import { MaterialLibrary } from '../assets/materials';
+import { resetContactShadowCache } from '../assets/characters/CharacterRig';
 import { SpaceScene } from '../scenes/SpaceScene';
 import { CorridorScene } from '../scenes/CorridorScene';
 import { CameraDirector, type ShotContext } from '../camera/CameraDirector';
@@ -406,7 +407,10 @@ export class App {
     this.ui.setTime(t, this.timeline.duration);
     this.ui.subtitles.update(t);
     this.ui.updateChrome(dt, this.timeline.playing, this.mode);
-    if (t < this.timeline.duration - 0.01) this.ui.showEndCard(false);
+    // The closing line resolves in over the last few seconds rather than
+    // snapping in when the clock stops.
+    if (t >= this.timeline.duration - 6.5) this.ui.showEndCard(true, EPILOGUE_LINE);
+    else this.ui.showEndCard(false);
 
     if (this.ui.debug.isVisible) {
       const stats = this.render.stats;
@@ -565,6 +569,7 @@ export class App {
     this.space.scene.clear();
     this.interior.scene.clear();
     this.registry.dispose();
+    resetContactShadowCache();
 
     this.lib = new MaterialLibrary(this.registry, QUALITY_PRESETS[level]);
     this.space = new SpaceScene(this.lib);

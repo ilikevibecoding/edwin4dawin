@@ -1,7 +1,7 @@
 {
   "generator": "piper-tts (local, open voices) + ffmpeg mastering",
   "note": "Original narration written for this fan project. No film dialogue, crawl text, or actor imitation.",
-  "words": 536,
+  "words": 544,
   "cues": [
     {
       "id": "p1",
@@ -326,6 +326,15 @@
       "text": "A weapon's blueprint and a call for help, hidden inside a machine nobody thinks to search.",
       "duration": 5.407,
       "file": "audio/narration/l5.mp3"
+    },
+    {
+      "id": "l6",
+      "chapter": "plans",
+      "time": 305.2,
+      "speaker": "NARRATOR",
+      "text": "Footsteps in the corridor. Her time is gone.",
+      "duration": 2.952,
+      "file": "audio/narration/l6.mp3"
     },
     {
       "id": "e1",

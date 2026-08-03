@@ -17,7 +17,7 @@ import { VectorTrack } from '../../timeline/tracks';
 
 export type CharacterState =
   | 'idle' | 'alert' | 'walk' | 'run' | 'aim' | 'fire'
-  | 'react' | 'down' | 'interact' | 'kneel' | 'look' | 'cower' | 'march';
+  | 'react' | 'down' | 'interact' | 'kneel' | 'crouch' | 'look' | 'cower' | 'march';
 
 export interface CharacterSpec {
   name: string;
@@ -122,7 +122,7 @@ export function buildHumanoid(lib: MaterialLibrary, spec: CharacterSpec): Joints
   chest.position.y = 0.26 * s;
   torso.add(chest);
 
-  const ribcage = box(lib, 0.42 * bulk * s, 0.32 * s, 0.25 * bulk * s, c.torso, rough, metal);
+  const ribcage = box(lib, 0.39 * bulk * s, 0.32 * s, 0.25 * bulk * s, c.torso, rough, metal);
   ribcage.position.y = 0.15 * s;
   chest.add(ribcage);
 
@@ -146,7 +146,7 @@ export function buildHumanoid(lib: MaterialLibrary, spec: CharacterSpec): Joints
   // Arms.
   const makeArm = (side: number): { shoulder: THREE.Object3D; elbow: THREE.Object3D; hand: THREE.Object3D } => {
     const shoulder = new THREE.Object3D();
-    shoulder.position.set(side * 0.23 * bulk * s, 0.27 * s, 0);
+    shoulder.position.set(side * 0.255 * bulk * s, 0.27 * s, 0);
     chest.add(shoulder);
     const pad = capsule(lib, 0.075 * bulk * s, 0.03 * s, c.arms, rough, metal);
     shoulder.add(pad);
@@ -196,12 +196,14 @@ export function buildHumanoid(lib: MaterialLibrary, spec: CharacterSpec): Joints
   const legR = makeLeg(1);
 
   if (spec.skirt) {
-    const geo = new THREE.CylinderGeometry(0.19 * s, 0.3 * s, 0.62 * s, 12, 1, true);
+    // Closed at both ends and single sided: an open cone shows its unlit
+    // interior as a dark slab the moment the wearer bends forward.
+    const geo = new THREE.CylinderGeometry(0.27 * s, 0.35 * s, 0.72 * s, 16, 1, false);
     lib.registry.track(geo);
     const m = new THREE.Mesh(geo, lib.character(c.legs, 0.7, 0.02));
-    (m.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
-    m.position.y = -0.2 * s;
+    m.position.y = -0.24 * s;
     m.castShadow = true;
+    m.receiveShadow = true;
     hips.add(m);
   }
 
@@ -430,6 +432,8 @@ export class Character {
   readonly options: CharacterOptions;
   private phase: number;
   private lastState: CharacterState = 'idle';
+  private contact: THREE.Mesh;
+  private contactRadius: number;
   /** Set by the scene so blaster muzzles can be located in world space. */
   readonly muzzleWorld = new THREE.Vector3();
 
@@ -439,6 +443,9 @@ export class Character {
     this.name = spec.name;
     this.options = options;
     this.phase = options.phase ?? 0;
+    this.contactRadius = (spec.height ?? 1.82) * 0.36;
+    this.contact = makeContactShadow(lib);
+    this.group.add(this.contact);
   }
 
   stateAt(t: number): StateKey {
@@ -449,6 +456,18 @@ export class Character {
       else break;
     }
     return found;
+  }
+
+  /** The state immediately before the one active at `t`, if any. */
+  private previousState(t: number): StateKey | null {
+    const keys = this.options.states;
+    let prev: StateKey | null = null;
+    for (const k of keys) {
+      if (t >= k.t) {
+        if (k !== this.stateAt(t)) prev = k;
+      } else break;
+    }
+    return prev;
   }
 
   /** Seconds since the active state began - drives one-shot pose transitions. */
@@ -482,10 +501,57 @@ export class Character {
     resetJoints(j);
 
     const walkPhase = (t + this.phase) * gait;
-    switch (key.state) {
+    this.applyPose(key.state, t, age, key, walkPhase, speed, fluid);
+
+    // Cross-fade out of the previous pose so a state change reads as a move
+    // rather than a snap. `down` is excluded: collapsing needs a hard start.
+    const previous = this.previousState(t);
+    if (previous && age < POSE_BLEND && key.state !== 'down') {
+      const blend = 1 - age / POSE_BLEND;
+      captureJoints(j, BLEND_TARGET);
+      resetJoints(j);
+      this.applyPose(previous.state, t, t - previous.t, previous, walkPhase, speed, fluid);
+      captureJoints(j, BLEND_PREVIOUS);
+      blendJoints(j, BLEND_PREVIOUS, BLEND_TARGET, smoothstep(0, 1, 1 - blend));
+    }
+
+    // Locomotion still applies while walking and firing simultaneously.
+    if (speed > 0.12 && (key.state === 'aim' || key.state === 'fire')) {
+      this.overlayStride(walkPhase, speed, fluid);
+    }
+
+    if (key.focus && key.state !== 'down') this.lookAtFocus(key.focus);
+
+    if (j.cape) {
+      const sway = Math.sin(t * 0.9 + this.phase) * 0.05 + fbm1(t * 0.6 + this.phase) * 0.04;
+      j.cape.rotation.x = -0.06 + sway * 0.5 + clamp(speed * 0.06, 0, 0.22);
+      j.cape.rotation.z = sway;
+    }
+
+    // The grounding blob stretches along the direction of travel and spreads
+    // as a body goes down.
+    const down = key.state === 'down' ? saturate(age / 1.25) : 0;
+    const r = this.contactRadius;
+    this.contact.scale.set(r * (1 + down * 0.7), 1, r * (1 + Math.min(0.45, speed * 0.1) + down * 1.1));
+    (this.contact.material as THREE.MeshBasicMaterial).opacity = 0.5 - down * 0.14;
+
+    j.root.updateMatrixWorld(true);
+    if (j.muzzle) j.muzzle.getWorldPosition(this.muzzleWorld);
+  }
+
+  private applyPose(
+    state: CharacterState,
+    t: number,
+    age: number,
+    key: StateKey,
+    walkPhase: number,
+    speed: number,
+    fluid: number,
+  ): void {
+    switch (state) {
       case 'walk':
       case 'march':
-        this.poseLocomotion(walkPhase, Math.max(0.9, speed), key.state === 'march' ? 0.75 : 1, fluid);
+        this.poseLocomotion(walkPhase, Math.max(0.9, speed), state === 'march' ? 0.75 : 1, fluid);
         break;
       case 'run':
         this.poseLocomotion(walkPhase * 1.55, Math.max(2.6, speed), 1.35, fluid);
@@ -511,6 +577,9 @@ export class Character {
       case 'kneel':
         this.poseKneel(t, key);
         break;
+      case 'crouch':
+        this.poseCrouch(t, key);
+        break;
       case 'cower':
         this.poseCower(t);
         break;
@@ -520,22 +589,6 @@ export class Character {
         this.poseIdle(t, fluid);
         break;
     }
-
-    // Locomotion still applies while walking and firing simultaneously.
-    if (speed > 0.12 && (key.state === 'aim' || key.state === 'fire')) {
-      this.overlayStride(walkPhase, speed, fluid);
-    }
-
-    if (key.focus && key.state !== 'down') this.lookAtFocus(key.focus);
-
-    if (j.cape) {
-      const sway = Math.sin(t * 0.9 + this.phase) * 0.05 + fbm1(t * 0.6 + this.phase) * 0.04;
-      j.cape.rotation.x = -0.06 + sway * 0.5 + clamp(speed * 0.06, 0, 0.22);
-      j.cape.rotation.z = sway;
-    }
-
-    j.root.updateMatrixWorld(true);
-    if (j.muzzle) j.muzzle.getWorldPosition(this.muzzleWorld);
   }
 
   get currentState(): CharacterState {
@@ -719,6 +772,29 @@ export class Character {
     if (key.focus) this.lookAtFocus(key.focus);
   }
 
+  /**
+   * A shallow two-footed crouch with a forward reach. Unlike `kneel` this keeps
+   * the thighs close to vertical, which matters for the robed silhouette: a
+   * full kneel drove the legs straight through the skirt geometry.
+   */
+  private poseCrouch(t: number, key: StateKey): void {
+    const j = this.joints;
+    j.hips.position.y -= 0.17;
+    j.hipL.rotation.x = 0.24;
+    j.hipR.rotation.x = 0.2;
+    j.kneeL.rotation.x = -0.48;
+    j.kneeR.rotation.x = -0.44;
+    j.torso.rotation.x = 0.11;
+    j.chest.rotation.x = 0.07 + Math.sin(t * 1.4) * 0.015;
+    j.shoulderR.rotation.x = -0.72;
+    j.shoulderR.rotation.z = -0.2;
+    j.elbowR.rotation.x = -0.5 + Math.sin(t * 2.1) * 0.07;
+    j.shoulderL.rotation.x = -0.38;
+    j.shoulderL.rotation.z = 0.26;
+    j.elbowL.rotation.x = -0.7;
+    if (key.focus) this.lookAtFocus(key.focus);
+  }
+
   private poseCower(t: number): void {
     const j = this.joints;
     const tremor = Math.sin(t * 11 + this.phase * 6) * 0.02;
@@ -749,6 +825,109 @@ export class Character {
     j.head.rotation.x += clamp(-Math.atan2(dy, Math.hypot(dx, dz)), -0.5, 0.5) * 0.8;
     j.chest.rotation.y += rel * 0.22;
   }
+}
+
+/**
+ * Soft grounding blob under every figure.
+ *
+ * A single shadow-casting key cannot reliably ground a dozen bodies in a
+ * corridor lit mostly by practicals, and without contact the eye reads them as
+ * hovering. One cheap radial decal per character fixes that outright.
+ */
+let contactTexture: THREE.CanvasTexture | null = null;
+let contactMaterial: THREE.MeshBasicMaterial | null = null;
+let contactGeometry: THREE.PlaneGeometry | null = null;
+
+function makeContactShadow(lib: MaterialLibrary): THREE.Mesh {
+  if (!contactTexture) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(0,0,0,0.9)');
+    g.addColorStop(0.45, 'rgba(0,0,0,0.45)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+    contactTexture = new THREE.CanvasTexture(canvas);
+    lib.registry.track(contactTexture);
+  }
+  if (!contactMaterial) {
+    contactMaterial = new THREE.MeshBasicMaterial({
+      map: contactTexture, transparent: true, opacity: 0.55,
+      depthWrite: false, toneMapped: false, color: 0x000000,
+    });
+    lib.registry.track(contactMaterial);
+  }
+  if (!contactGeometry) {
+    contactGeometry = new THREE.PlaneGeometry(1, 1);
+    contactGeometry.rotateX(-Math.PI / 2);
+    lib.registry.track(contactGeometry);
+  }
+  const mesh = new THREE.Mesh(contactGeometry, contactMaterial.clone());
+  lib.registry.track(mesh.material as THREE.Material);
+  mesh.position.y = 0.012;
+  mesh.renderOrder = 1;
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
+/** Public helper so non-humanoid assets (the astromech) can be grounded too. */
+export function makeGroundContact(lib: MaterialLibrary, radius: number): THREE.Mesh {
+  const mesh = makeContactShadow(lib);
+  mesh.scale.set(radius * 2, 1, radius * 2);
+  return mesh;
+}
+
+/** Discard the shared contact-shadow resources when the library is rebuilt. */
+export function resetContactShadowCache(): void {
+  contactTexture = null;
+  contactMaterial = null;
+  contactGeometry = null;
+}
+
+/** Seconds spent easing from one pose into the next. */
+const POSE_BLEND = 0.72;
+
+/** Joints captured during a cross-fade, in a fixed order. */
+const BLEND_ORDER: Array<keyof Joints> = [
+  'body', 'hips', 'torso', 'chest', 'head',
+  'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'hipL', 'hipR', 'kneeL', 'kneeR',
+];
+
+interface JointSnapshot {
+  rotation: THREE.Euler;
+  position: THREE.Vector3;
+}
+
+function makeSnapshot(): JointSnapshot[] {
+  return BLEND_ORDER.map(() => ({ rotation: new THREE.Euler(), position: new THREE.Vector3() }));
+}
+
+const BLEND_TARGET = makeSnapshot();
+const BLEND_PREVIOUS = makeSnapshot();
+
+function captureJoints(j: Joints, into: JointSnapshot[]): void {
+  BLEND_ORDER.forEach((key, i) => {
+    const node = j[key] as THREE.Object3D;
+    into[i].rotation.copy(node.rotation);
+    into[i].position.copy(node.position);
+  });
+}
+
+/** Write `lerp(previous, target, k)` back onto the rig. */
+function blendJoints(j: Joints, previous: JointSnapshot[], target: JointSnapshot[], k: number): void {
+  BLEND_ORDER.forEach((key, i) => {
+    const node = j[key] as THREE.Object3D;
+    const a = previous[i];
+    const b = target[i];
+    node.rotation.set(
+      a.rotation.x + (b.rotation.x - a.rotation.x) * k,
+      a.rotation.y + (b.rotation.y - a.rotation.y) * k,
+      a.rotation.z + (b.rotation.z - a.rotation.z) * k,
+    );
+    node.position.lerpVectors(a.position, b.position, k);
+  });
 }
 
 function resetJoints(j: Joints): void {

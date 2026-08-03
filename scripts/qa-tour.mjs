@@ -288,6 +288,15 @@ async function main() {
         await page.waitForTimeout(300);
         const visible = await page.locator('.selection').evaluate((el) => !el.classList.contains('hidden'));
         if (!visible) throw new Error('selection panel did not appear');
+        // The dossier must be genuinely painted, not merely un-hidden: on a slow
+        // rasteriser a screenshot taken immediately catches it mid-fade.
+        await page.waitForFunction(
+          () => Number(getComputedStyle(document.querySelector('.selection')).opacity) > 0.95,
+          null,
+          { timeout: 15000 },
+        );
+        const dossierText = await page.locator('.selection__name').textContent();
+        if (!dossierText || !dossierText.trim()) throw new Error('dossier panel is empty');
         await page.screenshot({ path: path.join(OUT_DIR, 'ui-explore-selection.png') });
         // Orbit with the pointer.
         await page.mouse.move(width / 2, height / 2);

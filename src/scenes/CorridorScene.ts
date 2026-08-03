@@ -75,6 +75,7 @@ export class CorridorScene {
   private vaderRim: THREE.PointLight;
   private vaderKey: THREE.PointLight;
   private archiveLight: THREE.PointLight;
+  private archiveFill: THREE.PointLight;
   private doorwayGlow: THREE.PointLight;
   private breachLight: THREE.PointLight;
   private podHatch: THREE.Group;
@@ -285,9 +286,13 @@ export class CorridorScene {
 
     // Warm practical over the archive station, and a dim residual glow from the
     // boarding tube so the breached doorway keeps reading after the flash.
-    this.archiveLight = new THREE.PointLight(0xffe6c8, 1.5, 7, 2);
-    this.archiveLight.position.set(-2.2, 2.4, 25.6);
+    this.archiveLight = new THREE.PointLight(0xffe6c8, 1.5, 9, 2);
+    this.archiveLight.position.set(-1.9, 2.5, 25.6);
     this.scene.add(this.archiveLight);
+
+    this.archiveFill = new THREE.PointLight(0xbfd4f0, 0, 8, 2);
+    this.archiveFill.position.set(1.4, 1.9, 24.2);
+    this.scene.add(this.archiveFill);
 
     this.doorwayGlow = new THREE.PointLight(0xffb27a, 0, 16, 2);
     this.doorwayGlow.position.set(0, 1.5, DOOR_Z - 2.2);
@@ -378,7 +383,7 @@ export class CorridorScene {
       const dist = from.distanceTo(to);
       const t1 = t0 + dist / BOLT_SPEED;
       const color = imperial ? PALETTE.imperialBoltRed : PALETTE.rebelBoltBlue;
-      bolts.push({ t0, t1, from: from.clone(), to: to.clone(), color, length: 0.5, radius: 0.032 });
+      bolts.push({ t0, t1, from: from.clone(), to: to.clone(), color, length: 1.05, radius: 0.026 });
       flashes.push({ t0, position: from.clone(), color, size: 0.55, light: 2.2, lightRange: 7, duration: 0.12 });
       flashes.push({
         t0: t1, position: to.clone(), color: hit ? 0xffd08a : color,
@@ -537,14 +542,14 @@ export class CorridorScene {
     // White house lighting fails as the boarding begins, emergency red takes
     // over, and Vader's arrival pulls the corridor colder and darker still.
     const alarmOn = smoothstep(196, 199, t) * (1 - smoothstep(300, 306, t) * 0.35);
-    const whiteLevel = 1 - 0.5 * smoothstep(197.5, 200.5, t) - 0.18 * smoothstep(216, 222, t) + 0.3 * smoothstep(262, 268, t);
+    const whiteLevel = 1 - 0.5 * smoothstep(197.5, 200.5, t) - 0.18 * smoothstep(216, 222, t) + 0.45 * smoothstep(262, 268, t);
     const redLevel = alarmOn * (0.8 + 0.2 * smoothstep(214, 220, t));
     for (let i = 0; i < this.runs.length; i++) {
       this.runs[i].setMood(t, clamp(whiteLevel, 0.25, 1), redLevel, i * 3.7);
     }
     for (const a of this.alarms) a.update(t, alarmOn);
 
-    const vaderPresence = smoothstep(238, 246, t) * (1 - smoothstep(300, 306, t));
+    const vaderPresence = smoothstep(238, 243, t) * (1 - smoothstep(300, 306, t));
     this.keyLight.intensity = 1.2 - 0.45 * vaderPresence - 0.25 * smoothstep(216, 224, t);
     this.keyLight.color.setRGB(1, 0.95 - 0.1 * vaderPresence, 0.89 - 0.2 * vaderPresence);
     this.fillLight.intensity = 0.52 - 0.2 * vaderPresence;
@@ -556,8 +561,10 @@ export class CorridorScene {
     this.vaderKey.position.set(0.75, 1.95, vaderZ + 2.6);
     this.vaderKey.intensity = vaderPresence * 4.4;
 
-    this.archiveLight.intensity = 1.1 + 0.7 * smoothstep(262, 268, t);
-    this.doorwayGlow.intensity = smoothstep(BREACH_TIME, BREACH_TIME + 3, t) * 2.6;
+    const archivePresence = smoothstep(260, 268, t) * (1 - smoothstep(316, 322, t));
+    this.archiveLight.intensity = 1.1 + 1.5 * archivePresence;
+    this.archiveFill.intensity = 1.5 * archivePresence;
+    this.doorwayGlow.intensity = smoothstep(BREACH_TIME, BREACH_TIME + 3, t) * (2.6 + 3.4 * vaderPresence);
 
     const breach = this.door.breachFlash(t);
     this.breachLight.intensity = breach * 26;
@@ -712,10 +719,12 @@ function buildCast(lib: MaterialLibrary): {
     advance: Array<[number, number]>;
     /** Where this trooper stands once Vader is announced: clear of the centre. */
     aside: [number, number];
+    /** Optional aft sweep during the archive chapter. */
+    sweepTo?: [number, number];
     downAt?: number;
   }> = [
-    { lane: -0.75, enter: BREACH_TIME + 0.7, advance: [[-0.75, -3.4], [-0.95, 1.2], [-1.0, 3.6]], aside: [-1.3, 4.4] },
-    { lane: 0.75, enter: BREACH_TIME + 1.0, advance: [[0.75, -3.0], [0.95, 0.6], [1.05, 3.0]], aside: [1.3, 3.4] },
+    { lane: -0.75, enter: BREACH_TIME + 0.7, advance: [[-0.75, -3.4], [-0.95, 1.2], [-1.0, 3.6]], aside: [-1.3, 4.4], sweepTo: [-1.05, 17.4] },
+    { lane: 0.75, enter: BREACH_TIME + 1.0, advance: [[0.75, -3.0], [0.95, 0.6], [1.05, 3.0]], aside: [1.3, 3.4], sweepTo: [1.05, 15.6] },
     { lane: 0.0, enter: BREACH_TIME + 1.5, advance: [[0.1, -4.2], [0.2, -1.2], [0.3, 1.6]], aside: [1.28, 0.4], downAt: 227.5 },
     { lane: -1.05, enter: BREACH_TIME + 2.4, advance: [[-1.05, -5.0], [-1.15, -1.6], [-1.2, 2.0]], aside: [-1.3, 1.0] },
     { lane: 1.05, enter: BREACH_TIME + 3.0, advance: [[1.05, -4.6], [1.15, -0.8], [1.2, 2.6]], aside: [1.3, -2.0], downAt: 224.5 },
@@ -734,7 +743,13 @@ function buildCast(lib: MaterialLibrary): {
     if (!plan.downAt) {
       keys.push([238.5 + i * 0.2, last[0], 0, last[1]]);
       keys.push([241.5 + i * 0.2, plan.aside[0], 0, plan.aside[1]]);
-      keys.push([1000, plan.aside[0], 0, plan.aside[1]]);
+      if (plan.sweepTo) {
+        keys.push([298.5 + i * 0.4, plan.aside[0], 0, plan.aside[1]]);
+        keys.push([306.5, plan.sweepTo[0], 0, plan.sweepTo[1]]);
+        keys.push([1000, plan.sweepTo[0], 0, plan.sweepTo[1]]);
+      } else {
+        keys.push([1000, plan.aside[0], 0, plan.aside[1]]);
+      }
     } else {
       keys.push([1000, last[0], 0, last[1]]);
     }
@@ -750,8 +765,15 @@ function buildCast(lib: MaterialLibrary): {
       { t: 238.5 + i * 0.2, state: 'walk' },
       { t: 242.4 + i * 0.2, state: 'alert', facing: facingIn },
       { t: 246, state: 'idle', facing: facingIn, focus: new THREE.Vector3(0, 1.5, DOOR_Z + 2) },
-      { t: 1000, state: 'idle', facing: facingIn },
     ];
+    if (plan.sweepTo) {
+      states.push({ t: 298.5 + i * 0.4, state: 'aim', focus: new THREE.Vector3(0, 1.3, 30) });
+      states.push({ t: 299.5 + i * 0.4, state: 'walk' });
+      states.push({ t: 306.5, state: 'aim', focus: new THREE.Vector3(-1.5, 1.3, 26) });
+      states.push({ t: 1000, state: 'aim', focus: new THREE.Vector3(-1.5, 1.3, 26) });
+    } else {
+      states.push({ t: 1000, state: 'idle', facing: facingIn });
+    }
     if (plan.downAt) {
       states.length = 6;
       states.push({ t: plan.downAt - 0.4, state: 'react', focus: new THREE.Vector3(0, 1.2, 12) });
@@ -772,7 +794,9 @@ function buildCast(lib: MaterialLibrary): {
     [254.0, 0, 0, 3.4],
     [259.5, 0, 0, 7.2],
     [262.0, 0, 0, 8.2],
-    [1000, 0, 0, 8.2],
+    [296.0, 0, 0, 8.6],
+    [307.0, 0, 0, 13.4],
+    [1000, 0, 0, 13.4],
   ]);
   const vader = createVader(lib, {
     path: vaderPath,
@@ -783,6 +807,8 @@ function buildCast(lib: MaterialLibrary): {
       { t: 240.0, state: 'march', facing: 0 },
       { t: 259.5, state: 'alert', facing: 0 },
       { t: 261.0, state: 'idle', facing: 0, focus: new THREE.Vector3(0, 1.6, 20) },
+      { t: 296.0, state: 'march', facing: 0 },
+      { t: 307.5, state: 'idle', facing: 0, focus: new THREE.Vector3(-1.5, 1.5, 26) },
       { t: 1000, state: 'idle', facing: 0 },
     ],
   });
@@ -799,8 +825,8 @@ function buildCast(lib: MaterialLibrary): {
     [283.0, -2.15, 0, 26.4],
     [285.2, -2.25, 0, 24.95],
     [299.0, -2.25, 0, 24.95],
-    [302.5, -1.4, 0, 26.7],
-    [1000, -1.4, 0, 26.7],
+    [302.5, -1.15, 0, 24.1],
+    [1000, -1.15, 0, 24.1],
   ]);
   // She works the projection itself, which turns her toward camera instead of
   // presenting her back to it for thirty seconds.
@@ -814,7 +840,7 @@ function buildCast(lib: MaterialLibrary): {
       { t: 262.0, state: 'run' },
       { t: 271.5, state: 'interact', focus: consoleFocus },
       { t: 277.0, state: 'interact', focus: consoleFocus },
-      { t: 285.6, state: 'kneel', focus: droidFocus },
+      { t: 285.6, state: 'crouch', focus: droidFocus },
       { t: 296.0, state: 'interact', focus: droidFocus },
       { t: 299.5, state: 'alert', focus: new THREE.Vector3(0, 1.5, 8) },
       { t: 303.0, state: 'idle', facing: Math.PI, focus: new THREE.Vector3(0, 1.5, 10) },

@@ -40,12 +40,12 @@ export const REBEL_SPEC: CharacterSpec = {
   roughness: 0.72,
   metalness: 0.06,
   colors: {
-    head: 0x2f3338,
-    torso: 0x9a917e,
-    arms: 0x6f6a5c,
-    legs: 0x4a4740,
-    belt: 0x2a2724,
-    accent: 0x30343a,
+    head: 0x2b2f34,
+    torso: 0x7a7263,
+    arms: 0x585245,
+    legs: 0x3e3b35,
+    belt: 0x24211e,
+    accent: 0x2a2e34,
   },
 };
 
@@ -72,12 +72,12 @@ export const VADER_SPEC: CharacterSpec = {
   roughness: 0.22,
   metalness: 0.5,
   colors: {
-    head: PALETTE.vaderBlack,
-    torso: 0x0d0e11,
-    arms: 0x121317,
-    legs: 0x0f1013,
-    belt: 0x1c1d22,
-    accent: 0x2c2e34,
+    head: 0x1a1c22,
+    torso: 0x15171d,
+    arms: 0x191b21,
+    legs: 0x161820,
+    belt: 0x24262d,
+    accent: 0x33363e,
   },
 };
 

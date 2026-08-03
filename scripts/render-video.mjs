@@ -22,7 +22,10 @@ import { chromium } from 'playwright';
 
 const ROOT = path.dirname(fileURLToPath(new URL('.', import.meta.url)));
 const FRAME_DIR = path.join(ROOT, 'qa', 'frames');
-const PORT = 5173;
+// Render against the production build by default: a dev-server hot reload in
+// the middle of a 2,000-frame render destroys the page context.
+const usePreview = !process.argv.includes('--dev');
+const PORT = usePreview ? 4173 : 5173;
 const BASE = `http://127.0.0.1:${PORT}`;
 
 const args = process.argv.slice(2);
@@ -42,9 +45,9 @@ const hideUi = args.includes('--clean');
 
 /** Highlight reel: one representative window per chapter. */
 const REEL = [
-  [5, 12], [52, 60], [104, 120], [133, 141], [149, 156],
-  [186, 196], [199, 206], [216, 226], [243, 255],
-  [275, 283], [289, 297], [308, 317], [319.5, 328], [345, 353], [367, 375],
+  [5, 11], [52, 59], [105, 119], [134, 141],
+  [186, 195], [216, 225], [243, 256],
+  [277, 284], [289, 296], [319.5, 327], [346, 353],
 ];
 
 const segments = args.includes('--reel')
@@ -65,7 +68,7 @@ async function waitForServer(url, timeoutMs = 60000) {
 await rm(FRAME_DIR, { recursive: true, force: true });
 await mkdir(FRAME_DIR, { recursive: true });
 
-const server = spawn('npm', ['run', 'dev'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+const server = spawn('npm', ['run', usePreview ? 'preview' : 'dev'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
 server.stdout.on('data', () => {});
 server.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));
 

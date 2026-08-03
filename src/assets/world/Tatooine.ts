@@ -135,7 +135,7 @@ export class Tatooine {
       uniforms: {
         uColor: { value: new THREE.Color(0xffb877) },
         uSunDir: { value: new THREE.Vector3(1, 0.25, 0.6).normalize() },
-        uIntensity: { value: 1.35 },
+        uIntensity: { value: 0.95 },
         uPower: { value: 6.0 },
       },
       vertexShader: atmosphereVertex,

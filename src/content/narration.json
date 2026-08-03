@@ -48,6 +48,7 @@
     { "id": "l3", "chapter": "plans", "time": 285.0, "voice": "narrator", "speaker": "NARRATOR", "text": "With them she records a message she may not live to send." },
     { "id": "l4", "chapter": "plans", "time": 292.0, "voice": "leia", "speaker": "PRINCESS", "text": "You are carrying more than a message. Get it to the surface. Do not stop for me." },
     { "id": "l5", "chapter": "plans", "time": 299.5, "voice": "narrator", "speaker": "NARRATOR", "text": "A weapon's blueprint and a call for help, hidden inside a machine nobody thinks to search." },
+    { "id": "l6", "chapter": "plans", "time": 305.2, "voice": "narrator", "speaker": "NARRATOR", "text": "Footsteps in the corridor. Her time is gone." },
 
     { "id": "e1", "chapter": "escape", "time": 310.0, "voice": "narrator", "speaker": "NARRATOR", "text": "Two droids run for the launch bays. One of them is certain." },
     { "id": "e2", "chapter": "escape", "time": 316.5, "voice": "threepio", "speaker": "PROTOCOL DROID", "text": "That is not a lifeboat. That is a very small can with an engine." },

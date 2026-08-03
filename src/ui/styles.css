@@ -231,7 +231,7 @@ button.active {
 .subtitles {
   position: absolute;
   left: 50%;
-  bottom: 9.5rem;
+  bottom: 13.2rem;
   transform: translateX(-50%);
   width: min(1020px, 84vw);
   text-align: center;
@@ -257,7 +257,7 @@ button.active {
   font-size: clamp(1rem, 1.75vw, 1.32rem);
   line-height: 1.5;
   color: #f2f4f8;
-  background: rgba(4, 6, 10, 0.6);
+  background: rgba(4, 6, 10, 0.42);
   padding: 0.42rem 1.1rem;
   border-radius: var(--radius);
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
@@ -630,6 +630,7 @@ button.active {
   position: absolute;
   left: 1rem;
   bottom: 8rem;
+  opacity: 1;
   width: min(330px, 84vw);
   background: var(--panel);
   border: 1px solid var(--line);
@@ -637,7 +638,7 @@ button.active {
   border-radius: 6px;
   padding: 0.9rem 1rem;
   backdrop-filter: blur(10px);
-  transition: opacity 200ms ease, transform 200ms ease;
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .selection.hidden {

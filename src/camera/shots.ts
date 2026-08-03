@@ -434,14 +434,16 @@ export function buildShots(): Shot[] {
       start: 221,
       end: 228,
       pos: [
-        { t: 221, v: [1.24, 1.62, 14.2], ease: 'smoother' },
-        { t: 228, v: [1.1, 1.5, 12.0], ease: 'smoother' },
+        { t: 221, v: [1.24, 1.78, 19.8], ease: 'smoother' },
+        { t: 228, v: [1.1, 1.66, 17.9], ease: 'smoother' },
       ],
+      // Behind the defended line: a defender frames the left edge instead of
+      // standing a half metre from the lens.
       look: [
-        { t: 221, v: [0, 1.3, 1.5] },
-        { t: 228, v: [0, 1.3, -2.5] },
+        { t: 221, v: [0, 1.3, 5] },
+        { t: 228, v: [0, 1.28, -1] },
       ],
-      fov: 48,
+      fov: 52,
       shake: 1.1,
       handheld: 1.6,
     }),
@@ -589,12 +591,14 @@ export function buildShots(): Shot[] {
       start: 299,
       end: 306,
       pos: [
-        { t: 299, v: [1.85, 1.54, 23.2], ease: 'smoother' },
-        { t: 306, v: [1.35, 1.48, 24.6], ease: 'smoother' },
+        { t: 299, v: [-1.32, 1.64, 28.6], ease: 'smoother' },
+        { t: 306, v: [-1.08, 1.56, 26.9], ease: 'smoother' },
       ],
+      // Over her shoulder and down the corridor: she is looking at what is
+      // coming, and so are we.
       look: [
-        { t: 299, v: [-1.7, 1.34, 25.1] },
-        { t: 306, v: [-1.1, 1.28, 26.8] },
+        { t: 299, v: [0.3, 1.34, 18.5] },
+        { t: 306, v: [0.1, 1.3, 12.5] },
       ],
       fov: 44,
       shake: 0.35,
@@ -641,15 +645,18 @@ export function buildShots(): Shot[] {
       start: 319.5,
       end: 328,
       pos: [
-        { t: 319.5, v: [-20, -15, -24], ease: 'smoother' },
-        { t: 323, v: [-31, -24, -37], ease: 'smoother' },
-        { t: 328, v: [-62, -47, -72], ease: 'smoother' },
+        { t: 319.5, v: [-11, -8, -13], ease: 'smoother' },
+        { t: 323, v: [-17, -13, -20], ease: 'smoother' },
+        { t: 328, v: [-38, -29, -44], ease: 'smoother' },
       ],
       // Trailing the pod along its escape vector puts the corvette directly
       // behind it, so separation reads as leaving something rather than
       // floating in the void.
       followPos: 'pod',
-      look: [0, 0, 0],
+      look: [
+        { t: 319.5, v: [0, -3, 0] },
+        { t: 328, v: [0, -9, 0] },
+      ],
       follow: 'pod',
       fov: [
         { t: 319.5, v: 52 },

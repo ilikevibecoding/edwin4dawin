@@ -4,7 +4,7 @@ import { PALETTE } from '../materials';
 import { clamp, saturate, smoothstep } from '../../core/mathx';
 import { fbm1 } from '../../core/Rng';
 import { VectorTrack } from '../../timeline/tracks';
-import { Character, type CharacterOptions } from './CharacterRig';
+import { Character, makeGroundContact, type CharacterOptions } from './CharacterRig';
 
 /**
  * The two droids.
@@ -152,6 +152,9 @@ export class Astromech {
     const port = new THREE.Mesh(portGeo, this.portMat);
     port.position.set(0.14, 0.3, 0.1);
     this.dome.add(port);
+
+    const contact = makeGroundContact(lib, 0.46);
+    this.group.add(contact);
 
     const proj = new THREE.Object3D();
     proj.position.set(0, 0.58, 0.2);
