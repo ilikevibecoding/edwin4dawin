@@ -18,6 +18,8 @@ import {
 import { saturate, smoothstep } from '../core/mathx';
 import { PrologueText } from './PrologueText';
 
+const _aft = new THREE.Vector3();
+
 /**
  * The exterior act: Tatooine, the pursuit, the capture and the pod's descent.
  *
@@ -57,6 +59,7 @@ export class SpaceScene {
   private tractorMat: THREE.MeshBasicMaterial;
   private podTrail: ParticleField;
   private podBurn: ParticleField;
+  private podGlow: THREE.PointLight;
 
   /** Objects the viewer can click in Explore mode. */
   readonly selectable: Array<{ object: THREE.Object3D; id: string }> = [];
@@ -214,6 +217,12 @@ export class SpaceScene {
     this.chase.add(this.podBurn.points);
     this.buildPodTrail(q.particleScale);
 
+    // The pod separates on the shadowed side of both hulls, where the only light
+    // reaching it is its own exhaust. Without this it is a black disc against a
+    // lit underside and reads as a hole rather than a machine.
+    this.podGlow = new THREE.PointLight(0xffbe72, 0, 26, 2);
+    this.chase.add(this.podGlow);
+
     // ---- Selectable registry ----------------------------------------------
     this.selectable.push(
       { object: this.runner.group, id: 'blockade-runner' },
@@ -312,7 +321,13 @@ export class SpaceScene {
     this.pod.update(t);
     this.podPivot.visible = podVisible(t);
     this.podTrail.points.visible = podReentry.at(t) > 0.02;
-    this.podBurn.points.visible = podEngineLevel.at(t) > 0.04;
+    const burn = podEngineLevel.at(t);
+    this.podBurn.points.visible = burn > 0.04;
+    // Sat at the nozzles rather than inside the hull: a light at the centre of a
+    // closed shape illuminates none of it, since every face points away.
+    this.podGlow.intensity = 34 * burn;
+    this.podGlow.position.copy(this.podPivot.position)
+      .add(_aft.set(0, 0, -4.5).applyQuaternion(this.podPivot.quaternion));
 
     // Turrets track the corvette from first contact until the guns fall silent.
     const trackTarget = this.runnerPivot.getWorldPosition(new THREE.Vector3());

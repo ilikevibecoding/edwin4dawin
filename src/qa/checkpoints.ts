@@ -283,7 +283,10 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: '25-pod-separation',
-    time: 322,
+    // Late in the shot, where the gap between pod and hull is widest. Sampled at
+    // launch the pod is still pressed against the hull's apex and the separation
+    // - the point of the shot - is the one thing you cannot see.
+    time: 325.5,
     chapter: 'escape',
     shot: 'esc-3',
     scene: 'space',

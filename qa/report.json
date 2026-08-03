@@ -1,517 +1,111 @@
 {
-  "generatedAt": "2026-08-03T16:18:25.477Z",
-  "url": "http://127.0.0.1:4173/?qa=1&quality=medium",
+  "generatedAt": "2026-08-03T16:34:40.460Z",
+  "url": "http://127.0.0.1:5173/?qa=1&quality=medium",
   "viewport": {
-    "width": 1920,
-    "height": 1080
+    "width": 1280,
+    "height": 720
   },
   "quality": "medium",
-  "checkpointCount": 4,
+  "checkpointCount": 1,
   "failureCount": 0,
   "consoleErrors": [],
   "pageErrors": [],
   "controlResults": [],
   "playbackSamples": [
     {
-      "time": 100.5,
-      "fps": 0.8816510777695649,
+      "time": 100.4834,
+      "fps": 4.4082739911812245,
       "draws": 128,
       "tris": 38223,
       "issues": 0
     },
     {
-      "time": 101.91659999999999,
-      "fps": 0.8118157070102993,
+      "time": 101.9001,
+      "fps": 3.243955598356768,
       "draws": 69,
       "tris": 17909,
       "issues": 0
     },
     {
-      "time": 102.8166,
-      "fps": 0.8031239737860334,
-      "draws": 70,
-      "tris": 18041,
+      "time": 103.3334,
+      "fps": 3.246077656164662,
+      "draws": 71,
+      "tris": 18185,
       "issues": 0
     },
     {
-      "time": 104.8999,
-      "fps": 0.9082083874053698,
+      "time": 104.8,
+      "fps": 3.1845105407292182,
       "draws": 73,
       "tris": 22253,
       "issues": 0
     },
     {
-      "time": 106.14990000000002,
-      "fps": 1.0400992948126782,
+      "time": 106.0834,
+      "fps": 2.8247346318737776,
       "draws": 73,
       "tris": 22253,
       "issues": 0
     },
     {
-      "time": 107.41650000000003,
-      "fps": 1.283927791900983,
+      "time": 108.19999999999999,
+      "fps": 2.6189132092162457,
       "draws": 73,
       "tris": 22253,
       "issues": 0
     },
     {
-      "time": 108.69960000000003,
-      "fps": 1.4532395939971519,
+      "time": 109.46659999999997,
+      "fps": 2.700108004320173,
       "draws": 79,
       "tris": 22733,
       "issues": 0
     },
     {
-      "time": 110.04970000000006,
-      "fps": 2.142938778620138,
+      "time": 110.78319999999998,
+      "fps": 3.0578961674368035,
       "draws": 86,
       "tris": 23333,
       "issues": 0
     },
     {
-      "time": 110.93300000000006,
-      "fps": 2.265188086117417,
-      "draws": 88,
-      "tris": 23399,
+      "time": 112.09979999999997,
+      "fps": 2.993474226186913,
+      "draws": 89,
+      "tris": 24119,
       "issues": 0
     },
     {
-      "time": 113.21630000000007,
-      "fps": 2.535311251711335,
-      "draws": 98,
-      "tris": 24737,
+      "time": 114.29959999999997,
+      "fps": 2.9285435376805937,
+      "draws": 120,
+      "tris": 24541,
       "issues": 0
     }
   ],
-  "meanFps": 1.412550394313097,
+  "meanFps": 3.1206487563146372,
   "results": [
     {
       "checkpoint": {
-        "id": "20-leia-console",
-        "time": 276,
-        "chapter": "plans",
-        "shot": "pln-2",
-        "scene": "interior",
-        "expects": [
-          "Leia at the archive console",
-          "data projection booting"
-        ],
-        "assertions": [
-          {
-            "kind": "visible",
-            "target": "leia",
-            "minScreenFraction": 0.01
-          },
-          {
-            "kind": "noIssues"
-          }
-        ]
-      },
-      "report": {
-        "time": 276,
-        "chapter": "plans",
-        "chapterIndex": 5,
-        "shot": "pln-2",
-        "shotLabel": "Archive console",
-        "scene": "interior",
-        "beat": "archive console",
-        "subtitle": "The stolen schematics fold down into a small astromech droid. Every tower, every corridor, and one flaw at the heart of it.",
-        "narrationCue": "l2",
-        "issues": [],
-        "fps": 9.945591762744565,
-        "drawCalls": 284,
-        "triangles": 45237,
-        "measurements": {
-          "vader": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -2.54956118330896,
-              0.28803049006625125
-            ],
-            "distance": 15.079718651150603
-          },
-          "leia": {
-            "screenFraction": 0.1180921429538911,
-            "onScreen": true,
-            "ndc": [
-              -0.1153381866162884,
-              -0.3305078812427176
-            ],
-            "distance": 4.274170340486759
-          },
-          "r2": {
-            "screenFraction": 0.08901017943015542,
-            "onScreen": true,
-            "ndc": [
-              0.8350782967849624,
-              -0.6125436927418593
-            ],
-            "distance": 3.9466576635013935
-          },
-          "threepio": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -1.8983015425400036,
-              -0.33094857176639003
-            ],
-            "distance": 6.68180366802292
-          },
-          "plans": {
-            "screenFraction": 0.15724127234459684,
-            "onScreen": true,
-            "ndc": [
-              0.26902425093942245,
-              0.10395934603237586
-            ],
-            "distance": 4.21541486828302
-          },
-          "door": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -2.3171825039951397,
-              0.20154166707860766
-            ],
-            "distance": 29.892474810285062
-          },
-          "trooper-0": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -2.8512271341609963,
-              0.2885183167659641
-            ],
-            "distance": 19.622253923219763
-          },
-          "rebel-0": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -2.8995746506399818,
-              0.5522998588029931
-            ],
-            "distance": 16.028357880177495
-          },
-          "rebel-1": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -2.2145309501150394,
-              0.5169828577278978
-            ],
-            "distance": 14.105305409252468
-          }
-        },
-        "boltsActive": 0,
-        "particleBudget": {
-          "spaceSparks": 2629,
-          "interiorSparks": 2900,
-          "overflow": false
-        }
-      },
-      "failures": [],
-      "brightness": {
-        "mean": 0.2620254598447774,
-        "p95": 0.7438894117647058,
-        "clipped": 0.00020833333333333335
-      },
-      "screenshot": "20-leia-console.png"
-    },
-    {
-      "checkpoint": {
-        "id": "21-plans-projection",
-        "time": 284,
-        "chapter": "plans",
-        "shot": "pln-3",
-        "scene": "interior",
-        "expects": [
-          "glowing station schematic",
-          "Leia"
-        ],
-        "assertions": [
-          {
-            "kind": "visible",
-            "target": "plans"
-          },
-          {
-            "kind": "noIssues"
-          }
-        ]
-      },
-      "report": {
-        "time": 284,
-        "chapter": "plans",
-        "chapterIndex": 5,
-        "shot": "pln-3",
-        "shotLabel": "The plans, in the round",
-        "scene": "interior",
-        "beat": "plans projected",
-        "subtitle": "The stolen schematics fold down into a small astromech droid. Every tower, every corridor, and one flaw at the heart of it.",
-        "narrationCue": null,
-        "issues": [],
-        "fps": 2.376100088648105,
-        "drawCalls": 284,
-        "triangles": 52905,
-        "measurements": {
-          "vader": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -3.263180563933252,
-              0.3404840804636913
-            ],
-            "distance": 14.380585098335409
-          },
-          "leia": {
-            "screenFraction": 0.10425072455375912,
-            "onScreen": true,
-            "ndc": [
-              -0.22255604149471775,
-              -0.5180031131426959
-            ],
-            "distance": 4.18935842628996
-          },
-          "r2": {
-            "screenFraction": 0.091143769935367,
-            "onScreen": true,
-            "ndc": [
-              0.5358268944909068,
-              -0.753484712612684
-            ],
-            "distance": 3.8835742214812243
-          },
-          "threepio": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -2.5431279981795223,
-              -0.529151388327755
-            ],
-            "distance": 7.246644232471761
-          },
-          "plans": {
-            "screenFraction": 0.15789245426575738,
-            "onScreen": true,
-            "ndc": [
-              0.0025878631406005778,
-              -0.018621052174227954
-            ],
-            "distance": 4.364351580687711
-          },
-          "door": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -2.9542072233207515,
-              0.19549605533437492
-            ],
-            "distance": 29.328213938069634
-          },
-          "trooper-0": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -3.716906742926708,
-              0.33570149535000793
-            ],
-            "distance": 19.053261573697526
-          },
-          "rebel-0": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -3.7686950812325355,
-              0.6878731746666831
-            ],
-            "distance": 15.464428519137643
-          },
-          "rebel-1": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -2.7688493916960004,
-              0.6149829955761739
-            ],
-            "distance": 13.553477398286471
-          }
-        },
-        "boltsActive": 0,
-        "particleBudget": {
-          "spaceSparks": 2629,
-          "interiorSparks": 2900,
-          "overflow": false
-        }
-      },
-      "failures": [],
-      "brightness": {
-        "mean": 0.6355501878812437,
-        "p95": 0.9141529411764705,
-        "clipped": 0.00003472222222222222
-      },
-      "screenshot": "21-plans-projection.png"
-    },
-    {
-      "checkpoint": {
-        "id": "22-transfer",
-        "time": 293,
-        "chapter": "plans",
-        "shot": "pln-4",
-        "scene": "interior",
-        "expects": [
-          "Leia kneeling by R2",
-          "transfer beam",
-          "R2 data port lit"
-        ],
-        "assertions": [
-          {
-            "kind": "visible",
-            "target": "r2",
-            "minScreenFraction": 0.004
-          },
-          {
-            "kind": "visible",
-            "target": "leia"
-          },
-          {
-            "kind": "noIssues"
-          }
-        ]
-      },
-      "report": {
-        "time": 293,
-        "chapter": "plans",
-        "chapterIndex": 5,
-        "shot": "pln-4",
-        "shotLabel": "Transfer to the droid",
-        "scene": "interior",
-        "beat": "transfer to the droid",
-        "subtitle": "You are carrying more than a message. Get it to the surface. Do not stop for me.",
-        "narrationCue": "l4",
-        "issues": [],
-        "fps": 1.4798629820983942,
-        "drawCalls": 285,
-        "triangles": 53233,
-        "measurements": {
-          "vader": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -4.713662896112442,
-              0.14624504536219757
-            ],
-            "distance": 14.032311602710717
-          },
-          "leia": {
-            "screenFraction": 0.15562444816610552,
-            "onScreen": true,
-            "ndc": [
-              -0.2300506304331809,
-              -0.08538401737706874
-            ],
-            "distance": 3.752459053243786
-          },
-          "r2": {
-            "screenFraction": 0.10707507327359447,
-            "onScreen": true,
-            "ndc": [
-              0.213704708944982,
-              -0.22411896296664505
-            ],
-            "distance": 3.7225649511916488
-          },
-          "threepio": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -3.5728863200926164,
-              -0.0814168314525867
-            ],
-            "distance": 7.4205340712437105
-          },
-          "plans": {
-            "screenFraction": 0.18032521938232635,
-            "onScreen": true,
-            "ndc": [
-              -0.2555632150790024,
-              0.4168856152089805
-            ],
-            "distance": 4.450168092105683
-          },
-          "door": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -4.148600421005864,
-              0.1471111121580295
-            ],
-            "distance": 29.100221326664798
-          },
-          "trooper-0": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -5.700746087282514,
-              0.20073187438040746
-            ],
-            "distance": 18.813711012911558
-          },
-          "rebel-0": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -5.834201993049872,
-              0.6563364046727992
-            ],
-            "distance": 15.19926590219338
-          },
-          "rebel-1": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -3.7858145941388504,
-              0.5312865576614632
-            ],
-            "distance": 13.29003623297929
-          }
-        },
-        "boltsActive": 0,
-        "particleBudget": {
-          "spaceSparks": 2629,
-          "interiorSparks": 2900,
-          "overflow": false
-        }
-      },
-      "failures": [],
-      "brightness": {
-        "mean": 0.39810715162036964,
-        "p95": 0.7162478431372549,
-        "clipped": 0
-      },
-      "screenshot": "22-transfer.png"
-    },
-    {
-      "checkpoint": {
-        "id": "23-droids-run",
-        "time": 310,
+        "id": "25-pod-separation",
+        "time": 325.5,
         "chapter": "escape",
-        "shot": "esc-1",
-        "scene": "interior",
+        "shot": "esc-3",
+        "scene": "space",
         "expects": [
-          "astromech rolling aft",
-          "protocol droid stopped dead behind him"
+          "pod leaving the corvette",
+          "thruster flare"
         ],
         "assertions": [
           {
             "kind": "visible",
-            "target": "r2",
-            "minScreenFraction": 0.002
+            "target": "pod",
+            "minScreenFraction": 0.0015
           },
           {
-            "kind": "visible",
-            "target": "threepio",
-            "minScreenFraction": 0.002
+            "kind": "brightness",
+            "min": 0.02,
+            "max": 0.5
           },
           {
             "kind": "noIssues"
@@ -519,100 +113,55 @@
         ]
       },
       "report": {
-        "time": 310,
+        "time": 325.5,
         "chapter": "escape",
         "chapterIndex": 6,
-        "shot": "esc-1",
-        "shotLabel": "Droids run for the bay",
-        "scene": "interior",
-        "beat": "droids run for the bay",
-        "subtitle": "Two droids run for the launch bays. One of them is certain.",
-        "narrationCue": "e1",
+        "shot": "esc-3",
+        "shotLabel": "Pod separation",
+        "scene": "space",
+        "beat": "pod launch",
+        "subtitle": "Clamps release. An unarmed pod drops away from the captured ship. No weapons, no crew, no reason to fire on it.",
+        "narrationCue": "e3",
         "issues": [],
-        "fps": 1.1729189764329018,
-        "drawCalls": 344,
-        "triangles": 45903,
+        "fps": 10.56245048849256,
+        "drawCalls": 75,
+        "triangles": 23745,
         "measurements": {
-          "vader": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -0.32970041487547885,
-              0.2707037596123318
-            ],
-            "distance": 17.56268064459743
-          },
-          "leia": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -0.6827108624054126,
-              0.4401966474571742
-            ],
-            "distance": 7.746742863880012
-          },
-          "r2": {
-            "screenFraction": 0.01741011549215578,
+          "runner": {
+            "screenFraction": 0.1936940824753987,
             "onScreen": true,
             "ndc": [
-              0.07740920785399176,
-              -0.04390118393614144
+              -0.7311159018568525,
+              1.0412937991799711
             ],
-            "distance": 7.6847173421706625
+            "distance": 231.51603478347783
           },
-          "threepio": {
-            "screenFraction": 0.045780491219153334,
+          "destroyer": {
+            "screenFraction": 1,
             "onScreen": true,
             "ndc": [
-              -0.08842177998395012,
-              -0.13420827205823288
+              -0.18271396708880636,
+              0.912871849881923
             ],
-            "distance": 4.745068844818828
+            "distance": 600.6034042071933
           },
-          "plans": {
-            "screenFraction": 0,
-            "onScreen": false,
+          "pod": {
+            "screenFraction": 0.057907398078089915,
+            "onScreen": true,
             "ndc": [
-              -1.1892706874470083,
-              0.17989625115377067
+              -0.04946209217007696,
+              -0.04216219108226165
             ],
-            "distance": 7.325557429052163
+            "distance": 36.53607860368088
           },
-          "door": {
-            "screenFraction": 0,
-            "onScreen": false,
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
             "ndc": [
-              -0.2795201080941208,
-              0.24105779087717627
+              0.0014489247137965534,
+              5.619803405769033
             ],
-            "distance": 37.43208953041334
-          },
-          "trooper-0": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -0.4523290530525538,
-              0.28613188636338976
-            ],
-            "distance": 14.08006643193209
-          },
-          "rebel-0": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -0.3523307285144476,
-              0.3217604457646364
-            ],
-            "distance": 23.521620620181846
-          },
-          "rebel-1": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -0.25850916258629136,
-              0.3294160083120447
-            ],
-            "distance": 21.62696926924204
+            "distance": 251850.73821817798
           }
         },
         "boltsActive": 0,
@@ -624,11 +173,11 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.27150662431914596,
-        "p95": 0.5515207843137255,
+        "mean": 0.27186197596678696,
+        "p95": 0.7839968627450979,
         "clipped": 0
       },
-      "screenshot": "23-droids-run.png"
+      "screenshot": "25-pod-separation.png"
     }
   ]
 }
