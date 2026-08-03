@@ -543,8 +543,15 @@ export default {
       shake: 0.35, shakeFreq: 22,
     });
     shots.add({            // 5. reverse: looking back at the pursuing TIEs
-      t: r4 - 1.2, dur: 5.0, fov: 52, ease: 'linear',
-      pos: () => hero.position.clone().add(new THREE.Vector3(0, 3.2, -34)),
+      // Behind the hero's tail rather than ahead of its nose. From in front,
+      // the X-wing sits on exactly the line to its own pursuers and hides all
+      // three of them behind its fuselage -- the shot is called "the TIEs" and
+      // what it showed was a fighter with some dark specks over one shoulder.
+      // The fuselage is thirty studs long, so 19 clears the engines by four.
+      // Wide, because from four studs off the tail a 52 has the lead TIE's
+      // panels running off both edges of the frame.
+      t: r4 - 1.2, dur: 5.0, fov: 64, ease: 'linear',
+      pos: (u) => hero.position.clone().add(new THREE.Vector3(2.6 - u * 0.9, 2.9 + u * 0.4, 19 + u * 2.6)),
       look: () => ties[0].position,
       shake: 0.4, shakeFreq: 20,
     });
@@ -677,14 +684,26 @@ export default {
           const qn = heroAt(t - lag + 0.05);
           x.lookAt(qn.x + (i ? spread : -spread), qn.y + 2.2, qn.z + 25 + i * 18);
           x.rotation.z = -Math.cos((t - lag) * 0.9) * 0.2;
-          x.visible = i === 0 ? true : t < r4 + 6.5;
+          // Our own two trail on the same line the TIEs are closing along, and
+          // there is no camera that looks back at the pursuit without putting
+          // a wingman in amongst them. Drop them for the length of the reverse
+          // and pick them up again on the cut, where nobody can see the join.
+          const REV = t > r4 - 1.2 && t < r4 + 3.8;
+          x.visible = (i === 0 ? true : t < r4 + 6.5) && !REV;
           x.userData.update?.(t, dt);
         });
 
         ties.forEach((tie, i) => {
-          const lag = 1.2 + i * 0.42;
+          // The run is 30 studs a second, so the old 1.2 s lag put the lead TIE
+          // seventy studs off the hero's tail, in amongst our own wingmen and
+          // a hundred and ten from the reverse camera: an eight degree dark
+          // hexagon against a dark wall, over a line that says "I have you
+          // now". Bring them up to forty and stack them shallowly, which is
+          // near enough for the reverse to sit behind the hero's engines and
+          // still hold the lead ship at a third of the frame.
+          const lag = 0.10 + i * 0.06;
           const q0 = heroAt(t - lag);
-          tie.position.set(q0.x + (i - 1) * 6.5, q0.y + 2.0 + i * 0.6, q0.z + 34 + i * 12);
+          tie.position.set(q0.x + (i - 1) * 7.5, q0.y + 1.6 + i * 0.7, q0.z + 37 + i * 8);
           tie.lookAt(hero.position);
           tie.visible = t > r4 - 5.5 && t < r6 - 0.5;
           tie.userData.update?.(t, dt);
