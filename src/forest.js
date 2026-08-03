@@ -11,6 +11,8 @@ import {
   endGrainMaps,
   farGroundMaps,
   fernAtlas,
+  floorBroadAtlas,
+  foliageDetail,
   grassAtlas,
   leafAtlas,
   litterAtlas,
@@ -19,6 +21,7 @@ import {
   needleAtlas,
   ridgeTexture,
   rockMaps,
+  setFoliageDetail,
   shrubAtlas,
   stalkAtlas,
   treeBillboardAtlas,
@@ -61,12 +64,165 @@ const linear = (hex, mul = 1) => new THREE.Color(hex).convertSRGBToLinear().mult
 const pick = (arr, rnd) => arr[Math.floor(rnd() * arr.length) % arr.length];
 
 // ---------------------------------------------------------------------------
+// Quality tiers
+//
+// `high` is the shipped look and every value below it is what the previous
+// iterations were judged against; it must not move. `fast` exists so the
+// software-rasterised capture harness completes a frame this decade, and gives
+// up density and the whole of the per-fragment detail budget to do it. `ultra`
+// is aimed at a discrete card that finishes a `high` frame with most of its
+// budget unspent.
+//
+// None of this can be measured from here — this box rasterises in software, so
+// a frame time measured on it says nothing about a GPU. The `ultra` numbers are
+// a reasoned budget rather than a measurement, and the reasoning is:
+//
+//  - Vertices are free. `high` draws about 1.6 M forest triangles; a discrete
+//    card set up for 60 fps at 1440p will process twenty times that without
+//    noticing, so instance counts, prototype counts and card counts can all go
+//    up several times over.
+//  - Fill is not free. Alpha-tested foliage near the lens is the one thing that
+//    can actually run out of budget, and `ultra` renders at pixelRatio 2. So
+//    the extra density is spent on *more, smaller* cards covering the same
+//    screen area rather than on bigger ones, and the reach of the undergrowth
+//    is extended outward — where it costs vertices, not fill.
+//  - The distance cull below is what pays for the density: at `high` and
+//    `ultra` the scatter is bucketed spatially and only the buckets in front of
+//    the camera are drawn, which typically takes the ground cover from every
+//    instance on the map to a fifth of them.
+//  - Texture memory at 1.5x cells is around 150 MB resident for the foliage
+//    atlases. That assumes a 4 GB card or better.
+// ---------------------------------------------------------------------------
+const QUALITY = {
+  fast: {
+    atlas: 1.0,
+    aniso: 4,
+    // Per-fragment extras, all of which are pure GPU cost with no geometry.
+    // These are the one dial where the tiers differ in *kind* rather than in
+    // degree, so `high` and `ultra` share a value: a tier that shades the same
+    // leaf a different colour is not a higher setting, it is a second look, and
+    // then every judgement made from a capture applies to only one of them.
+    bump: 0,
+    // Kept even here. The stock GGX highlight is patched out of this material
+    // entirely, so this is the *only* specular a leaf has, and a tier without it
+    // is not a cheaper version of the look — it is a matte one, which would make
+    // every night frame captured from `fast` lie about what a headlamp does to a
+    // verge. It is a dot, a pow and a min; the bump below is six trig calls and
+    // is what actually costs, so that is what `fast` gives up.
+    sheen: 0.018,
+    // near band reach and undergrowth reach, in metres from the corridor
+    //
+    // Deliberately identical to `high`. Thinning the scatter here saved nothing
+    // measurable — the same three views captured within half a second of each
+    // other with the ground cover down 15% — and it cost something that matters
+    // much more: every judgement about this forest is made from a `fast`
+    // capture, so a `fast` frame that is not laid out like a `high` frame makes
+    // the whole loop lie. What `fast` gives up is per-fragment work and
+    // prototype count, which is where a software rasteriser actually spends.
+    nearBand: 44,
+    ugReach: 56,
+    ugCell: 2.0,
+    ug: 1.0,
+    // extra prototype seeds per conifer species
+    dup: 0,
+    crownCards: 0.85,
+    midBand: 0,
+    midDetail: 0.4,
+  },
+  high: {
+    atlas: 1.0,
+    aniso: 4,
+    bump: 0.07,
+    // A leaf cuticle reflects a few per cent, not a third, and this is
+    // multiplied by the light colour — around 3 in linear for the key and an
+    // order of magnitude more for a headlamp a metre away. At 0.1 every sunward
+    // card sat on the clamp and the crown wore a flat pale film; at 0.05 the
+    // crowns were fine but the ground cover, whose cards are large and face the
+    // sky, went to bleached white leaves along the whole verge.
+    sheen: 0.018,
+    nearBand: 44,
+    ugReach: 56,
+    ugCell: 2.0,
+    ug: 1.0,
+    // One extra seed per species, which is the cheapest thing on this whole
+    // table: the trees are instanced, so a second silhouette costs one more
+    // draw call and one more copy of a crown's geometry, and nothing per frame.
+    // Five conifer shapes across nine hundred standing trees is a repeat the eye
+    // finds; ten is not.
+    dup: 1,
+    crownCards: 1.0,
+    // outer edge of the reduced-card geometry band, and how much of a crown it
+    // keeps. Off below `ultra`: it is pure added cost at a distance the
+    // billboards already cover acceptably.
+    midBand: 0,
+    midDetail: 0.4,
+  },
+  // Every band here is bounded by `terrain.roadDistance`, which returns a
+  // sentinel rather than a distance once a point is more than about 78 m from
+  // the corridor — 45% of a 300 m map. Nothing keyed off it can reach past
+  // that, so `ugReach: 92` was a number that read as ambition and placed
+  // exactly as many plants as 78 would have. The bands below are sized to what
+  // the function can actually answer.
+  ultra: {
+    atlas: 1.5,
+    aniso: 16,
+    // matched to `high` on purpose — see the note there
+    bump: 0.07,
+    sheen: 0.018,
+    nearBand: 52,
+    ugReach: 76,
+    ugCell: 1.6,
+    // Ground-cover density relative to `high`, grid-compensated below, so this
+    // reads as what it is: a quarter more plants per square metre, over a band a
+    // third wider, placed on a grid 60% finer. The ambition is reach and
+    // placement resolution rather than thickness — the verge at `high` is
+    // already dense enough that another layer of cards is fill rate spent on
+    // leaves behind leaves, and at a straight 1.5 (which compounded with the
+    // grid to nearly three times the plants) the cover closed over the trail
+    // edge and the `forest` frame came back with no floor in it at all.
+    ug: 1.25,
+    dup: 2,
+    crownCards: 1.5,
+    midBand: 78,
+    midDetail: 0.36,
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Shader plumbing
 // ---------------------------------------------------------------------------
 
-/** Wind sway driven by a per-vertex weight attribute plus per-instance phase. */
-function applyWind(material, { amplitude = 0.16, speed = 1.0 } = {}) {
-  material.userData.wind = { uTime: { value: 0 }, uAmp: { value: amplitude }, uSpeed: { value: speed } };
+// One bearing for the whole forest, shared by every wind material so a gust
+// crossing the stand crosses the undergrowth under it at the same moment.
+const WIND_DIR = new THREE.Vector2(0.82, 0.57).normalize();
+
+/**
+ * Wind sway driven by a per-vertex weight attribute plus per-instance phase.
+ *
+ * Three things the old version did not have, in the order they show up:
+ *
+ *  - **A gust front.** Phase used to advance only with a per-instance hash, so
+ *    the whole forest breathed at one frequency with no spatial structure; a
+ *    stand either agreed with its neighbour or did not, at random. Advancing
+ *    phase along the wind bearing makes the gust a wave that arrives at the far
+ *    trees first and sweeps through, which is the single most legible thing
+ *    wind does at this scale.
+ *  - **Shelter.** Amplitude varies over a ~25 m field, so a hollow stays calm
+ *    while the ridge above it works. Sampled from the instance origin, so it
+ *    costs two sines in the vertex shader and no attribute.
+ *  - **Tip flutter.** A high-frequency term cubed against the wind weight, so
+ *    it exists only at the very ends of a frond or a spray. The sway alone
+ *    moves a plant as a rigid fan; the flutter is what makes the tips look
+ *    light.
+ */
+function applyWind(material, { amplitude = 0.16, speed = 1.0, flutter = 1.0 } = {}) {
+  material.userData.wind = {
+    uTime: { value: 0 },
+    uAmp: { value: amplitude },
+    uSpeed: { value: speed },
+    uFlutter: { value: flutter },
+    uWindDir: { value: WIND_DIR },
+  };
   const prev = material.onBeforeCompile;
   material.onBeforeCompile = (shader) => {
     if (prev) prev(shader);
@@ -78,25 +234,43 @@ function applyWind(material, { amplitude = 0.16, speed = 1.0 } = {}) {
         attribute float aWind;
         uniform float uTime;
         uniform float uAmp;
-        uniform float uSpeed;`,
+        uniform float uSpeed;
+        uniform float uFlutter;
+        uniform vec2 uWindDir;`,
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
         #ifdef USE_INSTANCING
           vec3 iOrigin = instanceMatrix[ 3 ].xyz;
+          float iTall = length( instanceMatrix[ 1 ].xyz );
         #else
           vec3 iOrigin = vec3( 0.0 );
+          float iTall = 1.0;
         #endif
         float ph = iOrigin.x * 0.35 + iOrigin.z * 0.27;
-        float gust = sin( uTime * 0.23 * uSpeed + ph * 0.31 ) * 0.5 + 0.72;
+        // gust front travelling along the bearing at roughly 9 m/s
+        float front = dot( iOrigin.xz, uWindDir ) * 0.11;
+        float gustT = sin( uTime * 0.34 * uSpeed - front ) * 0.5 + 0.5;
+        float gust = 0.55 + 1.15 * gustT * gustT;
+        // shelter, at about a 25 m wavelength; the taller the instance the more
+        // of it stands above whatever is sheltering it
+        float shelter = ( 0.72 + 0.34 * sin( iOrigin.x * 0.043 + 2.1 ) * sin( iOrigin.z * 0.037 - 1.4 ) ) * ( 0.82 + 0.24 * iTall );
+        float amp = uAmp * gust * shelter;
         float sway = sin( uTime * 1.05 * uSpeed + ph ) * 0.72 + sin( uTime * 2.7 * uSpeed + ph * 2.3 ) * 0.28;
-        transformed.x += sway * aWind * uAmp * gust;
-        transformed.z += cos( uTime * 0.83 * uSpeed + ph * 1.3 ) * aWind * uAmp * 0.7 * gust;
-        transformed.y -= abs( sway ) * aWind * uAmp * 0.16;`,
+        float lateral = cos( uTime * 0.83 * uSpeed + ph * 1.3 ) * 0.45;
+        float tip = aWind * aWind * aWind * uFlutter;
+        float flick = sin( uTime * 6.1 * uSpeed + ph * 5.3 + transformed.y * 1.9 ) * 0.3 * tip;
+        vec2 off = uWindDir * ( sway * aWind + flick ) + vec2( -uWindDir.y, uWindDir.x ) * ( lateral * aWind + flick * 0.6 );
+        transformed.xz += off * amp;
+        transformed.y -= abs( sway ) * aWind * amp * 0.16;`,
       );
   };
-  material.customProgramCacheKey = () => 'wind-' + material.uuid;
+  // Content-addressed, not per material. Keying on the uuid gave every one of
+  // the twenty-odd wind materials its own compiled program for identical source,
+  // which at `ultra` is most of a minute of shader compilation on boot.
+  const prevKey = material.customProgramCacheKey;
+  material.customProgramCacheKey = () => 'wind|' + (prevKey ? prevKey.call(material) : material.type);
   return material;
 }
 
@@ -217,6 +391,15 @@ function skipAoPrepass(mesh) {
   return mesh;
 }
 
+// Skylight reaching a bole, as a straight multiplier on its albedo. Sized so a
+// shaded trunk's sky-facing flank roughly doubles and its away flank is left
+// alone: what a dark object needs at distance is a ratio between its two sides,
+// not more light. Cool from above, warm off the duff, and both well under the
+// foliage's equivalents because a trunk stands *under* the canopy that is
+// intercepting the sky in the first place.
+const BARK_SKY = new THREE.Color(0.66, 0.73, 0.82);
+const BARK_GND = new THREE.Color(0.32, 0.28, 0.22);
+
 /**
  * Trunk material. Bark gets moss blended in from a baked mask, weighted toward
  * the shaded side of the trunk and the wet first couple of metres, which is
@@ -250,7 +433,48 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
     uMossMax: { value: mossMax },
     uMossHeight: { value: mossHeight },
     uSunDir: { value: SUN_DIR },
+    // Analytic skylight on the bole, and the reason a trunk past twenty-five
+    // metres was a black bar. Everything else on this material is a multiplier
+    // on an albedo that starts near 0.2 and an instance tint that takes another
+    // two thirds off it, so a trunk standing in canopy shadow — which is every
+    // trunk not in the landing — was reaching the eye lit only by a hemisphere
+    // light and an environment probe held at a tenth. There was nothing in the
+    // model that could give it a light side at all.
+    //
+    // Named `uSky` and `uGnd` deliberately: sky.js retunes those keys by name
+    // across the whole scene, so the bole follows the hour without this file
+    // knowing what hour it is.
+    uSky: { value: BARK_SKY.clone() },
+    uGnd: { value: BARK_GND.clone() },
+    // How much of that reaches the foot of the trunk, where the canopy and the
+    // undergrowth both close in.
+    uCanopy: { value: new THREE.Vector2(0.34, 1.0) },
+    // A warm lift on whichever flank faces the gap the sun comes down. Also a
+    // retuned key, so it goes cold and weak at night.
+    uRim: { value: new THREE.Color(0.05, 0.043, 0.03) },
+    // Skylight on the bole as an *amount* rather than a fraction.
+    //
+    // Everything else on this material multiplies the albedo, and the albedo has
+    // already been through a 0.3 instance tint before it gets here — so a bole
+    // lands at about 0.015 linear and a light side worth twice a dark side is
+    // 0.03 against 0.015, which is 13 against 5 on a 0-255 display and reads as
+    // one flat black vertical. Measured that way: the trunk mask over the forest
+    // view came back at a median 0.11 with a 10-90 spread of 0.05 to 0.21, and
+    // killing every light in the scene moved it by 0.03. There is no ratio that
+    // fixes that; the bole needs light put on it.
+    //
+    // Additive, tinted by the same uSky/uGnd pair so it follows the hour, and
+    // gated on the canopy slot so it is the sunward flank that gets it. This is
+    // what a photograph of a stand actually shows: the trunks are legible in the
+    // shade because skylight grazes them, not because the key reaches them.
+    uSkyRim: { value: 0.34 },
     uHazeCol: { value: linear(0x272016) },
+    // Where a bole ends up once the ramp has saturated. One target for the
+    // whole ramp is what put the 60-120 m timber at the same near-black as the
+    // 30 m timber: past the point where the ramp is most of the pixel, the
+    // colour it is heading for *is* the trunk, and a stand of identical black
+    // verticals has no depth in it.
+    uHazeCol2: { value: linear(0x3b3a2e) },
     uHaze: { value: 0.97 },
     uHazeNear: { value: 16 },
     uHazeFar: { value: 42 },
@@ -295,7 +519,13 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
         uniform float uMossMax;
         uniform float uMossHeight;
         uniform vec3 uSunDir;
+        uniform vec3 uSky;
+        uniform vec3 uGnd;
+        uniform vec2 uCanopy;
+        uniform vec3 uRim;
+        uniform float uSkyRim;
         uniform vec3 uHazeCol;
+        uniform vec3 uHazeCol2;
         uniform float uHaze;
         uniform float uHazeNear;
         uniform float uHazeFar;
@@ -370,19 +600,65 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
       .replace(
         '#include <lights_fragment_end>',
         `#include <lights_fragment_end>
+        float barkLit = 0.5;
         {
           // Canopy occlusion on the bole. A trunk in a closed stand sees very
           // little sky, but the hemisphere light and the environment probe reach
           // it at full strength, which is what kept a lit bole measuring slightly
           // *brighter* than the crown behind it — the reverse of a photograph.
           // Least sky at the foot, where the undergrowth closes in as well.
+          vec3 wNa = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
           ${
             deadfall
-              ? `vec3 wNa = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
-          reflectedLight.indirectDiffuse *= mix( 0.34, 0.92, smoothstep( -0.4, 0.85, wNa.y ) );`
-              : `reflectedLight.indirectDiffuse *= mix( 0.56, 0.86, smoothstep( 0.5, 7.0, vTreeY ) );`
+              ? `float open = mix( 0.34, 0.92, smoothstep( -0.4, 0.85, wNa.y ) );`
+              : `float open = mix( uCanopy.x, uCanopy.y, smoothstep( 0.5, 8.0, vTreeY ) );`
           }
+          reflectedLight.indirectDiffuse *= open;
           reflectedLight.indirectSpecular *= 0.7;
+
+          // Skylight, aimed along the canopy gap.
+          //
+          // A trunk under a closed canopy gets almost nothing from directly
+          // overhead — the crowns are in the way — and almost everything through
+          // the same slot the sun comes down. So the flank facing the sun's
+          // azimuth sees several times the sky the flank behind it does, and
+          // that ratio is the whole of what gives a shaded bole a light side.
+          // Without it the only variation left on a trunk at thirty metres was
+          // a multiply on the albedo, which is a ratio of two numbers that are
+          // both already near zero.
+          vec2 sd = vec2( uSunDir.x, uSunDir.z );
+          float sl = length( sd );
+          vec2 sunAz = sl > 1e-4 ? sd / sl : vec2( 0.0, 1.0 );
+          vec2 hz = vec2( wNa.x, wNa.z );
+          float hl = length( hz );
+          float az = hl > 1e-4 ? dot( hz / hl, sunAz ) : 0.0;
+          barkLit = az * 0.5 + 0.5;
+          float gap = 0.3 + 0.7 * barkLit * barkLit;
+          vec3 amb = mix( uGnd, uSky, wNa.y * 0.5 + 0.5 );
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * amb * gap * open;
+          // The albedo-independent half, and it grows with distance.
+          //
+          // Near bark is not the problem — a bole four metres away has enough
+          // texture and enough size to read whatever its value is. The failure
+          // is at twenty-five metres and out, where the trunk is four pixels
+          // wide and every one of them is the same near-black. That is also
+          // where in-scattered light genuinely lives, so ramping this in over
+          // the same range both fixes the tell and models the right thing.
+          //
+          // Kept in the bark's own hue family by taking some of the albedo back
+          // in, and squared on the canopy slot so it falls away round the back
+          // of the trunk instead of flooding it evenly.
+          // Mostly albedo-weighted rather than flat. A flat sky-coloured add is
+          // how this first went wrong in the other direction: at a large enough
+          // constant the far timber came out as grey-blue pipes, which is a
+          // worse read than black because a black trunk at least belongs to the
+          // forest. Weighting it by the bark keeps each bole's instance tint —
+          // and a stand's tint spread is most of what says "trees" at four
+          // pixels wide — while the small constant is what stops a trunk whose
+          // albedo is near zero from staying at zero.
+          float dK = 0.4 + 1.1 * smoothstep( 12.0, 55.0, length( vBarkWPos - cameraPosition ) );
+          reflectedLight.indirectDiffuse +=
+            amb * ( uSkyRim * dK * gap * gap * open ) * ( 0.08 + diffuseColor.rgb * 15.0 );
         }`,
       )
       .replace(
@@ -392,8 +668,17 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
           // shows most of, and unramped it takes its value straight off the fog,
           // which is brighter than the sky — hence the row of pale poles standing
           // in front of a darker forest at 60 to 120 m.
+          //
+          // Two targets, and a rim on the lit flank. A single dark target is
+          // correct for the near timber and wrong past sixty metres, where it is
+          // most of the pixel: every bole out there converged on the same
+          // near-black and the stand lost its depth. The far target is lighter
+          // and greyer, and the rim survives the ramp so a distant trunk keeps
+          // the light side it was given above.
           float hd = length( vBarkWPos - cameraPosition );
-          gl_FragColor.rgb = mix( gl_FragColor.rgb, uHazeCol, uHaze * ( 1.0 - exp( -max( hd - uHazeNear, 0.0 ) / uHazeFar ) ) );
+          float aer = uHaze * ( 1.0 - exp( -max( hd - uHazeNear, 0.0 ) / uHazeFar ) );
+          vec3 haze = mix( uHazeCol, uHazeCol2, aer ) + uRim * pow( barkLit, 3.0 );
+          gl_FragColor.rgb = mix( gl_FragColor.rgb, haze, aer );
         }
         #include <fog_fragment>`,
       );
@@ -434,11 +719,30 @@ const FOLIAGE_GND = new THREE.Color(0.34, 0.34, 0.28);
 const WRAP_TARGETS = [
   'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );',
   'reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseContribution );',
+  // The stock dielectric highlight, deleted rather than scaled.
+  //
+  // This was the single largest term on the canopy and nobody had looked at it,
+  // because it is not in this file — it arrives inside the chunk. A leaf albedo
+  // is about 0.03 linear; a rough-GGX lobe off a 4% white Fresnel under a key of
+  // intensity 3 returns about 0.014, so between a third and a half of every lit
+  // crown pixel was the *light's own colour* rather than the leaf's. Ablating it
+  // moved the median hue of the `forest` frame from 72 degrees — a khaki — to
+  // 129, and the crown cards measured on their own now sit at 120 against an
+  // atlas painted at 90-120. Nothing reachable from this file could have done
+  // that: the albedo, the ambient and the aerial ramp were all being added to a
+  // term the size of the pixel that carried the key light's hue.
+  //
+  // Nothing is lost: a waxy leaf highlight is a real thing and `uSheen` below is
+  // it, written as a tight normalised lobe that is bounded, gated on the crown
+  // occlusion and tinted by the light rather than replacing the leaf with it.
+  'reflectedLight.directSpecular += irradiance * BRDF_GGX_Multiscatter( directLight.direction, geometryViewDir, geometryNormal, material );',
 ];
+const WRAP_PATCHES = [null, null, ''];
 const WRAPPED_PHYSICAL = WRAP_TARGETS.reduce((src, target, i) => {
   if (!src.includes(target)) {
     throw new Error(`forest: three changed lights_physical_pars_fragment; foliage wrap patch ${i} is dead`);
   }
+  if (WRAP_PATCHES[i] !== null) return src.replace(target, WRAP_PATCHES[i]);
   return src.replace(
     target,
     i === 0
@@ -456,7 +760,73 @@ const WRAPPED_PHYSICAL = WRAP_TARGETS.reduce((src, target, i) => {
       // crown interiors never read as voids: they were still lit by the sun.
       ? `${target}
 	float dotNLWrap = saturate( ( dot( geometryNormal, directLight.direction ) + uWrap ) / ( 1.0 + uWrap ) )
-		* uDirect * ( 1.0 - uShade * vShade * 0.86 );`
+		* uDirect * ( 1.0 - uShade * vShade * 0.86 );
+	// Cuticle sheen, per light and inside the shadow term.
+	//
+	// A leaf is not felt: it has a thin waxy layer over the pigment that throws
+	// a broad, weak highlight, and it is the only thing in this material that
+	// responds to where the light actually is rather than to where the camera
+	// is. Two places it earns its keep — a sunward crown gets a glitter along
+	// the tips that no amount of diffuse work produces, and at night the
+	// headlamp picks individual sprays out of the dark instead of washing a
+	// flat green over them.
+	//
+	// Written out rather than asked of BRDF_GGX on purpose: GGX divides by its
+	// own dot(N,L), which no longer cancels once the diffuse term is wrapped,
+	// and every card edge-on to the sun then fires a spike that floods the
+	// frame through bloom. A normalised Blinn lobe is bounded by one, so the
+	// worst case here is uSheen times the light colour.
+	{
+		vec3 hs = directLight.direction + geometryViewDir;
+		float hl = length( hs );
+		if ( hl > 1e-4 && uSheen > 0.0 ) {
+			float spec = pow( saturate( dot( geometryNormal, hs / hl ) ), 24.0 );
+			// Both numbers are sized against a *whole card*, not against a
+			// fragment. The shell normal is constant across a card, so this lobe
+			// does not put a highlight on part of a leaf — it turns an entire
+			// card white at once wherever that card happens to face the half
+			// vector, and a verge full of those reads as bleached rather than
+			// waxy. uBump breaks it into grain, but uBump is the expensive half
+			// and the fast tier does not buy it, so the ceiling has to hold on
+			// its own: about half of what a lit crown returns from diffuse.
+			//
+			// The ceiling is what carries the night, not uSheen. A headlamp two
+			// metres away delivers an irradiance an order of magnitude above the
+			// key's, so the same coefficient that is barely visible by day is
+			// pinned at the clamp under a lamp — which is exactly the behaviour
+			// wanted, since 0.035 against a near-black verge is a clear glint.
+			reflectedLight.directSpecular += min( vec3( 0.035 ), directLight.color * spec * uSheen * dotNLWrap );
+		}
+	}
+	// Transmission from the local lights, per light.
+	//
+	// The key's transmission is done once at the end of the shader, where the
+	// crown thickness and the view geometry are both to hand; that pass cannot
+	// see an individual light, so at night — when the only thing lighting the
+	// verge is a pair of lamps a metre off the ground — every card between the
+	// lamp and the lens was a black cutout with a bright rim on it. A leaf with
+	// a light behind it is the single most recognisable thing foliage does, and
+	// it is the whole reason a headlamp sweeping a verge looks like a headlamp
+	// sweeping a verge rather than a torch pointed at a photograph.
+	//
+	// The key itself is excluded rather than double-counted: its direction is
+	// the same at every fragment and every frame, so one dot separates it from
+	// a lamp for nothing.
+	if ( uTrans > 0.0 ) {
+		float lamp = 1.0 - step( 0.995, dot( directLight.direction, uSunDir ) );
+		if ( lamp > 0.0 ) {
+			// light has to enter the far face (normal) and leave toward the eye
+			// (view); a card seen edge-on to the lamp does neither
+			float bN = saturate( -dot( geometryNormal, directLight.direction ) * 0.9 + 0.22 );
+			float bV = pow( saturate( -dot( geometryViewDir, directLight.direction ) ), 1.6 );
+			float thinL = 1.0 - vShade * 0.7;
+			// A spot at two metres delivers a very large irradiance, and this
+			// term is additive on top of the diffuse one; bounded so a clump
+			// the truck is parked in cannot flare the whole frame through bloom.
+			vec3 through = min( directLight.color * ( uTrans * lamp * bN * bV * thinL ), vec3( 2.5 ) );
+			reflectedLight.directDiffuse += material.diffuseContribution * uSunTint * through;
+		}
+	}`
       : 'reflectedLight.directDiffuse += dotNLWrap * directLight.color * BRDF_Lambert( material.diffuseContribution );',
   );
 }, THREE.ShaderChunk.lights_physical_pars_fragment);
@@ -495,6 +865,7 @@ function foliageMaterial(map, {
   rough = 0.9,
   windAmp = 0.2,
   windSpeed = 1.0,
+  windFlutter = 1.0,
   // What the sun looks like once it has been through a leaf. Not the raw low
   // sun: a leaf transmits green and yellow and absorbs the rest, so backlight
   // arrives green-gold, and feeding the shader the undiluted 0xff9d52 pushed red
@@ -545,6 +916,18 @@ function foliageMaterial(map, {
   hazeRim = [0.015, 0.018, 0.013],
   // [start distance, e-fold scale] — not a smoothstep range
   hazeRange = [22, 58],
+  // Waxy highlight strength. A conifer needle is a good deal glossier than a
+  // deciduous leaf and a dead frond is barely glossy at all, so this is per
+  // material rather than global. Scaled by the tier: it is pure per-fragment
+  // cost with no geometry behind it.
+  sheen = 0.1,
+  // Sub-card relief. The shell normal is smooth across a whole card, so a crown
+  // lit from one side arrives with no grain in it whatsoever — every card is a
+  // single smooth gradient, which is the flat-value half of the cut-paper read.
+  // This tilts the normal on a 3 cm world-space field, which is roughly needle
+  // pitch, so the light breaks up at the scale the eye looks for it at arm's
+  // length and glitters under a moving lamp at night.
+  bump = 0.06,
 } = {}) {
   const m = new THREE.MeshStandardMaterial({
     map,
@@ -581,9 +964,15 @@ function foliageMaterial(map, {
     uRim: { value: new THREE.Color(...hazeRim) },
     uHazeNear: { value: hazeRange[0] },
     uHazeFar: { value: hazeRange[1] },
-    uAtlasPx: { value: map.image?.width || 1024 },
+    // Normalised out of the tier's cell multiplier — see `foliageDetail`. The
+    // mip bands below are a statement about how large a card is on screen, and
+    // a tier that paints at 1.5x would otherwise report every card as being
+    // 0.6 of a level further out and close its cutouts up that much nearer.
+    uAtlasPx: { value: (map.image?.width || 1024) / foliageDetail() },
     uMipFill: { value: mipFill },
     uMipErode: { value: mipErode },
+    uSheen: { value: sheen },
+    uBump: { value: bump },
   };
   m.userData.foliage = u;
   m.onBeforeCompile = (shader) => {
@@ -627,6 +1016,8 @@ function foliageMaterial(map, {
         uniform float uAtlasPx;
         uniform float uMipFill;
         uniform float uMipErode;
+        uniform float uSheen;
+        uniform float uBump;
         varying float vShade;
         varying vec3 vWPos;`,
       )
@@ -659,7 +1050,16 @@ function foliageMaterial(map, {
           // the shell normal is the point of these cards; do not flip per face
           normal *= faceDirection;
           nonPerturbedNormal = normal;
-        #endif`,
+        #endif
+        if ( uBump > 0.0 ) {
+          // Analytic rather than a normal map: a cutout card has no tangent
+          // frame worth the name and no second UV set to hang one off, and the
+          // point here is grain, not a surface. Bounded by construction — the
+          // added vector is at most sqrt(3) * uBump long against a unit normal,
+          // so the normalize below can never divide by anything small.
+          vec3 grain = sin( vWPos * 33.0 + vec3( 1.7, 4.3, 2.9 ) ) * cos( vWPos.zxy * 21.0 );
+          normal = normalize( normal + grain * uBump );
+        }`,
       )
       .replace(
         '#include <lights_fragment_end>',
@@ -679,15 +1079,26 @@ function foliageMaterial(map, {
           // the probe sheen is a surface effect, so it is only partly occluded
           reflectedLight.indirectSpecular *= 0.34 + 0.66 * open;
           reflectedLight.indirectDiffuse += diffuseColor.rgb * mix( uGnd, uSky, wN.y * 0.5 + 0.5 ) * open;
-          // Thin-leaf transmission. The lobe is wider than a specular one because
-          // leaves scatter over a broad angle, but not as wide as it was: at an
-          // exponent of 1.4 a card forty degrees off the sun still got two thirds
-          // of full transmission, so a whole sunward hillside of crowns went pale
-          // khaki rather than just the ones the sun was actually behind.
+          // Thin-leaf transmission, gated on the light and not only on the view.
+          //
+          // The old form asked one question — is the camera looking toward the
+          // sun — so every crown *beyond* the sun lit up whichever way its cards
+          // faced, and a whole sunward hillside went pale khaki when only the
+          // leaves with the sun actually behind them should have. Light has to
+          // enter the far side of the card to come out of this one, which is a
+          // question about the normal; how much of it reaches the eye is the
+          // question about the view. Both, multiplied.
+          //
+          // The third term is thickness. A card buried in a crown has the rest
+          // of the crown behind it, so nothing gets through; a rim spray has one
+          // leaf's worth of material and glows. Without it the interior of a
+          // backlit crown transmits as hard as its edge, which is the one thing
+          // that never happens in a photograph.
           vec3 fV = normalize( vWPos - cameraPosition );
-          float back = pow( saturate( dot( fV, uSunDir ) ), 2.6 );
-          float thin = 1.0 - abs( dot( normal, fV ) ) * 0.42;
-          reflectedLight.indirectDiffuse += diffuseColor.rgb * uSunTint * uTrans * back * thin * open;
+          float backN = saturate( -dot( wN, uSunDir ) * 0.8 + 0.28 );
+          float backV = pow( saturate( dot( fV, uSunDir ) ), 2.2 );
+          float thin = ( 1.0 - vShade * 0.72 ) * ( 1.0 - abs( dot( wN, fV ) ) * 0.34 );
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * uSunTint * uTrans * backN * backV * thin;
         }`,
       )
       .replace(
@@ -714,7 +1125,13 @@ function foliageMaterial(map, {
         #include <fog_fragment>`,
       );
   };
-  return applyWind(m, { amplitude: windAmp, speed: windSpeed });
+  // Every foliage material generates byte-identical source and differs only in
+  // uniform values, so they share one compiled program. Bump the version if the
+  // source above ever grows a branch on an option — three matches programs on
+  // this key alone and will silently hand the second material the first one's
+  // shader.
+  m.customProgramCacheKey = () => 'foliage-v2';
+  return applyWind(m, { amplitude: windAmp, speed: windSpeed, flutter: windFlutter });
 }
 
 // ---------------------------------------------------------------------------
@@ -969,7 +1386,7 @@ const BROADLEAVES = [
   { name: 'vine', tiles: [0, 1, 0, 1], bark: 'birch', height: [4.5, 7.5], trunk: 0.034, crownStart: 0.2, crownR: 0.42, clumps: 20, perClump: 5, leafScale: 0.17 },
 ];
 
-function buildConifer(spec, seed) {
+function buildConifer(spec, seed, detail = 1) {
   const rnd = mulberry32(seed);
   const height = lerp(spec.height[0], spec.height[1], rnd());
   const baseR = height * spec.trunk;
@@ -1090,7 +1507,7 @@ function buildConifer(spec, seed) {
     // cards also stop being able to span the crown, so the silhouette is built
     // out of thirty overlapping outlines a tier instead of eight, and no single
     // one of them is findable.
-    const outer = R > maxR * 0.34 ? 15 : 10;
+    const outer = Math.round((R > maxR * 0.34 ? 15 : 10) * detail);
     const base = k * 2.399 + rnd() * 0.8;
     const tierDroop = spec.droop;
 
@@ -1148,7 +1565,7 @@ function buildConifer(spec, seed) {
     // its plane. The geometric half of a fringed edge — the alpha fringe inside
     // the atlas breaks up a card's own outline, and these break up the outline of
     // the crown, which is the one the eye actually judges against the sky.
-    const tips = R > maxR * 0.2 ? 4 : 3;
+    const tips = Math.round((R > maxR * 0.2 ? 4 : 3) * detail);
     for (let j = 0; j < tips; j++) {
       const a = base + 1.2 + (j / tips) * Math.PI * 2 + (rnd() - 0.5) * 0.9;
       const s = R * (0.16 + rnd() * 0.16) + 0.16;
@@ -1179,7 +1596,7 @@ function buildConifer(spec, seed) {
     // read is one soft patch against another. Thinning them costs nothing in
     // silhouette — the rim sprays and tips own that — and it is what lets the
     // dark of the forest behind come through the crown.
-    const inner = Math.max(2, Math.round(2.7 * spec.fill));
+    const inner = Math.max(2, Math.round(2.7 * spec.fill * detail));
     for (let j = 0; j < inner; j++) {
       const a = base + rnd() * Math.PI * 2;
       if (inGap(a)) continue;
@@ -1279,7 +1696,7 @@ function buildConifer(spec, seed) {
   return { trunk, foliage, height, radius: baseR, bark: spec.bark, kind: 'conifer', name: spec.name };
 }
 
-function buildBroadleaf(spec, seed) {
+function buildBroadleaf(spec, seed, detail = 1) {
   const rnd = mulberry32(seed);
   const height = lerp(spec.height[0], spec.height[1], rnd());
   const baseR = height * spec.trunk;
@@ -1375,7 +1792,8 @@ function buildBroadleaf(spec, seed) {
   const crownH = height - trunkH;
   const cyMid = trunkH + crownH * 0.5;
   const crownCentre = [tax, cyMid, taz];
-  for (let c = 0; c < spec.clumps; c++) {
+  const clumpN = Math.round(spec.clumps * detail);
+  for (let c = 0; c < clumpN; c++) {
     const tip = tips[c % tips.length];
     const ta = Math.atan2(tip.z - taz, tip.x - tax);
     const a = ta + (rnd() - 0.5) * 1.7;
@@ -1810,7 +2228,20 @@ function rockGeo(seed, detail = 1, style = 'boulder') {
 // Scatter
 // ---------------------------------------------------------------------------
 
-export function createForest({ terrain, env = null, treeCount = 210, clearRadius = 7.4, area = 250, clearings = [] } = {}) {
+export function createForest({
+  terrain,
+  env = null,
+  treeCount = 210,
+  clearRadius = 7.4,
+  area = 250,
+  clearings = [],
+  quality = 'high',
+} = {}) {
+  const Q = QUALITY[quality] || QUALITY.high;
+  // Has to happen before the first atlas is asked for: the generators are
+  // memoised on a key that includes the cell size, so a later change would
+  // build a second copy rather than resize the first.
+  setFoliageDetail(Q.atlas, Q.aniso);
   // A logging landing where the trail opens out. Without a real hole in the
   // canopy the sun never reaches the road: a 20 m tree at this latitude needs
   // about 16 m of horizontal clearance before direct light gets underneath it,
@@ -1858,9 +2289,20 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   // sat on one flat sage. `trans` comes down with it: a broad forward lobe at
   // half strength turned every sunward crown pale khaki, and a needle is a lot
   // less translucent than a leaf.
+  // Per-fragment extras are a tier dial, and the multiplier on each is how
+  // glossy the plant is: a conifer needle is waxed, a fern frond is matte, a
+  // dead frond is neither.
+  const fx = (glossy = 1, grain = 1) => ({ sheen: Q.sheen * glossy, bump: Q.bump * grain });
+  // Every `direct` below is up by about 40% in one step, which is not a taste
+  // change: deleting the stock GGX highlight (see WRAP_TARGETS) took a warm
+  // additive term off every lit card that was worth roughly a third of the
+  // pixel, and it was worth *more* than that on the darkest materials because it
+  // does not scale with albedo. The diffuse lobe has to carry what it was
+  // carrying, and unlike the highlight it carries it in the plant's own colour.
   const needleMat = foliageMaterial(needleAtlas(), {
+    ...fx(1.35, 1.15),
     alphaTest: 0.26,
-    trans: 0.24,
+    trans: 0.3,
     // green-dominant, and much less of it: what gets through a needle is
     // chlorophyll-filtered, not the low sun's own gold
     sunTint: [0.68, 0.86, 0.42],
@@ -1873,7 +2315,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     // this: at 0.38 the mid-distance value spread gave up nine per cent for
     // another eight degrees of hue, and the spread is the thing being bought.
     wrap: 0.45,
-    direct: 0.7,
+    direct: 1.0,
     sky: 0.66,
     shade: 0.9,
     // The environment probe is built from the sky, and this sky has a 0xff9d52
@@ -1890,11 +2332,12 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     hazeRange: [22, 55],
   });
   const leafMat = foliageMaterial(leafAtlas(), {
+    ...fx(1.1, 0.9),
     alphaTest: 0.34,
     trans: 0.5,
     windAmp: 0.24,
     wrap: 0.5,
-    direct: 0.72,
+    direct: 1.0,
     sky: 0.7,
     shade: 0.88,
     env: 0.12,
@@ -1913,25 +2356,48 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   // opened the verge far enough that the 12-25 m band measured a third more bare
   // dirt and its hue histogram collapsed back onto brown, which trades one flat
   // read for another. Two thirds of that gets the holes without the bald patch.
-  const fernMat = foliageMaterial(fernAtlas(), { alphaTest: 0.36, mipFill: 0.1, mipErode: 0.2, trans: 0.9, windAmp: 0.12, windSpeed: 1.35, direct: 0.74, sky: 0.76, shade: 0.8, wrap: 0.66, haze: 0.72, hazeRange: [26, 62] });
+  // Transmission down from 0.9 and the sky term down with it. Rendered on its
+  // own the fern pass was a field of pale grey-green stars — the palest and the
+  // greyest thing on the floor, and the most numerous, which is the whole of
+  // the "pale sage band" read. Two causes, both here rather than in the art: a
+  // sword fern was transmitting harder than any other plant in the scene when
+  // it is in fact the most leathery thing on the floor and barely transmits at
+  // all; and at 0.76 the analytic sky term, which is a cyan, was most of the
+  // light on a clump in canopy shade, so the paint's own green never arrived.
+  const fernMat = foliageMaterial(fernAtlas(), { ...fx(0.7, 0.8), alphaTest: 0.36, mipFill: 0.1, mipErode: 0.2, trans: 0.5, windAmp: 0.12, windSpeed: 1.35, direct: 1.02, sky: 0.62, shade: 0.8, wrap: 0.66, haze: 0.72, hazeRange: [26, 62] });
   // Grass keeps a lower cut than the other two: a blade is one or two texels
   // across at the top and there is nothing left of it above 0.4.
-  const grassMat = foliageMaterial(grassAtlas(), { alphaTest: 0.3, mipFill: 0.2, mipErode: 0.1, trans: 0.95, windAmp: 0.09, windSpeed: 1.7, direct: 0.76, sky: 0.76, shade: 0.74, wrap: 0.7, haze: 0.72, hazeRange: [26, 62] });
-  const shrubMat = foliageMaterial(shrubAtlas(), { alphaTest: 0.35, mipFill: 0.12, mipErode: 0.18, trans: 0.8, windAmp: 0.1, windSpeed: 1.4, direct: 0.74, sky: 0.82, shade: 0.8, wrap: 0.64, haze: 0.72, hazeRange: [26, 62] });
+  const grassMat = foliageMaterial(grassAtlas(), { ...fx(0.5, 0.5), alphaTest: 0.3, mipFill: 0.2, mipErode: 0.1, trans: 0.95, windAmp: 0.09, windSpeed: 1.7, direct: 1.04, sky: 0.76, shade: 0.74, wrap: 0.7, haze: 0.72, hazeRange: [26, 62] });
+  // Salal is the pale one. Rendered on its own this pass was the brightest
+  // thing on the floor by a clear margin and it is also the second most
+  // numerous, so it — not the ferns and not the big leaves — was what a viewer
+  // was describing as a bed of pale paddles. Its atlas is the lightest of the
+  // three green ones and it was drawing the second-strongest sky term on top of
+  // that; the sky term is where the fix belongs, because a salal leaf really is
+  // glossy and light and the art is not wrong.
+  const shrubMat = foliageMaterial(shrubAtlas(), { ...fx(1.25, 0.9), alphaTest: 0.35, mipFill: 0.12, mipErode: 0.18, trans: 0.66, windAmp: 0.1, windSpeed: 1.4, direct: 1.02, sky: 0.64, shade: 0.86, wrap: 0.64, haze: 0.72, hazeRange: [26, 62] });
   // Transmission down from 0.72. A flower spike is a stack of thick corolla
   // tubes, not a leaf blade, and at 0.72 a backlit one lit up to the palest and
   // pinkest thing in the frame from two metres away.
-  const stalkMat = foliageMaterial(stalkAtlas(), { alphaTest: 0.3, trans: 0.34, windAmp: 0.22, windSpeed: 1.15, direct: 0.72, sky: 0.82, shade: 0.66, wrap: 0.6, haze: 0.72, hazeRange: [26, 62] });
+  const stalkMat = foliageMaterial(stalkAtlas(), { ...fx(0.5, 0.7), alphaTest: 0.3, trans: 0.34, windAmp: 0.22, windSpeed: 1.15, direct: 1.0, sky: 0.82, shade: 0.66, wrap: 0.6, haze: 0.72, hazeRange: [26, 62] });
   // Dead and turned material: less forward scatter than a live leaf, because a
   // rust frond backlit at 0.9 transmission goes orange and reads as a flower.
-  const understoryMat = foliageMaterial(understoryAtlas(), { alphaTest: 0.34, mipFill: 0.12, mipErode: 0.16, trans: 0.26, windAmp: 0.11, windSpeed: 1.3, direct: 0.7, sky: 0.7, shade: 0.82, wrap: 0.58, haze: 0.72, hazeRange: [26, 62] });
-  const litterMat = foliageMaterial(litterAtlas(), { alphaTest: 0.3, trans: 0.2, windAmp: 0.0, rough: 0.95, direct: 0.86, sky: 0.72, shade: 0.32, wrap: 0.45, haze: 0.6, hazeRange: [26, 62] });
+  const understoryMat = foliageMaterial(understoryAtlas(), { ...fx(0.35, 0.9), alphaTest: 0.34, mipFill: 0.12, mipErode: 0.16, trans: 0.26, windAmp: 0.11, windSpeed: 1.3, direct: 0.98, sky: 0.7, shade: 0.82, wrap: 0.58, haze: 0.72, hazeRange: [26, 62] });
+  // Big thin shade leaves. Transmission is the highest on the floor and it is
+  // earned rather than a hack: a devil's club leaf really is one cell thick and
+  // a hand held behind one is visible through it, which is why this is the
+  // species that lights up when the headlamp swings past at night. The lobe
+  // stays broad for the same reason — a leaf that thin scatters through most of
+  // the hemisphere rather than into a tight forward cone.
+  const broadMat = foliageMaterial(floorBroadAtlas(), { ...fx(0.95, 1.0), alphaTest: 0.4, mipFill: 0.08, mipErode: 0.22, trans: 0.82, windAmp: 0.16, windSpeed: 1.05, direct: 1.06, sky: 0.62, shade: 0.8, wrap: 0.74, haze: 0.72, hazeRange: [26, 62] });
+  const litterMat = foliageMaterial(litterAtlas(), { ...fx(0.3, 0.6), alphaTest: 0.3, trans: 0.2, windAmp: 0.0, rough: 0.95, direct: 1.1, sky: 0.72, shade: 0.32, wrap: 0.45, haze: 0.6, hazeRange: [26, 62] });
   // The far band is deliberately almost sun-blind. A directly lit painted crown
   // lands near 0.38 linear, and once FogExp2 has added its own 0.1-0.3 on top
   // that is as bright as the sky it is seen against — which is exactly how the
   // distance came out as pale spires. Ambient-dominated, dark, and ramped toward
   // a dark haze colour before the fog gets its turn.
   const billboardMat = foliageMaterial(treeBillboardAtlas(), {
+    ...fx(0, 0),
     alphaTest: 0.3,
     trans: 0.3,
     windAmp: 0.08,
@@ -1945,7 +2411,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     tint: 0x3f4a3c,
     env: 0.1,
     wrap: 0.95,
-    direct: 0.3,
+    direct: 0.42,
     sky: 0.6,
     shade: 0.5,
     haze: 0.95,
@@ -2025,13 +2491,37 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   );
 
   // --- prototypes ----------------------------------------------------------
+  // A second and third seed per species is the cheapest variety there is: it
+  // costs one instanced draw and one geometry each, and it is the coarsest
+  // scale the eye can find a repeat at — two trees of the same silhouette
+  // fifteen metres apart is far more findable than two identical sprays.
   const protos = [];
+  // Seeds are kept alongside so the reduced-card band can be built from the
+  // same ones: an LOD has to be the *same tree* with fewer cards, not another
+  // tree, or the swap band reads as a species boundary running parallel to the
+  // road.
+  const protoSeed = [];
+  const addConifer = (spec, seed) => {
+    protos.push(buildConifer(spec, seed, Q.crownCards));
+    protoSeed.push(() => buildConifer(spec, seed, Q.crownCards * Q.midDetail));
+  };
+  const addBroadleaf = (spec, seed) => {
+    protos.push(buildBroadleaf(spec, seed, Q.crownCards));
+    protoSeed.push(() => buildBroadleaf(spec, seed, Q.crownCards * Q.midDetail));
+  };
   CONIFERS.forEach((spec, i) => {
-    protos.push(buildConifer(spec, 101 + i * 37));
-    if (spec.name === 'fir' || spec.name === 'cedar') protos.push(buildConifer(spec, 907 + i * 53));
+    addConifer(spec, 101 + i * 37);
+    if (spec.name === 'fir' || spec.name === 'cedar') addConifer(spec, 907 + i * 53);
+    for (let d = 0; d < Q.dup; d++) addConifer(spec, 4801 + i * 131 + d * 617);
   });
-  BROADLEAVES.forEach((spec, i) => protos.push(buildBroadleaf(spec, 2003 + i * 71)));
-  protos.push(buildSnag(3301), buildSnag(3907));
+  BROADLEAVES.forEach((spec, i) => {
+    addBroadleaf(spec, 2003 + i * 71);
+    for (let d = 0; d < Q.dup; d++) addBroadleaf(spec, 5303 + i * 97 + d * 431);
+  });
+  [3301, 3907].forEach((seed) => {
+    protos.push(buildSnag(seed));
+    protoSeed.push(() => buildSnag(seed));
+  });
   const saplings = [buildSapling(4409), buildSapling(4903), buildSapling(5407)];
 
   const byName = {};
@@ -2049,28 +2539,32 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   const dieback = (x, z) => fbm(x * 0.045 + 41, z * 0.045 + 17, { octaves: 3, period: 32, seed: 1212 });
   const openness = (x, z) => fbm(x * 0.075 + 61, z * 0.075 + 29, { octaves: 3, period: 32, seed: 1616 });
 
+  // Which *species* grows here is a property of the ground; which prototype of
+  // that species gets used is a coin toss, so adding seeds at a higher tier
+  // widens the variety without moving where anything grows.
+  const anyOf = (name) => pick(byName[name] || byName.fir, rnd);
+
   /** Stands rather than a uniform mix: species come in contiguous patches. */
   function speciesAt(x, z) {
     if (dieback(x, z) > 0.68 && rnd() < 0.45) return pick(snagIdx, rnd);
     const r = rnd();
     if (wet(x, z) > 0.58) {
-      if (r < 0.4) return byName.alder[0];
-      if (r < 0.68) return byName.maple[0];
-      if (r < 0.86) return byName.turning[0];
-      return byName.vine[0];
+      if (r < 0.4) return anyOf('alder');
+      if (r < 0.68) return anyOf('maple');
+      if (r < 0.86) return anyOf('turning');
+      return anyOf('vine');
     }
     const s = stand(x, z);
-    if (s < 0.42) return r < 0.58 ? byName.fir[0] : r < 0.84 ? byName.fir[1] : byName.spruce[0];
+    if (s < 0.42) return r < 0.84 ? anyOf('fir') : anyOf('spruce');
     if (s < 0.58) {
-      if (r < 0.34) return byName.hemlock[0];
-      if (r < 0.62) return byName.fir[0];
-      if (r < 0.86) return byName.cedar[0];
-      return byName.dying[0];
+      if (r < 0.34) return anyOf('hemlock');
+      if (r < 0.62) return anyOf('fir');
+      if (r < 0.86) return anyOf('cedar');
+      return anyOf('dying');
     }
-    if (r < 0.4) return byName.cedar[0];
-    if (r < 0.66) return byName.cedar[1];
-    if (r < 0.86) return byName.hemlock[0];
-    return byName.spruce[0];
+    if (r < 0.66) return anyOf('cedar');
+    if (r < 0.86) return anyOf('hemlock');
+    return anyOf('spruce');
   }
 
   function sites(cell, radius, cb) {
@@ -2233,12 +2727,26 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   // No instance cap here: `sites` walks the grid row by row, so bailing out on a
   // target count would pile every tree into one edge of the map. Density is set
   // by the cell size and the acceptance probability instead.
-  const NEAR_BAND = 44;
+  // Three geometry bands where there used to be one, because the old pair was
+  // a real tree out to 44 m and a painted card past it, and 44 m is well inside
+  // the distance a viewer can still tell the two apart — the swap line is
+  // visible as a ring of flatness in every frame that looks down the trail.
+  //
+  // The middle band is the same prototypes at a third of the crown cards. That
+  // is the right thing to throw away first: at 50-100 m a spray is under two
+  // pixels wide, so what survives is the *mass and the silhouette*, and both of
+  // those come from the tier structure and the rim tips rather than from the
+  // card count inside a tier. The trunk is kept whole because a bole is the
+  // last thing to stop being resolved and it costs a tenth of what a crown does.
+  const NEAR_BAND = Q.nearBand;
+  const MID_BAND = Math.max(Q.midBand, NEAR_BAND);
   const placements = protos.map(() => []);
+  const midPlacements = protos.map(() => []);
   let nearPlaced = 0;
+  let midPlaced = 0;
   sites(4.6 / Math.sqrt(density), span, (x, z) => {
     const d = terrain.roadDistance(x, z);
-    if (d < clearRadius || d > NEAR_BAND) return;
+    if (d < clearRadius || d > MID_BAND) return;
     // thin the verge so the road keeps a corridor, and leave the odd clearing
     if (d < clearRadius + 5.0 && rnd() < 0.72) return;
     const gap = inClearing(x, z);
@@ -2251,7 +2759,13 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     // from the truck ends up inside one; keep them off the verge
     if (proto.height < 9 && d < 10) return;
     const y = terrain.heightAt(x, z);
-    placements[i].push({
+    // The band boundary is dithered over eight metres rather than being a hard
+    // radius. A clean switch line puts every tree at 44.0 m on one side and
+    // every tree at 44.1 m on the other, and where the trail bends that line
+    // becomes a visible arc of thinner crowns; interleaving the two sets across
+    // the transition means no run of trees ever shares a detail level.
+    const far = d > NEAR_BAND && rnd() < smoothstep(NEAR_BAND - 4, NEAR_BAND + 4, d);
+    (far ? midPlacements : placements)[i].push({
       x,
       y: y - proto.radius * 0.5,
       z,
@@ -2266,22 +2780,25 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       // autumn arrives as a region and costs no draw from the shared stream.
       turn: proto.kind === 'broadleaf' ? clamp((dieback(x, z) - 0.5) * 2.6) : 0,
     });
-    nearPlaced++;
+    if (far) midPlaced++;
+    else nearPlaced++;
   });
 
-  protos.forEach((proto, i) => {
-    const list = placements[i];
+  const emitBand = (proto, list, tag) => {
     if (!list.length) return;
     const trunkMesh = new THREE.InstancedMesh(proto.trunk, barkMats[proto.bark] || barkMats.fir, list.length);
-    trunkMesh.name = `tree_${proto.name}_trunk`;
+    trunkMesh.name = `tree_${proto.name}${tag}_trunk`;
     trunkMesh.castShadow = true;
     trunkMesh.receiveShadow = true;
     const foliMesh = proto.foliage
       ? new THREE.InstancedMesh(proto.foliage, proto.kind === 'broadleaf' ? leafMat : needleMat, list.length)
       : null;
     if (foliMesh) {
-      foliMesh.name = `tree_${proto.name}_foliage`;
-      foliMesh.castShadow = true;
+      foliMesh.name = `tree_${proto.name}${tag}_foliage`;
+      // Nothing in the reduced band casts a shadow. A crown at 60 m contributes
+      // a dapple the size of a texel to a 2 k shadow map covering the corridor,
+      // and it pays a full second geometry pass to do it.
+      foliMesh.castShadow = tag === '';
       foliMesh.receiveShadow = true;
     }
     list.forEach((p, j) => {
@@ -2333,6 +2850,17 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       if (foliMesh.instanceColor) foliMesh.instanceColor.needsUpdate = true;
       group.add(foliMesh);
     }
+  };
+
+  protos.forEach((proto, i) => emitBand(proto, placements[i], ''));
+  // The reduced set is only built for prototypes that actually got sites out
+  // there, which on a map with a trail through one corner is well under half of
+  // them — building all of them costs a second of load for geometry nothing
+  // references.
+  protos.forEach((proto, i) => {
+    if (!midPlacements[i].length) return;
+    const lod = protoSeed[i]();
+    emitBand(lod, midPlacements[i], 'Lod');
   });
 
   // --- billboard band: fills the mid ground out to the terrain edge ---------
@@ -2410,7 +2938,10 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     // viewer reads as "spiky treeline" are the sky slots between the geometry
     // crowns down the road, and nothing was filling them: the far band started
     // outside the near band, so from the road it sat entirely off to the sides.
-    if (d < 24) return;
+    // Where a reduced-card band exists those slots are filled with real trees
+    // instead, so the painted stands start further out and stop paying fill for
+    // ground the geometry already covers.
+    if (d < (MID_BAND > NEAR_BAND ? NEAR_BAND * 0.7 : 24)) return;
     const open = openness(x, z);
     if (rnd() > 0.84 - open * 0.3) return;
     const w = wet(x, z);
@@ -2552,6 +3083,30 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     plantClump(0.82, 0.98, [3, 3, 3, 3], { seed: 7577, planes: 4, spread: 0.3, bow: 0.22 }),
     plantClump(0.6, 1.25, [3, 3, 2, 3], { seed: 7589, planes: 3, spread: 0.2, bow: 0.18, form: 'spire' }),
   ];
+  // Devil's club, thimbleberry, salmonberry, cow parsnip: the big-leaf half of
+  // the floor. Deliberately *taller and narrower* than the fern and shrub sets
+  // rather than another dome — these plants hold a few large leaves well above
+  // the mass, so the profile is a stem with a canopy on it, and the gap under
+  // that canopy is where the duff finally becomes visible between clumps.
+  //
+  // Cards are large and few. A 0.9 m card carrying a 30 cm leaf is the only
+  // element on this floor bigger than a frond pinna, and it is the reference
+  // that makes the ferns read as ferns instead of as a texture.
+  const broadGeos = [
+    // devil's club: leggy, a couple of huge leaves at head height
+    plantClump(1.15, 1.7, [0, 0, 0, 0], { seed: 7601, planes: 4, spread: 0.34, bow: 0.34, form: 'tier' }),
+    plantClump(1.35, 2.1, [0, 0, 0, 0], { seed: 7613, planes: 5, spread: 0.3, bow: 0.36, form: 'arch' }),
+    // thimbleberry: the mid-height neutral, broad and soft
+    plantClump(1.3, 1.15, [1, 1, 1, 1], { seed: 7627, planes: 5, spread: 0.42, bow: 0.3 }),
+    plantClump(1.6, 0.82, [1, 1, 1, 1], { seed: 7639, planes: 5, spread: 0.56, form: 'shelf' }),
+    // salmonberry: a thicket, and the one carrying fruit
+    plantClump(1.5, 1.55, [2, 2, 2, 2], { seed: 7651, planes: 6, spread: 0.46, form: 'tier' }),
+    plantClump(1.9, 1.0, [2, 2, 2, 2], { seed: 7663, planes: 6, spread: 0.7, form: 'patch', lean: 0.6 }),
+    // cow parsnip: one flat cream head over a divided leaf, and the tallest
+    // thing on the floor bar a stalk
+    plantClump(1.05, 2.3, [3, 3, 3, 3], { seed: 7677, planes: 4, spread: 0.24, form: 'spire' }),
+    plantClump(1.45, 1.35, [3, 3, 3, 3], { seed: 7689, planes: 5, spread: 0.4, form: 'fan' }),
+  ];
   // small: a flat card this size seen from a low camera is a hard horizontal bar
   // lying across the dirt, and a big one is a painted oval
   const litterGeos = [groundCard(1.0, 0), groundCard(1.15, 1), groundCard(0.9, 2), groundCard(0.8, 3)];
@@ -2574,9 +3129,9 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   // One shared site grid for every plant type. terrain.roadDistance and
   // heightAt are by far the most expensive calls in this file, so they get
   // sampled once per 2 m cell and every scatter pass reads the same list.
-  const UG_REACH = 56;
+  const UG_REACH = Q.ugReach;
   const ugSites = [];
-  sites(2.0, span, (x, z) => {
+  sites(Q.ugCell, span, (x, z) => {
     const d = terrain.roadDistance(x, z);
     if (d < 1.3 || d > UG_REACH) return;
     const e = 0.8;
@@ -2622,6 +3177,27 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   const standField = (x, z, ox, oz, period, thresh, gain) => {
     const n = fbm(x * 0.5 + ox, z * 0.5 + oz, { octaves: 3, period, seed: 4242, gain: 0.55 });
     return Math.pow(smoothstep(thresh, 1.0, n), gain);
+  };
+
+  /**
+   * Whether anything grows here at all, shared by every species.
+   *
+   * Each pass already has its own stand field and each one is genuinely patchy
+   * on its own — but six independent fields *union* to an even wash. Wherever
+   * the ferns thin out the salal is thick, and the floor came out uniformly
+   * covered however patchy any single pass looked in isolation. That is the
+   * whole of the "the ground is resolved in the texture and you never see it"
+   * problem, and no amount of work inside one pass can reach it.
+   *
+   * A real floor has bare duff at a scale of several metres: under a heavy
+   * crown, on ground a skidder compacted, in the rain shadow of a windthrow.
+   * One low-frequency field that gates all of them puts that back, and the bare
+   * ground is worth more than the plants it removes — it is what gives the eye
+   * something to measure a thicket against.
+   */
+  const coverField = (x, z) => {
+    const n = fbm(x * 0.058 - 88.5, z * 0.058 + 41.3, { octaves: 3, period: 9, seed: 2727 });
+    return smoothstep(0.3, 0.58, n);
   };
 
   /**
@@ -2685,6 +3261,12 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     // surface reads as a bald patch painted on the dirt, so litter gets less of
     // it than anything that stands up.
     ragged = 1.0,
+    // How much of the shared bare-ground gate this pass takes. 1 is fully
+    // gated; ground clutter passes go negative, because bare duff is exactly
+    // where fallen needle and leaf are *visible* rather than buried.
+    bare = 1.0,
+    // how much road dust the first couple of metres of verge collects
+    dust = 0,
     name = 'plants',
   }) {
     const perGeo = geos.map(() => []);
@@ -2730,6 +3312,10 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       // so a species that used to be a thin even wash is now the same number of
       // plants concentrated into patches with bare ground between
       if (stand) p *= standField(s.x, s.z, stand[0], stand[1], stand[2], stand[3], stand[4]);
+      if (bare !== 0) {
+        const c = coverField(s.x, s.z);
+        p *= bare > 0 ? lerp(1 - bare * 0.92, 1, c) : lerp(1, 1 + bare * 0.6, c);
+      }
       while (p > 0) {
         if (p < 1 && rnd() > p) break;
         perGeo[pickGeo()].push(s);
@@ -2801,6 +3387,35 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
         // stand differ, they just no longer differ *only* along that one axis.
         const warm = (rnd() - 0.5) * 0.34;
         _col.setRGB(v * (hr + warm * 0.3), v * (hg - warm * 0.04), v * (hb - warm * 0.2));
+        // Road dust on whatever grows in the first couple of metres of the verge.
+        //
+        // A vehicle track through dry ground throws a pale film onto everything
+        // beside it, and the plants that were closest to the trail were the ones
+        // reading worst: a saturated dark green clump sitting on lit gravel is a
+        // five-to-one value step with nothing between the two, so each one came
+        // out as a hole punched in the ground rather than a plant growing out of
+        // it. Lifting and desaturating them toward the ground's own warm grey
+        // closes that step from the plant's side, which is the side that can
+        // afford it — the alternative is lightening the whole pass, and the
+        // plants ten metres back are not dusty and should not move.
+        if (dust > 0) {
+          const near = 1 - smoothstep(minRoad - 0.6, minRoad + 3.0, p.d + p.dj * ragged);
+          const k = dust * near * near * (0.4 + rnd() * 0.6);
+          if (k > 0.004) {
+            // Toward the plant's *own* mean, not toward a lifted one. Dust takes
+            // chroma out of a leaf; it barely changes how much light comes back
+            // off it. A first pass that added a constant before desaturating put
+            // near-white leaves along the whole verge, which reads as blown out
+            // rather than dirty — the green channel has to come down as far as
+            // the red comes up.
+            const g = (_col.r + _col.g + _col.b) / 3;
+            _col.setRGB(
+              lerp(_col.r, g * 1.12, k),
+              lerp(_col.g, g * 1.04, k),
+              lerp(_col.b, g * 0.9, k),
+            );
+          }
+        }
         mesh.setColorAt(j, _col);
       });
       mesh.instanceMatrix.needsUpdate = true;
@@ -2811,7 +3426,14 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     return total;
   }
 
-  const ug = clamp(density, 0.45, 1.25);
+  // `per` is plants per site and the site grid is a tier setting, so the two
+  // compound: at `ultra`'s 1.6 m cell the grid alone puts 1.56 times the sites
+  // on the same ground before any multiplier is applied. Scaling by the cell
+  // area makes `Q.ug` mean plants per square metre instead, which is the thing
+  // a tier actually wants to choose — and it decouples that from the grid, so a
+  // finer grid buys placement resolution (which is what keeps a dense bed from
+  // looking gridded) without also buying a wall of leaves.
+  const ug = clamp(density, 0.45, 1.25) * Q.ug * (Q.ugCell / 2.0) ** 2;
   const ugCounts = {};
   // Raised by two thirds, and it is a hue lever rather than a detail one: a mat
   // of fallen leaf and needle between the clumps puts rust and bronze on the
@@ -2831,7 +3453,11 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     jitter: 1.6,
     tint: [0.35, 0.17],
     ragged: 0.55,
+    // Inverted: fallen needle and leaf pile up where nothing is growing, which
+    // is also the only place there is room to see them.
+    bare: -0.55,
     hues: [[4, ...HUES.plain], [2.2, ...HUES.bronze], [1.6, ...HUES.sage], [1.5, ...HUES.rust]],
+    dust: 0.7,
     name: 'litter',
   });
   // A driven two-track has bare compacted ruts and only a thin verge: grass
@@ -2882,6 +3508,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     // warm where it had been 11%. Dead bracken belongs to the understory pass,
     // which has real rust art and its own stand field placed away from this one.
     hues: [[4.4, ...HUES.sage], [2.4, ...HUES.deep], [1.6, ...HUES.olive], [1.8, ...HUES.plain], [1.5, ...HUES.bronze], [0.7, ...HUES.slate]],
+    dust: 0.42,
     name: 'fern',
   });
   // Weighted up close to the camera at grass's expense. Fern paints pointed
@@ -2903,6 +3530,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     stand: [61.7, -38.2, 4.5, 0.47, 1.3],
     weights: [2, 3, 1.2, 2.6, 2.2, 1.6, 1.4, 1.8, 1.1, 0.8],
     hues: [[4, ...HUES.sage], [3, ...HUES.deep], [1.6, ...HUES.olive], [1.4, ...HUES.plain], [1.1, ...HUES.bronze], [0.9, ...HUES.slate]],
+    dust: 0.38,
     name: 'shrub',
   });
   ugCounts.grass = scatterPlants(grassGeos, grassMat, {
@@ -2922,6 +3550,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     // grass is the one that already carries a dry tile, so the warm families get
     // real straw to work on rather than turning a green blade khaki
     hues: [[4, ...HUES.sage], [2, ...HUES.olive], [1.6, ...HUES.deep], [1.5, ...HUES.plain], [1.4, ...HUES.bronze], [0.7, ...HUES.slate]],
+    dust: 0.62,
     name: 'grass',
   });
   // Not a garnish: at a sixth of the floor it is the thing that stops the verge
@@ -2967,7 +3596,52 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     // near neutral, so the painted rust, bronze, slate and straw survive rather
     // than being multiplied back to olive by a green-dominant tint
     hues: [[7, ...HUES.plain], [1.6, ...HUES.slate], [1.3, ...HUES.olive], [1.1, ...HUES.bronze]],
+    dust: 0.5,
     name: 'understory',
+  });
+  // The big-leaf pass. Fewer instances than any green pass and each one much
+  // larger, which is the whole point: this is a *scale* reference, not more
+  // cover. Ten of these in a frame do more for the floor than a hundred more
+  // ferns, because they are the only thing down there the eye can measure the
+  // ferns against.
+  //
+  // It is also the widest hue lever available. Every other green on the floor
+  // is painted from one conifer-cool base and can only be moved by tinting,
+  // which cannot introduce a hue the paint does not contain; this atlas is
+  // painted a full step yellower and a stop lighter, and it carries the only
+  // saturated warm on the floor that is not a dead frond.
+  ugCounts.broad = scatterPlants(broadGeos, broadMat, {
+    // A third of what the fern pass puts down. The first attempt at this pass
+    // was set by eye against a frame it appeared to dominate, and rendering it
+    // on its own showed the opposite — the pale mass in that frame was the
+    // ferns, and the big leaves were a scatter of specks. Isolating a pass
+    // before tuning its density is worth the two minutes it costs.
+    per: 2.1 * ug,
+    boost: 0.8,
+    // Held back further than anything else. These are the tallest and widest
+    // cards in the scatter, and one at the rut edge is a two-metre plane
+    // straight across a low beauty camera; the shrink ramp is long for the same
+    // reason, so what does creep in is a seedling rather than a full plant.
+    minRoad: 4.6,
+    scale: [0.5, 1.3],
+    lean: 0.3,
+    jitter: 1.9,
+    // A third of a stop over the ferns and no more, and the arithmetic has to
+    // be done against the *atlas*, not against the other passes' tint numbers:
+    // this art is painted twice as light as the fern art, so a tint anywhere
+    // near the fern's puts every one of these plants a full stop over the bed
+    // it grows in. Which is what happened — the verge came back as a wall of
+    // pale leaf, brighter than the sunlit dirt.
+    tint: [0.17, 0.3],
+    shrink: 0.34,
+    shrinkOver: 7.5,
+    stand: [204.6, -151.8, 6.2, 0.46, 1.15],
+    weights: [1.5, 1.1, 2.4, 1.8, 2.0, 1.4, 0.9, 1.3],
+    // Near neutral, heavily. The painted yellow-green, the fruit and the cream
+    // umbel are the reason this atlas exists and a green-dominant tint would
+    // multiply all three back into the family everything else is already in.
+    hues: [[8, ...HUES.plain], [1.6, ...HUES.sage], [1.2, ...HUES.olive], [0.8, ...HUES.bronze]],
+    name: 'broad',
   });
   // Foxglove and fireweed: a bare vertical stem well above the mass. Nothing
   // else on this floor has that silhouette, and a handful of them per stand is
@@ -2989,6 +3663,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     shrinkOver: 7.0,
     stand: [15.9, 47.3, 3.6, 0.5, 1.1],
     hues: [[4, ...HUES.sage], [2, ...HUES.plain], [1.4, ...HUES.deep], [1, ...HUES.bronze]],
+    dust: 0.28,
     name: 'stalk',
   });
   // Sixty-five thousand triangles of low dome for something the camera reads as
@@ -3002,8 +3677,10 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     jitter: 1.5,
     tint: [0.36, 0.32],
     ragged: 1.35,
+    bare: 0.4,
     stand: [-92.5, 12.8, 4.0, 0.4, 1.0],
     hues: [[5, ...HUES.sage], [2, ...HUES.olive], [1.6, ...HUES.deep], [1, ...HUES.bronze]],
+    dust: 0.4,
     name: 'moss',
   });
 
@@ -3557,6 +4234,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     shrubMat,
     stalkMat,
     understoryMat,
+    broadMat,
     litterMat,
     billboardMat,
     rockMat,
@@ -3571,8 +4249,8 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
 
   return {
     group,
-    materials: { barkMats, needleMat, leafMat, fernMat, grassMat, shrubMat, stalkMat, understoryMat, litterMat, billboardMat, rockMat, mossMat, skirtMat },
-    stats: { nearTrees: nearPlaced, farTrees: farPlaced, protos: protos.length, sites: ugSites.length, ...ugCounts },
+    materials: { barkMats, needleMat, leafMat, fernMat, grassMat, shrubMat, stalkMat, understoryMat, broadMat, litterMat, billboardMat, rockMat, mossMat, skirtMat },
+    stats: { nearTrees: nearPlaced, midTrees: midPlaced, farTrees: farPlaced, protos: protos.length, sites: ugSites.length, ...ugCounts },
     update(t) {
       for (const m of windMats) m.userData.wind.uTime.value = t;
     },

@@ -73,9 +73,46 @@ function shadeCore(ctx, w, h, amount, { from = 'centre' } = {}) {
   ctx.restore();
 }
 
+// ---------------------------------------------------------------------------
+// Atlas resolution
+//
+// The readable element in every one of these atlases is a tuft or a leaflet a
+// few dozen texels across, so cell size is the direct lever on how far a card
+// keeps its grain before minification averages it into a wash. `ultra` buys
+// more of that; `fast` and `high` stay exactly where they were tuned, because
+// changing the cell also changes every value judgement made against it.
+//
+// Cost is quadratic in the multiplier and it is paid twice: canvas fill at
+// generation time and texture memory at runtime. At 1.5 the nine cutout
+// atlases come to roughly 150 MB resident with mips, which is a fifth of a
+// small discrete card and nothing on a large one.
+// ---------------------------------------------------------------------------
+let ATLAS_SCALE = 1;
+let ATLAS_ANISO = 4;
+
+export function setFoliageDetail(scale = 1, aniso = 4) {
+  ATLAS_SCALE = clamp(scale, 0.5, 2);
+  ATLAS_ANISO = Math.max(1, Math.round(aniso));
+}
+
+/**
+ * The multiplier the atlases were last built at. The foliage shader estimates a
+ * mip level from `duv * atlasWidth`, so a tier that paints bigger cells reports
+ * a higher level for the same card on screen — and every threshold tuned
+ * against the mip-fill and erode bands then fires closer to the camera the more
+ * detail the tier bought, which is backwards. Dividing the width back out makes
+ * that estimate a screen-space measure of the card rather than of the texture.
+ */
+export function foliageDetail() {
+  return ATLAS_SCALE;
+}
+
+/** Atlas cell size in texels at the current detail level, kept to a multiple of 32. */
+const cell = (px) => Math.max(64, Math.round((px * ATLAS_SCALE) / 32) * 32);
+
 /** Lay four tile painters out in a 2x2 grid. Tiles keep a transparent margin. */
 function atlas(key, tile, painters, { bleed = [40, 52, 32], srgb = true } = {}) {
-  return cached(key, () =>
+  return cached(`${key}.${tile}`, () =>
     cutoutTexture(
       tile * 2,
       (ctx, w, h) => {
@@ -93,7 +130,12 @@ function atlas(key, tile, painters, { bleed = [40, 52, 32], srgb = true } = {}) 
         });
         bleedBackground(ctx, w, h, bleed);
       },
-      { srgb, repeat: 1, aniso: 4, height: tile * 2 },
+      // A foliage card is nearly always seen at a grazing angle — a spray hung
+      // off a branch, a frond lying over the duff — so the sample footprint is
+      // long and thin and an isotropic mip picks the wrong level along it. This
+      // is the cheapest quality the tier buys: sixteen taps on a card that
+      // covers a few hundred pixels is a rounding error next to the overdraw.
+      { srgb, repeat: 1, aniso: ATLAS_ANISO, height: tile * 2 },
     ),
   );
 }
@@ -898,7 +940,7 @@ export function needleAtlas() {
   // on needles that vanish at the second mip either way.
   return atlas(
     'nat.needleAtlas',
-    1024,
+    cell(1024),
     [
       // 0 douglas fir: dark, dense, the workhorse
       (c, w, h) =>
@@ -1139,7 +1181,7 @@ export function leafAtlas() {
   const woody = hexToRgb(PALETTE.barkDark);
   return atlas(
     'nat.leafAtlas',
-    768,
+    cell(768),
     [
       // 0 bigleaf maple. Small and numerous: leafLen is a fraction of the cell,
       // and the cards these land on are metres across.
@@ -1366,7 +1408,7 @@ export function fernAtlas() {
   const shade = mixRgb(mixRgb(hexToRgb(PALETTE.leafShade), CONIFER_COOL, 0.16), FLOOR_DARK, 0.2);
   return atlas(
     'nat.fernAtlas',
-    512,
+    cell(512),
     [
       // 0 sword fern: one tall crown with a juvenile crowded against it
       (c, w, h) =>
@@ -1497,7 +1539,7 @@ export function grassAtlas() {
   const dry = mixRgb(mixRgb(mixRgb(hexToRgb(PALETTE.grassDry), [92, 92, 66], 0.5), [58, 58, 44], 0.34), green, 0.5);
   return atlas(
     'nat.grassAtlas',
-    512,
+    cell(512),
     [
       (c, w, h) => grassTile(c, w, h, { seed: 8101, green: mixRgb(green, fern, 0.4), dry: mixRgb(dry, green, 0.45), blades: 96, tall: 0.72, wide: 0.4, seedHeads: false }),
       (c, w, h) => grassTile(c, w, h, { seed: 8609, green, dry: mixRgb(dry, green, 0.32), blades: 76, tall: 0.9, wide: 0.5, seedHeads: true }),
@@ -1778,7 +1820,7 @@ export function stalkAtlas() {
 
   return atlas(
     'nat.stalkAtlas',
-    256,
+    cell(256),
     [
       (c, w, h) => spike(c, w, h, 13001, bells, false),
       (c, w, h) => spike(c, w, h, 13109, fire, true),
@@ -1796,7 +1838,7 @@ export function shrubAtlas() {
   const woody = hexToRgb(PALETTE.barkDark);
   return atlas(
     'nat.shrubAtlas',
-    512,
+    cell(512),
     [
       // Salal: leathery, blue-green, the darkest and coolest of the four. The
       // four cells used to be three shades of the same green plus one olive,
@@ -1904,7 +1946,7 @@ export function understoryAtlas() {
   const strawDry = mixRgb([124, 108, 70], FLOOR_DARK, 0.36);
   return atlas(
     'nat.understoryAtlas',
-    512,
+    cell(512),
     [
       // 0 dead bracken: rust and ochre, collapsed, the frond outline still there
       (c, w, h) =>
@@ -1955,6 +1997,331 @@ export function understoryAtlas() {
   );
 }
 
+/**
+ * A leaf outline with a toothed rim, drawn about the origin along +X.
+ *
+ * Straight or smoothly-curved leaf edges are the strongest tell a painted plant
+ * has: every real leaf on this floor is serrated, doubly serrated or lobed, and
+ * at the size these are drawn — a fifth of the cell — the teeth land at three or
+ * four texels and survive two mips. They also break the outline, which is what
+ * stops two overlapping leaves reading as one shape.
+ */
+function toothedPath(ctx, len, wide, teeth, rnd, lobe = 0) {
+  const N = 46;
+  ctx.beginPath();
+  for (let i = 0; i <= N; i++) {
+    const s = i / N;
+    // out along one side and back along the other
+    const t = s < 0.5 ? s * 2 : (1 - s) * 2;
+    const side = s < 0.5 ? -1 : 1;
+    const base = Math.sin(Math.pow(t, 0.72) * Math.PI) * wide;
+    const lobed = base * (1 - lobe * 0.55 * Math.abs(Math.cos(t * 7.3)));
+    const tooth = 1 + Math.cos(t * teeth * Math.PI * 2) * 0.19 + (rnd() - 0.5) * 0.07;
+    const x = t * len;
+    const y = side * lobed * tooth;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
+/**
+ * The big-leaf half of a forest floor.
+ *
+ * Every other ground atlas here paints something with fine structure — needles,
+ * pinnae, blades — so the whole floor was built out of one element size and the
+ * eye had nothing to measure the fronds against. Devil's club, thimbleberry and
+ * salmonberry are the plants that actually grow between the ferns in this
+ * forest, and their leaves are twenty to forty centimetres across: a completely
+ * different scale of detail, a lighter and yellower green than anything else
+ * down there, and — with the fruit and the umbel — the only saturated non-green
+ * on the floor that is not a dead frond.
+ */
+function broadTile(ctx, w, h, opts) {
+  const {
+    seed,
+    sun,
+    mid,
+    shade,
+    stemCol,
+    stems = 5,
+    leafLen = 0.34,
+    lobe = 0.55,
+    teeth = 9,
+    perStem = 4,
+    // leaflets per leaf: 1 is a simple blade, 3 a trifoliate, 5 palmate. A
+    // compound leaf is the single biggest silhouette difference available here
+    // and it costs the same to draw.
+    lobes = 1,
+    berry = null,
+    umbel = null,
+  } = opts;
+  const rnd = mulberry32(seed);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  const blade = (size, v, face) => {
+    const g = ctx.createLinearGradient(0, -size * 0.5, size, size * 0.5);
+    g.addColorStop(0, rgbStr(mixRgb(face, shade, 0.5), v * 0.9));
+    g.addColorStop(0.45, rgbStr(face, v));
+    g.addColorStop(1, rgbStr(mixRgb(face, sun, 0.34), v * 1.12));
+    ctx.fillStyle = g;
+    toothedPath(ctx, size, size * (0.5 + rnd() * 0.2), teeth, rnd, lobe);
+    ctx.fill();
+    // Midrib and laterals. A leaf this size with a flat interior is the exact
+    // failure the fronds were rebuilt to avoid, one element bigger.
+    ctx.strokeStyle = rgbStr(mixRgb(face, shade, 0.6), v, 0.5);
+    ctx.lineWidth = Math.max(0.7, size * 0.018);
+    ctx.beginPath();
+    ctx.moveTo(size * 0.03, 0);
+    ctx.lineTo(size * 0.94, 0);
+    ctx.stroke();
+    ctx.lineWidth = Math.max(0.55, size * 0.011);
+    for (let i = 1; i <= 5; i++) {
+      const u = i / 6;
+      for (const d of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(size * u, 0);
+        ctx.quadraticCurveTo(size * (u + 0.14), d * size * 0.18, size * (u + 0.22), d * size * 0.34);
+        ctx.stroke();
+      }
+    }
+    // A pale rim on the far edge only: a leaf held flat catches sky along one
+    // side, and it is the single cheapest thing that stops it reading as a cut
+    // shape.
+    ctx.strokeStyle = rgbStr(mixRgb(sun, [162, 170, 132], 0.4), v * 0.9, 0.5);
+    ctx.lineWidth = Math.max(0.6, size * 0.016);
+    ctx.beginPath();
+    ctx.moveTo(size * 0.1, -size * 0.22);
+    ctx.quadraticCurveTo(size * 0.6, -size * 0.46, size * 0.92, -size * 0.05);
+    ctx.stroke();
+  };
+
+  const leafAt = (cx, cy, size, ang, v, tone, flip) => {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(ang);
+    // Leaves are held near horizontal and seen from a low camera, so the card
+    // shows them foreshortened — but only mildly. Squashing to two fifths threw
+    // away most of the leaf area, and leaf area is the entire reason this atlas
+    // exists: at 10% cell fill a clump of these was four sheets of empty
+    // alpha with a few specks on them.
+    ctx.scale(1, flip * (0.66 + rnd() * 0.34));
+    const face = mixRgb(mid, sun, tone);
+    if (lobes <= 1) {
+      blade(size, v, face);
+    } else {
+      // A compound leaf, drawn as leaflets radiating from the petiole tip. Each
+      // is shorter than the whole leaf would be but together they cover more,
+      // and the outline they make is deeply cut rather than a smooth paddle.
+      const spread = lobes >= 5 ? 1.5 : 1.0;
+      for (let k = 0; k < lobes; k++) {
+        const a = ((k / (lobes - 1)) - 0.5) * spread;
+        const ls = size * (lobes >= 5 ? 0.72 : 0.86) * (0.78 + rnd() * 0.4) * (1 - Math.abs(a) * 0.22);
+        ctx.save();
+        ctx.rotate(a);
+        blade(ls, v * (0.86 + rnd() * 0.28), face);
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  };
+
+  for (let s = 0; s < stems; s++) {
+    const t = stems === 1 ? 0.5 : s / (stems - 1);
+    const rootX = w * (0.12 + t * 0.76 + (rnd() - 0.5) * 0.14);
+    const topY = h * (0.06 + rnd() * 0.3);
+    const topX = rootX + (rnd() - 0.5) * w * 0.34;
+    // Thin, and never at the palette's darkest bark. A cane painted at bark
+    // value and 2% of the cell wide arrives as a black bar through the middle
+    // of the plant — a hole punched in the leaf mass, which is what a stem must
+    // not be. These are pale green canes in real life anyway.
+    ctx.strokeStyle = rgbStr(mixRgb(stemCol, mid, 0.4), 0.9 + rnd() * 0.4);
+    ctx.lineWidth = w * (0.007 + rnd() * 0.005);
+    ctx.beginPath();
+    ctx.moveTo(rootX, h * 0.99);
+    ctx.quadraticCurveTo(rootX + (topX - rootX) * 0.2, h * 0.6, topX, topY);
+    ctx.stroke();
+    const n = Math.max(3, Math.round(perStem * (0.7 + rnd() * 0.8)));
+    for (let i = 0; i < n; i++) {
+      const u = 0.1 + (i / n) * 0.9;
+      const lx = lerp(rootX, topX, u * u);
+      const ly = lerp(h * 0.99, topY, u);
+      const size = w * leafLen * (0.7 + rnd() * 0.6) * (0.62 + u * 0.55);
+      // Value carried per leaf, biased dark and wide: a plant whose leaves are
+      // all one brightness is a cut shape however good the outline is. The
+      // floor is under the deepest shade there is, so the top of the range only
+      // reaches what an open-sky leaf would be at a third of full light.
+      const v = 0.58 + Math.pow(rnd(), 0.8) * 0.66;
+      // a short petiole, so the blade is held off the stem rather than growing
+      // out of it — that gap is most of what says "big leaf" at ten metres
+      const pa = (rnd() - 0.5) * 2.6;
+      ctx.strokeStyle = rgbStr(mixRgb(stemCol, mid, 0.45), 0.9);
+      ctx.lineWidth = Math.max(0.7, w * 0.005);
+      ctx.beginPath();
+      ctx.moveTo(lx, ly);
+      ctx.lineTo(lx + Math.cos(pa) * size * 0.3, ly + Math.sin(pa) * size * 0.3);
+      ctx.stroke();
+      leafAt(lx + Math.cos(pa) * size * 0.26, ly + Math.sin(pa) * size * 0.26, size, pa, v, Math.pow(rnd(), 1.3), rnd() < 0.5 ? 1 : -1);
+    }
+    if (berry) {
+      // Fruit in small tight clusters near a stem tip, not scattered over the
+      // card: a berry the eye can find as an individual dot is a sticker.
+      const cx = lerp(rootX, topX, 0.8);
+      const cy = lerp(h * 0.99, topY, 0.85);
+      for (let k = 0; k < 4 + Math.floor(rnd() * 4); k++) {
+        const r = w * 0.011 * (0.7 + rnd() * 0.7);
+        const a = rnd() * Math.PI * 2;
+        const rr = w * 0.03 * Math.sqrt(rnd());
+        ctx.fillStyle = rgbStr(mixRgb(berry, [0, 0, 0], rnd() * 0.45), 1);
+        ctx.beginPath();
+        ctx.ellipse(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.7, r, r * 0.86, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    if (umbel && s % 2 === 0) {
+      // A flat compound head, drawn as rays with a knot of florets at each tip
+      // rather than one disc. A disc at this size is a white blob and the eye
+      // names it immediately.
+      const cx = topX;
+      const cy = topY;
+      const rays = 7 + Math.floor(rnd() * 4);
+      const R = w * (0.055 + rnd() * 0.035);
+      ctx.strokeStyle = rgbStr(mixRgb(stemCol, umbel, 0.3), 0.9);
+      ctx.lineWidth = Math.max(0.6, w * 0.0035);
+      for (let k = 0; k < rays; k++) {
+        const a = (k / rays) * Math.PI * 2 + rnd() * 0.4;
+        const ex = cx + Math.cos(a) * R;
+        const ey = cy + Math.sin(a) * R * 0.42;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+        for (let f = 0; f < 5; f++) {
+          const fa = rnd() * Math.PI * 2;
+          const fr = w * 0.012 * Math.sqrt(rnd());
+          ctx.fillStyle = rgbStr(umbel, 0.55 + rnd() * 0.5);
+          ctx.beginPath();
+          ctx.arc(ex + Math.cos(fa) * fr, ey + Math.sin(fa) * fr * 0.6, w * 0.0055 * (0.7 + rnd() * 0.6), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
+  // Lighter on both than the other floor atlases carry. Those are all painted
+  // near the value the duff sits at; this one is deliberately the exception,
+  // and burying it under the same core shade would put it straight back into
+  // the band it exists to escape.
+  shadeCore(ctx, w, h, 0.26, { from: 'bottom' });
+  shadeCore(ctx, w, h, 0.1);
+}
+
+/**
+ * Devil's club, thimbleberry, salmonberry and cow parsnip.
+ *
+ * Two jobs, and the second one is why it is a separate atlas rather than more
+ * cells on an existing one. The obvious job is leaf scale: a thirty-centimetre
+ * palmate leaf next to a sword fern is what tells the eye how big the fern is,
+ * and without it the floor has exactly one element size everywhere.
+ *
+ * The second is hue. Measured over the verge, more than half the saturated
+ * pixels sat inside one thirty-degree window, and the reason is that every
+ * plant down there was painted from the same conifer-cool green and then
+ * multiplied by tints that cannot introduce a hue the paint does not contain.
+ * These are the two colours a green atlas cannot reach by tinting: the pale
+ * yellow-green of a big thin shade leaf, well above the ferns in value, and the
+ * warm fruit and cream flower that go with it.
+ */
+export function floorBroadAtlas() {
+  // Painted off a yellow-green rather than off the conifer green everything
+  // else down here starts from, and a good half stop lighter. Both are the
+  // point. Chlorophyll in a thin shade leaf reads yellower than in a waxed
+  // needle because there is less of it per unit of leaf, and it is lighter
+  // because the leaf transmits — so this is not an arbitrary off-hue dropped in
+  // for variety, it is what the plant actually looks like, and it happens to be
+  // the one direction the existing floor could not be tinted toward.
+  const leafMid = mixRgb(hexToRgb(PALETTE.leaf), [118, 134, 62], 0.62);
+  const leafSun = mixRgb(hexToRgb(PALETTE.leafSun), [172, 176, 100], 0.55);
+  const leafShade = mixRgb(hexToRgb(PALETTE.leafShade), [58, 70, 36], 0.5);
+  const woody = hexToRgb(PALETTE.barkDark);
+  return atlas(
+    'nat.floorBroadAtlas',
+    cell(512),
+    [
+      // 0 devil's club: the palest and yellowest thing on the floor, and the
+      // biggest leaf — a five-lobed palmate the size of a dinner plate, held
+      // near horizontal on a spined cane well above the fern bed.
+      (c, w, h) =>
+        broadTile(c, w, h, {
+          seed: 21001,
+          sun: mixRgb(leafSun, [178, 178, 108], 0.4),
+          mid: mixRgb(leafMid, [130, 142, 72], 0.45),
+          shade: mixRgb(leafShade, [64, 74, 42], 0.35),
+          stemCol: mixRgb(woody, [136, 126, 92], 0.55),
+          stems: 4,
+          leafLen: 0.42,
+          lobes: 5,
+          lobe: 0.5,
+          teeth: 11,
+          perStem: 3,
+        }),
+      // 1 thimbleberry: broad, soft, matte, a plain mid green — the neutral the
+      // other three are read against, and the densest cell of the four
+      (c, w, h) =>
+        broadTile(c, w, h, {
+          seed: 21107,
+          sun: mixRgb(leafSun, leafMid, 0.3),
+          mid: leafMid,
+          shade: leafShade,
+          stemCol: mixRgb(woody, [102, 84, 60], 0.4),
+          stems: 5,
+          leafLen: 0.36,
+          lobe: 0.55,
+          teeth: 8,
+          perStem: 4,
+        }),
+      // 2 salmonberry in fruit: trifoliate, so the outline is cut into threes
+      // rather than being another paddle. The berries are the point — a few
+      // hundred square texels of a hue nothing else on this floor owns, sitting
+      // inside a green mass so they read as fruit rather than as confetti.
+      (c, w, h) =>
+        broadTile(c, w, h, {
+          seed: 21211,
+          sun: mixRgb(leafSun, [138, 150, 84], 0.3),
+          mid: mixRgb(leafMid, [88, 110, 56], 0.35),
+          shade: leafShade,
+          stemCol: mixRgb(woody, [126, 84, 58], 0.5),
+          stems: 5,
+          leafLen: 0.32,
+          lobes: 3,
+          lobe: 0.3,
+          teeth: 13,
+          perStem: 4,
+          berry: [196, 108, 46],
+        }),
+      // 3 cow parsnip: flat cream heads over big divided leaves. Cream and not
+      // white — a true white flower head on a floor this dark is a bloom source,
+      // and a bed of them reads as litter blown in rather than as a plant.
+      (c, w, h) =>
+        broadTile(c, w, h, {
+          seed: 21319,
+          sun: mixRgb(leafSun, [150, 158, 92], 0.34),
+          mid: mixRgb(leafMid, [104, 122, 64], 0.3),
+          shade: leafShade,
+          stemCol: mixRgb(woody, [128, 134, 94], 0.5),
+          stems: 4,
+          leafLen: 0.35,
+          lobes: 3,
+          lobe: 0.8,
+          teeth: 10,
+          perStem: 3,
+          umbel: [190, 182, 150],
+        }),
+    ],
+    { bleed: mixRgb(leafShade, leafMid, 0.5) },
+  );
+}
+
 /** Ground clutter: moss mats, needle litter, fallen leaves, twig scatter. */
 export function litterAtlas() {
   const moss = hexToRgb(PALETTE.moss);
@@ -1979,7 +2346,7 @@ export function litterAtlas() {
 
   return atlas(
     'nat.litterAtlas',
-    256,
+    cell(256),
     [
       // 0 moss mat
       (ctx, w, h) => {
@@ -2231,7 +2598,7 @@ export function treeBillboardAtlas() {
   const woody = hexToRgb(PALETTE.barkDark);
   return atlas(
     'nat.treeBillboards',
-    512,
+    cell(512),
     [
       // 0 douglas fir stand: four trees, tallest just off centre.
       //
