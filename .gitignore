@@ -5,7 +5,15 @@ dist/
 .DS_Store
 .env
 .env.*
+
+# Intermediate frames from scripts/render-video.mjs - thousands of PNGs.
+qa/frames/
 qa/output/
+
+# Tour screenshots are regenerated on demand; the JSON reports are committed.
 qa/screenshots/*.png
 !qa/screenshots/.gitkeep
+
+# Build-time narration tooling: voice models and raw WAVs before mastering.
 scripts/.voices/
+scripts/.tmp-narration/
