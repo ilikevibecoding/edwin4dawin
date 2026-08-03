@@ -59,7 +59,11 @@ Anyone with a GPU should sanity-check the automatic quality suggestion and adjus
   legs can reach, the stride is clamped and the foot skates. `qa/gait-report.json` reports these; in
   the final build two samples of 63 exceed the tolerance, both under hard deceleration, with the
   worst planted sole moving 0.74 m/s.
-- **The cape is a fixed cone with sway**, not simulated cloth.
+- **The cape and the gown are fixed cones**, not simulated cloth. The gown's hem therefore has to be
+  wide enough to contain a full stride, since it cannot drape out of a leg's way, and a fallen figure's
+  robe does not settle.
+- **Fallen figures are a single tipped pose,** not a simulated collapse, so a body comes to rest on
+  the deck in the same attitude wherever it falls.
 - **Crowd variety is limited.** Six stormtroopers and five defenders share two rigs, differentiated
   by phase offset, gait and objective rather than by unique animation.
 
