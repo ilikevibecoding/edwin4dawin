@@ -176,11 +176,23 @@ export class CorridorScene {
     }
     const bank = mergeAll(bankParts);
     if (bank) {
-      const bm = new THREE.Mesh(bank, lib.interiorTrim);
+      // Machinery grey, not the dark metallic trim. In the archive wide shot the
+      // trim material drops to near black and the lit wall panels either side of
+      // it look like they are floating in a hole.
+      const bm = new THREE.Mesh(bank, lib.interiorWallDark);
       bm.castShadow = bm.receiveShadow = true;
       bm.name = 'archive bank';
       this.root.add(bm);
       lib.registry.track(bank);
+    }
+    const bankStrip = lib.registry.track(new THREE.MeshBasicMaterial({
+      color: 0x7fc6a8, transparent: true, opacity: 0.7, toneMapped: false,
+    }));
+    for (const dz of [-1.85, 1.85]) {
+      const strip = new THREE.Mesh(lib.registry.track(new THREE.PlaneGeometry(0.62, 0.05)), bankStrip);
+      strip.rotation.y = Math.PI / 2;
+      strip.position.set(ARCHIVE_X + 0.24, 1.42, JUNCTION_Z + dz);
+      this.root.add(strip);
     }
 
     // Corridor wall consoles.
@@ -350,7 +362,7 @@ export class CorridorScene {
     this.archiveLight.position.set(-1.9, 2.5, 25.6);
     this.scene.add(this.archiveLight);
 
-    this.archiveFill = new THREE.PointLight(0xbfd4f0, 0, 8, 2);
+    this.archiveFill = new THREE.PointLight(0xbfd4f0, 0, 12, 2);
     this.archiveFill.position.set(1.4, 1.9, 24.2);
     this.scene.add(this.archiveFill);
 
@@ -625,7 +637,7 @@ export class CorridorScene {
 
     const archivePresence = smoothstep(260, 268, t) * (1 - smoothstep(316, 322, t));
     this.archiveLight.intensity = 1.1 + 1.5 * archivePresence;
-    this.archiveFill.intensity = 1.5 * archivePresence;
+    this.archiveFill.intensity = 2.3 * archivePresence;
     this.doorwayGlow.intensity = smoothstep(BREACH_TIME, BREACH_TIME + 3, t) * (2.6 + 3.4 * vaderPresence);
 
     const breach = this.door.breachFlash(t);
@@ -657,7 +669,7 @@ export class CorridorScene {
     // Leaves from the foot of the projection rather than its middle. Struck from
     // the centre it runs straight across the princess's face on the shot that
     // matters most.
-    const from = this.plans.group.position.clone().add(new THREE.Vector3(0, -0.62, 0));
+    const from = this.plans.group.position.clone().add(new THREE.Vector3(0, -1.1, 0));
     const to = this.r2.anchors.dataPort.getWorldPosition(new THREE.Vector3());
     this.root.worldToLocal(to);
     const mid = from.clone().add(to).multiplyScalar(0.5);
@@ -946,8 +958,8 @@ function buildCast(lib: MaterialLibrary): {
     [311.8, 0.72, 0, 36.4],
     [315.5, 0.5, 0, 42.0],
     [318.2, -0.4, 0, 45.6],
-    [320.0, -2.3, 0, POD_BAY_Z + 0.4],
-    [1000, -2.3, 0, POD_BAY_Z + 0.4],
+    [320.0, -1.78, 0, POD_BAY_Z + 0.4],
+    [1000, -1.78, 0, POD_BAY_Z + 0.4],
   ]);
   const threepio = new ProtocolDroid(lib, {
     path: threepioPath,

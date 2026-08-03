@@ -553,11 +553,13 @@ export class Character {
   ): void {
     switch (state) {
       case 'walk':
+        this.poseLocomotion(walkPhase, Math.max(0.9, speed), WALK_CADENCE, 1, fluid);
+        break;
       case 'march':
-        this.poseLocomotion(walkPhase, Math.max(0.9, speed), state === 'march' ? 0.75 : 1, fluid);
+        this.poseLocomotion(walkPhase, Math.max(0.9, speed), MARCH_CADENCE, 0.85, fluid);
         break;
       case 'run':
-        this.poseLocomotion(walkPhase * 1.55, Math.max(2.6, speed), 1.35, fluid);
+        this.poseLocomotion(walkPhase, Math.max(2.6, speed), RUN_CADENCE, 1.2, fluid);
         break;
       case 'aim':
         this.poseAim(t, key, 0);
@@ -629,14 +631,10 @@ export class Character {
     j.elbowR.rotation.x = -1.35;
   }
 
-  private poseLocomotion(phase: number, speed: number, amplitude: number, fluid: number): void {
+  private poseLocomotion(phase: number, speed: number, cadence: number, carriage: number, fluid: number): void {
     const j = this.joints;
-    const cadence = clamp(speed * 1.5, 2.2, 8.5);
     const p = phase * cadence;
-    // Floor the swing well above zero. A slow, deliberate walk solved purely
-    // from path speed produces a stride too small to read at ten metres, and the
-    // figure looks like it is being slid along the deck.
-    const swing = 0.5 * amplitude * clamp(speed / 2.2, 0.72, 1.35);
+    const swing = strideSwing(speed, cadence);
     const sin = Math.sin(p);
     const cos = Math.cos(p);
 
@@ -646,8 +644,8 @@ export class Character {
     j.kneeR.rotation.x = -Math.max(0, sin) * swing * 1.5 - 0.06;
 
     // Vertical bob keeps feet near the floor rather than sliding.
-    j.hips.position.y += Math.abs(cos) * 0.038 * amplitude - 0.019;
-    j.torso.rotation.x = 0.06 * amplitude + Math.abs(sin) * 0.02;
+    j.hips.position.y += Math.abs(cos) * 0.038 * carriage - 0.019;
+    j.torso.rotation.x = 0.06 * carriage + Math.abs(sin) * 0.02;
     j.chest.rotation.y = -sin * 0.09 * fluid;
     j.hips.rotation.y = sin * 0.05 * fluid;
 
@@ -662,14 +660,14 @@ export class Character {
 
   private overlayStride(phase: number, speed: number, fluid: number): void {
     const j = this.joints;
-    const p = phase * clamp(speed * 1.5, 2.2, 8);
+    const p = phase * WALK_CADENCE;
     const sin = Math.sin(p);
-    const swing = 0.4 * clamp(speed / 2.2, 0.4, 1.2);
+    const swing = strideSwing(speed, WALK_CADENCE) * 0.85;
     j.hipL.rotation.x = sin * swing;
     j.hipR.rotation.x = -sin * swing;
     j.kneeL.rotation.x = -Math.max(0, -sin) * swing * 1.4 - 0.06;
     j.kneeR.rotation.x = -Math.max(0, sin) * swing * 1.4 - 0.06;
-    j.hips.position.y += Math.abs(Math.cos(p)) * 0.02 - 0.01;
+    j.hips.position.y += Math.abs(Math.cos(p)) * 0.024 - 0.012;
     j.hips.rotation.y = sin * 0.04 * fluid;
   }
 
@@ -894,6 +892,29 @@ export function resetContactShadowCache(): void {
 
 /** Seconds spent easing from one pose into the next. */
 const POSE_BLEND = 0.72;
+
+/**
+ * Steps per second, as an angular rate.
+ *
+ * Cadence is a constant per gait and the stride amplitude is solved from ground
+ * speed, not the other way around. Deriving cadence from speed looks tempting
+ * but the walk phase is `(t + offset) * cadence` with `t` in the hundreds, so
+ * any change to cadence makes the phase leap by tens of radians and the legs
+ * blur through several cycles in a frame.
+ */
+const WALK_CADENCE = 6.2;
+const MARCH_CADENCE = 5.0;
+const RUN_CADENCE = 9.4;
+
+/**
+ * Hip swing that makes the stance foot sweep backwards at the speed the body
+ * travels forward. The foot sits about 0.85 m below the hip, so it covers
+ * roughly `1.7 * swing` metres per half cycle; solving that against distance
+ * per half cycle is what stops a walk reading as a slide.
+ */
+function strideSwing(speed: number, cadence: number): number {
+  return clamp((Math.PI * speed) / (1.7 * cadence), 0.14, 0.7);
+}
 
 /** Joints captured during a cross-fade, in a fixed order. */
 const BLEND_ORDER: Array<keyof Joints> = [
