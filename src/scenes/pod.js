@@ -60,7 +60,11 @@ const RUN_V = 7.65;   // droid run speed: puts them in the hatch on the cut
 const R2_X = -3.50, R2_Z = 30.70, R2_ROT = -1.465;
 const LEIA_X = -1.95, LEIA_Z = 29.70, LEIA_ROT = 3.25;
 const SLOT_Y = 1.78;  // height of the card slot up R2's body
-const C3_X = -0.90, C3_Z = 24.50, C3_ROT = 4.069;
+// Turned further round to the lens than reads natural on paper. Squared up to
+// the hall he showed the camera his shoulder, and his arms swung out along the
+// starboard handrail behind him; from here we get his front panel and his hands
+// foreshorten inside his own silhouette.
+const C3_X = -0.90, C3_Z = 24.50, C3_ROT = 3.92;
 
 /** Distance covered `u` seconds into the run, with a soft launch. */
 const runDist = (u) => (u <= 0 ? 0 : u < 1.2 ? (RUN_V * u * u) / 2.4 : RUN_V * (u - 0.6));
@@ -789,10 +793,15 @@ export async function build(ctx) {
     }
     return g;
   };
+  // Sized off the retro ring it is supposed to be coming out of — the hull ends
+  // at z = 4.5 and is 5 across — and no bigger. Overscaled it stops being a
+  // flare on a small hull and becomes a second hull: it doubled the pod's
+  // silhouette in the wide, which put a 9-unit pod on screen the same size as a
+  // 64-unit corvette and threw away the one comparison this shot exists to make.
   const podCore = crossBlob();     // the hot ring itself
   const podTrail = crossBlob();    // and the wash streaming off it
-  podCore.position.set(0, 2.8, 5.0);
-  podTrail.position.set(0, 2.8, 8.0);
+  podCore.position.set(0, 2.8, 4.8);
+  podTrail.position.set(0, 2.8, 6.7);
   podOut.add(podCore, podTrail);
 
   // the gun deck: three stepped plates of imperial hull tapering away below the
@@ -1031,8 +1040,13 @@ export async function build(ctx) {
           const f1 = Math.sin(t * 3.3);
           const f2 = Math.sin(t * 2.1 + 1.2);
           pose(c3, {
-            armR: { x: 1.02 + 0.24 * f1, y: 0, z: 0.14 },
-            armL: { x: 0.96 - 0.26 * f2, y: 0, z: -0.16 },
+            // Wringing at chest height rather than held out level. Two reasons:
+            // it is the more anxious read of the two, and level they carried his
+            // C-clip hands along the line of the starboard handrail fifteen units
+            // behind him — from this lens they closed round it exactly, and then
+            // slid down it as the arms moved.
+            armR: { x: 0.58 + 0.22 * f1, y: 0, z: 0.16 },
+            armL: { x: 0.52 - 0.24 * f2, y: 0, z: -0.18 },
             handR: -1.15, handL: 1.15,
             legR: 0.03, legL: -0.03,
             lean: 0.04 + 0.03 * f2,
@@ -1291,14 +1305,16 @@ export async function build(ctx) {
         }
 
         // Sized off the range it is being seen at, after the camera for this
-        // instant is parked — the wide holds the pod at twenty-odd units and the
+        // instant is parked — the wide holds the pod at ninety units and the
         // gunsight at up to three hundred, and a flare that works at one is
-        // either invisible or a bonfire at the other.
-        const range = clamp((podOut.position.distanceTo(cam.position) - 24) / 250, 0, 1);
-        const fs = (1 + 1.7 * range) * (0.84 + 0.16 * Math.sin(t * 9.1));
-        podCore.scale.setScalar(4.2 * fs);
-        podTrail.scale.set(2.8 * fs, 2.8 * fs, 7.0 * fs);
-        podTrail.position.z = 5.0 + 2.8 * fs;
+        // either invisible or a bonfire at the other. The ramp starts beyond the
+        // wide's own range, so through that beat the flare stays true to the
+        // hull and only opens up once the pod is genuinely far off.
+        const range = clamp((podOut.position.distanceTo(cam.position) - 95) / 205, 0, 1);
+        const fs = (1 + 2.1 * range) * (0.84 + 0.16 * Math.sin(t * 9.1));
+        podCore.scale.setScalar(2.4 * fs);
+        podTrail.scale.set(1.7 * fs, 1.7 * fs, 3.8 * fs);
+        podTrail.position.z = 4.8 + 1.9 * fs;
       }
 
       /* ---------------------------------------------------------------- */
