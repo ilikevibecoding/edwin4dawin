@@ -69,10 +69,10 @@ export const VADER_SPEC: CharacterSpec = {
   helmet: 'vader',
   weapon: 'saber',
   cape: true,
-  roughness: 0.22,
-  metalness: 0.5,
+  roughness: 0.17,
+  metalness: 0.55,
   colors: {
-    head: 0x1a1c22,
+    head: 0x1e2028,
     torso: 0x15171d,
     arms: 0x191b21,
     legs: 0x161820,

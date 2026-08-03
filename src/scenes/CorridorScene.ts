@@ -276,7 +276,7 @@ export class CorridorScene {
     this.vaderRim.position.set(0, 2.1, DOOR_Z - 1.5);
     this.scene.add(this.vaderRim);
 
-    this.vaderKey = new THREE.PointLight(0xcfe0ff, 0, 7.5, 2);
+    this.vaderKey = new THREE.PointLight(0xd6e4ff, 0, 10, 2);
     this.vaderKey.position.set(0.5, 1.9, 0);
     this.scene.add(this.vaderKey);
 
@@ -559,7 +559,7 @@ export class CorridorScene {
     this.vaderRim.position.set(0.6, 2.05, vaderZ - 2.4);
     this.vaderRim.intensity = vaderPresence * 5.2 * (0.85 + 0.15 * Math.sin(t * 1.6));
     this.vaderKey.position.set(0.75, 1.95, vaderZ + 2.6);
-    this.vaderKey.intensity = vaderPresence * 4.4;
+    this.vaderKey.intensity = vaderPresence * 7.5;
 
     const archivePresence = smoothstep(260, 268, t) * (1 - smoothstep(316, 322, t));
     this.archiveLight.intensity = 1.1 + 1.5 * archivePresence;

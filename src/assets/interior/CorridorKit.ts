@@ -73,6 +73,7 @@ export class CorridorRun {
     const rng = new Rng(opts.seed ?? `corridor:${opts.z0}:${opts.z1}`);
     const length = opts.z1 - opts.z0;
     const sections = Math.max(1, Math.round(length / SECTION_LENGTH));
+    const step = length / sections;
     this.group.name = `corridorRun:${opts.z0}:${opts.z1}`;
 
     // --- Shell -------------------------------------------------------------
@@ -112,7 +113,7 @@ export class CorridorRun {
       inst.receiveShadow = true;
       const m = new THREE.Matrix4();
       for (let i = 0; i < sections; i++) {
-        m.makeTranslation(0, 0, opts.z0 + SECTION_LENGTH * (i + 0.5));
+        m.makeTranslation(0, 0, opts.z0 + step * (i + 0.5));
         inst.setMatrixAt(i, m);
       }
       inst.instanceMatrix.needsUpdate = true;
@@ -128,7 +129,7 @@ export class CorridorRun {
       ribs.castShadow = true;
       const m = new THREE.Matrix4();
       for (let i = 0; i <= sections; i++) {
-        m.makeTranslation(0, 0, opts.z0 + SECTION_LENGTH * i);
+        m.makeTranslation(0, 0, opts.z0 + step * i);
         ribs.setMatrixAt(i, m);
       }
       ribs.instanceMatrix.needsUpdate = true;
@@ -175,7 +176,7 @@ export class CorridorRun {
     }
     for (const strip of this.lightStrips) {
       const mat = strip.material as THREE.MeshStandardMaterial;
-      mat.emissiveIntensity = 0.22 + whiteLevel * 0.95 * flick;
+      mat.emissiveIntensity = 0.16 + whiteLevel * 0.52 * flick;
       mat.emissive.setRGB(1, 0.94 * whiteLevel + 0.2 * redLevel, 0.86 * whiteLevel + 0.08 * redLevel);
     }
   }

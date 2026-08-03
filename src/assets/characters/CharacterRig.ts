@@ -443,7 +443,7 @@ export class Character {
     this.name = spec.name;
     this.options = options;
     this.phase = options.phase ?? 0;
-    this.contactRadius = (spec.height ?? 1.82) * 0.36;
+    this.contactRadius = (spec.height ?? 1.82) * 0.44;
     this.contact = makeContactShadow(lib);
     this.group.add(this.contact);
   }
@@ -533,7 +533,7 @@ export class Character {
     const down = key.state === 'down' ? saturate(age / 1.25) : 0;
     const r = this.contactRadius;
     this.contact.scale.set(r * (1 + down * 0.7), 1, r * (1 + Math.min(0.45, speed * 0.1) + down * 1.1));
-    (this.contact.material as THREE.MeshBasicMaterial).opacity = 0.5 - down * 0.14;
+    (this.contact.material as THREE.MeshBasicMaterial).opacity = 0.62 - down * 0.16;
 
     j.root.updateMatrixWorld(true);
     if (j.muzzle) j.muzzle.getWorldPosition(this.muzzleWorld);
@@ -854,7 +854,7 @@ function makeContactShadow(lib: MaterialLibrary): THREE.Mesh {
   }
   if (!contactMaterial) {
     contactMaterial = new THREE.MeshBasicMaterial({
-      map: contactTexture, transparent: true, opacity: 0.55,
+      map: contactTexture, transparent: true, opacity: 0.62,
       depthWrite: false, toneMapped: false, color: 0x000000,
     });
     lib.registry.track(contactMaterial);
