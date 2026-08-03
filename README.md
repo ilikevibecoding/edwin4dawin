@@ -340,11 +340,32 @@ single asset on a turntable against a neutral background.
 
 See [`docs/QA-CHECKLIST.md`](docs/QA-CHECKLIST.md) for the manual pass.
 
-Two screen recordings from the manual pass live in [`media/`](media/), with a
-self-contained player page at [`media/index.html`](media/index.html). Both were
-captured through a software rasteriser on a machine with no GPU, so the frame
-rate in them is single digits; the stills in `qa/screenshots/` come from the
-same renderer offline and show the real output.
+### Watching it without running it
+
+[`media/`](media/) holds a recording of the whole show with its soundtrack, plus
+the two interaction tests from the manual pass, behind a self-contained player
+page at [`media/index.html`](media/index.html).
+
+The film is not a screen capture. Because the show is a pure function of its
+clock, `scripts/render-film.mjs` steps `App.frame(dt)` at a fixed timestep and
+pipes each composited frame into ffmpeg, so the result runs at the intended
+speed however slowly the machine draws — on the box this was built on, one frame
+a second. The soundtrack cannot be produced that way, because the score, the
+effects and the narration are all scheduled against the Web Audio clock, so
+`scripts/render-audio.mjs` freezes the renderer, drives `App.simulate(dt)` off
+`AudioContext.currentTime` and records the master limiter in real time. The two
+passes line up to within a hundredth of a second over the full 404 seconds.
+
+```bash
+node scripts/render-film.mjs                     # picture, fixed timestep
+node scripts/render-audio.mjs                    # soundtrack, real time
+ffmpeg -i qa/starfall-film.mp4 -i qa/starfall-audio.webm \
+       -map 0:v -map 1:a -c:v libx264 -crf 28 -c:a aac -b:a 128k film.mp4
+```
+
+The two interaction recordings *are* live screen captures, so their frame rate
+is genuinely low. The stills in `qa/screenshots/` come from the offline path and
+show the real output.
 
 ---
 
