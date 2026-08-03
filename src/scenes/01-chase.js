@@ -196,19 +196,29 @@ export async function build(ctx) {
   lights.key.intensity = 1.62;
   // Planetshine: a warm bounce off fifteen hundred units of orange desert.
   // Kept weak — at any real strength it turns a grey destroyer into a rusty one.
-  lights.fill.color.setHex(0xffb07a);
-  lights.fill.position.set(-0.18, -0.95, -0.26).multiplyScalar(400);
-  lights.fill.intensity = 0.42;
+  // Raking, not straight up. Pointed almost vertically it lands the same value
+  // on every square unit of a 260-stud belly, and the money shot was a flat
+  // lavender ceiling with boxes stuck to it: nothing on that hull is doing any
+  // modelling if every face pointing down gets the same photon count. Tipped
+  // thirty degrees forward it separates the forward face of every transverse
+  // frame from its aft face, which is what turns the keel into ribs.
+  lights.fill.color.setHex(0xffc79c);
+  lights.fill.position.set(-0.26, -0.86, -0.44).multiplyScalar(400);
+  lights.fill.intensity = 0.58;
   lights.rim.position.set(0.7, 0.2, 0.66).multiplyScalar(400);
   lights.rim.intensity = 0.95;
   // The space preset's ground bounce is almost black, which leaves the whole
   // underside of the destroyer unreadable — and the warm fill on its own turns
   // that underside rust-orange. A cold slate ground bounce, strong enough to
   // dominate the warm one, is what keeps a grey ship grey.
-  lights.hemi.groundColor.setHex(0x76839a);
+  lights.hemi.groundColor.setHex(0x84868c);
   // Carries what came off the key: a hemisphere cannot blow a face out on its
-  // own, because no normal ever gets more than 1.0 of it.
-  lights.hemi.intensity = 1.2;
+  // own, because no normal ever gets more than 1.0 of it. Wound back from 1.2,
+  // though, because a hemisphere is the one light in here that CANNOT model
+  // anything — every face with the same normal takes the same value from it,
+  // whatever its neighbours are doing — and at 1.2 it was most of what the
+  // destroyer's underside was lit by.
+  lights.hemi.intensity = 0.82;
   // Cold sidelights, one per beam, so both his flanks separate from the sky in
   // the money shot. One is not enough: with only a starboard light the port
   // flank is pure black, and in a shot that is nothing but hull that reads as a
@@ -221,6 +231,15 @@ export async function build(ctx) {
     flank.position.set(x, -0.3, 0.42).multiplyScalar(400);
     scene.add(flank);
   }
+  // A hard cold rake from below and AHEAD, for the keel alone. Every other lamp
+  // in here either comes from above (the sun, the rim) or points straight up (the
+  // planetshine, the hemisphere), and shot 3 is nine seconds of nothing but the
+  // underside of the hull: this is the only light in the scene whose direction the
+  // frames, strakes and spine can throw a shadow line along. It is nearly white
+  // and it is aimed forward, so the two ends of every rib read differently.
+  const keelRake = new THREE.DirectionalLight(0xd6e2f0, 0.85);
+  keelRake.position.set(0.22, -0.52, -0.82).multiplyScalar(400);
+  scene.add(keelRake);
 
   // -------------------------------------------------------------------- sky
   scene.add(nebulaBackdrop({ radius: 3900, colorA: 0x1c2647, colorB: 0x3a1a2c, density: 0.5 }));
@@ -336,7 +355,7 @@ export async function build(ctx) {
     radiusTop: cv.halfW * 1.5,
     radiusBottom: cv.halfW * 0.55,
     height: 1,
-    opacity: 0.16,
+    opacity: 0.32,
   });
   beam.object.rotation.x = Math.PI; // local +y now runs downward, out of the bay
   beam.object.position.set(0, MOUTH_Y + 0.6, -HANGAR_BACK);
@@ -445,9 +464,17 @@ export async function build(ctx) {
   // The dead bell smoulders. Puffs drift back down the slipstream, so the smoke
   // group is tipped over to make its local "up" the ship's aft.
   const deadBell = (engines[DEAD_BELL] ?? engines[0]).object.position.clone().add(cvOffset);
-  const smokes = [[18.7, 8], [23.6, 10]].map(([t0, life]) => {
+  // The first bank is short: on an eight-second life at this rise its oldest puff
+  // is twenty-five units aft of the bell by 26s, which in the tractor-beam shot is
+  // a lone grey smudge off in empty space with nothing between it and the ship.
+  const smokes = [[18.7, 6.5], [23.4, 10.6]].map(([t0, life]) => {
     const sm = new Smoke({
-      count: 11,
+      // Fourteen small puffs rather than eleven large ones. At a sprite size of
+      // 0.085 of her length, eleven of them scattered over a plume half her length
+      // long are eleven separate grey smudges with black between them, and in the
+      // tractor-beam shot they read as blurred rectangles floating beside the ship
+      // rather than as anything coming out of it.
+      count: 14,
       t0,
       life,
       origin: [0, 0, 0],
@@ -456,9 +483,9 @@ export async function build(ctx) {
       // length that is three hundred units, so every puff was off frame within
       // half a second of appearing and the trail was invisible in every shot it
       // was meant to be in. Two and a half leaves a plume about half her length.
-      rise: 2.5,
-      spread: 4.6,
-      size: cv.len * 0.085,
+      rise: 1.55,
+      spread: 2.8,
+      size: cv.len * 0.052,
       // Pale, not dark: in vacuum against black sky a dark grey puff is invisible,
       // and what light there is here is sunlit dust.
       color: 0x9c958c,
@@ -467,7 +494,7 @@ export async function build(ctx) {
       // compose to very nearly opaque, and a 7-unit sprite with a bright core
       // then reads as a cotton ball rather than as smoke. Small, many, and faint
       // enough that four of them stacked are still translucent.
-      opacity: 0.32,
+      opacity: 0.27,
       seed: Math.round(t0 * 7),
     });
     sm.object.position.copy(deadBell);
@@ -673,9 +700,14 @@ export async function build(ctx) {
       // worse than nothing, because fx.Thruster keeps the cone at full length
       // and only fades its opacity, so a bell at a third reads as a hollow
       // plastic funnel taped to her transom rather than as a dying engine.
+      // Timed to the line, not to the hits. "Her engines went dark" lands at
+      // about 19.5, and on the old schedule the bank was still at four fifths of
+      // full at 20 — a ship blazing away under a narrator saying it had stopped,
+      // with the plume the brightest thing in the frame at the moment the shot
+      // wanted the hull. They start dying with the second hit and are out by 20.4.
       for (let i = 0; i < engines.length; i++) {
-        const die = i === DEAD_BELL ? 18.7 : 19.3 + i * 0.16;
-        const out = i === DEAD_BELL ? 0.35 : 1.1;
+        const die = i === DEAD_BELL ? 18.75 : 19.0 + i * 0.12;
+        const out = i === DEAD_BELL ? 0.3 : 0.85;
         let th = 1 - ease.range(t, die, die + out);
         if (i === DEAD_BELL) th *= 1 - 0.5 * ease.range(t, die - 0.9, die) * (0.5 + 0.5 * Math.sin(t * 33));
         else th *= 0.86 + 0.14 * Math.sin(t * 11 + i);
@@ -692,7 +724,13 @@ export async function build(ctx) {
       for (const f of fireballs) f.update(t);
       for (const s of smokes) s.update(t);
 
-      const grab = ease.smooth(ease.range(t, T.lock, T.lock + 1.4));
+      // Up in eight tenths of a second, not one and a half. The cut to shot 6 is
+      // at T.lock and the beat it opens is the beam taking hold of her, so half a
+      // second later the shaft has to be a shaft: on the slower ramp the frame at
+      // 26s — the first one anybody sees of it — had it at a third of its opacity,
+      // which on a field this faint is nothing at all, and she hung under an open
+      // hangar with no visible reason to be rising.
+      const grab = ease.smooth(ease.range(t, T.lock, T.lock + 0.8));
       // A cone squashed to nothing and seen close to end-on stops being a shaft
       // and becomes a bullseye of concentric rings sitting on the hull, so the
       // beam is faded out as the mouth closes on her and then switched off.
@@ -700,9 +738,9 @@ export async function build(ctx) {
       const shaft = grab * ease.smooth(ease.range(gap, 2.5, 13));
       beam.object.visible = shaft > 0.02;
       beam.object.scale.set(1, Math.max(0.5, gap * 1.06), 1);
-      beam.mesh.material.uniforms.uOpacity.value = 0.16 * shaft;
+      beam.mesh.material.uniforms.uOpacity.value = 0.32 * shaft;
       beam.update(t);
-      gripGlow.material.opacity = 0.16 * grab * (0.82 + 0.18 * Math.sin(t * 5.3));
+      gripGlow.material.opacity = 0.34 * grab * (0.82 + 0.18 * Math.sin(t * 5.3));
       gripGlow.visible = grab > 0.02;
       // ...and backed off again as she rises into it. The lamp is three units
       // under the bay roof and she is white ABS: at a fixed 1500 the near side of
@@ -1182,19 +1220,28 @@ function buildKeelStructure(sd, destroyer, bay = null) {
   // covering the skin behind it, nothing but bars. At a third of a unit, hull
   // grey, with the dark kept to a seam on every third frame, the same lines
   // read as plating on a hull instead of as a rack over a hole.
+  //
+  // Two beats, not one: a main frame every 11 studs and a light one between them.
+  // The main frames alone were 0.85 of a plate proud of the skin — a third of a
+  // unit on a hull sixty units from the lens — and at that depth the ladder was
+  // there in the geometry and not in the picture. At 1.3, with a half-plate
+  // intermediate every 5.5, the pitch reads, and it reads at two scales, which is
+  // what lets the eye see the spacing compress as the bow comes over.
   let n = 0;
-  for (let z = Z0 + 4; z < Z1; z += 11) {
+  for (let z = Z0 + 4; z < Z1; z += 5.5) {
     const s = skinAt(z);
     const w = s.half * 0.96;
     if (w < 5) continue;
     n++;
-    b.box(-w, s.top - 0.85, z, w * 2, 1.4, 0.85, pale, { studs: false });
-    // Every third frame is a heavier one, with a seam and a silver cap, so the
-    // ladder has a longer beat in it than its own pitch and does not read as
+    const main = n % 2 === 1;
+    b.box(-w, s.top - (main ? 1.3 : 0.5), z, w * 2, main ? 1.8 : 1.0, main ? 1.3 : 0.5, pale, { studs: false });
+    if (!main) continue;
+    // Every third main frame is a heavier one, with a seam and a silver cap, so
+    // the ladder has a longer beat in it than its own pitch and does not read as
     // corduroy.
-    if (n % 3 === 1) {
-      b.box(-w + 1, s.top - 1.3, z + 0.1, (w - 1) * 2, 1.1, 0.45, metal, { studs: false });
-      b.box(-w, s.top - 0.75, z - 0.5, w * 2, 0.5, 0.75, dark, { studs: false });
+    if (n % 6 === 1) {
+      b.box(-w + 1, s.top - 1.75, z + 0.2, (w - 1) * 2, 1.4, 0.45, metal, { studs: false });
+      b.box(-w, s.top - 1.2, z - 0.5, w * 2, 0.5, 1.2, dark, { studs: false });
     }
   }
 
@@ -1218,6 +1265,36 @@ function buildKeelStructure(sd, destroyer, bay = null) {
     if (s.half < 8) continue;
     b.box(-3.2, s.top - 1.5, z, 6.4, 8.2, 1.5, pale, { studs: false });
     b.box(-1.4, s.top - 2.0, z + 0.6, 2.8, 7, 0.55, dark, { studs: false });
+  }
+
+  // Formation lights: a pair down each side of the keel and one on the spine,
+  // every 22 studs. They do two jobs in the shot the whole scene is built around,
+  // and nothing else on the hull does either of them. One is scale — a hull with
+  // no lit detail on it has nothing to say how big it is, and 22 studs of pitch
+  // repeated forty times reads as distance. The other is motion: the belly is a
+  // near-uniform grey field, and a grey field sliding across the frame is a grey
+  // field. Points of light sliding across it are a mile of ship going past.
+  //
+  // Kept dim and small on purpose. Bloom in this scene has a 0.6 threshold, and
+  // an emissive tile any brighter than this blooms into a soft white lozenge four
+  // times its own size — forty of those is a runway, not a warship.
+  for (let z = Z0 + 6; z < Z1; z += 22) {
+    const s = skinAt(z);
+    if (s.half < 7) continue;
+    const lamp = { emissive: 0xffc27a, emissiveIntensity: 1.6, finish: 'glossy' };
+    // Hung a shade below the frame line so a rib can never stand between one of
+    // them and the lens — at s.top-1.05 they sat inboard of relief 1.3 deep and
+    // most of them were behind it at the grazing angles this shot works at.
+    for (const sx of [-1, 1]) {
+      b.box(sx * s.half * 0.74 - 0.6, s.top - 1.65, z, 1.2, 1.2, 0.5, COLORS.transOrange, lamp);
+    }
+    if (!inBay(z)) {
+      b.box(-0.6, s.top - 2.55, z + 1.2, 1.2, 1.2, 0.5, COLORS.transClear, {
+        emissive: 0xbfe0ff,
+        emissiveIntensity: 1.4,
+        finish: 'glossy',
+      });
+    }
   }
 
   return b.build({ castShadow: false, receiveShadow: false });

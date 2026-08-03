@@ -304,22 +304,36 @@ export async function build(ctx) {
     { start: 9.0, rig: trench.floorRig },
     {
       // riding the starboard wall, tower firing down ahead. Far enough back that
-      // the lead fighter is a fighter and not a wingtip in the corner.
+      // the lead fighter is a fighter and not a wingtip in the corner, and inboard
+      // of x=20: the wall face is at HALF_W and its service ribs stand up to three
+      // studs proud of it, so anything closer puts the lens inside a rib.
       start: 10.6,
       rel: true,
-      pos: [[10.6, [21, FLY_Y + 11, -46]], [T.TIES, [19, FLY_Y + 8, -38]]],
+      pos: [[10.6, [16, FLY_Y + 11, -46]], [T.TIES, [14, FLY_Y + 8, -38]]],
       look: [[10.6, [-2, FLY_Y + 1, 34]], [T.TIES, [-3, FLY_Y + 2, 30]]],
       fov: [[10.6, 34], [T.TIES, 32]],
       shake: [[10.6, 0.24], [T.TIES, 0.3]],
     },
     // ---- 3. the pursuit ----------------------------------------------------
     {
-      // behind and above the TIEs as they drop over the lip. Gets below the rim
-      // fast: level with it, the lip slides across the lens.
+      // behind and above the TIEs as they drop over the lip, riding down with
+      // them. The look target has to fall at least as fast as the camera does:
+      // held up at the rim while the camera sinks below it, the shot spends half
+      // a second on empty sky with the TIEs off the bottom of the frame.
       start: T.TIES,
       rel: true,
-      pos: [[T.TIES, [-9, WALL_H + 22, -214]], [13.6, [-8, WALL_H - 8, -196]], [15.0, [-6, FLY_Y + 10, -172]]],
-      look: [[T.TIES, [-2, WALL_H + 12, -138]], [15.0, [0, FLY_Y + 5, -116]]],
+      pos: [
+        [T.TIES, [-9, WALL_H + 46, -216]],
+        [13.5, [-8, WALL_H + 12, -204]],
+        [14.1, [-7, WALL_H - 4, -190]],
+        [15.0, [-6, FLY_Y + 10, -172]],
+      ],
+      look: [
+        [T.TIES, [-2, WALL_H + 44, -142]],
+        [13.5, [-2, WALL_H + 8, -138]],
+        [14.1, [-1, FLY_Y + 8, -132]],
+        [15.0, [0, FLY_Y + 5, -116]],
+      ],
       fov: [[T.TIES, 40], [15.0, 34]],
       shake: [[T.TIES, 0.16], [15.0, 0.24]],
     },
@@ -642,7 +656,10 @@ async function buildTrench(ctx, { odo, flyY, portZ }) {
       from: [sx * (HALF_W + 10), WALL_H + 14, odo(tt) + 300],
       to: [sx * 5 + (hash11(i, 15) - 0.5) * 8, 1.2, odo(tt) - 40],
       speed: 480,
-      scale: 1.5,
+      // These are the ones that come down close to the lens, so they are the
+      // ones whose additive glow can end up washing a whole wall green. Left at
+      // the size the tower volleys use, one bolt fills half the frame.
+      scale: 1.0,
     });
   }
   // TIE fire, mostly missing, then finding the trailing X-wing.
