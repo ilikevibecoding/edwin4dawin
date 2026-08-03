@@ -34,7 +34,7 @@ const S3 = 16.78;     // exterior — the cut lands on the bang
 const S4 = 21.2;      // the gunner
 const END = 27.0;
 const CARD_IN = 3.05; // the datacard disappears into the droid
-const DOOR = 11.15;   // the pod bay hatch cracks open, ahead of their arrival
+const DOOR = 10.3;    // the pod bay hatch cracks open, ahead of their arrival
 const CLAMPS = 14.6;  // the clamps snap back
 const IRIS = 15.1;    // the launch tube irises open onto the night
 const BANG = 16.45;   // explosive bolts fire, the pod goes
@@ -279,6 +279,16 @@ export async function build(ctx) {
 
   const hall = corridor({ segments: 8, width: 12, height: 9, segLen: 10, seed: 33, practicals: 5 });
   inside.add(hall);
+  // Every segment carries an additive, double-sided haze slab over each cove and
+  // strip, with depth writes off. Fine looking across the hall; this scene looks
+  // down the length of all eight of them, so forty-eight layers of it land in
+  // the same pixels and the two coves converge into a solid white wedge. The
+  // model only exposes it through setLights(), which scales it with the light
+  // the hallway casts — and this shot wants the light and not the wedge.
+  let hallHaze = null;
+  hall.traverse((m) => {
+    if (m.isMesh && m.material.blending === THREE.AdditiveBlending) hallHaze = m.material;
+  });
 
   const door = blastDoor({ width: 12, height: 9, seed: 44, label: 'POD BAY 7' });
   door.position.set(0, 0, -40.4);
@@ -348,7 +358,14 @@ export async function build(ctx) {
   // hung on a grey wall; the whole wall glowing is what puts two black droid
   // shapes in a bright doorway.
   vest.add(at(tile(10.6, 0.7, 1.2, { color: C.bluishGray }), OP_X, 0.3, -64.5));
-  vest.add(at(lit(tile(10.4, 0.35, 5.3), { color: 0xffe9ca }), OP_X, 1.2, -64.62));
+  const bayBank = at(lit(tile(10.4, 0.35, 5.3), { color: 0xffe9ca }), OP_X, 1.2, -64.62);
+  // Pushed over 1.0 so it crosses the bloom threshold. For most of the run this
+  // wall is seen from fifty units away through a seven-wide gap in a blast door,
+  // where a merely white panel comes back as one more pale grey rectangle in a
+  // hallway full of them. Over the line it flares round the edges of the
+  // doorframe, and the doorway reads as light rather than as an opening.
+  bayBank.material.color.setRGB(1.7, 1.44, 1.16);
+  vest.add(bayBank);
   for (let i = 0; i < 4; i++) {
     vest.add(at(tile(0.5, 0.5, 5.3, { color: C.darkGray }), OP_X - 4.2 + i * 2.8, 1.2, -64.3));
   }
@@ -462,8 +479,11 @@ export async function build(ctx) {
   // curved and picks up every point source in the nook, so this one also has to
   // stay a good three units off it: brought in close enough to key her face
   // properly it turned the top of the droid into one blown highlight.
-  const nookLamp = new THREE.PointLight(0xffc188, 17, 17, 2);
-  nookLamp.position.set(-4.2, 4.5, ALC_Z + 1.0);
+  // Out over the walkway rather than up against the port wall, which is a unit
+  // and a half off it: at that range the inverse square put a blown patch of
+  // wall panel across frame left, brighter than anything on her face.
+  const nookLamp = new THREE.PointLight(0xffc188, 16, 17, 2);
+  nookLamp.position.set(-2.6, 5.2, ALC_Z + 1.4);
   inside.add(nookLamp);
   const nookFill = new THREE.PointLight(0xffe6c4, 7.0, 12, 2);
   nookFill.position.set(-1.0, 2.4, ALC_Z + 3.4);
@@ -604,9 +624,12 @@ export async function build(ctx) {
   // them into four white bars that pull the eye straight off the pod. Repainted
   // on this instance only — the material comes out of a shared cache, so it must
   // not be edited in place.
+  // Warm, and not cool: dimmed to a blue-grey they stop blooming but a big flat
+  // pale-blue field along the top of frame stops reading as light fittings and
+  // starts reading as sky through a hole in the roof.
   bay.traverse((m) => {
     if (m.isMesh && m.material.isMeshBasicMaterial && m.material.color.getHex() === 0xdcf3ff) {
-      m.material = new THREE.MeshBasicMaterial({ color: 0x9cb3c2, toneMapped: false });
+      m.material = new THREE.MeshBasicMaterial({ color: 0xb6a488, toneMapped: false });
     }
   });
   // setClamps(1) lands the four pads on the keel line with each arm sitting on
@@ -878,7 +901,17 @@ export async function build(ctx) {
         const hum = 0.94 + 0.06 * Math.sin(t * 7.3) * Math.sin(t * 1.7);
         // held well down for the hand-off so the nook lamp is doing the work and
         // the three of them sit in a warm pool, then up for the run
-        hall.userData.setLights(lerp(0.22, 0.30, smoothstep(S1 - 0.5, S1 + 0.4, t)) * hum);
+        const power = lerp(0.22, 0.30, smoothstep(S1 - 0.5, S1 + 0.4, t)) * hum;
+        hall.userData.setLights(power);
+        // Emissive level decoupled from the light the hallway actually casts.
+        // Every strip and cove in the model is one long thin emitter pointed at
+        // the vanishing point, and the run looks straight down all eight
+        // segments of them: at the brightness that lights the deck they stack
+        // into a couple of hundred pixels and bloom into one white bar across
+        // the top of frame. Two thirds reads as lit without the bar.
+        const em = power * 0.44;
+        hall.userData.lightMaterial.color.setRGB(em, em * 0.957, em * 0.824);
+        if (hallHaze) hallHaze.opacity = 0.012;
         bay.userData.update(t);
         door.userData.update(t);
         door.userData.setOpen(0.78 * smoothstep(DOOR, DOOR + 1.0, t));
@@ -1048,19 +1081,21 @@ export async function build(ctx) {
             cam.lookAt(_v.x + 0.35, 2.75 - 0.15 * j, _v.z + 1.4);
             cam.fov = lerp(44, 42, j);
           } else {
-            // and now let them go: dead centre of the hall at dome height,
-            // creeping after them on a tightening lens while the hatch opens
-            // ahead. Centred on purpose — off to one side, the near wall cove
-            // on that side blooms into frame as a slab of white.
-            // Aimed above their heads and not at them: on a 24-degree lens the
-            // far end of this hall is 45 units off, so a level look puts two
-            // small droids dead centre over four hundred pixels of bare deck.
-            // Tilted up, the floor drops away and the lit doorway they are
-            // running at takes the middle of the frame instead.
+            // And now let them go. The lens stops: it stands in the middle of
+            // the hall at dome height and does nothing for four seconds while
+            // the two of them shrink from half the height of frame to a sixth
+            // of it. Anything that creeps after them or tightens the lens holds
+            // them the same size, which is the one thing this beat must not do.
+            // Centred, because off to one side the near cove on that side runs
+            // diagonally through the whole frame.
+            // Tipped three degrees up, which does two things: it lifts the
+            // near deck — all studs at four units — clear out of the bottom of
+            // frame, and it drops the lit hatch they are running at onto the
+            // middle of the frame instead of the ceiling.
             const k = smoothstep(0, 1, (t - S1B) / (S2 - S1B));
-            cam.position.set(0.2, 2.36, lerp(8.0, -4.0, k));
-            cam.lookAt(0.2, 3.0 + 0.9 * k, -34 - 12 * k);
-            cam.fov = lerp(40, 24, k);
+            cam.position.set(0.35, 2.42, lerp(6.6, 4.4, k));
+            cam.lookAt(0.25, 5.5, -50);
+            cam.fov = lerp(37, 34, k);
           }
         }
 
@@ -1090,38 +1125,49 @@ export async function build(ctx) {
           POD_Z - gone
         );
         podIn.rotation.set(0, 0, gone * 0.004 + noise(t * 11, 9) * 0.01 * settle);
-        // dropped as it reaches the bore: past that it is outside the set, and
-        // the disc of night laid over the aperture draws in front of it
-        podIn.visible = gone < 14;
-        const burn = clamp((t - BANG + 0.12) * 4);
+        // It is not hidden as it reaches the bore — the disc of night laid over
+        // the aperture draws in front of whatever is past it, so the hull slides
+        // out of the shot behind the tube rim instead of blinking out. Dropped
+        // only once it is far enough through that the additive plumes on the
+        // retro ring would otherwise still be showing round the rim.
+        podIn.visible = gone < 22;
+        // The retro ring points straight back down the lens. At full throttle
+        // six bells at eight units go to one white disc that swallows the tube
+        // mouth, and the launch stops reading as a hull going anywhere.
+        const burn = clamp((t - BANG + 0.12) * 4) * 0.72;
         podIn.userData.setThrottle(burn);
-        podBurn.intensity = burn * 60;
+        podBurn.intensity = burn * 70;
         for (const f of boltFire) f.update(t);
         bayHaze.update(t);
 
         if (t >= S2) {
-          // Off the starboard gantry, a shade abaft the cradle and a shade above
-          // the hull's axis: from here the pod is broadside enough to read as a
-          // pod, the tube ring sits clear of it at frame right, and the whole
-          // right half of frame is the run it is about to make. Aiming a couple
-          // of degrees down crops the ceiling fittings to a sliver.
+          // Broadside off the starboard gantry, a shade above the hull's axis.
+          // This is the only angle in the bay where the pod reads as a pod: from
+          // anywhere near its own axis a 9-long hull with a 5 bore is a grey
+          // barrel, and the cone, the lit viewport band and the retro ring only
+          // separate from each other in profile. It also puts the open tube at
+          // frame right, so the whole right third of frame is the run it is
+          // about to make and it exits the way the eye is already looking.
           const k = smoothstep(0, 1, (t - S2) / (BANG - S2));
           const shake = 1.7 * Math.max(0, 1 - Math.abs(t - BANG) * 2.4);
           // and once the bolts fire it whips after the hull rather than sitting
           // on an empty cradle for the last third of a second
-          const w = smoothstep(BANG, BANG + 0.3, t);
+          const w = smoothstep(BANG, BANG + 0.28, t);
           cam.position.set(
-            lerp(13.2, 12.2, k) + noise(t * 7, 1) * shake,
-            lerp(7.1, 6.6, k) + noise(t * 7.4, 2) * shake,
-            POD_Z + lerp(9.0, 7.8, k)
+            lerp(13.4, 12.8, k) + noise(t * 7, 1) * shake,
+            lerp(7.3, 6.8, k) + noise(t * 7.4, 2) * shake,
+            POD_Z + lerp(6.2, 3.2, k)
           );
+          // held off the starboard wall light strip, which runs the full depth of
+          // the bay a hand's breadth outboard of the lens: swing wide enough to
+          // catch it and it blooms across the top of frame as a yellow bar
           cam.lookAt(
-            lerp(-1.0, -1.8, k) - w * 1.6,
-            lerp(5.7, 5.5, k),
-            POD_Z + lerp(-6.6, -7.8, k) - w * 7.0
+            lerp(-0.6, -0.2, k) + w * 1.3,
+            lerp(6.0, 5.9, k),
+            POD_Z + lerp(-3.2, -2.6, k) - w * 12
           );
           cam.rotateZ(noise(t * 9, 5) * 0.028 * shake);
-          cam.fov = lerp(53, 51, k) + w * 3;
+          cam.fov = lerp(52, 50, k) + w * 3;
         }
       }
 
