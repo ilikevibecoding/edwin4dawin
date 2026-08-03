@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STAR WARS — The Kyber Star</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<style>
+  @font-face { font-family: 'News Cycle'; src: url('assets/fonts/newscycle-400.woff2') format('woff2'); font-weight: 400; font-display: block; }
+  @font-face { font-family: 'News Cycle'; src: url('assets/fonts/newscycle-700.woff2') format('woff2'); font-weight: 700; font-display: block; }
+  @font-face { font-family: 'Anton'; src: url('assets/fonts/anton-400.woff2') format('woff2'); font-weight: 400; font-display: block; }
+  @font-face { font-family: 'Orbitron'; src: url('assets/fonts/orbitron.woff2') format('woff2'); font-weight: 400; font-display: block; }
+
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { font-family: 'News Cycle', system-ui, sans-serif; }
+  #stage { position: fixed; inset: 0; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* Subtitles sit just inside the lower anamorphic bar. */
+  #subs {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: 12.5%; width: min(80%, 1100px);
+    text-align: center; pointer-events: none;
+    font-size: clamp(15px, 2.1vw, 30px); line-height: 1.32;
+    text-shadow: 0 2px 10px rgba(0,0,0,.95), 0 0 3px rgba(0,0,0,.9);
+    letter-spacing: .01em;
+    opacity: 0; transition: opacity .18s linear;
+  }
+  #subs .who {
+    display: block; font-size: .62em; letter-spacing: .22em;
+    opacity: .85; margin-bottom: .18em; font-weight: 700;
+  }
+  #subs.on { opacity: 1; }
+
+  #ui {
+    position: fixed; left: 0; right: 0; bottom: 0; padding: 14px 18px 16px;
+    display: flex; gap: 14px; align-items: center;
+    background: linear-gradient(to top, rgba(0,0,0,.75), rgba(0,0,0,0));
+    opacity: 0; transition: opacity .25s; pointer-events: none;
+    font-size: 13px; color: #9fd8ff;
+  }
+  #ui.show { opacity: 1; pointer-events: auto; }
+  #ui button {
+    background: rgba(20,32,44,.9); color: #cfe9ff; border: 1px solid #2c5878;
+    padding: 6px 13px; border-radius: 3px; cursor: pointer; font: inherit; letter-spacing: .08em;
+  }
+  #ui button:hover { background: #1b3a52; }
+  #scrub { flex: 1; accent-color: #4bd5ff; cursor: pointer; }
+  #clock { font-variant-numeric: tabular-nums; min-width: 128px; letter-spacing: .06em; }
+  #chapter { min-width: 130px; opacity: .75; text-transform: uppercase; letter-spacing: .16em; font-size: 11px; }
+
+  #gate {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    background: #000; z-index: 20; cursor: pointer; text-align: center;
+  }
+  #gate .inner { max-width: 640px; padding: 0 24px; }
+  #gate h1 {
+    font-family: 'Anton', 'Arial Black', sans-serif; color: #ffd21a;
+    font-size: clamp(40px, 9vw, 104px); margin: 0; letter-spacing: .04em; line-height: .92;
+    text-shadow: 0 0 34px rgba(255,190,20,.28);
+  }
+  #gate h2 {
+    font-size: clamp(13px, 2.2vw, 20px); color: #cfe9ff; letter-spacing: .5em;
+    margin: 18px 0 34px; font-weight: 400; text-indent: .5em;
+  }
+  #gate p { color: #7f93a6; font-size: 13px; line-height: 1.7; margin: 26px 0 0; letter-spacing: .04em; }
+  #gate .play {
+    display: inline-block; border: 1px solid #4bd5ff; color: #cfe9ff; padding: 12px 34px;
+    letter-spacing: .3em; font-size: 14px; border-radius: 2px; transition: all .2s;
+  }
+  #gate:hover .play { background: #4bd5ff; color: #02121c; }
+  #gate.hidden { display: none; }
+  #loading { color: #4bd5ff; letter-spacing: .3em; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c"></canvas></div>
+<div id="subs"></div>
+<div id="ui">
+  <button id="playBtn">PAUSE</button>
+  <input id="scrub" type="range" min="0" max="1000" value="0">
+  <span id="clock">0:00 / 0:00</span>
+  <span id="chapter"></span>
+  <button id="muteBtn">MUTE</button>
+</div>
+<div id="gate">
+  <div class="inner">
+    <h1>STAR WARS</h1>
+    <h2>THE KYBER STAR</h2>
+    <div class="play" id="playGate">▶ &nbsp;BEGIN</div>
+    <p id="gateNote">
+      A six-minute animated short rendered live in your browser.<br>
+      Every ship, planet, explosion and note of music is generated in code.<br>
+      <span style="opacity:.7">Headphones recommended — there is a voice track.</span>
+    </p>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

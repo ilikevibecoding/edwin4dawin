@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>bench</title><style>body{margin:0;background:#000}</style></head>
+<body>
+<script type="importmap">
+{"imports": {"three": "/vendor/three/three.module.js", "three/addons/": "/vendor/three/addons/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+const params = new URLSearchParams(location.search);
+const W = +(params.get('w') || 1280), H = +(params.get('h') || 720);
+const useBloom = params.get('bloom') !== '0';
+const tris = +(params.get('tris') || 100000);
+
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 5000);
+camera.position.set(0, 20, 80);
+camera.lookAt(0, 0, 0);
+
+scene.add(new THREE.AmbientLight(0x334455, 1.0));
+const dl = new THREE.DirectionalLight(0xffeedd, 2.0); dl.position.set(5, 10, 7); scene.add(dl);
+
+// build a bunch of boxes to hit a triangle budget
+const geos = [];
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+const count = Math.max(1, Math.floor(tris / 12));
+const inst = new THREE.InstancedMesh(boxGeo, new THREE.MeshStandardMaterial({ color: 0x9099a5, roughness: 0.6, metalness: 0.3 }), count);
+const m = new THREE.Matrix4();
+for (let i = 0; i < count; i++) {
+  m.makeTranslation((Math.random() - 0.5) * 120, (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 120);
+  m.scale(new THREE.Vector3(1 + Math.random() * 3, 1 + Math.random() * 3, 1 + Math.random() * 3));
+  inst.setMatrixAt(i, m);
+}
+scene.add(inst);
+
+// glowy things for bloom
+for (let i = 0; i < 40; i++) {
+  const s = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 6), new THREE.MeshBasicMaterial({ color: 0x66ddff }));
+  s.position.set((Math.random() - 0.5) * 100, (Math.random() - 0.5) * 50, (Math.random() - 0.5) * 100);
+  scene.add(s);
+}
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+if (useBloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.9, 0.5, 0.7));
+
+const gl = renderer.getContext();
+const px = new Uint8Array(4);
+const flush = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+
+window.__bench = async (frames) => {
+  // warmup
+  for (let i = 0; i < 3; i++) { if (useBloom) composer.render(); else renderer.render(scene, camera); flush(); }
+  const t0 = performance.now();
+  for (let i = 0; i < frames; i++) {
+    inst.rotation.y = i * 0.01;
+    if (useBloom) composer.render(); else renderer.render(scene, camera);
+    flush();
+  }
+  await new Promise(r => requestAnimationFrame(r));
+  const dt = performance.now() - t0;
+  return { frames, totalMs: dt, msPerFrame: dt / frames, renderer: renderer.getContext().getParameter(renderer.getContext().VERSION), triangles: renderer.info.render.triangles };
+};
+window.__ready = true;
+</script>
+</body>
+</html>

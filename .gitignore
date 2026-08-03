@@ -1,0 +1,11 @@
+node_modules/
+build/
+*.log
+
+# Rendered output
+*.mp4
+*.wav
+!assets/vo/*.wav
+
+# The published cut, small enough to serve straight off a CDN
+!media/*.mp4
