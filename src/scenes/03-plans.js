@@ -711,7 +711,11 @@ export async function build(ctx) {
       // place behind it. Locked to the tail, eight seconds of descent is eight
       // seconds of the same picture with the ground scrolling underneath; the
       // arc keeps giving the dune field a new angle to be seen from.
-      const swing = ease.lerp(0.62, -0.4, ease.smooth(u));
+      // Stopping a little short of dead astern. The pod's own heading is about
+      // -0.37 rad, so swinging all the way to that leaves the shot looking
+      // straight up four retro nozzles with the heat shield and its glow hidden
+      // behind the hull — the one thing this beat exists to show.
+      const swing = ease.lerp(0.78, -0.02, ease.smooth(u));
       const back = ease.lerp(56, 36, u);
       camera.position.set(
         p[0] + Math.sin(swing) * back,
