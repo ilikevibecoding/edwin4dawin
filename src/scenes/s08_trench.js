@@ -481,10 +481,10 @@ export default {
             debris.scale.setScalar(1 + b * 2.4);
             boomFlash.visible = true;
             boomFlash.quaternion.copy(camera.quaternion);
-            boomFlash.material.opacity = Math.exp(-b * 6) * 1.0;
-            boomFlash.scale.setScalar(9000 + b * 60000);
-            boomCore.material.opacity = clamp(1 - b * 1.6);
-            boomCore.scale.setScalar(2000 + Ease.outQuart(b) * 12000);
+            boomFlash.material.opacity = Math.exp(-b * 16) * 1.0;
+            boomFlash.scale.setScalar(7000 + b * 40000);
+            boomCore.material.opacity = clamp(1 - b * 2.4);
+            boomCore.scale.setScalar(1800 + Ease.outQuart(b) * 6800);
             boomCore.material.color.setRGB(1, 0.8 - b * 0.5, 0.45 - b * 0.4);
             boomRing.visible = true;
             boomRing.quaternion.copy(camera.quaternion);
@@ -501,7 +501,8 @@ export default {
               m.quaternion.copy(camera.quaternion);
               m.material.opacity = clamp(1 - age) * (0.5 + 0.5 * Math.sin(t * 6 + m.userData.ph)) * 0.8;
             }
-            this.flash = Math.exp(-Math.max(0, t - BOOM_T) * 3.5) * 1.4;
+            // Brief, not blinding: a full-frame white hold reads as a bug.
+            this.flash = Math.exp(-Math.max(0, t - BOOM_T) * 6.5) * 0.95;
           } else {
             station.visible = true;
             boomFlash.material.opacity = 0;
