@@ -4,6 +4,7 @@ import { register } from '../registry.js';
 import { buildVader } from './vader.js';
 import { buildLeia } from './leia.js';
 import { buildLuke } from './luke.js';
+import { buildHan } from './han.js';
 import { buildObiwan } from './obiwan.js';
 import { buildStormtrooper, buildCrowdTroopers } from './stormtrooper.js';
 import { buildRebelTrooper } from './rebeltrooper.js';
@@ -14,7 +15,7 @@ import { buildJawa } from './jawa.js';
 import { buildRebelPilot } from './rebelpilot.js';
 
 export {
-  buildVader, buildLeia, buildLuke, buildObiwan, buildStormtrooper,
+  buildVader, buildLeia, buildLuke, buildHan, buildObiwan, buildStormtrooper,
   buildCrowdTroopers, buildRebelTrooper, buildImperialOfficer, buildR2,
   buildC3po, buildJawa, buildRebelPilot,
 };
@@ -37,6 +38,12 @@ register('leia', (opts) => buildLeia(opts), {
 register('luke', (opts) => buildLuke(opts), {
   notes: 'Farm boy: cream tunic wrap, tan legs, sandy hair. luke?pilot=1 swaps in the '
     + 'orange flight suit and X-wing helmet; saber=1 ignites a blue blade.',
+});
+
+register('han', (opts) => buildHan(opts), {
+  notes: 'Smuggler at the ceremony: white shirt and open collar under a dark blue vest, '
+    + 'dark blue legs, brown hair parted on his left. blaster=1 puts the kit\'s DH-17 '
+    + 'in his right fist -- there is no DL-44 to give him.',
 });
 
 register('obiwan', (opts) => buildObiwan(opts), {

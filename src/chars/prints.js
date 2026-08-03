@@ -413,6 +413,41 @@ export const FACE_JAWA = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5
   <path d="M240 158 Q256 170 272 158" fill="none" stroke="#1d232a" stroke-width="4"/>
 </svg>`;
 
+/** Han: one brow up, a lopsided smirk. Cocky rather than heroic. */
+/*
+ * Two numbers here are read off hanHair rather than chosen: the piece is parted
+ * on his left, so its lower edge crosses the face on a diagonal at py 43 over
+ * px 290 and py 71 over px 195. The raised brow has to live under the high end
+ * of that diagonal and the overhang shading has to stay above it, or a band of
+ * hair colour sits on his forehead with daylight between it and the hairpiece.
+ */
+export const FACE_HAN = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 256">
+  <!-- Brows. The asymmetry between them is the whole face; his left one
+       (px 268..310) kicks up, and py 60 is as high as it can go. -->
+  <g stroke="#4a2f16" stroke-width="8" stroke-linecap="round" fill="none">
+    <path d="M204 82 Q222 74 243 79"/>
+    <path d="M310 63 Q290 58 268 74"/>
+  </g>
+  <g fill="${INK}">
+    <ellipse cx="222" cy="108" rx="12" ry="14"/>
+    <ellipse cx="290" cy="106" rx="12" ry="15"/>
+  </g>
+  <g fill="#ffffff" opacity="0.92">
+    <circle cx="226" cy="103" r="4"/><circle cx="294" cy="101" r="4"/>
+  </g>
+  <path d="M253 126 Q246 142 257 148" fill="none" stroke="#c9a52c" stroke-width="4"/>
+  <!-- The smirk. One corner sits low and level, the other is pulled up and back
+       under the raised brow. A lens with both corners lifted is a smile; only
+       the tilt makes it read as a smirk. -->
+  <path d="M226 170 Q252 186 288 156 Q254 171 226 170 Z" fill="#3a2213"/>
+  <path d="M288 156 Q294 150 296 142" fill="none" stroke="#3a2213" stroke-width="4"
+        stroke-linecap="round"/>
+  <!-- cheek fold, on the smirking side only -->
+  <path d="M303 124 Q301 145 293 159" fill="none" stroke="#c9a52c" stroke-width="3" opacity="0.8"/>
+  <!-- shading where the hairpiece overhangs the brow, cut on the same diagonal -->
+  <path d="M184 0 L328 0 L328 34 Q290 34 256 42 Q210 52 184 66 Z" fill="#6b4a2c" opacity="0.85"/>
+</svg>`;
+
 // ---------------------------------------------------------------------------
 // TORSOS
 // ---------------------------------------------------------------------------
@@ -870,6 +905,74 @@ export const TORSO_JAWA_FRONT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox
     <path d="M12 150 L18 164"/><path d="M32 150 L38 164"/><path d="M52 150 L58 164"/>
     <path d="M72 150 L78 164"/><path d="M92 150 L98 164"/><path d="M112 150 L118 164"/>
   </g>
+</svg>`;
+
+/** Han: white shirt and open collar under the dark blue vest, gunbelt. */
+/*
+ * The vest is C.darkBlue and it is painted #010920, which is not a typo: it is
+ * the value that comes back as C.darkBlue once the torso print's single sRGB to
+ * linear conversion is accounted for, so it matches the hips and legs below.
+ * han.js sets the torso base to the same number and explains why; the two have
+ * to move together or the flanks and the front of one part disagree.
+ *
+ * Everything meant to sit near white (shirt, collar, buckle) is authored at face
+ * value, because up there the two paths agree.
+ */
+export const TORSO_HAN_FRONT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 192">
+  <rect x="0" y="0" width="128" height="192" fill="#010920"/>
+  <!-- Shirt, wider at the top than at the bottom: the torso tapers 1.48 -> 1.05
+       going up, so a panel drawn with parallel sides comes off the rig
+       narrowing toward the belt. -->
+  <path d="M34 0 L94 0 L86 148 L42 148 Z" fill="#e9e7db"/>
+  <g stroke="#cbc7b5" stroke-width="2" fill="none">
+    <path d="M52 48 Q50 100 52 144"/>
+    <path d="M76 48 Q78 100 76 144"/>
+  </g>
+  <!-- Collar, folded open over the vest, with the shadow of the open neck
+       between the points. Warm, not blue: in the vest's colour it read as a
+       notch cut out of him rather than as shirt standing away from his chest. -->
+  <path d="M34 0 L64 30 L94 0 L94 13 L64 46 L34 13 Z" fill="#f2f0e6"
+        stroke="#bdb9a8" stroke-width="1.6"/>
+  <path d="M50 0 L64 26 L78 0 Z" fill="#352a18"/>
+  <!-- vest front edges, and the shoulder seams that stop the sides reading flat -->
+  <g fill="none" stroke="#04163a" stroke-width="2.4">
+    <path d="M34 4 L42 148"/>
+    <path d="M94 4 L86 148"/>
+  </g>
+  <g fill="none" stroke="#030f2a" stroke-width="1.8">
+    <path d="M8 12 Q4 80 8 146"/>
+    <path d="M120 12 Q124 80 120 146"/>
+    <path d="M14 34 Q26 40 32 52"/>
+    <path d="M114 34 Q102 40 96 52"/>
+  </g>
+  <!-- gunbelt: heavy brown strap, big square buckle, two pouches -->
+  <rect x="0" y="146" width="128" height="24" fill="#33200f" stroke="#1c1206" stroke-width="1.6"/>
+  <rect x="46" y="148" width="36" height="20" fill="#a5a9b4" stroke="#6f737c" stroke-width="2"/>
+  <rect x="54" y="153" width="20" height="10" fill="#8b8f98"/>
+  <g fill="#241608">
+    <rect x="14" y="150" width="18" height="16" rx="2"/>
+    <rect x="96" y="150" width="18" height="16" rx="2"/>
+  </g>
+  <!-- trousers below the belt, in the hips' own colour so the seam disappears -->
+  <rect x="0" y="170" width="128" height="22" fill="#010920"/>
+  <path d="M64 172 L64 192" stroke="#030f2a" stroke-width="2"/>
+</svg>`;
+
+export const TORSO_HAN_BACK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 192">
+  <rect x="0" y="0" width="128" height="192" fill="#010920"/>
+  <!-- shirt collar standing above the vest -->
+  <path d="M38 0 L90 0 L90 12 Q64 22 38 12 Z" fill="#e9e7db" stroke="#bdb9a8" stroke-width="1.4"/>
+  <!-- vest back: a yoke across the shoulders and a seam down the spine -->
+  <path d="M6 8 Q64 30 122 8 L120 42 Q64 62 8 42 Z" fill="#010920"
+        stroke="#04163a" stroke-width="1.8"/>
+  <g fill="none" stroke="#04163a" stroke-width="2">
+    <path d="M64 50 L64 146"/>
+    <path d="M8 50 Q4 100 8 146"/>
+    <path d="M120 50 Q124 100 120 146"/>
+  </g>
+  <rect x="0" y="146" width="128" height="24" fill="#33200f" stroke="#1c1206" stroke-width="1.6"/>
+  <rect x="44" y="149" width="40" height="18" fill="#241608"/>
+  <rect x="0" y="170" width="128" height="22" fill="#010920"/>
 </svg>`;
 
 /** Generic dark side panel for torso sides that need armour seams. */

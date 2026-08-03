@@ -416,6 +416,86 @@ export function lukeHair(fig) {
   return g;
 }
 
+/** Han: short brown hair, parted on his left and swept back off the brow. */
+export function hanHair(fig) {
+  if (fig) fig.topStud.visible = false;
+  const g = new THREE.Group();
+  const bb = builder();
+  // reddishBrown for the same reason Leia's is: darkBrown (0x352100) comes back
+  // from this rig as a black bathing cap rather than as brown hair.
+  const H = C.reddishBrown;
+
+  // Crown. Flatter than lukeHair's tousle, because the height is what made an
+  // earlier pass read as a bowl of hair balanced on his head rather than as a
+  // haircut. sy 0.46 still leaves it 0.632 wide at the head's flat top at y 1.2,
+  // wider than the 0.60 head, which is what keeps a ring of scalp from showing.
+  bb.sphere(0, 1.11, -0.01, 0.662, { dome: true, sy: 0.46, seg: 26, rings: 8, color: H });
+
+  /*
+   * Hairline. lukeHair's is symmetric and rippled all the way round; this one
+   * has to read as a different haircut from the far end of the throne room, so
+   * it is a SIDE PART: one continuous diagonal, high over his left brow and
+   * falling across to his right. sweep() cannot describe it -- it is a function
+   * of |a| -- so the profile is assembled here out of smoothsteps, which also
+   * leaves the slope at zero on both sides of every joint. Slope at a joint
+   * shows up in the silhouette as a kink hanging off the temple.
+   *
+   * How low the diagonal is allowed to go comes off the print: FACE_HAN's level
+   * brow tops out at py 74 (y 0.853) and reaches px 204, so the low end holds
+   * 0.885 rather than following Luke's fringe down to 0.86.
+   */
+  const smooth = (u) => { const t = Math.min(1, Math.max(0, u)); return t * t * (3 - 2 * t); };
+  const ramp = (a, a0, a1, v0, v1) => v0 + (v1 - v0) * smooth((a - a0) / (a1 - a0));
+  const bell = (a, at, width) => Math.exp(-(((a - at) / width) ** 2));
+  const PART = 0.52;
+  // Knots run from the nape round his right side, across the face and back to the
+  // nape. The two ends carry the same height because they are the same point.
+  const KNOTS = [
+    [-Math.PI, 0.44],   // down onto the back of the neck
+    [-1.62, 0.52],      // behind his right ear
+    [-0.60, 0.885],     // his right temple: the low end of the sweep
+    [PART, 1.03],       // the part, high over his left brow
+    [1.62, 0.55],       // behind his left ear
+    [Math.PI, 0.44],
+  ];
+  const hairline = (a) => {
+    for (let i = 1; i < KNOTS.length; i++) {
+      if (a <= KNOTS[i][0]) return ramp(a, KNOTS[i - 1][0], KNOTS[i][0], KNOTS[i - 1][1], KNOTS[i][1]);
+    }
+    return KNOTS[KNOTS.length - 1][1];
+  };
+  /*
+   * Two notches cut into that edge, and both are bells rather than steps: a step
+   * in a hairline is a rectangle of hair pinned to the head, which is how the
+   * imperial officer's printed sideburns failed.
+   *
+   * The narrow one at the part is the parting itself. A side part puts a corner
+   * in the hairline, and without it the diagonal is just a hairline drawn on the
+   * slant. The wide ones at |a| 1.20 are his sideburns; they sit outside the face
+   * window (|a| <= 0.75), so they cannot cut into the print however deep they go.
+   */
+  const notch = (a) => 0.055 * bell(a, PART, 0.15)
+    + 0.16 * bell(Math.abs(a), 1.20, 0.15);
+  bb.custom(curtain({
+    // The sweep stands proud as well as low, so the lock lays a shadow on the
+    // forehead under it instead of reading as paint.
+    r: (a) => 0.654 + 0.020 * bell(a, 0.10, 0.45),
+    rTop: 0.640,
+    y1: 1.13,
+    y0: (a) => hairline(a) - notch(a),
+    from: -Math.PI,
+    to: Math.PI,
+    seg: 56,
+  }), { color: H });
+  // Nothing is added on top of the crown. A second lobe standing out of the dome
+  // on the high side of the part was meant to give the crease a real part has,
+  // and however far it was sunk it read as a lump on his head, so the parting is
+  // carried entirely by the notch in the hairline.
+  g.add(bb.build());
+  hairFinish(g);
+  return g;
+}
+
 // ---------------------------------------------------------------------------
 // HOODS
 // ---------------------------------------------------------------------------
