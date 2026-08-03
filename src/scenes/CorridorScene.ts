@@ -828,10 +828,10 @@ function buildCast(lib: MaterialLibrary): {
     [0, -2.62, 0, 23.85],
     [302.0, -2.62, 0, 23.85],
     [304.5, -1.5, 0, 27.4],
-    [307.5, -0.6, 0, 32.0],
-    [314.0, -0.7, 0, 44.6],
-    [317.0, -1.5, 0, 46.6],
-    [319.2, -2.4, 0, POD_BAY_Z],
+    [307.0, -0.7, 0, 33.5],
+    [313.0, -0.7, 0, 44.0],
+    [316.5, -1.5, 0, 46.4],
+    [318.8, -2.4, 0, POD_BAY_Z],
     [1000, -2.4, 0, POD_BAY_Z],
   ]);
   const r2 = new Astromech(lib, r2Path, {
@@ -842,14 +842,14 @@ function buildCast(lib: MaterialLibrary): {
   // The protocol droid lags, stops dead once, and has to be left behind by the
   // camera before he finally follows.
   const threepioPath = path([
-    [0, 0.9, 0, 38.0],
-    [303.0, 0.9, 0, 38.0],
-    [306.0, 0.8, 0, 39.6],
-    [309.0, 0.7, 0, 42.0],
-    [311.2, 0.68, 0, 42.3],
-    [314.5, 0.45, 0, 45.0],
-    [317.6, -0.6, 0, 46.7],
-    [319.6, -2.3, 0, POD_BAY_Z + 0.4],
+    [0, 0.9, 0, 30.5],
+    [303.0, 0.9, 0, 30.5],
+    [305.5, 0.85, 0, 31.8],
+    [309.5, 0.75, 0, 36.0],
+    [311.8, 0.72, 0, 36.4],
+    [315.5, 0.5, 0, 42.0],
+    [318.2, -0.4, 0, 45.6],
+    [320.0, -2.3, 0, POD_BAY_Z + 0.4],
     [1000, -2.3, 0, POD_BAY_Z + 0.4],
   ]);
   const threepio = new ProtocolDroid(lib, {
@@ -858,11 +858,11 @@ function buildCast(lib: MaterialLibrary): {
     states: [
       { t: 0, state: 'idle', facing: Math.PI },
       { t: 303.0, state: 'walk' },
-      { t: 309.2, state: 'cower', facing: Math.PI * 0.82 },
-      { t: 311.4, state: 'walk' },
-      { t: 315.0, state: 'walk', focus: new THREE.Vector3(-2.6, 1.4, POD_BAY_Z) },
-      { t: 317.8, state: 'interact', focus: new THREE.Vector3(-2.7, 1.2, POD_BAY_Z) },
-      { t: 319.8, state: 'idle', facing: -Math.PI / 2 },
+      { t: 309.8, state: 'cower', facing: Math.PI * 0.82 },
+      { t: 312.0, state: 'walk' },
+      { t: 315.5, state: 'walk', focus: new THREE.Vector3(-2.6, 1.4, POD_BAY_Z) },
+      { t: 318.4, state: 'interact', focus: new THREE.Vector3(-2.7, 1.2, POD_BAY_Z) },
+      { t: 320.2, state: 'idle', facing: -Math.PI / 2 },
       { t: 1000, state: 'idle', facing: -Math.PI / 2 },
     ],
   });

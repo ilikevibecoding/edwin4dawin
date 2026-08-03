@@ -135,11 +135,15 @@ async function main() {
       // Ad-hoc timestamp mode: capture frames without checkpoint assertions.
       const list = String(times).split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n));
       for (const t of list) {
-        const report = await page.evaluate((time) => window.__starfall.report(time), t);
-        const brightness = await page.evaluate(() => window.__starfall.brightness());
+        const { report, brightness } = await page.evaluate((time) => {
+          const r = window.__starfall.report(time);
+          return { report: r, brightness: window.__starfall.brightness() };
+        }, t);
         const file = path.join(OUT_DIR, `t${t.toFixed(1).replace('.', '_')}.png`);
         await page.screenshot({ path: file });
+        const issues = report.issues.filter((i) => i.severity === 'error');
         console.log(`  t=${t.toFixed(1)}  ${report.chapter}/${report.shot}  "${report.beat}"  lum=${brightness.mean.toFixed(3)}`);
+        for (const i of issues) console.log(`         \u2716 ${i.message}`);
         results.push({ id: `t${t}`, time: t, failures: [], report, brightness, screenshot: path.basename(file) });
       }
     } else {
