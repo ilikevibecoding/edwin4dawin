@@ -257,8 +257,8 @@ export class CorridorScene {
     const collarGeo = new THREE.TorusGeometry(0.52, 0.06, 8, 22);
     collarGeo.rotateY(Math.PI / 2);
     lib.registry.track(collarGeo);
-    const collar = new THREE.Mesh(collarGeo, lib.interiorTrim);
-    collar.position.set(0.09, 1.02, 0);
+    const collar = new THREE.Mesh(collarGeo, lib.doorMetal);
+    collar.position.set(0.09, 1.16, 0);
     this.podHatch.add(collar);
     const portGeo = new THREE.CircleGeometry(0.2, 20);
     portGeo.rotateY(-Math.PI / 2);
@@ -266,7 +266,7 @@ export class CorridorScene {
     const port = new THREE.Mesh(portGeo, lib.registry.track(new THREE.MeshBasicMaterial({
       color: 0x9ec6e6, transparent: true, opacity: 0.6, toneMapped: false,
     })));
-    port.position.set(0.1, 1.3, 0);
+    port.position.set(0.1, 1.16, 0);
     this.podHatch.add(port);
 
     // Hazard chevrons above and below the opening.

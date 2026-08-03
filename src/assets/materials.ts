@@ -174,7 +174,7 @@ export class MaterialLibrary {
     this.interiorFloor = this.std('floor', { color: 0x6e6a63, roughness: 0.78, metalness: 0.18, map: floorTex });
     this.interiorTrim = this.std('trim', { color: 0x4c4a48, roughness: 0.5, metalness: 0.55 });
     this.interiorLight = this.std('ceil-light', {
-      color: 0xfff4e2, roughness: 0.3, metalness: 0, emissive: 0xfff0dc, emissiveIntensity: 0.7,
+      color: 0xfff4e2, roughness: 0.3, metalness: 0, emissive: 0xfff0dc, emissiveIntensity: 0.56,
     });
     this.controlPanel = this.std('control-panel', {
       color: 0x2a2e36, roughness: 0.45, metalness: 0.5,
