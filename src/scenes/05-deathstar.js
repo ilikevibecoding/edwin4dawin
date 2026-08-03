@@ -63,13 +63,29 @@ export async function build(ctx) {
   // and let the cyan do the work.
   rigs.interior.key.color.setHex(0x9fc0e8);
   rigs.interior.hemi.color.setHex(0x4a6484);
+  // The hangar preset keys almost straight down, which lights the tops of the
+  // fighters and leaves the flanks the camera actually sees on fill alone. Every
+  // deck set-up is on the -x side of the line, so the -x fill is what has to
+  // carry the hulls.
+  rigs.hangar.fill.intensity = 0.72;
+  rigs.hangar.ambient.intensity = 0.3;
+  // The warm rim rakes along the deck, and its specular lobe on the plate is
+  // broad enough that at a bloom threshold of 0.66 it burns a pool of white into
+  // the floor. It also tracks the camera, so the pool slides around the deck
+  // across the cut and reads as a fire on the floor rather than as a highlight.
+  // Held low enough that it only warms the trailing edges of the hulls.
+  rigs.hangar.rim.intensity = 0.2;
   // Vacuum has no bounce. Trimming the fill and hemisphere gives the station a
   // real terminator instead of the evenly lit ping-pong ball you get by default.
-  rigs.space.key.intensity = 2.5;
-  rigs.space.hemi.intensity = 0.2;
-  rigs.space.fill.intensity = 0.15;
+  rigs.space.key.intensity = 2.3;
+  // Raked well round to +x so the terminator crosses the visible disc. Anything
+  // with much +z in it lights the hull frontally and the station reads as a flat
+  // pale circle with no form at all.
+  rigs.space.key.position.set(0.78, 0.34, 0.24).multiplyScalar(700);
+  rigs.space.hemi.intensity = 0.14;
+  rigs.space.fill.intensity = 0.1;
   rigs.space.rim.intensity = 0.4;
-  rigs.space.ambient.intensity = 0.07;
+  rigs.space.ambient.intensity = 0.05;
 
   const chars = await tryCharacters();
 
@@ -135,24 +151,29 @@ export async function build(ctx) {
       fov: [[T_ZOOM, 44], [8.4, 37], [T_HANGAR, 35]],
       handheld: 0.035,
     },
-    // --- hangar deck: broadside on the line of ships, so the closed S-foils and
-    // the nose of the near fighter actually read, with the open launch door away
-    // to screen right. From behind the line, tail-on, they are only a stack of
-    // engine nozzles.
+    // --- hangar deck: front three-quarter on the line of ships. The camera has
+    // to sit between them and the door (+z) rather than behind them: from behind
+    // the line the fighters are a stack of engine nozzles and the closed S-foils
+    // read as plain tubes.
     {
       start: T_HANGAR,
-      pos: [[T_HANGAR, [-46, 7.6, -20]], [T_LAUNCH, [-42, 6.4, -11]]],
-      look: [[T_HANGAR, [0, 4.4, 1]], [T_LAUNCH, [5, 4.4, 6]]],
-      fov: [[T_HANGAR, 50], [T_LAUNCH, 47]],
+      pos: [[T_HANGAR, [-50, 8.5, 33]], [T_LAUNCH, [-45, 7.0, 27]]],
+      // Panned a little right of the line: the warm rim pools on the plate by the
+      // -x wall, and with the ships dead centre that pool sits in frame and blooms.
+      look: [[T_HANGAR, [-1, 5.0, -6]], [T_LAUNCH, [3, 4.8, -6]]],
+      fov: [[T_HANGAR, 38], [T_LAUNCH, 36]],
       handheld: 0.09,
     },
-    // Three-quarter from beside the near launch lane: the fighters light up and
-    // sweep past the lens.
+    // Low beside the near launch lane, panning with the near fighter as it lights
+    // up, lifts off its blocks and goes. The near lane is at x=-17 and an X-wing's
+    // port wing reaches about fifteen studs out from that, so the camera has to
+    // stand off past x=-36: any closer and it ends up inside the wing, which
+    // back-face-culls to nothing and leaves the shot looking at the front wall.
     {
       start: T_LAUNCH,
-      pos: [[T_LAUNCH, [-34, 2.9, 8]], [15.8, [-31, 5.4, 13]]],
-      look: [[T_LAUNCH, [-12, 4.0, -10]], [15.8, [-10, 6.8, 22]]],
-      fov: [[T_LAUNCH, 48], [15.8, 46]],
+      pos: [[T_LAUNCH, [-44, 3.0, -6]], [15.8, [-40, 6.6, 6]]],
+      look: [[T_LAUNCH, [-17, 4.6, -6]], [15.8, [-15, 11.0, 40]]],
+      fov: [[T_LAUNCH, 46], [15.8, 44]],
       shake: [[T_LAUNCH, 0], [T_LAUNCH + 0.35, 0.16], [15.8, 0.05]],
     },
     // Straight down the deck's centreline and out through the door. Looking
@@ -874,9 +895,12 @@ async function buildApproach() {
    */
   const SPACE_SHOTS = [
     // the hull nearly filling the frame, the squadron specks against its limb
-    { start: T_SPACE, end: 21.3, back: [124, 104], side: [18, 13], rise: [4, 2], frame: [-0.34, -0.56], fov: [27, 26] },
+    // The lead is held a little above halfway down rather than at -0.56: the
+    // formation spreads around it, and any lower the outboard ranks fall off the
+    // bottom of the frame.
+    { start: T_SPACE, end: 21.3, back: [124, 104], side: [18, 13], rise: [4, 2], frame: [-0.34, -0.44], fov: [27, 26] },
     // in close: near enough to read the fighters, hull curving away behind
-    { start: 21.3, end: 24.6, back: [72, 60], side: [22, 15], rise: [3, 1], frame: [-0.3, -0.4], fov: [43, 41] },
+    { start: 21.3, end: 24.6, back: [72, 60], side: [22, 15], rise: [3, 1], frame: [-0.3, -0.34], fov: [43, 41] },
     // the dive: over the top of the formation, surface swallowing the frame
     { start: 24.6, end: 28.6, back: [86, 68], side: [14, 9], rise: [16, 12], frame: [-0.14, -0.46], fov: [46, 50] },
   ];

@@ -39,7 +39,11 @@ const T_SPEECH = 7.0; // she kneels closer and loads the plans
 const T_THREEPIO = 13.0; // cut to the protocol droid fretting
 const T_EJECT = 18.2; // cut to space: the pod blows clear
 const T_TURRET = 25.0; // cut inside the destroyer's gun position
-const T_ENTRY = 33.6; // cut to atmospheric entry
+// The officer's line is done at 28.07. Holding the gun position much past that
+// leaves the frame with nothing in it but a man's back and a slow slide, so the
+// cut comes early and the time goes to the descent, which has something to look
+// at every second of its length.
+const T_ENTRY = 31.4; // cut to atmospheric entry
 
 // The data brick leaves her hand here and the droid's panel shuts over it.
 const T_SLOT = 9.5;
@@ -282,7 +286,7 @@ export async function build(ctx) {
   console1.position.set(5.2, 2.2, -2.0);
   turretSet.add(console1);
   // Cold light from outside, so the officer reads as a backlit silhouette.
-  const facing = new THREE.PointLight(0xbfd8ff, 34, 40, 2);
+  const facing = new THREE.PointLight(0xbfd8ff, 12, 40, 2);
   facing.position.set(-3.4, 3.6, -15.0);
   turretSet.add(facing);
 
@@ -318,7 +322,7 @@ export async function build(ctx) {
   // A cold edge down the window side of him. Point lights fall off with the
   // square of the distance, so this needs a big number to read at all at eight
   // units; it is what separates his shoulder line from the dark of the room.
-  const officerRim = new THREE.PointLight(0xa8ccff, 26, 26, 2);
+  const officerRim = new THREE.PointLight(0xa8ccff, 16, 26, 2);
   officerRim.position.set(-6.6, 8.6, -11.0);
   turretSet.add(officerRim);
 
@@ -352,10 +356,10 @@ export async function build(ctx) {
   entrySet.add(buildEntryGround());
   // Kept well down: the dunes' modelling is painted into their colours, and a
   // hot key just washes the whole field to one flat sheet of orange.
-  const entryKey = new THREE.DirectionalLight(0xffeacc, 3.0);
+  const entryKey = new THREE.DirectionalLight(0xffeacc, 3.6);
   entryKey.position.set(-260, 120, 180);
   entrySet.add(entryKey);
-  const entryHemi = new THREE.HemisphereLight(0xffe4c4, 0xc08048, 1.5);
+  const entryHemi = new THREE.HemisphereLight(0xffe4c4, 0xd08c56, 2.3);
   entrySet.add(entryHemi);
 
   // =========================================================================
@@ -402,7 +406,10 @@ export async function build(ctx) {
     [T_TURRET, [-30, TURRET_Y - 16, -290]],
     [T_ENTRY - 0.001, [-8, TURRET_Y - 64, -980]],
     [T_ENTRY, [-16, ENTRY_Y + 74, -30]],
-    [D, [34, ENTRY_Y - 4, -104]],
+    [T_ENTRY + 4.6, [12, ENTRY_Y + 30, -108]],
+    // Levelling out rather than driving into the sand: the crests stand about
+    // sixty units off the troughs, so anything below ENTRY_Y clips them.
+    [D, [50, ENTRY_Y + 2, -206]],
   ];
   const podPath = (tt) => ease.track(POD_PATH, tt, ease.smooth);
 
@@ -502,11 +509,14 @@ export async function build(ctx) {
       });
       handheld(camera, t, 0.035, 0.5, 4);
     } else {
-      // Down the corridor onto the fretting protocol droid, full figure.
+      // Down the corridor onto the fretting protocol droid, full figure. He
+      // fusses with his hands *above* his head, so the frame has to be centred
+      // higher than his chest and the push kept shallow — a tighter one takes
+      // the top of his head off exactly when the joke lands.
       cameraRig(camera, t, {
-        pos: [[T_THREEPIO, [2.6, 3.8, -6.2]], [T_EJECT, [2.1, 3.5, -7.6]]],
-        look: [[T_THREEPIO, [-1.3, 2.6, -15.3]], [T_EJECT, [-1.4, 2.5, -15.4]]],
-        fov: [[T_THREEPIO, 40], [T_EJECT, 36]],
+        pos: [[T_THREEPIO, [2.6, 4.0, -5.6]], [T_EJECT, [2.2, 3.8, -6.7]]],
+        look: [[T_THREEPIO, [-1.3, 2.9, -15.3]], [T_EJECT, [-1.4, 2.95, -15.4]]],
+        fov: [[T_THREEPIO, 42], [T_EJECT, 38]],
         ease: ease.smooth,
       });
       handheld(camera, t, 0.07, 0.55, 9);
@@ -555,8 +565,8 @@ export async function build(ctx) {
       // key is cut to a whisper and the window-side rim carries his edges.
       // Outside, light grey hull under a strong key clips to paper white, so
       // the launch beat is keyed low and carried by the rim instead.
-      spaceLights.key.intensity = turret ? 0.34 : 1.5;
-      spaceLights.hemi.intensity = turret ? 0.10 : 0.30;
+      spaceLights.key.intensity = turret ? 0.16 : 1.5;
+      spaceLights.hemi.intensity = turret ? 0.17 : 0.30;
       spaceLights.fill.intensity = turret ? 0.08 : 0.34;
       spaceLights.rim.intensity = turret ? 2.1 : 1.3;
     }
@@ -565,6 +575,9 @@ export async function build(ctx) {
     const p = podPath(t);
     podRig.position.set(p[0], p[1], p[2]);
     if (entry) podRig.scale.setScalar(1.15);
+
+    // The lens goes down before anything reads it back — see placeCamera.
+    placeCamera(t, p, launch, turret);
 
     if (launch) {
       // An eight-stud pod two hundred units off the lens is thirty pixels of
@@ -639,8 +652,20 @@ export async function build(ctx) {
     }
 
     stars.update(t);
+    stars.object.position.copy(camera.position);
+  }
 
-    // --- camera
+  /**
+   * Place the lens for whichever exterior beat we are in.
+   *
+   * Called *before* anything that reads the camera back. The pod's halo is
+   * sized off its distance to the lens so that its apparent size stays put as
+   * the pod dwindles, and if the camera is still sitting where the previous
+   * frame left it that read returns the wrong number — which makes the scene
+   * depend on what was drawn before it, and the offline renderer draws the
+   * timeline out of order across several browsers.
+   */
+  function placeCamera(t, p, launch, turret) {
     if (launch) {
       // Near-locked wide. The lens holds still on the hull and lets the pod
       // cross it, which is what makes six hundred units of Imperial grey feel
@@ -681,10 +706,17 @@ export async function build(ctx) {
     } else {
       // Chasing the pod down through the haze.
       const u = ease.range(t, T_ENTRY, D);
+      // The lens swings around the pod as it comes down — starting over its
+      // right shoulder and ending off its left — rather than sitting in one
+      // place behind it. Locked to the tail, eight seconds of descent is eight
+      // seconds of the same picture with the ground scrolling underneath; the
+      // arc keeps giving the dune field a new angle to be seen from.
+      const swing = ease.lerp(0.62, -0.4, ease.smooth(u));
+      const back = ease.lerp(56, 36, u);
       camera.position.set(
-        p[0] + ease.lerp(30, 14, u),
-        p[1] + ease.lerp(14, 7, u),
-        p[2] + ease.lerp(46, 26, u)
+        p[0] + Math.sin(swing) * back,
+        p[1] + ease.lerp(14, 11, u),
+        p[2] + Math.cos(swing) * back
       );
       camera.up.set(0, 1, 0);
       camera.lookAt(p[0], p[1] - 1, p[2]);
@@ -696,8 +728,6 @@ export async function build(ctx) {
       camera.position.x += Math.sin(t * 33) * rattle;
       camera.position.y += Math.sin(t * 27.4 + 1.3) * rattle;
     }
-
-    stars.object.position.copy(camera.position);
   }
 
   function poseOfficer(t) {
@@ -1023,7 +1053,8 @@ function vnoise2(x, z, salt = 0) {
  * push the frame past two hundred of them on their own.
  */
 const ENTRY_SAND = [
-  0x6a4227, 0x7c5230, 0x8d6039, 0x9e6f45, 0xaf7f53, 0xbe8f63, 0xcb9f75, 0xd7af88, 0xe2be9c, 0xecceb1,
+  0x6d4227, 0x7a4d2d, 0x875834, 0x94643c, 0xa07044, 0xac7d4e, 0xb88a59, 0xc39866, 0xcea675, 0xd8b486,
+  0xe1c299, 0xead0ad, 0xf2dcc2,
 ];
 
 // Horizontal bearing from a patch of sand towards `entryKey`, normalised. The
@@ -1046,24 +1077,34 @@ function duneCrest(u) {
 }
 
 /**
- * Height of the entry desert in [0,1], in world units.
+ * Height of the entry desert in [0,1].
  *
- * The crests are *transverse* — long ridges lying across the pod's line of
- * flight — because the lens looks straight down that line, and only a ridge
- * across it can ever occlude the ground behind it. Two trains at different
- * pitches keep the crests from marching at one fixed interval, and a lateral
- * warp bends them so they are not ruled bars across the frame.
+ * The crests lie broadly *across* the pod's line of flight, because the lens
+ * looks straight down that line and only a ridge across it can occlude the
+ * ground behind it. Three things stop that from reading as corrugated iron:
+ *
+ *  - the train is raked a little off square, so crests run diagonally out of
+ *    frame rather than parallel to its top and bottom edges;
+ *  - the line is warped sideways at two scales, so a single crest bends
+ *    several times across the width of the shot instead of ruling it;
+ *  - the height is *multiplied* by a slow field swell rather than having noise
+ *    added to it, which pinches some ridges away to interdune flats and stacks
+ *    others up into star dunes. Adding noise only roughens a washboard; this
+ *    breaks the rhythm.
  */
 function entryHeight(x, z) {
+  const s = z * 0.93 + x * 0.36;
+  // Both warps are kept well longer than a cell of the coarse field: a wander
+  // that turns over inside two or three cells cannot be sampled, and comes out
+  // as a scatter of unrelated blocks rather than a bending crest.
   const warp =
-    240 * (vnoise2(x * 0.0016, z * 0.0004, 3.1) - 0.5) +
-    90 * (vnoise2(x * 0.0052 + 7, z * 0.0013, 8.4) - 0.5);
-  const s = z + warp;
-  const a = duneCrest(s / 330);
-  const b = duneCrest((s + 150) / 149);
-  // A slow swell across the field, so the profile is not simply extruded in x.
-  const swell = vnoise2(x * 0.0013 + 2, z * 0.0007, 5.5);
-  return ease.clamp(a * 0.54 + b * 0.24 + swell * 0.28, 0, 1);
+    170 * (vnoise2(x * 0.0031, z * 0.001, 3.1) - 0.5) +
+    58 * (vnoise2(x * 0.0046 + 7, z * 0.0017, 8.4) - 0.5);
+  const u = s + warp;
+  const a = duneCrest(u / 296);
+  const b = duneCrest((u + 150) / 131);
+  const swell = 0.42 + 1.02 * vnoise2(x * 0.0018 + 2, z * 0.0011, 5.5);
+  return ease.clamp((a * 0.7 + b * 0.3) * swell, 0, 1);
 }
 
 /**
@@ -1113,11 +1154,35 @@ function buildEntryGround() {
   // modelling is painted in instead: sample the height one step *towards the
   // sun* and go pale where the sand climbs into the light, dark where it falls
   // away behind a crest. That is what turns a terraced grid into dunes.
+  // Heights land on a course, so neighbouring cells at similar elevations share
+  // a level and grow together into a continuous terrace. Left continuous, every
+  // cell sits a little proud of the last and a dune field of a few thousand of
+  // them reads as loose rubble rather than as stacked plate.
+  const COURSE = 11;
+  const RELIEF = 150;
+
   const cell = (x, z, cx, cz) => {
     const k = entryHeight(x, z);
+    const levels = Math.round((k * RELIEF) / COURSE);
     const step = Math.max(cx, cz) * 1.4;
-    const lit = ease.clamp((k - entryHeight(x + SUN_X * step, z + SUN_Z * step)) * 7.0 + 0.5, 0, 1);
-    b.box(x, BASE, z, cx, cz, 8 + k * 140, sandTone(k * 0.34 + lit * 0.66), { studs: false });
+    // Divide the drop back out by the distance it was measured over. Without
+    // that the same slope returns a far bigger number in the coarse zone than
+    // the fine one, and the far field saturates into alternating white and
+    // brown bars while the near field stays flat — which is precisely what a
+    // washboard looks like.
+    const slope = (k - entryHeight(x + SUN_X * step, z + SUN_Z * step)) / step;
+    const lit = ease.clamp(slope * 55 + 0.5, 0, 1);
+    // Tone is keyed to the *quantised* height, so a terrace is one flat colour
+    // edge to edge and the dune reads as a ramp of plate courses climbing into
+    // the light. Keying it to the continuous height instead puts a tonal edge
+    // somewhere across the middle of a plateau, which is what turns the field
+    // into a maze of unrelated blocks. The sun's modelling then rides on top,
+    // enough to tell a windward slope from a slip face.
+    const dither = (hash11(x * 13.37 + z * 7.11, 5) - 0.5) * 0.03;
+    const q = (levels * COURSE) / RELIEF;
+    b.box(x, BASE, z, cx, cz, 10 + levels * COURSE, sandTone(0.12 + q * 0.56 + lit * 0.34 + dither), {
+      studs: false,
+    });
   };
 
   // The coarse field, out to the fog. Cells are wider than they are deep,
@@ -1137,8 +1202,8 @@ function buildEntryGround() {
   // A finer patch over the flight path. The shot ends sixty units off the
   // sand, and at that range a fifty-unit cell is a runway slab: the near
   // ground only terraces if it is cut small.
-  for (let ix = 0; ix < 30; ix++) {
-    for (let iz = 0; iz < 32; iz++) cell(ix * 16 - 240, iz * 14 - 336, 16, 14);
+  for (let ix = 0; ix < 20; ix++) {
+    for (let iz = 0; iz < 28; iz++) cell(ix * 24 - 240, iz * 16 - 336, 24, 16);
   }
   g.add(b.build({ castShadow: false }));
   return g;
@@ -1184,7 +1249,7 @@ function buildSheath() {
 
   const sparks = new Sparks({
     t0: 0,
-    life: 6.6,
+    life: 9.2, // must outlast the descent, or the ablation stops halfway down
     count: 130,
     speed: 9,
     gravity: 0,

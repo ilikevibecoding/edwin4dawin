@@ -168,7 +168,11 @@ export async function build(ctx) {
   // of irradiance on the plate beside it and prints a hard white rectangle up
   // there. The one furthest forward is behind the lens in every shot and is
   // purely there to keep him off a black background as he closes.
-  for (const z of [2, -9, -18, -27, -38]) {
+  //
+  // Seven of them, and the two furthest aft are for the rebel end: it is fifty
+  // studs from the breach, the preset's key comes down as the smoke rises, and
+  // shot 5 was a dark blue-grey corridor with a firefight somewhere in it.
+  for (const z of [26, 13, 2, -9, -18, -27, -38]) {
     const lamp = new THREE.PointLight(0xffeccc, 14, 26, 2);
     lamp.position.set(0, CEIL_Y - 3.4, z);
     scene.add(lamp);
@@ -208,7 +212,16 @@ export async function build(ctx) {
   for (const variant of [0, 2]) {
     const fig = await makeRebelTrooper({ variant, seed: 3.1 + variant * 1.7 });
     poseAim(fig, variant * 1.31, { yaw: (hash11(variant, 81) - 0.5) * 0.16 });
-    fig.torso.rotation.x = 0.05;
+    // Down behind the crates. A minifig has no knees, so a crouch is both legs
+    // swung forward at the hip with the body dropped by as much as that shortens
+    // them — 0.42 for 0.85 radians, which puts the soles back on the deck. Only
+    // half a unit, and it is the difference between four men taking cover and
+    // four men standing at a counter: their shoulders end up level with the
+    // crate tops instead of a head above them.
+    fig.legL.rotation.x = 0.85;
+    fig.legR.rotation.x = 0.78;
+    fig.body.position.y -= 0.42;
+    fig.torso.rotation.x = 0.14;
     matte(fig.root);
     rebelBaked.push(bakeFigure(fig));
   }
@@ -241,12 +254,28 @@ export async function build(ctx) {
   }
 
   // ...and the rest of the squad is one instanced draw per material instead of
-  // a dozen per figure. Baked mid-aim: legs apart, blaster up, which reads both
-  // as advancing (with bob and roll on top) and as holding a firing line.
-  const squadTemplate = await makeStormtrooper({ variant: 7, seed: 1.4 });
-  poseAim(squadTemplate, 0);
-  matte(squadTemplate.root);
-  const squadBaked = bakeFigure(squadTemplate);
+  // a dozen per figure.
+  //
+  // TWO baked poses, walking and aiming, and the whole squad changes from one to
+  // the other on the frame its phase changes. That costs nothing: `Crowd` sizes
+  // every template for the whole crowd, and three.js skips an InstancedMesh
+  // whose count is zero before it counts the draw call — so the second pose is
+  // free at every instant when the first one is unused. With one pose the beat
+  // read as a chorus line: eight identical figures at the same stance sliding up
+  // the corridor without walking, then standing in it without firing.
+  const squadBaked = [];
+  for (const walking of [true, false]) {
+    const fig = await makeStormtrooper({ variant: 7, seed: 1.4 });
+    if (walking) {
+      // Phase chosen so sin() is at 1: legs at full extension, which is the
+      // single frame of a walk cycle that reads as walking when it is frozen.
+      poseWalk(fig, (Math.PI / 2 - (fig.seed ?? 0)) / Math.PI, { speed: 1, amp: 0.7, bob: 0, roll: 0.05 });
+    } else {
+      poseAim(fig, 0);
+    }
+    matte(fig.root);
+    squadBaked.push(bakeFigure(fig));
+  }
   const SQUAD = 8;
   const squadPlacements = [];
   for (let i = 0; i < SQUAD; i++) {
@@ -262,7 +291,7 @@ export async function build(ctx) {
   // No shadow casting on the crowd: `renderer.info` counts the shadow pass, and
   // a dozen instanced meshes rendered twice is a tenth of the whole scene's
   // draw-call budget for shadows that fall on wall the lens never looks at.
-  const squad = new Crowd([squadBaked], squadPlacements, { castShadow: false });
+  const squad = new Crowd(squadBaked, squadPlacements, { castShadow: false });
   scene.add(squad.object);
 
   /**
@@ -274,10 +303,17 @@ export async function build(ctx) {
    */
   const squadLanes = squadPlacements.map((_, i) => {
     const col = i % 4;
-    const lane = -6.0 + col * 4.0 + (hash11(i, 41) - 0.5) * 0.7;
+    const row = Math.floor(i / 4);
+    // The second rank is offset half a lane, not stacked behind the first: four
+    // abreast twice over is a grid, and from the low angle shot 4 takes it read
+    // as a parade rather than as a squad coming through a hole in a wall.
+    const lane = -6.0 + col * 4.0 + row * 2.0 + (hash11(i, 41) - 0.5) * 1.1;
     return {
       lane,
-      hold: -39.0 + col * 1.7 + Math.floor(i / 4) * 4.4,
+      // Seven studs between the ranks rather than four: at four, and with a lens
+      // twenty studs off them, both ranks land on the same screen row and eight
+      // troopers read as one line of seven.
+      hold: -42.5 + col * 1.4 + row * 7.4 + (hash11(i, 47) - 0.5) * 3.0,
       // Where they stand once the shooting stops: out against the walls and
       // back toward the door, which clears the whole centre of the corridor for
       // him to walk out of. It also gets eight white figures out of the near
@@ -331,8 +367,8 @@ export async function build(ctx) {
   // `width` drives the halo as well as the core, and the halo is nine times as
   // wide and a quarter longer than the bolt: at 0.2 a bolt crossing a stud from
   // the lens is a green bar a quarter of the frame across.
-  const rebelBolts = new BoltPool({ color: KIT.laserRed, length: 4.2, width: 0.11, glow: 0.85, max: 64 });
-  const imperialBolts = new BoltPool({ color: KIT.laserGreen, length: 4.2, width: 0.11, glow: 0.85, max: 64 });
+  const rebelBolts = new BoltPool({ color: KIT.laserRed, length: 3.6, width: 0.085, glow: 0.6, max: 64 });
+  const imperialBolts = new BoltPool({ color: KIT.laserGreen, length: 3.6, width: 0.085, glow: 0.6, max: 64 });
   scene.add(rebelBolts.object, imperialBolts.object);
 
   /**
@@ -349,13 +385,17 @@ export async function build(ctx) {
     SHOTS.push({
       t0,
       imp,
-      // Kept inside |x| < 5, which is what stops a bolt passing through the
-      // lens in the shot that watches them come through the door: additive
-      // geometry a stud from the glass is a green slab across half the frame.
-      from: imp ? [h(62) * 9, 3.2 + hash11(i, 69), -36 + h(63) * 6] : [h(64) * 9, 3.0, BARRICADE_Z + 1.5],
+      // Confined to the middle 7 studs of a 16-stud bore, at both ends. Both
+      // streams run nearly the whole length of the corridor, so they cross the
+      // plane of every camera that stands in it — and shot 4 stands two and a
+      // half studs off the port wall. Bolts allowed out to |x| = 5 passed within
+      // a stud of that lens and photographed as a green bar a third of the frame
+      // wide, which is not a blaster bolt, it is a lightsaber. Held inside 3.4
+      // they clear it by three studs and read as fire going past.
+      from: imp ? [h(62) * 6.4, 3.2 + hash11(i, 69), -36 + h(63) * 6] : [h(64) * 6.4, 3.0, BARRICADE_Z + 1.5],
       to: imp
-        ? [h(65) * 10, 1.4 + hash11(i, 66) * 5.4, BARRICADE_Z + 2.5]
-        : [h(67) * 10, 1.6 + hash11(i, 68) * 5.4, -34],
+        ? [h(65) * 6.8, 1.4 + hash11(i, 66) * 5.4, BARRICADE_Z + 2.5]
+        : [h(67) * 6.8, 1.6 + hash11(i, 68) * 5.4, -34],
     });
   }
   const BOLT_V = 150;
@@ -420,18 +460,28 @@ export async function build(ctx) {
   // the scene's entire draw-call budget. Fewer and larger reads the same at
   // these distances — a bank of smoke fifty studs down a corridor is a tonal
   // wash, and no one counts the sprites in it.
+  //
+  // All three sit in the twelve studs in front of the threshold, and that is the
+  // load-bearing number here. Spread up the corridor as far as DOOR_Z+20 the
+  // third bank straddled the lens of the two shots that watch the doorway, and a
+  // 19-unit sprite at 40% opacity a stud off the glass is not smoke in a
+  // corridor, it is a milk filter over the whole frame: the shot went flat, the
+  // corridor stopped being white and Vader stopped being black. Kept down at the
+  // far end they read as what they are — something he walks out of — and every
+  // one of them is between the lens and him, which is the only place smoke does
+  // any good.
   const smokes = [];
   for (let i = 0; i < 3; i++) {
     const s = new Smoke({
       t0: BLAST + 0.1 + i * 0.55,
-      life: 16,
+      life: 12.5,
       count: 5,
-      origin: [(hash11(i, 71) - 0.5) * 7, 2.6, DOOR_Z + 4 + i * 8],
+      origin: [(hash11(i, 71) - 0.5) * 6, 2.6, DOOR_Z + 2 + i * 5],
       rise: 0.5,
-      spread: 12,
-      size: 19,
+      spread: 8,
+      size: 17,
       color: 0x8d949c,
-      opacity: 0.17,
+      opacity: 0.2,
       seed: 30 + i * 7,
     });
     smokes.push(s);
@@ -466,9 +516,14 @@ export async function build(ctx) {
   // 24fps) or inside one shot, so no move ever runs across a cut.
   const CAM = {
     pos: [
-      // 1 — wide, pushing in from behind the barricade
-      [0, [1.2, 4.3, 33]],
-      [3.5, [1.0, 3.7, 21]],
+      // 1 — wide, pushing in from behind the barricade. It stops eleven studs
+      // short of them, not five: the rebel line is at z 12.6–14.6 and a minifig
+      // is four units tall, so at five studs one helmet is three quarters of the
+      // frame and the shot is a shoulder, not the tableau the narration is
+      // describing. From eleven the four of them, the barricade and the whole
+      // length of corridor down to the door are all in it.
+      [0, [1.2, 5.0, 36]],
+      [3.5, [1.0, 4.5, 25.5]],
       // 2 — reverse: their faces over the barricade, droid crossing the fore.
       //     Tilted down a little further than the composition wants, because
       //     level with the barricade top the deck in front of it — and the droid
@@ -477,23 +532,33 @@ export async function build(ctx) {
       // droid crosses in frame, and end high enough to clear the crate tops,
       // which are level with their shoulders and otherwise hide the blasters the
       // narration is talking about.
-      [3.55, [3.5, 3.3, -3]],
-      [7.0, [1.9, 4.4, 3.5]],
+      // Well back off the barricade too. At six studs its 3.2-unit face is a
+      // featureless grey slab across the bottom half of the frame; at fourteen it
+      // is a third of it and the corridor behind the rebel line reads.
+      [3.55, [3.4, 3.4, -6]],
+      [7.0, [2.2, 4.1, 0.5]],
       // 3 — the door, and the bricks coming at the lens
       [7.05, [1.7, 3.2, -9]],
       [BLAST + 0.9, [2.0, 3.3, -3.5]],
       [11.0, [2.3, 3.2, 2.0]],
-      // 4 — low and off-axis as the squad comes through the breach
-      [11.05, [-7.0, 1.8, -25]],
-      [13.4, [-6.6, 2.2, -21]],
-      // 5 — high and behind the rebel line as it takes casualties. Near the
-      // corridor's axis on purpose: bolts run the length of a corridor, so from
-      // any real cross-angle both streams are foreshortened into dots. And well
-      // back and well up: at ten studs behind them a rebel is half the height of
-      // the frame, three of them abreast wall off the corridor, and the firefight
-      // they are in the middle of happens behind their backs.
-      [13.45, [3.4, 6.6, 33]],
-      [CEASE + 0.4, [2.7, 5.8, 27]],
+      // 4 — low and off-axis as the squad comes through the breach. Low, but not
+      // down among the debris: at 1.8 the nearest brick of the door is three
+      // studs off the lens and a third of the frame, and the assault happens
+      // behind it. And a stud and a half further off the wall than it wants to
+      // be, because the wall carries a pilaster every four studs and at -7.0 the
+      // nearest one was a black band up the left third of the frame.
+      [11.05, [-6.0, 2.8, -25]],
+      [13.4, [-5.6, 3.1, -21]],
+      // 5 — the rebel line taking casualties. Close on it and off to one side,
+      // which is a change of mind: this was a wide from twenty studs behind them
+      // that tried to hold both ends of the corridor at once, and at that range
+      // the rebels were small, the imperials seventy-five studs away were four
+      // pixels tall, and the two men going over backwards — the whole content of
+      // the shot — happened somewhere in the middle of an empty grey corridor.
+      // From ten studs and off the axis the casualties read, and the corridor
+      // still runs away to the breach behind them because that is where it looks.
+      [13.45, [5.4, 4.7, 24.5]],
+      [CEASE + 0.4, [4.4, 4.3, 20.5]],
       // 6 — the quiet, and him. Low and near the door, backing off as he comes
       // on: a static lens would take him from a fifth of the frame to all of it
       // in five seconds, and this beat wants him to grow, not to charge.
@@ -503,16 +568,16 @@ export async function build(ctx) {
     ],
     look: [
       [0, [0, 4.1, -26]],
-      [3.5, [0, 4.0, -32]],
-      [3.55, [-0.7, 2.5, 14]],
-      [7.0, [-0.5, 3.1, 13]],
+      [3.5, [0, 3.9, -32]],
+      [3.55, [-0.7, 2.7, 14]],
+      [7.0, [-0.5, 3.2, 13]],
       [7.05, [0, 4.1, DOOR_Z + 1]],
       [BLAST + 0.9, [0, 4.2, DOOR_Z + 3]],
       [11.0, [0, 4.0, DOOR_Z + 6]],
       [11.05, [0.8, 3.4, DOOR_Z + 3]],
       [13.4, [0.8, 3.2, DOOR_Z + 8]],
-      [13.45, [-0.7, 2.8, 4]],
-      [CEASE + 0.4, [-0.7, 2.6, 1]],
+      [13.45, [-1.4, 3.0, 5.5]],
+      [CEASE + 0.4, [-1.2, 2.9, 1.5]],
       // The tilt: it starts level on the smoke lying in the doorway and ends on
       // his helmet, which is the whole point of the beat.
       [CEASE + 0.45, [0, 1.4, DOOR_Z + 2]],
@@ -523,14 +588,14 @@ export async function build(ctx) {
     fov: [
       [0, 48],
       [3.5, 45],
-      [3.55, 40],
-      [7.0, 37],
+      [3.55, 41],
+      [7.0, 38],
       [7.05, 38],
       [11.0, 44],
       [11.05, 52],
       [13.4, 48],
-      [13.45, 47],
-      [CEASE + 0.4, 45],
+      [13.45, 43],
+      [CEASE + 0.4, 41],
       [CEASE + 0.45, 45],
       [17.3, 40],
       [19.8, 34],
@@ -582,10 +647,14 @@ export async function build(ctx) {
         const holdX = ease.lerp(L.lane, L.wall, pull);
         out.x = ease.lerp(holdX, L.file + (hash11(i, 44) - 0.5) * 0.8, fallIn);
         out.z = ease.lerp(holdZ, vz - L.follow, fallIn);
-        // Bob only while the boots are actually moving.
+        // Bob only while the boots are actually moving — and stand on the walking
+        // pose while they do, on the firing pose while they hold.
         const moving = (march > 0.02 && march < 0.985) || fallIn > 0.05;
+        out.template = moving ? 0 : 1;
         out.y = moving ? Math.abs(Math.sin(vDist * 2.1 + t * 3.4 + seed)) * 0.11 : 0;
-        out.rotY = Math.sin(t * 2.6 + seed) * 0.045;
+        out.rotY = Math.sin(t * 2.6 + seed) * 0.045 + (moving ? 0 : (hash11(i, 51) - 0.5) * 0.3);
+        // A little lean into the firing line, different for each of them.
+        out.tilt = moving ? 0 : (hash11(i, 53) - 0.5) * 0.09;
       });
       squad.object.visible = t > POUR - 0.4;
 
@@ -594,11 +663,17 @@ export async function build(ctx) {
         const fig = heroTroopers[i];
         const march = ease.outCubic(ease.range(t, POUR + i * 0.3, POUR + 2.4 + i * 0.3));
         const holdZ = ease.lerp(DOOR_Z - 4, -39.5 + i * 3.2, march);
-        const holdX = ease.lerp(-3.4 + i * 6.8, (i ? 1 : -1) * 6.3, pull);
+        // Back against the jambs once the shooting stops, not out in the corridor
+        // beside him. Held at -39/-36 they stood twelve studs off shot 6's lens
+        // at the frame edges: two cropped white masses either side of the doorway,
+        // each of them brighter and bigger than the entrance they were framing.
+        // At -43 they are twenty studs back, small, and read as flanking the hole
+        // he walks out of.
+        const holdX = ease.lerp(-3.4 + i * 6.8, (i ? 1 : -1) * 5.6, pull);
         fig.root.position.set(
           ease.lerp(holdX, (i ? 1 : -1) * 4.4, fallIn),
           0,
-          ease.lerp(holdZ, vz - 5.6 - i * 1.6, fallIn)
+          ease.lerp(ease.lerp(holdZ, -43.4 + i * 1.6, pull), vz - 5.6 - i * 1.6, fallIn)
         );
         fig.root.rotation.y = (i ? -1 : 1) * 0.07;
         fig.root.visible = t > POUR - 0.3;
@@ -610,10 +685,16 @@ export async function build(ctx) {
       rubbleFade(ease.smooth(ease.range(t, BLAST + 1.1, BLAST + 2.4)));
 
       // ------------------------------------------------- 4. the mouse droid
-      // It crosses well forward of the barricade, three studs off the lens in
+      // It crosses well forward of the barricade, ten studs off the lens in
       // shot 2, and is gone before anything happens. Any further up the corridor
       // and a knee-high droid is four pixels tall.
-      const mu = ease.range(t, 1.8, 4.8);
+      //
+      // Timed to the reverse angle rather than to the wide. Crossing at 1.8–4.8
+      // it did its whole run while the camera was twenty-five studs behind four
+      // rebels' backs, where it was a few pixels of grey on a grey deck; the beat
+      // of comedy is only a beat of comedy if the shot it happens in is looking
+      // at the floor it crosses.
+      const mu = ease.range(t, 4.0, 6.7);
       mouse.root.position.set(ease.lerp(-7.2, 7.2, mu), 0, 8.0);
       mouse.root.rotation.y = Math.PI / 2;
       mouse.root.visible = mu > 0.01 && mu < 0.99;
@@ -658,18 +739,34 @@ export async function build(ctx) {
 
         // His travelling rig. Each sits three or four studs off the part of him
         // it is for, and both cones are aimed at his mask.
+        //
+        // The numbers here are small and they have to be. He is 0.05-albedo ABS
+        // three or four studs from these lamps, so with decay 2 the irradiance on
+        // his chest is intensity/16 — and it takes barely two units of that to
+        // put black plastic at mid grey. A first pass ran the key at 150 and the
+        // frame showed exactly that: a charcoal Vader with the near-black print
+        // on his mask blown out to white, so the grille read as five bright bars
+        // and the narration's "something tall and black" was the palest figure in
+        // the shot after the troopers. Forty is enough to find the shoulder line
+        // and the bevel of the helmet and leave the rest of him where it belongs.
+        //
+        // The KEY also waits. Through the doorway beat he is lit from behind by
+        // the breach alone, which is the shot the script asks for — in silhouette
+        // — and any frontal light at all fills that in. It comes up over the two
+        // seconds after he is clear of the threshold.
         const on = ease.smooth(ease.range(t, VADER_IN, VADER_IN + 1.3));
+        const front = ease.smooth(ease.range(t, 19.3, 21.4));
         vaderKey.position.set(1.6, 6.6, vz + 3.6);
         vaderKey.target.position.set(0, 4.4, vz);
-        // Opened up over the last four seconds. He is closing on the lens and
-        // the corridor behind him is running out, so the only thing left to
-        // separate a black helmet from a dark frame is more light on the helmet.
-        vaderKey.intensity = on * ease.lerp(150, 200, ease.smooth(ease.range(t, 29, 33)));
+        // Opened up a little over the last four seconds: he is closing on the
+        // lens and the corridor behind him is running out, so the only thing left
+        // to separate a black helmet from a dark frame is the helmet itself.
+        vaderKey.intensity = front * ease.lerp(40, 56, ease.smooth(ease.range(t, 29, 33)));
         vaderFill.position.set(-2.2, 1.6, vz + 2.6);
-        vaderFill.intensity = on * 65;
+        vaderFill.intensity = front * 11;
         vaderRim.position.set(0, 6.9, vz - 3.2);
         vaderRim.target.position.set(0, 4.5, vz + 0.4);
-        vaderRim.intensity = on * 120;
+        vaderRim.intensity = on * 78;
       } else {
         vaderKey.intensity = 0;
         vaderFill.intensity = 0;
@@ -686,22 +783,34 @@ export async function build(ctx) {
         // his line lands. The lens is long and the offset small on purpose: at
         // the wide angle a first pass used, whichever trooper was nearest the
         // right-hand wall sat beside the lens, cropped and twice his size.
+        //
+        // Framed for the whole figure, not the chest. Held at vz+11 on a 34 the
+        // frame was 6.6 units tall against a 5.1-unit costume centred on his
+        // chest, so his boots and half his cape were under the bottom edge and
+        // the walk the line is delivered on stopped being visible. Wider and two
+        // studs further out, centred lower, puts him in it from the deck up.
         const u = ease.smooth(ease.range(t, 22.05, 26.45));
-        camera.position.set(ease.lerp(2.9, 2.4, u), ease.lerp(2.2, 2.0, u), vz + ease.lerp(12.0, 10.2, u));
+        camera.position.set(ease.lerp(3.0, 2.5, u), ease.lerp(2.5, 2.2, u), vz + ease.lerp(14.5, 12.5, u));
         camera.up.set(0, 1, 0);
-        camera.lookAt(0, 4.3, vz + 0.4);
-        setFov(camera, 34);
+        camera.lookAt(0, 3.7, vz + 0.4);
+        setFov(camera, ease.lerp(38, 37, u));
       } else {
-        // 8 — dead ahead, sinking toward the deck as the gap closes, so he
-        // grows into the lens and ends looming over it. It stops seven studs off
-        // him rather than six: at six his helmet covers the lit ceiling panel
+        // 8 — nearly dead ahead, sinking toward the deck as the gap closes, so
+        // he grows into the lens and ends looming over it. It stops seven studs
+        // off him rather than six: at six his helmet covers the lit ceiling panel
         // behind it and there is nothing in frame for a black costume to be
         // black against.
+        //
+        // A stud and a half off the axis at the end rather than dead on it. Down
+        // the exact centre line the frame is symmetrical — him in the middle,
+        // two troopers mirrored either side, the corridor vanishing behind his
+        // helmet — and a symmetrical frame of a man walking at you is oddly
+        // static. Off-centre, one trooper reads and the other is a shoulder.
         const u = ease.smooth(ease.range(t, 26.45, END));
-        camera.position.set(ease.lerp(1.7, 0.4, u), ease.lerp(2.0, 1.5, u), vz + ease.lerp(13.0, 7.2, u));
+        camera.position.set(ease.lerp(1.7, 1.35, u), ease.lerp(2.1, 1.35, u), vz + ease.lerp(13.0, 7.0, u));
         camera.up.set(0, 1, 0);
-        camera.lookAt(0, ease.lerp(4.2, 4.3, u), vz + 0.4);
-        setFov(camera, ease.lerp(37, 44, u));
+        camera.lookAt(ease.lerp(0, 0.35, u), ease.lerp(4.2, 4.5, u), vz + 0.4);
+        setFov(camera, ease.lerp(37, 45, u));
       }
       // Bolt billboards need the final camera, so they are updated after it.
       const firing = t > POUR && t < CEASE + 1.0;
@@ -721,9 +830,9 @@ export async function build(ctx) {
       // it to be black against if the corridor is dark too.
       const gloom =
         ease.smooth(ease.range(t, BLAST, BLAST + 2.5)) * (1 - 0.72 * ease.smooth(ease.range(t, 25.5, 31)));
-      lights.hemi.intensity = ease.lerp(0.64, 0.3, gloom);
-      lights.key.intensity = ease.lerp(1.5, 0.95, gloom);
-      scene.fog.density = ease.lerp(0.006, 0.0145, gloom);
+      lights.hemi.intensity = ease.lerp(0.64, 0.42, gloom);
+      lights.key.intensity = ease.lerp(1.5, 1.15, gloom);
+      scene.fog.density = ease.lerp(0.006, 0.0135, gloom);
     },
   };
 }
@@ -868,9 +977,48 @@ function buildCorridor() {
   //     The supply crates are stacked against the walls rather than behind the
   //     line: from the reverse angle, anything in the middle of the deck stands
   //     between the lens and the men it is there to photograph.
-  for (let x = -HALF_W; x < HALF_W; x += 4) {
-    b.box(x, 0, BARRICADE_Z, 4, 2, 8, grey);
-    b.tile(x, 8, BARRICADE_Z, 4, 2, dark);
+  //
+  //     Eight narrow crates of four different heights rather than four wide ones
+  //     of the same height. Shot 2 is a reverse a dozen studs off this thing and
+  //     the barricade is the whole bottom half of the frame: as one continuous
+  //     3.2-unit face it is a blank grey slab with two seams in it, and there is
+  //     nothing in the shot to say the rebels are behind cover rather than
+  //     standing at a counter. Stepped tops, mixed colours and exposed studs
+  //     give it a silhouette; the tallest crates land just under the rebels'
+  //     shoulders so their blasters still clear it.
+  //
+  //     The profile is not arbitrary: the four SHORT crates are the four the
+  //     rebels are behind. Nine plates plus a lid is 4.0 units, and a crouched
+  //     minifig's helmet tops out at 3.6, so a barricade of one height either
+  //     buries the men or is too low to be cover for any of them. Piled high at
+  //     the walls and in the centre, low where somebody has to shoot over it, it
+  //     both reads as thrown together and leaves four helmets and four blasters
+  //     clear of the top edge.
+  const crateH = [9, 6, 8, 6, 9, 6, 6, 8];
+  const crateC = [grey, COLORS.darkTan, COLORS.white, COLORS.oliveGreen, grey, COLORS.darkTan, grey, COLORS.white];
+  for (let i = 0; i < 8; i++) {
+    const x = -HALF_W + i * 2;
+    const h = crateH[i];
+    b.box(x, 0, BARRICADE_Z, 2, 2, h, crateC[i]);
+    // The tall ones get a smooth lid; the low ones are left open with their studs
+    // up, which both breaks the top edge along its length and keeps the four the
+    // men are behind at their bare height.
+    if (h > 7) b.tile(x, h, BARRICADE_Z, 2, 2, dark);
+    // A dark shadow gap between crates: the seam is what reads at distance.
+    if (i) b.panel(x - 0.08, 0, BARRICADE_Z - 0.05, 0.16, 2.1, h, COLORS.darkBluishGray);
+  }
+  // Clutter along the top and the deck in front: a few loose bricks and an ammo
+  // box, so the line reads as thrown together in a hurry.
+  b.brick(-7.6, 9, BARRICADE_Z + 0.4, 2, 1, COLORS.darkTan);
+  b.brick(-3.7, 8, BARRICADE_Z + 0.5, 1, 2, COLORS.oliveGreen);
+  b.brick(6.1, 8, BARRICADE_Z + 0.3, 2, 1, COLORS.darkTan);
+  for (let i = 0; i < 5; i++) {
+    const h = (k) => hash11(i, 200 + k);
+    b.push();
+    b.translateWorld((h(1) - 0.5) * 13, 0.6, BARRICADE_Z - 1.4 - h(2) * 2.6);
+    b.rotateY(h(3) * Math.PI);
+    b.brick(-0.5, -1.5, -1, 1, 2, h(4) > 0.6 ? COLORS.darkTan : grey);
+    b.pop();
   }
   for (let i = 0; i < 6; i++) {
     const sx = i % 2 ? 1 : -1;
@@ -949,36 +1097,67 @@ function buildBlastDoor() {
  */
 function buildRubble() {
   const b = new Bricks({ studSegments: 6 });
-  const grey = COLORS.lightBluishGray;
-  for (let i = 0; i < 54; i++) {
+  // The door's own palette, so the pile is visibly the door: mostly its greys
+  // and whites, with the odd piece off its dark seam and its hazard chevrons.
+  // Weighted, not uniform: the door was two thirds grey and white with a single
+  // course of chevrons across it, and one brick in six coming up canary yellow
+  // put more of it on the deck than was ever on the door.
+  const palette = [
+    COLORS.lightBluishGray,
+    COLORS.white,
+    COLORS.lightBluishGray,
+    COLORS.white,
+    COLORS.lightBluishGray,
+    COLORS.darkBluishGray,
+    COLORS.white,
+    COLORS.darkBluishGray,
+    COLORS.lightBluishGray,
+    COLORS.white,
+    COLORS.lightBluishGray,
+    COLORS.yellow,
+  ];
+  const soft = { transparent: true, opacity: 0 };
+  for (let i = 0; i < 46; i++) {
     const h = (k) => hash11(i, k);
-    // Thickest at the threshold, thinning up the corridor. It stops short of
-    // where the lens sits for the Vader beat: a 1x2 brick two studs from the
-    // glass is a white slab across the bottom of frame.
-    const z = DOOR_Z + 1 + Math.pow(h(11), 1.7) * 19;
+    // Thickest at the threshold, thinning up the corridor, and it stops well
+    // short of the lens. Shots 4 and 6 both sit at z ≈ -22: with the field
+    // running to -26 the nearest brick was a stud off the glass and a third of
+    // the frame, and the assault and his entrance both happened behind it. Even
+    // at -32 the front rank of it walled off the bottom third of his entrance, so
+    // the run is shorter again and the distribution biased harder at the door.
+    const z = DOOR_Z + 1 + Math.pow(h(11), 2.3) * 11;
     const x = (h(12) - 0.5) * 14.4;
     const flat = h(15) > 0.45; // lying down, or tipped up on an edge
-    b.addGeometry(rubbleBrick(), {
-      x,
-      y: flat ? 0.58 : 0.64,
-      z,
-      rot: [flat ? 0 : (h(16) - 0.5) * 0.5, h(13) * Math.PI, flat ? 0 : 1.35],
-      color: h(14) > 0.72 ? COLORS.white : grey,
-      opts: { transparent: true, opacity: 0 },
-    });
+    const c = palette[Math.floor(h(14) * palette.length) % palette.length];
+    // STUDDED, and rotated on the transform stack rather than dropped in as a
+    // bare box. This debris ends up two or three studs from the lens in the
+    // shot the boarders come through, and at that range a smooth cuboid is a
+    // polystyrene block: the studs are the only thing that says LEGO brick.
+    b.push();
+    b.translateWorld(x, flat ? 0.6 : 0.63, z);
+    b.rotateY(h(13) * Math.PI);
+    if (!flat) {
+      b.rotateZ(1.35);
+      b.rotateX((h(16) - 0.5) * 0.5);
+    }
+    // Anchored on its own centre so the rotations happen about the brick rather
+    // than about a corner of it, then lifted onto the deck by the translate.
+    b.brick(-0.5, -1.5, -1, 1, 2, c, soft);
+    b.pop();
   }
   const group = b.build({ castShadow: false, receiveShadow: true });
   const mats = new Set();
   group.traverse((n) => {
     if (n.isMesh) mats.add(n.material);
   });
+  // Rough them off. `build()` gives every model its own material instances, so
+  // this is local. A polished 1x2 brick three studs from a point light returns a
+  // specular highlight well past the bloom threshold, and the frame shows a
+  // brick with a hole burnt in it.
+  for (const m of mats) {
+    if (m.roughness !== undefined) m.roughness = Math.max(m.roughness, 0.72);
+    if (m.metalness !== undefined) m.metalness = 0;
+  }
   group.userData.materials = [...mats];
   return group;
-}
-
-/** One 1x2 brick — 1 stud by 2 studs by 3 plates — shared by every piece. */
-let _rubbleGeo = null;
-function rubbleBrick() {
-  if (!_rubbleGeo) _rubbleGeo = new THREE.BoxGeometry(0.96, 3 * PLATE, 1.96);
-  return _rubbleGeo;
 }

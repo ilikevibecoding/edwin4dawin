@@ -182,6 +182,21 @@ export async function build(ctx) {
   duneSet.add(artoo.root);
   const threepio = await makeProtocolDroid({ seed: 31.5 });
   duneSet.add(threepio.root);
+  // Polished gold under two suns clips to a blown white flare, and with the
+  // bloom threshold down at 0.62 he stops being a character and becomes a lens
+  // effect standing in the sand. Roughened here rather than in the kit — the
+  // ship interiors want him shiny — and cloned so nothing else gold changes.
+  threepio.root.traverse((n) => {
+    if (!n.isMesh) return;
+    const mats = Array.isArray(n.material) ? n.material : [n.material];
+    n.material = mats.map((m) => {
+      if (!(m.metalness > 0.5)) return m;
+      const c = m.clone();
+      c.roughness = Math.max(c.roughness, 0.58);
+      return c;
+    });
+    if (n.material.length === 1) n.material = n.material[0];
+  });
 
   // --- the sandcrawler and its jawas --------------------------------------
   const crawler = ships?.buildSandcrawler ? await ships.buildSandcrawler({ ramp: 0 }) : fallbackCrawler();
@@ -357,8 +372,8 @@ export async function build(ctx) {
   // passes straight through grey on the way, and grey is exactly what the top
   // of a wide desert frame must not be.
   const SKY_HIGH = [
-    [0, 0x15558f],
-    [T_FARM, 0x1a4477],
+    [0, 0x2a6296],
+    [T_FARM, 0x27507e],
     [T_SUNSET, 0x4a2c66],
     [T_TURN, 0x341a48],
     [40, 0x160a22],
@@ -490,8 +505,8 @@ export async function build(ctx) {
     // It comes almost all the way off for that beat, which drops the near sand
     // with him and leaves the frame as two suns, a crest and a shape.
     const onRidge = ease.smooth(ease.range(t, T_SUNSET - 0.8, T_SUNSET + 1.6));
-    lights.rim.intensity = ease.lerp(1.6, 0.85, dusk) * (1 - night * 0.4) * (1 - onRidge * 0.82);
-    lights.hemi.intensity = ease.lerp(0.62, 0.34, dusk) * (1 - night * 0.5) * (1 - onRidge * 0.42);
+    lights.rim.intensity = ease.lerp(1.6, 0.85, dusk) * (1 - night * 0.4) * (1 - onRidge * 0.74);
+    lights.hemi.intensity = ease.lerp(0.62, 0.34, dusk) * (1 - night * 0.5) * (1 - onRidge * 0.34);
     lights.hemi.color.copy(skyLow);
     lights.hemi.groundColor.setHex(0x8a6337).lerp(_col(0x3a2016), dusk);
     if (lights.ambient) lights.ambient.intensity = ease.lerp(0.14, 0.08, dusk) * (1 - night * 0.5);
@@ -570,9 +585,10 @@ export async function build(ctx) {
       const b = [2, dunes.y(2, 6) + 4.6, 6];
       cameraRig(camera, t, {
         pos: [[0, a], [T_CRAWLER, b]],
-        // Almost level: the lens has to hold both suns above the crest lines
-        // without tipping so far that the sand loses the bottom of the frame.
-        look: [[0, [2, 9.1, -74]], [T_CRAWLER, [-4, 6.6, -66]]],
+        // Tipped down just enough to give the sand the larger half of the
+        // frame. Level, the horizon sits on the centre line and half the shot
+        // is an empty hazy sky; the dunes are where all the detail is.
+        look: [[0, [2, 6.8, -74]], [T_CRAWLER, [-4, 4.6, -66]]],
         fov: [[0, 50], [T_CRAWLER, 46]],
         ease: ease.smooth,
       });
@@ -655,12 +671,15 @@ export async function build(ctx) {
       holoBeam.object.scale.set(live, live * (HOLO_THROW / 2.4), live);
       holoBeam.update(t);
 
-      holoLight.position.copy(holoRig.position);
-      holoLight.intensity = 11 * live;
+      // Lifted off the dome. A point light with square falloff sitting one
+      // unit above a glossy hemisphere puts a blown white bead on top of the
+      // droid that outshines the projection it is supposed to be casting.
+      holoLight.position.copy(holoRig.position).setY(holoRig.position.y + 1.1);
+      holoLight.intensity = 6.5 * live;
       // The flare sits on the lens itself, not up in the image.
       holoGlow.position.copy(_v).addScaledVector(_axis, 0.16);
-      holoGlow.material.opacity = 0.14 * live;
-      holoGlow.scale.setScalar(0.52 + 0.06 * Math.sin(t * 5.3));
+      holoGlow.material.opacity = 0.10 * live;
+      holoGlow.scale.setScalar(0.42 + 0.05 * Math.sin(t * 5.3));
     } else {
       holoLight.intensity = 0;
     }
@@ -703,7 +722,7 @@ export async function build(ctx) {
     // not back toward the lens, which would drop him into the near trough and
     // out of the frame entirely.
     const x = ease.lerp(7.4, 2.6, arrive) - leave * 13.0;
-    const z = ease.lerp(-36.0, -28.0, arrive) - leave * 2.0;
+    const z = ease.lerp(-40.0, -32.0, arrive) - leave * 2.0;
     lukeRidge.root.position.set(x, ridge.cellY(x, z), z);
     // Facing the suns while he watches; away from them once he has decided.
     lukeRidge.root.rotation.y = ease.lerp(2.5, Math.PI + 0.14, arrive) - leave * 1.9;
@@ -726,13 +745,18 @@ export async function build(ctx) {
     // lens is *below* him and he is entirely sky. It also has to close a lot of
     // distance: a four-unit figure sixty units off a 36° lens is a thumbnail,
     // and this shot only works if he is big enough to be a person.
+    // Height is set absolutely rather than off the ground under the lens: the
+    // move ends in the trough, and a fixed offset above *that* puts the lens
+    // below the crest table, from where a man standing on it has no feet.
+    // Chest-high on him is the mark — his head clears into open sky and the
+    // sand in front of him still falls away below the sight line.
     cameraRig(camera, t, {
       pos: [
-        [T_SUNSET, [5.6, ridge.y(5.6, 30) + 3.2, 30]],
-        [T_TURN, [3.4, ridge.y(3.4, 12) + 2.9, 12]],
-        [D, [1.2, ridge.y(1.2, 6) + 2.7, 6]],
+        [T_SUNSET, [5.6, 7.4, 30]],
+        [T_TURN, [3.4, 5.8, 12]],
+        [D, [1.2, 5.5, 6]],
       ],
-      look: [[T_SUNSET, [1.2, 6.2, -28]], [T_TURN, [1.4, 6.2, -28]], [D, [-4.2, 6.0, -29]]],
+      look: [[T_SUNSET, [1.2, 6.4, -32]], [T_TURN, [1.4, 6.4, -32]], [D, [-4.2, 6.2, -33]]],
       fov: [[T_SUNSET, 34], [T_TURN, 26], [D, 24]],
       ease: ease.smooth,
     });
@@ -905,10 +929,11 @@ const RIDGE = [
   [-34, 5.4],
   [-24, 1.6],
   [-2, -1.4],
-  [14, -0.8],
-  [24, 3.5],
-  [36, 3.7],
-  [52, 1.0],
+  [14, -0.9],
+  [24, 2.6],
+  [30, 3.5],
+  [42, 3.7],
+  [56, 1.0],
   [86, -12.0],
   [160, -50.0],
   [400, -170.0],
@@ -919,8 +944,12 @@ function ridgeProfile(x, z) {
   // frame. Everything here stays shallow — the crest only has to clear the
   // lens by a couple of units, and any more gradient turns the plate courses
   // into a flight of stairs.
-  const warp = (vnoise2(x * 0.0135 + 41, z * 0.004 + 8, 71) - 0.5) * 24;
-  const lift = (vnoise2(x * 0.037 + 13, z * 0.016 + 2, 77) - 0.5) * 0.9;
+  // Both terms are kept small on purpose. The crest is the skyline a figure
+  // stands on, and every unit of lateral wander here is a unit of height
+  // somewhere along the climb up to it — enough of it and the sand a few paces
+  // this side of him comes up over his knees and eats the silhouette.
+  const warp = (vnoise2(x * 0.0135 + 41, z * 0.004 + 8, 71) - 0.5) * 14;
+  const lift = (vnoise2(x * 0.037 + 13, z * 0.016 + 2, 77) - 0.5) * 0.55;
   return ease.track(RIDGE, -z + warp, ease.smooth) + lift;
 }
 
@@ -1039,10 +1068,10 @@ function buildSandMesh(heightAt, rawAt, broadAt, { rings, studsAt = null, base =
         // A gentle transfer, not a hard one: divide by too little and a whole
         // dune flank saturates to one tone, which reads as a painted wall
         // rather than as a slope.
-        const slope = ease.clamp((down - up) / 9.0 + 0.5, 0, 1);
+        const slope = ease.clamp((down - up) / 6.2 + 0.5, 0, 1);
         // Height pales the sand as well, which both stands in for aerial
         // perspective and puts a bright lip on every crest line.
-        const lift = ease.clamp(smoothY / 22 + 0.42, 0, 1);
+        const lift = ease.clamp(smoothY / 17 + 0.42, 0, 1);
         // A little grain in the tone as well, so the bands are not perfectly
         // clean edges across a whole crest.
         const speck = (rawAt(cx, cz) - smoothY) * 0.055;

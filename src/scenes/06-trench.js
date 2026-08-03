@@ -426,7 +426,13 @@ export async function build(ctx) {
       // light grey, so a threshold this low turns the payoff into a white card.
       const heat = ease.pulse(t, T.BOOM - 0.1, 0.12, 0.26, 0.8);
       bloom.strength = 0.9 + 1.0 * heat;
-      bloom.threshold = 0.55 - 0.15 * heat;
+      // ...and then the threshold has to come back up above the bricks. The key
+      // that makes a drifting cloud of loose plate readable puts every white and
+      // light-grey brick in it over 0.55, so at the scene's standing threshold
+      // the last few seconds are a field of soft white beads with the bricks
+      // hidden behind them. Lifted, only the embers and the hot plate bloom.
+      const drift = ease.smooth(ease.range(t, T.BOOM + 1.6, T.SETTLE));
+      bloom.threshold = 0.55 - 0.15 * heat + 0.24 * drift;
 
       playShots(camera, t, SHOTS, odo);
     },
@@ -1649,18 +1655,20 @@ async function buildSpace() {
   const blastLight = new THREE.PointLight(0xffd8a0, 0, STATION_R * 12, 1.0);
   group.add(blastLight);
   // Embers riding out with the bricks: fire distributed through the cloud, not
-  // just a ball behind it. Kept small — at sprite sizes much over ten units
-  // they stop reading as embers and start reading as fog over the bricks.
-  // Fast: at the burst's own speed they stay bunched in the middle for the first
-  // two seconds and additively pile up into one white disc over the bricks.
+  // just a ball behind it. Small and dim on purpose. The sprite is additive and
+  // untonemapped, so anything much bigger or brighter than this saturates its
+  // own middle and reads as a hard white bead sitting on top of the bricks
+  // rather than as a coal burning among them.
+  // Fast, too: at the burst's own speed they stay bunched in the middle for the
+  // first two seconds and pile up into one white disc over the cloud.
   const embers = new Sparks({
-    count: 520,
+    count: 620,
     t0: T.BOOM,
     life: 9.4,
     speed: 132,
     gravity: 0,
-    color: 0xffa858,
-    size: 7,
+    color: 0xff8a3a,
+    size: 4.2,
     seed: 29,
     origin: core.position.toArray(),
   });
@@ -1813,6 +1821,10 @@ async function buildSpace() {
       }
       fireball.update(t);
       embers.update(t);
+      // Sparks fades on its own square curve, which keeps the embers near full
+      // brightness for most of their nine seconds. Held down hard, they stay
+      // sparks in the cloud instead of a field of glitter over it.
+      embers.material.opacity *= 0.42;
       // Everything from here on belongs to the blast; before it fires, all of it
       // has to be genuinely off, or the "before" wide shot is lit and hazed by
       // an explosion that has not happened yet.

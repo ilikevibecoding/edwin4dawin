@@ -312,9 +312,17 @@ export async function build(ctx) {
   destroyerRig.add(hangar.group);
   // ...and shut the model's own bay, which is a blowout waiting to happen.
   if (capital?.buildStarDestroyer) destroyer.add(buildRecessDoors());
-  // Frames and strakes on his belly: shot 3 is nothing but that belly, and a
-  // hull with no lines running down it has no length.
-  destroyer.add(buildKeelStructure(sd));
+  // Skin, frames and strakes on his belly: shot 3 is nothing but that belly, and
+  // a hull with no lines running down it has no length. The bay's own footprint
+  // is fenced off — the housing hangs below the keel plane there, and skin
+  // across it would be a floor in the mouth the corvette is lifted through.
+  destroyer.add(
+    buildKeelStructure(sd, destroyer, {
+      z: (sd.box.max.z - HANGAR_BACK) / PITCH,
+      halfD: hangar.depth / 2 + 4,
+      halfW: hangar.width / 2 + 6,
+    })
+  );
 
   // The tractor field. fx.Beam is an additive cone with a ring pattern baked in
   // at 40 cycles over its length: keep it narrow and faint or from anywhere
@@ -439,7 +447,7 @@ export async function build(ctx) {
   const deadBell = (engines[DEAD_BELL] ?? engines[0]).object.position.clone().add(cvOffset);
   const smokes = [[18.7, 8], [23.6, 10]].map(([t0, life]) => {
     const sm = new Smoke({
-      count: 8,
+      count: 11,
       t0,
       life,
       origin: [0, 0, 0],
@@ -449,12 +457,17 @@ export async function build(ctx) {
       // half a second of appearing and the trail was invisible in every shot it
       // was meant to be in. Two and a half leaves a plume about half her length.
       rise: 2.5,
-      spread: 3.6,
-      size: cv.len * 0.12,
+      spread: 4.6,
+      size: cv.len * 0.085,
       // Pale, not dark: in vacuum against black sky a dark grey puff is invisible,
       // and what light there is here is sunlit dust.
-      color: 0xb3aaa0,
-      opacity: 0.55,
+      color: 0x9c958c,
+      // fx.Smoke is a clutch of soft radial sprites that all sit inside `spread`
+      // of each other, so their alpha ACCUMULATES: eight puffs at 0.55 each
+      // compose to very nearly opaque, and a 7-unit sprite with a bright core
+      // then reads as a cotton ball rather than as smoke. Small, many, and faint
+      // enough that four of them stacked are still translucent.
+      opacity: 0.32,
       seed: Math.round(t0 * 7),
     });
     sm.object.position.copy(deadBell);
@@ -541,7 +554,11 @@ export async function build(ctx) {
       [T.lock, [52, -22, -46]], // cut: wide, the beam reaches down for her
       [30.2, [44, -14, -34]],
       [T.throat, [38, -10, -28]], // cut: in on the mouth
-      [END, [30, -2, -16]],
+      // Not all the way in. At thirty units out she is sixty units of ship
+      // across a frame that is showing her waist and nothing either side of it,
+      // and the last image of the scene has to be READ as a ship going into a
+      // hole, which needs the lip of the hole in shot with her.
+      [END, [35, -4, -23]],
     ],
     look: [
       [0, [12, 7, 440]],
@@ -687,7 +704,14 @@ export async function build(ctx) {
       beam.update(t);
       gripGlow.material.opacity = 0.16 * grab * (0.82 + 0.18 * Math.sin(t * 5.3));
       gripGlow.visible = grab > 0.02;
-      bayLamp.intensity = 1500 * ease.smooth(ease.range(t, T.slew + 1.4, T.lock + 1));
+      // ...and backed off again as she rises into it. The lamp is three units
+      // under the bay roof and she is white ABS: at a fixed 1500 the near side of
+      // her bridge deck goes to paper the moment she is inside the throat, which
+      // is the one frame the whole last beat is built to arrive at.
+      bayLamp.intensity =
+        1500 *
+        ease.smooth(ease.range(t, T.slew + 1.4, T.lock + 1)) *
+        (1 - 0.45 * ease.smooth(ease.range(t, 28.4, 32)));
       hangar.update(t, grab);
 
       // --- 5. sky and fire -------------------------------------------------
@@ -958,78 +982,242 @@ function buildPlanet(sunDir) {
 const BAY_DEEP = 32;
 
 /**
- * Ventral structure for the destroyer: transverse frames, longitudinal strakes
- * and a keel spine, hung a plate under his belly.
+ * Measure the underside of a model built by `Bricks`.
  *
- * Shot 3 sits nine units under his keel and looks forward along it, and at that
- * grazing an angle a hull needs LINES. What the kit gives the underside is a
- * field of scattered greeble blocks on one unbroken plate — individually
- * convincing, but with nothing running fore-and-aft there is no vanishing point
- * anywhere in frame and no regular spacing to read a length off, so a mile of
- * ship photographs as a flat grey ceiling with boxes glued to it. Frames at a
- * fixed pitch and strakes that follow the plan taper give the eye both at once:
- * a ladder that compresses toward the bow, and lines that converge on it.
+ * `Bricks.build()` leaves `userData.parts` on the model — the centre, size and
+ * orientation of every element it merged — so the shape of the belly can be
+ * READ rather than guessed at. That matters because the destroyer's belly is
+ * not the flat bottom of a box: ships-capital.js stacks the wedge out of eight
+ * slabs, each one stopping further forward than the one below it, so the
+ * underside is a staircase that climbs toward the bow and runs out from under
+ * the forward third of the ship entirely.
  *
- * The relief is what does the work, not the colour. Every rib stands a good half
- * unit proud, so its fore-and-aft faces turn edge-on to a lens this shallow and
- * read as hard bands — and because the scene's warm planetshine comes from below
- * and slightly aft, aft-facing rib walls catch it and forward-facing ones do
- * not, which stripes the belly for free.
+ * Returns `probe(x, z) -> y | null` in model units: the lowest bottom face
+ * among the axis-aligned elements whose footprint covers that station, or null
+ * where the model has no hull there at all.
+ */
+function bellyProbe(model) {
+  const parts = model.userData?.parts;
+  if (!parts?.length) return null;
+  const boxes = [];
+  for (const p of parts) {
+    // Rotated elements — turret barrels, domes, engine bells — have no useful
+    // axis-aligned footprint. The belly is all slab work, so skipping them
+    // costs nothing and keeps the footprint test honest.
+    if (Math.abs(p.quaternion.w) < 0.999) continue;
+    const bottom = p.position.y - p.size.y / 2;
+    if (bottom > 0) continue; // upper works: never the underside
+    boxes.push({
+      x: p.position.x,
+      z: p.position.z,
+      hx: p.size.x / 2 - 0.02,
+      hz: p.size.z / 2 - 0.02,
+      y: bottom,
+    });
+  }
+  if (!boxes.length) return null;
+  return (x, z) => {
+    let y = null;
+    for (const b of boxes) {
+      if (Math.abs(x - b.x) > b.hx || Math.abs(z - b.z) > b.hz) continue;
+      if (y === null || b.y < y) y = b.y;
+    }
+    return y;
+  };
+}
+
+/**
+ * The destroyer's underside: a continuous ventral skin, and the frames, strakes
+ * and keel spine that give it lines.
+ *
+ * TWO PROBLEMS, ONE PIECE OF GEOMETRY.
+ *
+ * The first is composition. Shot 3 sits nine units under his keel and looks
+ * forward along it, and at that grazing an angle a hull needs LINES. What the
+ * kit gives the underside is a field of scattered greeble blocks on one
+ * unbroken plate — individually convincing, but with nothing running
+ * fore-and-aft there is no vanishing point anywhere in frame and no regular
+ * spacing to read a length off, so a mile of ship photographs as a flat grey
+ * ceiling with boxes glued to it. Frames at a fixed pitch and strakes that
+ * follow the plan taper give the eye both at once: a ladder that compresses
+ * toward the bow, and lines that converge on it.
+ *
+ * The second is that the kit's belly has nothing under most of it. The wedge is
+ * eight stacked slabs, each stopping further forward than the one below, so the
+ * underside is a staircase that climbs toward the bow — but the ventral greeble
+ * field is laid at ONE height, the keel, from the transom to sixty studs past
+ * amidships. Forward of the lowest slab's apex those ninety blocks have no hull
+ * above them at all, and from under the keel they are a necklace of bricks
+ * floating in open space outside the ship's silhouette. That is another agent's
+ * file and this scene may not touch it.
+ *
+ * So the skin: a measured plate, laid one plate below the LOWEST thing the model
+ * has at each station, spanning the full width of the belly there. Where the
+ * hull is solid it lies flush against it and does nothing. Where the kit's
+ * blocks hang into space it passes underneath them and they become greebles on
+ * a surface again — which is what they were meant to be. Its outboard edge is
+ * skirted up to the real plating above, so the shallow box it makes reads as a
+ * ventral fairing rather than as a slab with a slot behind it.
+ *
+ * The relief on it is what does the work, not the colour. Every rib stands a
+ * good half unit proud, so its fore-and-aft faces turn edge-on to a lens this
+ * shallow and read as hard bands — and because the scene's warm planetshine
+ * comes from below and slightly aft, aft-facing rib walls catch it and
+ * forward-facing ones do not, which stripes the belly for free.
  *
  * Model coordinates, y in plates. Added to the model, not the rig, and after
  * measure(), so it cannot move the keel the rest of the scene is pinned to.
+ *
+ * @param {{z:number, halfD:number, halfW:number}|null} bay  the underslung
+ *   hangar's own footprint, in model studs: the skin parts around its mouth.
  */
-function buildKeelStructure(sd) {
+function buildKeelStructure(sd, destroyer, bay = null) {
+  const probe = bellyProbe(destroyer);
+  if (!probe) return new THREE.Group();
+
   const b = new Bricks({ studSegments: 6 });
   const dark = COLORS.darkBluishGray;
   const pale = COLORS.lightBluishGray;
   const metal = COLORS.flatSilver;
 
-  // The wedge in plan, taken off the measured model rather than the kit's
-  // constants: a straight taper from the transom half-beam to a point at the
-  // bow. Held slightly inboard so nothing pokes out through a flank.
   const noseZ = sd.box.max.z / PITCH;
   const sternZ = sd.box.min.z / PITCH;
-  const halfAt = (z) => Math.max(0, ((sd.halfW * 0.94) / PITCH) * ((noseZ - z) / (noseZ - sternZ)));
-  // A plate under the lowest thing the model already has down there.
-  const Y = sd.box.min.y / PLATE - 2.6;
-  const Z0 = sternZ + 5;
-  const Z1 = noseZ - 26; // the last 26 studs of wedge are too thin to frame
+  const Z0 = sternZ + 4;
+  const Z1 = noseZ - 16;
+  const PITCH_Z = 4; // studs between stations
+  const REACH = sd.halfW / PITCH + 4; // far enough out to find the flank
+  const STEP = 2; // studs between outboard samples
 
-  // Transverse frames. 11 studs of pitch is the whole point of them: it is the
-  // only fixed length in the shot, so it is what the eye measures the hull
-  // against as the spacing closes up toward the bow. The relief is kept under
-  // three quarters of a unit for the same reason a real hull's is — deeper and
-  // they occlude the belly plate between them at this grazing an angle, and the
-  // ship stops being a ship and becomes a rack of floating slats.
-  for (let z = Z0; z < Z1; z += 11) {
-    const w = halfAt(z + 1.4) * 0.9;
-    if (w < 3) continue;
-    b.box(-w, Y + 0.9, z, w * 2, 2.6, 1.7, dark, { studs: false });
-    // A pale cap along the underside of every third frame, so the ladder has
-    // a longer beat in it than its own pitch and does not read as corduroy.
-    if (Math.round((z - Z0) / 11) % 3 === 0) {
-      b.box(-w + 1, Y + 0.4, z + 0.3, (w - 1) * 2, 2, 0.5, pale, { studs: false });
+  /**
+   * What the hull is doing at station z.
+   *
+   *  - `low`  the lowest bottom face anywhere across the beam. This is what the
+   *           skin follows, because it is the only value that is guaranteed to
+   *           be under everything — floating blocks included.
+   *  - `plate` the MEDIAN of the outboard samples, which is the plating itself:
+   *           a minimum would pick up the first greeble that hangs lower and
+   *           drop the whole frame half a unit, reading as a bent rib.
+   *  - `half` how far outboard the hull reaches here.
+   */
+  const measureStation = (z) => {
+    const ys = [];
+    let edge = 0;
+    for (let x = 1; x <= REACH; x += STEP) {
+      const y = probe(x, z);
+      if (y === null) break;
+      edge = x;
+      ys.push(y);
+    }
+    if (edge < 8 || ys.length < 4) return null;
+    const outboard = ys.slice(Math.floor(ys.length / 3)).sort((p, q) => p - q);
+    let low = ys[0];
+    for (const y of ys) if (y < low) low = y;
+    const mid = probe(0, z);
+    if (mid !== null && mid < low) low = mid;
+    return { z, low, plate: outboard[Math.floor(outboard.length / 2)], half: edge };
+  };
+
+  const stations = [];
+  for (let z = Z0; z < Z1; z += PITCH_Z) {
+    const s = measureStation(z + PITCH_Z / 2);
+    if (s) stations.push({ ...s, z });
+  }
+  if (stations.length < 4) return new THREE.Group();
+
+  // A running minimum over three stations, so a single deep block pulls a
+  // twelve-stud stretch of skin down with it instead of putting a step in it.
+  const lows = stations.map((s, i) =>
+    Math.min(s.low, stations[Math.max(0, i - 1)].low, stations[Math.min(stations.length - 1, i + 1)].low)
+  );
+  /** Skin top, in plates, at station i: one plate clear of everything above. */
+  const skinTop = (i) => lows[i] / PLATE - 0.5;
+  const inBay = (z) => bay && Math.abs(z - bay.z) < bay.halfD;
+
+  // ------------------------------------------------------------------- skin
+  for (let i = 0; i < stations.length; i++) {
+    const s = stations[i];
+    const top = skinTop(i);
+    const w = s.half * 0.99;
+    const d = PITCH_Z + 0.3; // overlap, so no seam can open between stations
+    if (inBay(s.z)) {
+      // Two segments either side of the hangar mouth. The bay housing is its
+      // own structure hanging below the keel; plating across it would put a
+      // floor in the opening the corvette is lifted through.
+      const bw = bay.halfW;
+      if (w > bw + 2) {
+        b.box(-w, top - 1, s.z, w - bw, d, 1, pale, { studs: false });
+        b.box(bw, top - 1, s.z, w - bw, d, 1, pale, { studs: false });
+      }
+    } else {
+      b.box(-w, top - 1, s.z, w * 2, d, 1, pale, { studs: false });
+    }
+    // Skirt: close the void wherever the skin has dropped clear of the plating,
+    // so the fairing has sides. Nothing to close where it lies flush. Hull grey,
+    // not dark: it is a tall wall seen nearly edge-on in the money shot, and in
+    // dark grey it read as a black band down both sides of the ship.
+    const drop = (s.plate - lows[i]) / PLATE;
+    if (drop > 1.5) {
+      for (const sx of [-1, 1]) {
+        b.box(sx * w - (sx > 0 ? 1.6 : 0), top - 1, s.z, 1.6, d, drop + 1, pale, { studs: false });
+      }
     }
   }
 
-  // Longitudinal strakes. These are the converging lines; they are stepped in
-  // 6-stud segments because they have to follow a plan that narrows all the way.
-  for (const s of [-1, 1]) {
-    for (const f of [0.34, 0.66]) {
-      for (let z = Z0; z < Z1; z += 6) {
-        const w = halfAt(z + 3) * f;
-        if (w < 2) continue;
-        b.box(s * w - 1.1, Y + 1.0, z, 2.2, 6.2, 1.6, f > 0.5 ? metal : dark, { studs: false });
-      }
+  /** Interpolate the skin at an arbitrary z, for the relief hung under it. */
+  const skinAt = (z) => {
+    let i = 0;
+    for (let k = 0; k < stations.length; k++) if (stations[k].z <= z) i = k;
+    return { top: skinTop(i), half: stations[i].half };
+  };
+
+  // Transverse frames. 11 studs of pitch is the whole point of them: it is the
+  // only fixed length in the shot, so it is what the eye measures the hull
+  // against as the spacing closes up toward the bow.
+  //
+  // They are HULL-COLOURED and SHALLOW, and there is one line of strake per side
+  // rather than two. Depth is the whole argument. A rib standing 0.7 units proud
+  // of the plating projects across cot(θ) times its own height, and θ in this
+  // shot is under ten degrees: the first pass ran the relief at a unit and a
+  // half in dark grey and the prow arrived as a wireframe grid — every bar
+  // covering the skin behind it, nothing but bars. At a third of a unit, hull
+  // grey, with the dark kept to a seam on every third frame, the same lines
+  // read as plating on a hull instead of as a rack over a hole.
+  let n = 0;
+  for (let z = Z0 + 4; z < Z1; z += 11) {
+    const s = skinAt(z);
+    const w = s.half * 0.96;
+    if (w < 5) continue;
+    n++;
+    b.box(-w, s.top - 0.85, z, w * 2, 1.4, 0.85, pale, { studs: false });
+    // Every third frame is a heavier one, with a seam and a silver cap, so the
+    // ladder has a longer beat in it than its own pitch and does not read as
+    // corduroy.
+    if (n % 3 === 1) {
+      b.box(-w + 1, s.top - 1.3, z + 0.1, (w - 1) * 2, 1.1, 0.45, metal, { studs: false });
+      b.box(-w, s.top - 0.75, z - 0.5, w * 2, 0.5, 0.75, dark, { studs: false });
+    }
+  }
+
+  // Longitudinal strakes: the converging lines. Stepped in 6-stud segments
+  // because they follow both a plan that narrows all the way forward and a skin
+  // that climbs as the courses above take over.
+  for (const sx of [-1, 1]) {
+    for (let z = Z0 + 2; z < Z1; z += 6) {
+      const s = skinAt(z);
+      const w = s.half * 0.58;
+      if (w < 3) continue;
+      b.box(sx * w - 1.0, s.top - 0.95, z, 2.0, 6.2, 0.95, metal, { studs: false });
     }
   }
 
   // Keel spine: one unbroken run down the centreline, deeper than anything
   // either side of it, so the belly has a horizon of its own to converge to.
-  for (let z = Z0; z < Z1; z += 8) {
-    b.box(-3.4, Y - 0.2, z, 6.8, 8.2, 2.2, dark, { studs: false });
-    b.box(-1.5, Y - 0.8, z + 0.6, 3, 7, 0.7, metal, { studs: false });
+  for (let z = Z0 + 2; z < Z1; z += 8) {
+    if (inBay(z) || inBay(z + 8)) continue;
+    const s = skinAt(z);
+    if (s.half < 8) continue;
+    b.box(-3.2, s.top - 1.5, z, 6.4, 8.2, 1.5, pale, { studs: false });
+    b.box(-1.4, s.top - 2.0, z + 0.6, 2.8, 7, 0.55, dark, { studs: false });
   }
 
   return b.build({ castShadow: false, receiveShadow: false });
@@ -1195,6 +1383,8 @@ function buildHangar(cv) {
   return {
     group,
     width: W,
+    /** Studs of footprint along the keel, so the keel framing can avoid it. */
+    depth: D + WALL * 2,
     /** World y of the mouth plane, relative to the keel. */
     mouth: LOW * PLATE,
     update(t, grab) {
