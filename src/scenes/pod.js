@@ -88,6 +88,19 @@ function blobTex() {
     <rect width="128" height="128" fill="url(#b)"/>`), { w: 128, h: 128, key: 'podBlob' });
 }
 
+/** Soft additive blob, for the escape pod's retro flare seen from a long way. */
+function flareTex() {
+  return svgTexture(svg([0, 0, 128, 128], `
+    <defs><radialGradient id="f" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff8ea"/>
+      <stop offset="0.14" stop-color="#ffe0ab"/>
+      <stop offset="0.38" stop-color="#ffa447" stop-opacity="0.55"/>
+      <stop offset="0.72" stop-color="#ff7a1e" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#ff7a1e" stop-opacity="0"/>
+    </radialGradient></defs>
+    <rect width="128" height="128" fill="url(#f)"/>`), { w: 128, h: 128, key: 'podFlare' });
+}
+
 /** What the launch tube looks like once the iris is open: night, and a limb. */
 function tubeVoidTex() {
   const r = rng(64);
@@ -752,6 +765,36 @@ export async function build(ctx) {
     life: 6, opacity: 0.13, color: 0x565d66, spawnWindow: 6, seed: 51,
   });
 
+  // The pod's own retro plumes are built for a shot where a nine-unit hull is
+  // most of the frame: six half-unit bells with a one-unit plume each. This is
+  // the widest shot in the film and the hull is thirty pixels across in it, so
+  // the flare that is meant to sell "still under power" comes back as nothing.
+  // It gets its own, big enough to see from the far side of a planet: two soft
+  // additive blobs on the retro ring, each three quads crossed at right angles
+  // so there is projected area whichever way the pod happens to have tumbled.
+  const flareMat = new THREE.MeshBasicMaterial({
+    map: flareTex(),
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+  const crossBlob = () => {
+    const g = new THREE.Group();
+    for (const r of [[0, 0, 0], [0, Math.PI / 2, 0], [Math.PI / 2, 0, 0]]) {
+      const q = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flareMat);
+      q.rotation.set(r[0], r[1], r[2]);
+      g.add(q);
+    }
+    return g;
+  };
+  const podCore = crossBlob();     // the hot ring itself
+  const podTrail = crossBlob();    // and the wash streaming off it
+  podCore.position.set(0, 2.8, 5.0);
+  podTrail.position.set(0, 2.8, 8.0);
+  podOut.add(podCore, podTrail);
+
   // the gun deck: three stepped plates of imperial hull tapering away below the
   // gunner, dark enough that the space key does not blow them out
   const deck = new THREE.Group();
@@ -1176,7 +1219,9 @@ export async function build(ctx) {
       /* ---------------------------------------------------------------- */
       if (!indoors) {
         world.userData.update(t);
-        podOut.userData.setThrottle(1.75 + 0.4 * Math.sin(t * 7.3));
+        const thr = 1.75 + 0.4 * Math.sin(t * 7.3);
+        podOut.userData.setThrottle(thr);
+        flareMat.opacity = clamp(0.5 + 0.3 * (thr - 1.4), 0.3, 0.95);
         vent.update(t);
         const gunsight = t >= S4;
         bandMat.opacity = gunsight ? 0.09 : 0.34;
@@ -1244,6 +1289,16 @@ export async function build(ctx) {
           _aim.copy(podOut.position).lerp(STAND_DOWN, stand);
           for (const g of guns) g.userData.aim(_aim);
         }
+
+        // Sized off the range it is being seen at, after the camera for this
+        // instant is parked — the wide holds the pod at twenty-odd units and the
+        // gunsight at up to three hundred, and a flare that works at one is
+        // either invisible or a bonfire at the other.
+        const range = clamp((podOut.position.distanceTo(cam.position) - 24) / 250, 0, 1);
+        const fs = (1 + 1.7 * range) * (0.84 + 0.16 * Math.sin(t * 9.1));
+        podCore.scale.setScalar(4.2 * fs);
+        podTrail.scale.set(2.8 * fs, 2.8 * fs, 7.0 * fs);
+        podTrail.position.z = 5.0 + 2.8 * fs;
       }
 
       /* ---------------------------------------------------------------- */
