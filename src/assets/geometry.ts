@@ -377,11 +377,23 @@ function mergeBufferGeometries(geos: THREE.BufferGeometry[]): THREE.BufferGeomet
   return out;
 }
 
-/** Flat card that always faces the camera, sized in world units. */
+/**
+ * Flat card that always faces the camera, sized in world units.
+ *
+ * The parent's rotation has to be divided out: copying the camera's world
+ * quaternion straight into a local one leaves the card facing the camera only
+ * when its parent happens to be unrotated, and edge-on — invisible — the rest
+ * of the time.
+ */
+const _billboardQ = new THREE.Quaternion();
 export function billboard(width: number, height: number, material: THREE.Material): THREE.Mesh {
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
   mesh.onBeforeRender = (_r, _s, camera) => {
     mesh.quaternion.copy(camera.quaternion);
+    if (mesh.parent) {
+      mesh.parent.getWorldQuaternion(_billboardQ).invert();
+      mesh.quaternion.premultiply(_billboardQ);
+    }
   };
   return mesh;
 }

@@ -1405,11 +1405,13 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     start: 276, end: 285, region: 'interior', near: 0.03, far: 220, fov: 32, blend: 1.4,
     apply(c) {
       const k = Ease.sine(c.u);
-      // Across the pair at droid height: Leia kneeling on the left, the
-      // astromech on the right, the schematic draining down between them.
-      c.eye.copy(cp(CORRIDOR_MARKS.transfer + lerp(2.1, 1.75, k), lerp(1.35, 1.15, k), lerp(1.32, 1.12, k)));
-      c.target.copy(cp(CORRIDOR_MARKS.transfer - 1.05, lerp(-0.2, -0.16, k), lerp(1.0, 0.86, k)));
-      c.fov = lerp(40, 36, k);
+      // Across the pair at droid height, from the centreline so the two
+      // subjects separate: Leia kneeling on the left, the astromech on the
+      // right, the schematic draining down between them. Off to one side and
+      // the droid simply stands in front of her.
+      c.eye.copy(cp(CORRIDOR_MARKS.transfer + lerp(2.3, 1.95, k), lerp(0.2, 0.08, k), lerp(1.3, 1.08, k)));
+      c.target.copy(cp(CORRIDOR_MARKS.transfer - 1.0, lerp(0.02, 0.0, k), lerp(0.95, 0.84, k)));
+      c.fov = lerp(42, 38, k);
     },
   });
   shots.push({
@@ -1500,13 +1502,15 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
       const k = Ease.sine(c.u);
       // The planet lives in the sky scene, so what puts it behind the pod is
       // the camera's *orientation*: look along the pod's fall line.
+      // Well off the fall line rather than behind it: seen end-on the entry
+      // trail is a dot, and the pod has nothing to be a bright point against.
       const side = _shotB.crossVectors(PLANET_DIRECTION, UP).normalize();
-      const dist = lerp(300, 620, k);
+      const dist = lerp(300, 560, k);
       c.eye.copy(pp)
-        .addScaledVector(PLANET_DIRECTION, -dist)
-        .addScaledVector(side, dist * 0.2)
-        .addScaledVector(UP, dist * 0.12);
-      c.target.copy(pp).addScaledVector(PLANET_DIRECTION, dist * 0.42);
+        .addScaledVector(PLANET_DIRECTION, -dist * 0.62)
+        .addScaledVector(side, dist * 0.72)
+        .addScaledVector(UP, dist * 0.3);
+      c.target.copy(pp).addScaledVector(PLANET_DIRECTION, dist * 0.3);
     },
   });
 

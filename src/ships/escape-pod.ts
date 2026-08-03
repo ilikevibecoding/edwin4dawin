@@ -20,8 +20,9 @@ import {
   nozzleMaterial,
   additiveMaterial,
   glassMaterial,
+  plumeMaterial,
 } from '../assets/materials';
-import { loftedHull, roundedBox } from '../assets/geometry';
+import { billboard, loftedHull, roundedBox } from '../assets/geometry';
 import { flareSprite } from '../assets/textures';
 
 export const POD_LENGTH = 4.8;
@@ -70,6 +71,8 @@ export class EscapePod {
   private hatchOpen = 0;
   private reentryGlow: THREE.Mesh;
   private reentryMat: THREE.MeshBasicMaterial;
+  private reentryTrail!: THREE.Mesh;
+  private trailMat!: THREE.ShaderMaterial;
   private beaconMats: THREE.MeshStandardMaterial[] = [];
   private cabinMat: THREE.MeshStandardMaterial;
   private light: THREE.PointLight;
@@ -314,13 +317,25 @@ export class EscapePod {
     }
 
     // Re-entry shock envelope, revealed during atmospheric descent.
+    // A camera-facing card rather than a shell: wrapped round a sphere the
+    // flare sprite reads as a faint band, and at descent range the pod is
+    // thirty pixels tall, which is not enough surface for a shell to show on.
     this.reentryMat = additiveMaterial('podReentry', '#ffc46a', 0, flareTex).clone();
     this.reentryMat.opacity = 0;
-    this.reentryGlow = new THREE.Mesh(new THREE.SphereGeometry(2.6, 18, 12), this.reentryMat);
-    this.reentryGlow.scale.set(1, 1, 1.5);
+    this.reentryGlow = billboard(5.4, 5.4, this.reentryMat);
     this.reentryGlow.position.z = -0.9;
     this.reentryGlow.visible = false;
     this.group.add(this.reentryGlow);
+    // Ionisation trail. A halo alone is invisible against a sunlit desert;
+    // the streak is what actually reads at descent range.
+    this.trailMat = plumeMaterial('#ffb162', 0);
+    // Apex aft, base at the hull: the plume shader is brightest at the base,
+    // so the cone has to run the other way from an engine exhaust.
+    this.reentryTrail = new THREE.Mesh(new THREE.ConeGeometry(1.6, 12, 16, 1, true), this.trailMat);
+    this.reentryTrail.rotation.x = Math.PI / 2;
+    this.reentryTrail.position.z = podZ(1) + 6;
+    this.reentryTrail.visible = false;
+    this.group.add(this.reentryTrail);
 
     this.light = new THREE.PointLight(0xffc07a, 0, 60, 2);
     this.light.position.z = sternZ + 1.5;
@@ -348,8 +363,11 @@ export class EscapePod {
     const k = THREE.MathUtils.clamp(v, 0, 1);
     this.reentryGlow.visible = k > 0.01;
     // Additive over a sunlit desert needs real headroom to read at all.
-    this.reentryMat.opacity = k * 1.5;
-    this.reentryGlow.scale.set(1 + k * 0.7, 1 + k * 0.7, 1.5 + k * 2.2);
+    this.reentryMat.opacity = Math.min(1, k * 1.6);
+    this.reentryGlow.scale.setScalar(0.6 + k * 0.9);
+    this.reentryTrail.visible = k > 0.02;
+    this.trailMat.uniforms.uIntensity.value = k * 1.5;
+    this.reentryTrail.scale.set(0.7 + k * 0.55, 0.45 + k * 0.7, 0.7 + k * 0.55);
   }
 
   update(_dt: number, elapsed: number): void {
