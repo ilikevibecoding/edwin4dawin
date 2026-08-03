@@ -154,6 +154,7 @@ function brass(S, g, t, midi, dur, o = {}) {
   amp.connect(lpf); lpf.connect(g);
 
   const stop = S.stop(t + dur + release + 0.06);
+  const ampIn = fanIn(ctx, amp);
   for (const [type, det, lvl] of [['sawtooth', -detune, 0.45], ['sawtooth', 2, 0.5], ['sawtooth', detune, 0.4]]) {
     const s = ctx.createOscillator();
     s.type = type;
@@ -163,7 +164,7 @@ function brass(S, g, t, midi, dur, o = {}) {
     S.vib.connect(s.detune);
     const sg = ctx.createGain();
     sg.gain.value = lvl;
-    s.connect(sg); sg.connect(amp);
+    s.connect(sg); sg.connect(ampIn());
     s.start(t); s.stop(stop);
   }
   // Brass keeps its harmonics down in the tuba register: the cutoff tracks
@@ -190,6 +191,7 @@ function strings(S, g, t, midi, dur, o = {}) {
 
   const stop = S.stop(t + dur + release + 0.08);
   const dets = voices >= 3 ? [-detune, 0, detune * 0.75] : [-detune, detune];
+  const ampIn = fanIn(ctx, amp);
   for (const det of dets) {
     const s = ctx.createOscillator();
     s.type = 'sawtooth';
@@ -198,7 +200,7 @@ function strings(S, g, t, midi, dur, o = {}) {
     S.vib.connect(s.detune);
     const sg = ctx.createGain();
     sg.gain.value = 1 / dets.length;
-    s.connect(sg); sg.connect(amp);
+    s.connect(sg); sg.connect(ampIn());
     s.start(t); s.stop(stop);
   }
   const fc = clamp(bright * (f + 180), 280, 12000);
@@ -251,9 +253,10 @@ function timpani(S, g, t, midi, o = {}) {
   // drum presents its group one connection like every other instrument.
   const mix = ctx.createGain();
   mix.connect(g);
+  const mixIn = fanIn(ctx, mix);
   const body = ctx.createGain();
   body.gain.value = 0;
-  body.connect(mix);
+  body.connect(mixIn());
   const s = ctx.createOscillator();
   s.type = 'sine';
   s.frequency.setValueAtTime(f * 1.07, t);
@@ -268,7 +271,7 @@ function timpani(S, g, t, midi, o = {}) {
     p.frequency.value = f * 2.41;
     const pg = ctx.createGain();
     pg.gain.value = 0;
-    p.connect(pg); pg.connect(mix);
+    p.connect(pg); pg.connect(mixIn());
     p.start(t); p.stop(S.stop(t + decay * 0.4 + 0.04));
     hit(pg.gain, t, vel * 0.18, 0.003, decay * 0.38);
   }
@@ -277,7 +280,7 @@ function timpani(S, g, t, midi, o = {}) {
   bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q.value = 0.9;
   const ng = ctx.createGain();
   ng.gain.value = 0;
-  n.connect(bp); bp.connect(ng); ng.connect(mix);
+  n.connect(bp); bp.connect(ng); ng.connect(mixIn());
   hit(ng.gain, t, vel * 0.42, 0.001, 0.075);
   return t + decay;
 }
@@ -491,6 +494,7 @@ function pedal(S, g, t, midi, dur, o = {}) {
   lp.type = 'lowpass'; lp.frequency.value = 220; lp.Q.value = 0.9;
   amp.connect(lp); lp.connect(g);
   const stop = S.stop(t + dur + fade + 0.06);
+  const ampIn = fanIn(ctx, amp);
   for (const [mul, lvl, type] of [[1, 0.75, 'sine'], [2, 0.28, 'sine'], [1, 0.16, 'sawtooth']]) {
     const s = ctx.createOscillator();
     s.type = type;
@@ -498,7 +502,7 @@ function pedal(S, g, t, midi, dur, o = {}) {
     s.detune.value = mul === 1 && type === 'sawtooth' ? 6 : 0;
     const sg = ctx.createGain();
     sg.gain.value = lvl;
-    s.connect(sg); sg.connect(amp);
+    s.connect(sg); sg.connect(ampIn());
     s.start(t); s.stop(stop);
   }
   const f2 = Math.min(fade, dur * 0.45);

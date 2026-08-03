@@ -50,40 +50,59 @@ export const dbToGain = (db) => Math.pow(10, db / 20);
 export const gainToDb = (g) => 20 * Math.log10(Math.max(1e-9, g));
 
 /**
- * Bounded fan-in.
+ * Bounded fan-in — the thing that makes a render reproducible.
  *
- * Chrome keeps a node's inputs in a container it does not order, and it only
- * happens to sum them reproducibly while there are three or fewer. Measured on
- * this build: four sawtooths into one gain rendered three distinct results in
- * four runs, the same four through a tree of two-input gains rendered one.
- * Floating-point addition is commutative but not associative, which is exactly
- * the difference — with two or three terms any order gives the same bits, with
- * four the grouping starts to matter.
+ * Chrome holds a node's incoming connections in an unordered set and sums them
+ * by walking it, so the order changes from render to render. Floating-point
+ * addition is commutative but not associative, which draws the line in an
+ * unexpected place: two inputs always give the same bits whichever way round
+ * they are added, three do not. Measured on this build, three sawtooths into
+ * one gain produced three different results in six renders of an identical
+ * graph; two produced one; a chain of 6000 two-input gains produced one.
  *
- * `fanIn(ctx, dest)` returns a function that hands out somewhere to connect.
- * The first two callers get `dest` itself, so nothing is spent where nothing is
- * needed; after that it chains summing gains two at a time, leaving every node
- * in the chain with three inputs at most and the addition tree fixed.
+ * So `fanIn(ctx, dest)` returns a function handing out somewhere to connect,
+ * such that no node ever holds more than two inputs: one signal and one link
+ * to the rest of the chain. The first caller gets `dest` itself, so a mix
+ * point that only ever sees one source costs nothing and n sources cost n-1
+ * unity gains.
  *
  *   const slot = fanIn(ctx, mixNode);
  *   for (const v of voices) v.connect(slot());
+ *
+ * Depth is not a concern — 6000 links render fine and the extra gains are
+ * unity, so the arithmetic is untouched.
  */
 export function fanIn(ctx, dest) {
-  let head = dest;
-  let used = 0;
-  // Two callers per node, never three: the third input is reserved for the
-  // next link in the chain.
+  let head = null;
   return function slot() {
-    if (used >= 2) {
-      const next = ctx.createGain();
-      next.gain.value = 1;
-      next.connect(head);
-      head = next;
-      used = 0;
-    }
-    used++;
+    if (head === null) return (head = dest);   // the first signal goes straight on
+    const next = ctx.createGain();             // and every one after brings a link,
+    next.gain.value = 1;                       // leaving the node it hangs off with
+    next.connect(head);                        // exactly two inputs
+    head = next;
     return head;
   };
+}
+
+/**
+ * A `fanIn` that hangs off its own gain instead of off `dest` directly.
+ *
+ * Two uses. On a node it leaves `dest`'s other input free for whoever connects
+ * by hand. On an **AudioParam** it is not optional: a param's value is its
+ * automation curve plus every audio-rate connection accumulated in connection
+ * order, so a single modulator is two terms and reproducible while two
+ * modulators are three and are not. Measured the same way as `fanIn` — one
+ * connection gave one result in six renders, two gave two. Anything driving a
+ * param from more than one source has to sum first and connect once.
+ *
+ *   const mod = inlet(ctx, filter.frequency);
+ *   slowLfo.connect(mod());
+ *   fastLfo.connect(mod());
+ */
+export function inlet(ctx, dest) {
+  const g = ctx.createGain();
+  g.connect(dest);
+  return fanIn(ctx, g);
 }
 
 /** Exponential ramps blow up on zero. Everything goes through these. */
@@ -584,15 +603,15 @@ export function createBus(ctx, {
     mix, comp, limiter: shaper, musicDuck,
     fx, musicFx, hall, room,
     // Summing slots. `bus.music` and friends are ordinary nodes and connecting
-    // to them directly works, but a fader that ends up with four or more
-    // sources is the one thing that stops a render being reproducible, so
-    // anything scheduling in bulk should ask for a slot instead. `score.js`
-    // and `sfx.js` both do.
-    musicIn: fanIn(ctx, music),
-    musicFxIn: fanIn(ctx, musicFx),
-    sfxIn: fanIn(ctx, sfx),
-    fxIn: fanIn(ctx, fx),
-    voiceIn: fanIn(ctx, voice),
+    // to them directly still works — each keeps an input free for that — but a
+    // fader that collects three or more sources is the one thing that stops a
+    // render being reproducible, so anything scheduling in bulk should ask for
+    // a slot instead. `score.js` and `sfx.js` both do.
+    musicIn: inlet(ctx, music),
+    musicFxIn: inlet(ctx, musicFx),
+    sfxIn: inlet(ctx, sfx),
+    fxIn: inlet(ctx, fx),
+    voiceIn: inlet(ctx, voice),
     reverbKind: reverb === 'none' ? 'none' : (hall ? hall.kind : 'none'),
     setMusicGain(v) { music.gain.value = v; musicFx.gain.value = v; },
     setSfxGain(v) { sfx.gain.value = v; fx.gain.value = v; },

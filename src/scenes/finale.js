@@ -399,9 +399,13 @@ export async function build(ctx) {
     brickCount: c.size > 26 ? 16 : 8, gravity: 0, ring: false,
     color: 0xfff2cc, color2: 0xff7a1e,
   }));
+  // The camera is inside a thousand units for the whole of this beat, so a flare
+  // scaled off the biggest seam hits ends up two hundred units of additive cream
+  // four hundred from the lens, which washes the entire frame — the sky corners
+  // included. They stay small enough to read as a hit on the hull.
   const chainFlare = new Flares(station, chain.map((c, i) => ({
     t: c.t, dur: 0.9 + c.size * 0.011, p: chainPos[i].toArray(),
-    size: c.size * 2.6, gain: 0.95, color: 0xffd7a0,
+    size: Math.min(c.size, 34) * 1.5, gain: 0.6, color: 0xffd7a0,
   })), fireTex());
   const chainBalls = chainFx.flatMap((f) => [f.core.material, f.shell.material]);
 
@@ -634,7 +638,9 @@ export async function build(ctx) {
     { t: CALM + 0.3, sfx: 'ionDrone', opts: { gain: 0.24, dur: 6.4 } },
     { t: CALM + 0.9, sfx: 'crowdCheer', opts: { gain: 0.17, dur: 5.2, send: 0.7 } },
     { t: SNAP - 0.15, sfx: 'engineWhoosh', opts: { gain: 0.55, dur: 1.9 } },
-    { t: JUMP - 1.3, sfx: 'hyperspaceJump', opts: { gain: 0.95, send: 0.6 } },
+    // `hyperspaceJump` spends `charge` seconds winding up before the bang, so it
+    // has to be cued that far ahead for the bang to land on the white frame
+    { t: JUMP - 1.75, sfx: 'hyperspaceJump', opts: { gain: 0.95, send: 0.6 } },
     { t: JUMP + 0.05, sfx: 'rumbleSub', opts: { gain: 0.8, dur: 2.4 } },
     { t: DROP - 0.05, sfx: 'engineWhoosh', opts: { gain: 0.3, dur: 1.5 } },
     { t: TITLE + 0.1, sfx: 'ionDrone', opts: { gain: 0.14, dur: 6.8 } },
@@ -841,7 +847,11 @@ export async function build(ctx) {
         tStreak.material.opacity *= 0.42;
         for (const s of tHalo) s.material.opacity *= 0.22;
       }
-      chroma(c.stage, warp * 0.8 * (t > JUMP - 0.8 ? 1 : 0.25));
+      // the radial split is the jump, not the cruise: it spikes on the snap and
+      // settles to a fringe, because held wide it stops reading as speed and
+      // starts reading as a broken signal
+      const chr = lerp(0.34, 1, Math.exp(-Math.pow((t - JUMP) / 0.55, 2)));
+      chroma(c.stage, warp * chr * 0.82 * (t > JUMP - 0.8 ? 1 : 0.25));
 
       /* ---- the card ---------------------------------------------- */
       const res = smoothstep(TITLE, TITLE + 1.6, t);
@@ -922,15 +932,21 @@ export async function build(ctx) {
       }
 
       /* ---- post -------------------------------------------------- */
+      // `uFlash` mixes in linear space and the output pass encodes to sRGB
+      // afterwards, so these numbers punch far above their face value: 0.1 is
+      // already a third of the way to white across the whole frame. Only the
+      // detonation and the jump are allowed to be big; a chain hit is a hundredth.
       flash(c.stage, t, [
         ...chain.filter((_, i) => i % 4 === 0).map((ch) => ({
-          t: ch.t, dur: 0.24, amount: 0.05 + Math.min(ch.size, 60) / 620, color: 0xffdca8,
+          t: ch.t, dur: 0.24, amount: 0.004 + Math.min(ch.size, 60) / 9000, color: 0xffdca8,
         })),
         { t: DET, dur: 0.42, amount: 1.0, pow: 3.4, color: 0xffffff },
-        { t: DET + 1.05, dur: 0.45, amount: 0.3, pow: 2.6, color: 0xffe2b0 },
-        { t: DET + 3.4, dur: 0.45, amount: 0.17, pow: 2.6, color: 0xffd8a0 },
+        { t: DET + 1.05, dur: 0.45, amount: 0.16, pow: 2.6, color: 0xffe2b0 },
+        { t: DET + 3.4, dur: 0.45, amount: 0.085, pow: 2.6, color: 0xffd8a0 },
         { t: JUMP - 0.02, dur: 0.4, amount: 0.92, pow: 3.0, color: 0xffffff },
-        { t: DROP - 0.05, dur: 0.55, amount: 0.9, pow: 2.4, color: 0xf4faff },
+        // coming out of the streaks is a snap, not a second white-out: two
+        // full-frame flashes two seconds apart just reads as a broken cut
+        { t: DROP - 0.05, dur: 0.42, amount: 0.44, pow: 3.0, color: 0xf4faff },
       ]);
       c.stage.bloom.strength = t < DET ? 0.58 + 0.12 * heat
         : t < CALM ? 0.66 + 0.4 * Math.pow(clamp(1 - boom / 5), 1.6)

@@ -89,7 +89,10 @@ if (has('single')) {
     .map((f, i) => `[${i}:a]adelay=${Math.round(f.start * 1000)}|${Math.round(f.start * 1000)}[a${i}]`)
     .join(';');
   const mix = files.map((_, i) => `[a${i}]`).join('');
-  args.push('-filter_complex', `${filters};${mix}amix=inputs=${files.length}:normalize=0:dropout_transition=0[out]`,
+  // slice tails overlap when they are summed, so catch the peaks on the way out
+  args.push('-filter_complex',
+    `${filters};${mix}amix=inputs=${files.length}:normalize=0:dropout_transition=0,` +
+    'alimiter=level_in=1:level_out=1:limit=0.89:attack=4:release=60:level=disabled[out]',
     '-map', '[out]', '-ac', '2', '-ar', String(SR), OUT);
   execFileSync('ffmpeg', args, { stdio: 'inherit' });
 }

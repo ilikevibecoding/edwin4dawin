@@ -28,9 +28,9 @@ export const id = 'pod';
 
 /* beat boundaries, local scene time ---------------------------------- */
 const S1 = 5.0;       // the run begins
-const S1B = 9.6;      // ...and the camera stops chasing and lets them go
+const S1B = 8.7;      // ...and the camera stops chasing and lets them go
 const S2 = 13.35;     // the pod bay
-const S3 = 17.4;      // exterior
+const S3 = 16.6;      // exterior — the cut lands on the bang
 const S4 = 21.2;      // the gunner
 const END = 27.0;
 const CARD_IN = 3.05; // the datacard disappears into the droid
@@ -46,10 +46,16 @@ const BAY_Z = -160;   // the pod bay is a separate set, parked out of the way
 const GRATE = 0.30;   // top of the centre floor grating
 const WALK = 0.36;    // top of the raised side walkway
 const KNEEL = 1.15;   // how far the princess sinks to kneel
-const RUN_V = 9.0;    // droid run speed, units/sec
+const RUN_V = 8.8;    // droid run speed, units/sec
+
+/* the hand-off, staged so the reach reads: the two of them in profile,
+ * far enough apart that her arm crosses open air to get to the slot */
+const R2_X = -3.55, R2_Z = 30.9, R2_ROT = -1.93;
+const LEIA_X = -0.7, LEIA_Z = 31.5, LEIA_ROT = 2.2;
+const SLOT_Y = 1.78;  // height of the card slot up R2's body
 
 /** Distance covered `u` seconds into the run, with a soft launch. */
-const runDist = (u) => (u <= 0 ? 0 : u < 1.4 ? (RUN_V * u * u) / 2.8 : RUN_V * (u - 0.7));
+const runDist = (u) => (u <= 0 ? 0 : u < 1.2 ? (RUN_V * u * u) / 2.4 : RUN_V * (u - 0.6));
 
 /** Pod travel out of the cradle, `s` seconds after the bolts fire. */
 const podRun = (s) => (s <= 0 ? 0 : 46 * s * s);
@@ -246,7 +252,7 @@ export async function build(ctx) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x03050a);
 
-  const inLights = lightRig(scene, 'interior', { shadows: false, fog: false, intensity: 0.62 });
+  const inLights = lightRig(scene, 'interior', { shadows: false, fog: false, intensity: 0.44 });
   const spLights = lightRig(scene, 'space', { shadows: false, fog: false });
   inLights.key.position.set(10, 22, 34);
   const IN = [inLights.key.intensity, inLights.fill.intensity, inLights.rim.intensity, inLights.amb.intensity];
@@ -323,28 +329,28 @@ export async function build(ctx) {
   alcove.add(at(tile(1.3, 0.7, 3.4, { color: C.lightGray }), -5.3, WALK, ALC_Z - 2.4));
   alcove.add(at(tile(1.45, 0.8, 0.24, { color: C.darkGray }), -5.3, WALK + 3.4, ALC_Z - 2.45));
   alcove.add(at(tile(0.16, 0.1, 1.9, { color: C.darkGray }), -4.62, WALK + 0.7, ALC_Z - 2.6));
-  // wall readout
-  alcove.add(at(tile(1.9, 0.3, 1.5, { color: C.darkGray }), -3.85, 3.9, ALC_Z - 2.72));
+  // wall readout: behind the droid in the hand-off, straight ahead in the run
+  alcove.add(at(tile(1.9, 0.3, 1.5, { color: C.darkGray }), -3.9, 3.8, ALC_Z - 2.72));
   alcove.add(at(lit(tile(1.55, 0.12, 1.15), { map: nookScreenTex(), opacity: 0.94 }),
-    -3.85, 4.07, ALC_Z - 2.86));
+    -3.9, 3.97, ALC_Z - 2.86));
   alcove.add(at(rot(cyl(0.16, 0.14, { color: 0xff6a3a, glow: true, seg: 10 }), Math.PI / 2, 0, 0),
-    -2.9, 5.5, ALC_Z - 2.84));
-  // a pair of crates somebody left behind
+    -2.9, 5.2, ALC_Z - 2.84));
+  // a pair of crates somebody left behind, stacked up-corridor of the droid
   const crateR = rng(19);
   for (let i = 0; i < 3; i++) {
     const w = 0.8 + crateR() * 0.5;
     const c = at(tile(w, w, 0.6 + crateR() * 0.5, { color: i % 2 ? C.bluishGray : C.darkGray }),
-      -5.55 + crateR() * 0.3, WALK, ALC_Z - 0.6 + i * 1.35);
+      -5.3 + crateR() * 0.3, WALK, ALC_Z + 2.0 + i * 1.2);
     rot(c, 0, (crateR() - 0.5) * 0.5, 0);
     alcove.add(c);
   }
   inside.add(alcove);
 
-  const nookLamp = new THREE.PointLight(0xffd0a0, 9.5, 15, 2);
-  nookLamp.position.set(-4.5, 5.4, ALC_Z + 0.4);
+  const nookLamp = new THREE.PointLight(0xffc188, 15, 16, 2);
+  nookLamp.position.set(-4.4, 5.4, ALC_Z + 0.4);
   inside.add(nookLamp);
-  const nookFill = new THREE.PointLight(0xfff2dc, 3.2, 11, 2);
-  nookFill.position.set(-2.4, 2.6, ALC_Z + 3.0);
+  const nookFill = new THREE.PointLight(0xffe6c4, 5.0, 12, 2);
+  nookFill.position.set(-1.0, 2.4, ALC_Z + 3.4);
   inside.add(nookFill);
   // red emergency wash for the run
   const alarmA = new THREE.PointLight(0xff3a20, 0, 34, 2);
@@ -370,8 +376,10 @@ export async function build(ctx) {
   const c3 = protocolDroid();
   const leia = princess({ prop: false });
   const card = datacard();
-  attachToHand(leia, card, 'L');
-  card.rotation.set(-1.15, 0, 0);
+  // the far arm does the reaching: its shoulder is the only one within a
+  // minifig arm's length of the droid once they are far enough apart to read
+  attachToHand(leia, card, 'R');
+  card.rotation.set(-1.05, 0, 0);
   inside.add(r2, c3, leia);
   const r2Shadow = contact();
   const c3Shadow = contact();
@@ -379,21 +387,28 @@ export async function build(ctx) {
 
   // the slot the plans go into, and the tell-tale that lights once they are in
   const r2Body = r2.userData.dome.parent;
-  r2Body.add(at(tile(0.62, 0.2, 0.42, { color: C.darkGray }), 0, 1.42, -0.74));
-  const slotLamp = at(lit(tile(0.4, 0.1, 0.12), { color: 0x9fe8ff, opacity: 0 }), 0, 1.54, -0.8);
+  r2Body.add(at(tile(0.66, 0.22, 0.46, { color: C.darkGray }), 0, SLOT_Y, -0.72));
+  const slotLamp = at(lit(tile(0.42, 0.1, 0.13), { color: 0x9fe8ff, opacity: 0 }),
+    0, SLOT_Y + 0.13, -0.79);
   r2Body.add(slotLamp);
+
+  // world-space aim for her hand: out along the droid's front face
+  const R2_FRONT = new THREE.Vector3(-Math.sin(R2_ROT), 0, -Math.cos(R2_ROT));
+  const SLOT = new THREE.Vector3(R2_X, GRATE + SLOT_Y, R2_Z)
+    .addScaledVector(R2_FRONT, 0.72);
+  const HAND_IN = SLOT.clone().addScaledVector(R2_FRONT, 0.3);
 
   /* --- the run path --------------------------------------------------- */
 
   const runCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-2.95, 0, 31.3),
-    new THREE.Vector3(-2.2, 0, 29.6),
-    new THREE.Vector3(-0.7, 0, 27.6),
-    new THREE.Vector3(0.4, 0, 22.5),
-    new THREE.Vector3(0.1, 0, 9.0),
-    new THREE.Vector3(0.6, 0, -10.0),
-    new THREE.Vector3(0.2, 0, -30.0),
-    new THREE.Vector3(0.4, 0, -38.0),
+    new THREE.Vector3(R2_X, 0, R2_Z),
+    new THREE.Vector3(-3.0, 0, 29.4),
+    new THREE.Vector3(-2.0, 0, 27.4),
+    new THREE.Vector3(-0.9, 0, 24.0),
+    new THREE.Vector3(0.2, 0, 15.0),
+    new THREE.Vector3(0.5, 0, 0.0),
+    new THREE.Vector3(0.1, 0, -20.0),
+    new THREE.Vector3(0.3, 0, -41.5),
   ], false, 'catmullrom', 0.4);
   const runLen = runCurve.getLength();
   const _p = new THREE.Vector3();
@@ -453,6 +468,10 @@ export async function build(ctx) {
   bay.position.set(0, 0, BAY_Z);
   inside.add(bay);
   for (const l of bay.userData.lamps) l.intensity = 26;
+  // setClamps() is geared for a slimmer pod — at its "clamped" end the pads sit
+  // 2.2 out, well inside a 2.5-radius hull. Drive the four arms directly
+  // instead, and let them fall away rather than only sliding outboard.
+  const clampSide = bay.userData.clamps.map((a) => Math.sign(a.position.x) || 1);
   // podBay leaves its -Z end open around the launch tube; without this the
   // shot looks past the tube ring into empty space.
   const tubeR = bay.userData.tubeRadius;
@@ -518,8 +537,8 @@ export async function build(ctx) {
   sd.userData.setThrottle(0.55);
 
   const vent = new Smoke(cv, {
-    t0: -3, count: 14, origin: [0, 6, 26], spread: 12, size: 9, rise: 0.2,
-    life: 8, opacity: 0.2, color: 0x565d66, spawnWindow: 8, seed: 51,
+    t0: -3, count: 10, origin: [0, 5, 24], spread: 7, size: 4.5, rise: 0.2,
+    life: 6, opacity: 0.13, color: 0x565d66, spawnWindow: 6, seed: 51,
   });
 
   // the gun deck: three stepped plates of imperial hull tapering away below the
@@ -659,7 +678,7 @@ export async function build(ctx) {
       if (indoors) {
         // the hallway comes up from a warm brown-out to full emergency power
         const hum = 0.94 + 0.06 * Math.sin(t * 7.3) * Math.sin(t * 1.7);
-        hall.userData.setLights(lerp(0.42, 0.8, smoothstep(S1 - 0.5, S1 + 0.4, t)) * hum);
+        hall.userData.setLights(lerp(0.34, 0.48, smoothstep(S1 - 0.5, S1 + 0.4, t)) * hum);
         bay.userData.update(t);
         door.userData.update(t);
         door.userData.setOpen(0.78 * smoothstep(DOOR, DOOR + 1.0, t));
@@ -670,54 +689,52 @@ export async function build(ctx) {
         for (const s of shots) strobe += Math.max(0, 1 - Math.abs(t - s.t0) * 11);
         muzzleLight.intensity = clamp(strobe, 0, 1.6) * 70;
         const running = smoothstep(S1 - 0.2, S1 + 0.6, t);
-        nookLamp.intensity = 9.5 * (1 - smoothstep(S1 + 0.6, S1 + 1.6, t));
-        nookFill.intensity = 3.2 * (1 - running);
+        nookLamp.intensity = 15 * (1 - 0.6 * smoothstep(S1 + 0.6, S1 + 1.6, t));
+        nookFill.intensity = 5.0 * (1 - running);
         const blink = (Math.sin(t * 4.4) > 0 ? 1 : 0.06) * running;
-        alarmA.intensity = 16 * blink;
-        alarmB.intensity = 16 * (Math.sin(t * 4.4 + 2.1) > 0 ? 1 : 0.06) * running;
+        alarmA.intensity = 22 * blink;
+        alarmB.intensity = 22 * (Math.sin(t * 4.4 + 2.1) > 0 ? 1 : 0.06) * running;
 
         if (t < S1) {
           /* --- the hand-off ------------------------------------------- */
-          r2.position.set(-2.95, GRATE, 31.3);
-          r2.rotation.set(0, 2.961, 0);
+          r2.position.set(R2_X, GRATE, R2_Z);
+          r2.rotation.set(0, R2_ROT, 0);
           r2.userData.setCenterFoot(1);
           r2.userData.roll(0);
           // the dome watches her hands, then tips up to her face
           r2.userData.dome.rotation.y = lerp(
-            lerp(0.6, 0.12, smoothstep(0.7, 2.2, t)),
-            0.72, smoothstep(CARD_IN + 0.1, 4.3, t)
+            lerp(-0.5, -0.05, smoothstep(0.7, 2.2, t)),
+            0.5, smoothstep(CARD_IN + 0.1, 4.3, t)
           ) + 0.04 * Math.sin(t * 1.9);
           slotLamp.material.opacity = smoothstep(CARD_IN, CARD_IN + 0.3, t)
             * (0.55 + 0.45 * Math.sin(t * 13));
 
-          leia.position.set(-4.7, WALK - KNEEL, 31.25);
-          leia.rotation.set(0, -2.708, 0);
-          leia.userData.parts.root.rotation.set(0.07, 0, -0.03);
+          leia.position.set(LEIA_X, GRATE - KNEEL, LEIA_Z);
+          leia.rotation.set(0, LEIA_ROT, 0);
+          leia.userData.parts.root.rotation.set(0.05, 0, 0.03);
           const reach = smoothstep(0.5, 2.0, t);
           const push = smoothstep(2.2, CARD_IN, t);
           const rest = smoothstep(CARD_IN + 0.2, 4.2, t);
           pose(leia, {
-            armR: { x: 0.3 + 0.1 * Math.sin(t * 1.1), y: 0, z: -0.34 },
-            handR: 0.2,
-            handL: -0.5 - reach * 0.35,
-            lean: 0.1 + reach * 0.08 - rest * 0.05,
-            headX: 0.12 + reach * 0.2 - rest * 0.22,
-            headY: 0.42 + reach * 0.2 - rest * 0.34,
+            armL: { x: 0.34 + 0.12 * Math.sin(t * 1.1), y: 0, z: -0.4 },
+            handL: 0.2,
+            handR: -0.35 - reach * 0.3,
+            lean: 0.06 + reach * 0.1 - rest * 0.04,
+            headX: 0.12 + reach * 0.16 - rest * 0.34,
+            headY: -0.36 - reach * 0.14 + rest * 0.06,
           });
-          // her free hand tracks the slot: in, press home, then settle on the dome
-          _aim.set(-3.53, 1.72, 31.28);
-          _aim.y += (1 - reach) * 1.5;
-          _aim.z += (1 - reach) * 0.7;
-          _aim.x -= push * 0.14;
-          if (rest > 0) {
-            _aim.lerp(_v.set(-3.16, 2.9, 31.44), rest);
-          }
-          reachTo(leia, 'L', _aim);
+          // her hand tracks the slot: in, press home, then withdraws
+          _aim.copy(HAND_IN);
+          _aim.y += (1 - reach) * 1.4;
+          _aim.z += (1 - reach) * 0.8;
+          _aim.addScaledVector(R2_FRONT, -push * 0.12 + rest * 0.85);
+          _aim.y += rest * 0.5;
+          reachTo(leia, 'R', _aim);
           card.visible = t < CARD_IN;
 
           // out at the mouth of the nook, watching the corridor and fretting
-          c3.position.set(-0.6, GRATE, 24.5);
-          c3.rotation.set(0, 2.79, 0);
+          c3.position.set(0.5, GRATE, 26.4);
+          c3.rotation.set(0, 2.72, 0);
           const f1 = Math.sin(t * 3.3);
           const f2 = Math.sin(t * 2.1 + 1.2);
           pose(c3, {
@@ -726,27 +743,33 @@ export async function build(ctx) {
             handR: -0.95, handL: 0.95,
             legR: 0.03, legL: -0.03,
             lean: -0.02 + 0.03 * f2,
-            headY: -0.5 + 0.3 * Math.sin(t * 1.25),
+            headY: 0.55 + 0.3 * Math.sin(t * 1.25),
             headX: -0.04,
           });
 
           const k = smoothstep(0, 1, t / S1);
-          cam.position.set(-3.5 + 0.14 * k, 2.46 - 0.08 * k, 38.4 - 1.4 * k);
-          cam.lookAt(-3.9, 2.4 + 0.1 * k, 31.1);
-          cam.fov = 43 - 3.5 * k;
+          cam.position.set(0.6 - 0.14 * k, 2.62 - 0.07 * k, 38.5 - 1.0 * k);
+          cam.lookAt(-1.9 - 0.22 * k, 2.06, 30.9);
+          cam.fov = 45 - 3.4 * k;
         } else {
           /* --- the run ------------------------------------------------ */
-          const u = t - S1 - 0.3;
+          // the cut lands with the droid already rolling — no dead frames
+          const u = t - S1 + 0.45;
           const d = runDist(u);
-          const dG = Math.max(0, d - 1.0);
-          onRun(r2, d, 0.9, GRATE);
-          onRun(c3, dG, -1.5, GRATE);
+          // he starts a pace ahead of the droid at the nook mouth and loses
+          // ground steadily once it winds up: the whole joke of the character
+          const dG = d + 1.4 - 2.2 * smoothstep(S1 + 0.3, S1 + 2.8, t);
+          const drift = smoothstep(S1, S1 + 1.6, t);
+          onRun(r2, d, 0, GRATE);
+          // he keeps to the far side of the corridor from the lens: 5 units of
+          // protocol droid one pace behind the dome would fill the frame
+          onRun(c3, Math.max(0, dG), 1.3 + 1.1 * drift, GRATE);
           r2.userData.setCenterFoot(1 - smoothstep(S1 + 0.1, S1 + 0.7, t));
           r2.userData.roll(d);
           // glances back at every burst, then fixes on the hatch again
           let look = 0;
           for (const s of shots) look += pulse(t, s.t0 - 0.15, 1.2);
-          r2.userData.dome.rotation.y = clamp(look, 0, 1) * 2.6 + 0.2 * Math.sin(t * 2.3);
+          r2.userData.dome.rotation.y = clamp(look, 0, 1) * 2.7 + 0.2 * Math.sin(t * 2.3);
           slotLamp.material.opacity = 0.35 + 0.3 * Math.sin(t * 9);
 
           walk(c3, dG / 1.9, { stride: 0.34, arms: 0.5, lean: 0.16, sway: 0.06, twist: 0.11 });
@@ -759,42 +782,68 @@ export async function build(ctx) {
             headY: 0.34 * Math.sin(t * 3.1),
             headX: -0.14,
           });
-          leia.position.set(-4.7, WALK - KNEEL, 31.25);
+
+          // she gets up off her knee and watches them go
+          const up = smoothstep(S1 + 0.2, S1 + 1.5, t);
+          leia.position.set(LEIA_X, GRATE - KNEEL * (1 - up), LEIA_Z);
+          leia.rotation.set(0, LEIA_ROT - 0.5 * up, 0);
+          leia.userData.parts.root.rotation.set(0.05 * (1 - up), 0, 0.03 * (1 - up));
+          pose(leia, {
+            armR: { x: 0.1 - 0.5 * up, y: 0, z: 0.16 },
+            armL: { x: 0.12, y: 0, z: -0.16 },
+            handR: -0.2, handL: 0.2,
+            lean: 0.1 * (1 - up),
+            headX: 0.1 - 0.08 * up,
+            headY: -0.3 + 0.2 * Math.sin(t * 1.4),
+          });
           card.visible = false;
 
           if (t < S1B) {
-            // dollying with them off their quarter, low enough that the dome
-            // fills its share of frame; the bolts come in over our shoulder
-            const jog = noise(t * 4.6, 11) * 0.06;
-            // clamped so the dolly never backs through the aft bulkhead while
-            // the droids are still getting under way
-            cam.position.set(3.1, 2.4 + jog, Math.min(37.4, r2.position.z + 9.2));
-            cam.lookAt(0.75, 2.2, r2.position.z - 1.0);
-            cam.fov = lerp(48, 42, smoothstep(S1, S1B, t));
+            // Dolly with them off their port quarter, at dome height. It has to
+            // be this side: the princess is knelt on the starboard half of the
+            // grating, and from over there she blocks the whole shot. x stays
+            // inboard of -4.4 or the camera rides through the wall ribs.
+            const j = smoothstep(S1, S1B, t);
+            const jog = noise(t * 4.6, 11) * 0.05;
+            _v.copy(r2.position).add(c3.position).multiplyScalar(0.5);
+            cam.position.set(-4.05 + 1.1 * j, 2.4 + jog, Math.min(38.4, r2.position.z + 8.0));
+            cam.lookAt(_v.x + 0.1, 2.15, _v.z - 1.4);
+            cam.fov = lerp(46, 43, j);
           } else {
             // and now let them go: locked off, low, the hatch cracking ahead
             const k = smoothstep(0, 1, (t - S1B) / (S2 - S1B));
-            cam.position.set(0.9, 2.2, 5.4);
-            cam.lookAt(0.25, 2.1 + 0.5 * k, -14 - 12 * k);
-            cam.fov = lerp(46, 33, k);
+            cam.position.set(1.9, 2.6, 15.5);
+            cam.lookAt(0.4, 2.2 + 0.4 * k, -14 - 14 * k);
+            cam.fov = lerp(45, 34, k);
           }
         }
 
+        // the emergency wash rides along with them, so the red is always where
+        // the action is instead of only over two fixed stretches of hallway
+        alarmA.position.z = r2.position.z + 9;
+        alarmB.position.z = r2.position.z - 11;
+
         shadowAt(r2Shadow, r2, 3.4, GRATE, 0.9);
         shadowAt(c3Shadow, c3, 2.7, GRATE, 0.8);
-        shadowAt(leiaShadow, leia, 3.4, WALK, t < S1 ? 0.85 : 0);
+        shadowAt(leiaShadow, leia, 3.2, GRATE, t < S1 + 2 ? 0.85 : 0);
 
         /* --- the launch --------------------------------------------- */
-        bay.userData.setClamps(1 - smoothstep(CLAMPS, CLAMPS + 0.35, t));
+        const thrown = smoothstep(CLAMPS, CLAMPS + 0.3, t);
+        bay.userData.clamps.forEach((arm, i) => {
+          const sx = clampSide[i];
+          arm.position.x = sx * (6.2 + thrown * 1.5);
+          arm.rotation.z = -sx * thrown * 1.15;
+        });
         const iris = smoothstep(IRIS, IRIS + 0.7, t);
         voidDisc.material.opacity = iris;
         tubeGlow.intensity = iris * 16;
         const gone = podRun(t - BANG);
-        // a shudder in the cradle once the clamps are off, then it goes
+        // a shudder in the cradle once the clamps are off, then it goes; the
+        // hull rides up onto the tube's centre line as it runs out
         const settle = smoothstep(CLAMPS, CLAMPS + 0.5, t) * (1 - smoothstep(BANG - 0.1, BANG, t));
         podIn.position.set(
           noise(t * 13, 8) * 0.05 * settle,
-          POD_Y + gone * 0.012 - 0.07 * settle,
+          POD_Y + 2.0 * smoothstep(0, 14, gone) - 0.07 * settle,
           POD_Z - gone
         );
         podIn.rotation.set(-gone * 0.004, 0, gone * 0.005 + noise(t * 11, 9) * 0.01 * settle);
@@ -804,20 +853,19 @@ export async function build(ctx) {
         bayHaze.update(t);
 
         if (t >= S2) {
-          // Near profile from the starboard wall, sat between the two clamp
-          // pairs so their arms frame the edges instead of crossing the pod,
-          // and angled just far enough down-bay to keep the tube mouth at
-          // frame right — the pod then leaves along a line we already read.
+          // Square-on profile from the starboard wall, sat level with the pod so
+          // both clamp pairs fall just outside the frame edges; the hull then
+          // runs out to frame left along a line the shot has already drawn.
           const k = smoothstep(0, 1, (t - S2) / (BANG - S2));
-          const shake = 1.5 * Math.max(0, 1 - Math.abs(t - BANG) * 2.6);
+          const shake = 1.6 * Math.max(0, 1 - Math.abs(t - BANG) * 2.4);
           cam.position.set(
-            lerp(10.9, 10.2, k) + noise(t * 7, 1) * shake,
-            lerp(5.4, 5.0, k) + noise(t * 7.4, 2) * shake,
-            POD_Z + lerp(1.6, 0.4, k)
+            lerp(10.8, 10.3, k) + noise(t * 7, 1) * shake,
+            lerp(5.9, 5.5, k) + noise(t * 7.4, 2) * shake,
+            POD_Z + lerp(1.9, 1.2, k)
           );
-          cam.lookAt(lerp(0.2, -0.2, k), lerp(4.5, 4.4, k), POD_Z + lerp(-2.2, -3.4, k));
-          cam.rotateZ(noise(t * 9, 5) * 0.024 * shake);
-          cam.fov = lerp(61, 55, k);
+          cam.lookAt(lerp(-0.4, -0.9, k), lerp(4.9, 4.7, k), POD_Z + lerp(-0.6, -1.8, k));
+          cam.rotateZ(noise(t * 9, 5) * 0.026 * shake);
+          cam.fov = lerp(58, 53, k);
         }
       }
 
@@ -833,21 +881,23 @@ export async function build(ctx) {
           /* --- the wide: pod, corvette, destroyer, planet ------------- */
           const k = (t - S3) / (S4 - S3);
           world.position.set(300, -1360, -1620);
-          cv.position.set(-58, 24, -226);
+          cv.position.set(-62, 20, -244);
           cv.rotation.set(0.05, 1.7, 0.14 + 0.015 * Math.sin(t * 0.5));
-          sd.position.set(128, 54, -318);
-          sd.rotation.set(0.04, 0.3, 0.02);
+          // far enough off that all 300 units of her fit the frame: she has to
+          // read as one mass above the corvette, not as a cropped wing
+          sd.position.set(112, 84, -486);
+          sd.rotation.set(0.03, 0.62, 0.02);
           deck.position.y = -9000;
           for (const g of guns) g.position.y = -9000;
           podOut.position.set(
-            lerp(-38, 12, k),
-            lerp(15, -20, k * k * 0.55 + k * 0.45),
-            lerp(-172, -26, Math.pow(k, 0.75))
+            lerp(-48, 16, k),
+            lerp(14, -13, k * k * 0.5 + k * 0.5),
+            lerp(-224, -26, Math.pow(k, 0.8))
           );
           podOut.rotation.set(t * 1.3, t * 0.7, t * 0.48);
-          cam.position.set(lerp(0, 3, k), lerp(9, 4.5, k), lerp(26, 21, k));
-          cam.lookAt(2, -20, -210);
-          cam.fov = 56;
+          cam.position.set(lerp(-1, 3, k), lerp(8, 5, k), lerp(26, 22, k));
+          cam.lookAt(lerp(6, 10, k), lerp(-16, -13, k), -180);
+          cam.fov = 58;
         } else {
           /* --- the gunner: held fire ---------------------------------- */
           const k = (t - S4) / (END - S4);

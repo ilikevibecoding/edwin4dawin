@@ -33,7 +33,7 @@ import {
 import { svgTexture, svg } from '../lego/svgtex.js';
 import {
   minifig, pose, walk, run, idle, aimBlaster, fall, sit, attachToHand, capeSim,
-  arcShell, slab, assemble, paint, texMat, frontPanel, markNoBake,
+  arcShell, slab, assemble, paint, texMat, frontPanel, markNoBake, MINIFIG,
 } from '../lego/minifig.js';
 
 /* ------------------------------------------------------------------ */
@@ -828,21 +828,55 @@ function vaderHelmet() {
  */
 function rebelHelmet(o = {}) {
   const shell = o.color ?? X.helmetTan;
+  // The face opening spans 2.4 rad at the front; the printed brow band fills it
+  // so the helmet is not one unbroken slab of tan from the camera's angle.
+  const FRONT = 2.4;
+  const brow = arcShell(0.69, 0.34, { span: FRONT, center: Math.PI, seg: 18, map: rebelHelmetTex(shell) });
   return assemble([
     // back and sides come down over the ears
     paint(at(arcShell(0.68, 0.62, { span: 4.3, center: 0, seg: 22 }), 0, 0.5, 0), shell),
-    // front rim sits just above the brow
-    paint(at(arcShell(0.68, 0.36, { span: 2.4, center: Math.PI, seg: 16 }), 0, 0.76, 0), shell),
+    at(brow, 0, 0.78, 0),
     at(domeMesh(0.68, 0.4, shell, 22), 0, 1.12, 0),
-    // forward brim + crown rib
-    paint(at(arcShell(0.75, 0.09, { span: 2.4, center: Math.PI, seg: 16, rTop: 0.68 }), 0, 0.76, 0), C.darkTan),
+    // brim flaring forward over the brow, and the crown rib front to back
+    paint(at(arcShell(0.82, 0.13, { span: 2.7, center: Math.PI, seg: 18, rTop: 0.69 }), 0, 0.72, 0), C.darkTan),
     paint(at(arcShell(0.7, 0.07, { span: 4.3, center: 0, seg: 22 }), 0, 0.52, 0), C.darkTan),
-    paint(at(tile(0.14, 1.3, 0.09), 0, 1.48, 0), C.darkTan),
+    paint(at(tile(0.2, 1.34, 0.12), 0, 1.44, 0), C.darkTan),
+    paint(at(tile(0.1, 1.36, 0.05), 0, 1.56, 0), C.reddishBrown),
     // ear cups + chin strap
     paint(at(rot(cyl(0.19, 0.1, { seg: 14 }), 0, 0, Math.PI / 2), 0.7, 0.62, 0.02), C.darkTan),
     paint(at(rot(cyl(0.19, 0.1, { seg: 14 }), 0, 0, -Math.PI / 2), -0.7, 0.62, 0.02), C.darkTan),
     paint(at(arcShell(0.615, 0.1, { span: 3.6, center: Math.PI, seg: 16 }), 0, 0.08, 0), C.darkGray),
   ]);
+}
+
+/**
+ * Rebel crash-helmet brow band. This print rides a 2.4 rad arc centred on the
+ * front, so the viewBox spans that arc only: x = 256 is dead front, x = 0 the
+ * figure's right cheek and x = 512 its left. y = 0 is the crown seam.
+ */
+function rebelHelmetTex(shell) {
+  const dark = hx(C.darkTan);
+  return wrapTex([
+    bg(shell),
+    // vignette toward the cheeks
+    `<rect x="0" y="0" width="70" height="128" fill="#000" opacity="0.14"/>`,
+    `<rect x="442" y="0" width="70" height="128" fill="#000" opacity="0.14"/>`,
+    // padded brow roll with a stitched seam
+    `<rect x="0" y="86" width="512" height="42" fill="${dark}"/>`,
+    `<rect x="0" y="80" width="512" height="7" fill="#8a6f42"/>`,
+    `<g fill="#8a6f42" opacity="0.8">`
+    + `<rect x="40" y="100" width="26" height="6" rx="3"/><rect x="446" y="100" width="26" height="6" rx="3"/></g>`,
+    // rank flash above the figure's right brow
+    `<path d="M120 24 L168 24 L168 62 L144 74 L120 62 Z" fill="#a02b1c"/>`,
+    `<path d="M128 32 L160 32 L160 58 L144 65 L128 58 Z" fill="#d8cdb2"/>`,
+    // vent slots over the left temple
+    `<g fill="#6f5934" opacity="0.9">`
+    + `<rect x="344" y="30" width="46" height="9" rx="4"/><rect x="344" y="46" width="46" height="9" rx="4"/>`
+    + `<rect x="344" y="62" width="46" height="9" rx="4"/></g>`,
+    // centre ridge continuing the crown rib down the brow
+    `<rect x="246" y="0" width="20" height="80" fill="${dark}"/>`,
+    `<rect x="252" y="0" width="8" height="80" fill="#8a6f42"/>`,
+  ].join(''));
 }
 
 /**
@@ -939,6 +973,9 @@ function officerCap(o = {}) {
   return assemble([
     // black band gripping the head just above the brow
     paint(at(cyl(0.625, 0.17, { seg: 22 }), 0, BAND, 0), C.black),
+    // the band drops lower round the back and sides, where there are no brows
+    // to cover — without it the cap reads as a lid balanced on the crown
+    paint(at(arcShell(0.622, 0.18, { span: 4.1, center: 0, seg: 20 }), 0, BAND - 0.18, 0), C.black),
     // shallow crown, then the flat top plate that makes it a peaked cap.
     // The plate stays inside the peak's reach, or the two merge in silhouette
     // and the cap reads as a sun hat from the side.
@@ -1289,13 +1326,43 @@ function trooperHipsTex(o = {}) {
 export function sandtrooper(o = {}) {
   const fig = stormtrooper({ color: o.color ?? X.grime, dirty: true, prop: false, char: 'sandtrooper' });
   const q = fig.userData.parts;
-  // pauldron over the figure's right shoulder
+  // Pauldron over the figure's right shoulder: a drape, not a barrel.
+  //
+  // Everything is concentric on the shoulder pivot (x 0.9, y 1.28 in torso
+  // space), not on the torso: a torso-concentric arc wide enough to clear the
+  // arm socket stands half a unit off the chest. A curved wall wraps the outside
+  // of the arm from chest to shoulder blade, a squashed dome caps it, and a bib
+  // hangs down the chest.
+  //
+  // Three clearances set the numbers. The radius has to be at least 0.56 or the
+  // drape's front and back edges sink inside the torso faces at z = +-0.53 and
+  // only a sliver stays visible; it is flattened to 0.72 in X instead, because at
+  // a true 0.58 it clears the arm by a third of a unit and reads as a barrel. The
+  // bib stops at x = 0.78, inboard of the arm's swing, and the gap it leaves is
+  // covered by the arm itself. And the cone on top has to stay wide enough to
+  // swallow the shoulder ball all the way to 1.4 — taper it any harder and the
+  // ball's white crown surfaces through the orange. Above the drape the torso's
+  // own shoulder corner takes over, which is as high as anything can go here:
+  // the helmet's jaw flares to 0.74 at 1.56 and leaves no room.
+  const shade = o.pauldron ?? C.orange;
+  const SX = MINIFIG.shoulderX;
+  const R = 0.58;
+  const SPAN = 3.4;
+  const CEN = Math.PI / 2;                           // centred on +X, the outer flank
+  const HEM = 0.86;
+  const CAP = 1.24;                                  // where the wall gives way to the cone
+  const squash = (m) => { m.scale.x = 0.72; return m; };
+  // bib down the chest: hem angled up toward the neck, top tucked under the cone
+  const bib = [[0.28, 0.96], [0.78, 0.8], [0.78, 1.32], [0.28, 1.32]];
+  const piping = [[0.28, 0.96], [0.78, 0.8], [0.78, 0.92], [0.28, 1.08]];
   const pauldron = assemble([
-    paint(at(arcShell(1.06, 0.5, { span: 1.9, center: Math.PI - 0.1, seg: 14, rTop: 1.15 }), 0, 0, 0), o.pauldron ?? C.orange),
-    paint(at(arcShell(1.09, 0.09, { span: 1.9, center: Math.PI - 0.1, seg: 14 }), 0, -0.06, 0), C.darkOrange),
+    squash(paint(at(arcShell(R, CAP - HEM, { span: SPAN, center: CEN, seg: 18 }), SX, HEM, 0), shade)),
+    squash(paint(at(cone(R, 0.42, 0.16, { seg: 20 }), SX, CAP, 0), shade)),
+    paint(at(slab(bib, 0.09), 0, 0, -0.575), shade),
+    // darker piping along both hems
+    squash(paint(at(arcShell(R + 0.02, 0.1, { span: SPAN, center: CEN, seg: 18 }), SX, HEM, 0), C.darkOrange)),
+    paint(at(slab(piping, 0.11), 0, 0, -0.575), C.darkOrange),
   ]);
-  at(pauldron, 0.14, 1.28, 0);
-  rot(pauldron, 0, 0, 0.06);
   q.torso.add(pauldron);
   // field pack
   const pack = assemble([
@@ -1307,6 +1374,7 @@ export function sandtrooper(o = {}) {
   ]);
   at(pack, 0, 0.38, 0.74);
   q.torso.add(pack);
+  markNoBake(q.torso);
   if (o.prop !== false) hold(fig, blasterRifle(), 'R');
   readyPose(fig);
   fig.userData.char = 'sandtrooper';
@@ -1506,7 +1574,7 @@ export function jawa(o = {}) {
   });
   const q = fig.userData.parts;
   // robe skirt over the short legs
-  q.hips.add(paint(at(cone(1.0, 0.84, 1.0, { seg: 22 }), 0, -0.45, 0), cloth));
+  q.hips.add(markNoBake(paint(at(cone(1.0, 0.84, 1.0, { seg: 22 }), 0, -0.45, 0), cloth)));
   // glowing eyes, sitting just off the face so they bloom
   for (const sx of [1, -1]) {
     q.head.add(at(rot(cyl(0.085, 0.05, { seg: 12, glow: true, color: C.brightYellow }),
@@ -1604,10 +1672,11 @@ export function smuggler(o = {}) {
     q.legR.add(paint(at(tile(0.2, 0.3, 0.5), 0.24, -0.9, 0.06), C.black));
     q.legR.add(paint(at(rot(cyl(0.07, 0.34, { seg: 8 }), 0.25, 0, 0), 0.24, -1.3, -0.02), C.darkGray));
   }
+  // narrow blood stripe down each outer trouser seam
   for (const leg of [q.legR, q.legL]) {
     if (!leg) continue;
     const sx = leg === q.legR ? 1 : -1;
-    leg.add(paint(at(tile(0.05, 0.5, 1.0), sx * 0.34, -1.1, -0.05), C.darkRed));
+    leg.add(paint(at(tile(0.05, 0.18, 1.0), sx * 0.34, -1.1, -0.08), C.darkRed));
     markNoBake(leg);
   }
   if (o.prop !== false) hold(fig, blaster(), 'R');
@@ -1878,6 +1947,9 @@ export function astromech(o = {}) {
   g.userData.height = BODY_Y + BODY_H + 0.7;
   g.userData.char = 'astromech';
   setCenterFoot(o.centerFoot ?? 1);
+  // the body leans and the whole droid drives, so nothing here may be welded
+  // into a static scene mesh; the parts are already merged internally
+  markNoBake(g);
   return g;
 }
 
@@ -1992,6 +2064,7 @@ export function mouseDroid(o = {}) {
   g.userData.wheels = wheels;
   g.userData.height = DECK + 0.42;
   g.userData.char = 'mouseDroid';
+  markNoBake(g);
   return g;
 }
 

@@ -19,7 +19,7 @@
  */
 
 import {
-  rng, seedFrom, noiseBuffer, clamp, setAt, lin, exp, hit, NOTE, fanIn,
+  rng, seedFrom, noiseBuffer, clamp, setAt, lin, exp, hit, NOTE, fanIn, inlet,
 } from './engine.js';
 
 /* ------------------------------------------------------------------ *
@@ -543,10 +543,11 @@ function ionDrone(ctx, bus, t, o = {}) {
   const sw = lfo(ctx, t, dur, 0.17, 260);
   sw.connect(bp.frequency);
 
+  const bpIn = fanIn(ctx, bp);
   for (const [f, lvl, type] of [[62, 0.6, 'square'], [93, 0.35, 'square'], [87.5, 0.25, 'sawtooth']]) {
     const s = osc(ctx, type, f, t, dur + 0.05);
     const sg = gn(ctx, lvl);
-    s.connect(sg); sg.connect(bp);
+    s.connect(sg); sg.connect(bpIn());
   }
   // Ring-modulated whine on top.
   const w = osc(ctx, 'sine', 1240, t, dur + 0.05);
@@ -571,12 +572,13 @@ function hyperspaceJump(ctx, bus, t, o = {}) {
   const wbp = bq(ctx, 'bandpass', 220, 9);
   const wg = gn(ctx, 0);
   wbp.connect(wg); wg.connect(g.in());
+  const wbpIn = fanIn(ctx, wbp);
   for (const [mul, lvl, det] of [[1, 0.7, 0], [1.5, 0.3, 6], [2.01, 0.18, -8]]) {
     const s = osc(ctx, 'sawtooth', 190 * mul, t, charge + 0.12, det);
     setAt(s.frequency, t, 190 * mul);
     exp(s.frequency, jump, 3600 * mul);
     const sg = gn(ctx, lvl);
-    s.connect(sg); sg.connect(wbp);
+    s.connect(sg); sg.connect(wbpIn());
   }
   setAt(wbp.frequency, t, 260);
   exp(wbp.frequency, jump, 5200);
@@ -651,10 +653,9 @@ function saberHum(ctx, bus, t, o = {}) {
     s.connect(sg); sg.connect(amp.in());
   }
   // Two wobbles: the slow breathing one and the faster blade shimmer.
-  const slow = lfo(ctx, t, dur, 0.85, level * 0.085);
-  slow.connect(amp.gain);
-  const fast = lfo(ctx, t, dur, 5.3, level * 0.030);
-  fast.connect(amp.gain);
+  const wob = inlet(ctx, amp.gain);
+  lfo(ctx, t, dur, 0.85, level * 0.085).connect(wob());
+  lfo(ctx, t, dur, 5.3, level * 0.030).connect(wob());
   return t + dur + 0.05;
 }
 
@@ -673,11 +674,12 @@ function saberOn(ctx, bus, t, o = {}) {
   const bp = bq(ctx, 'bandpass', 300, 4);
   const wg = gn(ctx, 0);
   bp.connect(wg); wg.connect(g.in());
+  const bpIn = fanIn(ctx, bp);
   for (const [mul, lvl] of [[1, 0.7], [2, 0.3], [3, 0.15]]) {
     const s = osc(ctx, 'sawtooth', 180 * mul, t, 0.32);
     setAt(s.frequency, t, 180 * mul);
     exp(s.frequency, t + 0.26, base * 2.6 * mul);
-    const sg = gn(ctx, lvl); s.connect(sg); sg.connect(bp);
+    const sg = gn(ctx, lvl); s.connect(sg); sg.connect(bpIn());
   }
   sweep(bp.frequency, t, 260, 900, 0.26);
   setAt(wg.gain, t, 1e-4);
@@ -1038,9 +1040,9 @@ function wind(ctx, bus, t, o = {}) {
   const bp = bq(ctx, 'bandpass', 700, 1.5);
   const ng = gn(ctx, 1);
   n.connect(bp); bp.connect(ng); ng.connect(amp.in());
-  const s1 = lfo(ctx, t, dur, 0.13, 380);
-  const s2 = lfo(ctx, t, dur, 0.291, 220);
-  s1.connect(bp.frequency); s2.connect(bp.frequency);
+  const sway = inlet(ctx, bp.frequency);
+  lfo(ctx, t, dur, 0.13, 380).connect(sway());
+  lfo(ctx, t, dur, 0.291, 220).connect(sway());
 
   const lo = noise(ctx, t, dur + 0.05, { seed: sd ^ 0x5, offset: r() * 2.0, rate: 0.7 });
   const llp = bq(ctx, 'lowpass', 380, 0.9);

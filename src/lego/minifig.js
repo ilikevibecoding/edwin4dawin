@@ -473,10 +473,11 @@ export function minifig(o = {}) {
     wristL: arm.L.wrist, wristR: arm.R.wrist,
     neck, head, gear, cape, eye,
   };
-  // anything the rig animates must survive a bake() by scene code
-  for (const k of ['legL', 'legR', 'armL', 'armR', 'handL', 'handR', 'head', 'gear', 'cape']) {
-    if (parts[k]) markNoBake(parts[k]);
-  }
+  // Anything the rig animates must survive a bake() by scene code. That is the
+  // whole figure — the pelvis bobs and the torso leans — so tagging from the hips
+  // down covers it. It costs nothing: every piece is already merged internally by
+  // assemble(), so a figure is a handful of meshes either way.
+  markNoBake(hips);
   fig.userData.parts = parts;
   fig.userData.height = MINIFIG.height - (MINIFIG.legLen - legLen);
   fig.userData.width = 2.4;
