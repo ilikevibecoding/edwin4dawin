@@ -11,6 +11,10 @@ dist/
 # public/audio/narration IS committed so the project runs offline.
 voices/
 
-# QA output
+# QA output. The checkpoint stills and the diagnostic captures from
+# scripts/probe.mjs and scripts/inspect.mjs are all regenerable, and they are
+# large: `npm run qa` rewrites them from scratch in a few minutes.
 qa/screenshots/
+qa/probe/
+qa/inspect/
 qa/report.json

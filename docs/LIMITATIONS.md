@@ -93,3 +93,12 @@ whether the mix is pleasant — those are on the manual checklist.
 **No unit tests.** The project has no pure logic worth isolating from the
 renderer; correctness here is visual, and the checkpoint tour is the harness
 that carries it.
+
+**The manual pass was run under software rendering.** The development machine
+has no GPU, so the interactive pass was done through Chrome's SwiftShader
+backend at the low tier. Every control, panel and Explore-mode interaction was
+exercised and behaves correctly, but the frame rate there is single digits, so
+the 60 FPS and 30 FPS targets in the checklist are reasoned from the draw-call
+and triangle budgets rather than measured on real hardware. The still frames in
+`qa/screenshots/` are rendered offline through the same path and are accurate;
+what has not been verified on metal is how the show *feels* at speed.
