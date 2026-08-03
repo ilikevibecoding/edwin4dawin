@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Starfall — walkthrough recordings</title>
+    <title>Starfall — the film</title>
     <style>
       :root {
         --bg: #0a0b0e;
@@ -30,7 +30,7 @@
         margin: 0 0 10px;
       }
       h1 { margin: 0 0 8px; font-size: 30px; font-weight: 600; letter-spacing: -0.01em; }
-      .lede { margin: 0 0 40px; color: var(--muted); max-width: 68ch; }
+      .lede { margin: 0 0 40px; color: var(--muted); max-width: 70ch; }
       section {
         background: var(--panel);
         border: 1px solid var(--line);
@@ -38,7 +38,9 @@
         padding: 20px;
         margin-bottom: 28px;
       }
+      section.feature { border-color: #3a3524; background: linear-gradient(180deg, #191a22 0%, var(--panel) 100%); }
       h2 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+      section.feature h2 { font-size: 22px; }
       .meta { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
       video {
         width: 100%;
@@ -64,8 +66,12 @@
       a.btn:hover { border-color: var(--gold); background: #23262f; }
       a.btn.primary { border-color: var(--gold); color: var(--gold); }
       a.btn.primary:hover { background: rgba(216, 180, 106, 0.12); }
-      footer { color: var(--muted); font-size: 13px; max-width: 68ch; }
-      footer a { color: var(--gold); }
+      .chapters { margin: 18px 0 0; padding: 0; list-style: none; display: grid; gap: 2px;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+      .chapters li { display: flex; gap: 10px; font-size: 13.5px; color: var(--muted); padding: 3px 0; }
+      .chapters b { color: var(--gold); font-weight: 500; font-variant-numeric: tabular-nums; }
+      h3 { margin: 44px 0 18px; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+      footer { color: var(--muted); font-size: 13px; max-width: 70ch; margin-top: 40px; }
       code {
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         font-size: 12.5px;
@@ -79,51 +85,118 @@
   <body>
     <main>
       <p class="kicker">Starfall · Flight of the Diplomat</p>
-      <h1>Walkthrough recordings</h1>
+      <h1>The film</h1>
       <p class="lede">
-        Two screen recordings of the finished cinematic running from its production build. Both
-        were captured on a machine with no GPU, through Chrome's software rasteriser, so the frame
-        rate in them is single digits — the still frames in <code>qa/screenshots/</code> are
-        rendered through the same path offline and show the real output quality.
+        The complete six-minute-forty-four cinematic with its score, effects and narration. Every
+        frame was rendered offline by stepping the show's deterministic clock one frame at a time,
+        and the soundtrack was captured in a separate real-time pass off the same clock — which is
+        how a machine that draws at one frame a second produces a recording that runs at speed.
       </p>
 
-      <section>
-        <h2>Explore mode, object selection and Inspect framing</h2>
-        <p class="meta">46 seconds · 1920×1200 · no audio track</p>
+      <section class="feature">
+        <h2>Starfall — complete cinematic</h2>
+        <p class="meta">6 min 44 s · 1280×720 · 30 fps · with sound</p>
         <video controls preload="metadata" playsinline>
-          <source src="starfall_explore_mode_object_inspection.mp4" type="video/mp4" />
-          <source src="https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@cursor/star-wars-opening-cinematic-f514/media/starfall_explore_mode_object_inspection.mp4" type="video/mp4" />
+          <source src="starfall-film-720p.mp4" type="video/mp4" />
+          <source
+            src="https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@cursor/star-wars-opening-cinematic-f514/media/starfall-film-480p.mp4"
+            type="video/mp4"
+          />
           Your browser cannot play this file.
         </video>
         <div class="row">
-          <a class="btn primary" href="https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/star-wars-opening-cinematic-f514/media/starfall_explore_mode_object_inspection.mp4" download="starfall_explore_mode_object_inspection.mp4">
+          <a
+            class="btn primary"
+            href="https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/star-wars-opening-cinematic-f514/media/starfall-film-720p.mp4"
+            download="starfall-film-720p.mp4"
+          >
+            <span aria-hidden="true">&#8615;</span> Download 720p &middot; 40 MB
+          </a>
+          <a
+            class="btn"
+            href="https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/star-wars-opening-cinematic-f514/media/starfall-film-480p.mp4"
+            download="starfall-film-480p.mp4"
+          >
+            <span aria-hidden="true">&#8615;</span> Download 480p &middot; 17 MB
+          </a>
+          <a
+            class="btn"
+            href="https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@cursor/star-wars-opening-cinematic-f514/media/starfall-film-480p.mp4"
+            >Stream from CDN</a
+          >
+        </div>
+        <ul class="chapters">
+          <li><b>0:00</b> Prologue</li>
+          <li><b>0:42</b> The Desert World</li>
+          <li><b>1:18</b> The Pursuit</li>
+          <li><b>2:48</b> Capture</li>
+          <li><b>3:30</b> The Forward Passage</li>
+          <li><b>4:48</b> The Plans</li>
+          <li><b>5:32</b> Pod Six</li>
+          <li><b>6:22</b> Epilogue</li>
+        </ul>
+      </section>
+
+      <h3>Interaction tests</h3>
+
+      <section>
+        <h2>Explore mode, object selection and Inspect framing</h2>
+        <p class="meta">46 seconds · 1920×1200 · no audio track · captured live, so the frame rate is low</p>
+        <video controls preload="metadata" playsinline>
+          <source src="starfall_explore_mode_object_inspection.mp4" type="video/mp4" />
+          <source
+            src="https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@cursor/star-wars-opening-cinematic-f514/media/starfall_explore_mode_object_inspection.mp4"
+            type="video/mp4"
+          />
+        </video>
+        <div class="row">
+          <a
+            class="btn primary"
+            href="https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/star-wars-opening-cinematic-f514/media/starfall_explore_mode_object_inspection.mp4"
+            download="starfall_explore_mode_object_inspection.mp4"
+          >
             <span aria-hidden="true">&#8615;</span> Download MP4 &middot; 3.8 MB
           </a>
-          <a class="btn" href="https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@cursor/star-wars-opening-cinematic-f514/media/starfall_explore_mode_object_inspection.mp4">Play from CDN</a>
+          <a
+            class="btn"
+            href="https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@cursor/star-wars-opening-cinematic-f514/media/starfall_explore_mode_object_inspection.mp4"
+            >Stream from CDN</a
+          >
         </div>
       </section>
 
       <section>
         <h2>Transport, chapter jumps, subtitles, mixer and help</h2>
-        <p class="meta">66 seconds · 1920×1200 · no audio track</p>
+        <p class="meta">66 seconds · 1920×1200 · no audio track · captured live, so the frame rate is low</p>
         <video controls preload="metadata" playsinline>
           <source src="starfall_controls_walkthrough.mp4" type="video/mp4" />
-          <source src="https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@cursor/star-wars-opening-cinematic-f514/media/starfall_controls_walkthrough.mp4" type="video/mp4" />
-          Your browser cannot play this file.
+          <source
+            src="https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@cursor/star-wars-opening-cinematic-f514/media/starfall_controls_walkthrough.mp4"
+            type="video/mp4"
+          />
         </video>
         <div class="row">
-          <a class="btn primary" href="https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/star-wars-opening-cinematic-f514/media/starfall_controls_walkthrough.mp4" download="starfall_controls_walkthrough.mp4">
+          <a
+            class="btn primary"
+            href="https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/star-wars-opening-cinematic-f514/media/starfall_controls_walkthrough.mp4"
+            download="starfall_controls_walkthrough.mp4"
+          >
             <span aria-hidden="true">&#8615;</span> Download MP4 &middot; 6.7 MB
           </a>
-          <a class="btn" href="https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@cursor/star-wars-opening-cinematic-f514/media/starfall_controls_walkthrough.mp4">Play from CDN</a>
+          <a
+            class="btn"
+            href="https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@cursor/star-wars-opening-cinematic-f514/media/starfall_controls_walkthrough.mp4"
+            >Stream from CDN</a
+          >
         </div>
       </section>
 
       <footer>
         This page has no dependencies and is not part of the application bundle: open
-        <code>media/index.html</code> straight from a checkout and the two players above work
-        offline. What is being demonstrated, and how it was captured, is written up in
-        <code>docs/QA-CHECKLIST.md</code>.
+        <code>media/index.html</code> from a checkout and everything above works offline. The film
+        was produced with <code>scripts/render-film.mjs</code> and
+        <code>scripts/render-audio.mjs</code>; both are in the repository and reproduce it exactly,
+        because the show is a pure function of its clock.
       </footer>
     </main>
   </body>
