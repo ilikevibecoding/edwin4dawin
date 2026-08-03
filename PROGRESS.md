@@ -526,3 +526,99 @@ the workarounds.
   and what it has is an analytic approximation.
 - The awning is a pale near-uniform tube with no light and dark side.
 - The wheel close-up is still hot and the tailgate streak is still there.
+
+---
+
+## Iteration 15 — a second road, a GPU tier, and Rust
+
+Asked for: a main road to drive onto, better foliage, "use my GPU power", and
+"use different languages or textures this time."
+
+### Three tiers, and `ultra`
+
+`?quality=` resolves to `fast`, `high` or `ultra`, passed through to the sky, the
+post chain, the terrain and the forest. `fast` exists for the software capture
+harness. `high` is roughly what shipped before. `ultra` is there because a
+discrete card finishes a `high` frame with most of its budget unspent:
+
+| | fast | high | ultra |
+|---|---|---|---|
+| draw calls | 429 | 470 | 595 |
+| triangles | 3.6 M | 4.7 M | 9.6 M |
+| shadow map | 1024 | 2048 | 4096 |
+| forest instances | 39 k | 55 k | 92 k |
+| SSR | no | opt-in | yes |
+
+### The environment map had been black the whole time
+
+The single biggest find of the round, and it had been wrong since iteration 1.
+`PMREMGenerator.fromScene` defaults its far plane to 100. The sky dome in the
+environment scene sits at 500, the ground disc at 400, the horizon trunks at 120
+to 150 — so **every object was outside the cube camera and the environment map
+was clear colour.** Reading the target back: mean luma 0.00071 before, 0.03003
+after. Separately the tier's sample count was being passed as `sigma`, a pre-blur
+in radians, rather than as a resolution.
+
+Every material's ambient and specular response depends on that map, so a great
+deal of earlier tuning was done against a black environment.
+
+### The canopy was painted in the colour of the sun
+
+Three's `lights_physical_pars_fragment` adds a multiscatter GGX term to
+`directSpecular`. On foliage that was a third to a half of every lit crown pixel.
+A leaf albedo is about 0.03 linear; a rough GGX lobe off a 4 per cent white
+Fresnel under a key of intensity 3 returns about 0.014 — **and it carries the
+light's colour, not the leaf's.**
+
+Proved by ablation rather than argument: killing the key moved the median canopy
+hue from 72 degrees (khaki) to 147, while the hemisphere, probe, spot, haze, rim,
+transmission and sheen each moved it two degrees or less.
+
+Removing it was correct and cost the frame most of a stop, because a canopy is
+most of a wide shot — the hero went 0.243 mean to 0.183. Day exposure is up from
+1.34 to 1.52 to put that back.
+
+### The gravel road, and three iterations on the wrong cause
+
+The mainline's near field rendered as cobbled pavement, and three rounds went
+into the aggregate — piece size, facet tilt, AO, palette — each landing and
+changing nothing. Rendering the unlit albedo showed a clean smooth surface: it
+was all in the shading. It was the **anisotropic footprint smear** this project
+had already solved for the trail, which the gravel had been explicitly exempted
+from on the argument that packed aggregate is isotropic where the trail's crack
+network is directional. That argument is wrong. The smear is the sampler, not the
+features: a footprint twenty times longer than it is wide averages twenty texels
+along the view ray and one across, and the gravel tile is *finer* than the
+trail's, so it was always going to smear harder.
+
+### Rust, and why bit-exact was the requirement
+
+`fbm` is the hot path of the whole boot. It now has a Rust implementation
+compiled to wasm32 — 4 kB, inlined as base64 so the single-file build stays
+self-contained — and the port is **bit-exact**, verified over 300,000 samples.
+
+That constraint is the whole design. Twelve iterations of art direction are
+pinned to the exact output of these functions, so a port that was merely close
+would quietly rebuild the world. The app checks 4096 samples at boot and stands
+down to the JS if any disagree.
+
+Two things that would have made it merely close: `core` has no `f64::floor`, so
+it is open-coded rather than taken from libm, whose rounding is not guaranteed to
+match V8's; and `Math.round` rounds half towards +infinity while Rust's rounds
+half away from zero. `worley` is deliberately not ported, because `Math.hypot`'s
+precision is implementation-defined.
+
+Measured in a browser, so V8's JIT against V8's wasm engine: **0 mismatches,
+74.6 ms against 39.6 ms, 1.88x.** Boot went from about 23 s to 19 s.
+
+### Known issues carried forward
+
+- Arriving at the junction from the spur does not read as arriving anywhere: the
+  spur's churned mouth is the same value as the graded surface beyond it, so no
+  road ever *appears*.
+- `terrain.roadDistance` returns a sentinel past about 78 m, which caps how far
+  the forest's density bands can reach however they are set.
+- SSR competes with `applyBrightwork`'s fake analytic skyline; that amplitude
+  wants a uniform so SSR can turn it down.
+- TAA and per-object motion blur were rejected, not attempted: both need a
+  velocity buffer, and neither could have been scored from stills.

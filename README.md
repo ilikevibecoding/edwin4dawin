@@ -30,6 +30,28 @@ speed and the revs, and the rest drift on their own clocks.
 rig rather than a dimmed version of the last: moonlight as a real key, headlamps that
 carry the frame, and their own exposure, bloom, ambient occlusion and grade.
 
+There are two roads: the dirt two-track you start on, and a graded gravel mainline it
+crosses about sixty metres ahead. Auto-drive takes the turn onto it by itself, or press
+`W` at the apron and steer on yourself.
+
+### Quality
+
+`?quality=` takes `fast`, `high` (the default) or `ultra`.
+
+| | fast | high | ultra |
+|---|---|---|---|
+| draw calls | 429 | 470 | 595 |
+| triangles | 3.6 M | 4.7 M | 9.6 M |
+| shadow map | 1024 | 2048 | 4096 |
+| forest instances | 39 k | 55 k | 92 k |
+| screen-space reflections | no | `?ssr=on` | yes |
+| pixel ratio cap | 1 | 1.5 | 2 |
+
+`fast` exists for the software-rendered capture harness and is not worth using on a GPU.
+`ultra` assumes a card with 4 GB or more and enough fill rate for roughly a dozen
+alpha-tested layers per pixel at pixel ratio 2 — those are reasoned budgets, not
+measured ones, because this was developed against a software rasteriser.
+
 ### Hosted copies
 
 `demo/index.html` is a self-contained 1.1 MB build with no external references, so any
@@ -51,7 +73,11 @@ npm install
 npm run dev            # dev server
 npm run build          # normal production build
 npm run build:single   # regenerate demo/index.html
+node native/build.mjs  # rebuild the Rust noise kernel (needs a Rust toolchain)
 ```
+
+The generated wasm module is committed, so a checkout without Rust still builds and
+still gets the accelerator.
 
 `?quality=fast` on the URL drops the shadow map, AO samples and forest density — it
 exists for the capture harness on software rendering, and is not worth using on a GPU.
@@ -66,6 +92,7 @@ exists for the capture harness on software rendering, and is not worth using on 
 | Ground | `src/terrain.js`, `src/textures/ground.js` — graded two-track with wheel bands, ruts holding standing water, aggregate standing proud of the surface |
 | Look | `src/sky.js`, `src/post.js`, `src/palette.js` — analytic sky feeding a PMREM environment, sun plus an art-directed bounce spot, ACES through a non-clipping S-curve, GTAO, bloom, SMAA, vignette, grain, sub-pixel chromatic aberration |
 | Motion | `src/drive.js`, `src/dust.js`, `src/camera.js`, `src/hud.js` |
+| Noise | `native/noise` — Rust compiled to wasm32, bit-exact against the JS in `textures/core.js`, 1.88x faster. `?nowasm=1` forces the JS path |
 
 Textures are drawn on canvases at load (`src/textures/core.js`) and uploaded as data
 textures rather than canvas textures, because a canvas stores its pixels premultiplied
@@ -83,6 +110,7 @@ and that quietly destroys the colour behind every cutout's transparent pixels.
 | `isolate.mjs`, `sweep.mjs`, `camvar.mjs` | hide scene elements, sweep lighting setups, sweep camera framing |
 | `interact.mjs` | drive the mouse and keyboard controls, asserting where the camera lands in the truck's own frame |
 | `ride.mjs` | step the driver and camera headlessly and report ride quality as numbers, since it cannot be seen in a frame |
+| `wasmcheck.mjs` | assert the Rust kernel matches the JS bit for bit over 300k samples, and time both in a real browser |
 | `cdnboot.mjs`, `cdndump.mjs` | confirm a hosted build boots, and show what a browser receives as opposed to `curl` |
 
 `interact.mjs` takes `--raw --url <hosted url>` to run the same checks against a

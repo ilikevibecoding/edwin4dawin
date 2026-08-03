@@ -813,7 +813,13 @@ const GradeShader = {
 
 const GRADES = {
   day: {
-    exposure: 1.34,
+    // Lifted from 1.34 with the foliage highlight fix. A multiscatter GGX term
+    // was contributing between a third and a half of every lit crown pixel, in
+    // the sun's colour rather than the leaf's; removing it was correct and cost
+    // the frame most of a stop, because a canopy is most of a wide shot. The
+    // hero measured 0.243 mean before and 0.183 after, which is a moodier scene
+    // than the one that was tuned, not a better one.
+    exposure: 1.52,
     bloom: { strength: 0.26, radius: 0.6, threshold: 0.92 },
     clamp: 14.0,
     ao: { intensity: 0.95, radius: 0.62, scale: 1.15, distanceExponent: 1.5, thickness: 1.0 },
