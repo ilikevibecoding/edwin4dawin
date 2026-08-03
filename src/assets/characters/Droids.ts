@@ -299,29 +299,36 @@ export class ProtocolDroid extends CharacterRig {
       'pelvis',
     );
     const wires: THREE.BufferGeometry[] = [];
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * TAU;
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * TAU;
       wires.push(
-        cyl(0.011, 0.011, 0.15, 5, { pos: [Math.cos(a) * 0.085, 0.14, Math.sin(a) * 0.075] }),
+        cyl(0.009, 0.009, 0.15, 5, { pos: [Math.cos(a) * 0.082, 0.17, Math.sin(a) * 0.072] }),
       );
     }
     attach(j.hips, merge(wires), dark, 'waistWiring');
 
+    // The shoulder joints sit at chest-local y = spine*0.4 and the neck at
+    // spine*0.45 + neck, so the cuirass has to top out below ~0.3 or it grows
+    // straight over the face.
     attach(
       j.chest,
       merge([
-        box(0.32, 0.36, 0.21, { pos: [0, 0.26, 0] }),
-        cyl(0.16, 0.15, 0.3, 14, { pos: [0, 0.26, 0] }),
-        box(0.38, 0.1, 0.2, { pos: [0, 0.42, 0] }),
-        box(0.13, 0.13, 0.05, { pos: [0, 0.3, 0.11] }),
-        box(0.06, 0.06, 0.04, { pos: [0.09, 0.16, 0.11] }),
+        box(0.3, 0.3, 0.2, { pos: [0, 0.13, 0] }),
+        cyl(0.155, 0.135, 0.28, 14, { pos: [0, 0.14, 0] }),
+        box(0.36, 0.09, 0.19, { pos: [0, 0.27, 0] }),
+        box(0.13, 0.12, 0.05, { pos: [0, 0.15, 0.105] }),
+        box(0.06, 0.06, 0.04, { pos: [0.09, 0.02, 0.105] }),
       ]),
       gold,
       'torso',
     );
     attach(
       j.chest,
-      merge([box(0.1, 0.07, 0.04, { pos: [0, 0.31, 0.13] })]),
+      merge([
+        box(0.055, 0.035, 0.03, { pos: [-0.032, 0.175, 0.13] }),
+        box(0.03, 0.03, 0.03, { pos: [0.028, 0.175, 0.13] }),
+        box(0.09, 0.012, 0.03, { pos: [0, 0.125, 0.13] }),
+      ]),
       dark,
       'chestPort',
     );

@@ -17,17 +17,24 @@ const CONSOLE_Z = -4.25;
 /** Inside faces of the alcove side walls, with clearance for the near plane. */
 const ALCOVE_CAM_X0 = 20.4;
 const ALCOVE_CAM_X1 = 23.6;
+
 /**
- * Everyone stands deep in the alcove or off to its left, because the camera
- * works the right-hand side of the alcove mouth for this whole chapter and
- * anything nearer than about a metre fills the lens.
+ * Staging for the alcove (x 20..24, z -1.7..-5.1, console on the back wall).
+ *
+ * The alcove is only 4 m by 3.4 m, which is not enough room to put a camera
+ * inside it and still hold two figures plus a metre-wide projection. So the
+ * camera works from the corridor, square to the opening and looking straight
+ * down -Z; the frame's horizontal axis is then world X, and the marks below
+ * are simply spread across it so nothing overlaps.
  */
-const LEIA_POST = new THREE.Vector3(21.4, 0, -3.9);
-const LEIA_KNEEL = new THREE.Vector3(21.8, 0, -3.7);
-const R2_POST = new THREE.Vector3(22.55, 0, -3.35);
-const THREEPIO_POST = new THREE.Vector3(20.6, 0, -3.25);
-/** Where the schematic hangs above the console. */
-const HOLO_POST = new THREE.Vector3(22.0, 1.66, -4.0);
+const LEIA_POST = new THREE.Vector3(22.4, 0, -3.9);
+const LEIA_KNEEL = new THREE.Vector3(22.25, 0, -3.5);
+const R2_POST = new THREE.Vector3(21.5, 0, -2.55);
+const THREEPIO_POST = new THREE.Vector3(23.35, 0, -2.9);
+/** Where the schematic hangs: left of frame, against the bare back corner. */
+const HOLO_POST = new THREE.Vector3(20.95, 1.45, -3.4);
+/** She turns out of the console toward the opening once the readout is up. */
+const LEIA_FACE = new THREE.Vector3(22.5, 0, 0);
 
 /**
  * The corridor clamp box is a single rectangle, but past the alcove mouth the
@@ -50,6 +57,10 @@ function keepInAlcove(p: THREE.Vector3): void {
 export function plansChapter(): Chapter<ShowContext> {
   const tmpA = new THREE.Vector3();
   const tmpB = new THREE.Vector3();
+  // Look-at targets are held by reference until the character updates, so they
+  // need their own storage rather than the per-frame scratch vectors.
+  const leiaLook = new THREE.Vector3();
+  const threepioLook = new THREE.Vector3();
   const rng = freshRng('plans');
   const fired = new Set<number>();
 
@@ -124,46 +135,49 @@ export function plansChapter(): Chapter<ShowContext> {
       };
 
       return [
-        // 1. Find her: the corridor, then round into the alcove mouth.
+        // 1. Find her: down the corridor, then round into the alcove mouth. The
+        //    lateral move is held back until the camera is past the opening, so
+        //    it never cuts the corner through the corridor wall.
         customShot({ id: 'plans.find', start: S, end: S + 9, fov: 46, handheld: 0.55, blend: 1.6 }, (k, _t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(28.5, 23.4, a), lerp(1.75, 1.62, a), lerp(0.9, -1.25, a));
-          out.target.set(lerp(24, ALCOVE_X - 0.5, a), lerp(1.6, 1.35, a), lerp(-1.2, -3.4, a));
-          out.fov = lerp(48, 44, a);
-          out.focus = 5;
+          out.position.set(lerp(27.2, 22.05, a), lerp(1.72, 1.62, a), lerp(1.0, 0.45, a));
+          out.target.set(lerp(22.7, 22.15, a), lerp(1.5, 1.36, a), lerp(-1.9, -3.85, a));
+          out.fov = lerp(48, 40, a);
+          out.focus = out.position.distanceTo(out.target);
           clampCam(out);
         }),
 
-        // 2. Close on Leia at the console, shot across the alcove mouth.
-        customShot({ id: 'plans.leia', start: S + 9, end: S + 19, fov: 40, handheld: 0.4, blend: 1.1 }, (k, _t, out) => {
+        // 2. Two-shot from the corridor: she turns out of the console on the
+        //    right of frame, the schematic hangs on the left.
+        customShot({ id: 'plans.leia', start: S + 9, end: S + 19, fov: 38, handheld: 0.4, blend: 1.1 }, (k, _t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(23.4, 23.25, a), lerp(1.66, 1.56, a), lerp(-1.6, -2.2, a));
-          out.target.set(LEIA_POST.x + lerp(0.25, 0.05, a), lerp(1.44, 1.32, a), LEIA_POST.z + 0.1);
-          out.fov = 40;
-          out.focus = 2.5;
+          out.position.set(22.1, lerp(1.6, 1.54, a), lerp(0.15, -0.55, a));
+          out.target.set(lerp(21.95, 21.9, a), lerp(1.34, 1.3, a), -3.72);
+          out.fov = lerp(38, 35, a);
+          out.focus = out.position.distanceTo(out.target);
           clampCam(out);
         }),
 
-        // 3. The schematic itself, held long enough to read. Shot from below and
-        //    from the alcove mouth so the background is unlit ceiling: an
-        //    additive hologram against a lit white wall simply disappears.
-        customShot({ id: 'plans.hologram', start: S + 19, end: S + 26, fov: 34, handheld: 0.3, blend: 1.0 }, (k, _t, out) => {
+        // 3. The schematic itself, held long enough to read. Lined up on the
+        //    bare back-left corner: an additive hologram laid over the
+        //    console's own lit screens is simply not legible.
+        customShot({ id: 'plans.hologram', start: S + 19, end: S + 26, fov: 38, handheld: 0.3, blend: 1.0 }, (k, _t, out) => {
           const a = smootherstep(k);
           const c = stage.dataProjection.root.position;
-          out.position.set(lerp(23.35, 23.2, a), lerp(1.08, 1.2, a), lerp(-2.15, -2.45, a));
-          out.target.set(c.x - 0.06, c.y + lerp(0.06, 0.0, a), c.z);
+          out.position.set(lerp(21.3, 21.1, a), lerp(1.5, 1.47, a), lerp(-0.35, -1.0, a));
+          out.target.set(c.x, c.y + lerp(0.05, 0.0, a), c.z);
           out.fov = lerp(38, 33, a);
           out.focus = out.position.distanceTo(out.target);
           clampCam(out);
         }),
 
-        // 4. The transfer, low and close, from the alcove mouth so both the
-        //    kneeling figure and the droid stay in the same frame.
-        customShot({ id: 'plans.transfer', start: S + 26, end: S + 34, fov: 42, handheld: 0.45, blend: 0.9 }, (k, _t, out) => {
+        // 4. The transfer: the droid anchors the left foreground, she kneels
+        //    into the right of frame with her face still to camera.
+        customShot({ id: 'plans.transfer', start: S + 26, end: S + 34, fov: 44, handheld: 0.45, blend: 0.9 }, (k, _t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(23.45, 23.3, a), lerp(1.02, 0.88, a), lerp(-1.55, -1.95, a));
-          out.target.set(lerp(22.15, 22.1, a), lerp(0.88, 0.76, a), lerp(-3.4, -3.5, a));
-          out.fov = lerp(44, 40, a);
+          out.position.set(lerp(22.1, 22.0, a), lerp(1.1, 0.92, a), lerp(-0.35, -1.05, a));
+          out.target.set(22.1, lerp(0.9, 0.8, a), -3.45);
+          out.fov = lerp(46, 43, a);
           out.focus = out.position.distanceTo(out.target);
           clampCam(out);
         }),
@@ -171,8 +185,8 @@ export function plansChapter(): Chapter<ShowContext> {
         // 5. What is coming down the corridor behind her.
         customShot({ id: 'plans.approach', start: S + 34, end: S + PLANS_DURATION, fov: 46, handheld: 0.65, blend: 1.2 }, (k, _t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(21.6, 20.6, a), lerp(1.5, 1.62, a), lerp(-2.4, -1.05, a));
-          out.target.set(lerp(14, 4, a), 1.45, lerp(-1.2, 0, a));
+          out.position.set(lerp(22.4, 23.6, a), lerp(1.5, 1.62, a), lerp(-0.6, 0.25, a));
+          out.target.set(lerp(15, 4, a), 1.45, lerp(-0.7, 0, a));
           out.fov = lerp(46, 50, a);
           out.focus = lerp(8, 16, a);
           clampCam(out);
@@ -254,38 +268,41 @@ export function plansChapter(): Chapter<ShowContext> {
       const { leia, r2, threepio, vader, troopers } = stage.characters;
 
       // --- Leia at the console ------------------------------------------------
-      // She works the console, then steps across to kneel beside the droid.
+      // She works the console, turns out of it to read the schematic, then
+      // steps across and kneels beside the droid.
       const across = smootherstep(clamp01((t - 18) / 2.4)) * (1 - smootherstep(clamp01((t - 31) / 2)));
       leia.root.position.set(
         lerp(LEIA_POST.x, LEIA_KNEEL.x, across),
         0,
         lerp(LEIA_POST.z, LEIA_KNEEL.z, across),
       );
-      if (t < 16) {
+      if (t < 7.5) {
         leia.setState('interact');
-        leia.faceTowards(tmpA.set(LEIA_POST.x, 1.4, CONSOLE_Z - 0.4));
-        leia.lookTarget = tmpA.set(LEIA_POST.x, 1.5, CONSOLE_Z - 0.4);
-      } else if (t < 19.5) {
+        leia.faceTowards(tmpA.set(LEIA_POST.x, 0, CONSOLE_Z - 0.4));
+        leiaLook.set(LEIA_POST.x, 1.5, CONSOLE_Z - 0.4);
+      } else if (t < 18) {
+        // Turned out of the console so the schematic lights her face rather
+        // than the back of her head.
         leia.setState('idle');
-        leia.faceTowards(tmpA.copy(HOLO_POST).setY(0));
-        leia.lookTarget = tmpA.copy(stage.dataProjection.root.position);
+        leia.faceTowards(LEIA_FACE);
+        leiaLook.copy(stage.dataProjection.root.position);
       } else if (t < 31) {
-        // Kneel beside the droid and hand the data across.
         leia.setState('kneel');
         leia.faceTowards(tmpA.set(R2_POST.x, 0, R2_POST.z));
-        leia.lookTarget = tmpA.set(R2_POST.x, 0.95, R2_POST.z);
+        leiaLook.set(R2_POST.x, 0.98, R2_POST.z);
       } else {
         leia.setState('idle');
-        leia.faceTowards(tmpA.set(LEIA_POST.x + 2, 1.4, -1.4));
-        leia.lookTarget = tmpA.set(ALCOVE_X + 6, 1.5, 0);
+        leia.faceTowards(tmpA.set(23.6, 0, -1.6));
+        leiaLook.set(ALCOVE_X + 6, 1.5, 0);
       }
+      leia.lookTarget = leiaLook;
 
       // --- the schematic ------------------------------------------------------
       const proj = stage.dataProjection;
       const up = ramp(t, 4.5, 7);
       const shrink = ramp(t, 25, 29.5);
       proj.setVisible(t > 4.4 && t < 30 ? 1 : 0);
-      const projY = lerp(HOLO_POST.y, 0.88, shrink);
+      const projY = lerp(HOLO_POST.y, 0.95, shrink);
       const projX = lerp(HOLO_POST.x, R2_POST.x, shrink);
       const projZ = lerp(HOLO_POST.z, R2_POST.z + 0.02, shrink);
       proj.root.position.set(projX, projY, projZ);
@@ -298,11 +315,16 @@ export function plansChapter(): Chapter<ShowContext> {
 
       // --- the droids ---------------------------------------------------------
       r2.setState('idle');
-      r2.lookDomeAt(tmpA.set(projX, projY, projZ));
       if (t > 30) r2.lookDomeAt(tmpB.set(R2_POST.x + 4, 1.2, 0));
+      else if (t > 18) r2.lookDomeAt(tmpA.copy(leia.root.position).setY(1.1));
+      else r2.lookDomeAt(tmpA.set(projX, projY, projZ));
       threepio.setState('idle');
       threepio.setAnxiety(0.6 + 0.35 * ramp(t, 30, 40));
-      threepio.lookTarget = tmpB.set(THREEPIO_POST.x + 4, 1.5, 0.4);
+      threepio.lookTarget = threepioLook.set(
+        t > 26 ? THREEPIO_POST.x + 5 : leia.root.position.x,
+        1.5,
+        t > 26 ? 0.4 : leia.root.position.z,
+      );
       if (dt > 0 && rng.next() < dt * 0.4) {
         ctx.sfx.servo({ position: r2.root.position, gain: 0.05 });
       }

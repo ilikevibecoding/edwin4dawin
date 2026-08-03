@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CharacterRig, type RigProportions } from './CharacterRig';
 import { attach, blasterCarbine, blasterPistol, boot, limb, plate, utilityBelt } from './parts';
-import { box, cyl, merge, sphere } from '../geometry';
+import { box, cyl, merge, sphere, torus } from '../geometry';
 import { CHAR_MATS, cloth, emissive } from '../materials';
 import { clamp01, damp, smoothstep } from '../../core/math';
 
@@ -25,6 +25,8 @@ function buildBaseHuman(
     torsoWidth?: number;
     limbRadius?: number;
     bootScale?: number;
+    /** Soft, un-boxy upper body — used for figures worn under robes. */
+    roundTorso?: boolean;
   },
 ): void {
   const j = rig.joints;
@@ -45,11 +47,19 @@ function buildBaseHuman(
 
   attach(
     j.chest,
-    merge([
-      box(0.34 * tw, p.spine * 0.78, 0.2, { pos: [0, p.spine * 0.2, 0] }),
-      cyl(0.17 * tw, 0.16 * tw, p.spine * 0.6, 12, { pos: [0, p.spine * 0.18, 0] }),
-      box(0.4 * tw, 0.11, 0.19, { pos: [0, p.spine * 0.42, 0] }),
-    ]),
+    cfg.roundTorso
+      ? merge([
+          cyl(0.165 * tw, 0.145 * tw, p.spine * 0.92, 16, { pos: [0, p.spine * 0.2, 0] }),
+          sphere(0.165 * tw, 16, 12, {
+            pos: [0, p.spine * 0.4, 0],
+            scale: [1.32, 0.62, 0.95],
+          }),
+        ])
+      : merge([
+          box(0.34 * tw, p.spine * 0.78, 0.2, { pos: [0, p.spine * 0.2, 0] }),
+          cyl(0.17 * tw, 0.16 * tw, p.spine * 0.6, 12, { pos: [0, p.spine * 0.18, 0] }),
+          box(0.4 * tw, 0.11, 0.19, { pos: [0, p.spine * 0.42, 0] }),
+        ]),
     cfg.torso,
     'torso',
   );
@@ -448,20 +458,45 @@ export class DarkLord extends CharacterRig {
       'belt',
     );
 
-    // Helmet: dome, angled faceplate, triangular lenses, grille, rear flare.
-    // Helmet: a compact dome, a forward-raked faceplate with a pronounced
-    // brow and nose ridge, and a short flared neck skirt.
+    // Armoured limbs. Bare capsules at this radius read as an inflatable
+    // suit; the shells give each segment a hard edge to catch the rim light.
+    for (const side of ['L', 'R'] as const) {
+      const shoulder = side === 'L' ? j.shoulderL : j.shoulderR;
+      const elbow = side === 'L' ? j.elbowL : j.elbowR;
+      const hip = side === 'L' ? j.hipL : j.hipR;
+      const knee = side === 'L' ? j.kneeL : j.kneeR;
+      attach(shoulder, sphere(0.108, 12, 10, { pos: [0, 0.005, 0] }), black, `shoulderCap${side}`);
+      attach(elbow, plate(0.082, 0.0, 0.13, 1.16), trim, `elbowGuard${side}`);
+      attach(hip, plate(0.104, 0.04, 0.34, 1.1), black, `thighPlate${side}`);
+      attach(knee, plate(0.09, 0.0, 0.3, 1.12), black, `shinPlate${side}`);
+      attach(knee, box(0.16, 0.11, 0.04, { pos: [0, -0.02, 0.1] }), trim, `kneePlate${side}`);
+      attach(
+        side === 'L' ? j.ankleL : j.ankleR,
+        box(0.15, 0.11, 0.34, { pos: [0, -0.05, 0.06] }),
+        black,
+        `boot${side}`,
+      );
+    }
+
+    // Helmet. Four elements carry the read at corridor distance: a tall dome,
+    // a hard brow line, a wide flared neck skirt that reaches the shoulders,
+    // and the pale respirator grille that breaks the black.
     attach(
       j.head,
       merge([
-        sphere(0.132, 18, 14, { pos: [0, 0.028, -0.012], scale: [1, 1.04, 1.02] }),
-        box(0.2, 0.052, 0.115, { pos: [0, 0.052, 0.062] }),
-        box(0.152, 0.115, 0.075, { pos: [0, -0.008, 0.098], rot: [0.16, 0, 0] }),
-        box(0.048, 0.135, 0.095, { pos: [0, 0.0, 0.108], rot: [0.1, 0, 0] }),
-        box(0.118, 0.085, 0.062, { pos: [0, -0.088, 0.088], rot: [-0.3, 0, 0] }),
-        cyl(0.128, 0.168, 0.115, 16, { pos: [0, -0.128, -0.012] }),
-        box(0.068, 0.115, 0.07, { pos: [0.088, -0.022, 0.062], rot: [0, 0.42, 0] }),
-        box(0.068, 0.115, 0.07, { pos: [-0.088, -0.022, 0.062], rot: [0, -0.42, 0] }),
+        sphere(0.134, 20, 16, { pos: [0, 0.042, -0.014], scale: [1, 1.12, 1.02] }),
+        // Brow ledge over the lenses.
+        box(0.216, 0.05, 0.13, { pos: [0, 0.058, 0.058], rot: [-0.1, 0, 0] }),
+        // Raked faceplate and the vertical nose ridge that splits it.
+        box(0.158, 0.13, 0.08, { pos: [0, -0.012, 0.1], rot: [0.16, 0, 0] }),
+        box(0.05, 0.15, 0.1, { pos: [0, 0.004, 0.112], rot: [0.1, 0, 0] }),
+        // Angled cheek panels.
+        box(0.072, 0.155, 0.075, { pos: [0.09, -0.026, 0.062], rot: [0, 0.46, 0] }),
+        box(0.072, 0.155, 0.075, { pos: [-0.09, -0.026, 0.062], rot: [0, -0.46, 0] }),
+        // Respirator box under the faceplate.
+        box(0.126, 0.09, 0.07, { pos: [0, -0.096, 0.086], rot: [-0.3, 0, 0] }),
+        // Neck skirt: flared, and long enough to sit on the shoulder cowl.
+        cyl(0.126, 0.196, 0.16, 18, { pos: [0, -0.155, -0.016] }),
       ]),
       CHAR_MATS.vaderHelmet(),
       'helmet',
@@ -469,13 +504,26 @@ export class DarkLord extends CharacterRig {
     attach(
       j.head,
       merge([
-        box(0.058, 0.042, 0.028, { pos: [0.048, 0.022, 0.135], rot: [0.16, 0, -0.4] }),
-        box(0.058, 0.042, 0.028, { pos: [-0.048, 0.022, 0.135], rot: [0.16, 0, 0.4] }),
-        box(0.078, 0.036, 0.028, { pos: [0, -0.085, 0.118], rot: [-0.3, 0, 0] }),
-        box(0.018, 0.045, 0.028, { pos: [0.05, -0.075, 0.112] }),
-        box(0.018, 0.045, 0.028, { pos: [-0.05, -0.075, 0.112] }),
+        box(0.062, 0.046, 0.03, { pos: [0.05, 0.018, 0.138], rot: [0.16, 0, -0.42] }),
+        box(0.062, 0.046, 0.03, { pos: [-0.05, 0.018, 0.138], rot: [0.16, 0, 0.42] }),
       ]),
       CHAR_MATS.trooperLens(),
+      'lenses',
+    );
+    attach(
+      j.head,
+      merge([
+        // Mouth grille and the two round cheek intakes — the only light-toned
+        // features on the figure, so they define the face at any distance.
+        box(0.086, 0.042, 0.03, { pos: [0, -0.094, 0.118], rot: [-0.3, 0, 0] }),
+        box(0.02, 0.052, 0.03, { pos: [0.052, -0.08, 0.114], rot: [-0.2, 0, 0] }),
+        box(0.02, 0.052, 0.03, { pos: [-0.052, -0.08, 0.114], rot: [-0.2, 0, 0] }),
+        cyl(0.026, 0.026, 0.022, 12, { pos: [0.094, -0.048, 0.088], rot: [Math.PI / 2, 0, 0.46] }),
+        cyl(0.026, 0.026, 0.022, 12, { pos: [-0.094, -0.048, 0.088], rot: [Math.PI / 2, 0, -0.46] }),
+        // Brow trim strip.
+        box(0.2, 0.012, 0.016, { pos: [0, 0.036, 0.122], rot: [-0.1, 0, 0] }),
+      ]),
+      CHAR_MATS.vaderGrille(),
       'faceplate',
     );
 
@@ -582,6 +630,10 @@ export class DarkLord extends CharacterRig {
 // The princess
 // ---------------------------------------------------------------------------
 
+/** Gown geometry, in the hips' local frame. Hem lands on the deck at y = 0. */
+const GOWN_TOP = 0.39;
+const GOWN_LENGTH = 1.25;
+
 export class Princess extends CharacterRig {
   private gown: THREE.Mesh;
   private gownBase: Float32Array;
@@ -621,46 +673,63 @@ export class Princess extends CharacterRig {
       feet: white,
       torsoWidth: 0.82,
       limbRadius: 0.044,
+      roundTorso: true,
     });
 
-    // Long ceremonial gown replaces visible legs.
-    const gownGeo = new THREE.CylinderGeometry(0.19, 0.36, 0.9, 18, 6, true);
-    gownGeo.translate(0, -0.4, 0);
+    // Floor-length robe. It starts just under the bust so the boxy armature
+    // torso never shows, and the hem is only a little wider than her stance —
+    // a wide skirt turns the whole figure into a traffic cone at any distance.
+    const gownGeo = new THREE.CylinderGeometry(0.155, 0.235, GOWN_LENGTH, 20, 8, true);
+    // Origin at the waist, so shortening the gown draws the hem up rather than
+    // lifting it off the deck.
+    gownGeo.translate(0, -GOWN_LENGTH / 2, 0);
     const gpos = gownGeo.getAttribute('position');
     this.gownBase = new Float32Array(gpos.array as Float32Array);
     this.gown = new THREE.Mesh(gownGeo, cloth('leiaGown', 0xf6f4ee, 0.68));
     this.gown.castShadow = true;
     this.gown.receiveShadow = true;
     this.gown.name = 'gown';
+    this.gown.position.y = GOWN_TOP;
     j.hips.add(this.gown);
 
-    // Belt and high collar.
+    // Chrome waist belt, sitting on the natural waist rather than the hips.
     attach(
       j.hips,
-      merge([cyl(0.2, 0.2, 0.05, 16, { pos: [0, 0.06, 0] })]),
-      CHAR_MATS.trooperUnder(),
-      'sash',
+      merge([
+        cyl(0.183, 0.183, 0.055, 20, { pos: [0, 0.16, 0] }),
+        box(0.075, 0.075, 0.03, { pos: [0, 0.16, 0.175] }),
+      ]),
+      CHAR_MATS.leiaBelt(),
+      'belt',
     );
+    // Standing collar. Her chin sits at chest-local ~0.28, so the collar has
+    // to top out below that or it closes over her jaw.
     attach(
       j.chest,
       merge([
-        cyl(0.15, 0.12, 0.14, 14, { pos: [0, 0.42, 0] }),
-        box(0.06, 0.3, 0.02, { pos: [0, 0.24, 0.1] }),
+        cyl(0.108, 0.145, 0.12, 16, { pos: [0, 0.195, -0.012] }),
+        box(0.055, 0.24, 0.025, { pos: [0, 0.08, 0.095] }),
       ]),
       white,
       'collar',
     );
 
-    // Head with the side-bun hairstyle.
+    // Head with the side-bun hairstyle. The buns sit forward of the ears so
+    // they break the head's silhouette when seen head-on, which is the single
+    // cue that identifies her at corridor distance.
     attach(j.head, sphere(0.1, 14, 12, { pos: [0, 0, 0.004], scale: [0.95, 1.1, 1] }), skin, 'head');
     attach(
       j.head,
       merge([
-        sphere(0.108, 14, 12, { pos: [0, 0.022, -0.012], scale: [1, 1.02, 1] }),
-        box(0.19, 0.055, 0.13, { pos: [0, 0.062, 0.028] }),
-        sphere(0.062, 12, 10, { pos: [0.115, -0.012, 0], scale: [0.8, 1, 1] }),
-        sphere(0.062, 12, 10, { pos: [-0.115, -0.012, 0], scale: [0.8, 1, 1] }),
-        box(0.05, 0.12, 0.09, { pos: [0, -0.06, -0.075] }),
+        // Pulled back off the brow: an ellipsoid centred on the skull covers
+        // the whole upper face at this radius and leaves her with no eyes.
+        sphere(0.108, 16, 12, { pos: [0, 0.03, -0.028], scale: [1.03, 1.0, 1.0] }),
+        box(0.16, 0.05, 0.1, { pos: [0, 0.088, -0.004] }),
+        sphere(0.075, 14, 12, { pos: [0.122, -0.018, 0.012], scale: [0.72, 1, 1] }),
+        sphere(0.075, 14, 12, { pos: [-0.122, -0.018, 0.012], scale: [0.72, 1, 1] }),
+        torus(0.052, 0.017, { pos: [0.132, -0.018, 0.012], rot: [0, Math.PI / 2, 0] }, 6, 14),
+        torus(0.052, 0.017, { pos: [-0.132, -0.018, 0.012], rot: [0, Math.PI / 2, 0] }, 6, 14),
+        box(0.055, 0.13, 0.085, { pos: [0, -0.062, -0.072] }),
       ]),
       hair,
       'hair',
@@ -677,6 +746,16 @@ export class Princess extends CharacterRig {
     this.dataCard.position.set(0, -0.05, 0.04);
     this.dataCard.visible = false;
     j.handR.add(this.dataCard);
+
+    // The gown is her lower body. The armature's legs are never visible
+    // through it while she stands, and they punch straight out of the hem the
+    // moment she kneels, so drop them from the render entirely.
+    for (const side of ['L', 'R'] as const) {
+      for (const part of [`thigh${side}`, `shin${side}`, `foot${side}`, `trouser${side}`]) {
+        const mesh = j.root.getObjectByName(part);
+        if (mesh) mesh.visible = false;
+      }
+    }
   }
 
   setHoldingData(v: boolean): void {
@@ -697,8 +776,8 @@ export class Princess extends CharacterRig {
   protected override onUpdate(_dt: number, elapsed: number): void {
     // The gown is rigid, so shorten it as the pelvis drops or the hem would
     // pass through the deck when she kneels.
-    const pelvis = this.joints.body.position.y + this.p.hipHeight;
-    this.gown.scale.y = clamp01(pelvis / 0.86) * 0.94 + 0.06;
+    const waist = this.joints.body.position.y + this.p.hipHeight + GOWN_TOP;
+    this.gown.scale.y = Math.max(0.25, waist / GOWN_LENGTH);
     // Hem sway driven by speed and stride phase.
     const pos = this.gown.geometry.getAttribute('position');
     const amp = 0.012 + Math.min(0.05, this.speed * 0.05);
@@ -706,7 +785,7 @@ export class Princess extends CharacterRig {
       const bx = this.gownBase[i * 3];
       const by = this.gownBase[i * 3 + 1];
       const bz = this.gownBase[i * 3 + 2];
-      const t = clamp01((-by) / 0.9);
+      const t = clamp01(-by / GOWN_LENGTH);
       const w = Math.sin(elapsed * 2.6 + this.cyclePhase * Math.PI * 2 + bx * 2.2) * amp * t * t;
       pos.setX(i, bx + w * 0.6);
       pos.setZ(i, bz + w + t * t * this.speed * 0.05);

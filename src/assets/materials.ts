@@ -316,11 +316,16 @@ export const CHAR_MATS = {
   rebelPants: () => figure('rebelPants', 0x2f3a30, 0.82, 0.02),
   rebelHelmet: () => figure('rebelHelmet', 0x3d4a3c, 0.55, 0.15),
   rebelVest: () => figure('rebelVest', 0xb9ac93, 0.8, 0.02),
-  vaderBlack: () => figure('vaderBlack', 0x121215, 0.46, 0.16),
-  vaderHelmet: () => figure('vaderHelmet', 0x141418, 0.2, 0.55),
-  vaderCape: () => figure('vaderCape', 0x0e0e12, 0.94, 0.0),
-  vaderTrim: () => figure('vaderTrim', 0x33333a, 0.32, 0.75),
+  // Vader is lit almost entirely by rim and bounce. A true black suit turns
+  // into a hole in the frame, so every surface here is a very dark grey with
+  // enough specular to catch an edge highlight and describe its own shape.
+  vaderBlack: () => figure('vaderBlack', 0x282a32, 0.38, 0.26),
+  vaderHelmet: () => figure('vaderHelmet', 0x2d2f39, 0.13, 0.8),
+  vaderCape: () => figure('vaderCape', 0x15151b, 0.93, 0.0),
+  vaderTrim: () => figure('vaderTrim', 0x484c56, 0.3, 0.82),
+  vaderGrille: () => figure('vaderGrille', 0x5b6069, 0.26, 0.9),
   leiaWhite: () => figure('leiaWhite', 0xf6f4ee, 0.62, 0.02),
+  leiaBelt: () => figure('leiaBelt', 0xb9bec6, 0.28, 0.85),
   leiaHair: () => figure('leiaHair', 0x2a1c14, 0.72, 0.03),
   skinLight: () => figure('skinLight', 0xd8ab8c, 0.72, 0.0),
   skinMid: () => figure('skinMid', 0xc0895f, 0.72, 0.0),
