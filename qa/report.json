@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-03T10:54:07.647Z",
+  "generatedAt": "2026-08-03T12:10:55.566Z",
   "url": "http://127.0.0.1:4173/?qa=1&quality=medium",
   "viewport": {
     "width": 1920,
@@ -62,77 +62,77 @@
   ],
   "playbackSamples": [
     {
-      "time": 100.5,
-      "fps": 1.3678352032147156,
-      "draws": 125,
-      "tris": 24783,
+      "time": 100,
+      "fps": 1.4827506672377995,
+      "draws": 89,
+      "tris": 24119,
       "issues": 0
     },
     {
-      "time": 102.84990000000003,
-      "fps": 1.3588802826470976,
+      "time": 101.01670000000001,
+      "fps": 1.3386721562141168,
+      "draws": 69,
+      "tris": 17909,
+      "issues": 0
+    },
+    {
+      "time": 102.61660000000009,
+      "fps": 1.3839553443742203,
       "draws": 70,
       "tris": 18041,
       "issues": 0
     },
     {
-      "time": 104.58300000000007,
-      "fps": 1.3769005051694965,
-      "draws": 72,
-      "tris": 22153,
-      "issues": 0
-    },
-    {
-      "time": 106.56640000000009,
-      "fps": 1.4610911428654918,
+      "time": 104.93310000000008,
+      "fps": 1.4950762156630824,
       "draws": 73,
       "tris": 22253,
       "issues": 0
     },
     {
-      "time": 108.31630000000006,
-      "fps": 1.425611587370982,
+      "time": 106.53320000000006,
+      "fps": 1.5289376940901442,
       "draws": 73,
       "tris": 22253,
       "issues": 0
     },
     {
-      "time": 110.04960000000004,
-      "fps": 1.3910871500643,
+      "time": 108.94980000000005,
+      "fps": 1.5376414630145967,
+      "draws": 79,
+      "tris": 22733,
+      "issues": 0
+    },
+    {
+      "time": 110.66630000000006,
+      "fps": 1.474660418475857,
       "draws": 86,
       "tris": 23333,
       "issues": 0
     },
     {
-      "time": 111.93280000000004,
-      "fps": 1.5067552861997962,
-      "draws": 90,
-      "tris": 24121,
+      "time": 112.5829000000001,
+      "fps": 1.601486179174273,
+      "draws": 96,
+      "tris": 24601,
       "issues": 0
     },
     {
-      "time": 113.78260000000004,
-      "fps": 1.61683230215362,
-      "draws": 118,
-      "tris": 24475,
-      "issues": 0
-    },
-    {
-      "time": 115.24939999999998,
-      "fps": 2.229643356158278,
+      "time": 114.04950000000012,
+      "fps": 1.5118224515712892,
       "draws": 121,
       "tris": 24543,
       "issues": 0
     },
     {
-      "time": 117.19919999999995,
-      "fps": 2.4591238961266053,
-      "draws": 123,
-      "tris": 24547,
+      "time": 115.61620000000013,
+      "fps": 2.385243294816071,
+      "draws": 121,
+      "tris": 24543,
       "issues": 0
     }
   ],
-  "meanFps": 1.619376071197038,
+  "meanFps": 1.574024588463145,
   "results": [
     {
       "checkpoint": {
@@ -172,7 +172,7 @@
         "subtitle": "A galactic civil war burns across ten thousand worlds.",
         "narrationCue": "p1",
         "issues": [],
-        "fps": 10.193068713256762,
+        "fps": 9.897927621395143,
         "drawCalls": 25,
         "triangles": 13185,
         "measurements": {
@@ -222,8 +222,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.138963261846378,
-        "p95": 0.754787450980392,
+        "mean": 0.13905985650868738,
+        "p95": 0.755070588235294,
         "clipped": 0
       },
       "screenshot": "01-prologue-open.png"
@@ -260,7 +260,7 @@
         "subtitle": "This is the hour the war turns, and almost no one alive will know it happened.",
         "narrationCue": "p5",
         "issues": [],
-        "fps": 4.574002075890853,
+        "fps": 4.7925772563440034,
         "drawCalls": 25,
         "triangles": 13185,
         "measurements": {
@@ -310,8 +310,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.1943062230256586,
-        "p95": 0.7808854901960786,
+        "mean": 0.19436990189276068,
+        "p95": 0.7811529411764705,
         "clipped": 0
       },
       "screenshot": "02-prologue-final-line.png"
@@ -354,7 +354,7 @@
         "subtitle": "Tatooine. Twin suns, endless sand, and nothing an empire would bother to want.",
         "narrationCue": "t1",
         "issues": [],
-        "fps": 4.055198406544125,
+        "fps": 4.125206260312248,
         "drawCalls": 27,
         "triangles": 26623,
         "measurements": {
@@ -404,7 +404,7 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.5060285361791835,
+        "mean": 0.5060804691176358,
         "p95": 0.941313725490196,
         "clipped": 0
       },
@@ -443,7 +443,7 @@
         "subtitle": "For a few more seconds, the sky above her is empty.",
         "narrationCue": "t4",
         "issues": [],
-        "fps": 3.486241507352695,
+        "fps": 3.6104496729099886,
         "drawCalls": 72,
         "triangles": 31349,
         "measurements": {
@@ -493,7 +493,7 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.03699134813453332,
+        "mean": 0.036978295492921066,
         "p95": 0.0631921568627451,
         "clipped": 0
       },
@@ -532,7 +532,7 @@
         "subtitle": "Her corvette runs with every engine open.",
         "narrationCue": "u1",
         "issues": [],
-        "fps": 2.554350911051393,
+        "fps": 2.6840353576922067,
         "drawCalls": 69,
         "triangles": 17909,
         "measurements": {
@@ -582,8 +582,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.1543521183281409,
-        "p95": 0.6466768627450981,
+        "mean": 0.15213112742399276,
+        "p95": 0.6461105882352941,
         "clipped": 0
       },
       "screenshot": "05-pursuit-tracking.png"
@@ -625,7 +625,7 @@
         "subtitle": "A shadow climbs into the frame. Wedge shaped, gray, and vast. An Imperial destroyer, a city of guns, hunting a single courier.",
         "narrationCue": null,
         "issues": [],
-        "fps": 2.4022036214554148,
+        "fps": 2.5210931459881003,
         "drawCalls": 89,
         "triangles": 24119,
         "measurements": {
@@ -675,8 +675,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.07240709360021416,
-        "p95": 0.26547764705882354,
+        "mean": 0.06943859362744115,
+        "p95": 0.25369725490196077,
         "clipped": 0
       },
       "screenshot": "06-destroyer-reveal.png"
@@ -714,7 +714,7 @@
         "subtitle": "Shields flare, hold, and begin to fail.",
         "narrationCue": "u5",
         "issues": [],
-        "fps": 2.3915689223590437,
+        "fps": 2.4172754619681993,
         "drawCalls": 77,
         "triangles": 19819,
         "measurements": {
@@ -764,8 +764,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.2073781870370398,
-        "p95": 0.2979513725490196,
+        "mean": 0.19580994876092278,
+        "p95": 0.2864541176470588,
         "clipped": 0
       },
       "screenshot": "07-under-the-hull.png"
@@ -811,7 +811,7 @@
         "subtitle": "Shields flare, hold, and begin to fail.",
         "narrationCue": null,
         "issues": [],
-        "fps": 2.2023521120556753,
+        "fps": 2.224122336613502,
         "drawCalls": 129,
         "triangles": 24791,
         "measurements": {
@@ -861,8 +861,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.23440658282969506,
-        "p95": 0.4675003921568627,
+        "mean": 0.22989067972512628,
+        "p95": 0.46357882352941177,
         "clipped": 0
       },
       "screenshot": "08-battle-profile.png"
@@ -900,7 +900,7 @@
         "subtitle": "Shields flare, hold, and begin to fail.",
         "narrationCue": null,
         "issues": [],
-        "fps": 2.2333171211053435,
+        "fps": 2.200542800557471,
         "drawCalls": 86,
         "triangles": 22279,
         "measurements": {
@@ -950,8 +950,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.1762594467184445,
-        "p95": 0.4704894117647058,
+        "mean": 0.1762000846814077,
+        "p95": 0.46993882352941174,
         "clipped": 0
       },
       "screenshot": "09-corvette-hit.png"
@@ -989,7 +989,7 @@
         "subtitle": "Shields flare, hold, and begin to fail.",
         "narrationCue": null,
         "issues": [],
-        "fps": 2.309741462938915,
+        "fps": 2.317676143386898,
         "drawCalls": 101,
         "triangles": 22557,
         "measurements": {
@@ -1039,8 +1039,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.1905693976443396,
-        "p95": 0.5164313725490196,
+        "mean": 0.18993174023693013,
+        "p95": 0.5147121568627451,
         "clipped": 0
       },
       "screenshot": "10-engines-dead.png"
@@ -1082,7 +1082,7 @@
         "subtitle": "Shields flare, hold, and begin to fail.",
         "narrationCue": null,
         "issues": [],
-        "fps": 2.1412257327750277,
+        "fps": 2.117706852899375,
         "drawCalls": 137,
         "triangles": 24471,
         "measurements": {
@@ -1132,8 +1132,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.2140383761437277,
-        "p95": 0.4980392156862745,
+        "mean": 0.20218519541121674,
+        "p95": 0.4897960784313725,
         "clipped": 0
       },
       "screenshot": "11-capture-two-shot.png"
@@ -1171,7 +1171,7 @@
         "subtitle": "Somewhere in the corridors ahead, a plan is already moving.",
         "narrationCue": "c5",
         "issues": [],
-        "fps": 2.081791265729089,
+        "fps": 2.064286467914107,
         "drawCalls": 73,
         "triangles": 22103,
         "measurements": {
@@ -1221,8 +1221,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.07758950295478129,
-        "p95": 0.21598509803921567,
+        "mean": 0.07047741015792777,
+        "p95": 0.20083372549019607,
         "clipped": 0
       },
       "screenshot": "12-umbilical.png"
@@ -1265,7 +1265,7 @@
         "subtitle": "Inside, the corridor lights turn red.",
         "narrationCue": "d1",
         "issues": [],
-        "fps": 1.9204014919385815,
+        "fps": 1.8737664370955787,
         "drawCalls": 343,
         "triangles": 51671,
         "measurements": {
@@ -1333,22 +1333,22 @@
             "distance": 43.80257763961666
           },
           "rebel-0": {
-            "screenFraction": 0.15141603419627273,
+            "screenFraction": 0.15227891064079804,
             "onScreen": true,
             "ndc": [
-              -0.32321345199275975,
-              -0.7007198248815825
+              -0.32512597131234605,
+              -0.7058964022204651
             ],
-            "distance": 3.2634903411296188
+            "distance": 3.2513489863659073
           },
           "rebel-1": {
             "screenFraction": 1,
             "onScreen": true,
             "ndc": [
-              9.151173989255664,
-              8.530819385608948
+              9.153027254749325,
+              8.549789339395367
             ],
-            "distance": 2.1648186605597592
+            "distance": 2.165740484271698
           }
         },
         "boltsActive": 0,
@@ -1360,7 +1360,7 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.1951412444444502,
+        "mean": 0.19514127830882927,
         "p95": 0.4098180392156863,
         "clipped": 0.00001736111111111111
       },
@@ -1398,7 +1398,7 @@
         "subtitle": "They know exactly what is coming through that door, and they hold the line anyway.",
         "narrationCue": "d3",
         "issues": [],
-        "fps": 1.6216742164610745,
+        "fps": 1.6091082679558604,
         "drawCalls": 522,
         "triangles": 65417,
         "measurements": {
@@ -1493,8 +1493,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.19177994010077187,
-        "p95": 0.3314949019607843,
+        "mean": 0.1932812354302922,
+        "p95": 0.33433098039215686,
         "clipped": 0.00003472222222222222
       },
       "screenshot": "14-defenders-ready.png"
@@ -1536,7 +1536,7 @@
         "subtitle": "The seal glows. The metal bends.",
         "narrationCue": "d4",
         "issues": [],
-        "fps": 1.2124347305970031,
+        "fps": 1.146537710899242,
         "drawCalls": 398,
         "triangles": 55533,
         "measurements": {
@@ -1595,13 +1595,13 @@
             "distance": 12.117112494771302
           },
           "trooper-0": {
-            "screenFraction": 0.007669538511132219,
+            "screenFraction": 0.007707484026854292,
             "onScreen": true,
             "ndc": [
-              -0.08813628233507162,
-              -0.06077438468518415
+              -0.08813682653091841,
+              -0.06016382705433632
             ],
-            "distance": 15.398293539999303
+            "distance": 15.393815311937553
           },
           "rebel-0": {
             "screenFraction": 0,
@@ -1631,9 +1631,9 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.6449004263888586,
-        "p95": 0.861729411764706,
-        "clipped": 0.00006944444444444444
+        "mean": 0.6462669548474645,
+        "p95": 0.8617450980392157,
+        "clipped": 0.00008680555555555556
       },
       "screenshot": "15-door-breach.png"
     },
@@ -1674,7 +1674,7 @@
         "subtitle": "The seal glows. The metal bends.",
         "narrationCue": null,
         "issues": [],
-        "fps": 0.9709073020859403,
+        "fps": 0.9440889541592363,
         "drawCalls": 543,
         "triangles": 66817,
         "measurements": {
@@ -1733,13 +1733,13 @@
             "distance": 24.890207993035705
           },
           "trooper-0": {
-            "screenFraction": 0.004011101672568666,
+            "screenFraction": 0.0040312453684738445,
             "onScreen": true,
             "ndc": [
-              -0.0662282273299995,
-              -0.03875682115415199
+              -0.06623933276146472,
+              -0.038249509765302905
             ],
-            "distance": 16.90628837989707
+            "distance": 16.904841810017675
           },
           "rebel-0": {
             "screenFraction": 0.010890649436534016,
@@ -1769,8 +1769,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.23588483043300987,
-        "p95": 0.4976007843137255,
+        "mean": 0.23666693718682122,
+        "p95": 0.499398431372549,
         "clipped": 0
       },
       "screenshot": "16-firefight.png"
@@ -1803,7 +1803,7 @@
         "subtitle": "The seal glows. The metal bends.",
         "narrationCue": null,
         "issues": [],
-        "fps": 0.8014547293843581,
+        "fps": 0.782635917771053,
         "drawCalls": 462,
         "triangles": 60523,
         "measurements": {
@@ -1898,8 +1898,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.2552560760484761,
-        "p95": 0.5515435294117647,
+        "mean": 0.25549522915305184,
+        "p95": 0.5519905882352941,
         "clipped": 0
       },
       "screenshot": "17-line-breaks.png"
@@ -1943,18 +1943,18 @@
         "subtitle": "A figure in black, breathing through a machine. The Empire keeps him for problems it cannot solve with soldiers.",
         "narrationCue": "d8",
         "issues": [],
-        "fps": 0.6603323672915368,
+        "fps": 0.6820145193313228,
         "drawCalls": 256,
         "triangles": 45459,
         "measurements": {
           "vader": {
-            "screenFraction": 0.2501007883496873,
+            "screenFraction": 0.2563082731317284,
             "onScreen": true,
             "ndc": [
-              -0.0020703401336995327,
-              -0.18717071611763006
+              -0.0020171380803576298,
+              -0.1490250107628498
             ],
-            "distance": 3.6868232475414127
+            "distance": 3.712832701662007
           },
           "leia": {
             "screenFraction": 0,
@@ -2038,8 +2038,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.13005972265793925,
-        "p95": 0.19827607843137252,
+        "mean": 0.13036395891882496,
+        "p95": 0.17858039215686272,
         "clipped": 0
       },
       "screenshot": "18-vader-entrance.png"
@@ -2077,18 +2077,18 @@
         "subtitle": "He has come for the thing that was stolen.",
         "narrationCue": "d9",
         "issues": [],
-        "fps": 0.5984265371582985,
+        "fps": 0.6269094617355363,
         "drawCalls": 432,
         "triangles": 58227,
         "measurements": {
           "vader": {
-            "screenFraction": 0.07051957959282817,
+            "screenFraction": 0.07059323413135112,
             "onScreen": true,
             "ndc": [
-              0.021741193866934207,
-              -0.15713091048458408
+              0.021748479496619035,
+              -0.15663814794073905
             ],
-            "distance": 6.652636406985507
+            "distance": 6.652710076242464
           },
           "leia": {
             "screenFraction": 0,
@@ -2172,7 +2172,7 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.27944059025052753,
+        "mean": 0.2790887549700258,
         "p95": 0.6122901960784313,
         "clipped": 0
       },
@@ -2211,7 +2211,7 @@
         "subtitle": "The stolen schematics fold down into a small astromech droid. Every tower, every corridor, and one flaw at the heart of it.",
         "narrationCue": "l2",
         "issues": [],
-        "fps": 0.5784277305966419,
+        "fps": 0.5712080669811274,
         "drawCalls": 282,
         "triangles": 45217,
         "measurements": {
@@ -2306,8 +2306,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.27525903405500773,
-        "p95": 0.7610650980392156,
+        "mean": 0.2752764050108903,
+        "p95": 0.7611035294117647,
         "clipped": 0.00038194444444444446
       },
       "screenshot": "20-leia-console.png"
@@ -2344,7 +2344,7 @@
         "subtitle": "The stolen schematics fold down into a small astromech droid. Every tower, every corridor, and one flaw at the heart of it.",
         "narrationCue": null,
         "issues": [],
-        "fps": 0.6489068083302332,
+        "fps": 0.6192904857714573,
         "drawCalls": 282,
         "triangles": 52885,
         "measurements": {
@@ -2483,9 +2483,9 @@
         "subtitle": "You are carrying more than a message. Get it to the surface. Do not stop for me.",
         "narrationCue": "l4",
         "issues": [],
-        "fps": 0.6501556039078686,
+        "fps": 0.6272021765309308,
         "drawCalls": 283,
-        "triangles": 53205,
+        "triangles": 53213,
         "measurements": {
           "vader": {
             "screenFraction": 0,
@@ -2578,8 +2578,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.25374837662037847,
-        "p95": 0.7565850980392157,
+        "mean": 0.2499216099400918,
+        "p95": 0.6927019607843137,
         "clipped": 0
       },
       "screenshot": "22-transfer.png"
@@ -2622,7 +2622,7 @@
         "subtitle": "Two droids run for the launch bays. One of them is certain.",
         "narrationCue": "e1",
         "issues": [],
-        "fps": 0.6866989466038159,
+        "fps": 0.651726205476238,
         "drawCalls": 344,
         "triangles": 45903,
         "measurements": {
@@ -2654,13 +2654,13 @@
             "distance": 7.6847173421706625
           },
           "threepio": {
-            "screenFraction": 0.05033458858390661,
+            "screenFraction": 0.05035186213639915,
             "onScreen": true,
             "ndc": [
-              -0.08869736729232539,
-              -0.09329014624631142
+              -0.08868557231697567,
+              -0.09162654621360117
             ],
-            "distance": 4.733479494419992
+            "distance": 4.73228486993032
           },
           "plans": {
             "screenFraction": 0,
@@ -2717,7 +2717,7 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.2609388174291815,
+        "mean": 0.2610867430691565,
         "p95": 0.5436776470588234,
         "clipped": 0
       },
@@ -2762,7 +2762,7 @@
         "subtitle": "Two droids run for the launch bays. One of them is certain.",
         "narrationCue": null,
         "issues": [],
-        "fps": 0.7479506153140397,
+        "fps": 0.6996877837622679,
         "drawCalls": 770,
         "triangles": 88907,
         "measurements": {
@@ -2794,13 +2794,13 @@
             "distance": 4.552080746601932
           },
           "threepio": {
-            "screenFraction": 0.04062432253100139,
+            "screenFraction": 0.0408053910295521,
             "onScreen": true,
             "ndc": [
-              0.662593541123533,
-              -0.040218493261462894
+              0.6621826853486362,
+              -0.040574896688248374
             ],
-            "distance": 7.433228032702153
+            "distance": 7.419557650255506
           },
           "plans": {
             "screenFraction": 0.004222763105623947,
@@ -2857,7 +2857,7 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.39252829459419664,
+        "mean": 0.3926258175380991,
         "p95": 0.8851576470588236,
         "clipped": 0.0007291666666666667
       },
@@ -2901,7 +2901,7 @@
         "subtitle": "Two droids run for the launch bays. One of them is certain.",
         "narrationCue": null,
         "issues": [],
-        "fps": 0.7163973808511755,
+        "fps": 0.6959028334070475,
         "drawCalls": 78,
         "triangles": 23751,
         "measurements": {
@@ -2951,8 +2951,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.4313005781045869,
-        "p95": 0.8417709803921569,
+        "mean": 0.42859862267158144,
+        "p95": 0.8415035294117648,
         "clipped": 0.006961805555555555
       },
       "screenshot": "25-pod-separation.png"
@@ -2990,7 +2990,7 @@
         "subtitle": "On the destroyer, a gunnery officer checks for life signs, finds none, and holds his fire.",
         "narrationCue": "e4",
         "issues": [],
-        "fps": 0.7694780544858861,
+        "fps": 0.7260289443539151,
         "drawCalls": 89,
         "triangles": 25117,
         "measurements": {
@@ -3040,8 +3040,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.03160812527230913,
-        "p95": 0.03587607843137255,
+        "mean": 0.031196642211307215,
+        "p95": 0.035592941176470584,
         "clipped": 0
       },
       "screenshot": "26-pod-falling.png"
@@ -3082,7 +3082,7 @@
         "subtitle": "The pod falls toward the desert, a small bright point against a very old world.",
         "narrationCue": null,
         "issues": [],
-        "fps": 0.789271519926475,
+        "fps": 0.8115712018467754,
         "drawCalls": 45,
         "triangles": 29057,
         "measurements": {
@@ -3132,8 +3132,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.805555494553341,
-        "p95": 0.9699647058823528,
+        "mean": 0.8051222368463742,
+        "p95": 0.9702321568627451,
         "clipped": 0.00001736111111111111
       },
       "screenshot": "27-descent.png"
@@ -3169,7 +3169,7 @@
         "subtitle": "The pod falls toward the desert, a small bright point against a very old world.",
         "narrationCue": null,
         "issues": [],
-        "fps": 0.9246930019233616,
+        "fps": 0.9072891611204419,
         "drawCalls": 44,
         "triangles": 29057,
         "measurements": {
@@ -3219,8 +3219,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.6425311063589177,
-        "p95": 0.7343113725490197,
+        "mean": 0.6385590146922855,
+        "p95": 0.7331945098039216,
         "clipped": 0
       },
       "screenshot": "28-epilogue-entry.png"
@@ -3257,7 +3257,7 @@
         "subtitle": "The pod falls toward the desert, a small bright point against a very old world.",
         "narrationCue": null,
         "issues": [],
-        "fps": 1.1915700391629351,
+        "fps": 1.0809019045491564,
         "drawCalls": 136,
         "triangles": 38049,
         "measurements": {
@@ -3307,8 +3307,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.04132941885891977,
-        "p95": 0.0810964705882353,
+        "mean": 0.04140065155227468,
+        "p95": 0.08136392156862744,
         "clipped": 0
       },
       "screenshot": "29-epilogue-ships.png"

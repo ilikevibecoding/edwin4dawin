@@ -139,6 +139,22 @@ the story needs it to do:
 - Breached blast-door leaves came to rest standing upright in the middle of the corridor.
 - The warm planet bounce had drifted far enough that Imperial grey was reading as brown.
 
+### Second motion-review pass
+
+The re-rendered reel was reviewed shot by shot again:
+
+- **Stars were drawing straight through both hulls.** The starfield material was `transparent`, which
+  puts it in the transparent render list — drawn after all opaque geometry regardless of
+  `renderOrder` — and it had the depth test switched off. Against a dark grey hull that reads as the
+  ship being full of holes. The shell now sits at 1,600 km, comfortably beyond the planet and inside
+  the 2,400 km exterior far plane, and depth-tests normally.
+- Slow, deliberate walks read as sliding. The stride amplitude was solved purely from path speed
+  with a floor of half, which at a deliberate pace is a stride too small to see at ten metres. The
+  floor is now high enough that a walk is a walk, with a deeper bob and a wider arm swing.
+- The data-transfer beam left the middle of the projection and ran straight across the princess's
+  face on the one shot where her expression carries the scene. It now leaves the foot of the
+  projection, passes below her, and lands on the droid's lit data port.
+
 ## Final polish criteria
 
 - [x] The destroyer reveal communicates overwhelming scale — the bow crosses the top of frame at

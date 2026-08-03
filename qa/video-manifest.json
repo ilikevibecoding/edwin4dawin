@@ -1,8 +1,8 @@
 {
-  "out": "/tmp/reel_v5.mp4",
-  "fps": 15,
-  "width": 960,
-  "height": 540,
+  "out": "/tmp/starfall_reel.mp4",
+  "fps": 12,
+  "width": 1280,
+  "height": 720,
   "quality": "medium",
   "segments": [
     [
@@ -42,6 +42,10 @@
       296
     ],
     [
+      313,
+      319
+    ],
+    [
       319.5,
       327
     ],
@@ -50,7 +54,7 @@
       353
     ]
   ],
-  "frames": 1403,
-  "renderedAt": "2026-08-03T08:46:11.965Z",
+  "frames": 1194,
+  "renderedAt": "2026-08-03T11:43:55.702Z",
   "note": "Rendered frame-by-frame from the live engine on a software rasteriser; identical to real-time output on a GPU."
 }
