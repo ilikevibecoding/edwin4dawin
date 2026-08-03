@@ -65,14 +65,14 @@ export class SpaceScene {
     this.scene.background = new THREE.Color(0x000000);
 
     // ---- Lighting ---------------------------------------------------------
-    this.sun = new THREE.DirectionalLight(0xfff1de, 3.2);
+    this.sun = new THREE.DirectionalLight(0xfff4e6, 3.6);
     this.sun.position.copy(SUN_DIRECTION).multiplyScalar(600_000);
     this.sun.castShadow = false;
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
 
     // Warm bounce off the desert below keeps hull undersides readable.
-    this.planetBounce = new THREE.DirectionalLight(0xffb877, 2.1);
+    this.planetBounce = new THREE.DirectionalLight(0xffd0a4, 1.45);
     this.planetBounce.position.set(0, -1, 0.2);
     this.scene.add(this.planetBounce);
 
@@ -179,7 +179,7 @@ export class SpaceScene {
     this.chase.add(this.dockingArm);
 
     // ---- Tractor beam ------------------------------------------------------
-    const beamGeo = new THREE.CylinderGeometry(26, 42, 1, 18, 1, true);
+    const beamGeo = new THREE.CylinderGeometry(11, 20, 1, 18, 1, true);
     lib.registry.track(beamGeo);
     this.tractorMat = new THREE.MeshBasicMaterial({
       color: 0x7fc4ff, transparent: true, opacity: 0, side: THREE.DoubleSide,
@@ -334,7 +334,7 @@ export class SpaceScene {
 
   private updateTractorBeam(t: number): void {
     const v = tractorBeam.at(t);
-    this.tractorMat.opacity = v * 0.16 * (0.85 + Math.sin(t * 3.1) * 0.15);
+    this.tractorMat.opacity = v * 0.1 * (0.85 + Math.sin(t * 3.1) * 0.15);
     this.tractorMesh.visible = v > 0.02;
     if (!this.tractorMesh.visible) return;
     const top = this.destroyerPivot.localToWorld(new THREE.Vector3(0, -84, -260));

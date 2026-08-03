@@ -116,7 +116,7 @@ export function buildBattleScript(
 
       script.imperialBolts.push({
         t0, t1, from: from.clone(), to: to.clone(),
-        color: PALETTE.turbolaserGreen, length: 34, radius: 2.6, muzzle: 14,
+        color: PALETTE.turbolaserGreen, length: 21, radius: 1.5, muzzle: 14,
       });
       script.fireCues.push({ time: t0, kind: 'turbolaser', position: from.clone() });
 
@@ -135,17 +135,17 @@ export function buildBattleScript(
         });
         script.sparks.push({
           t0: t1, position: impact, count: Math.round(24 + strength * 40),
-          speed: 130 + strength * 190, spread: Math.PI * 0.55,
+          speed: 90 + strength * 130, spread: Math.PI * 0.55,
           direction: tmp.clone().negate(),
           color: salvo.shielded ? 0x9fe6ff : 0xffd08a,
           colorB: salvo.shielded ? 0x4c9dff : 0xff6a2a,
-          size: 9, life: 0.9, radius: 4,
+          size: 4.5, life: 0.9, radius: 3,
         });
         if (!salvo.shielded) {
           script.smoke.push({
             t0: t1, position: impact, count: Math.round(10 + strength * 16),
             speed: 26, spread: Math.PI * 0.7, direction: tmp.clone().negate(),
-            color: 0x6d6a66, colorB: 0x2b2926, size: 70, life: 3.2, radius: 6, stagger: 0.25,
+            color: 0x6d6a66, colorB: 0x2b2926, size: 16, life: 3.0, radius: 4, stagger: 0.25,
           });
           script.debris.push({
             t0: t1, position: impact, direction: tmp.clone().negate(),
@@ -179,16 +179,16 @@ export function buildBattleScript(
     const { t1, to } = solveArrival(t0, from, (t, out) => runnerPointAt(t, engineLocal, out), TURBOLASER_SPEED);
     tmp.copy(to).sub(from).normalize();
     from.addScaledVector(tmp, 55);
-    script.imperialBolts.push({ t0, t1, from: from.clone(), to: to.clone(), color: PALETTE.turbolaserGreen, length: 52, radius: 4.4 });
+    script.imperialBolts.push({ t0, t1, from: from.clone(), to: to.clone(), color: PALETTE.turbolaserGreen, length: 30, radius: 2.4 });
     script.fireCues.push({ time: t0, kind: 'turbolaser', position: from.clone() });
     script.flashes.push({ t0: t1, position: to.clone(), color: 0xffdca0, size: 260, light: 16, lightRange: 2600, duration: 1.5 });
     script.sparks.push({
-      t0: t1, position: to.clone(), count: 150, speed: 340, spread: Math.PI,
-      color: 0xfff0c8, colorB: 0xff5a1e, size: 13, life: 1.6, radius: 8,
+      t0: t1, position: to.clone(), count: 150, speed: 230, spread: Math.PI,
+      color: 0xfff0c8, colorB: 0xff5a1e, size: 7, life: 1.6, radius: 6,
     });
     script.smoke.push({
       t0: t1, position: to.clone(), count: 46, speed: 55, spread: Math.PI,
-      color: 0x88837c, colorB: 0x201e1c, size: 130, life: 6.5, radius: 12, stagger: 0.7,
+      color: 0x88837c, colorB: 0x201e1c, size: 30, life: 6.0, radius: 8, stagger: 0.7,
     });
     script.debris.push({ t0: t1, position: to.clone(), direction: new THREE.Vector3(0, 0.2, -1), count: 26, speed: 150, size: 5, life: 8 });
     script.damage.push({ time: t1, position: engineLocal.clone(), strength: 1, shielded: false });
@@ -209,14 +209,14 @@ export function buildBattleScript(
     from.addScaledVector(tmp, 12);
     script.rebelBolts.push({
       t0, t1, from: from.clone(), to: to.clone(),
-      color: PALETTE.rebelBoltRed, length: 22, radius: 1.7,
+      color: PALETTE.rebelBoltRed, length: 15, radius: 1.0,
     });
     script.fireCues.push({ time: t0, kind: 'rebel', position: from.clone() });
     script.flashes.push({ t0, position: from.clone(), color: PALETTE.rebelBoltRed, size: 16, light: 1.2, lightRange: 260, duration: 0.16 });
     script.flashes.push({ t0: t1, position: to.clone(), color: 0xffb060, size: 34, light: 2.4, lightRange: 700, duration: 0.4 });
     script.sparks.push({
       t0: t1, position: to.clone(), count: 16, speed: 90, spread: Math.PI * 0.6,
-      direction: tmp.clone().negate(), color: 0xffd8a0, colorB: 0xff5a20, size: 7, life: 0.7, radius: 3,
+      direction: tmp.clone().negate(), color: 0xffd8a0, colorB: 0xff5a20, size: 3.4, life: 0.7, radius: 2,
     });
   }
 
@@ -228,12 +228,12 @@ export function buildBattleScript(
     script.smoke.push({
       t0, position: p, count: 6, speed: 16, spread: Math.PI * 0.5,
       direction: new THREE.Vector3(0, 0.4, -1), color: 0x5d5a55, colorB: 0x1a1918,
-      size: 90, life: 7, radius: 5, stagger: 0.6,
+      size: 20, life: 7, radius: 4, stagger: 0.6,
     });
     if (i % 3 === 0) {
       script.sparks.push({
         t0, position: p, count: 8, speed: 55, spread: Math.PI,
-        color: 0xffc978, colorB: 0xff4a12, size: 5, life: 1.1, radius: 3,
+        color: 0xffc978, colorB: 0xff4a12, size: 3, life: 1.1, radius: 2,
       });
     }
   }

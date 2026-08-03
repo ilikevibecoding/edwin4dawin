@@ -178,9 +178,9 @@ export class BlockadeRunner {
 
       const halo = new THREE.Sprite(lib.rebel.engineHalo);
       halo.position.set(x, y, -81.5);
-      halo.scale.setScalar(r * 4.2);
+      halo.scale.setScalar(r * 3.0);
       this.group.add(halo);
-      this.thrusters.push({ mesh: core, halo, baseScale: r * 4.2 });
+      this.thrusters.push({ mesh: core, halo, baseScale: r * 3.0 });
     }
 
     this.engineLight = new THREE.PointLight(PALETTE.engineRebel, 0, 260, 2);
@@ -353,7 +353,7 @@ export class BlockadeRunner {
     for (const th of this.thrusters) {
       const s = th.baseScale * (0.55 + level * 0.75);
       th.halo.scale.setScalar(s);
-      (th.halo.material as THREE.SpriteMaterial).opacity = saturate(level * 0.7);
+      (th.halo.material as THREE.SpriteMaterial).opacity = saturate(level * 0.5);
       th.mesh.visible = level > 0.02;
       (th.mesh.material as THREE.MeshBasicMaterial).opacity = 1;
     }

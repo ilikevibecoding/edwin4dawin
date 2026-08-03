@@ -118,7 +118,7 @@ export class MaterialLibrary {
       trim: this.std('rebel-trim', { color: PALETTE.rebelTrim, roughness: 0.7, metalness: 0.15 }),
       greeble: this.std('rebel-greeble', { color: 0x8d8a80, roughness: 0.75, metalness: 0.4, map: rebelGreebleTex }),
       windows: this.emissiveWindows('rebel-windows', 24, 3, '#ffd9a8', 0.8),
-      engineCore: this.basic('rebel-engine', 0xfff0d8),
+      engineCore: this.basic('rebel-engine', 0xe8b478),
       engineHalo: this.spriteMat('rebel-engine-halo', PALETTE.engineRebel, this.glowSprite),
     };
 
@@ -148,7 +148,7 @@ export class MaterialLibrary {
       trim: this.std('imp-trim', { color: PALETTE.imperialAccent, roughness: 0.6, metalness: 0.55 }),
       greeble: this.std('imp-greeble', { color: 0x767d86, roughness: 0.72, metalness: 0.5, map: impGreebleTex }),
       windows: this.emissiveWindows('imp-windows', 40, 6, '#c9e2ff', 0.9),
-      engineCore: this.basic('imp-engine', 0xe6f2ff),
+      engineCore: this.basic('imp-engine', 0x7ba6e0),
       engineHalo: this.spriteMat('imp-engine-halo', PALETTE.engineBlue, this.glowSprite),
     };
 

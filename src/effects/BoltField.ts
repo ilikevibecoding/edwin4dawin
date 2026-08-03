@@ -66,7 +66,7 @@ export class BoltField {
     glowGeo.rotateX(Math.PI / 2);
     lib.registry.track(glowGeo);
     const glowMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff, toneMapped: false, transparent: true, opacity: 0.32,
+      color: 0xffffff, toneMapped: false, transparent: true, opacity: 0.24,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
     lib.registry.track(glowMat);
@@ -126,7 +126,7 @@ export class BoltField {
       _color.set(e.color);
       this.mesh.setColorAt(slot, _color);
 
-      _scale.set(e.radius * 3.1, e.radius * 3.1, e.length * Math.max(0.25, tail) * 1.15);
+      _scale.set(e.radius * 2.4, e.radius * 2.4, e.length * Math.max(0.25, tail) * 1.12);
       _m.compose(_pos, _q, _scale);
       this.glow.setMatrixAt(slot, _m);
       this.glow.setColorAt(slot, _color);

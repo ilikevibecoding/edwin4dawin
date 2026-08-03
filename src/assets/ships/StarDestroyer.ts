@@ -79,17 +79,18 @@ export class StarDestroyer {
 
     // ---- Dorsal trenches ---------------------------------------------------
     const trenchParts: THREE.BufferGeometry[] = [];
-    for (const [x, len, z, w] of [[90, 900, -280, 30], [180, 700, -380, 22]] as const) {
-      const g = trenchGeometry(len, w, 9, 1);
-      g.rotateX(-Math.PI / 2);
-      g.translate(x, 95, z);
+    // trenchGeometry is authored width-on-X, depth-on--Y, length-on-Z, so it
+    // only needs translating onto the dorsal plate - the earlier rotation stood
+    // each trench on end as an 880 m slab hanging off the hull.
+    for (const [x, len, z, w, d] of [[92, 880, -260, 26, 8], [176, 620, -360, 18, 7]] as const) {
+      const g = trenchGeometry(len, w, d, 1);
+      g.translate(x, halfHeightAt(z) + 0.5, z);
       trenchParts.push(g);
       trenchParts.push(mirrored(g));
     }
     // Long axial trench forward of the superstructure.
-    const axial = trenchGeometry(760, 44, 11, 1);
-    axial.rotateX(-Math.PI / 2);
-    axial.translate(0, 62, 260);
+    const axial = trenchGeometry(700, 38, 10, 1);
+    axial.translate(0, halfHeightAt(240) + 0.5, 250);
     trenchParts.push(axial);
     const trenches = mergeAll(trenchParts);
     if (trenches) {
@@ -219,8 +220,8 @@ export class StarDestroyer {
 
       const halo = new THREE.Sprite(lib.imperial.engineHalo);
       halo.position.set(x, y, -840);
-      halo.scale.setScalar(r * 3.4);
-      halo.userData.baseScale = r * 3.4;
+      halo.scale.setScalar(r * 2.1);
+      halo.userData.baseScale = r * 2.1;
       this.group.add(halo);
       this.engineHalos.push(halo);
     }
@@ -416,7 +417,7 @@ export class StarDestroyer {
     for (const halo of this.engineHalos) {
       const base = halo.userData.baseScale as number;
       halo.scale.setScalar(base * (0.6 + level * 0.62));
-      (halo.material as THREE.SpriteMaterial).opacity = saturate(level) * 0.75;
+      (halo.material as THREE.SpriteMaterial).opacity = saturate(level) * 0.42;
     }
     for (const core of this.engineCores) core.visible = level > 0.02;
     this.engineLight.intensity = level * 6;
