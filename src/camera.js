@@ -28,6 +28,10 @@ export const VIEWS = {
   interior: { pos: [0.3, 1.6, -0.16], target: [0.2, 1.24, 9.0], fov: 62 },
   forest: { pos: [1.2, 3.6, -10.5], target: [-0.2, 1.5, 9.0], fov: 46 },
   road: { pos: [1.82, 0.42, 4.5], target: [0.12, 0.98, -0.7], fov: 34 },
+  // The graded mainline. `place` is a hint to whoever resets the world before a
+  // capture: every other framing here is relative to a truck sitting on the
+  // spur, and no camera placement can show a road the truck is not on.
+  mainroad: { pos: [4.6, 2.5, -8.4], target: [-0.4, 1.1, 9.0], fov: 44, place: 'main', t: 0.06 },
 };
 
 export const VIEW_NAMES = Object.keys(VIEWS);

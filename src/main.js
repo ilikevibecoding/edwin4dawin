@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCameraRig, VIEW_NAMES } from './camera.js';
+import { createCameraRig, VIEWS, VIEW_NAMES } from './camera.js';
 import { createDriver } from './drive.js';
 import { createWheelDust } from './dust.js';
 import { createForest } from './forest.js';
@@ -7,6 +7,7 @@ import { PALETTE, SUN } from './palette.js';
 import { configureRenderer, createPost } from './post.js';
 import { createDustMotes, createLightShafts, createSky } from './sky.js';
 import { createTerrain } from './terrain.js';
+import { initNoise, noiseBackend } from './textures/core.js';
 import { createVehicle } from './vehicle/index.js';
 import { setVehicleEnv } from './vehicle/materials.js';
 import { createHud } from './hud.js';
@@ -16,8 +17,17 @@ import { createHud } from './hud.js';
 // ---------------------------------------------------------------------------
 
 const params = new URLSearchParams(location.search);
-const quality = params.get('quality') || 'high';
-const FAST = quality !== 'high';
+
+// Three tiers rather than two. `fast` exists for the software-rendered capture
+// harness and is not worth using on a GPU; `ultra` is there to actually load one
+// — a discrete card finishes a `high` frame with most of its budget unspent.
+const QUALITY_ALIAS = { low: 'fast', fast: 'fast', high: 'high', ultra: 'ultra' };
+const quality = QUALITY_ALIAS[params.get('quality')] ?? 'high';
+const TIER = {
+  fast: { shadowMap: 1024, envSamples: 256, trees: 150, motes: 400, shafts: 8, pixelRatio: 1, corridor: 1 },
+  high: { shadowMap: 2048, envSamples: 512, trees: 210, motes: 900, shafts: 14, pixelRatio: 1.5, corridor: 1 },
+  ultra: { shadowMap: 4096, envSamples: 1024, trees: 380, motes: 1800, shafts: 22, pixelRatio: 2, corridor: 1.6 },
+}[quality];
 const TIMES = ['day', 'dusk', 'night'];
 const startTime = TIMES.includes(params.get('time')) ? params.get('time') : 'day';
 
@@ -31,6 +41,11 @@ const step = async (label, pct, fn) => {
 };
 
 async function boot() {
+  // Compile the Rust noise kernel before anything asks for a texture. It checks
+  // itself against the JS and silently stands down if it disagrees, so this is
+  // never load-bearing for correctness — only for boot time.
+  await step('Compiling noise kernel', 3, () => initNoise({ enabled: !params.has('nowasm') }));
+
   // --- renderer ------------------------------------------------------------
   const renderer = new THREE.WebGLRenderer({
     antialias: false,
@@ -42,7 +57,7 @@ async function boot() {
     // directly once a frame is genuinely finished.
     preserveDrawingBuffer: params.has('capture'),
   });
-  renderer.setPixelRatio(FAST ? 1 : Math.min(window.devicePixelRatio, 1.5));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, TIER.pixelRatio));
   renderer.setSize(window.innerWidth, window.innerHeight);
   configureRenderer(renderer);
   document.body.appendChild(renderer.domElement);
@@ -53,9 +68,14 @@ async function boot() {
 
   // --- world ---------------------------------------------------------------
   const skyRig = await step('Building sky', 8, () =>
-    createSky(scene, renderer, { shadowMapSize: FAST ? 1024 : 2048, timeOfDay: startTime }),
+    createSky(scene, renderer, {
+      shadowMapSize: TIER.shadowMap,
+      envSamples: TIER.envSamples,
+      timeOfDay: startTime,
+      quality,
+    }),
   );
-  const terrain = await step('Grading the road', 24, () => createTerrain({ env: skyRig.env }));
+  const terrain = await step('Grading the road', 24, () => createTerrain({ env: skyRig.env, quality, tier: TIER }));
   scene.add(terrain.mesh);
 
   // A logging landing where the trail opens out, and the only place direct sun
@@ -79,8 +99,9 @@ async function boot() {
     createForest({
       terrain,
       env: skyRig.env,
-      treeCount: FAST ? 150 : 210,
+      treeCount: TIER.trees,
       clearings: landings,
+      quality,
     }),
   );
   scene.add(forest.group);
@@ -89,9 +110,9 @@ async function boot() {
   setVehicleEnv(skyRig.env);
   scene.add(vehicle.root);
 
-  const shafts = createLightShafts(skyRig.sunDir, { count: FAST ? 8 : 14 });
+  const shafts = createLightShafts(skyRig.sunDir, { count: TIER.shafts });
   scene.add(shafts.group);
-  const motes = createDustMotes({ count: FAST ? 400 : 900 });
+  const motes = createDustMotes({ count: TIER.motes });
   scene.add(motes.points);
   const wheelDust = createWheelDust();
   scene.add(wheelDust.points);
@@ -301,9 +322,24 @@ async function boot() {
       simTime = 0;
       wheelDust.clear();
       driver.state.auto = true;
-      driver.state.autoT = startT;
-      const p = terrain.roadPoint(startT);
-      const t = terrain.roadTangent(startT);
+      driver.resetAuto(startT);
+      // A view can ask to be shot from the other road. Every framing in VIEWS is
+      // relative to the truck, so the only way to see the mainline is to put the
+      // truck on it first.
+      const view = VIEWS[name];
+      let p;
+      let t;
+      if (view?.place === 'main' && terrain.mainPoint) {
+        const mt = THREE.MathUtils.clamp(terrain.junction.mainT + (view.t ?? 0.06), 0.02, 0.98);
+        driver.state.route = 'main';
+        driver.state.turned = true;
+        driver.state.autoT = mt;
+        p = terrain.mainPoint(mt);
+        t = terrain.mainTangent(mt);
+      } else {
+        p = terrain.roadPoint(startT);
+        t = terrain.roadTangent(startT);
+      }
       driver.state.pos.copy(p);
       driver.state.heading = Math.atan2(t.x, t.z);
       driver.state.speed = 8.6;
@@ -378,6 +414,8 @@ async function boot() {
     toggle: (n, on) => post.toggle(n, on),
     stats: () => ({
       fps: Math.round(fps),
+      quality,
+      noise: noiseBackend(),
       calls: post.sceneStats.calls,
       triangles: post.sceneStats.triangles,
       programs: renderer.info.programs?.length ?? 0,

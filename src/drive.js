@@ -63,7 +63,29 @@ export function createDriver({ terrain, vehicle, startT = 0.42 }) {
   const tiltZ = { x: 0, v: 0 };
   let rideInit = false;
 
-  const roadLength = terrain.roadLength || 330;
+  // Auto-drive tours both roads: up the spur, then out onto the graded mainline
+  // at the crossing. A second road nobody ever ends up on is not much of a
+  // feature, and the junction is the one place the two surfaces can be compared
+  // in a single frame.
+  const routes = {
+    trail: { point: (t) => terrain.roadPoint(t), length: terrain.roadLength || 330 },
+    main: { point: (t) => terrain.mainPoint(t), length: terrain.mainLength || 330 },
+  };
+  const junction = terrain.junction && terrain.mainPoint ? terrain.junction : null;
+
+  /**
+   * Put auto-drive back at a known point on the spur. The beauty captures reset
+   * position and speed between views, and without this a capture that ran after
+   * the truck had taken the turn would read its start parameter on the mainline
+   * instead — two views of "the same" framing, in different places.
+   */
+  function resetAuto(t = startT) {
+    state.route = 'trail';
+    state.autoDir = 1;
+    state.turned = false;
+    state.autoT = t;
+  }
+  resetAuto(startT);
 
   // drop the truck on the road facing along it
   const p0 = terrain.roadPoint(startT);
@@ -147,14 +169,27 @@ export function createDriver({ terrain, vehicle, startT = 0.42 }) {
       // Follow the road so the demo is alive before anyone touches a key.
       // Advance by the distance actually covered, not a fixed rate, or the
       // target creeps away from the truck whenever the two disagree.
-      state.autoT += (dt * Math.max(state.speed, 0.5)) / roadLength;
-      if (state.autoT > 0.96) state.autoT = 0.04;
+      const route = routes[state.route];
+      // Take the turn once, on the way past. Which way along the mainline is
+      // decided by whichever direction the truck is already pointing, so it
+      // swings onto the road rather than spinning round on the apron.
+      if (junction && !state.turned && state.route === 'trail' && state.autoT >= junction.trailT) {
+        const tg = terrain.mainTangent(junction.mainT);
+        state.autoDir = Math.sin(state.heading) * tg.x + Math.cos(state.heading) * tg.z >= 0 ? 1 : -1;
+        state.route = 'main';
+        state.autoT = junction.mainT;
+        state.turned = true;
+      }
+      state.autoT += (state.autoDir * dt * Math.max(state.speed, 0.5)) / route.length;
+      // Back to the top of the spur at either end rather than reversing: a
+      // three-point turn on a forest road is not what this is for.
+      if (state.autoT > 0.96 || state.autoT < 0.04) resetAuto(0.04);
       // Lookahead scaled to speed. A fixed 4 m target is 0.4 s of preview at
       // cruise, and steering at it with a gain of 1.9 is what had the truck
       // weaving down every straight — half of what read as a bumpy ride was
       // this, not the ground.
-      const lead = THREE.MathUtils.clamp(7 + state.speed * 0.95, 7, 24) / roadLength;
-      const ahead = terrain.roadPoint(Math.min(0.995, state.autoT + lead));
+      const lead = (state.autoDir * THREE.MathUtils.clamp(7 + state.speed * 0.95, 7, 24)) / route.length;
+      const ahead = route.point(THREE.MathUtils.clamp(state.autoT + lead, 0.005, 0.995));
       const toAhead = _c.copy(ahead).sub(state.pos);
       const want = Math.atan2(toAhead.x, toAhead.z);
       let diff = want - state.heading;
@@ -255,5 +290,5 @@ export function createDriver({ terrain, vehicle, startT = 0.42 }) {
     window.removeEventListener('keyup', ku);
   }
 
-  return { state, input, update, dispose };
+  return { state, input, update, resetAuto, dispose };
 }
