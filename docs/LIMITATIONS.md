@@ -50,9 +50,15 @@ Anyone with a GPU should sanity-check the automatic quality suggestion and adjus
   soft deformation, no finger articulation and no facial animation. Identification is carried by
   silhouette, value and posture, which is a deliberate art direction choice — but it is a choice,
   not a free lunch.
-- **No inverse kinematics.** Feet are kept near the deck by construction (stride amplitude tied to
-  path speed plus a vertical bob) rather than by solving for ground contact. On a perfectly flat
-  deck this reads correctly; on uneven geometry it would not.
+- **Ground contact assumes a flat deck.** The walk cycle does solve two-link IK for the hip and knee,
+  and a grounding pass sets hip height from the lower sole, so feet plant properly — but the target
+  height is a constant, not a query against the floor underneath. The whole corridor is flat, so this
+  reads correctly here; on a ramp or a step it would not. There is also no ankle joint, so the sole
+  stays parallel to the deck through the whole stride instead of rolling heel to toe.
+- **Some slip is unavoidable at the fastest moments.** Where a path demands a longer stride than the
+  legs can reach, the stride is clamped and the foot skates. `qa/gait-report.json` reports these; in
+  the final build two samples of 63 exceed the tolerance, both under hard deceleration, with the
+  worst planted sole moving 0.74 m/s.
 - **The cape is a fixed cone with sway**, not simulated cloth.
 - **Crowd variety is limited.** Six stormtroopers and five defenders share two rigs, differentiated
   by phase offset, gait and objective rather than by unique animation.

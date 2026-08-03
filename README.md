@@ -41,7 +41,8 @@ button is also what unlocks the Web Audio context.
 | `npm run narration` | Re-render the narration audio from `src/content/narration.json` (needs Python, `piper-tts`, `ffmpeg`) |
 | `npm run qa` | Automated visual tour: 29 checkpoints, screenshots, assertions, console-error capture |
 | `npm run qa -- --controls` | The above plus a full interface exercise (play/pause, scrub, chapters, quality, explore, resize) |
-| `node scripts/qa-audio.mjs` | Audio smoke test: proves each beat reaches the master bus and nothing clips |
+| `npm run qa:audio` | Audio smoke test: proves each beat reaches the master bus and nothing clips |
+| `npm run qa:gait -- --preview` | Gait check: measures how far each figure's planted sole slides over the deck |
 | `node scripts/render-video.mjs` | Render a deterministic MP4 of any time range straight from the engine |
 
 The narration MP3s are committed under `public/audio/narration/`, so `npm run narration` is only
@@ -131,11 +132,18 @@ software path and are not representative of real hardware.
   `src/qa/checkpoints.ts`).
 - `qa/report.json` — the last automated tour: per-checkpoint assertions, luminance measurements,
   subject screen coverage, console errors, control results.
+- `qa/gait-report.json` — planted-sole slip and sole height for every figure across the interior act.
+- `qa/audio-report.json` — per-beat peak level and limiter reduction on the master bus.
 - `qa/screenshots/` — one PNG per checkpoint.
 
 Runtime sanity checks run continuously (and exhaustively during the tour) for NaN transforms,
 objects outside expected bounds, cameras inside geometry, characters off the deck, missing
 narration assets, particle-pool overflow, WebGL errors, console errors and sustained frame drops.
+
+Where something is a matter of measurement rather than taste, it is measured. "The figures look like
+they are sliding" turned into a harness that samples the planted sole against body travel, which
+found the walk cycle flexing its knees in the wrong half of the stride, hyperextending them, and
+solving strides from a floored speed — none of which was going to be fixed by adjusting amplitudes.
 
 `node scripts/render-video.mjs --reel` renders a highlight reel straight out of the engine, frame
 by frame, and encodes it with ffmpeg. Because the whole world is a pure function of the clock, the

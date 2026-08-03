@@ -14,8 +14,8 @@
         "narration",
         "music"
       ],
-      "peak": 0.4453125,
-      "worstReduction": -0.019625911489129066,
+      "peak": 0.515625,
+      "worstReduction": -0.004879630636423826,
       "active": 1
     },
     {
@@ -26,8 +26,8 @@
         "narration",
         "music"
       ],
-      "peak": 0.5390625,
-      "worstReduction": -0.5166174173355103,
+      "peak": 0.671875,
+      "worstReduction": -0.7628790140151978,
       "active": 1
     },
     {
@@ -38,8 +38,8 @@
         "sfx",
         "music"
       ],
-      "peak": 0.5546875,
-      "worstReduction": -2.4716172218322754,
+      "peak": 0.515625,
+      "worstReduction": -1.2527391910552979,
       "active": 1
     },
     {
@@ -49,8 +49,8 @@
       "expect": [
         "sfx"
       ],
-      "peak": 0.578125,
-      "worstReduction": -0.4991973042488098,
+      "peak": 0.546875,
+      "worstReduction": -0.14402447640895844,
       "active": 1
     },
     {
@@ -61,8 +61,8 @@
         "sfx",
         "music"
       ],
-      "peak": 0.5,
-      "worstReduction": -1.2183884382247925,
+      "peak": 0.546875,
+      "worstReduction": -0.897018551826477,
       "active": 1
     },
     {
@@ -73,8 +73,8 @@
         "sfx",
         "music"
       ],
-      "peak": 0.4921875,
-      "worstReduction": -0.22513647377490997,
+      "peak": 0.421875,
+      "worstReduction": -0.7330924868583679,
       "active": 1
     },
     {
@@ -84,8 +84,8 @@
       "expect": [
         "sfx"
       ],
-      "peak": 0.4921875,
-      "worstReduction": -0.8114478588104248,
+      "peak": 0.359375,
+      "worstReduction": -0.7064195871353149,
       "active": 1
     }
   ],

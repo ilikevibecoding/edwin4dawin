@@ -88,6 +88,36 @@ Nothing is downloaded and nothing is traced from reference art.
   functions of the clock. Identification comes from silhouette, value contrast and posture, not
   polygon count.
 
+## Walking
+
+A walk cycle is the one place where "pose the rig from the clock" is not enough on its own, because
+the pose has to agree with where the path is putting the body. Get it wrong and the figure skates,
+which is exactly what happened here until it was measured.
+
+So the cycle is solved from the foot, not the hip:
+
+- **Cadence follows speed.** People do not walk faster by taking the same steps quicker; both the
+  rate and the length grow with speed, so a single cadence per gait can only ever suit one speed.
+- **The phase is the integral of the cadence,** built once per figure from its own path and read back
+  by interpolation. The obvious `t * cadence` cannot work once cadence varies: `t` runs into the
+  hundreds, so any change makes the phase leap by tens of radians. Integrating keeps it continuous
+  while leaving it a pure function of time.
+- **The stance foot is given the motion, and the joints follow.** It sweeps straight backwards over
+  the deck at the body's own speed — so it holds still in the world — and a two-link solve finds the
+  hip and knee that put the sole there. Half a step is `speed / (2 * steps per second)`, capped at
+  what the legs can reach. The swing leg hands back into stance at matching speed, so no sole has to
+  stop dead on the deck and wait.
+- **Hip height comes from the legs.** A grounding pass runs after every pose and sets the hips so the
+  lower sole rests on the deck, which makes the leg angles the single authority on how low a figure
+  stands. A pose that drops the hips further than the legs fold has no choice but to push the boots
+  through the floor.
+- **Cross-fades leave the legs alone** whenever a gait owns them, since averaging a solved stride
+  against another pose drags the planted foot for the length of the fade.
+
+`scripts/qa-gait.mjs` measures the result rather than trusting it: two frames a thirtieth of a second
+apart, the lower sole's travel over the deck against the body's travel, swept across the whole
+interior act.
+
 ## Effects
 
 Every effect is a precomputed event table.

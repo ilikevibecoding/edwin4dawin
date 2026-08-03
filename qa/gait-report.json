@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-08-03T14:22:59.942Z",
+  "ranAt": "2026-08-03T15:12:02.497Z",
   "build": "preview",
   "range": [
     194,
@@ -15,16 +15,16 @@
   "minStep": 0.25,
   "totals": {
     "samples": 832,
-    "moving": 69,
-    "slipping": 3,
+    "moving": 63,
+    "slipping": 2,
     "offDeck": 0,
     "wrongGait": 0
   },
   "byState": [
     {
       "state": "run",
-      "samples": 33,
-      "meanSlip": 0.13190709463966144,
+      "samples": 27,
+      "meanSlip": 0.16086125504453952,
       "worstSlip": 0.7732428990212373
     },
     {
@@ -71,6 +71,17 @@
       "strideReach": 1.3716428571428572
     },
     {
+      "time": 198,
+      "target": "rebel-0",
+      "state": "run",
+      "bodySpeed": 0.5529900555381194,
+      "plantSpeed": 0.4057196105052555,
+      "ratio": 0.733683375391708,
+      "soleHeight": 0.001971373748421927,
+      "stepLength": 0.3201432931482064,
+      "strideReach": 1.327157142857143
+    },
+    {
       "time": 224,
       "target": "trooper-1",
       "state": "run",
@@ -113,17 +124,6 @@
       "soleHeight": 0.011156105816354261,
       "stepLength": 0.37036424497475445,
       "strideReach": 1.3716428571428572
-    },
-    {
-      "time": 206,
-      "target": "rebel-4",
-      "state": "run",
-      "bodySpeed": 2.0173268073100523,
-      "plantSpeed": 0.8183384343283828,
-      "ratio": 0.4056548653212878,
-      "soleHeight": -0.007617248854933374,
-      "stepLength": 0.7342533004803267,
-      "strideReach": 1.327157142857143
     },
     {
       "time": 304,

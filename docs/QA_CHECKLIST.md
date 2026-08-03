@@ -2,7 +2,8 @@
 
 Results below are from the final pass: `npm run build` followed by
 `node scripts/qa-tour.mjs --preview --width 1920 --height 1080 --controls`, plus
-`node scripts/qa-audio.mjs`. Raw output lives in `qa/report.json` and `qa/audio-report.json`.
+`npm run qa:audio` and `npm run qa:gait -- --preview`. Raw output lives in `qa/report.json`,
+`qa/audio-report.json` and `qa/gait-report.json`.
 
 ## Automated
 
@@ -45,17 +46,40 @@ Evaluated at every checkpoint and continuously while the debug overlay is open:
 - [x] WebGL errors and context loss.
 - [x] Sustained frame-rate collapse.
 
+### Gait — every sole planted, every step within reach
+
+`scripts/qa-gait.mjs` sweeps the whole interior act, renders two frames a thirtieth of a second
+apart at each step, finds each figure's lower ("planted") sole and compares how far that sole
+travelled over the deck with how far the body travelled. A figure whose stance foot is nailed down
+while the body passes over it scores near 0; one being dragged along with its legs waving scores
+near 1. 832 samples, 63 of them with a figure actually travelling.
+
+| Gait | Samples | Mean slip | Worst |
+| --- | --- | --- | --- |
+| Run | 27 | 0.16 | 0.77 |
+| Walk | 12 | 0.13 | 0.36 |
+| March | 11 | 0.13 | 0.43 |
+| Firing on the move | 10 | 0.15 | 0.34 |
+
+- [x] Every sole stays within 6 cm below and 14 cm above the deck, in every pose including the
+      fallen and the crouching.
+- [x] Every step lands between 0.25 m and the figure's own leg reach, so no path demands a stride
+      the legs cannot cover.
+- [x] Two samples of 63 exceed a slip ratio of 0.35 with a sole moving faster than 0.45 m/s, both
+      at moments of hard deceleration; the fastest planted sole anywhere is 0.74 m/s, against 17 m/s
+      before this pass.
+
 ### Audio — 7/7 beats produce signal, nothing clips
 
 | Beat | Peak | Limiter |
 | --- | --- | --- |
-| Prologue drone + first narration | 0.45 | 0.0 dB |
-| Tatooine pad + narration | 0.54 | −0.5 dB |
-| Turbolaser salvo + pursuit ostinato | 0.56 | −2.5 dB |
-| Door breach + boarding percussion | 0.58 | −0.5 dB |
-| Respirator bed + iron motif | 0.50 | −1.2 dB |
-| Data transfer blips + strings | 0.49 | −0.2 dB |
-| Pod clamps and launch | 0.49 | −0.8 dB |
+| Prologue drone + first narration | 0.52 | 0.0 dB |
+| Tatooine pad + narration | 0.67 | −0.8 dB |
+| Turbolaser salvo + pursuit ostinato | 0.52 | −1.3 dB |
+| Door breach + boarding percussion | 0.55 | −0.1 dB |
+| Respirator bed + iron motif | 0.55 | −0.9 dB |
+| Data transfer blips + strings | 0.42 | −0.7 dB |
+| Pod clamps and launch | 0.36 | −0.7 dB |
 
 - [x] All 45 narration clips decode; playback mode reports `audio`.
 - [x] AudioContext reaches `running` after the enter gate.
@@ -148,12 +172,61 @@ The re-rendered reel was reviewed shot by shot again:
   `renderOrder` — and it had the depth test switched off. Against a dark grey hull that reads as the
   ship being full of holes. The shell now sits at 1,600 km, comfortably beyond the planet and inside
   the 2,400 km exterior far plane, and depth-tests normally.
-- Slow, deliberate walks read as sliding. The stride amplitude was solved purely from path speed
-  with a floor of half, which at a deliberate pace is a stride too small to see at ten metres. The
-  floor is now high enough that a walk is a walk, with a deeper bob and a wider arm swing.
 - The data-transfer beam left the middle of the projection and ran straight across the princess's
   face on the one shot where her expression carries the scene. It now leaves the foot of the
   projection, passes below her, and lands on the droid's lit data port.
+- Walking read as sliding, and no amount of adjusting amplitudes fixed it. See below.
+
+### Gait pass
+
+The sliding was not a matter of taste, so it was measured rather than tuned. `scripts/qa-gait.mjs`
+samples the planted sole against body travel, and the first sweep showed soles moving at up to 17 m/s
+under bodies travelling at 5.8 — the figures were not walking at all. Three faults compounded:
+
+- **The knee flexed during stance rather than swing.** In a walk the knee bends while the leg travels
+  forward and stays near straight while it takes the body's weight. This did the opposite, so the
+  sole was pressed to the deck at the exact moment it swept fastest — the strongest possible skating
+  cue. It also bent the wrong way: in this rig a *positive* knee rotation is the anatomical fold, and
+  the cycle used negative ones throughout, hyperextending every knee in the piece.
+- **The stride was solved from a floored speed** — 0.9 m/s walking, 2.6 m/s running — so a figure
+  creeping into position still took full strides.
+- **Cadence was fixed per gait,** which can only ever suit one speed, and it could not be made to
+  vary: the phase was `t * cadence` with `t` in the hundreds, so any change to cadence made the phase
+  leap by tens of radians and the legs blurred through several cycles in a frame.
+
+The cycle is now solved from the foot. Cadence rises with speed and the phase is the integral of it,
+built once per figure from its own path, so it stays continuous however the cadence moves. The stance
+foot gets a straight constant-speed sweep backwards over the deck at the body's own speed — so it
+holds still in the world — and the hip and knee come from a two-link solve that puts the sole there.
+The swing hands back into stance at matching speed, so nothing has to stop dead on the deck and wait.
+
+Two further defects fell out of building the measurement:
+
+- **Fallen figures were buried up to the chest.** The collapse pose tipped the body 81° about its own
+  origin, which sits on the deck and so already lays it flat and low, and then subtracted a further
+  0.86 m on top. A general grounding pass now sets every figure's hip height from where its soles
+  are, which also lifted the crouching and the cowering out of the floor.
+- **Pose cross-fades dragged the feet.** Averaging a solved stride against whatever the previous pose
+  had the legs doing slides the planted foot for the length of the fade. The upper body still
+  cross-fades; the legs come straight from the gait, whose amplitude grows from nothing as the figure
+  gets under way, so nothing snaps.
+
+Two paths were also too fast for any gait to cover: the boarding party crossed 6.3 m of umbilical in
+0.9 s, needing 7 m/s. They now start moving earlier, out of sight behind the door.
+
+### Staging pass on the reframed corridor
+
+- The corridor establishing shot dollied up a 3.4 m wide corridor behind the defenders and ended with
+  the lens 40 cm off one of their backs, so the shot meant to establish the geography showed a
+  shoulder and two walls. It now holds in the mouth of the archive junction on the centreline, with
+  the defenders' start positions pulled forward of it, and the whole depth of the corridor in frame.
+- The junction is twice the width of the corridor and its far wall had no light on it at all before
+  the archive chapter, so an establishing shot staged there looked into a hole in the ship. A little
+  fill is now kept alive from the start of the chapter.
+- The screen-coverage measurement projected bounding-box corners that were behind the camera, which
+  sends their coordinates through infinity and flips their sign, so a droid standing alongside the
+  lens was reported as filling the whole frame. Boxes are now clipped to the near plane first. This
+  only ever inflated coverage, so it could have masked a subject that had drifted out of shot.
 
 ## Final polish criteria
 
