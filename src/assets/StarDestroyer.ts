@@ -406,29 +406,37 @@ export class StarDestroyer {
     this.anchors.hangar = anchor(this.root, 'hangar', 0, hangarY - 6, hangarZ);
 
     // ------------------------------------------------------------ windows
-    // Lit ports along the flank. The side wall leans inboard as it drops, so
-    // the x offset has to follow the loft; a fixed fraction of the beam buries
-    // every one of them inside the hull.
-    this.windowMat = new THREE.MeshBasicMaterial({ color: 0xbfe4ff, toneMapped: false });
+    // Two lit deck lines along each flank. Ordered rows, not scatter: random
+    // ports read as confetti at any distance where the whole ship is in frame,
+    // and the colour stays under the bloom threshold so they light the deck
+    // rather than speckling the hull with stars.
+    this.windowMat = new THREE.MeshBasicMaterial({ color: 0x86adcc, toneMapped: false });
     const winPos: THREE.Vector3[] = [];
-    for (let i = 0; i < 110; i++) {
-      const t = 0.34 + r.next() * 0.6;
-      const top = topY(t);
-      const drop = r.range(8, 0.5 * (top - botY(t)));
-      const v = drop / (top - botY(t));
-      const x = halfWidth(t) * (1 - 0.28 * v) + 1.2;
-      const side = r.bool() ? 1 : -1;
-      winPos.push(new THREE.Vector3(side * x, top - drop, zAt(t)));
+    for (const deck of [0.42, 0.66]) {
+      for (let i = 0; i < 22; i++) {
+        const t = 0.4 + (i / 21) * 0.5;
+        if (r.bool(0.18)) continue; // a few dark cabins
+        const top = topY(t);
+        const depth = top - botY(t);
+        const drop = depth * deck;
+        const v = drop / depth;
+        // The side wall leans inboard as it drops, so x has to follow the loft;
+        // a fixed fraction of the beam buries every port inside the hull.
+        const x = halfWidth(t) * (1 - 0.28 * v) + 1.2;
+        for (const side of [-1, 1]) {
+          winPos.push(new THREE.Vector3(side * x, top - drop, zAt(t)));
+        }
+      }
     }
     const winL = windowStrip(
       winPos.filter((p) => p.x < 0),
-      new THREE.Vector2(5, 1.4),
+      new THREE.Vector2(9, 1.1),
       this.windowMat,
       new THREE.Vector3(-1, 0, 0),
     );
     const winR = windowStrip(
       winPos.filter((p) => p.x > 0),
-      new THREE.Vector2(5, 1.4),
+      new THREE.Vector2(9, 1.1),
       this.windowMat,
       new THREE.Vector3(1, 0, 0),
     );
@@ -463,7 +471,7 @@ export class StarDestroyer {
       heightRange: [1.2, 4.0],
       sparsity: 0.34,
     });
-    this.root.add(greebleInstances(dorsalBlocks, M.imperialHullDark, 'destroyerGreeble'));
+    this.root.add(greebleInstances(dorsalBlocks, M.imperialGreeble, 'destroyerGreeble'));
 
     // The belly is seen from very close during the reveal, so it gets its own
     // structure: shallow pans between long service lanes, never loose crates.
@@ -487,7 +495,7 @@ export class StarDestroyer {
       heightRange: [0.7, 2.0],
       sparsity: 0.4,
     });
-    this.root.add(greebleInstances(ventralBlocks, M.imperialHullDark, 'destroyerVentralGreeble'));
+    this.root.add(greebleInstances(ventralBlocks, M.imperialGreeble, 'destroyerVentralGreeble'));
 
     // ------------------------------------------------------------ turrets
     const turretSpots: Array<[number, number]> = [
@@ -527,20 +535,26 @@ export class StarDestroyer {
     }
 
     // ------------------------------------------------------ running lights
+    // Four beacons a side, right on the chine. Sixteen a side turned the wedge
+    // into a runway and swamped the silhouette the reveal depends on.
     const navPositions: THREE.Vector3[] = [];
     const navColors: THREE.Color[] = [];
-    for (let i = 0; i < 16; i++) {
-      const t = 0.16 + (i / 16) * 0.8;
+    for (let i = 0; i < 4; i++) {
+      const t = 0.3 + (i / 3) * 0.62;
       const w = halfWidth(t);
-      navPositions.push(new THREE.Vector3(-w - 2, topY(t) - 4, zAt(t)));
+      navPositions.push(new THREE.Vector3(-w - 2, topY(t) - 3, zAt(t)));
       navColors.push(new THREE.Color(0xff4a3a));
-      navPositions.push(new THREE.Vector3(w + 2, topY(t) - 4, zAt(t)));
+      navPositions.push(new THREE.Vector3(w + 2, topY(t) - 3, zAt(t)));
       navColors.push(new THREE.Color(0x54ff86));
     }
-    this.navLights = new RunningLights(navPositions, navColors, 9);
+    this.navLights = new RunningLights(navPositions, navColors, 7);
     this.root.add(this.navLights.points);
 
     // -------------------------------------------------------- tractor beam
+    // A single open cone shaded as if it were a volume: the shell is brightest
+    // where the camera looks along it, so the edges glow and the middle stays
+    // transparent. Ring banding across the surface reads as a stack of
+    // crescents instead of a beam, so the striations run lengthwise only.
     this.tractorMat = new THREE.ShaderMaterial({
       uniforms: {
         intensity: { value: 0 },
@@ -549,16 +563,39 @@ export class StarDestroyer {
       },
       vertexShader: /* glsl */ `
         varying vec2 vUv;
-        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+        varying vec3 vNormalW;
+        varying vec3 vViewW;
+        void main() {
+          vUv = uv;
+          vec4 world = modelMatrix * vec4(position, 1.0);
+          vNormalW = normalize(mat3(modelMatrix) * normal);
+          vViewW = normalize(cameraPosition - world.xyz);
+          gl_Position = projectionMatrix * viewMatrix * world;
+        }
       `,
       fragmentShader: /* glsl */ `
         uniform float intensity; uniform float time; uniform vec3 color;
         varying vec2 vUv;
+        varying vec3 vNormalW;
+        varying vec3 vViewW;
         void main() {
-          float radial = pow(1.0 - abs(vUv.x - 0.5) * 2.0, 1.4);
-          float bands = 0.65 + 0.35 * sin(vUv.y * 60.0 - time * 6.0);
-          float fade = smoothstep(0.0, 0.25, vUv.y) * (1.0 - vUv.y * 0.35);
-          float a = radial * bands * fade * intensity * 0.5;
+          // A solid cone is thickest through its axis, so the shell has to be
+          // brightest where it faces the camera and fade out at the silhouette.
+          // Shading it the other way round — bright at the edges — turns the
+          // beam into a flat ribbon with two hard sides.
+          float facing = abs(dot(normalize(vNormalW), normalize(vViewW)));
+          float depth = pow(facing, 0.7);
+
+          // Striations run with the beam: they vary around the circumference
+          // and drift lengthwise. Banding across it reads as stacked rings.
+          float flow = sin(vUv.x * 6.2831 * 26.0 + vUv.y * 5.0 - time * 1.8);
+          float streak = 0.86 + 0.14 * flow;
+
+          // Hot at the emitter, thinning as it reaches for the prize.
+          float head = smoothstep(0.0, 0.1, vUv.y) * (1.0 + 0.5 * (1.0 - smoothstep(0.0, 0.3, vUv.y)));
+          float tail = 1.0 - smoothstep(0.72, 1.0, vUv.y);
+
+          float a = depth * streak * head * tail * intensity * 0.32;
           gl_FragColor = vec4(color * a * 1.6, a);
         }
       `,
@@ -568,7 +605,7 @@ export class StarDestroyer {
       side: THREE.DoubleSide,
       toneMapped: false,
     });
-    const coneGeo = new THREE.CylinderGeometry(26, 90, 1, 20, 1, true);
+    const coneGeo = new THREE.CylinderGeometry(24, 54, 1, 32, 1, true);
     coneGeo.translate(0, -0.5, 0);
     this.tractorCone = new THREE.Mesh(coneGeo, this.tractorMat);
     this.tractorCone.position.set(0, botY(0.8) - 2, zAt(0.8));
@@ -592,34 +629,54 @@ export class StarDestroyer {
     );
   }
 
+  /**
+   * A heavy turbolaser emplacement: sunken ring, rotating tub, twin barrels.
+   *
+   * Kept deliberately matte and dark. These sit on the belly during the reveal
+   * with a lit planet filling the sky behind the camera, and anything glossy
+   * here turns the underside into a field of white studs.
+   */
   private buildTurret(M: ReturnType<typeof getMaterials>, side: number): Turret {
     const root = new THREE.Group();
     root.name = 'turret';
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(11, 13, 5, 12), M.imperialTrim);
+    // Recessed collar the tub sits in, so the mount grows out of the plating.
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(15, 17, 3.4, 14), M.imperialGreeble);
+    base.position.y = -0.6;
     root.add(base);
 
     const yoke = new THREE.Group();
-    yoke.position.y = 3;
+    yoke.position.y = 1.4;
     root.add(yoke);
 
-    const housing = new THREE.Mesh(new THREE.BoxGeometry(16, 8, 18), M.imperialHullDark);
-    housing.position.y = 3.4;
-    yoke.add(housing);
+    const tub = new THREE.Mesh(new THREE.CylinderGeometry(9.5, 12, 8, 12), M.imperialTurret);
+    tub.position.y = 4;
+    yoke.add(tub);
+
+    // Trunnion cheeks either side of the barrels give the tub a real axis.
+    for (const dx of [-9, 9]) {
+      const cheek = new THREE.Mesh(new THREE.BoxGeometry(4, 9, 12), M.imperialTurret);
+      cheek.position.set(dx, 8, 0);
+      yoke.add(cheek);
+    }
 
     const barrels = new THREE.Group();
-    barrels.position.set(0, 4.6, -6);
+    barrels.position.set(0, 8, 0);
     yoke.add(barrels);
 
+    const mantlet = new THREE.Mesh(new THREE.BoxGeometry(15, 8, 14), M.imperialTurret);
+    mantlet.position.z = -1;
+    barrels.add(mantlet);
+
     const muzzles: THREE.Object3D[] = [];
-    const barrelGeo = new THREE.CylinderGeometry(1.5, 1.9, 26, 8);
+    const barrelGeo = new THREE.CylinderGeometry(1.5, 2.1, 34, 8);
     barrelGeo.rotateX(-Math.PI / 2);
-    barrelGeo.translate(0, 0, -13);
-    for (const dx of [-4.2, 4.2]) {
-      const b = new THREE.Mesh(barrelGeo.clone(), M.imperialTrim);
-      b.position.x = dx;
+    barrelGeo.translate(0, 0, -17);
+    for (const dx of [-4.6, 4.6]) {
+      const b = new THREE.Mesh(barrelGeo.clone(), M.imperialTurret);
+      b.position.set(dx, 0, -6);
       barrels.add(b);
       const muzzle = new THREE.Object3D();
-      muzzle.position.set(dx, 0, -26);
+      muzzle.position.set(dx, 0, -40);
       barrels.add(muzzle);
       muzzles.push(muzzle);
     }
@@ -649,7 +706,10 @@ export class StarDestroyer {
   update(t: number, dt: number): void {
     const power = clamp(this.enginePower, 0, 1.4);
     this.plumes.forEach((p, i) => {
-      p.material.uniforms.intensity.value = power * 0.55;
+      // Seven overlapping cones this size stack into a fog bank across the
+      // whole transom when the camera comes round the stern, so each one is
+      // kept faint and the glow discs carry the drive instead.
+      p.material.uniforms.intensity.value = power * 0.16;
       p.material.uniforms.time.value = t + i * 0.21;
       p.mesh.scale.z = 0.5 + power * 0.7;
     });

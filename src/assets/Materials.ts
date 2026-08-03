@@ -14,6 +14,8 @@ export interface MaterialLibrary {
   rebelHullDark: THREE.MeshStandardMaterial;
   /** Slightly cooler than the hull: raised plates that must not read as holes. */
   rebelPlate: THREE.MeshStandardMaterial;
+  /** Surface machinery: carries the hull's plating so blocks never read clean. */
+  rebelGreeble: THREE.MeshStandardMaterial;
   rebelTrim: THREE.MeshStandardMaterial;
   /** Inside of an engine bell: back faces only, so the throat reads as a hole. */
   bellInterior: THREE.MeshStandardMaterial;
@@ -21,6 +23,10 @@ export interface MaterialLibrary {
   /** Untextured imperial grey for large slabs the plating tile cannot serve. */
   imperialPlate: THREE.MeshStandardMaterial;
   imperialHullDark: THREE.MeshStandardMaterial;
+  /** Surface machinery: carries the hull's plating so blocks never read clean. */
+  imperialGreeble: THREE.MeshStandardMaterial;
+  /** Gun emplacements: matte and dark, so they read as studs, not sugar cubes. */
+  imperialTurret: THREE.MeshStandardMaterial;
   imperialTrim: THREE.MeshStandardMaterial;
   imperialDeep: THREE.MeshStandardMaterial;
   corridorWall: THREE.MeshStandardMaterial;
@@ -31,6 +37,8 @@ export interface MaterialLibrary {
   whiteArmor: THREE.MeshStandardMaterial;
   darkCloth: THREE.MeshStandardMaterial;
   brownCloth: THREE.MeshStandardMaterial;
+  /** Rebel flight fatigues: light enough to read against the dark vest. */
+  rebelKhaki: THREE.MeshStandardMaterial;
   leiaWhite: THREE.MeshStandardMaterial;
   vaderBlack: THREE.MeshStandardMaterial;
   gold: THREE.MeshStandardMaterial;
@@ -125,6 +133,16 @@ export function buildMaterials(anisotropy: number): MaterialLibrary {
     }),
     rebelHullDark: std({ color: 0x8d8b84, roughness: 0.68, metalness: 0.35, envMapIntensity: 0.7 }),
     rebelPlate: std({ color: 0xcbc7bd, roughness: 0.74, metalness: 0.18, envMapIntensity: 0.7 }),
+    // Detail blocks have to sit a clear value step below the plate they stand
+    // on and share its texture, or a hundred clean untextured boxes read as
+    // white stickers pasted over a dirty hull.
+    rebelGreeble: std({
+      color: 0x8b867d,
+      map: rebelPlating.map,
+      roughness: 0.84,
+      metalness: 0.12,
+      envMapIntensity: 0.4,
+    }),
     // Low metalness on purpose: a polished disc the width of the stern turns
     // into a mirror of the sky and reads as a ball stuck to the hull.
     rebelTrim: std({ color: 0x5b5954, roughness: 0.66, metalness: 0.28, envMapIntensity: 0.5 }),
@@ -160,6 +178,21 @@ export function buildMaterials(anisotropy: number): MaterialLibrary {
       metalness: 0.22,
       envMapIntensity: 0.4,
     }),
+    imperialGreeble: std({
+      color: 0x767d85,
+      map: imperialPlating.map,
+      roughness: 0.78,
+      metalness: 0.12,
+      envMapIntensity: 0.28,
+    }),
+    // Matte and dark. At metalness 0.4 a turret cap mirrors the lit planet and
+    // the belly ends up flecked with white cubes during the reveal.
+    imperialTurret: std({
+      color: 0x555b63,
+      roughness: 0.72,
+      metalness: 0.1,
+      envMapIntensity: 0.2,
+    }),
     imperialTrim: std({ color: 0x646a72, roughness: 0.46, metalness: 0.4, envMapIntensity: 0.4 }),
     imperialDeep: std({ color: 0x33383e, roughness: 0.8, metalness: 0.18, envMapIntensity: 0.3 }),
 
@@ -176,10 +209,13 @@ export function buildMaterials(anisotropy: number): MaterialLibrary {
 
     blackRubber: std({ color: 0x121317, roughness: 0.86, metalness: 0.05 }),
     whiteArmor: std({ color: 0xdbdfe6, roughness: 0.36, metalness: 0.05 }),
-    darkCloth: std({ color: 0x2b2f36, roughness: 0.92, metalness: 0.02 }),
+    darkCloth: std({ color: 0x232a35, roughness: 0.92, metalness: 0.02 }),
     brownCloth: std({ color: 0x5d4a35, roughness: 0.9, metalness: 0.02 }),
+    rebelKhaki: std({ color: 0x9a8a68, roughness: 0.9, metalness: 0.02 }),
     leiaWhite: std({ color: 0xf7f6f2, roughness: 0.68, metalness: 0.02 }),
-    vaderBlack: std({ color: 0x0d0e11, roughness: 0.3, metalness: 0.42 }),
+    // Barely metallic. At metalness 0.42 the costume mirrors the corridor's
+    // alert strobes and the darkest figure in the story reads as red plastic.
+    vaderBlack: std({ color: 0x0b0c0f, roughness: 0.44, metalness: 0.14, envMapIntensity: 0.4 }),
     gold: std({ color: 0xd9a441, roughness: 0.24, metalness: 0.92 }),
     droidWhite: std({ color: 0xeceff2, roughness: 0.28, metalness: 0.34 }),
     droidBlue: std({ color: 0x2f6fb5, roughness: 0.3, metalness: 0.38 }),

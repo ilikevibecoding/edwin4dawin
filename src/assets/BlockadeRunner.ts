@@ -382,7 +382,7 @@ export class BlockadeRunner {
       heightRange: [0.22, 0.7],
       sparsity: 0.42,
     });
-    this.root.add(greebleInstances(shoulder, M.rebelPlate, 'runnerGreeble'));
+    this.root.add(greebleInstances(shoulder, M.rebelGreeble, 'runnerGreeble'));
 
     // Lengthwise strakes, the strongest read on the real ship's flanks.
     const strakeParts: THREE.BufferGeometry[] = [];
@@ -393,7 +393,7 @@ export class BlockadeRunner {
         strakeParts.push(boxAt(1.3, 0.7, 7.2, p.position.x, p.position.y, z));
       }
     }
-    this.root.add(new THREE.Mesh(mergeParts(strakeParts), M.rebelPlate));
+    this.root.add(new THREE.Mesh(mergeParts(strakeParts), M.rebelGreeble));
 
     // A handful of larger, deliberately placed dorsal boxes read as equipment
     // rather than noise: sensor housings, a docking ring, vent stacks.

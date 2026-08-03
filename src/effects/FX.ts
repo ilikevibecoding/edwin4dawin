@@ -118,33 +118,69 @@ export class FXManager {
     });
   }
 
-  spaceImpact(point: THREE.Vector3, scale = 1, color = new THREE.Color(0xffc46a)): void {
+  /**
+   * A hit on a hull.
+   *
+   * `away` is the direction the debris should spray, normally the surface
+   * normal. A spherical burst reads as a cartoon starburst pasted over the
+   * ship; a cone thrown back off the plating reads as an impact.
+   */
+  spaceImpact(
+    point: THREE.Vector3,
+    scale = 1,
+    color = new THREE.Color(0xffc46a),
+    away?: THREE.Vector3,
+  ): void {
     const r = this.rngStream;
+    const dir = away
+      ? away.clone().normalize()
+      : new THREE.Vector3(r.spread(1), r.spread(1), r.spread(1)).normalize();
+    /** A vector in a cone about `dir`; spread 1 is a full hemisphere. */
+    const cone = (spread: number): THREE.Vector3 =>
+      dir
+        .clone()
+        .addScaledVector(
+          new THREE.Vector3(r.spread(1), r.spread(1), r.spread(1)).normalize(),
+          spread,
+        )
+        .normalize();
+
+    // Two-part flash: a small hot core and a wider, shorter-lived bloom. One
+    // big sprite at this scale is larger than the ship it is supposed to be
+    // hitting once the camera pulls back for the chase.
     this.spaceFlash.spawn({
       position: point,
       velocity: new THREE.Vector3(),
-      color: color.clone().multiplyScalar(2.6),
-      size: 90 * scale,
-      life: 0.28,
-      growth: 1.6,
+      color: color.clone().multiplyScalar(3.2),
+      size: 15 * scale,
+      life: 0.13,
+      growth: 2.4,
     });
-    for (let i = 0; i < Math.round(26 * scale); i++) {
+    this.spaceFlash.spawn({
+      position: point,
+      velocity: new THREE.Vector3(),
+      color: color.clone().multiplyScalar(1.1),
+      size: 34 * scale,
+      life: 0.3,
+      growth: 1.5,
+    });
+    for (let i = 0; i < Math.round(22 * scale); i++) {
       this.spaceSparks.spawn({
         position: point,
-        velocity: new THREE.Vector3(r.spread(1), r.spread(1), r.spread(1)).normalize().multiplyScalar(r.range(18, 78) * scale),
-        color: new THREE.Color().setHSL(0.09 + r.next() * 0.05, 1, 0.65),
-        size: r.range(6, 16) * scale,
-        life: r.range(0.4, 1.3),
+        velocity: cone(0.8).multiplyScalar(r.range(30, 130) * scale),
+        color: new THREE.Color().setHSL(0.08 + r.next() * 0.05, 0.95, 0.6),
+        size: r.range(2.4, 6.5) * scale,
+        life: r.range(0.2, 0.7),
       });
     }
-    for (let i = 0; i < Math.round(7 * scale); i++) {
+    for (let i = 0; i < Math.round(6 * scale); i++) {
       this.spaceSmoke.spawn({
         position: point,
-        velocity: new THREE.Vector3(r.spread(1), r.spread(1), r.spread(1)).multiplyScalar(r.range(6, 22)),
-        color: new THREE.Color(0.22, 0.2, 0.19),
-        size: r.range(18, 46) * scale,
-        life: r.range(0.9, 1.8),
-        growth: 2.2,
+        velocity: cone(0.9).multiplyScalar(r.range(8, 26)),
+        color: new THREE.Color(0.2, 0.19, 0.18),
+        size: r.range(10, 26) * scale,
+        life: r.range(0.8, 1.6),
+        growth: 2.4,
         rotation: r.range(0, 6.28),
         spin: r.spread(0.7),
       });
@@ -152,7 +188,7 @@ export class FXManager {
     for (let i = 0; i < Math.round(5 * scale); i++) {
       this.spaceDebris.spawn(
         point,
-        new THREE.Vector3(r.spread(1), r.spread(1), r.spread(1)).normalize().multiplyScalar(r.range(8, 34)),
+        cone(0.7).multiplyScalar(r.range(10, 40)),
         new THREE.Vector3(r.range(0.6, 2.4), r.range(0.4, 1.6), r.range(0.8, 3.2)),
         r.range(2.5, 5),
         r,
@@ -167,9 +203,9 @@ export class FXManager {
       position: point,
       velocity: new THREE.Vector3(),
       color: new THREE.Color(0x9dffb0),
-      size: 45,
-      life: 0.16,
-      growth: 1.2,
+      size: 22,
+      life: 0.12,
+      growth: 1.6,
     });
     this.addShake(0.12);
   }

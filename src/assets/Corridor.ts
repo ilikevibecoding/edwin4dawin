@@ -483,7 +483,9 @@ export class CorridorSet {
     const flick = 1 - alert * 0.12 * (0.5 + 0.5 * Math.sin(t * 17 + Math.sin(t * 5) * 3));
     this.ceilingLights.forEach((l, i) => {
       l.intensity = this.baseLightIntensity[i] * dim * flick;
-      l.color.setRGB(1, 0.95 - this.vaderPresence * 0.14, 0.86 - this.vaderPresence * 0.12);
+      // The passage goes colder as he comes aboard, not warmer: against the
+      // red alert strobes a warm shift just turns the whole set pink.
+      l.color.setRGB(1 - this.vaderPresence * 0.2, 0.95 - this.vaderPresence * 0.04, 0.86 + this.vaderPresence * 0.14);
     });
 
     this.lightMat.color.setRGB(0.78 * dim * flick, 0.76 * dim * flick, 0.72 * dim * flick);

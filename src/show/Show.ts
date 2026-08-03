@@ -141,11 +141,14 @@ export class Show {
             const origin = m.getWorldPosition(new THREE.Vector3());
             fx.turbolaser(origin, aim.position.clone(), (p) => {
               if (isHit) {
+                // Spray back off the plating rather than out of the ship's
+                // middle, so the burst reads as a glancing hit.
+                const away = p.clone().sub(stage.runner.root.position).normalize();
                 stage.runner.flashShield(p);
-                fx.spaceImpact(p, 1.1, new THREE.Color(0x9fd4ff));
+                fx.spaceImpact(p, 1.1, new THREE.Color(0x9fd4ff), away);
                 this.audio.sfx('shieldFlash', { position: p.clone() });
                 if (time > 143) {
-                  fx.spaceImpact(p, 1.5);
+                  fx.spaceImpact(p, 1.5, new THREE.Color(0xffc46a), away);
                   this.audio.sfx('hullImpact', { position: p.clone(), gain: 0.9 });
                 }
               } else {
@@ -187,7 +190,8 @@ export class Show {
       id: 'drive-hit',
       action: () => {
         const p = stage.runner.root.localToWorld(new THREE.Vector3(0, 4, 62));
-        stage.fx.spaceImpact(p, 2.6);
+        const up = stage.runner.root.localToWorld(new THREE.Vector3(0, 30, 62)).sub(p);
+        stage.fx.spaceImpact(p, 2.6, new THREE.Color(0xffc46a), up);
         stage.fx.addShake(1.9);
         this.audio.sfx('explosionSmall', { position: p.clone(), gain: 1 });
         this.audio.sfx('metalStress', { gain: 0.8 });
@@ -198,7 +202,8 @@ export class Show {
       id: 'drive-out',
       action: () => {
         const p = stage.runner.root.localToWorld(new THREE.Vector3(0, 0, 76));
-        stage.fx.spaceImpact(p, 1.8, new THREE.Color(0x8fc9ff));
+        const aft = stage.runner.root.localToWorld(new THREE.Vector3(0, 0, 130)).sub(p);
+        stage.fx.spaceImpact(p, 1.8, new THREE.Color(0x8fc9ff), aft);
         this.audio.sfx('lowBoom', { gain: 0.8 });
       },
     });
@@ -453,8 +458,8 @@ export class Show {
 
     const presence = smoothstep(VADER_ENTRY - 4, VADER_ENTRY + 4, t) * (1 - smoothstep(350, 362, t));
     corridor.vaderPresence = presence;
-    stage.vaderKey.intensity = presence * 9;
-    stage.vaderKey.position.copy(stage.vader.root.position).add(new THREE.Vector3(0, 2.2, 1.4));
+    stage.vaderKey.intensity = presence * 16;
+    stage.vaderKey.position.copy(stage.vader.root.position).add(new THREE.Vector3(0, 2.1, -2.2));
 
     stage.boardingGlow.intensity =
       smoothstep(222, BREACH_TIME, t) * 5 * (1 - smoothstep(BREACH_TIME + 12, BREACH_TIME + 26, t)) +

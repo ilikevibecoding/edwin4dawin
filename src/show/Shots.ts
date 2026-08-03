@@ -106,12 +106,16 @@ export function buildShots(stage: Stage): Shot[] {
     end: 89,
     handheld: 0.05,
     apply: (ctx, pose) => {
-      const k = ctx.progress;
-      // Anchor to where the runner will be at the start of the shot.
+      const k = easeInOut(ctx.progress);
       _a.copy(runner.position);
-      pose.position.set(_a.x + 150 - k * 24, _a.y + 46, _a.z + 640 - k * 240);
-      pose.target.copy(_a);
-      pose.fov = lerp(34, 40, k);
+      // A slow orbit from off her bow round to her quarter. Nothing in deep
+      // space gives parallax — no ground, no near stars — so the only way to
+      // put movement in this shot is to change the aspect of the ship itself,
+      // which also walks the audience round the silhouette: hammerhead first,
+      // then the spine, then eleven lit engine throats.
+      pose.position.set(_a.x + lerp(268, 342, k), _a.y + lerp(52, 24, k), _a.z + lerp(-330, 180, k));
+      pose.target.set(_a.x - 40, _a.y + 4, _a.z - 60);
+      pose.fov = 44;
       pose.near = SPACE_NEAR;
       pose.far = SPACE_FAR;
       pose.dof = 0;
@@ -150,16 +154,15 @@ export function buildShots(stage: Stage): Shot[] {
     end: 131,
     handheld: 0.35,
     apply: (ctx, pose) => {
-      const k = ctx.progress;
+      const k = easeInOut(ctx.progress);
       _a.copy(runner.position);
-      _b.copy(destroyer.position);
-      _c.lerpVectors(_a, _b, 0.5);
-      // High three-quarter from the sunlit side: the destroyer's dorsal wedge
-      // reads as a shape, and the corvette sits small and low ahead of it.
-      const dist = lerp(2500, 2200, easeInOut(k));
-      pose.position.set(_c.x + dist * 0.78, _c.y + 620 + k * 90, _c.z + dist * 0.5);
-      pose.target.set(_c.x - 60, _c.y + 30, _c.z - 120);
-      pose.fov = 42;
+      // Ahead of the corvette and off her bow, looking back down the chase.
+      // Framing both ships whole needs two kilometres of stand-off, at which
+      // point the corvette is eight per cent of frame height and the contrast
+      // is lost; instead she is held close and the wedge runs out of frame.
+      pose.position.set(_a.x + 430 - k * 40, _a.y + 54 + k * 22, _a.z - 470 - k * 40);
+      pose.target.set(_a.x - 96, _a.y + 128, _a.z + 430);
+      pose.fov = lerp(46, 42, k);
       pose.near = SPACE_NEAR;
       pose.far = SPACE_FAR;
     },
@@ -251,11 +254,13 @@ export function buildShots(stage: Stage): Shot[] {
     end: 204,
     handheld: 0.2,
     apply: (ctx, pose) => {
-      const k = ctx.progress;
+      const k = easeInOut(ctx.progress);
       _a.copy(runner.position);
-      pose.position.set(_a.x + 300 - k * 90, _a.y - 130 + k * 40, _a.z + 250 - k * 70);
-      pose.target.set(_a.x, _a.y + 70, _a.z - 40);
-      pose.fov = lerp(50, 44, k);
+      // Stand off far enough that the belly overhead reads as a ceiling rather
+      // than an unresolvable wall of plating, with the prize small beneath it.
+      pose.position.set(_a.x + 700 - k * 140, _a.y - 110 + k * 30, _a.z + 235 - k * 70);
+      pose.target.set(_a.x - 40, _a.y + 176, _a.z - 250);
+      pose.fov = lerp(50, 46, k);
       pose.near = SPACE_NEAR;
       pose.far = SPACE_FAR;
     },
@@ -400,15 +405,23 @@ export function buildShots(stage: Stage): Shot[] {
     end: VADER_ENTRY + 14,
     handheld: 0.004,
     apply: (ctx, pose) => {
-      const k = easeInOut(ctx.progress);
-      ip(0.0, lerp(0.64, 0.8, k), lerp(-4.6, -7.4, k), pose.position);
+      // Most of the move happens in the first two seconds, so he has weight
+      // from the moment he clears the doorway rather than at the end of the
+      // shot. The long lens keeps the flanking troopers outside the frame:
+      // white armour in the near foreground dwarfs anything behind it.
+      const k = easeOutCubic(ctx.progress);
       const vz = stage.vader.root.position.z;
-      ip(0, lerp(1.35, 1.48, k), vz + 0.2, pose.target);
-      pose.fov = lerp(38, 30, k);
+      // Held aft of every trooper station and pulled in on a long lens. Put
+      // the lens between them and two suits of white armour crop the frame
+      // either side and dwarf the one figure the shot is about.
+      const camZ = lerp(-2.4, -4.8, k);
+      ip(0.0, lerp(0.74, 0.88, k), camZ, pose.position);
+      ip(0, lerp(1.34, 1.52, k), vz + 0.25, pose.target);
+      pose.fov = lerp(35, 22, k);
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
       pose.dof = 0.45;
-      pose.focus = 6.4;
+      pose.focus = Math.abs(vz - camZ);
       pose.focusRange = 7;
     },
   });

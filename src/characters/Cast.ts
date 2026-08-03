@@ -109,9 +109,12 @@ export class RebelSoldier extends Character implements ArmedCharacter {
   constructor(id: string) {
     const M = getMaterials();
     const rig = buildHumanoidRig({ height: 1.79, shoulderWidth: 0.42, limbThickness: 0.088 });
+    // Dark torso, light limbs. A figure in one mid-brown from head to boot
+    // reads as an unpainted wooden mannequin under corridor light; the value
+    // split is what makes the vest and the helmet register as clothing.
     skinHumanoid(rig, {
-      bodyMat: M.brownCloth,
-      limbMat: M.brownCloth,
+      bodyMat: M.darkCloth,
+      limbMat: M.rebelKhaki,
       bootMat: M.blackRubber,
       headMat: M.skin,
       beltMat: M.blackRubber,

@@ -188,8 +188,11 @@ export class Stage {
     this.interiorAmbient = new THREE.AmbientLight(0xb9c6d8, 0.55);
     this.interior.add(this.interiorAmbient);
 
-    this.vaderKey = new THREE.PointLight(0xff2f1c, 0, 12, 2);
-    this.vaderKey.position.set(0, 2.3, -12);
+    // Cold rim from behind him. A red key on his front made the blackest
+    // costume in the film read as maroon plastic; backlight separates the
+    // silhouette from the dark of the breached doorway instead.
+    this.vaderKey = new THREE.PointLight(0xa8c8ff, 0, 14, 2);
+    this.vaderKey.position.set(0, 2.3, -18);
     this.interior.add(this.vaderKey);
 
     this.boardingGlow = new THREE.PointLight(0xffd0a0, 0, 14, 2);

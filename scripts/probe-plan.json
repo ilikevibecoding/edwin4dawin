@@ -1,8 +1,7 @@
 [
-  {
-    "name": "sd-belly-pick",
-    "time": 105,
-    "js": "window.__STARFALL.look({subject:'destroyer', azimuth:90, elevation:-22, distance:1.65})",
-    "report": "(() => { const out = {}; for (const [k,[x,y]] of Object.entries({a:[0.05,-0.16],b:[-0.1,-0.2],c:[0.2,-0.18],d:[-0.25,-0.14]})) out[k] = window.__STARFALL.pick(x,y).slice(0,3).map(h=>h.name+'/'+h.parent+'/'+h.material+'/'+h.color); return out; })()"
-  }
+  { "name": "f1-enter", "time": 83 },
+  { "name": "f2-profile", "time": 122 },
+  { "name": "f3-underbelly", "time": 198 },
+  { "name": "f4-vader", "time": 274 },
+  { "name": "f5-tractor", "time": 184 }
 ]

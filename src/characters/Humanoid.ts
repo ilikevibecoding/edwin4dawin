@@ -203,21 +203,24 @@ export function skinHumanoid(rig: HumanoidRig, opts: SkinOptions): void {
     }
     if (opts.armor) {
       // Armoured limbs are plated boxes with a dark bodyglove at the joints.
+      // The plates run nearly the full bone length and the joint ball spans
+      // what is left: at 0.78 coverage every figure came apart into a stack of
+      // floating bricks as soon as the camera was inside four metres.
       const upper = new THREE.Mesh(
-        new THREE.BoxGeometry(th * 1.9, upperLen * 0.78, th * 1.8),
+        new THREE.BoxGeometry(th * 1.9, upperLen * 0.9, th * 1.8),
         opts.limbMat,
       );
-      upper.position.y = -upperLen * 0.46;
+      upper.position.y = -upperLen * 0.5;
       upper.castShadow = true;
       shoulder.add(upper);
-      const joint = new THREE.Mesh(new THREE.SphereGeometry(th * 0.86, 8, 6), opts.bootMat);
-      joint.position.y = -upperLen * 0.94;
+      const joint = new THREE.Mesh(new THREE.SphereGeometry(th * 0.95, 8, 6), opts.bootMat);
+      joint.position.y = -upperLen;
       shoulder.add(joint);
       const fore = new THREE.Mesh(
-        new THREE.BoxGeometry(th * 1.7, foreLen * 0.76, th * 1.6),
+        new THREE.BoxGeometry(th * 1.7, foreLen * 0.9, th * 1.6),
         opts.limbMat,
       );
-      fore.position.y = -foreLen * 0.46;
+      fore.position.y = -foreLen * 0.48;
       fore.castShadow = true;
       elbow.add(fore);
     } else {
@@ -250,21 +253,23 @@ export function skinHumanoid(rig: HumanoidRig, opts: SkinOptions): void {
     [rig.hipR, rig.kneeR, rig.footR],
   ] as Array<[THREE.Group, THREE.Group, THREE.Group]>) {
     const thigh = opts.armor
-      ? new THREE.Mesh(new THREE.BoxGeometry(th * 2.3, thighLen * 0.74, th * 2.2), opts.limbMat)
+      ? new THREE.Mesh(new THREE.BoxGeometry(th * 2.3, thighLen * 0.92, th * 2.2), opts.limbMat)
       : new THREE.Mesh(new THREE.CapsuleGeometry(th * 1.25, thighLen * 0.66, 3, 8), opts.limbMat);
-    thigh.position.y = -thighLen * (opts.armor ? 0.44 : 0.5);
+    thigh.position.y = -thighLen * (opts.armor ? 0.5 : 0.5);
     thigh.castShadow = true;
     hip.add(thigh);
     if (opts.armor) {
-      const kneeJoint = new THREE.Mesh(new THREE.SphereGeometry(th * 1.0, 8, 6), opts.bootMat);
-      kneeJoint.position.y = -thighLen * 0.92;
+      const hipJoint = new THREE.Mesh(new THREE.SphereGeometry(th * 1.15, 8, 6), opts.bootMat);
+      hip.add(hipJoint);
+      const kneeJoint = new THREE.Mesh(new THREE.SphereGeometry(th * 1.05, 8, 6), opts.bootMat);
+      kneeJoint.position.y = -thighLen;
       hip.add(kneeJoint);
     }
 
     const shin = opts.armor
-      ? new THREE.Mesh(new THREE.BoxGeometry(th * 2.0, shinLen * 0.78, th * 1.9), opts.limbMat)
+      ? new THREE.Mesh(new THREE.BoxGeometry(th * 2.0, shinLen * 0.92, th * 1.9), opts.limbMat)
       : new THREE.Mesh(new THREE.CapsuleGeometry(th * 1.05, shinLen * 0.68, 3, 8), opts.limbMat);
-    shin.position.y = -shinLen * (opts.armor ? 0.46 : 0.5);
+    shin.position.y = -shinLen * (opts.armor ? 0.5 : 0.5);
     shin.castShadow = true;
     knee.add(shin);
 
