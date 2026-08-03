@@ -19,9 +19,15 @@ npm run dev        # then open the printed URL and press Play
 Render it to a video file instead:
 
 ```bash
-npm run capture -- --fps=30 --w=1600 --h=900 --segments=3
+npm run capture -- --fps=24 --w=960 --h=540 --segments=3
 # -> render/film.mp4
 ```
+
+Pick the resolution deliberately. There is no GPU here, so every frame is
+rasterised by SwiftShader on the CPU and the cost is close to linear in pixels:
+on four cores the trench chapter is about a second a frame at 960x540 and three
+seconds at 1280x720, which is the difference between a two hour render and a six
+hour one. Roughly a third of that is the bloom pass alone.
 
 ## How it is put together
 
@@ -67,7 +73,7 @@ a six-cell atlas so a printed torso is still one draw call.
 
 - `src/ships/` — corvette, Star Destroyer, X-wing, TIE fighter, escape pod,
   sandcrawler, landspeeder, turrets.
-- `src/chars/` — Vader, Leia, Luke, Obi-Wan, stormtroopers, rebel troopers,
+- `src/chars/` — Vader, Leia, Luke, Han, Obi-Wan, stormtroopers, rebel troopers,
   imperial officers, R2-D2, C-3PO, Jawas, pilots.
 - `src/sets/` — starfield, desert planet, twin suns, corvette corridor, dune
   fields, moisture farm, hermit hut, battle-station surface and trench, hangar
@@ -122,8 +128,13 @@ See `docs/BRICK_KIT.md` for the full parts API.
 ## Notes
 
 The film renders on a software rasteriser with no GPU, so the whole thing is
-built to a budget: merged geometry, culled studs, pooled particles, and a
-capture pipeline that splits the timeline across parallel headless browsers.
+built to a budget: merged geometry, culled studs, pooled particles.
+
+`--segments` splits the timeline across parallel headless browsers, which buys
+much less than it looks like it should: SwiftShader is itself multi-threaded and
+one browser already saturates the machine, so three workers finish at roughly
+the rate one does. It is still worth using, because a segment that dies takes
+only its own slice of the film with it.
 
 The story beats are the ones everyone knows. The narration is original prose,
 and the score is an original composition in a similar idiom — no melodies or
