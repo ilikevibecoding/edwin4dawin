@@ -6,16 +6,86 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 
 // ---------------------------------------------------------------------------
 // Post stack, in the order light actually goes through a camera:
 //
-//   scene (linear HDR) -> ambient occlusion -> bloom -> ACES + sRGB
+//   scene (linear HDR) -> ambient occlusion -> screen-space reflections
+//   -> firefly guard -> bloom -> ACES + sRGB
 //   -> lens grade (vignette, chromatic aberration, grain) -> SMAA
 //
 // Bloom runs before tone mapping on purpose: that is what makes a hot
 // highlight bloom softly instead of smearing a clipped white blob.
+//
+// The firefly guard sits after SSR rather than before AO. It is the one pass
+// that strips NaN, and a ray march is a far richer source of those than the sky
+// shader ever was, so it wants to be downstream of the marcher — AO and SSR
+// both read depth and normals rather than colour, so nothing is lost by moving
+// it down.
 // ---------------------------------------------------------------------------
+
+// Three tiers. `fast` is for the software-rendered capture harness and must
+// stay cheap; `high` is roughly what a laptop can hold at 60; `ultra` is where
+// the frame budget of a discrete card actually goes.
+//
+// Sample counts are compile-time in every one of these shaders, so a tier is a
+// set of shader permutations, not a runtime dial.
+const TIERS = {
+  fast: {
+    aoSamples: 6,
+    pdSamples: 8,
+    ssr: null,
+    ssrOptIn: { steps: 12, refine: 2, blurTaps: 0, maxDistance: 14, thickness: 0.6 },
+    // SMAA stays on at every tier. It is two fixed-cost fullscreen passes and
+    // the frame is mostly alpha-tested foliage, so it is the cheapest edge in
+    // the stack — and dropping it would change what the harness shows the
+    // agents working on the other files.
+    smaa: true,
+  },
+  high: {
+    // 16 AO samples is three's own GTAOPass default, i.e. exactly today's cost.
+    aoSamples: 16,
+    pdSamples: 8,
+    // No SSR here by default. This tier is what `?quality=` resolves to when it
+    // is absent, so it is what the master loop's own capture harness renders,
+    // and SSR is not a cheap pass: a second geometry pass over every classified
+    // reflector plus a per-pixel march. The brief for this tier is "close to
+    // today's cost", and a whole new pass is not that. `?ssr=on` builds the
+    // permutation below at any tier, which is how to capture it at `high`.
+    ssr: null,
+    ssrOptIn: { steps: 16, refine: 3, blurTaps: 0, maxDistance: 18, thickness: 0.55 },
+    smaa: true,
+  },
+  ultra: {
+    // 40 steps reaches 30 m, five bisections put the hit inside a couple of
+    // centimetres of the surface it found, and the four blur taps stand in for
+    // a roughness lobe. The march only runs where a reflector was classified
+    // and its Fresnel weight survived: on the hero framing that is 17 per cent
+    // of the frame, measured off the reflection-only debug output.
+    aoSamples: 32,
+    pdSamples: 16,
+    ssr: { steps: 40, refine: 5, blurTaps: 4, maxDistance: 30, thickness: 0.5 },
+    ssrOptIn: { steps: 40, refine: 5, blurTaps: 4, maxDistance: 30, thickness: 0.5 },
+    smaa: true,
+  },
+};
+
+/**
+ * `?ssr=on` builds the tier's SSR permutation even where the tier does not ship
+ * one, `?ssr=off` skips it where it does. The pass is a set of compile-time
+ * defines, so this is a boot-time choice and not the runtime `toggle('ssr')` —
+ * that one only stops it running, which is the right lever for an A/B of the
+ * same build but tells you nothing about what building it costs.
+ */
+function ssrOverride() {
+  try {
+    const v = new URLSearchParams(location.search).get('ssr');
+    return v === 'on' ? true : v === 'off' ? false : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Firefly guard. The atmospheric scattering in the sky shader can emit NaN and
@@ -50,6 +120,523 @@ const SanitizeShader = {
       gl_FragColor = vec4( c, 1.0 );
     }`,
 };
+
+// ---------------------------------------------------------------------------
+// Screen-space reflections.
+//
+// Every reflection in this scene was analytic before this: a graded fake
+// skyline in the paint's specular lobe, a sky gradient in the puddles, a PMREM
+// of a sky dome with eighteen dark cards standing in for a forest. None of them
+// contain the truck, the trail or the trees, which is exactly what you look for
+// in a puddle.
+//
+// Three decisions shape this implementation, and all three are about not
+// spending the budget twice:
+//
+// 1. **Reflectors are declared, not derived.** SSR is applied only to surfaces
+//    that actually mirror — the standing water, the wet ruts, the paint's
+//    clearcoat, the glass, the brightwork. Marching a ray for a pixel of bark
+//    costs the same as marching one for a pixel of water and returns nothing,
+//    and there is no way to read a material's per-pixel roughness back out of
+//    an already-shaded frame, so the classification is done on the way in.
+//
+// 2. **The reflection is mixed in, not added.** These materials already carry
+//    an environment reflection from the PMREM; adding a second one on top
+//    double-counts it and blows the paint out. Weighting a *replacement* by
+//    Fresnel is both closer to what a mirror does and incapable of pushing the
+//    frame brighter than it already was.
+//
+// 3. **A miss keeps what was there.** Rays that leave the screen or run out of
+//    march return zero confidence, and the pixel is left exactly as the
+//    material shaded it — so the sky, which is almost always off the top of the
+//    frame for a horizontal puddle, is still the tuned analytic one.
+//
+// Depth comes from the G-buffer the AO pass already renders, so the geometry
+// cost of this whole feature is one extra pass over the reflectors alone.
+// ---------------------------------------------------------------------------
+
+/** Layer the reflector G-buffer pass renders. */
+const SSR_LAYER = 20;
+
+// F0 is the reflectance at normal incidence — the number Fresnel interpolates
+// away from as the surface turns edge-on. Water at 0.02 is nearly invisible
+// head-on and a mirror at eighty degrees, which is exactly how a puddle behaves
+// and is why it is worth doing this properly rather than with a constant.
+const REFLECTORS = {
+  // standing water in the ruts: its own mesh, and the sharpest mirror here
+  roadWater: { f0: 0.025, roughness: 0.04, water: 1 },
+  // the trail itself. Reflectivity is driven per-vertex off the wetness field
+  // the mesh was dished with, so only the wet ruts reflect.
+  terrain: { f0: 0.03, roughness: 0.3, wet: 1 },
+
+  glass: { f0: 0.055, roughness: 0.05 },
+  glassDark: { f0: 0.055, roughness: 0.1 },
+  cabinGlass: { f0: 0.05, roughness: 0.05 },
+  lensClear: { f0: 0.05, roughness: 0.04 },
+
+  // clearcoat over paint. The base coat is rough and the coat is not, so the
+  // reflection belongs to the coat and F0 is the coat's.
+  paint: { f0: 0.045, roughness: 0.1 },
+  paintDark: { f0: 0.045, roughness: 0.12 },
+  paintAccent: { f0: 0.045, roughness: 0.14 },
+  paintRoof: { f0: 0.045, roughness: 0.11 },
+  trimGloss: { f0: 0.045, roughness: 0.18 },
+
+  // metals: a high F0 and no diffuse under it, so the reflection is most of
+  // what they are
+  chrome: { f0: 0.62, roughness: 0.16 },
+  mirrorGlass: { f0: 0.7, roughness: 0.08 },
+  alu: { f0: 0.42, roughness: 0.3 },
+  steel: { f0: 0.4, roughness: 0.3 },
+  plate: { f0: 0.34, roughness: 0.3 },
+};
+
+const reflectVertex = /* glsl */ `
+attribute float aWet;
+uniform float uWetGate;
+varying vec3 vViewNormal;
+varying float vWet;
+void main() {
+  vViewNormal = normalMatrix * normal;
+  vWet = aWet * uWetGate;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+}`;
+
+const reflectFragment = /* glsl */ `
+uniform sampler2D tDepth;
+uniform vec2 uTexel;
+uniform float uF0;
+uniform float uRoughness;
+uniform float uWater;
+uniform float uTime;
+varying vec3 vViewNormal;
+varying float vWet;
+
+void main() {
+  // Manual depth test against the scene's own depth.
+  //
+  // This target has no depth buffer of its own on purpose: half the reflectors
+  // here — the water sheet, every pane of glass — do not write depth in the
+  // beauty pass either, so a hardware test against a buffer they never wrote
+  // would reject them. Comparing against the recorded scene depth instead lets
+  // a non-writing surface in front of the recorded one through and rejects
+  // anything genuinely behind it.
+  float sceneDepth = texture2D( tDepth, gl_FragCoord.xy * uTexel ).x;
+  if ( gl_FragCoord.z > sceneDepth + 3e-5 ) discard;
+
+  vec3 n = vViewNormal;
+  float len = length( n );
+  if ( len < 1e-6 ) discard;
+  n /= len;
+  // The G-buffer stores only n.xy and reconstructs z as the positive root, so a
+  // normal pointing away from the eye would come back flipped. Front faces of a
+  // visible surface point at the eye; interpolation across a silhouette can
+  // still tip one over, so it is forced rather than left to chance.
+  if ( n.z < 0.0 ) n = -n;
+
+  float f0 = uF0;
+  float rough = uRoughness;
+
+  if ( uWater > 0.5 ) {
+    // A dead flat mirror reads as a hole in the road. A trace of ripple is what
+    // makes the reflection sit *on* something.
+    vec2 rip = vec2(
+      sin( gl_FragCoord.x * 0.06 + uTime * 0.7 ) + sin( gl_FragCoord.y * 0.043 - uTime * 0.53 ),
+      sin( gl_FragCoord.y * 0.055 + uTime * 0.61 ) + sin( gl_FragCoord.x * 0.037 + uTime * 0.44 )
+    );
+    n = normalize( n + vec3( rip * 0.012, 0.0 ) );
+  }
+
+  if ( vWet > 0.0 ) {
+    // Wetness runs the whole reflector, not just its strength: a damp rut is a
+    // broad sheen and standing water is a mirror, and the difference between
+    // them is roughness rather than amount.
+    float w = clamp( vWet, 0.0, 1.0 );
+    float m = smoothstep( 0.28, 0.8, w );
+    if ( m < 0.02 ) discard;
+    f0 = mix( 0.012, 0.03, m );
+    rough = mix( 0.42, 0.1, m );
+  }
+
+  gl_FragColor = vec4( n.xy, rough, f0 );
+}`;
+
+const ssrFragment = /* glsl */ `
+uniform sampler2D tDiffuse;
+uniform sampler2D tDepth;
+uniform sampler2D tReflect;
+uniform mat4 uProj;
+uniform mat4 uProjInv;
+uniform vec2 uResolution;
+uniform float uNear;
+uniform float uFar;
+uniform float uMaxDistance;
+uniform float uThickness;
+uniform float uStrength;
+uniform float uStepBase;
+uniform float uGrow;
+uniform float uDebug;
+varying vec2 vUv;
+
+/**
+ * View-space z from a window-depth sample.
+ *
+ * The denominator is far + near - ndc * ( far - near ), which for ndc in
+ * [ -1, 1 ] is bounded by [ 2 * near, 2 * far ] and therefore never zero. That
+ * matters more than the two instructions it saves: a NaN here reaches bloom and
+ * takes the whole frame with it.
+ */
+float viewZ( float d ) {
+  float ndc = d * 2.0 - 1.0;
+  return -( 2.0 * uNear * uFar ) / ( uFar + uNear - ndc * ( uFar - uNear ) );
+}
+
+vec3 viewPos( vec2 uv, float d ) {
+  vec4 clip = vec4( uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0 );
+  vec4 v = uProjInv * clip;
+  return v.xyz / max( v.w, 1e-8 );
+}
+
+/** Per-pixel dither, deterministic in screen space so a still frame is still. */
+float igNoise( vec2 p ) {
+  return fract( 52.9829189 * fract( dot( p, vec2( 0.06711056, 0.00583715 ) ) ) );
+}
+
+void main() {
+  vec4 src = texture2D( tDiffuse, vUv );
+  vec4 g = texture2D( tReflect, vUv );
+  float f0 = g.a;
+
+  if ( uDebug > 0.5 ) {
+    if ( uDebug < 1.5 ) { gl_FragColor = vec4( vec3( f0 * 4.0 ), 1.0 ); return; }
+    if ( uDebug < 2.5 ) { gl_FragColor = vec4( vec3( g.b ), 1.0 ); return; }
+  }
+
+  if ( f0 < 0.004 ) { gl_FragColor = src; return; }
+
+  float depth = texture2D( tDepth, vUv ).x;
+  if ( depth >= 0.999999 ) { gl_FragColor = src; return; }
+
+  vec3 p = viewPos( vUv, depth );
+  if ( p.z > -uNear * 0.5 ) { gl_FragColor = src; return; }
+
+  vec3 n = normalize( vec3( g.xy, sqrt( max( 1.0 - dot( g.xy, g.xy ), 0.0 ) ) ) );
+  vec3 v = normalize( p );
+  float cosNV = clamp( dot( n, -v ), 0.0, 1.0 );
+  vec3 r = reflect( v, n );
+
+  float rough = clamp( g.b, 0.0, 1.0 );
+
+  // Schlick. This is the entire reason a puddle is a mirror at ten metres and a
+  // pane of muddy water at one.
+  float fres = f0 + ( 1.0 - f0 ) * pow( 1.0 - cosNV, 5.0 );
+  // A rough surface still reflects the same energy, it just spreads it over a
+  // lobe this pass cannot afford to integrate. Rather than draw a sharp
+  // reflection on a rough surface — which is the single most obvious way SSR
+  // announces itself — the contribution is faded out as the lobe opens.
+  float glossy = 1.0 - smoothstep( 0.08, 0.6, rough );
+  // and a ray pointing back towards the lens has nothing in front of it to find
+  float facing = 1.0 - smoothstep( 0.15, 0.7, r.z );
+  float weight = fres * glossy * facing * uStrength;
+  if ( weight < 0.004 ) { gl_FragColor = src; return; }
+
+  // March along the reflected ray with a stride that grows geometrically: the
+  // first step is centimetres, so a contact reflection lands on the right
+  // pixel, and the last is metres, where a metre is a pixel anyway.
+  float jitter = igNoise( gl_FragCoord.xy );
+  float bias = max( 0.015, abs( p.z ) * 0.0025 );
+  vec3 ro = p + n * bias;
+
+  float dt = uStepBase;
+  float t = dt * ( 0.35 + jitter * 0.9 );
+  float prevT = 0.0;
+  bool hit = false;
+  vec2 hitUv = vec2( 0.0 );
+  float hitT = 0.0;
+
+  for ( int i = 0; i < SSR_STEPS; i ++ ) {
+    vec3 q = ro + r * t;
+    vec4 clip = uProj * vec4( q, 1.0 );
+    if ( clip.w < 1e-4 ) break;
+    vec2 uv = ( clip.xy / clip.w ) * 0.5 + 0.5;
+    if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 ) break;
+
+    float sd = texture2D( tDepth, uv ).x;
+    // sky, or anything else that never wrote depth: not an occluder, keep going
+    if ( sd < 0.999999 ) {
+      float delta = viewZ( sd ) - q.z;
+      if ( delta > 0.0 && delta < uThickness ) {
+        float lo = prevT;
+        float hi = t;
+        for ( int k = 0; k < SSR_REFINE; k ++ ) {
+          float mid = ( lo + hi ) * 0.5;
+          vec3 qm = ro + r * mid;
+          vec4 cm = uProj * vec4( qm, 1.0 );
+          vec2 um = ( cm.xy / max( cm.w, 1e-4 ) ) * 0.5 + 0.5;
+          float sm = texture2D( tDepth, clamp( um, 0.0, 1.0 ) ).x;
+          if ( sm < 0.999999 && viewZ( sm ) - qm.z > 0.0 ) hi = mid; else lo = mid;
+        }
+        vec3 qh = ro + r * hi;
+        vec4 ch = uProj * vec4( qh, 1.0 );
+        hitUv = clamp( ( ch.xy / max( ch.w, 1e-4 ) ) * 0.5 + 0.5, 0.0, 1.0 );
+        hitT = hi;
+        hit = true;
+        break;
+      }
+    }
+
+    prevT = t;
+    t += dt;
+    dt *= uGrow;
+    if ( t > uMaxDistance ) break;
+  }
+
+  if ( !hit ) { gl_FragColor = src; return; }
+
+  vec3 refl = texture2D( tDiffuse, hitUv ).rgb;
+  #if SSR_BLUR_TAPS > 0
+    // A cheap stand-in for a roughness lobe: four taps on a cross whose radius
+    // grows with roughness and with how far the ray travelled, which is the
+    // same way a real lobe widens.
+    float spread = rough * ( 0.004 + hitT * 0.0016 );
+    vec2 e = vec2( spread, 0.0 );
+    refl += texture2D( tDiffuse, clamp( hitUv + e.xy, 0.0, 1.0 ) ).rgb;
+    refl += texture2D( tDiffuse, clamp( hitUv - e.xy, 0.0, 1.0 ) ).rgb;
+    refl += texture2D( tDiffuse, clamp( hitUv + e.yx, 0.0, 1.0 ) ).rgb;
+    refl += texture2D( tDiffuse, clamp( hitUv - e.yx, 0.0, 1.0 ) ).rgb;
+    refl *= 0.2;
+  #endif
+
+  // Confidence. The two honest failures of any screen-space trace are running
+  // off the edge of the frame and running out of march, and both have to be
+  // faded rather than cut or the reflection ends in a hard line.
+  vec2 edge = min( hitUv, 1.0 - hitUv );
+  float border = smoothstep( 0.0, 0.14, edge.x ) * smoothstep( 0.0, 0.10, edge.y );
+  float reach = 1.0 - smoothstep( uMaxDistance * 0.55, uMaxDistance, hitT );
+  float conf = border * reach;
+
+  vec3 outCol = mix( src.rgb, refl, clamp( weight * conf, 0.0, 1.0 ) );
+
+  if ( uDebug > 2.5 ) { gl_FragColor = vec4( refl * conf, 1.0 ); return; }
+
+  // Belt and braces. Everything above is guarded, but a ray march is the single
+  // richest source of NaN in a renderer and one NaN pixel here is a black frame
+  // once bloom has blurred it across the buffer.
+  if ( !( outCol.r == outCol.r ) ) outCol.r = src.r;
+  if ( !( outCol.g == outCol.g ) ) outCol.g = src.g;
+  if ( !( outCol.b == outCol.b ) ) outCol.b = src.b;
+
+  gl_FragColor = vec4( max( outCol, 0.0 ), src.a );
+}`;
+
+const ssrVertex = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+}`;
+
+class SsrPass extends Pass {
+  constructor(scene, camera, cfg) {
+    super();
+    this.scene = scene;
+    this.camera = camera;
+    this.cfg = cfg;
+    this.needsSwap = true;
+    this.depthTexture = null;
+    this.debug = 0;
+    this.time = 0;
+    this._scanned = false;
+
+    this.reflectRT = new THREE.WebGLRenderTarget(1, 1, {
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
+      type: THREE.HalfFloatType,
+      depthBuffer: false,
+      stencilBuffer: false,
+    });
+    this.reflectRT.texture.name = 'SSR.reflectors';
+
+    this.reflectMaterial = new THREE.ShaderMaterial({
+      name: 'SsrReflectors',
+      uniforms: {
+        tDepth: { value: null },
+        uTexel: { value: new THREE.Vector2(1, 1) },
+        uF0: { value: 0.04 },
+        uRoughness: { value: 0.2 },
+        uWater: { value: 0 },
+        uWetGate: { value: 0 },
+        uTime: { value: 0 },
+      },
+      vertexShader: reflectVertex,
+      fragmentShader: reflectFragment,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      fog: false,
+    });
+    // The override material is handed the object being drawn, which is the only
+    // hook this pass needs into geometry it does not own: the class is looked
+    // up here rather than stored on anybody else's material.
+    this.reflectMaterial.onBeforeRender = (renderer, scene, camera, geometry, object) => {
+      const c = object.userData.__ssr;
+      const u = this.reflectMaterial.uniforms;
+      u.uF0.value = c ? c.f0 : 0;
+      u.uRoughness.value = c ? c.roughness : 1;
+      u.uWater.value = c && c.water ? 1 : 0;
+      u.uWetGate.value = c && c.wet ? 1 : 0;
+    };
+
+    const material = new THREE.ShaderMaterial({
+      name: 'SsrResolve',
+      defines: {
+        SSR_STEPS: cfg.steps,
+        SSR_REFINE: cfg.refine,
+        SSR_BLUR_TAPS: cfg.blurTaps,
+      },
+      uniforms: {
+        tDiffuse: { value: null },
+        tDepth: { value: null },
+        tReflect: { value: this.reflectRT.texture },
+        uProj: { value: new THREE.Matrix4() },
+        uProjInv: { value: new THREE.Matrix4() },
+        uResolution: { value: new THREE.Vector2(1, 1) },
+        uNear: { value: 0.1 },
+        uFar: { value: 900 },
+        uMaxDistance: { value: cfg.maxDistance },
+        uThickness: { value: cfg.thickness },
+        uStrength: { value: 1 },
+        uStepBase: { value: 0.15 },
+        uGrow: { value: 1.06 },
+        uDebug: { value: 0 },
+      },
+      vertexShader: ssrVertex,
+      fragmentShader: ssrFragment,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.material = material;
+    this._quad = new FullScreenQuad(material);
+
+    // The stride grows geometrically, so the base step that makes the march
+    // reach exactly maxDistance in `steps` is the sum of the series.
+    const grow = 1.06;
+    const series = (Math.pow(grow, cfg.steps) - 1) / (grow - 1);
+    material.uniforms.uStepBase.value = cfg.maxDistance / series;
+    material.uniforms.uGrow.value = grow;
+  }
+
+  /**
+   * Find the reflective surfaces and put them on their own layer.
+   *
+   * Classification is by material name against a table, because the alternative
+   * — reading `roughness` and `metalness` off the material — is wrong for most
+   * of this scene: nearly every surface here carries a roughness map with the
+   * scalar left at 1, and the two that matter most take their roughness from an
+   * `onBeforeCompile` patch that no property on the material reflects.
+   */
+  scan() {
+    this._scanned = true;
+    this.scene.traverse((o) => {
+      // Lights are layer-tested too, and three re-keys every material in the
+      // scene whenever the light count changes between two renders. Rendering
+      // the reflectors under a camera that could not see the lights would flip
+      // that count twice a frame and re-derive four hundred program cache keys
+      // for a pass that does not shade anything.
+      if (o.isLight) {
+        o.layers.enable(SSR_LAYER);
+        return;
+      }
+      if (!o.isMesh && !o.isInstancedMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      let best = null;
+      for (const m of mats) {
+        if (!m) continue;
+        const c = REFLECTORS[m.name] || REFLECTORS[o.name];
+        if (c && (!best || c.f0 > best.f0)) best = c;
+      }
+      if (!best) {
+        if (o.userData.__ssr) {
+          delete o.userData.__ssr;
+          o.layers.disable(SSR_LAYER);
+        }
+        return;
+      }
+      o.userData.__ssr = best;
+      o.layers.enable(SSR_LAYER);
+    });
+  }
+
+  setSize(width, height) {
+    this.reflectRT.setSize(width, height);
+    this.material.uniforms.uResolution.value.set(width, height);
+    this.reflectMaterial.uniforms.uTexel.value.set(1 / Math.max(width, 1), 1 / Math.max(height, 1));
+  }
+
+  dispose() {
+    this.reflectRT.dispose();
+    this.reflectMaterial.dispose();
+    this.material.dispose();
+    this._quad.dispose();
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    if (!this.depthTexture) {
+      // No G-buffer this frame — the AO pass owns it, so if that is off this
+      // one has nothing to march against. Pass the frame through untouched
+      // rather than march a stale depth buffer.
+      return;
+    }
+    if (!this._scanned) this.scan();
+
+    const camera = this.camera;
+    const scene = this.scene;
+    const prevTarget = renderer.getRenderTarget();
+    const prevMask = camera.layers.mask;
+    const prevOverride = scene.overrideMaterial;
+    const prevAutoClear = renderer.autoClear;
+    const prevShadowAuto = renderer.shadowMap.autoUpdate;
+    const prevClear = renderer.getClearColor(_clearCol);
+    const prevAlpha = renderer.getClearAlpha();
+
+    this.reflectMaterial.uniforms.tDepth.value = this.depthTexture;
+    this.reflectMaterial.uniforms.uTime.value = this.time;
+
+    // Shadow maps were rendered by the beauty pass at the top of the frame and
+    // nothing has moved since. Without this three re-renders every shadow map
+    // for each extra scene render, which for a 4096 map is most of the cost of
+    // the pass it is being called from.
+    renderer.shadowMap.autoUpdate = false;
+    renderer.setRenderTarget(this.reflectRT);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear(true, false, false);
+    renderer.autoClear = false;
+    camera.layers.set(SSR_LAYER);
+    scene.overrideMaterial = this.reflectMaterial;
+    renderer.render(scene, camera);
+    scene.overrideMaterial = prevOverride;
+    camera.layers.mask = prevMask;
+    renderer.autoClear = prevAutoClear;
+    renderer.shadowMap.autoUpdate = prevShadowAuto;
+    renderer.setClearColor(prevClear, prevAlpha);
+
+    const u = this.material.uniforms;
+    u.tDiffuse.value = readBuffer.texture;
+    u.tDepth.value = this.depthTexture;
+    u.uProj.value.copy(camera.projectionMatrix);
+    u.uProjInv.value.copy(camera.projectionMatrixInverse);
+    u.uNear.value = camera.near;
+    u.uFar.value = camera.far;
+    u.uDebug.value = this.debug;
+
+    renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+    if (this.clear) renderer.clear();
+    this._quad.render(renderer);
+    renderer.setRenderTarget(prevTarget);
+  }
+}
+
+const _clearCol = new THREE.Color();
 
 const GradeShader = {
   name: 'GradeShader',
@@ -230,6 +817,7 @@ const GRADES = {
     bloom: { strength: 0.26, radius: 0.6, threshold: 0.92 },
     clamp: 14.0,
     ao: { intensity: 0.95, radius: 0.62, scale: 1.15, distanceExponent: 1.5, thickness: 1.0 },
+    ssr: 1.0,
     grade: {
       vignette: 0.21,
       vignetteSoft: 0.66,
@@ -254,6 +842,7 @@ const GRADES = {
     bloom: { strength: 0.38, radius: 0.72, threshold: 0.74 },
     clamp: 12.0,
     ao: { intensity: 1.0, radius: 0.68, scale: 1.2, distanceExponent: 1.5, thickness: 1.0 },
+    ssr: 1.0,
     grade: {
       vignette: 0.24,
       vignetteSoft: 0.62,
@@ -303,6 +892,9 @@ const GRADES = {
     // contact under the tyres, which is what the trail's own lit pool makes
     // legible in the first place.
     ao: { intensity: 0.82, radius: 0.85, scale: 1.0, distanceExponent: 1.3, thickness: 1.0 },
+    // A wet trail at night is mostly reflection — the lamps are the only light
+    // there is, and what you see of the road is what it bounces back at you.
+    ssr: 1.25,
     grade: {
       // Barely any. A night frame is already dark in the corners and a vignette
       // on top of that is how the "eighty per cent black" failure happens.
@@ -368,6 +960,7 @@ function urlTime() {
 }
 
 export function createPost(renderer, scene, camera, { quality = 'high', timeOfDay = urlTime() } = {}) {
+  const tier = TIERS[quality] || TIERS.high;
   const size = renderer.getSize(new THREE.Vector2());
   const composer = new EffectComposer(renderer);
   composer.setPixelRatio(renderer.getPixelRatio());
@@ -393,13 +986,10 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
     },
   });
 
-  const sanitize = new ShaderPass(SanitizeShader);
-  composer.addPass(sanitize);
-
   // --- ambient occlusion ---------------------------------------------------
   const gtao = new GTAOPass(scene, camera, size.x, size.y);
   gtao.output = GTAOPass.OUTPUT.Default;
-  const aoSamples = quality === 'high' ? 16 : 6;
+  const aoSamples = tier.aoSamples;
   // A tighter radius than the 0.85 this ran at, and more of it. Contact
   // occlusion is what plants a tyre in a rut and puts a line under a panel gap,
   // and at 0.85 m the kernel was wide enough that it read as a general
@@ -415,9 +1005,31 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
     distanceFallOff: 1.0,
     screenSpaceRadius: false,
   });
-  gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3.5, radius: 4, radiusExponent: 1, rings: 2, samples: 8 });
+  gtao.updatePdMaterial({
+    lumaPhi: 10,
+    depthPhi: 2,
+    normalPhi: 3.5,
+    radius: 4,
+    radiusExponent: 1,
+    rings: 2,
+    samples: tier.pdSamples,
+  });
   gtao.blendIntensity = 0.95;
+  patchGBufferPass(gtao, renderer, scene);
   composer.addPass(gtao);
+
+  // --- screen-space reflections -------------------------------------------
+  const want = ssrOverride();
+  const ssrCfg = want === false ? null : want === true ? tier.ssrOptIn : tier.ssr;
+  const ssr = ssrCfg ? new SsrPass(scene, camera, ssrCfg) : null;
+  let ssrWanted = !!ssr;
+  if (ssr) {
+    ssr.depthTexture = gtao.depthTexture;
+    composer.addPass(ssr);
+  }
+
+  const sanitize = new ShaderPass(SanitizeShader);
+  composer.addPass(sanitize);
 
   // --- bloom ---------------------------------------------------------------
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.26, 0.6, 0.92);
@@ -429,19 +1041,23 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
 
   // --- lens grade ----------------------------------------------------------
   const grade = new ShaderPass(GradeShader);
-  grade.uniforms.uResolution.value.set(size.x, size.y);
+  // The composer hands every pass the *device* pixel size, which at a pixel
+  // ratio of 2 is twice the size the renderer reports. The grade's unsharp mask
+  // and its grain are both measured in pixels, so feeding them the CSS size put
+  // a two-pixel kernel and half-frequency grain on every ultra frame.
+  grade.setSize = (w, h) => grade.uniforms.uResolution.value.set(w, h);
   composer.addPass(grade);
 
   // --- antialias -----------------------------------------------------------
   const smaa = new SMAAPass();
-  smaa.enabled = quality === 'high';
+  smaa.enabled = tier.smaa;
   composer.addPass(smaa);
 
   function setSize(w, h) {
+    // One call. The composer already forwards the device-pixel size to every
+    // pass it owns, and calling the passes again by hand with the CSS size is
+    // what silently halved the AO and bloom resolution above a pixel ratio of 1.
     composer.setSize(w, h);
-    gtao.setSize(w, h);
-    bloom.setSize(w, h);
-    grade.uniforms.uResolution.value.set(w, h);
   }
 
   let mode = GRADES[timeOfDay] ? timeOfDay : 'day';
@@ -465,6 +1081,7 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
       distanceFallOff: 1.0,
       screenSpaceRadius: false,
     });
+    if (ssr) ssr.material.uniforms.uStrength.value = g.ssr ?? 1;
     const u = grade.uniforms;
     u.uVignette.value = g.grade.vignette;
     u.uVignetteSoft.value = g.grade.vignetteSoft;
@@ -487,7 +1104,8 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
 
   return {
     composer,
-    passes: { renderPass, sanitize, gtao, bloom, output, grade, smaa },
+    quality,
+    passes: { renderPass, sanitize, gtao, ssr, bloom, output, grade, smaa },
     sceneStats,
     setSize,
     setTimeOfDay,
@@ -496,15 +1114,78 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
     },
     update(t) {
       grade.uniforms.uTime.value = t;
+      if (ssr) ssr.time = t;
     },
     render(dt) {
       composer.render(dt);
     },
+    /** Re-find the reflective surfaces, for anything built after boot. */
+    rescanReflectors() {
+      if (ssr) ssr.scan();
+    },
+    /** 0 off, 1 reflector mask, 2 reflector roughness, 3 reflection only. */
+    debugSsr(n) {
+      if (ssr) ssr.debug = n || 0;
+      return ssr ? ssr.debug : -1;
+    },
     /** Debug helper: turn individual stages on and off from the console. */
     toggle(name, on) {
-      const p = { ao: gtao, bloom, grade, smaa, sanitize }[name];
+      const p = { ao: gtao, bloom, grade, smaa, sanitize, ssr }[name];
+      if (name === 'ssr') ssrWanted = !!on;
       if (p) p.enabled = on;
+      // SSR marches the G-buffer the AO pass renders, so switching AO off takes
+      // the depth buffer with it — and switching AO back on has to give it back,
+      // which is why the intent is tracked rather than read off `ssr.enabled`.
+      if (name === 'ao' && ssr) ssr.enabled = !!on && ssrWanted;
     },
+  };
+}
+
+/**
+ * Keep things that are not surfaces out of the depth/normal G-buffer.
+ *
+ * The AO pass renders the whole scene through a single override material, which
+ * means every mesh in it writes depth whether or not its own material does. In
+ * this scene that is four separate populations of things that are not
+ * geometry at all: the sun shafts, the headlamp beam billboards, the stone
+ * shadow decals lying a millimetre over the trail, and every pane of glass.
+ * Each one was punching an occluder into the buffer — the beams in particular
+ * are two metre discs hanging in front of the truck at night.
+ *
+ * The rule is the one the materials already state: a surface that does not
+ * write depth in the beauty pass is not an occluder, and should not be one
+ * here. That fixes the AO, and it is what makes the buffer usable for a
+ * reflection march at all.
+ *
+ * The same wrapper freezes shadow-map updates. `renderer.render` is called once
+ * per extra scene pass and re-renders every shadow map each time; at 4096 that
+ * was three times the shadow cost of the frame for two passes that do not read
+ * a shadow.
+ */
+function patchGBufferPass(gtao, renderer, scene) {
+  const inner = gtao.render.bind(gtao);
+  const hidden = [];
+  gtao.render = (r, writeBuffer, readBuffer, deltaTime, maskActive) => {
+    scene.traverse((o) => {
+      if (!o.visible || (!o.isMesh && !o.isInstancedMesh)) return;
+      const m = o.material;
+      const mats = Array.isArray(m) ? m : [m];
+      let writes = false;
+      for (const mat of mats) if (mat && mat.depthWrite !== false) writes = true;
+      if (!writes) {
+        o.visible = false;
+        hidden.push(o);
+      }
+    });
+    const prevShadowAuto = renderer.shadowMap.autoUpdate;
+    renderer.shadowMap.autoUpdate = false;
+    try {
+      inner(r, writeBuffer, readBuffer, deltaTime, maskActive);
+    } finally {
+      renderer.shadowMap.autoUpdate = prevShadowAuto;
+      for (const o of hidden) o.visible = true;
+      hidden.length = 0;
+    }
   };
 }
 

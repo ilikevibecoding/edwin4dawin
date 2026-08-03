@@ -359,6 +359,153 @@ const MODES = {
 
 export const TIME_NAMES = Object.keys(MODES);
 
+// ---------------------------------------------------------------------------
+// Contact-hardening shadows.
+//
+// three ships one filter width for the whole frame: five Vogel taps at a fixed
+// radius, so a tyre resting in a rut and a branch twenty metres up throw edges
+// of exactly the same softness. That single fact is most of what says "real
+// time" about a shadow — a penumbra grows with the distance between the blocker
+// and what it lands on, and a wheel with a hard-edged shadow under it reads as
+// hovering however well it is modelled.
+//
+// PCSS does it in two stages: average the depth of whatever is casting over a
+// search disc, turn the gap between that and the receiver into a penumbra
+// width, then filter at that width. It needs the raw depth back rather than a
+// hardware comparison, which is why the shadow map moves to `BasicShadowMap` —
+// that is the mode where three leaves the depth texture uncompared and
+// point-sampled.
+//
+// Two numbers are baked in at install rather than passed as uniforms, because
+// there is nowhere to put a uniform on three's built-in materials without
+// taking over every `onBeforeCompile` in the scene:
+//
+//   span   = ( shadowFar - shadowNear ) / shadow box width
+//            turns a normalised depth difference into a fraction of the map
+//   source = tangent of the light's angular radius
+//            the sun is 0.0047; this runs wider on purpose, because a
+//            physically correct solar penumbra is under a texel at any distance
+//            this scene contains and buys nothing for the cost.
+// ---------------------------------------------------------------------------
+
+function legacyEnv() {
+  try {
+    return new URLSearchParams(location.search).get('env') === 'legacy';
+  } catch {
+    return false;
+  }
+}
+
+function flatShafts() {
+  try {
+    return new URLSearchParams(location.search).get('shafts') === 'flat';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `?pcss=off` keeps three's stock five-tap filter. The filter is a shader chunk
+ * chosen once at boot, so there is no runtime toggle for it and this is the
+ * only way to put the two side by side.
+ */
+function pcssOff() {
+  try {
+    return new URLSearchParams(location.search).get('pcss') === 'off';
+  } catch {
+    return false;
+  }
+}
+
+const SHADOW_NEAR = 1;
+const SHADOW_FAR = 260;
+const SOURCE_TAN = 0.019;
+
+let pcssInstalled = false;
+
+function installPcss(renderer, pcss, extent) {
+  if (!pcss || pcssInstalled || pcssOff()) return false;
+  // The whole `getShadow` cascade — the PCF, VSM and basic variants and the
+  // `#if` chain selecting between them — is replaced by one unconditional
+  // function. Anchored on three's own source by walking back from the first
+  // declaration to the conditional that opens it, rather than on an exact
+  // string, so a whitespace change between versions does not silently drop the
+  // filter. If either anchor is gone, fall back to stock rather than compile
+  // something that will not link.
+  const chunk = THREE.ShaderChunk.shadowmap_pars_fragment;
+  const decl = chunk.indexOf('float getShadow(');
+  const head = decl < 0 ? -1 : chunk.lastIndexOf('#if defined( SHADOWMAP_TYPE_PCF )', decl);
+  const tail = head < 0 ? -1 : chunk.indexOf('#if NUM_POINT_LIGHT_SHADOWS > 0', decl);
+  if (head < 0 || tail < 0) {
+    console.warn('sky: PCSS anchors not found in shadowmap chunk, keeping stock PCF');
+    return false;
+  }
+
+  const span = (SHADOW_FAR - SHADOW_NEAR) / (2 * extent);
+  // The widest penumbra this filter can make, in UV: what a blocker 28 m above
+  // its receiver throws. The canopy tops out at 24 m, so nothing in the scene
+  // wants more, and the blocker search runs at exactly this radius — a blocker
+  // further out than the filter reaches cannot change the pixel, so searching
+  // wider than it is taps spent on nothing.
+  const search = (28 * SOURCE_TAN) / (2 * extent);
+
+  const body = /* glsl */ `
+		float pcssNoise( vec2 p ) {
+			return fract( 52.9829189 * fract( dot( p, vec2( 0.06711056, 0.00583715 ) ) ) );
+		}
+		vec2 pcssDisk( int i, int n, float phi ) {
+			const float golden = 2.399963229728653;
+			float r = sqrt( ( float( i ) + 0.5 ) / float( n ) );
+			float theta = float( i ) * golden + phi;
+			return vec2( cos( theta ), sin( theta ) ) * r;
+		}
+		float getShadow( sampler2D shadowMap, vec2 shadowMapSize, float shadowIntensity, float shadowBias, float shadowRadius, vec4 shadowCoord ) {
+			float shadow = 1.0;
+			shadowCoord.xyz /= shadowCoord.w;
+			shadowCoord.z += shadowBias;
+			bool inFrustum = shadowCoord.x >= 0.0 && shadowCoord.x <= 1.0 && shadowCoord.y >= 0.0 && shadowCoord.y <= 1.0;
+			if ( inFrustum && shadowCoord.z <= 1.0 ) {
+				float texel = 1.0 / shadowMapSize.x;
+				float phi = pcssNoise( gl_FragCoord.xy ) * PI2;
+				float zR = shadowCoord.z;
+
+				// shadowRadius is three's PCF width in texels and is per-mode:
+				// 1.5 at noon, 2.4 at night. Referenced to the noon value it is
+				// a softness multiplier, which is the only part of it that still
+				// means anything once the width comes from the blocker.
+				const float maxR = ${search.toFixed(7)};
+				float soft = clamp( shadowRadius / 1.5, 0.6, 1.8 );
+				float sum = 0.0;
+				float hits = 0.0;
+				for ( int i = 0; i < ${pcss.blocker}; i ++ ) {
+					vec2 o = pcssDisk( i, ${pcss.blocker}, phi ) * maxR;
+					float d = texture2D( shadowMap, shadowCoord.xy + o ).r;
+					if ( d < zR ) { sum += d; hits += 1.0; }
+				}
+				if ( hits > 0.5 ) {
+					// hits is at least one, so this cannot divide by zero
+					float blocker = sum / hits;
+					float gap = max( zR - blocker, 0.0 );
+					float radius = clamp( gap * ${span.toFixed(5)} * ${SOURCE_TAN} * soft,
+						texel * 0.7, maxR );
+					float lit = 0.0;
+					for ( int i = 0; i < ${pcss.filter}; i ++ ) {
+						vec2 o = pcssDisk( i, ${pcss.filter}, phi + 1.7 ) * radius;
+						lit += step( zR, texture2D( shadowMap, shadowCoord.xy + o ).r );
+					}
+					shadow = lit / float( ${pcss.filter} );
+				}
+			}
+			return mix( 1.0, shadow, shadowIntensity );
+		}
+	`;
+
+  THREE.ShaderChunk.shadowmap_pars_fragment = chunk.slice(0, head) + body + '\t' + chunk.slice(tail);
+  renderer.shadowMap.type = THREE.BasicShadowMap;
+  pcssInstalled = true;
+  return true;
+}
+
 let currentMode = 'day';
 
 function modeOf(name) {
@@ -551,11 +698,62 @@ function uniformBags(mat, out) {
   return out;
 }
 
-export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 0.04, timeOfDay = 'day' } = {}) {
+// ---------------------------------------------------------------------------
+// Quality tiers.
+//
+// `fast` is what the software-rendered capture harness runs and has to stay
+// cheap; `high` is a laptop at 60; `ultra` is where the budget of a discrete
+// card actually goes.
+//
+// `extent` is the half-width of the sun's orthographic shadow box, so the map
+// covers 2 x extent metres. Today that is +/-22 m at 2048, or 21.5 mm a texel,
+// and 22 m from the truck is roughly where the near treeline starts — nothing
+// past the first row of trunks has ever cast. `high` keeps exactly that.
+//
+// Ultra spends its four times the texels on both: +/-34 m is 55 per cent more
+// reach *and* 16.6 mm a texel, a third sharper than today. Spending all of it
+// on reach instead (+/-44 m at the same texel size) puts the far treeline in
+// but leaves the wheel contact no crisper, and the contact is what a PCSS
+// filter has to have to harden against.
+// ---------------------------------------------------------------------------
+const SKY_TIERS = {
+  fast: { shadowExtent: 22, envSize: 256, pcss: null, beamSlices: 12 },
+  high: { shadowExtent: 22, envSize: 512, pcss: { blocker: 8, filter: 12 }, beamSlices: 20 },
+  ultra: { shadowExtent: 34, envSize: 1024, pcss: { blocker: 16, filter: 28 }, beamSlices: 44 },
+};
+
+export function createSky(
+  scene,
+  renderer,
+  { shadowMapSize = 2048, envSamples = 512, timeOfDay = 'day', quality = 'high' } = {},
+) {
+  const tier = SKY_TIERS[quality] || SKY_TIERS.high;
   let modeName = MODES[timeOfDay] ? timeOfDay : 'day';
   currentMode = modeName;
   let cfg = modeOf(modeName);
   const sunDir = dirFrom(cfg.key.az, cfg.key.el);
+
+  const softShadows = installPcss(renderer, tier.pcss, tier.shadowExtent);
+
+  // PMREM resolution, not a blur radius.
+  //
+  // `fromScene`'s second argument is sigma — a pre-blur in *radians* — and the
+  // tier table hands this 256, 512 or 1024. Three clamps that to twenty taps
+  // and warns, and what comes back is the sky convolved into an even dome: the
+  // aureole, the horizon band and the trunk cards that give metal something to
+  // break up on were all being averaged away before a single material saw them.
+  // The size the tier means belongs in `options.size`, where 1024 buys four
+  // times the angular resolution in every reflection in the scene.
+  const envSize = envSamples >= 16 ? Math.round(envSamples) : tier.envSize;
+  // and no pre-blur at all: PMREM's own roughness convolution is the blur, and
+  // a sigma on top of it only costs a pass and clips against three's 20-tap cap.
+  const envSigma = envSamples > 0 && envSamples < 16 ? envSamples : 0;
+  // `fromScene`'s far plane defaults to 100 and the dome this renders is at
+  // 500, the ground disc at 400 and the trunk cards at 120-150 — so every
+  // single thing in the environment scene has been outside the cube camera's
+  // far plane and the map has been the clear colour. `?env=legacy` reproduces
+  // that, for A/B against everything the scene was tuned under.
+  const envFar = legacyEnv() ? 100 : 1000;
 
   const skyMaterial = makeSkyMaterial(cfg.sky, sunDir);
   const sky = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), skyMaterial);
@@ -594,7 +792,7 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
     envScene.add(m);
   }
 
-  let envRT = pmrem.fromScene(envScene, envSamples);
+  let envRT = pmrem.fromScene(envScene, envSigma, 0.1, envFar, { size: envSize });
   let env = envRT.texture;
   scene.environment = env;
   // The art fill is a spot now, so the ground past its throw has only sun and
@@ -609,16 +807,19 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
   sun.position.copy(sunDir).multiplyScalar(120);
   sun.castShadow = true;
   sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
-  sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 260;
-  const s = 22;
+  sun.shadow.camera.near = SHADOW_NEAR;
+  sun.shadow.camera.far = SHADOW_FAR;
+  const s = tier.shadowExtent;
   sun.shadow.camera.left = -s;
   sun.shadow.camera.right = s;
   sun.shadow.camera.top = s;
   sun.shadow.camera.bottom = -s;
   sun.shadow.blurSamples = 12;
+  // Depth bias is measured in texels, and a texel is now a different size.
+  const texelScale = (s / 22) * (2048 / shadowMapSize);
   scene.add(sun);
   scene.add(sun.target);
+  sunShadowRef = softShadows ? sun.shadow : null;
 
   // Sky fill from above, warm bounce from the litter below.
   //
@@ -659,7 +860,12 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
   scene.add(fill);
   scene.add(fill.target);
 
-  const beams = createHeadlightBeams();
+  // A beam is a stack of billboards standing in for a scattering integral, so
+  // slice count *is* its quality: at 12 the discs read individually where the
+  // cone is widest, and every extra slice both smooths that and refines the
+  // dust noise sampled through it. The per-slice intensity divides by the
+  // count, so the integrated brightness of the beam does not move with the tier.
+  const beams = createHeadlightBeams(tier.beamSlices);
   scene.add(beams.group);
   publishBeamState(beams.state);
 
@@ -667,8 +873,14 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
 
   function applyShadow(c) {
     sun.shadow.radius = c.shadow.radius;
-    sun.shadow.bias = c.shadow.bias;
-    sun.shadow.normalBias = c.shadow.normalBias;
+    // Both biases are a defence against a receiver self-shadowing across the
+    // width of one shadow texel, so both scale with how much world a texel
+    // covers. PCSS filters over a variable radius rather than a fixed five
+    // taps, so it needs a little more of the depth bias than the stock filter
+    // does — a penumbra that reaches twenty texels reaches twenty texels of
+    // slope error with it.
+    sun.shadow.bias = c.shadow.bias * texelScale * (softShadows ? 1.6 : 1);
+    sun.shadow.normalBias = c.shadow.normalBias * texelScale;
     if ('intensity' in sun.shadow) sun.shadow.intensity = c.shadow.intensity;
   }
 
@@ -828,7 +1040,7 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
     applySkyUniforms(envSkyMaterial, cfg.sky, sunDir, { env: true });
     groundMat.color.set(modeName === 'night' ? 0x0a0f0b : modeName === 'dusk' ? 0x241d18 : 0x2b3323);
     trunkMat.color.set(modeName === 'night' ? 0x05080a : modeName === 'dusk' ? 0x140f10 : 0x18211a);
-    const next = pmrem.fromScene(envScene, envSamples);
+    const next = pmrem.fromScene(envScene, envSigma, 0.1, envFar, { size: envSize });
     const old = envRT;
     envRT = next;
     env = next.texture;
@@ -847,6 +1059,10 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
     env,
     sunDir,
     pmrem,
+    envScene,
+    get envTarget() {
+      return envRT;
+    },
     get timeOfDay() {
       return modeName;
     },
@@ -926,12 +1142,32 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
 // ---------------------------------------------------------------------------
 // Volumetric-looking sun shafts. Additive quads aligned to the sun direction,
 // faded by view angle so they never read as flat cards.
+//
+// The cards are gated by the sun's own shadow map, which is what turns them
+// from atmosphere into light: a shaft is a column of air lit through a gap in
+// the canopy, so it should exist where the canopy has a gap and nowhere else.
+// Because each card is aligned *along* the sun direction, every point on it
+// projects to nearly the same place in the shadow map — so one lookup answers
+// "is this column lit" for the whole length, and the cost is a handful of taps
+// over the card's own fill rather than a march.
+//
+// Gated rather than cut: a shadowed column drops to a quarter rather than
+// vanishing, so the haze the wide shots are built on survives and what the
+// gate adds is the structure — a shaft that breaks where a branch crosses it,
+// and one that lands on the trail where the gap above it is real.
 // ---------------------------------------------------------------------------
 
 // Rigs created after the sky that also have to move when the hour does. They
 // are built by main.js from separate factory calls, so this is how the sky
 // reaches them without a change to the call site.
 const registry = new Set();
+
+// The sun's shadow, published for the shaft field. Only set when the map is a
+// plain depth texture: three binds it as a `sampler2DShadow` with a comparison
+// attached under the stock PCF filter, and sampling that as a `sampler2D` does
+// not link. PCSS is what moves it to raw depth, so shadowed shafts ride on the
+// same tiers PCSS does.
+let sunShadowRef = null;
 
 const shaftVert = /* glsl */ `
 varying vec2 vUv;
@@ -951,6 +1187,43 @@ uniform float uSeed;
 varying vec2 vUv;
 varying vec3 vWorld;
 
+#ifdef SHAFT_SHADOW
+uniform sampler2D uShadowMap;
+uniform mat4 uShadowMatrix;
+uniform float uShadowGate;
+uniform float uShadowSoft;
+
+// Nine taps on a Vogel disc. The radius is half a metre of world rather than a
+// texel or two: this is gating a column of lit air, not resolving the edge of
+// a leaf, and a shaft with a shadow-map-sharp edge cut through it is the one
+// way this could look worse than the flat card it replaces.
+const vec2 SHAFT_TAPS[ 9 ] = vec2[ 9 ](
+  vec2( 0.000, 0.000 ), vec2( -0.253, 0.216 ), vec2( 0.100, -0.451 ),
+  vec2( 0.256, 0.502 ), vec2( -0.649, -0.180 ), vec2( 0.667, -0.371 ),
+  vec2( -0.256, 0.784 ), vec2( -0.404, -0.749 ), vec2( 0.891, 0.229 )
+);
+
+float shaftLit() {
+  vec4 sc = uShadowMatrix * vec4( vWorld, 1.0 );
+  // Directional shadows come back with w = 1; the guard is for the divide, not
+  // for this light.
+  vec3 sp = sc.xyz / max( abs( sc.w ), 1e-4 );
+  // Outside the shadow box there is no information, so the honest answer is
+  // lit — the alternative is a hard edge at the frustum wall.
+  if ( sp.x <= 0.0 || sp.x >= 1.0 || sp.y <= 0.0 || sp.y >= 1.0 || sp.z >= 1.0 ) return 1.0;
+  float z = sp.z - 0.0025;
+  float acc = 0.0;
+  for ( int i = 0; i < 9; i ++ ) {
+    acc += step( z, texture2D( uShadowMap, sp.xy + SHAFT_TAPS[ i ] * uShadowSoft ).r );
+  }
+  // fade the gate out at the edge of the box so a card crossing the wall does
+  // not step
+  vec2 e = min( sp.xy, 1.0 - sp.xy );
+  float inside = smoothstep( 0.0, 0.06, min( e.x, e.y ) );
+  return mix( 1.0, acc * ( 1.0 / 9.0 ), uShadowGate * inside );
+}
+#endif
+
 float hash( vec2 p ){ return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
 float noise( vec2 p ){
   vec2 i = floor( p ); vec2 f = fract( p );
@@ -969,6 +1242,9 @@ void main() {
   // distance falloff so shafts do not pile up in the far fog
   float d = length( vWorld - cameraPosition );
   density *= smoothstep( 90.0, 26.0, d ) * smoothstep( 1.5, 6.0, d );
+  #ifdef SHAFT_SHADOW
+    density *= shaftLit();
+  #endif
   gl_FragColor = vec4( uColor * density * uIntensity, density * uIntensity );
 }`;
 
@@ -979,6 +1255,14 @@ export function createLightShafts(sunDir, { count = 14, area = 60, origin = new 
   const uniformsList = [];
   const baseIntensity = [];
   const bases = [];
+  // `?shafts=flat` puts the field back on the ungated shader, for A/B.
+  const shadowed = sunShadowRef !== null && !flatShafts();
+  // The gate is not compensated for, and a first pass that scaled the field up
+  // by 1.5 to hold the average was wrong for a reason worth recording: gating
+  // does not thin the field evenly, it *moves* it. The clearing over the
+  // landing is the one real gap in this canopy, so every shaft that survives
+  // the gate lands inside it — and the scale on top of that piled twenty-two
+  // of them into a single orange mass.
 
   for (let i = 0; i < count; i++) {
     const len = 26 + Math.random() * 22;
@@ -986,13 +1270,19 @@ export function createLightShafts(sunDir, { count = 14, area = 60, origin = new 
     const geo = new THREE.PlaneGeometry(wide, len, 1, 1);
     const strength = 0.16 + Math.random() * 0.16;
     const mat = new THREE.ShaderMaterial({
+      name: 'sunShaft',
       vertexShader: shaftVert,
       fragmentShader: shaftFrag,
+      defines: shadowed ? { SHAFT_SHADOW: '' } : {},
       uniforms: {
         uColor: { value: new THREE.Color(modeOf(currentMode).shafts.color) },
         uIntensity: { value: strength * modeOf(currentMode).shafts.gain },
         uTime: { value: 0 },
         uSeed: { value: Math.random() * 20 },
+        uShadowMap: { value: null },
+        uShadowMatrix: { value: new THREE.Matrix4() },
+        uShadowGate: { value: 0.75 },
+        uShadowSoft: { value: 0.01 },
       },
       transparent: true,
       depthWrite: false,
@@ -1035,7 +1325,20 @@ export function createLightShafts(sunDir, { count = 14, area = 60, origin = new 
       }
     },
     update(t, camera, center = camera.position) {
-      for (const u of uniformsList) u.uTime.value = t;
+      // The map is allocated on the first shadow render, so it cannot be bound
+      // when the material is built.
+      const sh = shadowed ? sunShadowRef : null;
+      const map = sh && sh.map ? sh.map.depthTexture || sh.map.texture : null;
+      // Half a metre of softening, expressed in the shadow map's UV — so it is
+      // the same half metre whatever box the tier put the map over.
+      const soft = sh ? 0.5 / Math.max(2 * sh.camera.right, 1) : 0;
+      for (const u of uniformsList) {
+        u.uTime.value = t;
+        if (!sh) continue;
+        u.uShadowMap.value = map;
+        u.uShadowMatrix.value.copy(sh.matrix);
+        u.uShadowSoft.value = soft;
+      }
       for (let i = 0; i < group.children.length; i++) {
         const child = group.children[i];
         const b = bases[i];
@@ -1078,6 +1381,7 @@ export function createLightShafts(sunDir, { count = 14, area = 60, origin = new 
 // whatever the vehicle module does with them.
 // ---------------------------------------------------------------------------
 
+/** Slices per beam when nothing says otherwise; the tier sets the real one. */
 const SLICES = 20;
 
 const beamVert = /* glsl */ `
@@ -1180,8 +1484,8 @@ void main() {
   density *= smoothstep( 0.35, 1.6, dcam );
 
   // A stack of discs integrates whatever path the eye takes through it, and a
-  // view down the beam axis crosses every one of them at once — twenty slices
-  // of scatter stacked into a single pixel. Physically that *is* brighter, but
+  // view down the beam axis crosses every one of them at once — the whole
+  // stack of scatter in a single pixel. Physically that *is* brighter, but
   // by a factor that whites the frame out rather than one anybody would read as
   // a beam, so the axial case is held back hard.
   float ax = abs( dot( toFrag / max( dcam, 1e-4 ), uDir ) );
@@ -1194,7 +1498,7 @@ void main() {
   gl_FragColor = vec4( uColor * a, a );
 }`;
 
-function beamGeometry() {
+function beamGeometry(SLICES) {
   const quads = SLICES + 1;
   const pos = new Float32Array(quads * 4 * 3);
   const along = new Float32Array(quads * 4);
@@ -1231,11 +1535,11 @@ function beamGeometry() {
   return g;
 }
 
-function createHeadlightBeams() {
+function createHeadlightBeams(slices = SLICES) {
   const group = new THREE.Group();
   group.name = 'headlightBeams';
   group.frustumCulled = false;
-  const geo = beamGeometry();
+  const geo = beamGeometry(slices);
   const meshes = [];
   let lamps = null;
   let searched = 0;
@@ -1255,6 +1559,7 @@ function createHeadlightBeams() {
 
   function makeBeam() {
     const mat = new THREE.ShaderMaterial({
+      name: 'headlightBeam',
       vertexShader: beamVert,
       fragmentShader: beamFrag,
       uniforms: {
@@ -1344,7 +1649,7 @@ function createHeadlightBeams() {
         u.uColor.value.set(light.color);
         // Scatter scales with the lamp's own irradiance, referenced to the
         // headlamps' 13 so the roof bar reads as the brighter of the two.
-        u.uIntensity.value = ((0.5 * light.intensity) / 13) * cfg.beams.gain * (2.0 / SLICES);
+        u.uIntensity.value = ((0.5 * light.intensity) / 13) * cfg.beams.gain * (2.0 / slices);
         u.uGlareGain.value = cfg.beams.glare * 0.32;
         u.uGroundY.value = group.parent ? beamGroundY(group.parent) : 0;
         u.uTime.value = t;
