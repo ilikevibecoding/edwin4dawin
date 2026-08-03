@@ -52,7 +52,7 @@ Assertion vocabulary:
 | 22 | `22-transfer` | 293 | plans | pln-4 | interior | Leia kneeling by R2, transfer beam, lit data port | visible(r2, 0.004), visible(leia), noIssues |
 | 23 | `23-droids-run` | 310 | escape | esc-1 | interior | Astromech rolling aft, protocol droid following | visible(r2), noIssues |
 | 24 | `24-threepio-hesitates` | 316 | escape | esc-2 | interior | Protocol droid at the pod hatch, astromech boarding | visible(threepio, 0.004), noIssues |
-| 25 | `25-pod-separation` | 322 | escape | esc-3 | space | Pod leaving the corvette, thruster flare | visible(pod, 0.0015), brightness(0.02, 0.5), noIssues |
+| 25 | `25-pod-separation` | 325.5 | escape | esc-3 | space | Pod leaving the corvette, thruster flare | visible(pod, 0.0015), brightness(0.02, 0.5), noIssues |
 | 26 | `26-pod-falling` | 334 | escape | esc-4 | space | Pod falling away, both ships above, planet below | onScreen(pod), noIssues |
 | 27 | `27-descent` | 348 | escape | esc-5 | space | Pod against the desert, atmosphere | onScreen(pod), brightness(0.05), noIssues |
 | 28 | `28-epilogue-entry` | 360 | epilogue | epi-1 | space | Pod as a bright point entering atmosphere | brightness(0.04), noIssues |

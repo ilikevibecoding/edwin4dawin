@@ -214,6 +214,25 @@ Two further defects fell out of building the measurement:
 Two paths were also too fast for any gait to cover: the boarding party crossed 6.3 m of umbilical in
 0.9 s, needing 7 m/s. They now start moving earlier, out of sight behind the door.
 
+### Third motion-review pass
+
+The reel was reviewed again after the gait work, and three further defects came out of reading the
+checkpoint frames alongside it:
+
+- **The princess's gown was a lampshade.** Widening it to stop the crouch driving her pelvis through
+  it had left a hem 0.7 m across ending above the knee, with a single thin leg and an oversized boot
+  below. It is now narrow and floor length, still wide enough at knee height to contain a full stride,
+  since a rigid cone cannot drape out of a leg's way.
+- **Captions climbed into the middle of the frame at 720p.** The offset was a constant in `rem`, so an
+  offset that sits comfortably in the lower third at 1080p covered whoever was standing centre frame
+  at a smaller viewport. It now scales with viewport height.
+- **The escape pod was a black disc.** It separates on the shadowed side of both hulls, so nothing was
+  lighting it and the one shot that has to show it leaving showed a hole in the destroyer's underside.
+  A small point light at its nozzles, scaled by thrust, now picks out the hull ribs and the nozzles.
+  It has to sit at the nozzles rather than inside the pod, because a light at the centre of a closed
+  shape illuminates none of it. The checkpoint also sampled the instant of launch, when the pod is
+  still against the hull's apex; it now samples late in the shot where the gap is widest.
+
 ### Staging pass on the reframed corridor
 
 - The corridor establishing shot dollied up a 3.4 m wide corridor behind the defenders and ended with
