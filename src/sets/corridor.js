@@ -39,10 +39,13 @@ export function corridorSection(bb, zc, len = CORRIDOR.section, idx = 0) {
   bb.brick(0, 0, zc, wallOut * 2, len, { h: floorTop, color: C.darkBluishGray, ...F });
   // Recessed black tray the grating sits in.
   bb.brick(0, floorTop, zc, 5.4, len, { h: 0.12, color: C.trueBlack, ...F });
-  // Grating slats, one per stud -- the fastest-repeating rhythm in frame.
+  // Grating slats, one per stud -- the fastest-repeating rhythm in frame. Dark
+  // bluish gray over the black tray, not dark gray: the slats are the only
+  // thing separating the run from the void behind it, and one step darker they
+  // merge with the tray into a black canal down the middle of the shot.
   for (let i = 0; i < Math.round(len); i++) {
     bb.tile(0, floorTop + 0.12, zc - half + 0.5 + i, 5.2, 0.6, {
-      h: 0.16, color: C.darkGray, ...F,
+      h: 0.16, color: C.darkBluishGray, ...F,
     });
   }
   // Grating rails, then a plated walkway either side. The walkway keeps its
@@ -102,16 +105,24 @@ export function corridorSection(bb, zc, len = CORRIDOR.section, idx = 0) {
     b.brick(wallMid, 9.3, zc, wallT, len, { h: ceilY - 9.3, color: C.white, ...F });
 
     // Pipe run along the skirting.
+    //
+    // Pale, and matte rather than METAL. These two tubes run the whole 120
+    // studs and the camera catches them almost end-on, so they project as the
+    // longest continuous shapes in the frame -- and a tube's lit side faces the
+    // wall it is bolted to, not the lens. Anything darker than light grey, or
+    // any finish that takes its diffuse from an environment the interior rig
+    // barely has, comes back as a black cable ruling a line across the bottom
+    // third of every shot down the hallway.
     b.cyl(halfW - 0.35, 1.75, zc, 0.32, len, {
-      axis: 'z', color: C.flatSilver, finish: FINISH.METAL, stud: false,
+      axis: 'z', color: C.veryLightGray, finish: FINISH.RUBBER, stud: false,
     });
     b.cyl(halfW - 0.32, 2.55, zc, 0.24, len, {
-      axis: 'z', color: C.darkBluishGray, stud: false,
+      axis: 'z', color: C.lightBluishGray, finish: FINISH.RUBBER, stud: false,
     });
     const brackets = Math.round(len / 5);
     for (let k = 0; k < brackets; k++) {
       const zb = zc - half + len / brackets * (k + 0.5);
-      b.brick(halfW + 0.05, 1.3, zb, 0.9, 0.7, { h: 1.7, color: C.darkBluishGray, ...F });
+      b.brick(halfW + 0.05, 1.3, zb, 0.9, 0.7, { h: 1.7, color: C.lightBluishGray, ...F });
     }
   });
 
@@ -131,10 +142,26 @@ export function corridorSection(bb, zc, len = CORRIDOR.section, idx = 0) {
       });
     }
   }
-  // Spine conduit. Dark grey, not light: a pale cylinder on the centreline sits
-  // directly under every practical and runs to the vanishing point, so its
-  // specular streak stacks into one blown-out bar down the middle of the shot.
-  bb.cyl(0, ceilY - 0.75, zc, 0.42, len, { axis: 'z', color: C.darkBluishGray, stud: false });
+  // Conduit runs, in the two ceiling corners rather than down the spine.
+  //
+  // A single tube on the centreline is the obvious build and it wrecks the
+  // shot. The camera sits on that same axis, so the tube's underside -- a
+  // surface that faces straight down and therefore sees nothing but the bounce
+  // term -- projects as an unbroken dark wedge from the lens all the way to
+  // the vanishing point, directly over the blast door. In the corners the same
+  // tubes read as cable runs and leave the middle of the ceiling clear.
+  //
+  // RUBBER for the same reason the underside is a problem: with the practicals
+  // a couple of studs below them, a clearcoat on a tube in this position draws
+  // a specular line the full length of the corridor.
+  for (const s of [-1, 1]) {
+    bb.cyl(s * 3.3, ceilY - 0.62, zc, 0.34, len, {
+      axis: 'z', color: C.lightBluishGray, finish: FINISH.RUBBER, stud: false,
+    });
+    bb.cyl(s * 4.0, ceilY - 0.5, zc, 0.22, len, {
+      axis: 'z', color: C.darkBluishGray, finish: FINISH.RUBBER, stud: false,
+    });
+  }
 
   // ----------------------------------------------------------- greebles
   // Asymmetric kit so the two walls never look like mirror images.
@@ -246,9 +273,26 @@ export function buildCorridor(opts = {}) {
   // Blank bulkhead around the far door, and a lit compartment behind it so
   // opening the door reveals somewhere to walk into.
   const F = { free: true, studs: false };
-  bb.brick(0, 0, zFar - 2.6, 14.8, 1.2, { h: 11.4, color: C.darkBluishGray, ...F });
-  bb.brick(0, 0, zFar - 8, 9.0, 0.6, { h: 10.4, color: C.darkGray, ...F });
-  bb.brick(0, 0, zFar - 7.4, 9.0, 10.6, { h: 0.4, color: C.darkGray, ...F });
+  // Two piers and a header rather than one slab. Built solid, this bulkhead
+  // stood two studs behind the leaves and closed the whole opening, so sliding
+  // the door back revealed a dark wall exactly where the door had been and the
+  // shot read as a door that had failed to open.
+  for (const s of [-1, 1]) {
+    bb.brick(s * 5.95, 0, zFar - 2.6, 2.9, 1.2, { h: 11.4, color: C.darkBluishGray, ...F });
+  }
+  bb.brick(0, 10.4, zFar - 2.6, 9.2, 1.2, { h: 1.0, color: C.darkBluishGray, ...F });
+  // Grey, not near-black. This compartment is only ever seen through an open
+  // blast door 120 studs away, framed by a lit corridor: at that exposure a
+  // dark grey back wall is a black rectangle, and the door reads as missing
+  // rather than as open.
+  bb.brick(0, 0, zFar - 8, 9.0, 0.6, { h: 10.4, color: C.lightBluishGray, ...F });
+  bb.brick(0, 0, zFar - 7.4, 9.0, 10.6, { h: 0.4, color: C.darkBluishGray, ...F });
+  // Sides and lid, so the doorway frames a room and not two slots of empty
+  // background either side of a back wall.
+  for (const s of [-1, 1]) {
+    bb.brick(s * 4.8, 0, zFar - 5.4, 0.8, 6.4, { h: 10.4, color: C.lightBluishGray, ...F });
+  }
+  bb.brick(0, 10.4, zFar - 5.4, 10.4, 6.4, { h: 0.6, color: C.veryLightGray, ...F });
   bb.brick(0, 7.6, zFar - 7.7, 7.0, 0.4, { h: 0.6, color: C.transLightBlue, finish: FINISH.GLOW, ...F });
 
   const group = new THREE.Group();
@@ -294,14 +338,19 @@ export function buildCorridor(opts = {}) {
   if (bool(opts, 'light', true)) {
     const nl = Math.max(1, Math.round(num(opts, 'lights', 4)));
     for (let i = 0; i < nl; i++) {
-      practical(group, 0, 8.0, -total * (i + 0.5) / nl, 0xdfeaff, 20, 44);
+      practical(group, 0, 8.0, -total * (i + 0.5) / nl, 0xdfeaff, 42, 56);
     }
+    // The ground half of this is doing the work of a bounce card, not of a
+    // floor. Four lamps over 120 studs leaves most of the ceiling more than
+    // ten studs from the nearest one, and every ceiling rib faces straight
+    // down into whatever the ground term is: set it dark and the whole roof of
+    // a white corridor goes to navy between the lamps.
     group.add(new THREE.HemisphereLight(
       new THREE.Color(0xd6e6ff).convertSRGBToLinear(),
-      new THREE.Color(0x39414f).convertSRGBToLinear(), 2.6,
+      new THREE.Color(0x7d8798).convertSRGBToLinear(), 2.0,
     ));
     // Something to walk into when the far door opens.
-    practical(group, 0, 5.0, zFar - 6.0, 0x86c8ff, 26, 22);
+    practical(group, 0, 5.0, zFar - 6.0, 0x86c8ff, 46, 26);
   }
 
   let farV = clamp(num(opts, 'door', 0), 0, 1);

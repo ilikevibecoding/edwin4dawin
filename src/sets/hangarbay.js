@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BrickBuilder, PLATE, P, B } from '../lego/brick.js';
 import { C, FINISH } from '../lego/palette.js';
 import { RNG } from '../engine/rng.js';
-import { num, bool, hash2i, GREY_PANEL, pickFrom, greebleRect, setGloss } from './common.js';
+import { num, bool, hash2i, pickFrom, greebleRect, setGloss } from './common.js';
 
 /*
  * Rebel base hangar.
@@ -12,6 +12,25 @@ import { num, bool, hash2i, GREY_PANEL, pickFrom, greebleRect, setGloss } from '
  * showing daylight -- that bright rectangle is the whole point of the set,
  * because X-wings launch straight out of it toward the camera.
  */
+
+/*
+ * Wall palette. Narrower than the library's GREY_PANEL, and weighted below the
+ * wall colour rather than above it.
+ *
+ * The kit's greys are a coarse ladder -- there is nothing at all between light
+ * bluish gray and very light gray, which is a factor of two in reflectance. So
+ * on a light bluish gray wall every very light gray panel is twice the wall's
+ * value, and a wall of them reads as pale rectangles stuck to a grey sheet:
+ * posters, not plating. Half the list is therefore the wall's own colour, so
+ * those panels are given away only by the shadow they throw, and the accents
+ * that remain sit mostly a step down, where they read as recesses.
+ */
+const HANGAR_PANEL = [
+  C.lightBluishGray, C.lightBluishGray, C.lightBluishGray, C.lightBluishGray,
+  C.lightBluishGray, C.lightBluishGray, C.lightBluishGray, C.lightBluishGray,
+  C.veryLightGray, C.veryLightGray,
+  C.flatSilver, C.darkBluishGray,
+];
 
 /** Stacked crate, the universal hangar dressing. */
 function crate(bb, x, y, z, w, d, h, color, rot = 0) {
@@ -58,6 +77,23 @@ export function buildHangarBay(opts = {}) {
   const hw = w / 2;
   const zMouth = -len / 2, zBack = len / 2;
 
+  /*
+   * Two builders, split by whether a part should cast a shadow.
+   *
+   * `sb` is the shell -- deck, the four wall slabs, the roof. It receives
+   * shadows but throws none, and that is the whole reason the split exists: a
+   * hangar is a closed box, so a roof that casts puts every directional light
+   * in the rig outside the set looking at the top of a lid. Everything inside
+   * then falls back on the ambient term, and an ambient term varies only with
+   * a surface's Y -- so a panel standing two studs off a wall returns exactly
+   * what the wall returns and the greebling reads as rectangles printed on a
+   * flat sheet. Opening the shell to the key is the usual way a set is lit for
+   * real, with the lamp on a stand above a wall that stops at head height.
+   *
+   * `bb` is everything the shell contains, and it casts normally, so the
+   * panels, catwalks, gantries and crates all carve.
+   */
+  const sb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false });
   const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false });
 
   // -------------------------------------------------------------- deck
@@ -68,20 +104,31 @@ export function buildHangarBay(opts = {}) {
       const x = -hw + (i + 0.5) * cell;
       const z = zMouth + (j + 0.5) * cell;
       const t = hash2i(i, j, seed + 2);
+      // One tone for the whole deck, and light grey rather than dark. Two
+      // things drove this. A dark deck does not survive the shot -- the mouth
+      // is daylight, the interior is a single hemisphere, and dark grey ABS
+      // returns so little of it that the near half of the deck crushes to
+      // black. And mixing the kit's greys per cell does not work either: they
+      // are far apart in value, so on a 10-stud cell any real mix reads as a
+      // chessboard. The variation comes from the panel gaps, the hatches
+      // below, and the paint, all of which are smaller than a cell.
+      //
       // RUBBER, not SOLID: the standard ABS finish carries a clearcoat, and a
       // clearcoat lobe on 130 studs of flat deck turns the daylight coming
-      // through the mouth into a blown white pool right in the middle of the
-      // shot. This finish is the only one in the kit without one.
-      bb.brick(x, -PLATE, z, cell - 0.2, cell - 0.2, {
-        h: PLATE,
-        // Two darks and a rare light. No black -- the bay is lit by a
-        // hemisphere and one weak spill, so a black plate has nothing to return
-        // and the near deck, which is half the frame in the launch shot, goes
-        // to a crushed nothing. The light plate has to stay rare: it picks up
-        // the blue of the hemisphere, and at any density it reads as puddles.
-        color: t < 0.30 ? C.darkGray : (t < 0.94 ? C.darkBluishGray : C.lightBluishGray),
-        free: true, studs: false, finish: FINISH.RUBBER,
+      // through the mouth into a blown white pool in the middle of the shot.
+      sb.brick(x, -PLATE, z, cell - 0.2, cell - 0.2, {
+        h: PLATE, color: C.lightBluishGray, free: true, studs: false, finish: FINISH.RUBBER,
       });
+      // Service hatches and worn patches, deliberately smaller than the cell.
+      if (t < 0.20) {
+        const hw2 = 2.2 + hash2i(i, j, seed + 55) * 2.4;
+        const hd2 = 2.0 + hash2i(i, j, seed + 91) * 2.6;
+        sb.brick(x + (hash2i(i, j, seed + 13) - 0.5) * 3, 0, z + (hash2i(i, j, seed + 29) - 0.5) * 3,
+          hw2, hd2, {
+            h: P(0.4), color: t < 0.07 ? C.darkBluishGray : C.darkGray,
+            free: true, studs: false, finish: FINISH.RUBBER,
+          });
+      }
     }
   }
   // Landing circles: two painted rings the fighters sit in. Matte like the
@@ -91,7 +138,7 @@ export function buildHangarBay(opts = {}) {
     for (let k = 0; k < 28; k++) {
       const a = (k / 28) * Math.PI * 2;
       if (k % 7 === 6) continue;
-      bb.brick(cx + Math.cos(a) * 17, 0, Math.sin(a) * 17, 3.6, 1.1, {
+      sb.brick(cx + Math.cos(a) * 17, 0, Math.sin(a) * 17, 3.6, 1.1, {
         h: P(0.4), color: C.yellow, rot: -a, free: true, studs: false, finish: FINISH.RUBBER,
       });
     }
@@ -99,7 +146,7 @@ export function buildHangarBay(opts = {}) {
   // Guide stripes running out of the mouth.
   for (const s of [-1, 1]) {
     for (let k = 0; k < 8; k++) {
-      bb.brick(s * 9, 0, zMouth + 3 + k * 8, 1.2, 4.4, {
+      sb.brick(s * 9, 0, zMouth + 3 + k * 8, 1.2, 4.4, {
         h: P(0.4), color: C.yellow, free: true, studs: false, finish: FINISH.RUBBER,
       });
     }
@@ -108,13 +155,13 @@ export function buildHangarBay(opts = {}) {
   // -------------------------------------------------------- side walls
   for (const side of [-1, 1]) {
     const x = side * hw;
-    bb.brick(x + side * 2, 0, 0, 4, len, { h, color: C.lightBluishGray, free: true, studs: false });
+    sb.brick(x + side * 2, 0, 0, 4, len, { h, color: C.lightBluishGray, free: true, studs: false });
     bb.brick(x - side * 1, 0, 0, 2, len, { h: B(3), color: C.darkBluishGray, free: true, studs: false });
     greebleRect(bb, {
       axis: 'x', at: x, dir: -side,
       u0: zMouth + 1, u1: zBack - 1, v0: B(3), v1: h - B(2),
-      cell: 11, seed: seed + (side > 0 ? 31 : 97),
-      colors: GREY_PANEL, dMin: 0.3, dMax: 2.0, fill: 0.86, sub: 0.5, pipes: 0.22,
+      cell: 7.5, seed: seed + (side > 0 ? 31 : 97),
+      colors: HANGAR_PANEL, dMin: 0.4, dMax: 2.6, fill: 0.86, sub: 0.5, pipes: 0.22,
       lights: 0.07, lightColor: C.transNeonOrange, lightSize: 0.8,
     });
     // A raised catwalk with railings along each wall.
@@ -134,12 +181,12 @@ export function buildHangarBay(opts = {}) {
   }
 
   // ---------------------------------------------------------- back wall
-  bb.brick(0, 0, zBack + 2, w + 8, 4, { h, color: C.lightBluishGray, free: true, studs: false });
+  sb.brick(0, 0, zBack + 2, w + 8, 4, { h, color: C.lightBluishGray, free: true, studs: false });
   greebleRect(bb, {
     axis: 'z', at: zBack, dir: -1,
     u0: -hw + 2, u1: hw - 2, v0: B(2), v1: h - B(3),
-    cell: 12, seed: seed + 401, colors: GREY_PANEL,
-    dMin: 0.35, dMax: 2.2, fill: 0.8, sub: 0.45, pipes: 0.2, lights: 0.06,
+    cell: 8, seed: seed + 401, colors: HANGAR_PANEL,
+    dMin: 0.4, dMax: 2.6, fill: 0.8, sub: 0.45, pipes: 0.2, lights: 0.06,
   });
   // A blast door and a lit control window at the back, for scale.
   bb.brick(0, 0, zBack - 0.8, 16, 1.6, { h: B(6), color: C.darkBluishGray, free: true, studs: false });
@@ -153,21 +200,25 @@ export function buildHangarBay(opts = {}) {
   // Matte again: 130 x 128 studs of glossy roof catches the key light in one
   // enormous clearcoat highlight, which blooms into the frame on any shot that
   // sees the hangar from outside.
-  bb.brick(0, h, 0, w + 8, len + 4, {
-    h: B(2), color: C.darkBluishGray, free: true, studs: false, finish: FINISH.RUBBER,
+  // Light bluish gray rather than the dark grey a real roof would be. The
+  // ceiling's underside faces straight down, so it takes the hemisphere's
+  // ground term and nothing else -- at dark grey it came back as a black bar
+  // across the top sixth of every shot taken from the deck.
+  sb.brick(0, h, 0, w + 8, len + 4, {
+    h: B(2), color: C.lightBluishGray, free: true, studs: false, finish: FINISH.RUBBER,
   });
   for (let k = 0; k < Math.round(len / 16); k++) {
     const z = zMouth + 8 + k * 16;
-    bb.brick(0, h - P(2), z, w, 2.6, { h: P(2), color: C.lightBluishGray, free: true, studs: false });
+    sb.brick(0, h - P(2), z, w, 2.6, { h: P(2), color: C.veryLightGray, free: true, studs: false });
   }
   for (let k = 0; k < 4; k++) lightRig(bb, zMouth + 22 + k * 28, w - 10, h - B(4));
 
   // -------------------------------------------------- blast-door mouth
   // The doorway is a thick frame; the sky itself is a plane hung in the gap.
   const mw = mouthW / 2;
-  bb.brick(0, mouthH, zMouth - 1.5, w + 8, 3, { h: h - mouthH, color: C.lightBluishGray, free: true, studs: false });
+  sb.brick(0, mouthH, zMouth - 1.5, w + 8, 3, { h: h - mouthH, color: C.lightBluishGray, free: true, studs: false });
   for (const side of [-1, 1]) {
-    bb.brick(side * (mw + (hw - mw) / 2), 0, zMouth - 1.5, hw - mw, 3, {
+    sb.brick(side * (mw + (hw - mw) / 2), 0, zMouth - 1.5, hw - mw, 3, {
       h: mouthH, color: C.lightBluishGray, free: true, studs: false,
     });
     // Retracted door leaf, folded into the jamb.
@@ -181,6 +232,39 @@ export function buildHangarBay(opts = {}) {
       color: C.flatSilver, finish: FINISH.METAL, axis: 'x', seg: 8, stud: false,
     });
   }
+  // Greeble the inboard face of that frame. Every shot this set exists for is
+  // taken from inside the bay looking out, which puts the header and the two
+  // jambs across the top and sides of frame; left bare they are a plain slab
+  // occupying a third of the picture.
+  greebleRect(bb, {
+    axis: 'z', at: zMouth, dir: 1,
+    u0: -hw + 2, u1: hw - 2, v0: mouthH + 2.5, v1: h - B(2),
+    cell: 6.5, seed: seed + 613, colors: HANGAR_PANEL,
+    dMin: 0.4, dMax: 2.4, fill: 0.88, sub: 0.5, pipes: 0.24,
+    lights: 0.08, lightColor: C.transNeonOrange, lightSize: 0.7,
+  });
+  for (const side of [-1, 1]) {
+    greebleRect(bb, {
+      axis: 'z', at: zMouth, dir: 1,
+      u0: side > 0 ? mw + 1.5 : -hw + 2, u1: side > 0 ? hw - 2 : -mw - 1.5,
+      v0: B(2), v1: mouthH - 1,
+      cell: 6.5, seed: seed + (side > 0 ? 727 : 811), colors: HANGAR_PANEL,
+      dMin: 0.4, dMax: 2.2, fill: 0.84, sub: 0.45, pipes: 0.2, lights: 0.06,
+    });
+  }
+  // A rail of downlights under the header, aimed back into the bay. The mouth
+  // is a bright hole with the header directly above it in silhouette, so
+  // without emitters of its own that band goes to dead grey.
+  for (let k = -4; k <= 4; k++) {
+    bb.brick(k * 12, mouthH + 1.0, zMouth + 1.6, 5, 1.6, {
+      h: P(2), color: C.darkBluishGray, free: true, studs: false,
+    });
+    bb.brick(k * 12, mouthH + 1.0, zMouth + 2.15, 4.2, 0.5, {
+      h: P(1.4), color: C.transClear, finish: FINISH.GLOW, free: true, studs: false,
+      matOpts: { intensity: 1.0 },
+    });
+  }
+
   // Lip and warning chevrons on the deck at the threshold. The lip runs right
   // across the bright mouth and the camera sees its top face almost edge-on,
   // so a clearcoat here reads as a blown white bar under the sky.
@@ -267,7 +351,9 @@ export function buildHangarBay(opts = {}) {
     }
   }
 
-  const g = setGloss(bb.build());
+  const g = bb.build();
+  for (const m of [...sb.build({ castShadow: false }).children]) g.add(m);
+  setGloss(g);
   g.name = 'hangarbay';
   g.userData.nodes = bb.nodes;
 
@@ -322,28 +408,61 @@ export function buildHangarBay(opts = {}) {
     // level with the deck: a low sun coming straight in through the mouth
     // mirrors off every horizontal face into a camera standing on the deck,
     // which is the one shot this set exists for.
-    const spill = new THREE.DirectionalLight(new THREE.Color(0xfff0d8).convertSRGBToLinear(), 0.9);
-    spill.position.set(-34, 76, zMouth - 60);
-    spill.target.position.set(0, 0, zBack);
+    const spill = new THREE.DirectionalLight(new THREE.Color(0xfff0d8).convertSRGBToLinear(), 1.25);
+    spill.position.set(-52, 66, zMouth - 80);
+    spill.target.position.set(6, 4, zBack * 0.35);
     spill.castShadow = false;
     g.add(spill, spill.target);
-    // The overhead rigs are the bay's own lighting, and they have to come down
-    // as one broad soft source. Point lights big enough to reach 130 studs of
-    // deck burn a clearcoat hotspot into whatever crate sits under them, so
-    // the work is done by a directional plus a hemisphere instead.
-    // Most of the level is carried by the hemisphere rather than the
-    // directional: a directional strong enough to light the deck on its own
-    // puts a clearcoat lobe on every crate lid, and at this camera height the
-    // lids face the reflection direction, so they blow to white. A hemisphere
-    // has no such lobe.
-    const strip = new THREE.DirectionalLight(new THREE.Color(0xe6efff).convertSRGBToLinear(), 0.55);
-    strip.position.set(14, 60, 24);
-    strip.target.position.set(0, 0, zMouth * 0.4);
-    strip.castShadow = false;
-    g.add(strip, strip.target);
+
+    /*
+     * The bay's own key -- and the only shadow caster in the set.
+     *
+     * A wall panel here stands 0.3 to 2.6 studs proud, and the shot this set
+     * exists for looks at that wall head-on from a hundred studs back. At that
+     * distance a panel's side face is under a pixel wide, so no amount of
+     * shading on it can say the panel has depth: lit by ambient alone the whole
+     * wall came back as grey rectangles printed on a flat sheet. What does
+     * carry at that distance is the shadow the panel throws onto the wall
+     * behind it, which is as wide as the panel is deep and lands next to the
+     * panel rather than on its edge. Hence a real shadow map, sized to the
+     * whole bay rather than the rig's 40-stud default.
+     */
+    // It comes from over the camera's right shoulder and well forward, so the
+    // shadows fall across the mouth wall rather than straight down it, and so
+    // the two side walls do not come back at the same value.
+    // Near-neutral, not the cool white an interior rig usually wants: the ABS
+    // is already a bluish grey, the env is a blue room and the fill has a sky
+    // in it, and stacking a fourth blue on top turned a hall of grey plastic
+    // navy.
+    const key = new THREE.DirectionalLight(new THREE.Color(0xfbf7f2).convertSRGBToLinear(), 2.1);
+    key.position.set(86, 100, 110);
+    key.target.position.set(0, 10, -25);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.near = 20;
+    key.shadow.camera.far = 420;
+    const sh = Math.max(w, len) * 0.95;
+    key.shadow.camera.left = -sh; key.shadow.camera.right = sh;
+    key.shadow.camera.top = sh; key.shadow.camera.bottom = -sh;
+    key.shadow.bias = -0.0006;
+    key.shadow.normalBias = 0.07;
+    g.add(key, key.target);
+
+    // Fill. Broad and near-neutral, and no more than half the level: a
+    // hemisphere varies only with a surface's Y, so every vertical face in the
+    // bay takes the identical value from it no matter which way it points.
+    // Carried at the strength this needed before the key cast shadows it
+    // erased the shading as fast as the directionals put it in, and tinted a
+    // hall of grey ABS the colour of its own sky term.
+    //
+    // The ground half is not a floor colour, it is the bounce off 128 x 130
+    // studs of light grey deck. Set it as dark as a real floor and every
+    // down-facing surface in the bay -- the ceiling, the undersides of the
+    // catwalks and the light rigs, the tops of frame in any shot taken from
+    // deck level -- goes to black.
     g.add(new THREE.HemisphereLight(
-      new THREE.Color(0xb6c8e0).convertSRGBToLinear(),
-      new THREE.Color(0x424a58).convertSRGBToLinear(), 3.1,
+      new THREE.Color(0xe2e4e8).convertSRGBToLinear(),
+      new THREE.Color(0xa39c90).convertSRGBToLinear(), 1.9,
     ));
   }
   return g;

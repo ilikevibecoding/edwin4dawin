@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RNG } from '../engine/rng.js';
 import { canvasTexture } from '../lego/svg.js';
-import { num, bool, clamp, fbm2 } from './common.js';
+import { num, clamp, fbm2 } from './common.js';
 
 /*
  * Deep space backdrop.
@@ -147,8 +147,15 @@ export function buildStarfield(opts = {}) {
   nebTex.minFilter = THREE.LinearFilter;
   nebTex.anisotropy = 1;
   nebTex.needsUpdate = true;
+  // The painted map is authored bright enough to survive being scaled down;
+  // scaling here rather than in the texture keeps one cached canvas for every
+  // brightness a scene asks for. The default is deliberately low -- at full
+  // strength the dust lane competes with the stars for the eye, and this is a
+  // backdrop that spends most of its screen time behind moving ships.
+  const nebAmt = clamp(num(opts, 'nebula', 0.6), 0, 1);
   const nebMat = new THREE.MeshBasicMaterial({
     map: nebTex,
+    color: new THREE.Color(nebAmt, nebAmt, nebAmt),
     side: THREE.BackSide,
     depthWrite: false,
     depthTest: false,
@@ -160,7 +167,7 @@ export function buildStarfield(opts = {}) {
   neb.rotation.y = nebRot;
   neb.renderOrder = -1000;
   neb.frustumCulled = false;
-  neb.visible = bool(opts, 'nebula', true);
+  neb.visible = nebAmt > 0.001;
   group.add(neb);
 
   // -------------------------------------------------------------- stars

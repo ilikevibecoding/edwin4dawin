@@ -38,13 +38,21 @@ export function trenchSegment(bb, {
   // ------------------------------------------------------------- floor
   // Dark plating with a lighter service strip down the middle, so the eye has
   // a vanishing line to follow.
-  bb.brick(0, -B(1), z0, width, len, { h: B(1), color: C.darkBluishGray, free: true, studs: false });
+  //
+  // The sub-slab stops 0.1 short of y = 0 on purpose. Its top and the tile tops
+  // above it were both landing exactly on the floor plane, and 600 studs of two
+  // coplanar faces is the one case the depth buffer cannot resolve: the run
+  // came out streaked with stipple wherever the camera was far enough away.
+  bb.brick(0, -B(1) - 0.1, z0, width, len, { h: B(1), color: C.darkBluishGray, free: true, studs: false });
   const tiles = Math.round(len / 5);
   for (let k = 0; k < tiles; k++) {
     const z = z0m + (k + 0.5) * (len / tiles);
     const h = hash2i(index, k, s + 3);
+    // Weighted dark. The walls are the subject here and they are mid grey; a
+    // floor of the same value flattens the canyon out, and being the surface
+    // nearest the lens it is also the one that blows out first.
     bb.brick(0, -PLATE, z, width - 0.4, len / tiles - 0.4, {
-      h: PLATE, color: h < 0.34 ? C.darkBluishGray : (h < 0.82 ? C.lightBluishGray : C.darkGray),
+      h: PLATE, color: h < 0.46 ? C.darkBluishGray : (h < 0.74 ? C.darkGray : C.lightBluishGray),
       free: true, studs: false,
     });
     if (h > 0.62) {
@@ -53,9 +61,11 @@ export function trenchSegment(bb, {
       });
     }
   }
-  bb.brick(0, 0, z0, 3.2, len - 0.4, { h: P(1), color: C.darkBluishGray, free: true, studs: false });
+  // Service strip, a shade taller than the wear patches it crosses so the two
+  // never share a top plane.
+  bb.brick(0, 0, z0, 3.2, len - 0.4, { h: P(1) + 0.05, color: C.lightBluishGray, free: true, studs: false });
   for (let k = 0; k < tiles; k += 2) {
-    bb.brick(0, P(1), z0m + (k + 0.5) * (len / tiles), 1.2, 2.4, {
+    bb.brick(0, P(1) + 0.05, z0m + (k + 0.5) * (len / tiles), 1.2, 2.4, {
       h: P(0.5), color: C.veryLightGray, free: true, studs: false,
     });
   }
