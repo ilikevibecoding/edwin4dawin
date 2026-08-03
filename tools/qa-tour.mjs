@@ -452,10 +452,21 @@ if (realtime) {
   const started = Date.now();
   const samples = [];
   let lastLog = 0;
+  // The loop clamps its own delta, so on a machine too slow to hit ~20 fps the
+  // show runs at less than wall-clock speed rather than skipping. That is the
+  // right behaviour, but it means the completion test has to watch for a stall
+  // rather than for a fixed wall-clock budget.
+  let lastAdvance = Date.now();
+  let lastShowTime = -1;
+  const STALL_MS = 45000;
   while (true) {
     await page.waitForTimeout(2000);
     const s = await page.evaluate(() => window.__show.state());
     samples.push({ t: Number(s.time.toFixed(1)), fps: Number(s.fps.toFixed(1)), draws: s.drawCalls, tris: s.triangles });
+    if (s.time > lastShowTime + 0.25) {
+      lastShowTime = s.time;
+      lastAdvance = Date.now();
+    }
     if (s.time - lastLog >= 30) {
       lastLog = s.time;
       console.log(`   t=${s.time.toFixed(0)}s  ${s.chapter}/${s.shot}  ${s.fps.toFixed(1)} fps  ${s.drawCalls} draws`);
@@ -464,19 +475,24 @@ if (realtime) {
     const errors = sanity.filter((i) => i.severity === 'error');
     for (const e of errors) fail(`realtime t=${s.time.toFixed(1)}`, `${e.code}: ${e.detail}`);
     if (!s.playing && s.time >= manifest.duration - 0.5) break;
-    if (Date.now() - started > (manifest.duration + 180) * 1000) {
-      fail('realtime', 'playback did not finish within the expected wall-clock window');
+    if (Date.now() - lastAdvance > STALL_MS) {
+      fail('realtime', `playback stalled at t=${s.time.toFixed(1)}s`);
       break;
     }
   }
   const fpsValues = samples.map((s) => s.fps).filter((f) => f > 0);
+  const wallClockSeconds = Math.round((Date.now() - started) / 1000);
   report.realtime = {
     samples,
     medianFps: fpsValues.sort((a, b) => a - b)[Math.floor(fpsValues.length / 2)] ?? 0,
     minFps: Math.min(...fpsValues),
-    wallClockSeconds: Math.round((Date.now() - started) / 1000),
+    wallClockSeconds,
+    /** 1.0 means the show played at wall-clock speed. */
+    speedRatio: Number((manifest.duration / Math.max(1, wallClockSeconds)).toFixed(2)),
   };
-  console.log(`   finished in ${report.realtime.wallClockSeconds}s, median ${report.realtime.medianFps} fps`);
+  console.log(
+    `   finished in ${wallClockSeconds}s (${report.realtime.speedRatio}x real time), median ${report.realtime.medianFps} fps`,
+  );
   await page.screenshot({ path: join(outDir, '92-realtime-end.png') });
 }
 

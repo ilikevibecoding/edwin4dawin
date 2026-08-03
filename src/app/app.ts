@@ -606,11 +606,21 @@ export class App {
   /* --------------------------------------------------------- QA hooks */
 
   private installDebugApi(): void {
+    // Framing tests use a subject's bounding-box centre, not its transform
+    // origin. A character's origin is between its feet, so a low shot looking
+    // up at someone perfectly framed would still fail an origin-based test.
+    const subjectCentre = (s: Selectable) => {
+      const p = new THREE.Vector3();
+      const box = new THREE.Box3().setFromObject(s.object);
+      if (box.isEmpty()) s.object.getWorldPosition(p);
+      else box.getCenter(p);
+      return p;
+    };
+
     const project = (id: string) => {
       const s = this.world.selectables.find((x) => x.id === id);
       if (!s) return null;
-      const p = new THREE.Vector3();
-      s.object.getWorldPosition(p);
+      const p = subjectCentre(s);
       const v = p.clone().project(this.stage.camera);
       return { x: v.x, y: v.y, z: v.z, world: p };
     };
@@ -628,8 +638,7 @@ export class App {
       screenSize: (id) => {
         const s = this.world.selectables.find((x) => x.id === id);
         if (!s) return 0;
-        const p = new THREE.Vector3();
-        s.object.getWorldPosition(p);
+        const p = subjectCentre(s);
         const d = p.distanceTo(this.stage.camera.position);
         if (d <= 0.0001) return 10;
         const frustumHeight = 2 * Math.tan((this.stage.camera.fov * Math.PI) / 360) * d;
