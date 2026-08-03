@@ -105,20 +105,27 @@ export const imperialHull = (): THREE.MeshStandardMaterial =>
 export const imperialHullDark = (): THREE.MeshStandardMaterial =>
   reg('imperialHullDark', () =>
     new THREE.MeshStandardMaterial({
-      color: 0xb4bbc1,
+      color: 0x8f979e,
       map: imperialHullMap(),
-      roughness: 0.7,
-      metalness: 0.36,
-      envMapIntensity: 0.6,
+      roughness: 0.72,
+      metalness: 0.3,
+      envMapIntensity: 0.5,
     }),
   );
 
+/**
+ * Recessed channels. Textured and darker than the surrounding plating —
+ * an untextured flat colour takes the rim light straight on and the trenches
+ * end up reading as bright stripes rather than shadowed cuts.
+ */
 export const imperialTrench = (): THREE.MeshStandardMaterial =>
   reg('imperialTrench', () =>
     new THREE.MeshStandardMaterial({
-      color: 0x6d757b,
-      roughness: 0.82,
-      metalness: 0.3,
+      color: 0x4e555b,
+      map: imperialHullMap(),
+      roughness: 0.88,
+      metalness: 0.2,
+      envMapIntensity: 0.35,
     }),
   );
 
@@ -166,9 +173,10 @@ export const corridorWall = (): THREE.MeshStandardMaterial =>
 export const corridorTrim = (): THREE.MeshStandardMaterial =>
   reg('corridorTrim', () =>
     new THREE.MeshStandardMaterial({
-      color: 0xd2d6da,
-      roughness: 0.42,
-      metalness: 0.3,
+      color: 0xdadde1,
+      roughness: 0.5,
+      metalness: 0.08,
+      envMapIntensity: 0.6,
     }),
   );
 
@@ -177,10 +185,11 @@ export const corridorFloor = (): THREE.MeshStandardMaterial =>
     const map = deckPlateMap();
     map.repeat.set(2, 8);
     return new THREE.MeshStandardMaterial({
-      color: 0xb8bbc0,
+      color: 0xbcc0c5,
       map,
-      roughness: 0.66,
-      metalness: 0.28,
+      roughness: 0.62,
+      metalness: 0.14,
+      envMapIntensity: 0.5,
     });
   });
 
@@ -189,8 +198,9 @@ export const bulkhead = (): THREE.MeshStandardMaterial =>
     new THREE.MeshStandardMaterial({
       color: 0xe6e4dc,
       map: corridorWallMap(),
-      roughness: 0.48,
-      metalness: 0.28,
+      roughness: 0.52,
+      metalness: 0.1,
+      envMapIntensity: 0.5,
     }),
   );
 

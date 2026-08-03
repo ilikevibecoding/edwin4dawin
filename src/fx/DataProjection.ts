@@ -25,6 +25,7 @@ export class DataProjection {
   private amount = 0;
   private target = 0;
   private glitch = 0;
+  private baseScale = 1;
 
   constructor(radius = 0.5, color = 0x76d9ff) {
     this.root.name = 'DataProjection';
@@ -192,6 +193,15 @@ export class DataProjection {
     this.target = clamp01(v);
   }
 
+  /**
+   * Overall size. Owned here rather than written straight onto `root.scale` by
+   * callers, because the per-frame stutter animation also drives that transform
+   * and would otherwise stamp over it.
+   */
+  setScale(v: number): void {
+    this.baseScale = Math.max(0.0001, v);
+  }
+
   get isVisible(): boolean {
     return this.amount > 0.01;
   }
@@ -209,10 +219,10 @@ export class DataProjection {
       0.86 + 0.14 * Math.sin(elapsed * 27) + 0.06 * Math.sin(elapsed * 61.3) - this.glitch * 0.45;
     const a = this.amount * Math.max(0, flicker);
 
-    this.material.opacity = a * 0.92;
-    (this.shell.material as THREE.MeshBasicMaterial).opacity = a * 0.055;
-    (this.cone.material as THREE.MeshBasicMaterial).opacity = a * 0.5;
-    this.light.intensity = a * 3.2;
+    this.material.opacity = a * 0.8;
+    (this.shell.material as THREE.MeshBasicMaterial).opacity = a * 0.035;
+    (this.cone.material as THREE.MeshBasicMaterial).opacity = a * 0.22;
+    this.light.intensity = a * 1.6;
 
     this.root.visible = a > 0.004;
     if (!this.root.visible) return;
@@ -230,8 +240,8 @@ export class DataProjection {
     }
     // Ticks scroll upward and wrap.
     this.ticks.position.y = ((elapsed * 0.22) % 0.5) - 0.25;
-    const s = 1 + this.glitch * 0.06;
-    this.root.scale.set(s, 1 - this.glitch * 0.04, s);
+    const s = this.baseScale * (1 + this.glitch * 0.06);
+    this.root.scale.set(s, this.baseScale * (1 - this.glitch * 0.04), s);
   }
 
   dispose(): void {

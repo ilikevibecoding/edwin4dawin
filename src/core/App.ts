@@ -5,6 +5,7 @@ import { TitleCrawl } from '../stage/TitleCrawl';
 import { CameraDirector } from '../camera/CameraDirector';
 import { Timeline } from '../timeline/Timeline';
 import { buildChapters } from '../timeline/chapters';
+import { starOpacityAt } from '../timeline/ambience';
 import type { ShowContext } from '../timeline/context';
 import { AudioEngine } from '../audio/AudioEngine';
 import { Sfx } from '../audio/Sfx';
@@ -74,6 +75,7 @@ export class App {
     onProgress('Starting the renderer', 0.76);
     this.render = new RenderSystem(canvas, this.stage.scene, tier);
     this.stage.starfield.setPixelRatio(this.render.pixelRatio);
+    this.stage.attachEnvironments(this.render.renderer);
 
     this.sfx = new Sfx(this.audio);
     this.music = new MusicEngine(this.audio);
@@ -122,6 +124,7 @@ export class App {
 
     // Prime the world at t=0 so the first frame is already correct.
     this.timeline.seek(0);
+    this.applyContinuousWorldState();
     this.resize();
     onProgress('Ready', 1);
   }
@@ -372,6 +375,7 @@ export class App {
   private seek(t: number): void {
     this.resetAudioForSeek();
     this.timeline.seek(t);
+    this.applyContinuousWorldState();
     this.director.reset();
     this.syncNarrationTo(this.timeline.time, true);
   }
@@ -480,6 +484,7 @@ export class App {
 
     try {
       this.timeline.update(dt);
+      this.applyContinuousWorldState();
       this.syncNarrationTo(this.timeline.time, false);
 
       if (this.explore.enabled) {
@@ -508,6 +513,14 @@ export class App {
       this.reportError(err);
       this.stop();
     }
+  }
+
+  /**
+   * World state that belongs to the whole show rather than to one chapter, and
+   * must therefore be re-derived from the playhead on every frame and seek.
+   */
+  private applyContinuousWorldState(): void {
+    this.stage.starfield.setOpacity(starOpacityAt(this.timeline.time));
   }
 
   private updateHudIdle(dt: number): void {
@@ -611,6 +624,7 @@ export class App {
       seek: (t: number) => {
         this.resetAudioForSeek();
         this.timeline.seek(t);
+        this.applyContinuousWorldState();
         this.director.reset();
         this.director.update(this.timeline.time, 1 / 60, this.render.camera);
       },
@@ -618,6 +632,7 @@ export class App {
       settle: (steps = 6, dt = 1 / 30) => {
         for (let i = 0; i < steps; i++) {
           this.timeline.update(0);
+          this.applyContinuousWorldState();
           this.director.update(this.timeline.time, dt, this.render.camera);
           this.stage.update(dt, this.elapsed + i * dt);
         }
@@ -647,6 +662,20 @@ export class App {
       },
       sanity: () => this.sanity.run(this.render.camera, this.elapsed),
       inspect: () => this.inspectFrame(),
+      /** What the camera sees through a normalised device point. */
+      pick: (ndcX: number, ndcY: number) => {
+        const raycaster = new THREE.Raycaster();
+        raycaster.far = this.render.camera.far;
+        raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.render.camera);
+        const root = this.stage.location === 'space' ? this.stage.spaceRoot : this.stage.interiorRoot;
+        const hits = raycaster.intersectObject(root, true).filter((h) => h.object.visible);
+        return hits.slice(0, 3).map((h) => ({
+          name: h.object.name || h.object.type,
+          parent: h.object.parent?.name ?? '',
+          distance: +h.distance.toFixed(2),
+          point: h.point.toArray().map((v) => +v.toFixed(2)),
+        }));
+      },
       app: this,
     };
   }

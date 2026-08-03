@@ -183,12 +183,15 @@ export function destroyerPositionAt(t: number, out: THREE.Vector3): THREE.Vector
   const tau = t - PURSUIT;
 
   // Closing profile chosen so the hull is directly overhead of the corvette
-  // during the reveal, which is what sells the size difference.
+  // during the reveal, which is what sells the size difference. The bow has to
+  // be genuinely close by the time the reveal shot starts at tau = 26 —
+  // a wedge a kilometre away is just a grey triangle, however big it is.
   let x: number;
-  if (tau < 10) x = -2600;
-  else if (tau < 40) x = lerp(-2600, -700, smootherstep((tau - 10) / 30));
-  else if (tau < 62) x = lerp(-700, 100, smootherstep((tau - 40) / 22));
-  else x = lerp(100, 240, smootherstep(clamp01((tau - 62) / 30)));
+  if (tau < 8) x = -3200;
+  else if (tau < 26) x = lerp(-3200, -1250, smootherstep((tau - 8) / 18));
+  else if (tau < 46) x = lerp(-1250, -520, smootherstep((tau - 26) / 20));
+  else if (tau < 62) x = lerp(-520, -140, smootherstep((tau - 46) / 16));
+  else x = lerp(-140, 60, smootherstep(clamp01((tau - 62) / 30)));
 
   const y = lerp(430, 332, smootherstep(clamp01((tau - 28) / 50)));
   const z = lerp(-60, -18, smootherstep(clamp01((tau - 30) / 46)));

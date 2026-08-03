@@ -263,13 +263,14 @@ export function corridorChapter(): Chapter<ShowContext> {
       };
 
       return [
-        // 1. Establish the geography before anything happens in it.
+        // 1. Establish the geography before anything happens in it. Held aft of
+        //    the pod-bay junction so the branch opening never crowds the frame.
         customShot({ id: 'corridor.establish', start: S, end: S + 8.5, fov: 52, handheld: 0.45, blend: 0 }, (k, _t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(38.5, 33, a), lerp(2.2, 1.95, a), lerp(0.55, 0.1, a));
-          out.target.set(lerp(12, -6, a), 1.5, 0);
+          out.position.set(lerp(28.5, 24.5, a), lerp(2.15, 1.95, a), lerp(0.5, 0.1, a));
+          out.target.set(lerp(8, -7, a), 1.5, 0);
           out.fov = lerp(56, 52, a);
-          out.focus = 24;
+          out.focus = 22;
           clampCam(out);
         }),
 
@@ -416,8 +417,8 @@ export function corridorChapter(): Chapter<ShowContext> {
       stage.applyCameraRange(ctx.render.camera);
       ctx.render.fade = 1 - ramp(rho, 0, 1.6);
       ctx.render.dofEnabled = true;
-      ctx.render.dofRange = 16;
-      ctx.render.dofStrength = 0.5;
+      ctx.render.dofRange = 26;
+      ctx.render.dofStrength = 0.32;
 
       stage.corridor.setAlarm(rho < FIGHT_END ? 1 : 0.35);
       stage.corridor.setPowerLevel(1 - ramp(rho, BREACH_T, BREACH_T + 6) * 0.35);
@@ -601,7 +602,7 @@ export function corridorChapter(): Chapter<ShowContext> {
       }
 
       // Cool the corridor down as he approaches.
-      stage.interiorAmbient.intensity = 0.9 - ramp(rho, 50, 58) * 0.34;
+      stage.interiorAmbient.intensity = 0.5 - ramp(rho, 50, 58) * 0.2;
       stage.interiorAmbient.color.setHSL(0.58, 0.16, 0.86 - ramp(rho, 50, 58) * 0.12);
     },
   };

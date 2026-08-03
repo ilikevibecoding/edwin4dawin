@@ -113,11 +113,13 @@ export class RenderSystem {
     }
 
     if (this.tier.bloom) {
+      // Threshold above 1.0: the interior is a white room lit to near full
+      // diffuse, so anything lower makes the walls themselves glow.
       this.bloomPass = new UnrealBloomPass(
         new THREE.Vector2(this.width, this.height),
         this.tier.bloomStrength,
-        0.62,
-        0.92,
+        0.58,
+        1.05,
       );
       this.composer.addPass(this.bloomPass);
     } else {

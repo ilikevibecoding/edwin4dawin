@@ -67,9 +67,8 @@ export function prologueChapter(): Chapter<ShowContext> {
       ];
     },
 
-    enter(ctx, localTime) {
+    enter(ctx) {
       ctx.stage.setLocation('space');
-      ctx.stage.starfield.setOpacity(clamp01((localTime - 3) / 6));
       ctx.stage.planetPivot.visible = false;
       ctx.stage.destroyer.root.visible = false;
       ctx.stage.runner.root.visible = false;
@@ -89,7 +88,6 @@ export function prologueChapter(): Chapter<ShowContext> {
       const t = localTime;
       // Fade up from black, hold, and dip out as the last line recedes.
       ctx.render.fade = 1 - ramp(t, 0.4, 3.4);
-      ctx.stage.starfield.setOpacity(clamp01((t - 2.5) / 7) * 0.95);
 
       if (!ctx.crawl.isDisposed) {
         const textIn = ramp(t, 3.0, 5.5);

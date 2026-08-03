@@ -125,13 +125,13 @@ export class ControlPanel {
     const a = this.activity;
     for (let i = 0; i < this.screens.length; i++) {
       const mat = this.screens[i].material as THREE.MeshStandardMaterial;
-      mat.emissiveIntensity = (1.35 + 0.25 * Math.sin(elapsed * 3.1 + i)) * a;
+      mat.emissiveIntensity = (1.0 + 0.2 * Math.sin(elapsed * 3.1 + i)) * a;
       // Slow vertical scroll makes the readouts feel live.
       mat.map!.offset.y = (elapsed * 0.05 * (i % 2 === 0 ? 1 : -1)) % 1;
       mat.emissiveMap!.offset.y = mat.map!.offset.y;
     }
     (this.studs.material as THREE.MeshStandardMaterial).emissiveIntensity =
-      (2.0 + 0.9 * Math.sin(elapsed * 5.2)) * a;
-    this.glowLight.intensity = 1.6 * a;
+      (1.1 + 0.4 * Math.sin(elapsed * 5.2)) * a;
+    this.glowLight.intensity = 1.1 * a;
   }
 }

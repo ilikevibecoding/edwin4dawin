@@ -282,6 +282,15 @@ export interface GreebleOptions {
   origin?: [number, number, number];
   /** Grow boxes downward from the surface instead of upward. */
   downward?: boolean;
+  /**
+   * Footprint test run after a size is drawn. Unlike `mask`, which only sees a
+   * point, this receives the box half-extents, so a caller can guarantee the
+   * whole plate lands inside a tapering hull instead of overhanging the
+   * silhouette as a row of loose flakes.
+   */
+  fits?: (x: number, z: number, halfX: number, halfZ: number) => boolean;
+  /** Sink plates into the surface by this fraction of their height. */
+  bite?: number;
 }
 
 /**
@@ -304,10 +313,16 @@ export function greebleField(o: GreebleOptions): THREE.BufferGeometry {
     const sx = o.rng.range(o.minSize, o.maxSize);
     const sz = sx * (o.elongate ? o.rng.range(1, o.elongate) : o.rng.range(0.6, 1.6));
     const sy = o.rng.range(o.minHeight, o.maxHeight);
+    const turned = o.rng.bool(0.15);
+    const halfX = (turned ? sz : sx) * 0.5;
+    const halfZ = (turned ? sx : sz) * 0.5;
+    if (o.fits && !o.fits(x, z, halfX, halfZ)) continue;
+    // Seat plates slightly into the hull so their lower edge never floats.
+    const bite = o.bite ?? 0.25;
     parts.push(
       box(sx, sy, sz, {
-        pos: [ox + x, oy + surface + dir * sy * 0.5, oz + z],
-        rot: [0, o.rng.bool(0.15) ? Math.PI / 2 : 0, 0],
+        pos: [ox + x, oy + surface + dir * sy * (0.5 - bite), oz + z],
+        rot: [0, turned ? Math.PI / 2 : 0, 0],
       }),
     );
     placedCount++;

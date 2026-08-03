@@ -57,6 +57,7 @@ export class StarDestroyer {
   private bridgeLights: THREE.Mesh;
   private tractorGlow: THREE.Mesh;
   private beacons: THREE.PointLight[] = [];
+  private beaconBulbs: THREE.Mesh[] = [];
 
   constructor(opts: StarDestroyerOptions = {}) {
     const L = (this.length = opts.length ?? 1600);
@@ -120,8 +121,13 @@ export class StarDestroyer {
       maxHeight: L * 0.0034,
       rng,
       mask: (x, z) => (Math.abs(x) < this.halfWidthAt(z) * 0.9 ? 1 : 0),
+      // The wedge narrows towards the nose, so clear the plate against the hull
+      // width at its own forward edge; otherwise long runs spear out of the
+      // silhouette and read as debris stuck to the ship.
+      fits: (x, z, hx, hz) => Math.abs(x) + hx < this.halfWidthAt(z + hz) * 0.96,
       elongate: 5.5,
       origin: [0, -0.4, 0],
+      bite: 0.45,
     });
     const dorsal = new THREE.Mesh(dorsalGreeble, imperialHullDark());
     dorsal.name = 'ISD_DorsalGreeble';
@@ -279,13 +285,13 @@ export class StarDestroyer {
       color: 0x8d959c,
       emissive: new THREE.Color(0xcfe6ff),
       emissiveMap: winTex,
-      emissiveIntensity: 1.6,
+      emissiveIntensity: 1.1,
       roughness: 0.45,
-      metalness: 0.4,
+      metalness: 0.3,
     });
     for (const side of [-1, 1]) {
-      const panel = new THREE.Mesh(new THREE.PlaneGeometry(tD * 0.62, tH * 0.5), winMat);
-      panel.position.set(side * (tW * 0.47 + 0.3), tH * 0.5, -tD * 0.02);
+      const panel = new THREE.Mesh(new THREE.PlaneGeometry(tD * 0.58, tH * 0.3), winMat);
+      panel.position.set(side * (tW * 0.46 + 0.3), tH * 0.42, -tD * 0.02);
       panel.rotation.y = side * Math.PI * 0.5;
       tower.add(panel);
     }
@@ -302,16 +308,18 @@ export class StarDestroyer {
       imperialTrench(),
     );
     this.root.add(hangarRecess);
+    // Lit deck seen up inside the recess. Sunk above the hull line so it never
+    // shows as a bar of light along the silhouette when viewed edge-on.
     this.hangarGlow = new THREE.Mesh(
-      new THREE.PlaneGeometry(hangarW, hangarD),
-      emissive('isdHangar', 0xffd9a0, 0.85),
+      new THREE.PlaneGeometry(hangarW * 0.9, hangarD * 0.9),
+      emissive('isdHangar', 0xffd2a0, 0.35),
     );
     this.hangarGlow.rotation.x = Math.PI / 2;
-    this.hangarGlow.position.set(0, hangarY + H * 0.038, hangarZ);
+    this.hangarGlow.position.set(0, hangarY + H * 0.052, hangarZ);
     this.hangarGlow.name = 'ISD_HangarGlow';
     this.root.add(this.hangarGlow);
-    const hangarLight = new THREE.PointLight(0xffd9a0, 4, L * 0.22, 2);
-    hangarLight.position.set(0, hangarY + H * 0.1, hangarZ);
+    const hangarLight = new THREE.PointLight(0xffd2a0, 1.4, L * 0.14, 2);
+    hangarLight.position.set(0, hangarY + H * 0.06, hangarZ);
     this.root.add(hangarLight);
     this.anchors.hangar = makeAnchor('hangar', 0, hangarY, hangarZ, this.root);
 
@@ -319,7 +327,7 @@ export class StarDestroyer {
       greebleField({
         width: W * 0.8,
         depth: L * 0.86,
-        y: (x, z) => (Math.abs(x) < this.halfWidthAt(z) * 0.76 ? this.bellyY(z) : null),
+        y: (x, z) => this.bellySurfaceY(x, z),
         count: Math.round(300 * detail),
         minSize: L * 0.004,
         maxSize: L * 0.018,
@@ -330,8 +338,10 @@ export class StarDestroyer {
           const inHangar = Math.abs(x) < hangarW && Math.abs(z - hangarZ) < hangarD;
           return inHangar ? 0 : 1;
         },
+        fits: (x, z, hx, hz) => Math.abs(x) + hx < this.bellyHalfWidthAt(z + hz) * 0.94,
         elongate: 2.6,
         downward: true,
+        bite: 0.45,
       }),
       imperialHullDark(),
     );
@@ -346,39 +356,56 @@ export class StarDestroyer {
       const len = L * vRng.range(0.1, 0.4);
       const zFront = Math.min(L * 0.4, zBack + len);
       const zc = (zBack + zFront) / 2;
-      const limit = Math.min(this.halfWidthAt(zFront), this.halfWidthAt(zBack)) * 0.72;
+      const limit = Math.min(this.bellyHalfWidthAt(zFront), this.bellyHalfWidthAt(zBack)) * 0.9;
       if (limit < L * 0.012) continue;
       const x = vRng.spread(limit);
-      const yc = (this.bellyY(zFront) + this.bellyY(zBack)) / 2;
+      const yc = (this.bellySurfaceY(x, zFront) + this.bellySurfaceY(x, zBack)) / 2;
       ventralTrenchParts.push(
         box(L * vRng.range(0.005, 0.013), L * 0.006, zFront - zBack, { pos: [x, yc + L * 0.001, zc] }),
       );
     }
     ventralTrenchParts.push(
-      box(W * 0.1, H * 0.03, L * 0.5, { pos: [0, this.bellyY(-L * 0.15) + H * 0.012, -L * 0.15] }),
+      box(W * 0.1, H * 0.03, L * 0.5, { pos: [0, this.bellySurfaceY(0, -L * 0.15) + H * 0.012, -L * 0.15] }),
     );
     const ventralTrench = new THREE.Mesh(merge(ventralTrenchParts), imperialTrench());
     ventralTrench.name = 'ISD_VentralTrenches';
     this.root.add(ventralTrench);
 
-    // Tractor-beam projector array under the nose.
+    // Tractor-beam projector array under the nose: a shallow housing with three
+    // recessed emitter dishes rather than one bare sphere, which at this scale
+    // would read as a flat cyan coin pasted over the hull.
     const tractorZ = L * 0.18;
-    const tractorY = this.bellyY(tractorZ);
-    const tractorHousing = new THREE.Mesh(
-      merge([
-        box(W * 0.06, H * 0.05, L * 0.05, { pos: [0, tractorY - H * 0.012, tractorZ] }),
-        cyl(W * 0.018, W * 0.026, H * 0.05, 10, { pos: [0, tractorY - H * 0.05, tractorZ] }),
-      ]),
-      darkMechanical(),
-    );
+    const tractorY = this.bellySurfaceY(0, tractorZ);
+    const emitterR = W * 0.014;
+    const housingParts = [
+      box(W * 0.075, H * 0.045, L * 0.055, { pos: [0, tractorY - H * 0.02, tractorZ] }),
+    ];
+    const emitterSpots: Array<[number, number]> = [
+      [0, 0],
+      [-W * 0.024, -L * 0.012],
+      [W * 0.024, -L * 0.012],
+    ];
+    for (const [ex, ez] of emitterSpots) {
+      housingParts.push(
+        cyl(emitterR * 1.5, emitterR * 1.25, H * 0.03, 12, {
+          pos: [ex, tractorY - H * 0.05, tractorZ + ez],
+        }),
+      );
+    }
+    const tractorHousing = new THREE.Mesh(merge(housingParts), darkMechanical());
     this.root.add(tractorHousing);
     this.tractorGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(W * 0.016, 12, 8),
-      emissive('isdTractor', 0x8fd8ff, 2.6),
+      merge(
+        emitterSpots.map(([ex, ez]) =>
+          cyl(emitterR, emitterR, H * 0.004, 12, { pos: [ex, tractorY - H * 0.062, tractorZ + ez] }),
+        ),
+      ),
+      emissive('isdTractor', 0x8fd8ff, 2.4),
     );
-    this.tractorGlow.position.set(0, tractorY - H * 0.075, tractorZ);
+    // Dark until the capture chapter powers the array up.
+    this.tractorGlow.visible = false;
     this.root.add(this.tractorGlow);
-    this.anchors.tractor = makeAnchor('tractor', 0, tractorY - H * 0.09, tractorZ, this.root);
+    this.anchors.tractor = makeAnchor('tractor', 0, tractorY - H * 0.075, tractorZ, this.root);
 
     // ---- Stern & engines --------------------------------------------------
     const sternY = -H * 0.5;
@@ -456,17 +483,19 @@ export class StarDestroyer {
       [-W * 0.46, 2, -halfL * 0.92, 0x7fe8a0],
       [W * 0.46, 2, -halfL * 0.92, 0xff5b4a],
     ];
-    for (const [x, y, z, color] of beaconSpots) {
+    for (const [i, [x, y, z, color]] of beaconSpots.entries()) {
+      // Each strobe pulses on its own phase, so it needs its own material.
       const bulb = new THREE.Mesh(
-        new THREE.SphereGeometry(L * 0.004, 8, 6),
-        emissive(`isdBeacon${color.toString(16)}`, color, 3),
+        new THREE.SphereGeometry(L * 0.0022, 8, 6),
+        emissive(`isdBeacon${i}`, color, 1.5),
       );
       bulb.position.set(x, y, z);
       this.root.add(bulb);
-      const pl = new THREE.PointLight(color, 2.5, L * 0.12, 2);
+      const pl = new THREE.PointLight(color, 2.5, L * 0.09, 2);
       pl.position.set(x, y + 2, z);
       this.root.add(pl);
       this.beacons.push(pl);
+      this.beaconBulbs.push(bulb);
     }
 
     // ---- Named anchors ----------------------------------------------------
@@ -484,10 +513,26 @@ export class StarDestroyer {
     return (this.width / 2) * Math.pow(t, 0.92);
   }
 
-  /** Analytic ventral surface height of the wedge at a local Z. */
+  /** Analytic ventral surface height of the wedge at a local Z, on the keel. */
   bellyY(z: number): number {
     const t = Math.min(1, Math.max(0.0001, (this.length / 2 - z) / this.length));
     return -this.height * Math.pow(t, 1.05);
+  }
+
+  /** Half-width of the ventral face, which is inset from the dorsal edge. */
+  bellyHalfWidthAt(z: number): number {
+    return Math.max(this.length * 0.004, this.halfWidthAt(z) * 0.78);
+  }
+
+  /**
+   * Height of the ventral face at a local (x, z). Mirrors the shallow keel
+   * built into the loft profile so attached detail lands on the real surface.
+   */
+  bellySurfaceY(x: number, z: number): number {
+    const bb = this.bellyHalfWidthAt(z);
+    if (Math.abs(x) > bb) return this.bellyY(z);
+    const u = (bb - x) / (2 * bb);
+    return this.bellyY(z) * (1 + 0.06 * Math.cos(u * Math.PI * 2));
   }
 
   /** Aim every turret at a world point; returns turrets ready to fire. */
@@ -505,12 +550,12 @@ export class StarDestroyer {
   }
 
   setHangarGlow(v: number): void {
-    (this.hangarGlow.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.85 * v;
+    (this.hangarGlow.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.35 * v;
   }
 
   setTractorGlow(v: number): void {
-    (this.tractorGlow.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.6 * v;
-    this.tractorGlow.scale.setScalar(1 + v * 0.6);
+    (this.tractorGlow.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.4 * v;
+    this.tractorGlow.visible = v > 0.005;
   }
 
   update(dt: number, elapsed: number): void {
@@ -518,7 +563,13 @@ export class StarDestroyer {
     for (const t of this.turrets) t.update(dt);
     const pulseV = 0.6 + 0.4 * Math.sin(elapsed * 2.1);
     for (let i = 0; i < this.beacons.length; i++) {
-      this.beacons[i].intensity = 1.2 + 2.2 * Math.max(0, Math.sin(elapsed * 1.7 + i * 2.1));
+      // Navigation strobes: mostly dark with a short bright flash, so they read
+      // as blinking lights rather than three permanent coloured smudges.
+      const phase = (elapsed * 0.55 + i * 0.31) % 1;
+      const flash = phase < 0.12 ? Math.sin((phase / 0.12) * Math.PI) : 0;
+      this.beacons[i].intensity = 0.35 + 3.4 * flash;
+      const bulbMat = this.beaconBulbs[i].material as THREE.MeshStandardMaterial;
+      bulbMat.emissiveIntensity = 0.5 + 3 * flash;
     }
     (this.bridgeLights.material as THREE.MeshStandardMaterial).emissiveIntensity =
       1.35 + 0.1 * pulseV;

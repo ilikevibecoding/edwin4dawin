@@ -347,6 +347,46 @@ export const flareMap = (): THREE.Texture =>
   });
 
 /** Small bright dot with a tiny halo — star points. */
+/** Irregular soot bloom with a feathered edge, used as a wall decal. */
+export const scorchMarkMap = (): THREE.Texture =>
+  memo('scorchMark', () => {
+    const size = 128;
+    const rng = freshRng('scorch-mark');
+    const { c, g } = makeCanvas(size, size);
+    g.clearRect(0, 0, size, size);
+    g.globalCompositeOperation = 'lighter';
+    // A cluster of soft lobes so the outline is never a clean circle.
+    for (let i = 0; i < 22; i++) {
+      const a = rng.next() * Math.PI * 2;
+      const rad = Math.pow(rng.next(), 0.6) * size * 0.2;
+      const x = size / 2 + Math.cos(a) * rad;
+      const y = size / 2 + Math.sin(a) * rad;
+      const r = rng.range(size * 0.1, size * 0.24);
+      const grad = g.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, 'rgba(255,255,255,0.24)');
+      grad.addColorStop(0.55, 'rgba(255,255,255,0.09)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    }
+    // Hard-edged core where the bolt actually struck.
+    const core = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size * 0.16);
+    core.addColorStop(0, 'rgba(255,255,255,0.75)');
+    core.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = core;
+    g.fillRect(0, 0, size, size);
+    // Clip anything reaching the border so tiles never show a seam.
+    g.globalCompositeOperation = 'destination-in';
+    const vign = g.createRadialGradient(size / 2, size / 2, size * 0.2, size / 2, size / 2, size * 0.5);
+    vign.addColorStop(0, 'rgba(255,255,255,1)');
+    vign.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = vign;
+    g.fillRect(0, 0, size, size);
+    return finish('scorchMark', c);
+  });
+
 export const starPointMap = (): THREE.Texture =>
   memo('starPoint', () => {
     const size = 64;
@@ -444,13 +484,16 @@ export const hullWindowsMap = (): THREE.Texture =>
     const { c, g } = makeCanvas(w, h);
     g.fillStyle = '#000000';
     g.fillRect(0, 0, w, h);
-    for (let row = 0; row < 26; row++) {
-      const y = 8 + row * 19;
-      for (let x = 6; x < w - 6; x += 13) {
-        if (!rng.bool(0.35)) continue;
-        const a = rng.range(0.25, 1);
-        g.fillStyle = `rgba(215,232,255,${a})`;
-        g.fillRect(x, y, 4, 5);
+    // Few, large, strongly banded windows. Dense small squares turn into
+    // coloured static once the tower is more than a few hundred metres away.
+    const rows = 6;
+    for (let row = 0; row < rows; row++) {
+      const y = 26 + row * 80;
+      for (let x = 18; x < w - 26; x += 46) {
+        if (!rng.bool(0.55)) continue;
+        const a = rng.range(0.45, 1);
+        g.fillStyle = `rgba(212,230,255,${a})`;
+        g.fillRect(x, y, 30, 16);
       }
     }
     return finish('hullWindows', c);

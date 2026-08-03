@@ -336,7 +336,7 @@ export function escapeChapter(): Chapter<ShowContext> {
         }
         stage.corridor.openPodHatch(t > 16);
         stage.corridor.setAlarm(0.3);
-        stage.interiorAmbient.intensity = 0.62;
+        stage.interiorAmbient.intensity = 0.4;
         return;
       }
 

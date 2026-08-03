@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Chapter } from '../Timeline';
 import type { ShowContext } from '../context';
 import { customShot } from '../../camera/CameraDirector';
-import { clamp01, lerp, ramp, smootherstep } from '../../core/math';
+import { lerp, ramp, smootherstep } from '../../core/math';
 import { orbitAngle } from '../flight';
 
 export const TATOOINE_START = 46;
@@ -104,7 +104,6 @@ export function tatooineChapter(): Chapter<ShowContext> {
     enter(ctx) {
       ctx.stage.setLocation('space');
       ctx.stage.planetPivot.visible = true;
-      ctx.stage.starfield.setOpacity(0.95);
       ctx.stage.destroyer.root.visible = false;
       ctx.stage.runner.root.visible = false;
       ctx.stage.pod.root.visible = false;
@@ -122,7 +121,6 @@ export function tatooineChapter(): Chapter<ShowContext> {
       ctx.render.dofEnabled = false;
       // Sunlight is fixed; only the atmosphere shell needs the reminder.
       ctx.stage.planet.setSunDirection(ctx.stage.sunDirection);
-      ctx.stage.starfield.setOpacity(clamp01(0.95 - 0.25 * ramp(t, 18, 30)));
     },
   };
 }

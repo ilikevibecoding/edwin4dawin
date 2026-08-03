@@ -8,7 +8,7 @@ import {
   darkMechanical,
   emissive,
 } from '../materials';
-import { consoleScreenMap } from '../textures';
+import { consoleScreenMap, scorchMarkMap } from '../textures';
 import { freshRng } from '../../core/Random';
 import { BlastDoor } from './BlastDoor';
 import { ControlPanel } from './ControlPanel';
@@ -38,6 +38,9 @@ export const CORRIDOR = {
   junction: { x0: 30, x1: 34 },
   podBay: { zStart: 1.7, zEnd: 20.5, halfWidth: 1.7, roomHalf: 3.2, roomZ: 17.6 },
 } as const;
+
+/** Clear height of the alcove and junction openings cut into the side walls. */
+const OPENING_HEIGHT = 2.45;
 
 /** Cross-section of the corridor shell, from the -Z floor edge up and over. */
 const PROFILE: Array<[number, number]> = [
@@ -94,16 +97,86 @@ function ribbonAlongX(
   return geo;
 }
 
-/** Same as above but extruded along Z (used for the pod-bay branch). */
+/**
+ * Same cross-section extruded along Z instead, centred on `xCentre`.
+ * Used for the pod-bay branch that leaves the main run at the junction.
+ */
 function ribbonAlongZ(
   profile: Array<[number, number]>,
   z0: number,
   z1: number,
+  xCentre: number,
   flip = false,
+  uvRepeat = 0.25,
 ): THREE.BufferGeometry {
-  const g = ribbonAlongX(profile, z0, z1, flip);
-  g.rotateY(Math.PI / 2);
-  return g;
+  const n = profile.length;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const zs = [z0, z1];
+  for (let s = 0; s < 2; s++) {
+    for (let i = 0; i < n; i++) {
+      positions.push(xCentre + profile[i][1], profile[i][0], zs[s]);
+      uvs.push(zs[s] * uvRepeat, i / (n - 1));
+    }
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const a = i;
+    const b = i + 1;
+    const c = n + i + 1;
+    const d = n + i;
+    if (flip) indices.push(a, c, b, a, d, c);
+    else indices.push(a, b, c, a, c, d);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Portion of a cross-section at or above `yMin`, with an interpolated point
+ * inserted exactly on the boundary. Openings are cut out of the lower wall
+ * only: without the arch above them the camera can see straight out of the
+ * ship through the top of the doorway.
+ */
+function profileAbove(profile: Array<[number, number]>, yMin: number): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (let i = 0; i < profile.length; i++) {
+    const [y, z] = profile[i];
+    const prev = profile[i - 1];
+    if (prev && (prev[0] < yMin) !== (y < yMin)) {
+      const t = (yMin - prev[0]) / (y - prev[0]);
+      out.push([yMin, prev[1] + (z - prev[1]) * t]);
+    }
+    if (y >= yMin) out.push([y, z]);
+  }
+  return out;
+}
+
+/**
+ * |Z| of the shell at a given height, so wall furniture and scorch marks sit on
+ * the real curve instead of a straight line the profile never follows.
+ */
+function wallZAt(y: number): number {
+  for (let i = 0; i < PROFILE.length - 1; i++) {
+    const [y0, z0] = PROFILE[i];
+    const [y1, z1] = PROFILE[i + 1];
+    if (z0 > 0 || z1 > 0) continue;
+    if (y >= Math.min(y0, y1) && y <= Math.max(y0, y1)) {
+      const t = Math.abs(y1 - y0) < 1e-6 ? 0 : (y - y0) / (y1 - y0);
+      return Math.abs(z0 + (z1 - z0) * t);
+    }
+  }
+  return CORRIDOR.halfWidth;
+}
+
+/** Inward tilt of the shell at a given height, in radians about X. */
+function wallTiltAt(y: number): number {
+  const h = 0.12;
+  return Math.atan2(wallZAt(y + h) - wallZAt(y - h), 2 * h);
 }
 
 export interface CorridorOptions {
@@ -113,7 +186,10 @@ export interface CorridorOptions {
 
 interface Luminaire {
   light: THREE.PointLight;
+  /** Current target intensity (scaled by power level). */
   base: number;
+  /** Intensity at full power. */
+  full: number;
   x: number;
   flickerSeed: number;
   damaged: boolean;
@@ -144,12 +220,22 @@ export class Corridor {
     const negProfile = PROFILE.filter((p) => p[1] <= 0);
     const posProfile = PROFILE.filter((p) => p[1] >= 0);
     const wallRuns: THREE.BufferGeometry[] = [];
-    // -Z side, split by the alcove.
+    // -Z side, split by the alcove; the arch above the opening is retained.
     wallRuns.push(ribbonAlongX(negProfile, xStart, CORRIDOR.alcove.x0));
     wallRuns.push(ribbonAlongX(negProfile, CORRIDOR.alcove.x1, xEnd));
+    wallRuns.push(
+      ribbonAlongX(profileAbove(negProfile, OPENING_HEIGHT), CORRIDOR.alcove.x0, CORRIDOR.alcove.x1),
+    );
     // +Z side, split by the junction.
     wallRuns.push(ribbonAlongX(posProfile, xStart, CORRIDOR.junction.x0));
     wallRuns.push(ribbonAlongX(posProfile, CORRIDOR.junction.x1, xEnd));
+    wallRuns.push(
+      ribbonAlongX(
+        profileAbove(posProfile, OPENING_HEIGHT),
+        CORRIDOR.junction.x0,
+        CORRIDOR.junction.x1,
+      ),
+    );
     // Crown strip joining the two halves.
     wallRuns.push(
       ribbonAlongX(
@@ -223,18 +309,30 @@ export class Corridor {
     returns.push(
       box(0.3, ceiling + 0.2, halfWidth * 2 + 0.4, { pos: [xEnd + 0.15, ceiling / 2, 0] }),
     );
+    // Lintels and jambs finishing both openings.
+    const openingZ = wallZAt(OPENING_HEIGHT);
+    for (const [x0, x1, side] of [
+      [alc.x0, alc.x1, -1],
+      [jn.x0, jn.x1, 1],
+    ] as Array<[number, number, number]>) {
+      const mid = (x0 + x1) / 2;
+      returns.push(
+        box(x1 - x0 + 0.36, 0.22, 0.34, { pos: [mid, OPENING_HEIGHT - 0.11, side * (openingZ - 0.1)] }),
+        box(0.18, OPENING_HEIGHT, 0.34, { pos: [x0 - 0.09, OPENING_HEIGHT / 2, side * (openingZ - 0.1)] }),
+        box(0.18, OPENING_HEIGHT, 0.34, { pos: [x1 + 0.09, OPENING_HEIGHT / 2, side * (openingZ - 0.1)] }),
+      );
+    }
     const returnMesh = new THREE.Mesh(merge(returns), bulkhead());
     returnMesh.name = 'Corridor_Returns';
     returnMesh.castShadow = true;
     returnMesh.receiveShadow = true;
     this.root.add(returnMesh);
 
-    // Branch corridor side walls use the same profile turned 90 degrees.
+    // Branch corridor uses the same cross-section, extruded along Z.
     const branchWalls = merge([
-      ribbonAlongZ(negProfile, halfWidth, pb.roomZ - pb.roomHalf, true),
-      ribbonAlongZ(posProfile, halfWidth, pb.roomZ - pb.roomHalf, true),
+      ribbonAlongZ(negProfile, halfWidth, pb.roomZ - pb.roomHalf, branchMid, true),
+      ribbonAlongZ(posProfile, halfWidth, pb.roomZ - pb.roomHalf, branchMid, true),
     ]);
-    branchWalls.translate(branchMid, 0, 0);
     const branchMesh = new THREE.Mesh(branchWalls, corridorWall());
     branchMesh.name = 'Corridor_BranchWalls';
     branchMesh.receiveShadow = true;
@@ -277,16 +375,27 @@ export class Corridor {
     ribs.instanceMatrix.needsUpdate = true;
     this.root.add(ribs);
 
-    // Recessed wall panels, two per module per side.
+    // Wall panels, two per module per side. A shallow raised border around a
+    // plate that sits almost flush reads as a recessed inset under grazing
+    // light; a single proud slab reads as a dark rectangle stuck to the wall.
+    const PANEL_Y = 1.42;
     const panelGeo = merge([
-      box(1.4, 1.05, 0.07, { pos: [0, 0, 0] }),
-      box(1.24, 0.9, 0.1, { pos: [0, 0, 0.02] }),
-      box(0.16, 0.16, 0.12, { pos: [0.5, -0.36, 0.05] }),
+      // Border frame, four thin strips standing 4 cm proud of the shell.
+      box(1.52, 0.06, 0.04, { pos: [0, 0.57, 0.02] }),
+      box(1.52, 0.06, 0.04, { pos: [0, -0.57, 0.02] }),
+      box(0.06, 1.2, 0.04, { pos: [0.73, 0, 0.02] }),
+      box(0.06, 1.2, 0.04, { pos: [-0.73, 0, 0.02] }),
+      // Face plate, only 1 cm proud, so the frame overhangs it.
+      box(1.44, 1.12, 0.012, { pos: [0, 0, 0.006] }),
+      // A single seam and a small latch box for silhouette interest.
+      box(1.44, 0.014, 0.018, { pos: [0, 0.12, 0.014] }),
+      box(0.13, 0.13, 0.035, { pos: [0.5, -0.36, 0.02] }),
     ]);
     const panelCount = moduleCount * 2;
     const panels = new THREE.InstancedMesh(panelGeo, corridorTrim(), panelCount);
     panels.name = 'Corridor_Panels';
     panels.receiveShadow = true;
+    const panelZ = wallZAt(PANEL_Y);
     let pi = 0;
     for (let i = 0; i < moduleCount; i++) {
       const x = xStart + i * CORRIDOR.moduleLength + CORRIDOR.moduleLength / 2;
@@ -297,8 +406,8 @@ export class Corridor {
         panels.setMatrixAt(
           pi,
           placementMatrix({
-            pos: [x, 1.45, side * (halfWidth - 0.06)],
-            rot: [0, side > 0 ? Math.PI : 0, 0],
+            pos: [x, PANEL_Y, side * panelZ],
+            rot: [side * wallTiltAt(PANEL_Y), side > 0 ? Math.PI : 0, 0],
             scale: hide ? 0.0001 : 1,
           }),
         );
@@ -331,13 +440,14 @@ export class Corridor {
     const lightCount = opts.lights ?? Math.max(5, Math.round(9 * Math.min(1, detail + 0.35)));
     for (let i = 0; i < lightCount; i++) {
       const x = xStart + 3 + ((xEnd - xStart - 6) * i) / Math.max(1, lightCount - 1);
-      const light = new THREE.PointLight(0xdfe8f5, 8.5, 15, 1.7);
+      const light = new THREE.PointLight(0xdfe8f5, 5.2, 15, 1.7);
       light.position.set(x, ceiling - 0.35, 0);
       light.castShadow = false;
       this.root.add(light);
       this.luminaires.push({
         light,
-        base: 8.5,
+        base: 5.2,
+        full: 5.2,
         x,
         flickerSeed: rng.range(0, 100),
         damaged: rng.bool(0.22),
@@ -349,10 +459,10 @@ export class Corridor {
       [branchMid, halfWidth + 3.5, 0xdfe8f5],
       [(alc.x0 + alc.x1) / 2, -halfWidth - alc.depth * 0.5, 0xe8eef8],
     ] as Array<[number, number, number]>) {
-      const light = new THREE.PointLight(colour, 7.5, 14, 1.7);
+      const light = new THREE.PointLight(colour, 4.6, 14, 1.7);
       light.position.set(lx, ceiling - 0.4, lz);
       this.root.add(light);
-      this.luminaires.push({ light, base: 7.5, x: lx, flickerSeed: rng.range(0, 100), damaged: false });
+      this.luminaires.push({ light, base: 4.6, full: 4.6, x: lx, flickerSeed: rng.range(0, 100), damaged: false });
     }
     // Matching luminaire plates in the branch and alcove.
     const extraLums = new THREE.Mesh(
@@ -465,41 +575,33 @@ export class Corridor {
     this.root.add(this.vaderFill);
 
     // ---- Battle damage dressing -------------------------------------------
+    // Feathered alpha rather than a hard disc: a solid dark polygon on a white
+    // wall reads as a sticker, not as heat damage.
     const scorchMat = new THREE.MeshStandardMaterial({
-      color: 0x1a1614,
+      color: 0x2b2622,
+      map: scorchMarkMap(),
+      alphaMap: scorchMarkMap(),
       roughness: 0.95,
       metalness: 0,
       transparent: true,
-      opacity: 0.72,
+      opacity: 0.62,
+      depthWrite: false,
       polygonOffset: true,
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2,
     });
     const scorchParts: THREE.BufferGeometry[] = [];
     const dRng = rng.fork('corridor-damage');
-    /** Wall Z at a given height, so scorch marks lie flat on the curve. */
-    const wallZAt = (y: number): number => {
-      for (let i = 0; i < PROFILE.length - 1; i++) {
-        const [y0, z0] = PROFILE[i];
-        const [y1, z1] = PROFILE[i + 1];
-        if (z0 > 0 || z1 > 0) continue;
-        if (y >= Math.min(y0, y1) && y <= Math.max(y0, y1)) {
-          const t = Math.abs(y1 - y0) < 1e-6 ? 0 : (y - y0) / (y1 - y0);
-          return Math.abs(z0 + (z1 - z0) * t);
-        }
-      }
-      return halfWidth;
-    };
     for (let i = 0; i < Math.round(20 * detail); i++) {
       const x = dRng.range(xStart + 2, 26);
       const side = dRng.bool() ? -1 : 1;
-      const y = dRng.range(0.4, 2.3);
-      const s = dRng.range(0.14, 0.48);
-      const g = new THREE.CircleGeometry(s, 7);
+      const y = dRng.range(0.55, 2.15);
+      const s = dRng.range(0.12, 0.32);
+      const g = new THREE.PlaneGeometry(s * 2, s * 2);
       g.applyMatrix4(
         placementMatrix({
-          pos: [x, y, side * (wallZAt(y) - 0.015)],
-          rot: [0, side > 0 ? Math.PI : 0, dRng.range(0, Math.PI)],
+          pos: [x, y, side * (wallZAt(y) - 0.012)],
+          rot: [side * wallTiltAt(y), side > 0 ? Math.PI : 0, dRng.range(0, Math.PI)],
           scale: [1, dRng.range(0.6, 1.3), 1],
         }),
       );
@@ -507,6 +609,7 @@ export class Corridor {
     }
     const scorch = new THREE.Mesh(merge(scorchParts), scorchMat);
     scorch.name = 'Corridor_Scorch';
+    scorch.renderOrder = 1;
     this.root.add(scorch);
 
     // Loose conduit hanging from a damaged ceiling section.
@@ -550,7 +653,7 @@ export class Corridor {
 
   /** Cut the corridor lighting down as power fails. */
   setPowerLevel(v: number): void {
-    for (const l of this.luminaires) l.base = 8.5 * v;
+    for (const l of this.luminaires) l.base = l.full * v;
   }
 
   openPodHatch(open: boolean): void {

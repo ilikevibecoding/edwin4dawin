@@ -119,13 +119,15 @@ export function plansChapter(): Chapter<ShowContext> {
           clampCam(out);
         }),
 
-        // 3. The schematic itself, held long enough to read.
+        // 3. The schematic itself, held long enough to read. Shot from below so
+        //    the background is the unlit alcove ceiling: an additive hologram
+        //    against a lit white wall disappears.
         customShot({ id: 'plans.hologram', start: S + 19, end: S + 26, fov: 34, handheld: 0.3, blend: 1.0 }, (k, _t, out) => {
           const a = smootherstep(k);
           const c = stage.dataProjection.root.position;
-          out.position.set(c.x + lerp(1.35, 0.85, a), c.y + lerp(0.32, 0.12, a), c.z + lerp(1.25, 0.95, a));
-          out.target.copy(c);
-          out.fov = lerp(36, 31, a);
+          out.position.set(c.x + lerp(1.5, 1.02, a), c.y + lerp(-0.52, -0.3, a), c.z + lerp(1.5, 1.12, a));
+          out.target.set(c.x, c.y + 0.14, c.z);
+          out.fov = lerp(38, 33, a);
           out.focus = out.position.distanceTo(out.target);
           clampCam(out);
         }),
@@ -215,8 +217,13 @@ export function plansChapter(): Chapter<ShowContext> {
       stage.applyCameraRange(ctx.render.camera);
       ctx.render.fade = 0;
       ctx.render.dofEnabled = true;
-      ctx.render.dofRange = 5.5;
-      ctx.render.dofStrength = 0.8;
+      ctx.render.dofRange = 6.5;
+      ctx.render.dofStrength = 0.6;
+      // The corridor dims while the readout is up: a blue additive hologram
+      // projected onto a fully lit white wall is simply not legible.
+      const dim = ramp(t, 3, 6.5) * (1 - ramp(t, 29, 33));
+      stage.corridor.setPowerLevel(lerp(1, 0.3, dim));
+      stage.interiorAmbient.intensity = lerp(0.4, 0.2, dim);
 
       const { leia, r2, threepio, vader, troopers } = stage.characters;
 
@@ -248,7 +255,7 @@ export function plansChapter(): Chapter<ShowContext> {
       const projX = lerp(ALCOVE_X, R2_POST.x, shrink);
       const projZ = lerp(CONSOLE_Z + 0.55, R2_POST.z + 0.05, shrink);
       proj.root.position.set(projX, projY, projZ);
-      proj.root.scale.setScalar(lerp(1, 0.18, shrink) * (0.4 + 0.6 * up));
+      proj.setScale(lerp(1, 0.18, shrink) * (0.4 + 0.6 * up));
 
       if (dt > 0 && t > 25 && t < 30 && rng.next() < dt * 12) {
         tmpA.set(projX + rng.spread(0.3), projY + rng.spread(0.3), projZ + rng.spread(0.3));
@@ -295,7 +302,6 @@ export function plansChapter(): Chapter<ShowContext> {
       vader.lookTarget = tmpB.set(vaderX + 8, 1.55, 0);
       stage.corridor.setVaderPresence(0.6 + 0.4 * ramp(t, 32, 44), vaderX);
       stage.corridor.setAlarm(0.3);
-      stage.interiorAmbient.intensity = 0.62;
     },
   };
 }
