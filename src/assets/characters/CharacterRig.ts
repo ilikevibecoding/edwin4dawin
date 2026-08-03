@@ -205,11 +205,15 @@ export function buildHumanoid(lib: MaterialLibrary, spec: CharacterSpec): Joints
 
   if (spec.skirt) {
     // Closed at both ends and single sided: an open cone shows its unlit
-    // interior as a dark slab the moment the wearer bends forward.
-    const geo = new THREE.CylinderGeometry(0.27 * s, 0.35 * s, 0.72 * s, 16, 1, false);
+    // interior as a dark slab the moment the wearer bends forward. Narrow and
+    // floor length rather than short and wide - a hem 0.7 m across ends at the
+    // knee and reads as a lampshade with one leg under it. This still has to be
+    // wide enough at knee height to contain a full stride, since the skirt is a
+    // rigid cone and cannot drape out of the way.
+    const geo = new THREE.CylinderGeometry(0.2 * s, 0.31 * s, 0.86 * s, 20, 1, false);
     lib.registry.track(geo);
     const m = new THREE.Mesh(geo, lib.character(c.legs, 0.7, 0.02));
-    m.position.y = -0.24 * s;
+    m.position.y = -0.33 * s;
     m.castShadow = true;
     m.receiveShadow = true;
     hips.add(m);

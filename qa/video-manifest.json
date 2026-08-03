@@ -1,5 +1,5 @@
 {
-  "out": "/tmp/starfall_reel2.mp4",
+  "out": "/tmp/starfall_reel_final.mp4",
   "fps": 12,
   "width": 1280,
   "height": 720,
@@ -24,6 +24,10 @@
     [
       186,
       195
+    ],
+    [
+      197,
+      204
     ],
     [
       216,
@@ -54,7 +58,7 @@
       353
     ]
   ],
-  "frames": 1194,
-  "renderedAt": "2026-08-03T13:02:08.289Z",
+  "frames": 1278,
+  "renderedAt": "2026-08-03T16:07:25.909Z",
   "note": "Rendered frame-by-frame from the live engine on a software rasteriser; identical to real-time output on a GPU."
 }

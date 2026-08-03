@@ -231,7 +231,10 @@ button.active {
 .subtitles {
   position: absolute;
   left: 50%;
-  bottom: 13.2rem;
+  /* Clear of the transport, but proportional to the frame rather than fixed in
+     rem: a constant offset that sits in the lower third at 1080p climbs into the
+     middle of the picture at 720p and covers whatever is standing there. */
+  bottom: clamp(7.4rem, 15vh, 13.2rem);
   transform: translateX(-50%);
   width: min(1020px, 84vw);
   text-align: center;
