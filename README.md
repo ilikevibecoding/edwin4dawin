@@ -340,6 +340,12 @@ single asset on a turntable against a neutral background.
 
 See [`docs/QA-CHECKLIST.md`](docs/QA-CHECKLIST.md) for the manual pass.
 
+Two screen recordings from the manual pass live in [`media/`](media/), with a
+self-contained player page at [`media/index.html`](media/index.html). Both were
+captured through a software rasteriser on a machine with no GPU, so the frame
+rate in them is single digits; the stills in `qa/screenshots/` come from the
+same renderer offline and show the real output.
+
 ---
 
 ## Assets and licensing
