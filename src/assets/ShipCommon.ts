@@ -15,30 +15,66 @@ export function anchor(parent: THREE.Object3D, name: string, x: number, y: numbe
   return o;
 }
 
-let glowTex: THREE.Texture | null = null;
-function getGlowTexture(): THREE.Texture {
-  if (!glowTex) glowTex = radialTexture('engine-glow', 'rgba(255,255,255,1)', 'rgba(255,255,255,0)', 1.7);
-  return glowTex;
+const GLOW_VERT = /* glsl */ `
+varying vec2 vUv;
+varying float vFacing;
+void main() {
+  vUv = uv;
+  vec4 world = modelMatrix * vec4(position, 1.0);
+  vec3 n = normalize(mat3(modelMatrix) * vec3(0.0, 0.0, 1.0));
+  vec3 toEye = normalize(cameraPosition - world.xyz);
+  vFacing = max(dot(n, toEye), 0.0);
+  gl_Position = projectionMatrix * viewMatrix * world;
 }
+`;
+
+const GLOW_FRAG = /* glsl */ `
+uniform vec3 core;
+uniform vec3 halo;
+uniform float intensity;
+varying vec2 vUv;
+varying float vFacing;
+void main() {
+  float r = length(vUv - 0.5) * 2.0;
+  if (r > 1.0) discard;
+  // Flat body, soft rim, small hot centre. The body is deliberately kept
+  // below the bloom threshold so it stays blue; only the centre is allowed
+  // to blow out, which is the difference between a drive and a white golf ball.
+  float disc = 1.0 - smoothstep(0.74, 1.0, r);
+  // The hot spot has to stay small. Spread it across the disc and the bell
+  // stops being a hole with fire in it and becomes a pale blue balloon.
+  float hot = pow(1.0 - smoothstep(0.0, 0.34, r), 2.4);
+  // Nearly invisible edge-on, so the drive does not hang off the flank.
+  float face = pow(vFacing, 1.2);
+  float a = disc * intensity * face;
+  vec3 c = mix(halo, core, hot);
+  gl_FragColor = vec4(c * a, a);
+}
+`;
 
 /**
  * Hot engine bell.
  *
- * A flat additive disc facing aft rather than a camera-facing sprite: seen
- * from the side or from underneath it falls away naturally instead of
- * hanging off the hull as a big white ball.
+ * A flat additive disc rigidly facing aft, whose brightness falls away with
+ * the viewing angle. Seen from behind it is a saturated disc with a blown
+ * centre; seen from the flank it all but disappears, which is what keeps the
+ * stern from reading as a glowing sphere stuck to the hull.
  */
 export function glowDisc(color: THREE.ColorRepresentation, size: number, opacity = 1): THREE.Mesh {
-  const mat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(),
-    color,
+  const tint = new THREE.Color(color);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      core: { value: tint.clone().lerp(new THREE.Color(1, 1, 1), 0.72) },
+      halo: { value: tint.clone() },
+      intensity: { value: opacity },
+    },
+    vertexShader: GLOW_VERT,
+    fragmentShader: GLOW_FRAG,
+    transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
-    depthTest: true,
-    transparent: true,
-    opacity,
-    toneMapped: false,
     side: THREE.DoubleSide,
+    toneMapped: false,
   });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
   mesh.scale.setScalar(size);
@@ -47,13 +83,23 @@ export function glowDisc(color: THREE.ColorRepresentation, size: number, opacity
   return mesh;
 }
 
+/** Set the brightness of a disc built by {@link glowDisc}. */
+export function setGlowIntensity(disc: THREE.Mesh, value: number): void {
+  (disc.material as THREE.ShaderMaterial).uniforms.intensity.value = value;
+}
+
 const PLUME_VERT = /* glsl */ `
 varying float vFade;
 varying vec2 vUv;
+varying float vFacing;
 void main() {
   vUv = uv;
-  vFade = 1.0 - uv.y;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  // uv.y is 1 at the nozzle mouth and 0 at the far end of the cone.
+  vFade = uv.y;
+  vec4 world = modelMatrix * vec4(position, 1.0);
+  vec3 n = normalize(mat3(modelMatrix) * normal);
+  vFacing = abs(dot(n, normalize(cameraPosition - world.xyz)));
+  gl_Position = projectionMatrix * viewMatrix * world;
 }
 `;
 
@@ -64,15 +110,17 @@ uniform float intensity;
 uniform float time;
 varying float vFade;
 varying vec2 vUv;
+varying float vFacing;
 void main() {
-  float radial = abs(vUv.x - 0.5) * 2.0;
-  // Steep falloff keeps the cone from reading as a solid white blob when the
-  // camera looks at it from the side or from below.
-  float body = pow(1.0 - radial, 2.6);
-  float lengthwise = pow(vFade, 1.9);
+  // The cone is an open tube, so "how far from the axis am I" cannot come
+  // from the UVs — uv.x runs around the circumference. Facing does the job:
+  // the wall facing the camera is the middle of the plume, the silhouette
+  // edges are grazing, and the whole thing softens correctly from any angle.
+  float body = pow(vFacing, 2.6);
+  float lengthwise = pow(vFade, 2.2) * smoothstep(0.0, 0.06, vFade);
   float flicker = 0.9 + 0.1 * sin(time * 31.0 + vUv.y * 12.0);
   vec3 c = mix(edgeColor, coreColor, body);
-  float a = body * lengthwise * intensity * flicker * 0.75;
+  float a = body * lengthwise * intensity * flicker * 0.5;
   gl_FragColor = vec4(c * a, a);
 }
 `;
@@ -92,9 +140,12 @@ export function enginePlume(
   coreColor: THREE.ColorRepresentation,
   edgeColor: THREE.ColorRepresentation,
 ): Plume {
-  const geo = new THREE.CylinderGeometry(radius * 0.32, radius, length, 14, 1, true);
+  // Widest at the nozzle, tapering away aft. The cylinder is built along +Y
+  // with its wide end on top, shifted so that end sits at the origin, then
+  // turned so the cone runs down +Z — the direction every ship here calls aft.
+  const geo = new THREE.CylinderGeometry(radius, radius * 0.3, length, 16, 1, true);
   geo.translate(0, -length / 2, 0);
-  geo.rotateX(Math.PI / 2); // point along +Z (aft)
+  geo.rotateX(-Math.PI / 2);
   const material = new THREE.ShaderMaterial({
     uniforms: {
       coreColor: { value: new THREE.Color(coreColor) },

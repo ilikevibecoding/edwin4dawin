@@ -1,15 +1,24 @@
 import * as THREE from 'three';
 import { getMaterials } from './Materials';
-import { anchor, enginePlume, glowDisc, RunningLights, type Anchors, type Plume } from './ShipCommon';
 import {
+  anchor,
+  enginePlume,
+  glowDisc,
+  RunningLights,
+  setGlowIntensity,
+  type Anchors,
+  type Plume,
+} from './ShipCommon';
+import {
+  blockField,
   boxAt,
   frustumBox,
   greebleInstances,
   mergeParts,
   parametricSurface,
-  scatterOnPlane,
   windowStrip,
 } from './Greeble';
+import { radialTexture } from './Textures';
 import { rng } from '../core/Rng';
 import type { QualitySettings } from '../core/Quality';
 import { clamp, damp } from '../core/MathX';
@@ -29,10 +38,35 @@ const NOSE_HALF_WIDTH = 6;
 
 /** Plan half-width as a function of normalised nose→stern parameter. */
 const halfWidth = (t: number): number => NOSE_HALF_WIDTH + (STERN_HALF_WIDTH - NOSE_HALF_WIDTH) * t;
-const topY = (t: number): number => 6 + 96 * Math.pow(t, 0.94);
-const botY = (t: number): number => -4 - 58 * Math.pow(t, 1.15);
+// Depth matters as much as plan: a wedge only a sixth as thick as it is wide
+// reads as a paper dart. At the transom this hull stands 250 units in a 990
+// unit beam, which is what lets the reveal feel like a building going past.
+const topY = (t: number): number => 6 + 146 * Math.pow(t, 0.92);
+const botY = (t: number): number => -4 - 100 * Math.pow(t, 1.12);
 const zAt = (t: number): number => -HALF_LEN + LENGTH * t;
 export const destroyerParamAtZ = (z: number): number => clamp((z + HALF_LEN) / LENGTH, 0, 1);
+
+/** Smooth 0..1 pulse centred on `c` with half-width `w`. */
+function lane(a: number, c: number, w: number): number {
+  const d = Math.abs(a - c) / w;
+  return d >= 1 ? 0 : Math.pow(Math.cos(d * Math.PI * 0.5), 2);
+}
+
+/**
+ * Longitudinal service trenches cut into the plating.
+ *
+ * `across` is the lateral position as a fraction of the local half-width. The
+ * lanes are modelled into the loft rather than faked with dark strips so they
+ * self-shadow and catch the key light along one wall.
+ */
+function dorsalGroove(across: number): number {
+  const a = Math.abs(across);
+  return -(lane(a, 0.62, 0.09) * 9 + lane(a, 0.34, 0.055) * 5);
+}
+function ventralGroove(across: number): number {
+  const a = Math.abs(across);
+  return lane(a, 0.55, 0.1) * 11 + lane(a, 0.26, 0.07) * 6 + lane(a, 0.86, 0.06) * 4;
+}
 
 export interface Turret {
   root: THREE.Group;
@@ -70,25 +104,34 @@ export class StarDestroyer {
     const seg = quality.name === 'low' ? 24 : 48;
 
     // ------------------------------------------------------- hull surfaces
+    // One plating tile covers TILE units in both directions on every surface,
+    // so panels stay square from the needle bow to the 990-unit stern.
+    const TILE = 165;
+    const across = quality.name === 'low' ? 40 : 72;
     const dorsal = parametricSurface(
       seg,
-      12,
+      across,
       (u, v, out) => {
         const w = halfWidth(u);
-        out.set((v * 2 - 1) * w, topY(u), zAt(u));
+        const a = v * 2 - 1;
+        out.set(a * w, topY(u) + dorsalGroove(a) * Math.min(1, u * 3), zAt(u));
       },
-      [10, 4],
+      [1, 1],
       true,
+      (u, v, out) => out.set((zAt(u) + HALF_LEN) / TILE, ((v * 2 - 1) * halfWidth(u)) / TILE),
     );
     const ventral = parametricSurface(
       seg,
-      12,
+      across,
       (u, v, out) => {
         const w = halfWidth(u) * 0.72;
-        out.set((v * 2 - 1) * w, botY(u), zAt(u));
+        const a = v * 2 - 1;
+        out.set(a * w, botY(u) + ventralGroove(a) * Math.min(1, u * 3), zAt(u));
       },
-      [8, 3],
+      [1, 1],
       false,
+      (u, v, out) =>
+        out.set((zAt(u) + HALF_LEN) / TILE, ((v * 2 - 1) * halfWidth(u) * 0.72) / TILE),
     );
     const sideL = parametricSurface(
       seg,
@@ -98,8 +141,9 @@ export class StarDestroyer {
         const wBot = wTop * 0.72;
         out.set(-(wTop + (wBot - wTop) * v), topY(u) + (botY(u) - topY(u)) * v, zAt(u));
       },
-      [16, 1],
+      [1, 1],
       false,
+      (u, v, out) => out.set((zAt(u) + HALF_LEN) / TILE, (v * (topY(u) - botY(u))) / TILE),
     );
     const sideR = parametricSurface(
       seg,
@@ -109,8 +153,9 @@ export class StarDestroyer {
         const wBot = wTop * 0.72;
         out.set(wTop + (wBot - wTop) * v, topY(u) + (botY(u) - topY(u)) * v, zAt(u));
       },
-      [16, 1],
+      [1, 1],
       true,
+      (u, v, out) => out.set((zAt(u) + HALF_LEN) / TILE, (v * (topY(u) - botY(u))) / TILE),
     );
     const sternCap = parametricSurface(
       3,
@@ -119,8 +164,10 @@ export class StarDestroyer {
         const w = halfWidth(1) * (1 - v * 0.28);
         out.set((u * 2 - 1) * w, topY(1) + (botY(1) - topY(1)) * v, HALF_LEN);
       },
-      [8, 3],
+      [1, 1],
       false,
+      (u, v, out) =>
+        out.set((u * 2 - 1) * halfWidth(1) / TILE, (v * (topY(1) - botY(1))) / TILE),
     );
 
     const hull = new THREE.Mesh(
@@ -133,34 +180,27 @@ export class StarDestroyer {
     this.root.add(hull);
 
     // --------------------------------------------------- dorsal structure
-    const trenchParts: THREE.BufferGeometry[] = [];
-    for (const side of [-1, 1]) {
-      for (let i = 0; i < 26; i++) {
-        const t = 0.14 + (i / 26) * 0.72;
-        const z = zAt(t);
-        const w = halfWidth(t);
-        trenchParts.push(boxAt(w * 0.1, 7, LENGTH * 0.028, side * w * 0.62, topY(t) - 2.4, z));
-      }
-    }
-    // Central spine and the stepped plates ahead of the superstructure.
-    for (let i = 0; i < 22; i++) {
-      const t = 0.1 + (i / 22) * 0.62;
+    // The trenches are cut into the loft; what is left to build is the raised
+    // spine that runs from the bow to the superstructure and its side strata.
+    const spineParts: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 30; i++) {
+      const t = 0.08 + (i / 30) * 0.62;
       const z = zAt(t);
       const w = halfWidth(t);
-      trenchParts.push(boxAt(w * 0.3, 5.5, LENGTH * 0.03, 0, topY(t) + 2.2, z));
+      spineParts.push(boxAt(w * 0.26, 6.5, LENGTH * 0.021, 0, topY(t) + 2.4, z));
     }
-    const trenches = new THREE.Mesh(mergeParts(trenchParts), M.imperialDeep);
-    trenches.name = 'trenches';
-    this.root.add(trenches);
+    const spine = new THREE.Mesh(mergeParts(spineParts), M.imperialHullDark);
+    spine.name = 'dorsalSpine';
+    this.root.add(spine);
 
-    // Raised dorsal plates flanking the spine give the wedge visible strata.
+    // Stepped strata between the spine and the outer trench.
     const plateParts: THREE.BufferGeometry[] = [];
-    for (let i = 0; i < 16; i++) {
-      const t = 0.2 + (i / 16) * 0.55;
+    for (let i = 0; i < 18; i++) {
+      const t = 0.2 + (i / 18) * 0.52;
       const w = halfWidth(t);
       for (const side of [-1, 1]) {
         plateParts.push(
-          boxAt(w * 0.24, 3.2, LENGTH * 0.032, side * w * 0.34, topY(t) + 1.6, zAt(t)),
+          boxAt(w * 0.15, 3.4, LENGTH * 0.028, side * w * 0.47, topY(t) + 1.5, zAt(t)),
         );
       }
     }
@@ -168,53 +208,70 @@ export class StarDestroyer {
     this.root.add(plates);
 
     // ------------------------------------------------------ superstructure
+    // The command island is the ship's second silhouette: a broad stepped
+    // castle at the transom, a narrow neck, then the bridge deck flanked by
+    // two domes. Its faces are plain grey — the plating normal map smeared
+    // over a 400-unit slab produced a single mirror-bright band across the
+    // front of the tower, which is the one thing that must never happen here.
     const superGroup = new THREE.Group();
     superGroup.name = 'superstructure';
     this.root.add(superGroup);
 
-    const baseT = 0.72;
+    const baseT = 0.76;
     const baseZ = zAt(baseT);
     const baseY = topY(baseT);
 
-    const l1 = new THREE.Mesh(frustumBox(196, 214, 168, 188, 46), M.imperialHull);
-    l1.position.set(0, baseY - 2, baseZ + 100);
+    const l1 = new THREE.Mesh(frustumBox(212, 168, 190, 150, 52), M.imperialPlate);
+    l1.position.set(0, baseY - 4, baseZ + 178);
     superGroup.add(l1);
 
-    const l2 = new THREE.Mesh(frustumBox(160, 176, 128, 140, 40), M.imperialHull);
-    l2.position.set(0, baseY + 42, baseZ + 108);
+    const l2 = new THREE.Mesh(frustumBox(178, 136, 150, 116, 46), M.imperialPlate);
+    l2.position.set(0, baseY + 46, baseZ + 182);
     superGroup.add(l2);
 
-    const tower = new THREE.Mesh(frustumBox(86, 74, 76, 62, 54), M.imperialHullDark);
-    tower.position.set(0, baseY + 80, baseZ + 118);
+    // Trench between the castle and the tower, so the neck reads.
+    const shoulders = new THREE.Mesh(
+      mergeParts([
+        boxAt(300, 12, 40, 0, baseY + 92, baseZ + 92),
+        boxAt(40, 14, 150, -272, baseY + 90, baseZ + 178),
+        boxAt(40, 14, 150, 272, baseY + 90, baseZ + 178),
+      ]),
+      M.imperialHullDark,
+    );
+    superGroup.add(shoulders);
+
+    const tower = new THREE.Mesh(frustumBox(104, 84, 92, 72, 76), M.imperialHullDark);
+    tower.position.set(0, baseY + 90, baseZ + 186);
     superGroup.add(tower);
 
-    const bridge = new THREE.Mesh(frustumBox(96, 40, 88, 34, 22), M.imperialHull);
-    bridge.position.set(0, baseY + 132, baseZ + 112);
+    // Command deck: wider than the neck it sits on, which is the read.
+    const bridge = new THREE.Mesh(frustumBox(132, 54, 124, 46, 30), M.imperialPlate);
+    bridge.position.set(0, baseY + 164, baseZ + 178);
     superGroup.add(bridge);
-    this.anchors.bridge = anchor(superGroup, 'bridge', 0, baseY + 150, baseZ + 96);
+    this.anchors.bridge = anchor(superGroup, 'bridge', 0, baseY + 186, baseZ + 150);
 
-    const bridgeGlass = new THREE.Mesh(new THREE.BoxGeometry(84, 7, 2.5), M.emissiveIce);
-    bridgeGlass.position.set(0, baseY + 146, baseZ + 95);
+    const bridgeGlass = new THREE.Mesh(new THREE.BoxGeometry(212, 9, 3), M.emissiveIce);
+    bridgeGlass.position.set(0, baseY + 180, baseZ + 128);
     bridgeGlass.name = 'imperialBridgeGlass';
     superGroup.add(bridgeGlass);
 
-    // Deflector domes.
+    // Deflector domes on outriggers either side of the bridge.
     for (const side of [-1, 1]) {
-      const domeStalk = new THREE.Mesh(new THREE.CylinderGeometry(8, 10, 24, 10), M.imperialTrim);
-      domeStalk.position.set(side * 56, baseY + 152, baseZ + 130);
+      const domeStalk = new THREE.Mesh(new THREE.CylinderGeometry(11, 14, 34, 10), M.imperialTrim);
+      domeStalk.position.set(side * 88, baseY + 190, baseZ + 202);
       superGroup.add(domeStalk);
-      const dome = new THREE.Mesh(new THREE.IcosahedronGeometry(22, 1), M.imperialHullDark);
-      dome.position.set(side * 56, baseY + 176, baseZ + 130);
+      const dome = new THREE.Mesh(new THREE.IcosahedronGeometry(30, 1), M.imperialPlate);
+      dome.position.set(side * 88, baseY + 224, baseZ + 202);
       superGroup.add(dome);
-      const domeRing = new THREE.Mesh(new THREE.TorusGeometry(21, 2.2, 6, 18), M.imperialTrim);
+      const domeRing = new THREE.Mesh(new THREE.TorusGeometry(29, 3, 6, 18), M.imperialTrim);
       domeRing.rotation.x = Math.PI / 2;
       domeRing.position.copy(dome.position);
       superGroup.add(domeRing);
     }
 
     // Comms mast.
-    const mast = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 4, 46, 8), M.imperialTrim);
-    mast.position.set(0, baseY + 168, baseZ + 122);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(3, 5, 60, 8), M.imperialTrim);
+    mast.position.set(0, baseY + 208, baseZ + 192);
     superGroup.add(mast);
 
     superGroup.traverse((o) => {
@@ -227,36 +284,62 @@ export class StarDestroyer {
     this.root.add(engineGroup);
     this.anchors.engines = engineGroup;
 
+    // Three main thrusters high on the transom, four auxiliaries below them.
     const bells: Array<[number, number, number]> = [
-      [-172, 16, 82],
-      [0, 18, 88],
-      [172, 16, 82],
-      [-296, -6, 38],
-      [296, -6, 38],
-      [-88, -26, 34],
-      [88, -26, 34],
+      [-212, 58, 90],
+      [0, 62, 96],
+      [212, 58, 90],
+      [-322, -30, 40],
+      [322, -30, 40],
+      [-108, -46, 36],
+      [108, -46, 36],
     ];
+
+    // A raised housing band across the transom ties the three mains together
+    // so they read as one drive block rather than three unrelated holes.
+    const sternBlock = new THREE.Mesh(
+      mergeParts([
+        boxAt(660, 224, 40, 0, 56, -22),
+        boxAt(720, 26, 26, 0, 172, -20),
+        boxAt(30, 200, 30, -336, 56, -18),
+        boxAt(30, 200, 30, 336, 56, -18),
+      ]),
+      M.imperialHullDark,
+    );
+    sternBlock.name = 'engineBlock';
+    engineGroup.add(sternBlock);
+
     const ringGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true);
     ringGeo.rotateX(Math.PI / 2);
     bells.forEach(([x, y, radius], i) => {
-      const housing = new THREE.Mesh(ringGeo.clone(), M.imperialTrim);
-      housing.scale.set(radius * 1.08, radius * 1.08, 34);
-      housing.position.set(x, y, -18);
+      // A deep tube through the transom read from inside: the far wall is in
+      // shadow, so the mouth is a genuine hole with light sitting in it.
+      const housing = new THREE.Mesh(ringGeo.clone(), M.bellInterior);
+      housing.scale.set(radius * 1.06, radius * 1.06, 140);
+      housing.position.set(x, y, -56);
       engineGroup.add(housing);
 
-      const disc = glowDisc(0xb9e4ff, radius * 2.1);
-      disc.position.set(x, y, 2);
+      // Rim ring, so the mouth has a lip catching the key light.
+      const rim = new THREE.Mesh(
+        new THREE.TorusGeometry(radius * 1.06, radius * 0.075, 6, 22),
+        M.imperialTrim,
+      );
+      rim.position.set(x, y, 12);
+      engineGroup.add(rim);
+
+      const disc = glowDisc(0x3f9ae8, radius * 1.85, 1);
+      disc.position.set(x, y, 7);
       engineGroup.add(disc);
       this.glows.push(disc);
 
-      const plume = enginePlume(radius * 0.55, radius * 5.5, 0xe8f6ff, 0x4fb0ff);
-      plume.mesh.position.set(x, y, 4);
+      const plume = enginePlume(radius * 0.9, radius * 5.5, 0xcfe9ff, 0x2f7ac8);
+      plume.mesh.position.set(x, y, 16);
       engineGroup.add(plume.mesh);
       this.plumes.push(plume);
 
       if (i < 3) {
-        const light = new THREE.PointLight(0x8fc9ff, 0, 1400, 2);
-        light.position.set(x, y, 60);
+        const light = new THREE.PointLight(0x8fc9ff, 0, 1800, 2);
+        light.position.set(x, y, 180);
         engineGroup.add(light);
         this.engineLights.push(light);
       }
@@ -271,49 +354,71 @@ export class StarDestroyer {
     const hangarY = botY(hangarT);
     const hangarFrame = new THREE.Mesh(
       mergeParts([
-        boxAt(230, 12, 26, 0, hangarY - 4, hangarZ - 88),
-        boxAt(230, 12, 26, 0, hangarY - 4, hangarZ + 88),
-        boxAt(26, 12, 200, -114, hangarY - 4, hangarZ),
-        boxAt(26, 12, 200, 114, hangarY - 4, hangarZ),
+        boxAt(250, 14, 34, 0, hangarY - 3, hangarZ - 92),
+        boxAt(250, 14, 34, 0, hangarY - 3, hangarZ + 92),
+        boxAt(34, 14, 216, -124, hangarY - 3, hangarZ),
+        boxAt(34, 14, 216, 124, hangarY - 3, hangarZ),
       ]),
       M.imperialTrim,
     );
     this.root.add(hangarFrame);
-    const hangarWell = new THREE.Mesh(new THREE.BoxGeometry(204, 30, 178), M.imperialDeep);
-    hangarWell.position.set(0, hangarY + 16, hangarZ);
+    // A real well with walls: the glow sits at its ceiling, 34 units up, so the
+    // bay reads as a lit recess rather than an orange card stuck to the belly.
+    const wellDepth = 42;
+    const wellW = 214;
+    const wellD = 182;
+    const wellParts = [
+      boxAt(wellW, 5, wellD, 0, hangarY + wellDepth, hangarZ),
+      boxAt(wellW, wellDepth, 6, 0, hangarY + wellDepth / 2, hangarZ - wellD / 2),
+      boxAt(wellW, wellDepth, 6, 0, hangarY + wellDepth / 2, hangarZ + wellD / 2),
+      boxAt(6, wellDepth, wellD, -wellW / 2, hangarY + wellDepth / 2, hangarZ),
+      boxAt(6, wellDepth, wellD, wellW / 2, hangarY + wellDepth / 2, hangarZ),
+    ];
+    const hangarWell = new THREE.Mesh(mergeParts(wellParts), M.imperialDeep);
+    hangarWell.name = 'hangarWell';
     this.root.add(hangarWell);
     const hangarGlow = new THREE.Mesh(
-      new THREE.PlaneGeometry(196, 168),
-      new THREE.MeshBasicMaterial({ color: 0xd97a2a, toneMapped: false }),
+      new THREE.PlaneGeometry(196, 164),
+      new THREE.MeshBasicMaterial({
+        map: radialTexture('hangar-bay', 'rgba(255,214,164,1)', 'rgba(120,58,20,0)', 1.15),
+        color: 0x8f5a24,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+      }),
     );
     hangarGlow.rotation.x = Math.PI / 2;
-    hangarGlow.position.set(0, hangarY + 0.4, hangarZ);
+    hangarGlow.position.set(0, hangarY + wellDepth - 4, hangarZ);
     hangarGlow.name = 'hangarGlow';
     this.root.add(hangarGlow);
-    // Ventral trenches so the underside is not a bare plane in the reveal.
-    const ventralDetail: THREE.BufferGeometry[] = [];
-    for (let i = 0; i < 22; i++) {
-      const t = 0.2 + (i / 22) * 0.62;
-      const w = halfWidth(t) * 0.72;
-      for (const side of [-1, 1]) {
-        ventralDetail.push(boxAt(w * 0.16, 6, LENGTH * 0.03, side * w * 0.5, botY(t) + 2, zAt(t)));
-      }
-      ventralDetail.push(boxAt(w * 0.2, 5, LENGTH * 0.026, 0, botY(t) - 2, zAt(t)));
-    }
-    this.root.add(new THREE.Mesh(mergeParts(ventralDetail), M.imperialDeep));
+    // Landing-guide strips along the lip of the opening.
+    const lipLights = new THREE.Mesh(
+      mergeParts([
+        boxAt(180, 1.5, 4, 0, hangarY + 1, hangarZ - 84),
+        boxAt(180, 1.5, 4, 0, hangarY + 1, hangarZ + 84),
+      ]),
+      M.emissiveAmber,
+    );
+    this.root.add(lipLights);
     this.hangarLight = new THREE.PointLight(0xffa64a, 0, 320, 2);
     this.hangarLight.position.set(0, hangarY + 6, hangarZ);
     this.root.add(this.hangarLight);
     this.anchors.hangar = anchor(this.root, 'hangar', 0, hangarY - 6, hangarZ);
 
     // ------------------------------------------------------------ windows
+    // Lit ports along the flank. The side wall leans inboard as it drops, so
+    // the x offset has to follow the loft; a fixed fraction of the beam buries
+    // every one of them inside the hull.
     this.windowMat = new THREE.MeshBasicMaterial({ color: 0xbfe4ff, toneMapped: false });
     const winPos: THREE.Vector3[] = [];
-    for (let i = 0; i < 90; i++) {
-      const t = 0.4 + r.next() * 0.55;
-      const w = halfWidth(t);
+    for (let i = 0; i < 110; i++) {
+      const t = 0.34 + r.next() * 0.6;
+      const top = topY(t);
+      const drop = r.range(8, 0.5 * (top - botY(t)));
+      const v = drop / (top - botY(t));
+      const x = halfWidth(t) * (1 - 0.28 * v) + 1.2;
       const side = r.bool() ? 1 : -1;
-      winPos.push(new THREE.Vector3(side * (w * 0.86 + 1), topY(t) - r.range(6, 34), zAt(t)));
+      winPos.push(new THREE.Vector3(side * x, top - drop, zAt(t)));
     }
     const winL = windowStrip(
       winPos.filter((p) => p.x < 0),
@@ -330,40 +435,59 @@ export class StarDestroyer {
     this.root.add(winL, winR);
 
     // ----------------------------------------------------------- greebles
-    const count = Math.round(760 * quality.greebleScale);
-    const dorsalGreeble = scatterOnPlane(r.fork('dorsal'), {
-      count,
-      map: (u, v) => {
-        const t = 0.08 + (v * 0.5 + 0.5) * 0.84;
-        const w = halfWidth(t);
-        const x = u * w * 0.94;
-        // Keep the superstructure footprint and the central spine clear.
-        if (t > 0.68 && Math.abs(x) < 210 && t < 0.95) return null;
-        if (Math.abs(x) < w * 0.18) return null;
-        return new THREE.Vector3(x, topY(t) + 0.6, zAt(t));
-      },
-      normal: new THREE.Vector3(0, 1, 0),
-      sizeRange: [3, 16],
-      heightRange: [0.8, 4.2],
-      elongation: 2.2,
-    });
-    this.root.add(greebleInstances(dorsalGreeble, M.imperialHullDark, 'destroyerGreeble'));
+    // Surface texture does the fine work; these are the deliberate structures
+    // laid out on the hull's own axes so the wedge reads as engineered.
+    const density = quality.greebleScale;
+    const UP = new THREE.Vector3(0, 1, 0);
+    const DOWN = new THREE.Vector3(0, -1, 0);
 
-    const ventralGreeble = scatterOnPlane(r.fork('ventral'), {
-      count: Math.round(count * 0.5),
+    const dorsalBlocks = blockField(r.fork('dorsal'), {
+      rows: Math.max(10, Math.round(30 * density)),
+      cols: Math.max(6, Math.round(16 * density)),
       map: (u, v) => {
-        const t = 0.14 + (v * 0.5 + 0.5) * 0.78;
-        const w = halfWidth(t) * 0.72;
-        const x = u * w * 0.92;
-        if (t > 0.78 && Math.abs(x) < 110) return null;
-        return new THREE.Vector3(x, botY(t) - 0.6, zAt(t));
+        const t = 0.1 + (v * 0.5 + 0.5) * 0.82;
+        const w = halfWidth(t);
+        const a = u * 0.9;
+        const x = a * w;
+        // Keep the superstructure footprint, the central spine, the trenches
+        // and the outer hull edge clear so the silhouette stays crisp.
+        if (t > 0.66 && Math.abs(x) < 230 && t < 0.96) return null;
+        if (Math.abs(a) < 0.2 || Math.abs(x) > w - 14) return null;
+        if (dorsalGroove(a) < -1.2) return null;
+        return { position: new THREE.Vector3(x, topY(t) + dorsalGroove(a), zAt(t)), normal: UP };
       },
-      normal: new THREE.Vector3(0, -1, 0),
-      sizeRange: [4, 18],
-      heightRange: [0.4, 1.7],
-      elongation: 2.4,
+      cell: (_u, v) => {
+        const t = 0.1 + (v * 0.5 + 0.5) * 0.82;
+        return [halfWidth(t) * 0.11, LENGTH * 0.026];
+      },
+      heightRange: [1.2, 4.0],
+      sparsity: 0.34,
     });
-    this.root.add(greebleInstances(ventralGreeble, M.imperialHullDark, 'destroyerVentralGreeble'));
+    this.root.add(greebleInstances(dorsalBlocks, M.imperialHullDark, 'destroyerGreeble'));
+
+    // The belly is seen from very close during the reveal, so it gets its own
+    // structure: shallow pans between long service lanes, never loose crates.
+    const ventralBlocks = blockField(r.fork('ventral'), {
+      rows: Math.max(10, Math.round(26 * density)),
+      cols: Math.max(6, Math.round(12 * density)),
+      map: (u, v) => {
+        const t = 0.16 + (v * 0.5 + 0.5) * 0.74;
+        const w = halfWidth(t) * 0.72;
+        const a = u * 0.88;
+        const x = a * w;
+        if (t > 0.78 && Math.abs(x) < 150) return null;
+        if (Math.abs(x) > w - 12) return null;
+        if (ventralGroove(a) > 1.2) return null;
+        return { position: new THREE.Vector3(x, botY(t) + ventralGroove(a), zAt(t)), normal: DOWN };
+      },
+      cell: (_u, v) => {
+        const t = 0.16 + (v * 0.5 + 0.5) * 0.74;
+        return [halfWidth(t) * 0.1, LENGTH * 0.024];
+      },
+      heightRange: [0.7, 2.0],
+      sparsity: 0.4,
+    });
+    this.root.add(greebleInstances(ventralBlocks, M.imperialHullDark, 'destroyerVentralGreeble'));
 
     // ------------------------------------------------------------ turrets
     const turretSpots: Array<[number, number]> = [
@@ -530,12 +654,12 @@ export class StarDestroyer {
       p.mesh.scale.z = 0.5 + power * 0.7;
     });
     this.glows.forEach((g, i) => {
-      const base = g.userData.baseScale ?? (g.userData.baseScale = g.scale.x);
-      g.scale.setScalar(base * (0.5 + power * 0.6) * (1 + 0.02 * Math.sin(t * 9 + i)));
-      (g.material as THREE.MeshBasicMaterial).opacity = clamp(0.3 + power, 0, 1);
+      const base = (g.userData.baseScale ?? (g.userData.baseScale = g.scale.x)) as number;
+      g.scale.setScalar(base * (0.9 + power * 0.1));
+      setGlowIntensity(g, clamp(power * (0.95 + 0.05 * Math.sin(t * 9 + i)), 0, 1.2));
     });
     this.engineLights.forEach((l) => (l.intensity = power * 260000));
-    this.hangarLight.intensity = 40000;
+    this.hangarLight.intensity = 26000;
     this.navLights.update(t);
     this.windowMat.color.setRGB(0.72, 0.88, 1);
 

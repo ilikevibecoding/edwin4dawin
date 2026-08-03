@@ -1,7 +1,22 @@
 import * as THREE from 'three';
 import { getMaterials } from './Materials';
-import { anchor, enginePlume, glowDisc, RunningLights, type Anchors, type Plume } from './ShipCommon';
-import { boxAt, greebleInstances, mergeParts, scatterOnPlane, windowStrip } from './Greeble';
+import {
+  anchor,
+  enginePlume,
+  glowDisc,
+  RunningLights,
+  setGlowIntensity,
+  type Anchors,
+  type Plume,
+} from './ShipCommon';
+import {
+  blockField,
+  boxAt,
+  greebleInstances,
+  mergeParts,
+  windowStrip,
+  type SurfaceSample,
+} from './Greeble';
 import { rng } from '../core/Rng';
 import type { QualitySettings } from '../core/Quality';
 import { clamp } from '../core/MathX';
@@ -35,6 +50,28 @@ function surfacePoint(
   const ratio = Math.min(0.96, Math.abs(y) / Math.max(0.001, b));
   const x = r * Math.sqrt(Math.max(0.02, 1 - ratio * ratio));
   return new THREE.Vector3(side * (x + offset), y, z);
+}
+
+/**
+ * Point and outward normal on the hull ellipse.
+ *
+ * `across` runs 0 at the crown, ±1 at the beams and ±2 at the keel, which is a
+ * convenient way to scatter detail bands without touching raw angles.
+ */
+function ellipsePoint(
+  profile: THREE.Vector2[],
+  z: number,
+  across: number,
+  offset: number,
+): SurfaceSample {
+  const a = hullRadius(profile, z);
+  const b = a * 0.86;
+  const theta = Math.PI / 2 - across * (Math.PI / 2);
+  const cx = Math.cos(theta);
+  const sy = Math.sin(theta);
+  const normal = new THREE.Vector3(cx / a, sy / b, 0).normalize();
+  const position = new THREE.Vector3(a * cx, b * sy, z).addScaledVector(normal, offset);
+  return { position, normal };
 }
 
 /**
@@ -82,10 +119,11 @@ export class BlockadeRunner {
       new THREE.Vector2(8.8, 8),
       new THREE.Vector2(9.8, 28),
       new THREE.Vector2(10.6, 48),
-      new THREE.Vector2(11.0, 64),
-      new THREE.Vector2(10.2, 70.5),
-      new THREE.Vector2(6.4, 72),
-      new THREE.Vector2(0.01, 72),
+      new THREE.Vector2(10.4, 62),
+      new THREE.Vector2(10.4, 66),
+      // Stops short of the engine drum: any hull left inside the drum shows
+      // through the open bell throats as a row of white cups.
+      new THREE.Vector2(0.01, 66),
     ];
     const bodyGeo = new THREE.LatheGeometry(profile, 22);
     bodyGeo.rotateX(Math.PI / 2); // lathe axis Y -> +Z (stern)
@@ -100,31 +138,34 @@ export class BlockadeRunner {
     // ------------------------------------------------------- hammerhead
     // The bow is a broad, flat wedge on a narrow neck; that contrast is the
     // ship's signature, so the head is deliberately much wider than the hull.
+    // The head is short, deep and much wider than the neck that carries it —
+    // roughly a fifth of the ship's length. Stretched any longer it stops
+    // reading as a hammer and becomes a plank bolted to a tube.
     const plan = new THREE.Shape();
     // Plan coordinates are (x, -z); extruded upward then laid flat.
-    plan.moveTo(-3.4, 44);
-    plan.lineTo(-9.0, 55);
-    plan.lineTo(-17.0, 63);
-    plan.lineTo(-20.4, 69);
-    plan.lineTo(-19.2, 75.0);
-    plan.lineTo(-12.5, 78.5);
-    plan.lineTo(12.5, 78.5);
-    plan.lineTo(19.2, 75.0);
-    plan.lineTo(20.4, 69);
-    plan.lineTo(17.0, 63);
-    plan.lineTo(9.0, 55);
-    plan.lineTo(3.4, 44);
+    plan.moveTo(-5.0, 52);
+    plan.lineTo(-12.0, 60);
+    plan.lineTo(-20.0, 66.5);
+    plan.lineTo(-22.6, 71);
+    plan.lineTo(-21.4, 76.4);
+    plan.lineTo(-14.0, 79.4);
+    plan.lineTo(14.0, 79.4);
+    plan.lineTo(21.4, 76.4);
+    plan.lineTo(22.6, 71);
+    plan.lineTo(20.0, 66.5);
+    plan.lineTo(12.0, 60);
+    plan.lineTo(5.0, 52);
     plan.closePath();
     const headGeo = new THREE.ExtrudeGeometry(plan, {
-      depth: 5.6,
+      depth: 8.4,
       bevelEnabled: true,
-      bevelSize: 1.1,
-      bevelThickness: 1.1,
+      bevelSize: 1.4,
+      bevelThickness: 1.4,
       bevelSegments: 2,
       curveSegments: 1,
     });
     headGeo.rotateX(-Math.PI / 2);
-    headGeo.translate(0, -2.8, 0);
+    headGeo.translate(0, -4.2, 0);
     headGeo.computeVertexNormals();
     const head = new THREE.Mesh(headGeo, M.rebelHull);
     head.name = 'hammerhead';
@@ -134,23 +175,24 @@ export class BlockadeRunner {
 
     // Cheek pods on the outer corners of the bow.
     for (const side of [-1, 1]) {
-      const pod = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.6, 7.6, 12), M.rebelHullDark);
+      const pod = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.0, 9.0, 12), M.rebelHullDark);
       pod.rotation.x = Math.PI / 2;
-      pod.position.set(side * 18.2, -0.4, -70.5);
+      pod.position.set(side * 19.8, -0.6, -72.0);
       pod.castShadow = true;
       this.root.add(pod);
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(2.2, 12, 8), M.rebelTrim);
-      cap.position.set(side * 18.2, -0.4, -74.2);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(2.6, 12, 8), M.rebelTrim);
+      cap.position.set(side * 19.8, -0.6, -76.4);
       this.root.add(cap);
     }
 
-    // Neck fairing between head and body: narrow, so the head reads as a head.
+    // Neck fairing between head and body: short and clearly narrower than
+    // both, so the bow reads as a separate mass on a stalk.
     const neck = new THREE.Mesh(
       mergeParts([
-        boxAt(8.2, 6.0, 14, 0, 0, -35),
-        boxAt(6.0, 4.6, 8, 0, 0.4, -44),
-        boxAt(3.6, 1.8, 24, 0, 3.8, -32),
-        boxAt(9.6, 1.4, 6, 0, -2.4, -46),
+        boxAt(9.6, 7.0, 12, 0, 0, -42),
+        boxAt(7.2, 5.4, 8, 0, 0.4, -49),
+        boxAt(3.6, 2.0, 16, 0, 4.4, -42),
+        boxAt(10.6, 1.6, 6, 0, -3.0, -50),
       ]),
       M.rebelHullDark,
     );
@@ -227,52 +269,74 @@ export class BlockadeRunner {
     finGeo.dispose();
 
     // ------------------------------------------------------- engine bank
-    const engineHousing = new THREE.Mesh(
-      new THREE.CylinderGeometry(12.2, 11.2, 6, 20, 1, false),
-      M.rebelTrim,
+    // A drum no wider than the hull, its aft face recessed, with eleven bells
+    // sunk into it — one large, four medium, six small. The bells are holes
+    // with light at the bottom, never discs stuck onto a plate.
+    const engineDrum = new THREE.Mesh(
+      new THREE.CylinderGeometry(11.3, 10.8, 15, 26, 1, true),
+      M.rebelHullDark,
     );
-    engineHousing.rotation.x = Math.PI / 2;
-    engineHousing.position.z = 73.5;
-    engineHousing.castShadow = true;
-    this.root.add(engineHousing);
+    engineDrum.rotation.x = Math.PI / 2;
+    engineDrum.position.z = 67.5;
+    engineDrum.castShadow = true;
+    engineDrum.name = 'engineDrum';
+    this.root.add(engineDrum);
+
+    // Reinforcing band around the mouth of the drum.
+    const drumRing = new THREE.Mesh(new THREE.TorusGeometry(11.0, 0.55, 6, 26), M.rebelTrim);
+    drumRing.position.z = 74.4;
+    this.root.add(drumRing);
+
+    // Back wall of the bay, well forward of the bell mouths and dark, so the
+    // gaps between the throats read as shadow rather than a lit plate.
+    const engineDeck = new THREE.Mesh(new THREE.CircleGeometry(11.0, 26), M.imperialDeep);
+    engineDeck.position.z = 66.6;
+    engineDeck.name = 'engineDeck';
+    this.root.add(engineDeck);
 
     const engineCluster = new THREE.Group();
     engineCluster.name = 'engineCluster';
-    engineCluster.position.z = 75.5;
+    engineCluster.position.z = 70.8;
     this.root.add(engineCluster);
     this.anchors.engineCluster = engineCluster;
 
-    const layout: Array<[number, number, number]> = [[0, 0, 3.6]];
+    const layout: Array<[number, number, number]> = [[0, 0, 3.1]];
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-      layout.push([Math.cos(a) * 5.6, Math.sin(a) * 4.9, 2.5]);
+      layout.push([Math.cos(a) * 5.3, Math.sin(a) * 4.6, 1.9]);
     }
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
-      layout.push([Math.cos(a) * 9.4, Math.sin(a) * 7.8, 1.85]);
+      layout.push([Math.cos(a) * 8.4, Math.sin(a) * 7.1, 1.45]);
     }
-    const nozzleGeo = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
+    const nozzleGeo = new THREE.CylinderGeometry(1, 1, 1, 14, 1, true);
     nozzleGeo.rotateX(Math.PI / 2);
     for (const [x, y, radius] of layout) {
-      const nozzle = new THREE.Mesh(nozzleGeo.clone(), M.rebelTrim);
-      nozzle.scale.set(radius, radius, 3.2);
-      nozzle.position.set(x, y, -1.4);
+      const nozzle = new THREE.Mesh(nozzleGeo.clone(), M.bellInterior);
+      nozzle.scale.set(radius, radius, 7.6);
+      nozzle.position.set(x, y, 0);
       engineCluster.add(nozzle);
 
-      const disc = glowDisc(0xa8e6ff, radius * 1.9);
-      disc.position.set(x, y, 0.5);
+      // Light sits a couple of units down the throat, so the mouth keeps a
+      // dark rim and the drive still reads from off-axis.
+      const disc = glowDisc(0x3f9ae8, radius * 1.75, 1);
+      disc.position.set(x, y, 1.6);
       engineCluster.add(disc);
       this.glows.push(disc);
-
-      const plume = enginePlume(radius * 0.8, radius * 8, 0xdff4ff, 0x3aa4ff);
-      plume.mesh.position.set(x, y, 0.8);
-      engineCluster.add(plume.mesh);
-      this.plumes.push(plume);
     }
     nozzleGeo.dispose();
 
-    this.engineLight = new THREE.PointLight(0x8ec9ff, 0, 260, 2);
-    this.engineLight.position.set(0, 0, 84);
+    // A single soft wash behind the whole bank stands in for the exhaust; one
+    // cone per bell just stacks additive alpha until the stern blows out.
+    const plume = enginePlume(7.4, 48, 0xcfe9ff, 0x2f7ac8);
+    plume.mesh.position.z = 74.5;
+    this.root.add(plume.mesh);
+    this.plumes.push(plume);
+
+    // Far enough aft that it cannot wash out the ship's own transom; its job
+    // is spill on whatever happens to be flying behind the corvette.
+    this.engineLight = new THREE.PointLight(0x8ec9ff, 0, 520, 2);
+    this.engineLight.position.set(0, 0, 165);
     this.root.add(this.engineLight);
 
     // ---------------------------------------------------------- windows
@@ -301,36 +365,53 @@ export class BlockadeRunner {
     this.root.add(winL, winR);
 
     // --------------------------------------------------------- greebles
-    const greebleCount = Math.round(220 * quality.greebleScale);
-    const specs = [
-      ...scatterOnPlane(r.fork('dorsal'), {
-        count: greebleCount,
-        map: (u, v) => {
-          const z = v * 60 + 12;
-          const x = u * 5.2;
-          if (Math.abs(x) > 3.6 && Math.abs(z - 60) < 12) return null;
-          return new THREE.Vector3(x, 10.1, z);
-        },
-        normal: new THREE.Vector3(0, 1, 0),
-        sizeRange: [0.5, 2.1],
-        heightRange: [0.12, 0.55],
-        elongation: 1.8,
-      }),
-    ];
-    const greeble = greebleInstances(specs, M.rebelHullDark, 'runnerGreeble');
-    this.root.add(greeble);
+    // The corvette's hull is mostly smooth plating; the panel texture carries
+    // the fine detail and only a modest, ordered set of shoulder blocks sits
+    // proud of the surface, laid out on the hull's own axes.
+    const shoulder = blockField(r.fork('dorsal'), {
+      rows: Math.max(10, Math.round(26 * quality.greebleScale)),
+      cols: 6,
+      map: (u, v) => {
+        const z = v * 52 + 18;
+        const across = u * 0.9;
+        // Skip the spine footprint: plates there would float over the box.
+        if (Math.abs(across) < 0.3) return null;
+        return ellipsePoint(profile, z, across, 0.02);
+      },
+      cell: [3.4, 4.6],
+      heightRange: [0.22, 0.7],
+      sparsity: 0.42,
+    });
+    this.root.add(greebleInstances(shoulder, M.rebelPlate, 'runnerGreeble'));
 
-    // Flank plating rides on the hull ellipse so nothing sinks into the body.
-    for (const side of [1, -1]) {
-      const flank = scatterOnPlane(r.fork(`flank${side}`), {
-        count: Math.round(greebleCount * 0.35),
-        map: (u, v) => surfacePoint(profile, v * 44 + 24, u * 4.6, side, 0.06),
-        normal: new THREE.Vector3(side, 0, 0),
-        sizeRange: [0.4, 1.4],
-        heightRange: [0.08, 0.3],
-      });
-      this.root.add(greebleInstances(flank, M.rebelHullDark, `runnerFlank${side}`));
+    // Lengthwise strakes, the strongest read on the real ship's flanks.
+    const strakeParts: THREE.BufferGeometry[] = [];
+    for (const across of [-1.02, 1.02]) {
+      for (let i = 0; i < 9; i++) {
+        const z = -8 + i * 8.6;
+        const p = ellipsePoint(profile, z, across, 0.1);
+        strakeParts.push(boxAt(1.3, 0.7, 7.2, p.position.x, p.position.y, z));
+      }
     }
+    this.root.add(new THREE.Mesh(mergeParts(strakeParts), M.rebelPlate));
+
+    // A handful of larger, deliberately placed dorsal boxes read as equipment
+    // rather than noise: sensor housings, a docking ring, vent stacks.
+    const fittings = new THREE.Mesh(
+      mergeParts([
+        boxAt(5.2, 1.6, 9, 0, 10.4, 42),
+        boxAt(3.0, 2.2, 3.0, -2.6, 10.0, 26),
+        boxAt(3.0, 2.2, 3.0, 2.6, 10.0, 26),
+        boxAt(6.4, 1.2, 4.4, 0, 10.0, 2),
+        boxAt(2.2, 1.6, 12, -4.4, 8.6, 54),
+        boxAt(2.2, 1.6, 12, 4.4, 8.6, 54),
+        boxAt(4.6, 1.4, 6.2, 0, -8.8, 8),
+        boxAt(3.2, 1.2, 4.0, 0, -8.6, 38),
+      ]),
+      M.rebelTrim,
+    );
+    fittings.castShadow = true;
+    this.root.add(fittings);
 
     // ------------------------------------------------------- escape pods
     // Six pod hatches down the starboard flank; the story uses hatch #3.
@@ -441,21 +522,20 @@ export class BlockadeRunner {
     const effective = power * (1 - this.damage * 0.92) * flicker;
 
     this.plumes.forEach((p, i) => {
-      p.material.uniforms.intensity.value = effective * 0.9;
+      p.material.uniforms.intensity.value = effective * 0.8;
       p.material.uniforms.time.value = t + i * 0.13;
       p.mesh.scale.z = 0.35 + effective * 0.85;
     });
     this.glows.forEach((g, i) => {
-      const base = g.userData.baseScale ?? (g.userData.baseScale = g.scale.x);
-      const s = base * (0.35 + effective * 0.8) * (1 + 0.04 * Math.sin(t * 17 + i));
-      g.scale.setScalar(s);
-      (g.material as THREE.MeshBasicMaterial).opacity = clamp(0.18 + effective * 0.8, 0, 1);
+      const base = (g.userData.baseScale ?? (g.userData.baseScale = g.scale.x)) as number;
+      g.scale.setScalar(base * (0.86 + effective * 0.14));
+      setGlowIntensity(g, clamp(effective * (0.94 + 0.06 * Math.sin(t * 17 + i)), 0, 1.2));
     });
-    this.engineLight.intensity = effective * 3200;
+    this.engineLight.intensity = effective * 6500;
 
     const lit = 1 - this.damage * 0.55;
     const emergency = this.damage > 0.4 ? 0.55 + 0.45 * Math.sin(t * 6.2) : 1;
-    this.windowMat.color.setRGB(1 * lit * emergency, 0.85 * lit * emergency, 0.63 * lit);
+    this.windowMat.color.setRGB(1 * lit * emergency, 0.85 * lit * emergency, 0.63 * lit * emergency);
 
     this.navLights.update(t);
 

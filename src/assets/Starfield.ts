@@ -82,7 +82,9 @@ export class Starfield {
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      depthTest: false,
+      // Depth testing stays on: the planet shares this scene and stars must
+      // disappear behind its disc rather than sparkling through it.
+      depthTest: true,
       sizeAttenuation: true,
       toneMapped: false,
     });
@@ -130,7 +132,7 @@ export class Starfield {
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      depthTest: false,
+      depthTest: true,
     });
     const band = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.1, 32, 24), this.bandMat);
     band.name = 'galacticBand';

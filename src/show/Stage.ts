@@ -169,18 +169,20 @@ export class Stage {
     this.space.add(this.sun.target);
 
     // Warm bounce off the desert below — this is what reads on the undersides
-    // during the destroyer reveal. Strong enough to shape them, weak enough
-    // that a white corvette still looks white.
-    this.planetBounce = new THREE.HemisphereLight(0x36455f, 0xb99a7c, 0.8);
+    // during the destroyer reveal. Enough to shape them and no more: a
+    // saturated ground colour here turns the whole imperial hull to rust.
+    this.planetBounce = new THREE.HemisphereLight(0x3a465c, 0x7c6a58, 0.62);
     this.space.add(this.planetBounce);
-    this.planetFill = new THREE.DirectionalLight(0xffd2ae, 0.5);
+    this.planetFill = new THREE.DirectionalLight(0xf0cdb0, 0.42);
     this.planetFill.position.copy(PLANET_POSITION).normalize().multiplyScalar(3000);
     this.space.add(this.planetFill, this.planetFill.target);
-    // Cool counter-fill from deep space keeps the palette from going monochrome.
-    this.coolFill = new THREE.DirectionalLight(0x86aade, 0.6);
+    // Cool counter-fill from deep space keeps the palette from going
+    // monochrome. Kept low: with the hemisphere and the probe already lifting
+    // the shadow side, any more and the shadowed flank stops being a shadow.
+    this.coolFill = new THREE.DirectionalLight(0x86aade, 0.34);
     this.coolFill.position.set(-2600, 900, 1700);
     this.space.add(this.coolFill, this.coolFill.target);
-    this.spaceAmbient = new THREE.AmbientLight(0x9db0cc, 0.3);
+    this.spaceAmbient = new THREE.AmbientLight(0x9db0cc, 0.2);
     this.space.add(this.spaceAmbient);
 
     this.interiorAmbient = new THREE.AmbientLight(0xb9c6d8, 0.55);

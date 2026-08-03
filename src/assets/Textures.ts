@@ -211,6 +211,246 @@ export function panelTexture(opts: PanelOptions = {}): THREE.CanvasTexture {
   return tex;
 }
 
+export interface PlatingOptions {
+  seed: string;
+  /** Mid-tone of the plating in CSS notation. */
+  base: string;
+  /** Peak-to-peak albedo variation between neighbouring plates, 0..1. */
+  variation?: number;
+  /** Depth of the seams in normal-map terms, 0..1. */
+  relief?: number;
+  /** Number of large plates across the tile. */
+  majorCols?: number;
+  majorRows?: number;
+  /** Extra scattered raised boxes per tile. */
+  fittings?: number;
+  grime?: number;
+  streaks?: number;
+  size?: number;
+}
+
+export interface PlatingSet {
+  map: THREE.CanvasTexture;
+  normalMap: THREE.CanvasTexture;
+  roughnessMap: THREE.CanvasTexture;
+}
+
+const platingCache = new Map<string, PlatingSet>();
+
+/**
+ * Hull plating drawn once as a height field and once as albedo, then turned
+ * into a matching normal map.
+ *
+ * Small surface detail is far more convincing painted into a normal map than
+ * modelled: a thousand instanced boxes read as litter floating over the hull
+ * the moment the camera gets close, whereas seams and recessed plates catch
+ * the key light exactly like real panel work.
+ */
+export function platingTextures(opts: PlatingOptions): PlatingSet {
+  const key = `plating:${JSON.stringify(opts)}`;
+  const hit = platingCache.get(key);
+  if (hit) return hit;
+
+  const size = opts.size ?? 512;
+  const majorCols = opts.majorCols ?? 6;
+  const majorRows = opts.majorRows ?? 6;
+  const variation = opts.variation ?? 0.1;
+  const relief = opts.relief ?? 0.5;
+  const rng = new Rng(`plating:${opts.seed}`);
+
+  const height = makeCanvas(size);
+  const albedo = makeCanvas(size);
+  const rough = makeCanvas(size);
+
+  height.ctx.fillStyle = '#808080';
+  height.ctx.fillRect(0, 0, size, size);
+  albedo.ctx.fillStyle = opts.base;
+  albedo.ctx.fillRect(0, 0, size, size);
+  rough.ctx.fillStyle = '#9a9a9a';
+  rough.ctx.fillRect(0, 0, size, size);
+
+  /** Draw one plate into all three channels, wrapping at the tile edge. */
+  const plate = (x: number, y: number, w: number, h: number, lift: number, tone: number): void => {
+    for (const ox of [-size, 0, size]) {
+      for (const oy of [-size, 0, size]) {
+        const px = x + ox;
+        const py = y + oy;
+        if (px > size || py > size || px + w < 0 || py + h < 0) continue;
+        const level = Math.round(128 + lift * 127);
+        height.ctx.fillStyle = `rgb(${level},${level},${level})`;
+        height.ctx.fillRect(px, py, w, h);
+        // Seam groove around the plate.
+        height.ctx.strokeStyle = `rgba(0,0,0,${0.55 * relief + 0.2})`;
+        height.ctx.lineWidth = Math.max(1, size / 340);
+        height.ctx.strokeRect(px + 0.5, py + 0.5, w - 1, h - 1);
+
+        const t = Math.round(Math.abs(tone) * 255);
+        albedo.ctx.fillStyle = `rgba(${tone > 0 ? 255 : 0},${tone > 0 ? 255 : 0},${tone > 0 ? 255 : 0},${(t / 255) * variation})`;
+        albedo.ctx.fillRect(px, py, w, h);
+
+        const rv = Math.round(154 + tone * 60);
+        rough.ctx.fillStyle = `rgb(${rv},${rv},${rv})`;
+        rough.ctx.fillRect(px, py, w, h);
+      }
+    }
+  };
+
+  // Large plates on a jittered grid: the dominant read at a distance.
+  const cw = size / majorCols;
+  const rh = size / majorRows;
+  for (let gy = 0; gy < majorRows; gy++) {
+    for (let gx = 0; gx < majorCols; gx++) {
+      const wide = rng.bool(0.16) ? 2 : 1;
+      const tall = rng.bool(0.1) ? 2 : 1;
+      plate(
+        gx * cw,
+        gy * rh,
+        cw * wide,
+        rh * tall,
+        rng.range(-0.08, 0.1) * relief,
+        rng.range(-1, 1),
+      );
+    }
+  }
+
+  // Medium sub-plates: break up the grid without adding new silhouettes.
+  for (let i = 0; i < majorCols * majorRows * 2.2; i++) {
+    const w = rng.range(cw * 0.22, cw * 0.85);
+    const h = rng.range(rh * 0.18, rh * 0.6);
+    plate(
+      Math.round(rng.range(0, majorCols) * cw + rng.range(0, cw - w)),
+      Math.round(rng.range(0, majorRows) * rh + rng.range(0, rh - h)),
+      Math.round(w),
+      Math.round(h),
+      rng.range(-0.05, 0.18) * relief,
+      rng.range(-1, 1) * 0.7,
+    );
+  }
+
+  // Raised fittings: vents, housings, hatches. These sit clearly proud.
+  for (let i = 0; i < (opts.fittings ?? 18); i++) {
+    const w = rng.range(size * 0.012, size * 0.05);
+    const h = w * rng.range(0.4, 2.4);
+    plate(
+      Math.round(rng.range(0, size)),
+      Math.round(rng.range(0, size)),
+      Math.round(w),
+      Math.round(h),
+      rng.range(0.3, 0.75) * relief,
+      rng.range(-1, -0.2),
+    );
+  }
+
+  // Long service ducts running with the hull axis.
+  for (let i = 0; i < 5; i++) {
+    const x = Math.round(rng.range(0, size));
+    const w = Math.round(rng.range(size * 0.008, size * 0.02));
+    plate(x, -size, w, size * 3, rng.range(0.2, 0.5) * relief, -0.5);
+  }
+
+  // Rivet lines along the major seams.
+  height.ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  for (let i = 0; i < majorCols * majorRows * 5; i++) {
+    const x = rng.range(0, size);
+    const y = rng.range(0, size);
+    const d = Math.max(1.5, size / 300);
+    height.ctx.fillRect(x, y, d, d);
+  }
+
+  // Grime and streaking go into albedo and roughness only: dirt is not relief.
+  const grimeAmt = opts.grime ?? 0.16;
+  if (grimeAmt > 0) {
+    const n = makeCanvas(size);
+    n.ctx.fillStyle = '#808080';
+    n.ctx.fillRect(0, 0, size, size);
+    drawNoise(n.ctx, size, rng.fork('grime'), 5, 1.5, 1);
+    albedo.ctx.globalAlpha = grimeAmt;
+    albedo.ctx.globalCompositeOperation = 'overlay';
+    albedo.ctx.drawImage(n.c, 0, 0);
+    albedo.ctx.globalAlpha = 0.5;
+    rough.ctx.drawImage(n.c, 0, 0);
+    albedo.ctx.globalAlpha = 1;
+    albedo.ctx.globalCompositeOperation = 'source-over';
+  }
+  for (let i = 0; i < (opts.streaks ?? 18); i++) {
+    const x = rng.range(0, size);
+    const y = rng.range(0, size);
+    const len = rng.range(size * 0.06, size * 0.3);
+    const grad = albedo.ctx.createLinearGradient(0, y, 0, y + len);
+    const a = rng.range(0.05, 0.2);
+    grad.addColorStop(0, `rgba(46,42,38,${a})`);
+    grad.addColorStop(1, 'rgba(46,42,38,0)');
+    albedo.ctx.fillStyle = grad;
+    albedo.ctx.fillRect(x, y, rng.range(1.5, 5), len);
+  }
+
+  // Soften the height field before differentiating it. Sobel over hard
+  // one-pixel seams produces spiky normals that shimmer badly once the hull
+  // is a few hundred units away.
+  const smooth = makeCanvas(size);
+  smooth.ctx.filter = 'blur(1.1px)';
+  for (const ox of [-size, 0, size]) {
+    for (const oy of [-size, 0, size]) smooth.ctx.drawImage(height.c, ox, oy);
+  }
+  smooth.ctx.filter = 'none';
+
+  const set: PlatingSet = {
+    map: finish(albedo.c, 1, THREE.SRGBColorSpace),
+    normalMap: finish(normalFromHeight(smooth.c, size, 1.5 * relief), 1),
+    roughnessMap: finish(rough.c, 1),
+  };
+  platingCache.set(key, set);
+  return set;
+}
+
+/** Sobel a grayscale height canvas into a tangent-space normal map. */
+function normalFromHeight(src: HTMLCanvasElement, size: number, strength: number): HTMLCanvasElement {
+  const sctx = src.getContext('2d');
+  if (!sctx) throw new Error('2D canvas context unavailable');
+  const h = sctx.getImageData(0, 0, size, size).data;
+  const out = makeCanvas(size);
+  const img = out.ctx.createImageData(size, size);
+  const at = (x: number, y: number): number => {
+    const xx = (x + size) % size;
+    const yy = (y + size) % size;
+    return h[(yy * size + xx) * 4] / 255;
+  };
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx =
+        at(x - 1, y - 1) + 2 * at(x - 1, y) + at(x - 1, y + 1) -
+        (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1));
+      const dy =
+        at(x - 1, y - 1) + 2 * at(x, y - 1) + at(x + 1, y - 1) -
+        (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1));
+      // Canvas rows run downward while UV v runs upward once the texture is
+      // flipped, so the vertical gradient is negated to keep bumps convex.
+      let nx = dx * strength;
+      let ny = -dy * strength;
+      const len = Math.hypot(nx, ny, 1);
+      nx /= len;
+      ny /= len;
+      const nz = 1 / len;
+      const i = (y * size + x) * 4;
+      img.data[i] = (nx * 0.5 + 0.5) * 255;
+      img.data[i + 1] = (ny * 0.5 + 0.5) * 255;
+      img.data[i + 2] = (nz * 0.5 + 0.5) * 255;
+      img.data[i + 3] = 255;
+    }
+  }
+  out.ctx.putImageData(img, 0, 0);
+  return out.c;
+}
+
+export function clearPlatingCache(): void {
+  platingCache.forEach((set) => {
+    set.map.dispose();
+    set.normalMap.dispose();
+    set.roughnessMap.dispose();
+  });
+  platingCache.clear();
+}
+
 /** Grayscale roughness/variation map. */
 export function noiseTexture(seed: string, size = 256, octaves = 5, contrast = 1.6): THREE.CanvasTexture {
   const key = `noise:${seed}:${size}:${octaves}:${contrast}`;
@@ -416,4 +656,5 @@ export function consoleTexture(seed: string, tint: 'amber' | 'ice' | 'red' = 'ic
 export function clearTextureCache(): void {
   cache.forEach((t) => t.dispose());
   cache.clear();
+  clearPlatingCache();
 }

@@ -91,6 +91,99 @@ export function scatterOnPlane(
   return out;
 }
 
+/**
+ * Structured surface detail.
+ *
+ * Real capital-ship hulls read as city blocks: rectangles aligned to the keel,
+ * in a handful of related sizes, separated by service lanes. Purely random
+ * scatter reads as litter, so plates are laid on a jittered grid instead and
+ * every one keeps the hull's axes.
+ */
+export function blockField(
+  rng: Rng,
+  opts: {
+    /** Cells along the ship's length. */
+    rows: number;
+    /** Cells across the ship's beam. */
+    cols: number;
+    /** Maps cell centre coords in [-1,1] to a surface point, or null to skip. */
+    map: (u: number, v: number) => SurfaceSample | null;
+    /** Cell footprint in local units, (across, along); may vary with position. */
+    cell: [number, number] | ((u: number, v: number) => [number, number]);
+    heightRange: [number, number];
+    /** Chance a cell is left bare. */
+    sparsity?: number;
+  },
+): GreebleSpec[] {
+  const out: GreebleSpec[] = [];
+  const sparsity = opts.sparsity ?? 0.35;
+  for (let r = 0; r < opts.rows; r++) {
+    for (let c = 0; c < opts.cols; c++) {
+      if (rng.bool(sparsity)) continue;
+      const v = (r + 0.5) / opts.rows * 2 - 1;
+      const u = (c + 0.5) / opts.cols * 2 - 1;
+      const ju = u + rng.spread(0.3 / opts.cols);
+      const jv = v + rng.spread(0.3 / opts.rows);
+      const sample = opts.map(ju, jv);
+      if (!sample) continue;
+      const cell = typeof opts.cell === 'function' ? opts.cell(ju, jv) : opts.cell;
+      // Two plate families: wide low pans and narrower long ribs.
+      const rib = rng.bool(0.4);
+      const w = cell[0] * (rib ? rng.range(0.2, 0.42) : rng.range(0.45, 0.82));
+      const d = cell[1] * (rib ? rng.range(0.6, 0.95) : rng.range(0.3, 0.7));
+      const h = rng.range(opts.heightRange[0], opts.heightRange[1]);
+      out.push({
+        position: sample.position.clone().addScaledVector(sample.normal, h * 0.4),
+        normal: sample.normal,
+        size: new THREE.Vector3(w, h, d),
+        spin: 0,
+      });
+    }
+  }
+  return out;
+}
+
+/** A point on a curved surface together with its outward normal. */
+export interface SurfaceSample {
+  position: THREE.Vector3;
+  normal: THREE.Vector3;
+}
+
+/**
+ * Scatter plates over a curved surface.
+ *
+ * Unlike `scatterOnPlane` the normal comes back per sample, so plates on a
+ * cylinder or a lofted wedge lie flat against the hull instead of hovering
+ * over it wherever the surface curves away.
+ */
+export function scatterOnSurface(
+  rng: Rng,
+  opts: {
+    count: number;
+    map: (u: number, v: number) => SurfaceSample | null;
+    sizeRange: [number, number];
+    heightRange: [number, number];
+    elongation?: number;
+  },
+): GreebleSpec[] {
+  const out: GreebleSpec[] = [];
+  for (let i = 0; i < opts.count; i++) {
+    const sample = opts.map(rng.range(-1, 1), rng.range(-1, 1));
+    if (!sample) continue;
+    const s = rng.range(opts.sizeRange[0], opts.sizeRange[1]);
+    const elong = opts.elongation ?? 1;
+    const h = rng.range(opts.heightRange[0], opts.heightRange[1]);
+    out.push({
+      // Sink the plate half its own thickness so it grows out of the hull.
+      position: sample.position.clone().addScaledVector(sample.normal, h * 0.35),
+      normal: sample.normal,
+      size: new THREE.Vector3(s * rng.range(0.5, 1.5), h, s * rng.range(0.5, 1.5) * elong),
+      spin: rng.bool(0.75) ? 0 : rng.range(0, Math.PI),
+    });
+  }
+  return out;
+}
+
 /** Merge a list of positioned geometries into one buffer (static detail). */
 export function mergeParts(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const merged = mergeGeometries(parts, false);
@@ -118,6 +211,10 @@ export function boxAt(
 /**
  * Grid-lofted surface. `fn` returns a position for parameters (u,v) in [0,1];
  * UVs are the parameters scaled by `uvScale` so panel textures tile evenly.
+ *
+ * Pass `uvFn` when the surface widens along its length: scaling the raw
+ * parameters stretches plating badly on a wedge, whereas mapping UVs to real
+ * distance keeps every panel roughly square.
  */
 export function parametricSurface(
   nu: number,
@@ -125,11 +222,13 @@ export function parametricSurface(
   fn: (u: number, v: number, out: THREE.Vector3) => void,
   uvScale: [number, number] = [1, 1],
   flipWinding = false,
+  uvFn?: (u: number, v: number, out: THREE.Vector2) => void,
 ): THREE.BufferGeometry {
   const positions = new Float32Array((nu + 1) * (nv + 1) * 3);
   const uvs = new Float32Array((nu + 1) * (nv + 1) * 2);
   const indices: number[] = [];
   const p = new THREE.Vector3();
+  const uv = new THREE.Vector2();
   for (let i = 0; i <= nu; i++) {
     for (let j = 0; j <= nv; j++) {
       const u = i / nu;
@@ -140,8 +239,14 @@ export function parametricSurface(
       positions[k + 1] = p.y;
       positions[k + 2] = p.z;
       const t = (i * (nv + 1) + j) * 2;
-      uvs[t] = u * uvScale[0];
-      uvs[t + 1] = v * uvScale[1];
+      if (uvFn) {
+        uvFn(u, v, uv);
+        uvs[t] = uv.x;
+        uvs[t + 1] = uv.y;
+      } else {
+        uvs[t] = u * uvScale[0];
+        uvs[t + 1] = v * uvScale[1];
+      }
     }
   }
   for (let i = 0; i < nu; i++) {

@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { radialTexture } from '../assets/Textures';
 
 /**
  * Energy bolts with real travel time.
@@ -32,57 +31,46 @@ interface BoltRecord {
   radius: number;
   color: THREE.Color;
   onImpact?: (point: THREE.Vector3) => void;
-  glow: THREE.Sprite | null;
 }
-
-const UP = new THREE.Vector3(0, 1, 0);
 
 export class BoltSystem {
   readonly group = new THREE.Group();
-  private mesh: THREE.InstancedMesh;
+  private core: THREE.InstancedMesh;
+  private halo: THREE.InstancedMesh;
   private records: BoltRecord[] = [];
   private capacity: number;
   private cursor = 0;
   private matrix = new THREE.Matrix4();
   private quat = new THREE.Quaternion();
   private scale = new THREE.Vector3();
-  private glowPool: THREE.Sprite[] = [];
-  private glowCursor = 0;
+  private tint = new THREE.Color();
 
   constructor(capacity: number) {
     this.capacity = capacity;
     this.group.name = 'BoltSystem';
 
-    const geo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, false);
-    geo.rotateX(Math.PI / 2);
-    const mat = new THREE.MeshBasicMaterial({
-      vertexColors: true,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      toneMapped: false,
-      opacity: 1,
-    });
-    this.mesh = new THREE.InstancedMesh(geo, mat, capacity);
-    this.mesh.frustumCulled = false;
-    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
-    this.group.add(this.mesh);
-
-    const glowTex = radialTexture('bolt-glow', 'rgba(255,255,255,1)', 'rgba(255,255,255,0)', 2);
-    for (let i = 0; i < Math.min(capacity, 48); i++) {
-      const s = new THREE.Sprite(
-        new THREE.SpriteMaterial({
-          map: glowTex,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          transparent: true,
-          toneMapped: false,
-        }),
-      );
-      s.visible = false;
-      this.glowPool.push(s);
-      this.group.add(s);
-    }
+    // Two concentric capsules: a near-white core inside a wider, dimmer
+    // sheath of the bolt's own colour. A round sprite would read as a ball
+    // of light, which is exactly what a tracer must not look like.
+    const build = (segments: number): THREE.InstancedMesh => {
+      const geo = new THREE.CapsuleGeometry(1, 1, 2, segments);
+      geo.rotateX(Math.PI / 2);
+      const mat = new THREE.MeshBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      });
+      const mesh = new THREE.InstancedMesh(geo, mat, capacity);
+      mesh.frustumCulled = false;
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
+      this.group.add(mesh);
+      return mesh;
+    };
+    this.core = build(8);
+    this.halo = build(6);
+    this.halo.renderOrder = -1;
 
     for (let i = 0; i < capacity; i++) {
       this.records.push({
@@ -94,7 +82,6 @@ export class BoltSystem {
         length: 1,
         radius: 0.05,
         color: new THREE.Color(),
-        glow: null,
       });
     }
     this.reset();
@@ -127,61 +114,63 @@ export class BoltSystem {
     rec.radius = spec.radius;
     rec.color.copy(spec.color);
     rec.onImpact = spec.onImpact;
-
-    const glow = this.glowPool[this.glowCursor];
-    this.glowCursor = (this.glowCursor + 1) % Math.max(1, this.glowPool.length);
-    if (glow) {
-      glow.visible = true;
-      (glow.material as THREE.SpriteMaterial).color.copy(spec.color);
-      glow.scale.setScalar(spec.radius * 12);
-      rec.glow = glow;
-    }
   }
 
   update(dt: number): void {
+    const forward = _forward;
     for (let i = 0; i < this.capacity; i++) {
       const r = this.records[i];
       if (!r.alive) {
         this.matrix.makeScale(0, 0, 0);
-        this.mesh.setMatrixAt(i, this.matrix);
+        this.core.setMatrixAt(i, this.matrix);
+        this.halo.setMatrixAt(i, this.matrix);
         continue;
       }
       const step = Math.min(r.speed * dt, r.distanceLeft);
       r.position.addScaledVector(r.direction, step);
       r.distanceLeft -= step;
 
-      this.quat.setFromUnitVectors(new THREE.Vector3(0, 0, 1), r.direction);
-      this.scale.set(r.radius, r.radius, r.length);
+      this.quat.setFromUnitVectors(forward, r.direction);
+      // CapsuleGeometry's caps add `radius` at each end, so the cylinder part
+      // is scaled to leave the overall bolt the requested length.
+      this.scale.set(r.radius, r.radius, Math.max(0.001, r.length - r.radius * 2));
       this.matrix.compose(r.position, this.quat, this.scale);
-      this.mesh.setMatrixAt(i, this.matrix);
-      this.mesh.instanceColor!.setXYZ(i, r.color.r, r.color.g, r.color.b);
-      if (r.glow) r.glow.position.copy(r.position);
+      this.core.setMatrixAt(i, this.matrix);
+      this.tint.copy(r.color).lerp(WHITE, 0.72);
+      this.core.instanceColor!.setXYZ(i, this.tint.r, this.tint.g, this.tint.b);
+
+      this.scale.set(r.radius * 2.7, r.radius * 2.7, Math.max(0.001, r.length * 1.1));
+      this.matrix.compose(r.position, this.quat, this.scale);
+      this.halo.setMatrixAt(i, this.matrix);
+      this.tint.copy(r.color).multiplyScalar(0.34);
+      this.halo.instanceColor!.setXYZ(i, this.tint.r, this.tint.g, this.tint.b);
 
       if (r.distanceLeft <= 1e-4) {
         r.alive = false;
-        if (r.glow) {
-          r.glow.visible = false;
-          r.glow = null;
-        }
         r.onImpact?.(r.position.clone());
       }
     }
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.mesh.instanceColor!.needsUpdate = true;
-    UP.set(0, 1, 0);
+    for (const m of [this.core, this.halo]) {
+      m.instanceMatrix.needsUpdate = true;
+      m.instanceColor!.needsUpdate = true;
+    }
   }
 
   reset(): void {
     this.records.forEach((r) => {
       r.alive = false;
       r.onImpact = undefined;
-      if (r.glow) r.glow.visible = false;
-      r.glow = null;
     });
     this.cursor = 0;
     const m = new THREE.Matrix4().makeScale(0, 0, 0);
-    for (let i = 0; i < this.capacity; i++) this.mesh.setMatrixAt(i, m);
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.glowPool.forEach((g) => (g.visible = false));
+    for (let i = 0; i < this.capacity; i++) {
+      this.core.setMatrixAt(i, m);
+      this.halo.setMatrixAt(i, m);
+    }
+    this.core.instanceMatrix.needsUpdate = true;
+    this.halo.instanceMatrix.needsUpdate = true;
   }
 }
+
+const WHITE = new THREE.Color(1, 1, 1);
+const _forward = new THREE.Vector3(0, 0, 1);

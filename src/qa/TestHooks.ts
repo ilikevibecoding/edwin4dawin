@@ -48,10 +48,50 @@ export interface StarfallHooks {
   subjectCoverage(key: string): number;
   /** Downsampled read of the presented frame: catches black or flat output. */
   frameStats(): { mean: number; buckets: number; peak: number };
+  /**
+   * What is under this point of the frame? `x`/`y` are normalised device
+   * coordinates (-1..1, +y up). Used to answer "what is that bright blob?".
+   */
+  pick(
+    x: number,
+    y: number,
+  ): Array<{
+    name: string;
+    parent: string;
+    distance: number;
+    geometry: string;
+    material: string;
+    color: string;
+  }>;
+  /**
+   * Frame a named subject from a spherical direction and draw one frame.
+   *
+   * Bypasses the director entirely so an asset can be reviewed on its own
+   * terms — turntables, silhouette checks, close reads of a detail — without
+   * having to find a moment in the show that happens to point at it.
+   */
+  look(opts: {
+    subject: string;
+    /** Degrees around the world Y axis; 0 looks at the subject's -Z face. */
+    azimuth: number;
+    /** Degrees above the horizon. */
+    elevation: number;
+    /** Multiple of the subject's bounding radius. */
+    distance?: number;
+    fov?: number;
+    /** Extra world-space offset applied to the look-at point. */
+    offset?: [number, number, number];
+  }): { radius: number; center: [number, number, number]; distance: number } | null;
+  /** Stop the main loop so the harness owns the frame, or hand it back. */
+  freeze(v: boolean): void;
+  /** Draw one frame with whatever state the harness has just set. */
+  draw(): void;
   sanity(): Array<{ code: string; detail: string; severity: string }>;
   staticSanity(): Array<{ code: string; detail: string; severity: string }>;
   narrationStats(): { lines: number; words: number; voiced: boolean };
   consoleErrors: string[];
+  /** Live application, for ad-hoc scene-graph probing from the QA harness. */
+  app: App;
 }
 
 declare global {
@@ -106,6 +146,7 @@ export function installTestHooks(app: App): void {
 
   const hooks: StarfallHooks = {
     ready: true,
+    app,
     version: '1.0.0',
     duration: app.show.timeline.duration,
     checkpoints: CHECKPOINTS,
@@ -113,6 +154,9 @@ export function installTestHooks(app: App): void {
 
     seekAndSettle(time: number, frames = 6, preroll = 2.2): void {
       const start = Math.max(0, time - preroll);
+      // Own the frame for the duration: otherwise the next animation frame
+      // redraws before the screenshot lands and the capture is a lottery.
+      app.frozen = true;
       app.show.timeline.pause();
       app.show.timeline.seek(start);
       if (preroll > 0) {
@@ -125,6 +169,7 @@ export function installTestHooks(app: App): void {
       for (let i = 0; i < frames; i++) app.frame(1 / 120);
     },
     play(): void {
+      app.frozen = false;
       app.show.timeline.play();
     },
     pause(): void {
@@ -190,6 +235,68 @@ export function installTestHooks(app: App): void {
         buckets.add(Math.round(l * 24));
       }
       return { mean: sum / (w * h), buckets: buckets.size, peak };
+    },
+    pick(x: number, y: number) {
+      const rc = new THREE.Raycaster();
+      rc.near = 0.01;
+      rc.far = 1e9;
+      rc.setFromCamera(new THREE.Vector2(x, y), app.render.camera);
+      const root = app.stage.space.visible ? app.stage.space : app.stage.interior;
+      return rc
+        .intersectObject(root, true)
+        .slice(0, 8)
+        .map((h) => {
+          const m = h.object as THREE.Mesh;
+          const mat = Array.isArray(m.material) ? m.material[0] : m.material;
+          return {
+            name: h.object.name || h.object.type,
+            parent: h.object.parent?.name ?? '',
+            distance: Math.round(h.distance),
+            geometry: m.geometry?.type ?? '',
+            material: mat?.type ?? '',
+            color: (mat as THREE.MeshStandardMaterial)?.color?.getHexString?.() ?? '',
+          };
+        });
+    },
+    freeze(v: boolean): void {
+      app.frozen = v;
+    },
+    draw(): void {
+      app.render.render(app.show.time);
+    },
+    look(opts) {
+      const o = subject(opts.subject);
+      if (!o) return null;
+      app.frozen = true;
+      o.updateWorldMatrix(true, true);
+      const box = new THREE.Box3().setFromObject(o);
+      if (box.isEmpty()) return null;
+      const sphere = box.getBoundingSphere(new THREE.Sphere());
+      const center = sphere.center.clone();
+      if (opts.offset) center.add(new THREE.Vector3(...opts.offset));
+      const dist = sphere.radius * (opts.distance ?? 2.6);
+      const az = (opts.azimuth * Math.PI) / 180;
+      const el = (opts.elevation * Math.PI) / 180;
+      const dir = new THREE.Vector3(
+        Math.sin(az) * Math.cos(el),
+        Math.sin(el),
+        -Math.cos(az) * Math.cos(el),
+      );
+      const cam = app.render.camera;
+      cam.fov = opts.fov ?? 42;
+      cam.position.copy(center).addScaledVector(dir, dist);
+      cam.up.set(0, 1, 0);
+      cam.lookAt(center);
+      cam.near = Math.max(0.05, dist * 0.002);
+      cam.far = Math.max(24000, dist * 40);
+      cam.updateProjectionMatrix();
+      cam.updateMatrixWorld();
+      app.render.render(app.show.time);
+      return {
+        radius: sphere.radius,
+        center: [center.x, center.y, center.z],
+        distance: dist,
+      };
     },
     sanity() {
       return [

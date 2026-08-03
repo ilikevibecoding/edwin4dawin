@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { noiseTexture, panelTexture } from './Textures';
+import { noiseTexture, panelTexture, platingTextures, type PlatingSet } from './Textures';
 
 /**
  * Shared material palette.
@@ -12,8 +12,14 @@ import { noiseTexture, panelTexture } from './Textures';
 export interface MaterialLibrary {
   rebelHull: THREE.MeshStandardMaterial;
   rebelHullDark: THREE.MeshStandardMaterial;
+  /** Slightly cooler than the hull: raised plates that must not read as holes. */
+  rebelPlate: THREE.MeshStandardMaterial;
   rebelTrim: THREE.MeshStandardMaterial;
+  /** Inside of an engine bell: back faces only, so the throat reads as a hole. */
+  bellInterior: THREE.MeshStandardMaterial;
   imperialHull: THREE.MeshStandardMaterial;
+  /** Untextured imperial grey for large slabs the plating tile cannot serve. */
+  imperialPlate: THREE.MeshStandardMaterial;
   imperialHullDark: THREE.MeshStandardMaterial;
   imperialTrim: THREE.MeshStandardMaterial;
   imperialDeep: THREE.MeshStandardMaterial;
@@ -46,38 +52,49 @@ function std(params: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMa
   return new THREE.MeshStandardMaterial(params);
 }
 
+/** Apply filtering settings to every channel of a plating set. */
+function tuneSet(set: PlatingSet, anisotropy: number, repeat: [number, number] = [1, 1]): PlatingSet {
+  for (const t of [set.map, set.normalMap, set.roughnessMap]) {
+    t.anisotropy = anisotropy;
+    t.repeat.set(repeat[0], repeat[1]);
+  }
+  return set;
+}
+
 export function buildMaterials(anisotropy: number): MaterialLibrary {
   if (library) return library;
 
-  const rebelPanels = panelTexture({
-    seed: 'rebel-hull',
-    base: '#d8d6cf',
-    lineColor: 'rgba(70,72,74,0.5)',
-    cols: 10,
-    rows: 7,
-    grime: 0.24,
-    streaks: 40,
-    scorch: 3,
-    size: 512,
-  });
-  rebelPanels.anisotropy = anisotropy;
-  rebelPanels.repeat.set(3, 2);
+  // Hull tiling is driven by each surface's UV scale so a tile is roughly a
+  // hundred units across whatever the ship; the textures stay at 1:1.
+  const rebelPlating = tuneSet(
+    platingTextures({
+      seed: 'rebel-hull',
+      base: '#dedbd2',
+      variation: 0.09,
+      relief: 0.55,
+      majorCols: 5,
+      majorRows: 4,
+      fittings: 20,
+      grime: 0.22,
+      streaks: 26,
+    }),
+    anisotropy,
+  );
 
-  const imperialPanels = panelTexture({
-    seed: 'imperial-hull',
-    base: '#9aa0a6',
-    lineColor: 'rgba(46,50,56,0.62)',
-    cols: 14,
-    rows: 10,
-    grime: 0.13,
-    streaks: 12,
-    scorch: 0,
-    size: 512,
-  });
-  // Tiling is set per surface through the lofted UV scale, so the texture
-  // itself stays at 1:1 to avoid a moiré weave on the big hull planes.
-  imperialPanels.anisotropy = anisotropy;
-  imperialPanels.repeat.set(1, 1);
+  const imperialPlating = tuneSet(
+    platingTextures({
+      seed: 'imperial-hull',
+      base: '#aab0b6',
+      variation: 0.07,
+      relief: 0.7,
+      majorCols: 7,
+      majorRows: 6,
+      fittings: 26,
+      grime: 0.1,
+      streaks: 10,
+    }),
+    anisotropy,
+  );
 
   const corridorPanels = panelTexture({
     seed: 'corridor',
@@ -97,29 +114,59 @@ export function buildMaterials(anisotropy: number): MaterialLibrary {
 
   library = {
     rebelHull: std({
-      color: 0xe9e7e0,
-      map: rebelPanels,
-      roughnessMap: grime,
-      roughness: 0.72,
-      metalness: 0.22,
+      color: 0xf2efe6,
+      map: rebelPlating.map,
+      normalMap: rebelPlating.normalMap,
+      normalScale: new THREE.Vector2(0.55, 0.55),
+      roughnessMap: rebelPlating.roughnessMap,
+      roughness: 0.74,
+      metalness: 0.16,
+      envMapIntensity: 0.7,
     }),
-    rebelHullDark: std({ color: 0x8d8b84, roughness: 0.68, metalness: 0.35 }),
-    rebelTrim: std({ color: 0x4b4a48, roughness: 0.5, metalness: 0.6 }),
+    rebelHullDark: std({ color: 0x8d8b84, roughness: 0.68, metalness: 0.35, envMapIntensity: 0.7 }),
+    rebelPlate: std({ color: 0xcbc7bd, roughness: 0.74, metalness: 0.18, envMapIntensity: 0.7 }),
+    // Low metalness on purpose: a polished disc the width of the stern turns
+    // into a mirror of the sky and reads as a ball stuck to the hull.
+    rebelTrim: std({ color: 0x5b5954, roughness: 0.66, metalness: 0.28, envMapIntensity: 0.5 }),
+    bellInterior: std({
+      color: 0x26282c,
+      roughness: 0.85,
+      metalness: 0.2,
+      side: THREE.BackSide,
+      envMapIntensity: 0.25,
+    }),
 
     imperialHull: std({
-      color: 0xb6bcc3,
-      map: imperialPanels,
-      roughnessMap: grime,
-      roughness: 0.58,
-      metalness: 0.24,
+      color: 0xc2c7cc,
+      map: imperialPlating.map,
+      normalMap: imperialPlating.normalMap,
+      normalScale: new THREE.Vector2(0.5, 0.5),
+      roughnessMap: imperialPlating.roughnessMap,
+      roughness: 0.62,
+      metalness: 0.16,
+      // Imperial grey has to stay grey even with a lit desert filling half the
+      // sky, so these surfaces take a deliberately small share of the IBL.
+      envMapIntensity: 0.42,
     }),
-    imperialHullDark: std({ color: 0x878d95, roughness: 0.56, metalness: 0.3 }),
-    imperialTrim: std({ color: 0x5a6069, roughness: 0.44, metalness: 0.5 }),
-    imperialDeep: std({ color: 0x33383e, roughness: 0.78, metalness: 0.2 }),
+    imperialPlate: std({
+      color: 0xb4bac0,
+      roughness: 0.68,
+      metalness: 0.12,
+      envMapIntensity: 0.38,
+    }),
+    imperialHullDark: std({
+      color: 0x8d949c,
+      roughness: 0.6,
+      metalness: 0.22,
+      envMapIntensity: 0.4,
+    }),
+    imperialTrim: std({ color: 0x646a72, roughness: 0.46, metalness: 0.4, envMapIntensity: 0.4 }),
+    imperialDeep: std({ color: 0x33383e, roughness: 0.8, metalness: 0.18, envMapIntensity: 0.3 }),
 
     corridorWall: std({
       color: 0xf0eee8,
       map: corridorPanels,
+      roughnessMap: grime,
       roughness: 0.62,
       metalness: 0.06,
     }),

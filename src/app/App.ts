@@ -52,6 +52,12 @@ export class App {
   audio: AudioEngine | null = null;
 
   quality: QualityName = 'medium';
+  /**
+   * When set, the main loop stops simulating and drawing entirely. QA takes
+   * exclusive control of the frame this way; without it the next animation
+   * frame would immediately overwrite any camera or visibility the harness set.
+   */
+  frozen = false;
   private running = false;
   private lastFrame = 0;
   private rafHandle = 0;
@@ -171,7 +177,7 @@ export class App {
 
   private loop = (): void => {
     this.rafHandle = requestAnimationFrame(this.loop);
-    if (this.hidden || this.rebuilding) {
+    if (this.hidden || this.rebuilding || this.frozen) {
       this.lastFrame = performance.now();
       return;
     }

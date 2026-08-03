@@ -52,6 +52,8 @@ const NOISE_GLSL = /* glsl */ `
   }
 `;
 
+const _center = new THREE.Vector3();
+
 export class Tatooine {
   readonly root = new THREE.Group();
   readonly radius: number;
@@ -133,6 +135,10 @@ export class Tatooine {
           lit += vec3(0.95, 0.6, 0.34) * rim * light * 0.4;
           // Dusk band along the terminator.
           lit += vec3(0.5, 0.2, 0.08) * smoothstep(0.26, 0.0, abs(ndl)) * 0.45;
+          // Limb darkening: without it a fully lit hemisphere reads as a flat
+          // disc with a texture on it rather than as a ball.
+          float facing = max(dot(n, normalize(vViewDir)), 0.0);
+          lit *= mix(0.62, 1.04, pow(facing, 0.42));
           gl_FragColor = vec4(lit, 1.0);
         }
       `,
@@ -183,70 +189,89 @@ export class Tatooine {
     this.root.add(dust);
 
     // ------------------------------------------------------- atmosphere
+    // A fresnel on a slightly larger shell draws a hard ring: the glow stops
+    // dead at the shell's own silhouette. Instead the shell is thick and the
+    // shader works from the view ray's impact parameter, so the air thins out
+    // smoothly with altitude the way it actually does.
     const atmoVert = /* glsl */ `
-      varying vec3 vNormalW; varying vec3 vViewDir;
+      varying vec3 vWorld;
       void main() {
-        vNormalW = normalize(mat3(modelMatrix) * normal);
         vec4 world = modelMatrix * vec4(position, 1.0);
-        vViewDir = normalize(cameraPosition - world.xyz);
+        vWorld = world.xyz;
         gl_Position = projectionMatrix * viewMatrix * world;
       }
     `;
+    const atmoFrag = /* glsl */ `
+      uniform vec3 sunDirection, innerColor, outerColor, center;
+      uniform float rPlanet, rAtmo, strength, falloff, limbPower;
+      varying vec3 vWorld;
+      void main() {
+        vec3 ro = cameraPosition - center;
+        vec3 rd = normalize(vWorld - cameraPosition);
+        float tc = dot(-ro, rd);
+        vec3 closest = ro + rd * max(tc, 0.0);
+        float b = length(closest);
+
+        // Above the surface the column thins exponentially with altitude;
+        // across the disc it brightens toward the limb.
+        float altitude = clamp((b - rPlanet) / max(1.0, rAtmo - rPlanet), 0.0, 1.0);
+        float outside = exp(-altitude * falloff) * (1.0 - smoothstep(0.85, 1.0, altitude));
+        float inside = pow(clamp(b / rPlanet, 0.0, 1.0), limbPower);
+        float density = b > rPlanet ? outside : max(inside, 0.0);
+
+        vec3 limbDir = b > 1.0 ? normalize(closest) : vec3(0.0, 1.0, 0.0);
+        float ndl = smoothstep(-0.30, 0.42, dot(limbDir, normalize(sunDirection)));
+
+        vec3 col = mix(innerColor, outerColor, clamp(altitude * 1.6, 0.0, 1.0));
+        float a = density * ndl * strength;
+        gl_FragColor = vec4(col * a * 1.7, a);
+      }
+    `;
+    const atmoUniforms = (
+      inner: number,
+      outer: number,
+      rp: number,
+      ra: number,
+      strengthValue: number,
+      falloff: number,
+      limbPower: number,
+    ): Record<string, THREE.IUniform> => ({
+      sunDirection: { value: new THREE.Vector3(0.62, 0.34, 0.7).normalize() },
+      innerColor: { value: new THREE.Color(inner) },
+      outerColor: { value: new THREE.Color(outer) },
+      center: { value: new THREE.Vector3() },
+      rPlanet: { value: rp },
+      rAtmo: { value: ra },
+      strength: { value: strengthValue },
+      falloff: { value: falloff },
+      limbPower: { value: limbPower },
+    });
+
+    // Low, warm dust haze hugging the surface.
     this.hazeMat = new THREE.ShaderMaterial({
-      uniforms: {
-        sunDirection: { value: new THREE.Vector3(0.62, 0.34, 0.7).normalize() },
-        color: { value: new THREE.Color(0xffb06a) },
-        power: { value: 4.6 },
-        strength: { value: 0.5 },
-      },
+      uniforms: atmoUniforms(0xffc590, 0xf0b884, radius, radius * 1.035, 0.62, 5.2, 7.0),
       vertexShader: atmoVert,
-      fragmentShader: /* glsl */ `
-        uniform vec3 sunDirection, color; uniform float power, strength;
-        varying vec3 vNormalW; varying vec3 vViewDir;
-        void main() {
-          vec3 n = normalize(vNormalW);
-          float fres = pow(1.0 - max(dot(n, normalize(vViewDir)), 0.0), power);
-          float ndl = smoothstep(-0.35, 0.45, dot(n, normalize(sunDirection)));
-          float a = fres * ndl * strength;
-          gl_FragColor = vec4(color * a * 1.5, a);
-        }
-      `,
+      fragmentShader: atmoFrag,
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.BackSide,
     });
-    const haze = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.014, 96, 48), this.hazeMat);
+    const haze = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.04, 96, 48), this.hazeMat);
     haze.name = 'planetHaze';
     this.root.add(haze);
 
+    // The high, cool scattering shell that gives the limb its blue edge.
     this.rimMat = new THREE.ShaderMaterial({
-      uniforms: {
-        sunDirection: { value: new THREE.Vector3(0.62, 0.34, 0.7).normalize() },
-        color: { value: new THREE.Color(0x93c0f7) },
-        power: { value: 5.5 },
-        strength: { value: 0.38 },
-      },
+      uniforms: atmoUniforms(0xd8e2ec, 0x86b4e8, radius, radius * 1.09, 0.3, 3.4, 14.0),
       vertexShader: atmoVert,
-      fragmentShader: /* glsl */ `
-        uniform vec3 sunDirection, color; uniform float power, strength;
-        varying vec3 vNormalW; varying vec3 vViewDir;
-        void main() {
-          vec3 n = normalize(vNormalW);
-          float fres = pow(1.0 - max(dot(n, normalize(vViewDir)), 0.0), power);
-          // Only the daylit limb scatters; the night side stays dark so the
-          // shell never reads as a painted ring around the planet.
-          float ndl = smoothstep(-0.12, 0.42, dot(n, normalize(sunDirection)));
-          float a = fres * ndl * strength;
-          gl_FragColor = vec4(color * a * 2.0, a);
-        }
-      `,
+      fragmentShader: atmoFrag,
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.BackSide,
     });
-    const rim = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.026, 80, 40), this.rimMat);
+    const rim = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.1, 80, 40), this.rimMat);
     rim.name = 'planetRim';
     this.root.add(rim);
   }
@@ -263,5 +288,10 @@ export class Tatooine {
     this.surfaceMat.uniforms.time.value = t;
     this.dustMat.uniforms.time.value = t;
     this.surface.rotation.y = t * 0.0035;
+    // The atmosphere shaders integrate along the view ray, so they need the
+    // planet's world-space centre rather than an object-space normal.
+    this.root.getWorldPosition(_center);
+    (this.hazeMat.uniforms.center.value as THREE.Vector3).copy(_center);
+    (this.rimMat.uniforms.center.value as THREE.Vector3).copy(_center);
   }
 }
