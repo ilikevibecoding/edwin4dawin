@@ -122,19 +122,31 @@ export async function build(ctx) {
         const fig = cast.heroes[i];
         const z = ease.lerp(28, DAIS_Z + 13.5, ease.inOutCubic(walkU));
         fig.root.position.z = z;
+        if (fig.isDroid) {
+          fig._r2?.roll?.(t, { speed: walking ? 1 : 0.15 });
+          continue;
+        }
         if (walking) poseWalk(fig, t, { speed: 1.5, amp: 0.5, bob: 0.07 });
         else if (t >= heroWalkEnd) {
-          poseStand(fig, t, { rate: 0.7 });
-          // heads bow slightly as the medal goes on
-          fig.head.rotation.x = ease.lerp(0, 0.35, ease.pulse(t, 10.2, 0.8, 1.6, 1.2));
-        } else poseStand(fig, t);
+          idle(fig, t, i * 2.1);
+          // A proper bow as the medal goes over the head, then straighten up.
+          const bow = ease.pulse(t, 10.0, 1.0, 1.8, 1.4);
+          fig.head.rotation.x += bow * 0.3;
+          fig.torso.rotation.x += bow * 0.1;
+          // Hands come together in front during the presentation.
+          fig.armL.rotation.x -= bow * 0.5;
+          fig.armR.rotation.x -= bow * 0.5;
+        } else idle(fig, t, i * 2.1);
       }
 
       // --- Leia raises the medal and places it
+      idle(cast.leia, t, 4.7);
       const place = ease.pulse(t, 10.4, 2.0, 1.6, 1.8);
       cast.leia.armR.rotation.x = -0.15 - 1.45 * place;
-      cast.leia.armL.rotation.x = -0.08 - 0.45 * place;
-      poseStandTorso(cast.leia, t);
+      cast.leia.armL.rotation.x = -0.08 - 0.55 * place;
+      cast.leia.armR.rotation.z = 0.07 - place * 0.22;
+      cast.leia.torso.rotation.x += place * 0.12;
+      cast.leia.head.rotation.x += place * 0.2;
       medal.group.visible = t < 12.3;
       worn.visible = t >= 12.3;
       medal.spin(t);
@@ -426,19 +438,7 @@ async function buildCast() {
     r2.root.position.set(0, 0, 32.5);
     r2.root.rotation.y = Math.PI;
     group.add(r2.root);
-    heroes.push({
-      root: r2.root,
-      head: r2.dome ?? new THREE.Group(),
-      armL: new THREE.Group(),
-      armR: new THREE.Group(),
-      body: new THREE.Group(),
-      torso: new THREE.Group(),
-      legL: new THREE.Group(),
-      legR: new THREE.Group(),
-      seed: 5,
-      isDroid: true,
-      _r2: r2,
-    });
+    heroes.push({ root: r2.root, seed: 5, isDroid: true, _r2: r2 });
   }
 
   return { group, leia, heroes, hero: heroes[0] };
@@ -520,9 +520,27 @@ async function buildCrowd() {
   };
 }
 
-function poseStandTorso(fig, t) {
-  fig.torso.rotation.y = Math.sin(t * 0.5) * 0.03;
-  fig.head.rotation.y = Math.sin(t * 0.41 + 1) * 0.08;
+/**
+ * A readable idle. `poseStand` alone moves by a couple of hundredths of a
+ * radian, which disappears at ceremony distance and makes everyone look like a
+ * statue, so this adds a weight shift, a breath and a slow head turn.
+ */
+function idle(fig, t, seed = 0) {
+  const p = t * 0.62 + seed;
+  const breath = Math.sin(p * 1.7) * 0.5 + 0.5;
+  const shift = Math.sin(p * 0.55);
+  fig.body.rotation.z = shift * 0.035;
+  fig.body.position.y = breath * 0.035;
+  fig.torso.rotation.y = Math.sin(p * 0.47 + 0.8) * 0.08;
+  fig.torso.rotation.x = -0.02 + breath * 0.02;
+  fig.head.rotation.y = Math.sin(p * 0.33 + 1.9) * 0.16;
+  fig.head.rotation.x = Math.sin(p * 0.26) * 0.05;
+  fig.legL.rotation.x = shift * 0.05;
+  fig.legR.rotation.x = -shift * 0.05;
+  fig.armL.rotation.x = -0.06 + Math.sin(p * 0.9) * 0.05;
+  fig.armR.rotation.x = -0.05 + Math.sin(p * 0.9 + 1.4) * 0.05;
+  fig.armL.rotation.z = -0.07;
+  fig.armR.rotation.z = 0.07;
 }
 
 async function tryCharacters() {

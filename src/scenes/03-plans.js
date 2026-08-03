@@ -330,10 +330,12 @@ export async function build(ctx) {
   entrySet.visible = false;
   space.add(entrySet);
   entrySet.add(buildEntryGround());
-  const entryKey = new THREE.DirectionalLight(0xffeacc, 5.0);
+  // Kept well down: the dunes' modelling is painted into their colours, and a
+  // hot key just washes the whole field to one flat sheet of orange.
+  const entryKey = new THREE.DirectionalLight(0xffeacc, 3.0);
   entryKey.position.set(-260, 120, 180);
   entrySet.add(entryKey);
-  const entryHemi = new THREE.HemisphereLight(0xffe4c4, 0xd08a50, 3.0);
+  const entryHemi = new THREE.HemisphereLight(0xffe4c4, 0xc08048, 1.5);
   entrySet.add(entryHemi);
 
   // =========================================================================
@@ -959,13 +961,18 @@ function vnoise2(x, z, salt = 0) {
   return lo + (hi - lo) * v;
 }
 
-/** Sand from shadowed trough (0) to sunlit crest (1), as a packed hex. */
+/**
+ * Sand from shadowed trough to sunlit crest.
+ *
+ * A *discrete* ladder, not a continuous ramp: Bricks merges by material, so a
+ * ramp costs one draw call per cell and a few thousand dune cells will happily
+ * push the frame past two hundred of them on their own.
+ */
+const ENTRY_SAND = [
+  0x7c5230, 0x8b5f39, 0x9a6d43, 0xa87b4e, 0xb68a5b, 0xc39969, 0xcfa878, 0xdab789, 0xe4c59b, 0xecd2ae,
+];
 function sandTone(u) {
-  const k = ease.clamp(u, 0, 1);
-  const r = Math.round(0xb4 + (0xff - 0xb4) * k);
-  const g = Math.round(0x8e + (0xf0 - 0x8e) * k);
-  const b = Math.round(0x62 + (0xd2 - 0x62) * k);
-  return (r << 16) | (g << 8) | b;
+  return ENTRY_SAND[Math.round(ease.clamp(u, 0, 1) * (ENTRY_SAND.length - 1))];
 }
 
 /** Dune height in [0,1]: two octaves plus a ridge term for the crest lines. */
@@ -1006,29 +1013,48 @@ function buildEntryGround() {
   sky.position.y = 40;
   g.add(sky);
 
-  // Cells are long in x and shallow in z, because real dunes are transverse
+  // Cells are wider than they are deep, because real dunes are transverse
   // ridges: a square grid at this distance reads as a chequerboard, whereas
-  // long bars read as crest lines marching away from the lens.
+  // bars read as crest lines marching away from the lens. They still have to
+  // be small enough to terrace — the lens ends this shot sixty units off the
+  // sand, and a cell any bigger than this is a runway slab.
   const b = new Bricks({ studSegments: 4 });
-  const NX = 20;
-  const NZ = 46;
-  const CX = 240;
-  const CZ = 80;
-  const BASE = -150;
-  for (let ix = 0; ix < NX; ix++) {
-    for (let iz = 0; iz < NZ; iz++) {
-      const x = ix * CX - (NX * CX) / 2;
-      const z = iz * CZ - NZ * CZ + 400; // the field lies ahead of the lens
-      // Height varies fast across the ridges and slowly along them.
-      const k = duneHeight(ix * 0.34, iz * 1.05, 7);
-      const h = 10 + k * 110; // plates
-      // Every top face has the same normal, so lighting cannot tell one cell
-      // from the next. The modelling is painted in instead: pale on the way
-      // up to a crest, dark on the lee side falling away from it.
-      const kPrev = duneHeight(ix * 0.34, (iz - 1) * 1.05, 7);
-      const slope = ease.clamp((k - kPrev) * 2.6 + 0.5, 0, 1);
-      b.box(x, BASE, z, CX, CZ, h, sandTone(k * 0.45 + slope * 0.55), { studs: false });
+  // Deep enough that the tallest crest still clears the pod's flight path:
+  // it finishes about two units below this set's origin.
+  const BASE = -175;
+
+  // One cell of sand, wherever it is and however big.
+  const cell = (x, z, cx, cz) => {
+    // Keyed on world units rather than cell index, so the dune wavelength does
+    // not change when the grid is re-cut at a different resolution.
+    const k = duneHeight(x / 240, z / 90, 7);
+    // Every top face has the same normal, so lighting cannot tell one cell
+    // from the next. The modelling is painted in instead: pale on the way up
+    // to a crest, dark on the lee side falling away from it.
+    const kPrev = duneHeight(x / 240, (z - cz) / 90, 7);
+    const slope = ease.clamp((k - kPrev) * 5.0 + 0.5, 0, 1);
+    b.box(x, BASE, z, cx, cz, 8 + k * 140, sandTone(k * 0.42 + slope * 0.58), { studs: false });
+  };
+
+  // The coarse field, out to the fog. Cells are wider than they are deep,
+  // because real dunes are transverse ridges: a square grid at this distance
+  // reads as a chequerboard, whereas bars read as crest lines marching away.
+  const CX = 48;
+  const CZ = 28;
+  for (let ix = 0; ix < 50; ix++) {
+    for (let iz = 0; iz < 86; iz++) {
+      const x = ix * CX - 1200;
+      const z = iz * CZ - 2100; // the field lies ahead of the lens
+      // Leave the hole the fine patch below fills.
+      if (x >= -240 && x < 240 && z >= -336 && z < 112) continue;
+      cell(x, z, CX, CZ);
     }
+  }
+  // A finer patch over the flight path. The shot ends sixty units off the
+  // sand, and at that range a fifty-unit cell is a runway slab: the near
+  // ground only terraces if it is cut small.
+  for (let ix = 0; ix < 30; ix++) {
+    for (let iz = 0; iz < 32; iz++) cell(ix * 16 - 240, iz * 14 - 336, 16, 14);
   }
   g.add(b.build({ castShadow: false }));
   return g;

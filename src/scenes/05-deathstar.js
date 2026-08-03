@@ -189,11 +189,11 @@ export async function build(ctx) {
       else space.update(t);
 
       // The two cuts get a one-frame-ish bloom-white kick so they snap.
-      // Two or three frames each. Any longer and the flash stops reading as a
-      // cut and starts reading as fog over the first frame of the new set.
+      // Two frames each, and no hold. Any longer and the flash stops reading as
+      // a cut and starts reading as fog over the first frames of the new set.
       flash.material.opacity =
-        0.5 * ease.pulse(t, T_HANGAR - 0.04, 0.04, 0.02, 0.13) +
-        0.42 * ease.pulse(t, T_SPACE - 0.04, 0.04, 0.02, 0.13);
+        0.34 * ease.pulse(t, T_HANGAR - 0.03, 0.03, 0, 0.07) +
+        0.3 * ease.pulse(t, T_SPACE - 0.03, 0.03, 0, 0.07);
       flash.visible = flash.material.opacity > 0.002;
 
       playShots(camera, t, SHOTS);
@@ -538,7 +538,9 @@ async function buildHangar(chars) {
   // Space beyond the open door.
   const stars = new Starfield({ count: 500, radius: 620, sizeMax: 3.0, seed: 19 });
   group.add(stars.object);
-  const doorGlow = new THREE.Mesh(new THREE.PlaneGeometry(46, 24), additiveMaterial(0x1d3550, { opacity: 0.55 }));
+  // Faint: any more and this washes out the stars behind it and the opening
+  // reads as a painted blue flat rather than as a hole into space.
+  const doorGlow = new THREE.Mesh(new THREE.PlaneGeometry(46, 24), additiveMaterial(0x1d3550, { opacity: 0.16 }));
   doorGlow.position.set(0, 12, BAY_Z - 0.4);
   group.add(doorGlow);
 
@@ -719,8 +721,13 @@ function ladder(x, y, z) {
  * bob and the roll, which is plenty at this distance.
  */
 async function deckCrew(chars) {
+  // Four stride phases plus a standing pose. The runners switch template
+  // frame by frame, so their legs actually cycle instead of sliding.
   const baked = await bakedPilots(chars, [
-    (f) => poseWalk(f, 0.31, { speed: 2.4, amp: 0.95 }),
+    (f) => poseWalk(f, 0.0, { speed: 1, amp: 0.95 }),
+    (f) => poseWalk(f, 0.25, { speed: 1, amp: 0.95 }),
+    (f) => poseWalk(f, 0.5, { speed: 1, amp: 0.95 }),
+    (f) => poseWalk(f, 0.75, { speed: 1, amp: 0.95 }),
     (f) => {
       f.armL.rotation.set(0, 0, -1.9);
       f.armR.rotation.set(-0.2, 0, 0.2);
@@ -742,7 +749,7 @@ async function deckCrew(chars) {
   // would fill half the frame.
   for (let i = 0; i < 4; i++) {
     placements.push({
-      template: 1,
+      template: 4,
       position: [SHIP_X[i % 3] + (i % 2 ? 10 : -10), 0, -16 + hash11(i, 15) * 12],
       rotationY: (i % 2 ? -1 : 1) * 1.5,
       seed: hash11(i, 16) * 6.28,
@@ -763,6 +770,9 @@ async function deckCrew(chars) {
           out.y = Math.abs(Math.sin(t * 9.4 + seed * 3)) * 0.22 * (1 - u * 0.85);
           out.tilt = 0.12 * (1 - u);
           out.rotY = Math.sin(t * 4.2 + seed) * 0.08;
+          // Cycle the stride while they are still moving, then plant them.
+          const running = go > 0.02 && go < 0.96;
+          out.template = running ? Math.floor(t * 9.4 + seed * 4) % 4 : 4;
         } else {
           out.y = Math.sin(t * 1.3 + seed) * 0.03;
           out.rotY = Math.sin(t * 0.7 + seed) * 0.22;
@@ -1197,11 +1207,11 @@ class EngineGlow {
     const d = this._d;
     d.position.copy(position);
     d.quaternion.copy(quaternion);
-    const r = radius * (0.55 + f * 0.5);
+    const r = radius * (0.42 + f * 0.34);
     d.scale.set(r, r, Math.max(0.001, length * f));
     d.updateMatrix();
     this.plume.setMatrixAt(i, d.matrix);
-    d.scale.setScalar(radius * (0.2 + f * 0.5));
+    d.scale.setScalar(radius * (0.14 + f * 0.28));
     d.updateMatrix();
     this.core.setMatrixAt(i, d.matrix);
     return true;

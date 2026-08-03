@@ -74,7 +74,10 @@ const T = {
   LOCK: 35.2, // cut ahead of the port to watch them arrive
   DROP: 35.7, // they reach the port
   PULLUP: 37.9, // and the X-wing climbs out
-  SPACE: 41.0, // cut to the wide of the station
+  // The cut to the wide lands early in "…came apart into ten thousand pieces"
+  // (40.13-43.45): held any later, the line plays over an empty sky while the
+  // fighters are still climbing, and the station never gets an establishing beat.
+  SPACE: 39.9, // cut to the wide of the station
   CRACK: 42.0, // light starts racing across the hull
   HUSH: 44.2, // a beat of nothing
   BOOM: 44.6, // detonation
@@ -126,10 +129,10 @@ export async function build(ctx) {
   rigs.trench.hemi.intensity = 0.6;
   // Vacuum has no bounce: trimming the fill gives the station a real terminator
   // and lets the explosion be the only thing lighting the far side.
-  rigs.space.key.intensity = 2.5;
-  // Raking in from screen right and slightly behind the lens, so the terminator
-  // falls across the visible disc instead of leaving it flat.
-  rigs.space.key.position.set(0.72, 0.36, 0.42).multiplyScalar(600);
+  rigs.space.key.intensity = 2.2;
+  // Raking in almost side-on to the lens. Anything with much +z in it lights the
+  // disc flat-on and the station reads as a plain bright circle.
+  rigs.space.key.position.set(0.9, 0.32, 0.06).multiplyScalar(600);
   rigs.space.hemi.intensity = 0.1;
   rigs.space.fill.intensity = 0.07;
   rigs.space.rim.intensity = 0.45;
@@ -159,8 +162,11 @@ export async function build(ctx) {
         [T.DIVE, SURFACE_Y - 4],
         [T.IN, FLY_Y],
         [T.PULLUP, FLY_Y - 1.5],
-        [T.PULLUP + 2.2, WALL_H + 46],
-        [T.SPACE, WALL_H + 150],
+        // The climb only has to clear the rim before the cut: taking it any
+        // higher leaves the fighters hanging in empty sky with no station under
+        // them for the last second of the shot.
+        [T.PULLUP + 1.0, WALL_H + 14],
+        [T.SPACE, WALL_H + 72],
       ],
       t,
       ease.inOutCubic
@@ -236,9 +242,13 @@ export async function build(ctx) {
       // canyon opening up beyond, so the dive that follows has somewhere to go.
       start: 0,
       rel: true,
-      pos: [[0, [-46, SURFACE_Y + 21, -86]], [T.FOIL_A, [-38, SURFACE_Y + 15, -70]]],
-      look: [[0, [-2, SURFACE_Y - 5, 26]], [T.FOIL_A, [-2, SURFACE_Y - 6, 30]]],
-      fov: [[0, 40], [T.FOIL_A, 37]],
+      // Looking down the canyon from behind and outboard. The aim point is well
+      // to +x of the trench axis on purpose: the lens is pointing roughly along
+      // +z, so world +x falls on screen *left*, and aiming near the axis pushed
+      // all three fighters into the left edge with the lead clipping it.
+      pos: [[0, [-44, SURFACE_Y + 18, -92]], [T.FOIL_A, [-36, SURFACE_Y + 13, -74]]],
+      look: [[0, [17, SURFACE_Y - 7, 12]], [T.FOIL_A, [15, SURFACE_Y - 7, 16]]],
+      fov: [[0, 42], [T.FOIL_A, 38]],
       handheld: 0.3,
       rate: 0.7,
     },
@@ -258,8 +268,14 @@ export async function build(ctx) {
         [T.FOIL_B, [41, SURFACE_Y + 6, 11]],
         [T.DIVE, [42, SURFACE_Y + 5, -13]],
       ],
-      look: [[T.FOIL_A, [1, SURFACE_Y + 1, 1]], [T.DIVE, [0, SURFACE_Y + 0.5, 1]]],
-      fov: [[T.FOIL_A, 36], [T.FOIL_B, 34], [T.DIVE, 36]],
+      // Tips down at the end so the trench mouth comes into the bottom of frame
+      // and the cut to the dive has somewhere to have come from.
+      look: [
+        [T.FOIL_A, [1, SURFACE_Y + 1, 1]],
+        [T.FOIL_B, [0, SURFACE_Y + 0.5, 1]],
+        [T.DIVE, [-1, SURFACE_Y - 5, 4]],
+      ],
+      fov: [[T.FOIL_A, 36], [T.FOIL_B, 34], [T.DIVE, 39]],
       handheld: 0.12,
       rate: 0.9,
     },
@@ -287,12 +303,13 @@ export async function build(ctx) {
     // travel, so the squadron actually goes past something.
     { start: 9.0, rig: trench.floorRig },
     {
-      // riding the starboard wall, tower firing down ahead
+      // riding the starboard wall, tower firing down ahead. Far enough back that
+      // the lead fighter is a fighter and not a wingtip in the corner.
       start: 10.6,
       rel: true,
-      pos: [[10.6, [20, FLY_Y + 9, -30]], [T.TIES, [18.5, FLY_Y + 6, -24]]],
-      look: [[10.6, [-6, FLY_Y + 2, 66]], [T.TIES, [-8, FLY_Y + 3, 60]]],
-      fov: [[10.6, 32], [T.TIES, 30]],
+      pos: [[10.6, [21, FLY_Y + 11, -46]], [T.TIES, [19, FLY_Y + 8, -38]]],
+      look: [[10.6, [-2, FLY_Y + 1, 34]], [T.TIES, [-3, FLY_Y + 2, 30]]],
+      fov: [[10.6, 34], [T.TIES, 32]],
       shake: [[10.6, 0.24], [T.TIES, 0.3]],
     },
     // ---- 3. the pursuit ----------------------------------------------------
@@ -358,20 +375,8 @@ export async function build(ctx) {
       shake: [[T.FIRE, 0.1], [T.FIRE + 0.25, 0.4], [T.LOCK, 0.16]],
     },
     { start: T.LOCK, rig: trench.portRig },
-    {
-      // up and out, hard. Stays between the walls until it is above the rim: the
-      // trench is only 46 wide, so anything past x = 20 down here is masonry.
-      start: T.PULLUP,
-      rel: true,
-      pos: [
-        [T.PULLUP, [15, FLY_Y + 10, -48]],
-        [T.PULLUP + 1.0, [23, WALL_H + 14, -40]],
-        [T.SPACE, [70, WALL_H + 92, -24]],
-      ],
-      look: [[T.PULLUP, [0, FLY_Y + 4, 18]], [T.SPACE, [-4, WALL_H + 78, 44]]],
-      fov: [[T.PULLUP, 40], [T.SPACE, 46]],
-      shake: [[T.PULLUP, 0.3], [T.PULLUP + 1.4, 0.5], [T.SPACE, 0.2]],
-    },
+    // up and out, hard
+    { start: T.PULLUP, rig: trench.climbRig },
     // ---- 6. the station comes apart ---------------------------------------
     { start: T.SPACE, rig: space.rig, handheld: 0.9, rate: 0.24 },
   ];
@@ -389,6 +394,11 @@ export async function build(ctx) {
       space.group.visible = inSpace;
       useRig(rigs, inSpace ? 'space' : t < T.DIVE ? 'surface' : 'trench');
       scene.background.setHex(inSpace ? 0x03050a : 0x05070c);
+      // Once the blast light has burnt out, the drifting bricks are lit by the
+      // key alone. The key that gives the intact station a good terminator is
+      // far too dim for a cloud of loose plate, so it comes up afterwards —
+      // after the station has already gone.
+      rigs.space.key.intensity = 2.2 + 2.0 * ease.smooth(ease.range(t, T.BOOM + 2.5, 51));
 
       if (inSpace) space.update(t);
       else trench.update(t, camera);
@@ -407,9 +417,12 @@ export async function build(ctx) {
 
       // The film reads inst.bloom every frame, so the explosion can simply
       // turn the whole projector up.
-      const heat = ease.pulse(t, T.BOOM - 0.1, 0.2, 0.5, 4.2);
-      bloom.strength = 0.9 + 1.5 * heat;
-      bloom.threshold = 0.55 - 0.22 * heat;
+      // Held for about a third of a second and out inside one. Run any longer
+      // and the bloom itself becomes the whiteout: every brick in the cloud is
+      // light grey, so a threshold this low turns the payoff into a white card.
+      const heat = ease.pulse(t, T.BOOM - 0.1, 0.12, 0.26, 0.8);
+      bloom.strength = 0.9 + 1.0 * heat;
+      bloom.threshold = 0.55 - 0.15 * heat;
 
       playShots(camera, t, SHOTS, odo);
     },
@@ -495,8 +508,12 @@ async function buildTrench(ctx, { odo, flyY, portZ }) {
   }
 
   // Sky above the rim, so the walls have something to silhouette against and
-  // the run over the surface does not happen against pure black.
-  const sky = new Starfield({ count: 1100, radius: 2400, sizeMax: 3.6, seed: 41 });
+  // the run over the surface does not happen against pure black. The shell has
+  // to be small — the star shader sizes points as 900/distance, so at a couple
+  // of thousand units every star is under a pixel — and it has to be re-centred
+  // on the run every frame, or by the end of the scene the fighters have flown
+  // several thousand units out of it.
+  const sky = new Starfield({ count: 1300, radius: 1200, sizeMin: 2.2, sizeMax: 9, seed: 41 });
   group.add(sky.object);
 
   // --- the exhaust port, at a fixed z the torpedoes are aimed at
@@ -802,7 +819,7 @@ async function buildTrench(ctx, { odo, flyY, portZ }) {
       const e = cockpit.eye;
       camera.position.set(wp.x + e.x, wp.y + e.y, wp.z + e.z);
       camera.up.set(0, 1, 0);
-      camera.lookAt(wp.x + 0.5 * Math.sin(t * 0.4), wp.y + e.y - 4.4, wp.z + 40);
+      camera.lookAt(wp.x + 0.5 * Math.sin(t * 0.4), wp.y + e.y - 3.1, wp.z + 40);
       setFov(camera, 52);
       handheld(camera, t, 0.035, 0.7, 1);
     },
@@ -832,6 +849,34 @@ async function buildTrench(ctx, { odo, flyY, portZ }) {
     },
 
     /**
+     * Up and out of the trench. Aimed at the fighter rather than at fixed points:
+     * it climbs fast and a keyframed look-at either leads it or loses it off the
+     * edge of frame.
+     *
+     * The lens deliberately stays near rim height and falls behind instead of
+     * climbing with the fighters, so the rim and the hull plating hold the
+     * bottom of the frame while the squadron arcs up into the stars. Riding up
+     * with them just puts three ships in an empty sky.
+     */
+    climbRig(t, camera) {
+      const e = ease.range(t, T.PULLUP, T.SPACE);
+      shipPos(0, t, wp);
+      const dist = ease.lerp(46, 132, ease.inQuad(e));
+      const az = ease.lerp(0.3, 0.62, ease.inQuad(e));
+      camera.position.set(
+        wp.x + Math.sin(az) * dist,
+        ease.lerp(FLY_Y + 4, WALL_H + 20, ease.outCubic(e)),
+        odo(t) - Math.cos(az) * dist
+      );
+      camera.up.set(0, 1, 0);
+      // Aim under the fighters as they go up, which pushes them into the top
+      // third and leaves the trench mouth they just left in shot.
+      camera.lookAt(wp.x - 3, ease.lerp(wp.y, WALL_H + 6, ease.smooth(e) * 0.45), wp.z + 4);
+      setFov(camera, ease.lerp(40, 47, e));
+      handheld(camera, t, 0.5, 1.5, 8);
+    },
+
+    /**
      * Ahead of the port looking back up the trench, so the torpedoes come at
      * the lens and drop into the floor a few feet in front of it — and the
      * X-wing thunders over the top a moment later.
@@ -839,7 +884,7 @@ async function buildTrench(ctx, { odo, flyY, portZ }) {
     portRig(t, camera) {
       const u = ease.range(t, T.LOCK, T.PULLUP);
       const e = ease.inOutCubic(u);
-      camera.position.set(ease.lerp(17, 6, e), ease.lerp(16, 7.5, e), portZ + ease.lerp(50, 24, e));
+      camera.position.set(ease.lerp(17, 8, e), ease.lerp(16, 12, e), portZ + ease.lerp(50, 34, e));
       camera.up.set(0, 1, 0);
       // The aim rises to catch the fighter thundering over the port a beat after
       // the hit, then drops back into the glowing shaft.
@@ -861,6 +906,10 @@ async function buildTrench(ctx, { odo, flyY, portZ }) {
     update(t, camera) {
       const dist = odo(t);
       sky.update(t);
+      // Carried along on the odometer rather than on the camera: the camera is
+      // posed after this runs, and in the offline renderer each frame starts
+      // fresh, so reading camera.position here would not be reproducible.
+      sky.object.position.set(0, flyY(t), dist);
 
       // Re-seat the sections: one behind the fighters, the rest ahead.
       const base = Math.floor(dist / SECTION);
@@ -1056,37 +1105,52 @@ function exhaustPort() {
   const P = (w) => w / PLATE;
   const flat = { studs: false };
 
-  // A raised collar of plate around the mouth. The bright ring goes on the
-  // outside and the dark one next to the hole: the other way round the whole
-  // thing catches the key light and reads as a picture frame on the floor
-  // rather than as something you could drop a torpedo into.
-  for (const [r0, r1, c] of [
-    [9, 12, light],
-    [6.4, 9, grey],
-  ]) {
+  // The trench floor is one solid slab and nothing may modify the kit, so the
+  // shaft cannot be a hole cut downwards — it would just show the top face of
+  // the floor. Instead the port sits inside a low armoured housing that stands
+  // HOUSE proud of the deck, and the well is sunk into *that*. Everything the
+  // lens can see into is above the floor plane, so the mouth really is a hole.
+  const MOUTH = 6.4; // half-width of the opening
+  const HOUSE = 4.4; // height of the housing above the trench floor
+  const ring = (r0, r1, y, h, c) => {
     for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const w = ax !== 0 ? r1 - r0 : r1 * 2;
       const d = az !== 0 ? r1 - r0 : r1 * 2;
-      b.box(ax !== 0 ? ax * r0 - (ax > 0 ? 0 : w) : -w / 2, P(0.05), az !== 0 ? az * r0 - (az > 0 ? 0 : d) : -d / 2, w, d, P(0.9), c, flat);
+      b.box(
+        ax !== 0 ? ax * r0 - (ax > 0 ? 0 : w) : -w / 2,
+        P(y),
+        az !== 0 ? az * r0 - (az > 0 ? 0 : d) : -d / 2,
+        w,
+        d,
+        P(h),
+        c,
+        flat
+      );
     }
-  }
+  };
+
+  // An apron bolted to the deck, so the housing has a footing rather than
+  // sprouting out of flat plate. Kept narrow: the trench floor is only 46 wide,
+  // and an apron much past this reads as a plaza with a hole in it.
+  ring(13.4, 17.6, 0.05, 0.7, grey);
+  ring(11.4, 13.6, 0.05, 1.5, light);
+  // The housing: bright outside so it catches the key, dark immediately around
+  // the lip so the mouth reads as a shadow rather than as a picture frame.
+  ring(MOUTH + 1.9, 11.6, 0.05, HOUSE, light);
+  ring(MOUTH, MOUTH + 2.1, 0.05, HOUSE + 0.35, grey);
+  // Hazard chevrons along the two edges the camera looks across.
   for (let i = 0; i < 8; i++) {
-    b.box(-6.4 + i * 1.6, P(1.0), -7.6, 1.6, 1.2, P(0.3), i % 2 ? COLORS.yellow : COLORS.trueBlack, flat);
-    b.box(-6.4 + i * 1.6, P(1.0), 6.4, 1.6, 1.2, P(0.3), i % 2 ? COLORS.trueBlack : COLORS.yellow, flat);
+    b.box(-MOUTH + i * 1.6, P(HOUSE + 0.35), -MOUTH - 1.8, 1.6, 1.5, P(0.3), i % 2 ? COLORS.yellow : COLORS.trueBlack, flat);
+    b.box(-MOUTH + i * 1.6, P(HOUSE + 0.35), MOUTH + 0.3, 1.6, 1.5, P(0.3), i % 2 ? COLORS.trueBlack : COLORS.yellow, flat);
   }
-  // The mouth is an open well 2.6 deep with black sides, so from above there is
-  // a visible lip and a shadow inside it before the black shaft takes over.
-  for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    const w = ax !== 0 ? 0.6 : 13.4;
-    const d = az !== 0 ? 0.6 : 13.4;
-    b.box(ax !== 0 ? ax * 6.4 - (ax > 0 ? 0 : w) : -w / 2, P(-2.6), az !== 0 ? az * 6.4 - (az > 0 ? 0 : d) : -d / 2, w, d, P(2.6), COLORS.trueBlack, flat);
-  }
-  // The shaft below it: solid black, with faint ladder rungs so the eye has
-  // something to fall past.
-  b.box(-6.4, P(-32), -6.4, 12.8, 12.8, P(29.4), COLORS.trueBlack, flat);
-  for (let i = 1; i <= 5; i++) {
-    b.box(-6.2, P(-2.6 - i * 5), -6.2, 12.4, 0.5, P(0.5), COLORS.darkBluishGray, flat);
-    b.box(-6.2, P(-2.6 - i * 5), 5.7, 12.4, 0.5, P(0.5), COLORS.darkBluishGray, flat);
+  // The well: black sides down the full depth of the housing, a black floor
+  // just above the deck, and a couple of steps to give the eye some parallax
+  // on the way down.
+  ring(MOUTH - 0.75, MOUTH, 0.4, HOUSE - 0.4, COLORS.trueBlack);
+  b.box(-MOUTH + 0.7, P(0.15), -MOUTH + 0.7, (MOUTH - 0.7) * 2, (MOUTH - 0.7) * 2, P(0.3), COLORS.trueBlack, flat);
+  for (const y of [HOUSE - 1.3, HOUSE - 2.7]) {
+    b.box(-MOUTH + 0.75, P(y), -MOUTH + 0.75, (MOUTH - 0.75) * 2, 0.45, P(0.35), COLORS.darkBluishGray, flat);
+    b.box(-MOUTH + 0.75, P(y), MOUTH - 1.2, (MOUTH - 0.75) * 2, 0.45, P(0.35), COLORS.darkBluishGray, flat);
   }
   const mesh = b.build({ castShadow: false, receiveShadow: false });
 
@@ -1095,12 +1159,15 @@ function exhaustPort() {
   // Reactor light: an ember sitting down inside the well, small enough at rest
   // that the mouth still reads black, and a flat flare across the lip for the
   // moment of the hit.
-  const deepGlow = glowSprite(0xff3c10, 9, 0);
-  deepGlow.position.y = -1.5;
+  // Small: a sprite is a camera-facing quad, so anything much wider than the
+  // mouth pokes up out of the well and reads as a white blob lying on the deck
+  // instead of as light coming up the shaft.
+  const deepGlow = glowSprite(0xff3c10, 5, 0);
+  deepGlow.position.y = 1.1;
   group.add(deepGlow);
-  const lip = new THREE.Mesh(new THREE.PlaneGeometry(12.6, 12.6), additiveMaterial(0xff8a3a, { opacity: 0 }));
+  const lip = new THREE.Mesh(new THREE.PlaneGeometry(11.4, 11.4), additiveMaterial(0xff7a2e, { opacity: 0 }));
   lip.rotation.x = -Math.PI / 2;
-  lip.position.y = -0.25;
+  lip.position.y = 1.5;
   group.add(lip);
 
   return {
@@ -1111,9 +1178,11 @@ function exhaustPort() {
       // away, which is the only warning the audience gets before the wide shot.
       const cook = ease.smooth(ease.range(t, T.DROP + 0.5, T.PULLUP + 2.2));
       const breathe = 0.75 + 0.25 * Math.sin(t * 2.4);
-      deepGlow.material.opacity = 0.12 * breathe + 1.5 * hit + 1.1 * cook;
-      deepGlow.scale.setScalar(9 * (1 + 2.4 * hit + 1.6 * cook));
-      lip.material.opacity = 0.03 * breathe + 1.0 * hit + 0.7 * cook;
+      // Kept under 1 on purpose: an additive sprite past that just clips to
+      // white and the shaft stops looking hot and starts looking blown out.
+      deepGlow.material.opacity = Math.min(0.8, 0.18 * breathe + 0.55 * hit + 0.4 * cook);
+      deepGlow.scale.setScalar(5 * (1 + 0.7 * hit + 0.5 * cook));
+      lip.material.opacity = Math.min(0.8, 0.04 * breathe + 0.6 * hit + 0.34 * cook);
     },
   };
 }
@@ -1202,14 +1271,16 @@ async function cockpitInterior(ctx) {
     box(0.9, 0.5, 6.0, sx * 1.85, 2.55, 0, light); // sill
     box(0.34, 0.34, 5.6, sx * 2.0, 3.5, 0.1, COLORS.flatSilver); // canopy rail
     // Windscreen pillars, angling in above the panel. These are what the
-    // point-of-view set-up sees at the edges of frame.
+    // point-of-view set-up sees at the edges of frame — and, from the set-ups
+    // looking back at him, what one of them crosses. Kept near-black so it
+    // reads as canopy framing instead of a bright bar across his shoulder.
     b.push();
     b.translateWorld(sx * 2.05, 4.9, 3.15);
     b.rotateZ(sx * 0.2);
-    box(0.3, 3.0, 0.3, 0, 0, 0, grey);
+    box(0.26, 3.0, 0.26, 0, 0, 0, dark);
     b.pop();
   }
-  box(4.3, 0.28, 0.3, 0, 6.35, 3.05, grey); // windscreen header
+  box(4.3, 0.26, 0.28, 0, 6.35, 3.05, dark); // windscreen header
   // Instrument panel, canted so its face looks up at the pilot. The lens sits in
   // front of him, so it sees the panel's outside: give that side some structure
   // rather than leaving a blank grey slab in the corner of every frame.
@@ -1217,14 +1288,21 @@ async function cockpitInterior(ctx) {
   b.translateWorld(0, 2.7, 2.5);
   b.rotateX(0.6);
   box(3.9, 2.2, 0.45, 0, 0, 0, grey);
-  box(4.2, 0.34, 0.7, 0, 1.2, 0.05, light); // coaming along the top edge
+  // The coaming is the one piece of the set the point-of-view lens sees close
+  // up and edge-on, so it is near-black with a thin light lip: in light grey it
+  // filled the bottom third of that frame with a blown-out white slab.
+  box(4.2, 0.34, 0.7, 0, 1.2, 0.05, dark); // coaming along the top edge
+  box(4.24, 0.1, 0.16, 0, 1.34, -0.24, light); // lip catching the panel glow
   box(4.2, 0.24, 0.62, 0, -1.15, 0.02, dark);
   for (const sx of [-1, 1]) box(0.3, 2.0, 0.62, sx * 1.75, 0, 0.05, dark); // corner posts
   box(2.2, 0.16, 0.6, 0, 0.35, 0.06, dark); // panel line
   box(1.1, 0.5, 0.55, -0.9, -0.5, 0.08, COLORS.flatSilver); // vent
   b.pop();
   box(0.24, 2.6, 0.24, 0.7, 2.2, 0.55, dark); // control column
-  box(0.72, 0.32, 0.5, 0.7, 3.5, 0.45, COLORS.red); // grip, under his right hand
+  // Grip in dark grey rather than red: in red it read as a loose brick sitting
+  // in his lap instead of as the top of the stick.
+  box(0.6, 0.3, 0.44, 0.7, 3.48, 0.5, grey);
+  box(0.2, 0.12, 0.16, 0.7, 3.66, 0.34, COLORS.red); // fire button
   box(0.5, 0.9, 0.34, -0.95, 3.2, 0.9, COLORS.darkBluishGray); // throttle quadrant
   group.add(b.build({ castShadow: false, receiveShadow: false }));
 
@@ -1286,7 +1364,7 @@ async function cockpitInterior(ctx) {
 
   // Panel bounce, the scope's own green spill, and the cool wash that arrives
   // on the Obi-Wan line.
-  const warm = new THREE.PointLight(0xffb070, 2.2, 11, 1.6);
+  const warm = new THREE.PointLight(0xffb070, 1.7, 11, 1.6);
   warm.position.set(0, 3.1, 2.0);
   group.add(warm);
   const scopeLight = new THREE.PointLight(0x7dff9e, 0, 5, 1.8);
@@ -1516,7 +1594,7 @@ function fallbackTower() {
 async function buildSpace() {
   const group = new THREE.Group();
 
-  const stars = new Starfield({ count: 2000, radius: 2600, sizeMax: 4.0, seed: 53 });
+  const stars = new Starfield({ count: 2000, radius: 2000, sizeMin: 2.2, sizeMax: 8, seed: 53 });
   group.add(stars.object);
 
   let capital = null;
@@ -1550,7 +1628,7 @@ async function buildSpace() {
   group.add(halo);
   const fireball = new Fireball({
     t0: T.BOOM,
-    life: 2.2,
+    life: 1.9,
     radius: STATION_R * 0.5,
     color: 0xffa940,
     position: core.position.toArray(),
@@ -1747,7 +1825,9 @@ async function buildSpace() {
       hot.object.visible = t >= T.BOOM;
       if (hot.object.visible) {
         hot.update(t);
-        hot.material.emissiveIntensity = 1.5 * Math.pow(1 - ease.range(t, T.BOOM, 53.5), 1.4);
+        // Cooled off well before the end: held bright they stop reading as
+        // glowing plate and turn into a dozen hard white flares in the cloud.
+        hot.material.emissiveIntensity = 1.15 * Math.pow(1 - ease.range(t, T.BOOM, 50.5), 2.0);
       }
       const warmth = 1 - ease.range(t, T.BOOM + 0.4, 52.5);
       afterglow.visible = lit;

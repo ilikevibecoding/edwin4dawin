@@ -540,49 +540,62 @@ export class Crowd {
   constructor(baked, placements, opts = {}) {
     this.object = new THREE.Group();
     this.placements = placements;
-    this.groups = [];
+    this.templates = [];
+    // Every template is sized for the whole crowd so `out.template` can move a
+    // figure between poses on any frame -- that is what lets an instanced
+    // runner actually cycle its legs instead of sliding in a fixed stride.
+    const capacity = placements.length;
     for (let ti = 0; ti < baked.length; ti++) {
-      const members = placements.map((p, i) => ({ p, i })).filter(({ p }) => p.template === ti);
-      if (!members.length) continue;
       const meshes = baked[ti].map(({ geometry, material }) => {
-        const im = new THREE.InstancedMesh(geometry, material, members.length);
+        const im = new THREE.InstancedMesh(geometry, material, capacity);
         im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         im.castShadow = opts.castShadow ?? true;
         im.receiveShadow = opts.receiveShadow ?? true;
         im.frustumCulled = false;
+        im.count = 0;
         this.object.add(im);
         return im;
       });
-      this.groups.push({ members, meshes });
+      this.templates.push(meshes);
     }
     this._d = new THREE.Object3D();
-    this._out = { y: 0, rotY: 0, tilt: 0, scale: 1, x: 0, z: 0 };
+    this._out = { y: 0, rotY: 0, tilt: 0, scale: 1, x: 0, z: 0, template: 0, hidden: false };
+    this._counts = new Array(baked.length).fill(0);
   }
 
   /**
    * @param {number} t
-   * @param {(index:number, seed:number, out:{y,rotY,tilt,scale,x,z}) => void} fn
+   * @param {(index:number, seed:number, out:{y,rotY,tilt,scale,x,z,template,hidden}) => void} fn
    */
   update(t, fn) {
     const d = this._d;
     const out = this._out;
-    for (const g of this.groups) {
-      for (let k = 0; k < g.members.length; k++) {
-        const { p, i } = g.members[k];
-        out.y = 0;
-        out.rotY = 0;
-        out.tilt = 0;
-        out.x = 0;
-        out.z = 0;
-        out.scale = p.scale ?? 1;
-        fn?.(i, p.seed ?? 0, out);
-        d.position.set(p.position[0] + out.x, p.position[1] + out.y, p.position[2] + out.z);
-        d.rotation.set(out.tilt, (p.rotationY ?? 0) + out.rotY, 0);
-        d.scale.setScalar(out.scale);
-        d.updateMatrix();
-        for (const m of g.meshes) m.setMatrixAt(k, d.matrix);
+    this._counts.fill(0);
+    for (let i = 0; i < this.placements.length; i++) {
+      const p = this.placements[i];
+      out.y = 0;
+      out.rotY = 0;
+      out.tilt = 0;
+      out.x = 0;
+      out.z = 0;
+      out.scale = p.scale ?? 1;
+      out.template = p.template ?? 0;
+      out.hidden = false;
+      fn?.(i, p.seed ?? 0, out);
+      if (out.hidden) continue;
+      const ti = Math.max(0, Math.min(this.templates.length - 1, out.template | 0));
+      d.position.set(p.position[0] + out.x, p.position[1] + out.y, p.position[2] + out.z);
+      d.rotation.set(out.tilt, (p.rotationY ?? 0) + out.rotY, 0);
+      d.scale.setScalar(out.scale);
+      d.updateMatrix();
+      const slot = this._counts[ti]++;
+      for (const m of this.templates[ti]) m.setMatrixAt(slot, d.matrix);
+    }
+    for (let ti = 0; ti < this.templates.length; ti++) {
+      for (const m of this.templates[ti]) {
+        m.count = this._counts[ti];
+        m.instanceMatrix.needsUpdate = true;
       }
-      for (const m of g.meshes) m.instanceMatrix.needsUpdate = true;
     }
   }
 }

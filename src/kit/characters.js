@@ -311,6 +311,18 @@ function domeGeometry(r, phiLen = Math.PI * 0.5, segments = 18) {
 }
 
 /**
+ * `latheSector`, but the solid arc sits at the front instead of the back:
+ * built round the far side and turned to face +Z. Lets a piece that has to lie
+ * flush on a lathed shell — a fringe on a hair cap — reuse the shell's own
+ * surface of revolution instead of being approximated by a box.
+ */
+function frontSector(outer, thickness, { segments = 22, halfAngle = 1.0 } = {}) {
+  const g = latheSector(outer, thickness, { segments, openHalf: Math.PI - halfAngle });
+  g.rotateY(Math.PI);
+  return g;
+}
+
+/**
  * A curved rectangle lying exactly on a cone of revolution — the surface a
  * decal needs when it has to sit on a rounded helmet without floating at the
  * corners. UVs run left-to-right across the arc and bottom-to-top in y, which
@@ -503,11 +515,6 @@ async function decalOn(url, geometry) {
   return mesh;
 }
 
-/** Flat decal plate, for the mask fronts that are genuinely flat. */
-function flatDecal(w, h) {
-  return new THREE.PlaneGeometry(w, h);
-}
-
 /** How far back a bowed face plate falls at |x|, quadratically from the centre. */
 function bowAt(x, xMax, bow) {
   return bow * (x / xMax) * (x / xMax);
@@ -639,6 +646,8 @@ function stripHeadTexture(fig, color) {
  * nothing by being lit flat, and every face stays readable.
  */
 function keepFaceLit(fig) {
+  // Direct children only: the head's own cylinder, its cap and its stud. The
+  // accessory group hanging off it is big enough to shade properly.
   for (const n of fig.head.children) if (n.isMesh) n.receiveShadow = false;
 }
 
@@ -690,13 +699,17 @@ export function ghostify(root, color = KIT.hologram) {
     const map = n.material?.map ?? null;
     let m = byMap.get(map);
     if (!m) {
+      // Kept dim on purpose. Additive with depthWrite off means every surface
+      // the eye looks through adds again — a figure is a dozen layers deep at
+      // the torso — so values that look right on one quad saturate to white
+      // here and the ghost loses its silhouette entirely.
       m = new THREE.MeshStandardMaterial({
-        color: 0x1d4457,
+        color: 0x11303f,
         emissive: color,
-        emissiveIntensity: 0.75,
+        emissiveIntensity: 0.3,
         map,
         transparent: true,
-        opacity: 0.5,
+        opacity: 0.24,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         side: THREE.DoubleSide,
@@ -715,14 +728,14 @@ export function ghostify(root, color = KIT.hologram) {
 
 // ---------------------------------------------------------------------------
 // Accessories — one local builder per piece
+//
+// Everything here is head-local unless noted: the head runs from y = 0 at the
+// chin to y = 1.04 at the crown, radius 0.645. `headTexture` lands the face
+// print between y = 0.22 and y = 0.845, which puts the eyes at 0.59 and the
+// top of the brows at 0.68 — so hair, hoods and open-face helmets have to keep
+// their front edge above about y = 0.70 while still coming down over the ears
+// and the nape behind.
 // ---------------------------------------------------------------------------
-
-/**
- * The face print occupies head-local y 0.22 to 0.845, with the eyes at 0.59.
- * Hair, hoods and open-face helmets have to clear the brow at the front —
- * roughly y = 0.76 — while still coming down over the ears and nape.
- */
-const FACE_TOP = 0.78;
 
 /**
  * Leia's hair: a brown bob that clears the face print at the front and comes
@@ -971,13 +984,17 @@ function vaderHelmet({ shell = VADER_BLACK, mask = VADER_BLACK_DEEP } = {}) {
   // being a slab screwed onto the front of it — side-on, a flat plate leaves a
   // shoebox of exposed side wall standing off the curve. It is left out of the
   // widening: the mask is the one part of the helmet that is not oval.
+  // The plate is the one part of the helmet that is not matte. Black on black
+  // with the same finish everywhere, the mask has no edge at all and the whole
+  // head is a void; a softer roughness here is enough to run a faint highlight
+  // round the cheeks and separate the face from the dome behind it.
   b.addGeometry(taperShield(VADER_MASK_OUTLINE, 0.46, [1.2, 0.94], [0, -0.05], VADER_MASK_AT.bow), {
     x: 0,
     y: VADER_MASK_AT.y,
     z: VADER_MASK_AT.z,
     rot: [VADER_MASK_AT.tilt, 0, 0],
     color: mask,
-    opts: g,
+    opts: { finish: 'plastic' },
   });
   return b.build();
 }
@@ -1498,49 +1515,68 @@ function lukeHair(color = SANDY_BLOND) {
   const b = new Bricks();
   const o = { finish: 'plastic' };
 
-  // Cap, sitting on the head with its rim just above the printed brow.
+  // Crown: a rounded cap over the head, rim just above the printed brow. Run
+  // through smoothProfile because a hand-placed rim reads as a flat shelf with
+  // a hard lip, which is a bowl haircut rather than hair.
   b.addGeometry(
     latheShell(
-      [
-        [0.03, FACE_TOP + 0.02],
-        [0.7, FACE_TOP + 0.02],
-        [0.706, 0.9],
-        [0.688, 0.99],
-        [0.63, 1.07],
-        [0.52, 1.14],
-        [0.36, 1.19],
-        [0.18, 1.22],
-        [0.03, 1.23],
-      ],
-      { segments: 22, close: false }
+      shellProfile(
+        smoothProfile(
+          [
+            [0.712, 0.7],
+            [0.71, 0.94],
+            [0.66, 1.09],
+            [0.5, 1.18],
+            [0.26, 1.23],
+            [0.04, 1.245],
+          ],
+          18
+        ),
+        0.058
+      ),
+      { segments: 22 }
     ),
     { color, opts: o }
   );
   // Nape and sideburns: the hair is longer behind the ears than in front.
   // Solid, not a shell — a shell thin enough to look like hair has its inner
   // wall inside the head (r 0.645), and the head then z-fights its way out
-  // through it in a ragged line all round the jaw.
+  // through it in a ragged line all round the jaw. The two cut ends only show
+  // where the profile clears the head, so the bottom tucks back in to 0.652.
   b.addGeometry(
     latheSector(
       [
-        [0.02, 0.79],
-        [0.694, 0.79],
-        [0.698, 0.58],
-        [0.678, 0.42],
-        [0.63, 0.34],
-        [0.02, 0.34],
+        [0.02, 0.72],
+        [0.708, 0.72],
+        [0.71, 0.6],
+        [0.695, 0.45],
+        [0.652, 0.37],
+        [0.02, 0.37],
       ],
       0,
-      { segments: 20, openHalf: 1.15 }
+      { segments: 20, openHalf: 1.22 }
     ),
     { color, opts: o }
   );
-  // Side-parted fringe: a swept plate laid tangentially on the front of the
-  // cap, off-centre for the parting. Placed with `onCurve` so it follows the
-  // crown instead of stabbing through it at a corner.
-  onCurve(b, 0.14, 0.9, 0.63, -0.62, (bb) =>
-    bb.addGeometry(taperBox(0.94, 0.66, 0.3, 0.2, 0.13, 0.05), { color, opts: o })
+  // Side-parted fringe: a short arc of the cap's own surface, dropped over one
+  // brow and turned off-centre. Built this way rather than as a swept plate
+  // laid on tangentially — a plate wide enough to read throws its corners
+  // clear of the cap and Luke grows a pair of wings above his ears.
+  // Its top ring tucks inside the cap's outer radius (0.712), or the exposed
+  // annulus reads as a slot cut across the forehead.
+  const fringe = frontSector(
+    [
+      [0.02, 0.78],
+      [0.698, 0.78],
+      [0.716, 0.7],
+      [0.664, 0.652],
+      [0.02, 0.652],
+    ],
+    0,
+    { segments: 16, halfAngle: 0.66 }
   );
+  fringe.rotateY(0.34);
+  b.addGeometry(fringe, { color, opts: o });
   return b.build();
 }
 
@@ -1635,9 +1671,10 @@ export async function makeVader(opts = {}) {
     torsoPrint: 'svg/torso-vader.svg',
     scale: opts.scale ?? 1.14,
     seed: opts.seed ?? 23.7,
-    // Matte: a glossy near-black torso picks up big white speculars that read
-    // as pale grey armour instead of black.
-    finish: 'plastic',
+    // Matte, and further than plastic goes: on near-black the specular lobe is
+    // the only bright thing on the figure, so every chamfer on the boots and
+    // shoulders fires a white speck and he reads as pale grey armour.
+    finish: 'rubber',
     headStud: false,
   });
 
@@ -1971,6 +2008,17 @@ export async function makeProtocolDroid(opts = {}) {
     headStud: false,
   });
 
+  // Polished brass rather than mustard plastic. A little metalness sharpens
+  // the highlight along every edge; pushed much past this the diffuse term
+  // falls away (there is no environment map in these scenes) and he goes dark.
+  fig.root.traverse((n) => {
+    const m = n.isMesh && n.material;
+    if (m && m.metalness !== undefined && !m.map) {
+      m.metalness = 0.42;
+      m.roughness = 0.24;
+    }
+  });
+
   fig.torso.add(threepioWiring());
 
   // Photoreceptors and mouth grille, so he reads as 3PO even before the decal
@@ -2271,41 +2319,45 @@ export async function makeMouseDroid(opts = {}) {
   root.add(chassis);
 
   const b = new Bricks();
-  const G = { finish: 'glossy' };
-  // A stepped wedge, 0.78 long: tall at the back, tapering to a low nose.
-  b.addGeometry(chamferBox(0.46, 0.22, 0.46, 0.045), { x: 0, y: 0.17, z: -0.15, color: shell, opts: G });
-  b.addGeometry(chamferBox(0.44, 0.17, 0.20, 0.04), { x: 0, y: 0.145, z: 0.16, color: shell, opts: G });
-  b.addGeometry(chamferBox(0.39, 0.12, 0.16, 0.03), { x: 0, y: 0.115, z: 0.32, color: shell, opts: G });
+  // Plastic, not glossy: at this size the chamfers are a couple of pixels wide
+  // and a sharp highlight turns each one into a white speck.
+  const G = { finish: 'plastic' };
+  // A stepped wedge, 0.78 long: tall at the back, tapering to a low nose. Kept
+  // wider than it is tall, or the stepped nose reads head-on as a ziggurat
+  // rather than as something that scoots.
+  b.addGeometry(chamferBox(0.58, 0.19, 0.46, 0.045), { x: 0, y: 0.15, z: -0.15, color: shell, opts: G });
+  b.addGeometry(chamferBox(0.54, 0.15, 0.20, 0.04), { x: 0, y: 0.13, z: 0.16, color: shell, opts: G });
+  b.addGeometry(chamferBox(0.46, 0.11, 0.16, 0.03), { x: 0, y: 0.11, z: 0.32, color: shell, opts: G });
   // Top plate and sensor bar.
-  b.addGeometry(chamferBox(0.40, 0.05, 0.40, 0.02), { x: 0, y: 0.30, z: -0.15, color: trim, opts: G });
-  b.addGeometry(chamferBox(0.20, 0.07, 0.09, 0.02), { x: 0, y: 0.33, z: 0.02, color: COLORS.trueBlack, opts: G });
+  b.addGeometry(chamferBox(0.52, 0.05, 0.40, 0.02), { x: 0, y: 0.26, z: -0.15, color: trim, opts: G });
+  b.addGeometry(chamferBox(0.22, 0.07, 0.09, 0.02), { x: 0, y: 0.29, z: 0.02, color: COLORS.trueBlack, opts: G });
   for (const sx of [-1, 1]) {
     b.addGeometry(new THREE.CylinderGeometry(0.026, 0.026, 0.03, 8), {
-      x: sx * 0.10,
-      y: 0.14,
-      z: 0.40,
+      x: sx * 0.13,
+      y: 0.12,
+      z: 0.4,
       rot: [Math.PI / 2, 0, 0],
       color: KIT.laserRed,
       opts: { emissive: KIT.laserRed, emissiveIntensity: 2.4, finish: 'glow' },
     });
   }
   // Rear antenna.
-  b.addGeometry(new THREE.CylinderGeometry(0.014, 0.014, 0.28, 6), { x: 0.15, y: 0.44, z: -0.28, color: COLORS.trueBlack });
+  b.addGeometry(new THREE.CylinderGeometry(0.014, 0.014, 0.26, 6), { x: 0.19, y: 0.39, z: -0.28, color: COLORS.trueBlack });
   chassis.add(b.build());
 
   // Wheels on a shared axle group so `roll` can spin them together.
   const wheels = new THREE.Group();
-  wheels.position.set(0, 0.095, -0.06);
+  wheels.position.set(0, 0.09, -0.06);
   const w = new Bricks();
   for (const sx of [-1, 1]) {
-    w.addGeometry(new THREE.CylinderGeometry(0.09, 0.09, 0.055, 14), {
-      x: sx * 0.215,
+    w.addGeometry(new THREE.CylinderGeometry(0.085, 0.085, 0.055, 14), {
+      x: sx * 0.275,
       rot: [0, 0, Math.PI / 2],
       color: COLORS.trueBlack,
       opts: { finish: 'rubber' },
     });
-    w.addGeometry(new THREE.CylinderGeometry(0.04, 0.04, 0.065, 10), {
-      x: sx * 0.215,
+    w.addGeometry(new THREE.CylinderGeometry(0.038, 0.038, 0.065, 10), {
+      x: sx * 0.275,
       rot: [0, 0, Math.PI / 2],
       color: trim,
       opts: POLISH,
@@ -2387,13 +2439,17 @@ async function lineup() {
   return g;
 }
 
-/** A squad, to check that `variant` really does break up the lockstep. */
+/**
+ * Twenty troopers — the crowd size the corridor scenes ask for. Checks both
+ * that `variant` breaks up the lockstep and that a squad stays inside budget.
+ */
 async function squad() {
   const g = new THREE.Group();
   const troopers = [];
-  for (let i = 0; i < 8; i++) {
+  const cols = 5;
+  for (let i = 0; i < 20; i++) {
     const s = await makeStormtrooper({ variant: i });
-    s.root.position.set((i % 4) * 2.2 - 3.3, 0, Math.floor(i / 4) * 2.4 - 1.2);
+    s.root.position.set((i % cols) * 2.2 - 4.4, 0, Math.floor(i / cols) * 2.4 - 3.6);
     troopers.push(s);
     g.add(s.root);
   }
@@ -2432,25 +2488,4 @@ export const PREVIEW = {
     }),
   lineup,
   squad,
-  // TEMP-DEBUG
-  'dbg-vader-head': () => makeVader().then(headOnly),
-  'dbg-trooper-head': () => makeStormtrooper().then(headOnly),
-  'dbg-leia-head': () => makeLeia().then(headOnly),
-  'dbg-luke-head': () => makeLuke().then(headOnly),
-  'dbg-ben-head': () => makeBen().then(headOnly),
-  'dbg-pilot-head': () => makePilot().then(headOnly),
-  'dbg-rebel-head': () => makeRebelTrooper().then(headOnly),
-  'dbg-officer-head': () => makeImperialOfficer().then(headOnly),
-  'dbg-jawa-head': () => makeJawa().then(headOnly),
-  'dbg-3po-head': () => makeProtocolDroid().then(headOnly),
-  'dbg-bare-ben': () => makeBen().then((f) => headOnly(f, true)),
-  'dbg-bare-rebel': () => makeRebelTrooper().then((f) => headOnly(f, true)),
 };
-
-// TEMP-DEBUG
-function headOnly(fig, bare = false) {
-  const g = new THREE.Group();
-  if (bare) fig.accessory.clear();
-  g.add(fig.head);
-  return g;
-}
