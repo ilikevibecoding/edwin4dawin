@@ -488,8 +488,8 @@ export class StarDestroyer {
     for (const [i, [x, y, z, color]] of beaconSpots.entries()) {
       // Each strobe pulses on its own phase, so it needs its own material.
       const bulb = new THREE.Mesh(
-        new THREE.SphereGeometry(L * 0.0022, 8, 6),
-        emissive(`isdBeacon${i}`, color, 1.5),
+        new THREE.SphereGeometry(L * 0.0018, 8, 6),
+        emissive(`isdBeacon${i}`, color, 0.9),
       );
       bulb.position.set(x, y, z);
       this.root.add(bulb);
@@ -592,9 +592,9 @@ export class StarDestroyer {
       // as blinking lights rather than three permanent coloured smudges.
       const phase = (elapsed * 0.55 + i * 0.31) % 1;
       const flash = phase < 0.12 ? Math.sin((phase / 0.12) * Math.PI) : 0;
-      this.beacons[i].intensity = 0.35 + 3.4 * flash;
+      this.beacons[i].intensity = 0.35 + 2.2 * flash;
       const bulbMat = this.beaconBulbs[i].material as THREE.MeshStandardMaterial;
-      bulbMat.emissiveIntensity = 0.5 + 3 * flash;
+      bulbMat.emissiveIntensity = 0.35 + 1.35 * flash;
     }
     (this.bridgeLights.material as THREE.MeshStandardMaterial).emissiveIntensity =
       1.35 + 0.1 * pulseV;

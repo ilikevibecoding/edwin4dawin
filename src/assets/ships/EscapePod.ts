@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cyl, merge, sphere, torus } from '../geometry';
 import { darkMechanical, emissive, gunmetal, rebelHull, rebelHullDark } from '../materials';
-import { flareMap } from '../textures';
+import { softDiscMap } from '../textures';
 import { EngineBank } from './engines';
 import { makeAnchor } from './StarDestroyer';
 import { clamp01 } from '../../core/math';
@@ -154,7 +154,7 @@ export class EscapePod {
     // is literally two pixels, and the closing image has no subject.
     this.flare = new THREE.Sprite(
       new THREE.SpriteMaterial({
-        map: flareMap(),
+        map: softDiscMap(),
         color: 0xffd7a8,
         transparent: true,
         opacity: 0,
@@ -220,15 +220,18 @@ export class EscapePod {
     this.beaconLight.intensity = 2.4 * blink;
 
     // Hold the flare at a constant angular size so the pod stays a visible
-    // point of light from a hundred metres out to a couple of kilometres.
+    // point of light from a hundred metres out to a couple of kilometres. It
+    // only fades in once the hull itself is too small to read — up close the
+    // pod should look like a machine, not like a light source.
     const flareMat = this.flare.material as THREE.SpriteMaterial;
     if (camera) {
       this.root.getWorldPosition(_flareWorld);
       const dist = camera.getWorldPosition(_camWorld).distanceTo(_flareWorld);
-      const size = Math.max(this.length * 1.6, dist * 0.045);
+      const size = Math.max(this.length * 1.1, dist * 0.05);
       this.flare.scale.set(size, size, 1);
-      const heat = 0.28 + this.reentry * 0.72;
-      flareMat.opacity = heat * (0.85 + 0.15 * Math.sin(elapsed * 3.1));
+      const far = clamp01((dist - this.length * 6) / (this.length * 24));
+      const heat = 0.35 + this.reentry * 0.65;
+      flareMat.opacity = heat * far * (0.85 + 0.15 * Math.sin(elapsed * 3.1));
       flareMat.color.setRGB(1, 0.86 - this.reentry * 0.22, 0.68 - this.reentry * 0.36);
     } else {
       flareMat.opacity = 0;

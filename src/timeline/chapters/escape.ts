@@ -191,14 +191,20 @@ export function escapeChapter(): Chapter<ShowContext> {
           out.focus = out.position.distanceTo(out.target);
         }),
 
-        // 5. Launch: hold on the pod as it separates and clears the hull.
+        // 5. Launch. The corvette has to stay in frame while the pod pulls
+        //    away, or the shot is just a canister floating in space.
         customShot({ id: 'escape.launch', start: S + 30, end: S + 40, fov: 46, handheld: 0.75, blend: 0.8 }, (k, t, out) => {
           const p = podAt(t);
           const r = runnerPositionAt(t, new THREE.Vector3());
           const a = smootherstep(k);
-          out.position.set(r.x + lerp(64, 96, a), r.y + lerp(-18, -46, a), r.z + lerp(92, 132, a));
-          out.target.copy(p);
-          out.fov = lerp(44, 38, a);
+          const mid = new THREE.Vector3().lerpVectors(r, p, lerp(0.34, 0.55, a));
+          out.position.set(
+            mid.x + lerp(86, 128, a),
+            mid.y + lerp(2, -22, a),
+            mid.z + lerp(104, 168, a),
+          );
+          out.target.copy(mid);
+          out.fov = lerp(44, 40, a);
           out.focus = out.position.distanceTo(out.target);
         }),
 

@@ -2,40 +2,77 @@ import * as THREE from 'three';
 import { buildTatooineTextures } from './planetTexture';
 
 const atmosphereVert = /* glsl */ `
-  varying vec3 vWorldNormal;
   varying vec3 vWorldPos;
+  varying vec3 vCenter;
   void main() {
-    vWorldNormal = normalize(mat3(modelMatrix) * normal);
     vec4 wp = modelMatrix * vec4(position, 1.0);
     vWorldPos = wp.xyz;
+    vCenter = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
     gl_Position = projectionMatrix * viewMatrix * wp;
   }
 `;
 
+/**
+ * Atmospheric shell shaded by actual optical depth rather than a Fresnel rim.
+ *
+ * A `pow(1 - N·V)` rim peaks exactly at the shell's own silhouette, which draws
+ * a hard-edged ring of blown-out colour around the planet. Integrating the
+ * chord each view ray cuts through the shell instead puts the maximum just
+ * outside the surface and falls to nothing at the top of the atmosphere, which
+ * is what a limb actually looks like.
+ */
 const atmosphereFrag = /* glsl */ `
   uniform vec3 uColor;
   uniform vec3 uSunDir;
   uniform float uIntensity;
-  uniform float uPower;
+  uniform float uInner;
+  uniform float uOuter;
   uniform float uNightFill;
-  varying vec3 vWorldNormal;
   varying vec3 vWorldPos;
+  varying vec3 vCenter;
+
+  /** Entry/exit parameters of a ray against a sphere; x > y means no hit. */
+  vec2 sphereSpan(vec3 ro, vec3 rd, vec3 c, float r) {
+    vec3 oc = ro - c;
+    float b = dot(oc, rd);
+    float h = b * b - (dot(oc, oc) - r * r);
+    if (h < 0.0) return vec2(1.0, -1.0);
+    h = sqrt(h);
+    return vec2(-b - h, -b + h);
+  }
 
   void main() {
-    vec3 N = normalize(vWorldNormal);
-    vec3 V = normalize(cameraPosition - vWorldPos);
-    float facing = clamp(dot(N, V), 0.0, 1.0);
-    float rim = pow(1.0 - facing, uPower);
+    vec3 ro = cameraPosition;
+    vec3 rd = normalize(vWorldPos - ro);
 
-    // Forward scattering: the limb glows hardest where the sun grazes it.
-    float sun = dot(N, normalize(uSunDir));
-    float lit = smoothstep(-0.45, 0.35, sun);
-    float halo = pow(clamp(dot(normalize(-V), normalize(uSunDir)) * 0.5 + 0.5, 0.0, 1.0), 3.0);
+    vec2 outer = sphereSpan(ro, rd, vCenter, uOuter);
+    if (outer.y < outer.x) discard;
+    float t0 = max(outer.x, 0.0);
+    float t1 = outer.y;
 
-    float a = rim * (uNightFill + lit * (1.0 - uNightFill)) * uIntensity;
-    a += rim * halo * 0.55 * uIntensity;
-    vec3 col = mix(uColor, vec3(1.0, 0.93, 0.82), halo * 0.5);
-    gl_FragColor = vec4(col * a, clamp(a, 0.0, 1.0));
+    // Rays that reach the ground stop there; nothing behind the planet counts.
+    vec2 inner = sphereSpan(ro, rd, vCenter, uInner);
+    if (inner.y >= inner.x && inner.x > t0) t1 = min(t1, inner.x);
+
+    float path = max(t1 - t0, 0.0);
+    float grazing = 2.0 * sqrt(max(uOuter * uOuter - uInner * uInner, 1.0));
+    float depth = path / grazing;
+
+    // Beer-Lambert style saturation: the limb gets bright without clipping.
+    float a = 1.0 - exp(-depth * uIntensity * 4.2);
+
+    // Only the daylit hemisphere scatters. Sample the midpoint of the chord.
+    vec3 midPoint = ro + rd * mix(t0, t1, 0.5);
+    float lit = smoothstep(-0.32, 0.28, dot(normalize(midPoint - vCenter), normalize(uSunDir)));
+    a *= uNightFill + lit * (1.0 - uNightFill);
+
+    // Forward scattering when looking back toward the sun through the limb.
+    float halo = pow(clamp(dot(rd, normalize(uSunDir)) * 0.5 + 0.5, 0.0, 1.0), 4.0);
+    a *= 1.0 + halo * 0.7;
+
+    if (a < 0.002) discard;
+    vec3 col = mix(uColor, vec3(1.0, 0.95, 0.86), halo * 0.55);
+    gl_FragColor = vec4(col * a, a);
   }
 `;
 
@@ -97,13 +134,15 @@ export class Tatooine {
     this.clouds.name = 'Tatooine_Dust';
     this.root.add(this.clouds);
 
+    const OUTER = R * 1.035;
     const atmoMat = new THREE.ShaderMaterial({
       uniforms: {
-        uColor: { value: new THREE.Color(0xffb877) },
+        uColor: { value: new THREE.Color(0xffbe86) },
         uSunDir: { value: this.sunDir.clone() },
-        uIntensity: { value: 1.05 },
-        uPower: { value: 3.9 },
-        uNightFill: { value: 0.06 },
+        uIntensity: { value: 0.55 },
+        uInner: { value: R },
+        uOuter: { value: OUTER },
+        uNightFill: { value: 0.05 },
       },
       vertexShader: atmosphereVert,
       fragmentShader: atmosphereFrag,
@@ -113,17 +152,19 @@ export class Tatooine {
       depthWrite: false,
       toneMapped: false,
     });
-    this.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(R * 1.022, 64, 32), atmoMat);
+    // The back-faced shell paints the ring outside the disc; it is depth-tested
+    // away everywhere the planet itself is in front of it.
+    this.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(OUTER, 96, 48), atmoMat);
     this.atmosphere.name = 'Tatooine_Atmosphere';
     this.atmosphere.renderOrder = 2;
     this.root.add(this.atmosphere);
 
-    // A faint front-facing haze softens the disc near the edge.
+    // A front-faced shell just above the ground carries the same integral over
+    // the disc itself, so the haze thickens smoothly toward the edge.
     const hazeMat = atmoMat.clone();
     hazeMat.side = THREE.FrontSide;
-    hazeMat.uniforms.uIntensity.value = 0.14;
-    hazeMat.uniforms.uPower.value = 3.2;
-    this.innerHaze = new THREE.Mesh(new THREE.SphereGeometry(R * 1.006, 64, 32), hazeMat);
+    hazeMat.uniforms.uIntensity.value = 0.2;
+    this.innerHaze = new THREE.Mesh(new THREE.SphereGeometry(R * 1.0015, 96, 48), hazeMat);
     this.innerHaze.name = 'Tatooine_Haze';
     this.innerHaze.renderOrder = 1;
     this.root.add(this.innerHaze);
