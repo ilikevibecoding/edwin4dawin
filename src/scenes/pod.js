@@ -597,10 +597,10 @@ export async function build(ctx) {
   // the model's floods are set for a wide establishing shot; from inside the bay
   // at 13 units they burn the white hull out to a flat silhouette
   for (const l of bay.userData.lamps) l.intensity = 13;
-  // setClamps() is geared for a slimmer pod — at its "clamped" end the pads sit
-  // 2.2 out, well inside a 2.5-radius hull. Drive the four arms directly
-  // instead, and let them fall away rather than only sliding outboard.
-  const clampSide = bay.userData.clamps.map((a) => Math.sign(a.position.x) || 1);
+  // setClamps(1) lands the four pads on the keel line with each arm sitting on
+  // its own cradle post, and setClamps(0) slides them outboard and tips them
+  // away. Both ends are already right for this hull, so drive it and leave the
+  // arms alone.
   // podBay leaves its -Z end open around the launch tube; without this the
   // shot looks past the tube ring into empty space.
   const tubeR = bay.userData.tubeRadius;
@@ -909,8 +909,10 @@ export async function build(ctx) {
           _aim.copy(HAND_IN);
           _aim.y += (1 - reach) * 1.4;
           _aim.z += (1 - reach) * 0.8;
-          _aim.addScaledVector(R2_FRONT, -push * 0.12 + rest * 0.85);
-          _aim.y += rest * 0.5;
+          _aim.addScaledVector(R2_FRONT, -push * 0.12 + rest * 0.7);
+          // and comes back down to her side, not up to her chin: lifted, the
+          // shadowed forearm across her gown reads as something still in her hand
+          _aim.y -= rest * 0.34;
           reachTo(leia, 'R', _aim);
           card.visible = t < CARD_IN;
 
@@ -1040,25 +1042,19 @@ export async function build(ctx) {
         shadowAt(leiaShadow, leia, 3.2, GRATE, t < S1 + 2 ? 0.85 : 0);
 
         /* --- the launch --------------------------------------------- */
-        const thrown = smoothstep(CLAMPS, CLAMPS + 0.3, t);
-        bay.userData.clamps.forEach((arm, i) => {
-          const sx = clampSide[i];
-          arm.position.x = sx * (6.2 + thrown * 1.1);
-          // the model swings the pads up; dropping them instead keeps the near
-          // arm out of the lens and reads better as a release anyway
-          arm.rotation.z = sx * thrown * 0.85;
-        });
+        // clamps let go in two steps: a hard snap outboard off the keel, then the
+        // bars tip away over the remaining beat
+        const thrown = smoothstep(CLAMPS, CLAMPS + 0.22, t);
+        bay.userData.setClamps(1 - thrown);
         const iris = smoothstep(IRIS, IRIS + 0.7, t);
         voidDisc.material.opacity = iris;
         tubeGlow.intensity = iris * 20;
         const gone = podRun(t - BANG);
-        // a shudder in the cradle once the clamps are off, then it goes. The
-        // cradle parks the hull 0.76 above the tube's axis, so it also settles
-        // down onto the bore line over the first few units of travel.
+        // a shudder in the cradle once the clamps are off, then it goes
         const settle = smoothstep(CLAMPS, CLAMPS + 0.5, t) * (1 - smoothstep(BANG - 0.1, BANG, t));
         podIn.position.set(
           noise(t * 13, 8) * 0.05 * settle,
-          POD_Y - 0.76 * smoothstep(0, 7, gone) - 0.07 * settle,
+          POD_Y - 0.07 * settle,
           POD_Z - gone
         );
         podIn.rotation.set(0, 0, gone * 0.004 + noise(t * 11, 9) * 0.01 * settle);
