@@ -72,10 +72,27 @@ interface Card {
   out: number;
 }
 
+/**
+ * Scale a camera-locked card so it occupies `fraction` of the frame width at
+ * `distance`, whatever the aspect ratio or field of view. Typography that
+ * runs off the edge at 21:9 is the usual failure here.
+ */
+function fitScale(camera: THREE.Camera, distance: number, planeWidth: number, fraction: number): number {
+  const cam = camera as THREE.PerspectiveCamera;
+  if (!cam.isPerspectiveCamera) return 1;
+  const halfH = Math.tan((cam.fov * Math.PI) / 360) * distance;
+  const halfW = halfH * cam.aspect;
+  return Math.min(1.35, (2 * halfW * fraction) / planeWidth);
+}
+
+/** Distance in front of the lens at which a prologue card first appears. */
+const CARD_NEAR = 3.4;
+
 export class Prologue {
   readonly group = new THREE.Group();
   private cards: Card[] = [];
   private textures: THREE.CanvasTexture[] = [];
+  private planeWidth: number;
 
   /**
    * @param lines the prologue text, one card per entry
@@ -84,6 +101,7 @@ export class Prologue {
   constructor(lines: string[], schedule: Array<[number, number]>, dpi = 1) {
     this.group.name = 'Prologue';
     this.group.renderOrder = 10;
+    this.planeWidth = 3.1 * (CARD_WIDTH / CARD_HEIGHT);
 
     for (let i = 0; i < lines.length; i++) {
       const tex = renderCard(lines[i], dpi);
@@ -131,10 +149,11 @@ export class Prologue {
       card.mesh.visible = true;
       // Travel from close and low, receding upward and away.
       const travel = clamp(local / (span + 1.6));
-      const z = -3.4 - travel * 12.5;
-      const y = -0.75 + travel * 3.4;
+      const z = -CARD_NEAR - travel * 12.5;
+      const y = -0.62 + travel * 3.2;
       card.mesh.position.set(0, y, z);
       card.mesh.rotation.set(-0.42, 0, 0);
+      card.mesh.scale.setScalar(fitScale(camera, CARD_NEAR, this.planeWidth, 0.8));
       const fadeIn = smootherstep(0, 1.1, local);
       const fadeOut = 1 - smootherstep(span * 0.72, span + 1.5, local);
       card.material.opacity = fadeIn * fadeOut * 0.96;
@@ -156,12 +175,15 @@ export class Prologue {
   }
 }
 
+const CARD_DISTANCE = 4.2;
+
 /** A single closing card, centred and static. Used for the epilogue. */
 export class EpilogueCard {
   readonly group = new THREE.Group();
   private material: THREE.MeshBasicMaterial;
   private texture: THREE.CanvasTexture;
   private mesh: THREE.Mesh;
+  private planeWidth: number;
 
   constructor(text: string, dpi = 1) {
     this.group.name = 'EpilogueCard';
@@ -176,9 +198,10 @@ export class EpilogueCard {
     });
     const aspect = CARD_WIDTH / CARD_HEIGHT;
     const height = 2.1;
-    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(height * aspect, height), this.material);
+    this.planeWidth = height * aspect;
+    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(this.planeWidth, height), this.material);
     this.mesh.renderOrder = 20;
-    this.mesh.position.z = -4.2;
+    this.mesh.position.z = -CARD_DISTANCE;
     this.group.add(this.mesh);
     this.group.visible = false;
   }
@@ -189,6 +212,7 @@ export class EpilogueCard {
     if (!this.group.visible) return;
     this.group.position.copy(camera.position);
     this.group.quaternion.copy(camera.quaternion);
+    this.mesh.scale.setScalar(fitScale(camera, CARD_DISTANCE, this.planeWidth, 0.72));
   }
 
   dispose(): void {

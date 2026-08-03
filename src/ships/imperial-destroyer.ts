@@ -89,43 +89,47 @@ export class ImperialDestroyer {
   constructor(quality: QualitySettings, seed = 'destroyer') {
     this.group.name = 'ImperialDestroyer';
 
+    // Armour plate is painted, not bare metal. High metalness looked correct in
+    // isolation but turned the whole ship into a mirror for an almost-black
+    // sky, which is why the underside kept reading as a hole rather than grey.
     const hull = hullMaterial('isd', {
       color: PALETTE.imperialHull,
       grimeTint: 'cool',
-      grime: 0.24,
+      grime: 0.2,
       cell: 64,
-      roughness: 0.68,
-      metalness: 0.46,
+      roughness: 0.6,
+      metalness: 0.16,
       seed: `${seed}-hull`,
       repeat: 9,
-      normalScale: 0.35,
+      normalScale: 0.28,
     });
     const hullDark = hullMaterial('isdDark', {
-      color: '#6b7178',
+      color: '#7b828a',
       grimeTint: 'cool',
-      grime: 0.3,
-      cell: 52,
-      roughness: 0.72,
-      metalness: 0.5,
+      grime: 0.22,
+      cell: 40,
+      roughness: 0.64,
+      metalness: 0.14,
       seed: `${seed}-dark`,
-      repeat: 6,
+      repeat: 12,
+      normalScale: 0.22,
     });
     const towerMat = hullMaterial('isdTower', {
-      color: '#9ba1a8',
+      color: '#a3a9b0',
       grimeTint: 'cool',
-      grime: 0.18,
+      grime: 0.15,
       cell: 34,
       windows: 30,
-      roughness: 0.62,
-      metalness: 0.44,
+      roughness: 0.58,
+      metalness: 0.14,
       seed: `${seed}-tower`,
       repeat: 2,
     });
-    const trimMetal = metalMaterial('isdTrim', PALETTE.imperialTrim, 0.5, 0.82);
-    // A lighter grey for ventral detail: without a value break from the keel
-    // itself, the underside reads as one featureless plate.
-    const bellyDetail = metalMaterial('isdBelly', '#787e85', 0.66, 0.55);
-    const deepShadow = metalMaterial('isdDeep', '#23272c', 0.86, 0.35);
+    const trimMetal = metalMaterial('isdTrim', '#575d64', 0.48, 0.7);
+    // Ventral detail sits one value step above the keel — enough to read as
+    // structure, not so much that the ribs look like strip lighting.
+    const bellyDetail = metalMaterial('isdBelly', '#8b9199', 0.62, 0.18);
+    const deepShadow = metalMaterial('isdDeep', '#3a3f45', 0.8, 0.2);
     this.windowMat = emissiveMaterial('isdWin', '#b9d6ff', 0.9).clone();
     this.engineMat = emissiveMaterial('isdEngine', '#d5ebff', 2.4).clone();
 
@@ -294,24 +298,46 @@ export class ImperialDestroyer {
     }
 
     /* ------------------------------------------------------------- ventral */
+    // Hangar throat: a recessed bay with a lit ceiling and a landing deck, set
+    // behind a heavy frame. A single emissive block reads as a lens flare stuck
+    // to the hull; a real cavity reads as a door into a ship.
     const hangarZ = 250;
-    const hangarY = -keelDepth + 6;
-    const hangarInterior = new THREE.Mesh(
-      new THREE.BoxGeometry(180, 66, 150),
-      emissiveMaterial('hangarGlow', '#ffb04a', 0.6),
+    const hangarY = -keelDepth + 4;
+    const bayW = 190;
+    const bayD = 168;
+    const bayH = 74;
+    const bay = new THREE.Group();
+    bay.position.set(0, hangarY, hangarZ);
+    this.group.add(bay);
+
+    const bayShell = new THREE.Mesh(new THREE.BoxGeometry(bayW, bayH, bayD), deepShadow);
+    bayShell.material = new THREE.MeshStandardMaterial({ color: 0x2c3138, roughness: 0.9, metalness: 0.1, side: THREE.BackSide });
+    bayShell.position.y = bayH / 2;
+    bay.add(bayShell);
+    // Lit deck plating and roof strips: the light comes from inside the bay.
+    const bayDeck = new THREE.Mesh(
+      new THREE.PlaneGeometry(bayW - 12, bayD - 12),
+      emissiveMaterial('hangarDeck', '#ffb04a', 0.34),
     );
-    hangarInterior.position.set(0, hangarY + 26, hangarZ);
-    this.group.add(hangarInterior);
-    const hangarFrame = new THREE.Mesh(new THREE.BoxGeometry(206, 14, 176), deepShadow);
-    hangarFrame.position.set(0, hangarY - 3, hangarZ);
-    this.group.add(hangarFrame);
-    for (const s of [-1, 1]) {
-      const lip = new THREE.Mesh(roundedBox(26, 26, 190, 4), hullDark);
-      lip.position.set(s * 108, hangarY, hangarZ);
-      this.group.add(lip);
+    bayDeck.rotation.x = -Math.PI / 2;
+    bayDeck.position.y = bayH - 4;
+    bay.add(bayDeck);
+    for (const z of [-52, 0, 52]) {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(bayW - 40, 4, 9), emissiveMaterial('hangarStrip', '#ffd9a0', 1.4));
+      strip.position.set(0, bayH - 12, z);
+      bay.add(strip);
     }
-    this.hangarLight = new THREE.PointLight(0xffb04a, 30000, 1100, 2);
-    this.hangarLight.position.set(0, hangarY - 20, hangarZ);
+    // Mouth: a heavy rectangular frame flush with the keel.
+    for (const s of [-1, 1]) {
+      const lip = new THREE.Mesh(roundedBox(24, 20, bayD + 34, 4), hullDark);
+      lip.position.set(s * (bayW / 2 + 10), 0, 0);
+      bay.add(lip);
+      const end = new THREE.Mesh(roundedBox(bayW + 60, 20, 24, 4), hullDark);
+      end.position.set(0, 0, s * (bayD / 2 + 10));
+      bay.add(end);
+    }
+    this.hangarLight = new THREE.PointLight(0xffb04a, 9000, 520, 2);
+    this.hangarLight.position.set(0, hangarY - 26, hangarZ);
     this.group.add(this.hangarLight);
 
     // Longitudinal keel ribs and grooves. Long straight lines give a hull this
@@ -493,18 +519,9 @@ export class ImperialDestroyer {
       lamps.name = 'RunningLights';
       this.group.add(lamps);
 
-      // Broad, dim floodlights washing the keel so the belly is never a void.
-      const floodMat = additiveMaterial('isdFlood', '#8fb4e8', 0.09, flareTex).clone();
-      for (const z of [-380, -80, 220, 520]) {
-        const hw = hullHalfWidth((z - 66) / 0.9) * 0.6;
-        const flood = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(120, hw * 1.9), 300), floodMat);
-        flood.rotation.x = Math.PI / 2;
-        flood.position.set(0, -keelDepth + 4, z);
-        this.group.add(flood);
-      }
       // Ventral spotlights that actually light the greebling.
       for (const z of [-420, -160, 120, 400, 620]) {
-        const l = new THREE.PointLight(0xb4cdf0, 14000, 900, 2);
+        const l = new THREE.PointLight(0xc2d6f2, 9000, 760, 2);
         l.position.set(0, -keelDepth - 40, z);
         this.group.add(l);
       }

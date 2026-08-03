@@ -191,15 +191,20 @@ const atmosphereFrag = /* glsl */ `
 
   void main() {
     vec3 N = normalize(vNormalW);
-    float fres = pow(1.0 - clamp(dot(N, vViewDir), 0.0, 1.0), 5.0);
-    float sun = clamp(dot(N, normalize(uSunA)) + 0.32, 0.0, 1.0);
+    vec3 V = normalize(vViewDir);
+    // Front-facing shell, so the fresnel term peaks exactly on the silhouette —
+    // which is where an atmosphere is optically thickest. Drawn back-side it
+    // saturates across the whole annulus instead, and the limb becomes a hard
+    // flat ring rather than a glow.
+    float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.2);
+    float sun = clamp(dot(N, normalize(uSunA)) * 1.2 + 0.26, 0.0, 1.0);
 
     // Forward scattering: the limb blazes where we look through the most air
     // toward the star.
-    float toward = pow(clamp(dot(normalize(uSunA), -vViewDir), 0.0, 1.0), 3.0);
+    float toward = pow(clamp(dot(normalize(uSunA), -V), 0.0, 1.0), 3.0);
 
-    vec3 col = mix(uColorRim, uColorDay, sun) * fres * (0.7 + toward * 1.5);
-    float a = fres * uIntensity * (0.24 + sun * 0.95);
+    vec3 col = mix(uColorRim, uColorDay, sun * sun) * (0.5 + toward * 1.4);
+    float a = rim * uIntensity * (0.07 + sun * 1.15);
     if (a < 0.002) discard;
     gl_FragColor = vec4(col, clamp(a, 0.0, 1.0));
   }
@@ -312,9 +317,9 @@ export class Tatooine {
     this.atmosphereMat = new THREE.ShaderMaterial({
       uniforms: {
         uSunA: { value: sunA },
-        uColorDay: { value: new THREE.Color('#ffcf9c') },
-        uColorRim: { value: new THREE.Color('#6d86ad') },
-        uIntensity: { value: 0.78 },
+        uColorDay: { value: new THREE.Color('#ffd9a8') },
+        uColorRim: { value: new THREE.Color('#4f6f9e') },
+        uIntensity: { value: 0.9 },
         uCenter: { value: new THREE.Vector3() },
       },
       vertexShader: atmosphereVert,
@@ -322,10 +327,10 @@ export class Tatooine {
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
-      side: THREE.BackSide,
+      side: THREE.FrontSide,
     });
     this.atmosphere = new THREE.Mesh(
-      new THREE.SphereGeometry(PLANET_RADIUS * 1.026, Math.max(48, o.segments / 2), Math.max(24, o.segments / 4)),
+      new THREE.SphereGeometry(PLANET_RADIUS * 1.03, Math.max(64, o.segments / 2), Math.max(32, o.segments / 4)),
       this.atmosphereMat,
     );
     this.atmosphere.name = 'TatooineAtmosphere';

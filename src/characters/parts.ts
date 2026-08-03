@@ -81,34 +81,40 @@ export interface Weapon {
 /**
  * Blaster carbine. Held in the right hand; its muzzle anchor is what the
  * bolt system spawns from, so bolts always leave the barrel.
+ *
+ * The group origin sits at the pistol grip and the barrel runs along −Z, so
+ * the figure rig can rotate the weapon about the hand to aim it without the
+ * grip sliding out of the fist.
  */
 export function blasterCarbine(boltColor: string, scale = 1): Weapon {
   const g = new THREE.Group();
   g.name = 'Blaster';
-  const body = metalMaterial('gunBody', '#26292e', 0.55, 0.65);
-  const grip = metalMaterial('gunGrip', '#17191c', 0.8, 0.2);
+  const body = metalMaterial('gunBody', '#33373d', 0.55, 0.6);
+  const grip = metalMaterial('gunGrip', '#1c1f23', 0.8, 0.2);
 
   const receiver = new THREE.Mesh(roundedBox(0.05, 0.075, 0.3, 0.015), body);
-  receiver.position.set(0, 0, -0.06);
+  receiver.position.set(0, 0.075, -0.08);
   g.add(receiver);
   const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.017, 0.24, 8), body);
   barrel.rotation.x = Math.PI / 2;
-  barrel.position.set(0, 0.012, -0.3);
+  barrel.position.set(0, 0.087, -0.32);
   g.add(barrel);
   const handle = new THREE.Mesh(roundedBox(0.035, 0.11, 0.05, 0.012), grip);
-  handle.position.set(0, -0.075, 0.02);
   handle.rotation.x = -0.22;
   g.add(handle);
   const stock = new THREE.Mesh(roundedBox(0.035, 0.06, 0.14, 0.015), body);
-  stock.position.set(0, -0.012, 0.15);
+  stock.position.set(0, 0.063, 0.13);
   g.add(stock);
   const sight = new THREE.Mesh(roundedBox(0.014, 0.03, 0.07, 0.006), body);
-  sight.position.set(0, 0.055, -0.1);
+  sight.position.set(0, 0.13, -0.12);
   g.add(sight);
+  const foreGrip = new THREE.Mesh(roundedBox(0.032, 0.05, 0.09, 0.012), grip);
+  foreGrip.position.set(0, 0.04, -0.19);
+  g.add(foreGrip);
 
   const muzzle = new THREE.Object3D();
   muzzle.name = 'Muzzle';
-  muzzle.position.set(0, 0.012, -0.43);
+  muzzle.position.set(0, 0.087, -0.45);
   g.add(muzzle);
 
   const flashMat = additiveMaterial('muzzleFlash', boltColor, 0, glowSprite(0.25)).clone();
@@ -151,19 +157,18 @@ export function blasterPistol(boltColor: string, scale = 1): Weapon {
   const grip = metalMaterial('pistolGrip', '#191b1f', 0.85, 0.15);
 
   const receiver = new THREE.Mesh(roundedBox(0.038, 0.055, 0.14, 0.012), body);
-  receiver.position.set(0, 0, -0.03);
+  receiver.position.set(0, 0.06, -0.045);
   g.add(receiver);
   const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.013, 0.1, 8), body);
   barrel.rotation.x = Math.PI / 2;
-  barrel.position.set(0, 0.008, -0.13);
+  barrel.position.set(0, 0.068, -0.145);
   g.add(barrel);
   const handle = new THREE.Mesh(roundedBox(0.03, 0.085, 0.042, 0.01), grip);
-  handle.position.set(0, -0.06, 0.015);
   handle.rotation.x = -0.2;
   g.add(handle);
 
   const muzzle = new THREE.Object3D();
-  muzzle.position.set(0, 0.008, -0.19);
+  muzzle.position.set(0, 0.068, -0.205);
   g.add(muzzle);
 
   const flashMat = additiveMaterial('pistolFlash', boltColor, 0, glowSprite(0.25)).clone();

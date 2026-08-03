@@ -49,6 +49,16 @@ export const CORRIDOR_MARKS = {
 
 export const CORRIDOR_SECTIONS = 15;
 
+/**
+ * Exterior key rig, in one place so the constructor and `setExteriorMood`
+ * cannot drift apart. The fill is deliberately strong: the destroyer's belly
+ * is the subject of the piece's biggest shot and it faces away from the star.
+ */
+const KEY_BASE = 4.6;
+const FILL_BASE = 2.4;
+const RIM_BASE = 1.5;
+const AMBIENT_BASE = 1.2;
+
 export type Region = 'exterior' | 'interior';
 
 export interface Selectable {
@@ -153,20 +163,21 @@ export class World {
     this.exterior.name = 'Exterior';
     scene.add(this.exterior);
 
-    this.keyLight = new THREE.DirectionalLight(0xfff0da, 3.0);
+    this.keyLight = new THREE.DirectionalLight(0xfff4e6, KEY_BASE);
     this.keyLight.position.copy(this.sunDirection).multiplyScalar(4000);
     this.keyLight.castShadow = false;
     this.exterior.add(this.keyLight);
     // Planetshine from below. Without a strong bounce the destroyer's
     // underside — the shot the whole reveal depends on — is a black wedge.
-    this.fillLight = new THREE.DirectionalLight(0xdccdbb, 2.15);
+    // Nearly neutral: the desert tints it, it does not dye it.
+    this.fillLight = new THREE.DirectionalLight(0xe6ddd2, FILL_BASE);
     this.fillLight.position.set(-700, -3000, -1400);
     this.exterior.add(this.fillLight);
     // Cold rim from the opposite side of the sky.
-    this.rimLight = new THREE.DirectionalLight(0x9dc0ff, 1.15);
+    this.rimLight = new THREE.DirectionalLight(0xa8c6ff, RIM_BASE);
     this.rimLight.position.set(-1800, 900, 2400);
     this.exterior.add(this.rimLight);
-    this.spaceAmbient = new THREE.HemisphereLight(0x54637d, 0x51402d, 0.9);
+    this.spaceAmbient = new THREE.HemisphereLight(0x66748c, 0x6e6558, AMBIENT_BASE);
     this.exterior.add(this.spaceAmbient);
 
     this.runner = new BlockadeRunner(quality, 'runner');
@@ -214,8 +225,8 @@ export class World {
 
     this.interiorAmbient = new THREE.HemisphereLight(0xbfcadd, 0x2a2d33, 0.55);
     this.interior.add(this.interiorAmbient);
-    this.vaderKey = new THREE.PointLight(0xff3324, 0, 14, 2);
-    this.vaderKey.position.set(0, 2.2, CORRIDOR_MARKS.troopEntry);
+    this.vaderKey = new THREE.PointLight(0xff3a28, 0, 9, 2);
+    this.vaderKey.position.set(0, 1.95, CORRIDOR_MARKS.troopEntry);
     this.interior.add(this.vaderKey);
 
     this.interiorFx.name = 'InteriorEffects';
@@ -509,20 +520,25 @@ export class World {
 
   /* --------------------------------------------------------- lighting */
 
-  /** Cross-fades the exterior key rig toward a "captured, in shadow" look. */
+  /**
+   * Cross-fades the exterior key rig toward a "captured, in shadow" look.
+   * `sunlit` scales the star; `shadowFill` keeps the shadow side legible, so
+   * even in full eclipse nothing important drops below a readable value.
+   */
   setExteriorMood(sunlit: number, shadowFill: number): void {
-    this.keyLight.intensity = 3.0 * sunlit;
-    this.fillLight.intensity = 0.72 * (0.5 + shadowFill);
-    this.rimLight.intensity = 0.95 * (0.5 + shadowFill * 0.9);
-    this.spaceAmbient.intensity = 0.62 * (0.6 + shadowFill * 0.8);
+    this.keyLight.intensity = KEY_BASE * (0.34 + 0.66 * sunlit);
+    this.fillLight.intensity = FILL_BASE * (0.72 + 0.28 * shadowFill);
+    this.rimLight.intensity = RIM_BASE * (0.6 + 0.4 * shadowFill);
+    this.spaceAmbient.intensity = AMBIENT_BASE * (0.78 + 0.22 * shadowFill);
   }
 
   setInteriorMood(level: number, vaderPresence: number): void {
     this.corridor.setLightLevel(level);
     this.podBay.setLightLevel(level);
-    this.interiorAmbient.intensity = 0.55 * level * (1 - vaderPresence * 0.45);
-    this.vaderKey.intensity = vaderPresence * 26;
-    this.corridor.setTint('#ff6a48', vaderPresence * 0.34);
+    this.interiorAmbient.intensity = 0.55 * level * (1 - vaderPresence * 0.3);
+    this.vaderKey.intensity = vaderPresence * 17;
+    // A shift, not a wash: the walls must still read as white panelling.
+    this.corridor.setTint('#ff8b6a', vaderPresence * 0.17);
   }
 
   setVaderKeyPosition(worldZ: number): void {

@@ -168,9 +168,14 @@ export class Timeline {
     this.seek(this._time + delta);
   }
 
+  /**
+   * Mark everything strictly behind the head as spent. An event landing exactly
+   * on the seek target stays armed, so seeking to a beat and pressing play
+   * still plays that beat.
+   */
   private armFrom(t: number): void {
     for (let i = 0; i < this.events.length; i++) {
-      this.fired[i] = this.events[i].t <= t;
+      this.fired[i] = this.events[i].t < t;
     }
   }
 

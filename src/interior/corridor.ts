@@ -39,7 +39,7 @@ export class CorridorSection {
     const wallInside = corridorWallMaterial(`wall-in${variant % 3}`);
     wallInside.side = THREE.BackSide;
     const floorMat = corridorFloorMaterial();
-    const struct = metalMaterial('corridorStruct', '#8d9096', 0.5, 0.55);
+    const rib = paintMaterial('corridorRib', '#cfcdc6', 0.5, 0.08);
     const dark = metalMaterial('corridorDark', '#41454b', 0.7, 0.5);
     this.lampMat = emissiveMaterial('corridorLamp', '#f2f6ff', 1.4).clone();
 
@@ -97,15 +97,24 @@ export class CorridorSection {
     ceiling.position.set(0, h, SECTION_LENGTH / 2);
     this.group.add(ceiling);
 
-    /* structural rib at the section joint */
-    const ribMat = struct;
+    /* structural rib at the section joint — part of the architecture, so it
+       is the same off-white family as the walls rather than dark scaffolding */
+    const ribMat = rib;
     for (const s of [-1, 1]) {
-      const post = new THREE.Mesh(roundedBox(0.14, wallTop, 0.3, 0.04), ribMat);
-      post.position.set(s * (hw - 0.07), wallTop / 2, 0.16);
+      const post = new THREE.Mesh(roundedBox(0.12, wallTop, 0.22, 0.035), ribMat);
+      post.position.set(s * (hw - 0.05), wallTop / 2, 0.12);
       this.group.add(post);
+      // Quarter-round rib following the shoulder, closing the arch.
+      const arch = new THREE.Mesh(
+        new THREE.TorusGeometry(shoulderR, 0.055, 6, 12, Math.PI / 2),
+        ribMat,
+      );
+      arch.position.set(s * ceilingHalf, wallTop, 0.12);
+      arch.rotation.z = s > 0 ? 0 : Math.PI / 2;
+      this.group.add(arch);
     }
-    const lintel = new THREE.Mesh(roundedBox(ceilingHalf * 2 + 0.2, 0.14, 0.3, 0.04), ribMat);
-    lintel.position.set(0, h - 0.07, 0.16);
+    const lintel = new THREE.Mesh(roundedBox(ceilingHalf * 2 + 0.02, 0.11, 0.22, 0.035), ribMat);
+    lintel.position.set(0, h - 0.055, 0.12);
     this.group.add(lintel);
 
     /* ceiling light strip */
@@ -117,13 +126,10 @@ export class CorridorSection {
     lamp.name = 'CeilingLamp';
     this.group.add(lamp);
 
-    /* wall fittings — conduits, vents and the occasional readout */
+    /* wall fittings — vents and the occasional readout.
+       Nothing runs along the wall at head height: a horizontal member there
+       cuts straight across the lens in every shot down the corridor. */
     for (const s of [-1, 1]) {
-      const conduit = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, SECTION_LENGTH, 6), dark);
-      conduit.rotation.x = Math.PI / 2;
-      conduit.position.set(s * (hw - 0.1), wallTop - 0.12, SECTION_LENGTH / 2);
-      this.group.add(conduit);
-
       if (rng.chance(0.5)) {
         const vent = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.32, 0.7), dark);
         vent.position.set(s * (hw - 0.03), 0.5, rng.range(0.8, 3.2));
@@ -220,17 +226,24 @@ export class Corridor {
       }
     }
 
-    /* alarm strobes at the ends and midpoint */
+    /* alarm strobes at the ends and midpoint, in shallow wall housings so they
+       read as fittings rather than as floating red beads */
     const alarmMat = emissiveMaterial('alarm', '#ff3b25', 0).clone();
+    const housingMat = metalMaterial('alarmHousing', '#5a5f66', 0.6, 0.4);
     for (const z of [SECTION_LENGTH * 1.5, this.length * 0.5, this.length - SECTION_LENGTH * 1.5]) {
       for (const s of [-1, 1]) {
         const m = alarmMat.clone();
-        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 6), m);
-        dome.position.set(s * (CORRIDOR_WIDTH / 2 - 0.06), CORRIDOR_HEIGHT - 0.75, z);
+        const y = CORRIDOR_HEIGHT - 0.52;
+        const shell = new THREE.Mesh(roundedBox(0.09, 0.16, 0.19, 0.03), housingMat);
+        shell.position.set(s * (CORRIDOR_WIDTH / 2 - 0.03), y, z);
+        this.group.add(shell);
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.5), m);
+        dome.position.set(s * (CORRIDOR_WIDTH / 2 - 0.09), y, z);
+        dome.rotation.z = s * Math.PI * 0.5;
         this.group.add(dome);
         this.alarmMats.push(m);
       }
-      const l = new THREE.PointLight(0xff3b25, 0, 9, 2);
+      const l = new THREE.PointLight(0xff4a2e, 0, 5.5, 2);
       l.position.set(0, CORRIDOR_HEIGHT - 0.6, z);
       this.group.add(l);
       this.alarmLights.push(l);
@@ -248,24 +261,27 @@ export class Corridor {
     /* battle damage: buckled plates and hanging conduits */
     const dmg = o.battleDamage ?? 0;
     if (dmg > 0) {
-      const burnt = metalMaterial('corridorBurn', '#2a2724', 0.9, 0.3);
+      // Sprung wall panels, not black cut-outs: they have to read as a plate
+      // that has come away from its frame, so they stay close to the wall,
+      // keep some of the wall's value, and only tip a few degrees out of it.
+      const sprung = metalMaterial('corridorSprung', '#8a857c', 0.78, 0.2);
       const count = Math.round(6 * dmg);
       for (let i = 0; i < count; i++) {
         const s = rng.chance(0.5) ? 1 : -1;
         const z = rng.range(SECTION_LENGTH, this.length - SECTION_LENGTH);
-        const plate = new THREE.Mesh(roundedBox(0.08, rng.range(0.4, 0.9), rng.range(0.5, 1.1), 0.02), burnt);
-        plate.position.set(s * (CORRIDOR_WIDTH / 2 - 0.06), rng.range(0.6, 2.2), z);
-        plate.rotation.set(rng.range(-0.3, 0.3), rng.range(-0.4, 0.4), rng.range(-0.5, 0.5));
+        const plate = new THREE.Mesh(roundedBox(0.05, rng.range(0.3, 0.6), rng.range(0.35, 0.7), 0.015), sprung);
+        plate.position.set(s * (CORRIDOR_WIDTH / 2 - 0.09), rng.range(0.5, 1.9), z);
+        plate.rotation.set(rng.range(-0.12, 0.12), rng.range(-0.16, 0.16), rng.range(-0.22, 0.22));
         this.group.add(plate);
         this.damageMeshes.push(plate);
       }
       for (let i = 0; i < Math.round(3 * dmg); i++) {
         const cable = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.025, 0.025, rng.range(0.5, 1.2), 5),
-          metalMaterial('cable', '#20242a', 0.8, 0.3),
+          new THREE.CylinderGeometry(0.018, 0.018, rng.range(0.4, 0.8), 5),
+          metalMaterial('cable', '#43474d', 0.8, 0.3),
         );
-        cable.position.set(rng.range(-1, 1), CORRIDOR_HEIGHT - 0.35, rng.range(2, this.length - 2));
-        cable.rotation.set(rng.range(-0.5, 0.5), 0, rng.range(-0.5, 0.5));
+        cable.position.set(rng.range(-1.2, 1.2), CORRIDOR_HEIGHT - 0.22, rng.range(2, this.length - 2));
+        cable.rotation.set(rng.range(-0.35, 0.35), 0, rng.range(-0.35, 0.35));
         this.group.add(cable);
         this.damageMeshes.push(cable);
       }
@@ -304,8 +320,10 @@ export class Corridor {
     const base = 9 * this.lightLevel;
     for (const l of this.lights) l.intensity = base;
 
+    // The strobe is an accent near its own housing, not a wash: at full
+    // intensity it used to turn every white panel in the corridor pink.
     const strobe = this.alarm * (0.5 + 0.5 * Math.sin(elapsed * 4.2));
-    for (const m of this.alarmMats) m.emissiveIntensity = strobe * 2.4;
-    for (const l of this.alarmLights) l.intensity = strobe * 7;
+    for (const m of this.alarmMats) m.emissiveIntensity = 0.35 + strobe * 1.35;
+    for (const l of this.alarmLights) l.intensity = strobe * 2.6;
   }
 }

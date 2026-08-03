@@ -210,7 +210,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'breach',
-    preroll: 1.9,
+    preroll: 2.3,
     t: 208.4,
     chapter: 'corridor',
     shot: 'door-breach',

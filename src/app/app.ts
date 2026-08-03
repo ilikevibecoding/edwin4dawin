@@ -477,7 +477,10 @@ export class App {
       this.director.update(t, dt, this.stage.camera);
     }
 
-    this.world.update(dt, t, this.stage.camera);
+    // The world is a pure function of show time, so a paused timeline must
+    // freeze it completely: otherwise smoke, sparks and bolts drain away while
+    // the viewer is looking at a still frame.
+    this.world.update(this.timeline.playing ? dt : 0, t, this.stage.camera);
     this.music.update();
     this.updateAudioListener();
     this.updateSubtitles(t);
@@ -505,7 +508,7 @@ export class App {
   renderOnce(dt = 0.016): void {
     const t = this.timeline.time;
     this.director.update(t, dt, this.stage.camera);
-    this.world.update(dt, t, this.stage.camera);
+    this.world.update(this.timeline.playing ? dt : 0, t, this.stage.camera);
     this.stage.render(t);
   }
 
@@ -721,6 +724,8 @@ export class App {
       },
       /** Run `seconds` of show time in fixed steps, then hold. */
       simulate: (seconds: number, step?: number) => this.simulate(seconds, step),
+      /** Live object graph, for ad-hoc inspection from the QA harness. */
+      internals: () => ({ world: this.world, timeline: this.timeline, director: this.director, stage: this.stage }),
     };
     (window as unknown as Record<string, unknown>).__show = api;
     (window as unknown as Record<string, unknown>).__ready = true;

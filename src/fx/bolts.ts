@@ -57,13 +57,15 @@ class BoltPool {
   constructor(color: string, capacity: number) {
     // A capsule aligned to +Y; we rotate it onto the flight direction.
     const geo = new THREE.CapsuleGeometry(1, 1, 3, 8);
-    const mat = emissiveMaterial(`bolt-${color}`, '#ffffff', 5, { toneMapped: false }).clone();
-    mat.emissive = new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.55);
+    // Bright enough to bloom, but only lightly whitened: pushing the core all
+    // the way to white throws away the colour that tells you who is shooting.
+    const mat = emissiveMaterial(`bolt-${color}`, '#ffffff', 2.6, { toneMapped: false }).clone();
+    mat.emissive = new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.3);
     this.mesh = new THREE.InstancedMesh(geo, mat, capacity);
     this.mesh.frustumCulled = false;
     this.mesh.name = `Bolts-${color}`;
 
-    const glowMat = additiveMaterial(`boltGlow-${color}`, color, 0.75, glowSprite(0.3)).clone();
+    const glowMat = additiveMaterial(`boltGlow-${color}`, color, 0.42, glowSprite(0.3)).clone();
     this.glow = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), glowMat, capacity);
     this.glow.frustumCulled = false;
     this.glow.name = `BoltGlow-${color}`;
@@ -135,7 +137,7 @@ class BoltPool {
       this.quat.setFromRotationMatrix(
         new THREE.Matrix4().lookAt(b.pos, camera.position, b.dir),
       );
-      this.scale.set(b.radius * 8.5, b.length * 2.4, 1);
+      this.scale.set(b.radius * 5.0, b.length * 1.5, 1);
       this.matrix.compose(b.pos, this.quat, this.scale);
       this.glow.setMatrixAt(i, this.matrix);
       dirty = true;

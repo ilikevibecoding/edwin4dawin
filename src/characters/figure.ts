@@ -283,20 +283,37 @@ export class Figure {
    * position and derives the walk speed and facing from the frame delta, so
    * the procedural gait still works and the feet still do not skate.
    */
-  track(x: number, z: number, dt: number, faceMotion = true, facing?: number): void {
+  track(
+    x: number,
+    z: number,
+    dt: number,
+    faceMotion = true,
+    facing?: number,
+    /** Cumulative metres walked along the authored path, if the caller knows. */
+    pathDistance?: number,
+    /** Metres per second along that path. */
+    pathSpeed?: number,
+  ): void {
     const dx = x - this.group.position.x;
     const dz = z - this.group.position.z;
     const dist = Math.hypot(dx, dz);
     this.group.position.x = x;
     this.group.position.z = z;
     this.navTarget = null;
-    // A large jump means the timeline was scrubbed: snap rather than sprint.
-    if (dt > 0 && dist < this.p.runSpeed * 3 * dt + 0.05) {
+
+    const strideLen = this.state === 'run' ? this.p.stride * 1.55 : this.p.stride;
+    if (pathDistance !== undefined) {
+      // The gait is a pure function of distance travelled along the path, so a
+      // scrubbed frame shows exactly the stride the played frame would.
+      this.speed = pathSpeed ?? 0;
+      this.gait = ((pathDistance / strideLen) % 1 + 1) % 1;
+    } else if (dt > 0 && dist < this.p.runSpeed * 3 * dt + 0.05) {
       this.speed = dist / dt;
-      this.gait = (this.gait + dist / (this.state === 'run' ? this.p.stride * 1.55 : this.p.stride)) % 1;
+      this.gait = (this.gait + dist / strideLen) % 1;
     } else {
       this.speed = 0;
     }
+
     if (facing !== undefined) {
       this.targetFacing = facing;
       if (dist > this.p.runSpeed * 3 * dt + 0.05) this.facing = facing;
@@ -307,11 +324,18 @@ export class Figure {
   }
 
   private tracked = false;
+  /** True on frames with no time delta: blends resolve instantly. */
+  protected settling = false;
 
   /* ---------------------------------------------------------------- update */
 
   update(dt: number, elapsed: number): void {
     this.stateTime += dt;
+    // A zero delta means the timeline was scrubbed or is paused. Damped values
+    // would freeze wherever a previous pass left them, so a figure could stay
+    // slumped on the deck after a jump back into the firefight; settle them
+    // straight onto their targets instead.
+    this.settling = dt <= 0;
 
     // Navigation. A figure driven by `track()` has already had its position and
     // speed set for this frame.
@@ -344,7 +368,7 @@ export class Figure {
 
     // Turn toward the direction of travel — never snap.
     const turn = angleDelta(this.facing, this.targetFacing);
-    this.facing += clamp(turn, -6 * dt, 6 * dt);
+    this.facing = this.settling ? this.targetFacing : this.facing + clamp(turn, -6 * dt, 6 * dt);
     this.group.rotation.y = this.facing;
 
     // Gait phase advances with distance so feet never skate. Tracked figures
@@ -352,18 +376,26 @@ export class Figure {
     const strideLen = this.state === 'run' ? this.p.stride * 1.55 : this.p.stride;
     if (this.speed > 0.02 && this.navTarget) {
       this.gait = (this.gait + (this.speed * dt) / strideLen) % 1;
-    } else if (this.speed <= 0.02) {
+    } else if (this.speed <= 0.02 && !this.tracked) {
       // Settle to a neutral stance rather than freezing mid-step.
       const toNeutral = angleDelta(this.gait * Math.PI * 2, 0) / (Math.PI * 2);
-      this.gait = (this.gait - toNeutral * Math.min(1, dt * 4) + 1) % 1;
+      this.gait = this.settling ? 0 : (this.gait - toNeutral * Math.min(1, dt * 4) + 1) % 1;
     }
 
-    this.firePulse = Math.max(0, this.firePulse - dt * 6);
-    this.reactPulse = Math.max(0, this.reactPulse - dt * 1.6);
-    this.aimBlend = damp(this.aimBlend, this.aimTarget ? 1 : 0, 0.0005, dt);
-    this.interactBlend = damp(this.interactBlend, this.state === 'interact' ? 1 : 0, 0.002, dt);
     const fallTarget = this.state === 'fall' || this.state === 'down' ? 1 : 0;
-    this.fallProgress = damp(this.fallProgress, fallTarget, this.state === 'fall' ? 0.0002 : 0.002, dt);
+    if (this.settling) {
+      this.firePulse = 0;
+      this.reactPulse = this.state === 'react' ? 0.6 : 0;
+      this.aimBlend = this.aimTarget ? 1 : 0;
+      this.interactBlend = this.state === 'interact' ? 1 : 0;
+      this.fallProgress = fallTarget;
+    } else {
+      this.firePulse = Math.max(0, this.firePulse - dt * 6);
+      this.reactPulse = Math.max(0, this.reactPulse - dt * 1.6);
+      this.aimBlend = damp(this.aimBlend, this.aimTarget ? 1 : 0, 0.0005, dt);
+      this.interactBlend = damp(this.interactBlend, this.state === 'interact' ? 1 : 0, 0.002, dt);
+      this.fallProgress = damp(this.fallProgress, fallTarget, this.state === 'fall' ? 0.0002 : 0.002, dt);
+    }
 
     this.pose(elapsed);
     this.poseExtra(dt, elapsed);
@@ -536,16 +568,19 @@ export class Figure {
         pitch = Math.atan2(local.y - (p.hipHeight + p.spine + p.chest * 0.6), Math.hypot(local.x, local.z));
       }
       const recoil = this.firePulse * 0.34;
-      // Both hands on the weapon: right arm leads, left supports.
-      j.upperArmR.rotation.x = THREE.MathUtils.lerp(j.upperArmR.rotation.x, 1.42 + pitch - recoil, b);
-      j.upperArmR.rotation.y = THREE.MathUtils.lerp(j.upperArmR.rotation.y, -yaw * 0.4, b);
-      j.upperArmR.rotation.z = THREE.MathUtils.lerp(j.upperArmR.rotation.z, 0.16, b);
-      j.forearmR.rotation.x = THREE.MathUtils.lerp(j.forearmR.rotation.x, 0.18 + recoil * 0.8, b);
+      // Weapon shouldered: the right elbow lifts out to the side and the
+      // forearm folds back so the butt reaches the shoulder, while the left
+      // arm reaches forward under the barrel. A straight right arm at full
+      // extension is the classic tell of a procedural figure.
+      j.upperArmR.rotation.x = THREE.MathUtils.lerp(j.upperArmR.rotation.x, 1.06 + pitch * 0.9 - recoil, b);
+      j.upperArmR.rotation.y = THREE.MathUtils.lerp(j.upperArmR.rotation.y, -yaw * 0.35, b);
+      j.upperArmR.rotation.z = THREE.MathUtils.lerp(j.upperArmR.rotation.z, 0.46, b);
+      j.forearmR.rotation.x = THREE.MathUtils.lerp(j.forearmR.rotation.x, 0.66 + recoil * 0.8, b);
 
-      j.upperArmL.rotation.x = THREE.MathUtils.lerp(j.upperArmL.rotation.x, 1.25 + pitch * 0.8, b);
-      j.upperArmL.rotation.y = THREE.MathUtils.lerp(j.upperArmL.rotation.y, 0.42, b);
-      j.upperArmL.rotation.z = THREE.MathUtils.lerp(j.upperArmL.rotation.z, -0.3, b);
-      j.forearmL.rotation.x = THREE.MathUtils.lerp(j.forearmL.rotation.x, 0.72, b);
+      j.upperArmL.rotation.x = THREE.MathUtils.lerp(j.upperArmL.rotation.x, 1.34 + pitch * 0.8, b);
+      j.upperArmL.rotation.y = THREE.MathUtils.lerp(j.upperArmL.rotation.y, 0.5, b);
+      j.upperArmL.rotation.z = THREE.MathUtils.lerp(j.upperArmL.rotation.z, -0.34, b);
+      j.forearmL.rotation.x = THREE.MathUtils.lerp(j.forearmL.rotation.x, 0.58, b);
 
       j.chest.rotation.y = THREE.MathUtils.lerp(j.chest.rotation.y, yaw * 0.55, b);
       j.chest.rotation.x -= recoil * 0.22;
@@ -564,8 +599,9 @@ export class Figure {
       targetYaw = clamp(Math.atan2(local.x, -local.z), -1.05, 1.05);
     }
     // Head lag makes the figure look like it is deciding, not tracking.
-    this.lookYaw += (targetYaw - this.lookYaw) * 0.12;
-    this.lookPitch += (targetPitch - this.lookPitch) * 0.12;
+    const lag = this.settling ? 1 : 0.12;
+    this.lookYaw += (targetYaw - this.lookYaw) * lag;
+    this.lookPitch += (targetPitch - this.lookPitch) * lag;
     j.neck.rotation.y = this.lookYaw * 0.35;
     j.neck.rotation.x = this.lookPitch * 0.3;
     j.head.rotation.y = this.lookYaw * 0.65;

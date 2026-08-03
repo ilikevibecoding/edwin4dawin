@@ -37,17 +37,19 @@ function buildSpaceScene(sunDir: THREE.Vector3, planetDir: THREE.Vector3): THREE
         varying vec3 vDir;
         void main() {
           vec3 d = normalize(vDir);
-          // Deep space floor.
-          vec3 col = vec3(0.008, 0.011, 0.019);
+          // Deep space floor. Lifted off pure black so that metals facing away
+          // from every source still resolve as grey rather than as holes.
+          vec3 col = vec3(0.030, 0.034, 0.044);
           // Faint cool galactic band across the sky.
-          col += vec3(0.03, 0.04, 0.07) * pow(max(0.0, 1.0 - abs(d.y) * 2.4), 3.0);
-          // Broad warm bounce from the planet.
+          col += vec3(0.05, 0.062, 0.095) * pow(max(0.0, 1.0 - abs(d.y) * 2.4), 3.0);
+          // Bounce from the planet. Desaturated on purpose: a saturated ochre
+          // hemisphere turns every grey hull in the piece brown.
           float p = max(0.0, dot(d, uPlanet));
-          col += vec3(0.42, 0.28, 0.16) * pow(p, 1.6) * 0.85;
+          col += vec3(0.34, 0.30, 0.26) * pow(p, 1.5) * 0.95;
           // The primary star: small, extremely bright.
           float s = max(0.0, dot(d, uSun));
-          col += vec3(1.0, 0.94, 0.84) * pow(s, 900.0) * 34.0;
-          col += vec3(0.7, 0.62, 0.52) * pow(s, 22.0) * 0.5;
+          col += vec3(1.0, 0.95, 0.88) * pow(s, 900.0) * 34.0;
+          col += vec3(0.62, 0.60, 0.56) * pow(s, 18.0) * 0.55;
           gl_FragColor = vec4(col, 1.0);
         }
       `,

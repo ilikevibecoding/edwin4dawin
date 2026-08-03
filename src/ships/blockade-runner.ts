@@ -68,29 +68,31 @@ export class BlockadeRunner {
     this.group.name = 'BlockadeRunner';
     const rng = new Rng(seed);
 
+    // Painted, weathered plating: keep metalness low or the off-white hull
+    // stops being off-white and starts mirroring an almost-black sky.
     const hull = hullMaterial('runner', {
       color: PALETTE.rebelHull,
-      grime: 0.36,
+      grime: 0.28,
       scorch: 5,
       cell: 78,
-      roughness: 0.66,
-      metalness: 0.26,
+      roughness: 0.6,
+      metalness: 0.1,
       seed: `${seed}-hull`,
       repeat: 3,
     });
     const hullDark = hullMaterial('runnerDark', {
       color: PALETTE.rebelHullShadow,
-      grime: 0.5,
+      grime: 0.4,
       scorch: 3,
       cell: 54,
-      roughness: 0.74,
-      metalness: 0.32,
+      roughness: 0.7,
+      metalness: 0.12,
       seed: `${seed}-dark`,
       repeat: 2,
     });
-    const trim = metalMaterial('runnerTrim', PALETTE.rebelTrim, 0.62, 0.2);
-    const structure = metalMaterial('runnerStruct', '#787b78', 0.55, 0.68);
-    const dark = metalMaterial('runnerShadow', '#3a3d40', 0.8, 0.4);
+    const trim = metalMaterial('runnerTrim', PALETTE.rebelTrim, 0.62, 0.14);
+    const structure = metalMaterial('runnerStruct', '#8d918e', 0.55, 0.35);
+    const dark = metalMaterial('runnerShadow', '#4a4e52', 0.78, 0.3);
     this.windowMat = emissiveMaterial('runnerWin', '#cfe6ff', 0.85).clone();
     // Just over the bloom threshold and distinctly blue: a pure-white core at
     // high intensity blooms into one shapeless ball from astern.

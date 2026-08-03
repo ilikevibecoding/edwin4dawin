@@ -195,6 +195,12 @@ interface TrackSample {
   z: number;
   state: CharState;
   facing?: number;
+  /**
+   * Metres walked along the path so far. Segments are straight lines, so the
+   * arc length is exact regardless of the easing used to traverse them — which
+   * makes the gait a pure function of show time and therefore scrub-safe.
+   */
+  distance: number;
 }
 
 function sampleTrack(keys: TrackKey[], t: number, out: TrackSample): TrackSample {
@@ -203,18 +209,27 @@ function sampleTrack(keys: TrackKey[], t: number, out: TrackSample): TrackSample
     out.z = keys[0].z;
     out.state = keys[0].state ?? 'idle';
     out.facing = keys[0].facing;
+    out.distance = 0;
     return out;
   }
+  let travelled = 0;
   const last = keys[keys.length - 1];
   if (t >= last.t) {
+    for (let i = 1; i < keys.length; i++) {
+      travelled += Math.hypot(keys[i].x - keys[i - 1].x, keys[i].z - keys[i - 1].z);
+    }
     out.x = last.x;
     out.z = last.z;
     out.state = last.state ?? 'idle';
     out.facing = last.facing;
+    out.distance = travelled;
     return out;
   }
   let i = 0;
   while (i < keys.length - 2 && keys[i + 1].t <= t) i++;
+  for (let n = 1; n <= i; n++) {
+    travelled += Math.hypot(keys[n].x - keys[n - 1].x, keys[n].z - keys[n - 1].z);
+  }
   const a = keys[i];
   const b = keys[i + 1];
   const ease = b.ease ?? Ease.sine;
@@ -223,18 +238,26 @@ function sampleTrack(keys: TrackKey[], t: number, out: TrackSample): TrackSample
   out.z = lerp(a.z, b.z, k);
   out.state = a.state ?? 'idle';
   out.facing = a.facing !== undefined && b.facing !== undefined ? lerp(a.facing, b.facing, k) : a.facing;
+  out.distance = travelled + Math.hypot(b.x - a.x, b.z - a.z) * k;
   return out;
 }
 
-const _sample: TrackSample = { x: 0, z: 0, state: 'idle', facing: undefined };
+const _sample: TrackSample = { x: 0, z: 0, state: 'idle', facing: undefined, distance: 0 };
+const _sampleAhead: TrackSample = { x: 0, z: 0, state: 'idle', facing: undefined, distance: 0 };
+const _sampleBehind: TrackSample = { x: 0, z: 0, state: 'idle', facing: undefined, distance: 0 };
 
 /** Drive a figure from a keyed corridor track. */
 function driveFigure(fig: Figure, keys: TrackKey[], t: number, dt: number): void {
   const s = sampleTrack(keys, t, _sample);
+  // Central difference for the ground speed, so a paused frame still knows
+  // whether this figure is walking and how fast.
+  const h = 0.08;
+  const speed =
+    (sampleTrack(keys, t + h, _sampleAhead).distance - sampleTrack(keys, t - h, _sampleBehind).distance) / (2 * h);
   fig.setState(s.state);
   // Figures are children of the interior group, so tracks are authored — and
   // applied — in corridor-local coordinates.
-  fig.track(s.x, s.z, dt, s.facing === undefined, s.facing);
+  fig.track(s.x, s.z, dt, s.facing === undefined, s.facing, s.distance, Math.max(0, speed));
 }
 
 /* ========================================================================== *
@@ -1011,6 +1034,9 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
   const rp = new THREE.Vector3();
   const dp = new THREE.Vector3();
   const pp = new THREE.Vector3();
+  const _shotA = new THREE.Vector3();
+  const _shotB = new THREE.Vector3();
+  const UP = new THREE.Vector3(0, 1, 0);
   const IO = INTERIOR_ORIGIN;
 
   /** Corridor point helper for camera work. */
@@ -1076,11 +1102,13 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     name: 'Corvette — entry',
     start: 66, end: 75, region: 'exterior', near: 0.6, far: 40000, fov: 42, blend: 1.2,
     apply(c) {
-      // A fixed vantage the corvette tears past, so the speed is legible.
+      // A fixed vantage the corvette tears past, so the speed is legible. The
+      // camera sits astern of the mark, which puts the drive flares in frame
+      // as she goes by rather than presenting a flat unlit broadside.
       const anchor = runnerPosition(70.5, new THREE.Vector3());
-      c.eye.set(anchor.x + 92, anchor.y - 16, anchor.z - 30);
+      c.eye.set(anchor.x + 96, anchor.y + 22, anchor.z + 250);
       runnerPosition(c.t, rp);
-      c.target.copy(rp).add(new THREE.Vector3(0, 4, 0));
+      c.target.copy(rp).add(new THREE.Vector3(0, 3, 0));
     },
   });
   shots.push({
@@ -1233,9 +1261,10 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     start: 197, end: 207, region: 'interior', near: 0.05, far: 220, fov: 36, blend: 1.1,
     apply(c) {
       const k = Ease.sine(c.u);
-      // Down the centreline between the two firing lanes, at head height.
-      c.eye.copy(cp(lerp(26.4, 24.6, k), lerp(0.12, -0.05, k), 1.42));
-      c.target.copy(cp(CORRIDOR_MARKS.breachDoor + 0.2, 0.05, lerp(1.3, 1.55, k)));
+      // Behind the rearmost firing pair, on the centreline at head height, so
+      // the whole line stacks into depth instead of straddling the lens.
+      c.eye.copy(cp(lerp(29.8, 27.9, k), lerp(0.2, -0.05, k), lerp(1.52, 1.44, k)));
+      c.target.copy(cp(CORRIDOR_MARKS.breachDoor + 0.2, 0.05, lerp(1.3, 1.5, k)));
     },
   });
   shots.push({
@@ -1251,13 +1280,15 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
   shots.push({
     id: 'firefight',
     name: 'Firefight — cross corridor',
-    start: 214, end: 229, region: 'interior', near: 0.05, far: 220, fov: 40, blend: 1.2,
+    start: 214, end: 229, region: 'interior', near: 0.05, far: 220, fov: 46, blend: 1.2,
     apply(c) {
       const k = Ease.sine(c.u);
-      // Over the shoulder of the defensive line: rebels in the foreground,
-      // stormtroopers advancing beyond them, bolts crossing between.
-      c.eye.copy(cp(lerp(25.8, 22.6, k), lerp(1.2, -1.05, k), lerp(1.95, 1.74, k)));
-      c.target.copy(cp(lerp(12.5, 10.5, k), lerp(-0.35, 0.4, k), 1.38));
+      // Behind and above the defensive line, easing in: rebels in the
+      // foreground, stormtroopers advancing beyond them, bolts crossing
+      // between. Held clear of every firing position so nobody clips the lens.
+      c.eye.copy(cp(lerp(32.6, 29.9, k), lerp(0.9, 0.35, k), lerp(1.8, 1.52, k)));
+      c.target.copy(cp(lerp(13, 10.5, k), lerp(-0.15, 0.1, k), 1.28));
+      c.fov = lerp(46, 41, k);
     },
   });
   shots.push({
@@ -1335,9 +1366,12 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     start: 289, end: 299, region: 'interior', near: 0.05, far: 220, fov: 42, blend: 1.4,
     apply(c) {
       const rz = world.r2.group.visible ? world.r2.group.position.z - IO.z : CORRIDOR_MARKS.bayDoor;
+      // Anchor behind the *trailing* droid, or the lens ends up inside the
+      // protocol droid's hip as it overtakes the mark.
+      const cz = world.c3po.group.visible ? world.c3po.group.position.z - IO.z : rz - 3;
       const k = Ease.sine(c.u);
-      c.eye.copy(cp(rz - lerp(4.4, 3.4, k), lerp(-1.0, -0.55, k), lerp(1.5, 1.0, k)));
-      c.target.copy(cp(rz + 1.4, 0.1, 0.85));
+      c.eye.copy(cp(Math.min(cz, rz) - lerp(3.6, 3.0, k), lerp(1.05, 0.8, k), lerp(1.62, 1.34, k)));
+      c.target.copy(cp(rz + 0.4, -0.15, 0.92));
     },
   });
   shots.push({
@@ -1368,20 +1402,34 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
       podPosition(c.t, pp);
       runnerPosition(c.t, rp);
       const k = Ease.sine(c.u);
-      // Ride just off the pod's shoulder, corvette and destroyer behind it.
-      c.eye.set(pp.x - lerp(16, 46, k), pp.y + lerp(9, 26, k), pp.z + lerp(26, 74, k));
-      c.target.copy(pp).lerp(rp, 0.16);
+      // Stand off on the far side of the pod from the ships, so the frame
+      // reads pod-in-front-of-capital-ship however far the pod has fallen.
+      const toShip = _shotA.subVectors(rp, pp).normalize();
+      const side = _shotB.crossVectors(toShip, UP).normalize();
+      const dist = lerp(26, 52, k);
+      c.eye.copy(pp)
+        .addScaledVector(toShip, -dist)
+        .addScaledVector(side, dist * 0.55)
+        .addScaledVector(UP, dist * 0.22);
+      c.target.copy(pp).addScaledVector(toShip, dist * 0.5);
     },
   });
   shots.push({
     id: 'descent',
     name: 'Descent',
-    start: 317, end: 322, region: 'exterior', near: 1, far: 40000, fov: 36, blend: 1.6,
+    start: 317, end: 322, region: 'exterior', near: 1, far: 40000, fov: 38, blend: 1.6,
     apply(c) {
       podPosition(c.t, pp);
       const k = Ease.sine(c.u);
-      c.eye.set(pp.x + lerp(120, 320, k), pp.y + lerp(140, 380, k), pp.z + lerp(320, 800, k));
-      c.target.copy(pp);
+      // The planet lives in the sky scene, so what puts it behind the pod is
+      // the camera's *orientation*: look along the pod's fall line.
+      const side = _shotB.crossVectors(PLANET_DIRECTION, UP).normalize();
+      const dist = lerp(300, 620, k);
+      c.eye.copy(pp)
+        .addScaledVector(PLANET_DIRECTION, -dist)
+        .addScaledVector(side, dist * 0.2)
+        .addScaledVector(UP, dist * 0.12);
+      c.target.copy(pp).addScaledVector(PLANET_DIRECTION, dist * 0.42);
     },
   });
 
@@ -1389,16 +1437,25 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
   shots.push({
     id: 'final-wide',
     name: 'Epilogue — wide',
-    start: 322, end: 335, region: 'exterior', near: 1, far: 40000, fov: 42, blend: 2.6,
+    start: 322, end: 335, region: 'exterior', near: 1, far: 40000, fov: 46, blend: 2.6,
     apply(c) {
       runnerPosition(c.t, rp);
       destroyerPosition(c.t, dp);
-      podPosition(c.t, pp);
       const k = Ease.sine(c.u);
-      // Everything in one frame: the captured corvette, the destroyer above it,
-      // and the pod falling away toward the planet.
-      c.eye.set(rp.x - lerp(1500, 1950, k), rp.y + lerp(160, 420, k), rp.z + lerp(1500, 2100, k));
-      c.target.copy(rp).lerp(dp, 0.36).lerp(pp, 0.16);
+      // Everything in one frame: the captured corvette and the destroyer above
+      // it, the planet filling the lower half, the pod falling between them.
+      // Stand off "above" the ships in the anti-planet direction and then tip
+      // the lens back down, so the two subjects bracket the centre line.
+      const away = _shotA.copy(PLANET_DIRECTION).negate();
+      const side = _shotB.crossVectors(away, UP).normalize();
+      const dist = lerp(2300, 2950, k);
+      c.eye.copy(rp)
+        .addScaledVector(away, dist * 0.77)
+        .addScaledVector(side, dist * 0.64);
+      const toShips = _shotA.copy(rp).lerp(dp, 0.3).sub(c.eye).normalize();
+      // A third of the way from the ships toward the planet: ships high in
+      // frame, the limb across the middle, the pod between the two.
+      c.target.copy(c.eye).addScaledVector(toShips.lerp(PLANET_DIRECTION, 0.34).normalize(), 2400);
     },
   });
   shots.push({

@@ -58,14 +58,32 @@ function addFace(
   head.add(mouth);
 }
 
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+/** Weapon orientation in the hand when nobody is aiming: muzzle toward the deck. */
+const REST_GRIP = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+const _handQ = new THREE.Quaternion();
+const _handP = new THREE.Vector3();
+const _aimQ = new THREE.Quaternion();
+const _lookM = new THREE.Matrix4();
+const _carry = new THREE.Vector3();
+
 /** Common plumbing: a weapon socketed into the right hand. */
 abstract class ArmedFigure extends Figure {
   protected weapon: Weapon | null = null;
 
-  protected attachWeapon(w: Weapon, offset = new THREE.Vector3(0.02, -0.075, -0.03)): void {
+  /**
+   * Socket a weapon into the right hand.
+   *
+   * The rig hangs each limb down its own −Y, and the aim pose pitches the arm
+   * forward by very nearly π/2, so rotating the weapon −π/2 about X lays the
+   * barrel along the forearm: pointing at the target when aiming, and at the
+   * deck when the arm is down. Getting this wrong is what makes procedural
+   * soldiers appear to fire over their own shoulders.
+   */
+  protected attachWeapon(w: Weapon, offset = new THREE.Vector3(0.012, -0.05, -0.015)): void {
     this.weapon = w;
     w.group.position.copy(offset);
-    w.group.rotation.set(1.45, 0, 0);
+    w.group.quaternion.copy(REST_GRIP);
     this.joints.handR.add(w.group);
   }
 
@@ -87,6 +105,34 @@ abstract class ArmedFigure extends Figure {
 
   protected override poseExtra(dt: number, _elapsed: number): void {
     this.weapon?.update(dt);
+    this.aimWeapon();
+  }
+
+  /**
+   * Swing the weapon in the hand so the barrel lines up with the target.
+   *
+   * The arm pose is authored for silhouette, not for ballistics; letting the
+   * wrist take up the small residual error means the muzzle is always where
+   * the bolts actually come from, at any body angle.
+   */
+  private aimWeapon(): void {
+    const w = this.weapon;
+    if (!w) return;
+    const hand = this.joints.handR;
+    hand.getWorldQuaternion(_handQ);
+    hand.getWorldPosition(_handP);
+    let target = this.aimTarget;
+    if (!target || this.aimBlend < 0.02) {
+      // Carry position: muzzle forward and down, relative to the body rather
+      // than the hand, so a swinging arm does not wave the barrel skyward.
+      _carry.set(0, -0.55, -1.4).applyEuler(this.group.rotation).add(_handP);
+      target = _carry;
+    }
+    _lookM.lookAt(_handP, target, WORLD_UP);
+    // lookAt puts +Z along (eye − target), so local −Z lands on the target —
+    // and −Z is the barrel axis.
+    _aimQ.setFromRotationMatrix(_lookM).premultiply(_handQ.invert());
+    w.group.quaternion.copy(_aimQ);
   }
 
   setWeaponVisible(v: boolean): void {
@@ -109,8 +155,8 @@ export class RebelTrooper extends ArmedFigure {
 
     const suit = paintMaterial('rebelSuit', PALETTE.rebelUniform, 0.85, 0);
     const vest = paintMaterial('rebelVest', PALETTE.rebelVest, 0.8, 0);
-    const leather = paintMaterial('rebelLeather', '#3a2f24', 0.7, 0.05);
-    const helmetMat = paintMaterial('rebelHelmet', '#96835f', 0.6, 0.12);
+    const leather = paintMaterial('rebelLeather', '#2e2820', 0.7, 0.05);
+    const helmetMat = paintMaterial('rebelHelmet', '#333a46', 0.55, 0.15);
     const skin = paintMaterial('skin', '#b98c6d', 0.72, 0);
 
     // Abdomen on the spine, chest and vest on the chest joint.
