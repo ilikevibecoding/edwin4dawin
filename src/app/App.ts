@@ -266,10 +266,14 @@ export class App {
       const raw = (now - this.lastFrame) / 1000;
       this.lastFrame = now;
       if (this.hidden) return;
-      // Clamp so a background tab or a long GC pause cannot teleport the story.
+      // Two deltas. The story clock uses a generous cap so the cinematic stays
+      // in real time - and therefore in sync with the narration - even at a
+      // handful of frames per second on weak hardware. Interpolation uses a
+      // tighter cap so a single long hitch cannot fling the camera.
+      const storyDt = clamp(raw, 0, 0.5);
       const dt = clamp(raw, 0, 0.1);
       try {
-        this.frame(dt, raw * 1000);
+        this.frame(dt, storyDt, raw * 1000);
       } catch (err) {
         console.error('[frame]', err);
         this.ui.showError(`Frame error: ${String(err)}`);
@@ -290,8 +294,8 @@ export class App {
     });
   }
 
-  private frame(dt: number, frameMs: number): void {
-    this.timeline.advance(dt);
+  private frame(dt: number, storyDt: number, frameMs: number): void {
+    this.timeline.advance(storyDt);
     const t = this.timeline.time;
     this.evaluate(t, dt, this.timeline.playing);
     this.render.render(t, frameMs);

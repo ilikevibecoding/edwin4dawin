@@ -54,7 +54,42 @@ body {
   z-index: 10;
 }
 
-#ui-root > * {
+/*
+ * Interactive surfaces opt in individually. A blanket `#ui-root > *` rule beat
+ * the `pointer-events: none` on the full-screen end card and let an invisible
+ * overlay swallow every click on the transport.
+ */
+.gate,
+.transport,
+.panel,
+.chapter-list,
+.selection,
+.error-boundary,
+.explore-hint {
+  pointer-events: auto;
+}
+
+.gate.hidden,
+.transport.dimmed,
+.panel.hidden,
+.chapter-list.hidden,
+.selection.hidden,
+.error-boundary.hidden,
+.explore-hint.hidden {
+  pointer-events: none;
+}
+
+.subtitles,
+.title-card,
+.debug {
+  pointer-events: none;
+}
+
+.end-card {
+  pointer-events: none;
+}
+
+.end-card.show {
   pointer-events: auto;
 }
 

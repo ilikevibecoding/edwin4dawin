@@ -1,122 +1,176 @@
 {
-  "generatedAt": "2026-08-03T00:46:40.569Z",
+  "generatedAt": "2026-08-03T01:21:05.866Z",
   "url": "http://127.0.0.1:5173/?qa=1&quality=medium",
   "viewport": {
     "width": 1280,
     "height": 720
   },
   "quality": "medium",
-  "checkpointCount": 3,
+  "checkpointCount": 1,
   "failureCount": 0,
   "consoleErrors": [],
   "pageErrors": [],
-  "controlResults": [],
-  "playbackSamples": [
+  "controlResults": [
     {
-      "time": 100.83329999999995,
-      "fps": 4.035357417371686,
-      "draws": 69,
-      "tris": 11689,
-      "issues": 2
+      "label": "play/pause toggle",
+      "ok": true
     },
     {
-      "time": 101.7166999999999,
-      "fps": 4.695815506626317,
-      "draws": 69,
-      "tris": 11689,
-      "issues": 2
+      "label": "advances in real time",
+      "ok": true
     },
     {
-      "time": 102.81659999999984,
-      "fps": 4.918247792253214,
-      "draws": 70,
-      "tris": 11821,
-      "issues": 2
+      "label": "chapter buttons",
+      "ok": true
     },
     {
-      "time": 103.91649999999977,
-      "fps": 6.368164836408922,
-      "draws": 71,
-      "tris": 11965,
-      "issues": 2
+      "label": "timeline scrubbing",
+      "ok": true
     },
     {
-      "time": 105.1332999999997,
-      "fps": 6.368254956625107,
-      "draws": 72,
-      "tris": 12065,
-      "issues": 2
+      "label": "restart",
+      "ok": true
     },
     {
-      "time": 106.24969999999963,
-      "fps": 6.207067781180168,
-      "draws": 73,
-      "tris": 13173,
-      "issues": 2
+      "label": "subtitles toggle",
+      "ok": true
     },
     {
-      "time": 107.29969999999959,
-      "fps": 5.98698827880739,
-      "draws": 73,
-      "tris": 13173,
-      "issues": 2
+      "label": "volume sliders",
+      "ok": true
     },
     {
-      "time": 108.26639999999954,
-      "fps": 5.960422792656757,
-      "draws": 73,
-      "tris": 13173,
-      "issues": 2
+      "label": "quality switching",
+      "ok": true
     },
     {
-      "time": 109.29959999999949,
-      "fps": 5.934326783594883,
-      "draws": 79,
-      "tris": 13653,
-      "issues": 2
+      "label": "explore mode + selection",
+      "ok": true
     },
     {
-      "time": 110.34959999999944,
-      "fps": 5.844383547410938,
-      "draws": 86,
-      "tris": 14253,
-      "issues": 2
+      "label": "debug overlay",
+      "ok": true
+    },
+    {
+      "label": "help panel",
+      "ok": true
+    },
+    {
+      "label": "window resize",
+      "ok": true
     }
   ],
-  "meanFps": 5.631902969293538,
+  "playbackSamples": [
+    {
+      "time": 100.5,
+      "fps": 1.691792924546035,
+      "draws": 125,
+      "tris": 24783,
+      "issues": 0
+    },
+    {
+      "time": 101.51660000000001,
+      "fps": 1.5446772139515248,
+      "draws": 69,
+      "tris": 17909,
+      "issues": 0
+    },
+    {
+      "time": 103.6831,
+      "fps": 1.6739701363727666,
+      "draws": 71,
+      "tris": 18185,
+      "issues": 0
+    },
+    {
+      "time": 105.81639999999999,
+      "fps": 1.7555905806713377,
+      "draws": 73,
+      "tris": 22253,
+      "issues": 0
+    },
+    {
+      "time": 107.98299999999999,
+      "fps": 2.294057371825917,
+      "draws": 73,
+      "tris": 22253,
+      "issues": 0
+    },
+    {
+      "time": 110.1329,
+      "fps": 5.6487955512596795,
+      "draws": 86,
+      "tris": 23333,
+      "issues": 0
+    },
+    {
+      "time": 112.26620000000001,
+      "fps": 5.2428609709778575,
+      "draws": 90,
+      "tris": 24121,
+      "issues": 0
+    },
+    {
+      "time": 114.41610000000003,
+      "fps": 5.02810150060896,
+      "draws": 120,
+      "tris": 24541,
+      "issues": 0
+    },
+    {
+      "time": 116.49940000000004,
+      "fps": 4.770486589632142,
+      "draws": 122,
+      "tris": 24545,
+      "issues": 0
+    },
+    {
+      "time": 118.516,
+      "fps": 4.53035336756267,
+      "draws": 125,
+      "tris": 24783,
+      "issues": 0
+    }
+  ],
+  "meanFps": 3.418068620740889,
   "results": [
     {
       "checkpoint": {
-        "id": "09-corvette-hit",
-        "time": 149,
-        "chapter": "pursuit",
-        "shot": "pur-5",
+        "id": "01-prologue-open",
+        "time": 7.5,
+        "chapter": "prologue",
+        "shot": "pro-1",
         "scene": "space",
         "expects": [
-          "corvette taking hits",
-          "sparks and smoke"
+          "golden prologue typography",
+          "starfield"
         ],
         "assertions": [
           {
-            "kind": "visible",
-            "target": "runner",
-            "minScreenFraction": 0.02
+            "kind": "brightness",
+            "min": 0.008,
+            "max": 0.35
+          },
+          {
+            "kind": "subtitle",
+            "contains": "civil war"
           },
           {
             "kind": "noIssues"
           }
-        ]
+        ],
+        "notes": "Opens in near darkness; text must be legible without being blown out."
       },
       "report": {
-        "time": 149,
-        "chapter": "pursuit",
-        "chapterIndex": 2,
-        "shot": "pur-5",
-        "shotLabel": "Corvette under fire",
+        "time": 7.5,
+        "chapter": "prologue",
+        "chapterIndex": 0,
+        "shot": "pro-1",
+        "shotLabel": "Prologue — deep space",
         "scene": "space",
-        "beat": "shields failing",
-        "subtitle": "",
-        "narrationCue": null,
+        "beat": "prologue text recedes",
+        "subtitle": "A galactic civil war burns across ten thousand worlds.",
+        "narrationCue": "p1",
         "issues": [
           {
             "code": "particle-overflow",
@@ -129,145 +183,45 @@
             "message": "Interior particle pool wrapped - oldest bursts were overwritten"
           }
         ],
-        "fps": 3.8010425716791088,
-        "drawCalls": 86,
-        "triangles": 13199,
+        "fps": 4.748087575833777,
+        "drawCalls": 25,
+        "triangles": 8453,
         "measurements": {
           "runner": {
-            "screenFraction": 0.6701422992930179,
-            "onScreen": true,
+            "screenFraction": 0,
+            "onScreen": false,
             "ndc": [
-              -0.028175153618306477,
-              -0.062426715299086576
+              -0.0016570851585098205,
+              -0.049512855899402665
             ],
-            "distance": 219.23558286036277
+            "distance": 1507340.9618247903
           },
           "destroyer": {
-            "screenFraction": 1,
-            "onScreen": true,
+            "screenFraction": 0,
+            "onScreen": false,
             "ndc": [
-              1.2521735606999431,
-              1.7257113946388905
+              -0.0017187876239720939,
+              -0.05580084466356513
             ],
-            "distance": 1346.9600917214107
+            "distance": 1482960.9920808089
           },
           "pod": {
-            "screenFraction": 0.006740088620429088,
-            "onScreen": true,
+            "screenFraction": 0,
+            "onScreen": false,
             "ndc": [
-              -0.14106303055343022,
-              -0.19656135589478171
+              -0.0016484711105419505,
+              -0.049508565162151144
             ],
-            "distance": 188.83538411181868
+            "distance": 1507307.7000995246
           },
           "tatooine": {
-            "screenFraction": 1,
-            "onScreen": true,
+            "screenFraction": 0,
+            "onScreen": false,
             "ndc": [
-              -0.3085939606451489,
-              -19.48638700743209
+              -0.0016520660238685037,
+              0.41062251219353346
             ],
-            "distance": 252035.9381346513
-          }
-        },
-        "boltsActive": 1,
-        "particleBudget": {
-          "spaceSparks": 1470,
-          "interiorSparks": 1050,
-          "overflow": true
-        }
-      },
-      "failures": [],
-      "brightness": {
-        "mean": 0.15909431885895878,
-        "p95": 0.7043607843137255,
-        "clipped": 0
-      },
-      "screenshot": "09-corvette-hit.png"
-    },
-    {
-      "checkpoint": {
-        "id": "12-umbilical",
-        "time": 191,
-        "chapter": "capture",
-        "shot": "cap-3",
-        "scene": "space",
-        "expects": [
-          "boarding umbilical",
-          "corvette dorsal hull"
-        ],
-        "assertions": [
-          {
-            "kind": "visible",
-            "target": "runner",
-            "minScreenFraction": 0.05
-          },
-          {
-            "kind": "noIssues"
-          }
-        ]
-      },
-      "report": {
-        "time": 191,
-        "chapter": "capture",
-        "chapterIndex": 3,
-        "shot": "cap-3",
-        "shotLabel": "Boarding umbilical",
-        "scene": "space",
-        "beat": "umbilical extends",
-        "subtitle": "Somewhere in the corridors ahead, a plan is already moving.",
-        "narrationCue": "c5",
-        "issues": [
-          {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
-          },
-          {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
-          }
-        ],
-        "fps": 4.671669245818921,
-        "drawCalls": 73,
-        "triangles": 13023,
-        "measurements": {
-          "runner": {
-            "screenFraction": 0.8200266899866684,
-            "onScreen": true,
-            "ndc": [
-              -0.006748052763643792,
-              -0.7379375499304667
-            ],
-            "distance": 177.78392924330726
-          },
-          "destroyer": {
-            "screenFraction": 1,
-            "onScreen": true,
-            "ndc": [
-              -1.0296048147530819,
-              1.9409645011122292
-            ],
-            "distance": 504.1491841152148
-          },
-          "pod": {
-            "screenFraction": 0.010538386810971368,
-            "onScreen": true,
-            "ndc": [
-              0.2833916628914296,
-              -0.8805539087112554
-            ],
-            "distance": 167.78616235876913
-          },
-          "tatooine": {
-            "screenFraction": 1,
-            "onScreen": true,
-            "ndc": [
-              -0.00006262542331980315,
-              -36.40091918759158
-            ],
-            "distance": 252059.66738494267
+            "distance": 1521012.9842946562
           }
         },
         "boltsActive": 0,
@@ -279,111 +233,11 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.07020914772602346,
-        "p95": 0.20785882352941176,
+        "mean": 0.08415803238014878,
+        "p95": 0.5869529411764706,
         "clipped": 0
       },
-      "screenshot": "12-umbilical.png"
-    },
-    {
-      "checkpoint": {
-        "id": "25-pod-separation",
-        "time": 322,
-        "chapter": "escape",
-        "shot": "esc-3",
-        "scene": "space",
-        "expects": [
-          "pod leaving the corvette",
-          "thruster flare"
-        ],
-        "assertions": [
-          {
-            "kind": "visible",
-            "target": "pod",
-            "minScreenFraction": 0.0015
-          },
-          {
-            "kind": "noIssues"
-          }
-        ]
-      },
-      "report": {
-        "time": 322,
-        "chapter": "escape",
-        "chapterIndex": 6,
-        "shot": "esc-3",
-        "shotLabel": "Pod separation",
-        "scene": "space",
-        "beat": "pod launch",
-        "subtitle": "Somewhere in the corridors ahead, a plan is already moving.",
-        "narrationCue": null,
-        "issues": [
-          {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
-          },
-          {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
-          }
-        ],
-        "fps": 4.59423698912179,
-        "drawCalls": 72,
-        "triangles": 20009,
-        "measurements": {
-          "runner": {
-            "screenFraction": 1,
-            "onScreen": true,
-            "ndc": [
-              2.1487928399397944,
-              1.5713926628998585
-            ],
-            "distance": 79.38066658796743
-          },
-          "destroyer": {
-            "screenFraction": 1,
-            "onScreen": true,
-            "ndc": [
-              -1.079481515209312,
-              -1.283382491751411
-            ],
-            "distance": 413.7201203163303
-          },
-          "pod": {
-            "screenFraction": 0.051966326780025586,
-            "onScreen": true,
-            "ndc": [
-              -0.013260178553014743,
-              -0.03501301676171108
-            ],
-            "distance": 55.88360804332417
-          },
-          "tatooine": {
-            "screenFraction": 1,
-            "onScreen": true,
-            "ndc": [
-              0.0006945980250045168,
-              -4.264452589978802
-            ],
-            "distance": 251990.67144184042
-          }
-        },
-        "boltsActive": 0,
-        "particleBudget": {
-          "spaceSparks": 1470,
-          "interiorSparks": 1050,
-          "overflow": true
-        }
-      },
-      "failures": [],
-      "brightness": {
-        "mean": 0.24109267234481688,
-        "p95": 0.6312062745098038,
-        "clipped": 0
-      },
-      "screenshot": "25-pod-separation.png"
+      "screenshot": "01-prologue-open.png"
     }
   ]
 }

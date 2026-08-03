@@ -210,9 +210,26 @@ export class UIRoot {
       const f = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
       return f * this.duration;
     };
+    // Drag tracking lives on the window: pointer capture alone is not enough
+    // once the pointer leaves the 22-pixel-tall track.
+    const onWindowMove = (e: PointerEvent): void => {
+      if (!this.scrubbing) return;
+      this.cb.onSeek(seekFromEvent(e));
+    };
+    const endScrub = (): void => {
+      if (!this.scrubbing) return;
+      this.scrubbing = false;
+      window.removeEventListener('pointermove', onWindowMove);
+      window.removeEventListener('pointerup', endScrub);
+      window.removeEventListener('pointercancel', endScrub);
+      this.cb.onScrubEnd();
+    };
     this.scrubber.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
       this.scrubbing = true;
-      this.scrubber.setPointerCapture(e.pointerId);
+      window.addEventListener('pointermove', onWindowMove);
+      window.addEventListener('pointerup', endScrub);
+      window.addEventListener('pointercancel', endScrub);
       this.cb.onScrubStart();
       this.cb.onSeek(seekFromEvent(e));
     });
@@ -221,36 +238,34 @@ export class UIRoot {
       const f = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
       this.scrubTip.style.left = `${f * 100}%`;
       this.scrubTip.textContent = formatClock(f * this.duration);
-      if (this.scrubbing) this.cb.onSeek(seekFromEvent(e));
     });
-    const endScrub = (e: PointerEvent): void => {
-      if (!this.scrubbing) return;
-      this.scrubbing = false;
-      try {
-        this.scrubber.releasePointerCapture(e.pointerId);
-      } catch {
-        /* pointer already released */
-      }
-      this.cb.onScrubEnd();
-    };
-    this.scrubber.addEventListener('pointerup', endScrub);
-    this.scrubber.addEventListener('pointercancel', endScrub);
+    this.scrubber.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') this.cb.onSeek(this.currentTime - 5);
+      else if (e.key === 'ArrowRight') this.cb.onSeek(this.currentTime + 5);
+      else if (e.key === 'Home') this.cb.onSeek(0);
+      else return;
+      e.preventDefault();
+    });
 
     const controls = el('div', 'controls');
     this.playButton = el('button', 'icon-btn primary', '▮▮');
+    this.playButton.dataset.action = 'play';
     this.playButton.title = 'Play / pause (Space)';
     this.playButton.setAttribute('aria-label', 'Play or pause');
     this.playButton.addEventListener('click', () => this.cb.onPlayToggle());
 
     const restart = el('button', 'icon-btn', '↺');
+    restart.dataset.action = 'restart';
     restart.title = 'Restart (R)';
     restart.setAttribute('aria-label', 'Restart');
     restart.addEventListener('click', () => this.cb.onRestart());
 
     const back = el('button', 'icon-btn', '«');
+    back.dataset.action = 'back';
     back.title = 'Back 10 seconds (←)';
     back.addEventListener('click', () => this.cb.onSeek(this.currentTime - 10));
     const fwd = el('button', 'icon-btn', '»');
+    fwd.dataset.action = 'forward';
     fwd.title = 'Forward 10 seconds (→)';
     fwd.addEventListener('click', () => this.cb.onSeek(this.currentTime + 10));
 
@@ -258,6 +273,7 @@ export class UIRoot {
     this.chapterName = el('div', 'chapter-name', 'Prologue');
 
     const chapterToggle = el('button', undefined, 'Chapters');
+    chapterToggle.dataset.action = 'chapters';
     chapterToggle.addEventListener('click', () => {
       const showing = this.chapterList.classList.contains('hidden');
       this.setPanel(this.chapterList, showing);
@@ -268,12 +284,14 @@ export class UIRoot {
     });
 
     this.modeButton = el('button', undefined, 'Explore');
+    this.modeButton.dataset.action = 'mode';
     this.modeButton.title = 'Switch between cinematic and explore (E)';
     this.modeButton.addEventListener('click', () => {
       this.cb.onMode(this.mode === 'cinematic' ? 'explore' : 'cinematic');
     });
 
     const settingsToggle = el('button', undefined, 'Settings');
+    settingsToggle.dataset.action = 'settings';
     settingsToggle.addEventListener('click', () => {
       const showing = this.settings.classList.contains('hidden');
       this.setPanel(this.settings, showing);
@@ -284,6 +302,7 @@ export class UIRoot {
     });
 
     const helpToggle = el('button', 'icon-btn', '?');
+    helpToggle.dataset.action = 'help';
     helpToggle.title = 'Help (H)';
     helpToggle.addEventListener('click', () => {
       const showing = this.help.classList.contains('hidden');
@@ -295,6 +314,7 @@ export class UIRoot {
     });
 
     const fullscreen = el('button', 'icon-btn', '⛶');
+    fullscreen.dataset.action = 'fullscreen';
     fullscreen.title = 'Fullscreen (F)';
     fullscreen.addEventListener('click', () => this.cb.onFullscreen());
 

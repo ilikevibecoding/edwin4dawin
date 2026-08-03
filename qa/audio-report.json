@@ -1,0 +1,93 @@
+{
+  "narration": {
+    "mode": "audio",
+    "loaded": 44,
+    "cues": 44
+  },
+  "contextState": "running",
+  "results": [
+    {
+      "time": 6,
+      "seconds": 4,
+      "label": "prologue drone + first narration",
+      "expect": [
+        "narration",
+        "music"
+      ],
+      "peak": 0.6171875,
+      "worstReduction": -0.011333667673170567,
+      "active": 1
+    },
+    {
+      "time": 52,
+      "seconds": 4,
+      "label": "Tatooine pad + narration",
+      "expect": [
+        "narration",
+        "music"
+      ],
+      "peak": 0.5234375,
+      "worstReduction": -0.6077012419700623,
+      "active": 1
+    },
+    {
+      "time": 122,
+      "seconds": 5,
+      "label": "turbolaser salvo + pursuit ostinato",
+      "expect": [
+        "sfx",
+        "music"
+      ],
+      "peak": 0.578125,
+      "worstReduction": -1.1043574810028076,
+      "active": 1
+    },
+    {
+      "time": 218,
+      "seconds": 5,
+      "label": "door breach + boarding percussion",
+      "expect": [
+        "sfx"
+      ],
+      "peak": 0.5078125,
+      "worstReduction": -0.5523836612701416,
+      "active": 1
+    },
+    {
+      "time": 246,
+      "seconds": 5,
+      "label": "respirator bed + iron motif",
+      "expect": [
+        "sfx",
+        "music"
+      ],
+      "peak": 0.546875,
+      "worstReduction": -1.0977219343185425,
+      "active": 1
+    },
+    {
+      "time": 290,
+      "seconds": 4,
+      "label": "data transfer blips + strings",
+      "expect": [
+        "sfx",
+        "music"
+      ],
+      "peak": 0.4296875,
+      "worstReduction": -0.7567989230155945,
+      "active": 1
+    },
+    {
+      "time": 321,
+      "seconds": 5,
+      "label": "pod clamps and launch",
+      "expect": [
+        "sfx"
+      ],
+      "peak": 0.5,
+      "worstReduction": -1.0519930124282837,
+      "active": 1
+    }
+  ],
+  "errors": []
+}

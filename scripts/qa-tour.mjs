@@ -167,6 +167,12 @@ async function main() {
     const controlResults = [];
     if (testControls) {
       console.log('\nExercising the interface:');
+      // The transport fades out during uninterrupted playback, exactly as a
+      // video player does, so every interaction starts by waking the chrome.
+      const wake = async () => {
+        await page.mouse.move(width / 2, height - 60);
+        await page.waitForTimeout(150);
+      };
       const step = async (label, fn) => {
         try {
           await fn();
@@ -184,7 +190,8 @@ async function main() {
         await page.waitForTimeout(700);
         const playing = await page.evaluate(() => window.__starfall.isPlaying());
         if (!playing) throw new Error('timeline did not start');
-        await page.click('.transport .controls button.icon-btn.primary');
+        await wake();
+        await page.click('[data-action="play"]');
         await page.waitForTimeout(200);
         const paused = await page.evaluate(() => window.__starfall.isPlaying());
         if (paused) throw new Error('pause button had no effect');
@@ -200,7 +207,8 @@ async function main() {
       });
 
       await step('chapter buttons', async () => {
-        await page.click('.transport .controls button:nth-of-type(6)');
+        await wake();
+        await page.click('[data-action="chapters"]');
         await page.waitForTimeout(250);
         const buttons = await page.$$('.chapter-list .chapter-item');
         if (buttons.length !== 8) throw new Error(`expected 8 chapters, found ${buttons.length}`);
@@ -211,6 +219,7 @@ async function main() {
       });
 
       await step('timeline scrubbing', async () => {
+        await wake();
         const box = await page.locator('.scrubber').boundingBox();
         await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2);
         await page.mouse.down();
@@ -224,7 +233,8 @@ async function main() {
       });
 
       await step('restart', async () => {
-        await page.click('.transport .controls button:nth-of-type(2)');
+        await wake();
+        await page.click('[data-action="restart"]');
         await page.waitForTimeout(300);
         const t = await page.evaluate(() => window.__starfall.getTime());
         if (t > 3) throw new Error(`restart left the clock at ${t.toFixed(1)}s`);
@@ -243,7 +253,8 @@ async function main() {
       });
 
       await step('volume sliders', async () => {
-        await page.click('.transport .controls button:nth-of-type(8)');
+        await wake();
+        await page.click('[data-action="settings"]');
         await page.waitForTimeout(250);
         const sliders = await page.$$('.panel input[type="range"]');
         if (sliders.length !== 4) throw new Error(`expected 4 mix sliders, found ${sliders.length}`);
@@ -260,7 +271,8 @@ async function main() {
           const errs = await page.evaluate(() => window.__starfall.consoleErrors());
           if (errs.length) throw new Error(`quality switch produced errors: ${errs[0]}`);
         }
-        await page.click('.transport .controls button:nth-of-type(8)');
+        await wake();
+        await page.click('[data-action="settings"]');
       });
 
       await step('explore mode + selection', async () => {
