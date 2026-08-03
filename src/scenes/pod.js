@@ -589,42 +589,74 @@ export async function build(ctx) {
 
   // Wider than it needs to be: the pod only reads as a pod from near abeam, and
   // at the stock 20-24 width the camera has to sit inside the wall ribs to get
-  // there. The extra beam is all off-camera deck.
-  const BAY_W = 34, BAY_H = 11, BAY_D = 26;
+  // there. The extra beam is all off-camera deck. Not wider still, though — the
+  // tube is only ten across and every extra stud of beam is bare end wall
+  // around it.
+  const BAY_W = 30, BAY_H = 11, BAY_D = 26;
   const bay = podBay({ width: BAY_W, height: BAY_H, depth: BAY_D, seed: 55, practicals: 3 });
   bay.position.set(0, 0, BAY_Z);
   inside.add(bay);
   // the model's floods are set for a wide establishing shot; from inside the bay
   // at 13 units they burn the white hull out to a flat silhouette
   for (const l of bay.userData.lamps) l.intensity = 13;
+  // The ceiling panels are unlit near-white. From a lens inside the bay, an
+  // 11-high room puts them across the top quarter of frame, where bloom turns
+  // them into four white bars that pull the eye straight off the pod. Repainted
+  // on this instance only — the material comes out of a shared cache, so it must
+  // not be edited in place.
+  bay.traverse((m) => {
+    if (m.isMesh && m.material.isMeshBasicMaterial && m.material.color.getHex() === 0xdcf3ff) {
+      m.material = new THREE.MeshBasicMaterial({ color: 0x9cb3c2, toneMapped: false });
+    }
+  });
   // setClamps(1) lands the four pads on the keel line with each arm sitting on
   // its own cradle post, and setClamps(0) slides them outboard and tips them
   // away. Both ends are already right for this hull, so drive it and leave the
   // arms alone.
   // podBay leaves its -Z end open around the launch tube; without this the
-  // shot looks past the tube ring into empty space.
+  // shot looks past the tube ring into empty space. Dark, and ribbed: a pale
+  // flat plate here took a third of the launch frame and read as nothing, and
+  // it is the surface the lit ring has to stand out against.
   const tubeR = bay.userData.tubeRadius;
+  const EW_Z = -BAY_D / 2 - 0.6;
   const gap = BAY_W / 2 - (tubeR + 1.35);
   for (const sx of [-1, 1]) {
-    bay.add(at(tile(gap, 1.0, BAY_H + 0.6, { color: C.veryLightGray }),
-      sx * (BAY_W / 2 - gap / 2), 0, -BAY_D / 2 - 0.6));
-    bay.add(at(tile(0.5, 1.2, BAY_H + 0.6, { color: C.darkGray }),
-      sx * (tubeR + 1.35), 0, -BAY_D / 2 - 0.55));
+    const cx = sx * (BAY_W / 2 - gap / 2);
+    bay.add(at(tile(gap, 1.0, BAY_H + 0.6, { color: C.darkGray }), cx, 0, EW_Z));
+    // jamb up the inboard edge, and a pilaster out in the field of it
+    bay.add(at(tile(0.9, 1.4, BAY_H + 0.6, { color: C.bluishGray }),
+      sx * (tubeR + 1.35), 0, EW_Z + 0.1));
+    bay.add(at(tile(1.6, 1.5, BAY_H - 1.4, { color: C.bluishGray }), cx, 0.4, EW_Z + 0.15));
+    for (const y of [2.2, 5.4, 8.6]) {
+      bay.add(at(tile(gap - 0.6, 1.3, 0.5, { color: C.bluishGray }), cx, y, EW_Z + 0.1));
+    }
+    // service pipes running out of the tube collar
+    for (let i = 0; i < 2; i++) {
+      bay.add(at(rot(cyl(0.26, gap - 1.4, { color: C.silver, seg: 8 }), 0, 0, -sx * Math.PI / 2),
+        sx * (tubeR + 1.8), 7.4 + i * 1.15, EW_Z + 1.2));
+    }
+    // a lamp either side of the aperture, so the mouth has some falloff round it
+    bay.add(at(lit(tile(1.2, 0.5, 0.34), { color: 0xffa832 }),
+      sx * (tubeR + 3.1), tubeR + 1.0, EW_Z + 1.3));
+    bay.add(at(tile(1.6, 0.7, 0.42, { color: C.darkGray }),
+      sx * (tubeR + 3.1), tubeR + 0.55, EW_Z + 1.25));
   }
-  bay.add(at(tile(BAY_W, 1.0, 1.6, { color: C.lightGray }), 0, BAY_H + 0.4, -BAY_D / 2 - 0.6));
+  bay.add(at(tile(BAY_W, 1.0, 1.6, { color: C.darkGray }), 0, BAY_H + 0.4, EW_Z));
+  // hazard band across the lintel over the aperture
+  bay.add(at(tile(BAY_W, 1.2, 0.8, { color: C.bluishGray }), 0, BAY_H - 0.5, EW_Z + 0.2));
 
   // podBay's floods sit on the centreline and leave the pod's flank in shadow.
   // Kept well off the hull: any closer and the inverse square puts a blown
   // highlight on the near cradle post instead of a gradient down the flank.
   // Also kept off the ceiling: an 11-high bay with a 26-strength lamp a unit and
   // a half under the panels put a burnt pale band across the top of frame.
-  const podFill = new THREE.PointLight(0xffe8d2, 26, 36, 2);
-  podFill.position.set(12.6, 7.6, BAY_Z + 8.0);
+  const podFill = new THREE.PointLight(0xffe8d2, 70, 36, 2);
+  podFill.position.set(11.6, 7.2, BAY_Z + 8.6);
   inside.add(podFill);
   // and a second one forward of the cradle, or the hull goes to silhouette the
   // moment it starts down the tube
-  const podFore = new THREE.PointLight(0xffe0c0, 20, 30, 2);
-  podFore.position.set(11.5, 8.4, BAY_Z - 7.0);
+  const podFore = new THREE.PointLight(0xffe0c0, 44, 30, 2);
+  podFore.position.set(10.5, 8.2, BAY_Z - 7.0);
   inside.add(podFore);
 
   // The tube's blast hatch is a static plate in the model, so the aperture gets
@@ -1068,28 +1100,28 @@ export async function build(ctx) {
         bayHaze.update(t);
 
         if (t >= S2) {
-          // Near abeam from the starboard gantry, aimed a little forward of the
-          // pod so the tube ring sits at frame left with the hull right of
-          // centre: the nose cone reads, the cradle and clamps fall into the
-          // bottom third, and there is open frame for it to launch into.
-          // Looking down a few degrees keeps the ceiling light panels out.
+          // Off the starboard gantry, a shade abaft the cradle and a shade above
+          // the hull's axis: from here the pod is broadside enough to read as a
+          // pod, the tube ring sits clear of it at frame right, and the whole
+          // right half of frame is the run it is about to make. Aiming a couple
+          // of degrees down crops the ceiling fittings to a sliver.
           const k = smoothstep(0, 1, (t - S2) / (BANG - S2));
           const shake = 1.7 * Math.max(0, 1 - Math.abs(t - BANG) * 2.4);
           // and once the bolts fire it whips after the hull rather than sitting
           // on an empty cradle for the last third of a second
           const w = smoothstep(BANG, BANG + 0.3, t);
           cam.position.set(
-            lerp(14.9, 14.4, k) + noise(t * 7, 1) * shake,
-            lerp(9.6, 9.2, k) + noise(t * 7.4, 2) * shake,
-            POD_Z + lerp(3.2, 2.2, k)
+            lerp(13.2, 12.2, k) + noise(t * 7, 1) * shake,
+            lerp(7.1, 6.6, k) + noise(t * 7.4, 2) * shake,
+            POD_Z + lerp(9.0, 7.8, k)
           );
           cam.lookAt(
-            lerp(-2.2, -3.0, k) - w * 1.2,
-            lerp(4.6, 4.4, k),
-            POD_Z + lerp(-4.8, -6.2, k) - w * 6.0
+            lerp(-1.0, -1.8, k) - w * 1.6,
+            lerp(5.7, 5.5, k),
+            POD_Z + lerp(-6.6, -7.8, k) - w * 7.0
           );
           cam.rotateZ(noise(t * 9, 5) * 0.028 * shake);
-          cam.fov = lerp(46, 44, k) + w * 3;
+          cam.fov = lerp(53, 51, k) + w * 3;
         }
       }
 
@@ -1122,10 +1154,22 @@ export async function build(ctx) {
           sd.rotation.set(0.03, 0.62, 0.02);
           deck.position.y = -9000;
           for (const g of guns) g.position.y = -9000;
+          // Kept well out to port of both hulls. Straight down the middle it
+          // crossed the corvette's bow for the first second and a half of the
+          // beat and read as a piece of her rather than as the pod; out here it
+          // has clear night on both sides the whole way down. It needs no lateral
+          // travel of its own — closing 76 units on the lens walks it across half
+          // the frame on perspective alone.
+          // Falls nearly straight down the port side of frame, and only closes
+          // half the distance to the lens over the beat. Letting it run all the
+          // way in put a 9-unit pod on screen the same size as a 64-unit corvette
+          // and threw away the one thing this shot is for: it ends at three
+          // fifths of her length, which reads as small, and the destroyer behind
+          // her reads as enormous.
           podOut.position.set(
-            lerp(0, -18, Math.pow(k, 1.3)),
-            lerp(4, -12, k * k * 0.45 + k * 0.55),
-            lerp(-112, -18, Math.pow(k, 0.75))
+            -26,
+            lerp(0, -26, k * k * 0.45 + k * 0.55),
+            lerp(-84, -50, Math.pow(k, 0.8))
           );
           podOut.rotation.set(t * 1.3, t * 0.7, t * 0.48);
           cam.position.set(lerp(-1, 3, k), lerp(8, 5, k), lerp(26, 22, k));
