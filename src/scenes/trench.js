@@ -5,7 +5,7 @@ import { tryMake, setupScene, nodesLike } from './_kit.js';
 import { starfield } from '../engine/stars.js';
 import { BoltPool, Explosions, engineFlare, SpritePool, flashTexture, fireTexture } from '../engine/effects.js';
 import { C, FINISH } from '../lego/palette.js';
-import { mat } from '../lego/materials.js';
+import { mat, softenGloss } from '../lego/materials.js';
 import { boxGeo, studGeo, sphereGeo, ringGeo } from '../lego/parts.js';
 import { ramp, ease, clamp, lerp, TAU } from '../engine/util.js';
 import { RNG } from '../engine/rng.js';
@@ -60,6 +60,15 @@ export default {
     const trench = await tryMake('trench', { length: TRENCH_LEN, shoulder: 20 }, { size: [40, 30, TRENCH_LEN], color: C.darkBluishGray });
     trench.position.set(0, -DEPTH, TRENCH_Z);
     root.add(trench);
+    // A fourteen-hundred stud floor seen from a metre above it is nothing but
+    // grazing angles, and ABS ships with a clearcoat: any camera that looked
+    // back up the trench sat in the deck's mirror lobe and the bottom half of
+    // the frame blew to white. The trench is stamped plating, not a polished
+    // floor, so take the coat off it.
+    softenGloss(trench, { clearcoat: 0.04, clearcoatRoughness: 0.85, env: 0.20, roughness: 0.80 });
+    for (const g of [surface, horizon]) {
+      softenGloss(g, { clearcoat: 0.04, clearcoatRoughness: 0.85, env: 0.20, roughness: 0.80 });
+    }
     const port = trench.userData?.nodes?.exhaustPort;
 
     // Hiding the trench group would take its practicals and its raking key
@@ -138,71 +147,241 @@ export default {
       return new THREE.Vector3(x, y + Math.sin(t * 1.7) * 0.8 * (1 - a), z);
     };
 
-    // survivors running for it, on a line that passes the finale camera
-    const ESC_A = new THREE.Vector3(90, 24, -540);
-    const ESC_DIR = new THREE.Vector3(0.499, 0.258, 0.827).normalize();
-    const ESC_SPD = 260;
-    const escAt = (t, i = 0) => {
-      const s = Math.max(0, t - (BLOW + 1.0)) * ESC_SPD - (i ? 150 : 0);
-      const v = ESC_A.clone();
-      if (i) v.add(new THREE.Vector3(-64, -34, 30));
-      return v.addScaledVector(ESC_DIR, s);
-    };
+    // Survivors running for it. The line starts exactly where the climb out of
+    // the trench left the ship, so the hand-over at BLOW has no jump in it, and
+    // it is straight, which is what lets the closing shots be built as "sit on
+    // this line, look back down it": the ships then frame themselves against
+    // the wreck however fast they are going.
+    const ESC0 = heroAt(BLOW);
+    const ESC_DIR = new THREE.Vector3(-0.34, 0.46, -0.82).normalize();
+    const ESC_V0 = 80, ESC_V1 = 265, ESC_K = 1.1;
+    // distance covered by a burn that eases from V0 up to V1
+    const escS = (a) => (a <= 0 ? 0
+      : ESC_V1 * a - ((ESC_V1 - ESC_V0) / ESC_K) * (1 - Math.exp(-a * ESC_K)));
+    const ESC_OFF = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(58, -30, 26)];
+    const escAt = (t, i = 0) => ESC0.clone().add(ESC_OFF[i])
+      .addScaledVector(ESC_DIR, escS(t - BLOW) - (i ? 165 : 0));
 
     // ================= the blast ==========================================
     // Everything below is a closed-form function of (t - BLOW): the film is
     // rendered by seeking, so nothing here may depend on having been played.
 
+    // A direction on a slightly flattened sphere. The station was a deck, so
+    // the cloud it becomes should be wider than it is tall -- that, and the
+    // ring lying in the same plane, is most of what says "this was a disc".
+    const SQUASH = 0.82;
+    const burstDir = () => {
+      const th = rng.range(0, TAU);
+      const y = (rng.next() * 2 - 1) * SQUASH;
+      const r = Math.sqrt(Math.max(1e-4, 1 - y * y));
+      return new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r);
+    };
+
     // Whiteout: a shell big enough to contain the camera, drawn last with the
     // depth test off, so the frame goes to white however the shot is framed.
+    // Short -- about a third of a second -- because a long one is not a flash,
+    // it is a white card.
     const shellMat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(1, 1, 1), transparent: true, opacity: 1,
       depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
       side: THREE.BackSide, toneMapped: false,
     });
     const shell = new THREE.Mesh(sphereGeo(1, 12, 8), shellMat);
-    shell.scale.setScalar(7000);
+    shell.scale.setScalar(9000);
     shell.position.copy(BLAST);
     shell.renderOrder = 999;
     shell.frustumCulled = false;
     root.add(shell);
 
-    // The fireball itself. A billboard with a radial falloff, not a sphere:
-    // additive geometry with a hard silhouette reads as a flat disc, and a
-    // stack of them saturates to a white card.
-    const coreMat = new THREE.MeshBasicMaterial({
-      map: fireTexture(), color: new THREE.Color(1, 1, 1), transparent: true, opacity: 1,
-      depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
-    });
-    const core = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), coreMat);
-    core.position.copy(BLAST);
-    core.frustumCulled = false;
-    core.renderOrder = 3;
-    root.add(core);
+    // --- fire --------------------------------------------------------------
+    // The fireball is a cloud of soft additive billboards, not one sphere: a
+    // sphere has a silhouette and reads as a disc, and a stack of hard-edged
+    // additive spheres saturates to a white card. Each quad is kept dim enough
+    // that it takes a dozen of them overlapping to reach white, so the hot core
+    // and the cooler edge fall out of the density of the cloud rather than
+    // being painted in.
+    //
+    // They are turned to face the camera in the vertex shader. `update` runs
+    // before the shot list moves the camera, so an orientation taken from
+    // ctx.camera is one step stale -- invisible in playback, but the film is
+    // also rendered by seeking, and then it is stale by whole seconds.
+    const fires = [];
+    // fire walking back up the trench from the port, between the hit and the
+    // station letting go
+    for (let i = 0; i < 24; i++) {
+      const z = TRENCH_Z - 620 + i * 50 + rng.range(0, 36);
+      fires.push({
+        t0: HIT + 0.05 + i * 0.052 + rng.range(0, 0.1),
+        ttl: rng.range(1.3, 2.5),
+        origin: new THREE.Vector3(rng.gauss(0, 8), -DEPTH + rng.range(1, 15), z),
+        dir: new THREE.Vector3(rng.gauss(0, 0.5), 1.5 + rng.next(), rng.gauss(0, 0.4)).normalize(),
+        speed: rng.range(26, 62),
+        s0: rng.range(14, 28), s1: rng.range(60, 130),
+        peak: rng.range(0.16, 0.30), cool: 1.5,
+      });
+    }
+    const BURST_R = 900;
+    // the core: white hot, out fast, gone in three seconds
+    for (let i = 0; i < 40; i++) {
+      const d = burstDir();
+      const r = 300 * Math.pow(rng.next(), 0.5);
+      fires.push({
+        t0: BLOW + rng.range(0, 0.16),
+        ttl: rng.range(2.3, 4.0),
+        origin: BLAST.clone().addScaledVector(d, r),
+        dir: d, speed: rng.range(130, 350),
+        s0: rng.range(200, 420), s1: rng.range(700, 1300),
+        peak: rng.range(0.16, 0.28), cool: 0.95,
+      });
+    }
+    // the furnace: what is left of the middle, dim but slow to cool, so the
+    // cloud keeps a yellow heart long after its edge has gone to red
+    for (let i = 0; i < 26; i++) {
+      const d = burstDir();
+      const r = 240 * Math.pow(rng.next(), 0.6);
+      fires.push({
+        t0: BLOW + rng.range(0.1, 0.8),
+        ttl: rng.range(7, 14),
+        origin: BLAST.clone().addScaledVector(d, r),
+        dir: d, speed: rng.range(25, 90),
+        s0: rng.range(300, 620), s1: rng.range(800, 1500),
+        peak: rng.range(0.16, 0.30), cool: 0.16,
+      });
+    }
+    // the body: the shell of burning hull, lit from inside and cooling. Many
+    // and dim rather than few and bright -- a handful of bright quads reads as
+    // a bag of marbles, and only the overlap makes it look like fire.
+    for (let i = 0; i < 240; i++) {
+      const d = burstDir();
+      const r = BURST_R * Math.pow(rng.next(), 0.45);
+      const big = Math.pow(rng.next(), 1.8);
+      fires.push({
+        t0: BLOW + 0.05 + (r / BURST_R) * 0.45 + rng.range(0, 0.45),
+        ttl: rng.range(4.5, 9.5),
+        origin: BLAST.clone().addScaledVector(d, r),
+        dir: d, speed: 60 + (r / BURST_R) * 260 + rng.range(0, 90),
+        s0: lerp(70, 300, big), s1: lerp(260, 1400, big),
+        peak: lerp(0.16, 0.05, big), cool: 0.5,
+      });
+    }
+    // hot spots: small, bright and short, so the cloud has cells in it instead
+    // of being one smooth gradient the size of the screen. They keep lighting
+    // up for eight seconds, which is what stops the wreck going flat once the
+    // fireball proper has cooled.
+    for (let i = 0; i < 150; i++) {
+      const d = burstDir();
+      const r = BURST_R * 1.15 * Math.pow(rng.next(), 0.3);
+      const late = rng.next();
+      fires.push({
+        t0: BLOW + rng.range(0.05, 3.2) + late * late * 5.0,
+        ttl: rng.range(1.1, 3.8),
+        origin: BLAST.clone().addScaledVector(d, r),
+        dir: d, speed: 70 + (r / BURST_R) * 200 + rng.range(0, 120),
+        s0: rng.range(40, 130), s1: rng.range(160, 460),
+        peak: rng.range(0.20, 0.44), cool: 1.4,
+      });
+    }
+    // the long burn: what is still glowing behind the survivors at the fade
+    for (let i = 0; i < 90; i++) {
+      const d = burstDir();
+      const r = 760 * Math.pow(rng.next(), 0.4);
+      fires.push({
+        t0: BLOW + rng.range(0.4, 1.6),
+        ttl: rng.range(13, 21),
+        origin: BLAST.clone().addScaledVector(d, r),
+        dir: d, speed: rng.range(40, 150),
+        s0: rng.range(300, 820), s1: rng.range(1000, 2800),
+        peak: rng.range(0.035, 0.085), cool: 0.25,
+      });
+    }
+    const FIRES = fires.length;
+    const fOff = new Float32Array(FIRES * 3);
+    const fScl = new Float32Array(FIRES);
+    const fCol = new Float32Array(FIRES * 3);
+    const fireGeo = new THREE.InstancedBufferGeometry();
+    {
+      const quad = new THREE.PlaneGeometry(1, 1);
+      fireGeo.setAttribute('position', quad.attributes.position);
+      fireGeo.setAttribute('uv', quad.attributes.uv);
+      fireGeo.setIndex(quad.index);
+    }
+    const fOffAttr = new THREE.InstancedBufferAttribute(fOff, 3);
+    const fSclAttr = new THREE.InstancedBufferAttribute(fScl, 1);
+    const fColAttr = new THREE.InstancedBufferAttribute(fCol, 3);
+    fireGeo.setAttribute('aOffset', fOffAttr);
+    fireGeo.setAttribute('aScale', fSclAttr);
+    fireGeo.setAttribute('aColor', fColAttr);
+    fireGeo.instanceCount = FIRES;
+    const fire = new THREE.Mesh(fireGeo, new THREE.ShaderMaterial({
+      uniforms: { uMap: { value: fireTexture() } },
+      transparent: true, depthWrite: false,
+      blending: THREE.CustomBlending,
+      blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+      vertexShader: /* glsl */`
+        attribute vec3 aOffset;
+        attribute float aScale;
+        attribute vec3 aColor;
+        varying vec2 vUv;
+        varying vec3 vC;
+        void main() {
+          vUv = uv;
+          vec4 mv = modelViewMatrix * vec4(aOffset, 1.0);
+          // A quad whose centre drifts into the lens paints its hot middle
+          // across the whole frame, so fade one out as it comes within about
+          // its own radius of the camera.
+          vC = aColor * smoothstep(0.25, 0.85, -mv.z / max(1.0, aScale));
+          mv.xy += position.xy * aScale;
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */`
+        uniform sampler2D uMap;
+        varying vec2 vUv;
+        varying vec3 vC;
+        void main() {
+          vec4 tx = texture2D(uMap, vUv);
+          // the gradient is authored in sRGB and nothing here decodes it
+          gl_FragColor = vec4(tx.rgb * tx.rgb * tx.a * vC, 1.0);
+        }`,
+    }));
+    fire.frustumCulled = false;
+    fire.renderOrder = 5;
+    root.add(fire);
+    const FIRE_HOT = new THREE.Color(1.30, 1.08, 0.90);
+    // Not pure red: the gradient in the texture is already orange and the
+    // shader squares it, so anything much redder than this comes out as a flat
+    // sheet of primary red with no fire in it.
+    const FIRE_COOL = new THREE.Color(1.00, 0.50, 0.20);
 
-    // Two shockwave rings in the plane of the station.
-    const ringMesh = (rIn, colour) => {
+    // --- shockwave ---------------------------------------------------------
+    // Two in the plane of the deck and one across it: a single ring reads as a
+    // smoke halo, a crossed pair reads as a planet coming apart.
+    const ringMesh = (rIn, colour, orient) => {
       const m = new THREE.Mesh(ringGeo(rIn, 1.0, 128).clone(), new THREE.MeshBasicMaterial({
         color: colour, transparent: true, opacity: 0, depthWrite: false,
         blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
       }));
-      m.rotation.x = -Math.PI / 2;
+      m.rotation.copy(orient);
       m.position.copy(BLAST);
       m.frustumCulled = false;
       m.renderOrder = 4;
       root.add(m);
       return m;
     };
-    const ringA = ringMesh(0.90, new THREE.Color(5.5, 4.4, 2.6));
-    const ringB = ringMesh(0.55, new THREE.Color(2.6, 1.1, 0.45));
+    const FLAT = new THREE.Euler(-Math.PI / 2, 0, 0);
+    const ringA = ringMesh(0.87, new THREE.Color(3.4, 2.5, 1.5), FLAT);
+    const ringB = ringMesh(0.55, new THREE.Color(2.4, 0.9, 0.35), FLAT);
+    const ringC = ringMesh(0.90, new THREE.Color(2.8, 2.1, 1.4), new THREE.Euler(0, 0.62, 0.2));
 
     // --- brick debris ------------------------------------------------------
     // A LEGO station comes apart into LEGO. One 2x1 brick with its studs on,
-    // instanced, uniformly scaled, ballistic and deterministic.
+    // instanced and scaled: small ones are bricks, the big flat ones are sheets
+    // of hull, and the studs going with them is the whole point. Speed rises
+    // with the radius the piece started at, so the field stays a shell that
+    // expands rather than a puff that disperses.
     const debrisGeo = (() => {
-      const parts = [boxGeo(2, 1.2, 1, 0.03).clone()];
+      const parts = [boxGeo(2, 1.2, 1, 0).clone()];
       for (const dx of [-0.5, 0.5]) {
-        const s = studGeo(0.3, 0.24, 8).clone();
+        const s = studGeo(0.3, 0.24, 6).clone();
         s.translate(dx, 0.6, 0);
         parts.push(s);
       }
@@ -218,7 +397,7 @@ export default {
     debrisMat.vertexColors = true;
     debrisMat.color = new THREE.Color(1, 1, 1);
 
-    const DEBRIS = 620;
+    const DEBRIS = 780;
     const debris = new THREE.InstancedMesh(debrisGeo, debrisMat, DEBRIS);
     debris.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(DEBRIS * 3).fill(1), 3);
     debris.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -226,81 +405,36 @@ export default {
     debris.castShadow = debris.receiveShadow = false;
     root.add(debris);
 
-    const DEBRIS_TONES = [C.lightBluishGray, C.lightBluishGray, C.veryLightGray, C.darkBluishGray, C.darkGray, C.white]
-      .map((c) => new THREE.Color(c).convertSRGBToLinear());
+    const toLin = (c) => new THREE.Color(c).convertSRGBToLinear();
+    // Two palettes. A 200-stud sheet of hull that draws a dark grey is a black
+    // rectangle across the lens with no read on it at all, so the big pieces
+    // stay pale and only the small ones get the dark tones.
+    const HULL_TONES = [C.veryLightGray, C.white, C.lightBluishGray, C.veryLightGray].map(toLin);
+    const BRICK_TONES = [C.lightBluishGray, C.veryLightGray, C.darkBluishGray, C.darkGray, C.white, C.lightBluishGray].map(toLin);
     const chunks = [];
     for (let i = 0; i < DEBRIS; i++) {
-      const th = rng.range(0, TAU);
-      const el = Math.pow(rng.next(), 0.75) * 1.2;
-      const slab = rng.next() < 0.14;
-      const size = slab ? rng.range(12, 30) : rng.range(2.2, 9.5);
+      const d = burstDir();
+      const r = BURST_R * Math.pow(rng.next(), 0.4);
+      const kind = rng.next();
+      const slab = kind > 0.82, panel = !slab && kind > 0.42;
+      const size = slab ? rng.range(48, 96) : (panel ? rng.range(15, 46) : rng.range(4, 16));
+      const flat = slab ? rng.range(0.10, 0.20) : (panel ? rng.range(0.20, 0.40) : rng.range(0.6, 1.0));
+      const tones = size > 40 ? HULL_TONES : BRICK_TONES;
       chunks.push({
-        origin: new THREE.Vector3(
-          BLAST.x + rng.gauss(0, 150),
-          BLAST.y + rng.range(-30, 90),
-          BLAST.z + rng.gauss(0, 300),
-        ),
-        dir: new THREE.Vector3(Math.cos(th) * Math.cos(el), Math.sin(el), Math.sin(th) * Math.cos(el)),
-        speed: rng.range(34, 165) * (slab ? 0.42 : 1) * (1 - size * 0.02),
-        size,
-        t0: rng.range(0, 0.5),
+        origin: BLAST.clone().addScaledVector(d, r)
+          .add(new THREE.Vector3(rng.gauss(0, 55), rng.gauss(0, 34), rng.gauss(0, 55))),
+        dir: d.clone().add(new THREE.Vector3(rng.gauss(0, 0.15), rng.gauss(0, 0.15), rng.gauss(0, 0.15))).normalize(),
+        speed: 45 + (r / BURST_R) * 300 + rng.range(0, 110),
+        scale: new THREE.Vector3(size, size * flat, size * rng.range(0.5, 1.0)),
+        t0: rng.range(0, 0.32),
         rot: new THREE.Euler(rng.range(0, TAU), rng.range(0, TAU), rng.range(0, TAU)),
-        spin: new THREE.Vector3(rng.gauss(0, 1.5), rng.gauss(0, 1.5), rng.gauss(0, 1.5)),
-        tone: DEBRIS_TONES[rng.int(0, DEBRIS_TONES.length - 1)],
-      });
-    }
-
-    // --- fire blobs --------------------------------------------------------
-    // Additive spheres: the fireball rolling out of the trench when the shot
-    // lands, then the body of the blast itself.
-    const blobGeo = sphereGeo(1, 12, 8).clone();
-    {
-      const n = blobGeo.attributes.position.count;
-      blobGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
-    }
-    const BLOBS = 116;
-    const blobs = new THREE.InstancedMesh(blobGeo, new THREE.MeshBasicMaterial({
-      vertexColors: true, transparent: true, depthWrite: false,
-      blending: THREE.AdditiveBlending, toneMapped: false,
-    }), BLOBS);
-    blobs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(BLOBS * 3).fill(1), 3);
-    blobs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    blobs.frustumCulled = false;
-    blobs.renderOrder = 3;
-    root.add(blobs);
-
-    const puffs = [];
-    // fire walking back up the trench from the port between the hit and the
-    // station going
-    for (let i = 0; i < 26; i++) {
-      const z = TRENCH_Z - 620 + i * 52 + rng.range(0, 40);
-      puffs.push({
-        t0: HIT + 0.05 + i * 0.055 + rng.range(0, 0.12),
-        ttl: rng.range(1.6, 3.0),
-        origin: new THREE.Vector3(rng.gauss(0, 9), -DEPTH + rng.range(0, 14), z),
-        dir: new THREE.Vector3(rng.gauss(0, 0.5), 1.5 + rng.next(), rng.gauss(0, 0.4)).normalize(),
-        speed: rng.range(24, 60),
-        s0: rng.range(6, 14), s1: rng.range(40, 92),
-        hot: new THREE.Color(4.4, 1.9, 0.5),
-      });
-    }
-    // the station going
-    for (let i = 0; i < 90; i++) {
-      const th = rng.range(0, TAU);
-      const el = Math.pow(rng.next(), 0.8) * 1.25;
-      puffs.push({
-        t0: BLOW + rng.range(0, 0.7),
-        ttl: rng.range(2.6, 8.5),
-        origin: BLAST.clone().add(new THREE.Vector3(rng.gauss(0, 110), rng.range(-40, 70), rng.gauss(0, 210))),
-        dir: new THREE.Vector3(Math.cos(th) * Math.cos(el), Math.sin(el), Math.sin(th) * Math.cos(el)),
-        speed: rng.range(30, 130),
-        s0: rng.range(30, 90), s1: rng.range(160, 420),
-        hot: new THREE.Color(rng.range(4.5, 8), rng.range(2.2, 3.6), rng.range(0.5, 1.1)),
+        spin: new THREE.Vector3(rng.gauss(0, 1.1), rng.gauss(0, 1.1), rng.gauss(0, 1.1)),
+        tone: tones[rng.int(0, tones.length - 1)],
       });
     }
 
     // --- embers ------------------------------------------------------------
-    const EMB = 1100;
+    const EMB = 1400;
     const embPos = new Float32Array(EMB * 3);
     const embCol = new Float32Array(EMB * 3);
     const embSize = new Float32Array(EMB);
@@ -318,7 +452,9 @@ export default {
           vC = color;
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
           gl_Position = projectionMatrix * mv;
-          gl_PointSize = clamp(aSize * 420.0 / max(1.0, -mv.z), 1.2, 30.0);
+          // capped small: an ember that fills thirty pixels is not a spark,
+          // it is a white orb with a bloom halo round it
+          gl_PointSize = clamp(aSize * 420.0 / max(1.0, -mv.z), 1.0, 7.0);
         }`,
       fragmentShader: /* glsl */`
         varying vec3 vC;
@@ -332,29 +468,54 @@ export default {
 
     const sparkSeeds = [];
     for (let i = 0; i < EMB; i++) {
-      const th = rng.range(0, TAU);
-      const el = Math.pow(rng.next(), 0.6) * 1.35;
+      const d = burstDir();
+      const r = BURST_R * Math.pow(rng.next(), 0.5);
       sparkSeeds.push({
-        origin: BLAST.clone().add(new THREE.Vector3(rng.gauss(0, 130), rng.range(-30, 80), rng.gauss(0, 260))),
-        dir: new THREE.Vector3(Math.cos(th) * Math.cos(el), Math.sin(el), Math.sin(th) * Math.cos(el)),
-        speed: rng.range(60, 420),
-        t0: rng.range(0, 0.45),
-        ttl: rng.range(3.5, 15),
-        size: rng.range(0.55, 2.1),
+        origin: BLAST.clone().addScaledVector(d, r),
+        dir: d.clone().add(new THREE.Vector3(rng.gauss(0, 0.2), rng.gauss(0, 0.2), rng.gauss(0, 0.2))).normalize(),
+        speed: 70 + (r / BURST_R) * 420 + rng.range(0, 160),
+        t0: rng.range(0, 0.4),
+        ttl: rng.range(4, 19),
+        size: rng.range(0.7, 3.2),
       });
     }
 
     // Blast key: the debris is lit by the thing it came off.
-    const blastLight = new THREE.PointLight(0xffb266, 0, 6000, 1);
+    const blastLight = new THREE.PointLight(0xffb266, 0, 9000, 1);
     blastLight.position.copy(BLAST);
     root.add(blastLight);
     const portLight = new THREE.PointLight(0xffd8a0, 0, 1400, 1);
     root.add(portLight);
+    // Key for the survivors. They fly away from the only light left in the
+    // shot, so without something from the camera side they are two navy
+    // silhouettes on an orange field.
+    const escKey = new THREE.DirectionalLight(new THREE.Color(0xc4d6ff).convertSRGBToLinear(), 0);
+    escKey.castShadow = false;
+    root.add(escKey, escKey.target);
+    // The same problem for the wreckage: everything in the blast is lit from
+    // the middle of it, which is behind every piece the camera can see.
+    const blastFill = new THREE.DirectionalLight(new THREE.Color(0xffd9bb).convertSRGBToLinear(), 0);
+    blastFill.position.set(BLAST.x + 1400, BLAST.y + 950, BLAST.z + 1250);
+    blastFill.target.position.copy(BLAST);
+    blastFill.castShadow = false;
+    root.add(blastFill, blastFill.target);
 
     // ================= camera =============================================
     const SHOT_BLAST = BLOW;
-    const SHOT_PASS = BLOW + 5.6;
-    const SHOT_TAIL = BLOW + 10.7;
+    const SHOT_WAVE = BLOW + 3.0;
+    const SHOT_PASS = BLOW + 7.4;
+    const SHOT_TAIL = BLOW + 11.7;
+    // Real end of the chapter. `ctx.dur` is what the module asks for; the cut
+    // comes from timing.json and is a second and a half shorter, so the tail
+    // shot has to be paced to the shorter one or it never finishes its move.
+    const END = 53.4;
+
+    // The closing shots all sit on the escape line and look back down it, so
+    // the survivors frame themselves against the wreck: `lead` is how far
+    // ahead of the ships the camera sits, `off` how far off the line.
+    const chaseCam = (lead, off) => (u, t) => escAt(t, 0)
+      .addScaledVector(ESC_DIR, typeof lead === 'function' ? lead(u) : lead)
+      .add(typeof off === 'function' ? off(u) : off);
 
     const shots = new ShotList();
     shots.add({            // 1. thirty pilots, and a floor that has no edges
@@ -365,8 +526,8 @@ export default {
     });
     shots.add({            // 2. the trench, running away past the horizon
       t: 3.55, dur: 4.15, fov: 52, ease: 'linear',
-      pos: (u) => [132 - u * 40, 44 - u * 10, 150 - u * 118],
-      look: (u) => [6, -20, -400 - u * 260],
+      pos: (u) => [98 - u * 44, 40 - u * 13, 190 - u * 150],
+      look: (u) => [4, -22, -520 - u * 300],
       shake: 0.12, handheld: 0.5,
     });
     shots.add({            // 3. the run in, with the deck batteries up
@@ -377,8 +538,8 @@ export default {
     });
     shots.add({            // 4. chase cam, dropping into the trench
       t: DIVE_END - 1.2, dur: (r4 - 1.2) - (DIVE_END - 1.2), fov: 58, ease: 'linear',
-      pos: () => hero.position.clone().add(new THREE.Vector3(0, 4.6, 34)),
-      look: () => hero.position.clone().add(new THREE.Vector3(0, 1.0, -40)),
+      pos: () => hero.position.clone().add(new THREE.Vector3(5.5, 4.6, 34)),
+      look: () => hero.position.clone().add(new THREE.Vector3(1.5, 1.0, -40)),
       shake: 0.35, shakeFreq: 22,
     });
     shots.add({            // 5. reverse: looking back at the pursuing TIEs
@@ -387,10 +548,14 @@ export default {
       look: () => ties[0].position,
       shake: 0.4, shakeFreq: 20,
     });
-    shots.add({            // 6. low front quarter, wall streaming past
+    shots.add({            // 6. low front quarter, looking up past the s-foils
+      // Anything here that looks back up the trench along the floor catches the
+      // deck's mirror lobe and the bottom half of the frame goes to white. Sit
+      // under the flight line and tilt up instead: the fighter is then read
+      // against the open strip of sky, and the floor is out of shot entirely.
       t: r4 + 3.8, dur: (r6 - 0.6) - (r4 + 3.8), fov: 52, ease: 'linear',
-      pos: () => hero.position.clone().add(new THREE.Vector3(10, -5.0, -26)),
-      look: () => hero.position.clone().add(new THREE.Vector3(-1, 1.4, 8)),
+      pos: (u) => hero.position.clone().add(new THREE.Vector3(13 - u * 4, -6.2 + u * 1.4, -38 + u * 9)),
+      look: () => hero.position.clone().add(new THREE.Vector3(-1, 2.4, 6)),
       shake: 0.45, shakeFreq: 24,
     });
     shots.add({            // 7. down the barrel of the trench to the port
@@ -400,33 +565,41 @@ export default {
       shake: 0.5, shakeFreq: 26,
     });
     shots.add({            // 8. up and out, the deck spread out underneath
-      t: HIT + 0.45, dur: SHOT_BLAST - (HIT + 0.45), fov: 56, ease: 'linear',
-      pos: (u) => { const p = hero.position; return [p.x + 30, p.y - 8 + u * 16, p.z + 58]; },
-      look: () => hero.position,
+      t: HIT + 0.45, dur: SHOT_BLAST - (HIT + 0.45), fov: 58, ease: 'linear',
+      pos: (u) => { const p = hero.position; return [p.x + 34, p.y - 12 + u * 14, p.z + 64]; },
+      look: () => hero.position.clone().add(new THREE.Vector3(-4, -10, -46)),
       shake: 0.5, shakeFreq: 18,
     });
     shots.add({            // 9. the station goes
-      t: SHOT_BLAST, dur: SHOT_PASS - SHOT_BLAST, fov: 46, ease: 'outQuad',
-      pos: (u) => [380 + u * 430, 210 + u * 180, 260 + u * 520],
-      look: [0, -60, -520],
-      shake: (u) => 0.9 * Math.exp(-u * 4),
+      t: SHOT_BLAST, dur: SHOT_WAVE - SHOT_BLAST, fov: 50, ease: 'linear',
+      pos: (u) => [700 + u * 300, 560 + u * 200, 380 + u * 340],
+      look: [0, -40, -520],
+      shake: (u) => 1.0 * Math.exp(-u * 3),
     });
-    shots.add({            // 10. survivors, past the lens
-      t: SHOT_PASS, dur: SHOT_TAIL - SHOT_PASS, fov: 44, ease: 'linear',
-      pos: (u) => [810 + u * 300, 390 + u * 140, 780 + u * 430],
-      look: [0, -60, -520],
-      handheld: 0.5,
+    shots.add({            // 10. the wave, coming through the lens
+      t: SHOT_WAVE, dur: SHOT_PASS - SHOT_WAVE, fov: 52, ease: 'linear',
+      pos: (u) => [1240 + u * 300 + Math.sin(u * 2.2) * 260, 700 + u * 300, 980 + u * 560],
+      look: (u) => [0, -40 + u * 90, -520],
+      shake: (u) => 0.5 * Math.exp(-u * 1.6), shakeFreq: 12, handheld: 0.5,
     });
-    shots.add({            // 11. running for the dark
-      t: SHOT_TAIL, dur: ctx.dur - SHOT_TAIL, fov: 44, ease: 'linear',
-      pos: (u, t) => escAt(t + lerp(1.7, 0.85, u)).add(new THREE.Vector3(112, 48, -78)),
-      look: [0, -60, -520],
+    shots.add({            // 11. survivors, past the lens
+      t: SHOT_PASS, dur: SHOT_TAIL - SHOT_PASS, fov: 46, ease: 'linear',
+      pos: chaseCam((u) => lerp(300, 34, u), (u) => new THREE.Vector3(70 - u * 26, 42 - u * 16, -28)),
+      look: (u, t) => escAt(t, 0).clone().lerp(BLAST, lerp(0.05, 0.20, u)),
       handheld: 0.6,
     });
+    shots.add({            // 12. running for the dark, the wreck still burning
+      t: SHOT_TAIL, dur: END - SHOT_TAIL, fov: 54, ease: 'linear',
+      pos: chaseCam((u) => lerp(130, 380, u), (u) => new THREE.Vector3(80 + u * 42, 58 + u * 26, -30)),
+      look: (u, t) => escAt(t, 0).clone().lerp(BLAST, 0.12),
+      handheld: 0.5,
+    });
 
-    // firing schedules
+    // firing schedules. The TIEs stop well before r6: the line over that beat
+    // is "he switched off the targeting computer", and a green bolt going off
+    // in the lens is the one thing guaranteed to pull the eye off it.
     const tieFire = [];
-    for (let t = r4 - 3; t < r6; t += 0.34) tieFire.push({ t, which: rng.int(0, 2) });
+    for (let t = r4 - 3; t < r6 - 1.4; t += 0.34) tieFire.push({ t, which: rng.int(0, 2) });
     const wallHits = [];
     for (let t = DIVE_END; t < r6; t += 0.55) wallHits.push({ t, side: rng.sign() });
     // deck batteries throwing bolts up past the camera on the approach
@@ -445,13 +618,25 @@ export default {
     const _v = new THREE.Vector3();
     const _s = new THREE.Vector3();
     const _e = new THREE.Euler();
-    const grade = { uVignette: 0.44, uGrain: 0.032, uAberration: 0.0022 };
+    const grade = { uVignette: 0.44, uGrain: 0.032, uAberration: 0.0014 };
+    // The trench is built out of white and light bluish gray and the camera is
+    // inside it for thirty seconds, so it runs a stop under the rest of the film
+    // or every wall panel sits on the clip.
+    const RUN_EXPOSURE = 1.58;
 
     return {
       root,
       shots,
       grade,
-      exposure: (t) => (t < BLOW ? 1.8 : 1.8 - 0.5 * Math.exp(-(t - BLOW) * 0.8)),
+      // The lens stops down hard on the flash and opens again over the next
+      // few seconds, which is what keeps the fireball from being a white card
+      // and lets the wreck still read as orange once it is only embers.
+      exposure: (t) => {
+        const a = t - BLOW;
+        if (a < -0.22) return RUN_EXPOSURE;
+        const shut = a < 0 ? (a + 0.22) / 0.22 : Math.exp(-a * 0.35);
+        return RUN_EXPOSURE - (RUN_EXPOSURE - 0.65) * shut;
+      },
       update(t, dt) {
         if (t < lastT) { ti = 0; wi = 0; fi = 0; fired = false; hitDone = false; }
         lastT = t;
@@ -459,14 +644,18 @@ export default {
         const gone = tau >= 0.02;
 
         // ---- flight -----------------------------------------------------
+        const esc = clamp(ramp(t, BLOW - 0.2, BLOW + 0.7), 0, 1);
+        const ahead = lerp(0.05, 0.4, esc);   // longer lead once the burn is on
         const p = heroAt(t);
-        if (tau > -0.2) p.lerp(escAt(t, 0), clamp(ramp(t, BLOW - 0.2, BLOW + 0.7), 0, 1));
+        if (tau > -0.2) p.lerp(escAt(t, 0), esc);
         hero.position.copy(p);
-        const nxt = heroAt(t + 0.05);
-        if (tau > -0.2) nxt.lerp(escAt(t + 0.05, 0), clamp(ramp(t, BLOW - 0.2, BLOW + 0.7), 0, 1));
-        hero.lookAt(nxt.x, nxt.y, nxt.z - 1);
+        const nxt = heroAt(t + ahead);
+        if (tau > -0.2) nxt.lerp(escAt(t + ahead, 0), esc);
+        hero.lookAt(nxt.x, nxt.y, nxt.z - (1 - esc));
         hero.rotation.z = -Math.cos(t * 0.9) * 0.22 * clamp(1 - ramp(t, DIVE_END, DIVE_END + 3), 0.25, 1);
-        for (const f of heroFlares) f.userData.set(0.85 + Math.sin(t * 19) * 0.1);
+        // long trails once the burn is on: two ships against a burning moon are
+        // backlit silhouettes, and the engines are what says they are ours
+        for (const f of heroFlares) f.userData.set((0.85 + Math.sin(t * 19) * 0.1) * (1 + esc * 1.5));
 
         wing.forEach((x, i) => {
           if (gone) {
@@ -474,9 +663,9 @@ export default {
             x.visible = true;
             const q0 = escAt(t, 1);
             x.position.copy(q0);
-            const q1 = escAt(t + 0.05, 1);
-            x.lookAt(q1.x, q1.y, q1.z + 0.001);
-            x.rotation.z = Math.sin(t * 1.1) * 0.12;
+            const q1 = escAt(t + 0.4, 1);
+            x.lookAt(q1.x, q1.y, q1.z);
+            x.rotation.z = Math.sin(t * 1.1) * 0.16;
             x.userData.update?.(t, dt);
             return;
           }
@@ -497,7 +686,7 @@ export default {
           const q0 = heroAt(t - lag);
           tie.position.set(q0.x + (i - 1) * 6.5, q0.y + 2.0 + i * 0.6, q0.z + 34 + i * 12);
           tie.lookAt(hero.position);
-          tie.visible = t > r4 - 5.5 && t < HIT;
+          tie.visible = t > r4 - 5.5 && t < r6 - 0.5;
           tie.userData.update?.(t, dt);
         });
 
@@ -511,7 +700,11 @@ export default {
           const f = tieFire[ti++];
           const src = ties[f.which];
           const from = src.position.clone().add(new THREE.Vector3(rng.sign() * 3, 0, -4));
-          const to = hero.position.clone().add(new THREE.Vector3(rng.gauss(0, 2.4), rng.gauss(0, 1.6), 0));
+          // Deliberately wide, and wide to one side: the chase cameras sit on
+          // the hero's tail, so a bolt aimed dead at him goes through the lens
+          // and floods the whole frame green.
+          const to = hero.position.clone().add(new THREE.Vector3(
+            rng.sign() * rng.range(4.5, 11), rng.gauss(-1.5, 3.4), 0));
           green.fireAt(from, to, { ttl: 0.55 });
           if (rng.next() < 0.35) {
             for (const g of heroGuns.slice(0, 2)) {
@@ -553,7 +746,7 @@ export default {
         for (const m of deckMeshes) m.visible = !gone;
         for (const m of trenchMeshes) m.visible = !gone;
         for (const l of trenchLights) {
-          l.light.intensity = l.i0 * (tau < 0 ? 1 : lerp(1, 0.42, clamp(ramp(t, BLOW, BLOW + 2.5), 0, 1)));
+          l.light.intensity = l.i0 * (tau < 0 ? 1 : lerp(1, 0.85, clamp(ramp(t, BLOW, BLOW + 2.5), 0, 1)));
         }
 
         // the hit: the port lets go and fire walks back up the trench
@@ -566,44 +759,56 @@ export default {
           portLight.intensity = 0;
         }
 
-        // whiteout
+        // whiteout: a quarter of a second of nothing but white, which is what
+        // covers the cut from a standing station to a field of wreckage
         const flashK = tau < 0
-          ? (tau > -0.14 ? (tau + 0.14) / 0.14 : 0) * 9
-          : 9 * Math.exp(-tau * 4.4);
+          ? (tau > -0.1 ? (tau + 0.1) / 0.1 : 0) * 16
+          : 16 * Math.exp(-tau * 9);
         shell.visible = flashK > 0.004;
-        if (shell.visible) shellMat.color.setRGB(flashK, flashK * 0.99, flashK * 0.96);
+        if (shell.visible) shellMat.color.setRGB(flashK, flashK * 0.985, flashK * 0.95);
 
-        // fireball
-        if (tau > -0.1) {
-          const u = Math.max(0, tau);
-          const r = lerp(40, 980, ease.outQuart(clamp(u / 2.6, 0, 1))) + u * 16;
-          core.scale.setScalar(r);
-          const fade = Math.exp(-u * 0.42) * (1 - clamp(ramp(t, ctx.dur - 5, ctx.dur), 0, 1));
-          const hot = Math.exp(-u * 1.5);
-          coreMat.color.setRGB(
-            (0.55 + hot * 6.0) * fade,
-            (0.16 + hot * 3.4) * fade,
-            (0.05 + hot * 1.5) * fade,
-          );
-          core.visible = fade > 0.004;
-        } else {
-          core.visible = false;
+        // fire. No fade of its own: the film cross-fades the chapter out over
+        // the last three quarters of a second and a second fade on top of that
+        // just empties the frame early.
+        const tail = 1;
+        let anyFire = false;
+        for (let i = 0; i < FIRES; i++) {
+          const f = fires[i];
+          const a = t - f.t0;
+          const u = a / f.ttl;
+          if (a < 0 || u >= 1) { fScl[i] = 0; continue; }
+          anyFire = true;
+          const d = f.speed * a * (1 - u * 0.5);
+          fOff[i * 3] = f.origin.x + f.dir.x * d;
+          fOff[i * 3 + 1] = f.origin.y + f.dir.y * d;
+          fOff[i * 3 + 2] = f.origin.z + f.dir.z * d;
+          fScl[i] = lerp(f.s0, f.s1, ease.outCubic(u));
+          const heat = Math.exp(-a * f.cool);
+          const k = f.peak * Math.min(1, a * 9) * Math.pow(1 - u, 1.25) * tail;
+          fCol[i * 3] = lerp(FIRE_COOL.r, FIRE_HOT.r, heat) * k;
+          fCol[i * 3 + 1] = lerp(FIRE_COOL.g, FIRE_HOT.g, heat) * k;
+          fCol[i * 3 + 2] = lerp(FIRE_COOL.b, FIRE_HOT.b, heat) * k;
         }
+        fire.visible = anyFire;
+        fOffAttr.needsUpdate = true;
+        fSclAttr.needsUpdate = true;
+        fColAttr.needsUpdate = true;
 
-        // shockwave
+        // shockwave. Faded out well before the wave overtakes the camera: from
+        // inside, a ring is a brown band across the frame.
         const ringSet = (m, t0, dur, span, peak) => {
           const u = (t - t0) / dur;
           if (u < 0 || u > 1) { m.visible = false; return; }
           m.visible = true;
-          m.scale.setScalar(lerp(30, span, ease.outQuart(u)));
-          m.material.opacity = peak * Math.pow(1 - u, 1.8) * Math.min(1, u * 14);
+          m.scale.setScalar(lerp(50, span, Math.pow(u, 0.68)));
+          m.material.opacity = peak * Math.pow(1 - u, 2.2) * Math.min(1, u * 12) * tail;
         };
-        ringSet(ringA, BLOW, 3.9, 2600, 1.0);
-        ringSet(ringB, BLOW + 0.22, 6.4, 1750, 0.5);
+        ringSet(ringA, BLOW + 0.04, 5.0, 2900, 0.95);
+        ringSet(ringC, BLOW + 0.12, 5.6, 2500, 0.70);
+        ringSet(ringB, BLOW + 0.5, 6.6, 3400, 0.34);
 
         // debris
         if (tau > -0.05) {
-          const alive = 1 - clamp(ramp(t, ctx.dur - 3.5, ctx.dur), 0, 1) * 0.5;
           for (let i = 0; i < DEBRIS; i++) {
             const c = chunks[i];
             const a = tau - c.t0;
@@ -611,13 +816,13 @@ export default {
             _v.copy(c.origin).addScaledVector(c.dir, c.speed * a);
             _e.set(c.rot.x + c.spin.x * a, c.rot.y + c.spin.y * a, c.rot.z + c.spin.z * a);
             _q.setFromEuler(_e);
-            const s = c.size * Math.min(1, a / 0.12) * alive;
-            _s.set(s, s, s);
+            _s.copy(c.scale).multiplyScalar(Math.min(1, a / 0.1));
             _m.compose(_v, _q, _s);
             debris.setMatrixAt(i, _m);
-            const glowK = 1 + 2.4 * Math.exp(-a * 1.1);
+            // still glowing from the inside for the first couple of seconds
+            const glowK = 1 + 2.4 * Math.exp(-a * 0.85);
             debris.instanceColor.setXYZ(i,
-              c.tone.r * glowK, c.tone.g * glowK * 0.86, c.tone.b * glowK * 0.7);
+              c.tone.r * glowK, c.tone.g * glowK * 0.82, c.tone.b * glowK * 0.62);
           }
           debris.instanceMatrix.needsUpdate = true;
           debris.instanceColor.needsUpdate = true;
@@ -625,26 +830,6 @@ export default {
         } else {
           debris.visible = false;
         }
-
-        // fire blobs (trench flare-up, then the blast)
-        let anyBlob = false;
-        for (let i = 0; i < BLOBS; i++) {
-          const b = puffs[i];
-          const u = (t - b.t0) / b.ttl;
-          if (u < 0 || u >= 1) { _m.makeScale(0, 0, 0); blobs.setMatrixAt(i, _m); continue; }
-          anyBlob = true;
-          const a = t - b.t0;
-          _v.copy(b.origin).addScaledVector(b.dir, b.speed * a * (1 - u * 0.45));
-          const s = lerp(b.s0, b.s1, ease.outCubic(u));
-          _s.set(s, s, s);
-          _m.compose(_v, _q.identity(), _s);
-          blobs.setMatrixAt(i, _m);
-          const k = Math.min(1, u * 8) * Math.pow(1 - u, 1.6) * 0.42;
-          blobs.instanceColor.setXYZ(i, b.hot.r * k, b.hot.g * k, b.hot.b * k);
-        }
-        blobs.visible = anyBlob;
-        blobs.instanceMatrix.needsUpdate = true;
-        blobs.instanceColor.needsUpdate = true;
 
         // embers
         if (tau > -0.05) {
@@ -658,7 +843,7 @@ export default {
             embPos[i * 3] = e.origin.x + e.dir.x * d;
             embPos[i * 3 + 1] = e.origin.y + e.dir.y * d;
             embPos[i * 3 + 2] = e.origin.z + e.dir.z * d;
-            const k = Math.pow(1 - u, 1.4) * Math.min(1, a * 6);
+            const k = Math.pow(1 - u, 1.4) * Math.min(1, a * 6) * tail;
             embCol[i * 3] = 3.4 * k;
             embCol[i * 3 + 1] = (0.9 + 1.4 * Math.exp(-a * 1.6)) * k;
             embCol[i * 3 + 2] = (0.18 + 1.1 * Math.exp(-a * 2.4)) * k;
@@ -671,10 +856,19 @@ export default {
           embers.visible = false;
         }
 
-        blastLight.intensity = tau < 0 ? 0 : 2200 * Math.exp(-tau * 0.30);
+        blastLight.intensity = tau < 0 ? 0 : 12000 * Math.exp(-tau * 0.20);
+        blastFill.intensity = tau < 0 ? 0 : 1.6 * Math.exp(-tau * 0.13);
+        if (tau > 0) {
+          escKey.intensity = 2.0 * clamp(ramp(t, BLOW + 0.4, BLOW + 1.6), 0, 1);
+          const kp = escAt(t, 0);
+          escKey.target.position.copy(kp);
+          escKey.position.copy(kp).addScaledVector(ESC_DIR, 300).add(_v.set(180, 130, -60));
+        } else {
+          escKey.intensity = 0;
+        }
 
         // the grade takes the punch too
-        grade.uVignette = tau > 0 ? lerp(0.44, 0.62, clamp(ramp(t, BLOW, BLOW + 2), 0, 1)) : 0.44;
+        grade.uVignette = tau > 0 ? lerp(0.44, 0.54, clamp(ramp(t, BLOW, BLOW + 2), 0, 1)) : 0.44;
         grade.uAberration = tau > 0 && tau < 3 ? 0.0022 + 0.006 * Math.exp(-tau * 1.6) : 0.0022;
 
         green.update(dt); red.update(dt);

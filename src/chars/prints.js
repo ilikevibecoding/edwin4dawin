@@ -154,36 +154,50 @@ export const FACE_PILOT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
 
 /** Obi-Wan the hermit: white beard, hooded eyes, weathered. */
 export const FACE_OBIWAN = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 256">
-  <!-- Beard, as one U: two strips of hair down in front of the ears joined by a
-       nearly level moustache line at y 126. Drawn instead with a scooped top edge
-       the boundary between skin and beard read as one enormous grin. The greys are
-       kept well off white; near #e8e8e2 the studio rig clipped the whole beard to a
-       flat blob and every strand disappeared. -->
-  <path d="M192 58 L212 52 L214 126 L298 126 L300 52 L320 58 L318 150
-           Q310 214 256 244 Q202 214 194 150 Z" fill="#cbcbc3"/>
+  <!-- Beard.
+       It must NOT reach above the eyeline. Earlier passes ran two strips of hair
+       from y 52 down in front of the ears to meet the moustache, which is how a
+       real beard is shaped, but on a 122 px wide face those strips plus the
+       white brows closed into an unbroken pale ring around the eyes, and the
+       whole face read as a balaclava with a yellow window cut in it. So the
+       beard now starts at the CHEEK: its top edge lifts to y 104 only at the
+       outer corners, where it is beside the eye rather than above it, leaving
+       bare skin at each temple to break the ring.
+       The greys are kept well off white; near #e8e8e2 the studio rig clipped the
+       whole beard to a flat blob and every strand disappeared. -->
+  <path d="M194 104 C 197 126, 208 135, 226 135 Q 241 130, 256 132 Q 271 130, 286 135
+           C 304 135, 315 126, 318 104 C 322 158, 313 203, 293 226
+           Q 277 245, 256 247 Q 235 245, 219 226 C 199 203, 190 158, 194 104 Z"
+        fill="#c4c4bc"/>
   <!-- shadow under the mouth so the chin beard separates from the moustache -->
-  <path d="M212 152 Q256 146 300 152 L298 174 Q288 224 256 240 Q224 224 214 174 Z"
-        fill="#b3b3ab"/>
+  <path d="M214 154 Q256 148 298 154 L296 176 Q286 226 256 242 Q226 226 216 176 Z"
+        fill="#aeaea6"/>
   <!-- moustache, dipped at the philtrum and drooping past the corners of the mouth -->
-  <path d="M212 128 Q234 118 254 132 Q274 118 300 128 Q298 152 256 148 Q214 152 212 128 Z"
-        fill="#deded6"/>
+  <path d="M214 130 Q234 120 254 134 Q274 120 298 130 Q296 154 256 150 Q216 154 214 130 Z"
+        fill="#d8d8d0"/>
   <!-- mouth: a thin closed line, all that shows through the whiskers -->
-  <path d="M234 155 Q256 161 278 155" fill="none" stroke="#4a3628" stroke-width="4.5"
+  <path d="M234 157 Q256 163 278 157" fill="none" stroke="#4a3628" stroke-width="4.5"
         stroke-linecap="round"/>
-  <!-- beard strands -->
-  <g stroke="#93938b" stroke-width="3" fill="none" stroke-linecap="round">
-    <path d="M230 178 Q234 208 242 226"/>
-    <path d="M256 180 L256 234"/>
-    <path d="M282 178 Q278 208 270 226"/>
-    <path d="M204 132 Q204 172 216 200"/>
-    <path d="M308 132 Q308 172 296 200"/>
-    <path d="M226 138 Q222 142 224 146"/>
-    <path d="M286 138 Q290 142 288 146"/>
+  <!-- Beard strands. The four outer ones deliberately cross the silhouette so the
+       edge of the beard is ragged instead of a cut-out shield outline. -->
+  <g stroke="#8e8e86" stroke-width="3" fill="none" stroke-linecap="round">
+    <path d="M230 180 Q234 210 242 228"/>
+    <path d="M256 182 L256 236"/>
+    <path d="M282 180 Q278 210 270 228"/>
+    <path d="M206 140 Q203 178 214 204"/>
+    <path d="M306 140 Q309 178 298 204"/>
+    <path d="M198 150 Q192 176 202 198"/>
+    <path d="M314 150 Q320 176 310 198"/>
+    <path d="M238 240 Q244 250 250 252"/>
+    <path d="M274 240 Q268 250 262 252"/>
+    <path d="M226 140 Q222 144 224 148"/>
+    <path d="M286 140 Q290 144 288 148"/>
   </g>
-  <!-- heavy brows -->
+  <!-- Heavy brows. They stop at x 244/268 and the beard tops out at y 126 under
+       them, so there are ~40 px of bare cheek between the two on each side. -->
   <g stroke="#c0c0b8" stroke-width="10" stroke-linecap="round" fill="none">
-    <path d="M206 78 Q224 68 244 76"/>
-    <path d="M306 78 Q288 68 268 76"/>
+    <path d="M208 78 Q224 68 242 76"/>
+    <path d="M304 78 Q288 68 270 76"/>
   </g>
   <!-- eyes, hooded -->
   <g fill="${INK}">
@@ -307,14 +321,22 @@ export const FACE_OFFICER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
     <path d="M306 140 Q298 168 284 182"/>
   </g>
   <path d="M252 122 Q244 140 256 148" fill="none" stroke="#c19a26" stroke-width="4"/>
-  <!-- thin, flat, disapproving mouth -->
-  <path d="M228 176 L284 176 L282 184 L230 184 Z" fill="#5a3a24"/>
-  <path d="M228 176 Q256 170 284 176" fill="none" stroke="#7a5433" stroke-width="3"/>
-  <!-- scar over the right brow -->
-  <path d="M300 52 L312 84" fill="none" stroke="#c07a4a" stroke-width="3.5"/>
-  <!-- sideburns -->
-  <path d="M188 8 L204 14 L206 78 L190 84 Z" fill="#3f2a12" opacity="0.9"/>
-  <path d="M324 8 L308 14 L306 78 L322 84 Z" fill="#3f2a12" opacity="0.9"/>
+  <!-- Thin, flat, disapproving mouth. Filled as a 56x8 slab it read at distance
+       as either clenched teeth or a moustache, so it is one stroked line with
+       the corners pulled down. -->
+  <path d="M230 178 Q256 173 282 178" fill="none" stroke="#6b4526" stroke-width="4.5"
+        stroke-linecap="round"/>
+  <path d="M228 174 L231 180" fill="none" stroke="#6b4526" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M284 174 L281 180" fill="none" stroke="#6b4526" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- There is no scar. A 3.5px pink stroke from py 52 to 84 is 4 screen pixels of
+       a face this size, and next to the sideburn all it read as was one stray red
+       speck on his temple. -->
+  <!-- Sideburns, out at px 170/342 where the ears are. They have to stop ABOVE the
+       eyeline: run down to py 118 in near-black they stopped reading as hair and
+       became two hard vertical bars pinned to the edges of his head, right where
+       the head curves away from the light. Short, tapered, and a shade lighter. -->
+  <path d="M172 46 L192 52 L188 92 Q179 96 170 88 Z" fill="#5a3d1c" opacity="0.92"/>
+  <path d="M340 46 L320 52 L324 92 Q333 96 342 88 Z" fill="#5a3d1c" opacity="0.92"/>
 </svg>`;
 
 /** C-3PO: gold plating, sunken photoreceptors, mouth grille. */
@@ -322,9 +344,19 @@ export const FACE_C3PO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5
   <!-- face plate seam -->
   <path d="M192 0 L320 0 L326 120 Q302 216 256 246 Q210 216 186 120 Z"
         fill="#c5a341" stroke="#675214" stroke-width="3"/>
-  <!-- brow bar -->
-  <path d="M192 46 Q256 28 320 46 L316 72 Q256 56 196 72 Z" fill="#a3862a"
-        stroke="#675214" stroke-width="2.5"/>
+  <!-- Brow ridges: ONE PER EYE, not a bar across the head. Every version of this
+       that ran the full width of the plate read as a headband, however it was
+       shaded, because the eye is looking for a horizontal line at that height and
+       finds one. Two short arcs sitting on the photoreceptor housings read as the
+       moulded ridge they are, and they group with the eyes instead of the crown. -->
+  <g fill="none" stroke="#8a6c1c" stroke-width="4" stroke-linecap="round">
+    <path d="M198 78 Q220 62 244 74"/>
+    <path d="M314 78 Q292 62 268 74"/>
+  </g>
+  <g fill="none" stroke="#dfc272" stroke-width="2.4" stroke-linecap="round">
+    <path d="M201 84 Q221 70 242 80"/>
+    <path d="M311 84 Q291 70 270 80"/>
+  </g>
   <!-- photoreceptor sockets -->
   <g fill="#2b2415" stroke="#675214" stroke-width="3">
     <circle cx="220" cy="106" r="26"/>

@@ -103,6 +103,7 @@ const ready = (async () => {
 
 window.__film = {
   ready,
+  app: film,
   get duration() { return film.duration; },
   chapters: () => film.chapters.map((c) => ({ id: c.id, start: c._start, dur: c.dur })),
   renderAt(t) {

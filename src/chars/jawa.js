@@ -37,7 +37,13 @@ function glowEyes(fig) {
     halo.position.set(x, y, z);
     g.add(halo);
   }
-  const lamp = new THREE.PointLight(C.brightLightYellow, 2.2, 2.6, 2);
+  /*
+   * The lamp is for the inside of the hood, not for the figure. At intensity 2.2
+   * over a 2.6-stud radius it reached his chest, and since a jawa is black under
+   * a brown robe every surface it touched turned warm tan -- there was a light
+   * band across his throat and collarbone that read as bare skin.
+   */
+  const lamp = new THREE.PointLight(C.brightLightYellow, 0.8, 1.4, 2);
   lamp.position.set(0, y, 0.55);
   g.add(lamp);
   fig.head.add(g);

@@ -35,10 +35,16 @@ export default {
   dur: 34,
   async build(ctx) {
     const root = new THREE.Group();
-    setupScene(ctx, 'interior', {
+    const rig = setupScene(ctx, 'interior', {
       background: 0x1a120c, envIntensity: 0.19, fog: [0x1a120c, 40, 200],
       shadowSize: 34,
     });
+    // The rig's warm bounce sits at -X/-Z, which for a camera at +X/+Z is the
+    // exact mirror direction off every horizontal surface in the room. ABS
+    // carries a clearcoat, so that glinted a row of over-threshold white
+    // specular hits up the table and the shelf. Swing it round to the camera
+    // side: same warm bounce, mirror lobe now thrown away from the lens.
+    rig.userData.lights.bounce.position.set(26, 15, 24);
 
     // The set's practicals are dialled for a wide master -- a 90 candela lamp
     // one brick above the table top -- and at the distances this chapter shoots
@@ -46,18 +52,39 @@ export default {
     const hut = await tryMake('hermithut', { lights: false }, { size: [26, 12, 26], color: C.darkTan });
     root.add(hut);
 
-    // The lamp bulb is a GLOW sphere written well over the 1.3 bloom threshold,
-    // which is what put a white hole on the table. Bring it down to a warm amber
-    // under the threshold, on a clone: mat() hands out shared materials.
+    // The lamp bulb is a 1.5-stud GLOW sphere written well over the 1.3 bloom
+    // threshold: at this chapter's distances it was a white hole on the table,
+    // and even dimmed it is a beach ball. Shrink it to a flame and take it to a
+    // warm amber under the threshold. Both on clones -- mat() and BrickBuilder
+    // hand out shared materials and geometry.
     const bulb = hut.getObjectByName(`abs_glow_${C.transNeonOrange.toString(16)}`);
     if (bulb) {
       bulb.material = bulb.material.clone();
-      bulb.material.color.setRGB(0.36, 0.11, 0.03);
+      bulb.material.color.setRGB(0.42, 0.13, 0.035);
+      bulb.geometry = bulb.geometry.clone();
+      bulb.geometry.computeBoundingBox();
+      const c = bulb.geometry.boundingBox.getCenter(new THREE.Vector3());
+      bulb.geometry.translate(-c.x, -c.y, -c.z);
+      bulb.geometry.scale(0.5, 0.62, 0.5);
+      bulb.geometry.translate(c.x, c.y - 0.1, c.z);
     }
+
+    // This room is stone, timber and sand, none of which are glossy, and the
+    // clearcoat on default ABS is what has been throwing clipped white specular
+    // hits off the table and the shelf every time a lamp lands near the mirror
+    // angle of the lens. Take it off the set and the whole class of them goes.
+    // Materials are cached and shared with the characters, so clone first.
+    hut.traverse((o) => {
+      const m = o.material;
+      if (!m || m.clearcoat === undefined || m.metalness > 0.2) return;
+      o.material = m.clone();
+      o.material.clearcoat = 0;
+      o.material.roughness = Math.max(m.roughness ?? 0.34, 0.66);
+    });
 
     // Stone in a shuttered room: without a bounce term the walls go to black and
     // take Ben's cowl with them.
-    root.add(new THREE.HemisphereLight(0xffd9a8, 0x2a1c10, 0.55));
+    root.add(new THREE.HemisphereLight(0xffd9a8, 0x2a1c10, 1.2));
 
     // High enough over the table that the glossy top plate does not throw a
     // clipped specular back at the lens.
@@ -75,15 +102,28 @@ export default {
     fill.position.set(6.4, 4.8, 5.6);
     root.add(fill);
 
-    // afternoon light through the slit, landing across the sleeping mat
-    const shaft = lightShaft(1.0, 3.4, 10, 0xffd9a0, 0.03);
-    shaft.position.set(8.0, 3.6, 2.5);
-    shaft.rotation.z = -1.05;
+    // Afternoon light through the slit. lightShaft is a double-sided additive
+    // cylinder, so a fat one placed where the camera stands reads as a pane of
+    // glass laid over the actors. Keep it thin and short enough to stay in the
+    // near-wall corner, out of the lens and off Ben's face.
+    const shaft = lightShaft(0.5, 1.5, 7.5, 0xffd9a0, 0.05);
+    shaft.position.set(9.2, 3.0, 0.6);
+    shaft.rotation.z = -0.85;
     root.add(shaft);
 
     const key = new THREE.PointLight(0xffcf96, 46, 46, 2);
     key.position.set(6.6, 8.4, 8.4);
     root.add(key);
+
+    // Back-right corner. Everything else in here comes from the open front, so
+    // without this the wall Ben stands against goes to black and he sinks into
+    // it; from behind him it also gives the cowl an edge. Directional and far
+    // off, not a practical up against the stone: the +X wall is seen at a
+    // grazing angle from every camera here, and grazing angles are exactly
+    // where a near point light puts a clipped clearcoat glint on the wall.
+    const back = new THREE.DirectionalLight(0xffc890, 0.5);
+    back.position.set(17, 13, -19);
+    root.add(back);
 
     const obiwan = await tryMake('obiwan', { saber: 0 }, { size: [1.8, 5, 1], color: C.darkTan });
     obiwan.position.set(3.4, 0, -2.8);
@@ -101,7 +141,7 @@ export default {
     // The saber itself lives in this scene so we can hand it over. A saturated
     // blue with a barely-tinted core: the class whitens the core 55% of the way
     // to `coreColor`, so anything near white there comes back a white blade.
-    const saber = new Lightsaber({ color: 0x2f8bff, coreColor: 0x9ad2ff, len: 4.6 });
+    const saber = new Lightsaber({ color: 0x2f8bff, coreColor: 0xd8ecff, len: 4.6 });
     root.add(saber.object3D);
 
     const glowFromBlade = new THREE.PointLight(0x6fc0ff, 0, 18, 2);
@@ -123,8 +163,12 @@ export default {
 
     const shots = new ShotList();
     shots.add({          // 1. the room: chest, lamp, the two of them
+      // Clear of x = 8.6 to 12.2 at the front of the set. The open fourth wall
+      // has a stub return standing in that corner, and the old start position
+      // was buried inside it -- the lit inside face of it filled a third of the
+      // frame and bloomed the first two seconds of the chapter to cream.
       t: 0, dur: k2 - 0.9, fov: 38, ease: 'linear',
-      pos: [9.0, 7.4, 10.6], to: [8.2, 7.0, 9.4],
+      pos: [7.5, 7.5, 11.2], to: [7.9, 7.0, 9.3],
       look: [1.6, 4.5, -1.9],
       handheld: 0.28,
     });
@@ -133,10 +177,13 @@ export default {
       pos: [7.8, 6.4, 7.6], to: [7.2, 6.2, 6.8],
       look: [1.7, 4.4, -1.8], handheld: 0.26,
     });
-    shots.add({          // 3. ignition: the blade comes up past Luke's face
-      t: IGNITE - 0.5, dur: 3.9, fov: 34, ease: 'outQuad',
-      pos: [5.6, 5.2, 4.6], to: [5.2, 5.4, 3.8],
-      look: () => bladeAt(1.0), lookTo: () => lukeHead().add(new THREE.Vector3(0, 0.1, 0)),
+    shots.add({          // 3. ignition: a single on Luke, blade up past his face
+      // Ben sits almost exactly on the right frame edge from here, so this is
+      // framed to leave him out rather than slice his head in half.
+      t: IGNITE - 0.5, dur: 3.9, fov: 32, ease: 'outQuad',
+      pos: [5.8, 5.6, 5.2], to: [5.2, 5.8, 4.4],
+      look: () => lukeHead().add(new THREE.Vector3(-0.95, -0.9, 0.7)),
+      lookTo: () => lukeHead().add(new THREE.Vector3(-0.95, 0.2, 0.7)),
       handheld: 0.24,
     });
     shots.add({          // 4. Ben, lit blue off the blade, looking past it
@@ -159,8 +206,8 @@ export default {
     return {
       root,
       shots,
-      exposure: 1.18,
-      grade: { uVignette: 0.5, uGrain: 0.036, uSaturation: 1.1 },
+      exposure: 1.26,
+      grade: { uVignette: 0.46, uGrain: 0.036, uSaturation: 1.1, uContrast: 1.05 },
       update(t, dt) {
         const of = obiwan.userData.fig;
         const lf = luke.userData.fig;
@@ -193,10 +240,15 @@ export default {
             ['hold_two', ramp(t, HANDOVER - 1.3, HANDOVER - 0.1)],
             ['idle', ramp(t, IGNITE - 0.3, IGNITE + 0.9)],
           ]);
-          // On his long speech he looks off past the camera rather than at
-          // Luke: it plays the line, and it turns the cowl off the lens.
+          // Never all the way onto Luke, even when he is talking to him. Luke
+          // stands at -X of him and every camera in this chapter is at +X, so a
+          // head aimed squarely at Luke is a head aimed 78 degrees off the lens
+          // -- and what is on the back of this one is a cowl. A third of the way
+          // to the open side keeps his face on the camera through his own lines;
+          // on the long speech he looks off past it, which plays the line too.
           const away = env(t, k3 - 0.5, k3 + 6.6, 1.1, 1.5);
-          const gaze = lukeHead().lerp(new THREE.Vector3(8.0, 6.6, 7.0), away);
+          const open = new THREE.Vector3(8.4, 6.4, 8.0);
+          const gaze = lukeHead().lerp(open, 0.34 + 0.4 * away);
           of.lookAt(gaze, 0.62);
           of.update(dt, t);
         }

@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { BrickBuilder, PLATE, P, B } from '../lego/brick.js';
 import { C, FINISH } from '../lego/palette.js';
 import { num, bool, hash2i, q, GREY_PANEL, pickFrom } from './common.js';
@@ -189,11 +190,7 @@ export function buildDeathStarSurface(opts = {}) {
     return (d / curve) * cell;
   };
 
-  // No shadow pass: at 400 studs across, every rig's shadow camera covers a
-  // fraction of the plate, so shadows would only appear in one corner.
-  const bb = new BrickBuilder({
-    studs: false, bevel: false, cullStuds: false, castShadow: false, receiveShadow: false,
-  });
+  const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false });
 
   for (let j = 0; j < N; j++) {
     for (let i = 0; i < N; i++) {
@@ -209,9 +206,35 @@ export function buildDeathStarSurface(opts = {}) {
     }
   }
 
-  const g = bb.build();
+  // No shadow pass: at 400 studs across, every rig's shadow camera covers a
+  // fraction of the plate, so shadows would only appear in one corner.
+  const g = bb.build({ castShadow: false, receiveShadow: false });
   g.name = 'deathstar_surface';
   g.userData.nodes = bb.nodes;
   g.userData.size = size;
+
+  // The plate carries its own sun, the way `trench` does. Every rig in the kit
+  // is dialled for a model a few tens of studs across lit from a metre away;
+  // point one at 400 studs of grey deck and the deck comes out near black.
+  // Pass lights=0 when dropping this into a scene that already has a star.
+  if (bool(opts, 'lights', true)) {
+    const sun = new THREE.DirectionalLight(new THREE.Color(0xe8f0ff).convertSRGBToLinear(), 2.0);
+    sun.position.set(-size * 0.5, size * 1.1, size * 0.8);
+    sun.target.position.set(0, 0, 0);
+    sun.castShadow = false;
+    g.add(sun, sun.target);
+    // Reflected light off the rest of the hull: without it the side of every
+    // greeble facing away from the sun crushes and the plate reads as a
+    // silhouette rather than as panelling.
+    const bounce = new THREE.DirectionalLight(new THREE.Color(0x7d94bd).convertSRGBToLinear(), 0.85);
+    bounce.position.set(size * 0.7, size * 0.25, -size * 0.5);
+    bounce.target.position.set(0, 0, 0);
+    bounce.castShadow = false;
+    g.add(bounce, bounce.target);
+    g.add(new THREE.HemisphereLight(
+      new THREE.Color(0x8ea4c6).convertSRGBToLinear(),
+      new THREE.Color(0x1c222e).convertSRGBToLinear(), 1.15,
+    ));
+  }
   return g;
 }

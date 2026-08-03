@@ -91,8 +91,12 @@ export function corridorSection(bb, zc, len = CORRIDOR.section, idx = 0) {
     // Recessed lighting slot: cowl lips top and bottom, glow strip set back.
     b.tile(halfW + 0.75, 8.0, zc, 1.5, len, { h: 0.2, color: C.white, ...F });
     b.brick(wallMid + 0.3, 8.2, zc, wallT - 0.6, len, { h: 0.8, color: C.veryLightGray, ...F });
+    // Held just above the 1.3 bloom threshold. These strips run the entire
+    // 120 studs of hallway and converge on the vanishing point, so at full
+    // GLOW strength they smear into two bars of white across the frame.
     b.brick(halfW + 0.5, 8.35, zc, 0.35, len - 0.5, {
       h: 0.5, color: C.transLightBlue, finish: FINISH.GLOW, ...F,
+      matOpts: { intensity: 1.35 },
     });
     b.tile(halfW + 0.75, 9.0, zc, 1.5, len, { h: 0.3, color: C.white, ...F });
     b.brick(wallMid, 9.3, zc, wallT, len, { h: ceilY - 9.3, color: C.white, ...F });
@@ -123,7 +127,7 @@ export function corridorSection(bb, zc, len = CORRIDOR.section, idx = 0) {
     for (const s of [-1, 1]) {
       bb.brick(s * 2.2, ceilY - 0.18, zr + 2.5, 1.3, 2.6, {
         h: 0.18, color: C.white, ...F,
-        matOpts: { emissive: 0xbcdcf4, emissiveIntensity: 0.75, roughness: 0.5 },
+        matOpts: { emissive: 0xbcdcf4, emissiveIntensity: 0.52, roughness: 0.5 },
       });
     }
   }

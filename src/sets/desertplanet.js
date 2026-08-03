@@ -56,9 +56,11 @@ function surfaceTexture(seed, W, H) {
       const lat = y / (H - 1);
       for (let x = 0; x < W; x++) {
         const u = x / W;
-        // Warp the band boundaries so they are not dead-straight lines.
-        const warp = (fbm2p(u, lat * 2.4, O_WARP) - 0.5) * 0.20
-          + (fbm2p(u, lat * 9, O_FINE) - 0.5) * 0.05;
+        // Warp the band boundaries so they are not dead-straight lines. Kept
+        // small: past about a tenth of the map the bands cross each other and
+        // the globe reads as cloud cover instead of a banded desert.
+        const warp = (fbm2p(u, lat * 2.4, O_WARP) - 0.5) * 0.10
+          + (fbm2p(u, lat * 9, O_FINE) - 0.5) * 0.035;
         const lv = clamp(lat + warp, 0, 1);
         const [r, g, b] = bandColor(lv);
 
@@ -68,7 +70,12 @@ function surfaceTexture(seed, W, H) {
         const m = ctr(fbm2p(u, lat * 48, O_MOTTLE), 1.9);
         // Grain: the sand-blasted detail you only see when the camera is close.
         const gr = ctr(fbm2p(u, lat * 128, O_GRAIN), 1.8);
-        const k = (0.86 + m * 0.26) * (0.92 + streak * 0.17) * (0.95 + gr * 0.11);
+        // Fine latitude striping on top of the broad bands. Without it the
+        // noise layers average out and the globe reads as cloud, not a banded
+        // desert world.
+        const fine = 0.5 + 0.5 * Math.sin(lat * Math.PI * 15 + warp * 22);
+        const k = (0.94 + m * 0.10) * (0.94 + streak * 0.12)
+          * (0.965 + gr * 0.07) * (0.925 + fine * 0.15);
 
         // Dry sea basins and lava scars, painted straight into the albedo.
         const dark = ctr(fbm2p(u, lat * 3 + 4, O_DARK), 1.7);
@@ -145,6 +152,45 @@ const RIM_FRAG = /* glsl */`
   }
 `;
 
+/*
+ * Outer halo.
+ *
+ * A fresnel term on a shell peaks at the *shell's* own silhouette, which draws
+ * a hard blue wire around the planet however the exponent is tuned. This
+ * measures instead how far the view ray passes from the planet centre, so the
+ * glow is anchored to the limb of the globe and dies away smoothly into space.
+ */
+const HALO_VERT = /* glsl */`
+  varying vec3 vW;
+  void main() {
+    vec4 wp = modelMatrix * vec4(position, 1.0);
+    vW = wp.xyz;
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`;
+
+const HALO_FRAG = /* glsl */`
+  uniform vec3 uColor;
+  uniform vec3 uSun;
+  uniform vec3 uCentre;
+  uniform float uInner;
+  uniform float uOuter;
+  uniform float uIntensity;
+  varying vec3 vW;
+  void main() {
+    vec3 dir = normalize(vW - cameraPosition);
+    vec3 co = uCentre - cameraPosition;
+    // Perpendicular distance from the planet centre to the view ray.
+    float d = length(co - dir * dot(co, dir));
+    float x = (d - uInner) / max(uOuter - uInner, 1e-4);
+    if (x < 0.0) discard;
+    float a = pow(clamp(1.0 - x, 0.0, 1.0), 2.1) * uIntensity;
+    // Only the daylit limb scatters.
+    a *= clamp(dot(normalize(vW - uCentre), normalize(uSun)) * 0.85 + 0.30, 0.0, 1.0);
+    gl_FragColor = vec4(uColor * a, a);
+  }
+`;
+
 export function buildDesertPlanet(opts = {}) {
   const R = num(opts, 'radius', 600);
   const seed = Math.round(num(opts, 'seed', 4471));
@@ -190,25 +236,29 @@ export function buildDesertPlanet(opts = {}) {
   );
   group.add(haze);
 
-  // Outer rim: the cold-blue halo that wraps the limb. Front-facing so it
-  // fades into the disc instead of drawing a hard ring around it.
+  // Outer rim: the cold-blue halo that wraps the limb, measured off the globe
+  // rather than off its own shell so it has no hard outer edge.
+  const haloR = R * 1.17;
   const rim = new THREE.Mesh(
-    new THREE.SphereGeometry(R * 1.024, 64, 40),
+    new THREE.SphereGeometry(haloR, 64, 40),
     new THREE.ShaderMaterial({
       uniforms: {
-        uColor: { value: new THREE.Color(0x9ec8ff).convertSRGBToLinear() },
+        uColor: { value: new THREE.Color(0x9fc2ec).convertSRGBToLinear() },
         uSun: { value: sun.clone() },
-        uPower: { value: 5.0 },
-        uIntensity: { value: 1.9 },
+        uCentre: { value: new THREE.Vector3() },
+        uInner: { value: R * 0.996 },
+        uOuter: { value: haloR },
+        uIntensity: { value: 0.5 },
       },
-      vertexShader: RIM_VERT,
-      fragmentShader: RIM_FRAG,
+      vertexShader: HALO_VERT,
+      fragmentShader: HALO_FRAG,
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       side: THREE.BackSide,
     }),
   );
+  rim.onBeforeRender = () => rim.getWorldPosition(rim.material.uniforms.uCentre.value);
   group.add(rim);
 
   group.position.y = -R * sink;

@@ -96,19 +96,25 @@ export function trenchSegment(bb, {
       const y = B(3) + k * (depth - B(6)) / 2.6 + hash2i(index, k, s + 55) * 1.2;
       const t = 0.5 + hash2i(index, k, s + 66) * 0.7;
       bb.brick(x - side * (0.9 + t / 2), y, z0, t + 0.9, len, {
-        h: t, color: k % 2 ? C.darkBluishGray : C.flatSilver, free: true, studs: false,
+        h: t, color: k % 2 ? C.lightBluishGray : C.flatSilver, free: true, studs: false,
       });
     }
 
     // Vertical ribs, evenly spaced, giving the parallax something to chew on.
+    // Mid grey, not dark: the `dark` rig has no env map worth speaking of, so
+    // dark bluish gray under it renders as flat black and the canyon loses its
+    // "grey battle station" read entirely.
     const ribs = Math.round(len / 10);
     for (let k = 0; k < ribs; k++) {
       const z = z0m + (k + 0.5) * (len / ribs);
       bb.brick(x - side * 1.1, B(2), z, 2.2, 1.6, {
-        h: depth - B(4), color: C.darkBluishGray, free: true, studs: false,
+        h: depth - B(4), color: C.lightBluishGray, free: true, studs: false,
       });
       bb.brick(x - side * 2.0, B(2), z, 1.4, 2.6, {
-        h: P(2), color: C.lightBluishGray, free: true, studs: false,
+        h: P(2), color: C.veryLightGray, free: true, studs: false,
+      });
+      bb.brick(x - side * 1.1, B(2), z, 2.3, 0.5, {
+        h: depth - B(4), color: C.darkBluishGray, free: true, studs: false,
       });
     }
 
@@ -189,8 +195,38 @@ function exhaustPort(bb, x, z, r = 3.2) {
 
 // -------------------------------------------------------------- factories
 
+/**
+ * The set carries its own sun: point lights are useless over 600 studs and the
+ * `dark` rig leaves a canyon this deep essentially black. Pass lights=0 if a
+ * scene brings its own.
+ */
+function trenchLights(g) {
+  // The key leans hard toward +Z. Looking down a 600-stud trench you barely see
+  // the walls face-on -- almost every wall pixel is the +Z flank of a greeble --
+  // so a purely side-raking sun lights surfaces the camera never sees.
+  const sun = new THREE.DirectionalLight(new THREE.Color(0xe4ecff).convertSRGBToLinear(), 4.4);
+  sun.position.set(-45, 62, 88);
+  sun.target.position.set(0, 0, 0);
+  sun.castShadow = false;
+  g.add(sun, sun.target);
+  // A bounce off the opposite wall, or the shadowed side goes to pure black and
+  // the trench reads as a single lit plane.
+  const bounce = new THREE.DirectionalLight(new THREE.Color(0x9fb4d8).convertSRGBToLinear(), 2.4);
+  bounce.position.set(88, 26, 52);
+  bounce.target.position.set(0, 0, 0);
+  bounce.castShadow = false;
+  g.add(bounce, bounce.target);
+  // Sky fill does the real work: it is what keeps the grey plating reading as
+  // grey rather than as a black canyon with a few lit edges.
+  g.add(new THREE.HemisphereLight(
+    new THREE.Color(0xaec3e6).convertSRGBToLinear(),
+    new THREE.Color(0x5a6478).convertSRGBToLinear(), 3.4,
+  ));
+  return g;
+}
+
 export function buildTrenchSegment(opts = {}) {
-  const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false, castShadow: false, receiveShadow: false });
+  const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false });
   trenchSegment(bb, {
     index: Math.round(num(opts, 'index', 0)),
     width: num(opts, 'width', WIDTH),
@@ -199,9 +235,12 @@ export function buildTrenchSegment(opts = {}) {
     seed: Math.round(num(opts, 'seed', 4477)),
     shoulder: num(opts, 'shoulder', 10),
   });
-  const g = bb.build();
+  const g = bb.build({ castShadow: false, receiveShadow: false });
   g.name = 'trench_segment';
   g.userData.nodes = bb.nodes;
+  // On by default so a lone segment is visible; a scene chaining segments
+  // should pass lights=0 on all but one, or light the run itself.
+  if (bool(opts, 'lights', true)) trenchLights(g);
   return g;
 }
 
@@ -215,9 +254,7 @@ export function buildTrench(opts = {}) {
   const n = Math.max(1, Math.round(length / segLen));
   const total = n * segLen;
 
-  // 600 studs is far outside any shadow camera the rigs set up, so a shadow
-  // pass here buys nothing and costs a second draw of every triangle.
-  const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false, castShadow: false, receiveShadow: false });
+  const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false });
 
   // Segments run from +Z (near, behind camera) to -Z (far).
   for (let k = 0; k < n; k++) {
@@ -229,7 +266,9 @@ export function buildTrench(opts = {}) {
   const portZ = -total / 2 + segLen * 1.5;
   exhaustPort(bb, 0, portZ);
 
-  const g = bb.build();
+  // 600 studs is far outside any shadow camera the rigs set up, so a shadow
+  // pass here buys nothing and costs a second draw of every triangle.
+  const g = bb.build({ castShadow: false, receiveShadow: false });
   g.name = 'trench';
   g.userData.nodes = bb.nodes;
 
@@ -244,30 +283,7 @@ export function buildTrench(opts = {}) {
   g.userData.segmentLength = segLen;
 
   if (bool(opts, 'lights', true)) {
-    // The set carries its own sun: point lights are useless over 600 studs and
-    // the `dark` rig leaves a canyon this deep essentially black. Turn it off
-    // with lights=0 if a scene brings its own.
-    //
-    // The key leans hard toward +Z. Looking down a 600-stud trench you barely
-    // see the walls face-on -- almost every wall pixel is the +Z flank of a
-    // greeble -- so a purely side-raking sun lights surfaces the camera never
-    // sees and the whole canyon goes black.
-    const sun = new THREE.DirectionalLight(new THREE.Color(0xdbe6ff).convertSRGBToLinear(), 2.3);
-    sun.position.set(-45, 62, 78);
-    sun.target.position.set(0, 0, 0);
-    sun.castShadow = false;
-    g.add(sun, sun.target);
-    // A bounce off the opposite wall, or the shadowed side goes to pure black
-    // and the trench reads as a single lit plane.
-    const bounce = new THREE.DirectionalLight(new THREE.Color(0x8ea4c8).convertSRGBToLinear(), 1.0);
-    bounce.position.set(78, 22, 46);
-    bounce.target.position.set(0, 0, 0);
-    bounce.castShadow = false;
-    g.add(bounce, bounce.target);
-    g.add(new THREE.HemisphereLight(
-      new THREE.Color(0x9fb4d8).convertSRGBToLinear(),
-      new THREE.Color(0x424c60).convertSRGBToLinear(), 1.05,
-    ));
+    trenchLights(g);
     // A red wash coming up out of the port so the far end has a focus.
     practical(g, 0, 4, portZ, 0xff5530, 90, 46);
   }

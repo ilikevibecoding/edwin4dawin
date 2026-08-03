@@ -115,6 +115,45 @@ export function glow(color, opacity = 1, additive = true, intensity) {
   });
 }
 
+/*
+ * Widening the specular lobe.
+ *
+ * ABS has a clearcoat, and a clearcoat is a mirror: on a bevelled minifig limb
+ * it blows the edge to white, and on a fourteen-hundred stud floor seen from a
+ * metre up it turns the whole deck into one clipped highlight. Both cases want
+ * the same thing -- less coat, rougher coat, less environment -- so the tweak
+ * lives with the materials rather than with either caller. Results are cached,
+ * so a squad of troopers still shares one white ABS material.
+ */
+const glossCache = new Map();
+
+function tweakGloss(src, cc, ccr, env, rough) {
+  const k = `${src.uuid}|${cc}|${ccr}|${env}|${rough ?? ''}`;
+  let m = glossCache.get(k);
+  if (!m) {
+    m = src.clone();
+    m.clearcoat = cc;
+    m.clearcoatRoughness = ccr;
+    // never brighter than the rig asked for: makeEnv() already dialled this in
+    if ('envMapIntensity' in m) m.envMapIntensity = Math.min(m.envMapIntensity, env);
+    if (rough !== undefined) m.roughness = Math.max(m.roughness, rough);
+    m.userData = { ...m.userData, gloss: k };
+    glossCache.set(k, m);
+  }
+  return m;
+}
+
+/** Widen the specular lobe so bevelled parts stop blowing out to white. */
+export function softenGloss(root, { clearcoat = 0.12, clearcoatRoughness = 0.5, env = 0.3, roughness = 0.68 } = {}) {
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material || Array.isArray(o.material)) return;
+    const src = o.material;
+    if (!('clearcoat' in src) || src.userData?.gloss) return;
+    o.material = tweakGloss(src, clearcoat, clearcoatRoughness, env, roughness);
+  });
+  return root;
+}
+
 export function setEnvMap(env, intensity = 0.85) {
   Quality.envMap = env;
   Quality.envIntensity = intensity;

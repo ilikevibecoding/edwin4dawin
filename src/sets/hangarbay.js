@@ -16,7 +16,13 @@ import { num, bool, hash2i, GREY_PANEL, pickFrom, greebleRect, practical } from 
 /** Stacked crate, the universal hangar dressing. */
 function crate(bb, x, y, z, w, d, h, color, rot = 0) {
   bb.brick(x, y, z, w, d, { h, color, rot, free: true, studs: false });
-  bb.brick(x, y + h, z, w - 0.5, d - 0.5, { h: P(1), color: C.darkBluishGray, rot, free: true, studs: false });
+  // Matte lid: a crate lid is a horizontal face at deck level, which is
+  // exactly where the daylight coming in level through the mouth mirrors
+  // straight back into a camera standing on the deck. With a clearcoat on it
+  // the lid goes pure white and blooms over half the crate.
+  bb.brick(x, y + h, z, w - 0.5, d - 0.5, {
+    h: P(1), color: C.darkBluishGray, rot, free: true, studs: false, finish: FINISH.RUBBER,
+  });
   // Corner ribs so it reads as a container, not a block.
   for (const sx of [-1, 1]) {
     const lx = sx * (w / 2 - 0.4);
@@ -25,7 +31,7 @@ function crate(bb, x, y, z, w, d, h, color, rot = 0) {
     });
   }
   bb.brick(x, y + h * 0.5, z, w + 0.12, d + 0.12, {
-    h: P(1), color: C.darkGray, rot, free: true, studs: false,
+    h: P(1), color: C.darkGray, rot, free: true, studs: false, finish: FINISH.RUBBER,
   });
 }
 
@@ -78,13 +84,15 @@ export function buildHangarBay(opts = {}) {
       });
     }
   }
-  // Landing circles: two painted rings the fighters sit in.
+  // Landing circles: two painted rings the fighters sit in. Matte like the
+  // deck -- deck paint seen at this grazing an angle is exactly where a
+  // clearcoat lobe turns into a blown white streak.
   for (const cx of [-hw * 0.45, hw * 0.45]) {
     for (let k = 0; k < 28; k++) {
       const a = (k / 28) * Math.PI * 2;
       if (k % 7 === 6) continue;
       bb.brick(cx + Math.cos(a) * 17, 0, Math.sin(a) * 17, 3.6, 1.1, {
-        h: P(0.4), color: C.yellow, rot: -a, free: true, studs: false,
+        h: P(0.4), color: C.yellow, rot: -a, free: true, studs: false, finish: FINISH.RUBBER,
       });
     }
   }
@@ -92,7 +100,7 @@ export function buildHangarBay(opts = {}) {
   for (const s of [-1, 1]) {
     for (let k = 0; k < 8; k++) {
       bb.brick(s * 9, 0, zMouth + 3 + k * 8, 1.2, 4.4, {
-        h: P(0.4), color: C.yellow, free: true, studs: false,
+        h: P(0.4), color: C.yellow, free: true, studs: false, finish: FINISH.RUBBER,
       });
     }
   }
@@ -142,7 +150,12 @@ export function buildHangarBay(opts = {}) {
   });
 
   // -------------------------------------------------------- ceiling
-  bb.brick(0, h, 0, w + 8, len + 4, { h: B(2), color: C.darkBluishGray, free: true, studs: false });
+  // Matte again: 130 x 128 studs of glossy roof catches the key light in one
+  // enormous clearcoat highlight, which blooms into the frame on any shot that
+  // sees the hangar from outside.
+  bb.brick(0, h, 0, w + 8, len + 4, {
+    h: B(2), color: C.darkBluishGray, free: true, studs: false, finish: FINISH.RUBBER,
+  });
   for (let k = 0; k < Math.round(len / 16); k++) {
     const z = zMouth + 8 + k * 16;
     bb.brick(0, h - P(2), z, w, 2.6, { h: P(2), color: C.lightBluishGray, free: true, studs: false });
@@ -168,20 +181,30 @@ export function buildHangarBay(opts = {}) {
       color: C.flatSilver, finish: FINISH.METAL, axis: 'x', seg: 8, stud: false,
     });
   }
-  // Lip and warning chevrons on the deck at the threshold.
-  bb.brick(0, -PLATE, zMouth - 1.5, mouthW, 3, { h: PLATE + P(1), color: C.darkGray, free: true, studs: false });
+  // Lip and warning chevrons on the deck at the threshold. The lip runs right
+  // across the bright mouth and the camera sees its top face almost edge-on,
+  // so a clearcoat here reads as a blown white bar under the sky.
+  bb.brick(0, -PLATE, zMouth - 1.5, mouthW, 3, {
+    h: PLATE + P(1), color: C.darkGray, free: true, studs: false, finish: FINISH.RUBBER,
+  });
   for (let k = -6; k <= 6; k++) {
     bb.brick(k * 5.2, P(1), zMouth + 1.5, 2.6, 2.2, {
       h: P(0.4), color: k % 2 ? C.yellow : C.black, rot: 0.6, free: true, studs: false,
+      finish: FINISH.RUBBER,
     });
   }
 
   // ------------------------------------------------------------- crates
   const crateRng = rng;
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < 30; i++) {
     const side = crateRng.next() < 0.5 ? -1 : 1;
-    // Pulled in off the walls so they actually appear in a shot down the bay.
-    const x = side * crateRng.range(hw * 0.34, hw * 0.86);
+    // Two bands. Everything against the walls leaves the middle of the bay
+    // empty in exactly the shot this set exists for -- looking down the deck
+    // and out of the mouth -- so a third of the dressing sits inboard, clear
+    // of the landing circles.
+    const x = side * (i % 3 === 0
+      ? crateRng.range(hw * 0.2, hw * 0.42)
+      : crateRng.range(hw * 0.52, hw * 0.86));
     const z = crateRng.range(zMouth + 12, zBack - 12);
     const cw = crateRng.range(4, 8), cd = crateRng.range(4, 7);
     const ch = B(crateRng.range(1.6, 3.4));
@@ -193,12 +216,37 @@ export function buildHangarBay(opts = {}) {
     }
   }
   // Fuel drums.
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     const side = i % 2 ? -1 : 1;
-    const x = side * crateRng.range(hw * 0.4, hw * 0.84);
+    const x = side * crateRng.range(hw * 0.24, hw * 0.84);
     const z = crateRng.range(zMouth + 16, zBack - 16);
     bb.cyl(x, 0, z, 1.5, B(2.6), { color: C.oliveGreen, seg: 12, stud: false });
     bb.cyl(x, B(2.6), z, 1.6, P(1), { color: C.darkBluishGray, seg: 12, stud: false });
+  }
+
+  // Fuel bowser: a wheeled tank with a boom, parked between the landing
+  // circles. Something with height in the middle of the deck is what gives the
+  // bay its sense of scale when a fighter is not sitting in it.
+  {
+    const bx = -hw * 0.1, bz = -14;
+    bb.brick(bx, P(2), bz, 9, 5, { h: B(1.4), color: C.darkBluishGray, free: true, studs: false });
+    bb.cyl(bx, P(2) + B(1.4), bz, 2.2, 7.5, {
+      color: C.oliveGreen, axis: 'z', seg: 14, stud: false,
+    });
+    bb.cyl(bx, P(2) + B(1.4), bz - 3.9, 2.35, 0.5, {
+      color: C.darkBluishGray, axis: 'z', seg: 14, stud: false,
+    });
+    bb.brick(bx, P(2) + B(1.4) + 2.2, bz + 1.4, 2.6, 2.6, {
+      h: B(1.6), color: C.flatSilver, finish: FINISH.METAL, free: true, studs: false,
+    });
+    bb.bar(bx + 1.1, P(2) + B(1.4) + 4.6, bz + 1.4, 0.22, 7, { color: C.darkGray, rz: 0.5 });
+    for (const s of [-1, 1]) {
+      for (const zz of [-2.6, 2.6]) {
+        bb.cyl(bx + s * 4.2, P(2), bz + zz, 1.1, 0.9, {
+          color: C.black, axis: 'x', seg: 10, stud: false,
+        });
+      }
+    }
   }
 
   // -------------------------------------------------------------- cables
@@ -232,7 +280,7 @@ export function buildHangarBay(opts = {}) {
       uniforms: {
         top: { value: new THREE.Color(0x8ebde8).convertSRGBToLinear() },
         bot: { value: new THREE.Color(0xdcc9a4).convertSRGBToLinear() },
-        ground: { value: new THREE.Color(0x4a5340).convertSRGBToLinear() },
+        ground: { value: new THREE.Color(0xa79f7a).convertSRGBToLinear() },
       },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }',
       fragmentShader: `varying vec2 vUv; uniform vec3 top, bot, ground;
@@ -241,10 +289,18 @@ export function buildHangarBay(opts = {}) {
           // Sun haze up and to the left, where the key light comes from. Kept
           // well off the deck line so it does not wash out the threshold.
           c += vec3(1.0, 0.94, 0.82) * 0.26 * pow(max(0.0, 1.0 - length((vUv - vec2(0.3, 0.66)) * vec2(1.7, 2.2))), 2.2);
-          // A treeline along the bottom: without it the mouth is a hole full
-          // of light and the deck appears to run off the edge of the world.
-          float hz = smoothstep(0.20, 0.14, vUv.y);
-          c = mix(c, ground * (0.7 + 0.5 * vUv.y), hz);
+          // A sunlit plain along the bottom, with a ridge line broken up by a
+          // couple of low hills. Without any of this the mouth is a hole full
+          // of light and the deck appears to run off the edge of the world;
+          // without the hills it is a flat bar and the card reads as a card.
+          float ridge = 0.098
+            + 0.030 * exp(-pow((vUv.x - 0.22) * 5.0, 2.0))
+            + 0.046 * exp(-pow((vUv.x - 0.63) * 3.4, 2.0))
+            + 0.018 * exp(-pow((vUv.x - 0.88) * 7.0, 2.0));
+          // Haze bank just above the ridge, so the far plain sits behind air.
+          c = mix(c, vec3(0.88, 0.85, 0.78), 0.30 * smoothstep(ridge + 0.16, ridge, vUv.y));
+          float hz = smoothstep(ridge + 0.020, ridge - 0.016, vUv.y);
+          c = mix(c, ground * (0.80 + 1.9 * vUv.y), hz);
           gl_FragColor = vec4(c, 1.0);
         }`,
       toneMapped: true,
@@ -262,14 +318,33 @@ export function buildHangarBay(opts = {}) {
   g.userData.nodes.sky = sky;
 
   if (bool(opts, 'lights', true)) {
-    // Daylight spilling in through the mouth, plus two overhead practicals.
-    const spill = new THREE.DirectionalLight(new THREE.Color(0xfff0d8).convertSRGBToLinear(), 0.7);
-    spill.position.set(-34, 30, zMouth - 60);
-    spill.target.position.set(0, 6, zBack);
+    // Daylight spilling in through the mouth. Angled steeply down rather than
+    // level with the deck: a low sun coming straight in through the mouth
+    // mirrors off every horizontal face into a camera standing on the deck,
+    // which is the one shot this set exists for.
+    const spill = new THREE.DirectionalLight(new THREE.Color(0xfff0d8).convertSRGBToLinear(), 0.9);
+    spill.position.set(-34, 76, zMouth - 60);
+    spill.target.position.set(0, 0, zBack);
     spill.castShadow = false;
     g.add(spill, spill.target);
-    practical(g, -30, h - 10, zMouth + 40, 0xdfeaff, 500, 110);
-    practical(g, 30, h - 10, zBack - 34, 0xdfeaff, 500, 110);
+    // The overhead rigs are the bay's own lighting, and they have to come down
+    // as one broad soft source. Point lights big enough to reach 130 studs of
+    // deck burn a clearcoat hotspot into whatever crate sits under them, so
+    // the work is done by a directional plus a hemisphere instead.
+    // Most of the level is carried by the hemisphere rather than the
+    // directional: a directional strong enough to light the deck on its own
+    // puts a clearcoat lobe on every crate lid, and at this camera height the
+    // lids face the reflection direction, so they blow to white. A hemisphere
+    // has no such lobe.
+    const strip = new THREE.DirectionalLight(new THREE.Color(0xe6efff).convertSRGBToLinear(), 0.55);
+    strip.position.set(14, 60, 24);
+    strip.target.position.set(0, 0, zMouth * 0.4);
+    strip.castShadow = false;
+    g.add(strip, strip.target);
+    g.add(new THREE.HemisphereLight(
+      new THREE.Color(0xb6c8e0).convertSRGBToLinear(),
+      new THREE.Color(0x424a58).convertSRGBToLinear(), 3.1,
+    ));
   }
   return g;
 }

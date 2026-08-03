@@ -34,7 +34,7 @@ function hull(bb) {
   // ---- ball ------------------------------------------------------------
   // Deliberately coarse: a LEGO TIE builds this out of a ring of curved
   // slopes, so visible facets read better than a smooth sphere would.
-  bb.sphere(0, 0, 0, BALL_R, { seg: 12, rings: 8, sz: 0.9, color: HULL });
+  bb.sphere(0, 0, 0, BALL_R, { seg: 10, rings: 6, sz: 0.9, color: HULL });
   // banding: an equator plate and a spine plate, the seams of the build
   bb.cyl(0, -0.34, 0, BALL_R * 1.0, 0.68, { seg: 12, color: DARK, stud: false, ry: Math.PI / 12 });
   bb.cyl(0, 0, -0.15, BALL_R * 0.8, 0.55, { axis: 'z', seg: 8, color: HULL, stud: false });

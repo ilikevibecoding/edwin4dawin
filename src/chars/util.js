@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { softenGloss } from '../lego/materials.js';
+
+export { softenGloss };
 
 /**
  * Wrap a Minifig (and anything else that needs ticking) in the Object3D that
@@ -78,38 +81,9 @@ export function num(v, dflt) {
  * came back at 205,205,205 and an orange flight suit came back pink. Widening
  * the lobe (roughness ~0.68) drops the peak by an order of magnitude and the
  * colour comes back, at the cost of a slightly more satin plastic. Characters
- * therefore get a matte-satin finish and anything meant to be cloth loses the
- * clearcoat entirely. Materials go through a cache so a squad of troopers still
- * shares one white ABS material.
+ * therefore get a matte-satin finish (softenGloss, in lego/materials.js) and
+ * anything meant to be cloth loses the clearcoat entirely.
  */
-const glossCache = new Map();
-
-function tweak(src, cc, ccr, env, rough) {
-  const k = `${src.uuid}|${cc}|${ccr}|${env}|${rough ?? ''}`;
-  let m = glossCache.get(k);
-  if (!m) {
-    m = src.clone();
-    m.clearcoat = cc;
-    m.clearcoatRoughness = ccr;
-    // never brighter than the rig asked for: makeEnv() already dialled this in
-    if ('envMapIntensity' in m) m.envMapIntensity = Math.min(m.envMapIntensity, env);
-    if (rough !== undefined) m.roughness = Math.max(m.roughness, rough);
-    m.userData = { ...m.userData, gloss: k };
-    glossCache.set(k, m);
-  }
-  return m;
-}
-
-/** Widen the specular lobe so bevelled limbs stop blowing out to white. */
-export function softenGloss(root, { clearcoat = 0.12, clearcoatRoughness = 0.5, env = 0.3, roughness = 0.68 } = {}) {
-  root.traverse((o) => {
-    if (!o.isMesh || !o.material || Array.isArray(o.material)) return;
-    const src = o.material;
-    if (!('clearcoat' in src) || src.userData?.gloss) return;
-    o.material = tweak(src, clearcoat, clearcoatRoughness, env, roughness);
-  });
-  return root;
-}
 
 /** Cloth: robes, hoods, cowls. No clearcoat at all, and rough. */
 export function makeCloth(root) {
@@ -127,12 +101,19 @@ const metalCache = new Map();
  * light at rgb(247,228,146) -- same colour, same material, unrecognisably
  * different. Restoring a diffuse term makes one gold read across the whole figure.
  * softenGloss cannot do this: MeshStandardMaterial has no clearcoat to soften.
+ *
+ * `prints` extends the same treatment to SVG-printed parts. They come off
+ * mat(0xffffff) with a map and no metalness, so on a gold figure the printed
+ * torso stayed a pale non-metallic khaki next to half-metal gold legs -- the two
+ * did not read as the same plating. Pass it only when the print is painted in the
+ * body colour, which is true of C-3PO and of nothing else here.
  */
-export function temperMetal(root, { metalness = 0.42, roughness = 0.44 } = {}) {
+export function temperMetal(root, { metalness = 0.42, roughness = 0.44, prints = false } = {}) {
   root.traverse((o) => {
     if (!o.isMesh || !o.material || Array.isArray(o.material)) return;
     const src = o.material;
-    if (!('metalness' in src) || src.metalness < 0.5 || src.userData?.tempered) return;
+    if (!('metalness' in src) || src.userData?.tempered) return;
+    if (src.metalness < 0.5 && !(prints && src.map)) return;
     const k = `${src.uuid}|${metalness}|${roughness}`;
     let m = metalCache.get(k);
     if (!m) {

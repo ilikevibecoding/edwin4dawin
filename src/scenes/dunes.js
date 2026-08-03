@@ -16,15 +16,49 @@ import { RNG } from '../engine/rng.js';
  */
 
 
-/**
- * The twin-suns asset is a wide sky backdrop card; keep it facing the camera.
- * `swing` yaws the pair off the view axis so the discs sit to one side of the
- * frame instead of sitting on whatever the shot is actually about.
- */
-function faceCamera(card, camera, swing = 0) {
+/** The twin-suns asset is a wide sky backdrop card; keep it facing the camera. */
+function faceCamera(card, camera) {
   const d = new THREE.Vector3();
   camera.getWorldDirection(d);
-  card.rotation.y = Math.atan2(-d.x, -d.z) + swing;
+  card.rotation.y = Math.atan2(-d.x, -d.z);
+}
+
+/** Swap a billboard's plane for a smaller one. Scale is animated, so it is not free. */
+function resize(mesh, k) {
+  const { width, height } = mesh.geometry.parameters;
+  mesh.geometry.dispose();
+  mesh.geometry = new THREE.PlaneGeometry(width * k, height * k);
+}
+
+/**
+ * Take the flare furniture down and slide the discs off the lens axis.
+ *
+ * The set's halo and six-point burst are 260 and 330 studs across, which at
+ * any sun distance is a wash tens of degrees wide; left alone it turns the
+ * dune field into one flat sheet of orange. `shift` walks the pair sideways
+ * inside the card plane, which is the only safe way to get them out of the
+ * middle of frame -- yawing the whole group instead swings the 1000-stud sky
+ * card round until its edge cuts through the foreground.
+ */
+function tameGlare(suns, { halo = 0.5, burst = 0.35, shrink = 0.45, shift = 0 } = {}) {
+  for (const s of [suns.userData.nodes?.big, suns.userData.nodes?.small]) {
+    const p = s?.userData?.parts;
+    if (!p) continue;
+    s.position.x += shift;
+    p.halo.material.opacity *= halo;
+    p.burst.material.opacity *= burst;
+    resize(p.halo, shrink);
+    resize(p.burst, shrink);
+  }
+  suns.traverse((o) => {
+    // Flare ghosts: four more additive discs marching across the middle of
+    // the frame. With two real suns already in shot they read as lens dirt.
+    if (o.renderOrder === -800) o.visible = false;
+    // The set turns depth testing off so it can work as a backdrop. Here it
+    // is a light source standing 400 studs behind a sandcrawler, and without
+    // the test both discs paint straight through the hull.
+    if (o.isMesh) o.material.depthTest = true;
+  });
 }
 
 export default {
@@ -54,8 +88,19 @@ export default {
     const bed = (x, z, r) => (sand(x, z) + sand(x + r, z) + sand(x - r, z)
       + sand(x, z + r) + sand(x, z - r)) / 5;
 
-    // The whole chapter plays in one long valley between two dune ridges.
-    const FLOOR = sand(40, 20);
+    /*
+     * The whole chapter plays in one corridor of the dune field, running down
+     * +Z at roughly x = 60.
+     *
+     * That is not a free choice. buildDunes drops five rock outcrops on this
+     * plot, and at seed 3 the second one is a 12-stud, 23-stud-tall mesa at
+     * (28, 31) -- squarely across the old walk line. The droids used to pass
+     * through it and shots 2 and 3 put the lens inside it, which is what made
+     * this chapter read as a flat brown wall. The gap between that mesa and
+     * the smaller one at (90, 31) is the only lane wide enough for a walk, a
+     * camera offset to the west of it, and a sandcrawler.
+     */
+    const FLOOR = sand(58, 28);
 
     // Pushed further out and scaled down: at the stock 260 studs the halo is
     // 53 degrees wide and washes out everything it is meant to be lighting.
@@ -65,7 +110,10 @@ export default {
     // wash thins out as they rise, which keeps the glare off the droids.
     suns.position.set(0, FLOOR, 0);
     suns.userData.setRidge?.(false);
-    suns.userData.setHeight?.(0.92);
+    suns.userData.setHeight?.(0.8);
+    // Pushed a third of the way to the right-hand edge, so the droids walk
+    // through clean sand instead of through the glare.
+    tameGlare(suns, { halo: 0.4, burst: 0.28, shrink: 0.42, shift: 130 });
     root.add(suns);
 
     const crawler = await tryMake('sandcrawler', {}, { size: [33, 34, 58], color: C.reddishBrown });
@@ -76,8 +124,11 @@ export default {
     const r2 = await tryMake('r2', {}, { size: [2, 3.4, 2], color: C.white });
     root.add(threepio, r2);
 
-    const dust = new Motes(ctx.scene, { count: 200, box: [110, 26, 110], size: 0.11, color: 0xffe0a8, seed: 21, speed: 0.9 });
-    dust.points.position.set(40, FLOOR, 20);
+    // Kept down the valley, ahead of every camera. Motes are size-attenuated
+    // points: one that drifts within a stud of the lens is a fist-sized white
+    // blob, and the cameras all sit at the +Z end of the chapter.
+    const dust = new Motes(ctx.scene, { count: 200, box: [80, 22, 70], size: 0.10, color: 0xffe0a8, seed: 21, speed: 0.9 });
+    dust.points.position.set(58, FLOOR, -30);
     // Additive, not alpha: the smoke texture is dark grey, so a normal-blended
     // puff over lit sand reads as a fingerprint on the lens rather than dust.
     const puffs = new SpritePool(ctx.scene, { max: 60, texture: smokeTexture(), additive: true, color: 0xffd2a0 });
@@ -88,19 +139,19 @@ export default {
     const DUSK = d3 - 1.2;
 
     // -------------------------------------------------------------- staging
-    // The droids trudge down the valley, roughly -Z with a slow drift east.
-    const WALK_FROM = new THREE.Vector3(30, 0, 82);
-    const WALK_TO = new THREE.Vector3(46, 0, 6);
+    // The droids trudge down the lane, -Z with a slow drift west.
+    const WALK_FROM = new THREE.Vector3(66, 0, 92);
+    const WALK_TO = new THREE.Vector3(58, 0, 8);
     const WALK_END = d3 + 0.4;
     const HEADING = Math.atan2(WALK_TO.x - WALK_FROM.x, WALK_TO.z - WALK_FROM.z);
     // Body axes of the marching pair, so the formation holds through the turn.
     const RIGHT = new THREE.Vector3(Math.cos(HEADING), 0, -Math.sin(HEADING));
     const AHEAD = new THREE.Vector3(Math.sin(HEADING), 0, Math.cos(HEADING));
 
-    // The sandcrawler grinds up the same valley from the far end and stops
-    // short of them; the ridge at z = -55 is what it crests on the way.
-    const CRAWL_FROM = new THREE.Vector3(72, 0, -104);
-    const CRAWL_TO = new THREE.Vector3(52, 0, -34);
+    // The sandcrawler grinds up the same lane from the far end and stops a
+    // good thirty studs short of them.
+    const CRAWL_FROM = new THREE.Vector3(70, 0, -112);
+    const CRAWL_TO = new THREE.Vector3(57, 0, -26);
     const CRAWL_START = 2.0;
     const CRAWL_STOP = d3 + 2.6;
     const crawlAt = (t) => CRAWL_FROM.clone()
@@ -117,41 +168,50 @@ export default {
       return new THREE.Vector3(x, Math.max(threepio.position.y + dy, sand(x, z) + 2.6), z);
     };
     const at = (dx, dy, dz) => () => threepio.position.clone().add(new THREE.Vector3(dx, dy, dz));
+    /** A fixed spot in the lane, floated clear of the sand under it. */
+    const spot = (x, dy, z) => () => new THREE.Vector3(x, sand(x, z) + dy, z);
 
     /*
-     * The first three shots look back up the valley, so the sandcrawler --
-     * which is grinding up behind the lens the whole time -- stays out of
-     * frame until the cut at d3 turns round and finds it.
+     * The first three shots look back up the lane from the west, so the
+     * sandcrawler -- which is grinding up behind the lens the whole time --
+     * stays out of frame until the cut at dusk turns round and finds it.
+     * Every offset here is west and short of Threepio, which is the side the
+     * mesa is not on.
      */
     const shots = new ShotList();
+    /*
+     * Every aim point sits above the eye, so the lens is tilted a degree or
+     * two up and the horizon lands just below the middle of frame. Tilted
+     * down, as this chapter was, three quarters of every shot is bare sand.
+     */
     shots.add({          // 1. dune country, the pair walking down out of it
       t: 0, dur: (d2 - 2.4), fov: 36, ease: 'linear',
-      pos: eye(-20, 5.6, -26), to: eye(-14, 4.6, -17.5),
-      look: at(-0.6, 2.6, 3.5),
+      pos: eye(-11, 5.0, -34), to: eye(-7.5, 3.8, -22),
+      look: at(-0.4, 4.4, 2.5),
       handheld: 0.3,
     });
-    shots.add({          // 2. broadside, low: two small figures grinding past
+    shots.add({          // 2. lower and closer: two figures grinding past
       t: d2 - 2.4, dur: 2.4, fov: 34, ease: 'linear',
-      pos: eye(-15.5, 2.3, -5.5), to: eye(-14.5, 2.6, -1.5),
-      look: at(-0.6, 2.9, 0.4),
-      handheld: 0.55,
+      pos: eye(-13.5, 2.6, -9), to: eye(-12.5, 2.8, -4.5),
+      look: at(-0.5, 3.4, 0.6),
+      handheld: 0.5,
     });
     shots.add({          // 3. "We are doomed" -- Threepio, big
       t: d2, dur: (DUSK - 0.6) - d2, fov: 32, ease: 'linear',
-      pos: eye(-11.8, 3.3, -11.2), to: eye(-10.2, 3.6, -9.6),
-      look: at(-0.7, 3.5, 0.2),
+      pos: eye(-9.6, 3.4, -11.5), to: eye(-8.4, 3.6, -10.0),
+      look: at(-0.6, 4.0, 0.2),
       handheld: 0.45,
     });
-    shots.add({          // 4. turn round: the thing coming up the valley
+    shots.add({          // 4. turn round: the thing coming up the lane
       t: DUSK - 0.6, dur: (d3 + 3.4) - (DUSK - 0.6), fov: 42, ease: 'inOutQuad',
-      pos: eye(-6.5, 5.6, 26), to: eye(-4.5, 5.2, 19),
-      look: () => crawler.position.clone().add(new THREE.Vector3(0, 12, 12)),
+      pos: spot(65, 6.0, 44), to: spot(62, 5.2, 34),
+      look: () => crawler.position.clone().add(new THREE.Vector3(0, 13, 10)),
+      handheld: 0.25,
     });
-    shots.add({          // 5. at its feet, looking up: the droids for scale
+    shots.add({          // 5. under its bow: the droids there for scale
       t: d3 + 3.4, dur: ctx.dur - (d3 + 3.4), fov: 46, ease: 'inOutQuad',
-      pos: () => { const p = new THREE.Vector3(34, 0, 26); p.y = sand(p.x, p.z) + 3.2; return p; },
-      to: () => { const p = new THREE.Vector3(37, 0, 19); p.y = sand(p.x, p.z) + 3.0; return p; },
-      look: () => crawler.position.clone().add(new THREE.Vector3(-1, 14, 15)),
+      pos: spot(58.5, 3.4, 30), to: spot(58, 3.0, 21),
+      look: () => crawler.position.clone().add(new THREE.Vector3(-1, 14, 12)),
       handheld: 0.3,
       shake: (u) => 0.10 + u * 0.16,
     });
@@ -159,33 +219,47 @@ export default {
     const lights = ctx.scene.getObjectByName('rig_desert')?.userData?.lights;
     if (lights?.key) {
       /*
-       * Hard sun raking in from the west and slightly high. Every camera in
-       * the chapter sits on the -X side of whatever it is pointed at, so a
-       * key from -X models the droids and the crawler's flank from the lens
-       * side instead of turning them into backlit cut-outs.
+       * Hard sun raking in from the west, high enough that its mirror image
+       * in the sand falls below the bottom of frame. Every camera here sits
+       * west of what it is pointed at, so a key from -X models the droids and
+       * the crawler's flank from the lens side instead of turning them into
+       * backlit cut-outs.
        */
-      lights.key.position.set(-34, 78, 30);
-      lights.key.target.position.set(42, 0, 16);
+      lights.key.position.set(-24, 96, 30);
+      lights.key.target.position.set(58, 0, 34);
       root.add(lights.key.target);
     }
-    if (lights?.key2) lights.key2.position.set(30, 34, 120);
+    /*
+     * Second sun, softening the first from a slightly different bearing.
+     * What it must not do is sit low, as the stock rig has it at 15 degrees
+     * of elevation: down there its mirror image in the sand lands square in
+     * frame as a 300-pixel blown highlight, which bloom then smears over a
+     * third of the shot. Anything above about 40 degrees puts that glitter
+     * below the bottom edge.
+     */
+    if (lights?.key2) lights.key2.position.set(-40, 86, 66);
 
     return {
       root,
       shots,
-      exposure: 0.85,
+      // Opens up through the dusk so the sandcrawler stays a readable machine
+      // rather than a black wall once the key comes down.
+      exposure: (t) => lerp(0.85, 1.2, clamp(ramp(t, DUSK, ctx.dur - 3.0), 0, 1)),
       grade: { uVignette: 0.34, uGrain: 0.03, uSaturation: 1.12, uContrast: 1.09 },
       update(t, dt) {
-        faceCamera(suns, ctx.camera, 0.34);
+        faceCamera(suns, ctx.camera);
 
         // ---------------------------------------------------------- droids
         const u = clamp(ramp(t, 0, WALK_END), 0, 1);
         const p = WALK_FROM.clone().lerp(WALK_TO, u);
         const walking = t < WALK_END - 0.3;
 
-        threepio.position.copy(p).addScaledVector(RIGHT, 2.5);
+        // R2 walks on Threepio's left, which is the side the cameras are on:
+        // it keeps him out from behind Threepio in the close shots, and it
+        // means Threepio turns *toward* the lens to blame him.
+        threepio.position.copy(p).addScaledVector(RIGHT, -2.4);
         threepio.position.y = sand(threepio.position.x, threepio.position.z);
-        r2.position.copy(p).addScaledVector(RIGHT, -2.2).addScaledVector(AHEAD, -2.0);
+        r2.position.copy(p).addScaledVector(RIGHT, 2.9).addScaledVector(AHEAD, -1.8);
         r2.position.y = sand(r2.position.x, r2.position.z) + Math.abs(Math.sin(t * 6.2)) * 0.10;
 
         // Once the crawler is on them they stop and turn to face it.
@@ -212,7 +286,7 @@ export default {
             tf.arms.L.rotation.x = lerp(tf.arms.L.rotation.x, -1.15 - g * 0.4, 0.3);
             tf.arms.R.rotation.z = -0.5;
             tf.arms.L.rotation.z = 0.5;
-            tf.lookAt(r2.position.clone().setY(r2.position.y + 3.0), 0.75);
+            tf.lookAt(r2.position.clone().setY(r2.position.y + 3.0), 0.5);
           } else if (!walking) {
             tf.lookAt(crawler.position.clone().setY(crawler.position.y + 24), 0.8);
           }
@@ -267,10 +341,12 @@ export default {
         suns.userData.setHeight?.(lerp(0.92, 0.24, dusk));
         suns.userData.update?.(t);
         if (lights?.key) {
-          lights.key.intensity = lerp(3.1, 1.5, dusk) * 0.58;
+          lights.key.intensity = lerp(3.1, 2.4, dusk) * 0.58;
           lights.key.color.setHex(dusk > 0.5 ? 0xffb066 : 0xfff0cc);
-          if (lights.fill) lights.fill.intensity = lerp(1.05, 0.62, dusk) * 0.58;
-          if (lights.key2) lights.key2.intensity = lerp(1.2, 0.5, dusk) * 0.58;
+          if (lights.fill) lights.fill.intensity = lerp(1.05, 1.0, dusk) * 0.58;
+          // The last two shots are a dark hull against a dark sky, so the
+          // secondary comes up through the dusk rather than down with it.
+          if (lights.key2) lights.key2.intensity = lerp(1.2, 2.0, dusk) * 0.58;
         }
         if (ctx.scene.fog) ctx.scene.fog.color.setHex(dusk > 0.5 ? 0xa9703f : 0xc79a63);
         ctx.scene.background?.setHex?.(dusk > 0.5 ? 0xb06a3c : 0xd7a266);

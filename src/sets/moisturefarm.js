@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { BrickBuilder, BRICK, P, B } from '../lego/brick.js';
-import { C, FINISH } from '../lego/palette.js';
+import { C } from '../lego/palette.js';
 import { RNG } from '../engine/rng.js';
 import { num, bool, smoothstep, hash2i, practical } from './common.js';
 import { duneField, rockOutcrop } from './dunes.js';
@@ -17,9 +17,11 @@ import { duneField, rockOutcrop } from './dunes.js';
  * y = 0 so the plot still behaves like a ground-based set.
  */
 
-const RIM_R = 26;      // outer lip of the pit
-const PIT_R = 19;      // clear radius at the courtyard floor
-const PIT_D = 13;      // how far down the courtyard sits
+const RIM_R = 28;      // outer lip of the pit
+const PIT_R = 21;      // clear radius at the courtyard floor
+// Ten studs, not thirteen: at 13 the near wall hides the whole floor from any
+// camera below 35 degrees, and the courtyard is the reason the set exists.
+const PIT_D = 10;
 
 /** Ring of bricks laid round a circle, each yawed to face outward. */
 function ring(bb, cx, cz, y, r, h, thick, seg, colorFn, opts = {}) {
@@ -42,51 +44,56 @@ function pitWall(bb, cx, cz, r, top, bottom) {
     const deep = 1 - c / Math.max(1, courses - 1);
     ring(bb, cx, cz, y, r, BRICK * 1.05, 2.6, 34, (k) => {
       const t = hash2i(k, c, 3031);
-      if (t < 0.18 + deep * 0.42) return C.darkTan;
-      if (t < 0.3 + deep * 0.3) return C.mediumNougat;
-      return C.tan;
+      return t < 0.2 + deep * 0.45 ? C.darkTan : C.tan;
     }, { phase: (c % 2) * (Math.PI / 34) });
   }
 }
 
-/** Vaporator: thin finned column with a condenser head and a ground pan. */
-export function vaporator(bb, x, z, y0, height = 9, rng = null) {
-  const r = 0.62;
-  bb.cyl(x, y0, z, 2.1, P(2), { color: C.darkTan, seg: 12, stud: false });
-  bb.cyl(x, y0 + P(2), z, 1.35, P(2), { color: C.lightBluishGray, seg: 12, stud: false });
-  bb.cyl(x, y0 + P(4), z, r, height - P(4), { color: C.flatSilver, finish: FINISH.METAL, seg: 10, stud: false });
+/**
+ * Vaporator: finned column with a condenser head and a ground pan.
+ *
+ * Built heavier than the reference model on purpose. These are the homestead's
+ * whole silhouette, and at r = 0.6 on a 160-stud plot they disappear into the
+ * sand -- from any shot that takes in the yard they have to read as towers.
+ */
+export function vaporator(bb, x, z, y0, height = 15, rng = null) {
+  const r = 1.0;
+  bb.cyl(x, y0, z, 3.0, P(2), { color: C.darkTan, seg: 14, stud: false });
+  bb.cyl(x, y0 + P(2), z, 2.0, P(3), { color: C.lightBluishGray, seg: 14, stud: false });
+  bb.cyl(x, y0 + P(5), z, r, height - P(5), {
+    color: C.lightBluishGray, seg: 12, stud: false,
+  });
 
-  // Cooling fins: four blades running most of the column.
-  const finTop = y0 + height - B(1.6);
-  const fins = 4;
-  for (let k = 0; k < fins; k++) {
-    const a = (k / fins) * Math.PI * 2 + 0.4;
-    const fr = 1.5;
-    bb.brick(x + Math.cos(a) * fr * 0.55, y0 + P(5), z - Math.sin(a) * fr * 0.55, fr, 0.32, {
-      h: finTop - y0 - P(6), color: C.lightBluishGray, rot: -a, free: true, studs: false,
-    });
-  }
-  // Collar rings.
-  for (let k = 0; k < 3; k++) {
-    bb.cyl(x, y0 + P(6) + k * (height - B(3)) / 3, z, r + 0.28, P(1), {
-      color: C.darkBluishGray, seg: 10, stud: false,
-    });
+  // Cooling fins: six blades running most of the column, in two tiers so the
+  // tower has a waist instead of being one straight pipe.
+  const finTop = y0 + height - B(2.2);
+  for (const tier of [0, 1]) {
+    const y = y0 + P(6) + tier * (finTop - y0 - P(6)) * 0.52;
+    const hgt = (finTop - y0 - P(6)) * (tier ? 0.44 : 0.48);
+    const fr = tier ? 1.9 : 2.5;
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2 + (tier ? 0.52 : 0.14);
+      bb.brick(x + Math.cos(a) * fr * 0.55, y, z - Math.sin(a) * fr * 0.55, fr, 0.4, {
+        h: hgt, color: tier ? C.veryLightGray : C.lightBluishGray, rot: -a, free: true, studs: false,
+      });
+    }
+    bb.cyl(x, y - P(1), z, r + 0.5, P(2), { color: C.darkBluishGray, seg: 12, stud: false });
   }
   // Condenser head: a drum with a dish on top and three antennae.
-  bb.cyl(x, finTop, z, 1.15, B(1.4), { color: C.lightBluishGray, seg: 12, stud: false });
-  bb.cyl(x, finTop + B(1.4), z, 1.35, P(1), { color: C.darkBluishGray, seg: 12, stud: false });
-  bb.sphere(x, finTop + B(1.4) + P(1), z, 1.15, {
-    color: C.veryLightGray, dome: true, seg: 12, rings: 5, sy: 0.55,
+  bb.cyl(x, finTop, z, 1.8, B(2), { color: C.lightBluishGray, seg: 14, stud: false });
+  bb.cyl(x, finTop + B(2), z, 2.1, P(2), { color: C.darkBluishGray, seg: 14, stud: false });
+  bb.sphere(x, finTop + B(2) + P(2), z, 1.8, {
+    color: C.veryLightGray, dome: true, seg: 14, rings: 6, sy: 0.6,
   });
   for (let k = 0; k < 3; k++) {
     const a = (k / 3) * Math.PI * 2 + 0.9;
-    bb.bar(x + Math.cos(a) * 0.7, finTop + B(2.6), z - Math.sin(a) * 0.7, 0.1, B(1.6), {
+    bb.bar(x + Math.cos(a) * 1.05, finTop + B(3.6), z - Math.sin(a) * 1.05, 0.13, B(2.4), {
       color: C.flatSilver, rz: Math.cos(a) * 0.28, rx: Math.sin(a) * 0.28,
     });
   }
   // Drip line to the ground pan.
   if (rng && rng.next() < 0.6) {
-    bb.brick(x + 2.4, y0, z, 2.4, 1.6, { h: P(2), color: C.darkTan, free: true, studs: false });
+    bb.brick(x + 3.4, y0, z, 3.2, 2.2, { h: P(2), color: C.darkTan, free: true, studs: false });
   }
 }
 
@@ -132,7 +139,7 @@ function domedHut(bb, x, z, y0, r, opening = null) {
 }
 
 export function buildMoistureFarm(opts = {}) {
-  const plot = num(opts, 'size', 130);
+  const plot = num(opts, 'size', 160);
   const seed = Math.round(num(opts, 'seed', 3311));
   const rng = new RNG(seed);
 
@@ -151,7 +158,7 @@ export function buildMoistureFarm(opts = {}) {
     return B(1) * (1 - t) + hh * t;
   };
   duneField(bb, {
-    size: plot, cell: 4, seed: seed + 17, amp: 9, flatten, taper: 0.24,
+    size: plot, cell: 4, seed: seed + 17, amp: 10, flatten, taper: 0.3,
     // Punch the courtyard clean out of the terrain. Without this the dune
     // slab lies across the shaft and the pit reads as a shallow dish.
     mask: (x, z) => Math.hypot(x, z) > PIT_R + 1.6,
@@ -166,8 +173,10 @@ export function buildMoistureFarm(opts = {}) {
       const z = -PIT_R + (j + 0.5) * cell;
       if (Math.hypot(x, z) > PIT_R - 0.6) continue;
       const t = hash2i(i, j, seed + 5);
+      // Tan and dark tan only. Nougat goes salmon-pink under the desert key
+      // and speckles the yard with what look like spilled paint tins.
       bb.brick(x, floorY, z, cell - 0.1, cell - 0.1, {
-        h: P(1), color: t < 0.2 ? C.darkTan : (t < 0.86 ? C.tan : C.nougat), free: true, studs: false,
+        h: P(1), color: t < 0.26 ? C.darkTan : C.tan, free: true, studs: false,
       });
     }
   }
@@ -179,12 +188,12 @@ export function buildMoistureFarm(opts = {}) {
 
   // ------------------------------------------------------- courtyard
   // Stair down from the rim on the +Z side, facing camera.
-  const steps = 9;
+  const steps = 11;
   for (let k = 0; k < steps; k++) {
     const t = k / (steps - 1);
     const y = B(1) - (B(1) - floorY) * t;
-    const z = PIT_R + 1.2 - t * 11;
-    bb.brick(0, y - P(3), z, 7, 2.4, { h: P(3), color: k % 2 ? C.darkTan : C.tan, free: true, studs: false });
+    const z = PIT_R + 1.6 - t * 15;
+    bb.brick(0, y - P(3), z, 7, 2.6, { h: P(3), color: k % 2 ? C.darkTan : C.tan, free: true, studs: false });
   }
   // Doorways round the courtyard wall: dark recesses with sand-brick lintels.
   for (let k = 0; k < 5; k++) {
@@ -223,7 +232,7 @@ export function buildMoistureFarm(opts = {}) {
   for (let k = 0; k < vaps; k++) {
     const a = -0.5 + k * (Math.PI * 1.55 / Math.max(1, vaps - 1));
     const r = RIM_R + 13 + rng.range(-3, 8);
-    vaporator(bb, Math.cos(a) * r, -Math.sin(a) * r, B(1), rng.range(13, 18), rng);
+    vaporator(bb, Math.cos(a) * r, -Math.sin(a) * r, B(1), rng.range(16, 22), rng);
   }
 
   // A speeder-parking mat and a couple of rocks for scale.
@@ -246,12 +255,12 @@ export function buildMoistureFarm(opts = {}) {
   g.userData.pitDepth = PIT_D;
 
   if (bool(opts, 'lights', true)) {
-    // A courtyard 13 studs down is in its own shadow for most of the day, and
+    // A courtyard 10 studs down is in its own shadow for most of the day, and
     // every rig's shadow camera covers it, so without a bounce the whole yard
-    // -- the reason the set exists -- renders as a black disc. Warm, weak, and
-    // low: this is light coming off sunlit sand walls, not a lamp.
-    practical(g, 0, floorY + 9, 2, 0xffd9a0, 220, 46);
-    practical(g, -7, floorY + 4, -9, 0xffc98a, 70, 26);
+    // -- the reason the set exists -- renders as a black disc. Only just warm:
+    // a deep amber bounce on dark tan comes back through ACES as fired brick.
+    practical(g, 0, floorY + 12, 0, 0xffeed6, 80, 44);
+    practical(g, -6, floorY + 7, -8, 0xfff0dc, 30, 26);
   }
   return g;
 }

@@ -74,6 +74,18 @@ function sphereSeg({ r, phiFrom, phiTo, thetaTo = Math.PI / 2, seg = 6, rings = 
 }
 
 /**
+ * Upper half of a squashed sphere with a round hole at the pole -- an open-crowned
+ * helmet. `hole` is the polar half-angle left open; the returned dome runs from
+ * that boundary down to its equator at `y`.
+ */
+function openDome({ r, y, sy = 1, hole, seg = 28, rings = 10 }) {
+  const g = new THREE.SphereGeometry(r, seg, rings, 0, TWO_PI, hole, Math.PI / 2 - hole);
+  if (sy !== 1) g.scale(1, sy, 1);
+  g.translate(0, y, 0);
+  return g;
+}
+
+/**
  * Flat ring lying in the XZ plane -- helmet rims, droid collars, the lip of a
  * hood. `from`/`to` are the same angles-from-the-face that shell() takes; the
  * -PI/2 turns RingGeometry's from-+X convention into that.
@@ -84,6 +96,89 @@ function ring(rIn, rOut, y, seg = 24, from = 0, to = TWO_PI) {
   const g = new THREE.RingGeometry(rIn, rOut, s, 1, from - Math.PI / 2, span);
   g.rotateX(-Math.PI / 2);
   g.translate(0, y, 0);
+  return g;
+}
+
+/**
+ * Band round the head whose edges FOLLOW A CURVE.
+ *
+ * shell() and ring() both have level edges, which is right for a helmet rim and
+ * wrong for a hairline: one level edge across the brow reads as a swim cap, and
+ * the obvious fix -- a staircase of short shells at stepped heights -- renders
+ * as literal stairs, blocky enough to look like a bug. This lays down a single
+ * strip of quads instead and lets `y0`, `y1`, `r` and `rTop` each be either a
+ * number or a function of the angle from the face, so a hairline can sit high
+ * over the brow and sweep down over the ears in one smooth run.
+ */
+function curtain({ r, rTop, y0, y1, from, to, seg = 34 }) {
+  const fn = (v) => (typeof v === 'function' ? v : () => v);
+  const R0 = fn(r), R1 = fn(rTop === undefined ? r : rTop), Y0 = fn(y0), Y1 = fn(y1);
+  const n = Math.max(4, Math.round(seg * Math.abs(to - from) / TWO_PI));
+  const pos = [], idx = [];
+  for (let i = 0; i <= n; i++) {
+    const a = from + (to - from) * (i / n);
+    const s = Math.sin(a), c = Math.cos(a);
+    const rb = R0(a), rt = R1(a);
+    pos.push(rb * s, Y0(a), rb * c, rt * s, Y1(a), rt * c);
+  }
+  for (let i = 0; i < n; i++) {
+    const b = i * 2;
+    idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * Edge profile for curtain(): level at `flat` across the middle, then easing away
+ * to `edge` by the time it reaches `span`, and level again beyond it.
+ *
+ * `hold` is the fraction of the span that stays flat, and it is there because a
+ * hairline has to clear the eyebrows right across the face window before it
+ * starts to drop. The smoothstep is there because the ends have to be FLAT: a
+ * plain power curve still has slope where it meets the span, and on the rebel
+ * helmet that kink showed up in the silhouette as a spike hanging off the jaw.
+ */
+function sweep(flat, edge, span, hold = 0.45, back = null) {
+  const S = (u) => u * u * (3 - 2 * u);
+  return (a) => {
+    const x = Math.abs(a);
+    if (x <= span) {
+      const t = x / span;
+      const u = t <= hold ? 0 : (t - hold) / (1 - hold);
+      return flat - (flat - edge) * S(u);
+    }
+    // `back` lets the edge rise again behind the ears, which is what a hairline
+    // does at the nape; without it the profile is level all round the back and
+    // shows as one long horizontal cut across the side of the head.
+    if (back === null) return edge;
+    return edge + (back - edge) * S(Math.min(1, (x - span) / (Math.PI - span)));
+  };
+}
+
+/**
+ * Ellipsoid with a round hole punched through it facing +Z -- a hood.
+ *
+ * Everything else in this file builds coverage out of level-edged shells, and
+ * for a hood that is exactly wrong: any shell that stops in front of the face
+ * leaves a horizontal edge across the forehead, which is a hat brim. Here the
+ * opening is a polar cap of SphereGeometry rotated to point at the face, so its
+ * edge is a closed curve that runs above the brow, falls away diagonally past
+ * the temples and closes under the chin. There is no level edge anywhere.
+ *
+ * `opening` is the half-angle of the hole and `tilt` swings its axis downward,
+ * which is what brings the top of the hole down over the brow while leaving the
+ * cheeks clear.
+ */
+function cowl({ r, opening, tilt = 0, y = 0, z = 0, sy = 1, sz = 1, seg = 28, rings = 16 }) {
+  const g = new THREE.SphereGeometry(r, seg, rings, 0, TWO_PI, opening, Math.PI - opening);
+  g.rotateX(Math.PI / 2);       // +Y pole (the hole) now points at the face
+  if (tilt) g.rotateX(tilt);    // and swings down
+  if (sy !== 1 || sz !== 1) g.scale(1, sy, sz);
+  g.translate(0, y, z);
   return g;
 }
 
@@ -178,67 +273,95 @@ export function vaderMantle() {
 // HAIR
 // ---------------------------------------------------------------------------
 
-function torusAt(r, tube, x, y, z) {
-  const g = new THREE.TorusGeometry(r, tube, 6, 12);
-  g.rotateY(Math.PI / 2);
-  g.translate(x, y, z);
-  return g;
+/**
+ * Hair finish.
+ *
+ * A hairpiece is built from cylindrical shells hugging the head, so a lot of it
+ * sits at a grazing angle to the camera -- and at grazing angles Fresnel drives
+ * a clearcoat's environment reflection to full, so the shell stops showing its
+ * own colour and mirrors the studio backdrop instead. Leia's temple sweeps came
+ * back as flat light-grey panels lying across her cheeks for exactly that
+ * reason; picking the pixel gave vertex colour 0x694028 under a mirror-bright
+ * result. Both sides going grey at once is the tell, since a key-light highlight
+ * would favour one. So hair keeps almost no clearcoat and very little env.
+ *
+ * Raising env is not a way to rescue the shadow side of a bun, either: 0.24 to
+ * 0.36 was indistinguishable in the lab, because the env map is dark to the
+ * sides. What the shadow side needs is less surface pointing away from the key,
+ * which is a geometry question.
+ */
+function hairFinish(g) {
+  return softenGloss(g, { clearcoat: 0.03, clearcoatRoughness: 0.9, env: 0.24, roughness: 0.82 });
 }
 
-/** Leia: centre parting, side buns, white hood of the gown thrown back. */
+/** Leia: swept-back hair, side buns, white hood of the gown thrown back. */
 export function leiaHair(fig) {
   if (fig) fig.topStud.visible = false;
   const g = new THREE.Group();
   const bb = builder();
   // In darkBrown (0x352100) the whole piece rendered as a black bathing cap, so
-  // the mass is reddishBrown -- still a dark brown, but it reads as hair -- and
-  // darkBrown is kept for the parting and the shadow inside the coils.
-  const H = C.reddishBrown, SH = C.darkBrown;
+  // the hair is reddishBrown -- still a dark brown, but it reads as hair.
+  const H = C.reddishBrown;
 
-  // Crown + back of the head. The band is not optional: a dome alone narrows
-  // faster than the head cylinder does, so the head's own rim came out as a
-  // yellow crescent above the fringe.
-  bb.custom(shell({ r: 0.638, y0: 0.94, y1: 1.20, seg: 26 }), { color: H });
-  bb.sphere(0, 1.18, 0, 0.638, { dome: true, sy: 0.44, seg: 26, rings: 7, color: H });
-  bb.custom(shell({ r: 0.638, y0: 0.40, y1: 0.98, from: 1.12, to: TWO_PI - 1.12 }), { color: H });
+  /*
+   * Crown. A dome alone narrows faster than the head cylinder does -- the head
+   * is a 24-gon with a FLAT cap at y 1.2 -- so it needs a band under it or the
+   * head's own rim shows as a yellow crescent. The dome's equator sits at 1.08
+   * so that it is still 0.659 wide at y 1.10, which swallows the top edge of
+   * everything below it.
+   */
+  bb.sphere(0, 1.08, -0.01, 0.66, { dome: true, sy: 0.50, seg: 26, rings: 8, color: H });
 
-  // Hairline. Swept back from a centre parting, so it arches: highest over the
-  // middle of the forehead and dropping away to cover the temples. Built as
-  // stepped segments because a shell's bottom edge is level, and one level edge
-  // right across the brow is the other half of why this read as a swim cap.
-  const arch = [[168, 190, 0.845], [190, 212, 0.895], [212, 234, 0.935],
-    [234, 278, 0.965], [278, 300, 0.935], [300, 322, 0.895], [322, 344, 0.845]];
-  for (const [a, b, y0] of arch) {
-    bb.custom(shell({ r: 0.652, rTop: 0.643, y0, y1: 1.16, from: faceTheta(a), to: faceTheta(b) }), { color: H });
-  }
-  // the parting itself: a shadowed groove running back over the crown
-  bb.custom(shell({ r: 0.6555, y0: 0.99, y1: 1.19, from: faceTheta(252), to: faceTheta(260) }), { color: SH });
-  bb.custom(shell({ r: 0.6415, y0: 1.15, y1: 1.20, from: faceTheta(252), to: faceTheta(260) }), { color: SH });
+  /*
+   * Hairline: swept back off the forehead, then down over the ears in one run.
+   * The height at the middle is set off the print -- FACE_LEIA's brows run from
+   * px 204 to 308, which is the face window out to +/-37 degrees, and they sit at
+   * y 0.853, so the hair has to stay above ~0.88 everywhere inside that window.
+   * sweep(0.96, 0.34, 1.35) holds 0.915 at the edge of it and only then falls
+   * away. The previous pass built the same shape out of seven stepped shells and
+   * the steps were plainly visible as blocks.
+   */
+  bb.custom(curtain({
+    r: 0.654, rTop: 0.646, y1: 1.10, y0: sweep(0.96, 0.34, 1.35, 0.45, 0.50),
+    from: -Math.PI, to: Math.PI, seg: 40,
+  }), { color: H });
 
   /*
    * The buns, and the one thing that matters about them: NOTHING CONCENTRIC on
    * the outer face. First pass was a disc at eye height with three rings on it,
    * second was a stepped beehive of decreasing radius, and both rendered as a
    * headphone driver -- the second one so exactly that it had a dust cap in the
-   * middle. So the bun is one smooth flattened mass at TEMPLE height, overlapped
-   * into the temple hair so there is no air gap, and the only detail is a knot
-   * set high and forward of centre: the tucked end of the coil, and the cue that
-   * breaks the radial symmetry a speaker needs.
+   * middle. So each bun is one smooth flattened mass at TEMPLE height, sunk into
+   * the hair behind it so there is no air gap and no free-floating rim.
+   *
+   * There is no second lobe on it either. A smaller sphere set forward of the
+   * coil was meant to read as its tucked end and instead gave her a Mickey Mouse
+   * ear; the flattening alone (sx 0.60) is enough to say coil rather than ball.
+   *
+   * How far it stands off the head is a lighting decision as much as a shape
+   * one. At x -0.560 the outer half of the bun was a broad wall of normals
+   * pointing straight down the +/-X axis, and the bun on the away side of the
+   * key light came back near black -- a plastic ball, not hair. Sunk to -0.515
+   * the visible surface is mostly the part curving round towards the front, so
+   * it picks up the key from either side and still clears the head (radius
+   * 0.375 * 0.60 = 0.225 of half-width, on a 0.375-wide head).
    */
   bb.mirrorX((b) => {
-    // hair sweeping down over the temple and feeding into the coil
-    b.custom(shell({ r: 0.648, y0: 0.56, y1: 1.02, from: faceTheta(148), to: faceTheta(198) }), { color: H });
-    b.custom(shell({ r: 0.658, y0: 0.74, y1: 1.06, from: faceTheta(158), to: faceTheta(200) }), { color: H });
-    b.sphere(-0.585, 0.80, -0.02, 0.355, { seg: 16, rings: 12, sx: 0.54, color: H });
-    b.sphere(-0.735, 0.885, 0.075, 0.155, { seg: 12, rings: 9, sx: 0.72, color: H });
+    b.sphere(-0.515, 0.78, -0.02, 0.360, { seg: 18, rings: 12, sx: 0.60, color: H });
   });
   g.add(bb.build());
 
-  // white hood of the gown, sitting back off the head
+  /*
+   * White hood of the gown, thrown back. It stays clear of the hair at every
+   * height rather than tapering in over the crown, which had it crossing the
+   * temple shells; and its bottom lip is an arc, not a full annulus, or the cloth
+   * closes into a ring round the front of her throat.
+   */
   const hood = new THREE.Group();
-  hood.add(twoSided(shell({ r: 0.86, rTop: 0.58, y0: -0.40, y1: 0.92, from: 1.98, to: TWO_PI - 1.98, seg: 26 }),
+  hood.add(twoSided(shell({ r: 0.92, rTop: 0.845, y0: -0.42, y1: 0.44, from: 2.10, to: TWO_PI - 2.10, seg: 26 }),
     C.white));
-  hood.add(twoSided(ring(0.62, 0.86, -0.40, 20), C.white));
+  hood.add(twoSided(ring(0.70, 0.92, -0.42, 24, 2.10, TWO_PI - 2.10), C.white));
+  hairFinish(g);
   makeCloth(hood);
   g.add(hood);
   return g;
@@ -254,38 +377,42 @@ export function lukeHair(fig) {
   // rectangles stamped on the forehead, because a shell's arc ends square.
   const H = C.tan;
 
+  // Crown. Its equator is at 1.12 so it is still 0.633 wide at the head's flat
+  // top at y 1.2; a lower, flatter dome leaves a yellow ring of scalp up there.
+  bb.sphere(0, 1.12, -0.01, 0.655, { dome: true, sy: 0.48, seg: 24, rings: 8, color: H });
+
   /*
-   * Skull cap. Across the FRONT it stops at y 1.00, well clear of the brow at
-   * 0.834, and the fringe below is made only of tabs. The first pass wrapped the
-   * cap all the way round at y 0.92 and hung the tabs off that, which left them
-   * standing 0.05 studs proud of a level edge -- at film scale the hairline was
-   * a straight line and the piece rendered as a smooth tan swim cap.
+   * Fringe. One strip whose bottom edge is a swept curve plus a ripple, so the
+   * hairline undulates the way a fringe does. The ripple is carried in the RADIUS
+   * as well as the height and in antiphase to it, which means the locks that hang
+   * lowest also stand furthest out, and each one lays a soft shadow on the next.
+   *
+   * This replaced six stepped shells. They were an attempt at the same idea and
+   * the result was six flat-bottomed rectangles of hair, a stair-step so blocky
+   * it read as a rendering fault rather than as hair.
+   *
+   * Amplitude is bounded by the brows: FACE_LUKE has them at y 0.844 and running
+   * out to px 203, which is 37 degrees round, so the curve is set to hold 0.901
+   * there and 0.040 of ripple keeps the troughs at 0.861.
    */
-  bb.custom(shell({ r: 0.638, y0: 1.00, y1: 1.20, seg: 24 }), { color: H });
-  bb.sphere(0, 1.18, 0, 0.638, { dome: true, sy: 0.46, seg: 24, rings: 7, color: H });
-  // back and sides drop over the ears
-  bb.custom(shell({ r: 0.638, y0: 0.56, y1: 1.02, from: 0.88, to: TWO_PI - 0.88 }), { color: H });
-  // sideburn tabs, stopping at the top of the ear
-  bb.mirrorX((b) => {
-    b.custom(shell({ r: 0.646, y0: 0.70, y1: 0.98, from: faceTheta(150), to: faceTheta(180) }), { color: H });
-  });
-  /*
-   * Fringe: separate locks whose bottom edges step up and down, so the hairline
-   * is a zig-zag against bare forehead. Each lock also stands a little further
-   * out than its neighbours, which lays a shadow line between them -- that pair
-   * of cues is what survives when the head is 60 px tall, where any attempt at
-   * painting individual strands in a second colour just becomes a flat smudge.
-   */
-  const locks = [[164, 194, 0.870, 0.654], [194, 224, 0.792, 0.668],
-    [224, 250, 0.900, 0.656], [250, 286, 0.815, 0.672],
-    [286, 314, 0.884, 0.658], [314, 348, 0.845, 0.650]];
-  for (const [a, b, y0, r] of locks) {
-    bb.custom(shell({ r, rTop: 0.642, y0, y1: 1.08, from: faceTheta(a), to: faceTheta(b) }), { color: H });
-  }
-  // tuft at the crown
-  bb.sphere(0.12, 1.16, -0.10, 0.24, { seg: 12, rings: 8, sy: 0.7, color: H });
+  const line = sweep(0.96, 0.42, 1.30, 0.45, 0.58);
+  // The ripple frequency is an INTEGER number of cycles per turn. At 7.5 the
+  // curve did not close: sin was at +1 on one side of the seam behind his head
+  // and -1 on the other, which left a 0.08-stud notch cut into the nape.
+  const ripple = (a) => Math.sin(a * 8);
+  bb.custom(curtain({
+    r: (a) => 0.654 - 0.014 * ripple(a),
+    rTop: 0.646,
+    y1: 1.14,
+    y0: (a) => line(a) + 0.040 * ripple(a),
+    from: -Math.PI,
+    to: Math.PI,
+    seg: 48,
+  }), { color: H });
+  // cowlick, off-centre and toward the back
+  bb.sphere(0.07, 1.36, -0.15, 0.22, { seg: 12, rings: 8, sy: 0.66, sz: 1.1, color: H });
   g.add(bb.build());
-  softenGloss(g, { clearcoat: 0.12, clearcoatRoughness: 0.5, env: 0.4 });
+  hairFinish(g);
   return g;
 }
 
@@ -301,46 +428,77 @@ export function lukeHair(fig) {
  * ABOVE the skull, and the front edges drop down close to the cheeks.
  */
 
-/** Obi-Wan: heavy Jedi cowl, its mouth standing just proud of the brow. */
+/** Obi-Wan: heavy Jedi cowl, one shell with the face-hole punched through it. */
 export function obiwanHood(fig) {
   if (fig) fig.topStud.visible = false;
   const g = new THREE.Group();
-  const OUT = C.reddishBrown, IN = C.darkBrown;
+  /*
+   * Colour first, because it caused more trouble than the shape. In reddishBrown
+   * (0x694028) over a darkBrown lining, every surface of this hood faces away
+   * from the key light and the whole piece rendered essentially black -- so the
+   * bright yellow face sat in a black surround and the thing read as a wizard
+   * with long dark hair. Medium brown outside, reddishBrown inside: the lining
+   * is then still clearly in shadow without going to a void.
+   */
+  const OUT = C.brown, IN = C.reddishBrown;
 
   /*
-   * How wide the opening has to be: FACE_OBIWAN puts the eyes at px 216/296 and
-   * runs the beard out to px 192/320, which is +/-39 degrees of the head. A first
-   * pass left a +/-49 degree window and dropped the front edges to y -0.30, past
-   * the chin -- 10 degrees of clearance either side of the beard and two long
-   * panels down the cheeks, so it rendered as a face peering out of a slot with
-   * long brown hair. The window is +/-59 degrees now and the edges stop at the jaw.
+   * The whole hood is ONE cowl() shell. Three earlier passes built it as a crown
+   * dome plus a front "mouth" shell, and every one of them read as headwear
+   * rather than cloth: whichever of the two was widest across the front left a
+   * level edge over the eyebrows, which is a hard hat, and the tall side walls
+   * either side of the face read as two lengths of hair.
+   *
+   * The numbers are set off the face print. opening 0.77 rad with the axis tilted
+   * 0.36 rad down puts the top of the hole at y 0.94, z 0.81 -- 0.10 above the
+   * brow line at 0.834 and standing 0.2 proud of the head, so it overhangs the
+   * forehead without cutting the eyebrows, which are most of what makes this face
+   * read as old. The same edge passes the temples at y 0.32, level with the
+   * mouth, and closes below the chin inside the torso.
+   *
+   * Stretching y and z well past x is what stops it reading as a crash helmet. A
+   * sphere of even radius is a hard shape, and the first pass at this (sy = sz =
+   * 1.10) came back looking moulded; tall and deep, with the extra length hung
+   * off the BACK of the head -- centre z -0.16, so the shell reaches z -1.2
+   * behind a 0.6 head -- gives the drape a hood has and a helmet does not.
+   *
+   * sy also has to keep the shell off the TOP RIM of the head. The head is a
+   * 24-gon of radius 0.6 with a flat cap at y 1.2, and at sy 1.12 the shell
+   * passed within a percent of that rim between 45 and 75 degrees round: two
+   * yellow slivers of scalp showed through the crown, one per side.
    */
-  // outer cowl, flaring onto the shoulders, and its dark lining
-  g.add(twoSided(shell({ r: 1.00, rTop: 0.60, y0: -0.58, y1: 1.16, from: 1.06, to: TWO_PI - 1.06, seg: 30 }), OUT));
-  g.add(twoSided(shell({ r: 0.90, rTop: 0.575, y0: -0.52, y1: 1.10, from: 1.16, to: TWO_PI - 1.16, seg: 26 }), IN));
+  const HOOD = { r: 0.86, opening: 0.77, tilt: 0.36, y: 0.56, z: -0.16, sy: 1.24, sz: 1.22 };
+  g.add(twoSided(cowl({ ...HOOD, seg: 30, rings: 18 }), OUT));
+  // Lining, set 0.06 in all round so the rim reads as thick cloth rather than as
+  // the knife edge a single surface gives you.
+  g.add(twoSided(cowl({ ...HOOD, r: 0.80, seg: 26, rings: 14 }), IN));
 
   const bb = builder();
-  // crown of the hood: tall and pushed back off the forehead, so it reads as a
-  // cowl with cloth bunched behind the head rather than a flat-brimmed hat
-  bb.sphere(0, 0.80, -0.20, 0.68, { dome: true, sy: 0.98, seg: 24, rings: 9, color: OUT });
-  bb.sphere(0, 0.56, -0.44, 0.56, { dome: true, sy: 1.05, seg: 20, rings: 8, color: OUT });
-  // Mouth of the hood: a collar barely wider than the head, tipped forward so it
-  // overhangs the brow. Its lining starts at y 1.00 rather than 0.93 -- the brow
-  // print is at 0.834 and at 0.93 the cowl clipped the eyebrows, which are most
-  // of what makes this face read as old.
-  bb.custom(shell({ r: 0.66, rTop: 0.70, y0: 1.06, y1: 1.30, from: faceTheta(146), to: faceTheta(366) }),
+  /*
+   * Robe collar gathering onto the shoulders. Its top edge IS level, at y 0.30,
+   * but the hood is far wider there, so the edge is swallowed and the collar only
+   * emerges low down beside the neck. That is the whole difference between a robe
+   * collar and the hair curtains this replaced: where the vertical front edge
+   * sits. Beside the jaw it is hair; beside the collarbone it is cloth.
+   *
+   * It starts 1.45 rad round -- nearly at the ear -- because at 1.16 the edge
+   * stood 0.2 studs FORWARD of the hood shell beside it and showed as a thin
+   * brown thread hanging past his cheek.
+   */
+  bb.custom(shell({ r: 1.06, rTop: 0.72, y0: -0.62, y1: 0.30, from: 1.45, to: TWO_PI - 1.45, seg: 28 }),
     { color: OUT });
-  bb.custom(shell({ r: 0.645, rTop: 0.665, y0: 1.00, y1: 1.18, from: faceTheta(154), to: faceTheta(358) }),
+  bb.custom(shell({ r: 0.96, rTop: 0.68, y0: -0.58, y1: 0.26, from: 1.56, to: TWO_PI - 1.56, seg: 24 }),
     { color: IN });
-  // front edges of the cowl, tucked back behind the cheeks and stopping at the jaw
-  bb.mirrorX((b) => {
-    b.custom(shell({ r: 0.80, rTop: 0.685, y0: -0.06, y1: 1.06, from: faceTheta(120), to: faceTheta(172) }),
-      { color: OUT });
-    b.custom(shell({ r: 0.755, rTop: 0.66, y0: -0.02, y1: 1.02, from: faceTheta(128), to: faceTheta(170) }),
-      { color: IN });
-  });
   g.add(bb.build());
-  makeCloth(g);
+  /*
+   * Not makeCloth. At env 0.22 the parts of the cowl that face sideways get
+   * almost no key light and crush to near-black, so the two edges either side of
+   * his face separated from the lit crown and read as lengths of hair rather
+   * than as the same piece of cloth. There is still no clearcoat -- the extra
+   * env goes into the diffuse ambient, which lifts the grazing faces without
+   * putting a highlight anywhere.
+   */
+  softenGloss(g, { clearcoat: 0, clearcoatRoughness: 1, env: 0.62, roughness: 0.88 });
   return g;
 }
 
@@ -436,41 +594,50 @@ export function trooperHelmet(fig) {
 /**
  * Rebel fleet trooper: the tall open-crowned combat helmet.
  *
- * The shape is the whole job here. A straight-sided drum with a flared band
- * around the bottom is a flowerpot, and that is precisely what earlier passes
- * rendered as -- made worse by a dark plate on the front, which at any distance
- * read as a hole punched through the helmet. So the wall is an ogee instead:
- * swelling out above the brow, then drawing back in to the open crown, with the
- * only hard trim being the leather band at the brow and the lip at the top.
+ * The shape is the whole job here, and the failure modes are specific:
+ *  - a straight-sided drum with a level lower edge is a flowerpot, and a flat
+ *    open crown on top of it turns the lid into a saucepan;
+ *  - anything that widens all the way up + a contrast band at the brow is a
+ *    bellhop's fez;
+ *  - a dark plate on the front reads at any distance as a hole in the helmet.
+ *
+ * So the wall carries a real helmet section -- 0.712 at the brow, bulging to
+ * 0.736, then turning in hard to 0.56 at the crown lip -- and the lower edge is
+ * a single swept curve that sits above the brow and falls to below the ears,
+ * which does the work the separate slab-sided ear flaps used to do badly.
  */
 export function rebelHelmet(fig) {
   if (fig) fig.topStud.visible = false;
   const g = new THREE.Group();
-  const SH = C.darkTan, RIM = C.darkBrown, TR = C.tan;
-
-  g.add(twoSided(shell({ r: 0.700, rTop: 0.748, y0: 0.80, y1: 1.20, seg: 26 }), SH));
-  g.add(twoSided(shell({ r: 0.748, rTop: 0.632, y0: 1.20, y1: 1.62, seg: 26 }), SH));
-  // lip of the open crown: from above you look straight down into the helmet
-  g.add(twoSided(ring(0.570, 0.632, 1.62, 26), RIM));
+  // The trim is C.brown, not C.darkBrown. darkBrown is 0x352100 and renders as
+  // pure black, so a band of it landed across the brow print as a hard black bar
+  // -- the figure looked like he was wearing a blindfold under the helmet.
+  const SH = C.darkTan, RIM = C.brown, DK = C.darkBrown;
+  // Lower edge of the shell. sweep() flattens out past its span, so one call
+  // gives the brow curve at the front AND a level nape line round the back.
+  const edge = sweep(0.845, 0.40, 1.50, 0.30, 0.30);
 
   const bb = builder();
-  // inner crown so the open top never shows daylight through the head
-  bb.sphere(0, 1.10, 0, 0.60, { dome: true, sy: 0.30, seg: 20, rings: 6, color: RIM });
-  // padded leather band at the brow, kept flush so it is trim and not a brim
-  bb.custom(shell({ r: 0.714, rTop: 0.708, y0: 0.78, y1: 0.91, seg: 26 }), { color: RIM });
-  // highlight along the widest point, which is what gives the wall its curve
-  bb.custom(shell({ r: 0.754, y0: 1.16, y1: 1.24, seg: 26 }), { color: TR });
-  // strap anchors either side
-  bb.mirrorX((b) => {
-    b.cyl(-0.70, 0.86, 0.10, 0.055, 0.06,
-      { axis: 'x', seg: 8, color: C.flatSilver, finish: FINISH.METAL, stud: false });
-  });
-  // cheek guards, hugging the head
-  bb.mirrorX((b) => {
-    b.custom(shell({ r: 0.652, rTop: 0.672, y0: 0.46, y1: 0.86, from: faceTheta(148), to: faceTheta(188) }),
-      { color: SH });
-    b.custom(shell({ r: 0.662, y0: 0.46, y1: 0.53, from: faceTheta(148), to: faceTheta(188) }), { color: RIM });
-  });
+  bb.custom(curtain({ r: 0.700, rTop: 0.718, y0: edge, y1: 1.14, from: -Math.PI, to: Math.PI, seg: 34 }),
+    { color: SH });
+  // Rolled leather rim, following that same curve rather than cutting across it.
+  bb.custom(curtain({
+    r: 0.7055, rTop: 0.7045, y0: edge, y1: (a) => edge(a) + 0.065, from: -Math.PI, to: Math.PI, seg: 34,
+  }), { color: RIM });
+  /*
+   * Crown: a squashed dome with a 0.35-radius hole at the top. Built out of two
+   * cones instead -- 0.736 to 0.690 to 0.560 -- it left a 1.1-stud-wide flat disc
+   * up there, and from any camera below 15 degrees of elevation that disc is the
+   * silhouette: the helmet read as a kepi. Rounding the section and shrinking the
+   * hole to half its old radius is what makes it a helmet.
+   */
+  bb.custom(openDome({ r: 0.718, y: 1.14, sy: 0.46, hole: 0.50, seg: 28, rings: 10 }), { color: SH });
+  // The hole itself: an annular lip, and a dark liner filling the crown behind
+  // it. The liner has to be as wide as the HEAD (0.598), not as wide as the hole:
+  // a narrow plug left the head's flat yellow top exposed in the annulus around
+  // it, and from above you could see scalp through the opening.
+  bb.custom(ring(0.296, 0.352, 1.437, 24), { color: DK });
+  bb.sphere(0, 1.19, 0, 0.598, { dome: true, sy: 0.40, seg: 22, rings: 8, color: DK });
   g.add(bb.build());
   softenGloss(g, { clearcoat: 0.04, clearcoatRoughness: 0.8, env: 0.22, roughness: 0.86 });
   return g;
@@ -568,14 +735,17 @@ export function c3poHead(fig) {
   const bb = builder();
   const GOLD = C.pearlGold, DK = C.darkBrown;
 
-  // dome, sitting flush on the head
-  bb.sphere(0, 0.98, 0, 0.605, { dome: true, sy: 0.78, seg: 24, rings: 9, color: GOLD, finish: FINISH.METAL });
-  // plate seam where the dome meets the face. In copper and 0.08 tall it read as a
-  // headband, so it is gold with only a hairline of shadow under it.
-  bb.custom(shell({ r: 0.607, y0: 0.94, y1: 1.02 }), { color: GOLD, finish: FINISH.METAL });
-  bb.custom(shell({ r: 0.609, y0: 0.925, y1: 0.945 }), { color: C.copper, finish: FINISH.METAL });
-  // low crest along the crown
-  bb.sphere(0, 1.30, -0.02, 0.30, { dome: true, sy: 0.5, sx: 0.35, seg: 12, rings: 6, color: GOLD, finish: FINISH.METAL });
+  /*
+   * Dome. Its equator has to sit at the TOP of the head, not part way down it.
+   * Sunk to y 0.94 -- which is where it was, to keep the seam near the brow -- a
+   * dome of radius 0.605 is narrower than the 0.6 head from y 1.01 upward, so the
+   * head's own cylinder pushed back out through it: what rendered was a thin gold
+   * band from 0.94 to 1.01, bare scalp above that, and the dome's cap emerging
+   * again over the top. Three stacked bands, and the whole thing read as a cap
+   * with a brim. At 1.14/0.62/0.70 the dome stays wider than the head all the way
+   * to its flat top and there is one seam, a 0.02 lip at the crown.
+   */
+  bb.sphere(0, 1.14, 0, 0.62, { dome: true, sy: 0.70, seg: 24, rings: 10, color: GOLD, finish: FINISH.METAL });
 
   // photoreceptors, on the print's eye centres
   const ey = faceY(106);
@@ -592,12 +762,21 @@ export function c3poHead(fig) {
     bb.brick(-0.16 + i * 0.08, my0 + 0.015, 0.625, 0.03, 0.04,
       { h: my1 - my0 - 0.04, color: GOLD, studs: false, finish: FINISH.METAL });
   }
-  // ear plates + neck rings
+  /*
+   * Ears. Built as a curved shell hugging the head at 0.615 they had no visible
+   * thickness, so each one rendered as a flat rectangle of slightly-off gold on
+   * the side of his head -- a sticker, not a part. As a slab that overlaps the
+   * head by 0.035 and stands 0.065 proud, the near edge catches the light and it
+   * reads as the audio plate it is.
+   */
   bb.mirrorX((b) => {
-    b.custom(shell({ r: 0.615, rTop: 0.635, y0: faceY(150), y1: faceY(96), from: faceTheta(140), to: faceTheta(180) }),
-      { color: GOLD, finish: FINISH.METAL });
+    b.brick(-0.615, faceY(152), 0.01, 0.10, 0.26, {
+      h: faceY(96) - faceY(152), color: GOLD, finish: FINISH.METAL, studs: false,
+    });
   });
-  bb.cyl(0, -0.10, 0, 0.35, 0.08, { seg: 14, color: C.copper, finish: FINISH.METAL, stud: false });
+  // Neck joint. In copper it came back #6c3219 in the shadow under his chin and
+  // read as a ring of rust; dark grey reads as the machined joint it is.
+  bb.cyl(0, -0.10, 0, 0.35, 0.08, { seg: 14, color: C.darkBluishGray, finish: FINISH.METAL, stud: false });
   bb.cyl(0, -0.02, 0, 0.33, 0.06, { seg: 14, color: GOLD, finish: FINISH.METAL, stud: false });
 
   g.add(bb.build());

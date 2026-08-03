@@ -1,24 +1,40 @@
-// Temporary contract check: every ship's orientation, origin, nodes and rigs.
-// Deleted before hand-off.
+// Contract check for the ship library: orientation, origin, nodes and rigs.
+// Run with `node src/ships/_verify.mjs`; exits non-zero on any breach.
 import * as THREE from 'three';
 import './index.js';
 import { models, make } from '../registry.js';
 
+// fore/aft: nodes that prove the model's nose points at +Z. Scenes orient these
+// by yaw alone, so a ship built backwards is a silent, film-wide bug.
 const EXPECT = {
-  corvette: { nodes: ['cockpit', 'dorsalGun', ...Array.from({ length: 11 }, (_, i) => `engine${i}`)] },
-  stardestroyer: { nodes: ['engineL', 'engineC', 'engineR', 'bridge', 'hangarMouth'] },
+  corvette: {
+    nodes: ['cockpit', 'dorsalGun', ...Array.from({ length: 11 }, (_, i) => `engine${i}`)],
+    fore: ['cockpit'], aft: ['engine0', 'engine10', 'dorsalGun'],
+  },
+  stardestroyer: {
+    nodes: ['engineL', 'engineC', 'engineR', 'bridge', 'hangarMouth'],
+    aft: ['engineL', 'engineC', 'engineR', 'bridge', 'hangarMouth'],
+  },
   xwing: {
     nodes: ['r2socket', 'cockpit', ...Array.from({ length: 4 }, (_, i) => `gun${i}`),
       ...Array.from({ length: 4 }, (_, i) => `engine${i}`)],
     api: ['setSFoils'],
+    fore: ['cockpit', 'gun0', 'gun1', 'gun2', 'gun3'],
+    aft: ['r2socket', 'engine0', 'engine1', 'engine2', 'engine3'],
   },
-  tiefighter: { nodes: ['gunL', 'gunR'] },
-  escapepod: { nodes: ['thruster'] },
-  sandcrawler: { nodes: ['ramp'], api: ['setRamp'], ground: true },
-  landspeeder: { nodes: ['seatL', 'seatR'] },
+  tiefighter: { nodes: ['gunL', 'gunR'], fore: ['gunL', 'gunR'] },
+  escapepod: { nodes: ['thruster'], fore: ['cockpit'], aft: ['thruster'] },
+  sandcrawler: {
+    nodes: ['ramp'], api: ['setRamp'], ground: true,
+    fore: ['ramp', 'cockpit'], aft: ['bridge'],
+  },
+  landspeeder: {
+    nodes: ['seatL', 'seatR'],
+    fore: ['intakeL', 'intakeC', 'intakeR'], aft: ['exhaustL', 'exhaustR'],
+  },
   // The turret's origin is its yaw axis, not its bounding-box centre: a scene
   // bolts it to a hull at that point and aim() has to swing about it.
-  turret: { nodes: ['muzzle'], api: ['aim'], ground: true, pivotOrigin: true },
+  turret: { nodes: ['muzzle'], api: ['aim'], ground: true, pivotOrigin: true, fore: ['muzzle'] },
 };
 
 let fails = 0;
@@ -46,6 +62,17 @@ for (const id of models.keys()) {
   }
   for (const fn of spec.api || []) {
     if (typeof o.userData[fn] !== 'function') bad(id, `missing userData.${fn}()`);
+  }
+  const nodeZ = (n) => nodes[n]?.getWorldPosition(new THREE.Vector3()).z;
+  for (const n of spec.fore || []) {
+    const z = nodeZ(n);
+    if (z === undefined) bad(id, `fore node "${n}" missing`);
+    else if (z <= 0) bad(id, `"${n}" should be forward of centre but z=${z.toFixed(1)} (is the nose at +Z?)`);
+  }
+  for (const n of spec.aft || []) {
+    const z = nodeZ(n);
+    if (z === undefined) bad(id, `aft node "${n}" missing`);
+    else if (z >= 0) bad(id, `"${n}" should be aft of centre but z=${z.toFixed(1)} (is the nose at +Z?)`);
   }
   // every engine/thruster/muzzle node should sit inside the hull's bounds
   for (const [n, node] of Object.entries(nodes)) {

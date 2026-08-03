@@ -38,10 +38,14 @@ export function duneHeight(x, z, seed, amp) {
  */
 export function duneField(bb, {
   size = 200, cell = 4, seed = 1207, amp = 13,
-  x0 = 0, z0 = 0, step = PLATE, flatten = null, taper = 0.2, mask = null,
+  x0 = 0, z0 = 0, step = PLATE, flatten = null, taper = 0.42, mask = null,
 } = {}) {
   const n = Math.max(1, Math.round(size / cell));
   const H = new Float32Array(n * n);
+  // Height before the rim taper. Shading has to key off this, not off H: with
+  // the taper folded in, every cell near the edge counts as "low ground" and
+  // the plot ends up ringed by a band of dark tan.
+  const R = new Float32Array(n * n);
   const skip = mask ? new Uint8Array(n * n) : null;
   const half = size / 2;
 
@@ -50,14 +54,18 @@ export function duneField(bb, {
       const x = x0 - half + (i + 0.5) * cell;
       const z = z0 - half + (j + 0.5) * cell;
       let h = duneHeight(x - x0, z - z0, seed, amp);
-      // Fade the rim to a single plate. Without this the plot ends in a
+      R[j * n + i] = h;
+      // Fade the rim down to a sand shelf. Without this the plot ends in a
       // full-height cliff, which from a low camera looks like a cake slice.
+      // The zone has to be wide: bring 17 studs of dune down over 10 and every
+      // cell in the ramp is a four-stud riser, which reads as a quarry.
       if (taper > 0) {
         // Wobble the falloff so the rim is a ragged sand shelf rather than a
         // set of perfectly nested rectangles.
-        const w = half * taper * (0.55 + 0.9 * fbm2(x / 30, z / 30, { seed: seed + 301, octaves: 2 }));
+        const w = half * taper * (0.62 + 0.76 * fbm2(x / 34, z / 34, { seed: seed + 301, octaves: 2 }));
         const e = Math.min((half - Math.abs(x - x0)) / w, (half - Math.abs(z - z0)) / w);
-        h *= smoothstep(0, 1, clamp(e, 0, 1));
+        const s = smoothstep(0, 1, clamp(e, 0, 1));
+        h = h * s + step * 2 * (1 - s);
       }
       if (flatten) h = flatten(x - x0, z - z0, h);
       H[j * n + i] = Math.max(step, Math.round(h / step) * step);
@@ -68,7 +76,9 @@ export function duneField(bb, {
   }
 
   const at = (i, j) => (i < 0 || j < 0 || i >= n || j >= n ? 0 : H[j * n + i]);
+  const raw = (i, j) => (i < 0 || j < 0 || i >= n || j >= n ? 0 : R[j * n + i]);
   const maxH = H.reduce((a, b) => Math.max(a, b), 0);
+  const maxR = R.reduce((a, b) => Math.max(a, b), 0) || 1;
 
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
@@ -89,15 +99,18 @@ export function duneField(bb, {
       // falling away from the wind, which blows toward +x/+z here -- go dark
       // tan. Two colours only: nougat and friends are far too saturated next
       // to tan and turn the field into a sunburn.
-      const t = h / (maxH || 1);
-      const grad = (at(i + 1, j) - at(i - 1, j)) * 0.87 + (at(i, j + 1) - at(i, j - 1)) * 0.5;
+      const t = raw(i, j) / maxR;
+      const grad = (raw(i + 1, j) - raw(i - 1, j)) * 0.87 + (raw(i, j + 1) - raw(i, j - 1)) * 0.5;
       const spec = hash2i(i, j, seed + 9);
       let color = C.tan;
-      if (t < 0.24) color = spec < 0.74 ? C.darkTan : C.tan;
-      else if (grad < -step * 1.2) color = spec < 0.5 ? C.darkTan : C.tan;
+      if (t < 0.2) color = spec < 0.7 ? C.darkTan : C.tan;
+      else if (grad < -step * 1.4) color = spec < 0.55 ? C.darkTan : C.tan;
+      // Tall risers are lee faces standing in their own shade: darkening them
+      // is what keeps a steep step from reading as a bright quarry wall.
+      else if (h - low > step * 4) color = C.darkTan;
       // Stray plates only where the contour already steps: an odd dark tile in
       // the middle of a flat terrace reads as a pothole.
-      else if (spec < 0.14 && h - low > step) color = C.darkTan;
+      else if (spec < 0.13 && h - low > step) color = C.darkTan;
 
       bb.brick(x, yb, z, cell, cell, { h: h - yb, color, free: true, studs: false });
     }
@@ -126,15 +139,19 @@ export function rockOutcrop(bb, x, z, y0, r, tall, rng) {
   const tone = rng.next();
   const body = tone < 0.62 ? C.darkTan : C.mediumNougat;
   const band = tone < 0.62 ? C.mediumNougat : C.darkTan;
-  const layers = Math.max(3, Math.round(tall / (BRICK * 2.1)));
+  // Six courses at most. Any more and the radius has crept in far enough that
+  // the stack is a hoodoo rather than the squat mesa this landscape wants.
+  const layers = Math.min(6, Math.max(3, Math.round(tall / (BRICK * 2.1))));
   let rad = r;
   let y = y0 - PLATE;
   for (let k = 0; k < layers; k++) {
     const w = Math.max(2, Math.round(rad * 2));
     const d = Math.max(2, Math.round(rad * 2 * rng.range(0.78, 1.2)));
-    const h = BRICK * rng.range(1.4, 2.4);
-    // A darker stratum every few courses reads as bedding in the sandstone.
-    const col = rng.next() < 0.24 ? band : body;
+    const h = BRICK * rng.range(1.6, 2.6);
+    // A darker stratum now and then reads as bedding in the sandstone. Any
+    // more often and medium nougat, which goes almost red under a desert key,
+    // stripes the whole formation like liquorice.
+    const col = rng.next() < 0.15 ? band : body;
     const ox = rng.range(-1, 1) * rad * 0.3;
     const oz = rng.range(-1, 1) * rad * 0.3;
     bb.brick(x + ox, y, z + oz, w, d, { h, color: col, free: true, studs: false });
@@ -151,7 +168,7 @@ export function rockOutcrop(bb, x, z, y0, r, tall, rng) {
       }
     }
     y += h;
-    rad *= rng.range(0.8, 0.94);
+    rad *= rng.range(0.86, 0.97);
     if (rad < 1.6) break;
   }
   // A capstone that reads from a distance.
@@ -218,10 +235,10 @@ export function buildDunes(opts = {}) {
   const size = num(opts, 'size', 200);
   const cell = num(opts, 'cell', 4);
   const seed = Math.round(num(opts, 'seed', 1207));
-  const amp = num(opts, 'amp', 21);
+  const amp = num(opts, 'amp', 17);
 
   const bb = new BrickBuilder({ studs: false, bevel: false, cullStuds: false });
-  const sample = duneField(bb, { size, cell, seed, amp, taper: num(opts, 'taper', 0.2) });
+  const sample = duneField(bb, { size, cell, seed, amp, taper: num(opts, 'taper', 0.42) });
   const rng = new RNG(seed + 500);
   const half = size / 2;
 

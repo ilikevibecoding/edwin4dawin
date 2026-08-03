@@ -102,6 +102,21 @@ And single frames of the film itself:
 npm run frame -- --times=0,20,60,120 --dir=/tmp/frames
 ```
 
+The hard part of building something like this is not writing it, it is *seeing*
+it — a five minute film is nine thousand frames and there is no way to watch
+them. So the review loop is a contact sheet: sample the whole timeline at a
+fixed interval and tile the results into labelled grids.
+
+```bash
+npm run sheet -- --every=4 --dir=/tmp/sheet            # whole film, ~75 s
+npm run sheet -- --from=82 --to=120 --every=2 --dir=/tmp/corridor
+```
+
+Both `sheet` and `frame` step the simulation forward at 1/30 s between samples
+rather than seeking cold, because the effect pools are stateful: without it a
+sheet of the corridor firefight shows eighty blaster bolts hanging in the air
+that no viewer would ever see.
+
 See `docs/BRICK_KIT.md` for the full parts API.
 
 ## Notes

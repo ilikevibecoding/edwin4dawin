@@ -123,48 +123,49 @@ export function buildHermitHut(opts = {}) {
   });
 
   // -------------------------------------------------------------- dome
-  // Stepped rings of stone. The front arc is dropped when `open` so the
-  // camera can see in over the wall.
-  const rings = 7;
-  const domeH = num(opts, 'domeHeight', 9);
-  const rise = domeH / rings;
+  // Corbelled stone dome: each course is a full ring of blocks, and every
+  // block is sized from the gap to the course above it -- radial depth covers
+  // the inward step and height covers the rise -- so the shell is watertight
+  // from the inside instead of a stack of hoops with daylight between.
+  // The near arc is dropped when `open` so the camera can see over the wall.
+  const rings = 11;
+  const domeH = num(opts, 'domeHeight', 10);
+  const baseX = RX + WALL, baseZ = RZ + WALL;
+  const prof = (t) => ({
+    k: Math.cos(t * Math.PI / 2),
+    y: wallH - BRICK * 0.5 + Math.sin(t * Math.PI / 2) * domeH,
+  });
   for (let i = 0; i < rings; i++) {
-    const t = (i + 0.5) / rings;
-    const k = Math.cos(t * Math.PI / 2);
-    const rx = (RX + WALL) * k, rz = (RZ + WALL) * k;
-    const y = wallH + Math.sin(t * Math.PI / 2) * domeH - rise * 1.4;
-    const seg = Math.max(10, Math.round(30 * k));
+    const a0 = prof(i / rings), a1 = prof((i + 1) / rings);
+    // Overshoot both ways: the block hangs below its own course and reaches
+    // outward past the one under it, which also hides the step's underside.
+    const depth = Math.max(2.4, (a0.k - a1.k) * baseX + 1.6);
+    const h = (a1.y - a0.y) + BRICK * 0.55;
+    const rx = a0.k * baseX - depth / 2 + 0.7;
+    const rz = a0.k * baseZ - depth / 2 + 0.7;
+    if (rx < 0.9) break;
+    const seg = Math.max(8, Math.round(2.4 * Math.max(rx, rz)));
     for (let s = 0; s < seg; s++) {
-      const a = (s / seg) * Math.PI * 2 + (i % 2) * 0.1;
-      const cz = Math.sin(a);
-      // Slice the near arc off every ring, ring zero included: leave the
-      // widest course in and it hangs over the room like a hat brim.
-      if (open && cz > 0.14) continue;
-      const px = Math.cos(a) * rx, pz = cz * rz;
-      const wdt = (2 * Math.PI * Math.max(rx, rz) / seg) * 1.2;
+      const a = (s / seg) * Math.PI * 2 + (i % 2) * (Math.PI / seg);
+      const sa = Math.sin(a), ca = Math.cos(a);
+      if (open && sa > 0.12) continue;
+      const px = ca * rx, pz = sa * rz;
+      const wdt = (2 * Math.PI * Math.max(rx, rz) / seg) * 1.45;
       const tt = hash2i(s, i, seed + 71);
-      // Courses are twice their own rise so consecutive rings overlap; leave
-      // a gap and the dome reads as a stack of hoops with daylight between.
-      bb.brick(px, y, pz, 2.6, wdt, {
-        h: rise * 2.2, rot: -Math.atan2(cz * rz, Math.cos(a) * rx),
-        color: tt < 0.45 ? C.darkTan : (tt < 0.78 ? C.lightBluishGray : C.darkBluishGray),
+      bb.brick(px, a0.y, pz, depth, wdt, {
+        h, rot: -Math.atan2(pz, px),
+        color: tt < 0.5 ? C.darkTan : (tt < 0.74 ? C.tan : (tt < 0.93 ? C.lightBluishGray : C.darkBluishGray)),
         free: true, studs: false,
       });
     }
   }
-  if (!open) {
-    bb.sphere(0, wallH + domeH - P(2), 0, 3.4, {
-      color: C.darkTan, dome: true, seg: 14, rings: 5, sy: 0.7,
-    });
-  } else {
-    // Back half of the crown only, so the silhouette still closes from -Z.
-    for (let s = 0; s < 8; s++) {
-      const a = Math.PI + (s / 7) * Math.PI * 0.9 - Math.PI * 0.45;
-      bb.brick(Math.cos(a) * 2.6, wallH + domeH - P(2), Math.sin(a) * 2.2, 2.2, 2.4, {
-        h: P(3), color: s % 2 ? C.darkTan : C.lightBluishGray, rot: -a, free: true, studs: false,
-      });
-    }
-  }
+  // Crown: a stepped capstone plugs the apex whichever way the dome was cut.
+  const crownY = wallH - BRICK * 0.5 + domeH - BRICK * 0.8;
+  bb.cyl(0, crownY - P(3), 0, 4.2, P(3), { color: C.lightBluishGray, seg: 16, stud: false });
+  bb.cyl(0, crownY, 0, 3.4, P(3), { color: C.darkTan, seg: 16, stud: false });
+  bb.sphere(0, crownY + P(3), 0, 2.6, {
+    color: C.darkTan, dome: true, seg: 14, rings: 5, sy: 0.55,
+  });
 
   // ---------------------------------------------------------- interior
   // Chest: reddish brown with a hinged dark lid, standing against -Z.
@@ -214,7 +215,18 @@ export function buildHermitHut(opts = {}) {
     // Sun spilling in through the missing wall, which is the only thing
     // lighting the far side of the room.
     practical(g, -4, wallH + 4, frontZ + 8, 0xffeed2, 200, 60);
-    practical(g, 5, 7, frontZ + 3, 0xdce7ff, 70, 34);
+    // Sky fill from the open side. Held well back off the proscenium: a point
+    // light a few studs from the jamb puts its clearcoat highlight on a face
+    // the camera is looking straight at, and it blows to white.
+    practical(g, 7, 10, frontZ + 14, 0xdce7ff, 150, 60);
+    // Bounce off the floor. Without it the corbelled underside of every dome
+    // course goes black and the shell reads as loose rubble, not stonework.
+    const bounce = new THREE.HemisphereLight(
+      new THREE.Color(0x6a5540).convertSRGBToLinear(),
+      new THREE.Color(0xc79a63).convertSRGBToLinear(), 1.5,
+    );
+    g.add(bounce);
+    practical(g, 0, 2.5, 3, 0xffd9a8, 46, 26);
   }
   return g;
 }

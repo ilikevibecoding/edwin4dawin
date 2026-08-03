@@ -185,7 +185,10 @@ export function buildThroneRoom(opts = {}) {
       h: P(4), color: k % 2 ? C.veryLightGray : C.white, free: true, studs: false,
     });
     // Grey nosing on each tread, which is what makes the steps read at range.
-    bb.brick(0, k * P(4) + P(4) - P(0.5), zBack + 3 + t * 4.6 + (daisD - k * 3.6) / 2 - 0.5, daisW - k * 5.2, 1.0, {
+    // Stood 0.08 proud of the riser it caps: flush, its front face is coplanar
+    // with the step's and the pair z-fight into a dashed line along every
+    // tread, which is the first thing you see in any shot facing the dais.
+    bb.brick(0, k * P(4) + P(4) - P(0.5), zBack + 3 + t * 4.6 + (daisD - k * 3.6) / 2 - 0.42, daisW - k * 5.2 - 0.1, 1.0, {
       h: P(0.5), color: C.lightBluishGray, free: true, studs: false,
     });
   }
@@ -204,8 +207,11 @@ export function buildThroneRoom(opts = {}) {
     for (let k = 0; k < 4; k++) {
       const z = zBack + 26 + k * 30;
       const top = h - B(5);
+      // Full-strength red and blue, not the dark variants: the bays behind
+      // them are already shadow, and dark red at 0x720e0f renders as a black
+      // rectangle hanging on a white wall.
       bb.brick(side * (hw - 1.0), top - 20, z, 0.5, 9, {
-        h: 20, color: k % 2 ? C.darkRed : C.darkBlue, free: true, studs: false,
+        h: 20, color: k % 2 ? C.red : C.blue, free: true, studs: false,
       });
       bb.brick(side * (hw - 1.1), top - P(1.5), z, 0.7, 9.8, {
         h: P(1.5), color: C.pearlGold, finish: FINISH.METAL, free: true, studs: false,
@@ -245,7 +251,9 @@ export function buildThroneRoom(opts = {}) {
   // Extruded relief rather than a printed tile: gold catches the key light and
   // reads from 150 studs down the aisle in a way a flat print never would.
   const emblemSize = num(opts, 'emblem', 26);
-  const emblemY = num(opts, 'emblemY', 30);
+  // High enough that the backing disc clears the top of the dais: overlap the
+  // two and the shadow between them reads as a hole in the back wall.
+  const emblemY = num(opts, 'emblemY', 34);
   {
     const bb2 = new BrickBuilder({ studs: false, bevel: false, cullStuds: false });
     // Dark recessed disc inside a pale surround: the gold needs something to

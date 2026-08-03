@@ -3,7 +3,7 @@ import { register } from '../registry.js';
 import { BrickBuilder } from '../lego/brick.js';
 import { mulberry32 } from '../engine/rng.js';
 import {
-  recentre, zWedge, greebleField, glowRig, litTile, sym,
+  recentre, zWedge, greebleField, glowRig, litTile, sym, optNum,
   P, C, FINISH,
 } from './_util.js';
 
@@ -20,8 +20,16 @@ import {
  * staircase reads as riveted plating.
  */
 
+/*
+ * Palette. The set this is modelled on is mostly reddish-brown with dark-tan
+ * plating; leaning on dark brown for the detail parts turned the whole hulk
+ * into a maroon silhouette, so DUST carries the large panels and BROWN is kept
+ * for shadow lines only.
+ */
 const RUST = C.reddishBrown;
+const DUST = C.darkTan;
 const OCHRE = C.darkOrange;
+const CLAY = C.mediumNougat;
 const BROWN = C.darkBrown;
 const IRON = C.darkBluishGray;
 const DARKIRON = C.darkGray;
@@ -44,9 +52,17 @@ const bowAt = (y) => BOW_Z - Math.max(0, y - HULL_Y0) * RAKE;
 const sternAt = (y) => STERN_Z + Math.max(0, y - HULL_Y0) * 0.10;
 
 const RAMP_W = 15.0;
-const RAMP_LEN = 15.5;        // long enough to reach the sand when lowered
+const RAMP_LEN = 18.5;        // long enough to reach the sand when lowered
 const RAMP_T = 1.2;           // panel hangs this far below its own hinge plane
 const HINGE_Y = HULL_Y0 + 0.6;
+/*
+ * Rise of the hatch opening. The bow is raked, so a panel of a given length
+ * only covers RAMP_LEN / sqrt(1 + RAKE^2) studs of height when it is stowed
+ * against it. Deriving the opening from the panel keeps the two locked
+ * together -- size them apart and the stowed ramp leaves the top of the
+ * doorway showing.
+ */
+const DOOR_H = RAMP_LEN / Math.hypot(RAKE, 1);
 
 /* ------------------------------------------------------------------ tracks */
 
@@ -139,15 +155,17 @@ function courses(bb) {
     const hw = bodyHalfW(y);
     const band = Math.round((y - HULL_Y0) / step);
     // Alternating strakes: the hull reads as riveted plating rather than one
-    // flat slab of brown.
-    const color = band % 3 === 2 ? OCHRE : RUST;
+    // flat slab. Courses alternate dark tan and reddish brown -- an earlier
+    // pass at one tan course in three left the body a single dark mass at
+    // desert-sun grazing angles, which is the one thing a sandcrawler is not.
+    const color = band % 2 === 1 ? DUST : RUST;
     bb.brick(0, y, (zA + zB) / 2, hw * 2, zA - zB, {
       h: step, color, studs: false, free: true,
     });
-    if (band % 3 === 2) {
+    if (band % 2 === 1) {
       sym(bb, (b, s) => {
         b.brick(s * hw, y + step - P(1), (zA + zB) / 2, 0.4, (zA - zB) * 0.97, {
-          h: P(1), color: BROWN, studs: false, tile: true, free: true,
+          h: P(1), color: OCHRE, studs: false, tile: true, free: true,
         });
       });
     }
@@ -158,7 +176,7 @@ function roof(bb) {
   const rz0 = sternAt(ROOF_Y), rz1 = bowAt(ROOF_Y);
   const hw = bodyHalfW(ROOF_Y);
   bb.brick(0, ROOF_Y, (rz0 + rz1) / 2, hw * 2, rz1 - rz0, {
-    h: P(3), color: OCHRE, studs: false, free: true,
+    h: P(3), color: DUST, studs: false, free: true,
   });
   // lip all the way round
   sym(bb, (b, s) => {
@@ -175,7 +193,7 @@ function roof(bb) {
   // ---- lookout house + mast ---------------------------------------------
   const tz = rz0 + 10.0;
   bb.brick(0, ROOF_Y + P(3), tz, 13.0, 9.0, { h: 3.6, color: RUST, studs: false, free: true });
-  bb.brick(0, ROOF_Y + P(3) + 3.6, tz, 10.0, 6.4, { h: 1.6, color: OCHRE, studs: false, free: true });
+  bb.brick(0, ROOF_Y + P(3) + 3.6, tz, 10.0, 6.4, { h: 1.6, color: DUST, studs: false, free: true });
   sym(bb, (b, s) => {
     litTile(b, s * 4.2, ROOF_Y + P(3) + 1.6, tz + 4.6, 3.0, 0.4, { color: C.transYellow, h: 1.2 });
   });
@@ -200,7 +218,7 @@ function roof(bb) {
  * the steps, giving the stowed ramp one flat plane to close against.
  */
 function bowFace(bb) {
-  const y0 = HINGE_Y, y1 = HINGE_Y + 15.0;
+  const y0 = HINGE_Y, y1 = HINGE_Y + DOOR_H;
   /** Parallelogram following the rake between two heights, `d` deep. */
   const raked = (ya, yb, d, off = 0) => [
     [bowAt(ya) + off, ya], [bowAt(yb) + off, yb],
@@ -208,19 +226,19 @@ function bowFace(bb) {
   ];
 
   sym(bb, (b, s) => {
-    zWedge(b, s * (RAMP_W / 2 + 1.1), 2.2, raked(y0, y1 + 1.6, 3.0), { color: BROWN });
+    zWedge(b, s * (RAMP_W / 2 + 1.1), 2.2, raked(y0, y1 + 1.6, 3.0), { color: DUST });
   });
   // the recessed doorway the ramp closes over
-  zWedge(bb, 0, RAMP_W, raked(y0, y1, 2.6, -0.7), { color: C.black });
+  zWedge(bb, 0, RAMP_W, raked(y0, y1, 2.6, -0.7), { color: BROWN });
   // lintel
-  zWedge(bb, 0, RAMP_W + 4.4, raked(y1, y1 + 1.7, 3.0), { color: BROWN });
+  zWedge(bb, 0, RAMP_W + 4.4, raked(y1, y1 + 1.7, 3.0), { color: DUST });
   // sill the ramp hinges off
   zWedge(bb, 0, RAMP_W + 4.4, raked(y0 - 1.1, y0, 3.0), { color: IRON });
 
   // bow shoulder ribs either side of the hatch
   sym(bb, (b, s) => {
     for (let y = HINGE_Y + 2; y < ROOF_Y - 3.5; y += 5.0) {
-      zWedge(b, s * 11.2, 3.4, raked(y, y + 1.3, 2.2), { color: OCHRE });
+      zWedge(b, s * 11.2, 3.4, raked(y, y + 1.3, 2.2), { color: CLAY });
     }
   });
 }
@@ -237,13 +255,13 @@ function flanks(bb) {
       const yTop = Math.min(ROOF_Y - 1.2, HULL_Y0 + (BOW_Z - z) / RAKE - 1.4);
       if (yTop < HULL_Y0 + 4) continue;
       b.brick(s * x, HULL_Y0 + 0.8, z, 0.55, 1.5, {
-        h: yTop - HULL_Y0 - 0.8, color: BROWN, studs: false, free: true,
+        h: yTop - HULL_Y0 - 0.8, color: CLAY, studs: false, free: true,
       });
       b.brick(s * x, yTop, z, 0.75, 2.1, { h: 0.9, color: IRON, studs: false, free: true });
     }
     // service hatches
     for (const [z, y] of [[16, 12.0], [4, 12.0], [-8, 12.0], [-20, 15.0]]) {
-      b.brick(s * x, y, z, 0.4, 3.4, { h: 4.4, color: OCHRE, studs: false, free: true });
+      b.brick(s * x, y, z, 0.4, 3.4, { h: 4.4, color: RUST, studs: false, free: true });
       b.brick(s * (x + 0.2), y + 0.5, z, 0.3, 2.4, {
         h: 3.4, color: BROWN, studs: false, free: true,
       });
@@ -301,8 +319,8 @@ function windows(bb) {
         axis: 'x', color: C.transYellow, finish: FINISH.GLOW, seg: 8, stud: false,
       });
     }
-    // lamps either side of the hatch
-    const ly = HINGE_Y + 16.6;
+    // lamps riding just above the hatch lintel
+    const ly = HINGE_Y + DOOR_H + 2.9;
     b.cyl(s * 9.0, ly, bowAt(ly) + 0.6, 0.85, 0.8, { axis: 'z', color: IRON, seg: 8, stud: false });
     b.cyl(s * 9.0, ly, bowAt(ly) + 1.2, 0.62, 0.3, {
       axis: 'z', color: C.transYellow, finish: FINISH.GLOW, seg: 8, stud: false,
@@ -316,19 +334,37 @@ function windows(bb) {
  * The boarding ramp, built lying flat in local coordinates and hinged at its
  * back edge (local z = 0) so a rotation about X swings it from stowed (raked
  * back flush with the bow) down to lying on the sand.
+ *
+ * The deck is planked rather than left as one 15 x 15 slab. ABS carries a
+ * clearcoat, and an unbroken plane that big mirrors the sky as a sheet of flat
+ * grey the moment it tilts up -- the ribs and stringers keep it reading as a
+ * ramp from every angle.
  */
 function rampPanel() {
   const bb = new BrickBuilder({ studs: false, bevel: true, cullStuds: false });
   const W = RAMP_W, L = RAMP_LEN;
-  bb.brick(0, -RAMP_T, L / 2, W, L, { h: RAMP_T, color: C.magenta, studs: false });
-  for (let i = 1; i * 2.2 < L - 0.6; i++) {
-    bb.brick(0, 0, i * 2.2, W - 1.2, 0.9, {
-      h: P(1), color: BROWN, studs: false, tile: true, free: true,
+  /*
+   * Dark tan deck, not reddish-brown. ABS carries a clearcoat, and on a dark
+   * base the colourless sheen swamps what little diffuse there is: a
+   * reddish-brown deck this size turns into a slab of flat grey the moment it
+   * rakes up toward a bright sky. Tan has enough diffuse to stay tan.
+   */
+  bb.brick(0, -RAMP_T, L / 2, W, L, { h: RAMP_T, color: DUST, studs: false });
+  // tread bars across the ramp
+  for (let i = 1; i * 1.7 < L - 0.8; i++) {
+    bb.brick(0, 0, i * 1.7, W - 1.4, 0.85, {
+      h: P(1), color: RUST, studs: false, tile: true, free: true,
+    });
+  }
+  // stringers down its length, breaking the deck into four narrow lanes
+  for (const x of [-3.6, 0, 3.6]) {
+    bb.brick(x, 0, L / 2, 0.75, L - 0.6, {
+      h: P(1) * 1.6, color: OCHRE, studs: false, free: true,
     });
   }
   sym(bb, (b, s) => {
     b.brick(s * (W / 2 - 0.4), 0, L / 2, 0.8, L, {
-      h: P(2), color: OCHRE, studs: false, free: true,
+      h: P(2), color: RUST, studs: false, free: true,
     });
     b.cyl(s * (W / 2 - 1.4), -P(2), 0.2, 0.55, 2.2, { axis: 'x', color: IRON, seg: 8, stud: false });
   });
@@ -425,7 +461,8 @@ function buildSandcrawler() {
 
 register('sandcrawler', (opts = {}) => {
   const m = buildSandcrawler();
-  if (opts.ramp !== undefined) m.userData.setRamp(+opts.ramp);
+  const ramp = optNum(opts.ramp);
+  if (ramp !== undefined) m.userData.setRamp(ramp);
   return m;
 }, {
   notes: 'Jawa sandcrawler, 58 long x 34 tall, tracks resting on y = 0, bow at +Z. '

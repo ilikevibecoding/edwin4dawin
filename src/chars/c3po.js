@@ -20,7 +20,9 @@ export function buildC3po(opts = {}) {
     hands: C.pearlGold,
     hips: C.pearlGold,
     legs: C.pearlGold,
-    collar: C.copper,
+    // gold, not copper: the collar sits right under the chin and copper there
+    // blew out to pink in close-up. c3poHead keeps the copper neck rings.
+    collar: C.pearlGold,
     face: FACE_C3PO,
     torsoFront: TORSO_C3PO_FRONT,
     torsoBack: TORSO_C3PO_BACK,
@@ -35,6 +37,7 @@ export function buildC3po(opts = {}) {
   fig.arms.R.rotation.set(-0.30, 0, -0.22);
 
   // he is pearl gold everywhere, and at metalness 0.9 each panel reflected a
-  // different part of the room instead of reading as one plated droid
-  return temperMetal(figGroup(fig, { name: 'c3po' }));
+  // different part of the room instead of reading as one plated droid; prints
+  // are included so the printed torso plating matches the moulded limbs
+  return temperMetal(figGroup(fig, { name: 'c3po' }), { prints: true });
 }

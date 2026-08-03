@@ -34,7 +34,9 @@ const LAYERS = [
   { yTop: -10.8, h: 3.0, nose: 126, hwStern: 77, color: C.darkBluishGray },
   { yTop: -13.8, h: 3.4, nose: 114, hwStern: 72.5, color: C.lightBluishGray },
   { yTop: -17.2, h: 3.4, nose: 100, hwStern: 67, color: C.darkBluishGray },
-  { yTop: -20.6, h: 3.4, nose: 82, hwStern: 60, color: C.darkGray },
+  // The bottom layer is the one the camera flies past, so it stays light: the
+  // belly greebles are all dark tiles and they vanish against a dark base.
+  { yTop: -20.6, h: 3.4, nose: 82, hwStern: 60, color: C.lightBluishGray },
 ];
 const BOTTOM = LAYERS[7].yTop - LAYERS[7].h;   // -24
 

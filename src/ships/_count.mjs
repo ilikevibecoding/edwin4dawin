@@ -1,5 +1,5 @@
-// Temporary budgeting helper: build every registered ship in node and report
-// triangles / meshes. Deleted before hand-off.
+// Budget helper: build every registered ship in node and report triangles /
+// meshes against the BRICK_KIT budget. Run `node src/ships/_count.mjs [ids...]`.
 import * as THREE from 'three';
 import './index.js';
 import { models, make } from '../registry.js';

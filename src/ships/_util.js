@@ -45,6 +45,18 @@ export function sym(bb, fn) {
 export const mrot = (s, r = 0) => (s > 0 ? r : Math.PI - r);
 
 /**
+ * Read a rig position (S-foil spread, ramp angle) out of factory opts. The lab
+ * forwards URL params as strings, so a blank `--ramp=` arrives as '' -- and +''
+ * is 0, which silently stows the ramp instead of leaving it at its default.
+ * @returns {number|undefined} undefined when there is nothing usable to apply
+ */
+export function optNum(v) {
+  if (v === undefined || v === null || v === '') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
  * Wrap a built model so its origin sits at the natural centre.
  * @param {THREE.Object3D} inner result of BrickBuilder.build()
  * @param {{x?:boolean, z?:boolean, y?:'centre'|'bottom'|'none'}} how

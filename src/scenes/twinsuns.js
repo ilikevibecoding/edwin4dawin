@@ -16,34 +16,53 @@ import { ramp, ease, clamp, lerp } from '../engine/util.js';
  */
 
 
-/**
- * The twin-suns asset is a wide sky backdrop card; keep it facing the camera.
- * `swing` yaws the pair off the view axis so the discs frame the figure
- * instead of sitting behind his head.
- */
-function faceCamera(card, camera, swing = 0) {
+/** The twin-suns asset is a wide sky backdrop card; keep it facing the camera. */
+function faceCamera(card, camera) {
   const d = new THREE.Vector3();
   camera.getWorldDirection(d);
-  card.rotation.y = Math.atan2(-d.x, -d.z) + swing;
+  card.rotation.y = Math.atan2(-d.x, -d.z);
+}
+
+/** Swap a billboard's plane for a smaller one. Scale is animated, so it is not free. */
+function resize(mesh, k) {
+  const { width, height } = mesh.geometry.parameters;
+  mesh.geometry.dispose();
+  mesh.geometry = new THREE.PlaneGeometry(width * k, height * k);
 }
 
 /**
- * Take the flare furniture down.
+ * Take the flare furniture down and slide the discs off the lens axis.
  *
  * The set draws its halo and six-point burst at 260 and 330 studs across; at
  * any sane sun distance that is a 50-degree additive wash over the whole
- * frame, and it flattens the silhouette this chapter exists for. Returns the
- * sky-gradient card, whose opacity setHeight() rewrites every frame.
+ * frame, and it flattens the silhouette this chapter exists for. `shift`
+ * walks the pair sideways inside the card plane, which is the only safe way
+ * to get them out from behind his head -- yawing the whole group instead
+ * swings the 1000-stud sky card round until its edge cuts through frame as a
+ * grey vertical band. Returns that sky card, whose opacity setHeight()
+ * rewrites every frame.
  */
-function tameGlare(suns, { halo = 0.4, burst = 0.25 } = {}) {
+function tameGlare(suns, { halo = 0.4, burst = 0.25, shrink = 0.45, shift = 0 } = {}) {
   for (const s of [suns.userData.nodes?.big, suns.userData.nodes?.small]) {
     const p = s?.userData?.parts;
     if (!p) continue;
+    s.position.x += shift;
     p.halo.material.opacity *= halo;
     p.burst.material.opacity *= burst;
+    resize(p.halo, shrink);
+    resize(p.burst, shrink);
   }
   let sky = null;
-  suns.traverse((o) => { if (o.isMesh && o.renderOrder === -880) sky = o; });
+  suns.traverse((o) => {
+    // Flare ghosts: four more additive discs marching across the middle of
+    // the frame. With two real suns already in shot they read as lens dirt.
+    if (o.renderOrder === -800) o.visible = false;
+    // The set turns depth testing off so it can work as a backdrop. Here the
+    // discs stand 300 studs behind a boy the whole chapter is about, and
+    // without the test they paint straight through him.
+    if (o.isMesh) o.material.depthTest = true;
+    if (o.isMesh && o.renderOrder === -880) sky = o;
+  });
   return sky;
 }
 
@@ -79,12 +98,13 @@ export default {
     farm.rotation.y = 0.9;
     root.add(farm);
 
-    const suns = await tryMake('twinsuns', { sundist: 330, scale: 0.95 }, { size: [30, 30, 1], color: C.brightLightYellow });
+    const suns = await tryMake('twinsuns', { sundist: 300, scale: 0.7 }, { size: [30, 30, 1], color: C.brightLightYellow });
     // The card's y = 0 is its horizon line; ours is the sand he stands on.
     suns.position.set(0, RIDGE.y - 1.0, 0);
     suns.userData.setRidge?.(false);
     suns.userData.setHeight?.(0.52);
-    const skyCard = tameGlare(suns, { halo: 0.34, burst: 0.22 });
+    // Both discs live in the right-hand half of the frame; he holds the left.
+    const skyCard = tameGlare(suns, { halo: 0.3, burst: 0.2, shrink: 0.42, shift: 44 });
     root.add(suns);
 
     const luke = await tryMake('luke', {}, { size: [1.8, 5, 1], color: C.white });
@@ -95,8 +115,11 @@ export default {
     speeder.rotation.y = 1.15;
     root.add(speeder);
 
-    const dust = new Motes(ctx.scene, { count: 150, box: [90, 18, 90], size: 0.10, color: 0xffcf9a, seed: 33, speed: 0.5 });
-    dust.points.position.set(-26, RIDGE.y, -44);
+    // Out past the ridge, ahead of every camera. Motes are size-attenuated
+    // points: one that drifts within a stud of the lens is a fist-sized white
+    // blob, and every camera here sits at the +Z side of him.
+    const dust = new Motes(ctx.scene, { count: 150, box: [110, 20, 90], size: 0.10, color: 0xffcf9a, seed: 33, speed: 0.5 });
+    dust.points.position.set(-46, RIDGE.y, -92);
 
     const s1 = ctx.cue('s1', 1.6);
     const s2 = ctx.cue('s2', 12.4);
@@ -165,9 +188,14 @@ export default {
       lights.key.target.position.copy(RIDGE);
       root.add(lights.key.target);
     }
-    // The stock rim sits at +X +Z -- on the camera side, which lights the one
-    // surface that has to stay black. Put it behind him with the suns.
-    if (lights?.rim) lights.rim.position.set(-96, 20, -190);
+    /*
+     * The stock rim sits at +X +Z -- on the camera side, which lights the one
+     * surface that has to stay black. Behind him is no better: at 5 degrees
+     * of elevation its mirror image in the sand lands directly behind his
+     * head, a blown white disc that bloom then spreads over the silhouette.
+     * High and behind, it only touches the top of his shoulders.
+     */
+    if (lights?.rim) lights.rim.position.set(-58, 96, -140);
 
     return {
       root,
@@ -175,7 +203,7 @@ export default {
       exposure: 0.92,
       grade: { uVignette: 0.42, uGrain: 0.028, uSaturation: 1.14, uContrast: 1.1 },
       update(t, dt) {
-        faceCamera(suns, ctx.camera, 0.25);
+        faceCamera(suns, ctx.camera);
 
         const w = clamp(ramp(t, 0.5, ARRIVE - 0.4), 0, 1);
         luke.position.copy(from).lerp(to, ease.inOutQuad(w));
@@ -207,7 +235,7 @@ export default {
           // Ambient stays on the floor all chapter: any real fill here turns
           // the silhouette back into a boy in a white shirt.
           if (lights.fill) lights.fill.intensity = lerp(0.34, 0.20, set) * 0.58;
-          if (lights.rim) lights.rim.intensity = lerp(1.5, 0.7, set) * 0.58;
+          if (lights.rim) lights.rim.intensity = lerp(0.34, 0.16, set) * 0.58;
         }
         if (ctx.scene.fog) ctx.scene.fog.color.setHex(set > 0.55 ? 0x8a4426 : 0xa9603a);
         if (ctx.scene.background?.setHex) ctx.scene.background.setHex(set > 0.55 ? 0x93482a : 0xc4703a);

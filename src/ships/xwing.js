@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { register } from '../registry.js';
 import { BrickBuilder } from '../lego/brick.js';
 import {
-  recentre, glowRig, sym, mrot,
+  recentre, glowRig, sym, mrot, optNum,
   PLATE, BRICK, P, C, FINISH,
 } from './_util.js';
 
@@ -223,7 +223,8 @@ function buildXwing() {
 
 register('xwing', (opts = {}) => {
   const m = buildXwing();
-  if (opts.sfoils !== undefined) m.userData.setSFoils(+opts.sfoils);
+  const sfoils = optNum(opts.sfoils);
+  if (sfoils !== undefined) m.userData.setSFoils(sfoils);
   return m;
 }, {
   notes: 'T-65 X-wing, 30 studs long, 27 span open. userData.setSFoils(0..1); '
