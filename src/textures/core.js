@@ -1,9 +1,21 @@
 import * as THREE from 'three';
+import { NOISE_WASM_B64 } from '../lib/noise-wasm.js';
 
 // ---------------------------------------------------------------------------
 // Shared procedural texture toolkit. Everything in the demo is generated here
 // or by the per-asset texture modules that build on top of these helpers.
 // Nothing is downloaded.
+//
+// `fbm` is the hot path of the entire boot: every texture tile and the whole
+// terrain height field are built out of it, tens of millions of calls deep. It
+// has a Rust implementation compiled to wasm (native/noise), which `initNoise`
+// installs after checking it agrees with the JS below bit for bit. If the check
+// fails, or wasm is unavailable, or `?nowasm=1` is on the URL, the JS runs and
+// nothing else notices.
+//
+// Bit-exact rather than merely close, because twelve iterations of art
+// direction are pinned to the exact output of these functions — a port that was
+// only approximately right would silently rebuild the world.
 // ---------------------------------------------------------------------------
 
 export function mulberry32(seed) {
@@ -45,8 +57,8 @@ export function valueNoise(x, y, period, seed) {
   return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
 }
 
-/** Tileable fractal brownian motion in [0,1]. */
-export function fbm(x, y, { octaves = 5, period = 8, seed = 1, gain = 0.5, lacunarity = 2 } = {}) {
+/** The reference implementation. Kept as the fallback and as what wasm is checked against. */
+export function fbmJS(x, y, octaves, period, seed, gain, lacunarity) {
   let sum = 0;
   let amp = 1;
   let norm = 0;
@@ -60,6 +72,62 @@ export function fbm(x, y, { octaves = 5, period = 8, seed = 1, gain = 0.5, lacun
     per = Math.max(1, Math.round(per * lacunarity));
   }
   return sum / norm;
+}
+
+let wasmNoise = null;
+
+/**
+ * Compile the wasm kernel and adopt it only if it reproduces the JS exactly.
+ *
+ * Awaited once at boot before anything generates a texture. Compilation is
+ * async on purpose: browsers refuse a synchronous `new WebAssembly.Module` over
+ * 4 kB on the main thread, and this module is 4021 bytes — close enough to that
+ * line that relying on it would be a trap for whoever next edits the Rust.
+ */
+export async function initNoise({ enabled = true } = {}) {
+  if (wasmNoise !== null) return !!wasmNoise;
+  if (!enabled || typeof WebAssembly === 'undefined') {
+    wasmNoise = false;
+    return false;
+  }
+  try {
+    const bin = atob(NOISE_WASM_B64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const { instance } = await WebAssembly.instantiate(bytes, {});
+    const ex = instance.exports;
+
+    // Trust nothing: a port that is subtly wrong is worse than no port, because
+    // it rebuilds the world instead of failing.
+    const rnd = mulberry32(0xc0ffee);
+    for (let i = 0; i < 4096; i++) {
+      const x = (rnd() - 0.5) * 4000;
+      const y = (rnd() - 0.5) * 4000;
+      const oct = 1 + ((rnd() * 5) | 0);
+      const per = 1 + ((rnd() * 128) | 0);
+      const seed = (rnd() * 100000) | 0;
+      const gain = 0.3 + rnd() * 0.4;
+      const lac = 1.5 + rnd() * 1.2;
+      if (ex.fbm(x, y, oct, per, seed, gain, lac) !== fbmJS(x, y, oct, per, seed, gain, lac)) {
+        wasmNoise = false;
+        return false;
+      }
+    }
+    wasmNoise = ex;
+    return true;
+  } catch {
+    wasmNoise = false;
+    return false;
+  }
+}
+
+/** Whether the wasm kernel is in use. */
+export const noiseBackend = () => (wasmNoise ? 'wasm' : 'js');
+
+/** Tileable fractal brownian motion in [0,1]. */
+export function fbm(x, y, { octaves = 5, period = 8, seed = 1, gain = 0.5, lacunarity = 2 } = {}) {
+  if (wasmNoise) return wasmNoise.fbm(x, y, octaves, period, seed, gain, lacunarity);
+  return fbmJS(x, y, octaves, period, seed, gain, lacunarity);
 }
 
 /** Ridged variant, good for bark / rock strata. */
