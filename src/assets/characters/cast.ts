@@ -148,6 +148,30 @@ export function createVader(lib: MaterialLibrary, options: CharacterOptions): Ch
     strap.rotation.z = side * 0.16;
     chest.add(strap);
   }
+
+  // Armoured shoulder yoke and a high standing collar behind the helmet.
+  // Backlit in a doorway he is nothing but an outline, and these are what turn
+  // that outline from a bell into a shape with shoulders and a head.
+  const armour = lib.character(0x212329, 0.3, 0.55);
+  for (const side of [-1, 1]) {
+    const pauldron = new THREE.Mesh(
+      lib.registry.track(new THREE.BoxGeometry(0.15, 0.09, 0.26)),
+      armour,
+    );
+    pauldron.position.set(side * 0.245, 0.3, -0.005);
+    pauldron.rotation.z = side * -0.19;
+    pauldron.castShadow = true;
+    chest.add(pauldron);
+  }
+  const collar = new THREE.Mesh(
+    lib.registry.track(new THREE.CylinderGeometry(0.15, 0.19, 0.3, 12, 1, true, Math.PI * 0.34, Math.PI * 1.32)),
+    lib.character(0x111216, 0.55, 0.25),
+  );
+  collar.material.side = THREE.DoubleSide;
+  collar.position.set(0, 0.36, -0.045);
+  collar.rotation.x = -0.14;
+  collar.castShadow = true;
+  chest.add(collar);
   return c;
 }
 

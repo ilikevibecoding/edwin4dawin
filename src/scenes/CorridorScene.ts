@@ -80,6 +80,7 @@ export class CorridorScene {
   private breachLight: THREE.PointLight;
   private podHatch: THREE.Group;
   private podHatchGlow: THREE.MeshBasicMaterial;
+  private podBayLight: THREE.PointLight;
   private transferBeam: THREE.Mesh;
   private transferBeamMat: THREE.MeshBasicMaterial;
   private rng = new Rng('corridor-scene');
@@ -220,29 +221,88 @@ export class CorridorScene {
       lib.registry.track(crates);
     }
 
-    // Pod hatch on -X at the far end.
+    // Pod hatch on -X at the far end. This is where the story is going, so it
+    // has to be obviously a way off the ship from across the bay: a lit
+    // surround, hazard chevrons, a marked airlock ring and a green ready sign.
     this.podHatch = new THREE.Group();
     this.podHatch.position.set(-POD_BAY_HALF_WIDTH + 0.02, 0, POD_BAY_Z);
-    const hatchFrame = bevelBox(0.18, 2.1, 1.7, 0.05);
-    lib.registry.track(hatchFrame);
-    const hf = new THREE.Mesh(hatchFrame, lib.interiorTrim);
-    hf.position.y = 1.05;
-    this.podHatch.add(hf);
-    const hatchDoorGeo = bevelBox(0.1, 1.85, 1.4, 0.04);
+
+    const hatchDoorGeo = bevelBox(0.12, 1.92, 1.5, 0.05);
     lib.registry.track(hatchDoorGeo);
     const hatchDoor = new THREE.Mesh(hatchDoorGeo, lib.doorMetal);
-    hatchDoor.position.set(-0.06, 0.98, 0);
+    hatchDoor.position.set(0.02, 1.0, 0);
     hatchDoor.name = 'pod hatch';
     this.podHatch.add(hatchDoor);
+
+    // A surround built from four bars, not one slab. A solid frame box in front
+    // of the door hides the door completely and the whole hatch reads as a hole
+    // punched in the wall.
+    const surround: THREE.BufferGeometry[] = [
+      bevelBox(0.12, 0.17, 2.06, 0.04).translate(0, 2.05, 0),
+      bevelBox(0.12, 0.15, 2.06, 0.04).translate(0, 0.07, 0),
+      bevelBox(0.12, 2.12, 0.17, 0.04).translate(0, 1.06, -0.94),
+      bevelBox(0.12, 2.12, 0.17, 0.04).translate(0, 1.06, 0.94),
+    ];
+    const surroundGeo = mergeAll(surround);
+    if (surroundGeo) {
+      lib.registry.track(surroundGeo);
+      const sm = new THREE.Mesh(surroundGeo, lib.interiorTrim);
+      sm.position.x = 0.09;
+      sm.castShadow = true;
+      this.podHatch.add(sm);
+    }
+
+    // Airlock collar: a ring on the door face reads as a docking interface even
+    // in a wide shot where nothing else on it is resolvable.
+    const collarGeo = new THREE.TorusGeometry(0.52, 0.06, 8, 22);
+    collarGeo.rotateY(Math.PI / 2);
+    lib.registry.track(collarGeo);
+    const collar = new THREE.Mesh(collarGeo, lib.interiorTrim);
+    collar.position.set(0.09, 1.02, 0);
+    this.podHatch.add(collar);
+    const portGeo = new THREE.CircleGeometry(0.2, 20);
+    portGeo.rotateY(-Math.PI / 2);
+    lib.registry.track(portGeo);
+    const port = new THREE.Mesh(portGeo, lib.registry.track(new THREE.MeshBasicMaterial({
+      color: 0x9ec6e6, transparent: true, opacity: 0.6, toneMapped: false,
+    })));
+    port.position.set(0.1, 1.3, 0);
+    this.podHatch.add(port);
+
+    // Hazard chevrons above and below the opening.
+    const chevron = lib.registry.track(new THREE.MeshStandardMaterial({
+      color: 0xd9a13a, roughness: 0.6, metalness: 0.1,
+    }));
+    for (const y of [2.05, 0.07]) {
+      for (let i = -2; i <= 2; i++) {
+        const bar = new THREE.Mesh(lib.registry.track(new THREE.BoxGeometry(0.035, 0.13, 0.24)), chevron);
+        bar.position.set(0.16, y, i * 0.36);
+        bar.rotation.x = 0.62;
+        this.podHatch.add(bar);
+      }
+    }
+
     this.podHatchGlow = new THREE.MeshBasicMaterial({
-      color: 0x54d98c, transparent: true, opacity: 0.8, toneMapped: false,
+      color: 0x54d98c, transparent: true, opacity: 0.85, toneMapped: false,
     });
     lib.registry.track(this.podHatchGlow);
-    const sign = new THREE.Mesh(lib.registry.track(new THREE.PlaneGeometry(0.5, 0.16)), this.podHatchGlow);
+    const sign = new THREE.Mesh(lib.registry.track(new THREE.PlaneGeometry(0.86, 0.2)), this.podHatchGlow);
     sign.rotation.y = -Math.PI / 2;
-    sign.position.set(0.06, 2.0, 0);
+    sign.position.set(0.14, 2.34, 0);
     this.podHatch.add(sign);
+    for (const z of [-1.12, 1.12]) {
+      const lamp = new THREE.Mesh(
+        lib.registry.track(new THREE.BoxGeometry(0.04, 0.55, 0.08)),
+        this.podHatchGlow,
+      );
+      lamp.position.set(0.1, 1.15, z);
+      this.podHatch.add(lamp);
+    }
     this.root.add(this.podHatch);
+
+    this.podBayLight = new THREE.PointLight(0xcfe2d6, 0, 8, 2);
+    this.podBayLight.position.set(-1.1, 1.9, POD_BAY_Z);
+    this.scene.add(this.podBayLight);
 
     // ---- Lighting ----------------------------------------------------------
     // One shadow-casting key from above gives every character a contact shadow
@@ -580,7 +640,13 @@ export class CorridorScene {
     this.plans.update(t, plansStrength, transfer);
     this.updateTransferBeam(t, plansStrength, transfer);
 
-    this.podHatchGlow.opacity = 0.5 + 0.5 * Math.pow(Math.max(0, Math.sin(t * 2.2)), 3);
+    // The hatch pulses faster and the bay lifts out of shadow as the droids
+    // commit to it, so the destination is lit before they arrive in frame.
+    const podApproach = smoothstep(300, 310, t);
+    const podPulse = 1.4 + 1.6 * podApproach;
+    this.podHatchGlow.opacity = (0.34 + 0.24 * podApproach)
+      + (0.42 + 0.34 * podApproach) * Math.pow(Math.max(0, Math.sin(t * podPulse)), 3);
+    this.podBayLight.intensity = 0.5 + 2.4 * podApproach;
   }
 
   private updateTransferBeam(t: number, strength: number, transfer: number): void {

@@ -215,14 +215,17 @@ export function buildHumanoid(lib: MaterialLibrary, spec: CharacterSpec): Joints
 
   let cape: THREE.Mesh | null = null;
   if (spec.cape) {
-    const geo = new THREE.CylinderGeometry(0.26 * s, 0.46 * s, 1.32 * s, 14, 4, true, Math.PI * 0.18, Math.PI * 1.64);
+    // Hangs from the shoulder line, not over it. A cape whose mouth sits above
+    // the shoulders turns the whole figure into one smooth bell and throws away
+    // the only silhouette cue that survives a backlit doorway.
+    const geo = new THREE.CylinderGeometry(0.235 * s, 0.4 * s, 1.2 * s, 14, 4, true, Math.PI * 0.2, Math.PI * 1.6);
     lib.registry.track(geo);
     const capeMat = lib.character(0x0a0a0d, 0.85, 0.02);
     // The cape is the only double-sided body part; the cached material is
     // unique to this colour so flipping it here affects nothing else.
     capeMat.side = THREE.DoubleSide;
     cape = new THREE.Mesh(geo, capeMat);
-    cape.position.set(0, -0.28 * s, -0.04 * s);
+    cape.position.set(0, -0.36 * s, -0.05 * s);
     cape.rotation.y = Math.PI;
     cape.castShadow = true;
     chest.add(cape);

@@ -71,8 +71,10 @@ export class SpaceScene {
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
 
-    // Warm bounce off the desert below keeps hull undersides readable.
-    this.planetBounce = new THREE.DirectionalLight(0xffd0a4, 1.45);
+    // Warm bounce off the desert below keeps hull undersides readable. Kept
+    // pale rather than sand-coloured: pushed any further it stops reading as
+    // Imperial grey lit warm and starts reading as a brown ship.
+    this.planetBounce = new THREE.DirectionalLight(0xffdec2, 1.3);
     this.planetBounce.position.set(0, -1, 0.2);
     this.scene.add(this.planetBounce);
 
@@ -210,9 +212,37 @@ export class SpaceScene {
   }
 
   private buildPodTrail(): void {
-    // A deterministic ribbon of hot plasma laid along the pod's path during
-    // atmospheric entry, emitted at load time like every other effect.
+    // Two deterministic ribbons laid along the pod's path and emitted at load
+    // time like every other effect: the separation burn, and the plasma of
+    // atmospheric entry much later.
     const obj = new THREE.Object3D();
+    const aft = new THREE.Vector3();
+
+    // Separation burn. Six metres of dark pod crossing a kilometre and a half
+    // of lit Imperial hull is invisible without one; the plume is what the eye
+    // actually finds in that frame.
+    for (let i = 0; i < 170; i++) {
+      const t = 320.2 + (i / 170) * 11;
+      const level = podEngineLevel.at(t);
+      if (level < 0.06) continue;
+      podTransform(t, obj);
+      aft.set(0, 0, -1).applyQuaternion(obj.quaternion);
+      this.podTrail.emit({
+        t0: t,
+        position: obj.position.clone().addScaledVector(aft, 4.6),
+        count: 3,
+        speed: 5 + 16 * level,
+        spread: 0.5,
+        direction: aft.clone(),
+        color: 0xfff0cf,
+        colorB: 0xff9a3c,
+        size: 12 + level * 26,
+        sizeJitter: 0.4,
+        life: 1.5,
+        radius: 1.1,
+      });
+    }
+
     for (let i = 0; i < 200; i++) {
       const t = 344 + (i / 200) * 36;
       podTransform(t, obj);
@@ -263,7 +293,7 @@ export class SpaceScene {
     this.pod.setReentry(podReentry.at(t));
     this.pod.update(t);
     this.podPivot.visible = podVisible(t);
-    this.podTrail.points.visible = podReentry.at(t) > 0.02;
+    this.podTrail.points.visible = podReentry.at(t) > 0.02 || podEngineLevel.at(t) > 0.04;
 
     // Turrets track the corvette from first contact until the guns fall silent.
     const trackTarget = this.runnerPivot.getWorldPosition(new THREE.Vector3());

@@ -74,7 +74,12 @@ export class EscapePod {
     lib.registry.track(hatchGeo);
     this.group.add(new THREE.Mesh(hatchGeo, lib.rebel.hullDark));
 
-    // Retro thrusters.
+    // Retro thrusters. The halo material has to be the pod's own: sharing the
+    // corvette's means whichever ship updates last dictates the other's engine
+    // glow, and the pod - updated second, dark for most of the piece - was
+    // quietly switching the corvette's off through the entire chase.
+    const haloMat = lib.rebel.engineHalo.clone();
+    lib.registry.track(haloMat);
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
       const x = Math.cos(a) * 1.15;
@@ -85,7 +90,7 @@ export class EscapePod {
       lib.registry.track(nozzle);
       this.group.add(new THREE.Mesh(nozzle, lib.rebel.trench));
 
-      const halo = new THREE.Sprite(lib.rebel.engineHalo);
+      const halo = new THREE.Sprite(haloMat);
       halo.position.set(x, y, -5.2);
       halo.scale.setScalar(2.6);
       halo.userData.baseScale = 2.6;

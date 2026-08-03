@@ -644,23 +644,29 @@ export function buildShots(): Shot[] {
       label: 'Pod separation',
       start: 319.5,
       end: 328,
+      // Held off the pod's quarter, about twenty metres out, with the ships
+      // thrown up into frame left. Sitting directly astern instead puts the
+      // corvette squarely behind the pod, and six metres of pod silhouetted
+      // against a hundred metres of lit hull simply disappears. From here the
+      // hull crowds the top of the frame at launch and then slides away as the
+      // pod drops into clear space, which is the whole point of the shot.
+      // Frame left also matches the next shot, so the ships stay put across the
+      // cut, and pitching up keeps the planet's limb out; seen edge on it cuts
+      // the picture in half as a hard white bar.
       pos: [
-        { t: 319.5, v: [-9, -11, -12], ease: 'smoother' },
-        { t: 323, v: [-15, -18, -20], ease: 'smoother' },
-        { t: 328, v: [-34, -40, -46], ease: 'smoother' },
+        { t: 319.5, v: [4, -8, -20], ease: 'smoother' },
+        { t: 322, v: [0, -8, -21], ease: 'smoother' },
+        { t: 328, v: [-6, -16, -42], ease: 'smoother' },
       ],
-      // Trailing the pod along its escape vector puts the corvette directly
-      // behind it, so separation reads as leaving something. Sitting below the
-      // pod and looking slightly up also drops the planet's limb out of frame:
-      // seen edge on it cuts the picture in half as a hard white bar.
       followPos: 'pod',
       look: [
-        { t: 319.5, v: [0, 9, 2] },
-        { t: 328, v: [0, 14, 4] },
+        { t: 319.5, v: [-1, 2, 3] },
+        { t: 322, v: [-1, 2.5, 4] },
+        { t: 328, v: [-2, 4, 7] },
       ],
       follow: 'pod',
       fov: [
-        { t: 319.5, v: 52 },
+        { t: 319.5, v: 54 },
         { t: 328, v: 46 },
       ],
       shake: 0.9,
