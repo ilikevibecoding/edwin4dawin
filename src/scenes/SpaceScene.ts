@@ -56,6 +56,7 @@ export class SpaceScene {
   private tractorMesh: THREE.Mesh;
   private tractorMat: THREE.MeshBasicMaterial;
   private podTrail: ParticleField;
+  private podBurn: ParticleField;
 
   /** Objects the viewer can click in Explore mode. */
   readonly selectable: Array<{ object: THREE.Object3D; id: string }> = [];
@@ -195,12 +196,23 @@ export class SpaceScene {
     // ---- Pod re-entry trail ------------------------------------------------
     this.podTrail = new ParticleField(lib, {
       name: 'pod-trail',
-      capacity: Math.round(1600 * q.particleScale),
+      capacity: Math.max(320, Math.round(1600 * q.particleScale)),
       texture: lib.glowSprite,
       drag: 0.9, growth: 5.5, fade: 1.5, attack: 0.05,
     });
     this.chase.add(this.podTrail.points);
-    this.buildPodTrail();
+
+    // The separation burn is a separate field from the re-entry plasma: one is
+    // read from twenty metres and the other from several kilometres, and a
+    // single growth and size curve cannot serve both.
+    this.podBurn = new ParticleField(lib, {
+      name: 'pod-burn',
+      capacity: Math.max(260, Math.round(700 * q.particleScale)),
+      texture: lib.glowSprite,
+      drag: 1.5, growth: 2.4, fade: 1.5, attack: 0.06,
+    });
+    this.chase.add(this.podBurn.points);
+    this.buildPodTrail(q.particleScale);
 
     // ---- Selectable registry ----------------------------------------------
     this.selectable.push(
@@ -211,7 +223,7 @@ export class SpaceScene {
     );
   }
 
-  private buildPodTrail(): void {
+  private buildPodTrail(scale: number): void {
     // Two deterministic ribbons laid along the pod's path and emitted at load
     // time like every other effect: the separation burn, and the plasma of
     // atmospheric entry much later.
@@ -221,30 +233,35 @@ export class SpaceScene {
     // Separation burn. Six metres of dark pod crossing a kilometre and a half
     // of lit Imperial hull is invisible without one; the plume is what the eye
     // actually finds in that frame.
-    for (let i = 0; i < 170; i++) {
-      const t = 320.2 + (i / 170) * 11;
+    const burnSamples = Math.max(70, Math.round(300 * scale));
+    for (let i = 0; i < burnSamples; i++) {
+      const t = 320.2 + (i / burnSamples) * 11;
       const level = podEngineLevel.at(t);
       if (level < 0.06) continue;
       podTransform(t, obj);
       aft.set(0, 0, -1).applyQuaternion(obj.quaternion);
-      this.podTrail.emit({
+      this.podBurn.emit({
         t0: t,
-        position: obj.position.clone().addScaledVector(aft, 4.6),
-        count: 3,
-        speed: 5 + 16 * level,
-        spread: 0.5,
+        position: obj.position.clone().addScaledVector(aft, 4.8),
+        count: 2,
+        speed: 7 + 16 * level,
+        spread: 0.26,
         direction: aft.clone(),
-        color: 0xfff0cf,
-        colorB: 0xff9a3c,
-        size: 12 + level * 26,
-        sizeJitter: 0.4,
-        life: 1.5,
-        radius: 1.1,
+        color: 0xffe3b4,
+        colorB: 0xff8f36,
+        // Metres, not the tens of metres the re-entry plume uses: that one is
+        // read from kilometres away, this one from twenty.
+        size: 0.4 + level * 0.62,
+        sizeJitter: 0.35,
+        life: 0.62,
+        radius: 0.32,
       });
     }
+    this.podBurn.commit();
 
-    for (let i = 0; i < 200; i++) {
-      const t = 344 + (i / 200) * 36;
+    const entrySamples = Math.max(60, Math.round(200 * scale));
+    for (let i = 0; i < entrySamples; i++) {
+      const t = 344 + (i / entrySamples) * 36;
       podTransform(t, obj);
       const heat = podReentry.at(t);
       if (heat < 0.05) continue;
@@ -269,6 +286,7 @@ export class SpaceScene {
     this.sparks.setViewportScale(heightPx, fovDeg);
     this.smoke.setViewportScale(heightPx, fovDeg);
     this.podTrail.setViewportScale(heightPx, fovDeg);
+    this.podBurn.setViewportScale(heightPx, fovDeg);
     this.stars.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   }
 
@@ -293,7 +311,8 @@ export class SpaceScene {
     this.pod.setReentry(podReentry.at(t));
     this.pod.update(t);
     this.podPivot.visible = podVisible(t);
-    this.podTrail.points.visible = podReentry.at(t) > 0.02 || podEngineLevel.at(t) > 0.04;
+    this.podTrail.points.visible = podReentry.at(t) > 0.02;
+    this.podBurn.points.visible = podEngineLevel.at(t) > 0.04;
 
     // Turrets track the corvette from first contact until the guns fall silent.
     const trackTarget = this.runnerPivot.getWorldPosition(new THREE.Vector3());
@@ -304,6 +323,7 @@ export class SpaceScene {
     this.sparks.update(t);
     this.smoke.update(t);
     this.podTrail.update(t);
+    this.podBurn.update(t);
     this.debris.update(t);
     this.flashes.update(t);
 
@@ -393,7 +413,8 @@ export class SpaceScene {
     return {
       sparks: this.sparks.used,
       smoke: this.smoke.used,
-      overflow: this.sparks.overflowed || this.smoke.overflowed || this.podTrail.overflowed,
+      overflow: this.sparks.overflowed || this.smoke.overflowed
+        || this.podTrail.overflowed || this.podBurn.overflowed,
     };
   }
 

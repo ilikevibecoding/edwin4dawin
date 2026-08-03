@@ -288,7 +288,14 @@ export const CHECKPOINTS: Checkpoint[] = [
     shot: 'esc-3',
     scene: 'space',
     expects: ['pod leaving the corvette', 'thruster flare'],
-    assertions: [{ kind: 'visible', target: 'pod', minScreenFraction: 0.0015 }, { kind: 'noIssues' }],
+    assertions: [
+      { kind: 'visible', target: 'pod', minScreenFraction: 0.0015 },
+      // The thruster plume sits twenty metres from the lens. Capped so an
+      // over-scaled particle burst fails the tour instead of quietly washing
+      // the shot to white.
+      { kind: 'brightness', min: 0.02, max: 0.5 },
+      { kind: 'noIssues' },
+    ],
   },
   {
     id: '26-pod-falling',

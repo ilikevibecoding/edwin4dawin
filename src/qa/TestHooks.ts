@@ -258,6 +258,12 @@ export function installTestHooks(app: App): void {
       if (report.scene !== checkpoint.scene) {
         failures.push(`expected ${checkpoint.scene} scene, got ${report.scene}`);
       }
+      // Applies to every checkpoint, not only those that happen to carry a
+      // brightness assertion: a frame washed to white by a runaway effect is a
+      // failure whatever else the shot was supposed to prove.
+      if (brightness.clipped > 0.3) {
+        failures.push(`${(brightness.clipped * 100).toFixed(1)}% of pixels are blown out`);
+      }
 
       for (const a of checkpoint.assertions) {
         switch (a.kind) {
