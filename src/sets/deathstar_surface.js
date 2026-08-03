@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BrickBuilder, PLATE, P, B } from '../lego/brick.js';
 import { C, FINISH } from '../lego/palette.js';
-import { num, bool, hash2i, q, GREY_PANEL, pickFrom } from './common.js';
+import { num, bool, hash2i, q, GREY_PANEL, pickFrom, setGloss } from './common.js';
 
 /*
  * Battle-station exterior: a square of greebled grey panelling for an X-wing
@@ -208,7 +208,7 @@ export function buildDeathStarSurface(opts = {}) {
 
   // No shadow pass: at 400 studs across, every rig's shadow camera covers a
   // fraction of the plate, so shadows would only appear in one corner.
-  const g = bb.build({ castShadow: false, receiveShadow: false });
+  const g = setGloss(bb.build({ castShadow: false, receiveShadow: false }));
   g.name = 'deathstar_surface';
   g.userData.nodes = bb.nodes;
   g.userData.size = size;

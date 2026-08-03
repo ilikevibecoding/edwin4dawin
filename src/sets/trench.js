@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BrickBuilder, PLATE, P, B } from '../lego/brick.js';
 import { C, FINISH } from '../lego/palette.js';
-import { num, bool, hash2i, q, GREY_PANEL, greebleRect, practical } from './common.js';
+import { num, bool, hash2i, q, GREY_PANEL, greebleRect, practical, setGloss } from './common.js';
 
 /*
  * The trench run.
@@ -235,7 +235,7 @@ export function buildTrenchSegment(opts = {}) {
     seed: Math.round(num(opts, 'seed', 4477)),
     shoulder: num(opts, 'shoulder', 10),
   });
-  const g = bb.build({ castShadow: false, receiveShadow: false });
+  const g = setGloss(bb.build({ castShadow: false, receiveShadow: false }));
   g.name = 'trench_segment';
   g.userData.nodes = bb.nodes;
   // On by default so a lone segment is visible; a scene chaining segments
@@ -268,7 +268,7 @@ export function buildTrench(opts = {}) {
 
   // 600 studs is far outside any shadow camera the rigs set up, so a shadow
   // pass here buys nothing and costs a second draw of every triangle.
-  const g = bb.build({ castShadow: false, receiveShadow: false });
+  const g = setGloss(bb.build({ castShadow: false, receiveShadow: false }));
   g.name = 'trench';
   g.userData.nodes = bb.nodes;
 

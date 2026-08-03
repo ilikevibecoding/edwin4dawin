@@ -41,9 +41,16 @@ export default {
     root.add(destroyer);
     // The destroyer is only ever seen from underneath and the space rig keys
     // from above, so without a bounce the whole hull reads as one flat shape.
-    const belly = new THREE.DirectionalLight(0x9ec4ee, 0.8);
+    // It has to be strong: this is the only light the belly ever gets, and the
+    // capture runs for eight seconds with the hull filling most of the frame.
+    const belly = new THREE.DirectionalLight(0x9ec4ee, 2.6);
     belly.position.set(-24, -50, 46);
     root.add(belly);
+    // Raking the length of the hull from the far side picks the greebles out of
+    // the flat and gives the wedge an edge against the starfield.
+    const rake = new THREE.DirectionalLight(0xbcd4f0, 1.1);
+    rake.position.set(120, -18, -60);
+    root.add(rake);
     const dEngines = nodesLike(destroyer, 'engine');
     for (const n of dEngines) n.add(engineFlare(C.transLightBlue, 2.6, 26, { intensity: 1.2, coreIntensity: 1.6 }));
 
@@ -56,12 +63,26 @@ export default {
     // Tractor beam cone drawn under the destroyer's hangar mouth. Back faces
     // only: a double-sided additive cone this large reads as a sheet of
     // pale blue plastic laid across the frame.
-    const beamGeo = new THREE.CylinderGeometry(11, 3, 1, 24, 1, true);
+    const beamGeo = new THREE.CylinderGeometry(7.5, 2.5, 1, 24, 1, true);
     const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({
       color: 0x6fc4f0, transparent: true, opacity: 0, depthWrite: false,
       blending: THREE.AdditiveBlending, side: THREE.BackSide, toneMapped: false,
     }));
     root.add(beam);
+    // The mouth it is being drawn into. Without a source at the top of the
+    // shaft the beam is a cone coming out of an unlit slab of hull and the
+    // capture reads as the corvette drifting into shadow.
+    const mouth = new THREE.Mesh(
+      new THREE.CircleGeometry(13, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0x9fdcff, transparent: true, opacity: 0, depthWrite: false,
+        blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
+      }),
+    );
+    mouth.rotation.x = Math.PI / 2;
+    root.add(mouth);
+    const mouthLight = new THREE.PointLight(0x8fd0ff, 0, 190, 2);
+    root.add(mouthLight);
 
     // ---- staging ------------------------------------------------------
     const CORV_Y = 0;
@@ -193,12 +214,20 @@ export default {
           }
         }
 
-        // tractor beam
-        const tb = env(t, TRACTOR, ctx.dur - 3.2, 1.6, 1.4);
-        beam.material.opacity = tb * 0.05;
+        // tractor beam. It is two hundred studs long and the camera rides
+        // alongside it, so the shell has to stay faint: anything past about a
+        // tenth and the back faces stop being a haze and become a cyan wall.
+        // Gone before the closing wide, where it would only be a stray wedge.
+        const tb = env(t, TRACTOR, ctx.dur - 6.2, 1.6, 1.2);
+        beam.material.opacity = tb * 0.09;
         beam.visible = tb > 0.01;
+        mouth.visible = tb > 0.01;
+        mouth.material.opacity = tb * 0.5;
+        mouthLight.intensity = tb * 900;
         if (tb > 0.01) {
           const top = destroyer.position.clone().add(new THREE.Vector3(-10, -14, 60));
+          mouth.position.copy(top);
+          mouthLight.position.copy(top).add(new THREE.Vector3(0, -6, 0));
           const bottom = corvette.position.clone();
           const mid = top.clone().add(bottom).multiplyScalar(0.5);
           const len = top.distanceTo(bottom);

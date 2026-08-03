@@ -154,6 +154,21 @@ export default {
       return p.add(new THREE.Vector3(-f.z, 0, f.x).multiplyScalar(shift));
     };
 
+    /*
+     * The reverse, held for exactly as long as he is talking.
+     *
+     * Four backlit wides in a row is the same picture four times, and the one
+     * line in this chapter that is his rather than the narrator's plays over
+     * the back of his head. So come round in front for it. The suns are a
+     * camera-facing card, so they cannot be shot from the far side -- they
+     * would swing round and sit behind him again, lighting his face from the
+     * one direction it must not come from. The card goes out for these four
+     * seconds instead and the sky is left to the background and the fog, which
+     * is all a close-up needs behind it.
+     */
+    const FACE_IN = s2 - 0.3;
+    const FACE_OUT = s2 + 4.9;
+
     const shots = new ShotList();
     shots.add({          // 1. over his shoulder, walking out to the ridge
       t: 0, dur: ARRIVE, fov: 38, ease: 'linear',
@@ -167,15 +182,23 @@ export default {
       look: off(2.9, 5.2),
       handheld: 0.22,
     });
-    shots.add({          // 3. "there is a whole galaxy out there" -- closer
-      t: s2 - 1.2, dur: (s3 - 1.0) - (s2 - 1.2), fov: 30, ease: 'linear',
-      pos: eye(10.0, 2.3, 17.5), to: eye(8.6, 2.5, 15.2),
+    shots.add({          // 3. the beat before he speaks
+      t: s2 - 1.2, dur: FACE_IN - (s2 - 1.2), fov: 30, ease: 'linear',
+      pos: eye(10.0, 2.3, 17.5), to: eye(9.4, 2.4, 16.3),
       look: off(3.1, 4.0),
       handheld: 0.26,
     });
-    shots.add({          // 4. drift back; the light goes out behind him
-      t: s3 - 1.0, dur: ctx.dur - (s3 - 1.0), fov: 34, ease: 'inOutQuad',
-      pos: eye(8.6, 2.5, 15.2), to: eye(19.0, 5.6, 40.0),
+    shots.add({          // 4. his line, on his face, the low sun across it
+      // Tight enough to crop the speeder off the right edge: it is a flat brown
+      // slab at his shoulder and it is the only other object out here.
+      t: FACE_IN, dur: FACE_OUT - FACE_IN, fov: 21, ease: 'inOutQuad',
+      pos: eye(4.0, 1.6, -12.5), to: eye(3.2, 2.0, -10.0),
+      look: off(4.3, -1.1),
+      handheld: 0.3,
+    });
+    shots.add({          // 5. drift back; the light goes out behind him
+      t: FACE_OUT, dur: ctx.dur - FACE_OUT, fov: 34, ease: 'inOutQuad',
+      pos: eye(9.0, 2.5, 15.8), to: eye(19.0, 5.6, 40.0),
       look: off(2.6, 6.0),
       handheld: 0.18,
     });
@@ -203,6 +226,8 @@ export default {
       exposure: 0.92,
       grade: { uVignette: 0.42, uGrain: 0.028, uSaturation: 1.14, uContrast: 1.1 },
       update(t, dt) {
+        const onFace = t >= FACE_IN && t < FACE_OUT;
+        suns.visible = !onFace;
         faceCamera(suns, ctx.camera);
 
         const w = clamp(ramp(t, 0.5, ARRIVE - 0.4), 0, 1);
@@ -233,8 +258,12 @@ export default {
           lights.key.intensity = lerp(2.6, 1.0, set) * 0.58;
           lights.key.color.setHex(set > 0.55 ? 0xff6a2a : 0xff9b4a);
           // Ambient stays on the floor all chapter: any real fill here turns
-          // the silhouette back into a boy in a white shirt.
-          if (lights.fill) lights.fill.intensity = lerp(0.34, 0.20, set) * 0.58;
+          // the silhouette back into a boy in a white shirt. The reverse is the
+          // one shot that wants the opposite, and it is the only shot where
+          // lifting it cannot hurt -- the suns are off the card and there is no
+          // silhouette left to flatten.
+          const lift = onFace ? 3.4 : 1;
+          if (lights.fill) lights.fill.intensity = lerp(0.34, 0.20, set) * 0.58 * lift;
           if (lights.rim) lights.rim.intensity = lerp(0.34, 0.16, set) * 0.58;
         }
         if (ctx.scene.fog) ctx.scene.fog.color.setHex(set > 0.55 ? 0x8a4426 : 0xa9603a);

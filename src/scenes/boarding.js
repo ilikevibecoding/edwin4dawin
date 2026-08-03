@@ -46,7 +46,12 @@ export default {
     const standoffKey = new THREE.SpotLight(0xdce8ff, 0, 46, 0.7, 0.7, 1.7);
     standoffKey.position.set(2.6, 13, -9);
     standoffKey.target.position.set(1.2, 3, -9);
-    root.add(alertL, alertR, doorGlow, standoffKey, standoffKey.target);
+    // Vader is black gloss in a dark corridor and the chapter ends on his mask
+    // filling the frame. Behind and above him, this is the only thing that puts
+    // an edge on the dome and separates the helmet from the wall behind it.
+    const maskRim = new THREE.PointLight(0xa8c8ff, 0, 30, 2);
+    maskRim.position.set(-1.6, 9.0, -20.5);
+    root.add(alertL, alertR, doorGlow, standoffKey, standoffKey.target, maskRim);
 
     // ---- cast -----------------------------------------------------------
     const rebels = [];
@@ -73,7 +78,11 @@ export default {
       troopers.push(s);
     }
 
-    const vader = await tryMake('vader', {}, { size: [2, 5.6, 1.2], color: C.black });
+    // Hilt on the belt. He boards this ship to ask a question, not to fight,
+    // and a lit blade would be both wrong for the beat and the brightest thing
+    // in a corridor the whole chapter keeps deliberately dark.
+    const vader = await tryMake('vader', { saber: 0, pose: 'stand_wide' },
+      { size: [2, 5.6, 1.2], color: C.black });
     vader.position.set(0, 0, FAR_DOOR + 1.5);
     root.add(vader);
     const vaderFig = vader.userData.fig;
@@ -127,25 +136,34 @@ export default {
     // 4. over the officer's shoulder as Vader closes. The corridor's interior
     //    is only 9 studs wide, so every camera here has to stay inside
     //    |x| < 4.2 or it ends up buried in a wall looking at nothing.
+    //    Well back and off to -X: five studs from the officer his head is a
+    //    blank tan cylinder over a quarter of the frame, and the back of a
+    //    minifig head has nothing on it to look at.
     shots.add({
       t: b3 - 0.6, dur: (LIFT) - (b3 - 0.6), fov: 38, ease: 'linear',
-      pos: [0.7, 5.4, 1.4], to: [0.4, 5.3, -0.4],
+      pos: [-0.9, 5.4, 3.4], to: [-0.7, 5.3, 1.7],
       look: () => vader.position.clone().add(new THREE.Vector3(0, 4.8, 0)),
       handheld: 0.3,
     });
     // 5. the lift: low and wide, the officer hanging near camera and Vader
-    //    looming small and unhurried at the far end of the same frame
+    //    looming small and unhurried at the far end of the same frame.
+    //    The officer is at z -5.4 and Vader at -14, so this has to be shot from
+    //    in front of both and down the corridor axis: sat between them it just
+    //    points at the +X wall with an actor off each edge.
     shots.add({
-      t: LIFT, dur: (b5 - 0.5) - LIFT, fov: 44, ease: 'inOutQuad',
-      pos: [-3.2, 2.6, -8.2], to: [-3.3, 3.5, -9.6],
-      look: [1.1, 5.0, -9.6],
+      t: LIFT, dur: (b5 - 0.5) - LIFT, fov: 46, ease: 'inOutQuad',
+      pos: [-1.6, 2.4, 4.2], to: [-1.4, 2.8, 2.4],
+      // Aimed high: he ends up three studs off the deck with his arms out, and
+      // at 4.8 the top of his head went off the frame.
+      look: [1.5, 5.6, -7.0],
       handheld: 0.35,
     });
-    // 6. push in on the mask
+    // 6. push in on the mask. Stopping at 5 studs, not 3: the helmet is 2.2
+    //    across and any closer takes the dome off the top of the frame.
     shots.add({
-      t: b5 - 0.5, dur: ctx.dur - (b5 - 0.5), fov: 30, ease: 'outQuad',
-      pos: [0.5, 5.9, -8.4], to: [0.2, 5.75, -10.9],
-      look: () => vader.position.clone().add(new THREE.Vector3(0, 5.3, 0)),
+      t: b5 - 0.5, dur: ctx.dur - (b5 - 0.5), fov: 32, ease: 'outQuad',
+      pos: [0.6, 5.7, -5.4], to: [0.3, 5.6, -8.8],
+      look: () => vader.position.clone().add(new THREE.Vector3(0, 5.2, 0)),
       handheld: 0.22,
     });
 
@@ -176,6 +194,7 @@ export default {
           + 34 * clamp(ramp(t, BLOW, BLOW + 1), 0, 1);
 
         standoffKey.intensity = 130 * clamp(ramp(t, VADER_IN - 1.0, VADER_IN + 2.4), 0, 1);
+        maskRim.intensity = 34 * clamp(ramp(t, VADER_IN - 1.0, VADER_IN + 2.4), 0, 1);
 
         // the door
         corridor.userData.setDoor?.(clamp(ramp(t, BLOW, BLOW + 0.5), 0, 1));

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BrickBuilder, PLATE, BRICK, P, B } from '../lego/brick.js';
 import { C, FINISH } from '../lego/palette.js';
 import { RNG } from '../engine/rng.js';
-import { num, bool, hash2i, practical } from './common.js';
+import { num, bool, hash2i, practical, setGloss } from './common.js';
 
 /*
  * Ben Kenobi's hut: a small stone-brick dome in dark tan and light bluish
@@ -197,7 +197,7 @@ export function buildHermitHut(opts = {}) {
   bb.brick(RX * 0.4, 0, 4.5, 4.4, 8, { h: P(1), color: C.darkTan, free: true, studs: false });
   bb.brick(RX * 0.4, P(1), 1.4, 3.2, 1.8, { h: P(2), color: C.tan, free: true, studs: false });
 
-  const g = bb.build();
+  const g = setGloss(bb.build());
   g.name = 'hermithut';
   g.userData.nodes = bb.nodes;
 

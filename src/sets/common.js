@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { C, FINISH } from '../lego/palette.js';
 import { PLATE, BRICK, P, B } from '../lego/brick.js';
+import { softenGloss } from '../lego/materials.js';
 
 /*
  * Shared plumbing for the set library: deterministic noise, greeble scatter and
@@ -235,6 +236,23 @@ export function panelLines(bb, {
 }
 
 // ----------------------------------------------------------------- lights
+
+/**
+ * Set-scale gloss.
+ *
+ * The kit's ABS clearcoat is dialled for a minifig a metre from the lens. A set
+ * is a hundred studs of that same plastic seen almost edge-on, and at a grazing
+ * angle the coat's Fresnel term takes over: deck plates, crate lids and wall
+ * panels stop being grey and become one clipped white highlight that bloom then
+ * smears over whatever is standing in front of them. Widening the lobe and
+ * pulling the environment term down is the fix the material kit provides;
+ * pinning the numbers here keeps every location in the library consistent.
+ */
+export function setGloss(root, opts) {
+  return softenGloss(root, {
+    clearcoat: 0.06, clearcoatRoughness: 0.78, env: 0.24, roughness: 0.74, ...opts,
+  });
+}
 
 /** Practical light for enclosed sets -- interiors get no help from the rig. */
 export function practical(group, x, y, z, color = 0xdce9ff, intensity = 70, distance = 46) {

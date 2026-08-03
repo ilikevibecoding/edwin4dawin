@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BrickBuilder, PLATE, BRICK, P, B } from '../lego/brick.js';
 import { C, FINISH } from '../lego/palette.js';
-import { num, bool, clamp, hash2i, practical } from './common.js';
+import { num, bool, clamp, hash2i, practical, setGloss } from './common.js';
 
 /*
  * Rebel corvette hallway -- the boarding scene.
@@ -131,7 +131,10 @@ export function corridorSection(bb, zc, len = CORRIDOR.section, idx = 0) {
       });
     }
   }
-  bb.cyl(0, ceilY - 0.75, zc, 0.42, len, { axis: 'z', color: C.lightBluishGray, stud: false });
+  // Spine conduit. Dark grey, not light: a pale cylinder on the centreline sits
+  // directly under every practical and runs to the vanishing point, so its
+  // specular streak stacks into one blown-out bar down the middle of the shot.
+  bb.cyl(0, ceilY - 0.75, zc, 0.42, len, { axis: 'z', color: C.darkBluishGray, stud: false });
 
   // ----------------------------------------------------------- greebles
   // Asymmetric kit so the two walls never look like mirror images.
@@ -207,7 +210,7 @@ function doorLeaf(w, h, mirror) {
     });
   }
   bb.brick(s * w / 2, h - 0.5, 0.44, w - 0.5, 0.28, { h: 0.4, color: C.darkBluishGray, ...F });
-  const g = bb.build();
+  const g = setGloss(bb.build());
   g.name = mirror ? 'leafL' : 'leafR';
   return g;
 }
@@ -218,7 +221,7 @@ export function buildCorridorSection(opts = {}) {
   const len = num(opts, 'len', CORRIDOR.section);
   const bb = new BrickBuilder({ studs: bool(opts, 'studs', true), bevel: true, studSeg: 8 });
   corridorSection(bb, 0, len, 0);
-  const g = bb.build();
+  const g = setGloss(bb.build());
   g.userData.nodes = bb.nodes;
   g.userData.length = len;
   if (bool(opts, 'light', true)) practical(g, 0, 8.6, 0, 0xdfeaff, 55, 34);
@@ -280,11 +283,23 @@ export function buildCorridor(opts = {}) {
   // ------------------------------------------------------------ lights
   // Point lights are the single most expensive thing in a software render, so
   // the hallway gets four spread down its length rather than one per module.
+  //
+  // Most of the level comes from the hemisphere, not the practicals. The shot
+  // this set is built for looks straight down 120 studs of flat white ceiling
+  // with the lamps between the lens and the surface, which is the exact
+  // geometry that turns a point light's specular lobe into a streak running
+  // all the way to the vanishing point. Kept weak they read as lamps; turned up
+  // far enough to light the corridor on their own they weld into one bar of
+  // white over the far blast door.
   if (bool(opts, 'light', true)) {
     const nl = Math.max(1, Math.round(num(opts, 'lights', 4)));
     for (let i = 0; i < nl; i++) {
-      practical(group, 0, 8.4, -total * (i + 0.5) / nl, 0xdfeaff, 62, 62);
+      practical(group, 0, 8.0, -total * (i + 0.5) / nl, 0xdfeaff, 20, 44);
     }
+    group.add(new THREE.HemisphereLight(
+      new THREE.Color(0xd6e6ff).convertSRGBToLinear(),
+      new THREE.Color(0x39414f).convertSRGBToLinear(), 2.6,
+    ));
     // Something to walk into when the far door opens.
     practical(group, 0, 5.0, zFar - 6.0, 0x86c8ff, 26, 22);
   }

@@ -207,10 +207,45 @@ export default {
       root,
       shots,
       exposure: 1.26,
-      grade: { uVignette: 0.46, uGrain: 0.036, uSaturation: 1.1, uContrast: 1.05 },
+      // Every key this chapter cares about is named, including the ones set to
+      // the house value: one grade pass serves all nine chapters and nothing
+      // resets it between them, so a key left unmentioned is inherited from
+      // whichever chapter happened to draw last. uAberration is the one that
+      // bites -- the trench climax runs it up to 0.008.
+      grade: {
+        uVignette: 0.46, uGrain: 0.036, uAberration: 0.0012,
+        uSaturation: 1.1, uContrast: 1.05,
+      },
       update(t, dt) {
         const of = obiwan.userData.fig;
         const lf = luke.userData.fig;
+        const sw = env(t, SWING - 0.2, SWING + 1.0, 0.4, 0.6);
+
+        // Arms first, and the world matrices with them. The blade is hung off
+        // whichever fist is holding it by reading that hand's world position,
+        // and three.js only refreshes world matrices at draw time -- so posing
+        // after the read leaves the hands a frame stale. Played forward that is
+        // 33 ms of lag and invisible; on a seek it is a whole different pose,
+        // and the blade ends up buried in Luke's head with a 21-candela light
+        // on it. The film is rendered by seeking, so read nothing stale.
+        if (of) {
+          poseChain(of, [
+            ['idle', 1],
+            ['hold_right', ramp(t, k1 + 0.4, k1 + 1.6)],
+            ['hold_two', ramp(t, HANDOVER - 1.3, HANDOVER - 0.1)],
+            ['idle', ramp(t, IGNITE - 0.3, IGNITE + 0.9)],
+          ]);
+        }
+        if (lf) {
+          poseChain(lf, [
+            ['idle', 1],
+            ['hold_two', ramp(t, HANDOVER - 0.6, HANDOVER + 0.5)],
+            ['hold_right', ramp(t, IGNITE - 0.5, IGNITE + 0.6)],
+            ['saber_high', sw],
+          ]);
+        }
+        obiwan.updateMatrixWorld(true);
+        luke.updateMatrixWorld(true);
 
         // the saber passes from one hand to the other, bowing out toward the
         // open side of the set so camera sees the object change hands
@@ -226,20 +261,14 @@ export default {
 
         // upright in Luke's fist once he has it, with one slow sweep on the
         // swing cue
-        const sw = env(t, SWING - 0.2, SWING + 1.0, 0.4, 0.6);
         saber.object3D.rotation.set(
           lerp(-1.4, -0.12, pass) - sw * 0.45,
           lerp(-0.7, 0.35, pass),
           lerp(-0.3, -0.05, pass) - sw * 0.7,
         );
+        saber.object3D.updateMatrixWorld(true);   // Luke's eyeline reads it back
 
         if (of) {
-          poseChain(of, [
-            ['idle', 1],
-            ['hold_right', ramp(t, k1 + 0.4, k1 + 1.6)],
-            ['hold_two', ramp(t, HANDOVER - 1.3, HANDOVER - 0.1)],
-            ['idle', ramp(t, IGNITE - 0.3, IGNITE + 0.9)],
-          ]);
           // Never all the way onto Luke, even when he is talking to him. Luke
           // stands at -X of him and every camera in this chapter is at +X, so a
           // head aimed squarely at Luke is a head aimed 78 degrees off the lens
@@ -253,12 +282,6 @@ export default {
           of.update(dt, t);
         }
         if (lf) {
-          poseChain(lf, [
-            ['idle', 1],
-            ['hold_two', ramp(t, HANDOVER - 0.6, HANDOVER + 0.5)],
-            ['hold_right', ramp(t, IGNITE - 0.5, IGNITE + 0.6)],
-            ['saber_high', sw],
-          ]);
           // before he has it he listens to Ben; after, he watches the blade,
           // which is also what turns his face into its light
           const held = clamp(ramp(t, IGNITE - 0.6, IGNITE + 0.4), 0, 1);
@@ -272,7 +295,7 @@ export default {
         saber.setExtension(ease.outQuad(ign));
         saber.update(dt, t);
         glowFromBlade.position.copy(saber.object3D.position).add(new THREE.Vector3(0, 2.2 * ign, 0));
-        glowFromBlade.intensity = 13 * ign * (0.9 + Math.sin(t * 27) * 0.08);
+        glowFromBlade.intensity = 21 * ign * (0.9 + Math.sin(t * 27) * 0.08);
 
         lamp.intensity = 4.6 * (0.94 + Math.sin(t * 2.3) * 0.06);
         key.intensity = 46 * (0.96 + Math.sin(t * 0.7) * 0.04);

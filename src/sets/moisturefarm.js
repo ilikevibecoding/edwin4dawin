@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BrickBuilder, BRICK, P, B } from '../lego/brick.js';
 import { C } from '../lego/palette.js';
 import { RNG } from '../engine/rng.js';
-import { num, bool, smoothstep, hash2i, practical } from './common.js';
+import { num, bool, smoothstep, hash2i, practical, setGloss } from './common.js';
 import { duneField, rockOutcrop } from './dunes.js';
 
 /*
@@ -240,7 +240,7 @@ export function buildMoistureFarm(opts = {}) {
   rockOutcrop(bb, plot * 0.36, plot * 0.3, B(1), 5, 11, rng);
   rockOutcrop(bb, -plot * 0.4, -plot * 0.34, B(1), 4, 8, rng);
 
-  const g = bb.build();
+  const g = setGloss(bb.build());
   g.name = 'moisturefarm';
   g.userData.nodes = bb.nodes;
 

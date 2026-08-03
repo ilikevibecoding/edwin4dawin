@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BrickBuilder, PLATE, P, B } from '../lego/brick.js';
 import { C, FINISH } from '../lego/palette.js';
 import { RNG } from '../engine/rng.js';
-import { num, bool, hash2i, GREY_PANEL, pickFrom, greebleRect, practical } from './common.js';
+import { num, bool, hash2i, GREY_PANEL, pickFrom, greebleRect, setGloss } from './common.js';
 
 /*
  * Rebel base hangar.
@@ -16,13 +16,7 @@ import { num, bool, hash2i, GREY_PANEL, pickFrom, greebleRect, practical } from 
 /** Stacked crate, the universal hangar dressing. */
 function crate(bb, x, y, z, w, d, h, color, rot = 0) {
   bb.brick(x, y, z, w, d, { h, color, rot, free: true, studs: false });
-  // Matte lid: a crate lid is a horizontal face at deck level, which is
-  // exactly where the daylight coming in level through the mouth mirrors
-  // straight back into a camera standing on the deck. With a clearcoat on it
-  // the lid goes pure white and blooms over half the crate.
-  bb.brick(x, y + h, z, w - 0.5, d - 0.5, {
-    h: P(1), color: C.darkBluishGray, rot, free: true, studs: false, finish: FINISH.RUBBER,
-  });
+  bb.brick(x, y + h, z, w - 0.5, d - 0.5, { h: P(1), color: C.darkBluishGray, rot, free: true, studs: false });
   // Corner ribs so it reads as a container, not a block.
   for (const sx of [-1, 1]) {
     const lx = sx * (w / 2 - 0.4);
@@ -31,7 +25,7 @@ function crate(bb, x, y, z, w, d, h, color, rot = 0) {
     });
   }
   bb.brick(x, y + h * 0.5, z, w + 0.12, d + 0.12, {
-    h: P(1), color: C.darkGray, rot, free: true, studs: false, finish: FINISH.RUBBER,
+    h: P(1), color: C.darkGray, rot, free: true, studs: false,
   });
 }
 
@@ -79,7 +73,13 @@ export function buildHangarBay(opts = {}) {
       // through the mouth into a blown white pool right in the middle of the
       // shot. This finish is the only one in the kit without one.
       bb.brick(x, -PLATE, z, cell - 0.2, cell - 0.2, {
-        h: PLATE, color: t < 0.24 ? C.darkGray : (t < 0.9 ? C.darkBluishGray : C.black),
+        h: PLATE,
+        // Two darks and a rare light. No black -- the bay is lit by a
+        // hemisphere and one weak spill, so a black plate has nothing to return
+        // and the near deck, which is half the frame in the launch shot, goes
+        // to a crushed nothing. The light plate has to stay rare: it picks up
+        // the blue of the hemisphere, and at any density it reads as puddles.
+        color: t < 0.30 ? C.darkGray : (t < 0.94 ? C.darkBluishGray : C.lightBluishGray),
         free: true, studs: false, finish: FINISH.RUBBER,
       });
     }
@@ -267,7 +267,7 @@ export function buildHangarBay(opts = {}) {
     }
   }
 
-  const g = bb.build();
+  const g = setGloss(bb.build());
   g.name = 'hangarbay';
   g.userData.nodes = bb.nodes;
 
@@ -280,7 +280,7 @@ export function buildHangarBay(opts = {}) {
       uniforms: {
         top: { value: new THREE.Color(0x8ebde8).convertSRGBToLinear() },
         bot: { value: new THREE.Color(0xdcc9a4).convertSRGBToLinear() },
-        ground: { value: new THREE.Color(0xa79f7a).convertSRGBToLinear() },
+              ground: { value: new THREE.Color(0xa1998c).convertSRGBToLinear() },
       },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }',
       fragmentShader: `varying vec2 vUv; uniform vec3 top, bot, ground;

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BrickBuilder, PLATE, BRICK, P, B } from '../lego/brick.js';
 import { C, FINISH } from '../lego/palette.js';
 import { RNG } from '../engine/rng.js';
-import { num, bool, clamp, smoothstep, hash2i, fbm2, ridge2 } from './common.js';
+import { num, bool, clamp, smoothstep, hash2i, fbm2, ridge2, setGloss } from './common.js';
 
 /*
  * Tatooine dune sea.
@@ -305,7 +305,7 @@ export function buildDunes(opts = {}) {
     });
   }
 
-  const g = bb.build();
+  const g = setGloss(bb.build());
   g.name = 'dunes';
   g.userData.nodes = bb.nodes;
   g.userData.heightAt = sample;

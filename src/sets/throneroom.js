@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BrickBuilder, PLATE, BRICK, P, B } from '../lego/brick.js';
 import { C, FINISH } from '../lego/palette.js';
 import { svgExtrude } from '../lego/svg.js';
-import { num, bool, hash2i, practical, fixWinding } from './common.js';
+import { num, bool, hash2i, practical, fixWinding, setGloss } from './common.js';
 
 /*
  * The medal ceremony hall.
@@ -244,7 +244,7 @@ export function buildThroneRoom(opts = {}) {
     });
   }
 
-  const g = bb.build();
+  const g = setGloss(bb.build());
   g.name = 'throneroom';
 
   // ------------------------------------------------------------ emblem

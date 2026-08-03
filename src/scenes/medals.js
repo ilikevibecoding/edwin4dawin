@@ -236,7 +236,14 @@ export default {
       root,
       shots,
       exposure: 1.4,
-      grade: { uVignette: 0.36, uGrain: 0.026, uSaturation: 1.04 },
+      // Named in full, house values included: the grade pass is shared by all
+      // nine chapters and never reset, so anything left out is inherited from
+      // the chapter before -- and the one before this is the trench, which
+      // finishes with its aberration wound up to 0.0022.
+      grade: {
+        uVignette: 0.36, uGrain: 0.026, uAberration: 0.0010,
+        uSaturation: 1.04, uContrast: 1.04,
+      },
       update(t, dt) {
         const lf = luke.userData.fig;
         const lea = leia.userData.fig;
