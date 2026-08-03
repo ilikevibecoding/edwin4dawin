@@ -1,0 +1,197 @@
+{
+  "ranAt": "2026-08-03T14:22:59.942Z",
+  "build": "preview",
+  "range": [
+    194,
+    320
+  ],
+  "step": 2,
+  "slipLimit": 0.35,
+  "soleRange": [
+    -0.06,
+    0.14
+  ],
+  "movingThreshold": 0.35,
+  "minStep": 0.25,
+  "totals": {
+    "samples": 832,
+    "moving": 69,
+    "slipping": 3,
+    "offDeck": 0,
+    "wrongGait": 0
+  },
+  "byState": [
+    {
+      "state": "run",
+      "samples": 33,
+      "meanSlip": 0.13190709463966144,
+      "worstSlip": 0.7732428990212373
+    },
+    {
+      "state": "fire",
+      "samples": 10,
+      "meanSlip": 0.14569269036464957,
+      "worstSlip": 0.34088198957040927
+    },
+    {
+      "state": "walk",
+      "samples": 12,
+      "meanSlip": 0.12996092377348042,
+      "worstSlip": 0.3554292950606918
+    },
+    {
+      "state": "march",
+      "samples": 11,
+      "meanSlip": 0.13044021749428122,
+      "worstSlip": 0.42463004767607554
+    },
+    {
+      "state": "alert",
+      "samples": 2,
+      "meanSlip": 0.3435954709717805,
+      "worstSlip": 0.6495978765210072
+    },
+    {
+      "state": "interact",
+      "samples": 1,
+      "meanSlip": 0.025860092297500574,
+      "worstSlip": 0.025860092297500574
+    }
+  ],
+  "worstSlips": [
+    {
+      "time": 220,
+      "target": "trooper-2",
+      "state": "run",
+      "bodySpeed": 0.8337950138503203,
+      "plantSpeed": 0.6447260736990744,
+      "ratio": 0.7732428990212373,
+      "soleHeight": 0.010945768821274161,
+      "stepLength": 0.44323150059419475,
+      "strideReach": 1.3716428571428572
+    },
+    {
+      "time": 224,
+      "target": "trooper-1",
+      "state": "run",
+      "bodySpeed": 0.4233680912444606,
+      "plantSpeed": 0.2911302681950233,
+      "ratio": 0.6876528350052703,
+      "soleHeight": 0.01167728357691021,
+      "stepLength": 0.27879213540160436,
+      "strideReach": 1.3716428571428572
+    },
+    {
+      "time": 260,
+      "target": "vader",
+      "state": "alert",
+      "bodySpeed": 0.3934577777781012,
+      "plantSpeed": 0.25558933694532887,
+      "ratio": 0.6495978765210072,
+      "soleHeight": -0.001033219675108936,
+      "stepLength": 0.4602652578643673,
+      "strideReach": 1.5050999999999999
+    },
+    {
+      "time": 298,
+      "target": "vader",
+      "state": "march",
+      "bodySpeed": 0.3919979964941689,
+      "plantSpeed": 0.16645412794024503,
+      "ratio": 0.42463004767607554,
+      "soleHeight": 0.009279384292840136,
+      "stepLength": 0.457490901298844,
+      "strideReach": 1.5050999999999999
+    },
+    {
+      "time": 226,
+      "target": "trooper-4",
+      "state": "run",
+      "bodySpeed": 0.5993162990307941,
+      "plantSpeed": 0.2461622572113729,
+      "ratio": 0.4107384658309194,
+      "soleHeight": 0.011156105816354261,
+      "stepLength": 0.37036424497475445,
+      "strideReach": 1.3716428571428572
+    },
+    {
+      "time": 206,
+      "target": "rebel-4",
+      "state": "run",
+      "bodySpeed": 2.0173268073100523,
+      "plantSpeed": 0.8183384343283828,
+      "ratio": 0.4056548653212878,
+      "soleHeight": -0.007617248854933374,
+      "stepLength": 0.7342533004803267,
+      "strideReach": 1.327157142857143
+    },
+    {
+      "time": 304,
+      "target": "trooper-0",
+      "state": "walk",
+      "bodySpeed": 2.0874388352713673,
+      "plantSpeed": 0.7419369137028137,
+      "ratio": 0.3554292950606918,
+      "soleHeight": -0.008879112557065708,
+      "stepLength": 0.8164430353793228,
+      "strideReach": 1.3716428571428572
+    },
+    {
+      "time": 222,
+      "target": "trooper-2",
+      "state": "fire",
+      "bodySpeed": 0.7408148017664651,
+      "plantSpeed": 0.25253042352936095,
+      "ratio": 0.34088198957040927,
+      "soleHeight": -0.0008974690090057455,
+      "stepLength": 0.4333129652329589,
+      "strideReach": 1.3716428571428572
+    },
+    {
+      "time": 226,
+      "target": "trooper-1",
+      "state": "fire",
+      "bodySpeed": 0.6967047355198633,
+      "plantSpeed": 0.2251239035299068,
+      "ratio": 0.3231267021056274,
+      "soleHeight": 0.014711623082372324,
+      "stepLength": 0.4053803787861731,
+      "strideReach": 1.3716428571428572
+    },
+    {
+      "time": 242,
+      "target": "vader",
+      "state": "march",
+      "bodySpeed": 1.5029585798815859,
+      "plantSpeed": 0.440123580979983,
+      "ratio": 0.2928381306520498,
+      "soleHeight": -0.014944660107787708,
+      "stepLength": 1.2214077256308626,
+      "strideReach": 1.5050999999999999
+    },
+    {
+      "time": 224,
+      "target": "trooper-2",
+      "state": "fire",
+      "bodySpeed": 0.6725019614395779,
+      "plantSpeed": 0.18689404147161415,
+      "ratio": 0.2779085447892868,
+      "soleHeight": 0.011569808330392443,
+      "stepLength": 0.3933558270454661,
+      "strideReach": 1.3716428571428572
+    },
+    {
+      "time": 306,
+      "target": "trooper-1",
+      "state": "walk",
+      "bodySpeed": 0.573684544259893,
+      "plantSpeed": 0.15358317580085457,
+      "ratio": 0.26771363694134603,
+      "soleHeight": 0.013101182640630121,
+      "stepLength": 0.3498121750554668,
+      "strideReach": 1.3716428571428572
+    }
+  ],
+  "offDeck": [],
+  "wrongGait": []
+}

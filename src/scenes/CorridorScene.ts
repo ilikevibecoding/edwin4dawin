@@ -817,7 +817,10 @@ function buildCast(lib: MaterialLibrary): {
   trooperPlans.forEach((plan, i) => {
     const keys: Array<[number, number, number, number]> = [
       [0, plan.lane, 0, DOOR_Z - 7.5],
-      [plan.enter - 0.9, plan.lane, 0, DOOR_Z - 7.5],
+      // Get under way well before the doorway. Covering the boarding tube in the
+      // 0.9 s this used to allow needed 7 m/s, which is past what the legs can
+      // stride for, so the boots skated on the way in. None of it is on camera.
+      [plan.enter - 1.9, plan.lane, 0, DOOR_Z - 7.5],
       [plan.enter, plan.lane, 0, DOOR_Z - 1.2],
     ];
     plan.advance.forEach(([x, z], k) => keys.push([plan.enter + 1.6 + k * 2.6, x, 0, z]));
@@ -840,7 +843,7 @@ function buildCast(lib: MaterialLibrary): {
     const facingIn = plan.aside[0] > 0 ? -Math.PI / 2 : Math.PI / 2;
     const states: StateKey[] = [
       { t: 0, state: 'idle', facing: 0 },
-      { t: plan.enter - 0.9, state: 'run' },
+      { t: plan.enter - 1.9, state: 'run' },
       { t: plan.enter + 1.5, state: 'fire', focus: new THREE.Vector3(plan.lane * 0.4, 1.2, 12), rate: 2.1 },
       { t: plan.enter + 4.0, state: 'run' },
       { t: plan.enter + 5.4, state: 'fire', focus: new THREE.Vector3(plan.lane * 0.4, 1.2, 13), rate: 2.3 },

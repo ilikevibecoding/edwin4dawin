@@ -61,6 +61,8 @@ export interface Joints {
   hipR: THREE.Object3D;
   kneeL: THREE.Object3D;
   kneeR: THREE.Object3D;
+  footL: THREE.Object3D;
+  footR: THREE.Object3D;
   muzzle: THREE.Object3D | null;
   cape: THREE.Mesh | null;
   saber: THREE.Mesh | null;
@@ -172,7 +174,7 @@ export function buildHumanoid(lib: MaterialLibrary, spec: CharacterSpec): Joints
   const armR = makeArm(1);
 
   // Legs.
-  const makeLeg = (side: number): { hip: THREE.Object3D; knee: THREE.Object3D } => {
+  const makeLeg = (side: number): { hip: THREE.Object3D; knee: THREE.Object3D; foot: THREE.Object3D } => {
     const hip = new THREE.Object3D();
     hip.position.set(side * 0.11 * s, -0.06 * s, 0);
     hips.add(hip);
@@ -190,7 +192,13 @@ export function buildHumanoid(lib: MaterialLibrary, spec: CharacterSpec): Joints
     const boot = box(lib, 0.11 * s, 0.09 * s, 0.22 * s, c.belt ?? c.legs, 0.6, metal);
     boot.position.set(0, -0.4 * s, 0.04 * s);
     knee.add(boot);
-    return { hip, knee };
+
+    // The sole, as an empty. The foot-slip check in the QA harness needs a point
+    // it can sample in world space, and the mesh origin sits mid-boot.
+    const sole = new THREE.Object3D();
+    sole.position.set(0, -0.045 * s, 0);
+    boot.add(sole);
+    return { hip, knee, foot: sole };
   };
   const legL = makeLeg(-1);
   const legR = makeLeg(1);
@@ -285,6 +293,7 @@ export function buildHumanoid(lib: MaterialLibrary, spec: CharacterSpec): Joints
     handL: armL.hand, handR: armR.hand,
     hipL: legL.hip, hipR: legR.hip,
     kneeL: legL.knee, kneeR: legR.knee,
+    footL: legL.foot, footR: legR.foot,
     muzzle, cape, saber,
   };
 }
@@ -437,6 +446,10 @@ export class Character {
   private lastState: CharacterState = 'idle';
   private contact: THREE.Mesh;
   private contactRadius: number;
+  /** Hip pivot to sole, in metres. The stride solve needs it. */
+  private legLength: number;
+  private stride: { t0: number; dt: number; table: Float32Array };
+  private lastStepRate = 0;
   /** Set by the scene so blaster muzzles can be located in world space. */
   readonly muzzleWorld = new THREE.Vector3();
 
@@ -447,6 +460,8 @@ export class Character {
     this.options = options;
     this.phase = options.phase ?? 0;
     this.contactRadius = (spec.height ?? 1.82) * 0.44;
+    this.legLength = LEG_LENGTH * ((spec.height ?? 1.82) / 1.82);
+    this.stride = this.buildStridePhase();
     this.contact = makeContactShadow(lib);
     this.group.add(this.contact);
   }
@@ -481,7 +496,6 @@ export class Character {
   update(t: number): void {
     const j = this.joints;
     const opts = this.options;
-    const gait = opts.gait ?? 1;
     const fluid = opts.fluidity ?? 1;
 
     const pos = opts.path.at(t, _v);
@@ -503,7 +517,8 @@ export class Character {
     // Reset the pose each evaluation so the result depends only on `t`.
     resetJoints(j);
 
-    const walkPhase = (t + this.phase) * gait;
+    const walkPhase = this.phaseAt(t);
+    this.lastStepRate = this.stepsPerSecond(speed);
     this.applyPose(key.state, t, age, key, walkPhase, speed, fluid);
 
     // Cross-fade out of the previous pose so a state change reads as a move
@@ -516,12 +531,18 @@ export class Character {
       this.applyPose(previous.state, t, t - previous.t, previous, walkPhase, speed, fluid);
       captureJoints(j, BLEND_PREVIOUS);
       blendJoints(j, BLEND_PREVIOUS, BLEND_TARGET, smoothstep(0, 1, 1 - blend));
+      if (GAITS.has(key.state) || GAITS.has(previous.state)) restoreLegs(j, BLEND_TARGET);
     }
 
-    // Locomotion still applies while walking and firing simultaneously.
-    if (speed > 0.12 && (key.state === 'aim' || key.state === 'fire')) {
+    // A pose that holds the legs still while the path carries the body along is
+    // a slide by construction, so any of those get a stride laid over the top.
+    if (speed > 0.2 && STRIDE_OVERLAY.has(key.state)) {
       this.overlayStride(walkPhase, speed, fluid);
     }
+
+    // Lying figures pivot about the deck, and a kneel deliberately rests a knee
+    // on it, so neither wants its hips set from where its soles are.
+    if (key.state !== 'down' && key.state !== 'kneel') this.groundFeet();
 
     if (key.focus && key.state !== 'down') this.lookAtFocus(key.focus);
 
@@ -552,14 +573,16 @@ export class Character {
     fluid: number,
   ): void {
     switch (state) {
+      // The gait's timing comes from the ground speed, so these differ only in
+      // carriage: a march is stiffer than a walk, a run leans further forward.
       case 'walk':
-        this.poseLocomotion(walkPhase, Math.max(0.9, speed), WALK_CADENCE, 1, fluid);
+        this.poseLocomotion(walkPhase, speed, 1, fluid);
         break;
       case 'march':
-        this.poseLocomotion(walkPhase, Math.max(0.9, speed), MARCH_CADENCE, 0.85, fluid);
+        this.poseLocomotion(walkPhase, speed, 0.85, fluid);
         break;
       case 'run':
-        this.poseLocomotion(walkPhase, Math.max(2.6, speed), RUN_CADENCE, 1.2, fluid);
+        this.poseLocomotion(walkPhase, speed, 1.2, fluid);
         break;
       case 'aim':
         this.poseAim(t, key, 0);
@@ -600,6 +623,80 @@ export class Character {
     return this.lastState;
   }
 
+  /** Steps per second solved for the speed at the last evaluation. */
+  get stepRate(): number {
+    return this.lastStepRate;
+  }
+
+  /** Longest step these legs can take, in metres. */
+  get strideReach(): number {
+    return 2 * STRIDE_REACH * this.legLength;
+  }
+
+  /**
+   * Steps per second at a given ground speed.
+   *
+   * People do not walk faster by taking the same steps quicker; both the rate
+   * and the length grow with speed, which is why a single cadence per gait can
+   * only ever suit one speed. This is the standard shape - rate rising roughly
+   * linearly with speed and saturating at a sprint - scaled so that a longer
+   * legged figure steps more slowly, and finally scaled by the figure's own
+   * `gait` so Vader can tread heavily and a droid can scurry.
+   */
+  private stepsPerSecond(speed: number): number {
+    const size = this.legLength / LEG_LENGTH;
+    return (clamp(1.3 + 0.62 * speed, 1.25, 4.4) / size) * (this.options.gait ?? 1);
+  }
+
+  /**
+   * Stride phase in radians at `t`, where half a cycle is one step.
+   *
+   * Cadence has to be free to follow speed, and that rules out the obvious
+   * `t * cadence`: the phase would leap by tens of radians whenever the cadence
+   * changed, because `t` runs into the hundreds. So the phase is the integral of
+   * the cadence, built once from the figure's own path and read back by
+   * interpolation. Continuous by construction, still a pure function of time,
+   * and still reproducible.
+   */
+  private phaseAt(t: number): number {
+    const { t0, dt, table } = this.stride;
+    const offset = (this.options.phase ?? 0) * TAU;
+    if (t <= t0) return offset;
+    const i = (t - t0) / dt;
+    if (i >= table.length - 1) return table[table.length - 1] + offset;
+    const k = Math.floor(i);
+    return lerp(table[k], table[k + 1], i - k) + offset;
+  }
+
+  /** Integrate the cadence across the window in which this figure can move. */
+  private buildStridePhase(): { t0: number; dt: number; table: Float32Array } {
+    const keys = this.options.path.keys;
+    const dt = 0.05;
+    const t0 = keys[0].t;
+    // Past the last key that differs from the final position the figure is
+    // parked for good, so there is nothing left to integrate.
+    const final = keys[keys.length - 1].v;
+    let tEnd = t0;
+    for (let i = keys.length - 1; i >= 0; i--) {
+      const v = keys[i].v;
+      if (v[0] !== final[0] || v[1] !== final[1] || v[2] !== final[2]) {
+        tEnd = keys[Math.min(i + 1, keys.length - 1)].t;
+        break;
+      }
+    }
+    const steps = Math.max(1, Math.ceil((tEnd - t0) / dt));
+    const table = new Float32Array(steps + 1);
+    const vel = new THREE.Vector3();
+    let acc = 0;
+    for (let i = 0; i < steps; i++) {
+      const mid = t0 + (i + 0.5) * dt;
+      this.options.path.velocityAt(mid, vel);
+      acc += Math.PI * this.stepsPerSecond(Math.hypot(vel.x, vel.z)) * dt;
+      table[i + 1] = acc;
+    }
+    return { t0, dt, table };
+  }
+
   private poseIdle(t: number, fluid: number): void {
     const j = this.joints;
     const breathe = Math.sin(t * 1.1 + this.phase) * 0.012 * fluid;
@@ -631,44 +728,151 @@ export class Character {
     j.elbowR.rotation.x = -1.35;
   }
 
-  private poseLocomotion(phase: number, speed: number, cadence: number, carriage: number, fluid: number): void {
+  private poseLocomotion(p: number, speed: number, carriage: number, fluid: number): void {
     const j = this.joints;
-    const p = phase * cadence;
-    const swing = strideSwing(speed, cadence);
+    const legs = this.strideLegs(p, speed);
     const sin = Math.sin(p);
-    const cos = Math.cos(p);
 
-    j.hipL.rotation.x = sin * swing;
-    j.hipR.rotation.x = -sin * swing;
-    j.kneeL.rotation.x = -Math.max(0, -sin) * swing * 1.5 - 0.06;
-    j.kneeR.rotation.x = -Math.max(0, sin) * swing * 1.5 - 0.06;
+    j.hipL.rotation.x = legs.hipL;
+    j.hipR.rotation.x = legs.hipR;
+    j.kneeL.rotation.x = legs.kneeL;
+    j.kneeR.rotation.x = legs.kneeR;
 
-    // Vertical bob keeps feet near the floor rather than sliding.
-    j.hips.position.y += Math.abs(cos) * 0.038 * carriage - 0.019;
     j.torso.rotation.x = 0.06 * carriage + Math.abs(sin) * 0.02;
     j.chest.rotation.y = -sin * 0.09 * fluid;
     j.hips.rotation.y = sin * 0.05 * fluid;
 
-    j.shoulderL.rotation.x = -sin * swing * 0.95 - 0.1;
-    j.shoulderR.rotation.x = sin * swing * 0.95 - 0.1;
+    // Arms oppose the leg on the same side, which is what reads as walking
+    // rather than as a mannequin being pushed along.
+    j.shoulderL.rotation.x = -legs.hipL * 0.95 - 0.1;
+    j.shoulderR.rotation.x = -legs.hipR * 0.95 - 0.1;
     j.shoulderL.rotation.z = 0.13;
     j.shoulderR.rotation.z = -0.13;
-    j.elbowL.rotation.x = -0.35 - Math.abs(sin) * 0.25;
-    j.elbowR.rotation.x = -0.35 - Math.abs(sin) * 0.25;
+    j.elbowL.rotation.x = -0.35 - Math.abs(legs.hipR) * 0.3;
+    j.elbowR.rotation.x = -0.35 - Math.abs(legs.hipL) * 0.3;
     j.head.rotation.x = -0.03;
   }
 
-  private overlayStride(phase: number, speed: number, fluid: number): void {
+  private overlayStride(p: number, speed: number, fluid: number): void {
     const j = this.joints;
-    const p = phase * WALK_CADENCE;
-    const sin = Math.sin(p);
-    const swing = strideSwing(speed, WALK_CADENCE) * 0.85;
-    j.hipL.rotation.x = sin * swing;
-    j.hipR.rotation.x = -sin * swing;
-    j.kneeL.rotation.x = -Math.max(0, -sin) * swing * 1.4 - 0.06;
-    j.kneeR.rotation.x = -Math.max(0, sin) * swing * 1.4 - 0.06;
-    j.hips.position.y += Math.abs(Math.cos(p)) * 0.024 - 0.012;
-    j.hips.rotation.y = sin * 0.04 * fluid;
+    const legs = this.strideLegs(p, speed);
+    j.hipL.rotation.x = legs.hipL;
+    j.hipR.rotation.x = legs.hipR;
+    j.kneeL.rotation.x = legs.kneeL;
+    j.kneeR.rotation.x = legs.kneeR;
+    j.hips.rotation.y = Math.sin(p) * 0.04 * fluid;
+  }
+
+  /**
+   * One frame of a walk cycle, solved from the foot rather than from the hip.
+   *
+   * Swinging the hip through a sine puts the foot's own speed at zero at each
+   * end of the stride, so a planted foot has no choice but to skate along with
+   * the body there. Instead the stance foot is given a straight, constant-speed
+   * sweep backwards over the deck - the body's own speed, so the foot holds
+   * still in the world - and the hip angle is whatever puts it there. The swing
+   * leg then eases forward and lifts, and the hips ride at whatever height keeps
+   * the stance sole exactly on the deck. Each leg is in stance for half the
+   * cycle, so the two hand over at a double-support instant with no flight
+   * phase to float through.
+   *
+   * `p` is the integrated stride phase in radians: half a cycle is one step.
+   */
+  private strideLegs(p: number, speed: number): {
+    hipL: number; hipR: number; kneeL: number; kneeR: number;
+  } {
+    const L = this.legLength;
+    // Half a step. Beyond what the legs can reach the figure is travelling
+    // faster than its gait can carry it and some slip is unavoidable; the gait
+    // harness reports those so the path or the state can be corrected.
+    const half = Math.min(STRIDE_REACH * L, speed / (2 * this.stepsPerSecond(speed)));
+    // Fade the whole cycle out as the figure comes to rest, or a stationary
+    // figure still nominally walking marches on the spot.
+    const engage = smoothstep(0, 0.06, half);
+    const flex = 0.014 * (L / LEG_LENGTH);
+
+    const cycle = (u: number): { stance: boolean; f: number } => {
+      const turns = (((u % TAU) + TAU) % TAU) / Math.PI;
+      return turns < 1 ? { stance: true, f: turns } : { stance: false, f: turns - 1 };
+    };
+    const cl = cycle(p);
+    const cr = cycle(p + Math.PI);
+
+    // Stance sweeps the sole straight back at constant speed - the body's own
+    // speed, so it holds still over the deck.
+    const stanceForward = (f: number): number => half * (1 - 2 * f);
+    const front = stanceForward(cl.stance ? cl.f : cr.f);
+    // A straight leg reaching `front` ahead of the hip hangs this far below it,
+    // which is the hip height that leaves the sole exactly on the deck.
+    const rise = Math.sqrt(Math.max(0, L * L - front * front)) - L - flex;
+
+    const solve = (c: { stance: boolean; f: number }): { hip: number; knee: number } => {
+      if (c.stance) return this.solveLeg(stanceForward(c.f), L + rise);
+      // Swing hands over to stance at the same speed it left it, so the sole
+      // never has to stop dead on the deck and skate while it waits.
+      const f = c.f;
+      const forward = half * (-8 * f * f * f + 12 * f * f - 2 * f - 1);
+      const lift = engage * (0.035 + half * 0.2) * Math.sin(Math.PI * f);
+      return this.solveLeg(forward, L + rise - lift);
+    };
+
+    const l = solve(cl);
+    const r = solve(cr);
+    return { hipL: l.hip, hipR: r.hip, kneeL: l.knee, kneeR: r.knee };
+  }
+
+  /**
+   * Set the hip height so that the lower sole rests on the deck.
+   *
+   * Runs after every pose. A pose that drops the hips further than the legs fold
+   * has no choice but to push the boots through the floor, and several did; this
+   * makes the leg angles the single authority on how low a figure stands.
+   */
+  private groundFeet(): void {
+    const j = this.joints;
+    const size = this.legLength / LEG_LENGTH;
+    const thighLen = 0.42 * size;
+    const shinLen = 0.445 * size;
+    const depth = (hip: number, knee: number): number => thighLen * Math.cos(hip)
+      + shinLen * Math.cos(hip + knee);
+    const lower = Math.max(
+      depth(j.hipL.rotation.x, j.kneeL.rotation.x),
+      depth(j.hipR.rotation.x, j.kneeR.rotation.x),
+    );
+    const baseY = (j.hips.userData.baseY as number | undefined) ?? j.hips.position.y;
+    j.hips.position.y = baseY - this.legLength + lower;
+  }
+
+  /**
+   * Hip and knee rotations that place the sole `forward` metres ahead of the hip
+   * pivot and `depth` metres below it.
+   *
+   * The branch chosen puts the knee ahead of the line from hip to sole, which is
+   * how a leg actually folds. Worth stating because in this rig that means a
+   * positive knee rotation: negative values, which the static poses use, swing
+   * the shin forward and bend the knee backwards.
+   */
+  private solveLeg(forward: number, depth: number): { hip: number; knee: number } {
+    const size = this.legLength / LEG_LENGTH;
+    const thighLen = 0.42 * size;
+    const shinLen = 0.445 * size;
+    const d = clamp(
+      Math.hypot(forward, depth),
+      Math.abs(thighLen - shinLen) + 1e-3,
+      thighLen + shinLen - 1e-4,
+    );
+    const toSole = Math.atan2(forward, depth);
+    const spread = Math.acos(clamp(
+      (thighLen * thighLen + d * d - shinLen * shinLen) / (2 * thighLen * d),
+      -1,
+      1,
+    ));
+    const thigh = toSole + spread;
+    const shin = Math.atan2(
+      forward - thighLen * Math.sin(thigh),
+      depth - thighLen * Math.cos(thigh),
+    );
+    return { hip: -thigh, knee: thigh - shin };
   }
 
   private poseAim(t: number, key: StateKey, firing: number): void {
@@ -728,9 +932,13 @@ export class Character {
   private poseDown(age: number): void {
     const j = this.joints;
     const f = easeOutCubic(saturate(age / 1.25));
+    // The body pivots about its own origin, which sits on the deck, so tipping it
+    // through 81 degrees already lays it flat and lowers it. Subtracting a further
+    // 0.86 m on top buried the whole figure, soles included, under the floor. All
+    // that is wanted now is enough lift to rest the torso's thickness on the deck.
     j.body.rotation.x = -1.42 * f;
-    j.body.position.y = -0.86 * f;
-    j.body.position.z = -0.34 * f;
+    j.body.position.y = 0.13 * f;
+    j.body.position.z = -0.12 * f;
     j.hipL.rotation.x = 0.5 * f;
     j.hipR.rotation.x = 0.34 * f;
     j.kneeL.rotation.x = -0.7 * f;
@@ -802,7 +1010,9 @@ export class Character {
   private poseCower(t: number): void {
     const j = this.joints;
     const tremor = Math.sin(t * 11 + this.phase * 6) * 0.02;
-    j.hips.position.y -= 0.14;
+    // Drop the hips and fold the legs by matching amounts, or the crouch simply
+    // pushes both boots through the deck.
+    j.hips.position.y -= 0.2;
     j.torso.rotation.x = 0.34;
     j.chest.rotation.x = 0.2;
     j.head.rotation.x = 0.24;
@@ -812,10 +1022,10 @@ export class Character {
     j.shoulderR.rotation.z = -0.55;
     j.elbowL.rotation.x = -1.5;
     j.elbowR.rotation.x = -1.55;
-    j.hipL.rotation.x = 0.35;
-    j.hipR.rotation.x = 0.3;
-    j.kneeL.rotation.x = -0.6;
-    j.kneeR.rotation.x = -0.55;
+    j.hipL.rotation.x = 0.8;
+    j.hipR.rotation.x = 0.72;
+    j.kneeL.rotation.x = -1.45;
+    j.kneeR.rotation.x = -1.35;
   }
 
   private lookAtFocus(focus: THREE.Vector3): void {
@@ -894,27 +1104,28 @@ export function resetContactShadowCache(): void {
 const POSE_BLEND = 0.72;
 
 /**
- * Steps per second, as an angular rate.
- *
- * Cadence is a constant per gait and the stride amplitude is solved from ground
- * speed, not the other way around. Deriving cadence from speed looks tempting
- * but the walk phase is `(t + offset) * cadence` with `t` in the hundreds, so
- * any change to cadence makes the phase leap by tens of radians and the legs
- * blur through several cycles in a frame.
+ * Hip pivot to sole at full height, in metres: 0.42 down to the knee, 0.4 to the
+ * middle of the boot, 0.045 to the sole.
  */
-const WALK_CADENCE = 6.2;
-const MARCH_CADENCE = 5.0;
-const RUN_CADENCE = 9.4;
+const LEG_LENGTH = 0.865;
 
 /**
- * Hip swing that makes the stance foot sweep backwards at the speed the body
- * travels forward. The foot sits about 0.85 m below the hip, so it covers
- * roughly `1.7 * swing` metres per half cycle; solving that against distance
- * per half cycle is what stops a walk reading as a slide.
+ * Furthest a sole may reach from directly under the hip, as a fraction of leg
+ * length. Short of 1 so the hip angle never has to approach a right angle; at
+ * 0.78 a figure can just cover a hard sprint, which is what the defenders'
+ * scramble to their positions demands.
  */
-function strideSwing(speed: number, cadence: number): number {
-  return clamp((Math.PI * speed) / (1.7 * cadence), 0.14, 0.7);
-}
+const STRIDE_REACH = 0.78;
+
+/** Poses that leave the legs alone, so a moving figure needs a stride over them. */
+const STRIDE_OVERLAY = new Set<CharacterState>([
+  'idle', 'alert', 'aim', 'fire', 'react', 'interact', 'look',
+]);
+
+/** States whose legs come from the stride solve rather than from a fixed pose. */
+const GAITS = new Set<CharacterState>(['walk', 'march', 'run']);
+
+const TAU = Math.PI * 2;
 
 /** Joints captured during a cross-fade, in a fixed order. */
 const BLEND_ORDER: Array<keyof Joints> = [
@@ -955,6 +1166,22 @@ function blendJoints(j: Joints, previous: JointSnapshot[], target: JointSnapshot
     );
     node.position.lerpVectors(a.position, b.position, k);
   });
+}
+
+/**
+ * Put the legs back to the pose the figure is actually in.
+ *
+ * The stride solves the legs so the planted sole holds still, and averaging that
+ * against whatever the previous pose had the legs doing drags the foot across the
+ * deck for the length of the cross-fade. The upper body still cross-fades; the
+ * legs come straight from the gait, whose amplitude already grows from nothing as
+ * the figure gets under way, so nothing snaps.
+ */
+function restoreLegs(j: Joints, target: JointSnapshot[]): void {
+  for (const key of ['hipL', 'hipR', 'kneeL', 'kneeR'] as const) {
+    const i = BLEND_ORDER.indexOf(key);
+    (j[key] as THREE.Object3D).rotation.copy(target[i].rotation);
+  }
 }
 
 function resetJoints(j: Joints): void {

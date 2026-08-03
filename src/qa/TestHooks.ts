@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { App } from '../app/App';
+import type { Character } from '../assets/characters/CharacterRig';
 import { CHECKPOINTS, type Checkpoint } from './checkpoints';
 import type { SanityIssue } from './SanityChecks';
 
@@ -53,6 +54,26 @@ declare global {
   }
 }
 
+/**
+ * How much a figure's planted foot skates over the deck while it walks.
+ *
+ * `ratio` is the giveaway: 0 means the stance foot is nailed to the floor while
+ * the body passes over it, 1 means the whole figure is being dragged along with
+ * its legs waving. Anything below about 0.35 reads as walking.
+ */
+export interface FootSlip {
+  target: string;
+  state: string;
+  bodySpeed: number;
+  plantSpeed: number;
+  ratio: number;
+  soleHeight: number;
+  /** Distance covered per step. */
+  stepLength: number;
+  /** Longest step these legs can reach. Beyond it, slip is unavoidable. */
+  strideReach: number;
+}
+
 export interface StarfallTestApi {
   ready: boolean;
   app: App;
@@ -61,6 +82,7 @@ export interface StarfallTestApi {
   renderAt(time: number): void;
   report(time?: number): FrameReport;
   measure(target: string): ScreenMeasurement;
+  footSlip(targets?: string[], dt?: number): FootSlip[];
   runCheckpoint(id: string): CheckpointResult;
   setMode(mode: 'cinematic' | 'explore'): void;
   setQuality(level: 'low' | 'medium' | 'high'): void;
@@ -97,6 +119,28 @@ function targetObject(app: App, target: string): THREE.Object3D | null {
   if (trooper) return interior.troopers[Number(trooper[1])]?.group ?? null;
   const rebel = /^rebel-(\d+)$/.exec(target);
   if (rebel) return interior.rebels[Number(rebel[1])]?.group ?? null;
+  return null;
+}
+
+/** Every figure with legs, by target name. */
+function humanoidTargets(app: App): string[] {
+  const interior = app.interiorScene;
+  return [
+    'vader', 'leia',
+    ...interior.rebels.map((_, i) => `rebel-${i}`),
+    ...interior.troopers.map((_, i) => `trooper-${i}`),
+  ];
+}
+
+/** Humanoid figures only: the droids have no legs to plant. */
+function targetCharacter(app: App, target: string): Character | null {
+  const interior = app.interiorScene;
+  if (target === 'vader') return interior.vader;
+  if (target === 'leia') return interior.leia;
+  const trooper = /^trooper-(\d+)$/.exec(target);
+  if (trooper) return interior.troopers[Number(trooper[1])] ?? null;
+  const rebel = /^rebel-(\d+)$/.exec(target);
+  if (rebel) return interior.rebels[Number(rebel[1])] ?? null;
   return null;
 }
 
@@ -239,6 +283,55 @@ export function installTestHooks(app: App): void {
       const obj = targetObject(app, target);
       if (!obj) return { screenFraction: 0, onScreen: false, ndc: [0, 0], distance: Infinity };
       return measureObject(app, obj);
+    },
+
+    footSlip(targets?: string[], dt = 1 / 30): FootSlip[] {
+      const names = targets ?? humanoidTargets(app);
+      const cast = names
+        .map((target) => ({ target, character: targetCharacter(app, target) }))
+        .filter((e): e is { target: string; character: Character } => e.character !== null);
+      if (!cast.length) return [];
+
+      // Everything downstream of the clock is a pure function of time, so the
+      // second sample is a re-render at t0 + dt and the restore is a re-render at
+      // t0. Nothing has to be saved or rewound by hand. Sampling the whole cast
+      // per render keeps a timestep at three frames however many figures there
+      // are, which matters on a software rasteriser.
+      const t0 = app.timeline.time;
+      const sample = (time: number): Array<{ body: THREE.Vector3; feet: [THREE.Vector3, THREE.Vector3] }> => {
+        app.renderAt(time);
+        return cast.map(({ character }) => ({
+          body: character.group.getWorldPosition(new THREE.Vector3()),
+          feet: [
+            character.joints.footL.getWorldPosition(new THREE.Vector3()),
+            character.joints.footR.getWorldPosition(new THREE.Vector3()),
+          ],
+        }));
+      };
+      const a = sample(t0);
+      const states = cast.map(({ character }) => character.currentState);
+      const rates = cast.map(({ character }) => character.stepRate);
+      const reaches = cast.map(({ character }) => character.strideReach);
+      const b = sample(t0 + dt);
+      app.renderAt(t0);
+
+      const flat = (p: THREE.Vector3, q: THREE.Vector3): number => Math.hypot(p.x - q.x, p.z - q.z);
+      return cast.map(({ target }, i) => {
+        const bodySpeed = flat(a[i].body, b[i].body) / dt;
+        // The planted foot is the lower one across the interval.
+        const plant = (a[i].feet[0].y + b[i].feet[0].y) <= (a[i].feet[1].y + b[i].feet[1].y) ? 0 : 1;
+        const plantSpeed = flat(a[i].feet[plant], b[i].feet[plant]) / dt;
+        return {
+          target,
+          state: states[i],
+          bodySpeed,
+          plantSpeed,
+          ratio: bodySpeed > 0.05 ? plantSpeed / bodySpeed : 0,
+          soleHeight: Math.min(a[i].feet[plant].y, b[i].feet[plant].y),
+          stepLength: rates[i] > 0 ? bodySpeed / rates[i] : 0,
+          strideReach: reaches[i],
+        };
+      });
     },
 
     runCheckpoint(id: string): CheckpointResult {

@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "narration": "python3 scripts/generate_narration.py",
     "qa": "node scripts/qa-tour.mjs",
-    "qa:build": "npm run build && node scripts/qa-tour.mjs --preview"
+    "qa:build": "npm run build && node scripts/qa-tour.mjs --preview",
+    "qa:gait": "node scripts/qa-gait.mjs",
+    "qa:audio": "node scripts/qa-audio.mjs"
   },
   "dependencies": {
     "three": "^0.185.1"
