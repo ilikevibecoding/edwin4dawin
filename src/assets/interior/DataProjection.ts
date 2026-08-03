@@ -25,8 +25,11 @@ export class DataProjection {
   private beam: THREE.Mesh;
   private beamMat: THREE.MeshBasicMaterial;
 
+  private radius: number;
+
   constructor(lib: MaterialLibrary, radius = 0.42, seed = 'plans') {
     const rng = new Rng(seed);
+    this.radius = radius;
     this.group.name = 'dataProjection';
     const color = 0x8fe8ff;
 
@@ -162,7 +165,8 @@ export class DataProjection {
     for (let i = 0; i < this.cards.length; i++) {
       const c = this.cards[i];
       const a = (c.userData.angle as number) + t * 0.35;
-      c.position.set(Math.cos(a) * 0.72, Math.sin(t * 0.7 + i) * 0.22, Math.sin(a) * 0.72);
+      const orbit = this.radius * 1.75;
+      c.position.set(Math.cos(a) * orbit, Math.sin(t * 0.7 + i) * this.radius * 0.55, Math.sin(a) * orbit);
       c.lookAt(0, c.position.y, 0);
     }
     this.scan.position.y = Math.sin(t * 0.9) * 0.42;

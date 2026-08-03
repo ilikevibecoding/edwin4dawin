@@ -56,6 +56,8 @@ export interface CorridorRunOptions {
   height?: number;
   /** Adds worn scorch marks and dents. */
   weathering?: number;
+  /** Structural ribs between sections. Rooms read better without them. */
+  ribs?: boolean;
   seed?: string;
 }
 
@@ -119,7 +121,7 @@ export class CorridorRun {
     }
 
     // Ribs between sections.
-    const ribGeo = buildRib(halfWidth, height);
+    const ribGeo = opts.ribs === false ? null : buildRib(halfWidth, height);
     if (ribGeo) {
       const ribs = new THREE.InstancedMesh(ribGeo, lib.interiorTrim, sections + 1);
       ribs.name = 'corridor-ribs';
@@ -138,7 +140,7 @@ export class CorridorRun {
     const stripCount = Math.max(1, Math.round(length / (SECTION_LENGTH * 1)));
     for (let i = 0; i < stripCount; i++) {
       const z = opts.z0 + (i + 0.5) * (length / stripCount);
-      const g = new THREE.BoxGeometry(0.5, 0.05, 2.1);
+      const g = new THREE.BoxGeometry(0.44, 0.05, 1.8);
       lib.registry.track(g);
       const strip = new THREE.Mesh(g, lib.interiorLight);
       strip.position.set(0, height - 0.04, z);
@@ -173,7 +175,7 @@ export class CorridorRun {
     }
     for (const strip of this.lightStrips) {
       const mat = strip.material as THREE.MeshStandardMaterial;
-      mat.emissiveIntensity = 0.35 + whiteLevel * 2.1 * flick;
+      mat.emissiveIntensity = 0.22 + whiteLevel * 0.95 * flick;
       mat.emissive.setRGB(1, 0.94 * whiteLevel + 0.2 * redLevel, 0.86 * whiteLevel + 0.08 * redLevel);
     }
   }

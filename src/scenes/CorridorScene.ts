@@ -73,6 +73,9 @@ export class CorridorScene {
   private fillLight: THREE.HemisphereLight;
   private ambient: THREE.AmbientLight;
   private vaderRim: THREE.PointLight;
+  private vaderKey: THREE.PointLight;
+  private archiveLight: THREE.PointLight;
+  private doorwayGlow: THREE.PointLight;
   private breachLight: THREE.PointLight;
   private podHatch: THREE.Group;
   private podHatchGlow: THREE.MeshBasicMaterial;
@@ -100,7 +103,7 @@ export class CorridorScene {
     this.root.add(main.group);
 
     const junction = new CorridorRun(lib, {
-      z0: JUNCTION_Z0, z1: JUNCTION_Z1, halfWidth: JUNCTION_HALF_WIDTH, height: 2.92, seed: 'junction',
+      z0: JUNCTION_Z0, z1: JUNCTION_Z1, halfWidth: JUNCTION_HALF_WIDTH, height: 2.92, ribs: false, seed: 'junction',
     });
     this.runs.push(junction);
     this.root.add(junction.group);
@@ -110,27 +113,29 @@ export class CorridorScene {
     this.root.add(aft.group);
 
     const podBay = new CorridorRun(lib, {
-      z0: POD_Z0, z1: POD_Z1, halfWidth: POD_BAY_HALF_WIDTH, height: 2.9, seed: 'pod-bay',
+      z0: POD_Z0, z1: POD_Z1, halfWidth: POD_BAY_HALF_WIDTH, height: 2.9, ribs: false, seed: 'pod-bay',
     });
     this.runs.push(podBay);
     this.root.add(podBay.group);
 
     // Filler walls where a narrow run meets a wide one.
-    const addShoulder = (z: number, innerHalf: number, outerHalf: number, height: number, faceForward: boolean): void => {
+    const addShoulder = (z: number, innerHalf: number, outerHalf: number, height: number): void => {
       for (const side of [-1, 1]) {
-        const w = outerHalf - innerHalf;
-        const g = new THREE.PlaneGeometry(w, height);
-        if (!faceForward) g.rotateY(Math.PI);
-        g.translate(side * (innerHalf + w / 2), height / 2, z);
-        lib.registry.track(g);
-        const m = new THREE.Mesh(g, lib.interiorWallDark);
-        m.receiveShadow = true;
-        this.root.add(m);
+        for (const facing of [0, Math.PI]) {
+          const w = outerHalf - innerHalf;
+          const g = new THREE.PlaneGeometry(w, height);
+          if (facing) g.rotateY(Math.PI);
+          g.translate(side * (innerHalf + w / 2), height / 2, z + (facing ? -0.01 : 0.01));
+          lib.registry.track(g);
+          const m = new THREE.Mesh(g, lib.interiorWallDark);
+          m.receiveShadow = true;
+          this.root.add(m);
+        }
       }
     };
-    addShoulder(JUNCTION_Z0, CORRIDOR_HALF_WIDTH, JUNCTION_HALF_WIDTH, 2.92, false);
-    addShoulder(JUNCTION_Z1, CORRIDOR_HALF_WIDTH, JUNCTION_HALF_WIDTH, 2.92, true);
-    addShoulder(POD_Z0, CORRIDOR_HALF_WIDTH, POD_BAY_HALF_WIDTH, 2.9, false);
+    addShoulder(JUNCTION_Z0, CORRIDOR_HALF_WIDTH, JUNCTION_HALF_WIDTH, 2.92);
+    addShoulder(JUNCTION_Z1, CORRIDOR_HALF_WIDTH, JUNCTION_HALF_WIDTH, 2.92);
+    addShoulder(POD_Z0, CORRIDOR_HALF_WIDTH, POD_BAY_HALF_WIDTH, 2.9);
 
     // Cap the far end so the corridor never reads as an open tube.
     const capGeo = new THREE.PlaneGeometry(POD_BAY_HALF_WIDTH * 2, 2.9);
@@ -155,16 +160,16 @@ export class CorridorScene {
 
     // Archive console the princess works at, on the -X wall of the junction.
     const archive = new ControlPanel(lib, 1.7, 1.05);
-    archive.group.position.set(ARCHIVE_X - 0.02, 1.2, JUNCTION_Z);
+    archive.group.position.set(ARCHIVE_X - 0.04, 1.24, JUNCTION_Z);
     archive.group.rotation.y = Math.PI / 2;
     this.consoles.push(archive);
     this.root.add(archive.group);
 
     // A shallow equipment bank flanking it, so the archive reads as a station.
     const bankParts: THREE.BufferGeometry[] = [];
-    for (const dz of [-1.55, 1.55]) {
-      const g = bevelBox(0.4, 1.9, 1.1, 0.05);
-      g.translate(ARCHIVE_X - 0.16, 0.95, JUNCTION_Z + dz);
+    for (const dz of [-1.85, 1.85]) {
+      const g = bevelBox(0.34, 1.8, 1.0, 0.05);
+      g.translate(ARCHIVE_X + 0.06, 0.9, JUNCTION_Z + dz);
       bankParts.push(g);
     }
     const bank = mergeAll(bankParts);
@@ -198,8 +203,8 @@ export class CorridorScene {
     // Crates used as cover.
     const crateParts: THREE.BufferGeometry[] = [];
     for (const [x, z, w, h, d] of [
-      [-1.0, 9.0, 0.9, 0.78, 0.7], [1.05, 10.4, 0.8, 0.95, 0.75],
-      [-1.1, 13.6, 0.85, 0.6, 0.9], [1.0, 6.2, 0.75, 0.68, 0.65],
+      [-1.24, 9.4, 0.78, 0.62, 0.66], [1.28, 11.6, 0.72, 0.7, 0.7],
+      [-1.3, 14.2, 0.74, 0.5, 0.86], [1.26, 16.8, 0.7, 0.56, 0.62],
     ] as const) {
       const g = bevelBox(w, h, d, 0.04);
       g.translate(x, h / 2, z);
@@ -263,13 +268,30 @@ export class CorridorScene {
     this.ambient = new THREE.AmbientLight(0xffffff, 0.22);
     this.scene.add(this.ambient);
 
+    // Two lights follow him: a red wash from behind that separates him from the
+    // smoke, and a small cool key ahead so the helmet reads instead of becoming
+    // a featureless hole.
     this.vaderRim = new THREE.PointLight(0xff3a2a, 0, 14, 2);
     this.vaderRim.position.set(0, 2.1, DOOR_Z - 1.5);
     this.scene.add(this.vaderRim);
 
+    this.vaderKey = new THREE.PointLight(0xcfe0ff, 0, 7.5, 2);
+    this.vaderKey.position.set(0.5, 1.9, 0);
+    this.scene.add(this.vaderKey);
+
     this.breachLight = new THREE.PointLight(0xffb070, 0, 22, 2);
     this.breachLight.position.set(0, 1.4, DOOR_Z + 1);
     this.scene.add(this.breachLight);
+
+    // Warm practical over the archive station, and a dim residual glow from the
+    // boarding tube so the breached doorway keeps reading after the flash.
+    this.archiveLight = new THREE.PointLight(0xffe6c8, 1.5, 7, 2);
+    this.archiveLight.position.set(-2.2, 2.4, 25.6);
+    this.scene.add(this.archiveLight);
+
+    this.doorwayGlow = new THREE.PointLight(0xffb27a, 0, 16, 2);
+    this.doorwayGlow.position.set(0, 1.5, DOOR_Z - 2.2);
+    this.scene.add(this.doorwayGlow);
 
     // ---- Effects -----------------------------------------------------------
     const q = lib.qualitySettings;
@@ -313,8 +335,8 @@ export class CorridorScene {
     this.root.add(this.threepio.group);
 
     // ---- Plans -------------------------------------------------------------
-    this.plans = new DataProjection(lib, 0.4);
-    this.plans.setPosition(ARCHIVE_X + 1.15, 1.72, JUNCTION_Z);
+    this.plans = new DataProjection(lib, 0.34);
+    this.plans.setPosition(-2.78, 1.72, 25.35);
     this.root.add(this.plans.group);
 
     const beamGeo = new THREE.CylinderGeometry(0.05, 0.02, 1, 8, 1, true);
@@ -515,8 +537,8 @@ export class CorridorScene {
     // White house lighting fails as the boarding begins, emergency red takes
     // over, and Vader's arrival pulls the corridor colder and darker still.
     const alarmOn = smoothstep(196, 199, t) * (1 - smoothstep(300, 306, t) * 0.35);
-    const whiteLevel = 1 - 0.45 * smoothstep(198, 204, t) - 0.2 * smoothstep(216, 222, t) + 0.25 * smoothstep(262, 268, t);
-    const redLevel = alarmOn * (0.55 + 0.45 * smoothstep(214, 220, t));
+    const whiteLevel = 1 - 0.5 * smoothstep(197.5, 200.5, t) - 0.18 * smoothstep(216, 222, t) + 0.3 * smoothstep(262, 268, t);
+    const redLevel = alarmOn * (0.8 + 0.2 * smoothstep(214, 220, t));
     for (let i = 0; i < this.runs.length; i++) {
       this.runs[i].setMood(t, clamp(whiteLevel, 0.25, 1), redLevel, i * 3.7);
     }
@@ -530,7 +552,12 @@ export class CorridorScene {
 
     const vaderZ = this.vader.options.path.at(t).z;
     this.vaderRim.position.set(0.6, 2.05, vaderZ - 2.4);
-    this.vaderRim.intensity = vaderPresence * 4.2 * (0.85 + 0.15 * Math.sin(t * 1.6));
+    this.vaderRim.intensity = vaderPresence * 5.2 * (0.85 + 0.15 * Math.sin(t * 1.6));
+    this.vaderKey.position.set(0.75, 1.95, vaderZ + 2.6);
+    this.vaderKey.intensity = vaderPresence * 4.4;
+
+    this.archiveLight.intensity = 1.1 + 0.7 * smoothstep(262, 268, t);
+    this.doorwayGlow.intensity = smoothstep(BREACH_TIME, BREACH_TIME + 3, t) * 2.6;
 
     const breach = this.door.breachFlash(t);
     this.breachLight.intensity = breach * 26;
@@ -633,11 +660,11 @@ function buildCast(lib: MaterialLibrary): {
     fallbackAt?: number;
     fallbackTo?: [number, number];
   }> = [
-    { start: [0.4, 17.5], cover: [-1.05, 8.4], arrive: 203.4, officer: true, downAt: 233.5 },
-    { start: [-0.5, 19.5], cover: [1.15, 10.0], arrive: 204.2, downAt: 226.5 },
-    { start: [0.8, 22.0], cover: [-1.1, 12.8], arrive: 205.0, downAt: 229.5 },
-    { start: [-0.9, 24.0], cover: [1.05, 14.4], arrive: 205.8, downAt: 231.5 },
-    { start: [0.2, 26.5], cover: [-0.6, 16.6], arrive: 206.6, fallbackAt: 228, fallbackTo: [-0.9, 23.5] },
+    { start: [0.5, 27.0], cover: [-0.85, 8.6], arrive: 203.6, officer: true, downAt: 233.5 },
+    { start: [-0.6, 29.5], cover: [0.95, 10.4], arrive: 204.4, downAt: 226.5 },
+    { start: [1.0, 32.5], cover: [-0.9, 12.9], arrive: 205.2, downAt: 229.5 },
+    { start: [-1.0, 35.0], cover: [0.9, 14.6], arrive: 206.0, downAt: 231.5 },
+    { start: [0.3, 38.0], cover: [-0.5, 16.8], arrive: 206.8, fallbackAt: 228, fallbackTo: [1.26, 19.4] },
   ];
 
   rebelPlans.forEach((plan, i) => {
@@ -683,14 +710,16 @@ function buildCast(lib: MaterialLibrary): {
     lane: number;
     enter: number;
     advance: Array<[number, number]>;
+    /** Where this trooper stands once Vader is announced: clear of the centre. */
+    aside: [number, number];
     downAt?: number;
   }> = [
-    { lane: -0.75, enter: BREACH_TIME + 0.7, advance: [[-0.75, -3.4], [-0.95, 1.2], [-1.0, 3.6]] },
-    { lane: 0.75, enter: BREACH_TIME + 1.0, advance: [[0.75, -3.0], [0.95, 0.6], [1.05, 3.0]] },
-    { lane: 0.0, enter: BREACH_TIME + 1.5, advance: [[0.1, -4.2], [0.2, -1.2], [0.3, 1.6]], downAt: 227.5 },
-    { lane: -1.05, enter: BREACH_TIME + 2.4, advance: [[-1.05, -5.0], [-1.15, -1.6], [-1.2, 2.0]] },
-    { lane: 1.05, enter: BREACH_TIME + 3.0, advance: [[1.05, -4.6], [1.15, -0.8], [1.2, 2.6]], downAt: 224.5 },
-    { lane: 0.35, enter: BREACH_TIME + 4.2, advance: [[0.35, -5.4], [0.45, -2.2], [0.55, 0.8]] },
+    { lane: -0.75, enter: BREACH_TIME + 0.7, advance: [[-0.75, -3.4], [-0.95, 1.2], [-1.0, 3.6]], aside: [-1.3, 4.4] },
+    { lane: 0.75, enter: BREACH_TIME + 1.0, advance: [[0.75, -3.0], [0.95, 0.6], [1.05, 3.0]], aside: [1.3, 3.4] },
+    { lane: 0.0, enter: BREACH_TIME + 1.5, advance: [[0.1, -4.2], [0.2, -1.2], [0.3, 1.6]], aside: [1.28, 0.4], downAt: 227.5 },
+    { lane: -1.05, enter: BREACH_TIME + 2.4, advance: [[-1.05, -5.0], [-1.15, -1.6], [-1.2, 2.0]], aside: [-1.3, 1.0] },
+    { lane: 1.05, enter: BREACH_TIME + 3.0, advance: [[1.05, -4.6], [1.15, -0.8], [1.2, 2.6]], aside: [1.3, -2.0], downAt: 224.5 },
+    { lane: 0.35, enter: BREACH_TIME + 4.2, advance: [[0.35, -5.4], [0.45, -2.2], [0.55, 0.8]], aside: [-1.3, -2.6] },
   ];
 
   trooperPlans.forEach((plan, i) => {
@@ -701,8 +730,16 @@ function buildCast(lib: MaterialLibrary): {
     ];
     plan.advance.forEach(([x, z], k) => keys.push([plan.enter + 1.6 + k * 2.6, x, 0, z]));
     const last = plan.advance[plan.advance.length - 1];
-    keys.push([1000, last[0], 0, last[1]]);
+    // Clear the centre line before he arrives; nobody stands in his way.
+    if (!plan.downAt) {
+      keys.push([238.5 + i * 0.2, last[0], 0, last[1]]);
+      keys.push([241.5 + i * 0.2, plan.aside[0], 0, plan.aside[1]]);
+      keys.push([1000, plan.aside[0], 0, plan.aside[1]]);
+    } else {
+      keys.push([1000, last[0], 0, last[1]]);
+    }
 
+    const facingIn = plan.aside[0] > 0 ? -Math.PI / 2 : Math.PI / 2;
     const states: StateKey[] = [
       { t: 0, state: 'idle', facing: 0 },
       { t: plan.enter - 0.9, state: 'run' },
@@ -710,11 +747,13 @@ function buildCast(lib: MaterialLibrary): {
       { t: plan.enter + 4.0, state: 'run' },
       { t: plan.enter + 5.4, state: 'fire', focus: new THREE.Vector3(plan.lane * 0.4, 1.2, 13), rate: 2.3 },
       { t: 234.5, state: 'aim', focus: new THREE.Vector3(plan.lane * 0.4, 1.2, 14) },
-      { t: 240.5, state: 'alert', facing: 0 },
-      { t: 244, state: 'march', facing: 0 },
-      { t: 262, state: 'alert', facing: 0 },
+      { t: 238.5 + i * 0.2, state: 'walk' },
+      { t: 242.4 + i * 0.2, state: 'alert', facing: facingIn },
+      { t: 246, state: 'idle', facing: facingIn, focus: new THREE.Vector3(0, 1.5, DOOR_Z + 2) },
+      { t: 1000, state: 'idle', facing: facingIn },
     ];
     if (plan.downAt) {
+      states.length = 6;
       states.push({ t: plan.downAt - 0.4, state: 'react', focus: new THREE.Vector3(0, 1.2, 12) });
       states.push({ t: plan.downAt, state: 'down' });
     }
@@ -727,12 +766,13 @@ function buildCast(lib: MaterialLibrary): {
   const vaderPath = path([
     [0, 0, 0, DOOR_Z - 9],
     [240.0, 0, 0, DOOR_Z - 9],
-    [241.2, 0, 0, DOOR_Z - 3.2],
-    [246.0, 0, 0, DOOR_Z + 1.6],
-    [252.0, 0, 0, 2.4],
-    [258.5, 0, 0, 6.2],
-    [262.0, 0, 0, 7.0],
-    [1000, 0, 0, 7.0],
+    [241.4, 0, 0, DOOR_Z - 2.8],
+    [244.0, 0, 0, DOOR_Z + 0.8],
+    [249.0, 0, 0, -1.6],
+    [254.0, 0, 0, 3.4],
+    [259.5, 0, 0, 7.2],
+    [262.0, 0, 0, 8.2],
+    [1000, 0, 0, 8.2],
   ]);
   const vader = createVader(lib, {
     path: vaderPath,
@@ -750,19 +790,22 @@ function buildCast(lib: MaterialLibrary): {
   // --- Leia -----------------------------------------------------------------
   // She comes forward from the aft of the ship, works the archive console,
   // kneels to load the droid, then turns to face the approaching boarders.
-  const LEIA_STATION: [number, number] = [-2.25, JUNCTION_Z];
   const leiaPath = path([
     [0, 0.6, 0, 36],
     [262.0, 0.6, 0, 36],
     [264.5, 0.4, 0, 32],
-    [268.0, -0.9, 0, 28.6],
-    [271.5, LEIA_STATION[0], 0, LEIA_STATION[1]],
-    [299.0, LEIA_STATION[0], 0, LEIA_STATION[1]],
-    [302.5, -1.5, 0, 27.6],
-    [1000, -1.5, 0, 27.6],
+    [268.0, -0.9, 0, 28.8],
+    [271.5, -2.15, 0, 26.4],
+    [283.0, -2.15, 0, 26.4],
+    [285.2, -2.25, 0, 24.95],
+    [299.0, -2.25, 0, 24.95],
+    [302.5, -1.4, 0, 26.7],
+    [1000, -1.4, 0, 26.7],
   ]);
-  const consoleFocus = new THREE.Vector3(ARCHIVE_X, 1.35, JUNCTION_Z);
-  const droidFocus = new THREE.Vector3(-1.55, 0.85, JUNCTION_Z - 1.1);
+  // She works the projection itself, which turns her toward camera instead of
+  // presenting her back to it for thirty seconds.
+  const consoleFocus = new THREE.Vector3(-2.78, 1.6, 25.35);
+  const droidFocus = new THREE.Vector3(-2.62, 0.85, 23.85);
   const leia = createLeia(lib, {
     path: leiaPath,
     gait: 1.0,
@@ -771,7 +814,7 @@ function buildCast(lib: MaterialLibrary): {
       { t: 262.0, state: 'run' },
       { t: 271.5, state: 'interact', focus: consoleFocus },
       { t: 277.0, state: 'interact', focus: consoleFocus },
-      { t: 284.5, state: 'kneel', focus: droidFocus },
+      { t: 285.6, state: 'kneel', focus: droidFocus },
       { t: 296.0, state: 'interact', focus: droidFocus },
       { t: 299.5, state: 'alert', focus: new THREE.Vector3(0, 1.5, 8) },
       { t: 303.0, state: 'idle', facing: Math.PI, focus: new THREE.Vector3(0, 1.5, 10) },
@@ -782,9 +825,9 @@ function buildCast(lib: MaterialLibrary): {
   // --- Droids ---------------------------------------------------------------
   // The astromech travels in straight lines at one speed and never stops.
   const r2Path = path([
-    [0, -1.55, 0, JUNCTION_Z - 1.1],
-    [302.0, -1.55, 0, JUNCTION_Z - 1.1],
-    [304.5, -1.1, 0, 28.4],
+    [0, -2.62, 0, 23.85],
+    [302.0, -2.62, 0, 23.85],
+    [304.5, -1.5, 0, 27.4],
     [307.5, -0.6, 0, 32.0],
     [314.0, -0.7, 0, 44.6],
     [317.0, -1.5, 0, 46.6],

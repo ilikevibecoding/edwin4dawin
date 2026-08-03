@@ -43,6 +43,8 @@ interface ShotDef {
   look: VecArg;
   /** When set, `look` is treated as an offset from that object's chase position. */
   follow?: FollowTarget;
+  /** When set, `pos` is treated as an offset from that object's chase position. */
+  followPos?: FollowTarget;
   fov?: NumArg;
   roll?: NumArg;
   shake?: number;
@@ -68,17 +70,17 @@ function chaseShot(def: ShotDef): Shot {
     end: def.end,
     evaluate(t: number, ctx: ShotContext, out: CameraState): void {
       const chase = ctx.space.chase;
+      const pivotFor = (target: FollowTarget): THREE.Object3D =>
+        target === 'runner' ? ctx.space.runnerPivot
+          : target === 'destroyer' ? ctx.space.destroyerPivot
+            : ctx.space.podPivot;
+
       posTrack.at(t, _p);
+      if (def.followPos && def.followPos !== 'none') _p.add(pivotFor(def.followPos).position);
       out.position.copy(chase.localToWorld(_p.clone()));
 
       lookTrack.at(t, _l);
-      if (def.follow && def.follow !== 'none') {
-        const pivot =
-          def.follow === 'runner' ? ctx.space.runnerPivot
-            : def.follow === 'destroyer' ? ctx.space.destroyerPivot
-              : ctx.space.podPivot;
-        _l.add(pivot.position);
-      }
+      if (def.follow && def.follow !== 'none') _l.add(pivotFor(def.follow).position);
       out.target.copy(chase.localToWorld(_l.clone()));
 
       // Keep "up" aligned with the chase frame so the horizon behaves.
@@ -377,14 +379,14 @@ export function buildShots(): Shot[] {
       start: 196,
       end: 206,
       pos: [
-        { t: 196, v: [0, 1.78, 21.5], ease: 'smoother' },
-        { t: 206, v: [0, 1.7, 17.4], ease: 'smoother' },
+        { t: 196, v: [1.28, 1.95, 32.0], ease: 'smoother' },
+        { t: 206, v: [1.02, 1.84, 20.5], ease: 'smoother' },
       ],
       look: [
-        { t: 196, v: [0, 1.4, 2] },
-        { t: 206, v: [0, 1.35, -3] },
+        { t: 196, v: [0.0, 1.4, 14] },
+        { t: 206, v: [-0.1, 1.3, -2] },
       ],
-      fov: 50,
+      fov: 52,
       shake: 0.5,
     }),
     interiorShot({
@@ -482,14 +484,14 @@ export function buildShots(): Shot[] {
       start: 243,
       end: 254,
       pos: [
-        { t: 243, v: [0.62, 0.5, 8.0], ease: 'smoother' },
-        { t: 254, v: [0.5, 0.55, 10.6], ease: 'smoother' },
+        { t: 243, v: [0.0, 0.72, -2.0], ease: 'smoother' },
+        { t: 254, v: [0.06, 0.66, 7.4], ease: 'smoother' },
       ],
-      look: [0, 1.35, 0],
+      look: [0, 1.42, 0],
       followCharacter: 'vader',
       fov: [
-        { t: 243, v: 40 },
-        { t: 254, v: 36 },
+        { t: 243, v: 44 },
+        { t: 254, v: 38 },
       ],
       shake: 0.25,
       handheld: 0.7,
@@ -500,10 +502,10 @@ export function buildShots(): Shot[] {
       start: 254,
       end: 262,
       pos: [
-        { t: 254, v: [1.3, 1.66, 13.6], ease: 'smoother' },
-        { t: 262, v: [1.18, 1.6, 12.4], ease: 'smoother' },
+        { t: 254, v: [1.34, 1.62, 14.4], ease: 'smoother' },
+        { t: 262, v: [1.2, 1.52, 12.6], ease: 'smoother' },
       ],
-      look: [-0.1, 1.5, 0],
+      look: [-0.2, 1.46, 0],
       followCharacter: 'vader',
       fov: 42,
       shake: 0.25,
@@ -532,14 +534,14 @@ export function buildShots(): Shot[] {
       start: 271,
       end: 280,
       pos: [
-        { t: 271, v: [0.15, 1.62, 24.2], ease: 'smoother' },
-        { t: 280, v: [-0.45, 1.5, 24.9], ease: 'smoother' },
+        { t: 271, v: [1.62, 1.64, 23.5], ease: 'smoother' },
+        { t: 280, v: [0.92, 1.58, 24.1], ease: 'smoother' },
       ],
       look: [
-        { t: 271, v: [-2.4, 1.35, 26.4] },
-        { t: 280, v: [-2.35, 1.6, 26.5] },
+        { t: 271, v: [-2.2, 1.32, 26.4] },
+        { t: 280, v: [-2.5, 1.5, 25.9] },
       ],
-      fov: 42,
+      fov: 46,
       shake: 0.2,
       handheld: 0.8,
     }),
@@ -549,16 +551,16 @@ export function buildShots(): Shot[] {
       start: 280,
       end: 288,
       pos: [
-        { t: 280, v: [-0.9, 1.86, 28.5], ease: 'smoother' },
-        { t: 288, v: [-1.15, 1.78, 24.6], ease: 'smoother' },
+        { t: 280, v: [1.52, 1.76, 23.1], ease: 'smoother' },
+        { t: 288, v: [0.62, 1.66, 23.5], ease: 'smoother' },
       ],
       look: [
-        { t: 280, v: [-2.2, 1.72, 26.5] },
-        { t: 288, v: [-2.2, 1.7, 26.5] },
+        { t: 280, v: [-2.58, 1.66, 25.4] },
+        { t: 288, v: [-2.74, 1.58, 25.25] },
       ],
       fov: [
-        { t: 280, v: 38 },
-        { t: 288, v: 34 },
+        { t: 280, v: 44 },
+        { t: 288, v: 40 },
       ],
       shake: 0.15,
       handheld: 0.7,
@@ -569,14 +571,14 @@ export function buildShots(): Shot[] {
       start: 288,
       end: 299,
       pos: [
-        { t: 288, v: [0.55, 1.15, 24.0], ease: 'smoother' },
-        { t: 299, v: [0.15, 0.98, 24.5], ease: 'smoother' },
+        { t: 288, v: [1.28, 1.18, 23.0], ease: 'smoother' },
+        { t: 299, v: [0.58, 1.04, 23.2], ease: 'smoother' },
       ],
       look: [
-        { t: 288, v: [-1.9, 1.0, 25.6] },
-        { t: 299, v: [-1.8, 0.85, 25.5] },
+        { t: 288, v: [-2.4, 1.0, 24.5] },
+        { t: 299, v: [-2.5, 0.88, 24.2] },
       ],
-      fov: 40,
+      fov: 44,
       shake: 0.2,
       handheld: 0.8,
     }),
@@ -586,12 +588,12 @@ export function buildShots(): Shot[] {
       start: 299,
       end: 306,
       pos: [
-        { t: 299, v: [-0.4, 1.55, 22.0], ease: 'smoother' },
-        { t: 306, v: [-0.2, 1.5, 24.0], ease: 'smoother' },
+        { t: 299, v: [1.85, 1.54, 23.2], ease: 'smoother' },
+        { t: 306, v: [1.35, 1.48, 24.6], ease: 'smoother' },
       ],
       look: [
-        { t: 299, v: [-1.7, 1.45, 27.2] },
-        { t: 306, v: [-1.2, 1.3, 28.6] },
+        { t: 299, v: [-1.7, 1.34, 25.1] },
+        { t: 306, v: [-1.1, 1.28, 26.8] },
       ],
       fov: 44,
       shake: 0.35,
@@ -656,12 +658,13 @@ export function buildShots(): Shot[] {
       start: 328,
       end: 340,
       pos: [
-        { t: 328, v: [-140, -300, -180], ease: 'smoother' },
-        { t: 340, v: [-700, -3200, -1150], ease: 'smoother' },
+        { t: 328, v: [26, -46, -30], ease: 'smoother' },
+        { t: 340, v: [48, -88, -58], ease: 'smoother' },
       ],
-      look: [0, 0, 0],
+      followPos: 'pod',
+      look: [0, 1, 0],
       follow: 'pod',
-      fov: 42,
+      fov: 46,
       shake: 0.4,
       handheld: 1.0,
     }),
@@ -671,15 +674,16 @@ export function buildShots(): Shot[] {
       start: 340,
       end: 352,
       pos: [
-        { t: 340, v: [-1180, -8000, -1980], ease: 'smoother' },
-        { t: 352, v: [-1760, -23300, -3720], ease: 'smoother' },
+        { t: 340, v: [72, 150, 96], ease: 'smoother' },
+        { t: 352, v: [155, 330, 200], ease: 'smoother' },
       ],
+      followPos: 'pod',
       look: [
-        { t: 340, v: [140, -80, 60] },
-        { t: 352, v: [200, -300, 120] },
+        { t: 340, v: [-30, -520, -300] },
+        { t: 352, v: [-60, -1100, -640] },
       ],
       follow: 'pod',
-      fov: 40,
+      fov: 44,
       shake: 0.5,
       handheld: 1.0,
     }),
@@ -691,14 +695,16 @@ export function buildShots(): Shot[] {
       start: 352,
       end: 366,
       pos: [
-        { t: 352, v: [3600, -19000, -2400], ease: 'smoother' },
-        { t: 366, v: [4200, -28000, -3400], ease: 'smoother' },
+        { t: 352, v: [1600, 1900, 1050], ease: 'smoother' },
+        { t: 366, v: [3800, 3900, 2300], ease: 'smoother' },
       ],
+      followPos: 'pod',
       look: [
-        { t: 352, v: [-900, -22000, -3200] },
-        { t: 366, v: [-1400, -33000, -4600] },
+        { t: 352, v: [-200, -1400, -800] },
+        { t: 366, v: [-400, -2600, -1500] },
       ],
-      fov: 40,
+      follow: 'pod',
+      fov: 42,
       shake: 0.2,
       handheld: 0.8,
     }),
