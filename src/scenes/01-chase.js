@@ -265,6 +265,13 @@ export async function build(ctx) {
   const destroyer = capital?.buildStarDestroyer ? await capital.buildStarDestroyer() : fallbackDestroyer();
   const cv = measure(corvette);
   const sd = measure(destroyer);
+  // She is white plate lit by one hard sun and, in the last beat, by lamps a few
+  // units off her spine. At the kit's default 0.42 roughness that geometry throws
+  // specular lobes well over the 0.6 bloom threshold and she arrives with a hole
+  // burnt in her — first on the bridge as she passes the lens, then again inside
+  // the bay. Cloned, not mutated: the materials come out of the shared palette
+  // cache and other scenes are rendering off them in other tabs.
+  soften(corvette, 0.6, 0.35);
 
   // Both models are wrapped so the scene drives a convenient local origin.
   // Corvette: her own bounding-box centre, at the origin of her frame.
@@ -351,11 +358,11 @@ export async function build(ctx) {
   // the narrow end goes at the mouth and the wide, dissolving end reaches down
   // to her: a searchlight spreading out of the bay rather than a solid funnel.
   const beam = new Beam({
-    color: 0x9fe0ff,
+    color: 0x8fd6ff,
     radiusTop: cv.halfW * 1.5,
     radiusBottom: cv.halfW * 0.55,
     height: 1,
-    opacity: 0.32,
+    opacity: 0.5,
   });
   beam.object.rotation.x = Math.PI; // local +y now runs downward, out of the bay
   beam.object.position.set(0, MOUTH_Y + 0.6, -HANGAR_BACK);
@@ -370,9 +377,19 @@ export async function build(ctx) {
   // into the throat as a black cutout.
   // Range matters more than brightness: at 150 units it reaches most of the
   // belly and washes the money shot gold six seconds before the bay is in play.
-  const bayLamp = new THREE.PointLight(0xffb877, 0, 80, 1.7);
-  bayLamp.position.set(0, BELLY - 3, -HANGAR_BACK);
-  destroyerRig.add(bayLamp);
+  // Two of them, a third of the bay apart, rather than one in the middle. A
+  // single point source that close to a hull of flat plate throws one specular
+  // lobe, and on white ABS under a 0.6 bloom threshold that lobe is a hole burnt
+  // in her bridge deck — it was the brightest thing in every frame of the last
+  // beat, sat forward of the lamp where the reflection angle happened to line up,
+  // and drew the eye off the beam and the mouth entirely. Split and halved, the
+  // two lobes land in different places and neither one clips.
+  const bayLamps = [-0.3, 0.3].map((f) => {
+    const l = new THREE.PointLight(0xffb877, 0, 90, 1.7);
+    l.position.set(0, BELLY - 3, -HANGAR_BACK + f * hangar.depth);
+    destroyerRig.add(l);
+    return l;
+  });
 
   // ------------------------------------------------------------------- fire
   // fx.BoltPool sizes its halo at nine times `width` and scales it to the bolt's
@@ -572,20 +589,37 @@ export async function build(ctx) {
       [21.2, [35, 6, -30]],
       [T.slew, [48, -1, -50]], // cut: wider, she is slewing and sinking
       [25.3, [43, -8, -38]],
-      // Shots 6 and 7 are boxed in on three sides. The lens has to sit inside
-      // his plan (|x| under his half-beam at that station) or there is no hull
-      // overhead for the bay to be a hole in; it has to stay forward of his own
-      // ventral recess or that flares out the top of frame; and it wants to be
-      // far enough down and out that she is a small thing under a big one. What
-      // is left is a narrow wedge of positions well below his keel.
-      [T.lock, [52, -22, -46]], // cut: wide, the beam reaches down for her
-      [30.2, [44, -14, -34]],
-      [T.throat, [38, -10, -28]], // cut: in on the mouth
-      // Not all the way in. At thirty units out she is sixty units of ship
-      // across a frame that is showing her waist and nothing either side of it,
-      // and the last image of the scene has to be READ as a ship going into a
-      // hole, which needs the lip of the hole in shot with her.
-      [END, [35, -4, -23]],
+      // Shots 6 and 7 photograph two things that want opposite lenses, which is
+      // why they are two shots.
+      //
+      // Shot 6 is the SHAFT. The field is a vertical cone, so it reads in inverse
+      // proportion to how much of its own axis the lens is looking down: from a
+      // steep angle underneath it collapses into concentric ellipses lying on her
+      // hull — a bullseye, not a beam. Kept at 21° above the mouth plane the
+      // sight line is 69° off the axis and it is a shaft again.
+      //
+      // Shot 7 is the HOLE, and a hole in a horizontal plane reads in proportion
+      // to that same angle: at 21° a 37-by-69 aperture squashes to a slot two
+      // units tall, indistinguishable from the shadow line under the housing. At
+      // 42° it is a readable rectangle with the lit throat inside it. By the time
+      // this shot cuts in she is at the mouth plane and the field has already
+      // faded out (see `shaft`), so nothing is left for the angle to spoil.
+      //
+      // The lens can go this far down because the mouth plane is horizontal: any
+      // ray that reaches the opening from underneath crosses that plane exactly
+      // at the opening, so the housing's own side walls — which live above it —
+      // can never get in the way, however far outboard the camera sits.
+      [T.lock, [56, -20, -52]], // cut: wide and low, side-on to the shaft
+      [30.2, [46, -18, -40]],
+      [T.throat, [26, -30, -28]], // cut: down under the mouth, looking up it
+      // Shot 7 sinks away from her rather than pushing in. Pushing in was the
+      // instinct and it was wrong: by the last frame she was sixty units of ship
+      // across a frame showing her waist and nothing either side of it, and the
+      // closing image has to be READ as a ship going into a hole, which needs the
+      // whole hole in shot with her. Dropping instead holds her the same size,
+      // opens the aperture up from 42° to 49°, and lets more of the belly in.
+      [32.2, [28, -37, -23]],
+      [END, [30, -42, -18]],
     ],
     look: [
       [0, [12, 7, 440]],
@@ -612,10 +646,13 @@ export async function build(ctx) {
       [21.2, [0, 1, -20]],
       [T.slew, [0, 3, -6]],
       [25.3, [0, -5, -2]],
-      [T.lock, [0, -2, -18]],
-      [30.2, [0, 4, -10]],
-      [T.throat, [0, 6, -4]],
-      [END, [0, 12, 4]],
+      // Aimed between her and the mouth, so the shaft of the field runs up the
+      // middle of the frame with the belly above it and her below.
+      [T.lock, [0, -4, -16]],
+      [30.2, [0, 0, -12]],
+      [T.throat, [0, 6, -8]],
+      [32.2, [0, 9, 1]],
+      [END, [0, 8, 6]],
     ],
     fov: [
       [0, 46],
@@ -632,10 +669,11 @@ export async function build(ctx) {
       [T.hits, 42],
       [21.2, 40],
       [T.slew, 40],
-      [T.lock, 52],
-      [30.2, 48],
-      [T.throat, 46],
-      [END, 44],
+      [T.lock, 48],
+      [30.2, 46],
+      [T.throat, 50],
+      [32.2, 48],
+      [END, 47],
     ],
     // A degree and a half of roll through shot 3. Under a hull with no visible
     // edge in frame the only cue that anything is moving is the greebles
@@ -681,7 +719,7 @@ export async function build(ctx) {
       // losing her yaw as the field straightens her. Most of the rise happens in
       // shot 6 and the last fifth creeps on through shot 7, so the final frame
       // still has her moving.
-      const align = ease.smooth(ease.range(t, T.lock, 30.5));
+      const align = ease.smooth(ease.range(t, T.lock, 29.2));
       // Two thirds of the rise happens in shot 6 so the beam has something to be
       // doing, and the last third creeps on through shot 7 so the closing frames
       // are still her going in rather than a held tableau.
@@ -696,23 +734,34 @@ export async function build(ctx) {
 
       // --- 3. engines ------------------------------------------------------
       // One bell dies first and hard, then the rest gutter out behind it, and
-      // that is all: they stay dead. Anything left burning part-throttle is
-      // worse than nothing, because fx.Thruster keeps the cone at full length
-      // and only fades its opacity, so a bell at a third reads as a hollow
-      // plastic funnel taped to her transom rather than as a dying engine.
+      // that is all: they stay dead.
+      //
       // Timed to the line, not to the hits. "Her engines went dark" lands at
       // about 19.5, and on the old schedule the bank was still at four fifths of
       // full at 20 — a ship blazing away under a narrator saying it had stopped,
       // with the plume the brightest thing in the frame at the moment the shot
       // wanted the hull. They start dying with the second hit and are out by 20.4.
+      //
+      // The extra squeeze on the cone matters as much as the timing. fx.Thruster
+      // scales the flame linearly with throttle and fades it at 0.55 alpha, so a
+      // bell held at two thirds is a hard-edged translucent teal triangle a third
+      // of her length long sticking out of her transom — three of them were the
+      // worst thing in the frame at 20s, and they read as cellophane, not fire.
+      // Squaring it collapses the flame back into the bell while the halo fades,
+      // and the bell goes dark instead of going glassy.
       for (let i = 0; i < engines.length; i++) {
         const die = i === DEAD_BELL ? 18.75 : 19.0 + i * 0.12;
         const out = i === DEAD_BELL ? 0.3 : 0.85;
         let th = 1 - ease.range(t, die, die + out);
         if (i === DEAD_BELL) th *= 1 - 0.5 * ease.range(t, die - 0.9, die) * (0.5 + 0.5 * Math.sin(t * 33));
         else th *= 0.86 + 0.14 * Math.sin(t * 11 + i);
-        engines[i].throttle = Math.max(0, th);
+        th = Math.max(0, th);
+        engines[i].throttle = th;
         engines[i].update(t);
+        engines[i].cone.scale.z *= th * th;
+        // ...and hold the halo up while the flame collapses into it, so the last
+        // thing left of a bell is a glow rather than a shape with edges.
+        engines[i].sprite.material.opacity = 0.95 * Math.min(1, th * 3);
       }
       for (const e of sdEngines) {
         e.throttle = 1 - 0.45 * ease.smooth(ease.range(t, 17, 24));
@@ -735,10 +784,15 @@ export async function build(ctx) {
       // and becomes a bullseye of concentric rings sitting on the hull, so the
       // beam is faded out as the mouth closes on her and then switched off.
       const gap = hangarPos.y + hangar.mouth - cvPos.y - cv.halfH * 0.3;
-      const shaft = grab * ease.smooth(ease.range(gap, 2.5, 13));
+      const shaft = grab * ease.smooth(ease.range(gap, 4, 12));
       beam.object.visible = shaft > 0.02;
-      beam.object.scale.set(1, Math.max(0.5, gap * 1.06), 1);
-      beam.mesh.material.uniforms.uOpacity.value = 0.32 * shaft;
+      // The cone's radii have to come in with its height. Left at full width it
+      // goes from a shaft twenty-two units tall to a thirteen-unit-tall dome
+      // eighteen across — a glass blister sitting on her bow, which is what the
+      // frame at 28s was. Scaled together it stays a cone all the way in.
+      const taper = Math.min(1.05, Math.max(0.4, gap / 20));
+      beam.object.scale.set(taper, Math.max(0.5, gap * 1.06), taper);
+      beam.mesh.material.uniforms.uOpacity.value = 0.5 * shaft;
       beam.update(t);
       gripGlow.material.opacity = 0.34 * grab * (0.82 + 0.18 * Math.sin(t * 5.3));
       gripGlow.visible = grab > 0.02;
@@ -746,10 +800,15 @@ export async function build(ctx) {
       // under the bay roof and she is white ABS: at a fixed 1500 the near side of
       // her bridge deck goes to paper the moment she is inside the throat, which
       // is the one frame the whole last beat is built to arrive at.
-      bayLamp.intensity =
-        1500 *
+      // Backed off once she is inside, and further as the leaves come across: she
+      // goes dark in the throat rather than sitting in it brightly lit, which is
+      // the difference between a ship parked in a bay and a ship swallowed.
+      const bay =
+        620 *
         ease.smooth(ease.range(t, T.slew + 1.4, T.lock + 1)) *
-        (1 - 0.45 * ease.smooth(ease.range(t, 28.4, 32)));
+        (1 - 0.4 * ease.smooth(ease.range(t, 28.4, 31.5))) *
+        (1 - 0.45 * ease.smooth(ease.range(t, 31.5, 33.8)));
+      for (const l of bayLamps) l.intensity = bay;
       hangar.update(t, grab);
 
       // --- 5. sky and fire -------------------------------------------------
@@ -782,6 +841,32 @@ function thruster({ color, radius, length, position, halo = 2, haloColor = 0x335
   th.base.radius = (radius * halo) / 4.5;
   th.sprite.material.color.setHex(haloColor);
   return th;
+}
+
+/**
+ * Widen the specular lobe on a model built from someone else's kit.
+ *
+ * Materials arrive from the shared palette cache, so every one of them is cloned
+ * before it is touched — mutating in place would reach into every other scene
+ * the offline renderer has open. Clones are shared per source material, so a
+ * merged hull still draws in one call.
+ */
+function soften(root, roughness, metalness) {
+  const swapped = new Map();
+  const swap = (m) => {
+    let c = swapped.get(m);
+    if (!c) {
+      c = m.clone();
+      if (c.roughness !== undefined) c.roughness = Math.max(c.roughness, roughness);
+      if (c.metalness !== undefined) c.metalness = Math.min(c.metalness, metalness);
+      swapped.set(m, c);
+    }
+    return c;
+  };
+  root.traverse((o) => {
+    if (!o.material) return;
+    o.material = Array.isArray(o.material) ? o.material.map(swap) : swap(o.material);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1453,7 +1538,7 @@ function buildHangar(cv) {
   // One depth-tested additive glow up in the throat, for her to go dark against.
   // Kept narrower than the opening: a sprite wider than the mouth escapes past
   // the walls and washes a hundred units of grey belly warm orange.
-  const inner = glowSprite(0xffb066, W * 0.8, 0);
+  const inner = glowSprite(0xffb066, W * 0.62, 0);
   inner.position.y = -2.2;
   group.add(inner);
 
@@ -1471,9 +1556,15 @@ function buildHangar(cv) {
       // one image the scene is built around. Between 20.0 and 21.3 it is either
       // behind the lens or eighty degrees off axis, so it can simply arrive.
       group.visible = t >= 20;
-      const open = ease.smooth(ease.range(t, 20.6, 23.4));
+      // ...and start shutting again over her once she is inside, which is the one
+      // image that says swallowed rather than merely lifted. Only halfway: the
+      // leaves cross her flanks and leave her spine down the gap, so the last
+      // frame is a ship being closed in on rather than a shut pair of doors.
+      const open = ease.smooth(ease.range(t, 20.6, 23.4)) * (1 - 0.6 * ease.smooth(ease.range(t, 30.6, 33.6)));
       for (const l of leaves) l.mesh.position.x = l.sx * open * (W / 2 + 2.4);
-      inner.material.opacity = open * (0.26 + 0.16 * grab + 0.04 * Math.sin(t * 3.1) + 0.02 * Math.sin(t * 7.7));
+      // Kept off `open` so the throat does not go dark as the leaves come back.
+      const lit = ease.smooth(ease.range(t, 20.6, 23.4));
+      inner.material.opacity = lit * (0.19 + 0.11 * grab + 0.03 * Math.sin(t * 3.1) + 0.015 * Math.sin(t * 7.7));
     },
   };
 }

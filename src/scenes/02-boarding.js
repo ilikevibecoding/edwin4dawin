@@ -790,7 +790,17 @@ export async function build(ctx) {
       const flying = blown && t < BLAST + 3.7;
       for (const b of bursts) {
         b.object.visible = flying;
-        if (flying) b.update(t);
+        if (!flying) continue;
+        b.update(t);
+        // fx.BrickBurst fades linearly over its whole life, which means the hail
+        // spends nearly all of it half transparent: the bricks read as glass
+        // rather than as plastic, and the corridor wall shows through the ones
+        // tumbling past the lens. Held solid and taken out sharply at the end
+        // they are bricks all the way, and by then the static pile has arrived to
+        // take over from them.
+        const a = 1 - Math.pow(Math.min(1, Math.max(0, (t - b.t0) / b.fade)), 4);
+        b.material.opacity = a;
+        b.material.transparent = a < 1;
       }
       blastBall.update(t);
       blastSparks.update(t);
@@ -1053,10 +1063,15 @@ function buildCorridor() {
         b.panel(inner - (sx > 0 ? 0.45 : 0), 7, z + 0.5, 0.45, 3, 8, dark);
         b.panel(inner - (sx > 0 ? 0.7 : 0), 3, z + 2.4, 0.7, 1.2, 3, grey);
         if (bay % 4 === 1) {
+          // Under the 0.78 bloom threshold, not over it. At 1.3 a three-stud
+          // readout luminance-averages 0.95 and blooms into a star a third of a
+          // minifig across: every trooper who walked past one arrived with a white
+          // flare welded to his shoulder, which read as a blown highlight on the
+          // armour rather than as a lamp on the wall behind him.
           b.panel(inner - (sx > 0 ? 0.55 : 0), 12, z + 0.7, 0.55, 2.2, 3, COLORS.transClear, {
             emissive: 0x66ccff,
-            emissiveIntensity: 1.3,
-            finish: 'glossy',
+            emissiveIntensity: 0.95,
+            finish: 'plastic',
           });
         }
       }
