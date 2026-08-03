@@ -72,12 +72,12 @@ export const VADER_SPEC: CharacterSpec = {
   roughness: 0.17,
   metalness: 0.55,
   colors: {
-    head: 0x1e2028,
-    torso: 0x15171d,
-    arms: 0x191b21,
-    legs: 0x161820,
-    belt: 0x24262d,
-    accent: 0x33363e,
+    head: 0x26282f,
+    torso: 0x1a1c22,
+    arms: 0x1e2027,
+    legs: 0x1a1c24,
+    belt: 0x2a2c34,
+    accent: 0x3a3d46,
   },
 };
 

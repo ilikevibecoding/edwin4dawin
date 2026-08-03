@@ -645,17 +645,18 @@ export function buildShots(): Shot[] {
       start: 319.5,
       end: 328,
       pos: [
-        { t: 319.5, v: [-11, -8, -13], ease: 'smoother' },
-        { t: 323, v: [-17, -13, -20], ease: 'smoother' },
-        { t: 328, v: [-38, -29, -44], ease: 'smoother' },
+        { t: 319.5, v: [-9, -11, -12], ease: 'smoother' },
+        { t: 323, v: [-15, -18, -20], ease: 'smoother' },
+        { t: 328, v: [-34, -40, -46], ease: 'smoother' },
       ],
       // Trailing the pod along its escape vector puts the corvette directly
-      // behind it, so separation reads as leaving something rather than
-      // floating in the void.
+      // behind it, so separation reads as leaving something. Sitting below the
+      // pod and looking slightly up also drops the planet's limb out of frame:
+      // seen edge on it cuts the picture in half as a hard white bar.
       followPos: 'pod',
       look: [
-        { t: 319.5, v: [0, -3, 0] },
-        { t: 328, v: [0, -9, 0] },
+        { t: 319.5, v: [0, 9, 2] },
+        { t: 328, v: [0, 14, 4] },
       ],
       follow: 'pod',
       fov: [

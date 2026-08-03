@@ -342,12 +342,23 @@ export class BlastDoor {
         leaf.scale.setScalar(1);
         leaf.visible = true;
       } else {
-        // Blown inward: leaves tumble away down the corridor and settle.
+        // Blown inward: the leaves tumble down the corridor and come to rest
+        // FLAT on the deck, clear of the centre line. Anything that settles
+        // standing up ends as a slab across the next shot.
         const age = t - breachTime;
         const travel = Math.min(age, 1.6);
         const ease = 1 - Math.pow(1 - saturate(travel / 1.6), 3);
-        leaf.position.set(side * ease * 1.35, ease * 0.35 - Math.pow(ease, 2) * 0.35, facing * ease * 5.2);
-        leaf.rotation.set(-ease * 1.5, side * ease * 0.9, side * ease * 1.7);
+        const tumble = Math.sin(saturate(travel / 1.6) * Math.PI) * 0.9;
+        leaf.position.set(
+          side * ease * 1.25,
+          0.13 * ease + tumble * 0.35,
+          facing * ease * 4.2,
+        );
+        leaf.rotation.set(
+          -ease * Math.PI / 2 - tumble * 0.8,
+          side * ease * 0.45,
+          side * tumble * 0.6,
+        );
         leaf.visible = true;
       }
     }

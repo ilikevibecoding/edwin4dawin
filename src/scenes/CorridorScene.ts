@@ -558,8 +558,10 @@ export class CorridorScene {
     const vaderZ = this.vader.options.path.at(t).z;
     this.vaderRim.position.set(0.6, 2.05, vaderZ - 2.4);
     this.vaderRim.intensity = vaderPresence * 5.2 * (0.85 + 0.15 * Math.sin(t * 1.6));
-    this.vaderKey.position.set(0.75, 1.95, vaderZ + 2.6);
-    this.vaderKey.intensity = vaderPresence * 7.5;
+    // Raking key from above and to one side: enough to find the helmet and
+    // shoulder edges without turning him grey.
+    this.vaderKey.position.set(0.95, 2.15, vaderZ + 2.2);
+    this.vaderKey.intensity = vaderPresence * 11;
 
     const archivePresence = smoothstep(260, 268, t) * (1 - smoothstep(316, 322, t));
     this.archiveLight.intensity = 1.1 + 1.5 * archivePresence;
