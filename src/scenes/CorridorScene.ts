@@ -404,10 +404,10 @@ export class CorridorScene {
     this.plans.setPosition(-2.78, 1.72, 25.35);
     this.root.add(this.plans.group);
 
-    const beamGeo = new THREE.CylinderGeometry(0.05, 0.02, 1, 8, 1, true);
+    const beamGeo = new THREE.CylinderGeometry(0.035, 0.014, 1, 10, 1, true);
     lib.registry.track(beamGeo);
     this.transferBeamMat = new THREE.MeshBasicMaterial({
-      color: 0x9ff0ff, transparent: true, opacity: 0, toneMapped: false,
+      color: 0x8fe4ff, transparent: true, opacity: 0, toneMapped: false,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     });
     lib.registry.track(this.transferBeamMat);
@@ -651,10 +651,13 @@ export class CorridorScene {
 
   private updateTransferBeam(t: number, strength: number, transfer: number): void {
     const active = strength * smoothstep(287.5, 289.5, t) * (1 - smoothstep(298, 300.5, t));
-    this.transferBeamMat.opacity = active * 0.55 * (0.7 + 0.3 * Math.sin(t * 14));
+    this.transferBeamMat.opacity = active * 0.42 * (0.7 + 0.3 * Math.sin(t * 14));
     this.transferBeam.visible = active > 0.01;
     if (!this.transferBeam.visible) return;
-    const from = this.plans.group.position.clone().add(new THREE.Vector3(0, -0.2, 0));
+    // Leaves from the foot of the projection rather than its middle. Struck from
+    // the centre it runs straight across the princess's face on the shot that
+    // matters most.
+    const from = this.plans.group.position.clone().add(new THREE.Vector3(0, -0.62, 0));
     const to = this.r2.anchors.dataPort.getWorldPosition(new THREE.Vector3());
     this.root.worldToLocal(to);
     const mid = from.clone().add(to).multiplyScalar(0.5);

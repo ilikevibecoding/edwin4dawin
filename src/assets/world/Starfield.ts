@@ -50,7 +50,9 @@ export class Starfield {
   readonly band: THREE.Mesh;
   private bandMat: THREE.MeshBasicMaterial;
 
-  constructor(lib: MaterialLibrary, count: number, radius = 500_000, seed = 'starfield') {
+  // The shell sits well beyond the planet but inside the exterior far plane of
+  // 2,400 km, so it can depth-test against the world instead of painting over it.
+  constructor(lib: MaterialLibrary, count: number, radius = 1_600_000, seed = 'starfield') {
     const rng = new Rng(seed);
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
@@ -106,7 +108,10 @@ export class Starfield {
       fragmentShader,
       transparent: true,
       depthWrite: false,
-      depthTest: false,
+      // Transparent materials are drawn after all opaque geometry no matter what
+      // renderOrder says, so a starfield that skips the depth test paints itself
+      // straight over every hull in the scene.
+      depthTest: true,
       blending: THREE.AdditiveBlending,
     });
     lib.registry.track(this.material);
@@ -122,7 +127,7 @@ export class Starfield {
     const bandTex = lib.registry.track(makeBandTexture(rng.fork('band')));
     this.bandMat = new THREE.MeshBasicMaterial({
       map: bandTex, side: THREE.BackSide, transparent: true, opacity: 0.34,
-      depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, toneMapped: false,
+      depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending, toneMapped: false,
     });
     lib.registry.track(bandGeo);
     lib.registry.track(this.bandMat);

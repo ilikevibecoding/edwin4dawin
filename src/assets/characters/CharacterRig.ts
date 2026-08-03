@@ -633,7 +633,10 @@ export class Character {
     const j = this.joints;
     const cadence = clamp(speed * 1.5, 2.2, 8.5);
     const p = phase * cadence;
-    const swing = 0.5 * amplitude * clamp(speed / 2.2, 0.5, 1.3);
+    // Floor the swing well above zero. A slow, deliberate walk solved purely
+    // from path speed produces a stride too small to read at ten metres, and the
+    // figure looks like it is being slid along the deck.
+    const swing = 0.5 * amplitude * clamp(speed / 2.2, 0.72, 1.35);
     const sin = Math.sin(p);
     const cos = Math.cos(p);
 
@@ -643,13 +646,13 @@ export class Character {
     j.kneeR.rotation.x = -Math.max(0, sin) * swing * 1.5 - 0.06;
 
     // Vertical bob keeps feet near the floor rather than sliding.
-    j.hips.position.y += Math.abs(cos) * 0.028 * amplitude - 0.014;
+    j.hips.position.y += Math.abs(cos) * 0.038 * amplitude - 0.019;
     j.torso.rotation.x = 0.06 * amplitude + Math.abs(sin) * 0.02;
     j.chest.rotation.y = -sin * 0.09 * fluid;
     j.hips.rotation.y = sin * 0.05 * fluid;
 
-    j.shoulderL.rotation.x = -sin * swing * 0.8 - 0.1;
-    j.shoulderR.rotation.x = sin * swing * 0.8 - 0.1;
+    j.shoulderL.rotation.x = -sin * swing * 0.95 - 0.1;
+    j.shoulderR.rotation.x = sin * swing * 0.95 - 0.1;
     j.shoulderL.rotation.z = 0.13;
     j.shoulderR.rotation.z = -0.13;
     j.elbowL.rotation.x = -0.35 - Math.abs(sin) * 0.25;
