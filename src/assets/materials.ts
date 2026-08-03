@@ -15,6 +15,7 @@ import {
   corridorWallTexture,
   floorGrateTexture,
   fabricTexture,
+  nozzleTexture,
 } from './textures';
 
 /** Anything at or above this luminance blooms. Keep hull albedo below it. */
@@ -29,9 +30,12 @@ export const PALETTE = {
   imperialTrim: '#3d4249',
   engineBlue: '#9fd4ff',
   engineCore: '#e8f4ff',
+  // Imperial weapons fire red, Rebel weapons blue. Both sides firing the same
+  // colour down a white corridor is unreadable, and the split doubles as the
+  // piece's accent-lighting scheme.
+  laserRed: '#ff4032',
+  laserBlue: '#5cc8ff',
   laserGreen: '#7dff6a',
-  laserRed: '#ff4a3a',
-  laserBlue: '#63c8ff',
   amber: '#e8b657',
   hologram: '#7fdcff',
   vaderBlack: '#1b1d22',
@@ -177,6 +181,26 @@ export function emissiveMaterial(
       toneMapped: opts.toneMapped ?? true,
     });
     m.name = `emissive.${name}`;
+    return m;
+  });
+}
+
+/**
+ * Engine bell face. Same idea as `emissiveMaterial`, but graded from an
+ * incandescent core to a dark rim so the drive keeps its shape once the
+ * bloom pass gets hold of it.
+ */
+export function nozzleMaterial(name: string, color: string, intensity = 2): THREE.MeshStandardMaterial {
+  return memo(`nozzle:${name}:${color}:${intensity}`, () => {
+    const m = new THREE.MeshStandardMaterial({
+      color: 0x000000,
+      emissive: new THREE.Color(color),
+      emissiveIntensity: intensity,
+      emissiveMap: nozzleTexture(),
+      roughness: 1,
+      metalness: 0,
+    });
+    m.name = `nozzle.${name}`;
     return m;
   });
 }

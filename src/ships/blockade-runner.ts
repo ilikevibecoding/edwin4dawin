@@ -14,6 +14,7 @@ import {
   hullMaterial,
   metalMaterial,
   emissiveMaterial,
+  nozzleMaterial,
   additiveMaterial,
   glassMaterial,
   plumeMaterial,
@@ -70,23 +71,23 @@ export class BlockadeRunner {
 
     // Painted, weathered plating: keep metalness low or the off-white hull
     // stops being off-white and starts mirroring an almost-black sky.
+    // No tiled scorch: the map repeats three times along the hull, so any
+    // distinctive burn becomes a wallpaper pattern. Burns are decals instead.
     const hull = hullMaterial('runner', {
       color: PALETTE.rebelHull,
-      grime: 0.28,
-      scorch: 5,
+      grime: 0.22,
       cell: 78,
       roughness: 0.6,
-      metalness: 0.1,
+      metalness: 0.08,
       seed: `${seed}-hull`,
       repeat: 3,
     });
     const hullDark = hullMaterial('runnerDark', {
       color: PALETTE.rebelHullShadow,
-      grime: 0.4,
-      scorch: 3,
+      grime: 0.32,
       cell: 54,
       roughness: 0.7,
-      metalness: 0.12,
+      metalness: 0.1,
       seed: `${seed}-dark`,
       repeat: 2,
     });
@@ -94,9 +95,9 @@ export class BlockadeRunner {
     const structure = metalMaterial('runnerStruct', '#8d918e', 0.55, 0.35);
     const dark = metalMaterial('runnerShadow', '#4a4e52', 0.78, 0.3);
     this.windowMat = emissiveMaterial('runnerWin', '#cfe6ff', 0.85).clone();
-    // Just over the bloom threshold and distinctly blue: a pure-white core at
-    // high intensity blooms into one shapeless ball from astern.
-    this.engineMat = emissiveMaterial('runnerEngine', '#a8d8ff', 1.2).clone();
+    // Graded bell face rather than a flat emissive coin: the eleven drives are
+    // the corvette's signature and have to read as throats, not as headlights.
+    this.engineMat = nozzleMaterial('runnerEngine', '#bfe1ff', 3.0).clone();
 
     /* ------------------------------------------------------------ main body */
     // Full amidships, gently waisted toward the stern, tapering to the neck.
@@ -357,7 +358,7 @@ export class BlockadeRunner {
         scale: 1.1,
         barrels: 2,
         hullColor: PALETTE.rebelHullShadow,
-        boltColor: PALETTE.laserRed,
+        boltColor: PALETTE.laserBlue,
         slew: 1.6,
         name: 'RunnerTurret',
       });
@@ -448,12 +449,12 @@ export class BlockadeRunner {
     const flicker = 0.9 + Math.sin(elapsed * 21.7) * 0.05 + Math.sin(elapsed * 7.3) * 0.05;
     const level = power * flicker;
 
-    this.engineMat.emissiveIntensity = 0.1 + level * 1.15;
+    this.engineMat.emissiveIntensity = 0.12 + level * 3.1;
     for (const f of this.engineFlares) {
-      (f.material as THREE.MeshBasicMaterial).opacity = 0.16 * level;
+      (f.material as THREE.MeshBasicMaterial).opacity = 0.3 * level;
       f.visible = level > 0.01;
     }
-    for (const m of this.plumeMats) m.uniforms.uIntensity.value = 0.5 * level;
+    for (const m of this.plumeMats) m.uniforms.uIntensity.value = 0.62 * level;
     for (const c of this.engineCores) c.visible = level > 0.004;
     for (const l of this.engineLights) l.intensity = 700 * level;
 

@@ -27,34 +27,50 @@ export interface HumanOptions extends FigureOptions {
   weaponColor?: string;
 }
 
-/** A simple readable face: brow, eyes, nose shadow, mouth. */
+/**
+ * A stylised face.
+ *
+ * Deliberately reductive: a shaded brow, two recessed eye slots, a nose plane
+ * and a soft mouth line. Protruding eyeballs on a low-poly head read as googly
+ * cartoon eyes the moment the camera gets close, so everything here is set
+ * *into* the face rather than onto it, and nothing is brighter than the skin.
+ */
 function addFace(
   head: THREE.Object3D,
   skin: THREE.Material,
   opts: { depth: number; eyeY: number; scale?: number; hairMat?: THREE.Material },
 ): void {
   const s = opts.scale ?? 1;
-  const dark = paintMaterial('faceDark', '#2a1c16', 0.85, 0);
-  const white = paintMaterial('eyeWhite', '#e8e2da', 0.5, 0);
-  for (const side of [-1, 1]) {
-    const socket = new THREE.Mesh(new THREE.SphereGeometry(0.017 * s, 8, 6), white);
-    socket.position.set(side * 0.035 * s, opts.eyeY, -opts.depth + 0.004);
-    socket.scale.set(1.25, 0.8, 0.6);
-    head.add(socket);
-    const iris = new THREE.Mesh(new THREE.SphereGeometry(0.009 * s, 8, 6), dark);
-    iris.position.set(side * 0.035 * s, opts.eyeY, -opts.depth - 0.004);
-    iris.scale.set(1, 1, 0.5);
-    head.add(iris);
-    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.036 * s, 0.008 * s, 0.008 * s), opts.hairMat ?? dark);
-    brow.position.set(side * 0.037 * s, opts.eyeY + 0.026 * s, -opts.depth - 0.002);
-    brow.rotation.z = side * 0.1;
-    head.add(brow);
+  const socketMat = paintMaterial('faceSocket', '#6b4f40', 0.95, 0);
+  const eyeMat = paintMaterial('faceEye', '#241a15', 0.7, 0);
+  const mouthMat = paintMaterial('faceMouth', '#7a5245', 0.9, 0);
+
+  // Brow shelf: one slab across both eyes, sitting just proud of the face so
+  // it casts the eyes into shadow at any lighting angle.
+  const brow = new THREE.Mesh(roundedBox(0.104 * s, 0.018 * s, 0.026 * s, 0.007 * s), skin);
+  brow.position.set(0, opts.eyeY + 0.023 * s, -opts.depth - 0.001);
+  head.add(brow);
+  if (opts.hairMat) {
+    const brows = new THREE.Mesh(new THREE.BoxGeometry(0.088 * s, 0.006 * s, 0.005 * s), opts.hairMat);
+    brows.position.set(0, opts.eyeY + 0.024 * s, -opts.depth - 0.013 * s);
+    head.add(brows);
   }
-  const nose = new THREE.Mesh(roundedBox(0.019 * s, 0.03 * s, 0.022 * s, 0.006 * s), skin);
-  nose.position.set(0, opts.eyeY - 0.026 * s, -opts.depth - 0.004);
+
+  for (const side of [-1, 1]) {
+    // Recess first, pupil inside it: the slot never catches a specular hit.
+    const socket = new THREE.Mesh(roundedBox(0.036 * s, 0.017 * s, 0.012 * s, 0.005 * s), socketMat);
+    socket.position.set(side * 0.034 * s, opts.eyeY, -opts.depth + 0.008 * s);
+    head.add(socket);
+    const eye = new THREE.Mesh(roundedBox(0.022 * s, 0.011 * s, 0.008 * s, 0.004 * s), eyeMat);
+    eye.position.set(side * 0.034 * s, opts.eyeY - 0.001 * s, -opts.depth + 0.005 * s);
+    head.add(eye);
+  }
+
+  const nose = new THREE.Mesh(roundedBox(0.02 * s, 0.036 * s, 0.02 * s, 0.007 * s), skin);
+  nose.position.set(0, opts.eyeY - 0.025 * s, -opts.depth - 0.001);
   head.add(nose);
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.032 * s, 0.006 * s, 0.006 * s), dark);
-  mouth.position.set(0, opts.eyeY - 0.058 * s, -opts.depth);
+  const mouth = new THREE.Mesh(roundedBox(0.034 * s, 0.007 * s, 0.008 * s, 0.003 * s), mouthMat);
+  mouth.position.set(0, opts.eyeY - 0.058 * s, -opts.depth + 0.004 * s);
   head.add(mouth);
 }
 
@@ -232,7 +248,7 @@ export class RebelTrooper extends ArmedFigure {
       foot.add(boot(leather));
     }
 
-    this.attachWeapon(blasterCarbine(o.weaponColor ?? PALETTE.laserRed, 0.95));
+    this.attachWeapon(blasterCarbine(o.weaponColor ?? PALETTE.laserBlue, 0.95));
   }
 }
 
@@ -348,7 +364,7 @@ export class Stormtrooper extends ArmedFigure {
       foot.add(boot(armour, 1.05));
     }
 
-    this.attachWeapon(blasterCarbine(o.weaponColor ?? PALETTE.laserGreen, 1));
+    this.attachWeapon(blasterCarbine(o.weaponColor ?? PALETTE.laserRed, 1));
   }
 }
 
@@ -397,7 +413,7 @@ export class DarkLord extends ArmedFigure {
     const gloss = paintMaterial('vaderGloss', '#16181d', 0.13, 0.55);
     const leather = paintMaterial('vaderLeather', '#191b20', 0.66, 0.12);
     const silver = metalMaterial('vaderSilver', '#8f959c', 0.3, 0.92);
-    this.breathMat = emissiveMaterial('vaderChest', '#ff3b25', 0.9).clone();
+    this.breathMat = emissiveMaterial('vaderChest', '#ff3b25', 0.5).clone();
 
     // Torso.
     const abdomen = new THREE.Mesh(roundedBox(0.34, 0.34, 0.23, 0.08, 3), black);
@@ -411,13 +427,23 @@ export class DarkLord extends ArmedFigure {
     const chestBox = new THREE.Mesh(roundedBox(0.21, 0.155, 0.09, 0.02), gloss);
     chestBox.position.set(0, 0.16, -0.135);
     j.chest.add(chestBox);
-    const lampColours = ['#ff3b25', '#ff3b25', '#4aa3ff', '#7dff9a', '#ffffff', '#ff3b25'];
+    // Kept below the bloom threshold. Six saturated lamps at bloom strength on
+    // a black chest turn into a television set at any distance under five
+    // metres, which is exactly the distance his entrance is shot from.
+    const lampColours = ['#ff3b25', '#ff5a3a', '#4aa3ff', '#7dff9a', '#dfe6f0', '#ff3b25'];
     for (let i = 0; i < 6; i++) {
-      const m = emissiveMaterial(`vaderLamp${i}`, lampColours[i], 1.6).clone();
-      const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.017, 0.012), m);
-      lamp.position.set(-0.064 + (i % 3) * 0.064, 0.192 - Math.floor(i / 3) * 0.042, -0.182);
+      const m = emissiveMaterial(`vaderLamp${i}`, lampColours[i], 0.5).clone();
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.014, 0.01), m);
+      lamp.position.set(-0.062 + (i % 3) * 0.062, 0.19 - Math.floor(i / 3) * 0.04, -0.181);
       j.chest.add(lamp);
       this.chestLamps.push(m);
+    }
+    // Etched keypad squares so the panel is not just six lights on a void.
+    const keyMat = metalMaterial('vaderKeys', '#3c4046', 0.5, 0.7);
+    for (let i = 0; i < 4; i++) {
+      const key = new THREE.Mesh(roundedBox(0.026, 0.012, 0.008, 0.003), keyMat);
+      key.position.set(-0.048 + i * 0.032, 0.116, -0.181);
+      j.chest.add(key);
     }
     const chestVent = new THREE.Mesh(roundedBox(0.14, 0.038, 0.05, 0.012), silver);
     chestVent.position.set(0, 0.062, -0.145);
@@ -549,9 +575,9 @@ export class DarkLord extends ArmedFigure {
     // Respirator rhythm — an original ~4.4 s cycle, not a sampled recording.
     this.breathPhase = (elapsed % 4.4) / 4.4;
     const inhale = Math.max(0, Math.sin(this.breathPhase * Math.PI * 2));
-    this.breathMat.emissiveIntensity = 0.7 + inhale * 1.6;
+    this.breathMat.emissiveIntensity = 0.45 + inhale * 0.85;
     for (let i = 0; i < this.chestLamps.length; i++) {
-      this.chestLamps[i].emissiveIntensity = 1.1 + 1.1 * (0.5 + 0.5 * Math.sin(elapsed * (1.1 + i * 0.27) + i));
+      this.chestLamps[i].emissiveIntensity = 0.4 + 0.42 * (0.5 + 0.5 * Math.sin(elapsed * (1.1 + i * 0.27) + i));
     }
     // The chest slowly rises and falls with the machine, not with him.
     this.joints.chest.rotation.x -= inhale * 0.018;
@@ -696,7 +722,7 @@ export class Princess extends ArmedFigure {
     this.gown.castShadow = true;
     j.pelvis.add(this.gown);
 
-    this.attachWeapon(blasterPistol(PALETTE.laserRed, 0.95), new THREE.Vector3(0.015, -0.06, -0.02));
+    this.attachWeapon(blasterPistol(PALETTE.laserBlue, 0.95), new THREE.Vector3(0.015, -0.06, -0.02));
     this.setWeaponVisible(false);
   }
 
@@ -785,7 +811,7 @@ export class ImperialOfficer extends ArmedFigure {
       foot.add(boot(dark));
     }
 
-    this.attachWeapon(blasterPistol(PALETTE.laserGreen, 0.95));
+    this.attachWeapon(blasterPistol(PALETTE.laserRed, 0.95));
     this.setWeaponVisible(false);
   }
 }

@@ -16,6 +16,7 @@ import {
   hullMaterial,
   metalMaterial,
   emissiveMaterial,
+  nozzleMaterial,
   additiveMaterial,
   plumeMaterial,
   PALETTE,
@@ -126,12 +127,13 @@ export class ImperialDestroyer {
       repeat: 2,
     });
     const trimMetal = metalMaterial('isdTrim', '#575d64', 0.48, 0.7);
-    // Ventral detail sits one value step above the keel — enough to read as
-    // structure, not so much that the ribs look like strip lighting.
-    const bellyDetail = metalMaterial('isdBelly', '#8b9199', 0.62, 0.18);
+    // Ventral detail sits one step *below* the keel plating. Raised structure
+    // brighter than the hull reads as tape stuck on the ship; slightly darker
+    // reads as a frame the plating is stretched over.
+    const bellyDetail = metalMaterial('isdBelly', '#71767d', 0.68, 0.2);
     const deepShadow = metalMaterial('isdDeep', '#3a3f45', 0.8, 0.2);
     this.windowMat = emissiveMaterial('isdWin', '#b9d6ff', 0.9).clone();
-    this.engineMat = emissiveMaterial('isdEngine', '#d5ebff', 2.4).clone();
+    this.engineMat = nozzleMaterial('isdEngine', '#cfe6ff', 3.4).clone();
 
     /* ------------------------------------------------------- primary wedge */
     // Lower outline: a long isosceles triangle with a flat, slightly inset
@@ -311,21 +313,37 @@ export class ImperialDestroyer {
     this.group.add(bay);
 
     const bayShell = new THREE.Mesh(new THREE.BoxGeometry(bayW, bayH, bayD), deepShadow);
-    bayShell.material = new THREE.MeshStandardMaterial({ color: 0x2c3138, roughness: 0.9, metalness: 0.1, side: THREE.BackSide });
+    bayShell.material = new THREE.MeshStandardMaterial({ color: 0x3a4048, roughness: 0.85, metalness: 0.12, side: THREE.BackSide });
     bayShell.position.y = bayH / 2;
     bay.add(bayShell);
-    // Lit deck plating and roof strips: the light comes from inside the bay.
+    // Deck plating, lit from strips rather than glowing on its own. An emissive
+    // deck fills the whole mouth and reads from outside as an orange lens flare
+    // taped to the keel instead of a cavity with a floor in it.
     const bayDeck = new THREE.Mesh(
       new THREE.PlaneGeometry(bayW - 12, bayD - 12),
-      emissiveMaterial('hangarDeck', '#ffb04a', 0.34),
+      metalMaterial('hangarDeck', '#6a6e74', 0.7, 0.3),
     );
     bayDeck.rotation.x = -Math.PI / 2;
     bayDeck.position.y = bayH - 4;
     bay.add(bayDeck);
-    for (const z of [-52, 0, 52]) {
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(bayW - 40, 4, 9), emissiveMaterial('hangarStrip', '#ffd9a0', 1.4));
-      strip.position.set(0, bayH - 12, z);
+    for (const z of [-58, -20, 20, 58]) {
+      const strip = new THREE.Mesh(
+        new THREE.BoxGeometry(bayW - 46, 3, 7),
+        emissiveMaterial('hangarStrip', '#ffe2b4', 1.15),
+      );
+      strip.position.set(0, bayH - 13, z);
       bay.add(strip);
+    }
+    // Approach lights down both walls of the throat.
+    for (const s of [-1, 1]) {
+      for (let i = 0; i < 5; i++) {
+        const lamp = new THREE.Mesh(
+          new THREE.BoxGeometry(4, 4, 12),
+          emissiveMaterial('hangarLamp', '#ffcf94', 1.0),
+        );
+        lamp.position.set(s * (bayW / 2 - 6), 22, -bayD / 2 + 24 + i * 30);
+        bay.add(lamp);
+      }
     }
     // Mouth: a heavy rectangular frame flush with the keel.
     for (const s of [-1, 1]) {
@@ -336,8 +354,10 @@ export class ImperialDestroyer {
       end.position.set(0, 0, s * (bayD / 2 + 10));
       bay.add(end);
     }
-    this.hangarLight = new THREE.PointLight(0xffb04a, 9000, 520, 2);
-    this.hangarLight.position.set(0, hangarY - 26, hangarZ);
+    // Inside the throat, with a radius that stops just short of the mouth so
+    // the surrounding keel is not washed amber.
+    this.hangarLight = new THREE.PointLight(0xffc98e, 6000, 200, 2);
+    this.hangarLight.position.set(0, hangarY + 38, hangarZ);
     this.group.add(this.hangarLight);
 
     // Longitudinal keel ribs and grooves. Long straight lines give a hull this
@@ -497,9 +517,9 @@ export class ImperialDestroyer {
     // large they are the single clearest scale cue: the eye counts them.
     {
       const lampGeo = new THREE.SphereGeometry(1.7, 6, 4);
-      const lampMat = emissiveMaterial('isdRunning', '#cfe2ff', 1.5);
+      const lampMat = emissiveMaterial('isdRunning', '#cfe2ff', 1.05);
       const positions: THREE.Vector3[] = [];
-      const rows = 84;
+      const rows = 48;
       for (let i = 0; i < rows; i++) {
         const z = THREE.MathUtils.lerp(BOW_Z + 90, STERN_Z - 40, i / (rows - 1));
         const hw = hullHalfWidth(z);
@@ -519,10 +539,12 @@ export class ImperialDestroyer {
       lamps.name = 'RunningLights';
       this.group.add(lamps);
 
-      // Ventral spotlights that actually light the greebling.
+      // Broad ventral fill. Hung well below the keel so the falloff arrives as
+      // a wash across the whole belly; close in, each one burns a bright pool
+      // into the plating that reads as a lens artefact.
       for (const z of [-420, -160, 120, 400, 620]) {
-        const l = new THREE.PointLight(0xc2d6f2, 9000, 760, 2);
-        l.position.set(0, -keelDepth - 40, z);
+        const l = new THREE.PointLight(0xc2d6f2, 42000, 1700, 2);
+        l.position.set(0, -keelDepth - 190, z);
         this.group.add(l);
       }
     }
@@ -542,7 +564,7 @@ export class ImperialDestroyer {
         scale: 7,
         barrels: 2,
         hullColor: PALETTE.imperialHullDark,
-        boltColor: PALETTE.laserGreen,
+        boltColor: PALETTE.laserRed,
         slew: 0.6,
         name: 'DestroyerTurret',
       });
@@ -606,9 +628,9 @@ export class ImperialDestroyer {
   update(dt: number, elapsed: number): void {
     const flicker = 0.94 + Math.sin(elapsed * 5.1) * 0.03 + Math.sin(elapsed * 13.3) * 0.03;
     const level = this.throttle * flicker;
-    this.engineMat.emissiveIntensity = 0.35 + level * 2.4;
+    this.engineMat.emissiveIntensity = 0.4 + level * 3.2;
     for (const f of this.engineFlares) {
-      (f.material as THREE.MeshBasicMaterial).opacity = 0.26 * level;
+      (f.material as THREE.MeshBasicMaterial).opacity = 0.2 * level;
       f.visible = level > 0.01;
     }
     for (const m of this.plumeMats) m.uniforms.uIntensity.value = 0.42 * level;

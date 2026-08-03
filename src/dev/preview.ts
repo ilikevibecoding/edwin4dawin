@@ -129,6 +129,7 @@ async function build(name: string): Promise<THREE.Object3D> {
 
 const asset = await build(assetName);
 root.add(asset);
+(window as unknown as Record<string, unknown>).__previewAsset = asset;
 
 // Frame the subject.
 const box = new THREE.Box3().setFromObject(asset);

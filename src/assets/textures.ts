@@ -175,33 +175,39 @@ export function panelTexture(opts: PanelOptions = {}): THREE.Texture {
       for (let y = 0; y < size; y++) {
         for (let x = 0; x < size; x++) {
           const i = (y * size + x) * 4;
-          const streak = fbm2(x / 42, y / 340, 3, s) * 0.6 + fbm2(x / 9, y / 90, 2, s + 7) * 0.4;
+          // Streaks are directional but not infinite: an extreme aspect ratio
+          // here tiles into wood grain once the map repeats across a hull.
+          const streak = fbm2(x / 46, y / 150, 3, s) * 0.6 + fbm2(x / 11, y / 64, 2, s + 7) * 0.4;
           const blotch = fbm2(x / 170, y / 170, 4, s + 31);
-          const dirt = (streak * 0.55 + blotch * 0.45 - 0.32) * grime;
+          const dirt = (streak * 0.38 + blotch * 0.62 - 0.32) * grime;
           const k = 1 - Math.max(0, dirt) * 0.72;
+          // The tint is deliberately tiny. Grime covers the whole hull, so a
+          // visible colour bias here reads as "the ship is painted brown"
+          // rather than "the ship is dirty".
           if (cool) {
-            d[i] *= k * 0.985;
-            d[i + 1] *= k * 0.995;
+            d[i] *= k * 0.99;
+            d[i + 1] *= k * 0.997;
             d[i + 2] *= k;
           } else {
             d[i] *= k;
-            d[i + 1] *= k * 0.99;
-            d[i + 2] *= k * 0.972;
+            d[i + 1] *= k * 0.995;
+            d[i + 2] *= k * 0.986;
           }
         }
       }
       g.putImageData(img, 0, 0);
     }
 
-    // Scorch: soft dark radial smudges with a faint warm core.
+    // Scorch: soft radial soot smudges, near-neutral so a tiled hull does not
+    // turn sepia when the map repeats.
     for (let i = 0; i < scorchCount; i++) {
       const x = rng.range(0, size);
       const y = rng.range(0, size);
       const r = rng.range(size * 0.03, size * 0.1);
       const grad = g.createRadialGradient(x, y, 0, x, y, r);
-      grad.addColorStop(0, 'rgba(24,18,14,0.82)');
-      grad.addColorStop(0.42, 'rgba(46,34,26,0.44)');
-      grad.addColorStop(1, 'rgba(60,45,35,0)');
+      grad.addColorStop(0, 'rgba(22,21,21,0.8)');
+      grad.addColorStop(0.42, 'rgba(44,42,41,0.4)');
+      grad.addColorStop(1, 'rgba(58,56,54,0)');
       g.fillStyle = grad;
       g.beginPath();
       g.arc(x, y, r, 0, Math.PI * 2);
@@ -279,7 +285,10 @@ export function corridorWallTexture(seed = 'wall'): THREE.Texture {
     const size = 512;
     const rng = new Rng(seed);
     const { c, g } = makeCanvas(size, size);
-    g.fillStyle = '#e6e4dd';
+    // Held around 0.83 rather than near-white. The corridor is lit from a strip
+    // directly overhead; at a higher albedo every panel clips before the lamp
+    // itself does and the whole set goes flat.
+    g.fillStyle = '#d8d6cf';
     g.fillRect(0, 0, size, size);
 
     const cols = 4;
@@ -320,10 +329,12 @@ export function corridorWallTexture(seed = 'wall'): THREE.Texture {
         const i = (y * size + x) * 4;
         const dirt = fbm2(x / 60, y / 60, 4, s) * 0.5 + fbm2(x / 14, y / 200, 3, s + 3) * 0.5;
         const floorBias = Math.pow(y / size, 2.4) * 0.26;
-        const k = 1 - Math.max(0, dirt - 0.52) * 0.6 - floorBias * 0.4;
+        // Light soiling only. Strong streaks on a moulded plastic wall read as
+        // water damage rather than as a ship in service.
+        const k = 1 - Math.max(0, dirt - 0.58) * 0.34 - floorBias * 0.34;
         d[i] *= k;
-        d[i + 1] *= k * 0.99;
-        d[i + 2] *= k * 0.965;
+        d[i + 1] *= k * 0.995;
+        d[i + 2] *= k * 0.982;
       }
     }
     g.putImageData(img, 0, 0);
@@ -467,6 +478,44 @@ export function starSprite(size = 64): THREE.Texture {
     g.moveTo(6, h); g.lineTo(size - 6, h);
     g.stroke();
     const t = finish(c);
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    return t;
+  });
+}
+
+/**
+ * Engine bell face.
+ *
+ * Used as an emissive map on the flat disc that closes each nozzle. A constant
+ * emissive across the disc blooms into a featureless white coin; grading it
+ * from an incandescent core out to a dim rim keeps the drive reading as a
+ * throat with depth, and leaves the bloom pass something to shape.
+ */
+export function nozzleTexture(size = 128): THREE.Texture {
+  return memo(`nozzle:${size}`, () => {
+    const { c, g } = makeCanvas(size, size);
+    const h = size / 2;
+    const grad = g.createRadialGradient(h, h, 0, h, h, h);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.3, 'rgba(228,242,255,1)');
+    grad.addColorStop(0.62, 'rgba(120,178,240,1)');
+    grad.addColorStop(0.86, 'rgba(38,66,104,1)');
+    grad.addColorStop(1, 'rgba(6,10,18,1)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+    // Faint radial vanes: turbine structure glimpsed inside the throat.
+    g.globalCompositeOperation = 'multiply';
+    g.strokeStyle = 'rgba(120,130,150,1)';
+    g.lineWidth = Math.max(1, size / 64);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      g.beginPath();
+      g.moveTo(h + Math.cos(a) * h * 0.22, h + Math.sin(a) * h * 0.22);
+      g.lineTo(h + Math.cos(a) * h * 0.9, h + Math.sin(a) * h * 0.9);
+      g.stroke();
+    }
+    g.globalCompositeOperation = 'source-over';
+    const t = finish(c, { srgb: true });
     t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
     return t;
   });

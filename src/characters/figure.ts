@@ -293,11 +293,14 @@ export class Figure {
     pathDistance?: number,
     /** Metres per second along that path. */
     pathSpeed?: number,
+    /** Deck height under the figure — non-zero on ramps and platforms. */
+    y = 0,
   ): void {
     const dx = x - this.group.position.x;
     const dz = z - this.group.position.z;
     const dist = Math.hypot(dx, dz);
     this.group.position.x = x;
+    this.group.position.y = y;
     this.group.position.z = z;
     this.navTarget = null;
 

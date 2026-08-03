@@ -24,7 +24,7 @@ import { ImperialDestroyer } from '../ships/imperial-destroyer';
 import { EscapePod } from '../ships/escape-pod';
 import { Corridor, SECTION_LENGTH, CORRIDOR_WIDTH, CORRIDOR_HEIGHT } from '../interior/corridor';
 import { BlastDoor } from '../interior/door';
-import { PodBay } from '../interior/pod-bay';
+import { PodBay, BAY_DEPTH } from '../interior/pod-bay';
 import { BoltSystem } from '../fx/bolts';
 import { SparkSystem, SmokeSystem, DebrisSystem } from '../fx/particles';
 import { ShieldFlashSystem } from '../fx/shield';
@@ -48,6 +48,12 @@ export const CORRIDOR_MARKS = {
 } as const;
 
 export const CORRIDOR_SECTIONS = 15;
+
+/**
+ * Corridor station of the pod bay's centre. The bay's forward wall is flush
+ * with the aft end of the corridor, so the two sets never overlap.
+ */
+export const BAY_STATION = CORRIDOR_SECTIONS * SECTION_LENGTH + BAY_DEPTH / 2;
 
 /**
  * Exterior key rig, in one place so the constructor and `setExteriorMood`
@@ -114,7 +120,8 @@ export class World {
    */
   private interiorFx = new THREE.Group();
   private interiorAmbient: THREE.HemisphereLight;
-  private vaderKey: THREE.PointLight;
+  private vaderKey: THREE.SpotLight;
+  private vaderKeyTarget = new THREE.Object3D();
 
   /* --- cast --- */
   readonly rebels: RebelTrooper[] = [];
@@ -163,21 +170,24 @@ export class World {
     this.exterior.name = 'Exterior';
     scene.add(this.exterior);
 
-    this.keyLight = new THREE.DirectionalLight(0xfff4e6, KEY_BASE);
+    this.keyLight = new THREE.DirectionalLight(0xfff6ec, KEY_BASE);
     this.keyLight.position.copy(this.sunDirection).multiplyScalar(4000);
     this.keyLight.castShadow = false;
     this.exterior.add(this.keyLight);
     // Planetshine from below. Without a strong bounce the destroyer's
     // underside — the shot the whole reveal depends on — is a black wedge.
-    // Nearly neutral: the desert tints it, it does not dye it.
-    this.fillLight = new THREE.DirectionalLight(0xe6ddd2, FILL_BASE);
+    // Held close to neutral: this is the *dominant* light on every belly in
+    // the piece, so any real saturation here turns grey armour into leather.
+    this.fillLight = new THREE.DirectionalLight(0xeceff2, FILL_BASE);
     this.fillLight.position.set(-700, -3000, -1400);
     this.exterior.add(this.fillLight);
     // Cold rim from the opposite side of the sky.
     this.rimLight = new THREE.DirectionalLight(0xa8c6ff, RIM_BASE);
     this.rimLight.position.set(-1800, 900, 2400);
     this.exterior.add(this.rimLight);
-    this.spaceAmbient = new THREE.HemisphereLight(0x66748c, 0x6e6558, AMBIENT_BASE);
+    // Sky half cool, ground half a hair warm — the whole desert cue, and no
+    // more than that.
+    this.spaceAmbient = new THREE.HemisphereLight(0x6b7488, 0x7a7770, AMBIENT_BASE);
     this.exterior.add(this.spaceAmbient);
 
     this.runner = new BlockadeRunner(quality, 'runner');
@@ -220,14 +230,20 @@ export class World {
     this.interior.add(this.blastDoor.group);
 
     this.podBay = new PodBay();
-    this.podBay.group.position.set(0, 0, CORRIDOR_SECTIONS * SECTION_LENGTH + 3.1);
+    this.podBay.group.position.set(0, 0, BAY_STATION);
     this.interior.add(this.podBay.group);
 
-    this.interiorAmbient = new THREE.HemisphereLight(0xbfcadd, 0x2a2d33, 0.55);
+    this.interiorAmbient = new THREE.HemisphereLight(0xbfcadd, 0x2a2d33, 0.42);
     this.interior.add(this.interiorAmbient);
-    this.vaderKey = new THREE.PointLight(0xff3a28, 0, 9, 2);
-    this.vaderKey.position.set(0, 1.95, CORRIDOR_MARKS.troopEntry);
+    // Vader's light is a *back* light, not a fill. A red lamp in the middle of
+    // the corridor turns every white panel pink; one behind him rims the
+    // silhouette and leaves the rest of the set cold, which is the point.
+    this.vaderKey = new THREE.SpotLight(0xff3a28, 0, 6.5, 0.42, 0.8, 1.7);
+    this.vaderKey.position.set(0, 2.35, CORRIDOR_MARKS.troopEntry);
+    this.vaderKeyTarget.position.set(0, 0.9, CORRIDOR_MARKS.troopEntry + 6);
     this.interior.add(this.vaderKey);
+    this.interior.add(this.vaderKeyTarget);
+    this.vaderKey.target = this.vaderKeyTarget;
 
     this.interiorFx.name = 'InteriorEffects';
     this.interiorFx.visible = false;
@@ -250,8 +266,11 @@ export class World {
     this.interiorFx.add(this.interiorDebris.mesh);
 
     this.plans = new DataProjection(quality, 'plans');
-    this.plans.setScale(0.68);
-    this.plans.group.position.set(0.05, 1.22, CORRIDOR_MARKS.transfer - 0.95);
+    this.plans.setScale(0.62);
+    // Off Leia's shoulder rather than in front of her face: the shot has to
+    // read as a person *and* the thing she is carrying, not as a wire sphere
+    // with a white dress behind it.
+    this.plans.group.position.set(0.42, 1.26, CORRIDOR_MARKS.transfer - 0.5);
     this.plans.setReveal(0);
     this.interior.add(this.plans.group);
 
@@ -316,7 +335,7 @@ export class World {
     this.exterior.visible = r === 'exterior';
     this.interior.visible = r === 'interior';
     this.interiorFx.visible = r === 'interior';
-    this.environment?.apply(this.scene, r === 'exterior' ? 'space' : 'interior', r === 'exterior' ? 0.9 : 0.7);
+    this.environment?.apply(this.scene, r === 'exterior' ? 'space' : 'interior', r === 'exterior' ? 0.9 : 0.5);
   }
 
   get currentRegion(): Region {
@@ -535,14 +554,18 @@ export class World {
   setInteriorMood(level: number, vaderPresence: number): void {
     this.corridor.setLightLevel(level);
     this.podBay.setLightLevel(level);
-    this.interiorAmbient.intensity = 0.55 * level * (1 - vaderPresence * 0.3);
-    this.vaderKey.intensity = vaderPresence * 17;
-    // A shift, not a wash: the walls must still read as white panelling.
-    this.corridor.setTint('#ff8b6a', vaderPresence * 0.17);
+    this.interiorAmbient.intensity = 0.42 * level * (1 - vaderPresence * 0.45);
+    this.vaderKey.intensity = vaderPresence * 26;
+    // The barest shift. His weight comes from the corridor dimming and the
+    // rim behind him, not from repainting the walls.
+    this.corridor.setTint('#ff9b7a', vaderPresence * 0.07);
   }
 
+  /** Keeps the back light 2.2 m behind Vader as he walks up the corridor. */
   setVaderKeyPosition(worldZ: number): void {
-    this.vaderKey.position.z = worldZ - INTERIOR_ORIGIN.z;
+    const z = worldZ - INTERIOR_ORIGIN.z;
+    this.vaderKey.position.z = z - 1.7;
+    this.vaderKeyTarget.position.z = z + 1.2;
   }
 
   /* ----------------------------------------------------------- update */

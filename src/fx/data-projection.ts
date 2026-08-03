@@ -120,20 +120,31 @@ export class DataProjection {
     );
     this.station.add(wire);
 
-    // Equatorial construction trench.
-    const trench = new THREE.Mesh(new THREE.TorusGeometry(1.005, 0.052, 6, 64), makeHoloMat(1.15));
+    // Equatorial construction trench. This and the dish are the two features
+    // that make the readout legible as a *station* at a glance, so both are
+    // drawn well above the value of the shell they sit on.
+    const trench = new THREE.Mesh(new THREE.TorusGeometry(1.01, 0.075, 8, 72), makeHoloMat(1.8));
     trench.rotation.x = Math.PI / 2;
     this.station.add(trench);
-    const trenchRail = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints(
-        Array.from({ length: 65 }, (_, i) => {
-          const a = (i / 64) * Math.PI * 2;
-          return new THREE.Vector3(Math.cos(a) * 1.045, 0, Math.sin(a) * 1.045);
-        }),
-      ),
-      lineMat(0.85),
-    );
-    this.station.add(trenchRail);
+    for (const r of [1.055, 0.99]) {
+      const rail = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(
+          Array.from({ length: 97 }, (_, i) => {
+            const a = (i / 96) * Math.PI * 2;
+            return new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
+          }),
+        ),
+        lineMat(1),
+      );
+      this.station.add(rail);
+    }
+    // Cross-ties across the trench, every few degrees.
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      const tie = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.09, 0.012), makeHoloMat(0.9));
+      tie.position.set(Math.cos(a) * 1.02, 0, Math.sin(a) * 1.02);
+      this.station.add(tie);
+    }
 
     // Recessed focusing dish on the upper hemisphere.
     const dish = new THREE.Mesh(
@@ -144,7 +155,7 @@ export class DataProjection {
     dish.rotation.x = -0.72;
     dish.scale.set(1, 0.5, 1);
     this.station.add(dish);
-    const dishRim = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.014, 5, 36), makeHoloMat(1));
+    const dishRim = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.03, 6, 44), makeHoloMat(1.7));
     dishRim.position.copy(dish.position);
     dishRim.rotation.set(-0.72 + Math.PI / 2, 0, 0);
     this.station.add(dishRim);

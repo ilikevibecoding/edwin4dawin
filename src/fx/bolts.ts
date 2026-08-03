@@ -55,12 +55,15 @@ class BoltPool {
   private up = new THREE.Vector3(0, 1, 0);
 
   constructor(color: string, capacity: number) {
-    // A capsule aligned to +Y; we rotate it onto the flight direction.
-    const geo = new THREE.CapsuleGeometry(1, 1, 3, 8);
+    // A unit rod aligned to +Y, one metre long and one metre across, so the
+    // per-bolt scale is exactly (radius, length, radius) in metres. A capsule
+    // would couple the two: its cap radius scales with the length as well, and
+    // a 2 m bolt ends up five metres long and as thick as a lamp post.
+    const geo = new THREE.CylinderGeometry(0.42, 0.5, 1, 8, 1, false);
     // Bright enough to bloom, but only lightly whitened: pushing the core all
     // the way to white throws away the colour that tells you who is shooting.
-    const mat = emissiveMaterial(`bolt-${color}`, '#ffffff', 2.6, { toneMapped: false }).clone();
-    mat.emissive = new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.3);
+    const mat = emissiveMaterial(`bolt-${color}`, '#ffffff', 2.1, { toneMapped: false }).clone();
+    mat.emissive = new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.2);
     this.mesh = new THREE.InstancedMesh(geo, mat, capacity);
     this.mesh.frustumCulled = false;
     this.mesh.name = `Bolts-${color}`;
@@ -137,7 +140,7 @@ class BoltPool {
       this.quat.setFromRotationMatrix(
         new THREE.Matrix4().lookAt(b.pos, camera.position, b.dir),
       );
-      this.scale.set(b.radius * 5.0, b.length * 1.5, 1);
+      this.scale.set(b.radius * 4.0, b.length * 1.35, 1);
       this.matrix.compose(b.pos, this.quat, this.scale);
       this.glow.setMatrixAt(i, this.matrix);
       dirty = true;

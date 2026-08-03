@@ -41,7 +41,7 @@ export class CorridorSection {
     const floorMat = corridorFloorMaterial();
     const rib = paintMaterial('corridorRib', '#cfcdc6', 0.5, 0.08);
     const dark = metalMaterial('corridorDark', '#41454b', 0.7, 0.5);
-    this.lampMat = emissiveMaterial('corridorLamp', '#f2f6ff', 1.4).clone();
+    this.lampMat = emissiveMaterial('corridorLamp', '#f2f6ff', 1.1).clone();
 
     const hw = CORRIDOR_WIDTH / 2;
     const h = CORRIDOR_HEIGHT;
@@ -156,7 +156,7 @@ export class CorridorSection {
   }
 
   setLightLevel(v: number): void {
-    this.lampMat.emissiveIntensity = 1.4 * v;
+    this.lampMat.emissiveIntensity = 1.1 * v;
   }
 
   update(_dt: number, _elapsed: number): void {
@@ -213,7 +213,7 @@ export class Corridor {
       // One point light every other section keeps the count sane while still
       // giving the corridor pools of light and shadow.
       if (i % 2 === 0 || quality.level === 'high') {
-        const light = new THREE.PointLight(0xf0f5ff, 9, 11, 2);
+        const light = new THREE.PointLight(0xf0f5ff, 6.2, 10, 2);
         light.position.set(0, CORRIDOR_HEIGHT - 0.25, i * SECTION_LENGTH + SECTION_LENGTH / 2);
         light.castShadow = quality.shadows && i % 4 === 0;
         if (light.castShadow) {
@@ -226,25 +226,28 @@ export class Corridor {
       }
     }
 
-    /* alarm strobes at the ends and midpoint, in shallow wall housings so they
-       read as fittings rather than as floating red beads */
+    /* Alarm lamps: a flush red lens in a shallow bezel, set into the wall just
+       under the shoulder. Anything that stands proud of the panelling reads as
+       a floating bead the moment the camera passes within a metre of it. */
     const alarmMat = emissiveMaterial('alarm', '#ff3b25', 0).clone();
-    const housingMat = metalMaterial('alarmHousing', '#5a5f66', 0.6, 0.4);
+    const bezelMat = metalMaterial('alarmBezel', '#5a5f66', 0.6, 0.4);
     for (const z of [SECTION_LENGTH * 1.5, this.length * 0.5, this.length - SECTION_LENGTH * 1.5]) {
       for (const s of [-1, 1]) {
         const m = alarmMat.clone();
-        const y = CORRIDOR_HEIGHT - 0.52;
-        const shell = new THREE.Mesh(roundedBox(0.09, 0.16, 0.19, 0.03), housingMat);
-        shell.position.set(s * (CORRIDOR_WIDTH / 2 - 0.03), y, z);
-        this.group.add(shell);
-        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.5), m);
-        dome.position.set(s * (CORRIDOR_WIDTH / 2 - 0.09), y, z);
-        dome.rotation.z = s * Math.PI * 0.5;
-        this.group.add(dome);
+        const y = CORRIDOR_HEIGHT - 0.62;
+        const x = s * (CORRIDOR_WIDTH / 2 - 0.012);
+        const bezel = new THREE.Mesh(roundedBox(0.03, 0.11, 0.2, 0.02), bezelMat);
+        bezel.position.set(x, y, z);
+        this.group.add(bezel);
+        const lens = new THREE.Mesh(roundedBox(0.016, 0.06, 0.15, 0.012), m);
+        lens.position.set(s * (CORRIDOR_WIDTH / 2 - 0.024), y, z);
+        this.group.add(lens);
         this.alarmMats.push(m);
       }
-      const l = new THREE.PointLight(0xff4a2e, 0, 5.5, 2);
-      l.position.set(0, CORRIDOR_HEIGHT - 0.6, z);
+      // Short throw: the strobe should pick out the panelling beside it, not
+      // dye the whole arch salmon.
+      const l = new THREE.PointLight(0xff4a2e, 0, 2.6, 2);
+      l.position.set(0, CORRIDOR_HEIGHT - 0.7, z);
       this.group.add(l);
       this.alarmLights.push(l);
     }
@@ -315,15 +318,15 @@ export class Corridor {
       // Damaged lamps stutter; healthy ones sit still.
       const stutter =
         this.alarm > 0.3 && Math.sin(elapsed * (11 + seed * 0.4) + seed) > 0.86 ? 0.25 : 1;
-      this.lampMats[i].emissiveIntensity = 1.5 * this.lightLevel * stutter;
+      this.lampMats[i].emissiveIntensity = 1.15 * this.lightLevel * stutter;
     }
-    const base = 9 * this.lightLevel;
+    const base = 6.2 * this.lightLevel;
     for (const l of this.lights) l.intensity = base;
 
     // The strobe is an accent near its own housing, not a wash: at full
     // intensity it used to turn every white panel in the corridor pink.
     const strobe = this.alarm * (0.5 + 0.5 * Math.sin(elapsed * 4.2));
-    for (const m of this.alarmMats) m.emissiveIntensity = 0.35 + strobe * 1.35;
-    for (const l of this.alarmLights) l.intensity = strobe * 2.6;
+    for (const m of this.alarmMats) m.emissiveIntensity = 0.3 + strobe * 1.1;
+    for (const l of this.alarmLights) l.intensity = strobe * 1.5;
   }
 }

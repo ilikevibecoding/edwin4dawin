@@ -39,17 +39,20 @@ function buildSpaceScene(sunDir: THREE.Vector3, planetDir: THREE.Vector3): THREE
           vec3 d = normalize(vDir);
           // Deep space floor. Lifted off pure black so that metals facing away
           // from every source still resolve as grey rather than as holes.
-          vec3 col = vec3(0.030, 0.034, 0.044);
+          vec3 col = vec3(0.032, 0.036, 0.046);
           // Faint cool galactic band across the sky.
           col += vec3(0.05, 0.062, 0.095) * pow(max(0.0, 1.0 - abs(d.y) * 2.4), 3.0);
-          // Bounce from the planet. Desaturated on purpose: a saturated ochre
-          // hemisphere turns every grey hull in the piece brown.
+          // Bounce from the planet. Almost neutral by design: this term covers
+          // the whole lower hemisphere, so even a mildly ochre value dyes every
+          // grey hull in the piece brown. The desert reads in the warm rim
+          // below, not in the broad fill.
           float p = max(0.0, dot(d, uPlanet));
-          col += vec3(0.34, 0.30, 0.26) * pow(p, 1.5) * 0.95;
+          col += vec3(0.315, 0.310, 0.300) * pow(p, 1.5) * 0.95;
+          col += vec3(0.10, 0.075, 0.045) * pow(p, 7.0);
           // The primary star: small, extremely bright.
           float s = max(0.0, dot(d, uSun));
-          col += vec3(1.0, 0.95, 0.88) * pow(s, 900.0) * 34.0;
-          col += vec3(0.62, 0.60, 0.56) * pow(s, 18.0) * 0.55;
+          col += vec3(1.0, 0.97, 0.93) * pow(s, 900.0) * 34.0;
+          col += vec3(0.62, 0.61, 0.59) * pow(s, 18.0) * 0.55;
           gl_FragColor = vec4(col, 1.0);
         }
       `,

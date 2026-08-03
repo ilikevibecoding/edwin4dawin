@@ -100,6 +100,8 @@ export function loftedHull(
   radialSegments = 24,
   lengthSegments = 40,
   squash = 1,
+  /** Restricts the loft to a span of t, for caps and collars on the same form. */
+  range: [number, number] = [0, 1],
 ): THREE.BufferGeometry {
   const positions: number[] = [];
   const normals: number[] = [];
@@ -107,7 +109,7 @@ export function loftedHull(
   const indices: number[] = [];
 
   for (let i = 0; i <= lengthSegments; i++) {
-    const t = i / lengthSegments;
+    const t = range[0] + (i / lengthSegments) * (range[1] - range[0]);
     const r = radius * Math.max(0.0001, profile(t));
     const z = -length / 2 + t * length;
     for (let j = 0; j <= radialSegments; j++) {
