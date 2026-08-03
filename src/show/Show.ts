@@ -423,14 +423,16 @@ export class Show {
     }
     stage.vader.saberActive = 0;
 
-    // Droid attention.
+    // Droid attention. During the handover the dome is turned part way toward
+    // the lens: pointed squarely at the princess the photoreceptor is hidden
+    // and the droid is an anonymous white drum.
     stage.r2.domeTarget =
-      t < 300 ? 0.5 : t < 322 ? -0.7 : t < 336 ? 0.2 : t < 344 ? -1.2 : 0;
+      t < 300 ? 0.5 : t < 312 ? -0.7 : t < 332 ? -0.95 : t < 344 ? -1.2 : 0;
     stage.r2.projecting = smoothstep(311, 314, t) * (1 - smoothstep(320, 323, t));
     stage.leia.lookAtTarget =
-      t > 296 && t < 319
+      t > 296 && t < 311
         ? ip(-3.4, 1.7, 18.5, new THREE.Vector3())
-        : t >= 319 && t < 332
+        : t >= 311 && t < 326
           ? worldOf(stage.r2.root.position, 0, 0.85, 0)
           : t >= 344
             ? ip(0, 1.5, 0, new THREE.Vector3())
@@ -458,12 +460,22 @@ export class Show {
 
     const presence = smoothstep(VADER_ENTRY - 4, VADER_ENTRY + 4, t) * (1 - smoothstep(350, 362, t));
     corridor.vaderPresence = presence;
-    stage.vaderKey.intensity = presence * 16;
-    stage.vaderKey.position.copy(stage.vader.root.position).add(new THREE.Vector3(0, 2.1, -2.2));
+    // Two lamps travel with him: a cold rim from behind that cuts his outline
+    // out of the dark of the tube, and a very low frontal fill so the helmet
+    // has a shape. Without the fill he is a black hole with a cape.
+    stage.vaderKey.intensity = presence * 26;
+    stage.vaderKey.position.copy(stage.vader.root.position).add(new THREE.Vector3(0.9, 2.65, -1.7));
+    stage.vaderFill.intensity = presence * 7;
+    stage.vaderFill.position.copy(stage.vader.root.position).add(new THREE.Vector3(-0.8, 2.15, 2.0));
 
+    // The boarding lamp sits well up the tube. Left at the door lip it ended
+    // up a hand's breadth from his chest and blew a lantern into the costume.
     stage.boardingGlow.intensity =
       smoothstep(222, BREACH_TIME, t) * 5 * (1 - smoothstep(BREACH_TIME + 12, BREACH_TIME + 26, t)) +
-      smoothstep(BREACH_TIME, BREACH_TIME + 1, t) * 6 * (1 - smoothstep(BREACH_TIME + 20, 300, t));
+      smoothstep(BREACH_TIME, BREACH_TIME + 1, t) *
+        6 *
+        (1 - smoothstep(BREACH_TIME + 20, 300, t)) *
+        (1 - presence * 0.75);
 
     corridor.podBayDoor.open = smoothstep(340, 343, t) * (1 - smoothstep(350, 351.4, t));
     corridor.vestibuleDoor.open = smoothstep(286, 288.6, t) * (1 - smoothstep(291, 293, t));
@@ -490,6 +502,18 @@ export class Show {
       if (t > 206) {
         stage.fx.emitSparkShower(ip(1.42, 2.42, -9.4, _v), 0.55, dt);
         stage.fx.emitSparkShower(ip(-1.44, 2.5, 2.6, _v), 0.35, dt);
+      }
+      // The cutting torch, travelling anticlockwise round the door plate. At
+      // twenty metres a hairline of emissive shader is invisible; the spray of
+      // sparks is what actually sells the beat from the defenders' end.
+      if (t > 222.5 && t < BREACH_TIME) {
+        const cut = clamp((t - 222) / (BREACH_TIME - 0.4 - 222), 0, 1);
+        const ang = cut * Math.PI * 2 - Math.PI;
+        stage.fx.emitSparkShower(
+          ip(Math.cos(ang) * 1.34, 1.36 + Math.sin(ang) * 1.2, -14.78, _v),
+          1.6 + cut * 2.4,
+          dt,
+        );
       }
       if (t > 300 && t < 356) stage.fx.emitSmoke(ip(-1.2, 0.25, 6.5, _v), 2.2, dt);
     }

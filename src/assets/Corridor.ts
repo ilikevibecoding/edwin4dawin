@@ -143,8 +143,11 @@ export class CorridorSet {
       lightPanels.setMatrixAt(i, m);
 
       if (i % 2 === 0) {
-        const light = new THREE.PointLight(0xfff2dc, 6.5, 9.5, 2);
-        light.position.set(0, CORRIDOR_HEIGHT - 0.25, z);
+        // Held well clear of the ceiling plane. Sitting a quarter of a metre
+        // under it, the inverse-square falloff blew a white hole in the
+        // ceiling around every fitting and the nearest one owned the frame.
+        const light = new THREE.PointLight(0xfff2dc, 5.4, 10.5, 2);
+        light.position.set(0, CORRIDOR_HEIGHT - 0.62, z);
         light.castShadow = quality.shadows && i % 4 === 0;
         if (light.shadow) {
           light.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
@@ -154,7 +157,7 @@ export class CorridorSet {
         }
         this.root.add(light);
         this.ceilingLights.push(light);
-        this.baseLightIntensity.push(6.5);
+        this.baseLightIntensity.push(5.4);
       }
     }
     walls.instanceMatrix.needsUpdate = true;
@@ -176,11 +179,14 @@ export class CorridorSet {
         wallSection(vestStart, 15.3, VESTIBULE_HALF_WIDTH, 1),
         wallSection(18.7, vestEnd, VESTIBULE_HALF_WIDTH, 1),
         boxAt(0.24, 0.9, 3.4, VESTIBULE_HALF_WIDTH - 0.05, CORRIDOR_HEIGHT - 0.15, 17),
+        // The ceiling has to reach past where the walls taper in at the top
+        // (halfWidth - 0.34) or there is an open slot along both eaves and the
+        // camera looks straight out of the set into black.
         parametricSurface(
           2,
           4,
           (u, v, out) => {
-            out.set((v - 0.5) * VESTIBULE_HALF_WIDTH * 1.7, CORRIDOR_HEIGHT + 0.3, vestStart + u * vestLen);
+            out.set((v - 0.5) * (VESTIBULE_HALF_WIDTH * 2 - 0.4), CORRIDOR_HEIGHT + 0.3, vestStart + u * vestLen);
           },
           [4, 3],
           false,
@@ -232,11 +238,11 @@ export class CorridorSet {
 
     for (let i = 0; i < 3; i++) {
       const z = vestStart + 2.6 + i * 4;
-      const light = new THREE.PointLight(0xfff0d8, 7.5, 12, 2);
-      light.position.set(0, CORRIDOR_HEIGHT + 0.05, z);
+      const light = new THREE.PointLight(0xfff0d8, 6.4, 13, 2);
+      light.position.set(0, CORRIDOR_HEIGHT - 0.35, z);
       this.root.add(light);
       this.ceilingLights.push(light);
-      this.baseLightIntensity.push(7.5);
+      this.baseLightIntensity.push(6.4);
       const panel = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.8), this.lightMat);
       panel.rotation.x = Math.PI / 2;
       panel.position.set(0, CORRIDOR_HEIGHT + 0.28, z);
@@ -244,9 +250,12 @@ export class CorridorSet {
     }
 
     // ------------------------------------------------------------- doors
+    // Unrotated. The door authors its cut seam, its inner glow, its rim light
+    // and the direction the plate flies on local +Z; turned to face down the
+    // passage every one of those ended up behind the plate, inside the
+    // boarding tube, where the defenders could not see any of it.
     this.breachDoor = new BlastDoor(3.0, 2.72);
     this.breachDoor.root.position.set(0, 0, -15);
-    this.breachDoor.root.rotation.y = Math.PI; // faces down the corridor
     this.root.add(this.breachDoor.root);
 
     // Boarding tube on the far side of the door. Without it the breached
@@ -292,31 +301,78 @@ export class CorridorSet {
     this.root.add(this.vestibuleDoor.root);
 
     // --------------------------------------------------------- pod alcove
-    const BAY_X = VESTIBULE_HALF_WIDTH + 2.55;
+    // Sized so the pod sits in its cradle against the outboard wall with a
+    // clear metre of deck on the inboard side. When the bay hugged the hull
+    // the pod filled the doorway edge to edge and read as a wall, not a boat.
+    const BAY_X = VESTIBULE_HALF_WIDTH + 3.0;
+    const BAY_HEIGHT = 3.6;
     const bay = new THREE.Group();
     bay.position.set(BAY_X, 0, 17);
     this.root.add(bay);
     const bayShell = new THREE.Mesh(
       mergeParts([
-        boxAt(5.4, 0.2, 4.6, 0, -0.1, 0),
-        boxAt(5.4, 0.2, 4.6, 0, CORRIDOR_HEIGHT + 0.1, 0),
-        boxAt(0.2, CORRIDOR_HEIGHT, 4.6, 2.6, CORRIDOR_HEIGHT / 2, 0),
-        boxAt(5.4, CORRIDOR_HEIGHT, 0.2, 0, CORRIDOR_HEIGHT / 2, -2.2),
-        boxAt(5.4, CORRIDOR_HEIGHT, 0.2, 0, CORRIDOR_HEIGHT / 2, 2.2),
+        boxAt(6.2, 0.2, 6.6, 0, -0.1, 0),
+        boxAt(6.2, 0.2, 6.6, 0, BAY_HEIGHT + 0.1, 0),
+        boxAt(0.2, BAY_HEIGHT, 6.6, 3.1, BAY_HEIGHT / 2, 0),
+        boxAt(6.2, BAY_HEIGHT, 0.2, 0, BAY_HEIGHT / 2, -3.2),
+        boxAt(6.2, BAY_HEIGHT, 0.2, 0, BAY_HEIGHT / 2, 3.2),
+        // Fill the strip of vestibule wall above the shorter doorway.
+        boxAt(0.24, BAY_HEIGHT - CORRIDOR_HEIGHT, 6.6, -3.0, (BAY_HEIGHT + CORRIDOR_HEIGHT) / 2, 0),
       ]),
       M.corridorWall,
     );
     bay.add(bayShell);
-    const bayFloor = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 4.6), M.corridorFloor);
+    const bayFloor = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 6.6), M.corridorFloor);
     bayFloor.rotation.x = -Math.PI / 2;
     bayFloor.position.y = 0.005;
     bayFloor.receiveShadow = true;
     bay.add(bayFloor);
-    const bayLight = new THREE.PointLight(0xffd9a0, 6, 8, 2);
-    bayLight.position.set(0, 2.5, 0);
+
+    // Launch cradle: rail, saddles and a boarding step, so the pod is held by
+    // something rather than hanging in the middle of a white room.
+    const cradle = new THREE.Mesh(
+      mergeParts([
+        boxAt(3.9, 0.18, 0.34, 0.85, 0.09, -1.0),
+        boxAt(3.9, 0.18, 0.34, 0.85, 0.09, 1.0),
+        boxAt(0.5, 0.5, 2.5, -0.35, 0.28, 0),
+        boxAt(0.5, 0.5, 2.5, 1.95, 0.28, 0),
+        // Boarding stair, tucked into the aft corner. Forward of the doorway
+        // it stood exactly where the camera comes into the bay.
+        boxAt(1.4, 0.4, 1.5, -1.5, 0.2, 2.1),
+        boxAt(1.0, 0.38, 1.5, -1.3, 0.59, 2.1),
+        boxAt(0.1, 0.9, 1.5, -2.15, 0.85, 2.1),
+      ]),
+      M.corridorTrim,
+    );
+    cradle.castShadow = true;
+    cradle.receiveShadow = true;
+    bay.add(cradle);
+
+    // Bay status panel by the doorway, so the room has a purpose on screen.
+    const bayPanel = new THREE.Mesh(
+      mergeParts([boxAt(0.16, 0.7, 1.0, -2.9, 1.5, 2.3), boxAt(0.1, 0.16, 0.9, -2.78, 2.05, 2.3)]),
+      M.corridorTrim,
+    );
+    bay.add(bayPanel);
+    const bayPanelMat = new THREE.MeshBasicMaterial({
+      map: consoleTexture('bay', 'amber'),
+      toneMapped: false,
+    });
+    this.consoleMats.push(bayPanelMat);
+    const bayScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.5), bayPanelMat);
+    bayScreen.position.set(-2.81, 1.56, 2.3);
+    bayScreen.rotation.y = Math.PI / 2;
+    bay.add(bayScreen);
+
+    const bayLight = new THREE.PointLight(0xffd9a0, 7, 9, 2);
+    bayLight.position.set(0, 3.1, 0);
     bay.add(bayLight);
     this.ceilingLights.push(bayLight);
-    this.baseLightIntensity.push(6);
+    this.baseLightIntensity.push(7);
+    const bayLightPanel = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.7), this.lightMat);
+    bayLightPanel.rotation.x = Math.PI / 2;
+    bayLightPanel.position.set(0, BAY_HEIGHT - 0.03, 0);
+    bay.add(bayLightPanel);
     this.anchors.podBay = anchor(this.root, 'podBay', BAY_X, 0, 17);
 
     // -------------------------------------------------------- consoles
@@ -466,7 +522,7 @@ export class CorridorSet {
     this.anchors.corridorNear = anchor(this.root, 'corridorNear', 0, 1.5, 4);
     this.anchors.vestibuleCenter = anchor(this.root, 'vestibuleCenter', 0, 1.5, 15);
     this.anchors.vestibuleStern = anchor(this.root, 'vestibuleStern', 0, 1.5, 21);
-    this.anchors.podHatch = anchor(this.root, 'podHatchInterior', VESTIBULE_HALF_WIDTH + 2.55, 1.1, 17);
+    this.anchors.podHatch = anchor(this.root, 'podHatchInterior', BAY_X, 1.1, 17);
   }
 
   update(t: number, dt: number): void {
@@ -488,7 +544,7 @@ export class CorridorSet {
       l.color.setRGB(1 - this.vaderPresence * 0.2, 0.95 - this.vaderPresence * 0.04, 0.86 + this.vaderPresence * 0.14);
     });
 
-    this.lightMat.color.setRGB(0.78 * dim * flick, 0.76 * dim * flick, 0.72 * dim * flick);
+    this.lightMat.color.setRGB(0.66 * dim * flick, 0.645 * dim * flick, 0.61 * dim * flick);
     this.hazeMat.uniforms.time.value = t;
     this.hazeMat.uniforms.density.value = 0.03 + alert * 0.045 + this.vaderPresence * 0.035;
     this.tubeLight.intensity = 1.2 + this.breachProgress * 3.4;

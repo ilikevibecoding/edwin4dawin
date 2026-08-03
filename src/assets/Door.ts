@@ -53,8 +53,13 @@ export class BlastDoor {
       boxAt(width - 0.7, 0.1, 0.24, 0, height * 0.34, 0.02),
       boxAt(0.14, height - 0.5, 0.24, -width * 0.34, height / 2, 0.02),
       boxAt(0.14, height - 0.5, 0.24, width * 0.34, height / 2, 0.02),
+      // Centre join and dog-latches, so the slab is visibly a door.
+      boxAt(0.1, height - 0.12, 0.26, 0, height / 2, 0.03),
+      boxAt(0.5, 0.22, 0.3, -width * 0.17, height * 0.5, 0.04),
+      boxAt(0.5, 0.22, 0.3, width * 0.17, height * 0.5, 0.04),
+      boxAt(width - 0.9, 0.16, 0.26, 0, height * 0.86, 0.02),
     ]);
-    this.plate = new THREE.Mesh(plateGeo, M.corridorPanel);
+    this.plate = new THREE.Mesh(plateGeo, M.bulkhead);
     this.plate.castShadow = true;
     this.plate.receiveShadow = true;
     this.root.add(this.plate);
@@ -89,13 +94,16 @@ export class BlastDoor {
         void main() {
           // Distance to the plate border in normalised units.
           float border = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
-          float ring = smoothstep(0.045, 0.0, border);
+          float ring = smoothstep(0.05, 0.0, border);
+          // Heat bleeding inboard of the cut, so the line has a body and not
+          // just a hairline that vanishes at eleven metres.
+          float bleed = smoothstep(0.2, 0.0, border) * 0.35;
           // Angle around the plate centre drives the travelling cut.
           vec2 d = vUv - 0.5;
           float ang = (atan(d.y, d.x) + 3.14159265) / 6.2831853;
           float cut = step(ang, progress);
           float hot = exp(-abs(ang - progress) * 60.0);
-          float a = ring * (cut * 0.75 + hot * 1.4);
+          float a = (ring + bleed * cut) * (cut * 0.8 + hot * 1.5);
           a *= 0.85 + 0.15 * sin(time * 45.0);
           gl_FragColor = vec4(color * a * 2.2, a);
         }

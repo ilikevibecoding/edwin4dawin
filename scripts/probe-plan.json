@@ -1,7 +1,10 @@
 [
-  { "name": "f1-enter", "time": 83 },
-  { "name": "f2-profile", "time": 122 },
-  { "name": "f3-underbelly", "time": 198 },
-  { "name": "f4-vader", "time": 274 },
-  { "name": "f5-tractor", "time": 184 }
+  { "name": "h1-door-glow", "time": 231 },
+  { "name": "h2-vader", "time": 275 },
+  { "name": "h3-vader-walk", "time": 286 },
+  { "name": "h4-plans", "time": 308 },
+  { "name": "h5-transfer", "time": 317 },
+  { "name": "h6-droids", "time": 338 },
+  { "name": "h7-podbay", "time": 347 },
+  { "name": "h8-podbay-late", "time": 351 }
 ]

@@ -297,9 +297,12 @@ export function buildShots(stage: Stage): Shot[] {
     handheld: 0.004,
     apply: (ctx, pose) => {
       const k = easeInOut(ctx.progress);
-      ip(0, 1.62, lerp(9.4, 5.2, k), pose.position);
-      ip(0, 1.42, -14.6, pose.target);
-      pose.fov = lerp(52, 46, k);
+      // Just above head height at the vestibule mouth. Any lower and the
+      // nearest crewman's shoulders crop the top of frame; from here the
+      // whole run of the passage and everyone standing in it is legible.
+      ip(0, 1.96, lerp(8.9, 7.8, k), pose.position);
+      ip(0, 1.3, -14.6, pose.target);
+      pose.fov = lerp(52, 47, k);
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
       pose.dof = 0;
@@ -314,14 +317,20 @@ export function buildShots(stage: Stage): Shot[] {
     handheld: 0.008,
     apply: (ctx, pose) => {
       const k = easeInOut(ctx.progress);
-      ip(0.92, 1.52, lerp(-1.4, -3.4, k), pose.position);
-      ip(-0.1, 1.32, -14.8, pose.target);
-      pose.fov = 40;
+      // Behind the rearmost station, looking down the firing line at the door.
+      // Placed inside the line the two nearest defenders stood a metre off the
+      // lens and the door — the thing the shot is about — was a stamp.
+      ip(0.45, 1.5, lerp(7.6, 6.6, k), pose.position);
+      ip(-0.05, 1.32, -14.85, pose.target);
+      // Squeezing to a long lens over the shot. At forty degrees the door is
+      // seventy pixels across at twenty metres and the cut line — the entire
+      // subject of the beat — is smaller than the grain.
+      pose.fov = lerp(42, 25, k);
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
       pose.dof = 0.4;
-      pose.focus = 12;
-      pose.focusRange = 14;
+      pose.focus = 20;
+      pose.focusRange = 18;
     },
   });
 
@@ -396,8 +405,11 @@ export function buildShots(stage: Stage): Shot[] {
     },
   });
 
-  // Low, centred on the doorway: he fills it before he moves. The camera sits
-  // between the two rear trooper stations so nobody crosses the lens.
+  // Low and hard against the port wall, forward of every trooper station, so
+  // the lens is looking back into the breached doorway with nobody between it
+  // and him. Shot from behind the line instead, the two nearest suits of white
+  // armour stand a metre off the lens and dwarf the figure the shot is about —
+  // perspective, not lighting, is what was burying him.
   add({
     id: 'corridor.vader',
     label: 'Arrival',
@@ -405,24 +417,19 @@ export function buildShots(stage: Stage): Shot[] {
     end: VADER_ENTRY + 14,
     handheld: 0.004,
     apply: (ctx, pose) => {
-      // Most of the move happens in the first two seconds, so he has weight
-      // from the moment he clears the doorway rather than at the end of the
-      // shot. The long lens keeps the flanking troopers outside the frame:
-      // white armour in the near foreground dwarfs anything behind it.
       const k = easeOutCubic(ctx.progress);
       const vz = stage.vader.root.position.z;
-      // Held aft of every trooper station and pulled in on a long lens. Put
-      // the lens between them and two suits of white armour crop the frame
-      // either side and dwarf the one figure the shot is about.
-      const camZ = lerp(-2.4, -4.8, k);
-      ip(0.0, lerp(0.74, 0.88, k), camZ, pose.position);
-      ip(0, lerp(1.34, 1.52, k), vz + 0.25, pose.target);
-      pose.fov = lerp(35, 22, k);
+      const camZ = lerp(-11.5, -12.7, k);
+      ip(lerp(-1.5, -1.4, k), lerp(0.98, 0.78, k), camZ, pose.position);
+      // Tilting up at him from below the belt is what gives the entrance its
+      // height; the target sits at chest level and the camera under it.
+      ip(-0.15, lerp(1.28, 1.02, k), vz + 0.3, pose.target);
+      pose.fov = lerp(48, 41, k);
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
-      pose.dof = 0.45;
-      pose.focus = Math.abs(vz - camZ);
-      pose.focusRange = 7;
+      pose.dof = 0.4;
+      pose.focus = Math.max(1.4, Math.abs(vz - camZ));
+      pose.focusRange = 6;
     },
   });
 
@@ -436,14 +443,17 @@ export function buildShots(stage: Stage): Shot[] {
     apply: (ctx, pose) => {
       const vz = stage.vader.root.position.z;
       const k = ctx.progress;
-      ip(1.24, 1.46, vz + lerp(4.6, 3.6, k), pose.position);
-      ip(0, 1.58, vz, pose.target);
-      pose.fov = 42;
+      // Retreating ahead of him down the centre line. On the axis the flanking
+      // troopers fall outside a forty-degree frame until they are two metres
+      // off, so they sweep through the edges rather than blocking the lens.
+      ip(0, lerp(0.82, 0.7, k), vz + lerp(3.6, 3.2, k), pose.position);
+      ip(0, 1.42, vz, pose.target);
+      pose.fov = 40;
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
       pose.dof = 0.35;
-      pose.focus = 4.4;
-      pose.focusRange = 7;
+      pose.focus = 3.4;
+      pose.focusRange = 6;
     },
   });
 
@@ -469,6 +479,9 @@ export function buildShots(stage: Stage): Shot[] {
     },
   });
 
+  // Inboard of the alcove looking back at it, so the projection sits left of
+  // frame and the princess right of it in three-quarter profile. Shot from
+  // directly behind her the schematic was legible and she was a hairstyle.
   add({
     id: 'plans.console',
     label: 'The plans unfold',
@@ -477,14 +490,14 @@ export function buildShots(stage: Stage): Shot[] {
     handheld: 0.006,
     apply: (ctx, pose) => {
       const k = easeInOut(ctx.progress);
-      ip(lerp(-0.55, -1.15, k), lerp(1.72, 1.62, k), lerp(20.5, 19.9, k), pose.position);
-      ip(-3.0, 1.78, 18.5, pose.target);
-      pose.fov = lerp(40, 34, k);
+      ip(lerp(-0.1, -0.62, k), lerp(1.7, 1.62, k), lerp(16.4, 16.9, k), pose.position);
+      ip(-2.9, 1.68, 18.9, pose.target);
+      pose.fov = lerp(42, 38, k);
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
-      pose.dof = 0.55;
-      pose.focus = 2.3;
-      pose.focusRange = 3.2;
+      pose.dof = 0.45;
+      pose.focus = 3.4;
+      pose.focusRange = 4.5;
     },
   });
 
@@ -496,16 +509,16 @@ export function buildShots(stage: Stage): Shot[] {
     handheld: 0.005,
     apply: (ctx, pose) => {
       const k = easeInOut(ctx.progress);
-      // Side-on two-shot: the princess kneeling on the left of frame, the
-      // droid on the right, and the stream of data visible between them.
-      ip(lerp(0.55, 0.2, k), lerp(1.3, 1.12, k), lerp(15.6, 16.1, k), pose.position);
-      ip(-2.1, 1.05, 17.9, pose.target);
-      pose.fov = lerp(44, 40, k);
+      // Two-shot from downstream: the princess kneeling on the left of frame,
+      // the droid on the right, and the stream of data crossing between them.
+      ip(lerp(0.3, 0.05, k), lerp(1.2, 1.1, k), lerp(14.9, 15.4, k), pose.position);
+      ip(-2.3, 0.98, 17.7, pose.target);
+      pose.fov = lerp(44, 41, k);
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
-      pose.dof = 0.6;
-      pose.focus = 1.9;
-      pose.focusRange = 2.6;
+      pose.dof = 0.5;
+      pose.focus = 3.5;
+      pose.focusRange = 4;
     },
   });
 
@@ -538,14 +551,18 @@ export function buildShots(stage: Stage): Shot[] {
     apply: (ctx, pose) => {
       const k = easeInOut(ctx.progress);
       const r2 = stage.r2.root.position;
-      ip(lerp(-1.2, 1.2, k), 1.02, lerp(20.0, 19.4, k), pose.position);
-      ip(r2.x, r2.y + 0.6, r2.z, pose.target);
-      pose.fov = 48;
+      const c3 = stage.threepio.root.position;
+      // From the stern of the vestibule, looking forward past the pair toward
+      // the lit bay door: they cross left to right and the boarders coming up
+      // the passage stay in the far background instead of across the lens.
+      ip(lerp(0.7, 0.15, k), lerp(1.74, 1.62, k), lerp(21.5, 20.6, k), pose.position);
+      ip((r2.x + c3.x) / 2 + 0.4, 0.95, (r2.z + c3.z) / 2, pose.target);
+      pose.fov = 50;
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
-      pose.dof = 0.35;
-      pose.focus = 3.4;
-      pose.focusRange = 5;
+      pose.dof = 0.3;
+      pose.focus = 5.6;
+      pose.focusRange = 7;
     },
   });
 
@@ -557,15 +574,18 @@ export function buildShots(stage: Stage): Shot[] {
     handheld: 0.01,
     apply: (ctx, pose) => {
       const k = easeInOut(ctx.progress);
-      // Shooting through the bay doorway from inside the vestibule.
-      ip(lerp(1.5, 3.3, k), lerp(1.48, 1.36, k), lerp(17.9, 17.4, k), pose.position);
-      ip(6.5, 1.16, 17.0, pose.target);
-      pose.fov = lerp(50, 44, k);
+      // Inside the bay on the pod's forward quarter, low, tilting up at it.
+      // Shooting in through the 2.4 m doorway only ever gives the tail dead
+      // on, because the pod lies along the launch axis and the doorway is on
+      // it: the cut into the room is what buys the three-quarter view.
+      ip(lerp(4.35, 5.0, k), lerp(1.3, 1.02, k), lerp(14.6, 15.5, k), pose.position);
+      ip(lerp(7.6, 7.2, k), lerp(1.35, 1.24, k), lerp(17.3, 17.5, k), pose.target);
+      pose.fov = 58;
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
-      pose.dof = 0.35;
-      pose.focus = 3.6;
-      pose.focusRange = 5;
+      pose.dof = 0.25;
+      pose.focus = 3.8;
+      pose.focusRange = 6;
     },
   });
 

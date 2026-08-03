@@ -124,7 +124,7 @@ export const NARRATION: NarrationLine[] = [
     24.0,
     'What they took now runs ahead of the fleet, aboard one small diplomatic ship, above a desert world at the ragged edge of the map.',
   ),
-  line('n05', 0, 33.5, 'Its passenger is a princess. Her cargo is a secret worth a galaxy.'),
+  line('n05', 0, 34.8, 'Its passenger is a princess. Her cargo is a secret worth a galaxy.'),
 
   // ------------------------------------------------------------ tatooine
   line(
@@ -170,7 +170,7 @@ export const NARRATION: NarrationLine[] = [
   line(
     'o01',
     4,
-    222.5,
+    223.2,
     'Forward hatch is sealed. Whatever comes through it, we hold this passage.',
     'officer',
     'Rebel Officer',

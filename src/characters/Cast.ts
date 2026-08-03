@@ -198,7 +198,7 @@ export class Vader extends Character {
       limbMat: M.vaderBlack,
       bootMat: M.blackRubber,
       headMat: M.vaderBlack,
-      beltMat: M.chrome,
+      beltMat: M.blackRubber,
       armor: true,
       shoulderPads: true,
     });
@@ -216,12 +216,12 @@ export class Vader extends Character {
 
     // Helmet: dome, flared cheeks, angular faceplate, respirator.
     const helmet = new THREE.Group();
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.155, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), M.vaderBlack);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.155, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), M.vaderGloss);
     dome.scale.set(1, 1.24, 1.05);
     dome.position.y = 0.02;
     dome.castShadow = true;
     helmet.add(dome);
-    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.148, 0.158, 0.06, 14), M.vaderBlack);
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.148, 0.158, 0.06, 14), M.vaderGloss);
     crown.position.y = 0.01;
     helmet.add(crown);
     const face = new THREE.Mesh(
@@ -230,11 +230,17 @@ export class Vader extends Character {
         boxAt(0.13, 0.09, 0.09, 0, -0.15, -0.1),
         boxAt(0.22, 0.09, 0.1, 0, 0.02, -0.06),
       ]),
-      M.vaderBlack,
+      M.vaderGloss,
     );
     helmet.add(face);
-    // Angled eye lenses.
-    const lensMat = new THREE.MeshStandardMaterial({ color: 0x1a1207, roughness: 0.18, metalness: 0.75 });
+    // Angled eye lenses. Faintly self-lit: against a black helmet in a dark
+    // doorway, pure specular gives the face nothing to be read by.
+    const lensMat = new THREE.MeshStandardMaterial({
+      color: 0x241a08,
+      emissive: 0x3a2a0c,
+      roughness: 0.18,
+      metalness: 0.75,
+    });
     for (const side of [-1, 1]) {
       const lens = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.045, 0.03), lensMat);
       lens.position.set(side * 0.052, -0.018, -0.135);
@@ -246,7 +252,7 @@ export class Vader extends Character {
     helmet.add(grille);
     // Flared cheek panels.
     for (const side of [-1, 1]) {
-      const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.19, 0.16), M.vaderBlack);
+      const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.19, 0.16), M.vaderGloss);
       cheek.position.set(side * 0.13, -0.07, -0.02);
       cheek.rotation.z = side * 0.14;
       helmet.add(cheek);
@@ -256,7 +262,7 @@ export class Vader extends Character {
     // Shoulder mantle and cape.
     const mantle = new THREE.Mesh(
       mergeParts([boxAt(0.62, 0.09, 0.36, 0, 0.42, 0.02), boxAt(0.5, 0.2, 0.3, 0, 0.34, 0.06)]),
-      M.vaderBlack,
+      M.vaderGloss,
     );
     mantle.castShadow = true;
     rig.chest.add(mantle);
@@ -283,10 +289,15 @@ export class Vader extends Character {
     this.cape.castShadow = true;
     rig.chest.add(this.cape);
 
-    // Chest control panel.
-    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.06), M.chrome);
+    // Chest control panel. Chrome here caught every corridor lamp and read as
+    // a white slab hung on the darkest costume in the story; the plate is
+    // black with a thin bright bezel instead.
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.06), M.vaderBlack);
     panel.position.set(0, 0.22, -0.15);
     rig.torso.add(panel);
+    const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.19, 0.04), M.corridorTrim);
+    bezel.position.set(0, 0.22, -0.14);
+    rig.torso.add(bezel);
     this.chestLights = new THREE.MeshBasicMaterial({ color: 0xff3b28, toneMapped: false });
     for (let i = 0; i < 6; i++) {
       const led = new THREE.Mesh(new THREE.PlaneGeometry(0.026, 0.018), this.chestLights);
@@ -294,7 +305,7 @@ export class Vader extends Character {
       led.rotation.y = Math.PI;
       rig.torso.add(led);
     }
-    const beltBox = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.075, 0.22), M.chrome);
+    const beltBox = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.075, 0.22), M.corridorTrim);
     beltBox.position.y = -0.02;
     rig.torso.add(beltBox);
 

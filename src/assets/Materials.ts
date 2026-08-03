@@ -33,6 +33,8 @@ export interface MaterialLibrary {
   corridorPanel: THREE.MeshStandardMaterial;
   corridorFloor: THREE.MeshStandardMaterial;
   corridorTrim: THREE.MeshStandardMaterial;
+  /** Pressure doors: heavy grey plate, a clear step darker than the walls. */
+  bulkhead: THREE.MeshStandardMaterial;
   blackRubber: THREE.MeshStandardMaterial;
   whiteArmor: THREE.MeshStandardMaterial;
   darkCloth: THREE.MeshStandardMaterial;
@@ -41,6 +43,8 @@ export interface MaterialLibrary {
   rebelKhaki: THREE.MeshStandardMaterial;
   leiaWhite: THREE.MeshStandardMaterial;
   vaderBlack: THREE.MeshStandardMaterial;
+  /** Helmet and mask: glossy, so the edges catch light and the shape reads. */
+  vaderGloss: THREE.MeshStandardMaterial;
   gold: THREE.MeshStandardMaterial;
   droidWhite: THREE.MeshStandardMaterial;
   droidBlue: THREE.MeshStandardMaterial;
@@ -206,16 +210,25 @@ export function buildMaterials(anisotropy: number): MaterialLibrary {
     corridorPanel: std({ color: 0xd9d7d0, roughness: 0.55, metalness: 0.12 }),
     corridorFloor: std({ color: 0x9fa2a6, roughness: 0.78, metalness: 0.14 }),
     corridorTrim: std({ color: 0x5c5f64, roughness: 0.42, metalness: 0.55 }),
+    // The door has to be the darkest thing at the end of a white corridor or
+    // the end of the corridor is a blank lit rectangle and the cut line — the
+    // whole point of the beat — has nothing to read against.
+    bulkhead: std({ color: 0x7e838a, roughness: 0.48, metalness: 0.42, envMapIntensity: 0.5 }),
 
     blackRubber: std({ color: 0x121317, roughness: 0.86, metalness: 0.05 }),
     whiteArmor: std({ color: 0xdbdfe6, roughness: 0.36, metalness: 0.05 }),
     darkCloth: std({ color: 0x232a35, roughness: 0.92, metalness: 0.02 }),
     brownCloth: std({ color: 0x5d4a35, roughness: 0.9, metalness: 0.02 }),
-    rebelKhaki: std({ color: 0x9a8a68, roughness: 0.9, metalness: 0.02 }),
+    // Olive-grey, not tan: at 0x9a8a68 a bare forearm and a uniform sleeve
+    // were the same colour and the defenders read as unclothed mannequins.
+    rebelKhaki: std({ color: 0x7c7a60, roughness: 0.92, metalness: 0.02 }),
     leiaWhite: std({ color: 0xf7f6f2, roughness: 0.68, metalness: 0.02 }),
     // Barely metallic. At metalness 0.42 the costume mirrors the corridor's
     // alert strobes and the darkest figure in the story reads as red plastic.
-    vaderBlack: std({ color: 0x0b0c0f, roughness: 0.44, metalness: 0.14, envMapIntensity: 0.4 }),
+    vaderBlack: std({ color: 0x0e1014, roughness: 0.36, metalness: 0.16, envMapIntensity: 0.45 }),
+    // Lacquered. A matte black helmet in a dark doorway has no edge at all;
+    // the gloss is what draws the line round the dome and the cheek flares.
+    vaderGloss: std({ color: 0x0f1116, roughness: 0.16, metalness: 0.42, envMapIntensity: 1.0 }),
     gold: std({ color: 0xd9a441, roughness: 0.24, metalness: 0.92 }),
     droidWhite: std({ color: 0xeceff2, roughness: 0.28, metalness: 0.34 }),
     droidBlue: std({ color: 0x2f6fb5, roughness: 0.3, metalness: 0.38 }),

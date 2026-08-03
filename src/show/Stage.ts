@@ -73,6 +73,7 @@ export class Stage {
   readonly spaceAmbient: THREE.AmbientLight;
   readonly interiorAmbient: THREE.AmbientLight;
   readonly vaderKey: THREE.PointLight;
+  readonly vaderFill: THREE.PointLight;
   readonly boardingGlow: THREE.PointLight;
 
   readonly pickables: PickableInfo[] = [];
@@ -130,10 +131,12 @@ export class Stage {
     this.corridor = new CorridorSet(quality);
     this.interior.add(this.corridor.root);
 
+    // In its cradle against the outboard wall of bay six, nose pointing out
+    // through the hull so the launch reads as a straight ejection sideways.
     this.interiorPod = new EscapePod();
-    this.interiorPod.root.scale.setScalar(0.9);
-    this.interiorPod.root.position.set(6.65, 1.25, 17);
-    this.interiorPod.root.rotation.y = Math.PI / 2;
+    this.interiorPod.root.scale.setScalar(0.8);
+    this.interiorPod.root.position.set(8.0, 1.42, 17);
+    this.interiorPod.root.rotation.y = -Math.PI / 2;
     this.interior.add(this.interiorPod.root);
 
     this.plans = new DataProjection(0.55);
@@ -195,8 +198,13 @@ export class Stage {
     this.vaderKey.position.set(0, 2.3, -18);
     this.interior.add(this.vaderKey);
 
+    // Just enough frontal fill to find the brow, the lenses and the mantle.
+    this.vaderFill = new THREE.PointLight(0xc4d6f0, 0, 7, 2);
+    this.vaderFill.position.set(0, 1.9, -13);
+    this.interior.add(this.vaderFill);
+
     this.boardingGlow = new THREE.PointLight(0xffd0a0, 0, 14, 2);
-    this.boardingGlow.position.set(0, 1.5, -15.5);
+    this.boardingGlow.position.set(0, 1.6, -17.4);
     this.interior.add(this.boardingGlow);
 
     this.interior.position.copy(INTERIOR_ORIGIN);

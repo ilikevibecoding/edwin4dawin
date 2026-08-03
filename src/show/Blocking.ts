@@ -57,7 +57,10 @@ export function applyBlocking(stage: Stage): FireOrder[] {
   /* ------------------------------------------------------------- rebels */
   stage.rebels.forEach((rebel, i) => {
     const [x, z] = REBEL_STATIONS[i];
-    const restZ = z + 5.5 + i * 0.6;
+    // Where they stand before the alarm. Held well forward of the vestibule
+    // mouth: parked at the aft end they stood inside the establishing shot's
+    // lens and one shoulder filled a third of the frame.
+    const restZ = i === 4 ? 12.5 : z + 4.2 + i * 0.3;
     const keys: CharKey[] = [
       { t: 0, pos: [x * 0.5, 0, restZ], state: 'idle', face: [0, 0, -20] },
       { t: 209, pos: [x * 0.5, 0, restZ], state: 'idle', face: [0, 0, -20] },
@@ -123,8 +126,10 @@ export function applyBlocking(stage: Stage): FireOrder[] {
       keys.push({ t: 296 + i, pos: [x, 0, z], state: 'walk', face: 'motion' });
       keys.push({ t: 306 + i, pos: [x * 0.7, 0, 2.5 + i * 0.6], state: 'walk', face: 'motion' });
       keys.push({ t: 314 + i * 0.6, pos: [x * 0.8, 0, 7.0 + i * 0.5], state: 'aim', face: [0, 1.2, 18], ease: 'decel' });
-      keys.push({ t: 330 + i * 0.7, pos: [x * 0.9, 0, 11.5 + i * 0.4], state: 'walk', face: 'motion' });
-      keys.push({ t: 344 + i * 0.7, pos: [x * 1.4, 0, 15.5 + i * 0.5], state: 'aim', face: [0, 1.2, 20], ease: 'decel' });
+      // Out to the vestibule walls as they come aft. Down the middle of an
+      // eight-metre room they walked straight through every droid shot.
+      keys.push({ t: 330 + i * 0.7, pos: [x * 1.7, 0, 11.5 + i * 0.4], state: 'walk', face: 'motion' });
+      keys.push({ t: 344 + i * 0.7, pos: [x * 2.4, 0, 15.5 + i * 0.5], state: 'aim', face: [0, 1.2, 20], ease: 'decel' });
     }
     trooper.setKeys(keys);
 
@@ -165,19 +170,25 @@ export function applyBlocking(stage: Stage): FireOrder[] {
   ]);
 
   /* ------------------------------------------------------------ princess */
+  // She works the console standing aft of it rather than square to the wall:
+  // face-on to a bulkhead the camera only ever gets the back of her head, and
+  // the one plot point of the chapter is her handing the file over.
   stage.leia.setKeys([
-    { t: 0, pos: [-2.2, 0, 20.4], state: 'idle', face: [0, 1.2, 16] },
-    { t: 286, pos: [-2.2, 0, 20.4], state: 'idle', face: [0, 1.2, 16] },
-    { t: 288, pos: [-2.2, 0, 20.4], state: 'walk', face: 'motion' },
-    { t: 293.5, pos: [-2.75, 0, 18.9], state: 'interact', face: [-4.1, 1.4, 18.4], ease: 'decel' },
-    { t: 318, pos: [-2.75, 0, 18.9], state: 'interact', face: [-4.1, 1.4, 18.4] },
-    { t: 319, pos: [-2.75, 0, 18.9], state: 'walk', face: 'motion' },
-    { t: 322, pos: [-1.95, 0, 17.5], state: 'kneel', face: [-1.35, 0.7, 16.9], ease: 'decel' },
-    { t: 331, pos: [-1.95, 0, 17.5], state: 'kneel', face: [-1.35, 0.7, 16.9] },
-    { t: 332.5, pos: [-1.95, 0, 17.5], state: 'walk', face: 'motion' },
-    { t: 337, pos: [-0.6, 0, 19.4], state: 'idle', face: [3.5, 1.2, 17.4], ease: 'decel' },
-    { t: 344, pos: [-0.6, 0, 19.4], state: 'idle', face: [3.5, 1.2, 17.4] },
-    { t: 346, pos: [-0.6, 0, 19.4], state: 'walk', face: 'motion' },
+    { t: 0, pos: [-2.4, 0, 20.8], state: 'idle', face: [0, 1.2, 16] },
+    { t: 286, pos: [-2.4, 0, 20.8], state: 'idle', face: [0, 1.2, 16] },
+    { t: 288, pos: [-2.4, 0, 20.8], state: 'walk', face: 'motion' },
+    { t: 293.5, pos: [-3.0, 0, 19.9], state: 'interact', face: [-3.8, 1.4, 18.4], ease: 'decel' },
+    { t: 309.5, pos: [-3.0, 0, 19.9], state: 'interact', face: [-3.8, 1.4, 18.4] },
+    { t: 310.5, pos: [-3.0, 0, 19.9], state: 'walk', face: 'motion' },
+    { t: 313, pos: [-2.85, 0, 17.35], state: 'kneel', face: [-1.8, 0.9, 17.95], ease: 'decel' },
+    { t: 324, pos: [-2.85, 0, 17.35], state: 'kneel', face: [-1.8, 0.9, 17.95] },
+    { t: 325.5, pos: [-2.85, 0, 17.35], state: 'idle', face: [0, 1.4, 8] },
+    { t: 327, pos: [-2.85, 0, 17.35], state: 'walk', face: 'motion' },
+    // Back against the console to watch them go: standing in the middle of
+    // the room she blocked the lens for the whole run to the pod bay.
+    { t: 331, pos: [-2.95, 0, 20.5], state: 'idle', face: [3.5, 1.2, 17.4], ease: 'decel' },
+    { t: 344, pos: [-2.95, 0, 20.5], state: 'idle', face: [3.5, 1.2, 17.4] },
+    { t: 346, pos: [-2.95, 0, 20.5], state: 'walk', face: 'motion' },
     { t: 352, pos: [-0.9, 0, 13.6], state: 'idle', face: [0, 1.5, 0], ease: 'decel' },
     { t: 362, pos: [-0.9, 0, 13.6], state: 'surrender', face: [0, 1.6, 0] },
   ]);
@@ -187,14 +198,16 @@ export function applyBlocking(stage: Stage): FireOrder[] {
     { t: 0, pos: [-1.1, 0, 16.4], state: 'idle', face: [-4, 0.6, 18] },
     { t: 292, pos: [-1.1, 0, 16.4], state: 'idle', face: [-4, 0.6, 18] },
     { t: 294, pos: [-1.1, 0, 16.4], state: 'walk', face: 'motion' },
-    { t: 298.5, pos: [-1.9, 0, 17.9], state: 'idle', face: [-4.1, 1.0, 18.6], ease: 'decel' },
-    { t: 320, pos: [-1.9, 0, 17.9], state: 'idle', face: [-4.1, 1.0, 18.6] },
-    { t: 322, pos: [-1.75, 0, 17.4], state: 'idle', face: [-2.6, 0.9, 17.6] },
-    { t: 332, pos: [-1.75, 0, 17.4], state: 'idle', face: [-2.6, 0.9, 17.6] },
-    { t: 334, pos: [-1.75, 0, 17.4], state: 'walk', face: 'motion' },
+    { t: 298.5, pos: [-1.8, 0, 17.95], state: 'idle', face: [-4.1, 1.0, 18.6], ease: 'decel' },
+    { t: 311, pos: [-1.8, 0, 17.95], state: 'idle', face: [-4.1, 1.0, 18.6] },
+    // Turns to face the princess for the handover.
+    { t: 313, pos: [-1.8, 0, 17.95], state: 'idle', face: [-3.6, 0.9, 17.2] },
+    { t: 332, pos: [-1.8, 0, 17.95], state: 'idle', face: [-3.6, 0.9, 17.2] },
+    { t: 334, pos: [-1.8, 0, 17.95], state: 'walk', face: 'motion' },
     { t: 339, pos: [1.9, 0, 17.2], state: 'walk', face: 'motion' },
-    { t: 343, pos: [4.6, 0, 17.05], state: 'walk', face: 'motion' },
-    { t: 346.5, pos: [6.0, 0, 17.0], state: 'idle', face: [8, 0.6, 17], ease: 'decel' },
+    { t: 343, pos: [4.4, 0, 17.1], state: 'walk', face: 'motion' },
+    // Stops short of the cradle rail — the pod's tail begins at x = 6.2.
+    { t: 346.5, pos: [5.6, 0, 16.9], state: 'idle', face: [9, 0.6, 17.0], ease: 'decel' },
   ]);
 
   /* --------------------------------------------------------------- C-3PO */
@@ -210,8 +223,8 @@ export function applyBlocking(stage: Stage): FireOrder[] {
     { t: 336, pos: [1.7, 0, 20.0], state: 'walk', face: 'motion' },
     { t: 339.5, pos: [2.6, 0, 18.6], state: 'idle', face: [-2, 1.2, 17], ease: 'decel' },
     { t: 341.5, pos: [2.6, 0, 18.6], state: 'walk', face: 'motion' },
-    { t: 346, pos: [4.9, 0, 17.6], state: 'walk', face: 'motion' },
-    { t: 349, pos: [6.1, 0, 17.4], state: 'idle', face: [8, 1.2, 17], ease: 'decel' },
+    { t: 346, pos: [4.5, 0, 18.3], state: 'walk', face: 'motion' },
+    { t: 349, pos: [5.3, 0, 18.0], state: 'idle', face: [9, 1.2, 17.6], ease: 'decel' },
   ]);
 
   orders.sort((a, b) => a.time - b.time);
