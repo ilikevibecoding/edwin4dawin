@@ -1,8 +1,8 @@
 {
   "narration": {
     "mode": "audio",
-    "loaded": 44,
-    "cues": 44
+    "loaded": 45,
+    "cues": 45
   },
   "contextState": "running",
   "results": [
@@ -14,8 +14,8 @@
         "narration",
         "music"
       ],
-      "peak": 0.6171875,
-      "worstReduction": -0.011333667673170567,
+      "peak": 0.4453125,
+      "worstReduction": -0.019625911489129066,
       "active": 1
     },
     {
@@ -26,8 +26,8 @@
         "narration",
         "music"
       ],
-      "peak": 0.5234375,
-      "worstReduction": -0.6077012419700623,
+      "peak": 0.5390625,
+      "worstReduction": -0.5166174173355103,
       "active": 1
     },
     {
@@ -38,8 +38,8 @@
         "sfx",
         "music"
       ],
-      "peak": 0.578125,
-      "worstReduction": -1.1043574810028076,
+      "peak": 0.5546875,
+      "worstReduction": -2.4716172218322754,
       "active": 1
     },
     {
@@ -49,8 +49,8 @@
       "expect": [
         "sfx"
       ],
-      "peak": 0.5078125,
-      "worstReduction": -0.5523836612701416,
+      "peak": 0.578125,
+      "worstReduction": -0.4991973042488098,
       "active": 1
     },
     {
@@ -61,8 +61,8 @@
         "sfx",
         "music"
       ],
-      "peak": 0.546875,
-      "worstReduction": -1.0977219343185425,
+      "peak": 0.5,
+      "worstReduction": -1.2183884382247925,
       "active": 1
     },
     {
@@ -73,8 +73,8 @@
         "sfx",
         "music"
       ],
-      "peak": 0.4296875,
-      "worstReduction": -0.7567989230155945,
+      "peak": 0.4921875,
+      "worstReduction": -0.22513647377490997,
       "active": 1
     },
     {
@@ -84,8 +84,8 @@
       "expect": [
         "sfx"
       ],
-      "peak": 0.5,
-      "worstReduction": -1.0519930124282837,
+      "peak": 0.4921875,
+      "worstReduction": -0.8114478588104248,
       "active": 1
     }
   ],

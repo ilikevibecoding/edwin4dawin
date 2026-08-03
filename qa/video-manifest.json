@@ -1,5 +1,5 @@
 {
-  "out": "/tmp/reel_final.mp4",
+  "out": "/tmp/reel_v5.mp4",
   "fps": 15,
   "width": 960,
   "height": 540,
@@ -51,6 +51,6 @@
     ]
   ],
   "frames": 1403,
-  "renderedAt": "2026-08-03T07:48:23.778Z",
+  "renderedAt": "2026-08-03T08:46:11.965Z",
   "note": "Rendered frame-by-frame from the live engine on a software rasteriser; identical to real-time output on a GPU."
 }

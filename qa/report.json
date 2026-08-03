@@ -1,90 +1,1232 @@
 {
-  "generatedAt": "2026-08-03T07:54:11.146Z",
+  "generatedAt": "2026-08-03T10:54:07.647Z",
   "url": "http://127.0.0.1:4173/?qa=1&quality=medium",
   "viewport": {
     "width": 1920,
     "height": 1080
   },
   "quality": "medium",
-  "checkpointCount": 6,
+  "checkpointCount": 29,
   "failureCount": 0,
   "consoleErrors": [],
   "pageErrors": [],
-  "controlResults": [],
+  "controlResults": [
+    {
+      "label": "play/pause toggle",
+      "ok": true
+    },
+    {
+      "label": "advances in real time",
+      "ok": true
+    },
+    {
+      "label": "chapter buttons",
+      "ok": true
+    },
+    {
+      "label": "timeline scrubbing",
+      "ok": true
+    },
+    {
+      "label": "restart",
+      "ok": true
+    },
+    {
+      "label": "subtitles toggle",
+      "ok": true
+    },
+    {
+      "label": "volume sliders",
+      "ok": true
+    },
+    {
+      "label": "quality switching",
+      "ok": true
+    },
+    {
+      "label": "explore mode + selection",
+      "ok": true
+    },
+    {
+      "label": "debug overlay",
+      "ok": true
+    },
+    {
+      "label": "help panel",
+      "ok": true
+    },
+    {
+      "label": "window resize",
+      "ok": true
+    }
+  ],
   "playbackSamples": [
     {
       "time": 100.5,
-      "fps": 0.6987838056076625,
-      "draws": 128,
-      "tris": 38223,
+      "fps": 1.3678352032147156,
+      "draws": 125,
+      "tris": 24783,
       "issues": 0
     },
     {
-      "time": 101.85000000000001,
-      "fps": 0.688273351585323,
-      "draws": 69,
-      "tris": 17909,
+      "time": 102.84990000000003,
+      "fps": 1.3588802826470976,
+      "draws": 70,
+      "tris": 18041,
       "issues": 0
     },
     {
-      "time": 103.91660000000003,
-      "fps": 0.7904263559764139,
-      "draws": 71,
-      "tris": 18185,
+      "time": 104.58300000000007,
+      "fps": 1.3769005051694965,
+      "draws": 72,
+      "tris": 22153,
       "issues": 0
     },
     {
-      "time": 105.48330000000004,
-      "fps": 0.9310678727788858,
+      "time": 106.56640000000009,
+      "fps": 1.4610911428654918,
       "draws": 73,
       "tris": 22253,
       "issues": 0
     },
     {
-      "time": 107.76670000000003,
-      "fps": 1.1558644710378891,
+      "time": 108.31630000000006,
+      "fps": 1.425611587370982,
       "draws": 73,
       "tris": 22253,
       "issues": 0
     },
     {
-      "time": 109.80000000000003,
-      "fps": 1.2576190755661385,
-      "draws": 82,
-      "tris": 22949,
+      "time": 110.04960000000004,
+      "fps": 1.3910871500643,
+      "draws": 86,
+      "tris": 23333,
       "issues": 0
     },
     {
-      "time": 111.53330000000003,
-      "fps": 1.4431310170546017,
+      "time": 111.93280000000004,
+      "fps": 1.5067552861997962,
       "draws": 90,
       "tris": 24121,
       "issues": 0
     },
     {
-      "time": 113.83330000000002,
-      "fps": 1.7905245441125561,
+      "time": 113.78260000000004,
+      "fps": 1.61683230215362,
       "draws": 118,
       "tris": 24475,
       "issues": 0
     },
     {
-      "time": 115.73330000000003,
-      "fps": 2.4840057628933687,
+      "time": 115.24939999999998,
+      "fps": 2.229643356158278,
       "draws": 121,
       "tris": 24543,
       "issues": 0
     },
     {
-      "time": 117.16670000000003,
-      "fps": 2.5117213663764235,
+      "time": 117.19919999999995,
+      "fps": 2.4591238961266053,
       "draws": 123,
       "tris": 24547,
       "issues": 0
     }
   ],
-  "meanFps": 1.3751417622989262,
+  "meanFps": 1.619376071197038,
   "results": [
+    {
+      "checkpoint": {
+        "id": "01-prologue-open",
+        "time": 7.5,
+        "chapter": "prologue",
+        "shot": "pro-1",
+        "scene": "space",
+        "expects": [
+          "golden prologue typography",
+          "starfield"
+        ],
+        "assertions": [
+          {
+            "kind": "brightness",
+            "min": 0.008,
+            "max": 0.35
+          },
+          {
+            "kind": "subtitle",
+            "contains": "civil war"
+          },
+          {
+            "kind": "noIssues"
+          }
+        ],
+        "notes": "Opens in near darkness; text must be legible without being blown out."
+      },
+      "report": {
+        "time": 7.5,
+        "chapter": "prologue",
+        "chapterIndex": 0,
+        "shot": "pro-1",
+        "shotLabel": "Prologue — deep space",
+        "scene": "space",
+        "beat": "prologue text recedes",
+        "subtitle": "A galactic civil war burns across ten thousand worlds.",
+        "narrationCue": "p1",
+        "issues": [],
+        "fps": 10.193068713256762,
+        "drawCalls": 25,
+        "triangles": 13185,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.0016570851585098205,
+              -0.049512855899402665
+            ],
+            "distance": 1507340.9618247903
+          },
+          "destroyer": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.0017187876239720939,
+              -0.05580084466356513
+            ],
+            "distance": 1482960.9920808089
+          },
+          "pod": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.0016484711105419505,
+              -0.049508565162151144
+            ],
+            "distance": 1507307.7000995246
+          },
+          "tatooine": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.0016520660238685037,
+              0.41062251219353346
+            ],
+            "distance": 1521012.9842946562
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.138963261846378,
+        "p95": 0.754787450980392,
+        "clipped": 0
+      },
+      "screenshot": "01-prologue-open.png"
+    },
+    {
+      "checkpoint": {
+        "id": "02-prologue-final-line",
+        "time": 39.5,
+        "chapter": "prologue",
+        "shot": "pro-1",
+        "scene": "space",
+        "expects": [
+          "final prologue card",
+          "starfield"
+        ],
+        "assertions": [
+          {
+            "kind": "brightness",
+            "min": 0.008
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 39.5,
+        "chapter": "prologue",
+        "chapterIndex": 0,
+        "shot": "pro-1",
+        "shotLabel": "Prologue — deep space",
+        "scene": "space",
+        "beat": "prologue text recedes",
+        "subtitle": "This is the hour the war turns, and almost no one alive will know it happened.",
+        "narrationCue": "p5",
+        "issues": [],
+        "fps": 4.574002075890853,
+        "drawCalls": 25,
+        "triangles": 13185,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.004658136005319253,
+              -0.04441353608418827
+            ],
+            "distance": 1538552.806898852
+          },
+          "destroyer": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.004602112001716241,
+              -0.053328312882886655
+            ],
+            "distance": 1521239.5023033838
+          },
+          "pod": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.00466657515049215,
+              -0.0444164428406434
+            ],
+            "distance": 1538519.5956959622
+          },
+          "tatooine": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.004644186314792746,
+              0.4106185327886745
+            ],
+            "distance": 1521012.9842670534
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.1943062230256586,
+        "p95": 0.7808854901960786,
+        "clipped": 0
+      },
+      "screenshot": "02-prologue-final-line.png"
+    },
+    {
+      "checkpoint": {
+        "id": "03-tatooine-establish",
+        "time": 54,
+        "chapter": "tatooine",
+        "shot": "tat-1",
+        "scene": "space",
+        "expects": [
+          "Tatooine limb",
+          "atmospheric haze",
+          "starfield"
+        ],
+        "assertions": [
+          {
+            "kind": "onScreen",
+            "target": "tatooine"
+          },
+          {
+            "kind": "brightness",
+            "min": 0.05
+          },
+          {
+            "kind": "noIssues"
+          }
+        ],
+        "notes": "The planet must read as a sphere with a bright limb, not a flat disc."
+      },
+      "report": {
+        "time": 54,
+        "chapter": "tatooine",
+        "chapterIndex": 1,
+        "shot": "tat-1",
+        "shotLabel": "Wide planetary establishing",
+        "scene": "space",
+        "beat": "planet establishing drift",
+        "subtitle": "Tatooine. Twin suns, endless sand, and nothing an empire would bother to want.",
+        "narrationCue": "t1",
+        "issues": [],
+        "fps": 4.055198406544125,
+        "drawCalls": 27,
+        "triangles": 26623,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -1.871609607424871,
+              5.576915837781291
+            ],
+            "distance": 9851.129249922988
+          },
+          "destroyer": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.6345077011157892,
+              2.185176555608972
+            ],
+            "distance": 23470.739699568967
+          },
+          "pod": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -1.8651341450615275,
+              5.554746986014269
+            ],
+            "distance": 9883.067480506128
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.042419144667992605,
+              -3.325963311912128
+            ],
+            "distance": 256484.8744844524
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.5060285361791835,
+        "p95": 0.941313725490196,
+        "clipped": 0
+      },
+      "screenshot": "03-tatooine-establish.png"
+    },
+    {
+      "checkpoint": {
+        "id": "04-tatooine-corvette",
+        "time": 80,
+        "chapter": "tatooine",
+        "shot": "tat-2",
+        "scene": "space",
+        "expects": [
+          "blockade runner",
+          "Tatooine below"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "runner",
+            "minScreenFraction": 0.0008
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 80,
+        "chapter": "tatooine",
+        "chapterIndex": 1,
+        "shot": "tat-2",
+        "shotLabel": "Corvette in the distance",
+        "scene": "space",
+        "beat": "corvette spotted ahead",
+        "subtitle": "For a few more seconds, the sky above her is empty.",
+        "narrationCue": "t4",
+        "issues": [],
+        "fps": 3.486241507352695,
+        "drawCalls": 72,
+        "triangles": 31349,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.004422905367359063,
+            "onScreen": true,
+            "ndc": [
+              0.007578417433093384,
+              -0.025642815420149543
+            ],
+            "distance": 2111.220540473875
+          },
+          "destroyer": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.5390654193712467,
+              0.6672148689909024
+            ],
+            "distance": 7686.472366107097
+          },
+          "pod": {
+            "screenFraction": 0.000031289272723538493,
+            "onScreen": true,
+            "ndc": [
+              0.020121248147080988,
+              -0.04419477207936358
+            ],
+            "distance": 2085.201356526025
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.00017240919723769294,
+              -6.963560388721586
+            ],
+            "distance": 252785.69802987247
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.03699134813453332,
+        "p95": 0.0631921568627451,
+        "clipped": 0
+      },
+      "screenshot": "04-tatooine-corvette.png"
+    },
+    {
+      "checkpoint": {
+        "id": "05-pursuit-tracking",
+        "time": 92,
+        "chapter": "pursuit",
+        "shot": "pur-1",
+        "scene": "space",
+        "expects": [
+          "blockade runner large in frame",
+          "engine glow"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "runner",
+            "minScreenFraction": 0.01
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 92,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-1",
+        "shotLabel": "Tracking the blockade runner",
+        "scene": "space",
+        "beat": "corvette at full burn",
+        "subtitle": "Her corvette runs with every engine open.",
+        "narrationCue": "u1",
+        "issues": [],
+        "fps": 2.554350911051393,
+        "drawCalls": 69,
+        "triangles": 17909,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.30521938245272107,
+            "onScreen": true,
+            "ndc": [
+              0.056583706533996476,
+              -0.031038451827830525
+            ],
+            "distance": 292.4328635854266
+          },
+          "destroyer": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.6957587657294725,
+              -0.47133719379738487
+            ],
+            "distance": 5144.072638407769
+          },
+          "pod": {
+            "screenFraction": 0.0023833906241130846,
+            "onScreen": true,
+            "ndc": [
+              0.183694278088288,
+              -0.09292829867958145
+            ],
+            "distance": 267.8719620971292
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.0007569197500815413,
+              -31.57890021628883
+            ],
+            "distance": 252028.44955940984
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.1543521183281409,
+        "p95": 0.6466768627450981,
+        "clipped": 0
+      },
+      "screenshot": "05-pursuit-tracking.png"
+    },
+    {
+      "checkpoint": {
+        "id": "06-destroyer-reveal",
+        "time": 112,
+        "chapter": "pursuit",
+        "shot": "pur-2",
+        "scene": "space",
+        "expects": [
+          "destroyer bow entering frame",
+          "blockade runner small below"
+        ],
+        "assertions": [
+          {
+            "kind": "onScreen",
+            "target": "destroyer"
+          },
+          {
+            "kind": "onScreen",
+            "target": "runner"
+          },
+          {
+            "kind": "noIssues"
+          }
+        ],
+        "notes": "The scale relationship is the point of this frame."
+      },
+      "report": {
+        "time": 112,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-2",
+        "shotLabel": "Low angle — destroyer reveal",
+        "scene": "space",
+        "beat": "destroyer bow crosses frame",
+        "subtitle": "A shadow climbs into the frame. Wedge shaped, gray, and vast. An Imperial destroyer, a city of guns, hunting a single courier.",
+        "narrationCue": null,
+        "issues": [],
+        "fps": 2.4022036214554148,
+        "drawCalls": 89,
+        "triangles": 24119,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.03454439457730546,
+            "onScreen": true,
+            "ndc": [
+              0.07770063801610701,
+              -0.6719592510230694
+            ],
+            "distance": 550.9881940476341
+          },
+          "destroyer": {
+            "screenFraction": 0.9006156921709905,
+            "onScreen": true,
+            "ndc": [
+              -0.021571553842147047,
+              0.744684393424278
+            ],
+            "distance": 1357.3349666022298
+          },
+          "pod": {
+            "screenFraction": 0.00020366251537601296,
+            "onScreen": true,
+            "ndc": [
+              0.026500491115933382,
+              -0.6362120605592669
+            ],
+            "distance": 517.6012736116838
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.0001867208707223614,
+              6.080250620737039
+            ],
+            "distance": 251958.04192418908
+          }
+        },
+        "boltsActive": 1,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.07240709360021416,
+        "p95": 0.26547764705882354,
+        "clipped": 0
+      },
+      "screenshot": "06-destroyer-reveal.png"
+    },
+    {
+      "checkpoint": {
+        "id": "07-under-the-hull",
+        "time": 126,
+        "chapter": "pursuit",
+        "shot": "pur-3",
+        "scene": "space",
+        "expects": [
+          "destroyer underside filling frame",
+          "turbolaser fire"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "destroyer",
+            "minScreenFraction": 0.2
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 126,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-3",
+        "shotLabel": "Under the hull",
+        "scene": "space",
+        "beat": "belly fills the sky",
+        "subtitle": "Shields flare, hold, and begin to fail.",
+        "narrationCue": "u5",
+        "issues": [],
+        "fps": 2.3915689223590437,
+        "drawCalls": 77,
+        "triangles": 19819,
+        "measurements": {
+          "runner": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -26.42029216219235,
+              6.492263501410362
+            ],
+            "distance": 126.98657707178387
+          },
+          "destroyer": {
+            "screenFraction": 0.9202831871113443,
+            "onScreen": true,
+            "ndc": [
+              0.009583291909363755,
+              0.12642307809018025
+            ],
+            "distance": 1423.212744790505
+          },
+          "pod": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              3.162651064154795,
+              -1.11568688402392
+            ],
+            "distance": 102.61849947391245
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.001294738196152914,
+              3.8947845695191705
+            ],
+            "distance": 251996.10907773717
+          }
+        },
+        "boltsActive": 2,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.2073781870370398,
+        "p95": 0.2979513725490196,
+        "clipped": 0
+      },
+      "screenshot": "07-under-the-hull.png"
+    },
+    {
+      "checkpoint": {
+        "id": "08-battle-profile",
+        "time": 139,
+        "chapter": "pursuit",
+        "shot": "pur-4",
+        "scene": "space",
+        "expects": [
+          "both ships in profile",
+          "bolts in flight",
+          "impact flashes"
+        ],
+        "assertions": [
+          {
+            "kind": "onScreen",
+            "target": "destroyer"
+          },
+          {
+            "kind": "onScreen",
+            "target": "runner"
+          },
+          {
+            "kind": "boltsActive",
+            "min": 1
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 139,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-4",
+        "shotLabel": "Battle profile — both ships",
+        "scene": "space",
+        "beat": "turbolaser exchange",
+        "subtitle": "Shields flare, hold, and begin to fail.",
+        "narrationCue": null,
+        "issues": [],
+        "fps": 2.2023521120556753,
+        "drawCalls": 129,
+        "triangles": 24791,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.01151385296782495,
+            "onScreen": true,
+            "ndc": [
+              0.900057946949591,
+              -0.7522304455335996
+            ],
+            "distance": 2569.453770373071
+          },
+          "destroyer": {
+            "screenFraction": 0.7992653423422218,
+            "onScreen": true,
+            "ndc": [
+              0.010905388794078742,
+              0.09608123117041976
+            ],
+            "distance": 2312.1443125873966
+          },
+          "pod": {
+            "screenFraction": 0.00007315240117858367,
+            "onScreen": true,
+            "ndc": [
+              0.9291223815494142,
+              -0.7584938299217637
+            ],
+            "distance": 2568.7027134214595
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.04478277291045947,
+              -19.15687830664104
+            ],
+            "distance": 252880.01425303964
+          }
+        },
+        "boltsActive": 1,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.23440658282969506,
+        "p95": 0.4675003921568627,
+        "clipped": 0
+      },
+      "screenshot": "08-battle-profile.png"
+    },
+    {
+      "checkpoint": {
+        "id": "09-corvette-hit",
+        "time": 149,
+        "chapter": "pursuit",
+        "shot": "pur-5",
+        "scene": "space",
+        "expects": [
+          "corvette taking hits",
+          "sparks and smoke"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "runner",
+            "minScreenFraction": 0.02
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 149,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-5",
+        "shotLabel": "Corvette under fire",
+        "scene": "space",
+        "beat": "shields failing",
+        "subtitle": "Shields flare, hold, and begin to fail.",
+        "narrationCue": null,
+        "issues": [],
+        "fps": 2.2333171211053435,
+        "drawCalls": 86,
+        "triangles": 22279,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.6701422992930179,
+            "onScreen": true,
+            "ndc": [
+              -0.028175153618306477,
+              -0.062426715299086576
+            ],
+            "distance": 219.23558286036277
+          },
+          "destroyer": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              1.2521735606999431,
+              1.7257113946388905
+            ],
+            "distance": 1346.9600917214107
+          },
+          "pod": {
+            "screenFraction": 0.006740088620429088,
+            "onScreen": true,
+            "ndc": [
+              -0.14106303055343022,
+              -0.19656135589478171
+            ],
+            "distance": 188.83538411181868
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.3085939606451489,
+              -19.48638700743209
+            ],
+            "distance": 252035.9381346513
+          }
+        },
+        "boltsActive": 1,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.1762594467184445,
+        "p95": 0.4704894117647058,
+        "clipped": 0
+      },
+      "screenshot": "09-corvette-hit.png"
+    },
+    {
+      "checkpoint": {
+        "id": "10-engines-dead",
+        "time": 155,
+        "chapter": "pursuit",
+        "shot": "pur-6",
+        "scene": "space",
+        "expects": [
+          "engine block blown out",
+          "debris"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "runner",
+            "minScreenFraction": 0.01
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 155,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-6",
+        "shotLabel": "Engines knocked out",
+        "scene": "space",
+        "beat": "drives knocked out",
+        "subtitle": "Shields flare, hold, and begin to fail.",
+        "narrationCue": null,
+        "issues": [],
+        "fps": 2.309741462938915,
+        "drawCalls": 101,
+        "triangles": 22557,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.2672559004981553,
+            "onScreen": true,
+            "ndc": [
+              -0.14350070256490763,
+              0.06678790456716452
+            ],
+            "distance": 306.80837877307675
+          },
+          "destroyer": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.5905913091461849,
+              1.3912503292422298
+            ],
+            "distance": 1252.7117608687468
+          },
+          "pod": {
+            "screenFraction": 0.0019622631731322213,
+            "onScreen": true,
+            "ndc": [
+              -0.03054659909593746,
+              0.0047510811695643295
+            ],
+            "distance": 282.19430394385097
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.0111789063400158,
+              -17.18720503747713
+            ],
+            "distance": 252036.1896400118
+          }
+        },
+        "boltsActive": 1,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.1905693976443396,
+        "p95": 0.5164313725490196,
+        "clipped": 0
+      },
+      "screenshot": "10-engines-dead.png"
+    },
+    {
+      "checkpoint": {
+        "id": "11-capture-two-shot",
+        "time": 165,
+        "chapter": "capture",
+        "shot": "cap-1",
+        "scene": "space",
+        "expects": [
+          "destroyer above",
+          "corvette below",
+          "tractor beam"
+        ],
+        "assertions": [
+          {
+            "kind": "onScreen",
+            "target": "destroyer"
+          },
+          {
+            "kind": "onScreen",
+            "target": "runner"
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 165,
+        "chapter": "capture",
+        "chapterIndex": 3,
+        "shot": "cap-1",
+        "shotLabel": "Captured — scale two-shot",
+        "scene": "space",
+        "beat": "held in the beam",
+        "subtitle": "Shields flare, hold, and begin to fail.",
+        "narrationCue": null,
+        "issues": [],
+        "fps": 2.1412257327750277,
+        "drawCalls": 137,
+        "triangles": 24471,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.06204746980846654,
+            "onScreen": true,
+            "ndc": [
+              0.10797543063276081,
+              -0.3576608448235829
+            ],
+            "distance": 796.6382401429089
+          },
+          "destroyer": {
+            "screenFraction": 0.8492517547932869,
+            "onScreen": true,
+            "ndc": [
+              -0.5465469165261643,
+              0.25939144269782966
+            ],
+            "distance": 1453.5684879180296
+          },
+          "pod": {
+            "screenFraction": 0.0003982290293130761,
+            "onScreen": true,
+            "ndc": [
+              0.16809158020639503,
+              -0.359840884922653
+            ],
+            "distance": 784.968090331638
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.001074847002669408,
+              7.874048721038169
+            ],
+            "distance": 251854.1670897162
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.2140383761437277,
+        "p95": 0.4980392156862745,
+        "clipped": 0
+      },
+      "screenshot": "11-capture-two-shot.png"
+    },
+    {
+      "checkpoint": {
+        "id": "12-umbilical",
+        "time": 191,
+        "chapter": "capture",
+        "shot": "cap-3",
+        "scene": "space",
+        "expects": [
+          "boarding umbilical",
+          "corvette dorsal hull"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "runner",
+            "minScreenFraction": 0.05
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 191,
+        "chapter": "capture",
+        "chapterIndex": 3,
+        "shot": "cap-3",
+        "shotLabel": "Boarding umbilical",
+        "scene": "space",
+        "beat": "umbilical extends",
+        "subtitle": "Somewhere in the corridors ahead, a plan is already moving.",
+        "narrationCue": "c5",
+        "issues": [],
+        "fps": 2.081791265729089,
+        "drawCalls": 73,
+        "triangles": 22103,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.8200266899866684,
+            "onScreen": true,
+            "ndc": [
+              -0.006748052763643792,
+              -0.7379375499304667
+            ],
+            "distance": 177.78392924330726
+          },
+          "destroyer": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -1.0296048147530819,
+              1.9409645011122292
+            ],
+            "distance": 504.1491841152148
+          },
+          "pod": {
+            "screenFraction": 0.010538386810971368,
+            "onScreen": true,
+            "ndc": [
+              0.2833916628914296,
+              -0.8805539087112554
+            ],
+            "distance": 167.78616235876913
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.00006262542331980315,
+              -36.40091918759158
+            ],
+            "distance": 252059.66738494267
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.07758950295478129,
+        "p95": 0.21598509803921567,
+        "clipped": 0
+      },
+      "screenshot": "12-umbilical.png"
+    },
     {
       "checkpoint": {
         "id": "13-corridor-establish",
@@ -123,18 +1265,18 @@
         "subtitle": "Inside, the corridor lights turn red.",
         "narrationCue": "d1",
         "issues": [],
-        "fps": 10.50809741622493,
-        "drawCalls": 340,
-        "triangles": 51623,
+        "fps": 1.9204014919385815,
+        "drawCalls": 343,
+        "triangles": 51671,
         "measurements": {
           "vader": {
-            "screenFraction": 0.0009455578057673825,
+            "screenFraction": 0.0008264330551382447,
             "onScreen": true,
             "ndc": [
-              0.051326198504884075,
-              0.020052730014276845
+              0.05129717938924811,
+              0.020019482694066885
             ],
-            "distance": 44.92340897347572
+            "distance": 44.890297983973916
           },
           "leia": {
             "screenFraction": 0,
@@ -218,11 +1360,144 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.19730499308279825,
-        "p95": 0.41371921568627446,
+        "mean": 0.1951412444444502,
+        "p95": 0.4098180392156863,
         "clipped": 0.00001736111111111111
       },
       "screenshot": "13-corridor-establish.png"
+    },
+    {
+      "checkpoint": {
+        "id": "14-defenders-ready",
+        "time": 212,
+        "chapter": "corridor",
+        "shot": "cor-2",
+        "scene": "interior",
+        "expects": [
+          "rebels aiming at the door",
+          "door glowing"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "rebel-1"
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 212,
+        "chapter": "corridor",
+        "chapterIndex": 4,
+        "shot": "cor-2",
+        "shotLabel": "Defender eye level",
+        "scene": "interior",
+        "beat": "cutting charge burns",
+        "subtitle": "They know exactly what is coming through that door, and they hold the line anyway.",
+        "narrationCue": "d3",
+        "issues": [],
+        "fps": 1.6216742164610745,
+        "drawCalls": 522,
+        "triangles": 65417,
+        "measurements": {
+          "vader": {
+            "screenFraction": 0.0018786085771818417,
+            "onScreen": true,
+            "ndc": [
+              0.06047032694396951,
+              -0.002410985847891563
+            ],
+            "distance": 35.03308598263092
+          },
+          "leia": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.16230332207503026,
+              0.12358342843003396
+            ],
+            "distance": 17.508892745184042
+          },
+          "r2": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              1.2783293411242047,
+              0.47910828694138546
+            ],
+            "distance": 6.584088991111773
+          },
+          "threepio": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.14636455860212985,
+              0.1515999634595053
+            ],
+            "distance": 12.004240374823182
+          },
+          "plans": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              1.0467983307578395,
+              -0.046026677975536036
+            ],
+            "distance": 7.89696414675687
+          },
+          "door": {
+            "screenFraction": 0.014546687063602747,
+            "onScreen": true,
+            "ndc": [
+              0.044001993773591014,
+              0.014542791861644831
+            ],
+            "distance": 26.53661462628303
+          },
+          "trooper-0": {
+            "screenFraction": 0.0015425687226145934,
+            "onScreen": true,
+            "ndc": [
+              0.02464684257638383,
+              -0.011900062533423007
+            ],
+            "distance": 33.96020828621937
+          },
+          "rebel-0": {
+            "screenFraction": 0.02108205890138261,
+            "onScreen": true,
+            "ndc": [
+              -0.19508218106142983,
+              -0.118960684173452
+            ],
+            "distance": 10.254930274417404
+          },
+          "rebel-1": {
+            "screenFraction": 0.027809026432918365,
+            "onScreen": true,
+            "ndc": [
+              0.07163521210549355,
+              -0.15338779050145326
+            ],
+            "distance": 8.25510587620626
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.19177994010077187,
+        "p95": 0.3314949019607843,
+        "clipped": 0.00003472222222222222
+      },
+      "screenshot": "14-defenders-ready.png"
     },
     {
       "checkpoint": {
@@ -261,18 +1536,18 @@
         "subtitle": "The seal glows. The metal bends.",
         "narrationCue": "d4",
         "issues": [],
-        "fps": 2.337520669742356,
-        "drawCalls": 395,
-        "triangles": 55485,
+        "fps": 1.2124347305970031,
+        "drawCalls": 398,
+        "triangles": 55533,
         "measurements": {
           "vader": {
-            "screenFraction": 0.005384159724169788,
+            "screenFraction": 0.004719983042851206,
             "onScreen": true,
             "ndc": [
-              -0.03028757904591924,
-              -0.046939822941040626
+              -0.03023080938570836,
+              -0.04693358244689087
             ],
-            "distance": 21.966285915855583
+            "distance": 21.934428127088985
           },
           "leia": {
             "screenFraction": 0,
@@ -311,13 +1586,13 @@
             "distance": 20.056546587638064
           },
           "door": {
-            "screenFraction": 0.10298529554859696,
+            "screenFraction": 0.12117604679291989,
             "onScreen": true,
             "ndc": [
-              0.004076929703181631,
-              0.014890490998176978
+              0.0017120197741550959,
+              -0.013453056060490787
             ],
-            "distance": 11.761336296951665
+            "distance": 12.117112494771302
           },
           "trooper-0": {
             "screenFraction": 0.007669538511132219,
@@ -356,11 +1631,278 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.5022808280228729,
-        "p95": 0.793318431372549,
-        "clipped": 0.0003125
+        "mean": 0.6449004263888586,
+        "p95": 0.861729411764706,
+        "clipped": 0.00006944444444444444
       },
       "screenshot": "15-door-breach.png"
+    },
+    {
+      "checkpoint": {
+        "id": "16-firefight",
+        "time": 224.5,
+        "chapter": "corridor",
+        "shot": "cor-4",
+        "scene": "interior",
+        "expects": [
+          "stormtroopers advancing",
+          "blaster bolts",
+          "rebels firing"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "trooper-0"
+          },
+          {
+            "kind": "boltsActive",
+            "min": 1
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 224.5,
+        "chapter": "corridor",
+        "chapterIndex": 4,
+        "shot": "cor-4",
+        "shotLabel": "Boarders in the passage",
+        "scene": "interior",
+        "beat": "boarding action",
+        "subtitle": "The seal glows. The metal bends.",
+        "narrationCue": null,
+        "issues": [],
+        "fps": 0.9709073020859403,
+        "drawCalls": 543,
+        "triangles": 66817,
+        "measurements": {
+          "vader": {
+            "screenFraction": 0.0010382954181447127,
+            "onScreen": true,
+            "ndc": [
+              0.04191749261749873,
+              0.014973489695519945
+            ],
+            "distance": 35.37793221716421
+          },
+          "leia": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.11895846496570456,
+              0.1601817572875331
+            ],
+            "distance": 17.180547950198395
+          },
+          "r2": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              1.0172874538665935,
+              0.537642258679536
+            ],
+            "distance": 6.357300945097258
+          },
+          "threepio": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.10726896127489301,
+              0.19864813977413756
+            ],
+            "distance": 11.680093891975112
+          },
+          "plans": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.816091189836786,
+              0.08732779183451278
+            ],
+            "distance": 7.604584060621263
+          },
+          "door": {
+            "screenFraction": 0.02066954927369854,
+            "onScreen": true,
+            "ndc": [
+              0.02580158340591798,
+              -0.007224357735746394
+            ],
+            "distance": 24.890207993035705
+          },
+          "trooper-0": {
+            "screenFraction": 0.004011101672568666,
+            "onScreen": true,
+            "ndc": [
+              -0.0662282273299995,
+              -0.03875682115415199
+            ],
+            "distance": 16.90628837989707
+          },
+          "rebel-0": {
+            "screenFraction": 0.010890649436534016,
+            "onScreen": true,
+            "ndc": [
+              -0.14202203479814515,
+              -0.10701845667994629
+            ],
+            "distance": 10.608151865468853
+          },
+          "rebel-1": {
+            "screenFraction": 0.014172043995061974,
+            "onScreen": true,
+            "ndc": [
+              0.05043804202733255,
+              -0.14345061812629212
+            ],
+            "distance": 8.617883175386194
+          }
+        },
+        "boltsActive": 3,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.23588483043300987,
+        "p95": 0.4976007843137255,
+        "clipped": 0
+      },
+      "screenshot": "16-firefight.png"
+    },
+    {
+      "checkpoint": {
+        "id": "17-line-breaks",
+        "time": 232,
+        "chapter": "corridor",
+        "shot": "cor-5",
+        "scene": "interior",
+        "expects": [
+          "fallen defenders",
+          "smoke"
+        ],
+        "assertions": [
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 232,
+        "chapter": "corridor",
+        "chapterIndex": 4,
+        "shot": "cor-5",
+        "shotLabel": "The line breaks",
+        "scene": "interior",
+        "beat": "boarding action",
+        "subtitle": "The seal glows. The metal bends.",
+        "narrationCue": null,
+        "issues": [],
+        "fps": 0.8014547293843581,
+        "drawCalls": 462,
+        "triangles": 60523,
+        "measurements": {
+          "vader": {
+            "screenFraction": 0.0017671769428886318,
+            "onScreen": true,
+            "ndc": [
+              -0.11841257153039632,
+              -0.019919195667997172
+            ],
+            "distance": 32.82193737405437
+          },
+          "leia": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.28822173401421847,
+              0.02002496438964423
+            ],
+            "distance": 19.77379083587589
+          },
+          "r2": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.11337044795720201,
+              0.14341347513049013
+            ],
+            "distance": 7.702208958482197
+          },
+          "threepio": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.3672523590920439,
+              0.020850515923660856
+            ],
+            "distance": 14.340014515132046
+          },
+          "plans": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.09172115004560633,
+              -0.15284308496287044
+            ],
+            "distance": 9.218275379671773
+          },
+          "door": {
+            "screenFraction": 0.03876671614456851,
+            "onScreen": true,
+            "ndc": [
+              -0.09640856932853847,
+              -0.029152768315021022
+            ],
+            "distance": 22.32835791210692
+          },
+          "trooper-0": {
+            "screenFraction": 0.011551367840176007,
+            "onScreen": true,
+            "ndc": [
+              -0.1549511667681892,
+              -0.028253487255989803
+            ],
+            "distance": 12.581983468328858
+          },
+          "rebel-0": {
+            "screenFraction": 0.025132664047029258,
+            "onScreen": true,
+            "ndc": [
+              -0.12113316887118282,
+              -0.08600293241244428
+            ],
+            "distance": 7.828554175273275
+          },
+          "rebel-1": {
+            "screenFraction": 0.10482898855337677,
+            "onScreen": true,
+            "ndc": [
+              0.364179922235361,
+              -0.7578120300239157
+            ],
+            "distance": 5.839068698029171
+          }
+        },
+        "boltsActive": 2,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.2552560760484761,
+        "p95": 0.5515435294117647,
+        "clipped": 0
+      },
+      "screenshot": "17-line-breaks.png"
     },
     {
       "checkpoint": {
@@ -401,18 +1943,18 @@
         "subtitle": "A figure in black, breathing through a machine. The Empire keeps him for problems it cannot solve with soldiers.",
         "narrationCue": "d8",
         "issues": [],
-        "fps": 1.3324502584560047,
-        "drawCalls": 253,
-        "triangles": 45411,
+        "fps": 0.6603323672915368,
+        "drawCalls": 256,
+        "triangles": 45459,
         "measurements": {
           "vader": {
-            "screenFraction": 0.2884949654886565,
+            "screenFraction": 0.2501007883496873,
             "onScreen": true,
             "ndc": [
-              -0.0019882221020727227,
-              -0.18926438707535276
+              -0.0020703401336995327,
+              -0.18717071611763006
             ],
-            "distance": 3.713918581397096
+            "distance": 3.6868232475414127
           },
           "leia": {
             "screenFraction": 0,
@@ -451,13 +1993,13 @@
             "distance": 23.631995184716374
           },
           "door": {
-            "screenFraction": 0.5432361785836416,
+            "screenFraction": 0.5270941532002628,
             "onScreen": true,
             "ndc": [
-              0.0023526673781749706,
-              -0.25332923285050546
+              0.0027877322192068838,
+              -0.37182981778709917
             ],
-            "distance": 7.212470157420112
+            "distance": 7.909160908689877
           },
           "trooper-0": {
             "screenFraction": 0,
@@ -496,11 +2038,145 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.1161886268382173,
-        "p95": 0.17024313725490195,
+        "mean": 0.13005972265793925,
+        "p95": 0.19827607843137252,
         "clipped": 0
       },
       "screenshot": "18-vader-entrance.png"
+    },
+    {
+      "checkpoint": {
+        "id": "19-vader-advance",
+        "time": 258,
+        "chapter": "corridor",
+        "shot": "cor-8",
+        "scene": "interior",
+        "expects": [
+          "Vader walking the corridor",
+          "troopers flanking"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "vader",
+            "minScreenFraction": 0.01
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 258,
+        "chapter": "corridor",
+        "chapterIndex": 4,
+        "shot": "cor-8",
+        "shotLabel": "He walks the line",
+        "scene": "interior",
+        "beat": "the dark lord enters",
+        "subtitle": "He has come for the thing that was stolen.",
+        "narrationCue": "d9",
+        "issues": [],
+        "fps": 0.5984265371582985,
+        "drawCalls": 432,
+        "triangles": 58227,
+        "measurements": {
+          "vader": {
+            "screenFraction": 0.07051957959282817,
+            "onScreen": true,
+            "ndc": [
+              0.021741193866934207,
+              -0.15713091048458408
+            ],
+            "distance": 6.652636406985507
+          },
+          "leia": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.3541036913899784,
+              0.12672534373551442
+            ],
+            "distance": 22.52172083129433
+          },
+          "r2": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.9348778384281894,
+              0.3056483821754527
+            ],
+            "distance": 11.082967183846794
+          },
+          "threepio": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.34170239435915756,
+              0.14389916750453569
+            ],
+            "distance": 17.01681829315566
+          },
+          "plans": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.8714040419512044,
+              0.02703361963540396
+            ],
+            "distance": 12.522609968767714
+          },
+          "door": {
+            "screenFraction": 0.06002280139472477,
+            "onScreen": true,
+            "ndc": [
+              0.209865235002303,
+              -0.03757068532374561
+            ],
+            "distance": 19.549685510553104
+          },
+          "trooper-0": {
+            "screenFraction": 0.02467266140649283,
+            "onScreen": true,
+            "ndc": [
+              -0.0886682758920291,
+              -0.12785141498368835
+            ],
+            "distance": 9.454355220707855
+          },
+          "rebel-0": {
+            "screenFraction": 0.0930936725904532,
+            "onScreen": true,
+            "ndc": [
+              -0.38395375451969377,
+              -1.1390567429435388
+            ],
+            "distance": 5.160446005242598
+          },
+          "rebel-1": {
+            "screenFraction": 0.027154952550315414,
+            "onScreen": true,
+            "ndc": [
+              0.11078795341652815,
+              -2.1580565900989854
+            ],
+            "distance": 3.20778374562939
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.27944059025052753,
+        "p95": 0.6122901960784313,
+        "clipped": 0
+      },
+      "screenshot": "19-vader-advance.png"
     },
     {
       "checkpoint": {
@@ -535,18 +2211,18 @@
         "subtitle": "The stolen schematics fold down into a small astromech droid. Every tower, every corridor, and one flaw at the heart of it.",
         "narrationCue": "l2",
         "issues": [],
-        "fps": 1.120504974241636,
-        "drawCalls": 279,
-        "triangles": 45169,
+        "fps": 0.5784277305966419,
+        "drawCalls": 282,
+        "triangles": 45217,
         "measurements": {
           "vader": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -2.5484775025479167,
-              0.28757357322202054
+              -2.54956118330896,
+              0.28803049006625125
             ],
-            "distance": 15.112008314068941
+            "distance": 15.079718651150603
           },
           "leia": {
             "screenFraction": 0.1180921429538911,
@@ -588,10 +2264,10 @@
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -2.320542274426391,
-              0.15656105087390668
+              -2.3171825039951397,
+              0.20154166707860766
             ],
-            "distance": 29.17305324934749
+            "distance": 29.892474810285062
           },
           "trooper-0": {
             "screenFraction": 0,
@@ -630,9 +2306,9 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.2733747588916056,
-        "p95": 0.7589529411764705,
-        "clipped": 0.00034722222222222224
+        "mean": 0.27525903405500773,
+        "p95": 0.7610650980392156,
+        "clipped": 0.00038194444444444446
       },
       "screenshot": "20-leia-console.png"
     },
@@ -668,18 +2344,18 @@
         "subtitle": "The stolen schematics fold down into a small astromech droid. Every tower, every corridor, and one flaw at the heart of it.",
         "narrationCue": null,
         "issues": [],
-        "fps": 0.9196341899554952,
-        "drawCalls": 279,
-        "triangles": 52837,
+        "fps": 0.6489068083302332,
+        "drawCalls": 282,
+        "triangles": 52885,
         "measurements": {
           "vader": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -3.2616640018005563,
-              0.33970930321354104
+              -3.263180563933252,
+              0.3404840804636913
             ],
-            "distance": 14.413707820876539
+            "distance": 14.380585098335409
           },
           "leia": {
             "screenFraction": 0.10531750320042864,
@@ -721,10 +2397,10 @@
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -2.959703103870628,
-              0.1395076313692227
+              -2.9542072233207515,
+              0.19549605533437492
             ],
-            "distance": 28.60765763090986
+            "distance": 29.328213938069634
           },
           "trooper-0": {
             "screenFraction": 0,
@@ -763,8 +2439,8 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.6145022520697218,
-        "p95": 0.9152698039215686,
+        "mean": 0.6156418708333269,
+        "p95": 0.9158203921568627,
         "clipped": 0.00005208333333333334
       },
       "screenshot": "21-plans-projection.png"
@@ -807,18 +2483,18 @@
         "subtitle": "You are carrying more than a message. Get it to the surface. Do not stop for me.",
         "narrationCue": "l4",
         "issues": [],
-        "fps": 0.7881200534520535,
-        "drawCalls": 280,
-        "triangles": 53157,
+        "fps": 0.6501556039078686,
+        "drawCalls": 283,
+        "triangles": 53205,
         "measurements": {
           "vader": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -4.710856534960546,
-              0.1461515893187447
+              -4.713662896112442,
+              0.14624504536219757
             ],
-            "distance": 14.064392692174836
+            "distance": 14.032311602710717
           },
           "leia": {
             "screenFraction": 0.15462216917952823,
@@ -860,10 +2536,10 @@
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -4.1543655728031395,
-              0.06803740918709142
+              -4.148600421005864,
+              0.1471111121580295
             ],
-            "distance": 28.385383475525824
+            "distance": 29.100221326664798
           },
           "trooper-0": {
             "screenFraction": 0,
@@ -902,11 +2578,740 @@
       },
       "failures": [],
       "brightness": {
-        "mean": 0.25329556546841525,
-        "p95": 0.7563639215686274,
+        "mean": 0.25374837662037847,
+        "p95": 0.7565850980392157,
         "clipped": 0
       },
       "screenshot": "22-transfer.png"
+    },
+    {
+      "checkpoint": {
+        "id": "23-droids-run",
+        "time": 310,
+        "chapter": "escape",
+        "shot": "esc-1",
+        "scene": "interior",
+        "expects": [
+          "astromech rolling aft",
+          "protocol droid stopped dead behind him"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "r2",
+            "minScreenFraction": 0.002
+          },
+          {
+            "kind": "visible",
+            "target": "threepio",
+            "minScreenFraction": 0.002
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 310,
+        "chapter": "escape",
+        "chapterIndex": 6,
+        "shot": "esc-1",
+        "shotLabel": "Droids run for the bay",
+        "scene": "interior",
+        "beat": "droids run for the bay",
+        "subtitle": "Two droids run for the launch bays. One of them is certain.",
+        "narrationCue": "e1",
+        "issues": [],
+        "fps": 0.6866989466038159,
+        "drawCalls": 344,
+        "triangles": 45903,
+        "measurements": {
+          "vader": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.32970041487547885,
+              0.2707037596123318
+            ],
+            "distance": 17.56268064459743
+          },
+          "leia": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.6827108624054126,
+              0.4401966474571742
+            ],
+            "distance": 7.746742863880012
+          },
+          "r2": {
+            "screenFraction": 0.01741011549215578,
+            "onScreen": true,
+            "ndc": [
+              0.07740920785399176,
+              -0.04390118393614144
+            ],
+            "distance": 7.6847173421706625
+          },
+          "threepio": {
+            "screenFraction": 0.05033458858390661,
+            "onScreen": true,
+            "ndc": [
+              -0.08869736729232539,
+              -0.09329014624631142
+            ],
+            "distance": 4.733479494419992
+          },
+          "plans": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -1.1892706874470083,
+              0.17989625115377067
+            ],
+            "distance": 7.325557429052163
+          },
+          "door": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.2795201080941208,
+              0.24105779087717627
+            ],
+            "distance": 37.43208953041334
+          },
+          "trooper-0": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.4524568579625632,
+              0.2919355505042725
+            ],
+            "distance": 14.081397011656332
+          },
+          "rebel-0": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.36063424856143644,
+              0.4136282186547688
+            ],
+            "distance": 22.329459092877887
+          },
+          "rebel-1": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.26107156488309713,
+              0.42837288157126935
+            ],
+            "distance": 20.435731709799626
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.2609388174291815,
+        "p95": 0.5436776470588234,
+        "clipped": 0
+      },
+      "screenshot": "23-droids-run.png"
+    },
+    {
+      "checkpoint": {
+        "id": "24-droids-reach-the-pod",
+        "time": 316,
+        "chapter": "escape",
+        "shot": "esc-2",
+        "scene": "interior",
+        "expects": [
+          "astromech at the pod hatch",
+          "protocol droid catching up",
+          "lit hatch sign"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "threepio",
+            "minScreenFraction": 0.004
+          },
+          {
+            "kind": "visible",
+            "target": "r2",
+            "minScreenFraction": 0.004
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 316,
+        "chapter": "escape",
+        "chapterIndex": 6,
+        "shot": "esc-2",
+        "shotLabel": "Reaching the pod bay",
+        "scene": "interior",
+        "beat": "the protocol droid balks",
+        "subtitle": "Two droids run for the launch bays. One of them is certain.",
+        "narrationCue": null,
+        "issues": [],
+        "fps": 0.7479506153140397,
+        "drawCalls": 770,
+        "triangles": 88907,
+        "measurements": {
+          "vader": {
+            "screenFraction": 0.002302926348155871,
+            "onScreen": true,
+            "ndc": [
+              0.8300360416413496,
+              0.1444991434039588
+            ],
+            "distance": 35.786827131081395
+          },
+          "leia": {
+            "screenFraction": 0.002250120239287874,
+            "onScreen": true,
+            "ndc": [
+              0.725345324242361,
+              0.10996714365955654
+            ],
+            "distance": 25.698362702536762
+          },
+          "r2": {
+            "screenFraction": 0.08431767555063727,
+            "onScreen": true,
+            "ndc": [
+              -0.07579931709626961,
+              -0.2682697556771293
+            ],
+            "distance": 4.552080746601932
+          },
+          "threepio": {
+            "screenFraction": 0.04062432253100139,
+            "onScreen": true,
+            "ndc": [
+              0.662593541123533,
+              -0.040218493261462894
+            ],
+            "distance": 7.433228032702153
+          },
+          "plans": {
+            "screenFraction": 0.004222763105623947,
+            "onScreen": true,
+            "ndc": [
+              0.6140651017101543,
+              0.18911800976659365
+            ],
+            "distance": 24.673962628596403
+          },
+          "door": {
+            "screenFraction": 0.007983948357431587,
+            "onScreen": true,
+            "ndc": [
+              0.8560266715515148,
+              0.1537973892219596
+            ],
+            "distance": 55.679395119731815
+          },
+          "trooper-0": {
+            "screenFraction": 0.0024098215504842597,
+            "onScreen": true,
+            "ndc": [
+              0.7652305720766646,
+              0.13999358708363413
+            ],
+            "distance": 32.223123268600474
+          },
+          "rebel-0": {
+            "screenFraction": 0.0014079321114378732,
+            "onScreen": true,
+            "ndc": [
+              0.7981145671318477,
+              0.048548466522734667
+            ],
+            "distance": 40.49647828522289
+          },
+          "rebel-1": {
+            "screenFraction": 0.0015954210535976592,
+            "onScreen": true,
+            "ndc": [
+              0.876283142666833,
+              0.03790836193980066
+            ],
+            "distance": 38.63777543697857
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.39252829459419664,
+        "p95": 0.8851576470588236,
+        "clipped": 0.0007291666666666667
+      },
+      "screenshot": "24-droids-reach-the-pod.png"
+    },
+    {
+      "checkpoint": {
+        "id": "25-pod-separation",
+        "time": 322,
+        "chapter": "escape",
+        "shot": "esc-3",
+        "scene": "space",
+        "expects": [
+          "pod leaving the corvette",
+          "thruster flare"
+        ],
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "pod",
+            "minScreenFraction": 0.0015
+          },
+          {
+            "kind": "brightness",
+            "min": 0.02,
+            "max": 0.5
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 322,
+        "chapter": "escape",
+        "chapterIndex": 6,
+        "shot": "esc-3",
+        "shotLabel": "Pod separation",
+        "scene": "space",
+        "beat": "pod launch",
+        "subtitle": "Two droids run for the launch bays. One of them is certain.",
+        "narrationCue": null,
+        "issues": [],
+        "fps": 0.7163973808511755,
+        "drawCalls": 78,
+        "triangles": 23751,
+        "measurements": {
+          "runner": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.6128759316402107,
+              0.34018441130201005
+            ],
+            "distance": 93.53901699476927
+          },
+          "destroyer": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.08130014406178476,
+              0.7136855352912411
+            ],
+            "distance": 473.71351276754916
+          },
+          "pod": {
+            "screenFraction": 0.22091247590337384,
+            "onScreen": true,
+            "ndc": [
+              -0.026896732058501478,
+              -0.0008257367462028786
+            ],
+            "distance": 21.66238227252639
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.0005527484352639538,
+              5.291089395302498
+            ],
+            "distance": 251957.97528254788
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.4313005781045869,
+        "p95": 0.8417709803921569,
+        "clipped": 0.006961805555555555
+      },
+      "screenshot": "25-pod-separation.png"
+    },
+    {
+      "checkpoint": {
+        "id": "26-pod-falling",
+        "time": 334,
+        "chapter": "escape",
+        "shot": "esc-4",
+        "scene": "space",
+        "expects": [
+          "pod falling away",
+          "both ships above",
+          "planet below"
+        ],
+        "assertions": [
+          {
+            "kind": "onScreen",
+            "target": "pod"
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 334,
+        "chapter": "escape",
+        "chapterIndex": 6,
+        "shot": "esc-4",
+        "shotLabel": "Falling away",
+        "scene": "space",
+        "beat": "falling away",
+        "subtitle": "On the destroyer, a gunnery officer checks for life signs, finds none, and holds his fire.",
+        "narrationCue": "e4",
+        "issues": [],
+        "fps": 0.7694780544858861,
+        "drawCalls": 89,
+        "triangles": 25117,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.006485945510253745,
+            "onScreen": true,
+            "ndc": [
+              -0.5618273435345622,
+              0.9660762829467846
+            ],
+            "distance": 1554.92831964029
+          },
+          "destroyer": {
+            "screenFraction": 0.4339173285867507,
+            "onScreen": true,
+            "ndc": [
+              -0.5433047073766497,
+              0.6947537576245654
+            ],
+            "distance": 1904.9668918174182
+          },
+          "pod": {
+            "screenFraction": 0.011627512142233513,
+            "onScreen": true,
+            "ndc": [
+              0.15258541098344353,
+              -0.14024683823343237
+            ],
+            "distance": 87.5381763908705
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.003629840792764088,
+              1.5750405395116698
+            ],
+            "distance": 250600.83846420184
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.03160812527230913,
+        "p95": 0.03587607843137255,
+        "clipped": 0
+      },
+      "screenshot": "26-pod-falling.png"
+    },
+    {
+      "checkpoint": {
+        "id": "27-descent",
+        "time": 348,
+        "chapter": "escape",
+        "shot": "esc-5",
+        "scene": "space",
+        "expects": [
+          "pod against the desert",
+          "atmosphere"
+        ],
+        "assertions": [
+          {
+            "kind": "onScreen",
+            "target": "pod"
+          },
+          {
+            "kind": "brightness",
+            "min": 0.05
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 348,
+        "chapter": "escape",
+        "chapterIndex": 6,
+        "shot": "esc-5",
+        "shotLabel": "Descent",
+        "scene": "space",
+        "beat": "atmospheric entry",
+        "subtitle": "The pod falls toward the desert, a small bright point against a very old world.",
+        "narrationCue": null,
+        "issues": [],
+        "fps": 0.789271519926475,
+        "drawCalls": 45,
+        "triangles": 29057,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.09328310612062736,
+              -2.7952715525958873
+            ],
+            "distance": 16126.21284996263
+          },
+          "destroyer": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -0.08388660627050856,
+              -2.7136369909968985
+            ],
+            "distance": 16430.596671552383
+          },
+          "pod": {
+            "screenFraction": 0.0006677199510245238,
+            "onScreen": true,
+            "ndc": [
+              -0.16299554528880866,
+              0.04658449762845046
+            ],
+            "distance": 388.1296486373601
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.008043226583212644,
+              -4.016789663629198
+            ],
+            "distance": 236114.6427834766
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.805555494553341,
+        "p95": 0.9699647058823528,
+        "clipped": 0.00001736111111111111
+      },
+      "screenshot": "27-descent.png"
+    },
+    {
+      "checkpoint": {
+        "id": "28-epilogue-entry",
+        "time": 360,
+        "chapter": "epilogue",
+        "shot": "epi-1",
+        "scene": "space",
+        "expects": [
+          "pod as a bright point entering atmosphere"
+        ],
+        "assertions": [
+          {
+            "kind": "brightness",
+            "min": 0.04
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 360,
+        "chapter": "epilogue",
+        "chapterIndex": 7,
+        "shot": "epi-1",
+        "shotLabel": "A bright point in a wide sky",
+        "scene": "space",
+        "beat": "a bright point",
+        "subtitle": "The pod falls toward the desert, a small bright point against a very old world.",
+        "narrationCue": null,
+        "issues": [],
+        "fps": 0.9246930019233616,
+        "drawCalls": 44,
+        "triangles": 29057,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.23933403725571503,
+              -3.3362563123724827
+            ],
+            "distance": 33629.22343838939
+          },
+          "destroyer": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.2484251330076587,
+              -3.291527186671914
+            ],
+            "distance": 33914.57226689076
+          },
+          "pod": {
+            "screenFraction": 0.000006156261226705623,
+            "onScreen": true,
+            "ndc": [
+              -0.36059891903797364,
+              -0.31885307605463403
+            ],
+            "distance": 6331.5218521836605
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.03794990336511147,
+              -3.520195859362816
+            ],
+            "distance": 218582.06866530012
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.6425311063589177,
+        "p95": 0.7343113725490197,
+        "clipped": 0
+      },
+      "screenshot": "28-epilogue-entry.png"
+    },
+    {
+      "checkpoint": {
+        "id": "29-epilogue-ships",
+        "time": 374,
+        "chapter": "epilogue",
+        "shot": "epi-2",
+        "scene": "space",
+        "expects": [
+          "destroyer and captured corvette overhead",
+          "closing line"
+        ],
+        "assertions": [
+          {
+            "kind": "onScreen",
+            "target": "destroyer"
+          },
+          {
+            "kind": "noIssues"
+          }
+        ]
+      },
+      "report": {
+        "time": 374,
+        "chapter": "epilogue",
+        "chapterIndex": 7,
+        "shot": "epi-2",
+        "shotLabel": "The Empire keeps the ship",
+        "scene": "space",
+        "beat": "the Empire keeps the ship",
+        "subtitle": "The pod falls toward the desert, a small bright point against a very old world.",
+        "narrationCue": null,
+        "issues": [],
+        "fps": 1.1915700391629351,
+        "drawCalls": 136,
+        "triangles": 38049,
+        "measurements": {
+          "runner": {
+            "screenFraction": 0.003867950826660006,
+            "onScreen": true,
+            "ndc": [
+              -0.04533562612689912,
+              0.7253023231156387
+            ],
+            "distance": 2386.658667150004
+          },
+          "destroyer": {
+            "screenFraction": 0.18815977275764628,
+            "onScreen": true,
+            "ndc": [
+              -0.12478215745046767,
+              0.9447479625558712
+            ],
+            "distance": 2649.4465199966153
+          },
+          "pod": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              0.5053755386364929,
+              -5.94534306295756
+            ],
+            "distance": 47140.452079697614
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -0.0011450082711534965,
+              -5.039419018943217
+            ],
+            "distance": 251962.78834545767
+          }
+        },
+        "boltsActive": 0,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.04132941885891977,
+        "p95": 0.0810964705882353,
+        "clipped": 0
+      },
+      "screenshot": "29-epilogue-ships.png"
     }
   ]
 }

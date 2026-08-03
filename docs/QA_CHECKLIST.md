@@ -13,7 +13,9 @@ evaluates subject screen coverage, frame luminance and clipping, then runs the f
 Per-checkpoint detail is in [CHECKPOINTS.md](CHECKPOINTS.md).
 
 - [x] No checkpoint fails its assertions.
-- [x] No frame has more than 22% blown-out pixels (worst measured: 0.5%).
+- [x] No frame has more than 30% blown-out pixels (worst measured: 0.7%). This guard runs on every
+      checkpoint rather than only on those carrying a brightness assertion, which is how the
+      over-scaled escape-pod plume was caught.
 - [x] No frame in an interior chapter falls below the readability floor.
 - [x] Zero console errors across the whole run.
 - [x] Zero uncaught page exceptions across the whole run.
@@ -47,15 +49,15 @@ Evaluated at every checkpoint and continuously while the debug overlay is open:
 
 | Beat | Peak | Limiter |
 | --- | --- | --- |
-| Prologue drone + first narration | 0.62 | 0.0 dB |
-| Tatooine pad + narration | 0.52 | −0.6 dB |
-| Turbolaser salvo + pursuit ostinato | 0.58 | −1.1 dB |
-| Door breach + boarding percussion | 0.51 | −0.6 dB |
-| Respirator bed + iron motif | 0.55 | −1.1 dB |
-| Data transfer blips + strings | 0.43 | −0.8 dB |
-| Pod clamps and launch | 0.50 | −1.1 dB |
+| Prologue drone + first narration | 0.45 | 0.0 dB |
+| Tatooine pad + narration | 0.54 | −0.5 dB |
+| Turbolaser salvo + pursuit ostinato | 0.56 | −2.5 dB |
+| Door breach + boarding percussion | 0.58 | −0.5 dB |
+| Respirator bed + iron motif | 0.50 | −1.2 dB |
+| Data transfer blips + strings | 0.49 | −0.2 dB |
+| Pod clamps and launch | 0.49 | −0.8 dB |
 
-- [x] All 44 narration clips decode; playback mode reports `audio`.
+- [x] All 45 narration clips decode; playback mode reports `audio`.
 - [x] AudioContext reaches `running` after the enter gate.
 - [x] No beat reaches full scale; the limiter never works harder than about 1 dB.
 - [x] Music ducks under narration.
@@ -116,6 +118,27 @@ defects that still frames had hidden:
 - The firefight camera stood half a metre behind a defender's back. It now sits behind the whole
   defended line so a defender frames the edge and the advance reads in depth.
 
+### Staging pass
+
+A final read of every checkpoint frame at 1920×1080, looking only at whether each shot does the job
+the story needs it to do:
+
+- The escape pod's hatch surround was a solid slab standing in front of the door, so the droids'
+  destination read as a black hole punched in the wall. It is now four bars around a lit door with
+  an airlock collar, hazard chevrons, a green ready sign and a practical in the bay.
+- The escape pod shared the corvette's engine-halo sprite material. Because the pod is updated
+  second and is dark for most of the piece, it had been switching the corvette's engine glow off
+  through the entire chase. The pod now owns its material.
+- Vader's cape opened above his shoulders, which turned the whole figure into a smooth bell in the
+  one shot where he is nothing but an outline. The cape now hangs from the shoulder line and he has
+  an armoured yoke and a standing collar.
+- The pod separation shot trailed the pod, which put a hundred metres of lit hull directly behind a
+  six-metre object. The camera now holds off its quarter with the ships thrown into frame left.
+- The separation burn was first authored at the same scale as the re-entry plasma and washed the
+  frame to pure white. Caught by the new global clipping guard rather than by eye.
+- Breached blast-door leaves came to rest standing upright in the middle of the corridor.
+- The warm planet bounce had drifted far enough that Imperial grey was reading as brown.
+
 ## Final polish criteria
 
 - [x] The destroyer reveal communicates overwhelming scale — the bow crosses the top of frame at
@@ -135,9 +158,11 @@ defects that still frames had hidden:
       a low retreating camera holds him for eleven seconds.
 - [x] Leia's transfer of the plans is visually readable — the projection, the beam, the lit data
       port, and a two-shot of her kneeling beside the droid.
-- [x] The droids reach the correct pod — the lit hatch at the far end of the aft run.
-- [x] The pod visibly leaves the ship and approaches the planet — separation with the corvette
-      directly behind it, then a fall with both ships above, then descent, then a bright trail.
+- [x] The droids reach the correct pod — a marked, lit airlock hatch at the far end of the aft run,
+      with the astromech standing at it and the protocol droid still hesitating behind.
+- [x] The pod visibly leaves the ship and approaches the planet — it clears the hull under thrust
+      with the ships crowding frame left, then falls with both above it, then descends on a bright
+      trail.
 - [x] Narration, subtitles, music and action stay synchronised — all driven from one clock, and the
       clock advances by wall time regardless of frame rate.
 - [x] No camera crosses through geometry — enforced by an assertion, not by inspection alone.

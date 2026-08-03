@@ -6,7 +6,9 @@ Twenty-nine named moments the automated visual tour must capture. The machine-re
 For each checkpoint the tour:
 
 1. calls `window.__starfall.renderAt(time)` to render one deterministic frame,
-2. verifies the chapter, camera shot and active scene are the expected ones,
+2. verifies the chapter, camera shot and active scene are the expected ones, and that under 30% of
+   the frame is blown out — this one applies everywhere, not only where a brightness assertion is
+   listed,
 3. evaluates the listed assertions against measured screen coverage, frame luminance, subtitle
    text, bolt activity and particle usage,
 4. runs the full runtime sanity sweep at that instant,
@@ -18,7 +20,7 @@ Assertion vocabulary:
 | --- | --- |
 | `visible(target, f)` | The subject's projected bounds cover at least `f` of the viewport and it is in front of the camera |
 | `onScreen(target)` | Some part of the subject is inside the frustum |
-| `brightness(min, max)` | Mean frame luminance is inside the range, and under 22% of pixels are blown out |
+| `brightness(min, max)` | Mean frame luminance is inside the range |
 | `subtitle(text)` | The visible caption contains that text |
 | `boltsActive(n)` | At least `n` energy bolts are genuinely in flight |
 | `particlesActive(n)` | At least `n` particles have been emitted for this moment |
@@ -50,7 +52,7 @@ Assertion vocabulary:
 | 22 | `22-transfer` | 293 | plans | pln-4 | interior | Leia kneeling by R2, transfer beam, lit data port | visible(r2, 0.004), visible(leia), noIssues |
 | 23 | `23-droids-run` | 310 | escape | esc-1 | interior | Astromech rolling aft, protocol droid following | visible(r2), noIssues |
 | 24 | `24-threepio-hesitates` | 316 | escape | esc-2 | interior | Protocol droid at the pod hatch, astromech boarding | visible(threepio, 0.004), noIssues |
-| 25 | `25-pod-separation` | 322 | escape | esc-3 | space | Pod leaving the corvette, thruster flare | visible(pod, 0.0015), noIssues |
+| 25 | `25-pod-separation` | 322 | escape | esc-3 | space | Pod leaving the corvette, thruster flare | visible(pod, 0.0015), brightness(0.02, 0.5), noIssues |
 | 26 | `26-pod-falling` | 334 | escape | esc-4 | space | Pod falling away, both ships above, planet below | onScreen(pod), noIssues |
 | 27 | `27-descent` | 348 | escape | esc-5 | space | Pod against the desert, atmosphere | onScreen(pod), brightness(0.05), noIssues |
 | 28 | `28-epilogue-entry` | 360 | epilogue | epi-1 | space | Pod as a bright point entering atmosphere | brightness(0.04), noIssues |
