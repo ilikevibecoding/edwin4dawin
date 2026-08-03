@@ -138,9 +138,13 @@ export default {
       hall.add(trim);
     }
 
-    for (const x of [-17, 17]) {
-      const s = lightShaft(2.2, 7, 30, 0xfff0d0, 0.022);
-      s.position.set(x, 16, -114);
+    // Shafts down from the clerestory. Four rather than two, and more than
+    // twice the density: a white room lit evenly from a white ceiling has no
+    // modelling in it anywhere, and these are the only thing in the chapter
+    // that puts a diagonal across all that horizontal stone.
+    for (const [x, z] of [[-17, -114], [17, -114], [-31, -96], [31, -96]]) {
+      const s = lightShaft(2.4, 7.5, 32, 0xfff0d0, 0.05);
+      s.position.set(x, 16, z);
       root.add(s);
     }
     // A soft key over the ceremony itself: the set's practicals are hung to
@@ -168,11 +172,10 @@ export default {
     luke.rotation.y = 1.02;
     leia.position.set(1.15, 0, -128.6);
     leia.rotation.y = -0.85;
-    // Han is next in the line, on Leia's far side. The narration names three
-    // people and the hall only had two, so he has to be here -- but he cannot
-    // be anywhere the two-shot or the single can see him, or he stands in the
-    // corner of both with nothing to do. From x = 5.6 he is past the right
-    // edge of every lens that holds the hand-off, and squarely in the wides.
+    // Han is next in the line, on Leia's far side. From x = 5.6 he is past the
+    // right edge of every lens that holds the hand-off, so he never stands in
+    // the corner of someone else's shot with nothing to do -- and he is far
+    // enough round for a camera of his own to clear both of them.
     han.position.set(5.6, 0, -126.6);
     han.rotation.y = -1.16;
     // Everyone else is kept well off the aisle's centre line -- that is the
@@ -250,21 +253,39 @@ export default {
       look: [0, 27, -146], lookTo: [0, 6.0, -130],
     });
     shots.add({          // 2. the medal: two-shot across the eyeline
-      t: f2 - 1.2, dur: 6.0, fov: 34, ease: 'inOutQuad',
+      t: f2 - 1.2, dur: 4.7, fov: 34, ease: 'inOutQuad',
       pos: [2.9, 5.3, -118.9], to: [2.2, 5.15, -120.4],
       look: [0, 4.55, -128.4], lookTo: [0, 4.45, -128.4],
       handheld: 0.16,
     });
-    shots.add({          // 3. close on Luke
+    shots.add({          // 3. the smuggler, on the word
+      // Cut here because of what is being said over it. The line runs "a farm
+      // boy, a smuggler and a princess", and Han was otherwise only ever a
+      // dark shape at the edge of a wide or the back of a head in the reverse
+      // -- someone watching this cold could not have told you he was in the
+      // film. Two and a half seconds of his face, timed to his own noun.
+      //
+      // Round to -X and back off him, which is the only pocket in the room
+      // that holds him and neither of the other two: from anywhere squarer,
+      // Leia is two studs behind his shoulder. Seven and a half studs out and
+      // sighted a stud below the head, because he is at full salute over this
+      // and the shot has to contain the arm -- from five studs the lens cropped
+      // his hair and the raised hand crossed the frame as a bare white bar.
+      t: f2 + 3.5, dur: 2.4, fov: 30, ease: 'outQuad',
+      pos: [2.4, 5.6, -119.9], to: [2.8, 5.45, -121.0],
+      look: () => head(han).add(new THREE.Vector3(0.05, -0.95, 0)),
+      handheld: 0.18,
+    });
+    shots.add({          // 4. close on Luke
       // Aimed a little past him, away from Leia: at two studs apart she is
       // otherwise inside the frame edge from every angle that holds his face,
       // and this pushes her out and puts him off centre at the same time.
-      t: f2 + 4.8, dur: 4.4, fov: 28, ease: 'outQuad',
+      t: f2 + 5.9, dur: 3.3, fov: 28, ease: 'outQuad',
       pos: [3.7, 5.4, -123.2], to: [3.35, 5.3, -123.9],
       look: () => head(luke).add(new THREE.Vector3(-0.85, -0.62, -0.12)),
       handheld: 0.18,
     });
-    shots.add({          // 4. the reverse: the hall salutes, past the three of them
+    shots.add({          // 5. the reverse: the hall salutes, past the three of them
       // The ranks are drawn up facing the dais, so a lens anywhere down the
       // aisle only ever sees the backs of their heads -- which is what this
       // shot used to be, and the salute may as well not have happened. The
@@ -273,12 +294,18 @@ export default {
       // the frame as foreground. Seven studs up, which is the whole range
       // available: any lower and the three of them mask the ranks, any higher
       // and all that is left of them is three hair pieces on the bottom edge.
+      //
+      // On the centre line, unlike everything before it. The hall is built for
+      // one-point perspective and the two principals stand a stud and a bit
+      // either side of it, so from x = 0 they fall symmetrically into the lower
+      // corners and the aisle runs out between them to the door. Offset by two
+      // it was Leia's head sitting on the vanishing point.
       t: f2 + 9.2, dur: 4.7, fov: 44, ease: 'inOutQuad',
-      pos: [1.8, 7.0, -137.2], to: [1.6, 7.5, -134.6],
-      look: [0.6, 5.2, -112.0], lookTo: [0.5, 5.5, -108.0],
+      pos: [0.15, 7.0, -136.6], to: [0.1, 7.0, -135.2],
+      look: [0.1, 5.1, -112.0], lookTo: [0.1, 5.3, -108.0],
     });
-    shots.add({          // 5. crane out for the last image of the film
-      // Cuts across the line from shot 4, deliberately: it is a different
+    shots.add({          // 6. crane out for the last image of the film
+      // Cuts across the line from shot 5, deliberately: it is a different
       // setup at a different scale on the last beat of the film, which is
       // where an audience expects the picture to open out. Starting high
       // rather than craning up into it keeps it from reading as a whip round.
@@ -298,8 +325,8 @@ export default {
       // the chapter before -- and the one before this is the trench, which
       // finishes with its aberration wound up to 0.0022.
       grade: {
-        uVignette: 0.36, uGrain: 0.026, uAberration: 0.0010,
-        uSaturation: 1.04, uContrast: 1.04,
+        uVignette: 0.46, uGrain: 0.026, uAberration: 0.0010,
+        uSaturation: 1.06, uContrast: 1.10,
       },
       update(t, dt) {
         const lf = luke.userData.fig;
@@ -362,7 +389,10 @@ export default {
             ['idle', 1],
             ['salute', ramp(t, SALUTE + 0.35, SALUTE + 1.1)],
           ]);
-          hf.lookAt(head(luke).lerp(OPEN, 0.22), 0.7);
+          // Cheated further open than anyone else in the room. He is the only
+          // one covered from behind his own shoulder line, so a head aimed
+          // honestly at Luke gives his single nothing but a cheek.
+          hf.lookAt(head(luke).lerp(OPEN, 0.5), 0.7);
           hf.update(dt, t);
         }
 

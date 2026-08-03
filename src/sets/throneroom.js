@@ -205,7 +205,7 @@ export function buildThroneRoom(opts = {}) {
     });
   }
   bb.brick(0, doorH, 1.6, doorW, 3.2, { h: h - doorH, color: C.white, free: true, studs: false });
-  bb.brick(0, 0, 4.4, doorW - 0.6, 2.6, { h: doorH, color: C.lightBluishGray, free: true, studs: false });
+  bb.brick(0, 0, 4.4, doorW - 0.6, 2.6, { h: doorH, color: C.veryLightGray, free: true, studs: false });
   // Jambs and a lintel band, so the recess has an edge to catch the light
   // instead of being a grey rectangle painted on a white wall.
   for (const side of [-1, 1]) {
@@ -347,6 +347,19 @@ export function buildThroneRoom(opts = {}) {
     // is 120 studs from the nearest of the other three lamps and would
     // otherwise sit unlit at the exact centre of the reverse.
     practical(g, 0, 24, -9, 0xffe9c8, 420, 62);
+    // The recess needs its own lamp even so. Hung at 24 the first one is level
+    // with the lintel, and the back of a three-stud recess falls off steeply
+    // below it: the panel ran from mid grey at the head of the opening down to
+    // a fifth of the wall beside it at the threshold, which at 140 studs is not
+    // a doorway, it is a hole punched in the end of the room. Low and warm, so
+    // the opening reads as somewhere the light is coming from.
+    //
+    // Stood well back off the panel rather than tucked into the recess. The
+    // opening is 34 studs across and inverse square is brutal at close range:
+    // from three studs out the middle of it blew past white while the jambs
+    // stayed grey, which is a lamp pointed at a wall, not a doorway. From
+    // seventeen the spread across the panel is under three to one.
+    practical(g, 0, 15, -13, 0xffe6c2, 620, 64);
     // Three lamps cannot reach 150 studs of ceiling, and the ceiling is what
     // the top of every shot down this aisle is made of: coffers face straight
     // down, so with nothing but point lights the roof above the lens goes to
@@ -354,7 +367,7 @@ export function buildThroneRoom(opts = {}) {
     // hemisphere is standing in for the bounce off all that white floor.
     g.add(new THREE.HemisphereLight(
       new THREE.Color(0xe4ecfa).convertSRGBToLinear(),
-      new THREE.Color(0x9aa4b4).convertSRGBToLinear(), 1.5,
+      new THREE.Color(0x9aa4b4).convertSRGBToLinear(), 1.25,
     ));
   }
   return g;
