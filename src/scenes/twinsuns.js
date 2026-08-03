@@ -189,11 +189,16 @@ export default {
       handheld: 0.26,
     });
     shots.add({          // 4. his line, on his face, the low sun across it
-      // Tight enough to crop the speeder off the right edge: it is a flat brown
-      // slab at his shoulder and it is the only other object out here.
-      t: FACE_IN, dur: FACE_OUT - FACE_IN, fov: 21, ease: 'inOutQuad',
-      pos: eye(4.0, 1.6, -12.5), to: eye(3.2, 2.0, -10.0),
-      look: off(4.3, -1.1),
+      // Two things fix the position of this lens. It has to be far enough
+      // round to the -X side that the landspeeder falls off the right edge --
+      // it is a flat brown slab at his shoulder and the only other object out
+      // here -- and it has to sit at his chest rather than his knees. Down at
+      // knee height the camera tilts up and the entire background is a bare
+      // orange gradient: no horizon, no dunes, nothing to say he is standing
+      // anywhere. From chest height the sand line crosses behind his shoulder.
+      t: FACE_IN, dur: FACE_OUT - FACE_IN, fov: 23, ease: 'inOutQuad',
+      pos: eye(2.0, 3.4, -14.0), to: eye(1.4, 3.7, -11.8),
+      look: off(4.4, -0.35),
       handheld: 0.3,
     });
     shots.add({          // 5. drift back; the light goes out behind him
