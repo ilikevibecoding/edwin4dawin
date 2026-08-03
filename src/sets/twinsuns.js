@@ -182,38 +182,62 @@ export function buildTwinSuns(opts = {}) {
 
   // Optional dune silhouette so the set reads on its own; a scene that puts
   // real terrain in front of these suns can switch it off with ridge=0.
+  //
+  // Real geometry rather than a painted card. The dune line runs within a few
+  // degrees of horizontal right across the middle of frame, and a shallow edge
+  // is the one case where a magnified texel reads as a staircase: at a
+  // thousand studs wide the card only ever gets a third of a texel per pixel,
+  // and the crest came back as a flight of steps. A triangle strip has no such
+  // resolution, and it costs about the same as the card it replaces.
   let ridge = null;
   if (bool(opts, 'ridge', true)) {
-    const RH = 300 * s;
-    const crestFrac = 0.22; // where the dune line sits in the texture, top-down
-    const ridgeTex = canvasTexture(1024, 256, (ctx, w, h) => {
-      ctx.clearRect(0, 0, w, h);
-      const grd = ctx.createLinearGradient(0, h * crestFrac, 0, h);
-      grd.addColorStop(0, '#3a1a22');
-      grd.addColorStop(0.25, '#2a1119');
-      grd.addColorStop(1, '#150910');
-      ctx.fillStyle = grd;
-      ctx.beginPath();
-      ctx.moveTo(0, h);
-      for (let x = 0; x <= w; x += 4) {
-        const y = h * crestFrac
-          - Math.sin(x * 0.0065) * h * 0.035
-          - Math.sin(x * 0.021 + 1.7) * h * 0.016
-          - Math.sin(x * 0.0035 + 0.4) * h * 0.030;
-        ctx.lineTo(x, y);
+    const RW = 1000 * s, RH = 250 * s;
+    // Three octaves over the width of the card. Tuned against the ~380 studs
+    // of it a 35mm lens actually sees, so the slow term reads as one dune
+    // shoulder crossing frame rather than as a wave.
+    const crest = (x) => {
+      const u = x / (500 * s);
+      return (-14 + 9 * Math.sin(u * 3.4 + 1.9)
+        + 5 * Math.sin(u * 10.8 + 0.6)
+        + 2.2 * Math.sin(u * 25.0 + 2.7)) * s;
+    };
+    const N = 384;
+    const bands = [0, 0.08, 0.4, 1]; // fraction of the drop from crest to hem
+    const shade = ['#40202a', '#3a1a24', '#2c141d', '#1c0d14']
+      .map((c) => new THREE.Color(c).convertSRGBToLinear());
+    const verts = new Float32Array((N + 1) * bands.length * 3);
+    const cols = new Float32Array((N + 1) * bands.length * 3);
+    for (let i = 0; i <= N; i++) {
+      const x = -RW / 2 + (RW * i) / N;
+      const cy = crest(x);
+      for (let r = 0; r < bands.length; r++) {
+        const k = (i * bands.length + r) * 3;
+        verts[k] = x;
+        verts[k + 1] = cy - (cy + RH) * bands[r];
+        verts[k + 2] = 0;
+        cols[k] = shade[r].r; cols[k + 1] = shade[r].g; cols[k + 2] = shade[r].b;
       }
-      ctx.lineTo(w, h);
-      ctx.closePath();
-      ctx.fill();
-    }, { key: 'ts_ridge' });
-    ridge = new THREE.Mesh(
-      new THREE.PlaneGeometry(1000 * s, RH),
-      new THREE.MeshBasicMaterial({
-        map: ridgeTex, transparent: true, depthWrite: false, depthTest: false,
-        toneMapped: false, opacity: 1,
-      }),
-    );
-    ridge.position.set(0, RH * (crestFrac - 0.5) - 16 * s, -D * 1.22);
+    }
+    const idx = [];
+    for (let i = 0; i < N; i++) {
+      for (let r = 0; r < bands.length - 1; r++) {
+        const a = i * bands.length + r, b = (i + 1) * bands.length + r;
+        idx.push(a, a + 1, b, b, a + 1, b + 1);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    geo.setIndex(idx);
+    // transparent, though nothing here is see-through: three draws the opaque
+    // queue first and only sorts renderOrder within a queue, so an opaque dune
+    // lands under every additive card in the set and the suns paint their
+    // halos straight through it.
+    ridge = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      vertexColors: true, transparent: true, depthWrite: false, depthTest: false,
+      toneMapped: false, side: THREE.DoubleSide,
+    }));
+    ridge.position.set(0, 0, -D * 1.22);
     ridge.renderOrder = -790;
     ridge.frustumCulled = false;
     group.add(ridge);
@@ -228,8 +252,11 @@ export function buildTwinSuns(opts = {}) {
 
   function setHeight(v) {
     height = clamp(+v || 0, 0, 1);
-    const yBig = lerp(-9, 64, height) * s;
-    const ySmall = lerp(-20, 44, height) * s;
+    // Floors chosen against the dune crest, which sits around y = -4 where the
+    // suns are: at height 0 the big one is cut in half by the horizon and the
+    // small one has all but set, which is the beat this set is for.
+    const yBig = lerp(-6, 64, height) * s;
+    const ySmall = lerp(-8, 50, height) * s;
     big.position.y = yBig;
     small.position.y = ySmall;
     for (const gm of ghosts.children) gm.position.y = lerp(yBig, -yBig * 0.5, gm.userData.t);

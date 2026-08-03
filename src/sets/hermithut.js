@@ -17,8 +17,11 @@ const RX = 11;   // interior half-width
 const RZ = 9.5;  // interior half-depth
 const WALL = 2;  // stone thickness
 
-/** One course of stone: staggered blocks with a random cool/warm mix. */
-function course(bb, y, h, seed, cut) {
+/**
+ * One course of stone: staggered blocks with a random cool/warm mix.
+ * `gap` is an [x0, x1] span of the back wall to leave out, for the doorway.
+ */
+function course(bb, y, h, seed, cut, gap) {
   const step = 2.6;
   const outerX = RX + WALL, outerZ = RZ + WALL;
   const place = (x, z, w, d, k) => {
@@ -31,7 +34,9 @@ function course(bb, y, h, seed, cut) {
   // Back wall (-Z) full width; side walls up to the open front.
   let k = 0;
   for (let x = -outerX + step / 2 + jitter * 0.5; x <= outerX; x += step) {
-    place(Math.min(x, outerX - step / 2), -outerZ + WALL / 2, step - 0.12, WALL, k++);
+    const bx = Math.min(x, outerX - step / 2);
+    if (gap && bx + step / 2 > gap[0] && bx - step / 2 < gap[1]) { k++; continue; }
+    place(bx, -outerZ + WALL / 2, step - 0.12, WALL, k++);
   }
   for (const sx of [-1, 1]) {
     for (let z = -outerZ + WALL + step / 2 + jitter; z <= (cut ?? outerZ); z += step) {
@@ -74,8 +79,14 @@ export function buildHermitHut(opts = {}) {
   // ------------------------------------------------------------- walls
   // Side walls run full height right up to the open front: it is the dome
   // that gets cut away, not the room, or the hut turns into an amphitheatre.
+  const doorX = -RX * 0.42;
+  const doorHalf = 2.6;                    // half the clear opening
+  const doorGap = [doorX - doorHalf, doorX + doorHalf];
+  const doorH = BRICK * 4;                 // four courses of clear headroom
   const courses = Math.round(wallH / BRICK);
-  for (let c = 0; c < courses; c++) course(bb, c * BRICK, BRICK, seed + 11, null);
+  for (let c = 0; c < courses; c++) {
+    course(bb, c * BRICK, BRICK, seed + 11, null, c * BRICK < doorH - 0.01 ? doorGap : null);
+  }
   if (!open) {
     for (let c = 0; c < courses; c++) {
       bb.brick(0, c * BRICK, frontZ - WALL / 2, (RX + WALL) * 2, WALL, {
@@ -97,13 +108,28 @@ export function buildHermitHut(opts = {}) {
   }
 
   // Low doorway in the back-left, with a heavy lintel: even with the fourth
-  // wall gone the hut needs a door to read as a dwelling.
-  const doorX = -RX * 0.42;
-  bb.brick(doorX, 0, -RZ - WALL / 2, 5.2, WALL + 0.4, { h: B(4.6), color: C.black, free: true, studs: false });
-  bb.brick(doorX, B(4.6), -RZ - WALL / 2, 6.6, WALL + 0.8, { h: B(0.9), color: C.darkBluishGray, free: true, studs: false });
+  // wall gone the hut needs a door to read as a dwelling. The courses above
+  // skip the opening, so this is a real hole with desert behind it rather than
+  // a black panel stuck on the stonework -- from a camera at the open side the
+  // difference is the whole point of the doorway, which is that it goes
+  // somewhere.
+  const step = 2.6;
   for (const s of [-1, 1]) {
-    bb.brick(doorX + s * 3.1, 0, -RZ - WALL / 2, 1.2, WALL + 0.8, {
-      h: B(4.6), color: C.darkBluishGray, free: true, studs: false,
+    // A course brick is dropped whole, so the ragged edge of the opening can
+    // land up to one step outside the clear span. The jambs are exactly that
+    // step wide and sit just outside the span, which covers it either way.
+    bb.brick(doorX + s * (doorHalf + step / 2), 0, -RZ - WALL / 2, step, WALL + 0.8, {
+      h: doorH, color: C.darkBluishGray, free: true, studs: false,
+    });
+  }
+  bb.brick(doorX, doorH, -RZ - WALL / 2, doorHalf * 2 + step * 2, WALL + 0.8, {
+    h: B(0.9), color: C.darkBluishGray, free: true, studs: false,
+  });
+  // Sunlit sand bank a few studs beyond the threshold, so the opening reads as
+  // daylight rather than as a hole cut in the set.
+  for (let i = 0; i < 3; i++) {
+    bb.brick(doorX, i * P(2), -RZ - WALL - 3.4 - i * 0.8, 13 - i * 1.5, 1.6, {
+      h: doorH + B(1) - i * P(2), color: i % 2 ? C.tan : C.darkTan, free: true, studs: false,
     });
   }
 
@@ -212,6 +238,9 @@ export function buildHermitHut(opts = {}) {
     // Daylight through the window slit: weak and set back off the wall, or it
     // burns a specular hole through the stonework right at it.
     practical(g, RX - 4.5, winY + 1.2, 2.5, 0xffe6c0, 26, 18);
+    // Noon on the sand bank behind the doorway, which is all the camera sees
+    // of the outside world through it.
+    practical(g, doorX, doorH, -RZ - WALL - 1.6, 0xffe9c4, 70, 22);
     // Sun spilling in through the missing wall, which is the only thing
     // lighting the far side of the room.
     practical(g, -4, wallH + 4, frontZ + 8, 0xffeed2, 200, 60);

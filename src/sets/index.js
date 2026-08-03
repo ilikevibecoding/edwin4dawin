@@ -45,11 +45,11 @@ reg('twinsuns', (o) => buildTwinSuns(o), {
 });
 
 reg('corridor_section', (o) => buildCorridorSection(o), {
-  notes: 'one 15-stud rebel corvette hallway module, 11.4 wide x 11.4 tall, tiles along Z',
+  notes: 'one rebel corvette hallway module, 15-stud pitch along Z, 9 wide x 10.2 tall inside',
 });
 
 reg('corridor', (o) => buildCorridor(o), {
-  notes: '8 chained sections = 120 studs of hallway with blast doors; nodes doorFar/doorNear, userData.setDoor/blowDoor',
+  notes: '8 chained sections = 120 studs of hallway plus blast doors; nodes doorFar/doorNear, userData.setDoor/setDoorNear/blowDoor',
 });
 
 reg('dunes', (o) => buildDunes(o), {
@@ -57,7 +57,7 @@ reg('dunes', (o) => buildDunes(o), {
 });
 
 reg('moisturefarm', (o) => buildMoistureFarm(o), {
-  notes: 'homestead on a 130-stud dune plot: sunken courtyard 13 deep, 3 domes, 4 vaporators; nodes courtyard/hutDoor',
+  notes: 'homestead on a 160-stud dune plot: sunken courtyard 11 deep, domed hut, 4 vaporators; nodes courtyard/hutDoor',
 });
 
 reg('hermithut', (o) => buildHermitHut(o), {
@@ -69,7 +69,7 @@ reg('deathstar_surface', (o) => buildDeathStarSurface(o), {
 });
 
 reg('trench_segment', (o) => buildTrenchSegment(o), {
-  notes: 'one 60-stud trench module, 40 wide x 30 deep; pass index= to reseed the greebles',
+  notes: 'one 60-stud trench module, canyon 40 wide x 30 deep; pass index= to reseed the greebles',
 });
 
 reg('trench', (o) => buildTrench(o), {
@@ -77,9 +77,9 @@ reg('trench', (o) => buildTrench(o), {
 });
 
 reg('throneroom', (o) => buildThroneRoom(o), {
-  notes: 'medal hall 88 wide x 150 deep x 46 tall, dais and extruded SVG starbird at the -Z end; node dais',
+  notes: 'medal hall, 88 x 150 studs of clear floor, dais and extruded SVG starbird at the -Z end; node dais',
 });
 
 reg('hangarbay', (o) => buildHangarBay(o), {
-  notes: 'rebel hangar 120x130x44 with an open blast-door mouth at -Z showing sky; nodes mouth/sky',
+  notes: 'rebel hangar, 120 x 130 studs of clear deck, open blast-door mouth at -Z showing sky; nodes mouth/sky',
 });

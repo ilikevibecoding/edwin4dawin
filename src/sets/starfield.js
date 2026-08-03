@@ -276,7 +276,11 @@ export function buildStarfield(opts = {}) {
     for (let i = 0; i < nStars; i++) {
       const hx = headX[i], hy = headY[i], hz = headZ[i];
       // Never go under a pixel wide or the rasteriser breaks the streak up.
-      const w = Math.max(0.62, wide * (0.35 + allBright[i] * 0.9));
+      // The brightness term is capped because the shell is 900 units out and
+      // the camera sits inside it: an uncapped width put the few brightest
+      // stars that happen to pass near the lens on screen as twenty-pixel
+      // white slabs, which read as a broken rasteriser rather than as speed.
+      const w = Math.max(0.62, wide * (0.35 + Math.min(allBright[i], 1.5) * 0.75));
       const ax = sideX[i] * w, ay = sideY[i] * w;
       const bx = sideX[i] * w * 0.16, by = sideY[i] * w * 0.16;
       const tz = hz + len;

@@ -448,6 +448,26 @@ export function buildHangarBay(opts = {}) {
     key.shadow.normalBias = 0.07;
     g.add(key, key.target);
 
+    /*
+     * Bounce off the deck, and the only light in the bay that shines upward.
+     *
+     * 128 x 130 studs of light grey deck sits under four rows of lamps and an
+     * open mouth, so in the real bay the roof is lit almost entirely from
+     * below. Nothing else here can do that job: both directionals come down
+     * from outside, and the hemisphere's ground term is the only other thing a
+     * down-facing normal sees -- one term, divided by pi by the Lambert BRDF,
+     * which put the roof at a twentieth of the wall it meets and left a black
+     * bar across the top of every shot taken from the deck. Raising the
+     * hemisphere instead is no good, because a hemisphere gives a vertical
+     * face half its ground term too, so the walls come up with the roof and
+     * the shading the key just carved goes flat again.
+     */
+    const bounce = new THREE.DirectionalLight(new THREE.Color(0xf4ede0).convertSRGBToLinear(), 1.15);
+    bounce.position.set(0, -60, 6);
+    bounce.target.position.set(0, h, 0);
+    bounce.castShadow = false;
+    g.add(bounce, bounce.target);
+
     // Fill. Broad and near-neutral, and no more than half the level: a
     // hemisphere varies only with a surface's Y, so every vertical face in the
     // bay takes the identical value from it no matter which way it points.
