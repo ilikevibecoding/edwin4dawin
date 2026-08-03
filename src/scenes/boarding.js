@@ -257,6 +257,9 @@ export default {
           r.userData.update?.(t, dt);
         });
 
+        // the lift
+        const lift = env(t, LIFT, b5 + 1.6, 0.9, 0.55);
+
         // Vader walks in
         const vin = clamp(ramp(t, VADER_IN, VADER_IN + 5.2), 0, 1);
         vader.position.z = lerp(FAR_DOOR + 1.5, -14, ease.inOutQuad(vin));
@@ -265,18 +268,34 @@ export default {
         vader.rotation.y = 0;
         if (vaderFig) {
           if (vin > 0.01 && vin < 0.99) vaderFig.walk(dt, 0.72);
-          else { vaderFig.stopWalk(); vaderFig.setPose('stand_wide', 0.08); }
+          else if (lift > 0.001) {
+            // The gesture has to carry the lift, and it was not carrying it:
+            // stand_wide pulls the shoulder back toward zero every frame, so
+            // an arm lerped the other way settled around a third of the way
+            // up and the officer read as floating on his own. Assert the
+            // reach on its own instead.
+            //
+            // It is the +X arm because that is the side the officer hangs on,
+            // and it goes well above the true eyeline to him because this is
+            // shot from eighteen studs down the corridor axis: an arm held out
+            // at the angle that actually points at him foreshortens into the
+            // torso and there is nothing to see. Raised, it silhouettes.
+            vaderFig.stopWalk();
+            const g = ease.outQuad(clamp(lift / 0.85, 0, 1));
+            const aR = vaderFig.arms.R, aL = vaderFig.arms.L;
+            aL.rotation.x = lerp(aL.rotation.x, -1.62 * g, 0.22);
+            aL.rotation.z = lerp(aL.rotation.z, 0.30 + 0.24 * g, 0.22);
+            aR.rotation.x = lerp(aR.rotation.x, -0.10 * g, 0.10);
+            aR.rotation.z = lerp(aR.rotation.z, -0.30, 0.10);
+          } else { vaderFig.stopWalk(); vaderFig.setPose('stand_wide', 0.08); }
           if (t > b3 - 0.2) vaderFig.lookAt(officer.position.clone().setY(6.2), 0.7);
           vaderFig.update(dt, t);
         }
 
-        // the lift
-        const lift = env(t, LIFT, b5 + 1.6, 0.9, 0.55);
         if (lift > 0.001) {
           officer.position.y = lift * 3.2;
           officer.rotation.z = Math.sin(t * 3.1) * 0.09 * lift;
           officer.userData.fig?.setPose('panic', 0.1);
-          if (vaderFig) vaderFig.arms.R.rotation.x = lerp(vaderFig.arms.R.rotation.x, -1.62, 0.12);
         } else if (t > b5 + 1.6) {
           officer.position.y = Math.max(0, officer.position.y - dt * 22);
           officer.userData.fig?.setPose('fallen', 0.08);
