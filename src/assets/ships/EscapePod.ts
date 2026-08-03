@@ -8,6 +8,126 @@ import { clamp01 } from '../../core/math';
 
 const _flareWorld = new THREE.Vector3();
 const _camWorld = new THREE.Vector3();
+const _camLocal = new THREE.Vector3();
+
+/**
+ * Value noise shared by the two entry-plasma shaders. Cheap, and enough to stop
+ * the plume reading as a solid cone of geometry.
+ */
+const NOISE_GLSL = /* glsl */ `
+  float hash21(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+  }
+  float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(
+      mix(hash21(i), hash21(i + vec2(1.0, 0.0)), u.x),
+      mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), u.x),
+      u.y);
+  }
+`;
+
+/**
+ * Bow-shock envelope ahead of the heat shield.
+ *
+ * Drawn on a camera-facing quad rather than a sphere cap: any closed surface
+ * lit additively ends on a hard silhouette, and the earlier cap version read
+ * as an orange bowl bolted to the nose.
+ */
+function sheathMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uOpacity: { value: 0 },
+      uTime: { value: 0 },
+      uCore: { value: new THREE.Color(0xfff3dc) },
+      uEdge: { value: new THREE.Color(0xe4561a) },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      ${NOISE_GLSL}
+      uniform float uOpacity;
+      uniform float uTime;
+      uniform vec3 uCore;
+      uniform vec3 uEdge;
+      varying vec2 vUv;
+      void main() {
+        // +Y is the direction of travel; the shock stands off the nose and
+        // wraps back over the shoulders of the shield.
+        vec2 p = (vUv - 0.5) * 2.0;
+        float r = length(vec2(p.x, (p.y - 0.16) / 0.74));
+        float body = 1.0 - smoothstep(0.28, 1.0, r);
+        body *= body;
+        float lead = 0.3 + 0.7 * smoothstep(-0.7, 0.45, p.y);
+        float turb = 0.76 + 0.24 * vnoise(vec2(p.x * 4.5, p.y * 4.5 - uTime * 3.0));
+        vec3 c = mix(uEdge, uCore, smoothstep(0.35, 0.98, body));
+        gl_FragColor = vec4(c, uOpacity * body * lead * turb);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+}
+
+/**
+ * Ionised wake. A camera-facing ribbon rather than a cone: a cone always shows
+ * its silhouette as two straight converging lines, which is exactly what a
+ * plasma trail should not look like.
+ */
+function trailMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uOpacity: { value: 0 },
+      uTime: { value: 0 },
+      uHot: { value: new THREE.Color(0xffd9a0) },
+      uCool: { value: new THREE.Color(0xd8451a) },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      ${NOISE_GLSL}
+      uniform float uOpacity;
+      uniform float uTime;
+      uniform vec3 uHot;
+      uniform vec3 uCool;
+      varying vec2 vUv;
+      void main() {
+        float along = vUv.y;
+        float across = abs(vUv.x - 0.5) * 2.0;
+        float width = mix(0.24, 1.0, pow(along, 0.5));
+        float radial = 1.0 - smoothstep(width * 0.1, width, across);
+        radial *= radial;
+        float turb = 0.55 + 0.45 * vnoise(vec2(across * 2.2, along * 9.0 - uTime * 3.4));
+        float fade = pow(1.0 - along, 1.4);
+        vec3 c = mix(uHot, uCool, smoothstep(0.0, 0.5, along));
+        gl_FragColor = vec4(c, uOpacity * radial * fade * turb);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+}
 
 /**
  * Class-6 style escape pod: a stubby white cylinder with a blunt nose, three
@@ -27,6 +147,8 @@ export class EscapePod {
   private reentryGlow: THREE.Mesh;
   private flare: THREE.Sprite;
   private trail: THREE.Mesh;
+  private trailPivot: THREE.Group;
+  private entryLight: THREE.PointLight;
   private reentry = 0;
 
   constructor(length = 7) {
@@ -89,22 +211,10 @@ export class EscapePod {
     this.heatShield.scale.set(1, 1, 0.7);
     this.root.add(this.heatShield);
 
-    this.reentryGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(R * 1.5, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
-      new THREE.MeshBasicMaterial({
-        color: 0xff9a4a,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        toneMapped: false,
-      }),
-    );
+    this.reentryGlow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sheathMaterial());
     this.reentryGlow.rotation.x = Math.PI / 2;
-    this.reentryGlow.position.z = L * 0.3;
-    this.reentryGlow.scale.set(1, 1, 1.4);
-    this.root.add(this.reentryGlow);
+    this.reentryGlow.position.z = L * 0.34;
+    this.reentryGlow.renderOrder = 6;
 
     // Thruster cluster.
     const nozzles = [
@@ -149,6 +259,12 @@ export class EscapePod {
     this.beaconLight.position.set(0, R * 1.3, L * 0.02);
     this.root.add(this.beaconLight);
 
+    // Entry plasma throws light back onto the hull, which is what sells the
+    // shield as hot rather than as an overlay pasted in front of the pod.
+    this.entryLight = new THREE.PointLight(0xff8434, 0, L * 5, 2);
+    this.entryLight.position.set(0, 0, L * 0.62);
+    this.root.add(this.entryLight);
+
     // Long-range readability. At the end of the show the pod is a 7 m object
     // two kilometres away: without a screen-space-anchored flare and a trail it
     // is literally two pixels, and the closing image has no subject.
@@ -167,23 +283,17 @@ export class EscapePod {
     this.flare.renderOrder = 6;
     this.root.add(this.flare);
 
-    this.trail = new THREE.Mesh(
-      new THREE.ConeGeometry(1, 1, 12, 1, true),
-      new THREE.MeshBasicMaterial({
-        color: 0xff9040,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        toneMapped: false,
-      }),
-    );
-    // Cone apex forward (+Z, the direction of travel), skirt trailing aft.
-    this.trail.geometry.translate(0, -0.5, 0);
-    this.trail.rotation.x = Math.PI / 2;
-    this.trail.visible = false;
-    this.root.add(this.trail);
+    // Wake and bow shock live inside a pivot that rolls about the pod's own
+    // axis to keep their faces toward the camera, so neither turns edge-on.
+    this.trailPivot = new THREE.Group();
+    const ribbon = new THREE.PlaneGeometry(1, 1, 1, 24);
+    ribbon.translate(0, 0.5, 0);
+    this.trail = new THREE.Mesh(ribbon, trailMaterial());
+    this.trail.rotation.x = -Math.PI / 2;
+    this.trail.renderOrder = 5;
+    this.trailPivot.visible = false;
+    this.trailPivot.add(this.trail, this.reentryGlow);
+    this.root.add(this.trailPivot);
 
     this.anchors.nose = makeAnchor('nose', 0, 0, L * 0.5, this.root);
     this.anchors.stern = makeAnchor('stern', 0, 0, -L * 0.55, this.root);
@@ -202,19 +312,29 @@ export class EscapePod {
   setReentry(v: number): void {
     const t = clamp01(v);
     this.reentry = t;
-    (this.reentryGlow.material as THREE.MeshBasicMaterial).opacity = t * 0.85;
+    const sheath = this.reentryGlow.material as THREE.ShaderMaterial;
+    sheath.uniforms.uOpacity.value = t * 1.25;
     const mat = this.heatShield.material as THREE.MeshStandardMaterial;
     mat.emissive.setHex(0xff7a2a);
     mat.emissiveIntensity = t * 3.2;
-    this.reentryGlow.scale.set(1 + t * 0.4, 1 + t * 0.4, 1.4 + t * 1.6);
-    const trailMat = this.trail.material as THREE.MeshBasicMaterial;
-    trailMat.opacity = t * 0.5;
-    this.trail.visible = t > 0.02;
-    this.trail.scale.set(this.length * 0.5, this.length * (2 + t * 22), this.length * 0.5);
+    const shock = this.length * (0.85 + t * 0.75);
+    this.reentryGlow.scale.set(shock, shock, 1);
+    (this.trail.material as THREE.ShaderMaterial).uniforms.uOpacity.value = t * 0.95;
+    this.trailPivot.visible = t > 0.02;
+    this.trail.scale.set(this.length * (0.9 + t * 0.9), this.length * (3 + t * 20), 1);
+    this.entryLight.intensity = t * 9;
   }
 
   update(_dt: number, elapsed: number, camera?: THREE.Camera): void {
     this.engines.update(elapsed);
+    (this.reentryGlow.material as THREE.ShaderMaterial).uniforms.uTime.value = elapsed;
+    (this.trail.material as THREE.ShaderMaterial).uniforms.uTime.value = elapsed;
+    if (camera && this.trailPivot.visible) {
+      // Roll the ribbon about the pod's long axis until its face is square to
+      // the camera. Anything else shows the plume as a thin bright line.
+      this.root.worldToLocal(camera.getWorldPosition(_camLocal));
+      this.trailPivot.rotation.z = Math.atan2(-_camLocal.x, _camLocal.y);
+    }
     const blink = Math.sin(elapsed * 6.2) > 0.55 ? 1 : 0.08;
     (this.beacon.material as THREE.MeshStandardMaterial).emissiveIntensity = 3 * blink;
     this.beaconLight.intensity = 2.4 * blink;
