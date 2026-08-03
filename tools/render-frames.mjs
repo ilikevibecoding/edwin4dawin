@@ -26,6 +26,9 @@ const H = parseInt(flag('h', '720'), 10);
 const QUALITY = parseInt(flag('quality', '94'), 10);
 const WORKERS = parseInt(flag('workers', '3'), 10);
 const SKIP = has('skip-existing');
+// When a range sits inside a single scene, build only that scene: much less
+// memory per worker and a far faster page boot.
+const ONLY = flag('only', '');
 
 mkdirSync(OUT, { recursive: true });
 
@@ -47,7 +50,7 @@ async function openFilm() {
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
-  const url = `${URLBASE}?render=1&fps=${FPS}&w=${W}&h=${H}`;
+  const url = `${URLBASE}?render=1&fps=${FPS}&w=${W}&h=${H}${ONLY ? '&only=' + ONLY : ''}`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction('window.__ready === true', { timeout: 300000 });
   const boot = await page.evaluate(() => window.__bootError || null);

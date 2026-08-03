@@ -120,6 +120,7 @@ async function boot() {
     if (e.key === 'ArrowLeft') { director.stopAudio(); director.frame(Math.max(0, director.T - 5)); }
   });
 
+  window.__director = director;
   window.__ready = true;
   loop();
 }

@@ -45,7 +45,12 @@ const ALC_Z = 30.8;   // the alcove sits this far down the corridor
 const BAY_Z = -160;   // the pod bay is a separate set, parked out of the way
 const GRATE = 0.30;   // top of the centre floor grating
 const WALK = 0.36;    // top of the raised side walkway
-const KNEEL = 1.15;   // how far the princess sinks to kneel
+// How far the princess sinks to kneel. The model is a gown — a cone with no
+// knee in it — so a kneel can only be read two ways: off her height against the
+// droid beside her, and off the hem pooling on the deck. Both want this deep.
+// It puts her eyeline a brick under the dome, which is the whole point of the
+// shot: she has come down to him.
+const KNEEL = 1.62;
 const RUN_V = 7.65;   // droid run speed: puts them in the hatch on the cut
 
 /* The hand-off. Staged around one constraint: she has to be looking at what her
@@ -60,8 +65,10 @@ const C3_X = -0.90, C3_Z = 24.50, C3_ROT = 4.069;
 /** Distance covered `u` seconds into the run, with a soft launch. */
 const runDist = (u) => (u <= 0 ? 0 : u < 1.2 ? (RUN_V * u * u) / 2.4 : RUN_V * (u - 0.6));
 
-/** Pod travel out of the cradle, `s` seconds after the bolts fire. */
-const podRun = (s) => (s <= 0 ? 0 : 94 * s * s);
+/** Pod travel out of the cradle, `s` seconds after the bolts fire. Steep: the
+ * cut lands a third of a second after the bolts, and at anything gentler the
+ * hull has barely shifted a length by then and the launch reads as a nudge. */
+const podRun = (s) => (s <= 0 ? 0 : 210 * s * s);
 
 /* ------------------------------------------------------------------ */
 /* printed art                                                         */
@@ -94,9 +101,12 @@ function tubeVoidTex() {
   return svgTexture(svg([0, 0, 256, 256], [
     `<rect width="256" height="256" fill="#05070e"/>`,
     stars,
-    `<path d="M-20 214 Q128 150 276 214 L276 276 L-20 276 Z" fill="#c9782f"/>`,
-    `<path d="M-20 238 Q128 182 276 238 L276 276 L-20 276 Z" fill="#e5a24a"/>`,
-    `<path d="M-20 210 Q128 146 276 210 L276 222 L-20 222 Z" fill="#ffd9a0" opacity="0.5"/>`,
+    `<path d="M-20 232 Q128 176 276 232 L276 290 L-20 290 Z" fill="#a35f24"/>`,
+    `<path d="M-20 252 Q128 200 276 252 L276 290 L-20 290 Z" fill="#c9782f"/>`,
+    // a hot terminator line along the limb, which is what makes a curved edge
+    // read as the shoulder of a planet instead of a puddle of paint
+    `<path d="M-20 232 Q128 176 276 232" fill="none" stroke="#ffe3b0" stroke-width="5"/>`,
+    `<path d="M-20 232 Q128 176 276 232" fill="none" stroke="#fff3dc" stroke-width="1.6"/>`,
   ].join('')), { w: 256, h: 256, key: 'podTubeVoid' });
 }
 
@@ -273,38 +283,114 @@ export async function build(ctx) {
   const door = blastDoor({ width: 12, height: 9, seed: 44, label: 'POD BAY 7' });
   door.position.set(0, 0, -40.4);
   inside.add(door);
-
-  // A lit vestibule behind the hatch, so the opening reveals somewhere to go.
-  // Deep on purpose: the corridor model stops at z = -40, and a short box put
-  // the far wall right behind the droids as they cleared the door, which read as
-  // two figures pasted on a flat grey card.
-  const vest = new THREE.Group();
-  vest.add(at(tile(13, 1, 10.4, { color: C.lightGray }), 0, 0, -58));
-  vest.add(at(tile(13, 18, 0.3, { color: C.bluishGray }), 0, 0, -49.5));
-  vest.add(at(tile(13, 18, 0.6, { color: C.darkGray }), 0, 9.2, -49.5));
+  // The model slides its leaves straight out sideways with nowhere to go, so in
+  // a twelve-wide hallway they end up outboard of the walls with their warning
+  // lamps hanging in open space. Give each one a pocket to disappear into.
   for (const sx of [-1, 1]) {
-    vest.add(at(tile(1, 18, 10.4, { color: C.bluishGray }), sx * 6.4, 0, -49.5));
-    // A lit cove down each side wall, running away from the door rather than
-    // across it: two strips hung crosswise read as bars floating in the dark.
-    vest.add(at(rot(cyl(0.3, 15.4, { color: 0xffc46a, glow: true, seg: 10 }), Math.PI / 2, 0, 0),
-      sx * 5.5, 7.3, -57.0));
-    vest.add(at(tile(0.9, 15.8, 0.55, { color: C.darkGray }), sx * 5.5, 8.0, -49.4));
-    vest.add(at(tile(0.7, 15.8, 0.4, { color: C.lightGray }), sx * 5.5, 3.2, -49.4));
+    inside.add(at(tile(5.8, 1.0, 10.2, { color: C.bluishGray }), sx * 8.9, 0, -39.8));
+    inside.add(at(tile(6.2, 1.2, 0.6, { color: C.lightGray }), sx * 9.1, 10.2, -39.8));
   }
+
+  // The corridor model stops at z = -40 and the run curve carries the droids on
+  // to -50, so the far end of their run is all built here, and it has one job:
+  // be somewhere worth running to. By the cut the shot down the hall is 24
+  // degrees of lens, so whatever stands at the end of it fills the doorway — a
+  // flat wall there reads as a painted backdrop with two droids pasted on. So:
+  // a dim antechamber, and the bay door punched through the end of it, lit from
+  // the inside, straddling the line they are already running down.
+  const VZ = -52.6;                          // the bay door plane
+  const OP_X = -0.9, OP_W = 8.4, OP_H = 7.4; // its opening
+  const OP_L = OP_X - OP_W / 2, OP_R = OP_X + OP_W / 2;
+  const vest = new THREE.Group();
+  // Kept dark: this is the only stretch of the hall painted below the corridor
+  // model's own greys, and it has to be, or the bay door behind it is just one
+  // more pale rectangle among many.
+  vest.add(at(tile(13, 12.2, 0.3, { color: C.darkGray }), 0, 0, -46.5));
+  vest.add(at(tile(13, 12.2, 0.6, { color: C.darkGray }), 0, 9.2, -46.5));
+  for (const sx of [-1, 1]) {
+    vest.add(at(tile(1, 12.2, 9.8, { color: C.darkGray }), sx * 6.4, 0, -46.5));
+    // pilasters, so the raking light gives the side walls a rhythm of edges
+    // rather than one long grey smear
+    for (let i = 0; i < 3; i++) {
+      vest.add(at(tile(0.55, 1.0, 8.8, { color: C.bluishGray }), sx * 5.6, 0.3, -42.4 - i * 3.4));
+    }
+    // A cove down each side wall, kept inside the room this time: run out to
+    // the jamb they poked through the door and hung glowing in the bay beyond.
+    vest.add(at(rot(cyl(0.24, 10.6, { color: 0xffb45e, glow: true, seg: 10 }), Math.PI / 2, 0, 0),
+      sx * 5.1, 7.6, -46.6));
+    vest.add(at(tile(0.8, 11, 0.5, { color: C.darkGray }), sx * 5.2, 8.15, -46.6));
+  }
+  // the door: two cheeks, trimmed jambs, a sill, and a hazard-striped lintel
+  vest.add(at(tile(OP_L + 6.5, 1, 9.8, { color: C.darkGray }), (OP_L - 6.5) / 2, 0, VZ));
+  vest.add(at(tile(6.5 - OP_R, 1, 9.8, { color: C.darkGray }), (OP_R + 6.5) / 2, 0, VZ));
+  vest.add(at(tile(OP_W, 1, 9.2 - OP_H, { color: C.bluishGray }), OP_X, OP_H, VZ));
+  vest.add(at(tile(0.45, 1.4, OP_H, { color: C.darkGray }), OP_L + 0.15, 0.3, VZ));
+  vest.add(at(tile(0.45, 1.4, OP_H, { color: C.darkGray }), OP_R - 0.15, 0.3, VZ));
+  vest.add(at(tile(OP_W + 0.9, 1.5, 0.34, { color: C.darkGray }), OP_X, 0, VZ));
+  vest.add(at(tile(OP_W + 0.9, 1.5, 0.4, { color: C.darkGray }), OP_X, OP_H, VZ));
+  for (let i = 0; i < 9; i++) {
+    vest.add(at(tile(0.62, 0.22, 1.2, { color: i % 2 ? 0xd8a319 : 0x191919 }),
+      OP_L + 0.6 + i * 0.9, OP_H + 0.45, VZ + 0.6));
+  }
+  // The bay beyond. Only the eight-by-seven rectangle of it the doorway frames
+  // is ever on camera, so it is three walls, a hot panel down the back and a
+  // couple of dark shapes to break the light up — enough that it reads as a
+  // room and not as a lamp. It is the brightest thing in the set on purpose:
+  // the two of them run into it as silhouettes.
+  vest.add(at(tile(12, 12.2, 0.3, { color: C.lightGray }), OP_X, 0, -59.2));
+  vest.add(at(tile(12, 12.2, 0.6, { color: C.bluishGray }), OP_X, 8.4, -59.2));
+  vest.add(at(tile(12, 1, 10.4, { color: C.lightGray }), OP_X, 0, -65.4));
+  for (const sx of [-1, 1]) {
+    vest.add(at(tile(1, 12.2, 10.4, { color: C.lightGray }), OP_X + sx * 5.5, 0, -59.2));
+  }
+  // The back of it is one light bank, wall to wall, with ribs down it and a
+  // gantry across in front. A single panel in the middle read as a lit sign
+  // hung on a grey wall; the whole wall glowing is what puts two black droid
+  // shapes in a bright doorway.
+  vest.add(at(tile(10.6, 0.7, 1.2, { color: C.bluishGray }), OP_X, 0.3, -64.5));
+  vest.add(at(lit(tile(10.4, 0.35, 5.3), { color: 0xffe9ca }), OP_X, 1.2, -64.62));
+  for (let i = 0; i < 4; i++) {
+    vest.add(at(tile(0.5, 0.5, 5.3, { color: C.darkGray }), OP_X - 4.2 + i * 2.8, 1.2, -64.3));
+  }
+  vest.add(at(tile(11.2, 0.8, 0.6, { color: C.darkGray }), OP_X, 6.5, -64.5));
+  vest.add(at(rot(cyl(0.32, 11.6, { color: C.darkGray, seg: 8 }), 0, 0, Math.PI / 2),
+    OP_X, 6.2, -60.4));
+  vest.add(at(tile(1.7, 1.7, 2.6, { color: C.darkGray }), OP_X - 4.0, 0.3, -60.6));
+  vest.add(at(tile(1.3, 1.3, 3.6, { color: C.bluishGray }), OP_X + 3.4, 0.3, -62.2));
+  const vestBeacon = at(lit(cyl(0.3, 0.5, { seg: 10 }), { color: 0xff4a24 }), -5.1, 7.9, -50.2);
+  vest.add(vestBeacon);
+  const vestBlink = new THREE.PointLight(0xff4a24, 0, 13, 2);
+  vestBlink.position.set(-4.6, 7.6, -50.2);
+  inside.add(vestBlink);
+  // hazard chevrons on the deck, pointing the way they are already going
+  for (let i = 0; i < 4; i++) {
+    vest.add(at(tile(5.0, 0.7, 0.12, { color: 0xd8a319 }), OP_X, 0.3, -43.4 - i * 2.3));
+    vest.add(at(tile(5.0, 0.7, 0.12, { color: C.darkGray }), OP_X, 0.3, -44.55 - i * 2.3));
+  }
+  // a little dressing, so the antechamber floor is not a bare slab
+  vest.add(at(tile(1.6, 1.6, 2.2, { color: C.bluishGray }), 4.6, 0.3, -47.6));
+  vest.add(at(tile(1.2, 1.2, 1.6, { color: C.darkGray }), -4.9, 0.3, -49.4));
+  vest.add(at(rot(cyl(0.3, 11.4, { color: C.darkGray, seg: 8 }), 0, 0, Math.PI / 2),
+    0, 8.5, -43.2));
   inside.add(vest);
-  // Two soft sources rather than one hot one: a single lamp near the threshold
-  // burned a white pool on the deck and left the walls behind it black.
-  const vestLight = new THREE.PointLight(0xffd9a8, 30, 22, 2);
-  vestLight.position.set(0, 6.4, -45.4);
+  // Two soft sources in the antechamber rather than one hot one: a single lamp
+  // near the threshold burned a white pool on the deck and left the walls
+  // behind it black. Both held well down, so the bay is what the eye goes to.
+  const vestLight = new THREE.PointLight(0xffd9a8, 9, 20, 2);
+  vestLight.position.set(0, 6.6, -44.4);
   inside.add(vestLight);
-  const vestDeep = new THREE.PointLight(0xffcf9a, 30, 24, 2);
-  vestDeep.position.set(-1.4, 6.0, -52.5);
+  const vestDeep = new THREE.PointLight(0xffcf98, 22, 16, 2);
+  vestDeep.position.set(OP_X, 3.2, -54.4);
   inside.add(vestDeep);
-  // a little dressing so the space past the hatch is not a flat brown void
-  vest.add(at(tile(1.6, 1.6, 2.2, { color: C.bluishGray }), 4.4, 0.3, -47.6));
-  vest.add(at(tile(1.2, 1.2, 1.6, { color: C.darkGray }), -4.6, 0.3, -48.8));
-  vest.add(at(rot(cyl(0.3, 12.4, { color: C.darkGray, seg: 8 }), 0, 0, Math.PI / 2),
-    6.2, 8.5, -46.4));
+  // and the bay's own light: the thing at the end of the corridor
+  const bayGlow = new THREE.PointLight(0xffdcb0, 90, 26, 2);
+  bayGlow.position.set(OP_X, 3.4, -62.0);
+  inside.add(bayGlow);
+  // a second one in the mouth of the door, to put light on the reveal and lay a
+  // wedge of it across the antechamber deck in front of the droids
+  const bayThrow = new THREE.PointLight(0xffd2a0, 34, 15, 2);
+  bayThrow.position.set(OP_X, 3.0, -55.2);
+  inside.add(bayThrow);
 
   // The corridor ships with its +Z mouth open, which reads as a black hole in
   // any shot that looks back up the hall. Cap it with a bulkhead and leave one
@@ -344,9 +430,13 @@ export async function build(ctx) {
   // panel filling frame left.
   alcove.add(at(tile(0.9, 0.9, 7.4, { color: C.darkGray }), -5.6, 0, ALC_Z + 4.0));
   alcove.add(at(tile(1.2, 1.1, 0.5, { color: C.darkGray }), -5.6, 7.4, ALC_Z + 4.0));
-  // soffit over the nook with a warm strip tucked under it
+  // Soffit over the nook with a warm strip tucked under it. The strip is the
+  // brightest thing in the hand-off and it is up in the corner of frame, so it
+  // is painted well down from white: at anything near it, a five-brick slab of
+  // unlit material that close to the lens blooms into a smear that pulls the
+  // eye straight off her face.
   alcove.add(at(tile(2.4, 7.0, 0.5, { color: C.lightGray }), -4.8, 6.4, ALC_Z + 0.4));
-  alcove.add(at(lit(tile(1.5, 5.2, 0.2), { color: 0xffdda6 }), -4.8, 6.2, ALC_Z + 0.4));
+  alcove.add(at(lit(tile(1.3, 4.4, 0.2), { color: 0x9e7c52 }), -4.8, 6.2, ALC_Z + 0.4));
   // locker bank against the bulkhead
   alcove.add(at(tile(1.3, 0.7, 3.4, { color: C.lightGray }), -5.3, WALK, ALC_Z - 2.4));
   alcove.add(at(tile(1.45, 0.8, 0.24, { color: C.darkGray }), -5.3, WALK + 3.4, ALC_Z - 2.45));
@@ -368,8 +458,12 @@ export async function build(ctx) {
   }
   inside.add(alcove);
 
-  const nookLamp = new THREE.PointLight(0xffc188, 22, 16, 2);
-  nookLamp.position.set(-4.4, 5.4, ALC_Z + 0.4);
+  // Hung well clear of the soffit above it. The dome beside it is white and
+  // curved and picks up every point source in the nook, so this one also has to
+  // stay a good three units off it: brought in close enough to key her face
+  // properly it turned the top of the droid into one blown highlight.
+  const nookLamp = new THREE.PointLight(0xffc188, 17, 17, 2);
+  nookLamp.position.set(-4.2, 4.5, ALC_Z + 1.0);
   inside.add(nookLamp);
   const nookFill = new THREE.PointLight(0xffe6c4, 7.0, 12, 2);
   nookFill.position.set(-1.0, 2.4, ALC_Z + 3.4);
@@ -480,9 +574,11 @@ export async function build(ctx) {
     }),
   ];
   const bolts = new Bolts(inside, shots);
+  // small and hot. At 0.9 and cream they read as soft white balls stuck to the
+  // wall rather than as hits, and two overlapping ones make one big pale disc.
   const hits = new Impacts(inside, bolts.impacts().map((h) => ({
-    t: h.t, pos: [h.pos.x, h.pos.y, h.pos.z], size: 0.9, color: 0xffd0a0,
-  })), { dur: 0.3 });
+    t: h.t, pos: [h.pos.x, h.pos.y, h.pos.z], size: 0.3, color: 0xff9a52,
+  })), { dur: 0.22 });
   // kept short-range on purpose: at 50 units it lit the whole hall on every
   // burst and flattened the shot instead of punching the walls behind them
   const muzzleLight = new THREE.PointLight(0xff7a3a, 0, 30, 2);
@@ -520,8 +616,10 @@ export async function build(ctx) {
   // podBay's floods sit on the centreline and leave the pod's flank in shadow.
   // Kept well off the hull: any closer and the inverse square puts a blown
   // highlight on the near cradle post instead of a gradient down the flank.
+  // Also kept off the ceiling: an 11-high bay with a 26-strength lamp a unit and
+  // a half under the panels put a burnt pale band across the top of frame.
   const podFill = new THREE.PointLight(0xffe8d2, 26, 36, 2);
-  podFill.position.set(12.6, 9.6, BAY_Z + 8.0);
+  podFill.position.set(12.6, 7.6, BAY_Z + 8.0);
   inside.add(podFill);
   // and a second one forward of the cradle, or the hull goes to silhouette the
   // moment it starts down the tube
@@ -661,7 +759,10 @@ export async function build(ctx) {
 
   const _v = new THREE.Vector3();
   const _aim = new THREE.Vector3();
-  const STAND_DOWN = new THREE.Vector3(-160, 340, -520);
+  // Steep rather than long: aimed out along the bore the elevating barrels
+  // swept up through the pod's corner of the frame and read as still tracking
+  // it. Straight up over the deck is unmistakably safe.
+  const STAND_DOWN = new THREE.Vector3(-90, 520, -230);
 
   const shadowAt = (m, obj, w, y, o) => {
     m.position.set(obj.position.x, y + 0.03, obj.position.z);
@@ -756,11 +857,16 @@ export async function build(ctx) {
         for (const s of shots) strobe += Math.max(0, 1 - Math.abs(t - s.t0) * 11);
         muzzleLight.intensity = clamp(strobe, 0, 1.6) * 70;
         const running = smoothstep(S1 - 0.2, S1 + 0.6, t);
-        nookLamp.intensity = 22 * (1 - 0.6 * smoothstep(S1 + 0.6, S1 + 1.6, t));
+        nookLamp.intensity = 17 * (1 - 0.6 * smoothstep(S1 + 0.6, S1 + 1.6, t));
         nookFill.intensity = 7.0 * (1 - running);
         const blink = (Math.sin(t * 4.4) > 0 ? 1 : 0.06) * running;
         alarmA.intensity = 24 * blink;
         alarmB.intensity = 24 * (Math.sin(t * 4.4 + 2.1) > 0 ? 1 : 0.06) * running;
+        // beacon over the turn past the hatch, off its own phase so the far end
+        // of the hall is not blinking in lockstep with the near end
+        const bk = 0.3 + 0.7 * (Math.sin(t * 5.9 + 1.1) > 0.1 ? 1 : 0);
+        vestBeacon.material.color.setRGB(bk, bk * 0.29, bk * 0.14);
+        vestBlink.intensity = 15 * bk * running;
 
         if (t < S1) {
           /* --- the hand-off ------------------------------------------- */
@@ -779,18 +885,24 @@ export async function build(ctx) {
 
           leia.position.set(LEIA_X, GRATE - KNEEL, LEIA_Z);
           leia.rotation.set(0, LEIA_ROT, 0);
-          leia.userData.parts.root.rotation.set(0.05, 0, 0.03);
           const reach = smoothstep(0.5, 2.0, t);
           const push = smoothstep(2.2, CARD_IN, t);
           const rest = smoothstep(CARD_IN + 0.2, 4.2, t);
+          // Over the droid, not upright beside him: the root carries the whole
+          // figure forward from the hip and cants it toward the slot, and the
+          // torso lean stacks on top. Bolt upright at this height she read as a
+          // short woman standing, which is exactly the wrong idea.
+          leia.userData.parts.root.rotation.set(0.13 + reach * 0.1 - rest * 0.06, 0, 0.05);
           pose(leia, {
             armL: { x: 0.06 + 0.06 * Math.sin(t * 1.1), y: 0, z: -0.05 },
             handL: 0.2,
             handR: -0.35 - reach * 0.3,
-            lean: 0.06 + reach * 0.12 - rest * 0.05,
+            lean: 0.08 + reach * 0.16 - rest * 0.07,
             // headX is a pitch, and positive lifts the chin: she has to look
-            // *down* at the slot, which sits a brick and a half below her eyes
-            headX: -0.14 - reach * 0.2 + rest * 0.26,
+            // *down* at the slot, which sits a brick and a half below her eyes.
+            // The chin comes back up on `rest`, once the card is home and there
+            // is nothing left to look at but the corridor she is sending him on.
+            headX: -0.16 - reach * 0.26 + rest * 0.38,
             headY: 0.24 + reach * 0.06 - rest * 0.34,
           });
           // her hand tracks the slot: in, press home, then withdraws
@@ -816,6 +928,11 @@ export async function build(ctx) {
             lean: 0.04 + 0.03 * f2,
             headY: 0.55 + 0.3 * Math.sin(t * 1.25),
             headX: -0.04,
+            // walk() writes a torso twist and a hip sway that pose() only
+            // touches when it is asked to. Without these three, seeking back
+            // into the hand-off from the run leaves him standing here wearing
+            // the stride he had down the corridor.
+            torsoY: 0, turn: 0, sway: 0,
           });
 
           // Down the hall at dome height, so the three of them stack across the
@@ -840,7 +957,7 @@ export async function build(ctx) {
           onRun(r2, d, 0, GRATE);
           // he keeps to the port side, away from the lens: five units of
           // protocol droid between the camera and the dome would fill the frame
-          onRun(c3, Math.max(0, dG), -(1.5 + 0.4 * drift), GRATE);
+          onRun(c3, Math.max(0, dG), -(1.6 + 0.6 * drift), GRATE);
           r2.userData.setCenterFoot(1 - smoothstep(S1 + 0.1, S1 + 0.7, t));
           r2.userData.roll(d);
           // glances back at every burst, then fixes on the hatch again
@@ -864,7 +981,8 @@ export async function build(ctx) {
           const up = smoothstep(S1 + 0.2, S1 + 1.5, t);
           leia.position.set(LEIA_X, GRATE - KNEEL * (1 - up), LEIA_Z);
           leia.rotation.set(0, LEIA_ROT - 0.5 * up, 0);
-          leia.userData.parts.root.rotation.set(0.05 * (1 - up), 0, 0.03 * (1 - up));
+          // unfolds out of the kneel: matches where the hand-off left the root
+          leia.userData.parts.root.rotation.set(0.17 * (1 - up), 0, 0.05 * (1 - up));
           pose(leia, {
             armR: { x: 0.1 - 0.5 * up, y: 0, z: 0.16 },
             armL: { x: 0.12, y: 0, z: -0.16 },
@@ -885,21 +1003,30 @@ export async function build(ctx) {
             const j = smoothstep(S1, S1B, t);
             const jog = noise(t * 4.6, 11) * 0.05;
             _v.copy(r2.position).add(c3.position).multiplyScalar(0.5);
-            cam.position.set(2.15 - 0.35 * j, 2.5 + jog, r2.position.z - 8.8 - 0.9 * j);
+            // The lead shortens as the shot runs, because the protocol droid
+            // starts a pace in front of the astromech — nearest the lens — and
+            // ends a pace behind it. Held at one distance he tops out of frame
+            // for the first second and is a doll by the last.
+            cam.position.set(2.15 - 0.35 * j, 2.55 + jog, r2.position.z - 10.2 + 1.0 * j);
             // aimed a little starboard of the pair, which swings the receding
             // hallway and the doorway they are being shot at from into frame
             // left instead of burying it behind the port wall
-            cam.lookAt(_v.x + 0.35, 2.55 + 0.1 * j, _v.z + 1.4);
-            cam.fov = lerp(45, 42, j);
+            cam.lookAt(_v.x + 0.35, 2.75 - 0.15 * j, _v.z + 1.4);
+            cam.fov = lerp(44, 42, j);
           } else {
             // and now let them go: dead centre of the hall at dome height,
             // creeping after them on a tightening lens while the hatch opens
             // ahead. Centred on purpose — off to one side, the near wall cove
             // on that side blooms into frame as a slab of white.
+            // Aimed above their heads and not at them: on a 24-degree lens the
+            // far end of this hall is 45 units off, so a level look puts two
+            // small droids dead centre over four hundred pixels of bare deck.
+            // Tilted up, the floor drops away and the lit doorway they are
+            // running at takes the middle of the frame instead.
             const k = smoothstep(0, 1, (t - S1B) / (S2 - S1B));
-            cam.position.set(0.2, 2.5, lerp(3.0, -3.0, k));
-            cam.lookAt(0.2, 2.3 + 0.25 * k, -34 - 12 * k);
-            cam.fov = lerp(44, 27, k);
+            cam.position.set(0.2, 2.36, lerp(8.0, -4.0, k));
+            cam.lookAt(0.2, 3.0 + 0.9 * k, -34 - 12 * k);
+            cam.fov = lerp(40, 24, k);
           }
         }
 
@@ -935,7 +1062,9 @@ export async function build(ctx) {
           POD_Z - gone
         );
         podIn.rotation.set(0, 0, gone * 0.004 + noise(t * 11, 9) * 0.01 * settle);
-        podIn.visible = gone < 30;
+        // dropped as it reaches the bore: past that it is outside the set, and
+        // the disc of night laid over the aperture draws in front of it
+        podIn.visible = gone < 14;
         const burn = clamp((t - BANG + 0.12) * 4);
         podIn.userData.setThrottle(burn);
         podBurn.intensity = burn * 60;
@@ -1058,7 +1187,9 @@ export async function build(ctx) {
           b.scale.setScalar(fh * 0.055);
         });
         ring.position.set(tx, ty, 0);
-        ring.scale.setScalar(fh * lerp(0.2, 0.07, close));
+        // does not close all the way onto the hull: at 0.07 the converged ring
+        // is smaller than the pod and disappears behind it
+        ring.scale.setScalar(fh * lerp(0.2, 0.105, close));
 
         // clear of the caption row printed into the frame texture
         const rw = fh * 0.34;
