@@ -451,12 +451,12 @@ export class BlockadeRunner {
 
     this.engineMat.emissiveIntensity = 0.12 + level * 2.2;
     for (const f of this.engineFlares) {
-      (f.material as THREE.MeshBasicMaterial).opacity = 0.3 * level;
+      (f.material as THREE.MeshBasicMaterial).opacity = 0.16 * level;
       f.visible = level > 0.01;
     }
     for (const m of this.plumeMats) m.uniforms.uIntensity.value = 0.62 * level;
     for (const c of this.engineCores) c.visible = level > 0.004;
-    for (const l of this.engineLights) l.intensity = 700 * level;
+    for (const l of this.engineLights) l.intensity = 420 * level;
 
     // Running lights keep blinking even when the drive is dead: powerless,
     // but not destroyed.

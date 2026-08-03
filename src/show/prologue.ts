@@ -24,8 +24,8 @@ function renderCard(text: string, dpi = 1): THREE.CanvasTexture {
   g.scale(dpi, dpi);
   g.clearRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
-  const fontSize = 46;
-  g.font = `500 ${fontSize}px "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif`;
+  const fontSize = 48;
+  g.font = `600 ${fontSize}px "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
 
@@ -149,11 +149,11 @@ export class Prologue {
       card.mesh.visible = true;
       // Travel from close and low, receding upward and away.
       const travel = clamp(local / (span + 1.6));
-      const z = -CARD_NEAR - travel * 12.5;
-      const y = -0.62 + travel * 3.2;
+      const z = -CARD_NEAR - travel * 7.6;
+      const y = -0.5 + travel * 2.6;
       card.mesh.position.set(0, y, z);
       card.mesh.rotation.set(-0.42, 0, 0);
-      card.mesh.scale.setScalar(fitScale(camera, CARD_NEAR, this.planeWidth, 0.8));
+      card.mesh.scale.setScalar(fitScale(camera, CARD_NEAR, this.planeWidth, 0.92));
       const fadeIn = smootherstep(0, 1.1, local);
       const fadeOut = 1 - smootherstep(span * 0.72, span + 1.5, local);
       card.material.opacity = fadeIn * fadeOut * 0.96;

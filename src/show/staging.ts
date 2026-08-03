@@ -401,7 +401,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
       if (vel.lengthSq() > 1e-8) orientAlong(world.pod.group, vel, Math.sin(t * 1.3) * 0.12);
       world.pod.setClampsAttached(t < 309.4);
       world.pod.setBurn(smoothstep(309.2, 310.4, t) * (1 - smoothstep(318, 322, t) * 0.55));
-      world.pod.setReentry(smoothstep(316, 330, t));
+      world.pod.setReentry(smoothstep(314, 326, t));
       // Grow the pod as it recedes so it stays a readable point of light.
       const far = smoothstep(313, 336, t);
       world.pod.group.scale.setScalar(1 + far * 26);

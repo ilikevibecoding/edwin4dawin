@@ -120,7 +120,7 @@ export class ShieldFlashSystem {
         continue;
       }
       f.mat.uniforms.uSpread.value = t * 0.85;
-      f.mat.uniforms.uStrength.value = (1 - t) * (1 - t) * 1.6;
+      f.mat.uniforms.uStrength.value = (1 - t) * (1 - t) * 1.15;
       // A capital ship's shell is nearly a kilometre across, and the battle
       // shots sit inside it. Seen from within, the expanding ring wraps the
       // whole frame in hexagons, so the shell is simply not drawn from there.
