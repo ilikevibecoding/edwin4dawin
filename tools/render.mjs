@@ -67,6 +67,9 @@ await probe.browser.close();
 const T0 = parseFloat(arg('t0', '0'));
 const T1 = Math.min(parseFloat(arg('t1', String(duration))), duration);
 const total = Math.max(1, Math.round((T1 - T0) * FPS));
+// Absolute index of the first frame of this run, so a partial re-render lands
+// on the frames it is actually replacing.
+const FRAME0 = Math.round(T0 * FPS);
 
 console.log(
   `film ${fmt(duration)} · rendering ${fmt(T1 - T0)} (${total} frames) at ${WIDTH}x${HEIGHT}@${FPS}fps ` +
@@ -123,8 +126,12 @@ await Promise.all(
     for (let f = shard.from; f < shard.to; f++) {
       const t = T0 + f / FPS;
       const data = await film.page.evaluate((tt, q) => window.FILM.drawAndGrab(tt, q), t, QUALITY);
+      // Frames are named by their ABSOLUTE position in the film, not by their
+      // offset within this run. Numbering them from zero meant a partial
+      // re-render (`--t0 46 --t1 114`) silently overwrote the opening frames
+      // with the wrong part of the movie.
       fs.writeFileSync(
-        path.join(frameDir, `f${String(f).padStart(6, '0')}.jpg`),
+        path.join(frameDir, `f${String(FRAME0 + f).padStart(6, '0')}.jpg`),
         Buffer.from(data.slice(data.indexOf(',') + 1), 'base64')
       );
       tick();
@@ -173,8 +180,17 @@ args.push(
 if (audioWav) args.push('-c:a', 'aac', '-b:a', '192k', '-shortest');
 args.push(OUT);
 
-const startNum = shards.length ? shards[0].from : 0;
-if (startNum !== 0) args.splice(args.indexOf('-framerate'), 0, '-start_number', String(startNum));
+if (FRAME0 !== 0) args.splice(args.indexOf('-framerate'), 0, '-start_number', String(FRAME0));
+
+// Guard against encoding a half-populated frame directory: every frame this
+// run covers must exist before ffmpeg is handed the sequence.
+for (const idx of [FRAME0, FRAME0 + total - 1]) {
+  const f = path.join(frameDir, `f${String(idx).padStart(6, '0')}.jpg`);
+  if (!fs.existsSync(f)) {
+    console.error(`missing expected frame ${f} - refusing to encode`);
+    process.exit(1);
+  }
+}
 
 const enc = spawnSync('ffmpeg', args, { stdio: 'inherit' });
 if (enc.status !== 0) {
