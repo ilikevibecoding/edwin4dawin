@@ -5,6 +5,8 @@ import {
   canopyReflection,
   detailNormal,
   grainMaps,
+  GRAVEL_TILE,
+  gravelMaps,
   litterMaps,
   macroVariation,
   RELIEF_DEPTH,
@@ -17,24 +19,43 @@ import {
 } from './textures/ground.js';
 
 // ---------------------------------------------------------------------------
-// Rolling forest floor with a dirt two-track graded into it.
+// Rolling forest floor with two roads graded into it: a dirt two-track, and the
+// gravel mainline it runs out onto.
 //
 // One mesh, one draw call, but not one resolution: the far field is a 2.3 m
-// grid and every cell within nine metres of the centreline is subdivided to
+// grid and every cell within nine metres of a centreline is subdivided to
 // 0.4 m, which is what it takes for wheel ruts and a crown to exist as
 // geometry rather than as a normal map. Cells are stitched along the boundary
 // so there are no T-junction cracks, and every normal is analytic so the
 // duplicated vertices on cell seams shade identically.
 //
-// Three tiling surface sets (packed track, loose verge, needle litter) are
-// blended in the fragment shader from a signed lateral road offset, so the
-// ruts, the crown strip and the verge are placed in road space and the
+// Both roads' samples live in one set of flat arrays with a per-sample road id,
+// so one spatial lookup answers for both and everything keyed off it — the
+// refinement mask, the scatter, the forest's planting exclusion — comes out
+// right for free. Where the two overlap the profiles are blended by which road
+// has more authority over that patch of ground, which is what makes the
+// junction a junction rather than two ribbons crossing.
+//
+// Four tiling surface sets (packed track, graded gravel, loose verge, needle
+// litter) are blended in the fragment shader from signed lateral road offsets,
+// so the ruts, the crown strip and the verge are placed in road space and the
 // surfaces themselves tile in world space. No decals, no z-fighting.
 // ---------------------------------------------------------------------------
+
+// Build the world without the mainline, for measuring what it costs. The
+// mesh refinement, the scatter, the shader blend and the forest exclusion all
+// hang off one lookup, so switching that lookup off at the source is the only
+// way to get a like-for-like baseline out of the same code.
+//   NO_MAIN=1 node tools/mainprobe.mjs
+const NO_MAIN = typeof process !== 'undefined' && !!process.env?.NO_MAIN;
 
 const SIZE = 300;
 const COARSE = 128; // 2.34 m cells in the far field
 const FINE = 8; // sub-quads per corridor cell -> 0.29 m
+// The mainline is graded: nothing on it is smaller than the ditch, so half the
+// resolution carries it and it costs a fifth of the triangles a two-track does.
+// 4 divides 8, which is what lets the two levels share an edge without a crack.
+const FINE_MAIN = 4;
 // Narrowed from 9 m to pay for the finer grid inside it. 6.5 m still reaches
 // three metres past the shoulder, which is as far as the graded profile goes.
 const CORRIDOR = 6.5;
@@ -63,6 +84,50 @@ const CROWN_H = 0.028;
 const RUT_D = 0.082;
 const LIP_H = 0.046;
 const BERM_H = 0.24;
+
+// ---------------------------------------------------------------------------
+// The mainline.
+//
+// A logging road, not the trail scaled up. Everything about it is the result of
+// a grader having been down it: it is wide enough for a loaded truck to pass a
+// pickup, it is crowned hard enough to throw water off before a rut can form,
+// it drains into a ditch on both sides, and the material is imported crushed
+// rock rather than whatever the trail happened to be cut through.
+//
+// The vertical budget that constrains the trail does not apply here — the whole
+// point is that there is nothing to fall into — so the numbers are set by
+// drainage instead. 4% across the running surface and 7.5% down the shoulder is
+// what a forest road standard actually asks for.
+// ---------------------------------------------------------------------------
+const MAIN_HALF = 3.4; // graded running surface, half width — 6.8 m of road
+const MAIN_SHOULDER = 1.45; // unsorted coarse aggregate sloughing off the edge
+const MAIN_DITCH = 1.75; // ditch, measured out from the shoulder edge
+// Half the track of a loaded truck, which is wider than the pickup's 1.69 m —
+// and that is the point. On a single-lane mainline with turnouts everything
+// drives down the middle, so there is one pair of wheel paths and it is set by
+// the largest vehicle that uses the road, not by the one the player is in.
+const MAIN_RUT_C = 1.12;
+const MAIN_RUT_W = 0.52;
+const MAIN_CROWN = 0.136;
+const MAIN_SHED = 0.078; // extra crossfall per metre of shoulder
+const MAIN_DITCH_D = 0.46;
+// A graded surface still takes a wheel path, it is just a centimetre of it
+// rather than eight. Above about 3 cm it stops reading as maintained.
+const MAIN_RUT_D = 0.017;
+// Outer edge of the graded platform: the ditch's far bank, where the cut or
+// fill batter starts.
+const MAIN_EDGE = MAIN_HALF + MAIN_SHOULDER + MAIN_DITCH;
+// Has to cover MAIN_EDGE plus the widest batter the grade line can ask for, or
+// the batter lands on ground the fine grid does not reach.
+const MAIN_CORRIDOR = 9.2;
+// How far the trail's own distance metric has to be offset to make the two
+// comparable. Everything downstream of `roadDistance` — the forest's planting
+// exclusion, the undergrowth's inner boundary, the deadwood corridor — is
+// keyed off "metres from the trail centreline", where the surface ends at
+// ROAD_HALF. Reporting the raw distance to the mainline would plant trees in
+// the middle of it, so what comes back is the distance to its *edge*, shifted
+// so the two roads' verges start at the same number.
+const MAIN_DIST_BIAS = MAIN_EDGE - ROAD_HALF - 0.2;
 
 /** Direction toward the sun, matching sky.js. Used for the relief sun march. */
 function sunVector() {
@@ -105,67 +170,199 @@ export function createRoadCurve() {
   return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
 }
 
+/**
+ * The gravel mainline.
+ *
+ * Laid out to cross the trail at about fifty degrees near t = 0.575, which is
+ * sixty-odd metres of driving from where every beauty view starts — far enough
+ * that it does not turn up in the back of the existing framings, close enough
+ * that it is a few seconds away. The control point at the crossing is the
+ * trail's own position there, so the junction is on both curves by construction
+ * rather than by a fit.
+ *
+ * The alignment either side is deliberately slack: a graded road is surveyed
+ * with long radii, and a mainline that wiggles like the trail does would read as
+ * the same road painted a different colour. Both ends climb into the rim the
+ * base height field raises past 86 m, so the road leaves the frame over a crest
+ * instead of stopping.
+ */
+export function createMainCurve() {
+  const pts = [
+    [-146, 82],
+    [-112, 63],
+    [-76, 47],
+    [-42, 34],
+    [-12.3, 25.2],
+    [17, 17.5],
+    [52, 5],
+    [86, -13],
+    [118, -40],
+    [150, -78],
+  ];
+  return new THREE.CatmullRomCurve3(
+    pts.map(([x, z]) => new THREE.Vector3(x, 0, z)),
+    false,
+    'catmullrom',
+    0.5,
+  );
+}
+
 export function createTerrain({ env = null } = {}) {
   const curve = createRoadCurve();
+  const mainCurve = createMainCurve();
 
-  // --- sample and grade the road centreline --------------------------------
+  // --- sample and grade both centrelines -----------------------------------
   // 1100 rather than 900 because the centreline is a third longer than it was;
   // this keeps the spacing at half a metre, which is what the grading blur and
   // the along-road noise below are tuned against.
   const SAMPLES = 1100;
-  const cx = new Float32Array(SAMPLES);
-  const cz = new Float32Array(SAMPLES);
-  const cy = new Float32Array(SAMPLES);
-  const ctx = new Float32Array(SAMPLES); // unit tangent
-  const ctz = new Float32Array(SAMPLES);
-  const cs = new Float32Array(SAMPLES); // arc length, metres
+  // The mainline is sampled at the same half metre. It carries no feature
+  // finer than the ditch, but `lat` is taken from the nearest sample's own
+  // frame, and on a wide road a coarse frame puts a visible kink in the crown.
+  const MSAMPLES = Math.max(320, Math.round(mainCurve.getLength() / 0.5));
+  const TOTAL = SAMPLES + MSAMPLES;
+  const cx = new Float32Array(TOTAL);
+  const cz = new Float32Array(TOTAL);
+  const cy = new Float32Array(TOTAL);
+  const ctx = new Float32Array(TOTAL); // unit tangent
+  const ctz = new Float32Array(TOTAL);
+  const cs = new Float32Array(TOTAL); // arc length from that road's own start
+  const ckn = new Float32Array(TOTAL);
+  // 0 for the trail, 1 for the mainline. One array of samples and one grid over
+  // it, so a single walk answers for both roads.
+  const crid = new Uint8Array(TOTAL);
   const tmp = new THREE.Vector3();
-  for (let i = 0; i < SAMPLES; i++) {
-    curve.getPoint(i / (SAMPLES - 1), tmp);
-    cx[i] = tmp.x;
-    cz[i] = tmp.z;
-    cy[i] = baseHeight(tmp.x, tmp.z);
-  }
-  for (let i = 0; i < SAMPLES; i++) {
-    const a = Math.max(0, i - 1);
-    const b = Math.min(SAMPLES - 1, i + 1);
-    const dx = cx[b] - cx[a];
-    const dz = cz[b] - cz[a];
-    const len = Math.hypot(dx, dz) || 1;
-    ctx[i] = dx / len;
-    ctz[i] = dz / len;
-    cs[i] = i === 0 ? 0 : cs[i - 1] + Math.hypot(cx[i] - cx[i - 1], cz[i] - cz[i - 1]);
-  }
-  // Signed curvature, projected onto the same lateral frame `lat` uses, so its
-  // sign says which side of the road is the *inside* of the bend. A truck
-  // pushes material to the outside of every corner and cuts the inside, which
-  // is the one thing that tells a bend apart from a straight from ground level.
-  const ckn = new Float32Array(SAMPLES);
-  for (let i = 0; i < SAMPLES; i++) {
-    const a = Math.max(0, i - 8);
-    const b = Math.min(SAMPLES - 1, i + 8);
-    const ds = Math.max(1e-3, cs[b] - cs[a]);
-    const dtx = (ctx[b] - ctx[a]) / ds;
-    const dtz = (ctz[b] - ctz[a]) / ds;
-    ckn[i] = dtx * ctz[i] - dtz * ctx[i];
+
+  /**
+   * Sample one curve into the shared arrays at [off, off + n).
+   *
+   * Arc length accumulates per road, never across the join — the along-road
+   * noise, the tyre print and the streak fields are all keyed off it, and a
+   * value that carried on counting from the trail's 427 m would step the whole
+   * lot by that much the instant the mainline won the nearest-sample test.
+   */
+  function sampleCurve(src, off, n, id) {
+    for (let i = 0; i < n; i++) {
+      src.getPoint(i / (n - 1), tmp);
+      cx[off + i] = tmp.x;
+      cz[off + i] = tmp.z;
+      cy[off + i] = baseHeight(tmp.x, tmp.z);
+      crid[off + i] = id;
+    }
+    for (let i = 0; i < n; i++) {
+      const a = off + Math.max(0, i - 1);
+      const b = off + Math.min(n - 1, i + 1);
+      const dx = cx[b] - cx[a];
+      const dz = cz[b] - cz[a];
+      const len = Math.hypot(dx, dz) || 1;
+      ctx[off + i] = dx / len;
+      ctz[off + i] = dz / len;
+      cs[off + i] =
+        i === 0 ? 0 : cs[off + i - 1] + Math.hypot(cx[off + i] - cx[off + i - 1], cz[off + i] - cz[off + i - 1]);
+    }
+    // Signed curvature, projected onto the same lateral frame `lat` uses, so
+    // its sign says which side of the road is the *inside* of the bend. A truck
+    // pushes material to the outside of every corner and cuts the inside, which
+    // is the one thing that tells a bend apart from a straight from ground level.
+    for (let i = 0; i < n; i++) {
+      const a = off + Math.max(0, i - 8);
+      const b = off + Math.min(n - 1, i + 8);
+      const ds = Math.max(1e-3, cs[b] - cs[a]);
+      const dtx = (ctx[b] - ctx[a]) / ds;
+      const dtz = (ctz[b] - ctz[a]) / ds;
+      ckn[off + i] = dtx * ctz[off + i] - dtz * ctx[off + i];
+    }
   }
 
-  // a grader would smooth the profile out; do the same with a wide box blur
-  const smoothed = new Float32Array(SAMPLES);
-  const W = 26;
-  for (let i = 0; i < SAMPLES; i++) {
-    let s = 0;
-    let c = 0;
-    for (let j = -W; j <= W; j++) {
-      const k = i + j;
-      if (k < 0 || k >= SAMPLES) continue;
-      const w = 1 - Math.abs(j) / (W + 1);
-      s += cy[k] * w;
-      c += w;
+  /** Triangular box blur of the height run [off, off + n), in place. */
+  function gradeLine(off, n, w) {
+    const smoothed = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      let s = 0;
+      let c = 0;
+      for (let j = -w; j <= w; j++) {
+        const k = i + j;
+        if (k < 0 || k >= n) continue;
+        const g = 1 - Math.abs(j) / (w + 1);
+        s += cy[off + k] * g;
+        c += g;
+      }
+      smoothed[i] = s / c;
     }
-    smoothed[i] = s / c;
+    for (let i = 0; i < n; i++) cy[off + i] = smoothed[i];
   }
-  cy.set(smoothed);
+
+  sampleCurve(curve, 0, SAMPLES, 0);
+  sampleCurve(mainCurve, SAMPLES, MSAMPLES, 1);
+
+  // a grader would smooth the profile out; do the same with a wide box blur
+  gradeLine(0, SAMPLES, 26);
+  // The mainline is surveyed rather than worn in, so its vertical alignment is
+  // much longer: 24 samples is a ±12 m running mean, which flattens the 13 m
+  // and 48 m components of the ground out entirely and leaves the road climbing
+  // and falling only with the hills. What it does not survive is being widened
+  // further — the deviation from natural ground is what the cut and fill batter
+  // has to absorb, and the batter has to fit inside MAIN_CORRIDOR.
+  gradeLine(SAMPLES, MSAMPLES, 24);
+
+  // --- the junction --------------------------------------------------------
+  // Found rather than declared. The mainline has a control point on the trail,
+  // so the crossing exists by construction, but which sample it lands on
+  // depends on both curves' parameterisation — and the apron, the ditch fill
+  // and the approach grade are all placed off it.
+  let jTrail = 0;
+  let jMain = SAMPLES;
+  {
+    let best = 1e9;
+    for (let i = 0; i < SAMPLES; i += 2) {
+      for (let j = SAMPLES; j < TOTAL; j += 2) {
+        const d = (cx[i] - cx[j]) ** 2 + (cz[i] - cz[j]) ** 2;
+        if (d < best) {
+          best = d;
+          jTrail = i;
+          jMain = j;
+        }
+      }
+    }
+  }
+  const JUNC_T = cs[jTrail]; // arc length along the trail, metres
+  const JUNC_M = cs[jMain]; // arc length along the mainline
+  const JX = cx[jMain];
+  const JZ = cz[jMain];
+
+  // The spur has to arrive at the mainline's own surface, or the crossing is a
+  // step. The trail's grade line is pulled onto the mainline's over the last
+  // thirty metres of approach, which is exactly what a real spur mouth does —
+  // it gives up its own profile and takes the road's.
+  {
+    const blended = new Float32Array(SAMPLES);
+    for (let i = 0; i < SAMPLES; i++) {
+      let best = 1e9;
+      let bj = jMain;
+      for (let j = SAMPLES; j < TOTAL; j++) {
+        const d = (cx[i] - cx[j]) ** 2 + (cz[i] - cz[j]) ** 2;
+        if (d < best) {
+          best = d;
+          bj = j;
+        }
+      }
+      const d = Math.sqrt(best);
+      const w = 1 - smoothstep(9, 34, d);
+      if (w <= 0) {
+        blended[i] = cy[i];
+        continue;
+      }
+      // the mainline's *surface* at that offset, crown included, not its
+      // centreline — the spur meets the shoulder, which is 14 cm lower
+      const lat = Math.min(MAIN_HALF, d);
+      const target = cy[bj] - MAIN_CROWN * (lat / MAIN_HALF) ** 2;
+      blended[i] = lerp(cy[i], target, w);
+    }
+    for (let i = 0; i < SAMPLES; i++) cy[i] = blended[i];
+    // The blend has a kink where it starts; a short blur takes it out without
+    // undoing the wide grading that produced either input.
+    gradeLine(0, SAMPLES, 9);
+  }
 
   // --- uniform grid over the centreline samples ----------------------------
   // Flat typed arrays, not a Map: the mesh build asks for the nearest road
@@ -176,26 +373,68 @@ export function createTerrain({ env = null } = {}) {
   const ORIGIN = -176;
   const cellOf = (v) => Math.floor((v - ORIGIN) / CELL);
   const counts = new Int32Array(GRID * GRID + 1);
-  const cellIndex = new Int32Array(SAMPLES);
-  for (let i = 0; i < SAMPLES; i++) {
+  const cellIndex = new Int32Array(TOTAL);
+  for (let i = 0; i < TOTAL; i++) {
     const ix = Math.min(GRID - 1, Math.max(0, cellOf(cx[i])));
     const iz = Math.min(GRID - 1, Math.max(0, cellOf(cz[i])));
     cellIndex[i] = iz * GRID + ix;
     counts[cellIndex[i] + 1]++;
   }
   for (let i = 0; i < GRID * GRID; i++) counts[i + 1] += counts[i];
-  const items = new Int32Array(SAMPLES);
+  const items = new Int32Array(TOTAL);
   const cursor = counts.slice(0, GRID * GRID);
-  for (let i = 0; i < SAMPLES; i++) items[cursor[cellIndex[i]]++] = i;
+  for (let i = 0; i < TOTAL; i++) items[cursor[cellIndex[i]]++] = i;
 
-  const _near = { dist: 1e6, lat: 1e6, y: 0, t: 0, s: 0, k: 0, tx: 0, tz: 1 };
+  const makeNear = () => ({ dist: 1e6, lat: 1e6, y: 0, t: 0, s: 0, k: 0, tx: 0, tz: 1 });
+  const _near = { t: makeNear(), m: makeNear() };
 
-  /** Nearest centreline sample, with the signed perpendicular offset. */
+  /** Fill one road's result from sample `bi`, or leave it out of range. */
+  function fillNear(out, bi, x, z, off, n, d2) {
+    if (bi < 0) {
+      out.dist = 1e6;
+      out.lat = 1e6;
+      out.y = 0;
+      out.t = 0;
+      out.s = 0;
+      out.k = 0;
+      out.tx = 0;
+      out.tz = 1;
+      return;
+    }
+    const dx = x - cx[bi];
+    const dz = z - cz[bi];
+    out.dist = Math.sqrt(d2);
+    out.lat = dx * ctz[bi] - dz * ctx[bi];
+    out.y = cy[bi];
+    out.t = (bi - off) / (n - 1);
+    // Arc length projected onto the segment, not the sample's own arc length.
+    // The samples are 0.37 m apart and which one is nearest flips about as you
+    // move sideways, so the raw value jitters by more than a tyre lug pitch —
+    // enough to turn the road-space tread print into noise.
+    out.s = cs[bi] + dx * ctx[bi] + dz * ctz[bi];
+    out.k = ckn[bi];
+    out.tx = ctx[bi];
+    out.tz = ctz[bi];
+  }
+
+  /**
+   * Nearest centreline sample on *each* road, with the signed perpendicular
+   * offset. One grid walk answers both, which is the whole reason the two roads
+   * share a sample array: the alternative is two walks, and this function is on
+   * the hot path of every vertex, every scatter placement and every tree.
+   *
+   * The ring loop stops when both roads are confirmed. Confirming a road that
+   * is genuinely far away costs rings, so a road further out than the widest
+   * thing keyed off it — the forest's far-billboard exclusion, at 24 m — is
+   * allowed to come back approximate.
+   */
   function nearestRoad(x, z, out = _near) {
     const ix = cellOf(x);
     const iz = cellOf(z);
-    let best = 1e9;
-    let bi = -1;
+    let bestT = 1e9;
+    let bestM = 1e9;
+    let biT = -1;
+    let biM = -1;
     for (let r = 0; r <= 6; r++) {
       const x0 = Math.max(0, ix - r);
       const x1 = Math.min(GRID - 1, ix + r);
@@ -211,47 +450,111 @@ export function createTerrain({ env = null } = {}) {
             const dx = cx[i] - x;
             const dz = cz[i] - z;
             const d = dx * dx + dz * dz;
-            if (d < best) {
-              best = d;
-              bi = i;
+            if (crid[i]) {
+              if (d < bestM) {
+                bestM = d;
+                biM = i;
+              }
+            } else if (d < bestT) {
+              bestT = d;
+              biT = i;
             }
           }
         }
       }
       // everything still unsearched is at least r cells away
-      if (bi >= 0 && best <= (r * CELL) ** 2) break;
+      const rr = (r * CELL) ** 2;
+      const okT = biT >= 0 && bestT <= rr;
+      // 32 m is past everything keyed off the mainline: its profile dies at 13,
+      // and the widest forest rule that can see it — the far billboards' 24 m
+      // exclusion — is inside it. Giving up out there only ever reports the
+      // mainline as *further* than it is, which plants nothing anywhere it
+      // should not be, and it is worth about a second of boot.
+      const okM = (biM >= 0 && bestM <= rr) || rr >= 1000;
+      if (okT && okM) break;
     }
-    if (bi < 0) {
-      out.dist = 1e6;
-      out.lat = 1e6;
-      out.y = 0;
-      out.t = 0;
-      out.s = 0;
-      out.k = 0;
-      out.tx = 0;
-      out.tz = 1;
-      return out;
-    }
-    const dx = x - cx[bi];
-    const dz = z - cz[bi];
-    out.dist = Math.sqrt(best);
-    out.lat = dx * ctz[bi] - dz * ctx[bi];
-    out.y = cy[bi];
-    out.t = bi / (SAMPLES - 1);
-    // Arc length projected onto the segment, not the sample's own arc length.
-    // The samples are 0.37 m apart and which one is nearest flips about as you
-    // move sideways, so the raw value jitters by more than a tyre lug pitch —
-    // enough to turn the road-space tread print into noise.
-    out.s = cs[bi] + dx * ctx[bi] + dz * ctz[bi];
-    out.k = ckn[bi];
-    out.tx = ctx[bi];
-    out.tz = ctz[bi];
+    fillNear(out.t, biT, x, z, 0, SAMPLES, bestT);
+    fillNear(out.m, biM, x, z, SAMPLES, MSAMPLES, bestM);
+    if (NO_MAIN) out.m.dist = 1e6;
     return out;
   }
 
   /** Lateral wander of the two-track inside its corridor, in metres. */
   function roadShift(s) {
     return (fbm(s * 0.048, 3.7, { octaves: 3, period: 64, seed: 88 }) - 0.5) * 1.15;
+  }
+
+  /**
+   * The same two for the mainline, at a fraction of the amplitude.
+   *
+   * A graded road wanders because the grader's own line does, not because the
+   * traffic picks its way — so the crown drifts by a few tens of centimetres
+   * over tens of metres and the *edge* is where the irregularity lives, where
+   * the shoulder sloughs and the ditch silts. Running the trail's numbers here
+   * was the first thing tried and it read as a wide two-track.
+   */
+  function mainShift(s) {
+    return (fbm(s * 0.019, 6.1, { octaves: 3, period: 64, seed: 331 }) - 0.5) * 0.72;
+  }
+
+  function mainWobble(s) {
+    return (
+      (fbm(s * 0.062, 4.4, { octaves: 3, period: 64, seed: 337 }) - 0.5) * 0.62 +
+      (fbm(s * 0.27, 1.9, { octaves: 2, period: 64, seed: 349 }) - 0.5) * 0.24
+    );
+  }
+
+  /**
+   * Junction influence in the mainline's own frame, 0-1.
+   *
+   * A lozenge twenty metres along the road and fifteen across it, full strength
+   * over the middle seven by six: the apron a loaded truck needs to swing off a
+   * mainline and onto a spur without dropping a wheel in the ditch. Everything
+   * about the junction is driven off this — the platform widens, the crown
+   * flattens so a vehicle can cross it, the ditch is culverted through, and the
+   * shader scuffs the surface and drags mud out of the trail onto it.
+   *
+   * Down twice from where it started, and the overhead mask renders are what
+   * settled it both times. At the first numbers the union of this, the trail's
+   * flare and the forest's own clearance was forty metres of open scuffed
+   * ground with two roads somewhere inside it, which is a landing, not a
+   * junction. A junction is legible because two roads *of different widths*
+   * meet: the moment the disturbed ground is wider than either of them, there
+   * is nothing in the frame with an edge on it and the eye has nothing to read.
+   * The apron has to stay narrower than the mainline is long and shorter than
+   * the mainline is wide, or it stops being a feature of the road and becomes
+   * the place the road used to be.
+   */
+  function apronMain(s, ax) {
+    return (1 - smoothstep(3.5, 10, Math.abs(s - JUNC_M))) * (1 - smoothstep(3.0, 7.5, ax));
+  }
+
+  /** Junction influence in the trail's frame: the flared mouth of the spur. */
+  function apronTrail(s, ax) {
+    return (1 - smoothstep(3, 11, Math.abs(s - JUNC_T))) * (1 - smoothstep(2.0, 5.5, ax));
+  }
+
+  /**
+   * The culvert: the few metres of mainline the spur actually crosses.
+   *
+   * Split out of `apronMain` because the two want completely different lengths
+   * and running them off one number cost the junction its legibility. The
+   * apron — scuffing, mud, a wider platform — is twenty metres long, because
+   * that is how much ground a truck disturbs swinging a trailer off a road.
+   * The ditch, though, is culverted for the length of the pipe and no further:
+   * about six metres, with the ditch running again either side of it.
+   *
+   * Keyed off the same lozenge, the ditch, the crown and the windrow all
+   * disappeared for twenty metres in each direction — which is to say every
+   * feature that says "graded road" was switched off across exactly the piece
+   * of road the player arrives at and looks at. Coming up the spur you saw an
+   * open scuffed clearing with a two-track ending in it; the road was there,
+   * and had been stripped of everything that identified it as one. A ditch and
+   * a windrow crossing the view are what make a forest road read as a road
+   * from thirty metres, and they have to survive the junction.
+   */
+  function culvert(s) {
+    return 1 - smoothstep(3.2, 6.5, Math.abs(s - JUNC_M));
   }
 
   /**
@@ -301,66 +604,193 @@ export function createTerrain({ env = null } = {}) {
    */
   function surfaceInfo(x, z, out) {
     const nr = nearestRoad(x, z, out.near);
+    const nt = nr.t;
+    const nm = nr.m;
     const base = baseHeight(x, z);
-    const sgn = nr.lat < 0 ? -1 : 1;
-    const latAbs = nr.dist > 14 ? nr.dist : Math.min(nr.dist, Math.abs(nr.lat));
-    const side = sgn * latAbs - roadShift(nr.s);
+
+    // --- mainline cross-section ---------------------------------------------
+    // Everything here is zero past thirteen metres — the batter is the last
+    // term to die and it reaches ten — so beyond fourteen the whole block is
+    // skipped. It is eight fbm evaluations and the far field is most of the
+    // half million calls this function takes during a build.
+    const mSgn = nm.lat < 0 ? -1 : 1;
+    const mLatAbs = nm.dist > 20 ? nm.dist : Math.min(nm.dist, Math.abs(nm.lat));
+    const mNear = nm.dist < 14;
+    let mSide = mSgn * mLatAbs;
+    let apM = 0;
+    let gM = 0;
+    let mDrop = 0;
+    if (mNear) {
+      mSide -= mainShift(nm.s);
+      const mAx0 = Math.abs(mSide);
+      apM = apronMain(nm.s, mAx0);
+      // Trucks swing wide off a mainline, so the platform is wider at the
+      // junction and the ditch is culverted through it. 2.4 m, not 3.4: at the
+      // wider figure the flare plus the trail's own and the forest's clearance
+      // came to forty metres of open graded ground, which reads as a landing
+      // rather than as a junction. A crossing is legible because two roads of
+      // different widths meet, so the flare has to stay small enough that both
+      // of them still have a width.
+      const mHalf = MAIN_HALF + apM * 2.4;
+      const mPlat = mHalf + MAIN_SHOULDER;
+      // The edge wobble is tapered in from the middle of the running surface,
+      // for the same reason the trail's is: applied flat it slides the
+      // wheel-path masks across the crown.
+      const mEdge = mAx0 - mainWobble(nm.s) * smoothstep(mHalf * 0.5, mHalf + 1.0, mAx0);
+      const cM = culvert(nm.s);
+      const mDitchC = mPlat + MAIN_DITCH * 0.55;
+      const mOuter = mPlat + MAIN_DITCH * (1 - cM * 0.5) * 1.25;
+      const mCut = base - nm.y;
+      // A cut face stands up at about one to one and a fill slope lies down at
+      // one and a half, which is the one asymmetry that says a machine built
+      // this rather than that it eroded. Bounded because the batter has to fit
+      // inside MAIN_CORRIDOR — the grade line is smoothed only as far as that
+      // allows.
+      const mBatter = 0.95 + Math.min(2.2, Math.abs(mCut) * (mCut > 0 ? 0.75 : 1.15));
+      gM = 1 - smoothstep(mOuter, mOuter + mBatter, mEdge);
+
+      // 4% parabolic crown over the running surface, flattened across the apron
+      // so a vehicle can cross the road rather than climb over its middle.
+      const cw = Math.min(mAx0, mHalf) / mHalf;
+      mDrop -= MAIN_CROWN * (1 - cM * 0.5) * cw * cw;
+      // the shoulder sheds nearly twice as hard as the running surface
+      mDrop -= Math.min(Math.max(0, mEdge - mHalf), MAIN_SHOULDER + 0.5) * MAIN_SHED;
+      // Ditch. Culverted through the junction, and it silts up along its length
+      // rather than running to a constant section.
+      const mSilt = 0.62 + fbm(nm.s * 0.035 + 3.3, 7.7, { octaves: 3, period: 64, seed: 355 }) * 0.62;
+      const mDitch = Math.exp(-((mEdge - mDitchC) ** 2) / (2 * (MAIN_DITCH * 0.5) ** 2));
+      mDrop -= mDitch * MAIN_DITCH_D * clamp01(mSilt) * (1 - cM);
+      // A centimetre and a half of wheel path. Any more and it is a rut, which
+      // is the trail's job; any less and the road has no travelled way in it.
+      const mRut =
+        Math.exp(-((mAx0 - MAIN_RUT_C) ** 2) / (2 * MAIN_RUT_W ** 2)) *
+        clamp01(0.45 + fbm(nm.s * 0.028 + 5, 2.9, { octaves: 3, period: 64, seed: 361 }) * 0.9);
+      mDrop -= mRut * MAIN_RUT_D * (1 - apM * 0.6);
+      // A grader leaves a windrow of material it could not pull back onto the
+      // road. It sits on the shoulder's outer edge and it is the single feature
+      // that reads as "maintained" from a distance.
+      const mWind = Math.exp(-((mEdge - (mPlat + 0.12)) ** 2) / (2 * 0.3 ** 2));
+      mDrop +=
+        mWind * 0.055 * clamp01(0.3 + fbm(nm.s * 0.19 + 8, 1.4, { octaves: 2, period: 64, seed: 373 }) * 1.3) * (1 - cM);
+    }
+    const mAx = Math.abs(mSide);
+
+    // --- two-track cross-section --------------------------------------------
+    // Same early out, at eight and a half metres: past the widest surface mask
+    // the shader has, the lateral coordinate is the plain distance and the
+    // wander, the wobble and the rut profile are all worth nothing.
+    const sgn = nt.lat < 0 ? -1 : 1;
+    const latAbs = nt.dist > 14 ? nt.dist : Math.min(nt.dist, Math.abs(nt.lat));
+    const tNear = nt.dist < 8.5;
+    const side = tNear ? sgn * latAbs - roadShift(nt.s) : sgn * latAbs;
     const ax = Math.abs(side);
+    // The spur fans out into the mainline: a mouth, not a butt joint. This is
+    // also what carries the trail's dirt onto the apron in the shader, since
+    // every surface mask is keyed off the same lateral coordinate.
+    const apT = tNear ? apronTrail(nt.s, ax) : 0;
+    const tHalf = ROAD_HALF + apT * 2.4;
     // The wobble is tapered in from the middle of the running surface outward.
     // Applied flat it moves the whole lateral coordinate, so the track and verge
     // masks slide across the ruts and the two-track disappears on any stretch
     // where the wobble happens to be negative.
-    const edge = ax - edgeWobble(nr.s) * smoothstep(ROAD_HALF * 0.5, ROAD_HALF * 1.25, ax);
+    const edge = tNear ? ax - edgeWobble(nt.s) * smoothstep(ROAD_HALF * 0.5, ROAD_HALF * 1.25, ax) : ax;
 
     // a grader cuts a steep face into the uphill side and rolls a wider fill
     // out below, so the transition width follows the cross slope. Tightened from
     // 3.7 m: blending out over that distance turns a 2.5 m trail into ten metres
     // of disturbed ground with no edge to it.
-    const cut = base - nr.y;
+    const cut = base - nt.y;
     const fall = lerp(1.55, 0.8, smoothstep(-0.6, 1.6, cut));
-    const grade = 1 - smoothstep(ROAD_HALF + 0.1, ROAD_HALF + 0.1 + fall, edge);
+    const gT = 1 - smoothstep(tHalf + 0.1, tHalf + 0.1 + fall, edge);
 
-    let y = base + (nr.y - base) * grade;
-    // Rut depth is modulated along the road: a two-track is never a pair of
-    // extruded channels, it deepens through the wet stretches and washboards
-    // out over the dry ones. Costs nothing against the vertical budget because
-    // the modulation only ever takes depth away.
-    const wear = 0.52 + fbm(nr.s * 0.031 + 11, 5.3, { octaves: 3, period: 64, seed: 141 }) * 0.72;
-    const wash = 1 + Math.sin(nr.s * 2.1 + fbm(nr.s * 0.02, 1.7, { octaves: 2, period: 64, seed: 96 }) * 9) * 0.16;
-    const rut = Math.exp(-((ax - RUT_C) ** 2) / (2 * RUT_W ** 2));
-    // dirt squeezed out of the trough and piled either side of it. This is
-    // where the apparent depth comes from: the trough itself cannot go below
-    // -RUT_D without the suspension running out of travel.
-    const lip =
-      Math.exp(-((ax - (RUT_C - RUT_W * 1.9)) ** 2) / (2 * 0.16 ** 2)) +
-      Math.exp(-((ax - (RUT_C + RUT_W * 1.9)) ** 2) / (2 * 0.18 ** 2));
-    // The lip is squeezed out of the trough in clods, not extruded as a bead:
-    // without a strong along-road break it reads as a pair of moulded kerbs.
-    const lipVar = 0.35 + fbm(nr.s * 0.62, 4.4, { octaves: 2, period: 64, seed: 181 }) * 1.35;
-    const crown = 1 - smoothstep(0.1, 0.5, ax);
-    const berm = Math.exp(-((edge - (ROAD_HALF + 0.75)) ** 2) / (2 * 0.9 ** 2));
-    y += grade * (crown * CROWN_H - rut * RUT_D * clamp01(wear) * wash + lip * LIP_H * clamp01(wear) * lipVar);
+    // Which road owns this patch of ground. Both profiles are computed
+    // everywhere and mixed by authority rather than switched between, because a
+    // switch is a line — and the line would run down the middle of the one part
+    // of the world the whole feature exists to be looked at.
+    const m = gM <= 1e-5 ? 0 : gM / (gT + gM + 1e-5);
+    const gAny = Math.max(gT, gM);
+    const wT = gT * (1 - m);
+
+    let y = base + ((nt.y - base) * (1 - m) + (nm.y - base) * m) * gAny;
+    // the mainline's own cross-section, on the share of the ground it owns
+    y += gM * m * mDrop;
+    // The lip where the graded surface meets the unmade one.
+    //
+    // A mainline is a *built layer* — imported rock laid on top of the ground —
+    // and a two-track is a groove worn into the ground. Where the second runs
+    // onto the first there is a step up onto the layer, four or five
+    // centimetres of it, with the spur's dirt banked against the edge. It is
+    // the smallest feature at this junction and it is the one that says the two
+    // surfaces were made at different times by different machines, rather than
+    // being one surface with a texture change across it. Placed at the edge of
+    // the platform in the mainline's frame and gated on the spur, so it appears
+    // twice — once on each side of the crossing — and nowhere else.
+    const lipAt = MAIN_HALF + apM * 2.4 + 0.45;
+    y += apT * gM * Math.exp(-((mAx - lipAt) ** 2) / (2 * 0.55 ** 2)) * 0.055;
+
     // Outside of a bend gets the pushed-out material, inside gets cut. 34 puts a
     // 30 m radius corner at full strength, which is about the tightest this
     // centreline gets.
-    const outside = clamp01(-Math.sign(side) * nr.k * 34);
-    const inside = clamp01(Math.sign(side) * nr.k * 34);
-    y += smoothstep(0.05, 0.5, grade) * berm * BERM_H * (0.72 + outside * 0.95);
-    y -= smoothstep(0.05, 0.5, grade) * berm * 0.05 * inside;
-    // a puddle sits in a dish, not on a flat floor
-    const wet = wetnessAt(ax, nr.s, grade);
+    const outside = clamp01(-Math.sign(side) * nt.k * 34);
+    let rut = 0;
+    let wear = 0;
+    if (gT > 1e-4) {
+      // Rut depth is modulated along the road: a two-track is never a pair of
+      // extruded channels, it deepens through the wet stretches and washboards
+      // out over the dry ones. Costs nothing against the vertical budget because
+      // the modulation only ever takes depth away.
+      // Ruts die on the apron. A spur's wheel tracks run out onto the graded
+      // surface and stop, which is most of what makes a junction read as a
+      // junction rather than as two roads laid over each other.
+      wear = (0.52 + fbm(nt.s * 0.031 + 11, 5.3, { octaves: 3, period: 64, seed: 141 }) * 0.72) * (1 - apT * 0.85);
+      const wash = 1 + Math.sin(nt.s * 2.1 + fbm(nt.s * 0.02, 1.7, { octaves: 2, period: 64, seed: 96 }) * 9) * 0.16;
+      rut = Math.exp(-((ax - RUT_C) ** 2) / (2 * RUT_W ** 2));
+      // dirt squeezed out of the trough and piled either side of it. This is
+      // where the apparent depth comes from: the trough itself cannot go below
+      // -RUT_D without the suspension running out of travel.
+      const lip =
+        Math.exp(-((ax - (RUT_C - RUT_W * 1.9)) ** 2) / (2 * 0.16 ** 2)) +
+        Math.exp(-((ax - (RUT_C + RUT_W * 1.9)) ** 2) / (2 * 0.18 ** 2));
+      // The lip is squeezed out of the trough in clods, not extruded as a bead:
+      // without a strong along-road break it reads as a pair of moulded kerbs.
+      const lipVar = 0.35 + fbm(nt.s * 0.62, 4.4, { octaves: 2, period: 64, seed: 181 }) * 1.35;
+      const crown = 1 - smoothstep(0.1, 0.5, ax);
+      const berm = Math.exp(-((edge - (tHalf + 0.75)) ** 2) / (2 * 0.9 ** 2));
+      y += wT * (crown * CROWN_H - rut * RUT_D * clamp01(wear) * wash + lip * LIP_H * clamp01(wear) * lipVar);
+      const inside = clamp01(Math.sign(side) * nt.k * 34);
+      const bermW = smoothstep(0.05, 0.5, gT) * (1 - m) * (1 - apT);
+      y += bermW * berm * BERM_H * (0.72 + outside * 0.95);
+      y -= bermW * berm * 0.05 * inside;
+    }
+
+    // a puddle sits in a dish, not on a flat floor. A crowned road with a ditch
+    // either side does not hold water — that is what the crown is for — so the
+    // wetness field is the mainline's share taken back out of it.
+    const wet = wetnessAt(ax, nt.s, gT * (1 - m) * (1 - apT * 0.7));
     y -= wet * 0.026;
 
     // lumpy forest floor, flattened out on the compacted surface. The fine
     // chop only exists where the dense corridor mesh can carry it.
-    const smoothOut = 1 - grade * 0.86;
+    const smoothOut = 1 - gAny * 0.86;
     y += (fbm(x * 0.128, z * 0.128, { octaves: 3, period: 64, seed: 29 }) - 0.5) * 0.5 * smoothOut;
-    const near = 1 - smoothstep(CORRIDOR * NEAR_IN, CORRIDOR * NEAR_OUT, nr.dist);
+    // A graded surface is not flat, it is a plane a machine last passed over
+    // some months ago: long soft undulations from settlement and re-grading,
+    // and nothing shorter than the blade is wide.
+    y += (fbm(x * 0.058 + 4.4, z * 0.058 + 1.7, { octaves: 3, period: 64, seed: 383 }) - 0.5) * 0.11 * gM * m;
+    y += (fbm(x * 0.21 + 9.1, z * 0.21 + 2.3, { octaves: 2, period: 64, seed: 389 }) - 0.5) * 0.022 * gM * m;
+    // One distance, in the trail's units, so every constant downstream — the
+    // refinement mask, the near-field detail ramp, the analytic normal's sample
+    // radius — keeps the meaning it was tuned with. The mainline's corridor is
+    // half again as wide, so its distance is scaled into the trail's before the
+    // two are compared.
+    const distEq = Math.min(nt.dist, nm.dist * (CORRIDOR / (MAIN_CORRIDOR + apM * 3.4)));
+    const near = 1 - smoothstep(CORRIDOR * NEAR_IN, CORRIDOR * NEAR_OUT, distEq);
     if (near > 0.001) {
-      y += (fbm(x * 0.36, z * 0.36, { octaves: 3, period: 64, seed: 5 }) - 0.5) * 0.14 * near * (1 - grade * 0.7);
+      y += (fbm(x * 0.36, z * 0.36, { octaves: 3, period: 64, seed: 5 }) - 0.5) * 0.14 * near * (1 - gAny * 0.7);
       // hoof-and-tyre chop on the running surface itself, at a frequency the
-      // 0.29 m corridor grid can just carry
-      y += (fbm(x * 0.95, z * 0.95, { octaves: 2, period: 64, seed: 118 }) - 0.5) * 0.026 * grade * (1 - wet);
+      // 0.29 m corridor grid can just carry. Off the mainline: its cells are
+      // 0.59 m and a metre-wavelength term on them aliases into a lattice.
+      y += (fbm(x * 0.95, z * 0.95, { octaves: 2, period: 64, seed: 118 }) - 0.5) * 0.026 * wT * (1 - wet);
       // Braking ripples across the ruts, in road space so they run *across* the
       // direction of travel like the real thing. 1.37 m pitch is four corridor
       // cells, which is the finest the mesh can carry without aliasing, and it
@@ -377,35 +807,66 @@ export function createTerrain({ env = null } = {}) {
       // close to the ripple's own stretches and compresses the spacing rib to rib.
       // The warp is held below the fold — 0.42 against a gradient of at most 1.7 —
       // so the coordinate stays monotonic and no rib doubles back on itself.
-      const warp = fbm(nr.s * 0.55, 5.7, { octaves: 2, period: 64, seed: 171 }) - 0.5;
+      const warp = fbm(nt.s * 0.55, 5.7, { octaves: 2, period: 64, seed: 171 }) - 0.5;
       // Amplitude per rib as well as pitch. A tyre shoves up a ridge where the
       // surface was soft enough to take one and skips it where the ground was too
       // hard, so a third of them are missing outright and the rest run two to one.
-      const rAmp = smoothstep(0.24, 0.72, fbm(nr.s * 0.42 + 11, 3.1, { octaves: 2, period: 64, seed: 204 }));
-      const ripple = Math.sin((nr.s + warp * 0.42) * 4.6);
+      const rAmp = smoothstep(0.24, 0.72, fbm(nt.s * 0.42 + 11, 3.1, { octaves: 2, period: 64, seed: 204 }));
+      const ripple = Math.sin((nt.s + warp * 0.42) * 4.6);
       const rippleBand = rut * smoothstep(0.3, 0.7, ax);
       // 9 mm, down from 14, and that is now the ceiling rather than the value: with
       // rAmp on top the mean is nearer 5 mm. The ribs were casting shadows as deep
       // as the rut form, which puts the 10 cm tier above the form tier instead of
       // under it.
-      y += ripple * 0.009 * rAmp * rippleBand * grade * near * clamp01(wear) * (1 - wet);
+      y += ripple * 0.009 * rAmp * rippleBand * wT * near * clamp01(wear) * (1 - wet);
     }
 
     out.y = y;
     out.side = THREE.MathUtils.clamp(side, -20, 20);
     out.edge = THREE.MathUtils.clamp(edge, -2, 20);
-    out.along = nr.s;
-    out.dist = nr.dist;
+    out.along = nt.s;
+    out.dist = distEq;
     out.wet = wet;
-    out.grade = grade;
-    out.tanX = nr.tx;
-    out.tanZ = nr.tz;
+    out.grade = gAny;
     out.outside = outside;
+    // Which surface the shader should draw, on a wider and softer boundary than
+    // the geometry's: the graded platform's *material* runs a little past the
+    // ground it graded, because a truck throws gravel off the shoulder. Weighted
+    // toward the mainline where they overlap — the apron is a graded surface
+    // with mud dragged onto it, not a two-track with gravel dropped on it.
+    const gTs = 1 - smoothstep(ROAD_HALF + 2.6, ROAD_HALF + 5.6, ax);
+    const gMs = 1 - smoothstep(MAIN_EDGE + 0.7, MAIN_EDGE + 3.8, mAx);
+    let share = gMs <= 1e-4 ? 0 : Math.min(1, gMs / (gTs * 0.55 + gMs + 1e-4));
+    // On the graded platform itself the answer is not a weighting, it is gravel.
+    // The competition above is the right model out on the margins, where the
+    // spur's dirt and the material thrown off the shoulder genuinely interleave
+    // — but run across the running surface it left the crossing at 0.65 gravel
+    // and 0.35 two-track, and 35% of a warm dirt tile over the one part of the
+    // world the two surfaces have to be told apart in is what made every
+    // junction framing come back tan. It is also simply wrong: a grader
+    // maintains its road *through* a junction, so the platform is continuous
+    // and what a spur puts on it is mud lying on gravel, which the drag term
+    // below already draws. The dirt starts where the gravel stops.
+    const plat = MAIN_HALF + apM * 2.4 + MAIN_SHOULDER;
+    share = Math.max(share, 1 - smoothstep(plat - 0.5, plat + 1.1, mAx));
+    out.share = share;
+    out.mSide = THREE.MathUtils.clamp(mSide, -24, 24);
+    out.mAlong = nm.s;
+    // Road tangent, blended by share and sign-aligned first. The two roads meet
+    // at fifty degrees, so taking the dominant one's outright would put a hard
+    // line down the apron in every term keyed off direction — the drag grain,
+    // the tyre print, the streak field.
+    const flip = nt.tx * nm.tx + nt.tz * nm.tz < 0 ? -1 : 1;
+    const bx = nt.tx * (1 - out.share) + nm.tx * flip * out.share;
+    const bz = nt.tz * (1 - out.share) + nm.tz * flip * out.share;
+    const bl = Math.hypot(bx, bz) || 1;
+    out.tanX = bx / bl;
+    out.tanZ = bz / bl;
     return out;
   }
 
   const makeInfo = () => ({
-    near: { dist: 0, lat: 0, y: 0, t: 0, s: 0, k: 0, tx: 0, tz: 1 },
+    near: { t: makeNear(), m: makeNear() },
     y: 0,
     side: 0,
     edge: 0,
@@ -416,6 +877,9 @@ export function createTerrain({ env = null } = {}) {
     tanX: 0,
     tanZ: 1,
     outside: 0,
+    share: 0,
+    mSide: 0,
+    mAlong: 0,
   });
   const _hInfo = makeInfo();
   const _vInfo = makeInfo();
@@ -429,24 +893,40 @@ export function createTerrain({ env = null } = {}) {
   const half = SIZE / 2;
   const gx = (i) => -half + i * cell;
 
-  const fineFlag = new Uint8Array(COARSE * COARSE);
+  // Refinement level per coarse cell: 1 is the far field, FINE_MAIN the
+  // mainline, FINE the two-track. The mainline is graded, so it carries nothing
+  // finer than the ditch and a 0.59 m grid renders it identically to a 0.29 m
+  // one — at a fifth of the triangles. It is by a long way the widest corridor
+  // in the world and paying the trail's rate for it would have been most of the
+  // terrain's whole budget.
+  const cellLevel = new Uint8Array(COARSE * COARSE);
   let fineCells = 0;
+  let mainCells = 0;
   for (let j = 0; j < COARSE; j++) {
     for (let i = 0; i < COARSE; i++) {
       const mx = gx(i) + cell * 0.5;
       const mz = gx(j) + cell * 0.5;
-      if (nearestRoad(mx, mz).dist < CORRIDOR + cell) {
-        fineFlag[j * COARSE + i] = 1;
+      const nr = nearestRoad(mx, mz);
+      let lv = 1;
+      if (nr.m.dist < MAIN_CORRIDOR + 3.4 * apronMain(nr.m.s, Math.abs(nr.m.lat)) + cell) {
+        lv = FINE_MAIN;
+        mainCells++;
+      }
+      if (nr.t.dist < CORRIDOR + cell) {
+        if (lv === FINE_MAIN) mainCells--;
+        lv = FINE;
         fineCells++;
       }
+      cellLevel[j * COARSE + i] = lv;
     }
   }
-  const flagged = (i, j) => i >= 0 && j >= 0 && i < COARSE && j < COARSE && fineFlag[j * COARSE + i] === 1;
+  const levelAt = (i, j) => (i >= 0 && j >= 0 && i < COARSE && j < COARSE ? cellLevel[j * COARSE + i] : 1);
 
   const gridVerts = (COARSE + 1) * (COARSE + 1);
-  const fineVerts = fineCells * (FINE + 1) * (FINE + 1);
+  const fineVerts = fineCells * (FINE + 1) ** 2 + mainCells * (FINE_MAIN + 1) ** 2;
   const vertCount = gridVerts + fineVerts;
-  const triCount = (COARSE * COARSE - fineCells) * 2 + fineCells * FINE * FINE * 2;
+  const triCount =
+    (COARSE * COARSE - fineCells - mainCells) * 2 + fineCells * FINE * FINE * 2 + mainCells * FINE_MAIN * FINE_MAIN * 2;
 
   const position = new Float32Array(vertCount * 3);
   const normals = new Float32Array(vertCount * 3);
@@ -455,6 +935,11 @@ export function createTerrain({ env = null } = {}) {
   const aEdge = new Float32Array(vertCount);
   const aAlong = new Float32Array(vertCount);
   const aWet = new Float32Array(vertCount);
+  // Which road's surface this vertex belongs to, and where it sits in the
+  // mainline's own road space. x is the blend, y the signed lateral offset,
+  // z the arc length — the mainline's equivalents of aSide and aAlong, which
+  // stay the trail's so nothing already keyed off them has to move.
+  const aMain = new Float32Array(vertCount * 3);
   // Road tangent in world XZ. The surface tiles are all world space, so without
   // this the shader has no idea which way "along the road" points and nothing on
   // the trail can have a grain to it — which is most of why the ruts read as a
@@ -499,8 +984,30 @@ export function createTerrain({ env = null } = {}) {
     aEdge[k] = edge;
     aAlong[k] = along;
     aWet[k] = wet;
+    aMain[k * 3] = info.share;
+    aMain[k * 3 + 1] = info.mSide;
+    aMain[k * 3 + 2] = info.mAlong;
     aTan[k * 2] = info.tanX;
     aTan[k * 2 + 1] = info.tanZ;
+  }
+
+  /**
+   * Height along one cell edge, sampled at `level` nodes and interpolated.
+   *
+   * A fine edge that meets a coarser one has to *be* the coarser one, or the
+   * seam opens as a hairline crack. With one refinement level that meant
+   * clamping to the straight line between the coarse quad's corners; with two it
+   * has to be the neighbour's own polyline, so the sampling rate is the argument
+   * and `level = 1` reproduces the original behaviour exactly.
+   */
+  function edgeHeight(x0, z0, x1, z1, f, level) {
+    const g = f * level;
+    const k = Math.min(level - 1, Math.floor(g));
+    const a = k / level;
+    const b = (k + 1) / level;
+    const ya = surfaceHeight(lerp(x0, x1, a), lerp(z0, z1, a));
+    const yb = surfaceHeight(lerp(x0, x1, b), lerp(z0, z1, b));
+    return lerp(ya, yb, g - k);
   }
 
   for (let j = 0; j <= COARSE; j++) {
@@ -514,7 +1021,8 @@ export function createTerrain({ env = null } = {}) {
   const gi = (i, j) => j * (COARSE + 1) + i;
   for (let j = 0; j < COARSE; j++) {
     for (let i = 0; i < COARSE; i++) {
-      if (!fineFlag[j * COARSE + i]) {
+      const L = cellLevel[j * COARSE + i];
+      if (L === 1) {
         const a = gi(i, j);
         const b = gi(i + 1, j);
         const c = gi(i + 1, j + 1);
@@ -541,38 +1049,35 @@ export function createTerrain({ env = null } = {}) {
       const z0 = gx(j);
       const x1 = x0 + cell;
       const z1 = z0 + cell;
-      const h00 = surfaceHeight(x0, z0);
-      const h10 = surfaceHeight(x1, z0);
-      const h01 = surfaceHeight(x0, z1);
-      const h11 = surfaceHeight(x1, z1);
-      const coarseW = !flagged(i - 1, j);
-      const coarseE = !flagged(i + 1, j);
-      const coarseS = !flagged(i, j - 1);
-      const coarseN = !flagged(i, j + 1);
+      // Sampling rate each edge has to agree with: whichever side is coarser.
+      // A cell only snaps an edge when the neighbour is below its own level, so
+      // exactly one of any pair does the work and they land on the same polyline.
+      const lW = Math.min(L, levelAt(i - 1, j));
+      const lE = Math.min(L, levelAt(i + 1, j));
+      const lS = Math.min(L, levelAt(i, j - 1));
+      const lN = Math.min(L, levelAt(i, j + 1));
       const base = vi;
-      for (let v = 0; v <= FINE; v++) {
-        for (let u = 0; u <= FINE; u++) {
-          const fu = u / FINE;
-          const fv = v / FINE;
+      for (let v = 0; v <= L; v++) {
+        for (let u = 0; u <= L; u++) {
+          const fu = u / L;
+          const fv = v / L;
           const x = x0 + fu * cell;
           const z = z0 + fv * cell;
-          // a fine edge that meets a coarse quad has to be the coarse quad's
-          // straight edge, or the seam opens up as a hairline crack
           let y;
-          if (u === 0 && coarseW) y = lerp(h00, h01, fv);
-          else if (u === FINE && coarseE) y = lerp(h10, h11, fv);
-          else if (v === 0 && coarseS) y = lerp(h00, h10, fu);
-          else if (v === FINE && coarseN) y = lerp(h01, h11, fu);
-          writeVertex(base + v * (FINE + 1) + u, x, z, y);
+          if (u === 0 && lW < L) y = edgeHeight(x0, z0, x0, z1, fv, lW);
+          else if (u === L && lE < L) y = edgeHeight(x1, z0, x1, z1, fv, lE);
+          else if (v === 0 && lS < L) y = edgeHeight(x0, z0, x1, z0, fu, lS);
+          else if (v === L && lN < L) y = edgeHeight(x0, z1, x1, z1, fu, lN);
+          writeVertex(base + v * (L + 1) + u, x, z, y);
         }
       }
-      vi += (FINE + 1) * (FINE + 1);
-      for (let v = 0; v < FINE; v++) {
-        for (let u = 0; u < FINE; u++) {
-          const a = base + v * (FINE + 1) + u;
+      vi += (L + 1) * (L + 1);
+      for (let v = 0; v < L; v++) {
+        for (let u = 0; u < L; u++) {
+          const a = base + v * (L + 1) + u;
           const b = a + 1;
-          const c = a + FINE + 2;
-          const d = a + FINE + 1;
+          const c = a + L + 2;
+          const d = a + L + 1;
           if ((u + v) & 1) {
             index[ii++] = a;
             index[ii++] = d;
@@ -601,12 +1106,14 @@ export function createTerrain({ env = null } = {}) {
   geo.setAttribute('aEdge', new THREE.BufferAttribute(aEdge, 1));
   geo.setAttribute('aAlong', new THREE.BufferAttribute(aAlong, 1));
   geo.setAttribute('aWet', new THREE.BufferAttribute(aWet, 1));
+  geo.setAttribute('aMain', new THREE.BufferAttribute(aMain, 3));
   geo.setAttribute('aTan', new THREE.BufferAttribute(aTan, 2));
   geo.setIndex(new THREE.BufferAttribute(index, 1));
   geo.computeBoundingSphere();
 
   // --- material ------------------------------------------------------------
   const track = trackMaps();
+  const gravel = gravelMaps();
   const verge = vergeMaps();
   const litter = litterMaps();
   const tread = treadImprint();
@@ -644,6 +1151,8 @@ export function createTerrain({ env = null } = {}) {
   const uniforms = {
     uVergeMap: { value: verge.map },
     uVergeNrm: { value: verge.normal },
+    uGravelMap: { value: gravel.map },
+    uGravelNrm: { value: gravel.normal },
     uLitterMap: { value: litter.map },
     uLitterNrm: { value: litter.normal },
     uDetailNrm: { value: detail },
@@ -675,8 +1184,18 @@ export function createTerrain({ env = null } = {}) {
     uMacroScale: { value: 1 / 110 },
     uJitterScale: { value: 1 / 5.2 },
     uTreadPitch: { value: tread.pitch },
-    uMean: { value: new THREE.Vector2(Math.max(track.mean, 0.01), Math.max(litter.mean, 0.01)) },
+    uMean: {
+      value: new THREE.Vector3(Math.max(track.mean, 0.01), Math.max(litter.mean, 0.01), Math.max(gravel.mean, 0.01)),
+    },
     uRoad: { value: new THREE.Vector4(ROAD_HALF, SHOULDER, RUT_C, RUT_W) },
+    // The mainline's cross-section, so the shader places its surfaces off the
+    // same numbers the mesh was graded to rather than off a second set that
+    // has to be kept in step by hand.
+    uMain: { value: new THREE.Vector4(MAIN_HALF, MAIN_SHOULDER, MAIN_RUT_C, MAIN_RUT_W) },
+    // Junction: arc length along each road, then the ditch offset and the
+    // outer edge of the graded platform.
+    uJunc: { value: new THREE.Vector4(JUNC_M, JUNC_T, MAIN_DITCH, MAIN_EDGE) },
+    uGravelScale: { value: 1 / GRAVEL_TILE },
     // global weather dial: 0 is a dry summer track, 1 is soaked
     uWet: { value: 0.8 },
     uContacts: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
@@ -700,11 +1219,13 @@ export function createTerrain({ env = null } = {}) {
         attribute float aEdge;
         attribute float aAlong;
         attribute float aWet;
+        attribute vec3 aMain;
         attribute vec2 aTan;
         varying float vSide;
         varying float vEdge;
         varying float vAlong;
         varying float vWet;
+        varying vec3 vMain;
         varying vec2 vTan;
         varying vec2 vTile;
         varying vec3 vWorld;`,
@@ -716,6 +1237,7 @@ export function createTerrain({ env = null } = {}) {
         vEdge = aEdge;
         vAlong = aAlong;
         vWet = aWet;
+        vMain = aMain;
         vTan = aTan;
         vec4 wp = modelMatrix * vec4( transformed, 1.0 );
         vWorld = wp.xyz;
@@ -727,22 +1249,27 @@ export function createTerrain({ env = null } = {}) {
         '#include <common>',
         `#include <common>
         uniform sampler2D uVergeMap, uVergeNrm, uLitterMap, uLitterNrm;
+        uniform sampler2D uGravelMap, uGravelNrm;
         uniform sampler2D uDetailNrm, uGrain, uMacro, uTread;
         uniform sampler2D uReliefH, uReliefN;
         uniform vec3 uScale;
         uniform vec2 uGrainScale;
         uniform vec2 uSunStep;
         uniform vec4 uRoad;
+        uniform vec4 uMain;
+        uniform vec4 uJunc;
         uniform vec4 uNearAmt;
         uniform vec4 uContacts[ 4 ];
         uniform float uReliefScale, uReliefDepth, uReliefAmt;
         uniform float uDetailScale, uMacroScale, uJitterScale, uTreadPitch, uWet;
+        uniform float uGravelScale;
         uniform float uDebug;
-        uniform vec2 uMean;
+        uniform vec3 uMean;
         varying float vSide;
         varying float vEdge;
         varying float vAlong;
         varying float vWet;
+        varying vec3 vMain;
         varying vec2 vTan;
         varying vec2 vTile;
         varying vec3 vWorld;
@@ -946,6 +1473,16 @@ export function createTerrain({ env = null } = {}) {
 
         vec4 tTrack = texture2D( map, uvT );
         vec4 tTrack2 = texture2D( map, uvT * 0.27 + 0.41 );
+        // The mainline's aggregate, at its own tile scale, plus a coarse tap.
+        // The coarse one does two jobs: it breaks up a 1.9 m tile that would
+        // otherwise repeat four times across a seven metre road, and read on
+        // its own it *is* the unsorted material on the shoulder — same rock,
+        // two and a half times the piece size, which is what a grader leaves
+        // when it pushes the oversize off the running surface.
+        vec2 uvG = vTile * uGravelScale;
+        vec4 tGrav = texture2D( uGravelMap, uvG );
+        vec4 tGrav2 = texture2D( uGravelMap, uvG * 0.4 + 0.27 );
+        vec4 nGrav = texture2D( uGravelNrm, uvG );
         vec4 tVerge = texture2D( uVergeMap, uvV );
         vec4 tLit = texture2D( uLitterMap, uvL );
         vec4 tLit2 = texture2D( uLitterMap, uvL * 0.23 + 0.67 );
@@ -971,6 +1508,76 @@ export function createTerrain({ env = null } = {}) {
 
         vec3 cTrack = breakUp( tTrack.rgb, tTrack2.rgb, uMean.x );
         vec3 cLit = breakUp( tLit.rgb, tLit2.rgb, uMean.y );
+        // The gravel's de-tiling tap is held to a fifth of the swing the other
+        // two get, and this is a correction rather than a preference. breakUp
+        // modulates by the second tap's luminance over the tile mean, and the
+        // second tap here is *this same tile* at two and a half times the size
+        // — so what it modulates by is the shape of individual 4 cm pieces
+        // magnified into 25 cm blobs. At the shared 0.5 strength that is a
+        // value swing of 0.7 to 1.55 in the shape of stones, laid over a
+        // surface made of stones, and the low framings came back as a cobbled
+        // pavement: pieces the right size for a road, sitting inside pieces
+        // five times too big. The trail gets away with it because its second
+        // tap is a different tile. The metre-scale variety this was supposed to
+        // provide is carried properly further down by the scour, silt,
+        // washboard and pothole terms, which vary the surface by condition
+        // rather than by magnifying its own grain.
+        float gm = dot( tGrav2.rgb, vec3( 0.2126, 0.7152, 0.0722 ) ) / uMean.z;
+        vec3 cGrav = tGrav.rgb * mix( 1.0, clamp( gm, 0.72, 1.34 ), 0.5 );
+
+        // --- the mainline, in its own road space ------------------------------
+        // vMain is the graded road's equivalent of vSide / vAlong, with the
+        // trail-versus-gravel blend in x. Everything below is placed off it, so
+        // a wheel path stays a wheel path through a bend and the ditch does not
+        // wander across the shoulder.
+        float share = vMain.x;
+        float mAx = abs( vMain.y );
+        // Ragged, but nothing like as ragged as the trail's. A grader leaves an
+        // edge that wanders by a hand's width over ten metres; a two-track's
+        // edge is wherever the last vehicle happened to put a wheel. Making
+        // both roads equally ragged was the first thing tried and it read as
+        // one road at two widths.
+        vec4 mrs = texture2D( uMacro, vec2( vMain.z * 0.026, vMain.y * 0.14 + 0.44 ) );
+        float mAxj = mAx + ( mrs.g - 0.5 ) * 0.42 * smoothstep( uMain.x * 0.4, uMain.x * 1.3, mAx );
+        // Junction influence, in both roads' frames. These have to be the same
+        // numbers as apronMain / apronTrail in the mesh profile, and the
+        // flare the same 2.4 m: the geometry was tightened from a 21 m by 12 m
+        // ellipse to 14 by 9.5 when the junction read as a landing strip, and
+        // for a while these did not follow. What that mismatch draws is the
+        // worst of both — a platform graded to one width carrying scuffing,
+        // widening and mud drag sized for a much larger one, so the material
+        // apron ran out past the shoulder and over the ditch and every framing
+        // came back as one continuous dirt yard with roads leaving it. The
+        // junction is the thing this whole feature is looked at for; it is
+        // legible only while both roads still have an edge inside it.
+        float apM = ( 1.0 - smoothstep( 3.5, 10.0, abs( vMain.z - uJunc.x ) ) ) *
+                    ( 1.0 - smoothstep( 3.0, 7.5, mAx ) );
+        float apT = ( 1.0 - smoothstep( 3.0, 11.0, abs( vAlong - uJunc.y ) ) ) *
+                    ( 1.0 - smoothstep( 2.0, 5.5, ax ) );
+        // The culvert, which is a different length from the apron and has to
+        // match the culvert() term in the profile: the ditch and the windrow
+        // are carried through the junction and interrupted only where the spur
+        // actually crosses.
+        float cM = 1.0 - smoothstep( 3.2, 6.5, abs( vMain.z - uJunc.x ) );
+        float mHalf = uMain.x + apM * 2.4;
+        float mPlat = mHalf + uMain.y;
+        float mRun = 1.0 - smoothstep( mHalf - 0.35, mHalf + 0.3, mAxj );
+        // The travelled way. Two strips where every wheel that has been down
+        // this road has run, polished into the fines; a graded road's whole
+        // legibility at distance is these two bands against the loose material
+        // between them, exactly as a two-track's is its ruts.
+        float mWheel = ( 1.0 - smoothstep( uMain.w * 1.05, uMain.w * 2.1, abs( mAx - uMain.z ) ) ) * mRun;
+        // The crown strip: nothing drives over the middle of a road this wide,
+        // so the loose surface course survives there.
+        float mMid = ( 1.0 - smoothstep( 0.24, 0.72, mAx ) ) * mRun;
+        float mShld = smoothstep( mHalf - 0.3, mHalf + 0.4, mAxj ) *
+                      ( 1.0 - smoothstep( mPlat - 0.05, mPlat + 0.8, mAxj ) );
+        // The ditch invert, and the bank climbing out of it.
+        float mDitch = ( 1.0 - smoothstep( 0.25, 1.05, abs( mAxj - ( mPlat + uJunc.z * 0.55 ) ) ) ) * ( 1.0 - cM );
+        // Windrow: the bead of material the grader could not pull back onto the
+        // road, sitting on the shoulder's outer lip. The one feature that says
+        // "maintained" from thirty metres.
+        float mWind = ( 1.0 - smoothstep( 0.08, 0.42, abs( mAxj - ( mPlat + 0.12 ) ) ) ) * ( 1.0 - cM );
 
         vec3 albedo = mix( cLit, tVerge.rgb, mVerge );
         // Dirt scuffed off the running surface onto the margin, broken along the
@@ -985,7 +1592,7 @@ export function createTerrain({ env = null } = {}) {
         // crevice occlusion folded into the albedo as well as the indirect
         // term: in shade the direct light is gone and an AO term on the
         // ambient alone is not enough to keep the surface from going flat
-        float surfAo = mix( mix( nLit.w, nVerge.w, mVerge ), nTrack.w, mTrack );
+        float surfAo = mix( mix( mix( nLit.w, nVerge.w, mVerge ), nTrack.w, mTrack ), nGrav.w, share );
         albedo *= mix( 1.0, clamp( surfAo, 0.0, 1.3 ), 0.55 );
 
         // Road space: distance along the centreline against lateral offset.
@@ -1253,6 +1860,169 @@ export function createTerrain({ env = null } = {}) {
         // truck hidden the plan framing showed four black discs on the road.
         albedo *= mix( 1.0, 0.7, contact );
         albedo *= 1.0 + scatter * ( 0.6 + jit * 1.0 );
+
+        // --- graded gravel ------------------------------------------------------
+        // Built as a whole surface and blended in, rather than as a set of tints
+        // over the trail. The two roads share no term: the trail is a matrix of
+        // damp fines with ruts cut into it and water standing in them, and this
+        // is crushed rock with a crown on it that has never held water in its
+        // life. Trying to reach one from the other with masks is what makes a
+        // second road read as the first one scaled up.
+        // Hoisted: the normal and roughness stages downstream need the same
+        // washboard and the same scoured patches the albedo just drew, or the
+        // corrugation is a painted stripe and the scour is a stain.
+        float gWash = 0.0;
+        float gScour = 0.0;
+        float gPot = 0.0;
+        if ( share > 0.002 ) {
+          vec3 gAlb = cGrav;
+          // The wheel paths, polished. Fines worked to the top by every axle
+          // that has been down here, then compacted: darker, slightly warmer
+          // than the broken rock beside it, and smoother. This is the feature
+          // the whole surface is read by.
+          // A little over two to one against the loose material beside it, and
+          // *warmer* as well as darker — what is polished here is the fines,
+          // which are the dirt-coloured fraction of the aggregate worked to the
+          // top, not the rock. Two warm-dark strips on a cool grey platform is
+          // the whole read of a gravel road at any distance past ten metres,
+          // and it is the mainline's equivalent of the trail's ruts.
+          gAlb *= mix( vec3( 1.0 ), vec3( 0.58, 0.54, 0.5 ), mWheel * 0.92 );
+          // The wheel path is also the only part of this road that holds water,
+          // and it holds it because compaction is what made it impermeable —
+          // everything either side drains through the voids between the pieces
+          // within minutes of the rain stopping. That is the exact opposite of
+          // the trail, where the whole running surface goes dark and the ruts
+          // stand full, and it is the third thing separating the two surfaces
+          // after aggregate size and hue.
+          gAlb *= mix( 1.0, 0.82, mWheel * weather * 0.7 );
+          // Loose surface course either side of the wheel paths. Same rock,
+          // uncompacted, with dust still on it — so it lifts value without
+          // gaining chroma, which is what separates it from the trail's pale
+          // dry crown.
+          float mLooseG = mRun * ( 1.0 - mWheel * 0.9 ) * ( 0.45 + 0.55 * mMid );
+          gAlb *= mix( vec3( 1.0 ), vec3( 1.2, 1.2, 1.19 ), mLooseG * 0.9 );
+          // Shoulder: the oversize the grader pushed off, breaking down into
+          // the verge. Coarse tap on its own, then part way to verge material.
+          gAlb = mix( gAlb, mix( tGrav2.rgb * 1.08, tVerge.rgb, 0.45 ), mShld * 0.9 );
+          gAlb = mix( gAlb, tGrav2.rgb * 1.14, mWind * 0.7 );
+          // Ditch. The one part of this road that is wet, and it is wet because
+          // the crown put the water there — which is the argument the whole
+          // cross-section is making. Silt, dark, with weed taking hold in it.
+          vec3 silt = mix( cLit * 0.72, vec3( 0.055, 0.06, 0.042 ), 0.4 );
+          gAlb = mix( gAlb, silt, mDitch * ( 0.55 + 0.35 * mid.b ) );
+          // Grass and moss down the middle where nothing runs. Sparse — a road
+          // still in use, not an abandoned one.
+          float mGrass = mMid * smoothstep( 0.55, 0.85, mrs.a ) * ( 1.0 - apM );
+          gAlb = mix( gAlb, mix( vec3( 0.05, 0.058, 0.028 ), vec3( 0.09, 0.082, 0.04 ), mac.b ), mGrass * 0.42 );
+          // Dust film. A gravel road in use is coated in its own grindings and
+          // that film is what makes it read as a road rather than as a quarry
+          // stockpile; it lies thickest where nothing has swept it off.
+          // Neutral, because it is this road's own rock ground up. The trail's
+          // dust is soil and pulls warm; this is granite flour and it has no
+          // business doing the same, and a warm film over the whole running
+          // surface was a measurable part of why the mainline kept measuring
+          // at the trail's hue however cool the tile under it was authored.
+          gAlb *= mix( vec3( 1.0 ), vec3( 1.08, 1.08, 1.075 ), mRun * ( 1.0 - mWheel ) * ( 1.0 - damp ) * mac.a * 0.5 );
+
+          // --- what a gravel road actually looks like from twenty metres --------
+          // Everything above is either a 1.9 m tile, which has mipped to its mean
+          // by ten metres, or a cross-section mask, which is the same all the way
+          // down the road. Between them they describe a surface with no features
+          // at the range it is mostly seen from, and the first pass came back as
+          // a smooth ribbon with two darker strips on it — legible as a road and
+          // not as gravel. What is missing is metre-scale condition: this is a
+          // surface that is *maintained*, which means it is unmaintained
+          // everywhere the last grader pass has worn off.
+          //
+          // Scoured patches: traffic and run-off take the fines away and leave
+          // the coarse fraction standing proud. Lighter, greyer, rougher.
+          float scour = smoothstep( 0.52, 0.88, mrs.r * 0.55 + mac.g * 0.55 ) * mRun;
+          gAlb *= mix( vec3( 1.0 ), vec3( 1.22, 1.23, 1.24 ), scour * 0.75 );
+          // And where they have collected instead: a skin of rock flour over the
+          // aggregate, which goes dark the moment it is damp because unlike the
+          // stone it holds water.
+          float silted = smoothstep( 0.5, 0.85, 1.0 - mrs.r * 0.6 - mid.b * 0.4 ) * mRun;
+          // Darker, not browner. Same argument as the dust film: this is the
+          // same mineral as everything else on the road, wet.
+          gAlb *= mix( vec3( 1.0 ), vec3( 0.76, 0.755, 0.75 ), silted * ( 0.4 + 0.6 * damp ) * 0.8 );
+          // Washboard. A gravel road corrugates across the direction of travel
+          // wherever anything brakes or accelerates on it, and nothing else in
+          // the world does that — it is the one feature that names the surface
+          // outright. It lives in the shading rather than in the mesh: the brief
+          // for this road is that it rides smoother than the trail, and 2 cm
+          // ripples at a 70 cm pitch under a 0.16 m suspension would be the
+          // roughest thing in the world. Irregular in pitch as well as phase,
+          // for the reason the trail's ripples are: an evenly spaced repeat
+          // reads as machined however good its contrast is.
+          float wbWarp = texture2D( uMacro, vec2( vMain.z * 0.09, vMain.y * 0.04 + 0.2 ) ).r - 0.5;
+          float wbPhase = ( vMain.z + wbWarp * 0.9 ) * 8.6;
+          // Only on the travelled way, only where a truck works — it forms on
+          // grades, on the approach to the junction and through bends, not down
+          // an idle straight — and only in runs of a few metres.
+          //
+          // The first pass had it at three quarters strength across the whole
+          // platform, and the overhead framing came back as a ploughed field:
+          // a hundred metres of perfectly parallel, perfectly even ribs from
+          // ditch to ditch. Corrugation on a real road covers maybe a fifth of
+          // the surface, it lives in the wheel paths where the load is, and its
+          // crests vary by a factor of three along any one run. Something you
+          // notice on the second look, not the first.
+          float wbAmt = mWheel * smoothstep( 0.55, 0.86, mrs.a * 0.55 + mac.r * 0.5 ) *
+                        smoothstep( 0.35, 0.7, mid.r );
+          // Per-crest amplitude, at a wavelength close to the ripple's own, so
+          // the ribs come and go along a run rather than marching evenly through
+          // it. Same argument as the trail's braking ripples: irregular *pitch*
+          // and irregular *amplitude*, or an evenly spaced repeat reads as
+          // machined however good its contrast is.
+          float wbVar = 0.25 + 0.75 * smoothstep( 0.3, 0.75, texture2D( uMacro, vec2( vMain.z * 0.42 + 0.7, 0.31 ) ).g );
+          float wb = sin( wbPhase ) * 0.5 + 0.5;
+          wbAmt *= wbVar;
+          gAlb *= mix( 1.0, 0.93 + wb * 0.15, wbAmt * 0.7 );
+          // Potholes at the start of their lives: a shallow dish with the fines
+          // gone out of it and a ring of loose stone round the rim. Rare, and
+          // never on the crown — water has to stand for one to form.
+          float ph = smoothstep( 0.78, 0.94, mrs.b * 0.6 + clod.g * 0.55 ) * mRun * ( 1.0 - mMid * 0.7 );
+          gAlb *= mix( 1.0, 0.66, ph * 0.8 );
+          // The derivative of the ripple, not the ripple: what the normal wants
+          // is the slope of the corrugation, which is a quarter period out of
+          // phase with its shading.
+          gWash = cos( wbPhase ) * wbAmt;
+          gScour = scour;
+          gPot = ph;
+          // --- the junction -----------------------------------------------------
+          // Mud dragged out of the spur. A truck coming off an unmade road
+          // carries a wheel's worth of it onto the graded surface and lays it
+          // down over the first fifteen metres, in strips that break up as they
+          // go. This is the single most legible thing about a real junction and
+          // it is what stops the two roads reading as two ribbons crossing.
+          // It has to stay *streaky* and it has to stay off most of the apron.
+          // The first pass mixed four fifths of the way to dirt across the whole
+          // flare, which put warm brown over the gravel exactly where the two
+          // surfaces have to be told apart — so the junction rendered as one
+          // continuous dirt yard with a road leaving it. What a truck actually
+          // lays down is two wheel-widths of it, swinging out of the spur and
+          // fading over ten metres or so, with clean gravel between and beside.
+          // Both branches carry the wheel-width band, not just the mainline's.
+          // The spur's own flare was a full-strength wash over everything
+          // inside it, so the one part of the apron a driver is looking at as
+          // they come out of the trees — the ground straight ahead, where the
+          // spur meets the gravel — was the part with no gravel left in it.
+          // A truck lays down two wheel-widths of mud, and the road either
+          // side of them stays the road.
+          float dragBand = 1.0 - smoothstep( 0.3, 0.85, abs( abs( vMain.y ) - uMain.z ) );
+          float dragOut = max( apM * apM, apT * 0.85 ) * ( 0.2 + 0.8 * dragBand ) *
+                          smoothstep( 0.34, 0.78, mrs.b * 0.6 + rsEdge.b * 0.6 );
+          gAlb = mix( gAlb, cTrack * 0.82, clamp( dragOut, 0.0, 1.0 ) * 0.62 );
+          // Scuffing: the apron is churned rather than graded, so the surface
+          // course is turned over and the fines are up. Darker and more broken
+          // than the road either side of it.
+          gAlb *= mix( 1.0, 0.88 + mrs.r * 0.24, apM );
+          // The voids between the pieces, which is where packed aggregate gets
+          // its thickness from — deeper and narrower than anything on the
+          // trail, so it takes more occlusion, not less.
+          gAlb *= mix( 1.0, clamp( nGrav.w, 0.0, 1.3 ), 0.62 );
+          albedo = mix( albedo, gAlb, share );
+        }
         // Grain in the albedo up close, so nothing within reach is ever flat.
         // The tint tiers carry hue as well as value — a pebble that is only
         // darker still reads as a smudge, a pebble that is darker *and* greyer
@@ -1264,7 +2034,11 @@ export function createTerrain({ env = null } = {}) {
         // The old tiers are pulled back where the relief tile takes over, or the
         // same 3 cm features get drawn twice at slightly different scales, which
         // is the definition of mush.
-        float oldTier = 1.0 - pFade * 0.7;
+        // Eased a little on the mainline. The relief tile still takes over
+        // there, so the pull-back stands, but the 10.6 cm tier it is pulling
+        // back is 3.5 mm grit — which is the fines fraction of a graded
+        // aggregate and describes this road as well as it describes the trail.
+        float oldTier = 1.0 - pFade * 0.7 * ( 1.0 - share * 0.3 );
         // Relief aggregate. Three frequencies out of one fetch: the cavity term
         // darkens the hollows between the clods, the stone mask lifts and greys
         // the exposed caps, and the debris mask drops bark and needle fragments
@@ -1281,7 +2055,16 @@ export function createTerrain({ env = null } = {}) {
         // — and these three write straight into the albedo, so their filaments are
         // dark streaks rather than shaded ones. Tapering the normals alone left the
         // comb behind at half contrast, which is how this was found.
-        float relLoose = ( 1.0 - sweep * 0.32 ) * ( 1.0 - water * 0.9 );
+        // Barely eased on the mainline, and it was tried at a fifth and put
+        // straight back. The relief tile is a field of dirt clods, which is a
+        // fair account of a two-track and a loose one of crushed rock — but it
+        // is the only near-field tier in this shader that does *not* streak at
+        // a grazing footprint, because the parallax offset and the sun march
+        // move with it, and the base tile has just been taken back down to the
+        // trail's 0.42 for exactly that reason. Something has to carry the
+        // shape inside two metres. Its clods are the right size for aggregate
+        // and the wrong shape, and wrong-shaped shape beats a comb.
+        float relLoose = ( 1.0 - sweep * 0.32 ) * ( 1.0 - water * 0.9 ) * ( 1.0 - share * 0.25 );
         float relAmt = pFade * relLoose * fpFade;
 
         // One occlusion for the whole aggregate stack, not five multiplies.
@@ -1317,18 +2100,31 @@ export function createTerrain({ env = null } = {}) {
         vec3 gB = grainB4.rgb + 0.5;
         gA = mix( vec3( dot( gA, vec3( 0.3, 0.59, 0.11 ) ) ), gA, 0.55 );
         gB = mix( vec3( dot( gB, vec3( 0.3, 0.59, 0.11 ) ) ), gB, 0.55 );
-        albedo *= mix( vec3( 1.0 ), gA, detailFade * 0.7 * loose );
-        albedo *= mix( vec3( 1.0 ), gB, gritFade * 0.5 * loose );
+        // Taken most of the way out over the mainline, and this is a hue
+        // correction rather than a detail decision. These two tiers, the stone
+        // cap lift and the organic debris multiply below are all built from the
+        // *dirt* grain tile, and every one of them pulls warm. Stacked on the
+        // gravel they were taking a tile authored at a 0.96 red/blue ratio to
+        // 1.30 before a single light touched it, and the warm key then took that
+        // to 1.76 — which is the trail's own hue, on the road whose entire job
+        // is to not be the trail. They describe a matrix of fines with grit in
+        // it, which is not what is on this road.
+        float dirtTier = 1.0 - share * 0.72;
+        albedo *= mix( vec3( 1.0 ), gA, detailFade * 0.7 * loose * dirtTier );
+        albedo *= mix( vec3( 1.0 ), gB, gritFade * 0.5 * loose * dirtTier );
         // Held down: the cap of an embedded stone is a shade lighter than the
         // matrix, not a third lighter. At 0.45 the tile's stone mask was putting
         // measurable pale speckle over the whole trail again.
-        albedo = mix( albedo, albedo * vec3( 1.2, 1.18, 1.13 ), relH.b * relAmt * 0.3 );
+        albedo = mix( albedo, albedo * vec3( 1.2, 1.18, 1.13 ), relH.b * relAmt * 0.3 * dirtTier );
         // Debris, as a multiply rather than a mix to a fixed near-black. 0.030
         // against a trail rendering at 0.06 is a hole punched in the surface, and
         // the stamped needles are 0.7 mm wide — so what the tile actually drew
         // was a mat of black hairs, which is most of what the near-field speckle
         // was. Bark and needles are dark brown and they are lying *on* the dirt.
-        albedo = mix( albedo, albedo * vec3( 0.5, 0.44, 0.36 ), relH.a * relAmt * 0.7 );
+        // Bark and needles trodden into the surface. There is far less of it on
+        // a road in the open than on a two-track under a closed canopy, and what
+        // there is does not have the dirt's own hue.
+        albedo = mix( albedo, albedo * mix( vec3( 0.5, 0.44, 0.36 ), vec3( 0.52, 0.5, 0.47 ), share ), relH.a * relAmt * 0.7 );
         // water is a mirror, not a diffuser: kill whatever aggregate the tint
         // tiers just put into it
         albedo = mix( albedo, albedo * vec3( 0.9, 0.94, 1.0 ), water * 0.5 );
@@ -1373,9 +2169,18 @@ export function createTerrain({ env = null } = {}) {
         albedo *= mix( 1.0, 1.3, water );
 
         diffuseColor.rgb *= albedo;
-        if ( uDebug > 0.5 ) diffuseColor.rgb = vec3( mTrack * 0.5 + mVerge * 0.5, mRut, mPrint );
-        if ( uDebug > 2.5 ) albedo = vec3( sweep, mRut, mPrint );
-        if ( uDebug > 3.5 ) diffuseColor.rgb = vec3( water, soak, damp );`,
+        if ( uDebug > 0.5 && uDebug < 1.5 ) diffuseColor.rgb = vec3( mTrack * 0.5 + mVerge * 0.5, mRut, mPrint );
+        if ( uDebug > 2.5 && uDebug < 3.5 ) albedo = vec3( sweep, mRut, mPrint );
+        if ( uDebug > 3.5 && uDebug < 4.5 ) diffuseColor.rgb = vec3( water, soak, damp );
+        // 5 is the mainline: which road owns the fragment, where the travelled
+        // way is, and where the shoulder and ditch fall. Two roads blended by
+        // authority cannot be debugged from a lit frame — every failure mode
+        // looks like "the colour is a bit off".
+        // Written into albedo rather than into diffuseColor, and read back
+        // unlit below. A mask drawn through the light rig is a mask multiplied
+        // by an 8-intensity key, and every one of these came back at 1.0.
+        if ( uDebug > 4.5 && uDebug < 5.5 ) albedo = vec3( share, mWheel, mShld + mDitch );
+        if ( uDebug > 5.5 ) albedo = vec3( mRun, apM, apT );`,
       )
       .replace(
         '#include <roughnessmap_fragment>',
@@ -1437,12 +2242,41 @@ export function createTerrain({ env = null } = {}) {
         // a *colour* on every up-facing aggregate normal in the near field, and
         // the close crops still had cyan pinpricks scattered through the grain.
         // Dry earth and weathered stone do not have a lobe that tight.
-        roughnessFactor = clamp( roughnessFactor + dry * 0.06, 0.4, 1.0 );`,
+        roughnessFactor = clamp( roughnessFactor + dry * 0.06, 0.4, 1.0 );
+        // The mainline's wetness behaviour, which is the third thing that has
+        // to separate it from the trail after aggregate size and hue.
+        //
+        // Compacted earth holds water across its whole surface: it darkens
+        // everywhere, it stands in the ruts, and the sheen is broad. Crushed
+        // rock does not hold water at all — that is what the crown and the
+        // ditches are for — so the only smooth thing on this road is the
+        // polished fines in the two wheel paths, and everything else stays
+        // matte however hard it is raining. A gravel road in the wet reads as
+        // two dark satin strips on a dry-looking surface, and that contrast is
+        // the whole cue.
+        if ( share > 0.002 ) {
+          float gRough = tGrav.a;
+          gRough = mix( gRough, 0.66, mWheel * ( 0.3 + 0.45 * weather ) );
+          gRough = mix( gRough, 0.8, mDitch * 0.55 );
+          // Fresh broken faces in the windrow and on the shoulder: nothing has
+          // been over them, so they are the roughest thing on the road.
+          gRough = min( 1.0, gRough + ( mShld + mWind + gScour * 0.5 ) * 0.06 );
+          // A pothole holds what the rest of the road sheds.
+          gRough = mix( gRough, 0.7, gPot * 0.5 );
+          roughnessFactor = mix( roughnessFactor, clamp( gRough, 0.46, 1.0 ), share );
+        }`,
       )
       .replace(
         '#include <normal_fragment_maps>',
         `vec3 mapN = mix( nLit.xyz, nVerge.xyz, mVerge );
-        mapN = mix( mapN, nTrack.xyz, mTrack ) * 2.0 - 1.0;
+        mapN = mix( mapN, nTrack.xyz, mTrack );
+        mapN = mix( mapN, nGrav.xyz, share ) * 2.0 - 1.0;
+        // Aggregate standing proud is what this surface is, so its tile keeps
+        // more of its own relief than the trail's does — but the wheel paths
+        // are compacted flat and the pieces in them are bedded down, so the
+        // slope comes off there. A polished strip with full aggregate relief on
+        // it is the one thing that would give the wheel path away as a tint.
+        mapN.xy *= mix( 1.0, 1.0 - mWheel * 0.55, share );
         // The surface tile is 2.6 m across 512 px, so its normal map is a
         // gradient measured over 5 mm steps at a strength of 6.4. Magnified
         // eightfold in a 30 cm framing those slopes tilt micro-facets right off
@@ -1480,7 +2314,40 @@ export function createTerrain({ env = null } = {}) {
         // what produced a single dominant frequency across the whole running
         // surface. A third of the tile is below the streaking threshold and puts a
         // second, coarser gradient under the relief.
-        mapN.xy *= mix( 1.0, 0.32, nearFade ) * fpFade;
+        // The mainline is under exactly the same discipline as the trail here,
+        // and the argument for exempting it was wrong in a way worth recording
+        // because it cost three rounds.
+        //
+        // It went: the taper exists because the trail's near-field shape is a
+        // warped worley crack network, which is directional, so it resolves as
+        // filaments down the view ray at an oblique footprint; packed aggregate
+        // is isotropic blobs, which smear into a slightly blurrier blob field
+        // instead. So the gravel kept 0.72 of its tile against the trail's 0.32
+        // and got half its footprint taper waived.
+        //
+        // What that actually rendered was combed fur — the identical artefact,
+        // slightly finer. The mistake is that the smear has nothing to do with
+        // whether the *features* are directional. It is the sampler: a footprint
+        // twenty times longer than it is wide averages twenty texels along the
+        // view ray and one across, so whatever is in the tile comes back as a
+        // streak pointing down that ray, and neighbouring streaks line up
+        // because they are all pointing at the same vanishing point. Isotropy
+        // buys nothing. And the gravel tile is *finer* than the trail's — 3.7 mm
+        // a texel against 5 mm — so it was always going to smear harder, not
+        // less. Three rounds went on the aggregate underneath, which was fine
+        // and could never have shown through this.
+        //
+        // 0.42 against the trail's 0.32, which is the one part of the original
+        // argument that survives: the pieces are genuinely bolder than the
+        // trail's grain and the tile can hold a little more before it streaks.
+        mapN.xy *= mix( mix( 1.0, 0.32, nearFade ), mix( 1.0, 0.42, nearFade ), share ) * fpFade;
+        // Washboard, as slope rather than as tint. The ridges run across the
+        // road, so what they tilt is the along-road axis — vTan is the mainline's
+        // own tangent wherever share is high, which is exactly what this needs
+        // and is why the tangent is blended by share rather than switched.
+        mapN.xy += tanN * gWash * 0.11 * share;
+        // Fines gone, coarse fraction standing proud: more relief, not less.
+        mapN.xy *= 1.0 + gScour * share * 0.5;
         // Tapered close in. At 1.15 the lug walls tilt far enough to face away
         // from the key entirely, and a micro-facet with no light on it is black —
         // which is what turned the print into a row of hard crescents in the
@@ -1576,6 +2443,11 @@ export function createTerrain({ env = null } = {}) {
         // and the lip squeezed up either side shades it further
         ambientOcclusion *= mix( 1.0, 0.72, mRut );
         ambientOcclusion *= mix( 1.0, 0.85, soak );
+        // A drainage ditch is a half-metre trench with a bank on one side and a
+        // road embankment on the other, so it sees a fraction of the sky the
+        // running surface does. This is what draws the road's edge from a
+        // distance: a dark line either side of a light platform.
+        ambientOcclusion *= mix( 1.0, 0.6, mDitch * share );
         // Crevice occlusion from the close-range tiers, collapsed into one
         // deficit for the same reason the albedo stack above is. This is what
         // keeps the bottom of a low framing from going to a smooth wash — most of
@@ -1616,7 +2488,15 @@ export function createTerrain({ env = null } = {}) {
         // level came off the albedo, which scales everything equally, and the dark
         // end was then given back through the one term that only reaches the dark
         // end.
-        reflectedLight.indirectDiffuse += albedo * 0.5 * ambientOcclusion * ( 1.0 - water );
+        // Two thirds of it on the mainline. This term stands in for light that
+        // has come off the dirt and back down from the canopy, and the forest
+        // clears twenty-odd metres for a road this wide — so over the mainline
+        // there is no canopy to bounce off, only open sky, which the standard
+        // model already accounts for through the environment. Left at full
+        // strength it was adding half an albedo of fill to the one surface in
+        // the world that is in direct sun, and the road came back as a pale
+        // wash with its aggregate lit from every side at once.
+        reflectedLight.indirectDiffuse += albedo * mix( 0.5, 0.17, share ) * ambientOcclusion * ( 1.0 - water );
         // Relief self-shadowing. The shadow map is 4 cm a texel over this
         // corridor, so nothing the size of a pebble can ever cast into it — the
         // sun march is the only way a 4 cm stone gets a shadow, and a hard little
@@ -1632,7 +2512,7 @@ export function createTerrain({ env = null } = {}) {
         reflectedLight.directDiffuse *= mix( 1.0, 0.42, rShadow );
         reflectedLight.directSpecular *= mix( 1.0, 0.4, rShadow );
         reflectedLight.indirectDiffuse *= mix( 1.0, 0.86, rShadow );
-        if ( uDebug > 1.5 && uDebug < 2.5 ) {
+        if ( ( uDebug > 1.5 && uDebug < 2.5 ) || uDebug > 4.5 ) {
           reflectedLight.directDiffuse = albedo;
           reflectedLight.indirectDiffuse = vec3( 0.0 );
           reflectedLight.directSpecular = vec3( 0.0 );
@@ -1664,7 +2544,7 @@ export function createTerrain({ env = null } = {}) {
   // Hung off the terrain mesh rather than a wrapper group so everything that
   // already reaches for terrain.mesh.geometry or toggles its visibility keeps
   // working, and one scene.add still brings the whole ground in.
-  const scatter = buildScatter(curve, surfaceInfo, env, sunV);
+  const scatter = buildScatter(curve, mainCurve, surfaceInfo, env, sunV);
   mesh.add(scatter.stones);
   mesh.add(scatter.shadows);
   const water = buildWater(curve, surfaceInfo, surfaceHeight, sunV);
@@ -1679,17 +2559,45 @@ export function createTerrain({ env = null } = {}) {
     water,
     material,
     curve,
+    mainCurve,
     heightAt: surfaceHeight,
-    roadDistance: (x, z) => nearestRoad(x, z).dist,
+    /**
+     * Distance to the nearest road, in the trail's units.
+     *
+     * The forest keys every planting rule off this — trees at 7.4 m,
+     * undergrowth at 1.3, deadwood at 3.5 — and all of those numbers mean
+     * "metres from a centreline whose surface ends at 1.25". The mainline's
+     * surface ends at 6.6, so what comes back for it is the distance to its
+     * *edge* shifted into the same frame. Reporting the raw distance would put
+     * a stand of firs down the middle of it.
+     */
+    roadDistance: (x, z) => {
+      const nr = nearestRoad(x, z);
+      return Math.min(nr.t.dist, Math.max(0, nr.m.dist - MAIN_DIST_BIAS));
+    },
     roadHalf: ROAD_HALF,
     shoulder: SHOULDER,
+    mainHalf: MAIN_HALF,
     size: SIZE,
     /** Centreline arc length in metres, so anything following it can move at a real speed. */
     roadLength: cs[SAMPLES - 1],
+    mainLength: cs[TOTAL - 1],
+    /**
+     * Where the two roads meet, in every frame anything might want it in:
+     * world position, and the curve parameter on each road.
+     */
+    junction: {
+      x: JX,
+      y: cy[jMain],
+      z: JZ,
+      trailT: jTrail / (SAMPLES - 1),
+      mainT: (jMain - SAMPLES) / (MSAMPLES - 1),
+    },
     stats: {
       vertCount,
       triCount,
       fineCells,
+      mainCells,
       stoneTris: scatter.stones.geometry.attributes.position.count / 3,
       shadowTris: scatter.shadows.geometry.index.count / 3,
       waterTris: water.geometry.index.count / 3,
@@ -1704,6 +2612,21 @@ export function createTerrain({ env = null } = {}) {
     },
     roadTangent(t) {
       return curve.getTangent(THREE.MathUtils.clamp(t, 0, 1)).normalize();
+    },
+    /**
+     * The same pair for the mainline. Deliberately separate methods rather than
+     * a road argument on the existing ones: auto-drive, the canopy clearing and
+     * the forest's deadwood alignment all call roadPoint, and every one of them
+     * means the trail.
+     */
+    mainPoint(t) {
+      const p = mainCurve.getPoint(THREE.MathUtils.clamp(t, 0, 1));
+      const i = SAMPLES + Math.min(MSAMPLES - 1, Math.max(0, Math.round(t * (MSAMPLES - 1))));
+      p.y = cy[i];
+      return p;
+    },
+    mainTangent(t) {
+      return mainCurve.getTangent(THREE.MathUtils.clamp(t, 0, 1)).normalize();
     },
   };
 }
@@ -1735,6 +2658,14 @@ export function createTerrain({ env = null } = {}) {
 
 const STONE_COUNT = 760;
 const GRAVEL_COUNT = 6400;
+// The mainline is a surface made of loose stone, so the tier that is decoration
+// on the trail is the substance here — and it has seven metres of width and
+// three hundred metres of length to cover against the trail's two and a half.
+// It is still the cheapest legibility per triangle in the world: an eight-face
+// chip is 8 triangles and it is the only thing that puts real relief and a real
+// cast shadow on a surface the shadow map cannot resolve.
+const MAIN_CHIP_COUNT = 5200;
+const MAIN_ROCK_COUNT = 900;
 const TWIG_COUNT = 520;
 const ROOT_COUNT = 20;
 const ROOT_SEGS = 11;
@@ -1746,8 +2677,41 @@ const ROOT_SEGS = 11;
 // decals exist to prevent, arrived at from the other direction.
 const SCATTER_LEVEL = 0.5;
 
+/**
+ * Colour of one piece of quarried aggregate, keyed to the mainline's tile.
+ *
+ * Not `aggColour`, which is the trail's: that is a brown family, because the
+ * stones on a two-track are whatever the ground was cut through, coated in the
+ * same fines as the matrix around them. This is imported crushed rock — one
+ * quarry face, mostly dark basalt with a pale weathered minority — and it has
+ * to be *cool*, because the same warm key that takes the tile's 0.95 red/blue
+ * ratio to 1.3 on screen does the same to every one of these.
+ *
+ * Keyed under the surface it lies on rather than over it, for the reason the
+ * trail's tier is: a scatter of pale chips on a mid-grey road reads as gravel
+ * spilled on the road, not as the road.
+ */
+function mineralColour(rnd) {
+  // A quarter of them are the pale weathered fraction. They are what puts an
+  // edge on the tier — three hundred metres of uniformly dark chips against a
+  // mid-grey surface has no silhouette anywhere on it.
+  if (rnd() < 0.24) {
+    const v = 0.05 + rnd() * 0.055;
+    return [v * 0.94, v * 0.98, v];
+  }
+  if (rnd() < 0.12) {
+    // iron-stained, the only warm piece in the pit
+    const v = 0.036 + rnd() ** 1.4 * 0.03;
+    return [v * 1.16, v * 0.94, v * 0.7];
+  }
+  const v = 0.03 + rnd() ** 1.6 * 0.036;
+  return [v * 0.9, v * 0.97, v];
+}
+
+const nearSlot = () => ({ dist: 1e6, lat: 1e6, y: 0, t: 0, s: 0, k: 0, tx: 0, tz: 1 });
+
 const makeScatterInfo = () => ({
-  near: { dist: 0, lat: 0, y: 0, t: 0, s: 0, k: 0, tx: 0, tz: 1 },
+  near: { t: nearSlot(), m: nearSlot() },
   y: 0,
   side: 0,
   edge: 0,
@@ -1758,6 +2722,9 @@ const makeScatterInfo = () => ({
   tanX: 0,
   tanZ: 1,
   outside: 0,
+  share: 0,
+  mSide: 0,
+  mAlong: 0,
 });
 
 /**
@@ -1830,7 +2797,7 @@ function lumpVariants(geo, count, amount, rnd) {
   return out;
 }
 
-function buildScatter(curve, surfaceInfo, env, sunV) {
+function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
   const rnd = mulberry32(0x51a7);
   const info = makeScatterInfo();
 
@@ -1864,12 +2831,18 @@ function buildScatter(curve, surfaceInfo, env, sunV) {
   // against 2.5 M in the frame, so it is 1.5 per cent of the budget for the
   // difference between a stone and a paper chip — but the cap has to have the
   // headroom or the roots at the end of the list get silently dropped.
-  const MAX_TRIS = 142000;
+  // Raised from 142 k for the mainline's own aggregate. That tier is 60 k on
+  // its own — 5200 eight-face chips and 900 twenty-face oversize — which is two
+  // per cent of the frame's triangles in the one draw call the whole scatter
+  // shares, for the difference between a graded road and a smooth ribbon. The
+  // cap has to have headroom or `emit` silently drops whatever is at the end of
+  // the list, which here is the twigs and the roots.
+  const MAX_TRIS = 215000;
   const pos = new Float32Array(MAX_TRIS * 9);
   const nrm = new Float32Array(MAX_TRIS * 9);
   const col = new Float32Array(MAX_TRIS * 9);
 
-  const MAX_DECALS = 15000;
+  const MAX_DECALS = 24000;
   const dPos = new Float32Array(MAX_DECALS * 12);
   const dUv = new Float32Array(MAX_DECALS * 8);
   const dStr = new Float32Array(MAX_DECALS * 4);
@@ -2207,6 +3180,101 @@ function buildScatter(curve, surfaceInfo, env, sunV) {
     // at no visible cost.
     if (proud > 0.012) decal(x, info.y, z, r * 0.85, proud, chip ? 0.45 : 0.8);
     gravel++;
+  }
+
+  // --- the mainline's own aggregate ----------------------------------------
+  // On the trail loose stone is dressing over a surface that is fundamentally
+  // dirt. Here it *is* the surface: a graded road is a layer of crushed rock,
+  // and the top centimetre of it is not bound to anything. So this tier is not
+  // the trail's tier moved sideways — it is denser, it is angular rather than
+  // rounded, it is graded into two sizes rather than one, and it is placed by
+  // where traffic has swept it rather than by where water has left it.
+  //
+  // It is also the only thing in the world that gives the mainline shape at
+  // arm's length. The tile mips to its mean by ten metres and the cross-section
+  // masks are the same all the way down the road; without geometry the first
+  // pass rendered as a smooth ribbon, which is a road and not a gravel one.
+  let chips2 = 0;
+  for (let guard = 0; guard < MAIN_CHIP_COUNT * 8 && chips2 < MAIN_CHIP_COUNT; guard++) {
+    const t = rnd();
+    const sgn = rnd() < 0.5 ? -1 : 1;
+    let lat;
+    // Swept, not scattered. Wheels throw the loose fraction off the travelled
+    // way and it piles between the wheel paths and along the shoulder, so the
+    // two strips a vehicle actually runs on are the *clearest* part of the
+    // surface — which is the inverse of the trail, where the rut lips collect
+    // and the crown stays bare.
+    if (t < 0.3) lat = (rnd() - 0.5) * 1.5;
+    else if (t < 0.52) lat = sgn * (MAIN_RUT_C + (rnd() - 0.5) * MAIN_RUT_W * 2.4);
+    else if (t < 0.78) lat = sgn * (MAIN_RUT_C + MAIN_RUT_W * 1.6 + rnd() * (MAIN_HALF - MAIN_RUT_C - MAIN_RUT_W));
+    else lat = sgn * (MAIN_HALF - 0.2 + rnd() * (MAIN_SHOULDER + 0.6));
+
+    const u = rnd();
+    const cp = mainCurve.getPoint(u, p);
+    const tg = mainCurve.getTangent(u, ab).normalize();
+    const x = cp.x - tg.z * lat;
+    const z = cp.z + tg.x * lat;
+    surfaceInfo(x, z, info);
+    if (info.share < 0.45) continue;
+    // Patchiness in the mainline's own road space, so it follows the road
+    // rather than the world grid: a graded surface is swept clean in places and
+    // has half an inch of loose stone standing on it in others.
+    if (fbm(info.mAlong * 0.3, lat * 0.55 + 7.1, { octaves: 3, period: 64, seed: 419 }) < 0.36) continue;
+
+    // Two sizes, which is what "graded aggregate" means: a 3-6 cm surface
+    // course with a 1-2 cm fraction filling between it. One size reads as
+    // gravel poured out of a bag.
+    const coarse = rnd() < 0.42;
+    const r = coarse ? 0.022 + rnd() ** 1.2 * 0.036 : 0.009 + rnd() ** 1.4 * 0.014;
+    // Angular. Crushed rock sits on a face with its arrises up, so it is
+    // squatter than a river pebble and its silhouette has corners in it.
+    const flat = 0.42 + rnd() * 0.4;
+    s.set(r * (0.8 + rnd() * 0.5), r * flat, r * (0.8 + rnd() * 0.5));
+    e.set(rnd() * 6.283, rnd() * 6.283, rnd() * 6.283);
+    q.setFromEuler(e);
+    // Barely sunk. This is loose material lying on a compacted base, not
+    // aggregate pressed into mud — the trail's stones are half buried and
+    // these are not, and that difference is visible at half a metre.
+    const sink = 0.06 + rnd() * 0.24;
+    m.compose(new THREE.Vector3(x, info.y - s.y * sink, z), q, s);
+    const cc = mineralColour(rnd);
+    // Chips keep a shallow lean so their facets do not all catch the key at
+    // once, which on 5200 objects in open sun is a field of white flakes.
+    emit(chips[(rnd() * chips.length) | 0], m, cc[0], cc[1], cc[2], 0.3, chips2 + 7000);
+    const proud = s.y * (1 - sink);
+    if (proud > 0.01) decal(x, info.y, z, r * 0.85, proud, coarse ? 0.7 : 0.45);
+    chips2++;
+  }
+
+  // Oversize: the pieces too big for the surface course, which end up shoved
+  // to the shoulder and standing in the windrow. This is what gives the road's
+  // edge a scale, and it is the tier a headlamp picks out at night.
+  let mrock = 0;
+  for (let guard = 0; guard < MAIN_ROCK_COUNT * 10 && mrock < MAIN_ROCK_COUNT; guard++) {
+    const sgn = rnd() < 0.5 ? -1 : 1;
+    const t = rnd();
+    const lat =
+      t < 0.68
+        ? sgn * (MAIN_HALF + 0.1 + rnd() * (MAIN_SHOULDER + 0.5))
+        : sgn * (MAIN_HALF + MAIN_SHOULDER + rnd() * MAIN_DITCH * 1.1);
+    const u = rnd();
+    const cp = mainCurve.getPoint(u, p);
+    const tg = mainCurve.getTangent(u, ab).normalize();
+    const x = cp.x - tg.z * lat;
+    const z = cp.z + tg.x * lat;
+    surfaceInfo(x, z, info);
+    if (info.share < 0.3) continue;
+    const r = 0.06 + rnd() ** 1.5 * 0.11;
+    s.set(r * (0.85 + rnd() * 0.4), r * (0.5 + rnd() * 0.42), r * (0.85 + rnd() * 0.4));
+    e.set(rnd() * 6.283, rnd() * 6.283, rnd() * 6.283);
+    q.setFromEuler(e);
+    const sink = 0.18 + rnd() * 0.32;
+    m.compose(new THREE.Vector3(x, info.y - s.y * sink, z), q, s);
+    const cc = mineralColour(rnd);
+    emit(pebbles[(rnd() * pebbles.length) | 0], m, cc[0], cc[1], cc[2], 0.22, mrock + 21000);
+    const proud = s.y * (1 - sink);
+    if (proud > 0.012) decal(x, info.y, z, r * 0.85, proud, 0.8);
+    mrock++;
   }
 
   // --- twigs, bark flakes and stripped needle clusters ----------------------

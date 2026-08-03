@@ -382,6 +382,298 @@ export function trackMaps(seed = 17) {
 }
 
 // ---------------------------------------------------------------------------
+// The mainline's surface: crushed rock, not dirt.
+//
+// The single thing that has to come out of this tile is that it is a *different
+// substance* from the trail, and the difference is not colour. Compacted earth
+// is a matrix of fines with the odd stone pressed into it — one material, with
+// inclusions. Pit-run aggregate is the opposite: it is stone all the way down,
+// packed shoulder to shoulder, with only enough rock dust between the pieces to
+// bind them. So the trail's tile is built matrix-first and this one is built
+// particle-first, and that shows at every distance including the ones where
+// both have mipped down to their means.
+//
+// Three consequences worth stating, because each of them was arrived at by
+// getting it wrong first:
+//
+//   Angular, not rounded. Crushed rock is a polyhedron with sharp arrises and
+//   a couple of flat faces; river gravel is an ellipsoid. Dropping the trail's
+//   dome-shaped stones in here at four times the density produced a bag of
+//   marbles, which reads as decorative aggregate on a driveway.
+//
+//   Cool. The trail measures a red/blue ratio near 1.7 and quarried rock runs
+//   about 1.2. That is the whole hue separation between the two roads, and it
+//   is what lets the junction read as two surfaces meeting rather than as one
+//   surface with a mask across it.
+//
+//   Matte. Broken rock has no polish on it — the sheen on a gravel road comes
+//   from the fines in the wheel path, which the shader puts there, not from
+//   the aggregate. Roughness stays high across the whole tile so the night
+//   pass has nothing to catch.
+// ---------------------------------------------------------------------------
+
+/** Metres of ground one gravel tile covers. 3.7 mm a texel at 512. */
+export const GRAVEL_TILE = 1.9;
+
+/**
+ * Cellular noise with the offset to the winning site kept.
+ *
+ * `worley` in core returns distances and an id, which is enough for a field of
+ * round blobs and not enough for a field of angular ones: a crushed stone has a
+ * flat face at some arbitrary attitude, and to tilt one you need to know where
+ * you are *inside* the cell, not just how far from the middle of it.
+ */
+function crushed(x, y, period, seed) {
+  const p = Math.max(1, period | 0);
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  let f1 = 1e9;
+  let f2 = 1e9;
+  let id = 0;
+  let ox = 0;
+  let oy = 0;
+  for (let cy = yi - 1; cy <= yi + 1; cy++) {
+    for (let cx = xi - 1; cx <= xi + 1; cx++) {
+      const wx = ((cx % p) + p) % p;
+      const wy = ((cy % p) + p) % p;
+      const px = cx + tex1(wx, wy, seed);
+      const py = cy + tex1(wx, wy, seed + 7919);
+      const dx = x - px;
+      const dy = y - py;
+      const d = Math.hypot(dx, dy);
+      if (d < f1) {
+        f2 = f1;
+        f1 = d;
+        id = tex1(wx, wy, seed + 104729);
+        ox = dx;
+        oy = dy;
+      } else if (d < f2) {
+        f2 = d;
+      }
+    }
+  }
+  return { f1, f2, id, ox, oy };
+}
+
+/**
+ * Graded crushed aggregate: the running surface of the mainline.
+ *
+ * Two size classes packed into each other — a 4 cm surface course over a 1.5 cm
+ * chip and dust matrix — because a single-size aggregate reads as gravel poured
+ * out of a bag. Real pit run is graded, meaning the small stuff fills the voids
+ * between the big stuff, and the visual signature of that is a surface with no
+ * gaps in it and two clearly different particle sizes.
+ */
+export function gravelMaps(seed = 53) {
+  return cached('gnd.gravel.' + seed, () => {
+    const n = N * N;
+    const hf = new Float32Array(n);
+    const rock = new Float32Array(n); // coarse aggregate coverage
+    const rockId = new Float32Array(n);
+    const facet = new Float32Array(n); // which way this piece's top face leans
+    const chip = new Float32Array(n); // the 1.5 cm fraction
+    const chipId = new Float32Array(n);
+    const dust = new Float32Array(n); // rock flour packed into the voids
+    const damp = new Float32Array(n);
+    const arris = new Float32Array(n); // the bright broken edge of a piece
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const i = y * N + x;
+        const u = x / N;
+        const v = y / N;
+        // 4.2 cm cells: 40 mm minus, which is what a forest road surface course
+        // actually is. Warped, or the Voronoi net reads as a tiled honeycomb —
+        // the same failure the trail's dried-clay plates had.
+        const wx = fbm(u * 9 + 1, v * 9 + 4, { octaves: 2, period: 9, seed: seed + 71 }) - 0.5;
+        const wy = fbm(u * 9 + 6, v * 9 + 2, { octaves: 2, period: 9, seed: seed + 72 }) - 0.5;
+        const big = crushed(u * 45 + wx * 1.4, v * 45 + wy * 1.4, 45, seed);
+        const sml = crushed(u * 116 + wx * 2.2, v * 116 + wy * 2.2, 116, seed + 31);
+
+        // A piece fills its cell out to the boundary it shares with the next
+        // one, so the outline is a polygon and the gap between two pieces is a
+        // crack rather than a bed of sand. This is the whole angularity of the
+        // surface and it is why the cell *boundary* drives the mask instead of
+        // a radius: a radius gives circles however hard it is jittered.
+        const gap = big.f2 - big.f1;
+        // Two thirds of cells hold a coarse piece, and the ones that do only
+        // fill part of their cell. Both numbers were arrived at from the same
+        // failure: at four fifths coverage with every piece filling its cell out
+        // to the shared boundary, the surface came back as a *pavement* — a
+        // continuous field of same-sized polygons with mortar lines between
+        // them, which is cobbles, not pit run. Graded aggregate has a size
+        // distribution, so the piece has to be allowed to be much smaller than
+        // the cell it was seeded in.
+        const holds = smoothstep(0.16, 0.42, big.id);
+        const fill = 0.2 + ((big.id * 31.7) % 1) ** 1.5 * 0.34;
+        rock[i] =
+          smoothstep(0.02, 0.075, gap) * holds * smoothstep(fill + 0.06, fill - 0.02, big.f1);
+        rockId[i] = big.id;
+        // Broken rock has two or three flat faces meeting at an arris, so the
+        // top of a piece is a tilted plane and its neighbour's tilts a
+        // different way. The step in shading where two of them meet is the
+        // single strongest "crushed" cue there is.
+        const ang = big.id * 6.283;
+        facet[i] = (big.ox * Math.cos(ang) + big.oy * Math.sin(ang)) * (0.5 + big.id * 0.9);
+        // The arris itself: the last two texels before the boundary, where the
+        // face turns over. Rock breaks light-coloured on a fresh edge even when
+        // the weathered face is dark.
+        arris[i] = smoothstep(0.075, 0.03, gap) * smoothstep(0.02, 0.05, gap) * holds;
+
+        const cgap = sml.f2 - sml.f1;
+        const cfill = 0.24 + ((sml.id * 19.3) % 1) * 0.3;
+        chip[i] = smoothstep(0.03, 0.1, cgap) * smoothstep(0.1, 0.32, sml.id) * smoothstep(cfill + 0.08, cfill, sml.f1);
+        chipId[i] = sml.id;
+        // Rock flour: what the grader and the traffic have ground off the
+        // aggregate. It packs into the voids, so it is keyed off the *absence*
+        // of a coarse piece rather than scattered independently.
+        dust[i] =
+          clamp(1 - rock[i] * 1.15) * smoothstep(0.25, 0.72, fbm(u * 7, v * 7, { octaves: 3, period: 7, seed: seed + 12 }));
+        // Damp patches, at a much larger scale than the trail's and with far
+        // less of the tile in them. Gravel drains: it is damp in the shade and
+        // under the trees and dry everywhere else, where compacted earth holds
+        // water across its whole surface.
+        damp[i] = smoothstep(0.42, 0.86, fbm(u * 4 + 8, v * 4 + 3, { octaves: 3, period: 4, seed: seed + 25 }));
+
+        // Bedded, not tipped. This is a *compacted* surface: a grader laid it,
+        // loaded axles pressed it, and the fines were washed into the voids
+        // between the pieces by the first rain after. What shows is the top
+        // third of each piece standing in a matrix that comes most of the way
+        // up it — so the relief is a shallow cobbled-together plane with sharp
+        // little steps in it, not a layer of loose stone sitting on a floor.
+        //
+        // The facet tilt is the term that had to come down furthest, from 0.55
+        // to 0.19, and it is worth saying why because it looked right in
+        // isolation. It gives every piece a flat top at its own random angle,
+        // which is exactly what broken rock has — but a whole tile of them,
+        // each one uniformly shaded by a single directional key, is a field of
+        // alternating light and dark blobs at the size of the pieces. Rendered
+        // at a metre that is a cobbled pavement, which is what every low
+        // framing came back as: the aggregate was the right size, the right
+        // colour and the right shape, and still read as setts, because the
+        // strongest thing in the frame was thirty flat faces catching the sun
+        // at thirty different angles. Broken rock at arm's length is told apart
+        // by its *edges*, so the step at the boundary keeps its full amplitude
+        // and the tilt inside the piece is now a sixth of it.
+        hf[i] = clamp(
+          0.34 +
+            rock[i] * 0.26 +
+            facet[i] * rock[i] * 0.19 +
+            chip[i] * (1 - rock[i] * 0.7) * 0.1 +
+            dust[i] * 0.05 +
+            (tex1(x, y, seed + 90) - 0.5) * 0.045 -
+            smoothstep(0.05, 0.0, gap) * 0.1,
+        );
+      }
+    }
+
+    // Mineral families rather than one value ramp. A quarry works one face, so
+    // the aggregate on a road is mostly one rock with a minority of whatever
+    // else was in the seam — dark basalt, weathered granite, and enough iron
+    // staining to keep it from reading as concrete.
+    // Keyed off the damp end of the range, not the dry one. PALETTE.gravel is
+    // what a sunlit crown looks like, so it is the *pale* accent here rather
+    // than the base: at 2.7 times the trail's albedo the mainline came back as
+    // a white ribbon through the forest, which is the exact failure the trail
+    // was taken down two stops to fix.
+    //
+    // And deliberately cool at source, by more than the finished surface should
+    // look. The mainline is the one part of this world with an open sky over it
+    // — the forest clears twenty-odd metres for it — so unlike the trail it is
+    // lit by the full warm key rather than by canopy bounce, and it picks up
+    // about 0.4 of red/blue ratio on the way through the key, the warm indirect
+    // term and the grade. Measured: a tile at 1.10 rendered at 1.76, which is
+    // the trail's own hue, and the second road came back as the first one in a
+    // wider format. Authored at 0.95 it renders near 1.3, which is where
+    // quarried rock actually sits.
+    const basalt = desat(rgb(0x22282e), 0.16);
+    const basaltPale = desat(rgb(0x3d444c), 0.16);
+    const granite = desat(rgb(0x555c64), 0.14);
+    const granitePale = desat(rgb(0x6f767e), 0.14);
+    // The warm minority. Iron staining is what stops a grey aggregate reading
+    // as concrete, and it is the only warm thing in the tile.
+    const iron = desat(rgb(0x5c4831), 0.18);
+    const fines = desat(rgb(0x41464c), 0.18);
+    // PALETTE.gravel is a warm buff and this is the one place it lands on the
+    // running surface in quantity, so it is taken most of the way to neutral.
+    // Rock flour is the colour of the rock it came off.
+    const finesPale = desat(rgb(PALETTE.gravel), 0.78);
+    const finesDamp = desat(rgb(0x262a2d), 0.12);
+    const wetRock = desat(rgb(0x16181b), 0.14);
+
+    /** Colour of one aggregate particle from its cell id. */
+    const mineral = (id, wetBias) => {
+      const v = skewDark((id * 5.437) % 1, 1.7);
+      const kind = (id * 17.31) % 1;
+      let c;
+      if (kind > 0.82) c = mixRgb(granite, granitePale, v);
+      else if (kind > 0.74) c = mixRgb(iron, granite, v * 0.5);
+      else c = mixRgb(basalt, basaltPale, v);
+      return mixRgb(c, wetRock, wetBias * 0.45);
+    };
+
+    const mean = meanTracker();
+    const map = pixelTexture(
+      N,
+      N,
+      (x, y, out) => {
+        const i = y * N + x;
+        const u = x / N;
+        const v = y / N;
+        const wetness = damp[i];
+        // Matrix first, then the particles on top of it — but the matrix here
+        // is rock dust rather than soil, so it is the same hue as the stone and
+        // only lighter. A gravel road is one mineral at several values.
+        let c = mixRgb(fines, finesPale, dust[i] * (1 - wetness) * 0.8);
+        c = mixRgb(c, finesDamp, wetness * 0.5);
+        c = mixRgb(c, mineral(chipId[i] + 0.17, wetness * 0.7), chip[i] * (1 - rock[i] * 0.65) * 0.8);
+        c = mixRgb(c, mineral(rockId[i], wetness), rock[i] * 0.92);
+        // The fresh edge. Held to a narrow band and a modest lift — this is the
+        // term that reads as "sharp" at two metres and as white speckle at
+        // twenty if it is given any more than that.
+        c = mixRgb(c, granitePale, arris[i] * 0.3);
+        // Dust settling on the shoulders of the pieces, so the aggregate is
+        // coated rather than washed clean. Without it the surface reads as a
+        // gravel *pile*, freshly tipped, instead of a road that has been driven.
+        const coat = smoothstep(0.3, 0.75, fbm(u * 26, v * 26, { octaves: 2, period: 26, seed: seed + 44 }));
+        c = mixRgb(c, fines, coat * (1 - wetness) * 0.26);
+        const g = 0.9 + tex1(x, y, seed + 61) * 0.2;
+        c = [c[0] * g, c[1] * g, c[2] * g];
+        mean.add(c);
+        out[0] = c[0];
+        out[1] = c[1];
+        out[2] = c[2];
+        // Uniformly rough, and deliberately so. Crushed rock is matte on every
+        // face; the only sheen a gravel road has is the polished fines in the
+        // wheel path, and that is placed in road space by the shader because it
+        // belongs to the road and not to the tile. Giving the tile a specular
+        // response here is what puts a field of hard bright specks under the
+        // headlamps at night.
+        out[3] = clamp(0.99 - wetness * 0.16 - rock[i] * 0.05) * 255;
+      },
+      { srgb: true, repeat: 1, aniso: ANISO },
+    );
+    // 6.8 against the trail's 6.4. Close, and it should be: the two surfaces
+    // have relief at a similar depth once the mainline's pieces are bedded
+    // rather than tipped, and what separates them is the *shape* of it —
+    // 4 cm polygons with a step at every boundary against 1 cm grit pressed
+    // into clay.
+    const normal = normalAoTexture(hf, N, N, 6.8, (x, y) => {
+      const i = y * N + x;
+      // The voids between the pieces occlude, and that is all this does. The
+      // first version ran 0.51 in the matrix to 1.02 on a piece, which is not
+      // an occlusion term at all — it is a mask that *brightens* the aggregate,
+      // and since it lands on the albedo and on the ambient both, every piece
+      // came out as a white pebble lying on a dark floor. That is the failure
+      // the trail's near field was taken apart to fix two rounds ago, rebuilt
+      // from scratch on the other road. Centred high and narrow: the top of a
+      // piece is open to the whole sky, the crack beside it sees a fifth of it.
+      return 0.62 + hf[i] * 0.44 - (1 - rock[i]) * 0.05 + arris[i] * 0.05;
+    });
+    return { map, normal, height: hf, mean: mean.value };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // The verge: loose material the grader pushed to the edge. Coarser gravel,
 // clods, dry grass creeping in from the forest side.
 // ---------------------------------------------------------------------------
