@@ -92,7 +92,35 @@ try {
     await new Promise((r) => setTimeout(r, 900));
     document.getElementById('toast').classList.remove('visible');
   });
-  if (has('clean')) await page.evaluate(() => window.__SW.hideUi(true));
+  // Interface plates first, while the HUD is still up: the checkpoint frames
+  // themselves are shot clean, because they are judging composition and a
+  // control bar across the bottom sixth of frame makes that impossible.
+  console.log('> capturing interface plates');
+  await page.evaluate(async () => {
+    window.__SW.seek(150);
+    window.__SW.settle(10, 1 / 30);
+    window.__SW.renderOnce();
+    await new Promise((r) => setTimeout(r, 200));
+  });
+  await page.screenshot({ path: join(outDir, '00-interface.png') });
+  await page.evaluate(async () => {
+    window.__SW.seek(140);
+    window.__SW.setMode('explore');
+    const info = window.__SW.app.stage.selectables.find((s) => s.id === 'destroyer');
+    window.__SW.app.explore.select(info);
+    window.__SW.app.ui.setHelpVisible(true);
+    window.__SW.settle(6, 1 / 30);
+    window.__SW.renderOnce();
+    await new Promise((r) => setTimeout(r, 200));
+  });
+  await page.screenshot({ path: join(outDir, '00-explore-help.png') });
+  await page.evaluate(async () => {
+    window.__SW.app.ui.setHelpVisible(false);
+    window.__SW.setMode('cinematic');
+    await new Promise((r) => setTimeout(r, 300));
+    window.__SW.setPlaying(false);
+    window.__SW.hideUi(true);
+  });
 
   const checkpoints = await page.evaluate(() => window.__SW.checkpoints);
   console.log(`> ${checkpoints.length} checkpoints`);
@@ -101,10 +129,12 @@ try {
     if (only && !only.has(cp.id)) continue;
     const t0 = Date.now();
     const info = await page.evaluate(async (time) => {
-      window.__SW.seek(time);
-      // Let deterministic animation settle, then render a few real frames so
-      // particle pools and damped values reach the state the viewer would see.
-      window.__SW.settle(10, 1 / 30);
+      // Seek slightly early and play into the checkpoint, so camera blends,
+      // particle pools and anything with travel time are in the state a
+      // viewer arriving at this moment would actually see.
+      const lead = Math.min(time, 1.4);
+      window.__SW.seek(time - lead);
+      window.__SW.run(lead, 1 / 60);
       for (let i = 0; i < 3; i++) {
         window.__SW.renderOnce();
         await new Promise((r) => requestAnimationFrame(r));
@@ -132,6 +162,7 @@ try {
   // ---- interface exercise --------------------------------------------------
   if (!has('skip-controls')) {
     console.log('> exercising interface');
+    await page.evaluate(() => window.__SW.hideUi(false));
     const controlChecks = [
       ['play', async () => {
         await page.evaluate(() => window.__SW.setPlaying(true));

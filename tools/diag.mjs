@@ -25,6 +25,8 @@ for (let i = 0; i < args.length; i++) {
 const SHOTS = JSON.parse(positional[0] || '[["vader",276]]');
 const [W, H] = (flags.get('size') ?? '1280x720').split('x').map(Number);
 const QUALITY = flags.get('quality') ?? 'medium';
+/** Seconds of real playback run into each checkpoint before the grab. */
+const LEAD = Number(flags.get('lead') ?? 1.4);
 const OUT = flags.get('out') ?? '/workspace/qa-output/diag';
 mkdirSync(OUT, { recursive: true });
 
@@ -63,9 +65,9 @@ await page.evaluate(async (quality) => {
 
 const report = [];
 for (const [name, t] of SHOTS) {
-  const data = await page.evaluate(async (time) => {
-    window.__SW.seek(time);
-    window.__SW.settle(12, 1 / 30);
+  const data = await page.evaluate(async ({ time, lead }) => {
+    window.__SW.seek(Math.max(0, time - lead));
+    window.__SW.run(Math.min(time, lead), 1 / 60);
     for (let i = 0; i < 3; i++) {
       window.__SW.renderOnce();
       await new Promise((r) => requestAnimationFrame(r));
@@ -127,6 +129,7 @@ for (const [name, t] of SHOTS) {
           .map(([k, v]) => [k, +v.toFixed(3)]),
       ),
       card: frame.card,
+      bolts: frame.bolts,
       subtitle: frame.subtitle ? frame.subtitle.slice(0, 48) : null,
       issues: frame.issues.map((i) => `${i.severity}:${i.code}:${i.detail}`),
       chars,
@@ -134,12 +137,12 @@ for (const [name, t] of SHOTS) {
       darkPct: +((dark / n) * 100).toFixed(1),
       blownPct: +((blown / n) * 100).toFixed(1),
     };
-  }, t);
+  }, { time: t, lead: LEAD });
   await page.screenshot({ path: `${OUT}/${name}.png` });
   data.name = name;
   report.push(data);
   console.log(
-    `${name.padEnd(18)} t=${String(t).padStart(5)} ${String(data.chapter).padEnd(9)} ${String(data.camera).padEnd(22)} luma=${data.luma} dark=${data.darkPct}% blown=${data.blownPct}% vis=[${data.visible.join(',')}]`,
+    `${name.padEnd(18)} t=${String(t).padStart(5)} ${String(data.chapter).padEnd(9)} ${String(data.camera).padEnd(22)} luma=${data.luma} dark=${data.darkPct}% blown=${data.blownPct}% bolts=${data.bolts} vis=[${data.visible.join(',')}]`,
   );
   if (data.issues.length) console.log(`   issues: ${data.issues.join(' | ')}`);
 }

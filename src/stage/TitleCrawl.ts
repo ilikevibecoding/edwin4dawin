@@ -58,9 +58,9 @@ export class TitleCrawl {
       const lines = wrapText(g, PROLOGUE_PARAGRAPHS[i], wrapWidth);
       for (const line of lines) {
         g.fillText(line, CANVAS_W / 2, y);
-        y += size * 1.42;
+        y += size * 1.56;
       }
-      y += size * 1.1;
+      y += size * 1.25;
     }
 
     this.texture = new THREE.CanvasTexture(canvas);
@@ -96,8 +96,11 @@ export class TitleCrawl {
           vec2 uv = vec2(vUv.x, vUv.y * uWindow + uOffset);
           if (uv.y < 0.0 || uv.y > 1.0) discard;
           vec4 tex = texture2D(uMap, uv);
-          // Fade toward the vanishing point and just above the bottom edge.
-          float fade = smoothstep(0.92, 0.58, vUv.y) * smoothstep(0.0, 0.04, vUv.y);
+          // Fade out well before the vanishing point: past that the lines are
+          // compressed into each other and read as a smear rather than text.
+          // The near edge fades too, so the last line dissolves instead of
+          // sliding under the control bar.
+          float fade = smoothstep(0.74, 0.36, vUv.y) * smoothstep(0.0, 0.13, vUv.y);
           float a = tex.a * fade * uOpacity;
           if (a < 0.004) discard;
           gl_FragColor = vec4(uColor * (0.72 + 0.42 * tex.r), a);

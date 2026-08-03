@@ -113,13 +113,15 @@ export class RenderSystem {
     }
 
     if (this.tier.bloom) {
-      // Threshold above 1.0: the interior is a white room lit to near full
-      // diffuse, so anything lower makes the walls themselves glow.
+      // Threshold well above 1.0 and a tight radius: the brief is bloom on
+      // engines, bolts and lit panels only. A lower threshold makes the white
+      // corridor glow, and a wide radius smears a grazing hull highlight into
+      // a lens flare the size of the ship.
       this.bloomPass = new UnrealBloomPass(
         new THREE.Vector2(this.width, this.height),
         this.tier.bloomStrength,
-        0.58,
-        1.05,
+        0.4,
+        1.3,
       );
       this.composer.addPass(this.bloomPass);
     } else {

@@ -85,7 +85,7 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'destroyer-reveal',
-    time: 122,
+    time: 127,
     chapter: 'pursuit',
     camera: 'pursuit.reveal',
     expectVisible: ['destroyer', 'runner'],

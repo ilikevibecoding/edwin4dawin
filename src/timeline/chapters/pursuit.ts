@@ -18,8 +18,11 @@ export const PURSUIT_DURATION = 92;
 
 const FIRE_START = 30;
 const FIRE_END = 78;
-const SALVO_INTERVAL = 1.35;
-const BOLT_SPEED = 1500;
+// Cadence and muzzle velocity are chosen together: with a ~700 m gap between
+// the hulls, a bolt is in the air for a little longer than the interval, so
+// there is always fire crossing frame and the travel time is plainly visible.
+const SALVO_INTERVAL = 0.7;
+const BOLT_SPEED = 950;
 
 /**
  * Chapter 3 — The pursuit.
@@ -79,7 +82,7 @@ export function pursuitChapter(): Chapter<ShowContext> {
         debris: true,
       });
       ctx.sfx.impact(1.6 * strength, { position: world, gain: 0.5, refDistance: 60, maxDistance: 4000 });
-      damage = clamp01(damage + 0.07 * strength);
+      damage = clamp01(damage + 0.036 * strength);
       stage.runner.setDamage(damage);
     }
     // Shake falls off with distance so nearby hits feel heavier.
@@ -125,8 +128,10 @@ export function pursuitChapter(): Chapter<ShowContext> {
         to: target,
         speed: BOLT_SPEED,
         color: 0x8bff5a,
-        length: 46,
-        width: 5.2,
+        // Sized to read across a 700 m gap: a scale-accurate bolt is a
+        // couple of pixels long at this range and simply disappears.
+        length: 84,
+        width: 9,
         onHit: hit
           ? (p) => applyImpact(ctx, p, 0.75 + r.next() * 0.5, shielded)
           : (p) => {
@@ -149,8 +154,8 @@ export function pursuitChapter(): Chapter<ShowContext> {
         to: tmpB.clone(),
         speed: BOLT_SPEED * 0.9,
         color: 0xff5a3a,
-        length: 24,
-        width: 2.6,
+        length: 44,
+        width: 4.6,
         onHit: (p) => {
           stage.fx.flash({ origin: p, size: 18, color: 0xffb070, life: 0.22 });
           stage.fx.burstSparks({ origin: p, count: 10, speed: 40, color: 0xffc07a, gravity: 0, width: 0.4 });
@@ -257,25 +262,21 @@ export function pursuitChapter(): Chapter<ShowContext> {
           handheld: 0.55,
         }),
 
-        // 3. The reveal. The camera sits ahead of and below the runner looking
-        //    back down the line of travel, so the corvette stays anchored in
-        //    the lower frame while the destroyer's bow grows over the top of
-        //    it. That contrast is the whole point of the shot.
-        customShot({ id: 'pursuit.reveal', start: S + 26, end: S + 46, fov: 52, handheld: 0.45, blend: 0 }, (k, t, out) => {
+        // 3. The reveal. Behind and below the corvette, looking forward along
+        //    its line of travel. The destroyer overhauls from behind and above,
+        //    so its bow drops in over the top of frame and the underside runs
+        //    away toward the vanishing point the corvette is heading for. A
+        //    wedge only reads as enormous seen along its length; nose-on it is
+        //    a grey triangle whatever its size.
+        customShot({ id: 'pursuit.reveal', start: S + 26, end: S + 46, fov: 52, handheld: 0.45, blend: 1.2 }, (k, t, out) => {
           const r = runnerAt(t);
-          const d = destroyerAt(t);
           const a = smootherstep(k);
-          // Ahead of the corvette looking back down the line of travel, pushing
-          // in as the destroyer closes. The corvette stays small and low; the
-          // hull grows until it owns the top two thirds of the frame.
-          out.position.set(r.x + lerp(880, 330, a), r.y + lerp(-30, -46, a), r.z + lerp(300, 170, a));
-          const aim = smootherstep(clamp01((k - 0.05) / 0.7));
-          out.target.set(
-            lerp(r.x, r.x - 240, aim),
-            lerp(r.y + 4, r.y + 190, aim),
-            lerp(r.z, lerp(r.z, d.z, 0.45), aim),
-          );
-          out.fov = lerp(48, 56, a);
+          // Craning down and tilting up as the hull arrives: at the head of the
+          // shot the sky above the corvette is empty, which is what makes the
+          // arrival land.
+          out.position.set(r.x - lerp(360, 288, a), r.y + lerp(20, -46, a), r.z + lerp(196, 168, a));
+          out.target.set(r.x + 90, r.y + lerp(6, 95, a), r.z - 4);
+          out.fov = lerp(46, 60, a);
           out.focus = out.position.distanceTo(out.target);
         }),
 
@@ -352,7 +353,7 @@ export function pursuitChapter(): Chapter<ShowContext> {
         firedSalvos.clear();
         const salvosDone = Math.max(0, Math.floor((localTime - FIRE_START) / SALVO_INTERVAL) + 1);
         for (let i = 0; i < salvosDone; i++) firedSalvos.add(i);
-        damage = clamp01(salvosDone * 0.4 * 0.09);
+        damage = clamp01(salvosDone * 0.4 * 0.046);
         stage.runner.setDamage(damage);
         stage.fx.reset();
         stage.runnerShield.setStrength(localTime > 62 || localTime < FIRE_START ? 0 : 0.1);

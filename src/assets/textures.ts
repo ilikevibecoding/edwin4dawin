@@ -69,14 +69,23 @@ interface HullOptions {
   scorch: number;
   seed: string;
   stripes?: string | null;
+  /** Height of the plate relief in the companion normal map. */
+  relief?: number;
 }
 
-function drawPanels(g: CanvasRenderingContext2D, size: number, rng: Rng, o: HullOptions): void {
-  g.fillStyle = o.base;
-  g.fillRect(0, 0, size, size);
+/** One plate of the recursive subdivision, with the detail chosen for it. */
+interface Plate {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** -1..1 thickness offset relative to its neighbours. */
+  lift: number;
+  inset: boolean;
+  rivets: boolean;
+}
 
-  // Recursive vertical/horizontal splits produce plausible plating without
-  // obvious tiling artefacts.
+function splitPlates(size: number, rng: Rng): Plate[] {
   const rects: Array<[number, number, number, number]> = [[0, 0, size, size]];
   const minCell = size / 22;
   for (let pass = 0; pass < 5; pass++) {
@@ -97,22 +106,135 @@ function drawPanels(g: CanvasRenderingContext2D, size: number, rng: Rng, o: Hull
     rects.length = 0;
     rects.push(...next);
   }
+  return rects.map(([x, y, w, h]) => ({
+    x,
+    y,
+    w,
+    h,
+    lift: rng.spread(1),
+    inset: w > minCell * 2 && h > minCell * 2 && rng.bool(0.3),
+    rivets: rng.bool(0.34),
+  }));
+}
 
-  for (const [x, y, w, h] of rects) {
-    const shade = rng.spread(o.panelContrast);
+function drawPanels(
+  g: CanvasRenderingContext2D,
+  size: number,
+  rng: Rng,
+  o: HullOptions,
+  plates: Plate[],
+): void {
+  g.fillStyle = o.base;
+  g.fillRect(0, 0, size, size);
+
+  for (const p of plates) {
+    const shade = p.lift * o.panelContrast;
     g.fillStyle = `rgba(${shade > 0 ? 255 : 0},${shade > 0 ? 255 : 0},${shade > 0 ? 255 : 0},${Math.abs(shade)})`;
-    g.fillRect(x, y, w, h);
+    g.fillRect(p.x, p.y, p.w, p.h);
     g.strokeStyle = o.lineColor;
     g.lineWidth = rng.bool(0.25) ? 2 : 1;
-    g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    g.strokeRect(p.x + 0.5, p.y + 0.5, p.w - 1, p.h - 1);
     // Occasional inset detail so panels do not read as flat rectangles.
-    if (w > minCell * 2 && h > minCell * 2 && rng.bool(0.3)) {
-      const ix = x + w * 0.2;
-      const iy = y + h * 0.2;
+    if (p.inset) {
       g.strokeStyle = `rgba(0,0,0,${0.16 + rng.next() * 0.12})`;
-      g.strokeRect(ix, iy, w * 0.6, h * 0.6);
+      g.strokeRect(p.x + p.w * 0.2, p.y + p.h * 0.2, p.w * 0.6, p.h * 0.6);
     }
   }
+}
+
+/**
+ * Height field matching the plating, from which the normal map is derived.
+ *
+ * Without this the hull is a flat shell with plate boundaries painted on: at
+ * grazing angles the light slides across it with nothing to catch, and the
+ * ship reads as a printed cardboard silhouette rather than armour.
+ */
+function drawPlateHeight(
+  g: CanvasRenderingContext2D,
+  size: number,
+  rng: Rng,
+  plates: Plate[],
+): void {
+  g.fillStyle = '#808080';
+  g.fillRect(0, 0, size, size);
+  for (const p of plates) {
+    const level = 128 + Math.round(p.lift * 16);
+    g.fillStyle = `rgb(${level},${level},${level})`;
+    g.fillRect(p.x, p.y, p.w, p.h);
+    // Recessed seam plus a chamfer catching light on the near lip.
+    g.lineWidth = 3;
+    g.strokeStyle = 'rgba(0,0,0,0.72)';
+    g.strokeRect(p.x + 1.5, p.y + 1.5, p.w - 3, p.h - 3);
+    g.lineWidth = 2;
+    g.strokeStyle = 'rgba(255,255,255,0.36)';
+    g.strokeRect(p.x + 4, p.y + 4, p.w - 8, p.h - 8);
+    if (p.inset) {
+      g.lineWidth = 2;
+      g.strokeStyle = 'rgba(0,0,0,0.5)';
+      g.strokeRect(p.x + p.w * 0.2, p.y + p.h * 0.2, p.w * 0.6, p.h * 0.6);
+    }
+    if (p.rivets && p.w > 24 && p.h > 24) {
+      g.fillStyle = 'rgba(255,255,255,0.5)';
+      const step = Math.max(9, Math.min(p.w, p.h) / 6);
+      for (let x = p.x + step; x < p.x + p.w - step * 0.5; x += step) {
+        for (const y of [p.y + step * 0.55, p.y + p.h - step * 0.55]) {
+          g.beginPath();
+          g.arc(x, y, 1.6, 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+    }
+  }
+  // Shallow long-wavelength waviness so large flat runs still shift tone.
+  g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 26; i++) {
+    const x = rng.next() * size;
+    const y = rng.next() * size;
+    const r = rng.range(size * 0.06, size * 0.2);
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(255,255,255,0.07)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.globalCompositeOperation = 'source-over';
+}
+
+/** Sobel a greyscale height canvas into a tangent-space normal map. */
+function normalFromHeight(src: HTMLCanvasElement, strength: number): HTMLCanvasElement {
+  const size = src.width;
+  const data = src.getContext('2d')!.getImageData(0, 0, size, size).data;
+  const { c, g } = makeCanvas(size, size);
+  const img = g.createImageData(size, size);
+  const at = (x: number, y: number): number =>
+    data[((((y % size) + size) % size) * size + (((x % size) + size) % size)) * 4] / 255;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      // 3x3 Sobel: a two-tap difference on a hard-edged height field aliases
+      // into stair-stepped normals along every diagonal plate seam.
+      const dx =
+        (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) -
+          at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1)) *
+        0.25 *
+        strength;
+      const dy =
+        (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) -
+          at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1)) *
+        0.25 *
+        strength;
+      // Canvas rows run opposite to V, so the V slope is +dy.
+      const len = Math.hypot(dx, dy, 1);
+      const i = (y * size + x) * 4;
+      img.data[i] = Math.round(((-dx / len) * 0.5 + 0.5) * 255);
+      img.data[i + 1] = Math.round(((dy / len) * 0.5 + 0.5) * 255);
+      img.data[i + 2] = Math.round((1 / len) * 0.5 * 255 + 127.5);
+      img.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return c;
 }
 
 function drawGrime(g: CanvasRenderingContext2D, size: number, rng: Rng, amount: number): void {
@@ -160,59 +282,90 @@ function drawScorch(g: CanvasRenderingContext2D, size: number, rng: Rng, amount:
   }
 }
 
+/**
+ * Build a hull albedo and its matching normal map from one plate layout, so the
+ * painted seams and the modelled relief always line up.
+ */
+function buildHull(key: string, o: HullOptions): void {
+  const size = o.size ?? 1024;
+  const rng = freshRng(o.seed);
+  const plates = splitPlates(size, rng.fork('plates'));
+
+  const albedo = makeCanvas(size, size);
+  drawPanels(albedo.g, size, rng, o, plates);
+  if (o.stripes) {
+    albedo.g.fillStyle = o.stripes;
+    const bands = rng.int(2, 4);
+    for (let i = 0; i < bands; i++) {
+      const y = rng.next() * size;
+      albedo.g.fillRect(0, y, size, rng.range(size * 0.012, size * 0.03));
+    }
+  }
+  drawGrime(albedo.g, size, rng, o.grime);
+  if (o.scorch > 0) drawScorch(albedo.g, size, rng, o.scorch);
+  finish(key, albedo.c);
+
+  const height = makeCanvas(size, size);
+  drawPlateHeight(height.g, size, rng.fork('height'), plates);
+  finish(`${key}:normal`, normalFromHeight(height.c, o.relief ?? 3.2), { srgb: false });
+}
+
 function hullTexture(key: string, o: HullOptions): THREE.Texture {
   return memo(key, () => {
-    const size = o.size ?? 1024;
-    const rng = freshRng(o.seed);
-    const { c, g } = makeCanvas(size, size);
-    drawPanels(g, size, rng, o);
-    if (o.stripes) {
-      g.fillStyle = o.stripes;
-      const bands = rng.int(2, 4);
-      for (let i = 0; i < bands; i++) {
-        const y = rng.next() * size;
-        g.fillRect(0, y, size, rng.range(size * 0.012, size * 0.03));
-      }
-    }
-    drawGrime(g, size, rng, o.grime);
-    if (o.scorch > 0) drawScorch(g, size, rng, o.scorch);
-    return finish(key, c);
+    buildHull(key, o);
+    return cache.get(key)!;
   });
 }
 
-/** Weathered off-white plating for the Rebel blockade runner. */
-export const rebelHullMap = (): THREE.Texture =>
-  hullTexture('rebelHull', {
-    base: '#d9d7cf',
-    panelContrast: 0.09,
-    lineColor: 'rgba(70,68,62,0.5)',
-    grime: 1.15,
-    scorch: 0.7,
-    seed: 'rebel-hull',
+function hullNormal(key: string, o: HullOptions): THREE.Texture {
+  return memo(`${key}:normal`, () => {
+    buildHull(key, o);
+    return cache.get(`${key}:normal`)!;
   });
+}
+
+const REBEL_HULL: HullOptions = {
+  base: '#d9d7cf',
+  panelContrast: 0.09,
+  lineColor: 'rgba(70,68,62,0.5)',
+  grime: 1.15,
+  scorch: 0.7,
+  seed: 'rebel-hull',
+  relief: 3.6,
+};
+
+const IMPERIAL_HULL: HullOptions = {
+  base: '#9aa1a7',
+  panelContrast: 0.075,
+  lineColor: 'rgba(38,42,46,0.55)',
+  grime: 0.45,
+  scorch: 0.12,
+  seed: 'imperial-hull',
+  relief: 4.2,
+};
+
+const CORRIDOR_WALL: HullOptions = {
+  size: 768,
+  base: '#d5d4cd',
+  panelContrast: 0.075,
+  lineColor: 'rgba(120,120,116,0.45)',
+  grime: 0.55,
+  scorch: 0.35,
+  seed: 'corridor-wall',
+  relief: 2.4,
+};
+
+/** Weathered off-white plating for the Rebel blockade runner. */
+export const rebelHullMap = (): THREE.Texture => hullTexture('rebelHull', REBEL_HULL);
+export const rebelHullNormalMap = (): THREE.Texture => hullNormal('rebelHull', REBEL_HULL);
 
 /** Cold, near-monochrome plating for Imperial exteriors. */
-export const imperialHullMap = (): THREE.Texture =>
-  hullTexture('imperialHull', {
-    base: '#9aa1a7',
-    panelContrast: 0.075,
-    lineColor: 'rgba(38,42,46,0.55)',
-    grime: 0.45,
-    scorch: 0.12,
-    seed: 'imperial-hull',
-  });
+export const imperialHullMap = (): THREE.Texture => hullTexture('imperialHull', IMPERIAL_HULL);
+export const imperialHullNormalMap = (): THREE.Texture => hullNormal('imperialHull', IMPERIAL_HULL);
 
 /** Clean interior wall plating for the corridor set. */
-export const corridorWallMap = (): THREE.Texture =>
-  hullTexture('corridorWall', {
-    size: 768,
-    base: '#d5d4cd',
-    panelContrast: 0.075,
-    lineColor: 'rgba(120,120,116,0.45)',
-    grime: 0.55,
-    scorch: 0.35,
-    seed: 'corridor-wall',
-  });
+export const corridorWallMap = (): THREE.Texture => hullTexture('corridorWall', CORRIDOR_WALL);
+export const corridorWallNormalMap = (): THREE.Texture => hullNormal('corridorWall', CORRIDOR_WALL);
 
 /** Grey deck plating. */
 export const deckPlateMap = (): THREE.Texture =>

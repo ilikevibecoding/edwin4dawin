@@ -192,12 +192,14 @@ export function destroyerPositionAt(t: number, out: THREE.Vector3): THREE.Vector
   // a wedge a kilometre away is just a grey triangle, however big it is.
   let x: number;
   if (tau < 8) x = -3200;
-  else if (tau < 26) x = lerp(-3200, -1250, smootherstep((tau - 8) / 18));
-  else if (tau < 46) x = lerp(-1250, -520, smootherstep((tau - 26) / 20));
+  else if (tau < 26) x = lerp(-3200, -1180, smootherstep((tau - 8) / 18));
+  else if (tau < 46) x = lerp(-1180, -520, smootherstep((tau - 26) / 20));
   else if (tau < 62) x = lerp(-520, -140, smootherstep((tau - 46) / 16));
   else x = lerp(-140, 60, smootherstep(clamp01((tau - 62) / 30)));
 
-  const y = lerp(430, 332, smootherstep(clamp01((tau - 28) / 50)));
+  // Settles onto the corvette's altitude band early enough that the reveal
+  // shot can hold both ships in one frame without pointing at the zenith.
+  const y = lerp(430, 300, smootherstep(clamp01((tau - 20) / 34)));
   const z = lerp(-60, -18, smootherstep(clamp01((tau - 30) / 46)));
 
   // Very slight pitch/heave so the hull is never perfectly static.

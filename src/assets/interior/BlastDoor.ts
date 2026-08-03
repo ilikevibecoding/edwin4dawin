@@ -152,12 +152,17 @@ export class BlastDoor {
         [-1, this.leftLeaf],
         [1, this.rightLeaf],
       ] as Array<[number, THREE.Group]>) {
-        leaf.position.z = 0.14 + k * 1.15;
-        leaf.position.x = sign * (0.02 + k * 0.72);
-        leaf.position.y = 0;
-        leaf.rotation.x = k * (Math.PI / 2 - 0.16);
-        leaf.rotation.y = sign * (0.055 + k * 0.28);
-        leaf.rotation.z = sign * k * 0.2;
+        // An intact leaf laid flat is 1.7 m by 3.1 m — the two of them cover
+        // the entire deck in front of the breach and read as folded card. So
+        // they buckle as they tear out, and land angled against the side
+        // walls with the doorway left clear.
+        leaf.position.z = 0.14 + k * 0.92;
+        leaf.position.x = sign * (0.02 + k * 0.8);
+        leaf.position.y = k * 0.07;
+        leaf.rotation.x = k * 1.34;
+        leaf.rotation.y = sign * (0.055 + k * 0.52);
+        leaf.rotation.z = sign * k * 0.36;
+        leaf.scale.set(1, 1 - k * 0.44, 1 + k * 0.55);
       }
       mat.emissiveIntensity = 11 * (1 - k * 0.75);
       this.glowLight.intensity = 22 * (1 - k);

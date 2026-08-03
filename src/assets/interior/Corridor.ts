@@ -229,6 +229,7 @@ export class Corridor {
   private alarmPoint: THREE.PointLight;
   private alarmActive = 0;
   private vaderFill: THREE.PointLight;
+  private vaderRim: THREE.PointLight;
   private podHatchDoor: THREE.Mesh;
 
   constructor(opts: CorridorOptions = {}) {
@@ -606,10 +607,14 @@ export class Corridor {
     this.alarmPoint.position.set(14, 2.25, halfWidth - 0.75);
     this.root.add(this.alarmPoint);
 
-    // Cold fill light that rises when Vader enters.
-    this.vaderFill = new THREE.PointLight(0x5c7cc0, 0, 26, 1.7);
+    // Cold lights that rise when Vader enters: one ahead of him so the mask
+    // reads, one behind for the halo that separates him from the corridor.
+    this.vaderFill = new THREE.PointLight(0x6f92d8, 0, 22, 1.7);
     this.vaderFill.position.set(0, 2.2, 0);
     this.root.add(this.vaderFill);
+    this.vaderRim = new THREE.PointLight(0x8fb6ff, 0, 20, 1.8);
+    this.vaderRim.position.set(0, 2.4, 0);
+    this.root.add(this.vaderRim);
 
     // ---- Battle damage dressing -------------------------------------------
     // Feathered alpha rather than a hard disc: a solid dark polygon on a white
@@ -704,8 +709,13 @@ export class Corridor {
 
   /** 0..1 cold Imperial rim light that accompanies Vader. */
   setVaderPresence(v: number, x: number): void {
-    this.vaderFill.intensity = v * 9;
-    this.vaderFill.position.x = x;
+    // He walks toward +X with the camera ahead of him, so the fill has to sit
+    // down-corridor of him. A lamp at his own position lights the walls and
+    // leaves the mask — the one thing the shot is about — in shadow.
+    this.vaderFill.intensity = v * 6.5;
+    this.vaderFill.position.set(x + 3.3, 2.15, 0.4);
+    this.vaderRim.intensity = v * 5.5;
+    this.vaderRim.position.set(x - 2.6, 2.45, -0.35);
   }
 
   /** Cut the corridor lighting down as power fails. */

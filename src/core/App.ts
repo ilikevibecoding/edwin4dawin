@@ -644,6 +644,32 @@ export class App {
         this.render.dofFocus = this.director.sample.focus;
         this.render.update(dt, this.elapsed);
       },
+      /**
+       * Play the world forward for real, in fixed steps and without rendering.
+       *
+       * `settle` deliberately freezes the playhead, which means timeline beats
+       * never fire and nothing with travel time — bolts, sparks, smoke — is
+       * ever in the air. Capture tools seek slightly early and run into the
+       * checkpoint so the frame they grab is the one a viewer would see.
+       */
+      run: (seconds = 1, dt = 1 / 60) => {
+        const steps = Math.max(1, Math.round(seconds / dt));
+        const wasPlaying = this.timeline.playing;
+        // Set the flag directly rather than calling play(): the harness is
+        // driving the clock itself and must not disturb the transport UI or
+        // wake the audio graph.
+        this.timeline.playing = true;
+        for (let i = 0; i < steps; i++) {
+          this.timeline.update(dt);
+          this.applyContinuousWorldState();
+          this.director.update(this.timeline.time, dt, this.render.camera);
+          this.elapsed += dt;
+          this.stage.update(dt, this.elapsed, this.render.camera);
+        }
+        this.timeline.playing = wasPlaying;
+        this.render.dofFocus = this.director.sample.focus;
+        this.render.update(dt, this.elapsed);
+      },
       renderOnce: () => this.render.renderOnce(),
       setPlaying: (p: boolean) => (p ? this.timeline.play() : this.timeline.pause()),
       isPlaying: () => this.timeline.playing,

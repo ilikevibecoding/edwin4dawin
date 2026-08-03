@@ -2,10 +2,13 @@ import * as THREE from 'three';
 import { protectResource } from '../core/dispose';
 import {
   corridorWallMap,
+  corridorWallNormalMap,
   deckPlateMap,
   imperialHullMap,
+  imperialHullNormalMap,
   microRoughnessMap,
   rebelHullMap,
+  rebelHullNormalMap,
   softDiscMap,
   windowStripMap,
 } from './textures';
@@ -61,6 +64,8 @@ export const rebelHull = (): THREE.MeshStandardMaterial =>
     return new THREE.MeshStandardMaterial({
       color: 0xffffff,
       map,
+      normalMap: rebelHullNormalMap(),
+      normalScale: new THREE.Vector2(0.85, 0.85),
       roughnessMap: microRoughnessMap(),
       roughness: 0.6,
       metalness: 0.24,
@@ -74,6 +79,8 @@ export const rebelHullDark = (): THREE.MeshStandardMaterial =>
     return new THREE.MeshStandardMaterial({
       color: 0x9fa3a6,
       map,
+      normalMap: rebelHullNormalMap(),
+      normalScale: new THREE.Vector2(0.9, 0.9),
       roughness: 0.68,
       metalness: 0.4,
       envMapIntensity: 0.7,
@@ -95,6 +102,8 @@ export const imperialHull = (): THREE.MeshStandardMaterial =>
     return new THREE.MeshStandardMaterial({
       color: 0xffffff,
       map,
+      normalMap: imperialHullNormalMap(),
+      normalScale: new THREE.Vector2(1, 1),
       roughnessMap: microRoughnessMap(),
       roughness: 0.64,
       metalness: 0.3,
@@ -107,6 +116,8 @@ export const imperialHullDark = (): THREE.MeshStandardMaterial =>
     new THREE.MeshStandardMaterial({
       color: 0x8f979e,
       map: imperialHullMap(),
+      normalMap: imperialHullNormalMap(),
+      normalScale: new THREE.Vector2(1.1, 1.1),
       roughness: 0.72,
       metalness: 0.3,
       envMapIntensity: 0.5,
@@ -123,6 +134,8 @@ export const imperialTrench = (): THREE.MeshStandardMaterial =>
     new THREE.MeshStandardMaterial({
       color: 0x6d747a,
       map: imperialHullMap(),
+      normalMap: imperialHullNormalMap(),
+      normalScale: new THREE.Vector2(1.2, 1.2),
       roughness: 0.88,
       metalness: 0.2,
       envMapIntensity: 0.35,
@@ -163,6 +176,8 @@ export const corridorWall = (): THREE.MeshStandardMaterial =>
     const mat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       map,
+      normalMap: corridorWallNormalMap(),
+      normalScale: new THREE.Vector2(0.5, 0.5),
       roughness: 0.58,
       metalness: 0.06,
       envMapIntensity: 0.4,
@@ -211,6 +226,8 @@ export const bulkhead = (): THREE.MeshStandardMaterial =>
     new THREE.MeshStandardMaterial({
       color: 0xbfbdb6,
       map: corridorWallMap(),
+      normalMap: corridorWallNormalMap(),
+      normalScale: new THREE.Vector2(0.6, 0.6),
       roughness: 0.54,
       metalness: 0.09,
       envMapIntensity: 0.4,
