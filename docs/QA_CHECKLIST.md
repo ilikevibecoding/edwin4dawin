@@ -93,7 +93,28 @@ defects found and fixed this way:
 - The orbital track ran over the planet's UV pole; rolled the planet so it runs along the equator.
 - Junction shoulder walls were single-sided and read as holes from inside the room.
 - A CSS specificity bug let an invisible full-screen card swallow every transport click.
-- The `?quality=` override was discarded by the GPU probe.
+- The `?quality=` override was discarded by the GPU probe, so every tour had silently been
+  running at the Low preset.
+- Playback speed was tied to frame rate: the clock's delta cap made the story run in slow motion
+  below 10 fps, which would have desynchronised narration on weak hardware.
+- The timeline scrubber tracked drags with pointer capture only, so a drag that left the 22-pixel
+  track stopped seeking.
+
+### Motion-review pass
+
+The rendered highlight reel was reviewed shot by shot as a separate exercise, which surfaced
+defects that still frames had hidden:
+
+- Figures read as hovering: a single overhead shadow-casting key cannot ground a dozen bodies in a
+  corridor lit by practicals. Every character now carries a soft contact decal.
+- The princess's robe was an open double-sided cone; leaning forward exposed its unlit interior as
+  a dark slab through the front of the dress. It is now closed, single-sided and tall enough to
+  enclose the pelvis, and her crouch is a lean rather than a fold.
+- Pose changes snapped in a single frame. Poses now cross-fade over 0.72 s.
+- The planet's limb crest clipped to featureless white.
+- Captions sat low enough to bisect subjects; they now clear the lower third.
+- The firefight camera stood half a metre behind a defender's back. It now sits behind the whole
+  defended line so a defender frames the edge and the advance reads in depth.
 
 ## Final polish criteria
 

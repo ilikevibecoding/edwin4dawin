@@ -127,6 +127,11 @@ Runtime sanity checks run continuously (and exhaustively during the tour) for Na
 objects outside expected bounds, cameras inside geometry, characters off the deck, missing
 narration assets, particle-pool overflow, WebGL errors, console errors and sustained frame drops.
 
+`node scripts/render-video.mjs --reel` renders a highlight reel straight out of the engine, frame
+by frame, and encodes it with ffmpeg. Because the whole world is a pure function of the clock, the
+result is exactly what the cinematic plays — useful for reviewing motion, which still frames cannot
+show. Several real defects in this build were caught that way and nowhere else.
+
 ---
 
 ## Known limitations

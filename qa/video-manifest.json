@@ -1,16 +1,56 @@
 {
-  "out": "/tmp/probe.mp4",
-  "fps": 10,
+  "out": "/tmp/reel_v3.mp4",
+  "fps": 15,
   "width": 960,
   "height": 540,
   "quality": "medium",
   "segments": [
     [
-      110,
-      113
+      5,
+      11
+    ],
+    [
+      52,
+      59
+    ],
+    [
+      105,
+      119
+    ],
+    [
+      134,
+      141
+    ],
+    [
+      186,
+      195
+    ],
+    [
+      216,
+      225
+    ],
+    [
+      243,
+      256
+    ],
+    [
+      277,
+      284
+    ],
+    [
+      289,
+      296
+    ],
+    [
+      319.5,
+      327
+    ],
+    [
+      346,
+      353
     ]
   ],
-  "frames": 30,
-  "renderedAt": "2026-08-03T01:51:10.746Z",
+  "frames": 1403,
+  "renderedAt": "2026-08-03T06:33:09.901Z",
   "note": "Rendered frame-by-frame from the live engine on a software rasteriser; identical to real-time output on a GPU."
 }
