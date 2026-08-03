@@ -49,17 +49,25 @@ export class BoltSystem {
     this.capacity = capacity;
     this.group.name = 'BoltSystem';
 
-    // Two concentric capsules: a near-white core inside a wider, dimmer
-    // sheath of the bolt's own colour. A round sprite would read as a ball
-    // of light, which is exactly what a tracer must not look like.
-    const build = (segments: number): THREE.InstancedMesh => {
+    // Two concentric capsules: a solid, saturated core inside a wider additive
+    // sheath. The core is deliberately *not* additive — inside a white-walled
+    // corridor an additive bolt adds nothing to a surface already at one and
+    // disappears entirely. It has to replace what is behind it. A round sprite
+    // would read as a ball of light, which is what a tracer must not look like.
+    const build = (segments: number, additive: boolean): THREE.InstancedMesh => {
       const geo = new THREE.CapsuleGeometry(1, 1, 2, segments);
       geo.rotateX(Math.PI / 2);
+      // A white vertex colour is mandatory, not decoration. `vertexColors`
+      // defines USE_COLOR, and three multiplies the per-instance colour into
+      // the vertex colour; with no `color` attribute the driver supplies zero
+      // for the disabled attribute and every bolt shades to black.
+      const white = new Float32Array(geo.getAttribute('position').count * 3).fill(1);
+      geo.setAttribute('color', new THREE.BufferAttribute(white, 3));
       const mat = new THREE.MeshBasicMaterial({
         vertexColors: true,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
+        transparent: additive,
+        blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+        depthWrite: !additive,
         toneMapped: false,
       });
       const mesh = new THREE.InstancedMesh(geo, mat, capacity);
@@ -68,9 +76,9 @@ export class BoltSystem {
       this.group.add(mesh);
       return mesh;
     };
-    this.core = build(8);
-    this.halo = build(6);
-    this.halo.renderOrder = -1;
+    this.core = build(8, false);
+    this.halo = build(6, true);
+    this.halo.renderOrder = 2;
 
     for (let i = 0; i < capacity; i++) {
       this.records.push({
@@ -131,18 +139,21 @@ export class BoltSystem {
       r.distanceLeft -= step;
 
       this.quat.setFromUnitVectors(forward, r.direction);
-      // CapsuleGeometry's caps add `radius` at each end, so the cylinder part
-      // is scaled to leave the overall bolt the requested length.
-      this.scale.set(r.radius, r.radius, Math.max(0.001, r.length - r.radius * 2));
+      // The unit capsule is radius 1 with a length-1 barrel, so it measures 3
+      // along its axis; the caps stretch with the axial scale. Dividing by
+      // three is what makes `length` mean what it says.
+      this.scale.set(r.radius, r.radius, Math.max(0.001, r.length / 3));
       this.matrix.compose(r.position, this.quat, this.scale);
       this.core.setMatrixAt(i, this.matrix);
-      this.tint.copy(r.color).lerp(WHITE, 0.72);
+      // Only a third of the way to white: a near-white core is invisible
+      // against a lit white bulkhead, which is most of this corridor.
+      this.tint.copy(r.color).lerp(WHITE, 0.34).multiplyScalar(1.9);
       this.core.instanceColor!.setXYZ(i, this.tint.r, this.tint.g, this.tint.b);
 
-      this.scale.set(r.radius * 2.7, r.radius * 2.7, Math.max(0.001, r.length * 1.1));
+      this.scale.set(r.radius * 3.2, r.radius * 3.2, Math.max(0.001, (r.length * 1.18) / 3));
       this.matrix.compose(r.position, this.quat, this.scale);
       this.halo.setMatrixAt(i, this.matrix);
-      this.tint.copy(r.color).multiplyScalar(0.34);
+      this.tint.copy(r.color).multiplyScalar(0.42);
       this.halo.instanceColor!.setXYZ(i, this.tint.r, this.tint.g, this.tint.b);
 
       if (r.distanceLeft <= 1e-4) {

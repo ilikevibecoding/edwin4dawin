@@ -159,6 +159,11 @@ export class Stage {
     onProgress(0.86, 'Priming effects');
     this.fx = new FXManager(quality);
     this.space.add(this.fx.spaceGroup);
+    // Effects are fed world-space positions (muzzle transforms, `ip()` points),
+    // but this group hangs off the interior root four kilometres down, so it
+    // carries the inverse of that offset. Without it every interior spark,
+    // bolt, smoke puff and fragment was drawn 4 km below the corridor.
+    this.fx.interiorGroup.position.copy(INTERIOR_ORIGIN).negate();
     this.interior.add(this.fx.interiorGroup);
 
     this.prologue = new PrologueText();

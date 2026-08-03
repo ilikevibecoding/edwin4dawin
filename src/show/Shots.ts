@@ -359,11 +359,14 @@ export function buildShots(stage: Stage): Shot[] {
     handheld: 0.02,
     apply: (ctx, pose) => {
       const k = ctx.progress;
-      // Above head height in the middle of the passage: defenders read as
-      // mid-ground silhouettes instead of filling the lens with a face.
-      ip(0.18, 2.05, lerp(4.4, 2.6, easeInOut(k)), pose.position);
-      ip(-0.1, 1.15, -12.5, pose.target);
-      pose.fov = 46;
+      // High on the starboard side, angled across the passage rather than
+      // straight down it. Two things were hiding the exchange: a lens pointed
+      // along the corridor foreshortens every bolt to a dot, and at eye level
+      // the bolts pass behind the bodies of the men firing them. From up here
+      // they cross open floor between the two lines.
+      ip(1.3, 2.28, lerp(1.6, -0.2, easeInOut(k)), pose.position);
+      ip(-1.2, 1.05, -8.6, pose.target);
+      pose.fov = 50;
       pose.near = INT_NEAR;
       pose.far = INT_FAR;
     },

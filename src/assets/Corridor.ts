@@ -167,6 +167,8 @@ export class CorridorSet {
     this.root.add(walls, floors, trims, lightPanels);
 
     // ------------------------------------------------------- vestibule
+    const vestibuleShell = M.corridorWall.clone();
+    vestibuleShell.side = THREE.DoubleSide;
     const vestStart = corridorEnd;
     const vestEnd = 22;
     const vestLen = vestEnd - vestStart;
@@ -206,7 +208,10 @@ export class CorridorSet {
         boxAt(2.4, CORRIDOR_HEIGHT + 0.3, 0.3, VESTIBULE_HALF_WIDTH - 1.2, (CORRIDOR_HEIGHT + 0.3) / 2, vestStart),
         boxAt(3.4, 0.5, 0.3, 0, CORRIDOR_HEIGHT + 0.05, vestStart),
       ]),
-      M.corridorWall,
+      // Two-sided. Seven merged surfaces built from three different helpers
+      // cannot be trusted to agree on winding, and one inverted panel in a
+      // sealed room the camera lives inside is a hole straight out to black.
+      vestibuleShell,
     );
     vestWalls.receiveShadow = true;
     this.root.add(vestWalls);
@@ -231,6 +236,11 @@ export class CorridorSet {
         boxAt(0.16, 0.2, vestLen, -VESTIBULE_HALF_WIDTH + 0.16, CORRIDOR_HEIGHT + 0.18, vestCenterZ),
         boxAt(0.16, 0.2, 7.3, VESTIBULE_HALF_WIDTH - 0.16, CORRIDOR_HEIGHT + 0.18, 11.65),
         boxAt(0.16, 0.2, 3.3, VESTIBULE_HALF_WIDTH - 0.16, CORRIDOR_HEIGHT + 0.18, 20.35),
+        // Eaves. The wall profile stops at 2.9 and the ceiling sits at 3.2, so
+        // without these there is an open slot the length of the room on both
+        // sides and the camera looks straight out of the set into black.
+        boxAt(0.36, 0.5, vestLen, -(VESTIBULE_HALF_WIDTH - 0.3), CORRIDOR_HEIGHT + 0.05, vestCenterZ),
+        boxAt(0.36, 0.5, vestLen, VESTIBULE_HALF_WIDTH - 0.3, CORRIDOR_HEIGHT + 0.05, vestCenterZ),
       ]),
       M.corridorTrim,
     );
@@ -319,7 +329,7 @@ export class CorridorSet {
         // Fill the strip of vestibule wall above the shorter doorway.
         boxAt(0.24, BAY_HEIGHT - CORRIDOR_HEIGHT, 6.6, -3.0, (BAY_HEIGHT + CORRIDOR_HEIGHT) / 2, 0),
       ]),
-      M.corridorWall,
+      vestibuleShell,
     );
     bay.add(bayShell);
     const bayFloor = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 6.6), M.corridorFloor);

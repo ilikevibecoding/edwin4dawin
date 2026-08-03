@@ -246,15 +246,28 @@ export class FXManager {
     color: 'red' | 'blue',
     onImpact?: (p: THREE.Vector3) => void,
   ): void {
+    // Long, fat and comparatively slow. At forty-two metres a second and
+    // under a metre long, a bolt crossed a twelve-metre corridor in a third of
+    // a second and a still frame of the firefight showed no fire at all.
+    const tint = new THREE.Color(color === 'red' ? 0xff3a22 : 0x54c8ff);
     this.interiorBolts.spawn({
       origin: from,
       target: to,
-      speed: 42,
-      color: new THREE.Color(color === 'red' ? 0xff3a22 : 0x54c8ff),
-      length: 0.85,
-      radius: 0.035,
+      speed: 30,
+      color: tint,
+      length: 2.8,
+      radius: 0.075,
       scatter: 0.16,
       onImpact,
+    });
+    // Muzzle flare, so the shooter reads as the source even between bolts.
+    this.interiorFlash.spawn({
+      position: from,
+      velocity: new THREE.Vector3(),
+      color: tint.clone().lerp(new THREE.Color(1, 1, 1), 0.5).multiplyScalar(2.2),
+      size: 0.26,
+      life: 0.08,
+      growth: 1.7,
     });
   }
 

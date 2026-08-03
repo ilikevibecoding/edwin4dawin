@@ -588,8 +588,11 @@ export class StarDestroyer {
 
           // Striations run with the beam: they vary around the circumference
           // and drift lengthwise. Banding across it reads as stacked rings.
-          float flow = sin(vUv.x * 6.2831 * 26.0 + vUv.y * 5.0 - time * 1.8);
-          float streak = 0.86 + 0.14 * flow;
+          // Fine and shallow. At twenty-six turns and fifteen per cent depth
+          // the shell separated into a handful of distinct blue ribbons rather
+          // than one column of moving light.
+          float flow = sin(vUv.x * 6.2831 * 46.0 + vUv.y * 7.0 - time * 2.4);
+          float streak = 0.93 + 0.07 * flow;
 
           // Hot at the emitter, thinning as it reaches for the prize.
           float head = smoothstep(0.0, 0.1, vUv.y) * (1.0 + 0.5 * (1.0 - smoothstep(0.0, 0.3, vUv.y)));
