@@ -15,8 +15,9 @@ score or dialogue is reproduced, and no performer's voice is imitated. See
 | | |
 | --- | --- |
 | ![Tatooine](docs/images/tatooine.jpg) | ![The destroyer reveal](docs/images/destroyer-reveal.jpg) |
-| ![Vader's entrance](docs/images/vader-entrance.jpg) | ![The transfer](docs/images/the-transfer.jpg) |
-| ![Pod separation](docs/images/pod-separation.jpg) | ![Descent](docs/images/descent.jpg) |
+| ![Defenders moving up the corridor](docs/images/corridor.jpg) | ![Vader's entrance](docs/images/vader-entrance.jpg) |
+| ![The transfer](docs/images/the-transfer.jpg) | ![Pod separation](docs/images/pod-separation.jpg) |
+| ![Descent](docs/images/descent.jpg) | ![Explore mode](docs/images/explore.jpg) |
 
 ---
 

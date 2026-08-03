@@ -18,7 +18,7 @@ Assertion vocabulary:
 
 | Assertion | Meaning |
 | --- | --- |
-| `visible(target, f)` | The subject's projected bounds cover at least `f` of the viewport and it is in front of the camera |
+| `visible(target, f)` | The subject's projected bounds cover at least `f` of the viewport and it is in front of the camera. Bounds are clipped to the near plane first, so a subject straddling the lens is not counted as filling the frame |
 | `onScreen(target)` | Some part of the subject is inside the frustum |
 | `brightness(min, max)` | Mean frame luminance is inside the range |
 | `subtitle(text)` | The visible caption contains that text |
