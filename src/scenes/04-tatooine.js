@@ -182,27 +182,23 @@ export async function build(ctx) {
   duneSet.add(artoo.root);
   const threepio = await makeProtocolDroid({ seed: 31.5 });
   duneSet.add(threepio.root);
-  // Polished gold under two suns clips to a blown white flare, and with the
-  // bloom threshold down at 0.62 he stops being a character and becomes a lens
-  // effect standing in the sand. Roughened here rather than in the kit — the
-  // ship interiors want him shiny — and cloned so nothing else gold changes.
-  threepio.root.traverse((n) => {
-    if (!n.isMesh) return;
-    const mats = Array.isArray(n.material) ? n.material : [n.material];
-    n.material = mats.map((m) => {
-      if (!(m.metalness > 0.5)) return m;
-      const c = m.clone();
-      c.roughness = Math.max(c.roughness, 0.58);
-      return c;
-    });
-    if (n.material.length === 1) n.material = n.material[0];
-  });
+  // He is built as polished brass: the kit gives every part of him metalness
+  // 0.42 at roughness 0.24, which is right in a ship corridor and ruinous out
+  // here. A specular lobe that tight, aimed at a sun this strong, takes his
+  // chest past the 0.62 bloom threshold and he stops being a character and
+  // becomes a flare standing in the sand.
+  dull(threepio.root);
 
   // --- the sandcrawler and its jawas --------------------------------------
   const crawler = ships?.buildSandcrawler ? await ships.buildSandcrawler({ ramp: 0 }) : fallbackCrawler();
   // Scaled by measurement rather than by a guess: a minifigure is 5.3 units to
   // the top of its head, so 20 m of sandcrawler is about 58.
   const crawlerDrop = fitHeight(crawler, 58);
+  // Same problem as the protocol droid, on a much bigger canvas: a hull plate
+  // angled into a low sun throws a specular streak that clips white and blooms,
+  // and on a machine this size it reads as a light leak rather than as a
+  // highlight. Roughened here rather than in the kit, which has other scenes.
+  dull(crawler);
   duneSet.add(crawler);
   const rollTracks = crawler.userData.rollTracks;
 
@@ -321,9 +317,15 @@ export async function build(ctx) {
   const ridge = desert({ ox: -2400, oz: 800, amp: 0.35, grain: 0.55, ripple: 0.42, profile: ridgeProfile });
   ridgeSet.add(
     ridge.mesh({
+      // Four steps rather than three. Where the cell size changes, neighbouring
+      // cells sample the height at points that are half a coarse cell apart and
+      // the ground takes a small step; a jump straight from three units to
+      // twelve makes that step big enough to draw a hairline down the frame,
+      // right through the quietest image in the film.
       rings: [
         { cell: 3, half: 48 },
-        { cell: 12, half: 240 },
+        { cell: 6, half: 144 },
+        { cell: 18, half: 288 },
         { cell: 48, half: 528 },
       ],
       studsAt: [0, 6, 34],
@@ -1114,6 +1116,33 @@ function matte(obj) {
     if (!src.isMeshStandardMaterial) return;
     n.material = new THREE.MeshLambertMaterial({ color: src.color, fog: true });
     src.dispose();
+  });
+  return obj;
+}
+
+/**
+ * Take the polish off a built model, without changing anything else about it.
+ *
+ * The kit finishes hulls and droids for interiors, where a tight specular lobe
+ * is what gives a moulded brick its edge. Out here there are two suns close to
+ * the horizon and a bloom threshold at 0.62, and the same lobe clips to white
+ * and smears — a gold droid becomes a flare, a hull plate grows a light leak.
+ * Unlike `matte` this keeps the standard material, so emissive windows, decal
+ * maps and transparency all survive; the materials are cloned so that nothing
+ * outside this object is affected.
+ */
+function dull(obj, { roughness = 0.8, metalness = 0.15 } = {}) {
+  obj.traverse((n) => {
+    if (!n.isMesh) return;
+    const mats = Array.isArray(n.material) ? n.material : [n.material];
+    const out = mats.map((m) => {
+      if (m.metalness === undefined) return m;
+      const c = m.clone();
+      c.metalness = Math.min(c.metalness, metalness);
+      c.roughness = Math.max(c.roughness, roughness);
+      return c;
+    });
+    n.material = out.length === 1 ? out[0] : out;
   });
   return obj;
 }
