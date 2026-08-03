@@ -98,6 +98,11 @@ export class World {
   readonly smoke: SmokeSystem;
   readonly interiorDebris: DebrisSystem;
   readonly plans: DataProjection;
+  /**
+   * Interior effects live at the scene root rather than inside the offset
+   * interior group, because every effect is emitted at a world-space position.
+   */
+  private interiorFx = new THREE.Group();
   private interiorAmbient: THREE.HemisphereLight;
   private vaderKey: THREE.PointLight;
 
@@ -213,21 +218,25 @@ export class World {
     this.vaderKey.position.set(0, 2.2, CORRIDOR_MARKS.troopEntry);
     this.interior.add(this.vaderKey);
 
-    this.interiorBolts = new BoltSystem(Math.round(40 * Math.max(0.5, quality.particleScale)));
-    this.interior.add(this.interiorBolts.group);
+    this.interiorFx.name = 'InteriorEffects';
+    this.interiorFx.visible = false;
+    scene.add(this.interiorFx);
+
+    this.interiorBolts = new BoltSystem(Math.round(64 * Math.max(0.5, quality.particleScale)));
+    this.interiorFx.add(this.interiorBolts.group);
     this.interiorSparks = new SparkSystem(Math.round(1100 * quality.particleScale), 1);
     this.interiorSparks.gravity = 5.5;
-    this.interior.add(this.interiorSparks.points);
-    this.smoke = new SmokeSystem(Math.round(120 * quality.particleScale));
+    this.interiorFx.add(this.interiorSparks.points);
+    this.smoke = new SmokeSystem(Math.round(150 * quality.particleScale));
     this.smoke.setTint('#9aa0a6');
     this.smoke.wind.set(0, 0.22, 0.16);
-    this.interior.add(this.smoke.mesh);
+    this.interiorFx.add(this.smoke.mesh);
     this.interiorDebris = new DebrisSystem(
-      Math.round(48 * quality.particleScale),
+      Math.round(56 * quality.particleScale),
       metalMaterial('doorDebris', '#6f7378', 0.75, 0.5),
     );
     this.interiorDebris.gravity = 7;
-    this.interior.add(this.interiorDebris.mesh);
+    this.interiorFx.add(this.interiorDebris.mesh);
 
     this.plans = new DataProjection(quality, 'plans');
     this.plans.setScale(0.68);
@@ -295,6 +304,7 @@ export class World {
     this.region = r;
     this.exterior.visible = r === 'exterior';
     this.interior.visible = r === 'interior';
+    this.interiorFx.visible = r === 'interior';
     this.environment?.apply(this.scene, r === 'exterior' ? 'space' : 'interior', r === 'exterior' ? 0.9 : 0.7);
   }
 

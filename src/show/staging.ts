@@ -1233,8 +1233,9 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     start: 197, end: 207, region: 'interior', near: 0.05, far: 220, fov: 36, blend: 1.1,
     apply(c) {
       const k = Ease.sine(c.u);
-      c.eye.copy(cp(lerp(22.5, 20.5, k), lerp(-1.05, -0.85, k), 1.28));
-      c.target.copy(cp(CORRIDOR_MARKS.breachDoor + 0.2, 0.1, lerp(1.3, 1.55, k)));
+      // Down the centreline between the two firing lanes, at head height.
+      c.eye.copy(cp(lerp(26.4, 24.6, k), lerp(0.12, -0.05, k), 1.42));
+      c.target.copy(cp(CORRIDOR_MARKS.breachDoor + 0.2, 0.05, lerp(1.3, 1.55, k)));
     },
   });
   shots.push({
@@ -1255,7 +1256,7 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
       const k = Ease.sine(c.u);
       // Over the shoulder of the defensive line: rebels in the foreground,
       // stormtroopers advancing beyond them, bolts crossing between.
-      c.eye.copy(cp(lerp(25.5, 22.4, k), lerp(1.15, -1.05, k), lerp(1.82, 1.62, k)));
+      c.eye.copy(cp(lerp(25.8, 22.6, k), lerp(1.2, -1.05, k), lerp(1.95, 1.74, k)));
       c.target.copy(cp(lerp(12.5, 10.5, k), lerp(-0.35, 0.4, k), 1.38));
     },
   });
