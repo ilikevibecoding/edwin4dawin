@@ -186,10 +186,16 @@ export class ExploreMode {
       if (this.followOffset.length() < min) this.followOffset.setLength(min);
       this.inspectTarget = null;
     } else if (action === 'inspect') {
+      // Frame the subject's bounding box, not its origin. A character's origin
+      // is between its feet, so aiming there puts the lens at knee height and
+      // fills the frame with boots.
+      const box = new THREE.Box3().setFromObject(this.selected.object);
       const p = new THREE.Vector3();
-      this.selected.object.getWorldPosition(p);
-      const dir = new THREE.Vector3(0.62, 0.34, 0.7).normalize();
-      const dist = Math.max(2.2, this.selected.radius * 2.6);
+      if (box.isEmpty()) this.selected.object.getWorldPosition(p);
+      else box.getCenter(p);
+      const extent = box.isEmpty() ? this.selected.radius : box.getSize(new THREE.Vector3()).length() * 0.5;
+      const dir = new THREE.Vector3(0.62, 0.3, 0.72).normalize();
+      const dist = Math.max(1.8, Math.min(extent, this.selected.radius * 1.6) * 2.8);
       this.inspectTarget = { position: p.clone().addScaledVector(dir, dist), look: p.clone() };
       this.following = null;
     }
