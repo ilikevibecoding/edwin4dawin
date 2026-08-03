@@ -1,21 +1,36 @@
 #!/usr/bin/env node
-/** One-off numeric probe: bounding boxes of every child of a preview asset. */
+/**
+ * Dumps the world-space bounding box of every mesh in a preview asset.
+ *
+ * Useful when a fitting looks like it is floating off a hull: eyeballing a
+ * render cannot tell a 4 cm gap from a lighting artefact, and this can.
+ *
+ *   node tools/bounds.mjs
+ *   node tools/bounds.mjs "http://127.0.0.1:5173/preview.html?asset=runner"
+ */
+
 import { chromium } from 'playwright';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:5173/preview.html?asset=pod&env=interior';
 const browser = await chromium.launch({
   executablePath: '/usr/local/bin/google-chrome',
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--disable-dev-shm-usage'],
+  args: [
+    '--use-gl=angle',
+    '--use-angle=swiftshader',
+    '--enable-unsafe-swiftshader',
+    '--no-sandbox',
+    '--disable-dev-shm-usage',
+  ],
 });
 const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 await page.goto(url, { waitUntil: 'load', timeout: 60000 });
 await page.waitForFunction(() => window.__ready === true, null, { timeout: 60000 });
+
 const rows = await page.evaluate(async () => {
   const THREE = await import('/node_modules/three/build/three.module.js');
   const out = [];
-  const root = window.__previewAsset;
-  root.traverse((o) => {
+  window.__previewAsset.traverse((o) => {
     if (!o.isMesh) return;
     const b = new THREE.Box3().setFromObject(o);
     out.push({
@@ -27,5 +42,10 @@ const rows = await page.evaluate(async () => {
   });
   return out;
 });
-for (const r of rows) console.log(`${r.name.padEnd(22)} ${r.mat.padEnd(20)} min=${JSON.stringify(r.min).padEnd(22)} max=${JSON.stringify(r.max)}`);
+
+for (const r of rows) {
+  console.log(
+    `${r.name.padEnd(22)} ${r.mat.padEnd(22)} min=${JSON.stringify(r.min).padEnd(22)} max=${JSON.stringify(r.max)}`,
+  );
+}
 await browser.close();

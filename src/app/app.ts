@@ -98,6 +98,7 @@ export class App {
   private fps = 60;
   private frameAccum = 0;
   private frameCount = 0;
+  private lastFrameEnd = performance.now();
   private worstFrameMs = 0;
   private webglErrors = 0;
   private issues: Issue[] = [];
@@ -491,9 +492,14 @@ export class App {
     this.stage.render(t);
 
     if (!this.benchmarking) {
-      const ms = performance.now() - frameStart;
-      this.worstFrameMs = Math.max(this.worstFrameMs * 0.995, ms);
-      this.frameAccum += dt;
+      const now = performance.now();
+      this.worstFrameMs = Math.max(this.worstFrameMs * 0.995, now - frameStart);
+      // Measured against the wall clock, not against the show delta: the loop
+      // clamps its delta so a slow machine plays in slow motion rather than
+      // skipping, and accumulating the clamped value would report a healthy
+      // frame rate on hardware that is nowhere near keeping up.
+      this.frameAccum += (now - this.lastFrameEnd) / 1000;
+      this.lastFrameEnd = now;
       this.frameCount++;
       if (this.frameAccum >= 0.5) {
         this.fps = this.frameCount / this.frameAccum;

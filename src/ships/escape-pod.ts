@@ -314,11 +314,11 @@ export class EscapePod {
     }
 
     // Re-entry shock envelope, revealed during atmospheric descent.
-    this.reentryMat = additiveMaterial('podReentry', '#ff9a44', 0, flareTex).clone();
+    this.reentryMat = additiveMaterial('podReentry', '#ffc46a', 0, flareTex).clone();
     this.reentryMat.opacity = 0;
-    this.reentryGlow = new THREE.Mesh(new THREE.SphereGeometry(2.3, 18, 12), this.reentryMat);
+    this.reentryGlow = new THREE.Mesh(new THREE.SphereGeometry(2.6, 18, 12), this.reentryMat);
     this.reentryGlow.scale.set(1, 1, 1.5);
-    this.reentryGlow.position.z = -0.6;
+    this.reentryGlow.position.z = -0.9;
     this.reentryGlow.visible = false;
     this.group.add(this.reentryGlow);
 
@@ -347,8 +347,9 @@ export class EscapePod {
   setReentry(v: number): void {
     const k = THREE.MathUtils.clamp(v, 0, 1);
     this.reentryGlow.visible = k > 0.01;
-    this.reentryMat.opacity = k * 0.85;
-    this.reentryGlow.scale.set(1 + k * 0.5, 1 + k * 0.5, 1.5 + k * 1.6);
+    // Additive over a sunlit desert needs real headroom to read at all.
+    this.reentryMat.opacity = k * 1.5;
+    this.reentryGlow.scale.set(1 + k * 0.7, 1 + k * 0.7, 1.5 + k * 2.2);
   }
 
   update(_dt: number, elapsed: number): void {

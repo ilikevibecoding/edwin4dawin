@@ -23,7 +23,7 @@ export const BLOOM_THRESHOLD = 1.0;
 
 export const PALETTE = {
   rebelHull: '#d8d6cf',
-  rebelHullShadow: '#a8a69c',
+  rebelHullShadow: '#a7a7a1',
   rebelTrim: '#8f2f28',
   imperialHull: '#8d9298',
   imperialHullDark: '#5b6067',

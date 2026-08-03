@@ -503,9 +503,11 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     { t: 0, x: -0.62, z: CORRIDOR_MARKS.leiaStart, state: 'idle', facing: Math.PI },
     { t: 252, x: -0.62, z: CORRIDOR_MARKS.leiaStart, state: 'walk', facing: undefined },
     { t: 257.5, x: -0.62, z: CORRIDOR_MARKS.transfer - 1.5, state: 'interact', facing: Math.PI },
-    { t: 282, x: -0.62, z: CORRIDOR_MARKS.transfer - 1.5, state: 'kneel', facing: Math.PI },
-    { t: 286, x: -0.62, z: CORRIDOR_MARKS.transfer - 1.5, state: 'alert', facing: Math.PI },
-    { t: 289, x: -0.62, z: CORRIDOR_MARKS.transfer - 1.5, state: 'walk', facing: undefined },
+    // Down beside the droid for the transfer itself: standing with both hands
+    // raised at the schematic reads as surrender, not as handing something over.
+    { t: 276.5, x: -0.5, z: CORRIDOR_MARKS.transfer - 1.15, state: 'kneel', facing: Math.PI },
+    { t: 286, x: -0.5, z: CORRIDOR_MARKS.transfer - 1.15, state: 'alert', facing: Math.PI },
+    { t: 289, x: -0.5, z: CORRIDOR_MARKS.transfer - 1.15, state: 'walk', facing: undefined },
     { t: 295, x: 0.7, z: CORRIDOR_MARKS.transfer - 7.5, state: 'alert', facing: 0 },
     { t: 400, x: 0.7, z: CORRIDOR_MARKS.transfer - 7.5, state: 'alert', facing: 0 },
   ];

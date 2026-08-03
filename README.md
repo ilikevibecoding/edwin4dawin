@@ -74,9 +74,11 @@ There is also a development-only asset viewer at `/preview.html`:
 | `←` / `→` | Scrub 5 s |
 | `C` | Subtitles on / off |
 | `H` | Help panel |
+| `G` | Diagnostics overlay |
 | `F` | Fullscreen |
 | `U` | Hide / show the interface |
-| `E` | Toggle Explore mode |
+| `Tab` | Toggle Explore mode |
+| `Esc` | Close the inspector or help panel |
 
 The transport bar carries a chapter selector, a scrubbable timeline with chapter
 marks, an audio mixer (master / narration / music / effects), a settings popover

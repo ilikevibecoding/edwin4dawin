@@ -8,3 +8,4 @@ dist/
 qa/output/
 qa/latest/
 .vite/
+qa/view/
