@@ -148,6 +148,7 @@ export const CHECKPOINTS: Checkpoint[] = [
       const f: string[] = [];
       if (!c.onScreen('runner', 0.1)) f.push('corvette out of frame');
       if (!c.visible('destroyer')) f.push('destroyer not visible');
+      if (c.world.exteriorBolts.activeCount === 0) f.push('no turbolaser fire in flight');
       return f;
     },
   },
@@ -229,6 +230,7 @@ export const CHECKPOINTS: Checkpoint[] = [
     assert: (c) => {
       const f: string[] = [];
       if (!c.world.troopers.some((t) => t.group.visible)) f.push('no stormtroopers present');
+      if (c.world.interiorBolts.activeCount === 0) f.push('no blaster fire in flight');
       return f;
     },
   },

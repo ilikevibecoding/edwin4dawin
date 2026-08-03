@@ -64,6 +64,10 @@ export class EscapePod {
   private thrusterFlares: THREE.Mesh[] = [];
   private thrusterMat: THREE.MeshStandardMaterial;
   private clamps: THREE.Mesh[] = [];
+  private hatchDoor = new THREE.Group();
+  private cabinLight!: THREE.PointLight;
+  private hatchZ = 0;
+  private hatchOpen = 0;
   private reentryGlow: THREE.Mesh;
   private reentryMat: THREE.MeshBasicMaterial;
   private beaconMats: THREE.MeshStandardMaterial[] = [];
@@ -182,23 +186,66 @@ export class EscapePod {
     // follows the hull, a frame and three grab bars.
     const hatchT = 0.57;
     const hatchZ = podZ(hatchT);
+    this.hatchZ = hatchZ;
     const hatchR = podR(hatchT);
     // Everything here has to sit *outside* the skin: the hull loft is closed,
     // so a plate at a smaller radius is simply invisible. The recess is faked
     // by a raised surround with the door proud of the hull but inside it.
-    const surround = hullPatch(hatchR + 0.075, 1.16, 1.5, band, 14);
-    surround.position.z = hatchZ;
-    this.group.add(surround);
-    const well = hullPatch(hatchR + 0.05, 1.04, 1.34, dark, 14);
+    // Concentric curved patches only read correctly if each layer outward is
+    // also narrower than the one beneath it, otherwise the outer patch simply
+    // hides the inner one. So: a dark recess, a frame drawn as four strips
+    // rather than a slab, and the door proud of both.
+    const well = hullPatch(hatchR + 0.02, 1.12, 1.46, dark, 14);
     well.position.z = hatchZ;
     this.group.add(well);
-    const plate = hullPatch(hatchR + 0.022, 0.94, 1.22, metalMaterial('podHatchPlate', '#c2c0b7', 0.58, 0.26), 14);
-    plate.position.z = hatchZ;
-    this.group.add(plate);
-    // One grab handle across the door, sitting just proud of the plate.
-    const bar = new THREE.Mesh(roundedBox(0.07, 0.07, 0.8, 0.02), band);
-    bar.position.set(hatchR + 0.06, -0.02, hatchZ);
-    this.group.add(bar);
+    for (const dz of [-0.73, 0.73]) {
+      const jamb = hullPatch(hatchR + 0.05, 1.16, 0.12, band, 14);
+      jamb.position.z = hatchZ + dz;
+      this.group.add(jamb);
+    }
+    for (const s of [-1, 1]) {
+      const sill = new THREE.Mesh(
+        new THREE.CylinderGeometry(hatchR + 0.05, hatchR + 0.05, 1.46, 14, 1, true, Math.PI / 2 + s * 0.55, 0.1),
+        band,
+      );
+      sill.rotation.x = Math.PI / 2;
+      sill.position.z = hatchZ;
+      this.group.add(sill);
+    }
+    // The door and its handle slide aft together when the pod is boarding.
+    this.hatchDoor.position.z = hatchZ;
+    this.group.add(this.hatchDoor);
+    const plate = hullPatch(hatchR + 0.095, 0.92, 1.24, metalMaterial('podHatchPlate', '#c2c0b7', 0.58, 0.26), 14);
+    this.hatchDoor.add(plate);
+    const bar = new THREE.Mesh(roundedBox(0.07, 0.07, 0.82, 0.02), band);
+    bar.position.set(hatchR + 0.13, -0.02, 0);
+    this.hatchDoor.add(bar);
+
+    // Cabin. Only ever seen through the open hatch, but without an inward
+    // facing shell the doorway looks straight through the hull and out the
+    // far side, which reads as a hole in the model.
+    const cabin = new THREE.Mesh(
+      loftedHull(POD_LENGTH, POD_RADIUS - 0.07, podProfile, 18, 16, 1, [0.12, 0.9]),
+      new THREE.MeshStandardMaterial({ color: '#3c4149', roughness: 0.85, metalness: 0.1, side: THREE.BackSide }),
+    );
+    this.group.add(cabin);
+    const deck = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.3, 1.9),
+      metalMaterial('podDeck', '#4b5057', 0.8, 0.3),
+    );
+    deck.rotation.x = -Math.PI / 2;
+    deck.position.set(0, -0.66, hatchZ - 0.35);
+    this.group.add(deck);
+    const cabinStrip = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.1, 1.5),
+      emissiveMaterial('podCabinStrip', '#cfe4ff', 1.4),
+    );
+    cabinStrip.rotation.set(0, Math.PI / 2, 0);
+    cabinStrip.position.set(-hatchR + 0.12, 0.45, hatchZ - 0.2);
+    this.group.add(cabinStrip);
+    this.cabinLight = new THREE.PointLight(0xbcd6f5, 0, 3.2, 2);
+    this.cabinLight.position.set(0, 0.1, hatchZ - 0.3);
+    this.group.add(this.cabinLight);
     const hatchLamp = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.24), emissiveMaterial('podHatchLamp', '#7dff9a', 1.4));
     hatchLamp.position.set(hatchR * 0.86 + 0.09, 0.78, hatchZ + 0.62);
     this.group.add(hatchLamp);
@@ -278,6 +325,13 @@ export class EscapePod {
     this.light = new THREE.PointLight(0xffc07a, 0, 60, 2);
     this.light.position.z = sternZ + 1.5;
     this.group.add(this.light);
+  }
+
+  /** 0 = sealed, 1 = boarding hatch fully slid aft. */
+  setHatch(v: number): void {
+    this.hatchOpen = THREE.MathUtils.clamp(v, 0, 1);
+    this.hatchDoor.position.z = this.hatchZ + this.hatchOpen * 1.32;
+    this.cabinLight.intensity = this.hatchOpen * 5;
   }
 
   /** 0 = drifting, 1 = full retro burn. */

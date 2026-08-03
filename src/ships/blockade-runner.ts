@@ -97,7 +97,7 @@ export class BlockadeRunner {
     this.windowMat = emissiveMaterial('runnerWin', '#cfe6ff', 0.85).clone();
     // Graded bell face rather than a flat emissive coin: the eleven drives are
     // the corvette's signature and have to read as throats, not as headlights.
-    this.engineMat = nozzleMaterial('runnerEngine', '#bfe1ff', 3.0).clone();
+    this.engineMat = nozzleMaterial('runnerEngine', '#bfe1ff', 2.2).clone();
 
     /* ------------------------------------------------------------ main body */
     // Full amidships, gently waisted toward the stern, tapering to the neck.
@@ -449,7 +449,7 @@ export class BlockadeRunner {
     const flicker = 0.9 + Math.sin(elapsed * 21.7) * 0.05 + Math.sin(elapsed * 7.3) * 0.05;
     const level = power * flicker;
 
-    this.engineMat.emissiveIntensity = 0.12 + level * 3.1;
+    this.engineMat.emissiveIntensity = 0.12 + level * 2.2;
     for (const f of this.engineFlares) {
       (f.material as THREE.MeshBasicMaterial).opacity = 0.3 * level;
       f.visible = level > 0.01;

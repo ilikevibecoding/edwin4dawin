@@ -589,7 +589,7 @@ export class World {
       this.exteriorBolts.update(dt, camera);
       this.exteriorSparks.update(dt);
       this.exteriorDebris.update(dt);
-      this.shields.update(dt);
+      this.shields.update(dt, camera);
     } else {
       this.corridor.update(dt, elapsed);
       this.blastDoor.update(dt, elapsed);

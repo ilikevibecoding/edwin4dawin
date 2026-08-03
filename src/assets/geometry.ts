@@ -121,11 +121,15 @@ export function loftedHull(
       uvs.push(j / radialSegments, t);
     }
   }
+  // Wound counter-clockwise as seen from outside the tube, so the generated
+  // faces (and the normals derived from them) point outward. Reversed, the
+  // renderer culls the visible side of every hull in the piece and quietly
+  // draws its far interior instead.
   for (let i = 0; i < lengthSegments; i++) {
     for (let j = 0; j < radialSegments; j++) {
       const a = i * (radialSegments + 1) + j;
       const b = a + radialSegments + 1;
-      indices.push(a, b, a + 1, b, b + 1, a + 1);
+      indices.push(a, a + 1, b, b, a + 1, b + 1);
     }
   }
   const geo = new THREE.BufferGeometry();

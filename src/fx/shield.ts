@@ -109,7 +109,7 @@ export class ShieldFlashSystem {
     if (color) (f.mat.uniforms.uColor.value as THREE.Color).set(color);
   }
 
-  update(dt: number): void {
+  update(dt: number, camera?: THREE.Camera): void {
     for (const f of this.flashes) {
       if (!f.active) continue;
       f.age += dt;
@@ -121,6 +121,13 @@ export class ShieldFlashSystem {
       }
       f.mat.uniforms.uSpread.value = t * 0.85;
       f.mat.uniforms.uStrength.value = (1 - t) * (1 - t) * 1.6;
+      // A capital ship's shell is nearly a kilometre across, and the battle
+      // shots sit inside it. Seen from within, the expanding ring wraps the
+      // whole frame in hexagons, so the shell is simply not drawn from there.
+      if (camera) {
+        const inside = camera.position.distanceTo(f.mesh.position) < f.mesh.scale.x * 1.04;
+        f.mesh.visible = !inside;
+      }
     }
   }
 

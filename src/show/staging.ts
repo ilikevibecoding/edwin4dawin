@@ -293,6 +293,7 @@ export interface ShowRuntime {
 export function buildShow(deps: StagingDeps): ShowRuntime {
   const { world, director, timeline, sfx, music, narrator, stage, prologue, epilogue } = deps;
   const rng = new Rng('staging');
+  const _shieldOut = new THREE.Vector3();
 
   for (const c of CHAPTER_PLAN) timeline.addChapter({ ...c });
 
@@ -527,9 +528,9 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
   ];
 
   const c3poTrack: TrackKey[] = [
-    { t: 0, x: -1.0, z: CORRIDOR_MARKS.transfer - 2.4, state: 'idle', facing: 0.5 },
-    { t: 288, x: -1.0, z: CORRIDOR_MARKS.transfer - 2.4, state: 'cower', facing: 0.5 },
-    { t: 290.5, x: -1.0, z: CORRIDOR_MARKS.transfer - 2.0, state: 'walk', facing: Math.PI },
+    { t: 0, x: -1.35, z: CORRIDOR_MARKS.transfer - 3.0, state: 'idle', facing: 0.5 },
+    { t: 288, x: -1.35, z: CORRIDOR_MARKS.transfer - 3.0, state: 'cower', facing: 0.5 },
+    { t: 290.5, x: -1.3, z: CORRIDOR_MARKS.transfer - 2.4, state: 'walk', facing: Math.PI },
     { t: 299.4, x: 0.35, z: CORRIDOR_MARKS.bayDoor - 2.2, state: 'walk', facing: Math.PI },
     { t: 302.4, x: BOARDING_X + 0.95, z: RAMP_FOOT_Z - 0.5, state: 'cower', facing: Math.PI - 0.5 },
     { t: 304.7, x: BOARDING_X + 0.95, z: RAMP_FOOT_Z - 0.5, state: 'walk', facing: Math.PI },
@@ -625,6 +626,11 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
       world.pod.setBurn(0);
       world.pod.setReentry(0);
       world.pod.group.position.z = -run * 6.2;
+      // Boarding door: open from the moment the droids reach the bay, sealed
+      // again the instant the protocol droid is inside.
+      world.pod.setHatch(smootherstep(298, 300.5, t) * (1 - smootherstep(306.9, 307.7, t)));
+    } else {
+      world.pod.setHatch(0);
     }
   });
 
@@ -700,7 +706,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
   // Deterministic, seeded schedule so a replay is identical.
   {
     const fireRng = new Rng('turbolaser');
-    for (let t = 116.5; t < 143; t += 0.62 + fireRng.next() * 0.75) {
+    for (let t = 116.5; t < 143; t += 0.28 + fireRng.next() * 0.34) {
       const shotTime = t;
       const hits = shotTime > 126 ? fireRng.chance(0.55) : fireRng.chance(0.22);
       ev(shotTime, `tl-${shotTime.toFixed(2)}`, () => {
@@ -717,7 +723,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
         world.exteriorBolts.fire({
           origin: from,
           direction: dir,
-          speed: 1350,
+          speed: 950,
           color: PALETTE.laserRed,
           length: 130,
           radius: 3.6,
@@ -730,7 +736,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
             if (near) {
               const shielded = timeline.time < 130;
               if (shielded) {
-                world.shields.flash(runnerPos, 105, pos, 1);
+                world.shields.flash(runnerPos, 96, pos, 1);
                 sfx.shieldHit({ at: pos, ref: 90 }, 1);
               } else {
                 world.exteriorSparks.burst(pos, Math.round(34 * world.quality.particleScale), {
@@ -749,7 +755,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
       });
     }
     // The corvette returns fire early on — futile, but it is trying.
-    for (let t = 118; t < 133; t += 1.1 + fireRng.next() * 1.4) {
+    for (let t = 118; t < 133; t += 0.6 + fireRng.next() * 0.8) {
       const shotTime = t;
       ev(shotTime, `rl-${shotTime.toFixed(2)}`, () => {
         const turret = world.runner.turrets[Math.floor(fireRng.next() * world.runner.turrets.length)];
@@ -764,7 +770,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
           origin: from, direction: dir, speed: 1500, color: PALETTE.laserBlue,
           length: 46, radius: 1.6, life: 2.2, hitAt: target,
           onEnd: (pos) => {
-            world.shields.flash(world.destroyer.group.position, 880, pos, 0.5, '#9ec8ff');
+            world.shields.flash(pos, 150, pos.clone().add(_shieldOut.subVectors(pos, world.destroyer.group.position).setLength(150)), 0.55, '#9ec8ff');
             sfx.shieldHit({ at: pos, ref: 260 }, 0.5);
           },
         });
@@ -873,8 +879,8 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
       world.interiorBolts.fire({
         // Slow enough that the eye can follow a shot across the corridor:
         // visible travel time is what makes an exchange of fire readable.
-        origin: from, direction: dir, speed: 26, color: colour,
-        length: 1.3, radius: 0.05, life: 2.2, hitAt: aim,
+        origin: from, direction: dir, speed: 24, color: colour,
+        length: 1.6, radius: 0.075, life: 2.2, hitAt: aim,
         onEnd: (pos) => {
           world.interiorSparks.burst(pos, Math.round(12 * world.quality.particleScale), {
             speed: 3.4, spread: Math.PI * 0.8, color: colour === IMPERIAL_BOLT ? '#ffc0a8' : '#bfe6ff',
