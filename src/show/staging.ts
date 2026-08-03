@@ -325,7 +325,10 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
 
   // --- region, fades, global mood -----------------------------------------
   timeline.addContinuous((t) => {
-    const interior = t >= 185.6 && t < 309.6;
+    // The region must flip exactly on the cut. Half a second early and the
+    // interior is live while the camera is still 6 km away in space, which is
+    // invisible behind the white flash but is a genuine inconsistency.
+    const interior = t >= 186 && t < 309.6;
     world.setRegion(interior ? 'interior' : 'exterior');
     stage.skyVisible = !interior;
 
@@ -335,7 +338,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     let colour = 0x000000;
     fade = Math.max(fade, 1 - smootherstep(0, 2.6, t)); // opening fade-in
     fade = Math.max(fade, smootherstep(64.2, 65.6, t) * (1 - smootherstep(66.0, 67.4, t)));
-    const cut = smootherstep(183.6, 185.5, t) * (1 - smootherstep(185.7, 187.6, t));
+    const cut = smootherstep(183.6, 185.6, t) * (1 - smootherstep(186.2, 188.0, t));
     if (cut > 0.01) colour = 0xdfe6f2;
     fade = Math.max(fade, cut);
     const podCut = smootherstep(308.4, 309.5, t) * (1 - smootherstep(309.7, 311.2, t));

@@ -39,6 +39,8 @@ function isFiniteVec(v: THREE.Vector3): boolean {
 export interface SanityInput {
   world: World;
   camera: THREE.PerspectiveCamera;
+  /** Region the active shot belongs to; interior camera tests only apply there. */
+  cameraRegion?: 'exterior' | 'interior';
   time: number;
   fps: number;
   audioPeak: number;
@@ -96,7 +98,8 @@ export function runSanityChecks(input: SanityInput): Issue[] {
   /* --- camera inside solid geometry --- */
   const BAY_FORWARD_Z = BAY_STATION - BAY_DEPTH / 2;
   const BAY_AFT_Z = BAY_STATION + BAY_DEPTH / 2;
-  if (world.currentRegion === 'interior') {
+  const cameraInside = world.currentRegion === 'interior' && (input.cameraRegion ?? 'interior') === 'interior';
+  if (cameraInside) {
     const local = camera.position.clone().sub(INTERIOR_ORIGIN);
     const inBay = local.z > BAY_FORWARD_Z;
     const halfW = inBay ? BAY_WIDTH / 2 : CORRIDOR_WIDTH / 2;

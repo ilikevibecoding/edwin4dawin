@@ -572,6 +572,7 @@ export class App {
     this.issues = runSanityChecks({
       world: this.world,
       camera: this.stage.camera,
+      cameraRegion: this.mode === 'explore' ? this.world.currentRegion : shot?.region,
       time: t,
       fps: this.fps,
       audioPeak: this.audio.peakLevel(),
@@ -714,6 +715,8 @@ export class App {
         runSanityChecks({
           world: this.world,
           camera: this.stage.camera,
+          cameraRegion:
+            this.mode === 'explore' ? this.world.currentRegion : this.director.current?.region,
           time: this.timeline.time,
           fps: this.fps,
           audioPeak: this.audio.peakLevel(),
