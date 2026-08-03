@@ -537,8 +537,11 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     { t: 288, x: -1.35, z: CORRIDOR_MARKS.transfer - 3.0, state: 'cower', facing: 0.5 },
     { t: 290.5, x: -1.3, z: CORRIDOR_MARKS.transfer - 2.4, state: 'walk', facing: Math.PI },
     { t: 299.4, x: 0.35, z: CORRIDOR_MARKS.bayDoor - 2.2, state: 'walk', facing: Math.PI },
-    { t: 302.4, x: BOARDING_X + 0.95, z: RAMP_FOOT_Z - 0.5, state: 'cower', facing: Math.PI - 0.5 },
-    { t: 304.7, x: BOARDING_X + 0.95, z: RAMP_FOOT_Z - 0.5, state: 'walk', facing: Math.PI },
+    { t: 302.4, x: BOARDING_X + 0.95, z: RAMP_FOOT_Z - 0.6, state: 'cower', facing: Math.PI - 0.5 },
+    { t: 304.7, x: BOARDING_X + 0.95, z: RAMP_FOOT_Z - 0.6, state: 'walk', facing: Math.PI },
+    // The climb has to start exactly at the foot of the ramp: a key placed
+    // short of it lerps him into the air over the last half-metre of deck.
+    { t: 305.1, x: BOARDING_X + 0.4, z: RAMP_FOOT_Z, state: 'walk', facing: Math.PI },
     { t: 305.9, x: BOARDING_X + 0.3, z: PLATFORM_EDGE_Z, y: PLATFORM_Y, state: 'walk', facing: Math.PI },
     { t: 306.7, x: BOARDING_X, z: BOARD_Z, y: PLATFORM_Y, state: 'walk', facing: Math.PI },
     { t: 400, x: BOARDING_X, z: BOARD_Z, y: PLATFORM_Y, state: 'idle', facing: Math.PI },

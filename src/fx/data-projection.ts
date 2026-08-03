@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { PALETTE } from '../assets/materials';
 import { Rng } from '../core/rng';
+import { mergeMeshes } from '../assets/geometry';
 import type { QualitySettings } from '../core/quality';
 
 const holoVert = /* glsl */ `
@@ -155,13 +156,20 @@ export class DataProjection {
       );
       this.station.add(rail);
     }
-    // Cross-ties across the trench, every few degrees.
+    // Cross-ties across the trench, every few degrees. Merged: forty-eight
+    // separate 12-triangle boxes is forty-eight draw calls for a detail that
+    // never moves relative to the sphere it sits on.
+    const tieGeo = new THREE.BoxGeometry(0.012, 0.09, 0.012);
+    const ties: THREE.Mesh[] = [];
     for (let i = 0; i < 48; i++) {
       const a = (i / 48) * Math.PI * 2;
-      const tie = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.09, 0.012), makeHoloMat(0.9));
+      const tie = new THREE.Mesh(tieGeo);
       tie.position.set(Math.cos(a) * 1.02, 0, Math.sin(a) * 1.02);
-      this.station.add(tie);
+      ties.push(tie);
     }
+    const tieMesh = mergeMeshes(ties, makeHoloMat(0.9));
+    if (tieMesh) this.station.add(tieMesh);
+    tieGeo.dispose();
 
     // Recessed focusing dish on the upper hemisphere. Built inside a group
     // whose +Y is the surface normal, so the crater, its rim and the focal
@@ -185,12 +193,17 @@ export class DataProjection {
       dishGroup.add(rim);
     }
     // Eight emitter posts around the crater lip.
+    const postGeo = new THREE.BoxGeometry(0.035, 0.11, 0.035);
+    const posts: THREE.Mesh[] = [];
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.11, 0.035), makeHoloMat(1.2));
+      const post = new THREE.Mesh(postGeo);
       post.position.set(Math.cos(a) * 0.42, 0.07, Math.sin(a) * 0.42);
-      dishGroup.add(post);
+      posts.push(post);
     }
+    const postMesh = mergeMeshes(posts, makeHoloMat(1.2));
+    if (postMesh) dishGroup.add(postMesh);
+    postGeo.dispose();
     const focus = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), makeHoloMat(2.4));
     focus.position.y = 0.05;
     dishGroup.add(focus);
@@ -202,6 +215,7 @@ export class DataProjection {
 
     // Surface plating segments — a handful of raised quads.
     const plateCount = quality.level === 'low' ? 14 : 34;
+    const plates: THREE.Mesh[] = [];
     for (let i = 0; i < plateCount; i++) {
       const u = rng.range(-1, 1);
       const theta = rng.range(0, Math.PI * 2);
@@ -209,11 +223,14 @@ export class DataProjection {
       const pos = new THREE.Vector3(Math.cos(theta) * r, u, Math.sin(theta) * r);
       if (pos.distanceTo(dishNormal) < 0.6) continue;
       const size = rng.range(0.08, 0.2);
-      const plate = new THREE.Mesh(new THREE.PlaneGeometry(size, size * rng.range(0.6, 1.5)), makeHoloMat(0.7));
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(size, size * rng.range(0.6, 1.5)));
       plate.position.copy(pos).multiplyScalar(1.012);
       plate.lookAt(pos.clone().multiplyScalar(2));
-      this.station.add(plate);
+      plates.push(plate);
     }
+    const plateMesh = mergeMeshes(plates, makeHoloMat(0.7));
+    if (plateMesh) this.station.add(plateMesh);
+    for (const m of plates) m.geometry.dispose();
     // Radial surface trenches running away from the dish, so the sphere has
     // some direction to it rather than reading as a bare globe.
     for (let i = 0; i < 10; i++) {
@@ -243,28 +260,38 @@ export class DataProjection {
       const torus = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.004, 4, 72), makeHoloMat(0.55));
       torus.rotation.x = Math.PI / 2;
       ring.add(torus);
-      // Tick marks around the ring.
+      // Tick marks around the ring, merged into one mesh per ring.
       const ticks = 24 + i * 8;
+      const tickMeshes: THREE.Mesh[] = [];
+      const tallGeo = new THREE.BoxGeometry(0.006, 0.075, 0.006);
+      const shortGeo = new THREE.BoxGeometry(0.006, 0.035, 0.006);
       for (let k = 0; k < ticks; k++) {
         const a = (k / ticks) * Math.PI * 2;
-        const h = k % 4 === 0 ? 0.075 : 0.035;
-        const tick = new THREE.Mesh(new THREE.BoxGeometry(0.006, h, 0.006), makeHoloMat(0.7));
+        const tick = new THREE.Mesh(k % 4 === 0 ? tallGeo : shortGeo);
         tick.position.set(Math.cos(a) * radius, 0, Math.sin(a) * radius);
-        ring.add(tick);
+        tickMeshes.push(tick);
       }
+      const merged = mergeMeshes(tickMeshes, makeHoloMat(0.7));
+      if (merged) ring.add(merged);
+      tallGeo.dispose();
+      shortGeo.dispose();
       ring.rotation.set(rng.range(-0.5, 0.5), rng.range(0, Math.PI), rng.range(-0.5, 0.5));
       this.rings.push(ring);
       this.group.add(ring);
     }
 
     /* ---- annotation glyph bars: abstract readout, not language ---- */
+    const bars: THREE.Mesh[] = [];
     for (let i = 0; i < (quality.level === 'low' ? 10 : 22); i++) {
       const w = rng.range(0.04, 0.16);
-      const bar = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.012), makeHoloMat(rng.range(0.4, 0.95)));
+      const bar = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.012));
       const side = rng.chance(0.5) ? 1 : -1;
       bar.position.set(side * rng.range(0.85, 1.35), rng.range(-0.75, 0.85), rng.range(-0.3, 0.3));
-      this.glyphGroup.add(bar);
+      bars.push(bar);
     }
+    const barMesh = mergeMeshes(bars, makeHoloMat(0.7));
+    if (barMesh) this.glyphGroup.add(barMesh);
+    for (const b of bars) b.geometry.dispose();
     this.group.add(this.glyphGroup);
 
     /* ---- projector beam cone ---- */
