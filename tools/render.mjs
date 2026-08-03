@@ -192,6 +192,29 @@ for (const idx of [FRAME0, FRAME0 + total - 1]) {
   }
 }
 
+// Re-using a frame directory across runs is normal (that is the point of
+// --framedir), but frames left over from an older revision of the code would
+// be encoded silently alongside fresh ones. Report the age spread so a stale
+// mix is obvious.
+{
+  const names = fs.readdirSync(frameDir).filter((n) => /^f\d{6}\.jpg$/.test(n));
+  let oldest = Infinity;
+  let newest = 0;
+  for (const n of names) {
+    const m = fs.statSync(path.join(frameDir, n)).mtimeMs;
+    if (m < oldest) oldest = m;
+    if (m > newest) newest = m;
+  }
+  const spreadMin = (newest - oldest) / 60000;
+  console.log(`frames: ${names.length} in ${frameDir}, written over ${spreadMin.toFixed(0)} min`);
+  if (spreadMin > 90) {
+    console.log(
+      '  ! some frames are much older than others - if the code changed in between, ' +
+        're-render the whole film or delete the stale frames'
+    );
+  }
+}
+
 const enc = spawnSync('ffmpeg', args, { stdio: 'inherit' });
 if (enc.status !== 0) {
   console.error('ffmpeg failed');
