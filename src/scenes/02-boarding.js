@@ -67,19 +67,6 @@ const VADER_PATH = [
 /** Studs of travel per stride, used to lock his feet to the floor. */
 const STRIDE = 1.32;
 
-/**
- * Where Vader is at time `t`. Everything that needs his position calls this
- * rather than reading `vader.root.position`, which is only correct after his
- * own block has run — reading it earlier made the frame depend on the previous
- * frame, and the escort troopers visibly jumped at shard boundaries.
- */
-function vaderZAt(t) {
-  if (t < VADER_IN) return DOOR_Z + 3;
-  if (t < WALK_START) return DOOR_Z + 3 + ease.range(t, VADER_IN, VADER_IN + 1.6) * 4.5;
-  const walk = ease.range(t, WALK_START, 34 - 1.4);
-  return ease.lerp(DOOR_Z + 3, -1, ease.inOutCubic(walk) * 0.98);
-}
-
 export async function build(ctx) {
   /** Scene length, from the narration audio rather than from meta. */
   const END = ctx.duration;
@@ -116,16 +103,20 @@ export async function build(ctx) {
   const doorBurst = new BrickBurst(door.userData.parts, {
     t0: BLAST,
     origin: new THREE.Vector3(0, 4.4, DOOR_Z - 3),
-    speed: 15,
+    // Fast and heavily staggered, so the hail arrives at the retreating lens
+    // over the length of the shot rather than in one puff at the doorway.
+    speed: 22,
     spin: 7,
-    gravity: -10,
+    // BrickBurst is ballistic and knows nothing about the floor, so at any
+    // honest gravity the bricks are all under the deck a second and a half
+    // later and the corridor is bare while the narration is still talking about
+    // them. Light gravity keeps them in the air for the length of the shot; they
+    // fade out as a static pile takes over underneath.
+    gravity: -5.5,
     spread: 0.75,
     radial: 1.05,
-    stagger: 0.1,
-    // BrickBurst is ballistic with no floor, so left running the bricks simply
-    // sink through the deck and the corridor is bare two seconds later. They
-    // fade out instead, and a static pile takes over underneath them.
-    fade: 1.9,
+    stagger: 0.4,
+    fade: 2.6,
     max: 700,
     seed: 9,
   });
@@ -134,6 +125,14 @@ export async function build(ctx) {
 
   const rubble = buildRubble();
   scene.add(rubble);
+  /** Fade the pile in as the airborne bricks fade out. */
+  const rubbleFade = (a) => {
+    for (const m of rubble.userData.materials) {
+      m.opacity = a;
+      m.transparent = a < 0.995;
+    }
+  };
+  rubbleFade(0);
 
   // The hot key from the blown doorway: everything past the breach is meant to
   // read as a lit hangar the boarders came out of.
@@ -185,7 +184,9 @@ export async function build(ctx) {
     squadPlacements.push({
       template: 0,
       position: [0, 0, 0],
-      rotationY: Math.PI,
+      // Facing +z: the boarders come out of the door at -z and everything they
+      // do — advancing, firing at the barricade, following Vader — is up-ship.
+      rotationY: (hash11(i, 32) - 0.5) * 0.18,
       seed: hash11(i, 31) * 6.28,
     });
   }
@@ -204,61 +205,84 @@ export async function build(ctx) {
     const lane = -6.0 + col * 4.0 + (hash11(i, 41) - 0.5) * 0.7;
     return {
       lane,
-      hold: -41.5 + col * 1.7 + Math.floor(i / 4) * 4.6,
-      wall: Math.sign(lane || 1) * (5.9 + hash11(i, 43) * 0.7),
+      hold: -39.0 + col * 1.7 + Math.floor(i / 4) * 4.4,
+      // Where they stand once the shooting stops: out against the walls and
+      // back toward the door, which clears the whole centre of the corridor for
+      // him to walk out of. It also gets eight white figures out of the near
+      // foreground, where they were bigger and brighter in frame than he was.
+      wall: Math.sign(lane || 1) * (6.1 + hash11(i, 43) * 0.6),
+      back: -43.2 + col * 1.3 + Math.floor(i / 4) * 2.1,
       lag: col * 0.28 + Math.floor(i / 4) * 0.75 + hash11(i, 42) * 0.22,
-      follow: 5.0 + i * 1.15, // studs behind Vader once they fall in
-      file: i % 2 ? 3.3 : -3.3, // ...and which side of him
+      // Studs behind Vader once they fall in, chosen so the formation lands
+      // roughly on top of the firing line they were already holding — anything
+      // else and eight troopers visibly slide up the corridor without walking.
+      follow: 4.6 + (i % 4) * 1.5 + Math.floor(i / 4) * 3.0,
+      file: (i % 2 ? 3.4 : -3.4) + (hash11(i, 45) - 0.5) * 1.2,
     };
   });
 
   const vader = await makeVader({ seed: 2.2 });
-  vader.root.rotation.y = Math.PI;
   vader.root.visible = false;
   scene.add(vader.root);
 
-  // Vader is black plastic in a dim corridor, so he travels with his own rig: a
-  // cool key low and in front, which is the only thing that puts the mask and
-  // the shoulders on screen, and a warm kicker from the breach behind him that
-  // draws the edge of the helmet and the hem of the cape.
-  const vaderKey = new THREE.PointLight(0xc6dcff, 0, 34, 2);
-  const vaderRim = new THREE.PointLight(0xffb070, 0, 30, 2);
-  scene.add(vaderKey, vaderRim);
+  // Vader is near-black plastic in a dim corridor, so he travels with his own
+  // rig. Both keys are deliberately short-range: at the 30-unit range a first
+  // pass used they lit forty studs of white wall as well, and he went back to
+  // being the darkest thing in a bright frame.
+  //  - `vaderKey` is up at helmet height and ahead of him, which is the only
+  //    thing that puts the mask, the shoulder line and the chest panel on
+  //    screen at all.
+  //  - `vaderFill` is low and to one side, for the cape and the boots.
+  //  - `vaderRim` sits behind him in the breach and draws his edges.
+  const vaderKey = new THREE.PointLight(0xd2e2ff, 0, 13, 2);
+  const vaderFill = new THREE.PointLight(0x9fb8dc, 0, 14, 2);
+  const vaderRim = new THREE.PointLight(0xffb070, 0, 26, 2);
+  scene.add(vaderKey, vaderFill, vaderRim);
 
   // A mouse droid, scaled up to the size LEGO gives it next to a minifig.
-  const mouse = await makeMouseDroid({ seed: 4, scale: 2.6 });
+  const mouse = await makeMouseDroid({ seed: 4, scale: 3.0 });
   scene.add(mouse.root);
 
   // ------------------------------------------------------------- gunfire
-  const rebelBolts = new BoltPool({ color: KIT.laserRed, length: 4.6, width: 0.3, max: 40 });
-  const imperialBolts = new BoltPool({ color: KIT.laserGreen, length: 4.6, width: 0.3, max: 40 });
+  // `width` drives the halo as well as the core, and the halo is nine times as
+  // wide and a quarter longer than the bolt: at 0.2 a bolt crossing a stud from
+  // the lens is a green bar a quarter of the frame across.
+  const rebelBolts = new BoltPool({ color: KIT.laserRed, length: 4.2, width: 0.11, glow: 0.85, max: 64 });
+  const imperialBolts = new BoltPool({ color: KIT.laserGreen, length: 4.2, width: 0.11, glow: 0.85, max: 64 });
   scene.add(rebelBolts.object, imperialBolts.object);
 
   /**
-   * The exchange. 22 bolts over four seconds, alternating sides, aimed so both
-   * streams cross the middle of the corridor rather than running up its axis
-   * where a bolt is one pixel wide.
+   * The exchange: 46 bolts over four seconds, alternating sides. Both streams
+   * are aimed deliberately off the corridor's axis and across it, because a
+   * bolt travelling straight down the barrel of the lens is one bright pixel;
+   * it only reads as fire when it crosses the frame.
    */
   const SHOTS = [];
-  for (let i = 0; i < 22; i++) {
-    const t0 = POUR + 0.35 + i * 0.19 + hash11(i, 61) * 0.09;
+  for (let i = 0; i < 46; i++) {
+    const t0 = POUR + 0.3 + i * 0.092 + hash11(i, 61) * 0.05;
     const imp = i % 2 === 0;
     const h = (k) => hash11(i, k) - 0.5;
     SHOTS.push({
       t0,
       imp,
-      from: imp ? [h(62) * 11, 3.4, -37 + h(63) * 6] : [h(64) * 10, 3.0, BARRICADE_Z + 1.5],
-      to: imp ? [h(65) * 13, 2.6 + hash11(i, 66) * 4, BARRICADE_Z + 2.5] : [h(67) * 13, 2.8 + hash11(i, 68) * 4, -34],
+      // Kept inside |x| < 5, which is what stops a bolt passing through the
+      // lens in the shot that watches them come through the door: additive
+      // geometry a stud from the glass is a green slab across half the frame.
+      from: imp ? [h(62) * 9, 3.2 + hash11(i, 69), -36 + h(63) * 6] : [h(64) * 9, 3.0, BARRICADE_Z + 1.5],
+      to: imp
+        ? [h(65) * 10, 1.4 + hash11(i, 66) * 5.4, BARRICADE_Z + 2.5]
+        : [h(67) * 10, 1.6 + hash11(i, 68) * 5.4, -34],
     });
   }
-  const BOLT_V = 155;
+  const BOLT_V = 150;
   for (const s of SHOTS) (s.imp ? imperialBolts : rebelBolts).add({ t0: s.t0, from: s.from, to: s.to, speed: BOLT_V });
 
-  // Impact sparks, on eight of the twenty-two. Each Sparks is its own draw
-  // call, so they are rationed: the rest of the bolts read from the streak and
-  // the report alone.
+  // Impact sparks, on eight of the forty-six. Each Sparks is its own draw call,
+  // so they are rationed: the rest of the bolts read from the streak and the
+  // report alone.
   const wallHits = [];
-  for (let i = 0; i < SHOTS.length; i += 3) {
+  const HIT_EVERY = 6;
+  for (let i = 0; i < SHOTS.length; i += HIT_EVERY) {
     const s = SHOTS[i];
     const d = Math.hypot(s.to[0] - s.from[0], s.to[1] - s.from[1], s.to[2] - s.from[2]);
     wallHits.push(
@@ -317,7 +341,7 @@ export async function build(ctx) {
       spread: 12,
       size: 10,
       color: 0x8d949c,
-      opacity: 0.26,
+      opacity: 0.19,
       seed: 30 + i * 7,
     });
     smokes.push(s);
@@ -333,10 +357,12 @@ export async function build(ctx) {
   ctx.sfx(BLAST + 0.08, 'explosion_small', { gain: 0.8 });
   ctx.sfx(BLAST + 0.45, 'brick_scatter', { gain: 0.85 });
   ctx.sfx(BLAST + 1.1, 'brick_scatter', { gain: 0.4, rate: 1.3 });
-  for (const s of SHOTS) {
-    ctx.sfx(s.t0, s.imp ? 'blaster_imperial' : 'blaster_rebel', { gain: 0.62 });
+  // Every other bolt gets a report — forty-six of them inside four seconds is a
+  // machine gun, not a firefight.
+  for (let i = 0; i < SHOTS.length; i += 2) {
+    ctx.sfx(SHOTS[i].t0, SHOTS[i].imp ? 'blaster_imperial' : 'blaster_rebel', { gain: 0.6 });
   }
-  for (let i = 0; i < wallHits.length; i += 2) ctx.sfx(SHOTS[i * 3].t0 + 0.18, 'laser_impact', { gain: 0.4 });
+  for (let i = 0; i < SHOTS.length; i += HIT_EVERY * 2) ctx.sfx(SHOTS[i].t0 + 0.2, 'laser_impact', { gain: 0.4 });
   ctx.sfx(POUR - 0.2, 'footsteps_troopers', { gain: 0.5 });
   ctx.sfx(13.1, 'impact_hit', { gain: 0.5 });
   ctx.sfx(14.5, 'impact_hit', { gain: 0.45 });
@@ -353,50 +379,49 @@ export async function build(ctx) {
       // 1 — wide, pushing in from behind the barricade
       [0, [1.2, 4.3, 33]],
       [3.5, [1.0, 3.7, 21]],
-      // 2 — reverse: their faces over the barricade, droid crossing the fore
-      [3.55, [3.5, 3.15, -3]],
-      [7.0, [1.9, 3.0, 2.5]],
+      // 2 — reverse: their faces over the barricade, droid crossing the fore.
+      //     Tilted down a little further than the composition wants, because
+      //     level with the barricade top the deck in front of it — and the droid
+      //     on it — is entirely below the bottom of frame.
+      [3.55, [3.5, 3.3, -3]],
+      [7.0, [1.9, 3.15, 2.5]],
       // 3 — the door, and the bricks coming at the lens
       [7.05, [1.7, 3.2, -9]],
       [BLAST + 0.9, [2.0, 3.3, -3.5]],
       [11.0, [2.3, 3.2, 2.0]],
       // 4 — low and off-axis as the squad comes through the breach
-      [11.05, [-6.4, 1.9, -17]],
-      [13.4, [-6.0, 2.3, -12.5]],
-      // 5 — back over the rebel line as it takes casualties
-      [13.45, [5.8, 3.0, 20]],
-      [CEASE + 0.4, [5.0, 2.8, 16.5]],
-      // 6 — the quiet, and him: low, mid-corridor, tilting up
-      [CEASE + 0.45, [2.7, 1.5, -16]],
-      [19.0, [2.2, 1.4, -19]],
-      [22.0, [1.9, 1.5, -22]],
-      // 7 — locked off wide while he speaks and the squad falls in
-      [22.05, [3.2, 1.3, -3.5]],
-      [27.6, [2.7, 1.25, -1.5]],
-      // 8 — the tracking close-up is driven in code, see update()
-      [27.65, [1.6, 1.9, 0]],
+      [11.05, [-7.0, 1.8, -25]],
+      [13.4, [-6.6, 2.2, -21]],
+      // 5 — high and behind the rebel line as it takes casualties. Near the
+      // corridor's axis on purpose: bolts run the length of a corridor, so from
+      // any real cross-angle both streams are foreshortened into dots.
+      [13.45, [3.4, 4.6, 27]],
+      [CEASE + 0.4, [2.7, 4.1, 22]],
+      // 6 — the quiet, and him. Low and near the door, backing off as he comes
+      // on: a static lens would take him from a fifth of the frame to all of it
+      // in five seconds, and this beat wants him to grow, not to charge.
+      [CEASE + 0.45, [2.7, 1.5, -25]],
+      [19.0, [2.3, 1.4, -22.5]],
+      [22.0, [1.9, 1.5, -20]],
     ],
     look: [
       [0, [0, 4.1, -26]],
       [3.5, [0, 4.0, -32]],
-      [3.55, [-0.7, 3.5, 14]],
-      [7.0, [-0.5, 3.4, 13]],
+      [3.55, [-0.7, 2.5, 14]],
+      [7.0, [-0.5, 2.5, 13]],
       [7.05, [0, 4.1, DOOR_Z + 1]],
       [BLAST + 0.9, [0, 4.2, DOOR_Z + 3]],
       [11.0, [0, 4.0, DOOR_Z + 6]],
-      [11.05, [0.6, 3.4, DOOR_Z + 3]],
-      [13.4, [0.6, 3.2, DOOR_Z + 9]],
-      [13.45, [-1.6, 2.9, 8]],
-      [CEASE + 0.4, [-1.6, 2.8, 6]],
+      [11.05, [0.8, 3.4, DOOR_Z + 3]],
+      [13.4, [0.8, 3.2, DOOR_Z + 8]],
+      [13.45, [-0.7, 2.8, 4]],
+      [CEASE + 0.4, [-0.7, 2.6, 1]],
       // The tilt: it starts level on the smoke lying in the doorway and ends on
       // his helmet, which is the whole point of the beat.
-      [CEASE + 0.45, [0, 1.5, DOOR_Z + 3]],
-      [17.3, [0, 2.7, DOOR_Z + 4]],
-      [19.8, [0, 4.7, DOOR_Z + 7]],
-      [22.0, [0, 4.5, DOOR_Z + 11]],
-      [22.05, [0, 4.2, -30]],
-      [27.6, [0, 4.4, -22]],
-      [27.65, [0, 4.3, -12]],
+      [CEASE + 0.45, [0, 1.4, DOOR_Z + 2]],
+      [17.3, [0, 2.9, DOOR_Z + 3.5]],
+      [19.8, [0, 4.9, DOOR_Z + 6]],
+      [22.0, [0, 4.6, DOOR_Z + 9]],
     ],
     fov: [
       [0, 48],
@@ -407,14 +432,12 @@ export async function build(ctx) {
       [11.0, 44],
       [11.05, 52],
       [13.4, 48],
-      [13.45, 46],
+      [13.45, 47],
       [CEASE + 0.4, 45],
-      [CEASE + 0.45, 44],
-      [17.3, 38],
-      [19.8, 33],
+      [CEASE + 0.45, 45],
+      [17.3, 40],
+      [19.8, 34],
       [22.0, 33],
-      [22.05, 40],
-      [27.6, 40],
     ],
     shake: [
       [BLAST - 0.05, 0],
@@ -459,11 +482,11 @@ export async function build(ctx) {
       // behind Vader once he is past. `pull` slides them out to the walls, which
       // is what leaves the centre of the corridor to him.
       const pull = ease.smooth(ease.range(t, CEASE - 0.6, CEASE + 1.6));
-      const fallIn = ease.smooth(ease.range(t, 22.6, 25.4));
+      const fallIn = ease.smooth(ease.range(t, 21.4, 24.6));
       squad.update(t, (i, seed, out) => {
         const L = squadLanes[i];
         const march = ease.outCubic(ease.range(t, POUR + L.lag, POUR + L.lag + 2.6));
-        const holdZ = ease.lerp(DOOR_Z - 6, L.hold, march);
+        const holdZ = ease.lerp(ease.lerp(DOOR_Z - 6, L.hold, march), L.back, pull);
         const holdX = ease.lerp(L.lane, L.wall, pull);
         out.x = ease.lerp(holdX, L.file + (hash11(i, 44) - 0.5) * 0.8, fallIn);
         out.z = ease.lerp(holdZ, vz - L.follow, fallIn);
@@ -481,22 +504,25 @@ export async function build(ctx) {
         const holdZ = ease.lerp(DOOR_Z - 4, -39.5 + i * 3.2, march);
         const holdX = ease.lerp(-3.4 + i * 6.8, (i ? 1 : -1) * 6.3, pull);
         fig.root.position.set(
-          ease.lerp(holdX, (i ? 1 : -1) * 3.9, fallIn),
+          ease.lerp(holdX, (i ? 1 : -1) * 4.4, fallIn),
           0,
-          ease.lerp(holdZ, vz - 3.4 - i * 0.9, fallIn)
+          ease.lerp(holdZ, vz - 5.6 - i * 1.6, fallIn)
         );
-        fig.root.rotation.y = Math.PI;
+        fig.root.rotation.y = (i ? -1 : 1) * 0.07;
         fig.root.visible = t > POUR - 0.3;
         if (march < 0.98) poseWalk(fig, t, { speed: 3.2, amp: 0.62, bob: 0.1 });
         else if (fallIn > 0.04) poseWalk(fig, vDist / STRIDE + i * 0.4, { speed: 1, amp: 0.34, bob: 0.06 });
         else poseAim(fig, t + i);
       }
+      rubble.visible = t > BLAST + 0.7;
+      rubbleFade(ease.smooth(ease.range(t, BLAST + 0.8, BLAST + 1.7)));
 
       // ------------------------------------------------- 4. the mouse droid
-      // It crosses in front of the barricade early, close enough to the lens in
-      // shot 2 to register, and is gone well before anything happens.
+      // It crosses well forward of the barricade, three studs off the lens in
+      // shot 2, and is gone before anything happens. Any further up the corridor
+      // and a knee-high droid is four pixels tall.
       const mu = ease.range(t, 1.8, 4.8);
-      mouse.root.position.set(ease.lerp(-7.2, 7.2, mu), 0, 6);
+      mouse.root.position.set(ease.lerp(-7.2, 7.2, mu), 0, 8.0);
       mouse.root.rotation.y = Math.PI / 2;
       mouse.root.visible = mu > 0.01 && mu < 0.99;
       mouse.roll(t, { speed: 1.4 });
@@ -513,10 +539,10 @@ export async function build(ctx) {
       // Breach light: a hard flash on the blast, then a steady hot spill that
       // is what Vader is a silhouette against.
       const flash = ease.pulse(t, BLAST, 0.04, 0.36, 2.4);
-      const spill = blown ? ease.lerp(0.62, 0.4, ease.range(t, BLAST + 2, 20)) : 0;
-      breach.intensity = (flash * 1.1 + spill) * 190;
-      breachGlow.material.opacity = flash * 0.36 + spill * 0.2;
-      breachGlow.scale.setScalar(16 + flash * 20);
+      const spill = blown ? ease.lerp(0.6, 0.3, ease.range(t, BLAST + 2, 20)) : 0;
+      breach.intensity = (flash * 1.1 + spill) * 150;
+      breachGlow.material.opacity = flash * 0.34 + spill * 0.13;
+      breachGlow.scale.setScalar(13 + flash * 18);
 
       // ---------------------------------------------------------- 6. gunfire
       for (const s of wallHits) s.update(t);
@@ -531,34 +557,43 @@ export async function build(ctx) {
         vader.cape?.userData?.wave?.(t, 1.15);
         vader.head.rotation.y = Math.sin(t * 0.33) * 0.06;
 
-        // His travelling rig. The key sits low and ahead so it rakes up the
-        // mask; the kicker stays behind him, in the breach.
+        // His travelling rig, close in on all three so it stays on him.
         const on = ease.smooth(ease.range(t, VADER_IN, VADER_IN + 1.3));
-        vaderKey.position.set(2.4, 2.6, vz + 5.5);
-        vaderKey.intensity = on * 150;
-        vaderRim.position.set(-2.0, 6.2, vz - 4.5);
-        vaderRim.intensity = on * 190;
+        vaderKey.position.set(1.7, 5.6, vz + 3.0);
+        vaderKey.intensity = on * 95;
+        vaderFill.position.set(-2.8, 2.2, vz + 3.4);
+        vaderFill.intensity = on * 55;
+        vaderRim.position.set(-1.6, 6.4, vz - 4.2);
+        vaderRim.intensity = on * 170;
       } else {
         vaderKey.intensity = 0;
+        vaderFill.intensity = 0;
         vaderRim.intensity = 0;
       }
 
       // ---------------------------------------------------------- 8. camera
-      if (t < 27.65) {
+      // Shots 1–6 are keyed; the last two follow him, so they are computed from
+      // his own track instead of being keyed against the clock.
+      if (t < 22.05) {
         cameraRig(camera, t, CAM);
-      } else {
-        // Shot 8 rides a shrinking distance ahead of him and sinks toward the
-        // floor, so he grows into the lens from a low angle. Driven in code
-        // rather than keyed because it has to follow his track exactly.
-        const u = ease.smooth(ease.range(t, 27.65, END));
-        camera.position.set(ease.lerp(1.6, 0.5, u), ease.lerp(1.9, 1.25, u), vz + ease.lerp(12.5, 5.6, u));
+      } else if (t < 26.45) {
+        // 7 — three-quarter medium, riding ahead and off his right shoulder as
+        // his line lands. The lens is long and the offset small on purpose: at
+        // the wide angle a first pass used, whichever trooper was nearest the
+        // right-hand wall sat beside the lens, cropped and twice his size.
+        const u = ease.smooth(ease.range(t, 22.05, 26.45));
+        camera.position.set(ease.lerp(2.9, 2.4, u), ease.lerp(2.2, 2.0, u), vz + ease.lerp(12.0, 10.2, u));
         camera.up.set(0, 1, 0);
-        camera.lookAt(0, ease.lerp(4.3, 4.8, u), vz + 0.4);
-        const fov = ease.lerp(37, 41, u);
-        if (Math.abs(camera.fov - fov) > 1e-3) {
-          camera.fov = fov;
-          camera.updateProjectionMatrix();
-        }
+        camera.lookAt(0, 4.3, vz + 0.4);
+        setFov(camera, 34);
+      } else {
+        // 8 — dead ahead, sinking toward the deck as the gap closes, so he
+        // grows into the lens and ends looming over it.
+        const u = ease.smooth(ease.range(t, 26.45, END));
+        camera.position.set(ease.lerp(1.7, 0.4, u), ease.lerp(2.0, 1.5, u), vz + ease.lerp(13.0, 6.4, u));
+        camera.up.set(0, 1, 0);
+        camera.lookAt(0, ease.lerp(4.2, 4.3, u), vz + 0.4);
+        setFov(camera, ease.lerp(37, 44, u));
       }
       // Bolt billboards need the final camera, so they are updated after it.
       rebelBolts.update(t, camera);
@@ -574,6 +609,14 @@ export async function build(ctx) {
       scene.fog.density = ease.lerp(0.006, 0.0145, gloom);
     },
   };
+}
+
+/** Set a field of view without rebuilding the projection matrix every frame. */
+function setFov(camera, fov) {
+  if (Math.abs(camera.fov - fov) > 1e-3) {
+    camera.fov = fov;
+    camera.updateProjectionMatrix();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -670,22 +713,48 @@ function buildCorridor() {
     }
   }
 
-  // --- the barricade: a low wall of crates across the corridor
+  // --- the barricade: a low wall of crates across the corridor.
+  //     The supply crates are stacked against the walls rather than behind the
+  //     line: from the reverse angle, anything in the middle of the deck stands
+  //     between the lens and the men it is there to photograph.
   for (let x = -HALF_W; x < HALF_W; x += 4) {
     b.box(x, 0, BARRICADE_Z, 4, 2, 8, grey);
     b.tile(x, 8, BARRICADE_Z, 4, 2, dark);
   }
-  for (let i = 0; i < 5; i++) {
-    b.box(-6.4 + i * 3.1, 0, BARRICADE_Z + 2.6 + (i % 2) * 2.4, 2.6, 2.6, 6, i % 2 ? COLORS.oliveGreen : COLORS.darkTan);
+  for (let i = 0; i < 6; i++) {
+    const sx = i % 2 ? 1 : -1;
+    const row = Math.floor(i / 2);
+    b.box(
+      sx > 0 ? HALF_W - 3.1 : -HALF_W + 0.5,
+      row === 1 ? 6 : 0,
+      BARRICADE_Z - 8 + row * 3.2,
+      2.6,
+      2.6,
+      6,
+      i % 3 ? COLORS.oliveGreen : COLORS.darkTan
+    );
   }
-  // A toppled crate on the near side, for something in the foreground of the
-  // reverse angle to sit behind.
-  b.box(-7.6, 0, BARRICADE_Z + 9, 2.6, 2.6, 6, COLORS.darkTan);
 
   // --- door frame: jambs, a lintel and a threshold plate
   for (const sx of [-1, 1]) b.box(sx * 6 - (sx > 0 ? 0 : 2), 0, DOOR_Z - 1, 2, 3, CEIL, dark);
   b.box(-8, CEIL - 3, DOOR_Z - 1, 16, 3, 3, dark);
   b.tile(-6, -1, DOOR_Z - 1, 12, 3, COLORS.flatSilver);
+
+  // --- beyond the door: a short boarding throat with a lit back wall, so that
+  //     once the door is gone the opening reads as a hole into somewhere the
+  //     boarders came from rather than as fog.
+  for (const sx of [-1, 1]) b.panel(sx * 6 - (sx > 0 ? 0 : 1.4), 0, DOOR_Z - 11, 1.4, 10, 24, dark);
+  b.panel(-7, 24, DOOR_Z - 11, 14, 10, 4, dark);
+  b.panel(-6, -1, DOOR_Z - 11, 12, 10, 1, COLORS.darkBluishGray);
+  b.panel(-5.6, 1, DOOR_Z - 11.6, 11.2, 0.6, 20, COLORS.transClear, {
+    emissive: 0xffd9a8,
+    emissiveIntensity: 0.85,
+    finish: 'glossy',
+  });
+  // Ribs across the throat, so the light behind is broken up rather than flat.
+  for (let i = 0; i < 4; i++) {
+    b.panel(-6, 1 + i * 5, DOOR_Z - 11.2, 12, 0.5, 1.4, dark);
+  }
 
   return b.build();
 }
@@ -715,4 +784,48 @@ function buildBlastDoor() {
   b.panel(-5, 19, DOOR_Z - 0.4, 3, 0.5, 3, COLORS.red);
   b.panel(2.4, 4, DOOR_Z - 0.4, 2.2, 0.5, 2, COLORS.flatSilver);
   return b;
+}
+
+/**
+ * Where the door ends up: a scatter of loose bricks on the deck between the
+ * threshold and the barricade.
+ *
+ * The airborne bricks cannot land — BrickBurst is ballistic and knows nothing
+ * about the floor — so the shot hands over from one to the other. This pile is
+ * what the corridor still has strewn down it when Vader walks out of the smoke
+ * fifteen seconds later, which is the whole payoff of building the door out of
+ * bricks in the first place.
+ */
+function buildRubble() {
+  const b = new Bricks({ studSegments: 6 });
+  const grey = COLORS.lightBluishGray;
+  for (let i = 0; i < 54; i++) {
+    const h = (k) => hash11(i, k);
+    // Thickest at the threshold, thinning up the corridor.
+    const z = DOOR_Z + 1 + Math.pow(h(11), 1.7) * 26;
+    const x = (h(12) - 0.5) * 14.4;
+    const flat = h(15) > 0.45; // lying down, or tipped up on an edge
+    b.addGeometry(rubbleBrick(), {
+      x,
+      y: flat ? 0.58 : 0.64,
+      z,
+      rot: [flat ? 0 : (h(16) - 0.5) * 0.5, h(13) * Math.PI, flat ? 0 : 1.35],
+      color: h(14) > 0.5 ? grey : COLORS.white,
+      opts: { transparent: true, opacity: 0 },
+    });
+  }
+  const group = b.build({ castShadow: false, receiveShadow: true });
+  const mats = new Set();
+  group.traverse((n) => {
+    if (n.isMesh) mats.add(n.material);
+  });
+  group.userData.materials = [...mats];
+  return group;
+}
+
+/** One 1x2 brick — 1 stud by 2 studs by 3 plates — shared by every piece. */
+let _rubbleGeo = null;
+function rubbleBrick() {
+  if (!_rubbleGeo) _rubbleGeo = new THREE.BoxGeometry(0.96, 3 * PLATE, 1.96);
+  return _rubbleGeo;
 }

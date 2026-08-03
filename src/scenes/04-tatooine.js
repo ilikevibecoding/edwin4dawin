@@ -51,6 +51,11 @@ const HOLO_THROW = 1.15;
 // first has gone: "two suns that never quite set together".
 const SUN_A_AZ = -0.30; // radians east of the -z meridian
 const SUN_B_AZ = 0.10;
+// The first sun's bearing on the ground plane. The sand's shading is painted
+// on at build time along this line, so it must not change during the scene —
+// only the suns' altitude does.
+const SUN_DX = Math.sin(SUN_A_AZ);
+const SUN_DZ = -Math.cos(SUN_A_AZ);
 const SUN_B_LIFT = 0.062; // radians the second sun runs above the first
 const SUN_ELEV = [
   [0, 0.46],
@@ -112,10 +117,16 @@ export async function build(ctx) {
   const dunes = desert({ ox: 0, oz: 0, amp: 1.0, profile: duneProfile });
   duneSet.add(
     dunes.mesh({
+      // Each ring's half-extent is an exact multiple of both its own cell and
+      // the next one out, so the rings tile without a seam or an overlap. The
+      // second ring is the important one: the crest lines live in it, and at
+      // any coarser than six units a dune slope stops terracing and turns
+      // into a cliff.
       rings: [
-        { cell: 3, half: 48 },
-        { cell: 12, half: 240 },
-        { cell: 48, half: 720 },
+        { cell: 3, half: 54 },
+        { cell: 6, half: 144 },
+        { cell: 18, half: 288 },
+        { cell: 48, half: 480 },
       ],
       studsAt: [6, -26, 44], // studded plates only where the lens gets close
     })
@@ -134,13 +145,13 @@ export async function build(ctx) {
   // scattered over the flats they just read as boxes dropped on a floor.
   duneSet.add(
     buildRocks(dunes, [
-      [-52, -92, 1.2],
-      [-96, -86, 1.5],
-      [58, -84, 0.9],
-      [-24, -146, 1.9],
-      [104, -142, 1.7],
-      [16, -232, 2.6],
-      [-140, -226, 2.4],
+      [-52, -96, 1.0],
+      [-104, -88, 1.3],
+      [62, -88, 0.8],
+      [-30, -152, 1.6],
+      [112, -150, 1.5],
+      [18, -244, 2.2],
+      [-150, -236, 2.0],
     ])
   );
 
@@ -213,13 +224,14 @@ export async function build(ctx) {
 
   // Another stretch of the same desert, flattened into a shallow pan where
   // the homestead sits.
-  const farmGround = desert({ ox: 1900, oz: -1300, amp: 0.55, flatR: 34, flatY: 0 });
+  const farmGround = desert({ ox: 1900, oz: -1300, amp: 0.8, flatR: 34, flatY: 0, profile: farmProfile });
   farmSet.add(
     farmGround.mesh({
       rings: [
-        { cell: 4, half: 40 },
-        { cell: 16, half: 176 },
-        { cell: 64, half: 640 },
+        { cell: 3, half: 48 },
+        { cell: 8, half: 144 },
+        { cell: 24, half: 288 },
+        { cell: 72, half: 504 },
       ],
       studsAt: [0, -4, 30],
     })
@@ -330,22 +342,24 @@ export async function build(ctx) {
   // Sky stops on the same clock as the suns: bleached daylight, then dusk,
   // then a sunset that burns from the horizon up into violet.
   const SKY_HIGH = [
-    [0, 0x3f7fb8],
-    [T_FARM, 0x315e94],
+    [0, 0x2f6ea8],
+    [T_FARM, 0x2c5990],
     [T_SUNSET, 0x4a2c66],
     [T_TURN, 0x341a48],
     [40, 0x160a22],
   ];
+  // The horizon stop is what a desert sky is actually made of. Left grey it
+  // turns the whole lower sky into dishwater; it wants to be warm sand.
   const SKY_LOW = [
-    [0, 0xbaa47c],
-    [T_FARM, 0xb98a5c],
+    [0, 0xd2a86e],
+    [T_FARM, 0xc4904f],
     [T_SUNSET, 0xe0701e],
     [T_TURN, 0xcb3f14],
     [40, 0x45150b],
   ];
   const HAZE = [
-    [0, 0x6f5634],
-    [T_FARM, 0x8c4c1c],
+    [0, 0x8a6033],
+    [T_FARM, 0x9a5220],
     [T_SUNSET, 0xc44e10],
     [T_TURN, 0x96280a],
     [40, 0x260a05],
@@ -416,8 +430,9 @@ export async function build(ctx) {
       hazeGain: 0.3 + low * 1.15,
     });
 
-    // Haze takes the horizon colour so the dunes dissolve into the sky.
-    fogCol.copy(skyLow).lerp(skyHigh, 0.22);
+    // Haze takes the horizon colour so the dunes dissolve into the sky. Very
+    // little of the high stop goes in: any more and the far sand turns grey.
+    fogCol.copy(skyLow).lerp(skyHigh, 0.10);
     scene.fog.color.copy(fogCol);
     scene.background.copy(fogCol);
 
@@ -450,8 +465,9 @@ export async function build(ctx) {
   // Beats 1 and 2 — the dunes
   // -------------------------------------------------------------------------
   function updateDunes(t) {
-    scene.fog.near = 110;
-    scene.fog.far = 700;
+    // The sand stops at 480 units; the haze has to have swallowed it by then.
+    scene.fog.near = 150;
+    scene.fog.far = 465;
 
     // --- the droids trudge away from the wreck, out toward the deep desert.
     const walk = ease.clamp(t / T_FARM, 0, 1);
@@ -729,7 +745,9 @@ const SAND_STEP = PLATE; // the dunes terrace one plate at a time
  * call per cell. These are deliberately dark — two suns and a hemisphere light
  * take them most of the way to white on their own.
  */
-const SAND = [0x7e5c39, 0x8b6741, 0x97724a, 0xa47e54, 0xb08a5e, 0xbc9669, 0xc7a276, 0xd1ae84];
+const SAND = [
+  0x59401f, 0x684c28, 0x775a33, 0x866940, 0x96794e, 0xa6895d, 0xb69a6e, 0xc6ab80, 0xd4bb92, 0xdfc9a4,
+];
 
 function sandTone(u) {
   const i = Math.round(ease.clamp(u, 0, 1) * (SAND.length - 1));
@@ -771,25 +789,23 @@ function vnoise2(x, z, salt = 0) {
  *   z ≈ −230  and beyond, successive lines building to the horizon
  */
 const DUNE_TRAIN = [
-  [-120, 2.0],
-  [-44, 6.6],
-  [-30, 6.2],
-  [-6, 1.0],
-  [14, -2.2],
-  [40, -2.6],
-  [58, -1.6],
-  [72, 1.6],
-  [88, 6.4],
-  [104, 3.2],
-  [118, 1.6],
-  [140, 9.2],
-  [166, 4.2],
-  [196, 3.4],
-  [230, 13.0],
-  [280, 8.0],
-  [340, 17.0],
-  [430, 12.0],
-  [700, 23.0],
+  [-140, 1.0],
+  [-52, 6.4],
+  [-28, 5.4],
+  [0, 0.6],
+  [24, -2.2],
+  [52, -2.8],
+  [74, -1.4],
+  [104, 5.2],
+  [126, 2.6],
+  [146, 1.8],
+  [186, 8.0],
+  [214, 4.6],
+  [240, 3.8],
+  [300, 11.0],
+  [360, 7.0],
+  [440, 13.0],
+  [700, 16.0],
 ];
 
 function duneProfile(x, z) {
@@ -800,6 +816,25 @@ function duneProfile(x, z) {
   const warp = (vnoise2(x * 0.0115 + 3, z * 0.0035 + 11, 71) - 0.5) * 46;
   const warp2 = (vnoise2(x * 0.031 + 17, z * 0.011 + 5, 73) - 0.5) * 13;
   return ease.track(DUNE_TRAIN, -z + warp + warp2, ease.smooth);
+}
+
+/**
+ * The farm sits in a shallow basin, with the desert climbing away on every
+ * side. A flat pan out to the horizon reads as a table top; a rim gives the
+ * skyline something to do and puts the homestead somewhere specific.
+ */
+const FARM_BASIN = [
+  [0, 0],
+  [42, 0.5],
+  [92, 4.2],
+  [170, 9.0],
+  [300, 14.0],
+  [600, 18.0],
+];
+function farmProfile(x, z) {
+  const d = Math.sqrt(x * x + z * z);
+  const wander = (vnoise2(x * 0.0135 + 5, z * 0.0135 + 9, 83) - 0.5) * 44;
+  return ease.track(FARM_BASIN, d + wander, ease.smooth);
 }
 
 /**
@@ -852,20 +887,33 @@ function desert({ ox = 0, oz = 0, amp = 1, grain = 0.5, flatR = 0, flatY = 0, pr
   // about 1:3 — steeper than that and the plate courses read as walls. The two
   // fine octaves exist to break up the quantisation: without them every
   // terrace contour is a ruled line running clean across the frame.
+  const flatten = (x, z, h) => {
+    if (flatR <= 0) return h;
+    const d = Math.sqrt(x * x + z * z);
+    return ease.lerp(flatY, h, ease.smooth(ease.clamp((d - flatR) / (flatR * 0.9), 0, 1)));
+  };
+
+  // The dune shapes on their own, with none of the grain. The painted shading
+  // is sampled from this rather than from `raw`: run the gradient over the
+  // fine octaves too and the modelling breaks up into a chequerboard of light
+  // and dark cells instead of following the slopes.
+  const broad = (x, z) => {
+    const X = x + ox;
+    const Z = z + oz;
+    let h =
+      (vnoise2(X * 0.0062, Z * 0.0088, 3) - 0.5) * 7.0 * amp +
+      (vnoise2(X * 0.016 + 5, Z * 0.020 + 3, 16) - 0.5) * 3.4 * amp;
+    if (profile) h += profile(x, z);
+    return flatten(x, z, h);
+  };
+
   const raw = (x, z) => {
     const X = x + ox;
     const Z = z + oz;
-    let y =
-      (vnoise2(X * 0.0062, Z * 0.0088, 3) - 0.5) * 7.0 * amp +
-      (vnoise2(X * 0.016 + 5, Z * 0.020 + 3, 16) - 0.5) * 3.4 * amp +
+    const fine =
       (vnoise2(X * 0.052 + 21, Z * 0.044 + 17, 44) - 0.5) * 2.1 * grain +
       (vnoise2(X * 0.125 + 9, Z * 0.104 + 7, 27) - 0.5) * 0.55 * grain;
-    if (profile) y += profile(x, z);
-    if (flatR > 0) {
-      const d = Math.sqrt(x * x + z * z);
-      y = ease.lerp(flatY, y, ease.smooth(ease.clamp((d - flatR) / (flatR * 0.9), 0, 1)));
-    }
-    return y;
+    return broad(x, z) + flatten(x, z, fine) - flatten(x, z, 0);
   };
   const y = (x, z) => Math.round(raw(x, z) / SAND_STEP) * SAND_STEP;
   // Cells are laid on a global grid, so this is exactly the surface a figure
@@ -873,7 +921,7 @@ function desert({ ox = 0, oz = 0, amp = 1, grain = 0.5, flatR = 0, flatY = 0, pr
   const cellY = (x, z, cell = 4) =>
     y((Math.floor(x / cell) + 0.5) * cell, (Math.floor(z / cell) + 0.5) * cell);
 
-  return { raw, y, cellY, mesh: (opts) => buildSandMesh(y, raw, opts) };
+  return { raw, broad, y, cellY, mesh: (opts) => buildSandMesh(y, raw, broad, opts) };
 }
 
 /**
@@ -893,7 +941,7 @@ function desert({ ox = 0, oz = 0, amp = 1, grain = 0.5, flatR = 0, flatY = 0, pr
  * across three thousand cells — so `studsAt` marks one patch of ground near
  * the lens that gets them, and everything else is smooth tile.
  */
-function buildSandMesh(heightAt, rawAt, { rings, studsAt = null, base = -60 } = {}) {
+function buildSandMesh(heightAt, rawAt, broadAt, { rings, studsAt = null, base = -60 } = {}) {
   const b = new Bricks({ studSegments: 5 });
   const [sx, sz, sr] = studsAt || [0, 0, -1];
   const sr2 = sr * sr;
@@ -912,10 +960,20 @@ function buildSandMesh(heightAt, rawAt, { rings, studsAt = null, base = -60 } = 
         const cx = x + cell / 2;
         const cz = z + cell / 2;
         const y = heightAt(cx, cz);
-        // Painted modelling: pale climbing to a crest, dark on the lee side.
-        const smoothY = rawAt(cx, cz);
-        const slope = ease.clamp((smoothY - rawAt(cx, cz - 6)) / 1.6 + 0.5, 0, 1);
-        const lift = ease.clamp(smoothY / 26 + 0.45, 0, 1);
+        // Painted modelling, and it has to carry the whole shape of the field.
+        // Every cell's top face shares one normal, so no amount of key light
+        // will tell a windward slope from a lee one: the dunes only read
+        // because the tone is sampled from the gradient *along the sun
+        // bearing* and baked into the colour. Ground that climbs toward the
+        // suns is tilted away from them, so it goes dark.
+        const smoothY = broadAt(cx, cz);
+        const up = broadAt(cx + SUN_DX * 11, cz + SUN_DZ * 11);
+        const down = broadAt(cx - SUN_DX * 11, cz - SUN_DZ * 11);
+        const slope = ease.clamp((down - up) / 6.0 + 0.5, 0, 1);
+        const lift = ease.clamp(smoothY / 30 + 0.45, 0, 1);
+        // A little grain in the tone as well, so the bands are not perfectly
+        // clean edges across a whole crest.
+        const speck = (rawAt(cx, cz) - smoothY) * 0.055;
         // Studs on a scattered third of the near cells only. A solid studded
         // disc reads as corrugated iron; a patchy one reads as sand with
         // plates laid in it, and costs a third of the cylinders.
@@ -923,7 +981,7 @@ function buildSandMesh(heightAt, rawAt, { rings, studsAt = null, base = -60 } = 
           sr > 0 &&
           (cx - sx) * (cx - sx) + (cz - sz) * (cz - sz) < sr2 &&
           hash11(i * 137 + j * 31, 63) < 0.34;
-        b.box(x, base / PLATE, z, cell, cell, (y - base) / PLATE, sandTone(lift * 0.66 + slope * 0.34), {
+        b.box(x, base / PLATE, z, cell, cell, (y - base) / PLATE, sandTone(lift * 0.26 + slope * 0.74 + speck), {
           studs,
           finish: 'rubber', // sand has no specular sheen; plastic reads as wet
         });
@@ -933,18 +991,30 @@ function buildSandMesh(heightAt, rawAt, { rings, studsAt = null, base = -60 } = 
   const mesh = b.build({ castShadow: false });
   mesh.receiveShadow = true;
   mesh.traverse((n) => {
+    if (n.isMesh) n.receiveShadow = true;
+  });
+  return matte(mesh);
+}
+
+/**
+ * Strip every specular highlight out of a built object.
+ *
+ * Sand, adobe and a flagged courtyard are the surfaces in this scene that must
+ * have none at all. Even at roughness 0.92 the standard material keeps a
+ * Fresnel lobe, and with a sun this low that lobe draws a mirror path straight
+ * up the frame: the ground stops reading as dry desert and starts reading as
+ * a lake, and with the bloom threshold at 0.62 it smears. Lambert has no
+ * specular term whatsoever and its diffuse response is identical.
+ */
+function matte(obj) {
+  obj.traverse((n) => {
     if (!n.isMesh) return;
-    n.receiveShadow = true;
-    // Sand is the one surface in the film that must have no specular at all.
-    // Even at roughness 0.92 the standard material keeps a Fresnel lobe, and
-    // with a low sun that lobe draws a mirror path straight up the frame: the
-    // dunes stop reading as dry sand and start reading as a lake. Lambert has
-    // no specular term whatsoever, and the diffuse response is identical.
     const src = n.material;
+    if (!src.isMeshStandardMaterial) return;
     n.material = new THREE.MeshLambertMaterial({ color: src.color, fog: true });
     src.dispose();
   });
-  return mesh;
+  return obj;
 }
 
 /** The furrow the pod ploughed in, and the debris it shed doing it. */
@@ -990,16 +1060,20 @@ function buildRocks(ground, sites) {
   for (let s = 0; s < sites.length; s++) {
     const [x, z, scale] = sites[s];
     const y = ground.cellY(x, z);
-    for (let i = 0; i < 5; i++) {
+    // A tapering stack, each slab overlapping the one under it and the whole
+    // pile sunk a course into the sand. Scattered slabs with air between them
+    // read as boxes dropped on a floor; this reads as rock coming through it.
+    for (let i = 0; i < 4; i++) {
       const k = s * 11 + i;
-      const w = (2.4 + hash11(k, 91) * 3.0) * scale;
-      const d = (2.0 + hash11(k, 92) * 3.2) * scale;
-      const h = (1.6 + hash11(k, 93) * 2.6) * scale;
+      const taper = 1 - i * 0.19;
+      const w = (5.0 + hash11(k, 91) * 3.4) * scale * taper;
+      const d = (4.4 + hash11(k, 92) * 3.6) * scale * taper;
+      const h = (1.5 + hash11(k, 93) * 1.1) * scale;
       b.push();
       b.translateWorld(
-        x + (hash11(k, 94) - 0.5) * 5 * scale,
-        y - 1 + i * 0.7 * scale,
-        z + (hash11(k, 95) - 0.5) * 5 * scale
+        x + (hash11(k, 94) - 0.5) * 1.6 * scale * i,
+        y - 1.4 * scale + i * h * 0.82,
+        z + (hash11(k, 95) - 0.5) * 1.6 * scale * i
       );
       b.rotateY(hash11(k, 96) * 3.14);
       b.addGeometry(chamferBox(w, h, d, 0.3 * scale), {
@@ -1028,8 +1102,11 @@ function buildRocks(ground, sites) {
 function buildHomestead(ground) {
   const g = new THREE.Group();
   const b = new Bricks({ studSegments: 8 });
-  const wall = 0xd8bd93;
-  const wallDark = 0xb2966f;
+  // Deliberately dull for LEGO tan. The bloom threshold sits at 0.62, and a
+  // pale wall taking a low sun square-on runs straight past it: the studded
+  // top course smears into a bar of light halfway up the frame.
+  const wall = 0xb99a70;
+  const wallDark = 0x957c5a;
 
   // --- the courtyard floor, one plate proud of the sand
   for (let i = -8; i < 8; i++) {
@@ -1037,7 +1114,7 @@ function buildHomestead(ground) {
       const x = i * 2;
       const z = j * 2;
       if (x * x + z * z > 210) continue;
-      b.tile(x, 0, z, 2, 2, (i + j) % 2 ? 0xc9ab80 : 0xd2b689);
+      b.tile(x, 0, z, 2, 2, (i + j) % 2 ? 0xab8f68 : 0xb69a72);
     }
   }
 
@@ -1086,11 +1163,9 @@ function buildHomestead(ground) {
   // --- vaporators, kept off the lens axis so they flank the courtyard rather
   // than growing out of anybody's head
   for (const [x, z, s] of [
-    [-40, -26, 1.0],
-    [-8, -62, 0.86],
-    [34, -30, 0.8],
-    [-54, -8, 0.72],
-    [12, -74, 0.6],
+    [-40, -28, 1.0],
+    [-6, -64, 0.86],
+    [30, -46, 0.78],
   ]) {
     const v = buildVaporator();
     v.position.set(x, ground.cellY(x, z), z);

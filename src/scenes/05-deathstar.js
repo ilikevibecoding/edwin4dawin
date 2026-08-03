@@ -135,13 +135,15 @@ export async function build(ctx) {
       fov: [[T_ZOOM, 44], [8.4, 37], [T_HANGAR, 35]],
       handheld: 0.035,
     },
-    // --- hangar deck: three-quarter from behind the line of ships, with the
-    // open launch door beyond them, then a low side-on pass as they leave.
+    // --- hangar deck: broadside on the line of ships, so the closed S-foils and
+    // the nose of the near fighter actually read, with the open launch door away
+    // to screen right. From behind the line, tail-on, they are only a stack of
+    // engine nozzles.
     {
       start: T_HANGAR,
-      pos: [[T_HANGAR, [-33, 6.2, -46]], [T_LAUNCH, [-29, 5.4, -38]]],
-      look: [[T_HANGAR, [-3, 5.0, 2]], [T_LAUNCH, [0, 4.8, 7]]],
-      fov: [[T_HANGAR, 50], [T_LAUNCH, 46]],
+      pos: [[T_HANGAR, [-46, 7.6, -20]], [T_LAUNCH, [-42, 6.4, -11]]],
+      look: [[T_HANGAR, [0, 4.4, 1]], [T_LAUNCH, [5, 4.4, 6]]],
+      fov: [[T_HANGAR, 50], [T_LAUNCH, 47]],
       handheld: 0.09,
     },
     // Three-quarter from beside the near launch lane: the fighters light up and
@@ -187,9 +189,11 @@ export async function build(ctx) {
       else space.update(t);
 
       // The two cuts get a one-frame-ish bloom-white kick so they snap.
+      // Two or three frames each. Any longer and the flash stops reading as a
+      // cut and starts reading as fog over the first frame of the new set.
       flash.material.opacity =
-        0.5 * ease.pulse(t, T_HANGAR - 0.06, 0.06, 0.03, 0.28) +
-        0.42 * ease.pulse(t, T_SPACE - 0.06, 0.06, 0.03, 0.3);
+        0.5 * ease.pulse(t, T_HANGAR - 0.04, 0.04, 0.02, 0.13) +
+        0.42 * ease.pulse(t, T_SPACE - 0.04, 0.04, 0.02, 0.13);
       flash.visible = flash.material.opacity > 0.002;
 
       playShots(camera, t, SHOTS);
@@ -540,7 +544,7 @@ async function buildHangar(chars) {
 
   // --- three X-wings, foils closed, collapsed to a handful of draw calls
   const ships = [];
-  const engines = new EngineGlow(12, KIT.engineBlue, 0.22);
+  const engines = new EngineGlow(12, KIT.engineBlue, 0.12);
   group.add(engines.object);
   for (let i = 0; i < SHIP_X.length; i++) {
     const src = await makeXWing(i);
@@ -603,11 +607,13 @@ function hangarDeck() {
   const WALL = 56; // half-width of the deck, in studs
   const ROWS = 26; // wall courses of three plates each
 
-  // Deck: big 8x8 tiles with yellow guide lines under each ship.
+  // Deck: big 8x8 tiles. Mostly one grey with a scattering of darker and
+  // lighter panels — a strict checkerboard turns the floor into the loudest
+  // thing in the frame and the fighters standing on it disappear.
   for (let x = -WALL; x < WALL; x += 8) {
     for (let z = -48; z < BAY_Z; z += 8) {
-      const c = ((x / 8 + z / 8) & 1) === 0 ? grey : COLORS.black;
-      b.tile(x, -1, z, 8, 8, c);
+      const h = hash11(x * 0.125 + 40, z * 0.125 + 90);
+      b.tile(x, -1, z, 8, 8, h > 0.86 ? light : h > 0.66 ? COLORS.black : grey);
     }
   }
   // Lane markings under each ship, sparse enough to read as guides.

@@ -43,6 +43,7 @@ npm run dev
 node tools/shots.mjs --scene trench --n 8 --out /tmp/t --contact /tmp/t.png
 node tools/preview.mjs --model xwing --out /tmp/xwing.png
 node tools/render.mjs --scene trench --fps 24 --workers 3 --out /tmp/trench.mp4
+node tools/verify.mjs          # reproducibility / dead-frame / exposure report
 npx vite build
 ```
 

@@ -18,7 +18,7 @@ hand, and which is now more or less free to make.
 npm install
 node tools/tts.mjs        # narration  (needs piper, see below)
 node tools/sfx.mjs        # sound effects
-node tools/music.mjs      # score
+node tools/score.mjs      # score
 npm run dev               # watch it at http://localhost:5173
 node tools/render.mjs     # export out/brickwars.mp4
 ```
@@ -86,7 +86,7 @@ real durations and writes `public/audio/manifest.json`, and **scene lengths are
 derived from that**, so narration can never be clipped by a scene that is too
 short.
 
-`tools/sfx.mjs` and `tools/music.mjs` generate the effects and the score as raw
+`tools/sfx.mjs` and `tools/score.mjs` generate the effects and the score as raw
 waveforms — oscillators, filtered noise, FM, comb reverbs, a small orchestral
 synthesizer and a note scheduler. The score is an original composition.
 
@@ -102,8 +102,10 @@ sound stay locked without any synchronisation logic.
 | `node tools/render.mjs` | export the film to mp4 (`--scene`, `--fps`, `--workers`, `--t0/--t1`, `--w/--h`) |
 | `node tools/shots.mjs --scene trench --n 8 --contact /tmp/t.png` | still frames and a contact sheet |
 | `node tools/preview.mjs --model xwing` | turntable render of any kit model |
+| `node tools/verify.mjs` | checks every scene for reproducibility, dead frames and over-exposure |
+| `node tools/mixonly.mjs` | builds just the soundtrack, without rendering frames |
 | `node tools/tts.mjs` | narration (incremental; `--force` to rebuild) |
-| `node tools/sfx.mjs`, `node tools/music.mjs` | effects and score |
+| `node tools/sfx.mjs`, `node tools/score.mjs` | effects and score |
 
 `docs/ENGINE.md` is the full API reference for the brick kit, the effects
 library and the scene contract.

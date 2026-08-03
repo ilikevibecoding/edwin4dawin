@@ -631,6 +631,24 @@ function stripHeadTexture(fig, color) {
   });
 }
 
+/**
+ * Stop the head from receiving shadows. A helmet or hood sits a couple of
+ * hundredths off the scalp, which is well under one texel of the shadow map at
+ * figure scale, so the head self-shadows into a ragged bright patch straight
+ * across the face. The head is a 1.3-unit cylinder tucked under a hat: it loses
+ * nothing by being lit flat, and every face stays readable.
+ */
+function keepFaceLit(fig) {
+  for (const n of fig.head.children) if (n.isMesh) n.receiveShadow = false;
+}
+
+/** `buildMinifig` plus the fixes every character in this file wants. */
+async function figure(o) {
+  const fig = await buildMinifig(o);
+  keepFaceLit(fig);
+  return fig;
+}
+
 /** Clip a blaster into a hand and remember it on the figure. */
 function giveBlaster(fig, color = COLORS.trueBlack, opts = {}) {
   const gun = blaster(color, opts);
@@ -1315,13 +1333,18 @@ function hoodPiece({ color, rLow, rBrow, rTip, yLow, yBrow, yTip, openHalf, thic
   // reads as a bright band drawn round the brow.
   const overlap = 0.24;
   const rJoin = rBrow + ((rLow - rBrow) * overlap) / (yBrow - yLow) + 0.015;
+  // The peak rolls over to the axis instead of stopping at `rTip`: a shell of
+  // constant thickness that just stops leaves an annulus with a hole in it,
+  // and plugging that hole with a cap reads as a bobble on top of the hood.
   b.addGeometry(
     latheShell(
       shellProfile(
         [
           [rJoin, yBrow - overlap],
           [rBrow * 0.84, yBrow + (yTip - yBrow) * 0.45],
-          [rTip, yTip],
+          [rTip, yTip - rTip * 0.7],
+          [rTip * 0.66, yTip - rTip * 0.19],
+          [0.012, yTip],
         ],
         thickness
       ),
@@ -1332,20 +1355,28 @@ function hoodPiece({ color, rLow, rBrow, rTip, yLow, yBrow, yTip, openHalf, thic
   return b;
 }
 
-/** Ben's hood: low and wide, framing the face rather than swallowing it. */
+/**
+ * Ben's hood. The brow has to clear y = 0.80: the face decal puts his eyes at
+ * y = 0.59 and his brows at 0.66, and hoodPiece's cap overlaps 0.24 below the
+ * brow ring, so anything lower closes over his eyes and leaves only a beard.
+ */
 function benHood(color = COLORS.reddishBrown) {
-  return hoodPiece({
+  const b = hoodPiece({
     color,
-    rLow: 0.95,
-    rBrow: 0.84,
-    rTip: 0.26,
+    rLow: 0.98,
+    rBrow: 0.82,
+    rTip: 0.34,
     yLow: -0.3,
-    yBrow: 0.82,
-    yTip: 1.28,
-    openHalf: 1.1,
+    yBrow: 1.06,
+    yTip: 1.5,
+    openHalf: 1.12,
     thickness: 0.15,
     opts: { finish: 'rubber' },
-  }).build();
+  });
+  const g = b.build();
+  // Sat back off the brow, the way a pushed-back hood hangs.
+  g.position.z = -0.07;
+  return g;
 }
 
 /** Ben's robe: a mantle over the shoulders plus the belt. Torso-local. */
@@ -1437,14 +1468,18 @@ function jawaRobe(color = COLORS.darkBrown, { yTop, yBottom, rTop = 0.78, rBotto
   return b.build();
 }
 
-/** Two emissive discs set into the Jawa's pitch-black face. */
+/**
+ * Two emissive discs set into the Jawa's pitch-black face. They have to clear
+ * y = 0.62, where jawaHood's cap closes over the head — any higher and the
+ * hood shaves their tops off into a pair of flat-topped half moons.
+ */
 function jawaEyes(color = 0xffd21a) {
   const b = new Bricks();
   const glow = { emissive: color, emissiveIntensity: 3.2, finish: 'glow', toneMapped: false };
   for (const sx of [-1, 1]) {
-    b.addGeometry(new THREE.CylinderGeometry(0.105, 0.105, 0.05, 12), {
+    b.addGeometry(new THREE.CylinderGeometry(0.1, 0.1, 0.05, 12), {
       x: sx * 0.23,
-      y: 0.56,
+      y: 0.5,
       z: 0.635,
       rot: [Math.PI / 2, 0, 0],
       color,
@@ -1548,7 +1583,7 @@ function threepioWiring() {
  * @param {object} opts `{ scale, seed }`
  */
 export async function makeLeia(opts = {}) {
-  const fig = await buildMinifig({
+  const fig = await figure({
     shirt: COLORS.white,
     arms: COLORS.white,
     legs: COLORS.white,
@@ -1590,7 +1625,7 @@ export async function makeLeia(opts = {}) {
  */
 export async function makeVader(opts = {}) {
   const shell = opts.shell ?? VADER_BLACK;
-  const fig = await buildMinifig({
+  const fig = await figure({
     shirt: shell,
     arms: shell,
     legs: shell,
@@ -1653,7 +1688,7 @@ export async function makeStormtrooper(opts = {}) {
   const armour = mixHex(COLORS.white, COLORS.lightBluishGray, scuff);
   const helmetWhite = mixHex(COLORS.white, COLORS.lightBluishGray, scuff * 0.7);
 
-  const fig = await buildMinifig({
+  const fig = await figure({
     shirt: armour,
     arms: armour,
     legs: armour,
@@ -1707,7 +1742,7 @@ export async function makeStormtrooper(opts = {}) {
 /** Rebel Fleet Trooper — tan flak vest, blue trousers, open-face helmet. */
 export async function makeRebelTrooper(opts = {}) {
   const variant = opts.variant ?? 0;
-  const fig = await buildMinifig({
+  const fig = await figure({
     shirt: COLORS.tan,
     arms: COLORS.tan,
     legs: COLORS.sandBlue,
@@ -1733,7 +1768,7 @@ export async function makeRebelTrooper(opts = {}) {
 
 /** Luke Skywalker — Tatooine tunic. `opts.withSaber` clips a blue blade in. */
 export async function makeLuke(opts = {}) {
-  const fig = await buildMinifig({
+  const fig = await figure({
     shirt: COLORS.tan,
     arms: COLORS.tan,
     legs: COLORS.darkTan,
@@ -1769,7 +1804,7 @@ export async function makeLuke(opts = {}) {
 export async function makeBen(opts = {}) {
   const robe = COLORS.reddishBrown;
   const tunic = COLORS.darkTan;
-  const fig = await buildMinifig({
+  const fig = await figure({
     shirt: COLORS.brown,
     arms: robe,
     legs: tunic,
@@ -1802,7 +1837,7 @@ export async function makeBen(opts = {}) {
 /** Rebel X-wing pilot — orange flight suit, white legs, flight helmet. */
 export async function makePilot(opts = {}) {
   const variant = opts.variant ?? 0;
-  const fig = await buildMinifig({
+  const fig = await figure({
     shirt: COLORS.brightOrange,
     arms: COLORS.brightOrange,
     legs: COLORS.white,
@@ -1836,7 +1871,7 @@ export async function makePilot(opts = {}) {
 /** Imperial officer — grey uniform, black cap and gloves. */
 export async function makeImperialOfficer(opts = {}) {
   const uniform = opts.uniform ?? COLORS.darkBluishGray;
-  const fig = await buildMinifig({
+  const fig = await figure({
     shirt: uniform,
     arms: uniform,
     legs: uniform,
@@ -1867,8 +1902,10 @@ export async function makeImperialOfficer(opts = {}) {
  * hidden inside the robe; `fig.waddle(t)` is its walk.
  */
 export async function makeJawa(opts = {}) {
-  const robe = COLORS.darkBrown;
-  const fig = await buildMinifig({
+  // Warmed a little off flat darkBrown: at 0x352100 the whole figure collapses
+  // into one unlit silhouette in the dim corridors these scenes are set in.
+  const robe = opts.robe ?? mixHex(COLORS.darkBrown, COLORS.reddishBrown, 0.32);
+  const fig = await figure({
     shirt: robe,
     arms: robe,
     legs: robe,
@@ -1920,7 +1957,7 @@ export async function makeJawa(opts = {}) {
  */
 export async function makeProtocolDroid(opts = {}) {
   const gold = opts.gold ?? DROID_GOLD;
-  const fig = await buildMinifig({
+  const fig = await figure({
     shirt: gold,
     arms: gold,
     legs: opts.silverLeg ? COLORS.chromeSilver : gold,
@@ -2020,13 +2057,13 @@ export async function makeAstromech(opts = {}) {
   // --- chassis
   const b = new Bricks();
   b.addGeometry(new THREE.CylinderGeometry(R, R, Y1 - Y0, 24), { x: 0, y: (Y0 + Y1) / 2, z: 0, color: shell, opts: G });
-  // Silver bands top and bottom, all but flush. A ring standing 0.02 proud of
-  // the barrel shows the camera its top annulus, and the lower one — cut in
-  // half by the centre leg — then reads as two grey crescents sweeping out
-  // from behind the leg, which is to say a moustache.
-  for (const y of [Y0 + 0.09, Y1 - 0.07]) {
-    b.addGeometry(new THREE.CylinderGeometry(R + 0.006, R + 0.006, 0.15, 24), { x: 0, y, z: 0, color: STEEL, opts: POLISH });
-  }
+  // Silver bands top and bottom, all but flush. The lower one is a thin rim on
+  // the bottom edge rather than a band standing off the barrel: any camera
+  // above the droid sees a band as an arc, and a deep grey arc cut in half by
+  // the centre leg turns into two crescents sweeping out from behind it —
+  // which, with a pair of round ports for eyes, is a face with a moustache.
+  b.addGeometry(new THREE.CylinderGeometry(R + 0.006, R + 0.006, 0.1, 24), { x: 0, y: Y0 + 0.05, z: 0, color: STEEL, opts: POLISH });
+  b.addGeometry(new THREE.CylinderGeometry(R + 0.006, R + 0.006, 0.15, 24), { x: 0, y: Y1 - 0.07, z: 0, color: STEEL, opts: POLISH });
 
   // Panel details around the barrel, laid on the barrel's own curve. A flat
   // box wide enough to read as a panel is a chord across a cylinder this
@@ -2045,9 +2082,10 @@ export async function makeAstromech(opts = {}) {
     panel(s * 0.85, 1.04, 0.3, 0.5, COLORS.lightBluishGray);
     panel(s * 1.75, 1.38, 0.36, 0.6, trim);
     panel(s * 2.55, 1.18, 0.34, 0.42, dark);
-    // Octagonal utility ports low on the front.
-    onCurve(b, s * 0.42, 0.62, R - 0.015, 0, (bb) =>
-      bb.addGeometry(new THREE.CylinderGeometry(0.1, 0.1, 0.1, 8), { rot: [Math.PI / 2, 0, 0], color: STEEL, opts: POLISH })
+    // Octagonal utility ports. Kept up out of the way of the centre leg: down
+    // beside it they pair up and read as eyes.
+    onCurve(b, s * 0.55, 0.95, R - 0.02, 0, (bb) =>
+      bb.addGeometry(new THREE.CylinderGeometry(0.075, 0.075, 0.09, 8), { rot: [Math.PI / 2, 0, 0], color: STEEL, opts: POLISH })
     );
   }
   body.add(b.build());
@@ -2058,16 +2096,19 @@ export async function makeAstromech(opts = {}) {
   body.add(dome);
 
   const d = new Bricks();
+  const domeP = domeProfile(R);
   d.addGeometry(domeGeometry(R, Math.PI * 0.5, 24), { x: 0, y: 0, z: 0, color: shell, opts: G });
   // The base band sits level with the dome's rim; any higher and it cuts off
   // the bottom of the print.
-  d.addGeometry(new THREE.CylinderGeometry(R + 0.015, R + 0.015, 0.08, 24), { x: 0, y: 0, z: 0, color: STEEL, opts: POLISH });
-  // Blue wedges radiating up the dome, skipping the front where the face goes.
+  d.addGeometry(new THREE.CylinderGeometry(R + 0.008, R + 0.008, 0.09, 24), { x: 0, y: 0, z: 0, color: STEEL, opts: POLISH });
+  // Wedges radiating up the dome, skipping the front where the face goes.
+  // Laid on the dome's own curve for the same reason as the barrel panels: a
+  // flat box tangent to a sphere this small lifts its corners clear of the
+  // surface and reads as a brick balanced on the head.
   for (let i = 0; i < 7; i++) {
-    const a = 0.85 + (i / 7) * (Math.PI * 2 - 1.7);
-    onCurve(d, a, 0.20, R * 0.93, -0.42, (bb) =>
-      bb.addGeometry(chamferBox(0.20, 0.34, 0.06, 0.02), { color: i % 2 ? trim : dark, opts: G })
-    );
+    const g = shellPatch(domeP, { yFrom: 0.05, yTo: 0.37, halfAngle: 0.21, offset: 0.012, rows: 6, segments: 6 });
+    g.rotateY(0.85 + (i / 7) * (Math.PI * 2 - 1.7));
+    d.addGeometry(g, { color: i % 2 ? trim : dark, opts: { ...G, side: THREE.DoubleSide } });
   }
   d.addGeometry(new THREE.CylinderGeometry(0.19, 0.21, 0.05, 14), { x: 0, y: R - 0.02, z: 0, color: STEEL, opts: POLISH });
 
@@ -2082,7 +2123,9 @@ export async function makeAstromech(opts = {}) {
   d.addGeometry(new THREE.CylinderGeometry(0.075, 0.095, 0.12, 12), { color: STEEL, opts: POLISH });
   d.addGeometry(new THREE.CylinderGeometry(0.05, 0.05, 0.17, 12), {
     color: KIT.hologram,
-    opts: { emissive: KIT.hologram, emissiveIntensity: 1.4, finish: 'glow' },
+    // Enough to read as a lit lens; at the emissive strength a hologram beam
+    // wants, this little cylinder clips to white and becomes a bare nub.
+    opts: { emissive: KIT.hologram, emissiveIntensity: 0.8, finish: 'glow' },
   });
   d.pop();
   dome.add(d.build());
@@ -2157,7 +2200,7 @@ export async function makeAstromech(opts = {}) {
   legC.rotation.x = -0.2;
   const c = new Bricks();
   // Hinge shoulder, sunk into the barrel so the leg looks hung off it.
-  c.addGeometry(new THREE.CylinderGeometry(0.15, 0.15, 0.3, 12), { x: 0, y: 0, z: -0.03, rot: [0, 0, Math.PI / 2], color: dark, opts: POLISH });
+  c.addGeometry(new THREE.CylinderGeometry(0.115, 0.115, 0.26, 12), { x: 0, y: 0, z: -0.03, rot: [0, 0, Math.PI / 2], color: dark, opts: POLISH });
   c.addGeometry(chamferBox(0.24, 0.78, 0.26, 0.04), { x: 0, y: -0.42, z: 0.02, color: STEEL, opts: POLISH });
   c.addGeometry(chamferBox(0.28, 0.09, 0.3, 0.03), { x: 0, y: -0.5, z: 0.02, color: dark, opts: POLISH });
   c.addGeometry(chamferBox(0.3, 0.2, 0.58, 0.04), { x: 0, y: -0.92, z: 0.12, color: shell, opts: G });
@@ -2400,11 +2443,14 @@ export const PREVIEW = {
   'dbg-officer-head': () => makeImperialOfficer().then(headOnly),
   'dbg-jawa-head': () => makeJawa().then(headOnly),
   'dbg-3po-head': () => makeProtocolDroid().then(headOnly),
+  'dbg-bare-ben': () => makeBen().then((f) => headOnly(f, true)),
+  'dbg-bare-rebel': () => makeRebelTrooper().then((f) => headOnly(f, true)),
 };
 
 // TEMP-DEBUG
-function headOnly(fig) {
+function headOnly(fig, bare = false) {
   const g = new THREE.Group();
+  if (bare) fig.accessory.clear();
   g.add(fig.head);
   return g;
 }

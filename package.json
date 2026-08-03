@@ -7,9 +7,13 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "preview": "node tools/preview.mjs",
     "render": "node tools/render.mjs",
-    "shots": "node tools/shots.mjs"
+    "shots": "node tools/shots.mjs",
+    "tts": "node tools/tts.mjs",
+    "sfx": "node tools/sfx.mjs",
+    "score": "node tools/score.mjs",
+    "verify": "node tools/verify.mjs"
   },
   "devDependencies": {
     "puppeteer-core": "^23.0.0",
