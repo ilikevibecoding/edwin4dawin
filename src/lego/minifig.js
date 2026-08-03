@@ -823,15 +823,21 @@ export function capeSim(fig, t = 0, windVec = null) {
       .applyQuaternion(inv)
     : new THREE.Vector3();
 
-  // travelling forward (-Z) makes the cloth trail backwards (+Z): negative X
-  const drive = (-vel.z - wind.z * 0.7) * 0.1;
-  const side = (vel.x + wind.x * 0.7) * 0.05;
+  // Travelling forward (-Z) makes the cloth trail backwards (+Z): negative X.
+  // Both drives are the *total* sweep from hanging, shared out over the plates
+  // below, and both are clamped: past horizontal the cloth folds back over the
+  // shoulder and reads as a plank through the torso, and scene wind is free to
+  // be any magnitude it likes.
+  const clamp = (v, m) => Math.max(-m, Math.min(m, v));
+  const drive = clamp((-vel.z - wind.z * 0.7) * 0.48, 1.5);
+  const side = clamp((vel.x + wind.x * 0.7) * 0.23, 0.8);
+  const share = 2 / (segs.length + 1);               // sum of lag * share === 1
   for (let i = 0; i < segs.length; i++) {
     const s = segs[i];
     const lag = (i + 1) / segs.length;
     const flut = Math.sin(t * 1.7 - i * 0.9) * 0.035 + Math.sin(t * 2.9 - i * 1.6) * 0.018;
-    s.rotation.x = (i === 0 ? 0.05 : 0.025) - drive * lag * 1.6 + flut * lag;
-    s.rotation.z = -side * lag * 1.5 + Math.sin(t * 1.3 - i * 0.7) * 0.02 * lag;
+    s.rotation.x = (i === 0 ? 0.05 : 0.025) - drive * lag * share + flut * lag;
+    s.rotation.z = -side * lag * share + Math.sin(t * 1.3 - i * 0.7) * 0.02 * lag;
     s.rotation.y = Math.sin(t * 0.9 - i * 0.5) * 0.03 * lag;
   }
   return fig;

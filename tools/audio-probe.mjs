@@ -19,6 +19,7 @@
  *   --name     an SFX name (for --what sfx)
  *   --dur      length of the rendered file, seconds (default: natural length)
  *   --secdur   override the section length handed to scheduleScore
+ *   --from     resume a section this many seconds in (the director's scrub path)
  *   --opts     JSON options object forwarded to the effect
  *   --bus      JSON options object forwarded to createBus
  *   --sr       sample rate (default 48000)
@@ -29,6 +30,7 @@
  *   --no-png   skip the spectrogram/waveform images
  *   --json     print the measurements as JSON as well
  *   --port     static server port (default 5199)
+ *   --timeout  minutes to allow the render before giving up (default 90)
  */
 
 import puppeteer from 'puppeteer';
@@ -61,6 +63,8 @@ const SEED = num('seed', 20250802);
 const PORT = num('port', 5199);
 const DUR = num('dur', null);
 const SECDUR = num('secdur', null);
+const FROM = num('from', null);
+const TIMEOUT = num('timeout', 90);
 const OPTS = json('opts', {});
 const BUSOPTS = json('bus', {});
 const CUES = json('cues', null);
@@ -201,8 +205,9 @@ const srv = await serve(PORT);
 const browser = await puppeteer.launch({
   headless: true,
   // The full-film pass renders 243 s of audio in one shot and comfortably
-  // outlives puppeteer's default 180 s protocol timeout.
-  protocolTimeout: 30 * 60 * 1000,
+  // outlives puppeteer's default 180 s protocol timeout. It is also several
+  // times slower on a loaded machine, so this is deliberately generous.
+  protocolTimeout: TIMEOUT * 60 * 1000,
   args: [
     '--no-sandbox',
     '--disable-dev-shm-usage',
@@ -240,7 +245,7 @@ try {
     }
   }, {
     what: WHAT, section: SECTION, name: NAME, sr: SR, seed: SEED,
-    dur: DUR ?? undefined, secDur: SECDUR ?? undefined,
+    dur: DUR ?? undefined, secDur: SECDUR ?? undefined, from: FROM ?? undefined,
     opts: OPTS, bus: BUSOPTS, cues: CUES ?? undefined, pcm16: PCM16,
     ducks: has('ducks'),
   });

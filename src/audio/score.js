@@ -537,8 +537,17 @@ export const SECTION_IDS = Object.keys(DEFAULTS);
 
 function makeSection(ctx, bus, spec, o) {
   const d = DEFAULTS[spec.id] || DEFAULTS.fanfare;
-  const t0 = spec.start;
-  const dur = spec.dur;
+  // `from` seconds of the section have already gone by — the director passes it
+  // when playback resumes part-way through a scene. The composition origin
+  // moves back by that much so bar numbers still land where they were written,
+  // and `gate` holds back everything that would have sounded before the resume.
+  const from = Math.max(0, spec.from || 0);
+  const gate = spec.start;
+  const t0 = gate - from;
+  // `spec.dur` is what is left to play; the section is still written at full
+  // length, so bar counts and anything else derived from `S.dur` are unchanged
+  // by resuming.
+  const dur = from + spec.dur;
   const end = t0 + dur;
   const tempo = spec.tempo || d.tempo;
   const spb = 60 / tempo;
@@ -552,10 +561,12 @@ function makeSection(ctx, bus, spec, o) {
   const dryIn = fanIn(ctx, dry);
   const sendIn = fanIn(ctx, send);
   for (const p of [dry.gain, send.gain]) {
-    const fi = Math.max(0.005, spec.fadeIn ?? d.fadeIn);
-    setAt(p, Math.max(0, t0 - 0.002), 0);
-    lin(p, t0 + fi, level);
-    setAt(p, Math.max(t0 + fi + 0.005, end), level);
+    // Resuming mid-section takes a short fade rather than the written one:
+    // enough to keep the join silent, short enough to still feel like a cut.
+    const fi = from > 0 ? 0.04 : Math.max(0.005, spec.fadeIn ?? d.fadeIn);
+    setAt(p, Math.max(0, gate - 0.002), 0);
+    lin(p, gate + fi, level);
+    setAt(p, Math.max(gate + fi + 0.005, end), level);
     lin(p, end + tailFade, 0);
   }
 
@@ -572,7 +583,7 @@ function makeSection(ctx, bus, spec, o) {
   const vib = ctx.createGain();
   vib.gain.value = 5.5;
   vibOsc.connect(vib);
-  vibOsc.start(t0); vibOsc.stop(hardStop);
+  vibOsc.start(gate); vibOsc.stop(hardStop);
 
   const tremOsc = ctx.createOscillator();
   tremOsc.type = 'sine';
@@ -580,10 +591,10 @@ function makeSection(ctx, bus, spec, o) {
   const trem = ctx.createGain();
   trem.gain.value = 0.45;
   tremOsc.connect(trem);
-  tremOsc.start(t0); tremOsc.stop(hardStop);
+  tremOsc.start(gate); tremOsc.stop(hardStop);
 
   const S = {
-    ctx, bus, id: spec.id, t0, dur, end, tempo, spb, r, vib, trem, seed,
+    ctx, bus, id: spec.id, t0, gate, dur, end, tempo, spb, r, vib, trem, seed,
     /** beat -> absolute time */
     b: (beat) => t0 + beat * spb,
     /** bar (0-indexed, 4/4) -> absolute time */
@@ -622,25 +633,36 @@ function makeSection(ctx, bus, spec, o) {
     },
     /** Play a note only if it starts inside the section, clipped to the tail. */
     play(fn, g, t, midi, len, opts) {
-      if (t < t0 - 1e-6 || t >= end - 0.01) return t;
-      const clipped = Math.max(0.02, Math.min(len, end + tailFade - t - 0.02));
+      if (t >= end - 0.01) return t;
+      let st = t;
+      let l = len;
+      if (t < gate - 1e-6) {
+        // On a mid-section resume, a note that would still be sounding gets
+        // picked up part-way through so held pads do not leave a hole. Notes
+        // that had already finished — and, when not resuming, pickups written
+        // before the section starts — are dropped.
+        if (from <= 0 || t + len - gate < 0.15) return t;
+        st = gate;
+        l = t + len - gate;
+      }
+      const clipped = Math.max(0.02, Math.min(l, end + tailFade - st - 0.02));
       notes++;
-      return fn(S, into(g), t, midi, clipped, opts);
+      return fn(S, into(g), st, midi, clipped, opts);
     },
     /** Same, for the percussion signatures that take no pitch. */
     perc(fn, g, t, opts) {
-      if (t < t0 - 1e-6 || t >= end - 0.01) return t;
+      if (t < gate - 1e-6 || t >= end - 0.01) return t;
       notes++;
       return fn(S, into(g), t, opts);
     },
     /** Rolls carry a duration, so they get their own dispatcher. */
     roll(g, t, dur, opts) {
-      if (t < t0 - 1e-6 || t >= end - 0.01) return t;
+      if (t < gate - 1e-6 || t >= end - 0.01) return t;
       notes++;
       return snareRoll(S, into(g), t, Math.min(dur, end + tailFade - t - 0.02), opts);
     },
     hitAt(fn, g, t, midi, opts) {
-      if (t < t0 - 1e-6 || t >= end - 0.01) return t;
+      if (t < gate - 1e-6 || t >= end - 0.01) return t;
       notes++;
       return fn(S, into(g), t, midi, opts);
     },
@@ -1445,7 +1467,8 @@ const SECTIONS = {
  * @param {Array<{id:string,start:number,dur:number}>} sections
  *        `id` is one of 'fanfare' | 'chase' | 'imperial' | 'droids' |
  *        'desert' | 'battle' | 'finale'. Each may also carry `tempo`,
- *        `fadeIn`, `tailFade` and `level` to override the defaults.
+ *        `fadeIn`, `tailFade` and `level` to override the defaults, and
+ *        `from` to resume a section that is already `from` seconds in.
  * @param {object} [opts]  `{seed, gain}`
  * @returns {{end:number, notes:number, sections:Array}}
  */
@@ -1466,7 +1489,10 @@ export function scheduleScore(ctx, bus, sections = [], opts = {}) {
     const tail = S.end + (spec.tailFade ?? DEFAULTS[spec.id].tailFade);
     end = Math.max(end, tail);
     notes += S.noteCount();
-    out.push({ id: spec.id, start: S.t0, dur: S.dur, end: S.end, tempo: S.tempo, notes: S.noteCount() });
+    out.push({
+      id: spec.id, start: S.gate, dur: S.end - S.gate, end: S.end,
+      tempo: S.tempo, notes: S.noteCount(),
+    });
   }
   return { end, notes, sections: out };
 }

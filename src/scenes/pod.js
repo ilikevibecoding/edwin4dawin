@@ -28,17 +28,17 @@ export const id = 'pod';
 
 /* beat boundaries, local scene time ---------------------------------- */
 const S1 = 5.0;       // the run begins
-const S1B = 8.7;      // ...and the camera stops chasing and lets them go
+const S1B = 9.2;      // ...and the camera stops chasing and lets them go
 const S2 = 13.35;     // the pod bay
-const S3 = 16.6;      // exterior — the cut lands on the bang
+const S3 = 16.78;     // exterior — the cut lands on the bang
 const S4 = 21.2;      // the gunner
 const END = 27.0;
 const CARD_IN = 3.05; // the datacard disappears into the droid
-const DOOR = 11.9;    // the pod bay hatch cracks open
+const DOOR = 11.15;   // the pod bay hatch cracks open, ahead of their arrival
 const CLAMPS = 14.6;  // the clamps snap back
 const IRIS = 15.1;    // the launch tube irises open onto the night
 const BANG = 16.45;   // explosive bolts fire, the pod goes
-const LOCK = 23.35;   // the scan comes back empty
+const LOCK = 22.55;   // the scan comes back empty, under "no life forms aboard"
 
 /* interior geometry -------------------------------------------------- */
 const ALC_Z = 30.8;   // the alcove sits this far down the corridor
@@ -46,19 +46,22 @@ const BAY_Z = -160;   // the pod bay is a separate set, parked out of the way
 const GRATE = 0.30;   // top of the centre floor grating
 const WALK = 0.36;    // top of the raised side walkway
 const KNEEL = 1.15;   // how far the princess sinks to kneel
-const RUN_V = 8.8;    // droid run speed, units/sec
+const RUN_V = 7.65;   // droid run speed: puts them in the hatch on the cut
 
-/* the hand-off, staged so the reach reads: the two of them in profile,
- * far enough apart that her arm crosses open air to get to the slot */
-const R2_X = -3.55, R2_Z = 30.9, R2_ROT = -1.93;
-const LEIA_X = -0.7, LEIA_Z = 31.5, LEIA_ROT = 2.2;
+/* The hand-off. Staged around one constraint: she has to be looking at what her
+ * hands are doing and still show the camera her face, which only works if the
+ * droid sits up-corridor of her with his card slot turned across the hall. Her
+ * eyeline then runs back past the lens instead of away from it. */
+const R2_X = -3.50, R2_Z = 30.70, R2_ROT = -1.465;
+const LEIA_X = -1.95, LEIA_Z = 29.70, LEIA_ROT = 3.25;
 const SLOT_Y = 1.78;  // height of the card slot up R2's body
+const C3_X = -0.90, C3_Z = 24.50, C3_ROT = 4.069;
 
 /** Distance covered `u` seconds into the run, with a soft launch. */
 const runDist = (u) => (u <= 0 ? 0 : u < 1.2 ? (RUN_V * u * u) / 2.4 : RUN_V * (u - 0.6));
 
 /** Pod travel out of the cradle, `s` seconds after the bolts fire. */
-const podRun = (s) => (s <= 0 ? 0 : 46 * s * s);
+const podRun = (s) => (s <= 0 ? 0 : 94 * s * s);
 
 /* ------------------------------------------------------------------ */
 /* printed art                                                         */
@@ -81,19 +84,19 @@ function blobTex() {
 /** What the launch tube looks like once the iris is open: night, and a limb. */
 function tubeVoidTex() {
   const r = rng(64);
-  const stars = Array.from({ length: 40 }, () => {
-    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * 120;
+  const stars = Array.from({ length: 54 }, () => {
+    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * 122;
     return `<circle cx="${(128 + Math.cos(a) * d).toFixed(1)}" cy="${(128 + Math.sin(a) * d).toFixed(1)}"`
-      + ` r="${(0.5 + r() * 1.1).toFixed(2)}" fill="#dfe9ff" opacity="${(0.3 + r() * 0.6).toFixed(2)}"/>`;
+      + ` r="${(0.5 + r() * 1.2).toFixed(2)}" fill="#dfe9ff" opacity="${(0.3 + r() * 0.6).toFixed(2)}"/>`;
   }).join('');
+  // the limb sits low and inside the aperture, so a 5-unit disc still shows sky
+  // above it: a plain black hole reads as a hole in the set, not as space
   return svgTexture(svg([0, 0, 256, 256], [
-    `<defs><radialGradient id="limb" cx="0.5" cy="1.08" r="0.66">`,
-    `<stop offset="0" stop-color="#e08a3a"/><stop offset="0.42" stop-color="#5c3a24"/>`,
-    `<stop offset="0.72" stop-color="#0a1020"/><stop offset="1" stop-color="#05070e"/>`,
-    `</radialGradient></defs>`,
     `<rect width="256" height="256" fill="#05070e"/>`,
     stars,
-    `<rect width="256" height="256" fill="url(#limb)" opacity="0.92"/>`,
+    `<path d="M-20 214 Q128 150 276 214 L276 276 L-20 276 Z" fill="#c9782f"/>`,
+    `<path d="M-20 238 Q128 182 276 238 L276 276 L-20 276 Z" fill="#e5a24a"/>`,
+    `<path d="M-20 210 Q128 146 276 210 L276 222 L-20 222 Z" fill="#ffd9a0" opacity="0.5"/>`,
   ].join('')), { w: 256, h: 256, key: 'podTubeVoid' });
 }
 
@@ -271,20 +274,37 @@ export async function build(ctx) {
   door.position.set(0, 0, -40.4);
   inside.add(door);
 
-  // a lit vestibule behind the hatch, so the opening reveals somewhere to go
+  // A lit vestibule behind the hatch, so the opening reveals somewhere to go.
+  // Deep on purpose: the corridor model stops at z = -40, and a short box put
+  // the far wall right behind the droids as they cleared the door, which read as
+  // two figures pasted on a flat grey card.
   const vest = new THREE.Group();
-  vest.add(at(tile(13, 1, 10.4, { color: C.bluishGray }), 0, 0, -50));
-  vest.add(at(tile(1, 10, 10.4, { color: C.darkGray }), -6.4, 0, -45.6));
-  vest.add(at(tile(1, 10, 10.4, { color: C.darkGray }), 6.4, 0, -45.6));
-  vest.add(at(tile(13, 10, 0.6, { color: C.darkGray }), 0, 9.2, -45.6));
-  vest.add(at(rot(cyl(0.34, 8.6, { color: 0xffc46a, glow: true, seg: 10 }), 0, 0, Math.PI / 2),
-    4.3, 7.4, -49.2));
+  vest.add(at(tile(13, 1, 10.4, { color: C.lightGray }), 0, 0, -58));
+  vest.add(at(tile(13, 18, 0.3, { color: C.bluishGray }), 0, 0, -49.5));
+  vest.add(at(tile(13, 18, 0.6, { color: C.darkGray }), 0, 9.2, -49.5));
+  for (const sx of [-1, 1]) {
+    vest.add(at(tile(1, 18, 10.4, { color: C.bluishGray }), sx * 6.4, 0, -49.5));
+    // A lit cove down each side wall, running away from the door rather than
+    // across it: two strips hung crosswise read as bars floating in the dark.
+    vest.add(at(rot(cyl(0.3, 15.4, { color: 0xffc46a, glow: true, seg: 10 }), Math.PI / 2, 0, 0),
+      sx * 5.5, 7.3, -57.0));
+    vest.add(at(tile(0.9, 15.8, 0.55, { color: C.darkGray }), sx * 5.5, 8.0, -49.4));
+    vest.add(at(tile(0.7, 15.8, 0.4, { color: C.lightGray }), sx * 5.5, 3.2, -49.4));
+  }
   inside.add(vest);
-  vest.add(at(rot(cyl(0.34, 8.6, { color: 0xffc46a, glow: true, seg: 10 }), 0, 0, Math.PI / 2),
-    -4.3, 4.6, -49.2));
-  const vestLight = new THREE.PointLight(0xffd9a8, 52, 30, 2);
-  vestLight.position.set(0, 5.0, -46.5);
+  // Two soft sources rather than one hot one: a single lamp near the threshold
+  // burned a white pool on the deck and left the walls behind it black.
+  const vestLight = new THREE.PointLight(0xffd9a8, 30, 22, 2);
+  vestLight.position.set(0, 6.4, -45.4);
   inside.add(vestLight);
+  const vestDeep = new THREE.PointLight(0xffcf9a, 30, 24, 2);
+  vestDeep.position.set(-1.4, 6.0, -52.5);
+  inside.add(vestDeep);
+  // a little dressing so the space past the hatch is not a flat brown void
+  vest.add(at(tile(1.6, 1.6, 2.2, { color: C.bluishGray }), 4.4, 0.3, -47.6));
+  vest.add(at(tile(1.2, 1.2, 1.6, { color: C.darkGray }), -4.6, 0.3, -48.8));
+  vest.add(at(rot(cyl(0.3, 12.4, { color: C.darkGray, seg: 8 }), 0, 0, Math.PI / 2),
+    6.2, 8.5, -46.4));
 
   // The corridor ships with its +Z mouth open, which reads as a black hole in
   // any shot that looks back up the hall. Cap it with a bulkhead and leave one
@@ -319,9 +339,11 @@ export async function build(ctx) {
   alcove.add(at(tile(3.4, 0.9, 7.4, { color: C.veryLightGray }), -4.3, 0, ALC_Z - 3.2));
   alcove.add(at(tile(3.8, 1.1, 0.5, { color: C.lightGray }), -4.3, 7.4, ALC_Z - 3.2));
   alcove.add(at(tile(0.8, 1.0, 7.6, { color: C.bluishGray }), -2.45, 0, ALC_Z - 3.2));
-  // the near jamb, a sliver of foreground at frame left
-  alcove.add(at(tile(0.9, 0.9, 7.4, { color: C.veryLightGray }), -5.6, 0, ALC_Z + 4.0));
-  alcove.add(at(tile(1.2, 1.1, 0.5, { color: C.lightGray }), -5.6, 7.4, ALC_Z + 4.0));
+  // The near jamb: three units from the lens in the hand-off, so it is dark on
+  // purpose. Painted the same white as the rest of the hall it read as a blank
+  // panel filling frame left.
+  alcove.add(at(tile(0.9, 0.9, 7.4, { color: C.darkGray }), -5.6, 0, ALC_Z + 4.0));
+  alcove.add(at(tile(1.2, 1.1, 0.5, { color: C.darkGray }), -5.6, 7.4, ALC_Z + 4.0));
   // soffit over the nook with a warm strip tucked under it
   alcove.add(at(tile(2.4, 7.0, 0.5, { color: C.lightGray }), -4.8, 6.4, ALC_Z + 0.4));
   alcove.add(at(lit(tile(1.5, 5.2, 0.2), { color: 0xffdda6 }), -4.8, 6.2, ALC_Z + 0.4));
@@ -332,7 +354,7 @@ export async function build(ctx) {
   // wall readout: behind the droid in the hand-off, straight ahead in the run
   alcove.add(at(tile(1.9, 0.3, 1.5, { color: C.darkGray }), -3.9, 3.8, ALC_Z - 2.72));
   alcove.add(at(lit(tile(1.55, 0.12, 1.15), { map: nookScreenTex(), opacity: 0.94 }),
-    -3.9, 3.97, ALC_Z - 2.86));
+    -3.9, 3.97, ALC_Z - 2.55));
   alcove.add(at(rot(cyl(0.16, 0.14, { color: 0xff6a3a, glow: true, seg: 10 }), Math.PI / 2, 0, 0),
     -2.9, 5.2, ALC_Z - 2.84));
   // a pair of crates somebody left behind, stacked up-corridor of the droid
@@ -346,10 +368,10 @@ export async function build(ctx) {
   }
   inside.add(alcove);
 
-  const nookLamp = new THREE.PointLight(0xffc188, 15, 16, 2);
+  const nookLamp = new THREE.PointLight(0xffc188, 22, 16, 2);
   nookLamp.position.set(-4.4, 5.4, ALC_Z + 0.4);
   inside.add(nookLamp);
-  const nookFill = new THREE.PointLight(0xffe6c4, 5.0, 12, 2);
+  const nookFill = new THREE.PointLight(0xffe6c4, 7.0, 12, 2);
   nookFill.position.set(-1.0, 2.4, ALC_Z + 3.4);
   inside.add(nookFill);
   // red emergency wash for the run
@@ -408,7 +430,10 @@ export async function build(ctx) {
     new THREE.Vector3(0.2, 0, 15.0),
     new THREE.Vector3(0.5, 0, 0.0),
     new THREE.Vector3(0.1, 0, -20.0),
-    new THREE.Vector3(0.3, 0, -41.5),
+    new THREE.Vector3(0.3, 0, -38.0),
+    // through the hatch and on into the vestibule, so they leave the shot
+    // instead of piling up against the door
+    new THREE.Vector3(0.2, 0, -50.0),
   ], false, 'catmullrom', 0.4);
   const runLen = runCurve.getLength();
   const _p = new THREE.Vector3();
@@ -458,16 +483,24 @@ export async function build(ctx) {
   const hits = new Impacts(inside, bolts.impacts().map((h) => ({
     t: h.t, pos: [h.pos.x, h.pos.y, h.pos.z], size: 0.9, color: 0xffd0a0,
   })), { dur: 0.3 });
-  const muzzleLight = new THREE.PointLight(0xff7a3a, 0, 52, 2);
+  // kept short-range on purpose: at 50 units it lit the whole hall on every
+  // burst and flattened the shot instead of punching the walls behind them
+  const muzzleLight = new THREE.PointLight(0xff7a3a, 0, 30, 2);
   muzzleLight.position.set(0.2, 4.4, 38.2);
   inside.add(muzzleLight);
 
   /* --- the pod bay ---------------------------------------------------- */
 
-  const bay = podBay({ width: 24, height: 11, depth: 26, seed: 55, practicals: 3 });
+  // Wider than it needs to be: the pod only reads as a pod from near abeam, and
+  // at the stock 20-24 width the camera has to sit inside the wall ribs to get
+  // there. The extra beam is all off-camera deck.
+  const BAY_W = 34, BAY_H = 11, BAY_D = 26;
+  const bay = podBay({ width: BAY_W, height: BAY_H, depth: BAY_D, seed: 55, practicals: 3 });
   bay.position.set(0, 0, BAY_Z);
   inside.add(bay);
-  for (const l of bay.userData.lamps) l.intensity = 26;
+  // the model's floods are set for a wide establishing shot; from inside the bay
+  // at 13 units they burn the white hull out to a flat silhouette
+  for (const l of bay.userData.lamps) l.intensity = 13;
   // setClamps() is geared for a slimmer pod — at its "clamped" end the pads sit
   // 2.2 out, well inside a 2.5-radius hull. Drive the four arms directly
   // instead, and let them fall away rather than only sliding outboard.
@@ -475,53 +508,78 @@ export async function build(ctx) {
   // podBay leaves its -Z end open around the launch tube; without this the
   // shot looks past the tube ring into empty space.
   const tubeR = bay.userData.tubeRadius;
-  const gap = 12 - (tubeR + 1.35);
+  const gap = BAY_W / 2 - (tubeR + 1.35);
   for (const sx of [-1, 1]) {
-    bay.add(at(tile(gap, 1.0, 11.6, { color: C.veryLightGray }),
-      sx * (12 - gap / 2), 0, -13.6));
-    bay.add(at(tile(0.5, 1.2, 11.6, { color: C.darkGray }), sx * (tubeR + 1.35), 0, -13.55));
+    bay.add(at(tile(gap, 1.0, BAY_H + 0.6, { color: C.veryLightGray }),
+      sx * (BAY_W / 2 - gap / 2), 0, -BAY_D / 2 - 0.6));
+    bay.add(at(tile(0.5, 1.2, BAY_H + 0.6, { color: C.darkGray }),
+      sx * (tubeR + 1.35), 0, -BAY_D / 2 - 0.55));
   }
-  bay.add(at(tile(24, 1.0, 1.6, { color: C.lightGray }), 0, 11.4, -13.6));
+  bay.add(at(tile(BAY_W, 1.0, 1.6, { color: C.lightGray }), 0, BAY_H + 0.4, -BAY_D / 2 - 0.6));
 
-  // podBay's floods sit on the centreline and leave the pod's flank in shadow
-  const podFill = new THREE.PointLight(0xffe8d2, 34, 26, 2);
-  podFill.position.set(7.2, 7.4, BAY_Z + 3.4);
+  // podBay's floods sit on the centreline and leave the pod's flank in shadow.
+  // Kept well off the hull: any closer and the inverse square puts a blown
+  // highlight on the near cradle post instead of a gradient down the flank.
+  const podFill = new THREE.PointLight(0xffe8d2, 26, 36, 2);
+  podFill.position.set(12.6, 9.6, BAY_Z + 8.0);
   inside.add(podFill);
+  // and a second one forward of the cradle, or the hull goes to silhouette the
+  // moment it starts down the tube
+  const podFore = new THREE.PointLight(0xffe0c0, 20, 30, 2);
+  podFore.position.set(11.5, 8.4, BAY_Z - 7.0);
+  inside.add(podFore);
 
   // The tube's blast hatch is a static plate in the model, so the aperture gets
   // its own disc of night laid over it and faded up as the iris runs back.
+  // sized to the ring's inner bore (torus minor radius 0.55) so it fills the
+  // aperture without poking through the rim
   const voidDisc = new THREE.Mesh(
-    new THREE.CircleGeometry(bay.userData.tubeRadius * 1.02, 40),
+    new THREE.CircleGeometry(tubeR - 0.62, 40),
     new THREE.MeshBasicMaterial({
       map: tubeVoidTex(), transparent: true, opacity: 0, toneMapped: false, depthWrite: false,
     }),
   );
-  voidDisc.position.set(0, bay.userData.tubeRadius + 1.2, BAY_Z - 12.9);
+  const TUBE_Y = tubeR + 1.2;
+  voidDisc.position.set(0, TUBE_Y, BAY_Z - BAY_D / 2 + 0.5);
+  voidDisc.renderOrder = 3;
   inside.add(voidDisc);
-  const tubeGlow = new THREE.PointLight(0xc2d8ff, 0, 30, 2);
-  tubeGlow.position.set(0, bay.userData.tubeRadius + 1.2, BAY_Z - 10.4);
+  const tubeGlow = new THREE.PointLight(0xffb877, 0, 26, 2);
+  tubeGlow.position.set(0, TUBE_Y, BAY_Z - BAY_D / 2 + 2.4);
   inside.add(tubeGlow);
 
   const podIn = escapePod({ seed: 3 });
   inside.add(podIn);
   const POD_Y = 4.0;
   const POD_Z = BAY_Z + 1.2;
+  // rides with the hull so the retro ring throws light on the cradle and the
+  // tube rim as it goes past them
+  const podBurn = new THREE.PointLight(0xffc27a, 0, 22, 2);
+  podBurn.position.set(0, 2.8, 5.4);
+  podIn.add(podBurn);
 
   // The explosive bolts are squibs at the four clamp pads, not a fireball on the
   // pod: anything centred on the hull at this focal length swallows the frame.
-  const boltFire = [[-3.6, 5.4], [-3.6, -3.0], [3.6, 5.4], [3.6, -3.0]].map(([x, z], i) => new Fireball(inside, {
-    t0: BANG - 0.03 + i * 0.02, pos: [x, 3.0, BAY_Z + z], size: 0.62, dur: 0.26,
+  const boltFire = [[-3.2, 5.4], [-3.2, -3.0], [3.2, 5.4], [3.2, -3.0]].map(([x, z], i) => new Fireball(inside, {
+    t0: BANG - 0.03 + i * 0.02, pos: [x, 4.2, BAY_Z + z], size: 0.62, dur: 0.26,
     seed: 40 + i * 7, brickCount: 5, gravity: -9, ring: false,
     color: 0xfff0cc, color2: 0xffa652,
   }));
+  // additive, and the camera is looking through all of it: twenty puffs at 0.22
+  // turn the whole launch into a milk-white frame
   const bayHaze = new Smoke(inside, {
-    t0: BANG - 0.05, count: 20, origin: [0, 3.2, BAY_Z - 1.0], spread: 9, size: 5.5, rise: 1.1,
-    life: 2.4, opacity: 0.22, color: 0xc8cdd4, spawnWindow: 0.8, seed: 19,
+    t0: BANG - 0.05, count: 13, origin: [0, 3.0, BAY_Z - 1.0], spread: 10, size: 4.0, rise: 1.1,
+    life: 2.4, opacity: 0.05, color: 0xc8cdd4, spawnWindow: 0.8, seed: 19,
   });
 
   /* --- outside -------------------------------------------------------- */
 
-  outside.add(spaceBackdrop({ seed: 31, radius: 6400, count: 5200 }));
+  const sky = spaceBackdrop({ seed: 31, radius: 6400, count: 5200 });
+  outside.add(sky);
+  // The galaxy band is tuned for a wide lens. Behind a 30-degree gunsight its
+  // core magnifies into a milk-white wedge across the lower half of the frame,
+  // so it and the nebula both come down for that beat.
+  const bandMat = sky.userData.band.material;
+  const nebula = sky.userData.clouds;
 
   const SUN = new THREE.Vector3(220, 160, 120).normalize();
   const world = planet({ radius: 1000, type: 'desert', seed: 88, seg: 72 });
@@ -532,7 +590,7 @@ export async function build(ctx) {
   const sd = starDestroyer({ seed: 7 });
   const podOut = escapePod({ seed: 3 });
   outside.add(cv, sd, podOut);
-  cv.userData.setThrottle(0.12);
+  cv.userData.setThrottle(0.34);
   for (const i of [0, 3, 7, 9]) cv.userData.killEngine(i, true);
   sd.userData.setThrottle(0.55);
 
@@ -545,19 +603,26 @@ export async function build(ctx) {
   // gunner, dark enough that the space key does not blow them out
   const deck = new THREE.Group();
   const DECK_Y = -23;
-  const plates = [[130, 62, -30, 0x44474a], [104, 44, -84, 0x4b4e51], [64, 28, -118, 0x3f4245]];
+  // Kept genuinely dark. The space key is set for white hulls at 300 units, and
+  // anything mid-grey this close to the lens turns into a blown pale slab under
+  // the frame instead of the shadowed foreground the shot needs.
+  // Matte, and darker than they look like they should be. The kit's default
+  // roughness of 0.42 across a 130-stud plate puts one enormous specular lobe
+  // from the space key right across the bottom-left of the gunsight.
+  const HULL = { rough: 0.96, metal: 0 };
+  const plates = [[130, 62, -30, 0x232629], [104, 44, -84, 0x282b2e], [64, 28, -118, 0x1f2225]];
   plates.forEach(([w, d, z, col], i) => {
-    deck.add(at(tile(w, d, 3, { color: col }), 0, DECK_Y - i * 0.7, z));
+    deck.add(at(tile(w, d, 3, { color: col, ...HULL }), 0, DECK_Y - i * 0.7, z));
   });
   for (const sx of [-1, 1]) {
-    deck.add(at(tile(5, 120, 0.7, { color: 0x1d2023 }), sx * 21, DECK_Y + 3, -60));
-    deck.add(at(tile(2.4, 96, 0.5, { color: 0x2b2e31 }), sx * 40, DECK_Y + 3, -48));
+    deck.add(at(tile(5, 120, 0.7, { color: 0x121417, ...HULL }), sx * 21, DECK_Y + 3, -60));
+    deck.add(at(tile(2.4, 96, 0.5, { color: 0x181b1e, ...HULL }), sx * 40, DECK_Y + 3, -48));
   }
   const deckR = rng(41);
   for (let i = 0; i < 34; i++) {
     const w = 2 + deckR() * 6;
     deck.add(at(tile(w, 2 + deckR() * 7, 0.6 + deckR() * 2.0, {
-      color: deckR() < 0.45 ? 0x2f3235 : 0x585c5e,
+      color: deckR() < 0.45 ? 0x1a1d20 : 0x33373a, ...HULL,
     }), -56 + deckR() * 112, DECK_Y + 3, -22 - deckR() * 92));
   }
   outside.add(deck);
@@ -678,7 +743,9 @@ export async function build(ctx) {
       if (indoors) {
         // the hallway comes up from a warm brown-out to full emergency power
         const hum = 0.94 + 0.06 * Math.sin(t * 7.3) * Math.sin(t * 1.7);
-        hall.userData.setLights(lerp(0.34, 0.48, smoothstep(S1 - 0.5, S1 + 0.4, t)) * hum);
+        // held well down for the hand-off so the nook lamp is doing the work and
+        // the three of them sit in a warm pool, then up for the run
+        hall.userData.setLights(lerp(0.22, 0.30, smoothstep(S1 - 0.5, S1 + 0.4, t)) * hum);
         bay.userData.update(t);
         door.userData.update(t);
         door.userData.setOpen(0.78 * smoothstep(DOOR, DOOR + 1.0, t));
@@ -689,11 +756,11 @@ export async function build(ctx) {
         for (const s of shots) strobe += Math.max(0, 1 - Math.abs(t - s.t0) * 11);
         muzzleLight.intensity = clamp(strobe, 0, 1.6) * 70;
         const running = smoothstep(S1 - 0.2, S1 + 0.6, t);
-        nookLamp.intensity = 15 * (1 - 0.6 * smoothstep(S1 + 0.6, S1 + 1.6, t));
-        nookFill.intensity = 5.0 * (1 - running);
+        nookLamp.intensity = 22 * (1 - 0.6 * smoothstep(S1 + 0.6, S1 + 1.6, t));
+        nookFill.intensity = 7.0 * (1 - running);
         const blink = (Math.sin(t * 4.4) > 0 ? 1 : 0.06) * running;
-        alarmA.intensity = 22 * blink;
-        alarmB.intensity = 22 * (Math.sin(t * 4.4 + 2.1) > 0 ? 1 : 0.06) * running;
+        alarmA.intensity = 24 * blink;
+        alarmB.intensity = 24 * (Math.sin(t * 4.4 + 2.1) > 0 ? 1 : 0.06) * running;
 
         if (t < S1) {
           /* --- the hand-off ------------------------------------------- */
@@ -701,10 +768,11 @@ export async function build(ctx) {
           r2.rotation.set(0, R2_ROT, 0);
           r2.userData.setCenterFoot(1);
           r2.userData.roll(0);
-          // the dome watches her hands, then tips up to her face
+          // Watches her hands (0.96 puts the eye on her), then swings round to
+          // the corridor she is about to send him down (-1.05 faces the lens).
           r2.userData.dome.rotation.y = lerp(
-            lerp(-0.5, -0.05, smoothstep(0.7, 2.2, t)),
-            0.5, smoothstep(CARD_IN + 0.1, 4.3, t)
+            lerp(0.4, 0.96, smoothstep(0.7, 2.2, t)),
+            -1.05, smoothstep(CARD_IN + 0.15, 4.4, t)
           ) + 0.04 * Math.sin(t * 1.9);
           slotLamp.material.opacity = smoothstep(CARD_IN, CARD_IN + 0.3, t)
             * (0.55 + 0.45 * Math.sin(t * 13));
@@ -716,12 +784,14 @@ export async function build(ctx) {
           const push = smoothstep(2.2, CARD_IN, t);
           const rest = smoothstep(CARD_IN + 0.2, 4.2, t);
           pose(leia, {
-            armL: { x: 0.34 + 0.12 * Math.sin(t * 1.1), y: 0, z: -0.4 },
+            armL: { x: 0.06 + 0.06 * Math.sin(t * 1.1), y: 0, z: -0.05 },
             handL: 0.2,
             handR: -0.35 - reach * 0.3,
-            lean: 0.06 + reach * 0.1 - rest * 0.04,
-            headX: 0.12 + reach * 0.16 - rest * 0.34,
-            headY: -0.36 - reach * 0.14 + rest * 0.06,
+            lean: 0.06 + reach * 0.12 - rest * 0.05,
+            // headX is a pitch, and positive lifts the chin: she has to look
+            // *down* at the slot, which sits a brick and a half below her eyes
+            headX: -0.14 - reach * 0.2 + rest * 0.26,
+            headY: 0.24 + reach * 0.06 - rest * 0.34,
           });
           // her hand tracks the slot: in, press home, then withdraws
           _aim.copy(HAND_IN);
@@ -732,38 +802,45 @@ export async function build(ctx) {
           reachTo(leia, 'R', _aim);
           card.visible = t < CARD_IN;
 
-          // out at the mouth of the nook, watching the corridor and fretting
-          c3.position.set(0.5, GRATE, 26.4);
-          c3.rotation.set(0, 2.72, 0);
+          // out in the hall down-corridor of them, watching the way they have to
+          // go and fretting about it
+          c3.position.set(C3_X, GRATE, C3_Z);
+          c3.rotation.set(0, C3_ROT, 0);
           const f1 = Math.sin(t * 3.3);
           const f2 = Math.sin(t * 2.1 + 1.2);
           pose(c3, {
-            armR: { x: 0.5 + 0.42 * f1, y: 0, z: 0.34 },
-            armL: { x: 0.54 - 0.44 * f2, y: 0, z: -0.36 },
-            handR: -0.95, handL: 0.95,
+            armR: { x: 1.02 + 0.24 * f1, y: 0, z: 0.14 },
+            armL: { x: 0.96 - 0.26 * f2, y: 0, z: -0.16 },
+            handR: -1.15, handL: 1.15,
             legR: 0.03, legL: -0.03,
-            lean: -0.02 + 0.03 * f2,
+            lean: 0.04 + 0.03 * f2,
             headY: 0.55 + 0.3 * Math.sin(t * 1.25),
             headX: -0.04,
           });
 
+          // Down the hall at dome height, so the three of them stack across the
+          // frame instead of one filling it: droid left, princess centre, and
+          // the protocol droid small and further off at frame right.
           const k = smoothstep(0, 1, t / S1);
-          cam.position.set(0.6 - 0.14 * k, 2.62 - 0.07 * k, 38.5 - 1.0 * k);
-          cam.lookAt(-1.9 - 0.22 * k, 2.06, 30.9);
-          cam.fov = 45 - 3.4 * k;
+          cam.position.set(2.0 - 0.22 * k, 2.42 - 0.06 * k, 38.6 - 0.85 * k);
+          cam.lookAt(-2.9, 2.12, 30.65);
+          cam.fov = 40 - 2.6 * k;
         } else {
           /* --- the run ------------------------------------------------ */
-          // the cut lands with the droid already rolling — no dead frames
-          const u = t - S1 + 0.45;
+          // The cut lands with them already nine units down the hall. That is
+          // deliberate: any camera far enough behind them to frame both droids
+          // at the mouth of the nook also has the kneeling princess in it, and
+          // from four feet away she fills the frame.
+          const u = t - S1 + 1.55;
           const d = runDist(u);
           // he starts a pace ahead of the droid at the nook mouth and loses
           // ground steadily once it winds up: the whole joke of the character
           const dG = d + 1.4 - 2.2 * smoothstep(S1 + 0.3, S1 + 2.8, t);
           const drift = smoothstep(S1, S1 + 1.6, t);
           onRun(r2, d, 0, GRATE);
-          // he keeps to the far side of the corridor from the lens: 5 units of
-          // protocol droid one pace behind the dome would fill the frame
-          onRun(c3, Math.max(0, dG), 1.3 + 1.1 * drift, GRATE);
+          // he keeps to the port side, away from the lens: five units of
+          // protocol droid between the camera and the dome would fill the frame
+          onRun(c3, Math.max(0, dG), -(1.5 + 0.4 * drift), GRATE);
           r2.userData.setCenterFoot(1 - smoothstep(S1 + 0.1, S1 + 0.7, t));
           r2.userData.roll(d);
           // glances back at every burst, then fixes on the hatch again
@@ -799,22 +876,30 @@ export async function build(ctx) {
           card.visible = false;
 
           if (t < S1B) {
-            // Dolly with them off their port quarter, at dome height. It has to
-            // be this side: the princess is knelt on the starboard half of the
-            // grating, and from over there she blocks the whole shot. x stays
-            // inboard of -4.4 or the camera rides through the wall ribs.
+            // Retreat down the hall ahead of their starboard bow, matched to
+            // their speed. Everything the beat needs is then in one frame: two
+            // faces coming at the lens, the hallway they are running from, the
+            // muzzle flare at the end of it, and bolts crossing between.
+            // Ahead and not behind, because five units of protocol droid is all
+            // a trailing camera in a twelve-wide corridor can see.
             const j = smoothstep(S1, S1B, t);
             const jog = noise(t * 4.6, 11) * 0.05;
             _v.copy(r2.position).add(c3.position).multiplyScalar(0.5);
-            cam.position.set(-4.05 + 1.1 * j, 2.4 + jog, Math.min(38.4, r2.position.z + 8.0));
-            cam.lookAt(_v.x + 0.1, 2.15, _v.z - 1.4);
-            cam.fov = lerp(46, 43, j);
+            cam.position.set(2.15 - 0.35 * j, 2.5 + jog, r2.position.z - 8.8 - 0.9 * j);
+            // aimed a little starboard of the pair, which swings the receding
+            // hallway and the doorway they are being shot at from into frame
+            // left instead of burying it behind the port wall
+            cam.lookAt(_v.x + 0.35, 2.55 + 0.1 * j, _v.z + 1.4);
+            cam.fov = lerp(45, 42, j);
           } else {
-            // and now let them go: locked off, low, the hatch cracking ahead
+            // and now let them go: dead centre of the hall at dome height,
+            // creeping after them on a tightening lens while the hatch opens
+            // ahead. Centred on purpose — off to one side, the near wall cove
+            // on that side blooms into frame as a slab of white.
             const k = smoothstep(0, 1, (t - S1B) / (S2 - S1B));
-            cam.position.set(1.9, 2.6, 15.5);
-            cam.lookAt(0.4, 2.2 + 0.4 * k, -14 - 14 * k);
-            cam.fov = lerp(45, 34, k);
+            cam.position.set(0.2, 2.5, lerp(3.0, -3.0, k));
+            cam.lookAt(0.2, 2.3 + 0.25 * k, -34 - 12 * k);
+            cam.fov = lerp(44, 27, k);
           }
         }
 
@@ -831,41 +916,55 @@ export async function build(ctx) {
         const thrown = smoothstep(CLAMPS, CLAMPS + 0.3, t);
         bay.userData.clamps.forEach((arm, i) => {
           const sx = clampSide[i];
-          arm.position.x = sx * (6.2 + thrown * 1.5);
-          arm.rotation.z = -sx * thrown * 1.15;
+          arm.position.x = sx * (6.2 + thrown * 1.1);
+          // the model swings the pads up; dropping them instead keeps the near
+          // arm out of the lens and reads better as a release anyway
+          arm.rotation.z = sx * thrown * 0.85;
         });
         const iris = smoothstep(IRIS, IRIS + 0.7, t);
         voidDisc.material.opacity = iris;
-        tubeGlow.intensity = iris * 16;
+        tubeGlow.intensity = iris * 20;
         const gone = podRun(t - BANG);
-        // a shudder in the cradle once the clamps are off, then it goes; the
-        // hull rides up onto the tube's centre line as it runs out
+        // a shudder in the cradle once the clamps are off, then it goes. The
+        // cradle parks the hull 0.76 above the tube's axis, so it also settles
+        // down onto the bore line over the first few units of travel.
         const settle = smoothstep(CLAMPS, CLAMPS + 0.5, t) * (1 - smoothstep(BANG - 0.1, BANG, t));
         podIn.position.set(
           noise(t * 13, 8) * 0.05 * settle,
-          POD_Y + 2.0 * smoothstep(0, 14, gone) - 0.07 * settle,
+          POD_Y - 0.76 * smoothstep(0, 7, gone) - 0.07 * settle,
           POD_Z - gone
         );
-        podIn.rotation.set(-gone * 0.004, 0, gone * 0.005 + noise(t * 11, 9) * 0.01 * settle);
-        podIn.visible = gone < 26;
-        podIn.userData.setThrottle(clamp((t - BANG + 0.12) * 4) * 1.3);
+        podIn.rotation.set(0, 0, gone * 0.004 + noise(t * 11, 9) * 0.01 * settle);
+        podIn.visible = gone < 30;
+        const burn = clamp((t - BANG + 0.12) * 4);
+        podIn.userData.setThrottle(burn);
+        podBurn.intensity = burn * 60;
         for (const f of boltFire) f.update(t);
         bayHaze.update(t);
 
         if (t >= S2) {
-          // Square-on profile from the starboard wall, sat level with the pod so
-          // both clamp pairs fall just outside the frame edges; the hull then
-          // runs out to frame left along a line the shot has already drawn.
+          // Near abeam from the starboard gantry, aimed a little forward of the
+          // pod so the tube ring sits at frame left with the hull right of
+          // centre: the nose cone reads, the cradle and clamps fall into the
+          // bottom third, and there is open frame for it to launch into.
+          // Looking down a few degrees keeps the ceiling light panels out.
           const k = smoothstep(0, 1, (t - S2) / (BANG - S2));
-          const shake = 1.6 * Math.max(0, 1 - Math.abs(t - BANG) * 2.4);
+          const shake = 1.7 * Math.max(0, 1 - Math.abs(t - BANG) * 2.4);
+          // and once the bolts fire it whips after the hull rather than sitting
+          // on an empty cradle for the last third of a second
+          const w = smoothstep(BANG, BANG + 0.3, t);
           cam.position.set(
-            lerp(10.8, 10.3, k) + noise(t * 7, 1) * shake,
-            lerp(5.9, 5.5, k) + noise(t * 7.4, 2) * shake,
-            POD_Z + lerp(1.9, 1.2, k)
+            lerp(14.9, 14.4, k) + noise(t * 7, 1) * shake,
+            lerp(9.6, 9.2, k) + noise(t * 7.4, 2) * shake,
+            POD_Z + lerp(3.2, 2.2, k)
           );
-          cam.lookAt(lerp(-0.4, -0.9, k), lerp(4.9, 4.7, k), POD_Z + lerp(-0.6, -1.8, k));
-          cam.rotateZ(noise(t * 9, 5) * 0.026 * shake);
-          cam.fov = lerp(58, 53, k);
+          cam.lookAt(
+            lerp(-2.2, -3.0, k) - w * 1.2,
+            lerp(4.6, 4.4, k),
+            POD_Z + lerp(-4.8, -6.2, k) - w * 6.0
+          );
+          cam.rotateZ(noise(t * 9, 5) * 0.028 * shake);
+          cam.fov = lerp(46, 44, k) + w * 3;
         }
       }
 
@@ -874,29 +973,38 @@ export async function build(ctx) {
       /* ---------------------------------------------------------------- */
       if (!indoors) {
         world.userData.update(t);
-        podOut.userData.setThrottle(1.5 + 0.45 * Math.sin(t * 7.3));
+        podOut.userData.setThrottle(1.75 + 0.4 * Math.sin(t * 7.3));
         vent.update(t);
+        const gunsight = t >= S4;
+        bandMat.opacity = gunsight ? 0.09 : 0.34;
+        nebula.visible = !gunsight;
 
         if (t < S4) {
           /* --- the wide: pod, corvette, destroyer, planet ------------- */
+          // Stacked by depth, which is the only way three hulls 9, 64 and 300
+          // units long read at their true relative sizes in one frame: the pod
+          // near and falling out of the bottom of frame, the corvette a third of
+          // a kilometre back and small with it, the destroyer further again and
+          // still the biggest thing in the shot.
           const k = (t - S3) / (S4 - S3);
           world.position.set(300, -1360, -1620);
-          cv.position.set(-62, 20, -244);
-          cv.rotation.set(0.05, 1.7, 0.14 + 0.015 * Math.sin(t * 0.5));
-          // far enough off that all 300 units of her fit the frame: she has to
-          // read as one mass above the corvette, not as a cropped wing
-          sd.position.set(112, 84, -486);
+          cv.position.set(10, 8, -250);
+          cv.rotation.set(0.05, 1.66, 0.12 + 0.015 * Math.sin(t * 0.5));
+          // 300 units of hull with the tail 120 nearer the lens than the nose:
+          // parked any higher and perspective throws the stern clean out of the
+          // top-right corner and all that is left is a sliver of grey
+          sd.position.set(60, 40, -330);
           sd.rotation.set(0.03, 0.62, 0.02);
           deck.position.y = -9000;
           for (const g of guns) g.position.y = -9000;
           podOut.position.set(
-            lerp(-48, 16, k),
-            lerp(14, -13, k * k * 0.5 + k * 0.5),
-            lerp(-224, -26, Math.pow(k, 0.8))
+            lerp(0, -18, Math.pow(k, 1.3)),
+            lerp(4, -12, k * k * 0.45 + k * 0.55),
+            lerp(-112, -18, Math.pow(k, 0.75))
           );
           podOut.rotation.set(t * 1.3, t * 0.7, t * 0.48);
           cam.position.set(lerp(-1, 3, k), lerp(8, 5, k), lerp(26, 22, k));
-          cam.lookAt(lerp(6, 10, k), lerp(-16, -13, k), -180);
+          cam.lookAt(lerp(6, 8, k), lerp(-16, -14, k), -180);
           cam.fov = 58;
         } else {
           /* --- the gunner: held fire ---------------------------------- */
@@ -907,7 +1015,9 @@ export async function build(ctx) {
           deck.position.y = 0;
           guns[0].position.set(-9, DECK_Y + 3, -32);
           guns[1].position.set(17, DECK_Y + 2.3, -58);
-          podOut.position.set(lerp(2, 30, k), lerp(-6, -14, k), lerp(-58, -118, k));
+          // held out at gunnery range: any closer and a 9-unit pod behind a
+          // 30-degree sight reads as a capital ship
+          podOut.position.set(lerp(6, 54, k), lerp(-13, -34, k), lerp(-124, -268, k));
           podOut.rotation.set(t * 1.05, t * 0.58, t * 0.4);
 
           cam.position.set(0, 0, 0);
@@ -938,7 +1048,9 @@ export async function build(ctx) {
         const ty = _v.y * fh * 0.5;
         const close = smoothstep(S4 + 0.2, LOCK - 0.15, t);
         const release = smoothstep(25.2, END, t);
-        const box = fh * lerp(0.36, 0.075, close) * (1 + release * 1.8);
+        // opens narrower than the frame's own corner brackets, or the two sets
+        // sit on top of each other and neither reads
+        const box = fh * lerp(0.25, 0.062, close) * (1 + release * 1.8);
         brackets.forEach((b, i) => {
           const sx = i === 0 || i === 3 ? -1 : 1;
           const sy = i < 2 ? 1 : -1;
@@ -948,9 +1060,10 @@ export async function build(ctx) {
         ring.position.set(tx, ty, 0);
         ring.scale.setScalar(fh * lerp(0.2, 0.07, close));
 
-        const rw = fh * 0.36;
+        // clear of the caption row printed into the frame texture
+        const rw = fh * 0.34;
         for (const q of [readScan, readHold]) {
-          q.position.set(fw * 0.5 - rw * 0.62, -fh * 0.5 + rw * 0.3, 0);
+          q.position.set(fw * 0.5 - rw * 0.62, -fh * 0.5 + rw * 0.78, 0);
           q.scale.set(rw, rw * 0.4, 1);
         }
         readScan.visible = t < LOCK;
@@ -965,8 +1078,8 @@ export async function build(ctx) {
       }
 
       flash(c.stage, t, [
-        { t: BANG, dur: 0.26, amount: 0.22, color: 0xffe6b8 },
-        { t: DOOR + 0.05, dur: 0.22, amount: 0.14, color: 0xffd0a0 },
+        { t: BANG, dur: 0.2, amount: 0.11, color: 0xffe6b8 },
+        { t: DOOR + 0.05, dur: 0.22, amount: 0.12, color: 0xffd0a0 },
       ]);
     },
   };

@@ -960,40 +960,48 @@ function pilotDomeTex(stripe) {
 }
 
 /**
- * Imperial peaked cap.
+ * Imperial peaked cap: black band, flared crown, flat top plate, black peak.
  *
- * The head barrel runs local y 0..1.0 and the printed brows sit at 0.75..0.83,
- * so the band has to bottom out at 0.85: any higher and the cap floats above
- * the skull like a lid, any lower and it eats the eyebrows.
+ * Heights are in head-local units, where the barrel runs y 0..1.0 and the
+ * printed brows sit at 0.77. The band bottoms out at 0.84 to leave them showing,
+ * and the crown flares *outward* on the way up to a top plate wider than the
+ * band — that overhang is what reads as a peaked cap rather than a lid.
+ *
+ * The peak is a squashed disc, its back half buried in the head, tilted down 18
+ * degrees so a front camera sees its top face as a wide shelf instead of an
+ * edge-on line. Its centre sits at the band's own bottom edge so the two touch;
+ * lift it clear and a stripe of yellow head shows through at the temples.
  */
 function officerCap(o = {}) {
   const cloth = o.color ?? X.officer;
-  const BAND = 0.86;                                 // bottom of the black band
-  const TOP = BAND + 0.17 + 0.22;                    // top of the grey crown
+  const BAND = 0.84;
+  const CROWN = BAND + 0.16;
+  const TOP = CROWN + 0.22;                          // underside of the top plate
+  const TILT = 0.36;
   return assemble([
-    // black band gripping the head just above the brow
-    paint(at(cyl(0.625, 0.17, { seg: 22 }), 0, BAND, 0), C.black),
-    // the band drops lower round the back and sides, where there are no brows
-    // to cover — without it the cap reads as a lid balanced on the crown
-    paint(at(arcShell(0.622, 0.18, { span: 4.1, center: 0, seg: 20 }), 0, BAND - 0.18, 0), C.black),
-    // shallow crown, then the flat top plate that makes it a peaked cap.
-    // The plate stays inside the peak's reach, or the two merge in silhouette
-    // and the cap reads as a sun hat from the side.
-    paint(at(cyl(0.635, 0.22, { seg: 22, rTop: 0.72 }), 0, BAND + 0.17, 0), cloth),
-    paint(at(cyl(0.74, 0.07, { seg: 22 }), 0, TOP, 0), cloth),
-    paint(at(arcShell(0.745, 0.04, { span: 6.28, seg: 22 }), 0, TOP - 0.01, 0), 0x5f665f),
-    // peak: a flattened disc sweeping forward and tipping down over the brow
-    paint(at(rot(sqDisc(0.68, 0.075, C.black, 22), -0.15, 0, 0), 0, BAND + 0.02, -0.44), C.black),
-    // cap badge on the band, with a silver cord across it
-    paint(at(cyl(0.09, 0.05, { seg: 12 }), 0, BAND + 0.08, -0.62), C.silver),
-    paint(at(arcShell(0.635, 0.03, { span: 2.6, center: Math.PI, seg: 16 }), 0, BAND + 0.015, 0), C.silver),
+    paint(at(cyl(0.63, 0.16, { seg: 22 }), 0, BAND, 0), C.black),
+    paint(at(cyl(0.63, 0.22, { seg: 22, rTop: 0.7 }), 0, CROWN, 0), cloth),
+    paint(at(cyl(0.73, 0.06, { seg: 24 }), 0, TOP, 0), cloth),
+    // dark rim round the top plate: the cap's outermost silhouette, and the line
+    // that separates crown from plate at every camera angle
+    paint(at(arcShell(0.735, 0.035, { span: Math.PI * 2, seg: 24 }), 0, TOP + 0.005, 0), 0x4c534c),
+    // Peak. Its half-width stays *inside* the band radius: any wider and the
+    // parts of the oval abreast of the head stick out as two horizontal wings
+    // with daylight under them, which reads as a frisbee through the skull.
+    // Tilting it 20 degrees is what turns it from an edge-on line into a shelf
+    // for a camera at eye level.
+    paint(at(rot(ovalDisc(0.6, 0.56, 0.1, C.black, 24), -TILT, 0, 0), 0, BAND + 0.02, -0.22), C.black),
+    // rank disc on the crown front, above the peak's shelf
+    paint(at(cyl(0.075, 0.05, { seg: 12 }), 0, CROWN + 0.08, -0.64), C.silver),
+    // braid across the band, sitting on the peak's back edge
+    paint(at(arcShell(0.64, 0.022, { span: 2.9, center: Math.PI, seg: 16 }), 0, BAND + 0.08, 0), C.silver),
   ]);
 }
 
-/** Squashed disc used for cap peaks and droid feet. */
-function sqDisc(r, h, color, seg = 20) {
-  const m = paint(cyl(r, h, { seg }), color);
-  m.scale.z = 0.7;
+/** Oval plate: a disc of radius rx squashed to rz along Z. Base at y = 0. */
+function ovalDisc(rx, rz, h, color, seg = 20) {
+  const m = paint(cyl(rx, h, { seg }), color);
+  m.scale.z = rz / rx;
   return m;
 }
 
@@ -1012,21 +1020,35 @@ function jawaHood(o = {}) {
 }
 
 /**
- * Hooded cowl for the old man. The hood is pushed back off the brow so the
- * whole face stays lit — a hood that overhangs the eyes reads as a blank.
+ * Hooded cowl for the old man.
+ *
+ * The cloth comes forward to within 50 degrees of dead front, close enough to
+ * frame the cheeks, and is bridged above the forehead by a brow arch — without
+ * it the hood is two thin edges either side of the face and a cap on top. The
+ * arch starts at 0.98, clear of the printed brows at 0.75..0.83, so the whole
+ * face stays lit: a hood that overhangs the eyes reads as a blank.
  */
 function robeHood(o = {}) {
   const cloth = o.color ?? C.brown;
+  const R = 0.78;
+  const OPEN = 1.75;                                 // 100 degrees of clear air
+  const SPAN = Math.PI * 2 - OPEN;
   return assemble([
-    // crown and back of the hood, opening a wide 150 degrees at the front
-    paint(at(arcShell(0.76, 0.94, { span: 3.6, center: 0, seg: 22, rTop: 0.62 }), 0, 0.34, 0), cloth),
+    // crown, nape and cheeks
+    paint(at(arcShell(R, 0.96, { span: SPAN, center: 0, seg: 24, rTop: 0.64 }), 0, 0.32, 0), cloth),
+    // Brow arch bridging the opening. Its radius has to stay inside the crown's
+    // taper — 0.68 at this height — or it breaks out through the side of the hood
+    // and leaves a step at each temple.
+    paint(at(arcShell(0.66, 0.3, { span: OPEN + 0.5, center: Math.PI, seg: 16, rTop: 0.56 }),
+      0, 0.98, 0), cloth),
     // rounded peak: a cone tapering to a point reads as a wizard's hat from behind
-    at(domeMesh(0.62, 0.32, cloth, 20), 0, 1.28, 0),
+    at(domeMesh(0.64, 0.3, cloth, 20), 0, 1.28, 0),
     // rolled edge of the opening, framing the face without shading it
-    paint(at(arcShell(0.8, 0.16, { span: 3.6, center: 0, seg: 22 }), 0, 0.3, 0), 0x40291a),
+    paint(at(arcShell(R + 0.02, 0.15, { span: SPAN, center: 0, seg: 24 }), 0, 0.3, 0), 0x40291a),
+    paint(at(arcShell(0.672, 0.08, { span: OPEN + 0.5, center: Math.PI, seg: 16 }), 0, 0.96, 0), 0x40291a),
     // cowl over the shoulders
-    paint(at(arcShell(0.84, 0.4, { span: 4.4, center: 0, seg: 24 }), 0, -0.1, 0), cloth),
-    paint(at(cone(1.02, 0.82, 0.34, { seg: 22 }), 0, -0.38, 0), cloth),
+    paint(at(arcShell(0.86, 0.4, { span: 4.4, center: 0, seg: 24 }), 0, -0.1, 0), cloth),
+    paint(at(cone(1.02, 0.84, 0.34, { seg: 22 }), 0, -0.38, 0), cloth),
   ]);
 }
 
@@ -1692,11 +1714,19 @@ export function oldMan(o = {}) {
     headTex: faceTex({
       skin: o.skin ?? C.yellow, brow: 0xc8c8c0, mouth: 'none', wrinkles: true,
       eyeR: 11.5, browY: 27,
-      // beard starts below the nose and leaves the eyes clear
-      beard: `<path d="M204 84 Q256 76 308 84 L300 128 L212 128 Z" fill="#dfe1dd"/>`
-        + `<path d="M204 84 Q256 76 308 84 L306 94 Q256 86 206 94 Z" fill="#f2f3f2"/>`
-        + `<path d="M228 104 q28 9 56 0" fill="none" stroke="#c0c3bf" stroke-width="3.5"/>`
-        + `<path d="M240 84 q16 -5 32 0" fill="none" stroke="#c0c3bf" stroke-width="3"/>`,
+      // Beard, moustache and sideburns. The top edge has to be a V — up to the
+      // ears at the sides, dipping under the mouth in the middle — or the white
+      // mass reads as a surgical mask straight across the face.
+      beard: `<g stroke="#eef0ec" stroke-width="9" stroke-linecap="round" fill="none">`
+        + `<path d="M250 72 Q232 74 220 88"/><path d="M262 72 Q280 74 292 88"/></g>`
+        + `<path d="M240 84 q16 4 32 0" fill="none" stroke="#8a6a44" stroke-width="4"/>`
+        + `<path d="M196 78 Q204 106 210 128 L302 128 Q308 106 316 78`
+        + ` Q288 100 256 100 Q224 100 196 78 Z" fill="#e4e6e2"/>`
+        + `<path d="M232 108 Q256 100 280 108 L274 128 L238 128 Z" fill="#f4f5f3"/>`
+        + `<g stroke="#e4e6e2" stroke-width="8" stroke-linecap="round" fill="none">`
+        + `<path d="M190 48 Q192 66 198 82"/><path d="M322 48 Q320 66 314 82"/></g>`
+        + `<g fill="none" stroke="#c3c6c2" stroke-width="3">`
+        + `<path d="M226 110 q30 9 60 0"/><path d="M236 120 q20 6 40 0"/></g>`,
     }),
     torso: C.tan,
     arms: C.tan,
@@ -1717,10 +1747,12 @@ export function oldMan(o = {}) {
     hat: robeHood({ color: o.robe ?? C.brown }),
   });
   const q = fig.userData.parts;
-  // beard in the round below the chin line, so it reads from the side too
-  q.head.add(paint(at(arcShell(0.625, 0.34, { span: 3.2, center: Math.PI, seg: 18, rTop: 0.61 }),
-    0, -0.02, 0), 0xe6e8e4));
-  q.head.add(paint(at(cone(0.34, 0.12, 0.2, { seg: 16 }), 0, -0.2, -0.06), 0xe6e8e4));
+  // Beard in the round, so it reads from the side too. Its top edge has to stop
+  // at 0.2 — the height the printed beard's V bottoms out at — or the piece
+  // stands proud of the print and the seam shows as a band across the mouth.
+  q.head.add(paint(at(arcShell(0.625, 0.22, { span: 3.4, center: Math.PI, seg: 18, rTop: 0.6 }),
+    0, -0.02, 0), 0xe4e6e2));
+  q.head.add(paint(at(cone(0.34, 0.12, 0.2, { seg: 16 }), 0, -0.2, -0.06), 0xe4e6e2));
   markNoBake(q.head);
   const s = saber({ color: o.saberColor ?? C.transBlue, length: o.bladeLength ?? 2.2 });
   if (o.prop !== false) {
@@ -2110,7 +2142,12 @@ function factory(which, fallback) {
   return fallback;
 }
 
-/** Every character in the film, in a row, facing -Z, 4 units apart. */
+/**
+ * Every character in the film, in a row, facing -Z, 4 units apart.
+ *
+ * The row runs toward -X so that a camera in front of it (which sees +X on its
+ * left) reads the roster left to right.
+ */
 export function cast(o = {}) {
   const gap = o.gap ?? 4;
   const names = o.only || ROSTER;
@@ -2118,7 +2155,7 @@ export function cast(o = {}) {
   g.name = 'cast';
   names.forEach((name, i) => {
     const c = CHARACTERS[name]();
-    at(c, (i - (names.length - 1) / 2) * gap, 0, 0);
+    at(c, ((names.length - 1) / 2 - i) * gap, 0, 0);
     c.userData.char = name;
     g.add(c);
   });

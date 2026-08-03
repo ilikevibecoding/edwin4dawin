@@ -277,6 +277,7 @@ async function render(cfg = {}) {
 
   let dur = cfg.dur;
   let secDur = cfg.secDur;
+  const from = Math.max(0, cfg.from || 0);
   const notes = [];
 
   // --- work out how long the render needs to be --------------------
@@ -287,6 +288,8 @@ async function render(cfg = {}) {
       if (dur == null) dur = secDur + 2.0;
     } else {
       if (secDur == null) secDur = SECTION_STORY_DUR[section] || 20;
+      // `from` resumes part-way in, so only the remainder is left to play
+      if (from > 0) secDur = Math.max(1, secDur - from);
       if (dur == null) dur = secDur + 2.4;
     }
   } else if (what === 'film') {
@@ -351,7 +354,9 @@ async function schedule(ctx, bus, cfg) {
   if (what === 'score' || what === 'film') {
     const { scheduleScore } = await import('./score.js');
     const whole = what === 'film' || section === 'all' || section === 'film';
-    const sections = whole ? storySections() : [{ id: section, start: 0, dur: cfg.secDur }];
+    const sections = whole
+      ? storySections()
+      : [{ id: section, start: 0, dur: cfg.secDur, from: cfg.from || 0 }];
     const res = scheduleScore(ctx, bus, sections, { seed });
     info.sections = res.sections;
     info.scoreNotes = res.notes;

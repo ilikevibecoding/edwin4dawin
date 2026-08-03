@@ -574,11 +574,11 @@ export async function build(ctx) {
   // enough that it is already a shape rather than a speck. Lateral offsets stay
   // small so every pass crosses the fireball and silhouettes against it.
   const RUN = [
-    { ship: xws[0], t0: 10.25, t: 11.4, z: [148, -212, 6], x: [-28, -80, 3], y: [24, 16, -0.4], bank: -0.6 },
-    { ship: xws[1], t0: 10.95, t: 12.3, z: [132, -204, 6], x: [36, 86, -3], y: [-28, 18, 0.4], bank: 0.6 },
-    { ship: fal, t0: 11.95, t: 13.4, z: [110, -172, 4], x: [8, 84, -3], y: [-14, -26, -0.6], bank: 0.95 },
-    { ship: xws[2], t0: 13.2, t: 14.5, z: [104, -198, 6], x: [-32, -78, 3], y: [-6, -28, -0.4], bank: -0.55 },
-    { ship: xws[3], t0: 14.2, t: 15.4, z: [116, -202, 6], x: [24, 72, -3], y: [32, 22, 0.45], bank: 0.5 },
+    { ship: xws[0], t0: 10.25, t: 11.5, z: [140, -178, 5], x: [-22, -66, 3], y: [18, 13, -0.4], bank: -0.6 },
+    { ship: xws[1], t0: 11.0, t: 12.4, z: [126, -172, 5], x: [26, 70, -3], y: [-22, 15, 0.4], bank: 0.6 },
+    { ship: fal, t0: 12.0, t: 13.4, z: [108, -156, 4], x: [6, 74, -3], y: [-12, -22, -0.6], bank: 0.95 },
+    { ship: xws[2], t0: 13.3, t: 14.6, z: [100, -166, 5], x: [-24, -62, 3], y: [-5, -22, -0.4], bank: -0.55 },
+    { ship: xws[3], t0: 14.3, t: 15.5, z: [110, -170, 5], x: [18, 58, -3], y: [22, 17, 0.45], bank: 0.5 },
   ];
   const runPaths = RUN.map((r) => (tt) => {
     const u = tt - r.t;
@@ -719,10 +719,10 @@ export async function build(ctx) {
         for (const m of secBalls) m.opacity *= 0.22;
         secFlares.update(t);
         for (const s of storm) s.update(t);
-        // core: a white flare that cools into a huge lumpy fireball, then into
-        // the wall of fire the rebels fly out of
-        // it has to be wider than the station was within a couple of frames,
-        // or the cut from a 640-wide sphere to a debris cloud reads as a shrink
+        // The core: a white flare that cools into a huge lumpy fireball and then
+        // into the wall of fire the rebels fly out of. It has to be wider than
+        // the station was within a couple of frames, or cutting from a 640-wide
+        // sphere to a debris cloud reads as the explosion shrinking.
         const hk = clamp(boom / 0.75);
         hot.material.opacity = boom < 0 ? 0 : Math.pow(1 - hk, 2.4);
         hot.scale.setScalar(lerp(430, 1500, Math.pow(hk, 0.42)));
