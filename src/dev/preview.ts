@@ -27,14 +27,14 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x05070c);
 const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 600000);
 
-const key = new THREE.DirectionalLight(0xfff0dc, 4.2);
+const key = new THREE.DirectionalLight(0xfff0dc, 2.4);
 key.position.set(4, 3, 5);
 scene.add(key);
-const fill = new THREE.DirectionalLight(0x7f9ad0, 1.15);
+const fill = new THREE.DirectionalLight(0x7f9ad0, 0.5);
 fill.position.set(-5, -1, -3);
 scene.add(fill);
-scene.add(new THREE.AmbientLight(0x5d6f8c, 1.1));
-const rim = new THREE.DirectionalLight(0xbcd6ff, 2.0);
+scene.add(new THREE.AmbientLight(0x5d6f8c, 0.45));
+const rim = new THREE.DirectionalLight(0xbcd6ff, 0.9);
 rim.position.set(-2, 1.5, -6);
 scene.add(rim);
 

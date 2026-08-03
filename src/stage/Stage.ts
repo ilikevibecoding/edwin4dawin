@@ -148,7 +148,7 @@ export class Stage {
 
     // Interiors are lit far more generously than space: the brief is a bright
     // white Rebel corridor, and nothing important may hide in shadow.
-    this.interiorAmbient = new THREE.HemisphereLight(0xe3eaf4, 0x4e545c, 0.3);
+    this.interiorAmbient = new THREE.HemisphereLight(0xeae6dd, 0x4e545c, 0.3);
     this.interiorAmbient.visible = false;
     this.scene.add(this.interiorAmbient);
     this.interiorFill = new THREE.AmbientLight(0xa9b7cc, 0.1);
@@ -159,7 +159,7 @@ export class Stage {
     // stay shadowless (six cube faces each is far too expensive), but without a
     // single cast shadow every figure looks pasted onto the deck. The
     // orthographic frustum only needs to cover the section the story uses.
-    this.interiorKey = new THREE.DirectionalLight(0xeaf0fb, 2.55);
+    this.interiorKey = new THREE.DirectionalLight(0xf7f1e6, 2.55);
     this.interiorKey.position.set(17, 26, 9);
     this.interiorKey.target.position.set(8, 0, 2);
     this.interiorKey.visible = false;

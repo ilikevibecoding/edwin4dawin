@@ -144,18 +144,20 @@ export class BlastDoor {
     }
 
     if (p > 0.85) {
-      // Blow-in: leaves tumble into the corridor and fall away.
+      // Blow-in: the leaves tear out of the frame, fall forward and come to
+      // rest flat on the deck to either side. They must not end up standing up
+      // in the doorway — the boarding party and the dark lord walk through it.
       const k = easeOutCubic((p - 0.85) / 0.15);
       for (const [sign, leaf] of [
         [-1, this.leftLeaf],
         [1, this.rightLeaf],
       ] as Array<[number, THREE.Group]>) {
-        leaf.position.z = 0.14 + k * 3.6;
-        leaf.position.x = sign * (0.02 + k * 0.9);
-        leaf.position.y = -k * 0.35;
-        leaf.rotation.x = -k * 1.15 * sign;
-        leaf.rotation.y = sign * (0.055 + k * 0.5);
-        leaf.rotation.z = sign * k * 0.4;
+        leaf.position.z = 0.14 + k * 1.15;
+        leaf.position.x = sign * (0.02 + k * 0.72);
+        leaf.position.y = 0;
+        leaf.rotation.x = k * (Math.PI / 2 - 0.16);
+        leaf.rotation.y = sign * (0.055 + k * 0.28);
+        leaf.rotation.z = sign * k * 0.2;
       }
       mat.emissiveIntensity = 11 * (1 - k * 0.75);
       this.glowLight.intensity = 22 * (1 - k);

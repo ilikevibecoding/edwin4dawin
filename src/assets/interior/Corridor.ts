@@ -431,7 +431,7 @@ export class Corridor {
       box(2.6, 0.1, 0.86, { pos: [0, ceiling + 0.01, 0] }),
     ]);
     const lumFrames = new THREE.InstancedMesh(lumFrameGeo, corridorTrim(), moduleCount);
-    const lums = new THREE.InstancedMesh(lumGeo, emissive('corridorLight', 0xdfe8f5, 0.85), moduleCount);
+    const lums = new THREE.InstancedMesh(lumGeo, emissive('corridorLight', 0xf6f0e4, 0.85), moduleCount);
     lums.name = 'Corridor_Luminaires';
     for (let i = 0; i < moduleCount; i++) {
       const x = xStart + i * CORRIDOR.moduleLength + CORRIDOR.moduleLength / 2;
@@ -446,7 +446,7 @@ export class Corridor {
     const lightCount = opts.lights ?? Math.max(5, Math.round(9 * Math.min(1, detail + 0.35)));
     for (let i = 0; i < lightCount; i++) {
       const x = xStart + 3 + ((xEnd - xStart - 6) * i) / Math.max(1, lightCount - 1);
-      const light = new THREE.PointLight(0xdfe8f5, 3.0, 14, 1.8);
+      const light = new THREE.PointLight(0xf5eee1, 3.0, 14, 1.8);
       light.position.set(x, ceiling - 0.35, 0);
       light.castShadow = false;
       this.root.add(light);
@@ -461,9 +461,9 @@ export class Corridor {
     }
     // Two lights for the pod bay and one for the alcove.
     for (const [lx, lz, colour] of [
-      [branchMid, pb.roomZ, 0xdfe8f5],
-      [branchMid, halfWidth + 3.5, 0xdfe8f5],
-      [(alc.x0 + alc.x1) / 2, -halfWidth - alc.depth * 0.5, 0xe8eef8],
+      [branchMid, pb.roomZ, 0xf5eee1],
+      [branchMid, halfWidth + 3.5, 0xf5eee1],
+      [(alc.x0 + alc.x1) / 2, -halfWidth - alc.depth * 0.5, 0xeef1f6],
     ] as Array<[number, number, number]>) {
       const light = new THREE.PointLight(colour, 2.8, 13, 1.8);
       light.position.set(lx, ceiling - 0.4, lz);
@@ -479,7 +479,7 @@ export class Corridor {
           pos: [(alc.x0 + alc.x1) / 2, ceiling - 0.04, -halfWidth - alc.depth * 0.5],
         }),
       ]),
-      emissive('corridorLight', 0xdfe8f5, 0.85),
+      emissive('corridorLight', 0xf6f0e4, 0.85),
     );
     this.root.add(extraLums);
 
@@ -517,7 +517,7 @@ export class Corridor {
     this.consoles.push(bayConsole);
 
     const midConsole = new ControlPanel({ width: 1.5, tint: 'amber', screens: 2 });
-    midConsole.root.position.set(12, 0, halfWidth - 0.2);
+    midConsole.root.position.set(6.6, 0, halfWidth - 0.2);
     midConsole.root.rotation.y = Math.PI;
     this.root.add(midConsole.root);
     this.consoles.push(midConsole);
@@ -576,7 +576,7 @@ export class Corridor {
     this.root.add(this.alarmPoint);
 
     // Cold fill light that rises when Vader enters.
-    this.vaderFill = new THREE.PointLight(0x4468b8, 0, 30, 1.6);
+    this.vaderFill = new THREE.PointLight(0x5c7cc0, 0, 26, 1.7);
     this.vaderFill.position.set(0, 2.2, 0);
     this.root.add(this.vaderFill);
 
@@ -653,7 +653,7 @@ export class Corridor {
 
   /** 0..1 cold Imperial rim light that accompanies Vader. */
   setVaderPresence(v: number, x: number): void {
-    this.vaderFill.intensity = v * 26;
+    this.vaderFill.intensity = v * 9;
     this.vaderFill.position.x = x;
   }
 

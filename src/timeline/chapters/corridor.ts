@@ -37,23 +37,30 @@ function vaderWalkX(rho: number): number {
 const DEFENCE_START_X = 25.5;
 const OFFICER_START_X = 33.5;
 
-/** Trooper advance lanes; they enter in pairs and take alternating sides. */
+/**
+ * Trooper advance lanes; they enter in pairs and take alternating sides.
+ * `posture` staggers the firing line so it does not read as a chorus row.
+ */
 const TROOPER_LANES = [
-  { z: -1.16, stopX: 1.6, delay: 0.0 },
-  { z: 1.16, stopX: 2.6, delay: 0.45 },
-  { z: -1.2, stopX: -1.8, delay: 1.3 },
-  { z: 1.2, stopX: -1.0, delay: 1.75 },
-  { z: -1.24, stopX: -4.6, delay: 2.7 },
-  { z: 1.24, stopX: -3.8, delay: 3.1 },
+  { z: -1.16, stopX: 1.6, delay: 0.0, posture: 'aim' as const },
+  { z: 1.16, stopX: 2.9, delay: 0.45, posture: 'kneel' as const },
+  { z: -1.2, stopX: -1.8, delay: 1.3, posture: 'aim' as const },
+  { z: 1.2, stopX: -0.6, delay: 1.75, posture: 'aim' as const },
+  { z: -1.24, stopX: -4.9, delay: 2.7, posture: 'crouch' as const },
+  { z: 1.24, stopX: -3.6, delay: 3.1, posture: 'aim' as const },
 ];
-/** After the fight they hold the walls so the entrance stays uncluttered. */
+/**
+ * After the fight they hold the walls so the entrance stays uncluttered.
+ * `face` is an offset from "down the corridor" so the line is not a mirror of
+ * itself, and `watch` decides who keeps a weapon up and who stands down.
+ */
 const TROOPER_HOLD = [
-  { x: -0.4, z: -1.32 },
-  { x: 0.8, z: 1.32 },
-  { x: -3.4, z: -1.36 },
-  { x: -2.4, z: 1.36 },
-  { x: -6.4, z: -1.38 },
-  { x: -5.6, z: 1.38 },
+  { x: 1.1, z: -1.3, face: 0.34, watch: true },
+  { x: 2.9, z: 1.34, face: -0.16, watch: false },
+  { x: -2.1, z: -1.38, face: 0.12, watch: true },
+  { x: -0.7, z: 1.26, face: -0.44, watch: false },
+  { x: -5.6, z: -1.24, face: 0.46, watch: false },
+  { x: -4.1, z: 1.36, face: -0.12, watch: true },
 ];
 
 /**
@@ -101,7 +108,6 @@ export function corridorChapter(): Chapter<ShowContext> {
       const targetChar = liveDefenders.length
         ? liveDefenders[r.int(0, liveDefenders.length - 1)]
         : ctx.stage.characters.officer;
-      shooter.setState('fire');
       shooter.recoil(1);
       shooter.muzzlePosition(tmpA);
       targetChar.root.getWorldPosition(tmpB);
@@ -134,7 +140,6 @@ export function corridorChapter(): Chapter<ShowContext> {
       const activeTroopers = troopers(ctx).filter((t) => t.root.visible);
       if (activeTroopers.length === 0) return;
       const targetChar = activeTroopers[r.int(0, activeTroopers.length - 1)];
-      shooter.setState('fire');
       shooter.recoil(1);
       shooter.muzzlePosition(tmpA);
       targetChar.root.getWorldPosition(tmpB);
@@ -267,7 +272,7 @@ export function corridorChapter(): Chapter<ShowContext> {
         //    the pod-bay junction so the branch opening never crowds the frame.
         customShot({ id: 'corridor.establish', start: S, end: S + 8.5, fov: 52, handheld: 0.45, blend: 0 }, (k, _t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(28.5, 24.5, a), lerp(2.15, 1.95, a), lerp(0.5, 0.1, a));
+          out.position.set(lerp(28.5, 24.5, a), lerp(2.15, 1.95, a), lerp(-0.55, -0.12, a));
           out.target.set(lerp(8, -7, a), 1.5, 0);
           out.fov = lerp(56, 52, a);
           out.focus = 22;
@@ -287,7 +292,7 @@ export function corridorChapter(): Chapter<ShowContext> {
         // 3. The door itself.
         customShot({ id: 'corridor.door', start: S + 16, end: S + 21.5, fov: 44, handheld: 0.75, blend: 0.7 }, (k, _t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(-1.4, -3.4, a), lerp(1.55, 1.5, a), lerp(0.5, 0.22, a));
+          out.position.set(lerp(-1.4, -3.4, a), lerp(1.55, 1.5, a), lerp(-0.6, -0.28, a));
           out.target.set(DOOR_X, 1.5, 0);
           out.fov = lerp(46, 52, a);
           out.focus = 8;
@@ -297,8 +302,8 @@ export function corridorChapter(): Chapter<ShowContext> {
         // 4. Low angle as the boarders come through the smoke.
         customShot({ id: 'corridor.entry', start: S + 21.5, end: S + 31, fov: 50, handheld: 1.0, blend: 0.5 }, (k, _t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(13.5, 11.2, a), lerp(0.72, 0.8, a), lerp(0.95, 0.6, a));
-          out.target.set(lerp(-2, -5, a), 1.3, 0);
+          out.position.set(lerp(13.5, 11.2, a), lerp(0.72, 0.8, a), lerp(-1.0, -0.66, a));
+          out.target.set(lerp(-2, -5, a), 1.3, -0.1);
           out.fov = 50;
           out.focus = 15;
           clampCam(out);
@@ -308,8 +313,8 @@ export function corridorChapter(): Chapter<ShowContext> {
         customShot({ id: 'corridor.firefight', start: S + 31, end: S + 45, fov: 48, handheld: 1.1, blend: 0.7 }, (k, t, out) => {
           const a = smootherstep(k);
           const sway = Math.sin((t - S) * 0.6) * 0.12;
-          out.position.set(lerp(18.6, 15.2, a), 1.58, lerp(-1.02, 1.0, a) + sway);
-          out.target.set(lerp(1, -3.5, a), 1.35, lerp(0.2, -0.2, a));
+          out.position.set(lerp(18.6, 15.2, a), 1.58, lerp(-1.05, -0.5, a) + sway);
+          out.target.set(lerp(1, -3.5, a), 1.35, lerp(-0.1, 0.15, a));
           out.fov = 48;
           out.focus = 13;
           clampCam(out);
@@ -318,7 +323,7 @@ export function corridorChapter(): Chapter<ShowContext> {
         // 6. The corridor goes quiet.
         customShot({ id: 'corridor.aftermath', start: S + 45, end: S + 52, fov: 44, handheld: 0.4, blend: 1.2 }, (k, _t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(17.5, 13.5, a), lerp(1.7, 1.62, a), lerp(0.3, 0.1, a));
+          out.position.set(lerp(17.5, 13.5, a), lerp(1.7, 1.62, a), lerp(-0.45, -0.18, a));
           out.target.set(lerp(-3, -8.5, a), 1.5, 0);
           out.fov = lerp(46, 42, a);
           out.focus = 16;
@@ -332,10 +337,10 @@ export function corridorChapter(): Chapter<ShowContext> {
           const vx = vaderWalkX(t - S);
           // Low and retreating: the camera gives ground as he advances, and he
           // grows in frame the whole way.
-          out.position.set(vx + lerp(14.5, 6.2, a), lerp(0.52, 0.74, a), lerp(0.6, 0.1, a));
-          out.target.set(vx + lerp(2.6, 0.5, a), lerp(1.35, 1.55, a), 0);
-          out.fov = lerp(46, 42, a);
-          out.focus = lerp(14, 6.4, a);
+          out.position.set(vx + lerp(13, 4.6, a), lerp(0.5, 0.78, a), lerp(-0.7, -0.12, a));
+          out.target.set(vx + lerp(2.2, 0.4, a), lerp(1.3, 1.6, a), 0);
+          out.fov = lerp(46, 40, a);
+          out.focus = lerp(13, 4.8, a);
           clampCam(out);
         }),
 
@@ -344,7 +349,7 @@ export function corridorChapter(): Chapter<ShowContext> {
           vader.root.updateWorldMatrix(true, false);
           const p = vader.root.position;
           const a = smootherstep(k);
-          out.position.set(p.x + lerp(6.2, 4.6, a), lerp(1.5, 1.32, a), lerp(0.62, -0.2, a));
+          out.position.set(p.x + lerp(6.2, 4.6, a), lerp(1.5, 1.32, a), lerp(-0.66, -0.16, a));
           out.target.set(p.x + 0.4, 1.45, p.z);
           out.fov = 42;
           out.focus = 5.2;
@@ -420,7 +425,7 @@ export function corridorChapter(): Chapter<ShowContext> {
       ctx.render.dofRange = 26;
       ctx.render.dofStrength = 0.32;
 
-      stage.corridor.setAlarm(rho < FIGHT_END ? 1 : 0.35);
+      stage.corridor.setAlarm(rho < FIGHT_END ? 1 : 0.35 * (1 - ramp(rho, 49, 55)));
       stage.corridor.setPowerLevel(1 - ramp(rho, BREACH_T, BREACH_T + 6) * 0.35);
 
       // --- door -------------------------------------------------------------
@@ -481,7 +486,7 @@ export function corridorChapter(): Chapter<ShowContext> {
           r.lookTarget = null;
           continue;
         }
-        if (r.state !== 'fire') r.setState(d.state);
+        r.setState(d.state);
         r.aimTarget = tmpA.set(DOOR_X + 2, rho > BREACH_T - 2 ? 1.25 : 1.4, d.z * 0.4);
         r.setHeading(-Math.PI / 2);
       }
@@ -524,16 +529,21 @@ export function corridorChapter(): Chapter<ShowContext> {
         const clear = smootherstep(clamp01((rho - FIGHT_END - 1) / 4));
         t.root.position.set(lerp(advanceX, hold.x, clear), 0, lerp(lane.z, hold.z, clear));
         t.speed = moving ? 2.4 : clear > 0.02 && clear < 0.98 ? 0.7 : 0;
-        t.setHeading(Math.PI / 2);
+        t.setHeading(Math.PI / 2 + hold.face * clear);
         if (moving) {
           t.setState('run');
           t.aimTarget = null;
         } else if (rho < FIGHT_END) {
-          if (t.state !== 'fire') t.setState('aim');
+          t.setState(lane.posture);
           t.aimTarget = tmpB.set(16, 1.2, lane.z * 0.5);
+        } else if (clear > 0.02 && clear < 0.98) {
+          t.setState('walk');
+          t.aimTarget = null;
         } else {
-          t.setState(clear > 0.02 && clear < 0.98 ? 'walk' : 'aim');
-          t.aimTarget = clear > 0.9 ? tmpB.set(30, 1.4, 0) : null;
+          // Holding the wall: half the squad keeps a weapon up, the rest stand
+          // down, so the honour guard does not read as six identical statues.
+          t.setState(hold.watch ? 'aim' : 'idle');
+          t.aimTarget = hold.watch ? tmpB.set(34, 1.45, hold.z * 0.6) : null;
         }
       }
 
@@ -602,8 +612,10 @@ export function corridorChapter(): Chapter<ShowContext> {
       }
 
       // Cool the corridor down as he approaches.
-      stage.interiorAmbient.intensity = 0.5 - ramp(rho, 50, 58) * 0.2;
-      stage.interiorAmbient.color.setHSL(0.58, 0.16, 0.86 - ramp(rho, 50, 58) * 0.12);
+      const chill = ramp(rho, 50, 58);
+      stage.interiorAmbient.intensity = 0.32 - chill * 0.12;
+      stage.interiorAmbient.color.setHSL(lerp(0.11, 0.58, chill), 0.1 + chill * 0.08, 0.84);
+      stage.interiorKey.intensity = 2.55 - chill * 0.5;
     },
   };
 }

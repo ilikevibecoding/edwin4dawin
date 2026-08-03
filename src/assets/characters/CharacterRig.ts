@@ -456,7 +456,12 @@ export abstract class CharacterRig {
     let shoulderLZ = 0.14 + amp * 0.03;
     let shoulderRZ = -0.14 - amp * 0.03;
 
-    const aiming = this.state === 'aim' || this.state === 'fire';
+    // Anything holding a weapon on a target is aiming, whatever its stance:
+    // a kneeling defender must not stand up just to take a shot.
+    const aiming =
+      this.state === 'aim' ||
+      this.state === 'fire' ||
+      (this.aimTarget !== null && (this.state === 'kneel' || this.state === 'crouch'));
     const interacting = this.state === 'interact';
     this.interactAmount = damp(this.interactAmount, interacting ? 1 : 0, 0.2, dt);
     if (this.interactAmount > 0.001) {
@@ -540,7 +545,7 @@ export abstract class CharacterRig {
       this.weapon!.quaternion.setFromAxisAngle(_ax.set(1, 0, 0), Math.PI / 2);
       return;
     }
-    const aiming = this.state === 'aim' || this.state === 'fire';
+    const aiming = this.state !== 'run' && this.state !== 'walk' && this.aimTarget !== null;
     j.handR.updateWorldMatrix(true, false);
     _v2.setFromMatrixPosition(j.handR.matrixWorld);
     if (aiming && this.aimTarget) {

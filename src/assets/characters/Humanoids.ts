@@ -24,6 +24,7 @@ function buildBaseHuman(
     feet: THREE.Material;
     torsoWidth?: number;
     limbRadius?: number;
+    bootScale?: number;
   },
 ): void {
   const j = rig.joints;
@@ -373,7 +374,7 @@ export class DarkLord extends CharacterRig {
     const j = this.joints;
     const black = CHAR_MATS.vaderBlack();
     const trim = CHAR_MATS.vaderTrim();
-    const capeMat = cloth('vaderCape', 0x08080a, 0.9);
+    const capeMat = cloth('vaderCape', 0x0e0e12, 0.95);
 
     buildBaseHuman(this, {
       suit: black,
@@ -383,37 +384,43 @@ export class DarkLord extends CharacterRig {
       feet: black,
       torsoWidth: 1.15,
       limbRadius: 0.085,
+      bootScale: 1.35,
     });
 
-    // Broad armoured chest and shoulder mantle.
+    // Armoured chest. The shoulder joints sit at chest-local y = spine*0.4, so
+    // the cuirass has to stop just above that — a taller box fills the neck and
+    // the helmet disappears into a black slab.
+    const shoulderY = this.p.spine * 0.4;
     attach(
       j.chest,
       merge([
-        box(0.46, 0.42, 0.3, { pos: [0, 0.3, 0] }),
-        box(0.52, 0.1, 0.32, { pos: [0, 0.48, 0] }),
-        box(0.24, 0.2, 0.1, { pos: [0, 0.24, 0.16] }),
-        box(0.1, 0.1, 0.06, { pos: [0.15, 0.1, 0.16] }),
-        box(0.1, 0.1, 0.06, { pos: [-0.15, 0.1, 0.16] }),
+        box(0.47, 0.36, 0.3, { pos: [0, 0.06, 0] }),
+        box(0.53, 0.1, 0.32, { pos: [0, shoulderY, 0] }),
+        box(0.24, 0.22, 0.1, { pos: [0, 0.04, 0.16] }),
+        box(0.1, 0.09, 0.06, { pos: [0.16, -0.08, 0.16] }),
+        box(0.1, 0.09, 0.06, { pos: [-0.16, -0.08, 0.16] }),
       ]),
       black,
       'cuirass',
     );
-    // Shoulder mantle: a stiff cowl that reads even in silhouette.
+    // Shoulder cowl: narrow at the collar and flaring onto the shoulders, so
+    // it frames the helmet instead of swallowing it.
     const mantle = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.34, 0.24, 0.26, 16, 1, true),
+      new THREE.CylinderGeometry(0.155, 0.275, 0.25, 18, 1, true),
       capeMat,
     );
-    mantle.position.set(0, 0.44, 0);
-    mantle.rotation.x = -0.08;
+    mantle.position.set(0, shoulderY + 0.02, -0.01);
+    mantle.rotation.x = -0.05;
     mantle.castShadow = true;
     j.chest.add(mantle);
 
     this.chestLights = new THREE.Mesh(
       merge([
-        box(0.03, 0.03, 0.02, { pos: [-0.06, 0.28, 0.215] }),
-        box(0.03, 0.03, 0.02, { pos: [0, 0.28, 0.215] }),
-        box(0.03, 0.03, 0.02, { pos: [0.06, 0.28, 0.215] }),
-        box(0.14, 0.016, 0.02, { pos: [0, 0.21, 0.215] }),
+        box(0.019, 0.019, 0.02, { pos: [-0.048, 0.1, 0.215] }),
+        box(0.019, 0.019, 0.02, { pos: [0, 0.1, 0.215] }),
+        box(0.019, 0.019, 0.02, { pos: [0.048, 0.1, 0.215] }),
+        box(0.026, 0.026, 0.02, { pos: [-0.055, 0.05, 0.215] }),
+        box(0.09, 0.011, 0.02, { pos: [0.03, 0.05, 0.215] }),
       ]),
       emissive('vaderChest', 0xff3b2a, 1.1),
     );
@@ -421,8 +428,8 @@ export class DarkLord extends CharacterRig {
     attach(
       j.chest,
       merge([
-        box(0.2, 0.12, 0.03, { pos: [0, 0.29, 0.2] }),
-        box(0.24, 0.05, 0.04, { pos: [0, 0.36, 0.2] }),
+        box(0.2, 0.13, 0.03, { pos: [0, 0.08, 0.2] }),
+        box(0.24, 0.05, 0.04, { pos: [0, 0.16, 0.2] }),
       ]),
       trim,
       'chestBox',
@@ -456,7 +463,7 @@ export class DarkLord extends CharacterRig {
         box(0.068, 0.115, 0.07, { pos: [0.088, -0.022, 0.062], rot: [0, 0.42, 0] }),
         box(0.068, 0.115, 0.07, { pos: [-0.088, -0.022, 0.062], rot: [0, -0.42, 0] }),
       ]),
-      black,
+      CHAR_MATS.vaderHelmet(),
       'helmet',
     );
     attach(
@@ -479,16 +486,17 @@ export class DarkLord extends CharacterRig {
       const x = pos.getX(i);
       const y = pos.getY(i);
       const t = (y + 0.65) / 1.3; // 0 at hem, 1 at shoulders
-      const widen = 0.74 + (1 - t) * 0.34;
+      // Narrow at the shoulders, wide at the hem, and wrapped around the back
+      // so it drapes instead of hanging like a board.
+      const widen = 0.66 + Math.pow(1 - t, 1.3) * 1.05;
       pos.setX(i, x * widen);
-      // Wrap around the back so it drapes instead of hanging like a board.
-      pos.setZ(i, -0.14 - Math.pow(Math.abs(x) / 0.42, 2) * 0.3 * widen);
+      pos.setZ(i, -0.13 - Math.pow(Math.abs(x) / 0.36, 2) * 0.34 * widen - Math.pow(1 - t, 2) * 0.1);
     }
     pos.needsUpdate = true;
     capeGeo.computeVertexNormals();
     this.capeBase = new Float32Array(pos.array as Float32Array);
     this.cape = new THREE.Mesh(capeGeo, capeMat);
-    this.cape.position.set(0, 0.46 - 0.65, -0.05);
+    this.cape.position.set(0, shoulderY + 0.04 - 0.65, -0.07);
     this.cape.castShadow = true;
     this.cape.name = 'cape';
     j.chest.add(this.cape);
