@@ -176,6 +176,24 @@ function wallZAt(y: number): number {
   return CORRIDOR.halfWidth;
 }
 
+/** Height of the crown of the shell at a given |Z|, for ceiling furniture. */
+function wallCeilingAt(z: number): number {
+  const a = Math.abs(z);
+  let best: number = CORRIDOR.ceiling;
+  for (let i = 0; i < PROFILE.length - 1; i++) {
+    const [y0, z0] = PROFILE[i];
+    const [y1, z1] = PROFILE[i + 1];
+    if (y0 < 2.5 || y1 < 2.5) continue;
+    const a0 = Math.abs(z0);
+    const a1 = Math.abs(z1);
+    if (a >= Math.min(a0, a1) && a <= Math.max(a0, a1)) {
+      const t = Math.abs(a1 - a0) < 1e-6 ? 0 : (a - a0) / (a1 - a0);
+      best = Math.min(best, y0 + (y1 - y0) * t);
+    }
+  }
+  return best;
+}
+
 /** Inward tilt of the shell at a given height, in radians about X. */
 function wallTiltAt(y: number): number {
   const h = 0.12;
@@ -571,8 +589,10 @@ export class Corridor {
       this.root.add(strip);
       this.alarmLights.push(strip);
     }
-    this.alarmPoint = new THREE.PointLight(0xff2f1c, 0, 26, 1.5);
-    this.alarmPoint.position.set(14, 2.4, 0);
+    // Local spill only. A long-range red light turns the whole white corridor
+    // pink, which reads as a colour-grading mistake rather than as an alarm.
+    this.alarmPoint = new THREE.PointLight(0xff3a22, 0, 9, 2.2);
+    this.alarmPoint.position.set(14, 2.3, halfWidth - 0.3);
     this.root.add(this.alarmPoint);
 
     // Cold fill light that rises when Vader enters.
@@ -618,16 +638,36 @@ export class Corridor {
     scorch.renderOrder = 1;
     this.root.add(scorch);
 
-    // Loose conduit hanging from a damaged ceiling section.
+    // A ceiling panel dropped off one edge, with the loom behind it sagging out
+    // of the gap. The hinge, the strut and the recess all have to be visible or
+    // the conduit reads as a prop floating in mid-air.
+    const conduitZ = 0.62;
+    const panelY = wallCeilingAt(conduitZ);
     const conduit = new THREE.Mesh(
       merge([
-        cyl(0.05, 0.05, 0.85, 6, { pos: [5.6, 2.52, 1.05], rot: [0.35, 0, 0.28] }),
-        box(0.4, 0.08, 0.34, { pos: [5.45, 2.95, 0.98], rot: [0.18, 0, 0.36] }),
+        // Dark recess behind the dropped panel.
+        box(0.78, 0.05, 0.6, { pos: [5.5, panelY - 0.03, conduitZ] }),
+        // Hinge bar along the inboard edge.
+        cyl(0.028, 0.028, 0.8, 8, { pos: [5.5, panelY - 0.07, conduitZ - 0.3], rot: [0, 0, Math.PI / 2] }),
+        // Strut holding the far edge a hand's width clear of the ceiling.
+        box(0.05, 0.2, 0.05, { pos: [5.16, panelY - 0.15, conduitZ - 0.24] }),
+        // Loom sagging out of the recess and back up to the wall.
+        cyl(0.042, 0.042, 0.62, 6, { pos: [5.62, panelY - 0.34, conduitZ + 0.12], rot: [0.5, 0, 0.34] }),
+        cyl(0.034, 0.034, 0.52, 6, { pos: [5.78, panelY - 0.52, conduitZ + 0.44], rot: [-0.6, 0, 0.2] }),
       ]),
       darkMechanical(),
     );
     this.root.add(conduit);
-    this.anchors.sparkConduit = anchor(this.root, 'sparkConduit', 5.75, 2.12, 1.18);
+    // The panel itself, hanging down from the hinge.
+    const droppedPanel = new THREE.Mesh(
+      box(0.76, 0.05, 0.58, { pos: [0, 0, 0] }),
+      corridorTrim(),
+    );
+    droppedPanel.position.set(5.5, panelY - 0.16, conduitZ + 0.02);
+    droppedPanel.rotation.x = -0.42;
+    droppedPanel.castShadow = false;
+    this.root.add(droppedPanel);
+    this.anchors.sparkConduit = anchor(this.root, 'sparkConduit', 5.7, panelY - 0.62, conduitZ + 0.42);
 
     // ---- Navigation anchors ----------------------------------------------
     anchorInto(this.anchors, this.root, {
@@ -673,14 +713,14 @@ export class Corridor {
         const n = Math.sin(elapsed * 13 + l.flickerSeed) * Math.sin(elapsed * 4.3 + l.flickerSeed * 2);
         value *= n > -0.35 ? 1 : 0.15;
       }
-      l.light.intensity = value * (1 - this.alarmActive * 0.55);
+      l.light.intensity = value * (1 - this.alarmActive * 0.22);
     }
     const pulse = Math.max(0, Math.sin(elapsed * 3.4));
     const alarmValue = this.alarmActive * pulse;
     for (const s of this.alarmLights) {
       (s.material as THREE.MeshStandardMaterial).emissiveIntensity = 4.5 * alarmValue;
     }
-    this.alarmPoint.intensity = alarmValue * 22;
+    this.alarmPoint.intensity = alarmValue * 6;
     for (const c of this.consoles) c.update(elapsed);
   }
 }

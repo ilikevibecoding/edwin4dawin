@@ -493,7 +493,7 @@ export class App {
         this.director.update(this.timeline.time, dt, this.render.camera);
       }
 
-      this.stage.update(dt, this.elapsed);
+      this.stage.update(dt, this.elapsed, this.render.camera);
       this.music.update();
       this.audio.updateListener(this.render.camera);
       this.render.dofFocus = this.director.sample.focus;
@@ -639,7 +639,7 @@ export class App {
           this.timeline.update(0);
           this.applyContinuousWorldState();
           this.director.update(this.timeline.time, dt, this.render.camera);
-          this.stage.update(dt, this.elapsed + i * dt);
+          this.stage.update(dt, this.elapsed + i * dt, this.render.camera);
         }
         this.render.dofFocus = this.director.sample.focus;
         this.render.update(dt, this.elapsed);

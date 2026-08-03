@@ -135,7 +135,7 @@ export class Stage {
 
     // Bounce from the planet: warm but desaturated, from below. A saturated
     // bounce turns the destroyer's belly copper, which reads as rust.
-    this.fillLight = new THREE.DirectionalLight(0xe8d2ba, 1.25);
+    this.fillLight = new THREE.DirectionalLight(0xe8d2ba, 1.7);
     this.fillLight.position.set(-0.2, -1, 0.2);
     this.scene.add(this.fillLight);
 
@@ -377,13 +377,13 @@ export class Stage {
   }
 
   /** Per-frame updates that are independent of the timeline. */
-  update(dt: number, elapsed: number): void {
+  update(dt: number, elapsed: number, camera?: THREE.Camera): void {
     if (this.location === 'space') {
       this.starfield.update(dt, elapsed);
       this.planet.update(dt, elapsed);
       this.destroyer.update(dt, elapsed);
       this.runner.update(dt, elapsed);
-      this.pod.update(dt, elapsed);
+      this.pod.update(dt, elapsed, camera);
       this.runnerShield.update(dt, elapsed);
     } else {
       this.corridor.update(dt, elapsed);

@@ -141,8 +141,10 @@ try {
         return playing === true;
       }],
       ['timeline-advances', async () => {
+        // Long enough to survive a software rasteriser: the app clamps dt to
+        // 60 ms a frame, so a 2 fps headless GPU only advances ~0.12 s/second.
         const a = await page.evaluate(() => { window.__SW.seek(100); window.__SW.setPlaying(true); return window.__SW.time(); });
-        await sleep(1600);
+        await sleep(5000);
         const b = await page.evaluate(() => { const t = window.__SW.time(); window.__SW.setPlaying(false); return t; });
         return b > a + 0.2;
       }],

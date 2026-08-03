@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Chapter } from '../Timeline';
 import type { ShowContext } from '../context';
 import { customShot } from '../../camera/CameraDirector';
-import { clamp01, lerp, ramp, smootherstep } from '../../core/math';
+import { TractorBeam } from '../../fx/TractorBeam';
+import { lerp, ramp, smootherstep } from '../../core/math';
 import {
   destroyerPositionAt,
   orbitAngle,
@@ -14,6 +15,14 @@ import {
 
 export const CAPTURE_START = 176;
 export const CAPTURE_DURATION = 38;
+
+/**
+ * Offset from the destroyer's origin to its ventral tractor array, in the
+ * stage frame. The wedge holds station on a fixed heading through this
+ * chapter, so the shots can use it as a constant rather than needing the live
+ * scene graph.
+ */
+const TRACTOR_OFFSET = new THREE.Vector3(288, -95, 0);
 
 /**
  * Chapter 4 — Capture and docking.
@@ -35,42 +44,17 @@ export function captureChapter(): Chapter<ShowContext> {
     acceleration: new THREE.Vector3(),
   };
   const tmp = new THREE.Vector3();
-  let beam: THREE.Mesh | null = null;
+  let beam: TractorBeam | null = null;
 
   const posRunner = (t: number, out: THREE.Vector3): THREE.Vector3 =>
     runnerPositionAt(CAPTURE_START + t, out);
   const posDestroyer = (t: number, out: THREE.Vector3): THREE.Vector3 =>
     destroyerPositionAt(CAPTURE_START + t, out);
 
-  function ensureBeam(ctx: ShowContext): THREE.Mesh {
+  function ensureBeam(ctx: ShowContext): TractorBeam {
     if (beam) return beam;
-    const geo = new THREE.CylinderGeometry(26, 60, 1, 24, 1, true);
-    geo.translate(0, -0.5, 0);
-    const pos = geo.getAttribute('position');
-    const col = new Float32Array(pos.count * 3);
-    for (let i = 0; i < pos.count; i++) {
-      const f = clamp01(1 + pos.getY(i)) * 0.9 + 0.1;
-      col[i * 3] = f;
-      col[i * 3 + 1] = f;
-      col[i * 3 + 2] = f;
-    }
-    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    beam = new THREE.Mesh(
-      geo,
-      new THREE.MeshBasicMaterial({
-        color: 0x8fd8ff,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        toneMapped: false,
-      }),
-    );
-    beam.name = 'TractorBeam';
-    beam.renderOrder = 4;
-    ctx.stage.spaceRoot.add(beam);
+    beam = new TractorBeam(26, 74, 0x8fd8ff);
+    ctx.stage.spaceRoot.add(beam.mesh);
     return beam;
   }
 
@@ -136,38 +120,57 @@ export function captureChapter(): Chapter<ShowContext> {
       const runnerAt = (t: number): THREE.Vector3 => runnerPositionAt(t, new THREE.Vector3());
       const destroyerAt = (t: number): THREE.Vector3 => destroyerPositionAt(t, new THREE.Vector3());
 
+      const projectorAt = (t: number): THREE.Vector3 =>
+        destroyerAt(t).add(TRACTOR_OFFSET);
+
       return [
-        // Wide two-shot: the whole point is the size difference.
-        customShot({ id: 'capture.wide', start: S, end: S + 17, fov: 40, handheld: 0.35, blend: 1.4 }, (k, t, out) => {
+        // Wide two-shot. The camera sits below the destroyer's belly line and
+        // above the corvette, so the beam crosses the gap in clean profile
+        // instead of hiding behind a kilometre and a half of armour.
+        customShot({ id: 'capture.wide', start: S, end: S + 16, fov: 38, handheld: 0.3, blend: 1.4 }, (k, t, out) => {
           const r = runnerAt(t);
-          const d = destroyerAt(t);
-          const mid = new THREE.Vector3().addVectors(r, d).multiplyScalar(0.5);
+          const p = projectorAt(t);
+          const mid = new THREE.Vector3().lerpVectors(r, p, 0.5);
           const a = smootherstep(k);
-          out.position.set(mid.x - 520 + a * 200, mid.y - 150 + a * 60, mid.z + lerp(1450, 1080, a));
-          out.target.copy(mid).add(new THREE.Vector3(a * 60, -30, 0));
-          out.fov = lerp(43, 38, a);
+          out.position.set(
+            mid.x - lerp(520, 300, a),
+            r.y + lerp(-96, -34, a),
+            mid.z + lerp(1420, 1010, a),
+          );
+          out.target.set(mid.x + lerp(90, 40, a), mid.y + lerp(28, 8, a), mid.z - 40);
+          out.fov = lerp(42, 38, a);
           out.focus = out.position.distanceTo(out.target);
         }),
 
-        // Rising along the beam to the destroyer's belly.
-        customShot({ id: 'capture.beam', start: S + 17, end: S + 27, fov: 46, handheld: 0.45, blend: 1.2 }, (k, t, out) => {
+        // Riding up the beam: the corvette in the lower frame, the ventral
+        // hangar mouth opening above it.
+        customShot({ id: 'capture.beam', start: S + 16, end: S + 27, fov: 46, handheld: 0.45, blend: 1.3 }, (k, t, out) => {
           const r = runnerAt(t);
+          const p = projectorAt(t);
           const a = smootherstep(k);
-          out.position.set(r.x + lerp(230, 120, a), r.y + lerp(-40, 20, a), r.z + lerp(210, 132, a));
-          out.target.set(r.x, r.y + lerp(0, 44, a), r.z);
-          out.fov = lerp(48, 42, a);
+          out.position.set(
+            r.x + lerp(-210, -110, a),
+            r.y + lerp(-56, -14, a),
+            r.z + lerp(340, 218, a),
+          );
+          out.target.set(
+            lerp(r.x, p.x - 40, a),
+            lerp(r.y + 24, p.y - 30, a),
+            lerp(r.z, p.z, a),
+          );
+          out.fov = lerp(50, 45, a);
           out.focus = out.position.distanceTo(out.target);
         }),
 
-        // Push in on the runner's flank airlock until the frame whites out.
+        // Push in on the corvette's flank airlock until the frame whites out.
         customShot({ id: 'capture.airlock', start: S + 27, end: S + CAPTURE_DURATION, fov: 42, handheld: 0.7, blend: 1.0 }, (k, t, out) => {
           const r = runnerAt(t);
           const a = smootherstep(k);
-          const target = new THREE.Vector3(r.x - 26, r.y - 4, r.z + 13);
+          const target = new THREE.Vector3(r.x - 20, r.y + 3, r.z + 11);
           out.position.set(
-            lerp(r.x - 120, target.x + 6, a),
-            lerp(r.y + 18, target.y + 2, a),
-            lerp(r.z + 96, target.z + 14, a),
+            lerp(r.x - 132, target.x - 14, a),
+            lerp(r.y + 26, target.y + 6, a),
+            lerp(r.z + 118, target.z + 18, a),
           );
           out.target.copy(target);
           out.fov = lerp(44, 34, a);
@@ -198,7 +201,7 @@ export function captureChapter(): Chapter<ShowContext> {
     },
 
     exit(ctx) {
-      if (beam) beam.visible = false;
+      beam?.setStrength(0);
       ctx.render.fadeColor.setHex(0x000000);
       ctx.sfx.stopBed('tractor', 0.6);
     },
@@ -225,22 +228,18 @@ export function captureChapter(): Chapter<ShowContext> {
       stage.runner.setCockpitLights(0.3 + 0.12 * Math.sin(t * 7));
       stage.runner.setDamage(0.72);
       stage.destroyer.standDown();
+      // Holding station: the main drives idle down rather than blazing.
+      stage.destroyer.engines.throttle = lerp(0.55, 0.16, ramp(t, 0, 12));
 
       // --- tractor beam ------------------------------------------------------
       const b = ensureBeam(ctx);
       const strength = ramp(t, 3.2, 7) * (1 - ramp(t, 30, 36));
       stage.destroyer.setTractorGlow(strength);
-      const mat = b.material as THREE.MeshBasicMaterial;
-      mat.opacity = strength * 0.3;
-      b.visible = strength > 0.01;
-      if (b.visible) {
+      b.setStrength(strength);
+      b.update(CAPTURE_START + t);
+      if (strength > 0.01) {
         stage.destroyer.anchors.tractor.getWorldPosition(tmp);
-        const to = stage.runner.root.position;
-        b.position.copy(tmp);
-        const dir = new THREE.Vector3().subVectors(to, tmp);
-        const len = dir.length();
-        b.scale.set(1, Math.max(1, len), 1);
-        b.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+        b.aim(tmp, stage.runner.root.position);
       }
 
       // --- whiteout into the interior ---------------------------------------

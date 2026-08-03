@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { freshRng } from '../../core/Random';
-import { starPointMap } from '../textures';
+import { nebulaMap, starPointMap } from '../textures';
+
+/** Peak nebula brightness. Anything higher starts to look like lens flare. */
+const NEBULA_OPACITY = 0.3;
 
 /**
  * Star dome.
@@ -114,25 +117,27 @@ export class Starfield {
     this.points.frustumCulled = false;
     this.root.add(this.points);
 
-    // Faint nebula washes for depth.
-    for (let i = 0; i < 5; i++) {
+    // Faint nebula washes for depth. Kept very dim and structured: a bright
+    // soft disc out here reads as a smudge on the lens, not as a distant cloud.
+    for (let i = 0; i < 4; i++) {
       const spr = new THREE.Sprite(
         new THREE.SpriteMaterial({
-          map: starPointMap(),
-          color: new THREE.Color().setHSL(rng.range(0.54, 0.72), 0.55, 0.5),
+          map: nebulaMap(),
+          color: new THREE.Color().setHSL(rng.range(0.55, 0.72), 0.45, 0.42),
           transparent: true,
-          opacity: rng.range(0.045, 0.1),
+          opacity: NEBULA_OPACITY,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
+          rotation: rng.range(0, Math.PI * 2),
           toneMapped: false,
         }),
       );
       const a = rng.range(0, Math.PI * 2);
-      const lat = rng.gaussian() * 0.35;
+      const lat = rng.gaussian() * 0.32;
       const cl = Math.cos(lat);
       spr.position.set(Math.cos(a) * cl, Math.sin(lat), Math.sin(a) * cl).multiplyScalar(radius * 0.9);
-      const s = radius * rng.range(0.16, 0.34);
-      spr.scale.set(s, s * rng.range(0.5, 1.0), 1);
+      const s = radius * rng.range(0.3, 0.52);
+      spr.scale.set(s, s * rng.range(0.55, 0.95), 1);
       this.root.add(spr);
       this.nebulae.push(spr);
     }
@@ -150,7 +155,7 @@ export class Starfield {
   setOpacity(v: number): void {
     this.baseOpacity = v;
     this.material.uniforms.uOpacity.value = v;
-    for (const n of this.nebulae) (n.material as THREE.SpriteMaterial).opacity = 0.08 * v;
+    for (const n of this.nebulae) (n.material as THREE.SpriteMaterial).opacity = NEBULA_OPACITY * v;
   }
 
   dispose(): void {

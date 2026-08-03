@@ -1,9 +1,13 @@
 import * as THREE from 'three';
 import { box, cyl, merge, sphere, torus } from '../geometry';
 import { darkMechanical, emissive, gunmetal, rebelHull, rebelHullDark } from '../materials';
+import { flareMap } from '../textures';
 import { EngineBank } from './engines';
 import { makeAnchor } from './StarDestroyer';
 import { clamp01 } from '../../core/math';
+
+const _flareWorld = new THREE.Vector3();
+const _camWorld = new THREE.Vector3();
 
 /**
  * Class-6 style escape pod: a stubby white cylinder with a blunt nose, three
@@ -21,6 +25,9 @@ export class EscapePod {
   private beaconLight: THREE.PointLight;
   private heatShield: THREE.Mesh;
   private reentryGlow: THREE.Mesh;
+  private flare: THREE.Sprite;
+  private trail: THREE.Mesh;
+  private reentry = 0;
 
   constructor(length = 7) {
     const L = (this.length = length);
@@ -142,6 +149,42 @@ export class EscapePod {
     this.beaconLight.position.set(0, R * 1.3, L * 0.02);
     this.root.add(this.beaconLight);
 
+    // Long-range readability. At the end of the show the pod is a 7 m object
+    // two kilometres away: without a screen-space-anchored flare and a trail it
+    // is literally two pixels, and the closing image has no subject.
+    this.flare = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: flareMap(),
+        color: 0xffd7a8,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: false,
+        toneMapped: false,
+      }),
+    );
+    this.flare.renderOrder = 6;
+    this.root.add(this.flare);
+
+    this.trail = new THREE.Mesh(
+      new THREE.ConeGeometry(1, 1, 12, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xff9040,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      }),
+    );
+    // Cone apex forward (+Z, the direction of travel), skirt trailing aft.
+    this.trail.geometry.translate(0, -0.5, 0);
+    this.trail.rotation.x = Math.PI / 2;
+    this.trail.visible = false;
+    this.root.add(this.trail);
+
     this.anchors.nose = makeAnchor('nose', 0, 0, L * 0.5, this.root);
     this.anchors.stern = makeAnchor('stern', 0, 0, -L * 0.55, this.root);
     this.anchors.hatch = makeAnchor('hatch', 0, -R * 0.9, L * 0.05, this.root);
@@ -158,17 +201,37 @@ export class EscapePod {
   /** 0..1 atmospheric-entry heating on the shield. */
   setReentry(v: number): void {
     const t = clamp01(v);
+    this.reentry = t;
     (this.reentryGlow.material as THREE.MeshBasicMaterial).opacity = t * 0.85;
     const mat = this.heatShield.material as THREE.MeshStandardMaterial;
     mat.emissive.setHex(0xff7a2a);
     mat.emissiveIntensity = t * 3.2;
     this.reentryGlow.scale.set(1 + t * 0.4, 1 + t * 0.4, 1.4 + t * 1.6);
+    const trailMat = this.trail.material as THREE.MeshBasicMaterial;
+    trailMat.opacity = t * 0.5;
+    this.trail.visible = t > 0.02;
+    this.trail.scale.set(this.length * 0.5, this.length * (2 + t * 22), this.length * 0.5);
   }
 
-  update(_dt: number, elapsed: number): void {
+  update(_dt: number, elapsed: number, camera?: THREE.Camera): void {
     this.engines.update(elapsed);
     const blink = Math.sin(elapsed * 6.2) > 0.55 ? 1 : 0.08;
     (this.beacon.material as THREE.MeshStandardMaterial).emissiveIntensity = 3 * blink;
     this.beaconLight.intensity = 2.4 * blink;
+
+    // Hold the flare at a constant angular size so the pod stays a visible
+    // point of light from a hundred metres out to a couple of kilometres.
+    const flareMat = this.flare.material as THREE.SpriteMaterial;
+    if (camera) {
+      this.root.getWorldPosition(_flareWorld);
+      const dist = camera.getWorldPosition(_camWorld).distanceTo(_flareWorld);
+      const size = Math.max(this.length * 1.6, dist * 0.045);
+      this.flare.scale.set(size, size, 1);
+      const heat = 0.28 + this.reentry * 0.72;
+      flareMat.opacity = heat * (0.85 + 0.15 * Math.sin(elapsed * 3.1));
+      flareMat.color.setRGB(1, 0.86 - this.reentry * 0.22, 0.68 - this.reentry * 0.36);
+    } else {
+      flareMat.opacity = 0;
+    }
   }
 }

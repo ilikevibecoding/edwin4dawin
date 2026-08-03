@@ -328,20 +328,22 @@ export class StarDestroyer {
         width: W * 0.8,
         depth: L * 0.86,
         y: (x, z) => this.bellySurfaceY(x, z),
-        count: Math.round(300 * detail),
-        minSize: L * 0.004,
-        maxSize: L * 0.018,
-        minHeight: L * 0.001,
-        maxHeight: L * 0.0045,
+        count: Math.round(430 * detail),
+        minSize: L * 0.0035,
+        maxSize: L * 0.012,
+        minHeight: L * 0.0008,
+        maxHeight: L * 0.0026,
         rng: rng.fork('isd-ventral'),
         mask: (x, z) => {
           const inHangar = Math.abs(x) < hangarW && Math.abs(z - hangarZ) < hangarD;
           return inHangar ? 0 : 1;
         },
-        fits: (x, z, hx, hz) => Math.abs(x) + hx < this.bellyHalfWidthAt(z + hz) * 0.94,
-        elongate: 2.6,
+        // Hold plating well inboard of the chine: anything that reaches the
+        // edge is seen in silhouette from below and reads as loose panelling.
+        fits: (x, z, hx, hz) => Math.abs(x) + hx < this.bellyHalfWidthAt(z + hz) * 0.86,
+        elongate: 3.4,
         downward: true,
-        bite: 0.45,
+        bite: 0.5,
       }),
       imperialHullDark(),
     );
@@ -361,11 +363,11 @@ export class StarDestroyer {
       const x = vRng.spread(limit);
       const yc = (this.bellySurfaceY(x, zFront) + this.bellySurfaceY(x, zBack)) / 2;
       ventralTrenchParts.push(
-        box(L * vRng.range(0.005, 0.013), L * 0.006, zFront - zBack, { pos: [x, yc + L * 0.001, zc] }),
+        box(L * vRng.range(0.004, 0.009), L * 0.004, zFront - zBack, { pos: [x, yc + L * 0.0012, zc] }),
       );
     }
     ventralTrenchParts.push(
-      box(W * 0.1, H * 0.03, L * 0.5, { pos: [0, this.bellySurfaceY(0, -L * 0.15) + H * 0.012, -L * 0.15] }),
+      box(W * 0.07, H * 0.02, L * 0.5, { pos: [0, this.bellySurfaceY(0, -L * 0.15) + H * 0.009, -L * 0.15] }),
     );
     const ventralTrench = new THREE.Mesh(merge(ventralTrenchParts), imperialTrench());
     ventralTrench.name = 'ISD_VentralTrenches';
@@ -497,6 +499,29 @@ export class StarDestroyer {
       this.beacons.push(pl);
       this.beaconBulbs.push(bulb);
     }
+
+    // Ventral deck lighting. The belly faces away from the sun for the whole
+    // capture sequence, and an unlit surface that size reads as a hole in the
+    // frame. Scattered recessed strip lights give the underside a scale
+    // reference without brightening the hull itself.
+    const lRng = rng.fork('isd-ventral-lights');
+    const lampParts: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < Math.round(150 * detail); i++) {
+      const z = lRng.range(-L * 0.45, L * 0.42);
+      const bw = this.bellyHalfWidthAt(z) * 0.92;
+      if (bw < L * 0.02) continue;
+      const x = lRng.spread(bw);
+      if (Math.abs(x) < hangarW && Math.abs(z - hangarZ) < hangarD) continue;
+      const w = L * lRng.range(0.0014, 0.005);
+      lampParts.push(
+        box(w, L * 0.0006, w * lRng.range(0.25, 0.8), {
+          pos: [x, this.bellySurfaceY(x, z) - L * 0.0007, z],
+        }),
+      );
+    }
+    const ventralLights = new THREE.Mesh(merge(lampParts), emissive('isdDeckLight', 0xffe4bd, 1.15));
+    ventralLights.name = 'ISD_VentralLights';
+    this.root.add(ventralLights);
 
     // ---- Named anchors ----------------------------------------------------
     this.anchors.nose = makeAnchor('nose', 0, -H * 0.05, halfL, this.root);

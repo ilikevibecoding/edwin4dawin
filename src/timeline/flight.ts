@@ -173,8 +173,12 @@ export function runnerPositionAt(t: number, out: THREE.Vector3): THREE.Vector3 {
   );
 }
 
-/** Final docked position of the runner beneath the destroyer's bow. */
-export const DOCK = new THREE.Vector3(60, 96, -26);
+/**
+ * Final docked position of the runner: directly under the destroyer's ventral
+ * tractor array (world ~(348, 238, -18) once the wedge has stopped closing), so
+ * the beam runs straight down instead of raking back along the hull.
+ */
+export const DOCK = new THREE.Vector3(332, 118, -22);
 
 /** Where the destroyer sits (world space) at absolute timeline time `t`. */
 export function destroyerPositionAt(t: number, out: THREE.Vector3): THREE.Vector3 {

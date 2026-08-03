@@ -38,15 +38,18 @@ export function escapeChapter(): Chapter<ShowContext> {
   const rng = freshRng('escape');
   const fired = new Set<number>();
 
+  // Both start where the previous chapter left them in the alcove.
   const r2Path: Array<[number, number, number]> = [
-    [24.5, 0, -2.2],
+    [22.55, 0, -3.35],
+    [23.4, 0, -1.4],
     [27.5, 0, -0.6],
     [BAY_X, 0, 0.4],
     [BAY_X, 0, 8],
     [BAY_X, 0, BAY_Z - 1.6],
   ];
   const threepioPath: Array<[number, number, number]> = [
-    [23.5, 0, -1.6],
+    [20.6, 0, -3.25],
+    [22.6, 0, -1.5],
     [27, 0, -0.2],
     [BAY_X - 0.9, 0, 1.2],
     [BAY_X - 0.9, 0, 8.5],
@@ -151,10 +154,10 @@ export function escapeChapter(): Chapter<ShowContext> {
         // 1. The droids leave the alcove — contrasting gaits, one frame.
         customShot({ id: 'escape.leave', start: S, end: S + 8, fov: 46, handheld: 0.7, blend: 1.4 }, (k, _t, out) => {
           const a = smootherstep(k);
-          out.position.set(lerp(26.5, 29.5, a), lerp(1.05, 0.95, a), lerp(-1.9, -0.4, a));
-          out.target.set(lerp(24.5, 30.5, a), 0.75, lerp(-2.1, 0.6, a));
+          out.position.set(lerp(26.8, 29.5, a), lerp(1.15, 0.98, a), lerp(-1.15, -0.4, a));
+          out.target.set(lerp(23.2, 30.5, a), 0.8, lerp(-1.9, 0.6, a));
           out.fov = 46;
-          out.focus = 3.2;
+          out.focus = 3.6;
           clampCam(out);
         }),
 

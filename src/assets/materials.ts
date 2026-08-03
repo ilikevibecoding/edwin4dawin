@@ -121,7 +121,7 @@ export const imperialHullDark = (): THREE.MeshStandardMaterial =>
 export const imperialTrench = (): THREE.MeshStandardMaterial =>
   reg('imperialTrench', () =>
     new THREE.MeshStandardMaterial({
-      color: 0x4e555b,
+      color: 0x6d747a,
       map: imperialHullMap(),
       roughness: 0.88,
       metalness: 0.2,

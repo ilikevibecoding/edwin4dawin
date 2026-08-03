@@ -406,6 +406,44 @@ export const scorchMarkMap = (): THREE.Texture =>
     return finish('scorchMark', c);
   });
 
+/**
+ * Wispy cloud for distant nebulae. A plain radial gradient blown up to tens of
+ * thousands of units reads as a lens smudge; this is a cluster of offset
+ * blotches with a soft global falloff, so it breaks up into structure.
+ */
+export const nebulaMap = (): THREE.Texture =>
+  memo('nebula', () => {
+    const size = 256;
+    const { c, g } = makeCanvas(size, size);
+    const rng = freshRng('nebula-cloud');
+    g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 90; i++) {
+      const a = rng.range(0, Math.PI * 2);
+      const rad = Math.pow(rng.next(), 0.6) * 0.42;
+      const x = size * (0.5 + Math.cos(a) * rad * rng.range(0.7, 1.35));
+      const y = size * (0.5 + Math.sin(a) * rad * rng.range(0.5, 1.0));
+      const r = size * rng.range(0.035, 0.14);
+      const grad = g.createRadialGradient(x, y, 0, x, y, r);
+      const alpha = rng.range(0.03, 0.1);
+      grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
+      grad.addColorStop(0.55, `rgba(255,255,255,${alpha * 0.35})`);
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    }
+    // Global falloff so the cloud never shows a hard tile edge.
+    g.globalCompositeOperation = 'destination-in';
+    const fade = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    fade.addColorStop(0, 'rgba(255,255,255,1)');
+    fade.addColorStop(0.55, 'rgba(255,255,255,0.75)');
+    fade.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = fade;
+    g.fillRect(0, 0, size, size);
+    return finish('nebula', c);
+  });
+
 export const starPointMap = (): THREE.Texture =>
   memo('starPoint', () => {
     const size = 64;
