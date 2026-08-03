@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-03T02:05:18.332Z",
+  "generatedAt": "2026-08-03T03:07:06.497Z",
   "url": "http://127.0.0.1:5173/?qa=1&quality=medium",
   "viewport": {
     "width": 1280,
@@ -13,577 +13,667 @@
   "controlResults": [],
   "playbackSamples": [
     {
-      "time": 101.86660000000002,
-      "fps": 2.037803519513101,
+      "time": 100.5,
+      "fps": 1.9985876647169334,
+      "draws": 128,
+      "tris": 38223,
+      "issues": 0
+    },
+    {
+      "time": 102.18329999999999,
+      "fps": 1.7567351272852196,
       "draws": 69,
-      "tris": 11689,
-      "issues": 2
+      "tris": 17909,
+      "issues": 0
     },
     {
-      "time": 103.86650000000002,
-      "fps": 2.9901325625436055,
-      "draws": 71,
-      "tris": 11965,
-      "issues": 2
+      "time": 104.46659999999999,
+      "fps": 1.839309727496045,
+      "draws": 72,
+      "tris": 22153,
+      "issues": 0
     },
     {
-      "time": 105.9332,
-      "fps": 5.590270444861299,
+      "time": 106.5165,
+      "fps": 2.7721820769188126,
       "draws": 73,
-      "tris": 13173,
-      "issues": 2
+      "tris": 22253,
+      "issues": 0
     },
     {
-      "time": 107.64989999999997,
-      "fps": 6.2502604275178095,
-      "draws": 73,
-      "tris": 13173,
-      "issues": 2
+      "time": 108.6831,
+      "fps": 4.292705262856652,
+      "draws": 75,
+      "tris": 22349,
+      "issues": 0
     },
     {
-      "time": 109.99979999999996,
-      "fps": 5.895376714572063,
+      "time": 110.76640000000002,
+      "fps": 5.7448519743141295,
       "draws": 86,
-      "tris": 14253,
-      "issues": 2
+      "tris": 23333,
+      "issues": 0
     },
     {
-      "time": 111.84969999999996,
-      "fps": 5.934248526328278,
-      "draws": 90,
-      "tris": 15041,
-      "issues": 2
+      "time": 112.74950000000003,
+      "fps": 5.143092255645974,
+      "draws": 96,
+      "tris": 24601,
+      "issues": 0
     },
     {
-      "time": 113.51629999999997,
-      "fps": 5.400151204233719,
-      "draws": 116,
-      "tris": 16011,
-      "issues": 2
-    },
-    {
-      "time": 115.69949999999999,
-      "fps": 5.421882718652478,
+      "time": 114.88290000000005,
+      "fps": 4.821600771456123,
       "draws": 121,
-      "tris": 15463,
-      "issues": 2
+      "tris": 24543,
+      "issues": 0
     },
     {
-      "time": 117.16609999999999,
-      "fps": 5.094589545902251,
-      "draws": 123,
-      "tris": 15467,
-      "issues": 2
+      "time": 116.86610000000006,
+      "fps": 4.599816007359705,
+      "draws": 122,
+      "tris": 24545,
+      "issues": 0
     },
     {
-      "time": 119.6327,
-      "fps": 4.74538379609613,
-      "draws": 121,
-      "tris": 15463,
-      "issues": 2
+      "time": 118.91600000000007,
+      "fps": 4.426389148461091,
+      "draws": 125,
+      "tris": 24783,
+      "issues": 0
     }
   ],
-  "meanFps": 4.936009946022073,
+  "meanFps": 3.7395270016510684,
   "results": [
     {
-      "id": "t178",
-      "time": 178,
-      "failures": [],
-      "report": {
-        "time": 178,
-        "chapter": "capture",
-        "chapterIndex": 3,
-        "shot": "cap-2",
-        "shotLabel": "The destroyer draws alongside",
+      "checkpoint": {
+        "id": "05-pursuit-tracking",
+        "time": 92,
+        "chapter": "pursuit",
+        "shot": "pur-1",
         "scene": "space",
-        "beat": "clamps engage",
-        "subtitle": "Magnetic clamps close. A boarding ring seals against rebel steel.",
-        "narrationCue": "c3",
-        "issues": [
+        "expects": [
+          "blockade runner large in frame",
+          "engine glow"
+        ],
+        "assertions": [
           {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
+            "kind": "visible",
+            "target": "runner",
+            "minScreenFraction": 0.01
           },
           {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
+            "kind": "noIssues"
           }
-        ],
-        "fps": 6.547502127934996,
-        "drawCalls": 110,
-        "triangles": 14999,
+        ]
+      },
+      "report": {
+        "time": 92,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-1",
+        "shotLabel": "Tracking the blockade runner",
+        "scene": "space",
+        "beat": "corvette at full burn",
+        "subtitle": "Her corvette runs with every engine open.",
+        "narrationCue": "u1",
+        "issues": [],
+        "fps": 15.060240963846976,
+        "drawCalls": 69,
+        "triangles": 17909,
         "measurements": {
           "runner": {
-            "screenFraction": 0.24094603881314752,
+            "screenFraction": 0.30521938245272107,
             "onScreen": true,
             "ndc": [
-              -0.0362127049761619,
-              -0.4086301303260199
+              0.056583706533996476,
+              -0.031038451827830525
             ],
-            "distance": 279.8757482595572
+            "distance": 292.4328635854266
           },
           "destroyer": {
-            "screenFraction": 1,
-            "onScreen": true,
+            "screenFraction": 0,
+            "onScreen": false,
             "ndc": [
-              -0.48442051106183076,
-              0.6230191247887533
+              -0.6957587657294725,
+              -0.47133719379738487
             ],
-            "distance": 831.0650011419998
+            "distance": 5144.072638407769
           },
           "pod": {
-            "screenFraction": 0.002094219075024312,
+            "screenFraction": 0.0023833906241130846,
             "onScreen": true,
             "ndc": [
-              0.07945021053748116,
-              -0.44307113552794125
+              0.183694278088288,
+              -0.09292829867958145
             ],
-            "distance": 259.0235653226692
+            "distance": 267.8719620971292
           },
           "tatooine": {
             "screenFraction": 1,
             "onScreen": true,
             "ndc": [
-              0.0002541697406499579,
-              13.059076332463631
+              0.0007569197500815413,
+              -31.57890021628883
             ],
-            "distance": 252011.30960413962
+            "distance": 252028.44955940984
           }
         },
         "boltsActive": 0,
         "particleBudget": {
-          "spaceSparks": 1470,
-          "interiorSparks": 1050,
-          "overflow": true
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
         }
       },
+      "failures": [],
       "brightness": {
-        "mean": 0,
-        "p95": 0,
+        "mean": 0.09515420876903961,
+        "p95": 0.6239811764705883,
         "clipped": 0
       },
-      "screenshot": "t178_0.png"
+      "screenshot": "05-pursuit-tracking.png"
     },
     {
-      "id": "t310",
-      "time": 310,
-      "failures": [],
-      "report": {
-        "time": 310,
-        "chapter": "escape",
-        "chapterIndex": 6,
-        "shot": "esc-1",
-        "shotLabel": "Droids run for the bay",
-        "scene": "interior",
-        "beat": "droids run for the bay",
-        "subtitle": "Two droids run for the launch bays. One of them is certain.",
-        "narrationCue": "e1",
-        "issues": [
+      "checkpoint": {
+        "id": "07-under-the-hull",
+        "time": 126,
+        "chapter": "pursuit",
+        "shot": "pur-3",
+        "scene": "space",
+        "expects": [
+          "destroyer underside filling frame",
+          "turbolaser fire"
+        ],
+        "assertions": [
           {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
+            "kind": "visible",
+            "target": "destroyer",
+            "minScreenFraction": 0.2
           },
           {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
+            "kind": "noIssues"
           }
-        ],
-        "fps": 4.378922784994098,
-        "drawCalls": 109,
-        "triangles": 17025,
+        ]
+      },
+      "report": {
+        "time": 126,
+        "chapter": "pursuit",
+        "chapterIndex": 2,
+        "shot": "pur-3",
+        "shotLabel": "Under the hull",
+        "scene": "space",
+        "beat": "belly fills the sky",
+        "subtitle": "Shields flare, hold, and begin to fail.",
+        "narrationCue": "u5",
+        "issues": [],
+        "fps": 8.371703641689221,
+        "drawCalls": 77,
+        "triangles": 19819,
         "measurements": {
-          "vader": {
+          "runner": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              -26.42029216219235,
+              6.492263501410362
+            ],
+            "distance": 126.98657707178387
+          },
+          "destroyer": {
+            "screenFraction": 0.9202831871113443,
+            "onScreen": true,
+            "ndc": [
+              0.009583291909363755,
+              0.12642307809018025
+            ],
+            "distance": 1423.212744790505
+          },
+          "pod": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -0.30786515241061,
-              0.25578590408253316
+              3.162651064154795,
+              -1.11568688402392
             ],
-            "distance": 22.77964517126439
+            "distance": 102.61849947391245
+          },
+          "tatooine": {
+            "screenFraction": 1,
+            "onScreen": true,
+            "ndc": [
+              0.001294738196152914,
+              3.8947845695191705
+            ],
+            "distance": 251996.10907773717
+          }
+        },
+        "boltsActive": 2,
+        "particleBudget": {
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
+        }
+      },
+      "failures": [],
+      "brightness": {
+        "mean": 0.1969751401961001,
+        "p95": 0.28949019607843135,
+        "clipped": 0
+      },
+      "screenshot": "07-under-the-hull.png"
+    },
+    {
+      "checkpoint": {
+        "id": "13-corridor-establish",
+        "time": 200,
+        "chapter": "corridor",
+        "shot": "cor-1",
+        "scene": "interior",
+        "expects": [
+          "white corridor",
+          "rebel defenders moving into position",
+          "red alarm light"
+        ],
+        "assertions": [
+          {
+            "kind": "brightness",
+            "min": 0.06
+          },
+          {
+            "kind": "visible",
+            "target": "rebel-0"
+          },
+          {
+            "kind": "noIssues"
+          }
+        ],
+        "notes": "Interiors must stay readable - never crush to black."
+      },
+      "report": {
+        "time": 200,
+        "chapter": "corridor",
+        "chapterIndex": 4,
+        "shot": "cor-1",
+        "shotLabel": "Corridor establishing",
+        "scene": "interior",
+        "beat": "corridor: alarms",
+        "subtitle": "Inside, the corridor lights turn red.",
+        "narrationCue": "d1",
+        "issues": [],
+        "fps": 7.102272727271655,
+        "drawCalls": 335,
+        "triangles": 51881,
+        "measurements": {
+          "vader": {
+            "screenFraction": 0.0007108158632782477,
+            "onScreen": true,
+            "ndc": [
+              0.04067108587600217,
+              0.017585057935264888
+            ],
+            "distance": 44.91982268290896
           },
           "leia": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -1.047482666871807,
-              0.591270936013225
+              0.1642635498212645,
+              0.3513636530558857
             ],
-            "distance": 5.4853144088698516
+            "distance": 7.750926161396892
           },
           "r2": {
-            "screenFraction": 0.01654458941331885,
+            "screenFraction": 0.04811817263405879,
             "onScreen": true,
             "ndc": [
-              0.07744294661749568,
-              -0.035092499298132206
+              -0.8445329661749523,
+              -0.4772347920564754
             ],
-            "distance": 7.68075181353644
+            "distance": 6.085581319772569
           },
           "threepio": {
-            "screenFraction": 0.03275105614717121,
-            "onScreen": true,
+            "screenFraction": 0,
+            "onScreen": false,
             "ndc": [
-              -0.08862183671668886,
-              -0.1458085794103554
+              0.24277575318904052,
+              1.0634825261844973
             ],
-            "distance": 4.8963064851817535
+            "distance": 2.36774025984775
           },
           "plans": {
-            "screenFraction": 0,
-            "onScreen": false,
+            "screenFraction": 0.029392286820632472,
+            "onScreen": true,
             "ndc": [
-              -1.184228204051499,
-              0.19101475126875903
+              -1.345943860620472,
+              -0.13303544635172662
             ],
-            "distance": 7.313439076644267
+            "distance": 4.996025218357197
           },
           "door": {
-            "screenFraction": 0,
-            "onScreen": false,
+            "screenFraction": 0.004290205167000138,
+            "onScreen": true,
             "ndc": [
-              -0.28014361831516327,
-              0.22477904772689697
+              0.03340111694897222,
+              0.022861359122683136
             ],
-            "distance": 36.71366564022084
+            "distance": 36.374340945091205
           },
           "trooper-0": {
-            "screenFraction": 0,
-            "onScreen": false,
+            "screenFraction": 0.00046013127636710814,
+            "onScreen": true,
             "ndc": [
-              -0.3482317084297211,
-              0.25686231960006045
+              0.019941861468263905,
+              0.011433707279619267
             ],
-            "distance": 27.12020203457427
+            "distance": 43.66711961251596
           },
           "rebel-0": {
-            "screenFraction": 0,
-            "onScreen": false,
+            "screenFraction": 0.10195978595021062,
+            "onScreen": true,
             "ndc": [
-              -0.350296257283632,
-              0.4080417898326699
+              -0.2422720625255473,
+              -0.5555863208651276
             ],
-            "distance": 24.30817227360375
+            "distance": 3.204326410109882
           },
           "rebel-1": {
-            "screenFraction": 0,
-            "onScreen": false,
+            "screenFraction": 1,
+            "onScreen": true,
             "ndc": [
-              -0.2589762720342741,
-              0.4211034315681706
+              6.299028454883371,
+              5.921915117447891
             ],
-            "distance": 22.422182991391157
+            "distance": 2.0272109510455216
           }
         },
         "boltsActive": 0,
         "particleBudget": {
-          "spaceSparks": 1470,
-          "interiorSparks": 1050,
-          "overflow": true
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
         }
       },
+      "failures": [],
       "brightness": {
-        "mean": 0,
-        "p95": 0,
-        "clipped": 0
+        "mean": 0.24526726008987193,
+        "p95": 0.6283090196078431,
+        "clipped": 0.0006944444444444445
       },
-      "screenshot": "t310_0.png"
+      "screenshot": "13-corridor-establish.png"
     },
     {
-      "id": "t316",
-      "time": 316,
-      "failures": [],
-      "report": {
-        "time": 316,
-        "chapter": "escape",
-        "chapterIndex": 6,
-        "shot": "esc-2",
-        "shotLabel": "The protocol droid hesitates",
+      "checkpoint": {
+        "id": "18-vader-entrance",
+        "time": 248,
+        "chapter": "corridor",
+        "shot": "cor-7",
         "scene": "interior",
-        "beat": "the protocol droid balks",
-        "subtitle": "Two droids run for the launch bays. One of them is certain.",
-        "narrationCue": null,
-        "issues": [
+        "expects": [
+          "Vader silhouette",
+          "red rim light",
+          "stormtroopers standing aside"
+        ],
+        "assertions": [
           {
-            "code": "camera-in-geometry",
-            "severity": "error",
-            "message": "Camera x=1.74 is inside a corridor wall (|x| limit 1.50)"
+            "kind": "visible",
+            "target": "vader",
+            "minScreenFraction": 0.01
           },
           {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
+            "kind": "brightness",
+            "min": 0.03
           },
           {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
+            "kind": "noIssues"
           }
         ],
-        "fps": 2.7677830058121247,
-        "drawCalls": 100,
-        "triangles": 14889,
+        "notes": "Must be dramatic but still readable."
+      },
+      "report": {
+        "time": 248,
+        "chapter": "corridor",
+        "chapterIndex": 4,
+        "shot": "cor-7",
+        "shotLabel": "Vader entrance — low angle",
+        "scene": "interior",
+        "beat": "the dark lord enters",
+        "subtitle": "A figure in black, breathing through a machine. The Empire keeps him for problems it cannot solve with soldiers.",
+        "narrationCue": "d8",
+        "issues": [],
+        "fps": 4.316748986065612,
+        "drawCalls": 238,
+        "triangles": 45381,
         "measurements": {
           "vader": {
-            "screenFraction": 0,
-            "onScreen": false,
+            "screenFraction": 0.2886317612329122,
+            "onScreen": true,
             "ndc": [
-              -0.6763811225742309,
-              0.17017097362369468
+              -0.0019892468803482744,
+              -0.18927437069021064
             ],
-            "distance": 30.492667052919465
+            "distance": 3.7134888612496515
           },
           "leia": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -1.0370893752762276,
-              0.2909206321717218
+              -0.018627873422777178,
+              -0.4883343999535837
             ],
-            "distance": 12.821730143997032
+            "distance": 34.10195951328739
           },
           "r2": {
-            "screenFraction": 0.02124359753616724,
-            "onScreen": true,
+            "screenFraction": 0,
+            "onScreen": false,
             "ndc": [
-              0.01049957573882435,
-              -0.12464599032083416
+              0.18967339468920513,
+              -0.4733068912372175
             ],
-            "distance": 7.858171112167088
+            "distance": 22.040898664771866
           },
           "threepio": {
-            "screenFraction": 0.10378946220410172,
-            "onScreen": true,
+            "screenFraction": 0,
+            "onScreen": false,
             "ndc": [
-              -0.04212359892376176,
-              -0.27867428594426247
+              -0.039511910636219706,
+              -0.49743880947536157
             ],
-            "distance": 3.6410001367671323
+            "distance": 28.57816212401227
           },
           "plans": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -1.1896898149026545,
-              0.10914639386389394
+              0.1891997480814066,
+              -0.585899644018379
             ],
-            "distance": 14.485889376629304
+            "distance": 23.631995184716374
           },
           "door": {
-            "screenFraction": 0,
-            "onScreen": false,
+            "screenFraction": 0.5432361785836416,
+            "onScreen": true,
             "ndc": [
-              -0.6463201819301713,
-              0.14474358235410228
+              0.0023526673781749706,
+              -0.25332923285050546
             ],
-            "distance": 44.43239311916002
+            "distance": 7.212470157420112
           },
           "trooper-0": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -0.7190998489839219,
-              0.1738456237743519
+              0.715400805023037,
+              -0.7805388584294848
             ],
-            "distance": 34.8339662577363
+            "distance": 2.761174602582026
           },
           "rebel-0": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -0.7196599745540913,
-              0.313558639865601
+              0.14173630027513262,
+              -0.03520421152798874
             ],
-            "distance": 31.996160786060095
+            "distance": 8.146970882218605
           },
           "rebel-1": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -0.6278483272766234,
-              0.31981050809446687
+              -0.11024565371850055,
+              -0.11422631308204549
             ],
-            "distance": 30.106089456594948
+            "distance": 9.915475521024595
           }
         },
         "boltsActive": 0,
         "particleBudget": {
-          "spaceSparks": 1470,
-          "interiorSparks": 1050,
-          "overflow": true
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
         }
       },
+      "failures": [],
       "brightness": {
-        "mean": 0,
-        "p95": 0,
+        "mean": 0.1403097646105572,
+        "p95": 0.20890823529411762,
         "clipped": 0
       },
-      "screenshot": "t316_0.png"
+      "screenshot": "18-vader-entrance.png"
     },
     {
-      "id": "t334",
-      "time": 334,
-      "failures": [],
-      "report": {
-        "time": 334,
-        "chapter": "escape",
-        "chapterIndex": 6,
-        "shot": "esc-4",
-        "shotLabel": "Falling away",
-        "scene": "space",
-        "beat": "falling away",
-        "subtitle": "On the destroyer, a gunnery officer checks for life signs, finds none, and holds his fire.",
-        "narrationCue": "e4",
-        "issues": [
-          {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
-          },
-          {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
-          }
+      "checkpoint": {
+        "id": "21-plans-projection",
+        "time": 284,
+        "chapter": "plans",
+        "shot": "pln-3",
+        "scene": "interior",
+        "expects": [
+          "glowing station schematic",
+          "Leia"
         ],
-        "fps": 2.0996078673540883,
-        "drawCalls": 88,
-        "triangles": 15797,
-        "measurements": {
-          "runner": {
-            "screenFraction": 0.006485945510253745,
-            "onScreen": true,
-            "ndc": [
-              -0.5618273435345622,
-              0.9660762829467846
-            ],
-            "distance": 1554.92831964029
+        "assertions": [
+          {
+            "kind": "visible",
+            "target": "plans"
           },
-          "destroyer": {
-            "screenFraction": 0.4339173285867507,
-            "onScreen": true,
-            "ndc": [
-              -0.5433047073766497,
-              0.6947537576245654
-            ],
-            "distance": 1904.9668918174182
-          },
-          "pod": {
-            "screenFraction": 0.011627512142233513,
-            "onScreen": true,
-            "ndc": [
-              0.15258541098344353,
-              -0.14024683823343237
-            ],
-            "distance": 87.5381763908705
-          },
-          "tatooine": {
-            "screenFraction": 1,
-            "onScreen": true,
-            "ndc": [
-              0.003629840792764088,
-              1.5750405395116698
-            ],
-            "distance": 250600.83846420184
+          {
+            "kind": "noIssues"
           }
-        },
-        "boltsActive": 0,
-        "particleBudget": {
-          "spaceSparks": 1470,
-          "interiorSparks": 1050,
-          "overflow": true
-        }
+        ]
       },
-      "brightness": {
-        "mean": 0,
-        "p95": 0,
-        "clipped": 0
-      },
-      "screenshot": "t334_0.png"
-    },
-    {
-      "id": "t374",
-      "time": 374,
-      "failures": [],
       "report": {
-        "time": 374,
-        "chapter": "epilogue",
-        "chapterIndex": 7,
-        "shot": "epi-2",
-        "shotLabel": "The Empire keeps the ship",
-        "scene": "space",
-        "beat": "the Empire keeps the ship",
-        "subtitle": "On the destroyer, a gunnery officer checks for life signs, finds none, and holds his fire.",
+        "time": 284,
+        "chapter": "plans",
+        "chapterIndex": 5,
+        "shot": "pln-3",
+        "shotLabel": "The plans, in the round",
+        "scene": "interior",
+        "beat": "plans projected",
+        "subtitle": "A figure in black, breathing through a machine. The Empire keeps him for problems it cannot solve with soldiers.",
         "narrationCue": null,
-        "issues": [
-          {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Exterior particle pool wrapped - oldest bursts were overwritten"
-          },
-          {
-            "code": "particle-overflow",
-            "severity": "warning",
-            "message": "Interior particle pool wrapped - oldest bursts were overwritten"
-          }
-        ],
-        "fps": 1.9010288186915754,
-        "drawCalls": 136,
-        "triangles": 22153,
+        "issues": [],
+        "fps": 2.7200193423596453,
+        "drawCalls": 264,
+        "triangles": 52767,
         "measurements": {
-          "runner": {
-            "screenFraction": 0.003867950826660006,
-            "onScreen": true,
-            "ndc": [
-              -0.04533562612689912,
-              0.7253023231156387
-            ],
-            "distance": 2386.658667150004
-          },
-          "destroyer": {
-            "screenFraction": 0.18788664506445543,
-            "onScreen": true,
-            "ndc": [
-              -0.12379830780219028,
-              0.9416005291851314
-            ],
-            "distance": 2645.769237454369
-          },
-          "pod": {
+          "vader": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              0.5053755386364929,
-              -5.94534306295756
+              -3.2489208009295543,
+              0.3321886944694169
             ],
-            "distance": 47140.452079697614
+            "distance": 14.698580055359804
           },
-          "tatooine": {
-            "screenFraction": 1,
+          "leia": {
+            "screenFraction": 0.0748236105307944,
             "onScreen": true,
             "ndc": [
-              -0.0011450082711534965,
-              -5.039419018943217
+              -0.22257379341709077,
+              -0.5077102425095137
             ],
-            "distance": 251962.78834545767
+            "distance": 4.185964033181705
+          },
+          "r2": {
+            "screenFraction": 0.09111592217691354,
+            "onScreen": true,
+            "ndc": [
+              0.5359615832890634,
+              -0.7211071436641977
+            ],
+            "distance": 3.8714708342892274
+          },
+          "threepio": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -2.5424481239798755,
+              -0.530843692843234
+            ],
+            "distance": 7.213151521672531
+          },
+          "plans": {
+            "screenFraction": 0.15789245426575738,
+            "onScreen": true,
+            "ndc": [
+              0.0025878631406005778,
+              -0.018621052174227954
+            ],
+            "distance": 4.364351580687711
+          },
+          "door": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -2.959703103870628,
+              0.1395076313692227
+            ],
+            "distance": 28.60765763090986
+          },
+          "trooper-0": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -3.658189562817577,
+              0.3314166863927469
+            ],
+            "distance": 19.040842463801056
+          },
+          "rebel-0": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -3.8715458104840543,
+              1.3346273267026663
+            ],
+            "distance": 13.713845484964638
+          },
+          "rebel-1": {
+            "screenFraction": 0,
+            "onScreen": false,
+            "ndc": [
+              -2.881141884166215,
+              1.218793921379012
+            ],
+            "distance": 11.840549954268273
           }
         },
         "boltsActive": 0,
         "particleBudget": {
-          "spaceSparks": 1470,
-          "interiorSparks": 1050,
-          "overflow": true
+          "spaceSparks": 2629,
+          "interiorSparks": 2900,
+          "overflow": false
         }
       },
+      "failures": [],
       "brightness": {
-        "mean": 0,
-        "p95": 0,
-        "clipped": 0
+        "mean": 0.4918998682870404,
+        "p95": 0.9155011764705883,
+        "clipped": 0.0033854166666666668
       },
-      "screenshot": "t374_0.png"
+      "screenshot": "21-plans-projection.png"
     }
   ]
 }

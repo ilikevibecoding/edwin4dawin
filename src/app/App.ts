@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { DisposalRegistry } from '../core/disposal';
 import { RenderSystem } from '../core/Renderer';
-import { QUALITY_PRESETS, benchmarkSuggestion, type QualityLevel } from '../core/Quality';
+import { QUALITY_ORDER, QUALITY_PRESETS, benchmarkSuggestion, type QualityLevel } from '../core/Quality';
 import { MaterialLibrary } from '../assets/materials';
 import { SpaceScene } from '../scenes/SpaceScene';
 import { CorridorScene } from '../scenes/CorridorScene';
@@ -81,7 +81,10 @@ export class App {
     this.canvas = options.canvas;
     this.uiRootEl = options.uiRoot;
     this.headless = options.headless ?? false;
-    if (options.forceQuality) this.quality = options.forceQuality;
+    if (options.forceQuality) {
+      this.quality = options.forceQuality;
+      this.forcedQuality = options.forceQuality;
+    }
   }
 
   // -------------------------------------------------------------------- boot
@@ -124,6 +127,7 @@ export class App {
       ['Blocking camera moves', () => this.initDirector()],
       ['Wiring controls', () => this.initInteraction()],
       ['Compiling shaders', () => this.precompile()],
+      ['Measuring frame time', () => this.runBenchmark()],
     ];
 
     let done = 0;
@@ -167,22 +171,58 @@ export class App {
   }
 
   private initRenderer(): void {
-    // Probe the GPU before committing to a preset.
+    // Probe the GPU before committing to a preset. A timed benchmark runs later,
+    // once there is something real to draw, and can revise this downward.
     const probe = this.canvas.getContext('webgl2') ?? this.canvas.getContext('webgl');
     const suggestion = benchmarkSuggestion(probe as WebGL2RenderingContext | null);
-    if (!this.headlessForcedQuality) {
+    if (this.forcedQuality === null) {
       this.quality = suggestion.level;
       this.benchmarkNote = ` · ${suggestion.reason}`;
+    } else {
+      this.benchmarkNote = ' · requested by URL';
     }
     this.render = new RenderSystem(this.canvas, new THREE.Scene(), new THREE.PerspectiveCamera(), this.quality);
     this.render.setFade(1);
   }
 
-  private get headlessForcedQuality(): boolean {
-    return this.forcedQuality !== null;
+  private forcedQuality: QualityLevel | null = null;
+
+  /**
+   * Startup benchmark: draw a handful of frames of the busiest exterior moment
+   * and time them. Only used to *revise* the preset the GPU probe suggested,
+   * and only when the viewer has not asked for a specific one.
+   */
+  private async runBenchmark(): Promise<void> {
+    const samples: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      const t = 126 + i * 0.1;
+      const start = performance.now();
+      this.space.pose(t);
+      this.director.update(t, 0, this.shotContext(t), true);
+      this.space.finalize(t, this.director.camera.position);
+      this.render.setScene(this.space.scene);
+      this.render.setCamera(this.director.camera);
+      this.render.render(t, 16.7);
+      this.render.renderer.getContext().finish();
+      samples.push(performance.now() - start);
+      await nextFrame();
+    }
+    // Drop the warm-up frames; the first two include shader and buffer uploads.
+    const timed = samples.slice(2);
+    const avg = timed.reduce((a, b) => a + b, 0) / Math.max(1, timed.length);
+    this.benchmarkMs = avg;
+
+    if (this.forcedQuality !== null) return;
+    const order = QUALITY_ORDER;
+    let index = order.indexOf(this.quality);
+    if (avg > 42 && index > 0) index--;
+    else if (avg < 9 && index < order.length - 1) index++;
+    const target = order[index];
+    this.benchmarkNote = ` · ${avg.toFixed(1)} ms/frame benchmark`;
+    if (target !== this.quality) this.setQuality(target);
   }
 
-  private forcedQuality: QualityLevel | null = null;
+  private benchmarkMs = 0;
 
   private initMaterials(): void {
     this.lib = new MaterialLibrary(this.registry, QUALITY_PRESETS[this.quality]);
@@ -386,7 +426,7 @@ export class App {
         triangles: stats.triangles,
         programs: stats.programs,
         pixelRatio: stats.pixelRatio,
-        quality: this.quality,
+        quality: `${this.quality} (${this.benchmarkMs.toFixed(1)} ms bench)`,
         mode: this.mode,
         narration: this.narration
           ? `${this.narration.playbackMode} ${this.narration.loadedCount}/${this.narration.cueCount}`
