@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Starfall — walkthrough recordings</title>
+    <style>
+      :root {
+        --bg: #0a0b0e;
+        --panel: #14161c;
+        --line: #262a33;
+        --text: #e6e8ee;
+        --muted: #8d93a2;
+        --gold: #d8b46a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 48px 24px 96px;
+        background: radial-gradient(120% 90% at 50% 0%, #12141b 0%, var(--bg) 70%);
+        color: var(--text);
+        font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      main { max-width: 1040px; margin: 0 auto; }
+      .kicker {
+        color: var(--gold);
+        letter-spacing: 0.26em;
+        text-transform: uppercase;
+        font-size: 11px;
+        margin: 0 0 10px;
+      }
+      h1 { margin: 0 0 8px; font-size: 30px; font-weight: 600; letter-spacing: -0.01em; }
+      .lede { margin: 0 0 40px; color: var(--muted); max-width: 68ch; }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 20px;
+        margin-bottom: 28px;
+      }
+      h2 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+      .meta { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+      video {
+        width: 100%;
+        display: block;
+        border-radius: 8px;
+        background: #000;
+        border: 1px solid var(--line);
+      }
+      .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
+      a.btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 16px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #1b1e26;
+        color: var(--text);
+        text-decoration: none;
+        font-size: 14px;
+        transition: border-color 0.15s, background 0.15s;
+      }
+      a.btn:hover { border-color: var(--gold); background: #23262f; }
+      a.btn.primary { border-color: var(--gold); color: var(--gold); }
+      a.btn.primary:hover { background: rgba(216, 180, 106, 0.12); }
+      footer { color: var(--muted); font-size: 13px; max-width: 68ch; }
+      footer a { color: var(--gold); }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12.5px;
+        background: #1b1e26;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 1px 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="kicker">Starfall · Flight of the Diplomat</p>
+      <h1>Walkthrough recordings</h1>
+      <p class="lede">
+        Two screen recordings of the finished cinematic running from its production build. Both
+        were captured on a machine with no GPU, through Chrome's software rasteriser, so the frame
+        rate in them is single digits — the still frames in <code>qa/screenshots/</code> are
+        rendered through the same path offline and show the real output quality.
+      </p>
+
+      <section>
+        <h2>Explore mode, object selection and Inspect framing</h2>
+        <p class="meta">46 seconds · 1920×1200 · no audio track</p>
+        <video
+          controls
+          preload="metadata"
+          playsinline
+          src="starfall_explore_mode_object_inspection.mp4"
+        ></video>
+        <div class="row">
+          <a
+            class="btn primary"
+            href="starfall_explore_mode_object_inspection.mp4"
+            download="starfall_explore_mode_object_inspection.mp4"
+            >Download MP4 · 3.8 MB</a
+          >
+          <a
+            class="btn"
+            href="https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/star-wars-opening-cinematic-f514/media/starfall_explore_mode_object_inspection.mp4"
+            >Direct CDN link</a
+          >
+        </div>
+      </section>
+
+      <section>
+        <h2>Transport, chapter jumps, subtitles, mixer and help</h2>
+        <p class="meta">66 seconds · 1920×1200 · no audio track</p>
+        <video controls preload="metadata" playsinline src="starfall_controls_walkthrough.mp4"></video>
+        <div class="row">
+          <a
+            class="btn primary"
+            href="starfall_controls_walkthrough.mp4"
+            download="starfall_controls_walkthrough.mp4"
+            >Download MP4 · 6.7 MB</a
+          >
+          <a
+            class="btn"
+            href="https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/star-wars-opening-cinematic-f514/media/starfall_controls_walkthrough.mp4"
+            >Direct CDN link</a
+          >
+        </div>
+      </section>
+
+      <footer>
+        This page has no dependencies and is not part of the application bundle: open
+        <code>media/index.html</code> straight from a checkout and the two players above work
+        offline. What is being demonstrated, and how it was captured, is written up in
+        <code>docs/QA-CHECKLIST.md</code>.
+      </footer>
+    </main>
+  </body>
+</html>
