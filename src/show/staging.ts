@@ -341,7 +341,10 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     const cut = smootherstep(183.6, 185.6, t) * (1 - smootherstep(186.2, 188.0, t));
     if (cut > 0.01) colour = 0xdfe6f2;
     fade = Math.max(fade, cut);
-    const podCut = smootherstep(308.4, 309.5, t) * (1 - smootherstep(309.7, 311.2, t));
+    // A blink, not a curtain. The old dip started while the pod was still
+    // running out of its cradle and held black for a second and a half, which
+    // ate the only moment where you actually see it leave the ship.
+    const podCut = smootherstep(309.2, 309.6, t) * (1 - smootherstep(309.66, 310.1, t));
     fade = Math.max(fade, podCut);
     fade = Math.max(fade, smootherstep(SHOW_DURATION - 2.4, SHOW_DURATION, t) * 0.94);
     stage.fade = fade;
