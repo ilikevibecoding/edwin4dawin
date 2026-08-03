@@ -73,7 +73,7 @@ const T = {
   FIRE: 33.6, // torpedoes away
   LOCK: 35.2, // cut ahead of the port to watch them arrive
   DROP: 35.7, // they reach the port
-  PULLUP: 37.9, // and the X-wing climbs out
+  PULLUP: 37.4, // and the X-wing climbs out
   // The cut to the wide lands early in "…came apart into ten thousand pieces"
   // (40.13-43.45): held any later, the line plays over an empty sky while the
   // fighters are still climbing, and the station never gets an establishing beat.
@@ -398,7 +398,11 @@ export async function build(ctx) {
       // key alone. The key that gives the intact station a good terminator is
       // far too dim for a cloud of loose plate, so it comes up afterwards —
       // after the station has already gone.
-      rigs.space.key.intensity = 2.2 + 2.0 * ease.smooth(ease.range(t, T.BOOM + 2.5, 51));
+      // Steps up once and then holds: ramping it all the way to the end of the
+      // scene turned the last few seconds into a bright haze, because the cloud
+      // keeps spreading and every light-grey brick in it sits on the bloom
+      // threshold.
+      rigs.space.key.intensity = 2.2 + 0.85 * ease.smooth(ease.range(t, T.BOOM + 0.8, 47.6));
 
       if (inSpace) space.update(t);
       else trench.update(t, camera);
@@ -893,8 +897,8 @@ async function buildTrench(ctx, { odo, flyY, portZ }) {
           [T.LOCK, [0, 1, portZ - 34]],
           [T.DROP + 0.2, [0, -1, portZ - 3]],
           [36.5, [0, 15, portZ - 24]],
-          [37.1, [0, 2, portZ - 4]],
-          [T.PULLUP, [0, -5, portZ + 1]],
+          [37.0, [0, 2, portZ - 4]],
+          [T.PULLUP, [0, -4, portZ + 1]],
         ],
         t
       );
@@ -948,7 +952,10 @@ async function buildTrench(ctx, { odo, flyY, portZ }) {
 
       // --- TIEs
       let m = 0;
-      const tiesOn = t >= T.TIES - 0.3 && t < T.SPACE;
+      // The pursuit is off camera from the cut into the cockpit onwards, and it
+      // has to actually go away: the port set-up is locked to the world, and
+      // three TIEs travelling at 150 a second fly straight through the lens.
+      const tiesOn = t >= T.TIES - 0.3 && t < T.COCKPIT;
       for (let i = 0; i < ties.length; i++) {
         const tie = ties[i];
         tie.visible = tiesOn;
@@ -1133,10 +1140,12 @@ function exhaustPort() {
   // sprouting out of flat plate. Kept narrow: the trench floor is only 46 wide,
   // and an apron much past this reads as a plaza with a hole in it.
   ring(13.4, 17.6, 0.05, 0.7, grey);
-  ring(11.4, 13.6, 0.05, 1.5, light);
-  // The housing: bright outside so it catches the key, dark immediately around
-  // the lip so the mouth reads as a shadow rather than as a picture frame.
-  ring(MOUTH + 1.9, 11.6, 0.05, HOUSE, light);
+  ring(11.4, 13.6, 0.05, 1.5, grey);
+  // All of it in dark grey with one light course near the top. In light grey the
+  // whole housing sat above the bloom threshold and the mouth disappeared inside
+  // a soft white blob.
+  ring(MOUTH + 1.9, 11.6, 0.05, HOUSE, grey);
+  ring(MOUTH + 1.9, 11.7, HOUSE - 0.55, 0.55, light);
   ring(MOUTH, MOUTH + 2.1, 0.05, HOUSE + 0.35, grey);
   // Hazard chevrons along the two edges the camera looks across.
   for (let i = 0; i < 8; i++) {
@@ -1176,13 +1185,15 @@ function exhaustPort() {
       const hit = ease.pulse(t, T.DROP - 0.05, 0.12, 0.15, 1.1);
       // After the hit the shaft never goes cold again — the reactor is running
       // away, which is the only warning the audience gets before the wide shot.
-      const cook = ease.smooth(ease.range(t, T.DROP + 0.5, T.PULLUP + 2.2));
+      // It has to build fast enough to be visibly brighter by the time the shot
+      // cuts away, or the last second of it is a static plate of grey.
+      const cook = ease.smooth(ease.range(t, T.DROP + 0.3, T.PULLUP + 0.4));
       const breathe = 0.75 + 0.25 * Math.sin(t * 2.4);
       // Kept under 1 on purpose: an additive sprite past that just clips to
       // white and the shaft stops looking hot and starts looking blown out.
       deepGlow.material.opacity = Math.min(0.8, 0.18 * breathe + 0.55 * hit + 0.4 * cook);
       deepGlow.scale.setScalar(5 * (1 + 0.7 * hit + 0.5 * cook));
-      lip.material.opacity = Math.min(0.8, 0.04 * breathe + 0.6 * hit + 0.34 * cook);
+      lip.material.opacity = Math.min(0.32, 0.03 * breathe + 0.25 * hit + 0.14 * cook);
     },
   };
 }
@@ -1292,7 +1303,6 @@ async function cockpitInterior(ctx) {
   // up and edge-on, so it is near-black with a thin light lip: in light grey it
   // filled the bottom third of that frame with a blown-out white slab.
   box(4.2, 0.34, 0.7, 0, 1.2, 0.05, dark); // coaming along the top edge
-  box(4.24, 0.1, 0.16, 0, 1.34, -0.24, light); // lip catching the panel glow
   box(4.2, 0.24, 0.62, 0, -1.15, 0.02, dark);
   for (const sx of [-1, 1]) box(0.3, 2.0, 0.62, sx * 1.75, 0, 0.05, dark); // corner posts
   box(2.2, 0.16, 0.6, 0, 0.35, 0.06, dark); // panel line
@@ -1807,7 +1817,7 @@ async function buildSpace() {
       // has to be genuinely off, or the "before" wide shot is lit and hazed by
       // an explosion that has not happened yet.
       const lit = t >= T.BOOM;
-      blastLight.intensity = lit ? 19 * Math.pow(1 - ease.range(t, T.BOOM, T.BOOM + 5.0), 1.6) : 0;
+      blastLight.intensity = lit ? 19 * Math.pow(1 - ease.range(t, T.BOOM, T.BOOM + 6.0), 1.4) : 0;
 
       // Rings: fast, thin, and gone. Two radii so it does not read as one hoop.
       for (let i = 0; i < rings.length; i++) {

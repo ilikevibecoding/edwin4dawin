@@ -282,24 +282,44 @@ export async function build(ctx) {
   console1.position.set(5.2, 2.2, -2.0);
   turretSet.add(console1);
   // Cold light from outside, so the officer reads as a backlit silhouette.
-  const facing = new THREE.PointLight(0xbfd8ff, 5.0, 26, 2);
-  facing.position.set(-3.0, 5.0, -12.0);
+  const facing = new THREE.PointLight(0xbfd8ff, 34, 40, 2);
+  facing.position.set(-3.4, 3.6, -15.0);
   turretSet.add(facing);
 
-  // He stands at the rail, back to us, a shape cut out of the planet. Placed
-  // just inside the left edge of frame so the composition still opens on the
-  // window rather than on him.
+  // He stands at the rail, back to us, a shape cut out of the planet. His cap
+  // is true black, so against the black of the gun position there is simply
+  // nothing there and his head reads as a bare tan cylinder: he is placed in x
+  // so that head and cap cross the planet's lit disc, where the peak carries
+  // the silhouette. The quarter turn aims that peak into frame rather than
+  // straight away from the lens.
   const officer = await makeImperialOfficer({ seed: 19.6 });
-  officer.root.position.set(-4.4, 0, -3.2);
-  // Not quite square away from us: the quarter turn puts the peak of his cap
-  // and the line of his jaw into the silhouette instead of a bare skull.
+  officer.root.position.set(-1.2, 0, -3.6);
   officer.root.rotation.y = Math.PI - 0.62;
-  officer.root.scale.setScalar(1.5); // the gun deck is not minifig scale
+  officer.root.scale.setScalar(1.42); // the gun deck is not minifig scale
   turretSet.add(officer.root);
 
-  // A cold edge on his shoulders and cap so he does not vanish into the box.
-  const officerRim = new THREE.PointLight(0x9fc8ff, 3.4, 12, 2);
-  officerRim.position.set(-8.4, 8.4, -7.6);
+  // The cap is moulded in true black and this room is unlit black as well, so
+  // even on the planet's disc the peak has no interior modelling at all and
+  // the crown of his head reads as a bare tan cylinder. Lifting it to a very
+  // dark blue-grey gives the window light something to sit on. Cloned first:
+  // the black glossy material is shared with his belt and with half the set.
+  officer.cap?.traverse((n) => {
+    if (!n.isMesh) return;
+    const mats = Array.isArray(n.material) ? n.material : [n.material];
+    n.material = mats.map((m) => {
+      if (m.color.getHex() > 0x141414) return m; // the silver cap badge
+      const c = m.clone();
+      c.color.setHex(0x1f242e);
+      return c;
+    });
+    if (n.material.length === 1) n.material = n.material[0];
+  });
+
+  // A cold edge down the window side of him. Point lights fall off with the
+  // square of the distance, so this needs a big number to read at all at eight
+  // units; it is what separates his shoulder line from the dark of the room.
+  const officerRim = new THREE.PointLight(0xa8ccff, 26, 26, 2);
+  officerRim.position.set(-6.6, 8.6, -11.0);
   turretSet.add(officerRim);
 
   const planet = buildPlanet();
@@ -525,25 +545,34 @@ export async function build(ctx) {
       spaceLights.fill.intensity = 0;
       spaceLights.rim.intensity = 0;
     } else {
-      spaceLights.rim.intensity = 1.3;
       scene.fog.near = 4000;
       scene.fog.far = 20000;
       scene.background.setHex(0x03050a);
-      // Inside the gun position the rig is pulled down hard: the officer and
-      // the window frame want to be shapes cut out of the planet's glare.
+      // Inside the gun position the rig is pulled right down. The key comes
+      // from behind the lens, and at any useful strength it paints the back of
+      // the officer's head into a flat tan cylinder — the one thing this shot
+      // cannot afford. He is meant to be a shape cut out of the planet, so the
+      // key is cut to a whisper and the window-side rim carries his edges.
       // Outside, light grey hull under a strong key clips to paper white, so
       // the launch beat is keyed low and carried by the rim instead.
-      spaceLights.key.intensity = turret ? 1.5 : 1.5;
-      spaceLights.hemi.intensity = turret ? 0.16 : 0.30;
-      spaceLights.fill.intensity = turret ? 0.18 : 0.34;
+      spaceLights.key.intensity = turret ? 0.34 : 1.5;
+      spaceLights.hemi.intensity = turret ? 0.10 : 0.30;
+      spaceLights.fill.intensity = turret ? 0.08 : 0.34;
+      spaceLights.rim.intensity = turret ? 2.1 : 1.3;
     }
 
     // --- the pod's path, one continuous curve through all three shots.
     const p = podPath(t);
     podRig.position.set(p[0], p[1], p[2]);
-    if (!turret) podRig.scale.setScalar(entry ? 1.15 : 1);
+    if (entry) podRig.scale.setScalar(1.15);
 
     if (launch) {
+      // An eight-stud pod two hundred units off the lens is thirty pixels of
+      // grey on a grey hull, and the line over this beat is *"an escape pod
+      // fell away from the captured ship"* — it has to be findable. It is blown
+      // up while it is far and eased back as it closes, so it still reads as
+      // dwindling against the destroyer rather than growing.
+      podRig.scale.setScalar(ease.lerp(2.6, 1.6, ease.range(t, T_EJECT, T_TURRET)));
       // Kicked sideways off the hull and tumbling.
       const spin = Math.max(0, t - T_EJECT);
       podSpin.rotation.set(0.5 + spin * 1.35, -1.2 + spin * 0.75, spin * 0.42);
@@ -560,8 +589,10 @@ export async function build(ctx) {
       );
     }
 
-    // Retros: a hard burst at the kick, a trim burn afterwards, off in air.
-    const burn = ease.pulse(t, T_EJECT + 0.05, 0.12, 0.7, 1.6) * 0.9 + (launch ? 0.12 : 0);
+    // Retros: a hard burst at the kick, then a trim burn that never quite
+    // quits — the flame is the only warm thing in the frame and it is what
+    // lets the eye find the pod against three hundred units of grey hull.
+    const burn = ease.pulse(t, T_EJECT + 0.05, 0.12, 0.7, 1.6) * 0.8 + (launch ? 0.34 : 0);
     for (const th of retros) {
       th.throttle = entry ? 0 : burn;
       th.update(t);
@@ -586,6 +617,11 @@ export async function build(ctx) {
       // by the end the pod is meant to be a speck against the planet.
       podMarker.material.opacity = ease.lerp(0.36, 0.10, away);
       podMarker.scale.setScalar(dist * 0.05);
+    } else if (launch) {
+      // A whisper of a halo, just enough separation to pull the eye off the
+      // hull plating and onto the pod without reading as a light source.
+      podMarker.material.opacity = 0.13;
+      podMarker.scale.setScalar(camera.position.distanceTo(podRig.position) * 0.055);
     } else {
       podMarker.material.opacity = 0;
     }
@@ -621,14 +657,24 @@ export async function build(ctx) {
     } else if (turret) {
       // Inside the gun position, looking out past the officer. The lens sits
       // close to the glass so the opening, not the room, carries the frame.
+      // Lifted above his cap and tipped back down: the extra height is what
+      // drops his head onto the planet's disc, where the peak has something to
+      // be a silhouette against. Raising the look target by the same amount
+      // again holds the window's framing while the officer alone moves.
+      //
+      // The move is a slide to the right, not a push in. Pushing in on a man
+      // standing eight units from the lens ends the beat on the back of his
+      // head; sliding past him walks him out of frame left and leaves the shot
+      // on a clean window with the pod shrinking into the planet, which is the
+      // line he has just spoken.
       cameraRig(camera, t, {
-        pos: [[T_TURRET, [1.8, TURRET_Y + 6.0, 7.6]], [T_ENTRY, [-0.4, TURRET_Y + 5.6, 4.6]]],
+        pos: [[T_TURRET, [1.8, TURRET_Y + 8.2, 8.2]], [T_ENTRY, [3.4, TURRET_Y + 7.6, 11.2]]],
         look: [
-          [T_TURRET, [-2.4, TURRET_Y + 4.6, -30]],
-          [28.5, [-5.0, TURRET_Y + 2.4, -70]],
-          [T_ENTRY, [-1.6, TURRET_Y - 4.0, -90]],
+          [T_TURRET, [-2.4, TURRET_Y + 6.0, -30]],
+          [28.5, [-4.4, TURRET_Y + 4.2, -70]],
+          [T_ENTRY, [-2.0, TURRET_Y - 1.0, -96]],
         ],
-        fov: [[T_TURRET, 44], [T_ENTRY, 37]],
+        fov: [[T_TURRET, 44], [T_ENTRY, 40]],
         ease: ease.smooth,
       });
       handheld(camera, t, 0.05, 0.45, 6);
@@ -845,26 +891,34 @@ function buildTurret() {
   const dark = COLORS.trueBlack;
   const black = COLORS.trueBlack;
   const grey = COLORS.darkBluishGray;
+  // Everything in this room is matte. The set is lit by point lights a few
+  // units away, and a dielectric specular lobe does not care how black the
+  // base colour is: on smooth plastic each of those lamps leaves a blown white
+  // bead on the window trim that reads as a lens artefact rather than a room.
+  const M = { finish: 'rubber' };
 
   // Deck, ceiling and the two side walls, all boxed around the camera. The
   // opening is deliberately wider than the lens so its left and right edges
   // fall outside frame: the shot is a hole in a dark room, not a picture of a
   // window.
-  b.tile(-14, -1, -6, 28, 20, dark);
-  b.panel(-14, 31, -6, 28, 20, 2, dark);
-  for (const sx of [-1, 1]) b.panel(sx * 12, 0, -6, 2, 20, 31, dark);
-  b.panel(-14, 0, 12, 28, 2, 31, black); // wall behind the camera
+  b.tile(-14, -1, -6, 28, 20, dark, M);
+  b.panel(-14, 31, -6, 28, 20, 2, dark, M);
+  for (const sx of [-1, 1]) b.panel(sx * 12, 0, -6, 2, 20, 31, dark, M);
+  b.panel(-14, 0, 12, 28, 2, 31, black, M); // wall behind the camera
 
-  // Window: a wide opening with heavy mullions. Only two of them cross the
-  // glass, and they are kept off centre so the planet gets one clear pane.
-  b.panel(-14, 24, -6.6, 28, 1.4, 7, dark); // header
-  b.panel(-14, -1, -6.6, 28, 1.4, 4, dark); // sill
-  for (const x of [-8.5, 8.5]) b.panel(x - 0.4, 3, -6.7, 0.8, 1.6, 21, dark);
-  b.panel(-14, 2.6, -6.5, 28, 1.1, 0.4, grey);
+  // Window: a wide opening with heavy mullions.
+  b.panel(-14, 24, -6.6, 28, 1.4, 7, dark, M); // header
+  b.panel(-14, -1, -6.6, 28, 1.4, 4, dark, M); // sill
+  // One mullion inside the glass, and it lives on the officer's side. The
+  // camera tracks right across this beat, and a second one at +8.5 swings into
+  // the middle of the planet and cuts the frame in half just as the pod
+  // becomes a speck; at +11.3 it stays tucked against the wall.
+  for (const x of [-8.5, 11.3]) b.panel(x - 0.4, 3, -6.7, 0.8, 1.6, 21, dark, M);
+  b.panel(-14, 2.6, -6.5, 28, 1.1, 0.4, grey, M);
 
   // Console bank under the window, with lit readouts.
-  b.panel(3.6, 0, -5.4, 5.0, 3.0, 5, black);
-  b.slope(3.6, 5, -5.4, 5.0, 3.0, 2, black, { dir: '-z' });
+  b.panel(3.6, 0, -5.4, 5.0, 3.0, 5, black, M);
+  b.slope(3.6, 5, -5.4, 5.0, 3.0, 2, black, { ...M, dir: '-z' });
   for (let i = 0; i < 5; i++) {
     b.box(4.0 + i * 0.85, 5.4, -5.0, 0.5, 1.0, 0.5, COLORS.transGreen, {
       studs: false,
@@ -875,11 +929,11 @@ function buildTurret() {
   }
   // Pipes and greebles on the back wall so the silhouette is not a plain box.
   for (let i = 0; i < 6; i++) {
-    b.panel(-9 + i * 3.2, 6 + (i % 2) * 5, 11.2, 2.4, 0.8, 4, i % 2 ? grey : black);
+    b.panel(-9 + i * 3.2, 6 + (i % 2) * 5, 11.2, 2.4, 0.8, 4, i % 2 ? grey : black, M);
   }
   // A low rail the officer stands at, which gives his silhouette a base line.
-  b.panel(-9.5, 12, -5.4, 8, 0.6, 0.6, grey);
-  for (const x of [-9.2, -2.1]) b.panel(x, 0, -5.5, 0.6, 0.6, 12, grey);
+  b.panel(-9.5, 12, -5.4, 10, 0.6, 0.6, grey, M);
+  for (const x of [-9.2, -0.1]) b.panel(x, 0, -5.5, 0.6, 0.6, 12, grey, M);
   return b.build();
 }
 
@@ -969,18 +1023,47 @@ function vnoise2(x, z, salt = 0) {
  * push the frame past two hundred of them on their own.
  */
 const ENTRY_SAND = [
-  0x7c5230, 0x8b5f39, 0x9a6d43, 0xa87b4e, 0xb68a5b, 0xc39969, 0xcfa878, 0xdab789, 0xe4c59b, 0xecd2ae,
+  0x6a4227, 0x7c5230, 0x8d6039, 0x9e6f45, 0xaf7f53, 0xbe8f63, 0xcb9f75, 0xd7af88, 0xe2be9c, 0xecceb1,
 ];
+
+// Horizontal bearing from a patch of sand towards `entryKey`, normalised. The
+// dune shading is sampled along this, so the two must agree.
+const SUN_X = -0.822;
+const SUN_Z = 0.569;
 function sandTone(u) {
   return ENTRY_SAND[Math.round(ease.clamp(u, 0, 1) * (ENTRY_SAND.length - 1))];
 }
 
-/** Dune height in [0,1]: two octaves plus a ridge term for the crest lines. */
-function duneHeight(x, z, salt = 0) {
-  const a = vnoise2(x * 0.72, z * 0.5, salt);
-  const b = vnoise2(x * 1.9 + 11, z * 1.55 + 7, salt + 13);
-  const ridge = 1 - Math.abs(vnoise2(x * 0.33 - 3, z * 0.27 + 5, salt + 29) * 2 - 1);
-  return Math.min(1, a * 0.44 + b * 0.18 + ridge * 0.44);
+/**
+ * One dune, as a function of how far across the dune train you are. A long
+ * windward climb and a short steep slip face: a sine wave reads as corrugated
+ * iron, and it is the asymmetry that makes sand look like sand.
+ */
+function duneCrest(u) {
+  const f = u - Math.floor(u);
+  const WIND = 0.68; // share of the wavelength spent climbing
+  return f < WIND ? ease.smooth(f / WIND) : 1 - ease.smooth((f - WIND) / (1 - WIND));
+}
+
+/**
+ * Height of the entry desert in [0,1], in world units.
+ *
+ * The crests are *transverse* — long ridges lying across the pod's line of
+ * flight — because the lens looks straight down that line, and only a ridge
+ * across it can ever occlude the ground behind it. Two trains at different
+ * pitches keep the crests from marching at one fixed interval, and a lateral
+ * warp bends them so they are not ruled bars across the frame.
+ */
+function entryHeight(x, z) {
+  const warp =
+    240 * (vnoise2(x * 0.0016, z * 0.0004, 3.1) - 0.5) +
+    90 * (vnoise2(x * 0.0052 + 7, z * 0.0013, 8.4) - 0.5);
+  const s = z + warp;
+  const a = duneCrest(s / 330);
+  const b = duneCrest((s + 150) / 149);
+  // A slow swell across the field, so the profile is not simply extruded in x.
+  const swell = vnoise2(x * 0.0013 + 2, z * 0.0007, 5.5);
+  return ease.clamp(a * 0.54 + b * 0.24 + swell * 0.28, 0, 1);
 }
 
 /**
@@ -1024,16 +1107,17 @@ function buildEntryGround() {
   const BASE = -175;
 
   // One cell of sand, wherever it is and however big.
+  //
+  // Every cell's top face has the same normal, so the renderer cannot tell a
+  // windward slope from a slip face and the whole field lights flat. The
+  // modelling is painted in instead: sample the height one step *towards the
+  // sun* and go pale where the sand climbs into the light, dark where it falls
+  // away behind a crest. That is what turns a terraced grid into dunes.
   const cell = (x, z, cx, cz) => {
-    // Keyed on world units rather than cell index, so the dune wavelength does
-    // not change when the grid is re-cut at a different resolution.
-    const k = duneHeight(x / 240, z / 90, 7);
-    // Every top face has the same normal, so lighting cannot tell one cell
-    // from the next. The modelling is painted in instead: pale on the way up
-    // to a crest, dark on the lee side falling away from it.
-    const kPrev = duneHeight(x / 240, (z - cz) / 90, 7);
-    const slope = ease.clamp((k - kPrev) * 5.0 + 0.5, 0, 1);
-    b.box(x, BASE, z, cx, cz, 8 + k * 140, sandTone(k * 0.42 + slope * 0.58), { studs: false });
+    const k = entryHeight(x, z);
+    const step = Math.max(cx, cz) * 1.4;
+    const lit = ease.clamp((k - entryHeight(x + SUN_X * step, z + SUN_Z * step)) * 7.0 + 0.5, 0, 1);
+    b.box(x, BASE, z, cx, cz, 8 + k * 140, sandTone(k * 0.34 + lit * 0.66), { studs: false });
   };
 
   // The coarse field, out to the fog. Cells are wider than they are deep,

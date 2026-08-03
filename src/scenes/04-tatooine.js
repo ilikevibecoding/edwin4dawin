@@ -260,7 +260,12 @@ export async function build(ctx) {
   // --- the hologram --------------------------------------------------------
   // Additive blending saturates fast; past about 0.6 the figure stops reading
   // as Leia and turns into a bright smear.
-  const holoMat = hologramMaterial(0x59c9f0, { opacity: 0.55, scan: 16 });
+  // The shader multiplies its colour by up to 2.2 and blends additively over a
+  // double-sided figure, so anything with a healthy red channel accumulates
+  // straight to white through the torso and Leia stops being a person. Starving
+  // the red keeps her cyan even where the green and blue have long since
+  // clipped, which is what leaves the face and the buns readable.
+  const holoMat = hologramMaterial(0x2196d6, { opacity: 0.55, scan: 16 });
   const holoLeia = await makeLeia({ seed: 11.3 });
   holoLeia.root.traverse((n) => {
     if (!n.isMesh) return;
@@ -277,7 +282,7 @@ export async function build(ctx) {
   farmSet.add(holoRig);
 
   // The projector cone: narrow at the lens, opening upward to the image.
-  const holoBeam = new Beam({ color: 0x59c9f0, radiusTop: 0.7, radiusBottom: 0.08, height: 2.4, opacity: 0.09 });
+  const holoBeam = new Beam({ color: 0x2196d6, radiusTop: 0.7, radiusBottom: 0.08, height: 2.4, opacity: 0.09 });
   farmSet.add(holoBeam.object);
 
   // Cyan bounce on whoever is leaning into it.
@@ -285,7 +290,7 @@ export async function build(ctx) {
   farmSet.add(holoLight);
   // Small and dim: this is the flare on the projector lens, not a lamp. With
   // the bloom threshold down at 0.62 anything bigger swallows the figure.
-  const holoGlow = glowSprite(0x9feaff, 1.0, 0);
+  const holoGlow = glowSprite(0x63cdf0, 1.0, 0);
   farmSet.add(holoGlow);
 
   // =========================================================================
@@ -348,9 +353,12 @@ export async function build(ctx) {
 
   // Sky stops on the same clock as the suns: bleached daylight, then dusk,
   // then a sunset that burns from the horizon up into violet.
+  // Deep and saturated, not a pastel. A warm horizon lerped toward a pale blue
+  // passes straight through grey on the way, and grey is exactly what the top
+  // of a wide desert frame must not be.
   const SKY_HIGH = [
-    [0, 0x2f6ea8],
-    [T_FARM, 0x2c5990],
+    [0, 0x15558f],
+    [T_FARM, 0x1a4477],
     [T_SUNSET, 0x4a2c66],
     [T_TURN, 0x341a48],
     [40, 0x160a22],
@@ -358,7 +366,7 @@ export async function build(ctx) {
   // The horizon stop is what a desert sky is actually made of. Left grey it
   // turns the whole lower sky into dishwater; it wants to be warm sand.
   const SKY_LOW = [
-    [0, 0xd2a86e],
+    [0, 0xcf9c56],
     [T_FARM, 0xc4904f],
     [T_SUNSET, 0xe0701e],
     [T_TURN, 0xcb3f14],
@@ -375,8 +383,8 @@ export async function build(ctx) {
   // over. High by day (a warm sky with blue only near the zenith), low at
   // sunset (violet coming a long way down over the burn).
   const SKY_RAMP = [
-    [0, 1.7],
-    [T_FARM, 1.4],
+    [0, 1.15],
+    [T_FARM, 1.1],
     [T_SUNSET, 0.8],
     [40, 0.72],
   ];
@@ -443,7 +451,10 @@ export async function build(ctx) {
       discB,
       radiusA: 0.026 * (1 + low * 0.30),
       radiusB: 0.016 * (1 + low * 0.25),
-      hazeGain: 0.3 + low * 1.15,
+      // The haze band is what makes the desert hot, but it is also what turns
+      // a sky into dishwater: at full strength it lays a flat pale wash right
+      // across the part of frame the horizon lives in.
+      hazeGain: 0.22 + low * 0.72,
       ramp: ease.track(SKY_RAMP, t, ease.smooth),
     });
 
@@ -469,12 +480,18 @@ export async function build(ctx) {
     lights.key.color.setHex(0xffe4b6).lerp(_col(0xff8138), dusk);
     lights.fill.intensity = ease.lerp(0.5, 0.26, dusk) * (1 - night * 0.6);
     // The "rim" faces back down the sun line, so in this scene it is really
-    // the bounce off all that sand, and it has to be strong: the wide shots
-    // look straight into the suns, and without it every hull facing the lens
-    // is a flat black shape. It comes off toward the end so that the man on
-    // the ridge stays a silhouette.
-    lights.rim.intensity = ease.lerp(1.6, 0.85, dusk) * (1 - night * 0.4);
-    lights.hemi.intensity = ease.lerp(0.62, 0.34, dusk) * (1 - night * 0.5);
+    // the bounce off all that sand, and through the daylight beats it has to
+    // be strong: those shots look straight into the suns, and without it every
+    // hull facing the lens is a flat black shape.
+    //
+    // On the ridge it is the enemy. It is the only thing lighting the side of
+    // Luke that the camera can see, and at any useful strength he stops being
+    // a silhouette and becomes a tan minifigure standing in front of a sunset.
+    // It comes almost all the way off for that beat, which drops the near sand
+    // with him and leaves the frame as two suns, a crest and a shape.
+    const onRidge = ease.smooth(ease.range(t, T_SUNSET - 0.8, T_SUNSET + 1.6));
+    lights.rim.intensity = ease.lerp(1.6, 0.85, dusk) * (1 - night * 0.4) * (1 - onRidge * 0.82);
+    lights.hemi.intensity = ease.lerp(0.62, 0.34, dusk) * (1 - night * 0.5) * (1 - onRidge * 0.42);
     lights.hemi.color.copy(skyLow);
     lights.hemi.groundColor.setHex(0x8a6337).lerp(_col(0x3a2016), dusk);
     if (lights.ambient) lights.ambient.intensity = ease.lerp(0.14, 0.08, dusk) * (1 - night * 0.5);
@@ -621,7 +638,7 @@ export async function build(ctx) {
       holo.rotation.y = -2.3 + Math.sin(t * 0.4) * 0.09;
       holo.scale.setScalar(0.46 * (0.55 + 0.45 * boot));
       holoMat.uniforms.uTime.value = t;
-      holoMat.uniforms.uOpacity.value = 0.27 * live;
+      holoMat.uniforms.uOpacity.value = 0.22 * live;
 
       // Leia's plea: a small, contained gesture on "help us".
       poseStand(holoLeia, t, { sway: 0.05 });
@@ -642,8 +659,8 @@ export async function build(ctx) {
       holoLight.intensity = 11 * live;
       // The flare sits on the lens itself, not up in the image.
       holoGlow.position.copy(_v).addScaledVector(_axis, 0.16);
-      holoGlow.material.opacity = 0.20 * live;
-      holoGlow.scale.setScalar(0.75 + 0.08 * Math.sin(t * 5.3));
+      holoGlow.material.opacity = 0.14 * live;
+      holoGlow.scale.setScalar(0.52 + 0.06 * Math.sin(t * 5.3));
     } else {
       holoLight.intensity = 0;
     }
@@ -705,14 +722,18 @@ export async function build(ctx) {
     // Low, wide, and a push so slow it barely registers. The lens sits just
     // above the height he is standing at, so the skyline runs across his
     // ankles and everything above it is sky.
+    // The move runs off the near rim down into the trough, so by the end the
+    // lens is *below* him and he is entirely sky. It also has to close a lot of
+    // distance: a four-unit figure sixty units off a 36° lens is a thumbnail,
+    // and this shot only works if he is big enough to be a person.
     cameraRig(camera, t, {
       pos: [
-        [T_SUNSET, [5.6, ridge.y(5.6, 32) + 3.2, 32]],
-        [T_TURN, [4.0, ridge.y(4.0, 22) + 3.0, 22]],
-        [D, [1.6, ridge.y(1.6, 14) + 3.0, 14]],
+        [T_SUNSET, [5.6, ridge.y(5.6, 30) + 3.2, 30]],
+        [T_TURN, [3.4, ridge.y(3.4, 12) + 2.9, 12]],
+        [D, [1.2, ridge.y(1.2, 6) + 2.7, 6]],
       ],
-      look: [[T_SUNSET, [1.2, 6.2, -28]], [T_TURN, [1.2, 6.0, -28]], [D, [-4.2, 5.8, -29]]],
-      fov: [[T_SUNSET, 36], [T_TURN, 28], [D, 25]],
+      look: [[T_SUNSET, [1.2, 6.2, -28]], [T_TURN, [1.4, 6.2, -28]], [D, [-4.2, 6.0, -29]]],
+      fov: [[T_SUNSET, 34], [T_TURN, 26], [D, 24]],
       ease: ease.smooth,
     });
     handheld(camera, t, 0.03, 0.22, 12);
@@ -873,14 +894,21 @@ function farmProfile(x, z) {
  * ground dips into a trough, rises to the crest he stands on at z ≈ -21, and
  * then falls away to nothing so there is only sky behind him.
  */
+// The crest is a *table*, not a peak: flat from -z 24 to 36 with the whole
+// climb packed in front of it. A single summit at the point he stands on means
+// the lateral warp only has to shift the profile a few units for the ground
+// just this side of him to come up over his knees, and a man cut off at the
+// waist by his own dune is not a silhouette.
 const RIDGE = [
   [-200, 6.4],
   [-42, 5.8],
   [-34, 5.4],
   [-24, 1.6],
   [-2, -1.4],
-  [28, 3.0],
-  [46, 1.2],
+  [14, -0.8],
+  [24, 3.5],
+  [36, 3.7],
+  [52, 1.0],
   [86, -12.0],
   [160, -50.0],
   [400, -170.0],
@@ -1305,8 +1333,11 @@ function buildSky() {
 
       void main() {
         vec3 d = normalize(vDir);
-        // Bias the ramp below the horizon so the sand meets sky colour.
-        float h = clamp(d.y * 1.15 + 0.09, 0.0, 1.0);
+        // Bias the ramp below the horizon so the sand meets sky colour, and
+        // climb it fast. These are wide, low shots: the top of frame is barely
+        // twenty degrees up, and at a gentle gradient the whole visible sky is
+        // the horizon stop and the picture has no colour in it at all.
+        float h = clamp(d.y * 1.9 + 0.07, 0.0, 1.0);
         // The exponent is driven from the clock. A straight lerp from warm
         // sand to blue runs through grey, so by day it is pushed high and the
         // sand colour holds most of the sky; at sunset it drops and lets the
