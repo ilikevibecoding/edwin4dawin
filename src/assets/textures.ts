@@ -206,8 +206,8 @@ export const imperialHullMap = (): THREE.Texture =>
 export const corridorWallMap = (): THREE.Texture =>
   hullTexture('corridorWall', {
     size: 768,
-    base: '#e6e5df',
-    panelContrast: 0.055,
+    base: '#d5d4cd',
+    panelContrast: 0.075,
     lineColor: 'rgba(120,120,116,0.45)',
     grime: 0.55,
     scorch: 0.35,
@@ -283,6 +283,25 @@ export const softDiscMap = (): THREE.Texture =>
     g.fillStyle = grad;
     g.fillRect(0, 0, size, size);
     return finish('softDisc', c);
+  });
+
+/**
+ * Contact-shadow falloff: a much denser core than `softDiscMap` so a figure
+ * standing on the deck gets a readable grounding patch rather than a haze.
+ */
+export const contactShadowMap = (): THREE.Texture =>
+  memo('contactShadow', () => {
+    const size = 128;
+    const { c, g } = makeCanvas(size, size);
+    const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.45, 'rgba(255,255,255,0.86)');
+    grad.addColorStop(0.72, 'rgba(255,255,255,0.4)');
+    grad.addColorStop(0.9, 'rgba(255,255,255,0.09)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+    return finish('contactShadow', c);
   });
 
 /** Turbulent puff used for smoke billboards. */

@@ -9,6 +9,7 @@ import { BlockadeRunner } from '../assets/ships/BlockadeRunner';
 import { EscapePod } from '../assets/ships/EscapePod';
 import { Tatooine } from '../assets/world/Tatooine';
 import { Starfield } from '../assets/world/Starfield';
+import { contactShadowMap } from '../assets/textures';
 
 const params = new URLSearchParams(location.search);
 const assetName = params.get('asset') ?? 'destroyer';
@@ -169,6 +170,7 @@ switch (assetName) {
     let px = -((states.length - 1) * span) / 2;
     for (const st of states) {
       const c = createCharacter(kind);
+      c.addContactShadow(contactShadowMap(), 0.52);
       c.root.position.set(px, 0, 0);
       c.setState(st as never);
       if (st === 'aim' || st === 'fire') c.aimTarget = aimAt;
@@ -179,7 +181,15 @@ switch (assetName) {
       addLabel(st, px, 2.15, sheet);
       px += span;
     }
-    // Reference deck: a grid at y=0 plus a 1 m rule so heights can be read off.
+    // Reference deck: a lit floor so contact shadows show, a grid at y=0 and a
+    // 1 m rule so heights can be read off.
+    const deck = new THREE.Mesh(
+      new THREE.PlaneGeometry(states.length * span + 2, 6),
+      new THREE.MeshStandardMaterial({ color: 0x8b9098, roughness: 0.7 }),
+    );
+    deck.rotation.x = -Math.PI / 2;
+    deck.position.y = -0.002;
+    sheet.add(deck);
     const grid = new THREE.GridHelper(states.length * span, states.length * 5, 0x60708a, 0x2b3340);
     sheet.add(grid);
     const rule = new THREE.Mesh(
@@ -291,7 +301,9 @@ function loop(): void {
 }
 loop();
 
-// Signal readiness for the screenshot harness.
+// Signal readiness for the screenshot harness, and expose the scene so the
+// probe tools can inspect the graph.
+Object.assign(window, { __SCENE: scene, __THREE: THREE });
 window.setTimeout(() => {
   (window as unknown as { __PREVIEW_READY?: boolean }).__PREVIEW_READY = true;
 }, 400);

@@ -160,23 +160,36 @@ export const corridorWall = (): THREE.MeshStandardMaterial =>
   reg('corridorWall', () => {
     const map = corridorWallMap();
     map.repeat.set(1, 1);
-    return new THREE.MeshStandardMaterial({
+    const mat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       map,
-      roughness: 0.55,
-      metalness: 0.08,
-      envMapIntensity: 0.5,
+      roughness: 0.58,
+      metalness: 0.06,
+      envMapIntensity: 0.4,
       side: THREE.DoubleSide,
     });
+    // Baked vertical occlusion. The corridor is lit from ceiling strips, so
+    // without this the shell renders as one flat white tube: nine overlapping
+    // point lights cannot on their own build the falloff a real cove gives.
+    // V carries height above the deck (see `ribbonAlongX`).
+    mat.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+         diffuseColor.rgb *= mix(0.34, 1.0, smoothstep(-0.04, 0.72, vMapUv.y));`,
+      );
+    };
+    mat.customProgramCacheKey = () => 'corridorWall-heightAO';
+    return mat;
   });
 
 export const corridorTrim = (): THREE.MeshStandardMaterial =>
   reg('corridorTrim', () =>
     new THREE.MeshStandardMaterial({
-      color: 0xdadde1,
+      color: 0xb9bdc2,
       roughness: 0.5,
       metalness: 0.08,
-      envMapIntensity: 0.6,
+      envMapIntensity: 0.5,
     }),
   );
 
@@ -185,22 +198,22 @@ export const corridorFloor = (): THREE.MeshStandardMaterial =>
     const map = deckPlateMap();
     map.repeat.set(2, 8);
     return new THREE.MeshStandardMaterial({
-      color: 0xbcc0c5,
+      color: 0x7f858c,
       map,
-      roughness: 0.62,
-      metalness: 0.14,
-      envMapIntensity: 0.5,
+      roughness: 0.6,
+      metalness: 0.16,
+      envMapIntensity: 0.4,
     });
   });
 
 export const bulkhead = (): THREE.MeshStandardMaterial =>
   reg('bulkhead', () =>
     new THREE.MeshStandardMaterial({
-      color: 0xe6e4dc,
+      color: 0xbfbdb6,
       map: corridorWallMap(),
-      roughness: 0.52,
-      metalness: 0.1,
-      envMapIntensity: 0.5,
+      roughness: 0.54,
+      metalness: 0.09,
+      envMapIntensity: 0.4,
     }),
   );
 

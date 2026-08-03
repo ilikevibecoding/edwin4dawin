@@ -521,6 +521,11 @@ export class App {
    */
   private applyContinuousWorldState(): void {
     this.stage.starfield.setOpacity(starOpacityAt(this.timeline.time));
+    if (this.stage.location === 'interior') {
+      this.stage.focusInteriorLight(
+        this.explore.enabled ? this.render.camera.position : this.director.sample.target,
+      );
+    }
   }
 
   private updateHudIdle(dt: number): void {

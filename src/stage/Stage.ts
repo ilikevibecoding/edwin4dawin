@@ -19,8 +19,9 @@ import {
   Stormtrooper,
 } from '../assets/characters';
 import type { CharacterRig } from '../assets/characters/CharacterRig';
+import { clamp, damp } from '../core/math';
 import { disposeObject } from '../core/dispose';
-import { setTextureAnisotropy } from '../assets/textures';
+import { contactShadowMap, setTextureAnisotropy } from '../assets/textures';
 import { buildEnvironments, type Environments } from '../render/environment';
 
 export type StageLocation = 'space' | 'interior';
@@ -82,6 +83,7 @@ export class Stage {
   readonly spaceAmbient: THREE.AmbientLight;
   readonly interiorAmbient: THREE.HemisphereLight;
   readonly interiorFill: THREE.AmbientLight;
+  readonly interiorKey: THREE.DirectionalLight;
   readonly sunDirection = new THREE.Vector3(0.62, 0.26, -0.74).normalize();
 
   private tier: QualityTier;
@@ -146,12 +148,33 @@ export class Stage {
 
     // Interiors are lit far more generously than space: the brief is a bright
     // white Rebel corridor, and nothing important may hide in shadow.
-    this.interiorAmbient = new THREE.HemisphereLight(0xe3eaf4, 0x4e545c, 0.44);
+    this.interiorAmbient = new THREE.HemisphereLight(0xe3eaf4, 0x4e545c, 0.3);
     this.interiorAmbient.visible = false;
     this.scene.add(this.interiorAmbient);
-    this.interiorFill = new THREE.AmbientLight(0xa9b7cc, 0.14);
+    this.interiorFill = new THREE.AmbientLight(0xa9b7cc, 0.1);
     this.interiorFill.visible = false;
     this.scene.add(this.interiorFill);
+
+    // One shadow-casting key from the ceiling coves. The corridor point lights
+    // stay shadowless (six cube faces each is far too expensive), but without a
+    // single cast shadow every figure looks pasted onto the deck. The
+    // orthographic frustum only needs to cover the section the story uses.
+    this.interiorKey = new THREE.DirectionalLight(0xeaf0fb, 2.55);
+    this.interiorKey.position.set(17, 26, 9);
+    this.interiorKey.target.position.set(8, 0, 2);
+    this.interiorKey.visible = false;
+    this.interiorKey.castShadow = true;
+    const sc = this.interiorKey.shadow.camera;
+    sc.left = -11;
+    sc.right = 11;
+    sc.top = 11;
+    sc.bottom = -11;
+    sc.near = 4;
+    sc.far = 52;
+    this.interiorKey.shadow.mapSize.setScalar(tier.shadowMapSize);
+    this.interiorKey.shadow.bias = -0.0009;
+    this.interiorKey.shadow.normalBias = 0.035;
+    this.scene.add(this.interiorKey, this.interiorKey.target);
 
     // ---- Interior ---------------------------------------------------------
     step('Building a corridor', 0.68);
@@ -168,7 +191,10 @@ export class Stage {
     const troopers = [0, 1, 2, 3, 4, 5].map((i) => new Stormtrooper(20 + i));
     this.characters = { leia, vader, r2, threepio, rebels, officer, troopers };
     this.allCharacters.push(leia, vader, r2, threepio, officer, ...rebels, ...troopers);
-    for (const c of this.allCharacters) this.interiorRoot.add(c.root);
+    for (const c of this.allCharacters) {
+      c.addContactShadow(contactShadowMap(), c === r2 ? 0.45 : 0.52);
+      this.interiorRoot.add(c.root);
+    }
 
     this.dataProjection = new DataProjection(0.42, 0x76d9ff);
     this.interiorRoot.add(this.dataProjection.root);
@@ -306,6 +332,7 @@ export class Stage {
     this.spaceAmbient.visible = space;
     this.interiorAmbient.visible = !space;
     this.interiorFill.visible = !space;
+    this.interiorKey.visible = !space && this.tier.shadows;
     this.scene.background = space ? new THREE.Color(0x02030a) : new THREE.Color(0x05070a);
   }
 
@@ -325,10 +352,28 @@ export class Stage {
     this.tier = tier;
     setTextureAnisotropy(tier.anisotropy);
     this.starfield.setPixelRatio(Math.min(window.devicePixelRatio || 1, tier.maxPixelRatio));
+    this.interiorKey.shadow.mapSize.setScalar(tier.shadowMapSize);
+    this.interiorKey.shadow.map?.dispose();
+    this.interiorKey.shadow.map = null;
+    this.interiorKey.visible = this.location !== 'space' && tier.shadows;
   }
 
   get qualityTier(): QualityTier {
     return this.tier;
+  }
+
+  /**
+   * Slide the interior shadow frustum onto the part of the corridor the camera
+   * is looking at. A frustum wide enough for the whole 53 m run would waste
+   * almost every texel; a tight one that follows the shot keeps contact
+   * shadows crisp at 1024.
+   */
+  focusInteriorLight(point: THREE.Vector3): void {
+    const t = this.interiorKey.target.position;
+    const x = clamp(point.x, CORRIDOR.xStart, CORRIDOR.xEnd);
+    const z = clamp(point.z, -6, CORRIDOR.podBay.roomZ);
+    t.set(damp(t.x, x, 0.12, 1 / 60), 0, damp(t.z, z, 0.12, 1 / 60));
+    this.interiorKey.position.set(t.x + 9, 26, t.z + 7);
   }
 
   /** Per-frame updates that are independent of the timeline. */

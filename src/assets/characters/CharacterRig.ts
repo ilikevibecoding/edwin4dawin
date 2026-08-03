@@ -195,6 +195,9 @@ export abstract class CharacterRig {
   protected crouchAmount = 0;
   protected weaponPose = 0;
   protected blend = 1;
+  protected contactShadow: THREE.Mesh | null = null;
+  protected contactRadius = 0.55;
+  protected contactStrength = 0.66;
   protected path: THREE.Vector3[] = [];
   protected pathIndex = 0;
   protected pathSpeed = 1.35;
@@ -299,6 +302,7 @@ export abstract class CharacterRig {
     this.updateHeading(dt);
     this.evaluatePose(dt, elapsed);
     this.onUpdate(dt, elapsed);
+    this.updateContactShadow();
   }
 
   /** Hook for subclasses (capes, dome spin, saber glow...). */
@@ -632,6 +636,52 @@ export abstract class CharacterRig {
     const pitch = clamp(-Math.atan2(_v2.y, Math.hypot(_v2.x, _v2.z)), -0.55, 0.55);
     j.head.rotation.y = yaw;
     j.head.rotation.x += pitch;
+  }
+
+  /**
+   * Attach a soft contact patch under the figure.
+   *
+   * Interior point lights do not cast shadows (six-face shadow cubes for nine
+   * luminaires is not affordable here), and without any contact darkening
+   * every figure looks like it is hovering a few centimetres off the deck.
+   */
+  addContactShadow(texture: THREE.Texture, radius = 0.55): void {
+    if (this.contactShadow) return;
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: texture,
+        color: 0x05070a,
+        transparent: true,
+        opacity: this.contactStrength,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    );
+    mesh.name = 'contactShadow';
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.y = 0.012;
+    mesh.scale.setScalar(radius * 2);
+    mesh.renderOrder = -1;
+    mesh.matrixAutoUpdate = true;
+    this.contactShadow = mesh;
+    this.contactRadius = radius;
+    this.root.add(mesh);
+  }
+
+  /** Keep the contact patch under the body's centre of mass. */
+  protected updateContactShadow(): void {
+    const s = this.contactShadow;
+    if (!s) return;
+    const f = this.fallProgress;
+    const drop = clamp01((this.p.hipHeight - (this.joints.body.position.y + this.p.hipHeight)) / 0.5);
+    s.position.set(0, 0.012, this.joints.body.position.z - f * 0.75);
+    // Tighter and darker when crouched, longer and softer when knocked down.
+    const w = this.contactRadius * 2 * (1 - drop * 0.25) * (1 + f * 0.35);
+    const l = this.contactRadius * 2 * (1 - drop * 0.2) * (1 + f * 1.9);
+    s.scale.set(w, l, 1);
+    (s.material as THREE.MeshBasicMaterial).opacity =
+      this.contactStrength * (0.82 + drop * 0.18) * (1 - f * 0.2);
   }
 
   /** World-space position of the character's eyes. */

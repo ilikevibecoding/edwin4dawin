@@ -78,7 +78,10 @@ function ribbonAlongX(
   for (let s = 0; s < 2; s++) {
     for (let i = 0; i < n; i++) {
       positions.push(xs[s], profile[i][0], profile[i][1]);
-      uvs.push(xs[s] * uvRepeat, i / (n - 1));
+      // V is the height above the deck, not the profile index: the shell
+      // shader darkens the lower wall from it, and every run — including the
+      // short crown strip — has to agree on what "low" means.
+      uvs.push(xs[s] * uvRepeat, profile[i][0] / CORRIDOR.ceiling);
     }
   }
   for (let i = 0; i < n - 1; i++) {
@@ -117,7 +120,7 @@ function ribbonAlongZ(
   for (let s = 0; s < 2; s++) {
     for (let i = 0; i < n; i++) {
       positions.push(xCentre + profile[i][1], profile[i][0], zs[s]);
-      uvs.push(zs[s] * uvRepeat, i / (n - 1));
+      uvs.push(zs[s] * uvRepeat, profile[i][0] / CORRIDOR.ceiling);
     }
   }
   for (let i = 0; i < n - 1; i++) {
@@ -324,7 +327,10 @@ export class Corridor {
     }
     const returnMesh = new THREE.Mesh(merge(returns), bulkhead());
     returnMesh.name = 'Corridor_Returns';
-    returnMesh.castShadow = true;
+    // Deliberately not a shadow caster: the interior key comes down through the
+    // (non-casting) shell, so casting from the returns would drop hard bands
+    // across the deck from geometry the camera never sees.
+    returnMesh.castShadow = false;
     returnMesh.receiveShadow = true;
     this.root.add(returnMesh);
 
@@ -440,14 +446,14 @@ export class Corridor {
     const lightCount = opts.lights ?? Math.max(5, Math.round(9 * Math.min(1, detail + 0.35)));
     for (let i = 0; i < lightCount; i++) {
       const x = xStart + 3 + ((xEnd - xStart - 6) * i) / Math.max(1, lightCount - 1);
-      const light = new THREE.PointLight(0xdfe8f5, 5.2, 15, 1.7);
+      const light = new THREE.PointLight(0xdfe8f5, 3.0, 14, 1.8);
       light.position.set(x, ceiling - 0.35, 0);
       light.castShadow = false;
       this.root.add(light);
       this.luminaires.push({
         light,
-        base: 5.2,
-        full: 5.2,
+        base: 3.0,
+        full: 3.0,
         x,
         flickerSeed: rng.range(0, 100),
         damaged: rng.bool(0.22),
@@ -459,10 +465,10 @@ export class Corridor {
       [branchMid, halfWidth + 3.5, 0xdfe8f5],
       [(alc.x0 + alc.x1) / 2, -halfWidth - alc.depth * 0.5, 0xe8eef8],
     ] as Array<[number, number, number]>) {
-      const light = new THREE.PointLight(colour, 4.6, 14, 1.7);
+      const light = new THREE.PointLight(colour, 2.8, 13, 1.8);
       light.position.set(lx, ceiling - 0.4, lz);
       this.root.add(light);
-      this.luminaires.push({ light, base: 4.6, full: 4.6, x: lx, flickerSeed: rng.range(0, 100), damaged: false });
+      this.luminaires.push({ light, base: 2.8, full: 2.8, x: lx, flickerSeed: rng.range(0, 100), damaged: false });
     }
     // Matching luminaire plates in the branch and alcove.
     const extraLums = new THREE.Mesh(
