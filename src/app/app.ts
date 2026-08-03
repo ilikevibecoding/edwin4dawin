@@ -115,6 +115,7 @@ export class App {
     this.world = new World(this.stage.scene, this.stage.sky, this.quality);
     this.world.attachEnvironment(this.stage.renderer);
     this.world.setPixelRatio(this.stage.pixelRatio);
+    this.world.setViewportHeight(window.innerHeight);
 
     this.director = new CameraDirector(this.world);
     this.timeline = new Timeline();
@@ -363,6 +364,7 @@ export class App {
     this.quality = qualityFor(level);
     this.stage.setQuality(this.quality);
     this.world.setPixelRatio(this.stage.pixelRatio);
+    this.world.setViewportHeight(window.innerHeight);
     // Particle budgets and greeble counts are baked at construction; the tier
     // change takes full effect on reload, and the renderer-side settings
     // (pixel ratio, shadows, bloom, grain) apply immediately.
@@ -382,6 +384,7 @@ export class App {
     window.addEventListener('resize', () => {
       this.stage.resize(window.innerWidth, window.innerHeight);
       this.world.setPixelRatio(this.stage.pixelRatio);
+      this.world.setViewportHeight(window.innerHeight);
     });
 
     document.addEventListener('visibilitychange', () => {

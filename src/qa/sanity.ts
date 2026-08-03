@@ -10,8 +10,17 @@
 
 import * as THREE from 'three';
 import type { World } from '../show/world';
-import { INTERIOR_ORIGIN, CORRIDOR_SECTIONS } from '../show/world';
-import { CORRIDOR_WIDTH, CORRIDOR_HEIGHT, SECTION_LENGTH } from '../interior/corridor';
+import { INTERIOR_ORIGIN, BAY_STATION } from '../show/world';
+import { CORRIDOR_WIDTH, CORRIDOR_HEIGHT } from '../interior/corridor';
+import {
+  BAY_WIDTH,
+  BAY_DEPTH,
+  BAY_HEIGHT,
+  BOARDING_X,
+  PLATFORM_Y,
+  PLATFORM_BACK_Z,
+  PLATFORM_FRONT_Z,
+} from '../interior/pod-bay';
 
 export type Severity = 'info' | 'warn' | 'error';
 
@@ -35,6 +44,22 @@ export interface SanityInput {
   audioPeak: number;
   missingNarration: string[];
   webglErrors: number;
+}
+
+/**
+ * Height of walkable deck at a corridor station. Everything is at zero except
+ * the pod bay's boarding platform and the ramp that climbs onto it, which the
+ * droids legitimately stand on.
+ */
+function deckHeightAt(x: number, z: number): number {
+  const bz = z - BAY_STATION;
+  if (Math.abs(x - BOARDING_X) > 2.0) return 0;
+  if (bz >= PLATFORM_BACK_Z - 0.1 && bz <= PLATFORM_FRONT_Z + 0.1) return PLATFORM_Y;
+  const rampStart = PLATFORM_BACK_Z - 2.3;
+  if (bz > rampStart && bz < PLATFORM_BACK_Z) {
+    return (PLATFORM_Y * (bz - rampStart)) / (PLATFORM_BACK_Z - rampStart);
+  }
+  return 0;
 }
 
 export function runSanityChecks(input: SanityInput): Issue[] {
@@ -69,12 +94,13 @@ export function runSanityChecks(input: SanityInput): Issue[] {
   if (world.pod.group.visible) check(world.pod.group, 'escape pod', 60000);
 
   /* --- camera inside solid geometry --- */
+  const BAY_FORWARD_Z = BAY_STATION - BAY_DEPTH / 2;
+  const BAY_AFT_Z = BAY_STATION + BAY_DEPTH / 2;
   if (world.currentRegion === 'interior') {
     const local = camera.position.clone().sub(INTERIOR_ORIGIN);
-    const bayZ = CORRIDOR_SECTIONS * SECTION_LENGTH + 3.1;
-    const inBay = local.z > bayZ - 3.2;
-    const halfW = inBay ? 3.6 : CORRIDOR_WIDTH / 2;
-    const maxY = (inBay ? CORRIDOR_HEIGHT + 0.5 : CORRIDOR_HEIGHT) + 0.05;
+    const inBay = local.z > BAY_FORWARD_Z;
+    const halfW = inBay ? BAY_WIDTH / 2 : CORRIDOR_WIDTH / 2;
+    const maxY = (inBay ? BAY_HEIGHT : CORRIDOR_HEIGHT) + 0.05;
     if (Math.abs(local.x) > halfW - 0.06) {
       issues.push({
         severity: 'error',
@@ -89,7 +115,7 @@ export function runSanityChecks(input: SanityInput): Issue[] {
         detail: `camera y=${local.y.toFixed(2)} outside 0.12..${maxY.toFixed(2)}`,
       });
     }
-    if (local.z < -0.4 || local.z > bayZ + 3.2) {
+    if (local.z < -0.4 || local.z > BAY_AFT_Z - 0.1) {
       issues.push({
         severity: 'error',
         code: 'camera-out-of-set',
@@ -108,23 +134,20 @@ export function runSanityChecks(input: SanityInput): Issue[] {
       ...world.rebels.map((r, i) => [`rebel-${i}`, r.group, r.group.visible] as [string, THREE.Object3D, boolean]),
       ...world.troopers.map((t, i) => [`trooper-${i}`, t.group, t.group.visible] as [string, THREE.Object3D, boolean]),
     ];
-    const bayZ = CORRIDOR_SECTIONS * SECTION_LENGTH + 3.1;
     for (const [name, obj, visible] of figures) {
       if (!visible) continue;
       // Figures are children of the interior group, so their transform is
       // already expressed in corridor-local space.
       const local = obj.position;
-      if (Math.abs(local.y) > 0.08) {
+      if (Math.abs(local.y - deckHeightAt(local.x, local.z)) > 0.08) {
         issues.push({ severity: 'error', code: 'figure-off-floor', detail: `${name} y=${local.y.toFixed(2)}` });
       }
-      const inBay = local.z > bayZ - 3.6;
-      // The launch tube extends beyond the bay's side wall; droids boarding
-      // legitimately stand inside it.
-      const halfW = inBay ? 5.4 : CORRIDOR_WIDTH / 2;
+      const inBay = local.z > BAY_FORWARD_Z;
+      const halfW = inBay ? BAY_WIDTH / 2 - 0.3 : CORRIDOR_WIDTH / 2;
       if (Math.abs(local.x) > halfW) {
         issues.push({ severity: 'warn', code: 'figure-in-wall', detail: `${name} x=${local.x.toFixed(2)}` });
       }
-      if (local.z < -1 || local.z > bayZ + 3.5) {
+      if (local.z < -1 || local.z > BAY_AFT_Z) {
         issues.push({ severity: 'warn', code: 'figure-off-set', detail: `${name} z=${local.z.toFixed(2)}` });
       }
     }

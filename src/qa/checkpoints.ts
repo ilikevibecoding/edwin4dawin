@@ -210,8 +210,8 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'breach',
-    preroll: 2.3,
-    t: 208.4,
+    preroll: 1.6,
+    t: 207.9,
     chapter: 'corridor',
     shot: 'door-breach',
     expect: 'The door tearing inward, debris and smoke, camera shake.',
@@ -287,12 +287,26 @@ export const CHECKPOINTS: Checkpoint[] = [
   },
   {
     id: 'pod-bay',
-    t: 303,
+    t: 303.4,
     chapter: 'pod',
     shot: 'bay',
-    expect: 'Pod bay with the launch tube, the pod seated in it and the hatch cycling.',
+    expect: 'Pod broadside in its cradle, launch hatch off its nose, the astromech on the boarding platform.',
     file: '21-pod-bay.png',
-    assert: (c) => (c.world.pod.group.visible ? ok : ['pod not visible in the bay']),
+    assert: (c) => {
+      const f: string[] = [];
+      if (!c.world.pod.group.visible) f.push('pod not visible in the bay');
+      if (!c.onScreen('r2', 0.05)) f.push('the astromech is outside the frame');
+      return f;
+    },
+  },
+  {
+    id: 'pod-launch',
+    t: 308.8,
+    chapter: 'pod',
+    shot: 'tube',
+    expect: 'Hatch fully open on the starfield, the pod running out along its rail.',
+    file: '21b-pod-launch.png',
+    assert: (c) => (c.world.pod.group.visible ? ok : ['pod not visible']),
   },
   {
     id: 'pod-away',

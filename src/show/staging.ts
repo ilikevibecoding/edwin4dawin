@@ -415,8 +415,10 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
   const rebelTracks: TrackKey[][] = world.rebels.map((_, i) => {
     const side = i % 2 === 0 ? -1 : 1;
     const lane = side * (0.95 + (i % 3) * 0.14);
-    const post = CORRIDOR_MARKS.rebelLine + Math.floor(i / 2) * 3.1;
-    const fallback = CORRIDOR_MARKS.rebelFallback + Math.floor(i / 2) * 2.2;
+    // Tight stagger. The two firing lines have to fit in one frame, and a
+    // 3.4 m corridor gives the camera nowhere to stand except on the axis.
+    const post = CORRIDOR_MARKS.rebelLine + Math.floor(i / 2) * 2.2;
+    const fallback = CORRIDOR_MARKS.rebelFallback + Math.floor(i / 2) * 1.4;
     const downAt = 216 + i * 2.6;
     return [
       { t: 0, x: lane * 0.4, z: post + 8, state: 'idle', facing: 0 },
@@ -450,11 +452,12 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     // The lead pair pushes furthest; the rest stack up behind them toward the
     // breach. Advancing *past* the rebel line would put the two sides inside
     // one another.
-    const stop = CORRIDOR_MARKS.troopAdvance - Math.floor(i / 2) * 1.7;
-    // Once the shooting stops they clear the centreline and stand off the
-    // walls behind the lead pair, leaving the corridor — and the lens dolly —
-    // free for Vader.
-    const hold = Math.min(stop, 9.4);
+    const stop = CORRIDOR_MARKS.troopAdvance - Math.floor(i / 2) * 1.3;
+    // Once the shooting stops they clear right back toward the breach and
+    // stand hard against the walls. Vader then walks past them rather than
+    // through them, which is what lets the entrance shot put him alone in the
+    // middle of the frame with the escort small and behind.
+    const hold = CORRIDOR_MARKS.breachDoor + 0.6 + (i % 2) * 0.9 + Math.floor(i / 2) * 1.1;
     const enter = 207.4 + i * 0.55;
     return [
       { t: 0, x: lane, z: CORRIDOR_MARKS.breachDoor - 5, state: 'idle', facing: Math.PI },
@@ -462,8 +465,8 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
       { t: enter + 2.6, x: lane, z: stop - 2.4, state: 'aim', facing: Math.PI },
       { t: enter + 6.5, x: lane, z: stop, state: 'aim', facing: Math.PI },
       { t: 234, x: lane, z: stop, state: 'aim', facing: Math.PI },
-      { t: 238, x: lane * 1.5, z: hold, state: 'alert', facing: Math.PI },
-      { t: 252, x: lane * 1.5, z: hold, state: 'alert', facing: Math.PI },
+      { t: 238.5, x: side * 1.42, z: hold, state: 'alert', facing: Math.PI },
+      { t: 252, x: side * 1.42, z: hold, state: 'alert', facing: Math.PI },
       { t: 262, x: lane * 1.35, z: stop + 8 + i, state: 'walk', facing: Math.PI },
       { t: 284, x: lane * 1.4, z: CORRIDOR_MARKS.midCorridor + 4 + i * 1.4, state: 'walk', facing: Math.PI },
       { t: 300, x: lane * 1.4, z: CORRIDOR_MARKS.leiaStart - 6 + i * 1.2, state: 'walk', facing: Math.PI },
@@ -486,22 +489,22 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
   const vaderTrack: TrackKey[] = [
     { t: 0, x: 0, z: CORRIDOR_MARKS.breachDoor - 4.5, state: 'idle', facing: Math.PI },
     { t: 239, x: 0, z: CORRIDOR_MARKS.breachDoor - 2.4, state: 'march', facing: Math.PI },
-    { t: 243.5, x: 0, z: CORRIDOR_MARKS.breachDoor + 1.6, state: 'march', facing: Math.PI, ease: Ease.linear },
-    { t: 252, x: 0, z: CORRIDOR_MARKS.troopAdvance - 1.4, state: 'march', facing: Math.PI, ease: Ease.linear },
-    { t: 258, x: 0, z: CORRIDOR_MARKS.troopAdvance + 1.5, state: 'alert', facing: Math.PI },
-    { t: 274, x: 0, z: CORRIDOR_MARKS.troopAdvance + 1.5, state: 'alert', facing: Math.PI },
+    { t: 242.5, x: 0, z: CORRIDOR_MARKS.breachDoor + 1.4, state: 'march', facing: Math.PI, ease: Ease.linear },
+    { t: 252, x: 0, z: CORRIDOR_MARKS.troopAdvance + 1.2, state: 'march', facing: Math.PI, ease: Ease.linear },
+    { t: 258, x: 0, z: CORRIDOR_MARKS.troopAdvance + 3.0, state: 'alert', facing: Math.PI },
+    { t: 274, x: 0, z: CORRIDOR_MARKS.troopAdvance + 3.0, state: 'alert', facing: Math.PI },
     { t: 292, x: 0, z: CORRIDOR_MARKS.midCorridor + 2, state: 'march', facing: Math.PI, ease: Ease.linear },
     { t: 310, x: 0, z: CORRIDOR_MARKS.midCorridor + 11, state: 'march', facing: Math.PI, ease: Ease.linear },
     { t: 400, x: 0, z: CORRIDOR_MARKS.midCorridor + 13, state: 'alert', facing: Math.PI },
   ];
 
   const leiaTrack: TrackKey[] = [
-    { t: 0, x: -0.55, z: CORRIDOR_MARKS.leiaStart, state: 'idle', facing: Math.PI },
-    { t: 252, x: -0.55, z: CORRIDOR_MARKS.leiaStart, state: 'walk', facing: undefined },
-    { t: 257.5, x: -0.5, z: CORRIDOR_MARKS.transfer - 1.15, state: 'interact', facing: Math.PI },
-    { t: 282, x: -0.5, z: CORRIDOR_MARKS.transfer - 1.15, state: 'kneel', facing: Math.PI },
-    { t: 286, x: -0.5, z: CORRIDOR_MARKS.transfer - 1.15, state: 'alert', facing: Math.PI },
-    { t: 289, x: -0.5, z: CORRIDOR_MARKS.transfer - 1.15, state: 'walk', facing: undefined },
+    { t: 0, x: -0.62, z: CORRIDOR_MARKS.leiaStart, state: 'idle', facing: Math.PI },
+    { t: 252, x: -0.62, z: CORRIDOR_MARKS.leiaStart, state: 'walk', facing: undefined },
+    { t: 257.5, x: -0.62, z: CORRIDOR_MARKS.transfer - 1.5, state: 'interact', facing: Math.PI },
+    { t: 282, x: -0.62, z: CORRIDOR_MARKS.transfer - 1.5, state: 'kneel', facing: Math.PI },
+    { t: 286, x: -0.62, z: CORRIDOR_MARKS.transfer - 1.5, state: 'alert', facing: Math.PI },
+    { t: 289, x: -0.62, z: CORRIDOR_MARKS.transfer - 1.5, state: 'walk', facing: undefined },
     { t: 295, x: 0.7, z: CORRIDOR_MARKS.transfer - 7.5, state: 'alert', facing: 0 },
     { t: 400, x: 0.7, z: CORRIDOR_MARKS.transfer - 7.5, state: 'alert', facing: 0 },
   ];
@@ -603,8 +606,8 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     // The plans: revealed, studied, then poured into the droid.
     const reveal = smootherstep(259, 266, t) * (1 - smootherstep(277, 282.5, t));
     world.plans.setReveal(reveal);
-    world.plans.setScale(0.68 * (1 - smootherstep(277, 282.5, t) * 0.78));
-    world.plans.group.position.y = 1.22 - smootherstep(277, 282.5, t) * 0.42;
+    world.plans.setScale(0.56 * (1 - smootherstep(277, 282.5, t) * 0.78));
+    world.plans.group.position.y = 1.34 - smootherstep(277, 282.5, t) * 0.5;
 
     // Pod bay hatch, and the pod riding its rail out through it.
     world.podBay.setHatch(smootherstep(304.8, 307.4, t));
@@ -731,7 +734,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
                 sfx.shieldHit({ at: pos, ref: 90 }, 1);
               } else {
                 world.exteriorSparks.burst(pos, Math.round(34 * world.quality.particleScale), {
-                  speed: 34, spread: Math.PI * 0.7, color: '#ffd08a', size: 5, life: 1.1,
+                  speed: 34, spread: Math.PI * 0.7, color: '#ffd08a', size: 1.1, life: 1.1,
                 });
                 world.exteriorDebris.burst(pos, Math.round(6 * world.quality.particleScale), {
                   speed: 22, size: 2.4, life: 2.6,
@@ -803,7 +806,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
       );
       world.interiorSparks.burst(p, Math.round(22 * world.quality.particleScale), {
         speed: 5.2, spread: Math.PI * 0.55, normal: new THREE.Vector3(0, -0.3, 1),
-        color: '#ffb45c', size: 3.0, life: 1.1,
+        color: '#ffb45c', size: 0.8, life: 1.1,
       });
       world.smoke.emit(p, 1, { speed: 0.5, size: 0.5, life: 3.4, opacity: 0.2 });
       sfx.sparks({ at: p, ref: 6 }, 0.6);
@@ -816,7 +819,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
       speed: 9, size: 0.32, life: 6, direction: new THREE.Vector3(0, 0.25, 1), spread: 0.65,
     });
     world.interiorSparks.burst(p, Math.round(120 * world.quality.particleScale), {
-      speed: 12, spread: Math.PI, color: '#ffb45c', size: 3.4, life: 1.3,
+      speed: 12, spread: Math.PI, color: '#ffb45c', size: 0.9, life: 1.3,
     });
     // Enough to fill the doorway, not the ship. Long-lived puffs this large
     // turn the whole corridor into flat grey fog within a couple of seconds.
@@ -847,7 +850,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     ev(st, `breach-ember-${st.toFixed(1)}`, () => {
       const p = world.corridorPoint(CORRIDOR_MARKS.breachDoor + 0.2, rng.range(-1.3, 1.3), rng.range(0.1, 2.2));
       world.interiorSparks.burst(p, Math.round(7 * world.quality.particleScale), {
-        speed: 1.4, spread: Math.PI, color: '#ff9a44', size: 1.8, life: 1.4,
+        speed: 1.4, spread: Math.PI, color: '#ff9a44', size: 0.09, life: 1.4,
       });
       sfx.sparks({ at: p, ref: 6 }, 0.35);
     });
@@ -870,12 +873,12 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
       world.interiorBolts.fire({
         // Slow enough that the eye can follow a shot across the corridor:
         // visible travel time is what makes an exchange of fire readable.
-        origin: from, direction: dir, speed: 31, color: colour,
-        length: 1.15, radius: 0.05, life: 2.2, hitAt: aim,
+        origin: from, direction: dir, speed: 26, color: colour,
+        length: 1.3, radius: 0.05, life: 2.2, hitAt: aim,
         onEnd: (pos) => {
           world.interiorSparks.burst(pos, Math.round(12 * world.quality.particleScale), {
             speed: 3.4, spread: Math.PI * 0.8, color: colour === IMPERIAL_BOLT ? '#ffc0a8' : '#bfe6ff',
-            size: 1.8, life: 0.5,
+            size: 0.055, life: 0.5,
           });
           sfx.impact({ at: pos, ref: 5 }, 0.12);
         },
@@ -883,7 +886,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
       sfx.blaster({ at: from, ref: 6, gain: 0.55 }, pitch);
     };
 
-    for (let t = 208.6; t < 233; t += 0.09 + fRng.next() * 0.2) {
+    for (let t = 208.6; t < 233; t += 0.055 + fRng.next() * 0.11) {
       const st = t;
       const imperial = fRng.chance(0.62);
       ev(st, `ff-${st.toFixed(2)}`, () => {
@@ -989,7 +992,7 @@ export function buildShow(deps: StagingDeps): ShowRuntime {
     sfx.clamp({ at: p, ref: 60 }, 1.6);
     sfx.impact({ at: p, ref: 60 }, 0.4);
     world.exteriorSparks.burst(p, Math.round(40 * world.quality.particleScale), {
-      speed: 12, spread: Math.PI, color: '#ffd8a0', size: 3, life: 0.9,
+      speed: 12, spread: Math.PI, color: '#ffd8a0', size: 0.7, life: 0.9,
     });
     director.impulse(0.6);
   });
@@ -1137,7 +1140,7 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
       // camera sits astern of the mark, which puts the drive flares in frame
       // as she goes by rather than presenting a flat unlit broadside.
       const anchor = runnerPosition(70.5, new THREE.Vector3());
-      c.eye.set(anchor.x + 96, anchor.y + 22, anchor.z + 250);
+      c.eye.set(anchor.x + 52, anchor.y + 13, anchor.z + 108);
       runnerPosition(c.t, rp);
       c.target.copy(rp).add(new THREE.Vector3(0, 3, 0));
     },
@@ -1306,9 +1309,9 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
       const k = Ease.outCubic(c.u);
       // Close enough that the blast fills the frame, then pushed back as the
       // troopers come through — the recoil of the shot, not a zoom.
-      c.eye.copy(cp(lerp(10.4, 14.2, k), lerp(0.3, -0.2, k), lerp(1.1, 1.42, k)));
-      c.target.copy(cp(CORRIDOR_MARKS.breachDoor + 0.6, 0, 1.45));
-      c.fov = lerp(50, 44, k);
+      c.eye.copy(cp(lerp(8.4, 14.6, k), lerp(0.35, -0.25, k), lerp(1.05, 1.45, k)));
+      c.target.copy(cp(CORRIDOR_MARKS.breachDoor + 0.5, 0, 1.4));
+      c.fov = lerp(54, 44, k);
     },
   });
   shots.push({
@@ -1317,14 +1320,14 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     start: 214, end: 229, region: 'interior', near: 0.05, far: 220, fov: 46, blend: 1.2,
     apply(c) {
       const k = Ease.sine(c.u);
-      // High and off the centreline, above the rebel line looking down and
-      // across at the advance. Two things follow from the angle: the corridor
-      // axis runs diagonally, so bolts streak across frame instead of shrinking
-      // to dots at the vanishing point, and the lens sits above head height,
-      // which is the only place in a 3.4 m corridor nobody can walk through.
-      c.eye.copy(cp(lerp(23.4, 21.6, k), lerp(1.2, 1.02, k), lerp(2.15, 1.98, k)));
-      c.target.copy(cp(lerp(9.2, 7.2, k), lerp(-0.5, -0.34, k), lerp(1.1, 1.0, k)));
-      c.fov = lerp(58, 52, k);
+      // Behind and above the rebel line, looking down the corridor at the
+      // advance. Two things follow from the angle: the corridor axis runs
+      // diagonally so bolts streak across frame instead of shrinking to dots at
+      // the vanishing point, and the lens sits above head height, which is the
+      // only place in a 3.4 m corridor nobody can walk through.
+      c.eye.copy(cp(lerp(26.6, 25.0, k), lerp(1.18, 0.98, k), lerp(2.12, 1.94, k)));
+      c.target.copy(cp(lerp(13.4, 11.8, k), lerp(-0.45, -0.3, k), lerp(1.2, 1.1, k)));
+      c.fov = lerp(56, 50, k);
     },
   });
   shots.push({
@@ -1343,12 +1346,15 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     start: 239, end: 252, region: 'interior', near: 0.05, far: 220, fov: 34, blend: 1.8,
     apply(c) {
       const k = Ease.sine(c.u);
-      // Low and central: he has to be the tallest thing in the frame, and the
-      // lens has to be under his eyeline for the whole shot.
-      c.eye.copy(cp(lerp(16.2, 12.7, k), 0.05, lerp(0.56, 0.8, k)));
+      // Riding backwards ahead of him and closing, low and on the centreline:
+      // he has to be the tallest thing in the frame and the lens has to stay
+      // under his eyeline for the whole shot. Holding the standoff relative to
+      // him rather than to the set is what keeps his size constant while the
+      // escort behind him shrinks away.
       const vz = world.vader.group.visible ? world.vader.group.position.z - IO.z : CORRIDOR_MARKS.breachDoor;
-      c.target.copy(cp(vz + 0.4, 0, lerp(1.4, 1.66, k)));
-      c.fov = lerp(38, 31, k);
+      c.eye.copy(cp(vz + lerp(6.6, 3.9, k), 0.05, lerp(0.48, 0.7, k)));
+      c.target.copy(cp(vz + 0.3, 0, lerp(1.34, 1.6, k)));
+      c.fov = lerp(40, 32, k);
     },
   });
 
@@ -1370,13 +1376,13 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     start: 263, end: 276, region: 'interior', near: 0.03, far: 220, fov: 34, blend: 1.6,
     apply(c) {
       const k = Ease.sine(c.u);
-      // Down the corridor past the projection to Leia. The lens sits on her
-      // side of the centreline so the two subjects separate: she reads on the
-      // left of frame, the schematic on the right, neither in front of the
-      // other.
-      c.eye.copy(cp(CORRIDOR_MARKS.transfer + lerp(2.9, 2.3, k), lerp(-0.92, -0.74, k), lerp(1.66, 1.5, k)));
-      c.target.copy(cp(CORRIDOR_MARKS.transfer - 0.75, lerp(0.02, 0.1, k), 1.24));
-      c.fov = lerp(38, 34, k);
+      // Aft of both subjects, looking forward down the corridor. The lens sits
+      // between them on the centreline so they separate across the frame: she
+      // reads on the left, the schematic on the right, neither in front of the
+      // other, and her face is turned into the lens.
+      c.eye.copy(cp(CORRIDOR_MARKS.transfer + lerp(2.5, 1.9, k), lerp(0.16, 0.1, k), lerp(1.62, 1.52, k)));
+      c.target.copy(cp(CORRIDOR_MARKS.transfer - 1.2, lerp(0.06, 0.02, k), lerp(1.3, 1.26, k)));
+      c.fov = lerp(42, 38, k);
     },
   });
   shots.push({
@@ -1385,8 +1391,11 @@ function buildShots(world: World, prologue: Prologue, epilogue: EpilogueCard): S
     start: 276, end: 285, region: 'interior', near: 0.03, far: 220, fov: 32, blend: 1.4,
     apply(c) {
       const k = Ease.sine(c.u);
-      c.eye.copy(cp(CORRIDOR_MARKS.transfer + lerp(1.9, 1.5, k), lerp(0.7, 0.35, k), lerp(1.2, 0.95, k)));
-      c.target.copy(cp(CORRIDOR_MARKS.transfer - 0.35, 0.35, lerp(1.0, 0.74, k)));
+      // Across the pair at droid height: Leia kneeling on the left, the
+      // astromech on the right, the schematic draining down between them.
+      c.eye.copy(cp(CORRIDOR_MARKS.transfer + lerp(2.1, 1.75, k), lerp(1.35, 1.15, k), lerp(1.32, 1.12, k)));
+      c.target.copy(cp(CORRIDOR_MARKS.transfer - 1.05, lerp(-0.2, -0.16, k), lerp(1.0, 0.86, k)));
+      c.fov = lerp(40, 36, k);
     },
   });
   shots.push({

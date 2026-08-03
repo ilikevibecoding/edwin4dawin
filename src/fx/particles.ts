@@ -14,6 +14,9 @@ import { clamp } from '../core/math';
 
 /* -------------------------------------------------------------- sparks */
 
+// `aSize` is a diameter in metres. `uScale` carries viewportHeight /
+// (2 tan(fov/2)) so the projection is physically correct at any distance: a
+// fixed pixel constant makes a nearby spark fill a third of the screen.
 const sparkVert = /* glsl */ `
   attribute float aSize;
   attribute float aLife;
@@ -21,12 +24,14 @@ const sparkVert = /* glsl */ `
   varying vec3  vColor;
   varying float vAlpha;
   uniform float uPixelRatio;
+  uniform float uScale;
   void main() {
     vColor = aColor;
     vAlpha = clamp(aLife, 0.0, 1.0);
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = aSize * uPixelRatio * (300.0 / max(1.0, -mv.z)) * (0.35 + vAlpha * 0.75);
+    float px = aSize * uScale / max(0.25, -mv.z);
+    gl_PointSize = clamp(px, 1.0, 140.0) * uPixelRatio * (0.4 + vAlpha * 0.7);
   }
 `;
 
@@ -78,6 +83,7 @@ export class SparkSystem {
       uniforms: {
         uSprite: { value: glowSprite(0.25, 64) },
         uPixelRatio: { value: pixelRatio },
+        uScale: { value: 900 },
       },
       vertexShader: sparkVert,
       fragmentShader: sparkFrag,
@@ -93,6 +99,12 @@ export class SparkSystem {
 
   setPixelRatio(r: number): void {
     this.material.uniforms.uPixelRatio.value = r;
+  }
+
+  /** Keeps world-space point sizing correct across resizes and fov changes. */
+  setProjection(viewportHeight: number, fovDegrees: number): void {
+    this.material.uniforms.uScale.value =
+      viewportHeight / (2 * Math.tan((fovDegrees * Math.PI) / 360));
   }
 
   /** Emit a burst. `spread` is the cone half-angle around `normal`. */
@@ -113,7 +125,8 @@ export class SparkSystem {
     const spread = opts.spread ?? Math.PI;
     const normal = (opts.normal ?? new THREE.Vector3(0, 1, 0)).clone().normalize();
     const base = new THREE.Color(opts.color ?? '#ffb35c');
-    const size = opts.size ?? 3;
+    // Diameter in metres.
+    const size = opts.size ?? 0.3;
     const life = opts.life ?? 0.7;
 
     // Build an orthonormal frame around the emission normal.

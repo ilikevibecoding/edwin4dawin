@@ -38,9 +38,9 @@ export const INTERIOR_ORIGIN = new THREE.Vector3(0, -6000, 0);
 export const CORRIDOR_MARKS = {
   breachDoor: 3.0,
   troopEntry: 4.5,
-  troopAdvance: 11.0,
+  troopAdvance: 12.5,
   rebelLine: 17.5,
-  rebelFallback: 25.0,
+  rebelFallback: 21.5,
   midCorridor: 28.0,
   leiaStart: 46.0,
   transfer: 49.5,
@@ -136,6 +136,7 @@ export class World {
   private environment: EnvironmentSet | null = null;
   private region: Region = 'exterior';
   private scene: THREE.Scene;
+  private viewportHeight = 900;
 
   constructor(scene: THREE.Scene, sky: THREE.Scene, quality: QualitySettings) {
     this.quality = quality;
@@ -266,11 +267,11 @@ export class World {
     this.interiorFx.add(this.interiorDebris.mesh);
 
     this.plans = new DataProjection(quality, 'plans');
-    this.plans.setScale(0.62);
+    this.plans.setScale(0.56);
     // Off Leia's shoulder rather than in front of her face: the shot has to
     // read as a person *and* the thing she is carrying, not as a wire sphere
     // with a white dress behind it.
-    this.plans.group.position.set(0.42, 1.26, CORRIDOR_MARKS.transfer - 0.5);
+    this.plans.group.position.set(0.78, 1.34, CORRIDOR_MARKS.transfer - 0.9);
     this.plans.setReveal(0);
     this.interior.add(this.plans.group);
 
@@ -302,7 +303,7 @@ export class World {
     this.interior.add(this.vader.group);
 
     this.leia = new Princess({ seed: 'leia' });
-    this.leia.placeAt(-0.5, CORRIDOR_MARKS.leiaStart, 0);
+    this.leia.placeAt(-0.62, CORRIDOR_MARKS.leiaStart, 0);
     this.interior.add(this.leia.group);
 
     this.r2 = new AstroDroid({ seed: 'r2' });
@@ -574,6 +575,13 @@ export class World {
     this.starfield.update(elapsed);
     this.planet.update(elapsed);
 
+    // Point sprites are sized in metres, so they need the current projection.
+    const cam = camera as THREE.PerspectiveCamera;
+    if (cam.isPerspectiveCamera) {
+      this.exteriorSparks.setProjection(this.viewportHeight, cam.fov);
+      this.interiorSparks.setProjection(this.viewportHeight, cam.fov);
+    }
+
     if (this.region === 'exterior') {
       this.runner.update(dt, elapsed);
       this.destroyer.update(dt, elapsed);
@@ -620,6 +628,10 @@ export class World {
     this.starfield.setPixelRatio(r);
     this.exteriorSparks.setPixelRatio(r);
     this.interiorSparks.setPixelRatio(r);
+  }
+
+  setViewportHeight(h: number): void {
+    this.viewportHeight = Math.max(1, h);
   }
 
   dispose(): void {

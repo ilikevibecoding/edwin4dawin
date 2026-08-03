@@ -30,8 +30,10 @@ const holoVert = /* glsl */ `
     // Horizontal band jitter: a projector fighting interference.
     float band = floor((p.y + uTime * 0.35) * 22.0);
     p.x += (hash(band) - 0.5) * uJitter * step(0.982, hash(band + 3.7));
-    // The image assembles from the bottom up as it is revealed.
-    float appear = smoothstep(uReveal * 2.4 - 1.2, uReveal * 2.4, (p.y + 1.2) / 2.4);
+    // The image assembles from the bottom up as it is revealed: h is the
+    // fraction of the way up the authored volume, uReveal is the wavefront.
+    float h = clamp((p.y + 1.2) / 2.4, 0.0, 1.0);
+    float appear = smoothstep(0.0, 0.22, uReveal * 1.3 - h);
     p *= mix(0.001, 1.0, appear);
     vec4 world = modelMatrix * vec4(p, 1.0);
     vViewDir = normalize(cameraPosition - world.xyz);
@@ -113,12 +115,27 @@ export class DataProjection {
     const shell = new THREE.Mesh(new THREE.SphereGeometry(1, seg, seg / 2), makeHoloMat(0.34));
     this.station.add(shell);
 
-    // Wire meridians and parallels.
-    const wire = new THREE.LineSegments(
-      new THREE.WireframeGeometry(new THREE.SphereGeometry(1.002, 22, 12)),
-      lineMat(0.32),
-    );
-    this.station.add(wire);
+    // Wire meridians and parallels. Drawn explicitly rather than with
+    // WireframeGeometry: a triangulated sphere produces a diagonal mesh so
+    // dense that it swamps every feature actually worth reading.
+    const circle = (radius: number, points = 72) =>
+      new THREE.BufferGeometry().setFromPoints(
+        Array.from({ length: points + 1 }, (_, i) => {
+          const a = (i / points) * Math.PI * 2;
+          return new THREE.Vector3(Math.cos(a) * radius, 0, Math.sin(a) * radius);
+        }),
+      );
+    for (let i = 1; i < 8; i++) {
+      const lat = (i / 8) * Math.PI;
+      const ring = new THREE.Line(circle(Math.sin(lat) * 1.004), lineMat(0.3));
+      ring.position.y = Math.cos(lat);
+      this.station.add(ring);
+    }
+    for (let i = 0; i < 12; i++) {
+      const meridian = new THREE.Line(circle(1.004), lineMat(0.22));
+      meridian.rotation.set(Math.PI / 2, 0, (i / 12) * Math.PI);
+      this.station.add(meridian);
+    }
 
     // Equatorial construction trench. This and the dish are the two features
     // that make the readout legible as a *station* at a glance, so both are
@@ -146,28 +163,42 @@ export class DataProjection {
       this.station.add(tie);
     }
 
-    // Recessed focusing dish on the upper hemisphere.
-    const dish = new THREE.Mesh(
-      new THREE.SphereGeometry(0.42, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.44),
-      makeHoloMat(0.6),
+    // Recessed focusing dish on the upper hemisphere. Built inside a group
+    // whose +Y is the surface normal, so the crater, its rim and the focal
+    // spike stay aligned with each other and with the sphere underneath.
+    const dishNormal = new THREE.Vector3(0.34, 0.62, -0.71).normalize();
+    const dishGroup = new THREE.Group();
+    dishGroup.position.copy(dishNormal).multiplyScalar(0.88);
+    dishGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dishNormal);
+    this.station.add(dishGroup);
+    const crater = new THREE.Mesh(
+      new THREE.SphereGeometry(0.4, 22, 10, 0, Math.PI * 2, Math.PI * 0.56, Math.PI * 0.44),
+      makeHoloMat(0.85),
     );
-    dish.position.set(0.0, 0.62, -0.6);
-    dish.rotation.x = -0.72;
-    dish.scale.set(1, 0.5, 1);
-    this.station.add(dish);
-    const dishRim = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.03, 6, 44), makeHoloMat(1.7));
-    dishRim.position.copy(dish.position);
-    dishRim.rotation.set(-0.72 + Math.PI / 2, 0, 0);
-    this.station.add(dishRim);
-    // Focal spike.
+    crater.scale.set(1, 0.55, 1);
+    crater.position.y = 0.17;
+    dishGroup.add(crater);
+    for (const [r, o] of [[0.42, 1.9], [0.3, 1.1], [0.17, 0.9]] as const) {
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(r, r * 0.05, 6, 44), makeHoloMat(o));
+      rim.rotation.x = Math.PI / 2;
+      rim.position.y = 0.02 - (0.42 - r) * 0.22;
+      dishGroup.add(rim);
+    }
+    // Eight emitter posts around the crater lip.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.11, 0.035), makeHoloMat(1.2));
+      post.position.set(Math.cos(a) * 0.42, 0.07, Math.sin(a) * 0.42);
+      dishGroup.add(post);
+    }
+    const focus = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), makeHoloMat(2.4));
+    focus.position.y = 0.05;
+    dishGroup.add(focus);
     const spike = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0.62, -0.6),
-        new THREE.Vector3(0, 1.02, -1.02),
-      ]),
-      lineMat(0.7),
+      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.05, 0), new THREE.Vector3(0, 0.62, 0)]),
+      lineMat(0.75),
     );
-    this.station.add(spike);
+    dishGroup.add(spike);
 
     // Surface plating segments — a handful of raised quads.
     const plateCount = quality.level === 'low' ? 14 : 34;
@@ -176,12 +207,30 @@ export class DataProjection {
       const theta = rng.range(0, Math.PI * 2);
       const r = Math.sqrt(1 - u * u);
       const pos = new THREE.Vector3(Math.cos(theta) * r, u, Math.sin(theta) * r);
-      if (pos.distanceTo(new THREE.Vector3(0, 0.62, -0.6)) < 0.55) continue;
+      if (pos.distanceTo(dishNormal) < 0.6) continue;
       const size = rng.range(0.08, 0.2);
-      const plate = new THREE.Mesh(new THREE.PlaneGeometry(size, size * rng.range(0.6, 1.5)), makeHoloMat(0.5));
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(size, size * rng.range(0.6, 1.5)), makeHoloMat(0.7));
       plate.position.copy(pos).multiplyScalar(1.012);
       plate.lookAt(pos.clone().multiplyScalar(2));
       this.station.add(plate);
+    }
+    // Radial surface trenches running away from the dish, so the sphere has
+    // some direction to it rather than reading as a bare globe.
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const len = rng.range(0.25, 0.6);
+      const arc = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(
+          Array.from({ length: 14 }, (_, k) => {
+            const t = (k / 13) * len;
+            const p = new THREE.Vector3(Math.cos(a) * Math.sin(t), Math.cos(t), Math.sin(a) * Math.sin(t));
+            return p.multiplyScalar(1.008);
+          }),
+        ),
+        lineMat(0.5),
+      );
+      arc.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dishNormal);
+      this.station.add(arc);
     }
 
     this.station.scale.setScalar(0.78);
@@ -228,8 +277,8 @@ export class DataProjection {
       side: THREE.DoubleSide,
       toneMapped: false,
     });
-    this.beam = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.2, 24, 1, true), this.beamMat);
-    this.beam.position.y = -1.2;
+    this.beam = new THREE.Mesh(new THREE.ConeGeometry(0.72, 1.05, 20, 1, true), this.beamMat);
+    this.beam.position.y = -1.22;
     this.group.add(this.beam);
 
     // The projection is a practical light: it is what lights her face.

@@ -300,7 +300,7 @@ export class EscapePod {
   update(_dt: number, elapsed: number): void {
     const flicker = 0.88 + Math.sin(elapsed * 33) * 0.08 + Math.sin(elapsed * 11.4) * 0.04;
     const level = this.burn * flicker;
-    this.thrusterMat.emissiveIntensity = 0.25 + level * 4.2;
+    this.thrusterMat.emissiveIntensity = 0.06 + level * 4.4;
     for (const f of this.thrusterFlares) {
       (f.material as THREE.MeshBasicMaterial).opacity = level * 0.85;
       f.visible = level > 0.02;

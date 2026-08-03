@@ -637,7 +637,7 @@ export class Princess extends ArmedFigure {
     const white = clothMaterial('leiaGown', PALETTE.leiaWhite, 0.88);
     const whiteSolid = paintMaterial('leiaBodice', '#f6f4ef', 0.7, 0);
     const hair = paintMaterial('leiaHair', '#33231a', 0.84, 0.02);
-    const skin = paintMaterial('leiaSkin', '#d8ab8b', 0.7, 0);
+    const skin = paintMaterial('leiaSkin', '#e2b795', 0.68, 0);
     const beltMat = metalMaterial('leiaBelt', '#c9ccd1', 0.35, 0.85);
 
     const abdomen = new THREE.Mesh(roundedBox(0.26, 0.3, 0.175, 0.07, 3), whiteSolid);
@@ -665,10 +665,19 @@ export class Princess extends ArmedFigure {
     head.position.y = 0.085;
     j.head.add(head);
     addFace(j.head, skin, { depth: 0.084, eyeY: 0.1, scale: 0.94, hairMat: hair });
-    const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.094, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.68), hair);
-    hairCap.position.y = 0.098;
+    // The cap stops above the brow. Swept any further round and it closes over
+    // the eyes, and at the distances these shots are photographed from that
+    // turns her head into an anonymous dark mass.
+    const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.094, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), hair);
+    hairCap.position.y = 0.112;
     hairCap.scale.set(1.06, 1.06, 1.12);
     j.head.add(hairCap);
+    // Side falls framing the face, down to the buns.
+    for (const s of [-1, 1]) {
+      const fall = new THREE.Mesh(roundedBox(0.035, 0.11, 0.15, 0.017), hair);
+      fall.position.set(s * 0.072, 0.075, 0.01);
+      j.head.add(fall);
+    }
     const nape = new THREE.Mesh(roundedBox(0.14, 0.13, 0.07, 0.035), hair);
     nape.position.set(0, 0.05, 0.07);
     j.head.add(nape);
