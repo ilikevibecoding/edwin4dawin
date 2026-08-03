@@ -16,11 +16,11 @@
  *   node scripts/qa-tour.mjs --controls          # also exercise the interface
  */
 
-import { spawn } from 'node:child_process';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { startServer, stopServer, waitForServer } from './lib/devserver.mjs';
 
 const ROOT = path.dirname(fileURLToPath(new URL('.', import.meta.url)));
 const OUT_DIR = path.join(ROOT, 'qa', 'screenshots');
@@ -46,31 +46,9 @@ const keepServer = args.includes('--keep-server');
 const PORT = usePreview ? 4173 : 5173;
 const BASE = `http://127.0.0.1:${PORT}`;
 
-function startServer() {
-  const cmd = usePreview ? ['run', 'preview'] : ['run', 'dev'];
-  const child = spawn('npm', cmd, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
-  child.stdout.on('data', (d) => process.stdout.write(`[server] ${d}`));
-  child.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));
-  return child;
-}
-
-async function waitForServer(url, timeoutMs = 60000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return true;
-    } catch {
-      /* not up yet */
-    }
-    await new Promise((r) => setTimeout(r, 400));
-  }
-  throw new Error(`Server did not start at ${url}`);
-}
-
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
-  const server = startServer();
+  const server = startServer({ root: ROOT, preview: usePreview });
   let browser;
   const consoleMessages = [];
   const pageErrors = [];
@@ -387,11 +365,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     if (browser) await browser.close();
-    if (!keepServer) {
-      server.kill('SIGTERM');
-      await new Promise((r) => setTimeout(r, 400));
-      if (!server.killed) server.kill('SIGKILL');
-    }
+    if (!keepServer) await stopServer(server);
   }
 }
 

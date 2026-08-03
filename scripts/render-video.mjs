@@ -19,6 +19,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { startServer, stopServer, waitForServer } from './lib/devserver.mjs';
 
 const ROOT = path.dirname(fileURLToPath(new URL('.', import.meta.url)));
 const FRAME_DIR = path.join(ROOT, 'qa', 'frames');
@@ -54,23 +55,10 @@ const segments = args.includes('--reel')
   ? REEL
   : [[Number(flag('from', 0)), Number(flag('to', 380))]];
 
-async function waitForServer(url, timeoutMs = 60000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      if ((await fetch(url)).ok) return;
-    } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`server not up at ${url}`);
-}
-
 await rm(FRAME_DIR, { recursive: true, force: true });
 await mkdir(FRAME_DIR, { recursive: true });
 
-const server = spawn('npm', ['run', usePreview ? 'preview' : 'dev'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
-server.stdout.on('data', () => {});
-server.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));
+const server = startServer({ root: ROOT, preview: usePreview, quiet: true });
 
 let browser;
 try {
@@ -151,7 +139,5 @@ try {
   process.exitCode = 1;
 } finally {
   if (browser) await browser.close();
-  server.kill('SIGTERM');
-  await new Promise((r) => setTimeout(r, 300));
-  if (!server.killed) server.kill('SIGKILL');
+  await stopServer(server);
 }

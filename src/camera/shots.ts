@@ -379,13 +379,19 @@ export function buildShots(): Shot[] {
       label: 'Corridor establishing',
       start: 196,
       end: 206,
+      // Held in the mouth of the archive junction, a couple of metres back from
+      // where the main run narrows, so the whole depth of the corridor is in
+      // frame and the junction contributes only the bulkhead down the right
+      // edge. Dollying up the main run behind the defenders instead put the lens
+      // 40 cm off the back of one of them, in a corridor 3.4 m wide, and the
+      // shot that is meant to establish the geography showed a shoulder.
       pos: [
-        { t: 196, v: [1.45, 1.95, 32.0], ease: 'smoother' },
-        { t: 206, v: [1.05, 1.84, 20.5], ease: 'smoother' },
+        { t: 196, v: [0.6, 2.22, 24.6], ease: 'smoother' },
+        { t: 206, v: [0.45, 1.98, 21.4], ease: 'smoother' },
       ],
       look: [
-        { t: 196, v: [0.0, 1.4, 14] },
-        { t: 206, v: [-0.1, 1.3, -2] },
+        { t: 196, v: [0.05, 1.42, 10.0] },
+        { t: 206, v: [0.0, 1.3, -1.5] },
       ],
       fov: 46,
       shake: 0.5,

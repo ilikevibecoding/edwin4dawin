@@ -21,11 +21,11 @@
  *   node scripts/qa-gait.mjs --step 1   # finer sweep, slower
  */
 
-import { spawn } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { startServer, stopServer, waitForServer } from './lib/devserver.mjs';
 
 const ROOT = path.dirname(fileURLToPath(new URL('.', import.meta.url)));
 const REPORT_PATH = path.join(ROOT, 'qa', 'gait-report.json');
@@ -67,32 +67,8 @@ const MOVING = 0.35;
  */
 const STEP_MIN = 0.25;
 
-function startServer() {
-  const child = spawn('npm', usePreview ? ['run', 'preview'] : ['run', 'dev'], {
-    cwd: ROOT,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  child.stdout.on('data', (d) => process.stdout.write(`[server] ${d}`));
-  child.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));
-  return child;
-}
-
-async function waitForServer(url, timeoutMs = 60000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return true;
-    } catch {
-      /* not up yet */
-    }
-    await new Promise((r) => setTimeout(r, 400));
-  }
-  throw new Error(`Server did not start at ${url}`);
-}
-
 async function main() {
-  const server = startServer();
+  const server = startServer({ root: ROOT, preview: usePreview });
   let browser;
   try {
     await waitForServer(BASE);
@@ -226,7 +202,7 @@ async function main() {
     process.exitCode = slipping.length || offDeck.length || wrongGait.length ? 1 : 0;
   } finally {
     if (browser) await browser.close();
-    server.kill('SIGTERM');
+    await stopServer(server);
   }
 }
 

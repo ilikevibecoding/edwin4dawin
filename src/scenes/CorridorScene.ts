@@ -362,7 +362,10 @@ export class CorridorScene {
     this.archiveLight.position.set(-1.9, 2.5, 25.6);
     this.scene.add(this.archiveLight);
 
-    this.archiveFill = new THREE.PointLight(0xbfd4f0, 0, 12, 2);
+    // Kept faintly alive from the start. The junction is twice the width of the
+    // corridor, so an establishing shot staged in it looks into 3 m of unlit wall
+    // on the far side and reads as a hole in the ship.
+    this.archiveFill = new THREE.PointLight(0xbfd4f0, 0.55, 12, 2);
     this.archiveFill.position.set(1.4, 1.9, 24.2);
     this.scene.add(this.archiveFill);
 
@@ -637,7 +640,7 @@ export class CorridorScene {
 
     const archivePresence = smoothstep(260, 268, t) * (1 - smoothstep(316, 322, t));
     this.archiveLight.intensity = 1.1 + 1.5 * archivePresence;
-    this.archiveFill.intensity = 2.3 * archivePresence;
+    this.archiveFill.intensity = 0.55 + 2.3 * archivePresence;
     this.doorwayGlow.intensity = smoothstep(BREACH_TIME, BREACH_TIME + 3, t) * (2.6 + 3.4 * vaderPresence);
 
     const breach = this.door.breachFlash(t);
@@ -750,17 +753,19 @@ function buildCast(lib: MaterialLibrary): {
     fallbackAt?: number;
     fallbackTo?: [number, number];
   }> = [
-    { start: [0.5, 27.0], cover: [-0.85, 8.6], arrive: 203.6, officer: true, downAt: 233.5 },
-    { start: [-0.6, 29.5], cover: [0.95, 10.4], arrive: 204.4, downAt: 226.5 },
-    { start: [1.0, 32.5], cover: [-0.9, 12.9], arrive: 205.2, downAt: 229.5 },
-    { start: [-1.0, 35.0], cover: [0.9, 14.6], arrive: 206.0, downAt: 231.5 },
-    { start: [0.3, 38.0], cover: [-0.5, 16.8], arrive: 206.8, fallbackAt: 228, fallbackTo: [1.26, 19.4] },
+    // Every defender starts forward of the establishing camera in the junction
+    // and runs away from it down the main run, so none of them crosses the lens.
+    { start: [0.5, 12.5], cover: [-0.85, 8.6], arrive: 200.8, officer: true, downAt: 233.5 },
+    { start: [-0.6, 14.5], cover: [0.95, 10.4], arrive: 201.25, downAt: 226.5 },
+    { start: [1.0, 16.5], cover: [-0.9, 12.9], arrive: 201.7, downAt: 229.5 },
+    { start: [-1.0, 18.5], cover: [0.9, 14.6], arrive: 202.15, downAt: 231.5 },
+    { start: [-0.55, 20.5], cover: [-0.5, 16.8], arrive: 202.6, fallbackAt: 228, fallbackTo: [1.26, 19.4] },
   ];
 
   rebelPlans.forEach((plan, i) => {
     const keys: Array<[number, number, number, number]> = [
       [0, plan.start[0], 0, plan.start[1]],
-      [199.2 + i * 0.25, plan.start[0], 0, plan.start[1]],
+      [197.8 + i * 0.3, plan.start[0], 0, plan.start[1]],
       [plan.arrive, plan.cover[0], 0, plan.cover[1]],
     ];
     if (plan.fallbackAt && plan.fallbackTo) {
@@ -772,8 +777,8 @@ function buildCast(lib: MaterialLibrary): {
     }
 
     const states: StateKey[] = [
-      { t: 0, state: 'idle', facing: Math.PI },
-      { t: 199.2 + i * 0.25, state: 'run' },
+      { t: 0, state: 'alert', facing: 0, focus: DOORWAY },
+      { t: 197.8 + i * 0.3, state: 'run' },
       { t: plan.arrive, state: 'alert', focus: DOORWAY },
       { t: plan.arrive + 1.2, state: 'aim', focus: DOORWAY },
       { t: BREACH_TIME - 1.4, state: 'react', focus: DOORWAY },

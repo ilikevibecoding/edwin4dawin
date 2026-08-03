@@ -1,549 +1,228 @@
 {
-  "generatedAt": "2026-08-03T13:17:24.018Z",
+  "generatedAt": "2026-08-03T15:02:13.936Z",
   "url": "http://127.0.0.1:4173/?qa=1&quality=medium",
   "viewport": {
-    "width": 1280,
-    "height": 720
+    "width": 1920,
+    "height": 1080
   },
   "quality": "medium",
-  "checkpointCount": 4,
+  "checkpointCount": 1,
   "failureCount": 0,
   "consoleErrors": [],
   "pageErrors": [],
   "controlResults": [],
   "playbackSamples": [
     {
-      "time": 100.5,
-      "fps": 1.3909022628432446,
-      "draws": 128,
-      "tris": 38223,
+      "time": 100,
+      "fps": 2.2899854356923166,
+      "draws": 549,
+      "tris": 69169,
       "issues": 0
     },
     {
-      "time": 102.54990000000001,
-      "fps": 1.267055981348936,
+      "time": 101.0167,
+      "fps": 1.5426827252590993,
+      "draws": 88,
+      "tris": 23399,
+      "issues": 0
+    },
+    {
+      "time": 102.0667,
+      "fps": 1.6229534802514878,
       "draws": 69,
       "tris": 17909,
       "issues": 0
     },
     {
-      "time": 104.66660000000005,
-      "fps": 1.5661761634948697,
-      "draws": 72,
-      "tris": 22153,
+      "time": 104.2,
+      "fps": 1.793599412382555,
+      "draws": 71,
+      "tris": 18185,
       "issues": 0
     },
     {
-      "time": 106.5665,
-      "fps": 2.5117213663764235,
+      "time": 105.48329999999999,
+      "fps": 1.7681937311637212,
       "draws": 73,
       "tris": 22253,
       "issues": 0
     },
     {
-      "time": 108.84970000000001,
-      "fps": 5.411060207063236,
+      "time": 106.74999999999997,
+      "fps": 1.656506758547575,
+      "draws": 73,
+      "tris": 22253,
+      "issues": 0
+    },
+    {
+      "time": 108.03319999999997,
+      "fps": 1.6005406270562503,
+      "draws": 73,
+      "tris": 22253,
+      "issues": 0
+    },
+    {
+      "time": 109.34989999999996,
+      "fps": 1.877675687855194,
       "draws": 79,
       "tris": 22733,
       "issues": 0
     },
     {
-      "time": 110.93310000000001,
-      "fps": 5.806601460682853,
-      "draws": 87,
-      "tris": 23335,
+      "time": 110.69979999999997,
+      "fps": 2.7778978103992142,
+      "draws": 86,
+      "tris": 23333,
       "issues": 0
     },
     {
-      "time": 113.31640000000003,
-      "fps": 5.028157683024941,
-      "draws": 102,
-      "tris": 24783,
-      "issues": 0
-    },
-    {
-      "time": 115.48300000000006,
-      "fps": 4.79590749227326,
-      "draws": 122,
-      "tris": 24545,
-      "issues": 0
-    },
-    {
-      "time": 117.54980000000006,
-      "fps": 4.576426319536255,
-      "draws": 122,
-      "tris": 24545,
-      "issues": 0
-    },
-    {
-      "time": 119.89970000000008,
-      "fps": 4.340989552685142,
-      "draws": 122,
-      "tris": 24545,
+      "time": 111.59969999999997,
+      "fps": 2.6760387490410857,
+      "draws": 90,
+      "tris": 24121,
       "issues": 0
     }
   ],
-  "meanFps": 3.669499848932916,
+  "meanFps": 1.96060744176485,
   "results": [
     {
-      "id": "t232",
-      "time": 232,
-      "failures": [],
+      "checkpoint": {
+        "id": "13-corridor-establish",
+        "time": 200,
+        "chapter": "corridor",
+        "shot": "cor-1",
+        "scene": "interior",
+        "expects": [
+          "white corridor",
+          "rebel defenders moving into position",
+          "red alarm light"
+        ],
+        "assertions": [
+          {
+            "kind": "brightness",
+            "min": 0.06
+          },
+          {
+            "kind": "visible",
+            "target": "rebel-0"
+          },
+          {
+            "kind": "noIssues"
+          }
+        ],
+        "notes": "Interiors must stay readable - never crush to black."
+      },
       "report": {
-        "time": 232,
+        "time": 200,
         "chapter": "corridor",
         "chapterIndex": 4,
-        "shot": "cor-5",
-        "shotLabel": "The line breaks",
+        "shot": "cor-1",
+        "shotLabel": "Corridor establishing",
         "scene": "interior",
-        "beat": "boarding action",
-        "subtitle": "",
-        "narrationCue": null,
+        "beat": "corridor: alarms",
+        "subtitle": "Inside, the corridor lights turn red.",
+        "narrationCue": "d1",
         "issues": [],
-        "fps": 15.137753557320861,
-        "drawCalls": 507,
-        "triangles": 63967,
+        "fps": 10.194902548716525,
+        "drawCalls": 549,
+        "triangles": 69169,
         "measurements": {
           "vader": {
-            "screenFraction": 0.0017671769428886318,
+            "screenFraction": 0.001004557107213475,
             "onScreen": true,
             "ndc": [
-              -0.11841257153039632,
-              -0.019919195667997172
+              0.021279792158729795,
+              0.03883359778392251
             ],
-            "distance": 32.82193737405437
+            "distance": 40.11578113030211
           },
           "leia": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -0.28822173401421847,
-              0.02002496438964423
+              0.03559396644235324,
+              0.3542732575013554
             ],
-            "distance": 19.77379083587589
+            "distance": 12.485430735186497
           },
           "r2": {
-            "screenFraction": 0,
-            "onScreen": false,
+            "screenFraction": 1,
+            "onScreen": true,
             "ndc": [
-              0.11337044795720201,
-              0.14341347513049013
+              47.71256144528552,
+              40.88741982453873
             ],
-            "distance": 7.702208958482197
+            "distance": 3.536986865845434
           },
           "threepio": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              -0.3672523590920439,
-              0.020850515923660856
+              -0.025749612309433186,
+              0.5303383692089916
             ],
-            "distance": 14.340014515132046
+            "distance": 7.035078639875195
           },
           "plans": {
             "screenFraction": 0,
             "onScreen": false,
             "ndc": [
-              0.09172115004560633,
-              -0.15284308496287044
+              2.739323126579623,
+              0.8637517579592341
             ],
-            "distance": 9.218275379671773
+            "distance": 3.814112865098543
           },
           "door": {
-            "screenFraction": 0.03876671614456851,
+            "screenFraction": 0.007509196010412049,
             "onScreen": true,
             "ndc": [
-              -0.09640856932853847,
-              -0.029152768315021022
+              0.01630195752470842,
+              0.04091221044664255
             ],
-            "distance": 22.32835791210692
+            "distance": 31.600029132189796
           },
           "trooper-0": {
-            "screenFraction": 0.011551367840176007,
+            "screenFraction": 0.0008344785435315766,
             "onScreen": true,
             "ndc": [
-              -0.1549511667681892,
-              -0.028253487255989803
+              -0.004729449809770032,
+              0.03059453795613604
             ],
-            "distance": 12.581983468328858
+            "distance": 39.01754104501899
           },
           "rebel-0": {
-            "screenFraction": 0.025132664047029258,
+            "screenFraction": 0.008457103722537666,
             "onScreen": true,
             "ndc": [
-              -0.12113316887118282,
-              -0.08600293241244428
+              -0.06849360647525622,
+              -0.10453092273257583
             ],
-            "distance": 7.828554175273275
+            "distance": 14.403608631232366
           },
           "rebel-1": {
-            "screenFraction": 0.0787050692357399,
+            "screenFraction": 0.012565521506731748,
             "onScreen": true,
             "ndc": [
-              0.2576384931394593,
-              -0.608560868431692
+              0.023044069751117818,
+              -0.1522340516489349
             ],
-            "distance": 7.094255883857802
+            "distance": 11.829730443894505
           }
         },
-        "boltsActive": 2,
+        "boltsActive": 0,
         "particleBudget": {
           "spaceSparks": 2629,
           "interiorSparks": 2900,
           "overflow": false
         }
       },
+      "failures": [],
       "brightness": {
-        "mean": 0.23117494425381488,
-        "p95": 0.5265709803921569,
+        "mean": 0.25836418564815433,
+        "p95": 0.47311372549019604,
         "clipped": 0
       },
-      "screenshot": "t232_0.png"
-    },
-    {
-      "id": "t232.25",
-      "time": 232.25,
-      "failures": [],
-      "report": {
-        "time": 232.25,
-        "chapter": "corridor",
-        "chapterIndex": 4,
-        "shot": "cor-5",
-        "shotLabel": "The line breaks",
-        "scene": "interior",
-        "beat": "boarding action",
-        "subtitle": "",
-        "narrationCue": null,
-        "issues": [],
-        "fps": 3.0239496814759375,
-        "drawCalls": 490,
-        "triangles": 62589,
-        "measurements": {
-          "vader": {
-            "screenFraction": 0.001789412088264941,
-            "onScreen": true,
-            "ndc": [
-              -0.11397670022439435,
-              -0.019656311870284684
-            ],
-            "distance": 32.669425860799514
-          },
-          "leia": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -0.28118720865692826,
-              0.020793836495777037
-            ],
-            "distance": 19.924352832994018
-          },
-          "r2": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              0.11544072638399663,
-              0.1408088650233174
-            ],
-            "distance": 7.854178717612642
-          },
-          "threepio": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -0.35844408253652543,
-              0.02154289605680107
-            ],
-            "distance": 14.488885884692195
-          },
-          "plans": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              0.09445541672546745,
-              -0.15003687527975423
-            ],
-            "distance": 9.370381450581833
-          },
-          "door": {
-            "screenFraction": 0.03932555650990562,
-            "onScreen": true,
-            "ndc": [
-              -0.09202737111348164,
-              -0.029001381679993072
-            ],
-            "distance": 22.175512141609115
-          },
-          "trooper-0": {
-            "screenFraction": 0.011794406147606202,
-            "onScreen": true,
-            "ndc": [
-              -0.1516395665986933,
-              -0.029395091523807995
-            ],
-            "distance": 12.43176400514979
-          },
-          "rebel-0": {
-            "screenFraction": 0.02654969888994859,
-            "onScreen": true,
-            "ndc": [
-              -0.11815012770174607,
-              -0.08375876374945711
-            ],
-            "distance": 7.684480744884479
-          },
-          "rebel-1": {
-            "screenFraction": 0.0804094016656175,
-            "onScreen": true,
-            "ndc": [
-              0.2690113676346976,
-              -0.6234043816336287
-            ],
-            "distance": 6.948995297939471
-          }
-        },
-        "boltsActive": 4,
-        "particleBudget": {
-          "spaceSparks": 2629,
-          "interiorSparks": 2900,
-          "overflow": false
-        }
-      },
-      "brightness": {
-        "mean": 0.2336750917483697,
-        "p95": 0.6001725490196078,
-        "clipped": 0
-      },
-      "screenshot": "t232_3.png"
-    },
-    {
-      "id": "t232.5",
-      "time": 232.5,
-      "failures": [],
-      "report": {
-        "time": 232.5,
-        "chapter": "corridor",
-        "chapterIndex": 4,
-        "shot": "cor-5",
-        "shotLabel": "The line breaks",
-        "scene": "interior",
-        "beat": "boarding action",
-        "subtitle": "",
-        "narrationCue": null,
-        "issues": [],
-        "fps": 2.011944597398821,
-        "drawCalls": 486,
-        "triangles": 61973,
-        "measurements": {
-          "vader": {
-            "screenFraction": 0.0018033706673193702,
-            "onScreen": true,
-            "ndc": [
-              -0.11003828554643763,
-              -0.01884816351637932
-            ],
-            "distance": 32.518354644008255
-          },
-          "leia": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -0.2751371932795846,
-              0.02312231640559773
-            ],
-            "distance": 20.07395145415533
-          },
-          "r2": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              0.11635089070078487,
-              0.14215885502951553
-            ],
-            "distance": 8.004644083174972
-          },
-          "threepio": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -0.35080347825043734,
-              0.024155935748051957
-            ],
-            "distance": 14.63704501898749
-          },
-          "plans": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              0.09620274453437704,
-              -0.14430025598128657
-            ],
-            "distance": 9.52018062011258
-          },
-          "door": {
-            "screenFraction": 0.039893630098429465,
-            "onScreen": true,
-            "ndc": [
-              -0.08807093059557743,
-              -0.028530614413583354
-            ],
-            "distance": 22.02426160690449
-          },
-          "trooper-0": {
-            "screenFraction": 0.012161403302738667,
-            "onScreen": true,
-            "ndc": [
-              -0.14854473099542698,
-              -0.028508159825873486
-            ],
-            "distance": 12.278546626583617
-          },
-          "rebel-0": {
-            "screenFraction": 0.02774098510385133,
-            "onScreen": true,
-            "ndc": [
-              -0.1151593344048178,
-              -0.08584081829654674
-            ],
-            "distance": 7.534000805651252
-          },
-          "rebel-1": {
-            "screenFraction": 0.0822007248146123,
-            "onScreen": true,
-            "ndc": [
-              0.280935796480506,
-              -0.639596840019218
-            ],
-            "distance": 6.807960902168851
-          }
-        },
-        "boltsActive": 1,
-        "particleBudget": {
-          "spaceSparks": 2629,
-          "interiorSparks": 2900,
-          "overflow": false
-        }
-      },
-      "brightness": {
-        "mean": 0.2630733810865958,
-        "p95": 0.668112156862745,
-        "clipped": 0
-      },
-      "screenshot": "t232_5.png"
-    },
-    {
-      "id": "t232.75",
-      "time": 232.75,
-      "failures": [],
-      "report": {
-        "time": 232.75,
-        "chapter": "corridor",
-        "chapterIndex": 4,
-        "shot": "cor-5",
-        "shotLabel": "The line breaks",
-        "scene": "interior",
-        "beat": "boarding action",
-        "subtitle": "",
-        "narrationCue": null,
-        "issues": [],
-        "fps": 1.776058728341637,
-        "drawCalls": 482,
-        "triangles": 61927,
-        "measurements": {
-          "vader": {
-            "screenFraction": 0.0018102569712973838,
-            "onScreen": true,
-            "ndc": [
-              -0.10586869052102053,
-              -0.01902908491580769
-            ],
-            "distance": 32.37348867264481
-          },
-          "leia": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -0.2688471831039511,
-              0.02286410252718567
-            ],
-            "distance": 20.21711701967861
-          },
-          "r2": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              0.1178888965414178,
-              0.14038552115586603
-            ],
-            "distance": 8.148635888068485
-          },
-          "threepio": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              -0.3429913145741473,
-              0.02375153408404987
-            ],
-            "distance": 14.778808067236273
-          },
-          "plans": {
-            "screenFraction": 0,
-            "onScreen": false,
-            "ndc": [
-              0.09866077014202461,
-              -0.14131679943813502
-            ],
-            "distance": 9.664249961222296
-          },
-          "door": {
-            "screenFraction": 0.040449323829779255,
-            "onScreen": true,
-            "ndc": [
-              -0.08390422038214758,
-              -0.028814481165640785
-            ],
-            "distance": 21.879264346517438
-          },
-          "trooper-0": {
-            "screenFraction": 0.012411825806141644,
-            "onScreen": true,
-            "ndc": [
-              -0.14532791705778544,
-              -0.029607148904464937
-            ],
-            "distance": 12.134603658403808
-          },
-          "rebel-0": {
-            "screenFraction": 0.028578907406623128,
-            "onScreen": true,
-            "ndc": [
-              -0.11205444105061141,
-              -0.09134516004256377
-            ],
-            "distance": 7.38624021563889
-          },
-          "rebel-1": {
-            "screenFraction": 0.0842342819432693,
-            "onScreen": true,
-            "ndc": [
-              0.2933882700798651,
-              -0.6544537055207162
-            ],
-            "distance": 6.671548622234375
-          }
-        },
-        "boltsActive": 3,
-        "particleBudget": {
-          "spaceSparks": 2629,
-          "interiorSparks": 2900,
-          "overflow": false
-        }
-      },
-      "brightness": {
-        "mean": 0.3051867251089309,
-        "p95": 0.6940588235294117,
-        "clipped": 0.00020833333333333335
-      },
-      "screenshot": "t232_8.png"
+      "screenshot": "13-corridor-establish.png"
     }
   ]
 }

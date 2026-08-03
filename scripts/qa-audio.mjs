@@ -11,11 +11,11 @@
  * Web Audio graph still runs and the analyser still measures it.
  */
 
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { startServer, stopServer, waitForServer } from './lib/devserver.mjs';
 
 const ROOT = path.dirname(fileURLToPath(new URL('.', import.meta.url)));
 const PORT = 5173;
@@ -32,20 +32,7 @@ const PROBES = [
   { time: 321, seconds: 5, label: 'pod clamps and launch', expect: ['sfx'] },
 ];
 
-async function waitForServer(url, timeoutMs = 60000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      if ((await fetch(url)).ok) return;
-    } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`server not up at ${url}`);
-}
-
-const server = spawn('npm', ['run', 'dev'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
-server.stdout.on('data', () => {});
-server.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));
+const server = startServer({ root: ROOT, quiet: true });
 
 let browser;
 try {
@@ -120,7 +107,5 @@ try {
   process.exitCode = 1;
 } finally {
   if (browser) await browser.close();
-  server.kill('SIGTERM');
-  await new Promise((r) => setTimeout(r, 300));
-  if (!server.killed) server.kill('SIGKILL');
+  await stopServer(server);
 }

@@ -99,6 +99,13 @@ export interface StarfallTestApi {
 const _box = new THREE.Box3();
 const _v = new THREE.Vector3();
 
+/** Corner index pairs for the twelve edges of a box, in the bitmask order used below. */
+const BOX_EDGES: Array<[number, number]> = [
+  [0, 1], [2, 3], [4, 5], [6, 7],
+  [0, 2], [1, 3], [4, 6], [5, 7],
+  [0, 4], [1, 5], [2, 6], [3, 7],
+];
+
 function targetObject(app: App, target: string): THREE.Object3D | null {
   const space = app.spaceScene;
   const interior = app.interiorScene;
@@ -159,16 +166,32 @@ function measureObject(app: App, object: THREE.Object3D): ScreenMeasurement {
     ));
   }
 
+  // Depth in view space, negative in front of the lens.
+  const viewMatrix = camera.matrixWorldInverse;
+  const depths = corners.map((c) => c.clone().applyMatrix4(viewMatrix).z);
+  const near = -camera.near;
+  const anyInFront = depths.some((z) => z < near);
+
+  // Project only what is in front of the near plane, splitting any edge that
+  // crosses it. Projecting a point behind the lens sends its coordinates through
+  // infinity and flips their sign, which used to report a subject standing
+  // alongside the camera as filling the entire frame.
+  const points: THREE.Vector3[] = [];
+  for (let i = 0; i < 8; i++) {
+    if (depths[i] < near) points.push(corners[i].clone());
+  }
+  for (const [a, b] of BOX_EDGES) {
+    if ((depths[a] < near) === (depths[b] < near)) continue;
+    const k = (near - depths[a]) / (depths[b] - depths[a]);
+    points.push(corners[a].clone().lerp(corners[b], k));
+  }
+
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
   let maxY = -Infinity;
-  let anyInFront = false;
-  const viewMatrix = camera.matrixWorldInverse;
-  for (const c of corners) {
-    const view = c.clone().applyMatrix4(viewMatrix);
-    if (view.z < 0) anyInFront = true;
-    const ndc = c.clone().project(camera);
+  for (const p of points) {
+    const ndc = p.project(camera);
     minX = Math.min(minX, ndc.x);
     maxX = Math.max(maxX, ndc.x);
     minY = Math.min(minY, ndc.y);
