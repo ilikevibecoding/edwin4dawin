@@ -35,7 +35,8 @@ function buildBaseHuman(
     j.hips,
     merge([
       box(0.3 * tw, 0.2, 0.19, { pos: [0, -0.03, 0] }),
-      cyl(0.15 * tw, 0.14 * tw, 0.14, 12, { pos: [0, 0.05, 0] }),
+      // Runs up to meet the chest so there is never a gap at the waist.
+      cyl(0.15 * tw, 0.135 * tw, 0.26, 12, { pos: [0, 0.09, 0] }),
     ]),
     cfg.suit,
     'pelvis',
@@ -167,13 +168,15 @@ export class Stormtrooper extends CharacterRig {
       'visor',
     );
 
-    // Weapon.
+    // Weapon. The rig drives its rotation each frame so the barrel tracks the
+    // aim point; only the grip offset is fixed here.
     const weapon = blasterCarbine(1);
     const gun = attach(j.handR, weapon.geometry, CHAR_MATS.blasterBody(), 'blaster');
-    gun.position.set(0, -0.045, 0.03);
-    gun.rotation.x = 1.35;
+    gun.position.set(0, -0.05, 0.02);
     this.muzzleNode.position.copy(weapon.muzzle);
     gun.add(this.muzzleNode);
+    this.armed = true;
+    this.weapon = gun;
 
     this.flash = new THREE.Mesh(
       sphere(0.07, 8, 6),
@@ -293,10 +296,11 @@ export class RebelTrooper extends CharacterRig {
 
     const weapon = blasterCarbine(0.95);
     const gun = attach(j.handR, weapon.geometry, CHAR_MATS.blasterBody(), 'blaster');
-    gun.position.set(0, -0.045, 0.03);
-    gun.rotation.x = 1.35;
+    gun.position.set(0, -0.05, 0.02);
     this.muzzleNode.position.copy(weapon.muzzle);
     gun.add(this.muzzleNode);
+    this.armed = true;
+    this.weapon = gun;
 
     this.flash = new THREE.Mesh(
       sphere(0.07, 8, 6),
@@ -683,6 +687,10 @@ export class Princess extends CharacterRig {
   }
 
   protected override onUpdate(_dt: number, elapsed: number): void {
+    // The gown is rigid, so shorten it as the pelvis drops or the hem would
+    // pass through the deck when she kneels.
+    const pelvis = this.joints.body.position.y + this.p.hipHeight;
+    this.gown.scale.y = clamp01(pelvis / 0.86) * 0.94 + 0.06;
     // Hem sway driven by speed and stride phase.
     const pos = this.gown.geometry.getAttribute('position');
     const amp = 0.012 + Math.min(0.05, this.speed * 0.05);
@@ -737,10 +745,11 @@ export class ShipOfficer extends CharacterRig {
     );
     const weapon = blasterPistol(1);
     const gun = attach(j.handR, weapon.geometry, CHAR_MATS.blasterBody(), 'sidearm');
-    gun.position.set(0, -0.04, 0.02);
-    gun.rotation.x = 1.35;
+    gun.position.set(0, -0.05, 0.01);
     this.muzzleNode.position.copy(weapon.muzzle);
     gun.add(this.muzzleNode);
+    this.armed = true;
+    this.weapon = gun;
   }
 
   override muzzlePosition(out: THREE.Vector3): THREE.Vector3 {

@@ -51,7 +51,8 @@ try {
   });
   page.on('pageerror', (err) => errors.push(`[pageerror] ${err.message}`));
 
-  const url = `${BASE}/preview.html?asset=${encodeURIComponent(asset)}&view=${encodeURIComponent(view)}`;
+  const extra = flags.get('params') ? `&${flags.get('params')}` : '';
+  const url = `${BASE}/preview.html?asset=${encodeURIComponent(asset)}&view=${encodeURIComponent(view)}${extra}`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
   try {
     await page.waitForFunction('window.__PREVIEW_READY === true', { timeout: 120000 });

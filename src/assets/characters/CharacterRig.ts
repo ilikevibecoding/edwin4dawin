@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp, clamp01, damp, easeOutCubic, smoothstep, TAU } from '../../core/math';
+import { clamp, clamp01, damp, easeOutCubic, lerp, smoothstep, TAU } from '../../core/math';
 
 /**
  * Procedural humanoid rig and state machine.
@@ -83,6 +83,86 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 
+// Scratch vectors for the arm solver.
+const _t = new THREE.Vector3();
+const _dir = new THREE.Vector3();
+const _perp = new THREE.Vector3();
+const _upper = new THREE.Vector3();
+const _fore = new THREE.Vector3();
+const _ax = new THREE.Vector3();
+const _ay = new THREE.Vector3();
+const _az = new THREE.Vector3();
+const _pole = new THREE.Vector3();
+const _grip = new THREE.Vector3();
+const _basis = new THREE.Matrix4();
+const _q = new THREE.Quaternion();
+
+/**
+ * Orient a two-bone arm from explicit segment directions.
+ *
+ * `upperDir` and `foreDir` are unit vectors in the shoulder's parent space.
+ * The hand lands at `shoulder + l1·upperDir + l2·foreDir`, and the hand's local
+ * -Y ends up along `foreDir` — which is what lets a weapon mounted down the
+ * forearm point exactly where the pose intends.
+ */
+function orientArm(
+  shoulder: THREE.Object3D,
+  elbow: THREE.Object3D,
+  upperDir: THREE.Vector3,
+  foreDir: THREE.Vector3,
+  fallbackNormal: THREE.Vector3,
+): void {
+  const bend = Math.acos(clamp(upperDir.dot(foreDir), -1, 1));
+  _ax.crossVectors(upperDir, foreDir);
+  if (_ax.lengthSq() < 1e-10) _ax.crossVectors(upperDir, fallbackNormal);
+  if (_ax.lengthSq() < 1e-10) _ax.set(1, 0, 0);
+  _ax.normalize();
+  _ay.copy(upperDir).multiplyScalar(-1);
+  _az.crossVectors(_ax, _ay);
+  _basis.makeBasis(_ax, _ay, _az);
+  shoulder.quaternion.setFromRotationMatrix(_basis);
+  elbow.rotation.set(bend, 0, 0);
+  elbow.quaternion.setFromEuler(elbow.rotation);
+}
+
+/**
+ * Two-bone IK: place the hand on `target` (shoulder's parent space) with the
+ * elbow pushed toward `pole`.
+ */
+function reachArm(
+  shoulder: THREE.Object3D,
+  elbow: THREE.Object3D,
+  l1: number,
+  l2: number,
+  target: THREE.Vector3,
+  pole: THREE.Vector3,
+): void {
+  _t.copy(target).sub(shoulder.position);
+  let d = _t.length();
+  const max = (l1 + l2) * 0.995;
+  const min = Math.abs(l1 - l2) + 0.03;
+  if (d < 1e-5) {
+    _t.set(0, -min, 0);
+    d = min;
+  } else if (d > max) {
+    _t.multiplyScalar(max / d);
+    d = max;
+  } else if (d < min) {
+    _t.multiplyScalar(min / d);
+    d = min;
+  }
+  _dir.copy(_t).divideScalar(d);
+  const a = Math.acos(clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1));
+  _perp.copy(pole).addScaledVector(_dir, -pole.dot(_dir));
+  if (_perp.lengthSq() < 1e-8) _perp.set(0, 0, -1).addScaledVector(_dir, _dir.z);
+  _perp.normalize();
+  _upper.copy(_dir).multiplyScalar(Math.cos(a)).addScaledVector(_perp, Math.sin(a));
+  _fore.copy(_t).addScaledVector(_upper, -l1);
+  if (_fore.lengthSq() < 1e-10) _fore.copy(_upper);
+  else _fore.normalize();
+  orientArm(shoulder, elbow, _upper, _fore, _perp);
+}
+
 export abstract class CharacterRig {
   readonly root = new THREE.Group();
   readonly joints: Joints;
@@ -101,6 +181,11 @@ export abstract class CharacterRig {
   /** World point weapons point toward, if any. */
   aimTarget: THREE.Vector3 | null = null;
 
+  /** True when the figure carries a weapon in its right hand. */
+  protected armed = false;
+  /** The weapon node, rotated each frame so the barrel tracks the aim point. */
+  protected weapon: THREE.Object3D | null = null;
+
   protected cyclePhase = 0;
   protected stateTime = 0;
   protected reactImpulse = 0;
@@ -108,6 +193,7 @@ export abstract class CharacterRig {
   protected fallProgress = 0;
   protected interactAmount = 0;
   protected crouchAmount = 0;
+  protected weaponPose = 0;
   protected blend = 1;
   protected path: THREE.Vector3[] = [];
   protected pathIndex = 0;
@@ -273,35 +359,58 @@ export abstract class CharacterRig {
     const breath = Math.sin(elapsed * 1.5 + this.seedPhase) * 0.5 + 0.5;
 
     // --- crouch / kneel -----------------------------------------------------
-    const wantCrouch = this.state === 'crouch' ? 1 : this.state === 'kneel' ? 1 : 0;
+    const wantCrouch = this.state === 'crouch' || this.state === 'kneel' ? 1 : 0;
     this.crouchAmount = damp(this.crouchAmount, wantCrouch, 0.16, dt);
     const kneel = this.state === 'kneel' ? this.crouchAmount : 0;
     const crouch = this.state === 'crouch' ? this.crouchAmount : 0;
 
     // --- legs ---------------------------------------------------------------
-    const swing = 0.52 * amp;
-    const hipLA = Math.sin(ph) * swing - crouch * 0.5 - kneel * 0.75;
-    const hipRA = Math.sin(ph + Math.PI) * swing - crouch * 0.5 - kneel * 0.2;
-    const kneeBase = running ? 1.15 : 0.85;
-    const kneeLA = -Math.max(0, Math.sin(ph + 1.15)) * kneeBase * amp - crouch * 1.0 - kneel * 1.5;
-    const kneeRA = -Math.max(0, Math.sin(ph + Math.PI + 1.15)) * kneeBase * amp - crouch * 1.0 - kneel * 0.4;
+    // Sign convention: +hip swings the knee backwards, +knee folds the shin
+    // backwards (anatomical). Flexion therefore always uses positive knee
+    // angles, and a straight leg is 0/0.
+    const swing = 0.5 * amp;
+    const kneeBase = running ? 1.25 : 0.8;
+    const lift = (phase: number): number => Math.max(0, -Math.cos(phase - 0.35)) * kneeBase * amp;
+
+    let hipLA = Math.sin(ph) * swing;
+    let hipRA = Math.sin(ph + Math.PI) * swing;
+    let kneeLA = lift(ph);
+    let kneeRA = lift(ph + Math.PI);
+
+    // Squat: both knees drive forward, shins fold back, pelvis drops ~0.35 m.
+    if (crouch > 0.001) {
+      hipLA = lerp(hipLA, -1.15, crouch);
+      hipRA = lerp(hipRA, -1.15, crouch);
+      kneeLA = lerp(kneeLA, 1.8, crouch);
+      kneeRA = lerp(kneeRA, 1.8, crouch);
+    }
+    // Kneel: left knee folds onto the deck, right leg stays planted in front.
+    if (kneel > 0.001) {
+      hipLA = lerp(hipLA, -0.05, kneel);
+      kneeLA = lerp(kneeLA, 1.82, kneel);
+      hipRA = lerp(hipRA, -1.35, kneel);
+      kneeRA = lerp(kneeRA, 2.08, kneel);
+    }
 
     j.hipL.rotation.x = hipLA;
     j.hipR.rotation.x = hipRA;
     j.kneeL.rotation.x = kneeLA;
     j.kneeR.rotation.x = kneeRA;
-    j.ankleL.rotation.x = -hipLA * 0.35 - kneeLA * 0.5;
-    j.ankleR.rotation.x = -hipRA * 0.35 - kneeRA * 0.5;
+    // Keep the soles roughly parallel to the deck.
+    j.ankleL.rotation.x = -(hipLA + kneeLA) * 0.82;
+    j.ankleR.rotation.x = -(hipRA + kneeRA) * 0.82;
     // Slight outward stance stops legs from intersecting.
-    j.hipL.rotation.z = 0.03;
-    j.hipR.rotation.z = -0.03;
+    j.hipL.rotation.z = 0.03 + crouch * 0.12 + kneel * 0.05;
+    j.hipR.rotation.z = -0.03 - crouch * 0.12 - kneel * 0.05;
 
-    // Ground the pelvis on the lowest sole. `soleHeight` is measured from the
-    // hip pivot, and the hips already sit `hipHeight` above the body origin,
-    // so the correction is the sum of the two — not just the sole.
-    const soleL = soleHeight(p, hipLA, kneeLA);
-    const soleR = soleHeight(p, hipRA, kneeRA);
-    const lowest = Math.min(soleL, soleR);
+    // Ground the pelvis on the lowest contact. `soleHeight` is measured from
+    // the hip pivot, and the hips already sit `hipHeight` above the body
+    // origin, so the correction is the sum of the two — not just the sole.
+    // When kneeling, the down knee is the contact rather than the sole.
+    let lowest = Math.min(soleHeight(p, hipLA, kneeLA), soleHeight(p, hipRA, kneeRA));
+    if (kneel > 0.001) {
+      lowest = Math.min(lowest, -p.thigh * Math.cos(hipLA) - 0.1 * kneel);
+    }
     const groundOffset = -(p.hipHeight + lowest);
     j.body.position.y = groundOffset;
 
@@ -316,53 +425,77 @@ export abstract class CharacterRig {
       lean * 0.6 + breath * 0.012 - this.reactImpulse * 0.35 + this.fireImpulse * 0.06;
     j.chest.rotation.z = Math.sin(ph) * 0.03 * amp;
 
+    // Turn the torso toward the aim point before the arms are solved, so the
+    // whole upper body commits to the target rather than just the hands.
+    if (this.aimTarget) {
+      _v.copy(this.aimTarget);
+      this.root.updateWorldMatrix(true, false);
+      _m.copy(this.root.matrixWorld).invert();
+      _v.applyMatrix4(_m);
+      const yaw = clamp(Math.atan2(_v.x, _v.z), -0.8, 0.8);
+      const pitch = clamp(
+        Math.atan2(_v.y - (p.hipHeight + p.spine), Math.hypot(_v.x, _v.z)),
+        -0.45,
+        0.45,
+      );
+      j.chest.rotation.y += yaw * 0.7;
+      j.chest.rotation.x -= pitch * 0.45;
+      j.hips.rotation.y += yaw * 0.2;
+    }
+
     // --- arms ---------------------------------------------------------------
     const armSwing = 0.5 * amp * (running ? 1.35 : 1);
     let shoulderLX = -Math.sin(ph) * armSwing;
     let shoulderRX = -Math.sin(ph + Math.PI) * armSwing;
-    let elbowLX = -0.22 - Math.max(0, Math.sin(ph + 0.6)) * 0.5 * amp;
-    let elbowRX = -0.22 - Math.max(0, Math.sin(ph + Math.PI + 0.6)) * 0.5 * amp;
+    let elbowLX = 0.22 + Math.max(0, Math.sin(ph + 0.6)) * 0.5 * amp;
+    let elbowRX = 0.22 + Math.max(0, Math.sin(ph + Math.PI + 0.6)) * 0.5 * amp;
     let shoulderLZ = 0.14 + amp * 0.03;
     let shoulderRZ = -0.14 - amp * 0.03;
 
     const aiming = this.state === 'aim' || this.state === 'fire';
-    if (aiming) {
-      const a = smoothstep(this.stateTime / 0.28);
-      // Both hands come to a two-handed low-ready / firing pose.
-      shoulderLX = THREE.MathUtils.lerp(shoulderLX, -1.15, a);
-      shoulderRX = THREE.MathUtils.lerp(shoulderRX, -1.28, a);
-      elbowLX = THREE.MathUtils.lerp(elbowLX, -1.0, a);
-      elbowRX = THREE.MathUtils.lerp(elbowRX, -0.72, a);
-      shoulderLZ = THREE.MathUtils.lerp(shoulderLZ, 0.5, a);
-      shoulderRZ = THREE.MathUtils.lerp(shoulderRZ, -0.28, a);
-      shoulderRX += this.fireImpulse * 0.22;
-      elbowRX -= this.fireImpulse * 0.16;
-    }
-
-    if (this.state === 'interact' || this.interactAmount > 0.001) {
-      const want = this.state === 'interact' ? 1 : 0;
-      this.interactAmount = damp(this.interactAmount, want, 0.2, dt);
+    const interacting = this.state === 'interact';
+    this.interactAmount = damp(this.interactAmount, interacting ? 1 : 0, 0.2, dt);
+    if (this.interactAmount > 0.001) {
       const a = this.interactAmount;
       const reach = Math.sin(elapsed * 2.2 + this.seedPhase) * 0.1;
-      shoulderRX = THREE.MathUtils.lerp(shoulderRX, -1.35 + reach, a);
-      elbowRX = THREE.MathUtils.lerp(elbowRX, -0.45, a);
-      shoulderRZ = THREE.MathUtils.lerp(shoulderRZ, -0.18, a);
-      shoulderLX = THREE.MathUtils.lerp(shoulderLX, -0.55, a * 0.6);
-      elbowLX = THREE.MathUtils.lerp(elbowLX, -0.9, a * 0.6);
-    } else {
-      this.interactAmount = damp(this.interactAmount, 0, 0.2, dt);
+      shoulderRX = lerp(shoulderRX, -1.05 + reach, a);
+      elbowRX = lerp(elbowRX, 0.75, a);
+      shoulderRZ = lerp(shoulderRZ, -0.18, a);
+      shoulderLX = lerp(shoulderLX, -0.7, a * 0.7);
+      elbowLX = lerp(elbowLX, 1.05, a * 0.7);
     }
 
     if (this.reactImpulse > 0.01) {
       shoulderLX -= this.reactImpulse * 0.5;
       shoulderRX -= this.reactImpulse * 0.35;
-      elbowLX -= this.reactImpulse * 0.4;
+      elbowLX += this.reactImpulse * 0.4;
     }
 
     j.shoulderL.rotation.set(shoulderLX, 0, shoulderLZ);
     j.shoulderR.rotation.set(shoulderRX, 0, shoulderRZ);
     j.elbowL.rotation.x = elbowLX;
     j.elbowR.rotation.x = elbowRX;
+
+    // Armed figures keep both hands on the weapon instead of swinging their
+    // arms. The pose is solved with two-bone IK so hands land on authored
+    // points and elbows stay outside the torso.
+    this.weaponPose = damp(this.weaponPose, this.armed && !interacting ? 1 : 0, 0.14, dt);
+    if (this.weaponPose > 0.002) {
+      const a = aiming ? smoothstep(this.stateTime / 0.3) : 0;
+      const kick = this.fireImpulse * 0.05;
+      // Chest-space hand targets: low-ready across the waist, or up on the
+      // shoulder line when aiming.
+      _grip.set(
+        lerp(-0.21, -0.19, a),
+        lerp(-0.12, 0.06, a) - kick,
+        lerp(0.19, 0.3, a) - kick * 1.6,
+      );
+      _pole.set(-0.65, -1, -0.2).normalize();
+      this.blendArm(j.shoulderR, j.elbowR, p, _grip, _pole, this.weaponPose);
+      _grip.set(lerp(-0.03, 0.0, a), lerp(-0.16, -0.01, a), lerp(0.31, 0.45, a));
+      _pole.set(0.7, -1, -0.15).normalize();
+      this.blendArm(j.shoulderL, j.elbowL, p, _grip, _pole, this.weaponPose);
+    }
 
     // --- head ---------------------------------------------------------------
     j.neck.rotation.set(0, 0, 0);
@@ -375,52 +508,119 @@ export abstract class CharacterRig {
       j.head.rotation.x += Math.sin(elapsed * 0.21 + this.seedPhase * 2) * 0.05;
     }
 
-    // Torso yaw toward the aim point so weapons point plausibly.
-    if (this.aimTarget) {
-      _v.copy(this.aimTarget);
-      this.root.updateWorldMatrix(true, false);
-      _m.copy(this.root.matrixWorld).invert();
-      _v.applyMatrix4(_m);
-      const yaw = clamp(Math.atan2(_v.x, _v.z), -0.75, 0.75);
-      const pitch = clamp(
-        Math.atan2(_v.y - (p.hipHeight + p.spine), Math.hypot(_v.x, _v.z)),
-        -0.5,
-        0.5,
-      );
-      j.chest.rotation.y += yaw * 0.75;
-      j.shoulderL.rotation.x -= pitch * 0.9;
-      j.shoulderR.rotation.x -= pitch * 0.9;
-    }
-
     // --- knocked down --------------------------------------------------------
+    // The figure topples straight backwards from where it stood and comes to
+    // rest flat on its back: feet stay on the marker, head ends up behind.
+    // Deliberately undramatic — no impact contortion, nothing graphic.
     if (this.state === 'fall' || this.state === 'down') {
-      const target = this.state === 'down' ? 1 : clamp01(this.stateTime / 0.85);
+      const target = this.state === 'down' ? 1 : clamp01(this.stateTime / 0.9);
       this.fallProgress = Math.max(this.fallProgress, target);
-      const f = easeOutCubic(this.fallProgress);
-      // Settle onto the back and come to rest flat on the deck. Deliberately
-      // undramatic: no impact, no contortion, nothing graphic.
-      j.body.rotation.x = f * (Math.PI / 2 - 0.15);
-      j.body.position.y = groundOffset * (1 - f) + f * 0.16;
-      j.body.position.z = f * 0.28;
-      j.chest.rotation.x = -f * 0.18;
-      j.hipL.rotation.x = hipLA * (1 - f) - f * 0.22;
-      j.hipR.rotation.x = hipRA * (1 - f) - f * 0.1;
-      j.kneeL.rotation.x = -f * 0.42;
-      j.kneeR.rotation.x = -f * 0.2;
-      j.shoulderL.rotation.set(0.15 * f, 0, 0.85 * f);
-      j.shoulderR.rotation.set(0.1 * f, 0, -0.95 * f);
-      j.elbowL.rotation.x = -0.25 * f;
-      j.elbowR.rotation.x = -0.2 * f;
-      j.head.rotation.set(f * 0.2, f * 0.3, 0);
-    } else if (this.fallProgress > 0) {
+      this.applyFallPose(easeOutCubic(this.fallProgress), groundOffset);
+    } else if (this.fallProgress > 0.002) {
       this.fallProgress = damp(this.fallProgress, 0, 0.2, dt);
-      const f = this.fallProgress;
-      j.body.rotation.x = f * (Math.PI / 2 - 0.15);
-      j.body.position.z = f * 0.28;
+      this.applyFallPose(easeOutCubic(this.fallProgress), groundOffset);
     } else {
-      j.body.rotation.x = 0;
+      this.fallProgress = 0;
+      j.body.rotation.set(0, 0, 0);
       j.body.position.z = 0;
     }
+
+    if (this.weapon) this.updateWeaponAim();
+  }
+
+  /** Swing the held weapon onto the aim point, or to a safe carry angle. */
+  private updateWeaponAim(): void {
+    const j = this.joints;
+    if (this.fallProgress > 0.3) {
+      // Dropped hand: let the weapon hang along the forearm.
+      this.weapon!.quaternion.setFromAxisAngle(_ax.set(1, 0, 0), Math.PI / 2);
+      return;
+    }
+    const aiming = this.state === 'aim' || this.state === 'fire';
+    j.handR.updateWorldMatrix(true, false);
+    _v2.setFromMatrixPosition(j.handR.matrixWorld);
+    if (aiming && this.aimTarget) {
+      _v.copy(this.aimTarget).sub(_v2);
+    } else {
+      // Muzzle forward and angled down: a carried, non-threatening weapon.
+      this.root.updateWorldMatrix(true, false);
+      _v.set(0, 0, 1).transformDirection(this.root.matrixWorld);
+      _v.y = aiming ? 0 : -0.55;
+    }
+    if (_v.lengthSq() < 1e-8) return;
+    _v.normalize();
+    this.aimWeaponAlong(_v);
+  }
+
+  /** Lay the figure on its back; `f` is 0 (upright) to 1 (settled). */
+  private applyFallPose(f: number, groundOffset: number): void {
+    const j = this.joints;
+    const p = this.p;
+    const roll = Math.sin(this.seedPhase * 3.7) * 0.22;
+    j.body.rotation.set(-f * (Math.PI / 2 - 0.06), 0, roll * f);
+    // Pivot about the ankles so the boots stay where the figure was standing,
+    // then lift by half the torso depth so the back rests on the deck.
+    const ankle = p.hipHeight - (p.thigh + p.shin + p.ankle);
+    j.body.position.y = groundOffset * (1 - f) + f * (0.16 + p.headRadius + ankle);
+    j.body.position.z = f * (p.ankle + 0.06);
+    j.hips.rotation.x = f * 0.12;
+    j.chest.rotation.set(f * 0.2, 0, 0);
+    j.hipL.rotation.x = lerp(j.hipL.rotation.x, -0.16, f);
+    j.hipR.rotation.x = lerp(j.hipR.rotation.x, -0.05, f);
+    j.kneeL.rotation.x = lerp(j.kneeL.rotation.x, 0.55, f);
+    j.kneeR.rotation.x = lerp(j.kneeR.rotation.x, 0.22, f);
+    j.ankleL.rotation.x = lerp(j.ankleL.rotation.x, -0.3, f);
+    j.ankleR.rotation.x = lerp(j.ankleR.rotation.x, -0.2, f);
+    j.shoulderL.rotation.set(-0.35 * f, 0, 0.7 * f);
+    j.shoulderR.rotation.set(-0.2 * f, 0, -0.8 * f);
+    j.elbowL.rotation.set(0.5 * f, 0, 0);
+    j.elbowR.rotation.set(0.35 * f, 0, 0);
+    j.neck.rotation.set(0, 0, 0);
+    j.head.rotation.set(f * 0.3, f * 0.35, 0);
+  }
+
+  /**
+   * Solve one arm onto a chest-space target and blend it over whatever the
+   * cycle animation produced, so weapon poses fade in and out cleanly.
+   */
+  private blendArm(
+    shoulder: THREE.Object3D,
+    elbow: THREE.Object3D,
+    p: RigProportions,
+    target: THREE.Vector3,
+    pole: THREE.Vector3,
+    weight: number,
+  ): void {
+    if (weight >= 0.999) {
+      reachArm(shoulder, elbow, p.upperArm, p.foreArm, target, pole);
+      return;
+    }
+    _q.setFromEuler(shoulder.rotation);
+    const elbowX = elbow.rotation.x;
+    reachArm(shoulder, elbow, p.upperArm, p.foreArm, target, pole);
+    shoulder.quaternion.slerpQuaternions(_q, shoulder.quaternion, weight);
+    elbow.rotation.x = lerp(elbowX, elbow.rotation.x, weight);
+  }
+
+  /**
+   * Rotate the held weapon so its barrel (local +Z) points along `worldDir`.
+   * Keeps the weapon level by using world up as the roll reference.
+   */
+  protected aimWeaponAlong(worldDir: THREE.Vector3): void {
+    const w = this.weapon;
+    if (!w || !w.parent) return;
+    w.parent.updateWorldMatrix(true, false);
+    _m.copy(w.parent.matrixWorld).invert();
+    _az.copy(worldDir).transformDirection(_m);
+    if (_az.lengthSq() < 1e-8) return;
+    _az.normalize();
+    _ay.set(0, 1, 0).transformDirection(_m).normalize();
+    _ax.crossVectors(_ay, _az);
+    if (_ax.lengthSq() < 1e-8) _ax.set(1, 0, 0).transformDirection(_m).normalize();
+    _ax.normalize();
+    _ay.crossVectors(_az, _ax).normalize();
+    _basis.makeBasis(_ax, _ay, _az);
+    w.quaternion.setFromRotationMatrix(_basis);
   }
 
   protected applyLookAt(worldPoint: THREE.Vector3): void {

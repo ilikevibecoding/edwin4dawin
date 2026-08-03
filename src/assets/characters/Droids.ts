@@ -222,8 +222,9 @@ export class Astromech extends CharacterRig {
 
     this.bodyGroup.rotation.z = Math.sin(ph) * 0.16 * amp * this.wobble;
     this.bodyGroup.rotation.x = 0.05 * amp * this.wobble + Math.sin(ph * 2) * 0.03 * amp;
+    // The centre leg extends downward, so deploying it lifts the barrel.
     this.bodyGroup.position.y =
-      this.bodyHeight + Math.abs(Math.sin(ph)) * 0.022 * amp - this.centreLegAmount * 0.02;
+      this.bodyHeight + Math.abs(Math.sin(ph)) * 0.022 * amp + this.centreLegAmount * 0.045;
 
     this.legL.rotation.x = Math.sin(ph) * 0.12 * amp;
     this.legR.rotation.x = -Math.sin(ph) * 0.12 * amp;
@@ -406,8 +407,8 @@ export class ProtocolDroid extends CharacterRig {
     this.joints.head.rotation.z += tremor * 1.6;
     this.joints.head.rotation.y += Math.sin(elapsed * 1.9 + this.seedPhase) * 0.18 * this.anxiety;
     // Elbows never fully straighten.
-    this.joints.elbowL.rotation.x = Math.min(-0.55, this.joints.elbowL.rotation.x);
-    this.joints.elbowR.rotation.x = Math.min(-0.55, this.joints.elbowR.rotation.x);
+    this.joints.elbowL.rotation.x = Math.max(0.55, this.joints.elbowL.rotation.x);
+    this.joints.elbowR.rotation.x = Math.max(0.55, this.joints.elbowR.rotation.x);
     this.joints.shoulderL.rotation.z += 0.16 * this.anxiety;
     this.joints.shoulderR.rotation.z -= 0.16 * this.anxiety;
     (this.eyes.material as THREE.MeshStandardMaterial).emissiveIntensity =

@@ -42,6 +42,27 @@ let target = new THREE.Vector3();
 let updater: ((dt: number, t: number) => void) | null = null;
 let framedObject: THREE.Object3D = scene;
 
+/** Billboard caption used by the pose sheet. */
+function addLabel(text: string, x: number, y: number, parent: THREE.Object3D = scene): void {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const g = canvas.getContext('2d')!;
+  g.fillStyle = '#0a0d12';
+  g.fillRect(0, 0, 256, 64);
+  g.fillStyle = '#ffd77a';
+  g.font = 'bold 34px ui-monospace, monospace';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 128, 34);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, toneMapped: false }));
+  sprite.position.set(x, y, 0);
+  sprite.scale.set(0.8, 0.2, 1);
+  parent.add(sprite);
+}
+
 function frame(object: THREE.Object3D, pad = 1.25): void {
   framedObject = object;
   const bbox = new THREE.Box3().setFromObject(object);
@@ -130,6 +151,71 @@ switch (assetName) {
     scene.add(group);
     frame(scene, 1.05);
     updater = (dt, t) => cast.forEach((c) => c.update(dt, t));
+    break;
+  }
+  case 'poses': {
+    // Every state of one character, lined up over a metre grid so floating
+    // feet, sunk pelvises and broken arm poses are immediately obvious.
+    const { createCharacter } = await import('../assets/characters');
+    const kind = (params.get('kind') ?? 'stormtrooper') as never;
+    const states = (
+      params.get('states') ?? 'idle,walk,run,aim,fire,react,crouch,kneel,interact,fall,down'
+    ).split(',');
+    const aimAt = new THREE.Vector3(0, 1.3, 40);
+    const cast: Array<{ update: (dt: number, t: number) => void }> = [];
+    const sheet = new THREE.Group();
+    scene.add(sheet);
+    const span = 1.3;
+    let px = -((states.length - 1) * span) / 2;
+    for (const st of states) {
+      const c = createCharacter(kind);
+      c.root.position.set(px, 0, 0);
+      c.setState(st as never);
+      if (st === 'aim' || st === 'fire') c.aimTarget = aimAt;
+      if (st === 'walk') c.speed = 1.3;
+      if (st === 'run') c.speed = 3.1;
+      sheet.add(c.root);
+      cast.push(c);
+      addLabel(st, px, 2.15, sheet);
+      px += span;
+    }
+    // Reference deck: a grid at y=0 plus a 1 m rule so heights can be read off.
+    const grid = new THREE.GridHelper(states.length * span, states.length * 5, 0x60708a, 0x2b3340);
+    sheet.add(grid);
+    const rule = new THREE.Mesh(
+      new THREE.BoxGeometry(0.03, 1, 0.03),
+      new THREE.MeshBasicMaterial({ color: 0xff3355 }),
+    );
+    rule.position.set(px - span * 0.35, 0.5, 0);
+    sheet.add(rule);
+    frame(sheet, 1.0);
+    updater = (dt, t) => {
+      for (const c of cast) c.update(dt, t);
+    };
+    // Expose world-space joint positions so the QA scripts can assert on the
+    // skeleton instead of squinting at pixels.
+    (window as unknown as { __POSE?: unknown }).__POSE = () =>
+      cast.map((c, i) => {
+        const rig = c as unknown as {
+          displayName: string;
+          state: string;
+          joints: Record<string, THREE.Object3D>;
+          root: THREE.Object3D;
+        };
+        rig.root.updateWorldMatrix(true, true);
+        const out: Record<string, number[]> = {};
+        for (const key of ['head', 'chest', 'hips', 'handR', 'handL', 'ankleL', 'ankleR']) {
+          const p = new THREE.Vector3().setFromMatrixPosition(rig.joints[key].matrixWorld);
+          out[key] = [+p.x.toFixed(3), +p.y.toFixed(3), +p.z.toFixed(3)];
+        }
+        const box = new THREE.Box3().setFromObject(rig.root);
+        return {
+          state: states[i],
+          joints: out,
+          minY: +box.min.y.toFixed(3),
+          maxY: +box.max.y.toFixed(3),
+        };
+      });
     break;
   }
   default: {
