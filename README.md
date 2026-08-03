@@ -118,6 +118,23 @@ npm run sheet -- --every=4 --dir=/tmp/sheet            # whole film, ~75 s
 npm run sheet -- --from=82 --to=120 --every=2 --dir=/tmp/corridor
 ```
 
+Sound has the same problem in a worse form: a render with the dialogue half a
+second late looks perfect in every frame you inspect. So `npm run sync` decodes
+each voice stem and the finished film's audio track, reduces both to a 100 Hz
+loudness envelope, slides one over the other, and reports where each line
+actually plays against where the script says it starts.
+
+```bash
+npm run sync
+# t1    narrator     0.000   5.2  A long time ago, in a galaxy far, far aw
+# c2    narrator     0.350   2.7  And out of the dark behind it comes some  ~ weak match
+# 35 lines | 34 within 50 ms | 0 out by more than 0.15s
+```
+
+The `q` column is the correlation peak over its own mean. A line playing under
+a dense effects bed matches weakly and its reported offset is a guess, so those
+are called out rather than failed.
+
 Both `sheet` and `frame` step the simulation forward at 1/30 s between samples
 rather than seeking cold, because the effect pools are stateful: without it a
 sheet of the corridor firefight shows eighty blaster bolts hanging in the air

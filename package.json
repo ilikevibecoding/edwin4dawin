@@ -11,7 +11,8 @@
     "capture": "node tools/capture.mjs",
     "audio": "node tools/build-audio.mjs",
     "frame": "node tools/frame.mjs",
-    "sheet": "node tools/sheet.mjs"
+    "sheet": "node tools/sheet.mjs",
+    "sync": "node tools/check-sync.mjs"
   },
   "repository": {
     "type": "git",
