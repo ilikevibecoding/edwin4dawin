@@ -78,8 +78,9 @@ Anyone with a GPU should sanity-check the automatic quality suggestion and adjus
 
 ## Interaction
 
-- **Explore mode does not collide.** The free camera can fly through hulls and walls. It can always
-  be recovered with Follow or Return to camera, but there is no collision response.
+- **Explore mode does not collide.** The free camera can fly through hulls and walls. It is leashed
+  to the action so you cannot fly out of sight of it, and Follow or Return to camera always recovers
+  you, but there is no collision response.
 - **Selection is per-object, not per-part.** Clicking a character selects the character, not the
   helmet or the rifle.
 - **No touch controls.** The interface is responsive and the transport works with touch, but

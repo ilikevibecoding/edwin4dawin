@@ -25,6 +25,8 @@ import { chapterAt } from '../timeline/stage';
 const EPILOGUE_LINE =
   'The Empire holds the ship, the crew and the princess.\nThe only thing that mattered left in an unarmed droid.';
 
+const _leash = new THREE.Vector3();
+
 export interface BootOptions {
   canvas: HTMLCanvasElement;
   uiRoot: HTMLElement;
@@ -362,7 +364,10 @@ export class App {
     this.director.update(t, dt, ctx, instantCamera || !playing);
 
     const activeCamera = this.mode === 'explore' ? this.explore.camera : this.director.camera;
-    if (this.mode === 'explore') this.explore.update(dt);
+    if (this.mode === 'explore') {
+      this.explore.setLeash(this.exploreLeashCentre(), this.interiorActive ? 48 : 9_000);
+      this.explore.update(dt);
+    }
 
     this.space.finalize(t, activeCamera.position);
     this.render.setScene(this.interiorActive ? this.interior.scene : this.space.scene);
@@ -490,6 +495,16 @@ export class App {
     this.ui.showChapterCard(chapter);
     if (this.mode === 'explore') this.setMode('cinematic');
     this.timeline.play();
+  }
+
+  /**
+   * Where the free camera is leashed to. Inside, the middle of 60 m of corridor;
+   * outside, the chase frame, which carries both ships around a 200 km orbit and
+   * so is the only fixed thing worth being near.
+   */
+  private exploreLeashCentre(): THREE.Vector3 {
+    if (this.interiorActive) return _leash.set(0, 1.5, 20);
+    return this.space.chase.getWorldPosition(_leash);
   }
 
   // ------------------------------------------------------------------- modes

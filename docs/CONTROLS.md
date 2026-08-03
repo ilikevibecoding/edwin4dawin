@@ -63,8 +63,10 @@ short original description, measured dimensions and three actions:
 - **Return to camera** — hand control back to the cinematic camera at the current timestamp.
 
 Movement speed scales with your distance from the pivot, and both Follow and Return always put you
-somewhere sensible, so it is not possible to get irretrievably lost. Press `E` again (or use the
-transport button) to resume the cinematic.
+somewhere sensible, so it is not possible to get irretrievably lost. Flying is also leashed to the
+action — 48 m from the middle of the corridor inside, 9 km from the two ships outside — so holding
+`W` cannot take you somewhere with nothing in frame. Press `E` again (or use the transport button) to
+resume the cinematic.
 
 ## Debug overlay
 

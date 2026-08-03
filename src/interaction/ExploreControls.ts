@@ -25,6 +25,14 @@ export class ExploreControls {
   private followOffset = new THREE.Vector3();
   /** Scale factor applied to movement speed, set from the active scene. */
   private worldScale = 1;
+  /**
+   * Soft leash on the pivot: where the action is, and how far from it the viewer
+   * may fly. Holding W is otherwise a one-way trip to somewhere with nothing in
+   * it, and while "Return to cinematic camera" always rescues them, a viewer who
+   * has lost sight of the ships has no reason to believe anything is left to see.
+   */
+  private leashCentre = new THREE.Vector3();
+  private leashRadius = Infinity;
 
   constructor(element: HTMLElement) {
     this.camera.name = 'exploreCamera';
@@ -52,6 +60,11 @@ export class ExploreControls {
 
   setWorldScale(scale: number): void {
     this.worldScale = scale;
+  }
+
+  setLeash(centre: THREE.Vector3, radius: number): void {
+    this.leashCentre.copy(centre);
+    this.leashRadius = radius;
   }
 
   /** Place the explore camera where the cinematic camera currently is. */
@@ -163,6 +176,12 @@ export class ExploreControls {
     if (this.followTarget) {
       const p = this.followTarget.getWorldPosition(new THREE.Vector3()).add(this.followOffset);
       this.pivot.copy(p);
+    } else if (Number.isFinite(this.leashRadius)) {
+      const offset = new THREE.Vector3().subVectors(this.pivot, this.leashCentre);
+      const d = offset.length();
+      if (d > this.leashRadius) {
+        this.pivot.copy(this.leashCentre).addScaledVector(offset, this.leashRadius / d);
+      }
     }
 
     this.smoothPivot.set(
