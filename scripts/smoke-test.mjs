@@ -19,6 +19,9 @@ const readArg = (name, fallback) => {
 
 const out = resolve(root, readArg('out', 'screenshots/scene.png'));
 const seconds = Number(readArg('seconds', 6));
+const width = Number(readArg('width', 1600));
+const height = Number(readArg('height', 900));
+const query = readArg('query', '');
 const keys = (readArg('keys', '') || '').split(',').filter(Boolean);
 const executablePath = process.env.CHROME_PATH || '/usr/local/bin/google-chrome';
 
@@ -30,13 +33,13 @@ const browser = await puppeteer.launch({
     '--enable-unsafe-swiftshader',
     '--use-gl=angle',
     '--use-angle=swiftshader',
-    '--window-size=1600,900',
+    `--window-size=${width},${height}`,
     '--hide-scrollbars',
   ],
 });
 
 const page = await browser.newPage();
-await page.setViewport({ width: 1600, height: 900, deviceScaleFactor: 1 });
+await page.setViewport({ width, height, deviceScaleFactor: 1, hasTouch: true });
 
 const problems = [];
 page.on('console', (message) => {
@@ -46,7 +49,9 @@ page.on('console', (message) => {
 page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`));
 page.on('requestfailed', (request) => problems.push(`requestfailed: ${request.url()}`));
 
-await page.goto(pathToFileURL(join(root, 'pirate-ship.html')).href, { waitUntil: 'load' });
+await page.goto(`${pathToFileURL(join(root, 'pirate-ship.html')).href}${query}`, {
+  waitUntil: 'load',
+});
 
 await page.evaluate(() => {
   window.__frames = 0;

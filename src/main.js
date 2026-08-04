@@ -26,6 +26,14 @@ const hud = {
 
 // Multisampling is ruinous on software WebGL, so ask the driver first.
 const gpu = detectRenderer();
+if (gpu.name === 'none') {
+  hud.loader.innerHTML =
+    '<div style="max-width:26rem;text-align:center;line-height:1.7">' +
+    '<p style="color:#e8c06a;letter-spacing:.2em">NO WIND IN THESE SAILS</p>' +
+    '<p style="font-size:13px;color:#c3b394">This browser could not start WebGL, so the ship cannot be drawn. ' +
+    'Try another browser, or enable hardware acceleration and reload.</p></div>';
+  throw new Error('WebGL is unavailable');
+}
 const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: !gpu.software,

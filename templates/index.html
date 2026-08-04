@@ -272,7 +272,7 @@
 
       #joystick-hint {
         position: absolute;
-        bottom: -18px;
+        top: -16px;
         width: 100%;
         text-align: center;
         font-size: 10px;
@@ -351,15 +351,40 @@
           display: none;
         }
         #instruments {
-          min-width: 168px;
-          padding: 9px 11px;
+          min-width: 158px;
+          padding: 8px 10px;
+        }
+        #instruments .stat {
+          font-size: 11px;
         }
         #compass {
-          width: 66px;
-          height: 66px;
+          width: 62px;
+          height: 62px;
+        }
+        #joystick {
+          width: 108px;
+          height: 108px;
+        }
+        #joystick-knob {
+          width: 46px;
+          height: 46px;
+        }
+        /* Wrap the buttons into a compact block beside the joystick. */
+        #buttons {
+          flex-direction: row;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          max-width: 210px;
+          gap: 6px;
         }
         button {
-          padding: 11px 13px;
+          padding: 10px 11px;
+          font-size: 11px;
+          border-radius: 9px;
+        }
+        #btn-fire {
+          flex-basis: 100%;
+          text-align: center;
         }
       }
     </style>

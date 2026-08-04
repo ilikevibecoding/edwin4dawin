@@ -16,7 +16,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
-const OUTPUT = join(root, 'pirate-ship.html');
+// --debug keeps the bundle readable so stack traces point at real names.
+const debug = args.includes('--debug');
+const OUTPUT = join(root, debug ? 'pirate-ship.debug.html' : 'pirate-ship.html');
 const PORT = Number(process.env.PORT || 8080);
 
 async function bundle() {
@@ -26,7 +28,8 @@ async function bundle() {
     bundle: true,
     format: 'iife',
     target: ['es2020'],
-    minify: true,
+    minify: !debug,
+    sourcemap: debug ? 'inline' : false,
     legalComments: 'none',
     write: false,
   });
@@ -41,7 +44,7 @@ async function bundle() {
   await writeFile(OUTPUT, inlined);
 
   const kb = (Buffer.byteLength(inlined) / 1024).toFixed(0);
-  console.log(`built pirate-ship.html (${kb} kB) in ${Date.now() - started} ms`);
+  console.log(`built ${OUTPUT.replace(`${root}/`, '')} (${kb} kB) in ${Date.now() - started} ms`);
 }
 
 const MIME = {

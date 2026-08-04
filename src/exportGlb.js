@@ -10,11 +10,19 @@ export function exportShip(ship, filename = 'pirate-ship.glb') {
   clone.position.set(0, 0, 0);
   clone.rotation.set(0, 0, 0);
   clone.scale.set(1, 1, 1);
+
+  const lights = [];
   clone.traverse((object) => {
     object.userData = {};
-    if (object.geometry) object.geometry.userData = {};
-    if (object.isLight) object.parent?.remove(object);
+    // Object3D.clone() shares geometry with the live scene, so the runtime
+    // animation data has to be dropped on a copy rather than in place.
+    if (object.geometry && Object.keys(object.geometry.userData).length > 0) {
+      object.geometry = object.geometry.clone();
+      object.geometry.userData = {};
+    }
+    if (object.isLight) lights.push(object);
   });
+  for (const light of lights) light.removeFromParent();
   clone.updateMatrixWorld(true);
 
   return new Promise((resolve, reject) => {

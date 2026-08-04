@@ -19,7 +19,10 @@ export function createCameraRig(camera, domElement, ship) {
   const DEFAULT_TARGET = new THREE.Vector3(0, 7, 0);
   controls.target.copy(ship.root.position).add(DEFAULT_TARGET);
 
-  camera.position.set(-32, 21, -46);
+  // Portrait screens need to stand further off to fit her rig in frame.
+  const framing = camera.aspect < 1 ? 1.45 : 1;
+  const HOME_OFFSET = new THREE.Vector3(-30, 20, -42).multiplyScalar(framing);
+  camera.position.copy(HOME_OFFSET);
   controls.update();
 
   let mode = 'orbit';
@@ -33,7 +36,7 @@ export function createCameraRig(camera, domElement, ship) {
     mode = next;
     controls.enabled = mode === 'orbit';
     if (mode === 'orbit') {
-      const offset = new THREE.Vector3(-30, 20, -42);
+      const offset = HOME_OFFSET.clone();
       offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), ship.state.heading);
       camera.position.copy(ship.root.position).add(offset);
       targetOffset.copy(DEFAULT_TARGET);

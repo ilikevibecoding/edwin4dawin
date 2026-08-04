@@ -162,13 +162,14 @@ void main() {
   color = mix(color, vec3(0.95, 0.98, 1.0), clamp(foamMask * foamNoise * 3.4, 0.0, 0.85) * detail);
 #endif
 
-  // Soft contact shadow so the hull reads as sitting in the water.
-  vec2 toShip = vWorldPosition.xz - uShipPosition.xz;
+  // Soft contact shadow so the hull reads as sitting in the water, thrown
+  // downsun from the ship the way the real shadow would fall.
+  vec2 downsun = -uSunDirection.xz / max(uSunDirection.y, 0.2) * 2.6;
+  vec2 toShip = vWorldPosition.xz - uShipPosition.xz - downsun;
   vec2 right = vec2(uShipForward.y, -uShipForward.x);
   vec2 local = vec2(dot(toShip, uShipForward), dot(toShip, right));
-  local -= vec2(6.0, -3.0); // pushed downsun
-  float shade = 1.0 - smoothstep(0.35, 1.0, length(local / vec2(19.0, 6.5)));
-  color *= 1.0 - shade * 0.4;
+  float shade = 1.0 - smoothstep(0.35, 1.0, length(local / vec2(18.0, 6.5)));
+  color *= 1.0 - shade * 0.38;
 
   float fog = 1.0 - exp(-uFogDensity * distance);
   color = mix(color, uHorizonColor, clamp(fog, 0.0, 1.0));

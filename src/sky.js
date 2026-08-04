@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 
-/** Shared lighting direction: mid-afternoon sun, off the starboard bow. */
-export const SUN_DIRECTION = new THREE.Vector3(0.72, 0.44, -0.53).normalize();
+/**
+ * Shared lighting direction: mid-afternoon sun over the port quarter, which
+ * puts it behind the default camera so the ship reads fully lit.
+ */
+export const SUN_DIRECTION = new THREE.Vector3(-0.44, 0.52, -0.73).normalize();
 export const SUN_COLOR = new THREE.Color('#fff3d4');
 export const HORIZON_COLOR = new THREE.Color('#bcd7e6');
 export const ZENITH_COLOR = new THREE.Color('#2f7fc4');
