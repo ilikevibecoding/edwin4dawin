@@ -106,10 +106,55 @@ for (let i = 0; i < 3; i++) {
 check('C cycles the cameras', new Set(modes).size === 3, modes.join(' -> '));
 
 // ---- Reset -----------------------------------------------------------------
+/** Where the ship lands on screen, in normalised device coords. */
+const shipOnScreen = () =>
+  page.evaluate(() => {
+    const { ship, camera } = window.pirateShip;
+    const point = ship.root.position.clone();
+    point.y += 6;
+    point.project(camera);
+    return { x: point.x, y: point.y, distance: camera.position.distanceTo(ship.root.position) };
+  });
+
+await page.evaluate(() => window.pirateShip.cameraRig.setMode('orbit'));
+check('orbit mode is selected for the reset checks', (await cameraMode()) === 'orbit');
+
 await page.keyboard.press('KeyR');
-await wait(400);
+await wait(1200);
 const reset = await position();
 check('R puts her back on station', Math.hypot(reset[0], reset[2]) < 0.5);
+
+await page.keyboard.down('KeyW');
+await wait(3000);
+await page.keyboard.up('KeyW');
+await wait(2500);
+const framedWhileSailing = await shipOnScreen();
+check(
+  'the orbit camera keeps her in frame while sailing',
+  Math.abs(framedWhileSailing.x) < 0.8 && Math.abs(framedWhileSailing.y) < 0.8,
+  `ndc ${framedWhileSailing.x.toFixed(2)}, ${framedWhileSailing.y.toFixed(2)}`,
+);
+
+// Regression: a teleport used to be applied as a one-frame camera delta, which
+// flung the orbit camera and its pivot off to empty water for good. Reset does
+// exactly this jump once she has sailed a long way from the origin.
+await page.evaluate(() => window.pirateShip.ship.root.position.set(620, 0, -430));
+await wait(1500);
+const framedAfterJump = await shipOnScreen();
+check(
+  'the orbit camera survives a teleport',
+  Math.abs(framedAfterJump.x) < 0.8 && Math.abs(framedAfterJump.y) < 0.8 && framedAfterJump.distance < 120,
+  `ndc ${framedAfterJump.x.toFixed(2)}, ${framedAfterJump.y.toFixed(2)} at ${framedAfterJump.distance.toFixed(0)} m`,
+);
+
+await page.keyboard.press('KeyR');
+await wait(2000);
+const framedAfterReset = await shipOnScreen();
+check(
+  'the orbit camera re-frames her after a reset',
+  Math.abs(framedAfterReset.x) < 0.8 && Math.abs(framedAfterReset.y) < 0.8 && framedAfterReset.distance < 120,
+  `ndc ${framedAfterReset.x.toFixed(2)}, ${framedAfterReset.y.toFixed(2)} at ${framedAfterReset.distance.toFixed(0)} m`,
+);
 
 // ---- Touch joystick --------------------------------------------------------
 const joystick = await page.$('#joystick');

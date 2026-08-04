@@ -43,6 +43,9 @@ export function createCameraRig(camera, domElement, ship) {
       controls.target.copy(ship.root.position).add(targetOffset);
       controls.update();
     }
+    // The ship may have just been teleported (reset); forget the old position
+    // so the next frame does not apply the jump as a camera delta.
+    previousShipPosition.copy(ship.root.position);
   }
 
   function cycle() {
@@ -55,8 +58,13 @@ export function createCameraRig(camera, domElement, ship) {
 
     if (mode === 'orbit') {
       // Carry the orbit with the ship so she never sails out from under it,
-      // while keeping whatever pan offset the user has dialled in.
+      // while keeping whatever pan offset the user has dialled in. A jump too
+      // large to be sailing means she was teleported, so re-frame instead.
       const delta = shipPosition.clone().sub(previousShipPosition);
+      if (delta.lengthSq() > 900) {
+        setMode('orbit');
+        return;
+      }
       camera.position.add(delta);
       targetOffset.copy(controls.target).sub(previousShipPosition);
       controls.target.copy(shipPosition).add(targetOffset);
