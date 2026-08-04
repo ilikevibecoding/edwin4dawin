@@ -77,12 +77,14 @@ export function createCameraRig(camera, domElement, ship) {
       smoothLook.lerp(lookAt, Math.min(dt * 3.5, 1));
       camera.lookAt(smoothLook);
     } else {
-      // Standing abaft the wheel, looking forward down the length of her.
-      const offset = new THREE.Vector3(0, 7.4, -13.2).applyEuler(ship.root.rotation);
+      // On the quarterdeck abaft the wheel, off to starboard of the mizzen: a
+      // square-rigger's own canvas blocks any view straight down the deck, so
+      // this looks past the helm and out over the lee rail.
+      const offset = new THREE.Vector3(2.5, 7.5, -12.8).applyEuler(ship.root.rotation);
       camera.position.copy(shipPosition).add(offset);
       lookAt
         .copy(shipPosition)
-        .add(new THREE.Vector3(0, 6.2, 34).applyEuler(ship.root.rotation));
+        .add(new THREE.Vector3(0.8, 6.0, 34).applyEuler(ship.root.rotation));
       smoothLook.lerp(lookAt, Math.min(dt * 5, 1));
       camera.lookAt(smoothLook);
     }

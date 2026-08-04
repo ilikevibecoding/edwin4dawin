@@ -5,6 +5,8 @@ A three-masted galleon you can sail around an open sea, rendered with
 grain, the Jolly Roger, the water — is generated in code, so the whole scene
 ships as **one self-contained HTML file with no assets and no network calls**.
 
+![The Black Gale under sail](docs/ship-port-quarter.jpg)
+
 ## Just open it
 
 Download [`pirate-ship.html`](pirate-ship.html) and open it in any browser
@@ -34,6 +36,11 @@ quarter) and **helm** (standing at the wheel, looking down the deck).
 with all of its generated textures baked in — as a standard glTF binary you can
 drop into Blender, Unity, Unreal, `<model-viewer>` or any other glTF tool.
 
+| | |
+| --- | --- |
+| ![Broadside](docs/ship-broadside.jpg) | ![At the helm](docs/ship-helm.jpg) |
+| A full broadside: recoil, powder smoke and round shot | The helm camera on the quarterdeck |
+
 ## What is in the scene
 
 - **Hull** lofted from a table of cross sections, so every fitting (gunports,
@@ -53,6 +60,10 @@ drop into Blender, Unity, Unreal, `<model-viewer>` or any other glTF tool.
 - **Wake, spray and foam** that ride the swell, plus circling gulls, a lit
   stern lantern, a drifting cloud deck and a sun you can see glittering on the
   water.
+- **A carved transom** with her name, gilded scrollwork and lit great cabin
+  windows.
+
+![The transom and great cabin windows](docs/ship-stern.jpg)
 
 ## Developing
 

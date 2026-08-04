@@ -270,7 +270,7 @@ function createBirds(count = 5) {
 
 export function createEffects(scene) {
   const softPuff = puffTexture({ erode: 14, core: 0.3 });
-  const billowPuff = puffTexture({ erode: 70, core: 0.5, seed: 23 });
+  const billowPuff = puffTexture({ erode: 26, core: 0.4, seed: 23 });
 
   const foam = new Particles(softPuff, 900);
   const spray = new Particles(softPuff, 400);
@@ -319,21 +319,29 @@ export function createEffects(scene) {
   function cannonSmoke(position, direction) {
     flashTimer = 0.12;
     flash.position.copy(position);
-    for (let i = 0; i < 18; i++) {
-      const spreadX = (Math.random() - 0.5) * 1.2;
-      const spreadY = (Math.random() - 0.5) * 1.2;
+    // Along-ship axis, so the puffs from neighbouring guns run into each other
+    // and read as one rolling bank of smoke instead of a row of balls.
+    const alongX = -direction.z;
+    const alongZ = direction.x;
+    const puff = { x: 0, y: 0, z: 0 };
+    for (let i = 0; i < 26; i++) {
+      const along = (Math.random() - 0.5) * 4.2;
+      puff.x = position.x + alongX * along + (Math.random() - 0.5) * 0.8;
+      puff.y = position.y + (Math.random() - 0.5) * 1.3;
+      puff.z = position.z + alongZ * along + (Math.random() - 0.5) * 0.8;
+      const push = 4 + Math.random() * 12;
       smoke.spawn({
-        position,
+        position: puff,
         velocity: {
-          x: direction.x * (5 + Math.random() * 11) + spreadX,
-          y: 0.9 + Math.random() * 1.8 + spreadY,
-          z: direction.z * (5 + Math.random() * 11) + spreadX,
+          x: direction.x * push + (Math.random() - 0.5) * 1.6,
+          y: 0.9 + Math.random() * 1.9,
+          z: direction.z * push + (Math.random() - 0.5) * 1.6,
         },
-        size: 1.1 + Math.random() * 1.1,
-        growth: 3.2 + Math.random() * 2.2,
-        life: 3.4 + Math.random() * 2.2,
-        color: [0.8, 0.8, 0.82],
-        opacity: 0.62,
+        size: 1.1 + Math.random() * 1.5,
+        growth: 3.4 + Math.random() * 2.6,
+        life: 3.8 + Math.random() * 2.4,
+        color: [0.44, 0.44, 0.47],
+        opacity: 0.4,
         drag: 1.5,
         gravity: 0.4,
         spin: (Math.random() - 0.5) * 1.4,
@@ -347,10 +355,10 @@ export function createEffects(scene) {
           y: 1.2,
           z: direction.z * (14 + Math.random() * 10),
         },
-        size: 0.5,
-        growth: 1.4,
-        life: 0.32,
-        color: [1.0, 0.82, 0.42],
+        size: 0.9,
+        growth: 3.2,
+        life: 0.34,
+        color: [1.0, 0.84, 0.45],
         opacity: 0.95,
         drag: 2.4,
       });

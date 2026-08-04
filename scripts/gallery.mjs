@@ -25,7 +25,7 @@ const SHOTS = [
   { name: 'starboard-bow', offset: [34, 13, 30], sails: 0.75 },
   { name: 'port-quarter', offset: [-30, 16, -34], sails: 0.75 },
   { name: 'deck-detail', offset: [13, 12, -14], sails: 0.7 },
-  { name: 'broadside', offset: [46, 10, 4], sails: 0.6, fire: 'starboard', fireDelay: 900 },
+  { name: 'broadside', offset: [44, 11, 4], sails: 0.6, fire: 'starboard', fireDelay: 1500 },
   { name: 'wide', offset: [-58, 30, -70], sails: 1.0 },
   { name: 'helm-view', mode: 'helm', sails: 0.8 },
   { name: 'guns-closeup', offset: [13, 5.5, 1], target: [4, 3, 1], sails: 0.6 },
