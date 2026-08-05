@@ -27,7 +27,7 @@ export function bearingOf(x, z) {
 }
 
 class Track {
-  constructor(threat) {
+  constructor(threat, now = 0) {
     this.threat = threat;
     this.id = threat.id;
     this.isDecoy = threat.isDecoy;
@@ -35,7 +35,9 @@ class Track {
     this.acquiredAt = 0;
     this.classified = false;
     this.trackTime = 0;
-    this.lastSeen = 0;
+    // Seeded with the registration time so a track that appears late in a raid
+    // is not immediately judged stale.
+    this.lastSeen = now;
     this.quality = 0;
     this.lost = false;
     this.bearing = 0;
@@ -115,14 +117,14 @@ export class Radar {
 
     // Register new threats
     for (const th of threats) {
-      if (!this.tracks.has(th.id)) this.tracks.set(th.id, new Track(th));
+      if (!this.tracks.has(th.id)) this.tracks.set(th.id, new Track(th, this.time));
     }
 
     for (const track of this.tracks.values()) {
       const th = track.threat;
       if (!th.alive) {
-        track.lastSeen = track.lastSeen || this.time;
-        if (this.time - track.lastSeen > RADAR.trackLossTime) track.lost = true;
+        if (track.deadAt === undefined) track.deadAt = this.time;
+        if (this.time - track.deadAt > RADAR.trackLossTime) track.lost = true;
         continue;
       }
       track.bearing = bearingOf(th.pos.x, th.pos.z);
@@ -155,13 +157,17 @@ export class Radar {
         track.quality = clamp01(track.quality + dt * (inRange ? 0.9 : -0.6));
         // Real bodies classify after a few sweeps; light returns never do,
         // which is the player's only cue that something is not a warhead.
-        if (!track.classified && !track.isDecoy && track.trackTime > RADAR.sweepPeriod * 1.35) {
+        if (!track.classified && !track.isDecoy
+            && track.trackTime > RADAR.sweepPeriod * RADAR.classifySweeps) {
           track.classified = true;
           track.justClassified = true;
         }
       }
       track.blip = Math.max(0, track.blip - dt / RADAR.sweepPeriod);
-      if (this.time - track.lastSeen > RADAR.trackLossTime * 2.5) track.lost = true;
+      // Only an acquired track can be dropped for going stale.
+      if (track.acquired && this.time - track.lastSeen > RADAR.trackLossTime * 2.5) {
+        track.lost = true;
+      }
     }
 
     // Drop stale entries

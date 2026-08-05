@@ -25,7 +25,7 @@ import { glowSprite } from './util/textures.js';
 import { makeFlame } from './effects.js';
 import {
   stepBallistic, orientAlong, steerLeadPursuit, estimateInterceptPoint,
-  closestApproach, G,
+  interceptorFlightStep, closestApproach, G,
 } from './physics.js';
 import { WORLD } from './config.js';
 import { airDensity, clamp, clamp01, lerp, DEG } from './util/mathx.js';
@@ -184,6 +184,7 @@ class Interceptor {
 
   launch({ def, position, direction, target, rng, batteryId }) {
     this.def = def;
+    this.flight = def.flight;
     this.batteryId = batteryId;
     this.pos.copy(position);
     this.vel.copy(direction).multiplyScalar(38);
@@ -193,6 +194,8 @@ class Interceptor {
     this.launchDir = direction.clone();
     this.padPos = position.clone();
 
+    // Every field that survives a pool round-trip has to be cleared here, or a
+    // recycled round inherits the previous engagement's termination state.
     this.age = 0;
     this.phase = PHASE.TIPOFF;
     this.alive = true;
@@ -201,16 +204,24 @@ class Interceptor {
     this.closing = 0;
     this.prevRange = Infinity;
     this.minRange = Infinity;
+    this.passedTarget = false;
+    this.orphanAt = undefined;
+    this.sustainCut = false;
+    this.solutionTime = 0;
     this.fuelLeft = def.flight.fuelTime;
     this.staged = def.flight.stageSeparation <= 0;
     this.guidanceBias = 1 + rng.gauss(0, 0.035);
     // Aim-point error, in metres, scaled by the battery's fictional accuracy.
+    const n = def.guidanceNoise;
     this.aimError = new THREE.Vector3(
-      rng.gauss(0, def.guidanceNoise * 26),
-      rng.gauss(0, def.guidanceNoise * 26),
-      rng.gauss(0, def.guidanceNoise * 26),
+      rng.gauss(0, n * 40), rng.gauss(0, n * 40), rng.gauss(0, n * 40),
     );
     this.errorDecay = 0.42 + rng.float(0, 0.2);
+    // Residual bias, tuned in tools/guidance-sim.mjs to land the batteries at
+    // roughly 70% / 90% / 100% single-shot success against a clean solution.
+    this.terminalBias = new THREE.Vector3(
+      rng.gauss(0, n * 72), rng.gauss(0, n * 72), rng.gauss(0, n * 72),
+    );
 
     for (const id in this.bodies) this.bodies[id].visible = false;
     this.body = this._bodyFor(def);
@@ -245,34 +256,8 @@ class Interceptor {
 
   get speed() { return this.vel.length(); }
 
-  /** Thrust available at this instant, by phase. */
-  _thrust() {
-    const f = this.def.flight;
-    if (this.age < f.boostTime) return f.boostAccel;
-    if (this.age < f.boostTime + f.sustainTime) return f.sustainAccel;
-    return 0;
-  }
-
   update(dt, camera) {
-    this.age += dt;
     const f = this.def.flight;
-    const rho = airDensity(this.pos.y);
-
-    // --- phase bookkeeping -------------------------------------------------
-    const boosting = this.age < f.boostTime;
-    const sustaining = !boosting && this.age < f.boostTime + f.sustainTime;
-    const guided = this.age >= f.pitchOver;
-    let targetRange = Infinity;
-    if (this.target && this.target.alive) {
-      targetRange = this.pos.distanceTo(this.target.pos);
-    }
-
-    if (!guided) this.phase = PHASE.TIPOFF;
-    else if (boosting) this.phase = PHASE.BOOST;
-    else if (sustaining) this.phase = PHASE.SUSTAIN;
-    else if (targetRange < f.terminalRange) this.phase = PHASE.TERMINAL;
-    else if (this.fuelLeft > 0) this.phase = PHASE.MIDCOURSE;
-    else this.phase = PHASE.SPENT;
 
     // Stage separation: shed the booster mid-flight for visual variety.
     if (!this.staged && this.age >= f.stageSeparation) {
@@ -285,43 +270,17 @@ class Interceptor {
       });
     }
 
-    // --- guidance ----------------------------------------------------------
-    let latCmd = 0;
-    if (guided && this.target && this.target.alive && this.fuelLeft > 0) {
-      // Coarse average closing speed for the intercept-time estimate.
-      const avg = clamp(this.speed * 0.85 + 260, 320, f.maxSpeed);
-      const sol = estimateInterceptPoint(this.pos, this.target.pos, this.target.vel, avg, {
-        maxTime: 90, iterations: 4, bias: this.guidanceBias,
-      });
-      // Aim error shrinks as the round closes: the seeker "refines" the solution.
-      const err = Math.exp(-this.errorDecay * Math.max(0, 20 - sol.time));
-      this.aimPoint.copy(sol.point).addScaledVector(this.aimError, err);
-      this.solutionTime = sol.time;
-
-      const maxLat = (this.phase === PHASE.TERMINAL ? f.terminalG : f.lateralG) * G
-        // Aerodynamic authority falls off in thin air.
-        * clamp(0.35 + rho * 1.4, 0.35, 1.6);
-      latCmd = steerLeadPursuit(
-        this.pos, this.vel, this.aimPoint, maxLat, dt, this.accelCmd,
-        this.phase === PHASE.TERMINAL ? 9 : 5,
-      );
-    } else {
-      this.accelCmd.multiplyScalar(Math.exp(-dt * 2.2));
-    }
-
-    // --- integrate ---------------------------------------------------------
-    const thrust = this.fuelLeft > 0 ? this._thrust() : 0;
-    if (thrust > 0) this.fuelLeft -= dt;
-    _v1.copy(this.accelCmd);
-    if (thrust > 0) {
-      _v2.copy(this.vel);
-      if (_v2.lengthSq() < 1) _v2.copy(this.launchDir);
-      _v1.addScaledVector(_v2.normalize(), thrust);
-    }
-    // Speed cap expressed as extra drag so it never looks like a hard clamp.
-    let drag = f.coastDrag;
-    if (this.speed > f.maxSpeed) drag *= 1 + (this.speed / f.maxSpeed - 1) * 26;
-    stepBallistic(this.pos, this.vel, dt, drag, _v1);
+    // Guidance and integration live in physics.js so the offline tuning
+    // harness runs bit-identical flight code.
+    const live = this.target && this.target.alive ? this.target : null;
+    const res = interceptorFlightStep(this, dt, live);
+    this.phase = res.phase;
+    this.solutionTime = res.solutionTime;
+    const latCmd = res.latCmd;
+    const boosting = res.boosting;
+    const thrust = res.thrust;
+    const targetRange = res.range;
+    const rho = airDensity(this.pos.y);
 
     this.group.position.copy(this.pos);
     orientAlong(this.group, this.vel);

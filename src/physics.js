@@ -112,22 +112,161 @@ export function ballisticLaunchVelocity(from, target, speed, loft = 1, out = new
  * effective average speed. Deliberately coarse: guidance has to work for its
  * living, which is what makes near-misses happen.
  *
+ * The candidate time is capped by the target's own time to the ground, so the
+ * estimate can never return a point below the terrain - which would otherwise
+ * make a freshly launched round steer down into the dirt.
+ *
  * @returns {{point: THREE.Vector3, time: number, feasible: boolean}}
  */
 export function estimateInterceptPoint(launchPos, threatPos, threatVel, avgSpeed, opts = {}) {
-  const { maxTime = 60, iterations = 5, bias = 1.0 } = opts;
+  const { maxTime = 60, iterations = 5, bias = 1.0, minAlt = 120 } = opts;
   const point = new THREE.Vector3();
-  let t = launchPos.distanceTo(threatPos) / Math.max(1, avgSpeed);
+  const ttg = timeToGround(threatPos, threatVel);
+  const tCap = Math.min(maxTime, ttg > 0 ? ttg * 0.98 : maxTime);
+  const speed = Math.max(1, avgSpeed * bias);
+  let t = clamp(launchPos.distanceTo(threatPos) / speed, 0, tCap);
   for (let i = 0; i < iterations; i++) {
     predictBallistic(threatPos, threatVel, t, point);
-    const d = launchPos.distanceTo(point);
-    const tNew = d / Math.max(1, avgSpeed * bias);
+    const tNew = clamp(launchPos.distanceTo(point) / speed, 0, tCap);
     if (Math.abs(tNew - t) < 0.02) { t = tNew; break; }
-    t = t * 0.4 + tNew * 0.6;
-    if (t > maxTime) { t = maxTime; break; }
+    t = t * 0.35 + tNew * 0.65;
   }
+  t = clamp(t, 0, tCap);
   predictBallistic(threatPos, threatVel, t, point);
-  return { point, time: t, feasible: point.y > 60 && t < maxTime };
+  const reachable = t < tCap * 0.995;
+  return { point, time: t, feasible: reachable && point.y > minAlt };
+}
+
+/**
+ * Launch attitude for a battery engaging a given intercept point.
+ *
+ * A fixed launch pitch looks dramatic but leaves a fast round with a turn
+ * radius measured in tens of kilometres pointing well away from where it needs
+ * to go. Aiming the launcher at the solution (plus a loft margin, and clamped
+ * to the launcher's fictional elevation limits) keeps the shot flyable and
+ * gives the player visible feedback as the erector slews and elevates.
+ *
+ * @returns {{bearing: number, pitchDeg: number, elevationDeg: number}}
+ */
+export function computeLaunchAttitude(batteryPos, aimPoint, flight) {
+  _a.subVectors(aimPoint, batteryPos);
+  const horiz = Math.hypot(_a.x, _a.z);
+  const bearing = Math.atan2(_a.x, -_a.z);
+  const elevationDeg = Math.atan2(_a.y, Math.max(1, horiz)) * (180 / Math.PI);
+  const range = flight.pitchRange ?? [45, flight.launchPitch];
+  const margin = flight.launchLoftDeg ?? 12;
+  const pitchDeg = clamp(elevationDeg + margin, range[0], range[1]);
+  return { bearing, pitchDeg, elevationDeg };
+}
+
+/**
+ * One guidance + integration step for an interceptor.
+ *
+ * Extracted as a pure function over a plain state object so the exact same code
+ * runs inside the game entity and inside the offline tuning harness
+ * (`tools/guidance-sim.mjs`). `m` is mutated in place.
+ *
+ * @param {object} m   { pos, vel, accelCmd, aimPoint, age, fuelLeft, flight,
+ *                       guidanceBias, aimError, errorDecay }
+ * @param {number} dt
+ * @param {{pos: THREE.Vector3, vel: THREE.Vector3}|null} target
+ * @returns {{phase: string, latCmd: number, thrust: number, burning: boolean,
+ *            boosting: boolean, solutionTime: number, range: number}}
+ */
+export function interceptorFlightStep(m, dt, target) {
+  const f = m.flight;
+  m.age += dt;
+  const rho = airDensity(m.pos.y);
+
+  const boosting = m.age < f.boostTime;
+  const sustaining = !boosting && m.age < f.boostTime + f.sustainTime;
+  const guided = m.age >= f.pitchOver;
+  const range = target ? m.pos.distanceTo(target.pos) : Infinity;
+
+  let phase;
+  if (!guided) phase = 'TIP-OFF';
+  else if (boosting) phase = 'BOOST';
+  else if (sustaining) phase = 'SUSTAIN';
+  else if (range < f.terminalRange) phase = 'TERMINAL';
+  else if (m.fuelLeft > 0) phase = 'MIDCOURSE';
+  else phase = 'COASTING';
+
+  let latCmd = 0;
+  let solutionTime = 0;
+  if (guided && target) {
+    // A fixed design closing speed, not the instantaneous one: using the
+    // current speed right after launch produces absurd times of flight.
+    const avg = f.designSpeed ?? f.maxSpeed * 0.58;
+    const sol = estimateInterceptPoint(m.pos, target.pos, target.vel, avg, {
+      maxTime: f.fuelTime, iterations: 4, bias: m.guidanceBias ?? 1,
+    });
+    solutionTime = sol.time;
+    m.aimPoint.copy(sol.point);
+
+    // Loft bias: early in the flight, aim above the solution so the round
+    // trades a long climb for a fast diving terminal leg. This is what gives
+    // the high-altitude batteries their dramatic arcing contrails.
+    //
+    // The bias has to wash out well before closest approach - at these closing
+    // speeds a round that is still aiming high in the last few seconds cannot
+    // pull down in time and sails over the target.
+    if (phase !== 'TERMINAL') {
+      const fade = clamp01((sol.time - (f.loftFadeStart ?? 4)) / (f.loftFadeSpan ?? 5));
+      if (fade > 0) {
+        const d = m.pos.distanceTo(sol.point);
+        m.aimPoint.y += Math.min(d * (f.loft ?? 0.2), f.loftCap ?? 6000) * fade;
+      }
+    }
+    // Seeker refinement: the initial aim error washes out as the round closes.
+    if (m.aimError) {
+      const err = Math.exp(-(m.errorDecay ?? 0.5) * Math.max(0, 18 - sol.time));
+      m.aimPoint.addScaledVector(m.aimError, err);
+    }
+    // Residual bias that never washes out. This is what makes an engagement
+    // feel earned: a good shot still lands inside the fuse radius, a marginal
+    // one can slip outside it, and neither outcome is a hidden dice roll.
+    if (m.terminalBias) m.aimPoint.add(m.terminalBias);
+
+    const gLimit = phase === 'TERMINAL' ? f.terminalG : f.lateralG;
+    // Aerodynamic authority thins with altitude but never vanishes: these are
+    // fictional rounds with divert control.
+    const authority = clamp(0.55 + rho * 0.95, 0.55, 1.45);
+    const maxLat = gLimit * G * authority;
+    latCmd = steerLeadPursuit(
+      m.pos, m.vel, m.aimPoint, maxLat, dt, m.accelCmd,
+      phase === 'TERMINAL' ? 9 : 5.5,
+    );
+  } else {
+    m.accelCmd.multiplyScalar(Math.exp(-dt * 2.2));
+  }
+
+  // Energy management: once the solution is close enough that the round will
+  // coast to it, the sustainer is cut. Without this the long-range batteries
+  // arrive with far too much energy and fly straight past the target.
+  if (!boosting && target && solutionTime > 0 && solutionTime < (f.sustainCut ?? 5)) {
+    m.sustainCut = true;
+  }
+
+  let thrust = 0;
+  if (m.fuelLeft > 0) {
+    if (boosting) thrust = f.boostAccel;
+    else if (sustaining && !m.sustainCut) thrust = f.sustainAccel;
+    if (thrust > 0) m.fuelLeft -= dt;
+  }
+
+  _d.copy(m.accelCmd);
+  if (thrust > 0) {
+    _c.copy(m.vel);
+    if (_c.lengthSq() < 1) _c.copy(m.launchDir ?? _up);
+    _d.addScaledVector(_c.normalize(), thrust);
+  }
+  // Express the speed cap as extra drag so it never looks like a hard clamp.
+  let drag = f.coastDrag;
+  const speed = m.vel.length();
+  if (speed > f.maxSpeed) drag *= 1 + (speed / f.maxSpeed - 1) * 26;
+  stepBallistic(m.pos, m.vel, dt, drag, _d);
+
+  return { phase, latCmd, thrust, burning: thrust > 0, boosting, solutionTime, range };
 }
 
 /**

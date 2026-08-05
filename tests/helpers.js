@@ -35,9 +35,15 @@ export async function boot(page, { query = '', reducedMotion = false } = {}) {
   return errors;
 }
 
-/** Advance the simulation deterministically and return the snapshot. */
-export async function advance(page, seconds, stepMs = 1000 / 60) {
-  return page.evaluate(([s, st]) => window.__GAME.advance(s, st), [seconds, stepMs]);
+/**
+ * Advance the simulation deterministically and return the snapshot.
+ * Rendering is skipped by default; call `shot()` (which renders first) when a
+ * frame actually needs to be captured.
+ */
+export async function advance(page, seconds, stepMs = 1000 / 60, render = false) {
+  return page.evaluate(
+    ([s, st, r]) => window.__GAME.advance(s, st, r), [seconds, stepMs, render],
+  );
 }
 
 export async function snapshot(page) {
@@ -51,6 +57,7 @@ export async function perf(page) {
 /** Save a screenshot into the run folder (and optionally the artifact folder). */
 export async function shot(page, name, { artifact = false } = {}) {
   ensureDirs();
+  await page.evaluate(() => window.__GAME.renderOnce());
   const file = path.join(SHOT_DIR, `${name}.png`);
   await page.screenshot({ path: file });
   if (artifact) {
@@ -60,13 +67,26 @@ export async function shot(page, name, { artifact = false } = {}) {
   return file;
 }
 
+/** Advance until a battery reports ready (or the budget runs out). */
+export async function waitForReady(page, battery, maxSeconds = 16, chunk = 1.0) {
+  let waited = 0;
+  while (waited < maxSeconds) {
+    const snap = await advance(page, chunk);
+    const b = snap.batteries.find((x) => x.id === battery);
+    if (b && b.state === 'ready') return { ready: true, waited, battery: b };
+    waited += chunk;
+  }
+  const snap = await snapshot(page);
+  return { ready: false, waited, battery: snap.batteries.find((x) => x.id === battery) };
+}
+
 /**
  * Run an engagement: start the scenario, wait for a track, engage with the
- * given battery, and advance until the round resolves.
+ * given battery, wait out its prep, authorize, and fly the round to a result.
  */
 export async function engage(page, {
   scenario = 'single', condition = 'day', battery = 'highlance', seed = 20240601,
-  acquireTime = 8, prepTime = 6, flightTime = 26,
+  acquireTime = 8, prepTime = 16, flightTime = 26,
 } = {}) {
   await page.evaluate(([sc, cond, bat, sd]) => {
     window.__GAME.setCondition(cond);
@@ -77,8 +97,8 @@ export async function engage(page, {
 
   await advance(page, acquireTime);
   const assigned = await page.evaluate((b) => window.__GAME.autoEngage(b), battery);
-  await advance(page, prepTime);
+  const ready = await waitForReady(page, battery, prepTime);
   const fired = await page.evaluate(() => window.__GAME.authorize());
   const result = await advance(page, flightTime);
-  return { assigned, fired, result };
+  return { assigned, ready, fired, result };
 }

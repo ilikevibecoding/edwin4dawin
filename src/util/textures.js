@@ -684,11 +684,9 @@ export function noiseTexture(size = 128, seed = 5) {
   });
 }
 
-/** Emissive strip texture for status lights and CRT screens. */
-export function screenTexture(lines, opts = {}) {
-  const { size = 256, bg = '#04120c', color = '#7ef7bd', title = '' } = opts;
-  const c = canvas(size);
-  const ctx = c.getContext('2d');
+/** Draw CRT-style text onto an existing 2D context. */
+export function drawScreen(ctx, size, lines, opts = {}) {
+  const { bg = '#04120c', color = '#7ef7bd', title = '' } = opts;
   ctx.fillStyle = bg; ctx.fillRect(0, 0, size, size);
   ctx.strokeStyle = 'rgba(126,247,189,0.13)';
   ctx.lineWidth = 1;
@@ -701,9 +699,41 @@ export function screenTexture(lines, opts = {}) {
   }
   ctx.font = `${Math.round(size * 0.055)}px ui-monospace, monospace`;
   lines.forEach((l, i) => ctx.fillText(l, size * 0.06, size * (0.24 + i * 0.075)));
+}
+
+/** One-shot emissive text texture (used for static labels). */
+export function screenTexture(lines, opts = {}) {
+  const { size = 256 } = opts;
+  const c = canvas(size);
+  drawScreen(c.getContext('2d'), size, lines, opts);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+/**
+ * A persistent CRT surface: one canvas and one GPU texture that get redrawn in
+ * place. Console screens update several times a second, so allocating a fresh
+ * texture each time would leak GPU memory steadily through a scenario.
+ */
+export class ScreenSurface {
+  constructor(size = 256, opts = {}) {
+    this.size = size;
+    this.opts = opts;
+    this.canvas = canvas(size);
+    this.ctx = this.canvas.getContext('2d');
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture.colorSpace = THREE.SRGBColorSpace;
+    this.draw([]);
+  }
+
+  draw(lines, opts = {}) {
+    drawScreen(this.ctx, this.size, lines, { ...this.opts, ...opts });
+    this.texture.needsUpdate = true;
+    return this.texture;
+  }
+
+  dispose() { this.texture.dispose(); }
 }
 
 export function clearTextureCache() { cache.clear(); }

@@ -429,6 +429,9 @@ export class Weather {
     this.wind = new THREE.Vector3(3.2, 0, 1.4);
     this.time = 0;
     this.effects = null;
+    // Reused colour scratch: `_apply` runs every frame during a crossfade and
+    // must not allocate.
+    this._scratch = { a: new THREE.Color(), b: new THREE.Color() };
 
     this.setCondition('day', true);
   }
@@ -459,18 +462,19 @@ export class Weather {
     const p = this.preset;
     const l = this.live;
     const t = snap ? 1 : k;
+    const c = this._scratch;
     l.sunDir.lerp(this.targetDir, t).normalize();
-    l.sunColour.lerp(new THREE.Color(p.sunColour), t);
+    l.sunColour.lerp(c.a.set(p.sunColour), t);
     l.sunIntensity = lerp(l.sunIntensity, p.sunIntensity, t);
     l.ambient = lerp(l.ambient, p.ambient, t);
-    l.ambientColour.lerp(new THREE.Color(p.ambientColour), t);
-    l.zenith.lerp(new THREE.Color(p.skyTint), t);
-    l.horizon.lerp(new THREE.Color(p.hazeColour).lerp(new THREE.Color(0xffffff), 0.32), t);
-    l.ground.lerp(new THREE.Color(p.groundTint), t);
-    l.haze.lerp(new THREE.Color(p.hazeColour), t);
+    l.ambientColour.lerp(c.a.set(p.ambientColour), t);
+    l.zenith.lerp(c.a.set(p.skyTint), t);
+    l.horizon.lerp(c.a.set(p.hazeColour).lerp(c.b.set(0xffffff), 0.32), t);
+    l.ground.lerp(c.a.set(p.groundTint), t);
+    l.haze.lerp(c.a.set(p.hazeColour), t);
     l.hazeDensity = lerp(l.hazeDensity, p.hazeDensity, t);
     l.cloudCover = lerp(l.cloudCover, p.cloudCover, t);
-    l.cloudTint.lerp(new THREE.Color(p.cloudTint), t);
+    l.cloudTint.lerp(c.a.set(p.cloudTint), t);
     l.stars = lerp(l.stars, p.stars, t);
     l.exposure = lerp(l.exposure, p.exposure, t);
     l.moon = lerp(l.moon, p.id === 'night' ? 1 : 0, t);
@@ -479,12 +483,12 @@ export class Weather {
     this.sun.color.copy(l.sunColour);
     this.sun.intensity = l.sunIntensity;
     this.sun.position.copy(l.sunDir).multiplyScalar(320);
-    this.hemi.color.copy(l.zenith).lerp(new THREE.Color(0xffffff), 0.2);
+    this.hemi.color.copy(l.zenith).lerp(c.b.set(0xffffff), 0.2);
     this.hemi.groundColor.copy(l.ground);
     this.hemi.intensity = l.ambient;
     this.ambient.color.copy(l.ambientColour);
     this.ambient.intensity = l.ambient * 0.35;
-    this.fill.color.copy(l.ambientColour).lerp(new THREE.Color(0xffffff), 0.25);
+    this.fill.color.copy(l.ambientColour).lerp(c.b.set(0xffffff), 0.25);
     this.fill.intensity = l.ambient * 0.55;
     this.fill.position.copy(l.sunDir).multiplyScalar(-200).setY(120);
 
@@ -518,7 +522,7 @@ export class Weather {
     mu.uWind.value.copy(this.wind).multiplyScalar(0.22);
 
     if (this.effects) {
-      this.effects.setLighting(l.sunDir, l.sunColour, new THREE.Color().copy(l.ambientColour).lerp(l.haze, 0.5));
+      this.effects.setLighting(l.sunDir, l.sunColour, c.b.copy(l.ambientColour).lerp(l.haze, 0.5));
       this.effects.setHaze({
         colour: l.haze,
         density: l.hazeDensity,
@@ -534,10 +538,9 @@ export class Weather {
     if (this.blend < 1) {
       this.blend = Math.min(1, this.blend + dt / 1.4);
       this._apply(1 - Math.exp(-dt * 2.6));
-    } else {
-      // Keep the shadow frustum centred on the player.
-      this._apply(0);
     }
+    // Once the crossfade lands there is nothing to re-derive each frame; only
+    // the shadow frustum below still needs to follow the player.
     // Slow wind variation so smoke drift is never perfectly steady.
     const w = noise.noise2(this.time * 0.03, 11.5);
     const w2 = noise.noise2(this.time * 0.024, 71.2);

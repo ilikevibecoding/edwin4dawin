@@ -241,14 +241,21 @@ function buildVanguard(def) {
   root.add(cyl(0.07, 0.9, matHeat(), -2.4, deckY + 1.7, -0.8, 8));
   colliders.push(boxCollider(-3.1, 0, 1.1, 1.3, 2.6));
 
-  // Elevating frame pivot
-  const pivotZ = 1.1;
+  // Traversing launching station: the whole erector, its trunnions and its rams
+  // rotate together on the trailer deck.
+  const train = new THREE.Group();
+  train.position.set(0, deckY, 0);
+  root.add(train);
+  const turnRing = cyl(1.5, 0.14, matSteelDark(), 0, 0.07, 0, 20);
+  train.add(turnRing);
+  train.add(flangeBolts(14, 1.3, 0.028, 0.15, matSteel()));
+
   const pivot = new THREE.Group();
-  pivot.position.set(1.0, deckY + 0.36, 0);
-  root.add(pivot);
+  pivot.position.set(1.0, 0.36, 0);
+  train.add(pivot);
   for (const sz of [-1, 1]) {
-    root.add(box(0.5, 0.7, 0.22, matSteelDark(), 1.0, deckY + 0.2, sz * 1.05));
-    root.add(cyl(0.11, 0.3, matChrome(), 1.0, deckY + 0.36, sz * 1.05, 10).rotateX(Math.PI / 2));
+    train.add(box(0.5, 0.7, 0.22, matSteelDark(), 1.0, 0.2, sz * 1.05));
+    train.add(cyl(0.11, 0.3, matChrome(), 1.0, 0.36, sz * 1.05, 10).rotateX(Math.PI / 2));
   }
 
   // The erector frame carries the canister pack; +Z is "up the rail".
@@ -291,20 +298,20 @@ function buildVanguard(def) {
   frame.add(box(packW + 0.3, 0.1, 0.12, matSteel(), 0, packH / 2 + 0.1, packLen - 0.3));
   frame.add(box(packW + 0.3, 0.1, 0.12, matSteel(), 0, -packH / 2 - 0.1, packLen - 0.3));
 
-  // Elevation rams
+  // Elevation rams, carried on the traversing station
   const rams = [];
   for (const sz of [-1, 1]) {
     const ram = hydraulicRam(2.2, 0.13, 0.08, 1.9);
-    ram.position.set(-1.2, deckY + 0.28, sz * 1.15);
+    ram.position.set(-1.2, 0.28, sz * 1.15);
     ram.rotation.x = -0.32;
-    root.add(ram);
+    train.add(ram);
     rams.push(ram);
   }
-  // Hydraulic hoses from the pump to the rams
+  // Hydraulic hoses from the pump to the station
   for (const sz of [-1, 1]) {
     root.add(saggingCable(
       new THREE.Vector3(-2.2, deckY + 0.4, sz * 0.9),
-      new THREE.Vector3(-1.2, deckY + 0.5, sz * 1.15),
+      new THREE.Vector3(-1.35, deckY + 0.5, sz * 1.0),
       0.18, 0.028, cableMaterial('#26262a'),
     ));
   }
@@ -341,12 +348,12 @@ function buildVanguard(def) {
   root.add(tray);
 
   return {
-    root, colliders, canisters, frame, pivot, rams,
+    root, colliders, canisters, frame, pivot, train, rams,
     panel, beacon, chassis,
-    // Elevation is applied to the pivot around X; 0 = stowed flat, 1 = firing.
+    // Elevation rotates the erector about X; 0 = stowed flat, high = firing.
     setElevation: (deg) => { pivot.rotation.x = -deg * DEG; },
-    setTrain: () => {},
-    trainable: false,
+    setTrain: (rad) => { train.rotation.y = rad; },
+    trainable: true,
     stowedElevation: 4,
     muzzleLocal: (i) => {
       const can = canisters[i % canisters.length];
@@ -727,6 +734,20 @@ const BUILDERS = {
 // Battery runtime
 // ===========================================================================
 
+/**
+ * All three rigs are modelled with the canister axis along local +Z. A group
+ * rotated by `y` points its +Z at world (sin y, 0, cos y), whose site bearing
+ * (measured from -Z, clockwise) is `PI - y`. So converting a target bearing
+ * into a training angle means `y = PI - bearing`, and a launcher parked at
+ * `y = PI` faces due north, downrange toward the threat sector.
+ */
+const FRAME_AZIMUTH_OFFSET = Math.PI;
+
+/** Training angle, local to the battery, that points the tubes at `bearing`. */
+function trainForBearing(bearing, heading) {
+  return FRAME_AZIMUTH_OFFSET - bearing - heading;
+}
+
 export const BATTERY_STATE = {
   STOWED: 'stowed',
   PREP: 'prep',
@@ -798,8 +819,12 @@ export class Battery {
     this.nextTube = 0;
     this.elevation = built.stowedElevation;
     this.targetElevation = built.stowedElevation;
-    this.train = 0;
-    this.targetTrain = 0;
+    // Parked facing downrange so a slew onto a target is short and readable.
+    this.stowTrain = trainForBearing(0, def.heading);
+    this.train = this.stowTrain;
+    this.targetTrain = this.stowTrain;
+    this.elevRate = def.slew?.elevation ?? 18;
+    this.trainRate = def.slew?.train ?? 0.55;
     this.timer = 0;
     this.assignedTrackId = null;
     this.blockedReason = null;
@@ -815,8 +840,8 @@ export class Battery {
 
   /** True while the launcher is pointing where it was told to point. */
   get aimed() {
-    return Math.abs(this.elevation - this.targetElevation) < 1.2
-      && Math.abs(angleDelta(this.train, this.targetTrain)) < 0.05;
+    return Math.abs(this.elevation - this.targetElevation) < 1.5
+      && Math.abs(angleDelta(this.train, this.targetTrain)) < 0.06;
   }
 
   get statusLabel() {
@@ -864,13 +889,18 @@ export class Battery {
     return { ok: true, reason: null };
   }
 
-  /** Begin the prep sequence, training toward a bearing (radians, world). */
-  prepare(bearing) {
+  /**
+   * Begin the prep sequence: train toward a bearing (radians, world) and
+   * elevate to the pitch the fire solution asks for.
+   */
+  prepare(bearing, pitchDeg) {
     if (this.state === BATTERY_STATE.RELOAD || this.ammo <= 0) return false;
-    this.targetElevation = this.def.flight.launchPitch;
+    const range = this.def.flight.pitchRange ?? [45, this.def.flight.launchPitch];
+    this.targetElevation = pitchDeg === undefined
+      ? this.def.flight.launchPitch
+      : clamp(pitchDeg, range[0], range[1]);
     if (this.rig.trainable && bearing !== undefined) {
-      // Launcher frame points along +Z locally; convert world bearing to local.
-      this.targetTrain = bearing - this.def.heading;
+      this.targetTrain = trainForBearing(bearing, this.def.heading);
     }
     if (this.state !== BATTERY_STATE.READY && this.state !== BATTERY_STATE.FIRING) {
       this.state = BATTERY_STATE.PREP;
@@ -879,11 +909,21 @@ export class Battery {
     return true;
   }
 
+  /** Update the aim of an already-assigned battery as the solution drifts. */
+  retarget(bearing, pitchDeg) {
+    if (this.state === BATTERY_STATE.RELOAD || this.state === BATTERY_STATE.EMPTY) return;
+    const range = this.def.flight.pitchRange ?? [45, this.def.flight.launchPitch];
+    if (pitchDeg !== undefined) this.targetElevation = clamp(pitchDeg, range[0], range[1]);
+    if (this.rig.trainable && bearing !== undefined) {
+      this.targetTrain = trainForBearing(bearing, this.def.heading);
+    }
+  }
+
   stow() {
     if (this.state === BATTERY_STATE.FIRING) return;
     this.state = this.ammo > 0 ? BATTERY_STATE.STOWED : BATTERY_STATE.EMPTY;
     this.targetElevation = this.rig.stowedElevation;
-    this.targetTrain = 0;
+    this.targetTrain = this.stowTrain;
     this.assignedTrackId = null;
   }
 
@@ -956,9 +996,9 @@ export class Battery {
     this.timer = 0;
     this.assignedTrackId = null;
     this.targetElevation = this.rig.stowedElevation;
-    this.targetTrain = 0;
+    this.targetTrain = this.stowTrain;
     this.elevation = this.rig.stowedElevation;
-    this.train = 0;
+    this.train = this.stowTrain;
     this.firedThisSalvo = 0;
     for (const can of this.rig.canisters) {
       if (can.userData.cap) can.userData.cap.visible = true;
@@ -977,17 +1017,16 @@ export class Battery {
   }
 
   update(dt, selected) {
-    // Mechanical motion: elevation and training slew at fixed rates.
-    const elevRate = 18;   // deg/s, fictional
-    const trainRate = 0.55; // rad/s, fictional
+    // Mechanical motion: elevation and training slew at fixed, fictional rates
+    // that give each launcher its own sense of mass.
     const de = this.targetElevation - this.elevation;
     if (Math.abs(de) > 0.01) {
-      this.elevation += clamp(de, -elevRate * dt, elevRate * dt);
+      this.elevation += clamp(de, -this.elevRate * dt, this.elevRate * dt);
     }
     if (this.rig.trainable) {
-      const dt2 = angleDelta(this.train, this.targetTrain);
-      if (Math.abs(dt2) > 0.001) {
-        this.train += clamp(dt2, -trainRate * dt, trainRate * dt);
+      const dTrain = angleDelta(this.train, this.targetTrain);
+      if (Math.abs(dTrain) > 0.001) {
+        this.train += clamp(dTrain, -this.trainRate * dt, this.trainRate * dt);
       }
     }
     this._applyRig();

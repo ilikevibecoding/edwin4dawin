@@ -28,8 +28,8 @@ import { Player } from './player.js';
 import { PostFX } from './post.js';
 import { UI } from './ui.js';
 import { audio } from './audio.js';
-import { estimateInterceptPoint } from './physics.js';
-import { screenTexture } from './util/textures.js';
+import { estimateInterceptPoint, computeLaunchAttitude } from './physics.js';
+import { ScreenSurface } from './util/textures.js';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -139,8 +139,13 @@ class Game {
     this.post = new PostFX(this.renderer, this.scene, this.camera, this.qualityId);
     this.post.applyCondition(CONDITIONS[state.condition]);
 
-    // The shelter's centre display mirrors the live scope canvas.
+    // The shelter's centre display mirrors the live scope canvas; the two side
+    // displays get persistent CRT surfaces that are redrawn in place.
     this.base.bindScopeCanvas(this.ui.el.scopeCanvas);
+    this.statusSurface = new ScreenSurface(256);
+    this.batterySurface = new ScreenSurface(256);
+    this.base.setScreenTexture(0, this.statusSurface.texture);
+    this.base.setScreenTexture(2, this.batterySurface.texture);
 
     this._wireUI();
     this._wireKeys();
@@ -361,12 +366,15 @@ class Game {
 
     this.radar.select(id);
     bat.assignedTrackId = id;
-    const bearing = bearingOf(track.threat.pos.x, track.threat.pos.z);
-    // Train toward the predicted intercept bearing, not the current one.
-    const avg = bat.def.flight.maxSpeed * 0.6;
-    const sol = estimateInterceptPoint(bat.worldPosition, track.threat.pos, track.threat.vel, avg);
-    const leadBearing = bearingOf(sol.point.x - bat.worldPosition.x, sol.point.z - bat.worldPosition.z);
-    bat.prepare(Number.isFinite(leadBearing) ? leadBearing : bearing);
+    // Aim at the predicted intercept point, not the current position: the
+    // erector visibly slews and elevates onto the solution during prep.
+    const f = bat.def.flight;
+    const sol = estimateInterceptPoint(
+      bat.worldPosition, track.threat.pos, track.threat.vel,
+      f.designSpeed, { maxTime: f.fuelTime },
+    );
+    const att = computeLaunchAttitude(bat.worldPosition, sol.point, f);
+    bat.prepare(att.bearing, att.pitchDeg);
     audio.blip('assign');
     state.logEvent(`${bat.def.name} ASSIGNED TO ${id} · PREP ${bat.def.prepTime.toFixed(1)}s`, 'info');
     this.ui.log(state.log[state.log.length - 1]);
@@ -578,8 +586,12 @@ class Game {
     if (this.showPerf) this._updatePerf(raw);
   }
 
-  /** One simulation step. Kept separate so tests can drive it deterministically. */
-  step(dt) {
+  /**
+   * One simulation step. Kept separate so tests can drive it deterministically.
+   * `skipUI` suppresses DOM and canvas work during batch advances; the caller
+   * does a single interface update at the end.
+   */
+  step(dt, skipUI = false) {
     state.wallClock += dt;
     if (state.phase === PHASE.INBOUND) state.clock += dt;
 
@@ -652,6 +664,16 @@ class Game {
         if (!tr || !tr.threat.alive) {
           b.assignedTrackId = null;
           if (b.state === BATTERY_STATE.READY || b.state === BATTERY_STATE.PREP) b.stow();
+        } else {
+          // Keep following the solution while assigned - the launcher tracks
+          // the target instead of freezing on the attitude it started with.
+          const f = b.def.flight;
+          const sol = estimateInterceptPoint(
+            b.worldPosition, tr.threat.pos, tr.threat.vel, f.designSpeed,
+            { maxTime: f.fuelTime },
+          );
+          const att = computeLaunchAttitude(b.worldPosition, sol.point, f);
+          b.retarget(att.bearing, att.pitchDeg);
         }
       }
     }
@@ -672,6 +694,18 @@ class Game {
     // --- interface ---------------------------------------------------------
     this.nearConsole = this.base.consoleDistance(this.player.position) < 3.2;
     state.set('nearConsole', this.nearConsole);
+    if (skipUI) {
+      // Keep the refresh clocks running so the interface catches up in one go.
+      this._scopeTexClock += dt;
+      this._screenClock += dt;
+      return;
+    }
+    this.updateInterface(dt);
+  }
+
+  updateInterface(dt) {
+    const alarm = state.phase === PHASE.INBOUND
+      && this.radar.trackList.some((t) => t.threat.alive);
     this.ui.update(dt, {
       state,
       radar: this.radar,
@@ -715,7 +749,7 @@ class Game {
 
   _updateShelterScreens() {
     const s = state.stats;
-    this.base.setScreenText(0, screenTexture([
+    this.statusSurface.draw([
       `COND  ${CONDITIONS[state.condition].name}`,
       `SCEN  ${SCENARIOS.find((x) => x.id === state.scenarioId).name}`,
       `STATE ${state.phase.toUpperCase()}`,
@@ -724,15 +758,16 @@ class Game {
       `FLT   ${this.interceptors.activeCount}`,
       '',
       'FICTIONAL RANGE',
-    ], { title: 'SITE STATUS', size: 256 }));
-    this.base.setScreenText(2, this.batteries.map ? screenTexture([
-      ...this.batteries.map((b) => `${b.def.name.slice(0, 9).padEnd(9)} ${b.statusLabel.padEnd(6)} ${b.ammo}/${b.maxAmmo}`),
+    ], { title: 'SITE STATUS' });
+    this.batterySurface.draw([
+      ...this.batteries.map((b) =>
+        `${b.def.name.slice(0, 9).padEnd(9)} ${b.statusLabel.padEnd(6)} ${b.ammo}/${b.maxAmmo}`),
       '',
       `FIRED ${s.roundsFired}`,
       `KILL  ${s.intercepted}`,
       `MISS  ${s.misses}`,
       `HIT   ${s.impacted}`,
-    ], { title: 'BATTERY STATUS', size: 256 }) : null);
+    ], { title: 'BATTERY STATUS' });
   }
 
   render(dt) {
@@ -759,12 +794,19 @@ class Game {
     const g = this;
     window.__GAME = {
       get ready() { return !!g.ready; },
-      /** Deterministically advance the sim without waiting on rAF. */
-      advance(seconds, stepMs = 1000 / 60) {
+      /**
+       * Deterministically advance the sim without waiting on rAF.
+       * Rendering is opt-in: on a software rasteriser a frame costs far more
+       * than the whole simulation step, so tests only draw before a capture.
+       */
+      advance(seconds, stepMs = 1000 / 60, render = false) {
         const dt = stepMs / 1000;
         const n = Math.max(1, Math.round(seconds / dt));
-        for (let i = 0; i < n; i++) g.step(dt);
-        g.render(dt);
+        // Interface work is skipped until the final step so a long advance is
+        // dominated by simulation cost rather than DOM churn.
+        for (let i = 0; i < n - 1; i++) g.step(dt, true);
+        g.step(dt, false);
+        if (render) g.render(dt);
         return g.snapshot();
       },
       renderOnce() { g.render(1 / 60); },
@@ -822,6 +864,70 @@ class Game {
         const ok = g.assign(pick.id);
         return ok ? { track: pick.id, battery: bat.def.id } : null;
       },
+      /**
+       * Run one complete engagement head-to-tail inside the page with no
+       * rendering: start the scenario, wait for a track, engage as soon as the
+       * battery will accept it, authorize when ready, and fly to a result.
+       * Used to measure hit rates without paying for hundreds of frames.
+       */
+      runTrial({
+        battery = 'highlance', scenario = 'single', seed = 1,
+        engageAfter = 6, maxTime = 140,
+      } = {}) {
+        g.setScenario(scenario);
+        g.selectBattery(battery);
+        g.restartScenario(seed);
+        const dt = 1 / 60;
+        let t = 0;
+        let assigned = false;
+        let fired = false;
+        let nextTry = engageAfter;
+        let killAlt = 0;
+        const before = { i: 0, m: 0, h: 0 };
+        while (t < maxTime) {
+          g.step(dt, true);
+          t += dt;
+          if (!assigned && t >= nextTry) {
+            assigned = !!window.__GAME.autoEngage(battery);
+            if (!assigned) nextTry = t + 0.5;
+          }
+          if (assigned && !fired) fired = g.authorize();
+          const s = state.stats;
+          if (fired && (s.intercepted + s.misses + s.impacted
+              + s.decoysDestroyed > before.i + before.m + before.h)) {
+            killAlt = s.bestIntercept;
+            break;
+          }
+          // Nothing left to wait for.
+          if (fired && g.interceptors.activeCount === 0 && g.threats.activeCount === 0) break;
+        }
+        const s = { ...state.stats };
+        return {
+          battery, scenario, seed, assigned, fired, t: +t.toFixed(1),
+          killAlt: Math.round(killAlt),
+          outcome: s.intercepted ? 'KILL' : s.decoysDestroyed ? 'DECOY'
+            : s.impacted ? 'IMPACT' : s.misses ? 'MISS' : 'NONE',
+          stats: s,
+        };
+      },
+
+      /** Repeat `runTrial` over a seed range and summarise. */
+      runTrials(n = 10, opts = {}) {
+        const rows = [];
+        for (let i = 0; i < n; i++) {
+          rows.push(window.__GAME.runTrial({ ...opts, seed: (opts.seed ?? 1000) + i * 37 }));
+        }
+        const kills = rows.filter((r) => r.outcome === 'KILL');
+        return {
+          n, kills: kills.length,
+          hitRate: +(kills.length / n).toFixed(3),
+          medKillAlt: kills.length
+            ? kills.map((r) => r.killAlt).sort((a, b) => a - b)[Math.floor(kills.length / 2)] : 0,
+          outcomes: rows.map((r) => r.outcome),
+          fired: rows.filter((r) => r.fired).length,
+        };
+      },
+
       snapshot() { return g.snapshot(); },
       perf() {
         const info = g.renderer.info;
@@ -874,6 +980,13 @@ class Game {
         battery: m.batteryId, phase: m.phase, target: m.targetId,
         alt: Math.round(m.pos.y), speed: Math.round(m.speed),
         minRange: Number.isFinite(m.minRange) ? Math.round(m.minRange) : null,
+        // Flight diagnostics: these make a bad engagement legible in a log.
+        range: m.target ? Math.round(m.pos.distanceTo(m.target.pos)) : null,
+        aimAlt: Math.round(m.aimPoint.y),
+        solTime: +(m.solutionTime ?? 0).toFixed(1),
+        fuel: +(m.fuelLeft ?? 0).toFixed(1),
+        cut: !!m.sustainCut,
+        age: +m.age.toFixed(1),
       })),
       batteries: this.batteries.map((b) => ({
         id: b.def.id, state: b.state, status: b.statusLabel,

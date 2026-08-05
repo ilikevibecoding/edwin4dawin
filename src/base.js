@@ -381,12 +381,13 @@ export class Base {
     if (this._scopeTexture) this._scopeTexture.needsUpdate = true;
   }
 
-  /** Replace a side screen's contents with generated status text. */
-  setScreenText(index, texture) {
+  /** Point a shelter display at a live texture (bound once at boot). */
+  setScreenTexture(index, texture) {
     const screen = this.shelterScreens?.[index];
     if (!screen) return;
     screen.material.map = texture;
     screen.material.emissiveMap = texture;
+    screen.material.emissiveIntensity = 1.4;
     screen.material.needsUpdate = true;
   }
 }
