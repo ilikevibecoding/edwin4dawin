@@ -1,1 +1,58 @@
-# edwin4dawin
+# IRONVEIL RANGE — first-person interceptor base demo
+
+A polished first-person defense demo built with **Three.js**: operate fictional interceptor
+batteries at a desert air-defense test range while ballistic threats descend through the
+atmosphere. Everything — terrain, vehicles, launchers, textures, audio — is generated
+procedurally in code. No downloaded assets.
+
+> **Fictional entertainment demo.** Systems are loosely visually inspired by publicly
+> recognizable platforms (Patriot / THAAD) but every range, speed, radar behavior, guidance
+> rule and probability is invented and tuned purely for gameplay. Nothing here reflects real
+> procedures or performance.
+
+## Run
+
+```bash
+npm install
+npm run dev        # http://localhost:5173
+```
+
+## Play
+
+- **WASD** move · **SHIFT** sprint · mouse look (click to lock pointer)
+- Walk into the **C2 shelter** and press **E** at the console (or **TAB** nearby)
+- Console: pick **conditions** (day/sunset/night), a **scenario**
+  (`SINGLE TRACK`, `SATURATION`, `NIGHT RAID`), a **battery**, then
+  **START BALLISTIC MISSILES**
+- Select a track on the radar display or list → **ASSIGN** → **AUTHORIZE LAUNCH**
+- Outdoors: look at a tracked threat → **E** assigns the selected battery, **F** authorizes
+- **1/2/3** select battery · **H** settings (reduced motion, volume, quality) · **R** restart after debrief
+
+## Batteries (fictional)
+
+| System | Style | Profile |
+|--------|-------|---------|
+| RAMPART PX-4 | Patriot-inspired | fast, agile, terminal-phase, 8 rounds |
+| HALBERD HA-9 | THAAD-inspired | slower spin-up, high-altitude window, 6 rounds |
+| SENTINEL LR-1 | entirely fictional | 3 rounds, longest reach, biggest plume |
+
+## Tests
+
+```bash
+npm test           # Playwright: deterministic gameplay + boot + budgets
+npm run shots      # deterministic screenshot sweep into shots/
+```
+
+The game exposes a deterministic test API on `window.__game` (seeded RNG + fixed-step
+`step()` driving), which the Playwright suites use.
+
+## Code map
+
+`src/main.js` integration + game state · `player.js` FPS controller · `base.js` terrain/base ·
+`batteries.js` launchers · `threats.js` ballistic threats · `interceptors.js` guidance ·
+`physics.js` flight math + collision · `radar.js` tracking/PPI/holo display · `effects.js`
+particles/trails/explosions · `weather.js` sky/time-of-day · `audio.js` procedural WebAudio ·
+`post.js` composer chain · `ui.js` HUD/console DOM · `textures.js` canvas textures ·
+`util.js` RNG/pool/events.
+
+See `PROGRESS.md` for the iteration log and rubric scoring.
