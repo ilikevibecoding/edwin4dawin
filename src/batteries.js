@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { mats } from './core/materials.js';
 import * as T from './core/textures.js';
 import * as K from './core/kit.js';
+import { mergeStatic, markDynamic } from './core/merge.js';
 
 export const BATTERY_SPECS = {
   patriot: {
@@ -341,10 +342,7 @@ function buildRectCanister(len, size, index, accentColor) {
   // stencils
   const dec = new THREE.Mesh(
     new THREE.PlaneGeometry(len * 0.5, size * 0.4),
-    new THREE.MeshStandardMaterial({
-      map: T.stencil(`MIM-PT ${index + 1}`, { w: 512, h: 128, color: '#d8d5c4' }),
-      transparent: true, roughness: 0.85,
-    }),
+    K.decalMaterial(`MIM-PT ${index + 1}`, { color: '#d8d5c4' }),
   );
   dec.position.set(size / 2 + 0.005, 0, 0);
   dec.rotation.y = Math.PI / 2;
@@ -363,7 +361,7 @@ function buildRectCanister(len, size, index, accentColor) {
   );
   strip.position.set(-size / 2 - 0.02, size * 0.25, 0);
   g.add(strip);
-  g.userData.cover = cover;
+  g.userData.cover = markDynamic(cover);
   g.userData.strip = strip;
   return g;
 }
@@ -392,10 +390,7 @@ function buildRoundCanister(len, radius, index, accentColor, tint = null) {
   g.add(K.boltRing(radius * 0.86, 16, M.steel).translateZ(len / 2 - 0.05));
   const dec = new THREE.Mesh(
     new THREE.PlaneGeometry(len * 0.42, radius * 0.9),
-    new THREE.MeshStandardMaterial({
-      map: T.stencil(`RD-${index + 1}`, { w: 512, h: 160, color: '#cfd4cc' }),
-      transparent: true, roughness: 0.85,
-    }),
+    K.decalMaterial(`RD-${index + 1}`, { color: '#cfd4cc', h: 160 }),
   );
   dec.position.set(radius + 0.004, 0, len * 0.1);
   dec.rotation.y = Math.PI / 2;
@@ -406,7 +401,7 @@ function buildRoundCanister(len, radius, index, accentColor, tint = null) {
   );
   strip.position.set(0, radius + 0.02, 0);
   g.add(strip);
-  g.userData.cover = cover;
+  g.userData.cover = markDynamic(cover);
   g.userData.strip = strip;
   return g;
 }
@@ -521,13 +516,13 @@ function buildPadSupport(battery, rng, { crewShelter = true } = {}) {
   battery.padFloodlight = mast;
 
   // ground scorch under the launcher
-  const scorch = new THREE.Mesh(new THREE.PlaneGeometry(13, 13), mats().scorch);
+  const scorch = new THREE.Mesh(new THREE.PlaneGeometry(13, 13), mats().scorch.clone());
   scorch.rotation.x = -Math.PI / 2;
   scorch.position.set(0, 0.06, -1.5);
   scorch.material = mats().scorch.clone();
   scorch.material.opacity = 0.55;
   g.add(scorch);
-  battery.scorchDecal = scorch;
+  battery.scorchDecal = markDynamic(scorch);
 
   return g;
 }
@@ -551,13 +546,13 @@ function buildPatriot(battery, rng) {
   g.add(turntable);
   turntable.add(K.cyl(1.0, 1.15, 0.34, 20, M.panelGrey, 0, 0.17, 0));
   turntable.add(K.boltRing(1.02, 20, M.steel).translateY(0.02).rotateX(-Math.PI / 2));
-  battery.turntable = turntable;
+  battery.turntable = markDynamic(turntable);
 
   // erector frame
   const erector = new THREE.Group();
   erector.position.set(0, 0.4, 0);
   turntable.add(erector);
-  battery.erector = erector;
+  battery.erector = markDynamic(erector);
 
   // trunnion + frame rails
   for (const s of [-1, 1]) {
@@ -600,7 +595,7 @@ function buildPatriot(battery, rng) {
     const ram = K.hydraulicRam(2.0);
     ram.position.set(s * 1.25, 0.1, 0.7);
     ram.rotation.x = -0.55;
-    turntable.add(ram);
+    turntable.add(markDynamic(ram));
     battery.rams.push(ram);
   }
   // hydraulic lines
@@ -614,7 +609,7 @@ function buildPatriot(battery, rng) {
   for (let i = 0; i < 4; i++) {
     const led = K.cyl(0.035, 0.035, 0.03, 10, M.ledGreen, -0.45 + i * 0.3, 1.85, 3.37);
     led.rotation.x = Math.PI / 2;
-    g.add(led);
+    g.add(markDynamic(led));
     leds.push(led);
   }
   battery.statusLeds = leds;
@@ -633,7 +628,7 @@ function buildPatriot(battery, rng) {
   for (const s of [-1, 1]) {
     const b = K.warningBeacon(0xffb029);
     b.position.set(s * 1.2, 1.9, -3.3);
-    g.add(b);
+    g.add(markDynamic(b));
     battery.beacons.push(b);
   }
 
@@ -667,12 +662,12 @@ function buildThaad(battery, rng) {
   g.add(turntable);
   turntable.add(K.cyl(1.35, 1.55, 0.4, 24, M.panelGrey, 0, 0.2, 0));
   turntable.add(K.boltRing(1.4, 26, M.steel).translateY(0.02).rotateX(-Math.PI / 2));
-  battery.turntable = turntable;
+  battery.turntable = markDynamic(turntable);
 
   const erector = new THREE.Group();
   erector.position.set(0, 0.45, 0);
   turntable.add(erector);
-  battery.erector = erector;
+  battery.erector = markDynamic(erector);
 
   // launch pod: a boxy frame containing 8 round tubes (2 x 4)
   const podLen = 8.0;
@@ -729,7 +724,7 @@ function buildThaad(battery, rng) {
     const ram = K.hydraulicRam(3.0);
     ram.position.set(s * 1.45, 0.05, 1.4);
     ram.rotation.x = -0.75;
-    turntable.add(ram);
+    turntable.add(markDynamic(ram));
     battery.rams.push(ram);
   }
   // blast deflector plate that folds down behind the pod
@@ -744,7 +739,7 @@ function buildThaad(battery, rng) {
   for (let i = 0; i < 4; i++) {
     const led = K.cyl(0.035, 0.035, 0.03, 10, M.ledGreen, -0.5 + i * 0.32, 2.6, -3.28);
     led.rotation.x = Math.PI / 2;
-    g.add(led);
+    g.add(markDynamic(led));
     leds.push(led);
   }
   battery.statusLeds = leds;
@@ -762,7 +757,7 @@ function buildThaad(battery, rng) {
   for (const s of [-1, 1]) {
     const b = K.warningBeacon(0xffb029);
     b.position.set(s * 1.3, 3.05, -4.4);
-    g.add(b);
+    g.add(markDynamic(b));
     battery.beacons.push(b);
   }
 
@@ -801,12 +796,12 @@ function buildSentinel(battery, rng) {
   g.add(turntable);
   turntable.add(K.cyl(1.8, 2.1, 0.5, 28, M.panelGrey, 0, 0.25, 0));
   turntable.add(K.boltRing(1.86, 32, M.steel).translateY(0.03).rotateX(-Math.PI / 2));
-  battery.turntable = turntable;
+  battery.turntable = markDynamic(turntable);
 
   const erector = new THREE.Group();
   erector.position.set(0, 0.55, 0);
   turntable.add(erector);
-  battery.erector = erector;
+  battery.erector = markDynamic(erector);
 
   // erector beam
   erector.add(K.box(2.6, 0.6, 11.0, M.panelGrey, 0, 0, 4.4));
@@ -849,7 +844,7 @@ function buildSentinel(battery, rng) {
     const ram = K.hydraulicRam(4.4);
     ram.position.set(s * 1.7, 0.0, 2.2);
     ram.rotation.x = -0.8;
-    turntable.add(ram);
+    turntable.add(markDynamic(ram));
     battery.rams.push(ram);
   }
 
@@ -860,7 +855,7 @@ function buildSentinel(battery, rng) {
   for (let i = 0; i < 5; i++) {
     const led = K.cyl(0.04, 0.04, 0.03, 10, M.ledGreen, -0.7 + i * 0.35, 3.5, -3.88);
     led.rotation.x = Math.PI / 2;
-    g.add(led);
+    g.add(markDynamic(led));
     leds.push(led);
   }
   battery.statusLeds = leds;
@@ -879,7 +874,7 @@ function buildSentinel(battery, rng) {
   for (const s of [-1, 1]) {
     const b = K.warningBeacon(0xff3a2a);
     b.position.set(s * 1.5, 4.05, -5.4);
-    g.add(b);
+    g.add(markDynamic(b));
     battery.beacons.push(b);
   }
 
@@ -916,5 +911,6 @@ export function createBattery(type, position, heading, rng, collision) {
       o.receiveShadow = true;
     }
   });
+  b.mergeStats = mergeStatic(b.group, { tag: `bat-${type}` });
   return b;
 }

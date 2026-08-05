@@ -423,22 +423,27 @@ class TrailSystem {
     t.emitting = false;
   }
 
-  update(dt, camera) {
+  /** Simulation half: age the points and retire dead trails. */
+  tick(dt) {
+    for (const t of this.trails) {
+      if (!t.active) continue;
+      t.tick(dt);
+      if (!t.active) {
+        this._blank(t);
+        if (!this.free.includes(t)) this.free.push(t);
+      }
+    }
+  }
+
+  /** Presentation half: rebuild the camera-facing ribbon vertices. */
+  present(camera) {
     camera.getWorldPosition(_view);
-    let maxIndex = 0;
     for (const t of this.trails) {
       if (!t.active) {
         this._blank(t);
         continue;
       }
-      t.tick(dt);
-      if (!t.active) {
-        this._blank(t);
-        this.free.push(t);
-        continue;
-      }
       this._writeTrail(t);
-      maxIndex = Math.max(maxIndex, (t.slot + 1) * (this.maxPoints - 1) * 6);
     }
     this.geometry.setDrawRange(0, this.maxTrails * (this.maxPoints - 1) * 6);
     this.posAttr.needsUpdate = true;
@@ -650,7 +655,7 @@ class ShockwaveSystem {
     m.userData = { age: 0, life, size, alpha };
   }
 
-  update(dt, camera) {
+  tick(dt) {
     this.pool.forEachLive((m) => {
       const u = m.userData;
       u.age += dt;
@@ -662,8 +667,11 @@ class ShockwaveSystem {
       const s = u.size * Math.pow(t, 0.55);
       m.scale.setScalar(s);
       m.material.opacity = u.alpha * (1 - t) * (1 - t);
-      m.quaternion.copy(camera.quaternion);
     });
+  }
+
+  face(camera) {
+    this.pool.forEachLive((m) => m.quaternion.copy(camera.quaternion));
   }
 
   clear() {
@@ -1124,15 +1132,22 @@ export class Effects {
     this.trails.release(t);
   }
 
-  update(dt, camera) {
+  /** Advance every particle system. Called once per fixed simulation step. */
+  simulate(dt) {
     this.smoke.update(dt);
     this.smoke2.update(dt);
     this.fire.update(dt);
     this.sparks.update(dt);
-    this.trails.update(dt, camera);
+    this.trails.tick(dt);
     this.debris.update(dt);
-    this.shockwaves.update(dt, camera);
+    this.shockwaves.tick(dt);
     this.flashes.update(dt);
+  }
+
+  /** Camera-dependent work. Called once per rendered frame. */
+  present(camera) {
+    this.trails.present(camera);
+    this.shockwaves.face(camera);
   }
 
   get stats() {

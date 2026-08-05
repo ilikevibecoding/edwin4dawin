@@ -138,6 +138,8 @@ export function hydraulicRam(length = 1.6, barrelR = 0.075) {
   const eyeB = eyeA.clone();
   eyeB.position.y = length * 0.92;
   g.add(barrel, rod, eyeA, eyeB);
+  // the rod slides, so it must survive static merging as its own object
+  rod.userData.dynamic = true;
   g.userData.rod = rod;
   g.userData.length = length;
   return g;
@@ -248,7 +250,7 @@ export function crateStack(rng) {
     }
     const label = new THREE.Mesh(
       new THREE.PlaneGeometry(w * 0.7, h * 0.5),
-      new THREE.MeshBasicMaterial({ map: T.stencil(rng.pick(['MK-4', 'AGL-2', 'FCU', 'SPARES', 'CBL-7']), { w: 256, h: 96 }), transparent: true }),
+      decalMaterial(rng.pick(['MK-4', 'AGL-2', 'FCU', 'SPARES', 'CBL-7']), { w: 256, h: 96, basic: true }),
     );
     label.position.set(c.position.x, y + h * 0.55, c.position.z + d / 2 + 0.012);
     label.rotation.y = c.rotation.y;
@@ -712,16 +714,33 @@ export function conduit(points, radius = 0.05, material = null) {
   return m;
 }
 
+const decalMats = new Map();
+
+/**
+ * Cached decal material. Stencils are reused all over the site, and sharing the
+ * material lets the static merge collapse them into one draw call.
+ */
+export function decalMaterial(text, opts = {}) {
+  const key = `${text}|${opts.color || ''}|${opts.w || 512}x${opts.h || 128}|${opts.font || ''}|${opts.basic ? 'b' : 's'}`;
+  let mat = decalMats.get(key);
+  if (mat) return mat;
+  const map = T.stencil(text, {
+    w: opts.w || 512,
+    h: opts.h || 128,
+    color: opts.color || '#dfe4d8',
+    font: opts.font || 'bold 64px "Arial Narrow", Impact, sans-serif',
+    wear: opts.wear ?? 0.2,
+  });
+  mat = opts.basic
+    ? new THREE.MeshBasicMaterial({ map, transparent: true })
+    : new THREE.MeshStandardMaterial({ map, transparent: true, roughness: 0.7, metalness: 0.1 });
+  decalMats.set(key, mat);
+  return mat;
+}
+
 /** Text plate that can be bolted to equipment. */
 export function labelPlate(text, w = 0.6, h = 0.18, color = '#dfe4d8') {
-  const mat = new THREE.MeshStandardMaterial({
-    map: T.stencil(text, { w: 512, h: 128, color, font: 'bold 64px "Arial Narrow", Impact, sans-serif', wear: 0.2 }),
-    transparent: true,
-    roughness: 0.7,
-    metalness: 0.1,
-  });
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-  return m;
+  return new THREE.Mesh(new THREE.PlaneGeometry(w, h), decalMaterial(text, { color }));
 }
 
 export { _v };

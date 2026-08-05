@@ -496,6 +496,67 @@ class Game {
     return true;
   }
 
+  /**
+   * Estimate the altitude at which a given battery would meet a threat, used to
+   * pick a sensible battery. Deliberately crude - it is a gameplay heuristic.
+   */
+  _predictInterceptAltitude(battery, threat) {
+    const spec = INTERCEPTOR_SPECS[battery.spec.interceptor];
+    const d = battery.group.position.distanceTo(threat.pos);
+    const t = d / (spec.maxSpeed * 0.55);
+    return Math.max(0, threat.pos.y + threat.vel.y * t);
+  }
+
+  /**
+   * One decision tick of the demonstration autopilot. Used by the headless
+   * tests to play the game, and available in-game as an assist.
+   * @returns {string} what it decided to do
+   */
+  autoPilot() {
+    // finish an existing engagement first
+    if (this.assignedBattery && this.assignedTrack && this.assignedTrack.threat.alive) {
+      const b = this.assignedBattery;
+      if (this.assignedTrack.threat.engagedBy) {
+        // one round per assignment - release and look for the next threat
+        this.assignedTrack = null;
+        b.stow();
+        this.assignedBattery = null;
+        return 'ENGAGED';
+      }
+      if (b.canFire && b.aimError < 0.14) {
+        return this.authorize() ? 'FIRE' : 'FIRE_FAILED';
+      }
+      return b.status === 'PREPARING' ? 'PREPARING' : 'SLEWING';
+    }
+    const candidates = this.radar.tracks.filter(
+      (t) => t.threat.alive && !t.engaged && t.classification !== 'DECOY',
+    );
+    if (!candidates.length) return 'NO_TARGET';
+    // engage the most urgent track first
+    candidates.sort((a, b) => a.timeToImpact - b.timeToImpact);
+    for (const tr of candidates) {
+      let best = null;
+      let bestScore = -Infinity;
+      for (const b of this.batteries) {
+        if (b.status !== 'READY' || b.loaded <= 0) continue;
+        const alt = this._predictInterceptAltitude(b, tr.threat);
+        const [lo, hi] = b.spec.idealAltitude;
+        const inBand = alt >= lo && alt <= hi;
+        const margin = inBand ? 0 : Math.min(Math.abs(alt - lo), Math.abs(alt - hi));
+        const score = (inBand ? 1000 : 0) - margin / 100 + b.loaded * 2;
+        if (score > bestScore) {
+          bestScore = score;
+          best = b;
+        }
+      }
+      if (!best) continue;
+      this.radar.selectTrack(tr);
+      this._selectBattery(best);
+      return this.assign() ? 'ASSIGN' : 'ASSIGN_FAILED';
+    }
+    return 'NO_BATTERY';
+  }
+
   /** Convenience used by the tests and by the auto-cue: best available battery. */
   autoEngage() {
     if (!this.radar.tracks.length) return false;
@@ -619,7 +680,7 @@ class Game {
     const groundAt = (x, z) => this.base.terrainHeight(x, z);
     this.threats.update(dt, this.camera, groundAt);
     this.interceptors.update(dt, this.camera, groundAt);
-    this.effects.update(dt, this.camera);
+    this.effects.simulate(dt);
     this.weather.update(dt, this.simTime, this.player.pos);
 
     // keep an assigned launcher tracking its target
@@ -627,13 +688,7 @@ class Game {
       this.assignedBattery.aimAt(this._leadPoint(this.assignedBattery, this.assignedTrack.threat));
     }
 
-    this.radar.update(dt, {
-      threats: this.threats.active,
-      interceptors: this.interceptors.active,
-      batteries: this.batteries,
-      selectedBattery: this.selectedBattery,
-      gameState: this.state,
-    });
+    this.radar.update(dt, { threats: this.threats.active });
     this.audio.setListener(this.camera.position);
 
     // sonic rumble of bodies passing near the site
@@ -685,6 +740,13 @@ class Game {
   _render(dt) {
     this.frameCount++;
     this.renderer.info.reset();
+    this.effects.present(this.camera);
+    this.radar.present(dt, {
+      interceptors: this.interceptors.active,
+      batteries: this.batteries,
+      selectedBattery: this.selectedBattery,
+      gameState: this.state,
+    });
     this._updateHudProjection();
     this.ui.update(dt, this._snapshot());
     if (this.settings.perf) {
@@ -883,6 +945,25 @@ class Game {
       assign: () => this.assign(),
       authorize: () => this.authorize(),
       autoEngage: () => this.autoEngage(),
+      autoPilot: () => this.autoPilot(),
+      /**
+       * Play the scenario headlessly: steps the sim and lets the autopilot make
+       * a decision every 0.35 s. Returns the decision histogram.
+       */
+      autoPlay: (seconds = 90, decisionInterval = 0.35) => {
+        const total = Math.round(seconds / FIXED_DT);
+        const every = Math.max(1, Math.round(decisionInterval / FIXED_DT));
+        const decisions = {};
+        for (let i = 0; i < total; i++) {
+          this.stepSim(FIXED_DT);
+          if (i % every === 0) {
+            const d = this.autoPilot();
+            decisions[d] = (decisions[d] || 0) + 1;
+          }
+          if (this.state === 'complete') break;
+        }
+        return decisions;
+      },
       selectBattery: (id) => {
         this._selectBattery(this.batteries.find((x) => x.id === id));
         return true;

@@ -225,8 +225,8 @@ export class ThreatManager {
 
     // spawn on a high arc, well downrange, on a varying bearing
     const bearing = rng.range(-0.85, 0.85) + Math.PI; // arriving broadly from the north
-    const range = rng.range(46000, 62000);
-    const alt = rng.range(23000, 31000);
+    const range = rng.range(52000, 68000);
+    const alt = rng.range(26000, 34000);
     const aimSpread = decoy ? 900 : 420;
     const aim = new THREE.Vector3(
       this.targetCentre.x + rng.gauss(0, aimSpread * 0.4, 2),
@@ -238,7 +238,7 @@ export class ThreatManager {
       alt,
       aim.z + Math.cos(bearing) * range,
     );
-    const flightTime = rng.range(46, 60) * (decoy ? 1.05 : 1);
+    const flightTime = rng.range(56, 72) * (decoy ? 1.05 : 1);
     ballisticLaunchVelocity(t.vel, t.pos, aim, flightTime, 1.0);
     // the solve gives the whole arc; we join it already descending
     t.vel.y = Math.min(t.vel.y, -120);

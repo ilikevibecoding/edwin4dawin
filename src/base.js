@@ -6,6 +6,7 @@ import { Noise2D } from './core/rng.js';
 import { mats } from './core/materials.js';
 import * as T from './core/textures.js';
 import * as K from './core/kit.js';
+import { mergeStatic, markDynamic } from './core/merge.js';
 
 export const BASE_FLAT_RADIUS = 170;
 export const PAD_POSITIONS = {
@@ -479,12 +480,13 @@ export class Base {
     }
     blades.position.copy(fan.position);
     blades.position.y += 0.02;
-    g.add(blades);
+    g.add(markDynamic(blades));
     this.rotators.push({ obj: blades, axis: 'y', speed: 6.5 });
 
     const mast = K.antennaMast(11, { dish: true, rng });
     mast.position.set(W / 2 - 1.2, 0.34 + H + 0.28, -D / 2 + 1.2);
     g.add(mast);
+    markDynamic(mast.userData.beacon, mast.userData.dish);
     this.beacons.push(mast.userData.beacon);
     if (mast.userData.dish) this.rotators.push({ obj: mast.userData.dish, axis: 'y', speed: 0.22 });
 
@@ -510,6 +512,7 @@ export class Base {
     lamp.add(bulb);
     lamp.position.set(2.6, 0.34 + 2.7, frontZ + 0.35);
     g.add(lamp);
+    markDynamic(bulb);
     this.lampLights.push({ bulbMesh: bulb, group: lamp, kind: 'door' });
 
     // sandbag revetment + gabions along the exposed side
@@ -816,9 +819,10 @@ export class Base {
       arrayGroup.add(K.cyl(0.012, 0.02, 1.4, 5, M.steel, s * (faceW / 2 - 0.15), faceH + 0.8, 0));
       const strobe = K.warningBeacon(0xff3a2a);
       strobe.position.set(s * (faceW / 2 - 0.05), faceH + 0.16, 0);
-      arrayGroup.add(strobe);
+      arrayGroup.add(markDynamic(strobe));
       this.beacons.push(strobe.userData.rotor);
     }
+    markDynamic(turret);
     this.radarTurret = turret;
     this.radarArray = arrayGroup;
     this.rotators.push({ obj: turret, axis: 'y', speed: 0.62 });
@@ -852,6 +856,7 @@ export class Base {
     dishHead.add(horn);
     dishHead.add(K.cyl(0.3, 0.34, 0.5, 12, M.panelGrey, 0, -0.3, 0));
     this.rotators.push({ obj: dishHead, axis: 'y', speed: -0.9 });
+    markDynamic(dishHead);
     this.radarDish = dishHead;
 
     // generator + cable runs feeding the radar
@@ -957,7 +962,7 @@ export class Base {
     const boom = K.box(9.0, 0.16, 0.16, M.hazard, 4.5, 0, 0);
     boomPivot.add(boom);
     boomPivot.rotation.z = 0.02;
-    gate.add(boomPivot);
+    gate.add(markDynamic(boomPivot));
     gate.add(K.cyl(0.14, 0.16, 1.1, 10, M.panelGrey, -4.6, 0.55, 0));
     this.gateBoom = boomPivot;
     g.add(gate);
@@ -987,7 +992,7 @@ export class Base {
       tower.add(K.ladder(6.4).translateZ(1.35).translateY(0));
       const searchlight = this._buildSearchlight();
       searchlight.position.set(0.9, 6.9, 0.9);
-      tower.add(searchlight);
+      tower.add(markDynamic(searchlight));
       this.searchlights = this.searchlights || [];
       this.searchlights.push(searchlight);
       g.add(tower);
@@ -1039,6 +1044,7 @@ export class Base {
       const mast = K.floodlightMast(8.2);
       mast.position.set(x, this.terrainHeight(x, z), z);
       mast.rotation.y = Math.atan2(-x, -z) + Math.PI;
+      markDynamic(mast.userData.head);
       this.group.add(mast);
       // one shared spot per mast, aimed inwards and downwards
       const spot = new THREE.SpotLight(0xffe8c4, 0, 90, 0.62, 0.55, 1.4);
@@ -1097,6 +1103,7 @@ export class Base {
       const mast = K.antennaMast(h, { dish: h > 11, rng });
       mast.position.set(x, this.terrainHeight(x, z), z);
       g.add(mast);
+      markDynamic(mast.userData.beacon, mast.userData.dish);
       this.beacons.push(mast.userData.beacon);
       if (mast.userData.dish) this.rotators.push({ obj: mast.userData.dish, axis: 'y', speed: 0.15 });
       this.collision.addCylinder(new THREE.Vector3(x, 3, z), 0.7, 6, 'mast');
@@ -1172,7 +1179,7 @@ export class Base {
     ring.rotation.y = Math.PI / 2;
     ring.position.set(0.06, 5.9, 0);
     sock.add(ring);
-    this.windsock = sockMesh;
+    this.windsock = markDynamic(sockMesh);
     g.add(sock);
     this.collision.addCylinder(new THREE.Vector3(24, 3, 16), 0.4, 6, 'mast');
 
@@ -1219,6 +1226,8 @@ export class Base {
     this.buildPerimeter();
     this.buildFloodlights();
     this.buildProps();
+    // collapse the kit-bashed static geometry into a handful of draw calls
+    this.mergeStats = mergeStatic(this.group, { tag: 'site' });
     return this;
   }
 

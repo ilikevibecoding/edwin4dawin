@@ -229,15 +229,33 @@ export class Radar {
     return best;
   }
 
-  update(dt, { threats, interceptors, batteries, selectedBattery, gameState }) {
+  /** Simulation half: track formation only. Cheap. */
+  update(dt, { threats }) {
     this.time += dt;
     this.sweep += dt * 0.85;
     this.updateTracks(threats, dt);
+  }
+
+  /**
+   * Presentation half: the hologram and the two canvas displays. Canvas 2D
+   * redraws are the single most expensive thing in the frame, so the scope is
+   * repainted at a fixed 20 Hz and the status panel at 5 Hz - both still look
+   * like live instruments.
+   */
+  present(dt, { interceptors, batteries, selectedBattery, gameState }) {
     this._updateHolo(interceptors, selectedBattery);
-    this._drawScope(interceptors, batteries, selectedBattery, gameState);
-    this._drawSide(batteries, selectedBattery, gameState);
-    this.texture.needsUpdate = true;
-    this.sideTexture.needsUpdate = true;
+    this._scopeAccum = (this._scopeAccum || 0) + dt;
+    this._sideAccum = (this._sideAccum || 0) + dt;
+    if (this._scopeAccum >= 0.05) {
+      this._scopeAccum = 0;
+      this._drawScope(interceptors, batteries, selectedBattery, gameState);
+      this.texture.needsUpdate = true;
+    }
+    if (this._sideAccum >= 0.2) {
+      this._sideAccum = 0;
+      this._drawSide(batteries, selectedBattery, gameState);
+      this.sideTexture.needsUpdate = true;
+    }
   }
 
   _updateHolo(interceptors, selectedBattery) {
