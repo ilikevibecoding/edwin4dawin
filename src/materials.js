@@ -31,7 +31,7 @@ function tune(tex, repeat = 1) {
 }
 
 /** Painted, weathered steel - the workhorse material for hardware. */
-export function painted(color = '#6f7365', { repeat = 2, rough = 0.72, metal = 0.35, seam = '#3a3d36', panels = 4 } = {}) {
+export function painted(color = '#6f7365', { repeat = 2, rough = 0.72, metal = 0.14, seam = '#3a3d36', panels = 4 } = {}) {
   return make(`painted|${color}|${repeat}|${rough}|${metal}|${seam}|${panels}`, () => {
     const map = tune(T.metalPanel({ base: color, seam, panels, key: 'metal' }), repeat);
     return new THREE.MeshStandardMaterial({
@@ -46,14 +46,14 @@ export function painted(color = '#6f7365', { repeat = 2, rough = 0.72, metal = 0
 }
 
 /** Flat structural metal without panel lines (frames, brackets, bolts). */
-export function metal(color = '#585c54', rough = 0.55, metalness = 0.85) {
+export function metal(color = '#6b6f66', rough = 0.55, metalness = 0.62) {
   return make(`metal|${color}|${rough}|${metalness}`, () =>
     new THREE.MeshStandardMaterial({ color, roughness: rough, metalness })
   );
 }
 
 export function darkMetal() {
-  return metal('#31342f', 0.62, 0.8);
+  return metal('#3d4139', 0.62, 0.45);
 }
 
 export function chrome() {

@@ -30,6 +30,7 @@ const PHASE = {
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _aimPoint = new THREE.Vector3();
 const _ray = new THREE.Raycaster();
 const _pointer = new THREE.Vector2();
 
@@ -592,6 +593,7 @@ class Game {
 
   /** Test/demo convenience: pick the best pairing and fire it. */
   autoEngage() {
+    if (this._pendingAuto) return false;
     const firm = this.radar
       .firmTracks()
       .filter((t) => !t.engaged && t.classification !== CLASSIFICATION.DECOY);
@@ -647,7 +649,7 @@ class Game {
     for (const b of this.batteries.list) {
       const track = b.assignedTrack;
       if (track && track.alive && (b.state === 'preparing' || b.state === 'armed' || b.state === 'firing')) {
-        b.aimAt(track.pos);
+        b.aimAt(b.predictAimPoint(track.threat, _aimPoint));
       } else if (b.state === 'ready' || b.state === 'empty') {
         b.aimAt(null);
       }
@@ -687,6 +689,7 @@ class Game {
     this._updateLookedAt();
     this._updateAlerts();
 
+    // Let the last fireball burn down before the debrief comes up.
     if (
       this.phase === PHASE.RUNNING &&
       this.threats.running &&
@@ -694,7 +697,13 @@ class Game {
       this.threats.active.length === 0 &&
       this.interceptors.active.length === 0
     ) {
-      this.finishEngagement();
+      this._settle = (this._settle || 0) + dt;
+      if (this._settle > 4.5) {
+        this._settle = 0;
+        this.finishEngagement();
+      }
+    } else {
+      this._settle = 0;
     }
   }
 

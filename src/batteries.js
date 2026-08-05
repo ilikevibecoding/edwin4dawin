@@ -5,7 +5,8 @@ import * as G from './util/geo.js';
 import * as M from './materials.js';
 import * as T from './util/textures.js';
 import { Kit } from './base.js';
-import { clamp, saturate, lerp, damp, degToRad } from './util/mathx.js';
+import { clamp, saturate, lerp, damp, degToRad, predictIntercept } from './util/mathx.js';
+import { GRAVITY } from './physics.js';
 
 /**
  * The three fictional interceptor batteries.
@@ -18,6 +19,7 @@ import { clamp, saturate, lerp, damp, degToRad } from './util/mathx.js';
 const UP = new THREE.Vector3(0, 1, 0);
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _accel = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 
 /** Shared, non-cached status lamp material (each battery needs its own). */
@@ -44,8 +46,8 @@ export const BATTERY_SPECS = {
     prepTime: 1.4,
     salvoGap: 0.55,
     reloadTime: 7.0,
-    stowElevation: 12,
-    fireElevation: 42,
+    stowElevation: 24,
+    minElevation: 12,
     traverseRate: 55,
     elevateRate: 22,
     // Fictional envelope, tuned so terminal-phase intercepts read well.
@@ -58,8 +60,9 @@ export const BATTERY_SPECS = {
       sustainAccel: 26,
       sustainTime: 5.0,
       maxSpeed: 1250,
-      maxG: 26,
-      responseRate: 7.5,
+      maxG: 30,
+      navGain: 4.6,
+      responseRate: 8.5,
       bc: 3400,
       trailWidth: 1.3,
       plumeScale: 0.9,
@@ -79,8 +82,8 @@ export const BATTERY_SPECS = {
     prepTime: 3.4,
     salvoGap: 0.9,
     reloadTime: 11.0,
-    stowElevation: 6,
-    fireElevation: 72,
+    stowElevation: 40,
+    minElevation: 20,
     traverseRate: 32,
     elevateRate: 13,
     envelope: { minAlt: 1800, maxAlt: 26000, minRange: 2500, maxRange: 32000 },
@@ -92,8 +95,9 @@ export const BATTERY_SPECS = {
       sustainAccel: 14,
       sustainTime: 10.0,
       maxSpeed: 1900,
-      maxG: 15,
-      responseRate: 4.6,
+      maxG: 18,
+      navGain: 4.2,
+      responseRate: 5.6,
       bc: 9000,
       trailWidth: 1.7,
       plumeScale: 1.4,
@@ -113,8 +117,8 @@ export const BATTERY_SPECS = {
     prepTime: 5.2,
     salvoGap: 3.0,
     reloadTime: 26.0,
-    stowElevation: 0,
-    fireElevation: 88,
+    stowElevation: 66,
+    minElevation: 30,
     traverseRate: 20,
     elevateRate: 9,
     envelope: { minAlt: 3000, maxAlt: 60000, minRange: 3000, maxRange: 60000 },
@@ -126,8 +130,9 @@ export const BATTERY_SPECS = {
       sustainAccel: 18,
       sustainTime: 14.0,
       maxSpeed: 2600,
-      maxG: 11,
-      responseRate: 3.4,
+      maxG: 13,
+      navGain: 4.0,
+      responseRate: 4.4,
       bc: 16000,
       trailWidth: 2.6,
       plumeScale: 2.3,
@@ -254,7 +259,29 @@ export class Battery {
     return this._worldPos.copy(this.anchor.pos).setY(this.launchHeight ?? 3);
   }
 
-  /** Point the launcher at a track (or return to stow when unassigned). */
+  /**
+   * Where this battery would like its round to meet a threat. Uses the same
+   * simplified lead model the round itself flies, so the launcher points where
+   * the intercept will actually happen rather than at the target's current
+   * position.
+   */
+  predictAimPoint(threat, out = new THREE.Vector3()) {
+    if (!threat) return out.set(0, 1000, 0);
+    _accel.set(0, -GRAVITY, 0);
+    predictIntercept(
+      this.worldPosition,
+      threat.pos,
+      threat.vel,
+      this.spec.interceptor.maxSpeed * 0.8,
+      _accel,
+      3,
+      out
+    );
+    if (out.y < this.spec.envelope.minAlt) out.y = this.spec.envelope.minAlt;
+    return out;
+  }
+
+  /** Point the launcher at an aim point (or return to stow when unassigned). */
   aimAt(worldPoint) {
     if (!worldPoint) {
       this.targetTraverse = 0;
@@ -262,17 +289,21 @@ export class Battery {
       return;
     }
     _v.copy(worldPoint).sub(this.group.position);
-    // Traverse is measured in the battery's local frame.
-    const local = _v.clone().applyAxisAngle(UP, -this.anchor.yaw);
-    this.targetTraverse = Math.atan2(local.x, -local.z);
-    const horiz = Math.hypot(local.x, local.z);
-    const desired = Math.atan2(local.y, horiz);
-    // The launcher never depresses below its stow angle, and tops out near
-    // vertical - a deliberately simple presentation rule.
+    // Traverse is measured in the battery's local frame. The erector's tube
+    // axis is +Y and its muzzle swings toward -Z, so a turret yaw of `a` points
+    // the tubes at (-sin a, -cos a) on the ground plane.
+    _v2.copy(_v).applyAxisAngle(UP, -this.anchor.yaw);
+    this.targetTraverse = Math.atan2(-_v2.x, -_v2.z);
+    const horiz = Math.hypot(_v2.x, _v2.z);
+    const direct = Math.atan2(_v2.y, horiz);
+    // Loft bias: the longer the shot, the more the launcher throws the round up
+    // before it noses over. Presentation rule, not a ballistics solution.
+    const stretch = saturate(horiz / this.spec.envelope.maxRange);
+    const loft = degToRad(lerp(7, 26, stretch));
     this.targetElevation = clamp(
-      lerp(degToRad(this.spec.fireElevation), desired, 0.45),
-      degToRad(this.spec.stowElevation),
-      degToRad(89)
+      direct + loft,
+      degToRad(this.spec.minElevation),
+      degToRad(88)
     );
   }
 
@@ -345,7 +376,9 @@ export class Battery {
     this.elevation += clamp(this.targetElevation - this.elevation, -elRate, elRate);
 
     this.turret.rotation.y = this.traverse;
-    this.erector.rotation.x = -this.elevation;
+    // `elevation` is measured from the horizon: 90 degrees is straight up,
+    // which is the erector's unrotated pose.
+    this.erector.rotation.x = this.elevation - Math.PI / 2;
 
     this._updateHydraulics();
     this._updateLamps();

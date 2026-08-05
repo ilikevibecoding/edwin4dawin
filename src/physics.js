@@ -115,6 +115,60 @@ export function steeringAccel(vel, desiredDir, maxLateralG, altitude, dt, state,
   return out;
 }
 
+const _r = new THREE.Vector3();
+const _vr = new THREE.Vector3();
+const _omega = new THREE.Vector3();
+const _rhat = new THREE.Vector3();
+
+/**
+ * Proportional navigation: command acceleration proportional to the rotation
+ * rate of the line of sight.
+ *
+ * a = N · Vc · (ω × r̂), where ω = (r × vr)/|r|² and Vc = -(r·vr)/|r|.
+ *
+ * Chasing a predicted point works out to pure pursuit and always lags, so the
+ * round arrives needing an impossible last-second turn. Nulling the line-of-
+ * sight rate instead spends the correction early, when it is cheap, which is
+ * exactly what makes an intercept look purposeful.
+ */
+export function proNavAccel(pos, vel, targetPos, targetVel, N = 4, out = new THREE.Vector3()) {
+  _r.copy(targetPos).sub(pos);
+  const range = _r.length();
+  if (range < 1e-3) return out.set(0, 0, 0);
+  _rhat.copy(_r).multiplyScalar(1 / range);
+  _vr.copy(targetVel).sub(vel);
+  const closing = -_vr.dot(_rhat);
+  _omega.copy(_r).cross(_vr).multiplyScalar(1 / (range * range));
+  out.copy(_omega).cross(_rhat).multiplyScalar(N * Math.max(0, closing));
+  return out;
+}
+
+/**
+ * Turn a desired acceleration into one the airframe can actually fly: strip the
+ * along-velocity component (the motor owns speed), clamp to the lateral-g
+ * budget for this altitude, and pass it through a first-order autopilot lag.
+ * The lag is what removes nervous jitter from the visible flight path.
+ */
+export function limitCommand(desired, vel, maxLateralG, altitude, dt, state, out = new THREE.Vector3()) {
+  const speed = vel.length();
+  out.copy(desired);
+  if (speed > 1e-3) {
+    _a.copy(vel).multiplyScalar(1 / speed);
+    out.addScaledVector(_a, -out.dot(_a));
+  }
+  const rhoFrac = airDensity(altitude) / SEA_LEVEL_DENSITY;
+  const authority = lerp(0.34, 1.0, saturate(rhoFrac * 2.4));
+  const maxA = maxLateralG * GRAVITY * authority;
+  const mag = out.length();
+  if (mag > maxA) out.multiplyScalar(maxA / mag);
+  if (state) {
+    const k = 1 - Math.exp(-state.responseRate * dt);
+    state.command.lerp(out, clamp(k, 0, 1));
+    out.copy(state.command);
+  }
+  return out;
+}
+
 /**
  * Align a body's +Y axis with its velocity, with a small amount of angle of
  * attack so a manoeuvring missile visibly leans into its turn.
@@ -150,6 +204,78 @@ export function ballisticArcVelocity(from, to, apogee, out = new THREE.Vector3()
   out.y = 0;
   out.multiplyScalar(1 / total);
   out.y = vy;
+  return out;
+}
+
+const _simPos = new THREE.Vector3();
+const _simVel = new THREE.Vector3();
+const _simTmp = new THREE.Vector3();
+
+/**
+ * Fly a body forward under gravity and drag until it reaches `groundY`.
+ * Coarse (quarter-second steps) but good enough to place an impact point.
+ */
+export function projectImpact(pos, vel, bc, groundY = 0, out = new THREE.Vector3()) {
+  _simPos.copy(pos);
+  _simVel.copy(vel);
+  const dt = 0.25;
+  let t = 0;
+  for (let i = 0; i < 1600; i++) {
+    const speed = _simVel.length();
+    if (speed > 1 && bc) {
+      const d = dragAccel(speed, _simPos.y, bc);
+      _simTmp.copy(_simVel).multiplyScalar(1 / speed);
+      _simVel.addScaledVector(_simTmp, -d * dt);
+    }
+    _simVel.y -= GRAVITY * dt;
+    _simPos.addScaledVector(_simVel, dt);
+    t += dt;
+    if (_simPos.y <= groundY) break;
+  }
+  out.copy(_simPos);
+  out.w = t;
+  return { point: out, time: t };
+}
+
+/**
+ * Solve a launch velocity that carries a body from `from` to `to` on a
+ * believable ballistic arc at roughly `speed`.
+ *
+ * Starts from the drag-free closed form, then corrects the downrange component
+ * by actually flying the trajectory a couple of times - without that, drag
+ * makes a long shot fall kilometres short.
+ */
+const _solveTo = new THREE.Vector3();
+export function solveBallisticToTarget(from, to, speed, bc, out = new THREE.Vector3()) {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const horiz = Math.max(1, Math.hypot(dx, dz));
+  const ux = dx / horiz;
+  const uz = dz / horiz;
+
+  // Drag-free: pick the horizontal speed whose implied flight time yields the
+  // requested total speed.
+  let vh = speed * 0.92;
+  let vy = 0;
+  for (let i = 0; i < 6; i++) {
+    const tau = horiz / vh;
+    vy = (to.y - from.y) / tau + 0.5 * GRAVITY * tau;
+    const total = Math.hypot(vh, vy);
+    vh *= speed / total;
+  }
+  out.set(ux * vh, vy, uz * vh);
+
+  // Shooting correction for drag.
+  for (let pass = 0; pass < 3; pass++) {
+    const { point } = projectImpact(from, out, bc, to.y, _solveTo);
+    const flown = Math.max(1, Math.hypot(point.x - from.x, point.z - from.z));
+    const correction = clamp(horiz / flown, 0.55, 2.2);
+    if (Math.abs(correction - 1) < 0.004) break;
+    vh *= correction;
+    const tau = horiz / vh;
+    vy = (to.y - from.y) / tau + 0.5 * GRAVITY * tau;
+    out.set(ux * vh, vy, uz * vh);
+  }
   return out;
 }
 

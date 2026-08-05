@@ -10,8 +10,11 @@ import {
   GRAVITY,
   integrateBody,
   steeringAccel,
+  proNavAccel,
+  limitCommand,
   orientToVelocity,
   airDensity,
+  dragAccel,
   SEA_LEVEL_DENSITY
 } from './physics.js';
 import { groundHeight } from './base.js';
@@ -37,6 +40,9 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _pip = new THREE.Vector3();
 const _cmd = new THREE.Vector3();
+const _targetAccel = new THREE.Vector3();
+const _guide = new THREE.Vector3();
+const _loft = new THREE.Vector3();
 const _col = new THREE.Color();
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -58,6 +64,7 @@ class Interceptor {
     this.spec = null;
     this.minRange = Infinity;
     this.prevRange = Infinity;
+    this.opening = 0;
     this.passed = false;
     this.mesh = null;
     this.nozzleGlow = null;
@@ -192,6 +199,7 @@ export class InterceptorManager {
     shot.launchDir.copy(dir);
     shot.minRange = Infinity;
     shot.prevRange = Infinity;
+    shot.opening = 0;
     shot.passed = false;
     shot.trailAcc.value = 0;
     shot.commandState.command.set(0, 0, 0);
@@ -209,7 +217,7 @@ export class InterceptorManager {
     // Larger when the engagement is opened near the edge of the envelope.
     const range = target ? shot.pos.distanceTo(target.pos) : 0;
     const stretch = saturate(range / spec.envelope.maxRange);
-    const errScale = lerp(6, 44, stretch * stretch) * (target?.spiralAmp ? 1.35 : 1);
+    const errScale = lerp(4, 26, stretch * stretch) * (target?.spiralAmp ? 1.25 : 1);
     shot.aimBias
       .set(this.rng.spread(1), this.rng.spread(1), this.rng.spread(1))
       .normalize()
@@ -326,31 +334,65 @@ export class InterceptorManager {
 
     _cmd.set(0, 0, 0);
     const target = shot.target && shot.target.alive ? shot.target : null;
+    let timeToGo = Infinity;
 
     if (shot.phase !== PHASES.EJECT) {
-      let desired;
+      let gain = 1;
       if (target) {
-        // Simplified lead pursuit: extrapolate the target at constant velocity
-        // and steer at the meeting point. This is a gameplay abstraction.
-        const closing = Math.max(220, speed * 1.05);
-        predictIntercept(shot.pos, target.pos, target.vel, closing, null, 5, _pip);
+        // Simplified lead pursuit. Two things matter for this to converge: the
+        // target is extrapolated under gravity and drag (not just velocity),
+        // and the speed handed to the solver is the round's design speed, not
+        // whatever it happens to be doing mid-boost. Using the instantaneous
+        // speed over-estimates the flight time and parks the aim point
+        // kilometres beyond where the target will actually be.
+        const designSpeed = Math.max(speed, s.maxSpeed * 0.82);
+        _targetAccel.set(0, -GRAVITY, 0);
+        const tSpeed = target.vel.length();
+        if (tSpeed > 1 && target.bc) {
+          const dA = dragAccel(tSpeed, target.pos.y, target.bc);
+          _targetAccel.addScaledVector(target.vel, -dA / tSpeed);
+        }
+        predictIntercept(shot.pos, target.pos, target.vel, designSpeed, _targetAccel, 3, _pip);
         _pip.add(shot.aimBias);
+        // Never chase a point underground.
+        if (_pip.y < 60) _pip.y = 60;
         shot.pip.copy(_pip);
-        desired = _v1.copy(_pip).sub(shot.pos).normalize();
+        timeToGo = shot.pos.distanceTo(_pip) / designSpeed;
 
-        // Loft: early in the boost the round arcs up rather than driving flat
-        // at the target. This is what gives the long, dramatic contrail.
-        const loftFrac = saturate(1 - shot.age / (s.boostTime * 0.9));
+        // Proportional navigation on the true target, biased toward the offset
+        // aim point so each round still has its own small dispersion.
+        _v2.copy(target.pos).add(shot.aimBias);
+        proNavAccel(shot.pos, shot.vel, _v2, target.vel, s.navGain ?? 4.2, _guide);
+        // Cancel the gravity sag so the round holds its lead instead of
+        // slumping below it over a long flight.
+        _guide.y += GRAVITY;
+
+        // Endgame: the autopilot tightens up over the last seconds so a
+        // well-timed shot inside the envelope converges hard.
+        if (timeToGo < 4) {
+          gain = lerp(1, 2.2, saturate((4 - timeToGo) / 3.4));
+          shot.commandState.responseRate = s.responseRate * gain;
+        } else {
+          shot.commandState.responseRate = s.responseRate;
+        }
+
+        // Loft: for the first part of the boost the round holds its launch
+        // attitude and arcs up rather than driving flat at the target. This is
+        // what gives the long, dramatic contrail.
+        const loftFrac = saturate(1 - shot.age / (s.boostTime * 0.45));
         if (loftFrac > 0) {
-          const lofted = _v2.copy(shot.launchDir).multiplyScalar(loftFrac * 1.15);
-          desired.addScaledVector(lofted, 1).normalize();
+          steeringAccel(shot.vel, shot.launchDir, s.maxG, shot.pos.y, dt, null, _loft);
+          _guide.lerp(_loft, loftFrac * 0.7);
         }
       } else {
-        desired = _v1.copy(shot.vel).normalize();
+        _guide.set(0, GRAVITY * 0.5, 0);
       }
 
-      const altitude = shot.pos.y;
-      steeringAccel(shot.vel, desired, s.maxG, altitude, dt, shot.commandState, _v3);
+      // Safety floor: a round climbing away from the pad never commands a
+      // descent, so a bad geometry cannot fly it into the ground on launch.
+      if (shot.pos.y < 500 && shot.vel.y < 40 && _guide.y < 0) _guide.y = 0;
+
+      limitCommand(_guide, shot.vel, s.maxG * gain, shot.pos.y, dt, shot.commandState, _v3);
       shot.lateral.copy(_v3);
       _cmd.add(_v3);
     }
@@ -377,10 +419,10 @@ export class InterceptorManager {
 
     if (this.effects && shot.phase !== PHASES.EJECT) {
       this.effects.emitTrail(shot.pos, shot.vel, dt, {
-        rate: burning ? 110 : 46,
+        rate: burning ? 150 : 60,
         widthStart: s.trailWidth,
-        widthEnd: s.trailWidth * 6,
-        alpha: burning ? 0.62 : 0.3,
+        widthEnd: s.trailWidth * 8,
+        alpha: burning ? 0.66 : 0.34,
         hot: glowPower,
         accumulator: shot.trailAcc
       });
@@ -410,11 +452,21 @@ export class InterceptorManager {
         this._detonate(shot, _v2, target, true);
         return;
       }
-      if (range > shot.prevRange && shot.prevRange < lethal * 12 && !shot.passed) {
-        // Flew past: the proximity fuze fires but the round is out of position.
-        shot.passed = true;
-        this._detonate(shot, shot.pos, target, false);
-        return;
+      if (range > shot.prevRange) {
+        shot.opening += dt;
+        if (shot.prevRange < lethal * 14 && !shot.passed) {
+          // Close pass: the proximity fuze fires, but out of position.
+          shot.passed = true;
+          this._detonate(shot, shot.pos, target, false);
+          return;
+        }
+        if (shot.opening > 1.6) {
+          // Range has been opening for a while - the engagement has failed.
+          this._detonate(shot, shot.pos, target, false, 'NO INTERCEPT');
+          return;
+        }
+      } else {
+        shot.opening = 0;
       }
       shot.prevRange = range;
     } else if (shot.target && !shot.target.alive) {

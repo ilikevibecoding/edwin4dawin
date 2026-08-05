@@ -671,19 +671,22 @@ export class Weather {
     }
   }
 
-  /** Render the sky into a cube map so PBR surfaces get real reflections. */
+  /**
+   * Render the sky into a cube map so PBR surfaces get real reflections.
+   * Without this every metal surface on the base renders black, because a
+   * metal has no diffuse response to punctual lights.
+   */
   rebuildEnvironment() {
-    if (settings.softwareGL) return; // too slow under SwiftShader, and barely visible
     if (!this._pmrem) this._pmrem = new THREE.PMREMGenerator(this.renderer);
     const envScene = new THREE.Scene();
     const skyClone = new THREE.Mesh(this.sky.geometry, this.sky.material);
     skyClone.scale.setScalar(1);
     envScene.add(skyClone);
-    const rt = this._pmrem.fromScene(envScene, 0.04, 0.1, 100);
+    const rt = this._pmrem.fromScene(envScene, 0.05, 0.1, 100);
     if (this._envRT) this._envRT.dispose();
     this._envRT = rt;
     this.scene.environment = rt.texture;
-    this.scene.environmentIntensity = lerp(1.0, 0.35, this.preset.night);
+    this.scene.environmentIntensity = lerp(1.15, 0.42, this.preset.night);
     envScene.remove(skyClone);
   }
 

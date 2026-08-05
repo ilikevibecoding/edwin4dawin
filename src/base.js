@@ -25,19 +25,24 @@ export const NORTH = new THREE.Vector3(0, 0, -1);
 export function terrainHeight(x, z) {
   const d = Math.hypot(x, z);
   // The pad and its immediate surroundings are graded flat.
-  const flat = smoothstep(150, 420, d);
+  const flat = smoothstep(150, 460, d);
 
   const rolling =
-    terrainNoise.fbm2(x / 620, z / 620, 4) * 9 + terrainNoise.fbm2(x / 170, z / 170, 3) * 2.2;
+    terrainNoise.fbm2(x / 900, z / 900, 4) * 12 +
+    terrainNoise.fbm2(x / 240, z / 240, 3) * 3.0 +
+    terrainNoise.fbm2(x / 62, z / 62, 2) * 0.7;
 
-  // Distant ranges: ridged noise that only switches on past a few kilometres.
-  const far = smoothstep(2600, 7200, d);
-  const ridge = Math.pow(terrainNoise.ridged2(x / 3100, z / 3100, 6), 2.1);
-  const ridge2 = Math.pow(terrainNoise.ridged2(x / 1250 + 40, z / 1250 - 70, 5), 2.6);
-  const mountains = far * (ridge * 1250 + ridge2 * 320);
+  // Distant ranges. A very broad mask decides *where* there are mountains at
+  // all, so ridges gather into clusters with open desert between them instead
+  // of marching across the horizon as an even row of teeth.
+  const far = smoothstep(2400, 7000, d);
+  const mask = saturate(terrainNoise.fbm2(x / 11000 + 12, z / 11000 - 7, 3) * 1.15 + 0.46);
+  const spine = Math.pow(terrainNoise.ridged2(x / 7600, z / 7600, 4, 2.05, 0.52), 1.7);
+  const shoulder = Math.pow(terrainNoise.ridged2(x / 2900 - 30, z / 2900 + 18, 4), 2.4);
+  const mountains = far * mask * (spine * 1700 + shoulder * 260 * saturate(spine * 2.4));
 
   // A shallow basin so the base sits in a bowl ringed by high ground.
-  const basin = -smoothstep(300, 2400, d) * 12;
+  const basin = -smoothstep(300, 2600, d) * 14;
 
   return rolling * flat + mountains + basin;
 }
@@ -293,9 +298,9 @@ function sandbagWall(kit, from, to, rng, rows = 3) {
   const a = new THREE.Vector3().fromArray(from);
   const b = new THREE.Vector3().fromArray(to);
   const len = a.distanceTo(b);
-  const perBag = 0.42;
+  const perBag = 0.36;
   const n = Math.max(2, Math.round(len / perBag));
-  const bag = G.roundedBox(0.44, 0.2, 0.28, 0.09, 1);
+  const bag = G.roundedBox(0.38, 0.16, 0.26, 0.055, 1);
   for (let r = 0; r < rows; r++) {
     for (let i = 0; i < n - r; i++) {
       const t = (i + (r % 2) * 0.5) / Math.max(1, n - 1);
@@ -303,7 +308,7 @@ function sandbagWall(kit, from, to, rng, rows = 3) {
       kit.place(
         bagMat,
         bag,
-        [p.x + rng.spread(0.03), p.y + 0.1 + r * 0.19, p.z + rng.spread(0.03)],
+        [p.x + rng.spread(0.03), p.y + 0.08 + r * 0.155, p.z + rng.spread(0.03)],
         [rng.spread(0.06), Math.atan2(b.x - a.x, b.z - a.z) + rng.spread(0.12), rng.spread(0.06)]
       );
     }
@@ -340,14 +345,17 @@ export class MilitaryBase {
       patriot: { pos: new THREE.Vector3(-54, 0, -22), yaw: THREE.MathUtils.degToRad(12) },
       thaad: { pos: new THREE.Vector3(46, 0, -30), yaw: THREE.MathUtils.degToRad(-16) },
       sentinel: { pos: new THREE.Vector3(-4, 0, -66), yaw: THREE.MathUtils.degToRad(2) },
-      radar: { pos: new THREE.Vector3(30, 0, 12), yaw: THREE.MathUtils.degToRad(-8) },
-      shelter: { pos: new THREE.Vector3(-8, 0, 34), yaw: 0 }
+      radar: { pos: new THREE.Vector3(34, 0, 14), yaw: THREE.MathUtils.degToRad(-8) },
+      // The shelter sits well off to the west so the whole northern sky - the
+      // threat axis - is unobstructed from the main operating area.
+      shelter: { pos: new THREE.Vector3(-58, 0, 40), yaw: 0 }
     };
-    this.playerSpawn = new THREE.Vector3(-8, 0, 47);
+    const sh = this.anchors.shelter.pos;
+    this.playerSpawn = new THREE.Vector3(-10, 0, 48);
     // Yaw 0 faces -Z, which is north here: straight up the apron at the pads.
     this.playerSpawnYaw = 0;
-    this.consoleSeat = new THREE.Vector3(-8, 0, 36.6);
-    this.consoleFocus = new THREE.Vector3(-8, 1.15, 33.4);
+    this.consoleSeat = new THREE.Vector3(sh.x, 0, sh.z - 1.0);
+    this.consoleFocus = new THREE.Vector3(sh.x, 1.3, sh.z - 2.65);
   }
 
   build() {
@@ -368,7 +376,9 @@ export class MilitaryBase {
 
     // Far terrain: one big displaced plane carrying the mountain ranges.
     const farSize = 34000;
-    const farSeg = Math.max(96, Math.floor(q.terrainSegments * 1.15));
+    // The ranges need enough segments that a ridge is not read as a row of
+    // triangles: this is one draw call, so resolution is cheap here.
+    const farSeg = clamp(Math.floor(q.terrainSegments * 1.7), 170, 320);
     const farGeo = new THREE.PlaneGeometry(farSize, farSize, farSeg, farSeg);
     farGeo.rotateX(-Math.PI / 2);
     this._displace(farGeo, true);
@@ -573,9 +583,14 @@ export class MilitaryBase {
     for (const key of ['patriot', 'thaad', 'sentinel']) {
       const a = this.anchors[key];
       kit.place(conc, new THREE.BoxGeometry(34, 0.3, 30), [a.pos.x, 0.28, a.pos.z], [0, a.yaw, 0]);
-      // Low earth revetment on the flanks.
-      const berm = new THREE.BoxGeometry(36, 1.5, 2.4);
-      kit.place(M.gravelMat(8), berm, [a.pos.x, 0.7, a.pos.z + 16.5], [0, a.yaw, 0]);
+      // Earth revetments on the east and west flanks only - the launcher's
+      // line of sight north and the player's view from the south stay clear.
+      const berm = new THREE.BoxGeometry(2.6, 1.7, 26);
+      for (const sx of [-17.5, 17.5]) {
+        const off = new THREE.Vector3(sx, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), a.yaw);
+        kit.place(M.gravelMat(8), berm, [a.pos.x + off.x, 0.85, a.pos.z + off.z], [0, a.yaw, 0]);
+        this.collision.addBox(a.pos.x + off.x, 0.85, a.pos.z + off.z, 1.3, 0.85, 13, a.yaw, 'berm');
+      }
     }
 
     // Service roads out from the apron.
@@ -859,10 +874,12 @@ export class MilitaryBase {
     // Vehicle park east of the shelter.
     supportTruck(kit, [26, 0.24, 46], -0.35, { variant: 'desert' });
     supportTruck(kit, [34, 0.24, 44], -0.2, { variant: 'olive' });
-    supportTruck(kit, [-40, 0.24, 40], 1.9, { variant: 'desert', tilt: false });
+    supportTruck(kit, [-36, 0.24, 54], 1.9, { variant: 'desert', tilt: false });
+    supportTruck(kit, [-70, 0.24, 26], 0.6, { variant: 'olive' });
     this.collision.addBox(26, 1.4, 46, 3.4, 1.4, 1.4, -0.35, 'truck');
     this.collision.addBox(34, 1.4, 44, 3.4, 1.4, 1.4, -0.2, 'truck');
-    this.collision.addBox(-40, 1.4, 40, 3.4, 1.4, 1.4, 1.9, 'truck');
+    this.collision.addBox(-36, 1.4, 54, 3.4, 1.4, 1.4, 1.9, 'truck');
+    this.collision.addBox(-70, 1.4, 26, 3.4, 1.4, 1.4, 0.6, 'truck');
 
     // Generator farm + fuel bladders.
     generatorUnit(kit, [-26, 0.24, 30], 0.1);
@@ -1050,7 +1067,7 @@ export class MilitaryBase {
       group.add(mesh);
     };
 
-    addDecal(['AEGIS LINE', 'SITE 07'], -4, 44, 18, 9, 0);
+    addDecal(['AEGIS LINE', 'SITE 07'], -4, 50, 13, 6.5, 0, { color: '#c3bda6' });
     addDecal(['PAD A', 'PATRIOT-TYPE'], this.anchors.patriot.pos.x, this.anchors.patriot.pos.z + 11, 12, 6, this.anchors.patriot.yaw);
     addDecal(['PAD B', 'HIGH ALT'], this.anchors.thaad.pos.x, this.anchors.thaad.pos.z + 11, 12, 6, this.anchors.thaad.yaw);
     addDecal(['PAD C', 'SENTINEL'], this.anchors.sentinel.pos.x, this.anchors.sentinel.pos.z + 11, 12, 6, this.anchors.sentinel.yaw);

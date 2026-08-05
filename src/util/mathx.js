@@ -52,14 +52,48 @@ export function formatRange(meters) {
   return `${Math.round(meters)} m`;
 }
 
+/** Longest lead time the prediction model will ever consider, in seconds. */
+export const MAX_LEAD_TIME = 90;
+
+/**
+ * Closed-form time to a constant-velocity meeting point.
+ *
+ * Solves |targetPos + targetVel t - shooterPos| = chaserSpeed t, which is the
+ * quadratic (v·v - s²) t² + 2 (r·v) t + r·r = 0. Returns the smallest positive
+ * root, or -1 when the chaser can never catch up.
+ */
+const _rel = new THREE.Vector3();
+export function leadTime(shooterPos, targetPos, targetVel, chaserSpeed) {
+  _rel.copy(targetPos).sub(shooterPos);
+  const a = targetVel.lengthSq() - chaserSpeed * chaserSpeed;
+  const b = 2 * _rel.dot(targetVel);
+  const c = _rel.lengthSq();
+  if (Math.abs(a) < 1e-6) {
+    if (Math.abs(b) < 1e-9) return -1;
+    const t = -c / b;
+    return t > 0 ? t : -1;
+  }
+  const disc = b * b - 4 * a * c;
+  if (disc < 0) return -1;
+  const s = Math.sqrt(disc);
+  const t1 = (-b - s) / (2 * a);
+  const t2 = (-b + s) / (2 * a);
+  const positive = [t1, t2].filter((t) => t > 0);
+  if (positive.length === 0) return -1;
+  return Math.min(...positive);
+}
+
 /**
  * A deliberately simplified fictional lead-prediction helper.
  *
- * It iterates a constant-velocity extrapolation of the target a handful of
- * times to converge on a plausible meeting point. This is a gameplay
- * abstraction for readable, cinematic intercepts, not a fire-control model.
+ * Starts from the closed-form constant-velocity solution, then refines a few
+ * times with the target's acceleration folded in. The refinement is damped and
+ * the lead time is clamped, because the naive fixed-point form diverges
+ * explosively whenever the chaser is slower than the target.
+ *
+ * This is a gameplay abstraction for readable, cinematic intercepts, not a
+ * fire-control model.
  */
-const _rel = new THREE.Vector3();
 const _pred = new THREE.Vector3();
 export function predictIntercept(
   shooterPos,
@@ -67,17 +101,32 @@ export function predictIntercept(
   targetVel,
   chaserSpeed,
   targetAccel = null,
-  iterations = 5,
+  iterations = 3,
   out = new THREE.Vector3()
 ) {
-  out.copy(targetPos);
-  let t = 0;
-  for (let i = 0; i < iterations; i++) {
-    _rel.copy(out).sub(shooterPos);
-    t = _rel.length() / Math.max(1e-3, chaserSpeed);
-    _pred.copy(targetVel).multiplyScalar(t);
-    out.copy(targetPos).add(_pred);
-    if (targetAccel) out.addScaledVector(targetAccel, 0.5 * t * t);
+  const speed = Math.max(1, chaserSpeed);
+  let t = leadTime(shooterPos, targetPos, targetVel, speed);
+  if (!(t > 0) || !Number.isFinite(t)) {
+    // Unreachable on a constant-velocity solution: fall back to a straight
+    // range/speed estimate so the round still flies a sensible pursuit course.
+    t = _rel.copy(targetPos).sub(shooterPos).length() / speed;
+  }
+  t = clamp(t, 0, MAX_LEAD_TIME);
+
+  if (targetAccel) {
+    for (let i = 0; i < iterations; i++) {
+      _pred.copy(targetVel).multiplyScalar(t);
+      out.copy(targetPos).add(_pred).addScaledVector(targetAccel, 0.5 * t * t);
+      const tNew = clamp(_rel.copy(out).sub(shooterPos).length() / speed, 0, MAX_LEAD_TIME);
+      // Damped update: an undamped one oscillates and can run away.
+      t = t + (tNew - t) * 0.5;
+    }
+  }
+  _pred.copy(targetVel).multiplyScalar(t);
+  out.copy(targetPos).add(_pred);
+  if (targetAccel) out.addScaledVector(targetAccel, 0.5 * t * t);
+  if (!Number.isFinite(out.x) || !Number.isFinite(out.y) || !Number.isFinite(out.z)) {
+    out.copy(targetPos);
   }
   return out;
 }

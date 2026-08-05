@@ -12,6 +12,7 @@ import {
   SEA_LEVEL_DENSITY,
   integrateBody,
   orientToVelocity,
+  solveBallisticToTarget,
   timeToAltitude
 } from './physics.js';
 import { groundHeight } from './base.js';
@@ -81,9 +82,9 @@ export const SCENARIOS = {
     preferredSky: null,
     waves: [{ at: 3.0, count: 1, decoys: 0 }],
     spreadDeg: 0,
-    baseSpeed: [980, 1120],
-    baseAltitude: [15000, 17000],
-    baseRange: [40000, 46000],
+    baseSpeed: [760, 880],
+    baseAltitude: [15500, 17500],
+    baseRange: [46000, 52000],
     duration: 90
   },
   saturation: {
@@ -92,14 +93,14 @@ export const SCENARIOS = {
     brief: 'Four to five tracks on separate arcs inside a twenty second window.',
     preferredSky: null,
     waves: [
-      { at: 2.5, count: 2, decoys: 0 },
-      { at: 11.0, count: 1, decoys: 0 },
-      { at: 17.0, count: 2, decoys: 0 }
+      { at: 3.0, count: 2, decoys: 0 },
+      { at: 13.0, count: 1, decoys: 0 },
+      { at: 21.0, count: 2, decoys: 0 }
     ],
     spreadDeg: 46,
-    baseSpeed: [1000, 1320],
-    baseAltitude: [13500, 17500],
-    baseRange: [36000, 50000],
+    baseSpeed: [790, 960],
+    baseAltitude: [14000, 18000],
+    baseRange: [42000, 54000],
     duration: 95
   },
   nightraid: {
@@ -108,14 +109,14 @@ export const SCENARIOS = {
     brief: 'Multiple tracks with harmless decoys mixed in. Low visibility.',
     preferredSky: 'night',
     waves: [
-      { at: 2.5, count: 2, decoys: 1 },
-      { at: 10.0, count: 2, decoys: 1 },
-      { at: 19.0, count: 1, decoys: 1 }
+      { at: 3.0, count: 2, decoys: 1 },
+      { at: 12.0, count: 2, decoys: 1 },
+      { at: 23.0, count: 1, decoys: 1 }
     ],
     spreadDeg: 62,
-    baseSpeed: [960, 1240],
-    baseAltitude: [13000, 16500],
-    baseRange: [34000, 48000],
+    baseSpeed: [770, 940],
+    baseAltitude: [13500, 17000],
+    baseRange: [40000, 52000],
     duration: 100
   }
 };
@@ -313,18 +314,10 @@ export class ThreatManager {
       t.impactPoint.z - Math.cos(bearing) * range
     );
 
-    // Velocity: point at the aim point and add the downward component that a
-    // body on this arc would already have. Simple, stable and repeatable.
+    // Ballistic solve for a descending arc that actually reaches the aim point.
     const speed = this.rng.range(s.baseSpeed[0], s.baseSpeed[1]) * (kind === 'decoy' ? 0.94 : 1);
-    _v1.copy(t.impactPoint).sub(t.pos);
-    const horiz = Math.hypot(_v1.x, _v1.z);
-    const fallTime = Math.sqrt((2 * alt) / GRAVITY) * 0.82;
-    const flightTime = Math.max(fallTime, horiz / Math.max(200, speed * 0.92));
-    t.vel.set(_v1.x / flightTime, -alt / flightTime + 0.5 * GRAVITY * flightTime * 0.35, _v1.z / flightTime);
-    const currentSpeed = t.vel.length();
-    t.vel.multiplyScalar(speed / Math.max(1, currentSpeed));
-
-    t.bc = kind === 'decoy' ? 900 : this.rng.range(9000, 15000);
+    t.bc = kind === 'decoy' ? 2600 : this.rng.range(26000, 44000);
+    solveBallisticToTarget(t.pos, t.impactPoint, speed, t.bc, t.vel);
     t.spiralPhase = this.rng.float() * Math.PI * 2;
     t.spiralRate = this.rng.range(0.8, 1.9);
     t.spiralAmp = kind === 'decoy' ? 0 : this.rng.range(6, 22);
@@ -425,10 +418,10 @@ export class ThreatManager {
     if (this.effects) {
       _col.setRGB(0.8, 0.79, 0.78);
       this.effects.emitTrail(t.pos, t.vel, dt, {
-        rate: t.isDecoy ? 42 : 62,
-        widthStart: t.isDecoy ? 2.2 : 4.0,
-        widthEnd: t.isDecoy ? 12 : 22,
-        alpha: t.isDecoy ? 0.34 : 0.5,
+        rate: t.isDecoy ? 55 : 85,
+        widthStart: t.isDecoy ? 3.0 : 5.5,
+        widthEnd: t.isDecoy ? 16 : 30,
+        alpha: t.isDecoy ? 0.36 : 0.55,
         color: _col,
         hot: t.isDecoy ? 0 : heat * 0.8,
         accumulator: t.trailAcc
