@@ -1,0 +1,5 @@
+[
+ {"url":"/?dev=heads&who=connor&q=medium&warm=2&rf=3&mat=clay&nopost=1","out":"shots/ab_nopost.png"},
+ {"url":"/?dev=heads&who=connor&q=medium&warm=2&rf=3&mat=clay","out":"shots/ab_post.png"},
+ {"url":"/?dev=heads&who=connor&q=medium&warm=2&rf=3&mat=clay&qover=bloom:0,dof:0,anamorphic:0,smaa:0","out":"shots/ab_gradeonly.png"}
+]

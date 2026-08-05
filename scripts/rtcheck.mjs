@@ -1,0 +1,10 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({executablePath:'/usr/local/bin/google-chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--window-size=400,300']});
+const p = await b.newPage();
+p.on('pageerror',e=>console.log('[err]',String(e).slice(0,300)));
+p.on('console',m=>console.log('[c]',m.text().slice(0,300)));
+await p.goto('http://localhost:5173/rt-test.html',{waitUntil:'domcontentloaded'});
+await new Promise(r=>setTimeout(r,8000));
+console.log((await p.evaluate(()=>document.getElementById('out').textContent)));
+await p.screenshot({path:'/workspace/shots/rt-test.png'});
+await b.close();

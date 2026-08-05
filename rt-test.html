@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>rt test</title></head>
+  <body style="background:#111;color:#eee;font:12px monospace">
+    <pre id="out">running…</pre>
+    <canvas id="c" width="320" height="180"></canvas>
+    <script type="module">
+      import * as THREE from 'three';
+
+      const log = [];
+      const out = document.getElementById('out');
+      const canvas = document.getElementById('c');
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true });
+      const gl = renderer.getContext();
+      log.push('webgl2: ' + (gl instanceof WebGL2RenderingContext));
+      log.push('color_buffer_float: ' + !!gl.getExtension('EXT_color_buffer_float'));
+      log.push('color_buffer_half_float: ' + !!gl.getExtension('EXT_color_buffer_half_float'));
+      log.push('float_blend: ' + !!gl.getExtension('EXT_float_blend'));
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x203040);
+      const camera = new THREE.PerspectiveCamera(50, 320 / 180, 0.1, 100);
+      camera.position.set(0, 0, 3);
+      const cube = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1.4), new THREE.MeshBasicMaterial({ color: 0xff4444 }));
+      scene.add(cube);
+
+      function testRT(label, opts, w = 320, h = 180) {
+        const rt = new THREE.WebGLRenderTarget(w, h, opts);
+        renderer.setRenderTarget(rt);
+        renderer.clear();
+        renderer.render(scene, camera);
+        const isFloat = rt.texture.type !== THREE.UnsignedByteType;
+        const buf = isFloat ? new Float32Array(32 * 32 * 4) : new Uint8Array(32 * 32 * 4);
+        let err = '';
+        try {
+          renderer.readRenderTargetPixels(rt, 140, 70, 32, 32, buf);
+        } catch (e) {
+          err = String(e).slice(0, 100);
+        }
+        let max = 0, sum = 0;
+        for (let i = 0; i < buf.length; i += 4) {
+          const v = (buf[i] + buf[i + 1] + buf[i + 2]) / 3;
+          sum += v;
+          if (v > max) max = v;
+        }
+        const glErr = gl.getError();
+        const fbStatus = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+        log.push(`${label}: size=${rt.width}x${rt.height} mean=${(sum / (buf.length / 4)).toFixed(3)} max=${max.toFixed(3)} glErr=${glErr} fb=${fbStatus === gl.FRAMEBUFFER_COMPLETE ? 'complete' : fbStatus} ${err}`);
+        renderer.setRenderTarget(null);
+        rt.dispose();
+      }
+
+      testRT('rgba8', { type: THREE.UnsignedByteType });
+      testRT('rgba8-nodepth', { type: THREE.UnsignedByteType, depthBuffer: false });
+      testRT('half', { type: THREE.HalfFloatType });
+      testRT('half-samples0', { type: THREE.HalfFloatType, samples: 0 });
+      testRT('half-nodepth', { type: THREE.HalfFloatType, depthBuffer: false });
+      testRT('half-odd', { type: THREE.HalfFloatType }, 408, 229);
+
+      // Full-screen blit of an RT to the canvas, to see whether sampling works.
+      const rt = new THREE.WebGLRenderTarget(320, 180, { type: THREE.HalfFloatType });
+      renderer.setRenderTarget(rt);
+      renderer.clear();
+      renderer.render(scene, camera);
+      renderer.setRenderTarget(null);
+      const quadScene = new THREE.Scene();
+      const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      quadScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: rt.texture })));
+      renderer.render(quadScene, quadCam);
+      log.push('blit done; renderer info: ' + JSON.stringify(renderer.info.render));
+
+      // Composer test, mimicking the game's renderer configuration.
+      {
+        const { EffectComposer } = await import('three/examples/jsm/postprocessing/EffectComposer.js');
+        const { RenderPass } = await import('three/examples/jsm/postprocessing/RenderPass.js');
+        const { ShaderPass } = await import('three/examples/jsm/postprocessing/ShaderPass.js');
+        const c2 = document.createElement('canvas');
+        c2.width = 320; c2.height = 180;
+        c2.style.cssText = 'width:320px;height:180px;display:block;margin-top:8px';
+        document.body.appendChild(c2);
+        const r2 = new THREE.WebGLRenderer({ canvas: c2, antialias: false, preserveDrawingBuffer: true });
+        r2.setPixelRatio(0.85);
+        r2.setSize(320, 180, false);
+        r2.outputColorSpace = THREE.SRGBColorSpace;
+        r2.toneMapping = THREE.NoToneMapping;
+        const dpr = r2.getPixelRatio();
+        const tgt = new THREE.WebGLRenderTarget(Math.floor(320 * dpr), Math.floor(180 * dpr), {
+          type: THREE.HalfFloatType, samples: 0,
+        });
+        const comp = new EffectComposer(r2, tgt);
+        comp.setPixelRatio(dpr);
+        comp.setSize(320, 180);
+        comp.addPass(new RenderPass(scene, camera));
+        const cp = new ShaderPass({
+          uniforms: { tDiffuse: { value: null } },
+          vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
+          fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec3 c=texture2D(tDiffuse,vUv).rgb; gl_FragColor=vec4(pow(clamp(c,0.0,1.0),vec3(1.0/2.2)),1.0); }',
+        });
+        cp.renderToScreen = true;
+        comp.addPass(cp);
+        comp.render();
+        const px = new Uint8Array(4 * 16);
+        const gl2 = r2.getContext();
+        gl2.readPixels(150, 90, 4, 4, gl2.RGBA, gl2.UNSIGNED_BYTE, px);
+        log.push(`composer: rt1=${comp.renderTarget1.width}x${comp.renderTarget1.height} rt2=${comp.renderTarget2.width}x${comp.renderTarget2.height} screenPx=${px[0]},${px[1]},${px[2]} glErr=${gl2.getError()}`);
+      }
+
+      out.textContent = log.join('\n');
+      window.__rtTest = log;
+      window.__engineReady = true;
+    </script>
+  </body>
+</html>

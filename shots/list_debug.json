@@ -1,0 +1,20 @@
+[
+  {
+    "url": "/?dev=portrait&q=low&warm=3&rf=3",
+    "out": "shots/d1_nobloom.png",
+    "eval": "window.__engine.fx.setBloom(0.0,0.7,0.9); window.__engine.fx.grade.uniforms.uHalation.value=0; window.__engine.fx.wetLens=0;",
+    "postEvalWait": 6000
+  },
+  {
+    "url": "/?dev=portrait&q=low&warm=3&rf=3",
+    "out": "shots/d2_lowexposure.png",
+    "eval": "window.__engine.fx.grade.uniforms.uExposure.value=0.25; window.__engine.fx.grade.uniforms.uHalation.value=0;",
+    "postEvalWait": 6000
+  },
+  {
+    "url": "/?dev=portrait&q=low&warm=3&rf=3",
+    "out": "shots/d3_nograde.png",
+    "eval": "const f=window.__engine.fx; f.grade.uniforms.uExposure.value=1; f.grade.uniforms.uHalation.value=0; f.grade.uniforms.uGrain.value=0; f.grade.uniforms.uVignette.value=0; f.grade.uniforms.uCA.value=0; f.wetLens=0; f.setBloom(0,0.7,0.9);",
+    "postEvalWait": 6000
+  }
+]

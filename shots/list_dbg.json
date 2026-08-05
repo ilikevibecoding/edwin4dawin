@@ -1,0 +1,4 @@
+[
+ {"url":"/?dev=heads&who=connor,connor&angles=0,0&gap=0.26&fov=13&mat=normal&hide=scalp,collar,stripe,armband,jacket","out":"shots/n1_front_normals.png"},
+ {"url":"/?dev=heads&who=connor,connor&angles=0,3.1416&gap=0.26&fov=13&hide=scalp,collar,stripe,armband,jacket","out":"shots/n2_front_back.png"}
+]

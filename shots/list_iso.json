@@ -1,0 +1,4 @@
+[
+ {"url":"/?dev=heads&who=connor&q=medium&warm=2&rf=3&only=body&gap=0.28","out":"shots/i1_body_only.png"},
+ {"url":"/?dev=heads&who=connor&q=medium&warm=2&rf=3&hide=scalp,collar,stripe,armband,jacket,trousers&gap=0.28","out":"shots/i2_no_clothes.png"}
+]

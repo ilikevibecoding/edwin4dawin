@@ -1,0 +1,4 @@
+[
+ {"url":"/?dev=heads&who=connor&q=medium&warm=2&rf=3&mat=clay&hide=scalp,collar,stripe,armband,jacket","out":"shots/f1_clay.png"},
+ {"url":"/?dev=heads&who=connor&q=medium&warm=2&rf=3&hide=collar,stripe,armband,jacket","out":"shots/f2_skin.png"}
+]
