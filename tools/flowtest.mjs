@@ -40,7 +40,8 @@ page.on('console', (m) => {
   }
 });
 
-await page.goto(`${BASE}/index.html?render=1&tier=low&w=${W}&h=${H}&fps=${FPS}`, {
+const SPEED = Number(arg('speed', 1));
+await page.goto(`${BASE}/index.html?render=1&tier=low&w=${W}&h=${H}&fps=${FPS}&speed=${SPEED}`, {
   waitUntil: 'load',
   timeout: 600000,
 });

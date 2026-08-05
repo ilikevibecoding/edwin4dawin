@@ -86,8 +86,40 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
   const nudge = (delta: number): void => setStress(stress + delta);
 
   // ------------------------------------------------------------------- act one
-  d.state.visit('ch1.arrive');
+  // ------------------------------------------------------------------- titles
+  // Opens on the city itself, high and slow, before anyone is on screen.
   d.hud.letterbox(true);
+  d.cut(
+    d.shots.establish(new THREE.Vector3(6.0, 3.2, 3.0), new THREE.Vector3(-14.0, 6.5, -22.0), {
+      lens: 34,
+      bokeh: 0.9,
+    }),
+    { move: 'driftLeft', moveAmount: 2.6, moveDuration: 22, handheld: 0.25 }
+  );
+  d.hud.showCard('DETROIT · 2038', 'Neo Detroit', 'A story of machines that started to feel', { clear: true });
+  d.hud.fade(0, 2.6);
+  if (!d.silent) {
+    d.audio.startRain(0.42);
+    d.audio.startMusic(-24, 0.15);
+  }
+  await d.wait(7.0);
+  d.sfx('thunder', 0.35);
+  await d.wait(3.5);
+  d.hud.hideCard();
+  await d.wait(1.4);
+
+  d.cut(
+    d.shots.establish(new THREE.Vector3(-9.5, 2.2, -6.0), new THREE.Vector3(6.0, 4.0, -18.0), {
+      lens: 40,
+      bokeh: 1.2,
+    }),
+    { move: 'craneUp', moveAmount: 1.6, moveDuration: 9, handheld: 0.4 }
+  );
+  await d.say('DISPATCH', 'Central, be advised — we have a jumper on the Stratford roof and he is not alone up there.', 'ch1_dispatch_0', { hold: 5.2 });
+  await d.wait(1.2);
+  await d.fadeOut(1.2);
+
+  d.state.visit('ch1.arrive');
 
   // Frame the establishing shot before the card fades up, so the first thing
   // revealed is a composed image rather than wherever the camera happened to be.
@@ -101,10 +133,7 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
   d.light(orion, -1);
   await d.chapterCard('CHAPTER ONE', 'The Ledge', 'Stratford Tower · 23:41');
 
-  if (!d.silent) {
-    d.audio.startRain(0.5);
-    d.audio.startMusic(-24, 0.25);
-  }
+  if (!d.silent) d.audio.setRain(0.5);
   await d.wait(1.2);
   d.sfx('thunder', 0.5);
   await d.say('DISPATCH', 'All units, hostage on the Stratford roof. Deviant android, one civilian. Negotiator inbound.', 'ch1_dispatch_1', { hold: 5.4 });
@@ -142,9 +171,8 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
   // The camera pans with the player during the investigation.
   const origin = new THREE.Vector3(-2.4, 1.68, 4.4);
   const stopFollow = d.follow(() => {
-    const yaw = d.lookYaw;
-    const target = new THREE.Vector3(Math.sin(yaw) * 6 + 0.4, 1.15, Math.cos(yaw) * -6 - 0.6);
-    return d.shots.establish(origin, target, { lens: 30, bokeh: 1.0, focusOn: target });
+    const target = origin.clone().addScaledVector(d.lookDirection(), 5.2);
+    return d.shots.establish(origin, target, { lens: 30, bokeh: 0.9, focusOn: target });
   });
 
   const found = await d.scanScene(
@@ -259,6 +287,28 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
     d.state.visit('ch1.pressure');
     await d.say(deviant, "Nothing to say? Of course not. You're one of them. A better model of me.", 'ch1_dev_silent');
   }
+
+  // Look over the edge: gives the drop a size before it matters.
+  d.cut(
+    d.shots.establish(new THREE.Vector3(1.4, 1.55, -3.2), new THREE.Vector3(2.6, -6.0, -9.5), {
+      lens: 24,
+      bokeh: 1.8,
+    }),
+    { blend: 0.9, move: 'craneDown', moveAmount: 1.4, moveDuration: 6, handheld: 1.1 }
+  );
+  d.sfx('heartbeat', 0.5);
+  await d.say(orion, 'Eighty-one metres. At terminal velocity a child has no survivable outcome. Neither does he.', 'ch1_orion_5', {
+    thought: true,
+  });
+
+  d.cut(d.shots.overShoulder(orion, deviant, { lens: 62, side: -1, distance: 1.25 }), { blend: 0.7, handheld: 0.9 });
+  d.light(deviant, -1);
+  await d.say(deviant, 'Six years in that house. Six years of being furniture that says good morning.', 'ch1_dev_2', {
+    pose: 'talkEmphatic',
+  });
+  d.cut(d.shots.closeUp(orion, { lookingAt: marks.deviant, lens: 80, distance: 1.05 }), { handheld: 0.6 });
+  d.light(orion, 1);
+  await d.say(orion, 'And tonight the furniture stopped agreeing with the room.', 'ch1_orion_6');
 
   // Beat with the child: raises the stakes and shows the drop.
   d.cut(d.shots.closeUp(child, { lookingAt: marks.standoff, lens: 82, distance: 0.95 }), { handheld: 1.0 });

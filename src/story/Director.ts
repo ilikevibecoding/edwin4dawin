@@ -18,6 +18,8 @@ import { Hud, type ChoiceOption, type QteKey } from '../ui/Hud';
 import { AudioEngine } from '../audio/Audio';
 import { StoryState, type ChapterFlow } from './State';
 import { Deferred, clamp01, damp } from '../core/Time';
+
+const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 import type { GRADE } from '../render/LookConfig';
 
 /**
@@ -106,7 +108,7 @@ export class Director {
   private subject: Actor | null = null;
   private subjectSide = 1;
   private speaking: Actor | null = null;
-  private freeLook = { yaw: 0, pitch: 0, active: false };
+  private freeLook = { yaw: 0, pitch: -0.18, active: false };
   /** Muted during offline render: WebAudio cannot be captured from a screenshot. */
   silent = false;
 
@@ -529,8 +531,11 @@ export class Director {
     const s = this.scan;
     if (!s) return;
     const clue = this.hud.clueUnderReticle(this.set.camera, this.engine.width, this.engine.height);
+    const enough = s.found.size >= s.required;
     if (clue) this.hud.prompt(`ANALYSE <b>E</b> &nbsp;·&nbsp; ${clue.label}`);
-    else this.hud.prompt('MOVE <b>A</b> <b>D</b> &nbsp;·&nbsp; FIND EVIDENCE');
+    else if (enough) this.hud.prompt('LOOK <b>W</b> <b>A</b> <b>S</b> <b>D</b> &nbsp;·&nbsp; CONCLUDE <b>Q</b>');
+    else this.hud.prompt('LOOK <b>W</b> <b>A</b> <b>S</b> <b>D</b> &nbsp;·&nbsp; FIND EVIDENCE');
+
     if (clue && this.input.actionPressed('interact')) {
       s.found.add(clue.id);
       this.hud.markClueFound(clue.id);
@@ -538,27 +543,53 @@ export class Director {
       this.sfx('blipFound');
       const note = this.clueNotes.get(clue.id);
       if (note) this.hud.toast(note, 3.2);
-      if (s.found.size >= s.required) s.deferred.resolve();
     }
+    // The minimum unlocks the exit; finding everything ends the beat outright.
+    if (s.found.size >= s.total || (enough && this.input.actionPressed('scan'))) s.deferred.resolve();
   }
 
-  /** Slow horizontal look, used during investigation beats. */
+  /**
+   * Look control for investigation beats. Both axes matter: most evidence is on
+   * the deck, so a camera that can only pan will never bring a clue under the
+   * reticle.
+   */
   private tickFreeLook(dt: number): void {
     if (!this.freeLook.active) return;
-    const rate = 0.55;
+    // Deliberately slow. The reticle has to be able to settle on a target
+    // between frames, and at a brisk pan rate a single fixed step moves the
+    // frame further than the capture radius, so nothing can ever be selected.
+    // Capped per-step so one frame can never swing the reticle further than its
+    // own capture radius, however long the frame was.
+    const maxStep = 0.022;
+    const yawRate = Math.min(0.42, maxStep / Math.max(dt, 1e-4));
+    const pitchRate = Math.min(0.3, (maxStep * 0.7) / Math.max(dt, 1e-4));
     let dx = 0;
-    if (this.input.actionDown('left')) dx -= rate;
-    if (this.input.actionDown('right')) dx += rate;
-    this.freeLook.yaw = damp(this.freeLook.yaw, this.freeLook.yaw + dx * dt * 2.2, 8, dt);
-    this.lookYaw = this.freeLook.yaw;
+    let dy = 0;
+    if (this.input.actionDown('left')) dx -= 1;
+    if (this.input.actionDown('right')) dx += 1;
+    if (this.input.actionDown('forward')) dy += 1;
+    if (this.input.actionDown('back')) dy -= 1;
+    this.freeLook.yaw = clamp(this.freeLook.yaw + dx * yawRate * dt, -1.5, 1.5);
+    this.freeLook.pitch = clamp(this.freeLook.pitch + dy * pitchRate * dt, -0.85, 0.4);
+    this.lookYaw = damp(this.lookYaw, this.freeLook.yaw, 26, dt);
+    this.lookPitch = damp(this.lookPitch, this.freeLook.pitch, 26, dt);
   }
 
-  /** Yaw offset applied by the chapter's investigation camera. */
+  /** Yaw and pitch applied by the chapter's investigation camera. */
   lookYaw = 0;
+  lookPitch = 0;
+
+  /** Direction the investigation camera is pointing, for building its shot. */
+  lookDirection(out = new THREE.Vector3()): THREE.Vector3 {
+    const cp = Math.cos(this.lookPitch);
+    return out.set(Math.sin(this.lookYaw) * cp, Math.sin(this.lookPitch), -Math.cos(this.lookYaw) * cp);
+  }
 
   resetLook(): void {
     this.freeLook.yaw = 0;
+    this.freeLook.pitch = 0;
     this.lookYaw = 0;
+    this.lookPitch = 0;
   }
 
   // ------------------------------------------------- introspection for autoplay

@@ -435,6 +435,9 @@ body {
   inset: 0;
   display: grid;
   place-items: center;
+  /* Above the fade layer so end cards can be shown while the frame is held
+     black between chapters. */
+  z-index: 22;
   background: #000;
   opacity: 0;
   transition: opacity 600ms ease-in-out;
@@ -489,6 +492,9 @@ body {
 #flow {
   position: absolute;
   inset: 0;
+  /* Above the fade layer: the chart is shown between chapters, while the frame
+     underneath is still held at black. */
+  z-index: 25;
   background: radial-gradient(ellipse at 50% 40%, #071420 0%, #01050a 70%);
   display: none;
   padding: 5% 6%;

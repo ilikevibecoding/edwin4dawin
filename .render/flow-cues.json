@@ -1,0 +1,407 @@
+[
+ {
+  "time": 10,
+  "kind": "sfx",
+  "id": "thunder:0.50"
+ },
+ {
+  "time": 10,
+  "kind": "voice",
+  "id": "ch1_dispatch_1"
+ },
+ {
+  "time": 23.999999999999982,
+  "kind": "voice",
+  "id": "ch1_orion_1"
+ },
+ {
+  "time": 27.999999999999968,
+  "kind": "voice",
+  "id": "ch1_trooper_1"
+ },
+ {
+  "time": 35.99999999999998,
+  "kind": "voice",
+  "id": "ch1_orion_2"
+ },
+ {
+  "time": 40.00000000000001,
+  "kind": "voice",
+  "id": "ch1_orion_3"
+ },
+ {
+  "time": 51.66666666666676,
+  "kind": "sfx",
+  "id": "blipFound:1.00"
+ },
+ {
+  "time": 55.000000000000114,
+  "kind": "sfx",
+  "id": "blipFound:1.00"
+ },
+ {
+  "time": 61.66666666666683,
+  "kind": "sfx",
+  "id": "blipFound:1.00"
+ },
+ {
+  "time": 66.33333333333347,
+  "kind": "sfx",
+  "id": "blipFound:1.00"
+ },
+ {
+  "time": 70.00000000000009,
+  "kind": "sfx",
+  "id": "blipScan:1.00"
+ },
+ {
+  "time": 70.00000000000009,
+  "kind": "voice",
+  "id": "ch1_orion_4"
+ },
+ {
+  "time": 109.99999999999952,
+  "kind": "voice",
+  "id": "ch1_dev_1"
+ },
+ {
+  "time": 116.33333333333276,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 116.99999999999942,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 117.33333333333275,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 119.99999999999937,
+  "kind": "sfx",
+  "id": "blipConfirm:1.00"
+ },
+ {
+  "time": 121.99999999999935,
+  "kind": "voice",
+  "id": "ch1_orion_c_name"
+ },
+ {
+  "time": 127.99999999999926,
+  "kind": "voice",
+  "id": "ch1_dev_name"
+ },
+ {
+  "time": 133.99999999999943,
+  "kind": "sfx",
+  "id": "heartbeat:0.60"
+ },
+ {
+  "time": 133.99999999999943,
+  "kind": "voice",
+  "id": "ch1_child_1"
+ },
+ {
+  "time": 138.3333333333329,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 138.99999999999957,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 139.66666666666626,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 141.99999999999966,
+  "kind": "sfx",
+  "id": "blipConfirm:1.00"
+ },
+ {
+  "time": 143.99999999999972,
+  "kind": "voice",
+  "id": "ch1_orion_c_blood"
+ },
+ {
+  "time": 151.99999999999994,
+  "kind": "voice",
+  "id": "ch1_dev_blood"
+ },
+ {
+  "time": 170.00000000000045,
+  "kind": "sfx",
+  "id": "heartbeat:0.80"
+ },
+ {
+  "time": 170.3333333333338,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 171.00000000000048,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 174.00000000000057,
+  "kind": "sfx",
+  "id": "blipConfirm:1.00"
+ },
+ {
+  "time": 176.00000000000063,
+  "kind": "voice",
+  "id": "ch1_orion_c_promise"
+ },
+ {
+  "time": 184.00000000000085,
+  "kind": "voice",
+  "id": "ch1_dev_promise"
+ },
+ {
+  "time": 190.00000000000102,
+  "kind": "sfx",
+  "id": "thunder:0.90"
+ },
+ {
+  "time": 192.58846164837786,
+  "kind": "sfx",
+  "id": "blipFound:1.00"
+ },
+ {
+  "time": 192.99824948038184,
+  "kind": "sfx",
+  "id": "blipFound:1.00"
+ },
+ {
+  "time": 193.33141647335322,
+  "kind": "sfx",
+  "id": "blipFound:1.00"
+ },
+ {
+  "time": 193.8254394467969,
+  "kind": "sfx",
+  "id": "blipConfirm:1.00"
+ },
+ {
+  "time": 202.08426374948672,
+  "kind": "voice",
+  "id": "ch1_end_both_1"
+ },
+ {
+  "time": 205.58426374948712,
+  "kind": "voice",
+  "id": "ch1_end_both_2"
+ },
+ {
+  "time": 227.08426374948957,
+  "kind": "voice",
+  "id": "ch2_news_1"
+ },
+ {
+  "time": 232.5842637494902,
+  "kind": "voice",
+  "id": "ch2_cass_1"
+ },
+ {
+  "time": 237.58426374949076,
+  "kind": "voice",
+  "id": "ch2_girl_1"
+ },
+ {
+  "time": 244.0842637494915,
+  "kind": "voice",
+  "id": "ch2_owner_1"
+ },
+ {
+  "time": 253.58426374949258,
+  "kind": "sfx",
+  "id": "blipConfirm:1.00"
+ },
+ {
+  "time": 254.08426374949264,
+  "kind": "voice",
+  "id": "ch2_cass_c_stall"
+ },
+ {
+  "time": 258.58426374949227,
+  "kind": "voice",
+  "id": "ch2_owner_2a"
+ },
+ {
+  "time": 263.58426374949113,
+  "kind": "sfx",
+  "id": "thunder:0.85"
+ },
+ {
+  "time": 263.58426374949113,
+  "kind": "voice",
+  "id": "ch2_owner_3"
+ },
+ {
+  "time": 266.58426374949045,
+  "kind": "sfx",
+  "id": "heartbeat:0.90"
+ },
+ {
+  "time": 266.58426374949045,
+  "kind": "voice",
+  "id": "ch2_cass_2"
+ },
+ {
+  "time": 272.6675970828224,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 273.2509304161556,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 273.58426374948885,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 275.0842637494885,
+  "kind": "sfx",
+  "id": "blipConfirm:1.00"
+ },
+ {
+  "time": 275.5842637494884,
+  "kind": "sfx",
+  "id": "blipConfirm:1.00"
+ },
+ {
+  "time": 276.5842637494882,
+  "kind": "voice",
+  "id": "ch2_cass_break"
+ },
+ {
+  "time": 282.5842637494868,
+  "kind": "sfx",
+  "id": "bang:0.50"
+ },
+ {
+  "time": 282.5842637494868,
+  "kind": "voice",
+  "id": "ch2_cass_shield"
+ },
+ {
+  "time": 288.58426374948544,
+  "kind": "voice",
+  "id": "ch2_girl_2"
+ },
+ {
+  "time": 292.16759708281796,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 294.5842637494841,
+  "kind": "sfx",
+  "id": "blipConfirm:1.00"
+ },
+ {
+  "time": 295.08426374948397,
+  "kind": "voice",
+  "id": "ch2_cass_c_run"
+ },
+ {
+  "time": 338.5842637494741,
+  "kind": "voice",
+  "id": "ch3_bc_1"
+ },
+ {
+  "time": 344.5842637494727,
+  "kind": "voice",
+  "id": "ch3_atlas_1"
+ },
+ {
+  "time": 349.5842637494716,
+  "kind": "voice",
+  "id": "ch3_simon_1"
+ },
+ {
+  "time": 356.0842637494701,
+  "kind": "voice",
+  "id": "ch3_cass_1"
+ },
+ {
+  "time": 365.16759708280136,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 367.5842637494675,
+  "kind": "sfx",
+  "id": "blipConfirm:1.00"
+ },
+ {
+  "time": 368.08426374946737,
+  "kind": "voice",
+  "id": "ch3_atlas_c_peace"
+ },
+ {
+  "time": 375.58426374946566,
+  "kind": "sfx",
+  "id": "thunder:0.70"
+ },
+ {
+  "time": 375.58426374946566,
+  "kind": "voice",
+  "id": "ch3_cmd_1"
+ },
+ {
+  "time": 380.5842637494645,
+  "kind": "sfx",
+  "id": "heartbeat:0.90"
+ },
+ {
+  "time": 380.5842637494645,
+  "kind": "voice",
+  "id": "ch3_atlas_2"
+ },
+ {
+  "time": 384.66759708279693,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 385.25093041613013,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 385.5842637494634,
+  "kind": "sfx",
+  "id": "blipSelect:1.00"
+ },
+ {
+  "time": 387.08426374946305,
+  "kind": "sfx",
+  "id": "blipConfirm:1.00"
+ },
+ {
+  "time": 387.58426374946293,
+  "kind": "voice",
+  "id": "ch3_atlas_c_kneel"
+ },
+ {
+  "time": 396.084263749461,
+  "kind": "voice",
+  "id": "ch3_end_dawn_1"
+ },
+ {
+  "time": 401.08426374945986,
+  "kind": "voice",
+  "id": "ch3_end_dawn_2"
+ }
+]

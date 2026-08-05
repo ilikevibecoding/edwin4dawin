@@ -89,7 +89,7 @@ class ScriptedPlayer implements AutoplayPlan {
           const startY = window.innerHeight * 0.62;
           director.input.setVirtualCursor(startX + (cx - startX) * k, startY + (cy - startY) * k);
         }
-        if (elapsed > 2.1) director.input.inject('Enter', 0.1);
+        if (elapsed > 2.1) director.input.inject('Enter', 0.25);
         return;
       }
       t.choiceSeenAt = -1;
@@ -101,7 +101,7 @@ class ScriptedPlayer implements AutoplayPlan {
         }
         // React after a beat so the ring visibly closes, but always in time.
         const react = Math.min(0.34, Math.max(0.12, qte.remaining * 0.4));
-        if (now - t.qteSeenAt > react) director.input.inject(qteCode(qte.key), 0.12);
+        if (now - t.qteSeenAt > react) director.input.inject(qteCode(qte.key), 0.25);
         return;
       }
       t.qteIndex = -1;
@@ -138,19 +138,36 @@ class ScriptedPlayer implements AutoplayPlan {
     }
 
     p.copy(target.world).project(camera);
+    const behind = p.z > 1;
     const sx = (p.x * 0.5 + 0.5) * width;
-    const offset = sx - width / 2;
-    const tolerance = Math.min(width, height) * 0.055;
+    const sy = (-p.y * 0.5 + 0.5) * height;
+    const dx = behind ? -width : sx - width / 2;
+    const dy = sy - height / 2;
+    // Comfortably inside the reticle's own capture radius, so a clue that the
+    // HUD is offering can always be taken.
+    const tolerance = Math.min(width, height) * 0.1;
+    // Hold each key for a little over one step: any longer and the camera keeps
+    // turning after the target is centred and oscillates around it.
+    const hold = Math.max(0.05, director.clock.dt * 1.4);
 
-    if (Math.abs(offset) > tolerance) {
-      director.input.inject(offset > 0 ? 'KeyD' : 'KeyA', 0.08);
+    let steering = false;
+    if (Math.abs(dx) > tolerance) {
+      director.input.inject(dx > 0 ? 'KeyD' : 'KeyA', hold);
+      steering = true;
+    }
+    if (Math.abs(dy) > tolerance) {
+      // Screen Y grows downward; W tilts the camera up.
+      director.input.inject(dy > 0 ? 'KeyS' : 'KeyW', hold);
+      steering = true;
+    }
+    if (steering) {
       t.clueSettle = 0;
       return;
     }
     t.clueSettle += director.clock.dt;
-    if (t.clueSettle > 0.62) {
-      director.input.inject('KeyE', 0.1);
-      t.clueSettle = -0.5;
+    if (t.clueSettle > 0.4) {
+      director.input.inject('KeyE', hold);
+      t.clueSettle = -0.7;
     }
   }
 }

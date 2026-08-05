@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SceneSet } from './SceneSet';
-import { chainFence, neonSign, parapet, puddle, skyline } from './Kit';
+import { chainFence, neonSign, parapet, puddle, skyline, tileMaterial } from './Kit';
 import { EmergencyLights, LightShaft } from '../render/Volumetric';
 import { FOG, PALETTE } from '../render/LookConfig';
 import { Tex } from '../render/SharedTextures';
@@ -49,8 +49,10 @@ export class PlazaSet extends SceneSet {
       horizonColor: new THREE.Color(0.09, 0.11, 0.16),
       zenithColor: new THREE.Color(0.01, 0.016, 0.032),
       stars: 0.04,
-      envIntensity: 6.5,
-      backgroundIntensity: 0.6,
+      // Kept low for the same reason as the rooftop: image-based light is
+      // omnidirectional, and at high intensity it flattens the whole square.
+      envIntensity: 1.4,
+      backgroundIntensity: 0.4,
       beams: [
         { azimuth: 1.2, elevation: 0.55, spread: 0.28, intensity: 0.3, color: new THREE.Color(0.55, 0.75, 1) },
         { azimuth: 5.0, elevation: 0.42, spread: 0.3, intensity: 0.26, color: new THREE.Color(1, 0.45, 0.4) },
@@ -81,21 +83,21 @@ export class PlazaSet extends SceneSet {
       map: maps.map,
       normalMap: maps.normalMap,
       roughnessMap: maps.roughnessMap,
-      color: 0x101317,
-      roughness: 0.42,
-      metalness: 0.03,
-      envMapIntensity: 0.1,
-      normalScale: new THREE.Vector2(0.75, 0.75),
+      color: 0x2c3037,
+      roughness: 0.44,
+      metalness: 0.02,
+      envMapIntensity: 1.1,
+      normalScale: new THREE.Vector2(0.45, 0.45),
     });
-    this.groundMaterial = mat;
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(70, 70), mat);
+    this.groundMaterial = tileMaterial(mat, 14, 14);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(70, 70), this.groundMaterial);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
     this.wetFloor?.excludeFromReflection(ground);
 
     // Granite banding gives the plaza scale and a perspective grid.
-    const bandMat = new THREE.MeshStandardMaterial({ color: 0x7c828a, roughness: 0.5, metalness: 0.1, transparent: true, opacity: 0.5 });
+    const bandMat = new THREE.MeshStandardMaterial({ color: 0x4a5058, roughness: 0.5, metalness: 0.1, transparent: true, opacity: 0.4 });
     for (let i = -6; i <= 6; i++) {
       const band = new THREE.Mesh(new THREE.PlaneGeometry(46, 0.14), bandMat);
       band.rotation.x = -Math.PI / 2;
@@ -259,9 +261,18 @@ export class PlazaSet extends SceneSet {
   }
 
   private buildLights(): void {
-    this.scene.add(new THREE.HemisphereLight(0x76808e, 0x14181c, 0.35));
+    this.scene.add(new THREE.HemisphereLight(0x6c7a90, 0x121519, 1.5));
+    this.scene.add(new THREE.AmbientLight(0x1d2430, 0.45));
 
-    const key = new THREE.DirectionalLight(PALETTE.moonlight, 1.05);
+    // Broad frontal wash over the crowd. The police line backlights them, which
+    // is the shot, but without something on their faces the square reads as an
+    // empty stage full of black cut-outs.
+    const crowdFill = new THREE.SpotLight(0xa8c2e6, 900, 34, 0.85, 0.95, 2);
+    crowdFill.position.set(-6, 9, 14);
+    crowdFill.target.position.set(0, 1.2, 2);
+    this.scene.add(crowdFill, crowdFill.target);
+
+    const key = new THREE.DirectionalLight(PALETTE.moonlight, 2.2);
     key.position.set(-14, 20, 8);
     key.castShadow = this.quality.shadows;
     key.shadow.mapSize.set(this.quality.shadowMapSize, this.quality.shadowMapSize);
@@ -276,10 +287,10 @@ export class PlazaSet extends SceneSet {
 
     // Police floodlights: hard backlight that turns the crowd into silhouettes.
     for (const x of [-7, 7]) {
-      const flood = new THREE.SpotLight(0xdcebff, 340, 40, 0.42, 0.5, 2);
+      const flood = new THREE.SpotLight(0xdcebff, 230, 40, 0.42, 0.5, 2);
       flood.position.set(x, 7.5, -13.5);
       flood.target.position.set(x * 0.3, 1.2, 2);
-      flood.userData.base = 340;
+      flood.userData.base = 230;
       this.lineLights.push(flood);
       this.scene.add(flood, flood.target);
 

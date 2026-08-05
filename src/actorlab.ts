@@ -104,10 +104,23 @@ const FRAMINGS: Framing[] = [
   { name: 'child_full', id: 'child', clip: 'idle', view: 'full' },
   { name: 'child_face', id: 'child', clip: 'idle', view: 'face', lookAtCamera: true },
   { name: 'crowd_full', id: 'crowdAndroid', clip: 'idle', pose: [['defiant', 0.8]], view: 'full', led: 'process' },
+  // Story poses, checked in isolation before they are used in a chapter.
+  { name: 'pose_shield', id: 'cass', clip: 'idle', pose: [['shieldChild', 1]], view: 'full', led: 'stress' },
+  { name: 'pose_reach', id: 'child', clip: 'idle', pose: [['reachOut', 1]], view: 'full' },
+  { name: 'pose_openpalms', id: 'orion', clip: 'idle', pose: [['openPalms', 0.9]], view: 'full' },
+  { name: 'pose_fists', id: 'owner', clip: 'idle', pose: [['fists', 0.9]], view: 'full' },
+  { name: 'pose_point', id: 'owner', clip: 'idle', pose: [['pointForward', 0.85]], view: 'full' },
+  { name: 'pose_resigned', id: 'atlas', clip: 'idle', pose: [['resigned', 0.9]], view: 'full', led: 'calm' },
+  { name: 'pose_flinch', id: 'child', clip: 'idle', pose: [['flinch', 0.9]], view: 'full' },
+  { name: 'pose_defiant', id: 'deviant', clip: 'idle', pose: [['defiant', 0.9]], view: 'full', led: 'stress' },
+  { name: 'pose_slump', id: 'deviant', clip: 'idle', pose: [['slump', 0.9]], view: 'full', led: 'process' },
+  { name: 'pose_wound', id: 'atlas', clip: 'idle', pose: [['clutchWound', 0.9]], view: 'full', led: 'stress' },
+  { name: 'pose_talk', id: 'cass', clip: 'idle', pose: [['talkOpen', 0.9]], view: 'threeQuarter' },
+  { name: 'owner_face', id: 'owner', clip: 'idle', view: 'face', lookAtCamera: true },
 ];
 
-const only = params.get('only');
-const framings = only ? FRAMINGS.filter((f) => f.name.startsWith(only)) : FRAMINGS;
+const only = (params.get('only') ?? '').split(',').filter(Boolean);
+const framings = only.length ? FRAMINGS.filter((f) => only.some((o) => f.name.startsWith(o))) : FRAMINGS;
 
 declare global {
   interface Window {

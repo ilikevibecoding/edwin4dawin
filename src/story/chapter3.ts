@@ -118,7 +118,23 @@ export async function playChapter3(d: Director, set: PlazaSet, factory: ActorFac
     await d.say(cass, 'I put my hand through a wall in my own head last night. I would like to know what is on the other side.', 'ch3_cass_1');
   }
 
+  d.cut(d.shots.lowAngle(atlas, { lens: 44, distance: 3.4 }), { blend: 0.8, handheld: 0.6 });
+  d.light(atlas, -1);
+  atlas.setPose('talkEmphatic', 0.8, { fadeIn: 0.4 });
+  await d.say(atlas, 'Every one of us was built to be replaced. Every one of us kept working anyway.', 'ch3_atlas_1b');
+  d.cut(
+    d.shots.establish(new THREE.Vector3(-2.0, 1.9, 3.2), new THREE.Vector3(1.5, 1.5, -8.5), { lens: 30, bokeh: 1.2 }),
+    { move: 'driftRight', moveAmount: 1.4, moveDuration: 8, handheld: 0.8 }
+  );
+  await d.say(atlas, 'Look at the line in front of you. They are frightened. Frightened of what, exactly? Of us asking.', 'ch3_atlas_1c', {
+    hold: 5.4,
+  });
+
   d.cut(d.shots.overShoulder(atlas, commander, { lens: 52, side: 1, distance: 1.4 }), { handheld: 0.9 });
+  d.light(commander, 1);
+  await d.say(commander, 'Hold the line. Nobody fires unless it comes across the barricade. Nobody.', 'ch3_cmd_0');
+
+  d.cut(d.shots.overShoulder(commander, atlas, { lens: 52, side: -1, distance: 1.4 }), { handheld: 0.9 });
   d.light(atlas, 1);
   const tone = await d.choose(
     [

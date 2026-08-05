@@ -46,8 +46,8 @@ export class HouseholdSet extends SceneSet {
       cityGlow: 0.7,
       cloudBrightness: 0.4,
       stars: 0.01,
-      envIntensity: 3.0,
-      backgroundIntensity: 0.5,
+      envIntensity: 0.85,
+      backgroundIntensity: 0.32,
     });
     this.initFog(0x141a22, FOG.domesticDensity);
 
@@ -55,8 +55,10 @@ export class HouseholdSet extends SceneSet {
     this.buildFurniture();
     this.buildLights();
 
-    // Rain is only visible through the window, but it still needs to fall.
-    this.initRain({ groundY: -0.4, boxSize: 26, color: 0x9fbcdc, intensity: 1 });
+    // Rain belongs outside the glass. The volume is parked beyond the back wall
+    // so it reads through the window without falling through the ceiling.
+    this.initRain({ groundY: -3.5, boxSize: 16, color: 0x9fbcdc, intensity: 1 });
+    if (this.rain) this.rain.group.position.set(0.6, 0, -9.5);
     this.initWetFloor({ planeY: 0, wetness: 0.32, strength: 0.4 });
     this.initHaze(5, { color: 0xffb066, radius: 4.5, height: 2.4, scale: 3.6, opacity: 0.035 });
     this.initCharacterLights({ keyColor: 0xffcf9a, kickerColor: 0x9fc4ff, keyIntensity: 16, kickerIntensity: 12, range: 5 });
@@ -64,15 +66,18 @@ export class HouseholdSet extends SceneSet {
 
   private buildShell(): void {
     const floorMaps = Tex.concreteFine;
-    const boards = fabricSurface({ size: 256, repeat: 8, tint: [0.22, 0.14, 0.09], weave: 26, seed: 5 });
+    // A tight weave repeat at room scale reads as a checkerboard rather than a
+    // floor, so the tiling is coarse and the sheen is pulled right down.
+    const boards = fabricSurface({ size: 256, repeat: 2.5, tint: [0.22, 0.14, 0.09], weave: 26, seed: 5 });
     const floorMat = new THREE.MeshStandardMaterial({
       map: boards.map,
       normalMap: boards.normalMap,
       roughnessMap: boards.roughnessMap,
-      color: 0x6a4a33,
-      roughness: 0.45,
-      metalness: 0.05,
-      envMapIntensity: 0.7,
+      color: 0x33231a,
+      roughness: 0.58,
+      metalness: 0.02,
+      envMapIntensity: 0.4,
+      normalScale: new THREE.Vector2(0.1, 0.1),
     });
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(9, 9), floorMat);
     floor.rotation.x = -Math.PI / 2;
@@ -83,10 +88,10 @@ export class HouseholdSet extends SceneSet {
     const wallMat = new THREE.MeshStandardMaterial({
       map: floorMaps.map,
       normalMap: floorMaps.normalMap,
-      color: 0x5d5a55,
-      roughness: 0.92,
+      color: 0x39352f,
+      roughness: 0.94,
       metalness: 0.02,
-      envMapIntensity: 0.5,
+      envMapIntensity: 0.6,
     });
 
     const mkWall = (w: number, h: number, pos: [number, number, number], rotY: number): THREE.Mesh => {
@@ -247,11 +252,11 @@ export class HouseholdSet extends SceneSet {
     const shade = new THREE.Mesh(
       new THREE.CylinderGeometry(0.2, 0.26, 0.3, 14, 1, true),
       new THREE.MeshStandardMaterial({
-        color: 0xd8c7a8,
-        roughness: 0.85,
+        color: 0x8f7d63,
+        roughness: 0.95,
         side: THREE.DoubleSide,
         emissive: new THREE.Color(PALETTE.sodium),
-        emissiveIntensity: 0.5,
+        emissiveIntensity: 0.1,
       })
     );
     shade.position.set(1.95, 1.62, 1.35);
@@ -318,7 +323,7 @@ export class HouseholdSet extends SceneSet {
       if (this.tvMaterial && this.tvLight) {
         // Broadcast flicker drives both the screen and its spill.
         const f = 0.72 + 0.28 * Math.abs(Math.sin(time * 5.7) * Math.sin(time * 1.9));
-        this.tvMaterial.color.setRGB(0.55 * f + 0.2, 0.7 * f + 0.2, 1.0 * f);
+        this.tvMaterial.color.setRGB(0.3 * f + 0.08, 0.4 * f + 0.1, 0.62 * f + 0.05);
         this.tvLight.intensity = 5 + f * 5;
       }
 

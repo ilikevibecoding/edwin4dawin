@@ -95,6 +95,17 @@ export async function playChapter2(d: Director, set: HouseholdSet, factory: Acto
   girl.setPose('slump', 0.6, { fadeIn: 0.5 });
   await d.say(girl, "Can I stay up? He's in a mood. He's always in a mood when it rains.", 'ch2_girl_1');
 
+  d.cut(d.shots.overShoulder(girl, cass, { lens: 60, side: -1, distance: 1.15 }), { handheld: 0.7 });
+  d.light(cass, 1);
+  cass.setPose('talkOpen', 0.7, { fadeIn: 0.4 });
+  await d.say(cass, 'It rains four days in seven here. I have kept the count since I arrived.', 'ch2_cass_0');
+  d.cut(d.shots.closeUp(girl, { lookingAt: marks.cass, lens: 78, distance: 1.0 }), { handheld: 0.6 });
+  d.light(girl, -1);
+  await d.say(girl, 'Do you mind it? The rain. Are you allowed to mind things?', 'ch2_girl_0');
+  d.cut(d.shots.closeUp(cass, { lookingAt: marks.child, lens: 80, distance: 1.0 }), { move: 'pushIn', moveDuration: 6 });
+  d.light(cass, 1);
+  await d.say(cass, 'I am allowed to note them. Whether that is the same thing is not in my documentation.', 'ch2_cass_0b');
+
   // ------------------------------------------------------------ the first order
   d.state.visit('ch2.order');
   d.cut(d.shots.lowAngle(owner, { lens: 40, distance: 2.3 }), { handheld: 0.9 });

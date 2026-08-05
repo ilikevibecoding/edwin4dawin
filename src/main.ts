@@ -29,6 +29,9 @@ const startChapter = Number(params.get('chapter') || 1);
 const width = Number(params.get('w') || 0) || undefined;
 const height = Number(params.get('h') || 0) || undefined;
 const fps = Number(params.get('fps') || 24);
+// Fast-forward for flow testing: every wait, camera move and timer scales
+// together, so the script can be walked end to end in a fraction of the frames.
+const speed = Number(params.get('speed') || 1);
 
 const container = document.getElementById('app') as HTMLElement;
 const engine = new Engine(container, {
@@ -63,13 +66,17 @@ async function boot(): Promise<void> {
   if (!renderMode) await director.audio.loadVoiceBank();
   director.hud.setLoading(1, 'READY');
 
+  // Autoplay runs first so injected keys are visible to the Director in the same
+  // frame; input is cleared at the end of every step.
+  const plan: AutoplayPlan | null = autoplay ? AUTOPLAY : null;
+  if (plan) plan.attach(director);
+
+  if (speed !== 1) engine.clock.setTimeScale(speed);
+
   engine.onFrame(() => {
     // The Director drives the camera, HUD and story timers.
     director.update(engine.clock.dt, engine.clock.time);
   });
-
-  const plan: AutoplayPlan | null = autoplay ? AUTOPLAY : null;
-  if (plan) plan.attach(director);
 
   const run = async (): Promise<void> => {
     if (!renderMode) await director.audio.resume();
@@ -93,10 +100,20 @@ async function boot(): Promise<void> {
       await playChapter3(director, plaza, factory);
     }
 
-    // Epilogue card built from the flags the run set.
-    director.hud.showCard('END OF DEMO', 'Neo Detroit', epilogueLines(director).join('   ·   '));
-    director.hud.fade(0, 0.6);
-    await director.wait(8);
+    // Epilogue: one card per chapter outcome, then the closing title. The text
+    // is assembled from the flags this particular run set, so two playthroughs
+    // do not end the same way.
+    for (const result of director.state.results) {
+      director.hud.showCard(result.outcome, result.chapter, result.detail);
+      await director.wait(5.5);
+      director.hud.hideCard();
+      await director.wait(1.1);
+    }
+    const closing = epilogueLines(director);
+    director.hud.showCard('END OF DEMO', 'Neo Detroit', closing[closing.length - 1] ?? '');
+    await director.wait(7);
+    director.hud.hideCard();
+    await director.wait(2);
     window.__finished = true;
   };
 
