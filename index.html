@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>AEGIS LINE // Air Defence Range (Fictional Training Demo)</title>
+    <link rel="stylesheet" href="/src/styles/ui.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene"></canvas>
+
+      <!-- ============================ HUD ============================ -->
+      <div id="hud" class="layer" aria-hidden="false">
+        <div id="hud-vignette"></div>
+
+        <!-- Reticle + world-space target prompt -->
+        <div id="reticle" class="reticle">
+          <svg viewBox="0 0 64 64" aria-hidden="true">
+            <circle cx="32" cy="32" r="12" class="r-ring" />
+            <path d="M32 4 V16 M32 48 V60 M4 32 H16 M48 32 H60" class="r-tick" />
+            <circle cx="32" cy="32" r="1.6" class="r-dot" />
+          </svg>
+        </div>
+        <div id="target-prompt" class="target-prompt hidden" role="status" aria-live="polite"></div>
+
+        <!-- Top status strip -->
+        <header id="status-strip">
+          <div class="strip-block">
+            <span class="k">SITE</span><span class="v">AEGIS&nbsp;LINE</span>
+          </div>
+          <div class="strip-block">
+            <span class="k">COND</span><span class="v" id="s-cond">DAY</span>
+          </div>
+          <div class="strip-block">
+            <span class="k">SCENARIO</span><span class="v" id="s-scenario">SINGLE TRACK</span>
+          </div>
+          <div class="strip-block alert" id="s-defcon">
+            <span class="k">STATE</span><span class="v" id="s-state">STANDBY</span>
+          </div>
+          <div class="strip-block">
+            <span class="k">THREATS</span><span class="v" id="s-threats">0</span>
+          </div>
+          <div class="strip-block">
+            <span class="k">IN FLIGHT</span><span class="v" id="s-inflight">0</span>
+          </div>
+          <div class="strip-block">
+            <span class="k">T+</span><span class="v" id="s-clock">00.0</span>
+          </div>
+        </header>
+
+        <!-- Battery selector rail -->
+        <aside id="battery-rail" aria-label="Interceptor batteries">
+          <div class="rail-title">BATTERIES <span class="hint">[1-3] / [Q]</span></div>
+          <div id="battery-list"></div>
+        </aside>
+
+        <!-- Track list -->
+        <aside id="track-panel" aria-label="Tracked threats">
+          <div class="rail-title">TRACKS <span class="hint">[TAB] cycle</span></div>
+          <div id="track-list"><div class="empty">NO TRACKS</div></div>
+        </aside>
+
+        <!-- Mini radar scope -->
+        <div id="mini-radar">
+          <canvas id="mini-radar-canvas" width="240" height="240"></canvas>
+          <div class="mr-label">SEARCH / TRACK <span id="mr-range">RNG 30 KM</span></div>
+        </div>
+
+        <!-- Engagement bar -->
+        <div id="engage-bar">
+          <div class="eb-slot" id="eb-assign"><b>E</b><span>ASSIGN</span></div>
+          <div class="eb-slot" id="eb-launch"><b>F</b><span>AUTHORIZE</span></div>
+          <div class="eb-slot" id="eb-console"><b>E</b><span>CONSOLE</span></div>
+        </div>
+
+        <!-- Event log -->
+        <div id="event-log" role="log" aria-live="polite"></div>
+
+        <!-- Result banner -->
+        <div id="result-banner" class="hidden"></div>
+
+        <!-- Alarm flash -->
+        <div id="alarm-flash"></div>
+      </div>
+
+      <!-- ======================= COMMAND CONSOLE ======================= -->
+      <section id="console-ui" class="layer hidden" aria-label="Command and control console">
+        <div class="console-frame">
+          <div class="console-head">
+            <div class="ch-left">
+              <span class="badge">FICTIONAL TRAINING SIM</span>
+              <h1>ENGAGEMENT CONSOLE // AEGIS LINE</h1>
+            </div>
+            <button id="console-exit" class="btn ghost">EXIT [ESC]</button>
+          </div>
+
+          <div class="console-body">
+            <div class="console-col scope-col">
+              <div class="panel scope-panel">
+                <div class="panel-title">SURVEILLANCE SCOPE <span id="scope-mode">SEARCH</span></div>
+                <div class="scope-wrap">
+                  <canvas id="scope-canvas" width="620" height="620" tabindex="0"
+                          aria-label="Radar scope. Use arrow keys or click to select a track."></canvas>
+                </div>
+                <div class="scope-legend">
+                  <span><i class="sw threat"></i>THREAT</span>
+                  <span><i class="sw decoy"></i>UNCONFIRMED</span>
+                  <span><i class="sw inter"></i>INTERCEPTOR</span>
+                  <span><i class="sw sel"></i>SELECTED</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="console-col ctrl-col">
+              <div class="panel">
+                <div class="panel-title">1 &nbsp;LIGHT CONDITION</div>
+                <div class="seg" id="cond-seg" role="group" aria-label="Light condition">
+                  <button class="seg-btn" data-cond="day">DAY</button>
+                  <button class="seg-btn" data-cond="sunset">SUNSET</button>
+                  <button class="seg-btn" data-cond="night">NIGHT</button>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-title">2 &nbsp;THREAT SCENARIO</div>
+                <div class="seg vertical" id="scen-seg" role="group" aria-label="Threat scenario">
+                  <button class="seg-btn" data-scen="single">
+                    <b>SINGLE TRACK</b><i>1 inbound &middot; high visibility</i>
+                  </button>
+                  <button class="seg-btn" data-scen="saturation">
+                    <b>SATURATION</b><i>3-5 inbound &middot; split arcs</i>
+                  </button>
+                  <button class="seg-btn" data-scen="night">
+                    <b>NIGHT RAID</b><i>multi + decoys &middot; darkness</i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-title">3 &nbsp;INTERCEPTOR BATTERY</div>
+                <div class="seg vertical" id="bat-seg" role="group" aria-label="Interceptor battery"></div>
+              </div>
+
+              <div class="panel assign-panel">
+                <div class="panel-title">4 &nbsp;ENGAGE</div>
+                <div class="assign-readout">
+                  <div><span class="k">TRACK</span><span class="v" id="c-track">--</span></div>
+                  <div><span class="k">BATTERY</span><span class="v" id="c-bat">--</span></div>
+                  <div><span class="k">SOLUTION</span><span class="v" id="c-sol">--</span></div>
+                </div>
+                <button id="btn-assign" class="btn wide" disabled>ASSIGN <em>[E]</em></button>
+                <button id="btn-authorize" class="btn wide danger" disabled>AUTHORIZE LAUNCH <em>[F]</em></button>
+              </div>
+
+              <button id="btn-start" class="btn start">START BALLISTIC MISSILES</button>
+              <button id="btn-restart" class="btn ghost wide">RESTART SCENARIO <em>[R]</em></button>
+            </div>
+          </div>
+
+          <div class="console-foot">
+            <span id="console-status">SYSTEM READY &middot; ALL RANGES AND BEHAVIOUR ARE FICTIONAL</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================ MENU ============================ -->
+      <section id="menu" class="layer">
+        <div class="menu-card">
+          <div class="menu-badge">FICTIONAL ENTERTAINMENT DEMO &middot; NOT A TRAINING SIMULATOR</div>
+          <h1 class="menu-title">AEGIS<span>LINE</span></h1>
+          <p class="menu-sub">First-person air-defence range. Walk the site, read the scope,
+             assign an interceptor, and watch the sky.</p>
+          <div class="menu-keys">
+            <div><b>W A S D</b> move</div><div><b>SHIFT</b> sprint</div>
+            <div><b>MOUSE</b> look</div><div><b>E</b> assign / use console</div>
+            <div><b>F</b> authorize launch</div><div><b>TAB</b> cycle track</div>
+            <div><b>1 2 3</b> battery</div><div><b>R</b> restart scenario</div>
+            <div><b>C</b> console</div><div><b>ESC</b> release mouse</div>
+          </div>
+          <label class="menu-toggle">
+            <input type="checkbox" id="opt-reduced" /> Reduced motion (no head bob / heavy shake)
+          </label>
+          <label class="menu-toggle">
+            <input type="checkbox" id="opt-audio" checked /> Audio cues
+          </label>
+          <button id="btn-enter" class="btn start big">ENTER THE RANGE</button>
+          <div class="menu-foot">Everything is generated procedurally &middot; no downloaded assets</div>
+        </div>
+      </section>
+
+      <!-- ============================ LOADER ============================ -->
+      <section id="loader" class="layer">
+        <div class="loader-inner">
+          <div class="loader-bar"><i></i></div>
+          <div class="loader-text">BUILDING SITE…</div>
+        </div>
+      </section>
+
+      <div id="perf" class="hidden"></div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

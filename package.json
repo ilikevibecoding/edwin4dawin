@@ -1,0 +1,22 @@
+{
+  "name": "aegis-line",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "AEGIS LINE - a fictional first-person ballistic missile interceptor base demo built with Three.js",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "test": "playwright test",
+    "test:shots": "playwright test tests/screenshots.spec.js",
+    "test:perf": "playwright test tests/perf.spec.js"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "vite": "^8.2.0"
+  }
+}
