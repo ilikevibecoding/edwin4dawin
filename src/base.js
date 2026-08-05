@@ -6,7 +6,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   tintGeometry, grungeTexture, concreteTexture, asphaltTexture, sandTexture, camoTexture,
   hazardTexture, chainlinkTexture, stencilTexture, scorchTexture, softCircleTexture,
-  cableCurve, fbm, clamp, lerp, rngFx, makeCanvas,
+  cableCurve, fbm, clamp, lerp, smoothstep, rngFx, makeCanvas,
 } from './utils.js';
 import { makeBoxCollider } from './physics.js';
 
@@ -131,8 +131,8 @@ export class Base {
   _buildTerrain() {
     const RINGS = 42, SECTORS = 96, RMAX = 14000;
     const pos = [], uv = [], col = [], idx = [];
-    const cSand = new THREE.Color(0.78, 0.66, 0.5);
-    const cDark = new THREE.Color(0.6, 0.5, 0.4);
+    const cSand = new THREE.Color(0.60, 0.53, 0.42);
+    const cDark = new THREE.Color(0.38, 0.33, 0.26);
     for (let r = 0; r <= RINGS; r++) {
       const t = r / RINGS;
       const rad = Math.pow(t, 2.1) * RMAX; // dense near center
@@ -140,22 +140,29 @@ export class Base {
         const a = (s / SECTORS) * Math.PI * 2;
         const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
         let y = 0;
-        if (rad > 320) {
+        if (rad > 260) {
           const n = fbm(x * 0.0006 + 7, z * 0.0006 + 3, 4);
-          y = (n - 0.42) * clamp((rad - 320) / 900, 0, 1) * 90;
-          y += (fbm(x * 0.0035, z * 0.0035, 3) - 0.5) * clamp((rad - 320) / 600, 0, 1) * 12;
+          y = (n - 0.42) * clamp((rad - 260) / 900, 0, 1) * 120;
+          y += (fbm(x * 0.0035, z * 0.0035, 3) - 0.5) * clamp((rad - 260) / 600, 0, 1) * 16;
         }
         pos.push(x, y, z);
-        uv.push(x / 26, z / 26);
+        uv.push(x / 37, z / 37);
         const n2 = fbm(x * 0.002 + 31, z * 0.002, 3);
-        const c = cSand.clone().lerp(cDark, n2 * 0.7);
+        const n3 = fbm(x * 0.0007 + 90, z * 0.0007 + 44, 3); // macro wadis/basins
+        const c = cSand.clone().lerp(cDark, clamp(n2 * 0.55 + smoothstep(0.55, 0.75, n3) * 0.65, 0, 1));
+        // graded gravel ring blending into the apron edges (baked, avoids z-fighting decals)
+        const edge = Math.max(Math.abs(x) / 192, Math.abs(z) / 172);
+        if (edge < 1.35) {
+          const k = smoothstep(1.35, 0.95, edge);
+          c.lerp(new THREE.Color(0.42, 0.385, 0.33), k * 0.85);
+        }
         col.push(c.r, c.g, c.b);
       }
     }
     for (let r = 0; r < RINGS; r++) {
       for (let s = 0; s < SECTORS; s++) {
         const a = r * (SECTORS + 1) + s, b = a + SECTORS + 1;
-        idx.push(a, b, a + 1, b, b + 1, a + 1);
+        idx.push(a, a + 1, b, b, a + 1, b + 1); // wound so normals face up
       }
     }
     const geo = new THREE.BufferGeometry();
@@ -164,9 +171,8 @@ export class Base {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({
-      map: sandTexture(512), vertexColors: true, roughness: 1.0, metalness: 0.0,
-    });
+    // Lambert with reflectivity 0: pure diffuse — no fresnel wash, no mirror env reflection
+    const mat = new THREE.MeshLambertMaterial({ map: sandTexture(512), vertexColors: true, reflectivity: 0 });
     mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
     this.ground = new THREE.Mesh(geo, mat);
     this.ground.receiveShadow = true;
@@ -174,26 +180,33 @@ export class Base {
   }
 
   _buildMountains() {
-    const SECTORS = 200, ROWS = [5600, 6600, 7600, 9200, 12500];
-    const HEIGHTS = [40, 480, 980, 620, 0];
+    const SECTORS = 300;
+    const ROWS = [5400, 5900, 6500, 7200, 8000, 9000, 10200, 12500];
+    const HEIGHTS = [20, 180, 430, 780, 1080, 760, 380, 0];
     const pos = [], col = [], idx = [];
-    const cLow = new THREE.Color(0.42, 0.35, 0.28);
-    const cHigh = new THREE.Color(0.58, 0.52, 0.47);
+    const cLow = new THREE.Color(0.105, 0.082, 0.062);
+    const cHigh = new THREE.Color(0.19, 0.165, 0.14);
+    const cHaze = new THREE.Color(0.30, 0.35, 0.44); // baked aerial perspective on far rows
     for (let r = 0; r < ROWS.length; r++) {
       for (let s = 0; s <= SECTORS; s++) {
         const a = (s / SECTORS) * Math.PI * 2;
-        const jag = fbm(Math.cos(a) * 4 + r * 9, Math.sin(a) * 4, 4);
-        const rad = ROWS[r] * (1 + (jag - 0.5) * 0.12);
-        const h = HEIGHTS[r] * (0.35 + jag * 1.25);
+        const jag = fbm(Math.cos(a) * 4 + r * 9, Math.sin(a) * 4, 5);
+        const jag2 = fbm(Math.cos(a) * 14 + 40, Math.sin(a) * 14 + r * 3, 4);
+        // low-frequency massif mask: some sectors drop to passes/gaps
+        const massif = 0.15 + 0.85 * smoothstep(0.3, 0.72, fbm(Math.cos(a) * 2.2 + 5, Math.sin(a) * 2.2, 3));
+        const rad = ROWS[r] * (1 + (jag - 0.5) * 0.11);
+        const h = Math.min(HEIGHTS[r] * (0.35 + jag * 1.1) * (0.72 + jag2 * 0.55) * massif, 1400);
         pos.push(Math.cos(a) * rad, h, Math.sin(a) * rad);
-        const c = cLow.clone().lerp(cHigh, clamp(h / 900, 0, 1));
+        const c = cLow.clone().lerp(cHigh, clamp(h / 1000, 0, 1));
+        c.offsetHSL(0, (jag2 - 0.5) * 0.04, (jag2 - 0.5) * 0.04);
+        c.lerp(cHaze, r >= 5 ? 0.5 : r === 4 ? 0.3 : r === 3 ? 0.16 : 0.06);
         col.push(c.r, c.g, c.b);
       }
     }
     for (let r = 0; r < ROWS.length - 1; r++) {
       for (let s = 0; s < SECTORS; s++) {
         const a = r * (SECTORS + 1) + s, b = a + SECTORS + 1;
-        idx.push(a, b, a + 1, b, b + 1, a + 1);
+        idx.push(a, a + 1, b, b, a + 1, b + 1); // wound so normals face up
       }
     }
     const geo = new THREE.BufferGeometry();
@@ -201,35 +214,36 @@ export class Base {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 });
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, reflectivity: 0 });
     const m = new THREE.Mesh(geo, mat);
     this.group.add(m);
   }
 
-  // ---------------- apron: big detailed pad with painted markings baked into the texture
+  // ---------------- apron: tiled asphalt base (crisp up close) + painted markings overlay
   _buildApron() {
     const W = 320, H = 280;
+    // base: tiling asphalt for close-up detail
+    const aTex = asphaltTexture(512);
+    aTex.repeat.set(W / 7.5, H / 7.5);
+    aTex.anisotropy = 8;
+    const baseMat = new THREE.MeshStandardMaterial({ map: aTex, roughness: 0.95, metalness: 0.02, color: 0xf4efe6 });
+    const apron = new THREE.Mesh(new THREE.PlaneGeometry(W, H), baseMat);
+    apron.rotation.x = -Math.PI / 2;
+    apron.position.y = 0.02;
+    apron.receiveShadow = true;
+    this.group.add(apron);
+
+    // markings overlay: transparent canvas (paint, stains, panel joints)
     const canvas = makeCanvas(2048, 1792, (ctx, w, h) => {
-      // asphalt base
-      const img = ctx.createImageData(w, h);
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const n = fbm(x * 0.015, y * 0.015, 5);
-          const sp = (Math.random() - 0.5) * 12;
-          const v = 58 + (n - 0.5) * 26 + sp;
-          const i = (y * w + x) * 4;
-          img.data[i] = v; img.data[i + 1] = v + 1; img.data[i + 2] = v + 3; img.data[i + 3] = 255;
-        }
-      }
-      ctx.putImageData(img, 0, 0);
-      const px = w / W; // pixels per metre
-
+      ctx.clearRect(0, 0, w, h);
+      const px = w / W; // horizontal pixels per metre
+      const py = h / H; // vertical pixels per metre
       const mx = (xm) => (xm + W / 2) * px;
-      const my = (zm) => (zm + H / 2) * (h / H);
+      const my = (zm) => (zm + H / 2) * py;
 
-      // concrete panel grid in center
-      ctx.strokeStyle = 'rgba(30,30,32,0.55)';
-      ctx.lineWidth = 2;
+      // concrete panel joints
+      ctx.strokeStyle = 'rgba(16,16,18,0.5)';
+      ctx.lineWidth = 2.4;
       for (let gx = -140; gx <= 140; gx += 20) {
         ctx.beginPath(); ctx.moveTo(mx(gx), my(-120)); ctx.lineTo(mx(gx), my(120)); ctx.stroke();
       }
@@ -237,85 +251,105 @@ export class Base {
         ctx.beginPath(); ctx.moveTo(mx(-140), my(gz)); ctx.lineTo(mx(140), my(gz)); ctx.stroke();
       }
 
-      // service road: gate (south) to center, then loops
-      ctx.strokeStyle = 'rgba(24,24,26,0.9)';
-      ctx.lineWidth = 9 * px;
+      // service roads (darker resurfaced strips)
       const road = (pts) => {
         ctx.beginPath();
         ctx.moveTo(mx(pts[0][0]), my(pts[0][1]));
         for (let i = 1; i < pts.length; i++) ctx.lineTo(mx(pts[i][0]), my(pts[i][1]));
         ctx.stroke();
       };
+      ctx.strokeStyle = 'rgba(14,14,16,0.55)';
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.lineWidth = 9 * px;
       road([[0, 140], [0, 40], [6, -20], [58, -52]]);
       road([[6, -20], [-64, -56]]);
       road([[0, 40], [16, 74]]);
       road([[6, -20], [-44, -8], [-74, 44]]);
-
-      // road edge lines
-      ctx.strokeStyle = 'rgba(200,190,160,0.5)';
-      ctx.lineWidth = 0.35 * px;
-      ctx.setLineDash([4 * px, 3 * px]);
+      // center dashes
+      ctx.strokeStyle = 'rgba(215,205,175,0.6)';
+      ctx.lineWidth = 0.3 * px;
+      ctx.setLineDash([3.4 * px, 3 * px]);
       road([[0, 140], [0, 40], [6, -20], [58, -52]]);
+      road([[6, -20], [-64, -56]]);
+      road([[0, 40], [16, 74]]);
       ctx.setLineDash([]);
 
       // helipad
       const hx = mx(96), hy = my(38);
-      ctx.strokeStyle = 'rgba(220,210,180,0.85)';
-      ctx.lineWidth = 1.1 * px;
+      ctx.strokeStyle = 'rgba(225,215,185,0.9)';
+      ctx.lineWidth = 1.0 * px;
       ctx.beginPath(); ctx.arc(hx, hy, 11 * px, 0, Math.PI * 2); ctx.stroke();
-      ctx.font = `700 ${Math.floor(13 * px)}px monospace`;
-      ctx.fillStyle = 'rgba(220,210,180,0.85)';
+      ctx.font = `700 ${Math.floor(12 * px)}px monospace`;
+      ctx.fillStyle = 'rgba(225,215,185,0.9)';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('H', hx, hy);
 
-      // launcher pad outlines + hazard rings
+      // launcher pad outlines + labels
       const padMark = (x, z, label) => {
-        ctx.strokeStyle = 'rgba(200,60,40,0.75)';
-        ctx.lineWidth = 0.5 * px;
-        ctx.strokeRect(mx(x - 11), my(z - 11), 22 * px, 22 * (h / H) * (H / W) * px * (W / H) );
-        ctx.strokeStyle = 'rgba(220,180,60,0.6)';
-        ctx.beginPath(); ctx.arc(mx(x), my(z), 15 * px, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = 'rgba(210,200,170,0.75)';
-        ctx.font = `700 ${Math.floor(2.6 * px)}px monospace`;
-        ctx.fillText(label, mx(x), my(z + 13.4));
+        ctx.strokeStyle = 'rgba(190,55,38,0.8)';
+        ctx.lineWidth = 0.45 * px;
+        ctx.strokeRect(mx(x - 12), my(z - 12), 24 * px, 24 * py);
+        ctx.strokeStyle = 'rgba(215,180,70,0.55)';
+        ctx.beginPath(); ctx.arc(mx(x), my(z), 15.5 * px, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = 'rgba(215,205,175,0.85)';
+        ctx.font = `700 ${Math.floor(2.2 * px)}px monospace`;
+        ctx.fillText(label, mx(x), my(z + 13.8));
       };
-      padMark(58, -52, 'PAD A — RAMPART');
-      padMark(-64, -56, 'PAD B — HIGHGUARD');
-      padMark(16, 74, 'PAD C — SENTINEL-X');
+      padMark(58, -52, 'PAD A · MIM-9 RAMPART');
+      padMark(-64, -56, 'PAD B · TX-11 HIGHGUARD');
+      padMark(16, 74, 'PAD C · SENTINEL-X');
 
       // parking bays
-      ctx.strokeStyle = 'rgba(200,190,160,0.5)';
-      ctx.lineWidth = 0.28 * px;
+      ctx.strokeStyle = 'rgba(215,205,175,0.55)';
+      ctx.lineWidth = 0.26 * px;
       for (let i = 0; i < 5; i++) {
-        ctx.strokeRect(mx(-40 + i * 9), my(26), 7.4 * px, 14 * px);
+        ctx.strokeRect(mx(-40 + i * 9), my(26), 7.4 * px, 14 * py);
       }
 
-      // arrows + text near gate
-      ctx.fillStyle = 'rgba(210,200,170,0.6)';
-      ctx.font = `700 ${Math.floor(3.4 * px)}px monospace`;
-      ctx.fillText('FB CASTLE ROCK', mx(0), my(112));
-      ctx.font = `700 ${Math.floor(2.2 * px)}px monospace`;
-      ctx.fillText('AUTHORIZED VEHICLES ONLY', mx(0), my(118));
+      // gate text
+      ctx.fillStyle = 'rgba(215,205,175,0.7)';
+      ctx.font = `700 ${Math.floor(3.2 * px)}px monospace`;
+      ctx.fillText('FB CASTLE ROCK', mx(0), my(110));
+      ctx.font = `700 ${Math.floor(2.0 * px)}px monospace`;
+      ctx.fillText('AUTHORIZED VEHICLES ONLY', mx(0), my(115));
+      // stop line at gate
+      ctx.fillStyle = 'rgba(215,205,175,0.75)';
+      ctx.fillRect(mx(-5), my(122), 10 * px, 0.6 * py);
 
       // oil stains / tire wear
-      for (let i = 0; i < 90; i++) {
-        const x = Math.random() * w, y = Math.random() * h, r = 6 + Math.random() * 30;
+      for (let i = 0; i < 110; i++) {
+        const x = Math.random() * w, y = Math.random() * h, r = 6 + Math.random() * 34;
         const g = ctx.createRadialGradient(x, y, 1, x, y, r);
-        g.addColorStop(0, 'rgba(12,12,12,0.20)');
-        g.addColorStop(1, 'rgba(12,12,12,0)');
+        g.addColorStop(0, 'rgba(10,10,10,0.22)');
+        g.addColorStop(1, 'rgba(10,10,10,0)');
         ctx.fillStyle = g;
         ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+      // tire tracks along main road
+      ctx.strokeStyle = 'rgba(12,12,12,0.25)';
+      ctx.lineWidth = 0.35 * px;
+      for (const off of [-1.1, 1.1]) {
+        ctx.beginPath();
+        ctx.moveTo(mx(off), my(140));
+        ctx.lineTo(mx(off), my(40));
+        ctx.quadraticCurveTo(mx(off), my(0), mx(6 + off), my(-20));
+        ctx.stroke();
       }
     });
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 8;
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.94, metalness: 0.02 });
-    const apron = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat);
-    apron.rotation.x = -Math.PI / 2;
-    apron.position.y = 0.02;
-    apron.receiveShadow = true;
-    this.group.add(apron);
+    // standard material so markings darken correctly at night
+    const overlayMat = new THREE.MeshStandardMaterial({
+      map: tex, transparent: true, depthWrite: false, roughness: 1, metalness: 0,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    });
+    const overlay = new THREE.Mesh(new THREE.PlaneGeometry(W, H), overlayMat);
+    overlay.rotation.x = -Math.PI / 2;
+    overlay.position.y = 0.045;
+    overlay.receiveShadow = true;
+    overlay.renderOrder = 1;
+    this.group.add(overlay);
   }
 
   // ---------------- perimeter fence
@@ -323,8 +357,8 @@ export class Base {
     const X = 150, Z = 132, POST = 3.0;
     const link = chainlinkTexture(128);
     const fenceMat = new THREE.MeshStandardMaterial({
-      map: link, transparent: false, alphaTest: 0.35, side: THREE.DoubleSide,
-      roughness: 0.6, metalness: 0.6, color: 0xb8bcc0,
+      map: link, transparent: false, alphaTest: 0.32, side: THREE.DoubleSide,
+      roughness: 0.55, metalness: 0.55, color: 0x62666a,
     });
     const spans = [
       { from: V(-X, 0, -Z), to: V(X, 0, -Z) },
@@ -345,18 +379,17 @@ export class Base {
       g.rotateY(angle + Math.PI / 2);
       g.translate(mid.x, mid.y, mid.z);
       fenceGeos.push(g);
-      // posts
+      // posts (non-metallic + dark so they read as silhouettes, not glints)
       const n = Math.floor(len / 6);
       for (let i = 0; i <= n; i++) {
         const p = V().lerpVectors(s.from, s.to, i / n);
-        kit.cyl('steel', 0.05, 0.06, POST + 0.4, V(p.x, (POST + 0.4) / 2, p.z), 0x5a5f58, null, 6);
+        kit.cyl('paint', 0.05, 0.06, POST + 0.4, V(p.x, (POST + 0.4) / 2, p.z), 0x2e322d, null, 6);
       }
       // barbed top rails
-      const dir = V().subVectors(s.to, s.from).normalize();
       for (let k = 0; k < 2; k++) {
         const y = POST + 0.14 + k * 0.14;
         const c = new THREE.LineCurve3(V(s.from.x, y, s.from.z), V(s.to.x, y, s.to.z));
-        kit.tube('steel', c, 0.012, 0x4c5049, 1, 4);
+        kit.tube('paint', c, 0.012, 0x242720, 1, 4);
       }
       // collider
       const size = V(Math.abs(s.to.x - s.from.x) + 0.3, POST, Math.abs(s.to.z - s.from.z) + 0.3);
@@ -967,17 +1000,17 @@ export class Base {
   _buildScrub() {
     const bushGeo = new THREE.IcosahedronGeometry(1, 0);
     bushGeo.scale(1, 0.55, 1);
-    const bushMat = new THREE.MeshStandardMaterial({ color: 0x4d5238, roughness: 1, flatShading: true });
+    const bushMat = new THREE.MeshLambertMaterial({ color: 0x55573c, flatShading: true, reflectivity: 0 });
     const bushes = new THREE.InstancedMesh(bushGeo, bushMat, 420);
     const m4 = new THREE.Matrix4();
     let bi = 0;
     for (let i = 0; i < 420; i++) {
       const a = rngFx.range(0, Math.PI * 2);
-      const r = rngFx.range(175, 2400);
+      const r = rngFx.range(175, 2200);
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      const s = rngFx.range(0.3, 1.4) * (r > 800 ? 2.2 : 1);
+      const s = rngFx.range(0.35, 1.3) * (r > 800 ? 1.6 : 1);
       m4.makeScale(s, s * rngFx.range(0.6, 1.1), s);
-      m4.setPosition(x, s * 0.3, z);
+      m4.setPosition(x, s * 0.28, z);
       bushes.setMatrixAt(bi++, m4);
     }
     bushes.instanceMatrix.needsUpdate = true;
@@ -985,12 +1018,12 @@ export class Base {
     this.group.add(bushes);
 
     const rockGeo = new THREE.DodecahedronGeometry(1, 0);
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0x71685c, roughness: 1, flatShading: true });
+    const rockMat = new THREE.MeshLambertMaterial({ color: 0x69604f, flatShading: true, reflectivity: 0 });
     const rocks = new THREE.InstancedMesh(rockGeo, rockMat, 260);
     for (let i = 0; i < 260; i++) {
       const a = rngFx.range(0, Math.PI * 2);
-      const r = rngFx.range(200, 3400);
-      const s = rngFx.range(0.3, 2.2) * (r > 1200 ? 3.5 : 1);
+      const r = rngFx.range(220, 3000);
+      const s = rngFx.range(0.3, 1.8) * (r > 1200 ? 2.4 : 1);
       m4.makeRotationY(rngFx.range(0, Math.PI * 2));
       m4.scale(new THREE.Vector3(s, s * 0.7, s));
       m4.setPosition(Math.cos(a) * r, s * 0.2, Math.sin(a) * r);

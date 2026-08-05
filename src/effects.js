@@ -191,15 +191,17 @@ class Trail {
 }
 
 class TrailPool {
-  constructor(scene, count = 26) {
+  constructor(scene, count = 26, { additive = false, color = [1, 1, 1] } = {}) {
+    this.additive = additive;
     this.uniforms = {
-      uColorMul: { value: new THREE.Color(1, 1, 1) },
+      uColorMul: { value: new THREE.Color(color[0], color[1], color[2]) },
       uFogColor: { value: new THREE.Color(0.7, 0.75, 0.85) },
       uFogDensity: { value: 0.00005 },
     };
     this.mat = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
       transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
       vertexShader: /* glsl */`
         attribute float aA;
         attribute float aSide;
@@ -222,8 +224,10 @@ class TrailPool {
         uniform vec3 uFogColor;
         void main() {
           float edge = 1.0 - abs(vSide);
-          float a = vA * smoothstep(0.0, 0.35, edge + 0.35) * (0.55 + 0.45 * edge);
-          vec3 col = mix(uColorMul, uFogColor, vFog * 0.8);
+          float a = vA * smoothstep(0.0, 0.55, edge);
+          ${additive
+            ? 'vec3 col = uColorMul * (1.0 - vFog * 0.7);'
+            : 'vec3 col = mix(uColorMul, uFogColor, vFog * 0.8);'}
           gl_FragColor = vec4(col, a);
           if (a < 0.004) discard;
         }`,
@@ -252,6 +256,7 @@ class TrailPool {
     t.fadeTime = fadeTime; t.spacing = spacing;
     t.color.setHex(color);
     t.mesh.visible = true;
+    t.pool = this;
     this.activeList.push(t);
     return t;
   }
@@ -311,8 +316,8 @@ class TrailPool {
       if (_v2.lengthSq() < 1e-6) _v2.set(0, 1, 0);
       _v3.subVectors(_v1, camPos);
       const side = _v2.cross(_v3).normalize();
-      const w = t.width[i] * (0.6 + age * 0.25); // trails billow slightly with age
-      const a = t.alpha[i] * fade * fade;
+      const w = t.width[i] * (0.75 + Math.min(age * 0.2, 1.5)); // trails billow with age, capped
+      const a = t.alpha[i] * Math.pow(fade, 1.35);
       if (a > 0.003) visible++;
       this._setVert(t, vi++, _v1.x + side.x * w, _v1.y + side.y * w, _v1.z + side.z * w, a);
       this._setVert(t, vi++, _v1.x - side.x * w, _v1.y - side.y * w, _v1.z - side.z * w, a);
@@ -507,6 +512,7 @@ export class Effects {
     this.smoke = new ParticlePool(scene, { capacity: 6000, texture: smokeTexture(128), additive: false, name: 'smoke' });
     this.fire = new ParticlePool(scene, { capacity: 4500, texture: softCircleTexture(64), additive: true, name: 'fire' });
     this.trails = new TrailPool(scene, 26);
+    this.glowTrails = new TrailPool(scene, 14, { additive: true, color: [1.0, 0.62, 0.3] });
     this.shock = new ShockPool(scene, 10);
     this.debris = new DebrisPool(scene, 220);
     this.decals = new DecalPool(scene, 26);
@@ -533,12 +539,15 @@ export class Effects {
     this.trails.uniforms.uFogColor.value.copy(fogColor);
     this.trails.uniforms.uFogDensity.value = fogDensity;
     this.trails.uniforms.uColorMul.value.copy(ambient);
+    this.glowTrails.uniforms.uFogColor.value.copy(fogColor);
+    this.glowTrails.uniforms.uFogDensity.value = fogDensity;
   }
 
   // ---------------- trail API
   createTrail(opts) { return this.trails.acquire(opts); }
-  pushTrail(trail, pos, width, alpha) { this.trails.push(trail, this.now, pos, width, alpha); }
-  releaseTrail(trail) { this.trails.release(trail); }
+  createGlowTrail(opts) { return this.glowTrails.acquire(opts); }
+  pushTrail(trail, pos, width, alpha) { trail.pool.push(trail, this.now, pos, width, alpha); }
+  releaseTrail(trail) { trail.pool.release(trail); }
 
   // ---------------- composite effects
   airBurst(pos, { size = 1, kind = 'intercept' } = {}) {
@@ -568,11 +577,12 @@ export class Effects {
         color: 0xffc37a, alpha: 1, damp: 0.55, gravity: 0.55, wind: 0.1,
       });
     }
-    // core flash
-    this.fire.emit(this.now, { pos, vel: _v2.set(0, 0, 0), life: 0.22, size0: 16 * size, size1: 30 * size, color: 0xfff3dc, alpha: 1, damp: 1, gravity: 0 });
-    this.shock.spawn(pos, { size: 60 * size, dur: 0.8, alpha: 0.5 });
-    this.debris.burst(pos, _v2.set(0, 0, 0), Math.round(10 * size), 55 * size, 0.8 * size);
-    this.flash.flash(pos, 900 * size, 0.4);
+    // core flash (double-pulse, distance-readable)
+    this.fire.emit(this.now, { pos, vel: _v2.set(0, 0, 0), life: 0.2, size0: 38 * size, size1: 64 * size, color: 0xfff3dc, alpha: 1, damp: 1, gravity: 0 });
+    this.fire.emit(this.now, { pos, vel: _v2.set(0, 0, 0), life: 0.55, size0: 20 * size, size1: 44 * size, color: 0xffb060, alpha: 0.8, damp: 1, gravity: 0 });
+    this.shock.spawn(pos, { size: 130 * size, dur: 1.0, alpha: 0.55 });
+    this.debris.burst(pos, _v2.set(0, 0, 0), Math.round(10 * size), 62 * size, 0.8 * size);
+    this.flash.flash(pos, 1100 * size, 0.45);
     const d = this.camera.position.distanceTo(pos);
     if (this.onShake) this.onShake(clamp(1 - d / 1500, 0, 1) * 0.5 * size);
     if (this.onBoom) this.onBoom(pos, size, kind);
@@ -657,8 +667,8 @@ export class Effects {
     if (rngFx.next() < 0.85 * intensity) {
       _v1.copy(vel).multiplyScalar(-0.04).add(_v2.set(rngFx.gauss(), rngFx.gauss(), rngFx.gauss()).multiplyScalar(1.5));
       this.smoke.emit(this.now, {
-        pos, vel: _v1, life: rngFx.range(4, 9) * scale, size0: 1.6 * scale, size1: 10 * scale,
-        color: 0xcfcfcf, alpha: 0.42 * intensity, damp: 1.2, gravity: -0.002, wind: 1.0,
+        pos, vel: _v1, life: rngFx.range(5, 11) * scale, size0: 2.2 * scale, size1: 17 * scale,
+        color: 0xd6d6d6, alpha: 0.5 * intensity, damp: 1.2, gravity: -0.002, wind: 1.0,
       });
     }
     if (rngFx.next() < 0.5 * intensity) {
@@ -715,6 +725,7 @@ export class Effects {
     this.smoke.flush();
     this.fire.flush();
     this.trails.update(now, this.camera);
+    this.glowTrails.update(now, this.camera);
     this.shock.update(dt, this.camera);
     this.debris.update(dt, now);
     this.decals.update(dt);
@@ -725,6 +736,7 @@ export class Effects {
     this.smoke.clear();
     this.fire.clear();
     this.trails.clear();
+    this.glowTrails.clear();
     this.shock.clear();
     this.debris.clear();
     this.emitters.length = 0;

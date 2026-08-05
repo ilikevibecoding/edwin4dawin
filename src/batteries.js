@@ -3,7 +3,7 @@
 // All performance numbers are invented for gameplay; see README safety note.
 import * as THREE from 'three';
 import { Kit } from './base.js';
-import { stencilTexture, hazardTexture, scorchTexture, clamp, damp, lerp } from './utils.js';
+import { stencilTexture, hazardTexture, scorchTexture, clamp, damp, lerp, tintGeometry } from './utils.js';
 import { makeBoxCollider } from './physics.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -172,13 +172,16 @@ export class Battery {
     const kit = new Kit();
     const mats = this.base.materials;
     // trailer platform
-    kit.box('paint', 5.6, 0.5, 2.6, V(0, 0.95, -0.4), 0x49523e);
-    kit.box('paint', 1.1, 0.5, 2.4, V(-3.1, 0.9, -0.4), 0x3d4534); // tongue
+    kit.box('paint', 5.6, 0.5, 2.6, V(0, 0.88, -0.4), 0x49523e);
+    kit.box('paint', 1.1, 0.5, 2.4, V(-3.1, 0.84, -0.4), 0x3d4534); // tongue
     // wheels
     for (const wx of [0.8, 2.0]) for (const s of [-1, 1]) {
-      const g = new THREE.CylinderGeometry(0.5, 0.5, 0.38, 12);
+      const g = new THREE.CylinderGeometry(0.56, 0.56, 0.4, 12);
       g.rotateX(Math.PI / 2);
-      kit.custom('paint', g, V(wx, 0.5, -0.4 + s * 1.3), 0x161616);
+      kit.custom('paint', g, V(wx, 0.56, -0.4 + s * 1.3), 0x161616);
+      const hub = new THREE.CylinderGeometry(0.22, 0.22, 0.42, 8);
+      hub.rotateX(Math.PI / 2);
+      kit.custom('steel', hub, V(wx, 0.56, -0.4 + s * 1.3), 0x5d6157);
     }
     // outrigger legs
     for (const [lx, lz] of [[-2.6, 0.9], [-2.6, -1.7], [2.6, 0.9], [2.6, -1.7]]) {
@@ -350,14 +353,20 @@ export class Battery {
   _makeCaps(size, shape) {
     // front covers that pop on launch + dark "empty tube" faces revealed after
     this.caps = [];
+    const capMat = new THREE.MeshStandardMaterial({ color: shape === 'circle' ? 0x7a5638 : 0x6a614e, roughness: 0.7, metalness: 0.2 });
+    const ribMat = new THREE.MeshStandardMaterial({ color: 0x3c4136, roughness: 0.6, metalness: 0.3 });
     for (const mz of this.muzzles) {
-      let cap;
-      if (shape === 'circle') {
-        cap = new THREE.Mesh(new THREE.CircleGeometry(size / 2, 16),
-          new THREE.MeshStandardMaterial({ color: 0x6b4b32, roughness: 0.7, metalness: 0.2 }));
-      } else {
-        cap = new THREE.Mesh(new THREE.PlaneGeometry(size * 0.96, size * 0.96),
-          new THREE.MeshStandardMaterial({ color: 0x5b5344, roughness: 0.7, metalness: 0.2 }));
+      const cap = new THREE.Group();
+      const face = shape === 'circle'
+        ? new THREE.Mesh(new THREE.CircleGeometry(size / 2, 16), capMat)
+        : new THREE.Mesh(new THREE.PlaneGeometry(size * 0.96, size * 0.96), capMat);
+      cap.add(face);
+      // X-ribs across the cover
+      for (const rz of [Math.PI / 4, -Math.PI / 4]) {
+        const rib = new THREE.Mesh(new THREE.BoxGeometry(size * 1.06, size * 0.09, 0.03), ribMat);
+        rib.rotation.z = rz;
+        rib.position.z = 0.02;
+        cap.add(rib);
       }
       cap.position.copy(mz.local).addScaledVector(mz.dirLocal, 0.012);
       this.elevGroup.add(cap);
@@ -512,12 +521,7 @@ export class Battery {
 }
 
 function tintMesh(mesh, color) {
-  const c = new THREE.Color(color);
-  const g = mesh.geometry;
-  const count = g.attributes.position.count;
-  const arr = new Float32Array(count * 3);
-  for (let i = 0; i < count; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
-  g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  tintGeometry(mesh.geometry, color);
 }
 
 // ------------------------------------------------------------------ manager

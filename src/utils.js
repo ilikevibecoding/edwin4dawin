@@ -92,8 +92,8 @@ export function grungeTexture(size = 512) {
       for (let x = 0; x < w; x++) {
         const n = fbm(x * 0.02, y * 0.02, 5);
         const s = vnoise(x * 0.45, y * 0.45);
-        let v = 205 + (n - 0.5) * 70 + (s - 0.5) * 26;
-        v = clamp(v, 120, 255);
+        let v = 233 + (n - 0.5) * 44 + (s - 0.5) * 20;
+        v = clamp(v, 150, 255);
         const i = (y * w + x) * 4;
         img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
         img.data[i + 3] = 255;
@@ -101,7 +101,7 @@ export function grungeTexture(size = 512) {
     }
     ctx.putImageData(img, 0, 0);
     // streaks
-    ctx.globalAlpha = 0.10;
+    ctx.globalAlpha = 0.07;
     ctx.fillStyle = '#3a352c';
     for (let i = 0; i < 60; i++) {
       const x = (i * 97.3) % w, y0 = (i * 61.7) % h;
@@ -157,9 +157,9 @@ export function asphaltTexture(size = 512) {
       for (let x = 0; x < w; x++) {
         const n = fbm(x * 0.05, y * 0.05, 4);
         const sp = vnoise(x * 1.3, y * 1.3);
-        const v = 52 + (n - 0.5) * 22 + sp * 18;
+        const v = 88 + (n - 0.5) * 30 + sp * 24;
         const i = (y * w + x) * 4;
-        img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = v + 2;
+        img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = v + 3;
         img.data[i + 3] = 255;
       }
     }
@@ -176,10 +176,10 @@ export function sandTexture(size = 512) {
         const rip = Math.sin((x + vnoise(x * 0.05, y * 0.05) * 60) * 0.11) * 0.5 + 0.5;
         const sp = vnoise(x * 0.8, y * 0.8);
         const i = (y * w + x) * 4;
-        const r = 168 + (n - 0.5) * 42 + rip * 9 + (sp - 0.5) * 14;
+        const r = 152 + (n - 0.5) * 46 + rip * 9 + (sp - 0.5) * 16;
         img.data[i] = clamp(r, 0, 255);
-        img.data[i + 1] = clamp(r * 0.84, 0, 255);
-        img.data[i + 2] = clamp(r * 0.62, 0, 255);
+        img.data[i + 1] = clamp(r * 0.82, 0, 255);
+        img.data[i + 2] = clamp(r * 0.60, 0, 255);
         img.data[i + 3] = 255;
       }
     }
@@ -243,8 +243,8 @@ export function hazardTexture(w = 256, h = 64) {
 export function chainlinkTexture(size = 128) {
   const tex = canvasTexture(size, size, (ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
-    ctx.strokeStyle = 'rgba(190,196,200,0.95)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(74,78,82,0.95)';
+    ctx.lineWidth = 1.2;
     const s = 16;
     for (let y = -s; y < h + s; y += s) {
       for (let x = -s; x < w + s; x += s) {
@@ -365,8 +365,11 @@ export function cloudTexture(size = 256, seed = 5) {
 }
 
 // ---------------------------------------------------------------- geometry helpers
+// Vertex tint: treat the hex palette as the *displayed* color. Color.setHex converts
+// sRGB→linear; combined with the multiplicative grunge map that rendered near-black,
+// so we convert back and let the map/lighting provide the darkening.
 export function tintGeometry(geo, color) {
-  const c = new THREE.Color(color);
+  const c = new THREE.Color(color).convertLinearToSRGB();
   const count = geo.attributes.position.count;
   const arr = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }

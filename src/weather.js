@@ -5,28 +5,28 @@ import { cloudTexture, lerp, damp, rngFx } from './utils.js';
 
 export const CONDITIONS = {
   day: {
-    sunDir: new THREE.Vector3(0.55, 0.72, 0.34).normalize(),
-    sunColor: new THREE.Color(1.0, 0.98, 0.92), sunIntensity: 3.1,
-    hemiSky: new THREE.Color(0.55, 0.68, 0.85), hemiGround: new THREE.Color(0.52, 0.44, 0.34), hemiIntensity: 0.85,
-    zenith: new THREE.Color(0.14, 0.34, 0.72), horizon: new THREE.Color(0.72, 0.82, 0.94),
-    glow: new THREE.Color(1.0, 0.97, 0.88), fogColor: new THREE.Color(0.71, 0.79, 0.89),
-    fogDensity: 0.000048, night: 0.0, exposure: 1.0, floodlights: 0.0, starAmt: 0.0,
+    sunDir: new THREE.Vector3(0.55, 0.68, 0.34).normalize(),
+    sunColor: new THREE.Color(1.0, 0.97, 0.9), sunIntensity: 2.7,
+    hemiSky: new THREE.Color(0.5, 0.64, 0.85), hemiGround: new THREE.Color(0.5, 0.42, 0.32), hemiIntensity: 0.5,
+    zenith: new THREE.Color(0.09, 0.26, 0.64), horizon: new THREE.Color(0.55, 0.69, 0.86),
+    glow: new THREE.Color(1.0, 0.96, 0.86), fogColor: new THREE.Color(0.63, 0.72, 0.85),
+    fogDensity: 0.00007, night: 0.0, exposure: 1.0, floodlights: 0.0, starAmt: 0.0,
   },
   sunset: {
-    sunDir: new THREE.Vector3(0.88, 0.13, 0.45).normalize(),
-    sunColor: new THREE.Color(1.0, 0.62, 0.32), sunIntensity: 2.4,
-    hemiSky: new THREE.Color(0.48, 0.36, 0.42), hemiGround: new THREE.Color(0.38, 0.28, 0.22), hemiIntensity: 0.62,
-    zenith: new THREE.Color(0.10, 0.14, 0.34), horizon: new THREE.Color(0.98, 0.48, 0.22),
-    glow: new THREE.Color(1.0, 0.55, 0.25), fogColor: new THREE.Color(0.62, 0.40, 0.32),
-    fogDensity: 0.000060, night: 0.12, exposure: 1.02, floodlights: 0.45, starAmt: 0.12,
+    sunDir: new THREE.Vector3(0.88, 0.11, 0.45).normalize(),
+    sunColor: new THREE.Color(1.0, 0.58, 0.28), sunIntensity: 2.2,
+    hemiSky: new THREE.Color(0.5, 0.36, 0.4), hemiGround: new THREE.Color(0.4, 0.29, 0.22), hemiIntensity: 0.4,
+    zenith: new THREE.Color(0.10, 0.13, 0.32), horizon: new THREE.Color(0.98, 0.45, 0.20),
+    glow: new THREE.Color(1.0, 0.52, 0.22), fogColor: new THREE.Color(0.55, 0.36, 0.30),
+    fogDensity: 0.000062, night: 0.12, exposure: 1.02, floodlights: 0.55, starAmt: 0.12,
   },
   night: {
     sunDir: new THREE.Vector3(-0.4, 0.52, -0.65).normalize(), // moon
-    sunColor: new THREE.Color(0.62, 0.72, 0.95), sunIntensity: 0.32,
-    hemiSky: new THREE.Color(0.10, 0.14, 0.24), hemiGround: new THREE.Color(0.05, 0.05, 0.07), hemiIntensity: 0.34,
-    zenith: new THREE.Color(0.012, 0.018, 0.045), horizon: new THREE.Color(0.05, 0.075, 0.13),
-    glow: new THREE.Color(0.55, 0.65, 0.9), fogColor: new THREE.Color(0.024, 0.034, 0.055),
-    fogDensity: 0.000075, night: 1.0, exposure: 1.1, floodlights: 1.0, starAmt: 1.0,
+    sunColor: new THREE.Color(0.6, 0.7, 0.95), sunIntensity: 0.2,
+    hemiSky: new THREE.Color(0.09, 0.13, 0.23), hemiGround: new THREE.Color(0.04, 0.045, 0.06), hemiIntensity: 0.3,
+    zenith: new THREE.Color(0.010, 0.016, 0.042), horizon: new THREE.Color(0.042, 0.062, 0.11),
+    glow: new THREE.Color(0.5, 0.6, 0.85), fogColor: new THREE.Color(0.020, 0.030, 0.05),
+    fogDensity: 0.000075, night: 1.0, exposure: 1.08, floodlights: 1.0, starAmt: 1.0,
   },
 };
 
@@ -66,9 +66,9 @@ const SKY_FRAG = /* glsl */`
 
     float sunD = max(dot(dir, uSunDir), 0.0);
     // wide scattering glow + tight disc
-    col += uGlow * (pow(sunD, 5.0) * 0.22 + pow(sunD, 40.0) * 0.55);
-    float disc = smoothstep(0.9994, 0.99975, sunD);
-    vec3 discCol = mix(uGlow * 6.0, vec3(0.9, 0.95, 1.1) * (0.8 + uNight * 1.4), uNight);
+    col += uGlow * (pow(sunD, 5.0) * 0.20 + pow(sunD, 60.0) * 0.5);
+    float disc = smoothstep(0.99965, 0.99985, sunD);
+    vec3 discCol = mix(uGlow * 6.0, vec3(0.85, 0.9, 1.05) * 2.4, uNight);
     col += discCol * disc;
 
     // stars
@@ -76,16 +76,16 @@ const SKY_FRAG = /* glsl */`
       vec3 sp = dir * 700.0;
       vec3 cell = floor(sp);
       float star = hash13(cell);
-      if (star > 0.997) {
+      if (star > 0.9958) {
         vec3 f = fract(sp) - 0.5;
         float d = length(f);
-        float tw = 0.75 + 0.25 * sin(uTime * (1.0 + star * 6.0) + star * 40.0);
-        float b = smoothstep(0.5, 0.05, d) * tw;
-        col += vec3(b) * uStarAmt * (0.55 + star) * smoothstep(0.02, 0.2, dir.y);
+        float tw = 0.72 + 0.28 * sin(uTime * (1.0 + star * 6.0) + star * 40.0);
+        float b = smoothstep(0.42, 0.03, d) * tw * 1.6;
+        col += vec3(b, b, b * 1.08) * uStarAmt * (0.45 + star) * smoothstep(0.02, 0.2, dir.y);
       }
       // milky band
       float band = exp(-pow((dir.y - 0.35), 2.0) * 14.0) * exp(-pow(dir.x * 0.8 + dir.z * 0.4, 2.0) * 2.2);
-      col += vec3(0.020, 0.026, 0.038) * band * uStarAmt;
+      col += vec3(0.022, 0.028, 0.042) * band * uStarAmt;
     }
     gl_FragColor = vec4(col, 1.0);
   }
@@ -101,6 +101,8 @@ export class Weather {
     this.time = 0;
     this._target = CONDITIONS.day;
     this._blend = 1;
+    this.pmrem = new THREE.PMREMGenerator(renderer);
+    this._envCache = {};
 
     // --- sky dome
     this.skyUniforms = {
@@ -173,6 +175,37 @@ export class Weather {
     this._target = CONDITIONS[name];
     if (instant) this._blend = 1; else this._blend = 0;
     if (instant) this._apply(this._target, 1);
+    this._applyEnvironment(name);
+  }
+
+  // IBL: prefiltered environment from the procedural sky so metals/glass reflect
+  // something plausible. Cached per condition.
+  _applyEnvironment(name) {
+    if (!this._envCache[name]) {
+      const c = CONDITIONS[name];
+      const s = new THREE.Scene();
+      const mat = new THREE.ShaderMaterial({
+        vertexShader: SKY_VERT.replace('gl_Position.z = gl_Position.w * 0.99999; // pin to far plane', ''),
+        fragmentShader: SKY_FRAG,
+        uniforms: {
+          uSunDir: { value: c.sunDir.clone() },
+          uZenith: { value: c.zenith.clone() },
+          uHorizon: { value: c.horizon.clone() },
+          uGlow: { value: c.glow.clone() },
+          uNight: { value: c.night },
+          uStarAmt: { value: 0 },
+          uTime: { value: 0 },
+        },
+        side: THREE.BackSide, depthWrite: false,
+      });
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(60, 32, 16), mat);
+      s.add(dome);
+      this._envCache[name] = this.pmrem.fromScene(s, 0.03, 1, 120).texture;
+      dome.geometry.dispose();
+      mat.dispose();
+    }
+    this.scene.environment = this._envCache[name];
+    this.scene.environmentIntensity = 0.55;
   }
 
   _apply(c, k) {
@@ -196,10 +229,10 @@ export class Weather {
     this.scene.fog.color.lerp(c.fogColor, k);
     this.scene.fog.density = lerp(this.scene.fog.density, c.fogDensity, k);
 
-    const cloudTint = 0.18 + (1 - c.night) * 0.82;
+    const cloudTint = 0.16 + (1 - c.night) * 0.84;
     for (const m of this.cloudMats) {
       m.color.setScalar(cloudTint);
-      m.opacity = lerp(m.opacity, c.night > 0.5 ? 0.4 : 0.8, k);
+      m.opacity = lerp(m.opacity, c.night > 0.5 ? 0.34 : 0.62, k);
     }
     this.floodAmount = c.floodlights;
   }
@@ -229,10 +262,10 @@ const BEAM_FRAG = /* glsl */`
   varying vec3 vPos;
   uniform float uIntensity;
   void main() {
-    float core = pow(1.0 - abs(vUv.x - 0.5) * 2.0, 2.4);
-    float fade = pow(1.0 - vUv.y, 1.6);
+    float core = pow(max(1.0 - abs(vUv.x - 0.5) * 2.0, 0.0), 3.4);
+    float fade = pow(1.0 - vUv.y, 2.0) * smoothstep(0.0, 0.06, vUv.y);
     float a = core * fade * uIntensity;
-    gl_FragColor = vec4(vec3(0.75, 0.82, 1.0) * a, a * 0.55);
+    gl_FragColor = vec4(vec3(0.72, 0.8, 1.0) * a, a * 0.4);
   }
 `;
 const BEAM_VERT = /* glsl */`
@@ -292,8 +325,8 @@ export class Searchlights {
     for (const b of this.beams) {
       const u = b.userData;
       const target = this.enabled ? 1 : 0;
-      u.mat.uniforms.uIntensity.value = damp(u.mat.uniforms.uIntensity.value, target * 0.75, 2.5, dt);
-      u.src.intensity = u.mat.uniforms.uIntensity.value * 3;
+      u.mat.uniforms.uIntensity.value = damp(u.mat.uniforms.uIntensity.value, target * 0.5, 2.5, dt);
+      u.src.intensity = u.mat.uniforms.uIntensity.value * 2;
       if (this.enabled) {
         b.rotation.y = Math.sin(t * u.rate + u.phase) * 1.4 + u.phase;
         b.rotation.x = u.tiltBase + Math.sin(t * u.rate * 1.7 + u.phase * 2.0) * 0.16;

@@ -76,7 +76,8 @@ class Threat {
     this.phase = 'coast';
     this.group.visible = true;
     this.spawnTime = -1;
-    this.trail = this.effects.createTrail({ color: 0xffffff, fadeTime: 14, spacing: 22 });
+    this.trail = this.effects.createTrail({ color: 0xffffff, fadeTime: 16, spacing: 24 });
+    this.glowTrail = this.effects.createGlowTrail({ fadeTime: 1.4, spacing: 8 });
     this.body.material.emissiveIntensity = 0;
   }
 
@@ -84,6 +85,7 @@ class Threat {
     this.alive = false;
     this.group.visible = false;
     if (this.trail) { this.effects.releaseTrail(this.trail); this.trail = null; }
+    if (this.glowTrail) { this.effects.releaseTrail(this.glowTrail); this.glowTrail = null; }
   }
 
   update(dt, now) {
@@ -103,15 +105,20 @@ class Threat {
     const rho = airDensity(this.pos.y);
     const speed = this.vel.length();
     // reentry heating visual: strongest low + fast
-    const heat = clamp(rho * speed / 420, 0, 1.25) * (this.decoy ? 0.5 : 1);
-    this.body.material.emissiveIntensity = heat * 2.2;
-    this.glow.material.opacity = clamp(heat - 0.06, 0, 1) * 0.85;
-    this.glow.scale.setScalar(6 + heat * 14);
+    const heat = clamp(rho * speed / 380, 0, 1.25) * (this.decoy ? 0.5 : 1);
+    this.body.material.emissiveIntensity = heat * 2.4;
+    // glow sprite: distance-compensated so tracked threats stay readable from the base
+    const camDist = this.effects.camera.position.distanceTo(this.pos);
+    this.glow.material.opacity = clamp(heat + 0.28, 0, 1) * 0.9;
+    this.glow.scale.setScalar(Math.max(6 + heat * 16, camDist * 0.0038));
 
     // trail: air-density-driven width/alpha (thin bright contrail high, smoky low)
-    const width = lerp(2.2, 8.5, clamp(rho * 1.6, 0, 1)) * (this.decoy ? 0.6 : 1);
-    const alpha = (0.16 + 0.5 * clamp(rho * 2.2, 0, 1)) * (this.decoy ? 0.55 : 1);
+    const width = lerp(4.5, 14, clamp(rho * 1.6, 0, 1)) * (this.decoy ? 0.6 : 1);
+    const alpha = (0.26 + 0.5 * clamp(rho * 2.2, 0, 1)) * (this.decoy ? 0.55 : 1);
     this.effects.pushTrail(this.trail, this.pos, width, alpha);
+    if (heat > 0.15) {
+      this.effects.pushTrail(this.glowTrail, this.pos, 3 + heat * 6, clamp(heat * 1.2, 0, 1) * 0.85);
+    }
     if (heat > 0.25 && !this.decoy) this.effects.plasmaWake(this.pos, this.vel, heat);
 
     // phase transitions

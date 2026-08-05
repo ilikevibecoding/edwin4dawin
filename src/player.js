@@ -89,13 +89,12 @@ export class Player {
     const wishZ = (-mx * sin - mz * cos);
     const len = Math.hypot(wishX, wishZ) || 1;
 
-    const accel = 26;
-    this.vel.x = damp(this.vel.x, (wishX / len) * targetSpeed * (mx || mz ? 1 : 0), accel * dt, 1);
-    this.vel.z = damp(this.vel.z, (wishZ / len) * targetSpeed * (mx || mz ? 1 : 0), accel * dt, 1);
-    // exponential approach
-    const k = 1 - Math.exp(-10 * dt);
-    this.vel.x += ((mx || mz ? (wishX / len) * targetSpeed : 0) - this.vel.x) * k;
-    this.vel.z += ((mx || mz ? (wishZ / len) * targetSpeed : 0) - this.vel.z) * k;
+    // smooth exponential approach to wish velocity
+    const k = 1 - Math.exp(-11 * dt);
+    const goalX = (mx || mz) ? (wishX / len) * targetSpeed : 0;
+    const goalZ = (mx || mz) ? (wishZ / len) * targetSpeed : 0;
+    this.vel.x += (goalX - this.vel.x) * k;
+    this.vel.z += (goalZ - this.vel.z) * k;
 
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;

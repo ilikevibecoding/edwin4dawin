@@ -12,9 +12,9 @@ const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
     uTime: { value: 0 },
-    uVignette: { value: 0.42 },
-    uGrain: { value: 0.028 },
-    uAberration: { value: 0.0016 },
+    uVignette: { value: 0.26 },
+    uGrain: { value: 0.014 },
+    uAberration: { value: 0.00045 },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -35,8 +35,8 @@ const GradeShader = {
       vec2 fromCenter = uv - 0.5;
       float r2 = dot(fromCenter, fromCenter);
 
-      // chromatic aberration towards edges
-      vec2 off = fromCenter * r2 * uAberration * 60.0;
+      // chromatic aberration towards edges (kept subtle)
+      vec2 off = fromCenter * r2 * r2 * uAberration * 40.0;
       vec3 col;
       col.r = texture2D(tDiffuse, uv - off).r;
       col.g = texture2D(tDiffuse, uv).g;

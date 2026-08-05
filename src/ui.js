@@ -230,6 +230,7 @@ export class UI {
     el.className = `toast panel ${cls}`;
     el.textContent = text;
     this.els.toastStack.appendChild(el);
+    while (this.els.toastStack.children.length > 4) this.els.toastStack.firstChild.remove();
     setTimeout(() => el.classList.add('out'), 2600);
     setTimeout(() => el.remove(), 3300);
   }
@@ -475,17 +476,28 @@ export class UI {
       ctx.stroke();
     }
 
-    // sweep with afterglow
+    // sweep with smooth afterglow wedge (trailing behind the beam)
     const sweep = s.sweepAngle;
-    for (let i = 0; i < 30; i++) {
-      const a = sweep - i * 0.028;
-      ctx.strokeStyle = `rgba(140, 255, 180, ${0.30 * (1 - i / 30)})`;
-      ctx.lineWidth = i === 0 ? 2 : 1.6;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
-      ctx.stroke();
+    if (ctx.createConicGradient) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+      // flip vertically so the gradient trails behind the clockwise-moving beam
+      ctx.scale(1, -1); ctx.translate(0, -2 * cy);
+      const grad = ctx.createConicGradient(-sweep, cx, cy);
+      grad.addColorStop(0, 'rgba(140,255,180,0.32)');
+      grad.addColorStop(0.09, 'rgba(140,255,180,0.05)');
+      grad.addColorStop(0.2, 'rgba(140,255,180,0.0)');
+      grad.addColorStop(1, 'rgba(140,255,180,0.0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
     }
+    ctx.strokeStyle = 'rgba(160,255,195,0.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(sweep) * R, cy + Math.sin(sweep) * R);
+    ctx.stroke();
 
     // base + batteries
     ctx.fillStyle = 'rgba(160, 255, 190, 0.9)';

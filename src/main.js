@@ -590,7 +590,9 @@ let last = performance.now();
 let acc = 0;
 let frameCount = 0;
 
+renderer.info.autoReset = false;
 function render() {
+  renderer.info.reset();
   effects.setPointScale(renderer.getSize(_size2).y, camera);
   post.render(FIXED_DT, game.simTime);
 }

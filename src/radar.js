@@ -2,7 +2,7 @@
 // fictional track store: detection on sweep crossings, track quality growth, decoy
 // classification, predicted impact points. Feeds HUD, console scope and guidance quality.
 import * as THREE from 'three';
-import { makeCanvas, clamp, lerp } from './utils.js';
+import { makeCanvas, clamp, lerp, tintGeometry } from './utils.js';
 import { predictImpact } from './physics.js';
 import { makeBoxCollider } from './physics.js';
 
@@ -198,9 +198,5 @@ function sweptOver(a0, a1, az) {
 }
 
 function tint(geo, color) {
-  const c = new THREE.Color(color);
-  const count = geo.attributes.position.count;
-  const arr = new Float32Array(count * 3);
-  for (let i = 0; i < count; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
-  geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  tintGeometry(geo, color);
 }

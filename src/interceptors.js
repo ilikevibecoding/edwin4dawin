@@ -86,13 +86,15 @@ class Interceptor {
       else if (alt < env.minAlt * 0.95) { this.envelopeError = clamp((env.minAlt - alt) / Math.max(env.minAlt, 1), 0, 1.4); this.envelopeReason = 'target below engagement floor'; }
       if (rng2 > env.maxRange) { this.envelopeError = Math.max(this.envelopeError, (rng2 - env.maxRange) / env.maxRange); this.envelopeReason = 'target beyond effective range'; }
     }
-    this.trail = this.effects.createTrail({ color: 0xffffff, fadeTime: 11 + def.trail * 3, spacing: 5 });
+    this.trail = this.effects.createTrail({ color: 0xffffff, fadeTime: 12 + def.trail * 3, spacing: 5 });
+    this.glowTrail = this.effects.createGlowTrail({ fadeTime: 1.0, spacing: 2.5 });
   }
 
   deactivate() {
     this.alive = false;
     this.group.visible = false;
     if (this.trail) { this.effects.releaseTrail(this.trail); this.trail = null; }
+    if (this.glowTrail) { this.effects.releaseTrail(this.glowTrail); this.glowTrail = null; }
   }
 
   _noise() { return (this.noiseSeed() - 0.5) * 2; }
@@ -213,13 +215,17 @@ class Interceptor {
     // ---------- visuals
     const burning = this.t < def.motorTime;
     const boostPhase = this.t < def.boostTime;
-    this.glow.material.opacity = burning ? (boostPhase ? 1.0 : 0.55) : 0;
-    this.glow.scale.setScalar(boostPhase ? 5.5 * def.plume : 2.6 * def.plume);
+    const camDist = this.effects.camera.position.distanceTo(this.pos);
+    this.glow.material.opacity = burning ? (boostPhase ? 1.0 : 0.6) : 0;
+    this.glow.scale.setScalar(Math.max((boostPhase ? 5.5 : 2.6) * def.plume, camDist * (burning ? 0.004 : 0)));
     const rho = airDensity(this.pos.y);
-    const width = (boostPhase ? 5.5 : 3.2) * def.trail * lerp(0.45, 1.0, clamp(rho * 1.8, 0, 1));
-    const alpha = burning ? 0.62 : 0.2;
+    const width = (boostPhase ? 8.5 : 4.6) * def.trail * lerp(0.5, 1.0, clamp(rho * 1.8, 0, 1));
+    const alpha = burning ? 0.7 : 0.24;
     this.effects.pushTrail(this.trail, this.pos, width, alpha);
-    if (burning) this.effects.motorExhaust(this.pos, this.vel, boostPhase ? 1 : 0.5, def.plume);
+    if (burning) {
+      this.effects.pushTrail(this.glowTrail, this.pos, 2.6 * def.plume, boostPhase ? 0.9 : 0.5);
+      this.effects.motorExhaust(this.pos, this.vel, boostPhase ? 1 : 0.5, def.plume);
+    }
 
     // ---------- expiry
     if (this.pos.y <= 2 || this.t > 55 || (this.missDeclared && this.recedingTime > 2.6)) {
