@@ -42,14 +42,14 @@ export class WetFloor {
   private uniforms = {
     uRefl: { value: null as THREE.Texture | null },
     uReflMatrix: { value: new THREE.Matrix4() },
-    uReflStrength: { value: 0.85 },
+    uReflStrength: { value: 0.5 },
     uWetness: { value: 1 },
     uRipple: { value: null as THREE.Texture | null },
     uRippleScale: { value: 1.5 },
     uRippleSpeed: { value: 1 },
     uTime: { value: 0 },
     uReflDistort: { value: 0.014 },
-    uReflFade: { value: 0.55 },
+    uReflFade: { value: 0.35 },
   };
   private hidden: THREE.Object3D[] = [];
 
@@ -59,7 +59,7 @@ export class WetFloor {
     this.resolutionScale = opts.resolutionScale ?? 0.3;
     this.maxResolution = opts.maxResolution ?? 640;
     this.uniforms.uWetness.value = opts.wetness ?? 1;
-    this.uniforms.uReflStrength.value = opts.reflectionStrength ?? 0.85;
+    this.uniforms.uReflStrength.value = opts.reflectionStrength ?? 0.5;
     this.uniforms.uRippleScale.value = opts.rippleScale ?? 1.5;
     this.uniforms.uRippleSpeed.value = opts.rippleSpeed ?? 1;
     this.uniforms.uRipple.value = rippleNormal;
@@ -158,9 +158,11 @@ export class WetFloor {
              float fres = pow( 1.0 - ndv, 4.0 );
              // Grazing angles reflect most; roughness kills the mirror.
              float gloss = 1.0 - clamp( roughnessFactor, 0.0, 1.0 );
-             float amount = uReflStrength * uWetness * ( 0.12 + fres * 1.35 ) * mix( 0.25, 1.0, gloss );
+             // Real wet ground returns less than the sky it mirrors, and only
+             // approaches mirror strength at grazing angles.
+             float amount = uReflStrength * uWetness * ( 0.05 + fres * 0.8 ) * mix( 0.2, 1.0, gloss );
              float fade = mix( 1.0, uReflFade, clamp( length( vWetWorldPos.xz - cameraPosition.xz ) / 40.0, 0.0, 1.0 ) );
-             outgoingLight += reflCol * amount * fade;
+             outgoingLight += reflCol * 0.78 * amount * fade;
            }
            #include <opaque_fragment>`
         );

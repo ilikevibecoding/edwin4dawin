@@ -28,11 +28,11 @@ export interface GradeConfig {
 export const GRADE: Record<string, GradeConfig> = {
   // Chapter 1 — rooftop, night, downpour, neon bounce.
   noirRain: {
-    exposure: 1.02,
+    exposure: 1.15,
     tint: [0.94, 1.0, 1.12],
     contrast: 1.22,
     saturation: 1.04,
-    shadowTint: [0.58, 0.74, 1.0],
+    shadowTint: [0.72, 0.83, 1.0],
     highlightTint: [1.0, 0.84, 0.62],
     splitBalance: 0.42,
     lift: 0.022,
@@ -60,11 +60,11 @@ export const GRADE: Record<string, GradeConfig> = {
   },
   // Chapter 3 — plaza, riot lights, searchlights, snow-rain mix.
   uprising: {
-    exposure: 0.96,
+    exposure: 0.86,
     tint: [1.0, 0.98, 1.06],
     contrast: 1.2,
     saturation: 1.08,
-    shadowTint: [0.5, 0.7, 1.0],
+    shadowTint: [0.66, 0.8, 1.0],
     highlightTint: [1.0, 0.72, 0.5],
     splitBalance: 0.38,
     lift: 0.02,

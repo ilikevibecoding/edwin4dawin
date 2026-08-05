@@ -7,8 +7,6 @@ import {
   FXAAEffect,
   RenderPass,
   SMAAEffect,
-  ToneMappingEffect,
-  ToneMappingMode,
 } from 'postprocessing';
 import { BLOOM, DOF, GRADE, type GradeConfig } from './LookConfig';
 import { ExposureEffect } from './effects/ExposureEffect';
@@ -83,10 +81,8 @@ export class PostFX {
     this.composer.addPass(new EffectPass(camera, this.exposureFx));
     if (this.dofFx) this.composer.addPass(new EffectPass(camera, this.dofFx));
     if (this.bloomFx) this.composer.addPass(new EffectPass(camera, this.bloomFx));
-    // ToneMappingEffect declares sRGB output, so FilmEffect grades display-referred.
-    this.composer.addPass(
-      new EffectPass(camera, new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }), this.filmFx)
-    );
+    // FilmEffect tone maps its own samples, so no separate tone-mapping pass.
+    this.composer.addPass(new EffectPass(camera, this.filmFx));
     if (quality.antialias === 'smaa') this.composer.addPass(new EffectPass(camera, new SMAAEffect()));
     else if (quality.antialias === 'fxaa') this.composer.addPass(new EffectPass(camera, new FXAAEffect()));
   }

@@ -25,6 +25,9 @@ interface ShotDef {
   name: string;
   set: SetKind;
   build: (set: MarkedSet) => Shot;
+  /** Actor the portrait rig should light for this shot. */
+  subject?: string;
+  keySide?: number;
   /** Extra warm-up seconds before capture. */
   settle?: number;
 }
@@ -129,6 +132,8 @@ async function ensureSet(kind: SetKind): Promise<SceneSet> {
 const SHOTS: ShotDef[] = [
   {
     name: '01_rooftop_wide',
+    subject: 'orion',
+    keySide: -1,
     set: 'rooftop',
     build: (set) =>
       establish(new THREE.Vector3(-4.6, 2.5, 6.6), new THREE.Vector3(1.4, 1.2, -4.2), {
@@ -138,27 +143,37 @@ const SHOTS: ShotDef[] = [
   },
   {
     name: '02_standoff_ots',
+    subject: 'deviant',
+    keySide: 1,
     set: 'rooftop',
     build: (set) => overShoulder(set.actor('orion'), set.actor('deviant'), { lens: 52, side: 1 }),
   },
-  { name: '03_orion_cu', set: 'rooftop', build: (set) => closeUp(set.actor('orion'), { lookingAt: (set.marks.deviant as THREE.Vector3) }) },
+  { name: '03_orion_cu', subject: 'orion', keySide: -1, set: 'rooftop', build: (set) => closeUp(set.actor('orion'), { lookingAt: (set.marks.deviant as THREE.Vector3) }) },
   {
     name: '04_deviant_cu',
+    subject: 'deviant',
+    keySide: 1,
     set: 'rooftop',
     build: (set) => closeUp(set.actor('deviant'), { lookingAt: (set.marks.standoff as THREE.Vector3), lens: 75, distance: 1.15 }),
   },
   {
     name: '05_hostage',
+    subject: 'child',
+    keySide: -1,
     set: 'rooftop',
     build: (set) => medium(set.actor('child'), { lookingAt: (set.marks.standoff as THREE.Vector3), lens: 58, distance: 2.0 }),
   },
   {
     name: '06_two_shot',
+    subject: 'deviant',
+    keySide: 1,
     set: 'rooftop',
     build: (set) => twoShot(set.actor('deviant'), set.actor('child'), { lens: 40, side: -1, distance: 3.4 }),
   },
   {
     name: '07_low_wet',
+    subject: 'orion',
+    keySide: -1,
     set: 'rooftop',
     build: (set) =>
       establish(new THREE.Vector3(2.6, 0.34, 1.6), new THREE.Vector3(-1.2, 1.4, -3.4), {
@@ -173,7 +188,7 @@ const SHOTS: ShotDef[] = [
     build: () =>
       establish(new THREE.Vector3(2.2, 1.8, -3.4), new THREE.Vector3(9.5, -1.5, -14.0), { lens: 35, bokeh: 1.0 }),
   },
-  { name: '09_trooper', set: 'rooftop', build: (set) => lowAngle(set.actor('trooper0'), { lens: 40, distance: 2.2 }) },
+  { name: '09_trooper', subject: 'trooper0', keySide: 1, set: 'rooftop', build: (set) => lowAngle(set.actor('trooper0'), { lens: 40, distance: 2.2 }) },
   {
     name: '10_house_wide',
     set: 'household',
@@ -183,7 +198,7 @@ const SHOTS: ShotDef[] = [
         focusOn: set.actor('cass').getChestPosition(new THREE.Vector3()),
       }),
   },
-  { name: '11_house_cu', set: 'household', build: (set) => closeUp(set.actor('cass'), { lookingAt: (set.marks.owner as THREE.Vector3) }) },
+  { name: '11_house_cu', subject: 'cass', keySide: -1, set: 'household', build: (set) => closeUp(set.actor('cass'), { lookingAt: (set.marks.owner as THREE.Vector3) }) },
   {
     name: '12_plaza_wide',
     set: 'plaza',
@@ -193,9 +208,11 @@ const SHOTS: ShotDef[] = [
         focusOn: set.actor('atlas').getChestPosition(new THREE.Vector3()),
       }),
   },
-  { name: '13_plaza_atlas', set: 'plaza', build: (set) => closeUp(set.actor('atlas'), { lens: 75, distance: 1.3 }) },
+  { name: '13_plaza_atlas', subject: 'atlas', keySide: -1, set: 'plaza', build: (set) => closeUp(set.actor('atlas'), { lens: 75, distance: 1.3 }) },
   {
     name: '14_plaza_line',
+    subject: 'commander',
+    keySide: 1,
     set: 'plaza',
     build: (set) => overShoulder(set.actor('atlas'), set.actor('commander'), { lens: 46, side: -1, distance: 0.8 }),
   },
@@ -237,6 +254,9 @@ window.__shot = async (i: number): Promise<void> => {
 
   engine.postFX?.setLensRain(def.set === 'household' ? 0.1 : 0.45, true);
   applyShot();
+  if (def.subject && set.hasActor(def.subject)) {
+    set.lightSubject(set.actor(def.subject).getChestPosition(new THREE.Vector3()), { keySide: def.keySide ?? 1 });
+  }
   // Warm-up: pose easing, rain wrap and the mirror pass all need a few frames.
   const settle = Number(params.get('settle') ?? def.settle ?? 1.2);
   const steps = Math.max(2, Math.round(settle / (1 / 30)));

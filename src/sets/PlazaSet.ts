@@ -42,14 +42,14 @@ export class PlazaSet extends SceneSet {
   async build(renderer: THREE.WebGLRenderer): Promise<void> {
     this.initSky(renderer, {
       coverage: 0.9,
-      cityGlow: 1.5,
-      cloudBrightness: 0.7,
+      cityGlow: 0.4,
+      cloudBrightness: 0.14,
       cityGlowColor: new THREE.Color(1.0, 0.42, 0.2),
       horizonColor: new THREE.Color(0.09, 0.11, 0.16),
       zenithColor: new THREE.Color(0.01, 0.016, 0.032),
       stars: 0.04,
-      envIntensity: 1.05,
-      backgroundIntensity: 1,
+      envIntensity: 6.5,
+      backgroundIntensity: 0.6,
       beams: [
         { azimuth: 1.2, elevation: 0.55, spread: 0.28, intensity: 0.3, color: new THREE.Color(0.55, 0.75, 1) },
         { azimuth: 5.0, elevation: 0.42, spread: 0.3, intensity: 0.26, color: new THREE.Color(1, 0.45, 0.4) },
@@ -64,9 +64,10 @@ export class PlazaSet extends SceneSet {
     this.buildLights();
 
     this.initRain({ groundY: 0, boxSize: 52, color: 0xb2cbe8, intensity: 0.85 });
-    this.initWetFloor({ planeY: 0, wetness: 1, strength: 1.15 });
+    this.initWetFloor({ planeY: 0, wetness: 1, strength: 0.4 });
     if (this.groundMaterial) this.wetFloor?.attach(this.groundMaterial);
     this.initHaze(12, { color: 0x9fc0e8, radius: 18, height: 4.2, scale: 11, opacity: 0.055 });
+    this.initCharacterLights({ keyColor: 0xd0e2ff, kickerColor: 0xff8a44, keyIntensity: 28, kickerIntensity: 24 });
     if (this.rain) this.wetFloor?.excludeFromReflection(this.rain.group);
     if (this.haze) this.wetFloor?.excludeFromReflection(this.haze.group);
   }
@@ -79,10 +80,10 @@ export class PlazaSet extends SceneSet {
       map: maps.map,
       normalMap: maps.normalMap,
       roughnessMap: maps.roughnessMap,
-      color: 0x585e66,
+      color: 0x101317,
       roughness: 0.42,
-      metalness: 0.16,
-      envMapIntensity: 1.05,
+      metalness: 0.03,
+      envMapIntensity: 0.1,
       normalScale: new THREE.Vector2(0.75, 0.75),
     });
     this.groundMaterial = mat;
@@ -257,7 +258,7 @@ export class PlazaSet extends SceneSet {
   }
 
   private buildLights(): void {
-    this.scene.add(new THREE.HemisphereLight(0x35506e, 0x0a0d11, 0.5));
+    this.scene.add(new THREE.HemisphereLight(0x76808e, 0x14181c, 0.35));
 
     const key = new THREE.DirectionalLight(PALETTE.moonlight, 1.05);
     key.position.set(-14, 20, 8);

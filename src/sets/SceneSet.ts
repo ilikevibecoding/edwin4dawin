@@ -7,6 +7,7 @@ import { createKit, type Kit } from './Kit';
 import type { Actor } from '../actors/Actor';
 import type { QualitySettings } from '../core/Quality';
 import type { LightShaft } from '../render/Volumetric';
+import { CharacterLights } from '../render/CharacterLights';
 
 interface HazeOptions {
   color?: THREE.ColorRepresentation;
@@ -28,6 +29,8 @@ export abstract class SceneSet {
   readonly actors = new Map<string, Actor>();
 
   rain: RainSystem | null = null;
+  /** Portrait rig that follows whoever is currently playing the scene. */
+  characterLights: CharacterLights | null = null;
   wetFloor: WetFloor | null = null;
   haze: HazeField | null = null;
   protected shafts: LightShaft[] = [];
@@ -87,6 +90,18 @@ export abstract class SceneSet {
     this.haze = haze;
     if (this.wetFloor) this.wetFloor.excludeFromReflection(haze.group);
     return haze;
+  }
+
+  protected initCharacterLights(opts: Parameters<typeof CharacterLights.prototype.setColors> extends never ? never : ConstructorParameters<typeof CharacterLights>[0] = {}): CharacterLights {
+    const lights = new CharacterLights({ shadowMapSize: this.quality.shadowMapSize, shadows: this.quality.shadows, ...opts });
+    this.scene.add(lights.group);
+    this.characterLights = lights;
+    return lights;
+  }
+
+  /** Points the portrait rig at a subject, keeping the key off the camera axis. */
+  lightSubject(subject: THREE.Vector3, opts: { keySide?: number; height?: number } = {}): void {
+    this.characterLights?.aim(subject, this.camera.getWorldPosition(new THREE.Vector3()), opts);
   }
 
   protected addShaft(shaft: LightShaft, reflectable = false): LightShaft {

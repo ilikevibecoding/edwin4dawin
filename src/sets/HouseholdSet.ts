@@ -46,8 +46,8 @@ export class HouseholdSet extends SceneSet {
       cityGlow: 0.7,
       cloudBrightness: 0.4,
       stars: 0.01,
-      envIntensity: 0.5,
-      backgroundIntensity: 0.8,
+      envIntensity: 3.0,
+      backgroundIntensity: 0.5,
     });
     this.initFog(0x141a22, FOG.domesticDensity);
 
@@ -59,6 +59,7 @@ export class HouseholdSet extends SceneSet {
     this.initRain({ groundY: -0.4, boxSize: 26, color: 0x9fbcdc, intensity: 1 });
     this.initWetFloor({ planeY: 0, wetness: 0.32, strength: 0.4 });
     this.initHaze(5, { color: 0xffb066, radius: 4.5, height: 2.4, scale: 3.6, opacity: 0.035 });
+    this.initCharacterLights({ keyColor: 0xffcf9a, kickerColor: 0x9fc4ff, keyIntensity: 16, kickerIntensity: 12, range: 5 });
   }
 
   private buildShell(): void {

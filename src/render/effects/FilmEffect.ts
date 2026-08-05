@@ -34,6 +34,28 @@ float hash21(vec2 p) {
   return fract(p.x * p.y);
 }
 
+/**
+ * ACES filmic curve, applied here rather than in a separate pass.
+ *
+ * This effect samples neighbouring texels for chromatic aberration and the
+ * anamorphic smear, and those samples come from the pass input — which is
+ * scene-referred HDR. Grading them as if they were display-referred is what
+ * produces clipped highlights and crushed shadows at the same time, so the curve
+ * has to be applied to every sample as it is read.
+ */
+vec3 aces(vec3 x) {
+  const float a = 2.51;
+  const float b = 0.03;
+  const float c = 2.43;
+  const float d = 0.59;
+  const float e = 0.14;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+vec3 sampleGraded(vec2 uv) {
+  return aces(texture2D(inputBuffer, uv).rgb);
+}
+
 // Cheap value noise for lens water.
 float vnoise(vec2 p) {
   vec2 i = floor(p);
@@ -71,9 +93,9 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   float caAmount = uCA * (0.35 + r2 * 2.2);
   vec2 dir = normalize(centered + 1e-6);
   vec3 col;
-  col.r = texture2D(inputBuffer, duv + dir * caAmount).r;
-  col.g = texture2D(inputBuffer, duv).g;
-  col.b = texture2D(inputBuffer, duv - dir * caAmount).b;
+  col.r = sampleGraded(duv + dir * caAmount).r;
+  col.g = sampleGraded(duv).g;
+  col.b = sampleGraded(duv - dir * caAmount).b;
 
   // Anamorphic smear: a few horizontal taps on the brightest parts only.
   if (uAnamorphic > 0.001) {
@@ -81,8 +103,8 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
     float w = 0.0;
     for (int i = 1; i <= 4; i++) {
       float o = float(i) * 2.5 * texelSize.x * (1.0 + uAnamorphic * 3.0);
-      vec3 a = texture2D(inputBuffer, duv + vec2(o, 0.0)).rgb;
-      vec3 b = texture2D(inputBuffer, duv - vec2(o, 0.0)).rgb;
+      vec3 a = sampleGraded(duv + vec2(o, 0.0));
+      vec3 b = sampleGraded(duv - vec2(o, 0.0));
       float k = 1.0 / float(i);
       smear += (a + b) * k;
       w += 2.0 * k;

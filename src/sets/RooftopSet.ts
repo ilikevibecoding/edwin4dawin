@@ -44,7 +44,7 @@ export class RooftopSet extends SceneSet {
     deviant: new THREE.Vector3(1.15, 0, -4.15),
     hostage: new THREE.Vector3(1.9, 0, -4.85),
     edge: new THREE.Vector3(1.6, 0, -5.6),
-    troopers: [new THREE.Vector3(-4.2, 0, 2.2), new THREE.Vector3(-5.0, 0, 3.6)],
+    troopers: [new THREE.Vector3(-5.4, 0, 1.4), new THREE.Vector3(-6.3, 0, 3.0)],
   };
 
   private beacon: THREE.Mesh | null = null;
@@ -64,14 +64,14 @@ export class RooftopSet extends SceneSet {
   async build(renderer: THREE.WebGLRenderer): Promise<void> {
     this.initSky(renderer, {
       coverage: 0.9,
-      cityGlow: 0.95,
-      cloudBrightness: 0.34,
-      cityGlowColor: new THREE.Color(1.0, 0.46, 0.2),
-      horizonColor: new THREE.Color(0.08, 0.1, 0.14),
-      zenithColor: new THREE.Color(0.012, 0.02, 0.038),
+      cityGlow: 0.3,
+      cloudBrightness: 0.11,
+      cityGlowColor: new THREE.Color(0.72, 0.4, 0.3),
+      horizonColor: new THREE.Color(0.055, 0.058, 0.068),
+      zenithColor: new THREE.Color(0.012, 0.015, 0.022),
       stars: 0.05,
-      envIntensity: 2.4,
-      backgroundIntensity: 1.0,
+      envIntensity: 7.5,
+      backgroundIntensity: 0.55,
       beams: [
         { azimuth: 2.1, elevation: 0.5, spread: 0.35, intensity: 0.16, color: new THREE.Color(0.4, 0.7, 1) },
         { azimuth: 4.4, elevation: 0.3, spread: 0.5, intensity: 0.1, color: new THREE.Color(1, 0.5, 0.3) },
@@ -85,9 +85,11 @@ export class RooftopSet extends SceneSet {
     this.buildLights();
 
     this.initRain({ groundY: 0, boxSize: 40, color: 0xa9c6e8, intensity: 1 });
-    this.initWetFloor({ planeY: 0, wetness: 1, strength: 1.05 });
+    this.initWetFloor({ planeY: 0, wetness: 1, strength: 0.35 });
     if (this.floorMaterial) this.wetFloor?.attach(this.floorMaterial);
-    this.initHaze(9, { color: 0x86a8d8, radius: 13, height: 3.4, scale: 8, opacity: 0.05 });
+    this.initHaze(9, { color: 0x86a8d8, radius: 13, height: 3.4, scale: 8, opacity: 0.0 });
+    this.initCharacterLights({ keyColor: 0xbcd4ff, kickerColor: 0xff9a52, keyIntensity: 30, kickerIntensity: 22 });
+    this.lightSubject(this.marks.standoff.clone().setY(1.5), { keySide: -1 });
 
     // Rain and haze must not appear in the mirror pass.
     if (this.rain) this.wetFloor?.excludeFromReflection(this.rain.group);
@@ -104,11 +106,11 @@ export class RooftopSet extends SceneSet {
       map: maps.map,
       normalMap: maps.normalMap,
       roughnessMap: maps.roughnessMap,
-      color: 0x23272c,
-      roughness: 0.5,
-      metalness: 0.1,
-      envMapIntensity: 0.55,
-      normalScale: new THREE.Vector2(0.3, 0.3),
+      color: 0x0d0f12,
+      roughness: 0.45,
+      metalness: 0.02,
+      envMapIntensity: 0.08,
+      normalScale: new THREE.Vector2(0.14, 0.14),
     });
     this.floorMaterial = floorMat;
 
@@ -141,7 +143,7 @@ export class RooftopSet extends SceneSet {
       if (this.floorMaterial) {
         // Puddles share the wet shader so they reflect too.
         const mat = (pool.material as THREE.MeshStandardMaterial).clone();
-        mat.roughness = 0.02;
+        mat.roughness = 0.07;
         mat.metalness = 0.1;
         pool.material = mat;
       }
@@ -300,9 +302,9 @@ export class RooftopSet extends SceneSet {
     // Overcast key from the sky, cool and soft.
     // Ground colour is deliberately not black: downward-facing surfaces still
     // receive bounce from a wet deck, and without it half the frame crushes.
-    const ambient = new THREE.HemisphereLight(0x5a7290, 0x232a31, 1.5);
+    const ambient = new THREE.HemisphereLight(0x76808e, 0x1c2024, 0.35);
     // A flat ambient term keeps deep interiors and undersides readable.
-    this.scene.add(new THREE.AmbientLight(0x223245, 0.9));
+    this.scene.add(new THREE.AmbientLight(0x2a3038, 0.25));
     this.scene.add(ambient);
 
     // Moon/skylight direction: the only shadow-caster wide enough for the deck.
@@ -326,26 +328,26 @@ export class RooftopSet extends SceneSet {
       width: 3.2,
       height: 6.4,
       vertical: true,
-      spill: 16,
+      spill: 34,
       flicker: true,
     });
     magenta.group.position.set(9.6, -3.4, -9.2);
     magenta.group.rotation.y = -0.9;
     this.scene.add(magenta.group);
     this.reflect(magenta.group);
-    this.neonLights.push({ light: magenta.light, base: 16, flicker: true, phase: 0 });
+    this.neonLights.push({ light: magenta.light, base: 34, flicker: true, phase: 0 });
 
     const cyan = neonSign(['CYBERLIFE'], {
       color: PALETTE.neonCyan,
       width: 7.2,
       height: 1.5,
-      spill: 14,
+      spill: 30,
     });
     cyan.group.position.set(-13.5, 2.6, -16);
     cyan.group.rotation.y = 0.55;
     this.scene.add(cyan.group);
     this.reflect(cyan.group);
-    this.neonLights.push({ light: cyan.light, base: 14, flicker: false, phase: 1.7 });
+    this.neonLights.push({ light: cyan.light, base: 30, flicker: false, phase: 1.7 });
 
     const amber = neonSign(['24H', 'NOODLE'], {
       color: PALETTE.neonAmber,

@@ -36,6 +36,8 @@ function perpendicular(dir: THREE.Vector3): THREE.Vector3 {
 }
 
 export interface SingleOptions {
+  /** Where the eyes sit in frame, measured from the top (0.36 = upper third). */
+  eyeline?: number;
   /** Lens length in millimetres, converted to a vertical FOV. */
   lens?: number;
   /** Distance from the subject in metres. */
@@ -54,6 +56,20 @@ export function lensToFov(lens: number): number {
   return 2 * Math.atan(24 / (2 * lens)) * (180 / Math.PI);
 }
 
+/**
+ * Lowers the aim point so the subject's eyes land at `fraction` of the frame
+ * height measured from the top. Aiming straight at the eyes puts them dead
+ * centre, which makes every character look like they are sinking out of frame;
+ * a third is the standard place for them.
+ */
+function applyEyeline(shot: Shot, fraction = 0.36): Shot {
+  const distance = shot.position.distanceTo(shot.target);
+  const halfFov = (shot.fov * Math.PI) / 360;
+  const offset = Math.tan(halfFov * (1 - fraction * 2)) * distance;
+  shot.target.y -= offset;
+  return shot;
+}
+
 /** Single of one actor, angled off their eyeline so the face reads in depth. */
 export function single(actor: Actor, opts: SingleOptions = {}): Shot {
   const lens = opts.lens ?? 65;
@@ -67,13 +83,16 @@ export function single(actor: Actor, opts: SingleOptions = {}): Shot {
   const dir = facing.clone().multiplyScalar(Math.cos(angle)).addScaledVector(side, Math.sin(angle)).normalize();
   const position = eyes.clone().addScaledVector(dir, distance);
   position.y += opts.rise ?? 0.02;
-  return {
-    position,
-    target: eyes.clone(),
-    focus: eyes.clone(),
-    fov: lensToFov(lens),
-    bokeh: opts.bokeh ?? 3.4,
-  };
+  return applyEyeline(
+    {
+      position,
+      target: eyes.clone(),
+      focus: eyes.clone(),
+      fov: lensToFov(lens),
+      bokeh: opts.bokeh ?? 3.4,
+    },
+    opts.eyeline ?? 0.36
+  );
 }
 
 /** Close-up: tight, shallow, slightly below eye level so the subject has weight. */
@@ -82,9 +101,7 @@ export function closeUp(actor: Actor, opts: SingleOptions = {}): Shot {
 }
 
 export function medium(actor: Actor, opts: SingleOptions = {}): Shot {
-  const shot = single(actor, { lens: 50, distance: 2.4, angle: 0.55, bokeh: 3.0, ...opts });
-  shot.target.y -= 0.18;
-  return shot;
+  return single(actor, { lens: 50, distance: 2.4, angle: 0.55, bokeh: 3.0, eyeline: 0.3, ...opts });
 }
 
 /**
@@ -92,30 +109,44 @@ export function medium(actor: Actor, opts: SingleOptions = {}): Shot {
  * subject, which is what makes a dialogue exchange feel like a conversation
  * rather than two separate singles.
  */
+/**
+ * Over-the-shoulder two-shot.
+ *
+ * The camera sits well behind the foreground actor's head and offset to one
+ * side, on a long lens. Sitting too close turns the foreground actor into an
+ * unreadable smear at the frame edge instead of a shoulder that frames the shot,
+ * and a wide lens lets the subject shrink into the middle of the frame.
+ */
 export function overShoulder(
   foreground: Actor,
   subject: Actor,
-  opts: { lens?: number; side?: number; distance?: number; rise?: number; bokeh?: number } = {}
+  opts: { lens?: number; side?: number; distance?: number; rise?: number; bokeh?: number; eyeline?: number } = {}
 ): Shot {
-  const lens = opts.lens ?? 58;
+  const lens = opts.lens ?? 80;
   const side = opts.side ?? 1;
   const fgEyes = foreground.getEyePosition(v());
   const subjEyes = subject.getEyePosition(v());
   const dir = flatDir(fgEyes, subjEyes);
   const perp = perpendicular(dir).multiplyScalar(side);
-  // Behind and to one side of the foreground actor's head.
   const position = fgEyes
     .clone()
-    .addScaledVector(dir, -(opts.distance ?? 0.62))
-    .addScaledVector(perp, 0.34);
-  position.y += opts.rise ?? 0.06;
-  return {
-    position,
-    target: subjEyes.clone(),
-    focus: subjEyes.clone(),
-    fov: lensToFov(lens),
-    bokeh: opts.bokeh ?? 3.6,
-  };
+    .addScaledVector(dir, -(opts.distance ?? 1.15))
+    .addScaledVector(perp, 0.46);
+  position.y += opts.rise ?? 0.1;
+  const shot = applyEyeline(
+    {
+      position,
+      target: subjEyes.clone(),
+      focus: subjEyes.clone(),
+      fov: lensToFov(lens),
+      bokeh: opts.bokeh ?? 3.2,
+    },
+    opts.eyeline ?? 0.33
+  );
+  // Push the subject off centre, into the space the shoulder is not occupying.
+  const lateral = perpendicular(flatDir(shot.position, shot.target)).multiplyScalar(-side * 0.18);
+  shot.target.add(lateral);
+  return shot;
 }
 
 /** Wide that holds two actors, placed off the axis between them. */
@@ -132,17 +163,24 @@ export function twoShot(
   const separation = pa.distanceTo(pb);
   const distance = opts.distance ?? Math.max(2.6, separation * 1.15);
   const position = mid.clone().addScaledVector(perp, distance);
-  position.y += opts.rise ?? 0.25;
-  return {
-    position,
-    target: mid.clone(),
-    focus: mid.clone(),
-    fov: lensToFov(opts.lens ?? 40),
-    bokeh: 2.0,
-  };
+  position.y += opts.rise ?? 0.4;
+  return applyEyeline(
+    {
+      position,
+      target: mid.clone(),
+      focus: mid.clone(),
+      fov: lensToFov(opts.lens ?? 40),
+      bokeh: 1.2,
+    },
+    0.34
+  );
 }
 
 /** Establishing wide from an arbitrary viewpoint. */
+/**
+ * Establishing wide. Deep focus by default: a wide shot exists to explain the
+ * geography, and shallow focus turns the set into an unreadable diorama.
+ */
 export function establish(
   from: THREE.Vector3,
   lookAt: THREE.Vector3,
@@ -153,7 +191,7 @@ export function establish(
     target: lookAt.clone(),
     focus: (opts.focusOn ?? lookAt).clone(),
     fov: lensToFov(opts.lens ?? 32),
-    bokeh: opts.bokeh ?? 1.4,
+    bokeh: opts.bokeh ?? 0.5,
     roll: opts.roll,
   };
 }
@@ -165,16 +203,19 @@ export function lowAngle(actor: Actor, opts: { lens?: number; distance?: number;
   const side = perpendicular(facing);
   const angle = opts.angle ?? 0.3;
   const dir = facing.clone().multiplyScalar(Math.cos(angle)).addScaledVector(side, Math.sin(angle)).normalize();
-  const distance = opts.distance ?? 2.0;
+  const distance = opts.distance ?? 2.8;
   const position = actor.root.position.clone().addScaledVector(dir, distance);
-  position.y = actor.root.position.y + 0.5;
-  return {
-    position,
-    target: eyes.clone(),
-    focus: eyes.clone(),
-    fov: lensToFov(opts.lens ?? 35),
-    bokeh: 2.4,
-  };
+  position.y = actor.root.position.y + 0.85;
+  return applyEyeline(
+    {
+      position,
+      target: eyes.clone(),
+      focus: eyes.clone(),
+      fov: lensToFov(opts.lens ?? 40),
+      bokeh: 2.0,
+    },
+    0.3
+  );
 }
 
 /** Insert on a prop or detail. */
