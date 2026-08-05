@@ -122,6 +122,7 @@ console.log(`\nrendered ${frame} frames (${(frame / fps).toFixed(1)}s of video, 
 
 if (!checkOnly && args.encode !== 'false' && existsSync(framesDir)) {
   const outFile = path.join(outDir, 'demo.mp4');
+  const audioFile = args.audio ? path.resolve(args.audio) : null;
   console.log('encoding...');
   await new Promise((resolve, reject) => {
     const ff = spawn(
@@ -132,6 +133,7 @@ if (!checkOnly && args.encode !== 'false' && existsSync(framesDir)) {
         String(fps),
         '-i',
         path.join(framesDir, `%06d.${format === 'jpeg' ? 'jpg' : 'png'}`),
+        ...(audioFile ? ['-i', audioFile] : []),
         '-c:v',
         'libx264',
         '-preset',
@@ -142,6 +144,7 @@ if (!checkOnly && args.encode !== 'false' && existsSync(framesDir)) {
         'yuv420p',
         '-movflags',
         '+faststart',
+        ...(audioFile ? ['-c:a', 'aac', '-b:a', '160k', '-shortest'] : []),
         outFile,
       ],
       { stdio: ['ignore', 'ignore', 'pipe'] },
