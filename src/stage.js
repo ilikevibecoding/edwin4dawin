@@ -166,6 +166,9 @@ class Stage {
         ln.textContent = txt.slice(0, c) + (c < txt.length ? '▌' : '');
         await wait(T(txt ? 9 : 2));
       }
+      // lift the diagnostic value above its label
+      const m = txt.match(/^(.*\.{4,} )(.+)$/);
+      if (m) ln.innerHTML = m[1] + '<b class="boot-val">' + m[2] + '</b>';
       await wait(T(150));
     }
     el('span', 'boot-cursor', inner, '▌');

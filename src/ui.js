@@ -389,14 +389,14 @@ class UI {
       let hits = 0, done = false;
       requestAnimationFrame(() => wrap.classList.add('show'));
 
-      // Radial shatter clusters that avoid the headline exclusion zone.
+      // Radial shatter clusters that avoid the headline/sub-line exclusion zone.
       const addCracks = () => {
         let cx, cy, tries = 0;
         do {
-          cx = 120 + Math.random() * 760;
-          cy = 60 + Math.random() * 440;
+          cx = 110 + Math.random() * 780;
+          cy = 50 + Math.random() * 460;
           tries++;
-        } while (Math.abs(cx - 500) < 350 && Math.abs(cy - 265) < 120 && tries < 12);
+        } while (Math.abs(cx - 500) < 365 && Math.abs(cy - 280) < 155 && tries < 14);
         const rays = 4 + (Math.random() * 3 | 0);
         for (let i = 0; i < rays; i++) {
           const a = (i / rays) * Math.PI * 2 + Math.random() * 0.7;
@@ -555,6 +555,8 @@ class UI {
       const wrap = el('div', 'flowwrap', this.overlays);
       el('div', 'fl-over', wrap, 'FLOWCHART');
       el('div', 'fl-title', wrap, chapterTitle);
+      const visitedCount = flow.nodes.filter((n) => !n.when || marks.has(n.when)).length;
+      el('div', 'fl-stats', wrap, `${visitedCount} / ${flow.nodes.length} PATHS DISCOVERED — ${Math.round((visitedCount / flow.nodes.length) * 100)}%`);
       const chart = el('div', 'fl-chart', wrap);
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('viewBox', '0 0 1260 470');
