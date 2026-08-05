@@ -62,11 +62,11 @@ class SharedTextureCache {
   }
 
   get facade(): ReturnType<typeof facadeMaps> {
-    return this.get('facade', () => facadeMaps(512, 5, { litChance: 0.4 }));
+    return this.get('facade', () => facadeMaps(1024, 5, { litChance: 0.3 }));
   }
 
   get facadeDense(): ReturnType<typeof facadeMaps> {
-    return this.get('facadeDense', () => facadeMaps(512, 19, { litChance: 0.3, cols: 22, rows: 40 }));
+    return this.get('facadeDense', () => facadeMaps(1024, 19, { litChance: 0.24, cols: 38, rows: 64 }));
   }
 
   get ripple(): THREE.CanvasTexture {

@@ -216,7 +216,7 @@ export class HazeField {
       const a = (i / count) * Math.PI * 2 + Math.random();
       const r = radius * (0.35 + Math.random() * 0.65);
       s.position.set(Math.cos(a) * r, Math.random() * height, Math.sin(a) * r);
-      const sc = scale * (0.6 + Math.random() * 0.8);
+      const sc = scale * (0.45 + Math.random() * 0.5);
       s.scale.set(sc, sc * 0.55, 1);
       this.group.add(s);
       this.cards.push(s);

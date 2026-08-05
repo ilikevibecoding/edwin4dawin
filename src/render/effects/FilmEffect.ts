@@ -100,10 +100,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   // Split tone: cool shadows, warm highlights.
   float t = smoothstep(0.0, 1.0, pow(clamp(lum, 0.0, 1.0), uSplitBalance * 2.0));
   vec3 tone = mix(uShadowTint, uHighlightTint, t);
-  col *= mix(vec3(1.0), tone, 0.34);
-
-  // Milk the blacks a touch so shadows keep detail.
-  col += uLift * (1.0 - t);
+  col *= mix(vec3(1.0), tone, 0.24);
 
   // Edge desaturation reads as cheap lens falloff.
   col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), r2 * uDesaturateEdges);
@@ -123,6 +120,11 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   // Animated grain, slightly stronger in the shadows like real film.
   float g = hash21(uv * vec2(1024.0, 768.0) + fract(uTime) * 91.7) - 0.5;
   col += g * uGrain * (1.25 - 0.75 * clamp(lum, 0.0, 1.0));
+
+  // Print black: applied last, after the vignette, so that nothing in the frame
+  // sits at zero. Night scenes graded without this read as holes rather than
+  // shadows, and a third of the image can end up carrying no information at all.
+  col = col * (1.0 - uLift) + uLift;
 
   outputColor = vec4(max(col, 0.0), inputColor.a);
 }

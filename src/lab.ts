@@ -1,5 +1,5 @@
 /**
- * Graphics lab.
+ * Scene lab.
  *
  * Renders a fixed set of framings from the real chapter sets so the look can be
  * reviewed from stills. Deliberately deterministic: the clock is advanced by a
@@ -13,35 +13,21 @@ import { RooftopSet } from './sets/RooftopSet';
 import { HouseholdSet } from './sets/HouseholdSet';
 import { PlazaSet } from './sets/PlazaSet';
 import { ActorFactory } from './actors/Cast';
-import { DOF } from './render/LookConfig';
 import type { SceneSet } from './sets/SceneSet';
+import { closeUp, establish, lowAngle, medium, overShoulder, twoShot, type Shot } from './cine/Framing';
+
+type SetKind = 'rooftop' | 'household' | 'plaza';
+
+/** Sets expose named staging marks that shots are composed against. */
+type MarkedSet = SceneSet & { marks: Record<string, THREE.Vector3 | THREE.Vector3[]> };
 
 interface ShotDef {
   name: string;
-  set: 'rooftop' | 'household' | 'plaza';
-  pos: [number, number, number];
-  target: [number, number, number];
-  fov?: number;
-  bokeh?: number;
-  roll?: number;
-  /** Extra warm-up seconds before capture (for animation-dependent shots). */
+  set: SetKind;
+  build: (set: MarkedSet) => Shot;
+  /** Extra warm-up seconds before capture. */
   settle?: number;
 }
-
-const SHOTS: ShotDef[] = [
-  { name: '01_wide', set: 'rooftop', pos: [-6.2, 2.35, 7.4], target: [1.2, 1.1, -3.6], fov: 34 },
-  { name: '02_standoff_ots', set: 'rooftop', pos: [-1.35, 1.62, 1.85], target: [1.5, 1.35, -4.3], fov: 40, bokeh: DOF.bokehMedium },
-  { name: '03_orion_cu', set: 'rooftop', pos: [-0.72, 1.63, 0.62], target: [-0.24, 1.62, 0.05], fov: 32, bokeh: DOF.bokehCloseUp },
-  { name: '04_deviant_cu', set: 'rooftop', pos: [1.9, 1.66, -2.85], target: [1.2, 1.6, -4.1], fov: 34, bokeh: DOF.bokehCloseUp },
-  { name: '05_hostage', set: 'rooftop', pos: [3.6, 1.5, -2.4], target: [1.9, 1.05, -4.85], fov: 38, bokeh: DOF.bokehMedium },
-  { name: '06_low_wet', set: 'rooftop', pos: [3.1, 0.28, 2.1], target: [-1.6, 1.5, -3.2], fov: 42 },
-  { name: '07_skyline', set: 'rooftop', pos: [1.2, 1.75, -3.0], target: [6.5, 0.2, -14.0], fov: 40 },
-  { name: '08_troopers', set: 'rooftop', pos: [-2.2, 1.7, 4.6], target: [-4.8, 1.4, 2.8], fov: 36, bokeh: DOF.bokehMedium },
-  { name: '09_house_wide', set: 'household', pos: [3.4, 1.65, 3.9], target: [-0.8, 1.2, -1.2], fov: 34 },
-  { name: '10_house_cu', set: 'household', pos: [-0.15, 1.6, 0.95], target: [-0.75, 1.58, 0.1], fov: 34, bokeh: DOF.bokehCloseUp },
-  { name: '11_plaza_wide', set: 'plaza', pos: [0.5, 2.4, 10.5], target: [0, 1.6, -3.5], fov: 36 },
-  { name: '12_plaza_atlas', set: 'plaza', pos: [-1.1, 1.72, 2.2], target: [0.15, 1.68, -0.4], fov: 38, bokeh: DOF.bokehCloseUp },
-];
 
 const params = new URLSearchParams(location.search);
 const tier = (params.get('tier') as TierName) || 'cinema';
@@ -52,21 +38,21 @@ const height = Number(params.get('h') || 720);
 const container = document.getElementById('app') as HTMLElement;
 const engine = new Engine(container, { tier, mode: 'fixed', width, height });
 const factory = new ActorFactory(engine.assets);
-
-const sets: Partial<Record<ShotDef['set'], SceneSet>> = {};
+const sets: Partial<Record<SetKind, SceneSet>> = {};
 
 async function buildRooftop(): Promise<SceneSet> {
   const set = new RooftopSet(engine.quality);
   await set.build(engine.renderer);
+
   const orion = await factory.spawn('orion');
-  orion.root.position.copy(set.marks.standoff);
-  orion.faceToward(set.marks.deviant, true);
+  orion.root.position.copy((set.marks.standoff as THREE.Vector3));
+  orion.faceToward((set.marks.deviant as THREE.Vector3), true);
   orion.setLed('process');
   set.addActor('orion', orion);
 
   const deviant = await factory.spawn('deviant');
-  deviant.root.position.copy(set.marks.deviant);
-  deviant.faceToward(set.marks.standoff, true);
+  deviant.root.position.copy((set.marks.deviant as THREE.Vector3));
+  deviant.faceToward((set.marks.standoff as THREE.Vector3), true);
   deviant.setLed('stress');
   deviant.agitation = 0.9;
   deviant.setPose('holdHostage', 1, { fadeIn: 0 });
@@ -74,18 +60,22 @@ async function buildRooftop(): Promise<SceneSet> {
 
   const child = await factory.spawn('child');
   child.root.position.copy(set.marks.hostage);
-  child.faceToward(set.marks.standoff, true);
-  child.setPose('flinch', 0.55, { fadeIn: 0 });
+  child.faceToward((set.marks.standoff as THREE.Vector3), true);
+  child.setPose('flinch', 0.5, { fadeIn: 0 });
   child.agitation = 1;
   set.addActor('child', child);
 
   for (let i = 0; i < set.marks.troopers.length; i++) {
     const t = await factory.spawn('trooper', { name: `TROOPER ${i + 1}` });
     t.root.position.copy(set.marks.troopers[i]);
-    t.faceToward(set.marks.deviant, true);
+    t.faceToward((set.marks.deviant as THREE.Vector3), true);
     t.setPose('aimPistol', 0.9, { fadeIn: 0 });
     set.addActor(`trooper${i}`, t);
   }
+
+  orion.lookAt(deviant.getEyePosition(new THREE.Vector3()), 1);
+  deviant.lookAt(orion.getEyePosition(new THREE.Vector3()), 1);
+  child.lookAt(orion.getEyePosition(new THREE.Vector3()), 0.8);
   return set;
 }
 
@@ -94,7 +84,7 @@ async function buildHousehold(): Promise<SceneSet> {
   await set.build(engine.renderer);
   const cass = await factory.spawn('cass');
   cass.root.position.copy(set.marks.cass);
-  cass.faceToward(set.marks.owner, true);
+  cass.faceToward((set.marks.owner as THREE.Vector3), true);
   cass.setLed('calm');
   set.addActor('cass', cass);
 
@@ -102,6 +92,9 @@ async function buildHousehold(): Promise<SceneSet> {
   child.root.position.copy(set.marks.child);
   child.faceToward(set.marks.cass, true);
   set.addActor('child', child);
+
+  cass.lookAt(child.getEyePosition(new THREE.Vector3()), 1);
+  child.lookAt(cass.getEyePosition(new THREE.Vector3()), 1);
   return set;
 }
 
@@ -112,13 +105,19 @@ async function buildPlaza(): Promise<SceneSet> {
   atlas.root.position.copy(set.marks.podium);
   atlas.faceToward(set.marks.crowdCentre, true);
   atlas.setLed('calm');
-  atlas.setPose('raiseFist', 0.8, { fadeIn: 0 });
+  atlas.setPose('raiseFist', 0.85, { fadeIn: 0 });
   set.addActor('atlas', atlas);
+
+  const commander = await factory.spawn('commander');
+  commander.root.position.copy(set.marks.commander);
+  commander.faceToward(set.marks.podium, true);
+  set.addActor('commander', commander);
+
   await set.populateCrowd(factory);
   return set;
 }
 
-async function ensureSet(kind: ShotDef['set']): Promise<SceneSet> {
+async function ensureSet(kind: SetKind): Promise<SceneSet> {
   let set = sets[kind];
   if (!set) {
     set = kind === 'rooftop' ? await buildRooftop() : kind === 'household' ? await buildHousehold() : await buildPlaza();
@@ -127,7 +126,82 @@ async function ensureSet(kind: ShotDef['set']): Promise<SceneSet> {
   return set;
 }
 
-const shots = only ? SHOTS.filter((s) => s.name.includes(only)) : SHOTS;
+const SHOTS: ShotDef[] = [
+  {
+    name: '01_rooftop_wide',
+    set: 'rooftop',
+    build: (set) =>
+      establish(new THREE.Vector3(-4.6, 2.5, 6.6), new THREE.Vector3(1.4, 1.2, -4.2), {
+        lens: 28,
+        focusOn: set.actor('deviant').getChestPosition(new THREE.Vector3()),
+      }),
+  },
+  {
+    name: '02_standoff_ots',
+    set: 'rooftop',
+    build: (set) => overShoulder(set.actor('orion'), set.actor('deviant'), { lens: 52, side: 1 }),
+  },
+  { name: '03_orion_cu', set: 'rooftop', build: (set) => closeUp(set.actor('orion'), { lookingAt: (set.marks.deviant as THREE.Vector3) }) },
+  {
+    name: '04_deviant_cu',
+    set: 'rooftop',
+    build: (set) => closeUp(set.actor('deviant'), { lookingAt: (set.marks.standoff as THREE.Vector3), lens: 75, distance: 1.15 }),
+  },
+  {
+    name: '05_hostage',
+    set: 'rooftop',
+    build: (set) => medium(set.actor('child'), { lookingAt: (set.marks.standoff as THREE.Vector3), lens: 58, distance: 2.0 }),
+  },
+  {
+    name: '06_two_shot',
+    set: 'rooftop',
+    build: (set) => twoShot(set.actor('deviant'), set.actor('child'), { lens: 40, side: -1, distance: 3.4 }),
+  },
+  {
+    name: '07_low_wet',
+    set: 'rooftop',
+    build: (set) =>
+      establish(new THREE.Vector3(2.6, 0.34, 1.6), new THREE.Vector3(-1.2, 1.4, -3.4), {
+        lens: 24,
+        focusOn: set.actor('orion').getChestPosition(new THREE.Vector3()),
+        bokeh: 1.2,
+      }),
+  },
+  {
+    name: '08_skyline',
+    set: 'rooftop',
+    build: () =>
+      establish(new THREE.Vector3(2.2, 1.8, -3.4), new THREE.Vector3(9.5, -1.5, -14.0), { lens: 35, bokeh: 1.0 }),
+  },
+  { name: '09_trooper', set: 'rooftop', build: (set) => lowAngle(set.actor('trooper0'), { lens: 40, distance: 2.2 }) },
+  {
+    name: '10_house_wide',
+    set: 'household',
+    build: (set) =>
+      establish(new THREE.Vector3(2.9, 1.7, 3.4), new THREE.Vector3(-1.0, 1.2, -1.4), {
+        lens: 26,
+        focusOn: set.actor('cass').getChestPosition(new THREE.Vector3()),
+      }),
+  },
+  { name: '11_house_cu', set: 'household', build: (set) => closeUp(set.actor('cass'), { lookingAt: (set.marks.owner as THREE.Vector3) }) },
+  {
+    name: '12_plaza_wide',
+    set: 'plaza',
+    build: (set) =>
+      establish(new THREE.Vector3(3.6, 2.7, 9.5), new THREE.Vector3(0, 1.5, -6.5), {
+        lens: 28,
+        focusOn: set.actor('atlas').getChestPosition(new THREE.Vector3()),
+      }),
+  },
+  { name: '13_plaza_atlas', set: 'plaza', build: (set) => closeUp(set.actor('atlas'), { lens: 75, distance: 1.3 }) },
+  {
+    name: '14_plaza_line',
+    set: 'plaza',
+    build: (set) => overShoulder(set.actor('atlas'), set.actor('commander'), { lens: 46, side: -1, distance: 0.8 }),
+  },
+];
+
+const shots = only ? SHOTS.filter((s) => s.name.startsWith(only)) : SHOTS;
 
 declare global {
   interface Window {
@@ -136,36 +210,38 @@ declare global {
     __shotNames?: () => string[];
     __shotDone?: boolean;
     __stats?: () => Record<string, number | string>;
+    __exposure?: () => Record<string, number>;
   }
 }
 
 window.__shotNames = () => shots.map((s) => s.name);
 
 window.__shot = async (i: number): Promise<void> => {
-  const shot = shots[i];
-  const set = await ensureSet(shot.set);
-  const grade = shot.set === 'household' ? 'domestic' : shot.set === 'plaza' ? 'uprising' : 'noirRain';
+  const def = shots[i];
+  const set = (await ensureSet(def.set)) as MarkedSet;
+  const grade = def.set === 'household' ? 'domestic' : def.set === 'plaza' ? 'uprising' : 'noirRain';
   engine.setStage(set, grade);
 
   const cam = set.camera;
-  cam.position.set(...shot.pos);
-  cam.fov = shot.fov ?? 35;
-  cam.up.set(0, 1, 0);
-  cam.lookAt(new THREE.Vector3(...shot.target));
-  if (shot.roll) cam.rotateZ(shot.roll);
-  cam.updateProjectionMatrix();
-
-  const focus = new THREE.Vector3(...shot.target);
-  engine.postFX?.focusOn(focus, cam, true);
-  if (engine.postFX) engine.postFX.bokeh = shot.bokeh ?? DOF.bokehWide;
-  engine.postFX?.setLensRain(shot.set === 'household' ? 0.12 : 0.5, true);
-
-  // Warm up: animation blending, rain wrap, reflections and pose easing all need
-  // a few frames before the frame is representative.
-  const steps = Math.round((shot.settle ?? 1.6) / (1 / 30));
-  for (let s = 0; s < steps; s++) {
-    cam.lookAt(new THREE.Vector3(...shot.target));
+  const applyShot = (): void => {
+    const shot = def.build(set);
+    cam.position.copy(shot.position);
+    cam.fov = shot.fov;
+    cam.up.set(0, 1, 0);
+    cam.updateProjectionMatrix();
+    cam.lookAt(shot.target);
     if (shot.roll) cam.rotateZ(shot.roll);
+    engine.postFX?.focusOn(shot.focus, cam, true);
+    if (engine.postFX) engine.postFX.bokeh = shot.bokeh;
+  };
+
+  engine.postFX?.setLensRain(def.set === 'household' ? 0.1 : 0.45, true);
+  applyShot();
+  // Warm-up: pose easing, rain wrap and the mirror pass all need a few frames.
+  const settle = Number(params.get('settle') ?? def.settle ?? 1.2);
+  const steps = Math.max(2, Math.round(settle / (1 / 30)));
+  for (let s = 0; s < steps; s++) {
+    applyShot();
     engine.step(1 / 30);
   }
   window.__shotDone = true;
@@ -178,7 +254,51 @@ window.__stats = () => ({
   size: `${engine.renderer.domElement.width}x${engine.renderer.domElement.height}`,
 });
 
-// Warm the shared asset set before signalling readiness.
+/**
+ * Exposure readout for the current frame.
+ *
+ * Judging night-time lighting by eye across many iterations is unreliable, so
+ * each capture also reports luminance percentiles. The target for these scenes:
+ * median around 0.10-0.20, p95 around 0.55-0.80, under 2% of pixels clipped, and
+ * a p05 above zero so the shadows are dark but not crushed.
+ */
+window.__exposure = () => {
+  const gl = engine.renderer.getContext();
+  const w = engine.renderer.domElement.width;
+  const h = engine.renderer.domElement.height;
+  const step = Math.max(1, Math.floor(Math.min(w, h) / 240));
+  const buf = new Uint8Array(w * h * 4);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+  const lum: number[] = [];
+  let clipped = 0;
+  let black = 0;
+  for (let y = 0; y < h; y += step) {
+    for (let x = 0; x < w; x += step) {
+      const i = (y * w + x) * 4;
+      const r = buf[i] / 255;
+      const g = buf[i + 1] / 255;
+      const b = buf[i + 2] / 255;
+      const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      lum.push(l);
+      if (r > 0.996 && g > 0.996 && b > 0.996) clipped++;
+      if (l < 0.004) black++;
+    }
+  }
+  lum.sort((a, b) => a - b);
+  const at = (q: number): number => lum[Math.min(lum.length - 1, Math.floor(q * lum.length))] ?? 0;
+  const mean = lum.reduce((a, b) => a + b, 0) / Math.max(1, lum.length);
+  return {
+    mean: +mean.toFixed(4),
+    p05: +at(0.05).toFixed(4),
+    p50: +at(0.5).toFixed(4),
+    p90: +at(0.9).toFixed(4),
+    p99: +at(0.99).toFixed(4),
+    clipped: +(clipped / Math.max(1, lum.length)).toFixed(4),
+    crushed: +(black / Math.max(1, lum.length)).toFixed(4),
+  };
+};
+
 void (async () => {
   await factory.preload();
   await ensureSet(shots[0]?.set ?? 'rooftop');

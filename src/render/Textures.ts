@@ -134,12 +134,14 @@ export function concreteSurface(opts: SurfaceOptions = {}): SurfaceMaps {
       if (seam > 0.47) h -= 0.35;
       height[y * size + x] = h;
 
-      const base = 0.3 + stain * 0.16 + aggregate * 0.12;
-      const tone = base * (1 - patch * 0.16);
+      // Aggregate and stains only modulate the tone slightly: high-contrast
+      // speckle at this scale reads as gravel rather than poured concrete.
+      const base = 0.34 + stain * 0.05 + aggregate * 0.035;
+      const tone = base * (1 - patch * 0.07);
       const i = (y * size + x) * 4;
-      col.data[i] = tone * 245;
-      col.data[i + 1] = tone * 246;
-      col.data[i + 2] = tone * 252;
+      col.data[i] = tone * 232;
+      col.data[i + 1] = tone * 236;
+      col.data[i + 2] = tone * 244;
       col.data[i + 3] = 255;
 
       const r = 0.62 + stain * 0.22 - aggregate * 0.18;
@@ -152,7 +154,7 @@ export function concreteSurface(opts: SurfaceOptions = {}): SurfaceMaps {
   const repeat = opts.repeat ?? 4;
   return {
     map: toTexture(colCanvas, { srgb: true, repeat }),
-    normalMap: toTexture(heightToNormal(height, size, 1.6), { repeat }),
+    normalMap: toTexture(heightToNormal(height, size, 0.55), { repeat }),
     roughnessMap: toTexture(roughCanvas, { repeat }),
   };
 }
@@ -178,7 +180,7 @@ export function asphaltSurface(opts: SurfaceOptions = {}): SurfaceMaps {
       height[y * size + x] = h;
 
       const wetLow = Math.pow(1 - tar, 2);
-      const tone = 0.07 + chip * 0.09 + tar * 0.05;
+      const tone = 0.1 + chip * 0.035 + tar * 0.025;
       const i = (y * size + x) * 4;
       col.data[i] = tone * 235;
       col.data[i + 1] = tone * 240;
@@ -196,7 +198,7 @@ export function asphaltSurface(opts: SurfaceOptions = {}): SurfaceMaps {
   const repeat = opts.repeat ?? 6;
   return {
     map: toTexture(colCanvas, { srgb: true, repeat }),
-    normalMap: toTexture(heightToNormal(height, size, 2.4), { repeat }),
+    normalMap: toTexture(heightToNormal(height, size, 0.8), { repeat }),
     roughnessMap: toTexture(roughCanvas, { repeat }),
   };
 }
@@ -241,7 +243,7 @@ export function metalSurface(opts: SurfaceOptions & { panel?: number } = {}): Su
   const repeat = opts.repeat ?? 2;
   return {
     map: toTexture(colCanvas, { srgb: true, repeat }),
-    normalMap: toTexture(heightToNormal(height, size, 2.0), { repeat }),
+    normalMap: toTexture(heightToNormal(height, size, 0.9), { repeat }),
     roughnessMap: toTexture(roughCanvas, { repeat }),
   };
 }
@@ -256,9 +258,9 @@ export function facadeMaps(
   seed = 5,
   opts: { litChance?: number; cols?: number; rows?: number } = {}
 ): { map: THREE.CanvasTexture; emissiveMap: THREE.CanvasTexture; roughnessMap: THREE.CanvasTexture } {
-  const cols = opts.cols ?? 16;
-  const rows = opts.rows ?? 26;
-  const litChance = opts.litChance ?? 0.42;
+  const cols = opts.cols ?? 28;
+  const rows = opts.rows ?? 44;
+  const litChance = opts.litChance ?? 0.3;
   const { canvas: colCanvas, ctx: colCtx } = makeCanvas(size);
   const { canvas: emCanvas, ctx: emCtx } = makeCanvas(size);
   const { canvas: roughCanvas, ctx: roughCtx } = makeCanvas(size);
@@ -290,7 +292,9 @@ export function facadeMaps(
       roughCtx.fillRect(x + pad, y + pad, w, h);
       if (lit) {
         const warm = hash2(c, r, seed + 7) < 0.62;
-        const bright = 0.35 + hash2(c, r, seed + 8) * 0.65;
+        // Most lit windows are dim; only a few are bright, which keeps a
+        // skyline from turning into a wall of blown-out dots under bloom.
+        const bright = 0.12 + Math.pow(hash2(c, r, seed + 8), 2.2) * 0.7;
         const col = warm
           ? `rgba(${255 * bright},${196 * bright},${132 * bright},1)`
           : `rgba(${168 * bright},${212 * bright},${255 * bright},1)`;
@@ -361,26 +365,27 @@ export function fabricSurface(
   };
 }
 
-/** Tiling ripple normal map; two scrolling copies make convincing rain-struck water. */
+/**
+ * Tiling ripple normal map for rain-struck water.
+ *
+ * High frequency on purpose: at the scale a camera sees a wet street, agitation
+ * is a fine chop. Larger features read as gravel scattered over the ground once
+ * the surface is glossy enough to catch the sky in every bump.
+ */
 export function rippleNormal(size = 256, seed = 61): THREE.CanvasTexture {
   const height = new Float32Array(size * size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = x / size;
       const v = y / size;
-      let h = fbm(u * 24, v * 24, 4, seed) * 0.6;
-      // Concentric impact rings.
-      for (let i = 0; i < 14; i++) {
-        const cx = hash2(i, 1, seed);
-        const cy = hash2(i, 2, seed);
-        const d = Math.hypot(Math.min(Math.abs(u - cx), 1 - Math.abs(u - cx)), Math.min(Math.abs(v - cy), 1 - Math.abs(v - cy)));
-        const rad = 0.03 + hash2(i, 3, seed) * 0.09;
-        if (d < rad) h += Math.cos((d / rad) * Math.PI * 3) * (1 - d / rad) * 0.25;
-      }
+      const h =
+        fbm(u * 68, v * 68, 3, seed) * 0.5 +
+        fbm(u * 150, v * 150, 2, seed + 9) * 0.35 +
+        fbm(u * 300, v * 300, 1, seed + 17) * 0.15;
       height[y * size + x] = h;
     }
   }
-  return toTexture(heightToNormal(height, size, 1.1), { repeat: 1 });
+  return toTexture(heightToNormal(height, size, 0.5), { repeat: 1 });
 }
 
 /** Soft radial sprite used for splashes, dust, sparks and light glows. */

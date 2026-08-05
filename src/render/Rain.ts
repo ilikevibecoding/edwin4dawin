@@ -192,7 +192,7 @@ export class RainSystem {
         transparent: true,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
-        opacity: 0.5,
+        opacity: 0.2,
         fog: true,
       });
       this.splashes = new THREE.InstancedMesh(splashGeo, splashMat, opts.splashCount);
@@ -275,7 +275,7 @@ export class RainSystem {
             const r = Math.sqrt(Math.random()) * 6.5;
             s.x = centre.x + Math.cos(a) * r;
             s.z = centre.z + Math.sin(a) * r;
-            s.scale = 0.1 + Math.random() * 0.16;
+            s.scale = 0.05 + Math.random() * 0.07;
           }
           s.t = 0;
           s.life = 0.24 + Math.random() * 0.2;
@@ -291,7 +291,7 @@ export class RainSystem {
       }
       this.splashes.instanceMatrix.needsUpdate = true;
       const mat = this.splashes.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.38 * this.intensity;
+      mat.opacity = 0.14 * this.intensity;
       this.splashes.visible = visible > 0 && this.intensity > 0.02;
     }
   }

@@ -61,6 +61,9 @@ export class Engine {
       powerPreference: 'high-performance',
       stencil: false,
       depth: true,
+      // Offline capture reads the frame back for exposure metering, which only
+      // works if the drawing buffer survives past the end of the frame.
+      preserveDrawingBuffer: (opts.mode ?? 'realtime') === 'fixed',
     });
     const gl = this.renderer.getContext();
     const tier = opts.tier ?? detectTier(gl);

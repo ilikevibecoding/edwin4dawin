@@ -132,7 +132,7 @@ export function buildHairCap(
   eyeBones: THREE.Bone[],
   opts: HairOptions = {}
 ): THREE.SkinnedMesh | null {
-  const thickness = opts.thickness ?? 0.008;
+  const thickness = opts.thickness ?? 0.0022;
   const frontLift = opts.frontLift ?? 0.052;
   const napeDrop = opts.napeDrop ?? 0.045;
 
@@ -165,22 +165,37 @@ export function buildHairCap(
   }
 
   // Hairline: high across the forehead, dropping toward the nape.
+  // Vertices are kept with a *weight* rather than a hard test, so the shell can
+  // taper to zero thickness at the hairline. A hard cut leaves a visible jagged
+  // step across the forehead where the shell ends.
   const v = new THREE.Vector3();
   const selected = new Uint8Array(pos.count);
+  const weight = new Float32Array(pos.count);
+  // Wide feather: the fade has to span several vertex rings or the alpha
+  // gradient collapses into the same faceted edge it was meant to hide.
+  const feather = 0.055;
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     const forward = Math.max(-1, Math.min(1, (v.z - eyeZ) / 0.09));
-    const threshold = eyeY + frontLift - napeDrop * (1 - (forward + 1) / 2);
-    if (v.y >= threshold) selected[i] = 1;
+    // A little noise keeps the hairline from being a perfect contour line.
+    const jitter = Math.sin(v.x * 210) * 0.0022 + Math.sin(v.z * 143 + 1.7) * 0.0016;
+    const threshold = eyeY + frontLift - napeDrop * (1 - (forward + 1) / 2) + jitter;
+    const t = (v.y - threshold + feather) / feather;
+    if (t > 0) {
+      selected[i] = 1;
+      const c = Math.min(1, t);
+      weight[i] = c * c * (3 - 2 * c);
+    }
   }
 
-  // Keep only triangles fully inside the scalp region.
+  // Keep any triangle that touches the region, so boundary triangles exist to
+  // carry the alpha fade rather than being clipped away.
   const keep: number[] = [];
   for (let t = 0; t < index.count; t += 3) {
     const a = index.getX(t);
     const b = index.getX(t + 1);
     const c = index.getX(t + 2);
-    if (selected[a] && selected[b] && selected[c]) keep.push(a, b, c);
+    if (selected[a] || selected[b] || selected[c]) keep.push(a, b, c);
   }
   if (keep.length < 90) return null;
 
@@ -190,11 +205,21 @@ export function buildHairCap(
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     n.fromBufferAttribute(nrm, i).normalize();
-    v.addScaledVector(n, thickness);
+    v.addScaledVector(n, thickness * weight[i]);
     newPos[i * 3] = v.x;
     newPos[i * 3 + 1] = v.y;
     newPos[i * 3 + 2] = v.z;
   }
+  // Per-vertex alpha from the same falloff: the shell fades out at the hairline
+  // instead of ending on a hard, faceted edge.
+  const colors = new Float32Array(pos.count * 4);
+  for (let i = 0; i < pos.count; i++) {
+    colors[i * 4] = 1;
+    colors[i * 4 + 1] = 1;
+    colors[i * 4 + 2] = 1;
+    colors[i * 4 + 3] = Math.min(1, weight[i] * 1.15);
+  }
+  hairGeo.setAttribute('color', new THREE.BufferAttribute(colors, 4));
   hairGeo.setAttribute('position', new THREE.BufferAttribute(newPos, 3));
   hairGeo.setAttribute('normal', nrm.clone());
   if (geo.attributes.uv) hairGeo.setAttribute('uv', (geo.attributes.uv as THREE.BufferAttribute).clone());
@@ -207,20 +232,26 @@ export function buildHairCap(
     hairGeo,
     new THREE.MeshPhysicalMaterial({
       color: opts.color ?? 0x1a1512,
-      roughness: opts.roughness ?? 0.42,
-      metalness: 0.05,
-      sheen: 0.6,
-      sheenRoughness: 0.35,
-      sheenColor: new THREE.Color(0x6a5a4a),
-      clearcoat: 0.35,
-      clearcoatRoughness: 0.4,
+      roughness: opts.roughness ?? 0.68,
+      metalness: 0.02,
+      sheen: 0.35,
+      sheenRoughness: 0.6,
+      sheenColor: new THREE.Color(0x5a4a3a),
+      clearcoat: 0.05,
+      clearcoatRoughness: 0.7,
       envMapIntensity: 0.9,
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
     })
   );
   hair.name = `${headMesh.name}_hair`;
   hair.castShadow = true;
   hair.receiveShadow = true;
   hair.frustumCulled = false;
+  hair.renderOrder = 2;
   hair.bind(headMesh.skeleton, headMesh.bindMatrix);
   return hair;
 }

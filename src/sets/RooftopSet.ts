@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SceneSet } from './SceneSet';
 import {
   antennaMast,
+  facadeMaterialFor,
   cableRun,
   chainFence,
   chair,
@@ -62,21 +63,21 @@ export class RooftopSet extends SceneSet {
 
   async build(renderer: THREE.WebGLRenderer): Promise<void> {
     this.initSky(renderer, {
-      coverage: 0.86,
-      cityGlow: 1.35,
-      cloudBrightness: 0.62,
-      cityGlowColor: new THREE.Color(1.0, 0.5, 0.24),
-      horizonColor: new THREE.Color(0.075, 0.1, 0.15),
-      zenithColor: new THREE.Color(0.008, 0.014, 0.03),
-      stars: 0.08,
-      envIntensity: 1.15,
+      coverage: 0.9,
+      cityGlow: 0.95,
+      cloudBrightness: 0.34,
+      cityGlowColor: new THREE.Color(1.0, 0.46, 0.2),
+      horizonColor: new THREE.Color(0.08, 0.1, 0.14),
+      zenithColor: new THREE.Color(0.012, 0.02, 0.038),
+      stars: 0.05,
+      envIntensity: 2.4,
       backgroundIntensity: 1.0,
       beams: [
         { azimuth: 2.1, elevation: 0.5, spread: 0.35, intensity: 0.16, color: new THREE.Color(0.4, 0.7, 1) },
         { azimuth: 4.4, elevation: 0.3, spread: 0.5, intensity: 0.1, color: new THREE.Color(1, 0.5, 0.3) },
       ],
     });
-    this.initFog(PALETTE.fogNight, FOG.rooftopDensity);
+    this.initFog(0x2c3e52, FOG.rooftopDensity);
 
     this.buildDeck();
     this.buildEdgeAndSkyline();
@@ -103,11 +104,11 @@ export class RooftopSet extends SceneSet {
       map: maps.map,
       normalMap: maps.normalMap,
       roughnessMap: maps.roughnessMap,
-      color: 0x6e747c,
-      roughness: 0.55,
-      metalness: 0.12,
-      envMapIntensity: 1,
-      normalScale: new THREE.Vector2(0.85, 0.85),
+      color: 0x23272c,
+      roughness: 0.5,
+      metalness: 0.1,
+      envMapIntensity: 0.55,
+      normalScale: new THREE.Vector2(0.3, 0.3),
     });
     this.floorMaterial = floorMat;
 
@@ -125,15 +126,6 @@ export class RooftopSet extends SceneSet {
     slab.castShadow = true;
     this.scene.add(slab);
     this.reflect(slab);
-
-    // Painted service walkway; a graphic line that guides the eye to the edge.
-    const walk = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.5, 11),
-      new THREE.MeshStandardMaterial({ color: 0x9a8f5f, roughness: 0.7, metalness: 0.05, opacity: 0.55, transparent: true })
-    );
-    walk.rotation.x = -Math.PI / 2;
-    walk.position.set(0.6, 0.008, -1.5);
-    this.scene.add(walk);
 
     for (const p of [
       new THREE.Vector3(-2.2, 0.012, 2.6),
@@ -192,16 +184,20 @@ export class RooftopSet extends SceneSet {
     const nearTowerMaps = Tex.facadeDense;
     const nearTower = new THREE.Mesh(
       new THREE.BoxGeometry(16, 96, 16),
-      new THREE.MeshStandardMaterial({
-        map: nearTowerMaps.map,
-        emissiveMap: nearTowerMaps.emissiveMap,
-        roughnessMap: nearTowerMaps.roughnessMap,
-        emissive: new THREE.Color(0xffffff),
-        emissiveIntensity: 1.25,
-        color: 0x43494f,
-        roughness: 0.7,
-        metalness: 0.25,
-      })
+      facadeMaterialFor(
+        new THREE.MeshStandardMaterial({
+          map: nearTowerMaps.map,
+          emissiveMap: nearTowerMaps.emissiveMap,
+          roughnessMap: nearTowerMaps.roughnessMap,
+          emissive: new THREE.Color(0xffffff),
+          emissiveIntensity: 0.9,
+          color: 0x24282e,
+          roughness: 0.7,
+          metalness: 0.25,
+        }),
+        16,
+        96
+      )
     );
     nearTower.position.set(-27, -20, -26);
     this.scene.add(nearTower);
@@ -302,11 +298,15 @@ export class RooftopSet extends SceneSet {
 
   private buildLights(): void {
     // Overcast key from the sky, cool and soft.
-    const ambient = new THREE.HemisphereLight(0x3c5878, 0x0a0c10, 0.55);
+    // Ground colour is deliberately not black: downward-facing surfaces still
+    // receive bounce from a wet deck, and without it half the frame crushes.
+    const ambient = new THREE.HemisphereLight(0x5a7290, 0x232a31, 1.5);
+    // A flat ambient term keeps deep interiors and undersides readable.
+    this.scene.add(new THREE.AmbientLight(0x223245, 0.9));
     this.scene.add(ambient);
 
     // Moon/skylight direction: the only shadow-caster wide enough for the deck.
-    const key = new THREE.DirectionalLight(PALETTE.moonlight, 1.15);
+    const key = new THREE.DirectionalLight(PALETTE.moonlight, 1.7);
     key.position.set(-9, 14, -11);
     key.castShadow = this.quality.shadows;
     key.shadow.mapSize.set(this.quality.shadowMapSize, this.quality.shadowMapSize);
@@ -326,55 +326,63 @@ export class RooftopSet extends SceneSet {
       width: 3.2,
       height: 6.4,
       vertical: true,
-      spill: 26,
+      spill: 16,
       flicker: true,
     });
     magenta.group.position.set(9.6, -3.4, -9.2);
     magenta.group.rotation.y = -0.9;
     this.scene.add(magenta.group);
     this.reflect(magenta.group);
-    this.neonLights.push({ light: magenta.light, base: 26, flicker: true, phase: 0 });
+    this.neonLights.push({ light: magenta.light, base: 16, flicker: true, phase: 0 });
 
     const cyan = neonSign(['CYBERLIFE'], {
       color: PALETTE.neonCyan,
       width: 7.2,
       height: 1.5,
-      spill: 22,
+      spill: 14,
     });
     cyan.group.position.set(-13.5, 2.6, -16);
     cyan.group.rotation.y = 0.55;
     this.scene.add(cyan.group);
     this.reflect(cyan.group);
-    this.neonLights.push({ light: cyan.light, base: 22, flicker: false, phase: 1.7 });
+    this.neonLights.push({ light: cyan.light, base: 14, flicker: false, phase: 1.7 });
 
     const amber = neonSign(['24H', 'NOODLE'], {
       color: PALETTE.neonAmber,
       width: 2.2,
       height: 3.6,
       vertical: true,
-      spill: 14,
+      spill: 6,
     });
     amber.group.position.set(-10.5, -6.5, 6.5);
     amber.group.rotation.y = 1.3;
     this.scene.add(amber.group);
-    this.neonLights.push({ light: amber.light, base: 14, flicker: false, phase: 3.1 });
+    this.neonLights.push({ light: amber.light, base: 6, flicker: false, phase: 3.1 });
 
     // Bounce from the city, low and warm, keeps the shadow side alive.
-    const bounce = new THREE.PointLight(PALETTE.sodium, 12, 26, 2);
+    const bounce = new THREE.PointLight(PALETTE.sodium, 9, 24, 2);
     bounce.position.set(6, -2.5, -8);
     this.scene.add(bounce);
 
-    const rimLight = new THREE.SpotLight(0x9fd4ff, 60, 26, 0.85, 0.6, 2);
-    rimLight.position.set(6.5, 8.5, -12);
-    rimLight.target.position.set(0.5, 1.2, -3);
+    // Hard cyan rim from the tower behind the standoff: separates the figures
+    // from the skyline, which is the single most important light in the scene.
+    const rimLight = new THREE.SpotLight(0x9fd4ff, 70, 22, 0.7, 0.65, 2);
+    rimLight.position.set(4.2, 4.6, -9.5);
+    rimLight.target.position.set(0.4, 1.4, -1.5);
     this.scene.add(rimLight, rimLight.target);
+
+    // Low sodium fill from the stairwell side, so shadow sides keep detail.
+    const fill = new THREE.SpotLight(PALETTE.sodium, 20, 16, 0.9, 0.8, 2);
+    fill.position.set(-5.0, 2.6, 4.2);
+    fill.target.position.set(0.2, 1.3, 0.4);
+    this.scene.add(fill, fill.target);
 
     // Police helicopter searchlight sweeping the roof.
     this.searchlight = new LightShaft({
       length: 34,
-      radius: 3.6,
+      radius: 2.1,
       color: 0xdfeeff,
-      intensity: 0.42,
+      intensity: 0.32,
       noise: 0.7,
       falloff: 1.05,
       nearFade: 1.4,
@@ -382,7 +390,7 @@ export class RooftopSet extends SceneSet {
     this.addShaft(this.searchlight);
     this.scene.add(this.searchlight.mesh);
 
-    const heliSpot = new THREE.SpotLight(0xe8f4ff, 260, 46, 0.2, 0.55, 2);
+    const heliSpot = new THREE.SpotLight(0xe8f4ff, 160, 46, 0.16, 0.6, 2);
     heliSpot.position.copy(this.searchlightSource);
     heliSpot.castShadow = false;
     this.scene.add(heliSpot, heliSpot.target);
@@ -410,9 +418,9 @@ export class RooftopSet extends SceneSet {
       const target = new THREE.Vector3(Math.sin(this.heliAngle) * 6.5, 0, -1.5 + Math.cos(this.heliAngle * 0.7) * 4.5);
       if (this.searchlight) {
         this.searchlight.aim(this.searchlightSource, target);
-        this.searchlight.setIntensity(this.searchlightActive ? 0.42 : 0);
+        this.searchlight.setIntensity(this.searchlightActive ? 0.32 : 0);
       }
-      heliSpot.intensity = this.searchlightActive ? 260 : 0;
+      heliSpot.intensity = this.searchlightActive ? 160 : 0;
       heliSpot.target.position.copy(target);
       heliSpot.target.updateMatrixWorld();
     });

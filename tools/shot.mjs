@@ -63,7 +63,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       await page.waitForFunction('window.__shotDone === true', { timeout });
       const file = out.endsWith('.png') ? out.replace(/\.png$/, `_${names[i]}.png`) : `${out}_${names[i]}.png`;
       await page.screenshot({ path: file });
-      console.log('wrote', file);
+      const exposure = await page.evaluate(() => (window.__exposure ? window.__exposure() : null));
+      console.log('wrote', file, exposure ? JSON.stringify(exposure) : '');
       await page.evaluate(() => (window.__shotDone = false));
     }
   } else {

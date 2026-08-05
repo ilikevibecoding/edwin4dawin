@@ -65,7 +65,7 @@ void main() {
   vec3 viewDir = normalize( uCamPos - vPosW );
   // Approximate the chord length through the cone.
   float facing = abs( dot( normalize( vNormalW ), viewDir ) );
-  float body = pow( smoothstep( 0.0, 0.85, facing ), 1.35 );
+  float body = pow( smoothstep( 0.15, 0.95, facing ), 2.4 );
   // Fade along the beam and soften the mouth of the cone.
   float axial = pow( 1.0 - vAxial, uFalloff ) * smoothstep( 0.0, 0.08, vAxial );
   // Drifting particulate.
@@ -78,7 +78,9 @@ void main() {
   // Don't let the shaft blow out when the camera is inside it.
   float dist = length( uCamPos - vPosW );
   float nearFade = smoothstep( 0.0, uNearFade, dist );
-  float a = body * axial * n * uIntensity * nearFade;
+  // Fade with distance so a wide cone never becomes a flat wall of light.
+  float distFade = 1.0 / ( 1.0 + dist * dist * 0.02 );
+  float a = body * axial * n * uIntensity * nearFade * distFade;
   gl_FragColor = vec4( uColor * a, a );
 }
 `;
@@ -98,11 +100,13 @@ export class LightShaft {
   readonly mesh: THREE.Mesh;
   private mat: THREE.ShaderMaterial;
   private baseIntensity: number;
+  private coneLength = 8;
   private flickerAmount = 0;
   private flickerSpeed = 8;
 
   constructor(opts: ShaftOptions = {}) {
     const length = opts.length ?? 8;
+    this.coneLength = length;
     const radius = opts.radius ?? 2.2;
     const segments = opts.segments ?? 20;
     this.baseIntensity = opts.intensity ?? 0.55;
@@ -136,12 +140,27 @@ export class LightShaft {
     this.mesh.frustumCulled = true;
   }
 
-  /** Points the shaft from `from` toward `to`. */
-  aim(from: THREE.Vector3, to: THREE.Vector3): void {
+  /**
+   * Points the shaft from `from` toward `to`, scaled so the cone stops just
+   * short of the target. A cone that continues through the floor accumulates
+   * additive brightness where it intersects and leaves a hard bright ellipse on
+   * the ground.
+   */
+  aim(from: THREE.Vector3, to: THREE.Vector3, opts: { clampToTarget?: boolean } = {}): void {
     this.mesh.position.copy(from);
-    const dir = new THREE.Vector3().subVectors(to, from).normalize();
+    const delta = new THREE.Vector3().subVectors(to, from);
+    const distance = delta.length() || 1;
+    const dir = delta.divideScalar(distance);
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
     this.mesh.quaternion.copy(q);
+    if (opts.clampToTarget !== false) {
+      const fit = Math.min(1, Math.max(0.05, (distance - 0.35) / this.length));
+      this.mesh.scale.set(1, fit, 1);
+    }
+  }
+
+  get length(): number {
+    return this.coneLength;
   }
 
   setColor(c: THREE.ColorRepresentation): void {

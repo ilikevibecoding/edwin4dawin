@@ -183,7 +183,7 @@ export function antennaMast(kit: Kit, height = 6): { group: THREE.Group; beacon:
   );
   beacon.position.y = height + 0.1;
   g.add(beacon);
-  const beaconLight = new THREE.PointLight(PALETTE.neonRed, 6, 9, 2);
+  const beaconLight = new THREE.PointLight(PALETTE.neonRed, 2.2, 7, 2);
   beaconLight.position.copy(beacon.position);
   g.add(beaconLight);
   return { group: g, beacon, beaconLight };
@@ -260,17 +260,17 @@ export function stairHouse(
   cage.rotation.x = Math.PI / 2;
   g.add(cage);
 
-  const lamp = new THREE.PointLight(lampColor, 14, 9, 2);
+  const lamp = new THREE.PointLight(lampColor, 3.2, 7, 2);
   lamp.position.set(0, doorH + 0.3, d / 2 + 0.3);
   lamp.castShadow = true;
   lamp.shadow.bias = -0.002;
   g.add(lamp);
 
   const shaft = new LightShaft({
-    length: 3.4,
-    radius: 1.5,
+    length: 2.8,
+    radius: 0.85,
     color: lampColor,
-    intensity: 0.34,
+    intensity: 0.12,
     noise: 0.6,
     falloff: 1.6,
     nearFade: 0.6,
@@ -329,17 +329,17 @@ export function neonSign(
       map: Tex.softGlow,
       color,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.32,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       fog: false,
     })
   );
-  glow.scale.set(w * 2.1, h * 2.4, 1);
+  glow.scale.set(w * 1.5, h * 1.7, 1);
   glow.position.z = 0.05;
   g.add(glow);
 
-  const light = new THREE.PointLight(color, opts.spill ?? 9, 12, 2);
+  const light = new THREE.PointLight(color, opts.spill ?? 3, 14, 2);
   light.position.z = 0.6;
   g.add(light);
 
@@ -470,8 +470,8 @@ export function skyline(
     emissiveMap: facade.emissiveMap,
     roughnessMap: facade.roughnessMap,
     emissive: new THREE.Color(0xffffff),
-    emissiveIntensity: 1.5,
-    color: 0x4a5058,
+    emissiveIntensity: 1.0,
+    color: 0x23272d,
     roughness: 0.7,
     metalness: 0.25,
     envMapIntensity: 0.5,
@@ -481,8 +481,8 @@ export function skyline(
     emissiveMap: facadeDense.emissiveMap,
     roughnessMap: facadeDense.roughnessMap,
     emissive: new THREE.Color(0xffffff),
-    emissiveIntensity: 1.35,
-    color: 0x3f454d,
+    emissiveIntensity: 0.85,
+    color: 0x1e2228,
     roughness: 0.72,
     metalness: 0.25,
     envMapIntensity: 0.5,
@@ -529,7 +529,7 @@ export function tablet(kit: Kit, screenColor = PALETTE.neonCyan): THREE.Group {
   g.add(body);
   const screen = new THREE.Mesh(
     new THREE.PlaneGeometry(0.166, 0.25),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(screenColor).multiplyScalar(0.9), toneMapped: false })
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(screenColor).multiplyScalar(0.25), toneMapped: false })
   );
   screen.rotation.x = -Math.PI / 2;
   screen.position.y = 0.0075;
@@ -541,11 +541,11 @@ export function tablet(kit: Kit, screenColor = PALETTE.neonCyan): THREE.Group {
 export function thiriumPool(radius = 0.45): THREE.Mesh {
   const m = puddle(radius, 18);
   m.material = new THREE.MeshStandardMaterial({
-    color: 0x0a2a5a,
+    color: 0x061633,
     roughness: 0.08,
     metalness: 0.2,
     emissive: new THREE.Color(0x1e6fff),
-    emissiveIntensity: 0.55,
+    emissiveIntensity: 0.16,
   });
   return m;
 }
@@ -567,6 +567,30 @@ export function chair(kit: Kit): THREE.Group {
     }
   }
   return g;
+}
+
+/**
+ * Clones a facade material with its texture repeat matched to a building's size,
+ * so windows come out roughly three metres across whatever the wall's dimensions.
+ */
+export function facadeMaterialFor(
+  base: THREE.MeshStandardMaterial,
+  width: number,
+  height: number
+): THREE.MeshStandardMaterial {
+  const mat = base.clone();
+  const repeatX = Math.max(0.05, width / 84);
+  const repeatY = Math.max(0.05, height / 140);
+  for (const key of ['map', 'emissiveMap', 'roughnessMap'] as const) {
+    const tex = mat[key];
+    if (!tex) continue;
+    const clone = tex.clone();
+    clone.needsUpdate = true;
+    clone.wrapS = clone.wrapT = THREE.RepeatWrapping;
+    clone.repeat.set(repeatX, repeatY);
+    mat[key] = clone;
+  }
+  return mat;
 }
 
 /** Wall-mounted warning placard. */

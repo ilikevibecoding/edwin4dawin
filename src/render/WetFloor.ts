@@ -45,10 +45,10 @@ export class WetFloor {
     uReflStrength: { value: 0.85 },
     uWetness: { value: 1 },
     uRipple: { value: null as THREE.Texture | null },
-    uRippleScale: { value: 0.35 },
+    uRippleScale: { value: 1.5 },
     uRippleSpeed: { value: 1 },
     uTime: { value: 0 },
-    uReflDistort: { value: 0.028 },
+    uReflDistort: { value: 0.014 },
     uReflFade: { value: 0.55 },
   };
   private hidden: THREE.Object3D[] = [];
@@ -60,7 +60,7 @@ export class WetFloor {
     this.maxResolution = opts.maxResolution ?? 640;
     this.uniforms.uWetness.value = opts.wetness ?? 1;
     this.uniforms.uReflStrength.value = opts.reflectionStrength ?? 0.85;
-    this.uniforms.uRippleScale.value = opts.rippleScale ?? 0.35;
+    this.uniforms.uRippleScale.value = opts.rippleScale ?? 1.5;
     this.uniforms.uRippleSpeed.value = opts.rippleSpeed ?? 1;
     this.uniforms.uRipple.value = rippleNormal;
     rippleNormal.wrapS = rippleNormal.wrapT = THREE.RepeatWrapping;
@@ -136,15 +136,15 @@ export class WetFloor {
              vec3 n1 = texture2D( uRipple, uv1 ).xyz * 2.0 - 1.0;
              vec3 n2 = texture2D( uRipple, uv2 ).xyz * 2.0 - 1.0;
              vec3 n3 = texture2D( uRipple, uv3 ).xyz * 2.0 - 1.0;
-             vec2 xy = n1.xy + n2.xy * 0.72 + n3.xy * 0.34;
-             return normalize( vec3( xy * uWetness, 1.0 ) );
+             vec2 xy = n1.xy + n2.xy * 0.6 + n3.xy * 0.25;
+             return normalize( vec3( xy * uWetness * 0.45, 1.0 ) );
            }`
         )
         // Replace the stock normal mapping with the animated water surface.
         .replace(
           '#include <normal_fragment_maps>',
           `vec3 wetN = wetRippleNormal();
-           vec3 wetWorldN = normalize( vec3( wetN.x * 0.6, 1.0, wetN.y * 0.6 ) );
+           vec3 wetWorldN = normalize( vec3( wetN.x * 0.3, 1.0, wetN.y * 0.3 ) );
            normal = normalize( mix( normal, normalize( ( viewMatrix * vec4( wetWorldN, 0.0 ) ).xyz ), uWetness * 0.85 ) );`
         )
         .replace(

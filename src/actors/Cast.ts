@@ -190,16 +190,22 @@ function styleHair(root: THREE.Object3D, opts: { color: number; roughness?: numb
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh || !mesh.name.endsWith(HAIR_MESH_SUFFIX)) return;
+    const previous = mesh.material as THREE.MeshPhysicalMaterial;
     mesh.material = new THREE.MeshPhysicalMaterial({
       color: opts.color,
-      roughness: opts.roughness ?? 0.42,
-      metalness: 0.05,
-      sheen: opts.sheen ?? 0.6,
-      sheenRoughness: 0.35,
+      vertexColors: previous.vertexColors,
+      transparent: previous.transparent,
+      depthWrite: previous.depthWrite,
+      polygonOffset: previous.polygonOffset,
+      polygonOffsetFactor: previous.polygonOffsetFactor,
+      roughness: opts.roughness ?? 0.68,
+      metalness: 0.02,
+      sheen: opts.sheen ?? 0.35,
+      sheenRoughness: 0.6,
       sheenColor: new THREE.Color(0x6a5a4a),
-      clearcoat: 0.3,
-      clearcoatRoughness: 0.45,
-      envMapIntensity: 0.9,
+      clearcoat: 0.05,
+      clearcoatRoughness: 0.7,
+      envMapIntensity: 0.85,
     });
   });
 }
@@ -248,7 +254,7 @@ export const CAST: Record<CharacterId, CharacterDef> = {
       replaceMaterial(root, (m) => /body/i.test(m.name) && !/outfit/i.test(m.name), (m) =>
         syntheticSkin(m, { clearcoat: 0.18 })
       );
-      styleHair(root, { color: 0x14100e, roughness: 0.38 });
+      styleHair(root, { color: 0x241b14, roughness: 0.62 });
       eachMaterial(root, (m) => {
         if (/eye/i.test(m.name)) {
           const std = m as THREE.MeshStandardMaterial;
@@ -285,7 +291,7 @@ export const CAST: Record<CharacterId, CharacterDef> = {
       replaceMaterial(root, (m) => /footwear/i.test(m.name), () =>
         new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.55, metalness: 0.1 })
       );
-      styleHair(root, { color: 0x4a3728, roughness: 0.5 });
+      styleHair(root, { color: 0x4a3728, roughness: 0.58 });
       replaceMaterial(root, (m) => /body/i.test(m.name) && !/outfit/i.test(m.name), (m) =>
         syntheticSkin(m, { clearcoat: 0.2 })
       );
@@ -451,10 +457,10 @@ export const CAST: Record<CharacterId, CharacterDef> = {
         return mat;
       });
       replaceMaterial(root, (m) => /outfit_top/i.test(m.name), () =>
-        fabricMaterial(Tex.paleFabric, 0x7f5fa8, 0.85)
+        fabricMaterial(Tex.paleFabric, 0x6b6480, 0.85)
       );
       replaceMaterial(root, (m) => /outfit_bottom/i.test(m.name), () =>
-        fabricMaterial(Tex.paleFabric, 0x4a4f7a, 0.88)
+        fabricMaterial(Tex.paleFabric, 0x40465c, 0.88)
       );
       styleHair(root, { color: 0x6b4a2e, roughness: 0.55, sheen: 0.4 });
     },
@@ -526,7 +532,7 @@ export class ActorFactory {
 
         const headBone = skeleton.bones.find((b) => /(^|[^A-Za-z])Head$/.test(b.name));
         if (headBone) {
-          const hair = buildHairCap(head, headBone, eyes, { thickness: 0.0075, frontLift: 0.026, napeDrop: 0.03 });
+          const hair = buildHairCap(head, headBone, eyes, { thickness: 0.0026, frontLift: 0.062, napeDrop: 0.03 });
           if (hair) {
             hair.name = `${head.name}${HAIR_MESH_SUFFIX}`;
             head.parent?.add(hair);
