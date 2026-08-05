@@ -1,0 +1,10 @@
+{
+  "name": "deviant-protocol",
+  "version": "0.1.0",
+  "description": "A cinematic, choice-driven interactive drama — a fan homage inspired by Detroit: Become Human.",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node tests/validate_story.mjs"
+  }
+}

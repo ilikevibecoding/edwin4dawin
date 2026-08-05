@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DEVIANT PROTOCOL — a cinematic interactive demo</title>
+<link rel="stylesheet" href="assets/fonts/fonts.css" />
+<link rel="stylesheet" href="css/game.css" />
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <div id="shotA" class="shot"></div>
+    <div id="shotB" class="shot"></div>
+    <canvas id="fxWeather"></canvas>
+    <canvas id="fxGrain"></canvas>
+    <div id="fog"></div>
+    <div id="vignette"></div>
+    <div id="flash"></div>
+    <div id="barTop" class="cinebar"></div>
+    <div id="barBot" class="cinebar"></div>
+  </div>
+  <div id="hud">
+    <div id="objective"><span class="ob-over">OBJECTIVE</span><span id="obText"></span></div>
+    <div id="toasts"></div>
+    <div id="meterProb" class="meter"><span class="m-label">PROBABILITY OF SUCCESS</span><span class="m-val">0%</span><span class="m-delta"></span></div>
+    <div id="meterStress" class="meter"><span class="m-label">STRESS LEVEL</span>
+      <div class="stressbar"><div class="s-opt"></div><div class="s-needle"></div></div>
+      <span class="m-val">0%</span>
+    </div>
+  </div>
+  <div id="caption"></div>
+  <div id="dialogue">
+    <div id="dlgName"><i id="dlgLed"></i><span id="dlgWho"></span></div>
+    <div id="dlgText"></div>
+    <div id="dlgNext">▸</div>
+  </div>
+  <div id="overlays"></div>
+  <div id="errBadge"></div>
+</div>
+<script>
+window.addEventListener('error', function(e){
+  var b = document.getElementById('errBadge');
+  if(b){ b.textContent = 'ERR: ' + (e.message||'unknown'); b.style.display='block'; }
+});
+</script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
