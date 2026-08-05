@@ -48,7 +48,7 @@ export function buildRooftop(ctx: SetContext): GameSet {
     wetness: 0.95,
     reflectStrength: 0.75,
     texRepeat: 16,
-    color: 0x7c8288,
+    color: 0x8f979e,
   });
   scene.add(ground.mesh);
 

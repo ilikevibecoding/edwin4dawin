@@ -49,7 +49,7 @@ export class Director {
   private steps: Step[];
   private labels = new Map<string, number>();
   private wait = 0;
-  private blocked: 'choice' | 'qte' | 'scan' | 'continue' | 'explore' | null = null;
+  private blocked: 'choice' | 'qte' | 'scan' | 'continue' | 'explore' | 'seekHold' | null = null;
   private chapter: Chapter;
   private set: GameSet;
   private ui: UI;
@@ -183,6 +183,7 @@ export class Director {
     }
     if (this.blocked === 'scan') return;
     if (this.blocked === 'continue') return;
+    if (this.blocked === 'seekHold') return;
 
     if (this.wait > 0) {
       this.wait -= dt;
@@ -311,9 +312,14 @@ export class Director {
         }
         audio.stress();
         if (this.fastForward && this.haltOnExplore) {
-          // Seek mode asked to stop here: play the roam phase for real.
+          // Seek mode asked to stop here. Rewind so the phase runs for real on
+          // the next update, from a clean, deterministic start state.
           this.seekHalted = true;
-        } else if (this.fastForward) {
+          this.pc--;
+          this.blocked = 'seekHold';
+          break;
+        }
+        if (this.fastForward) {
           window.setTimeout(() => {
             for (let i = 0; i < 10; i++) this.ui.qteKey(step.key);
           }, 0);
@@ -339,9 +345,14 @@ export class Director {
         const ch = this.char(step.who);
         if (!ch) break;
         if (this.fastForward && this.haltOnExplore) {
-          // Seek mode asked to stop here: play the roam phase for real.
+          // Seek mode asked to stop here. Rewind so the phase runs for real on
+          // the next update, from a clean, deterministic start state.
           this.seekHalted = true;
-        } else if (this.fastForward) {
+          this.pc--;
+          this.blocked = 'seekHold';
+          break;
+        }
+        if (this.fastForward) {
           // Seeking past a roam phase: award its clues and drop the character
           // at the objective so the following cinematics still line up.
           for (const id of step.require ?? []) {
@@ -398,9 +409,14 @@ export class Director {
         this.onEvents.onNeedInput('scan');
         audio.scanOn();
         if (this.fastForward && this.haltOnExplore) {
-          // Seek mode asked to stop here: play the roam phase for real.
+          // Seek mode asked to stop here. Rewind so the phase runs for real on
+          // the next update, from a clean, deterministic start state.
           this.seekHalted = true;
-        } else if (this.fastForward) {
+          this.pc--;
+          this.blocked = 'seekHold';
+          break;
+        }
+        if (this.fastForward) {
           this.blocked = null;
           this.onEvents.onNeedInput(null);
           for (const t of targets.slice(0, step.need ?? targets.length)) {
@@ -537,17 +553,10 @@ export class Director {
     if (!on) this.player?.order(null);
   }
 
-  /** Seek stopped on a roam step; the phase is already live, so just clear the flag. */
+  /** Seek stopped just before a roam step; let the normal loop run it. */
   resumeExploreAfterSeek(): void {
     this.seekHalted = false;
-    // The seek ran a slice of this phase in demo mode; drop its orders so the
-    // player is not fighting the autopilot.
-    this.player?.order(null);
-    this.player?.activate();
-    if (this.explore) {
-      this.explore.timeout = 240;
-      this.explore.demoIndex = 0;
-    }
+    if (this.blocked === 'seekHold') this.blocked = null;
   }
 
   /* ----------------------------------------------------------- free roam */

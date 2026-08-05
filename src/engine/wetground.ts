@@ -58,7 +58,7 @@ export class WetGround {
       roughnessMap: set.roughnessMap,
       roughness: 1,
       metalness: 0,
-      normalScale: new THREE.Vector2(0.5, 0.5),
+      normalScale: new THREE.Vector2(0.28, 0.28),
       // A near-mirror surface would otherwise reflect the whole sky dome and
       // turn the road into a lightbox.
       envMapIntensity: 0.22,

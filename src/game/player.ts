@@ -99,8 +99,8 @@ export class Player {
   /** Hand control to the player, snapping the orbit behind the character. */
   activate(): void {
     this.enabled = true;
-    this.keyLight.intensity = 15 * this.keyScale;
-    this.rimLight.intensity = 20 * this.keyScale;
+    this.keyLight.intensity = 20 * this.keyScale;
+    this.rimLight.intensity = 9 * this.keyScale;
     this.fillLight.intensity = 20 * this.keyScale;
     this.ambLift.intensity = 1.1 * this.keyScale;
     this.yaw = this.character.group.rotation.y + Math.PI;
@@ -287,7 +287,7 @@ export class Player {
     for (const it of this.interactables) {
       if (it.once !== false && this.used.has(it.id)) continue;
       const dd = Math.hypot(it.at[0] - pos.x, it.at[2] - pos.z);
-      const r = it.radius ?? 1.7;
+      const r = it.radius ?? 2.2;
       if (dd < r && dd < bestD) {
         best = it;
         bestD = dd;
