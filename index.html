@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AEGIS POINT — Interceptor Base (Fictional Demo)</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- ===================== HUD (in-game) ===================== -->
+  <div id="hud" class="hidden">
+    <div id="hud-topleft" class="panel">
+      <div class="hud-title" id="hud-scenario">STANDBY</div>
+      <div class="hud-row"><span class="lbl">THREATS</span><span id="hud-threats" class="val">0</span></div>
+      <div class="hud-row"><span class="lbl">TRACKED</span><span id="hud-tracked" class="val">0</span></div>
+      <div class="hud-row"><span class="lbl">BIRDS OUT</span><span id="hud-birds" class="val">0</span></div>
+      <div class="hud-row"><span class="lbl">CONDITION</span><span id="hud-condition" class="val ok">GREEN</span></div>
+    </div>
+
+    <div id="hud-batteries"></div>
+
+    <div id="hud-feed"></div>
+
+    <div id="hud-bottom" class="panel">
+      <div id="hud-selbat">BTRY: PATRIOT</div>
+      <div id="hud-assign">ASSIGNED: —</div>
+      <div id="hud-flight">—</div>
+    </div>
+
+    <div id="crosshair"><div class="dot"></div></div>
+    <div id="target-prompt" class="hidden">
+      <div id="tp-id">T-01</div>
+      <div id="tp-info">RNG 4.2km ALT 3.1km</div>
+      <div id="tp-keys"><span class="key">E</span> ASSIGN <span class="key">F</span> LAUNCH</div>
+    </div>
+
+    <div id="markers"></div>
+    <div id="alert-banner" class="hidden"></div>
+    <div id="objective" class="hidden"></div>
+    <div id="interact-prompt" class="hidden"><span class="key">E</span> <span id="ip-text">USE CONSOLE</span></div>
+    <div id="damage-flash"></div>
+  </div>
+
+  <!-- ===================== COMMAND CONSOLE ===================== -->
+  <div id="console-ui" class="hidden">
+    <div id="console-frame">
+      <div id="console-head">
+        <span>AN/QRK-9 "LONGWATCH" ENGAGEMENT CONSOLE — FICTIONAL TRAINER</span>
+        <button id="btn-exit-console" class="cbtn small">EXIT [ESC]</button>
+      </div>
+      <div id="console-body">
+        <div id="radar-wrap">
+          <canvas id="radar-canvas" width="640" height="640"></canvas>
+          <div id="radar-caption">TACTICAL PICTURE — CLICK TRACK TO SELECT</div>
+        </div>
+        <div id="console-right">
+          <div class="cpanel">
+            <div class="cpanel-title">CONDITIONS</div>
+            <div class="cbtn-row" id="time-btns">
+              <button class="cbtn" data-time="day">DAY</button>
+              <button class="cbtn" data-time="sunset">SUNSET</button>
+              <button class="cbtn" data-time="night">NIGHT</button>
+            </div>
+          </div>
+          <div class="cpanel">
+            <div class="cpanel-title">SCENARIO</div>
+            <div class="cbtn-row" id="scenario-btns">
+              <button class="cbtn" data-scenario="single">SINGLE TRACK</button>
+              <button class="cbtn" data-scenario="saturation">SATURATION</button>
+              <button class="cbtn" data-scenario="nightraid">NIGHT RAID</button>
+            </div>
+          </div>
+          <div class="cpanel">
+            <div class="cpanel-title">BATTERY</div>
+            <div class="cbtn-row" id="battery-btns">
+              <button class="cbtn" data-battery="patriot">PAC-X</button>
+              <button class="cbtn" data-battery="thaad">HALO</button>
+              <button class="cbtn" data-battery="sentinel">SENTINEL</button>
+            </div>
+            <div id="console-batstatus"></div>
+          </div>
+          <div class="cpanel">
+            <div class="cpanel-title">ENGAGEMENT</div>
+            <div id="console-trackinfo">NO TRACK SELECTED</div>
+            <div class="cbtn-row">
+              <button id="btn-assign" class="cbtn" disabled>ASSIGN</button>
+              <button id="btn-authorize" class="cbtn warn" disabled>AUTHORIZE LAUNCH</button>
+            </div>
+          </div>
+          <button id="btn-start" class="cbtn start">START BALLISTIC MISSILES</button>
+          <div id="console-msg"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MENU ===================== -->
+  <div id="menu">
+    <div id="menu-inner">
+      <div id="menu-title">AEGIS<span> POINT</span></div>
+      <div id="menu-sub">FORWARD INTERCEPTOR BASE "COBALT MESA" — FICTIONAL DEFENSE DEMO</div>
+      <button id="btn-deploy">CLICK TO DEPLOY</button>
+      <div id="menu-cols">
+        <div class="menu-col">
+          <div class="menu-h">CONTROLS</div>
+          <div class="menu-line"><span class="key">W A S D</span> MOVE</div>
+          <div class="menu-line"><span class="key">SHIFT</span> SPRINT</div>
+          <div class="menu-line"><span class="key">MOUSE</span> LOOK</div>
+          <div class="menu-line"><span class="key">E</span> INTERACT / ASSIGN TARGET</div>
+          <div class="menu-line"><span class="key">F</span> AUTHORIZE LAUNCH</div>
+          <div class="menu-line"><span class="key">1 2 3</span> SELECT BATTERY</div>
+          <div class="menu-line"><span class="key">R</span> RESTART SCENARIO</div>
+          <div class="menu-line"><span class="key">ESC</span> RELEASE CURSOR</div>
+        </div>
+        <div class="menu-col">
+          <div class="menu-h">SETTINGS</div>
+          <label class="menu-opt"><input type="checkbox" id="opt-reduced-motion" /> REDUCED MOTION (no head bob / strong shake)</label>
+          <label class="menu-opt"><input type="checkbox" id="opt-audio" checked /> AUDIO</label>
+          <label class="menu-opt">QUALITY
+            <select id="opt-quality">
+              <option value="high" selected>HIGH</option>
+              <option value="medium">MEDIUM</option>
+              <option value="low">LOW</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div id="menu-note">Entirely fictional entertainment software. All systems, ranges, speeds and behaviors are invented and balanced for gameplay. Not a simulator.</div>
+    </div>
+  </div>
+
+  <!-- ===================== SUMMARY ===================== -->
+  <div id="summary" class="hidden">
+    <div id="summary-inner">
+      <div id="summary-title">ENGAGEMENT COMPLETE</div>
+      <div id="summary-grade"></div>
+      <div id="summary-stats"></div>
+      <div id="summary-log"></div>
+      <div class="cbtn-row">
+        <button id="btn-restart" class="cbtn start">RESTART SCENARIO [R]</button>
+        <button id="btn-close-summary" class="cbtn">RETURN TO BASE</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fade"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
