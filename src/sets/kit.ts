@@ -150,7 +150,7 @@ export function neonSign(
   g.add(panel);
   const back = box(w * 1.04, h * 1.08, 0.06, MAT.metal(1, 0.12), [0, 0, -0.04]);
   g.add(back);
-  const s = glowSprite(color, Math.max(w, h) * 1.5, (opts.glow ?? 0.5));
+  const s = glowSprite(color, Math.max(w, h) * 1.3, (opts.glow ?? 0.5) * 0.55);
   s.position.z = 0.12;
   g.add(s);
   return g;
@@ -167,7 +167,7 @@ export function streetLamp(
   g.add(pole);
   const arm = box(0.06, 0.06, 0.9, MAT.metal(1, 0.16), [0, height - 0.1, 0.42]);
   g.add(arm);
-  const headMat = emissiveMaterial(color, 2.6);
+  const headMat = emissiveMaterial(color, 1.3);
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 10, 0, Math.PI * 2, Math.PI * 0.4, Math.PI * 0.6), headMat);
   head.position.set(0, height - 0.16, 0.84);
   g.add(head);
@@ -177,7 +177,7 @@ export function streetLamp(
   const light = new THREE.PointLight(color, intensity, height * 3.2, 2);
   light.position.set(0, height - 0.28, 0.84);
   g.add(light);
-  const s = glowSprite(color, 1.5, 0.5);
+  const s = glowSprite(color, 1.1, 0.3);
   s.position.copy(head.position);
   g.add(s);
   return { group: g, light };
@@ -459,7 +459,7 @@ export function ceilingLamp(
   light.position.set(0, -0.05, 0);
   light.target.position.set(0, -3, 0);
   g.add(light, light.target);
-  g.add(glowSprite(color, shade * 3.4, 0.4));
+  g.add(glowSprite(color, shade * 2.6, 0.28));
   return { group: g, light };
 }
 

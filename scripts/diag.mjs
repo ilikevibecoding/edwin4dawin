@@ -11,7 +11,7 @@ const browser = await puppeteer.launch({
   args: [
     '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
-    '--window-size=640,360', '--mute-audio',
+    '--window-size=640,360', '--mute-audio', '--autoplay-policy=no-user-gesture-required', '--autoplay-policy=no-user-gesture-required',
   ],
   protocolTimeout: 300000,
 });

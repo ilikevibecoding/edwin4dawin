@@ -58,10 +58,24 @@ export const CH1: Chapter = {
     { t: 'do', who: 'emma', look: 'connor', shiver: 1 },
     { t: 'say', who: 'emma', text: 'Please… I want to go home.', expr: 'fear', dur: 2.4 },
 
+    // --- Hand over control: walk the roof and read the evidence yourself.
+    { t: 'letterbox', on: false },
+    { t: 'objective', text: 'INVESTIGATE THE ROOF' },
+    { t: 'say', who: 'connor', text: 'Forty seconds of rain removes most evidence. I should look around before I speak to him.', think: true, led: 'yellow' },
+    {
+      t: 'explore', who: 'connor',
+      objective: 'INVESTIGATE THE ROOF',
+      require: ['i_gun', 'i_blood'],
+      goal: { mark: 'approach', radius: 1.5 },
+      demoPath: ['i_door', 'i_gun', 'i_blood'],
+      timeout: 150,
+    },
+    { t: 'letterbox', on: true },
+
     // --- Scan the roof.
     { t: 'objective', text: 'ANALYSE THE SCENE' },
     { t: 'shot', pos: [-4.6, 2.1, 2.6], look: [-1.5, 0.6, 7.5], fov: 46, handheld: 0.3, aperture: 0.5 },
-    { t: 'say', who: 'connor', text: 'Forty seconds of rain removes most evidence. I need to work quickly.', think: true, led: 'yellow' },
+    { t: 'say', who: 'connor', text: 'Now the details. Reconstruction needs everything I can get.', think: true, led: 'yellow' },
     { t: 'scan', need: 3, hint: 'CLICK MARKERS TO ANALYSE' },
     { t: 'objective', text: 'ASSESS THE SITUATION', done: true },
     { t: 'node', id: 'scanned' },

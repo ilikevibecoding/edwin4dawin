@@ -58,7 +58,10 @@ export class WetGround {
       roughnessMap: set.roughnessMap,
       roughness: 1,
       metalness: 0,
-      normalScale: new THREE.Vector2(0.85, 0.85),
+      normalScale: new THREE.Vector2(0.5, 0.5),
+      // A near-mirror surface would otherwise reflect the whole sky dome and
+      // turn the road into a lightbox.
+      envMapIntensity: 0.22,
     });
 
     this.uniforms = {
@@ -130,8 +133,8 @@ export class WetGround {
           '#include <roughnessmap_fragment>',
           `#include <roughnessmap_fragment>
            float wetMask = uWetness;
-           roughnessFactor = mix( roughnessFactor, 0.055 + roughnessFactor * 0.1, wetMask );
-           diffuseColor.rgb *= mix( 1.0, 0.42, wetMask );`,
+           roughnessFactor = mix( roughnessFactor, 0.11 + roughnessFactor * 0.12, wetMask );
+           diffuseColor.rgb *= mix( 1.0, 0.34, wetMask );`,
         )
         .replace(
           '#include <colorspace_fragment>',
@@ -143,7 +146,7 @@ export class WetGround {
              vec3 refl = sampleRefl( clamp( ruv + distort, vec2( 0.002 ), vec2( 0.998 ) ), uBlur + roughnessFactor * 22.0 );
              vec3 V = normalize( vViewPosition );
              float fres = pow( 1.0 - clamp( dot( normalize( normal ), V ), 0.0, 1.0 ), 4.0 );
-             float amt = uWetness * uReflStrength * mix( 0.12, 1.0, fres );
+             float amt = uWetness * uReflStrength * mix( 0.05, 0.85, fres );
              gl_FragColor.rgb += refl * amt;
            }`
               : ''

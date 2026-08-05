@@ -71,7 +71,7 @@ export class Rain {
       uColor: { value: new THREE.Color(o.color ?? 0xbfe4ff) },
       uIntensity: { value: o.intensity ?? 1 },
       uAmount: { value: 1 },
-      uWidth: { value: 0.014 },
+      uWidth: { value: 0.009 },
     };
 
     const mat = new THREE.ShaderMaterial({
@@ -122,7 +122,7 @@ export class Rain {
           float across = 1.0 - abs( vUv.x - 0.5 ) * 2.0;
           float along = smoothstep( 0.0, 0.25, vUv.y ) * smoothstep( 1.0, 0.72, vUv.y );
           float a = pow( across, 1.6 ) * along;
-          gl_FragColor = vec4( uColor * vBright * uIntensity, a * 0.5 );
+          gl_FragColor = vec4( uColor * vBright * uIntensity, a * 0.34 );
         }
       `,
     });
@@ -154,9 +154,9 @@ export class Rain {
       this.splashUniforms = {
         uTime: { value: 0 },
         uColor: { value: new THREE.Color(o.color ?? 0xbfe4ff) },
-        tSprite: { value: radialSprite(128, 3, 0.78) },
+        tSprite: { value: radialSprite(128, 2.2, 0.86) },
         uAmount: { value: 1 },
-        uScale: { value: 0.13 },
+        uScale: { value: 0.055 },
       };
       const sMat = new THREE.ShaderMaterial({
         uniforms: this.splashUniforms,
@@ -188,7 +188,7 @@ export class Rain {
           void main() {
             float a = texture2D( tSprite, vUv ).a;
             a *= ( 1.0 - vLife ) * smoothstep( 0.0, 0.12, vLife );
-            gl_FragColor = vec4( uColor * 0.9, a * 0.5 );
+            gl_FragColor = vec4( uColor * 0.8, a * 0.22 );
           }
         `,
       });
@@ -204,7 +204,7 @@ export class Rain {
       this.mistUniforms = {
         uTime: { value: 0 },
         uColor: { value: new THREE.Color(0x9dc4de) },
-        uOpacity: { value: 0.055 },
+        uOpacity: { value: 0.028 },
       };
       const mistMat = new THREE.ShaderMaterial({
         uniforms: this.mistUniforms,

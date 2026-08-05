@@ -54,7 +54,7 @@ export const GradeShader = {
     uSplit: { value: 0.16 },
     uVignette: { value: 0.42 },
     uCA: { value: 0.0016 },
-    uGrain: { value: 0.032 },
+    uGrain: { value: 0.014 },
     uWetLens: { value: 0.0 },
     uFlash: { value: 0.0 },
     uFlashColor: { value: new THREE.Vector3(1, 1, 1) },
@@ -163,7 +163,7 @@ export const GradeShader = {
 
       // Animated grain, stronger in the shadows like real film.
       float g = hash12(vUv * uResolution + fract(uTime) * 1371.0) - 0.5;
-      col += g * uGrain * (1.25 - 0.8 * l);
+      col += g * uGrain * (1.15 - 0.75 * l);
 
       // Dither to kill 8-bit banding in the gradients.
       col += (hash12(vUv * uResolution.yx + 17.3) - 0.5) / 255.0;
@@ -199,6 +199,31 @@ class DepthProvider {
     const prevTarget = renderer.getRenderTarget();
     const prevOverride = scene.overrideMaterial;
     const prevBg = scene.background;
+
+    // Anything that is not opaque geometry must be excluded. Effects like rain
+    // are billboarded in their own vertex shader, so under an override material
+    // they would collapse to the origin and poison the depth buffer.
+    const hidden: THREE.Object3D[] = [];
+    scene.traverse((o) => {
+      if (!o.visible) return;
+      const isSprite = (o as THREE.Sprite).isSprite;
+      const isPoints = (o as THREE.Points).isPoints;
+      let skip = isSprite || isPoints;
+      if (!skip) {
+        const mesh = o as THREE.Mesh;
+        const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+        const one = Array.isArray(mat) ? mat[0] : mat;
+        if (one) {
+          const custom = (one as THREE.ShaderMaterial).isShaderMaterial === true;
+          if (one.transparent || one.depthWrite === false || one.blending === THREE.AdditiveBlending || custom) skip = true;
+        }
+      }
+      if (skip) {
+        hidden.push(o);
+        o.visible = false;
+      }
+    });
+
     scene.overrideMaterial = this.material;
     scene.background = null;
     renderer.setRenderTarget(this.rt);
@@ -207,6 +232,7 @@ class DepthProvider {
     renderer.render(scene, camera);
     scene.overrideMaterial = prevOverride;
     scene.background = prevBg;
+    for (const o of hidden) o.visible = true;
     renderer.setRenderTarget(prevTarget);
   }
   get texture(): THREE.Texture {
@@ -251,7 +277,7 @@ const DofShader = {
     float coc(vec2 uv) {
       float z = -viewZ(uv);
       float d = (z - uFocus) / max(z, 0.001);
-      return clamp(abs(d) * uAperture * 3.2, 0.0, 1.0) * uMaxCoC;
+      return clamp(abs(d) * uAperture * 1.5, 0.0, 1.0) * uMaxCoC;
     }
 
     void main() {
@@ -599,7 +625,7 @@ export class PostFX {
     if (this.dof) {
       this.dof.uniforms.uFocus.value = this.focusDistance;
       this.dof.uniforms.uAperture.value = this.aperture;
-      this.dof.uniforms.uMaxCoC.value = clamp(this.size.y / 52, 8, 26);
+      this.dof.uniforms.uMaxCoC.value = clamp(this.size.y / 78, 6, 18);
     }
     this.grade.uniforms.uTime.value = time;
   }

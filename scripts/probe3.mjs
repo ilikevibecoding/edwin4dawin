@@ -9,7 +9,7 @@ const browser = await puppeteer.launch({
   executablePath: process.env.CHROME_PATH || '/usr/local/bin/google-chrome',
   headless: true,
   args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader',
-    '--enable-unsafe-swiftshader', '--window-size=480,270', '--mute-audio'],
+    '--enable-unsafe-swiftshader', '--window-size=480,270', '--mute-audio', '--autoplay-policy=no-user-gesture-required', '--autoplay-policy=no-user-gesture-required'],
   protocolTimeout: 300000,
 });
 const page = await browser.newPage();

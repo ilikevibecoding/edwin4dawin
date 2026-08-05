@@ -29,7 +29,7 @@ export function buildApartment(ctx: SetContext): GameSet {
   scene.fog = new THREE.FogExp2(0x0a1219, 0.02);
   const env = sky.buildEnvironment(renderer, [envPanel(0xffb066, 1.6, 6, 4, new THREE.Vector3(0, 2.2, -3))]);
   scene.environment = env;
-  scene.environmentIntensity = 0.34;
+  scene.environmentIntensity = 0.6;
 
   /* -------------------------------------------------------------- shell */
   const W = 7.2, D = 6.4, H = 2.75;
@@ -144,7 +144,7 @@ export function buildApartment(ctx: SetContext): GameSet {
   scene.add(sign);
 
   /* --------------------------------------------------------------- lights */
-  const lamp = ceilingLamp(0xffd0a0, 26, 0.3);
+  const lamp = ceilingLamp(0xffd0a0, 20, 0.3);
   lamp.group.position.set(-1.4, H - 0.34, 0.7);
   lamp.light.target.position.set(-1.4, 0, 0.7);
   scene.add(lamp.group);
@@ -152,7 +152,7 @@ export function buildApartment(ctx: SetContext): GameSet {
   // Cold city light through the window: the counter-key.
   const windowKey = spotLight(q, {
     color: 0x86b6e8,
-    intensity: 90,
+    intensity: 52,
     position: new THREE.Vector3(2.6, 3.0, -D / 2 - 2.2),
     target: new THREE.Vector3(0.2, 1.1, 0.6),
     angle: 0.7,
@@ -168,7 +168,7 @@ export function buildApartment(ctx: SetContext): GameSet {
   shaft.mesh.rotation.x = -0.22;
   scene.add(shaft.mesh);
 
-  const amb = new THREE.HemisphereLight(0x2c3b4a, 0x1a150f, 0.9);
+  const amb = new THREE.HemisphereLight(0x35465a, 0x241d14, 1.9);
   scene.add(amb);
 
   const tvFlickerLight = tv.light;
@@ -206,6 +206,38 @@ export function buildApartment(ctx: SetContext): GameSet {
     cower: { pos: [2.9, 0, 2.3], rotY: -2.2 },
   };
 
+  const bounds = { minX: -W / 2 + 0.4, maxX: W / 2 - 0.4, minZ: -D / 2 + 0.4, maxZ: D / 2 - 0.4 };
+  const colliders: GameSet['colliders'] = [
+    { min: [-2.5, 1.0], max: [-0.5, 2.0] },     // sofa
+    { min: [-1.9, -0.4], max: [-0.7, 0.3] },    // coffee table
+    { min: [-3.6, 0.0], max: [-3.0, 1.2] },     // tv stand
+    { min: [-3.5, -3.0], max: [-0.9, -2.5] },   // kitchen counter
+    { min: [1.5, -1.95], max: [2.7, -1.05] },   // dining table
+    { min: [2.6, 1.8], max: [3.4, 2.9] },       // boxes
+  ];
+  const interactables: GameSet['interactables'] = [
+    {
+      id: 'i_bottles', at: [-1.3, 0.55, -0.05], label: 'COUNT THE BOTTLES', marker: true,
+      think: 'Six since noon. His blood alcohol is above two per cent. He will not remember tonight.',
+      flag: 'sawBottles',
+    },
+    {
+      id: 'i_drawing', at: [-3.3, 1.5, -1.2], label: "EXAMINE THE CHILD'S DRAWING", marker: true,
+      think: 'Three figures. One of them has been scribbled out, hard enough to tear the paper.',
+      flag: 'sawDrawing',
+    },
+    {
+      id: 'i_tv', at: [-3.2, 1.35, 0.6], label: 'WATCH THE BROADCAST',
+      think: 'Two hundred and forty-three deviants this month. Sixty-one per cent of humans want us recalled.',
+      flag: 'sawNews',
+    },
+    {
+      id: 'i_window', at: [1.2, 1.4, -2.9], label: 'CLEAN THE WINDOW', radius: 1.4,
+      think: 'Two hundred and eleven days of the same list. I have never once been asked to stop.',
+      flag: 'cleaned',
+    },
+  ];
+
   const scanTargets: GameSet['scanTargets'] = [
     {
       id: 'bottles',
@@ -236,6 +268,9 @@ export function buildApartment(ctx: SetContext): GameSet {
     scene,
     camera,
     marks,
+    bounds,
+    colliders,
+    interactables,
     lights: { lamp: lamp.light, windowKey, tv: tvFlickerLight, amb },
     scanTargets,
     rain,
@@ -248,21 +283,21 @@ export function buildApartment(ctx: SetContext): GameSet {
       tvPhase += dt;
       const f = 0.75 + Math.sin(tvPhase * 7.3) * 0.12 + Math.sin(tvPhase * 19.1) * 0.06;
       tvFlickerLight.intensity = 12 * f;
-      lamp.light.intensity = 26 + Math.sin(time * 1.7) * 0.7;
+      lamp.light.intensity = 20 + Math.sin(time * 1.7) * 0.6;
     },
     applyLook(fx) {
       fx.wetLens = 0;
-      fx.setBloom(0.34, 0.78, 1.05);
+      fx.setBloom(0.16, 0.7, 1.9);
       fx.setStreak(0.16, new THREE.Vector3(0.9, 0.66, 0.4));
-      fx.highlightCeiling = 10;
+      fx.highlightCeiling = 6.0;
       fx.applyLook({
-        uExposure: 1.28,
+        uExposure: 1.5,
         uContrast: 1.12,
         uSaturation: 1.02,
         uSplit: 0.22,
         uVignette: 0.52,
-        uGrain: 0.03,
-        uHalation: 0.2,
+        uGrain: 0.008,
+        uHalation: 0.1,
         uShadowTint: new THREE.Vector3(0.34, 0.58, 0.86),
         uHighlightTint: new THREE.Vector3(1.0, 0.82, 0.62),
       });
@@ -272,7 +307,7 @@ export function buildApartment(ctx: SetContext): GameSet {
     },
     actions: {
       lampSwing: (on) => {
-        lamp.light.intensity = on ? 14 : 26;
+        lamp.light.intensity = on ? 11 : 20;
       },
       tvOff: (on) => {
         tvFlickerLight.intensity = on ? 0 : 12;

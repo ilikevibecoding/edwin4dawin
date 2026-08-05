@@ -16,7 +16,7 @@ export const CH5: Chapter = {
   minutes: 1.5,
   hud: { actor: 'NOAH', model: 'RK-800 #313 248 317 - 51' },
   cast: [
-    { id: 'connor', spec: 'connor', mark: 'negotiate', pose: 'idle', led: 'yellow' },
+    { id: 'connor', spec: 'connor', mark: 'entry', pose: 'idle', led: 'yellow' },
     { id: 'markus', spec: 'markus', mark: 'edgeDeviant', pose: 'idleAlert', led: 'blue' },
     { id: 'hank', spec: 'hank', mark: 'partner', pose: 'handsPockets', hidden: true },
   ],
@@ -32,6 +32,16 @@ export const CH5: Chapter = {
     { t: 'title', kicker: 'EPILOGUE', title: 'DIVERGENCE', sub: 'THE SAME ROOF — 05:41', dur: 4.2 },
     { t: 'hud', show: true, actor: 'NOAH', model: 'RK-800 #313 248 317 - 51' },
     { t: 'objective', text: 'DECIDE WHAT YOU ARE' },
+
+    // --- Walk back out to the ledge on your own feet.
+    { t: 'letterbox', on: false },
+    { t: 'explore', who: 'connor',
+      objective: 'GO TO THE LEDGE',
+      goal: { mark: 'negotiate', radius: 1.4 },
+      demoPath: ['i_edge'],
+      timeout: 90,
+    },
+    { t: 'letterbox', on: true },
 
     { t: 'shot', pos: [-2.2, EYE, 6.4], target: 'connor', fov: 40, handheld: 0.4 },
     { t: 'do', who: 'connor', look: 'markus', led: 'yellow' },

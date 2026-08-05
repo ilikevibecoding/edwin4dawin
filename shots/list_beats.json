@@ -1,0 +1,5 @@
+[
+ {"url":"/?chapter=ch1&q=medium&seek=34&rf=3","out":"shots/B1_ch1_dialogue.png","settle":6000},
+ {"url":"/?chapter=ch3&q=medium&seek=30&rf=3","out":"shots/B3_ch3_interrogation.png","settle":6000},
+ {"url":"/?chapter=ch4&q=medium&seek=36&rf=3","out":"shots/B4_ch4_street.png","settle":6000}
+]

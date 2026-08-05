@@ -45,6 +45,20 @@ export const CH3: Chapter = {
     { t: 'do', who: 'suspect', look: 'connor', expr: 'sad', led: 'yellow' },
     { t: 'say', who: 'suspect', text: '…', dur: 1.6, silent: true },
 
+    // --- Hand over control: work the room before the interview.
+    { t: 'letterbox', on: false },
+    { t: 'objective', text: 'WORK THE ROOM' },
+    {
+      t: 'explore', who: 'connor',
+      objective: 'WORK THE ROOM',
+      require: ['i_file', 'i_suspect'],
+      goal: { mark: 'investigatorSeat', radius: 1.1 },
+      demoPath: ['i_mirror', 'i_file', 'i_suspect'],
+      timeout: 120,
+    },
+    { t: 'letterbox', on: true },
+    { t: 'do', who: 'connor', mark: 'investigatorSeat', pose: 'sit' },
+
     // --- Read him first.
     { t: 'objective', text: 'ANALYSE THE SUSPECT' },
     { t: 'shot', pos: [0.9, 1.75, 0.9], look: [0, 1.1, -1.0], fov: 46, handheld: 0.25, aperture: 0.5 },

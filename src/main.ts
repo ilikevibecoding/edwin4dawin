@@ -65,6 +65,17 @@ async function boot(): Promise<void> {
   const game = new Game(engine, params);
   (window as unknown as { __game: unknown }).__game = game;
   await game.boot();
+
+  // Film mode: stop the realtime loop and expose a manual fixed-step driver so
+  // frames can be rendered and captured one at a time, at any speed.
+  if (params.get('film') === '1') {
+    engine.stop();
+    engine.deterministic = true;
+    (window as unknown as { __film: { step: (dt: number) => void; time: () => number } }).__film = {
+      step: (dt: number) => engine.step(dt),
+      time: () => engine.clock.time,
+    };
+  }
   markReady();
 }
 

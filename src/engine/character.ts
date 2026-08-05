@@ -509,6 +509,24 @@ export class Character {
     this.moveQueue = { to: new THREE.Vector3(x, this.group.position.y, z), speed, face };
     return this;
   }
+
+  /**
+   * Direct locomotion for player control: a world-space direction plus a speed.
+   * The walk cycle, facing and lean all follow from this, and it takes priority
+   * over any scripted `walkTo`.
+   */
+  drive(dirX: number, dirZ: number, speed: number): this {
+    this.driveDir.set(dirX, dirZ);
+    this.driveSpeed = speed;
+    if (this.driveDir.lengthSq() > 1e-6) this.moveQueue = null;
+    return this;
+  }
+  private driveDir = new THREE.Vector2();
+  private driveSpeed = 0;
+  /** Applied by the controller after collision resolution. */
+  get plannedStep(): THREE.Vector2 {
+    return this.driveDir;
+  }
   get isMoving(): boolean {
     return this.moveQueue !== null;
   }
@@ -532,7 +550,14 @@ export class Character {
     this.rigRoot.rotation.set(0, 0, 0);
 
     /* locomotion */
-    if (this.moveQueue) {
+    if (this.driveDir.lengthSq() > 1e-6) {
+      // Player-driven movement: the controller has already resolved collision,
+      // so just face the direction of travel and let the walk layer play.
+      const want = Math.atan2(this.driveDir.x, this.driveDir.y);
+      this.group.rotation.y = angleDamp(this.group.rotation.y, want, 9, dt);
+      this.walkSpeed = damp(this.walkSpeed, this.driveSpeed, 9, dt);
+      this.driveDir.set(0, 0);
+    } else if (this.moveQueue) {
       const to = this.moveQueue.to;
       const here = this.group.position;
       const dx = to.x - here.x, dz = to.z - here.z;

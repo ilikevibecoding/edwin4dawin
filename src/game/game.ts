@@ -231,6 +231,30 @@ export class Game {
     this.ui.showHud(false);
     if (chapter.objective) this.ui.setObjective(chapter.objective);
 
+    // Optional seek: fast-forward the story to a timestamp without rendering,
+    // which makes any beat cheap to screenshot or start filming from.
+    const seek = Number(this.params.get('seek') ?? 0);
+    const roam = this.params.get('roam') === '1';
+    if ((seek > 0 || roam) && this.director) {
+      this.ui.instant = true;
+      this.director.fastForward = true;
+      this.director.haltOnExplore = roam;
+      this.director.setDemo(true);
+      // Warmed in slices so a roam phase can interrupt the seek.
+      const budget = seek > 0 ? seek : 600;
+      const slice = 2;
+      for (let t = 0; t < budget; t += slice) {
+        this.engine.warm(Math.min(slice, budget - t), 1 / 30);
+        if (this.director.seekHalted) break;
+      }
+      this.director.fastForward = false;
+      this.director.haltOnExplore = false;
+      this.ui.instant = false;
+      this.director.setDemo(this.demo);
+      // Re-enter the roam phase now that time is running normally.
+      if (this.director.seekHalted) this.director.resumeExploreAfterSeek();
+    }
+
     // Let the shaders compile against a couple of frames before revealing.
     this.engine.warm(0.6, 0.1);
     await frame();
@@ -253,9 +277,9 @@ export class Game {
     this.ui.showFlow(`${chapter.kicker} — ${chapter.title}`, chapter.flow, taken, stats);
     this.awaitingFlow = true;
     audio.chime();
-    if (this.demo) {
-      window.setTimeout(() => this.advanceFromFlow(), 7000);
-    }
+    // Virtual-clock timer so autoplay advances identically in realtime play and
+    // in frame-by-frame film capture.
+    this.flowTimer = this.demo ? 6.5 : -1;
   }
 
   private async advanceFromFlow(): Promise<void> {
@@ -316,21 +340,61 @@ export class Game {
     window.addEventListener('mousemove', (e) => {
       this.pointer.x = e.clientX;
       this.pointer.y = e.clientY;
+      // Mouse look while roaming: pointer lock when granted, drag otherwise.
+      const p = this.director?.player;
+      if (p?.enabled && !this.ui.scanning) {
+        if (document.pointerLockElement || this.dragging) p.look(e.movementX, e.movementY);
+      }
     });
+    window.addEventListener('mousedown', () => {
+      this.dragging = true;
+    });
+    window.addEventListener('mouseup', () => {
+      this.dragging = false;
+    });
+    window.addEventListener('wheel', (e) => {
+      const p = this.director?.player;
+      if (p?.enabled) p.zoom(e.deltaY);
+    }, { passive: true });
     window.addEventListener('click', () => {
       void audio.start();
       if (this.awaitingFlow) {
         void this.advanceFromFlow();
         return;
       }
+      // Grab the pointer for FPS-style look control during free roam.
+      const p = this.director?.player;
+      if (p?.enabled && !this.ui.scanning && !document.pointerLockElement) {
+        const cv = document.getElementById('view');
+        cv?.requestPointerLock?.();
+      }
       this.director?.click();
     });
   }
 
   private perfShown = false;
+  private dragging = false;
+  private flowTimer = -1;
+
+  /** Feed held keys into the player controller each frame. */
+  private pumpMovement(): void {
+    const p = this.director?.player;
+    if (!p?.enabled) return;
+    const down = (...keys: string[]): boolean => keys.some((k) => this.held.has(k));
+    const forward = (down('w', 'W', 'ArrowUp') ? 1 : 0) - (down('s', 'S', 'ArrowDown') ? 1 : 0);
+    const right = (down('d', 'D', 'ArrowRight') ? 1 : 0) - (down('a', 'A', 'ArrowLeft') ? 1 : 0);
+    p.setInput({ forward, right, run: down('Shift', 'ShiftLeft', 'ShiftRight') });
+  }
 
   private tick(dt: number): void {
-    void dt;
+    if (this.flowTimer > 0) {
+      this.flowTimer -= dt;
+      if (this.flowTimer <= 0) {
+        this.flowTimer = -1;
+        void this.advanceFromFlow();
+      }
+    }
+    this.pumpMovement();
     if (this.director && this.set) {
       this.ui.updateScan(this.set.camera, this.pointer);
     }

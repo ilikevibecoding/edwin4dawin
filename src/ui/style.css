@@ -370,3 +370,44 @@ body.playing.pointer { cursor: default; }
 @keyframes qteShrink { from { transform: scale(2.6); opacity: 0.9; } to { transform: scale(1); opacity: 1; } }
 @keyframes qteHit { 50% { transform: scale(1.25); } to { opacity: 0; transform: scale(1.5); } }
 @keyframes qteMiss { 20% { transform: translateX(-7px); } 40% { transform: translateX(7px); } to { opacity: 0; } }
+
+/* ---------------- free roam ---------------- */
+.iprompt {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, 40px); z-index: 25;
+  display: flex; align-items: center; gap: 10px; pointer-events: none;
+  animation: promptIn 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.iprompt .key {
+  width: 30px; height: 30px; display: grid; place-items: center;
+  border: 1px solid var(--cy); color: var(--cy); font-size: 12px; font-weight: 700;
+  background: rgba(6, 16, 22, 0.72); box-shadow: 0 0 18px rgba(87, 216, 255, 0.3);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+.iprompt .lbl {
+  font-size: 11px; letter-spacing: 0.26em; color: var(--ink);
+  padding: 7px 12px; background: rgba(6, 16, 22, 0.72); border-left: 2px solid var(--cy);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
+}
+.iprompt.far { opacity: 0.45; }
+
+.controls {
+  position: absolute; bottom: 4.5%; left: 50%; transform: translateX(-50%); z-index: 22;
+  display: flex; gap: 22px; font-size: 8.5px; letter-spacing: 0.26em; color: rgba(234, 246, 255, 0.42);
+  pointer-events: none; animation: slideD 500ms ease-out both;
+}
+.controls b { color: var(--cy); font-weight: 600; margin-right: 5px; }
+
+/* World-space objective marker */
+.wmark {
+  position: absolute; transform: translate(-50%, -50%); z-index: 23; pointer-events: none;
+}
+.wmark i {
+  display: block; width: 16px; height: 16px; border: 1px solid var(--cy); transform: rotate(45deg);
+  box-shadow: 0 0 14px var(--cy-glow); animation: pulse 2s ease-in-out infinite;
+}
+.wmark span {
+  position: absolute; left: 22px; top: 1px; white-space: nowrap; font-size: 9px;
+  letter-spacing: 0.22em; color: var(--ink-dim);
+}
+
+@keyframes promptIn { from { opacity: 0; transform: translate(-50%, 52px); } }

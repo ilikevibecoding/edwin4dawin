@@ -31,7 +31,7 @@ export function buildRooftop(ctx: SetContext): GameSet {
     sunSize: 0.03,
   });
   scene.add(sky.mesh);
-  scene.fog = new THREE.FogExp2(0x0b1826, 0.011);
+  scene.fog = new THREE.FogExp2(0x0a1522, 0.019);
 
   const env = sky.buildEnvironment(renderer, [
     envPanel(0x2f79ff, 2.2, 40, 26, new THREE.Vector3(-40, 10, -30)),
@@ -39,14 +39,14 @@ export function buildRooftop(ctx: SetContext): GameSet {
     envPanel(0x64e0ff, 1.4, 26, 14, new THREE.Vector3(6, 6, 40)),
   ]);
   scene.environment = env;
-  scene.environmentIntensity = 0.62;
+  scene.environmentIntensity = 0.85;
 
   /* -------------------------------------------------------------- ground */
   const ground = new WetGround({
     size: 62,
     resolution: q.reflectionScale,
     wetness: 0.95,
-    reflectStrength: 1.15,
+    reflectStrength: 0.75,
     texRepeat: 16,
     color: 0x7c8288,
   });
@@ -82,7 +82,7 @@ export function buildRooftop(ctx: SetContext): GameSet {
   hut.position.set(-7.5, 0, -6);
   hut.rotation.y = 0.3;
   scene.add(hut);
-  const doorLight = new THREE.PointLight(0xffd9a8, 26, 9, 2);
+  const doorLight = new THREE.PointLight(0xffd9a8, 18, 9, 2);
   doorLight.position.set(-6.9, 1.4, -4.8);
   scene.add(doorLight);
 
@@ -124,7 +124,7 @@ export function buildRooftop(ctx: SetContext): GameSet {
   /* --------------------------------------------------------------- lights */
   const moon = dirLight(q, {
     color: 0x9fc0e8,
-    intensity: 0.55,
+    intensity: 1.15,
     position: new THREE.Vector3(-16, 22, -20),
     target: new THREE.Vector3(0, 1, 4),
     area: 16,
@@ -144,18 +144,18 @@ export function buildRooftop(ctx: SetContext): GameSet {
   scene.add(cityKey, cityKey.target);
 
   // Warm bounce from the sign wall.
-  const warmFill = new THREE.HemisphereLight(0x39506b, 0x14181c, 1.35);
+  const warmFill = new THREE.HemisphereLight(0x40597a, 0x181d24, 4.2);
   scene.add(warmFill);
 
-  const signBounce = new THREE.PointLight(0xff7048, 30, 30, 2);
+  const signBounce = new THREE.PointLight(0xff7048, 22, 30, 2);
   signBounce.position.set(20, 5, 16);
   scene.add(signBounce);
-  const signBounce2 = new THREE.PointLight(0x63e0ff, 40, 34, 2);
+  const signBounce2 = new THREE.PointLight(0x63e0ff, 28, 34, 2);
   signBounce2.position.set(-18, 7, 20);
   scene.add(signBounce2);
 
   // Practical lamp on the roof, close to the action: this is the key light.
-  const lamp = streetLamp(4.6, 0xffd2a0, 150);
+  const lamp = streetLamp(4.6, 0xffd2a0, 70);
   lamp.group.position.set(-4.2, 0, 3.4);
   scene.add(lamp.group);
   const lampCone = new VolumeCone({ height: 5.2, radius: 2.6, color: 0xffd2a0, opacity: q.volumetrics ? 0.12 : 0.05 });
@@ -164,7 +164,7 @@ export function buildRooftop(ctx: SetContext): GameSet {
 
   const keySpot = spotLight(q, {
     color: 0xbcd8ff,
-    intensity: 120,
+    intensity: 78,
     position: new THREE.Vector3(-3.4, 6.2, 9.5),
     target: new THREE.Vector3(0, 1.3, 11.5),
     angle: 0.62,
@@ -187,7 +187,7 @@ export function buildRooftop(ctx: SetContext): GameSet {
   drone.add(glowSprite(0x4fc6ff, 0.6, 0.8).translateZ(0.3));
   const droneLight = spotLight(q, {
     color: 0xdff0ff,
-    intensity: 260,
+    intensity: 110,
     position: new THREE.Vector3(0, 0, 0),
     target: new THREE.Vector3(0, -8, 2),
     angle: 0.3,
@@ -236,7 +236,7 @@ export function buildRooftop(ctx: SetContext): GameSet {
 
   /* --------------------------------------------------------------- marks */
   const marks: GameSet['marks'] = {
-    entry: { pos: [-6.4, 0, -3.4], rotY: 0.4 },
+    entry: { pos: [-5.0, 0, -1.5], rotY: 0.4 },
     approach: { pos: [-1.6, 0, 6.2], rotY: 0.18 },
     negotiate: { pos: [-0.4, 0, 9.1], rotY: 0.05 },
     edgeDeviant: { pos: [0.5, 0, 13.1], rotY: Math.PI + 0.1 },
@@ -245,6 +245,39 @@ export function buildRooftop(ctx: SetContext): GameSet {
     wide: { pos: [-8, 0, 0], rotY: 0.6 },
     fallen: { pos: [0.2, 0, 12.4], rotY: 0.2 },
   };
+
+  // The ledge itself is fenced off: the drop is a story beat, not a hazard.
+  const bounds = { minX: -14.3, maxX: 14.3, minZ: -14.3, maxZ: 12.4 };
+  const colliders: GameSet['colliders'] = [
+    { min: [-9.4, -7.9], max: [-5.6, -4.1] },   // roof access hut
+    { min: [6.0, -8.5], max: [7.0, -7.5] },     // vent stacks
+    { min: [8.1, -6.7], max: [9.1, -5.7] },
+    { min: [-11.5, 2.5], max: [-10.5, 3.5] },
+    { min: [-7.7, -3.9], max: [-5.1, -2.5] },   // police barricade
+    { min: [-4.45, 3.15], max: [-3.95, 3.65] }, // lamp post
+  ];
+  const interactables: GameSet['interactables'] = [
+    {
+      id: 'i_gun', at: [-3.9, 0.1, 5.1], label: 'EXAMINE THE SERVICE PISTOL', marker: true,
+      think: 'DPD issue. Two rounds fired. The officer who owned it is downstairs on a stretcher.',
+      flag: 'sawGun',
+    },
+    {
+      id: 'i_blood', at: [-2.6, 0.05, 7.4], label: 'ANALYSE THE THIRIUM', marker: true,
+      think: 'Thirium 310, six minutes old. He is losing pressure. He does not have long either.',
+      flag: 'sawBlood',
+    },
+    {
+      id: 'i_door', at: [-6.6, 1.2, -4.2], label: 'EXAMINE THE FORCED DOOR',
+      think: 'The lock was sheared at two thousand newtons. He carried her up twelve flights.',
+      flag: 'sawDoor',
+    },
+    {
+      id: 'i_edge', at: [0.2, 0.6, 12.2], label: 'LOOK OVER THE EDGE', radius: 2.2,
+      think: 'Twelve floors. Eighty-one kilometres per hour at impact. No survivable outcome.',
+      flag: 'sawEdge',
+    },
+  ];
 
   const scanTargets: GameSet['scanTargets'] = [
     {
@@ -287,6 +320,9 @@ export function buildRooftop(ctx: SetContext): GameSet {
     scene,
     camera,
     marks,
+    bounds,
+    colliders,
+    interactables,
     lights,
     scanTargets,
     wetGround: ground,
@@ -312,24 +348,24 @@ export function buildRooftop(ctx: SetContext): GameSet {
       // Failing roof lamp.
       lampFlicker = Math.max(0, lampFlicker - dt);
       if (lampFlicker <= 0 && Math.random() < dt * 0.25) lampFlicker = 0.12 + Math.random() * 0.2;
-      lamp.light.intensity = lampFlicker > 0 ? 40 + Math.random() * 90 : 150;
+      lamp.light.intensity = lampFlicker > 0 ? 22 + Math.random() * 42 : 70;
     },
     prerender(r, cam) {
       ground.renderReflection(r, scene, cam);
     },
     applyLook(fx) {
-      fx.wetLens = 0.5;
-      fx.setBloom(0.42, 0.82, 1.0);
-      fx.setStreak(0.4, new THREE.Vector3(0.4, 0.62, 1.0));
-      fx.highlightCeiling = 11;
+      fx.wetLens = 0.3;
+      fx.setBloom(0.17, 0.72, 1.95);
+      fx.setStreak(0.16, new THREE.Vector3(0.4, 0.62, 1.0));
+      fx.highlightCeiling = 6.5;
       fx.applyLook({
-        uExposure: 1.32,
+        uExposure: 1.8,
         uContrast: 1.1,
         uSaturation: 1.06,
         uSplit: 0.2,
-        uVignette: 0.5,
-        uGrain: 0.036,
-        uHalation: 0.16,
+        uVignette: 0.36,
+        uGrain: 0.008,
+        uHalation: 0.09,
         uShadowTint: new THREE.Vector3(0.3, 0.6, 0.95),
         uHighlightTint: new THREE.Vector3(1.0, 0.86, 0.7),
       });
@@ -340,12 +376,12 @@ export function buildRooftop(ctx: SetContext): GameSet {
     },
     actions: {
       droneBeam: (on) => {
-        droneLight.intensity = on ? 260 : 0;
+        droneLight.intensity = on ? 110 : 0;
         droneCone.opacity = on ? (q.volumetrics ? 0.1 : 0.04) : 0;
       },
       redAlert: (on) => {
         keySpot.color.set(on ? 0xff5a55 : 0xbcd8ff);
-        keySpot.intensity = on ? 150 : 120;
+        keySpot.intensity = on ? 96 : 78;
       },
     },
   };

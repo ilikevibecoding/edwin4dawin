@@ -11,6 +11,9 @@ import type { ScanTargetDef } from '../sets/types';
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 export class UI {
+  /** When true, confirmations resolve synchronously (used for seeking). */
+  instant = false;
+
   private subs = $('subs');
   private subsWho = $('subs-who');
   private subsLine = $('subs-line');
@@ -47,6 +50,84 @@ export class UI {
   private flowSub = $('flow-sub');
   private flowStats = $('flow-stats');
   private perf = $('perf');
+  private prompt = $('prompt');
+  private controls = $('controls');
+
+  /* ------------------------------------------------------------ free roam */
+
+  setPrompt(label: string | null): void {
+    if (!label) {
+      this.prompt.classList.add('hidden');
+      return;
+    }
+    const lbl = this.prompt.querySelector('.lbl') as HTMLElement;
+    if (lbl.textContent !== label) lbl.textContent = label;
+    this.prompt.classList.remove('hidden');
+  }
+
+  showControls(on: boolean): void {
+    this.controls.classList.toggle('hidden', !on);
+  }
+
+  private markerEls = new Map<string, HTMLElement>();
+  private goalEl: HTMLElement | null = null;
+
+  /** Diamond markers over unexamined objects and the current objective. */
+  updateWorldMarkers(
+    camera: THREE.PerspectiveCamera,
+    items: { id: string; at: [number, number, number]; label: string; marker?: boolean }[],
+    used: Set<string>,
+    goal: THREE.Vector3 | null,
+  ): void {
+    const v = new THREE.Vector3();
+    const place = (el: HTMLElement, x: number, y: number, z: number): boolean => {
+      v.set(x, y, z).project(camera);
+      const on = v.z < 1 && v.x > -1 && v.x < 1 && v.y > -1 && v.y < 1;
+      el.style.display = on ? 'block' : 'none';
+      if (!on) return false;
+      el.style.left = `${(v.x * 0.5 + 0.5) * window.innerWidth}px`;
+      el.style.top = `${(-v.y * 0.5 + 0.5) * window.innerHeight}px`;
+      return true;
+    };
+    for (const it of items) {
+      if (!it.marker) continue;
+      let el = this.markerEls.get(it.id);
+      if (used.has(it.id)) {
+        if (el) {
+          el.remove();
+          this.markerEls.delete(it.id);
+        }
+        continue;
+      }
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'wmark';
+        el.innerHTML = `<i></i><span>${it.label}</span>`;
+        document.getElementById('stage')!.appendChild(el);
+        this.markerEls.set(it.id, el);
+      }
+      place(el, it.at[0], it.at[1] + 0.35, it.at[2]);
+    }
+    if (goal) {
+      if (!this.goalEl) {
+        this.goalEl = document.createElement('div');
+        this.goalEl.className = 'wmark';
+        this.goalEl.innerHTML = '<i></i><span>GO HERE</span>';
+        document.getElementById('stage')!.appendChild(this.goalEl);
+      }
+      place(this.goalEl, goal.x, goal.y + 1.2, goal.z);
+    } else if (this.goalEl) {
+      this.goalEl.remove();
+      this.goalEl = null;
+    }
+  }
+
+  clearWorldMarkers(): void {
+    for (const el of this.markerEls.values()) el.remove();
+    this.markerEls.clear();
+    this.goalEl?.remove();
+    this.goalEl = null;
+  }
 
   /* --------------------------------------------------------------- basics */
 
@@ -171,6 +252,11 @@ export class UI {
     if (el) el.classList.add('picked');
     const cb = this.choiceResolve;
     this.choiceResolve = null;
+    if (this.instant) {
+      this.choices.classList.add('hidden');
+      cb(i);
+      return;
+    }
     window.setTimeout(() => {
       this.choices.classList.add('hidden');
       cb(i);
@@ -260,10 +346,15 @@ export class UI {
     if (!s) return;
     this.qteState = null;
     s.el.classList.add(ok ? 'hit' : 'miss');
-    window.setTimeout(() => {
+    if (this.instant) {
       this.qte.classList.add('hidden');
       this.qte.innerHTML = '';
-    }, 420);
+    } else {
+      window.setTimeout(() => {
+        this.qte.classList.add('hidden');
+        this.qte.innerHTML = '';
+      }, 420);
+    }
     s.resolve(ok);
   }
 
@@ -367,7 +458,8 @@ export class UI {
       `<b>${t.label}</b><br>` + t.readout.map((r) => `· ${r}`).join('<br>');
     this.scanReadout.classList.add('show');
     if (this.scanFound.size >= this.scanNeed) {
-      window.setTimeout(() => this.endScan(), 1500);
+      if (this.instant) this.endScan();
+      else window.setTimeout(() => this.endScan(), 1500);
     }
     return t;
   }

@@ -18,13 +18,17 @@ export class Audio {
   private cue: { stop: () => void } | null = null;
   enabled = true;
 
-  /** Must be called from a user gesture. */
+  /**
+   * Safe to call at any time; ideally from a user gesture. `resume()` is never
+   * awaited because on a blocked context that promise can stay pending forever,
+   * which would stall the whole boot sequence.
+   */
   async start(): Promise<void> {
     if (this.started) return;
     try {
       const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new Ctor();
-      await this.ctx.resume();
+      void this.ctx.resume().catch(() => undefined);
     } catch {
       this.enabled = false;
       return;

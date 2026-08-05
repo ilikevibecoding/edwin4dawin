@@ -110,10 +110,23 @@ export class CameraRig {
     // A cut should not inherit the previous frame's smoothing.
     this.settle = shot.pos ? 0 : 1;
     if (this.fx) {
-      this.fx.aperture = shot.aperture ?? 0.85;
+      this.fx.aperture = shot.aperture ?? 0.6;
       if (shot.pos) this.fx.focusDistance = this.focusDistanceNow();
     }
     this.noiseSeed = Math.random() * 100;
+  }
+
+  /** Adopt the live camera transform, e.g. after the player hands back control. */
+  syncFromCamera(): void {
+    this.curPos.copy(this.camera.position);
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    this.curLook.copy(this.camera.position).addScaledVector(dir, 3);
+    this.posA.copy(this.curPos);
+    this.posB.copy(this.curPos);
+    this.lookA.copy(this.curLook);
+    this.lookB.copy(this.curLook);
+    this.settle = 1;
   }
 
   addShake(power: number): void {

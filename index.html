@@ -54,6 +54,16 @@
         <div class="precon-label" id="precon-label">SIMULATING…</div>
       </div>
 
+      <!-- Free-roam interaction prompt -->
+      <div id="prompt" class="iprompt hidden">
+        <span class="key">E</span><span class="lbl">EXAMINE</span>
+      </div>
+
+      <!-- Free-roam control hint -->
+      <div id="controls" class="controls hidden">
+        <span><b>W A S D</b> MOVE</span><span><b>SHIFT</b> RUN</span><span><b>MOUSE</b> LOOK</span><span><b>E</b> INTERACT</span><span><b>TAB</b> ANALYSE</span>
+      </div>
+
       <!-- Subtitles -->
       <div id="subs" class="subs hidden">
         <span class="who" id="subs-who"></span>
@@ -62,7 +72,7 @@
 
       <!-- Dialogue choices -->
       <div id="choices" class="choices hidden">
-        <div class="choice-timer"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="44"/><circle class="fill" id="choice-arc" cx="50" cy="50" r="44"/></svg></div>
+        <div class="choice-timer" id="choice-timer"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="44"/><circle class="fill" id="choice-arc" cx="50" cy="50" r="44"/></svg></div>
         <div class="choice-list" id="choice-list"></div>
       </div>
 

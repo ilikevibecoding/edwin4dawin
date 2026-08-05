@@ -1,0 +1,33 @@
+[
+  { "name": "a_base", "steps": 4 },
+  {
+    "name": "b_expose",
+    "steps": 4,
+    "eval": "const g=window.__game,e=window.__engine;e.fx.applyLook({uExposure:1.9,uGrain:0.008});g.set.scene.environmentIntensity=0.9;"
+  },
+  {
+    "name": "c_lights",
+    "steps": 4,
+    "eval": "const g=window.__game,e=window.__engine;const L=g.set.lights;L.moon.intensity=2.2;L.cityKey.intensity=3.2;g.set.scene.traverse(o=>{if(o.isHemisphereLight)o.intensity=6;});"
+  },
+  {
+    "name": "d_lessmirror",
+    "steps": 4,
+    "eval": "const g=window.__game;g.set.scene.traverse(o=>{const m=o.material;if(m&&m.userData&&m.userData.wet){m.roughness=0.42;m.color.setHex(0x9aa3aa);m.envMapIntensity=1.2;}});if(g.set.wetGround){g.set.wetGround.mesh.material.roughness=0.42;g.set.wetGround.mesh.material.color.setHex(0x9aa3aa);}"
+  },
+  {
+    "name": "e_norain",
+    "steps": 4,
+    "eval": "const g=window.__game;g.set.scene.traverse(o=>{if(o.isPoints&&o.material&&o.material.size)o.visible=false;if(o.isSprite)o.visible=false;});"
+  },
+  {
+    "name": "f_nograin",
+    "steps": 4,
+    "eval": "window.__engine.fx.applyLook({uGrain:0.0,uVignette:0.28,uContrast:1.02});"
+  },
+  {
+    "name": "g_bloomdown",
+    "steps": 4,
+    "eval": "window.__engine.fx.setBloom(0.14,0.7,1.9);window.__engine.fx.setStreak(0.12);"
+  }
+]

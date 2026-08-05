@@ -38,7 +38,7 @@ const TIERS: Record<QualityName, QualitySettings> = {
     ao: true, aoQuality: 'High', bloom: true, anamorphic: true,
     dof: true, dofSamples: 32, ssr: true, reflectionScale: 0.7,
     volumetrics: true, volumetricSteps: 36,
-    rainCount: 16000, splashCount: 900, smaa: true,
+    rainCount: 8000, splashCount: 420, smaa: true,
     textureSize: 512, characterSegments: 1.0, fillLights: true, hdr: true,
   },
   high: {
@@ -47,7 +47,7 @@ const TIERS: Record<QualityName, QualitySettings> = {
     ao: true, aoQuality: 'Medium', bloom: true, anamorphic: true,
     dof: true, dofSamples: 20, ssr: true, reflectionScale: 0.55,
     volumetrics: true, volumetricSteps: 24,
-    rainCount: 11000, splashCount: 560, smaa: true,
+    rainCount: 5200, splashCount: 260, smaa: true,
     textureSize: 512, characterSegments: 1.0, fillLights: true, hdr: true,
   },
   medium: {
@@ -56,7 +56,7 @@ const TIERS: Record<QualityName, QualitySettings> = {
     ao: false, aoQuality: 'Low', bloom: true, anamorphic: false,
     dof: true, dofSamples: 12, ssr: true, reflectionScale: 0.4,
     volumetrics: true, volumetricSteps: 14,
-    rainCount: 6000, splashCount: 280, smaa: false,
+    rainCount: 3000, splashCount: 140, smaa: false,
     textureSize: 256, characterSegments: 0.8, fillLights: true, hdr: true,
   },
   low: {
@@ -65,7 +65,7 @@ const TIERS: Record<QualityName, QualitySettings> = {
     ao: false, aoQuality: 'Low', bloom: true, anamorphic: false,
     dof: false, dofSamples: 8, ssr: false, reflectionScale: 0.3,
     volumetrics: false, volumetricSteps: 8,
-    rainCount: 2600, splashCount: 90, smaa: false,
+    rainCount: 1600, splashCount: 60, smaa: false,
     textureSize: 256, characterSegments: 0.6, fillLights: false, hdr: true,
   },
 };

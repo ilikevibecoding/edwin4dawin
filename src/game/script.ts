@@ -65,6 +65,22 @@ export type Step =
       slowmo?: number;
       shake?: number;
     }
+  /**
+   * Hand control to the player. Ends when every id in `require` has been
+   * examined and, if given, the player has reached `goal`.
+   */
+  | {
+      t: 'explore';
+      who: string;
+      objective?: string;
+      require?: string[];
+      goal?: { mark: string; radius?: number };
+      hint?: string;
+      /** Marks the autoplay demo walks through, in order. */
+      demoPath?: string[];
+      /** Safety valve: hand control back after this long. */
+      timeout?: number;
+    }
   | { t: 'scan'; need?: number; time?: number; hint?: string }
   | { t: 'precon'; label?: string; dur?: number }
   | { t: 'wait'; dur: number }

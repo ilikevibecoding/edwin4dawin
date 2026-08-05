@@ -1,0 +1,4 @@
+[
+ {"url":"/?chapter=ch1&q=medium&seek=34&rf=3&nopost=1","out":"shots/D1_ch1_nopost.png","settle":4000},
+ {"url":"/?chapter=ch3&q=medium&seek=30&rf=3","out":"shots/D3_ch3.png","settle":4000}
+]

@@ -1,0 +1,8 @@
+[
+ {"url":"/?chapter=ch1&q=medium&seek=48&rf=3","out":"shots/P1_rooftop_deviant.png","settle":3500},
+ {"url":"/?chapter=ch1&q=medium&seek=95&rf=3","out":"shots/P2_rooftop_choice.png","settle":3500},
+ {"url":"/?chapter=ch2&q=medium&seek=30&rf=3","out":"shots/P3_apartment.png","settle":3500},
+ {"url":"/?chapter=ch3&q=medium&seek=42&rf=3","out":"shots/P4_interrogation.png","settle":3500},
+ {"url":"/?chapter=ch4&q=medium&seek=40&rf=3","out":"shots/P5_street.png","settle":3500},
+ {"url":"/?chapter=ch4&q=medium&seek=95&rf=3","out":"shots/P6_street_speech.png","settle":3500}
+]

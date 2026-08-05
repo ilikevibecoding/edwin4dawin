@@ -31,7 +31,7 @@ export function buildStreet(ctx: SetContext): GameSet {
     sunColor: 0x8fb4d8,
   });
   scene.add(sky.mesh);
-  scene.fog = new THREE.FogExp2(0x0c1a28, 0.017);
+  scene.fog = new THREE.FogExp2(0x0a1624, 0.023);
 
   const env = sky.buildEnvironment(renderer, [
     envPanel(0x63e0ff, 3.0, 26, 12, new THREE.Vector3(-18, 6, 0)),
@@ -39,14 +39,14 @@ export function buildStreet(ctx: SetContext): GameSet {
     envPanel(0xffc247, 1.4, 16, 8, new THREE.Vector3(0, 4, 34)),
   ]);
   scene.environment = env;
-  scene.environmentIntensity = 0.7;
+  scene.environmentIntensity = 0.85;
 
   /* ---------------------------------------------------------------- road */
   const ground = new WetGround({
     size: 140,
     resolution: q.reflectionScale,
     wetness: 1.0,
-    reflectStrength: 1.3,
+    reflectStrength: 0.85,
     texRepeat: 34,
     color: 0x82888e,
   });
@@ -105,7 +105,7 @@ export function buildStreet(ctx: SetContext): GameSet {
       glass.rotation.y = sx > 0 ? -Math.PI / 2 : Math.PI / 2;
       scene.add(glass);
       // Interior spill so the shops read as occupied.
-      const inner = new THREE.PointLight(i % 3 === 0 ? 0xffc78a : 0x8fd8ff, 22, 14, 2);
+      const inner = new THREE.PointLight(i % 3 === 0 ? 0xffc78a : 0x8fd8ff, 14, 14, 2);
       inner.position.set(sx * 16.5, 2.0, z);
       scene.add(inner);
       facadeLights.push(inner);
@@ -124,7 +124,7 @@ export function buildStreet(ctx: SetContext): GameSet {
       sign.position.set(sx * 13.7, vertical ? 5.6 : 4.2, z + 1.5);
       sign.rotation.y = sx > 0 ? -Math.PI / 2 : Math.PI / 2;
       scene.add(sign);
-      const signLight = new THREE.PointLight(color, 46, 22, 2);
+      const signLight = new THREE.PointLight(color, 26, 22, 2);
       signLight.position.set(sx * 11.5, vertical ? 5.6 : 4.2, z + 1.5);
       scene.add(signLight);
       facadeLights.push(signLight);
@@ -146,7 +146,7 @@ export function buildStreet(ctx: SetContext): GameSet {
   for (let i = 0; i < 7; i++) {
     const z = -30 + i * 11;
     for (const sx of [-1, 1]) {
-      const l = streetLamp(6.4, 0xffd2a0, 320);
+      const l = streetLamp(6.4, 0xffd2a0, 150);
       l.group.position.set(sx * 8.6, 0, z);
       l.group.rotation.y = sx > 0 ? Math.PI : 0;
       scene.add(l.group);
@@ -192,7 +192,7 @@ export function buildStreet(ctx: SetContext): GameSet {
     s.position.set(x, 1.45, z);
     policeLine.add(s);
     beacons.push(s);
-    const bl = new THREE.PointLight(color, 55, 22, 2);
+    const bl = new THREE.PointLight(color, 30, 22, 2);
     bl.position.set(x, 1.5, z);
     policeLine.add(bl);
     beaconLights.push(bl);
@@ -202,11 +202,11 @@ export function buildStreet(ctx: SetContext): GameSet {
 
   // Searchlights behind the line, aimed down the street at the crowd.
   const searchA = spotLight(q, {
-    color: 0xeaf6ff, intensity: 900, position: new THREE.Vector3(-6, 7.5, -19),
+    color: 0xeaf6ff, intensity: 340, position: new THREE.Vector3(-6, 7.5, -19),
     target: new THREE.Vector3(-1, 1.4, 6), angle: 0.24, penumbra: 0.55, distance: 60, radius: 2,
   });
   const searchB = spotLight(q, {
-    color: 0xeaf6ff, intensity: 900, position: new THREE.Vector3(6, 7.5, -20),
+    color: 0xeaf6ff, intensity: 340, position: new THREE.Vector3(6, 7.5, -20),
     target: new THREE.Vector3(2, 1.4, 8), angle: 0.24, penumbra: 0.55, distance: 60, shadow: false,
   });
   scene.add(searchA, searchA.target, searchB, searchB.target);
@@ -232,10 +232,10 @@ export function buildStreet(ctx: SetContext): GameSet {
     target: new THREE.Vector3(0, 1, 0), area: 22, far: 90, radius: 3,
   });
   scene.add(moon, moon.target);
-  const amb = new THREE.HemisphereLight(0x3a5470, 0x161b20, 1.5);
+  const amb = new THREE.HemisphereLight(0x44607f, 0x1a2027, 2.6);
   scene.add(amb);
   const heroKey = spotLight(q, {
-    color: 0xbcd8ff, intensity: 130, position: new THREE.Vector3(-3.2, 5.4, 10),
+    color: 0xbcd8ff, intensity: 85, position: new THREE.Vector3(-3.2, 5.4, 10),
     target: new THREE.Vector3(0, 1.4, 5), angle: 0.7, penumbra: 0.8, distance: 24, radius: 3,
   });
   scene.add(heroKey, heroKey.target);
@@ -278,6 +278,35 @@ export function buildStreet(ctx: SetContext): GameSet {
     walkStart: { pos: [0, 0, 22], rotY: Math.PI },
   };
 
+  // The police line is the wall: the march cannot pass it until the story says so.
+  const bounds = { minX: -7.4, maxX: 7.4, minZ: -6.2, maxZ: 23 };
+  const colliders: GameSet['colliders'] = [
+    { min: [-8.6, 14.0], max: [-4.2, 18.0] },   // parked car, left kerb
+    { min: [4.4, -6.0], max: [8.8, -2.0] },     // cruiser at the line
+  ];
+  const interactables: GameSet['interactables'] = [
+    {
+      id: 'i_line', at: [0, 1.2, -5.6], label: 'READ THE POLICE LINE', marker: true, radius: 2.4,
+      think: 'Fourteen officers. Riot protocol active. The order to fire has not been given yet.',
+      flag: 'sawLine',
+    },
+    {
+      id: 'i_crowd', at: [0, 1.4, 11.5], label: 'LOOK BACK AT THE MARCH', marker: true, radius: 2.6,
+      think: 'Eight hundred and twelve of them, and every one is waiting to see what I do first.',
+      flag: 'sawCrowd',
+    },
+    {
+      id: 'i_camera', at: [-6.4, 1.5, 4.0], label: 'FACE THE BROADCAST DRONE', radius: 2.2,
+      think: 'Forty-one million people. They will remember the picture, not the argument.',
+      flag: 'sawCamera',
+    },
+    {
+      id: 'i_sign', at: [-2.0, 1.4, 19.0], label: 'READ THE BILLBOARD', radius: 2.6,
+      think: '"Androids are not alive." Somebody paid to have that printed six metres tall.',
+      flag: 'sawSign',
+    },
+  ];
+
   const scanTargets: GameSet['scanTargets'] = [
     {
       id: 'line',
@@ -309,6 +338,9 @@ export function buildStreet(ctx: SetContext): GameSet {
     scene,
     camera,
     marks,
+    bounds,
+    colliders,
+    interactables,
     lights: { moon, amb, heroKey, searchA, searchB },
     scanTargets,
     wetGround: ground,
@@ -328,7 +360,7 @@ export function buildStreet(ctx: SetContext): GameSet {
       for (let i = 0; i < beacons.length; i++) {
         const phase = Math.sin(beaconPhase + (i % 2) * Math.PI) * 0.5 + 0.5;
         beacons[i].material.opacity = 0.15 + phase * 0.85;
-        beaconLights[i].intensity = 8 + phase * 60;
+        beaconLights[i].intensity = 5 + phase * 32;
       }
 
       // Searchlights sweep slowly across the crowd.
@@ -349,18 +381,18 @@ export function buildStreet(ctx: SetContext): GameSet {
       ground.renderReflection(r, scene, cam);
     },
     applyLook(fx) {
-      fx.wetLens = 0.55;
-      fx.setBloom(0.5, 0.85, 0.95);
-      fx.setStreak(0.48, new THREE.Vector3(0.42, 0.66, 1.0));
-      fx.highlightCeiling = 12;
+      fx.wetLens = 0.32;
+      fx.setBloom(0.18, 0.72, 1.9);
+      fx.setStreak(0.16, new THREE.Vector3(0.42, 0.66, 1.0));
+      fx.highlightCeiling = 6.5;
       fx.applyLook({
-        uExposure: 1.28,
+        uExposure: 1.75,
         uContrast: 1.1,
         uSaturation: 1.12,
         uSplit: 0.22,
         uVignette: 0.48,
-        uGrain: 0.034,
-        uHalation: 0.2,
+        uGrain: 0.008,
+        uHalation: 0.1,
         uShadowTint: new THREE.Vector3(0.28, 0.58, 0.96),
         uHighlightTint: new THREE.Vector3(1.0, 0.84, 0.68),
       });
@@ -371,8 +403,8 @@ export function buildStreet(ctx: SetContext): GameSet {
     },
     actions: {
       searchlights: (on) => {
-        searchA.intensity = on ? 900 : 0;
-        searchB.intensity = on ? 900 : 0;
+        searchA.intensity = on ? 340 : 0;
+        searchB.intensity = on ? 340 : 0;
         for (const c of searchCones) c.opacity = on ? 0.055 : 0;
       },
       redAlert: (on) => {

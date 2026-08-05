@@ -38,6 +38,19 @@ export const CH4: Chapter = {
     { t: 'objective', text: 'REACH THE LINE' },
     { t: 'lightning', delay: 0.4 },
 
+    // --- Hand over control: lead the march down the avenue yourself.
+    { t: 'letterbox', on: false },
+    { t: 'do', who: 'markus', mark: 'walkStart', pose: 'idleAlert', look: null },
+    { t: 'explore', who: 'markus',
+      objective: 'LEAD THE MARCH TO THE LINE',
+      require: ['i_crowd'],
+      goal: { mark: 'leaderFront', radius: 1.6 },
+      demoPath: ['i_sign', 'i_crowd', 'i_camera'],
+      timeout: 160,
+    },
+    { t: 'letterbox', on: true },
+    { t: 'do', who: 'markus', mark: 'leaderFront', pose: 'idleAlert' },
+
     { t: 'shot', pos: [-2.6, EYE, 7.4], target: 'markus', fov: 40, handheld: 0.5, to: [-2.0, EYE, 6.4], move: 5 },
     { t: 'do', who: 'markus', look: 'captain', pose: 'idleAlert' },
     { t: 'say', who: 'markus', text: 'Eight hundred and twelve of us. Not one of us armed. That is the whole argument.', think: true, led: 'blue' },

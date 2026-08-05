@@ -15,6 +15,7 @@ import { audio } from '../engine/audio';
 import { CAST } from './cast';
 import { clamp } from '../engine/math';
 import type { PostFX } from '../engine/postfx';
+import { Player } from './player';
 
 export type GameState = {
   flags: Set<string>;
@@ -25,18 +26,30 @@ export type GameState = {
 
 export type DirectorEvents = {
   onChapterEnd: (outcome: string, state: GameState) => void;
-  onNeedInput: (kind: 'choice' | 'qte' | 'scan' | 'continue' | null) => void;
+  onNeedInput: (kind: 'choice' | 'qte' | 'scan' | 'continue' | 'explore' | null) => void;
 };
 
 export class Director {
   chars = new Map<string, Character>();
   rig: CameraRig;
   state: GameState = { flags: new Set(), stats: {}, nodes: new Set(), instability: 0.08 };
+  /** When seeking, stop fast-forwarding as soon as a roam phase is reached. */
+  haltOnExplore = false;
+  seekHalted = false;
+  /** Free-roam controller, created lazily for the chapter's protagonist. */
+  player: Player | null = null;
+  private explore: {
+    require: Set<string>;
+    goal: { pos: THREE.Vector3; radius: number } | null;
+    timeout: number;
+    demoPath: THREE.Vector3[];
+    demoIndex: number;
+  } | null = null;
   private pc = 0;
   private steps: Step[];
   private labels = new Map<string, number>();
   private wait = 0;
-  private blocked: 'choice' | 'qte' | 'scan' | 'continue' | null = null;
+  private blocked: 'choice' | 'qte' | 'scan' | 'continue' | 'explore' | null = null;
   private chapter: Chapter;
   private set: GameSet;
   private ui: UI;
@@ -51,8 +64,8 @@ export class Director {
   private preconTotal = 0;
   finished = false;
   onEvents: DirectorEvents;
-  /** Set true while a chapter is being fast-forwarded (chapter select). */
-  skipping = false;
+  /** Set true while a chapter is being fast-forwarded to a timestamp. */
+  fastForward = false;
 
   constructor(
     chapter: Chapter,
@@ -127,6 +140,13 @@ export class Director {
       if (this.slowmoLeft <= 0) this.timeScale = 1;
     }
     const dt = dtRaw * this.timeScale;
+
+    // Free roam drives the camera itself; the cinematic rig stands down.
+    if (this.blocked === 'explore' && this.player) {
+      this.updateExplore(dt);
+      for (const ch of this.chars.values()) ch.update(dt, performance.now() / 1000);
+      return;
+    }
 
     for (const ch of this.chars.values()) ch.update(dt, performance.now() / 1000);
     this.rig.update(dt);
@@ -263,7 +283,7 @@ export class Director {
       }
       case 'choice': {
         this.blocked = 'choice';
-        this.demoDelay = 1.5 + Math.random() * 0.8;
+        this.demoDelay = this.fastForward ? 0.05 : 1.5 + Math.random() * 0.8;
         this.onEvents.onNeedInput('choice');
         const opts = step.options.filter((o) => !o.requires || this.state.flags.has(o.requires));
         audio.uiOpen();
@@ -290,6 +310,14 @@ export class Director {
           this.slowmoLeft = (step.window ?? 1.6) + 0.6;
         }
         audio.stress();
+        if (this.fastForward && this.haltOnExplore) {
+          // Seek mode asked to stop here: play the roam phase for real.
+          this.seekHalted = true;
+        } else if (this.fastForward) {
+          window.setTimeout(() => {
+            for (let i = 0; i < 10; i++) this.ui.qteKey(step.key);
+          }, 0);
+        }
         this.ui.askQte(step.key, step.kind ?? 'press', step.window ?? 1.6, step.caption ?? '', (ok) => {
           this.blocked = null;
           this.onEvents.onNeedInput(null);
@@ -307,12 +335,80 @@ export class Director {
         });
         break;
       }
+      case 'explore': {
+        const ch = this.char(step.who);
+        if (!ch) break;
+        if (this.fastForward && this.haltOnExplore) {
+          // Seek mode asked to stop here: play the roam phase for real.
+          this.seekHalted = true;
+        } else if (this.fastForward) {
+          // Seeking past a roam phase: award its clues and drop the character
+          // at the objective so the following cinematics still line up.
+          for (const id of step.require ?? []) {
+            const it = this.set.interactables?.find((x) => x.id === id);
+            if (it?.flag) this.state.flags.add(it.flag);
+          }
+          const gm = step.goal ? this.set.marks[step.goal.mark] : undefined;
+          if (gm) {
+            ch.setPosition(gm.pos[0], gm.pos[1], gm.pos[2]);
+            ch.setRotationY(gm.rotY);
+          }
+          break;
+        }
+        if (!this.player) {
+          this.player = new Player(ch, this.set.camera);
+          this.player.attachPost(this.fx);
+        }
+        this.player.configure({
+          colliders: this.set.colliders,
+          interactables: this.set.interactables,
+          bounds: this.set.bounds,
+          scene: this.set.scene,
+          // Interiors are already lit; exteriors at night need the full rig.
+          keyScale: this.set.name === 'apartment' || this.set.name === 'interrogation' ? 0.45 : 1,
+        });
+        this.player.activate();
+        const goalMark = step.goal ? this.set.marks[step.goal.mark] : undefined;
+        this.explore = {
+          require: new Set(step.require ?? []),
+          goal: goalMark
+            ? { pos: new THREE.Vector3(...goalMark.pos), radius: step.goal?.radius ?? 1.4 }
+            : null,
+          timeout: step.timeout ?? 180,
+          demoPath: (step.demoPath ?? []).map((m) => {
+            const mk = this.set.marks[m];
+            const it = this.set.interactables?.find((x) => x.id === m);
+            if (mk) return new THREE.Vector3(...mk.pos);
+            if (it) return new THREE.Vector3(it.at[0], 0, it.at[2]);
+            return new THREE.Vector3();
+          }),
+          demoIndex: 0,
+        };
+        if (step.objective) this.ui.setObjective(step.objective);
+        this.ui.showControls(true);
+        this.ui.showScanHint(true);
+        this.blocked = 'explore';
+        this.onEvents.onNeedInput('explore');
+        break;
+      }
       case 'scan': {
         const targets = this.set.scanTargets ?? [];
         if (!targets.length) break;
         this.blocked = 'scan';
         this.onEvents.onNeedInput('scan');
         audio.scanOn();
+        if (this.fastForward && this.haltOnExplore) {
+          // Seek mode asked to stop here: play the roam phase for real.
+          this.seekHalted = true;
+        } else if (this.fastForward) {
+          this.blocked = null;
+          this.onEvents.onNeedInput(null);
+          for (const t of targets.slice(0, step.need ?? targets.length)) {
+            if (t.flag) this.state.flags.add(t.flag);
+          }
+          this.state.stats.clues = (this.state.stats.clues ?? 0) + (step.need ?? targets.length);
+          break;
+        }
         this.ui.beginScan(targets, step.need ?? targets.length, (found) => {
           this.blocked = null;
           this.onEvents.onNeedInput(null);
@@ -436,6 +532,103 @@ export class Director {
     }
   }
 
+  setDemo(on: boolean): void {
+    this.demoMode = on;
+    if (!on) this.player?.order(null);
+  }
+
+  /** Seek stopped on a roam step; the phase is already live, so just clear the flag. */
+  resumeExploreAfterSeek(): void {
+    this.seekHalted = false;
+    // The seek ran a slice of this phase in demo mode; drop its orders so the
+    // player is not fighting the autopilot.
+    this.player?.order(null);
+    this.player?.activate();
+    if (this.explore) {
+      this.explore.timeout = 240;
+      this.explore.demoIndex = 0;
+    }
+  }
+
+  /* ----------------------------------------------------------- free roam */
+
+  private updateExplore(dt: number): void {
+    const p = this.player!;
+    const ex = this.explore!;
+    ex.timeout -= dt;
+
+    // Autoplay walks the authored path, pausing to examine what it passes.
+    if (this.demoMode) {
+      if (p.botDone) {
+        if (ex.demoIndex < ex.demoPath.length) {
+          p.order({ to: ex.demoPath[ex.demoIndex], radius: 1.1 });
+          ex.demoIndex++;
+        } else if (ex.goal) {
+          p.order({ to: ex.goal.pos, radius: ex.goal.radius });
+        } else {
+          p.order(null);
+        }
+      }
+      // Examine whatever is in reach as it walks past.
+      if (p.nearest) this.useInteractable();
+    }
+
+    if (this.thinkLeft > 0) {
+      this.thinkLeft -= dt;
+      if (this.thinkLeft <= 0) {
+        this.ui.clearSay();
+        p.character.setLed('blue');
+      }
+    }
+
+    p.update(dt);
+    this.ui.setPrompt(p.nearest ? p.nearest.label : null);
+    this.ui.updateWorldMarkers(this.set.camera, p.interactableList, p.used, ex.goal?.pos ?? null);
+
+    const requireDone = [...ex.require].every((id) => p.used.has(id));
+    let goalDone = true;
+    if (ex.goal) {
+      const pos = p.character.group.position;
+      goalDone = Math.hypot(ex.goal.pos.x - pos.x, ex.goal.pos.z - pos.z) <= ex.goal.radius;
+    }
+    if ((requireDone && goalDone) || ex.timeout <= 0) this.endExplore();
+  }
+
+  /** Examine the nearest object: sets its flag and shows the thought line. */
+  useInteractable(): void {
+    const p = this.player;
+    if (!p || this.blocked !== 'explore') return;
+    const it = p.interact();
+    if (!it) return;
+    if (it.flag) this.state.flags.add(it.flag);
+    this.state.stats.clues = (this.state.stats.clues ?? 0) + 1;
+    audio.scanFound();
+    if (it.think) {
+      const who = p.character.spec.name;
+      this.ui.say(who, it.think, true);
+      p.character.setLed('yellow');
+      this.thinkLeft = 3.4;
+    }
+  }
+  private thinkLeft = 0;
+
+  private endExplore(): void {
+    this.player?.deactivate();
+    this.explore = null;
+    this.blocked = null;
+    this.ui.setPrompt(null);
+    this.ui.showControls(false);
+    this.ui.showScanHint(false);
+    this.ui.clearWorldMarkers();
+    this.ui.clearSay();
+    this.rig.syncFromCamera();
+    this.onEvents.onNeedInput(null);
+  }
+
+  get exploring(): boolean {
+    return this.blocked === 'explore';
+  }
+
   bumpInstability(delta: number): void {
     this.state.instability = clamp(this.state.instability + delta);
     this.ui.setInstability(this.state.instability);
@@ -445,6 +638,29 @@ export class Director {
   /* ---------------------------------------------------------------- input */
 
   keyDown(key: string): boolean {
+    if (this.blocked === 'explore') {
+      const k = key.toLowerCase();
+      if (k === 'e' || key === 'Enter') {
+        this.useInteractable();
+        return true;
+      }
+      if (key === 'Tab') {
+        // Analysis mode is available on demand during free roam.
+        const targets = this.set.scanTargets ?? [];
+        if (targets.length) {
+          audio.scanOn();
+          this.ui.beginScan(targets, targets.length, (found) => {
+            for (const id of found) {
+              const t = targets.find((x) => x.id === id);
+              if (t?.flag) this.state.flags.add(t.flag);
+            }
+            this.state.stats.clues = (this.state.stats.clues ?? 0) + found.length;
+          });
+        }
+        return true;
+      }
+      return false;
+    }
     if (this.blocked === 'choice') {
       const n = Number(key);
       if (n >= 1 && n <= 4) {
@@ -471,7 +687,7 @@ export class Director {
       this.ui.qteKey(key === ' ' ? ' ' : key);
       return true;
     }
-    if (this.blocked === 'scan') {
+    if (this.ui.scanning) {
       if (key === 'Enter' || key === ' ' || key === 'e') {
         const t = this.ui.confirmScan();
         if (t) audio.scanFound();
@@ -486,7 +702,7 @@ export class Director {
   }
 
   click(): boolean {
-    if (this.blocked === 'scan') {
+    if (this.ui.scanning) {
       const t = this.ui.confirmScan();
       if (t) audio.scanFound();
       return true;

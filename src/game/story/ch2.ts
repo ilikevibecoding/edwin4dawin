@@ -46,6 +46,19 @@ export const CH2: Chapter = {
     { t: 'do', who: 'alice', look: 'kara', shiver: 0.7 },
     { t: 'say', who: 'alice', text: "Don't answer him. It's worse when you answer him.", dur: 3, expr: 'fear' },
 
+    // --- Hand over control: the chores are the tutorial.
+    { t: 'letterbox', on: false },
+    { t: 'objective', text: 'FINISH THE HOUSEWORK' },
+    {
+      t: 'explore', who: 'kara',
+      objective: 'FINISH THE HOUSEWORK',
+      require: ['i_window', 'i_bottles'],
+      goal: { mark: 'livingCentre', radius: 1.2 },
+      demoPath: ['i_window', 'i_tv', 'i_bottles', 'i_drawing'],
+      timeout: 150,
+    },
+    { t: 'letterbox', on: true },
+
     { t: 'objective', text: 'READ THE ROOM' },
     { t: 'shot', pos: [-0.4, 1.7, 1.0], look: [-1.4, 0.8, -0.2], fov: 46, handheld: 0.3, aperture: 0.5 },
     { t: 'say', who: 'kara', text: 'Six bottles since noon. His hands are shaking. The girl has stopped eating.', think: true, led: 'yellow' },

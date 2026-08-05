@@ -46,7 +46,7 @@ async function main() {
       '--disable-frame-rate-limit',
       `--window-size=${W},${H}`,
       '--hide-scrollbars',
-      '--mute-audio',
+      '--mute-audio', '--autoplay-policy=no-user-gesture-required', '--autoplay-policy=no-user-gesture-required',
       '--font-render-hinting=none',
     ],
     protocolTimeout: 300000,
