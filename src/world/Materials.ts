@@ -306,7 +306,7 @@ export function wetGroundMaterial(reflection: THREE.Texture): THREE.ShaderMateri
         vec3 viewDir = normalize(cameraPosition - vWorld);
         float fres = mix(0.12, 1.0, pow(1.0 - clamp(viewDir.y, 0.0, 1.0), 3.0));
         float wet = mix(0.3, 1.0, puddle);
-        vec3 col = albedo * uAmbient * 26.0;
+        vec3 col = albedo * uAmbient * 38.0;
         col += refl * fres * uReflectStrength * 1.25 * wet;
         // Sheen where the water film catches grazing light.
         col += refl * 0.2 * wet;

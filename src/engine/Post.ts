@@ -775,7 +775,7 @@ export class PostStack {
     }
     // Target middle grey in scene-referred units.
     const target = 0.155;
-    const wanted = clamp(target / this.measuredKey, 0.05, 8);
+    const wanted = clamp(target / this.measuredKey, 0.05, 18);
     if (this.snapNext) {
       this.exposureScale = wanted;
       this.snapNext = false;

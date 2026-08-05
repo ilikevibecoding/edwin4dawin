@@ -171,7 +171,7 @@ export class StoryRunner {
       this.lightSubject = spec.to.slice(6);
     // Wide, non-actor shots read better on set light alone.
     const wide = spec.type === 'free' && !(typeof spec.to === 'string' && spec.to.startsWith('actor:'));
-    this.game.lights.setStrength(wide ? 0.35 : 1);
+    this.game.lights.setStrength(wide ? 0.55 : 1);
     const common = {
       fov: spec.fov,
       aperture: spec.aperture,

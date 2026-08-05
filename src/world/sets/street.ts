@@ -40,7 +40,7 @@ export function buildStreet(ctx: SetContext): GameSet {
   const groundMat = wetGroundMaterial(reflection.renderTarget.texture);
   groundMat.uniforms.uRepeat.value = 14;
   groundMat.uniforms.uFogColor.value = new THREE.Color(0x0b1720);
-  groundMat.uniforms.uAmbient.value = new THREE.Color(0x33566c);
+  groundMat.uniforms.uAmbient.value = new THREE.Color(0x4a7794);
   (groundMat.uniforms.uTextureMatrix.value as THREE.Matrix4) = reflection.textureMatrix;
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(70, 90, 1, 1), groundMat);
   ground.rotation.x = -Math.PI / 2;
@@ -217,7 +217,7 @@ export function buildStreet(ctx: SetContext): GameSet {
   root.add(vent);
 
   // ---------------------------------------------------------------- lighting
-  const moon = new THREE.DirectionalLight(0x9fc4e8, 5.0);
+  const moon = new THREE.DirectionalLight(0x9fc4e8, 7.5);
   moon.position.set(9, 19, 17);
   moon.castShadow = true;
   moon.shadow.mapSize.set(768, 768);
@@ -231,7 +231,7 @@ export function buildStreet(ctx: SetContext): GameSet {
   moon.shadow.normalBias = 0.03;
   root.add(moon);
 
-  const bounce = new THREE.HemisphereLight(0x3a6280, 0x101a22, 6.0);
+  const bounce = new THREE.HemisphereLight(0x3a6280, 0x101a22, 11.0);
   root.add(bounce);
 
   // Warm practical from the lobby doorway, cool neon rim from across the street.
@@ -256,7 +256,7 @@ export function buildStreet(ctx: SetContext): GameSet {
     id: 'street',
     root,
     env,
-    envIntensity: 4.0,
+    envIntensity: 7.0,
     fog: new THREE.FogExp2(0x0f2130, 0.02),
     rain,
     mist,

@@ -35,7 +35,7 @@ export function buildRooftop(ctx: SetContext): GameSet {
   const deckMat = wetGroundMaterial(reflection.renderTarget.texture);
   deckMat.uniforms.uRepeat.value = 9;
   deckMat.uniforms.uFogColor.value = new THREE.Color(0x0b141c);
-  deckMat.uniforms.uAmbient.value = new THREE.Color(0x35566a);
+  deckMat.uniforms.uAmbient.value = new THREE.Color(0x4b7590);
   deckMat.uniforms.uReflectStrength.value = 0.95;
   (deckMat.uniforms.uTextureMatrix.value as THREE.Matrix4) = reflection.textureMatrix;
   const deck = new THREE.Mesh(new THREE.PlaneGeometry(24, 22), deckMat);
@@ -161,7 +161,7 @@ export function buildRooftop(ctx: SetContext): GameSet {
   root.add(drone);
 
   // ---------------------------------------------------------------- lighting
-  const moon = new THREE.DirectionalLight(0xa8c8e8, 4.6);
+  const moon = new THREE.DirectionalLight(0xa8c8e8, 6.8);
   moon.position.set(9, 16, 12);
   moon.castShadow = true;
   moon.shadow.mapSize.set(768, 768);
@@ -184,7 +184,7 @@ export function buildRooftop(ctx: SetContext): GameSet {
   rimNeon.target.position.set(0, 1.4, 4);
   root.add(rimNeon, rimNeon.target);
 
-  const ambient = new THREE.HemisphereLight(0x3a6480, 0x121a22, 5.5);
+  const ambient = new THREE.HemisphereLight(0x3a6480, 0x121a22, 9.5);
   root.add(ambient);
 
   const searchlight = new THREE.Mesh(new THREE.ConeGeometry(2.4, 26, 20, 1, true), lightShaftMaterial(0xbfe0f4, 0.09));
@@ -205,7 +205,7 @@ export function buildRooftop(ctx: SetContext): GameSet {
     id: 'rooftop',
     root,
     env,
-    envIntensity: 4.2,
+    envIntensity: 7.0,
     fog: new THREE.FogExp2(0x102431, 0.018),
     rain,
     mist,

@@ -43,7 +43,7 @@ export function buildGarden(ctx: SetContext): GameSet {
   const groundMat = wetGroundMaterial(reflection.renderTarget.texture);
   groundMat.uniforms.uRepeat.value = 10;
   groundMat.uniforms.uFogColor.value = new THREE.Color(0x0d1216);
-  groundMat.uniforms.uAmbient.value = new THREE.Color(0x2e3c46);
+  groundMat.uniforms.uAmbient.value = new THREE.Color(0x445764);
   groundMat.uniforms.uReflectStrength.value = 0.85;
   (groundMat.uniforms.uTextureMatrix.value as THREE.Matrix4) = reflection.textureMatrix;
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(46, 46), groundMat);
@@ -209,7 +209,7 @@ export function buildGarden(ctx: SetContext): GameSet {
   warmFill.position.set(-2.6, 1.4, 1.4);
   root.add(warmFill);
 
-  const ambient = new THREE.HemisphereLight(0x2e4450, 0x100f0e, 4.0);
+  const ambient = new THREE.HemisphereLight(0x2e4450, 0x100f0e, 6.5);
   root.add(ambient);
 
   const rain = new Rain(1500, 26, { color: 0x9cc0dc, length: 0.5, wind: 0.08 });
@@ -225,7 +225,7 @@ export function buildGarden(ctx: SetContext): GameSet {
     id: 'garden',
     root,
     env,
-    envIntensity: 3.2,
+    envIntensity: 5.0,
     fog: new THREE.FogExp2(0x111a20, 0.024),
     rain,
     mist,
