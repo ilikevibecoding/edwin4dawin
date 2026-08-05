@@ -140,26 +140,27 @@ export function materials() {
   const am = asphaltMaps(512);
   const tread = treadTexture(256);
 
-  // Tiling here is in "texture repeats per UV unit"; geometry supplies UVs in
-  // metres/N so a repeat of 1 keeps the intended physical texel size.
+  // Albedo lives entirely in the baked canvas maps, so `color` stays white to
+  // avoid double-darkening. Tiling is "repeats per UV unit" and geometry
+  // supplies UVs in metres/N, so a repeat of 1 keeps the intended texel size.
   lib = {
-    concrete: std({ ...repeated(cm, 1, 1), color: 0x8c877d, roughness: 0.93, metalness: 0.02, normalScale: new THREE.Vector2(0.5, 0.5) }),
-    concretePad: std({ ...repeated(cm, 1, 1), color: 0x847f77, roughness: 0.95, metalness: 0.02, normalScale: new THREE.Vector2(0.35, 0.35) }),
-    concreteWall: std({ ...repeated(cm, 0.34, 0.34), color: 0x8a857b, roughness: 0.9, metalness: 0.02, normalScale: new THREE.Vector2(0.6, 0.6) }),
-    sand: std({ ...repeated(sm, 1, 1), color: 0x9a7c54, roughness: 1.0, metalness: 0, normalScale: new THREE.Vector2(0.7, 0.7) }),
-    asphalt: std({ ...repeated(am, 1, 1), color: 0x4a4744, roughness: 0.84, metalness: 0.04, normalScale: new THREE.Vector2(0.6, 0.6) }),
-    gravel: std({ ...repeated(sm, 1, 1), color: 0x726a5e, roughness: 1.0, metalness: 0.02, normalScale: new THREE.Vector2(0.9, 0.9) }),
+    concrete: std({ ...repeated(cm, 1, 1), color: 0xffffff, roughness: 0.96, metalness: 0.0, envMapIntensity: 0.4, normalScale: new THREE.Vector2(0.35, 0.35) }),
+    concretePad: std({ ...repeated(cm, 1, 1), color: 0xf2eee6, roughness: 0.98, metalness: 0.0, envMapIntensity: 0.32, normalScale: new THREE.Vector2(0.22, 0.22) }),
+    concreteWall: std({ ...repeated(cm, 0.34, 0.34), color: 0xffffff, roughness: 0.93, metalness: 0.0, envMapIntensity: 0.45, normalScale: new THREE.Vector2(0.5, 0.5) }),
+    sand: std({ ...repeated(sm, 1, 1), color: 0xffffff, roughness: 1.0, metalness: 0, envMapIntensity: 0.4, normalScale: new THREE.Vector2(0.55, 0.55) }),
+    asphalt: std({ ...repeated(am, 1, 1), color: 0xffffff, roughness: 0.9, metalness: 0.0, envMapIntensity: 0.35, normalScale: new THREE.Vector2(0.5, 0.5) }),
+    gravel: std({ ...repeated(sm, 2, 2), color: 0xc8c2b4, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.35, normalScale: new THREE.Vector2(0.8, 0.8) }),
 
-    oliveMetal: std({ ...repeated(paintedMetalMaps(512, '#4c5445', { camo: false }), 0.5, 0.5), color: 0x707a62, roughness: 0.68, metalness: 0.34 }),
-    sandMetal: std({ ...repeated(paintedMetalMaps(512, '#7c6b4f', { rust: 0.35 }), 0.5, 0.5), color: 0x998767, roughness: 0.64, metalness: 0.3 }),
-    darkMetal: std({ ...repeated(paintedMetalMaps(512, '#333634', { rust: 0.7, streaks: 30 }), 0.5, 0.5), color: 0x5c6060, roughness: 0.6, metalness: 0.55 }),
-    steel: std({ ...repeated(brushedMetalMaps(512, '#7d8288'), 1, 1), color: 0x9aa0a6, roughness: 0.44, metalness: 0.9 }),
-    galv: std({ ...repeated(brushedMetalMaps(512, '#969ca2'), 1, 1), color: 0xa6acb2, roughness: 0.54, metalness: 0.8 }),
-    rubber: std({ map: tread.map, normalMap: tread.normalMap, color: 0x222224, roughness: 0.94, metalness: 0.02 }),
-    tarp: std({ ...repeated(paintedMetalMaps(512, '#434838', { scratches: 8, streaks: 6 }), 0.5, 0.5), color: 0x5f6553, roughness: 0.9, metalness: 0.0 }),
-    plastic: std({ color: 0x24272a, roughness: 0.5, metalness: 0.05 }),
-    heatMetal: std({ map: heatDiscolorMap(256), color: 0xd8d8d8, roughness: 0.46, metalness: 0.85 }),
-    soot: std({ color: 0x171614, roughness: 0.97, metalness: 0.05 }),
+    oliveMetal: std({ ...repeated(paintedMetalMaps(512, '#6e7862', { camo: false }), 0.5, 0.5), color: 0xffffff, roughness: 0.72, metalness: 0.12, envMapIntensity: 0.75, normalScale: new THREE.Vector2(0.6, 0.6) }),
+    sandMetal: std({ ...repeated(paintedMetalMaps(512, '#a4906a', { rust: 0.35 }), 0.5, 0.5), color: 0xffffff, roughness: 0.68, metalness: 0.12, envMapIntensity: 0.75, normalScale: new THREE.Vector2(0.6, 0.6) }),
+    darkMetal: std({ ...repeated(paintedMetalMaps(512, '#6d726f', { rust: 0.7, streaks: 30 }), 0.5, 0.5), color: 0xffffff, roughness: 0.66, metalness: 0.16, envMapIntensity: 0.8, normalScale: new THREE.Vector2(0.5, 0.5) }),
+    steel: std({ ...repeated(brushedMetalMaps(512, '#9aa0a6'), 1, 1), color: 0xffffff, roughness: 0.42, metalness: 0.88, envMapIntensity: 1.1 }),
+    galv: std({ ...repeated(brushedMetalMaps(512, '#b0b6bc'), 1, 1), color: 0xffffff, roughness: 0.52, metalness: 0.78, envMapIntensity: 1.0 }),
+    rubber: std({ map: tread.map, normalMap: tread.normalMap, color: 0x9a9a9c, roughness: 0.95, metalness: 0.0, envMapIntensity: 0.4 }),
+    tarp: std({ ...repeated(paintedMetalMaps(512, '#5d6450', { scratches: 8, streaks: 6 }), 0.5, 0.5), color: 0xffffff, roughness: 0.94, metalness: 0.0, envMapIntensity: 0.45, normalScale: new THREE.Vector2(0.5, 0.5) }),
+    plastic: std({ color: 0x3a3e42, roughness: 0.52, metalness: 0.05, envMapIntensity: 0.7 }),
+    heatMetal: std({ map: heatDiscolorMap(256), color: 0xffffff, roughness: 0.48, metalness: 0.7, envMapIntensity: 1.0 }),
+    soot: std({ color: 0x1c1a18, roughness: 0.97, metalness: 0.05, envMapIntensity: 0.2 }),
     copper: std({ color: 0xa06428, roughness: 0.35, metalness: 0.95 }),
     glass: phys({
       color: 0x1a2630,
@@ -171,8 +172,8 @@ export function materials() {
       envMapIntensity: 1.4,
       side: THREE.DoubleSide,
     }),
-    interceptorSkin: std({ ...brushedMetalMaps(512, '#b9bcc0'), color: 0xd2d5d8, roughness: 0.38, metalness: 0.58 }),
-    threatSkin: std({ ...paintedMetalMaps(512, '#54575a', { rust: 0.2, scratches: 14 }), color: 0x74777a, roughness: 0.52, metalness: 0.6 }),
+    interceptorSkin: std({ ...brushedMetalMaps(512, '#d6d9dc'), color: 0xffffff, roughness: 0.38, metalness: 0.5, envMapIntensity: 1.1 }),
+    threatSkin: std({ ...paintedMetalMaps(512, '#7c8084', { rust: 0.2, scratches: 14 }), color: 0xffffff, roughness: 0.54, metalness: 0.45, envMapIntensity: 0.9 }),
   };
   return lib;
 }

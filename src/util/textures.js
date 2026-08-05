@@ -162,11 +162,11 @@ export function concreteMaps(size = 512) {
     ctx.drawImage(h, 0, 0);
     // tint toward warm grey concrete
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = '#b9b4a8';
+    ctx.fillStyle = '#d8d2c4';
     ctx.fillRect(0, 0, size, size);
     ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = '#8f8b80';
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = '#a8a49a';
     ctx.fillRect(0, 0, size, size);
     ctx.globalAlpha = 1;
     splotches(ctx, size, size, 90, [[70, 66, 60], [190, 186, 176], [120, 112, 100]], [8, 46], 3, [0.03, 0.14]);
@@ -254,13 +254,13 @@ export function asphaltMaps(size = 512) {
     const h = fbmCanvas(size, { seed: 44, octaves: 6, scale: 26, contrast: 1.5 });
     const c = makeCanvas(size);
     const ctx = c.getContext('2d', { willReadFrequently: true });
-    ctx.fillStyle = '#2f2e2c';
+    ctx.fillStyle = '#4b4845';
     ctx.fillRect(0, 0, size, size);
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = 0.4;
     ctx.drawImage(h, 0, 0);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = '#6e6a64';
+    ctx.fillStyle = '#b0aaa2';
     ctx.fillRect(0, 0, size, size);
     ctx.globalCompositeOperation = 'source-over';
     splotches(ctx, size, size, 70, [[20, 20, 20], [110, 108, 104]], [10, 50], 29, [0.05, 0.2]);
@@ -334,7 +334,7 @@ export function paintedMetalMaps(size = 512, base = '#5c6350', opts = {}) {
     rc.drawImage(h, 0, 0);
     return {
       map: finish(c),
-      normalMap: finish(normalFromCanvas(h, 0.8), { srgb: false }),
+      normalMap: finish(normalFromCanvas(h, 0.45), { srgb: false }),
       roughnessMap: finish(rough, { srgb: false }),
     };
   });

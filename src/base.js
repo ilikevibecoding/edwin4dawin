@@ -142,26 +142,30 @@ function buildTerrain(quality) {
     colorize(geo);
   }
 
+  /**
+   * Vertex colours are tint multipliers around 1.0, not absolute albedo — the
+   * sand map already carries the base colour.
+   */
   function colorize(geo) {
     const p = geo.attributes.position;
     const n = geo.attributes.normal;
     const col = new Float32Array(p.count * 3);
-    const sand = new THREE.Color(0xc9a97c);
-    const rock = new THREE.Color(0x8b8175);
-    const dark = new THREE.Color(0x6f5f4c);
-    const scrub = new THREE.Color(0x7c7a54);
+    const rock = new THREE.Color(1.02, 1.0, 0.98);
+    const scrub = new THREE.Color(0.86, 0.92, 0.74);
+    const high = new THREE.Color(0.74, 0.73, 0.76);
     const c = new THREE.Color();
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i);
       const y = p.getY(i);
       const z = p.getZ(i);
       const slope = 1 - THREE.MathUtils.clamp(n.getY(i), 0, 1);
-      const alt = THREE.MathUtils.clamp(y / 1500, 0, 1);
+      const alt = THREE.MathUtils.clamp(y / 1600, 0, 1);
       const v = noise.fbm2(x * 0.0012, z * 0.0012, 3) * 0.5 + 0.5;
-      c.copy(sand).lerp(scrub, v * 0.35);
+      const w = noise.fbm2(x * 0.012 + 40, z * 0.012 - 20, 2) * 0.5 + 0.5;
+      c.setRGB(1, 1, 1).lerp(scrub, v * 0.4);
       c.lerp(rock, THREE.MathUtils.clamp(slope * 2.6, 0, 1));
-      c.lerp(dark, alt * 0.55);
-      c.multiplyScalar(0.9 + v * 0.2);
+      c.lerp(high, alt * 0.7);
+      c.multiplyScalar(0.86 + w * 0.28);
       col[i * 3] = c.r;
       col[i * 3 + 1] = c.g;
       col[i * 3 + 2] = c.b;
