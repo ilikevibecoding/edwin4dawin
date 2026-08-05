@@ -1,0 +1,147 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>cast viewer</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #05070a;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+      }
+      #label {
+        position: fixed;
+        left: 12px;
+        bottom: 10px;
+        color: #9fe8ff;
+        font: 13px monospace;
+        z-index: 3;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="label"></div>
+    <script type="module">
+      import * as THREE from 'three';
+      import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+      import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+
+      const W = 1280;
+      const H = 720;
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(1);
+      renderer.setSize(W, H);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      document.body.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x05070a);
+      const camera = new THREE.PerspectiveCamera(35, W / H, 0.05, 100);
+
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      scene.environmentIntensity = 0.35;
+
+      const key = new THREE.SpotLight(0xcfe4ff, 60, 20, 0.7, 0.5, 2);
+      key.position.set(2.2, 3.2, 2.6);
+      key.castShadow = true;
+      key.shadow.mapSize.set(1024, 1024);
+      key.shadow.bias = -0.0008;
+      scene.add(key);
+      const rim = new THREE.SpotLight(0x3aa0ff, 90, 20, 0.8, 0.6, 2);
+      rim.position.set(-2.6, 2.4, -2.2);
+      scene.add(rim);
+      const fill = new THREE.PointLight(0xff7a4a, 6, 12, 2);
+      fill.position.set(-1.6, 1.4, 1.8);
+      scene.add(fill);
+
+      const floor = new THREE.Mesh(
+        new THREE.CircleGeometry(6, 48),
+        new THREE.MeshStandardMaterial({ color: 0x0a0d12, roughness: 0.28, metalness: 0.5 })
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      scene.add(floor);
+
+      const loader = new GLTFLoader();
+      const files = ['readyplayer.me', 'Michelle', 'Soldier', 'Xbot'];
+      const models = {};
+      const mixers = [];
+
+      function normalise(root) {
+        const box = new THREE.Box3().setFromObject(root);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const s = 1.78 / size.y;
+        root.scale.setScalar(s);
+        const box2 = new THREE.Box3().setFromObject(root);
+        root.position.y -= box2.min.y;
+        return s;
+      }
+
+      for (const f of files) {
+        const g = await loader.loadAsync(`/assets/models/${f}.glb`);
+        const root = g.scene;
+        root.traverse((o) => {
+          if (o.isMesh) {
+            o.castShadow = true;
+            o.receiveShadow = true;
+            o.frustumCulled = false;
+          }
+        });
+        const s = normalise(root);
+        root.visible = false;
+        scene.add(root);
+        models[f] = { root, gltf: g, scale: s };
+        if (g.animations.length) {
+          const mixer = new THREE.AnimationMixer(root);
+          const idle =
+            g.animations.find((a) => /idle/i.test(a.name)) ||
+            g.animations.find((a) => !/tpose/i.test(a.name)) ||
+            g.animations[0];
+          mixer.clipAction(idle).play();
+          mixer.update(0.6);
+          mixers.push(mixer);
+          models[f].clipNames = g.animations.map((a) => a.name);
+        }
+        console.log('[shot] loaded', f, 'scale', s.toFixed(3), g.animations.map((a) => a.name).join(','));
+      }
+
+      // camera framings
+      const framings = {
+        full: (h) => ({ pos: new THREE.Vector3(0.9, 1.15, 3.0), tgt: new THREE.Vector3(0, h * 0.5, 0), fov: 34 }),
+        face: (h) => ({ pos: new THREE.Vector3(0.34, h * 0.93, 0.85), tgt: new THREE.Vector3(0, h * 0.9, 0), fov: 30 }),
+      };
+
+      const shots = [];
+      for (const f of files) {
+        shots.push({ name: `${f}_full`, model: f, framing: 'full' });
+        shots.push({ name: `${f}_face`, model: f, framing: 'face' });
+      }
+
+      window.__shotNames = () => shots.map((s) => s.name);
+      window.__shot = (i) => {
+        const s = shots[i];
+        for (const f of files) models[f].root.visible = f === s.model;
+        const h = 1.78;
+        const fr = framings[s.framing](h);
+        camera.position.copy(fr.pos);
+        camera.fov = fr.fov;
+        camera.updateProjectionMatrix();
+        camera.lookAt(fr.tgt);
+        document.getElementById('label').textContent = `${s.name}   clips: ${(models[s.model].clipNames || []).join(', ')}`;
+        renderer.render(scene, camera);
+        renderer.render(scene, camera);
+        window.__shotDone = true;
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "neo-detroit-awakening",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A cinematic branching-narrative android game in the browser — a Detroit: Become Human homage built on three.js",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "typecheck": "tsc --noEmit",
+    "voices": "node tools/build-voices.mjs",
+    "shots": "node tools/shoot.mjs",
+    "render": "node tools/render-video.mjs"
+  },
+  "dependencies": {
+    "postprocessing": "^6.39.4",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.0",
+    "puppeteer-core": "^24.43.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12"
+  }
+}

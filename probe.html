@@ -1,0 +1,226 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>perf probe</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #000;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      import * as THREE from 'three';
+      import {
+        EffectComposer,
+        RenderPass,
+        EffectPass,
+        BloomEffect,
+        DepthOfFieldEffect,
+        ToneMappingEffect,
+        ToneMappingMode,
+        VignetteEffect,
+        NoiseEffect,
+        ChromaticAberrationEffect,
+        SMAAEffect,
+        BlendFunction,
+      } from 'postprocessing';
+
+      const q = new URLSearchParams(location.search);
+      const W = Number(q.get('w') || 1280);
+      const H = Number(q.get('h') || 720);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+      renderer.setPixelRatio(1);
+      renderer.setSize(W, H);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.shadowMap.autoUpdate = false;
+      document.body.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x0a1018, 0.02);
+      const camera = new THREE.PerspectiveCamera(35, W / H, 0.1, 400);
+      camera.position.set(0, 2, 8);
+      camera.lookAt(0, 1, 0);
+
+      const geo = new THREE.BoxGeometry(1, 1, 1);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x20262e, roughness: 0.7, metalness: 0.2 });
+      const boxes = 400;
+      const inst = new THREE.InstancedMesh(geo, mat, boxes);
+      const m4 = new THREE.Matrix4();
+      for (let i = 0; i < boxes; i++) {
+        const s = new THREE.Vector3(2 + Math.random() * 6, 4 + Math.random() * 40, 2 + Math.random() * 6);
+        m4.makeScale(s.x, s.y, s.z);
+        m4.setPosition((Math.random() - 0.5) * 200, s.y / 2 - 20, -20 - Math.random() * 180);
+        inst.setMatrixAt(i, m4);
+      }
+      scene.add(inst);
+
+      const sphereGeo = new THREE.SphereGeometry(0.6, 48, 32);
+      const shadowCasters = [];
+      for (let i = 0; i < 12; i++) {
+        const s = new THREE.Mesh(
+          sphereGeo,
+          new THREE.MeshPhysicalMaterial({ color: 0xdddddd, roughness: 0.25 + i / 24, metalness: 0.9, clearcoat: 1 })
+        );
+        s.position.set(-4 + i * 0.8, 1, 0);
+        s.castShadow = true;
+        s.receiveShadow = true;
+        scene.add(s);
+        shadowCasters.push(s);
+      }
+
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(120, 120),
+        new THREE.MeshStandardMaterial({ color: 0x0b0e12, roughness: 0.15, metalness: 0.6 })
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      const lights = [];
+      const key = new THREE.SpotLight(0xbfd8ff, 400, 60, 0.6, 0.4, 2);
+      key.position.set(6, 12, 6);
+      key.castShadow = true;
+      key.shadow.mapSize.set(1024, 1024);
+      scene.add(key);
+      lights.push(key);
+      const rim = new THREE.SpotLight(0xff5a3c, 300, 50, 0.7, 0.5, 2);
+      rim.position.set(-8, 6, -6);
+      rim.castShadow = true;
+      rim.shadow.mapSize.set(1024, 1024);
+      scene.add(rim);
+      lights.push(rim);
+      scene.add(new THREE.HemisphereLight(0x223344, 0x080808, 0.6));
+
+      function makeRain(count) {
+        const g = new THREE.InstancedBufferGeometry();
+        const quad = new THREE.PlaneGeometry(0.012, 0.7);
+        g.index = quad.index;
+        g.attributes.position = quad.attributes.position;
+        g.attributes.uv = quad.attributes.uv;
+        const off = new Float32Array(count * 3);
+        const spd = new Float32Array(count);
+        for (let i = 0; i < count; i++) {
+          off[i * 3] = (Math.random() - 0.5) * 40;
+          off[i * 3 + 1] = Math.random() * 24;
+          off[i * 3 + 2] = (Math.random() - 0.5) * 40;
+          spd[i] = 10 + Math.random() * 14;
+        }
+        g.setAttribute('iOffset', new THREE.InstancedBufferAttribute(off, 3));
+        g.setAttribute('iSpeed', new THREE.InstancedBufferAttribute(spd, 1));
+        g.instanceCount = count;
+        const m = new THREE.ShaderMaterial({
+          uniforms: { uTime: { value: 0 } },
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          vertexShader: `attribute vec3 iOffset; attribute float iSpeed; uniform float uTime; varying vec2 vUv;
+            void main(){ vUv=uv; vec3 o=iOffset; o.y=mod(o.y-uTime*iSpeed,24.0);
+            vec4 mv=modelViewMatrix*vec4(o,1.0); mv.xy+=position.xy;
+            gl_Position=projectionMatrix*mv; }`,
+          fragmentShader: `varying vec2 vUv; void main(){ float a=smoothstep(0.0,0.3,vUv.y)*smoothstep(1.0,0.7,vUv.y);
+            gl_FragColor=vec4(vec3(0.6,0.75,0.95)*a, a*0.5); }`,
+        });
+        const mesh = new THREE.Mesh(g, m);
+        mesh.frustumCulled = false;
+        return mesh;
+      }
+      const rain = makeRain(12000);
+      scene.add(rain);
+
+      // Convolution effects (DoF, Bloom, SMAA) each need their own pass.
+      function buildComposer(opts) {
+        const c = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType });
+        c.addPass(new RenderPass(scene, camera));
+        if (opts.dof) {
+          c.addPass(
+            new EffectPass(
+              camera,
+              new DepthOfFieldEffect(camera, {
+                focusDistance: 0.02,
+                focalLength: 0.03,
+                bokehScale: 3,
+                resolutionScale: opts.dofScale ?? 0.5,
+              })
+            )
+          );
+        }
+        if (opts.bloom) {
+          c.addPass(
+            new EffectPass(
+              camera,
+              new BloomEffect({ intensity: 1.2, luminanceThreshold: 0.6, mipmapBlur: true, radius: 0.7 })
+            )
+          );
+        }
+        const tail = [];
+        if (opts.ca) tail.push(new ChromaticAberrationEffect({ offset: new THREE.Vector2(0.0007, 0.0004) }));
+        tail.push(new VignetteEffect({ darkness: 0.45, offset: 0.28 }));
+        if (opts.noise) tail.push(new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: true }));
+        tail.push(new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }));
+        c.addPass(new EffectPass(camera, ...tail));
+        if (opts.smaa) c.addPass(new EffectPass(camera, new SMAAEffect()));
+        c.setSize(W, H);
+        return c;
+      }
+
+      // readPixels forces the driver to finish outstanding work; gl.finish() alone
+      // returns immediately under ANGLE and reports fantasy numbers.
+      const syncPx = new Uint8Array(4);
+      function sync() {
+        const gl = renderer.getContext();
+        renderer.setRenderTarget(null);
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, syncPx);
+      }
+      function bench(fn, n) {
+        fn();
+        sync();
+        const t0 = performance.now();
+        for (let i = 0; i < n; i++) {
+          fn();
+          sync();
+        }
+        return (performance.now() - t0) / n;
+      }
+
+      const out = {};
+      window.__run = (name, cfg) => {
+        rain.visible = !!cfg.rain;
+        if (cfg.rain) rain.geometry.instanceCount = cfg.rain;
+        renderer.shadowMap.enabled = !!cfg.shadows;
+        lights.forEach((l) => {
+          l.castShadow = !!cfg.shadows;
+          if (cfg.shadowSize) l.shadow.mapSize.set(cfg.shadowSize, cfg.shadowSize);
+        });
+        shadowCasters.forEach((s) => (s.castShadow = !!cfg.shadows));
+        scene.traverse((o) => {
+          if (o.material) o.material.needsUpdate = true;
+        });
+        renderer.shadowMap.needsUpdate = true;
+        let render;
+        if (cfg.post) {
+          const comp = buildComposer(cfg.post);
+          render = () => comp.render(0.016);
+        } else {
+          render = () => renderer.render(scene, camera);
+        }
+        const ms = bench(render, cfg.n || 8);
+        out[name] = { ms: +ms.toFixed(1), fps: +(1000 / ms).toFixed(2) };
+        return out[name];
+      };
+      const gl = renderer.getContext();
+      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      window.__gpu = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'unknown';
+      window.__ready = true;
+    </script>
+  </body>
+</html>
