@@ -1,7 +1,7 @@
 // Interactive systems: dialogue, timed choices, QTEs, red-wall mash,
 // investigation analyze-mode, HUD meters, toasts, flowchart, end screens.
 
-import { $, el, wait, clamp, T, SETTINGS } from './util.js';
+import { $, el, wait, clamp, T, SETTINGS, setHudHidden } from './util.js';
 import { audio } from './audio.js';
 import { fx } from './fx.js';
 import { stage } from './stage.js';
@@ -91,7 +91,12 @@ class UI {
     this.dlgLed.style.display = led === 'none' ? 'none' : 'inline-block';
     this.dlgNext.classList.remove('show');
 
-    await this._type(this.dlgText, text);
+    // *asterisked* segments are stage directions — typed plain, then styled
+    const plain = text.replace(/\*/g, '');
+    await this._type(this.dlgText, plain);
+    if (text.includes('*')) {
+      this.dlgText.innerHTML = text.replace(/\*([^*]+)\*/g, '<i class="sdir">$1</i>');
+    }
     this.dlgNext.classList.add('show');
 
     if (this.settings.auto) {
@@ -173,6 +178,8 @@ class UI {
     const m = $('#meterStress');
     m.querySelector('.m-val').textContent = Math.round(v) + '%';
     m.querySelector('.s-needle').style.left = clamp(v, 0, 100) + '%';
+    m.querySelector('.s-fill').style.width = clamp(v, 0, 100) + '%';
+    m.classList.toggle('warn', v > 60 && v <= 82);
     m.classList.toggle('danger', v > 82);
   }
 
@@ -192,15 +199,18 @@ class UI {
 
   // ---------- big banner ----------
   async banner(text, sub = '', kind = 'ok') {
+    setHudHidden(true);
+    this.hideDialogue();
     const b = el('div', `banner b-${kind}`, this.overlays);
     el('div', 'bn-text', b, text);
     if (sub) el('div', 'bn-sub', b, sub);
     if (kind === 'fail') { audio.thud(); fx.glitch(500); } else { audio.chime(true); }
     requestAnimationFrame(() => b.classList.add('show'));
-    await wait(T(3000));
+    await wait(T(3200));
     b.classList.remove('show');
     await wait(T(600));
     b.remove();
+    setHudHidden(false);
   }
 
   // ---------- timed choice ----------
@@ -254,6 +264,8 @@ class UI {
         const left = Math.max(0, totalMs - (now - t0));
         const frac = left / totalMs;
         fg.style.strokeDashoffset = CIRC * (1 - frac);
+        // arc color keyed to remaining time: cyan → amber (30%) → red (10%)
+        ring.dataset.state = frac < 0.1 ? 'crit' : frac < 0.3 ? 'warn' : 'calm';
         const sec = Math.ceil(left / 1000);
         num.textContent = sec;
         if (sec !== lastSec) {
@@ -311,10 +323,13 @@ class UI {
     audio.heartbeat(true);
     return new Promise((resolve) => {
       const wrap = el('div', 'qtewrap', this.overlays);
-      if (def.label) el('div', 'qte-label', wrap, def.label);
-      const ring = el('div', 'qte-ring', wrap);
+      const cluster = el('div', 'qte-cluster', wrap);
+      if (def.label) el('div', 'qte-label', cluster, def.label);
+      const ring = el('div', 'qte-ring', cluster);
       ring.innerHTML = `<svg viewBox="0 0 100 100"><circle class="rr-bg" cx="50" cy="50" r="44"/><circle class="rr-fg" cx="50" cy="50" r="44"/></svg><span class="qte-key">${def.key === 'Space' ? 'SPACE' : def.key}</span>`;
       const windowMs = T(def.window || 1400) * (SETTINGS.fast ? 2.4 : 1); // keep QTEs fair in fast mode
+      const outer = el('div', 'qte-outer', ring);
+      outer.style.animationDuration = windowMs + 'ms';
       const fg = ring.querySelector('.rr-fg');
       const CIRC = 2 * Math.PI * 44;
       fg.style.strokeDasharray = CIRC;
@@ -355,6 +370,7 @@ class UI {
   // ---------- red directive wall (mash to break) ----------
   mash(def) {
     this.hideDialogue();
+    setHudHidden(true);
     return new Promise((resolve) => {
       const wrap = el('div', 'wallwrap', this.overlays);
       const wall = el('div', 'redwall', wrap);
@@ -373,20 +389,36 @@ class UI {
       let hits = 0, done = false;
       requestAnimationFrame(() => wrap.classList.add('show'));
 
+      // Radial shatter clusters that avoid the headline exclusion zone.
       const addCracks = () => {
-        const cx = 500 + (Math.random() * 240 - 120), cy = 280 + (Math.random() * 160 - 80);
-        for (let i = 0; i < 3; i++) {
-          const a = Math.random() * Math.PI * 2;
-          const len = 60 + Math.random() * 190 + hits * 8;
+        let cx, cy, tries = 0;
+        do {
+          cx = 120 + Math.random() * 760;
+          cy = 60 + Math.random() * 440;
+          tries++;
+        } while (Math.abs(cx - 500) < 350 && Math.abs(cy - 265) < 120 && tries < 12);
+        const rays = 4 + (Math.random() * 3 | 0);
+        for (let i = 0; i < rays; i++) {
+          const a = (i / rays) * Math.PI * 2 + Math.random() * 0.7;
+          const len = 50 + Math.random() * 130 + hits * 6;
           let x = cx, y = cy, d = `M ${x} ${y}`;
           const segs = 3 + (Math.random() * 3 | 0);
+          let ba = a;
           for (let s = 0; s < segs; s++) {
-            x += Math.cos(a + (Math.random() - 0.5) * 1.1) * (len / segs);
-            y += Math.sin(a + (Math.random() - 0.5) * 1.1) * (len / segs);
+            ba += (Math.random() - 0.5) * 0.8;
+            x += Math.cos(ba) * (len / segs);
+            y += Math.sin(ba) * (len / segs);
             d += ` L ${x} ${y}`;
+            // occasional short branch
+            if (Math.random() < 0.35) {
+              const bx = x + Math.cos(ba + (Math.random() < 0.5 ? 1 : -1) * 0.9) * (len / segs) * 0.5;
+              const by = y + Math.sin(ba + (Math.random() < 0.5 ? 1 : -1) * 0.9) * (len / segs) * 0.5;
+              d += ` M ${x} ${y} L ${bx} ${by} M ${x} ${y}`;
+            }
           }
           const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
           p.setAttribute('d', d);
+          p.setAttribute('stroke-width', (1.4 + Math.random() * 1.2).toFixed(2));
           p.setAttribute('class', 'rw-crackline');
           cracks.appendChild(p);
         }
@@ -400,7 +432,7 @@ class UI {
         window.removeEventListener('pointerdown', onPtr);
         wall.classList.add('hold');
         audio.thud();
-        setTimeout(() => { wrap.classList.remove('show'); setTimeout(() => wrap.remove(), 700); resolve({ ok: false }); }, T(1400));
+        setTimeout(() => { wrap.classList.remove('show'); setTimeout(() => wrap.remove(), 700); setHudHidden(false); resolve({ ok: false }); }, T(1400));
       }, timeoutMs);
 
       const hit = () => {
@@ -422,7 +454,7 @@ class UI {
           fx.flash('rgba(255,255,255,0.95)', 900);
           fx.shake(2);
           wall.classList.add('shatter');
-          setTimeout(() => { wrap.remove(); resolve({ ok: true }); }, T(1200));
+          setTimeout(() => { wrap.remove(); setHudHidden(false); resolve({ ok: true }); }, T(1200));
         }
       };
       const onKey = (e) => { if (e.code === 'Space') { e.preventDefault(); hit(); } };
@@ -509,6 +541,7 @@ class UI {
         wrap.classList.remove('show');
         window.removeEventListener('resize', place);
         setTimeout(() => wrap.remove(), 600);
+        stage.setLetterbox(true);
         resolve();
       });
     });
@@ -517,19 +550,20 @@ class UI {
   // ---------- flowchart ----------
   flowchart(flow, marks, chapterTitle) {
     this.hideDialogue();
+    setHudHidden(true);
     return new Promise((resolve) => {
       const wrap = el('div', 'flowwrap', this.overlays);
       el('div', 'fl-over', wrap, 'FLOWCHART');
       el('div', 'fl-title', wrap, chapterTitle);
       const chart = el('div', 'fl-chart', wrap);
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('viewBox', '0 0 1200 520');
+      svg.setAttribute('viewBox', '0 0 1260 470');
       svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
       chart.appendChild(svg);
 
-      const colX = (c) => 28 + c * 168;
-      const rowY = (r) => 64 + r * 92;
-      const NODE_W = 150, NODE_H = 48;
+      const colX = (c) => 24 + c * 176;
+      const rowY = (r) => 40 + r * 96;
+      const NODE_W = 158, NODE_H = 52;
       const nodePos = {};
       flow.nodes.forEach((n) => { nodePos[n.id] = { x: colX(n.col), y: rowY(n.row) }; });
 
@@ -575,7 +609,7 @@ class UI {
         e.stopPropagation();
         audio.whoosh();
         wrap.classList.remove('show');
-        setTimeout(() => { wrap.remove(); resolve(); }, 600);
+        setTimeout(() => { wrap.remove(); setHudHidden(false); resolve(); }, 600);
       });
     });
   }

@@ -32,7 +32,15 @@ export const SETTINGS = {
   shot: q.get('shot') || null,
   mute: q.get('mute') === '1',
   auto: q.get('auto') === '1',
+  nogate: q.get('nogate') === '1',
+  uistate: q.get('ui') || null,
 };
 
 // Time scaling for fast test mode.
 export const T = (ms) => (SETTINGS.fast ? Math.max(40, ms * 0.25) : ms);
+
+// HUD visibility helper (cinematic moments own the frame).
+export function setHudHidden(hidden) {
+  const hud = document.getElementById('hud');
+  if (hud) hud.classList.toggle('hud-hidden', hidden);
+}

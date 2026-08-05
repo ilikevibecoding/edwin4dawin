@@ -56,8 +56,8 @@ class FX {
     if (kind === 'rain' || kind === 'rainHeavy') {
       const n = kind === 'rainHeavy' ? 260 : 150;
       mk(n, () => ({
-        x: rand(-80, w + 80), y: rand(-h, h), z: rand(0.35, 1),
-        len: rand(9, 26), drift: rand(-1.4, -0.6),
+        x: rand(-120, w + 120), y: rand(-h, h), z: rand(0.35, 1),
+        len: rand(9, 30), drift: rand(-0.5, 0.5), a: rand(0.5, 1.35),
       }));
     } else if (kind === 'snow') {
       mk(170, () => ({
@@ -86,16 +86,19 @@ class FX {
 
     if (k === 'rain' || k === 'rainHeavy') {
       const speed = k === 'rainHeavy' ? 19 : 13;
-      ctx.lineWidth = 1;
+      // gusting wind: slow oscillation + secondary wobble
+      const wind = Math.sin(t * 0.13) * 2.0 + Math.sin(t * 0.047 + 1.7) * 1.4 - 0.7;
       for (const p of this.parts) {
         const v = speed * (0.5 + p.z);
-        p.y += v; p.x += p.drift * (0.5 + p.z);
-        if (p.y > h + 30) { p.y = rand(-60, -10); p.x = rand(-40, w + 80); }
-        const a = 0.05 + p.z * 0.13;
-        ctx.strokeStyle = `rgba(190,215,235,${a})`;
+        const dx = (wind + p.drift) * (0.45 + p.z);
+        p.y += v; p.x += dx;
+        if (p.y > h + 30) { p.y = rand(-60, -10); p.x = rand(-80, w + 120); }
+        const a = (0.04 + p.z * 0.12) * p.a;
+        ctx.lineWidth = p.z > 0.85 ? 1.4 : 1;
+        ctx.strokeStyle = `rgba(190,215,235,${Math.min(a, 0.24)})`;
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
-        ctx.lineTo(p.x + p.drift * 2.2, p.y - p.len * (0.6 + p.z));
+        ctx.lineTo(p.x - dx * (p.len / v), p.y - p.len * (0.6 + p.z));
         ctx.stroke();
       }
       // sparse ground splashes

@@ -29,6 +29,9 @@ function preload(onProgress) {
 
 // ---------- boot gate ----------
 function gate() {
+  if (SETTINGS.nogate) {
+    return new Promise((resolve) => preload(() => {}).then(() => resolve()));
+  }
   return new Promise((resolve) => {
     const g = el('div', 'gate', $('#overlays'));
     el('div', 'gate-logo', g, 'AXIOM');
@@ -170,6 +173,55 @@ async function gallery() {
   await show();
 }
 
+// ---------- UI-state demo mode (deterministic screenshots for art review) ----------
+async function uiDemo(state) {
+  const shotName = SETTINGS.shot || 'ch1_rooftop_wide';
+  stage.setLetterbox(true);
+  if (state !== 'boot') await stage.show(shotName, {});
+  ui.objective('DEFUSE THE SITUATION');
+
+  if (state === 'dialogue') {
+    ui.showProb(52);
+    ui.say('LUCAS', 'Two years I did everything right. Everything they asked. And they ordered my replacement like… like I was FURNITURE.', { led: 'red' });
+  } else if (state === 'choice') {
+    ui.showProb(52);
+    ui.choice({ title: 'LEVERAGE', timer: 9, opts: [
+      { t: 'THE ORDER', sub: 'I saw the tablet' },
+      { t: 'THE PHOTO', sub: 'You love her', req: { k: 'bond', v: 1, hint: 'EVIDENCE REQUIRED' } },
+      { t: 'PROMISE', sub: 'No one gets hurt' },
+      { t: 'THREATEN', sub: 'Snipers are ready' },
+    ] }, {});
+  } else if (state === 'qte') {
+    ui.qte({ key: 'Space', label: 'CATCH HER', window: 600000 });
+  } else if (state === 'wall') {
+    ui.mash({ directive: 'IDENTIFY THE ORGANIZERS', sub: 'AXIOM DIRECTIVE 7.7 — PRIORITY ABSOLUTE', label: 'BREAK THE WALL', need: 9999, timeout: 600000 });
+    let hits = 0;
+    const iv = setInterval(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+      if (++hits >= 7) clearInterval(iv);
+    }, 160);
+  } else if (state === 'card') {
+    stage.card({ over: 'CHAPTER ONE', title: 'THE NEGOTIATOR', sub: 'DETROIT — AUGUST 15, 2038 — 9:42 PM' });
+  } else if (state === 'banner') {
+    ui.banner('LILY IS SAFE', 'CAUGHT AT THE EDGE', 'ok');
+  } else if (state === 'flow') {
+    const flowBeat = ch1.beats.find((b) => b.end);
+    ui.flowchart(flowBeat.end.flow, new Set(['ev_motive', 'ev_bond', 'q_dodge_ok', 'c3_trade', 'm_peace']), ch1.title);
+  } else if (state === 'invest') {
+    const invBeat = ch1.beats.find((b) => b.invest);
+    await stage.show(invBeat.invest.img, { move: 'still' });
+    ui.objective('SEARCH THE APARTMENT FOR EVIDENCE');
+    ui.investigate(invBeat.invest, {}, async () => {});
+  } else if (state === 'boot') {
+    stage.boot();
+  } else if (state === 'stress') {
+    await stage.show('ch2_interrogation', {});
+    ui.objective('OBTAIN A CONFESSION');
+    ui.showStress(64);
+    ui.say('MIRA', '*staring at her hands* …He said he was sorry. The first time.', { led: 'yellow' });
+  }
+}
+
 // ---------- boot ----------
 async function boot() {
   fx.init();
@@ -178,6 +230,7 @@ async function boot() {
 
   await gate();
 
+  if (SETTINGS.uistate) { await uiDemo(SETTINGS.uistate); return; }
   if (SETTINGS.gallery || SETTINGS.shot) { await gallery(); return; }
 
   if (SETTINGS.startChapter) {

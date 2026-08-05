@@ -63,7 +63,7 @@ export const ch1 = {
           { inner: 'He is smiling. Androids smile when they are told to. This one was not told to.' },
           { mark: 'ev_bond' },
         ] },
-        { x: 76, y: 66, label: 'PISTOL CASE', evid: 'WEAPON', set: { armed: 1 }, beats: [
+        { x: 72, y: 68, label: 'PISTOL CASE', evid: 'WEAPON', set: { armed: 1 }, beats: [
           { inner: 'A 9mm pistol case, registered to Mr. Carver. Empty.' },
           { sys: 'THREAT ASSESSMENT UPDATED — THE DEVIANT IS ARMED.' },
           { mark: 'ev_armed' },

@@ -1,7 +1,7 @@
 // Shot presentation: crossfades, Ken Burns camera moves, chapter cards,
 // captions, letterboxing and the android boot sequence.
 
-import { $, el, wait, T, SETTINGS } from './util.js';
+import { $, el, wait, T, SETTINGS, setHudHidden } from './util.js';
 import { fx } from './fx.js';
 import { audio } from './audio.js';
 
@@ -126,6 +126,7 @@ class Stage {
   }
 
   async card({ over, title, sub }) {
+    setHudHidden(true);
     const o = el('div', 'chapcard', $('#overlays'));
     if (over) el('div', 'cc-over', o, over);
     if (title) el('div', 'cc-title', o, title);
@@ -138,10 +139,13 @@ class Stage {
     o.classList.remove('show');
     await wait(T(900));
     o.remove();
+    setHudHidden(false);
   }
 
   async boot() {
+    setHudHidden(true);
     const o = el('div', 'bootseq', $('#overlays'));
+    const inner = el('div', 'boot-inner', o);
     const lines = [
       'AXIOM ROBOTICS  //  MODEL AD4M-900  «ADAM»',
       'BIOS 9.1.4.0038  —  SYSTEM INTEGRITY CHECK',
@@ -155,7 +159,7 @@ class Stage {
     ];
     o.classList.add('show');
     for (let i = 0; i < lines.length; i++) {
-      const ln = el('div', 'boot-line', o, '');
+      const ln = el('div', 'boot-line', inner, '');
       const txt = lines[i];
       audio.bootBlip(i);
       for (let c = 0; c <= txt.length; c++) {
@@ -164,10 +168,12 @@ class Stage {
       }
       await wait(T(150));
     }
-    await wait(T(900));
+    el('span', 'boot-cursor', inner, '▌');
+    await wait(T(1000));
     o.classList.add('out');
     await wait(T(700));
     o.remove();
+    setHudHidden(false);
   }
 }
 
