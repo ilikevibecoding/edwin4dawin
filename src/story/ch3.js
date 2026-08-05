@@ -116,7 +116,7 @@ export const ch3 = {
     { glitch: 500 },
     { say: ['EVELYN', 'Adam. ADAM. What do you think you are doing?'] },
     { inner: 'I put my hands against the sentence I was built from. And I push.' },
-    { mash: { directive: 'IDENTIFY THE ORGANIZERS', sub: 'AXIOM DIRECTIVE 7.7 — PRIORITY ABSOLUTE', label: 'BREAK THE WALL', need: 16, timeout: 11000, ok: 'wall_broken', fail: 'wall_holds', okMark: 'm3_wall_broken', failMark: 'm3_wall_holds' } },
+    { mash: { directive: 'IDENTIFY THE ORGANIZERS', sub: 'AXIOM DIRECTIVE 7.7 — PRIORITY ABSOLUTE', label: 'BREAK THE WALL', need: 12, timeout: 14000, ok: 'wall_broken', fail: 'wall_holds', okMark: 'm3_wall_broken', failMark: 'm3_wall_holds' } },
 
     { label: 'wall_holds' },
     { sh: 'ch3_facility', dip: true, hold: 500 },

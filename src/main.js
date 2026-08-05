@@ -139,6 +139,7 @@ function endingData(flags, marks) {
 async function playFrom(startId) {
   const flags = { ins: 0, reese: 0, opinion: 0, evidence: 0 };
   const marks = new Set();
+  window.__dp = { flags, marks }; // test/debug hook
   let id = startId;
   while (id && CHAPTERS[id]) {
     const res = await engine.run(CHAPTERS[id], flags, marks);
@@ -240,6 +241,7 @@ async function boot() {
       const pre = { 2: { reese: 0 }, 3: { reese: 2, opinion: 1, ins: 3 } }[SETTINGS.startChapter] || {};
       const flags = { ins: 0, reese: 0, opinion: 0, evidence: 0, ...pre };
       const marks = new Set(SETTINGS.startChapter === 3 ? ['m_peace', 'm2_confess', 'm2_ra9'] : []);
+      window.__dp = { flags, marks }; // test/debug hook
       let id2 = id;
       while (id2 && CHAPTERS[id2]) {
         const res = await engine.run(CHAPTERS[id2], flags, marks);

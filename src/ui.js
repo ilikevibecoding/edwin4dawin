@@ -424,7 +424,8 @@ class UI {
         }
       };
 
-      const timeoutMs = T(def.timeout || 10000) * (SETTINGS.fast ? 2 : 1);
+      // The wall must stay physically mashable: never shrink this window.
+      const timeoutMs = (def.timeout || 10000) * (SETTINGS.fast ? 1.2 : 1);
       const timer = setTimeout(() => {
         if (done) return;
         done = true;
