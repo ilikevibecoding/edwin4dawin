@@ -1,0 +1,33 @@
+{
+  "name": "interceptor-base",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "capture": "node tools/capture.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ilikevibecoding/edwin4dawin.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ilikevibecoding/edwin4dawin/issues"
+  },
+  "homepage": "https://github.com/ilikevibecoding/edwin4dawin#readme",
+  "type": "module",
+  "private": "true",
+  "dependencies": {
+    "three": "^0.185.1",
+    "vite": "^8.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}

@@ -1,0 +1,889 @@
+// Every texture in the project is generated at runtime on a 2D canvas or from
+// typed arrays. No external image assets are ever loaded.
+
+import * as THREE from 'three';
+import { Noise } from './noise.js';
+
+const cache = new Map();
+let anisotropy = 4;
+
+export function setTextureAnisotropy(v) {
+  anisotropy = v;
+}
+
+export function makeCanvas(w, h = w) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return c;
+}
+
+function finish(canvas, { srgb = true, repeat = [1, 1], wrap = THREE.RepeatWrapping, mips = true } = {}) {
+  const t = new THREE.CanvasTexture(canvas);
+  t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  t.wrapS = wrap;
+  t.wrapT = wrap;
+  t.repeat.set(repeat[0], repeat[1]);
+  t.anisotropy = anisotropy;
+  t.generateMipmaps = mips;
+  t.minFilter = mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
+  t.needsUpdate = true;
+  return t;
+}
+
+function memo(key, fn) {
+  if (cache.has(key)) return cache.get(key);
+  const v = fn();
+  cache.set(key, v);
+  return v;
+}
+
+export function disposeTextureCache() {
+  for (const v of cache.values()) {
+    if (v && v.isTexture) v.dispose();
+    else if (Array.isArray(v)) v.forEach((x) => x && x.isTexture && x.dispose());
+  }
+  cache.clear();
+}
+
+/* ------------------------------------------------------------------ helpers */
+
+function px(ctx, w, h) {
+  return ctx.getImageData(0, 0, w, h);
+}
+
+/** Sobel-style height -> tangent-space normal map. */
+export function normalFromCanvas(src, strength = 2.2, srgbHeight = false) {
+  const w = src.width;
+  const h = src.height;
+  const sctx = src.getContext('2d', { willReadFrequently: true });
+  const data = sctx.getImageData(0, 0, w, h).data;
+  const out = makeCanvas(w, h);
+  const octx = out.getContext('2d', { willReadFrequently: true });
+  const img = octx.createImageData(w, h);
+  const at = (x, y) => {
+    const xi = (x + w) % w;
+    const yi = (y + h) % h;
+    const v = data[(yi * w + xi) * 4] / 255;
+    return srgbHeight ? v * v : v;
+  };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx =
+        at(x - 1, y - 1) + 2 * at(x - 1, y) + at(x - 1, y + 1) -
+        (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1));
+      const dy =
+        at(x - 1, y - 1) + 2 * at(x, y - 1) + at(x + 1, y - 1) -
+        (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1));
+      let nx = dx * strength;
+      let ny = dy * strength;
+      const nz = 1;
+      const len = Math.hypot(nx, ny, nz);
+      nx /= len;
+      ny /= len;
+      const i = (y * w + x) * 4;
+      img.data[i] = (nx * 0.5 + 0.5) * 255;
+      img.data[i + 1] = (ny * 0.5 + 0.5) * 255;
+      img.data[i + 2] = (nz / len) * 255;
+      img.data[i + 3] = 255;
+    }
+  }
+  octx.putImageData(img, 0, 0);
+  return out;
+}
+
+function fbmCanvas(size, { seed = 1, octaves = 6, scale = 4, gain = 0.5, ridged = false, contrast = 1 } = {}) {
+  const n = new Noise(seed);
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  const img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = (x / size) * scale;
+      const v = (y / size) * scale;
+      let f = ridged ? n.ridged2(u, v, octaves, 2.03, gain) : n.fbm2(u, v, octaves, 2.0, gain) * 0.5 + 0.5;
+      f = Math.min(1, Math.max(0, (f - 0.5) * contrast + 0.5));
+      const k = Math.round(f * 255);
+      const i = (y * size + x) * 4;
+      img.data[i] = k;
+      img.data[i + 1] = k;
+      img.data[i + 2] = k;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+function grain(ctx, w, h, amount, alpha = 1) {
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  let s = 991;
+  for (let i = 0; i < d.length; i += 4) {
+    s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff;
+    const r = ((s >> 16) & 255) / 255 - 0.5;
+    const k = r * amount * 255 * alpha;
+    d[i] = Math.min(255, Math.max(0, d[i] + k));
+    d[i + 1] = Math.min(255, Math.max(0, d[i + 1] + k));
+    d[i + 2] = Math.min(255, Math.max(0, d[i + 2] + k));
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function splotches(ctx, w, h, count, colors, sizeRange, seed = 7, alpha = [0.05, 0.2]) {
+  let s = seed;
+  const rnd = () => {
+    s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff;
+    return (s >>> 8) / 8388608;
+  };
+  for (let i = 0; i < count; i++) {
+    const x = rnd() * w;
+    const y = rnd() * h;
+    const r = sizeRange[0] + rnd() * (sizeRange[1] - sizeRange[0]);
+    const col = colors[Math.floor(rnd() * colors.length)];
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const a = alpha[0] + rnd() * (alpha[1] - alpha[0]);
+    g.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${a})`);
+    g.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* --------------------------------------------------------------- materials */
+
+export function concreteMaps(size = 512) {
+  return memo(`concrete${size}`, () => {
+    const h = fbmCanvas(size, { seed: 21, octaves: 6, scale: 6, contrast: 1.2 });
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(h, 0, 0);
+    // tint toward warm grey concrete
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = '#b9b4a8';
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#8f8b80';
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalAlpha = 1;
+    splotches(ctx, size, size, 90, [[70, 66, 60], [190, 186, 176], [120, 112, 100]], [8, 46], 3, [0.03, 0.14]);
+    // expansion joints
+    ctx.strokeStyle = 'rgba(48,44,40,0.85)';
+    ctx.lineWidth = Math.max(1, size / 340);
+    for (let i = 0; i <= 4; i++) {
+      const p = (i / 4) * size;
+      ctx.beginPath();
+      ctx.moveTo(p, 0);
+      ctx.lineTo(p, size);
+      ctx.moveTo(0, p);
+      ctx.lineTo(size, p);
+      ctx.stroke();
+    }
+    // small chips & cracks
+    let s = 55;
+    const rnd = () => ((s = (Math.imul(s, 48271) + 11) & 0x7fffffff), (s >>> 9) / 4194304);
+    ctx.strokeStyle = 'rgba(60,56,52,0.5)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 26; i++) {
+      ctx.beginPath();
+      let x = rnd() * size;
+      let y = rnd() * size;
+      ctx.moveTo(x, y);
+      for (let k = 0; k < 6; k++) {
+        x += (rnd() - 0.5) * 40;
+        y += (rnd() - 0.5) * 40;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    grain(ctx, size, size, 0.1);
+    const nrm = normalFromCanvas(h, 1.6);
+    const rough = makeCanvas(size);
+    const rctx = rough.getContext('2d', { willReadFrequently: true });
+    rctx.drawImage(h, 0, 0);
+    rctx.globalCompositeOperation = 'multiply';
+    rctx.fillStyle = '#d8d8d8';
+    rctx.fillRect(0, 0, size, size);
+    return {
+      map: finish(c, { repeat: [1, 1] }),
+      normalMap: finish(nrm, { srgb: false }),
+      roughnessMap: finish(rough, { srgb: false }),
+    };
+  });
+}
+
+export function sandMaps(size = 512) {
+  return memo(`sand${size}`, () => {
+    const h = fbmCanvas(size, { seed: 91, octaves: 7, scale: 9, contrast: 1.1 });
+    const grav = fbmCanvas(size, { seed: 12, octaves: 4, scale: 42, contrast: 1.6 });
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#a8875e';
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalAlpha = 0.55;
+    ctx.drawImage(h, 0, 0);
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(grav, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = '#c9a577';
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalCompositeOperation = 'source-over';
+    splotches(ctx, size, size, 130, [[120, 92, 62], [196, 168, 128], [90, 74, 56]], [6, 40], 17, [0.05, 0.2]);
+    grain(ctx, size, size, 0.16);
+    const hc = makeCanvas(size);
+    const hctx = hc.getContext('2d', { willReadFrequently: true });
+    hctx.drawImage(h, 0, 0);
+    hctx.globalAlpha = 0.7;
+    hctx.drawImage(grav, 0, 0);
+    const nrm = normalFromCanvas(hc, 2.4);
+    return {
+      map: finish(c),
+      normalMap: finish(nrm, { srgb: false }),
+    };
+  });
+}
+
+export function asphaltMaps(size = 512) {
+  return memo(`asphalt${size}`, () => {
+    const h = fbmCanvas(size, { seed: 44, octaves: 6, scale: 26, contrast: 1.5 });
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#2f2e2c';
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(h, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = '#6e6a64';
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalCompositeOperation = 'source-over';
+    splotches(ctx, size, size, 70, [[20, 20, 20], [110, 108, 104]], [10, 50], 29, [0.05, 0.2]);
+    grain(ctx, size, size, 0.2);
+    return { map: finish(c), normalMap: finish(normalFromCanvas(h, 1.4), { srgb: false }) };
+  });
+}
+
+export function paintedMetalMaps(size = 512, base = '#5c6350', opts = {}) {
+  const key = `paint${size}${base}${JSON.stringify(opts)}`;
+  return memo(key, () => {
+    const { scratches = 40, rust = 0.5, streaks = 22, camo = false } = opts;
+    const h = fbmCanvas(size, { seed: 7, octaves: 5, scale: 18, contrast: 1.1 });
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, size, size);
+    if (camo) {
+      const blob = fbmCanvas(size, { seed: 33, octaves: 3, scale: 3.2 });
+      const bd = blob.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, size, size).data;
+      const img = ctx.getImageData(0, 0, size, size);
+      const cols = [
+        [74, 82, 64],
+        [56, 60, 48],
+        [96, 88, 66],
+      ];
+      for (let i = 0; i < img.data.length; i += 4) {
+        const v = bd[i] / 255;
+        const idx = v < 0.42 ? 0 : v < 0.62 ? 1 : 2;
+        img.data[i] = cols[idx][0];
+        img.data[i + 1] = cols[idx][1];
+        img.data[i + 2] = cols[idx][2];
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+    ctx.globalAlpha = 0.16;
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.drawImage(h, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    let s = 4001;
+    const rnd = () => ((s = (Math.imul(s, 48271) + 7) & 0x7fffffff), (s >>> 9) / 4194304);
+    // paint chips revealing primer
+    for (let i = 0; i < scratches; i++) {
+      const x = rnd() * size;
+      const y = rnd() * size;
+      const w = 2 + rnd() * 14;
+      ctx.fillStyle = `rgba(${90 + rnd() * 30},${70 + rnd() * 20},${58},${0.2 + rnd() * 0.35})`;
+      ctx.beginPath();
+      ctx.ellipse(x, y, w, w * (0.2 + rnd() * 0.6), rnd() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // rust weep streaks running with gravity
+    for (let i = 0; i < streaks; i++) {
+      const x = rnd() * size;
+      const y = rnd() * size * 0.7;
+      const len = 20 + rnd() * 120;
+      const g = ctx.createLinearGradient(x, y, x, y + len);
+      const a = 0.05 + rnd() * 0.22 * rust;
+      g.addColorStop(0, `rgba(112,68,38,${a})`);
+      g.addColorStop(1, 'rgba(112,68,38,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, 1 + rnd() * 4, len);
+    }
+    grain(ctx, size, size, 0.06);
+    const rough = makeCanvas(size);
+    const rc = rough.getContext('2d', { willReadFrequently: true });
+    rc.fillStyle = '#9a9a9a';
+    rc.fillRect(0, 0, size, size);
+    rc.globalAlpha = 0.5;
+    rc.drawImage(h, 0, 0);
+    return {
+      map: finish(c),
+      normalMap: finish(normalFromCanvas(h, 0.8), { srgb: false }),
+      roughnessMap: finish(rough, { srgb: false }),
+    };
+  });
+}
+
+export function brushedMetalMaps(size = 512, tint = '#8d9299') {
+  return memo(`brushed${size}${tint}`, () => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = tint;
+    ctx.fillRect(0, 0, size, size);
+    let s = 17;
+    const rnd = () => ((s = (Math.imul(s, 48271) + 13) & 0x7fffffff), (s >>> 9) / 4194304);
+    for (let i = 0; i < 2600; i++) {
+      const y = rnd() * size;
+      const a = 0.02 + rnd() * 0.05;
+      ctx.strokeStyle = rnd() > 0.5 ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a})`;
+      ctx.lineWidth = 0.5 + rnd() * 1.5;
+      ctx.beginPath();
+      ctx.moveTo(rnd() * size, y);
+      ctx.lineTo(rnd() * size, y + (rnd() - 0.5) * 2);
+      ctx.stroke();
+    }
+    const rough = makeCanvas(size);
+    const rc = rough.getContext('2d', { willReadFrequently: true });
+    rc.fillStyle = '#666';
+    rc.fillRect(0, 0, size, size);
+    rc.globalAlpha = 0.35;
+    rc.drawImage(c, 0, 0);
+    return { map: finish(c), roughnessMap: finish(rough, { srgb: false }), normalMap: finish(normalFromCanvas(c, 0.5), { srgb: false }) };
+  });
+}
+
+/** Heat-affected metal band used on nozzles and blast deflectors. */
+export function heatDiscolorMap(size = 256) {
+  return memo(`heat${size}`, () => {
+    const c = makeCanvas(size, size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const g = ctx.createLinearGradient(0, 0, 0, size);
+    g.addColorStop(0.0, '#39332f');
+    g.addColorStop(0.28, '#54463c');
+    g.addColorStop(0.44, '#7d5a3a');
+    g.addColorStop(0.58, '#8a6a86');
+    g.addColorStop(0.7, '#4e6a8d');
+    g.addColorStop(0.84, '#59564f');
+    g.addColorStop(1.0, '#2b2724');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const h = fbmCanvas(size, { seed: 5, octaves: 5, scale: 12 });
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = 0.45;
+    ctx.drawImage(h, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    grain(ctx, size, size, 0.1);
+    return finish(c);
+  });
+}
+
+export function sootMap(size = 256) {
+  return memo(`soot${size}`, () => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, size, size);
+    const h = fbmCanvas(size, { seed: 88, octaves: 6, scale: 8, contrast: 1.6 });
+    ctx.globalAlpha = 0.85;
+    ctx.drawImage(h, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = '#2a2724';
+    ctx.fillRect(0, 0, size, size);
+    return finish(c);
+  });
+}
+
+/* ----------------------------------------------------------------- decals */
+
+/** Stencilled text/markings on a transparent canvas, for decal planes. */
+export function stencilDecal(lines, { w = 512, h = 256, color = '#e8e2d2', font = 'bold 60px "Arial Narrow", Impact, sans-serif', align = 'center', wear = 0.5, letterSpacing = 4 } = {}) {
+  const key = `stencil${lines.join('|')}${w}${h}${color}${font}${wear}`;
+  return memo(key, () => {
+    const c = makeCanvas(w, h);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = font;
+    ctx.textAlign = align;
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${letterSpacing}px`;
+    const lh = h / (lines.length + 0.6);
+    lines.forEach((ln, i) => {
+      const y = lh * (i + 0.8);
+      ctx.fillText(ln, align === 'center' ? w / 2 : 12, y);
+    });
+    if (wear > 0) {
+      const n = fbmCanvas(Math.max(64, w / 2), { seed: 71, octaves: 5, scale: 14, contrast: 1.8 });
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.globalAlpha = wear * 0.85;
+      ctx.drawImage(n, 0, 0, w, h);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
+    return finish(c, { wrap: THREE.ClampToEdgeWrapping });
+  });
+}
+
+export function warningStripes(w = 512, h = 128, a = '#d8c02a', b = '#22201c') {
+  return memo(`stripes${w}${h}${a}${b}`, () => {
+    const c = makeCanvas(w, h);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = b;
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = a;
+    ctx.save();
+    const step = h * 0.62;
+    for (let x = -h; x < w + h; x += step * 2) {
+      ctx.beginPath();
+      ctx.moveTo(x, h);
+      ctx.lineTo(x + step, h);
+      ctx.lineTo(x + step + h, 0);
+      ctx.lineTo(x + h, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    const n = fbmCanvas(Math.max(64, w / 2), { seed: 4, octaves: 5, scale: 10, contrast: 2 });
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalAlpha = 0.32;
+    ctx.drawImage(n, 0, 0, w, h);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    grain(ctx, w, h, 0.08);
+    return finish(c);
+  });
+}
+
+export function padMarkingsDecal(size = 1024) {
+  return memo(`padmark${size}`, () => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, size, size);
+    const S = size / 1024;
+    ctx.strokeStyle = 'rgba(232,226,200,0.92)';
+    ctx.lineWidth = 7 * S;
+    ctx.strokeRect(70 * S, 70 * S, size - 140 * S, size - 140 * S);
+    ctx.setLineDash([34 * S, 26 * S]);
+    ctx.lineWidth = 4 * S;
+    ctx.strokeStyle = 'rgba(226,196,60,0.85)';
+    ctx.strokeRect(120 * S, 120 * S, size - 240 * S, size - 240 * S);
+    ctx.setLineDash([]);
+    // corner hazard hatch
+    ctx.strokeStyle = 'rgba(226,196,60,0.75)';
+    ctx.lineWidth = 9 * S;
+    for (const [cx, cy, sx, sy] of [
+      [70, 70, 1, 1],
+      [size - 70 * S, 70, -1, 1],
+      [70, size - 70 * S, 1, -1],
+      [size - 70 * S, size - 70 * S, -1, -1],
+    ]) {
+      for (let i = 0; i < 6; i++) {
+        const o = (i * 22 + 12) * S;
+        ctx.beginPath();
+        ctx.moveTo(cx * (typeof cx === 'number' && cx > 1 ? 1 : 1) + sx * o, cy);
+        ctx.lineTo(cx, cy + sy * o);
+        ctx.stroke();
+      }
+    }
+    ctx.fillStyle = 'rgba(232,226,200,0.9)';
+    ctx.font = `bold ${58 * S}px "Arial Narrow", Impact, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('DANGER — BLAST AREA', size / 2, size / 2 - 22 * S);
+    ctx.font = `bold ${38 * S}px "Arial Narrow", Impact, sans-serif`;
+    ctx.fillText('KEEP CLEAR WHEN ARMED', size / 2, size / 2 + 30 * S);
+    const n = fbmCanvas(size / 2, { seed: 61, octaves: 6, scale: 11, contrast: 1.9 });
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalAlpha = 0.45;
+    ctx.drawImage(n, 0, 0, size, size);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    return finish(c, { wrap: THREE.ClampToEdgeWrapping });
+  });
+}
+
+export function chainLinkTexture(size = 256) {
+  return memo(`chain${size}`, () => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, size, size);
+    ctx.strokeStyle = 'rgba(178,182,186,0.95)';
+    ctx.lineWidth = size / 64;
+    const cell = size / 8;
+    for (let i = -1; i <= 9; i++) {
+      ctx.beginPath();
+      for (let k = 0; k <= 8; k++) {
+        const x = i * cell + k * cell;
+        const y = k * cell;
+        if (k === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.beginPath();
+      for (let k = 0; k <= 8; k++) {
+        const x = i * cell - k * cell;
+        const y = k * cell;
+        if (k === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    return finish(c);
+  });
+}
+
+export function treadTexture(size = 256) {
+  return memo(`tread${size}`, () => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#191919';
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#2c2c2c';
+    for (let i = 0; i < 14; i++) {
+      const y = (i / 14) * size;
+      ctx.save();
+      ctx.translate(0, y);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(size, 0);
+      ctx.lineTo(size, size / 34);
+      ctx.lineTo(0, size / 34);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = '#0f0f0f';
+    ctx.fillRect(size * 0.46, 0, size * 0.08, size);
+    grain(ctx, size, size, 0.14);
+    return { map: finish(c), normalMap: finish(normalFromCanvas(c, 1.6), { srgb: false }) };
+  });
+}
+
+/* ---------------------------------------------------------------- sprites */
+
+export function softSprite(size = 128, { power = 2.2, core = 1, colorInner = '255,255,255', colorOuter = '255,255,255' } = {}) {
+  return memo(`soft${size}${power}${core}${colorInner}${colorOuter}`, () => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const img = ctx.createImageData(size, size);
+    const r = size / 2;
+    const ci = colorInner.split(',').map(Number);
+    const co = colorOuter.split(',').map(Number);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = (x + 0.5 - r) / r;
+        const dy = (y + 0.5 - r) / r;
+        const d = Math.min(1, Math.hypot(dx, dy));
+        const a = Math.pow(1 - d, power) * core;
+        const t = d;
+        const i = (y * size + x) * 4;
+        img.data[i] = ci[0] * (1 - t) + co[0] * t;
+        img.data[i + 1] = ci[1] * (1 - t) + co[1] * t;
+        img.data[i + 2] = ci[2] * (1 - t) + co[2] * t;
+        img.data[i + 3] = Math.max(0, Math.min(255, a * 255));
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return finish(c, { wrap: THREE.ClampToEdgeWrapping });
+  });
+}
+
+/** Turbulent puff with soft edges; the workhorse smoke/dust sprite. */
+export function smokeSprite(size = 256, seed = 3) {
+  return memo(`smoke${size}${seed}`, () => {
+    const n = new Noise(seed);
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const img = ctx.createImageData(size, size);
+    const r = size / 2;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = (x + 0.5 - r) / r;
+        const dy = (y + 0.5 - r) / r;
+        const d = Math.hypot(dx, dy);
+        const ang = Math.atan2(dy, dx);
+        const warp = n.fbm2(Math.cos(ang) * 1.7 + 4, Math.sin(ang) * 1.7 + 4, 4) * 0.34;
+        const body = n.fbm2(dx * 2.1 + 11, dy * 2.1 + 11, 5) * 0.5 + 0.5;
+        let a = 1 - Math.min(1, d / (0.92 + warp));
+        a = Math.pow(Math.max(0, a), 1.5) * (0.45 + 0.75 * body);
+        const i = (y * size + x) * 4;
+        const lum = 210 + body * 45;
+        img.data[i] = lum;
+        img.data[i + 1] = lum;
+        img.data[i + 2] = lum;
+        img.data[i + 3] = Math.min(255, a * 255);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return finish(c, { wrap: THREE.ClampToEdgeWrapping });
+  });
+}
+
+export function flareSprite(size = 256) {
+  return memo(`flare${size}`, () => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, size, size);
+    const r = size / 2;
+    const g = ctx.createRadialGradient(r, r, 0, r, r, r);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.08, 'rgba(255,250,220,0.92)');
+    g.addColorStop(0.26, 'rgba(255,190,110,0.34)');
+    g.addColorStop(0.6, 'rgba(255,140,70,0.08)');
+    g.addColorStop(1, 'rgba(255,120,60,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    // anamorphic streak
+    ctx.globalCompositeOperation = 'lighter';
+    const lg = ctx.createLinearGradient(0, r, size, r);
+    lg.addColorStop(0, 'rgba(255,255,255,0)');
+    lg.addColorStop(0.5, 'rgba(255,255,255,0.5)');
+    lg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = lg;
+    ctx.fillRect(0, r - size / 90, size, size / 45);
+    return finish(c, { wrap: THREE.ClampToEdgeWrapping });
+  });
+}
+
+export function sparkSprite(size = 64) {
+  return memo(`spark${size}`, () => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const r = size / 2;
+    const g = ctx.createRadialGradient(r, r, 0, r, r, r);
+    g.addColorStop(0, 'rgba(255,255,250,1)');
+    g.addColorStop(0.3, 'rgba(255,220,150,0.7)');
+    g.addColorStop(1, 'rgba(255,150,60,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    return finish(c, { wrap: THREE.ClampToEdgeWrapping });
+  });
+}
+
+export function ringSprite(size = 256, thickness = 0.1) {
+  return memo(`ring${size}${thickness}`, () => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const img = ctx.createImageData(size, size);
+    const r = size / 2;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const d = Math.hypot((x + 0.5 - r) / r, (y + 0.5 - r) / r);
+        const a = Math.max(0, 1 - Math.abs(d - 0.82) / thickness) * (d < 1 ? 1 : 0);
+        const i = (y * size + x) * 4;
+        img.data[i] = 255;
+        img.data[i + 1] = 255;
+        img.data[i + 2] = 255;
+        img.data[i + 3] = Math.pow(a, 1.6) * 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return finish(c, { wrap: THREE.ClampToEdgeWrapping });
+  });
+}
+
+export function scorchDecalTexture(size = 256, seed = 9) {
+  return memo(`scorch${size}${seed}`, () => {
+    const n = new Noise(seed);
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const img = ctx.createImageData(size, size);
+    const r = size / 2;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = (x + 0.5 - r) / r;
+        const dy = (y + 0.5 - r) / r;
+        const d = Math.hypot(dx, dy);
+        const ang = Math.atan2(dy, dx);
+        const edge = 0.72 + n.fbm2(Math.cos(ang) * 2.4 + 2, Math.sin(ang) * 2.4 + 2, 4) * 0.28;
+        const body = n.fbm2(dx * 3.4, dy * 3.4, 5) * 0.5 + 0.5;
+        let a = 1 - Math.min(1, d / edge);
+        a = Math.pow(Math.max(0, a), 1.1) * (0.35 + body * 0.9);
+        const i = (y * size + x) * 4;
+        const k = 18 + body * 26;
+        img.data[i] = k;
+        img.data[i + 1] = k * 0.94;
+        img.data[i + 2] = k * 0.9;
+        img.data[i + 3] = Math.min(255, a * 240);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return finish(c, { wrap: THREE.ClampToEdgeWrapping });
+  });
+}
+
+export function craterDecalTexture(size = 256, seed = 4) {
+  return memo(`crater${size}${seed}`, () => {
+    const n = new Noise(seed);
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const img = ctx.createImageData(size, size);
+    const r = size / 2;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = (x + 0.5 - r) / r;
+        const dy = (y + 0.5 - r) / r;
+        const d = Math.hypot(dx, dy);
+        const ang = Math.atan2(dy, dx);
+        const edge = 0.62 + n.fbm2(Math.cos(ang) * 3 + 6, Math.sin(ang) * 3 + 6, 4) * 0.26;
+        const body = n.fbm2(dx * 5, dy * 5, 5) * 0.5 + 0.5;
+        const inner = 1 - Math.min(1, d / edge);
+        const rim = Math.exp(-Math.pow((d - edge) / 0.14, 2));
+        const a = Math.min(1, inner * 1.1 + rim * 0.6);
+        const dark = 26 + body * 20;
+        const rimc = 120 + body * 60;
+        const t = rim > inner ? 1 : 0;
+        const i = (y * size + x) * 4;
+        img.data[i] = dark * (1 - t) + rimc * t * 0.9;
+        img.data[i + 1] = dark * 0.95 * (1 - t) + rimc * t * 0.78;
+        img.data[i + 2] = dark * 0.9 * (1 - t) + rimc * t * 0.6;
+        img.data[i + 3] = Math.min(255, a * 250);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return finish(c, { wrap: THREE.ClampToEdgeWrapping });
+  });
+}
+
+export function tireTrackTexture(size = 256) {
+  return memo(`tiretrack${size}`, () => {
+    const c = makeCanvas(size, size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, size, size);
+    const n = fbmCanvas(size, { seed: 202, octaves: 5, scale: 18, contrast: 1.4 });
+    for (const off of [0.3, 0.7]) {
+      const g = ctx.createLinearGradient(off * size - size * 0.06, 0, off * size + size * 0.06, 0);
+      g.addColorStop(0, 'rgba(58,44,30,0)');
+      g.addColorStop(0.5, 'rgba(58,44,30,0.5)');
+      g.addColorStop(1, 'rgba(58,44,30,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(off * size - size * 0.06, 0, size * 0.12, size);
+    }
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalAlpha = 0.6;
+    ctx.drawImage(n, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    return finish(c);
+  });
+}
+
+/* ------------------------------------------------------------------- sky */
+
+export function starfieldTexture(size = 2048) {
+  return memo(`stars${size}`, () => {
+    const c = makeCanvas(size, size / 2);
+    const w = c.width;
+    const h = c.height;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, w, h);
+    // milky way band
+    const n = new Noise(777);
+    const img = ctx.getImageData(0, 0, w, h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const u = x / w;
+        const v = y / h;
+        const band = Math.exp(-Math.pow((v - 0.52 - 0.1 * Math.sin(u * Math.PI * 2)) / 0.075, 2));
+        const cloud = Math.max(0, n.fbm2(u * 22, v * 22, 6) * 0.5 + 0.5) * band;
+        const k = cloud * 46;
+        const i = (y * w + x) * 4;
+        img.data[i] = k * 0.85;
+        img.data[i + 1] = k * 0.9;
+        img.data[i + 2] = k * 1.15;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    let s = 20261;
+    const rnd = () => ((s = (Math.imul(s, 48271) + 3) & 0x7fffffff), (s >>> 9) / 4194304);
+    const palette = ['255,255,255', '200,215,255', '255,232,200', '255,205,175', '215,235,255'];
+    for (let i = 0; i < 5200; i++) {
+      const x = rnd() * w;
+      const y = rnd() * h;
+      const mag = Math.pow(rnd(), 3.2);
+      const r = 0.5 + mag * 2.6;
+      const a = 0.25 + mag * 0.75;
+      const col = palette[Math.floor(rnd() * palette.length)];
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r * 3);
+      g.addColorStop(0, `rgba(${col},${a})`);
+      g.addColorStop(0.35, `rgba(${col},${a * 0.35})`);
+      g.addColorStop(1, `rgba(${col},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return finish(c, { srgb: true, wrap: THREE.RepeatWrapping });
+  });
+}
+
+export function cloudSheetTexture(size = 1024, { seed = 5, coverage = 0.48, softness = 1.5, wispy = false } = {}) {
+  return memo(`cloudsheet${size}${seed}${coverage}${softness}${wispy}`, () => {
+    const n = new Noise(seed);
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const img = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const u = (x / size) * (wispy ? 6 : 3);
+        const v = (y / size) * (wispy ? 1.6 : 3);
+        let f = n.fbm2(u, v, 7, 2.02, 0.52) * 0.5 + 0.5;
+        if (wispy) f = f * 0.6 + 0.4 * (n.fbm2(u * 3.2, v * 0.6, 5) * 0.5 + 0.5);
+        let a = (f - (1 - coverage)) / Math.max(0.05, coverage);
+        a = Math.pow(Math.max(0, Math.min(1, a)), softness);
+        const i = (y * size + x) * 4;
+        const lum = 245;
+        img.data[i] = lum;
+        img.data[i + 1] = lum;
+        img.data[i + 2] = lum;
+        img.data[i + 3] = a * 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return finish(c);
+  });
+}
+
+/* --------------------------------------------------------------- displays */
+
+/** A live 2D canvas texture wrapper for animated console screens. */
+export class CanvasSurface {
+  constructor(w, h, { srgb = true } = {}) {
+    this.canvas = makeCanvas(w, h);
+    this.ctx = this.canvas.getContext('2d');
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    this.texture.minFilter = THREE.LinearFilter;
+    this.texture.generateMipmaps = false;
+    this.texture.anisotropy = anisotropy;
+    this.w = w;
+    this.h = h;
+  }
+
+  commit() {
+    this.texture.needsUpdate = true;
+  }
+
+  dispose() {
+    this.texture.dispose();
+  }
+}
+
+export { fbmCanvas, finish as finishTexture, grain as canvasGrain, splotches as canvasSplotches };
