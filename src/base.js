@@ -44,11 +44,17 @@ export class Base {
 
     this._buildTerrain();
     this._buildPadsAndRoads();
+    this._buildGroundDetail();
     this._buildFence();
     this._buildShelter();
     this._buildRadarTower();
     this._buildFloodlights();
     this._buildProps();
+    this._buildBerms();
+    this._buildPropClusters();
+    this._buildVehiclesExtra();
+    this._buildLightTowers();
+    this._buildPerimeterExtras();
     this._buildSigns();
 
     events.on('tod-changed', ({ night }) => this._setNight(night));
@@ -78,6 +84,7 @@ export class Base {
     const sandLight = new THREE.Color(0xa89673);
     const rock = new THREE.Color(0x7c6e5c);
     const rockHigh = new THREE.Color(0x9c9181);
+    const rimHaze = new THREE.Color(0x6e675c);
     for (let i = 0; i <= rings; i++) {
       for (let j = 0; j < segs; j++) {
         const a = (j / segs) * Math.PI * 2;
@@ -91,6 +98,10 @@ export class Base {
         c.copy(sand).lerp(sandLight, patch * 0.7);
         if (h > 40) c.lerp(rock, smoothstep(40, 320, h));
         if (h > 600) c.lerp(rockHigh, smoothstep(600, 1500, h));
+        // mute the far rim (beyond the mountain ring) so low sunlit sand does
+        // not read as a pale halo strip above the mountain silhouettes
+        const rim = smoothstep(10800, 14200, r);
+        if (rim > 0) c.lerp(rimHaze, rim * 0.9);
         cols.push(c.r, c.g, c.b);
       }
     }
@@ -115,16 +126,66 @@ export class Base {
     terrain.name = 'terrain';
     this.group.add(terrain);
 
+    // natural grouping helpers: vegetation/rock patches + dry washes
+    const rng = this.rng;
+    const clusters = [];
+    for (let i = 0; i < 14; i++) {
+      const a = rng.range(0, Math.PI * 2);
+      const r = 300 + 2600 * Math.pow(rng.next(), 1.5);
+      clusters.push([Math.cos(a) * r, Math.sin(a) * r, rng.range(24, 85)]);
+    }
+    const washes = [];
+    for (let w = 0; w < 5; w++) {
+      let a = rng.range(0, Math.PI * 2), r = rng.range(280, 470);
+      const pts = [];
+      for (let sIdx = 0; sIdx < 9; sIdx++) {
+        pts.push([Math.cos(a) * r, Math.sin(a) * r]);
+        r += rng.range(130, 240);
+        a += rng.range(-0.16, 0.16);
+      }
+      washes.push(pts);
+    }
+    const pickSpot = (out, washLateral) => {
+      const roll = rng.next();
+      if (roll < 0.42) {          // clustered patch
+        const cl = rng.pick(clusters);
+        const rr = Math.abs(rng.gauss(0, cl[2] * 0.55));
+        const aa = rng.range(0, Math.PI * 2);
+        out[0] = cl[0] + Math.cos(aa) * rr;
+        out[1] = cl[1] + Math.sin(aa) * rr;
+      } else if (roll < 0.76) {   // along a dry wash
+        const wash = rng.pick(washes);
+        const f = rng.range(0, wash.length - 1.001);
+        const i0 = Math.floor(f), t = f - i0;
+        const x = wash[i0][0] + (wash[i0 + 1][0] - wash[i0][0]) * t;
+        const z = wash[i0][1] + (wash[i0 + 1][1] - wash[i0][1]) * t;
+        const lat = rng.sign() * (washLateral[0] + Math.abs(rng.gauss(0, washLateral[1])));
+        const la = Math.atan2(wash[i0 + 1][1] - wash[i0][1], wash[i0 + 1][0] - wash[i0][0]) + Math.PI / 2;
+        out[0] = x + Math.cos(la) * lat;
+        out[1] = z + Math.sin(la) * lat;
+      } else {                    // sparse loners
+        const aa = rng.range(0, Math.PI * 2);
+        const rr = rng.range(255, 4200);
+        out[0] = Math.cos(aa) * rr;
+        out[1] = Math.sin(aa) * rr;
+      }
+      const rOut = Math.hypot(out[0], out[1]);
+      if (rOut < 250) {           // never inside the base perimeter
+        const k = rng.range(260, 340) / Math.max(rOut, 1);
+        out[0] *= k; out[1] *= k;
+      }
+    };
+
     // scattered rocks + scrub outside the base
     const rockGeo = new THREE.DodecahedronGeometry(1, 0);
     const rockMat = new THREE.MeshStandardMaterial({ color: 0x6d6055, roughness: 1 });
     const rocks = new THREE.InstancedMesh(rockGeo, rockMat, 240);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
     const e = new THREE.Euler();
+    const spot = [0, 0];
     for (let i = 0; i < 240; i++) {
-      const a = this.rng.range(0, Math.PI * 2);
-      const r = this.rng.range(255, 4200);
-      p.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+      pickSpot(spot, [8, 14]);
+      p.set(spot[0], 0, spot[1]);
       p.y = terrainHeight(p.x, p.z) - 0.2;
       e.set(this.rng.range(0, 3), this.rng.range(0, 3), this.rng.range(0, 3));
       q.setFromEuler(e);
@@ -135,6 +196,31 @@ export class Base {
     }
     rocks.castShadow = true;
     this.group.add(rocks);
+
+    // larger rock outcrops mid-distance — partially buried slabs in groups
+    const outcropGeo = new THREE.DodecahedronGeometry(1, 0);
+    const outcropMat = new THREE.MeshStandardMaterial({ color: 0x655849, roughness: 0.98 });
+    const outcrops = new THREE.InstancedMesh(outcropGeo, outcropMat, 30);
+    let oi = 0;
+    for (let g = 0; g < 9 && oi < 30; g++) {
+      const a = rng.range(0, Math.PI * 2);
+      const r = rng.range(380, 1900);
+      const gx = Math.cos(a) * r, gz = Math.sin(a) * r;
+      const n = rng.int(2, 4);
+      for (let k = 0; k < n && oi < 30; k++) {
+        p.set(gx + rng.range(-16, 16), 0, gz + rng.range(-16, 16));
+        const sc = rng.range(4.5, 13);
+        p.y = terrainHeight(p.x, p.z) - sc * rng.range(0.25, 0.45);
+        e.set(rng.range(-0.25, 0.25), rng.range(0, Math.PI * 2), rng.range(-0.25, 0.25));
+        q.setFromEuler(e);
+        s.set(sc * rng.range(0.8, 1.5), sc * rng.range(0.55, 0.95), sc * rng.range(0.8, 1.5));
+        m.compose(p, q, s);
+        outcrops.setMatrixAt(oi++, m);
+      }
+    }
+    outcrops.count = oi;
+    outcrops.castShadow = true;
+    this.group.add(outcrops);
 
     // dry scrub — crossed planes
     const scrubGeo = BufferGeometryUtils.mergeGeometries([
@@ -148,9 +234,8 @@ export class Base {
     });
     const scrub = new THREE.InstancedMesh(scrubGeo, scrubMat, 420);
     for (let i = 0; i < 420; i++) {
-      const a = this.rng.range(0, Math.PI * 2);
-      const r = this.rng.range(250, 2600);
-      p.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+      pickSpot(spot, [4, 9]);
+      p.set(spot[0], 0, spot[1]);
       p.y = terrainHeight(p.x, p.z);
       e.set(0, this.rng.range(0, Math.PI * 2), 0);
       q.setFromEuler(e);
@@ -214,6 +299,35 @@ export class Base {
     mkRoad(42, 0, 52, -22, 6);          // to rampart
     mkRoad(42, 8, 58, 30, 6);           // to zenith
     mkRoad(-42, 0, -70, 0, 6);          // west service
+
+    // ring + service loop connecting the pads, the north motor-pool area and
+    // the west gate — merged into a single mesh (one draw call)
+    const loopSegs = [
+      [54, -23, 66, 2],     // rampart pad → east
+      [66, 2, 60, 30],      // east → zenith junction
+      [56, 50, 34, 70],     // zenith south exit
+      [34, 70, 4, 80],      // → sentinel pad east edge
+      [12, -37, 12, -58],   // apron north exit
+      [12, -58, -26, -52],  // → motor pool frontage
+      [-26, -52, -52, -30], // → west camp
+      [-52, -30, -54, -6],  // camp edge
+      [-54, -6, -48, 0],    // join west service road
+      [12, -58, 36, -52],   // spur to storage / camo net yard
+      [-70, 0, -226, 0],    // long west spur to gate 2
+    ];
+    const loopParts = [];
+    for (const [x1, z1, x2, z2] of loopSegs) {
+      const len = Math.hypot(x2 - x1, z2 - z1);
+      const g = new THREE.PlaneGeometry(6, len, 1, Math.max(1, Math.round(len / 18)));
+      g.rotateX(-Math.PI / 2);
+      g.rotateY(Math.atan2(x2 - x1, z2 - z1));
+      g.translate((x1 + x2) / 2, 0.07, (z1 + z2) / 2);
+      loopParts.push(g);
+    }
+    const loop = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(loopParts), roadMat);
+    loop.receiveShadow = true;
+    this.group.add(loop);
+
     // center line on gate road
     const line = new THREE.Mesh(
       new THREE.PlaneGeometry(0.35, 180),
@@ -222,6 +336,145 @@ export class Base {
     line.rotation.x = -Math.PI / 2;
     line.position.set(0, 0.1, 140);
     this.group.add(line);
+  }
+
+  // -------------------------------------------------- ground detail pass --
+  // motor pool / fuel point hardstands, tire wear decals, weathering stains,
+  // painted lane markings and pad identification stencils
+  _buildGroundDetail() {
+    const rng = this.rng;
+
+    // motor pool hardstand (north-west of the apron, along the service loop)
+    const motorPad = new THREE.Mesh(
+      new THREE.PlaneGeometry(26, 16),
+      new THREE.MeshStandardMaterial({ map: asphaltTexture([3, 2]), roughness: 0.96 }),
+    );
+    motorPad.rotation.x = -Math.PI / 2;
+    motorPad.position.set(-8, 0.055, -63);
+    motorPad.receiveShadow = true;
+    this.group.add(motorPad);
+
+    // fuel point hardstand (south-east, off the ring road)
+    const fuelPad = new THREE.Mesh(
+      new THREE.PlaneGeometry(13, 11),
+      new THREE.MeshStandardMaterial({ map: concreteTexture([2, 2]), roughness: 0.94 }),
+    );
+    fuelPad.rotation.x = -Math.PI / 2;
+    fuelPad.position.set(30, 0.055, 52);
+    fuelPad.receiveShadow = true;
+    this.group.add(fuelPad);
+
+    // ---- tire track decals on roads, junctions and the apron
+    const trackMat = new THREE.MeshBasicMaterial({
+      map: tireTracksTexture(), transparent: true, opacity: 0.42, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2,
+    });
+    const trackGeo = new THREE.PlaneGeometry(3.4, 15);
+    trackGeo.rotateX(-Math.PI / 2);
+    const trackSpots = [
+      [0, 118, 0.03, 0.11], [0, 164, -0.02, 0.11], [0, 74, 0.09, 0.11], [0, 46, -0.3, 0.11],
+      [18, 12, 0.42, 0.27], [-8, 24, -1.24, 0.27], [30, -8, 1.6, 0.27], [-20, -14, 1.1, 0.27],
+      [46, -10, -0.42, 0.11], [50, 16, -0.6, 0.11], [12, -46, 0.02, 0.11], [-8, -54, 1.62, 0.11],
+      [-2, 66, -1.05, 0.11], [42, 62, 0.85, 0.11], [-56, 0, 1.55, 0.11], [-120, 0, 1.58, 0.11],
+    ];
+    const tracks = new THREE.InstancedMesh(trackGeo, trackMat, trackSpots.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    trackSpots.forEach(([x, z, rot, y], i) => {
+      p.set(x, y, z);
+      q.setFromEuler(new THREE.Euler(0, rot, 0));
+      s.set(rng.range(0.8, 1.1), 1, rng.range(0.85, 1.25));
+      m.compose(p, q, s);
+      tracks.setMatrixAt(i, m);
+    });
+    this.group.add(tracks);
+
+    // ---- weathering patches on the apron + pads (dark oil/rubber stains)
+    const stainMat = new THREE.MeshBasicMaterial({
+      map: stainTexture(), transparent: true, opacity: 0.52, depthWrite: false,
+      color: 0x4b463c, polygonOffset: true, polygonOffsetFactor: -1.5,
+    });
+    const stainGeo = new THREE.PlaneGeometry(1, 1);
+    stainGeo.rotateX(-Math.PI / 2);
+    const stainSpots = [];
+    for (let i = 0; i < 22; i++) stainSpots.push([rng.range(-38, 38), rng.range(-33, 33), 0.262]);
+    for (let i = 0; i < 3; i++) stainSpots.push([52 + rng.range(-8, 8), -34 + rng.range(-8, 8), 0.272]);
+    for (let i = 0; i < 3; i++) stainSpots.push([60 + rng.range(-8, 8), 38 + rng.range(-8, 8), 0.272]);
+    for (let i = 0; i < 3; i++) stainSpots.push([-16 + rng.range(-10, 10), 84 + rng.range(-10, 10), 0.272]);
+    for (let i = 0; i < 5; i++) stainSpots.push([-8 + rng.range(-11, 11), -63 + rng.range(-6, 6), 0.075]);
+    for (let i = 0; i < 4; i++) stainSpots.push([30 + rng.range(-5, 5), 52 + rng.range(-4, 4), 0.075]);
+    const stains = new THREE.InstancedMesh(stainGeo, stainMat, stainSpots.length);
+    stainSpots.forEach(([x, z, y], i) => {
+      p.set(x, y, z);
+      q.setFromEuler(new THREE.Euler(0, rng.range(0, Math.PI * 2), 0));
+      const sc = rng.range(2.2, 7.5);
+      s.set(sc, 1, sc * rng.range(0.6, 1));
+      m.compose(p, q, s);
+      stains.setMatrixAt(i, m);
+    });
+    this.group.add(stains);
+
+    // ---- painted lane markings (merged strips, one draw call)
+    const paint = [];
+    const strip = (x, z, w, l, y = 0.262, rot = 0) => {
+      const g = new THREE.PlaneGeometry(w, l);
+      g.rotateX(-Math.PI / 2);
+      if (rot) g.rotateY(rot);
+      g.translate(x, y, z);
+      paint.push(g);
+    };
+    // apron perimeter line
+    strip(0, -34.5, 79, 0.35); strip(0, 34.5, 79, 0.35);
+    strip(-39.5, 0, 0.35, 69); strip(39.5, 0, 0.35, 69);
+    // apron lead-in dashes from the gate road
+    for (let i = 0; i < 5; i++) strip(0, 30 - i * 5.4, 0.35, 3.0);
+    // motor pool parking bays
+    for (let i = 0; i < 7; i++) strip(-20 + i * 4, -64, 0.28, 11, 0.075);
+    strip(-8, -58.6, 24.28, 0.28, 0.075);
+    // fuel point border
+    strip(30, 47.4, 12, 0.3, 0.075); strip(30, 56.6, 12, 0.3, 0.075);
+    strip(24.2, 52, 0.3, 9.5, 0.075); strip(35.8, 52, 0.3, 9.5, 0.075);
+    const paintMesh = new THREE.Mesh(
+      BufferGeometryUtils.mergeGeometries(paint),
+      new THREE.MeshBasicMaterial({ color: 0xcdc6a6, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }),
+    );
+    this.group.add(paintMesh);
+
+    // ---- pad identification stencils near each pad road entry (one atlas)
+    const labels = ['PAD R', 'PAD Z', 'PAD S'];
+    const atlas = padLabelAtlas(labels);
+    const labelParts = [];
+    const labelSpots = [
+      // rotated so the text reads upright for a driver arriving on the road
+      [52, -22.5, 0.28, -0.43],  // rampart entry
+      [59, 28.5, 0.28, -2.51],   // zenith entry
+      [-12.5, 70, 0.28, 2.09],   // sentinel entry
+    ];
+    labelSpots.forEach(([x, z, y, rot], i) => {
+      const g = new THREE.PlaneGeometry(5.4, 1.7);
+      const uv = g.attributes.uv;
+      for (let k = 0; k < uv.count; k++) uv.setY(k, (uv.getY(k) + (labels.length - 1 - i)) / labels.length);
+      g.rotateX(-Math.PI / 2);
+      g.rotateY(rot);
+      g.translate(x, y, z);
+      labelParts.push(g);
+    });
+    const labelMesh = new THREE.Mesh(
+      BufferGeometryUtils.mergeGeometries(labelParts),
+      new THREE.MeshBasicMaterial({ map: atlas, transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }),
+    );
+    this.group.add(labelMesh);
+
+    // big apron stencil, readable when walking in from the gate
+    const apronStencil = new THREE.Mesh(
+      new THREE.PlaneGeometry(19, 2.7),
+      new THREE.MeshBasicMaterial({
+        map: stencilTexture('CASTELLAN RIDGE', { w: 1024, h: 144, size: 92, color: 'rgba(215,209,186,0.78)' }),
+        transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1,
+      }),
+    );
+    apronStencil.rotation.x = -Math.PI / 2;
+    apronStencil.position.set(6, 0.265, 27);
+    this.group.add(apronStencil);
   }
 
   // --------------------------------------------------------------- fence --
@@ -606,7 +859,7 @@ export class Base {
         spot.position.set(x, 9.2, z);
         spot.target.position.set(x * 0.15, 0, z * 0.15);
         this.group.add(spot, spot.target);
-        this._nightItems.push({ spot, intensity: 3200 });
+        this._nightItems.push({ spot, intensity: 1050 });
       }
     });
 
@@ -701,7 +954,7 @@ export class Base {
       const cable = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.05, 6), cableMat);
       this.group.add(cable);
     };
-    mkGenerator(40, -20, this.pads.rampart.pos);
+    mkGenerator(43, -22, this.pads.rampart.pos);
     mkGenerator(47, 26, this.pads.zenith.pos);
     mkGenerator(-28, 74, this.pads.sentinel.pos);
     mkGenerator(-30, -18, new THREE.Vector3(-38, 0, -10)); // shelter power
@@ -726,6 +979,14 @@ export class Base {
     ringBarriers(-16, 84, 21, 12, 1.4, Math.PI * 1.6);
     // gate chicane
     barrierSpots.push([-4, 205, 0.3], [4.5, 193, -0.3], [-4, 181, 0.25]);
+    // occasional barriers along road edges (gate road, service loop, west spur)
+    barrierSpots.push(
+      [5, 120, 0.06], [-5, 152, -0.08], [5, 96, 0.12], [4, 140, -0.05],
+      [8, -44, 0.05], [16, -52, -1.5], [-20, -56.5, 1.62], [-40, -46, 0.8],
+      [30, 66, 2.15], [50, 58, -1.05], [69, 14, 1.5], [65, -16, 1.35],
+      [-100, -4, 1.55], [-146, 4, 1.62], [-192, -4, 1.58],
+      [-222, -3, 1.6], [-223, 3.4, 1.52],
+    );
     const jbInst = new THREE.InstancedMesh(jbGeo, jbMat, barrierSpots.length);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
     barrierSpots.forEach(([x, z, rot], i) => {
@@ -825,20 +1086,57 @@ export class Base {
     hescoInst.receiveShadow = true;
     this.group.add(hescoInst);
 
-    // camo net over crates near rampart
-    const net = new THREE.Mesh(
-      new THREE.PlaneGeometry(7, 7, 6, 6),
-      new THREE.MeshStandardMaterial({ map: camoNetTexture(), transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, roughness: 1 }),
-    );
-    const netPos = net.geometry.attributes.position;
+    // camo net canopies — smooth tent-like drape on corner poles (replaces the
+    // old crumpled-looking noise plane). One over the rampart crate yard, one
+    // over the fuel point drums.
+    const NET_HALF = 4.75;
+    const drape = (x, y) => {
+      const rr = Math.hypot(x, y);
+      // dome over the stored goods, sagging toward the pole line
+      let h = 1.34 + 1.02 * (1 - smoothstep(1.5, NET_HALF, rr));
+      h += fbm2(x * 0.5 + 7, y * 0.5 + 3, 2) * 0.14;
+      // scalloped droop along the free edges between poles
+      const edge = smoothstep(NET_HALF - 0.9, NET_HALF, Math.max(Math.abs(x), Math.abs(y)));
+      h -= edge * 0.3 * (0.35 + 0.65 * Math.abs(Math.sin(x * 1.35 + y * 1.7)));
+      return h;
+    };
+    const netGeo = new THREE.PlaneGeometry(NET_HALF * 2, NET_HALF * 2, 16, 16);
+    const netPos = netGeo.attributes.position;
     for (let i = 0; i < netPos.count; i++) {
-      netPos.setZ(i, fbm2(netPos.getX(i) * 0.5, netPos.getY(i) * 0.5, 2) * 1.1);
+      netPos.setZ(i, drape(netPos.getX(i), netPos.getY(i)));
     }
-    net.geometry.computeVertexNormals();
-    net.rotation.x = -Math.PI / 2;
-    net.position.set(44, 2.2, -44);
-    net.castShadow = true;
-    this.group.add(net);
+    netGeo.computeVertexNormals();
+    const netTex = camoNetTexture();
+    const netMat = new THREE.MeshStandardMaterial({
+      map: netTex, transparent: true, alphaTest: 0.34, side: THREE.DoubleSide, roughness: 1,
+    });
+    const netSites = [[44, -44, 0.35], [30, 52, -0.85]];
+    const poleGeo = new THREE.CylinderGeometry(0.035, 0.05, 1, 6);
+    poleGeo.translate(0, 0.5, 0);
+    const poleMatN = new THREE.MeshStandardMaterial({ map: metalTexture('#4c5148', 27), roughness: 0.6, metalness: 0.5 });
+    const poles = new THREE.InstancedMesh(poleGeo, poleMatN, netSites.length * 4);
+    let pi = 0;
+    for (const [nx, nz, nyaw] of netSites) {
+      const net = new THREE.Mesh(netGeo, netMat);
+      net.rotation.order = 'YXZ';
+      net.rotation.y = nyaw;
+      net.rotation.x = -Math.PI / 2;
+      net.position.set(nx, 0, nz);
+      net.castShadow = true;
+      this.group.add(net);
+      const cs = Math.cos(nyaw), sn = Math.sin(nyaw);
+      const corners = [[-NET_HALF, -NET_HALF], [NET_HALF, -NET_HALF], [-NET_HALF, NET_HALF], [NET_HALF, NET_HALF]];
+      for (const [cx, cy] of corners) {
+        // plane local (x, y) maps to offset (x, -y) in XZ, then yaw rotates it
+        const lx = cx, lz = -cy;
+        p.set(nx + lx * cs + lz * sn, 0, nz - lx * sn + lz * cs);
+        q.identity();
+        s.set(1, Math.max(0.7, drape(cx, cy) - 0.05), 1);
+        m.compose(p, q, s);
+        poles.setMatrixAt(pi++, m);
+      }
+    }
+    this.group.add(poles);
 
     // ---- windsock
     const wsPole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 6.4, 6), antMat);
@@ -854,6 +1152,441 @@ export class Base {
     this.group.add(sock);
     this.windsock = sock;
     this.cylCollider(-38, 34, 0.3, 6);
+  }
+
+  // ---------------------------------------------------- revetment berms --
+  // low dirt embankments wrapped around the battery pads (outside the hazard
+  // rings and jersey barriers), plus a small berm around the fuel point.
+  _buildBerms() {
+    const parts = [];
+    const bermDefs = [
+      // [cx, cz, R, a0, arc, tube]
+      [52, -34, 21, 2.2, Math.PI * 2 - 1.55, 2.6],   // rampart — opening SSE toward roads
+      [60, 38, 22, 2.4, 1.8, 2.6],                    // zenith west arc
+      [60, 38, 22, 5.1, 2.38, 2.6],                   // zenith east arc (gaps N + S for roads)
+      [-16, 84, 26.5, 0.35, 2.8, 2.8],                // sentinel — north stays with the HESCOs
+      [30, 52, 8, 1.7, Math.PI * 2 - 1.4, 1.5],       // fuel point bund
+    ];
+    for (const [cx, cz, R, a0, arc, tube] of bermDefs) {
+      const g = new THREE.TorusGeometry(R, tube, 7, Math.max(14, Math.round((arc * R) / 5)), arc);
+      // tile the sand texture along the arc instead of stretching it once
+      const uv = g.attributes.uv;
+      const uRep = Math.max(2, Math.round((arc * R) / 7));
+      for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * uRep, uv.getY(k) * 2);
+      g.rotateX(-Math.PI / 2);
+      g.scale(1, 0.5, 1);
+      g.rotateY(-(a0 + arc));
+      g.translate(cx, 0, cz);
+      parts.push(g);
+      // colliders along the crest
+      const n = Math.max(4, Math.round((arc * R) / 4));
+      for (let k = 0; k < n; k++) {
+        const az = a0 + ((k + 0.5) / n) * arc;
+        this.cylCollider(cx + Math.cos(az) * R, cz + Math.sin(az) * R, tube * 0.9, 1.6);
+      }
+    }
+    const berm = new THREE.Mesh(
+      BufferGeometryUtils.mergeGeometries(parts),
+      new THREE.MeshStandardMaterial({ map: sandTexture([1, 1]), color: 0x8d7c5f, roughness: 1 }),
+    );
+    berm.castShadow = true;
+    berm.receiveShadow = true;
+    this.group.add(berm);
+  }
+
+  // ------------------------------------------------------ prop clusters --
+  // fuel drums, pallet stacks, cable reels, quonset tents and T-wall blast
+  // panels — all instanced/merged.
+  _buildPropClusters() {
+    const rng = this.rng;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    const e = new THREE.Euler();
+
+    // ---- fuel drums
+    const drumGeo = new THREE.CylinderGeometry(0.31, 0.31, 0.92, 10);
+    const drumMat = new THREE.MeshStandardMaterial({ map: drumTexture(), roughness: 0.72, metalness: 0.28 });
+    const drums = [];
+    const drumRow = (cx, cz, n, dx, dz) => {
+      for (let i = 0; i < n; i++) drums.push([cx + dx * i + rng.range(-0.05, 0.05), 0.46, cz + dz * i + rng.range(-0.05, 0.05), 0]);
+    };
+    drumRow(28.9, 50.9, 4, 0.72, 0.06);       // fuel point rows
+    drumRow(29.1, 51.75, 4, 0.72, -0.04);
+    drums.push([29.6, 1.38, 51.3, 0], [30.4, 1.38, 51.35, 0]);   // second layer
+    for (let i = 0; i < 3; i++) drums.push([32.6 + i * 0.75, 0.32, 54.3 + rng.range(-0.2, 0.2), 1]); // tipped
+    drumRow(-19.2, -67.2, 4, 0.72, 0.08);      // motor pool corner
+    drumRow(45.2, -18.6, 3, 0.7, 0.2);         // rampart generator
+    drumRow(-63.3, -11.2, 4, 0.7, -0.12);      // camp
+    drumRow(49.6, 26.6, 4, 0.68, 0.3);         // zenith pad edge
+    const drumInst = new THREE.InstancedMesh(drumGeo, drumMat, drums.length);
+    drums.forEach(([x, y, z, tipped], i) => {
+      p.set(x, y, z);
+      if (tipped) e.set(Math.PI / 2, 0, rng.range(0, Math.PI * 2));
+      else e.set(0, rng.range(0, Math.PI * 2), 0);
+      q.setFromEuler(e);
+      m.compose(p, q, s.set(1, 1, 1));
+      drumInst.setMatrixAt(i, m);
+    });
+    drumInst.castShadow = true;
+    this.group.add(drumInst);
+    this.cylCollider(30, 51.3, 2.4, 1.9);
+    this.cylCollider(33.3, 54.3, 1.3, 0.7);
+    this.cylCollider(-18.2, -67.2, 1.7, 1.1);
+    this.cylCollider(45.9, -18.4, 1.4, 1.1);
+    this.cylCollider(-62.3, -11.3, 1.6, 1.1);
+    this.cylCollider(50.6, 27.1, 1.5, 1.1);
+
+    // ---- pallet stacks
+    const palletGeo = BufferGeometryUtils.mergeGeometries([
+      new THREE.BoxGeometry(1.25, 0.1, 1.05).translate(0, 0.21, 0),
+      new THREE.BoxGeometry(1.25, 0.1, 0.17).translate(0, 0.08, -0.42),
+      new THREE.BoxGeometry(1.25, 0.1, 0.17).translate(0, 0.08, 0),
+      new THREE.BoxGeometry(1.25, 0.1, 0.17).translate(0, 0.08, 0.42),
+    ]);
+    const palletMat = new THREE.MeshStandardMaterial({ map: panelTexture({ base: '#7a6b4e', seed: 83, rivets: false }), roughness: 1 });
+    const pallets = [
+      [46.2, -39.6, 1], [44.9, -38.4, 2], [3.2, -67.4, 3], [1.6, -66.8, 1],
+      [26.6, 55.4, 2], [-31.2, 8.4, 1], [-30.1, 9.6, 3], [-23.4, 88.6, 2], [67.8, 25.6, 1],
+    ];
+    const palletInst = new THREE.InstancedMesh(palletGeo, palletMat, pallets.length);
+    pallets.forEach(([x, z, stack], i) => {
+      p.set(x, 0, z);
+      q.setFromEuler(e.set(0, rng.range(0, Math.PI), 0));
+      m.compose(p, q, s.set(1, stack, 1));
+      palletInst.setMatrixAt(i, m);
+    });
+    this.group.add(palletInst);
+    this.cylCollider(2.6, -67.1, 1.6, 0.9);
+    this.cylCollider(-30.6, 9, 1.6, 0.9);
+
+    // ---- cable reels
+    const reelDisc = new THREE.CylinderGeometry(0.82, 0.82, 0.09, 14);
+    const reelGeo = BufferGeometryUtils.mergeGeometries([
+      reelDisc.clone().rotateZ(Math.PI / 2).translate(-0.36, 0, 0),
+      reelDisc.clone().rotateZ(Math.PI / 2).translate(0.36, 0, 0),
+      new THREE.CylinderGeometry(0.44, 0.44, 0.64, 10).rotateZ(Math.PI / 2),
+    ]);
+    const reelMat = new THREE.MeshStandardMaterial({ map: panelTexture({ base: '#6b5f45', seed: 87, rivets: false }), roughness: 0.9 });
+    const reels = [
+      [-64.2, -27.6, 0.4, 0],   // antenna farm, upright
+      [-66.1, -23.8, 1.1, 1],   // flat on the ground
+      [-27.2, -15.2, 2.2, 0],
+      [44.6, 28.4, 0.9, 0],
+      [25.8, 48.6, -0.6, 0],
+      [-30.8, 76.8, 0.2, 1],
+    ];
+    const reelInst = new THREE.InstancedMesh(reelGeo, reelMat, reels.length);
+    reels.forEach(([x, z, yaw, flat], i) => {
+      if (flat) {
+        p.set(x, 0.45, z);
+        q.setFromEuler(e.set(0, yaw, Math.PI / 2));
+      } else {
+        p.set(x, 0.82, z);
+        q.setFromEuler(e.set(0, yaw, 0));
+      }
+      m.compose(p, q, s.set(1, 1, 1));
+      reelInst.setMatrixAt(i, m);
+      this.cylCollider(x, z, 0.9, 1.4);
+    });
+    reelInst.castShadow = true;
+    this.group.add(reelInst);
+
+    // ---- quonset tents (west camp)
+    const tentShell = new THREE.CylinderGeometry(2.35, 2.35, 5.6, 12, 1, true, 0, Math.PI);
+    tentShell.rotateZ(Math.PI / 2);
+    const tentGeo = BufferGeometryUtils.mergeGeometries([
+      tentShell,
+      new THREE.CircleGeometry(2.35, 12, 0, Math.PI).rotateY(Math.PI / 2).translate(2.8, 0, 0),
+      new THREE.CircleGeometry(2.35, 12, 0, Math.PI).rotateY(-Math.PI / 2).translate(-2.8, 0, 0),
+    ]);
+    const tentMat = new THREE.MeshStandardMaterial({
+      map: panelTexture({ base: '#5f6350', seed: 71, rivets: false }), roughness: 1, side: THREE.DoubleSide,
+    });
+    const tents = [[-62, -13, 0.08], [-64, -21, -0.1], [-59, -27, 1.48]];
+    const tentInst = new THREE.InstancedMesh(tentGeo, tentMat, tents.length);
+    tents.forEach(([x, z, yaw], i) => {
+      p.set(x, 0, z);
+      q.setFromEuler(e.set(0, yaw, 0));
+      m.compose(p, q, s.set(1, 1, 1));
+      tentInst.setMatrixAt(i, m);
+      const along = Math.abs(Math.sin(yaw)) > 0.7;
+      this.boxCollider(x, z, along ? 5 : 6.2, along ? 6.2 : 5, 2.4);
+    });
+    tentInst.castShadow = true;
+    tentInst.receiveShadow = true;
+    this.group.add(tentInst);
+    // sandbag positions guarding the camp + motor pool
+    this._sandbagWall(this.group, -58, -8, 4, 2, 0.35);
+    this.boxCollider(-58, -8, 3, 1, 1);
+    this._sandbagWall(this.group, 7, -51, 5, 3, 0.35);
+    this.boxCollider(7, -51, 3.6, 1, 1.2);
+
+    // ---- T-wall blast panels shielding the command shelter + motor pool
+    const twShape = new THREE.Shape();
+    twShape.moveTo(-0.52, 0); twShape.lineTo(0.52, 0); twShape.lineTo(0.52, 0.22);
+    twShape.lineTo(0.15, 0.5); twShape.lineTo(0.13, 2.55); twShape.lineTo(0.3, 2.7);
+    twShape.lineTo(0.3, 2.92); twShape.lineTo(-0.3, 2.92); twShape.lineTo(-0.3, 2.7);
+    twShape.lineTo(-0.13, 2.55); twShape.lineTo(-0.15, 0.5); twShape.lineTo(-0.52, 0.22);
+    twShape.closePath();
+    const twGeo = new THREE.ExtrudeGeometry(twShape, { depth: 1.75, bevelEnabled: false });
+    twGeo.translate(0, 0, -0.875);
+    const twMat = new THREE.MeshStandardMaterial({ map: concreteTexture([1, 1]), roughness: 0.95 });
+    const twSpots = [];
+    for (let i = 0; i < 6; i++) twSpots.push([-43.5, -14.6 + i * 1.72, 0]);           // west of shelter
+    for (let i = 0; i < 7; i++) twSpots.push([-43.6 + i * 1.72, -17.5, Math.PI / 2]); // north of shelter
+    for (let i = 0; i < 3; i++) twSpots.push([-22.6, -60.4 - i * 1.72, 0]);           // motor pool west edge
+    const twInst = new THREE.InstancedMesh(twGeo, twMat, twSpots.length);
+    twSpots.forEach(([x, z, yaw], i) => {
+      p.set(x, 0, z);
+      q.setFromEuler(e.set(0, yaw + rng.range(-0.02, 0.02), 0));
+      m.compose(p, q, s.set(1, 1, 1));
+      twInst.setMatrixAt(i, m);
+      const along = Math.abs(Math.sin(yaw)) > 0.7;
+      this.boxCollider(x, z, along ? 1.9 : 1.15, along ? 1.15 : 1.9, 2.9);
+    });
+    twInst.castShadow = true;
+    twInst.receiveShadow = true;
+    this.group.add(twInst);
+  }
+
+  // -------------------------------------------------- additional vehicles --
+  _buildVehiclesExtra() {
+    const rng = this.rng;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    const e = new THREE.Euler();
+    const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+
+    // ---- three more parked trucks (instanced merged geometry, 3 draw calls)
+    const bodyMat = new THREE.MeshStandardMaterial({ map: panelTexture({ base: '#61694f', seed: 42 }), roughness: 0.8 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x23261f, roughness: 0.9 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x1d2b33, roughness: 0.25, metalness: 0.6 });
+    const truckBodyGeo = BufferGeometryUtils.mergeGeometries([
+      box(2.1, 1.5, 2.2, 0, 1.45, 2.6), box(2.1, 0.75, 1.3, 0, 1.07, 4.3), box(2.3, 0.5, 4.6, 0, 1.1, -0.6),
+      box(0.09, 0.42, 4.6, -1.14, 1.56, -0.6), box(0.09, 0.42, 4.6, 1.14, 1.56, -0.6), box(2.28, 0.42, 0.09, 0, 1.56, -2.85),
+    ]);
+    const wheelGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.42, 12);
+    wheelGeo.rotateZ(Math.PI / 2);
+    const wheelParts = [];
+    for (const [wx, wz] of [[-0.98, 3.9], [0.98, 3.9], [-0.98, 0.6], [0.98, 0.6], [-0.98, -1.6], [0.98, -1.6]]) {
+      wheelParts.push(wheelGeo.clone().translate(wx, 0.55, wz));
+    }
+    const truckWheelsGeo = BufferGeometryUtils.mergeGeometries(wheelParts);
+    const truckGlassGeo = box(1.9, 0.55, 0.06, 0, 1.75, 3.72);
+    const truckSpots = [
+      [-14, -63.5, Math.PI + 0.06], [-6, -63.5, Math.PI - 0.03], [19, 61, 0.55],
+    ];
+    const tBody = new THREE.InstancedMesh(truckBodyGeo, bodyMat, truckSpots.length);
+    const tWheels = new THREE.InstancedMesh(truckWheelsGeo, darkMat, truckSpots.length);
+    const tGlass = new THREE.InstancedMesh(truckGlassGeo, glassMat, truckSpots.length);
+    truckSpots.forEach(([x, z, yaw], i) => {
+      p.set(x, 0, z);
+      q.setFromEuler(e.set(0, yaw, 0));
+      m.compose(p, q, s.set(1, 1, 1));
+      tBody.setMatrixAt(i, m);
+      tWheels.setMatrixAt(i, m);
+      tGlass.setMatrixAt(i, m);
+      const diag = Math.abs(Math.sin(yaw)) > 0.3 && Math.abs(Math.sin(yaw)) < 0.95;
+      this.boxCollider(x, z, diag ? 5.5 : 3.4, diag ? 5.5 : 7.4, 2.6);
+    });
+    tBody.castShadow = true;
+    this.group.add(tBody, tWheels, tGlass);
+
+    // ---- fuel tanker at the fuel point
+    const tk = new THREE.Group();
+    tk.position.set(38, 0, 62);
+    tk.rotation.y = -0.83;
+    this.group.add(tk);
+    const tkBody = new THREE.Mesh(BufferGeometryUtils.mergeGeometries([
+      box(2.1, 1.5, 2.2, 0, 1.45, 2.8), box(2.1, 0.75, 1.3, 0, 1.07, 4.5),
+      box(1.1, 0.35, 7.4, 0, 0.72, -0.5), box(2.0, 0.12, 0.5, 0, 2.62, 0.9),
+    ]), bodyMat);
+    tkBody.castShadow = true;
+    tk.add(tkBody);
+    const tkTank = new THREE.Mesh(BufferGeometryUtils.mergeGeometries([
+      new THREE.CylinderGeometry(1.02, 1.02, 4.6, 14).rotateX(Math.PI / 2).translate(0, 1.82, -1.2),
+      new THREE.SphereGeometry(1.02, 12, 8).scale(1, 1, 0.42).translate(0, 1.82, 1.1),
+      new THREE.SphereGeometry(1.02, 12, 8).scale(1, 1, 0.42).translate(0, 1.82, -3.5),
+    ]), new THREE.MeshStandardMaterial({ map: metalTexture('#8f948b', 33), roughness: 0.42, metalness: 0.62 }));
+    tkTank.castShadow = true;
+    tk.add(tkTank);
+    const tkWheels = new THREE.Mesh(truckWheelsGeo, darkMat);
+    tk.add(tkWheels);
+    const tkHaz = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.9, 0.42),
+      new THREE.MeshBasicMaterial({ map: hazardStripesTexture([4, 1]) }),
+    );
+    tkHaz.position.set(0, 0.95, -4.25);
+    tkHaz.rotation.y = Math.PI;
+    tk.add(tkHaz);
+    const tkLabel = new THREE.Mesh(BufferGeometryUtils.mergeGeometries([
+      new THREE.PlaneGeometry(2.1, 0.44).rotateY(Math.PI / 2).translate(1.04, 1.82, -1.2),
+      new THREE.PlaneGeometry(2.1, 0.44).rotateY(-Math.PI / 2).translate(-1.04, 1.82, -1.2),
+    ]), new THREE.MeshBasicMaterial({ map: stencilTexture('FLAMMABLE', { w: 512, h: 96, size: 58, color: '#8a2e26' }), transparent: true }));
+    tk.add(tkLabel);
+    this.boxCollider(38, 62, 5.6, 5.6, 2.9);
+
+    // ---- small equipment carts on the apron
+    const cartMat = new THREE.MeshStandardMaterial({ map: metalTexture('#4a4f42', 29), roughness: 0.7, metalness: 0.4 });
+    const cartGeo = BufferGeometryUtils.mergeGeometries([
+      box(1.7, 0.09, 0.95, 0, 0.52, 0),
+      box(0.06, 0.5, 0.06, -0.78, 0.27, -0.4), box(0.06, 0.5, 0.06, 0.78, 0.27, -0.4),
+      box(0.06, 0.5, 0.06, -0.78, 0.27, 0.4), box(0.06, 0.5, 0.06, 0.78, 0.27, 0.4),
+      new THREE.CylinderGeometry(0.17, 0.17, 0.12, 10).rotateZ(Math.PI / 2).translate(-0.7, 0.17, -0.36),
+      new THREE.CylinderGeometry(0.17, 0.17, 0.12, 10).rotateZ(Math.PI / 2).translate(0.7, 0.17, -0.36),
+      new THREE.CylinderGeometry(0.17, 0.17, 0.12, 10).rotateZ(Math.PI / 2).translate(-0.7, 0.17, 0.36),
+      new THREE.CylinderGeometry(0.17, 0.17, 0.12, 10).rotateZ(Math.PI / 2).translate(0.7, 0.17, 0.36),
+      new THREE.BoxGeometry(0.05, 0.62, 0.05).rotateZ(0.55).translate(-1.0, 0.8, -0.15),
+      new THREE.BoxGeometry(0.05, 0.62, 0.05).rotateZ(0.55).translate(-1.0, 0.8, 0.15),
+      new THREE.BoxGeometry(0.05, 0.05, 0.4).translate(-1.16, 1.05, 0),
+    ]);
+    const carts = [[-24, 10, 0.5], [-12, -26, -1.1], [2, -64, 1.65]];
+    const cartInst = new THREE.InstancedMesh(cartGeo, cartMat, carts.length);
+    carts.forEach(([x, z, yaw], i) => {
+      p.set(x, 0, z);
+      q.setFromEuler(e.set(0, yaw, 0));
+      m.compose(p, q, s.set(1, 1, 1));
+      cartInst.setMatrixAt(i, m);
+      this.boxCollider(x, z, 2.0, 1.3, 1.1);
+    });
+    this.group.add(cartInst);
+  }
+
+  // ------------------------------------------------ portable light towers --
+  _buildLightTowers() {
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    const e = new THREE.Euler();
+    const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+    const frameMat = new THREE.MeshStandardMaterial({ map: metalTexture('#6a7164', 23), roughness: 0.55, metalness: 0.6 });
+    const frameGeo = BufferGeometryUtils.mergeGeometries([
+      box(1.65, 0.22, 1.05, 0, 0.55, 0),
+      box(0.08, 0.06, 0.85, 0, 0.5, 0.92),
+      new THREE.CylinderGeometry(0.05, 0.07, 5.0, 7).translate(0, 3.16, 0),
+      box(1.0, 0.09, 0.11, 0, 5.72, 0),
+      new THREE.CylinderGeometry(0.28, 0.28, 0.16, 10).rotateZ(Math.PI / 2).translate(-0.86, 0.28, 0),
+      new THREE.CylinderGeometry(0.28, 0.28, 0.16, 10).rotateZ(Math.PI / 2).translate(0.86, 0.28, 0),
+      box(0.05, 0.04, 0.75, -0.72, 0.32, -0.62), box(0.05, 0.04, 0.75, 0.72, 0.32, -0.62),
+      box(0.05, 0.04, 0.75, -0.72, 0.32, 0.62), box(0.05, 0.04, 0.75, 0.72, 0.32, 0.62),
+    ]);
+    const headParts = [];
+    for (let i = 0; i < 4; i++) headParts.push(box(0.26, 0.2, 0.22, -0.39 + i * 0.26, 5.92, 0.04));
+    const headsGeo = BufferGeometryUtils.mergeGeometries(headParts);
+    const headsMat = new THREE.MeshBasicMaterial({ color: 0x2a2d2a, toneMapped: false });
+    const sites = [[-52, 16, 0.7], [16, -50, 2.4], [-34, 58, -0.5], [40, 58, 2.9]];
+    const frames = new THREE.InstancedMesh(frameGeo, frameMat, sites.length);
+    const heads = new THREE.InstancedMesh(headsGeo, headsMat, sites.length);
+    sites.forEach(([x, z, yaw], i) => {
+      p.set(x, 0, z);
+      q.setFromEuler(e.set(0, yaw, 0));
+      m.compose(p, q, s.set(1, 1, 1));
+      frames.setMatrixAt(i, m);
+      heads.setMatrixAt(i, m);
+      this.cylCollider(x, z, 0.8, 5);
+    });
+    frames.castShadow = true;
+    this.group.add(frames, heads);
+    this.floodHeads.push(headsMat); // glows warm at night with the mast lights
+  }
+
+  // ------------------------------------- perimeter towers, gate 2, signs --
+  _buildPerimeterExtras() {
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    const e = new THREE.Euler();
+    const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+
+    // ---- guard towers (main gate + NW perimeter) — 2 instanced draw calls
+    const frameMat = new THREE.MeshStandardMaterial({ map: metalTexture('#5f665f', 15), roughness: 0.55, metalness: 0.65 });
+    const cabinMat = new THREE.MeshStandardMaterial({ map: panelTexture({ base: '#5d6552', seed: 57 }), roughness: 0.8 });
+    const legGeo = new THREE.CylinderGeometry(0.07, 0.095, 6.7, 6);
+    const frameParts = [];
+    for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      frameParts.push(legGeo.clone().rotateZ(-dx * 0.055).rotateX(dz * 0.055).translate(dx * 1.16, 3.32, dz * 1.16));
+    }
+    for (const y of [1.9, 4.1]) {
+      frameParts.push(
+        box(2.3, 0.07, 0.07, 0, y, 1.04), box(2.3, 0.07, 0.07, 0, y, -1.04),
+        box(0.07, 0.07, 2.3, 1.04, y, 0), box(0.07, 0.07, 2.3, -1.04, y, 0),
+      );
+    }
+    frameParts.push(box(0.035, 6.4, 0.035, -0.26, 3.2, 1.38), box(0.035, 6.4, 0.035, 0.26, 3.2, 1.38));
+    for (let i = 0; i < 9; i++) frameParts.push(box(0.55, 0.045, 0.045, 0, 0.7 + i * 0.65, 1.38));
+    const towerFrameGeo = BufferGeometryUtils.mergeGeometries(frameParts);
+    const towerCabinGeo = BufferGeometryUtils.mergeGeometries([
+      box(3.0, 0.14, 3.0, 0, 6.62, 0),
+      box(3.0, 0.8, 0.1, 0, 7.1, 1.45), box(3.0, 0.8, 0.1, 0, 7.1, -1.45),
+      box(0.1, 0.8, 3.0, 1.45, 7.1, 0), box(0.1, 0.8, 3.0, -1.45, 7.1, 0),
+      box(3.35, 0.1, 3.35, 0, 8.75, 0),
+      box(0.09, 1.6, 0.09, 1.38, 7.9, 1.38), box(0.09, 1.6, 0.09, -1.38, 7.9, 1.38),
+      box(0.09, 1.6, 0.09, 1.38, 7.9, -1.38), box(0.09, 1.6, 0.09, -1.38, 7.9, -1.38),
+      box(0.42, 0.3, 0.36, 0.7, 7.62, 1.5),
+    ]);
+    const towerSites = [[14, 214], [-152, -156]];
+    const towerFrames = new THREE.InstancedMesh(towerFrameGeo, frameMat, towerSites.length);
+    const towerCabins = new THREE.InstancedMesh(towerCabinGeo, cabinMat, towerSites.length);
+    towerSites.forEach(([x, z], i) => {
+      p.set(x, 0, z);
+      q.setFromEuler(e.set(0, Math.atan2(-x, -z), 0));
+      m.compose(p, q, s.set(1, 1, 1));
+      towerFrames.setMatrixAt(i, m);
+      towerCabins.setMatrixAt(i, m);
+      this.boxCollider(x, z, 2.9, 2.9, 9);
+    });
+    towerFrames.castShadow = true;
+    towerCabins.castShadow = true;
+    this.group.add(towerFrames, towerCabins);
+
+    // ---- gate 2 (west, closed) at the end of the west spur road
+    const g2Mat = new THREE.MeshStandardMaterial({ map: panelTexture({ base: '#5b6353', seed: 12 }), roughness: 0.7 });
+    const g2Posts = new THREE.Mesh(BufferGeometryUtils.mergeGeometries([
+      box(0.75, 4.2, 0.75, -231.6, 2.1, -5.5), box(0.75, 4.2, 0.75, -231.6, 2.1, 5.5),
+      box(0.6, 0.5, 12.0, -231.6, 4.5, 0),
+    ]), g2Mat);
+    g2Posts.castShadow = true;
+    this.group.add(g2Posts);
+    const g2FrameMat = new THREE.MeshStandardMaterial({ map: metalTexture('#606862', 25), roughness: 0.5, metalness: 0.7 });
+    const g2Frame = new THREE.Mesh(BufferGeometryUtils.mergeGeometries([
+      box(0.1, 0.1, 10.5, -230.9, 0.4, 0), box(0.1, 0.1, 10.5, -230.9, 3.0, 0),
+      box(0.1, 2.7, 0.1, -230.9, 1.7, -5.2), box(0.1, 2.7, 0.1, -230.9, 1.7, 0), box(0.1, 2.7, 0.1, -230.9, 1.7, 5.2),
+    ]), g2FrameMat);
+    this.group.add(g2Frame);
+    const g2LinkTex = chainlinkTexture().clone();
+    g2LinkTex.repeat.set(3.4, 1.3);
+    g2LinkTex.needsUpdate = true;
+    const g2Link = new THREE.Mesh(
+      new THREE.PlaneGeometry(10.4, 2.6),
+      new THREE.MeshStandardMaterial({
+        map: g2LinkTex, transparent: true, alphaTest: 0.22, side: THREE.DoubleSide,
+        color: 0xd6dde0, roughness: 0.6, metalness: 0.25, depthWrite: false,
+      }),
+    );
+    g2Link.rotation.y = Math.PI / 2;
+    g2Link.position.set(-230.9, 1.65, 0);
+    this.group.add(g2Link);
+    const g2Sign = new THREE.Mesh(
+      new THREE.PlaneGeometry(6.2, 0.8),
+      new THREE.MeshBasicMaterial({ map: stencilTexture('GATE 2 — AUTHORIZED VEHICLES ONLY', { w: 1024, h: 128, size: 52, color: '#e8e4d8', bg: '#3a4136' }) }),
+    );
+    g2Sign.rotation.y = Math.PI / 2;
+    g2Sign.position.set(-230.4, 3.1, 0);
+    this.group.add(g2Sign);
+
+    // ---- warning signs hung on the fence (instanced, face inward)
+    const signGeo = new THREE.PlaneGeometry(0.95, 0.68);
+    const signMat = new THREE.MeshBasicMaterial({ map: warnSignTexture() });
+    const signSpots = [];
+    const segs = 44;
+    for (let i = 0; i < segs; i += 4) {
+      const a = (i / segs) * Math.PI * 2;
+      if (Math.abs(a - Math.PI / 2) < 0.22 || Math.abs(a - Math.PI) < 0.22) continue;
+      signSpots.push(a);
+    }
+    const signs = new THREE.InstancedMesh(signGeo, signMat, signSpots.length);
+    signSpots.forEach((a, i) => {
+      const R = WORLD.fenceRadius - 0.55;
+      p.set(Math.cos(a) * R, 1.85, Math.sin(a) * R);
+      q.setFromEuler(e.set(0, Math.atan2(-Math.cos(a), -Math.sin(a)), 0));
+      m.compose(p, q, s.set(1, 1, 1));
+      signs.setMatrixAt(i, m);
+    });
+    this.group.add(signs);
   }
 
   // --------------------------------------------------------------- signs --
@@ -878,6 +1611,9 @@ export class Base {
     mkSign('SENTINEL TEST PAD — KEEP OUT', -2, 70, -2.9, 3.2);
     mkSign('TOC — AUTHORIZED ONLY', -32, -3, 1.72, 2.6, 0.8, '#31402f');
     mkSign('EAR PROTECTION REQUIRED', 6, 44, 3.14, 2.8, 0.7, '#7a6a24');
+    mkSign('MOTOR POOL', -8, -56, 0, 2.4, 0.7, '#31402f');
+    mkSign('FUEL POINT — NO SMOKING', 27.5, 55.5, 0.7, 3.0, 0.7, '#7a3020');
+    mkSign('SPEED LIMIT 15', 7, 198, 0, 2.2, 0.7, '#31402f');
 
     // hazard stripe aprons around battery pads
     const stripes = hazardStripesTexture([14, 1]);
@@ -947,4 +1683,134 @@ function scrubTexture() {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+// ---------------------------------------------- local decal/prop textures --
+let _tireTracksTex = null;
+function tireTracksTexture() {
+  if (_tireTracksTex) return _tireTracksTex;
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 512;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, 128, 512);
+  for (const cx of [38, 90]) {
+    for (let y = 0; y < 512; y += 3) {
+      const fade = Math.min(1, y / 90, (512 - y) / 90);
+      const wobble = fbm2(y * 0.014, cx * 0.3, 2) * 7;
+      const a = fade * (0.35 + 0.4 * (0.5 + 0.5 * fbm2(y * 0.05, cx, 2)));
+      g.fillStyle = `rgba(28,26,22,${a.toFixed(3)})`;
+      g.fillRect(cx + wobble - 9, y, 18, 3);
+      // tread gaps
+      if ((y >> 2) % 3 === 0) {
+        g.clearRect(cx + wobble - 6, y, 4, 2);
+        g.clearRect(cx + wobble + 2, y, 4, 2);
+      }
+    }
+  }
+  _tireTracksTex = new THREE.CanvasTexture(c);
+  _tireTracksTex.colorSpace = THREE.SRGBColorSpace;
+  return _tireTracksTex;
+}
+
+let _stainTex = null;
+function stainTexture() {
+  if (_stainTex) return _stainTex;
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, 128, 128);
+  const gr = g.createRadialGradient(64, 64, 4, 64, 64, 62);
+  gr.addColorStop(0, 'rgba(30,28,24,0.85)');
+  gr.addColorStop(0.55, 'rgba(34,32,28,0.4)');
+  gr.addColorStop(1, 'rgba(36,34,30,0)');
+  g.fillStyle = gr;
+  g.beginPath(); g.arc(64, 64, 62, 0, 7); g.fill();
+  const img = g.getImageData(0, 0, 128, 128);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const x = (i / 4) % 128, y = (i / 4 / 128) | 0;
+    const n = 0.5 + 0.65 * fbm2(x * 0.055 + 11, y * 0.055 + 4, 3);
+    img.data[i + 3] = Math.max(0, Math.min(255, img.data[i + 3] * n));
+  }
+  g.putImageData(img, 0, 0);
+  _stainTex = new THREE.CanvasTexture(c);
+  return _stainTex;
+}
+
+let _drumTex = null;
+function drumTexture() {
+  if (_drumTex) return _drumTex;
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#57604c';
+  g.fillRect(0, 0, 128, 128);
+  for (let y = 0; y < 128; y += 2) {
+    for (let x = 0; x < 128; x += 2) {
+      const n = fbm2(x * 0.06 + 5, y * 0.06, 3) * 9;
+      g.fillStyle = `rgba(${n > 0 ? 255 : 0},${n > 0 ? 255 : 10},${n > 0 ? 220 : 0},${Math.abs(n) * 0.012})`;
+      g.fillRect(x, y, 2, 2);
+    }
+  }
+  // rolling ribs + rims
+  g.fillStyle = 'rgba(24,28,22,0.65)';
+  g.fillRect(0, 40, 128, 5);
+  g.fillRect(0, 83, 128, 5);
+  g.fillRect(0, 0, 128, 4);
+  g.fillRect(0, 124, 128, 4);
+  // rust streaks
+  for (let i = 0; i < 12; i++) {
+    const x = (i * 41) % 128, h = 12 + ((i * 29) % 40);
+    g.fillStyle = `rgba(112,70,36,${0.1 + (i % 4) * 0.05})`;
+    g.fillRect(x, 6 + ((i * 17) % 30), 2 + (i % 3), h);
+  }
+  g.fillStyle = 'rgba(220,214,190,0.6)';
+  g.font = 'bold 15px "Courier New", monospace';
+  g.fillText('CR-FL', 46, 68);
+  _drumTex = new THREE.CanvasTexture(c);
+  _drumTex.colorSpace = THREE.SRGBColorSpace;
+  return _drumTex;
+}
+
+let _warnSignTex = null;
+function warnSignTexture() {
+  if (_warnSignTex) return _warnSignTex;
+  const c = document.createElement('canvas');
+  c.width = 190; c.height = 136;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ded8c4';
+  g.fillRect(0, 0, 190, 136);
+  g.strokeStyle = '#8a2e26';
+  g.lineWidth = 8;
+  g.strokeRect(4, 4, 182, 128);
+  g.fillStyle = '#8a2e26';
+  g.fillRect(8, 8, 174, 38);
+  g.fillStyle = '#efe9d6';
+  g.font = 'bold 24px "Arial Narrow", Arial, sans-serif';
+  g.textAlign = 'center';
+  g.fillText('RESTRICTED AREA', 95, 35);
+  g.fillStyle = '#2c2a26';
+  g.font = 'bold 17px "Arial Narrow", Arial, sans-serif';
+  g.fillText('AUTHORIZED', 95, 74);
+  g.fillText('PERSONNEL ONLY', 95, 96);
+  g.font = '12px "Arial Narrow", Arial, sans-serif';
+  g.fillText('CASTELLAN RIDGE TEST RANGE', 95, 120);
+  _warnSignTex = new THREE.CanvasTexture(c);
+  _warnSignTex.colorSpace = THREE.SRGBColorSpace;
+  return _warnSignTex;
+}
+
+/** vertical atlas of ground stencil labels (row 0 at the bottom of the UVs) */
+function padLabelAtlas(labels) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 128 * labels.length;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, c.width, c.height);
+  g.font = 'bold 62px "Courier New", monospace';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = 'rgba(214,208,184,0.85)';
+  labels.forEach((t, i) => g.fillText(t, 128, i * 128 + 66));
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
