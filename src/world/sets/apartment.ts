@@ -289,7 +289,7 @@ export function buildApartment(ctx: SetContext): GameSet {
   shaft.renderOrder = 3;
   root.add(shaft);
 
-  const mist = new MistLayers(4, 9, 0x2c4a5c, 0.05);
+  const mist = new MistLayers(2, 9, 0x2c4a5c, 0.05);
   mist.group.position.set(0, 0.3, 0);
   root.add(mist.group);
 

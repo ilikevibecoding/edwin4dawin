@@ -130,7 +130,7 @@ if (!checkOnly && args.encode !== 'false' && existsSync(framesDir)) {
       [
         '-y',
         '-framerate',
-        String(fps),
+        String(args.encodeFps ?? fps),
         '-i',
         path.join(framesDir, `%06d.${format === 'jpeg' ? 'jpg' : 'png'}`),
         ...(audioFile ? ['-i', audioFile] : []),
@@ -142,6 +142,7 @@ if (!checkOnly && args.encode !== 'false' && existsSync(framesDir)) {
         '20',
         '-pix_fmt',
         'yuv420p',
+        ...(args.outFps ? ['-r', String(args.outFps)] : []),
         '-movflags',
         '+faststart',
         ...(audioFile ? ['-c:a', 'aac', '-b:a', '160k', '-shortest'] : []),

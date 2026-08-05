@@ -12,7 +12,7 @@ export class PlanarReflection {
   private clipPlane: THREE.Plane;
   private excluded = new Set<THREE.Object3D>();
   /** Reflections are expensive; refresh them every other frame. */
-  interval = 2;
+  interval = 3;
   private tick = 0;
 
   constructor(

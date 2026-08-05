@@ -554,7 +554,7 @@ export class PostStack {
       case 'high':
         return { ao: true, dof: true, aoScale: 0.5, dofScale: 0.5, aoSamples: 14, dofSamples: 24, mips: 5 };
       case 'balanced':
-        return { ao: true, dof: true, aoScale: 0.5, dofScale: 0.5, aoSamples: 8, dofSamples: 14, mips: 4 };
+        return { ao: true, dof: true, aoScale: 0.34, dofScale: 0.5, aoSamples: 8, dofSamples: 12, mips: 4 };
       default:
         return { ao: false, dof: false, aoScale: 0.5, dofScale: 0.5, aoSamples: 6, dofSamples: 8, mips: 4 };
     }

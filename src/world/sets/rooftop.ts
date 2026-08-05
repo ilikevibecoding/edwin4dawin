@@ -193,9 +193,9 @@ export function buildRooftop(ctx: SetContext): GameSet {
   searchlight.renderOrder = 3;
   root.add(searchlight);
 
-  const rain = new Rain(2800, 34, { color: 0xaad0ec, length: 0.72, wind: 0.2 });
+  const rain = new Rain(1700, 34, { color: 0xaad0ec, length: 0.72, wind: 0.2 });
   root.add(rain.mesh);
-  const mist = new MistLayers(7, 28, 0x33566c, 0.08);
+  const mist = new MistLayers(3, 28, 0x33566c, 0.08);
   mist.group.position.y = 0.3;
   root.add(mist.group);
 

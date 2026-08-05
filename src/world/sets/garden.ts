@@ -212,10 +212,10 @@ export function buildGarden(ctx: SetContext): GameSet {
   const ambient = new THREE.HemisphereLight(0x2e4450, 0x100f0e, 6.5);
   root.add(ambient);
 
-  const rain = new Rain(1500, 26, { color: 0x9cc0dc, length: 0.5, wind: 0.08 });
+  const rain = new Rain(900, 26, { color: 0x9cc0dc, length: 0.5, wind: 0.08 });
   rain.opacity = 0.75;
   root.add(rain.mesh);
-  const mist = new MistLayers(6, 22, 0x3a4a54, 0.06);
+  const mist = new MistLayers(3, 22, 0x3a4a54, 0.06);
   mist.group.position.y = 0.4;
   root.add(mist.group);
 

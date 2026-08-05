@@ -240,9 +240,9 @@ export function buildStreet(ctx: SetContext): GameSet {
   rim.target.position.set(-5, 1.5, 3);
   root.add(rim, rim.target);
 
-  const rain = new Rain(2400, 36, { color: 0xa8cfe8, length: 0.62, wind: 0.14 });
+  const rain = new Rain(1500, 36, { color: 0xa8cfe8, length: 0.62, wind: 0.14 });
   root.add(rain.mesh);
-  const mist = new MistLayers(6, 30, 0x2b4a5e, 0.075);
+  const mist = new MistLayers(3, 30, 0x2b4a5e, 0.075);
   mist.group.position.y = 0.2;
   root.add(mist.group);
 
