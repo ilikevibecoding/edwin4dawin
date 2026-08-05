@@ -1,0 +1,47 @@
+[
+  {
+    "shot": "portrait-kai",
+    "file": "/workspace/shots/clay4/portrait-kai.png",
+    "ms": 1964,
+    "frameMs": 473,
+    "triangles": 107400,
+    "calls": 41,
+    "lights": 4,
+    "programs": 17,
+    "buildSetMs": 1039,
+    "buildActorsMs": 3021,
+    "firstFrameMs": 1500,
+    "settleMsPerFrame": 13,
+    "errors": []
+  },
+  {
+    "shot": "portrait-kai-profile",
+    "file": "/workspace/shots/clay4/portrait-kai-profile.png",
+    "ms": 10396,
+    "frameMs": 395,
+    "triangles": 107400,
+    "calls": 41,
+    "lights": 4,
+    "programs": 17,
+    "buildSetMs": 18,
+    "buildActorsMs": 584,
+    "firstFrameMs": 17,
+    "settleMsPerFrame": 0,
+    "errors": []
+  },
+  {
+    "shot": "portrait-voss",
+    "file": "/workspace/shots/clay4/portrait-voss.png",
+    "ms": 14787,
+    "frameMs": 492,
+    "triangles": 109468,
+    "calls": 43,
+    "lights": 4,
+    "programs": 17,
+    "buildSetMs": 16,
+    "buildActorsMs": 2420,
+    "firstFrameMs": 14,
+    "settleMsPerFrame": 0,
+    "errors": []
+  }
+]

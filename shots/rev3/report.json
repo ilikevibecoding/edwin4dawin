@@ -1,0 +1,35 @@
+[
+  {
+    "label": "ch1.merge",
+    "fileA": "/workspace/shots/rev3/ch1.merge-a.png",
+    "fileB": "/workspace/shots/rev3/ch1.merge-b.png",
+    "probe": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "max": 0
+    }
+  },
+  {
+    "label": "ch3.empathy",
+    "fileA": "/workspace/shots/rev3/ch3.empathy-a.png",
+    "fileB": "/workspace/shots/rev3/ch3.empathy-b.png",
+    "probe": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "max": 0
+    }
+  },
+  {
+    "label": "ch4.reveal",
+    "fileA": "/workspace/shots/rev3/ch4.reveal-a.png",
+    "fileB": "/workspace/shots/rev3/ch4.reveal-b.png",
+    "probe": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "max": 0
+    }
+  }
+]

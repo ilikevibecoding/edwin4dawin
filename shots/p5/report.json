@@ -1,0 +1,62 @@
+[
+  {
+    "shot": "portrait-kai",
+    "file": "/workspace/shots/p5/portrait-kai.png",
+    "ms": 3065,
+    "frameMs": 728,
+    "triangles": 122804,
+    "calls": 41,
+    "lights": 7,
+    "programs": 23,
+    "buildSetMs": 1013,
+    "buildActorsMs": 3055,
+    "firstFrameMs": 3364,
+    "settleMsPerFrame": 845,
+    "errors": []
+  },
+  {
+    "shot": "portrait-kai-profile",
+    "file": "/workspace/shots/p5/portrait-kai-profile.png",
+    "ms": 15512,
+    "frameMs": 634,
+    "triangles": 122804,
+    "calls": 41,
+    "lights": 7,
+    "programs": 23,
+    "buildSetMs": 20,
+    "buildActorsMs": 583,
+    "firstFrameMs": 18,
+    "settleMsPerFrame": 686,
+    "errors": []
+  },
+  {
+    "shot": "portrait-voss",
+    "file": "/workspace/shots/p5/portrait-voss.png",
+    "ms": 20844,
+    "frameMs": 723,
+    "triangles": 122924,
+    "calls": 43,
+    "lights": 7,
+    "programs": 27,
+    "buildSetMs": 26,
+    "buildActorsMs": 2446,
+    "firstFrameMs": 600,
+    "settleMsPerFrame": 762,
+    "errors": []
+  },
+  {
+    "shot": "portrait-kai-body",
+    "file": "/workspace/shots/p5/portrait-kai-body.png",
+    "ms": 14062,
+    "frameMs": 567,
+    "triangles": 122804,
+    "calls": 41,
+    "lights": 7,
+    "programs": 27,
+    "buildSetMs": 17,
+    "buildActorsMs": 579,
+    "firstFrameMs": 701,
+    "settleMsPerFrame": 487,
+    "errors": []
+  }
+]

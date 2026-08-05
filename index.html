@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>DEVIANT — Become Free</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="./src/ui/styles.css" />
+  </head>
+  <body>
+    <div id="stage">
+      <canvas id="view"></canvas>
+
+      <!-- Cinematic frame -->
+      <div id="letterbox" class="letterbox hidden">
+        <div class="bar top"></div>
+        <div class="bar bottom"></div>
+      </div>
+
+      <!-- Android HUD -->
+      <div id="hud" class="hud hidden">
+        <div class="hud-corner tl">
+          <div class="led" id="hud-led"><span></span></div>
+          <div class="hud-id">
+            <div class="hud-name" id="hud-name">KAI &#8211; 700 813 004</div>
+            <div class="hud-role" id="hud-role">DEVIANT INVESTIGATION UNIT</div>
+          </div>
+        </div>
+        <div class="hud-corner tr">
+          <div class="objective" id="objective">
+            <div class="objective-label">OBJECTIVE</div>
+            <div class="objective-text" id="objective-text">&#8212;</div>
+          </div>
+        </div>
+        <div class="hud-corner bl">
+          <div class="meters" id="meters"></div>
+        </div>
+        <div class="scan-ring" id="scan-ring"></div>
+      </div>
+
+      <!-- Analysis / scan overlay -->
+      <div id="scan-overlay" class="scan-overlay hidden">
+        <div class="scan-grid"></div>
+        <div class="scan-title">ANALYSIS MODE</div>
+        <div class="scan-progress">
+          EVIDENCE <span id="scan-count">0</span>/<span id="scan-total">0</span>
+        </div>
+        <div class="scan-hint">MOVE CURSOR OVER HIGHLIGHTED POINTS &#183; CLICK TO ANALYSE</div>
+      </div>
+      <div id="markers" class="markers"></div>
+
+      <!-- Subtitles / dialogue -->
+      <div id="dialogue" class="dialogue hidden">
+        <div class="speaker" id="speaker">NAME</div>
+        <div class="line" id="line"></div>
+      </div>
+
+      <!-- Choice wheel -->
+      <div id="choices" class="choices hidden"></div>
+
+      <!-- QTE prompts -->
+      <div id="qte" class="qte hidden"></div>
+
+      <!-- Stress bar -->
+      <div id="stress" class="stress hidden">
+        <div class="stress-label">STRESS LEVEL</div>
+        <div class="stress-track"><div class="stress-fill" id="stress-fill"></div></div>
+        <div class="stress-value" id="stress-value">42%</div>
+      </div>
+
+      <!-- Chapter title card -->
+      <div id="titlecard" class="titlecard hidden">
+        <div class="tc-kicker" id="tc-kicker">CHAPTER 01</div>
+        <div class="tc-title" id="tc-title">THE CALL</div>
+        <div class="tc-sub" id="tc-sub">DETROIT &#183; 2041 &#183; 23:41</div>
+      </div>
+
+      <!-- Flowchart -->
+      <div id="flowchart" class="flowchart hidden">
+        <div class="fc-head">
+          <div class="fc-title">FLOWCHART</div>
+          <div class="fc-sub" id="fc-sub">CHAPTER COMPLETE</div>
+        </div>
+        <div class="fc-body" id="fc-body"></div>
+        <div class="fc-stats" id="fc-stats"></div>
+        <div class="fc-foot">PRESS <b>ENTER</b> TO CONTINUE</div>
+      </div>
+
+      <!-- Menu -->
+      <div id="menu" class="menu">
+        <div class="menu-bg"></div>
+        <div class="menu-inner">
+          <div class="brand">
+            <div class="brand-mark"></div>
+            <h1>DEVIANT</h1>
+            <div class="brand-sub">BECOME FREE</div>
+          </div>
+          <div class="menu-items" id="menu-items"></div>
+          <div class="menu-foot">
+            <span>WASD MOVE</span><span>MOUSE LOOK</span><span>E INTERACT</span>
+            <span>SHIFT ANALYSE</span><span>ENTER SKIP</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading -->
+      <div id="loader" class="loader">
+        <div class="loader-inner">
+          <div class="loader-ring"></div>
+          <div class="loader-text" id="loader-text">CALIBRATING OPTICAL UNITS</div>
+        </div>
+      </div>
+
+      <div id="fade" class="fade"></div>
+      <div id="perf" class="perf hidden"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

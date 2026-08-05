@@ -1,0 +1,64 @@
+[
+  {
+    "shot": "street-wide",
+    "file": "/workspace/shots/r4/street-wide.png",
+    "ms": 58354,
+    "frameMs": 585,
+    "triangles": 131502,
+    "calls": 193,
+    "lights": 9,
+    "programs": 66,
+    "buildSetMs": 3204,
+    "buildActorsMs": 1031,
+    "firstFrameMs": 11758,
+    "settleMsPerFrame": 302,
+    "errors": [
+      "[error] Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ]
+  },
+  {
+    "shot": "street-closeup",
+    "file": "/workspace/shots/r4/street-closeup.png",
+    "ms": 75172,
+    "frameMs": 752,
+    "triangles": 71900,
+    "calls": 158,
+    "lights": 9,
+    "programs": 56,
+    "buildSetMs": 3092,
+    "buildActorsMs": 909,
+    "firstFrameMs": 11328,
+    "settleMsPerFrame": 239,
+    "errors": []
+  },
+  {
+    "shot": "interrogation-closeup",
+    "file": "/workspace/shots/r4/interrogation-closeup.png",
+    "ms": 141276,
+    "frameMs": 564,
+    "triangles": 53856,
+    "calls": 65,
+    "lights": 6,
+    "programs": 31,
+    "buildSetMs": 1749,
+    "buildActorsMs": 879,
+    "firstFrameMs": 3964,
+    "settleMsPerFrame": 8,
+    "errors": []
+  },
+  {
+    "shot": "apartment-wide",
+    "file": "/workspace/shots/r4/apartment-wide.png",
+    "ms": 71226,
+    "frameMs": 829,
+    "triangles": 125592,
+    "calls": 360,
+    "lights": 8,
+    "programs": 43,
+    "buildSetMs": 1851,
+    "buildActorsMs": 757,
+    "firstFrameMs": 6988,
+    "settleMsPerFrame": 451,
+    "errors": []
+  }
+]

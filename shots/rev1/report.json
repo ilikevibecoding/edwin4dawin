@@ -1,0 +1,47 @@
+[
+  {
+    "label": "ch1.merge",
+    "fileA": "/workspace/shots/rev1/ch1.merge-a.png",
+    "fileB": "/workspace/shots/rev1/ch1.merge-b.png"
+  },
+  {
+    "label": "ch2.kneel",
+    "fileA": "/workspace/shots/rev1/ch2.kneel-a.png",
+    "fileB": "/workspace/shots/rev1/ch2.kneel-b.png"
+  },
+  {
+    "label": "ch2.name",
+    "fileA": "/workspace/shots/rev1/ch2.name-a.png",
+    "fileB": "/workspace/shots/rev1/ch2.name-b.png"
+  },
+  {
+    "label": "ch3.empathy",
+    "fileA": "/workspace/shots/rev1/ch3.empathy-a.png",
+    "fileB": "/workspace/shots/rev1/ch3.empathy-b.png"
+  },
+  {
+    "label": "ch3.hold",
+    "fileA": "/workspace/shots/rev1/ch3.hold-a.png",
+    "fileB": "/workspace/shots/rev1/ch3.hold-b.png"
+  },
+  {
+    "label": "ch4.start",
+    "fileA": "/workspace/shots/rev1/ch4.start-a.png",
+    "fileB": "/workspace/shots/rev1/ch4.start-b.png"
+  },
+  {
+    "label": "ch4.reveal",
+    "fileA": "/workspace/shots/rev1/ch4.reveal-a.png",
+    "fileB": "/workspace/shots/rev1/ch4.reveal-b.png"
+  },
+  {
+    "label": "ch5.warn",
+    "fileA": "/workspace/shots/rev1/ch5.warn-a.png",
+    "fileB": "/workspace/shots/rev1/ch5.warn-b.png"
+  },
+  {
+    "label": "epi.free",
+    "fileA": "/workspace/shots/rev1/epi.free-a.png",
+    "fileB": "/workspace/shots/rev1/epi.free-b.png"
+  }
+]

@@ -1,0 +1,35 @@
+[
+  {
+    "label": "ch1.merge",
+    "fileA": "/workspace/shots/rev5/ch1.merge-a.png",
+    "fileB": "/workspace/shots/rev5/ch1.merge-b.png",
+    "probe": {
+      "mean": 0.022076887442638384,
+      "p50": 0.006447941207885742,
+      "p95": 0.0627217529296875,
+      "max": 0.44271455078125
+    }
+  },
+  {
+    "label": "ch3.empathy",
+    "fileA": "/workspace/shots/rev5/ch3.empathy-a.png",
+    "fileB": "/workspace/shots/rev5/ch3.empathy-b.png",
+    "probe": {
+      "mean": 6.033952088935,
+      "p50": 3.4315435546875,
+      "p95": 17.8875671875,
+      "max": 246.00459999999998
+    }
+  },
+  {
+    "label": "ch4.reveal",
+    "fileA": "/workspace/shots/rev5/ch4.reveal-a.png",
+    "fileB": "/workspace/shots/rev5/ch4.reveal-b.png",
+    "probe": {
+      "mean": 1.4440515631023738,
+      "p50": 0.49847958984374996,
+      "p95": 8.46686171875,
+      "max": 13.359054687499999
+    }
+  }
+]

@@ -1,0 +1,32 @@
+[
+  {
+    "shot": "portrait-kai",
+    "file": "/workspace/shots/clay3/portrait-kai.png",
+    "ms": 1994,
+    "frameMs": 485,
+    "triangles": 107400,
+    "calls": 41,
+    "lights": 4,
+    "programs": 17,
+    "buildSetMs": 1052,
+    "buildActorsMs": 3119,
+    "firstFrameMs": 1512,
+    "settleMsPerFrame": 13,
+    "errors": []
+  },
+  {
+    "shot": "portrait-kai-profile",
+    "file": "/workspace/shots/clay3/portrait-kai-profile.png",
+    "ms": 10351,
+    "frameMs": 398,
+    "triangles": 107400,
+    "calls": 41,
+    "lights": 4,
+    "programs": 17,
+    "buildSetMs": 19,
+    "buildActorsMs": 579,
+    "firstFrameMs": 15,
+    "settleMsPerFrame": 0,
+    "errors": []
+  }
+]

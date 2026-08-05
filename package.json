@@ -1,0 +1,25 @@
+{
+  "name": "deviant",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "DEVIANT - a cinematic branching-narrative android thriller in the browser",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "typecheck": "tsc --noEmit",
+    "shots": "node tools/shots.mjs",
+    "render": "node tools/render-demo.mjs",
+    "encode": "node tools/encode.mjs"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.0",
+    "puppeteer": "^25.5.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0"
+  }
+}
