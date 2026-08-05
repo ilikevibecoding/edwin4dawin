@@ -1,7 +1,7 @@
 // effects.js — pooled GPU particles, ribbon trails, flashes, debris, shockwaves,
 // scorch decals, and composite effects (launch blasts, intercepts, impacts).
 import * as THREE from 'three';
-import { Pool, clamp, TAU } from './util.js';
+import { Pool, Rand, clamp, TAU } from './util.js';
 import { terrainHeight } from './base.js';
 
 // ============================================================ GPU point particles
@@ -13,12 +13,15 @@ attribute float aLife;
 attribute float aSize0;
 attribute float aSize1;
 attribute float aAlpha;
+attribute float aRot;
+attribute float aRotVel;
 attribute vec3 aCol0;
 attribute vec3 aCol1;
 uniform float uTime;
 uniform float uScale;
 varying float vAlpha;
 varying vec3 vCol;
+varying float vRot;
 void main() {
   float age = uTime - aBirth;
   float t = age / max(aLife, 0.0001);
@@ -27,6 +30,7 @@ void main() {
     gl_PointSize = 0.0;
     vAlpha = 0.0;
     vCol = vec3(0.0);
+    vRot = 0.0;
     return;
   }
   vec3 pos = position + aVel * age + 0.5 * aAcc * age * age;
@@ -37,19 +41,25 @@ void main() {
   float fadeOut = 1.0 - smoothstep(0.55, 1.0, t);
   vAlpha = aAlpha * fadeIn * fadeOut;
   vCol = mix(aCol0, aCol1, pow(t, 0.55));
+  vRot = aRot + age * aRotVel;
   gl_Position = projectionMatrix * mv;
 }
 `;
 const PARTICLE_FRAG = /* glsl */ `
 precision mediump float;
 uniform sampler2D uMap;
+uniform vec3 uTint;
 varying float vAlpha;
 varying vec3 vCol;
+varying float vRot;
 void main() {
-  vec4 tex = texture2D(uMap, gl_PointCoord);
+  float cs = cos(vRot), sn = sin(vRot);
+  vec2 pc = gl_PointCoord - 0.5;
+  vec2 uv = vec2(pc.x * cs - pc.y * sn, pc.x * sn + pc.y * cs) + 0.5;
+  vec4 tex = texture2D(uMap, uv);
   float a = tex.a * vAlpha;
   if (a < 0.004) discard;
-  gl_FragColor = vec4(vCol * tex.rgb, a);
+  gl_FragColor = vec4(vCol * tex.rgb * uTint, a);
 }
 `;
 
@@ -66,7 +76,7 @@ class ParticleSystem {
     this.attrs = {
       position: mk(3), aVel: mk(3), aAcc: mk(3),
       aBirth: mk(1), aLife: mk(1), aSize0: mk(1), aSize1: mk(1),
-      aAlpha: mk(1), aCol0: mk(3), aCol1: mk(3),
+      aAlpha: mk(1), aRot: mk(1), aRotVel: mk(1), aCol0: mk(3), aCol1: mk(3),
     };
     // park all particles as dead
     this.attrs.aBirth.array.fill(-1e9);
@@ -76,6 +86,7 @@ class ParticleSystem {
       uTime: { value: 0 },
       uScale: { value: 720 },
       uMap: { value: map },
+      uTint: { value: new THREE.Color(1, 1, 1) },
     };
     const mat = new THREE.ShaderMaterial({
       vertexShader: PARTICLE_VERT,
@@ -91,6 +102,7 @@ class ParticleSystem {
     scene.add(this.points);
     this._c0 = new THREE.Color();
     this._c1 = new THREE.Color();
+    this.rand = new Rand(0xfeed);
   }
   /** spawn one particle; p = {pos, vel, acc, life, size0, size1, alpha, col0, col1, delay} */
   spawn(now, p) {
@@ -105,6 +117,8 @@ class ParticleSystem {
     A.aSize0.setX(i, p.size0 ?? 1);
     A.aSize1.setX(i, p.size1 ?? 2);
     A.aAlpha.setX(i, p.alpha ?? 1);
+    A.aRot.setX(i, p.rot ?? this.rand.next() * 6.283);
+    A.aRotVel.setX(i, p.rotVel ?? (this.rand.next() - 0.5) * 1.4);
     this._c0.set(p.col0 ?? 0xffffff);
     this._c1.set(p.col1 ?? p.col0 ?? 0xffffff);
     A.aCol0.setXYZ(i, this._c0.r, this._c0.g, this._c0.b);
@@ -166,6 +180,8 @@ const TRAIL_FRAG = /* glsl */ `
 precision mediump float;
 uniform vec3 uColor;
 uniform float uOpacity;
+uniform vec3 uTint;
+uniform float uEmissive;
 uniform sampler2D uNoise;
 varying float vT;
 varying float vU;
@@ -178,7 +194,9 @@ void main() {
   float n = texture2D(uNoise, vec2(vSeed * 8.0 + vT * 2.0, vU * 0.8 + vSeed)).r;
   float a = edge * fade * uOpacity * vFade * (0.55 + 0.45 * n);
   if (a < 0.004) discard;
-  gl_FragColor = vec4(uColor, a);
+  // smoke is lit by the environment (uTint); emissive trails ignore it
+  vec3 col = uColor * mix(uTint, vec3(1.0), uEmissive);
+  gl_FragColor = vec4(col, a);
 }
 `;
 
@@ -224,6 +242,8 @@ class TrailRibbon {
       uWind: { value: new THREE.Vector3() },
       uColor: { value: new THREE.Color(0xffffff) },
       uOpacity: { value: 0.7 },
+      uTint: { value: new THREE.Color(1, 1, 1) },
+      uEmissive: { value: 0.1 },
       uNoise: { value: noiseTex },
     };
     const mat = new THREE.ShaderMaterial({
@@ -245,10 +265,11 @@ class TrailRibbon {
     this.prevBirth = 0;
     this.prevWidth = 1;
   }
-  configure({ color = 0xffffff, life = 10, opacity = 0.7 }) {
+  configure({ color = 0xffffff, life = 10, opacity = 0.7, emissive = 0.1 }) {
     this.uniforms.uColor.value.set(color);
     this.uniforms.uLife.value = life;
     this.uniforms.uOpacity.value = opacity;
+    this.uniforms.uEmissive.value = emissive;
     this.mesh.visible = true;
   }
   reset() {
@@ -378,6 +399,8 @@ export function createEffects(ctx) {
   const _v = new THREE.Vector3();
   const _v2 = new THREE.Vector3();
 
+  const WHITE = new THREE.Color(1, 1, 1);
+
   function shakeFromDistance(pos, base) {
     const d = pos.distanceTo(ctx.camera.position);
     const amt = base * clamp(1 - d / 900, 0, 1);
@@ -387,12 +410,15 @@ export function createEffects(ctx) {
   function flash(pos, size, dur = 0.25, color = 0xfff2d8) {
     const f = flashPool.acquire();
     if (!f) return;
+    // keep flashes readable at multi-km engagement distances
+    const d = pos.distanceTo(ctx.camera.position);
+    const sizeAdj = size * clamp(0.55 + d * 0.0011, 1, 6.5);
     f.sprite.position.copy(pos);
     f.sprite.material.color.set(color);
     f.sprite.material.opacity = 1;
-    f.sprite.scale.setScalar(size * 0.4);
+    f.sprite.scale.setScalar(sizeAdj * 0.4);
     f.sprite.visible = true;
-    f.t = 0; f.dur = dur; f.size = size;
+    f.t = 0; f.dur = dur; f.size = sizeAdj;
     f.active = true;
     activeFlashes.push(f);
   }
@@ -462,15 +488,15 @@ export function createEffects(ctx) {
     }
     // billowing launch smoke column
     for (let i = 0; i < 46; i++) {
-      _v.set(pos.x + ctx.vrng.range(-2, 2) * scale, ground + ctx.vrng.range(0.5, 3), pos.z + ctx.vrng.range(-2, 2) * scale);
+      _v.set(pos.x + ctx.vrng.range(-2.5, 2.5) * scale, ground + ctx.vrng.range(0.5, 4), pos.z + ctx.vrng.range(-2.5, 2.5) * scale);
       const a = ctx.vrng.next() * TAU;
       smoke.spawn(now, {
         pos: _v,
-        vel: { x: Math.cos(a) * ctx.vrng.range(2, 9) * scale, y: ctx.vrng.range(1.5, 7), z: Math.sin(a) * ctx.vrng.range(2, 9) * scale },
-        acc: { x: ctx.world.wind.x * 0.14, y: ctx.vrng.range(0.4, 1.2), z: ctx.world.wind.z * 0.14 },
-        life: ctx.vrng.range(3.5, 9),
-        size0: 2.5 * scale, size1: 16 * scale,
-        alpha: ctx.vrng.range(0.35, 0.6),
+        vel: { x: Math.cos(a) * ctx.vrng.range(2, 9) * scale, y: ctx.vrng.range(0.8, 4.5), z: Math.sin(a) * ctx.vrng.range(2, 9) * scale },
+        acc: { x: ctx.world.wind.x * 0.14, y: ctx.vrng.range(0.1, 0.5), z: ctx.world.wind.z * 0.14 },
+        life: ctx.vrng.range(2.5, 7.5),
+        size0: ctx.vrng.range(1.8, 3.4) * scale, size1: ctx.vrng.range(9, 14) * scale,
+        alpha: ctx.vrng.range(0.28, 0.52),
         col0: 0xd9d2c6, col1: 0x8e887e,
         delay: ctx.vrng.range(0, 0.3),
       });
@@ -650,8 +676,13 @@ export function createEffects(ctx) {
           fadingTrails.splice(i, 1);
         }
       }
-      // wind uniform
-      for (const tr of trailPool.used) tr.uniforms.uWind.value.copy(ctx.world.wind);
+      // wind + lighting tint uniforms
+      const tint = ctx.world.trailTint;
+      smoke.uniforms.uTint.value.copy(tint ?? WHITE);
+      for (const tr of trailPool.used) {
+        tr.uniforms.uWind.value.copy(ctx.world.wind);
+        if (tint) tr.uniforms.uTint.value.copy(tint);
+      }
 
       // flashes
       for (let i = activeFlashes.length - 1; i >= 0; i--) {

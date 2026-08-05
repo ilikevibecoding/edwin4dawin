@@ -101,6 +101,7 @@ const PRESETS = {
     sunIntensity: 3.0, hemiSky: 0x9db8d8, hemiGround: 0x8a7a5c, hemiIntensity: 0.85,
     fogColor: 0xbccbdb, fogNear: 1800, fogFar: 14000,
     exposure: 1.0, floodlights: false,
+    trailTint: 0xffffff,
   },
   sunset: {
     sunElev: 7, sunAz: 258,
@@ -110,6 +111,7 @@ const PRESETS = {
     sunIntensity: 2.1, hemiSky: 0x8a7ba8, hemiGround: 0x6b4f3c, hemiIntensity: 0.5,
     fogColor: 0xc2856a, fogNear: 1300, fogFar: 10500,
     exposure: 1.05, floodlights: true,
+    trailTint: 0xf0b98a,
   },
   night: {
     sunElev: 44, sunAz: 118, // acts as moon light vector
@@ -119,6 +121,7 @@ const PRESETS = {
     sunIntensity: 0.95, hemiSky: 0x2a3a58, hemiGround: 0x141822, hemiIntensity: 0.52,
     fogColor: 0x101a29, fogNear: 900, fogFar: 8200,
     exposure: 1.18, floodlights: true,
+    trailTint: 0x4a5468,
   },
 };
 
@@ -288,6 +291,7 @@ export function createWeather(ctx) {
 
     ctx.world.sunDir.copy(lightDir);
     ctx.world.sunColor = uniforms.uSunColor.value;
+    lerpColor('trailTint', t, ctx.world.trailTint);
   }
 
   const api = {
@@ -331,6 +335,7 @@ export function createWeather(ctx) {
   };
 
   ctx.world.wind = state.wind.clone();
+  ctx.world.trailTint = new THREE.Color(0xffffff);
   api.setTimeOfDay('day', true);
   return api;
 }

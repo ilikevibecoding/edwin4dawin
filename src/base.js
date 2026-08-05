@@ -37,7 +37,7 @@ export function createBase(ctx) {
     tan: new THREE.MeshStandardMaterial({ map: textures.desertTan(), roughness: 0.82 }),
     olive: new THREE.MeshStandardMaterial({ map: textures.oliveDrab(), roughness: 0.8 }),
     metal: new THREE.MeshStandardMaterial({ map: textures.metalPlate(), roughness: 0.55, metalness: 0.65 }),
-    darkMetal: new THREE.MeshStandardMaterial({ color: 0x2e3134, roughness: 0.5, metalness: 0.7 }),
+    darkMetal: new THREE.MeshStandardMaterial({ color: 0x3c4046, roughness: 0.55, metalness: 0.6 }),
     steel: new THREE.MeshStandardMaterial({ color: 0x8b9299, roughness: 0.42, metalness: 0.85 }),
     rubber: new THREE.MeshStandardMaterial({ color: 0x1a1b1c, roughness: 0.95 }),
     cable: new THREE.MeshStandardMaterial({ color: 0x141516, roughness: 0.9 }),
@@ -145,10 +145,13 @@ export function createBase(ctx) {
       pad.position.set(x, 0.025, z);
       pad.receiveShadow = true;
       group.add(pad);
-      // hazard ring
-      const ring = new THREE.Mesh(new THREE.RingGeometry(10.6, 11.6, 48), M.hazard.clone());
+      // hazard ring (worn painted band)
+      const ring = new THREE.Mesh(new THREE.RingGeometry(10.9, 11.55, 48), M.hazard.clone());
       ring.material.polygonOffset = true;
       ring.material.polygonOffsetFactor = -2;
+      ring.material.color.setScalar(0.72);
+      ring.material.transparent = true;
+      ring.material.opacity = 0.85;
       ring.rotation.x = -Math.PI / 2;
       ring.position.set(x, 0.035, z);
       ring.receiveShadow = true;
@@ -158,7 +161,7 @@ export function createBase(ctx) {
     const mkDecal = (tex, w, h, x, z, rot = 0, opacity = 0.85) => {
       const m = new THREE.Mesh(
         new THREE.PlaneGeometry(w, h),
-        new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 })
+        new THREE.MeshStandardMaterial({ map: tex, transparent: true, opacity, roughness: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 })
       );
       m.rotation.x = -Math.PI / 2;
       m.rotation.z = rot;
@@ -185,7 +188,7 @@ export function createBase(ctx) {
       group.add(m);
       const line = new THREE.Mesh(
         new THREE.PlaneGeometry(0.7, len),
-        new THREE.MeshBasicMaterial({ map: textures.roadLine(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })
+        new THREE.MeshStandardMaterial({ map: textures.roadLine(), transparent: true, roughness: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })
       );
       line.rotation.copy(m.rotation);
       line.position.set(x, 0.03, z);
@@ -792,8 +795,8 @@ export function createBase(ctx) {
   ctx.events.on('time-of-day', () => {
     const on = ctx.weather.floodlightsOn;
     for (const f of floodlights) {
-      f.spot.intensity = on ? 900 : 0;
-      f.glow.material.opacity = on ? 0.5 : 0;
+      f.spot.intensity = on ? 260 : 0;
+      f.glow.material.opacity = on ? 0.55 : 0;
       f.headMat.emissive.setHex(on ? 0xcfe0ff : 0x000000);
       f.headMat.emissiveIntensity = on ? 2.4 : 0;
     }
@@ -801,9 +804,9 @@ export function createBase(ctx) {
 
   // battery pads: positions + facing used by batteries.js
   const batteryPads = {
-    patriot: { position: new THREE.Vector3(-46, 0, 32), heading: Math.PI * 0.85 },
-    thaad: { position: new THREE.Vector3(2, 0, 50), heading: Math.PI },
-    sentinel: { position: new THREE.Vector3(48, 0, 30), heading: -Math.PI * 0.8 },
+    patriot: { position: new THREE.Vector3(-46, 0, 32), heading: 0.9 },
+    thaad: { position: new THREE.Vector3(2, 0, 50), heading: Math.PI * 0.72 },
+    sentinel: { position: new THREE.Vector3(48, 0, 30), heading: -0.6 },
   };
 
   let searchlightsActive = false;

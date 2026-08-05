@@ -65,8 +65,10 @@ export function createBatteries(ctx) {
   const heatMat = new THREE.MeshStandardMaterial({ map: textures.heatBurn(), roughness: 0.6, metalness: 0.4 });
   const oliveTex = textures.oliveDrab().clone();
   oliveTex.repeat.set(2.6, 1.3);
+  oliveTex.needsUpdate = true;
   const tanTex = textures.desertTan().clone();
   tanTex.repeat.set(2.2, 1.1);
+  tanTex.needsUpdate = true;
   const canisterMat = new THREE.MeshStandardMaterial({ map: oliveTex, roughness: 0.75 });
   const canisterMatTan = new THREE.MeshStandardMaterial({ map: tanTex, roughness: 0.75 });
 
@@ -185,28 +187,61 @@ export function createBatteries(ctx) {
     erector.add(canGrp);
     canGrp.position.set(0, 0.55, 0);
     const tubes = [];
-    const canGeo = new THREE.BoxGeometry(1.05, 1.05, 5.4);
+    const canGeo = new THREE.BoxGeometry(1.02, 1.02, 5.4);
     for (let cx = 0; cx < 2; cx++) {
       for (let cy = 0; cy < 2; cy++) {
-        const can = new THREE.Mesh(canGeo, canisterMat);
+        // per-canister texture offset so the camo doesn't tile continuously
+        const cMat = canisterMat.clone();
+        cMat.map = canisterMat.map.clone();
+        cMat.map.offset.set(cx * 0.37 + cy * 0.13, cy * 0.29);
+        cMat.map.needsUpdate = true;
+        const can = new THREE.Mesh(canGeo, cMat);
         can.position.set((cx - 0.5) * 1.18, cy * 1.18, 0);
         can.castShadow = true;
         canGrp.add(can);
+        // rib bands along the canister
+        for (const zz of [-2.1, -0.7, 0.7, 2.1]) {
+          const rib = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.1, 0.09), M.darkMetal);
+          rib.position.set(can.position.x, can.position.y, zz);
+          canGrp.add(rib);
+        }
         // front face with 2 round covers + heat rim
-        const face = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.0), heatMat);
+        const face = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 0.98), heatMat);
         face.position.set(can.position.x, can.position.y, 2.72);
         canGrp.add(face);
         for (const s of [-0.26, 0.26]) {
           const cover = new THREE.Mesh(new THREE.CircleGeometry(0.21, 18), new THREE.MeshStandardMaterial({ color: 0x8f2f24, roughness: 0.8 }));
           cover.position.set(can.position.x + s, can.position.y, 2.75);
           canGrp.add(cover);
+          const rim = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.02, 6, 18), M.darkMetal);
+          rim.position.set(can.position.x + s, can.position.y, 2.74);
+          canGrp.add(rim);
           tubes.push({ cover, offset: new THREE.Vector3(can.position.x + s, can.position.y, 2.6), used: false });
         }
+        // rear closure
+        const rear = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 0.98), M.darkMetal);
+        rear.rotation.y = Math.PI;
+        rear.position.set(can.position.x, can.position.y, -2.72);
+        canGrp.add(rear);
         // stencils
         labelPlate(canGrp, `RMP-${cx}${cy}`, 0.8, 0.22, can.position.x, can.position.y + 0.31, 2.751, 0, { font: 'bold 26px Arial' });
       }
     }
-    canGrp.rotation.x = 0; // erector handles elevation
+    // rack frame: dark structure between/around canisters
+    const frameBack = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.5, 0.16), M.metal);
+    frameBack.position.set(0, 0.59, -2.78);
+    canGrp.add(frameBack);
+    const frameMid = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.42, 5.15), M.darkMetal);
+    frameMid.position.set(0, 0.59, 0);
+    canGrp.add(frameMid);
+    const frameMidH = new THREE.Mesh(new THREE.BoxGeometry(2.42, 0.1, 5.15), M.darkMetal);
+    frameMidH.position.set(0, 0.59, 0);
+    canGrp.add(frameMidH);
+    for (const s of [-1.26, 1.26]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.46, 5.3), M.darkMetal);
+      rail.position.set(s, 0.59, 0);
+      canGrp.add(rail);
+    }
 
     // hydraulic erector pistons
     const hyd1 = hydraulics(g, { pos: new THREE.Vector3(0.8, 1.1, 0.9), node: g }, { pos: new THREE.Vector3(0.62, 0.4, -1.5), node: canGrp });
@@ -379,6 +414,36 @@ export function createBatteries(ctx) {
                    { cover: null, offset: new THREE.Vector3(0, 0.75, 4.0), used: false },
                    { cover: null, offset: new THREE.Vector3(0, 0.75, 4.0), used: false }];
 
+    // visible loaded round on the rail (hidden while a shot reloads)
+    const roundMesh = new THREE.Group();
+    {
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe3e0d5, roughness: 0.42, metalness: 0.15 });
+      const rbody = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 7.6, 16).rotateX(Math.PI / 2), bodyMat);
+      roundMesh.add(rbody);
+      const rnose = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.9, 16).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x2f3338, roughness: 0.3, metalness: 0.5 }));
+      rnose.position.z = 4.75;
+      roundMesh.add(rnose);
+      const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.38, 0.5, 14).rotateX(Math.PI / 2), heatMat);
+      nozzle.position.z = -4.0;
+      roundMesh.add(nozzle);
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        const fin = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.55, 1.2), new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.5, metalness: 0.4 }));
+        fin.position.set(Math.cos(a) * 0.55, Math.sin(a) * 0.55, -3.4);
+        fin.rotation.z = a;
+        roundMesh.add(fin);
+      }
+      // band markings
+      for (const zz of [2.4, -1.6]) {
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(0.425, 0.425, 0.16, 16).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xb3402e, roughness: 0.6 }));
+        band.position.z = zz;
+        roundMesh.add(band);
+      }
+      roundMesh.position.set(0, 0.75, 0.6);
+      roundMesh.traverse((o) => { o.castShadow = true; });
+      rail.add(roundMesh);
+    }
+
     const hyd = hydraulics(g, { pos: new THREE.Vector3(1.4, 0.7, -1.6), node: g }, { pos: new THREE.Vector3(0.42, -0.1, 3.4), node: rail });
     const hyd2 = hydraulics(g, { pos: new THREE.Vector3(-1.0, 0.7, -1.6), node: g }, { pos: new THREE.Vector3(-0.42, -0.1, 3.4), node: rail });
 
@@ -419,6 +484,7 @@ export function createBatteries(ctx) {
       hydUpdaters: [hyd, hyd2],
       muzzleForward: new THREE.Vector3(0, 0, 1),
       isSentinel: true,
+      roundMesh,
     };
   }
 
@@ -455,10 +521,8 @@ export function createBatteries(ctx) {
     }
     canAccept() { return this.ammo > 0 && (this.state === 'ready' || this.state === 'slewing'); }
     applyElevation() {
-      const r = this.rig;
-      r.elevGroup.rotation.x = -this.currentElev * (r.elevSign ?? 1) * (r.isSentinel || this.id === 'thaad' ? 1 : 0) - (this.id === 'patriot' ? this.currentElev : 0);
-      // unified: rotate around x by -elev so +z tips upward
-      r.elevGroup.rotation.x = -this.currentElev;
+      // rotate around x by -elev so the +z muzzle axis tips upward
+      this.rig.elevGroup.rotation.x = -this.currentElev;
     }
     /** Point launcher toward a world position (azimuth only + set fire elevation). */
     pointAt(worldPos) {
@@ -524,7 +588,10 @@ export function createBatteries(ctx) {
         this.readyIn -= dt;
         if (this.readyIn <= 0) {
           this.state = this.ammo > 0 ? 'ready' : 'empty';
-          if (this.ammo > 0) ctx.events.emit('battery-ready', { battery: this });
+          if (this.ammo > 0) {
+            if (this.rig.roundMesh) this.rig.roundMesh.visible = true;
+            ctx.events.emit('battery-ready', { battery: this });
+          }
         }
       }
       // status light
@@ -547,6 +614,7 @@ export function createBatteries(ctx) {
         tube.cover.visible = false;
         ctx.effects.coverPop(_v, _dir);
       }
+      if (this.rig.roundMesh) this.rig.roundMesh.visible = false;
       this.tubeIndex = (this.tubeIndex + 1) % this.rig.tubes.length;
       ctx.interceptors.launch(this, track, _v.clone(), _dir.clone());
       ctx.events.emit('interceptor-launched', { battery: this, track });
@@ -559,6 +627,7 @@ export function createBatteries(ctx) {
       this.pendingTrack = null;
       this.launchTimer = -1;
       for (const t of this.rig.tubes) { if (t.cover) t.cover.visible = true; t.used = false; }
+      if (this.rig.roundMesh) this.rig.roundMesh.visible = true;
     }
   }
 

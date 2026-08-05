@@ -52,3 +52,34 @@ fps is judged via draw-call/triangle budgets + real-GPU spot checks, not headles
 
 **Perf:** headless (SwiftShader) ~150 draw calls, ~450k tris in overview shot — well inside
 budget; real-GPU spot check pending.
+
+---
+
+## Iteration 2 — lighting/tinting/detail fixes
+
+**Status:** all 7 gameplay tests green after changes.
+
+**Scores:** R1 5 · R2 6 · R3 6.5 · R4 7 · R5 8 · R6 8 · R7 8 (305 calls / 135k tris night scene) · R8 pass
+**Average: 6.8 — keep iterating.**
+
+**Fixed this iteration**
+- Trails + smoke now tinted by time-of-day light (`ctx.world.trailTint`); threat trails keep a
+  0.45 emissive floor (reentry heat), interceptor smoke 0.12.
+- Per-particle sprite rotation (aRot/aRotVel) removes the "perfect ball" smoke look.
+- Distance-compensated explosion flashes (readable at multi-km).
+- Rampart rack rebuilt: separated canisters w/ per-canister camo offset, ribs, frames, red
+  covers + rims, rear closures — was rendering as a black slab (cloned textures needed
+  `needsUpdate`, rest heading faced away from sun).
+- Sentinel now carries a visible loaded round (hides on launch, returns after reload).
+- Night: brighter moonlight/hemisphere, PMREM environment maps per time-of-day (metals no
+  longer black), floodlights balanced (260 cd — 6500 washed the scene out), unlit ground
+  decals switched to lit materials.
+- Debrief modal no longer leaks into subsequent scenario starts.
+- Launch smoke: lower buoyancy, more size/alpha variation.
+
+**Next (iteration 3 — parallel specialist passes)**
+1. Base/terrain detail density (clutter, fence, shelter interior, radar install, mountains).
+2. Battery visual overhaul (silhouettes, greebles, decals, wear).
+3. Explosions/trails quality (sparks streaks, debris trails, shockwaves, reentry look).
+4. Sky/clouds/sunset/night drama + grading polish.
+5. Radar holo + PPI + HUD refinement.

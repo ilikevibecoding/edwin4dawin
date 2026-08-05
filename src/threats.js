@@ -135,6 +135,7 @@ export function createThreats(ctx) {
       color: spec.decoy ? 0xcfd4da : 0xe8e2d8,
       life: 11,
       opacity: spec.decoy ? 0.4 : 0.62,
+      emissive: 0.45, // reentry-heated: partially self-lit at night
     });
     active.push(t);
     ctx.events.emit('threat-spawned', { threat: t });

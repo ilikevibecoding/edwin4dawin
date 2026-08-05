@@ -153,6 +153,7 @@ export function createInterceptors(ctx) {
         color: 0xf2ede2,
         life: 9,
         opacity: 0.8,
+        emissive: 0.12, // mostly sun/moon-lit smoke
       });
       // launch effects at the muzzle
       ctx.effects.launchBlast(muzzlePos, muzzleDir, battery.id === 'sentinel' ? 1.9 : battery.id === 'thaad' ? 1.25 : 1.0);
