@@ -14,8 +14,10 @@ import {
   skyline,
   stairHouse,
   tablet,
+  tileMaterial,
   thiriumPool,
   warningSign,
+  workLight,
 } from './Kit';
 import { LightShaft } from '../render/Volumetric';
 import { FOG, PALETTE } from '../render/LookConfig';
@@ -64,20 +66,24 @@ export class RooftopSet extends SceneSet {
   async build(renderer: THREE.WebGLRenderer): Promise<void> {
     this.initSky(renderer, {
       coverage: 0.9,
-      cityGlow: 0.3,
-      cloudBrightness: 0.11,
-      cityGlowColor: new THREE.Color(0.72, 0.4, 0.3),
-      horizonColor: new THREE.Color(0.055, 0.058, 0.068),
-      zenithColor: new THREE.Color(0.012, 0.015, 0.022),
+      cityGlow: 0.34,
+      cloudBrightness: 0.1,
+      // Barely warm. A saturated sodium glow here bleeds onto every upward face
+      // in the set and turns the whole frame muddy brown.
+      cityGlowColor: new THREE.Color(0.5, 0.46, 0.47),
+      horizonColor: new THREE.Color(0.042, 0.052, 0.068),
+      zenithColor: new THREE.Color(0.008, 0.011, 0.018),
       stars: 0.05,
-      envIntensity: 7.5,
-      backgroundIntensity: 0.55,
+      // Deliberately low: image-based light is ambient by nature, and any more of
+      // it flattens the deck into a uniform grey. Modelling comes from the lamps.
+      envIntensity: 1.7,
+      backgroundIntensity: 0.32,
       beams: [
         { azimuth: 2.1, elevation: 0.5, spread: 0.35, intensity: 0.16, color: new THREE.Color(0.4, 0.7, 1) },
         { azimuth: 4.4, elevation: 0.3, spread: 0.5, intensity: 0.1, color: new THREE.Color(1, 0.5, 0.3) },
       ],
     });
-    this.initFog(0x2c3e52, FOG.rooftopDensity);
+    this.initFog(0x121b26, FOG.rooftopDensity);
 
     this.buildDeck();
     this.buildEdgeAndSkyline();
@@ -85,10 +91,10 @@ export class RooftopSet extends SceneSet {
     this.buildLights();
 
     this.initRain({ groundY: 0, boxSize: 40, color: 0xa9c6e8, intensity: 1 });
-    this.initWetFloor({ planeY: 0, wetness: 1, strength: 0.35 });
+    this.initWetFloor({ planeY: 0, wetness: 1, strength: 0.5 });
     if (this.floorMaterial) this.wetFloor?.attach(this.floorMaterial);
-    this.initHaze(9, { color: 0x86a8d8, radius: 13, height: 3.4, scale: 8, opacity: 0.0 });
-    this.initCharacterLights({ keyColor: 0xbcd4ff, kickerColor: 0xff9a52, keyIntensity: 30, kickerIntensity: 22 });
+    this.initHaze(10, { color: 0x6d88b4, radius: 14, height: 3.6, scale: 7, opacity: 0.05 });
+    this.initCharacterLights({ keyColor: 0xbcd4ff, kickerColor: 0xff9a52, keyIntensity: 42, kickerIntensity: 30 });
     this.lightSubject(this.marks.standoff.clone().setY(1.5), { keySide: -1 });
 
     // Rain and haze must not appear in the mirror pass.
@@ -102,16 +108,21 @@ export class RooftopSet extends SceneSet {
     const deckW = 17;
     const deckD = 14;
     const maps = Tex.concrete;
-    const floorMat = new THREE.MeshStandardMaterial({
-      map: maps.map,
-      normalMap: maps.normalMap,
-      roughnessMap: maps.roughnessMap,
-      color: 0x0d0f12,
-      roughness: 0.45,
-      metalness: 0.02,
-      envMapIntensity: 0.08,
-      normalScale: new THREE.Vector2(0.14, 0.14),
-    });
+    const floorMat = tileMaterial(
+      new THREE.MeshStandardMaterial({
+        map: maps.map,
+        normalMap: maps.normalMap,
+        roughnessMap: maps.roughnessMap,
+        color: 0x424852,
+        // Wet, so it is nearly a mirror at grazing angles and reads black head-on.
+        roughness: 0.38,
+        metalness: 0.0,
+        envMapIntensity: 1.5,
+        normalScale: new THREE.Vector2(0.24, 0.24),
+      }),
+      5,
+      4
+    );
     this.floorMaterial = floorMat;
 
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(deckW, deckD, 1, 1), floorMat);
@@ -192,8 +203,8 @@ export class RooftopSet extends SceneSet {
           emissiveMap: nearTowerMaps.emissiveMap,
           roughnessMap: nearTowerMaps.roughnessMap,
           emissive: new THREE.Color(0xffffff),
-          emissiveIntensity: 0.9,
-          color: 0x24282e,
+          emissiveIntensity: 2.1,
+          color: 0x0c0f13,
           roughness: 0.7,
           metalness: 0.25,
         }),
@@ -269,6 +280,33 @@ export class RooftopSet extends SceneSet {
       this.reflect(cable);
     }
 
+    // Police floodlights hauled up for the standoff. Placed low and raking so
+    // the wet deck catches them, and off to the sides so they cross the acting
+    // area rather than flattening it from the camera's side.
+    for (const spec of [
+      { at: new THREE.Vector3(-7.6, 0, 5.0), aim: new THREE.Vector3(2.4, 0.0, -1.4), intensity: 380, color: 0xfff2e0, shadows: true },
+      { at: new THREE.Vector3(7.4, 0, 3.4), aim: new THREE.Vector3(-1.2, 0.1, -3.4), intensity: 240, color: 0xe4f0ff, shadows: false },
+      { at: new THREE.Vector3(-7.8, 0, -4.6), aim: new THREE.Vector3(2.8, 0.1, 3.2), intensity: 200, color: 0xd8e8ff, shadows: false },
+    ]) {
+      const flood = workLight(this.kit, {
+        color: spec.color,
+        intensity: spec.intensity,
+        height: 1.2,
+        range: 30,
+        shadows: spec.shadows && this.quality.shadows,
+      });
+      flood.group.position.copy(spec.at);
+      const head = spec.aim.clone().sub(spec.at);
+      flood.group.rotation.y = Math.atan2(head.x, head.z);
+      flood.light.target.position.set(0, spec.aim.y - 1.2, head.length());
+      flood.light.target.updateMatrixWorld();
+      this.scene.add(flood.group);
+      this.reflect(flood.group);
+      // No volumetric cone: a shaft that terminates inside the acting area
+      // leaves a bright additive blob on whoever is standing there.
+      flood.shaft.dispose();
+    }
+
     const fence = chainFence(this.kit, 4.6, 2.1);
     fence.position.set(7.0, 0, 0.4);
     fence.rotation.y = Math.PI / 2;
@@ -302,13 +340,13 @@ export class RooftopSet extends SceneSet {
     // Overcast key from the sky, cool and soft.
     // Ground colour is deliberately not black: downward-facing surfaces still
     // receive bounce from a wet deck, and without it half the frame crushes.
-    const ambient = new THREE.HemisphereLight(0x76808e, 0x1c2024, 0.35);
+    const ambient = new THREE.HemisphereLight(0x5a6d86, 0x0d1014, 1.5);
     // A flat ambient term keeps deep interiors and undersides readable.
-    this.scene.add(new THREE.AmbientLight(0x2a3038, 0.25));
+    this.scene.add(new THREE.AmbientLight(0x1b2430, 0.5));
     this.scene.add(ambient);
 
     // Moon/skylight direction: the only shadow-caster wide enough for the deck.
-    const key = new THREE.DirectionalLight(PALETTE.moonlight, 1.7);
+    const key = new THREE.DirectionalLight(PALETTE.moonlight, 2.6);
     key.position.set(-9, 14, -11);
     key.castShadow = this.quality.shadows;
     key.shadow.mapSize.set(this.quality.shadowMapSize, this.quality.shadowMapSize);
@@ -328,14 +366,14 @@ export class RooftopSet extends SceneSet {
       width: 3.2,
       height: 6.4,
       vertical: true,
-      spill: 34,
+      spill: 18,
       flicker: true,
     });
     magenta.group.position.set(9.6, -3.4, -9.2);
     magenta.group.rotation.y = -0.9;
     this.scene.add(magenta.group);
     this.reflect(magenta.group);
-    this.neonLights.push({ light: magenta.light, base: 34, flicker: true, phase: 0 });
+    this.neonLights.push({ light: magenta.light, base: 18, flicker: true, phase: 0 });
 
     const cyan = neonSign(['CYBERLIFE'], {
       color: PALETTE.neonCyan,
@@ -365,6 +403,23 @@ export class RooftopSet extends SceneSet {
     const bounce = new THREE.PointLight(PALETTE.sodium, 9, 24, 2);
     bounce.position.set(6, -2.5, -8);
     this.scene.add(bounce);
+
+    // Acting-area key. The portrait rig only lights whoever is speaking, so a
+    // broad soft source over the standoff keeps everyone else in the frame
+    // readable instead of dropping them to silhouette the moment they stop
+    // being the subject.
+    const areaKey = new THREE.SpotLight(0xb4c8ea, 420, 26, 0.8, 0.9, 2);
+    areaKey.position.set(-4.5, 4.6, 5.6);
+    areaKey.target.position.set(0.8, 1.2, -3.5);
+    areaKey.castShadow = this.quality.shadows;
+    if (areaKey.castShadow) {
+      areaKey.shadow.mapSize.set(this.quality.shadowMapSize, this.quality.shadowMapSize);
+      areaKey.shadow.bias = -0.0014;
+      areaKey.shadow.normalBias = 0.024;
+      areaKey.shadow.camera.near = 1;
+      areaKey.shadow.camera.far = 26;
+    }
+    this.scene.add(areaKey, areaKey.target);
 
     // Hard cyan rim from the tower behind the standoff: separates the figures
     // from the skyline, which is the single most important light in the scene.

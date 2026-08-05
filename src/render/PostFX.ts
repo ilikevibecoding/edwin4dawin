@@ -196,7 +196,17 @@ export class PostFX {
     }
   }
 
+  /** Renders the raw scene instead of the graded frame, for look isolation. */
+  bypass = false;
+
   render(dt: number): void {
+    if (this.bypass) {
+      const scene = this.renderPass.mainScene;
+      const camera = this.renderPass.mainCamera;
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(scene, camera);
+      return;
+    }
     this.composer.render(dt);
   }
 

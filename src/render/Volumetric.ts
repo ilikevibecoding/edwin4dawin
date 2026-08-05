@@ -231,6 +231,14 @@ export class EmergencyLights {
     }
   }
 
+  /** Overall brightness of the bar, so a story beat can escalate it. */
+  private level = 1;
+
+  setIntensity(v: number): void {
+    this.level = Math.max(0, v) / 0.34;
+    for (const s of this.shafts) s.shaft.setIntensity(Math.max(0, v));
+  }
+
   update(time: number, camPos: THREE.Vector3): void {
     for (const s of this.shafts) {
       const a = time * s.speed + s.phase;
@@ -239,7 +247,7 @@ export class EmergencyLights {
       s.shaft.aim(origin, dir);
       s.shaft.update(time, camPos);
       s.light.position.set(Math.cos(a) * 0.3, 0, Math.sin(a) * 0.3);
-      s.light.intensity = 6 + Math.sin(a * 2) * 3;
+      s.light.intensity = (6 + Math.sin(a * 2) * 3) * this.level;
     }
   }
 

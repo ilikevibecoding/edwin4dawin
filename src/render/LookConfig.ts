@@ -32,9 +32,9 @@ export const GRADE: Record<string, GradeConfig> = {
     tint: [0.94, 1.0, 1.12],
     contrast: 1.22,
     saturation: 1.04,
-    shadowTint: [0.72, 0.83, 1.0],
-    highlightTint: [1.0, 0.84, 0.62],
-    splitBalance: 0.42,
+    shadowTint: [0.68, 0.82, 1.0],
+    highlightTint: [1.0, 0.93, 0.82],
+    splitBalance: 0.34,
     lift: 0.022,
     vignette: 0.38,
     vignetteSoftness: 0.5,
@@ -117,10 +117,10 @@ export const PALETTE = {
 } as const;
 
 export const BLOOM = {
-  intensity: 1.35,
-  threshold: 0.72,
-  smoothing: 0.45,
-  radius: 0.72,
+  intensity: 0.95,
+  threshold: 0.82,
+  smoothing: 0.4,
+  radius: 0.7,
 };
 
 export const DOF = {
@@ -133,9 +133,12 @@ export const DOF = {
 };
 
 export const FOG = {
-  rooftopDensity: 0.03,
+  // Exponential-squared fog: at 0.03 a city 150 m out is completely erased, which
+  // costs the rooftop its best background. Kept low enough that the near towers
+  // stay legible and the far skyline dissolves.
+  rooftopDensity: 0.0075,
   domesticDensity: 0.012,
-  plazaDensity: 0.026,
+  plazaDensity: 0.014,
 };
 
 export const RAIN = {

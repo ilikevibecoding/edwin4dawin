@@ -34,19 +34,19 @@ export function createKit(): Kit {
       map: c.map,
       normalMap: c.normalMap,
       roughnessMap: c.roughnessMap,
-      color: 0x8d9299,
-      roughness: 0.9,
+      color: 0x555a61,
+      roughness: 0.72,
       metalness: 0.02,
-      envMapIntensity: 0.85,
+      envMapIntensity: 1.0,
     }),
     concreteFine: new THREE.MeshStandardMaterial({
       map: cf.map,
       normalMap: cf.normalMap,
       roughnessMap: cf.roughnessMap,
-      color: 0x7e848c,
-      roughness: 0.85,
+      color: 0x4c5157,
+      roughness: 0.66,
       metalness: 0.02,
-      envMapIntensity: 0.85,
+      envMapIntensity: 1.0,
     }),
     metal: new THREE.MeshStandardMaterial({
       map: m.map,
@@ -470,22 +470,22 @@ export function skyline(
     emissiveMap: facade.emissiveMap,
     roughnessMap: facade.roughnessMap,
     emissive: new THREE.Color(0xffffff),
-    emissiveIntensity: 1.0,
-    color: 0x23272d,
+    emissiveIntensity: 2.4,
+    color: 0x0b0d11,
     roughness: 0.7,
     metalness: 0.25,
-    envMapIntensity: 0.5,
+    envMapIntensity: 1.1,
   });
   const matB = new THREE.MeshStandardMaterial({
     map: facadeDense.map,
     emissiveMap: facadeDense.emissiveMap,
     roughnessMap: facadeDense.roughnessMap,
     emissive: new THREE.Color(0xffffff),
-    emissiveIntensity: 0.85,
-    color: 0x1e2228,
+    emissiveIntensity: 1.9,
+    color: 0x090b0e,
     roughness: 0.72,
     metalness: 0.25,
-    envMapIntensity: 0.5,
+    envMapIntensity: 1.1,
   });
 
   const geo = new THREE.BoxGeometry(1, 1, 1);
@@ -520,6 +520,89 @@ export function skyline(
   }
   g.add(meshA, meshB);
   return g;
+}
+
+/**
+ * Portable police floodlight on a tripod.
+ *
+ * The single most useful prop on a wet night set: a hard source at knee height
+ * rakes across standing water and turns a flat deck into a field of specular
+ * streaks, and it throws long shadows from anything standing in front of it.
+ */
+export function workLight(
+  kit: Kit,
+  opts: { color?: number; intensity?: number; height?: number; range?: number; shadows?: boolean } = {}
+): { group: THREE.Group; light: THREE.SpotLight; shaft: LightShaft; lens: THREE.Mesh } {
+  const g = new THREE.Group();
+  const color = opts.color ?? 0xfff0dc;
+  const h = opts.height ?? 1.15;
+
+  // Tripod.
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.4;
+    const leg = mesh(new THREE.CylinderGeometry(0.016, 0.016, h * 1.02, 6), kit.metalDark);
+    leg.position.set(Math.cos(a) * 0.16, h * 0.5, Math.sin(a) * 0.16);
+    leg.rotation.set(Math.sin(a) * 0.3, 0, -Math.cos(a) * 0.3);
+    g.add(leg);
+  }
+  const column = mesh(new THREE.CylinderGeometry(0.026, 0.03, h, 8), kit.metalDark);
+  column.position.y = h * 0.5;
+  g.add(column);
+
+  // Head: a boxy housing with a bright lens and a wire guard.
+  const head = new THREE.Group();
+  head.position.y = h;
+  const housing = mesh(new THREE.BoxGeometry(0.4, 0.26, 0.2), kit.metalDark);
+  head.add(housing);
+  const lens = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.34, 0.2),
+    // Kept near unity: a practical pointed at the lens blooms into a white hole
+    // that eats the middle of the frame if its emissive is pushed past display
+    // white.
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(0.85), toneMapped: false })
+  );
+  lens.position.z = 0.105;
+  head.add(lens);
+  const glow = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: Tex.softGlow,
+      color,
+      transparent: true,
+      opacity: 0.1,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    })
+  );
+  glow.scale.set(0.42, 0.3, 1);
+  glow.position.z = 0.14;
+  head.add(glow);
+  g.add(head);
+
+  const light = new THREE.SpotLight(color, opts.intensity ?? 90, opts.range ?? 26, 0.62, 0.42, 2);
+  light.position.set(0, h, 0.12);
+  light.castShadow = opts.shadows ?? false;
+  if (light.castShadow) {
+    light.shadow.mapSize.set(1024, 1024);
+    light.shadow.bias = -0.0014;
+    light.shadow.normalBias = 0.024;
+    light.shadow.camera.near = 0.5;
+    light.shadow.camera.far = opts.range ?? 26;
+  }
+  g.add(light, light.target);
+
+  // The shaft is aimed in world space, so the caller parents it to the scene.
+  const shaft = new LightShaft({
+    length: 7,
+    radius: 0.5,
+    color,
+    intensity: 0.16,
+    noise: 0.55,
+    falloff: 1.5,
+    nearFade: 0.5,
+  });
+
+  return { group: g, light, shaft, lens };
 }
 
 /** Handheld tablet prop, used as an investigable clue. */
@@ -567,6 +650,21 @@ export function chair(kit: Kit): THREE.Group {
     }
   }
   return g;
+}
+
+/** Clones a material with every map re-tiled, for surfaces larger than one texel grid. */
+export function tileMaterial<T extends THREE.MeshStandardMaterial>(base: T, repeatX: number, repeatY = repeatX): T {
+  const mat = base.clone() as T;
+  for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap'] as const) {
+    const tex = mat[key];
+    if (!tex) continue;
+    const clone = tex.clone();
+    clone.needsUpdate = true;
+    clone.wrapS = clone.wrapT = THREE.RepeatWrapping;
+    clone.repeat.set(repeatX, repeatY);
+    mat[key] = clone;
+  }
+  return mat;
 }
 
 /**

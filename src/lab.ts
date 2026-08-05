@@ -37,6 +37,12 @@ const tier = (params.get('tier') as TierName) || 'cinema';
 const only = params.get('only');
 const width = Number(params.get('w') || 1280);
 const height = Number(params.get('h') || 720);
+/**
+ * Isolation switches, e.g. `?dbg=nofog,nowet`. Judging which of a dozen
+ * overlapping contributions is lifting a surface is guesswork from a single
+ * frame, so each one can be removed and re-metered on its own.
+ */
+const dbg = new Set((params.get('dbg') || '').split(',').filter(Boolean));
 
 const container = document.getElementById('app') as HTMLElement;
 const engine = new Engine(container, { tier, mode: 'fixed', width, height });
@@ -185,8 +191,12 @@ const SHOTS: ShotDef[] = [
   {
     name: '08_skyline',
     set: 'rooftop',
-    build: () =>
-      establish(new THREE.Vector3(2.2, 1.8, -3.4), new THREE.Vector3(9.5, -1.5, -14.0), { lens: 35, bokeh: 1.0 }),
+    build: (set) =>
+      establish(new THREE.Vector3(-1.6, 1.5, 2.2), new THREE.Vector3(3.4, 3.0, -18.0), {
+        lens: 32,
+        bokeh: 1.0,
+        focusOn: set.actor('deviant').getChestPosition(new THREE.Vector3()),
+      }),
   },
   { name: '09_trooper', subject: 'trooper0', keySide: 1, set: 'rooftop', build: (set) => lowAngle(set.actor('trooper0'), { lens: 40, distance: 2.2 }) },
   {
@@ -218,7 +228,47 @@ const SHOTS: ShotDef[] = [
   },
 ];
 
-const shots = only ? SHOTS.filter((s) => s.name.startsWith(only)) : SHOTS;
+const wanted = (only ?? '').split(',').filter(Boolean);
+const shots = wanted.length ? SHOTS.filter((s) => wanted.some((w) => s.name.startsWith(w))) : SHOTS;
+
+function applyDebug(set: SceneSet): void {
+  if (!dbg.size) return;
+  if (dbg.has('nofog')) set.scene.fog = null;
+  if (dbg.has('nobg')) set.scene.background = null;
+  if (dbg.has('noenv')) set.scene.environment = null;
+  if (dbg.has('nowet')) set.wetFloor?.setReflectionStrength(0);
+  if (dbg.has('norain')) set.rain?.setIntensity(0, true);
+  if (dbg.has('nolights')) {
+    set.scene.traverse((o) => {
+      const light = o as THREE.Light;
+      if (light.isLight) light.intensity = 0;
+    });
+  }
+  if (dbg.has('noemis')) {
+    set.scene.traverse((o) => {
+      const mats = (o as THREE.Mesh).material;
+      for (const m of Array.isArray(mats) ? mats : [mats]) {
+        const std = m as THREE.MeshStandardMaterial;
+        if (std && std.isMeshStandardMaterial) std.emissiveIntensity = 0;
+        const basic = m as THREE.MeshBasicMaterial;
+        if (basic && basic.isMeshBasicMaterial) basic.color.multiplyScalar(0.001);
+      }
+    });
+  }
+  if (dbg.has('nopost') && engine.postFX) engine.postFX.bypass = true;
+  if (dbg.has('hairred')) {
+    set.scene.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh && o.name.endsWith('_hair')) {
+        (o as THREE.Mesh).material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+      }
+    });
+  }
+  if (dbg.has('nohair')) {
+    set.scene.traverse((o) => {
+      if (o.name.endsWith('_hair')) o.visible = false;
+    });
+  }
+}
 
 declare global {
   interface Window {
@@ -238,6 +288,7 @@ window.__shot = async (i: number): Promise<void> => {
   const set = (await ensureSet(def.set)) as MarkedSet;
   const grade = def.set === 'household' ? 'domestic' : def.set === 'plaza' ? 'uprising' : 'noirRain';
   engine.setStage(set, grade);
+  applyDebug(set);
 
   const cam = set.camera;
   const applyShot = (): void => {

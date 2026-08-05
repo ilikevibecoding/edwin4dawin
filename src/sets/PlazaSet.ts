@@ -29,6 +29,7 @@ export class PlazaSet extends SceneSet {
   };
 
   private strobes: EmergencyLights[] = [];
+  private lineLights: THREE.SpotLight[] = [];
   private searchlights: { shaft: LightShaft; speed: number; phase: number; origin: THREE.Vector3 }[] = [];
   private crowd: Actor[] = [];
   private droneGroup = new THREE.Group();
@@ -278,6 +279,8 @@ export class PlazaSet extends SceneSet {
       const flood = new THREE.SpotLight(0xdcebff, 340, 40, 0.42, 0.5, 2);
       flood.position.set(x, 7.5, -13.5);
       flood.target.position.set(x * 0.3, 1.2, 2);
+      flood.userData.base = 340;
+      this.lineLights.push(flood);
       this.scene.add(flood, flood.target);
 
       const shaft = new LightShaft({
@@ -430,4 +433,41 @@ export class PlazaSet extends SceneSet {
   get crowdActors(): Actor[] {
     return this.crowd;
   }
+
+  /**
+   * Alert level for the police line: 0 stands down, 1 is the ultimatum, 2 is
+   * weapons free. Drives the strobes, the floodlights and the crowd's posture in
+   * one call so a story beat does not have to touch six objects.
+   */
+  raiseAlert(level: 0 | 1 | 2): void {
+    this.alertLevel = level;
+    for (const s of this.strobes) s.setIntensity(level === 0 ? 0.12 : level === 1 ? 0.42 : 0.85);
+    for (const light of this.lineLights) light.intensity = light.userData.base * (0.5 + level * 0.55);
+    for (let i = 0; i < this.crowd.length; i++) {
+      const actor = this.crowd[i];
+      if (level === 2) {
+        actor.setLed('stress');
+        actor.agitation = 1;
+      } else if (level === 1) {
+        actor.setLed(i % 3 === 0 ? 'stress' : 'process');
+        actor.agitation = 0.7;
+      } else {
+        actor.setLed(i % 5 === 0 ? 'process' : 'calm');
+        actor.agitation = 0.25;
+      }
+    }
+  }
+
+  /** Every android in the square goes down: the chapter's peaceful resolution. */
+  kneelCrowd(): void {
+    for (let i = 0; i < this.crowd.length; i++) {
+      const actor = this.crowd[i];
+      actor.clearAllPoses([]);
+      actor.setPose('resigned', 0.9, { fadeIn: 0.9 + (i % 7) * 0.16 });
+      actor.setLed('calm');
+      actor.agitation = 0.15;
+    }
+  }
+
+  alertLevel: 0 | 1 | 2 = 1;
 }

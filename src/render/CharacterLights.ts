@@ -93,8 +93,10 @@ export class CharacterLights {
       .multiplyScalar(Math.cos(this.keyAzimuth))
       .addScaledVector(side, Math.sin(this.keyAzimuth) * keySide)
       .normalize();
-    this.key.position.copy(subject).addScaledVector(keyDir, 2.6);
-    this.key.position.y = subject.y + (opts.height ?? 1.4);
+    // Kept close to the subject's own height: a key placed high above the aim
+    // point becomes a top light, which blows out scalps and hides eyes.
+    this.key.position.copy(subject).addScaledVector(keyDir, 3.1);
+    this.key.position.y = subject.y + (opts.height ?? 0.62);
     this.key.target.position.copy(subject);
     this.key.target.updateMatrixWorld();
 

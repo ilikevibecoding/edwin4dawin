@@ -30,6 +30,7 @@ export type CharacterId =
   | 'trooper'
   | 'commander'
   | 'child'
+  | 'owner'
   | 'crowdAndroid';
 
 export interface CharacterDef {
@@ -198,14 +199,15 @@ function styleHair(root: THREE.Object3D, opts: { color: number; roughness?: numb
       depthWrite: previous.depthWrite,
       polygonOffset: previous.polygonOffset,
       polygonOffsetFactor: previous.polygonOffsetFactor,
-      roughness: opts.roughness ?? 0.68,
-      metalness: 0.02,
-      sheen: opts.sheen ?? 0.35,
-      sheenRoughness: 0.6,
-      sheenColor: new THREE.Color(0x6a5a4a),
-      clearcoat: 0.05,
-      clearcoatRoughness: 0.7,
-      envMapIntensity: 0.85,
+      // Hair is the darkest thing on a head and has no broad specular lobe. Any
+      // gloss here turns the shell into a wet plastic cap under a hard key.
+      roughness: opts.roughness ?? 0.88,
+      metalness: 0.0,
+      sheen: opts.sheen ?? 0.14,
+      sheenRoughness: 0.9,
+      sheenColor: new THREE.Color(0x4a3d31),
+      clearcoat: 0,
+      envMapIntensity: 0.3,
     });
   });
 }
@@ -466,6 +468,44 @@ export const CAST: Record<CharacterId, CharacterDef> = {
     },
   },
 
+  owner: {
+    id: 'owner',
+    displayName: 'TODD',
+    model: 'HUMAN · REGISTERED OWNER',
+    file: 'readyplayer.me',
+    rigKey: 'rpm',
+    height: 1.79,
+    hasFace: true,
+    hasLed: false,
+    accent: 0xd8956a,
+    restyle: (root) => {
+      // Keeps the beard the avatar ships with: the one human in the cast should
+      // not read as another variant of the same clean android face.
+      hideMesh(root, /headwear|hat/i);
+      replaceMaterial(root, (m) => /skin/i.test(m.name), (m) => {
+        const mat = syntheticSkin(m, { clearcoat: 0.02 }) as THREE.MeshPhysicalMaterial;
+        mat.clearcoat = 0;
+        mat.roughness = 0.78;
+        mat.sheen = 0.1;
+        mat.color.setHex(0xd9ab8e);
+        return mat;
+      });
+      replaceMaterial(root, (m) => /outfit_top/i.test(m.name), () =>
+        fabricMaterial(Tex.darkFabric, 0x5a4536, 0.92)
+      );
+      replaceMaterial(root, (m) => /outfit_bottom/i.test(m.name), () =>
+        fabricMaterial(Tex.darkFabric, 0x2c3038, 0.9)
+      );
+      replaceMaterial(root, (m) => /footwear/i.test(m.name), () =>
+        new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.65, metalness: 0.05 })
+      );
+      replaceMaterial(root, (m) => /body/i.test(m.name) && !/outfit/i.test(m.name), (m) =>
+        syntheticSkin(m, { clearcoat: 0.02 })
+      );
+      styleHair(root, { color: 0x2a1f18, roughness: 0.92, sheen: 0.08 });
+    },
+  },
+
   crowdAndroid: {
     id: 'crowdAndroid',
     displayName: 'ANDROID',
@@ -532,7 +572,7 @@ export class ActorFactory {
 
         const headBone = skeleton.bones.find((b) => /(^|[^A-Za-z])Head$/.test(b.name));
         if (headBone) {
-          const hair = buildHairCap(head, headBone, eyes, { thickness: 0.0026, frontLift: 0.062, napeDrop: 0.03 });
+          const hair = buildHairCap(head, headBone, eyes, { thickness: 0.014, frontLift: 0.058, napeDrop: 0.032 });
           if (hair) {
             hair.name = `${head.name}${HAIR_MESH_SUFFIX}`;
             head.parent?.add(hair);
