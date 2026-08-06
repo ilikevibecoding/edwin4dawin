@@ -160,7 +160,9 @@ const NEON: NeonSpec[] = [
   { text: 'RAMEN', color: '#3ff2ff', light: 0x3ff2ff, vertical: true, x: 1.1, y: 4.6, z: 0.7, yaw: Math.PI / 2, w: 0.86, h: 3.1, reflect: 10, flicker: 0.35 },
   { text: 'HOTEL', color: '#ffab34', light: 0xffab34, vertical: true, x: 13.6, y: 7.6, z: 0.7, yaw: Math.PI / 2, w: 0.98, h: 3.4, reflect: 9 },
   { text: 'BAR', color: '#ff2f5e', light: 0xff2f5e, vertical: true, x: -16.2, y: 3.9, z: 0.66, yaw: Math.PI / 2, w: 0.8, h: 2.3, reflect: 7 },
-  { text: '24H', color: '#63ff9c', light: 0x63ff9c, vertical: true, x: 6.4, y: 9.2, z: 0.68, yaw: Math.PI / 2, w: 0.8, h: 2.4 },
+  // Sits on the corner of block B right beside the alley mouth: it fills the
+  // otherwise blank ground storey and throws green into the alley entrance.
+  { text: '24H', color: '#63ff9c', light: 0x63ff9c, vertical: true, x: -1.88, y: 4.3, z: 0.7, yaw: Math.PI / 2, w: 0.78, h: 2.3, reflect: 8 },
   { text: 'CYBER', color: '#b06cff', light: 0xb06cff, vertical: true, x: 18.4, y: 4.4, z: 0.68, yaw: Math.PI / 2, w: 0.9, h: 3.0, flicker: 0.55 },
   // Fascia signs, flush to the wall above the shopfronts.
   { text: 'BLUE MOON', sub: 'LOUNGE', color: '#43d8ff', light: 0x43d8ff, vertical: false, x: -11.5, y: 3.75, z: 0.09, yaw: 0, w: 3.9, h: 0.98, reflect: 8 },
@@ -269,7 +271,7 @@ export function buildStreetScene(stage: Stage): SceneBuild {
       batch.add(mDarkWall, box(0.1, shopTop, 2.4, s0 + 0.05, shopTop / 2, iz / 2), false, true);
       batch.add(mDarkWall, box(0.1, shopTop, 2.4, s1 - 0.05, shopTop / 2, iz / 2), false, true);
       batch.add(mPave, box(s1 - s0, 0.1, 2.5, (s0 + s1) / 2, PAVE_Y - 0.05, iz / 2), false, true);
-      const glow = b.shop[0] < 0 ? emitter(0xffc07a, 1.5) : emitter(0xc8e6ff, 1.4);
+      const glow = b.x0 < -10 ? emitter(0xffc07a, 0.9) : emitter(0xc8e6ff, 0.8);
       batch.add(glow, plane(s1 - s0 - 0.4, shopTop - 0.7, (s0 + s1) / 2, shopTop * 0.55, iz + 0.06), false, false);
       // Silhouetted stock so the interior is not a flat card
       const shelf = paint(0x1a1c20, 0.8);
