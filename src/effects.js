@@ -1357,6 +1357,11 @@ const COL = {
   flameHot: C(0xffd79a),
   flameMid: C(0xff7a24),
   flameDeep: C(0xd23a06),
+  // Exhaust cools through this rather than through flameDeep. An additive
+  // sprite whose green sits far below its red adds red and blue to a blue sky
+  // and leaves green behind, which lands squarely on magenta in the low-alpha
+  // halo around a boosting motor. Carrying more green keeps it orange.
+  flameExhaustCool: C(0xc7591c),
   // Embers are spawned over-range: additive sprites at LDR intensity against a
   // bright sky come out as pale pink smears instead of glowing points.
   emberWhite: C(0xfffbe8).multiplyScalar(3.2),
@@ -1610,7 +1615,7 @@ export class Effects {
     // moment its channels are close together. The orange stops carry the plume
     // and the near-white throat is kept small and comparatively dim.
     _cd.copy(COL.flameMid).multiplyScalar(3.0);
-    _ce.copy(COL.flameDeep).multiplyScalar(2.4);
+    _ce.copy(COL.flameExhaustCool).multiplyScalar(1.85);
     _cc.copy(COL.flameHot).multiplyScalar(2.7);
     _ca.multiplyScalar(2.3);
     // Kept only just over range: this one is normal-blended, so pushing it high
@@ -1682,7 +1687,7 @@ export class Effects {
           rot: rnd() * TAU,
           rotV: (rnd() - 0.5) * 2.4,
           color0: _cf,
-          color1: COL.flameDeep,
+          color1: COL.flameExhaustCool,
           color2: COL.smokeDark,
           alpha: 0.5,
           drag: 3.4,

@@ -119,6 +119,11 @@ Bugs the integration pass caught that the specialists had not:
 - **Launch dust stayed fully lit at midnight** — smoke is drawn in a custom
   shader with no scene lights, so it needed an explicit ambient term.
 - **The DOM HUD covered the physical console** it was sitting on.
+- **Exhaust puffs went pink at close range.** The cooling stop was very nearly
+  pure red, and an additive sprite whose green sits far below its red adds red
+  and blue to a blue sky while leaving green behind — which lands on magenta in
+  the low-alpha halo. Exhaust now cools through a dedicated stop that carries
+  more green; the fireball palette was left alone so its separate tuning holds.
 
 ## Iteration 5 — integration, optimisation, QA
 
@@ -218,3 +223,12 @@ state, seed determinism, run-to-run variation, and three presentation captures.
    direction rather than an inverse-transpose normal, so the fresnel rim is
    slightly biased. Invisible at the flattening used; pushing `flat` past ~0.85
    would start to show it.
+9. A missile contrail viewed from inside ~20 m still reads as a fairly opaque
+   white tube rather than condensing gas, and the exhaust sprites show their
+   internal turbulence as visible spikes at that range. Neither is a framing the
+   game presents — the closest a player gets is standing beside a launcher during
+   ignition, at 30 m or more, where both read correctly — so this is only
+   reachable with a chase camera. A longer condensation ramp on `uBirth` fixes
+   the tube but visibly thins the long-range contrails, which are a headline
+   feature, so the current value stays. Doing this properly needs the ribbon
+   opacity to fall off with apparent width rather than with age.
