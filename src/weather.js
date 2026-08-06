@@ -205,7 +205,9 @@ const PRESETS = {
     stars: 0.9, milkyWay: 0.85, moon: 1.0,
     clouds: 0.18, cloudLit: 0x27314b, cloudShade: 0x070b16, cloudUnder: 0,
     lightColor: 0x8fa8d8, sunIntensity: 0.95,
-    hemiSky: 0x26364f, hemiGround: 0x12161f, hemiIntensity: 0.5,
+    // hemi lifted 0.5→0.62 per missiles specialist: keeps unlit airframes and
+    // vehicle shadow sides readable at night without touching the moon key
+    hemiSky: 0x2a3b57, hemiGround: 0x141821, hemiIntensity: 0.62,
     fogColor: 0x0f1826, fogNear: 750, fogFar: 9000,
     exposure: 1.16, floodlights: true,
     trailTint: 0x556179,
@@ -420,7 +422,7 @@ export function createWeather(ctx) {
     setTimeOfDay(t, instant = false) {
       if (!PRESETS[t]) return;
       scene.environment = envMaps[t];
-      scene.environmentIntensity = t === 'night' ? 0.3 : 0.55;
+      scene.environmentIntensity = t === 'night' ? 0.38 : 0.55;
       // snapshot the currently displayed values as the new blend origin so
       // re-targeting mid-transition never pops
       const snap = {};

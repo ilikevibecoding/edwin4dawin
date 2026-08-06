@@ -85,7 +85,9 @@ const GradeShader = {
 // changes glide instead of popping
 const LOOKS = {
   day: {
-    bloomStrength: 0.45, bloomThreshold: 0.85,
+    // threshold raised 0.85→0.90 per missiles specialist: keeps the sun-halo
+    // sky from blooming over a distant threat dot; explosions sit far above it
+    bloomStrength: 0.42, bloomThreshold: 0.90,
     tint: [1.0, 1.0, 1.0], tintHi: [1.0, 1.0, 1.0], lift: [0.0, 0.0, 0.0],
     grain: 0.028, scurve: 0.10, contrast: 1.035, sat: 1.02, vignette: 0.34,
   },
