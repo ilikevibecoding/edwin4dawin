@@ -397,10 +397,10 @@ export const CAST: Record<CharacterId, CharacterDef> = {
           map: src.map ?? null,
           normalMap: src.normalMap ?? null,
           // The stock armour is pale tan; tint it to riot black.
-          color: 0x2b3038,
-          roughness: 0.62,
-          metalness: 0.35,
-          envMapIntensity: 0.8,
+          color: 0x454c58,
+          roughness: 0.58,
+          metalness: 0.3,
+          envMapIntensity: 1.1,
         });
       });
     },
@@ -431,9 +431,10 @@ export const CAST: Record<CharacterId, CharacterDef> = {
         return new THREE.MeshStandardMaterial({
           map: src.map ?? null,
           normalMap: src.normalMap ?? null,
-          color: 0x1d222a,
-          roughness: 0.6,
-          metalness: 0.3,
+          color: 0x3c4350,
+          roughness: 0.58,
+          metalness: 0.28,
+          envMapIntensity: 1.1,
         });
       });
     },

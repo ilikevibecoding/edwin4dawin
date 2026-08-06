@@ -78,7 +78,7 @@ export function single(actor: Actor, opts: SingleOptions = {}): Shot {
   const eyes = actor.getEyePosition(v());
   const facing = opts.lookingAt
     ? flatDir(actor.root.position, opts.lookingAt)
-    : new THREE.Vector3(0, 0, 1).applyQuaternion(actor.root.quaternion).setY(0).normalize();
+    : actor.facingDirection();
   const side = perpendicular(facing);
   const dir = facing.clone().multiplyScalar(Math.cos(angle)).addScaledVector(side, Math.sin(angle)).normalize();
   const position = eyes.clone().addScaledVector(dir, distance);
@@ -197,9 +197,12 @@ export function establish(
 }
 
 /** Low angle looking up at a subject: makes them loom. */
-export function lowAngle(actor: Actor, opts: { lens?: number; distance?: number; angle?: number } = {}): Shot {
+export function lowAngle(
+  actor: Actor,
+  opts: { lens?: number; distance?: number; angle?: number; lookingAt?: THREE.Vector3 } = {}
+): Shot {
   const eyes = actor.getEyePosition(v());
-  const facing = new THREE.Vector3(0, 0, 1).applyQuaternion(actor.root.quaternion).setY(0).normalize();
+  const facing = opts.lookingAt ? flatDir(actor.root.position, opts.lookingAt) : actor.facingDirection();
   const side = perpendicular(facing);
   const angle = opts.angle ?? 0.3;
   const dir = facing.clone().multiplyScalar(Math.cos(angle)).addScaledVector(side, Math.sin(angle)).normalize();

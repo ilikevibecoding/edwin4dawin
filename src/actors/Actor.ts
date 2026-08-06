@@ -897,6 +897,19 @@ export class Actor {
 
   // ------------------------------------------------------------------ facing
 
+  /**
+   * World direction the character is actually facing.
+   *
+   * Not the same as the root's +Z: the source rigs disagree about which way a
+   * model faces in its own space, so the root carries a compensating yaw. Shot
+   * framing has to ask for this rather than reading the quaternion, or a camera
+   * placed "in front of" an actor ends up behind them and inside the set.
+   */
+  facingDirection(out = new THREE.Vector3()): THREE.Vector3 {
+    const yaw = this.root.rotation.y + this.facingOffset;
+    return out.set(Math.sin(yaw), 0, Math.cos(yaw)).normalize();
+  }
+
   /** Rotates the whole body to face a world point (yaw only). */
   faceToward(point: THREE.Vector3, immediate = false): void {
     const dx = point.x - this.root.position.x;

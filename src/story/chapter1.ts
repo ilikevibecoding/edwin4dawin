@@ -109,8 +109,8 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
   await d.wait(1.4);
 
   d.cut(
-    d.shots.establish(new THREE.Vector3(-9.5, 2.2, -6.0), new THREE.Vector3(6.0, 4.0, -18.0), {
-      lens: 40,
+    d.shots.establish(new THREE.Vector3(2.6, 1.5, 5.0), new THREE.Vector3(0.4, 3.2, -16.0), {
+      lens: 45,
       bokeh: 1.2,
     }),
     { move: 'craneUp', moveAmount: 1.6, moveDuration: 9, handheld: 0.4 }
@@ -143,7 +143,7 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
   await d.walk(orion, [marks.playerStart], { speed: 1.15, face: marks.deviant });
   await d.say(orion, "RK-900. I'm the negotiator. Hold your positions.", 'ch1_orion_1', { pose: 'talkSmall' });
 
-  d.cut(d.shots.lowAngle(troopers[0], { lens: 44, distance: 2.4 }), { handheld: 0.7 });
+  d.cut(d.shots.medium(troopers[0], { lookingAt: marks.deviant, lens: 50, distance: 2.7 }), { handheld: 0.7 });
   d.light(troopers[0], 1);
   await d.say(troopers[0], "He's been up there twenty minutes. One wrong move and he takes the kid over.", 'ch1_trooper_1');
 

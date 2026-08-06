@@ -14,7 +14,7 @@ import { HouseholdSet } from './sets/HouseholdSet';
 import { PlazaSet } from './sets/PlazaSet';
 import { ActorFactory } from './actors/Cast';
 import type { SceneSet } from './sets/SceneSet';
-import { closeUp, establish, lowAngle, overShoulder, single, twoShot, type Shot } from './cine/Framing';
+import { closeUp, establish, lowAngle, medium, overShoulder, single, twoShot, type Shot } from './cine/Framing';
 import { RAIN } from './render/LookConfig';
 
 type SetKind = 'rooftop' | 'household' | 'plaza';
@@ -103,8 +103,15 @@ async function buildHousehold(): Promise<SceneSet> {
   child.faceToward(set.marks.cass, true);
   set.addActor('child', child);
 
+  const owner = await factory.spawn('owner');
+  owner.root.position.copy(set.marks.owner);
+  owner.faceToward(set.marks.cass, true);
+  owner.setPose('pointForward', 0.8, { fadeIn: 0 });
+  set.addActor('owner', owner);
+
   cass.lookAt(child.getEyePosition(new THREE.Vector3()), 1);
   child.lookAt(cass.getEyePosition(new THREE.Vector3()), 1);
+  owner.lookAt(cass.getEyePosition(new THREE.Vector3()), 1);
   return set;
 }
 
@@ -199,7 +206,31 @@ const SHOTS: ShotDef[] = [
         focusOn: set.actor('deviant').getChestPosition(new THREE.Vector3()),
       }),
   },
-  { name: '09_trooper', subject: 'trooper0', keySide: 1, set: 'rooftop', build: (set) => lowAngle(set.actor('trooper0'), { lens: 40, distance: 2.2 }) },
+  { name: '09_trooper', subject: 'trooper0', keySide: 1, set: 'rooftop', build: (set) => medium(set.actor('trooper0'), { lookingAt: set.marks.deviant as THREE.Vector3, lens: 50, distance: 2.7 }) },
+  {
+    name: '17_owner_low',
+    subject: 'owner',
+    keySide: 1,
+    set: 'household',
+    build: (set) => lowAngle(set.actor('owner'), { lens: 40, distance: 2.3 }),
+  },
+  {
+    name: '18_atlas_low',
+    subject: 'atlas',
+    keySide: -1,
+    set: 'plaza',
+    build: (set) => lowAngle(set.actor('atlas'), { lens: 38, distance: 3.0 }),
+  },
+  {
+    name: '15_title_a',
+    set: 'rooftop',
+    build: () => establish(new THREE.Vector3(6.0, 3.2, 3.0), new THREE.Vector3(-14.0, 6.5, -22.0), { lens: 34, bokeh: 0.9 }),
+  },
+  {
+    name: '16_title_b',
+    set: 'rooftop',
+    build: () => establish(new THREE.Vector3(2.6, 1.5, 5.0), new THREE.Vector3(0.4, 3.2, -16.0), { lens: 45, bokeh: 1.2 }),
+  },
   {
     name: '10_house_wide',
     set: 'household',

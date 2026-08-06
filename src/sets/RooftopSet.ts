@@ -46,7 +46,7 @@ export class RooftopSet extends SceneSet {
     deviant: new THREE.Vector3(1.15, 0, -4.15),
     hostage: new THREE.Vector3(1.9, 0, -4.85),
     edge: new THREE.Vector3(1.6, 0, -5.6),
-    troopers: [new THREE.Vector3(-6.8, 0, 3.4), new THREE.Vector3(-7.4, 0, 4.9)],
+    troopers: [new THREE.Vector3(-2.6, 0, 4.6), new THREE.Vector3(-4.2, 0, 4.3)],
   };
 
   private beacon: THREE.Mesh | null = null;
