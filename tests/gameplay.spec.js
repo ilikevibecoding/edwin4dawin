@@ -73,6 +73,9 @@ test.describe('IRONVEIL gameplay', () => {
   });
 
   test('manual engagement via console DOM controls', async ({ page }) => {
+    // the console view renders the full C2 interior + PPI canvas uploads every
+    // stepped frame — much heavier than outdoor tests under SwiftShader CI
+    test.setTimeout(420_000);
     await boot(page);
     await page.evaluate(() => window.__game.openConsole());
     await step(page, 0.5);
