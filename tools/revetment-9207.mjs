@@ -54,25 +54,40 @@ for (const [name, px, pz, tx, ty, tz] of views) {
   await shot(name);
 }
 
-// Walk in from the pad centre towards each hardstand and report where the
-// player ends up: the approach lane has to let them through.
+// Walk in from the pad centre towards each hardstand. What matters is that the
+// player gets through the revetment line, so the result is measured in the
+// hardstand's own frame: how far past the near flank they ended up. Stopping
+// short of the dead centre is expected — the launcher is parked on it.
 const walks = await page.evaluate(() => {
   const G = window.__GAME;
-  const targets = [
-    ['HAWKEYE 1', -64, 3],
-    ['LONGVIEW 2', 66, -11],
-    ['IRONWOOD 3', 4, -96],
+  // Mirrors HARDSTANDS in src/base.js.
+  const hardstands = [
+    { name: 'HAWKEYE 1', pos: [-64, 3], size: [36, 68], yaw: 0.03 },
+    { name: 'LONGVIEW 2', pos: [66, -11], size: [42, 76], yaw: -0.08 },
+    { name: 'IRONWOOD 3', pos: [4, -96], size: [50, 44], yaw: 0.05 },
   ];
   const out = [];
   const p = G.game.player;
-  for (const [name, tx, tz] of targets) {
+  for (const hs of hardstands) {
+    const long = hs.size[1] > hs.size[0];
+    const half = long ? hs.size[0] / 2 : hs.size[1] / 2;
+    const dirYaw = long ? hs.yaw : hs.yaw + Math.PI / 2;
+    // Outward normal of the flanks; the near flank is the one facing the pad.
+    const ox = Math.cos(dirYaw);
+    const oz = -Math.sin(dirYaw);
+    const flank = half + 1.6;
+    const [tx, tz] = hs.pos;
+    // Signed distance out along the flank normal, measured from the centre.
+    const outward = (x, z) => (x - tx) * ox + (z - tz) * oz;
+    const startOut = outward(0, 0);
+    const side = Math.sign(startOut);
+
     G.teleport(0, undefined, 0);
-    const d = Math.hypot(tx, tz);
+    const d0 = Math.hypot(tx, tz);
     p.keys.add('KeyW');
     p.keys.add('ShiftLeft');
-    let closest = d;
+    let closest = d0;
     for (let i = 0; i < 3000; i++) {
-      // Drive the collide-and-slide movement straight at the target.
       const dx = tx - p.pos.x;
       const dz = tz - p.pos.z;
       const len = Math.hypot(dx, dz);
@@ -83,17 +98,23 @@ const walks = await page.evaluate(() => {
     }
     p.keys.delete('KeyW');
     p.keys.delete('ShiftLeft');
+    const endOut = outward(p.pos.x, p.pos.z);
     out.push({
-      name,
-      startDist: Math.round(d),
-      closest: Number(closest.toFixed(1)),
+      name: hs.name,
+      startDist: Math.round(d0),
       endDist: Number(Math.hypot(tx - p.pos.x, tz - p.pos.z).toFixed(1)),
       at: [Number(p.pos.x.toFixed(1)), Number(p.pos.z.toFixed(1))],
+      nearFlankAt: Number((side * flank).toFixed(1)),
+      endedAt: Number(endOut.toFixed(1)),
+      insideRing: side > 0 ? endOut < flank : endOut > -flank,
+      metresPastFlank: Number((flank - side * endOut).toFixed(1)),
     });
   }
   return out;
 });
 console.log('walk-in from pad centre:', JSON.stringify(walks, null, 2));
+const blocked = walks.filter((w) => !w.insideRing);
+console.log(blocked.length ? `BLOCKED OUTSIDE THE RING: ${blocked.map((w) => w.name).join(', ')}` : 'all three approach lanes clear');
 
 const heights = await page.evaluate(() => {
   const G = window.__GAME;
