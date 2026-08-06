@@ -12,6 +12,23 @@ import type { Shot } from '../cine/Framing';
 
 const UP = new THREE.Vector3(0, 1, 0);
 
+/**
+ * Horizontal distance from a point to a segment, ignoring height.
+ *
+ * Ignoring height on purpose: a standing figure is a vertical column roughly half
+ * a metre across, and whether it blocks a shot has nothing to do with how the
+ * camera and the subject's eyeline compare to the height of its chest.
+ */
+function distanceToSegment(point: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3): number {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const lenSq = abx * abx + abz * abz;
+  if (lenSq < 1e-6) return Math.hypot(point.x - a.x, point.z - a.z);
+  let t = ((point.x - a.x) * abx + (point.z - a.z) * abz) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(point.x - (a.x + abx * t), point.z - (a.z + abz * t));
+}
+
 interface HazeOptions {
   color?: THREE.ColorRepresentation;
   radius?: number;
@@ -159,13 +176,14 @@ export abstract class SceneSet {
     if (far < minDistance) return;
     if (!this.occluders) this.occluders = this.collectOccluders();
 
-    // Anyone the shot is not built around is an obstacle. Standing a camera
-    // inside a bystander produces a frame of unreadable limbs, and the troopers
-    // on the roof stand close enough together for a clean single on one of them
-    // to land inside another.
+    // Anyone the shot is not built around is an obstacle — not only where the
+    // camera would stand, but anywhere along its line to the subject. The roof
+    // has five people standing within a few metres of each other, and a clean
+    // single on one of them was landing inside a second and behind a third.
     const crowd: THREE.Vector3[] = [];
     for (const a of this.actors.values()) {
       if (shot.subjects?.includes(a)) continue;
+      if (!a.root.visible) continue;
       crowd.push(a.getChestPosition(new THREE.Vector3()));
     }
 
@@ -178,7 +196,7 @@ export abstract class SceneSet {
       const position = clamped.position;
       if (!fallback) fallback = position.clone();
       if (clamped.blocked) continue;
-      if (crowd.some((p) => p.distanceTo(position) < 0.62)) continue;
+      if (crowd.some((p) => distanceToSegment(p, shot.target, position) < 0.5)) continue;
       shot.position.copy(position);
       return;
     }

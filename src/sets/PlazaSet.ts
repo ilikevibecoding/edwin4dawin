@@ -71,7 +71,7 @@ export class PlazaSet extends SceneSet {
     this.initWetFloor({ planeY: 0, wetness: 1, strength: 0.4 });
     if (this.groundMaterial) this.wetFloor?.attach(this.groundMaterial);
     this.initHaze(12, { color: 0x9fc0e8, radius: 18, height: 4.2, scale: 11, opacity: 0.055 });
-    this.initCharacterLights({ keyColor: 0xd0e2ff, kickerColor: 0xff8a44, keyIntensity: 30, kickerIntensity: 14, bounceIntensity: 1.2 });
+    this.initCharacterLights({ keyColor: 0xd0e2ff, kickerColor: 0xff8a44, keyIntensity: 19, kickerIntensity: 11, bounceIntensity: 1.0 });
     if (this.rain) this.wetFloor?.excludeFromReflection(this.rain.group);
     if (this.haze) this.wetFloor?.excludeFromReflection(this.haze.group);
   }

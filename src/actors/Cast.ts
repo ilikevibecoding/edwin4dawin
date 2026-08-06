@@ -350,8 +350,10 @@ export const CAST: Record<CharacterId, CharacterDef> = {
       // close-up while the exposed ceramic sells what he is.
       replaceMaterial(root, (m) => /skin/i.test(m.name), (m) => {
         const mat = syntheticSkin(m, { clearcoat: 0.34 }) as THREE.MeshPhysicalMaterial;
-        mat.color.setHex(0xd8dee6);
-        mat.roughness = 0.44;
+        // Pale, not white. At 0xd8dee6 his face clipped in every close-up: a
+        // near-white albedo under a portrait key has nowhere left to go.
+        mat.color.setHex(0xb2bac6);
+        mat.roughness = 0.5;
         mat.sheenColor.setHex(0x35506e);
         return mat;
       });
@@ -367,9 +369,10 @@ export const CAST: Record<CharacterId, CharacterDef> = {
       replaceMaterial(root, (m) => /footwear/i.test(m.name), () =>
         new THREE.MeshStandardMaterial({ color: 0x121417, roughness: 0.45, metalness: 0.2 })
       );
-      // Silver: the one lead who has to read instantly against Orion in a
-      // crowd, and the two of them share a face.
-      styleHair(root, { color: 0xa8adb6, roughness: 0.6 });
+      // Steel grey rather than silver: light enough to tell him from Orion at a
+      // glance — they share a face — but dark enough that the back of his head
+      // does not clip to white when he is the foreground of an over-the-shoulder.
+      styleHair(root, { color: 0x6b7079, roughness: 0.66 });
       brightenEyes(root, 0xbfe4ff);
     },
     decorate: (actor) => {

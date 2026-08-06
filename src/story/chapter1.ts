@@ -142,7 +142,7 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
   await d.say('DISPATCH', 'All units, hostage on the Stratford roof. Deviant android, one civilian. Negotiator inbound.', 'ch1_dispatch_1', { hold: 5.4 });
 
   // Orion steps out of the stairwell.
-  d.cut(d.shots.medium(orion, { lookingAt: marks.standoff, lens: 40, distance: 2.9, angle: 2.4 }), { blend: 0.9, handheld: 0.55 });
+  d.cut(d.shots.medium(orion, { lookingAt: marks.standoff, lens: 40, distance: 2.9, angle: 0.65 }), { blend: 0.9, handheld: 0.55 });
   await d.walk(orion, [marks.playerStart], { speed: 1.15, face: marks.deviant });
   await d.say(orion, "RK-900. I'm the negotiator. Hold your positions.", 'ch1_orion_1', { pose: 'talkSmall' });
 
@@ -235,8 +235,11 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
   d.state.set('ch1.hasEvidence', found.includes('clue.thirium'));
   d.state.set('ch1.readTablet', found.includes('clue.tablet'));
 
+  // The tablet, not the thirium: the pool is an emissive puddle, and an insert on
+  // it is a blue blob filling the frame. The tablet is a physical prop with an
+  // edge, a screen and a shadow.
   d.cut(
-    d.shots.insert(marks.clueThirium, marks.clueThirium.clone().add(new THREE.Vector3(0.9, 1.15, 1.05)), 48),
+    d.shots.insert(marks.clueTablet, marks.clueTablet.clone().add(new THREE.Vector3(0.62, 0.78, 0.7)), 52),
     { handheld: 0.3 }
   );
   d.sfx('blipScan');
