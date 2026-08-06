@@ -20,7 +20,11 @@ npm run dev        # http://localhost:5173
 ## Play
 
 - **WASD** move · **SHIFT** sprint · mouse look (click to lock pointer)
+- **Q** raises the handheld **TACOM pad** anywhere on the base: tactical radar
+  plot, per-track ASSIGN/FIRE buttons, battery chips, ENGAGE ALL, and raid
+  setup (conditions/scenario/start) — no need to walk back to the C2 shelter
 - Press **TAB** anywhere (or walk to the C2 shelter console and press **E**)
+  for the full fire-direction console
 - Console: pick **conditions** (day/sunset/night), a **scenario**
   (`SINGLE TRACK`, `SATURATION`, `NIGHT RAID`), a **battery**, then
   **START BALLISTIC MISSILES**
@@ -30,6 +34,11 @@ npm run dev        # http://localhost:5173
   control automatically rolls to the next ready battery while one reloads);
   press **1/2/3** mid-engagement to re-point a specific battery at it.
   With nothing aimed, **F** engages the most urgent track automatically.
+- Engagements are **per track and concurrent**: assign several tracks at once,
+  put one battery on several missiles (rounds queue and fire as it cycles),
+  or several batteries on one missile. Queued rounds show as `Q n` badges.
+- **V** cycles cinematic chase cams: ride the newest interceptor out
+  (missile cam), then the most urgent inbound threat, then back to first person.
 - **1/2/3** select battery · **H** settings (reduced motion, volume, quality) · **R** restart after debrief
 
 ## Batteries (fictional)

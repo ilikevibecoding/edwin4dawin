@@ -85,8 +85,14 @@ const game = {
   seed: null,
   scenarioStartedAt: 0,
   selectedBatteryId: 'patriot',
-  assignment: null, // { trackId, batteryId }
+  assignments: new Map(), // trackId -> batteryId: every live engagement intent
+  fireQueue: [],          // [{ trackId, batteryId }] authorized rounds waiting on a battery cycle
+  focusTrackId: null,     // track driving the one-key flow + HUD focus chip
   engageHint: '',
+  viewMode: 'fp',         // fp | missile | threat — cinematic chase cams on V
+  camTarget: null,        // followed interceptor / threat object
+  camHold: 0,             // linger timer after the followed object dies
+  tabletOpen: false,      // handheld TACOM pad (Q)
   endTimer: -1,
   autoplay: false,
   autoplayTimer: 0,
@@ -99,10 +105,20 @@ const game = {
 };
 ctx.game = game;
 
+/** focused assignment (compat shape used by HUD chip + tests) */
+function focusAssignment() {
+  if (game.focusTrackId && game.assignments.has(game.focusTrackId)) {
+    return { trackId: game.focusTrackId, batteryId: game.assignments.get(game.focusTrackId) };
+  }
+  // fall back to any live assignment so the chip never lies
+  for (const [trackId, batteryId] of game.assignments) return { trackId, batteryId };
+  return null;
+}
+
 function freshStats() {
   return {
     threatsTotal: 0, warheads: 0, decoys: 0,
-    intercepted: 0, misses: 0, impacts: 0, impactsOnBase: 0,
+    intercepted: 0, misses: 0, safed: 0, impacts: 0, impactsOnBase: 0,
     launches: 0, wastedOnDecoys: 0, elapsed: 0,
   };
 }
@@ -119,9 +135,12 @@ ctx.events.on('intercept-success', ({ decoy }) => {
   else game.stats.intercepted++;
 });
 ctx.events.on('intercept-miss', ({ threat }) => {
+  // salvo doctrine: a round whose target was already killed (or already hit
+  // the ground) safes itself — that is not a miss against a live threat
+  if (!threat || !threat.alive) { game.stats.safed++; return; }
   game.stats.misses++;
   // allow re-engagement of the surviving threat
-  const tr = threat ? ctx.radar.trackFor(threat) : null;
+  const tr = ctx.radar.trackFor(threat);
   if (tr) tr.engagedBy = Math.max(0, tr.engagedBy - 1);
 });
 ctx.events.on('intercept-success', ({ point }) => {
@@ -135,15 +154,16 @@ ctx.events.on('threat-impact', ({ onBase, threat }) => {
     ctx.ui.flashImpact();
   }
 });
-// clear assignment when its track dies
-ctx.events.on('threat-destroyed', ({ threat }) => {
+// tear down a track's engagement when it dies (destroyed or impacted)
+function dropEngagement(threat) {
   const tr = ctx.radar.trackFor(threat);
-  if (tr && game.assignment?.trackId === tr.id) game.assignment = null;
-});
-ctx.events.on('threat-impact', ({ threat }) => {
-  const tr = ctx.radar.trackFor(threat);
-  if (tr && game.assignment?.trackId === tr.id) game.assignment = null;
-});
+  if (!tr) return;
+  game.assignments.delete(tr.id);
+  if (game.fireQueue.length) game.fireQueue = game.fireQueue.filter((q) => q.trackId !== tr.id);
+  if (game.focusTrackId === tr.id) game.focusTrackId = null;
+}
+ctx.events.on('threat-destroyed', ({ threat }) => dropEngagement(threat));
+ctx.events.on('threat-impact', ({ threat }) => dropEngagement(threat));
 
 // ============================================================ engagement API
 function selectScenario(id) {
@@ -159,10 +179,10 @@ function selectBattery(id) {
   if (!BATTERY_DEFS[id]) return;
   game.selectedBatteryId = id;
   ctx.events.emit('battery-selected', { id });
-  // mid-engagement battery switch re-points the new battery at the same
+  // mid-engagement battery switch re-points the new battery at the focused
   // threat, so 1/2/3 + F puts interceptors from several batteries on one bomb
-  if (game.phase === 'active' && game.assignment && game.assignment.batteryId !== id) {
-    assign(game.assignment.trackId, id);
+  if (game.phase === 'active' && game.focusTrackId && game.assignments.get(game.focusTrackId) !== id) {
+    assign(game.focusTrackId, id);
   }
 }
 function setTimeOfDay(t) {
@@ -184,7 +204,10 @@ function startScenario(opts = {}) {
   ctx.interceptors.clear();
   ctx.batteries.resetAll();
   game.stats = freshStats();
-  game.assignment = null;
+  game.assignments.clear();
+  game.fireQueue.length = 0;
+  game.focusTrackId = null;
+  setView('fp');
   game.endTimer = -1;
   game.phase = 'active';
   game.scenarioStartedAt = ctx.time.now;
@@ -244,11 +267,10 @@ function assign(trackId = ctx.radar.selectedTrackId ?? game.aimTrackId, batteryI
     hint = `MARGINAL GEOMETRY FOR ${battery.def.name} — REDUCED PK`;
   }
   if (auto) hint = `AUTO: ${battery.def.name} TAKES ${track.id} — ${hint}`;
-  if (game.assignment && game.assignment.trackId !== track.id) {
-    const prev = ctx.radar.getTrack(game.assignment.trackId);
-    if (prev) prev.assignedBattery = null;
-  }
-  game.assignment = { trackId: track.id, batteryId: battery.id };
+  // per-track assignment: engaging a new track never drops other engagements,
+  // and one battery may be assigned to several tracks at once
+  game.assignments.set(track.id, battery.id);
+  game.focusTrackId = track.id;
   track.assignedBattery = battery.id;
   battery.pointAt(sol.point);
   game.engageHint = hint;
@@ -256,21 +278,20 @@ function assign(trackId = ctx.radar.selectedTrackId ?? game.aimTrackId, batteryI
   return true;
 }
 
-function authorize() {
-  const a = game.assignment;
-  if (!a) { game.engageHint = 'NO ASSIGNMENT — ASSIGN A TRACK FIRST'; return false; }
-  const track = ctx.radar.getTrack(a.trackId);
-  if (!track || track.gone) { game.assignment = null; return false; }
-  let battery = ctx.batteries.get(a.batteryId);
+function authorize(trackId = game.focusTrackId ?? ctx.radar.selectedTrackId ?? game.aimTrackId) {
+  const track = trackId ? ctx.radar.getTrack(trackId) : null;
+  if (!track || track.gone) { game.engageHint = 'NO ASSIGNMENT — ASSIGN A TRACK FIRST'; return false; }
+  if (!game.assignments.has(track.id) && !assign(track.id)) return false;
+  game.focusTrackId = track.id;
+  let battery = ctx.batteries.get(game.assignments.get(track.id));
   if (!battery.canAccept()) {
-    // ripple fire: roll to another ready battery so repeated presses keep
-    // putting interceptors on the same threat while this one reloads
+    // salvo roll: another ready battery takes the shot immediately…
     const altId = bestBatteryFor(track);
     if (altId && altId !== battery.id && assign(track.id, altId)) {
       battery = ctx.batteries.get(altId);
     } else {
-      game.engageHint = `${battery.def.name} NOT READY (${battery.displayState})`;
-      return false;
+      // …or the round queues on the assigned battery and fires the moment it cycles
+      return queueRound(track, battery);
     }
   }
   const ok = battery.launch(track);
@@ -281,6 +302,84 @@ function authorize() {
     // assignment stays: pressing F again ripple-fires at the same threat
   }
   return ok;
+}
+
+/** queue an authorized round on a busy battery (fires automatically when ready) */
+function queueRound(track, battery) {
+  const queuedForBattery = game.fireQueue.filter((q) => q.batteryId === battery.id).length;
+  if (battery.ammo - queuedForBattery <= 0) {
+    game.engageHint = `${battery.def.name} HAS NO ROUNDS LEFT TO QUEUE`;
+    ctx.ui.toast(game.engageHint, 'warn');
+    return false;
+  }
+  if (game.fireQueue.length >= 12) {
+    game.engageHint = 'FIRE QUEUE FULL';
+    return false;
+  }
+  game.fireQueue.push({ trackId: track.id, batteryId: battery.id });
+  const n = game.fireQueue.filter((q) => q.trackId === track.id).length;
+  game.engageHint = `${battery.def.name} CYCLING — ROUND QUEUED ON ${track.id}${n > 1 ? ` (${n} WAITING)` : ''}`;
+  ctx.ui.toast(`ROUND QUEUED — ${battery.def.name} WILL FIRE ON ${track.id} WHEN READY`, 'info', 4);
+  ctx.events.emit('launch-queued', { track, battery });
+  return true;
+}
+
+/** drain the fire queue: launch every queued round whose battery has cycled.
+ *  Stale geometry re-rolls to the best available battery or drops the round. */
+function processFireQueue() {
+  if (!game.fireQueue.length) return;
+  const kept = [];
+  const firedThisPass = new Set();
+  for (const q of game.fireQueue) {
+    const track = ctx.radar.getTrack(q.trackId);
+    if (!track || track.gone) continue; // target already dead — drop silently
+    let battery = ctx.batteries.get(q.batteryId);
+    if (firedThisPass.has(battery.id) || !battery.canAccept()) { kept.push(q); continue; }
+    let sol = predictIntercept(battery.rig.group.position, track.threat.pos, track.threat.vel, battery.def.interceptor.avgSpeed);
+    if (!sol) {
+      // waited too long for this battery — see if any other can still make the shot
+      const altId = bestBatteryFor(track);
+      const alt = altId ? ctx.batteries.get(altId) : null;
+      sol = alt ? predictIntercept(alt.rig.group.position, track.threat.pos, track.threat.vel, alt.def.interceptor.avgSpeed) : null;
+      if (alt && sol && alt.canAccept() && !firedThisPass.has(alt.id)) {
+        battery = alt;
+        game.assignments.set(track.id, battery.id);
+        track.assignedBattery = battery.id;
+      } else if (alt && sol) {
+        kept.push({ trackId: q.trackId, batteryId: alt.id }); // re-queue on the viable battery
+        continue;
+      } else {
+        ctx.ui.toast(`QUEUED SHOT LOST — ${track.id} LEFT THE ENGAGEMENT ENVELOPE`, 'warn', 5);
+        continue;
+      }
+    }
+    battery.pointAt(sol.point);
+    if (battery.launch(track)) {
+      track.engagedBy++;
+      firedThisPass.add(battery.id);
+      ctx.events.emit('launch-authorized', { track, battery, queued: true });
+    } else {
+      kept.push(q);
+    }
+  }
+  game.fireQueue = kept;
+}
+
+/** assign + authorize every live hostile track, most urgent first (tablet button) */
+function engageAll() {
+  const tracks = ctx.radar.activeTracks()
+    .filter((tr) => !tr.classified.startsWith('DECOY'))
+    .sort((a, b) => timeToGround(a.threat.pos, a.threat.vel, 0) - timeToGround(b.threat.pos, b.threat.vel, 0));
+  let engaged = 0;
+  for (const tr of tracks) {
+    if (tr.engagedBy > 0 || game.fireQueue.some((q) => q.trackId === tr.id)) continue; // already covered
+    const bid = game.assignments.get(tr.id) ?? bestBatteryFor(tr) ?? game.selectedBatteryId;
+    if (!assign(tr.id, bid)) continue;
+    if (authorize(tr.id)) engaged++;
+  }
+  if (engaged > 0) ctx.ui.toast(`BATCH ENGAGEMENT — ${engaged} TRACK${engaged > 1 ? 'S' : ''} UNDER FIRE`, 'warn', 5);
+  else ctx.ui.toast('NO UNENGAGED HOSTILE TRACKS', 'info', 3);
+  return engaged;
 }
 
 /** most urgent live track: shortest time-to-impact, deprioritizing
@@ -331,6 +430,8 @@ const consoleView = {
 
 function enterConsole() {
   if (game.mode === 'console') return;
+  closeTablet();
+  setView('fp');
   game.mode = 'console';
   game.consoleTransition = 0;
   game.savedCam.pos.copy(camera.position);
@@ -348,6 +449,111 @@ function exitConsole() {
   ctx.ui.showConsole(false);
   ctx.ui.crosshair(true);
   if (!isTestDriver) ctx.player.lockPointer();
+}
+
+// ============================================================ tactical tablet
+// handheld TACOM pad: full engagement authority from anywhere on the base,
+// so the player never has to walk back to the C2 shelter mid-raid.
+function openTablet() {
+  if (game.tabletOpen || game.mode === 'console') return;
+  game.tabletOpen = true;
+  ctx.player.setEnabled(false);
+  ctx.player.unlockPointer();
+  ctx.ui.showTablet(true);
+  ctx.ui.crosshair(false);
+  ctx.ui.setPrompt(null);
+  ctx.events.emit('ui-click');
+}
+function closeTablet() {
+  if (!game.tabletOpen) return;
+  game.tabletOpen = false;
+  ctx.ui.showTablet(false);
+  if (game.viewMode === 'fp') {
+    ctx.player.setEnabled(true);
+    ctx.ui.crosshair(true);
+    if (!isTestDriver) ctx.player.lockPointer();
+  }
+}
+function toggleTablet() { game.tabletOpen ? closeTablet() : openTablet(); }
+
+// ============================================================ chase views (V)
+// cinematic follow cams: ride the newest interceptor out, or track the most
+// urgent inbound threat. Zero extra render cost — same camera, new transform.
+const chase = {
+  pos: new THREE.Vector3(),
+  look: new THREE.Vector3(),
+  lastTargetPos: new THREE.Vector3(),
+  lastVel: new THREE.Vector3(0, 1, 0),
+  snapped: false,
+};
+function setView(mode, target = null) {
+  if (mode !== 'fp' && !target) mode = 'fp';
+  if (game.viewMode === mode && game.camTarget === target) return;
+  game.viewMode = mode;
+  game.camTarget = target;
+  game.camHold = 0;
+  chase.snapped = false;
+  const fp = mode === 'fp';
+  ctx.player.setEnabled(fp && !game.tabletOpen && game.mode === 'freeroam');
+  ctx.ui.setCinema(!fp, mode === 'missile' ? 'INTERCEPTOR CAM' : 'THREAT TRACK CAM');
+  if (game.mode === 'freeroam' && !game.tabletOpen) ctx.ui.crosshair(fp);
+}
+function cycleView() {
+  if (game.mode === 'console') return;
+  const ints = ctx.interceptors.active;
+  const urgent = mostUrgentTrack();
+  if (game.viewMode === 'fp') {
+    if (ints.length) setView('missile', ints[ints.length - 1]);
+    else if (urgent) setView('threat', urgent.threat);
+    else ctx.ui.toast('NO AIRBORNE CAMERA TARGETS', 'info', 2.5);
+  } else if (game.viewMode === 'missile') {
+    if (urgent) setView('threat', urgent.threat);
+    else setView('fp');
+  } else {
+    setView('fp');
+  }
+}
+const _chaseVel = new THREE.Vector3();
+const _chaseDesired = new THREE.Vector3();
+const _chaseSide = new THREE.Vector3();
+function updateChaseCam(dt) {
+  if (game.viewMode === 'fp') return;
+  const t = game.camTarget;
+  const alive = t && (game.viewMode === 'missile'
+    ? ctx.interceptors.active.includes(t)
+    : ctx.threats.active.includes(t));
+  if (alive) {
+    if (t.vel.lengthSq() > 1) chase.lastVel.copy(t.vel).normalize();
+    chase.lastTargetPos.copy(t.pos);
+    const dist = game.viewMode === 'missile' ? 26 : 52;
+    // 3/4 side chase: offset laterally out of the exhaust plume so the
+    // missile reads against the sky instead of filling the frame with smoke
+    _chaseSide.crossVectors(chase.lastVel, camera.up);
+    if (_chaseSide.lengthSq() < 0.05) _chaseSide.set(1, 0, 0);
+    _chaseSide.normalize();
+    _chaseDesired.copy(t.pos)
+      .addScaledVector(chase.lastVel, -dist * 0.62)
+      .addScaledVector(_chaseSide, dist * 0.78)
+      .addScaledVector(camera.up, dist * 0.30);
+    _chaseDesired.y = Math.max(_chaseDesired.y, 3);
+    if (!chase.snapped) { chase.pos.copy(_chaseDesired); chase.snapped = true; }
+    else chase.pos.lerp(_chaseDesired, 1 - Math.exp(-dt * 4.0));
+    chase.look.copy(t.pos).addScaledVector(_chaseVel.copy(chase.lastVel), 55);
+  } else {
+    // target just died — hold on the fireball for a beat, then move on
+    game.camHold += dt;
+    chase.look.copy(chase.lastTargetPos);
+    if (game.camHold > 1.6) {
+      const ints = ctx.interceptors.active;
+      if (game.viewMode === 'missile' && ints.length) setView('missile', ints[ints.length - 1]);
+      else if (game.viewMode === 'threat' && mostUrgentTrack()) setView('threat', mostUrgentTrack().threat);
+      else setView('fp');
+      return;
+    }
+  }
+  camera.position.copy(chase.pos);
+  _lookM.lookAt(chase.pos, chase.look, camera.up);
+  camera.quaternion.setFromRotationMatrix(_lookM);
 }
 
 // click-to-select tracks on the holo display
@@ -375,6 +581,8 @@ window.addEventListener('keydown', (e) => {
     case 'KeyH': ctx.ui.showSettings(!ctx.ui.settingsOpen); break;
     case 'Escape':
       if (ctx.ui.settingsOpen) ctx.ui.showSettings(false);
+      else if (game.tabletOpen) closeTablet();
+      else if (game.viewMode !== 'fp') setView('fp');
       else if (game.mode === 'console') exitConsole();
       break;
     case 'Tab':
@@ -383,22 +591,30 @@ window.addEventListener('keydown', (e) => {
       if (game.mode === 'console') exitConsole();
       else enterConsole();
       break;
+    case 'KeyQ':
+      // handheld TACOM pad — full engagement authority without leaving the pad
+      if (game.mode !== 'console') toggleTablet();
+      break;
+    case 'KeyV':
+      cycleView();
+      break;
     case 'KeyE':
       if (game.mode === 'console') { exitConsole(); break; }
-      if (game.nearConsole) enterConsole();
+      if (game.nearConsole && !game.tabletOpen) enterConsole();
       else if (game.aimTrackId) { ctx.radar.selectTrack(game.aimTrackId); assign(game.aimTrackId); }
       break;
-    case 'KeyF':
-      // works in freeroam AND console mode. Fallback chain keeps the flow to
-      // one key: aimed threat -> selected track -> most urgent track.
-      if (!game.assignment) {
-        const tid = (game.mode === 'freeroam' && game.aimTrackId)
-          || ctx.radar.selectedTrackId
-          || mostUrgentTrack()?.id;
-        if (tid) assign(tid);
-      }
-      authorize();
+    case 'KeyF': {
+      // one-key engagement everywhere. Priority: aimed threat -> selected
+      // track -> focused engagement -> most urgent track. authorize()
+      // self-assigns, ripple-fires and queues rounds as needed.
+      const tid = (game.mode === 'freeroam' && !game.tabletOpen && game.aimTrackId)
+        || ctx.radar.selectedTrackId
+        || game.focusTrackId
+        || mostUrgentTrack()?.id;
+      if (tid) authorize(tid);
+      else game.engageHint = 'NO TRACKS TO ENGAGE';
       break;
+    }
     case 'KeyR':
       if (game.phase === 'debrief') { ctx.ui.hideDebrief(); restartScenario(); }
       break;
@@ -406,10 +622,10 @@ window.addEventListener('keydown', (e) => {
 });
 
 canvas.addEventListener('pointerdown', () => {
-  if (game.mode === 'freeroam' && !isTestDriver && !ctx.ui.settingsOpen) {
-    ctx.player.lockPointer();
-    ctx.audio.unlock();
-  }
+  if (game.mode !== 'freeroam' || isTestDriver || ctx.ui.settingsOpen) return;
+  if (game.tabletOpen) { closeTablet(); return; } // click past the pad = stow it
+  ctx.player.lockPointer();
+  ctx.audio.unlock();
 });
 
 // ============================================================ UI handlers
@@ -421,6 +637,10 @@ Object.assign(ctx.ui.handlers, {
   start: () => startScenario(),
   assign: () => assign(),
   authorize: () => authorize(),
+  assignTrack: (trackId, batteryId) => assign(trackId, batteryId ?? game.selectedBatteryId),
+  fireTrack: (trackId) => authorize(trackId),
+  engageAll: () => engageAll(),
+  closeTablet: () => closeTablet(),
   exitConsole: () => exitConsole(),
   enterConsole: () => enterConsole(),
   restart: () => restartScenario(),
@@ -468,12 +688,12 @@ function updateAim() {
     const tr = ctx.radar.getTrack(game.aimTrackId);
     const t = tr.threat;
     const bat = ctx.batteries.get(game.selectedBatteryId);
-    const assigned = game.assignment?.trackId === tr.id;
+    const assignedTo = game.assignments.get(tr.id);
     ctx.ui.setPrompt(
       `<span class="tp-title">${tr.id} · ${tr.classified}</span>\n` +
       `ALT ${fmtKm(t.pos.y)} · RNG ${fmtKm(Math.hypot(t.pos.x, t.pos.z))} · SPD ${Math.round(t.vel.length())} m/s\n` +
-      (assigned
-        ? `ASSIGNED TO ${ctx.batteries.get(game.assignment.batteryId).def.name} — [F] AUTHORIZE LAUNCH`
+      (assignedTo
+        ? `ASSIGNED TO ${ctx.batteries.get(assignedTo).def.name} — [F] FIRE / SALVO`
         : `[E] ASSIGN ${bat.def.name} · [F] QUICK FIRE`)
     );
   } else if (game.nearBattery) {
@@ -514,6 +734,8 @@ function updateScenarioEnd(dt) {
     game.endTimer -= dt;
     if (game.endTimer <= 0) {
       game.phase = 'debrief';
+      setView('fp');
+      closeTablet();
       updateSearchlights();
       ctx.events.emit('scenario-ended', { stats: { ...game.stats } });
       ctx.ui.showDebrief(game.stats);
@@ -527,18 +749,25 @@ function updateScenarioEnd(dt) {
 function buildSnapshot() {
   const tracks = [];
   for (const tr of ctx.radar.activeTracks()) {
+    const tImpact = timeToGround(tr.threat.pos, tr.threat.vel, 0);
     tracks.push({
       id: tr.id,
       classified: tr.classified,
       alt: tr.threat.pos.y,
       range: Math.hypot(tr.threat.pos.x, tr.threat.pos.z),
-      assignedBattery: tr.assignedBattery,
+      assignedBattery: game.assignments.get(tr.id) ?? tr.assignedBattery,
+      engagedBy: tr.engagedBy,
+      queued: game.fireQueue.reduce((n, q) => n + (q.trackId === tr.id ? 1 : 0), 0),
+      impactIn: tImpact > 0 ? tImpact : 0,
     });
   }
   const batteries = ctx.batteries.list.map((b) => ({
     id: b.id, state: b.displayState, ammo: b.ammo, maxAmmo: b.def.ammo, readyIn: Math.max(0, b.readyIn),
+    queued: game.fireQueue.reduce((n, q) => n + (q.batteryId === b.id ? 1 : 0), 0),
+    tracks: [...game.assignments].filter(([, bid]) => bid === b.id).map(([tid]) => tid),
   }));
   const selBat = ctx.batteries.get(game.selectedBatteryId);
+  const focusA = focusAssignment();
   return {
     mode: game.mode,
     phase: game.phase,
@@ -550,9 +779,13 @@ function buildSnapshot() {
     selectedBatteryName: selBat.def.name,
     selectedBatteryReady: selBat.canAccept(),
     selectedTrackId: ctx.radar.selectedTrackId,
-    assignment: game.assignment
-      ? { trackId: game.assignment.trackId, batteryName: ctx.batteries.get(game.assignment.batteryId).def.name }
+    assignment: focusA
+      ? { trackId: focusA.trackId, batteryName: ctx.batteries.get(focusA.batteryId).def.name }
       : null,
+    assignments: [...game.assignments].map(([tid, bid]) => ({ trackId: tid, batteryId: bid })),
+    queueCount: game.fireQueue.length,
+    viewMode: game.viewMode,
+    tabletOpen: game.tabletOpen,
     inFlight: ctx.interceptors.active.length,
     threatsRemaining: ctx.threats.active.length + ctx.threats.pendingCount,
     inboundUndetected: ctx.threats.active.length - tracks.length,
@@ -633,6 +866,8 @@ function update(dt) {
   }
   ctx.audio.update(dt);
 
+  processFireQueue();
+  updateChaseCam(dt);
   updateAim();
   autoplayTick();
   updateScenarioEnd(dt);
@@ -682,7 +917,11 @@ window.__game = {
         x: Math.round(i.pos.x), z: Math.round(i.pos.z),
       })),
       batteries: ctx.batteries.list.map((b) => ({ id: b.id, state: b.displayState, ammo: b.ammo })),
-      assignment: game.assignment,
+      assignment: focusAssignment(),
+      assignments: [...game.assignments].map(([tid, bid]) => ({ trackId: tid, batteryId: bid })),
+      fireQueue: game.fireQueue.map((q) => ({ ...q })),
+      viewMode: game.viewMode,
+      tabletOpen: game.tabletOpen,
       stats: { ...game.stats },
       autoplay: game.autoplay,
       engageHint: game.engageHint,
@@ -704,6 +943,7 @@ window.__game = {
   },
   testMode() {
     isTestDriver = true;
+    document.body.classList.add('test-driver'); // kills CSS transitions/animations
     ctx.ui.hideIntro();
     ctx.audio.setMuted(true);
     return true;
@@ -715,11 +955,25 @@ window.__game = {
     return startScenario(opts);
   },
   restart() { restartScenario(); },
-  stopScenario() { ctx.threats.clear(); ctx.interceptors.clear(); ctx.ui.hideDebrief(); game.phase = 'idle'; updateSearchlights(); },
+  stopScenario() {
+    ctx.threats.clear(); ctx.interceptors.clear(); ctx.ui.hideDebrief();
+    game.assignments.clear(); game.fireQueue.length = 0; game.focusTrackId = null;
+    setView('fp'); game.phase = 'idle'; updateSearchlights();
+  },
   selectBattery(id) { selectBattery(id); },
   selectTrack(id) { ctx.radar.selectTrack(id); },
   assign(trackId, batteryId) { return assign(trackId, batteryId); },
-  authorize() { return authorize(); },
+  authorize(trackId) { return authorize(trackId); },
+  engageAll() { return engageAll(); },
+  openTablet() { openTablet(); },
+  closeTablet() { closeTablet(); },
+  setView(mode) {
+    if (mode === 'fp') setView('fp');
+    else if (mode === 'missile') setView('missile', ctx.interceptors.active.at(-1) ?? null);
+    else if (mode === 'threat') setView('threat', mostUrgentTrack()?.threat ?? null);
+    return game.viewMode;
+  },
+  cycleView() { cycleView(); return game.viewMode; },
   autoplay(v = true) { game.autoplay = v; return v; },
   openConsole() { enterConsole(); game.consoleTransition = 0.999; },
   closeConsole() { exitConsole(); },

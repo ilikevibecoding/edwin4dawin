@@ -23,12 +23,27 @@ Key events: `threat-spawned/-tracked/-destroyed/-impact`, `track-assigned`,
 `scenario-started/-ended`, `battery-ready/-launching`, `time-of-day`, `footstep`,
 `fx-launch`, `fx-explosion`, `ui-click`, `pointer-lock`.
 
-Engagement lifecycle (main.js): assignments are STICKY — `authorize()` fires
-and keeps the assignment so repeated presses salvo more interceptors at the
-same track (`track.engagedBy` counts them). If the assigned battery is not
-ready, fire control auto-rolls to `bestBatteryFor(track)`. `assign()` falls
-back to the best capable battery when the requested one has no shot. The
-assignment clears when its track dies or the scenario resets.
+Engagement lifecycle (main.js): engagements are PER TRACK and CONCURRENT.
+`game.assignments` is a Map `trackId -> batteryId` (one battery may cover many
+tracks; assigning a new track never drops other engagements). `authorize(trackId)`
+fires immediately if the assigned battery is ready; otherwise it auto-rolls to
+`bestBatteryFor(track)` (immediate salvo) or pushes into `game.fireQueue`
+(`{trackId, batteryId}` rounds that launch automatically as the battery
+cycles — this is how one battery services several missiles). Repeated
+authorizes salvo more interceptors at the same track (`track.engagedBy`
+counts them). `processFireQueue()` drains the queue each frame, re-rolling or
+dropping rounds whose geometry went stale. `engageAll()` (tablet button)
+assigns + authorizes every unengaged hostile, most urgent first. Assignments
+and queued rounds clear when their track dies or the scenario resets. A round
+that detonates after its target already died counts as `stats.safed`, not a
+miss.
+
+View modes (main.js): `game.viewMode` = `fp | missile | threat`. `V` cycles
+first-person → chase cam behind the newest interceptor → most-urgent-threat
+cam (`updateChaseCam` overrides the camera after the sim substeps; letterbox
+UI via `ui.setCinema`). The handheld TACOM pad (`Q`, `game.tabletOpen`)
+mirrors console authority anywhere: tactical plot canvas, per-track
+ASSIGN/FIRE, battery select, ENGAGE ALL, and raid setup when idle.
 
 | Module | Owns | Public API (do not break) |
 |--------|------|--------------------------|
