@@ -224,7 +224,7 @@ scene('13_sunset_saturation', async () => {
   const r = await ev(() => {
     const G = window.__GAME;
     G.startScenario('SATURATION', 'sunset', 'THAAD');
-    G.teleport(30, undefined, 78);
+    G.teleport(10, undefined, 46);
     G.runUntil((s) => s.firm >= 2, 45);
     const committed = G.autoEngage(3);
     G.lookAt(0, 2400, -16000);
@@ -244,9 +244,9 @@ scene('13_sunset_saturation', async () => {
   await ev(() => {
     const G = window.__GAME;
     G.runFor(4.5);
-    const s = G.snapshot();
-    const alt = s.interceptors.length ? Math.max(...s.interceptors.map((i) => i.alt)) : 4000;
-    G.lookAt(0, alt * 0.85, -7000);
+    const m = G.game.interceptors.active[0];
+    if (m) G.lookAt(m.pos.x, m.pos.y, m.pos.z);
+    else G.lookAt(0, 4000, -7000);
   });
   await shot('14_sunset_midflight');
 
@@ -263,10 +263,22 @@ scene('13_sunset_saturation', async () => {
 
   const fin = await ev(() => {
     const G = window.__GAME;
-    G.runUntil((s) => s.stats.intercepted + s.stats.leakers >= 2, 60);
-    G.runFor(0.3);
-    const s = G.snapshot();
-    return s;
+    const target = G.snapshot().stats.intercepted + 1;
+    let last = null;
+    for (let i = 0; i < 700; i++) {
+      const m = G.game.interceptors.active[0];
+      const t = m && m.target ? m.target : G.game.threats.active[0];
+      if (t) {
+        last = t.pos.toArray();
+        G.lookAt(last[0], last[1], last[2]);
+      }
+      G.runFor(0.1);
+      const s = G.snapshot();
+      if (s.stats.intercepted >= target || s.stats.leakers > 0) break;
+    }
+    if (last) G.lookAt(last[0], last[1], last[2]);
+    G.runFor(0.16);
+    return G.snapshot();
   });
   report.scenes.push({ name: '15_sunset_result', stats: fin.stats, record: fin.record });
   await shot('16_sunset_result');
@@ -276,8 +288,8 @@ scene('17_night_raid', async () => {
   const r = await ev(() => {
     const G = window.__GAME;
     G.startScenario('NIGHT_RAID', 'night', 'SENTINEL');
-    G.teleport(34, undefined, 62);
-    G.lookAt(-40, 90, -120);
+    G.teleport(6, undefined, 34);
+    G.lookAt(-64, 30, -60);
     G.runFor(2.0);
     return G.snapshot();
   });
@@ -290,23 +302,38 @@ scene('17_night_raid', async () => {
     G.autoEngage(3);
     G.runUntil((s) => s.interceptors.length > 0, 25);
     G.runFor(0.7);
-    G.lookAt(4, 300, -1200);
+    const m = G.game.interceptors.active[0];
+    if (m) G.lookAt(m.pos.x, m.pos.y + 40, m.pos.z);
   });
   await shot('18_night_launch');
 
   await ev(() => {
     const G = window.__GAME;
     G.runFor(4.5);
-    const s = G.snapshot();
-    const alt = s.interceptors.length ? Math.max(...s.interceptors.map((i) => i.alt)) : 5000;
-    G.lookAt(0, alt * 0.9, -9000);
+    const m = G.game.interceptors.active[0];
+    if (m) G.lookAt(m.pos.x, m.pos.y, m.pos.z);
+    else G.lookAt(0, 5000, -9000);
   });
   await shot('19_night_flight');
 
   const fin = await ev(() => {
     const G = window.__GAME;
-    G.runUntil((s) => s.stats.intercepted > 0 || s.stats.leakers > 0, 50);
-    G.runFor(0.28);
+    // Hold the camera on the doomed track so the kill happens in frame.
+    const before = G.snapshot().stats.intercepted;
+    let last = null;
+    for (let i = 0; i < 600; i++) {
+      const m = G.game.interceptors.active[0];
+      const t = m && m.target ? m.target : G.game.threats.active[0];
+      if (t) {
+        last = t.pos.toArray();
+        G.lookAt(last[0], last[1], last[2]);
+      }
+      G.runFor(0.1);
+      const s = G.snapshot();
+      if (s.stats.intercepted > before || s.stats.leakers > 0) break;
+    }
+    if (last) G.lookAt(last[0], last[1], last[2]);
+    G.runFor(0.16);
     return G.snapshot();
   });
   report.scenes.push({ name: '19_night_result', stats: fin.stats, record: fin.record });
@@ -335,7 +362,7 @@ scene('99_perf', async () => {
   const perf = await ev(() => {
     const G = window.__GAME;
     G.startScenario('SATURATION', 'sunset', 'THAAD');
-    G.teleport(30, undefined, 78);
+    G.teleport(10, undefined, 46);
     G.runUntil((s) => s.firm >= 3, 45);
     G.autoEngage(3);
     G.runFor(2.4);

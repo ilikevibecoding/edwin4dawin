@@ -196,8 +196,8 @@ export const SCENARIOS = [
     tod: 'night',
     waves: [
       { at: 1.5, count: 2, decoys: 1 },
-      { at: 8.0, count: 2, decoys: 1 },
-      { at: 15.0, count: 1, decoys: 1 },
+      { at: 7.0, count: 2, decoys: 1 },
+      { at: 13.0, count: 1, decoys: 1 },
     ],
     spread: [-1.25, 1.25],
     baseAlt: [17000, 21000],

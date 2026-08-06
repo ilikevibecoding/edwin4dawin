@@ -94,7 +94,7 @@ await shot('briefing', 1.6);
 await page.evaluate(() => {
   const G = window.__GAME;
   G.action('deploy');
-  G.teleport(46, undefined, -46);
+  G.teleport(40, undefined, -40);
   G.lookAt(4, 7, -96);
   G.game.player.allowKeyboard = true;
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
@@ -133,7 +133,7 @@ await shot('commit', 1.6);
 await page.evaluate(() => {
   const G = window.__GAME;
   G.undock();
-  G.teleport(34, undefined, 6);
+  G.teleport(16, undefined, 14);
   G.lookAt(60, 40, -40);
   G.runUntil((s) => s.interceptors.length > 0, 30);
 });
@@ -165,7 +165,7 @@ await shot('intercept', 3.4, (G) => {
 await page.evaluate(() => {
   const G = window.__GAME;
   G.autoEngage(3);
-  G.teleport(-30, undefined, 46);
+  G.teleport(-20, undefined, 34);
   G.runUntil((s) => s.interceptors.length > 0, 30);
 });
 await shot('second wave', 3.2, (G) => {
