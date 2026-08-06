@@ -1043,16 +1043,18 @@ button.hud.opt.on::after {
 
 /* --------------------------------------------------------------- banner */
 
+/* Sits below the mission strip and is deliberately narrower than the gap
+   between the two top panels, so a long banner never covers the readouts. */
 #banner {
   position: absolute;
   left: 50%;
-  top: 15%;
+  top: 21%;
   transform: translate(-50%, -50%);
   text-align: center;
   opacity: 0;
   transition: opacity 0.25s;
-  min-width: 460px;
-  padding: 10px 26px 12px;
+  width: min(560px, calc(100vw - 520px));
+  padding: 8px 22px 10px;
   --bc: #eafffb;
 }
 #banner.on {
@@ -1075,8 +1077,8 @@ button.hud.opt.on::after {
   background: linear-gradient(90deg, transparent, var(--bc), transparent);
 }
 #banner .t {
-  font: 700 46px/1 var(--cond);
-  letter-spacing: 0.22em;
+  font: 700 34px/1.05 var(--cond);
+  letter-spacing: 0.18em;
   text-shadow: 0 4px 26px rgba(0, 0, 0, 0.95);
 }
 #banner .s {
@@ -1102,16 +1104,30 @@ button.hud.opt.on::after {
   }
 }
 
+/* Kept clear of the bottom-corner panels: the available gap between them is
+   viewport width minus their two widths, so the strip is capped to that and
+   wraps instead of running underneath them. */
 #hint {
   position: absolute;
   left: 50%;
-  bottom: 56px;
+  bottom: 16px;
   transform: translateX(-50%);
-  font-size: 11px;
-  color: rgba(208, 244, 236, 0.8);
+  max-width: min(620px, calc(100vw - 720px));
+  padding: 5px 12px 6px;
+  background: rgba(4, 12, 14, 0.62);
+  border: 1px solid var(--line-soft);
+  font-size: 10px;
+  line-height: 1.7;
+  color: rgba(208, 244, 236, 0.82);
   text-shadow: var(--shadow);
   text-align: center;
-  white-space: nowrap;
+  white-space: normal;
+  opacity: 0;
+  transition: opacity 0.4s linear;
+  z-index: 4;
+}
+#hint.on {
+  opacity: 1;
 }
 
 #perf {

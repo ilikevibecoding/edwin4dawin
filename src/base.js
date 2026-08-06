@@ -1417,7 +1417,7 @@ function buildShelter(rng) {
   gabParts.forEach((p) => p.geometry.dispose());
 
   // Sandbag stacks tucked into the corners of the plinth.
-  const bagGeo = new THREE.SphereGeometry(0.28, 7, 5);
+  const bagGeo = new THREE.SphereGeometry(0.28, 5, 3);
   bagGeo.scale(1.5, 0.62, 0.95);
   const bags = new THREE.InstancedMesh(bagGeo, site.burlap, 220);
   const bm = new THREE.Matrix4();
@@ -3515,7 +3515,9 @@ export class Base {
     // The walls cast, so every bag is drawn twice and the count is the largest
     // single line in the site's triangle budget. Coursing is what pays for the
     // height rather than a denser bag.
-    const bagGeo = new THREE.SphereGeometry(0.3, 6, 4);
+    // 5x3 segments: 20 triangles per bag. At 0.4 m across, with flat-ish
+    // shading and thousands of instances, extra segments buy nothing.
+    const bagGeo = new THREE.SphereGeometry(0.3, 5, 3);
     bagGeo.scale(1.46, 0.6, 0.94);
     const bagRng = rng.fork('bags');
     const revetments = [];
@@ -3745,7 +3747,7 @@ export class Base {
     const sc = new THREE.Vector3();
 
     // rocks
-    const rockGeo = new THREE.IcosahedronGeometry(1, 1);
+    const rockGeo = new THREE.IcosahedronGeometry(1, 0);
     const rp = rockGeo.attributes.position;
     for (let i = 0; i < rp.count; i++) {
       const n = noise.fbm3(rp.getX(i) * 1.6, rp.getY(i) * 1.6, rp.getZ(i) * 1.6, 3) * 0.34 + 1;

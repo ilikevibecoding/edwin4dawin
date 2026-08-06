@@ -520,8 +520,14 @@ export class UI {
       </div>`;
   }
 
+  /**
+   * Control reminder. It is onboarding text, so it fades out once the player has
+   * had time to read it rather than competing with the side panels forever.
+   */
   setHint(text) {
     this.hint.innerHTML = text;
+    this.hint.classList.add('on');
+    this.hintTimer = 34;
   }
 
   setPrompt(text) {
@@ -660,6 +666,10 @@ export class UI {
     if (this.subTimer > 0) {
       this.subTimer -= dt;
       if (this.subTimer <= 0) this.subtitles.classList.remove('on');
+    }
+    if (this.hintTimer > 0) {
+      this.hintTimer -= dt;
+      if (this.hintTimer <= 0) this.hint.classList.remove('on');
     }
   }
 

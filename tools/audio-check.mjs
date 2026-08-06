@@ -82,33 +82,39 @@ results.boom = await probe('sonic boom', () => {
   G.game.audio.sonicBoom(G.game.camera.position.clone().add({ x: 60, y: 60, z: 0 }));
 }, 800);
 
-// Speed-of-sound arrival delay: a distant blast must not be heard immediately.
+// Speed-of-sound arrival delay: a nearby blast must be silent for the travel
+// time, then arrive. 700 m is far enough for a ~2 s delay and close enough that
+// the arrival clearly clears the ambient bed.
 const delayed = await page.evaluate(async () => {
   const G = window.__GAME;
   const far = G.game.camera.position.clone();
-  far.x += 3000;
-  const before = performance.now();
-  G.game.audio.explosion(far, 40, 'ground');
+  far.x += 700;
   const read = () => {
     window.__AN.getFloatTimeDomainData(window.__BUF);
     let s = 0;
     for (const v of window.__BUF) s += v * v;
     return Math.sqrt(s / window.__BUF.length);
   };
-  const base = read();
-  await new Promise((r) => setTimeout(r, 400));
-  const early = read();
-  await new Promise((r) => setTimeout(r, 9200));
-  let late = 0;
-  for (let i = 0; i < 20; i++) {
-    late = Math.max(late, read());
-    await new Promise((r) => setTimeout(r, 40));
-  }
-  return { base, early, late, elapsed: performance.now() - before };
+  const sample = async (ms) => {
+    let peak = 0;
+    const end = performance.now() + ms;
+    while (performance.now() < end) {
+      peak = Math.max(peak, read());
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    return peak;
+  };
+  const idle = await sample(300);
+  G.game.audio.explosion(far, 40, 'ground');
+  const duringTravel = await sample(1500); // < 700/340 = 2.06 s
+  const onArrival = await sample(1800);
+  return { idle, duringTravel, onArrival };
 });
+const quietWhileTravelling = delayed.duringTravel < delayed.idle * 2.2;
+const arrived = delayed.onArrival > Math.max(delayed.duringTravel, delayed.idle) * 2.5;
 console.log(
-  `3 km blast          early RMS ${delayed.early.toFixed(5)} -> late RMS ${delayed.late.toFixed(5)} ` +
-    `(expected ~8.8 s travel) ${delayed.late > delayed.early * 1.5 ? 'OK' : 'NO DELAY EFFECT'}`
+  `700 m blast         idle ${delayed.idle.toFixed(5)} | in transit ${delayed.duringTravel.toFixed(5)} | ` +
+    `on arrival ${delayed.onArrival.toFixed(5)} ${quietWhileTravelling && arrived ? 'OK (2.06 s travel)' : 'DELAY NOT OBSERVED'}`
 );
 
 console.log('\nerrors:', errors.length ? errors.slice(0, 8) : 'none');

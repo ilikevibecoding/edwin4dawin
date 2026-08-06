@@ -247,6 +247,8 @@ export const TOD = {
     bloomThreshold: 2.4,
     hazeStrength: 1.0,
     groundBounce: 0x8a6e50,
+    /** Albedo multiplier for non-emissive smoke and dust at this light level. */
+    particleAmbient: 0xf4f2ee,
     gradeContrast: 1.18,
     gradeSaturation: 1.14,
     shadowTint: 0x2a3f66,
@@ -277,6 +279,8 @@ export const TOD = {
     bloomThreshold: 2.2,
     hazeStrength: 1.05,
     groundBounce: 0x6f4326,
+    /** Albedo multiplier for non-emissive smoke and dust at this light level. */
+    particleAmbient: 0xdcb894,
     gradeContrast: 1.12,
     gradeSaturation: 1.18,
     shadowTint: 0x35407a,
@@ -307,6 +311,8 @@ export const TOD = {
     bloomThreshold: 0.5,
     hazeStrength: 0.95,
     groundBounce: 0x101319,
+    /** Albedo multiplier for non-emissive smoke and dust at this light level. */
+    particleAmbient: 0x39445c,
     gradeContrast: 1.16,
     gradeSaturation: 1.02,
     shadowTint: 0x24344f,

@@ -47,8 +47,15 @@ vec3 applyAtm( vec3 color, vec3 worldPos, out float transOut ) {
 }
 `;
 
+/**
+ * Ambient light level for particle albedo. Smoke and dust are drawn in a custom
+ * shader with no scene lights, so without this a tan dust cloud stays fully
+ * bright at midnight. Emissive layers are exempt via `uEmissive`.
+ */
+export const particleAmbient = { uAmbient: { value: new THREE.Color(1, 1, 1) } };
+
 function withAtm(uniforms) {
-  return Object.assign({}, atmosphere, uniforms);
+  return Object.assign({}, atmosphere, particleAmbient, uniforms);
 }
 
 /* ------------------------------------------------------ logarithmic depth */
@@ -153,6 +160,7 @@ precision highp float;
 uniform sampler2D uMap;
 uniform float uEmissive;
 uniform float uSunLit;
+uniform vec3 uAmbient;
 varying vec2 vUv;
 varying vec3 vColor;
 varying float vAlpha;
@@ -185,6 +193,7 @@ void main() {
     float ms = pow( max( dot( viewDir, uAtmSunDir ), 0.0 ), 6.0 );
     col += uAtmSunColor * ms * uSunLit * 0.2 * ( 1.0 - t.a );
   }
+  col *= mix( uAmbient, vec3( 1.0 ), uEmissive );
   float trans;
   vec3 lit = applyAtm( col, vWorld, trans );
   // Emissive material keeps its own colour through the haze.
@@ -381,20 +390,36 @@ class BillboardLayer {
       const cx = camera.position.x;
       const cy = camera.position.y;
       const cz = camera.position.z;
+      const depth = this._depth;
       for (let i = 0; i < n; i++) {
         const dx = this.px[i] - cx;
         const dy = this.py[i] - cy;
         const dz = this.pz[i] - cz;
-        this._depth[i] = dx * dx + dy * dy + dz * dz;
+        depth[i] = dx * dx + dy * dy + dz * dz;
       }
-      const ord = this._sortList;
-      ord.length = n;
-      for (let i = 0; i < n; i++) ord[i] = i;
-      const depth = this._depth;
-      ord.sort((a, b) => depth[b] - depth[a]);
-      for (let k = 0; k < n; k++) this._order[k] = ord[k];
+      // Unused slots sort to the very back and are skipped when writing.
+      for (let i = n; i < this.capacity; i++) depth[i] = -1;
+      // Back-to-front insertion sort that reuses the previous frame's order.
+      // Particle slots are stable and depths barely change between frames, so
+      // this is near-linear and, unlike Array.sort, it touches no heap.
+      const order = this._order;
+      if (!this._orderReady) {
+        for (let i = 0; i < this.capacity; i++) order[i] = i;
+        this._orderReady = true;
+      }
+      for (let k = 1; k < this.capacity; k++) {
+        const idx = order[k];
+        const d = depth[idx];
+        let j = k - 1;
+        while (j >= 0 && depth[order[j]] < d) {
+          order[j + 1] = order[j];
+          j--;
+        }
+        order[j + 1] = idx;
+      }
     } else {
-      for (let i = 0; i < n; i++) this._order[i] = i;
+      const order = this._order;
+      for (let i = 0; i < n; i++) order[i] = i;
     }
 
     const pos = this.aPos.array;
@@ -532,6 +557,7 @@ varying float vAge;
 varying float vSeed;
 uniform float uEmissive;
 uniform float uSunLit;
+uniform vec3 uAmbient;
 ${ATM_PARS}
 ${LOGDEPTH_PARS_FRAG}
 void main() {
@@ -555,6 +581,7 @@ void main() {
     float ms = pow( max( dot( viewDir, uAtmSunDir ), 0.0 ), 5.0 );
     col += uAtmSunColor * ms * uSunLit * 0.25;
   }
+  col *= mix( uAmbient, vec3( 1.0 ), uEmissive );
   float trans;
   vec3 lit = applyAtm( col, vWorld, trans );
   col = mix( lit, col, uEmissive );
@@ -1459,6 +1486,11 @@ export class Effects {
 
   setWind(v) {
     this.wind.copy(v);
+  }
+
+  /** Ambient level applied to non-emissive particle albedo (per time of day). */
+  setAmbient(color) {
+    particleAmbient.uAmbient.value.set(color);
   }
 
   /* ------------------------------------------------------------- trails */

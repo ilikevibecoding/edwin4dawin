@@ -389,6 +389,7 @@ class Game {
     this.weather.setTimeOfDay(id);
     this.base.setTimeOfDay(id);
     this.post.setTimeOfDay(tod);
+    this.effects.setAmbient(tod.particleAmbient !== undefined ? tod.particleAmbient : 0xffffff);
     this.renderer.toneMappingExposure = tod.exposure;
     updateAtmosphere(tod, tod.sunElev < 0 ? this.weather.moonDir : this.weather.sunDir);
     this.ui.updateSelections();
