@@ -176,15 +176,51 @@ export function sandTexture(size = 512) {
         const rip = Math.sin((x + vnoise(x * 0.05, y * 0.05) * 60) * 0.11) * 0.5 + 0.5;
         const sp = vnoise(x * 0.8, y * 0.8);
         const i = (y * w + x) * 4;
-        const r = 152 + (n - 0.5) * 46 + rip * 9 + (sp - 0.5) * 16;
+        // grayer, lower-chroma sand: multiplying warm vertex tints on top of a warm
+        // texture compounds saturation in linear space, so keep the map close to neutral
+        const r = 154 + (n - 0.5) * 40 + rip * 8 + (sp - 0.5) * 14;
         img.data[i] = clamp(r, 0, 255);
-        img.data[i + 1] = clamp(r * 0.82, 0, 255);
-        img.data[i + 2] = clamp(r * 0.60, 0, 255);
+        img.data[i + 1] = clamp(r * 0.875, 0, 255);
+        img.data[i + 2] = clamp(r * 0.735, 0, 255);
         img.data[i + 3] = 255;
       }
     }
     ctx.putImageData(img, 0, 0);
   }, { repeat: [1, 1] });
+}
+
+// Large-scale desert variation, tiled seamlessly (bilinear wrap-blend of four
+// offset noise copies). Channels: R = macro luminance field, G = mid-scale
+// luminance field, B = scrub/desert-pavement patch mask. Sampled in the terrain
+// shader at two different world scales to kill flat tiling from altitude.
+export function macroVariationTexture(size = 256) {
+  const tex = new THREE.CanvasTexture(makeCanvas(size, size, (ctx, w, h) => {
+    const img = ctx.createImageData(w, h);
+    const nR = (x, y) => fbm(x * 0.012 + 3, y * 0.012 + 11, 3);
+    const nG = (x, y) => fbm(x * 0.035 + 57, y * 0.035 + 23, 4);
+    const nB = (x, y) => fbm(x * 0.055 + 101, y * 0.055 + 71, 4);
+    const nB2 = (x, y) => fbm(x * 0.012 + 201, y * 0.012 + 171, 2);
+    const wrap = (fn, x, y) => {
+      const fx = x / w, fy = y / h;
+      return fn(x, y) * (1 - fx) * (1 - fy) + fn(x - w, y) * fx * (1 - fy)
+           + fn(x, y - h) * (1 - fx) * fy + fn(x - w, y - h) * fx * fy;
+    };
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        img.data[i] = clamp(wrap(nR, x, y) * 255, 0, 255);
+        img.data[i + 1] = clamp(wrap(nG, x, y) * 255, 0, 255);
+        // clustered patches: mid-frequency speckle gated by a low-frequency field
+        const sp = smoothstep(0.52, 0.72, wrap(nB, x, y)) * (0.25 + 0.75 * wrap(nB2, x, y));
+        img.data[i + 2] = clamp(sp * 255, 0, 255);
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }));
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.NoColorSpace; // data texture — no sRGB decode
+  return tex;
 }
 
 export function camoTexture(size = 512, colors = ['#4a5240', '#3a4234', '#5b6149', '#31382e']) {

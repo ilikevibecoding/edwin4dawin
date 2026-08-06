@@ -227,11 +227,11 @@ class Interceptor {
     this.glow.material.opacity = burning ? (boostPhase ? 1.0 : 0.6) : 0;
     this.glow.scale.setScalar(Math.max((boostPhase ? 5.5 : 2.6) * def.plume, camDist * (burning ? 0.004 : 0)));
     const rho = airDensity(this.pos.y);
-    const width = (boostPhase ? 8.5 : 4.6) * def.trail * lerp(0.5, 1.0, clamp(rho * 1.8, 0, 1));
-    const alpha = burning ? 0.7 : 0.24;
+    const width = (boostPhase ? 7.2 : 4.4) * def.trail * lerp(0.5, 1.0, clamp(rho * 1.8, 0, 1));
+    const alpha = burning ? 0.64 : 0.24;
     this.effects.pushTrail(this.trail, this.pos, width, alpha);
     if (burning) {
-      this.effects.pushTrail(this.glowTrail, this.pos, 4.2 * def.plume, boostPhase ? 1.0 : 0.6);
+      this.effects.pushTrail(this.glowTrail, this.pos, 3.4 * def.plume, boostPhase ? 0.9 : 0.55);
       this.effects.motorExhaust(this.pos, this.vel, boostPhase ? 1 : 0.5, def.plume);
     }
 

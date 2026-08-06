@@ -6,7 +6,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   tintGeometry, grungeTexture, concreteTexture, asphaltTexture, sandTexture, camoTexture,
   hazardTexture, chainlinkTexture, stencilTexture, scorchTexture, softCircleTexture,
-  cableCurve, fbm, clamp, lerp, smoothstep, rngFx, makeCanvas, mulberry32,
+  macroVariationTexture, cableCurve, fbm, clamp, lerp, smoothstep, rngFx, makeCanvas, mulberry32,
 } from './utils.js';
 import { makeBoxCollider } from './physics.js';
 
@@ -181,11 +181,11 @@ export class Base {
 
   // ---------------- terrain: polar grid, flat in base area, dunes further out
   _buildTerrain() {
-    const RINGS = 42, SECTORS = 96, RMAX = 14000;
+    const RINGS = 42, SECTORS = 96, RMAX = 20000;
     const pos = [], uv = [], col = [], idx = [];
-    const cSand = new THREE.Color(0.575, 0.525, 0.435);
-    const cDark = new THREE.Color(0.375, 0.335, 0.27);
-    const cHaze = new THREE.Color(0.66, 0.635, 0.60); // baked aerial perspective target
+    const cSand = new THREE.Color(0.56, 0.53, 0.47);
+    const cDark = new THREE.Color(0.38, 0.35, 0.30);
+    const cHaze = new THREE.Color(0.63, 0.615, 0.59); // baked aerial perspective target
     for (let r = 0; r <= RINGS; r++) {
       const t = r / RINGS;
       const rad = Math.pow(t, 2.1) * RMAX; // dense near center
@@ -199,14 +199,9 @@ export class Base {
         const n3 = fbm(x * 0.0007 + 90, z * 0.0007 + 44, 3); // macro wadis/basins
         const c = cSand.clone().lerp(cDark, clamp(n2 * 0.55 + smoothstep(0.55, 0.75, n3) * 0.65, 0, 1));
         // distant desert desaturates and lifts toward haze so the horizon band
-        // doesn't stay saturated mustard all the way to the mountain wall
-        c.lerp(cHaze, smoothstep(1600, 8500, rad) * 0.55);
-        // graded gravel ring blending into the apron edges (baked, avoids z-fighting decals)
-        const edge = Math.max(Math.abs(x) / 192, Math.abs(z) / 172);
-        if (edge < 1.35) {
-          const k = smoothstep(1.35, 0.95, edge);
-          c.lerp(new THREE.Color(0.42, 0.385, 0.33), k * 0.85);
-        }
+        // doesn't stay saturated mustard all the way to the mountain wall; the
+        // rim itself (20 km) rides at ~90% scene fog so it dissolves into sky
+        c.lerp(cHaze, smoothstep(2000, 12000, rad) * 0.45);
         col.push(c.r, c.g, c.b);
       }
     }
@@ -225,6 +220,38 @@ export class Base {
     // Lambert with reflectivity 0: pure diffuse — no fresnel wash, no mirror env reflection
     const mat = new THREE.MeshLambertMaterial({ map: sandTexture(512), vertexColors: true, reflectivity: 0 });
     mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
+    mat.map.anisotropy = 8; // keeps ripple detail at the grazing angles players actually see
+    // Two extra samples of a seamless variation texture at very different world
+    // scales: breaks the 37 m tile repetition and gives the flats km-scale tonal
+    // structure + scrub-field mottling that reads from altitude.
+    const macroTex = macroVariationTexture(256);
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uMacro = { value: macroTex };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vMacroXZ;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMacroXZ = position.xz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uMacro;\nvarying vec2 vMacroXZ;')
+        .replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          vec3 mA = texture2D(uMacro, vMacroXZ / 1731.0).rgb;
+          vec3 mB = texture2D(uMacro, vMacroXZ / 401.0 + vec2(0.37, 0.11)).rgb;
+          // fbm output clusters around 0.5 — stretch it before use
+          float lA = smoothstep(0.30, 0.70, mA.r), lB = smoothstep(0.32, 0.68, mB.g);
+          diffuseColor.rgb *= (0.74 + 0.48 * lA) * (0.84 + 0.30 * lB);
+          // scrub/desert-pavement fields: darker, slightly olive patches
+          float scrub = smoothstep(0.28, 0.75, mB.b) * (0.25 + 0.75 * smoothstep(0.15, 0.6, mA.b));
+          diffuseColor.rgb *= mix(vec3(1.0), vec3(0.70, 0.72, 0.62), scrub);
+          // graded gravel ring around the apron, computed per-pixel (the old
+          // per-vertex bake interpolated across skinny polar triangles as streaks)
+          float apronEdge = max(abs(vMacroXZ.x) / 192.0, abs(vMacroXZ.y) / 172.0);
+          apronEdge += (mB.g - 0.5) * 0.16; // ragged outer edge, not a surveyed line
+          float gk = smoothstep(1.28, 0.98, apronEdge);
+          // compacted-aggregate ring: must stay close to the sand's HUE — a neutral
+          // gray of equal luminance reads as a pale blue mist band under the sky light
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.27, 0.225, 0.168) * (0.84 + 0.32 * lB), gk * 0.55);
+        }`);
+    };
     this.ground = new THREE.Mesh(geo, mat);
     this.ground.receiveShadow = true;
     this.group.add(this.ground);
@@ -235,10 +262,14 @@ export class Base {
     const ROWS = [5400, 5900, 6500, 7200, 8000, 9000, 10200, 12500];
     const HEIGHTS = [20, 180, 430, 780, 1080, 760, 380, 0];
     const pos = [], col = [], idx = [];
-    const cFoot = new THREE.Color(0.40, 0.355, 0.285); // sandy bajada where ranges meet the flats
+    // bajada matched to the desert's *effective* albedo (vertex tint × sand map ≈ 0.18/0.13/0.08)
+    // — the mountain mesh has no texture, so a bright foot color reads as a glowing band
+    const cFoot = new THREE.Color(0.225, 0.19, 0.145);
     const cLow = new THREE.Color(0.145, 0.118, 0.092);
     const cHigh = new THREE.Color(0.21, 0.185, 0.156);
-    const cHaze = new THREE.Color(0.35, 0.365, 0.43); // baked aerial perspective on far rows
+    // warm-gray haze: the old blue-gray 0.35/0.365/0.43 lit up near-white under the
+    // 2.75× day sun and turned the ranges into pale paper cutouts
+    const cHaze = new THREE.Color(0.265, 0.252, 0.258);
     for (let r = 0; r < ROWS.length; r++) {
       for (let s = 0; s <= SECTORS; s++) {
         const a = (s / SECTORS) * Math.PI * 2;
@@ -253,7 +284,9 @@ export class Base {
         // feet blend into the desert so there is no hard mustard-to-gray seam
         const c = cFoot.clone().lerp(rock, smoothstep(15, 300, h));
         c.offsetHSL(0, (jag2 - 0.5) * 0.04, (jag2 - 0.5) * 0.04);
-        c.lerp(cHaze, r >= 5 ? 0.5 : r === 4 ? 0.3 : r === 3 ? 0.16 : 0.06);
+        // light albedo haze only — real aerial perspective comes from the boosted
+        // fog curve on this material (post-lighting), not from bleaching the rock
+        c.lerp(cHaze, r >= 5 ? 0.24 : r === 4 ? 0.15 : r === 3 ? 0.08 : 0.04);
         col.push(c.r, c.g, c.b);
       }
     }
@@ -269,6 +302,18 @@ export class Base {
     geo.setIndex(idx);
     geo.computeVertexNormals();
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, reflectivity: 0 });
+    // The ranges sit 5–12 km out where the global FogExp2 only reaches ~10–30%,
+    // yet their sunlit faces render near-white (albedo × 2.75 sun) and read as
+    // pale paper cutouts. Boost the fog curve for this material only: proper
+    // screen-space aerial perspective that tracks each condition's fog color.
+    mat.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <fog_fragment>', `
+      #ifdef USE_FOG
+        float mFog = 1.0 - exp(-pow(vFogDepth * fogDensity * 1.55, 2.0));
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, mFog);
+      #endif
+      `);
+    };
     const m = new THREE.Mesh(geo, mat);
     this.group.add(m);
   }
@@ -523,6 +568,14 @@ export class Base {
   _buildC2Interior() {
     const P = this.c2.pos;
     const g = new THREE.Group();
+    // painted interior floor: covers the outdoor pad concrete (whose crack/stain
+    // pattern read as random scribbles inside the dim room)
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(this.c2.w - 0.3, this.c2.d - 0.3),
+      new THREE.MeshStandardMaterial({ color: 0x3d4038, roughness: 0.92 }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(P.x, 0.125, P.z); // just above the pad top (0.115)
+    g.add(floor);
     // console desk along north wall
     const deskMat = new THREE.MeshStandardMaterial({ color: 0x23281f, roughness: 0.7, metalness: 0.3 });
     const desk = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.08, 0.85), deskMat);
@@ -639,7 +692,7 @@ export class Base {
     const mat2 = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.6),
       new THREE.MeshStandardMaterial({ color: 0x23261f, roughness: 1 }));
     mat2.rotation.x = -Math.PI / 2;
-    mat2.position.set(P.x + 0.6, 0.075, P.z - 0.4);
+    mat2.position.set(P.x + 0.6, 0.133, P.z - 0.4); // above the interior floor plane
     g.add(mat2);
     // wall map (sector chart)
     const mapTex = new THREE.CanvasTexture(makeCanvas(256, 192, (ctx, w, h) => {

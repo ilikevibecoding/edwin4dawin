@@ -64,7 +64,9 @@ export class Post {
     this.renderPass = new RenderPass(scene, camera);
     this.composer.addPass(this.renderPass);
 
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.5, 0.5, 1.0);
+    // threshold slightly over 1: sunlit smoke stays crisp, only genuinely hot
+    // pixels (motor glow, burst flashes, sun disc) feed the bloom halo
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.46, 0.5, 1.12);
     this.composer.addPass(this.bloom);
 
     // OutputPass applies tone mapping (ACES) + sRGB conversion; grade/FXAA operate on sRGB

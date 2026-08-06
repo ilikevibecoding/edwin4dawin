@@ -657,6 +657,9 @@ window.__game = {
   seed: SEED,
   testMode: TEST_MODE,
   api,
+  scene, // exposed for visual-QA probes (fog toggles, object visibility)
+  effects,
+  THREE,
   step(n = 1, dt = FIXED_DT) {
     for (let i = 0; i < n; i++) step(dt);
     render();

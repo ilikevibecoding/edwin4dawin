@@ -73,3 +73,37 @@ Self-evaluating loop: build → run → screenshot → judge vs rubric → fix �
 - Scores: env 7.5 · batteries 8 · physics 7.5 · effects 7 · light/post 8 · UI 8 · perf 8.5 · loop 8.
 - Next: intercept flash verification at range, debris/aftermath shots, threat reentry readability by day,
   radar site detail, sentinel launch smoke variation, spawn-view composition.
+
+### Iterations 5–6 (night & distance readability) — avg ~8.0
+- Night dust wash fixed: smoke ambient lerp-to-white now scaled by ambient luminance (moonlit dust stays dim);
+  trail ribbons keep a readability floor so contrails stay a gameplay cue.
+- Sky: moon disc crispened (night scattering term cut to 0.30) — no more fuzzy lantern; stars brightened.
+- Radar array face lifted (brighter element texture, less metalness) — readable even angled off-sun.
+- Desert depth: analytic `terrainHeight()` shared by mesh + scatter; aerial-perspective bake on far flats;
+  mountain bajada foot blend; 620 terrain-conforming bushes + 480 grass tufts (alpha-tested crossed quads).
+- Kill signature at range: airBurst core flash + shock ring distance-compensated, amber afterglow (2.6 s),
+  radial fragment flares, drifting burst-smoke ball → intercept point stays marked ~10 s from 6 km away.
+- Launch-plume ground dust trimmed (shorter life/size) — pads no longer sit in permanent haze.
+- Perf: 124 DC / 81.8k tris. Scores: env 7.5 · batteries 8 · physics 8 · effects 7.5 · light/post 8 · UI 8 ·
+  perf 9 · loop 8.5.
+
+### Iteration 7 (day terrain + trail blob + C2 floor) — avg ~8.3
+- 7a: canister stencils on all three batteries (RAMPART / TX-11 / XM-EXP + unit codes), center prompt moved
+  below crosshair (was covering the launcher/target), result banner yields to debrief panel.
+- Day desert de-mudded: sand map desaturated (green ×0.875, blue ×0.735), vertex tints rebalanced, and an
+  `onBeforeCompile` macro-variation overlay (two world-scale samples of a seamless fbm texture: km-scale
+  luminance + clustered scrub-patch mottling) breaks the 37 m tile repetition.
+- "Mist ring" root-caused: the old vertex-baked gravel ring was a neutral gray — equal-luminance gray next to
+  warm sand reads as blue haze. Rebuilt per-pixel in the terrain shader with a compacted-aggregate brown.
+- Mountains: warm-dark haze bake + custom boosted fog curve (screen-space aerial perspective per condition).
+  First pass (×2.4) erased them by day; settled at ×1.55 — day shows layered hazy ranges, sunset gains depth.
+- Terrain rim extended 14 → 20 km so the mesh edge rides ~90% scene fog and dissolves into the sky instead of
+  cutting a hard dark line at the horizon; haze bake re-ranged 2–12 km.
+- Boost-trail white blob fixed: bloom threshold 1.02 → 1.12 (sunlit smoke no longer feeds bloom), main ribbon
+  7.2 w @ 0.64 α, glow ribbon 3.4 w @ 0.9/0.55 — near view now shows motor glow + structured expanding cone.
+- C2 interior floor scribbles root-caused: outdoor apron crack/stain decals showing through — painted interior
+  floor plane added (0x3d4038 @ y 0.125).
+- Full suite 11/11 green. Perf worst case (night raid, 4 tracks + 2 birds): 264 DC / 89k tris.
+- Scores: env 8 · batteries 8 · physics 8 · effects 8 · light/post 8.5 · UI 8.5 · perf 9 · loop 8.5.
+- Next: battery ground-cable runs + generator hookups, post-launch heat discoloration/scorch verification,
+  ground-impact signature (dust column + shock ring) for leakers, mid-ground dune banding from altitude.

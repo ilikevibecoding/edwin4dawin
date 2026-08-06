@@ -9,8 +9,9 @@ export const CONDITIONS = {
     sunColor: new THREE.Color(1.0, 0.96, 0.87), sunIntensity: 2.75,
     hemiSky: new THREE.Color(0.56, 0.63, 0.74), hemiGround: new THREE.Color(0.52, 0.44, 0.33), hemiIntensity: 0.5,
     zenith: new THREE.Color(0.09, 0.26, 0.64), horizon: new THREE.Color(0.55, 0.69, 0.86),
-    glow: new THREE.Color(1.0, 0.96, 0.86), fogColor: new THREE.Color(0.68, 0.71, 0.78),
-    fogDensity: 0.00007, night: 0.0, exposure: 1.0, floodlights: 0.0, starAmt: 0.0,
+    // warm-gray desert haze (blue fog made the ranges clash against the warm flats)
+    glow: new THREE.Color(1.0, 0.96, 0.86), fogColor: new THREE.Color(0.72, 0.705, 0.69),
+    fogDensity: 0.000078, night: 0.0, exposure: 1.0, floodlights: 0.0, starAmt: 0.0,
   },
   sunset: {
     sunDir: new THREE.Vector3(0.88, 0.11, 0.45).normalize(),
