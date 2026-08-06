@@ -667,21 +667,25 @@ export class Threat {
     // Widened with range for readability, narrowed again inside ~110 m so a
     // close pass shows the body rather than the smoke it is sitting in.
     const widthScale = Math.max(1, dist * 0.00075) * THREE.MathUtils.clamp(dist / 110, 0.3, 1);
+    // Wake and ablation shed from the base of the body, not its centroid. The
+    // offset is sub-pixel at 30 km but it is the difference between seeing the
+    // heat shield and seeing the smoke in front of it on a close pass.
+    const aft = this.pos.clone().addScaledVector(tangent, -(this.kind === 'DECOY' ? 1.0 : 1.34) * this.scaleBoost);
     if (this.trail) {
       const col = this.kind === 'DECOY' ? new THREE.Color(0.62, 0.68, 0.74) : new THREE.Color(0.72, 0.7, 0.68);
-      this.trail.push(this.pos, tangent, this.effects.time, 1.6 * widthScale * (0.6 + persist), 0.5 * (0.25 + persist * 0.9), col);
+      this.trail.push(aft, tangent, this.effects.time, 1.6 * widthScale * (0.6 + persist), 0.5 * (0.25 + persist * 0.9) * (0.5 + 0.5 * near), col);
     }
     if (this.hotTrail && heat > 0.05) {
       this.hotTrail.push(
-        this.pos,
+        aft,
         tangent,
         this.effects.time,
         1.1 * widthScale * (0.6 + heat),
-        heat * 0.85,
+        heat * 0.85 * (0.5 + 0.5 * near),
         new THREE.Color(1.0, 0.55 + heat * 0.3, 0.25)
       );
     }
-    if (heat > 0.25 && this.kind !== 'DECOY') this.effects.ablation(this.pos, this.vel, heat);
+    if (heat > 0.25 && this.kind !== 'DECOY') this.effects.ablation(aft, this.vel, heat);
   }
 }
 

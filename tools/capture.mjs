@@ -18,8 +18,8 @@ const SEED = arg('seed', '20260805');
 const QUALITY = arg('quality', 'high');
 const ONLY = arg('only', null);
 const BASE = arg('base', 'http://127.0.0.1:5173');
-const W = Number(arg('w', 1600));
-const H = Number(arg('h', 900));
+const W = Number(arg('w', 1280));
+const H = Number(arg('h', 720));
 const SKIP_PERF = argv.includes('--no-perf');
 
 await fs.mkdir(OUT, { recursive: true });
@@ -61,8 +61,20 @@ const report = { seed: SEED, quality: QUALITY, viewport: [W, H], scenes: [], per
 const shot = async (name, frames = 2) => {
   const t = Date.now();
   await page.evaluate((f) => window.__GAME.render(f), frames);
-  await page.screenshot({ path: path.join(OUT, `${name}.png`), timeout: 180000 });
-  console.log(`  shot ${name} (${((Date.now() - t) / 1000).toFixed(1)}s)`);
+  // Software rasterisation makes a single frame expensive, and Chromium's
+  // compositor occasionally stalls under that load, so retry once.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await page.screenshot({ path: path.join(OUT, `${name}.png`), timeout: 300000, animations: 'disabled' });
+      console.log(`  shot ${name} (${((Date.now() - t) / 1000).toFixed(1)}s)`);
+      return;
+    } catch (e) {
+      if (attempt === 1) throw e;
+      console.log(`  shot ${name} retrying after ${e.message.split('\n')[0]}`);
+      await page.waitForTimeout(2000);
+      await page.evaluate(() => window.__GAME.render(1));
+    }
+  }
 };
 
 const ev = (fn, a) => page.evaluate(fn, a);

@@ -791,13 +791,19 @@ void main() {
   // contrast: a few incandescent pockets inside a body of deep orange and soot,
   // instead of one broad region that tone-maps to pale yellow.
   float core = mix( band, smoothstep( 0.35, 1.0, band ), 0.8 );
-  float heat = clamp( ( 1.0 - uProgress * 2.1 ) * ( 0.22 + core * 1.3 ) - fres * 0.4, 0.0, 1.0 );
+  // Heat has to survive into the middle of the life. Draining it faster leaves
+  // the ball sitting at a fraction of the colour ramp for most of the shot, so
+  // it never gets near the orange and white stops and reads as flat scarlet.
+  float heat = clamp( ( 1.0 - uProgress * 1.55 ) * ( 0.22 + core * 1.3 ) - fres * 0.4, 0.0, 1.0 );
   // Soot -> deep red -> orange -> white. The white stop is deliberately hard to
   // reach: callers pass a near-white "hot" colour, and reaching for it early is
   // what turns the whole ball into a pale yellow balloon.
-  vec3 col = mix( uCool, uMid * vec3( 0.8, 0.36, 0.2 ), smoothstep( 0.03, 0.28, heat ) );
-  col = mix( col, uMid, smoothstep( 0.24, 0.62, heat ) );
-  col = mix( col, uHot, smoothstep( 0.72, 1.3, heat ) );
+  // The stops sit low on the heat range on purpose. Heat drains fast, so ramps
+  // pitched any higher leave the whole ball parked in the deep-red band for
+  // most of its life, which reads as one flat scarlet mass.
+  vec3 col = mix( uCool, uMid * vec3( 0.72, 0.26, 0.12 ), smoothstep( 0.02, 0.19, heat ) );
+  col = mix( col, uMid, smoothstep( 0.16, 0.46, heat ) );
+  col = mix( col, uHot, smoothstep( 0.58, 1.05, heat ) );
   // The ball is opaque gas, not a glow: it has to replace the sky behind it or
   // an HDR daylight background shows straight through and washes it white.
   // As it cools, uSmoke decides whether it settles into soot (low altitude) or
@@ -841,9 +847,12 @@ void main() {
   // frames get several times the output of the cooling phase.
   // Soot is entrained from the first frame: the folds that are not glowing must
   // stay dark, or the ball is a uniformly lit balloon rather than burning gas.
-  float sooty = 0.3 + 0.7 * smoothstep( 0.14, 0.68, band );
-  float emit = uGlow * heat * heat * ( 1.1 + 3.1 * young ) * ( 1.0 - uProgress * 0.5 ) * sooty;
-  vec3 base = mix( bodyCol, col, heat );
+  float sooty = 0.18 + 0.82 * smoothstep( 0.20, 0.75, band );
+  // A steep power on heat is what keeps the incandescence in a few creases. A
+  // gentler curve lights most of the surface at once and the ball reads as one
+  // flat saturated orange mass rather than as burning gas.
+  float emit = uGlow * pow( heat, 2.6 ) * ( 4.5 + 6.0 * young ) * ( 1.0 - uProgress * 0.5 ) * sooty;
+  vec3 base = mix( bodyCol, col * ( 0.45 + 0.55 * sooty ), heat );
   gl_FragColor = vec4( ( base + col * emit ) * a, a );
 }
 `;
@@ -893,6 +902,8 @@ class Fireball {
     this.r1 = 2;
     this.rise = 0;
     this.grow = 2.6;
+    this.flat = 0;
+    this.rootY = null;
     this._p = new THREE.Vector3();
   }
 
@@ -907,6 +918,12 @@ class Fireball {
     this.r1 = r1;
     this.rise = opts.rise !== undefined ? opts.rise : 0;
     this.grow = opts.grow !== undefined ? opts.grow : 2.6;
+    // A burst against a surface cannot expand downward, so it spreads sideways
+    // instead: an oblate dome whose base stays welded to the deck until
+    // buoyancy lifts it clear. Without this a ground hit reads as a sphere
+    // parked on the terrain.
+    this.flat = opts.flat !== undefined ? opts.flat : 0;
+    this.rootY = opts.rootY !== undefined ? opts.rootY : null;
     this.mat.uniforms.uGlow.value = opts.glow !== undefined ? opts.glow : 1;
     this.mat.uniforms.uSeed.value = Math.random() * 40;
     this.mat.uniforms.uTurb.value = opts.turb !== undefined ? opts.turb : 0.42;
@@ -925,7 +942,12 @@ class Fireball {
     this.t += dt;
     const p = Math.min(1, this.t / this.life);
     const eased = 1 - Math.pow(1 - p, this.grow);
-    this.mesh.scale.setScalar(this.r0 + (this.r1 - this.r0) * eased);
+    const rad = this.r0 + (this.r1 - this.r0) * eased;
+    // The dome rounds out as it climbs away from the surface that squashed it.
+    const flat = this.flat * (1 - p * 0.55);
+    const sy = 1 - flat * 0.46;
+    const sxz = 1 + flat * 0.3;
+    this.mesh.scale.set(rad * sxz, rad * sy, rad * sxz);
     // Buoyant rise plus wind drift: the ball does not hang where it was born.
     if (this.rise !== 0) this._p.y += this.rise * dt * (0.35 + p);
     if (wind) {
@@ -933,6 +955,9 @@ class Fireball {
       this._p.z += wind.z * dt * 0.6;
     }
     this.mesh.position.copy(this._p);
+    // Keep the underside on the deck while the dome is still growing faster
+    // than it is rising; once buoyancy wins, it lifts off on its own.
+    if (this.rootY !== null) this.mesh.position.y = Math.max(this._p.y, this.rootY + rad * sy * 0.62);
     this.mat.uniforms.uProgress.value = p;
     this.mat.uniforms.uTime.value = time;
     if (p >= 1) {
@@ -1297,8 +1322,10 @@ const COL = {
   soot: C(0x2b2826),
   sootDeep: C(0x1a1817),
   // A ground burst entrains dirt, so its cold lobes are brown rather than the
-  // near-black soot of a clean airframe kill.
-  sootEarth: C(0x322317),
+  // near-black soot of a clean airframe kill. It still has to be dark: lifting
+  // the cool stop is what collapses the fireball into one flat orange mass,
+  // because the unlit lobes stop reading as unlit.
+  sootEarth: C(0x1b1209),
   flameWhite: C(0xfff6e2),
   flameHot: C(0xffd79a),
   flameMid: C(0xff7a24),
@@ -1343,7 +1370,10 @@ export class Effects {
       sorted: true,
       sunLit: 0.85,
     });
-    this.fire = new BillboardLayer(Math.round(budget * 0.18), softSprite(128, { power: 1.7 }), {
+    // A turbulent sprite rather than a radial gradient. Additive gradients
+    // saturate to a cluster of identical white discs the moment several of them
+    // overlap, which is the giveaway that a fire is made of billboards.
+    this.fire = new BillboardLayer(Math.round(budget * 0.18), smokeSprite(128, 7), {
       blending: THREE.AdditiveBlending,
       emissive: 1,
     });
@@ -1841,7 +1871,7 @@ export class Effects {
         wind: 0.15,
       });
     }
-    const nSpark = Math.round(34 * s * q);
+    const nSpark = Math.round(48 * s * q);
     for (let i = 0; i < nSpark; i++) {
       const a = rnd() * TAU;
       const sp = 24 + rnd() * 54;
@@ -1850,8 +1880,10 @@ export class Effects {
       this.sparks.spawn({
         pos: _p,
         vel: _v,
-        size0: 0.9,
-        size1: 0.22,
+        // Embers are over-range and therefore bloom: anything much wider than a
+        // couple of pixels at pad range renders as a soft white disc.
+        size0: 0.22,
+        size1: 0.07,
         life: 0.5 + rnd() * 0.8,
         color0: COL.emberWhite,
         color1: COL.emberOrange,
@@ -1995,8 +2027,8 @@ export class Effects {
       this.sparks.spawn({
         pos,
         vel: _v,
-        size0: 0.85,
-        size1: 0.2,
+        size0: 0.5,
+        size1: 0.13,
         life: 0.7 + rnd() * 1.4,
         color0: COL.emberWhite,
         color1: COL.emberOrange,
@@ -2107,18 +2139,40 @@ export class Effects {
     const px = pos.x;
     const pz = pos.z;
 
+    // Fuel-rich dirt burn: pull the mid stop off pure orange so the body has
+    // somewhere to sit between the incandescent creases and the soot.
+    _ca.copy(COL.flameMid).lerp(COL.sootEarth, 0.16);
+    // The surge dome. Squashed and welded to the deck, it spreads sideways
+    // because that is the only direction open to it.
     const fb = this._fireball();
-    _p.set(px, gy + size * 0.35, pz);
-    fb.fire(_p, size * 0.22, size * 1.5, 1.5, { hot: COL.flameWhite, mid: COL.flameMid, cool: COL.sootEarth }, {
-      rise: 14,
-      roll: 0.95,
-      smoke: 0.62,
-      turb: 1.15,
+    _p.set(px, gy + size * 0.16, pz);
+    fb.fire(_p, size * 0.16, size * 1.05, 1.35, { hot: COL.flameWhite, mid: _ca, cool: COL.sootEarth }, {
+      rise: 7,
+      roll: 1.05,
+      smoke: 0.7,
+      turb: 1.25,
       // Compact and bright for the first frames, then it rolls open.
       grow: 1.5,
-      glow: 0.62,
+      glow: 0.9,
       opacity: 0.95,
+      flat: 0.85,
+      rootY: gy - size * 0.06,
     });
+    // The head of the column: a smaller, hotter ball climbing out of the dome.
+    const fbHead = this._fireball();
+    if (fbHead !== fb) {
+      _p.set(px + rr(-1, 1) * size * 0.18, gy + size * 0.5, pz + rr(-1, 1) * size * 0.18);
+      fbHead.fire(_p, size * 0.1, size * 0.62, 1.7, { hot: COL.flameWhite, mid: _ca, cool: COL.sootEarth }, {
+        rise: 22,
+        roll: 0.8,
+        smoke: 0.85,
+        turb: 1.0,
+        grow: 2.2,
+        glow: 0.7,
+        opacity: 0.92,
+        flat: 0.3,
+      });
+    }
 
     // ---- base surge: the dirty ring that rolls out along the deck -------
     const nSurge = Math.round(64 * q);
@@ -2231,8 +2285,10 @@ export class Effects {
       this.sparks.spawn({
         pos: _p,
         vel: _v,
-        size0: 1,
-        size1: 0.25,
+        // Small: an additive sprite a metre across reads as a pale pink pill
+        // against a bright sky, not as a glowing fragment.
+        size0: 0.55,
+        size1: 0.16,
         life: 1.1 + rnd() * 1.6,
         color0: COL.emberWhite,
         color1: COL.emberOrange,

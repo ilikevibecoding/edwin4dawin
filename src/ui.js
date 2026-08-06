@@ -14,10 +14,20 @@ const el = (tag, cls, html) => {
 
 const fmtKm = (m) => `${(m / 1000).toFixed(1)}`;
 
-/** Rough on-screen footprint of a marker caption, used to keep them apart. */
-const MARKER_LABEL_W = 104;
-const MARKER_LABEL_H = 34;
-const MARKER_CHIP_H = 15;
+/**
+ * Laid-out footprint of a marker caption, used to keep captions apart. These
+ * mirror the sizes in hud.css: an identity chip, then one line per readout row
+ * on its own backing plate. Guessing low here is what lets two captions overlap
+ * without the declutter pass noticing, so they are measured, not estimated.
+ */
+const MARKER_CHIP_H = 17;
+const MARKER_LINE_H = 14;
+const MARKER_RO_PAD = 4;
+/** Glyph advance plus horizontal padding for the chip and readout faces. */
+const markerChipW = (n) => n * 7.4 + 12;
+const markerRoW = (n) => n * 6.3 + 10;
+/** How far a caption may slide before it stops reading as its symbol's label. */
+const MARKER_MAX_DROP = 54;
 
 export class UI {
   constructor(root, api) {
@@ -543,9 +553,11 @@ export class UI {
    */
   updateMarkers(items) {
     const seen = new Set();
-    // Nearest first — marker scale falls off with range, so it stands in for
-    // depth — which lets the closest track keep the uncluttered slot.
-    const ordered = items.slice().sort((a, b) => (b.scale || 1) - (a.scale || 1));
+    // Captions hang below their symbol, so the only move that never drags one
+    // across another symbol is downwards. Resolve from the top of the screen
+    // down: the upper caption keeps its slot and the lower one gives way, with
+    // the nearer track winning ties.
+    const ordered = items.slice().sort((a, b) => a.y - b.y || (b.scale || 1) - (a.scale || 1));
     const placed = [];
     for (const it of ordered) {
       seen.add(it.key);
@@ -560,7 +572,7 @@ export class UI {
       const cls = it.cls || '';
       const kind = cls.includes('inter') ? 'inter' : cls.includes('assigned') ? 'assigned' : cls.includes('decoy') ? 'decoy' : cls.includes('tentative') ? 'tentative' : 'firm';
       rec.node.className = `marker ${kind}${cls.includes('tentative') && kind !== 'tentative' ? ' tentative' : ''}${it.offscreen ? ' offscreen' : ''}`;
-      rec.node.style.transform = `translate(${it.x.toFixed(1)}px, ${it.y.toFixed(1)}px) translate(-50%,-50%)`;
+      rec.node.style.transform = `translate(${it.x.toFixed(1)}px, ${it.y.toFixed(1)}px)`;
       rec.node.style.opacity = String(it.opacity !== undefined ? it.opacity : 1);
       const size = Math.round(24 * (it.scale || 1));
       rec.sym.style.width = `${size}px`;
@@ -570,31 +582,46 @@ export class UI {
         const parts = String(it.label).split(/<br\s*\/?>/i);
         rec.id.textContent = parts[0] || '';
         rec.ro.innerHTML = parts.slice(1).join('<br>');
+        rec.lines = parts.length - 1;
+        rec.chipW = markerChipW((parts[0] || '').length);
+        rec.capW = Math.max(rec.chipW, markerRoW(parts.slice(1).reduce((m, p) => Math.max(m, p.length), 0)));
       }
 
       // Two inbounds on a similar bearing interleave their readouts into one
-      // unreadable block. Slide the caption clear if there is room below, and
-      // if there is not, drop the readout and keep the identity chip: knowing
-      // which track is which matters more than its altitude to a tenth.
+      // unreadable block, and an interceptor climbing past a track lands its
+      // chip straight on that track's readout. Slide the caption clear if there
+      // is room below; if there is not, drop the readout and keep the identity
+      // chip, because knowing which track is which matters more than knowing
+      // its altitude to a tenth.
       const half = size / 2;
-      let top = it.y + half + 9;
-      let height = MARKER_LABEL_H;
+      const base = it.y + half + (kind === 'inter' ? 4 : 9);
+      let top = base;
+      let height = MARKER_CHIP_H + (rec.lines ? MARKER_RO_PAD + rec.lines * MARKER_LINE_H : 0);
+      let width = rec.lines ? rec.capW : rec.chipW;
       let terse = false;
-      for (let pass = 0; pass < 3; pass++) {
-        const hit = placed.find(
-          (p) => Math.abs(p.x - it.x) < MARKER_LABEL_W && top < p.bottom && top + height > p.top
-        );
-        if (!hit) break;
-        if (pass < 2) {
-          top = hit.bottom + 3;
-        } else {
-          terse = true;
-          height = MARKER_CHIP_H;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        top = base;
+        let clear = false;
+        for (let pass = 0; pass < 4; pass++) {
+          const hit = placed.find(
+            (p) => Math.abs(p.x - it.x) * 2 < p.w + width && top < p.bottom && top + height > p.top
+          );
+          if (!hit) {
+            clear = true;
+            break;
+          }
+          const next = hit.bottom + 3;
+          if (next - base > MARKER_MAX_DROP) break;
+          top = next;
         }
+        if (clear || terse || !rec.lines) break;
+        terse = true;
+        height = MARKER_CHIP_H;
+        width = rec.chipW;
       }
-      rec.lbl.style.marginTop = `${Math.round(top - it.y - half)}px`;
+      rec.lbl.style.top = `${Math.round(top - it.y)}px`;
       rec.node.classList.toggle('terse', terse);
-      placed.push({ x: it.x, top, bottom: top + height });
+      placed.push({ x: it.x, w: width, top, bottom: top + height });
     }
     for (const [key, rec] of this.markers) {
       if (!seen.has(key)) {

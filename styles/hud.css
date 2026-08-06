@@ -577,9 +577,16 @@ body {
 #reticle .prompt {
   z-index: 1;
 }
+/* The marker collapses to the tracked point itself: the symbol is centred on
+   it and the caption hangs below at an offset the declutter pass sets. Sizing
+   the marker to its contents instead would let a pushed-down caption drag its
+   own symbol off the target it is supposed to be pointing at. */
 .marker {
   position: absolute;
-  transform: translate(-50%, -50%);
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
   font-size: 10px;
   color: #ff9d86;
   white-space: nowrap;
@@ -587,10 +594,12 @@ body {
   text-align: center;
 }
 .marker .sym {
+  position: absolute;
+  left: 0;
+  top: 0;
   width: 24px;
   height: 24px;
-  margin: 0 auto;
-  position: relative;
+  transform: translate(-50%, -50%);
 }
 /* symbol body */
 .marker .sym i {
@@ -619,7 +628,11 @@ body {
   bottom: -11px;
 }
 .marker .lbl {
-  margin-top: 9px;
+  position: absolute;
+  left: 0;
+  /* `top` is set per frame by the declutter pass. */
+  top: 9px;
+  transform: translateX(-50%);
   line-height: 1.4;
 }
 .marker .id {
@@ -635,13 +648,23 @@ body {
   -webkit-text-fill-color: #06100f;
   padding: 1px 6px;
 }
+/* A readout sits against whatever the track is flying over — usually a bright
+   sunset sky — so it carries its own plate rather than relying on a shadow. */
 .marker .ro {
+  /* Block so it starts a new line under the chip, but shrunk to the text so the
+     plate hugs the readout instead of running the caption's full width. */
   display: block;
-  margin-top: 2px;
+  width: fit-content;
+  margin: 2px auto 0;
+  padding: 1px 5px;
+  background: rgba(4, 12, 14, 0.52);
   color: #eafffb;
   font-size: 10px;
   letter-spacing: 0.02em;
   text-shadow: var(--shadow), 0 0 3px #000;
+}
+.marker .ro:empty {
+  display: none;
 }
 
 /* Set when captions are stacked too tightly to show a readout as well. */
@@ -686,9 +709,6 @@ body {
 .marker.inter .sym::before,
 .marker.inter .sym::after {
   display: none;
-}
-.marker.inter .lbl {
-  margin-top: 4px;
 }
 .marker.offscreen .sym i {
   border-style: dashed;

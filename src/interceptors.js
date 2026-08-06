@@ -1239,29 +1239,33 @@ export class Interceptor {
 
     const persist = trailPersistence(this.pos.y);
     const tangent = fwd;
+    // Smoke, ribbon and particles all leave from the nozzle plane rather than
+    // the airframe centroid. Emitting from the centroid costs nothing at 20 km,
+    // where the offset is well under a pixel, but at 10 m it buries the round in
+    // its own exhaust and there is no airframe left to look at.
+    const tail = this.pos.clone().addScaledVector(fwd, -this.glowOffset * boost);
     // Far out the ribbon is widened so a round 20 km away still reads as a line
     // in the sky. Close in it is pulled back towards the motor's own exit
-    // diameter, otherwise the airframe is born inside its own smoke column and
-    // nothing of the round is visible at all.
+    // diameter.
     const widthScale = Math.max(1, dist * 0.0007) * THREE.MathUtils.clamp(dist / 110, 0.3, 1);
     if (this.trail) {
       this.trail.push(
-        this.pos,
+        tail,
         tangent,
         this.effects.time,
         c.trailWidth * widthScale * (0.5 + persist * 0.9),
-        (burning ? 0.62 : 0.2) * (0.2 + persist),
+        (burning ? 0.62 : 0.2) * (0.2 + persist) * (0.5 + 0.5 * near),
         new THREE.Color(0.88, 0.87, 0.85)
       );
     }
     if (this.hotTrail && burning) {
-      this.hotTrail.push(this.pos, tangent, this.effects.time, c.trailWidth * 0.55 * widthScale, 0.9, new THREE.Color(1.0, 0.72, 0.35));
+      this.hotTrail.push(tail, tangent, this.effects.time, c.trailWidth * 0.55 * widthScale, 0.9 * (0.45 + 0.55 * near), new THREE.Color(1.0, 0.72, 0.35));
     }
     if (burning) {
-      this.effects.exhaust(this.pos, this.vel, {
+      this.effects.exhaust(tail, this.vel, {
         scale: c.plumeScale * (this.flight === FLIGHT.BOOST ? 1 : 0.5),
         dt,
-        rate: this.flight === FLIGHT.BOOST ? 1.4 : 0.7,
+        rate: (this.flight === FLIGHT.BOOST ? 1.4 : 0.7) * (0.45 + 0.55 * near),
         boosting: true,
         backDir: fwd.clone().multiplyScalar(-1),
         smokeColor: 0xc8c4be,
