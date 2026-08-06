@@ -83,3 +83,68 @@ budget; real-GPU spot check pending.
 3. Explosions/trails quality (sparks streaks, debris trails, shockwaves, reentry look).
 4. Sky/clouds/sunset/night drama + grading polish.
 5. Radar holo + PPI + HUD refinement.
+
+---
+
+## Iteration 3 — four specialist passes + guidance/fuze fixes
+
+**Status:** all 7 gameplay tests green; screenshot sweep initially exposed a real
+gameplay regression (single-track sentinel shot ended grade D).
+
+**Root-caused and fixed (guidance):**
+- `predictIntercept` had a 0.5 s minimum time-of-flight clamp → at close range the
+  aim point sat ~50 m ahead of the target (0.5 s × target speed) and guidance
+  chased a phantom lead forever. Closest approach stuck at 34 m (> 20 m kill radius).
+- Threats fly with quadratic drag but the predictor propagated pure ballistics →
+  systematic lead bias. Added `propagateWithDrag` and threaded `dragK` through.
+- Fixed-step sampling at ~2.5 km/s closing speed jumps 80 m/frame → added an
+  analytic closest-approach fuze (relative-state tca/dca) so detonation distance
+  is frame-rate independent. Probe: closest approach 2 m, pk 0.94, SUCCESS.
+- Sentinel envelope ceiling 8000 → 12500 m ("maximum reach" battery was rolling
+  OUTSIDE-ENVELOPE penalties at apogee).
+
+**Fixed (visuals):**
+- Searchlight beams rendered as solid additive pipes from the side → replaced with
+  a view-facing + axial falloff shader (soft volumetric look, verified night probe).
+- Launch smoke drifting over the player produced screen-filling soft blobs →
+  near-camera alpha fade (2.5–18 m) in the particle vertex shader.
+- Status strip / key-help overlap at ≤1500 px widths → strip lifted one row.
+
+**Specialist passes integrated:** batteries (detailed rigs), effects (layered
+explosions, sparks, reentry plasma), sky/weather/post (per-preset grading, moon,
+milky way), radar/HUD/UI (holo + PPI overhaul, aim bracket).
+
+---
+
+## Iteration 4 — base environment overhaul (5th specialist)
+
+**Status:** all 7 gameplay tests green; full 14-shot sweep captured (incl.
+09_intercept_moment for the first time — intercept now succeeds deterministically).
+
+**Scores:** R1 7.5 · R2 7.5 · R3 7.5 · R4 8 · R5 8.5 · R6 8.5 · R7 7.5 · R8 pass
+**Average: 7.9 — keep iterating.**
+
+**Landed this iteration**
+- Three noise-displaced mountain ranges (5.2/7.4/9.2 km) with atmospheric-
+  perspective banding; arc gaps prevent wall-of-ridge repetition.
+- Apron: per-slab tone variation, tar joints, painted markings (lane stripes,
+  pad IDs, KEEP CLEAR stencils), tire marks, oil stains, drain grates.
+- Clutter zones: pallets, crates, barrels, cable drums, sandbags, tents, light
+  masts — instanced/merged, with colliders.
+- Radar centerpiece: raised platform w/ railing + stairs, 6.3 m phased array on
+  tan pedestal, IFF dish, cabin, cable run, warning signs, blinking light.
+- Shelter interior: panel walls, equipment racks w/ LED field, map board, desk,
+  monitors, ceiling light — console view now reads as a real C2 room.
+- Sand macro variation + windrows + non-repeating overlay + grass tufts.
+
+**Perf:** default view 275 calls (was 293 pre-pass despite far more content);
+base overview 530 (down from 589); console interior 282; SwiftShader software
+rendering ~48 fps @1280×720 → large headroom on real GPUs. Watch item: widest
+south-horizon angle peaks at 403 calls.
+
+**Next (iteration 5 — final polish)**
+1. Intercept spectacle at mid range (debris trails from kill point, brief
+   secondary sparkle) — judged vs shots 09/13.
+2. Base overview near-field interest (foreground clutter/road into frame).
+3. Demo video (real-browser manual test walkthrough), README/PROGRESS final,
+   PR update with artifacts.

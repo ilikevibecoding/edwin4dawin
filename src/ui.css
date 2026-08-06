@@ -256,9 +256,9 @@
   font-size: 12px;
   align-items: center;
 }
-/* on narrow viewports the centered strip would collide with the key help
-   block bottom-right, so lift it one row */
-@media (max-width: 1180px) {
+/* below ~1500px the centered strip collides with the key help block
+   bottom-right (its second row is wide), so lift it one row */
+@media (max-width: 1500px) {
   #status-strip { bottom: 48px; }
 }
 #status-strip .chip {

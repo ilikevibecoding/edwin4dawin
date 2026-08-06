@@ -6,3 +6,4 @@ shots/
 *.log
 .DS_Store
 shots_probe/
+shots_base_env/
