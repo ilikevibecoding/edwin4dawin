@@ -10,6 +10,22 @@ function el(tag, cls, html) {
   return e;
 }
 
+const stateCls = (st) => (st === 'READY' ? 'ok' : (st === 'EMPTY' ? 'bad' : 'warn'));
+
+/** thin battery readiness bar; PREP/RELOAD animate a fill timed from the
+ *  battery constants (state transitions arrive within one UI tick) */
+function batBarHtml(b) {
+  const def = BATTERIES[b.id];
+  if (b.state === 'PREP') return `<div class="cb-bar st-prep"><i style="animation-duration:${def.prepTime}s"></i></div>`;
+  if (b.state === 'RELOAD') return `<div class="cb-bar st-reload"><i style="animation-duration:${def.reloadTime}s"></i></div>`;
+  if (b.state === 'EMPTY') return '<div class="cb-bar st-empty"><i></i></div>';
+  return '<div class="cb-bar st-ready"><i></i></div>';
+}
+
+function ammoPips(b) {
+  return '▮'.repeat(b.ammo) + '▯'.repeat(Math.max(0, b.maxAmmo - b.ammo));
+}
+
 export class UI {
   constructor() {
     this.actions = null;
@@ -18,9 +34,9 @@ export class UI {
     this._tickerLines = [];
     this._bannerTimer = null;
     this._lastHudSig = null;
-    this._trackRowsSig = null;
-    this._batSig = null;
-    this._conBatSig = null;
+    this._aimHtml = null;
+    this._interactHtml = null;
+    this._altPrev = new Map();
   }
 
   init(actions) {
@@ -30,6 +46,26 @@ export class UI {
     this._buildStart();
     this._buildDebrief();
     this._buildHelp();
+  }
+
+  /** per-row signature-guarded list sync: rows are only rewritten when their
+   *  own signature changes, so CSS bar animations on other rows keep running */
+  _syncList(container, sigs, htmlFn, bindFn) {
+    const prev = container._sigs;
+    if (!prev || prev.length !== sigs.length) {
+      container.innerHTML = sigs.map((_, i) => htmlFn(i)).join('');
+      for (let i = 0; i < container.children.length; i++) bindFn(container.children[i], i);
+    } else {
+      for (let i = 0; i < sigs.length; i++) {
+        if (prev[i] === sigs[i]) continue;
+        const old = container.children[i];
+        old.insertAdjacentHTML('beforebegin', htmlFn(i));
+        const fresh = old.previousElementSibling;
+        old.remove();
+        bindFn(fresh, i);
+      }
+    }
+    container._sigs = sigs;
   }
 
   // ------------------------------------------------------------------ HUD
@@ -67,6 +103,8 @@ export class UI {
 
   showBanner(text, cls = '', dur = 3.2) {
     this.banner.textContent = text;
+    this.banner.className = 'banner hidden';
+    void this.banner.offsetWidth;           // restart slide/flash animation
     this.banner.className = `banner ${cls}`;
     clearTimeout(this._bannerTimer);
     this._bannerTimer = setTimeout(() => this.banner.classList.add('hidden'), dur * 1000);
@@ -77,20 +115,39 @@ export class UI {
     this._tickerLines.push({ text: `${stamp} ${text}`, cls });
     if (this._tickerLines.length > 7) this._tickerLines.shift();
     this.ticker.innerHTML = this._tickerLines
-      .map((l, i) => `<div class="tk ${l.cls}" style="opacity:${0.35 + 0.65 * (i / this._tickerLines.length)}">${l.text}</div>`)
+      .map((l, i) => `<div class="tk ${l.cls}" style="opacity:${0.4 + 0.6 * (i / this._tickerLines.length)}">${l.text}</div>`)
       .join('');
   }
 
   setAimPrompt(html) {
-    if (!html) { this.aimPrompt.classList.add('hidden'); return; }
+    if (!html) {
+      this.aimPrompt.classList.add('hidden');
+      this._aimHtml = null;
+      return;
+    }
+    if (html !== this._aimHtml) {
+      this._aimHtml = html;
+      this.aimPrompt.innerHTML = html;
+      // classification tint for the target box (content comes from main.js)
+      const cls = html.includes('HOSTILE') ? 'hostile'
+        : html.includes('DECOY') ? 'decoy'
+          : html.includes('AMBIG') ? 'ambig' : 'unknown';
+      this.aimPrompt.className = `aim-prompt cls-${cls}`;
+    }
     this.aimPrompt.classList.remove('hidden');
-    this.aimPrompt.innerHTML = html;
   }
 
   setInteractPrompt(html) {
-    if (!html) { this.interactPrompt.classList.add('hidden'); return; }
+    if (!html) {
+      this.interactPrompt.classList.add('hidden');
+      this._interactHtml = null;
+      return;
+    }
+    if (html !== this._interactHtml) {
+      this._interactHtml = html;
+      this.interactPrompt.innerHTML = html;
+    }
     this.interactPrompt.classList.remove('hidden');
-    this.interactPrompt.innerHTML = html;
   }
 
   /** cheap-to-call every frame; DOM only rewritten when content changes */
@@ -108,19 +165,22 @@ export class UI {
         <div class="row"><span>THREATS ACTIVE</span><b class="${s.threatsActive ? 'bad' : ''}">${s.threatsActive}</b></div>
         <div class="row"><span>TRACKS</span><b>${trackedN}/${s.tracks.length}</b></div>
         <div class="row"><span>INTERCEPTORS</span><b class="${s.inFlight ? 'cyan' : ''}">${s.inFlight ? s.inFlight + ' IN FLIGHT' : 'NONE'}</b></div>
-        ${s.selectedTrackId ? `<div class="row"><span>TARGET</span><b class="warn">${s.selectedTrackId}</b></div>` : ''}
+        ${s.selectedTrackId ? `<div class="row"><span>TARGET</span><b class="warn">◈ ${s.selectedTrackId}</b></div>` : ''}
       `;
     }
-    const bsig = s.batteries.map(b => `${b.id}${b.state}${b.ammo}${b.selected ? 1 : 0}`).join('|');
-    if (bsig !== this._batSig) {
-      this._batSig = bsig;
-      this.topRight.innerHTML = s.batteries.map(b => `
-        <div class="bat-card ${b.selected ? 'sel' : ''}" style="--c:${b.uiColor}">
-          <div class="bc-name">${b.name} <span class="bc-key">[${b.key}]</span></div>
-          <div class="bc-state ${b.state === 'READY' ? 'ok' : (b.state === 'EMPTY' ? 'bad' : 'warn')}">${b.state}</div>
-          <div class="bc-ammo">${'▮'.repeat(b.ammo)}${'▯'.repeat(Math.max(0, b.maxAmmo - b.ammo))}</div>
-        </div>
-      `).join('');
+    const bsigs = s.batteries.map(b => `${b.id}|${b.state}|${b.ammo}`);
+    this._syncList(this.topRight, bsigs, (i) => {
+      const b = s.batteries[i];
+      return `
+        <div class="bat-card" data-id="${b.id}" style="--c:${b.uiColor}">
+          <div class="bc-top"><span class="bc-name">${b.name}</span><span class="bc-key">[${b.key}]</span></div>
+          <div class="bc-mid"><span class="bc-state ${stateCls(b.state)}">${b.state}</span><span class="bc-count">${b.ammo}/${b.maxAmmo}</span></div>
+          <div class="bc-ammo">${ammoPips(b)}</div>
+          ${batBarHtml(b)}
+        </div>`;
+    }, () => {});
+    for (const n of this.topRight.children) {
+      n.classList.toggle('sel', n.dataset.id === s.selectedBattery);
     }
   }
 
@@ -149,7 +209,10 @@ export class UI {
       </div>
       <div class="con-section">
         <div class="sec-label">TRACKS <span class="dim">(click blip or row)</span></div>
-        <div id="con-tracks" class="track-list"></div>
+        <div class="track-head"><b>ID</b><span>CLASS</span><span>ALT</span><span>STATE</span><span class="asg">ASG</span></div>
+        <div id="con-tracks" class="track-list">
+          <div class="no-tracks">NO TRACKS — radar sweeping…</div>
+        </div>
         <div class="con-actions">
           <button class="btn" id="btn-assign">ASSIGN</button>
           <button class="btn warn" id="btn-authorize">AUTHORIZE LAUNCH</button>
@@ -200,46 +263,57 @@ export class UI {
     this._btnStart.textContent = s.phase === 'active' ? '■ ABORT SCENARIO' : '▶ START BALLISTIC MISSILES';
     this._btnStart.classList.toggle('running', s.phase === 'active');
 
-    const bsig = s.batteries.map(b => `${b.id}${b.state}${b.ammo}${b.selected}`).join();
-    if (bsig !== this._conBatSig) {
-      this._conBatSig = bsig;
-      this._conBatteries.innerHTML = s.batteries.map(b => `
-        <div class="con-bat ${b.selected ? 'sel' : ''}" data-id="${b.id}" style="--c:${b.uiColor}">
-          <div>
-            <div class="cb-name">${b.name}</div>
+    // batteries — selection is applied as a class so rows never rebuild for it
+    const bsigs = s.batteries.map(b => `${b.id}|${b.state}|${b.ammo}`);
+    this._syncList(this._conBatteries, bsigs, (i) => {
+      const b = s.batteries[i];
+      return `
+        <div class="con-bat" data-id="${b.id}" style="--c:${b.uiColor}">
+          <div class="cb-main">
+            <div class="cb-name">${b.name} <span class="cb-key">[${b.key}]</span></div>
             <div class="cb-desc">${b.blurb}</div>
+            ${batBarHtml(b)}
           </div>
           <div class="cb-right">
-            <div class="bc-state ${b.state === 'READY' ? 'ok' : (b.state === 'EMPTY' ? 'bad' : 'warn')}">${b.state}</div>
-            <div class="bc-ammo">${b.ammo}/${b.maxAmmo}</div>
+            <div class="bc-state ${stateCls(b.state)}">${b.state}</div>
+            <div class="cb-pips">${ammoPips(b)}</div>
+            <div class="cb-count">${b.ammo}/${b.maxAmmo}</div>
           </div>
-        </div>
-      `).join('');
-      for (const row of this._conBatteries.querySelectorAll('.con-bat')) {
-        row.onclick = () => this.actions.selectBattery(row.dataset.id);
-      }
+        </div>`;
+    }, (node) => { node.onclick = () => this.actions.selectBattery(node.dataset.id); });
+    for (const n of this._conBatteries.children) {
+      n.classList.toggle('sel', n.dataset.id === s.selectedBattery);
     }
 
-    const tsig = s.tracks.map(t => `${t.id}${t.state}${t.classification}${Math.round(t.alt / 100)}${t.assignedBattery}${t.selected}`).join();
-    if (tsig !== this._trackRowsSig) {
-      this._trackRowsSig = tsig;
-      if (!s.tracks.length) {
-        this._conTracks.innerHTML = '<div class="dim pad8">NO TRACKS — radar sweeping…</div>';
-      } else {
-        this._conTracks.innerHTML = s.tracks.map(t => `
-          <div class="track-row ${t.selected ? 'sel' : ''} cls-${t.classification.toLowerCase()}" data-id="${t.id}">
+    // tracks
+    if (!s.tracks.length) {
+      if (this._conTracks._sigs !== null || !this._conTracks.querySelector('.no-tracks')) {
+        this._conTracks.innerHTML = '<div class="no-tracks">NO TRACKS — radar sweeping…</div>';
+        this._conTracks._sigs = null;
+      }
+    } else {
+      const prevAlt = this._altPrev;
+      const tsigs = s.tracks.map(t => `${t.id}|${t.state}|${t.classification}|${Math.round(t.alt / 100)}|${t.assignedBattery}`);
+      this._syncList(this._conTracks, tsigs, (i) => {
+        const t = s.tracks[i];
+        const pa = prevAlt.get(t.id);
+        const trend = pa === undefined ? ''
+          : (t.alt < pa - 1 ? '<em class="tr-dn">▼</em>' : (t.alt > pa + 1 ? '<em class="tr-up">▲</em>' : ''));
+        return `
+          <div class="track-row cls-${t.classification.toLowerCase()}" data-id="${t.id}">
             <b>${t.id}</b>
-            <span>${t.classification}</span>
-            <span>${(t.alt / 1000).toFixed(1)} km</span>
-            <span>${t.state}</span>
-            <span class="asg">${t.assignedBattery ? '→' + t.assignedBattery.toUpperCase() : ''}</span>
-          </div>
-        `).join('');
-        for (const row of this._conTracks.querySelectorAll('.track-row')) {
-          row.onclick = () => this.actions.selectTrack(row.dataset.id);
-        }
+            <span class="chip cls">${t.classification}</span>
+            <span class="alt">${(t.alt / 1000).toFixed(1)}<i>km</i>${trend}</span>
+            <span class="chip st${t.state === 'DETECT' ? ' pulse' : ''}">${t.state}</span>
+            <span class="asg">${t.assignedBattery ? '→' + t.assignedBattery.slice(0, 3).toUpperCase() : ''}</span>
+          </div>`;
+      }, (node) => { node.onclick = () => this.actions.selectTrack(node.dataset.id); });
+      for (const n of this._conTracks.children) {
+        n.classList.toggle('sel', n.dataset.id === s.selectedTrackId);
       }
     }
+    // remember altitudes for the closing-trend arrows
+    this._altPrev = new Map(s.tracks.map(t => [t.id, t.alt]));
   }
 
   // ---------------------------------------------------------------- start
@@ -314,6 +388,7 @@ export class UI {
         </div>
         <div class="db-list">
           ${results.map(r => `<div class="db-row db-${r.type.toLowerCase()}"><b>${r.type}</b><span>${r.text}</span></div>`).join('')}
+          <div class="db-row db-total"><b>TOTALS</b><span>${results.length} ${results.length === 1 ? 'event' : 'events'} · ${stats.fired} ${stats.fired === 1 ? 'round' : 'rounds'} expended · ${stats.intercepted} killed · ${stats.impacts} leaked</span></div>
         </div>
         <div class="db-actions">
           <button class="btn warn" id="db-restart">RESTART SCENARIO [R]</button>

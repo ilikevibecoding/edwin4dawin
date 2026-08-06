@@ -62,19 +62,24 @@ export function predictImpact(pos, vel, out = new THREE.Vector3()) {
  * `avgSpeed` starting at `from`, against a ballistic target.
  * Fictional simplification: assumes constant average pursuer speed.
  * Returns { point, time } or null when no solution inside maxTime.
+ * NOTE: returns a shared module-scope result (guidance runs at 120 Hz —
+ * no per-step allocations). Copy `point` before calling again.
  */
+const _solPoint = new THREE.Vector3();
+const _sol = { point: _solPoint, time: 0 };
 export function predictInterceptPoint(from, targetPos, targetVel, avgSpeed, maxTime = 90) {
   let t = from.distanceTo(targetPos) / Math.max(avgSpeed, 1);
-  for (let i = 0; i < 12; i++) {
-    predictBallistic(targetPos, targetVel, t, tmpV);
-    const tNew = from.distanceTo(tmpV) / Math.max(avgSpeed, 1);
-    if (Math.abs(tNew - t) < 0.01) { t = tNew; break; }
-    t = 0.5 * (t + tNew);
+  for (let i = 0; i < 16; i++) {
+    predictBallistic(targetPos, targetVel, t, _solPoint);
+    const tNew = from.distanceTo(_solPoint) / Math.max(avgSpeed, 1);
+    if (Math.abs(tNew - t) < 0.005) { t = tNew; break; }
+    t = 0.5 * (t + tNew); // damped fixed-point iteration — stable solution
   }
   if (!(t > 0) || t > maxTime) return null;
-  predictBallistic(targetPos, targetVel, t, tmpV);
-  if (tmpV.y < 0) return null; // target hits ground first
-  return { point: tmpV.clone(), time: t };
+  predictBallistic(targetPos, targetVel, t, _solPoint);
+  if (_solPoint.y < 0) return null; // target hits ground first
+  _sol.time = t;
+  return _sol;
 }
 
 /**

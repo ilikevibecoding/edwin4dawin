@@ -33,7 +33,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'hi
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 document.getElementById('app').appendChild(renderer.domElement);
@@ -80,7 +80,11 @@ function resetStats() {
 }
 
 function trackForThreat(threat) {
-  return radar.tracks.find(t => t.threat === threat && !t.closed) ?? null;
+  // include recently-closed tracks: impact/burnout events fire after the
+  // radar has already dropped the track, but the id is still meaningful
+  return radar.tracks.find(t => t.threat === threat && !t.closed)
+    ?? radar.tracks.find(t => t.threat === threat)
+    ?? null;
 }
 
 // ------------------------------------------------------------ engagement
@@ -639,6 +643,7 @@ window.__game = {
   authorize: () => authorize(),
   openConsole, closeConsole,
   setView,
+  clearView: () => { game.freeCam = false; player.enabled = !game.consoleMode; },
   lookAt: lookAtWorld,
   views: Object.keys(VIEWS),
   setQuality,

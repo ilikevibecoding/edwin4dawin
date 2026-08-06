@@ -12,7 +12,7 @@ const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
     uTime: { value: 0 },
-    uVignette: { value: 0.36 },
+    uVignette: { value: 0.30 },
     uGrain: { value: 0.035 },
     uAberration: { value: 0.00038 },
   },
@@ -70,7 +70,16 @@ export class Post {
     this.composer = new EffectComposer(renderer);
     this.renderPass = new RenderPass(scene, camera);
     this.composer.addPass(this.renderPass);
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1280, 720), 0.55, 0.62, 0.82);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1280, 720), 0.6, 0.5, 0.8);
+    // Clamp the bloom bright-pass: night floodlights push HDR values into the
+    // hundreds, which otherwise floods half the frame with white glow.
+    this.bloom.materialHighPassFilter.fragmentShader =
+      this.bloom.materialHighPassFilter.fragmentShader.replace(
+        'gl_FragColor = mix( outputColor, texel, alpha );',
+        'vec4 hi = mix( outputColor, texel, alpha );\n' +
+        '\t\t\tgl_FragColor = vec4( min( hi.rgb, vec3( 2.5 ) ), hi.a );',
+      );
+    this.bloom.materialHighPassFilter.needsUpdate = true;
     this.composer.addPass(this.bloom);
     this.output = new OutputPass();
     this.composer.addPass(this.output);
@@ -90,6 +99,9 @@ export class Post {
   /** quality: 0 = low, 1 = medium, 2 = high */
   setQuality(q) {
     this.bloom.enabled = q >= 1;
+    this.bloom.strength = q >= 2 ? 0.6 : 0.42;
+    this.bloom.radius = q >= 2 ? 0.5 : 0.42;
+    this.bloom.threshold = q >= 2 ? 0.8 : 0.86;
     this.grade.uniforms.uGrain.value = q >= 1 ? 0.035 : 0;
     this.grade.uniforms.uAberration.value = q >= 2 ? 0.00038 : 0;
     this.fxaa.enabled = q >= 1;

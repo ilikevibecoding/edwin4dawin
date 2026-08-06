@@ -329,6 +329,31 @@ export function cloudSprite(seed = 5) {
   }, { srgb: false }));
 }
 
+/** lengthwise smoke-streak strip for ribbon trails: soft cross-profile ×
+ *  wispy noise. Sampled with u = along trail (repeat), v = across (clamp). */
+export function trailNoiseTexture() {
+  return cached('trailnoise', () => {
+    const tex = canvasTexture(256, 64, (g, w, h) => {
+      const img = g.createImageData(w, h);
+      for (let y = 0; y < h; y++) {
+        const cross = Math.pow(Math.sin((y / (h - 1)) * Math.PI), 1.15);
+        for (let x = 0; x < w; x++) {
+          const streak = 0.62 + 0.38 * fbm2(x * 0.035, y * 0.16, 3);
+          const wisp = 0.85 + 0.3 * noise2(x * 0.12 + 40, y * 0.05);
+          const v = Math.max(0, Math.min(1, cross * streak * wisp));
+          const i = (y * w + x) * 4;
+          img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+          img.data[i + 3] = v * 255;
+        }
+      }
+      g.putImageData(img, 0, 0);
+    }, { srgb: false });
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return tex;
+  });
+}
+
 /** small text decal texture (stencil style) */
 export function stencilTexture(text, { color = '#e8e4d8', bg = null, w = 256, h = 64, size = 34 } = {}) {
   return canvasTexture(w, h, (g) => {

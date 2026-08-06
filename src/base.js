@@ -366,7 +366,7 @@ export class Base {
 
     // ---- tire track decals on roads, junctions and the apron
     const trackMat = new THREE.MeshBasicMaterial({
-      map: tireTracksTexture(), transparent: true, opacity: 0.42, depthWrite: false,
+      map: tireTracksTexture(), transparent: true, opacity: 0.58, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -2,
     });
     const trackGeo = new THREE.PlaneGeometry(3.4, 15);
@@ -390,8 +390,8 @@ export class Base {
 
     // ---- weathering patches on the apron + pads (dark oil/rubber stains)
     const stainMat = new THREE.MeshBasicMaterial({
-      map: stainTexture(), transparent: true, opacity: 0.52, depthWrite: false,
-      color: 0x4b463c, polygonOffset: true, polygonOffsetFactor: -1.5,
+      map: stainTexture(), transparent: true, opacity: 0.62, depthWrite: false,
+      color: 0x3f3a31, polygonOffset: true, polygonOffsetFactor: -1.5,
     });
     const stainGeo = new THREE.PlaneGeometry(1, 1);
     stainGeo.rotateX(-Math.PI / 2);
@@ -1410,18 +1410,13 @@ export class Base {
     tk.add(tkTank);
     const tkWheels = new THREE.Mesh(truckWheelsGeo, darkMat);
     tk.add(tkWheels);
-    const tkHaz = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.9, 0.42),
-      new THREE.MeshBasicMaterial({ map: hazardStripesTexture([4, 1]) }),
-    );
-    tkHaz.position.set(0, 0.95, -4.25);
-    tkHaz.rotation.y = Math.PI;
-    tk.add(tkHaz);
-    const tkLabel = new THREE.Mesh(BufferGeometryUtils.mergeGeometries([
+    // one merged decal mesh: FLAMMABLE placards on both sides + rear plate
+    const tkDecals = new THREE.Mesh(BufferGeometryUtils.mergeGeometries([
       new THREE.PlaneGeometry(2.1, 0.44).rotateY(Math.PI / 2).translate(1.04, 1.82, -1.2),
       new THREE.PlaneGeometry(2.1, 0.44).rotateY(-Math.PI / 2).translate(-1.04, 1.82, -1.2),
-    ]), new THREE.MeshBasicMaterial({ map: stencilTexture('FLAMMABLE', { w: 512, h: 96, size: 58, color: '#8a2e26' }), transparent: true }));
-    tk.add(tkLabel);
+      new THREE.PlaneGeometry(1.9, 0.42).rotateY(Math.PI).translate(0, 0.95, -4.25),
+    ]), new THREE.MeshBasicMaterial({ map: stencilTexture('FLAMMABLE', { w: 512, h: 96, size: 58, color: '#f0ead8', bg: '#8a2e26' }) }));
+    tk.add(tkDecals);
     this.boxCollider(38, 62, 5.6, 5.6, 2.9);
 
     // ---- small equipment carts on the apron
@@ -1591,6 +1586,7 @@ export class Base {
 
   // --------------------------------------------------------------- signs --
   _buildSigns() {
+    const postParts = [];
     const mkSign = (text, x, z, yaw, w = 2.6, h = 0.8, bg = '#8a2e26') => {
       const board = new THREE.Mesh(
         new THREE.PlaneGeometry(w, h),
@@ -1599,12 +1595,7 @@ export class Base {
       board.position.set(x, 1.35, z);
       board.rotation.y = yaw;
       this.group.add(board);
-      const post = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.04, 0.05, 1.4, 6),
-        new THREE.MeshStandardMaterial({ color: 0x4c524b, roughness: 0.7 }),
-      );
-      post.position.set(x, 0.65, z);
-      this.group.add(post);
+      postParts.push(new THREE.CylinderGeometry(0.04, 0.05, 1.4, 6).translate(x, 0.65, z));
     };
     mkSign('DANGER — LAUNCH AREA', 38, -22, 2.4);
     mkSign('DANGER — LAUNCH AREA', 46, 24, 2.9);
@@ -1614,6 +1605,12 @@ export class Base {
     mkSign('MOTOR POOL', -8, -56, 0, 2.4, 0.7, '#31402f');
     mkSign('FUEL POINT — NO SMOKING', 27.5, 55.5, 0.7, 3.0, 0.7, '#7a3020');
     mkSign('SPEED LIMIT 15', 7, 198, 0, 2.2, 0.7, '#31402f');
+    // all sign posts share one merged mesh (single draw call)
+    const posts = new THREE.Mesh(
+      BufferGeometryUtils.mergeGeometries(postParts),
+      new THREE.MeshStandardMaterial({ color: 0x4c524b, roughness: 0.7 }),
+    );
+    this.group.add(posts);
 
     // hazard stripe aprons around battery pads
     const stripes = hazardStripesTexture([14, 1]);

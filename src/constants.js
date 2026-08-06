@@ -52,9 +52,9 @@ export const BATTERIES = {
     boostAccel: 260,        // m/s^2 (fictional)
     maxSpeed: 620,
     turnG: 14,              // lateral accel limit, expressed in g (fictional)
-    killRadius: 9,
+    killRadius: 12,
     envelope: { minAlt: 150, maxAlt: 4200, maxRange: 5200 },
-    trail: { width: 1.7, life: 11 },
+    trail: { width: 2.6, life: 12 },
     plumeScale: 1.0,
   },
   zenith: {
@@ -71,9 +71,9 @@ export const BATTERIES = {
     boostAccel: 300,
     maxSpeed: 1050,
     turnG: 9,
-    killRadius: 12,
+    killRadius: 14,
     envelope: { minAlt: 2400, maxAlt: 9500, maxRange: 10500 },
-    trail: { width: 2.6, life: 20 },
+    trail: { width: 3.8, life: 22 },
     plumeScale: 1.5,
   },
   sentinel: {
@@ -90,9 +90,9 @@ export const BATTERIES = {
     boostAccel: 330,
     maxSpeed: 1500,
     turnG: 7,
-    killRadius: 16,
-    envelope: { minAlt: 3800, maxAlt: 14000, maxRange: 16000 },
-    trail: { width: 3.6, life: 30 },
+    killRadius: 18,
+    envelope: { minAlt: 4000, maxAlt: 14000, maxRange: 16000 },
+    trail: { width: 4.6, life: 32 },
     plumeScale: 2.4,
   },
 };
@@ -101,9 +101,9 @@ export const BATTERIES = {
 // Threats — fictional ballistic practice targets.
 // ---------------------------------------------------------------------------
 export const THREATS = {
-  spawnAltitude: [5200, 7000],
+  spawnAltitude: [4800, 6600],
   spawnRange: [6800, 9600],      // horizontal distance from base
-  flightTime: [42, 62],          // seconds from spawn to impact (drives arc solve)
+  flightTime: [50, 64],          // seconds from spawn to impact (drives arc solve)
   terminalWeaveAccel: 8,         // m/s^2 gentle terminal weave (fictional)
   terminalPhaseAlt: 2600,        // below this: plasma glow + weave
   hitFlashAlt: 90,

@@ -9,6 +9,7 @@ import { flareSprite } from './textures.js';
 const _v = new THREE.Vector3();
 const _perp = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
+const _Z = new THREE.Vector3(0, 0, 1);
 
 let NEXT_ID = 1;
 
@@ -67,13 +68,14 @@ class Threat {
     this.tumble = new THREE.Vector3();
   }
 
-  spawn({ from, vel, isDecoy, weavePhase, weaveFreq, impact }) {
+  spawn({ from, vel, isDecoy, weavePhase, weaveFreq, impact, tumble }) {
     this.id = NEXT_ID++;
     this.active = true;
     this.isDecoy = isDecoy;
     this.pos.copy(from);
     this.vel.copy(vel);
     this.age = 0;
+    this.fate = '';
     this.weavePhase = weavePhase;
     this.weaveFreq = weaveFreq;
     this.plannedImpact.copy(impact);
@@ -81,15 +83,19 @@ class Threat {
     this.group.position.copy(from);
     this.heatMat.emissiveIntensity = 0;
     this.glow.material.opacity = 0;
+    // long-lived, wide contrail so the whole arc (incl. apogee) stays
+    // readable from the base many km away
     this.trail = this.effects.acquireTrail({
-      width: 2.7, life: 10, color: 0xcac6c0, opacity: 0.62,
+      width: 12, life: 44, color: 0xcac6c0, opacity: 0.7,
     });
-    this.trail.minDist = 14;
-    this.tumble.set(Math.random() * 2, Math.random() * 3, Math.random() * 2);
+    this.trail.minDist = 40;
+    if (tumble) this.tumble.copy(tumble);
+    else this.tumble.set(1.1, 1.8, 0.9);
   }
 
-  /** remove from sky. reason: 'intercepted' | 'impact' | 'burnout' */
-  despawn() {
+  /** remove from sky. fate: 'intercepted' | 'impact' | 'burnout' | 'aborted' */
+  despawn(fate = '') {
+    this.fate = fate;
     this.active = false;
     this.group.visible = false;
     if (this.trail) { this.trail.release(); this.trail = null; }
@@ -105,9 +111,12 @@ class Threat {
     // gentle terminal weave (hostiles only) — fictional evasive wobble
     let extra = null;
     if (!this.isDecoy && alt < THREATS.terminalPhaseAlt && alt > 200) {
-      _perp.crossVectors(this.vel, _up).normalize();
-      const w = Math.sin(this.age * this.weaveFreq + this.weavePhase) * THREATS.terminalWeaveAccel * rho;
-      extra = _perp.multiplyScalar(w);
+      _perp.crossVectors(this.vel, _up);
+      if (_perp.lengthSq() > 1e-6) {
+        _perp.normalize();
+        const w = Math.sin(this.age * this.weaveFreq + this.weavePhase) * THREATS.terminalWeaveAccel * rho;
+        extra = _perp.multiplyScalar(w);
+      }
     }
     integrate({ pos: this.pos, vel: this.vel }, dt, extra);
     this.group.position.copy(this.pos);
@@ -119,7 +128,7 @@ class Threat {
       this.group.rotation.z += this.tumble.z * dt;
     } else if (speed > 1) {
       _v.copy(this.vel).normalize();
-      this.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), _v);
+      this.group.quaternion.setFromUnitVectors(_Z, _v);
     }
 
     // plasma sheath: stronger with air density × speed
@@ -129,9 +138,12 @@ class Threat {
     this.glow.scale.setScalar(14 + heat * 30);
 
     if (this.trail) {
+      // wide node spacing up high (whole-arc readability within the node
+      // budget), tighter down low so the terminal path hugs the vehicle
+      this.trail.minDist = 24 + 66 * (1 - rho);
       this.trail.push(this.pos);
-      // trail brightness follows air density
-      this.trail.baseOpacity = 0.14 + 0.5 * Math.min(1, rho * 1.6) + heat * 0.25;
+      // trail brightness follows air density (floor keeps the high arc legible)
+      this.trail.baseOpacity = 0.24 + 0.42 * Math.min(1, rho * 1.5) + heat * 0.25;
     }
 
     // decoys burn out harmlessly at low altitude
@@ -139,7 +151,7 @@ class Threat {
       this.effects.sparkle(this.pos, 1.6);
       this.effects.airBurst(this.pos, 0.35, 0xffd9a0);
       events.emit('threat-burnout', { threat: this });
-      this.despawn();
+      this.despawn('burnout');
       return;
     }
     // ground impact
@@ -147,7 +159,7 @@ class Threat {
       this.pos.y = 0;
       this.effects.groundImpact(this.pos, 1.25);
       events.emit('threat-impact', { threat: this, pos: this.pos.clone() });
-      this.despawn();
+      this.despawn('impact');
     }
   }
 }
@@ -204,7 +216,7 @@ export class Threats {
   stop() {
     this.running = false;
     this.plan = [];
-    for (const t of this.pool) if (t.active) t.despawn();
+    for (const t of this.pool) if (t.active) t.despawn('aborted');
   }
 
   _spawnFromSpec(spec) {
@@ -230,6 +242,8 @@ export class Threats {
       weavePhase: rng.range(0, 6.28),
       weaveFreq: rng.range(0.55, 1.15),
       impact,
+      // deterministic tumble (visual only, but keep it on the seeded stream)
+      tumble: _v.set(rng.range(0.6, 2.2), rng.range(0.8, 3.0), rng.range(0.6, 2.2)),
     });
     this.spawnedCount++;
     this.events.emit('threat-spawned', { threat });
