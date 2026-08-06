@@ -1993,9 +1993,9 @@ export class Effects {
     const mrad = viewDist * 0.001;
     this.glow.spawn({
       pos,
-      size0: Math.max(size * 1.2, mrad * 45),
-      size1: Math.max(size * 4.2, mrad * 130),
-      life: 0.14 + (read > 3 ? 0.2 : 0),
+      size0: Math.max(size * 1.2, mrad * 70),
+      size1: Math.max(size * 4.2, mrad * 190),
+      life: 0.14 + (read > 3 ? 0.3 : 0),
       color0: COL.flameWhite,
       color1: _ca,
       color2: _cb,
@@ -2011,9 +2011,9 @@ export class Effects {
       // nearly half its radius and is what actually makes a 20 km kill legible.
       this.fire.spawn({
         pos,
-        size0: mrad * 55,
-        size1: mrad * 150,
-        life: 0.42,
+        size0: mrad * 85,
+        size1: mrad * 230,
+        life: 0.62,
         color0: COL.flameWhite,
         color1: _ca,
         color2: _cb,
@@ -2024,13 +2024,13 @@ export class Effects {
       });
       this.fire.spawn({
         pos,
-        size0: mrad * 95,
-        size1: mrad * 240,
-        life: 1.15,
+        size0: mrad * 130,
+        size1: mrad * 330,
+        life: 1.5,
         color0: _cb,
         color1: _cc,
         color2: _cc,
-        alpha: 0.55,
+        alpha: 0.62,
         drag: 4,
         fadeIn: 0.03,
         wind: 0,
@@ -2038,9 +2038,9 @@ export class Effects {
       // Afterglow so the eye has time to find the event at long range.
       this.glow.spawn({
         pos,
-        size0: mrad * 70,
-        size1: mrad * 200,
-        life: 1.25,
+        size0: mrad * 95,
+        size1: mrad * 270,
+        life: 1.5,
         color0: _ca,
         color1: _cb,
         color2: _cc,
@@ -2083,7 +2083,7 @@ export class Effects {
     }
 
     // ---- shock ring ----------------------------------------------------
-    this._shock().fire(pos, Math.max(size * (2.8 + dens * 2.2), mrad * 46), 0.2 + dens * 0.14, _ca, camera, {
+    this._shock().fire(pos, Math.max(size * (2.8 + dens * 2.2), mrad * 72), 0.32 + dens * 0.18, _ca, camera, {
       emit: 1,
       intensity: 0.3,
       thickness: 0.022,

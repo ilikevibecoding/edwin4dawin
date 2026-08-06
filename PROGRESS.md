@@ -129,18 +129,40 @@ Bugs the integration pass caught that the specialists had not:
 
 **env 8 · batteries 8 · physics 9 · effects 8 · lighting 8 · ui 9 · loop 9 · perf 9 — avg 8.5**
 
+## Iteration 6 — intercept readability
+
+The walkthrough video was reviewed by a separate visual model, which reported no
+visible launches, contrails or explosions — only HUD icons. Investigation showed
+two separate causes:
+
+1. The video's camera script tracked the round's *altitude*, so within a second
+   of launch it was staring at empty sky with the launcher and its dust cloud out
+   of frame. The launch beat now holds on the launcher and then leads the round
+   upward.
+2. A 30 m fireball 22 km away subtends about a tenth of a degree — a single dim
+   pixel. Intercept extents now scale with view distance (counts and lifetimes
+   stay keyed to the true yield so a far-off kill costs no more), and the flash
+   uses the broad soft-edged puff rather than the flare sprite, whose alpha
+   collapses well inside its own quad and so read as a pinprick however large
+   the quad was made.
+
+Re-review confirmed all nine storyboard beats: a launch with exhaust flame and
+ground dust at 0:11 with the launcher in frame, a tracked climb with a persistent
+contrail from 0:12 to 0:16, a legible fireball at 0:17, and two more rounds in
+flight at 0:20.
+
 ### Final measurements
 
 Peak load (SATURATION at sunset, three rounds in flight, sunset preset, `high`):
 
 | Metric | Value | Budget |
 |---|---|---|
-| Draw calls | 575 | 700 |
-| Triangles | 885 k | 1.2 M |
-| Live particles | 1 332 | — |
+| Draw calls | 417 | 700 |
+| Triangles | 828 k | 1.2 M |
+| Live particles | 1 340 | — |
 | CPU sim, median | 0.20 ms | 1.5 ms |
 | CPU sim, p95 | 0.30 ms | — |
-| CPU sim, max | 0.70 ms | — |
+| CPU sim, max | 2.0 ms | — |
 | Console errors / Three.js warnings | 0 | 0 |
 
 Balance telemetry (`tools/balance.mjs`, 2 runs per scenario, auto-engagement):
@@ -167,9 +189,9 @@ state, seed determinism, run-to-run variation, and three presentation captures.
 
 ### Remaining fix list
 
-1. The night intercept fireball is hard to frame from the pad; the capture script
-   tracks the round but the kill often lands outside the shot. A short in-game
-   "engagement replay" camera would solve this for both screenshots and play.
+1. A high-altitude kill still reads as a fairly small bloom from the pad. An
+   optional in-game "engagement view" that zooms toward the assigned track would
+   give the payoff more weight without inflating world-space effect sizes further.
 2. Launchers sit at 23–27 draw calls each rather than the ~8 aimed for, because
    nothing merges across the chassis → azimuth → elevation → lid node boundaries.
    Collapsing to a single master atlas plus vertex colours would fix it at the
