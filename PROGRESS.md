@@ -182,3 +182,51 @@ R7 7.5 · R8 pass — average 7.9 of the 8.5 target. Remaining known gaps, in
 priority order: battery texture wear/decals at closeup range, mid-range
 intercept spectacle, base overview foreground interest, watch-item 403-call
 peak on the widest south-horizon angle.
+
+---
+
+## Iteration 6 — user feedback round + parallel specialist waves (IN PROGRESS)
+
+**User feedback addressed directly (committed + demo refreshed):**
+- "Big blob of black when I turn around" — root causes fixed (over-dark ground
+  decals/tar strips, black cable protector humps → hazard-striped ramps,
+  silhouetted work-light masts/floodlight poles → steel + emissive lamp faces,
+  camera clipping inside Sentinel canister collider gaps → full-length box
+  colliders). Verified with fresh 8-direction sweeps at two positions, day and
+  night — clean. The user had been playing a pre-fix demo snapshot; refreshed.
+- "Easier missile function / multiple interceptors at one bomb" — engagement
+  model rebuilt: per-track concurrent assignments (`Map trackId→batteryId`),
+  sticky salvo fire (F ripples across ready batteries), per-battery fire queue
+  (one battery services several missiles, rounds auto-launch as it cycles),
+  `engageAll()`, urgent-track F fallback, wider aim assist. Rounds detonating
+  after their target died count as `safed`, not misses.
+- "Mobile tablet to command on the go" — handheld TACOM pad (Q): live tactical
+  radar plot (sweep synced to the dish, heading wedges, impact ×, engagement
+  lines, queue rings), per-track ASGN/FIRE, battery chips with queue badges,
+  ENGAGE ALL, raid setup (time/scenario/START) usable anywhere on the base.
+- "Different views — the missile separate" — V cycles cinematic chase cams:
+  side-chase interceptor cam → most-urgent-threat cam → first person, with
+  letterbox bars, kill-linger, auto-return. Zero extra render cost.
+
+**Specialist wave 1 (complete, committed):**
+- Missiles (9 loops): lathe-profile RVs with ablative canvas textures, reentry
+  heating + bow shock + terminal plasma streak, tumbling biconic decoys; three
+  distinct interceptor airframes with stencils/panel lines/mach-diamond plumes.
+  Self-scores 8.5–9 across silhouette/detail/lighting/motion/readability.
+  Perf +3 draw calls net. Kill chain re-verified post-rewrite (same
+  deterministic outcomes).
+- Console room (9 loops): dressed fire-direction center (three-bay console,
+  bezeled monitor wall, guarded launch button, props), phosphor PPI scope with
+  persistence + engagement sidebar, live aux screens, volumetric holo table,
+  acoustic walls/cable trays/signage, day/sunset/night ops lighting with red
+  battle lamps. Self-scores 8.5–8.8. Seat pose adopted in main.js.
+
+**Specialist wave 2 (running):** batteries (TEL/launcher fidelity) and
+explosions/effects (intercept fireballs, ground impacts, launch blasts,
+per-emit trail cooling).
+
+**Queued for integration pass (after wave 2):** bloom threshold near sun disc
+(distant-dot washout), slightly higher night ambient/IBL (both requested by
+missiles specialist — deferred so running specialists don't tune against a
+moving target), full 7-test suite on a quiet box, screenshot sweep re-score,
+demo video, demo snapshot + CDN refresh.
