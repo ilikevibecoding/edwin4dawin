@@ -423,9 +423,10 @@ const consoleView = {
 };
 {
   // frame both the PPI screen (left) and the holo table (right)
+  // (pose per console specialist: PPI readable, full holo disc clickable)
   const c = ctx.base.consolePos;
-  consoleView.pos.set(c.x + 2.1, 1.92, c.z + 3.1);
-  consoleView.look.set(c.x + 1.85, 1.22, c.z - 0.9);
+  consoleView.pos.set(c.x + 2.05, 1.84, c.z + 2.95);
+  consoleView.look.set(c.x + 1.7, 1.18, c.z - 1.0);
 }
 
 function enterConsole() {
