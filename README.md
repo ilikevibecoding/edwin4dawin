@@ -52,6 +52,11 @@ The page exposes `window.__game` (deterministic seed via `?seed=`, manual steppi
 the Playwright suites in `tests/`. `npm test` runs gameplay assertions and captures the screenshot gallery
 used for visual QA in `shots/`.
 
+`node cinematic.mjs` renders a smooth 24 fps demo video of the deterministic sim offline: it steps the game
+exactly 1/24 s per frame, screenshots every frame into `cine/`, and the frames assemble with
+`ffmpeg -framerate 24 -i 'cine/f%05d.jpg' …`. `SAVE_FROM=<n>` skips re-screenshotting frames before `n`
+(the sim is deterministic, so partial re-captures after storyboard-only edits are safe).
+
 ## Module map
 
 `src/main.js` wiring + loop · `player.js` FPS controller · `base.js` terrain + base · `batteries.js` launchers ·

@@ -183,3 +183,70 @@ RAMPART proximity kill, two unengaged threats impacting the base, debrief "DEFEN
 
 **Test results: 18/18 passing.** Final capture: cinematic 24 fps stepped-render video of the
 same engagement flow (smooth offline render of the real deterministic sim).
+
+### Iteration 5 — cinematic capture pipeline + a real guidance bug found by it
+
+Building the stepped-capture pipeline (advance sim exactly 1/24 s per frame, screenshot,
+assemble at 24 fps) surfaced a genuine step-rate bug that live play could never show:
+
+**Pass-detector step-rate bug.** The whiff detector compared the *pre-integration* range
+against the *post-integration* closest approach with a fixed 14 m hysteresis tuned for
+1/120 s stepping. At the capture's 1/30 s steps a head-on closing missile moves ~35 m per
+step, so every frame read as "receding"; the pass timer filled and the round self-destructed
+~520 m out — reported as an unexplained proximity miss. Fixed by comparing post-integration
+range with a step-scaled margin (`max(10, relSpeed·dt·0.75)`). Verified: the same engagement
+now closes to 22 m → proximity kill at every step rate.
+
+**Fire-solution console cue.** While chasing the above, added a proper pre-launch quality cue:
+`classifyLaunch` (envelope fit) + `simulateFlyout` (virtual flyout of the real flight model
+against a ballistic target) are shared by `Interceptors.launch()` and a live console readout
+("FIRE SOLUTION: GOOD / MARGINAL / POOR / OUT — reason") for the selected track × battery.
+Kinematically unreachable shots now die as explained theatrical near-misses
+("CROSSING GEOMETRY — KV CANNOT CONVERGE") instead of confusing wide misses.
+
+**Cinematic pipeline lessons** (all storyboard-side): console camera tweens must start inside
+the shelter (no wall clipping); exit the console before prep completes so pad views catch
+ignition; result banners run on wall-clock timers so stepped capture drives the banner element
+deterministically from sim results; park the player body outdoors after console exit (the
+E-prompt keys off player position); pull pad cameras back far enough that launch plumes don't
+blow out the frame.
+
+**Final videos:** live manual playthrough (computer-use, real input) + 70 s cinematic
+24 fps two-kill engagement (ZENITH high-altitude kill with slow-mo, RAMPART terminal kill,
+two leakers impacting the base, DEFENSE OVERRUN debrief). 18/18 tests green.
+
+**External video review loop (blind reviewer, three passes):**
+- Pass 1 flagged the RAMPART pad shot (framed on a blown-out exhaust, launcher invisible) —
+  re-framed wide from 35 m out; partial re-render (deterministic sim ⇒ frames before the cut
+  are bit-identical, only re-captured from the affected frame on).
+- Pass 2 flagged a foreground floodlight pole crossing the new framing — moved the pad camera
+  again (probe-shot first this time).
+- Pass 3 scored 8.5/10, confirmed pad shot + banners + UI clean, and localized one last defect:
+  a mid-shot camera jolt at 0:52.25. Traced with a sim probe to the storyboard's impacts phase:
+  the look target was gated on `lowest.alt < 2600 m`, so the exact frame a leaker crossed
+  2600 m the target snapped from the RAMPART burst point to a point ~1 km up-range. Fixed by
+  acquiring the lowest streak once at phase entry and tracking it continuously to the ground
+  (hand-off to the burst site afterwards), pan rate slowed 0.07 → 0.05.
+- Known minor (accepted): 2D smoke/fire sprite cards intersect visibly at the very end of the
+  double ground impact (1:05); proper fix is depth-fade soft particles — out of scope for now.
+- The jolt fix also exposed a stitching flaw: ticker stamps used wall-clock elapsed time, so
+  partial re-captures showed a timestamp discontinuity mid-video. Fixed in the game itself —
+  the ticker now stamps events with the mission clock (sim time), which is deterministic and
+  more honest on slow machines; final video re-rendered end-to-end in one run.
+- Pass 4 (final render): 10/10 — jolt gone ("deliberate and flawless" tracking), mission clock
+  chronologically consistent, banners readable, "no remaining visual defects to report".
+
+### Final rubric (v5)
+| Category | Score |
+|---|---|
+| Base environment | 8.5 |
+| Battery assets | 8.5 |
+| Flight physics | 9 |
+| Effects | 8.5 |
+| Lighting/weather/post | 8.5 |
+| Radar/HUD/UX | 9 |
+| Performance | 8.5 |
+| Gameplay loop | 9 |
+
+Average 8.7, no category below 8.5 — stopping condition met (18/18 tests, full manual
+playthrough verified, budget-friendly perf profile with honest instrumentation).
