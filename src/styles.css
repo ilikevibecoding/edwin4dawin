@@ -162,6 +162,14 @@ button:focus-visible, select:focus-visible, input:focus-visible,
 }
 @keyframes redPulse { 50% { box-shadow: 0 0 26px rgba(255, 70, 50, 0.5); } }
 
+.engage-cue {
+  margin: 6px 0 2px; padding: 5px 9px; font-size: 11px; letter-spacing: 1px;
+  border: 1px solid var(--line); background: rgba(8, 18, 12, 0.72); color: var(--text);
+}
+.engage-cue.ok { color: var(--green); border-color: rgba(90, 230, 130, 0.55); }
+.engage-cue.warn { color: var(--amber); border-color: rgba(255, 200, 80, 0.55); }
+.engage-cue.bad { color: var(--red); border-color: rgba(255, 90, 70, 0.55); }
+
 .pause-overlay {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   background: rgba(2, 6, 4, 0.55); pointer-events: auto; cursor: pointer; z-index: 40;

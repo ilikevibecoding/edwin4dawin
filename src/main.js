@@ -9,7 +9,7 @@ import { Effects } from './effects.js';
 import { Base } from './base.js';
 import { Batteries, BSTATE } from './batteries.js';
 import { Threats } from './threats.js';
-import { Interceptors } from './interceptors.js';
+import { Interceptors, assessEngagement } from './interceptors.js';
 import { Radar } from './radar.js';
 import { Player } from './player.js';
 import { GameAudio } from './audio.js';
@@ -456,7 +456,19 @@ function hudSnapshot() {
       selected: game.selectedBattery === b.id,
       key: i + 1,
     })),
+    engageCue: engageCue(),
   };
+}
+
+/** solution-quality cue for the console (selected track × selected battery) */
+function engageCue() {
+  if (!game.consoleMode) return null;
+  const track = game.selectedTrack;
+  const battery = batteries.get(game.selectedBattery);
+  if (!track || track.closed || !track.threat?.active || !battery) return null;
+  const a = assessEngagement(battery, track.threat);
+  const cls = { GOOD: 'ok', MARGINAL: 'warn', POOR: 'bad', OUT: 'bad' }[a.verdict];
+  return { text: `FIRE SOLUTION: ${a.verdict} — ${a.reason}`, cls };
 }
 
 let uiTimer = 0;
@@ -704,6 +716,13 @@ window.__game = {
     player.update(1 / 120);
   },
   lookAt: lookAtWorld,
+  /** solution quality for selected track (or given track id) × battery */
+  assess: (batteryId, trackId) => {
+    const b = batteries.get(batteryId ?? game.selectedBattery);
+    const t = trackId ? radar.liveTracks.find(x => x.id === trackId) : game.selectedTrack;
+    if (!b || !t || !t.threat?.active) return 'OUT';
+    return assessEngagement(b, t.threat).verdict;
+  },
   /** let tests drive WASD without pointer lock */
   setTestDrive: (v) => { player.testDrive = v; },
   playerPos: () => player.pos.toArray().map(v => +v.toFixed(2)),

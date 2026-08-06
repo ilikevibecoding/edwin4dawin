@@ -35,6 +35,116 @@ const PROFILE = {
 
 let NEXT_MISSILE = 1;
 
+// ---------------------------------------------------------------------------
+// Launch feasibility. A ballistic lead solution can sit inside the paper
+// envelope yet be kinematically unreachable (close-in crossing shots exceed
+// the airframe's turn radius). Rather than hand-tuning heuristics, fly a
+// cheap virtual copy of the real flight model against a ballistic target and
+// measure the closest approach it can actually achieve.
+// NOTE: mirrors the integration in Interceptors.update() — keep in sync.
+const _fPos = new THREE.Vector3(), _fVel = new THREE.Vector3();
+const _fTp = new THREE.Vector3(), _fTv = new THREE.Vector3();
+const _fAim = new THREE.Vector3(), _fAimSm = new THREE.Vector3();
+const _fDes = new THREE.Vector3(), _fUp = new THREE.Vector3(), _fTmp = new THREE.Vector3();
+
+export function simulateFlyout(def, muzzlePos, muzzleDir, threatPos, threatVel, maxT = 95) {
+  const prof = PROFILE[def.id];
+  const dt = 1 / 30;
+  _fPos.copy(muzzlePos);
+  _fVel.copy(muzzleDir).multiplyScalar(34);
+  _fTp.copy(threatPos);
+  _fTv.copy(threatVel);
+  let aimInit = false;
+  let minD = Infinity;
+  for (let t = 0; t < maxT; t += dt) {
+    _fTv.y -= WORLD.gravity * dt;
+    _fTp.addScaledVector(_fTv, dt);
+    if (_fTp.y < -40) break;
+    const lit = t >= prof.ignition;
+    const boosting = lit && t < prof.ignition + def.boostTime;
+    const dist = _fPos.distanceTo(_fTp);
+    const terminal = dist < 1100;
+    const sol = predictInterceptPoint(_fPos, _fTp, _fTv, Math.max(_fVel.length(), def.maxSpeed * 0.6));
+    _fAim.copy(sol ? sol.point : _fTp);
+    if (!aimInit) { _fAimSm.copy(_fAim); aimInit = true; }
+    else _fAimSm.lerp(_fAim, 1 - Math.exp(-dt * (terminal ? AIM_LP_TERMINAL : AIM_LP)));
+    _fDes.subVectors(_fAimSm, _fPos).normalize();
+    if (t < prof.riseTime) _fDes.lerp(_fUp.set(0, 1, 0), 0.55).normalize();
+    if (lit) {
+      const speed0 = _fVel.length();
+      let gLimit = def.turnG * 9.81 * (boosting ? 0.55 : 1) * (terminal ? 1.35 : 1);
+      if (boosting) gLimit += def.boostAccel * prof.tvc * Math.max(0, 1 - speed0 / prof.tvcSpeed);
+      steerTowards(_fVel, _fDes, gLimit, dt);
+    }
+    if (boosting) {
+      if (_fVel.length() < def.maxSpeed) {
+        _fTmp.copy(_fVel).normalize().multiplyScalar(def.boostAccel * dt);
+        _fVel.add(_fTmp);
+      }
+    } else {
+      _fVel.y -= WORLD.gravity * dt * (lit ? 0.55 : 1);
+      _fVel.multiplyScalar(Math.max(0, 1 - airDensity(_fPos.y) * 0.028 * dt));
+    }
+    _fPos.addScaledVector(_fVel, dt);
+    if (dist < minD) minD = dist;
+    if (minD < def.killRadius) break;
+    if (t > 4 && dist > minD + 900) break; // decisively past closest approach
+  }
+  return minD;
+}
+
+/**
+ * Classify a prospective launch: envelope fit + kinematic feasibility.
+ * Returns { kind: ''|'floor'|'ceiling'|'range'|'late'|'geometry', reason,
+ *           point (may be null), time } — kind '' means engageable.
+ * Shared by Interceptors.launch() and the console's solution-quality cue.
+ */
+const _clsPoint = new THREE.Vector3();
+export function classifyLaunch(def, muzzlePos, muzzleDir, threat) {
+  const sol = predictInterceptPoint(muzzlePos, threat.pos, threat.vel, def.maxSpeed * 0.72);
+  if (!sol) return { kind: 'late', reason: 'NO INTERCEPT SOLUTION — TOO LATE', point: null, time: 0 };
+  _clsPoint.copy(sol.point);
+  const rangeFromBattery = Math.hypot(_clsPoint.x - muzzlePos.x, _clsPoint.z - muzzlePos.z);
+  const env = def.envelope;
+  if (_clsPoint.y < env.minAlt + PROFILE[def.id].floorMargin) {
+    return { kind: 'floor', reason: `PREDICTED INTERCEPT BELOW ${def.name} FLOOR`, point: _clsPoint, time: sol.time };
+  }
+  if (_clsPoint.y > env.maxAlt) {
+    return { kind: 'ceiling', reason: `PREDICTED INTERCEPT ABOVE ${def.name} CEILING`, point: _clsPoint, time: sol.time };
+  }
+  if (rangeFromBattery > env.maxRange) {
+    return { kind: 'range', reason: 'TARGET OUTSIDE ENGAGEMENT RANGE', point: _clsPoint, time: sol.time };
+  }
+  const minD = simulateFlyout(def, muzzlePos, muzzleDir, threat.pos, threat.vel);
+  if (minD > 220) {
+    return { kind: 'geometry', reason: 'CROSSING GEOMETRY — KV CANNOT CONVERGE', point: _clsPoint, time: sol.time, minD };
+  }
+  return { kind: '', reason: '', point: _clsPoint, time: sol.time, minD };
+}
+
+/**
+ * Pre-launch solution quality for the console cue (battery hasn't slewed yet,
+ * so model the post-slew muzzle: yaw toward the threat at the battery's
+ * fixed firing elevation). Returns 'GOOD' | 'MARGINAL' | 'POOR' | 'OUT'.
+ */
+const _asMuz = new THREE.Vector3(), _asDir = new THREE.Vector3();
+export function assessEngagement(battery, threat) {
+  if (!threat || !threat.active) return { verdict: 'OUT', reason: 'NO TARGET' };
+  _asMuz.copy(battery.group.position).setY(battery.group.position.y + 3);
+  if (battery.fixedVertical) {
+    _asDir.set(0, 1, 0);
+  } else {
+    const az = Math.atan2(threat.pos.x - _asMuz.x, threat.pos.z - _asMuz.z);
+    const el = battery.maxElev ?? 1.2;
+    _asDir.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).normalize();
+  }
+  const cls = classifyLaunch(battery.def, _asMuz, _asDir, threat);
+  if (cls.kind === 'geometry') return { verdict: 'POOR', reason: cls.reason };
+  if (cls.kind) return { verdict: 'OUT', reason: cls.reason };
+  if (cls.minD !== undefined && cls.minD > 60) return { verdict: 'MARGINAL', reason: 'EDGE OF WINDOW' };
+  return { verdict: 'GOOD', reason: 'IN WINDOW' };
+}
+
 function buildVariant(defId) {
   const g = new THREE.Group();
   const liveryColor = { rampart: 0xb9c0af, zenith: 0xd8dcd8, sentinel: 0xe8e4dc }[defId];
@@ -177,32 +287,28 @@ export class Interceptors {
       m.doomKind = 'lost';
       m.doomReason = 'TRACK LOST AT LAUNCH';
     } else {
-      const sol = predictInterceptPoint(muzzlePos, threat.pos, threat.vel, def.maxSpeed * 0.72);
-      if (!sol) {
+      // envelope + kinematic feasibility (shared with the console cue)
+      const cls = classifyLaunch(def, muzzlePos, muzzleDir, threat);
+      if (cls.point) solPoint = _v2.copy(cls.point); // keep for offset shaping below
+      if (cls.kind) {
         m.doomed = true;
-        m.doomKind = 'late';
-        m.doomReason = 'NO INTERCEPT SOLUTION — TOO LATE';
+        m.doomKind = cls.kind;
+        m.doomReason = cls.reason;
       } else {
-        const p = sol.point;
-        solPoint = _v2.copy(p); // keep for offset shaping below
+        // difficulty rises near envelope edges
+        const p = solPoint;
         const rangeFromBattery = Math.hypot(p.x - muzzlePos.x, p.z - muzzlePos.z);
         const env = def.envelope;
-        if (p.y < env.minAlt + PROFILE[def.id].floorMargin) { m.doomed = true; m.doomKind = 'floor'; m.doomReason = `PREDICTED INTERCEPT BELOW ${def.name} FLOOR`; }
-        else if (p.y > env.maxAlt) { m.doomed = true; m.doomKind = 'ceiling'; m.doomReason = `PREDICTED INTERCEPT ABOVE ${def.name} CEILING`; }
-        else if (rangeFromBattery > env.maxRange) { m.doomed = true; m.doomKind = 'range'; m.doomReason = 'TARGET OUTSIDE ENGAGEMENT RANGE'; }
-        else {
-          // difficulty rises near envelope edges
-          const edge = Math.max(
-            (p.y - env.minAlt < 500) ? 0.5 : 0,
-            (env.maxAlt - p.y < 800) ? 0.35 : 0,
-            (env.maxRange - rangeFromBattery < 900) ? 0.35 : 0,
-          );
-          const pk = 0.94 - edge * 0.5;
-          if (this.rng.next() > pk) {
-            m.doomed = true;
-            m.doomKind = 'pk';
-            m.doomReason = 'KILL VEHICLE DISPERSION — NEAR MISS';
-          }
+        const edge = Math.max(
+          (p.y - env.minAlt < 500) ? 0.5 : 0,
+          (env.maxAlt - p.y < 800) ? 0.35 : 0,
+          (env.maxRange - rangeFromBattery < 900) ? 0.35 : 0,
+        );
+        const pk = 0.94 - edge * 0.5;
+        if (this.rng.next() > pk) {
+          m.doomed = true;
+          m.doomKind = 'pk';
+          m.doomReason = 'KILL VEHICLE DISPERSION — NEAR MISS';
         }
       }
     }
@@ -352,8 +458,12 @@ export class Interceptors {
           });
           continue;
         }
-        // passed closest approach → let it visibly whiff by, then detonate
-        if ((terminal || m.doomed) && m.minDist < 900 && dist > m.minDist + 14) {
+        // passed closest approach → let it visibly whiff by, then detonate.
+        // Compare post-integration range against minDist with a step-scaled
+        // hysteresis: a fixed margin reads head-on closure as "receding" at
+        // coarse test step rates (pre-move dist is ~relSpeed*dt larger).
+        const distPost = _rel.length();
+        if ((terminal || m.doomed) && m.minDist < 900 && distPost > m.minDist + Math.max(10, relSpeed * dt * 0.75)) {
           m.passTimer += dt;
           if (m.passTimer > 0.34) {
             this.effects.airBurst(m.pos, 0.55, 0xffc9a0);

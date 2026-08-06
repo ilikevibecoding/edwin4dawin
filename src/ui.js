@@ -221,6 +221,7 @@ export class UI {
         <div id="con-tracks" class="track-list">
           <div class="no-tracks">NO TRACKS — radar sweeping…</div>
         </div>
+        <div class="engage-cue hidden" id="engage-cue"></div>
         <div class="con-actions">
           <button class="btn" id="btn-assign">ASSIGN</button>
           <button class="btn warn" id="btn-authorize">AUTHORIZE LAUNCH</button>
@@ -253,6 +254,7 @@ export class UI {
     this._conBatteries = c.querySelector('#con-batteries');
     this._conTracks = c.querySelector('#con-tracks');
     this._btnStart = c.querySelector('#btn-start');
+    this._engageCue = c.querySelector('#engage-cue');
   }
 
   setConsoleVisible(v) {
@@ -322,6 +324,19 @@ export class UI {
     }
     // remember altitudes for the closing-trend arrows
     this._altPrev = new Map(s.tracks.map(t => [t.id, t.alt]));
+
+    // solution-quality cue for the selected track × battery
+    if (s.engageCue) {
+      const sig = s.engageCue.text + '|' + s.engageCue.cls;
+      if (this._engageCue._sig !== sig) {
+        this._engageCue._sig = sig;
+        this._engageCue.textContent = s.engageCue.text;
+        this._engageCue.className = `engage-cue ${s.engageCue.cls}`;
+      }
+    } else if (this._engageCue._sig !== null) {
+      this._engageCue._sig = null;
+      this._engageCue.className = 'engage-cue hidden';
+    }
   }
 
   // ---------------------------------------------------------------- start
