@@ -57,6 +57,11 @@ radar, console, HUD, audio, post. Capture harness runs 20 scenes.
 - Console errors: mixed indexed/non-indexed geometry in `mergeParts`,
   mediump/highp uniform precision mismatch, `MultiplyBlending` without
   premultiplied alpha.
+- The custom effect shaders omitted Three.js' logarithmic-depth chunks. With
+  `logarithmicDepthBuffer` enabled on a 120 km far plane that made the launch
+  dust ring fail its depth test against the terrain — a decision taken early on
+  the assumption that additive sprites would not care, which turned out to be
+  wrong.
 
 ## Iteration 2 — correctness pass
 
@@ -201,3 +206,15 @@ state, seed determinism, run-to-run variation, and three presentation captures.
 4. Ground decals do not project onto sloped terrain, so scorch marks off the
    apron can float slightly.
 5. No volumetric shadowing in the searchlight beams; they are additive cones.
+6. Effects sit at about 41 draw calls at a synthetic worst case (six concurrent
+   explosions, twelve live trails), which is the whole budget allowed for them.
+   Whole-scene totals stay well inside 700 / 1.2 M, but there is no headroom for
+   another always-on particle layer without merging existing ones.
+7. The tighter 110 m shadow frustum trades distant cast shadows for close-range
+   crispness. Hardware near the box edge loses its shadow rather than popping
+   across a hard boundary, and aerial haze covers it, but `shadowExtent` in
+   `LOOK` is the lever if a distant shadow is ever needed.
+8. The oblate ground-impact fireball derives its world normal from the point
+   direction rather than an inverse-transpose normal, so the fresnel rim is
+   slightly biased. Invisible at the flattening used; pushing `flat` past ~0.85
+   would start to show it.
