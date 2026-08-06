@@ -250,15 +250,16 @@ html, body {
   padding: 14px; min-height: 0; flex: 1; overflow: hidden;
 }
 .console-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
-/* The control column scrolls on short screens; START stays pinned to the
-   bottom of the column so the primary action is never scrolled out of view. */
-.ctrl-col { overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
-.ctrl-col::-webkit-scrollbar { width: 6px; }
-.ctrl-col::-webkit-scrollbar-thumb { background: rgba(126,247,189,.25); }
-.start-dock {
-  position: sticky; bottom: 0; margin-top: auto; padding-top: 8px;
-  background: linear-gradient(to top, rgba(6,11,12,1) 65%, rgba(6,11,12,0));
+/* The control column is a fixed dock plus a scrolling stack above it, so the
+   primary action is always on screen and never covers the engage controls. */
+.ctrl-col { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 10px; }
+.ctrl-scroll {
+  display: flex; flex-direction: column; gap: 10px;
+  overflow-y: auto; overflow-x: hidden; padding-right: 4px; min-height: 0;
 }
+.ctrl-scroll::-webkit-scrollbar { width: 6px; }
+.ctrl-scroll::-webkit-scrollbar-thumb { background: rgba(126,247,189,.25); }
+.start-dock { display: flex; flex-direction: column; gap: 6px; }
 
 .panel { border: 1px solid var(--line); background: rgba(8,14,15,.7); }
 .panel-title {
@@ -287,10 +288,10 @@ html, body {
 .sw.inter { background: var(--blue); } .sw.sel { background: #fff; }
 
 /* Segment buttons ----------------------------------------------------- */
-.seg { display: flex; gap: 1px; padding: 8px; }
+.seg { display: flex; gap: 1px; padding: 7px; }
 .seg.vertical { flex-direction: column; gap: 6px; }
 .seg-btn {
-  flex: 1; padding: 8px 10px; cursor: pointer; text-align: left;
+  flex: 1; padding: 6px 9px; cursor: pointer; text-align: left;
   font-family: var(--font); font-size: 11px; letter-spacing: .12em;
   color: var(--text-dim); background: rgba(255,255,255,.03);
   border: 1px solid var(--line); transition: all .13s ease;
@@ -334,12 +335,13 @@ html, body {
 .btn.start:disabled { filter: grayscale(.7) brightness(.7); }
 .btn.start.big { padding: 17px; font-size: 14px; }
 
-.assign-readout { padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 10.5px; }
-.assign-readout > div { display: flex; justify-content: space-between; }
+.assign-readout { padding: 7px 10px; display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; }
+.assign-readout > div { display: flex; justify-content: space-between; gap: 10px; }
 .assign-readout .k { color: var(--text-dim); letter-spacing: .16em; font-size: 9.5px; }
-.assign-readout .v { color: var(--green); letter-spacing: .08em; }
-.assign-panel { padding-bottom: 10px; }
-.assign-panel .btn { width: calc(100% - 20px); margin-left: 10px; }
+.assign-readout .v { color: var(--green); letter-spacing: .08em; text-align: right; }
+.assign-panel { padding-bottom: 8px; }
+.assign-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 8px; }
+.assign-actions .btn { width: 100%; }
 
 .console-foot {
   padding: 7px 16px; border-top: 1px solid var(--line);

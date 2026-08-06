@@ -113,6 +113,7 @@
             </div>
 
             <div class="console-col ctrl-col">
+              <div class="ctrl-scroll">
               <div class="panel">
                 <div class="panel-title">1 &nbsp;LIGHT CONDITION</div>
                 <div class="seg" id="cond-seg" role="group" aria-label="Light condition">
@@ -142,18 +143,23 @@
                 <div class="seg vertical" id="bat-seg" role="group" aria-label="Interceptor battery"></div>
               </div>
 
-              <div class="panel assign-panel">
-                <div class="panel-title">4 &nbsp;ENGAGE</div>
-                <div class="assign-readout">
-                  <div><span class="k">TRACK</span><span class="v" id="c-track">--</span></div>
-                  <div><span class="k">BATTERY</span><span class="v" id="c-bat">--</span></div>
-                  <div><span class="k">SOLUTION</span><span class="v" id="c-sol">--</span></div>
-                </div>
-                <button id="btn-assign" class="btn wide" disabled>ASSIGN <em>[E]</em></button>
-                <button id="btn-authorize" class="btn wide danger" disabled>AUTHORIZE LAUNCH <em>[F]</em></button>
               </div>
 
+              <!-- The action dock never scrolls: assigning, authorising and
+                   starting a scenario must always be one click away. -->
               <div class="start-dock">
+                <div class="panel assign-panel">
+                  <div class="panel-title">4 &nbsp;ENGAGE</div>
+                  <div class="assign-readout">
+                    <div><span class="k">TRACK</span><span class="v" id="c-track">--</span></div>
+                    <div><span class="k">BATTERY</span><span class="v" id="c-bat">--</span></div>
+                    <div><span class="k">SOLUTION</span><span class="v" id="c-sol">--</span></div>
+                  </div>
+                  <div class="assign-actions">
+                    <button id="btn-assign" class="btn" disabled>ASSIGN <em>[E]</em></button>
+                    <button id="btn-authorize" class="btn danger" disabled>AUTHORIZE <em>[F]</em></button>
+                  </div>
+                </div>
                 <button id="btn-start" class="btn start">START BALLISTIC MISSILES</button>
                 <button id="btn-restart" class="btn ghost wide">RESTART SCENARIO <em>[R]</em></button>
               </div>

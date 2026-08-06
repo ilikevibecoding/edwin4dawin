@@ -280,8 +280,10 @@ class Threat {
     const s = Math.max(THREAT.bodyLength * 0.9, px * (this.isDecoy ? 5 : 9));
     this.glow.scale.setScalar(s);
     const haze = this.effects.hazeAt(this.pos);
-    this.glowMat.opacity = clamp01(0.3 + this.heat * 0.8)
-      * (this.isDecoy ? 0.85 : 1) * (1 - haze * 0.8);
+    // A descending warhead has to be findable by eye against a bright sky, so
+    // the marker keeps a healthy floor even before reentry heating starts.
+    this.glowMat.opacity = clamp01(0.55 + this.heat * 0.6)
+      * (this.isDecoy ? 0.85 : 1) * (1 - haze * 0.75);
     // Fade the detailed body out when it is too small to matter.
     const showBody = dist < 6000;
     this.body.visible = showBody && !this.isDecoy;

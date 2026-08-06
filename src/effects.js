@@ -111,11 +111,11 @@ export class Effects {
 
     this.smoke = new ParticleSystem({
       kind: 'smoke', capacity: Math.round(budget * 0.62),
-      texture: smokePuff(128, 3), turbulence: 0.55, softness: 0.78,
+      texture: smokePuff(128, 3), turbulence: 0.9, softness: 0.78,
     });
     this.dust = new ParticleSystem({
       kind: 'smoke', capacity: Math.round(budget * 0.2),
-      texture: smokePuff(128, 8), turbulence: 0.8, softness: 0.85,
+      texture: smokePuff(128, 8), turbulence: 1.15, softness: 0.85,
     });
     this.hot = new ParticleSystem({
       kind: 'hot', capacity: Math.round(budget * 0.18),
@@ -151,6 +151,24 @@ export class Effects {
       this.glareGroup.add(s);
       this.glares.push({ sprite: s, mat, t: 0, life: 1, peak: 0, scale: 1 });
     }
+
+    // Distance-compensated burst flashes. A 150 m fireball 14 km away is four
+    // pixels across; without this the payoff of a high-altitude intercept is
+    // invisible from the ground, which is exactly where the player is standing.
+    this.bursts = [];
+    const burstTex = glowSprite(256, 1.7, 'burst');
+    for (let i = 0; i < 8; i++) {
+      const mat = new THREE.SpriteMaterial({
+        map: burstTex, color: 0xfff2d8, transparent: true,
+        blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0, fog: false,
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.visible = false;
+      sprite.renderOrder = 20;
+      scene.add(sprite);
+      this.bursts.push({ sprite, mat, t: 0, life: 1, r0: 10, r1: 100, minPixels: 70 });
+    }
+    this._viewportHeight = 800;
 
     this._lightDirView = new THREE.Vector3(0, 0, 1);
     this._lightColour = new THREE.Color(0xffffff);
@@ -199,8 +217,47 @@ export class Effects {
 
   // ------------------------------------------------------------------ update
 
+  /**
+   * Fire a burst flash that never falls below `minPixels` on screen.
+   * @param {THREE.Vector3} pos
+   */
+  burstFlash(pos, {
+    r0 = 12, r1 = 140, life = 1.1, minPixels = 70, colour = 0xfff2d8, intensity = 2.6,
+  } = {}) {
+    let b = this.bursts.find((x) => !x.sprite.visible);
+    if (!b) b = this.bursts.reduce((a, c) => (a.t / a.life > c.t / c.life ? a : c));
+    b.sprite.position.copy(pos);
+    // Values above 1 are legitimate here: the sprite renders into the HDR
+    // buffer before tone mapping, so this is what makes the flash blow out.
+    _c1.set(colour);
+    b.mat.color.setRGB(_c1.r * intensity, _c1.g * intensity, _c1.b * intensity);
+    b.sprite.visible = true;
+    b.t = 0; b.life = life; b.r0 = r0; b.r1 = r1; b.minPixels = minPixels;
+    return b;
+  }
+
+  _updateBursts(dt) {
+    const pixelScale = this._viewportHeight
+      / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
+    for (const b of this.bursts) {
+      if (!b.sprite.visible) continue;
+      b.t += dt;
+      const k = b.t / b.life;
+      if (k >= 1) { b.sprite.visible = false; b.mat.opacity = 0; continue; }
+      // Fast flare, slow decay - the signature of a detonation seen at range.
+      const env = k < 0.05 ? k / 0.05 : Math.pow(1 - (k - 0.05) / 0.95, 1.9);
+      const grow = b.r0 + (b.r1 - b.r0) * (1 - Math.pow(1 - k, 2.4));
+      const dist = this.camera.position.distanceTo(b.sprite.position);
+      const minWorld = (dist * b.minPixels) / Math.max(1, pixelScale);
+      const s = Math.max(grow, minWorld);
+      b.sprite.scale.setScalar(s);
+      b.mat.opacity = env * (1 - this.hazeAt(b.sprite.position) * 0.7);
+    }
+  }
+
   update(dt, viewportHeight) {
     this.time += dt;
+    if (viewportHeight) this._viewportHeight = viewportHeight;
     // Light direction in view space for the lit-smoke approximation.
     this._lightDirView.copy(this._sunDir)
       .transformDirection(this.camera.matrixWorldInverse);
@@ -235,6 +292,7 @@ export class Effects {
       g.sprite.scale.set(s, s * 0.14, 1);
     }
 
+    this._updateBursts(dt);
     this.shakeImpulse = Math.max(0, this.shakeImpulse - dt * 2.2);
   }
 
@@ -282,13 +340,17 @@ export class Effects {
       const jitter = _v2.set(
         (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9,
       );
+      // Alternating light and dark puffs give the trailing column visible roll.
+      const dark = i % 3 === 0;
       this.smoke.emit(
         _v3.copy(pos).addScaledVector(back, Math.random() * 6 * scale),
         jitter.addScaledVector(back, 14 * scale),
         {
           life: lerp(5.5, 2.2, rho) * (0.7 + Math.random() * 0.6),
-          sizeStart: 1.6 * scale, sizeEnd: (12 + rho * 22) * scale,
-          color: colour, opacity: 0.10 + rho * 0.22,
+          sizeStart: 1.6 * scale * (0.6 + Math.random() * 0.9),
+          sizeEnd: (12 + rho * 22) * scale * (0.7 + Math.random() * 0.7),
+          color: dark ? 0x8f887c : colour,
+          opacity: (0.10 + rho * 0.22) * (dark ? 1.25 : 0.9),
           drag: 0.9, gravity: 0.4,
         },
       );
@@ -340,17 +402,23 @@ export class Effects {
     const down = _v1.copy(dir).multiplyScalar(-1).normalize();
     const groundDist = Math.max(0, pos.y - groundY);
 
-    // Efflux jet driven straight out of the tail.
-    for (let i = 0; i < 90 * scale; i++) {
-      const spread = 0.42;
-      const v = _v2.copy(down).multiplyScalar(55 + Math.random() * 90).add(
-        _v3.set((Math.random() - 0.5) * 60 * spread, (Math.random() - 0.5) * 60 * spread,
-          (Math.random() - 0.5) * 60 * spread),
+    // Efflux jet driven straight out of the tail. Two populations - a bright
+    // fast core and a slower, darker, longer-lived outer roll - so the column
+    // has internal structure instead of reading as a smooth cone.
+    for (let i = 0; i < 110 * scale; i++) {
+      const core = i % 3 !== 0;
+      const spread = core ? 0.26 : 0.62;
+      const v = _v2.copy(down).multiplyScalar((core ? 75 : 34) + Math.random() * 90).add(
+        _v3.set((Math.random() - 0.5) * 70 * spread, (Math.random() - 0.5) * 70 * spread,
+          (Math.random() - 0.5) * 70 * spread),
       );
       this.smoke.emit(pos, v, {
-        life: 3.4 + Math.random() * 3.6,
-        sizeStart: 3 * scale, sizeEnd: (34 + Math.random() * 40) * scale,
-        color: 0xbdb7ab, opacity: 0.34, drag: 1.15, gravity: 1.4,
+        life: (core ? 2.6 : 5.0) + Math.random() * 3.6,
+        sizeStart: (core ? 2.2 : 4.5) * scale,
+        sizeEnd: ((core ? 22 : 40) + Math.random() * 44) * scale,
+        color: core ? 0xd6cfc0 : 0x8d867a,
+        opacity: (core ? 0.34 : 0.26) * (0.7 + Math.random() * 0.6),
+        drag: core ? 1.0 : 1.5, gravity: core ? 1.9 : 0.8,
       });
     }
     for (let i = 0; i < 55 * scale; i++) {
@@ -437,20 +505,26 @@ export class Effects {
    */
   airburst(pos, relVel, { power = 1, colour = 0xffe6b0 } = {}) {
     const rho = airDensity(pos.y);
-    const lod = this._lod(pos);
+    // One-shot events keep a much higher detail floor than continuous
+    // emitters: an intercept at 12 km is the payoff of the whole engagement
+    // and has to read from the ground.
+    const lod = Math.max(0.55, this._lod(pos));
     const s = power;
+    // Thin air lets the fireball expand far further before it is quenched,
+    // which is also what makes a distant high-altitude burst legible.
+    const expand = 1 + (1 - rho) * 2.6;
 
     this.fire.spawn(pos, {
-      r0: 4 * s, r1: (30 + rho * 30) * s, life: 0.7 + rho * 0.5,
+      r0: 5 * s, r1: (30 + rho * 30) * s * expand, life: 0.9 + rho * 0.4,
       hot: 0xfff8e0, cool: 0xe0621c, opacity: 1,
     });
     this.shock.spawn(pos, {
-      r0: 6 * s, r1: (170 + rho * 130) * s, life: 0.7,
-      colour: 0xe8f4ff, opacity: 0.5 + rho * 0.35, rim: 2.6,
+      r0: 8 * s, r1: (170 + rho * 130) * s * expand, life: 0.9,
+      colour: 0xe8f4ff, opacity: 0.45 + rho * 0.35, rim: 2.6,
     });
     // Secondary slower shell reads as the expanding gas cloud.
     this.shock.spawn(pos, {
-      r0: 3 * s, r1: 70 * s, life: 1.25, colour: colour, opacity: 0.3, rim: 1.5,
+      r0: 4 * s, r1: 90 * s * expand, life: 1.6, colour, opacity: 0.28, rim: 1.5,
     });
 
     const hotN = Math.round(90 * s * lod);
@@ -474,19 +548,24 @@ export class Effects {
         color: 0xffd18a, opacity: 1, drag: 0.55, gravity: -9.81, stretch: 1.3,
       });
     }
-    const smokeN = Math.round((40 + rho * 90) * s * lod);
+    const smokeN = Math.round((60 + rho * 80) * s * lod);
     for (let i = 0; i < smokeN; i++) {
-      const sp = 12 + Math.random() * 70 * s;
+      const sp = (16 + Math.random() * 80 * s) * expand * 0.6;
       _v2.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(sp);
       this.smoke.emit(pos, _v2, {
-        life: 4 + Math.random() * 7,
-        sizeStart: 6 * s, sizeEnd: (40 + Math.random() * 60) * s,
-        color: 0x4a4640, opacity: 0.2 + rho * 0.35, drag: 1.1, gravity: 0.8,
+        life: 5 + Math.random() * 8,
+        sizeStart: 7 * s, sizeEnd: (40 + Math.random() * 60) * s * expand * 0.7,
+        color: i % 3 === 0 ? 0x6a6258 : 0x413d38,
+        opacity: 0.22 + rho * 0.3, drag: 1.1, gravity: 0.8,
       });
     }
 
     this.lights.flash(pos, {
       colour: 0xfff0d0, intensity: 9000 * s, life: 0.9, distance: 2600 * s,
+    });
+    this.burstFlash(pos, {
+      r0: 14 * s, r1: (150 + rho * 60) * s * expand, life: 1.25,
+      minPixels: 86 * s, colour: 0xfff0cc, intensity: 3.4,
     });
     // Glare is sized in world units, so it has to scale with viewing distance
     // to stay a lens artefact rather than a wall of white.
@@ -575,6 +654,9 @@ export class Effects {
       colour: 0xffd090, intensity: 16000 * s, life: 1.1, distance: 3200,
     });
     const gd = this.camera.position.distanceTo(p);
+    this.burstFlash(_v3.set(p.x, 10 * s, p.z), {
+      r0: 18 * s, r1: 120 * s, life: 1.1, minPixels: 54 * s, colour: 0xffd9a4, intensity: 2.8,
+    });
     this.glare(_v3.set(p.x, 14 * s, p.z), {
       scale: clamp(gd * 0.06, 50, 700) * s, life: 1.1, peak: 0.8, colour: 0xffd8a0,
     });
@@ -641,11 +723,37 @@ export class Effects {
     }
   }
 
+  /**
+   * Compile every effect program before the first engagement.
+   *
+   * Pool members start hidden, so their shaders would otherwise compile the
+   * first time each effect fires - which on a cold GPU driver shows up as a
+   * multi-second freeze exactly when the player presses AUTHORIZE.
+   */
+  warmup(renderer, scene, camera, extraRoots = []) {
+    const hidden = [];
+    const reveal = (obj) => {
+      obj.traverse((o) => {
+        if (!o.visible) { hidden.push(o); o.visible = true; }
+      });
+    };
+    reveal(this.shock.group);
+    reveal(this.fire.group);
+    reveal(this.decals.group);
+    reveal(this.glareGroup);
+    for (const b of this.bursts) reveal(b.sprite);
+    for (const root of extraRoots) if (root) reveal(root);
+    for (const g of this.glares) { g.mat.opacity = 0; }
+    renderer.compile(scene, camera);
+    for (const o of hidden) o.visible = false;
+  }
+
   clear() {
     this.smoke.clear(); this.dust.clear(); this.hot.clear(); this.sparks.clear();
     this.trails.clear(); this.shock.clear(); this.fire.clear();
     this.debris.clear(); this.decals.clear(); this.lights.clear();
     for (const g of this.glares) { g.sprite.visible = false; g.mat.opacity = 0; g.peak = 0; }
+    for (const b of this.bursts) { b.sprite.visible = false; b.mat.opacity = 0; }
     this.shakeImpulse = 0;
   }
 

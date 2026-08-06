@@ -407,6 +407,17 @@ export class InterceptorSystem {
     this.active.length = 0;
   }
 
+  /**
+   * Build every battery's round on every pooled slot up front. Interceptor
+   * bodies and their flame shaders are created lazily per battery, and doing
+   * that at launch time costs a visible hitch.
+   */
+  prewarm(defs) {
+    for (const item of [...this.pool.free, ...this.pool.live]) {
+      for (const def of defs) item._bodyFor(def);
+    }
+  }
+
   launch(opts) {
     const m = this.pool.acquire();
     if (!m) return null;

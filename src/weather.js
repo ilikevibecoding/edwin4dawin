@@ -494,8 +494,9 @@ export class Weather {
     if (this.envRT) this.envRT.dispose();
     this.envRT = rt;
     this.scene.environment = rt.texture;
-    // Night needs the extra bounce or shadowed metal goes to black.
-    this.scene.environmentIntensity = this.preset.id === 'night' ? 1.5 : 1.0;
+    // Enough bounce to keep shadowed metal readable without lifting the night
+    // scene into a flat dusk.
+    this.scene.environmentIntensity = this.preset.id === 'night' ? 0.8 : 1.0;
     this._envDirty = false;
   }
 

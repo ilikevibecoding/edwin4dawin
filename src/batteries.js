@@ -354,7 +354,7 @@ function buildVanguard(def) {
     setElevation: (deg) => { pivot.rotation.x = -deg * DEG; },
     setTrain: (rad) => { train.rotation.y = rad; },
     trainable: true,
-    stowedElevation: 4,
+    stowedElevation: 34,
     muzzleLocal: (i) => {
       const can = canisters[i % canisters.length];
       return new THREE.Vector3(can.position.x, can.position.y, can.position.z + packLen / 2);
@@ -510,7 +510,7 @@ function buildHighLance(def) {
     setElevation: (deg) => { pivot.rotation.x = -deg * DEG; },
     setTrain: (rad) => { train.rotation.y = rad; },
     trainable: true,
-    stowedElevation: 2,
+    stowedElevation: 26,
     muzzleLocal: (i) => {
       const can = canisters[i % canisters.length];
       return new THREE.Vector3(can.position.x, can.position.y, can.position.z + packLen / 2);
@@ -651,9 +651,9 @@ function buildSentinel(def) {
   // Massive elevation rams
   const rams = [];
   for (const sz of [-1, 1]) {
-    const ram = hydraulicRam(4.0, 0.24, 0.15, 3.6);
-    ram.position.set(0, 1.25, sz * 3.0);
-    ram.rotation.x = -0.42;
+    const ram = hydraulicRam(3.1, 0.24, 0.15, 2.7);
+    ram.position.set(0, 0.85, sz * 2.3);
+    ram.rotation.x = -0.62;
     train.add(ram);
     rams.push(ram);
   }
@@ -715,7 +715,7 @@ function buildSentinel(def) {
     setElevation: (deg) => { pivot.rotation.x = -deg * DEG; },
     setTrain: (rad) => { train.rotation.y = rad; },
     trainable: true,
-    stowedElevation: 0,
+    stowedElevation: 22,
     muzzleLocal: (i) => {
       const can = canisters[i % canisters.length];
       return new THREE.Vector3(can.position.x, can.position.y, can.position.z + packLen / 2);

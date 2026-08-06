@@ -157,9 +157,18 @@ class Game {
     this.base.update(0.016, { nightFactor: 0, floodOn: false, radarSweep: 0 });
 
     // Warm the shader cache before the first visible frame so the opening
-    // moments never hitch while programs compile.
+    // moments never hitch while programs compile. Effects and interceptor
+    // bodies are built lazily, so they have to be forced into existence here.
+    this.interceptors.prewarm(BATTERIES);
+    const warmRoots = [
+      ...this.interceptors.pool.free.map((m) => m.group),
+      ...this.threats.pool.free.map((t) => t.group),
+      ...this.effects.trails.free.map((r) => r.mesh),
+    ];
+    this.effects.warmup(this.renderer, this.scene, this.camera, warmRoots);
     this.renderer.compile(this.scene, this.camera);
     this.renderer.render(this.scene, this.camera);
+    this.post.render(1 / 60);
 
     state.setPhase(PHASE.MENU);
     this.ui.hideLoader();
@@ -462,6 +471,7 @@ class Game {
     this.player.shake = Math.max(this.player.shake, clamp01(1 - camDist / 6000) * 1.2);
 
     const wasDecoy = threat.isDecoy;
+    this.lastKillPoint = point.clone();
     this.threats.destroy(threat);
     if (wasDecoy) {
       state.stats.decoysDestroyed++;
@@ -864,6 +874,59 @@ class Game {
         if (!t) return false;
         window.__GAME.lookAt(t.threat.pos.x, t.threat.pos.y, t.threat.pos.z);
         return true;
+      },
+      /** Look at the round in flight. */
+      lookAtInterceptor() {
+        const m = g.interceptors.active[0];
+        if (!m) return false;
+        window.__GAME.lookAt(m.pos.x, m.pos.y, m.pos.z);
+        return true;
+      },
+      /**
+       * Point the camera at where the engagement is heading, so a capture
+       * taken at the intercept moment actually frames the intercept.
+       */
+      lookAtSolution() {
+        const m = g.interceptors.active[0];
+        if (!m || !m.target || !m.target.alive) return window.__GAME.lookAtTrack();
+        const p = m.aimPoint;
+        window.__GAME.lookAt(p.x, p.y, p.z);
+        return true;
+      },
+      /**
+       * Advance until the round in flight resolves, aim the camera at where it
+       * detonated, and report the outcome.
+       */
+      flyToResolution(maxSeconds = 40, stepMs = 1000 / 60) {
+        const dt = stepMs / 1000;
+        let t = 0;
+        g.lastKillPoint = null;
+        while (t < maxSeconds && g.interceptors.activeCount > 0) {
+          g.step(dt, true);
+          t += dt;
+        }
+        g.step(dt, false);
+        const k = g.lastKillPoint;
+        if (k) window.__GAME.lookAt(k.x, k.y, k.z);
+        return {
+          t: +t.toFixed(2),
+          killPoint: k ? { x: Math.round(k.x), y: Math.round(k.y), z: Math.round(k.z) } : null,
+          snapshot: g.snapshot(),
+        };
+      },
+      /** Advance until a round is within `range` metres of its target. */
+      flyToRange(range = 900, maxSeconds = 40, stepMs = 1000 / 60) {
+        const dt = stepMs / 1000;
+        let t = 0;
+        while (t < maxSeconds) {
+          const m = g.interceptors.active[0];
+          if (!m) break;
+          if (m.target && m.target.alive && m.pos.distanceTo(m.target.pos) <= range) break;
+          g.step(dt, true);
+          t += dt;
+        }
+        g.step(dt, false);
+        return { t: +t.toFixed(2), snapshot: g.snapshot() };
       },
       /** Assign + authorize the best available shot. Returns a description. */
       autoEngage(batteryId) {

@@ -255,11 +255,12 @@ export class Base {
       this.beacons.push(mast.beacon);
     });
 
-    // A handful of real spot lights for the masts nearest the working area.
-    const litMasts = this.q.id === 'low' ? 2 : 4;
+    // Real spot lights for the masts nearest the working area. These carry the
+    // night look: without visible pools of light the site reads as flat dusk.
+    const litMasts = this.q.id === 'low' ? 3 : 5;
     for (let i = 0; i < Math.min(litMasts, this.floodMasts.length); i++) {
       const mast = this.floodMasts[i];
-      const spot = new THREE.SpotLight(0xffeccd, 0, 190, 0.85, 0.5, 1.3);
+      const spot = new THREE.SpotLight(0xffeccd, 0, 210, 0.8, 0.42, 1.1);
       spot.position.set(mast.group.position.x, mast.height - 0.3, mast.group.position.z);
       const target = new THREE.Object3D();
       target.position.set(mast.group.position.x * 0.25, 0, mast.group.position.z * 0.25);
@@ -325,7 +326,7 @@ export class Base {
         head.userData.lensMat.emissiveIntensity = 0.15 + lit * 3.4;
       }
     }
-    for (const spot of this.spotLights) spot.intensity = lit * 55;
+    for (const spot of this.spotLights) spot.intensity = lit * 140;
 
     // Beacons blink; faster and redder when the site is on alert.
     const blinkFast = (this.time % 0.9) / 0.9 < 0.3;

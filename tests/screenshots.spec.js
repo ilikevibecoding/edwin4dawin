@@ -114,23 +114,22 @@ test.describe('visual capture', () => {
 
     // Follow the round up.
     await advance(page, 5);
-    await page.evaluate(() => {
-      const s = window.__GAME.snapshot();
-      if (s.interceptors[0]) window.__GAME.lookAtTrack();
-    });
+    await page.evaluate(() => window.__GAME.lookAtInterceptor());
     await advance(page, 0.3);
     await shot(page, 'day-14-midcourse');
 
-    // Advance to just after the intercept.
-    let snap = await snapshot(page);
-    for (let i = 0; i < 40 && snap.interceptors.length; i++) {
-      snap = await advance(page, 0.5);
-    }
-    await advance(page, 0.35);
-    await shot(page, 'day-15-intercept');
-    await advance(page, 3.5);
-    await shot(page, 'day-16-aftermath');
-    console.log('day engagement:', snap.lastResult);
+    // Close on the target, framing where the two tracks converge.
+    await page.evaluate(() => window.__GAME.flyToRange(1400));
+    await page.evaluate(() => window.__GAME.lookAtSolution());
+    await advance(page, 0.2);
+    await shot(page, 'day-15-terminal');
+
+    const res = await page.evaluate(() => window.__GAME.flyToResolution(40));
+    await advance(page, 0.16);
+    await shot(page, 'day-16-intercept');
+    await advance(page, 2.6);
+    await shot(page, 'day-17-aftermath');
+    console.log('day engagement:', res.snapshot.lastResult, JSON.stringify(res.killPoint));
   });
 
   test('sunset engagement', async ({ page }) => {
@@ -154,17 +153,17 @@ test.describe('visual capture', () => {
     await advance(page, 0.7);
     await shot(page, 'sunset-02-launch');
     await advance(page, 3.2);
-    await page.evaluate(() => window.__GAME.lookAt(4, 6000, -104));
+    await page.evaluate(() => window.__GAME.lookAtInterceptor());
     await advance(page, 0.3);
     await shot(page, 'sunset-03-climb');
 
-    let snap = await snapshot(page);
-    for (let i = 0; i < 40 && snap.interceptors.length; i++) {
-      snap = await advance(page, 0.5);
-    }
-    await advance(page, 0.3);
+    await page.evaluate(() => window.__GAME.flyToRange(1600));
+    await page.evaluate(() => window.__GAME.lookAtSolution());
+    await advance(page, 0.2);
+    const res = await page.evaluate(() => window.__GAME.flyToResolution(40));
+    await advance(page, 0.16);
     await shot(page, 'sunset-04-intercept');
-    console.log('sunset engagement:', snap.lastResult);
+    console.log('sunset engagement:', res.snapshot.lastResult);
   });
 
   test('night raid', async ({ page }) => {
@@ -189,15 +188,19 @@ test.describe('visual capture', () => {
     await advance(page, 0.6);
     await shot(page, 'night-03-launch');
     await advance(page, 3.0);
+    await page.evaluate(() => window.__GAME.lookAtInterceptor());
+    await advance(page, 0.2);
     await shot(page, 'night-04-climb');
 
-    let snap = await snapshot(page);
-    for (let i = 0; i < 40 && snap.interceptors.length; i++) {
-      snap = await advance(page, 0.5);
-    }
-    await advance(page, 0.3);
+    await page.evaluate(() => window.__GAME.flyToRange(1600));
+    await page.evaluate(() => window.__GAME.lookAtSolution());
+    await advance(page, 0.2);
+    const res = await page.evaluate(() => window.__GAME.flyToResolution(40));
+    await advance(page, 0.16);
     await shot(page, 'night-05-intercept');
-    console.log('night engagement:', snap.lastResult);
+    await advance(page, 2.6);
+    await shot(page, 'night-06-aftermath');
+    console.log('night engagement:', res.snapshot.lastResult);
   });
 
   test('ground impact', async ({ page }) => {
