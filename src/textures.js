@@ -159,19 +159,24 @@ export function createTextures() {
       g.lineWidth = 7;
       g.beginPath(); g.moveTo(p, 0); g.lineTo(p, 1024); g.stroke();
       g.beginPath(); g.moveTo(0, p); g.lineTo(1024, p); g.stroke();
-      g.strokeStyle = 'rgba(38,37,35,0.7)';
-      g.lineWidth = 3;
+      g.strokeStyle = 'rgba(58,56,52,0.55)';
+      g.lineWidth = 2.4;
       g.beginPath(); g.moveTo(p, 0); g.lineTo(p, 1024); g.stroke();
       g.beginPath(); g.moveTo(0, p); g.lineTo(1024, p); g.stroke();
     }
-    // cracks
-    g.strokeStyle = 'rgba(60,58,54,0.5)';
-    g.lineWidth = 1.4;
-    for (let i = 0; i < 26; i++) {
+    // cracks: directional meanders (dominant direction + small lateral jitter)
+    // so they read as settling cracks instead of scribbles
+    for (let i = 0; i < 11; i++) {
       let x = rng.next() * 1024, y = rng.next() * 1024;
+      const dir = rng.next() * Math.PI * 2;
+      const dx = Math.cos(dir), dy = Math.sin(dir);
+      g.strokeStyle = `rgba(88,86,80,${rng.range(0.18, 0.3)})`;
+      g.lineWidth = rng.range(0.8, 1.3);
       g.beginPath(); g.moveTo(x, y);
-      for (let s = 0; s < 14; s++) {
-        x += rng.range(-26, 26); y += rng.range(-26, 26);
+      for (let s = 0; s < 12; s++) {
+        const step = rng.range(14, 30);
+        const lat = rng.range(-7, 7);
+        x += dx * step - dy * lat; y += dy * step + dx * lat;
         g.lineTo(x, y);
       }
       g.stroke();
@@ -727,23 +732,24 @@ export function createTextures() {
   });
 
   const oilStain = () => memo('oilStain', () => {
+    // subtle warm-brown drip patch — must read as grime, never a black void
     const [c, g] = makeCanvas(128, 128);
     g.clearRect(0, 0, 128, 128);
-    const blobs = [[64, 64, 34], [48, 52, 18], [82, 70, 16], [58, 84, 12]];
+    const blobs = [[64, 64, 30], [50, 54, 15], [80, 70, 13]];
     for (const [x, y, r] of blobs) {
       const grad = g.createRadialGradient(x, y, 2, x, y, r);
-      grad.addColorStop(0, 'rgba(18,16,14,0.62)');
-      grad.addColorStop(0.7, 'rgba(22,20,16,0.34)');
-      grad.addColorStop(1, 'rgba(22,20,16,0)');
+      grad.addColorStop(0, 'rgba(52,44,34,0.4)');
+      grad.addColorStop(0.65, 'rgba(56,48,38,0.2)');
+      grad.addColorStop(1, 'rgba(56,48,38,0)');
       g.fillStyle = grad;
       g.fillRect(0, 0, 128, 128);
     }
     // drips
-    for (let i = 0; i < 14; i++) {
-      const a = rng.next() * 7, r = rng.range(26, 52);
-      g.fillStyle = `rgba(20,18,15,${rng.range(0.2, 0.42)})`;
+    for (let i = 0; i < 10; i++) {
+      const a = rng.next() * 7, r = rng.range(24, 48);
+      g.fillStyle = `rgba(50,43,34,${rng.range(0.12, 0.26)})`;
       g.beginPath();
-      g.arc(64 + Math.cos(a) * r, 64 + Math.sin(a) * r, rng.range(1.5, 4.5), 0, 7);
+      g.arc(64 + Math.cos(a) * r, 64 + Math.sin(a) * r, rng.range(1.5, 3.5), 0, 7);
       g.fill();
     }
     const tex = toTexture(c, { srgb: false });

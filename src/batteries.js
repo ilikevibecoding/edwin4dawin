@@ -1121,11 +1121,11 @@ export function createBatteries(ctx) {
     ctx.world.colliders.push(makeColliderBox(
       pad.position.x + Math.cos(pad.heading) * -3.0, pad.position.z - Math.sin(pad.heading) * -3.0, 1.5, 1.5, pad.heading, 0, 13
     ));
+    // full-length box colliders — gapped cylinders let the player slip inside
+    // the canister mesh (camera fills with dark geometry)
     for (const [x, z, a] of [[4.4, -3.6, 0.5], [5.2, -1.2, 0.35]]) {
-      for (const s of [-3.2, 0, 3.2]) {
-        const w = padWorld(pad, x + Math.cos(a) * s, z - Math.sin(a) * s);
-        ctx.world.colliders.push(makeColliderCyl(w.x, w.z, 1.0, 0, 1.6));
-      }
+      const w = padWorld(pad, x, z);
+      ctx.world.colliders.push(makeColliderBox(w.x, w.z, 5.4, 0.95, pad.heading + a, 0, 1.7));
     }
 
     // per-frame hook: strobes blink, umbilical arm tracks battery state

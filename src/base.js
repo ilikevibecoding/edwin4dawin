@@ -39,8 +39,8 @@ export function createBase(ctx) {
     metal: new THREE.MeshStandardMaterial({ map: textures.metalPlate(), roughness: 0.55, metalness: 0.65 }),
     darkMetal: new THREE.MeshStandardMaterial({ color: 0x3c4046, roughness: 0.55, metalness: 0.6 }),
     steel: new THREE.MeshStandardMaterial({ color: 0x8b9299, roughness: 0.42, metalness: 0.85 }),
-    rubber: new THREE.MeshStandardMaterial({ color: 0x1a1b1c, roughness: 0.95 }),
-    cable: new THREE.MeshStandardMaterial({ color: 0x141516, roughness: 0.9 }),
+    rubber: new THREE.MeshStandardMaterial({ color: 0x24262a, roughness: 0.95 }),
+    cable: new THREE.MeshStandardMaterial({ color: 0x26282c, roughness: 0.85 }),
     glassDark: new THREE.MeshStandardMaterial({ color: 0x0c1116, roughness: 0.12, metalness: 0.9 }),
     hazard: new THREE.MeshStandardMaterial({ map: textures.hazardStripes(), roughness: 0.85 }),
     rock: new THREE.MeshStandardMaterial({ color: 0x9a8a70, roughness: 0.98, flatShading: true }),
@@ -328,7 +328,7 @@ export function createBase(ctx) {
     const markGeo = new THREE.PlaneGeometry(1, 1);
     markGeo.rotateX(-Math.PI / 2);
     const markMat = new THREE.MeshStandardMaterial({
-      map: textures.tireMarks(), transparent: true, opacity: 0.6, roughness: 0.95,
+      map: textures.tireMarks(), transparent: true, opacity: 0.34, roughness: 0.95,
       depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
     });
     const marks = [];
@@ -346,12 +346,14 @@ export function createBase(ctx) {
     const oilGeo = new THREE.PlaneGeometry(1, 1);
     oilGeo.rotateX(-Math.PI / 2);
     const oilMat = new THREE.MeshStandardMaterial({
-      map: textures.oilStain(), transparent: true, roughness: 0.7,
+      map: textures.oilStain(), transparent: true, opacity: 0.55, roughness: 0.7,
       depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
     });
+    // only where equipment actually parks (generators, truck bays) — stray
+    // stains in open walk lanes read as rendering glitches up close
     const oils = [];
-    for (const [x, z] of [[-46, 30], [3, 49], [47, 32], [-38, 24], [10, 41], [41, 35], [-14, -34], [-24, -37], [8, -18], [30, -20], [22, -6], [-6, 8], [16, 30], [-28, 10]]) {
-      oils.push({ x: x + rng.range(-1.5, 1.5), y: 0.028, z: z + rng.range(-1.5, 1.5), ry: rng.next() * TAU, s: rng.range(2.2, 4.6) });
+    for (const [x, z] of [[-46, 30], [3, 49], [47, 32], [-38, 24], [10, 41], [41, 35], [-14, -34], [-24, -37], [30, -20]]) {
+      oils.push({ x: x + rng.range(-1.5, 1.5), y: 0.028, z: z + rng.range(-1.5, 1.5), ry: rng.next() * TAU, s: rng.range(1.5, 2.7) });
     }
     const oilMesh = makeInstanced(oilGeo, oilMat, oils, { shadow: false });
     oilMesh.renderOrder = 1;
@@ -367,10 +369,10 @@ export function createBase(ctx) {
     // tar expansion strips crossing the big pour
     const tarGeo = new THREE.PlaneGeometry(1, 1);
     tarGeo.rotateX(-Math.PI / 2);
-    const tarMat = new THREE.MeshStandardMaterial({ color: 0x232324, roughness: 0.98, polygonOffset: true, polygonOffsetFactor: -1 });
+    const tarMat = new THREE.MeshStandardMaterial({ color: 0x4a4741, roughness: 0.98, polygonOffset: true, polygonOffsetFactor: -1 });
     const tars = [];
-    for (const x of [-40, -12, 16, 44]) tars.push({ x, y: 0.026, z: 0, ry: 0, sx: 0.18, sz: 96 });
-    for (const z of [-24, 12] ) tars.push({ x: 0, y: 0.026, z, ry: Math.PI / 2, sx: 0.18, sz: 120 });
+    for (const x of [-40, -12, 16, 44]) tars.push({ x, y: 0.026, z: 0, ry: 0, sx: 0.13, sz: 96 });
+    for (const z of [-24, 12] ) tars.push({ x: 0, y: 0.026, z, ry: Math.PI / 2, sx: 0.13, sz: 120 });
     makeInstanced(tarGeo, tarMat, tars, { shadow: false });
 
     // rutted tire tracks in the sand: gate approach + truck park exits
@@ -1054,15 +1056,17 @@ export function createBase(ctx) {
       const tw = new THREE.Group();
       tw.position.set(x, 0, z);
       group.add(tw);
-      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.22, 11, 8), M.darkMetal);
+      // galvanized pole — a pure-black 11m silhouette against the sky reads
+      // as a rendering artifact from across the apron
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.22, 11, 8), M.steel);
       mast.position.y = 5.5;
       mast.castShadow = true;
       tw.add(mast);
       colliders.push(makeColliderCyl(x, z, 0.45, 0, 11));
-      const cross = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.16, 0.16), M.darkMetal);
+      const cross = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.16, 0.16), M.steel);
       cross.position.y = 10.6;
       tw.add(cross);
-      const headMat = new THREE.MeshStandardMaterial({ color: 0x606468, emissive: 0x000000, roughness: 0.5, metalness: 0.4 });
+      const headMat = new THREE.MeshStandardMaterial({ color: 0x83888e, emissive: 0x000000, roughness: 0.5, metalness: 0.4 });
       const headGeo = mergeGeoms([-0.8, 0, 0.8].map((s) =>
         placeGeo(new THREE.BoxGeometry(0.5, 0.34, 0.3), s, 10.45, 0.15, 0.7)
       ));
@@ -1277,13 +1281,26 @@ export function createBase(ctx) {
     makeInstanced(new THREE.BoxGeometry(1, 1, 1), caseMat, caseItems);
     colliders.push(makeColliderCyl(-26.2, -12, 1.6, 0, 1.2));
 
-    // cable protector humps crossing apron
-    for (const [x, z, len, rot] of [[-10, 6, 18, 0.35], [18, 22, 14, -0.5]]) {
-      const hump = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, len, 8, 1, false, 0, Math.PI), M.rubber);
-      hump.rotation.z = Math.PI / 2;
-      hump.rotation.y = rot;
-      hump.position.set(x, 0.045, z);
-      group.add(hump);
+    // cable protector ramps crossing the apron: yellow/black hazard tops so
+    // they read as equipment (a plain black hump looks like a glitch stripe)
+    {
+      const hazTex = textures.hazardStripes().clone();
+      hazTex.needsUpdate = true;
+      hazTex.repeat.set(6, 1);
+      const hazMat = new THREE.MeshStandardMaterial({ map: hazTex, roughness: 0.85 });
+      const topGeo = new THREE.PlaneGeometry(1, 0.3);
+      topGeo.rotateX(-Math.PI / 2);
+      for (const [x, z, len, rot] of [[-10, 6, 18, 0.35], [18, 22, 14, -0.5]]) {
+        const body = new THREE.Mesh(new THREE.BoxGeometry(len, 0.075, 0.46), M.rubber);
+        body.position.set(x, 0.037, z);
+        body.rotation.y = rot;
+        group.add(body);
+        const top = new THREE.Mesh(topGeo, hazMat);
+        top.scale.x = len;
+        top.rotation.y = rot;
+        top.position.set(x, 0.078, z);
+        group.add(top);
+      }
     }
 
     // ---------------- clutter zones: pallets, crates, barrels, drums,
@@ -1454,7 +1471,9 @@ export function createBase(ctx) {
       colliders.push(makeColliderBox(66, 16, 2.4, 2.9, -0.52, 0, 2.4));
     }
 
-    // work-light masts near the clutter zones (instanced)
+    // work-light masts near the clutter zones (instanced). Galvanized pole +
+    // gray housings with visible lamp faces — an all-black silhouette reads
+    // as a rendering artifact against the sky.
     const mastGeo = mergeGeoms([
       placeGeo(new THREE.CylinderGeometry(0.055, 0.09, 5.6, 7), 0, 2.8, 0),
       placeGeo(new THREE.BoxGeometry(1.3, 0.08, 0.08), 0, 5.42, 0),
@@ -1464,7 +1483,14 @@ export function createBase(ctx) {
     const mastItems = [
       { x: 13, z: 65, ry: 2.6 }, { x: -39.5, z: -11.5, ry: 0.8 }, { x: 60, z: 1.5, ry: -1.9 },
     ];
-    makeInstanced(mastGeo, M.darkMetal, mastItems);
+    makeInstanced(mastGeo, M.steel, mastItems);
+    // lamp faces (slightly warm, faint emissive so they read as glass)
+    const faceGeo = mergeGeoms([
+      placeGeo(new THREE.PlaneGeometry(0.28, 0.14), -0.48, 5.3, 0.185, 0.55),
+      placeGeo(new THREE.PlaneGeometry(0.28, 0.14), 0.48, 5.3, 0.185, 0.55),
+    ]);
+    const faceMat = new THREE.MeshStandardMaterial({ color: 0xd8d2b8, emissive: 0xb9a878, emissiveIntensity: 0.25, roughness: 0.4 });
+    makeInstanced(faceGeo, faceMat, mastItems, { shadow: false });
     for (const it of mastItems) colliders.push(makeColliderCyl(it.x, it.z, 0.3, 0, 5.6));
 
     // fuel point signage
