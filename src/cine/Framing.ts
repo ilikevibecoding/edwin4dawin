@@ -130,7 +130,7 @@ export function overShoulder(
   const perp = perpendicular(dir).multiplyScalar(side);
   const position = fgEyes
     .clone()
-    .addScaledVector(dir, -(opts.distance ?? 1.15))
+    .addScaledVector(dir, -(opts.distance ?? 1.9))
     .addScaledVector(perp, 0.46);
   position.y += opts.rise ?? 0.1;
   const shot = applyEyeline(
@@ -203,7 +203,7 @@ export function lowAngle(actor: Actor, opts: { lens?: number; distance?: number;
   const side = perpendicular(facing);
   const angle = opts.angle ?? 0.3;
   const dir = facing.clone().multiplyScalar(Math.cos(angle)).addScaledVector(side, Math.sin(angle)).normalize();
-  const distance = opts.distance ?? 2.8;
+  const distance = opts.distance ?? 3.0;
   const position = actor.root.position.clone().addScaledVector(dir, distance);
   position.y = actor.root.position.y + 0.85;
   return applyEyeline(

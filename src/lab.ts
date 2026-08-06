@@ -14,7 +14,7 @@ import { HouseholdSet } from './sets/HouseholdSet';
 import { PlazaSet } from './sets/PlazaSet';
 import { ActorFactory } from './actors/Cast';
 import type { SceneSet } from './sets/SceneSet';
-import { closeUp, establish, lowAngle, medium, overShoulder, twoShot, type Shot } from './cine/Framing';
+import { closeUp, establish, lowAngle, overShoulder, single, twoShot, type Shot } from './cine/Framing';
 
 type SetKind = 'rooftop' | 'household' | 'plaza';
 
@@ -152,7 +152,7 @@ const SHOTS: ShotDef[] = [
     subject: 'deviant',
     keySide: 1,
     set: 'rooftop',
-    build: (set) => overShoulder(set.actor('orion'), set.actor('deviant'), { lens: 52, side: 1 }),
+    build: (set) => overShoulder(set.actor('orion'), set.actor('deviant'), { lens: 40, side: 1 }),
   },
   { name: '03_orion_cu', subject: 'orion', keySide: -1, set: 'rooftop', build: (set) => closeUp(set.actor('orion'), { lookingAt: (set.marks.deviant as THREE.Vector3) }) },
   {
@@ -167,14 +167,14 @@ const SHOTS: ShotDef[] = [
     subject: 'child',
     keySide: -1,
     set: 'rooftop',
-    build: (set) => medium(set.actor('child'), { lookingAt: (set.marks.standoff as THREE.Vector3), lens: 58, distance: 2.0 }),
+    build: (set) => single(set.actor('child'), { lookingAt: (set.marks.standoff as THREE.Vector3), lens: 85, distance: 2.6, angle: 1.15 }),
   },
   {
     name: '06_two_shot',
     subject: 'deviant',
     keySide: 1,
     set: 'rooftop',
-    build: (set) => twoShot(set.actor('deviant'), set.actor('child'), { lens: 40, side: -1, distance: 3.4 }),
+    build: (set) => twoShot(set.actor('deviant'), set.actor('child'), { lens: 40, side: 1, distance: 3.4 }),
   },
   {
     name: '07_low_wet',
@@ -218,7 +218,7 @@ const SHOTS: ShotDef[] = [
         focusOn: set.actor('atlas').getChestPosition(new THREE.Vector3()),
       }),
   },
-  { name: '13_plaza_atlas', subject: 'atlas', keySide: -1, set: 'plaza', build: (set) => closeUp(set.actor('atlas'), { lens: 75, distance: 1.3 }) },
+  { name: '13_plaza_atlas', subject: 'atlas', keySide: 1, set: 'plaza', build: (set) => closeUp(set.actor('atlas'), { lens: 75, distance: 1.3, angle: -0.42 }) },
   {
     name: '14_plaza_line',
     subject: 'commander',

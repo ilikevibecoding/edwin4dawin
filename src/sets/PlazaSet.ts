@@ -52,7 +52,7 @@ export class PlazaSet extends SceneSet {
       // Kept low for the same reason as the rooftop: image-based light is
       // omnidirectional, and at high intensity it flattens the whole square.
       envIntensity: 1.4,
-      backgroundIntensity: 0.4,
+      backgroundIntensity: 1.0,
       beams: [
         { azimuth: 1.2, elevation: 0.55, spread: 0.28, intensity: 0.3, color: new THREE.Color(0.55, 0.75, 1) },
         { azimuth: 5.0, elevation: 0.42, spread: 0.3, intensity: 0.26, color: new THREE.Color(1, 0.45, 0.4) },
@@ -70,7 +70,7 @@ export class PlazaSet extends SceneSet {
     this.initWetFloor({ planeY: 0, wetness: 1, strength: 0.4 });
     if (this.groundMaterial) this.wetFloor?.attach(this.groundMaterial);
     this.initHaze(12, { color: 0x9fc0e8, radius: 18, height: 4.2, scale: 11, opacity: 0.055 });
-    this.initCharacterLights({ keyColor: 0xd0e2ff, kickerColor: 0xff8a44, keyIntensity: 28, kickerIntensity: 24 });
+    this.initCharacterLights({ keyColor: 0xd0e2ff, kickerColor: 0xff8a44, keyIntensity: 30, kickerIntensity: 14, bounceIntensity: 1.2 });
     if (this.rain) this.wetFloor?.excludeFromReflection(this.rain.group);
     if (this.haze) this.wetFloor?.excludeFromReflection(this.haze.group);
   }
@@ -83,7 +83,7 @@ export class PlazaSet extends SceneSet {
       map: maps.map,
       normalMap: maps.normalMap,
       roughnessMap: maps.roughnessMap,
-      color: 0x2c3037,
+      color: 0x22262c,
       roughness: 0.44,
       metalness: 0.02,
       envMapIntensity: 1.1,
@@ -261,13 +261,13 @@ export class PlazaSet extends SceneSet {
   }
 
   private buildLights(): void {
-    this.scene.add(new THREE.HemisphereLight(0x6c7a90, 0x121519, 1.5));
-    this.scene.add(new THREE.AmbientLight(0x1d2430, 0.45));
+    this.scene.add(new THREE.HemisphereLight(0x6c7a90, 0x121519, 0.6));
+    this.scene.add(new THREE.AmbientLight(0x1d2430, 0.18));
 
     // Broad frontal wash over the crowd. The police line backlights them, which
     // is the shot, but without something on their faces the square reads as an
     // empty stage full of black cut-outs.
-    const crowdFill = new THREE.SpotLight(0xa8c2e6, 900, 34, 0.85, 0.95, 2);
+    const crowdFill = new THREE.SpotLight(0xa8c2e6, 240, 34, 0.85, 0.95, 2);
     crowdFill.position.set(-6, 9, 14);
     crowdFill.target.position.set(0, 1.2, 2);
     this.scene.add(crowdFill, crowdFill.target);
@@ -287,10 +287,10 @@ export class PlazaSet extends SceneSet {
 
     // Police floodlights: hard backlight that turns the crowd into silhouettes.
     for (const x of [-7, 7]) {
-      const flood = new THREE.SpotLight(0xdcebff, 230, 40, 0.42, 0.5, 2);
+      const flood = new THREE.SpotLight(0xdcebff, 700, 40, 0.42, 0.5, 2);
       flood.position.set(x, 7.5, -13.5);
       flood.target.position.set(x * 0.3, 1.2, 2);
-      flood.userData.base = 230;
+      flood.userData.base = 700;
       this.lineLights.push(flood);
       this.scene.add(flood, flood.target);
 

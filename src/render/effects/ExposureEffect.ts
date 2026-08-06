@@ -15,6 +15,11 @@ uniform float uFlash;
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
   vec3 col = inputColor.rgb * uExposure * uTint;
   col += uFlashColor * uFlash;
+  // Soft ceiling on scene-referred values. Bloom downstream thresholds in linear
+  // space, so a single unbounded specular pinpoint at 10^3 turns into a clipped
+  // white disc a hundred pixels across. This costs about 6% at linear 1.0 and
+  // asymptotes at 16, which the filmic curve maps to white anyway.
+  col = col / (1.0 + col / 16.0);
   outputColor = vec4(col, inputColor.a);
 }
 `;

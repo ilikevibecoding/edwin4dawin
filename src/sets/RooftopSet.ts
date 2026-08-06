@@ -46,7 +46,7 @@ export class RooftopSet extends SceneSet {
     deviant: new THREE.Vector3(1.15, 0, -4.15),
     hostage: new THREE.Vector3(1.9, 0, -4.85),
     edge: new THREE.Vector3(1.6, 0, -5.6),
-    troopers: [new THREE.Vector3(-5.4, 0, 1.4), new THREE.Vector3(-6.3, 0, 3.0)],
+    troopers: [new THREE.Vector3(-6.8, 0, 3.4), new THREE.Vector3(-7.4, 0, 4.9)],
   };
 
   private beacon: THREE.Mesh | null = null;
@@ -83,18 +83,19 @@ export class RooftopSet extends SceneSet {
         { azimuth: 4.4, elevation: 0.3, spread: 0.5, intensity: 0.1, color: new THREE.Color(1, 0.5, 0.3) },
       ],
     });
-    this.initFog(0x121b26, FOG.rooftopDensity);
+    this.initFog(0x2b3a4e, FOG.rooftopDensity);
 
     this.buildDeck();
     this.buildEdgeAndSkyline();
     this.buildPlant();
     this.buildLights();
 
-    this.initRain({ groundY: 0, boxSize: 40, color: 0xa9c6e8, intensity: 1 });
-    this.initWetFloor({ planeY: 0, wetness: 1, strength: 0.5 });
+    this.initRain({ groundY: 0, boxSize: 26, color: 0xa9c6e8, intensity: 1 });
+    this.initWetFloor({ planeY: 0, wetness: 1, strength: 0.85 });
     if (this.floorMaterial) this.wetFloor?.attach(this.floorMaterial);
+    for (const mat of this.puddleMaterials) this.wetFloor?.attach(mat);
     this.initHaze(10, { color: 0x6d88b4, radius: 14, height: 3.6, scale: 7, opacity: 0.05 });
-    this.initCharacterLights({ keyColor: 0xbcd4ff, kickerColor: 0xff9a52, keyIntensity: 42, kickerIntensity: 30 });
+    this.initCharacterLights({ keyColor: 0xbcd4ff, kickerColor: 0xff9a52, keyIntensity: 42, kickerIntensity: 19, bounceIntensity: 1.4 });
     this.lightSubject(this.marks.standoff.clone().setY(1.5), { keySide: -1 });
 
     // Rain and haze must not appear in the mirror pass.
@@ -118,10 +119,10 @@ export class RooftopSet extends SceneSet {
         roughness: 0.38,
         metalness: 0.0,
         envMapIntensity: 1.5,
-        normalScale: new THREE.Vector2(0.24, 0.24),
+        normalScale: new THREE.Vector2(0.55, 0.55),
       }),
-      5,
-      4
+      14,
+      12
     );
     this.floorMaterial = floorMat;
 
@@ -140,26 +141,31 @@ export class RooftopSet extends SceneSet {
     this.scene.add(slab);
     this.reflect(slab);
 
-    for (const p of [
-      new THREE.Vector3(-2.2, 0.012, 2.6),
-      new THREE.Vector3(2.5, 0.012, -1.4),
-      new THREE.Vector3(-0.4, 0.012, -3.2),
-      new THREE.Vector3(4.4, 0.012, 2.2),
-      new THREE.Vector3(-4.8, 0.012, -1.2),
-    ]) {
-      const pool = puddle(0.85 + Math.random() * 1.5);
-      pool.position.copy(p);
-      pool.rotation.y = Math.random() * Math.PI;
+    // Fixed sizes and rotations rather than Math.random: an unseeded set makes
+    // two captures of the same code differ, which makes look development
+    // impossible to judge.
+    for (const [x, z, radius, spin] of [
+      [-2.2, 2.6, 1.35, 0.4],
+      [2.5, -1.4, 1.9, 2.1],
+      [-0.4, -3.2, 1.05, 1.2],
+      [4.4, 2.2, 2.2, 2.9],
+      [-4.8, -1.2, 1.6, 0.8],
+    ] as [number, number, number, number][]) {
+      const pool = puddle(radius);
+      pool.position.set(x, 0.012, z);
+      pool.rotation.y = spin;
+      const mat = (pool.material as THREE.MeshStandardMaterial).clone();
+      mat.roughness = 0.05;
+      mat.metalness = 0.0;
+      mat.envMapIntensity = 1.4;
+      pool.material = mat;
+      this.puddleMaterials.push(mat);
       this.scene.add(pool);
-      if (this.floorMaterial) {
-        // Puddles share the wet shader so they reflect too.
-        const mat = (pool.material as THREE.MeshStandardMaterial).clone();
-        mat.roughness = 0.07;
-        mat.metalness = 0.1;
-        pool.material = mat;
-      }
     }
   }
+
+  /** Standing water shares the wet-floor shader, so it mirrors the set too. */
+  private puddleMaterials: THREE.MeshStandardMaterial[] = [];
 
   private buildEdgeAndSkyline(): void {
     // Parapets on three sides; the east edge (-z) is open for the standoff.
@@ -203,8 +209,8 @@ export class RooftopSet extends SceneSet {
           emissiveMap: nearTowerMaps.emissiveMap,
           roughnessMap: nearTowerMaps.roughnessMap,
           emissive: new THREE.Color(0xffffff),
-          emissiveIntensity: 2.1,
-          color: 0x0c0f13,
+          emissiveIntensity: 1.5,
+          color: 0x1e2530,
           roughness: 0.7,
           metalness: 0.25,
         }),
@@ -284,9 +290,9 @@ export class RooftopSet extends SceneSet {
     // the wet deck catches them, and off to the sides so they cross the acting
     // area rather than flattening it from the camera's side.
     for (const spec of [
-      { at: new THREE.Vector3(-7.6, 0, 5.0), aim: new THREE.Vector3(2.4, 0.0, -1.4), intensity: 380, color: 0xfff2e0, shadows: true },
-      { at: new THREE.Vector3(7.4, 0, 3.4), aim: new THREE.Vector3(-1.2, 0.1, -3.4), intensity: 240, color: 0xe4f0ff, shadows: false },
-      { at: new THREE.Vector3(-7.8, 0, -4.6), aim: new THREE.Vector3(2.8, 0.1, 3.2), intensity: 200, color: 0xd8e8ff, shadows: false },
+      { at: new THREE.Vector3(-7.6, 0, 5.0), aim: new THREE.Vector3(2.4, 0.0, -1.4), intensity: 210, color: 0xfff2e0, shadows: true },
+      { at: new THREE.Vector3(7.4, 0, 3.4), aim: new THREE.Vector3(-1.2, 0.1, -3.4), intensity: 110, color: 0xe4f0ff, shadows: false },
+      { at: new THREE.Vector3(-7.8, 0, -4.6), aim: new THREE.Vector3(2.8, 0.1, 3.2), intensity: 90, color: 0xd8e8ff, shadows: false },
     ]) {
       const flood = workLight(this.kit, {
         color: spec.color,
@@ -326,7 +332,9 @@ export class RooftopSet extends SceneSet {
 
     const seat = chair(this.kit);
     seat.position.copy(this.marks.clueChair);
+    // Tipped onto its back, and lifted so the legs do not pass through the deck.
     seat.rotation.set(-1.3, 0.6, 0.3);
+    seat.position.y += 0.24;
     this.scene.add(seat);
     this.reflect(seat);
 
@@ -340,9 +348,9 @@ export class RooftopSet extends SceneSet {
     // Overcast key from the sky, cool and soft.
     // Ground colour is deliberately not black: downward-facing surfaces still
     // receive bounce from a wet deck, and without it half the frame crushes.
-    const ambient = new THREE.HemisphereLight(0x5a6d86, 0x0d1014, 1.5);
+    const ambient = new THREE.HemisphereLight(0x5a6d86, 0x0d1014, 0.85);
     // A flat ambient term keeps deep interiors and undersides readable.
-    this.scene.add(new THREE.AmbientLight(0x1b2430, 0.5));
+    this.scene.add(new THREE.AmbientLight(0x1b2430, 0.28));
     this.scene.add(ambient);
 
     // Moon/skylight direction: the only shadow-caster wide enough for the deck.
@@ -408,7 +416,7 @@ export class RooftopSet extends SceneSet {
     // broad soft source over the standoff keeps everyone else in the frame
     // readable instead of dropping them to silhouette the moment they stop
     // being the subject.
-    const areaKey = new THREE.SpotLight(0xb4c8ea, 420, 26, 0.8, 0.9, 2);
+    const areaKey = new THREE.SpotLight(0xb4c8ea, 150, 26, 0.8, 0.9, 2);
     areaKey.position.set(-4.5, 4.6, 5.6);
     areaKey.target.position.set(0.8, 1.2, -3.5);
     areaKey.castShadow = this.quality.shadows;
@@ -423,13 +431,13 @@ export class RooftopSet extends SceneSet {
 
     // Hard cyan rim from the tower behind the standoff: separates the figures
     // from the skyline, which is the single most important light in the scene.
-    const rimLight = new THREE.SpotLight(0x9fd4ff, 70, 22, 0.7, 0.65, 2);
-    rimLight.position.set(4.2, 4.6, -9.5);
+    const rimLight = new THREE.SpotLight(0x9fd4ff, 260, 22, 0.42, 0.22, 2);
+    rimLight.position.set(2.4, 3.2, -8.4);
     rimLight.target.position.set(0.4, 1.4, -1.5);
     this.scene.add(rimLight, rimLight.target);
 
     // Low sodium fill from the stairwell side, so shadow sides keep detail.
-    const fill = new THREE.SpotLight(PALETTE.sodium, 20, 16, 0.9, 0.8, 2);
+    const fill = new THREE.SpotLight(PALETTE.sodium, 8, 16, 0.9, 0.8, 2);
     fill.position.set(-5.0, 2.6, 4.2);
     fill.target.position.set(0.2, 1.3, 0.4);
     this.scene.add(fill, fill.target);

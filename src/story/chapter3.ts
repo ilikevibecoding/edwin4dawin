@@ -175,6 +175,9 @@ export async function playChapter3(d: Director, set: PlazaSet, factory: ActorFac
   d.sfx('thunder', 0.7);
   await d.say(commander, 'You have sixty seconds to disperse. After that, every unit in this square is scrap.', 'ch3_cmd_1', { hold: 4.4 });
 
+  // Drop the raised fist before the close-up, or the forearm crosses the face.
+  atlas.clearPose('raiseFist', 0.6);
+  atlas.clearPose('talkEmphatic', 0.6);
   d.cut(d.shots.closeUp(atlas, { lookingAt: marks.commander, lens: 82, distance: 1.05 }), { handheld: 0.8 });
   d.light(atlas, -1);
   d.sfx('heartbeat', 0.9);

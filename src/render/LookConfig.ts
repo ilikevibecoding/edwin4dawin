@@ -28,51 +28,51 @@ export interface GradeConfig {
 export const GRADE: Record<string, GradeConfig> = {
   // Chapter 1 — rooftop, night, downpour, neon bounce.
   noirRain: {
-    exposure: 1.15,
+    exposure: 1.05,
     tint: [0.94, 1.0, 1.12],
     contrast: 1.22,
     saturation: 1.04,
     shadowTint: [0.68, 0.82, 1.0],
     highlightTint: [1.0, 0.93, 0.82],
     splitBalance: 0.34,
-    lift: 0.022,
+    lift: 0.012,
     vignette: 0.38,
     vignetteSoftness: 0.5,
     grain: 0.02,
     chromaticAberration: 0.0011,
-    anamorphic: 0.55,
+    anamorphic: 0.28,
   },
   // Chapter 2 — domestic interior, tungsten lamps, storm outside.
   domestic: {
-    exposure: 1.0,
+    exposure: 1.35,
     tint: [1.05, 0.99, 0.95],
     contrast: 1.1,
     saturation: 1.0,
     shadowTint: [0.42, 0.58, 0.95],
     highlightTint: [1.0, 0.82, 0.6],
     splitBalance: 0.5,
-    lift: 0.024,
+    lift: 0.013,
     vignette: 0.44,
     vignetteSoftness: 0.5,
     grain: 0.018,
     chromaticAberration: 0.0008,
-    anamorphic: 0.32,
+    anamorphic: 0.2,
   },
   // Chapter 3 — plaza, riot lights, searchlights, snow-rain mix.
   uprising: {
-    exposure: 0.86,
+    exposure: 1.15,
     tint: [1.0, 0.98, 1.06],
     contrast: 1.2,
     saturation: 1.08,
     shadowTint: [0.66, 0.8, 1.0],
     highlightTint: [1.0, 0.72, 0.5],
     splitBalance: 0.38,
-    lift: 0.02,
+    lift: 0.012,
     vignette: 0.4,
     vignetteSoftness: 0.48,
     grain: 0.022,
     chromaticAberration: 0.0013,
-    anamorphic: 0.7,
+    anamorphic: 0.34,
   },
   // Android interface / mind-space: clean, cold, low grain.
   interface: {
@@ -117,10 +117,12 @@ export const PALETTE = {
 } as const;
 
 export const BLOOM = {
-  intensity: 0.95,
-  threshold: 0.82,
-  smoothing: 0.4,
-  radius: 0.7,
+  // Thresholded in scene-referred linear, so the number is an exposure value,
+  // not a display level: anything above roughly one stop over key blooms.
+  intensity: 0.6,
+  threshold: 1.3,
+  smoothing: 0.5,
+  radius: 0.72,
 };
 
 export const DOF = {
@@ -136,17 +138,17 @@ export const FOG = {
   // Exponential-squared fog: at 0.03 a city 150 m out is completely erased, which
   // costs the rooftop its best background. Kept low enough that the near towers
   // stay legible and the far skyline dissolves.
-  rooftopDensity: 0.0075,
+  rooftopDensity: 0.011,
   domesticDensity: 0.012,
-  plazaDensity: 0.014,
+  plazaDensity: 0.026,
 };
 
 export const RAIN = {
-  streakLength: 0.46,
+  streakLength: 0.6,
   streakWidth: 0.0075,
   fallSpeed: 22,
   windX: 2.4,
   windZ: 0.6,
-  opacity: 0.34,
+  opacity: 0.46,
   lensDrops: 0.55,
 };

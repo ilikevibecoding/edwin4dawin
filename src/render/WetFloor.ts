@@ -155,12 +155,15 @@ export class WetFloor {
              reflUv += wetN2.xy * uReflDistort * uWetness;
              vec3 reflCol = texture2D( uRefl, clamp( reflUv, 0.002, 0.998 ) ).rgb;
              float ndv = clamp( dot( normalize( vViewPosition ), normal ), 0.0, 1.0 );
-             float fres = pow( 1.0 - ndv, 4.0 );
+             // A fourth-power Fresnel returns almost nothing at the incidence a
+             // standing camera actually sees the ground at, which is how a wet
+             // deck ends up reflecting neither the neon nor the figures on it.
+             float fres = pow( 1.0 - ndv, 2.2 );
              // Grazing angles reflect most; roughness kills the mirror.
              float gloss = 1.0 - clamp( roughnessFactor, 0.0, 1.0 );
              // Real wet ground returns less than the sky it mirrors, and only
              // approaches mirror strength at grazing angles.
-             float amount = uReflStrength * uWetness * ( 0.05 + fres * 0.8 ) * mix( 0.2, 1.0, gloss );
+             float amount = uReflStrength * uWetness * ( 0.12 + fres * 0.8 ) * mix( 0.2, 1.0, gloss );
              float fade = mix( 1.0, uReflFade, clamp( length( vWetWorldPos.xz - cameraPosition.xz ) / 40.0, 0.0, 1.0 ) );
              outgoingLight += reflCol * 0.78 * amount * fade;
            }

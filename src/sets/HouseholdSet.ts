@@ -47,7 +47,7 @@ export class HouseholdSet extends SceneSet {
       cloudBrightness: 0.4,
       stars: 0.01,
       envIntensity: 0.85,
-      backgroundIntensity: 0.32,
+      backgroundIntensity: 0.12,
     });
     this.initFog(0x141a22, FOG.domesticDensity);
 
@@ -57,11 +57,10 @@ export class HouseholdSet extends SceneSet {
 
     // Rain belongs outside the glass. The volume is parked beyond the back wall
     // so it reads through the window without falling through the ceiling.
-    this.initRain({ groundY: -3.5, boxSize: 16, color: 0x9fbcdc, intensity: 1 });
-    if (this.rain) this.rain.group.position.set(0.6, 0, -9.5);
-    this.initWetFloor({ planeY: 0, wetness: 0.32, strength: 0.4 });
+    this.initRain({ groundY: -3.5, boxSize: 16, color: 0x9fbcdc, intensity: 0 });
+    this.initWetFloor({ planeY: 0, wetness: 0.12, strength: 0.22 });
     this.initHaze(5, { color: 0xffb066, radius: 4.5, height: 2.4, scale: 3.6, opacity: 0.035 });
-    this.initCharacterLights({ keyColor: 0xffcf9a, kickerColor: 0x9fc4ff, keyIntensity: 16, kickerIntensity: 12, range: 5 });
+    this.initCharacterLights({ keyColor: 0xffcf9a, kickerColor: 0x9fc4ff, keyIntensity: 18, kickerIntensity: 8, bounceIntensity: 1.0, range: 5 });
   }
 
   private buildShell(): void {
@@ -88,7 +87,7 @@ export class HouseholdSet extends SceneSet {
     const wallMat = new THREE.MeshStandardMaterial({
       map: floorMaps.map,
       normalMap: floorMaps.normalMap,
-      color: 0x39352f,
+      color: 0x4a463e,
       roughness: 0.94,
       metalness: 0.02,
       envMapIntensity: 0.6,
@@ -112,7 +111,7 @@ export class HouseholdSet extends SceneSet {
     mkWall(2.6, 0.85, [0.65, 0.42, -4.0], 0);
     mkWall(8.2, 2.9, [-4.4, 1.45, 0], Math.PI / 2);
     mkWall(3.0, 2.9, [4.4, 1.45, -2.4], Math.PI / 2);
-    mkWall(9.0, 0.2, [0, 2.95, 0], 0).rotation.x = Math.PI / 2;
+    mkWall(9.0, 9.0, [0, 2.95, 0], 0).rotation.x = Math.PI / 2;
 
     // Window: glass, frame, and the storm behind it.
     const glass = new THREE.Mesh(
@@ -265,7 +264,7 @@ export class HouseholdSet extends SceneSet {
   }
 
   private buildLights(): void {
-    this.scene.add(new THREE.HemisphereLight(0x2a3646, 0x0b0a09, 0.35));
+    this.scene.add(new THREE.HemisphereLight(0x2a3646, 0x0b0a09, 0.9));
 
     this.lampLight = new THREE.PointLight(PALETTE.sodium, 16, 7.5, 2);
     this.lampLight.position.set(1.95, 1.6, 1.35);

@@ -111,11 +111,18 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
     }
     smear /= max(w, 1e-4);
     float lum = dot(smear, vec3(0.2126, 0.7152, 0.0722));
-    col += smear * smoothstep(0.55, 1.0, lum) * uAnamorphic * 0.5;
+    col += smear * smoothstep(0.85, 1.0, lum) * uAnamorphic * 0.5;
   }
 
-  // Contrast around mid grey, then saturation.
-  col = (col - 0.5) * uContrast + 0.5;
+  // Contrast around scene mid grey, not display mid grey.
+  //
+  // Pivoting at 0.5 pushes everything below 0.09 negative at the contrasts this
+  // grade uses, and negative values survive the split tone and the vignette and
+  // are then clamped to zero — which is how a night scene ends up with half its
+  // pixels carrying no information at all. Pivoting at 18% grey moves the zero
+  // crossing down into the noise floor, and clamping here means the print black
+  // applied at the end actually lands.
+  col = max((col - 0.18) * uContrast + 0.18, 0.0);
   float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
   col = mix(vec3(lum), col, uSaturation);
 

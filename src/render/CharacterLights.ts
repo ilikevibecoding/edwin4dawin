@@ -35,19 +35,22 @@ export class CharacterLights {
   private bounce: THREE.PointLight;
   private focus = new THREE.Vector3();
   /** Direction the key comes from, rotated per shot for variety. */
-  private keyAzimuth = 0.9;
+  private keyAzimuth = 1.15;
+  /** Per-set intensities, so scaling the rig does not discard them. */
+  private base: { key: number; kicker: number; bounce: number };
+  /** The rig stays dark until it has been pointed at something. */
+  private aimed = false;
+  private scale = 1;
 
   constructor(opts: CharacterLightOptions = {}) {
     const range = opts.range ?? 7;
+    this.base = {
+      key: opts.keyIntensity ?? 26,
+      kicker: opts.kickerIntensity ?? 11,
+      bounce: opts.bounceIntensity ?? 1.2,
+    };
 
-    this.key = new THREE.SpotLight(
-      opts.keyColor ?? 0xc8dcff,
-      opts.keyIntensity ?? 26,
-      range,
-      0.85,
-      0.55,
-      2
-    );
+    this.key = new THREE.SpotLight(opts.keyColor ?? 0xc8dcff, 0, range, 0.85, 0.55, 2);
     this.key.castShadow = opts.shadows ?? true;
     if (this.key.shadow) {
       const size = opts.shadowMapSize ?? 1024;
@@ -58,17 +61,12 @@ export class CharacterLights {
       this.key.shadow.camera.far = range * 1.5;
     }
 
-    this.kicker = new THREE.SpotLight(
-      opts.kickerColor ?? PALETTE.sodium,
-      opts.kickerIntensity ?? 18,
-      range,
-      0.8,
-      0.7,
-      2
-    );
+    // Harder and tighter than the key: this is the edge that separates a figure
+    // from a black background, and a wide soft cone does not cut one.
+    this.kicker = new THREE.SpotLight(opts.kickerColor ?? PALETTE.sodium, 0, range, 0.5, 0.3, 2);
     this.kicker.castShadow = false;
 
-    this.bounce = new THREE.PointLight(opts.bounceColor ?? 0x2b4a6e, opts.bounceIntensity ?? 4, range, 2);
+    this.bounce = new THREE.PointLight(opts.bounceColor ?? 0x2b4a6e, 0, range, 2);
 
     this.group.add(this.key, this.key.target, this.kicker, this.kicker.target, this.bounce);
   }
@@ -80,6 +78,10 @@ export class CharacterLights {
    */
   aim(subject: THREE.Vector3, cameraPosition: THREE.Vector3, opts: { keySide?: number; height?: number } = {}): void {
     this.focus.copy(subject);
+    if (!this.aimed) {
+      this.aimed = true;
+      this.applyIntensities();
+    }
     const toCamera = new THREE.Vector3().subVectors(cameraPosition, subject);
     toCamera.y = 0;
     if (toCamera.lengthSq() < 1e-6) toCamera.set(0, 0, 1);
@@ -100,26 +102,36 @@ export class CharacterLights {
     this.key.target.position.copy(subject);
     this.key.target.updateMatrixWorld();
 
-    // Kicker: behind the subject on the opposite side, low and warm.
+    // Kicker: behind the subject on the opposite side, low and warm. Placed at
+    // the same distance as the key, so the intensities in the set definitions
+    // mean what they say instead of being scaled by inverse square.
     const kickDir = toCamera
       .clone()
       .multiplyScalar(-0.85)
       .addScaledVector(side, -0.55 * keySide)
       .normalize();
-    this.kicker.position.copy(subject).addScaledVector(kickDir, 2.2);
-    this.kicker.position.y = subject.y + 0.9;
+    this.kicker.position.copy(subject).addScaledVector(kickDir, 3.1);
+    this.kicker.position.y = subject.y + 0.55;
     this.kicker.target.position.copy(subject);
     this.kicker.target.updateMatrixWorld();
 
-    // Bounce: in front, below, very dim.
+    // Bounce: in front, barely below the subject. Any lower and it becomes a
+    // footlight, which on a close-up lights the underside of the jaw brighter
+    // than the key does.
     this.bounce.position.copy(subject).addScaledVector(toCamera, 1.4);
-    this.bounce.position.y = subject.y - 0.5;
+    this.bounce.position.y = subject.y - 0.1;
+  }
+
+  private applyIntensities(): void {
+    const k = this.aimed ? this.scale : 0;
+    this.key.intensity = this.base.key * k;
+    this.kicker.intensity = this.base.kicker * k;
+    this.bounce.intensity = this.base.bounce * k;
   }
 
   setIntensity(scale: number): void {
-    this.key.intensity = 26 * scale;
-    this.kicker.intensity = 18 * scale;
-    this.bounce.intensity = 4 * scale;
+    this.scale = scale;
+    this.applyIntensities();
   }
 
   setColors(keyColor: number, kickerColor: number): void {

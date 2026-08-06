@@ -1,406 +1,456 @@
 [
  {
-  "time": 10,
+  "time": 12,
+  "kind": "sfx",
+  "id": "thunder:0.35"
+ },
+ {
+  "time": 21,
+  "kind": "voice",
+  "id": "ch1_dispatch_0"
+ },
+ {
+  "time": 45,
   "kind": "sfx",
   "id": "thunder:0.50"
  },
  {
-  "time": 10,
+  "time": 45,
   "kind": "voice",
   "id": "ch1_dispatch_1"
  },
  {
-  "time": 23.999999999999982,
+  "time": 60,
   "kind": "voice",
   "id": "ch1_orion_1"
  },
  {
-  "time": 27.999999999999968,
+  "time": 66,
   "kind": "voice",
   "id": "ch1_trooper_1"
  },
  {
-  "time": 35.99999999999998,
+  "time": 75,
   "kind": "voice",
   "id": "ch1_orion_2"
  },
  {
-  "time": 40.00000000000001,
+  "time": 81,
   "kind": "voice",
   "id": "ch1_orion_3"
  },
  {
-  "time": 51.66666666666676,
+  "time": 98,
   "kind": "sfx",
   "id": "blipFound:1.00"
  },
  {
-  "time": 55.000000000000114,
+  "time": 102.5,
   "kind": "sfx",
   "id": "blipFound:1.00"
  },
  {
-  "time": 61.66666666666683,
+  "time": 112,
   "kind": "sfx",
   "id": "blipFound:1.00"
  },
  {
-  "time": 66.33333333333347,
+  "time": 118.5,
   "kind": "sfx",
   "id": "blipFound:1.00"
  },
  {
-  "time": 70.00000000000009,
+  "time": 123,
   "kind": "sfx",
   "id": "blipScan:1.00"
  },
  {
-  "time": 70.00000000000009,
+  "time": 123,
   "kind": "voice",
   "id": "ch1_orion_4"
  },
  {
-  "time": 109.99999999999952,
+  "time": 165,
   "kind": "voice",
   "id": "ch1_dev_1"
  },
  {
-  "time": 116.33333333333276,
+  "time": 171.5,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 116.99999999999942,
-  "kind": "sfx",
-  "id": "blipSelect:1.00"
- },
- {
-  "time": 117.33333333333275,
-  "kind": "sfx",
-  "id": "blipSelect:1.00"
- },
- {
-  "time": 119.99999999999937,
+  "time": 174,
   "kind": "sfx",
   "id": "blipConfirm:1.00"
  },
  {
-  "time": 121.99999999999935,
+  "time": 177,
   "kind": "voice",
   "id": "ch1_orion_c_name"
  },
  {
-  "time": 127.99999999999926,
+  "time": 183,
   "kind": "voice",
   "id": "ch1_dev_name"
  },
  {
-  "time": 133.99999999999943,
+  "time": 189,
+  "kind": "sfx",
+  "id": "heartbeat:0.50"
+ },
+ {
+  "time": 189,
+  "kind": "voice",
+  "id": "ch1_orion_5"
+ },
+ {
+  "time": 195,
+  "kind": "voice",
+  "id": "ch1_dev_2"
+ },
+ {
+  "time": 201,
+  "kind": "voice",
+  "id": "ch1_orion_6"
+ },
+ {
+  "time": 207,
   "kind": "sfx",
   "id": "heartbeat:0.60"
  },
  {
-  "time": 133.99999999999943,
+  "time": 207,
   "kind": "voice",
   "id": "ch1_child_1"
  },
  {
-  "time": 138.3333333333329,
+  "time": 210.5,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 138.99999999999957,
+  "time": 211.5,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 139.66666666666626,
+  "time": 212,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 141.99999999999966,
+  "time": 213,
   "kind": "sfx",
   "id": "blipConfirm:1.00"
  },
  {
-  "time": 143.99999999999972,
+  "time": 216,
   "kind": "voice",
   "id": "ch1_orion_c_blood"
  },
  {
-  "time": 151.99999999999994,
+  "time": 225,
   "kind": "voice",
   "id": "ch1_dev_blood"
  },
  {
-  "time": 170.00000000000045,
+  "time": 243,
   "kind": "sfx",
   "id": "heartbeat:0.80"
  },
  {
-  "time": 170.3333333333338,
+  "time": 243.5,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 171.00000000000048,
+  "time": 244.5,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 174.00000000000057,
+  "time": 246,
   "kind": "sfx",
   "id": "blipConfirm:1.00"
  },
  {
-  "time": 176.00000000000063,
+  "time": 249,
   "kind": "voice",
   "id": "ch1_orion_c_promise"
  },
  {
-  "time": 184.00000000000085,
+  "time": 258,
   "kind": "voice",
   "id": "ch1_dev_promise"
  },
  {
-  "time": 190.00000000000102,
+  "time": 264,
   "kind": "sfx",
   "id": "thunder:0.90"
  },
  {
-  "time": 192.58846164837786,
+  "time": 267.64837962962963,
   "kind": "sfx",
   "id": "blipFound:1.00"
  },
  {
-  "time": 192.99824948038184,
+  "time": 268.1464360504623,
   "kind": "sfx",
   "id": "blipFound:1.00"
  },
  {
-  "time": 193.33141647335322,
+  "time": 268.5123195780645,
   "kind": "sfx",
   "id": "blipFound:1.00"
  },
  {
-  "time": 193.8254394467969,
+  "time": 269.04850962690523,
   "kind": "sfx",
   "id": "blipConfirm:1.00"
  },
  {
-  "time": 202.08426374948672,
+  "time": 277.30827503892783,
   "kind": "voice",
   "id": "ch1_end_both_1"
  },
  {
-  "time": 205.58426374948712,
+  "time": 280.80827503892704,
   "kind": "voice",
   "id": "ch1_end_both_2"
  },
  {
-  "time": 227.08426374948957,
+  "time": 303.3082750389219,
   "kind": "voice",
   "id": "ch2_news_1"
  },
  {
-  "time": 232.5842637494902,
+  "time": 308.80827503892067,
   "kind": "voice",
   "id": "ch2_cass_1"
  },
  {
-  "time": 237.58426374949076,
+  "time": 313.80827503891953,
   "kind": "voice",
   "id": "ch2_girl_1"
  },
  {
-  "time": 244.0842637494915,
+  "time": 320.30827503891805,
+  "kind": "voice",
+  "id": "ch2_cass_0"
+ },
+ {
+  "time": 326.3082750389167,
+  "kind": "voice",
+  "id": "ch2_girl_0"
+ },
+ {
+  "time": 331.30827503891555,
+  "kind": "voice",
+  "id": "ch2_cass_0b"
+ },
+ {
+  "time": 338.30827503891396,
   "kind": "voice",
   "id": "ch2_owner_1"
  },
  {
-  "time": 253.58426374949258,
+  "time": 347.8082750389118,
   "kind": "sfx",
   "id": "blipConfirm:1.00"
  },
  {
-  "time": 254.08426374949264,
+  "time": 348.3082750389117,
   "kind": "voice",
   "id": "ch2_cass_c_stall"
  },
  {
-  "time": 258.58426374949227,
+  "time": 352.80827503891066,
   "kind": "voice",
   "id": "ch2_owner_2a"
  },
  {
-  "time": 263.58426374949113,
+  "time": 357.8082750389095,
   "kind": "sfx",
   "id": "thunder:0.85"
  },
  {
-  "time": 263.58426374949113,
+  "time": 357.8082750389095,
   "kind": "voice",
   "id": "ch2_owner_3"
  },
  {
-  "time": 266.58426374949045,
+  "time": 360.80827503890885,
   "kind": "sfx",
   "id": "heartbeat:0.90"
  },
  {
-  "time": 266.58426374949045,
+  "time": 360.80827503890885,
   "kind": "voice",
   "id": "ch2_cass_2"
  },
  {
-  "time": 272.6675970828224,
+  "time": 366.8916083722408,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 273.2509304161556,
+  "time": 367.474941705574,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 273.58426374948885,
+  "time": 367.80827503890725,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 275.0842637494885,
+  "time": 369.3082750389069,
   "kind": "sfx",
   "id": "blipConfirm:1.00"
  },
  {
-  "time": 275.5842637494884,
+  "time": 369.8082750389068,
   "kind": "sfx",
   "id": "blipConfirm:1.00"
  },
  {
-  "time": 276.5842637494882,
+  "time": 370.8082750389066,
   "kind": "voice",
   "id": "ch2_cass_break"
  },
  {
-  "time": 282.5842637494868,
+  "time": 376.8082750389052,
   "kind": "sfx",
   "id": "bang:0.50"
  },
  {
-  "time": 282.5842637494868,
+  "time": 376.8082750389052,
   "kind": "voice",
   "id": "ch2_cass_shield"
  },
  {
-  "time": 288.58426374948544,
+  "time": 382.80827503890384,
   "kind": "voice",
   "id": "ch2_girl_2"
  },
  {
-  "time": 292.16759708281796,
+  "time": 386.39160837223636,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 294.5842637494841,
+  "time": 388.8082750389025,
   "kind": "sfx",
   "id": "blipConfirm:1.00"
  },
  {
-  "time": 295.08426374948397,
+  "time": 389.30827503890237,
   "kind": "voice",
   "id": "ch2_cass_c_run"
  },
  {
-  "time": 338.5842637494741,
+  "time": 432.8082750388925,
   "kind": "voice",
   "id": "ch3_bc_1"
  },
  {
-  "time": 344.5842637494727,
+  "time": 438.8082750388911,
   "kind": "voice",
   "id": "ch3_atlas_1"
  },
  {
-  "time": 349.5842637494716,
+  "time": 443.80827503889,
   "kind": "voice",
   "id": "ch3_simon_1"
  },
  {
-  "time": 356.0842637494701,
+  "time": 450.3082750388885,
   "kind": "voice",
   "id": "ch3_cass_1"
  },
  {
-  "time": 365.16759708280136,
+  "time": 459.30827503888645,
+  "kind": "voice",
+  "id": "ch3_atlas_1b"
+ },
+ {
+  "time": 465.808275038885,
+  "kind": "voice",
+  "id": "ch3_atlas_1c"
+ },
+ {
+  "time": 471.8082750388836,
+  "kind": "voice",
+  "id": "ch3_cmd_0"
+ },
+ {
+  "time": 476.8916083722158,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 367.5842637494675,
+  "time": 479.3082750388819,
   "kind": "sfx",
   "id": "blipConfirm:1.00"
  },
  {
-  "time": 368.08426374946737,
+  "time": 479.8082750388818,
   "kind": "voice",
   "id": "ch3_atlas_c_peace"
  },
  {
-  "time": 375.58426374946566,
+  "time": 487.3082750388801,
   "kind": "sfx",
   "id": "thunder:0.70"
  },
  {
-  "time": 375.58426374946566,
+  "time": 487.3082750388801,
   "kind": "voice",
   "id": "ch3_cmd_1"
  },
  {
-  "time": 380.5842637494645,
+  "time": 492.30827503887895,
   "kind": "sfx",
   "id": "heartbeat:0.90"
  },
  {
-  "time": 380.5842637494645,
+  "time": 492.30827503887895,
   "kind": "voice",
   "id": "ch3_atlas_2"
  },
  {
-  "time": 384.66759708279693,
+  "time": 496.39160837221135,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 385.25093041613013,
+  "time": 496.97494170554455,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 385.5842637494634,
+  "time": 497.3082750388778,
   "kind": "sfx",
   "id": "blipSelect:1.00"
  },
  {
-  "time": 387.08426374946305,
+  "time": 498.80827503887747,
   "kind": "sfx",
   "id": "blipConfirm:1.00"
  },
  {
-  "time": 387.58426374946293,
+  "time": 499.30827503887735,
   "kind": "voice",
   "id": "ch3_atlas_c_kneel"
  },
  {
-  "time": 396.084263749461,
+  "time": 507.8082750388754,
   "kind": "voice",
   "id": "ch3_end_dawn_1"
  },
  {
-  "time": 401.08426374945986,
+  "time": 512.8082750388749,
   "kind": "voice",
   "id": "ch3_end_dawn_2"
  }
