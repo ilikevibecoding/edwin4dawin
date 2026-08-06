@@ -3,21 +3,37 @@
 // rotating array; all behavior is a gameplay abstraction.
 import * as THREE from 'three';
 import { TAU, clamp, wrapAngle, pad2 } from './util.js';
+import { GRAVITY } from './physics.js';
 
 const RADAR_RANGE = 9000; // fictional display range, meters
 const ALT_SCALE_MAX = 7000;
 
+// shared symbology (colorblind-safe: every color is paired with a shape/glyph)
+const HEX = { hostile: 0xff5340, decoy: 0xc9a6ff, intc: 0x37e0ff, assigned: 0xffd257, select: 0xffffff };
+const CSS = { hostile: '#ff6a55', decoy: '#c9a6ff', intc: '#37e0ff', assigned: '#ffd257', phos: '#7df0ac' };
+
+/** closed-form ballistic ground impact (flat ground, no drag): y0 + vy·t − ½g·t² = 0 */
+const _imp = { x: 0, z: 0, t: 0 };
+function impactPoint(pos, vel) {
+  const t = (vel.y + Math.sqrt(vel.y * vel.y + 2 * GRAVITY * Math.max(0, pos.y))) / GRAVITY;
+  _imp.x = pos.x + vel.x * t;
+  _imp.z = pos.z + vel.z * t;
+  _imp.t = t;
+  return _imp;
+}
+
 export function createRadar(ctx) {
-  const { scene, textures } = ctx;
+  const { textures } = ctx;
   const tracks = [];
   const byThreat = new Map();
   let trackCounter = 0;
   let selectedTrackId = null;
 
   // ------------------------------------------------ PPI scope canvas
-  const cw = 512;
+  // 928×512 matches the 1.9×1.05 console screen plane (square pixels on the glass)
+  const cw = 928, ch = 512;
   const canvas = document.createElement('canvas');
-  canvas.width = cw; canvas.height = cw;
+  canvas.width = cw; canvas.height = ch;
   const g = canvas.getContext('2d');
   const screenTex = new THREE.CanvasTexture(canvas);
   screenTex.colorSpace = THREE.SRGBColorSpace;
@@ -25,73 +41,324 @@ export function createRadar(ctx) {
     ctx.base.consoleScreen.material = new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false });
   }
 
+  // scope geometry on the canvas
+  const SX = 258, SY = 256, SR = 214;      // scope center + radius
+  const PX = 520, PW = cw - 14 - PX;       // right data panel
+  const FONT = '"Consolas","Menlo","DejaVu Sans Mono",monospace';
+
+  // static overlay (bezel + scanlines + vignette + glare), built once
+  const overlay = (() => {
+    const c = document.createElement('canvas');
+    c.width = cw; c.height = ch;
+    const o = c.getContext('2d');
+    o.fillStyle = 'rgba(0,0,0,0.10)';
+    for (let y = 14; y < ch - 14; y += 3) o.fillRect(14, y, cw - 28, 1);
+    const vg = o.createRadialGradient(SX, SY, SR * 0.55, SX, SY, SR * 1.35);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.28)');
+    o.fillStyle = vg;
+    o.fillRect(14, 14, 500, ch - 28);
+    const gl = o.createLinearGradient(0, 0, cw, ch);
+    gl.addColorStop(0.10, 'rgba(190,255,225,0)');
+    gl.addColorStop(0.20, 'rgba(190,255,225,0.030)');
+    gl.addColorStop(0.28, 'rgba(190,255,225,0)');
+    o.fillStyle = gl;
+    o.fillRect(14, 14, cw - 28, ch - 28);
+    // bezel frame
+    o.fillStyle = '#111613';
+    o.beginPath(); o.rect(0, 0, cw, ch); o.rect(12, 12, cw - 24, ch - 24); o.fill('evenodd');
+    o.strokeStyle = 'rgba(150,255,200,0.16)';
+    o.strokeRect(12.5, 12.5, cw - 25, ch - 25);
+    o.strokeStyle = 'rgba(0,0,0,0.65)';
+    o.strokeRect(1.5, 1.5, cw - 3, ch - 3);
+    o.strokeStyle = 'rgba(255,255,255,0.05)';
+    o.strokeRect(0.5, 0.5, cw - 1, ch - 1);
+    // corner screws
+    o.font = `9px ${FONT}`;
+    for (const [x, y] of [[6.5, 6.5], [cw - 6.5, 6.5], [6.5, ch - 6.5], [cw - 6.5, ch - 6.5]]) {
+      o.fillStyle = '#20261f';
+      o.beginPath(); o.arc(x, y, 3.4, 0, TAU); o.fill();
+      o.strokeStyle = 'rgba(0,0,0,0.7)'; o.lineWidth = 1;
+      o.beginPath(); o.moveTo(x - 2.2, y - 2.2); o.lineTo(x + 2.2, y + 2.2); o.stroke();
+    }
+    o.fillStyle = '#39443c';
+    o.textAlign = 'center';
+    o.fillText('IVX-9 · P43 PHOSPHOR SCOPE · FICTIONAL TRAINER', cw / 2, ch - 3.5);
+    return c;
+  })();
+
+  let ppiInit = false;
+
   // ------------------------------------------------ holo table display
   const holo = new THREE.Group();
   const holoScale = 0.78 / RADAR_RANGE;
-  const altScale = 0.42 / ALT_SCALE_MAX;
+  const altScale = 0.78 / ALT_SCALE_MAX;
   if (ctx.base?.holoAnchor) ctx.base.holoAnchor.add(holo);
 
   {
-    const discMat = new THREE.MeshBasicMaterial({ color: 0x06333d, transparent: true, opacity: 0.55, depthWrite: false });
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.8, 48), discMat);
+    // layered translucent volume: base disc + faint annular fills + thin bright rings
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(0.8, 64),
+      new THREE.MeshBasicMaterial({ color: 0x05242e, transparent: true, opacity: 0.6, depthWrite: false })
+    );
     disc.rotation.x = -Math.PI / 2;
     holo.add(disc);
-    const ringMat = new THREE.LineBasicMaterial({ color: 0x2ec8de, transparent: true, opacity: 0.5 });
+    // faint alternating annular fills (additive, gives layered depth)
+    for (let r = 0; r < 3; r++) {
+      const fill = new THREE.Mesh(
+        new THREE.RingGeometry(0.26 * r + 0.004, 0.26 * (r + 1) - 0.004, 64),
+        new THREE.MeshBasicMaterial({
+          color: 0x0e5c6e, transparent: true, opacity: r % 2 ? 0.05 : 0.11,
+          side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
+        })
+      );
+      fill.rotation.x = -Math.PI / 2;
+      fill.position.y = 0.0015;
+      fill.renderOrder = 1;
+      holo.add(fill);
+    }
+    // thin bright range rings
     for (let r = 1; r <= 3; r++) {
       const pts = [];
-      for (let i = 0; i <= 48; i++) {
-        const a = (i / 48) * TAU;
+      for (let i = 0; i <= 72; i++) {
+        const a = (i / 72) * TAU;
         pts.push(new THREE.Vector3(Math.cos(a) * 0.26 * r, 0.002, Math.sin(a) * 0.26 * r));
       }
-      holo.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), ringMat));
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color: 0x3fd6ec, transparent: true, opacity: r === 3 ? 0.85 : 0.42 })
+      );
+      line.renderOrder = 2;
+      holo.add(line);
     }
+    // bearing ticks on the outer rim (every 15°)
+    {
+      const pts = [];
+      for (let s = 0; s < 24; s++) {
+        const a = (s / 24) * TAU;
+        const inner = s % 6 === 0 ? 0.73 : 0.76;
+        pts.push(new THREE.Vector3(Math.cos(a) * inner, 0.002, Math.sin(a) * inner));
+        pts.push(new THREE.Vector3(Math.cos(a) * 0.795, 0.002, Math.sin(a) * 0.795));
+      }
+      const ticks = new THREE.LineSegments(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color: 0x2ec8de, transparent: true, opacity: 0.5 })
+      );
+      ticks.renderOrder = 2;
+      holo.add(ticks);
+    }
+    // spokes
     for (let s = 0; s < 8; s++) {
       const a = (s / 8) * TAU;
       const pts = [new THREE.Vector3(0, 0.002, 0), new THREE.Vector3(Math.cos(a) * 0.78, 0.002, Math.sin(a) * 0.78)];
-      holo.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x1a7c8c, transparent: true, opacity: 0.3 })));
+      holo.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color: 0x1a7c8c, transparent: true, opacity: 0.22 })
+      ));
     }
-    // north marker
-    const nMark = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.07), new THREE.MeshBasicMaterial({ map: textures.label('N', { fg: '#7fe8f8', w: 64, h: 64, font: 'bold 44px Arial' }), transparent: true, depthWrite: false }));
-    nMark.rotation.x = -Math.PI / 2;
-    nMark.position.set(0, 0.004, 0.86);
-    holo.add(nMark);
+    // translucent volume wall at the rim
+    const wall = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.8, 0.8, 0.46, 64, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0x1c94ac, transparent: true, opacity: 0.02, side: THREE.DoubleSide,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+      })
+    );
+    wall.position.y = 0.23;
+    wall.renderOrder = 1;
+    holo.add(wall);
+    // cardinal markers (north = −z so the PPI reads north-up)
+    const cardinal = (txt, x, z, size, opacity) => {
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(size, size),
+        new THREE.MeshBasicMaterial({
+          map: textures.label(txt, { fg: '#7fe8f8', w: 64, h: 64, font: 'bold 44px Arial' }),
+          transparent: true, depthWrite: false, opacity,
+        })
+      );
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(x, 0.004, z);
+      holo.add(m);
+    };
+    cardinal('N', 0, -0.87, 0.075, 1);
+    cardinal('E', 0.87, 0, 0.055, 0.55);
+    cardinal('S', 0, 0.87, 0.055, 0.55);
+    cardinal('W', -0.87, 0, 0.055, 0.55);
     // base marker
     const bm = new THREE.Mesh(new THREE.OctahedronGeometry(0.014), new THREE.MeshBasicMaterial({ color: 0x9ff3ff }));
     bm.position.y = 0.006;
     holo.add(bm);
   }
 
-  // holo sweep wedge
-  const sweepMat = new THREE.MeshBasicMaterial({ color: 0x2ee8ff, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
-  const sweepGeo = new THREE.CircleGeometry(0.78, 12, 0, 0.5);
-  const sweep = new THREE.Mesh(sweepGeo, sweepMat);
-  sweep.rotation.x = -Math.PI / 2;
-  sweep.position.y = 0.004;
-  holo.add(sweep);
+  // holo sweep: bright leading wedge + vertex-alpha afterglow fan, grouped so the
+  // wedge's leading edge matches the detection azimuth exactly.
+  const sweepGrp = new THREE.Group();
+  holo.add(sweepGrp);
+  {
+    const mkFlat = (geo, mat) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.y = 0.004;
+      m.renderOrder = 3;
+      sweepGrp.add(m);
+      return m;
+    };
+    // afterglow fan with per-vertex fade (trailing 1.15 rad)
+    const arc = 1.15, segs = 40, R = 0.78;
+    const pos = [0, 0, 0];
+    const col = [0, 0, 0];
+    for (let i = 0; i <= segs; i++) {
+      const k = i / segs;
+      const a = -arc + k * arc; // leading edge at local angle 0
+      pos.push(Math.cos(a) * R, Math.sin(a) * R, 0);
+      const w = k * k * k;
+      col.push(w, w, w);
+    }
+    const idx = [];
+    for (let i = 1; i <= segs; i++) idx.push(0, i, i + 1);
+    const fanGeo = new THREE.BufferGeometry();
+    fanGeo.setIndex(idx);
+    fanGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    fanGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    mkFlat(fanGeo, new THREE.MeshBasicMaterial({
+      color: 0x2ee8ff, vertexColors: true, transparent: true, opacity: 0.42,
+      side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
+    }));
+    // hot leading wedge
+    mkFlat(new THREE.CircleGeometry(R, 10, -0.09, 0.09), new THREE.MeshBasicMaterial({
+      color: 0x66f2ff, transparent: true, opacity: 0.42,
+      side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
+    }));
+    // beam edge line
+    const beam = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0.04, 0, 0), new THREE.Vector3(R, 0, 0)]),
+      new THREE.LineBasicMaterial({ color: 0xa8fbff, transparent: true, opacity: 0.85 })
+    );
+    beam.rotation.x = -Math.PI / 2;
+    beam.position.y = 0.005;
+    beam.renderOrder = 3;
+    sweepGrp.add(beam);
+  }
 
   // blip pools
-  const mkBlip = (color) => {
+  const mkBlip = (color, interceptor = false) => {
     const grp = new THREE.Group();
-    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.016), new THREE.MeshBasicMaterial({ color }));
+    const coreGeo = interceptor ? new THREE.BoxGeometry(0.02, 0.02, 0.02) : new THREE.OctahedronGeometry(0.018);
+    const core = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({ color }));
+    core.renderOrder = 4;
     grp.add(core);
-    const hit = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ visible: false }));
+    const halo = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending,
+    }));
+    halo.scale.setScalar(1.9);
+    halo.renderOrder = 4;
+    grp.add(halo);
+    const hit = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ visible: false }));
     grp.add(hit);
     const stemGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 1, 0)]);
     const stem = new THREE.Line(stemGeo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.42 }));
     grp.add(stem);
-    const ringM = new THREE.Mesh(new THREE.RingGeometry(0.02, 0.026, 20), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
+    const ringM = new THREE.Mesh(new THREE.RingGeometry(0.02, 0.026, 20), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
     ringM.rotation.x = -Math.PI / 2;
+    ringM.renderOrder = 3;
     grp.add(ringM);
-    const sel = new THREE.Mesh(new THREE.RingGeometry(0.032, 0.038, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+    const sel = new THREE.Mesh(new THREE.RingGeometry(0.032, 0.038, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
     sel.rotation.x = -Math.PI / 2;
     sel.visible = false;
+    sel.renderOrder = 3;
     grp.add(sel);
+    // velocity leader on the disc floor (direction of travel)
+    const velGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    const vel = new THREE.Line(velGeo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.8 }));
+    vel.renderOrder = 3;
+    vel.visible = !interceptor;
+    grp.add(vel);
     grp.visible = false;
     holo.add(grp);
-    return { grp, core, hit, stem, ringM, sel };
+    return { grp, core, halo, hit, stem, ringM, sel, vel };
   };
-  const threatBlips = Array.from({ length: 10 }, () => mkBlip(0xff5340));
-  const intBlips = Array.from({ length: 12 }, () => mkBlip(0x37e0ff));
+  const threatBlips = Array.from({ length: 10 }, () => mkBlip(HEX.hostile));
+  const intBlips = Array.from({ length: 12 }, () => mkBlip(HEX.intc, true));
+
+  // predicted ground-impact markers (✕ + micro ring on the disc floor), one per threat blip
+  const mkImpactMarker = () => {
+    const grp = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({
+      color: HEX.hostile, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide,
+    });
+    for (const a of [Math.PI / 4, -Math.PI / 4]) {
+      const bar = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.01), mat);
+      bar.rotation.set(-Math.PI / 2, 0, a);
+      bar.renderOrder = 3;
+      grp.add(bar);
+    }
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.03, 0.034, 20), mat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.renderOrder = 3;
+    grp.add(ring);
+    grp.visible = false;
+    grp.position.y = 0.003;
+    holo.add(grp);
+    return { grp, mat };
+  };
+  const impactMarkers = Array.from({ length: 10 }, mkImpactMarker);
+
+  // pooled track-ID microlabels (canvas sprites, detected tracks only, ≤ 12)
+  const mkMicroLabel = () => {
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 40;
+    const lg = c.getContext('2d');
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthTest: false, depthWrite: false, opacity: 0.98,
+    }));
+    spr.scale.set(0.2, 0.062, 1);
+    spr.renderOrder = 10;
+    spr.visible = false;
+    holo.add(spr);
+    return { spr, lg, tex, key: '' };
+  };
+  const microLabels = Array.from({ length: 12 }, mkMicroLabel);
+  function setMicroLabel(l, text, color) {
+    const key = text + '|' + color;
+    if (l.key === key) return;
+    l.key = key;
+    l.lg.clearRect(0, 0, 128, 40);
+    l.lg.fillStyle = 'rgba(2,10,9,0.8)';
+    l.lg.fillRect(10, 4, 108, 32);
+    l.lg.strokeStyle = 'rgba(140,240,220,0.3)';
+    l.lg.strokeRect(10.5, 4.5, 107, 31);
+    l.lg.font = `bold 21px ${FONT}`;
+    l.lg.textAlign = 'center';
+    l.lg.textBaseline = 'middle';
+    l.lg.fillStyle = color;
+    l.lg.fillText(text, 64, 21);
+    l.tex.needsUpdate = true;
+  }
+
+  // interceptor → target path leaders (thin lines in holo space)
+  const intLeaders = Array.from({ length: 12 }, () => {
+    const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    const ln = new THREE.Line(geo, new THREE.LineBasicMaterial({
+      color: HEX.intc, transparent: true, opacity: 0.28, depthWrite: false,
+    }));
+    ln.renderOrder = 3;
+    ln.visible = false;
+    holo.add(ln);
+    return ln;
+  });
+
+  // shared animated selection pulse ring
+  const pulseRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.05, 0.057, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })
+  );
+  pulseRing.rotation.x = -Math.PI / 2;
+  pulseRing.position.y = 0.005;
+  pulseRing.renderOrder = 3;
+  pulseRing.visible = false;
+  holo.add(pulseRing);
 
   // ------------------------------------------------ track bookkeeping
   ctx.events.on('threat-spawned', ({ threat }) => {
@@ -143,160 +410,526 @@ export function createRadar(ctx) {
     }
   }
 
+  // ------------------------------------------------ PPI drawing helpers
+  const toScreen = (x, z) => [SX + (x / RADAR_RANGE) * SR, SY + (z / RADAR_RANGE) * SR];
+  function diamond(px, py, s, fill, color, lw = 1.6) {
+    g.beginPath();
+    g.moveTo(px, py - s); g.lineTo(px + s, py); g.lineTo(px, py + s); g.lineTo(px - s, py);
+    g.closePath();
+    if (fill) { g.fillStyle = color; g.fill(); }
+    else { g.strokeStyle = color; g.lineWidth = lw; g.stroke(); }
+  }
+  function xMark(px, py, s, color, lw = 1.6) {
+    g.strokeStyle = color; g.lineWidth = lw;
+    g.beginPath();
+    g.moveTo(px - s, py - s); g.lineTo(px + s, py + s);
+    g.moveTo(px + s, py - s); g.lineTo(px - s, py + s);
+    g.stroke();
+  }
+  function corners(px, py, s, color, lw = 1.4) {
+    const k = s * 0.45;
+    g.strokeStyle = color; g.lineWidth = lw;
+    g.beginPath();
+    g.moveTo(px - s + k, py - s); g.lineTo(px - s, py - s); g.lineTo(px - s, py - s + k);
+    g.moveTo(px + s - k, py - s); g.lineTo(px + s, py - s); g.lineTo(px + s, py - s + k);
+    g.moveTo(px - s + k, py + s); g.lineTo(px - s, py + s); g.lineTo(px - s, py + s - k);
+    g.moveTo(px + s - k, py + s); g.lineTo(px + s, py + s); g.lineTo(px + s, py + s - k);
+    g.stroke();
+  }
+  function panelBox(x, y, w, h, title) {
+    g.fillStyle = 'rgba(3,17,11,0.96)';
+    g.fillRect(x, y, w, h);
+    g.strokeStyle = 'rgba(110,240,170,0.26)';
+    g.lineWidth = 1;
+    g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    if (title) {
+      g.fillStyle = 'rgba(125,240,172,0.66)';
+      g.font = `10px ${FONT}`;
+      g.textAlign = 'left';
+      g.fillText(title, x + 9, y + 14);
+      g.strokeStyle = 'rgba(110,240,170,0.18)';
+      g.beginPath(); g.moveTo(x + 8, y + 19.5); g.lineTo(x + w - 8, y + 19.5); g.stroke();
+    }
+  }
+  const fmtK = (m) => (m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.round(m) + 'm');
+  const brgOf = (x, z) => Math.round(((Math.atan2(x, -z) * 180) / Math.PI + 360) % 360);
+
   // ------------------------------------------------ PPI drawing
   let redrawAcc = 0;
   function drawPPI() {
-    g.fillStyle = '#03150c';
-    g.fillRect(0, 0, cw, cw);
-    const cx = cw / 2, cy = cw / 2;
-    const R = cw / 2 - 10;
-    // range rings
-    g.strokeStyle = 'rgba(46,200,122,0.35)';
+    const now = ctx.time.now;
+    if (!ppiInit) {
+      ppiInit = true;
+      g.fillStyle = '#020f0a';
+      g.fillRect(0, 0, cw, ch);
+    }
+    // phosphor persistence: veil instead of clear (moving paint leaves fading trails)
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    g.fillStyle = 'rgba(2,15,10,0.16)';
+    g.fillRect(0, 0, cw, ch);
+    // slightly green-lit scope disc
+    g.save();
+    g.beginPath(); g.arc(SX, SY, SR, 0, TAU); g.clip();
+    g.fillStyle = 'rgba(6,27,17,0.10)';
+    g.fillRect(SX - SR, SY - SR, SR * 2, SR * 2);
+    g.restore();
+
+    // ---- static graticule (redrawn crisp every frame)
     g.lineWidth = 1;
     for (let r = 1; r <= 4; r++) {
-      g.beginPath();
-      g.arc(cx, cy, (R * r) / 4, 0, TAU);
-      g.stroke();
+      g.strokeStyle = r === 4 ? 'rgba(80,240,160,0.55)' : 'rgba(60,220,140,0.26)';
+      g.beginPath(); g.arc(SX, SY, (SR * r) / 4, 0, TAU); g.stroke();
     }
-    g.strokeStyle = 'rgba(46,200,122,0.2)';
+    g.strokeStyle = 'rgba(80,240,160,0.30)';
+    g.beginPath(); g.arc(SX, SY, SR - 4, 0, TAU); g.stroke();
+    g.strokeStyle = 'rgba(60,220,140,0.13)';
     for (let s = 0; s < 12; s++) {
       const a = (s / 12) * TAU;
       g.beginPath();
-      g.moveTo(cx, cy);
-      g.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+      g.moveTo(SX + Math.cos(a) * 12, SY + Math.sin(a) * 12);
+      g.lineTo(SX + Math.cos(a) * SR, SY + Math.sin(a) * SR);
       g.stroke();
     }
-    // range labels
-    g.fillStyle = 'rgba(46,200,122,0.6)';
-    g.font = '13px monospace';
-    for (let r = 1; r <= 4; r++) {
-      g.fillText(`${((RADAR_RANGE * r) / 4 / 1000).toFixed(0)}k`, cx + 4, cy - (R * r) / 4 + 14);
+    // rim ticks every 10°
+    g.strokeStyle = 'rgba(80,240,160,0.5)';
+    for (let s = 0; s < 36; s++) {
+      const a = (s / 36) * TAU;
+      const l = s % 9 === 0 ? 10 : 5;
+      g.beginPath();
+      g.moveTo(SX + Math.cos(a) * (SR - l), SY + Math.sin(a) * (SR - l));
+      g.lineTo(SX + Math.cos(a) * SR, SY + Math.sin(a) * SR);
+      g.stroke();
     }
-    // sweep
-    const sweepAz = ctx.base?.radarHead ? ctx.base.radarHead.rotation.y : 0;
-    const drawA = -sweepAz + Math.PI / 2; // world az → screen
-    const grad = g.createConicGradient ? null : null;
-    g.save();
-    g.translate(cx, cy);
-    g.rotate(drawA);
-    const sw = g.createLinearGradient(0, 0, R, 0);
-    sw.addColorStop(0, 'rgba(64,255,150,0.0)');
-    sw.addColorStop(1, 'rgba(64,255,150,0.16)');
-    g.fillStyle = sw;
+    // center cross
+    g.strokeStyle = 'rgba(159,243,200,0.8)';
     g.beginPath();
-    g.moveTo(0, 0);
-    g.arc(0, 0, R, -0.5, 0.02);
-    g.closePath();
-    g.fill();
-    g.strokeStyle = 'rgba(120,255,180,0.8)';
-    g.lineWidth = 2;
-    g.beginPath();
-    g.moveTo(0, 0);
-    g.lineTo(R, 0);
+    g.moveTo(SX - 5, SY); g.lineTo(SX + 5, SY);
+    g.moveTo(SX, SY - 5); g.lineTo(SX, SY + 5);
     g.stroke();
+    // cardinals (north-up: N = −z at top)
+    g.font = `bold 12px ${FONT}`;
+    g.textAlign = 'center';
+    g.fillStyle = 'rgba(159,243,200,0.85)';
+    g.fillText('N', SX, SY - SR + 24);
+    g.fillStyle = 'rgba(159,243,200,0.45)';
+    g.fillText('E', SX + SR - 22, SY + 4);
+    g.fillText('S', SX, SY + SR - 16);
+    g.fillText('W', SX - SR + 22, SY + 4);
+    // range labels down the NE diagonal
+    g.font = `10px ${FONT}`;
+    g.textAlign = 'left';
+    g.fillStyle = 'rgba(140,240,180,0.55)';
+    for (let r = 1; r <= 4; r++) {
+      const d = (SR * r) / 4 * 0.7071;
+      g.fillText(`${((RADAR_RANGE * r) / 4 / 1000).toFixed(1)}`, SX + d + 3, SY - d + 11);
+    }
+    g.fillText('km', SX + SR * 0.7071 + 3, SY - SR * 0.7071 + 22);
+
+    // ---- rotating sweep with phosphor afterglow (additive)
+    const sweepAz = ctx.base?.radarHead ? ctx.base.radarHead.rotation.y : 0;
+    const beamA = -sweepAz + Math.PI / 2; // world az → screen angle (verified with detection az)
+    g.save();
+    g.beginPath(); g.arc(SX, SY, SR - 2, 0, TAU); g.clip();
+    g.globalCompositeOperation = 'lighter';
+    g.translate(SX, SY);
+    g.rotate(beamA);
+    if (g.createConicGradient) {
+      // trailing glow occupies increasing local angle (beam travels toward −angle on screen)
+      const cg = g.createConicGradient(0, 0, 0);
+      const trail = 1.45 / TAU;
+      cg.addColorStop(0, 'rgba(110,255,175,0.30)');
+      cg.addColorStop(trail * 0.35, 'rgba(90,245,160,0.115)');
+      cg.addColorStop(trail, 'rgba(70,235,150,0)');
+      cg.addColorStop(1, 'rgba(70,235,150,0)');
+      g.fillStyle = cg;
+      g.beginPath(); g.arc(0, 0, SR, 0, TAU); g.fill();
+    } else {
+      for (let i = 0; i < 10; i++) {
+        g.fillStyle = `rgba(90,245,160,${0.16 * (1 - i / 10) * (1 - i / 10)})`;
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.arc(0, 0, SR, i * 0.145, (i + 1) * 0.145);
+        g.closePath();
+        g.fill();
+      }
+    }
+    // hot beam line
+    g.strokeStyle = 'rgba(190,255,215,0.9)';
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(SR, 0); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.35)';
+    g.lineWidth = 4;
+    g.beginPath(); g.moveTo(10, 0); g.lineTo(SR, 0); g.stroke();
     g.restore();
-    void grad;
 
-    const toScreen = (x, z) => {
-      // world az: atan2(x, z); PPI: north (=+z world? use -z north) up.
-      const px = cx + (x / RADAR_RANGE) * R;
-      const py = cy + (z / RADAR_RANGE) * R;
-      return [px, py];
-    };
-    // base marker
+    // ---- base + battery markers (azimuth-true, clamped to a readable radius)
     g.strokeStyle = '#9ff3c8';
-    g.strokeRect(cx - 4, cy - 4, 8, 8);
+    g.lineWidth = 1.2;
+    g.strokeRect(SX - 4, SY - 4, 8, 8);
+    if (ctx.batteries?.list) {
+      g.font = `bold 10px ${FONT}`;
+      for (const b of ctx.batteries.list) {
+        const p = b.rig.group.position;
+        const d = Math.hypot(p.x, p.z) || 1;
+        const rr = Math.max((d / RADAR_RANGE) * SR, 21);
+        const px = SX + (p.x / d) * rr;
+        const py = SY + (p.z / d) * rr;
+        const st = b.displayState;
+        const col = st === 'READY' ? 'rgba(142,240,180,0.95)' : st === 'EMPTY' ? 'rgba(255,106,85,0.95)' : 'rgba(255,210,87,0.95)';
+        g.fillStyle = col;
+        g.beginPath();
+        g.moveTo(px, py - 4.6); g.lineTo(px + 4.2, py + 3.4); g.lineTo(px - 4.2, py + 3.4);
+        g.closePath();
+        g.fill();
+        g.fillText(b.def.name[0], px + 6, py + 3);
+      }
+    }
 
-    // threat blips
+    // ---- threat blips
+    const selTr = selectedTrackId ? tracks.find((t) => t.id === selectedTrackId && !t.gone) : null;
     for (const tr of tracks) {
       if (tr.gone || !tr.detected) continue;
       const t = tr.threat;
       const [px, py] = toScreen(t.pos.x, t.pos.z);
-      // history trail
-      g.fillStyle = 'rgba(120,255,170,0.25)';
+      const isDecoy = tr.classified.startsWith('DECOY');
+      const col = isDecoy ? CSS.decoy : tr.assignedBattery ? CSS.assigned : CSS.hostile;
+      // history breadcrumbs with age fade
       for (const h of tr.history) {
+        const age = now - (h[2] ?? now);
+        const a = Math.max(0, 1 - age / 14) * 0.34;
+        if (a <= 0.01) continue;
         const [hx, hy] = toScreen(h[0], h[1]);
+        g.fillStyle = `rgba(130,255,180,${a.toFixed(3)})`;
         g.fillRect(hx - 1, hy - 1, 2, 2);
       }
-      const isDecoy = tr.classified.startsWith('DECOY');
-      g.fillStyle = isDecoy ? '#c9a6ff' : '#ff6a55';
-      g.beginPath();
-      g.moveTo(px, py - 6); g.lineTo(px + 6, py); g.lineTo(px, py + 6); g.lineTo(px - 6, py);
-      g.closePath();
-      g.fill();
-      g.fillStyle = '#d7ffe8';
-      g.font = 'bold 13px monospace';
-      g.fillText(tr.id, px + 8, py - 4);
-      g.font = '11px monospace';
-      g.fillStyle = 'rgba(215,255,232,0.7)';
-      g.fillText(`${(t.pos.y / 1000).toFixed(1)}km`, px + 8, py + 8);
+      // predicted ground-impact marker
+      const imp = impactPoint(t.pos, t.vel);
+      const ir = Math.hypot(imp.x, imp.z);
+      if (ir < RADAR_RANGE) {
+        const [ix, iy] = toScreen(imp.x, imp.z);
+        xMark(ix, iy, 4.4, isDecoy ? 'rgba(201,166,255,0.6)' : 'rgba(255,140,110,0.8)', 1.4);
+        g.strokeStyle = isDecoy ? 'rgba(201,166,255,0.35)' : 'rgba(255,140,110,0.45)';
+        g.lineWidth = 1;
+        g.beginPath(); g.arc(ix, iy, 7.5, 0, TAU); g.stroke();
+        // dotted path hint from blip to impact for the selected track
+        if (tr === selTr) {
+          g.setLineDash([3, 5]);
+          g.strokeStyle = 'rgba(255,255,255,0.30)';
+          g.beginPath(); g.moveTo(px, py); g.lineTo(ix, iy); g.stroke();
+          g.setLineDash([]);
+        }
+      }
+      // velocity leader (direction of travel, length ∝ ground speed)
+      const gs = Math.hypot(t.vel.x, t.vel.z);
+      if (gs > 1) {
+        const ll = clamp(gs * 0.045, 9, 34);
+        g.strokeStyle = col;
+        g.lineWidth = 1.6;
+        g.beginPath();
+        g.moveTo(px, py);
+        g.lineTo(px + (t.vel.x / gs) * ll, py + (t.vel.z / gs) * ll);
+        g.stroke();
+      }
+      // blip glyph: hostile ◆ filled · decoy ◇ open
+      g.save();
+      g.shadowColor = col; g.shadowBlur = 9;
+      diamond(px, py, 6.5, !isDecoy, col, 1.8);
+      g.restore();
+      // labels (bigger typography)
+      g.font = `bold 15px ${FONT}`;
+      g.textAlign = 'left';
+      g.fillStyle = '#eafff2';
+      g.fillText(tr.id, px + 11, py - 5);
+      g.font = `11px ${FONT}`;
+      g.fillStyle = 'rgba(215,255,232,0.72)';
+      g.fillText(`${(t.pos.y / 1000).toFixed(1)}km ${isDecoy ? '◇' : '◆'}`, px + 11, py + 9);
       if (tr.id === selectedTrackId) {
         g.strokeStyle = '#ffffff';
         g.lineWidth = 1.6;
+        g.beginPath(); g.arc(px, py, 12.5, 0, TAU); g.stroke();
         g.beginPath();
-        g.arc(px, py, 11, 0, TAU);
+        for (let q = 0; q < 4; q++) {
+          const a = (q / 4) * TAU + now * 0.9;
+          g.moveTo(px + Math.cos(a) * 12.5, py + Math.sin(a) * 12.5);
+          g.lineTo(px + Math.cos(a) * 17, py + Math.sin(a) * 17);
+        }
         g.stroke();
       }
-      if (tr.assignedBattery) {
-        g.strokeStyle = '#ffd257';
-        g.lineWidth = 1;
-        g.strokeRect(px - 9, py - 9, 18, 18);
-      }
+      if (tr.assignedBattery) corners(px, py, 11, CSS.assigned, 1.6);
     }
-    // interceptor blips
-    g.fillStyle = '#37e0ff';
+
+    // ---- interceptor blips (■ cyan + thin leader to their target)
     for (const it of ctx.interceptors?.active ?? []) {
       const [px, py] = toScreen(it.pos.x, it.pos.z);
-      g.fillRect(px - 2.5, py - 2.5, 5, 5);
+      if (it.threat?.alive) {
+        const [tx, ty] = toScreen(it.threat.pos.x, it.threat.pos.z);
+        g.strokeStyle = 'rgba(55,224,255,0.30)';
+        g.lineWidth = 1;
+        g.setLineDash([2, 4]);
+        g.beginPath(); g.moveTo(px, py); g.lineTo(tx, ty); g.stroke();
+        g.setLineDash([]);
+      }
+      g.save();
+      g.shadowColor = CSS.intc; g.shadowBlur = 7;
+      g.fillStyle = CSS.intc;
+      g.fillRect(px - 3, py - 3, 6, 6);
+      g.restore();
+      g.font = `10px ${FONT}`;
+      g.fillStyle = 'rgba(55,224,255,0.75)';
+      g.fillText(it.id, px + 6, py - 4);
     }
+
+    // ---- right data panel (opaque boxes: crisp, no ghosting)
+    const active = tracks.filter((t) => !t.gone && t.detected);
     // header
+    g.font = `bold 17px ${FONT}`;
+    g.textAlign = 'left';
     g.fillStyle = '#baf7d4';
-    g.font = 'bold 15px monospace';
-    g.fillText('IVX-9 SURVEILLANCE', 12, 20);
-    g.font = '12px monospace';
-    g.fillStyle = 'rgba(186,247,212,0.75)';
-    const active = tracks.filter((t) => !t.gone && t.detected).length;
-    g.fillText(`TRACKS ${active}  RNG ${(RADAR_RANGE / 1000).toFixed(0)}KM  MODE TBM`, 12, 38);
+    g.fillText('IVX-9 SURVEILLANCE', PX, 40);
+    if (now % 1 < 0.55) { g.fillStyle = 'rgba(186,247,212,0.8)'; g.fillRect(PX + 232, 28, 8, 13); }
+    g.font = `11px ${FONT}`;
+    g.fillStyle = 'rgba(186,247,212,0.66)';
+    g.fillText(`MODE TBM · RNG ${(RADAR_RANGE / 1000).toFixed(0)} KM · SWP 8.1 RPM`, PX, 58);
+    g.strokeStyle = 'rgba(110,240,170,0.3)';
+    g.beginPath(); g.moveTo(PX, 68.5); g.lineTo(PX + PW, 68.5); g.stroke();
+
+    // batteries box
+    panelBox(PX, 78, PW, 100, 'BATTERIES');
+    if (ctx.batteries?.list) {
+      let by = 100;
+      for (const b of ctx.batteries.list) {
+        const st = b.displayState;
+        const col = st === 'READY' ? CSS.phos : st === 'EMPTY' ? CSS.hostile : CSS.assigned;
+        g.fillStyle = col;
+        g.beginPath();
+        g.moveTo(PX + 15, by - 4.5); g.lineTo(PX + 19, by + 3); g.lineTo(PX + 11, by + 3);
+        g.closePath(); g.fill();
+        g.font = `bold 12px ${FONT}`;
+        g.fillStyle = '#d9ffe9';
+        g.fillText(b.def.name, PX + 27, by + 4);
+        g.font = `11px ${FONT}`;
+        g.fillStyle = col;
+        g.fillText(st + (st === 'RELOADING' ? ` ${Math.ceil(Math.max(0, b.readyIn))}s` : ''), PX + 150, by + 4);
+        g.textAlign = 'right';
+        g.fillStyle = 'rgba(142,240,180,0.8)';
+        g.fillText('▮'.repeat(b.ammo) + '▯'.repeat(Math.max(0, b.def.ammo - b.ammo)), PX + PW - 10, by + 4);
+        g.textAlign = 'left';
+        by += 26;
+      }
+    }
+
+    // selected-track readout
+    panelBox(PX, 186, PW, 148, 'TRACK DATA');
+    if (selTr) {
+      const t = selTr.threat;
+      const isDecoy = selTr.classified.startsWith('DECOY');
+      const col = isDecoy ? CSS.decoy : selTr.assignedBattery ? CSS.assigned : CSS.hostile;
+      g.font = `bold 20px ${FONT}`;
+      g.fillStyle = col;
+      g.fillText(`${isDecoy ? '◇' : '◆'} ${selTr.id}`, PX + 12, 218);
+      g.font = `bold 12px ${FONT}`;
+      g.fillText(selTr.classified, PX + 130, 218);
+      // track quality bar
+      g.strokeStyle = 'rgba(142,240,180,0.4)';
+      g.strokeRect(PX + 262.5, 206.5, 112, 9);
+      g.fillStyle = 'rgba(142,240,180,0.75)';
+      g.fillRect(PX + 264, 208, 109 * clamp(selTr.quality, 0.05, 1), 6);
+      g.font = `9px ${FONT}`;
+      g.fillStyle = 'rgba(142,240,180,0.6)';
+      g.fillText('TRK QUAL', PX + 262, 202);
+      const imp = impactPoint(t.pos, t.vel);
+      const rows = [
+        ['ALT', fmtK(t.pos.y)], ['RNG', fmtK(Math.hypot(t.pos.x, t.pos.z))],
+        ['SPD', `${Math.round(t.vel.length())}m/s`], ['BRG', `${pad2(brgOf(t.pos.x, t.pos.z))}°`.padStart(4, '0')],
+        ['TTI', `${Math.max(0, imp.t).toFixed(0)}s`], ['V/S', `${Math.round(t.vel.y)}m/s`],
+      ];
+      g.font = `12px ${FONT}`;
+      for (let i = 0; i < rows.length; i++) {
+        const rx = PX + 12 + (i % 2) * 190;
+        const ry = 244 + Math.floor(i / 2) * 22;
+        g.fillStyle = 'rgba(142,240,180,0.55)';
+        g.fillText(rows[i][0], rx, ry);
+        g.fillStyle = '#eafff2';
+        g.fillText(rows[i][1], rx + 44, ry);
+      }
+      g.font = `11px ${FONT}`;
+      if (selTr.assignedBattery) {
+        g.fillStyle = CSS.assigned;
+        g.fillText(`ASSIGNED → ${selTr.assignedBattery.toUpperCase()}`, PX + 12, 322);
+      } else {
+        g.fillStyle = 'rgba(142,240,180,0.5)';
+        g.fillText('NOT ASSIGNED', PX + 12, 322);
+      }
+      if (selTr.engagedBy > 0) {
+        g.fillStyle = CSS.intc;
+        g.fillText(`ENGAGED ×${selTr.engagedBy}`, PX + 202, 322);
+      }
+    } else {
+      g.font = `12px ${FONT}`;
+      g.fillStyle = 'rgba(142,240,180,0.45)';
+      g.fillText('NO TRACK SELECTED', PX + 12, 250);
+      g.font = `11px ${FONT}`;
+      g.fillText('SELECT FROM LIST OR TAP A HOLO BLIP', PX + 12, 270);
+    }
+
+    // symbology legend (shape + color pairs)
+    panelBox(PX, 342, PW, 74, 'SYMBOLOGY');
+    g.font = `10px ${FONT}`;
+    const ly = 372;
+    diamond(PX + 18, ly - 3, 5, true, CSS.hostile);
+    g.fillStyle = 'rgba(215,255,232,0.8)'; g.fillText('HOSTILE', PX + 28, ly);
+    diamond(PX + 106, ly - 3, 5, false, CSS.decoy, 1.4);
+    g.fillStyle = 'rgba(215,255,232,0.8)'; g.fillText('DECOY', PX + 116, ly);
+    g.fillStyle = CSS.intc; g.fillRect(PX + 184, ly - 8, 6, 6);
+    g.fillStyle = 'rgba(215,255,232,0.8)'; g.fillText('INTCPT', PX + 194, ly);
+    xMark(PX + 262, ly - 3, 4, 'rgba(255,140,110,0.85)', 1.3);
+    g.fillStyle = 'rgba(215,255,232,0.8)'; g.fillText('PRED IMPACT', PX + 272, ly);
+    const ly2 = 396;
+    corners(PX + 18, ly2 - 4, 7, CSS.assigned, 1.3);
+    g.fillStyle = 'rgba(215,255,232,0.8)'; g.fillText('ASSIGNED', PX + 32, ly2);
+    g.strokeStyle = '#fff'; g.lineWidth = 1.2;
+    g.beginPath(); g.arc(PX + 114, ly2 - 4, 6, 0, TAU); g.stroke();
+    g.fillStyle = 'rgba(215,255,232,0.8)'; g.fillText('SELECTED', PX + 126, ly2);
+    g.fillStyle = 'rgba(130,255,180,0.5)'; g.fillRect(PX + 210, ly2 - 9, 2, 2);
+    g.fillRect(PX + 215, ly2 - 7, 2, 2); g.fillRect(PX + 220, ly2 - 5, 2, 2);
+    g.fillStyle = 'rgba(215,255,232,0.8)'; g.fillText('HISTORY', PX + 228, ly2);
+
+    // status strip
+    const inFlight = ctx.interceptors?.active.length ?? 0;
+    const mm = Math.floor(now / 60), ss = Math.floor(now % 60);
+    g.font = `bold 13px ${FONT}`;
+    g.fillStyle = active.length ? '#ffd257' : 'rgba(186,247,212,0.75)';
+    g.fillText(`TRACKS ${pad2(active.length)}`, PX, 442);
+    g.fillStyle = inFlight ? CSS.intc : 'rgba(186,247,212,0.45)';
+    g.fillText(`IN FLIGHT ${pad2(inFlight)}`, PX + 118, 442);
+    g.fillStyle = 'rgba(186,247,212,0.6)';
+    g.fillText(`SIM ${pad2(mm)}:${pad2(ss)}`, PX + 258, 442);
+    g.font = `10px ${FONT}`;
+    g.fillStyle = 'rgba(140,240,180,0.4)';
+    g.fillText('GAIN ▮▮▮▮▯ · MTI ON · CFAR AUTO', PX, 462);
+
+    // scope corner tag
+    g.font = `10px ${FONT}`;
+    g.fillStyle = 'rgba(140,240,180,0.5)';
+    g.fillText('PPI-1 · NORTH-UP', 26, 34);
+
+    // static overlay: scanlines, vignette, glare, bezel
+    g.drawImage(overlay, 0, 0);
     screenTex.needsUpdate = true;
   }
 
   // ------------------------------------------------ holo update
+  const _dir = new THREE.Vector3();
   function updateHolo() {
-    sweep.rotation.z = (ctx.base?.radarHead?.rotation.y ?? 0) + Math.PI / 2;
+    const now = ctx.time.now;
+    // leading edge of the wedge tracks the detection azimuth
+    sweepGrp.rotation.y = (ctx.base?.radarHead?.rotation.y ?? 0) - Math.PI / 2;
+
     let bi = 0;
+    let selPos = null;
     for (const tr of tracks) {
       if (tr.gone || !tr.detected || bi >= threatBlips.length) continue;
+      const idx = bi;
       const b = threatBlips[bi++];
       const t = tr.threat;
       const x = clamp(t.pos.x * holoScale, -0.8, 0.8);
       const z = clamp(t.pos.z * holoScale, -0.8, 0.8);
-      const y = clamp(t.pos.y * altScale, 0, 0.5);
+      const y = clamp(t.pos.y * altScale, 0, 0.85);
       b.grp.visible = true;
       b.grp.position.set(x, 0, z);
       b.core.position.y = y;
+      b.halo.position.y = y;
+      b.halo.scale.setScalar(1.9 + Math.sin(now * 4 + idx * 1.7) * 0.35);
       b.hit.position.y = y;
-      b.stem.scale.set(1, y, 1);
+      b.stem.scale.set(1, Math.max(y, 0.001), 1);
       const isDecoy = tr.classified.startsWith('DECOY');
-      const col = isDecoy ? 0xc9a6ff : tr.assignedBattery ? 0xffd257 : 0xff5340;
+      const col = isDecoy ? HEX.decoy : tr.assignedBattery ? HEX.assigned : HEX.hostile;
       b.core.material.color.setHex(col);
+      b.core.material.wireframe = isDecoy; // ◇ open form for decoys
+      b.halo.material.color.setHex(col);
       b.stem.material.color.setHex(col);
       b.ringM.material.color.setHex(col);
+      b.ringM.material.opacity = 0.3 + tr.quality * 0.45;
       b.sel.visible = tr.id === selectedTrackId;
-      b.sel.position.y = 0.004;
+      if (b.sel.visible) selPos = b.grp.position;
       b.hit.userData.trackId = tr.id;
       b.core.userData.trackId = tr.id;
+      // velocity leader on the disc floor
+      const gs = Math.hypot(t.vel.x, t.vel.z);
+      if (gs > 1) {
+        _dir.set(t.vel.x / gs, 0, t.vel.z / gs);
+        const len = clamp(gs * 0.00016, 0.035, 0.13);
+        const vp = b.vel.geometry.attributes.position;
+        vp.setXYZ(0, _dir.x * 0.03, 0.004, _dir.z * 0.03);
+        vp.setXYZ(1, _dir.x * (0.03 + len), 0.004, _dir.z * (0.03 + len));
+        vp.needsUpdate = true;
+        b.vel.material.color.setHex(col);
+        b.vel.visible = true;
+      } else b.vel.visible = false;
+      // predicted ground-impact marker
+      const mk = impactMarkers[idx];
+      const imp = impactPoint(t.pos, t.vel);
+      let ix = imp.x * holoScale, iz = imp.z * holoScale;
+      const irr = Math.hypot(ix, iz);
+      const off = irr > 0.78;
+      if (off) { ix *= 0.78 / irr; iz *= 0.78 / irr; }
+      mk.grp.visible = true;
+      mk.grp.position.set(ix, 0.003, iz);
+      mk.mat.color.setHex(isDecoy ? HEX.decoy : tr.assignedBattery ? HEX.assigned : HEX.hostile);
+      mk.mat.opacity = (off ? 0.25 : 0.68) + Math.sin(now * 3.2 + idx) * 0.14;
+      // microlabel sprite
+      if (idx < microLabels.length) {
+        const l = microLabels[idx];
+        const cssCol = isDecoy ? CSS.decoy : tr.assignedBattery ? CSS.assigned : '#ffd7cf';
+        setMicroLabel(l, `${isDecoy ? '◇' : '◆'} ${tr.id}`, cssCol);
+        l.spr.position.set(x, y + 0.075, z);
+        l.spr.visible = true;
+      }
     }
-    for (; bi < threatBlips.length; bi++) threatBlips[bi].grp.visible = false;
+    for (let i = bi; i < threatBlips.length; i++) {
+      threatBlips[i].grp.visible = false;
+      impactMarkers[i].grp.visible = false;
+    }
+    for (let i = bi; i < microLabels.length; i++) microLabels[i].spr.visible = false;
+
+    // selection pulse ring
+    if (selPos) {
+      const ph = (now % 1.4) / 1.4;
+      pulseRing.visible = true;
+      pulseRing.position.set(selPos.x, 0.005, selPos.z);
+      pulseRing.scale.setScalar(0.85 + ph * 1.15);
+      pulseRing.material.opacity = 0.85 * (1 - ph);
+    } else pulseRing.visible = false;
+
+    // interceptors: cube blips + thin leader to their target
     let ii = 0;
     for (const it of ctx.interceptors?.active ?? []) {
       if (ii >= intBlips.length) break;
+      const idx = ii;
       const b = intBlips[ii++];
+      const x = clamp(it.pos.x * holoScale, -0.8, 0.8);
+      const z = clamp(it.pos.z * holoScale, -0.8, 0.8);
+      const y = clamp(it.pos.y * altScale, 0, 0.85);
       b.grp.visible = true;
-      b.grp.position.set(clamp(it.pos.x * holoScale, -0.8, 0.8), 0, clamp(it.pos.z * holoScale, -0.8, 0.8));
-      b.core.position.y = clamp(it.pos.y * altScale, 0, 0.5);
-      b.stem.scale.set(1, clamp(it.pos.y * altScale, 0.001, 0.5), 1);
+      b.grp.position.set(x, 0, z);
+      b.core.position.y = y;
+      b.halo.position.y = y;
+      b.hit.position.y = y;
+      b.stem.scale.set(1, Math.max(y, 0.001), 1);
+      const ld = intLeaders[idx];
+      if (it.threat?.alive) {
+        const tp = it.threat.pos;
+        const lp = ld.geometry.attributes.position;
+        lp.setXYZ(0, x, y, z);
+        lp.setXYZ(1, clamp(tp.x * holoScale, -0.8, 0.8), clamp(tp.y * altScale, 0, 0.85), clamp(tp.z * holoScale, -0.8, 0.8));
+        lp.needsUpdate = true;
+        ld.visible = true;
+      } else ld.visible = false;
     }
-    for (; ii < intBlips.length; ii++) intBlips[ii].grp.visible = false;
+    for (let i = ii; i < intBlips.length; i++) {
+      intBlips[i].grp.visible = false;
+      intLeaders[i].visible = false;
+    }
   }
 
   const api = {
@@ -350,7 +983,7 @@ export function createRadar(ctx) {
           // history breadcrumbs
           if (ctx.time.now - tr.lastPing > 1.2) {
             tr.lastPing = ctx.time.now;
-            tr.history.push([t.pos.x, t.pos.z]);
+            tr.history.push([t.pos.x, t.pos.z, ctx.time.now]);
             if (tr.history.length > 10) tr.history.shift();
           }
         }

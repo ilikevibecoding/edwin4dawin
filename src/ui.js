@@ -1,5 +1,6 @@
 // ui.js — DOM HUD, console panel, debrief + settings modals, event feed.
 // Everything is driven by game state snapshots + events from main.js.
+import { Vector3 } from 'three';
 import { fmtKm, clamp } from './util.js';
 import { SCENARIOS } from './threats.js';
 import { BATTERY_DEFS } from './batteries.js';
@@ -11,6 +12,11 @@ const el = (tag, cls, html) => {
   return e;
 };
 
+// colorblind-safe pairing: every color code ships with a shape/text glyph
+const GLYPH = { hostile: '◆', decoy: '◇', interceptor: '■' };
+const FEED_ICONS = { good: '✓', bad: '✗', warn: '▲', info: '◆' };
+const BANNER_ICONS = { good: '✓ ', bad: '✗ ', warn: '◆ ' };
+
 export function createUI(ctx) {
   const root = el('div');
   root.id = 'hud';
@@ -21,14 +27,18 @@ export function createUI(ctx) {
     <div id="threat-board" class="hud-panel"><h3>AIR PICTURE</h3><div id="threat-rows"></div></div>
     <div id="battery-board"></div>
     <div id="crosshair"></div>
+    <div id="aim-bracket" aria-hidden="true">
+      <span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span>
+      <span class="ab-id"></span><span class="ab-data"></span>
+    </div>
     <div id="target-prompt"></div>
-    <div id="feed"></div>
+    <div id="feed" role="log" aria-label="Event feed"></div>
     <div id="status-strip"></div>
     <div id="keyhelp">
       <b>WASD</b> move &nbsp;<b>SHIFT</b> sprint &nbsp;<b>E</b> interact / assign<br/>
       <b>F</b> authorize launch &nbsp;<b>1·2·3</b> battery &nbsp;<b>TAB</b> console &nbsp;<b>H</b> settings
     </div>
-    <div id="banner"></div>
+    <div id="banner" aria-live="polite"></div>
     <div id="impact-flash"></div>
   `;
 
@@ -39,40 +49,45 @@ export function createUI(ctx) {
   const statusStrip = root.querySelector('#status-strip');
   const banner = root.querySelector('#banner');
   const impactFlash = root.querySelector('#impact-flash');
+  const aimBracket = root.querySelector('#aim-bracket');
+  const abId = aimBracket.querySelector('.ab-id');
+  const abData = aimBracket.querySelector('.ab-data');
 
   // ---------- console panel ----------
   const consolePanel = el('div');
   consolePanel.id = 'console-panel';
+  consolePanel.setAttribute('role', 'dialog');
+  consolePanel.setAttribute('aria-label', 'Fire direction console');
   consolePanel.innerHTML = `
     <header>
       <div>
         <div class="title">FIRE DIRECTION CENTER — IRONVEIL RANGE</div>
         <div class="subtitle">FICTIONAL TRAINING DEMO · ALL PARAMETERS SIMULATED</div>
       </div>
-      <button id="btn-exit-console">EXIT [TAB]</button>
+      <button id="btn-exit-console" aria-label="Exit console (Tab)">EXIT [TAB]</button>
     </header>
     <div class="console-grid">
       <div class="console-section">
         <h4>CONDITIONS</h4>
-        <div class="opt-row" id="opt-time"></div>
+        <div class="opt-row" id="opt-time" role="group" aria-label="Time of day"></div>
       </div>
       <div class="console-section">
         <h4>THREAT SCENARIO</h4>
-        <div class="opt-row" id="opt-scenario"></div>
+        <div class="opt-row" id="opt-scenario" role="group" aria-label="Threat scenario"></div>
       </div>
       <div class="console-section">
         <h4>BATTERY SELECT</h4>
-        <div class="opt-row" id="opt-battery"></div>
-        <button id="btn-start">▶ START BALLISTIC MISSILES</button>
+        <div class="opt-row" id="opt-battery" role="group" aria-label="Battery select"></div>
+        <button id="btn-start" aria-label="Start scenario">▶ START BALLISTIC MISSILES</button>
       </div>
       <div class="console-section">
         <h4>ENGAGEMENT — SELECT TRACK ON DISPLAY OR LIST</h4>
-        <div id="track-list"></div>
+        <div id="track-list" role="group" aria-label="Detected tracks"></div>
         <div class="engage-actions">
-          <button id="btn-assign">ASSIGN</button>
-          <button id="btn-authorize">AUTHORIZE LAUNCH</button>
+          <button id="btn-assign" aria-label="Assign selected track to battery">ASSIGN</button>
+          <button id="btn-authorize" aria-label="Authorize launch">AUTHORIZE LAUNCH</button>
         </div>
-        <div id="engage-status"></div>
+        <div id="engage-status" aria-live="polite"></div>
       </div>
     </div>
   `;
@@ -80,15 +95,17 @@ export function createUI(ctx) {
 
   // ---------- debrief modal ----------
   const debrief = el('div', 'modal');
+  debrief.setAttribute('role', 'dialog');
+  debrief.setAttribute('aria-label', 'Engagement debrief');
   debrief.innerHTML = `
     <div class="box">
       <h2 id="db-title">ENGAGEMENT COMPLETE</h2>
       <div class="grade" id="db-grade">A</div>
       <table id="db-table"></table>
       <div class="row-buttons">
-        <button id="db-restart" class="primary">RESTART SCENARIO</button>
-        <button id="db-console">BACK TO CONSOLE</button>
-        <button id="db-close">FREE ROAM</button>
+        <button id="db-restart" class="primary" aria-label="Restart scenario">RESTART SCENARIO</button>
+        <button id="db-console" aria-label="Back to console">BACK TO CONSOLE</button>
+        <button id="db-close" aria-label="Close and free roam">FREE ROAM</button>
       </div>
     </div>
   `;
@@ -96,10 +113,12 @@ export function createUI(ctx) {
 
   // ---------- settings modal ----------
   const settings = el('div', 'modal');
+  settings.setAttribute('role', 'dialog');
+  settings.setAttribute('aria-label', 'Settings');
   settings.innerHTML = `
     <div class="box">
       <h2>SETTINGS</h2>
-      <label>Reduced motion (no head bob / heavy shake)
+      <label>Reduced motion (no head bob / heavy shake / flash effects)
         <input type="checkbox" id="set-reduced"></label>
       <label>Master volume
         <input type="range" id="set-volume" min="0" max="1" step="0.05"></label>
@@ -111,7 +130,7 @@ export function createUI(ctx) {
           <option value="medium">Medium</option>
           <option value="low">Low</option>
         </select></label>
-      <div class="row-buttons"><button id="set-close" class="primary">CLOSE</button></div>
+      <div class="row-buttons"><button id="set-close" class="primary" aria-label="Close settings">CLOSE</button></div>
       <div class="hint">Fictional entertainment demo. Systems are visually inspired by public
       imagery but all behavior, ranges and procedures are invented for gameplay.</div>
     </div>
@@ -121,6 +140,8 @@ export function createUI(ctx) {
   // ---------- intro overlay ----------
   const intro = el('div');
   intro.id = 'intro';
+  intro.setAttribute('role', 'button');
+  intro.setAttribute('aria-label', 'Click to take post');
   intro.innerHTML = `
     <h1>IRONVEIL RANGE</h1>
     <div class="tagline">INTEGRATED AIR-DEFENSE TEST SITE · FICTIONAL DEMO</div>
@@ -144,6 +165,7 @@ export function createUI(ctx) {
   for (const [id, name, d] of times) {
     const b = el('button', 'copt', `${name}<span class="d">${d}</span>`);
     b.dataset.id = id;
+    b.setAttribute('aria-label', `${name} — ${d}`);
     b.addEventListener('click', () => { handlers.setTimeOfDay?.(id); ctx.events.emit('ui-click'); });
     optTime.appendChild(b);
   }
@@ -151,6 +173,7 @@ export function createUI(ctx) {
   for (const s of Object.values(SCENARIOS)) {
     const b = el('button', 'copt', `${s.name}<span class="d">${s.desc}</span>`);
     b.dataset.id = s.id;
+    b.setAttribute('aria-label', `${s.name} — ${s.desc}`);
     b.addEventListener('click', () => { handlers.selectScenario?.(s.id); ctx.events.emit('ui-click'); });
     optScenario.appendChild(b);
   }
@@ -158,6 +181,7 @@ export function createUI(ctx) {
   for (const def of Object.values(BATTERY_DEFS)) {
     const b = el('button', 'copt', `${def.name}<span class="d">${def.kind} · ${def.desc}</span>`);
     b.dataset.id = def.id;
+    b.setAttribute('aria-label', `${def.name} — ${def.kind}`);
     b.addEventListener('click', () => { handlers.selectBattery?.(def.id); ctx.events.emit('ui-click'); });
     optBattery.appendChild(b);
   }
@@ -195,7 +219,7 @@ export function createUI(ctx) {
 
   // ---------- feed + banner ----------
   function toast(text, kind = 'info', ttl = 6) {
-    const m = el('div', `msg ${kind}`, text);
+    const m = el('div', `msg ${kind}`, `<span class="ico">${FEED_ICONS[kind] ?? '◆'}</span><span class="txt">${text}</span>`);
     feed.appendChild(m);
     while (feed.children.length > 5) feed.removeChild(feed.firstChild);
     setTimeout(() => m.classList.add('fading'), ttl * 1000);
@@ -205,8 +229,11 @@ export function createUI(ctx) {
   let bannerTimer = null;
   function showBanner(text, kind = 'good', sub = '', ttl = 2.6) {
     banner.className = kind;
-    banner.innerHTML = `${text}${sub ? `<span class="sub">${sub}</span>` : ''}`;
+    banner.innerHTML = `<span class="b-ico">${BANNER_ICONS[kind] ?? ''}</span>${text}${sub ? `<span class="sub">${sub}</span>` : ''}`;
     banner.style.opacity = '1';
+    // retrigger entrance pop (suppressed by body.reduced-motion in CSS)
+    void banner.offsetWidth;
+    banner.classList.add('pop');
     if (bannerTimer) clearTimeout(bannerTimer);
     bannerTimer = setTimeout(() => { banner.style.opacity = '0'; }, ttl * 1000);
   }
@@ -262,8 +289,13 @@ export function createUI(ctx) {
   const handlers = {};
 
   // ---------- per-frame HUD update (signature-diffed to avoid DOM churn) ----------
-  const sig = { threats: '', batts: '', strip: '', console: '', trackList: '' };
+  // struct signatures gate element rebuilds (membership/order/state classes);
+  // value signatures gate in-place textContent updates, so elements stay stable
+  // while data merely ticks.
+  const sig = { threatsStruct: '', threatsVals: '', batts: '', strip: '', console: '', trackStruct: '', trackVals: '' };
   const q100 = (v) => Math.round(v / 100) * 100;
+  let threatRowRefs = [];
+  let trackBtnRefs = [];
 
   // event delegation: track list buttons survive rebuilds
   trackList.addEventListener('click', (e) => {
@@ -271,25 +303,81 @@ export function createUI(ctx) {
     if (b) { handlers.selectTrack?.(b.dataset.id); ctx.events.emit('ui-click'); }
   });
 
-  function update(snapshot) {
-    // threat rows
-    const rows = [];
-    for (const tr of snapshot.tracks) {
-      const cls = [
-        'row',
-        tr.classified.startsWith('DECOY') ? 'decoy' : '',
-        tr.assignedBattery ? 'assigned' : '',
-        tr.id === snapshot.selectedTrackId ? 'selected' : '',
-      ].join(' ');
-      rows.push(`<div class="${cls}"><span class="tid">${tr.id}</span><span class="cls">${tr.classified}</span><span class="alt">${fmtKm(q100(tr.alt))}</span><span class="rng">${fmtKm(q100(tr.range))}</span>${tr.assignedBattery ? `<span class="asg">→${tr.assignedBattery.slice(0, 4).toUpperCase()}</span>` : ''}</div>`);
+  // ---------- screen-space aim bracket (presentation only) ----------
+  const _proj = new Vector3();
+  let abShown = false, abAssigned = false, abIdText = '', abDataText = '';
+  function updateAimBracket(snapshot) {
+    let track = null;
+    if (snapshot.mode !== 'console' && ctx.game) {
+      const id = ctx.game.aimTrackId ?? snapshot.assignment?.trackId ?? null;
+      if (id) track = ctx.radar.getTrack(id);
     }
+    let visible = false;
+    if (track && !track.gone) {
+      ctx.camera.updateMatrixWorld();
+      _proj.copy(track.threat.pos).project(ctx.camera);
+      if (_proj.z < 1 && Math.abs(_proj.x) < 1.02 && Math.abs(_proj.y) < 1.02) {
+        visible = true;
+        const x = (_proj.x * 0.5 + 0.5) * innerWidth;
+        const y = (-_proj.y * 0.5 + 0.5) * innerHeight;
+        const d = track.threat.pos.distanceTo(ctx.camera.position);
+        const s = clamp(1.45 - d / 12000, 0.72, 1.3);
+        aimBracket.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%) scale(${s.toFixed(3)})`;
+        const assigned = !!track.assignedBattery || snapshot.assignment?.trackId === track.id;
+        const decoy = track.classified.startsWith('DECOY');
+        const idText = `${decoy ? GLYPH.decoy : GLYPH.hostile} ${track.id}`;
+        const dataText = assigned ? `${track.classified} · ASSIGNED` : track.classified;
+        if (assigned !== abAssigned) { abAssigned = assigned; aimBracket.classList.toggle('assigned', assigned); }
+        if (idText !== abIdText) { abIdText = idText; abId.textContent = idText; }
+        if (dataText !== abDataText) { abDataText = dataText; abData.textContent = dataText; }
+      }
+    }
+    if (visible !== abShown) {
+      abShown = visible;
+      aimBracket.classList.toggle('on', visible);
+    }
+  }
+
+  function update(snapshot) {
+    // presentation flag for CSS (disables banner/feed/pulse animation)
+    document.body.classList.toggle('reduced-motion', !!ctx.settings.reducedMotion);
+
+    // ---- threat rows: rebuild only on membership/state change; tick values in place
     const inbound = snapshot.inboundUndetected;
-    const threatsHtml = rows.length
-      ? rows.join('')
-      : `<div class="empty">${snapshot.phase === 'active' ? (inbound > 0 ? 'RADAR SEARCHING — LAUNCH DETECTED' : 'NO ACTIVE TRACKS') : 'NO ACTIVE TRACKS — START A SCENARIO AT THE CONSOLE'}</div>`;
-    if (threatsHtml !== sig.threats) {
-      sig.threats = threatsHtml;
-      threatRows.innerHTML = threatsHtml;
+    let struct = snapshot.tracks
+      .map((tr) => `${tr.id}:${tr.classified.startsWith('DECOY') ? 1 : 0}:${tr.assignedBattery ?? ''}:${tr.id === snapshot.selectedTrackId ? 1 : 0}`)
+      .join('|');
+    if (!snapshot.tracks.length) struct = `empty:${snapshot.phase}:${inbound > 0 ? 1 : 0}`;
+    if (struct !== sig.threatsStruct) {
+      sig.threatsStruct = struct;
+      sig.threatsVals = '';
+      if (!snapshot.tracks.length) {
+        threatRows.innerHTML = `<div class="empty">${snapshot.phase === 'active' ? (inbound > 0 ? '▲ RADAR SEARCHING — LAUNCH DETECTED' : 'NO ACTIVE TRACKS') : 'NO ACTIVE TRACKS — START A SCENARIO AT THE CONSOLE'}</div>`;
+        threatRowRefs = [];
+      } else {
+        threatRows.innerHTML = snapshot.tracks.map((tr) => {
+          const decoy = tr.classified.startsWith('DECOY');
+          const cls = ['row', decoy ? 'decoy' : '', tr.assignedBattery ? 'assigned' : '', tr.id === snapshot.selectedTrackId ? 'selected' : ''].join(' ');
+          return `<div class="${cls}"><span class="glyph">${decoy ? GLYPH.decoy : GLYPH.hostile}</span><span class="tid">${tr.id}</span><span class="cls"></span><span class="alt"></span><span class="rng"></span>${tr.assignedBattery ? `<span class="asg">→${tr.assignedBattery.slice(0, 4).toUpperCase()}</span>` : ''}</div>`;
+        }).join('');
+        threatRowRefs = [...threatRows.children].map((r) => ({
+          cls: r.querySelector('.cls'), alt: r.querySelector('.alt'), rng: r.querySelector('.rng'),
+        }));
+      }
+    }
+    if (snapshot.tracks.length) {
+      const vals = snapshot.tracks.map((tr) => `${tr.classified}:${q100(tr.alt)}:${q100(tr.range)}`).join('|');
+      if (vals !== sig.threatsVals) {
+        sig.threatsVals = vals;
+        for (let i = 0; i < snapshot.tracks.length; i++) {
+          const tr = snapshot.tracks[i];
+          const ref = threatRowRefs[i];
+          if (!ref) continue;
+          ref.cls.textContent = tr.classified;
+          ref.alt.textContent = fmtKm(q100(tr.alt));
+          ref.rng.textContent = fmtKm(q100(tr.range));
+        }
+      }
     }
 
     // battery cards
@@ -310,10 +398,10 @@ export function createUI(ctx) {
     const chips = [];
     chips.push(`<span class="chip batt"><span class="lbl">BTRY</span>${snapshot.selectedBatteryName}</span>`);
     if (snapshot.assignment) {
-      chips.push(`<span class="chip"><span class="lbl">ASSIGNED</span>${snapshot.assignment.trackId} → ${snapshot.assignment.batteryName}</span>`);
+      chips.push(`<span class="chip asg"><span class="lbl">ASSIGNED</span>${snapshot.assignment.trackId} → ${snapshot.assignment.batteryName}</span>`);
     }
     if (snapshot.inFlight > 0) {
-      chips.push(`<span class="chip flight"><span class="lbl">IN FLIGHT</span>${snapshot.inFlight} INTERCEPTOR${snapshot.inFlight > 1 ? 'S' : ''}</span>`);
+      chips.push(`<span class="chip flight"><span class="lbl">IN FLIGHT</span>${GLYPH.interceptor} ${snapshot.inFlight} INTERCEPTOR${snapshot.inFlight > 1 ? 'S' : ''}</span>`);
     }
     if (snapshot.phase === 'active') {
       chips.push(`<span class="chip"><span class="lbl">THREATS</span>${snapshot.threatsRemaining} REMAIN</span>`);
@@ -329,9 +417,21 @@ export function createUI(ctx) {
       const cSig = `${snapshot.timeOfDay}|${snapshot.scenario}|${snapshot.selectedBatteryId}|${snapshot.phase}|${snapshot.selectedTrackId}|${snapshot.selectedBatteryReady}|${!!snapshot.assignment}|${snapshot.engageHint}`;
       if (cSig !== sig.console) {
         sig.console = cSig;
-        for (const b of optTime.children) b.classList.toggle('active', b.dataset.id === snapshot.timeOfDay);
-        for (const b of optScenario.children) b.classList.toggle('active', b.dataset.id === snapshot.scenario);
-        for (const b of optBattery.children) b.classList.toggle('active', b.dataset.id === snapshot.selectedBatteryId);
+        for (const b of optTime.children) {
+          const on = b.dataset.id === snapshot.timeOfDay;
+          b.classList.toggle('active', on);
+          b.setAttribute('aria-pressed', on);
+        }
+        for (const b of optScenario.children) {
+          const on = b.dataset.id === snapshot.scenario;
+          b.classList.toggle('active', on);
+          b.setAttribute('aria-pressed', on);
+        }
+        for (const b of optBattery.children) {
+          const on = b.dataset.id === snapshot.selectedBatteryId;
+          b.classList.toggle('active', on);
+          b.setAttribute('aria-pressed', on);
+        }
         btnStart.disabled = snapshot.phase === 'active' || !snapshot.scenario;
         btnStart.textContent = snapshot.phase === 'active' ? '… RAID IN PROGRESS …' : '▶ START BALLISTIC MISSILES';
         btnAssign.disabled = !snapshot.selectedTrackId || !snapshot.selectedBatteryReady;
@@ -339,18 +439,45 @@ export function createUI(ctx) {
         engageStatus.textContent = snapshot.engageHint ?? '';
       }
 
-      // track list (rebuild only when membership/selection/coarse values change)
-      const items = [];
-      for (const tr of snapshot.tracks) {
-        const c = ['', tr.classified.startsWith('DECOY') ? 'decoy' : '', tr.id === snapshot.selectedTrackId ? 'selected' : '', tr.assignedBattery ? 'assigned' : ''].join(' ');
-        items.push(`<button data-id="${tr.id}" class="${c}"><b>${tr.id}</b><span>${tr.classified}</span><span>ALT ${fmtKm(q100(tr.alt))}</span><span>RNG ${fmtKm(q100(tr.range))}</span></button>`);
+      // track list: rebuild only when membership/selection/classes change
+      let tStruct = snapshot.tracks
+        .map((tr) => `${tr.id}:${tr.classified.startsWith('DECOY') ? 1 : 0}:${tr.id === snapshot.selectedTrackId ? 1 : 0}:${tr.assignedBattery ? 1 : 0}`)
+        .join('|');
+      if (!snapshot.tracks.length) tStruct = `none:${snapshot.phase}`;
+      if (tStruct !== sig.trackStruct) {
+        sig.trackStruct = tStruct;
+        sig.trackVals = '';
+        if (!snapshot.tracks.length) {
+          trackList.innerHTML = `<div class="none">No detected tracks. ${snapshot.phase === 'active' ? 'Radar searching…' : 'Press START.'}</div>`;
+          trackBtnRefs = [];
+        } else {
+          trackList.innerHTML = snapshot.tracks.map((tr) => {
+            const decoy = tr.classified.startsWith('DECOY');
+            const c = ['', decoy ? 'decoy' : '', tr.id === snapshot.selectedTrackId ? 'selected' : '', tr.assignedBattery ? 'assigned' : ''].join(' ');
+            return `<button data-id="${tr.id}" class="${c}" aria-label="Select track ${tr.id}" aria-pressed="${tr.id === snapshot.selectedTrackId}"><span class="glyph">${decoy ? GLYPH.decoy : GLYPH.hostile}</span><b>${tr.id}</b><span class="cls"></span><span class="alt"></span><span class="rng"></span></button>`;
+          }).join('');
+          trackBtnRefs = [...trackList.children].map((b) => ({
+            cls: b.querySelector('.cls'), alt: b.querySelector('.alt'), rng: b.querySelector('.rng'),
+          }));
+        }
       }
-      const listHtml = items.length ? items.join('') : `<div class="none">No detected tracks. ${snapshot.phase === 'active' ? 'Radar searching…' : 'Press START.'}</div>`;
-      if (listHtml !== sig.trackList) {
-        sig.trackList = listHtml;
-        trackList.innerHTML = listHtml;
+      if (snapshot.tracks.length) {
+        const vals = snapshot.tracks.map((tr) => `${tr.classified}:${q100(tr.alt)}:${q100(tr.range)}`).join('|');
+        if (vals !== sig.trackVals) {
+          sig.trackVals = vals;
+          for (let i = 0; i < snapshot.tracks.length; i++) {
+            const tr = snapshot.tracks[i];
+            const ref = trackBtnRefs[i];
+            if (!ref) continue;
+            ref.cls.textContent = tr.classified;
+            ref.alt.textContent = `ALT ${fmtKm(q100(tr.alt))}`;
+            ref.rng.textContent = `RNG ${fmtKm(q100(tr.range))}`;
+          }
+        }
       }
     }
+
+    updateAimBracket(snapshot);
   }
 
   const api = {
@@ -403,7 +530,7 @@ export function createUI(ctx) {
       toast(`${tr?.id ?? 'TRACK'} WAS A DECOY — ROUND WASTED`, 'warn', 7);
     } else {
       showBanner('INTERCEPT', 'good', `${tr?.id ?? 'TRACK'} DESTROYED`);
-      toast(`${tr?.id ?? 'TRACK'} INTERCEPTED ✓`, 'good', 7);
+      toast(`${tr?.id ?? 'TRACK'} INTERCEPTED`, 'good', 7);
     }
   });
   ctx.events.on('intercept-miss', ({ threat, reason }) => {
@@ -416,13 +543,12 @@ export function createUI(ctx) {
     if (onBase) {
       showBanner('IMPACT — BASE STRUCK', 'bad', tr?.id ?? '', 3);
       flashImpact();
-      toast(`${tr?.id ?? 'THREAT'} IMPACTED INSIDE PERIMETER ✗`, 'bad', 8);
+      toast(`${tr?.id ?? 'THREAT'} IMPACTED INSIDE PERIMETER`, 'bad', 8);
     } else {
       toast(`${tr?.id ?? 'THREAT'} IMPACT OFF-BASE`, 'warn', 6);
     }
   });
   ctx.events.on('battery-ready', ({ battery }) => toast(`${battery.def.name} READY`, 'good', 3));
 
-  void clamp;
   return api;
 }

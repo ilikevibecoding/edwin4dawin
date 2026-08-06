@@ -45,6 +45,7 @@ export function createInterceptors(ctx) {
     pos: new THREE.Vector3(), vel: new THREE.Vector3(),
     age: 0, phase: 'boost', alive: false,
     trail: null, emitAcc: 0, minDist: 1e9, weaveSeed: 0,
+    flickerSeed: 0,
     lastPredict: new THREE.Vector3(), predictT: 0,
   }), 14);
 
@@ -88,7 +89,7 @@ export function createInterceptors(ctx) {
     const closing = _v.dot(it.vel.clone().normalize());
     const geomFactor = closing < -0.25 ? 1.0 : 0.8; // head-on best
     if (geomFactor < 1 && !reason) reason = 'CROSSING ENGAGEMENT';
-    const proxFactor = clamp(1.25 - dist / (def.killRadius * 1.6), 0.4, 1);
+    const proxFactor = clamp(1.15 - dist / (def.killRadius * 3.0), 0.5, 1);
 
     const pk = 0.94 * envFactor * geomFactor * proxFactor;
     const roll = ctx.rng.next();
@@ -100,12 +101,14 @@ export function createInterceptors(ctx) {
       ctx.events.emit('intercept-success', {
         interceptor: it, threat, point,
         decoy: threat.isDecoy,
+        dist: Math.round(dist), pk,
       });
     } else {
       ctx.effects.explosionAir(it.pos, 0.55);
       ctx.events.emit('intercept-miss', {
         interceptor: it, threat,
         reason: reason ?? 'PROXIMITY FUZE — DEBRIS MISSED',
+        dist: Math.round(dist), pk,
       });
     }
     destroy(it, false);
@@ -142,6 +145,7 @@ export function createInterceptors(ctx) {
       it.minDist = 1e9;
       it.emitAcc = 0;
       it.weaveSeed = ctx.rng.next() * 10;
+      it.flickerSeed = ctx.vrng.next() * 20; // visual-only motor flicker phase
       it.threat.engagedBy++;
 
       shapeMesh(it.mesh, def);
@@ -150,10 +154,10 @@ export function createInterceptors(ctx) {
       it.mesh.flame.material.color.setHex(def.flame);
 
       it.trail = ctx.effects.acquireTrail({
-        color: 0xf2ede2,
+        color: 0xf6f0e4,
         life: 9,
-        opacity: 0.8,
-        emissive: 0.12, // mostly sun/moon-lit smoke
+        opacity: 0.85,
+        emissive: 0.14, // mostly sun/moon-lit smoke
       });
       // launch effects at the muzzle
       ctx.effects.launchBlast(muzzlePos, muzzleDir, battery.id === 'sentinel' ? 1.9 : battery.id === 'thaad' ? 1.25 : 1.0);
@@ -171,7 +175,10 @@ export function createInterceptors(ctx) {
         // ---- guidance target
         let desiredDir = null;
         if (targetAlive) {
-          const sol = predictIntercept(it.pos, threat.pos, threat.vel, Math.max(def.avgSpeed, it.vel.length()));
+          const sol = predictIntercept(
+            it.pos, threat.pos, threat.vel,
+            Math.max(def.avgSpeed, it.vel.length()), 90, threat.dragK
+          );
           if (sol) {
             it.lastPredict.copy(sol.point);
             it.predictT = sol.t;
@@ -194,7 +201,12 @@ export function createInterceptors(ctx) {
             steerVelocity(it.vel, desiredDir, def.turnRate * 0.55, dt);
           }
           it.vel.y -= GRAVITY * 0.4 * dt;
-          if (it.age >= def.boostTime) it.phase = 'guide';
+          if (it.age >= def.boostTime) {
+            it.phase = 'guide';
+            // motor burnout: small puff + brief flare
+            ctx.effects.muzzlePuff(it.pos, 1.15);
+            ctx.effects.flash(it.pos, 6, 0.16, 0xffdcae);
+          }
         } else {
           // sustainer: hold speed, bleed a little in turns
           const speed = it.vel.length();
@@ -203,12 +215,16 @@ export function createInterceptors(ctx) {
           }
           it.vel.y -= GRAVITY * 0.25 * dt;
           if (desiredDir) {
-            const terminal = distToTarget < 700;
+            // terminal window scales with closing speed so fast intercepts get
+            // enough clean-steering time (~0.9 s) to null the miss distance
+            const closingSpeed = it.vel.length() + (targetAlive ? threat.vel.length() : 0);
+            const terminal = distToTarget < Math.max(700, closingSpeed * 0.9);
             it.phase = terminal ? 'terminal' : 'guide';
             let rate = def.turnRate * (terminal ? 1.9 : 1.0);
-            // visible mid-course corrections without jitter
+            // visible mid-course corrections, faded out well before terminal
             if (!terminal) {
-              const w = Math.sin(it.age * 1.7 + it.weaveSeed) * 0.06;
+              const weaveK = clamp((distToTarget - 1200) / 2600, 0, 1);
+              const w = Math.sin(it.age * 1.7 + it.weaveSeed) * 0.06 * weaveK;
               _desired.applyAxisAngle(_v.set(0, 1, 0), w * 0.5);
             }
             steerVelocity(it.vel, _desired, rate, dt);
@@ -222,17 +238,21 @@ export function createInterceptors(ctx) {
         _look.copy(it.pos).add(it.vel);
         it.mesh.group.lookAt(_look);
 
-        // flame + trail
+        // flame (subtle motor flicker during boost) + trail
         const boosting = it.phase === 'boost';
-        it.mesh.flame.material.opacity = boosting ? 0.95 : 0.35;
+        const flick = 0.84 + 0.16 * Math.sin(it.age * 41 + it.flickerSeed) * Math.sin(it.age * 13.7 + it.flickerSeed * 2.3);
+        it.mesh.flame.material.opacity = boosting ? 0.95 * flick : 0.32;
         const dCam = it.pos.distanceTo(ctx.camera.position);
-        it.mesh.flame.scale.setScalar((boosting ? 7 : 2.6) * clamp(0.7 + dCam * 0.004, 0.8, 8));
+        it.mesh.flame.scale.setScalar((boosting ? 7 * (0.88 + 0.2 * flick) : 2.6) * clamp(0.7 + dCam * 0.004, 0.8, 8));
         it.emitAcc += dt;
         if (it.emitAcc > 0.03 && it.trail) {
           it.emitAcc = 0;
           const airK = clamp(it.pos.y / 6500, 0, 1);
-          const w = def.trailWidth * (boosting ? 2.6 : 1.4) * (0.6 + airK * 1.1);
-          it.trail.emit(it.pos, w, boosting ? 1.0 : 0.55 + airK * 0.3);
+          // widthRamp: grow in over the first half second so the young ribbon
+          // doesn't render as a hard-edged rectangle at the pad
+          const widthRamp = clamp(it.age * 2.2, 0.15, 1);
+          const w = def.trailWidth * (boosting ? 2.8 : 1.35) * (0.6 + airK * 1.1) * widthRamp;
+          it.trail.emit(it.pos, w, boosting ? 1.0 : 0.5 + airK * 0.3);
         }
 
         // ---- endgame
@@ -240,6 +260,27 @@ export function createInterceptors(ctx) {
           if (distToTarget < def.killRadius) {
             resolveDetonation(it, distToTarget);
             continue;
+          }
+          // analytic proximity fuze: at ~2.5 km/s closing speed a fixed-step
+          // sample can jump 80 m past the target, so predict the closest
+          // approach over the next step from relative state and detonate there.
+          if (distToTarget < 500) {
+            _v.subVectors(threat.pos, it.pos); // r
+            const rvx = threat.vel.x - it.vel.x, rvy = threat.vel.y - it.vel.y, rvz = threat.vel.z - it.vel.z;
+            const vv = rvx * rvx + rvy * rvy + rvz * rvz;
+            const rv = _v.x * rvx + _v.y * rvy + _v.z * rvz;
+            const tca = vv > 1e-6 ? -rv / vv : -1;
+            if (tca > 0 && tca <= dt * 1.5) {
+              const dca2 = _v.lengthSq() - (rv * rv) / vv;
+              const dca = Math.sqrt(Math.max(dca2, 0));
+              if (dca < def.killRadius * 2.2) {
+                // move to the fuzing point so the burst renders where it happens
+                it.pos.addScaledVector(it.vel, tca);
+                it.mesh.group.position.copy(it.pos);
+                resolveDetonation(it, dca);
+                continue;
+              }
+            }
           }
           if (distToTarget < it.minDist) {
             it.minDist = distToTarget;

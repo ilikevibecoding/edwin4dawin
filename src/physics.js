@@ -28,6 +28,29 @@ export function propagateBallistic(pos, vel, t, out = new THREE.Vector3()) {
   return out;
 }
 
+/**
+ * Numeric propagation matching the threat integrator (gravity + quadratic
+ * drag). Coarse fixed substeps are fine because callers re-predict each frame.
+ */
+export function propagateWithDrag(pos, vel, dragK, t, out = new THREE.Vector3()) {
+  let px = pos.x, py = pos.y, pz = pos.z;
+  let vx = vel.x, vy = vel.y, vz = vel.z;
+  let rem = t;
+  while (rem > 0) {
+    const h = Math.min(0.25, rem);
+    rem -= h;
+    vy -= GRAVITY * h;
+    const sp = Math.sqrt(vx * vx + vy * vy + vz * vz);
+    if (sp > 1) {
+      const s = Math.max(0, 1 - (dragK * sp * h));
+      vx *= s; vy *= s; vz *= s;
+    }
+    px += vx * h; py += vy * h; pz += vz * h;
+  }
+  out.set(px, py, pz);
+  return out;
+}
+
 /** Time until a ballistic object crosses y=groundY (positive root), or -1. */
 export function timeToGround(pos, vel, groundY = 0) {
   const a = -0.5 * GRAVITY;
@@ -46,21 +69,28 @@ export function timeToGround(pos, vel, groundY = 0) {
  * Simplified fictional intercept predictor. Iterates time-of-flight guesses so
  * an interceptor with average speed `avgSpeed` starting at `from` meets a
  * ballistic target. Returns { point, t } or null when unreachable in time.
+ * Pass `dragK` matching the target's drag so the lead point tracks how the
+ * target actually flies (a pure ballistic lead leaves a systematic miss bias).
  */
-export function predictIntercept(from, targetPos, targetVel, avgSpeed, maxT = 90) {
+export function predictIntercept(from, targetPos, targetVel, avgSpeed, maxT = 90, dragK = 0) {
+  const prop = dragK > 0
+    ? (t) => propagateWithDrag(targetPos, targetVel, dragK, t, _v1)
+    : (t) => propagateBallistic(targetPos, targetVel, t, _v1);
   let t = from.distanceTo(targetPos) / avgSpeed;
   for (let i = 0; i < 4; i++) {
-    propagateBallistic(targetPos, targetVel, t, _v1);
+    prop(t);
     if (_v1.y < 30) { // clamp prediction above terrain
       const tg = timeToGround(targetPos, targetVel, 30);
       if (tg > 0 && tg < t) t = tg;
-      propagateBallistic(targetPos, targetVel, t, _v1);
+      prop(t);
     }
     const d = from.distanceTo(_v1);
     t = 0.55 * t + 0.45 * (d / avgSpeed);
-    t = clamp(t, 0.5, maxT);
+    // tiny floor only: a large floor forces a phantom lead at close range
+    // (aim point ahead of the target that guidance can never converge on)
+    t = clamp(t, 0.02, maxT);
   }
-  propagateBallistic(targetPos, targetVel, t, _v1);
+  prop(t);
   const tg = timeToGround(targetPos, targetVel, 5);
   if (tg > 0 && t >= tg - 0.4) return null; // target lands before we arrive
   return { point: _v1.clone(), t };

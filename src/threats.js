@@ -96,11 +96,13 @@ export function createThreats(ctx) {
       id: '', pos: new THREE.Vector3(), vel: new THREE.Vector3(),
       alive: false, isDecoy: false, dragK: 0, weave: 0, weavePhase: 0,
       trail: null, glowTrail: null, emitAcc: 0, age: 0, engagedBy: 0,
+      plasmaTrail: null, plasmaAcc: 0, flickerPhase: 0,
     };
   }, 10);
 
   const _v = new THREE.Vector3();
   const _look = new THREE.Vector3();
+  const _pv = new THREE.Vector3();
 
   function spawnThreat(spec, rng) {
     const t = pool.acquire();
@@ -137,6 +139,15 @@ export function createThreats(ctx) {
       opacity: spec.decoy ? 0.4 : 0.62,
       emissive: 0.45, // reentry-heated: partially self-lit at night
     });
+    // short additive plasma sheath hugging the body; intensity follows reentry heat
+    t.plasmaTrail = ctx.effects.acquireTrail({
+      color: spec.decoy ? 0xffd9a0 : 0xffb066,
+      life: 1.2,
+      opacity: spec.decoy ? 0.45 : 0.9,
+      emissive: 1.0,
+    });
+    t.plasmaAcc = 0;
+    t.flickerPhase = ctx.vrng.next() * TAU;
     active.push(t);
     ctx.events.emit('threat-spawned', { threat: t });
     return t;
@@ -146,6 +157,7 @@ export function createThreats(ctx) {
     t.alive = false;
     t.group.visible = false;
     if (t.trail) { ctx.effects.releaseTrail(t.trail); t.trail = null; }
+    if (t.plasmaTrail) { ctx.effects.releaseTrail(t.plasmaTrail); t.plasmaTrail = null; }
     const i = active.indexOf(t);
     if (i >= 0) active.splice(i, 1);
     pool.release(t);
@@ -205,12 +217,13 @@ export function createThreats(ctx) {
         _look.copy(t.pos).add(t.vel);
         t.group.lookAt(_look);
 
-        // reentry heating glow: stronger when fast & low
+        // reentry heating glow: stronger when fast & low, with subtle plasma flicker
         const heat = clamp((sp - 220) / 600, 0, 1) * clamp(1.5 - t.pos.y / 5200, 0.2, 1);
-        t.body.material.emissiveIntensity = heat * 3.2;
+        const flick = 0.9 + 0.1 * Math.sin(t.age * 27 + t.flickerPhase) * Math.sin(t.age * 9.3 + t.flickerPhase * 1.7);
+        t.body.material.emissiveIntensity = heat * 3.2 * (0.75 + 0.35 * flick);
         const dCam = t.pos.distanceTo(ctx.camera.position);
-        t.glow.scale.setScalar(clamp(3.5 + dCam * 0.012, 4, 90) * (t.isDecoy ? 0.7 : 1) * (0.55 + heat));
-        t.glow.material.opacity = 0.5 + heat * 0.5;
+        t.glow.scale.setScalar(clamp(3.5 + dCam * 0.012, 4, 90) * (t.isDecoy ? 0.7 : 1) * (0.55 + heat) * (0.92 + 0.08 * flick));
+        t.glow.material.opacity = (0.5 + heat * 0.5) * (t.isDecoy ? 0.72 : 1) * flick;
 
         // trail emission (air-density based width/fade)
         t.emitAcc += dt;
@@ -218,6 +231,21 @@ export function createThreats(ctx) {
           t.emitAcc = 0;
           const airK = clamp(t.pos.y / 6500, 0, 1); // thin air => wide persistent trail
           t.trail.emit(t.pos, (t.isDecoy ? 3.5 : 6) * (0.5 + airK * 1.2), 0.5 + airK * 0.6);
+        }
+        // plasma sheath: short bright ribbon just behind the body, grows with
+        // heat. Width is stylized (wider than the body) so the sheath still
+        // reads as a burning streak from typical viewing ranges of 0.5-2 km.
+        t.plasmaAcc += dt;
+        if (t.plasmaAcc > 0.024 && t.plasmaTrail) {
+          t.plasmaAcc = 0;
+          if (heat > 0.04) {
+            _pv.copy(t.vel).normalize().multiplyScalar(-2.6).add(t.pos);
+            t.plasmaTrail.emit(
+              _pv,
+              (t.isDecoy ? 1.3 : 2.8) * (0.45 + heat * 1.3),
+              clamp(0.3 + heat * 0.95, 0, 1) * (0.9 + 0.1 * flick)
+            );
+          }
         }
 
         // ground impact

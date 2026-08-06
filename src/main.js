@@ -278,9 +278,10 @@ const consoleView = {
   look: new THREE.Vector3(),
 };
 {
+  // frame both the PPI screen (left) and the holo table (right)
   const c = ctx.base.consolePos;
-  consoleView.pos.set(c.x + 1.15, 1.78, c.z + 0.85);
-  consoleView.look.set(c.x + 0.2, 1.15, c.z - 1.7);
+  consoleView.pos.set(c.x + 2.1, 1.92, c.z + 3.1);
+  consoleView.look.set(c.x + 1.85, 1.22, c.z - 0.9);
 }
 
 function enterConsole() {
