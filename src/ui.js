@@ -29,6 +29,7 @@ function ammoPips(b) {
 export class UI {
   constructor() {
     this.actions = null;
+    this.now = () => 0; // sim-time source, wired by main.js (mission clock)
     this.root = el('div', 'ui-root');
     document.body.appendChild(this.root);
     this._tickerLines = [];
@@ -119,7 +120,10 @@ export class UI {
   }
 
   log(text, cls = '') {
-    const stamp = new Date().toISOString().substr(14, 5);
+    // mission clock (sim time), not wall clock — deterministic and honest about
+    // sim pace on slow machines
+    const t = Math.max(0, this.now());
+    const stamp = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
     this._tickerLines.push({ text: `${stamp} ${text}`, cls });
     if (this._tickerLines.length > 7) this._tickerLines.shift();
     this.ticker.innerHTML = this._tickerLines

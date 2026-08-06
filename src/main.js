@@ -73,6 +73,7 @@ const game = {
   freeCam: false,           // test viewpoints
   everEntered: false,       // start screen dismissed at least once
 };
+ui.now = () => game.time;   // ticker stamps events with the mission clock
 weather.setTimeOfDay(game.tod, true);
 
 function resetStats() {
