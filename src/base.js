@@ -1467,6 +1467,7 @@ function buildShelter(rng) {
   }
   const housings = new THREE.Mesh(mergeParts(lampHousings), mats.darkMetal);
   housings.castShadow = true;
+  housings.receiveShadow = true;
   g.add(housings);
   lampHousings.forEach((p) => p.geometry.dispose());
   const lensMesh = new THREE.Mesh(mergeParts(lensGeoParts), lamp(0xffe9c0, 0, { side: THREE.DoubleSide }));
@@ -1492,6 +1493,8 @@ function buildShelter(rng) {
   );
   doorSign.position.set(W / 2 + 0.09, 2.0, 3.5);
   doorSign.rotation.y = Math.PI / 2;
+  doorSign.castShadow = true;
+  doorSign.receiveShadow = true;
   g.add(doorSign);
 
   const unitBoard = new THREE.Mesh(
@@ -1512,6 +1515,8 @@ function buildShelter(rng) {
   );
   unitBoard.position.set(-W / 2 - 3.1, 1.6, -1.4);
   unitBoard.rotation.y = -Math.PI / 2;
+  unitBoard.castShadow = true;
+  unitBoard.receiveShadow = true;
   g.add(unitBoard);
 
   g.userData.colliders = [
@@ -2817,6 +2822,8 @@ function buildGate(rng) {
   );
   plate.position.set(0.12, 2.0, 5.2);
   plate.rotation.y = Math.PI / 2;
+  plate.castShadow = true;
+  plate.receiveShadow = true;
   g.add(plate);
 
   g.userData.colliders = [
@@ -2922,6 +2929,7 @@ function buildMarkerBoard() {
   );
   face.position.set(0, 2.35, 0.17);
   face.castShadow = true;
+  face.receiveShadow = true;
   g.add(face);
 
   g.userData.colliders = [
@@ -2969,6 +2977,8 @@ function buildCableTray(points, { covered = 0.55, rng = null } = {}) {
     cableParts.push({ geometry: pathTube(inner.map((p) => p.clone().add(new THREE.Vector3(0, k * 0.03, (k - 1) * 0.16))), 0.05, 5) });
   }
   const cables = new THREE.Mesh(mergeParts(cableParts), std({ color: 0x1b1b1d, roughness: 0.88, metalness: 0.08 }));
+  cables.castShadow = true;
+  cables.receiveShadow = true;
   cableParts.forEach((p) => p.geometry.dispose());
 
   const g = new THREE.Group();
@@ -3332,6 +3342,7 @@ export class Base {
       const pts = cablePts.map((p, i) => p.clone().add(new THREE.Vector3(k * 0.14, 0.02 * k, k * 0.1)));
       const c = new THREE.Mesh(pathTube(pts, 0.045, 5), cableMat);
       c.castShadow = true;
+      c.receiveShadow = true;
       g.add(c);
     }
 
