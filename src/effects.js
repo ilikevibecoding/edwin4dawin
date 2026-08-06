@@ -1962,6 +1962,17 @@ export class Effects {
    * the smoke back and shifts the whole event colder.
    */
   intercept(pos, size, camera, palette) {
+    // Readability scale. A 30 m fireball 22 km away subtends about a tenth of a
+    // degree, so a high-altitude kill would be a single dim pixel. Distant
+    // events are drawn larger than life — the same cheat already used for
+    // missile bodies and their glow sprites — so the player can actually see
+    // the intercept they just paid a round for.
+    const viewDist = camera ? pos.distanceTo(camera.position) : 0;
+    const read = THREE.MathUtils.clamp(viewDist / 1300, 1, 22);
+    // Spatial extents scale with distance; counts and lifetimes stay keyed to
+    // the true yield so a far-off kill does not cost more or last longer.
+    const baseSize = size;
+    size *= read;
     const dens = trailPersistence(pos.y);
     const thin = 1 - dens;
     const q = this.q;
@@ -1975,23 +1986,74 @@ export class Effects {
     _cc.copy(cool).lerp(COL.coldBlue, thin * 0.35);
 
     // ---- flash core ----------------------------------------------------
+    // Held to a minimum angular size. A real detonation 25 km away reads as a
+    // brilliant point of light with a halo, which is exactly what this sprite
+    // is, so sizing it in milliradians rather than metres is both cheaper and
+    // more convincing than inflating the fireball to a kilometre across.
+    const mrad = viewDist * 0.001;
     this.glow.spawn({
       pos,
-      size0: size * 1.2,
-      size1: size * 4.2,
-      life: 0.14,
+      size0: Math.max(size * 1.2, mrad * 45),
+      size1: Math.max(size * 4.2, mrad * 130),
+      life: 0.14 + (read > 3 ? 0.2 : 0),
       color0: COL.flameWhite,
       color1: _ca,
       color2: _cb,
-      alpha: 0.85,
+      alpha: 1.0,
       drag: 5,
       fadeIn: 0.005,
       wind: 0,
     });
+    if (read > 2.5) {
+      // The flare sprite's alpha collapses well inside its quad, so at long
+      // range it reads as a pinprick however large the quad is. These two use
+      // the broad soft-edged puff instead, which keeps real brightness out to
+      // nearly half its radius and is what actually makes a 20 km kill legible.
+      this.fire.spawn({
+        pos,
+        size0: mrad * 55,
+        size1: mrad * 150,
+        life: 0.42,
+        color0: COL.flameWhite,
+        color1: _ca,
+        color2: _cb,
+        alpha: 1,
+        drag: 5,
+        fadeIn: 0.006,
+        wind: 0,
+      });
+      this.fire.spawn({
+        pos,
+        size0: mrad * 95,
+        size1: mrad * 240,
+        life: 1.15,
+        color0: _cb,
+        color1: _cc,
+        color2: _cc,
+        alpha: 0.55,
+        drag: 4,
+        fadeIn: 0.03,
+        wind: 0,
+      });
+      // Afterglow so the eye has time to find the event at long range.
+      this.glow.spawn({
+        pos,
+        size0: mrad * 70,
+        size1: mrad * 200,
+        life: 1.25,
+        color0: _ca,
+        color1: _cb,
+        color2: _cc,
+        alpha: 0.72,
+        drag: 4,
+        fadeIn: 0.02,
+        wind: 0,
+      });
+    }
 
     // ---- fireball ------------------------------------------------------
     const fb = this._fireball();
-    fb.fire(pos, size * 0.22, size * (1.5 + dens * 0.8), (0.55 + size * 0.008) * (0.55 + dens * 0.7), { hot: _ca, mid: _cb, cool: _cc }, {
+    fb.fire(pos, size * 0.22, size * (1.5 + dens * 0.8), (0.55 + baseSize * 0.008) * (0.55 + dens * 0.7), { hot: _ca, mid: _cb, cool: _cc }, {
       rise: 4 + dens * 16,
       roll: 0.8 + dens * 0.6,
       smoke: 0.08 + dens * 0.5,
@@ -2009,7 +2071,7 @@ export class Effects {
       _p.x += rr(-1, 1) * size * 0.5;
       _p.y += rr(-0.3, 0.9) * size * 0.5;
       _p.z += rr(-1, 1) * size * 0.5;
-      fb2.fire(_p, size * 0.16, size * (0.9 + dens * 0.6), (0.75 + size * 0.01) * (0.55 + dens * 0.8), { hot: _ca, mid: _cb, cool: _cc }, {
+      fb2.fire(_p, size * 0.16, size * (0.9 + dens * 0.6), (0.75 + baseSize * 0.01) * (0.55 + dens * 0.8), { hot: _ca, mid: _cb, cool: _cc }, {
         rise: 6 + dens * 18,
         roll: 0.5,
         smoke: 0.1 + dens * 0.45,
@@ -2021,7 +2083,7 @@ export class Effects {
     }
 
     // ---- shock ring ----------------------------------------------------
-    this._shock().fire(pos, size * (2.8 + dens * 2.2), 0.2 + dens * 0.14, _ca, camera, {
+    this._shock().fire(pos, Math.max(size * (2.8 + dens * 2.2), mrad * 46), 0.2 + dens * 0.14, _ca, camera, {
       emit: 1,
       intensity: 0.3,
       thickness: 0.022,
@@ -2081,7 +2143,7 @@ export class Effects {
     if (_side.lengthSq() < 1e-4) _side.set(1, 0, 0);
     _side.normalize();
     _up.crossVectors(_axis, _side);
-    const nDebris = Math.round((12 + size * 0.42) * Math.min(1, q + 0.25));
+    const nDebris = Math.round((12 + baseSize * 0.42) * Math.min(1, q + 0.25));
     for (let i = 0; i < nDebris; i++) {
       const spread = 0.42 + rnd() * 0.5;
       const ang = rnd() * TAU;
