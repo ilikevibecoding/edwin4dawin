@@ -261,6 +261,11 @@
 @media (max-width: 1500px) {
   #status-strip { bottom: 48px; }
 }
+/* below ~1280px even the lifted strip crosses the key help's upper row,
+   so clear both rows entirely */
+@media (max-width: 1280px) {
+  #status-strip { bottom: 76px; }
+}
 #status-strip .chip {
   background: var(--hud-bg);
   border: 1px solid var(--hud-border);
