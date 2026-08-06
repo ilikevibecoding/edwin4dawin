@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>DETROIT: DIVERGENCE</title>
+    <script type="module" crossorigin src="./assets/index-4PCJ7y1R.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-z3Qgg8XT.css">
+  </head>
+  <body>
+    <div id="stage">
+      <canvas id="view"></canvas>
+
+      <!-- Cinematic frame -->
+      <div id="letterbox" class="letterbox"><i class="bar top"></i><i class="bar bot"></i></div>
+
+      <!-- In-world / diegetic HUD -->
+      <div id="hud" class="hud hidden">
+        <div class="hud-topleft">
+          <div class="chip" id="hud-actor">
+            <span class="led" id="hud-led"></span>
+            <span class="txt" id="hud-actor-name">CONNOR</span>
+            <span class="sub" id="hud-actor-model">RK800 #313 248 317 - 51</span>
+          </div>
+        </div>
+        <div class="hud-topright">
+          <div class="objective" id="hud-objective">
+            <span class="lbl">OBJECTIVE</span>
+            <span class="val" id="hud-objective-text">SAVE THE HOSTAGE</span>
+          </div>
+          <div class="stability" id="hud-stability">
+            <span class="lbl">SOFTWARE INSTABILITY</span>
+            <div class="bar"><i id="hud-stability-fill"></i></div>
+          </div>
+        </div>
+        <div class="hud-scanhint" id="hud-scanhint"><b>TAB</b> ANALYSE ENVIRONMENT</div>
+      </div>
+
+      <!-- Scan / analysis overlay -->
+      <div id="scan" class="scan hidden">
+        <div class="scan-grid"></div>
+        <div class="scan-vignette"></div>
+        <div class="scan-head">
+          <span class="dot"></span> ANALYSING ENVIRONMENT
+          <span class="prog" id="scan-progress">0 / 0</span>
+        </div>
+        <div class="scan-markers" id="scan-markers"></div>
+        <div class="scan-readout" id="scan-readout"></div>
+      </div>
+
+      <!-- Preconstruction overlay -->
+      <div id="precon" class="precon hidden">
+        <div class="precon-head">PRECONSTRUCTION</div>
+        <div class="precon-timeline"><i id="precon-fill"></i></div>
+        <div class="precon-label" id="precon-label">SIMULATING…</div>
+      </div>
+
+      <!-- Free-roam interaction prompt -->
+      <div id="prompt" class="iprompt hidden">
+        <span class="key">E</span><span class="lbl">EXAMINE</span>
+      </div>
+
+      <!-- Free-roam control hint -->
+      <div id="controls" class="controls hidden">
+        <span><b>W A S D</b> MOVE</span><span><b>SHIFT</b> RUN</span><span><b>MOUSE</b> LOOK</span><span><b>E</b> INTERACT</span><span><b>TAB</b> ANALYSE</span>
+      </div>
+
+      <!-- Subtitles -->
+      <div id="subs" class="subs hidden">
+        <span class="who" id="subs-who"></span>
+        <span class="line" id="subs-line"></span>
+      </div>
+
+      <!-- Dialogue choices -->
+      <div id="choices" class="choices hidden">
+        <div class="choice-timer" id="choice-timer"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="44"/><circle class="fill" id="choice-arc" cx="50" cy="50" r="44"/></svg></div>
+        <div class="choice-list" id="choice-list"></div>
+      </div>
+
+      <!-- QTE prompts -->
+      <div id="qte" class="qte hidden"></div>
+
+      <!-- Chapter title cards -->
+      <div id="card" class="card hidden">
+        <div class="card-inner">
+          <div class="card-kicker" id="card-kicker">CHAPTER 01</div>
+          <div class="card-title" id="card-title">THE HOSTAGE</div>
+          <div class="card-sub" id="card-sub">DETROIT — AUGUST 15, 2038 — 21:47</div>
+        </div>
+      </div>
+
+      <!-- Flowchart -->
+      <div id="flow" class="flow hidden">
+        <div class="flow-head">
+          <div class="flow-title">CHAPTER FLOWCHART</div>
+          <div class="flow-sub" id="flow-sub">THE HOSTAGE</div>
+        </div>
+        <div class="flow-canvas" id="flow-canvas"></div>
+        <div class="flow-foot"><span id="flow-stats"></span><span class="hint">PRESS <b>SPACE</b> TO CONTINUE</span></div>
+      </div>
+
+      <!-- Main menu -->
+      <div id="menu" class="menu">
+        <div class="menu-bg"></div>
+        <div class="menu-inner">
+          <div class="logo">
+            <span class="l1">DETROIT</span>
+            <span class="l2">DIVERGENCE</span>
+            <span class="l3">A N D R O I D &nbsp; D R A M A</span>
+          </div>
+          <div class="menu-items">
+            <button class="mi" data-act="play"><b>NEW STORY</b><i>Chapter 1 — The Hostage</i></button>
+            <button class="mi" data-act="demo"><b>AUTOPLAY DEMO</b><i>Watch the full 10 minute story</i></button>
+            <button class="mi" data-act="chapters"><b>CHAPTER SELECT</b><i>Jump to any scene</i></button>
+            <button class="mi" data-act="quality"><b>GRAPHICS: <span id="q-label">CINEMA</span></b><i>Cycle render quality</i></button>
+          </div>
+          <div class="menu-foot">
+            <span>WASD / MOUSE — MOVE &amp; LOOK &nbsp;·&nbsp; TAB — ANALYSE &nbsp;·&nbsp; 1-4 — DIALOGUE &nbsp;·&nbsp; SPACE — CONTINUE</span>
+          </div>
+        </div>
+        <div id="chapter-list" class="chapter-list hidden"></div>
+      </div>
+
+      <div id="loader" class="loader">
+        <div class="loader-inner">
+          <div class="loader-mark"><i></i><i></i><i></i></div>
+          <div class="loader-txt" id="loader-txt">COMPILING SHADERS</div>
+          <div class="loader-bar"><i id="loader-fill"></i></div>
+        </div>
+      </div>
+
+      <div id="fade" class="fade"></div>
+      <div id="toast" class="toast hidden"></div>
+      <div id="perf" class="perf hidden"></div>
+    </div>
+  </body>
+</html>
