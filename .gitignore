@@ -4,3 +4,4 @@ shots/
 frames/
 /tmp/
 *.log
+.render/

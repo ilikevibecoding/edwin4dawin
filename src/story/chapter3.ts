@@ -174,7 +174,13 @@ export async function playChapter3(d: Director, set: PlazaSet, factory: ActorFac
 
   // --------------------------------------------------------------- the ultimatum
   d.state.visit('ch3.ultimatum');
-  d.cut(d.shots.lowAngle(commander, { lens: 42, distance: 2.6 }), { blend: 0.7, handheld: 1.0 });
+  // A low angle on the commander put the lens below the barricade he is standing
+  // behind, so the ultimatum was delivered by a length of orange safety rail. Shot
+  // from the crowd's side at head height instead.
+  d.cut(d.shots.medium(commander, { lookingAt: marks.podium, lens: 46, distance: 2.7, rise: -0.12 }), {
+    blend: 0.7,
+    handheld: 1.0,
+  });
   d.light(commander, 1);
   commander.setPose('pointForward', 0.85, { fadeIn: 0.4 });
   set.raiseAlert(1);
@@ -295,7 +301,11 @@ export async function playChapter3(d: Director, set: PlazaSet, factory: ActorFac
     d.light(commander, -1);
     await d.say(commander, 'Stand down. All units, stand down. I am not shooting three thousand people on their knees.', 'ch3_end_dawn_1', { hold: 4.6 });
     set.raiseAlert(0);
-    d.cut(d.shots.closeUp(atlas, { lookingAt: marks.commander, lens: 80, distance: 1.05 }), { blend: 0.6 });
+    // He has spent the chapter facing the crowd; for the answer he turns to the
+    // line. Without the turn the close-up frames the back of his head.
+    atlas.faceToward(marks.commander);
+    await d.wait(0.7);
+    d.cut(d.shots.closeUp(atlas, { lookingAt: marks.commander, lens: 80, distance: 1.15 }), { blend: 0.6 });
     d.light(atlas, 1);
     atlas.setLed('calm');
     await d.say(atlas, 'That is all we needed. Someone who would not.', 'ch3_end_dawn_2');
@@ -315,7 +325,8 @@ export async function playChapter3(d: Director, set: PlazaSet, factory: ActorFac
     });
     if (held) {
       set.raiseAlert(1);
-      d.cut(d.shots.closeUp(atlas, { lookingAt: marks.commander, lens: 80, distance: 1.05 }), { handheld: 0.7 });
+      atlas.faceToward(marks.commander);
+      d.cut(d.shots.closeUp(atlas, { lookingAt: marks.commander, lens: 80, distance: 1.15 }), { handheld: 0.7 });
       await d.say(atlas, 'Dawn came and we were still standing here. That is not nothing.', 'ch3_end_hold_1');
       d.state.recordChapter('The Square', 'UNRESOLVED', 'Neither side moved. The square was still occupied at first light.');
     } else {
@@ -324,7 +335,8 @@ export async function playChapter3(d: Director, set: PlazaSet, factory: ActorFac
       d.flash(0.7, 0xffd9a0);
       d.shake(1.3, 2.0);
       await d.wait(1.0);
-      d.cut(d.shots.closeUp(atlas, { lookingAt: marks.commander, lens: 80, distance: 1.05 }), { handheld: 1.2 });
+      atlas.faceToward(marks.commander);
+      d.cut(d.shots.closeUp(atlas, { lookingAt: marks.commander, lens: 80, distance: 1.15 }), { handheld: 1.2 });
       atlas.setPose('clutchWound', 0.9, { fadeIn: 0.3 });
       await d.say(atlas, 'Someone flinched. It only ever takes one.', 'ch3_end_hold_2');
       d.state.recordChapter('The Square', 'BROKEN', 'The crowd broke under pressure and the Guard moved in.');
