@@ -29,56 +29,123 @@ export const NORTH = new THREE.Vector3(0, 0, -1);
  * ------------------------------------------------------------------ */
 
 /**
- * Long-wavelength relief: the bajada, the foothills, the ranges and the mesas.
+ * Ridged multifractal.
+ *
+ * `Noise.ridged2` sums its octaves flat, so the fine detail lands in the
+ * valleys as hard as it lands on the crests and a wide horizon comes out as a
+ * row of near-identical cones. Weighting each octave by the one above it
+ * gathers the detail onto the ridgelines and leaves the flanks and valleys
+ * smooth, which is what makes a range read as a range.
+ */
+function ridgeMF(x, y, octaves = 4, lacunarity = 2.04, gain = 0.5, sharpen = 2.0) {
+  const N = terrainNoise;
+  let sum = 0;
+  let norm = 0;
+  let amp = 1;
+  let freq = 1;
+  let weight = 1;
+  for (let o = 0; o < octaves; o++) {
+    let n = 1 - Math.abs(N.noise2D(x * freq, y * freq));
+    n = n * n * weight;
+    weight = saturate(n * sharpen);
+    sum += n * amp;
+    norm += amp;
+    amp *= gain;
+    freq *= lacunarity;
+  }
+  return sum / norm;
+}
+
+/**
+ * Long-wavelength relief: the bajada, the washes, the buttes, the foothills,
+ * the ranges and the massif behind them.
  *
  * Split out from `terrainHeight` because it is identically zero inside the
  * basin, and every gameplay query (player footfall, impact points, launcher
  * seating) happens on the pad where the cheap path is all that runs.
+ *
+ * The layers are deliberately given different distance windows AND different
+ * meander fields, so the eye gets four separate silhouettes stacked back to
+ * front instead of one wall at one distance.
  */
 function distantRelief(x, z, d) {
   const N = terrainNoise;
 
   // Warp the sampling domain so range fronts meander instead of following the
   // obvious grain of the noise.
-  const wx = x + N.fbm2(x / 5200 + 3.1, z / 5200 - 8.4, 2) * 2100;
-  const wz = z + N.fbm2(x / 5200 - 6.7, z / 5200 + 2.2, 2) * 2100;
+  const wx = x + N.fbm2(x / 5400 + 3.1, z / 5400 - 8.4, 2) * 2400;
+  const wz = z + N.fbm2(x / 5400 - 6.7, z / 5400 + 2.2, 2) * 2400;
 
-  // Where there is high ground at all. Broad clusters, open desert between.
-  const clusters = saturate(N.fbm2(wx / 12500 + 12, wz / 12500 - 7, 3) * 1.3 + 0.42);
-  // Not every range is the same size: some are 500 m ridges, some 1500 m walls.
-  const scale = 0.45 + saturate(N.fbm2(x / 23000 - 4, z / 23000 + 9, 2) * 1.6 + 0.5) * 1.05;
+  // How much relief this quarter of the map gets at all. Very long wavelength
+  // on purpose: one side of the horizon should be a 1500 m wall while another
+  // is a low bench, and that variation has to survive a 70 degree field of
+  // view without repeating.
+  const relief = saturate(N.fbm2(x / 19000 + 5, z / 19000 - 12, 2) * 1.5 + 0.5);
+  // Belts of high ground. Biased low so a good third of the compass stays open
+  // desert running out to the haze - a horizon that is mountains all the way
+  // round has no composition to it.
+  const belt = saturate(N.fbm2(wx / 11000 + 12, wz / 11000 - 7, 2) * 2.2 + 0.18);
 
-  // Bajada: the gravel apron every desert range sheds into the basin. This is
-  // what makes the flat pad read as the floor of a bowl rather than a plate
-  // with hills glued to the edge.
-  const bajada =
-    smoothstep(700, 4600, d) * clusters * (105 + N.fbm2(x / 2600, z / 2600, 2) * 70);
+  // Bajada: the gravel apron every desert range sheds into the basin, with a
+  // scalloped toe where the individual alluvial fans overlap. This is what
+  // makes the flat pad read as the floor of a bowl rather than a plate with
+  // hills glued around the edge.
+  const fan = N.fbm2(x / 1500 + 27, z / 1500 - 33, 3) * 0.5 + 0.5;
+  const bajada = smoothstep(700, 5200, d) * belt * (70 + relief * 140) * (0.7 + fan * 0.6);
 
-  // Foothills in front of the main ranges.
-  const hills =
-    smoothstep(1500, 3600, d) *
-    clusters *
-    scale *
-    Math.pow(N.ridged2(wx / 2450 + 11, wz / 2450 - 5, 3, 2.1, 0.55), 2.1) *
-    300;
-
-  // The ranges themselves.
-  const far = smoothstep(2500, 6000, d);
-  const spine = Math.pow(N.ridged2(wx / 7600, wz / 7600, 4, 2.05, 0.52), 1.75);
-  const shoulder = Math.pow(N.ridged2(wx / 2900 - 30, wz / 2900 + 18, 4), 2.4);
-  const ranges = far * clusters * scale * (spine * 1350 + shoulder * 300 * saturate(spine * 2.2));
+  // Dry washes draining the bajada into the playa. Sampled in polar space -
+  // tangentially fast, radially slow - so the channels run down the slope like
+  // drainage instead of closing into the loops a plain fBm zero-set gives.
+  const ang = Math.atan2(z, x);
+  const wq = N.fbm2(ang * 3.1 + 55, d / 2600 - 21, 2);
+  const wash =
+    -smoothstep(760, 1600, d) *
+    (1 - smoothstep(5200, 8000, d)) *
+    Math.pow(1 - Math.min(1, Math.abs(wq) * 6), 2) *
+    7;
 
   // Mesas and buttes: flat caprock tables standing on the open basin floor.
-  // Two hard steps in the mask give a bench part-way down the flank, which is
-  // what stops them reading as extruded blobs.
-  const table = N.fbm2(x / 3100 + 41, z / 3100 - 17, 3) * 0.5 + 0.5;
-  const zone = smoothstep(1400, 2400, d) * (1 - smoothstep(6500, 9500, d)) * (1 - clusters * 0.7);
-  const top = 42 + saturate(N.fbm2(x / 8000 - 2, z / 8000 + 5, 2) * 1.7 + 0.5) * 115;
-  const bench = smoothstep(0.532, 0.572, table);
-  const cap = smoothstep(0.582, 0.601, table);
-  const mesas = zone * top * (bench * 0.34 + cap * 0.66);
+  // They sit in the near band and away from the belts, so they stand alone
+  // against the sky instead of being lost in front of a range. The bench
+  // threshold is broad and the cap threshold narrow, which gives the profile
+  // every butte has - a talus skirt, then a cliff, then a dead flat top.
+  const table = N.fbm2(x / 2400 + 41, z / 2400 - 17, 2);
+  // Kept inside the mid ring: a caprock edge is a cliff, and the far sheet is
+  // far too coarse to put one anywhere near its seam without spiking through.
+  const mesaZone =
+    smoothstep(900, 1600, d) * (1 - smoothstep(2500, 3300, d)) * (1 - belt * 0.9);
+  const capH = 55 + (N.fbm2(x / 5200 - 2, z / 5200 + 5, 2) * 0.5 + 0.5) * 145;
+  const bench = smoothstep(-0.09, 0.02, table);
+  const cap = smoothstep(0.055, 0.095, table);
+  const mesas = mesaZone * capH * (bench * 0.3 + cap * 0.7);
 
-  return bajada + hills + ranges + mesas;
+  // Foothills: their own meandering front, well inside the ranges, so there is
+  // always a near layer to read the far one against.
+  const hillFront = 1600 + (N.fbm2(x / 7200 + 19, z / 7200 - 41, 2) * 0.5 + 0.5) * 1900;
+  const hills =
+    smoothstep(hillFront, hillFront + 1500, d) *
+    (1 - smoothstep(7000, 11000, d) * 0.7) *
+    belt *
+    (0.45 + relief * 0.8) *
+    ridgeMF(wx / 2300 + 11, wz / 2300 - 5, 4, 2.1, 0.5, 2.6) *
+    330;
+
+  // The ranges themselves. The front advances and retreats by a couple of
+  // kilometres so spurs come forward and re-entrants fall back, instead of
+  // every base meeting the desert along one straight line.
+  const front = 2600 + (N.fbm2(x / 8600 + 21, z / 8600 - 13, 2) * 0.5 + 0.5) * 3000;
+  const spine = ridgeMF(wx / 8200, wz / 8200, 5, 2.05, 0.52, 2.4);
+  const ranges =
+    smoothstep(front, front + 2400, d) * belt * (0.35 + relief * 1.1) * Math.pow(spine, 1.35) * 1400;
+
+  // A second, much heavier massif well beyond the first line, so the horizon
+  // has depth rather than one silhouette.
+  const deep = smoothstep(7500, 14000, d);
+  const backbone = ridgeMF(wx / 16000 + 61, wz / 16000 - 23, 4, 2.0, 0.55, 1.8);
+  const backMask = saturate(N.fbm2(x / 24000 - 31, z / 24000 + 17, 2) * 1.6 + 0.5);
+  const massif = deep * backMask * Math.pow(backbone, 1.2) * 2300;
+
+  return bajada + wash + mesas + hills + ranges + massif;
 }
 
 /** Height of the natural desert floor at a world position. */
@@ -88,14 +155,24 @@ export function terrainHeight(x, z) {
   const flat = smoothstep(150, 460, d);
 
   const rolling =
-    terrainNoise.fbm2(x / 900, z / 900, 4) * 12 +
-    terrainNoise.fbm2(x / 240, z / 240, 3) * 3.0 +
-    terrainNoise.fbm2(x / 62, z / 62, 2) * 0.7;
+    terrainNoise.fbm2(x / 900, z / 900, 4) * 13 +
+    terrainNoise.fbm2(x / 240, z / 240, 3) * 3.2 +
+    terrainNoise.fbm2(x / 62, z / 62, 2) * 0.8;
+
+  // Wind-combed sand sheets: long, low swells lying across the prevailing
+  // north-westerly. Sampled anisotropically - stretched along the wind, tight
+  // across it - which is what stops the playa margin reading as a plate.
+  const along = (x * 0.82 + z * 0.57) / 620;
+  const across = (z * 0.82 - x * 0.57) / 128;
+  const sheets =
+    smoothstep(165, 520, d) *
+    (1 - smoothstep(1600, 3400, d)) *
+    (terrainNoise.fbm2(along, across, 3) * 2.6 + terrainNoise.fbm2(along * 3.1, across * 2.7, 2) * 0.9);
 
   // A shallow playa so the base sits in a bowl ringed by high ground.
   const basin = -smoothstep(280, 2400, d) * 15;
 
-  const near = rolling * flat + basin;
+  const near = rolling * flat + sheets + basin;
   if (d < 700) return near;
   return near + distantRelief(x, z, d);
 }
@@ -243,6 +320,67 @@ function camoNetTexture() {
   });
 }
 
+/** Clone a shared texture at a given tiling density. */
+function tiled(tex, repeat) {
+  const t = tex.clone();
+  t.needsUpdate = true;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repeat, repeat);
+  t.anisotropy = settings.quality.anisotropy;
+  return t;
+}
+
+const _matCache = new Map();
+function localMaterial(key, build) {
+  if (!_matCache.has(key)) {
+    const m = build();
+    m.name = key;
+    _matCache.set(key, m);
+  }
+  return _matCache.get(key);
+}
+
+/**
+ * Site concrete. The shared concrete texture is mixed for bright interiors;
+ * out here under a desert sun it needs pulling down to a believable albedo, or
+ * the whole apron blows out and the painted markings stop reading.
+ */
+function siteConcrete(repeat, tint = '#8f8b7f') {
+  return localMaterial(`site-concrete|${repeat}|${tint}`, () =>
+    new THREE.MeshStandardMaterial({
+      map: tiled(T.concrete({}), repeat),
+      color: tint,
+      roughness: 0.95,
+      metalness: 0
+    })
+  );
+}
+
+/** Graded gravel, warmed and darkened to sit against the desert floor. */
+function siteGravel(repeat, tint = '#b3a48b') {
+  return localMaterial(`site-gravel|${repeat}|${tint}`, () =>
+    new THREE.MeshStandardMaterial({
+      map: tiled(T.gravel({}), repeat),
+      color: tint,
+      roughness: 0.99,
+      metalness: 0
+    })
+  );
+}
+
+/** Drifted, windblown sand. Planar-mapped, so loose geometry can use it. */
+function driftSand() {
+  return localMaterial('drift-sand', () =>
+    new THREE.MeshStandardMaterial({
+      map: tiled(T.sand({}), 1),
+      color: '#c2ab84',
+      roughness: 1,
+      metalness: 0,
+      side: THREE.DoubleSide
+    })
+  );
+}
+
 let _netMat = null;
 function netMat() {
   if (!_netMat) {
@@ -279,10 +417,11 @@ function palette() {
     steel: M.metal('#7c8079', 0.5, 0.85),
     bright: M.metal('#8d918a', 0.4, 0.9),
     chrome: M.chrome(),
-    concrete: M.concreteMat(14),
-    concreteFine: M.concreteMat(3),
-    gravel: M.gravelMat(26),
-    gravelCoarse: M.gravelMat(8),
+    concrete: siteConcrete(14),
+    concreteFine: siteConcrete(3, '#96917f'),
+    gravel: siteGravel(26),
+    gravelCoarse: siteGravel(8, '#a99a80'),
+    drift: driftSand(),
     rubber: M.rubberMat(1.4),
     hose: M.hoseMat(),
     camoDesert: M.camoMat('desert', 1.1),
@@ -297,6 +436,25 @@ function palette() {
     net: netMat()
   };
   return PAL;
+}
+
+/**
+ * Reproject a slab's UVs as a planar map of its own X/Z at a fixed number of
+ * metres per texture tile.
+ *
+ * `BoxGeometry` gives every face 0..1, so a tiling texture stretches with the
+ * box: a 210 x 12 m gravel shoulder ends up with aggregate eight metres long
+ * and half a metre wide. The material's own `repeat` is divided back out here,
+ * so slabs of wildly different sizes share one material - and therefore one
+ * draw call - and still read at the same grain.
+ */
+function slabUv(geo, metresPerTile, repeat) {
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  const k = 1 / (metresPerTile * repeat);
+  for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) * k, pos.getZ(i) * k);
+  uv.needsUpdate = true;
+  return geo;
 }
 
 /** Obstruction beacons and walkway lamps: emissive only, no real light cost. */
@@ -340,7 +498,7 @@ class MarkingAtlas {
    * region-local pixels; `wear` chews the alpha back with noise so nothing
    * looks like freshly plotted vector art.
    */
-  paint(w, h, draw, { wear = 0.5 } = {}) {
+  paint(w, h, draw, { wear = 0.5, halo = 6 } = {}) {
     if (this.cx + w + 2 > this.size) {
       this.cx = 2;
       this.cy += this.rowH + 2;
@@ -356,6 +514,12 @@ class MarkingAtlas {
     ctx.rect(r.x, r.y, w, h);
     ctx.clip();
     ctx.translate(r.x, r.y);
+    // Weathered paint always carries a grime shadow at its edge. It also gives
+    // the stencils enough contrast to read against sunlit concrete.
+    if (halo > 0) {
+      ctx.shadowColor = 'rgba(38,33,26,0.8)';
+      ctx.shadowBlur = halo;
+    }
     draw(ctx, w, h);
     ctx.restore();
 
@@ -774,7 +938,7 @@ function antennaMast(kit, pos, height = 9, yaw = 0, out = null) {
 /** Floodlight mast: four heads on a crossbar with a cabinet at the base. */
 function floodlightMast(kit, pos, height = 10, yaw = 0, beacons = null) {
   const P = palette();
-  const steel = M.metal('#6e7269', 0.55, 0.8);
+  const steel = palette().steel;
   const dark = P.dark;
   kit.place(steel, new THREE.CylinderGeometry(0.13, 0.19, height, 10), [pos[0], pos[1] + height / 2, pos[2]], [0, yaw, 0]);
   kit.place(P.concreteFine, new THREE.CylinderGeometry(0.42, 0.48, 0.4, 12), [pos[0], pos[1] + 0.16, pos[2]]);
@@ -809,7 +973,7 @@ function supportTruck(kit, pos, yaw = 0, { tilt = true, variant = 'desert' } = {
   const P = palette();
   const body = variant === 'olive' ? P.camoOlive : P.camoDesert;
   const dark = P.dark;
-  const glass = M.glassMat('#101c1e', 0.5);
+  const glass = palette().glass;
   const tyre = P.rubber;
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
@@ -869,7 +1033,7 @@ function supportTruck(kit, pos, yaw = 0, { tilt = true, variant = 'desert' } = {
     [2.35, 1.05], [2.35, -1.05]
   ]) {
     kit.place(tyre, wheel, Pt(lx, 0.62, lz), [0, yaw, 0]);
-    kit.place(M.metal('#6a6a64', 0.5, 0.8), hub, Pt(lx, 0.62, lz), [0, yaw, 0]);
+    kit.place(P.steel, hub, Pt(lx, 0.62, lz), [0, yaw, 0]);
   }
   for (const lz of [-1.12, 1.12]) {
     kit.place(P.rubber, new THREE.BoxGeometry(0.04, 0.42, 0.5), Pt(3.05, 0.42, lz), [0, yaw, 0]);
@@ -878,7 +1042,7 @@ function supportTruck(kit, pos, yaw = 0, { tilt = true, variant = 'desert' } = {
   kit.place(dark, new THREE.BoxGeometry(0.1, 0.34, 0.16), Pt(-2.9, 2.1, 1.25), [0, yaw, 0]);
   kit.place(dark, new THREE.BoxGeometry(0.1, 0.34, 0.16), Pt(-2.9, 2.1, -1.25), [0, yaw, 0]);
   for (const lx of [0.2, 0.66]) {
-    kit.place(M.painted('#4f5443', { repeat: 1 }), G.roundedBox(0.42, 0.5, 0.18, 0.03), Pt(lx, 1.0, 1.15), [0, yaw, 0]);
+    kit.place(P.crate, G.roundedBox(0.42, 0.5, 0.18, 0.03), Pt(lx, 1.0, 1.15), [0, yaw, 0]);
   }
   kit.place(tyre, wheel, Pt(0.4, 1.05, -1.2), [Math.PI / 2, yaw, 0]);
   kit.place(dark, new THREE.BoxGeometry(1.2, 0.4, 0.5), Pt(-0.4, 0.95, -1.2), [0, yaw, 0]);
@@ -1010,7 +1174,13 @@ function sandDrift(kit, mat, from, to, rng, { height = 0.5, reach = 1.6 } = {}) 
   const dir = b.clone().sub(a).normalize();
   const side = new THREE.Vector3(-dir.z, 0, dir.x);
   const positions = [];
-  const push = (p) => positions.push(p.x, p.y, p.z);
+  const uvs = [];
+  // Planar UVs from world XZ: the drift geometry is generated loose, so it has
+  // to carry its own mapping for the sand texture to land on it.
+  const push = (p) => {
+    positions.push(p.x, p.y, p.z);
+    uvs.push(p.x / 3.5, p.z / 3.5);
+  };
   for (let i = 0; i < steps; i++) {
     const t0 = i / steps;
     const t1 = (i + 1) / steps;
@@ -1032,6 +1202,7 @@ function sandDrift(kit, mat, from, to, rng, { height = 0.5, reach = 1.6 } = {}) 
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvs), 2));
   geo.computeVertexNormals();
   kit.add(mat, geo);
 }
@@ -1187,7 +1358,6 @@ export class MilitaryBase {
     this._regions = {};
     this._beaconsA = [];
     this._beaconsB = [];
-    this._walkwayLamps = [];
   }
 
   build() {
@@ -1206,6 +1376,7 @@ export class MilitaryBase {
     this.group.add(this.kit.build('site'));
     this.group.add(this.marks.build('markings'));
     this.collision.build();
+    window.__BASE = this; // TEMP-DEBUG
     return this;
   }
 
@@ -1376,109 +1547,131 @@ export class MilitaryBase {
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
       ctx.globalCompositeOperation = 'source-over';
-    }, { wear: 0.3 });
+    }, { wear: 0.3, halo: 0 });
 
-    R.sandStreak = A.paint(512, 512, (ctx, w, h) => {
+    // Sand combed across the concrete. Long, thin, all running the same way,
+    // and faint - the open desert gets its streaks from the terrain's own
+    // vertex colour, so these only have to sell the slab.
+    const rp = this.rng.fork('paint');
+    R.sandStreak = A.paint(512, 256, (ctx, w, h) => {
       ctx.clearRect(0, 0, w, h);
-      for (let i = 0; i < 90; i++) {
-        const y = Math.random() * h;
-        const len = w * (0.2 + Math.random() * 0.7);
-        const x = Math.random() * w;
-        const grad = ctx.createLinearGradient(x, y, x + len, y + (Math.random() - 0.5) * 40);
-        const a = 0.1 + Math.random() * 0.22;
-        grad.addColorStop(0, 'rgba(226,208,172,0)');
-        grad.addColorStop(0.45, `rgba(226,208,172,${a})`);
-        grad.addColorStop(1, 'rgba(226,208,172,0)');
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 120; i++) {
+        const y = rp.float() * h;
+        const x = -w * 0.2 + rp.float() * w;
+        const len = w * (0.3 + rp.float() * 0.8);
+        const drop = rp.spread(14);
+        const grad = ctx.createLinearGradient(x, y, x + len, y + drop);
+        const a = 0.05 + rp.float() * 0.13;
+        grad.addColorStop(0, 'rgba(228,212,178,0)');
+        grad.addColorStop(0.4, `rgba(228,212,178,${a.toFixed(3)})`);
+        grad.addColorStop(1, 'rgba(228,212,178,0)');
         ctx.strokeStyle = grad;
-        ctx.lineWidth = 2 + Math.random() * 11;
+        ctx.lineWidth = 1 + rp.float() * 4;
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.quadraticCurveTo(x + len * 0.5, y + (Math.random() - 0.5) * 26, x + len, y + (Math.random() - 0.5) * 40);
+        ctx.quadraticCurveTo(x + len * 0.5, y + drop * 0.4, x + len, y + drop);
         ctx.stroke();
       }
-    }, { wear: 0.2 });
+    }, { wear: 0.15, halo: 0 });
 
     R.oilStain = A.paint(256, 256, (ctx, w, h) => {
       ctx.clearRect(0, 0, w, h);
       for (let i = 0; i < 12; i++) {
-        const x = w * 0.5 + (Math.random() - 0.5) * w * 0.5;
-        const y = h * 0.5 + (Math.random() - 0.5) * h * 0.5;
-        const r = w * (0.08 + Math.random() * 0.26);
+        const x = w * 0.5 + rp.spread(w * 0.25);
+        const y = h * 0.5 + rp.spread(h * 0.25);
+        const r = w * (0.08 + rp.float() * 0.26);
         const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0, `rgba(26,23,20,${0.2 + Math.random() * 0.3})`);
+        g.addColorStop(0, `rgba(26,23,20,${(0.2 + rp.float() * 0.3).toFixed(3)})`);
         g.addColorStop(1, 'rgba(26,23,20,0)');
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fill();
       }
-    }, { wear: 0.1 });
+    }, { wear: 0.1, halo: 0 });
   }
 
   /* ---------------------------------------------------- terrain */
   _buildTerrain() {
     const q = settings.quality;
 
-    // Far terrain: one big displaced plane carrying the ranges. One draw call,
-    // so resolution is the only thing that is genuinely cheap here.
-    const farSize = 34000;
-    const farSeg = clamp(Math.floor(q.terrainSegments * 1.7), 170, 320);
-    const farGeo = new THREE.PlaneGeometry(farSize, farSize, farSeg, farSeg);
-    farGeo.rotateX(-Math.PI / 2);
-    this._displace(farGeo, farSeg, farSize, true);
-    const farMat = new THREE.MeshStandardMaterial({
-      map: (() => {
-        const t = T.sand({}).clone();
-        t.needsUpdate = true;
-        t.wrapS = t.wrapT = THREE.RepeatWrapping;
-        t.repeat.set(420, 420);
-        return t;
-      })(),
-      vertexColors: true,
-      roughness: 0.97,
-      metalness: 0.0
-    });
-    const farMesh = new THREE.Mesh(farGeo, farMat);
-    farMesh.name = 'terrain-far';
-    farMesh.receiveShadow = false;
-    this.group.add(farMesh);
+    /**
+     * The desert is three concentric displaced planes - one draw call each -
+     * so the triangles land where the eye is: metres per quad on the ground
+     * you walk on, tens of metres across the butte and foothill band, hundreds
+     * out on the massif, which is mostly silhouette and haze anyway.
+     *
+     * Overlapping sheets that sample the same field at different densities
+     * will z-fight, so each one is pushed below the true surface by `under`
+     * wherever a finer sheet covers it, and dives by `tuck` at its own rim so
+     * the coarser sheet outside swallows the edge. The margins look large, but
+     * they have to beat the height a coarse quad can miss a slope by, and they
+     * are always released over kilometres - a metre of false slope per hundred
+     * is invisible at these ranges.
+     */
+    const ramp = (amount, from, to) => (cheb) => amount * (1 - smoothstep(from, to, cheb));
+    const sum = (...fns) => (cheb) => fns.reduce((a, f) => a + f(cheb), 0);
 
-    // Near terrain: finer mesh around the site. It has to reach past the point
-    // where the far sheet stops being sunk, or the seam shows.
-    const nearSize = 1300;
-    const nearSeg = clamp(Math.floor(q.terrainSegments * 1.25), 110, 200);
-    const nearGeo = new THREE.PlaneGeometry(nearSize, nearSize, nearSeg, nearSeg);
-    nearGeo.rotateX(-Math.PI / 2);
-    this._displace(nearGeo, nearSeg, nearSize, false);
-    const nearMat = new THREE.MeshStandardMaterial({
-      map: (() => {
-        const t = T.sand({}).clone();
-        t.needsUpdate = true;
-        t.wrapS = t.wrapT = THREE.RepeatWrapping;
-        t.repeat.set(90, 90);
-        t.anisotropy = q.anisotropy;
-        return t;
-      })(),
-      vertexColors: true,
-      roughness: 0.96,
-      metalness: 0.0
-    });
-    const nearMesh = new THREE.Mesh(nearGeo, nearMat);
-    nearMesh.name = 'terrain-near';
-    nearMesh.receiveShadow = settings.quality.shadows;
-    nearMesh.position.y = 0.02;
-    this.group.add(nearMesh);
+    const rings = [
+      {
+        name: 'far',
+        size: 34000,
+        seg: clamp(Math.floor(q.terrainSegments * 1.3), 150, 250),
+        repeat: 620,
+        under: sum(ramp(45, 3400, 3900), ramp(18, 4600, 7000)),
+        tuck: null,
+        shadows: false
+      },
+      {
+        name: 'mid',
+        size: 8400,
+        seg: clamp(Math.floor(q.terrainSegments * 1.15), 110, 200),
+        repeat: 340,
+        under: sum(ramp(10, 640, 860), ramp(4, 1400, 2600)),
+        tuck: { amount: 40, from: 3900, to: 4200 },
+        shadows: false
+      },
+      {
+        name: 'near',
+        size: 1600,
+        seg: clamp(Math.floor(q.terrainSegments * 1.25), 110, 200),
+        repeat: 98,
+        under: null,
+        tuck: { amount: 10, from: 720, to: 800 },
+        shadows: q.shadows
+      }
+    ];
+
+    for (const ring of rings) {
+      const geo = new THREE.PlaneGeometry(ring.size, ring.size, ring.seg, ring.seg);
+      geo.rotateX(-Math.PI / 2);
+      this._displace(geo, ring);
+      const map = T.sand({}).clone();
+      map.needsUpdate = true;
+      map.wrapS = map.wrapT = THREE.RepeatWrapping;
+      map.repeat.set(ring.repeat, ring.repeat);
+      if (ring.name === 'near') map.anisotropy = q.anisotropy;
+      const mesh = new THREE.Mesh(
+        geo,
+        new THREE.MeshStandardMaterial({ map, vertexColors: true, roughness: 0.97, metalness: 0 })
+      );
+      mesh.name = `terrain-${ring.name}`;
+      mesh.receiveShadow = ring.shadows;
+      this.group.add(mesh);
+    }
 
     this._scatterGroundDetail();
   }
 
   /**
-   * Displace a ground plane and paint per-vertex colour from altitude and
-   * slope. Slope comes from the vertex grid rather than extra noise lookups,
-   * which keeps the far mesh - 100 k vertices of fairly expensive fBm - inside
-   * a sensible build budget.
+   * Displace a ground ring and paint per-vertex colour from altitude, slope
+   * and distance. Slope comes from the vertex grid rather than extra noise
+   * lookups, which keeps the far sheet - a hundred thousand vertices of fairly
+   * expensive fBm - inside a sensible build budget.
    */
-  _displace(geo, seg, size, isFar) {
+  _displace(geo, ring) {
+    const { seg, size } = ring;
     const pos = geo.attributes.position;
     const cols = seg + 1;
     const step = size / seg;
@@ -1487,19 +1680,10 @@ export class MilitaryBase {
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
+      const cheb = Math.max(Math.abs(x), Math.abs(z));
       let y = terrainHeight(x, z);
-      if (isFar) {
-        // Sink the coarse sheet under the fine one so they never z-fight, and
-        // finish the blend well inside the near mesh so the two agree at the
-        // seam.
-        const d = Math.hypot(x, z);
-        y -= (1 - smoothstep(360, 540, d)) * 4.5;
-      } else {
-        // Tuck the outer ring under the far sheet so no crack can open up.
-        const ix = i % cols;
-        const iy = (i / cols) | 0;
-        if (ix === 0 || iy === 0 || ix === seg || iy === seg) y -= 3.0;
-      }
+      if (ring.under) y -= ring.under(cheb);
+      if (ring.tuck) y -= ring.tuck.amount * smoothstep(ring.tuck.from, ring.tuck.to, cheb);
       h[i] = y;
       pos.setY(i, y);
     }
@@ -1507,12 +1691,14 @@ export class MilitaryBase {
     const colors = new Float32Array(pos.count * 3);
     const c = new THREE.Color();
     const tmp = new THREE.Color();
-    const sand = new THREE.Color('#bda67c');
-    const dust = new THREE.Color('#9c8a66');
-    const gravelCol = new THREE.Color('#87795e');
-    const rock = new THREE.Color('#6b5f50');
-    const darkRock = new THREE.Color('#4e463c');
-    const pale = new THREE.Color('#a8a396');
+    const sand = new THREE.Color('#c1ab80');
+    const dust = new THREE.Color('#a5926c');
+    const gravelCol = new THREE.Color('#8d7f63');
+    const ochre = new THREE.Color('#8a6c4a');
+    const rock = new THREE.Color('#6d6051');
+    const darkRock = new THREE.Color('#4b423a');
+    const capRock = new THREE.Color('#584737');
+    const pale = new THREE.Color('#b4ae9f');
     const N = terrainNoise;
 
     for (let i = 0; i < pos.count; i++) {
@@ -1531,33 +1717,69 @@ export class MilitaryBase {
       const d = Math.hypot(x, z);
 
       // Base floor: pale playa sand near the site, coarser gravel out on the
-      // bajada. Streaked along the prevailing wind so the flats are not flat.
-      const streak = N.fbm2(x / 900 + z / 3000, z / 190, 3) * 0.5 + 0.5;
+      // bajada, lightened in lobes where the alluvial fans spill onto the
+      // basin.
       const patch = N.fbm2(x / 260, z / 260, 3) * 0.5 + 0.5;
+      const fanLobe = N.fbm2(x / 1500 + 27, z / 1500 - 33, 3) * 0.5 + 0.5;
       c.copy(sand).lerp(dust, saturate(patch * 1.2 - 0.1));
-      c.lerp(gravelCol, smoothstep(600, 3200, d) * 0.55);
-      c.lerp(pale, saturate(streak - 0.55) * 0.5);
+      c.lerp(gravelCol, smoothstep(700, 3400, d) * 0.6);
+      c.lerp(sand, smoothstep(900, 2600, d) * saturate(fanLobe - 0.55) * 0.9);
 
-      // Slope drives the rock/sand split: anything steep sheds its cover.
-      const rockMix = smoothstep(0.16, 0.62, slope);
-      tmp.copy(rock).lerp(darkRock, smoothstep(0.5, 1.25, slope));
-      c.lerp(tmp, rockMix * 0.9);
+      // Wind streaks: pale sand combed downwind off the fan heads, sampled
+      // anisotropically so it lies in long ribbons rather than blotches.
+      const along = (x * 0.82 + z * 0.57) / 1600;
+      const across = (z * 0.82 - x * 0.57) / 130;
+      const streak = N.fbm2(along, across, 3) * 0.5 + 0.5;
+      c.lerp(pale, saturate(streak - 0.52) * 0.85 * (1 - smoothstep(2600, 6000, d)));
 
-      // Altitude bleaches the high ground and puts a bright rim on the ridges.
-      const alt = saturate((y - 160) / 520);
-      c.lerp(pale, Math.pow(alt, 1.5) * 0.55 * (1 - rockMix * 0.35));
-      const crest = saturate((y - 700) / 700);
-      c.lerp(pale, crest * 0.35);
+      // Scrub cover. Instanced cards only reach a few hundred metres, so past
+      // that the vegetation has to live in the vertex colour: a two-scale
+      // mottle of olive-grey stands thickening in the washes and thinning on
+      // the bare pans. This is what keeps the open flats from reading as one
+      // flat sheet of paint between the site and the hills.
+      const stand = N.fbm2(x / 210 + 63, z / 210 - 88, 3) * 0.5 + 0.5;
+      const drift = N.fbm2(x / 1450 - 12, z / 1450 + 44, 2) * 0.5 + 0.5;
+      const cover =
+        saturate(stand * 0.75 + drift * 0.55 - 0.62) *
+        smoothstep(150, 420, d) *
+        (1 - smoothstep(0.22, 0.6, slope));
+      c.lerp(tmp.set('#7a7452'), cover * 0.48);
 
-      // Caprock band: the flat mesa tops keep their dark cover, their flanks
-      // do not - which is exactly what makes a butte read as a butte.
-      const capBand = smoothstep(0.05, 0.25, slope) * (1 - smoothstep(0.45, 0.9, slope));
-      c.lerp(darkRock, capBand * saturate((y - 45) / 90) * 0.4);
+      // Slope drives the cover: gentle ground keeps its sand, moderate slopes
+      // shed it down to warm ochre bedrock, cliffs go to bare dark rock.
+      tmp.copy(ochre).lerp(rock, smoothstep(0.28, 0.75, slope));
+      tmp.lerp(darkRock, smoothstep(0.7, 1.5, slope));
+      c.lerp(tmp, smoothstep(0.13, 0.55, slope) * 0.92);
+
+      // Strata: a soft horizontal banding, wobbled so it is not a contour map.
+      // Period is set well above the far sheet's vertical sampling error, or
+      // it would just read as noise out on the massif.
+      const band = Math.sin(y * 0.055 + N.fbm2(x / 900 + 7, z / 900 - 3, 2) * 3.4) * 0.5 + 0.5;
+      c.multiplyScalar(1 + (band - 0.5) * 0.13 * smoothstep(40, 260, y));
+
+      // Altitude bleaches the high ground and puts a bright rim on the crests.
+      c.lerp(pale, Math.pow(saturate((y - 200) / 620), 1.4) * 0.6);
+      c.lerp(pale, saturate((y - 900) / 800) * 0.4);
+
+      // Caprock: the flat butte tops keep their dark resistant cover, their
+      // flanks do not - which is exactly what makes a butte read as a butte.
+      const capBand = smoothstep(0.03, 0.14, slope) * (1 - smoothstep(0.3, 0.72, slope));
+      c.lerp(capRock, capBand * saturate((y - 40) / 70) * 0.55);
 
       // Traffic and spoil darken the ground immediately around the site.
-      const worked = (1 - smoothstep(120, 340, d)) * 0.12;
-      c.multiplyScalar(1 - worked);
+      c.multiplyScalar(1 - (1 - smoothstep(120, 340, d)) * 0.06);
       c.multiplyScalar(0.93 + N.fbm2(x / 55, z / 55, 2) * 0.13);
+
+      // Aerial perspective. The scene fog is far too thin at these ranges to
+      // separate one ridge line from the next, so the sheets fake it: desaturate
+      // toward their own luminance and lift it. Deliberately hue-neutral, so it
+      // still reads as haze under the sunset and night skies.
+      const haze = smoothstep(2200, 17000, d) * 0.62;
+      if (haze > 0) {
+        const lum = c.r * 0.3 + c.g * 0.59 + c.b * 0.11;
+        const lift = lum * 0.55 + 0.3;
+        c.lerp(tmp.setRGB(lift, lift, lift * 1.04), haze);
+      }
 
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
@@ -1565,7 +1787,6 @@ export class MilitaryBase {
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
-    void isFar;
   }
 
   /** Is this position inside the graded site, where nothing should grow? */
@@ -1584,13 +1805,15 @@ export class MilitaryBase {
 
     /**
      * Rocks and scrub both want to gather into fields rather than spread
-     * evenly, so every sample is pulled toward one of a handful of seeds.
+     * evenly, so every sample is pulled toward one of a handful of seeds. The
+     * seeds themselves thin out with distance, which reads as the site having
+     * been cleared and the desert reclaiming it further out.
      */
     const fields = [];
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < 44; i++) {
       const a = rng.float() * Math.PI * 2;
-      const r = 120 + Math.pow(rng.float(), 0.7) * 620;
-      fields.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, r: 40 + rng.float() * 120 });
+      const r = 130 + Math.pow(rng.float(), 0.62) * 1150;
+      fields.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, r: 45 + rng.float() * 190 });
     }
     const inField = () => {
       const f = fields[rng.int(0, fields.length - 1)];
@@ -1599,18 +1822,18 @@ export class MilitaryBase {
       return [f.x + Math.cos(a) * rr, f.z + Math.sin(a) * rr];
     };
 
-    const scatter = (mesh, count, place) => {
+    const scatter = (mesh, count, place, reach = 1180) => {
       let placed = 0;
       let guard = 0;
       while (placed < count && guard++ < count * 14) {
-        const clustered = rng.bool(0.65);
+        const clustered = rng.bool(0.68);
         let x;
         let z;
         if (clustered) {
           [x, z] = inField();
         } else {
           const a = rng.float() * Math.PI * 2;
-          const r = 26 + Math.pow(rng.float(), 0.6) * 660;
+          const r = 26 + Math.pow(rng.float(), 0.55) * reach;
           x = Math.cos(a) * r;
           z = Math.sin(a) * r;
         }
@@ -1623,8 +1846,21 @@ export class MilitaryBase {
     };
 
     // --- small rocks ---
-    const rockCount = Math.floor(620 * q.groundDetail);
-    const rockGeo = new THREE.DodecahedronGeometry(1, 0);
+    // Eight triangles each, knocked out of round: at the ranges these are seen
+    // at, silhouette is all that survives, and it buys ten times the count.
+    const rockCount = Math.floor(1400 * q.groundDetail);
+    const rockGeo = new THREE.OctahedronGeometry(1, 0);
+    {
+      const rp = rockGeo.attributes.position;
+      for (let i = 0; i < rp.count; i++) {
+        const nx = rp.getX(i);
+        const ny = rp.getY(i);
+        const nz = rp.getZ(i);
+        const k = 0.72 + detailNoise.fbm2(nx * 2.3 + 9, nz * 2.3 - 4, 2) * 0.5;
+        rp.setXYZ(i, nx * k, ny * k * 0.7, nz * k * (0.85 + Math.abs(nx) * 0.3));
+      }
+      rockGeo.computeVertexNormals();
+    }
     const rockMat = M.metal('#6a6055', 0.98, 0.02);
     rockMat.flatShading = true;
     const rocks = new THREE.InstancedMesh(rockGeo, rockMat, rockCount);
@@ -1635,7 +1871,7 @@ export class MilitaryBase {
       p.set(x, terrainHeight(x, z) - 0.15, z);
       e.set(rng.spread(0.5), rng.float() * 6.28, rng.spread(0.5));
       qt.setFromEuler(e);
-      const s = 0.25 + Math.pow(rng.float(), 2.4) * 2.2;
+      const s = 0.3 + Math.pow(rng.float(), 2.2) * 2.6;
       sc.set(s, s * (0.5 + rng.float() * 0.5), s * (0.7 + rng.float() * 0.6));
       m.compose(p, qt, sc);
       rocks.setMatrixAt(i, m);
@@ -1643,7 +1879,7 @@ export class MilitaryBase {
     });
 
     // --- boulders: a handful of big ones, worth their own geometry ---
-    const bCount = Math.max(18, Math.floor(90 * q.groundDetail));
+    const bCount = Math.max(24, Math.floor(120 * q.groundDetail));
     const bGeo = new THREE.IcosahedronGeometry(1, 1);
     // Knock the sphere about so it reads as fractured rock, not a ball.
     {
@@ -1675,14 +1911,14 @@ export class MilitaryBase {
       return true;
     });
 
-    // --- dry grass tussocks ---
+    // --- vegetation cards: two crossed quads, four triangles a plant ---
     const blade = new THREE.PlaneGeometry(1.5, 1.0);
     blade.translate(0, 0.5, 0);
     const blade2 = blade.clone();
     blade2.rotateY(Math.PI / 2);
     const cardGeo = G.merge([blade, blade2]);
 
-    const scrubCount = Math.floor(560 * q.groundDetail);
+    const scrubCount = Math.floor(1500 * q.groundDetail);
     const scrubMat = new THREE.MeshStandardMaterial({
       map: scrubTexture('grass'),
       transparent: true,
@@ -1708,7 +1944,7 @@ export class MilitaryBase {
     });
 
     // --- woody bushes, bigger and darker, to break up the grass ---
-    const bushCount = Math.floor(230 * q.groundDetail);
+    const bushCount = Math.floor(620 * q.groundDetail);
     const bushMat = new THREE.MeshStandardMaterial({
       map: scrubTexture('bush'),
       transparent: true,
@@ -1732,6 +1968,39 @@ export class MilitaryBase {
       bushes.setMatrixAt(i, m);
       return true;
     });
+
+    // --- burnt-out saltbush: pale, sparse, and taller than the rest, which
+    // gives the flats a scale reference at a few hundred metres ---
+    const saltCount = Math.floor(240 * q.groundDetail);
+    const saltMat = new THREE.MeshStandardMaterial({
+      map: scrubTexture('bush'),
+      transparent: true,
+      alphaTest: 0.3,
+      side: THREE.DoubleSide,
+      roughness: 1,
+      metalness: 0,
+      color: '#a8a077'
+    });
+    const salt = new THREE.InstancedMesh(cardGeo.clone(), saltMat, saltCount);
+    salt.castShadow = false;
+    salt.receiveShadow = false;
+    salt.name = 'saltbush';
+    scatter(
+      salt,
+      saltCount,
+      (x, z, i) => {
+        if (Math.hypot(x, z) < 130) return false;
+        p.set(x, terrainHeight(x, z) - 0.1, z);
+        e.set(0, rng.float() * 6.28, 0);
+        qt.setFromEuler(e);
+        const s = 1.8 + rng.float() * 2.4;
+        sc.set(s, s * (0.7 + rng.float() * 0.6), s);
+        m.compose(p, qt, sc);
+        salt.setMatrixAt(i, m);
+        return true;
+      },
+      1600
+    );
   }
 
   /* ---------------------------------------------------- apron & roads */
@@ -1740,16 +2009,23 @@ export class MilitaryBase {
     const P = palette();
     const conc = P.concrete;
     const grav = P.gravel;
+    // One aggregate size for every gravel surface on the site, one bay size
+    // for every concrete one, whatever the slab's dimensions.
+    const cslab = (w, h, d) => slabUv(new THREE.BoxGeometry(w, h, d), 12, 14);
+    const cfine = (w, h, d) => slabUv(new THREE.BoxGeometry(w, h, d), 2.6, 3);
+    const gslab = (w, h, d) => slabUv(new THREE.BoxGeometry(w, h, d), 3.4, 26);
+    const gcoarse = (w, h, d) => slabUv(new THREE.BoxGeometry(w, h, d), 4.6, 8);
+    this._slab = { cslab, cfine, gslab, gcoarse };
 
-    // Main apron slab, slightly proud of the ground, with a chamfered kerb.
-    kit.place(conc, new THREE.BoxGeometry(196, 0.24, 168), [-4, 0.12, -12]);
-    kit.place(P.gravelCoarse, new THREE.BoxGeometry(206, 0.14, 178), [-4, 0.05, -12]);
+    // Main apron slab, slightly proud of the ground, on a hardcore blinding.
+    kit.place(conc, cslab(196, 0.24, 168), [-4, 0.12, -12]);
+    kit.place(P.gravelCoarse, gcoarse(206, 0.14, 178), [-4, 0.05, -12]);
 
     // Battery hardstands.
     const pads = ['patriot', 'thaad', 'sentinel'];
     for (const key of pads) {
       const a = this.anchors[key];
-      kit.place(conc, new THREE.BoxGeometry(34, 0.3, 30), [a.pos.x, 0.28, a.pos.z], [0, a.yaw, 0]);
+      kit.place(conc, cslab(34, 0.3, 30), [a.pos.x, 0.28, a.pos.z], [0, a.yaw, 0]);
       // Kerb so the 200 mm step up onto the hardstand reads as deliberate.
       for (const [dx, dz, w, d] of [
         [0, -15.1, 34.6, 0.6],
@@ -1758,11 +2034,11 @@ export class MilitaryBase {
         [17.3, 0, 0.6, 30.8]
       ]) {
         const off = new THREE.Vector3(dx, 0, dz).applyAxisAngle(new THREE.Vector3(0, 1, 0), a.yaw);
-        kit.place(P.concreteFine, new THREE.BoxGeometry(w, 0.34, d), [a.pos.x + off.x, 0.3, a.pos.z + off.z], [0, a.yaw, 0]);
+        kit.place(P.concreteFine, cfine(w, 0.34, d), [a.pos.x + off.x, 0.3, a.pos.z + off.z], [0, a.yaw, 0]);
       }
       // Earth revetments on the east and west flanks only - the launcher's
       // line of sight north and the player's view from the south stay clear.
-      const berm = new THREE.BoxGeometry(2.6, 1.7, 26);
+      const berm = gcoarse(2.6, 1.7, 26);
       for (const sx of [-17.5, 17.5]) {
         const off = new THREE.Vector3(sx, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), a.yaw);
         kit.place(P.gravelCoarse, berm, [a.pos.x + off.x, 0.85, a.pos.z + off.z], [0, a.yaw, 0]);
@@ -1770,13 +2046,32 @@ export class MilitaryBase {
       }
     }
 
-    // Service roads out from the apron.
+    // Service roads out from the apron. Split into short bays that sit on the
+    // ground and pitch with it, so the grade follows the desert instead of
+    // leaving the far end of the road hanging in the air.
     const road = (x1, z1, x2, z2, w) => {
       const dx = x2 - x1;
       const dz = z2 - z1;
       const len = Math.hypot(dx, dz);
-      const geo = new THREE.BoxGeometry(w, 0.14, len);
-      kit.place(grav, geo, [(x1 + x2) / 2, 0.19, (z1 + z2) / 2], [0, Math.atan2(dx, dz), 0]);
+      const yaw = Math.atan2(dx, dz);
+      const bays = Math.max(1, Math.round(len / 14));
+      const bay = len / bays;
+      const geo = gslab(w, 0.16, bay + 0.5);
+      const verge = gcoarse(w + 2.8, 0.09, bay + 0.5);
+      for (let i = 0; i < bays; i++) {
+        const ax = lerp(x1, x2, i / bays);
+        const az = lerp(z1, z2, i / bays);
+        const bx = lerp(x1, x2, (i + 1) / bays);
+        const bz = lerp(z1, z2, (i + 1) / bays);
+        const ya = groundHeight(ax, az);
+        const yb = groundHeight(bx, bz);
+        // Pitch about the bay's own axis first, then yaw it into place - a
+        // world-space X rotation would twist any road that is not due north.
+        const pitch = Math.atan2(yb - ya, bay);
+        const c = [(ax + bx) / 2, (ya + yb) / 2, (az + bz) / 2];
+        kit.place(grav, geo.clone().rotateX(pitch), [c[0], c[1] + 0.2, c[2]], [0, yaw, 0]);
+        kit.place(P.gravelCoarse, verge.clone().rotateX(pitch), [c[0], c[1] + 0.11, c[2]], [0, yaw, 0]);
+      }
     };
     road(-4, 72, -4, 250, 9);
     road(-4, 72, 60, 120, 7);
@@ -1801,11 +2096,11 @@ export class MilitaryBase {
     const H = 3.6;
     const wall = P.wall;
     const dark = P.dark;
-    const trim = M.painted('#4a4e42', { repeat: 2 });
+    const trim = P.crate;
 
     // Concrete plinth with a ramp up to the door.
-    this.slabKit.place(P.concreteFine, new THREE.BoxGeometry(W + 2.4, 0.4, D + 2.4), [ox, 0.2, oz]);
-    this.slabKit.place(P.concreteFine, new THREE.BoxGeometry(2.6, 0.4, 2.2), [ox, 0.2, oz + D / 2 + 2.3], [0.09, 0, 0]);
+    this.slabKit.place(P.concreteFine, this._slab.cfine(W + 2.4, 0.4, D + 2.4), [ox, 0.2, oz]);
+    this.slabKit.place(P.concreteFine, this._slab.cfine(2.6, 0.4, 2.2), [ox, 0.2, oz + D / 2 + 2.3], [0.09, 0, 0]);
 
     const t = 0.28;
     const winW = 8.4;
@@ -1865,10 +2160,10 @@ export class MilitaryBase {
       kit.place(P.bright, new THREE.CylinderGeometry(0.07, 0.07, 0.3, 6), [px, 0.5, pz + sz * 0.12], [0.5 * sz, 0, 0]);
     }
     kit.place(dark, G.railing(W - 0.6, D - 0.6, 0.85), [ox, 0.4 + H + 0.24, oz]);
-    kit.place(M.painted('#7d8175', { repeat: 1.4 }), G.roundedBox(1.6, 0.9, 1.2, 0.06), [ox + 4.2, 0.4 + H + 0.7, oz + 1.4]);
+    kit.place(P.equip, G.roundedBox(1.6, 0.9, 1.2, 0.06), [ox + 4.2, 0.4 + H + 0.7, oz + 1.4]);
     kit.place(dark, new THREE.CylinderGeometry(0.5, 0.5, 0.34, 12), [ox + 4.2, 0.4 + H + 1.32, oz + 1.4]);
     kit.place(dark, G.roundedBox(1.1, 0.5, 0.8, 0.04), [ox - 5.2, 0.4 + H + 0.5, oz - 1.6]);
-    kit.place(M.metal('#8b8f88', 0.4, 0.9), G.ladder(H + 0.6, 0.4), [ox + W / 2 + 0.22, 0.4, oz + 2.6], [0, -Math.PI / 2, 0]);
+    kit.place(P.bright, G.ladder(H + 0.6, 0.4), [ox + W / 2 + 0.22, 0.4, oz + 2.6], [0, -Math.PI / 2, 0]);
 
     // Roof-mounted satellite terminals: one big dish, one small VSAT.
     const bigDish = new THREE.SphereGeometry(1.5, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.42);
@@ -1914,7 +2209,7 @@ export class MilitaryBase {
     // Sandbags and drifted sand around the entrance.
     sandbagWall(kit, [ox - W / 2 - 1.6, 0.4, oz + D / 2 + 1.4], [ox - 1.6, 0.4, oz + D / 2 + 1.4], rng, 3);
     sandbagWall(kit, [ox + 1.6, 0.4, oz + D / 2 + 1.4], [ox + W / 2 + 1.6, 0.4, oz + D / 2 + 1.4], rng, 3);
-    sandDrift(kit, P.sandbag, [ox - W / 2 - 1.2, 0.02, oz - D / 2], [ox - W / 2 - 1.2, 0.02, oz + D / 2], rng, { height: 0.55, reach: 2.0 });
+    sandDrift(kit, P.drift, [ox - W / 2 - 1.2, 0.02, oz - D / 2], [ox - W / 2 - 1.2, 0.02, oz + D / 2], rng, { height: 0.55, reach: 2.0 });
 
     // Fire point and a boot-scrape grate by the door.
     firePoint(kit, [ox + 3.2, 0.4, oz + D / 2 + 1.0], Math.PI);
@@ -1925,10 +2220,10 @@ export class MilitaryBase {
 
     // ---- interior ----
     this._buildConsole(kit, ox, oz, D);
-    this.slabKit.place(P.concreteFine, new THREE.BoxGeometry(W - 0.5, 0.06, D - 0.5), [ox, 0.42, oz]);
+    this.slabKit.place(P.concreteFine, this._slab.cfine(W - 0.5, 0.06, D - 0.5), [ox, 0.42, oz]);
 
     equipmentStack(kit, [ox + 5.4, 0.45, oz + 2.4], rng, 3, 0.3);
-    kit.place(M.painted('#4a4e42', { repeat: 1 }), G.roundedBox(0.8, 1.9, 0.6, 0.05), [ox - 6.6, 0.45 + 0.95, oz + 2.6], [0, 0.2, 0]);
+    kit.place(P.crate, G.roundedBox(0.8, 1.9, 0.6, 0.05), [ox - 6.6, 0.45 + 0.95, oz + 2.6], [0, 0.2, 0]);
     kit.place(dark, G.roundedBox(1.4, 0.75, 0.7, 0.04), [ox + 6.2, 0.45 + 0.38, oz - 2.4]);
 
     // Colliders: walls, not the doorway.
@@ -1985,7 +2280,7 @@ export class MilitaryBase {
 
     // Holo radar plinth in the middle of the desk.
     kit.place(dark, new THREE.CylinderGeometry(0.62, 0.72, 0.14, 24), [ox, 1.29, zFront - 0.05]);
-    kit.place(M.metal('#2a2d29', 0.4, 0.9), new THREE.TorusGeometry(0.64, 0.03, 8, 32), [ox, 1.36, zFront - 0.05], [Math.PI / 2, 0, 0]);
+    kit.place(P.dark, new THREE.TorusGeometry(0.64, 0.03, 8, 32), [ox, 1.36, zFront - 0.05], [Math.PI / 2, 0, 0]);
     this.holoAnchor = new THREE.Vector3(ox, 1.38, zFront - 0.05);
 
     // Overhead light bar.
@@ -2015,7 +2310,7 @@ export class MilitaryBase {
     const L = (lx, ly, lz) => [ox + lx * c + lz * s, ly, oz - lx * s + lz * c];
 
     // Trailer chassis with outriggers.
-    this.slabKit.place(P.concreteFine, new THREE.BoxGeometry(13, 0.3, 9), [ox, 0.15, oz], [0, yaw, 0]);
+    this.slabKit.place(P.concreteFine, this._slab.cfine(13, 0.3, 9), [ox, 0.15, oz], [0, yaw, 0]);
     kit.place(P.dark, new THREE.BoxGeometry(9.5, 0.5, 3.0), [ox, 0.85, oz], [0, yaw, 0]);
     kit.place(P.equip, G.roundedBox(6.5, 1.9, 2.8, 0.08), [ox - 1.2, 2.05, oz], [0, yaw, 0]);
 
@@ -2057,7 +2352,7 @@ export class MilitaryBase {
     wheel.rotateX(Math.PI / 2);
     for (const sx of [-3.2, -1.8, 3.0]) {
       for (const sz of [-1.6, 1.6]) {
-        kit.place(M.rubberMat(1.2), wheel, L(sx, 0.7, sz), [0, yaw, 0]);
+        kit.place(P.rubber, wheel, L(sx, 0.7, sz), [0, yaw, 0]);
         kit.place(P.bright, new THREE.CylinderGeometry(0.2, 0.2, 0.52, 8), L(sx, 0.7, sz), [Math.PI / 2, yaw, 0]);
       }
     }
@@ -2084,7 +2379,7 @@ export class MilitaryBase {
     const arrKit = new Kit();
     const arrayW = 5.2;
     const arrayH = 4.0;
-    arrKit.place(M.painted('#5e6256', { repeat: 2 }), G.roundedBox(arrayW, arrayH, 0.42, 0.06), [0, arrayH / 2, 0]);
+    arrKit.place(P.equip, G.roundedBox(arrayW, arrayH, 0.42, 0.06), [0, arrayH / 2, 0]);
     // Emitter face: a grid of small radiating elements.
     const faceMat = M.metal('#2f342f', 0.35, 0.95);
     const elem = new THREE.BoxGeometry(0.14, 0.14, 0.07);
@@ -2115,9 +2410,9 @@ export class MilitaryBase {
     const arrayGroup = arrKit.build('radar-array');
     // Mount the array on a yoke that rotates.
     const yokeKit = new Kit();
-    yokeKit.place(M.painted('#5b5f54', { repeat: 1.6 }), new THREE.CylinderGeometry(1.05, 1.25, 0.55, 18), [0, 0.28, 0]);
-    yokeKit.place(M.metal('#7d817a', 0.45, 0.9), new THREE.BoxGeometry(0.3, 1.5, 0.3), [-1.6, 1.3, 0]);
-    yokeKit.place(M.metal('#7d817a', 0.45, 0.9), new THREE.BoxGeometry(0.3, 1.5, 0.3), [1.6, 1.3, 0]);
+    yokeKit.place(P.equip, new THREE.CylinderGeometry(1.05, 1.25, 0.55, 18), [0, 0.28, 0]);
+    yokeKit.place(P.steel, new THREE.BoxGeometry(0.3, 1.5, 0.3), [-1.6, 1.3, 0]);
+    yokeKit.place(P.steel, new THREE.BoxGeometry(0.3, 1.5, 0.3), [1.6, 1.3, 0]);
     const yoke = yokeKit.build('radar-yoke');
     arrayGroup.position.set(0, 1.1, 0);
     arrayGroup.rotation.x = 0.3;
@@ -2140,9 +2435,9 @@ export class MilitaryBase {
     const dishGeo = new THREE.SphereGeometry(1.5, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.4);
     dishGeo.scale(1, 0.5, 1);
     dishKit.place(M.painted('#c3c2b8', { repeat: 1.2, panels: 3 }), dishGeo, [0, 0, 0], [Math.PI * 0.62, 0, 0]);
-    dishKit.place(M.metal('#5c605a', 0.4, 0.9), new THREE.CylinderGeometry(0.05, 0.05, 1.3, 6), [0, 0.42, 0.62], [Math.PI * 0.62, 0, 0]);
-    dishKit.place(M.metal('#5c605a', 0.4, 0.9), new THREE.SphereGeometry(0.16, 10, 8), [0, 0.72, 1.05]);
-    dishKit.place(M.darkMetal(), new THREE.BoxGeometry(0.6, 0.5, 0.6), [0, -0.5, 0]);
+    dishKit.place(P.steel, new THREE.CylinderGeometry(0.05, 0.05, 1.3, 6), [0, 0.42, 0.62], [Math.PI * 0.62, 0, 0]);
+    dishKit.place(P.steel, new THREE.SphereGeometry(0.16, 10, 8), [0, 0.72, 1.05]);
+    dishKit.place(P.dark, new THREE.BoxGeometry(0.6, 0.5, 0.6), [0, -0.5, 0]);
     const dish = dishKit.build('radar-dish');
     dish.position.set(ox + 5.4, 8.2, oz);
     this.group.add(dish);
@@ -2189,7 +2484,7 @@ export class MilitaryBase {
     // Fuel: a bladder on a bunded stand, with signage and a delivery point.
     const fuel = new THREE.CylinderGeometry(1.5, 1.5, 5.4, 18);
     fuel.rotateZ(Math.PI / 2);
-    kit.place(M.painted('#5a5f4e', { repeat: 1.6, panels: 3 }), fuel, [-34, 1.74, 27], [0, 0.1, 0]);
+    kit.place(P.equip, fuel, [-34, 1.74, 27], [0, 0.1, 0]);
     kit.place(P.dark, new THREE.BoxGeometry(6.0, 0.3, 3.4), [-34, 0.39, 27], [0, 0.1, 0]);
     kit.place(P.dark, new THREE.BoxGeometry(6.4, 0.5, 0.16), [-34, 0.45, 25.1], [0, 0.1, 0]);
     kit.place(P.dark, new THREE.BoxGeometry(6.4, 0.5, 0.16), [-34, 0.45, 28.9], [0, 0.1, 0]);
@@ -2202,7 +2497,7 @@ export class MilitaryBase {
     // Gabion revetment shielding the fuel and power plant from the pads.
     gabionWall(kit, this.collision, [-39.5, 0.24, 32.5], [-21.5, 0.24, 32.5], { h: 1.6 });
     gabionWall(kit, this.collision, [-39.5, 0.24, 32.5], [-39.5, 0.24, 21.5], { h: 1.6 });
-    sandDrift(kit, P.sandbag, [-39.5, 0.26, 32.5], [-21.5, 0.26, 32.5], rng, { height: 0.5, reach: 1.7 });
+    sandDrift(kit, P.drift, [-39.5, 0.26, 32.5], [-21.5, 0.26, 32.5], rng, { height: 0.5, reach: 1.7 });
 
     // Antenna field.
     antennaMast(kit, [-52, 0.24, 24], 12, 0.4, this._beaconsA);
@@ -2234,7 +2529,7 @@ export class MilitaryBase {
 
     // Jersey barriers guiding the road onto the apron.
     const barrier = jerseyBarrier(3.0);
-    const barrMat = M.concreteMat(2);
+    const barrMat = siteConcrete(2, '#98937f');
     const barrierRow = (x1, z1, x2, z2, n, drift = true) => {
       for (let i = 0; i < n; i++) {
         const t = n === 1 ? 0.5 : i / (n - 1);
@@ -2251,7 +2546,7 @@ export class MilitaryBase {
         this.collision.addBox(x, 0.72, z, 0.35, 0.5, 1.5, yaw + Math.PI / 2, 'barrier');
       }
       if (drift) {
-        sandDrift(kit, P.sandbag, [x1, 0.03, z1], [x2, 0.03, z2], rng, { height: 0.34, reach: 1.3 });
+        sandDrift(kit, P.drift, [x1, 0.03, z1], [x2, 0.03, z2], rng, { height: 0.34, reach: 1.3 });
       }
     };
     barrierRow(-14, 62, -14, 74, 5);
@@ -2271,8 +2566,8 @@ export class MilitaryBase {
 
     // Windsock on a pole - a readable cue for the wind direction.
     const sockKit = new Kit();
-    sockKit.place(M.metal('#8b8f88', 0.5, 0.85), new THREE.CylinderGeometry(0.07, 0.09, 6, 8), [0, 3, 0]);
-    sockKit.place(M.metal('#8b8f88', 0.5, 0.85), new THREE.TorusGeometry(0.42, 0.025, 5, 14), [1.2, 6, 0], [0, 0, Math.PI / 2]);
+    sockKit.place(P.steel, new THREE.CylinderGeometry(0.07, 0.09, 6, 8), [0, 3, 0]);
+    sockKit.place(P.steel, new THREE.TorusGeometry(0.42, 0.025, 5, 14), [1.2, 6, 0], [0, 0, Math.PI / 2]);
     const sock = new THREE.Mesh(
       new THREE.CylinderGeometry(0.42, 0.16, 2.2, 12, 1, true),
       new THREE.MeshStandardMaterial({ color: '#e06a2a', roughness: 0.9, side: THREE.DoubleSide })
@@ -2318,9 +2613,9 @@ export class MilitaryBase {
     const A = this.marks;
     const R = this._regions;
     const rng = this.rng.fork('fence');
-    const postMat = M.metal('#7b7f78', 0.55, 0.85);
+    const postMat = P.steel;
     const meshMat = P.chain;
-    const wireMat = M.metal('#9aa09a', 0.4, 0.9);
+    const wireMat = P.bright;
 
     const half = { x: 128, z: 118 };
     const centre = { x: -4, z: -12 };
@@ -2373,7 +2668,7 @@ export class MilitaryBase {
       rail.rotateX(Math.PI / 2);
       kit.place(postMat, rail, [(x1 + x2) / 2, groundHeight((x1 + x2) / 2, (z1 + z2) / 2) + H - 0.03, (z1 + z2) / 2], [0, yaw, 0]);
       // Sand piles up on the windward side of every long run.
-      sandDrift(kit, P.sandbag, [x1, groundHeight(x1, z1) + 0.02, z1], [x2, groundHeight(x2, z2) + 0.02, z2], rng, {
+      sandDrift(kit, P.drift, [x1, groundHeight(x1, z1) + 0.02, z1], [x2, groundHeight(x2, z2) + 0.02, z2], rng, {
         height: 0.42,
         reach: 1.9
       });
@@ -2396,8 +2691,8 @@ export class MilitaryBase {
     const gx = c.x - 4;
     const gz = c.z + half.z;
     const ggy = groundHeight(gx - 6, gz);
-    kit.place(M.painted('#6b6f60', { repeat: 1.6 }), G.roundedBox(2.4, 2.6, 2.4, 0.06), [gx - 6, ggy + 1.3, gz]);
-    kit.place(M.glassMat('#16282c', 0.35), new THREE.BoxGeometry(1.9, 0.9, 0.05), [gx - 6, ggy + 1.8, gz - 1.22]);
+    kit.place(P.wall, G.roundedBox(2.4, 2.6, 2.4, 0.06), [gx - 6, ggy + 1.3, gz]);
+    kit.place(P.glass, new THREE.BoxGeometry(1.9, 0.9, 0.05), [gx - 6, ggy + 1.8, gz - 1.22]);
     kit.place(P.bright, new THREE.BoxGeometry(3.0, 0.1, 3.0), [gx - 6, ggy + 2.7, gz]);
     kit.place(P.dark, new THREE.CylinderGeometry(0.32, 0.32, 0.26, 12), [gx - 6, ggy + 2.9, gz]);
     A.wall(R.restricted, 0.9, 0.45, [gx - 6, ggy + 2.2, gz + 1.24], [0, Math.PI, 0]);
@@ -2601,19 +2896,17 @@ export class MilitaryBase {
       }
     }
 
-    // --- drifted sand streaks across the open ground and over the apron ---
-    const streakCount = Math.floor(70 * clamp(q.groundDetail, 0.4, 1.4));
+    // --- sand combed across the concrete on the prevailing wind ---
+    // Only on the slab: out on the open ground the terrain's own vertex colour
+    // already carries the streaking, and stacking translucent decals out there
+    // just piles up into blotches.
+    const streakCount = Math.floor(34 * clamp(q.groundDetail, 0.4, 1.4));
     for (let i = 0; i < streakCount; i++) {
-      const ang = rng.float() * Math.PI * 2;
-      const r = 40 + Math.pow(rng.float(), 0.55) * 380;
-      const cx = Math.cos(ang) * r;
-      const cz = Math.sin(ang) * r;
-      const onSlab = Math.abs(cx + 4) < 96 && cz > -94 && cz < 70;
-      const size = 14 + rng.float() * 26;
-      A.ground(R.sandStreak, size, size * (0.5 + rng.float() * 0.5), cx, cz, 0.35 + rng.spread(0.25), {
-        y: onSlab ? 0.254 : null,
-        lift: 0.05,
-        segs: onSlab ? 1 : 3
+      const cx = -4 + rng.spread(92);
+      const cz = -12 + rng.spread(78);
+      const w = 20 + rng.float() * 30;
+      A.ground(R.sandStreak, w, w * (0.28 + rng.float() * 0.22), cx, cz, 0.62 + rng.spread(0.12), {
+        y: 0.254
       });
     }
 
@@ -2629,7 +2922,7 @@ export class MilitaryBase {
 
     // --- graded gravel shoulders and hardcore aprons off the slab edges ---
     const shoulder = (cx, cz, w, d, yaw = 0) => {
-      this.slabKit.place(P.gravel, new THREE.BoxGeometry(w, 0.1, d), [cx, 0.06, cz], [0, yaw, 0]);
+      this.slabKit.place(P.gravel, this._slab.gslab(w, 0.1, d), [cx, 0.06, cz], [0, yaw, 0]);
     };
     shoulder(-4, 76, 210, 12);
     shoulder(-4, -100, 210, 14);
@@ -2675,7 +2968,7 @@ export class MilitaryBase {
     // Tumbleweed and windblown debris caught against the south fence.
     if (q.groundDetail >= 0.4) {
       const weed = new THREE.IcosahedronGeometry(0.55, 0);
-      const weedMat = M.tarpMat('#8a7f58');
+      const weedMat = P.sandbag;
       for (let i = 0; i < 16; i++) {
         const x = -4 + rng.spread(120);
         const z = 106 - rng.float() * 0.6;
@@ -2727,20 +3020,24 @@ export class MilitaryBase {
     this._beaconHalo.children.forEach((m) => (m.renderOrder = 5));
     this.group.add(this._beaconHalo);
 
-    // Low walkway lamps: a short bollard with an emissive band.
+    // Low walkway lamps: a slim post with a shrouded head that throws down at
+    // the path. Kept clear of the spawn point so the player never starts the
+    // session standing inside a light fitting.
     const glowKit = new Kit();
-    const stem = new THREE.CylinderGeometry(0.07, 0.09, 0.6, 8);
-    const hood = new THREE.CylinderGeometry(0.12, 0.1, 0.1, 8);
-    const band = new THREE.CylinderGeometry(0.085, 0.085, 0.11, 8);
+    const stem = new THREE.CylinderGeometry(0.028, 0.042, 0.86, 6);
+    const shroud = G.roundedBox(0.15, 0.13, 0.2, 0.02);
+    const collar = new THREE.CylinderGeometry(0.05, 0.05, 0.05, 6);
+    const lens = new THREE.BoxGeometry(0.12, 0.015, 0.16);
     const walkPts = [];
-    for (let i = 0; i <= 8; i++) walkPts.push([-10.4, 60 - i * 5]);
-    for (let i = 1; i <= 7; i++) walkPts.push([-10.4 - i * 4.6, 38.6]);
-    for (let i = 1; i <= 6; i++) walkPts.push([-6.0 + i * 6, 18]);
+    for (let i = 0; i <= 8; i++) walkPts.push([-11.9, 62 - i * 5.5]);
+    for (let i = 1; i <= 7; i++) walkPts.push([-11.9 - i * 4.6, 38.4]);
+    for (let i = 1; i <= 6; i++) walkPts.push([-6.0 + i * 6, 17.8]);
     for (const [x, z] of walkPts) {
       const gy = groundHeight(x, z) + 0.24;
-      this.kit.place(P.dark, stem, [x, gy + 0.3, z]);
-      this.kit.place(P.dark, hood, [x, gy + 0.66, z]);
-      glowKit.place(this.walkwayMat, band, [x, gy + 0.56, z]);
+      this.kit.place(P.steel, stem, [x, gy + 0.43, z]);
+      this.kit.place(P.dark, collar, [x, gy + 0.86, z]);
+      this.kit.place(P.dark, shroud, [x, gy + 0.95, z]);
+      glowKit.place(this.walkwayMat, lens, [x, gy + 0.882, z]);
     }
     this._walkwayGlow = glowKit.build('walkway-glow', { castShadow: false, receiveShadow: false });
     this._walkwayGlow.visible = false;

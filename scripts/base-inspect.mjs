@@ -20,16 +20,21 @@ const sky = arg('--sky', 'day');
 mkdirSync(outDir, { recursive: true });
 
 const VIEWS = {
-  spawn: { pos: [-10, 48, 0], look: [-4, 6, -80] },
-  north: { pos: [-4, 20, 0], look: [-4, 40, -700] },
-  pads: { pos: [-4, -4, 0], look: [-54, 8, -22] },
-  shelter: { pos: [-42, 52, -2.0], look: [-58, 4, 40] },
-  radar: { pos: [16, 22, 0.7], look: [34, 6, 14] },
-  support: { pos: [-14, 40, 0.6], look: [-30, 4, 26] },
-  gate: { pos: [-4, 130, 0], look: [-4, 4, 60] },
-  west: { pos: [-100, 20, 1.6], look: [-400, 120, -300] },
-  ridge: { pos: [0, 60, 0], look: [900, 260, -1800] },
-  ground: { pos: [-30, 80, 0.4], look: [-46, -2, 30] }
+  spawn: { pos: [-10, 48], look: [-4, 6, -80] },
+  north: { pos: [-4, 20], look: [-4, 40, -700] },
+  pads: { pos: [-4, -4], look: [-54, 8, -22] },
+  shelter: { pos: [-42, 52], look: [-58, 4, 40] },
+  radar: { pos: [16, 22], look: [34, 6, 14] },
+  support: { pos: [-14, 40], look: [-30, 4, 26] },
+  gate: { pos: [-4, 118], look: [-4, 3, 60] },
+  fence: { pos: [-60, 96], look: [-60, 2, 112] },
+  markings: { pos: [-4, 40], look: [-4, -3, 20] },
+  padmark: { pos: [-54, -4], look: [-54, -2, -22] },
+  west: { pos: [-100, 20], look: [-400, 120, -300] },
+  ridge: { pos: [0, 60], look: [900, 260, -1800] },
+  mesa: { pos: [0, 60], look: [-1600, 120, -2400] },
+  ground: { pos: [-30, 80], look: [-46, -2, 30] },
+  drain: { pos: [-88, 20], look: [-97, 0, -10] }
 };
 
 const viewList = (arg('--views', Object.keys(VIEWS).join(',')) || '').split(',').filter(Boolean);
@@ -50,7 +55,9 @@ page.on('console', (m) => {
 });
 page.on('pageerror', (e) => console.log(`[pageerror] ${e.stack || e.message}`));
 
-await page.goto('http://127.0.0.1:4173/?test=1&quality=low&seed=1&skipintro=1', {
+const origin = arg('--origin', 'http://127.0.0.1:4180');
+
+await page.goto(`${origin}/?test=1&quality=low&seed=1&skipintro=1`, {
   waitUntil: 'domcontentloaded'
 });
 await page.waitForFunction(() => !!window.__GAME, null, { timeout: 180000 });
@@ -105,17 +112,15 @@ if (sky !== 'day') {
 for (const name of viewList) {
   const v = VIEWS[name];
   if (!v) continue;
-  await page.evaluate(
-    ({ v }) => {
-      window.__GAME.teleport(v.pos[0], v.pos[1], 0);
-      window.__GAME.lookAt(v.look[0], v.look[1], v.look[2]);
-    },
-    { v }
-  );
-  await page.evaluate(() => new Promise((r) => setTimeout(r, 260)));
+  // Teleport, let a frame move the camera, and only then aim: `lookAt` works
+  // off the live camera position, which the teleport has not applied yet.
+  await page.evaluate(({ v }) => window.__GAME.teleport(v.pos[0], v.pos[1], 0), { v });
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 220)));
+  await page.evaluate(({ v }) => window.__GAME.lookAt(v.look[0], v.look[1], v.look[2]), { v });
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 220)));
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const path = `${outDir}/${name}.png`;
-  await page.screenshot({ path });
+  await page.screenshot({ path, timeout: 120000, animations: 'allow', caret: 'initial' });
   const c = await page.evaluate(() => window.__GAME.counts());
   console.log(`${name}: draws=${c.drawCalls} tris=${c.triangles} -> ${path}`);
 }
