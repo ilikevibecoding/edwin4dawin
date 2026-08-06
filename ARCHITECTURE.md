@@ -23,6 +23,13 @@ Key events: `threat-spawned/-tracked/-destroyed/-impact`, `track-assigned`,
 `scenario-started/-ended`, `battery-ready/-launching`, `time-of-day`, `footstep`,
 `fx-launch`, `fx-explosion`, `ui-click`, `pointer-lock`.
 
+Engagement lifecycle (main.js): assignments are STICKY — `authorize()` fires
+and keeps the assignment so repeated presses salvo more interceptors at the
+same track (`track.engagedBy` counts them). If the assigned battery is not
+ready, fire control auto-rolls to `bestBatteryFor(track)`. `assign()` falls
+back to the best capable battery when the requested one has no shot. The
+assignment clears when its track dies or the scenario resets.
+
 | Module | Owns | Public API (do not break) |
 |--------|------|--------------------------|
 | `util.js` | RNG/pool/events/math | `Rand`, `Events`, `Pool`, easing/angle helpers |

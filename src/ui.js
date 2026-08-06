@@ -36,7 +36,7 @@ export function createUI(ctx) {
     <div id="status-strip"></div>
     <div id="keyhelp">
       <b>WASD</b> move &nbsp;<b>SHIFT</b> sprint &nbsp;<b>E</b> interact / assign<br/>
-      <b>F</b> authorize launch &nbsp;<b>1·2·3</b> battery &nbsp;<b>TAB</b> console &nbsp;<b>H</b> settings
+      <b>F</b> fire (again: salvo) &nbsp;<b>1·2·3</b> battery &nbsp;<b>TAB</b> console &nbsp;<b>H</b> settings
     </div>
     <div id="banner" aria-live="polite"></div>
     <div id="impact-flash"></div>
@@ -149,7 +149,7 @@ export function createUI(ctx) {
     <div class="controls">
       WASD move · SHIFT sprint · mouse look<br/>
       TAB or walk to the C2 shelter console to start a raid<br/>
-      Look at a track: E assign battery · F authorize launch
+      Look at a track: E assign · F fire — press F again for a salvo, 1·2·3 to ripple batteries
     </div>
     <div class="safety">ENTERTAINMENT ONLY — ALL SYSTEM BEHAVIOR IS FICTIONALIZED</div>
   `;

@@ -20,12 +20,16 @@ npm run dev        # http://localhost:5173
 ## Play
 
 - **WASD** move · **SHIFT** sprint · mouse look (click to lock pointer)
-- Walk into the **C2 shelter** and press **E** at the console (or **TAB** nearby)
+- Press **TAB** anywhere (or walk to the C2 shelter console and press **E**)
 - Console: pick **conditions** (day/sunset/night), a **scenario**
   (`SINGLE TRACK`, `SATURATION`, `NIGHT RAID`), a **battery**, then
   **START BALLISTIC MISSILES**
 - Select a track on the radar display or list → **ASSIGN** → **AUTHORIZE LAUNCH**
-- Outdoors: look at a tracked threat → **E** assigns the selected battery, **F** authorizes
+- Outdoors: look at a tracked threat → **E** assigns, **F** fires.
+  Press **F** again to salvo more interceptors at the same threat (fire
+  control automatically rolls to the next ready battery while one reloads);
+  press **1/2/3** mid-engagement to re-point a specific battery at it.
+  With nothing aimed, **F** engages the most urgent track automatically.
 - **1/2/3** select battery · **H** settings (reduced motion, volume, quality) · **R** restart after debrief
 
 ## Batteries (fictional)

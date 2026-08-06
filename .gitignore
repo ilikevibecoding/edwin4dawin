@@ -1,9 +1,9 @@
 node_modules/
 dist/
+dist-*/
 test-results/
 playwright-report/
 shots/
+shots_*/
 *.log
 .DS_Store
-shots_probe/
-shots_base_env/
