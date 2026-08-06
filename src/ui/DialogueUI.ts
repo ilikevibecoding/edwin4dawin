@@ -111,19 +111,24 @@ export class DialogueUI {
     uiReveal(this.clock, this.nameRow, { duration: 0.2, y: 4 });
 
     const chars = this.fullText.length;
-    let typeDur: number;
-    if (opts.typewriter === false) typeDur = 0;
-    else if (opts.duration && opts.duration > 0) typeDur = Math.min(opts.duration * 0.55, chars / 28);
-    else typeDur = uiClamp(chars / 42, 0.28, 2.4);
-    typeDur = uiDur(typeDur);
+    // How long the line takes to read. Reduced motion drops the typing
+    // animation but keeps this timing, so the pacing of a scene survives it.
+    let readTime: number;
+    if (opts.typewriter === false) readTime = 0;
+    else if (opts.duration && opts.duration > 0) readTime = Math.min(opts.duration * 0.55, chars / 28);
+    else readTime = uiClamp(chars / 42, 0.28, 2.4);
+    const typeDur = chars > 0 ? uiDur(readTime) : 0;
 
     const promise = new Promise<void>((resolve) => {
       this.resolveLine = resolve;
     });
 
-    if (typeDur <= 0 || chars === 0) {
+    if (typeDur <= 0) {
       this.revealChars(chars);
-      this.settle();
+      this.typeTween = this.clock.after(readTime, () => {
+        this.typeTween = null;
+        this.settle();
+      });
     } else {
       let shown = -1;
       this.typeTween = this.clock.tween(

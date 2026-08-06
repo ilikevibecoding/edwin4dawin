@@ -197,8 +197,13 @@ export class QTEUI {
     const isDirection = this.kind === 'direction';
     this.chevrons.style.display = isDirection ? '' : 'none';
     this.glyph.style.display = isDirection ? 'none' : '';
-    if (isDirection) this.layoutChevrons(this.wantKey);
-    else this.glyph.textContent = glyphFor(this.wantKey);
+    if (isDirection) {
+      this.layoutChevrons(this.wantKey);
+    } else {
+      const glyph = glyphFor(this.wantKey);
+      this.glyph.textContent = glyph;
+      this.glyph.classList.toggle('dv-wide', glyph.length > 2);
+    }
 
     // Anchor: world-projected UV when given, otherwise just below centre.
     let base: string;

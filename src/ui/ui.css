@@ -875,6 +875,11 @@
   text-transform: uppercase;
   color: var(--dv-text);
 }
+/* Word keys ("SPACE") would otherwise run into the ring. */
+.dv-root .dv-qte-glyph.dv-wide {
+  font-size: 0.82em;
+  letter-spacing: 0.14em;
+}
 .dv-root .dv-qte-chev {
   position: absolute;
   inset: 0;
