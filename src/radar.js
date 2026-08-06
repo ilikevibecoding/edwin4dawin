@@ -69,11 +69,12 @@ export class Radar {
     ped.position.y = 0.4;
     this.pedestal.add(ped);
 
-    // array face with procedural element pattern
+    // array face with procedural element pattern (kept light enough to read even
+    // when the face points away from the sun)
     const arrTex = new THREE.CanvasTexture(makeCanvas(256, 256, (ctx, w, h) => {
-      ctx.fillStyle = '#39413a';
+      ctx.fillStyle = '#5a6459';
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#2d342e';
+      ctx.fillStyle = '#454f46';
       for (let y = 12; y < h - 12; y += 14) {
         for (let x = 12; x < w - 12; x += 14) {
           ctx.beginPath();
@@ -81,20 +82,18 @@ export class Radar {
           ctx.fill();
         }
       }
-      ctx.strokeStyle = '#242a25';
+      ctx.strokeStyle = '#39413a';
       ctx.lineWidth = 5;
       ctx.strokeRect(4, 4, w - 8, h - 8);
     }));
     arrTex.colorSpace = THREE.SRGBColorSpace;
+    const sideMat = new THREE.MeshStandardMaterial({ color: 0x4a5348, roughness: 0.7 });
     const face = new THREE.Mesh(
       new THREE.BoxGeometry(3.3, 2.7, 0.28),
       [
-        new THREE.MeshStandardMaterial({ color: 0x39413a, roughness: 0.7 }),
-        new THREE.MeshStandardMaterial({ color: 0x39413a, roughness: 0.7 }),
-        new THREE.MeshStandardMaterial({ color: 0x39413a, roughness: 0.7 }),
-        new THREE.MeshStandardMaterial({ color: 0x39413a, roughness: 0.7 }),
-        new THREE.MeshStandardMaterial({ map: arrTex, roughness: 0.62, metalness: 0.25 }),
-        new THREE.MeshStandardMaterial({ color: 0x39413a, roughness: 0.7 }),
+        sideMat, sideMat, sideMat, sideMat,
+        new THREE.MeshStandardMaterial({ map: arrTex, roughness: 0.58, metalness: 0.12 }),
+        sideMat,
       ]
     );
     face.position.set(0, 2.1, 0);

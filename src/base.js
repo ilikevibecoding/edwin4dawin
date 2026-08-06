@@ -13,6 +13,39 @@ import { makeBoxCollider } from './physics.js';
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const E = (x, y, z) => new THREE.Euler(x, y, z);
 
+// analytic terrain height — shared by the terrain mesh and anything scattered on it
+export function terrainHeight(x, z, rad = Math.hypot(x, z)) {
+  if (rad <= 260) return 0;
+  const n = fbm(x * 0.0006 + 7, z * 0.0006 + 3, 4);
+  let y = (n - 0.42) * clamp((rad - 260) / 900, 0, 1) * 120;
+  y += (fbm(x * 0.0035, z * 0.0035, 3) - 0.5) * clamp((rad - 260) / 600, 0, 1) * 16;
+  return y;
+}
+
+const _scrubHaze = new THREE.Color(0.62, 0.60, 0.57);
+
+// straw blades on transparent background; alpha-tested, tinted per instance
+function grassTuftTexture() {
+  const tex = new THREE.CanvasTexture(makeCanvas(128, 64, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    const rnd = mulberry32(1234);
+    for (let i = 0; i < 26; i++) {
+      const x0 = w * (0.18 + rnd() * 0.64);
+      const lean = (rnd() - 0.5) * 34;
+      const top = h * (0.05 + rnd() * 0.3);
+      const v = 175 + Math.floor(rnd() * 80);
+      ctx.strokeStyle = `rgb(${v},${v - 12},${v - 40})`;
+      ctx.lineWidth = 1.6 + rnd() * 1.6;
+      ctx.beginPath();
+      ctx.moveTo(x0, h);
+      ctx.quadraticCurveTo(x0 + lean * 0.35, h * 0.55, x0 + lean, top);
+      ctx.stroke();
+    }
+  }));
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 // ---------------------------------------------------------------- geometry kit
 // Box UVs scale with physical size (3 m tile) so big surfaces keep texture density.
 const UV_TILE = 3;
@@ -152,23 +185,22 @@ export class Base {
     const pos = [], uv = [], col = [], idx = [];
     const cSand = new THREE.Color(0.575, 0.525, 0.435);
     const cDark = new THREE.Color(0.375, 0.335, 0.27);
+    const cHaze = new THREE.Color(0.66, 0.635, 0.60); // baked aerial perspective target
     for (let r = 0; r <= RINGS; r++) {
       const t = r / RINGS;
       const rad = Math.pow(t, 2.1) * RMAX; // dense near center
       for (let s = 0; s <= SECTORS; s++) {
         const a = (s / SECTORS) * Math.PI * 2;
         const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
-        let y = 0;
-        if (rad > 260) {
-          const n = fbm(x * 0.0006 + 7, z * 0.0006 + 3, 4);
-          y = (n - 0.42) * clamp((rad - 260) / 900, 0, 1) * 120;
-          y += (fbm(x * 0.0035, z * 0.0035, 3) - 0.5) * clamp((rad - 260) / 600, 0, 1) * 16;
-        }
+        const y = terrainHeight(x, z, rad);
         pos.push(x, y, z);
         uv.push(x / 37, z / 37);
         const n2 = fbm(x * 0.002 + 31, z * 0.002, 3);
         const n3 = fbm(x * 0.0007 + 90, z * 0.0007 + 44, 3); // macro wadis/basins
         const c = cSand.clone().lerp(cDark, clamp(n2 * 0.55 + smoothstep(0.55, 0.75, n3) * 0.65, 0, 1));
+        // distant desert desaturates and lifts toward haze so the horizon band
+        // doesn't stay saturated mustard all the way to the mountain wall
+        c.lerp(cHaze, smoothstep(1600, 8500, rad) * 0.55);
         // graded gravel ring blending into the apron edges (baked, avoids z-fighting decals)
         const edge = Math.max(Math.abs(x) / 192, Math.abs(z) / 172);
         if (edge < 1.35) {
@@ -203,8 +235,9 @@ export class Base {
     const ROWS = [5400, 5900, 6500, 7200, 8000, 9000, 10200, 12500];
     const HEIGHTS = [20, 180, 430, 780, 1080, 760, 380, 0];
     const pos = [], col = [], idx = [];
-    const cLow = new THREE.Color(0.115, 0.092, 0.07);
-    const cHigh = new THREE.Color(0.20, 0.175, 0.148);
+    const cFoot = new THREE.Color(0.40, 0.355, 0.285); // sandy bajada where ranges meet the flats
+    const cLow = new THREE.Color(0.145, 0.118, 0.092);
+    const cHigh = new THREE.Color(0.21, 0.185, 0.156);
     const cHaze = new THREE.Color(0.35, 0.365, 0.43); // baked aerial perspective on far rows
     for (let r = 0; r < ROWS.length; r++) {
       for (let s = 0; s <= SECTORS; s++) {
@@ -216,7 +249,9 @@ export class Base {
         const rad = ROWS[r] * (1 + (jag - 0.5) * 0.11);
         const h = Math.min(HEIGHTS[r] * (0.35 + jag * 1.1) * (0.72 + jag2 * 0.55) * massif, 1400);
         pos.push(Math.cos(a) * rad, h, Math.sin(a) * rad);
-        const c = cLow.clone().lerp(cHigh, clamp(h / 1000, 0, 1));
+        const rock = cLow.clone().lerp(cHigh, clamp(h / 1000, 0, 1));
+        // feet blend into the desert so there is no hard mustard-to-gray seam
+        const c = cFoot.clone().lerp(rock, smoothstep(15, 300, h));
         c.offsetHSL(0, (jag2 - 0.5) * 0.04, (jag2 - 0.5) * 0.04);
         c.lerp(cHaze, r >= 5 ? 0.5 : r === 4 ? 0.3 : r === 3 ? 0.16 : 0.06);
         col.push(c.r, c.g, c.b);
@@ -1176,40 +1211,83 @@ export class Base {
 
   // ---------------- desert scrub + rocks (instanced)
   _buildScrub() {
+    const m4 = new THREE.Matrix4();
+    const cTmp = new THREE.Color();
+
+    // creosote-style bushes: sit on the actual terrain, reach out to the mountain
+    // aprons so the mid-ground band doesn't read as bare paint
+    const N_BUSH = 620;
     const bushGeo = new THREE.IcosahedronGeometry(1, 0);
     bushGeo.scale(1, 0.55, 1);
-    const bushMat = new THREE.MeshLambertMaterial({ color: 0x55573c, flatShading: true, reflectivity: 0 });
-    const bushes = new THREE.InstancedMesh(bushGeo, bushMat, 420);
-    const m4 = new THREE.Matrix4();
-    let bi = 0;
-    for (let i = 0; i < 420; i++) {
+    const bushMat = new THREE.MeshLambertMaterial({ flatShading: true, reflectivity: 0 });
+    const bushes = new THREE.InstancedMesh(bushGeo, bushMat, N_BUSH);
+    for (let i = 0; i < N_BUSH; i++) {
       const a = rngFx.range(0, Math.PI * 2);
-      const r = rngFx.range(175, 2200);
+      const r = Math.pow(rngFx.next(), 0.6) * 4600 + 175;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      const s = rngFx.range(0.35, 1.3) * (r > 800 ? 1.6 : 1);
+      const s = rngFx.range(0.35, 1.3) * (r > 800 ? 1.9 : 1);
       m4.makeScale(s, s * rngFx.range(0.6, 1.1), s);
-      m4.setPosition(x, s * 0.28, z);
-      bushes.setMatrixAt(bi++, m4);
+      m4.setPosition(x, terrainHeight(x, z) + s * 0.28, z);
+      bushes.setMatrixAt(i, m4);
+      // olive → straw variation, hazed with distance to match the terrain bake
+      cTmp.setHSL(0.16 + rngFx.range(-0.03, 0.04), rngFx.range(0.18, 0.34), rngFx.range(0.24, 0.34));
+      cTmp.lerp(_scrubHaze, smoothstep(1600, 5200, r) * 0.5);
+      bushes.setColorAt(i, cTmp);
     }
     bushes.instanceMatrix.needsUpdate = true;
     bushes.frustumCulled = false;
     this.group.add(bushes);
 
+    const N_ROCK = 340;
     const rockGeo = new THREE.DodecahedronGeometry(1, 0);
-    const rockMat = new THREE.MeshLambertMaterial({ color: 0x69604f, flatShading: true, reflectivity: 0 });
-    const rocks = new THREE.InstancedMesh(rockGeo, rockMat, 260);
-    for (let i = 0; i < 260; i++) {
+    const rockMat = new THREE.MeshLambertMaterial({ flatShading: true, reflectivity: 0 });
+    const rocks = new THREE.InstancedMesh(rockGeo, rockMat, N_ROCK);
+    for (let i = 0; i < N_ROCK; i++) {
       const a = rngFx.range(0, Math.PI * 2);
-      const r = rngFx.range(220, 3000);
-      const s = rngFx.range(0.3, 1.8) * (r > 1200 ? 2.4 : 1);
+      const r = Math.pow(rngFx.next(), 0.7) * 5000 + 220;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const s = rngFx.range(0.3, 1.8) * (r > 1200 ? 2.6 : 1);
       m4.makeRotationY(rngFx.range(0, Math.PI * 2));
       m4.scale(new THREE.Vector3(s, s * 0.7, s));
-      m4.setPosition(Math.cos(a) * r, s * 0.2, Math.sin(a) * r);
+      m4.setPosition(x, terrainHeight(x, z) + s * 0.2, z);
       rocks.setMatrixAt(i, m4);
+      cTmp.setHSL(0.09 + rngFx.range(-0.02, 0.02), rngFx.range(0.08, 0.16), rngFx.range(0.3, 0.42));
+      cTmp.lerp(_scrubHaze, smoothstep(1600, 5200, r) * 0.5);
+      rocks.setColorAt(i, cTmp);
     }
     rocks.instanceMatrix.needsUpdate = true;
     rocks.frustumCulled = false;
     this.group.add(rocks);
+
+    // dry grass tufts: crossed alpha-tested quads near the perimeter where the
+    // player actually walks/looks — softens the pad-to-desert edge
+    const N_TUFT = 480;
+    const tuftGeo = mergeGeometries([
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.PlaneGeometry(1, 1).applyMatrix4(new THREE.Matrix4().makeRotationY(Math.PI / 2)),
+    ], false);
+    tuftGeo.translate(0, 0.5, 0);
+    const tuftMat = new THREE.MeshLambertMaterial({
+      map: grassTuftTexture(), transparent: false, alphaTest: 0.42,
+      side: THREE.DoubleSide, reflectivity: 0,
+    });
+    const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, N_TUFT);
+    for (let i = 0; i < N_TUFT; i++) {
+      const a = rngFx.range(0, Math.PI * 2);
+      const r = Math.pow(rngFx.next(), 1.6) * 1100 + 178;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const s = rngFx.range(0.55, 1.5);
+      m4.makeRotationY(rngFx.range(0, Math.PI * 2));
+      m4.scale(new THREE.Vector3(s * 1.2, s * 0.62, s * 1.2));
+      m4.setPosition(x, terrainHeight(x, z) - 0.02, z);
+      tufts.setMatrixAt(i, m4);
+      cTmp.setHSL(0.115 + rngFx.range(-0.015, 0.02), rngFx.range(0.26, 0.4), rngFx.range(0.34, 0.46));
+      tufts.setColorAt(i, cTmp);
+    }
+    tufts.instanceMatrix.needsUpdate = true;
+    tufts.frustumCulled = false;
+    tufts.castShadow = false;
+    this.group.add(tufts);
   }
 
   // ---------------- runtime

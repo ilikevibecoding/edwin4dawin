@@ -95,6 +95,9 @@ test('intercept flash close-up', async ({ page }) => {
       return { d: 1e9, hits: st.results.hits, done: st.scenarioState !== 'running' };
     });
     if (s.hits > 0) {
+      // a few frames past detonation: white pop has bloomed off, amber fireball +
+      // shock ring + fragment flares are all visible
+      await step(page, 7);
       await shot(page, '42_intercept_flash');
       hitShot = true;
       break;

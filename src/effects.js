@@ -566,12 +566,14 @@ export class Effects {
       p.uniforms.uFogDensity.value = fogDensity;
       p.uniforms.uWind.value.copy(wind);
     }
-    // sunlit exhaust smoke reads brighter than flat ambient
-    this.smoke.uniforms.uAmbient.value.lerp(_white, 0.28);
+    // sun-catching boost scales with ambient brightness: full in daylight, ~none at
+    // night so moonlit dust stays dark instead of washing milky gray
+    const lum = Math.min(1, ambient.r * 0.35 + ambient.g * 0.5 + ambient.b * 0.15);
+    this.smoke.uniforms.uAmbient.value.lerp(_white, 0.28 * lum);
     this.trails.uniforms.uFogColor.value.copy(fogColor);
     this.trails.uniforms.uFogDensity.value = fogDensity;
-    // exhaust smoke reads brighter than generic ambient (sun-catching white plume)
-    this.trails.uniforms.uColorMul.value.copy(ambient).lerp(_white, 0.4);
+    // ribbons keep a floor so night contrails stay moonlit-readable (gameplay cue)
+    this.trails.uniforms.uColorMul.value.copy(ambient).lerp(_white, 0.4 * (0.55 + 0.45 * lum));
     this.glowTrails.uniforms.uFogColor.value.copy(fogColor);
     this.glowTrails.uniforms.uFogDensity.value = fogDensity;
   }
@@ -610,11 +612,33 @@ export class Effects {
         color: 0xffc37a, alpha: 1, damp: 0.55, gravity: 0.55, wind: 0.1,
       });
     }
-    // core flash (double-pulse) — scaled up with camera distance so far intercepts stay readable
+    // core flash (double-pulse) — scaled up with camera distance so far intercepts stay
+    // readable; warm amber so a daytime kill never reads as a second sun
     const d = this.camera.position.distanceTo(pos);
     const ds = clamp(d / 950, 0.75, 6.5) * size;
-    this.fire.emit(this.now, { pos, vel: _v2.set(0, 0, 0), life: 0.34, size0: 55 * ds, size1: 100 * ds, color: 0xfff3dc, alpha: 1, damp: 1, gravity: 0 });
-    this.fire.emit(this.now, { pos, vel: _v2.set(0, 0, 0), life: 0.9, size0: 30 * ds, size1: 70 * ds, color: 0xffb060, alpha: 0.85, damp: 1, gravity: 0 });
+    this.fire.emit(this.now, { pos, vel: _v2.set(0, 0, 0), life: 0.34, size0: 55 * ds, size1: 100 * ds, color: 0xffe7bc, alpha: 1, damp: 1, gravity: 0 });
+    this.fire.emit(this.now, { pos, vel: _v2.set(0, 0, 0), life: 0.9, size0: 30 * ds, size1: 70 * ds, color: 0xff9440, alpha: 0.85, damp: 1, gravity: 0 });
+    // lingering amber afterglow so the kill point stays marked after the white pop
+    this.fire.emit(this.now, { pos, vel: _v2.set(0, 0, 0), life: 2.6, size0: 26 * ds, size1: 14 * ds, color: 0xff7a30, alpha: 0.6, damp: 1, gravity: 0 });
+    // radial fragment flares, velocity/size compensated with distance so a far burst
+    // visibly throws material instead of being a bare disc
+    const nr = Math.round(6 * size);
+    for (let i = 0; i < nr; i++) {
+      _v1.set(rngFx.gauss(), rngFx.gauss(), rngFx.gauss()).normalize().multiplyScalar(rngFx.range(40, 70) * ds);
+      this.fire.emit(this.now, {
+        pos, vel: _v1, life: rngFx.range(1.4, 2.6), size0: 7 * ds, size1: 2 * ds,
+        color: 0xffa050, alpha: 0.95, damp: 0.7, gravity: 0.5, wind: 0.1,
+      });
+    }
+    // drifting burst-smoke ball, distance-scaled: marks the intercept for ~10 s
+    const nb = Math.round(8 * size);
+    for (let i = 0; i < nb; i++) {
+      _v1.set(rngFx.gauss(), rngFx.gauss() * 0.6, rngFx.gauss()).multiplyScalar(5 * ds);
+      this.smoke.emit(this.now, {
+        pos, vel: _v1, life: rngFx.range(8, 14), size0: 10 * ds, size1: 26 * ds,
+        color: 0x6e6a66, alpha: 0.55, damp: 1.1, gravity: -0.002, wind: 0.8,
+      });
+    }
     this.shock.spawn(pos, { size: 130 * clamp(ds, 1, 3.6), dur: 1.0, alpha: 0.55 });
     this.debris.burst(pos, _v2.set(0, 0, 0), Math.round(10 * size), 62 * size, 0.8 * size);
     this.flash.flash(pos, 1100 * size, 0.45);
@@ -683,8 +707,8 @@ export class Effects {
       const a = rngFx.range(0, Math.PI * 2);
       _v2.set(Math.cos(a) * rngFx.range(10, 26) * scale, rngFx.range(1.5, 6), Math.sin(a) * rngFx.range(10, 26) * scale);
       this.smoke.emit(this.now, {
-        pos: groundP, vel: _v2, life: rngFx.range(3, 8), size0: 3.5 * scale, size1: 16 * scale,
-        color: 0xb8a98e, alpha: 0.62, damp: 1.7, gravity: 0.01, wind: 1.0,
+        pos: groundP, vel: _v2, life: rngFx.range(2.5, 6), size0: 3.5 * scale, size1: 13 * scale,
+        color: 0xb8a98e, alpha: 0.55, damp: 1.7, gravity: 0.01, wind: 1.0,
       });
     }
     this.shock.spawn(groundP, { size: 34 * scale, dur: 0.8, ground: true, alpha: 0.5 });

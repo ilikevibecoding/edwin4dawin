@@ -65,8 +65,10 @@ const SKY_FRAG = /* glsl */`
     if (dir.y < 0.0) col = mix(uHorizon, uHorizon * 0.55, clamp(-dir.y * 10.0, 0.0, 1.0));
 
     float sunD = max(dot(dir, uSunDir), 0.0);
-    // wide scattering glow + tight disc
-    col += uGlow * (pow(sunD, 5.0) * 0.20 + pow(sunD, 60.0) * 0.5);
+    // wide scattering glow + tight disc; night air scatters far less, so the moon
+    // keeps a crisp disc with only a modest halo instead of a fuzzy ball
+    float scat = mix(1.0, 0.30, uNight);
+    col += uGlow * (pow(sunD, 5.0) * 0.20 * scat + pow(sunD, 60.0) * 0.5 * mix(1.0, 0.55, uNight));
     float disc = smoothstep(0.99965, 0.99985, sunD);
     vec3 discCol = mix(uGlow * 6.0, vec3(0.85, 0.9, 1.05) * 2.4, uNight);
     col += discCol * disc;

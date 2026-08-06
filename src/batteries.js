@@ -390,6 +390,11 @@ export class Battery {
       }
       // umbilical conduit along each canister
       ck.box('paint', 0.12, 0.12, L * 0.85, V(x + (sx > 0 ? 0.62 : -0.62), 0.75, 1.2), 0x23261f);
+      // aft closure puck + dark nozzle throat (reads from behind during erection)
+      ck.cyl('steel', 0.5, 0.5, 0.14, V(x, 0.55, -2.98), 0x2c302a, E(Math.PI / 2, 0, 0), 18);
+      const noz = new THREE.CircleGeometry(0.34, 14);
+      noz.rotateY(Math.PI);
+      ck.custom('paint', noz, V(x, 0.55, -3.08), 0x0c0d0b);
       this.muzzles.push({ local: V(x, 0.55, 1.4 + L / 2), dirLocal: V(0, 0, 1), spent: false, idx: mi++ });
     }
     // A-frame erector cradle under canisters (low side rails keep the round tubes readable)
