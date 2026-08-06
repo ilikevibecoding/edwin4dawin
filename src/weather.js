@@ -373,7 +373,14 @@ const LOOK = {
     fillIntensity: 0.18,
     fillDir: [-0.35, 0.62, -0.42],
     bounceIntensity: 0.24,
-    atmHeight: 1900,
+    // Scale height of the haze layer the aerial-perspective model integrates
+    // through. It has to stay well above the mountain ring's 1500-2600 m
+    // crests: a falloff that dies inside them buys a ridge far less optical
+    // depth than flat desert at the same range, which inverts the depth cue
+    // and leaves the distant plain reading brighter than the mountains behind
+    // it. Kept short of the sky's own Rayleigh scale so a target near apogee
+    // does not wash out.
+    atmHeight: 4000,
     shadowExtent: 110,
     shadowBias: -0.00006,
     shadowNormalBias: 0.06,
@@ -410,7 +417,7 @@ const LOOK = {
     fillIntensity: 0.42,
     fillDir: [0.42, 0.55, -0.30],
     bounceIntensity: 0.30,
-    atmHeight: 1500,
+    atmHeight: 3400,
     // A 3.5-degree sun stretches every texel ~16x along its own direction, so
     // this preset needs a much larger normal offset than the other two to stay
     // free of acne on the apron.
@@ -450,7 +457,7 @@ const LOOK = {
     fillIntensity: 0.10,
     fillDir: [-0.4, 0.7, 0.35],
     bounceIntensity: 0.05,
-    atmHeight: 2400,
+    atmHeight: 4000,
     shadowExtent: 110,
     shadowBias: -0.00008,
     shadowNormalBias: 0.09,
