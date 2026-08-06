@@ -57,3 +57,19 @@ Self-evaluating loop: build → run → screenshot → judge vs rubric → fix �
   Sentinel cradle rails lowered.
 - Perf: 122–173 DC / ~70k tris across shots. Headroom intact.
 - Scores: env 7 · batteries 7.5 · physics 7.5 · effects 6.5 · light/post 7.5 · UI 8 · perf 8.5 · loop 8.
+
+### Iteration 4 (visual harmony) — avg ~7.8
+- Root-caused the "giant ground text": full pad designation painted 17 m wide next to each pad — shortened to
+  'PAD A/B/C'. Root-caused the "opaque trail column": it was a floodlight pole 2 m from the QA camera. Moved
+  the camera; relaxed the over-corrected near-fades (ribbons smoothstep 10–48 m, smoke 6–26 m).
+- Day palette harmony: warmer/dustier hemi + fog, asphalt texture warmed & lifted (was blue-dark vs mustard
+  desert), sand slightly desaturated, mountains warm-hazed, large sun-bleach/resurfacing patches on apron.
+- Kit-wide box UV tiling (3 m tile + RepeatWrapping): T-walls, C2 shelter, cabins, decks all show real
+  texture density now (was one 512px tile stretched per face).
+- THAAD: side stiffener ribs + hatches, underside rails (visible elevated), lighter panels. Patriot: ECS
+  vents/door/AC. Interceptors: roll-reference paint bands.
+- C2: brighter base light (setFloodAmount was clobbering it), monitor spill, textured walls.
+- Full suite 11/11 green. Perf: 121 DC / 72.7k tris under saturation.
+- Scores: env 7.5 · batteries 8 · physics 7.5 · effects 7 · light/post 8 · UI 8 · perf 8.5 · loop 8.
+- Next: intercept flash verification at range, debris/aftermath shots, threat reentry readability by day,
+  radar site detail, sentinel launch smoke variation, spawn-view composition.

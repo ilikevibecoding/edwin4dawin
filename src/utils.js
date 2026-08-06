@@ -118,7 +118,7 @@ export function concreteTexture(size = 512, base = [128, 127, 122]) {
       for (let x = 0; x < w; x++) {
         const n = fbm(x * 0.03, y * 0.03, 5);
         const sp = vnoise(x * 0.9, y * 0.9);
-        const v = (n - 0.5) * 34 + (sp - 0.5) * 20;
+        const v = (n - 0.5) * 30 + (sp - 0.5) * 11;
         const i = (y * w + x) * 4;
         img.data[i] = clamp(base[0] + v, 0, 255);
         img.data[i + 1] = clamp(base[1] + v, 0, 255);
@@ -157,9 +157,9 @@ export function asphaltTexture(size = 512) {
       for (let x = 0; x < w; x++) {
         const n = fbm(x * 0.05, y * 0.05, 4);
         const sp = vnoise(x * 1.3, y * 1.3);
-        const v = 88 + (n - 0.5) * 30 + sp * 24;
+        const v = 104 + (n - 0.5) * 30 + sp * 22;
         const i = (y * w + x) * 4;
-        img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = v + 3;
+        img.data[i] = v + 5; img.data[i + 1] = v + 1; img.data[i + 2] = v - 5;
         img.data[i + 3] = 255;
       }
     }

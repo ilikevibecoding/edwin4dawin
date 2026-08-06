@@ -150,8 +150,8 @@ export class Base {
   _buildTerrain() {
     const RINGS = 42, SECTORS = 96, RMAX = 14000;
     const pos = [], uv = [], col = [], idx = [];
-    const cSand = new THREE.Color(0.60, 0.53, 0.42);
-    const cDark = new THREE.Color(0.38, 0.33, 0.26);
+    const cSand = new THREE.Color(0.575, 0.525, 0.435);
+    const cDark = new THREE.Color(0.375, 0.335, 0.27);
     for (let r = 0; r <= RINGS; r++) {
       const t = r / RINGS;
       const rad = Math.pow(t, 2.1) * RMAX; // dense near center
@@ -203,9 +203,9 @@ export class Base {
     const ROWS = [5400, 5900, 6500, 7200, 8000, 9000, 10200, 12500];
     const HEIGHTS = [20, 180, 430, 780, 1080, 760, 380, 0];
     const pos = [], col = [], idx = [];
-    const cLow = new THREE.Color(0.105, 0.082, 0.062);
-    const cHigh = new THREE.Color(0.19, 0.165, 0.14);
-    const cHaze = new THREE.Color(0.30, 0.35, 0.44); // baked aerial perspective on far rows
+    const cLow = new THREE.Color(0.115, 0.092, 0.07);
+    const cHigh = new THREE.Color(0.20, 0.175, 0.148);
+    const cHaze = new THREE.Color(0.35, 0.365, 0.43); // baked aerial perspective on far rows
     for (let r = 0; r < ROWS.length; r++) {
       for (let s = 0; s <= SECTORS; s++) {
         const a = (s / SECTORS) * Math.PI * 2;
@@ -245,7 +245,7 @@ export class Base {
     const aTex = asphaltTexture(512);
     aTex.repeat.set(W / 7.5, H / 7.5);
     aTex.anisotropy = 8;
-    const baseMat = new THREE.MeshStandardMaterial({ map: aTex, roughness: 0.95, metalness: 0.02, color: 0xf4efe6 });
+    const baseMat = new THREE.MeshStandardMaterial({ map: aTex, roughness: 0.95, metalness: 0.02, color: 0xf2e8d6 });
     const apron = new THREE.Mesh(new THREE.PlaneGeometry(W, H), baseMat);
     apron.rotation.x = -Math.PI / 2;
     apron.position.y = 0.02;
@@ -335,6 +335,16 @@ export class Base {
       ctx.fillStyle = 'rgba(215,205,175,0.75)';
       ctx.fillRect(mx(-5), my(122), 10 * px, 0.6 * py);
 
+      // large-scale sun-bleach + resurfacing patches (breaks up the uniform sheet)
+      for (let i = 0; i < 16; i++) {
+        const x = Math.random() * w, y = Math.random() * h, r = 70 + Math.random() * 220;
+        const light = Math.random() < 0.6;
+        const g = ctx.createRadialGradient(x, y, r * 0.15, x, y, r);
+        g.addColorStop(0, light ? 'rgba(238,226,200,0.085)' : 'rgba(22,22,26,0.10)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      }
       // oil stains / tire wear
       for (let i = 0; i < 110; i++) {
         const x = Math.random() * w, y = Math.random() * h, r = 6 + Math.random() * 34;
@@ -1210,7 +1220,7 @@ export class Base {
     this.materials.lamp.emissiveIntensity = v * 3.2;
     this.floodGlowMat.opacity = v * 0.28;
     for (const s of this.floodSpots) s.intensity = v * 380;
-    if (this.c2Light) this.c2Light.intensity = 0.7 + v * 1.6;
+    if (this.c2Light) this.c2Light.intensity = 1.1 + v * 1.3;
   }
 
   update(dt, t) {

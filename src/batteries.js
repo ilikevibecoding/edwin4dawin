@@ -195,8 +195,13 @@ export class Battery {
       kit.cyl('steel', 0.07, 0.07, 0.9, V(lx, 0.45, lz), 0x5c6156);
       kit.box('steel', 0.4, 0.08, 0.4, V(lx, 0.05, lz), 0x51564c);
     }
-    // ECS box on front
+    // ECS box on front (vents, door seam, cooling unit)
     kit.box('paint', 1.3, 1.0, 1.6, V(-2.2, 1.7, -0.4), 0x424a38);
+    for (let i = 0; i < 3; i++) {
+      kit.box('paint', 0.06, 0.09, 1.2, V(-2.87, 1.5 + i * 0.18, -0.4), 0x2c3126);
+    }
+    kit.box('paint', 0.5, 0.72, 0.05, V(-2.05, 1.62, 0.42), 0x39412f);
+    kit.box('steel', 0.34, 0.34, 0.1, V(-2.5, 1.75, 0.42), 0x565c50);
     this.staticMeshes = kit.build(mats, this.group);
 
     // azimuth turntable
@@ -288,9 +293,23 @@ export class Battery {
     }
     // rack frame
     ck.box('steel', 3.6, 0.24, 5.8, V(-0.0 - 0, 0.1, 0.3), 0x3a3e35);
+    // lengthwise stiffeners under the base plate (visible when elevated)
+    for (const sx of [-1.15, 0, 1.15]) {
+      ck.box('steel', 0.16, 0.12, 5.5, V(sx, -0.07, 0.3), 0x2e332a);
+    }
+    ck.box('steel', 3.4, 0.12, 0.2, V(0, -0.07, 1.9), 0x2e332a);
+    ck.box('steel', 3.4, 0.12, 0.2, V(0, -0.07, -1.3), 0x2e332a);
     ck.box('steel', 3.6, 1.8, 0.2, V(0, 1.0, -2.7), 0x444a40);
-    ck.box('steel', 0.2, 1.6, 5.6, V(-1.85, 0.9, 0.3), 0x3f453b);
-    ck.box('steel', 0.2, 1.6, 5.6, V(1.85, 0.9, 0.3), 0x3f453b);
+    ck.box('steel', 0.2, 1.6, 5.6, V(-1.85, 0.9, 0.3), 0x49503f);
+    ck.box('steel', 0.2, 1.6, 5.6, V(1.85, 0.9, 0.3), 0x49503f);
+    // side panel detail: stiffener ribs + access hatches so the slab reads mechanical
+    for (const sx of [-1, 1]) {
+      for (const rz of [-2.1, -0.9, 0.4, 1.7, 2.9]) {
+        ck.box('steel', 0.27, 1.52, 0.12, V(sx * 1.86, 0.9, rz), 0x30352b);
+      }
+      ck.box('paint', 0.05, 0.62, 0.92, V(sx * 1.97, 0.72, 1.05), 0x555c49);
+      ck.box('paint', 0.05, 0.4, 0.6, V(sx * 1.97, 1.05, -1.5), 0x3a4133);
+    }
     this.elevMeshes = ck.build(mats, this.elevGroup);
 
     this._makeCaps(0.68, 'circle');
