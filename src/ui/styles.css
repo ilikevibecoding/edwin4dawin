@@ -1,0 +1,17 @@
+:root {
+  --ui-accent: #4fc3ff;
+  --ui-warn: #ff4d5e;
+  --ui-text: #eef4fb;
+  --ui-font: 'Rajdhani', 'Roboto Condensed', 'Helvetica Neue', Arial, sans-serif;
+  --ui-mono: 'SF Mono', Consolas, ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: #000; overflow: hidden;
+  color: var(--ui-text); font-family: var(--ui-font);
+  -webkit-font-smoothing: antialiased;
+}
+#app { position: fixed; inset: 0; background: #000; }
+#stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#ui-root { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
