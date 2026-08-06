@@ -268,12 +268,6 @@ export class HouseholdSet extends SceneSet {
 
     this.lampLight = new THREE.PointLight(PALETTE.sodium, 16, 7.5, 2);
     this.lampLight.position.set(1.95, 1.6, 1.35);
-    this.lampLight.castShadow = this.quality.shadows;
-    if (this.lampLight.shadow) {
-      this.lampLight.shadow.mapSize.set(this.quality.shadowMapSize, this.quality.shadowMapSize);
-      this.lampLight.shadow.bias = -0.003;
-      this.lampLight.shadow.normalBias = 0.02;
-    }
     this.scene.add(this.lampLight);
 
     this.tvLight = new THREE.PointLight(0x86b4ff, 7, 6.5, 2);

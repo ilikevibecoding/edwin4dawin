@@ -6,7 +6,7 @@
  * the art direction, so the look survives all the way down.
  */
 
-export type TierName = 'low' | 'medium' | 'high' | 'cinema';
+export type TierName = 'low' | 'medium' | 'high' | 'cinema' | 'video';
 
 export interface QualitySettings {
   name: TierName;
@@ -139,6 +139,35 @@ const TIERS: Record<TierName, QualitySettings> = {
     envMapSize: 256,
     anisotropy: 4,
     crowdActors: 10,
+    staticShadowUpdates: false,
+  },
+  // Offline video capture. Same art direction as `cinema`, with the costs that
+  // do not survive compression pulled back: a ten-minute recording on a software
+  // rasteriser is thirteen thousand frames, so an extra 200 ms per frame is an
+  // extra forty-five minutes of wall time.
+  video: {
+    name: 'video',
+    renderScale: 1,
+    maxPixelRatio: 1,
+    shadows: true,
+    shadowMapSize: 1024,
+    shadowLights: 2,
+    softShadows: false,
+    rainCount: 2400,
+    splashCount: 120,
+    bloom: true,
+    bloomResolution: 240,
+    dof: true,
+    dofResolution: 260,
+    antialias: 'fxaa',
+    planarReflections: true,
+    reflectionScale: 0.24,
+    volumetrics: true,
+    volumetricSteps: 8,
+    lensRain: true,
+    envMapSize: 256,
+    anisotropy: 4,
+    crowdActors: 8,
     staticShadowUpdates: false,
   },
 };

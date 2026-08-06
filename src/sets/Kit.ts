@@ -262,8 +262,6 @@ export function stairHouse(
 
   const lamp = new THREE.PointLight(lampColor, 3.2, 7, 2);
   lamp.position.set(0, doorH + 0.3, d / 2 + 0.3);
-  lamp.castShadow = true;
-  lamp.shadow.bias = -0.002;
   g.add(lamp);
 
   const shaft = new LightShaft({
