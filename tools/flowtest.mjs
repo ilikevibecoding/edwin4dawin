@@ -55,7 +55,7 @@ let stalledFor = 0;
 let lastTime = -1;
 
 while (!progress.finished && progress.time < MAX_STORY) {
-  await page.evaluate((n) => window.__step(n), 6);
+  await page.evaluate(async (n) => { await window.__step(n); }, 6);
   progress = await page.evaluate(() => window.__progress());
   if (progress.time > lastTime + 0.001) {
     lastTime = progress.time;

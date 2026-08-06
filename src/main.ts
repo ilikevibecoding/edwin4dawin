@@ -47,8 +47,8 @@ declare global {
   interface Window {
     __ready?: boolean;
     __finished?: boolean;
-    __step?: (frames?: number) => void;
-    __skip?: (frames?: number) => void;
+    __step?: (frames?: number) => Promise<void>;
+    __skip?: (frames?: number) => Promise<void>;
     __cues?: () => unknown;
     __progress?: () => { time: number; frame: number; finished: boolean };
   }
@@ -121,17 +121,29 @@ async function boot(): Promise<void> {
   if (renderMode) {
     window.__ready = true;
     let frame = 0;
-    window.__step = (frames = 1) => {
+    /**
+     * Advancing the clock is not enough to advance the story: the chapters are
+     * async functions, and their continuations are microtasks that cannot run
+     * while a synchronous loop holds the stack. Every step therefore drains the
+     * microtask queue, or a batch of steps would move time forward while the
+     * script stayed on the same line.
+     */
+    const drain = async (): Promise<void> => {
+      for (let k = 0; k < 6; k++) await Promise.resolve();
+    };
+    window.__step = async (frames = 1) => {
       for (let i = 0; i < frames; i++) {
         engine.step(engine.fixedStep);
         frame++;
+        await drain();
       }
     };
     // Simulate without drawing, to catch back up after an interrupted capture.
-    window.__skip = (frames = 1) => {
+    window.__skip = async (frames = 1) => {
       for (let i = 0; i < frames; i++) {
         engine.step(engine.fixedStep, { draw: false });
         frame++;
+        await drain();
       }
     };
     window.__progress = () => ({ time: engine.clock.time, frame, finished: Boolean(window.__finished) });

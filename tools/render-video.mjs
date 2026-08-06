@@ -75,7 +75,7 @@ if (!argv.includes('--no-resume')) {
     console.log(`resuming at frame ${frame}; fast-forwarding`);
     const batch = 240;
     for (let done = 0; done < frame; done += batch) {
-      await page.evaluate((n) => window.__skip(n), Math.min(batch, frame - done));
+      await page.evaluate(async (n) => { await window.__skip(n); }, Math.min(batch, frame - done));
     }
     console.log('caught up');
   }
@@ -86,7 +86,7 @@ const t0 = Date.now();
 let captured = 0;
 let finished = false;
 while (frame < MAX_FRAMES && !finished) {
-  await page.evaluate(() => window.__step(1));
+  await page.evaluate(async () => { await window.__step(1); });
   // JPEG rather than PNG: a ten-minute capture is over thirteen thousand frames,
   // and lossless intermediates cost ten times the disk for no visible gain once
   // the result is x264 at CRF 19.
