@@ -22,9 +22,17 @@ test.describe('screenshot harness', () => {
     await shot(page, '01_base_overview_day');
 
     // ---- 2. rampart (patriot) closeup
+    // pad-local front-3/4 framing (matches the battery specialist's hero shot,
+    // shows cab + canister rack regardless of pad heading)
     await page.evaluate(() => {
-      window.__game.teleport(-36, 0, 42, 2.4, 0.06);
-      window.__game.lookAt(-46, 3, 32);
+      const rig = window.__game.ctx.batteries.get('patriot').rig.group;
+      const yaw = rig.rotation.y;
+      const cos = Math.cos(yaw), sin = Math.sin(yaw);
+      const L = (x, z) => [rig.position.x + x * cos + z * sin, rig.position.z - x * sin + z * cos];
+      const [cx, cz] = L(9.5, 11.0);
+      const [tx, tz] = L(0, 1.6);
+      window.__game.teleport(cx, 0, cz, 0, 0);
+      window.__game.lookAt(tx, 2.6, tz);
     });
     await step(page, 0.5);
     await shot(page, '02_rampart_closeup');
@@ -144,7 +152,8 @@ test.describe('screenshot harness', () => {
     });
     await step(page, 0.2);
     await shot(page, '12_night_raid');
-    const nightHit = await stepUntil(page, (s) => s.stats.intercepted >= 1, 120, 33.34, 1);
+    // 0.5 s poll chunks: catch the kill within ~0.6 s so the fireball is still lit
+    const nightHit = await stepUntil(page, (s) => s.stats.intercepted >= 1, 120, 33.34, 0.5);
     if (nightHit.ok && nightHit.state.lastIntercept) {
       await page.evaluate(() => {
         const p = window.__game.state().lastIntercept;
