@@ -104,3 +104,35 @@ feed — the intended cinematic look. Threat trails foreshorten to a point on he
 2. Ground-impact explosion + camera shake verification shot.
 3. Sunset preset review; base overview cinematic shots for README/PR.
 4. Full Playwright suite + perf budget check; demo video.
+
+## Iteration 6 — battery detail, demo video, kill readability (final)
+
+**Changes:** battery detail pass integrated (PAC-X: individual canisters, ring frames, jacks,
+hydraulics, toolboxes; HALO-9: cab w/ glass + mirrors, numbered tubes, elevation ram; SENTINEL:
+domed canister, 4-leg lattice gantry, platform ring, floodlights, aviation strobe). Demo recorder
+(`tools/demo_video.mjs`): RAF-calibrated testSpeed so headless capture plays at natural pace,
+sim-time camera plan, kill-dwell hold. Video reviewed by a visual model: sequence/pacing/HUD all
+confirmed, weakest point = intercept flash washing out half the sky at range. Fix: flash sprite
+distance growth split from particle growth (dsF = 1+(ds-1)·0.45), halo alpha 0.4→0.26, afterglow
+smaller + saturated orange; kill smoke 115-165·ds sized, 10-14 s life, darker. Verified vs seed-42
+single track: compact fireball w/ orange core + hanging dark smoke marker (kill at 6 km reads
+without dominating frame).
+
+**Observations:** intercepts now read as fireball → smoke marker → contrail column, exactly the
+intended silhouette. Sunset preset reviewed (warm horizon azimuth tint, purple zenith) — good.
+Overview + sunset stills captured for PR.
+
+**Tests:** 8/8 Playwright green (240 s budget, retries=1 for SwiftShader variance).
+**Perf:** drawCalls ~230, triangles ~80 k in deployed day scene — inside budgets (<500 / <2.5 M).
+
+**Scores:** env 8 · batteries 8 · flight 8 · effects 8.5 · light 8.5 · UX 8.5 · loop 8.5 · perf 8.5
+→ avg 8.3 — all categories ≥ 8. **Stopping condition met.**
+
+## Final state
+
+- Fictional interceptor-base FPS demo: 3 batteries (PAC-X / HALO-9 / SENTINEL), 3 scenarios
+  (SINGLE TRACK / SATURATION / NIGHT RAID), day/sunset/night, console + outdoor engagement.
+- All assets procedural (primitives, canvas textures, shaders, instancing); pooled particles,
+  trails, debris, flashes; dynamic resolution scaling.
+- Deterministic seeded runs; Playwright suite covers boot, console flow, outdoor flow, saturation
+  auto-engage, night-raid decoys, restart, all-battery launches, perf budgets.
