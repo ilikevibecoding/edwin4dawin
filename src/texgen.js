@@ -31,10 +31,10 @@ export function groundTexture() {
       const n = fbm2(x * 0.008, y * 0.008, 4);
       const n2 = fbm2(x * 0.045 + 31, y * 0.045 + 17, 3);
       const i = (y * S + x) * 4;
-      const shade = 0.82 + n * 0.34 + (n2 - 0.5) * 0.14;
+      const shade = 0.74 + n * 0.42 + (n2 - 0.5) * 0.18;
       d[i] = Math.min(255, 157 * shade);
-      d[i + 1] = Math.min(255, 134 * shade);
-      d[i + 2] = Math.min(255, 98 * shade * (0.96 + n2 * 0.08));
+      d[i + 1] = Math.min(255, 133 * shade);
+      d[i + 2] = Math.min(255, 95 * shade * (0.96 + n2 * 0.08));
       d[i + 3] = 255;
     }
   }

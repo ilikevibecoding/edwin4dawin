@@ -288,7 +288,7 @@ export class UI {
     this.els.summaryGrade.style.color = gcol;
     const rows = [
       ['SCENARIO', stats.scenario],
-      ['DURATION', `${Math.round((performance.now() - stats.startTime) / 1000)}s`],
+      ['DURATION', `${Math.round(stats.duration ?? 0)}s`],
       ['THREATS LAUNCHED', stats.launched - stats.decoysTotal],
       ['DECOYS', stats.decoysTotal],
       ['INTERCEPTED', stats.intercepted],

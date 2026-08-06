@@ -524,13 +524,16 @@ class Trail {
       const i0 = Math.max(0, i - 1), i1 = Math.min(this.count - 1, i + 1);
       _dir.set(this.pts[i1 * 3] - this.pts[i0 * 3], this.pts[i1 * 3 + 1] - this.pts[i0 * 3 + 1], this.pts[i1 * 3 + 2] - this.pts[i0 * 3 + 2]);
       _v.set(camPos.x - x, camPos.y - y, camPos.z - z);
+      const dist = _v.length();
       _side.crossVectors(_dir, _v).normalize();
 
       const age = now - this.born[i];
       const t = Math.min(1, age / this.life[i]);
       const grow = this.kind === 'core' ? 0.3 : this.kind === 'threat' ? 2.2 : 1.8;
-      const w = this.width[i] * (1 + t * grow);
-      const alpha = this.baseA[i] * (1 - THREE.MathUtils.smoothstep(t, 0.3, 1));
+      // enforce a minimum apparent width so trails still read from km away
+      const wMin = dist * (this.kind === 'core' ? 0.0012 : 0.003);
+      const w = Math.max(this.width[i] * (1 + t * grow), wMin);
+      const alpha = this.baseA[i] * (1 - THREE.MathUtils.smoothstep(t, 0.42, 1));
       P[i * 6] = x + _side.x * w; P[i * 6 + 1] = y + _side.y * w; P[i * 6 + 2] = z + _side.z * w;
       P[i * 6 + 3] = x - _side.x * w; P[i * 6 + 4] = y - _side.y * w; P[i * 6 + 5] = z - _side.z * w;
       C[i * 8 + 3] = alpha;
@@ -637,10 +640,11 @@ export class Effects {
 
   feedThreatTrail(trail, pos, vel, heat, isDecoy) {
     const cf = contrailFactor(pos.y);
-    const width = (isDecoy ? 1.8 : 2.8) * (0.7 + cf * 0.7);
-    const life = 3 + cf * 11;
-    const alpha = 0.4 + cf * 0.3 + heat * 0.1;
-    trail.push(pos, width, life, Math.min(0.85, alpha), this.now, 7);
+    // widths scale with altitude so trails still subtend pixels at 4-8 km
+    const width = (isDecoy ? 1.8 : 2.8) * (0.7 + cf * 0.7) + cf * cf * (isDecoy ? 6 : 13);
+    const life = 3 + cf * 18;
+    const alpha = 0.5 + cf * 0.32 + heat * 0.1;
+    trail.push(pos, width, life, Math.min(0.9, alpha), this.now, 7 + cf * 12);
   }
 
   feedInterceptorTrail(smokeTrail, coreTrail, pos, vel, thrusting, def) {
@@ -649,24 +653,25 @@ export class Effects {
       if (thrusting) {
         // slim, turbulent boost column: per-point width jitter (~±30%) and a
         // slight lateral offset off the flight axis so it billows instead of
-        // reading as a ruler-straight solid slab
-        const width = 1.1 * (0.72 + Math.random() * 0.62);
+        // reading as a ruler-straight solid slab. Widens with altitude so the
+        // column still reads from km away.
+        const width = 1.1 * (0.72 + Math.random() * 0.62) * (1 + cf * cf * 5);
         _dir.copy(vel).normalize();
         _p.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
         _p.addScaledVector(_dir, -_p.dot(_dir)); // keep offset perpendicular
         const len = _p.length();
-        if (len > 1e-4) _p.multiplyScalar((0.4 + Math.random() * 0.75) / len);
+        if (len > 1e-4) _p.multiplyScalar((0.4 + Math.random() * 0.75) * (1 + cf * 2) / len);
         _p.add(pos);
-        smokeTrail.push(_p, width, 8, 0.65, this.now, 4);
+        smokeTrail.push(_p, width, 8 + cf * 5, 0.65, this.now, 4 + cf * 9);
       } else {
-        const width = 1.0 + cf * 1.3;
-        const life = 2.5 + cf * 13;
-        const alpha = 0.26 + cf * 0.45;
-        smokeTrail.push(pos, width, life, alpha, this.now, 4);
+        const width = 1.0 + cf * 1.3 + cf * cf * 7;
+        const life = 2.5 + cf * 16;
+        const alpha = 0.34 + cf * 0.48;
+        smokeTrail.push(pos, width, life, alpha, this.now, 4 + cf * 12);
       }
     }
     if (coreTrail && thrusting) {
-      coreTrail.push(pos, 0.8, 0.35, 0.95, this.now, 1.5);
+      coreTrail.push(pos, 0.8 + cf * cf * 3, 0.35, 0.95, this.now, 1.5);
     }
   }
 
@@ -997,10 +1002,11 @@ export class Effects {
     this.now += dt;
     const wind = this.ctx.weather ? this.ctx.weather.wind : _v.set(1, 0, 0);
 
-    // trail color follows time of day (moonlit at night, warm at sunset)
+    // trail color follows time of day (moonlit at night, warm at sunset).
+    // Threat trails run much darker so hostile tracks read against bright sky.
     if (this.ctx.weather && this.ctx.weather.trailTint) {
       this.trailMats.smoke.color.copy(this.ctx.weather.trailTint);
-      this.trailMats.threat.color.copy(this.ctx.weather.trailTint).multiplyScalar(0.92);
+      this.trailMats.threat.color.copy(this.ctx.weather.trailTint).multiplyScalar(0.42);
     }
 
     // emitters

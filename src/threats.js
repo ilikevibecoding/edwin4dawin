@@ -88,7 +88,7 @@ class Threat {
     this.group.visible = false;
   }
 
-  update(dt, effects) {
+  update(dt, effects, camera) {
     if (!this.alive) return null;
     this.age += dt;
     // ballistic integration + light drag low down
@@ -122,7 +122,10 @@ class Threat {
     this.noseMat.emissiveIntensity = heat;
     this.glowMat.opacity = Math.min(0.9, 0.18 + heat * 0.3);
     const flicker = 1 + Math.sin(this.age * 23 + this.wobblePhase) * 0.15;
-    this.glow.scale.setScalar((6 + heat * 6) * flicker * (this.isDecoy ? 0.6 : 1));
+    // enforce a minimum apparent size so distant threats read as a hot point
+    const dist = camera ? camera.position.distanceTo(this.pos) : 1000;
+    const minApparent = dist * 0.0042;
+    this.glow.scale.setScalar(Math.max(6 + heat * 6, minApparent) * flicker * (this.isDecoy ? 0.6 : 1));
 
     // trail
     if (effects && this.trail) {
@@ -249,7 +252,7 @@ export class Threats {
     // threats
     for (const t of this.list) {
       if (!t.alive) continue;
-      const evt = t.update(dt, this.ctx.effects);
+      const evt = t.update(dt, this.ctx.effects, this.ctx.camera);
       if (!evt) continue;
       if (evt.type === 'impact') {
         const onBase = Math.hypot(t.pos.x, t.pos.z) < 150;

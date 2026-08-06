@@ -196,6 +196,7 @@ class Game {
     this.batteries.resetAll();
     this.batteries.deployAll();
     this.threats.startScenario(id);
+    this.threats.stats.startSim = this.simTime;
     this.lastScenario = id;
     this.completeTimer = -1;
     this.log = [];
@@ -439,6 +440,7 @@ class Game {
       this.completeTimer -= dt;
       if (this.completeTimer <= 0) {
         const stats = this.threats.stats;
+        stats.duration = this.simTime - (stats.startSim ?? this.simTime);
         this.threats.scenario = null;
         this.ui.showSummary(stats, this.log);
         this.audio.stinger(stats.impactsBase === 0);

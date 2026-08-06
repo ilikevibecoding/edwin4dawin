@@ -253,7 +253,9 @@ class Interceptor {
     if (thrusting) {
       this.exhaust.position.copy(this.pos).addScaledVector(_v.copy(this.vel).normalize(), -(this.type === 'sentinel' ? 4 : 2.6));
       const flick = 1 + Math.sin(this.age * 41) * 0.22;
-      this.exhaust.scale.setScalar((this.type === 'sentinel' ? 9 : 5.5) * flick);
+      const dist = this.ctx.camera ? this.ctx.camera.position.distanceTo(this.pos) : 500;
+      const base = (this.type === 'sentinel' ? 9 : 5.5);
+      this.exhaust.scale.setScalar(Math.max(base, dist * 0.0038) * flick);
       this.exhaustMat.opacity = 0.85;
     }
     if (this.trailSmoke) {

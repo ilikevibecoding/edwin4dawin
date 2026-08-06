@@ -116,14 +116,16 @@ export class Base {
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i);
       pos.setY(i, groundHeight(x, z));
-      // subtle tonal variation with distance & noise so tiling reads less
+      // macro + meso tonal variation with distance so tiling reads less
       const n = fbm2(x * 0.0008 + 40, z * 0.0008 + 9, 3);
+      const n2 = fbm2(x * 0.0052 + 7, z * 0.0052 - 3, 3);
       const r = Math.hypot(x, z);
       const dry = Math.min(1, Math.max(0, (r - 400) / 3000));
+      const tone = 0.78 + n * 0.22 + (n2 - 0.5) * 0.16;
       base.setRGB(
-        0.92 + n * 0.18 - dry * 0.05,
-        0.92 + n * 0.16 - dry * 0.02,
-        0.92 + n * 0.13 + dry * 0.03,
+        tone - dry * 0.04,
+        tone * (0.975 + n2 * 0.03) - dry * 0.015,
+        tone * (0.94 + n * 0.05) + dry * 0.03,
       );
       colors[i * 3] = base.r; colors[i * 3 + 1] = base.g; colors[i * 3 + 2] = base.b;
     }
@@ -137,44 +139,56 @@ export class Base {
     this.ground.name = 'terrain';
     this.group.add(this.ground);
 
-    // --- mountain rings
+    // --- mountain rings + sandy foothills band
+    this._mountains(2850, 230, 90, 0x93815f, 23);
     this._mountains(3600, 900, 420, 0x6d5c48, 17);
     this._mountains(5600, 1500, 760, 0x5d5348, 55);
-    // a few closer mesas
+    // a few closer weathered hills
     const kit = new Kit();
-    const mesaMat = new THREE.MeshStandardMaterial({ color: 0x8a7458, roughness: 1, flatShading: true });
+    const mesaMat = new THREE.MeshStandardMaterial({ color: 0x8a7458, roughness: 1, vertexColors: true });
     const rnd = mulberry32(88);
+    const hillTint = new THREE.Color();
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * Math.PI * 2 + rnd() * 0.8;
       const r = 1300 + rnd() * 900;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       const h = 60 + rnd() * 110, rad = 120 + rnd() * 220;
-      const g = new THREE.CylinderGeometry(rad * (0.5 + rnd() * 0.3), rad, h, 9, 3);
+      const g = new THREE.SphereGeometry(rad, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
       const p = g.attributes.position;
       for (let v = 0; v < p.count; v++) {
-        const vx = p.getX(v), vz = p.getZ(v);
-        const nn = fbm2(vx * 0.02 + i * 9, vz * 0.02, 3);
-        p.setX(v, vx * (0.85 + nn * 0.35));
-        p.setZ(v, vz * (0.85 + nn * 0.35));
+        const vx = p.getX(v), vy = p.getY(v), vz = p.getZ(v);
+        const nn = fbm2(vx * 0.014 + i * 9, vz * 0.014, 4);
+        const nn2 = fbm2(vx * 0.05 + i * 3, vz * 0.05 + 8, 3);
+        const rScale = 0.8 + nn * 0.5 + (nn2 - 0.5) * 0.18;
+        p.setX(v, vx * rScale);
+        p.setZ(v, vz * rScale);
+        p.setY(v, (vy / rad) * h * (0.75 + nn * 0.5));
       }
       g.computeVertexNormals();
-      kit.addGeo(g, mesaMat, x, groundHeight(x, z) + h / 2 - 6, z);
+      const cols = new Float32Array(p.count * 3);
+      for (let v = 0; v < p.count; v++) {
+        const hn = THREE.MathUtils.clamp(p.getY(v) / h, 0, 1);
+        const sn = fbm2(p.getX(v) * 0.03 + i, p.getZ(v) * 0.03, 3);
+        hillTint.setRGB(
+          0.9 + hn * 0.22 + (sn - 0.5) * 0.22,
+          0.9 + hn * 0.18 + (sn - 0.5) * 0.2,
+          0.9 + hn * 0.12 + (sn - 0.5) * 0.18,
+        );
+        cols[v * 3] = hillTint.r; cols[v * 3 + 1] = hillTint.g; cols[v * 3 + 2] = hillTint.b;
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      kit.addGeo(g, mesaMat, x, groundHeight(x, z) - 4, z);
     }
     this.group.add(kit.build({ castShadow: false, name: 'mesas' }));
   }
 
   _mountains(radius, maxH, minH, color, seed) {
-    const SEGS = 220, RINGS = 6;
-    const geo = new THREE.CylinderGeometry(radius, radius * 1.2, maxH, SEGS, RINGS, true);
+    const SEGS = 260, RINGS = 14;
+    const geo = new THREE.CylinderGeometry(radius, radius * 1.18, maxH, SEGS, RINGS, true);
     const pos = geo.attributes.position;
     const rnd = mulberry32(seed);
     const peaks = [];
-    for (let i = 0; i < 34; i++) peaks.push({ a: rnd() * Math.PI * 2, w: 0.05 + rnd() * 0.22, h: 0.3 + rnd() * 0.7 });
-    const base = new THREE.Color(color);
-    const rock = new THREE.Color(color).multiplyScalar(0.82).lerp(new THREE.Color(0x777d80), 0.35);
-    const high = new THREE.Color(color).lerp(new THREE.Color(0xb8ac96), 0.5);
-    const colors = new Float32Array(pos.count * 3);
-    const tmp = new THREE.Color();
+    for (let i = 0; i < 40; i++) peaks.push({ a: rnd() * Math.PI * 2, w: 0.04 + rnd() * 0.2, h: 0.3 + rnd() * 0.7 });
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
       const ang = Math.atan2(z, x);
@@ -188,25 +202,44 @@ export class Base {
         ridge = Math.max(ridge, p.h * Math.exp(-(d * d) / (p.w * p.w)) * (0.75 + ridged * 0.4));
       }
       const yn = (y / maxH) + 0.5; // 0 bottom, 1 top
-      // sharpen silhouettes: nonlinear vertical profile + fine detail
-      const detail = (fbm2(ang * 22 + seed * 7, yn * 5 + seed, 3) - 0.5) * 0.16 * yn;
-      const prof = Math.pow(yn, 1.25);
-      const newY = (prof * ridge + detail * ridge) * maxH - 12;
+      // nonlinear vertical profile + erosion detail
+      const detail = (fbm2(ang * 26 + seed * 7, yn * 6 + seed, 4) - 0.5) * 0.2 * yn;
+      const prof = Math.pow(yn, 1.22);
+      const newY = prof * (ridge + detail) * maxH - 12;
       pos.setY(i, Math.max(-12, newY) + minH * 0.001);
-      const rj = 1 + (fbm2(ang * 9 + seed * 3, yn * 4, 4) - 0.5) * 0.2;
+      const rj = 1 + (fbm2(ang * 9 + seed * 3, yn * 4, 4) - 0.5) * 0.22
+        + (fbm2(ang * 31 + seed, yn * 9, 3) - 0.5) * 0.07;
       pos.setX(i, x * rj); pos.setZ(i, z * rj);
-      // color: valley base -> rocky mid -> pale top
-      const hFrac = THREE.MathUtils.clamp(newY / (maxH * 0.7), 0, 1);
-      tmp.copy(base).lerp(rock, THREE.MathUtils.smoothstep(hFrac, 0.15, 0.6));
-      tmp.lerp(high, THREE.MathUtils.smoothstep(hFrac, 0.55, 1) * 0.7);
-      const shade = 0.9 + (fbm2(ang * 30, yn * 8 + seed, 2) - 0.5) * 0.3;
+    }
+    geo.computeVertexNormals();
+    // weld the wrap seam so smooth shading has no lighting discontinuity
+    const nrm = geo.attributes.normal;
+    for (let r = 0; r <= RINGS; r++) {
+      const a = r * (SEGS + 1), b = a + SEGS;
+      const nx = (nrm.getX(a) + nrm.getX(b)) / 2;
+      const ny = (nrm.getY(a) + nrm.getY(b)) / 2;
+      const nz = (nrm.getZ(a) + nrm.getZ(b)) / 2;
+      nrm.setXYZ(a, nx, ny, nz); nrm.setXYZ(b, nx, ny, nz);
+    }
+    // slope + height based coloring (after normals so steepness is known)
+    const base = new THREE.Color(color);
+    const rock = new THREE.Color(color).multiplyScalar(0.62).lerp(new THREE.Color(0x6a6a66), 0.45);
+    const high = new THREE.Color(color).lerp(new THREE.Color(0xcabfa5), 0.55);
+    const colors = new Float32Array(pos.count * 3);
+    const tmp = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const ang = Math.atan2(pos.getZ(i), pos.getX(i));
+      const hFrac = THREE.MathUtils.clamp(pos.getY(i) / (maxH * 0.7), 0, 1);
+      const steep = THREE.MathUtils.clamp((1 - Math.abs(nrm.getY(i))) * 1.5, 0, 1);
+      tmp.copy(base).lerp(rock, steep * 0.75);
+      tmp.lerp(high, THREE.MathUtils.smoothstep(hFrac, 0.45, 1) * 0.7);
+      const shade = 0.92 + (fbm2(ang * 42 + seed, hFrac * 12, 3) - 0.5) * 0.24;
       colors[i * 3] = tmp.r * shade;
       colors[i * 3 + 1] = tmp.g * shade;
       colors[i * 3 + 2] = tmp.b * shade;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true, side: THREE.DoubleSide, vertexColors: true });
+    const mat = new THREE.MeshStandardMaterial({ roughness: 1, side: THREE.DoubleSide, vertexColors: true });
     const m = new THREE.Mesh(geo, mat);
     m.name = 'mountains';
     this.group.add(m);

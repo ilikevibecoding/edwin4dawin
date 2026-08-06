@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { Kit, instanced, cableCurve } from './kit.js';
 import { BoxCollider, solveIntercept, THREAT_GRAVITY } from './physics.js';
-import { blowoutCoverTexture, heatTexture, stencilTexture, hazardStripesTexture, metalPanelTexture } from './texgen.js';
+import { blowoutCoverTexture, heatTexture, stencilTexture, hazardStripesTexture, metalPanelTexture, scorchTexture } from './texgen.js';
 
 export const BATTERY_DEFS = {
   patriot: {
@@ -71,14 +71,20 @@ class Battery {
     this.lampMats.amber = mk(0xffaa22);
     this.lampMats.red = mk(0xff2a20);
     kit.cyl(this.mats.dark, 0.04, 0.05, h, 6, x, h / 2, z);
-    // lamp housing: back channel, rain hood, mounting bracket
+    // lamp housing: back channel, per-lamp housing boxes, rain hood, bracket
     kit.box(this.mats.dark, 0.07, 0.68, 0.2, x - 0.11, h + 0.09, z);
+    for (let i = 0; i < 3; i++) {
+      kit.box(this.mats.dark, 0.17, 0.135, 0.2, x - 0.035, h + 0.24 - i * 0.15, z);
+    }
     kit.box(this.mats.dark, 0.24, 0.05, 0.24, x - 0.03, h + 0.39, z);
     kit.box(this.mats.dark, 0.14, 0.1, 0.16, x, h - 0.16, z);
+    // conduit drop + junction stub at the mast base
+    kit.cyl(this.mats.rubber, 0.022, 0.022, h - 0.3, 5, x + 0.06, (h - 0.3) / 2 + 0.1, z + 0.03);
+    kit.box(this.mats.dark, 0.16, 0.2, 0.12, x + 0.02, 0.24, z + 0.05);
     const lamps = [this.lampMats.green, this.lampMats.amber, this.lampMats.red];
     lamps.forEach((m, i) => {
       const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.12, 8), m);
-      lamp.position.set(x, h + 0.24 - i * 0.15, z);
+      lamp.position.set(x + 0.04, h + 0.24 - i * 0.15, z);
       this.group.add(lamp);
     });
   }
@@ -211,6 +217,10 @@ class Battery {
       case STATE.EMPTY: set(0.1, 0.1, 2.8); break;
       default: set(0.4, 0.4, 0.4);
     }
+    // aviation obstruction beacon (sentinel gantry): slow red pulse
+    if (this.beaconMat) {
+      this.beaconMat.emissiveIntensity = Math.sin(performance.now() * 0.0028) > 0.25 ? 2.6 : 0.2;
+    }
   }
 
   status() {
@@ -288,6 +298,200 @@ function scorchStreakTexture() {
   _scorchStreakTex = new THREE.CanvasTexture(c);
   _scorchStreakTex.colorSpace = THREE.SRGBColorSpace;
   return _scorchStreakTex;
+}
+
+// muted hazard chevron band (repeating v-stripes) for canister front caps
+let _chevTex = null;
+function chevronBandTexture() {
+  if (_chevTex) return _chevTex;
+  const W = 256, H = 64;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#33342d'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = '#8a7c42'; g.lineWidth = 13; g.lineJoin = 'miter';
+  const s = 42;
+  for (let x = -s; x < W + s; x += s) {
+    g.beginPath();
+    g.moveTo(x - s / 2, 6); g.lineTo(x, H - 10); g.lineTo(x + s / 2, 6);
+    g.stroke();
+  }
+  // grime
+  let seed = 31;
+  const rnd = () => { seed = (seed * 16807 + 11) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 140; i++) {
+    g.fillStyle = `rgba(24,22,16,${0.08 + rnd() * 0.2})`;
+    g.fillRect(rnd() * W, rnd() * H, 1 + rnd() * 4, 1 + rnd() * 2);
+  }
+  _chevTex = new THREE.CanvasTexture(c);
+  _chevTex.colorSpace = THREE.SRGBColorSpace;
+  return _chevTex;
+}
+
+// square blowout cover with cell number, for PAC-X canister faces
+const _pacCoverTexs = new Map();
+function pacCoverTexture(n) {
+  if (_pacCoverTexs.has(n)) return _pacCoverTexs.get(n);
+  const S = 128;
+  const c = document.createElement('canvas'); c.width = S; c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = '#57614f'; g.fillRect(0, 0, S, S);
+  // pressed rim
+  g.strokeStyle = 'rgba(22,26,18,0.6)'; g.lineWidth = 6; g.strokeRect(3, 3, S - 6, S - 6);
+  g.strokeStyle = 'rgba(190,196,178,0.16)'; g.lineWidth = 2; g.strokeRect(8, 8, S - 16, S - 16);
+  // circular blowout seam + X seams
+  g.strokeStyle = '#39412f'; g.lineWidth = 3.4;
+  g.beginPath(); g.arc(S / 2, S / 2, S * 0.4, 0, 7); g.stroke();
+  g.lineWidth = 2.2;
+  g.beginPath();
+  g.moveTo(S * 0.17, S * 0.17); g.lineTo(S * 0.83, S * 0.83);
+  g.moveTo(S * 0.83, S * 0.17); g.lineTo(S * 0.17, S * 0.83);
+  g.stroke();
+  g.fillStyle = '#39412f';
+  g.beginPath(); g.arc(S / 2, S / 2, 5, 0, 7); g.fill();
+  // corner bolt dots
+  g.fillStyle = 'rgba(25,28,22,0.9)';
+  for (const bx of [14, S - 14]) for (const by of [14, S - 14]) {
+    g.beginPath(); g.arc(bx, by, 4, 0, 7); g.fill();
+  }
+  // stencilled cell number
+  g.fillStyle = '#cfd4c0';
+  g.font = 'bold 24px "Courier New", monospace';
+  g.textAlign = 'left'; g.textBaseline = 'top';
+  g.fillText(String(n), 12, 20);
+  // wear
+  let seed = 7 + n * 13;
+  const rnd = () => { seed = (seed * 16807 + 11) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 70; i++) {
+    g.fillStyle = `rgba(20,20,14,${0.06 + rnd() * 0.16})`;
+    g.fillRect(rnd() * S, rnd() * S, 1 + rnd() * 3, 1 + rnd() * 2);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  _pacCoverTexs.set(n, t);
+  return t;
+}
+
+// round tube end cap with big stencilled number, for HALO-9 launch tubes
+const _haloCapTexs = new Map();
+function haloCapTexture(n) {
+  if (_haloCapTexs.has(n)) return _haloCapTexs.get(n);
+  const S = 128;
+  const c = document.createElement('canvas'); c.width = S; c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = '#454e3c'; g.fillRect(0, 0, S, S);
+  // outer clamp ring + inner seam ring
+  g.strokeStyle = '#2c332a'; g.lineWidth = 8;
+  g.beginPath(); g.arc(S / 2, S / 2, S * 0.44, 0, 7); g.stroke();
+  g.strokeStyle = 'rgba(210,214,196,0.14)'; g.lineWidth = 2;
+  g.beginPath(); g.arc(S / 2, S / 2, S * 0.36, 0, 7); g.stroke();
+  // ring bolts
+  g.fillStyle = 'rgba(24,27,21,0.95)';
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + 0.39;
+    g.beginPath(); g.arc(S / 2 + Math.cos(a) * S * 0.44, S / 2 + Math.sin(a) * S * 0.44, 4, 0, 7); g.fill();
+  }
+  // big stencilled number
+  g.fillStyle = '#dde1cf';
+  g.font = 'bold 58px "Courier New", monospace';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(String(n), S / 2, S / 2 + 2);
+  // wear specks
+  let seed = 91 + n * 29;
+  const rnd = () => { seed = (seed * 16807 + 11) % 2147483647; return seed / 2147483647; };
+  g.globalCompositeOperation = 'destination-over';
+  g.globalCompositeOperation = 'source-over';
+  for (let i = 0; i < 60; i++) {
+    g.fillStyle = `rgba(18,20,14,${0.08 + rnd() * 0.18})`;
+    g.fillRect(rnd() * S, rnd() * S, 1 + rnd() * 3, 1 + rnd() * 2);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  _haloCapTexs.set(n, t);
+  return t;
+}
+
+// vertical soot/heat gradient wrap (dark at v=1 / top of geometry) for muzzles
+let _tubeHeatTex = null;
+function tubeHeatTexture() {
+  if (_tubeHeatTex) return _tubeHeatTex;
+  const W = 64, H = 128;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, W, H);
+  const grad = g.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0.0, 'rgba(14,11,9,0.88)');
+  grad.addColorStop(0.3, 'rgba(52,36,26,0.55)');
+  grad.addColorStop(0.62, 'rgba(66,60,92,0.26)');
+  grad.addColorStop(1.0, 'rgba(0,0,0,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, W, H);
+  let seed = 55;
+  const rnd = () => { seed = (seed * 16807 + 11) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 90; i++) {
+    g.fillStyle = `rgba(8,7,5,${0.12 + rnd() * 0.24})`;
+    g.fillRect(rnd() * W, rnd() * H * 0.45, 1 + rnd() * 3, 2 + rnd() * 7;
+  }
+  _tubeHeatTex = new THREE.CanvasTexture(c);
+  return _tubeHeatTex;
+}
+
+// small red-header warning placard plate
+const _placardTexs = new Map();
+function placardTexture(top, bottom) {
+  const key = top + '|' + bottom;
+  if (_placardTexs.has(key)) return _placardTexs.get(key);
+  const W = 256, H = 128;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#d6d2c2'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#8f2f26'; g.fillRect(0, 0, W, 52);
+  g.strokeStyle = '#2a2a24'; g.lineWidth = 6; g.strokeRect(3, 3, W - 6, H - 6);
+  g.fillStyle = '#efe9da';
+  g.font = 'bold 34px "Arial Narrow", sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(top, W / 2, 28);
+  g.fillStyle = '#26261f';
+  g.font = 'bold 19px "Arial Narrow", sans-serif';
+  g.fillText(bottom, W / 2, 82);
+  // corner screws + grime
+  g.fillStyle = '#4a4c48';
+  for (const px of [10, W - 10]) for (const py of [10, H - 10]) {
+    g.beginPath(); g.arc(px, py, 4, 0, 7); g.fill();
+  }
+  let seed = 17 + key.length * 7;
+  const rnd = () => { seed = (seed * 16807 + 11) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 90; i++) {
+    g.fillStyle = `rgba(40,36,26,${0.05 + rnd() * 0.12})`;
+    g.fillRect(rnd() * W, rnd() * H, 1 + rnd() * 4, 1 + rnd() * 3);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  _placardTexs.set(key, t);
+  return t;
+}
+
+// ---- hydraulic ram helpers ------------------------------------------------
+// Static parts of a ram (outer barrel, gland collar, base block) merged into
+// the surrounding kit; only the piston is a live mesh. Piston geometry is
+// anchored at its base so Battery.update's `piston.scale.y = 1 + e * stretch`
+// extends it out of the barrel instead of stretching about its centre.
+function ramBarrel(kit, M, x, y, z, rx, outerLen, outerR) {
+  const dy = Math.cos(rx), dz = Math.sin(rx);
+  kit.cyl(M.steel, outerR, outerR * 1.12, outerLen, 10,
+    x, y + dy * outerLen / 2, z + dz * outerLen / 2, rx, 0, 0);
+  kit.cyl(M.dark, outerR * 1.24, outerR * 1.24, 0.09, 10,
+    x, y + dy * (outerLen - 0.05), z + dz * (outerLen - 0.05), rx, 0, 0);
+  kit.cyl(M.dark, outerR * 1.28, outerR * 1.4, 0.16, 10,
+    x, y + dy * 0.08, z + dz * 0.08, rx, 0, 0);
+}
+
+function makePiston(parent, M, x, y, z, rx, len, r) {
+  const geo = new THREE.CylinderGeometry(r, r, len, 8);
+  geo.translate(0, len / 2 + 0.05, 0);
+  const piston = new THREE.Mesh(geo, M.piston);
+  piston.position.set(x, y, z);
+  piston.rotation.x = rx;
+  parent.add(piston);
+  return piston;
 }
 
 // ---------------------------------------------------------------- PAC-X
