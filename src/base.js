@@ -490,7 +490,7 @@ export function createBase(ctx) {
   const shelter = new THREE.Group();
   shelter.position.set(-32, 0, -18);
   group.add(shelter);
-  let consoleScreen, holoAnchor, consolePos;
+  let consoleScreen, holoAnchor, consolePos, auxScreens, interiorLights;
   {
     const W = 9, H = 3.1, D = 6, t = 0.16;
     const sx = shelter.position.x, sz = shelter.position.z;
@@ -517,38 +517,65 @@ export function createBase(ctx) {
     const door = addBox(M.olive, doorW - 0.1, 2.1, 0.06, doorX + doorW / 2 + 0.62, 1.06, D / 2 + 0.7, { parent: shelter, rot: -1.25 });
     door.castShadow = true;
 
-    // ---- interior liner: ribbed panel walls + ceiling (single merged mesh)
-    // so the inside stops showing the exterior camo wrap
+    // local deterministic stream for interior detail — must NOT touch `rng`
+    // (its call count feeds every section after the shelter)
+    const srng = new Rand(9107);
+    const wallT = 0.012; // liner offset off the structural wall
+    const iw = W / 2 - t - wallT, id = D / 2 - t - wallT;
+
+    // interior material set (shared across merged buckets)
+    const IM = {
+      wall: new THREE.MeshStandardMaterial({ map: textures.interiorWall(), roughness: 0.9 }),
+      ceil: new THREE.MeshStandardMaterial({ map: textures.interiorCeiling(), roughness: 0.92 }),
+      deck: new THREE.MeshStandardMaterial({ map: textures.paintedFloor(), roughness: 0.82 }),
+      conBody: new THREE.MeshStandardMaterial({ color: 0x4d5551, roughness: 0.58, metalness: 0.3 }),
+      conDesk: new THREE.MeshStandardMaterial({ color: 0x2c2f31, roughness: 0.68, metalness: 0.2 }),
+      bezel: new THREE.MeshStandardMaterial({ color: 0x1b1d1f, roughness: 0.42, metalness: 0.5 }),
+      panelTex: new THREE.MeshStandardMaterial({ map: textures.consolePanel(), roughness: 0.55, metalness: 0.25 }),
+      fabric: new THREE.MeshStandardMaterial({ color: 0x2e332c, roughness: 0.96 }),
+      red: new THREE.MeshStandardMaterial({ color: 0x8c2016, roughness: 0.5, metalness: 0.2 }),
+      steel: M.steel,
+      white: M.white,
+      cable: M.cable,
+    };
+
+    // ---- interior liner: acoustic-panel walls (v spans full wall height)
     {
-      const wallT = 0.012; // liner offset off the structural wall
-      const iw = W / 2 - t - wallT, id = D / 2 - t - wallT;
-      const uvDiv = 2.4; // texture tile size in metres
-      const panel = (w, h) => scaleUV(new THREE.PlaneGeometry(w, h), w / uvDiv, h / uvDiv);
+      const panel = (w) => scaleUV(new THREE.PlaneGeometry(w, H), w / 2.4, 1);
       const parts = [];
-      // back wall (faces +z)
-      parts.push(placeGeo(panel(W - 2 * t, H), 0, H / 2, -id));
-      // side walls
-      parts.push(placeGeo(panel(D - 2 * t, H), -iw, H / 2, 0, 0, Math.PI / 2));
-      parts.push(placeGeo(panel(D - 2 * t, H), iw, H / 2, 0, 0, -Math.PI / 2));
-      // front wall segments around the door (faces -z)
+      parts.push(placeGeo(panel(W - 2 * t), 0, H / 2, -id));
+      parts.push(placeGeo(panel(D - 2 * t), -iw, H / 2, 0, 0, Math.PI / 2));
+      parts.push(placeGeo(panel(D - 2 * t), iw, H / 2, 0, 0, -Math.PI / 2));
       const f1w = iw + (doorX - doorW / 2);
       const f2w = iw - (doorX + doorW / 2);
-      parts.push(placeGeo(panel(f1w, H), -iw + f1w / 2, H / 2, id, 0, Math.PI));
-      parts.push(placeGeo(panel(f2w, H), iw - f2w / 2, H / 2, id, 0, Math.PI));
-      parts.push(placeGeo(panel(doorW, H - 2.15), doorX, 2.15 + (H - 2.15) / 2, id, 0, Math.PI));
-      // ceiling (faces down)
-      parts.push(placeGeo(panel(W - 2 * t, D - 2 * t), 0, H - 0.065, 0, Math.PI / 2));
-      const liner = new THREE.Mesh(
-        mergeGeoms(parts),
-        new THREE.MeshStandardMaterial({ map: textures.interiorWall(), roughness: 0.88 })
-      );
+      parts.push(placeGeo(panel(f1w), -iw + f1w / 2, H / 2, id, 0, Math.PI));
+      parts.push(placeGeo(panel(f2w), iw - f2w / 2, H / 2, id, 0, Math.PI));
+      // lintel interior face: remap v to its true wall band so no wainscot floats
+      const lintelH = H - 2.15;
+      const lintel = new THREE.PlaneGeometry(doorW, lintelH);
+      {
+        const uv = lintel.attributes.uv;
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (doorW / 2.4), 2.15 / H + uv.getY(i) * (lintelH / H));
+      }
+      parts.push(placeGeo(lintel, doorX, 2.15 + lintelH / 2, id, 0, Math.PI));
+      const liner = new THREE.Mesh(mergeGeoms(parts), IM.wall);
       liner.receiveShadow = true;
       shelter.add(liner);
 
-      // painted deck floor (one-shot texture: border lane, wear path, chevrons)
+      // ceiling (pale acoustic tile, own texture)
+      const ceil = new THREE.Mesh(
+        scaleUV(new THREE.PlaneGeometry(W - 2 * t, D - 2 * t), (W - 2 * t) / 1.2, (D - 2 * t) / 1.2),
+        IM.ceil
+      );
+      ceil.rotation.x = Math.PI / 2;
+      ceil.position.y = H - 0.065;
+      ceil.receiveShadow = true;
+      shelter.add(ceil);
+
+      // painted deck floor (one-shot texture: tiles, border, chevrons, wear)
       const deck = new THREE.Mesh(
         new THREE.PlaneGeometry(W - 2 * t - 0.02, D - 2 * t - 0.02),
-        new THREE.MeshStandardMaterial({ map: textures.paintedFloor(), roughness: 0.85 })
+        IM.deck
       );
       deck.rotation.x = -Math.PI / 2;
       deck.position.y = 0.148;
@@ -556,39 +583,363 @@ export function createBase(ctx) {
       shelter.add(deck);
     }
 
-    // console desk + screen (north wall interior)
-    const desk = addBox(M.darkMetal, 3.4, 0.08, 0.95, -1.2, 0.86, -D / 2 + 0.75, { parent: shelter, collide: true });
-    addBox(M.darkMetal, 3.2, 0.8, 0.7, -1.2, 0.42, -D / 2 + 0.72, { parent: shelter });
-    // angled screen
-    const scrGeo = new THREE.PlaneGeometry(1.9, 1.05);
-    consoleScreen = new THREE.Mesh(scrGeo, new THREE.MeshBasicMaterial({ color: 0x0a1408 }));
-    consoleScreen.position.set(-1.2, 1.62, -D / 2 + 0.45);
-    consoleScreen.rotation.x = -0.3;
-    shelter.add(consoleScreen);
-    const scrFrame = addBox(M.darkMetal, 2.05, 1.2, 0.1, -1.2, 1.6, -D / 2 + 0.38, { parent: shelter });
-    scrFrame.rotation.x = -0.3;
-    // keyboard + panels
-    addBox(M.rubber, 1.1, 0.03, 0.35, -1.4, 0.92, -D / 2 + 0.78, { parent: shelter });
-    const btnPanel = addBox(M.metal, 0.9, 0.04, 0.5, -0.1, 0.91, -D / 2 + 0.78, { parent: shelter });
-    // big red START button housing
-    const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.07, 16), new THREE.MeshStandardMaterial({ color: 0xaa1111, emissive: 0xcc2211, emissiveIntensity: 0.9, roughness: 0.4 }));
-    btn.position.set(-0.1, 0.97, -D / 2 + 0.7);
-    shelter.add(btn);
-    dynamic.push((dt, t2) => { btn.material.emissiveIntensity = 0.9 + Math.sin(t2 * 3.1) * 0.5; });
+    // ============================ FIRE-DIRECTION CONSOLE SUITE (back wall)
+    // Three bays: [aux display | main PPI | annunciator+switches], one
+    // continuous plinth/body/desktop/slope/monitor-wall profile, side cheeks.
+    const CB = -id;                 // interior back-wall z
+    const CX0 = -3.45, CX1 = 0.75;  // console span
+    const CW = CX1 - CX0, CCX = (CX0 + CX1) / 2;
+    const SLOPE_A = 0.62;           // slope lean-back from vertical
+    const sCos = Math.cos(SLOPE_A), sSin = Math.sin(SLOPE_A);
+    const slopeBaseY = 0.79, slopeBaseZ = CB + 0.62, slopeLen = 0.46;
+    // point on the slope face: s along face from bottom edge, out along normal
+    const slopePt = (x, s, out = 0) => [x, slopeBaseY + s * sCos + out * sSin, slopeBaseZ - s * sSin + out * sCos];
+    {
+      const bodyParts = [
+        placeGeo(new THREE.BoxGeometry(CW - 0.1, 0.12, 0.66), CCX, 0.06, CB + 0.37),          // plinth (kick recess)
+        placeGeo(new THREE.BoxGeometry(CW, 0.62, 0.94), CCX, 0.43, CB + 0.47),                // body
+        placeGeo(new THREE.BoxGeometry(CW, 0.86, 0.12), CCX, 1.615, CB + 0.24, -0.10),        // monitor wall
+        placeGeo(new THREE.BoxGeometry(CW + 0.12, 0.1, 0.4), CCX, 2.075, CB + 0.26, -0.06),   // brow visor
+        // side cheeks
+        placeGeo(new THREE.BoxGeometry(0.06, 0.79, 1.06), CX0 - 0.03, 0.395, CB + 0.53),
+        placeGeo(new THREE.BoxGeometry(0.06, 0.79, 1.06), CX1 + 0.03, 0.395, CB + 0.53),
+        placeGeo(new THREE.BoxGeometry(0.06, 1.4, 0.56), CX0 - 0.03, 1.44, CB + 0.30),
+        placeGeo(new THREE.BoxGeometry(0.06, 1.4, 0.56), CX1 + 0.03, 1.44, CB + 0.30),
+        // bay divider strips on the monitor wall
+        placeGeo(new THREE.BoxGeometry(0.035, 0.86, 0.14), -2.15, 1.615, CB + 0.25, -0.10),
+        placeGeo(new THREE.BoxGeometry(0.035, 0.86, 0.14), -0.25, 1.615, CB + 0.25, -0.10),
+      ];
+      const body = new THREE.Mesh(mergeGeoms(bodyParts), IM.conBody);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      shelter.add(body);
+      colliders.push(makeColliderBox(sx + CCX, sz + CB + 0.5, CW / 2 + 0.14, 0.62, 0, 0, 2.2));
 
-    // holographic radar table
-    const table = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.95, 0.92, 24), M.darkMetal);
-    table.position.set(2.4, 0.46, -0.6);
-    table.castShadow = true;
-    shelter.add(table);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.03, 8, 40), new THREE.MeshStandardMaterial({ color: 0x06222a, emissive: 0x27c4de, emissiveIntensity: 1.6 }));
-    rim.position.set(2.4, 0.93, -0.6);
-    rim.rotation.x = Math.PI / 2;
-    shelter.add(rim);
-    colliders.push(makeColliderCyl(sx + 2.4, sz - 0.6, 1.05, 0, 1.0));
-    holoAnchor = new THREE.Object3D();
-    holoAnchor.position.set(2.4, 0.98, -0.6);
-    shelter.add(holoAnchor);
+      // desktop slab + rounded front lip strip
+      const deskParts = [
+        placeGeo(new THREE.BoxGeometry(CW, 0.05, 1.06), CCX, 0.765, CB + 0.53),
+        placeGeo(new THREE.CylinderGeometry(0.026, 0.026, CW, 8), CCX, 0.765, CB + 1.055, 0, 0, Math.PI / 2),
+      ];
+      const desk = new THREE.Mesh(mergeGeoms(deskParts), IM.conDesk);
+      desk.castShadow = true;
+      desk.receiveShadow = true;
+      shelter.add(desk);
+
+      // sloped switch panels, one full-texture per bay
+      {
+        const bays = [[-3.45, -2.15], [-2.15, -0.25], [-0.25, 0.75]];
+        const parts = [];
+        for (const [x0, x1] of bays) {
+          const [px, py, pz] = slopePt((x0 + x1) / 2, slopeLen / 2, 0.002);
+          parts.push(placeGeo(new THREE.PlaneGeometry(x1 - x0 - 0.06, slopeLen), px, py, pz, -SLOPE_A));
+        }
+        const slope = new THREE.Mesh(mergeGeoms(parts), IM.panelTex);
+        slope.receiveShadow = true;
+        shelter.add(slope);
+      }
+
+      // ---- screens: main PPI (contract mesh) + two aux displays
+      const SCR_RX = -0.10;
+      const bezelParts = [];
+      const frameAround = (cx, cy, w, h2) => {
+        // slab behind + proud frame strips around the glass
+        bezelParts.push(placeGeo(new THREE.BoxGeometry(w + 0.14, h2 + 0.14, 0.075), cx, cy, CB + 0.305, SCR_RX));
+        const fz = CB + 0.352;
+        const oy = h2 / 2 + 0.045; // strip offset along the tilted screen's up axis
+        bezelParts.push(placeGeo(new THREE.BoxGeometry(w + 0.14, 0.05, 0.045), cx, cy + oy * Math.cos(SCR_RX), fz + oy * Math.sin(SCR_RX), SCR_RX));
+        bezelParts.push(placeGeo(new THREE.BoxGeometry(w + 0.14, 0.05, 0.045), cx, cy - oy * Math.cos(SCR_RX), fz - oy * Math.sin(SCR_RX), SCR_RX));
+        bezelParts.push(placeGeo(new THREE.BoxGeometry(0.05, h2 + 0.14, 0.045), cx - w / 2 - 0.045, cy, fz, SCR_RX));
+        bezelParts.push(placeGeo(new THREE.BoxGeometry(0.05, h2 + 0.14, 0.045), cx + w / 2 + 0.045, cy, fz, SCR_RX));
+      };
+      frameAround(-1.2, 1.60, 1.9, 1.05);
+      frameAround(-2.85, 1.60, 0.98, 0.56);
+      frameAround(0.25, 1.46, 0.64, 0.42);
+      // annunciator housing
+      bezelParts.push(placeGeo(new THREE.BoxGeometry(0.82, 0.37, 0.07), 0.25, 1.895, CB + 0.31, SCR_RX));
+      const bezels = new THREE.Mesh(mergeGeoms(bezelParts), IM.bezel);
+      bezels.castShadow = true;
+      bezels.receiveShadow = true;
+      shelter.add(bezels);
+
+      consoleScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.05), new THREE.MeshBasicMaterial({ color: 0x0a1408 }));
+      consoleScreen.position.set(-1.2, 1.60, CB + 0.353);
+      consoleScreen.rotation.x = SCR_RX;
+      shelter.add(consoleScreen);
+      const auxL = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 0.56), new THREE.MeshBasicMaterial({ map: textures.statusScreen(), toneMapped: false }));
+      auxL.position.set(-2.85, 1.60, CB + 0.353);
+      auxL.rotation.x = SCR_RX;
+      shelter.add(auxL);
+      const auxR = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.42), new THREE.MeshBasicMaterial({ map: textures.statusScreen(), toneMapped: false }));
+      auxR.position.set(0.25, 1.46, CB + 0.353);
+      auxR.rotation.x = SCR_RX;
+      shelter.add(auxR);
+      auxScreens = { left: auxL, right: auxR };
+      const annun = new THREE.Mesh(new THREE.PlaneGeometry(0.76, 0.315), new THREE.MeshBasicMaterial({ map: textures.annunciator(), toneMapped: false }));
+      annun.position.set(0.25, 1.895, CB + 0.35);
+      annun.rotation.x = SCR_RX;
+      shelter.add(annun);
+
+      // power LEDs + brand plates under the screens (emissive dots)
+      {
+        const dotGeo = new THREE.PlaneGeometry(0.022, 0.022);
+        const dots = [];
+        for (const [dx, dy] of [[-0.35, 1.035], [-2.5, 1.29], [0.5, 1.22]]) {
+          dots.push(placeGeo(dotGeo, dx, dy, CB + 0.36, SCR_RX));
+        }
+        const dotMesh = new THREE.Mesh(mergeGeoms(dots), new THREE.MeshBasicMaterial({ color: 0x53e07c }));
+        shelter.add(dotMesh);
+      }
+
+      // ---- keyboard, trackball, mug, pencil, phone
+      const kb = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.022, 0.22), new THREE.MeshStandardMaterial({ map: textures.keyboard(), roughness: 0.6 }));
+      kb.position.set(-1.35, 0.802, CB + 0.83);
+      kb.rotation.y = 0.03;
+      kb.castShadow = true;
+      shelter.add(kb);
+      {
+        const whiteParts = [
+          placeGeo(new THREE.CylinderGeometry(0.041, 0.036, 0.1, 10), -0.32, 0.845, CB + 0.84),          // mug
+          placeGeo(new THREE.TorusGeometry(0.028, 0.008, 6, 10), -0.275, 0.845, CB + 0.84, 0, 0, 0),     // handle
+          placeGeo(new THREE.CylinderGeometry(0.05, 0.06, 0.02, 12), -0.85, 0.80, CB + 0.85),            // trackball base
+        ];
+        const wm = new THREE.Mesh(mergeGeoms(whiteParts), new THREE.MeshStandardMaterial({ color: 0xc9c2ae, roughness: 0.62 }));
+        wm.castShadow = true;
+        shelter.add(wm);
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.034, 12, 10), new THREE.MeshStandardMaterial({ color: 0x8c2016, roughness: 0.3 }));
+        ball.position.set(-0.85, 0.822, CB + 0.85);
+        shelter.add(ball);
+        // grease pencil
+        const pencil = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.14, 6), new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.6 }));
+        pencil.position.set(-1.95, 0.80, CB + 0.9);
+        pencil.rotation.set(Math.PI / 2, 0, 0.5);
+        shelter.add(pencil);
+        // open duty logbook on the right bay
+        const bookCover = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.012, 0.24), new THREE.MeshStandardMaterial({ color: 0x2a3325, roughness: 0.85 }));
+        bookCover.position.set(-0.15, 0.795, CB + 0.86);
+        bookCover.rotation.y = -0.12;
+        bookCover.castShadow = true;
+        shelter.add(bookCover);
+        const pages = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.31, 0.21),
+          new THREE.MeshStandardMaterial({ map: textures.clipboard(), roughness: 0.92 })
+        );
+        pages.rotation.set(-Math.PI / 2, 0, -0.12 + Math.PI / 2);
+        pages.position.set(-0.15, 0.8025, CB + 0.86);
+        shelter.add(pages);
+      }
+      // phone handset on a cradle at the right end + coiled cord
+      {
+        const darkParts = [
+          placeGeo(new THREE.BoxGeometry(0.22, 0.05, 0.1), 0.52, 0.815, CB + 0.72),                // cradle
+          placeGeo(new THREE.BoxGeometry(0.06, 0.045, 0.075), 0.455, 0.87, CB + 0.72),             // handset ear
+          placeGeo(new THREE.BoxGeometry(0.06, 0.045, 0.075), 0.585, 0.87, CB + 0.72),             // handset mouth
+          placeGeo(new THREE.BoxGeometry(0.15, 0.028, 0.05), 0.52, 0.878, CB + 0.72),              // handset bar
+        ];
+        const ph = new THREE.Mesh(mergeGeoms(darkParts), IM.bezel);
+        ph.castShadow = true;
+        shelter.add(ph);
+      }
+
+      // ---- switches (instanced), knobs, guard covers, blinking auth button
+      {
+        const swGeo = mergeGeoms([
+          placeGeo(new THREE.CylinderGeometry(0.013, 0.015, 0.01, 8), 0, 0, 0),
+          placeGeo(new THREE.CylinderGeometry(0.0045, 0.006, 0.042, 6), 0, 0.02, 0.008, 0.42),
+        ]);
+        swGeo.rotateX(Math.PI / 2 - SLOPE_A); // lie on the slope face
+        const swItems = [];
+        const swRow = (bayX0, n, s, pitch = 0.075) => {
+          for (let i = 0; i < n; i++) {
+            const [px, py, pz] = slopePt(bayX0 + i * pitch, s, 0.012);
+            swItems.push({ x: px, y: py, z: pz, ry: srng.next() < 0.4 ? Math.PI : 0 });
+          }
+        };
+        swRow(-3.28, 4, 0.30); swRow(-3.28, 4, 0.13);
+        swRow(-1.62, 5, 0.30, 0.08);
+        swRow(-0.06, 4, 0.30); swRow(-0.06, 4, 0.13);
+        makeInstanced(swGeo, IM.steel, swItems, { parent: shelter, shadow: false });
+
+        // rotary knobs on the PPI bay slope
+        const knobGeo = mergeGeoms([
+          placeGeo(new THREE.CylinderGeometry(0.02, 0.024, 0.025, 10), 0, 0.012, 0),
+          placeGeo(new THREE.BoxGeometry(0.006, 0.014, 0.02), 0, 0.03, 0.006),
+        ]);
+        knobGeo.rotateX(Math.PI / 2 - SLOPE_A);
+        const knobItems = [];
+        for (let i = 0; i < 4; i++) {
+          const [px, py, pz] = slopePt(-1.86 + i * 0.12, 0.115, 0.012);
+          knobItems.push({ x: px, y: py, z: pz, ry: srng.range(-1.2, 1.2) });
+        }
+        makeInstanced(knobGeo, IM.bezel, knobItems, { parent: shelter, shadow: false });
+
+        // red switch guards (U-channel covers) over the launch-auth pair
+        const guardParts = [];
+        const guardAt = (gx, s, open) => {
+          const [px, py, pz] = slopePt(gx, s, 0.03);
+          const rx = -SLOPE_A + (open ? -1.35 : 0);
+          guardParts.push(placeGeo(new THREE.BoxGeometry(0.05, 0.09, 0.035), px, py + (open ? 0.045 : 0), pz + (open ? -0.02 : 0), rx));
+        };
+        guardAt(0.24, 0.30, false);
+        guardAt(0.34, 0.30, true);
+        const guards = new THREE.Mesh(mergeGeoms(guardParts), IM.red);
+        guards.castShadow = true;
+        shelter.add(guards);
+
+        // blinking ENGAGE AUTH button (kept from the original console)
+        const [bx, by, bz] = slopePt(0.5, 0.13, 0.02);
+        const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.042, 0.035, 14), new THREE.MeshStandardMaterial({ color: 0xaa1111, emissive: 0xcc2211, emissiveIntensity: 0.9, roughness: 0.4 }));
+        btn.position.set(bx, by, bz);
+        btn.rotation.x = Math.PI / 2 - SLOPE_A;
+        shelter.add(btn);
+        dynamic.push((dt, t2) => { btn.material.emissiveIntensity = 0.9 + Math.sin(t2 * 3.1) * 0.5; });
+        // guard ring around it
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.008, 6, 14), IM.red);
+        ring.position.set(bx, by, bz);
+        ring.rotation.x = -SLOPE_A + Math.PI / 2;
+        shelter.add(ring);
+      }
+
+      // ---- headset on a hook (right cheek) + taped note (left cheek)
+      {
+        const hs = mergeGeoms([
+          placeGeo(new THREE.TorusGeometry(0.085, 0.011, 6, 12, Math.PI), 0, 0, 0),
+          placeGeo(new THREE.CylinderGeometry(0.042, 0.042, 0.028, 10), -0.085, -0.03, 0, 0, 0, Math.PI / 2),
+          placeGeo(new THREE.CylinderGeometry(0.042, 0.042, 0.028, 10), 0.085, -0.03, 0, 0, 0, Math.PI / 2),
+          placeGeo(new THREE.BoxGeometry(0.02, 0.05, 0.02), 0, 0.11, -0.02), // hook
+        ]);
+        const headset = new THREE.Mesh(hs, IM.bezel);
+        headset.position.set(CX1 + 0.062, 1.42, CB + 0.52);
+        headset.rotation.y = Math.PI / 2;
+        headset.castShadow = true;
+        shelter.add(headset);
+        const note = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.14, 0.1),
+          new THREE.MeshStandardMaterial({ map: textures.label('CHECK IFF CODES\nBEFORE RADIATE', { fg: '#3c3e38', bg: '#ddd8c4', w: 128, h: 96, font: 'bold 13px Arial' }), roughness: 0.9 })
+        );
+        note.position.set(CX0 - 0.065, 1.5, CB + 0.42);
+        note.rotation.y = -Math.PI / 2;
+        note.rotation.z = 0.06;
+        shelter.add(note);
+      }
+
+      // ---- desk lamp at the left end (warm task light pool)
+      {
+        const arm = mergeGeoms([
+          placeGeo(new THREE.CylinderGeometry(0.045, 0.055, 0.02, 10), 0, 0.01, 0),
+          placeGeo(new THREE.CylinderGeometry(0.008, 0.008, 0.24, 6), 0.02, 0.12, 0.02, 0.25, 0, 0.15),
+          placeGeo(new THREE.CylinderGeometry(0.007, 0.007, 0.2, 6), 0.09, 0.30, 0.1, 1.0, 0, 0.5),
+        ]);
+        const lampArm = new THREE.Mesh(arm, IM.bezel);
+        lampArm.position.set(-3.15, 0.79, CB + 0.62);
+        lampArm.castShadow = true;
+        shelter.add(lampArm);
+        const head = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.09, 12, 1, true), IM.bezel);
+        head.position.set(-2.99, 1.06, CB + 0.72);
+        head.rotation.set(1.1, 0, -0.5);
+        shelter.add(head);
+        const bulb = new THREE.Mesh(new THREE.CircleGeometry(0.04, 10), new THREE.MeshStandardMaterial({ color: 0xffe2b0, emissive: 0xffc873, emissiveIntensity: 1.25 }));
+        bulb.position.copy(head.position);
+        bulb.rotation.set(1.1 - Math.PI / 2, 0, -0.5);
+        bulb.translateZ(-0.02);
+        shelter.add(bulb);
+      }
+    }
+
+    // ============================ HOLOGRAPHIC PLOT TABLE
+    {
+      const HTX = 2.4, HTZ = -0.6;
+      const bodyParts = [
+        placeGeo(new THREE.CylinderGeometry(0.74, 0.82, 0.16, 8), HTX, 0.08, HTZ),          // plinth
+        placeGeo(new THREE.CylinderGeometry(0.95, 0.9, 0.13, 24), HTX, 0.845, HTZ),         // tabletop
+      ];
+      const tbody = new THREE.Mesh(mergeGeoms(bodyParts), IM.conBody);
+      tbody.castShadow = true;
+      tbody.receiveShadow = true;
+      shelter.add(tbody);
+      // darker column with vertical rib strips + chamfer collar under the top
+      {
+        const colParts = [
+          placeGeo(new THREE.CylinderGeometry(0.6, 0.68, 0.62, 8), HTX, 0.47, HTZ),
+          placeGeo(new THREE.CylinderGeometry(0.72, 0.62, 0.09, 24), HTX, 0.745, HTZ),      // collar
+        ];
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * TAU + Math.PI / 8;
+          colParts.push(placeGeo(new THREE.BoxGeometry(0.045, 0.5, 0.03), HTX + Math.cos(a) * 0.655, 0.45, HTZ + Math.sin(a) * 0.655, 0, -a + Math.PI / 2));
+        }
+        const col = new THREE.Mesh(mergeGeoms(colParts), IM.conDesk);
+        col.castShadow = true;
+        col.receiveShadow = true;
+        shelter.add(col);
+        // power feed from the column base into the floor channel
+        const feed = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+          new THREE.Vector3(HTX - 0.32, 0.32, HTZ - 0.5),
+          new THREE.Vector3(HTX - 0.42, 0.2, HTZ - 0.44),
+          new THREE.Vector3(2.05, 0.165, -0.98),
+        ]), 8, 0.022, 5), M.cable);
+        feed.castShadow = false;
+        shelter.add(feed);
+      }
+      // side control wedge facing the console
+      const wedge = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.1, 0.26), IM.conDesk);
+      wedge.position.set(HTX - 0.78, 0.85, HTZ - 0.3);
+      wedge.rotation.y = 0.36;
+      wedge.rotation.z = 0.16;
+      wedge.castShadow = true;
+      shelter.add(wedge);
+      const wedgeTex = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.42, 0.22),
+        new THREE.MeshStandardMaterial({ map: textures.consolePanel(), roughness: 0.55, metalness: 0.25, emissive: 0x16281c, emissiveIntensity: 0.5, emissiveMap: textures.consolePanel() })
+      );
+      wedgeTex.position.copy(wedge.position);
+      wedgeTex.rotation.set(-Math.PI / 2 + 0.16, 0.0, -0.36, 'ZYX');
+      wedgeTex.translateZ(0.052);
+      shelter.add(wedgeTex);
+      // engraved bearing ring on the tabletop
+      const ringTex = new THREE.Mesh(
+        new THREE.CircleGeometry(0.95, 32),
+        new THREE.MeshStandardMaterial({ map: textures.holoRing(), transparent: true, roughness: 0.5, metalness: 0.3, polygonOffset: true, polygonOffsetFactor: -1 })
+      );
+      ringTex.rotation.x = -Math.PI / 2;
+      ringTex.rotation.z = Math.PI / 2; // 000 at -z (north)
+      ringTex.position.set(HTX, 0.9115, HTZ);
+      shelter.add(ringTex);
+      // recessed dark glass well
+      const glass = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.8, 0.8, 0.03, 32),
+        new THREE.MeshStandardMaterial({ color: 0x05171d, roughness: 0.16, metalness: 0.8 })
+      );
+      glass.position.set(HTX, 0.9, HTZ);
+      shelter.add(glass);
+      // soft emissive rim ring (kept below bloom-blowout levels)
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.835, 0.014, 8, 48), new THREE.MeshStandardMaterial({ color: 0x06222a, emissive: 0x27c4de, emissiveIntensity: 1.05 }));
+      rim.position.set(HTX, 0.916, HTZ);
+      rim.rotation.x = Math.PI / 2;
+      shelter.add(rim);
+      // projector emitter posts at 45° corners + emissive tips + center lens
+      {
+        const posts = [];
+        const tips = [];
+        for (let k = 0; k < 4; k++) {
+          const a = Math.PI / 4 + (k * Math.PI) / 2;
+          const px = HTX + Math.cos(a) * 0.7, pz = HTZ + Math.sin(a) * 0.7;
+          posts.push(placeGeo(new THREE.CylinderGeometry(0.02, 0.026, 0.07, 8), px, 0.945, pz));
+          tips.push(placeGeo(new THREE.CylinderGeometry(0.013, 0.013, 0.012, 8), px, 0.985, pz));
+        }
+        const postMesh = new THREE.Mesh(mergeGeoms(posts), IM.bezel);
+        shelter.add(postMesh);
+        const tipMat = new THREE.MeshStandardMaterial({ color: 0x0a2e36, emissive: 0x36d8ec, emissiveIntensity: 1.5 });
+        const tipMesh = new THREE.Mesh(mergeGeoms(tips), tipMat);
+        shelter.add(tipMesh);
+        dynamic.push((dt, t2) => { tipMat.emissiveIntensity = 1.5 + Math.sin(t2 * 2.2) * 0.35; });
+        const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.1, 0.018, 16), new THREE.MeshStandardMaterial({ color: 0x0a2e36, emissive: 0x2fc0d8, emissiveIntensity: 1.2 }));
+        lens.position.set(HTX, 0.923, HTZ);
+        shelter.add(lens);
+      }
+      colliders.push(makeColliderCyl(sx + HTX, sz + HTZ, 1.02, 0, 1.0));
+      holoAnchor = new THREE.Object3D();
+      holoAnchor.position.set(HTX, 0.98, HTZ);
+      shelter.add(holoAnchor);
+    }
 
     // equipment racks with detailed faces + blinking status LEDs
     addBox(M.darkMetal, 0.7, 2.1, 1.8, -W / 2 + 0.55, 1.05, 0.9, { parent: shelter, collide: true });
@@ -631,12 +982,12 @@ export function createBase(ctx) {
       });
     }
 
-    // cable trays along ceiling + conduit drops (merged)
+    // cable trays along ceiling + conduit drops + overhead looms (merged)
     {
       const trays = mergeGeoms([
         placeGeo(new THREE.BoxGeometry(0.34, 0.05, 4.6), -3.8, 2.72, -0.2),
-        placeGeo(new THREE.BoxGeometry(4.9, 0.05, 0.34), -1.45, 2.72, -2.66),
-        placeGeo(new THREE.BoxGeometry(0.24, 0.85, 0.06), -1.2, 2.28, -2.86),
+        placeGeo(new THREE.BoxGeometry(4.9, 0.05, 0.34), -1.45, 2.72, -2.62),
+        placeGeo(new THREE.BoxGeometry(0.24, 0.56, 0.06), -0.25, 2.42, -2.75), // drop into console (clear of the placard text)
         placeGeo(new THREE.BoxGeometry(0.3, 0.62, 0.3), -3.9, 2.41, 0.9),
         placeGeo(new THREE.BoxGeometry(0.3, 0.62, 0.3), -3.9, 2.41, -1.4),
       ]);
@@ -644,112 +995,377 @@ export function createBase(ctx) {
       trayMesh.castShadow = false;
       trayMesh.receiveShadow = true;
       shelter.add(trayMesh);
-      // sagging cable bundles: racks -> desk, holo table -> floor channel
-      const tube1 = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-        new THREE.Vector3(-3.85, 2.12, 0.25),
-        new THREE.Vector3(-3.4, 1.15, -1.3),
-        new THREE.Vector3(-2.6, 0.22, -2.3),
-        new THREE.Vector3(-1.7, 0.75, -2.5),
+      // sagging cable bundles: rack loom into console top; console tail into
+      // the floor channel toward the holo table; phone coil to the cheek
+      const loomA = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-3.85, 2.14, 0.2),
+        new THREE.Vector3(-3.72, 2.5, -1.1),
+        new THREE.Vector3(-3.4, 2.2, -2.1),
+        new THREE.Vector3(-3.1, 2.06, -2.5),
       ]), 16, 0.03, 5);
-      const tube2 = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-        new THREE.Vector3(2.15, 0.12, -0.9),
-        new THREE.Vector3(0.6, 0.05, -1.9),
-        new THREE.Vector3(-0.9, 0.4, -2.45),
-      ]), 12, 0.025, 5);
-      const cables = new THREE.Mesh(mergeGeoms([tube1, tube2]), M.cable);
+      const loomA2 = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-3.85, 2.1, 0.35),
+        new THREE.Vector3(-3.66, 2.42, -0.9),
+        new THREE.Vector3(-3.3, 2.12, -2.05),
+        new THREE.Vector3(-3.0, 2.04, -2.45),
+      ]), 16, 0.022, 5);
+      const tail = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0.62, 0.7, -2.15),
+        new THREE.Vector3(0.75, 0.18, -2.0),
+        new THREE.Vector3(0.9, 0.06, -1.85),
+      ]), 10, 0.024, 5);
+      // coiled phone cord: helix desk -> right cheek
+      const coilPts = [];
+      for (let i = 0; i <= 60; i++) {
+        const k = i / 60;
+        coilPts.push(new THREE.Vector3(
+          0.55 + k * 0.24 + Math.cos(k * 26) * 0.016,
+          0.82 - Math.sin(k * Math.PI) * 0.1 - k * 0.02,
+          -2.12 + Math.sin(k * 26) * 0.016
+        ));
+      }
+      const coil = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(coilPts), 60, 0.006, 5);
+      const cables = new THREE.Mesh(mergeGeoms([loomA, loomA2, tail, coil]), M.cable);
       cables.castShadow = false;
       shelter.add(cables);
+
+      // floor cable channels: racks -> console, console -> holo table
+      const chan = (x0, z0, x1, z1) => {
+        const len = Math.hypot(x1 - x0, z1 - z0);
+        const ry = Math.atan2(x1 - x0, z1 - z0);
+        return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, len, ry };
+      };
+      const runs = [chan(-3.5, -1.15, -2.7, -2.0), chan(0.68, -1.8, 2.05, -0.98)];
+      const chanBodies = [];
+      const chanTops = [];
+      for (const r of runs) {
+        chanBodies.push(placeGeo(new THREE.BoxGeometry(0.3, 0.02, r.len), r.x, 0.159, r.z, 0, r.ry));
+        chanTops.push(placeGeo(scaleUV(new THREE.PlaneGeometry(0.3, r.len), 1, r.len / 0.9), r.x, 0.1705, r.z, -Math.PI / 2, r.ry));
+      }
+      const chanBodyMesh = new THREE.Mesh(mergeGeoms(chanBodies), M.rubber);
+      chanBodyMesh.receiveShadow = true;
+      shelter.add(chanBodyMesh);
+      const chanTopMesh = new THREE.Mesh(mergeGeoms(chanTops), new THREE.MeshStandardMaterial({ map: textures.floorChannel(), roughness: 0.95 }));
+      chanTopMesh.receiveShadow = true;
+      shelter.add(chanTopMesh);
     }
 
-    // wall furniture: sector map, notice board, fire extinguisher
+    // wall furniture: sector map + clipboard (right wall over the holo table),
+    // notice board, binder shelf, fire extinguisher + placards, breaker panel
     {
-      const frame = addBox(M.darkMetal, 1.78, 1.32, 0.035, -3.28, 1.78, -D / 2 + 0.185, { parent: shelter, castShadow: false });
-      void frame;
+      // backing slab flush to the wall, map proud of it, thin frame strips proud of the map
+      addBox(M.darkMetal, 0.04, 1.34, 1.76, iw - 0.026, 1.78, -1.35, { parent: shelter, castShadow: false });
       const map = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.68, 1.26),
+        new THREE.PlaneGeometry(1.64, 1.22),
         new THREE.MeshStandardMaterial({ map: textures.mapBoard(), roughness: 0.9 })
       );
-      map.position.set(-3.28, 1.78, -D / 2 + 0.206);
+      map.position.set(iw - 0.052, 1.78, -1.35);
+      map.rotation.y = -Math.PI / 2;
       map.receiveShadow = true;
       shelter.add(map);
+      const mapFrame = new THREE.Mesh(mergeGeoms([
+        placeGeo(new THREE.BoxGeometry(0.026, 0.06, 1.76), iw - 0.055, 1.78 + 0.64, -1.35),
+        placeGeo(new THREE.BoxGeometry(0.026, 0.06, 1.76), iw - 0.055, 1.78 - 0.64, -1.35),
+        placeGeo(new THREE.BoxGeometry(0.026, 1.34, 0.06), iw - 0.055, 1.78, -1.35 - 0.85),
+        placeGeo(new THREE.BoxGeometry(0.026, 1.34, 0.06), iw - 0.055, 1.78, -1.35 + 0.85),
+      ]), IM.bezel);
+      mapFrame.castShadow = false;
+      shelter.add(mapFrame);
+      const clip = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.2, 0.27),
+        new THREE.MeshStandardMaterial({ map: textures.clipboard(), roughness: 0.9 })
+      );
+      clip.position.set(iw - 0.02, 1.5, -0.28);
+      clip.rotation.y = -Math.PI / 2;
+      clip.rotation.z = 0.05;
+      shelter.add(clip);
 
       const notice = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.15, 0.85),
+        new THREE.PlaneGeometry(1.05, 0.78),
         new THREE.MeshStandardMaterial({ map: textures.noticeBoard(), roughness: 0.95 })
       );
-      notice.position.set(W / 2 - t - 0.02, 1.72, 0.7);
+      notice.position.set(iw - 0.02, 1.74, 0.55);
       notice.rotation.y = -Math.PI / 2;
       notice.receiveShadow = true;
       shelter.add(notice);
 
-      const extParts = mergeGeoms([
-        placeGeo(new THREE.CylinderGeometry(0.075, 0.075, 0.52, 10), 0, 0, 0),
-        placeGeo(new THREE.CylinderGeometry(0.022, 0.022, 0.1, 6), 0, 0.3, 0),
-        placeGeo(new THREE.BoxGeometry(0.05, 0.05, 0.16), 0, 0.28, 0.06),
-      ]);
-      const ext = new THREE.Mesh(extParts, new THREE.MeshStandardMaterial({ color: 0x9e1c12, roughness: 0.5, metalness: 0.3 }));
-      ext.position.set(W / 2 - t - 0.16, 0.62, 2.2);
-      ext.castShadow = false;
-      shelter.add(ext);
-    }
-
-    // status monitor on the desk (second screen, emissive)
-    {
-      const arm = addBox(M.darkMetal, 0.06, 0.34, 0.06, 0.68, 1.09, -D / 2 + 0.62, { parent: shelter, castShadow: false });
-      void arm;
-      const mFrame = addBox(M.darkMetal, 0.68, 0.5, 0.05, 0.68, 1.38, -D / 2 + 0.6, { parent: shelter, castShadow: false });
-      mFrame.rotation.y = -0.32;
-      mFrame.rotation.x = -0.08;
-      const mScreen = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.6, 0.42),
-        new THREE.MeshBasicMaterial({ map: textures.statusScreen(), toneMapped: false })
+      // binder shelf + spines
+      addBox(M.darkMetal, 0.05, 0.035, 0.92, iw - 0.14, 1.36, 1.62, { parent: shelter, castShadow: false });
+      addBox(M.darkMetal, 0.05, 0.14, 0.03, iw - 0.03, 1.31, 1.25, { parent: shelter, castShadow: false });
+      addBox(M.darkMetal, 0.05, 0.14, 0.03, iw - 0.03, 1.31, 1.99, { parent: shelter, castShadow: false });
+      const spines = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.88, 0.42),
+        new THREE.MeshStandardMaterial({ map: textures.binderSpines(), roughness: 0.9 })
       );
-      mScreen.position.set(0.68, 1.38, -D / 2 + 0.6);
-      mScreen.rotation.y = -0.32;
-      mScreen.rotation.x = -0.08;
-      mScreen.translateZ(0.032);
-      shelter.add(mScreen);
+      spines.position.set(iw - 0.125, 1.59, 1.62);
+      spines.rotation.y = -Math.PI / 2;
+      spines.castShadow = false;
+      shelter.add(spines);
+
+      // fire extinguisher: bottle + hose + gauge + bracket + sign
+      const extParts = mergeGeoms([
+        placeGeo(new THREE.CylinderGeometry(0.072, 0.075, 0.5, 12), 0, 0, 0),
+        placeGeo(new THREE.SphereGeometry(0.072, 12, 6), 0, 0.25, 0),
+        placeGeo(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 6), 0, 0.31, 0),
+        placeGeo(new THREE.BoxGeometry(0.045, 0.045, 0.15), 0, 0.3, 0.06),
+      ]);
+      const ext = new THREE.Mesh(extParts, new THREE.MeshStandardMaterial({ color: 0x9e1c12, roughness: 0.42, metalness: 0.25 }));
+      ext.position.set(iw - 0.15, 0.66, 2.25);
+      ext.castShadow = true;
+      shelter.add(ext);
+      const hose = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+        new THREE.Vector3(iw - 0.15, 0.93, 2.33),
+        new THREE.Vector3(iw - 0.1, 0.78, 2.38),
+        new THREE.Vector3(iw - 0.12, 0.55, 2.34),
+      ]), 8, 0.011, 5), M.cable);
+      shelter.add(hose);
+      addBox(M.darkMetal, 0.04, 0.1, 0.2, iw - 0.045, 0.62, 2.25, { parent: shelter, castShadow: false });
+      const extSign = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.3, 0.3),
+        new THREE.MeshBasicMaterial({ map: textures.label('FIRE', { fg: '#fff', bg: '#8c1c13', w: 96, h: 96, font: 'bold 40px Arial' }) })
+      );
+      extSign.position.set(iw - 0.02, 1.35, 2.25);
+      extSign.rotation.y = -Math.PI / 2;
+      shelter.add(extSign);
+
+      // breaker panel on the left wall near the door end
+      addBox(M.metal, 0.07, 0.72, 0.5, -iw + 0.05, 1.5, 2.15, { parent: shelter, castShadow: false });
+      const bkLabel = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.42, 0.1),
+        new THREE.MeshBasicMaterial({ map: textures.label('PWR DIST — 28V DC', { fg: '#d8d4c4', bg: '#3a3d33', w: 256, h: 48, font: 'bold 22px Arial' }) })
+      );
+      bkLabel.position.set(-iw + 0.095, 1.94, 2.15);
+      bkLabel.rotation.y = Math.PI / 2;
+      shelter.add(bkLabel);
+      // UPS box beside the racks (+ kettle on top: crew comfort)
+      addBox(M.darkMetal, 0.5, 0.42, 0.55, -W / 2 + 0.5, 0.36, -0.35, { parent: shelter });
+      {
+        const kettleParts = mergeGeoms([
+          placeGeo(new THREE.CylinderGeometry(0.07, 0.082, 0.15, 12), 0, 0.075, 0),
+          placeGeo(new THREE.CylinderGeometry(0.02, 0.02, 0.02, 8), 0, 0.16, 0),
+          placeGeo(new THREE.TorusGeometry(0.045, 0.009, 6, 10, Math.PI), 0.078, 0.085, 0, 0, 0, -Math.PI / 2),
+        ]);
+        const kettle = new THREE.Mesh(kettleParts, new THREE.MeshStandardMaterial({ color: 0x3c3f42, roughness: 0.35, metalness: 0.7 }));
+        kettle.position.set(-W / 2 + 0.42, 0.57, -0.28);
+        kettle.castShadow = true;
+        shelter.add(kettle);
+      }
+
+      // left wall near the door: first-aid kit, intercom, conduit, stencil
+      {
+        addBox(M.white, 0.055, 0.3, 0.34, -iw + 0.04, 1.42, 1.32, { parent: shelter, castShadow: false });
+        const cross = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.16, 0.16),
+          new THREE.MeshBasicMaterial({ map: textures.label('+', { fg: '#ffffff', bg: '#2e7d32', w: 64, h: 64, font: 'bold 52px Arial' }) })
+        );
+        cross.position.set(-iw + 0.07, 1.42, 1.32);
+        cross.rotation.y = Math.PI / 2;
+        shelter.add(cross);
+        // intercom box + handset on its face
+        addBox(M.tan, 0.07, 0.34, 0.24, -iw + 0.05, 1.5, 0.6, { parent: shelter, castShadow: false });
+        const icParts = mergeGeoms([
+          placeGeo(new THREE.BoxGeometry(0.03, 0.2, 0.07), 0, 0, 0),
+          placeGeo(new THREE.BoxGeometry(0.035, 0.05, 0.075), 0, 0.085, 0),
+          placeGeo(new THREE.BoxGeometry(0.035, 0.05, 0.075), 0, -0.085, 0),
+        ]);
+        const ic = new THREE.Mesh(icParts, IM.bezel);
+        ic.position.set(-iw + 0.1, 1.5, 0.68);
+        shelter.add(ic);
+        const icLabel = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.18, 0.05),
+          new THREE.MeshBasicMaterial({ map: textures.label('TA-343 INTERCOM', { fg: '#d8d4c4', bg: '#4a4d40', w: 192, h: 48, font: 'bold 19px Arial' }) })
+        );
+        icLabel.position.set(-iw + 0.087, 1.7, 0.6);
+        icLabel.rotation.y = Math.PI / 2;
+        shelter.add(icLabel);
+        // vertical conduit with junction boxes feeding the breaker panel
+        const conduitParts = mergeGeoms([
+          placeGeo(new THREE.CylinderGeometry(0.018, 0.018, 2.2, 6), -iw + 0.04, 1.5, 1.78),
+          placeGeo(new THREE.BoxGeometry(0.06, 0.12, 0.1), -iw + 0.045, 1.05, 1.78),
+          placeGeo(new THREE.CylinderGeometry(0.014, 0.014, 0.32, 6), -iw + 0.04, 2.52, 1.96, Math.PI / 2),
+        ]);
+        const conduit = new THREE.Mesh(conduitParts, M.metal);
+        conduit.castShadow = false;
+        shelter.add(conduit);
+        const bayStencil = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.5, 0.09),
+          new THREE.MeshBasicMaterial({ map: textures.label('C2 BAY — SIGNAL PWR', { fg: '#c9c4ae', bg: null, w: 320, h: 56, font: 'bold 26px Arial' }), transparent: true })
+        );
+        bayStencil.position.set(-iw + 0.02, 2.16, 1.55);
+        bayStencil.rotation.y = Math.PI / 2;
+        shelter.add(bayStencil);
+      }
     }
 
-    // operator chair + desk clutter
+    // back-wall trim above the console: unit placard, clocks, ops status box
     {
-      const chairParts = mergeGeoms([
-        placeGeo(new THREE.BoxGeometry(0.5, 0.07, 0.48), 0, 0.6, 0),
-        placeGeo(new THREE.BoxGeometry(0.48, 0.56, 0.06), 0, 0.95, 0.25, 0.14),
-        placeGeo(new THREE.CylinderGeometry(0.035, 0.035, 0.44, 8), 0, 0.36, 0),
-        placeGeo(new THREE.CylinderGeometry(0.29, 0.32, 0.05, 10), 0, 0.1, 0),
+      const placard = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.72, 0.21),
+        new THREE.MeshBasicMaterial({ map: textures.label('IRONVEIL FIRE DIRECTION CENTER', { fg: '#d9d6c8', bg: '#31342c', w: 768, h: 92, font: 'bold 44px Arial' }) })
+      );
+      placard.position.set(-1.35, 2.40, -id + 0.012);
+      shelter.add(placard);
+      const clockHousings = mergeGeoms([
+        placeGeo(new THREE.CylinderGeometry(0.155, 0.155, 0.045, 20), -2.75, 2.42, -id + 0.03, Math.PI / 2),
+        placeGeo(new THREE.CylinderGeometry(0.155, 0.155, 0.045, 20), -3.35, 2.42, -id + 0.03, Math.PI / 2),
       ]);
-      const chair = new THREE.Mesh(chairParts, M.rubber);
-      chair.position.set(-0.95, 0, -1.02);
-      chair.rotation.y = -0.4;
-      chair.castShadow = true;
-      shelter.add(chair);
-      colliders.push(makeColliderCyl(sx - 0.95, sz - 1.02, 0.38, 0, 1.2));
-
-      const white = mergeGeoms([
-        placeGeo(new THREE.CylinderGeometry(0.042, 0.036, 0.1, 8), -2.25, 0.95, 0.14),
-        placeGeo(new THREE.BoxGeometry(0.3, 0.014, 0.22), -2.6, 0.907, -0.12, 0, 0.2),
-      ]);
-      const deskWhite = new THREE.Mesh(white, M.white);
-      deskWhite.position.set(0, 0, -D / 2 + 0.75); // items sit on the desk plane
-      deskWhite.castShadow = false;
-      shelter.add(deskWhite);
-      const binder = addBox(M.olive, 0.34, 0.05, 0.27, -2.62, 0.925, -D / 2 + 0.5, { parent: shelter, rot: -0.3, castShadow: false });
-      void binder;
+      const clockMesh = new THREE.Mesh(clockHousings, M.darkMetal);
+      clockMesh.castShadow = false;
+      shelter.add(clockMesh);
+      const clockA = new THREE.Mesh(new THREE.CircleGeometry(0.145, 20), new THREE.MeshStandardMaterial({ map: textures.clockFace('LOCAL', 1.1, 2.6), roughness: 0.5 }));
+      clockA.position.set(-2.75, 2.42, -id + 0.056);
+      shelter.add(clockA);
+      const clockB = new THREE.Mesh(new THREE.CircleGeometry(0.145, 20), new THREE.MeshStandardMaterial({ map: textures.clockFace('ZULU', 4.2, 2.6), roughness: 0.5 }));
+      clockB.position.set(-3.35, 2.42, -id + 0.056);
+      shelter.add(clockB);
+      // ops condition light box
+      addBox(M.darkMetal, 0.56, 0.24, 0.07, 0.3, 2.42, -id + 0.045, { parent: shelter, castShadow: false });
+      const opsOn = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.24, 0.16),
+        new THREE.MeshBasicMaterial({ map: textures.label('OPS', { fg: '#0c2010', bg: '#57d879', w: 96, h: 64, font: 'bold 34px Arial' }), toneMapped: false })
+      );
+      opsOn.position.set(0.165, 2.42, -id + 0.085);
+      shelter.add(opsOn);
+      const opsOff = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.24, 0.16),
+        new THREE.MeshStandardMaterial({ map: textures.label('RAID', { fg: '#4a1410', bg: '#241210', w: 96, h: 64, font: 'bold 34px Arial' }), roughness: 0.6 })
+      );
+      opsOff.position.set(0.435, 2.42, -id + 0.085);
+      shelter.add(opsOff);
     }
 
-    // interior lighting: one point light + two emissive tube fixtures
-    const lamp = new THREE.PointLight(0xcfe0ff, 14, 14, 2);
-    lamp.position.set(0, H - 0.3, 0);
+    // door dressing: EXIT sign inside + threshold strip
+    {
+      const exit = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.42, 0.155),
+        new THREE.MeshBasicMaterial({ map: textures.exitSign(), toneMapped: false })
+      );
+      exit.position.set(doorX, 2.32, id - 0.02);
+      exit.rotation.y = Math.PI;
+      shelter.add(exit);
+      addBox(M.darkMetal, 0.46, 0.02, 0.05, doorX, 2.41, id - 0.045, { parent: shelter, castShadow: false });
+      const thresh = new THREE.Mesh(new THREE.PlaneGeometry(doorW - 0.05, 0.16), M.hazard.clone());
+      thresh.material.map = thresh.material.map.clone();
+      thresh.material.map.repeat.set(3, 0.5);
+      thresh.material.map.needsUpdate = true;
+      thresh.rotation.x = -Math.PI / 2;
+      thresh.position.set(doorX, 0.152, id - 0.1);
+      shelter.add(thresh);
+    }
+
+    // operator chairs (two, merged buckets: dark fabric + near-black frame)
+    {
+      const chairFrameMat = new THREE.MeshStandardMaterial({ color: 0x17191a, roughness: 0.5, metalness: 0.55 });
+      const chairFabMat = new THREE.MeshStandardMaterial({ color: 0x1a1d18, roughness: 0.98 });
+      const chairAt = (cx, cz, yaw) => {
+        const fab = [];
+        const stl = [];
+        const place = (geo, x, y, z, rx = 0, ry = 0, rz = 0) => {
+          // rotate the part around the chair pivot by yaw, then translate
+          const ca = Math.cos(yaw), sa = Math.sin(yaw);
+          return placeGeo(geo, cx + x * ca + z * sa, y, cz - x * sa + z * ca, rx, ry + yaw, rz);
+        };
+        // five-star base with casters
+        for (let k = 0; k < 5; k++) {
+          const a = (k / 5) * TAU + 0.3;
+          stl.push(place(new THREE.BoxGeometry(0.24, 0.03, 0.045), Math.cos(a) * 0.15, 0.055, Math.sin(a) * 0.15, 0, -a));
+          stl.push(place(new THREE.SphereGeometry(0.026, 8, 6), Math.cos(a) * 0.255, 0.03, Math.sin(a) * 0.255));
+        }
+        // gas lift: sleeve + column
+        stl.push(place(new THREE.CylinderGeometry(0.032, 0.038, 0.14, 8), 0, 0.13, 0));
+        stl.push(place(new THREE.CylinderGeometry(0.02, 0.022, 0.26, 8), 0, 0.32, 0));
+        stl.push(place(new THREE.BoxGeometry(0.3, 0.024, 0.2), 0, 0.445, 0)); // seat pan mount
+        // seat: cushion + slightly smaller top pad (soft bevel read)
+        fab.push(place(new THREE.BoxGeometry(0.45, 0.07, 0.43), 0, 0.49, 0.01));
+        fab.push(place(new THREE.BoxGeometry(0.40, 0.024, 0.38), 0, 0.535, 0.01));
+        // back post rising behind the seat, leaning back
+        stl.push(place(new THREE.BoxGeometry(0.045, 0.36, 0.035), 0, 0.63, -0.245, -0.18));
+        // backrest: main pad + lumbar pad, both leaning
+        fab.push(place(new THREE.BoxGeometry(0.42, 0.5, 0.055), 0, 0.93, -0.29, -0.18));
+        fab.push(place(new THREE.BoxGeometry(0.44, 0.16, 0.07), 0, 0.65, -0.245, -0.14));
+        // armrests: L posts + pads
+        for (const s of [-1, 1]) {
+          stl.push(place(new THREE.BoxGeometry(0.026, 0.17, 0.03), s * 0.245, 0.585, 0.06));
+          stl.push(place(new THREE.BoxGeometry(0.026, 0.03, 0.14), s * 0.245, 0.66, 0.0));
+          fab.push(place(new THREE.BoxGeometry(0.055, 0.026, 0.22), s * 0.245, 0.685, 0.0));
+        }
+        return [fab, stl];
+      };
+      const [fabA, stlA] = chairAt(-1.25, -1.3, Math.PI - 0.15);
+      const [fabB, stlB] = chairAt(-2.88, -1.36, Math.PI + 0.3);
+      const fabMesh = new THREE.Mesh(mergeGeoms([...fabA, ...fabB]), chairFabMat);
+      fabMesh.castShadow = true;
+      shelter.add(fabMesh);
+      const stlMesh = new THREE.Mesh(mergeGeoms([...stlA, ...stlB]), chairFrameMat);
+      stlMesh.castShadow = true;
+      shelter.add(stlMesh);
+      colliders.push(makeColliderCyl(sx - 1.25, sz - 1.3, 0.34, 0, 1.2));
+      colliders.push(makeColliderCyl(sx - 2.88, sz - 1.36, 0.34, 0, 1.2));
+    }
+
+    // ---- interior lighting rig (time-of-day aware; see handler below)
+    // main light hangs below the ceiling plane so the tiles don't blow out
+    const lamp = new THREE.PointLight(0xe8f0ff, 7, 12, 2);
+    lamp.position.set(0, H - 0.95, 0.3);
     shelter.add(lamp);
-    const fixMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xdfe8ff, emissiveIntensity: 1.6 });
-    const fixGeo = mergeGeoms([
-      placeGeo(new THREE.BoxGeometry(0.92, 0.055, 0.17), -1.6, H - 0.1, -0.5),
-      placeGeo(new THREE.BoxGeometry(0.92, 0.055, 0.17), 1.6, H - 0.1, 0.5),
-    ]);
-    const lampFix = new THREE.Mesh(fixGeo, fixMat);
-    lampFix.castShadow = false;
-    shelter.add(lampFix);
+    const consoleGlow = new THREE.PointLight(0x86e8bc, 1.7, 2.7, 2);
+    consoleGlow.position.set(-1.2, 1.5, -1.5);
+    shelter.add(consoleGlow);
+    // moderately desaturated cyan: a pure-cyan point light turns any warm
+    // floor paint lime green at night
+    const holoGlow = new THREE.PointLight(0x66c8dc, 1.6, 3.0, 2);
+    holoGlow.position.set(2.4, 1.55, -0.6);
+    shelter.add(holoGlow);
+    // warm task-light pool from the desk lamp at the console's left end
+    const deskPool = new THREE.PointLight(0xffd9a0, 0.9, 1.9, 2);
+    deskPool.position.set(-2.99, 1.12, CB + 0.75);
+    shelter.add(deskPool);
+    // twin louvered troffers (emissive lens + dark ribs so they never blow out)
+    const troffMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f0, emissive: 0xdfe8ff, emissiveIntensity: 0.62 });
+    {
+      const housings = mergeGeoms([
+        placeGeo(new THREE.BoxGeometry(1.0, 0.055, 0.42), -1.5, H - 0.095, 0.25),
+        placeGeo(new THREE.BoxGeometry(1.0, 0.055, 0.42), 1.5, H - 0.095, 0.25),
+      ]);
+      const hMesh = new THREE.Mesh(housings, M.metal);
+      hMesh.castShadow = false;
+      shelter.add(hMesh);
+      const lenses = mergeGeoms([
+        placeGeo(new THREE.PlaneGeometry(0.9, 0.34), -1.5, H - 0.124, 0.25, Math.PI / 2),
+        placeGeo(new THREE.PlaneGeometry(0.9, 0.34), 1.5, H - 0.124, 0.25, Math.PI / 2),
+      ]);
+      const lensMesh = new THREE.Mesh(lenses, troffMat);
+      lensMesh.castShadow = false;
+      shelter.add(lensMesh);
+      const ribs = [];
+      for (const fx of [-1.5, 1.5]) {
+        for (let k = -2; k <= 2; k++) ribs.push(placeGeo(new THREE.BoxGeometry(0.02, 0.02, 0.36), fx + k * 0.18, H - 0.128, 0.25));
+      }
+      const ribMesh = new THREE.Mesh(mergeGeoms(ribs), M.darkMetal);
+      ribMesh.castShadow = false;
+      shelter.add(ribMesh);
+    }
+    // red battle lamps (dark by day, glowing at night)
+    const domeMat = new THREE.MeshStandardMaterial({ color: 0x481410, emissive: 0xff2a1a, emissiveIntensity: 0.0, roughness: 0.35 });
+    {
+      const domes = mergeGeoms([
+        placeGeo(new THREE.SphereGeometry(0.075, 12, 8, 0, TAU, 0, Math.PI / 2), -0.6, H - 0.07, -1.9, Math.PI),
+        placeGeo(new THREE.SphereGeometry(0.075, 12, 8, 0, TAU, 0, Math.PI / 2), 1.7, H - 0.07, 1.9, Math.PI),
+      ]);
+      const domeMesh = new THREE.Mesh(domes, domeMat);
+      domeMesh.castShadow = false;
+      shelter.add(domeMesh);
+      const cages = [];
+      for (const [dx, dz] of [[-0.6, -1.9], [1.7, 1.9]]) {
+        for (let k = 0; k < 3; k++) {
+          cages.push(placeGeo(new THREE.TorusGeometry(0.08, 0.005, 4, 10, Math.PI), dx, H - 0.07, dz, Math.PI / 2, (k * Math.PI) / 3));
+        }
+      }
+      const cageMesh = new THREE.Mesh(mergeGeoms(cages), M.darkMetal);
+      cageMesh.castShadow = false;
+      shelter.add(cageMesh);
+    }
+    interiorLights = { lamp, consoleGlow, holoGlow, deskPool, troffMat, domeMat, panelMat: IM.panelTex };
 
     // roof antennas + AC
     addBox(M.metal, 1.1, 0.8, 0.9, W / 2 - 1, H + 0.55, -1.4, { parent: shelter });
@@ -764,6 +1380,12 @@ export function createBase(ctx) {
     const plate = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.42), new THREE.MeshBasicMaterial({ map: textures.label('BATTERY CONTROL — C2 SHELTER', { fg: '#e5e2d4', bg: '#3a3d33', w: 512, h: 80, font: 'bold 34px Arial' }) }));
     plate.position.set(0.4, 2.6, D / 2 + 0.09);
     shelter.add(plate);
+
+    // every interior surface must sample the sun shadow map, or direct sun
+    // "leaks" through the roof and bleaches whatever has receiveShadow=false
+    shelter.traverse((o) => {
+      if (o.isMesh) o.receiveShadow = true;
+    });
 
     consolePos = new THREE.Vector3(sx - 1.2, 0, sz - D / 2 + 2.0);
   }
@@ -1688,6 +2310,45 @@ export function createBase(ctx) {
       f.headMat.emissive.setHex(on ? 0xcfe0ff : 0x000000);
       f.headMat.emissiveIntensity = on ? 2.4 : 0;
     }
+    // shelter interior: white troffers by day -> red battle lighting at night
+    if (interiorLights) {
+      const IL = interiorLights;
+      const tod = ctx.weather.timeOfDay;
+      if (tod === 'night') {
+        IL.lamp.color.setHex(0xff4a28);
+        IL.lamp.intensity = 5.5;
+        IL.troffMat.emissive.setHex(0x66150c);
+        IL.troffMat.emissiveIntensity = 0.3;
+        IL.domeMat.emissiveIntensity = 3.2;
+        IL.consoleGlow.intensity = 3.0;
+        IL.holoGlow.intensity = 2.1;
+        IL.deskPool.intensity = 1.5;
+        IL.panelMat.emissive.setHex(0x2a1006);
+        IL.panelMat.emissiveIntensity = 0.5;
+      } else if (tod === 'sunset') {
+        IL.lamp.color.setHex(0xffd9a8);
+        IL.lamp.intensity = 6;
+        IL.troffMat.emissive.setHex(0xe8d9b4);
+        IL.troffMat.emissiveIntensity = 0.45;
+        IL.domeMat.emissiveIntensity = 0.4;
+        IL.consoleGlow.intensity = 2.0;
+        IL.holoGlow.intensity = 1.8;
+        IL.deskPool.intensity = 1.1;
+        IL.panelMat.emissive.setHex(0x000000);
+        IL.panelMat.emissiveIntensity = 0;
+      } else {
+        IL.lamp.color.setHex(0xe8f0ff);
+        IL.lamp.intensity = 7.4;
+        IL.troffMat.emissive.setHex(0xdfe8ff);
+        IL.troffMat.emissiveIntensity = 0.62;
+        IL.domeMat.emissiveIntensity = 0.0;
+        IL.consoleGlow.intensity = 1.7;
+        IL.holoGlow.intensity = 1.6;
+        IL.deskPool.intensity = 0.9;
+        IL.panelMat.emissive.setHex(0x000000);
+        IL.panelMat.emissiveIntensity = 0;
+      }
+    }
   });
 
   // battery pads: positions + facing used by batteries.js
@@ -1704,6 +2365,7 @@ export function createBase(ctx) {
     consoleScreen,
     holoAnchor,
     consolePos,
+    auxScreens,
     batteryPads,
     generators,
     radarHead,

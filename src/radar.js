@@ -2,7 +2,7 @@
 // stylized 3D holographic radar table. Detection timing follows the visible
 // rotating array; all behavior is a gameplay abstraction.
 import * as THREE from 'three';
-import { TAU, clamp, wrapAngle, pad2 } from './util.js';
+import { TAU, clamp, wrapAngle, pad2, Rand } from './util.js';
 import { GRAVITY } from './physics.js';
 
 const RADAR_RANGE = 9000; // fictional display range, meters
@@ -46,6 +46,21 @@ export function createRadar(ctx) {
   const PX = 520, PW = cw - 14 - PX;       // right data panel
   const FONT = '"Consolas","Menlo","DejaVu Sans Mono",monospace';
 
+  // ---- aux status displays on the flanking console screens (live canvases)
+  const mkAux = (w, h, mesh) => {
+    if (!mesh) return null;
+    const cnv = document.createElement('canvas');
+    cnv.width = w; cnv.height = h;
+    const a = cnv.getContext('2d');
+    const tex = new THREE.CanvasTexture(cnv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    mesh.material.dispose?.();
+    mesh.material = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false });
+    return { a, tex, w, h };
+  };
+  const auxL = mkAux(512, 288, ctx.base?.auxScreens?.left);
+  const auxR = mkAux(384, 256, ctx.base?.auxScreens?.right);
+
   // static overlay (bezel + scanlines + vignette + glare), built once
   const overlay = (() => {
     const c = document.createElement('canvas');
@@ -64,6 +79,13 @@ export function createRadar(ctx) {
     gl.addColorStop(0.28, 'rgba(190,255,225,0)');
     o.fillStyle = gl;
     o.fillRect(14, 14, cw - 28, ch - 28);
+    // permanent burn-in ghosts (long-life phosphor: range rings + center)
+    o.strokeStyle = 'rgba(140,255,190,0.045)';
+    o.lineWidth = 3;
+    o.beginPath(); o.arc(SX, SY, SR * 0.75, 0, TAU); o.stroke();
+    o.beginPath(); o.arc(SX, SY, SR * 0.25, 0, TAU); o.stroke();
+    o.fillStyle = 'rgba(140,255,190,0.06)';
+    o.beginPath(); o.arc(SX, SY, 6.5, 0, TAU); o.fill();
     // bezel frame
     o.fillStyle = '#111613';
     o.beginPath(); o.rect(0, 0, cw, ch); o.rect(12, 12, cw - 24, ch - 24); o.fill('evenodd');
@@ -88,6 +110,23 @@ export function createRadar(ctx) {
   })();
 
   let ppiInit = false;
+
+  // deterministic ground-clutter table: angular blobs hugging the scope center
+  const clutterBlobs = (() => {
+    const r = new Rand(48271);
+    const blobs = [];
+    for (let i = 0; i < 26; i++) {
+      blobs.push({
+        a: r.next() * TAU,
+        d: r.range(0.06, 0.34) * SR,
+        w: r.range(0.12, 0.5),
+        l: r.range(6, 22),
+        o: r.range(0.05, 0.16),
+        ph: r.next() * TAU,
+      });
+    }
+    return blobs;
+  })();
 
   // ------------------------------------------------ holo table display
   const holo = new THREE.Group();
@@ -167,6 +206,27 @@ export function createRadar(ctx) {
     wall.position.y = 0.23;
     wall.renderOrder = 1;
     holo.add(wall);
+    // soft volumetric projection cone rising from the table lens
+    const cone = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.78, 0.06, 0.48, 48, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0x1e94aa, transparent: true, opacity: 0.04, side: THREE.DoubleSide,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+      })
+    );
+    cone.position.y = 0.19;
+    cone.renderOrder = 1;
+    holo.add(cone);
+    const shaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3, 0.04, 0.3, 32, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0x2ab8cf, transparent: true, opacity: 0.045, side: THREE.DoubleSide,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+      })
+    );
+    shaft.position.y = 0.1;
+    shaft.renderOrder = 1;
+    holo.add(shaft);
     // cardinal markers (north = −z so the PPI reads north-up)
     const cardinal = (txt, x, z, size, opacity) => {
       const m = new THREE.Mesh(
@@ -349,6 +409,20 @@ export function createRadar(ctx) {
     return ln;
   });
 
+  // rim bearing arcs marking inbound hostile azimuths
+  const threatArcs = Array.from({ length: 10 }, () => {
+    const m = new THREE.Mesh(
+      new THREE.RingGeometry(0.752, 0.778, 10, 1, -0.16, 0.32),
+      new THREE.MeshBasicMaterial({ color: HEX.hostile, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })
+    );
+    m.rotation.x = -Math.PI / 2;
+    m.position.y = 0.0035;
+    m.renderOrder = 3;
+    m.visible = false;
+    holo.add(m);
+    return m;
+  });
+
   // shared animated selection pulse ring
   const pulseRing = new THREE.Mesh(
     new THREE.RingGeometry(0.05, 0.057, 32),
@@ -456,6 +530,7 @@ export function createRadar(ctx) {
 
   // ------------------------------------------------ PPI drawing
   let redrawAcc = 0;
+  let auxAcc = 0.2, auxFlip = false;
   function drawPPI() {
     const now = ctx.time.now;
     if (!ppiInit) {
@@ -465,7 +540,7 @@ export function createRadar(ctx) {
     }
     // phosphor persistence: veil instead of clear (moving paint leaves fading trails)
     g.textAlign = 'left'; g.textBaseline = 'alphabetic';
-    g.fillStyle = 'rgba(2,15,10,0.16)';
+    g.fillStyle = 'rgba(2,15,10,0.22)';
     g.fillRect(0, 0, cw, ch);
     // slightly green-lit scope disc
     g.save();
@@ -506,15 +581,15 @@ export function createRadar(ctx) {
     g.moveTo(SX - 5, SY); g.lineTo(SX + 5, SY);
     g.moveTo(SX, SY - 5); g.lineTo(SX, SY + 5);
     g.stroke();
-    // cardinals (north-up: N = −z at top)
-    g.font = `bold 12px ${FONT}`;
+    // bearing numerals every 30° just inside the rim ticks (000 = north/up)
+    g.font = `10px ${FONT}`;
     g.textAlign = 'center';
-    g.fillStyle = 'rgba(159,243,200,0.85)';
-    g.fillText('N', SX, SY - SR + 24);
-    g.fillStyle = 'rgba(159,243,200,0.45)';
-    g.fillText('E', SX + SR - 22, SY + 4);
-    g.fillText('S', SX, SY + SR - 16);
-    g.fillText('W', SX - SR + 22, SY + 4);
+    for (let b = 0; b < 360; b += 30) {
+      const a = (b / 180) * Math.PI;
+      const rr = SR - 21;
+      g.fillStyle = b % 90 === 0 ? 'rgba(159,243,200,0.9)' : 'rgba(140,240,180,0.5)';
+      g.fillText(String(b).padStart(3, '0'), SX + Math.sin(a) * rr, SY - Math.cos(a) * rr + 3.5);
+    }
     // range labels down the NE diagonal
     g.font = `10px ${FONT}`;
     g.textAlign = 'left';
@@ -553,13 +628,35 @@ export function createRadar(ctx) {
         g.fill();
       }
     }
-    // hot beam line
-    g.strokeStyle = 'rgba(190,255,215,0.9)';
+    // hot beam line (kept modest — persistence veil re-paints slowly, so bright
+    // strokes would otherwise linger as discrete ghost spokes)
+    g.strokeStyle = 'rgba(190,255,215,0.55)';
     g.lineWidth = 2;
-    g.beginPath(); g.moveTo(0, 0); g.lineTo(SR, 0); g.stroke();
-    g.strokeStyle = 'rgba(255,255,255,0.35)';
+    g.beginPath(); g.moveTo(6, 0); g.lineTo(SR, 0); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.18)';
     g.lineWidth = 4;
-    g.beginPath(); g.moveTo(10, 0); g.lineTo(SR, 0); g.stroke();
+    g.beginPath(); g.moveTo(16, 0); g.lineTo(SR, 0); g.stroke();
+    g.restore();
+
+    // ---- ground clutter arcs near center + receiver noise speckle
+    g.save();
+    g.beginPath(); g.arc(SX, SY, SR - 4, 0, TAU); g.clip();
+    g.globalCompositeOperation = 'lighter';
+    for (const cb of clutterBlobs) {
+      const tw = 0.7 + 0.3 * Math.sin(now * 1.7 + cb.ph);
+      g.strokeStyle = `rgba(90,235,150,${(cb.o * tw).toFixed(3)})`;
+      g.lineWidth = cb.l * 0.35;
+      g.beginPath();
+      g.arc(SX, SY, cb.d, cb.a, cb.a + cb.w);
+      g.stroke();
+    }
+    if (ctx.vrng) {
+      for (let i = 0; i < 46; i++) {
+        const a = ctx.vrng.next() * TAU, d = Math.sqrt(ctx.vrng.next()) * (SR - 8);
+        g.fillStyle = `rgba(120,255,180,${(ctx.vrng.next() * 0.11).toFixed(3)})`;
+        g.fillRect(SX + Math.cos(a) * d, SY + Math.sin(a) * d, 1.6, 1.6);
+      }
+    }
     g.restore();
 
     // ---- base + battery markers (azimuth-true, clamped to a readable radius)
@@ -767,9 +864,32 @@ export function createRadar(ctx) {
     } else {
       g.font = `12px ${FONT}`;
       g.fillStyle = 'rgba(142,240,180,0.45)';
-      g.fillText('NO TRACK SELECTED', PX + 12, 250);
+      g.fillText('NO TRACK SELECTED', PX + 12, 214);
       g.font = `11px ${FONT}`;
-      g.fillText('SELECT FROM LIST OR TAP A HOLO BLIP', PX + 12, 270);
+      g.fillText('SELECT FROM LIST OR TAP A HOLO BLIP', PX + 12, 232);
+      // raid summary so the panel never sits empty
+      let nHost = 0, nDecoy = 0, soonest = Infinity, soonestId = null;
+      for (const tr of active) {
+        if (tr.classified.startsWith('DECOY')) { nDecoy++; continue; }
+        nHost++;
+        const imp = impactPoint(tr.threat.pos, tr.threat.vel);
+        if (imp.t < soonest) { soonest = imp.t; soonestId = tr.id; }
+      }
+      g.strokeStyle = 'rgba(110,240,170,0.18)';
+      g.beginPath(); g.moveTo(PX + 10, 246.5); g.lineTo(PX + PW - 10, 246.5); g.stroke();
+      g.font = `11px ${FONT}`;
+      g.fillStyle = 'rgba(142,240,180,0.55)';
+      g.fillText('RAID SUMMARY', PX + 12, 266);
+      g.font = `12px ${FONT}`;
+      g.fillStyle = active.length ? '#eafff2' : 'rgba(142,240,180,0.5)';
+      g.fillText(`HOSTILE ${pad2(nHost)} · DECOY(P) ${pad2(nDecoy)}`, PX + 12, 288);
+      if (soonestId != null) {
+        g.fillStyle = soonest < 20 ? CSS.hostile : '#eafff2';
+        g.fillText(`FIRST IMPACT ${soonestId} T-${Math.max(0, soonest).toFixed(0)}s`, PX + 12, 308);
+      } else {
+        g.fillStyle = 'rgba(142,240,180,0.5)';
+        g.fillText('NO PREDICTED IMPACTS', PX + 12, 308);
+      }
     }
 
     // symbology legend (shape + color pairs)
@@ -816,6 +936,172 @@ export function createRadar(ctx) {
     // static overlay: scanlines, vignette, glare, bezel
     g.drawImage(overlay, 0, 0);
     screenTex.needsUpdate = true;
+  }
+
+  // ------------------------------------------------ aux status displays
+  function auxChrome(a, w, h, title, sub) {
+    a.textAlign = 'left';
+    a.textBaseline = 'alphabetic';
+    a.fillStyle = '#04100a';
+    a.fillRect(0, 0, w, h);
+    a.fillStyle = 'rgba(12,42,24,0.95)';
+    a.fillRect(0, 0, w, 26);
+    a.font = `bold 13px ${FONT}`;
+    a.fillStyle = '#7deca8';
+    a.fillText(title, 10, 18);
+    if (sub) {
+      a.textAlign = 'right';
+      a.font = `11px ${FONT}`;
+      a.fillStyle = 'rgba(125,236,168,0.7)';
+      a.fillText(sub, w - 10, 18);
+      a.textAlign = 'left';
+    }
+  }
+  function auxOverlay(aux) {
+    const { a, w, h } = aux;
+    a.fillStyle = 'rgba(0,0,0,0.13)';
+    for (let y = 2; y < h; y += 3) a.fillRect(0, y, w, 1);
+    const vg = a.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.95);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.34)');
+    a.fillStyle = vg;
+    a.fillRect(0, 0, w, h);
+    a.strokeStyle = 'rgba(110,240,170,0.2)';
+    a.strokeRect(0.5, 0.5, w - 1, h - 1);
+    aux.tex.needsUpdate = true;
+  }
+  const zClock = () => {
+    const zt = 14 * 3600 + 22 * 60 + Math.floor(ctx.time.now); // fictional 1422Z start
+    return `${pad2(Math.floor(zt / 3600) % 24)}${pad2(Math.floor(zt / 60) % 60)}:${pad2(zt % 60)}Z`;
+  };
+  function drawAuxLeft() {
+    if (!auxL) return;
+    const { a, w, h } = auxL;
+    const now = ctx.time.now;
+    auxChrome(a, w, h, 'WEAPONS STATUS — BTRY NET', zClock());
+    const bats = ctx.batteries?.list ?? [];
+    let y = 60;
+    for (const b of bats) {
+      const st = b.displayState;
+      const col = st === 'READY' ? '#57e389' : st === 'EMPTY' ? '#ff6a55' : '#ffd257';
+      a.font = `bold 16px ${FONT}`;
+      a.fillStyle = '#d9ffe9';
+      a.fillText(b.def.name.toUpperCase(), 14, y);
+      // status lamp + state
+      a.fillStyle = col;
+      a.fillRect(w - 168, y - 12, 9, 9);
+      if (st !== 'READY' && now % 1 < 0.5) { a.fillStyle = 'rgba(0,0,0,0.55)'; a.fillRect(w - 168, y - 12, 9, 9); }
+      a.fillStyle = col;
+      a.font = `bold 13px ${FONT}`;
+      a.fillText(st + (st === 'RELOADING' ? ` ${Math.ceil(Math.max(0, b.readyIn))}s` : ''), w - 150, y - 2);
+      // ammo pips
+      a.font = `10px ${FONT}`;
+      a.fillStyle = 'rgba(125,236,168,0.55)';
+      a.fillText('RDY MSL', 14, y + 18);
+      const na = Math.max(0, b.def.ammo);
+      for (let i = 0; i < na; i++) {
+        a.fillStyle = i < b.ammo ? '#4ede84' : 'rgba(52,84,64,0.7)';
+        a.fillRect(76 + i * 15, y + 8, 10, 13);
+      }
+      // reload progress bar
+      if (st === 'RELOADING' && b.def.reloadTime) {
+        const p = clamp(1 - b.readyIn / b.def.reloadTime, 0, 1);
+        a.strokeStyle = 'rgba(255,210,87,0.5)';
+        a.strokeRect(w - 168.5, y + 8.5, 120, 11);
+        a.fillStyle = 'rgba(255,210,87,0.75)';
+        a.fillRect(w - 166, y + 10.5, 116 * p, 7);
+      }
+      a.strokeStyle = 'rgba(110,240,170,0.14)';
+      a.beginPath(); a.moveTo(10, y + 30.5); a.lineTo(w - 10, y + 30.5); a.stroke();
+      y += 52;
+    }
+    // inventory + plant summary strip above the footer
+    {
+      const total = bats.reduce((s, b) => s + b.ammo, 0);
+      const cap = bats.reduce((s, b) => s + b.def.ammo, 0);
+      a.strokeStyle = 'rgba(110,240,170,0.22)';
+      a.beginPath(); a.moveTo(10, y - 16.5); a.lineTo(w - 10, y - 16.5); a.stroke();
+      a.font = `11px ${FONT}`;
+      a.fillStyle = 'rgba(125,236,168,0.62)';
+      a.fillText('INVENTORY', 14, y + 2);
+      a.font = `bold 13px ${FONT}`;
+      a.fillStyle = total === 0 ? '#ff6a55' : total <= cap * 0.25 ? '#ffd257' : '#d9ffe9';
+      a.fillText(`${total}/${cap} MSL`, 100, y + 2);
+      a.font = `11px ${FONT}`;
+      a.fillStyle = 'rgba(125,236,168,0.62)';
+      a.fillText('GEN LOAD', 200, y + 2);
+      const load = 0.54 + 0.1 * Math.sin(now * 0.7) + (ctx.interceptors?.active.length ?? 0) * 0.04;
+      a.strokeStyle = 'rgba(125,236,168,0.4)';
+      a.strokeRect(272.5, y - 8.5, 90, 10);
+      a.fillStyle = load > 0.85 ? '#ffd257' : 'rgba(87,227,137,0.7)';
+      a.fillRect(274, y - 6.5, 87 * clamp(load, 0, 1), 6);
+      a.fillStyle = 'rgba(125,236,168,0.75)';
+      a.fillText(`${Math.round(load * 100)}%`, 372, y + 2);
+      a.fillText('COOLANT NOMINAL', 14, y + 22);
+      a.fillText('DECON: CLEAR', 200, y + 22);
+    }
+    // footer: ROE + datalink
+    a.fillStyle = 'rgba(12,42,24,0.95)';
+    a.fillRect(0, h - 26, w, 26);
+    a.font = `bold 12px ${FONT}`;
+    a.fillStyle = '#ffd257';
+    a.fillText('ROE: WEAPONS TIGHT', 10, h - 8);
+    a.fillStyle = now % 1.6 < 1.25 ? '#57e389' : 'rgba(87,227,137,0.3)';
+    a.fillText('● DL-16 LINK', 210, h - 8);
+    a.fillStyle = 'rgba(125,236,168,0.7)';
+    a.fillText(`RADIATE ON · T+${pad2(Math.floor(now / 60))}:${pad2(Math.floor(now % 60))}`, 330, h - 8);
+    auxOverlay(auxL);
+  }
+  function drawAuxRight() {
+    if (!auxR) return;
+    const { a, w, h } = auxR;
+    const now = ctx.time.now;
+    auxChrome(a, w, h, 'ENGAGEMENT QUEUE', pad2(tracks.filter((t) => !t.gone && t.detected).length));
+    const act = tracks.filter((t) => !t.gone && t.detected);
+    a.font = `10px ${FONT}`;
+    a.fillStyle = 'rgba(125,236,168,0.55)';
+    a.fillText('TRK', 12, 42);
+    a.fillText('TTI', 84, 42);
+    a.fillText('BTRY', 140, 42);
+    a.fillText('STATUS', 226, 42);
+    a.strokeStyle = 'rgba(110,240,170,0.18)';
+    a.beginPath(); a.moveTo(10, 47.5); a.lineTo(w - 10, 47.5); a.stroke();
+    let y = 64;
+    for (const tr of act.slice(0, 7)) {
+      const t = tr.threat;
+      const imp = impactPoint(t.pos, t.vel);
+      const isDecoy = tr.classified.startsWith('DECOY');
+      const col = isDecoy ? CSS.decoy : tr.assignedBattery ? CSS.assigned : CSS.hostile;
+      a.font = `bold 12px ${FONT}`;
+      a.fillStyle = col;
+      a.fillText(tr.id, 12, y);
+      a.font = `12px ${FONT}`;
+      a.fillStyle = '#d9ffe9';
+      a.fillText(`${Math.max(0, imp.t).toFixed(0)}s`, 84, y);
+      a.fillText(tr.assignedBattery ? tr.assignedBattery.toUpperCase().slice(0, 8) : '——', 140, y);
+      const st = tr.engagedBy > 0 ? `INTC×${tr.engagedBy}` : tr.assignedBattery ? 'ASSIGNED' : isDecoy ? 'MONITOR' : 'TRACK';
+      a.fillStyle = tr.engagedBy > 0 ? CSS.intc : col;
+      a.fillText(st, 226, y);
+      y += 22;
+    }
+    if (!act.length) {
+      a.font = `bold 13px ${FONT}`;
+      a.fillStyle = 'rgba(125,236,168,0.6)';
+      a.fillText('NO ACTIVE ENGAGEMENTS', 14, 84);
+      a.font = `11px ${FONT}`;
+      a.fillText('SURVEILLANCE SWEEP NOMINAL', 14, 106);
+      if (now % 2 < 1.4) a.fillText('▮', 218, 106);
+    }
+    // footer
+    const inF = ctx.interceptors?.active.length ?? 0;
+    a.fillStyle = 'rgba(12,42,24,0.95)';
+    a.fillRect(0, h - 24, w, 24);
+    a.font = `bold 11px ${FONT}`;
+    a.fillStyle = inF ? CSS.intc : 'rgba(125,236,168,0.6)';
+    a.fillText(`IN FLIGHT ${pad2(inF)}`, 10, h - 8);
+    a.fillStyle = 'rgba(125,236,168,0.65)';
+    a.fillText('SHOOT-LOOK-SHOOT', 250, h - 8);
+    auxOverlay(auxR);
   }
 
   // ------------------------------------------------ holo update
@@ -885,10 +1171,19 @@ export function createRadar(ctx) {
         l.spr.position.set(x, y + 0.075, z);
         l.spr.visible = true;
       }
+      // rim bearing arc (hostiles only)
+      const arc = threatArcs[idx];
+      arc.visible = !isDecoy;
+      if (arc.visible) {
+        arc.material.color.setHex(tr.assignedBattery ? HEX.assigned : HEX.hostile);
+        arc.material.opacity = 0.42 + 0.18 * Math.sin(now * 3.1 + idx * 2.3);
+        arc.rotation.z = Math.atan2(-t.pos.z, t.pos.x);
+      }
     }
     for (let i = bi; i < threatBlips.length; i++) {
       threatBlips[i].grp.visible = false;
       impactMarkers[i].grp.visible = false;
+      threatArcs[i].visible = false;
     }
     for (let i = bi; i < microLabels.length; i++) microLabels[i].spr.visible = false;
 
@@ -931,6 +1226,10 @@ export function createRadar(ctx) {
       intLeaders[i].visible = false;
     }
   }
+
+  // first paint so the aux panes aren't black before the sim loop starts
+  drawAuxLeft();
+  drawAuxRight();
 
   const api = {
     tracks,
@@ -997,6 +1296,13 @@ export function createRadar(ctx) {
       if (redrawAcc > 0.08) {
         redrawAcc = 0;
         drawPPI();
+      }
+      auxAcc += dt;
+      if (auxAcc > 0.26) {
+        auxAcc = 0;
+        auxFlip = !auxFlip;
+        if (auxFlip) drawAuxLeft();
+        else drawAuxRight();
       }
       updateHolo();
     },
