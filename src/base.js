@@ -30,7 +30,7 @@ import {
   stencilDecal,
   warningStripes,
   chainLinkTexture,
-  tireTrackTexture,
+  wornTrackTexture,
   softSprite,
   hardstandConcreteMaps,
   dryConcreteMaps,
@@ -38,7 +38,7 @@ import {
   apronWearTexture,
   apronJointTexture,
   groundStainAtlas,
-  gravelMaps,
+  hardcoreMaps,
   burlapMaps,
   fabricMaps,
   gabionTexture,
@@ -48,6 +48,14 @@ import {
   plywoodMaps,
   unitFlagTexture,
 } from './util/textures.js';
+
+/**
+ * World size of one `hardcoreMaps` tile, in metres. The generator draws stones
+ * that read as 2–7 cm chippings at this scale; stretched over the 6 m tiles the
+ * surfacing used to run at, the same stones came out half a metre across and
+ * the roads and hardstanding turned into leopard print.
+ */
+const GRAVEL_TILE = 1.4;
 
 const smoothstep = (a, b, x) => {
   const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1);
@@ -70,14 +78,26 @@ export function washDepth(x, z) {
 }
 
 function terrainBase(x, z, r) {
+  // The regional elevation field swings tens of metres inside half a kilometre
+  // of the site. Run straight up against the dead-flat pad that builds a smooth
+  // rim just outside the apron, which walls the low horizon off from the
+  // operating area — and the pad has to keep a clear view of descending targets
+  // and rising rounds. So the large scales are held back and only reach full
+  // strength kilometres out, where the same relief stays under a degree.
+  const macro = smoothstep(300, 5200, r);
   let h = 0;
-  h += noise.fbm2(x * 0.00085, z * 0.00085, 4) * 13;
-  h += noise.fbm2(x * 0.00019, z * 0.00019, 4) * 82;
+  h += noise.fbm2(x * 0.00085, z * 0.00085, 4) * 13 * macro;
+  h += noise.fbm2(x * 0.00019, z * 0.00019, 4) * 82 * macro;
+  // Low dunes over the graded plain, so the near desert is not a flat sheet.
+  // Amplitude is tied to range and capped, which keeps a crest below the
+  // skyline no matter which bearing the player faces.
+  const open = smoothstep(WORLD.baseRadius + 20, WORLD.baseRadius + 150, r);
+  h += noise.fbm2(x * 0.0021 + 11, z * 0.0021 - 5, 3) * Math.min(7.5, r * 0.0055) * open;
   // dune ripples
   h += Math.sin(x * 0.0043 + noise.simplex2(x * 0.0006, z * 0.0006) * 2.4) * 1.6 * smoothstep(200, 900, r);
   // erosion gullies on the mid-distance apron slopes
   const gully = Math.max(0, noise.ridged2(x * 0.0049 + 3.1, z * 0.0049 - 7.4, 3, 2.1, 0.55));
-  h -= Math.pow(gully, 3.1) * 6.5 * smoothstep(240, 760, r) * (1 - smoothstep(2400, 4400, r));
+  h -= Math.pow(gully, 3.1) * 6.5 * smoothstep(320, 900, r) * (1 - smoothstep(2400, 4400, r));
   const mt = smoothstep(4600, 12000, r) * (1 - smoothstep(29000, 44000, r));
   if (mt > 0) {
     const ridge = Math.pow(Math.max(0, noise.ridged2(x * 0.000058, z * 0.000058, 6, 2.07, 0.52)), 1.35);
@@ -122,6 +142,19 @@ function terrainNormalY(x, z, e = 6) {
  */
 const GROUND_TINT = '#a89578';
 
+/**
+ * Radius inside which the desert sheet is cut away entirely.
+ *
+ * The sheet used to run on under the whole site five centimetres below the
+ * apron pour, and at that separation the two traded depth-buffer wins: the sand
+ * took the first few metres in front of the player and the concrete took
+ * everything beyond, meeting on a hard line across the pad. Nothing under the
+ * surfacing is ever seen, so the cheapest way to settle it is to not build it.
+ * The cut stops short of the apron edge by less than one cell, and the gravel
+ * skirt runs thirty metres past that, so no hole is ever exposed.
+ */
+const PAD_CUT = WORLD.baseRadius + 9;
+
 function buildTerrain(quality) {
   const group = new THREE.Group();
 
@@ -130,6 +163,7 @@ function buildTerrain(quality) {
   const near = new THREE.PlaneGeometry(nearSize, nearSize, nearSeg, nearSeg);
   near.rotateX(-Math.PI / 2);
   displace(near, 0);
+  cutPad(near);
   {
     // World-space UVs: one texture tile every 18 m.
     const p = near.attributes.position;
@@ -199,16 +233,37 @@ function buildTerrain(quality) {
     vertexColors: true,
   });
   const farMesh = new THREE.Mesh(far, farMat);
+  // Starts at 560 m, well outside the sun's 260 m shadow volume, so it is left
+  // out of the receive path; `terrain.near` covers everything shadows reach.
+  farMesh.receiveShadow = false;
   farMesh.name = 'terrain.far';
   group.add(farMesh);
 
   function displace(geo, yOff) {
     const p = geo.attributes.position;
     for (let i = 0; i < p.count; i++) {
-      p.setY(i, terrainHeight(p.getX(i), p.getZ(i)) + yOff);
+      const x = p.getX(i);
+      const z = p.getZ(i);
+      p.setY(i, terrainHeight(x, z) + yOff);
     }
     geo.computeVertexNormals();
     colorize(geo);
+  }
+
+  /** Drop every triangle that lies wholly under the surfaced site. */
+  function cutPad(geo) {
+    const p = geo.attributes.position;
+    const idx = geo.index;
+    const kept = [];
+    for (let i = 0; i < idx.count; i += 3) {
+      let outside = false;
+      for (let k = 0; k < 3 && !outside; k++) {
+        const v = idx.getX(i + k);
+        if (Math.hypot(p.getX(v), p.getZ(v)) >= PAD_CUT) outside = true;
+      }
+      if (outside) kept.push(idx.getX(i), idx.getX(i + 1), idx.getX(i + 2));
+    }
+    geo.setIndex(kept);
   }
 
   /**
@@ -274,7 +329,7 @@ function siteMaterials() {
   net.needsUpdate = true;
   net.wrapS = THREE.RepeatWrapping;
   net.wrapT = THREE.RepeatWrapping;
-  const track = tireTrackTexture(256).clone();
+  const track = wornTrackTexture(256).clone();
   track.needsUpdate = true;
   track.wrapS = THREE.ClampToEdgeWrapping;
   track.wrapT = THREE.RepeatWrapping;
@@ -345,31 +400,35 @@ function siteMaterials() {
       m.roughnessMap = null;
       return m;
     })(),
+    // The aggregate surfacing carries as much sky fill as the terrain it runs
+    // over (0.28). Starved of it the same tint comes back pure warm sun and the
+    // roads and hardstanding read a much stronger ochre than the sand around
+    // them, as if they were a different material entirely.
     gravel: std({
-      ...tiled(gravelMaps(512, '#b3a68d'), 1, 1),
+      ...tiled(hardcoreMaps(512, '#aca596'), 1, 1),
       color: 0xffffff,
       roughness: 1,
       metalness: 0,
-      envMapIntensity: 0.18,
-      normalScale: new THREE.Vector2(0.75, 0.75),
+      envMapIntensity: 0.3,
+      normalScale: new THREE.Vector2(0.6, 0.6),
     }),
-    // Bulldozed spoil for the bunker berm and the drifts: coarser and warmer
-    // than the graded gravel, so a mound reads as pushed-up earth.
+    // Bulldozed spoil for the bunker berm and the drifts: warmer and less
+    // graded than the running surfaces, so a mound reads as pushed-up earth.
     spoil: std({
-      ...tiled(gravelMaps(512, '#a18f6d'), 1, 1),
+      ...tiled(hardcoreMaps(512, '#a08e6e'), 1, 1),
       color: 0xffffff,
       roughness: 1,
       metalness: 0,
-      envMapIntensity: 0.14,
+      envMapIntensity: 0.26,
       normalScale: new THREE.Vector2(0.5, 0.5),
     }),
     gravelDark: std({
-      ...tiled(gravelMaps(512, '#8d8271'), 1, 1),
+      ...tiled(hardcoreMaps(512, '#8e887a'), 1, 1),
       color: 0xffffff,
       roughness: 1,
       metalness: 0,
-      envMapIntensity: 0.18,
-      normalScale: new THREE.Vector2(0.75, 0.75),
+      envMapIntensity: 0.3,
+      normalScale: new THREE.Vector2(0.6, 0.6),
     }),
     burlap: std({ ...tiled(burlapMaps(256, '#9c8862'), 1, 1), color: 0xffffff, roughness: 1, metalness: 0, envMapIntensity: 0.14 }),
     canvas: std({
@@ -433,6 +492,58 @@ function stainQuad(x, z, w, d, rot, quad) {
   return g;
 }
 
+/**
+ * Flat disc lying on the pad, tessellated into rings, with world-space UVs.
+ *
+ * `CircleGeometry` fans every triangle off one centre vertex, so the apron is
+ * 96 slivers each 190 m long. Seen from standing height those are almost
+ * edge-on, the UV gradient across one runs off the end of the mip chain, and
+ * the concrete under the player collapses into flat wedges of colour with the
+ * desert sheet cutting across them. Rings hold every triangle to a few metres
+ * for a few thousand more of them.
+ */
+function discGeometry(radius, uvScale, opts = {}) {
+  const { cell = 4, sectors = 96, uvOffset = [0, 0] } = opts;
+  const rings = Math.max(1, Math.round(radius / cell));
+  const step = radius / rings;
+  // A few geometric steps first: the innermost band is directly under the
+  // player's feet, where a whole cell's worth of sliver would still smear.
+  const radii = [step * 0.12, step * 0.3, step * 0.58];
+  for (let i = 1; i <= rings; i++) radii.push(step * i);
+
+  const pos = [0, 0, 0];
+  const nrm = [0, 1, 0];
+  const uv = [uvOffset[0], uvOffset[1]];
+  for (const r of radii) {
+    for (let j = 0; j < sectors; j++) {
+      const a = (j / sectors) * Math.PI * 2;
+      const x = Math.cos(a) * r;
+      const z = -Math.sin(a) * r;
+      pos.push(x, 0, z);
+      nrm.push(0, 1, 0);
+      uv.push(x / uvScale + uvOffset[0], z / uvScale + uvOffset[1]);
+    }
+  }
+  const at = (ring, j) => 1 + ring * sectors + (j % sectors);
+  const idx = [];
+  for (let j = 0; j < sectors; j++) idx.push(at(0, j), at(0, j + 1), 0);
+  for (let i = 0; i < radii.length - 1; i++) {
+    for (let j = 0; j < sectors; j++) {
+      const a = at(i, j);
+      const b = at(i, j + 1);
+      const c = at(i + 1, j);
+      const d = at(i + 1, j + 1);
+      idx.push(c, d, a, a, d, b);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+
 /** Chamfered rectangular slab lying on the pad, with world-space UVs. */
 function slabGeometry(cx, cz, w, d, yaw, uvScale, chamfer = 1.6) {
   const shape = new THREE.Shape();
@@ -475,42 +586,29 @@ function buildPad(rng) {
   // ---- main apron ----------------------------------------------------
   // One texture tile every 24 m; the joint decal below runs on an 8 m grid, so
   // three bays fit a tile and the two never beat against each other.
-  const apron = new THREE.CircleGeometry(R, 96);
-  apron.rotateX(-Math.PI / 2);
-  {
-    const uvs = apron.attributes.uv;
-    const pos = apron.attributes.position;
-    for (let i = 0; i < uvs.count; i++) uvs.setXY(i, pos.getX(i) / 24, pos.getZ(i) / 24);
-  }
+  const apron = discGeometry(R, 24);
   const apronMesh = new THREE.Mesh(apron, site.apron);
   apronMesh.position.y = 0.05;
   apronMesh.receiveShadow = true;
   g.add(apronMesh);
 
   // ---- expansion-joint grid -------------------------------------------
-  const jointGeo = new THREE.CircleGeometry(R - 0.6, 96);
-  jointGeo.rotateX(-Math.PI / 2);
-  {
-    const uvs = jointGeo.attributes.uv;
-    const pos = jointGeo.attributes.position;
-    for (let i = 0; i < uvs.count; i++) uvs.setXY(i, pos.getX(i) / 8, pos.getZ(i) / 8);
-  }
+  const jointGeo = discGeometry(R - 0.6, 8);
   const joints = new THREE.Mesh(jointGeo, site.joints);
   joints.position.y = 0.056;
+  // Ground decals sit over the apron, so they have to be shadowed with it or
+  // they punch bright patches through anything the sun puts on the concrete.
+  joints.receiveShadow = true;
   g.add(joints);
 
   // ---- large-scale grime ------------------------------------------------
   // Without this the pad is one flat tone from 150 m up. Tiled at 96 m so it
   // drifts slowly and never lines up with the concrete or the joint grid.
-  const wearGeo = new THREE.CircleGeometry(R - 0.2, 96);
-  wearGeo.rotateX(-Math.PI / 2);
-  {
-    const uvs = wearGeo.attributes.uv;
-    const pos = wearGeo.attributes.position;
-    for (let i = 0; i < uvs.count; i++) uvs.setXY(i, pos.getX(i) / 96 + 0.13, pos.getZ(i) / 96 + 0.41);
-  }
+  // Tiled at 96 m, so it can carry a coarser mesh than the concrete under it.
+  const wearGeo = discGeometry(R - 0.2, 96, { cell: 8, sectors: 64, uvOffset: [0.13, 0.41] });
   const wear = new THREE.Mesh(wearGeo, site.wear);
   wear.position.y = 0.058;
+  wear.receiveShadow = true;
   g.add(wear);
 
   // ---- battery hardstands ---------------------------------------------
@@ -622,7 +720,7 @@ function buildPad(rng) {
   {
     const su = skirt.attributes.uv;
     const sp = skirt.attributes.position;
-    for (let i = 0; i < su.count; i++) su.setXY(i, sp.getX(i) / 6, sp.getZ(i) / 6);
+    for (let i = 0; i < su.count; i++) su.setXY(i, sp.getX(i) / GRAVEL_TILE, sp.getZ(i) / GRAVEL_TILE);
     // Feather the outer edge down so it beds into the desert instead of
     // finishing on a hard lip.
     for (let i = 0; i < sp.count; i++) {
@@ -685,6 +783,7 @@ function buildGroundStains(rng, extraSpots = []) {
 
   const mesh = new THREE.Mesh(mergeParts(parts), site.stain);
   mesh.position.y = 0.072;
+  mesh.receiveShadow = true;
   mesh.renderOrder = 2;
   parts.forEach((p) => p.geometry.dispose());
   return mesh;
@@ -692,8 +791,15 @@ function buildGroundStains(rng, extraSpots = []) {
 
 /* ----------------------------------------------------------------- roads */
 
-/** Flat ribbon following a poly-line. Used for roads, tracks and tyre marks. */
-function ribbonGeometry(points, width, { uvRepeat = null, uvPerMetre = null, halfWidths = null } = {}) {
+/**
+ * Flat ribbon following a poly-line. Used for roads, tracks and tyre marks.
+ *
+ * U runs across the ribbon and V along it. `uSpan` is how many times the map
+ * repeats across the width: a surfacing texture wants it set so the tile stays
+ * near a metre in both directions, while a decal that has to line up with the
+ * ribbon edges (tyre marks) leaves it at 1.
+ */
+function ribbonGeometry(points, width, { uvRepeat = null, uvPerMetre = null, halfWidths = null, uSpan = 1 } = {}) {
   const pos = [];
   const uv = [];
   const idx = [];
@@ -712,7 +818,7 @@ function ribbonGeometry(points, width, { uvRepeat = null, uvPerMetre = null, hal
     pos.push(p.x - side.x, p.y, p.z - side.z);
     pos.push(p.x + side.x, p.y, p.z + side.z);
     const t = uvPerMetre != null ? run * uvPerMetre : (i / (points.length - 1)) * (uvRepeat || 1);
-    uv.push(0, t, 1, t);
+    uv.push(0, t, uSpan, t);
     if (i < points.length - 1) {
       const k = i * 2;
       idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
@@ -723,15 +829,46 @@ function ribbonGeometry(points, width, { uvRepeat = null, uvPerMetre = null, hal
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx);
   geo.computeVertexNormals();
-  // The strip's winding depends on which way the path runs, so half the time
-  // computeVertexNormals hands back downward normals and the ribbon renders as
-  // an unlit black stripe. These are all ground surfaces, so face them up.
-  const nrm = geo.attributes.normal;
-  let sumY = 0;
-  for (let i = 0; i < nrm.count; i++) sumY += nrm.getY(i);
-  if (sumY < 0) {
-    for (let i = 0; i < nrm.count; i++) nrm.setXYZ(i, -nrm.getX(i), -nrm.getY(i), -nrm.getZ(i));
-    nrm.needsUpdate = true;
+  return faceUp(geo);
+}
+
+/**
+ * Point a ground strip's faces at the sky.
+ *
+ * Strip winding depends on which way its path happens to run, so about half of
+ * them come out wound the wrong way. Single-sided, that means the strip is
+ * back-face culled and never appears at all; correcting the shading normals
+ * alone leaves it just as invisible. Rewinding each triangle instead fixes both
+ * the culling and the lighting, and works on merged sheets whose triangles
+ * disagree with one another.
+ */
+function faceUp(geo) {
+  let idx = geo.getIndex();
+  if (!idx) {
+    const n = geo.attributes.position.count;
+    geo.setIndex(Array.from({ length: n }, (_, i) => i));
+    idx = geo.getIndex();
+  }
+  const pos = geo.attributes.position;
+  let flipped = false;
+  for (let t = 0; t < idx.count; t += 3) {
+    const a = idx.getX(t);
+    const b = idx.getX(t + 1);
+    const c = idx.getX(t + 2);
+    const ux = pos.getX(b) - pos.getX(a);
+    const uz = pos.getZ(b) - pos.getZ(a);
+    const vx = pos.getX(c) - pos.getX(a);
+    const vz = pos.getZ(c) - pos.getZ(a);
+    // +Y component of the right-hand-rule face normal.
+    if (uz * vx - ux * vz < 0) {
+      idx.setX(t + 1, c);
+      idx.setX(t + 2, b);
+      flipped = true;
+    }
+  }
+  if (flipped) {
+    idx.needsUpdate = true;
+    geo.computeVertexNormals();
   }
   return geo;
 }
@@ -775,7 +912,7 @@ function buildRoads(rng) {
   // black stripe across a bleached plain, and a graded haul road is what a
   // remote site of this size would actually get.
   const road = roadPath(APPROACH_CONTROLS, 110, terrainHeightUncut, 0.09);
-  const roadMesh = new THREE.Mesh(ribbonGeometry(road, 9, { uvPerMetre: 1 / 9 }), site.gravelDark);
+  const roadMesh = new THREE.Mesh(ribbonGeometry(road, 9, { uvPerMetre: 1 / GRAVEL_TILE, uSpan: 9 / GRAVEL_TILE }), site.gravelDark);
   roadMesh.receiveShadow = true;
   g.add(roadMesh);
 
@@ -793,7 +930,7 @@ function buildRoads(rng) {
       q.y = Math.max(terrainHeight(q.x, q.z), p.y - 1.4) + 0.03;
       line.push(q);
     }
-    shoulderParts.push({ geometry: ribbonGeometry(line, 5.4, { uvPerMetre: 1 / 6 }) });
+    shoulderParts.push({ geometry: ribbonGeometry(line, 5.4, { uvPerMetre: 1 / GRAVEL_TILE, uSpan: 5.4 / GRAVEL_TILE }) });
   }
   const shoulders = new THREE.Mesh(mergeParts(shoulderParts), site.spoil);
   shoulders.receiveShadow = true;
@@ -818,6 +955,7 @@ function buildRoads(rng) {
         bottom.push(gd);
       }
       if (strip.length < 3) continue;
+      let run = 0;
       for (let i = 0; i < strip.length - 1; i++) {
         const p0 = strip[i];
         const p1 = strip[i + 1];
@@ -839,10 +977,16 @@ function buildRoads(rng) {
             3
           )
         );
-        geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, i / 3, 1, i / 3, 0, (i + 1) / 3, 1, (i + 1) / 3], 2));
+        // Metre-ish tile in both directions, or the spoil reads as boulders.
+        const u0 = inner0.distanceTo(outer0) / GRAVEL_TILE;
+        const u1 = inner1.distanceTo(outer1) / GRAVEL_TILE;
+        const v0 = run / GRAVEL_TILE;
+        run += p0.distanceTo(p1);
+        const v1 = run / GRAVEL_TILE;
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, v0, u0, v0, 0, v1, u1, v1], 2));
         geo.setIndex(s > 0 ? [0, 2, 1, 1, 2, 3] : [0, 1, 2, 1, 3, 2]);
         geo.computeVertexNormals();
-        fillParts.push({ geometry: geo });
+        fillParts.push({ geometry: faceUp(geo) });
       }
     }
     if (fillParts.length) {
@@ -898,7 +1042,7 @@ function buildRoads(rng) {
     const a = (i / 128) * Math.PI * 2;
     ring.push(new THREE.Vector3(Math.cos(a) * trackR, 0.055, Math.sin(a) * trackR));
   }
-  const perim = new THREE.Mesh(ribbonGeometry(ring, 6.4, { uvPerMetre: 1 / 6 }), site.gravelDark);
+  const perim = new THREE.Mesh(ribbonGeometry(ring, 6.4, { uvPerMetre: 1 / GRAVEL_TILE, uSpan: 6.4 / GRAVEL_TILE }), site.gravelDark);
   perim.receiveShadow = true;
   g.add(perim);
 
@@ -926,7 +1070,7 @@ function buildTyreTracks(rng) {
   ];
   for (const r of routes) {
     const pts = roadPath(r, Math.max(12, r.length * 5), () => 0.05, 0.028);
-    parts.push({ geometry: ribbonGeometry(pts, 2.9, { uvPerMetre: 1 / 3.4 }) });
+    parts.push({ geometry: ribbonGeometry(pts, 3.4, { uvPerMetre: 1 / 3.4 }) });
   }
   // Manoeuvring arcs beside the parked vehicles.
   for (const [cx, cz, rad] of [
@@ -940,9 +1084,10 @@ function buildTyreTracks(rng) {
       const a = a0 + (i / 14) * sweep;
       arc.push(new THREE.Vector3(cx + Math.cos(a) * rad, 0.078, cz + Math.sin(a) * rad));
     }
-    parts.push({ geometry: ribbonGeometry(arc, 2.7, { uvPerMetre: 1 / 3.4 }) });
+    parts.push({ geometry: ribbonGeometry(arc, 3.2, { uvPerMetre: 1 / 3.4 }) });
   }
   const mesh = new THREE.Mesh(mergeParts(parts), site.tracks);
+  mesh.receiveShadow = true;
   mesh.renderOrder = 1;
   parts.forEach((p) => p.geometry.dispose());
   return mesh;
@@ -965,7 +1110,8 @@ function decalPlane(texture, size, opts = {}) {
     })
   );
   const m = new THREE.Mesh(geo, mat);
-  m.receiveShadow = false;
+  // Painted markings lie on the apron; they have to darken with it.
+  m.receiveShadow = true;
   return m;
 }
 
@@ -1218,6 +1364,7 @@ function buildShelter(rng) {
   const camoNet = new THREE.Mesh(netGeo, site.camoNet);
   camoNet.position.set(0.4, 0, 3.4);
   camoNet.castShadow = true;
+  camoNet.receiveShadow = true;
   g.add(camoNet);
 
   for (const [px, pz] of [[-8.0, 0.4], [-8.0, 7.6], [8.6, 0.4], [8.6, 7.6], [0.2, 8.4]]) {
@@ -1866,6 +2013,7 @@ function signPost(texture, w, h, postH = 1.5, doubleSided = true) {
     std({ map: texture, color: 0xffffff, roughness: 0.93, metalness: 0, envMapIntensity: 0.3, side: doubleSided ? THREE.DoubleSide : THREE.FrontSide })
   );
   face.position.set(0, postH + h / 2, 0.005);
+  face.castShadow = true;
   g.add(face);
   g.userData.colliders = [{ type: 'cyl', pos: [0, postH / 2, 0], r: 0.2, hh: postH / 2, walkable: false }];
   return g;
@@ -1897,7 +2045,7 @@ function buildFuelFarm(rng) {
   floor.position.y = 0.07;
   {
     const uv = floor.geometry.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 3, uv.getY(i) * 2);
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * (bundW - 0.5)) / GRAVEL_TILE, (uv.getY(i) * (bundD - 0.5)) / GRAVEL_TILE);
   }
   floor.receiveShadow = true;
   g.add(floor);
@@ -2396,8 +2544,13 @@ function buildBunker(rng) {
       // Crest first (a rounded shoulder), then an easing slope to the toe.
       const out = s < 0.2 ? (s / 0.2) * 1.3 : 1.3 + Math.pow((s - 0.2) / 0.8, 0.86) * 5.6 * wob;
       const y = s < 0.2 ? crestY * crestWob * (1 - 0.04 * (s / 0.2)) : crestY * crestWob * Math.pow(1 - (s - 0.2) / 0.8, 1.55);
-      bermPos.push(rx * (innerW + out), y, rz * (innerD + out));
-      bermUv.push((i / segs) * 22, s * 3.2);
+      const bx = rx * (innerW + out);
+      const bz = rz * (innerD + out);
+      bermPos.push(bx, y, bz);
+      // Planar UV in world metres: the slope is shallow enough that the
+      // stretch never shows, and it keeps the spoil at the same grain as the
+      // hardcore it is pushed up from.
+      bermUv.push(bx / GRAVEL_TILE, bz / GRAVEL_TILE);
     }
   }
   const stride = rows + 1;
@@ -2427,7 +2580,7 @@ function buildBunker(rng) {
   apron.position.set(0, 0.03, -D / 2 - 8.5);
   {
     const uv = apron.geometry.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 2.5, uv.getY(i) * 2.2);
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * 15) / GRAVEL_TILE, (uv.getY(i) * 13) / GRAVEL_TILE);
   }
   apron.receiveShadow = true;
   g.add(apron);
@@ -2673,16 +2826,10 @@ function buildFlagpole() {
   g.add(pole);
   parts.forEach((p) => p.geometry.dispose());
 
-  const flagGeo = new THREE.PlaneGeometry(2.6, 1.6, 10, 4);
-  {
-    const p = flagGeo.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const t = (p.getX(i) + 1.3) / 2.6;
-      p.setZ(i, Math.sin(t * 5.2) * 0.16 * t);
-      p.setY(i, p.getY(i) - t * 0.12);
-    }
-    flagGeo.computeVertexNormals();
-  }
+  // Cloth is deformed per frame rather than baked, so the fly end ripples and
+  // the hoist stays pinned to the pole.
+  const flagGeo = new THREE.PlaneGeometry(2.6, 1.6, 14, 5);
+  const flagRest = flagGeo.attributes.position.array.slice();
   const flagPivot = new THREE.Group();
   flagPivot.position.set(0, H - 1.1, 0);
   flagPivot.rotation.y = 0.3;
@@ -2695,6 +2842,24 @@ function buildFlagpole() {
   flag.castShadow = true;
   flagPivot.add(flag);
   g.userData.flag = flagPivot;
+  g.userData.flutter = (t) => {
+    const p = flagGeo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = flagRest[i * 3];
+      const y = flagRest[i * 3 + 1];
+      // Amplitude grows toward the fly end; the wave runs along the cloth and
+      // shears with height so the trailing corner curls.
+      const s = (x + 1.3) / 2.6;
+      const amp = s * s * 0.42;
+      const phase = t * 3.4 - s * 5.6 + y * 0.9;
+      p.setZ(i, Math.sin(phase) * amp + Math.sin(phase * 0.47 + 1.7) * amp * 0.4);
+      p.setY(i, y - s * 0.14 + Math.cos(phase) * amp * 0.16);
+      p.setX(i, x - s * amp * amp * 0.5);
+    }
+    p.needsUpdate = true;
+    flagGeo.computeVertexNormals();
+  };
+  g.userData.flutter(0);
 
   const halyard = new THREE.Mesh(
     pathTube([new THREE.Vector3(0.1, H - 0.1, 0), new THREE.Vector3(0.14, H * 0.6, 0.02), new THREE.Vector3(0.17, 1.6, 0)], 0.012, 4),
@@ -2740,6 +2905,7 @@ function buildMarkerBoard() {
     })
   );
   face.position.set(0, 2.35, 0.17);
+  face.castShadow = true;
   g.add(face);
 
   g.userData.colliders = [
@@ -3088,14 +3254,8 @@ export class Base {
     // ---- helipad ------------------------------------------------------
     const heli = new THREE.Group();
     heli.position.set(-42, 0, 138);
-    const heliSlab = new THREE.Mesh(new THREE.CircleGeometry(15, 40), site.pourLate);
-    heliSlab.rotation.x = -Math.PI / 2;
+    const heliSlab = new THREE.Mesh(discGeometry(15, 16, { cell: 3, sectors: 48, uvOffset: [-42 / 16, 138 / 16] }), site.pourLate);
     heliSlab.position.y = 0.062;
-    {
-      const uv = heliSlab.geometry.attributes.uv;
-      const pos = heliSlab.geometry.attributes.position;
-      for (let i = 0; i < uv.count; i++) uv.setXY(i, (pos.getX(i) - 42) / 16, (pos.getY(i) + 138) / 16);
-    }
     heliSlab.receiveShadow = true;
     heli.add(heliSlab);
     const heliMark = decalPlane(helipadDecal(512, 'H'), [26, 26]);
@@ -3313,13 +3473,16 @@ export class Base {
     g.add(cases);
 
     // ---- revetments ---------------------------------------------------
-    // Sandbag walls flank the long sides of each hardstand in broken segments,
-    // leaving both ends open as drive-through lanes.
-    const bagGeo = new THREE.SphereGeometry(0.28, 7, 5);
-    bagGeo.scale(1.5, 0.62, 0.95);
-    const BAG_MAX = 1400;
-    const bags = new THREE.InstancedMesh(bagGeo, site.burlap, BAG_MAX);
-    let bg = 0;
+    // A broken sandbag ring round every emplacement: chest-high walls down the
+    // two long flanks and a lower return across each end, with a gap left in
+    // the middle of all four runs. The gap on the flank facing the pad is the
+    // lane crews walk in on; the end gaps are wide enough to drive a launcher
+    // through. Every run is sized from the hardstand it belongs to and the
+    // instance budget is counted from that, because one shared cap spent the
+    // whole allowance on the first emplacement and left the others bare.
+    const bagGeo = new THREE.SphereGeometry(0.3, 6, 4);
+    bagGeo.scale(1.46, 0.6, 0.94);
+    const BAG_PITCH = 0.52;
     const bagRng = rng.fork('bags');
     const revetments = [];
     for (const hs of HARDSTANDS) {
@@ -3331,25 +3494,44 @@ export class Base {
       const out = new THREE.Vector3(Math.cos(dirYaw), 0, -Math.sin(dirYaw));
       for (const s of [-1, 1]) {
         for (const seg of [-1, 1]) {
-          const segLen = runAxis * 0.62;
-          const segMid = seg * runAxis * 0.5;
-          const cx = hs.pos[0] + out.x * s * (half + 1.6) + along.x * segMid;
-          const cz = hs.pos[1] + out.z * s * (half + 1.6) + along.z * segMid;
-          revetments.push({ cx, cz, along, yaw: dirYaw, len: segLen });
-          const courses = 5;
-          for (let row = 0; row < courses; row++) {
-            const rowLen = segLen * (1 - row * 0.045);
-            const n = Math.floor((rowLen * 2) / 0.44);
-            for (let i = 0; i < n && bg < BAG_MAX; i++) {
-              const t = (i / (n - 1) - 0.5) * rowLen * 2 + (row % 2 ? 0.14 : 0);
-              const y = 0.1 + row * 0.17 + bagRng.range(-0.015, 0.015);
-              q.setFromEuler(
-                new THREE.Euler(bagRng.range(-0.05, 0.05), dirYaw + Math.PI / 2 + bagRng.range(-0.09, 0.09), bagRng.range(-0.05, 0.05))
-              );
-              m4.compose(new THREE.Vector3(cx + along.x * t, y, cz + along.z * t), q, sc);
-              bags.setMatrixAt(bg++, m4);
-            }
-          }
+          // Flank run: half the flank each side of a central walk-in gap.
+          revetments.push({
+            cx: hs.pos[0] + out.x * s * (half + 1.6) + along.x * seg * runAxis * 0.56,
+            cz: hs.pos[1] + out.z * s * (half + 1.6) + along.z * seg * runAxis * 0.56,
+            dir: along,
+            yaw: dirYaw,
+            len: runAxis * 0.4,
+            courses: 5,
+          });
+          // End return: kept low so it does not fence in the drive-through.
+          revetments.push({
+            cx: hs.pos[0] + along.x * s * (runAxis + 1.6) + out.x * seg * half * 0.6,
+            cz: hs.pos[1] + along.z * s * (runAxis + 1.6) + out.z * seg * half * 0.6,
+            dir: out,
+            yaw: dirYaw + Math.PI / 2,
+            len: half * 0.36,
+            courses: 3,
+          });
+        }
+      }
+    }
+    const rowCount = (rev, row) => Math.max(2, Math.floor((rev.len * 2 * (1 - row * 0.05)) / BAG_PITCH));
+    let bagTotal = 0;
+    for (const rev of revetments) for (let row = 0; row < rev.courses; row++) bagTotal += rowCount(rev, row);
+    const bags = new THREE.InstancedMesh(bagGeo, site.burlap, bagTotal);
+    let bg = 0;
+    for (const rev of revetments) {
+      for (let row = 0; row < rev.courses; row++) {
+        const rowLen = rev.len * (1 - row * 0.05);
+        const n = rowCount(rev, row);
+        for (let i = 0; i < n; i++) {
+          const t = (i / (n - 1) - 0.5) * rowLen * 2 + (row % 2 ? 0.16 : 0);
+          const y = 0.1 + row * 0.17 + bagRng.range(-0.015, 0.015);
+          q.setFromEuler(
+            new THREE.Euler(bagRng.range(-0.05, 0.05), rev.yaw + Math.PI / 2 + bagRng.range(-0.09, 0.09), bagRng.range(-0.05, 0.05))
+          );
+          m4.compose(new THREE.Vector3(rev.cx + rev.dir.x * t, y, rev.cz + rev.dir.z * t), q, sc);
+          bags.setMatrixAt(bg++, m4);
         }
       }
     }
@@ -3379,7 +3561,7 @@ export class Base {
         const a = Math.atan2(p.getY(i), p.getX(i));
         const k = 1 + noise.fbm2(Math.cos(a) * 1.7, Math.sin(a) * 1.7, 3) * 0.12;
         p.setXY(i, p.getX(i) * k, p.getY(i) * k);
-        uv.setXY(i, (cx + p.getX(i)) / 6, (cz + p.getY(i)) / 6);
+        uv.setXY(i, (cx + p.getX(i)) / GRAVEL_TILE, (cz + p.getY(i)) / GRAVEL_TILE);
       }
       geo.rotateX(-Math.PI / 2);
       geo.translate(cx, 0, cz);
@@ -3399,7 +3581,9 @@ export class Base {
     // Doors face back toward the pad, so the reload route runs inward rather
     // than into the fence line.
     install(buildBunker(rng.fork('bunker')), -150, -44, -1.85);
-    this.flag = install(buildFlagpole(), 12, 74).userData.flag;
+    const flagpole = install(buildFlagpole(), 12, 74);
+    this.flag = flagpole.userData.flag;
+    this.flagFlutter = flagpole.userData.flutter;
     install(buildAntennaFarm(rng.fork('farm')), -152, 52, 0.3);
 
     // Cable run from the antenna farm back towards the shelter.
@@ -3479,6 +3663,7 @@ export class Base {
       });
     }
     const drifts = new THREE.Mesh(mergeParts(driftParts), mats.sand);
+    drifts.castShadow = true;
     drifts.receiveShadow = true;
     g.add(drifts);
     driftParts.forEach((p) => p.geometry.dispose());
@@ -3513,6 +3698,7 @@ export class Base {
     sock.position.set(-8, 5.7, 129.2);
     sock.rotation.x = Math.PI / 2;
     sock.rotation.z = 0.2;
+    sock.castShadow = true;
     g.add(sock);
     this.windSock = sock;
   }
@@ -3652,9 +3838,12 @@ export class Base {
       const yaw = Math.atan2(b.x - a.x, b.z - a.z);
       world.addBox(new THREE.Vector3(mid.x, 0.48, mid.z), new THREE.Vector3(0.35, 0.48, len / 2), yaw, { walkable: false });
     }
-    // sandbag revetment walls flanking each hardstand
+    // sandbag revetment walls ringing each hardstand
     for (const rev of this.revetments || []) {
-      world.addBox(new THREE.Vector3(rev.cx, 0.45, rev.cz), new THREE.Vector3(0.55, 0.45, rev.len + 0.3), rev.yaw, { walkable: false });
+      const top = 0.28 + (rev.courses - 1) * 0.17;
+      world.addBox(new THREE.Vector3(rev.cx, top / 2, rev.cz), new THREE.Vector3(0.55, top / 2, rev.len + 0.3), rev.yaw, {
+        walkable: false,
+      });
     }
     // perimeter fence
     const seg = 48;
@@ -3708,5 +3897,6 @@ export class Base {
     for (const s of this.searchlights) s.update(dt, this.time, searchTarget);
     if (this.windSock) this.windSock.rotation.z = 0.2 + Math.sin(this.time * 1.7) * 0.14;
     if (this.flag) this.flag.rotation.y = 0.3 + Math.sin(this.time * 0.85) * 0.16;
+    if (this.flagFlutter) this.flagFlutter(this.time);
   }
 }

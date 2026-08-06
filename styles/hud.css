@@ -5,7 +5,10 @@
   --red: #ff6a55;
   --green: #5cff9d;
   --blue: #8fd4ff;
-  --ink: rgba(3, 11, 13, 0.82);
+  /* Markers fly behind the panels and this is a glass HUD, so the ink has to
+     be dense enough that a caption drifting under the threat board does not
+     read as a second row of text. */
+  --ink: rgba(3, 11, 13, 0.93);
   --ink-solid: rgba(4, 12, 14, 0.96);
   --line: rgba(159, 246, 225, 0.3);
   --line-soft: rgba(159, 246, 225, 0.14);
@@ -163,8 +166,8 @@ body {
 #threats .thead,
 #threats .trk {
   display: grid;
-  grid-template-columns: 62px 1fr 56px 44px;
-  gap: 6px;
+  grid-template-columns: 58px 1fr 54px 38px;
+  gap: 5px;
 }
 #threats .thead {
   font-size: 9px;
@@ -189,8 +192,11 @@ body {
   color: #f0fffb;
 }
 #threats .tcls {
-  font-size: 10px;
-  letter-spacing: 0.08em;
+  /* The longest classification is RV UNRESOLVED, and it has to fit whole: an
+     elided discrimination state is worse than no discrimination state. */
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -430,6 +436,12 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Ten entries are kept so the debrief can quote them, but only the newest six
+   fit the panel. Without this the overflow clips from the bottom, which hides
+   the lines the operator actually needs. */
+#log [data-list] > .entry:nth-last-child(n + 7) {
+  display: none;
+}
 #log .entry.warn {
   color: var(--amber);
 }
@@ -552,6 +564,18 @@ body {
   position: absolute;
   inset: 0;
   overflow: hidden;
+  /* Markers follow the tracks wherever they fly, so they will sooner or later
+     cross a panel. The panels win: a caption drifting over the battery board
+     is worth less than the board itself staying readable. */
+  z-index: 0;
+}
+.panel,
+#banner,
+#subtitles,
+#console,
+#hint,
+#reticle .prompt {
+  z-index: 1;
 }
 .marker {
   position: absolute;
@@ -603,8 +627,12 @@ body {
   font-weight: 700;
   font-size: 11px;
   letter-spacing: 0.1em;
-  color: #06100f;
+  /* The chip is filled with the track colour and the glyphs are punched out of
+     it. `color` has to stay inherited for that, because `background:
+     currentColor` resolves against this element's own colour — setting `color`
+     here as well would paint a black chip with black letters on it. */
   background: currentColor;
+  -webkit-text-fill-color: #06100f;
   padding: 1px 6px;
 }
 .marker .ro {
@@ -616,6 +644,10 @@ body {
   text-shadow: var(--shadow), 0 0 3px #000;
 }
 
+/* Set when captions are stacked too tightly to show a readout as well. */
+.marker.terse .ro {
+  display: none;
+}
 .marker.tentative {
   color: #ece3a4;
 }
@@ -757,6 +789,9 @@ button.hud.big {
   justify-content: center;
   background: radial-gradient(120% 90% at 50% 40%, rgba(4, 10, 12, 0.6), rgba(2, 5, 6, 0.94));
   pointer-events: auto;
+  /* Above the panels, which carry their own z-index: a briefing or a debrief
+     is a full stop, and a live threat board showing through it undercuts that. */
+  z-index: 10;
 }
 .overlay.on {
   display: flex;
@@ -806,7 +841,8 @@ button.hud.big {
 .opt {
   flex: 1 1 200px;
   text-align: left;
-  padding: 9px 11px;
+  padding: 9px 11px 9px 13px;
+  position: relative;
 }
 .opt .t {
   display: block;
@@ -819,6 +855,26 @@ button.hud.big {
   text-transform: none;
   color: rgba(188, 232, 224, 0.78);
   letter-spacing: 0.02em;
+}
+/* Setup cards carry a title and a paragraph, so the selected one is marked with
+   a lit edge instead of the console bar's solid inversion: filling the button
+   would bury the description and the battery's own accent colour with it. */
+button.hud.opt.on {
+  background: rgba(94, 240, 214, 0.13);
+  border-color: var(--hud);
+  color: var(--hud);
+  box-shadow: inset 4px 0 0 var(--hud), 0 0 14px rgba(94, 240, 214, 0.18);
+}
+button.hud.opt.on .d {
+  color: rgba(220, 252, 246, 0.92);
+}
+button.hud.opt.on::after {
+  content: '\25C6';
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 9px;
+  color: var(--hud);
 }
 .actions {
   margin-top: 22px;
@@ -1114,10 +1170,25 @@ input[type="range"]:focus-visible {
   top: auto;
   bottom: 56px;
   width: 300px;
-  max-height: 116px;
   overflow: hidden;
   opacity: 0.9;
   transform: scale(0.85);
+}
+#hud.docked #log {
+  max-height: 116px;
+}
+#hud.docked #log [data-list] > .entry:nth-last-child(n + 5) {
+  display: none;
+}
+/* The status board on the console already carries the battery, the selected
+   and assigned tracks, the intercept window and the last result, so docked
+   this panel is cut back to the one thing the screens do not say outright:
+   what the operator may do next, and why not if the answer is no. */
+#hud.docked #engagement .row,
+#hud.docked #engagement .bar,
+#hud.docked #engagement .grid2,
+#hud.docked #engagement .last {
+  display: none;
 }
 #hud.docked #engagement {
   left: 10px;
@@ -1134,9 +1205,16 @@ input[type="range"]:focus-visible {
   top: auto;
   bottom: 62px;
   transform: translateX(-50%);
-  background: rgba(3, 11, 13, 0.82);
-  border: 1px solid var(--line-soft);
+  /* Sitting on the lit desk front rather than on sky, so the card has to carry
+     the contrast the backdrop no longer does. */
+  color: #ffffff;
+  background: rgba(2, 9, 10, 0.92);
+  border: 1px solid var(--line);
   padding: 3px 12px 4px;
+}
+#hud.docked #reticle .prompt .key {
+  background: rgba(0, 0, 0, 0.85);
+  border-color: var(--hud);
 }
 
 #hud.docked #banner {

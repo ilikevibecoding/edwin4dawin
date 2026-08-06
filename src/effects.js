@@ -477,6 +477,7 @@ uniform float uTime;
 uniform float uGrow;
 uniform float uFade;
 uniform float uTurb;
+uniform float uBirth;
 uniform vec3 uWind;
 varying float vAlpha;
 varying vec3 vColor;
@@ -487,21 +488,30 @@ varying float vSeed;
 ${LOGDEPTH_PARS_VERT}
 void main() {
   float age = max( 0.0, uTime - aBirth );
-  float w = aWidth * ( 1.0 + age * uGrow * aMod.y );
+  // The ribbon is born narrow and widens as the exhaust expands. That also
+  // keeps it out of the way of the flame cone, which is otherwise painted over
+  // by a full-width contrail starting at the nozzle.
+  float w = aWidth * ( 1.0 + age * uGrow * aMod.y ) * mix( 0.3, 1.0, smoothstep( 0.0, uBirth * 2.2, age ) );
   vec3 world = position;
   // Old ribbon drifts downwind and wanders: a smoke trail is not a wire.
   world += uWind * age * 0.4;
   float sd = aMod.z;
+  // sd counts segments, so these low frequencies wander over tens of metres of
+  // ribbon. High frequencies here would jitter each vertex independently and
+  // read as a saw blade rather than as a wandering column of smoke.
   vec3 wob = vec3(
-    sin( sd * 11.3 + age * 0.83 ),
-    sin( sd * 7.1 + age * 0.61 + 2.1 ),
-    cos( sd * 5.7 + age * 0.72 + 4.2 )
+    sin( sd * 0.43 + age * 0.83 ),
+    sin( sd * 0.29 + age * 0.61 + 2.1 ),
+    cos( sd * 0.37 + age * 0.72 + 4.2 )
   );
   world += wob * ( uTurb * w * min( age, 10.0 ) * 0.14 );
   vec3 toCam = normalize( cameraPosition - world );
   vec3 side = normalize( cross( aTangent, toCam ) );
   world += side * ( aSide * w );
-  vAlpha = aOpacity * exp( -age * uFade * aMod.x );
+  // A contrail condenses a moment behind the nozzle. Ramping the newest
+  // segments in also stops the ribbon from painting over the flame cone, which
+  // is the only place the exhaust is close enough to read as fire.
+  vAlpha = aOpacity * exp( -age * uFade * aMod.x ) * smoothstep( 0.0, uBirth, age );
   vColor = aColor;
   vWorld = world;
   vAcross = aSide;
@@ -527,12 +537,17 @@ ${LOGDEPTH_PARS_FRAG}
 void main() {
   ${LOGDEPTH_FRAG}
   float aged = clamp( vAge * 0.055, 0.0, 1.0 );
-  // The cross-section profile softens with age, so the ribbon goes wispy.
-  float edge = 1.0 - abs( vAcross ) * 2.0;
-  float a = vAlpha * pow( clamp( edge, 0.0, 1.0 ), mix( 0.85, 2.6, aged ) );
-  // Longitudinal break-up: adjacent segments carry different seeds.
-  float wisp = 0.55 + 0.45 * sin( vSeed * 19.0 );
-  a *= mix( 1.0, wisp, aged * 0.75 );
+  // Rounded cross-section: a column of smoke seen side-on rather than a flat
+  // card. The profile broadens and softens with age so old ribbon goes wispy.
+  float x = clamp( abs( vAcross ) * 2.0, 0.0, 1.0 );
+  float prof = pow( max( 0.0, 1.0 - x * x ), mix( 0.95, 2.3, aged ) );
+  // Lean the density off-axis per segment; the profile still reaches zero at
+  // the geometry edge, so this bends the core without exposing a seam.
+  prof *= clamp( 1.0 + sin( vSeed * 0.31 + 2.0 ) * vAcross * 0.5, 0.4, 1.6 );
+  float a = vAlpha * prof;
+  // Longitudinal break-up, at a wavelength of roughly ten segments.
+  float wisp = 0.64 + 0.36 * sin( vSeed * 0.55 ) * sin( vSeed * 0.21 + 1.3 );
+  a *= mix( 1.0, wisp, 0.12 + aged * 0.72 );
   if ( a < 0.004 ) discard;
   vec3 col = vColor;
   if ( uSunLit > 0.0 ) {
@@ -600,6 +615,7 @@ class Trail {
         uGrow: { value: 0.9 },
         uFade: { value: 0.06 },
         uTurb: { value: 1 },
+        uBirth: { value: 0.09 },
         uEmissive: { value: emissive },
         uSunLit: { value: sunLit },
         uWind: { value: new THREE.Vector3() },
@@ -628,6 +644,8 @@ class Trail {
     this.mat.uniforms.uFade.value = opts.fade !== undefined ? opts.fade : 0.06;
     this.mat.uniforms.uEmissive.value = opts.emissive !== undefined ? opts.emissive : 0;
     this.mat.uniforms.uTurb.value = opts.turbulence !== undefined ? opts.turbulence : opts.emissive ? 0.35 : 1;
+    // The hot ribbon is the flame itself, so it may not be held back.
+    this.mat.uniforms.uBirth.value = opts.emissive ? 0.012 : 0.075;
     this.minStep = opts.minStep !== undefined ? opts.minStep : 3;
     this._first = true;
   }
@@ -645,7 +663,10 @@ class Trail {
     const persist = trailPersistence(pos.y);
     const fadeMul = 1 + (1 - persist) * 1.6;
     const growMul = 0.4 + persist * 1.15;
-    const seed = ((this.head * 0.6180339887) % 1) * 10;
+    // Segment index, wrapped to keep float32 exact. The shaders derive their
+    // low-frequency wander from it, so it has to increase monotonically along
+    // the ribbon rather than hop about.
+    const seed = this.head % 4096;
     for (const k of [v, v + 1]) {
       this.positions[k * 3] = pos.x;
       this.positions[k * 3 + 1] = pos.y;
@@ -706,6 +727,7 @@ uniform float uRoll;
 varying vec3 vNormalW;
 varying vec3 vWorld;
 varying float vNoise;
+varying vec3 vQ;
 ${GLSL_NOISE}
 ${LOGDEPTH_PARS_VERT}
 void main() {
@@ -719,7 +741,12 @@ void main() {
   // A second, finer band breaks the silhouette into individual billows.
   float n2 = fbm3g( q * 3.3 + 17.0, 3 );
   vNoise = n * 0.72 + n2 * 0.5;
-  float bulge = 1.0 + n * uTurb * ( 0.35 + uProgress * 0.85 ) + n2 * uTurb * 0.34;
+  vQ = q;
+  // Keep the displacement well under the radius. Past that the surface folds
+  // through itself, back faces get culled and the ball shows sky-coloured holes
+  // with hard polygonal edges.
+  float amp = uTurb * ( 0.3 + uProgress * 0.36 );
+  float bulge = max( 1.0 + n * amp + n2 * amp * 0.45, 0.35 );
   vec3 world = ( modelMatrix * vec4( p * bulge, 1.0 ) ).xyz;
   vWorld = world;
   vNormalW = normalize( mat3( modelMatrix ) * p );
@@ -740,19 +767,37 @@ uniform float uGlow;
 varying vec3 vNormalW;
 varying vec3 vWorld;
 varying float vNoise;
+varying vec3 vQ;
+${GLSL_NOISE}
 ${ATM_PARS}
 ${LOGDEPTH_PARS_FRAG}
 void main() {
   ${LOGDEPTH_FRAG}
   vec3 v = normalize( cameraPosition - vWorld );
   float fres = pow( 1.0 - abs( dot( v, vNormalW ) ), 1.6 );
-  float band = clamp( vNoise * 0.5 + 0.5, 0.0, 1.0 );
+  // The vertex noise is interpolated across each triangle, so any hard
+  // threshold on it alone breaks along straight polygon edges. Two octaves
+  // evaluated per fragment, in the same advected noise space, put the detail
+  // below the tessellation and keep every boundary organic.
+  float fine = snoise3( vQ * 3.2 ) * 0.42 + snoise3( vQ * 7.6 + 5.0 ) * 0.2;
+  float band = clamp( vNoise * 0.34 + fine * 0.34 + 0.5, 0.0, 1.0 );
   // Heat drains from the outside in; the deepest folds stay bright longest.
   // Multiplying (rather than adding) the noise band means even the first frames
   // are mostly incandescent orange with white only in the hottest creases.
-  float heat = clamp( ( 1.0 - uProgress * 2.1 ) * ( 0.5 + band * 0.8 ) - fres * 0.28, 0.0, 1.0 );
-  vec3 col = mix( uCool, uMid, smoothstep( 0.04, 0.40, heat ) );
-  col = mix( col, uHot, smoothstep( 0.64, 1.0, heat ) );
+  // Weighting heat heavily by the noise band is what gives the ball internal
+  // structure: without it the whole surface cools at one rate and reads as a
+  // painted sphere.
+  // Concentrating the heat into the upper part of the noise band is what buys
+  // contrast: a few incandescent pockets inside a body of deep orange and soot,
+  // instead of one broad region that tone-maps to pale yellow.
+  float core = mix( band, smoothstep( 0.35, 1.0, band ), 0.8 );
+  float heat = clamp( ( 1.0 - uProgress * 2.1 ) * ( 0.22 + core * 1.3 ) - fres * 0.4, 0.0, 1.0 );
+  // Soot -> deep red -> orange -> white. The white stop is deliberately hard to
+  // reach: callers pass a near-white "hot" colour, and reaching for it early is
+  // what turns the whole ball into a pale yellow balloon.
+  vec3 col = mix( uCool, uMid * vec3( 0.8, 0.36, 0.2 ), smoothstep( 0.03, 0.28, heat ) );
+  col = mix( col, uMid, smoothstep( 0.24, 0.62, heat ) );
+  col = mix( col, uHot, smoothstep( 0.72, 1.3, heat ) );
   // The ball is opaque gas, not a glow: it has to replace the sky behind it or
   // an HDR daylight background shows straight through and washes it white.
   // As it cools, uSmoke decides whether it settles into soot (low altitude) or
@@ -761,27 +806,58 @@ void main() {
   float young = 1.0 - smoothstep( 0.0, 0.34, uProgress );
   // Feather the silhouette. Without this the icosphere's outline reads as a
   // hard polygon the moment the ball stops being bright enough to hide it.
-  float rim = pow( clamp( 1.0 - fres, 0.0, 1.0 ), 0.5 );
-  float dense = uOpacity * ( 0.6 + 0.4 * band ) * rim
-    * ( 1.0 - smoothstep( 0.42, 0.92, uProgress ) ) * mix( 1.0, uSmoke, coolT );
+  // Only the outer limb is feathered; feathering the whole surface punches
+  // holes wherever a billow happens to turn edge-on.
+  float rim = smoothstep( 0.0, 0.45, 1.0 - fres );
+  // The shell has to be near-opaque where there is gas and absent where there
+  // is not. A cooling ball held at one intermediate alpha over a bright sky
+  // reads as tinted glass, which is the single worst artefact this shader can
+  // produce; the billow mask below is what keeps it lumpy instead.
+  // As it cools the mask narrows onto the densest billows and those billows are
+  // pushed towards opaque, so the ball tears into separate lumps of smoke
+  // instead of thinning uniformly into a translucent bubble.
+  float torn = smoothstep( 0.18, 0.9, uProgress );
+  float lump = smoothstep( mix( 0.30, 0.56, torn ), mix( 0.62, 0.74, torn ), band );
+  float burning = smoothstep( 0.02, 0.24, heat );
+  float body = clamp( max( burning, lump * mix( 1.0, uSmoke, coolT ) * ( 1.0 + torn ) ), 0.0, 1.0 );
+  float dense = uOpacity * rim * body * ( 1.0 - smoothstep( 0.42, 0.95, uProgress ) );
   // While it is still incandescent the ball is optically thick: force it opaque
-  // so a bright HDR sky cannot bleed through and desaturate the fire.
-  dense = mix( dense, rim, young * 0.85 );
+  // so a bright HDR sky cannot bleed through and desaturate the fire. In thin
+  // air (low uSmoke) there is nothing to be thick with, so only the burning
+  // part gets the override and the rest stays a wisp.
+  dense = mix( dense, rim * uOpacity, young * 0.85 * max( burning, uSmoke ) );
   float a = clamp( dense, 0.0, 1.0 );
   if ( a < 0.004 ) discard;
   float trans;
   vec3 lit = applyAtm( col, vWorld, trans );
   // Mostly self-coloured soot: pushing a near-black cool palette through the
   // haze in-scatter turns the cold rim into a pale glassy shell.
-  vec3 bodyCol = mix( col * 0.32, lit, 0.3 );
+  vec3 bodyCol = mix( col * 0.55, lit, 0.22 );
+  // Entrained smoke is lit from inside by the fire it wraps, which is what
+  // keeps the dark lobes brown rather than a neutral grey cut-out.
+  bodyCol += uMid * 0.09 * ( 1.0 - uProgress ) * ( 0.35 + 0.65 * band );
   // Emission goes as heat squared so only the deepest folds punch through the
   // tonemapper: a uniformly bright ball just reads as a white blob. The birth
   // frames get several times the output of the cooling phase.
-  float emit = uGlow * heat * heat * ( 1.1 + 3.1 * young ) * ( 1.0 - uProgress * 0.5 );
+  // Soot is entrained from the first frame: the folds that are not glowing must
+  // stay dark, or the ball is a uniformly lit balloon rather than burning gas.
+  float sooty = 0.3 + 0.7 * smoothstep( 0.14, 0.68, band );
+  float emit = uGlow * heat * heat * ( 1.1 + 3.1 * young ) * ( 1.0 - uProgress * 0.5 ) * sooty;
   vec3 base = mix( bodyCol, col, heat );
   gl_FragColor = vec4( ( base + col * emit ) * a, a );
 }
 `;
+
+/**
+ * One icosphere shared by every fireball in the pool. The displacement is a
+ * vertex effect, so the tessellation has to be fine enough that a strong bulge
+ * does not expose the polyhedron; paying for that once is the only way it fits.
+ */
+let _fbGeo = null;
+function fireballGeometry(detail) {
+  if (!_fbGeo || _fbGeo.parameters.detail !== detail) _fbGeo = new THREE.IcosahedronGeometry(1, detail);
+  return _fbGeo;
+}
 
 class Fireball {
   constructor(detail = 4) {
@@ -806,7 +882,7 @@ class Fireball {
       toneMapped: true,
       ...PREMULT,
     });
-    this.mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1, detail), this.mat);
+    this.mesh = new THREE.Mesh(fireballGeometry(detail), this.mat);
     this.mesh.frustumCulled = false;
     this.mesh.visible = false;
     this.mesh.renderOrder = 13;
@@ -893,8 +969,14 @@ ${ATM_PARS}
 ${LOGDEPTH_PARS_FRAG}
 void main() {
   ${LOGDEPTH_FRAG}
-  float d = length( vUv - 0.5 ) * 2.0;
-  float ring = exp( -pow( ( d - 0.86 ) / uThickness, 2.0 ) );
+  vec2 q = vUv - 0.5;
+  float d = length( q ) * 2.0;
+  float ang = atan( q.y, q.x );
+  // A blast front is not a perfect circle. Rippling the radius and varying the
+  // brightness round the ring is what keeps it from reading as a lens artefact.
+  float r0 = 0.86 + sin( ang * 7.0 + uProgress * 3.1 ) * 0.013 + sin( ang * 13.0 - 1.7 ) * 0.007;
+  float ring = exp( -pow( ( d - r0 ) / uThickness, 2.0 ) );
+  ring *= 0.7 + 0.3 * sin( ang * 5.0 + 2.3 );
   // A faint compressed shell trails the leading edge inward.
   float shell = smoothstep( 0.86, 0.4, d ) * ( 1.0 - smoothstep( 0.86, 0.99, d ) ) * 0.18;
   float a = ( ring + shell ) * uIntensity * pow( 1.0 - uProgress, 1.6 ) * ( 1.0 - smoothstep( 0.94, 1.0, d ) );
@@ -981,7 +1063,9 @@ class DebrisPool {
     // A 20-face solid silhouettes as a chunk from any angle; a tetrahedron
     // tumbles through orientations where it reads as a flat triangle.
     const geo = new THREE.IcosahedronGeometry(0.5, 0);
-    this.mat = std({ color: 0x4a4642, roughness: 0.75, metalness: 0.5, emissive: 0x220b04, emissiveIntensity: 0.6 });
+    // Low metalness on purpose: a half-metal chunk with no local reflection
+    // probe renders as a black dot against a bright sky instead of a fragment.
+    this.mat = std({ color: 0x6e6660, roughness: 0.85, metalness: 0.08, emissive: 0x2a0d04, emissiveIntensity: 0.7 });
     this.mesh = new THREE.InstancedMesh(geo, this.mat, capacity);
     this.mesh.frustumCulled = false;
     this.mesh.count = 0;
@@ -1116,16 +1200,40 @@ class DecalPool {
   }
 
   place(pos, size, normal, life = 1e9, rot = Math.random() * Math.PI * 2, opacity = 1) {
-    const it = this.items[this.next % this.items.length];
-    this.next++;
-    it.mesh.visible = true;
-    it.mesh.position.copy(pos);
-    it.mesh.position.y += 0.035;
-    it.mesh.scale.set(size, 1, size);
-    it.mesh.rotation.set(0, rot, 0);
-    if (normal) {
-      this._q.setFromUnitVectors(this._up, normal);
-      it.mesh.quaternion.premultiply(this._q);
+    // Every decal is its own draw call, and a launch pad is scorched from the
+    // same spot on every shot. Refreshing the mark that is already there keeps
+    // a long session from spending the whole pool - and the whole draw-call
+    // allowance - on one launcher.
+    let it = null;
+    const near = size * 0.3;
+    for (const c of this.items) {
+      if (!c.mesh.visible) continue;
+      if (Math.abs(c.mesh.scale.x - size) > size * 0.35) continue;
+      const dx = c.mesh.position.x - pos.x;
+      const dz = c.mesh.position.z - pos.z;
+      if (dx * dx + dz * dz < near * near) {
+        it = c;
+        break;
+      }
+    }
+    if (it) {
+      // Deepen and spread the existing mark slightly instead of moving it, so
+      // repeat launches darken one patch rather than snapping a new quad in.
+      const grown = Math.min(size * 1.35, it.mesh.scale.x * 1.06);
+      it.mesh.scale.set(grown, 1, grown);
+      opacity = Math.min(1, Math.max(opacity, (it.peak || 0) + 0.05));
+    } else {
+      it = this.items[this.next % this.items.length];
+      this.next++;
+      it.mesh.visible = true;
+      it.mesh.position.copy(pos);
+      it.mesh.position.y += 0.035;
+      it.mesh.scale.set(size, 1, size);
+      it.mesh.rotation.set(0, rot, 0);
+      if (normal) {
+        this._q.setFromUnitVectors(this._up, normal);
+        it.mesh.quaternion.premultiply(this._q);
+      }
     }
     it.mesh.material.opacity = opacity;
     it.peak = opacity;
@@ -1172,6 +1280,9 @@ const _up = new THREE.Vector3();
 const _ca = new THREE.Color();
 const _cb = new THREE.Color();
 const _cc = new THREE.Color();
+const _cd = new THREE.Color();
+const _ce = new THREE.Color();
+const _cf = new THREE.Color();
 
 // Shared palettes; none of these allocate at spawn time.
 const COL = {
@@ -1185,12 +1296,17 @@ const COL = {
   smokeDark: C(0x4a4744),
   soot: C(0x2b2826),
   sootDeep: C(0x1a1817),
+  // A ground burst entrains dirt, so its cold lobes are brown rather than the
+  // near-black soot of a clean airframe kill.
+  sootEarth: C(0x322317),
   flameWhite: C(0xfff6e2),
   flameHot: C(0xffd79a),
   flameMid: C(0xff7a24),
   flameDeep: C(0xd23a06),
-  emberWhite: C(0xfffbe8),
-  emberOrange: C(0xff8a24),
+  // Embers are spawned over-range: additive sprites at LDR intensity against a
+  // bright sky come out as pale pink smears instead of glowing points.
+  emberWhite: C(0xfffbe8).multiplyScalar(3.2),
+  emberOrange: C(0xff8a24).multiplyScalar(2.4),
   emberDark: C(0x501202),
   ringWarm: C(0xfff0d0),
   ringPale: C(0xd8cbb4),
@@ -1233,7 +1349,7 @@ export class Effects {
     });
     this.sparks = new BillboardLayer(Math.round(budget * 0.13), sparkSprite(64), {
       blending: THREE.AdditiveBlending,
-      stretch: 0.012,
+      stretch: 0.009,
       emissive: 1,
     });
     // Ejected grit: opaque, gravity-bound and unlit, so it silhouettes against
@@ -1267,7 +1383,9 @@ export class Effects {
     }
 
     this.fireballs = [];
-    const fbDetail = budget >= 2400 ? 4 : 3;
+    // The displaced sphere needs enough tessellation that a strong bulge reads
+    // as billows rather than as flat plates pulled off a polyhedron.
+    const fbDetail = budget >= 2400 ? 14 : budget >= 1500 ? 9 : 5;
     for (let i = 0; i < 12; i++) {
       const f = new Fireball(fbDetail);
       this.group.add(f.mesh);
@@ -1420,6 +1538,22 @@ export class Effects {
     const n = Math.max(1, Math.round(rate * dt * 60 * this.q));
     _ca.set(hot);
     _cb.set(smokeColor);
+    // The flame layer blends additively, so against a bright HDR sky an LDR
+    // orange adds almost nothing and the plume disappears. Spawning the flame
+    // with over-range colour is what makes it out-punch the background - and it
+    // is the honest answer too, since a burning motor really is far brighter
+    // than the sky behind it.
+    // Saturation matters more than raw intensity: ACES pulls anything bright
+    // and broad-spectrum towards white, so the flame stops reading as fire the
+    // moment its channels are close together. The orange stops carry the plume
+    // and the near-white throat is kept small and comparatively dim.
+    _cd.copy(COL.flameMid).multiplyScalar(3.0);
+    _ce.copy(COL.flameDeep).multiplyScalar(2.4);
+    _cc.copy(COL.flameHot).multiplyScalar(2.7);
+    _ca.multiplyScalar(2.3);
+    // Kept only just over range: this one is normal-blended, so pushing it high
+    // would tone-map straight to white instead of painting an orange cone.
+    _cf.copy(COL.flameMid).multiplyScalar(1.4);
     for (let i = 0; i < n; i++) {
       const jitter = 0.6 * scale;
       _p.copy(pos);
@@ -1441,37 +1575,65 @@ export class Effects {
         this.fire.spawn({
           pos: _p,
           vel: _v2,
-          size0: 1.9 * scale,
-          size1: 6.5 * scale,
+          size0: 1.5 * scale,
+          size1: 3.6 * scale,
           life: 0.1 + rnd() * 0.07,
-          color0: COL.flameWhite,
+          color0: _cc,
           color1: _ca,
-          color2: COL.flameMid,
-          alpha: 1,
+          color2: _cd,
+          alpha: 0.6,
           drag: 5.5,
           fadeIn: 0.02,
           wind: 0.05,
         });
-        // Sheath: the flame that actually reads at distance.
+        // Sheath: the flame that actually reads at distance. It starts orange
+        // rather than white, because a dozen overlapping white sprites just
+        // saturate to a featureless streak once bloom gets hold of them, and it
+        // ends on soot so the cone hands off to the smoke column.
         _v2.copy(_v).addScaledVector(vel, 0.55);
         this.fire.spawn({
           pos: _p,
           vel: _v2,
-          size0: 3.4 * scale,
-          size1: 14 * scale,
-          life: 0.24 + rnd() * 0.18,
-          color0: _ca,
-          color1: COL.flameMid,
-          color2: COL.flameDeep,
-          alpha: 0.8,
+          size0: 3.2 * scale,
+          size1: 15 * scale,
+          life: 0.26 + rnd() * 0.2,
+          color0: _cd,
+          color1: _ce,
+          color2: COL.smokeDark,
+          alpha: 0.5,
           drag: 3.2,
           fadeIn: 0.05,
           wind: 0.1,
-          turb: 5 * scale,
+          turb: 9 * scale,
+        });
+        // Opaque flame sheath. Additive fire can only add to a bright sky, so
+        // by itself it saturates to a white streak; a normal-blended warm puff
+        // is what actually paints an orange cone at close range and then hands
+        // over to the grey column as it cools.
+        _v2.copy(_v).addScaledVector(vel, 0.62);
+        this.smoke.spawn({
+          pos: _p,
+          vel: _v2,
+          size0: 2.2 * scale,
+          size1: 9 * scale,
+          life: 0.3 + rnd() * 0.22,
+          rot: rnd() * TAU,
+          rotV: (rnd() - 0.5) * 2.4,
+          color0: _cf,
+          color1: COL.flameDeep,
+          color2: COL.smokeDark,
+          alpha: 0.5,
+          drag: 3.4,
+          fadeIn: 0.06,
+          wind: 0.1,
+          turb: 7 * scale,
         });
       }
-      // Smoke column, offset off the axis so the sheath churns outward.
+      // Smoke column, offset off the axis so the sheath churns outward and set
+      // back from the throat: a pale normal-blended puff sitting on the nozzle
+      // covers the flame and is what makes a close plume look like a grey rag.
       _p2.copy(_p);
+      if (backDir) _p2.addScaledVector(backDir, 2.6 * scale);
       const off = 1.1 * scale;
       _p2.x += (rnd() - 0.5) * off;
       _p2.y += (rnd() - 0.5) * off;
@@ -1487,13 +1649,13 @@ export class Effects {
         life: (1.5 + rnd() * 2.4) * (0.45 + dens * 1.5),
         rot: rnd() * TAU,
         rotV: (rnd() - 0.5) * 0.9,
-        color0: COL.smokeLight,
+        color0: COL.smokeMid,
         color1: _cb,
-        color2: COL.smokeMid,
+        color2: COL.smokeLight,
         alpha: 0.4 * (0.3 + dens * 0.85),
         drag: 0.85,
         buoyancy: 1.1,
-        fadeIn: 0.1,
+        fadeIn: 0.2,
         wind: 0.85,
         turb: 1.6 + dens * 2.2,
       });
@@ -1543,18 +1705,23 @@ export class Effects {
       const sp = (20 + rnd() * 24) * (0.6 + s * 0.55);
       _p.set(deckX + Math.cos(a) * r0, gy + 0.4 + rnd() * 4 * s, deckZ + Math.sin(a) * r0);
       _v.set(Math.cos(a) * sp, 3 + rnd() * 10, Math.sin(a) * sp);
+      // Mottle the mid stop per puff. Overlapping sprites that share one colour
+      // integrate to a flat wash however many of them there are; a spread of
+      // values across the population is what gives the cloud internal form.
+      const shade = rnd();
+      _cd.copy(COL.dust).lerp(COL.dustDark, shade * 0.85);
       this.dust.spawn({
         pos: _p,
         vel: _v,
-        size0: (10 + rnd() * 7) * sz,
-        size1: (30 + rnd() * 24) * sz,
+        size0: (6 + rnd() * 11) * sz,
+        size1: (24 + rnd() * 34) * sz,
         life: 5 + rnd() * 4,
         rot: rnd() * TAU,
-        rotV: (rnd() - 0.5) * 0.7,
+        rotV: (rnd() - 0.5) * 1.1,
         color0: COL.dustHot,
-        color1: COL.dust,
+        color1: _cd,
         color2: COL.dustDark,
-        alpha: 0.88,
+        alpha: 0.7 + rnd() * 0.28,
         // Drag sets the radius the ring stalls at (v0/drag), so it stays a
         // readable ring near the pad instead of sweeping past the viewer.
         drag: 1.15,
@@ -1622,26 +1789,32 @@ export class Effects {
     }
 
     // ---- fire wash off the deflector ----------------------------------
-    const nFire = Math.round(22 * s * q);
+    // Sizes and lifetimes vary widely on purpose. Uniform sprites at this
+    // density stack into a cluster of identical soft discs, which is the one
+    // thing that unmistakably reads as billboards rather than as fire.
+    const nFire = Math.round(34 * s * q);
     for (let i = 0; i < nFire; i++) {
       const a = rnd() * TAU;
-      const sp = 18 + rnd() * 34 * s;
-      _p.set(deckX, gy + 0.6 + rnd() * 2.5 * s, deckZ);
-      _v.set(Math.cos(a) * sp, rnd() * 8 * s, Math.sin(a) * sp);
+      const big = rnd();
+      const sp = (14 + rnd() * 38 * s) * (1.3 - big * 0.6);
+      _p.set(deckX + Math.cos(a) * rnd() * 2 * s, gy + 0.5 + rnd() * 2.6 * s, deckZ + Math.sin(a) * rnd() * 2 * s);
+      _v.set(Math.cos(a) * sp, rnd() * 9 * s, Math.sin(a) * sp);
       this.fire.spawn({
         pos: _p,
         vel: _v,
-        size0: 2.6 * s,
-        size1: 12 * s,
-        life: 0.26 + rnd() * 0.3,
+        size0: (1.1 + big * 2.4) * s,
+        size1: (4 + big * 11) * s,
+        life: 0.18 + rnd() * 0.34,
+        rot: rnd() * TAU,
+        rotV: (rnd() - 0.5) * 3.5,
         color0: COL.flameHot,
         color1: COL.flameMid,
         color2: COL.flameDeep,
-        alpha: 0.5 * ex,
+        alpha: (0.34 + big * 0.28) * ex,
         drag: 2.8,
         fadeIn: 0.02,
         wind: 0.25,
-        turb: 6,
+        turb: 9,
       });
     }
 
@@ -1761,6 +1934,9 @@ export class Effects {
       turb: 0.44 + dens * 0.34,
       grow: 1.9,
       glow: 0.8 + thin * 0.35,
+      // Thin air has little to keep optically thick, so the ball is a flash
+      // and a wisp up high rather than a persistent shell.
+      opacity: 0.45 + dens * 0.55,
     });
     // A second, smaller ball a beat later reads as the burn rolling over.
     const fb2 = this._fireball();
@@ -1776,16 +1952,16 @@ export class Effects {
         turb: 0.6,
         grow: 1.7,
         glow: 0.55,
-        opacity: 0.7,
+        opacity: 0.7 * (0.3 + dens * 0.7),
       });
     }
 
     // ---- shock ring ----------------------------------------------------
-    this._shock().fire(pos, size * (4.5 + dens * 3), 0.22 + dens * 0.16, _ca, camera, {
+    this._shock().fire(pos, size * (2.8 + dens * 2.2), 0.2 + dens * 0.14, _ca, camera, {
       emit: 1,
-      intensity: 0.42,
-      thickness: 0.03,
-      thickness1: 0.1,
+      intensity: 0.3,
+      thickness: 0.022,
+      thickness1: 0.07,
       ease: 0.42,
     });
 
@@ -1857,28 +2033,61 @@ export class Effects {
     }
 
     // ---- prompt smoke plus a lingering, wind-drifting ball --------------
-    const nSmoke = Math.round((10 + 20 * dens) * q);
-    for (let i = 0; i < nSmoke; i++) {
+    // The ball is built from two populations: a slow, dense body that holds
+    // together as a recognisable mass, and faster outer wisps that shred off it.
+    // Up high there is no soot to make and no warm bounce light to catch, so
+    // what little cloud there is goes pale and blue instead of brown.
+    _cd.copy(COL.smokeLight).lerp(COL.coldWhite, thin * 0.8);
+    _ce.copy(COL.smokeMid).lerp(COL.coldWhite, thin * 0.65);
+    _cf.copy(COL.smokeDark).lerp(COL.coldBlue, thin * 0.6);
+    const nBall = Math.round((9 + 11 * dens) * q);
+    for (let i = 0; i < nBall; i++) {
       _v.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
-      _p.copy(pos).addScaledVector(_v, size * 0.6);
-      _v.multiplyScalar(12 + rnd() * 38);
+      _p.copy(pos).addScaledVector(_v, size * (0.15 + rnd() * 0.3));
+      _v.multiplyScalar(5 + rnd() * 16);
       this.smoke.spawn({
         pos: _p,
         vel: _v,
-        size0: size * 0.7,
-        size1: size * (3.4 + rnd() * 3.4) * (0.45 + dens),
-        life: (3.2 + rnd() * 4) * (0.3 + dens),
+        size0: size * 1.15,
+        size1: size * (1.9 + rnd() * 1.3) * (0.55 + dens * 0.7),
+        life: (4.2 + rnd() * 4.5) * (0.32 + dens),
         rot: rnd() * TAU,
-        rotV: (rnd() - 0.5) * 0.5,
-        color0: COL.smokeMid,
-        color1: COL.smokeDark,
-        color2: COL.soot,
-        alpha: 0.6 * (0.22 + dens * 0.9),
-        drag: 0.75,
-        buoyancy: 0.5 * dens,
-        fadeIn: 0.22,
+        rotV: (rnd() - 0.5) * 0.35,
+        color0: _ce,
+        color1: _cf,
+        color2: _cc,
+        alpha: 0.82 * (0.22 + dens * 0.95),
+        drag: 1.1,
+        buoyancy: 1.6 * dens,
+        // fadeIn is a fraction of life: on a multi-second smoke ball anything
+        // above a few percent means the mass is still arriving a second later.
+        fadeIn: 0.035,
         wind: 1,
-        turb: 1.2 + dens * 1.6,
+        turb: 0.8 + dens * 1.1,
+      });
+    }
+    const nWisp = Math.round((9 + 15 * dens) * q);
+    for (let i = 0; i < nWisp; i++) {
+      _v.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
+      _p.copy(pos).addScaledVector(_v, size * 0.55);
+      _v.multiplyScalar(20 + rnd() * 46);
+      this.smoke.spawn({
+        pos: _p,
+        vel: _v,
+        size0: size * 0.8,
+        size1: size * (2.4 + rnd() * 2.6) * (0.45 + dens),
+        life: (2.6 + rnd() * 3.4) * (0.3 + dens),
+        rot: rnd() * TAU,
+        rotV: (rnd() - 0.5) * 0.6,
+        color0: _cd,
+        color1: _ce,
+        color2: _cf,
+        alpha: 0.42 * (0.2 + dens * 0.9),
+        drag: 0.7,
+        buoyancy: 0.7 * dens,
+        fadeIn: 0.07,
+        wind: 1,
+        turb: 1.4 + dens * 1.8,
       });
     }
     if (dens > 0.12) {
@@ -1900,11 +2109,11 @@ export class Effects {
 
     const fb = this._fireball();
     _p.set(px, gy + size * 0.35, pz);
-    fb.fire(_p, size * 0.22, size * 1.5, 1.5, { hot: COL.flameWhite, mid: COL.flameMid, cool: COL.sootDeep }, {
+    fb.fire(_p, size * 0.22, size * 1.5, 1.5, { hot: COL.flameWhite, mid: COL.flameMid, cool: COL.sootEarth }, {
       rise: 14,
-      roll: 0.75,
+      roll: 0.95,
       smoke: 0.62,
-      turb: 0.66,
+      turb: 1.15,
       // Compact and bright for the first frames, then it rolls open.
       grow: 1.5,
       glow: 0.62,
@@ -1915,7 +2124,9 @@ export class Effects {
     const nSurge = Math.round(64 * q);
     for (let i = 0; i < nSurge; i++) {
       const a = (i / nSurge) * TAU + rr(-0.08, 0.08);
-      const sp = 30 + rnd() * 52;
+      // The surge has to outrun the fireball, or the dirty part of the event
+      // stays hidden inside the bright part for its whole first second.
+      const sp = 48 + rnd() * 74;
       _p.set(px + Math.cos(a) * size * 0.2, gy + 0.5 + rnd() * 3, pz + Math.sin(a) * size * 0.2);
       _v.set(Math.cos(a) * sp, 2 + rnd() * 7, Math.sin(a) * sp);
       this.dust.spawn({
@@ -1930,7 +2141,7 @@ export class Effects {
         color1: COL.dust,
         color2: COL.dustDark,
         alpha: 0.75,
-        drag: 1.05,
+        drag: 0.9,
         buoyancy: 0.45,
         fadeIn: 0.05,
         wind: 1,
@@ -2317,15 +2528,15 @@ export class Effects {
         this.smoke.spawn({
           pos: p,
           vel: _v,
-          size0: scl * (2 + rnd()),
-          size1: scl * (7 + rnd() * 5),
+          size0: scl * (3.4 + rnd() * 1.6),
+          size1: scl * (9 + rnd() * 6),
           life: 1 + rnd() * 1.1,
           rot: rnd() * TAU,
           rotV: (rnd() - 0.5) * 0.6,
           color0: COL.dustDark,
           color1: COL.smokeDark,
           color2: COL.soot,
-          alpha: 0.16 * (1 - t * 0.6),
+          alpha: 0.26 * (1 - t * 0.6),
           drag: 1.1,
           buoyancy: 0.9,
           fadeIn: 0.1,

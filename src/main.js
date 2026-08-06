@@ -1028,6 +1028,20 @@ if (TEST) {
     hideHud(on = true) {
       document.getElementById('hud').style.display = on ? 'none' : '';
     },
+    /** Override the aerial-perspective uniforms; used by the haze tuning probe. */
+    setAtm({ density, height, haze, color, sunColor } = {}) {
+      if (density !== undefined) atmosphere.uAtmDensity.value = density;
+      if (height !== undefined) atmosphere.uAtmHeight.value = height;
+      if (haze !== undefined) atmosphere.uAtmHaze.value = haze;
+      if (color !== undefined) atmosphere.uAtmColor.value.setHex(color);
+      if (sunColor !== undefined) atmosphere.uAtmSunColor.value.setHex(sunColor);
+      return {
+        density: atmosphere.uAtmDensity.value,
+        height: atmosphere.uAtmHeight.value,
+        haze: atmosphere.uAtmHaze.value,
+        color: `#${atmosphere.uAtmColor.value.getHexString()}`,
+      };
+    },
     snapshot() {
       return {
         phase: state.phase,

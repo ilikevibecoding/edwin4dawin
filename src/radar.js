@@ -795,6 +795,17 @@ void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(
 
 const HOLO_COL = { tentative: 0xd8ca60, rv: 0xff6a4a, decoy: 0x74bcff, inter: 0xffd06a };
 const HOLO_CEILING = 30000;
+/**
+ * The tank sits half a metre from the eye but the world's smoke, dust and
+ * flare sprites all draw in the 9-15 render-order band, so at the default
+ * ordering a launch plume 300 m downrange painted itself straight over the
+ * canopy and washed the symbology out. Everything in the volume is sorted
+ * from this base instead, which keeps the tank's internal stacking intact
+ * while putting the whole tank in front of the world's transparent effects.
+ * Depth testing still lets solid geometry — the console, the hoods — occlude
+ * it normally.
+ */
+const HOLO_ORDER = 40;
 /** Altitude reference planes, as fractions of the 30 km ceiling. */
 const HOLO_BANDS = [1 / 3, 2 / 3, 1];
 const UP = new THREE.Vector3(0, 1, 0);
@@ -897,10 +908,14 @@ function holoCanopyTexture(h = 128) {
   const s = new CanvasSurface(4, h);
   const ctx = s.ctx;
   // Cylinder v runs 0 at the base to 1 at the rim, and canvas row 0 is v = 1.
+  // Nearly opaque, and deliberately so: this backdrop is the only reason the
+  // additive symbology reads at all with a sunset sky in the shelter opening.
+  // The thin band left at the rim is what keeps it looking like smoked glass
+  // rather than a painted drum.
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, 'rgba(6, 24, 26, 0.06)');
-  g.addColorStop(0.4, 'rgba(5, 21, 23, 0.46)');
-  g.addColorStop(1, 'rgba(2, 13, 15, 0.9)');
+  g.addColorStop(0, 'rgba(9, 32, 34, 0.82)');
+  g.addColorStop(0.12, 'rgba(7, 26, 28, 0.95)');
+  g.addColorStop(1, 'rgba(2, 12, 14, 0.995)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 4, h);
   s.commit();
@@ -951,12 +966,17 @@ export class HoloDisplay {
     // the blips.
     const canopy = holoCanopyTexture();
     this.surfaces.push(canopy);
+    // The far wall has to stand taller than the cage it backs. The operator
+    // looks very slightly down into the tank, so the far wall's top edge
+    // projects below the near rim's, and a wall cut off at the ceiling leaves
+    // a bright band of sky across the top third of the volume.
+    const canopyH = height * 1.24;
     const canopyMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(radius * 1.01, radius * 1.01, height, 48, 1, true),
+      new THREE.CylinderGeometry(radius * 1.01, radius * 1.01, canopyH, 48, 1, true),
       new THREE.MeshBasicMaterial({ map: canopy.texture, transparent: true, side: THREE.BackSide, depthWrite: false })
     );
-    canopyMesh.position.y = height / 2;
-    canopyMesh.renderOrder = 1;
+    canopyMesh.position.y = canopyH / 2;
+    canopyMesh.renderOrder = HOLO_ORDER;
     this.volume.add(canopyMesh);
 
     const base = new THREE.Mesh(
@@ -964,8 +984,20 @@ export class HoloDisplay {
       new THREE.MeshBasicMaterial({ color: 0x03181a, transparent: true, opacity: 0.94, depthWrite: false, side: THREE.DoubleSide })
     );
     base.rotation.x = -Math.PI / 2;
-    base.renderOrder = 1;
+    base.renderOrder = HOLO_ORDER;
     this.volume.add(base);
+
+    // The operator's eye sits below the rim, so the line of sight into the top
+    // of the tank leaves over the far wall and picks up open sky. A smoked lid
+    // closes that gap well above the band the tracks actually live in.
+    const lid = new THREE.Mesh(
+      new THREE.CircleGeometry(radius * 1.01, 48),
+      new THREE.MeshBasicMaterial({ color: 0x061e20, transparent: true, opacity: 0.82, depthWrite: false, side: THREE.DoubleSide })
+    );
+    lid.rotation.x = -Math.PI / 2;
+    lid.position.y = height;
+    lid.renderOrder = HOLO_ORDER;
+    this.volume.add(lid);
 
     // ---- floor: engraved plan grid with a live sweep over it -------------
     const floor = new CanvasSurface(1024, 1024);
@@ -983,7 +1015,7 @@ export class HoloDisplay {
       })
     );
     floorMesh.rotation.x = -Math.PI / 2;
-    floorMesh.renderOrder = 2;
+    floorMesh.renderOrder = HOLO_ORDER + 1;
     this.volume.add(floorMesh);
 
     this.sweepMat = new THREE.ShaderMaterial({
@@ -999,44 +1031,57 @@ export class HoloDisplay {
     const sweepMesh = new THREE.Mesh(new THREE.PlaneGeometry(radius * 2, radius * 2), this.sweepMat);
     sweepMesh.rotation.x = -Math.PI / 2;
     sweepMesh.position.y = 0.0018;
-    sweepMesh.renderOrder = 3;
+    sweepMesh.renderOrder = HOLO_ORDER + 2;
     this.volume.add(sweepMesh);
 
     // ---- altitude cage ---------------------------------------------------
     // Reference planes at 10 / 20 / 30 km, corner posts and a centre mast.
     // Built from thin tubes rather than lines: WebGL will not widen a line, and
     // a one-pixel wireframe vanishes the moment there is daylight behind it.
-    const cageParts = [];
+    // Reference planes read as planes, so they carry most of the ink; the
+    // corner posts only exist to tie them together and are kept faint, or the
+    // whole tank turns into a birdcage that fights the blips for attention.
+    const ringParts = [];
     HOLO_BANDS.forEach((f, bi) => {
       const yy = height * f;
       const ceiling = bi === HOLO_BANDS.length - 1;
-      cageParts.push({
-        geometry: new THREE.TorusGeometry(radius, ceiling ? 0.0026 : 0.0016, 4, 72),
+      ringParts.push({
+        geometry: new THREE.TorusGeometry(radius, ceiling ? 0.0024 : 0.0015, 4, 72),
         matrix: transform({ pos: [0, yy, 0], rot: [Math.PI / 2, 0, 0] }),
       });
-      // spurs from the mast out to the ring, so the plane reads as a plane
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2;
-        cageParts.push({
-          geometry: pathTube([new THREE.Vector3(0, yy, 0), new THREE.Vector3(Math.cos(a) * radius, yy, Math.sin(a) * radius)], 0.0013, 4),
-        });
+      // Two full chords per plane read as a plane; stubs at the rim just look
+      // like broken geometry.
+      for (let i = 0; i < 2; i++) {
+        const a = (i / 2) * Math.PI + Math.PI * 0.25;
+        const c0 = Math.cos(a) * radius;
+        const s0 = Math.sin(a) * radius;
+        ringParts.push({ geometry: pathTube([new THREE.Vector3(-c0, yy, -s0), new THREE.Vector3(c0, yy, s0)], 0.0011, 4) });
       }
     });
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
+    const rings = new THREE.Mesh(
+      mergeParts(ringParts),
+      new THREE.MeshBasicMaterial({ color: 0x62dcc4, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+    );
+    rings.renderOrder = HOLO_ORDER + 2;
+    this.volume.add(rings);
+    ringParts.forEach((p) => p.geometry.dispose());
+
+    const postParts = [];
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4 + 0.125) * Math.PI * 2;
       const x = Math.cos(a) * radius;
       const z = Math.sin(a) * radius;
-      cageParts.push({ geometry: pathTube([new THREE.Vector3(x, 0, z), new THREE.Vector3(x, height, z)], 0.0015, 4) });
+      postParts.push({ geometry: pathTube([new THREE.Vector3(x, 0, z), new THREE.Vector3(x, height, z)], 0.0013, 4) });
     }
     // Centre mast: the altitude datum every stem is read against.
-    cageParts.push({ geometry: pathTube([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, height, 0)], 0.0022, 5) });
-    const cage = new THREE.Mesh(
-      mergeParts(cageParts),
-      new THREE.MeshBasicMaterial({ color: 0x6fe4cc, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+    postParts.push({ geometry: pathTube([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, height, 0)], 0.002, 5) });
+    const posts = new THREE.Mesh(
+      mergeParts(postParts),
+      new THREE.MeshBasicMaterial({ color: 0x4fc4b0, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
     );
-    cage.renderOrder = 3;
-    this.volume.add(cage);
-    cageParts.forEach((p) => p.geometry.dispose());
+    posts.renderOrder = HOLO_ORDER + 2;
+    this.volume.add(posts);
+    postParts.forEach((p) => p.geometry.dispose());
 
     // ---- altitude ruler --------------------------------------------------
     // Fixed to the console frame, not the plan view, so it always faces the
@@ -1048,8 +1093,8 @@ export class HoloDisplay {
       new THREE.PlaneGeometry(height * 0.40, height * 1.10),
       new THREE.MeshBasicMaterial({ map: ruler.texture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })
     );
-    rulerMesh.position.set(-radius * 0.94, height * 0.50, radius * 0.60);
-    rulerMesh.renderOrder = 5;
+    rulerMesh.position.set(-radius * 0.78, height * 0.50, radius * 0.86);
+    rulerMesh.renderOrder = HOLO_ORDER + 5;
     this.group.add(rulerMesh);
 
     // ---- track blips -----------------------------------------------------
@@ -1057,12 +1102,14 @@ export class HoloDisplay {
     this.blips = [];
     const glow = holoGlowTexture();
     this.surfaces.push(glow);
-    const blipGeo = new THREE.OctahedronGeometry(0.027, 0);
-    const stemGeo = new THREE.CylinderGeometry(0.0035, 0.0035, 1, 6, 1, true);
+    const blipGeo = new THREE.OctahedronGeometry(0.032, 0);
+    const stemGeo = new THREE.CylinderGeometry(0.0038, 0.0038, 1, 6, 1, true);
     stemGeo.translate(0, 0.5, 0);
-    const ringGeo = new THREE.RingGeometry(0.024, 0.032, 28);
-    const glowGeo = new THREE.PlaneGeometry(0.12, 0.12);
-    const labelGeo = new THREE.PlaneGeometry(0.208, 0.0736);
+    const ringGeo = new THREE.RingGeometry(0.028, 0.038, 28);
+    const glowGeo = new THREE.PlaneGeometry(0.13, 0.13);
+    this.labelW = 0.208;
+    this.labelH = 0.0736;
+    const labelGeo = new THREE.PlaneGeometry(this.labelW, this.labelH);
     for (let i = 0; i < this.maxTracks; i++) {
       const mat = new THREE.MeshBasicMaterial({ color: HOLO_COL.rv, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
       const blip = new THREE.Mesh(blipGeo, mat);
@@ -1079,15 +1126,17 @@ export class HoloDisplay {
       ring.rotation.x = -Math.PI / 2;
       const label = new CanvasSurface(384, 136);
       this.surfaces.push(label);
+      // Captions are the one part that is not additive: they need their dark
+      // card to actually darken, or the text is unreadable against daylight.
       const labelMesh = new THREE.Mesh(
         labelGeo,
-        new THREE.MeshBasicMaterial({ map: label.texture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })
+        new THREE.MeshBasicMaterial({ map: label.texture, transparent: true, depthWrite: false, toneMapped: false })
       );
-      halo.renderOrder = 4;
-      stem.renderOrder = 4;
-      ring.renderOrder = 4;
-      blip.renderOrder = 5;
-      labelMesh.renderOrder = 6;
+      halo.renderOrder = HOLO_ORDER + 3;
+      stem.renderOrder = HOLO_ORDER + 3;
+      ring.renderOrder = HOLO_ORDER + 3;
+      blip.renderOrder = HOLO_ORDER + 4;
+      labelMesh.renderOrder = HOLO_ORDER + 6;
       for (const o of [halo, stem, ring, blip, labelMesh]) {
         o.visible = false;
         this.volume.add(o);
@@ -1097,18 +1146,21 @@ export class HoloDisplay {
 
     // ---- interceptor marks -----------------------------------------------
     this.interMarks = [];
-    const iGeo = new THREE.ConeGeometry(0.013, 0.044, 6);
-    const iStemGeo = new THREE.CylinderGeometry(0.0022, 0.0022, 1, 4, 1, true);
+    // Sized off the track blip rather than off nothing: a round in flight is
+    // the other half of the picture and it has to read at a glance next to the
+    // inbound it is chasing, not hide under the tank rim.
+    const iGeo = new THREE.ConeGeometry(0.017, 0.056, 6);
+    const iStemGeo = new THREE.CylinderGeometry(0.0030, 0.0030, 1, 5, 1, true);
     iStemGeo.translate(0, 0.5, 0);
     for (let i = 0; i < 6; i++) {
       const mat = new THREE.MeshBasicMaterial({ color: HOLO_COL.inter, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
       const mark = new THREE.Mesh(iGeo, mat);
       const stem = new THREE.Mesh(iStemGeo, mat.clone());
-      stem.material.opacity = 0.28;
+      stem.material.opacity = 0.4;
       mark.visible = false;
       stem.visible = false;
-      mark.renderOrder = 5;
-      stem.renderOrder = 4;
+      mark.renderOrder = HOLO_ORDER + 4;
+      stem.renderOrder = HOLO_ORDER + 3;
       this.volume.add(mark, stem);
       this.interMarks.push({ mark, stem });
     }
@@ -1153,9 +1205,11 @@ export class HoloDisplay {
 
       item.halo.position.copy(item.blip.position);
       item.halo.visible = true;
-      item.halo.material.color.setHex(sel ? 0xffffff : col);
-      item.halo.material.opacity = sel ? 0.62 : tr.firm ? 0.46 : 0.3;
-      item.halo.scale.setScalar(sel ? 1.35 : assigned ? 1.15 : 1);
+      // The halo sells the blip's height; past about a third opacity it stops
+      // being a glow and starts being a hole punched in the symbology.
+      item.halo.material.color.setHex(sel ? 0xdff6ee : col);
+      item.halo.material.opacity = sel ? 0.34 : tr.firm ? 0.28 : 0.18;
+      item.halo.scale.setScalar(sel ? 1.3 : assigned ? 1.12 : 1);
       item.halo.quaternion.copy(camera.quaternion).premultiply(this._pq);
 
       item.stem.position.set(x, 0, z);
@@ -1178,9 +1232,12 @@ export class HoloDisplay {
         drawHoloLabel(item.label, tr, { decoy, sel, assigned });
       }
       item.labelMesh.visible = true;
-      item.labelMesh.position.set(x, y + 0.066, z);
+      item.labelMesh.position.set(x, y + 0.072, z);
       item.labelMesh.quaternion.copy(camera.quaternion).premultiply(this._pq);
+      item.anchorY = y + 0.072;
     }
+
+    this.declutterLabels(camera);
 
     const inters = opts.interceptors || [];
     for (let i = 0; i < this.interMarks.length; i++) {
@@ -1205,7 +1262,52 @@ export class HoloDisplay {
       stem.scale.set(1, y, 1);
     }
   }
+
+  /**
+   * Two inbounds on a similar bearing put their captions on top of each other,
+   * which is exactly when the operator most needs to tell them apart. Labels
+   * billboard, so overlap is decided in the billboard's own plane and the lower
+   * caption of each clashing pair is slid down until it clears.
+   */
+  declutterLabels(camera) {
+    const live = this.blips.filter((b) => b.labelMesh.visible);
+    if (live.length < 2) return;
+    const q = _lq.copy(camera.quaternion).premultiply(this._pq);
+    const right = _lr.set(1, 0, 0).applyQuaternion(q);
+    const up = _lu.set(0, 1, 0).applyQuaternion(q);
+
+    for (const it of live) {
+      const p = it.labelMesh.position;
+      it._u = p.dot(right);
+      it._v = p.dot(up);
+    }
+    live.sort((a, b) => b._v - a._v);
+
+    // A caption may only be pushed so far before it stops belonging to its
+    // blip, so past that the older track keeps the slot and the newer one is
+    // parked hard against it rather than drifting off across the tank.
+    const minU = this.labelW * 0.94;
+    const minV = this.labelH * 1.06;
+    for (let i = 1; i < live.length; i++) {
+      const it = live[i];
+      let drop = 0;
+      for (let j = 0; j < i; j++) {
+        const other = live[j];
+        if (Math.abs(it._u - other._u) >= minU) continue;
+        const need = it._v - (other._v - minV);
+        if (need > drop) drop = need;
+      }
+      if (drop <= 0) continue;
+      drop = Math.min(drop, this.labelH * 3.2);
+      it._v -= drop;
+      it.labelMesh.position.addScaledVector(up, -drop);
+    }
+  }
 }
+
+const _lq = new THREE.Quaternion();
+const _lr = new THREE.Vector3();
+const _lu = new THREE.Vector3();
 
 /** Operator-facing altitude ruler standing at the near-left of the tank. */
 function drawHoloRuler(surface, bands) {
@@ -1274,7 +1376,7 @@ function drawHoloLabel(surface, tr, { decoy, sel, assigned }) {
   ctx.lineTo(w * 0.5, body);
   ctx.stroke();
 
-  ctx.fillStyle = assigned ? 'rgba(78, 52, 4, 0.72)' : sel ? 'rgba(20, 66, 60, 0.72)' : 'rgba(6, 28, 26, 0.62)';
+  ctx.fillStyle = assigned ? 'rgba(46, 31, 2, 0.94)' : sel ? 'rgba(9, 38, 35, 0.94)' : 'rgba(4, 20, 19, 0.9)';
   roundRect(ctx, 4, 4, w - 8, body - 6, 11);
   ctx.fill();
   ctx.strokeStyle = assigned ? '#ffc846' : sel ? '#ffffff' : 'rgba(126, 218, 202, 0.55)';
@@ -1350,23 +1452,26 @@ const DOCK_EYE = [0, 1.45, 1.05];
 const DOCK_PITCH = -0.20;
 
 const BUTTON_SPECS = {
-  BAT_PATRIOT: { label: 'TERMINAL', sub: 'HAWKEYE 1', color: 0x5fd0ff, w: 0.235, h: 0.112 },
-  BAT_THAAD: { label: 'HI-ALT', sub: 'LONGVIEW 2', color: 0xffc46b, w: 0.235, h: 0.112 },
-  BAT_SENTINEL: { label: 'SENTINEL', sub: 'IRONWOOD 3', color: 0xff7de3, w: 0.235, h: 0.112 },
-  NEXT_TRACK: { label: 'NEXT', sub: 'TRACK', color: 0x6fe0ff, w: 0.255, h: 0.112 },
-  ASSIGN: { label: 'ASSIGN', sub: 'TARGET', color: 0xffd23f, w: 0.255, h: 0.112 },
-  AUTHORIZE: { label: 'AUTHORIZE', sub: 'RELEASE', color: 0xff4436, w: 0.300, h: 0.126, danger: true },
-  START: { label: 'START', sub: 'THREAT WAVE', color: 0xff8a2b, w: 0.330, h: 0.126, danger: true },
-  SCN_SINGLE: { label: 'SINGLE', color: 0xc4d2da, w: 0.235, h: 0.092 },
-  SCN_SATURATION: { label: 'SATURATION', color: 0xc4d2da, w: 0.235, h: 0.092 },
-  SCN_NIGHT_RAID: { label: 'NIGHT RAID', color: 0xc4d2da, w: 0.235, h: 0.092 },
-  TOD_day: { label: 'DAY', color: 0xffe9b0, w: 0.235, h: 0.092 },
-  TOD_sunset: { label: 'SUNSET', color: 0xffa060, w: 0.235, h: 0.092 },
-  TOD_night: { label: 'NIGHT', color: 0x9db4ff, w: 0.235, h: 0.092 },
+  BAT_PATRIOT: { label: 'TERMINAL', sub: 'HAWKEYE 1', color: 0x5fd0ff, w: 0.235, h: 0.098 },
+  BAT_THAAD: { label: 'HI-ALT', sub: 'LONGVIEW 2', color: 0xffc46b, w: 0.235, h: 0.098 },
+  BAT_SENTINEL: { label: 'SENTINEL', sub: 'IRONWOOD 3', color: 0xff7de3, w: 0.235, h: 0.098 },
+  NEXT_TRACK: { label: 'NEXT', sub: 'TRACK', color: 0x6fe0ff, w: 0.255, h: 0.098 },
+  ASSIGN: { label: 'ASSIGN', sub: 'TARGET', color: 0xffd23f, w: 0.255, h: 0.098 },
+  AUTHORIZE: { label: 'AUTHORIZE', sub: 'RELEASE', color: 0xff4436, w: 0.300, h: 0.110, danger: true },
+  START: { label: 'START', sub: 'THREAT WAVE', color: 0xff8a2b, w: 0.330, h: 0.110, danger: true },
+  SCN_SINGLE: { label: 'SINGLE', color: 0xc4d2da, w: 0.235, h: 0.076 },
+  SCN_SATURATION: { label: 'SATURATION', color: 0xc4d2da, w: 0.235, h: 0.076 },
+  SCN_NIGHT_RAID: { label: 'NIGHT RAID', color: 0xc4d2da, w: 0.235, h: 0.076 },
+  TOD_day: { label: 'DAY', color: 0xffe9b0, w: 0.235, h: 0.076 },
+  TOD_sunset: { label: 'SUNSET', color: 0xffa060, w: 0.235, h: 0.076 },
+  TOD_night: { label: 'NIGHT', color: 0x9db4ff, w: 0.235, h: 0.076 },
 };
 
-const ROW1 = 0.0620;
-const ROW2 = -0.1180;
+// Buttons stand proud of the panel and the operator looks down the slope, so
+// each cap hides a strip of panel just up-slope of it. Both rows are pushed to
+// the bottom of their group frame to keep that strip clear of the group title.
+const ROW1 = 0.0380;
+const ROW2 = -0.1470;
 
 /** [id, panel-local x, panel-local y] */
 const BUTTON_LAYOUT = [
@@ -1377,21 +1482,30 @@ const BUTTON_LAYOUT = [
   ['ASSIGN', 0.015, ROW1],
   ['AUTHORIZE', 0.475, ROW1],
   ['START', 1.030, ROW1],
-  ['SCN_SINGLE', -1.125, ROW2],
-  ['SCN_SATURATION', -0.865, ROW2],
-  ['SCN_NIGHT_RAID', -0.605, ROW2],
-  ['TOD_day', -0.275, ROW2],
-  ['TOD_sunset', -0.015, ROW2],
-  ['TOD_night', 0.245, ROW2],
+  // The lower row sits nearest the eye and so spreads widest on screen; it is
+  // pulled in from the panel edges to keep every cap inside a 16:9 frame.
+  ['SCN_SINGLE', -1.025, ROW2],
+  ['SCN_SATURATION', -0.765, ROW2],
+  ['SCN_NIGHT_RAID', -0.505, ROW2],
+  ['TOD_day', -0.175, ROW2],
+  ['TOD_sunset', 0.085, ROW2],
+  ['TOD_night', 0.345, ROW2],
 ];
 
+// `size` is a texture-space cap, and the lower row needs a smaller one: the
+// bottom of the panel is the closest thing to the operator's eye, so the same
+// number of texels there lands roughly half again as large on screen.
+// `align: 'right'` keeps the fire-control caption clear of the open launch
+// guard, which stands up over the left half of that group.
 const PANEL_GROUPS = [
-  { title: 'WEAPON SELECT', x0: -1.255, x1: -0.475, y0: 0.156, y1: -0.020 },
-  { title: 'TRACK CONTROL', x0: -0.415, x1: 0.160, y0: 0.156, y1: -0.020 },
-  { title: 'FIRE CONTROL', x0: 0.290, x1: 1.255, y0: 0.156, y1: -0.020, hazard: true },
-  { title: 'EXERCISE PROFILE', x0: -1.255, x1: -0.475, y0: -0.050, y1: -0.188 },
-  { title: 'SITE CONDITIONS', x0: -0.415, x1: 0.378, y0: -0.050, y1: -0.188 },
-  { title: 'MASTER ARM', x0: 0.470, x1: 1.255, y0: -0.050, y1: -0.188 },
+  { title: 'WEAPON SELECT', x0: -1.255, x1: -0.475, y0: 0.176, y1: -0.024, size: 23 },
+  // Short on purpose: the tank's lower hoop crops this group's top rail from
+  // the docked eye point, and a longer caption runs straight under it.
+  { title: 'DESIGNATE', x0: -0.415, x1: 0.160, y0: 0.176, y1: -0.024, size: 23 },
+  { title: 'FIRE CONTROL', x0: 0.290, x1: 1.255, y0: 0.176, y1: -0.024, size: 23, hazard: true, align: 'right' },
+  { title: 'EXERCISE PROFILE', x0: -1.155, x1: -0.375, y0: -0.052, y1: -0.196, size: 16 },
+  { title: 'SITE CONDITIONS', x0: -0.305, x1: 0.475, y0: -0.052, y1: -0.196, size: 16 },
+  { title: 'MASTER ARM', x0: 0.560, x1: 1.155, y0: -0.052, y1: -0.196, size: 16 },
 ];
 
 /** Backlit legend lamps along the top rail of the sloped panel. */
@@ -1410,7 +1524,7 @@ const LAMP_X0 = -1.16;
 const LAMP_DX = 0.3314;
 const lampX = (i) => LAMP_X0 + i * LAMP_DX;
 
-const SWITCH_X = [0.600, 0.860, 1.120];
+const SWITCH_X = [0.660, 0.860, 1.060];
 
 /* ---------------------------------------------------------- panel graphics */
 
@@ -1497,25 +1611,28 @@ function panelLegendTexture() {
     ctx.lineWidth = 3.5;
     roundRect(ctx, x0, yTop, x1 - x0, yBot - yTop, 12);
     ctx.stroke();
-    fitFont(ctx, grp.title, (x1 - x0) * 0.66, 30, '700', COND, 5);
-    const tw = ctx.measureText(grp.title).width + 30;
-    ctx.fillStyle = '#2a3134';
-    ctx.fillRect(x0 + 24, yTop - 5, tw, 10);
+    // The title straddles the frame's top rail, so the rail is broken behind it
+    // by a tab tall enough to clear the glyphs at whatever size they fitted to.
+    const tsize = fitFont(ctx, grp.title, (x1 - x0) * 0.7, grp.size || 23, '700', COND, 3);
+    const tw = ctx.measureText(grp.title).width;
+    const tx = grp.align === 'right' ? x1 - 26 - tw : x0 + 26;
+    ctx.fillStyle = '#2c3336';
+    ctx.fillRect(tx - 12, yTop - tsize * 0.66, tw + 24, tsize * 1.32);
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#dcecf0';
-    ctx.fillText(grp.title, x0 + 38, yTop + 1);
+    ctx.fillStyle = '#e6f4f8';
+    ctx.fillText(grp.title, tx, yTop + 1);
   }
 
   // ---- master-arm block detail --------------------------------------------
   ctx.textAlign = 'center';
   const swLabels = [['ARM', 'SAFE'], ['BATT', 'EXT'], ['LINK', 'LOCAL']];
   SWITCH_X.forEach((sx, i) => {
-    fitFont(ctx, swLabels[i][0], um(0.18), 24, '700', COND, 3);
+    fitFont(ctx, swLabels[i][0], um(0.15), 15, '700', COND, 2);
     ctx.fillStyle = 'rgba(216, 230, 234, 0.82)';
-    ctx.fillText(swLabels[i][0], ux(sx), uy(-0.078));
-    fitFont(ctx, swLabels[i][1], um(0.18), 24, '700', COND, 3);
+    ctx.fillText(swLabels[i][0], ux(sx), uy(-0.074));
+    fitFont(ctx, swLabels[i][1], um(0.15), 15, '700', COND, 2);
     ctx.fillStyle = 'rgba(180, 198, 204, 0.6)';
-    ctx.fillText(swLabels[i][1], ux(sx), uy(-0.174));
+    ctx.fillText(swLabels[i][1], ux(sx), uy(-0.180));
   });
 
   // ---- screws and bottom stencil -------------------------------------------
@@ -1534,16 +1651,18 @@ function panelLegendTexture() {
       ctx.stroke();
     }
   }
+  // The panel's bottom edge is the nearest thing to the operator's eye, so its
+  // stencil is set small: at this distance it still out-reads the button caps.
   const stencilL = 'AEGIS RIDGE \u00B7 C2 CONSOLE 01 \u00B7 FIRE DIRECTION';
   const stencilR = 'EXERCISE ONLY \u2014 FICTIONAL SYSTEM';
   ctx.textAlign = 'left';
-  fitFont(ctx, stencilL, um(1.06), 21, '700', COND, 4);
-  ctx.fillStyle = 'rgba(200, 216, 220, 0.66)';
-  ctx.fillText(stencilL, ux(-1.22), uy(-0.228));
+  fitFont(ctx, stencilL, um(0.60), 14, '700', COND, 2);
+  ctx.fillStyle = 'rgba(196, 212, 216, 0.5)';
+  ctx.fillText(stencilL, ux(-1.22), uy(-0.234));
   ctx.textAlign = 'right';
-  fitFont(ctx, stencilR, um(0.94), 21, '700', COND, 4);
-  ctx.fillStyle = 'rgba(224, 176, 96, 0.7)';
-  ctx.fillText(stencilR, ux(1.22), uy(-0.228));
+  fitFont(ctx, stencilR, um(0.52), 14, '700', COND, 2);
+  ctx.fillStyle = 'rgba(220, 172, 96, 0.55)';
+  ctx.fillText(stencilR, ux(1.22), uy(-0.234));
 
   s.commit();
   return s;
@@ -1757,8 +1876,10 @@ export class ConsoleRig {
     detail.forEach((p) => p.geometry.dispose());
 
     const plate = this.track(equipmentPlateTexture(['FIRE DIRECTION', 'CONSOLE 01 \u00B7 AEGIS RIDGE']));
-    const plateMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.105), basicScreen(plate.texture));
-    plateMesh.position.set(-0.42, 0.60, 0.494);
+    // Small: the desk front is the nearest surface to a docked eye, and at the
+    // old size this dedication plate shouted over the controls above it.
+    const plateMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.055), basicScreen(plate.texture));
+    plateMesh.position.set(-0.52, 0.585, 0.494);
     this.group.add(plateMesh);
 
     /* ---- sloped control panel -------------------------------------------- */
@@ -2143,7 +2264,9 @@ export class ConsoleRig {
     }
 
     // The guard lifts once a target is assigned and a round can be committed.
-    const want = opts.assignedTrackId ? -1.15 : 0;
+    // It has to swing past vertical, or the open frame hangs over the cap it
+    // just uncovered and the operator cannot read the legend under it.
+    const want = opts.assignedTrackId ? -1.85 : 0;
     this.guard.rotation.x += (want - this.guard.rotation.x) * Math.min(1, dt * 5);
 
     this.pulse += dt;

@@ -392,11 +392,15 @@ function sheathGeometry() {
   // nose tip and wrapping back past the shoulder. Kept close to the body — a
   // fat dome reads as fog rather than as a shock front.
   const cap = [];
-  for (let i = 0; i <= 9; i++) {
-    const t = i / 9;
-    cap.push([Math.max(0.004, 0.94 * Math.pow(t, 0.62)), 1.86 - 1.02 * t * t]);
+  // Stepping y linearly and taking the radius as its square root gives a true
+  // paraboloid whose stand-off grows smoothly from 0.16 at the stagnation point
+  // to 0.24 at the shoulder, instead of a dome that hugs the tip and then
+  // balloons past the body.
+  for (let i = 0; i <= 10; i++) {
+    const t = i / 10;
+    cap.push([Math.max(0.004, 0.86 * Math.sqrt(t)), 1.77 - 1.85 * t]);
   }
-  parts.push({ geometry: sheathShell(cap, 0, 18, 1.86, 0.84) });
+  parts.push({ geometry: sheathShell(cap, 0, 20, 1.77, -0.08) });
   // Luminous boundary layer clinging to the cone, barely proud of the hull.
   const body = [];
   for (let i = 0; i <= 10; i++) {
@@ -633,8 +637,12 @@ export class Threat {
     if (this.kind === 'DECOY') this.glowColor.setHex(0x9fd8ff);
     else this.glowColor.setHex(0xffb070).lerp(new THREE.Color(0xfff4e2), heat * 0.8);
     this.glow.setColor(this.glowColor);
-    this.glow.update(camera, 1 + heat * 0.9);
-    this.glow.opacity = this.kind === 'DECOY' ? 0.55 : 0.55 + heat * 0.75;
+    // Constant angular size keeps a body at 30 km readable; inside ~90 m the
+    // sprite is eased off so it stops sitting on top of the airframe it is
+    // meant to advertise.
+    const near = THREE.MathUtils.clamp(dist / 90, 0.4, 1);
+    this.glow.update(camera, (1 + heat * 0.9) * near);
+    this.glow.opacity = (this.kind === 'DECOY' ? 0.55 : 0.55 + heat * 0.75) * (0.55 + 0.45 * near);
 
     if (this.sheath.visible) {
       this.sheath.material.uniforms.uIntensity.value = heat;
@@ -656,7 +664,9 @@ export class Threat {
     // ---- trails ------------------------------------------------------
     const persist = trailPersistence(this.pos.y);
     const tangent = this.vel.clone().normalize();
-    const widthScale = Math.max(1, dist * 0.00075);
+    // Widened with range for readability, narrowed again inside ~110 m so a
+    // close pass shows the body rather than the smoke it is sitting in.
+    const widthScale = Math.max(1, dist * 0.00075) * THREE.MathUtils.clamp(dist / 110, 0.3, 1);
     if (this.trail) {
       const col = this.kind === 'DECOY' ? new THREE.Color(0.62, 0.68, 0.74) : new THREE.Color(0.72, 0.7, 0.68);
       this.trail.push(this.pos, tangent, this.effects.time, 1.6 * widthScale * (0.6 + persist), 0.5 * (0.25 + persist * 0.9), col);

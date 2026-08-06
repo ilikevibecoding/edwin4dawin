@@ -14,6 +14,11 @@ const el = (tag, cls, html) => {
 
 const fmtKm = (m) => `${(m / 1000).toFixed(1)}`;
 
+/** Rough on-screen footprint of a marker caption, used to keep them apart. */
+const MARKER_LABEL_W = 104;
+const MARKER_LABEL_H = 34;
+const MARKER_CHIP_H = 15;
+
 export class UI {
   constructor(root, api) {
     this.root = root;
@@ -386,7 +391,7 @@ export class UI {
         ? decoy
           ? 'DECOY'
           : tr.ambiguous
-            ? 'RV (UNRESOLVED)'
+            ? 'RV UNRESOLVED'
             : 'BALLISTIC RV'
         : 'ACQUIRING';
       row.querySelector('[data-alt]').textContent = `${fmtKm(tr.alt)}km`;
@@ -467,7 +472,7 @@ export class UI {
     rows.push(`<div class="verdict ${vcls}">${verdict}</div>`);
     rows.push(`<div class="grid2">
       <div><label>SELECTED</label><b class="white">${sel ? sel.id : '\u2014\u2014'}</b><span class="dim">${sel ? (sel.firm ? sel.classified : 'ACQUIRING') : 'none'}</span></div>
-      <div><label>ASSIGNED</label><b class="amber">${info.assigned ? info.assigned.id : '\u2014\u2014'}</b><span class="dim">${info.assigned ? 'round committed on cue' : 'no commitment'}</span></div>
+      <div><label>ASSIGNED</label><b class="amber">${info.assigned ? info.assigned.id : '\u2014\u2014'}</b><span class="dim">${info.assigned ? 'ready to commit' : 'no commitment'}</span></div>
     </div>`);
     rows.push(
       `<div class="row"><span class="dim">BATTERY</span><span style="color:${info.battery.accent}">${info.battery.label}</span></div>`
@@ -538,7 +543,11 @@ export class UI {
    */
   updateMarkers(items) {
     const seen = new Set();
-    for (const it of items) {
+    // Nearest first — marker scale falls off with range, so it stands in for
+    // depth — which lets the closest track keep the uncluttered slot.
+    const ordered = items.slice().sort((a, b) => (b.scale || 1) - (a.scale || 1));
+    const placed = [];
+    for (const it of ordered) {
       seen.add(it.key);
       let rec = this.markers.get(it.key);
       if (!rec) {
@@ -562,6 +571,30 @@ export class UI {
         rec.id.textContent = parts[0] || '';
         rec.ro.innerHTML = parts.slice(1).join('<br>');
       }
+
+      // Two inbounds on a similar bearing interleave their readouts into one
+      // unreadable block. Slide the caption clear if there is room below, and
+      // if there is not, drop the readout and keep the identity chip: knowing
+      // which track is which matters more than its altitude to a tenth.
+      const half = size / 2;
+      let top = it.y + half + 9;
+      let height = MARKER_LABEL_H;
+      let terse = false;
+      for (let pass = 0; pass < 3; pass++) {
+        const hit = placed.find(
+          (p) => Math.abs(p.x - it.x) < MARKER_LABEL_W && top < p.bottom && top + height > p.top
+        );
+        if (!hit) break;
+        if (pass < 2) {
+          top = hit.bottom + 3;
+        } else {
+          terse = true;
+          height = MARKER_CHIP_H;
+        }
+      }
+      rec.lbl.style.marginTop = `${Math.round(top - it.y - half)}px`;
+      rec.node.classList.toggle('terse', terse);
+      placed.push({ x: it.x, top, bottom: top + height });
     }
     for (const [key, rec] of this.markers) {
       if (!seen.has(key)) {

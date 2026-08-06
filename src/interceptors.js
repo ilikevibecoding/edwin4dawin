@@ -706,18 +706,16 @@ function buildIronwoodRound() {
         [0.52, 3.74],
         [0.505, 3.58], // hammerhead shoulder
         [R2, 3.34],
-        ...ringAt(R2, 2.7),
-        ...ringAt(R2, 1.7),
-        ...ringAt(R2, 0.7),
+        ...ringAt(R2, 2.5),
+        ...ringAt(R2, 1.2),
         [R2, 0.34],
         [0.46, 0.3], // interstage flange
         [0.5, 0.22],
         [0.5, 0.0],
         [0.56, -0.1],
         [R1, -0.2],
-        ...ringAt(R1, -0.9),
-        ...ringAt(R1, -1.9),
-        ...ringAt(R1, -2.9),
+        ...ringAt(R1, -1.05),
+        ...ringAt(R1, -2.5),
         [R1, -3.28],
         [0.7, -3.6], // skirt flare
         [0.82, -3.96],
@@ -746,7 +744,7 @@ function buildIronwoodRound() {
   // ---- first-stage strakes and skirt fins --------------------------------
   radialParts(skin, finPlate(2.3, 1.4, 0.2, 0.36, 0.04, 0.012), 4, Math.PI / 4, R1 - 0.016, -1.4);
   radialParts(skin, finPlate(0.95, 0.42, 0.6, 0.34, 0.05, 0.014), 4, 0, 0.78, -3.72);
-  const fairing = new THREE.SphereGeometry(1, 8, 4);
+  const fairing = new THREE.SphereGeometry(1, 6, 3);
   fairing.scale(0.1, 0.34, 0.14);
   radialParts(skin, fairing, 4, 0, 0.7, -3.6);
 
@@ -826,16 +824,26 @@ function plumeShell({ y0, len, r0, flare, power, layer, seg = 12, steps = 8, x =
 function buildPlumeGeometry(body, plumeScale) {
   const len = 8.4 * plumeScale;
   const parts = [];
+  // A cluster spends its budget on four small columns that are individually
+  // never more than a few pixels across, so each one gets coarser rings than
+  // the single fat column of a one-motor round.
+  const cluster = body.nozzles.length > 1;
+  const coreSeg = cluster ? 10 : 14;
+  const coreSteps = cluster ? 7 : 8;
+  const midSeg = cluster ? 12 : 18;
+  const midSteps = cluster ? 8 : 10;
   for (const n of body.nozzles) {
     parts.push({
-      geometry: plumeShell({ y0: body.exitY + 0.04, len: len * 0.4, r0: n.r * 0.95, flare: 0.42, power: 1.5, layer: 0, seg: 14, steps: 8, x: n.x, z: n.z }),
+      geometry: plumeShell({ y0: body.exitY + 0.04, len: len * 0.4, r0: n.r * 0.95, flare: 0.42, power: 1.5, layer: 0, seg: coreSeg, steps: coreSteps, x: n.x, z: n.z }),
     });
     parts.push({
-      geometry: plumeShell({ y0: body.exitY + 0.04, len: len * 0.8, r0: n.r * 1.0, flare: 1.15, power: 1.05, layer: 0.5, seg: 16, steps: 10, x: n.x, z: n.z }),
+      geometry: plumeShell({ y0: body.exitY + 0.04, len: len * 0.8, r0: n.r * 1.0, flare: 1.15, power: 1.05, layer: 0.5, seg: midSeg, steps: midSteps, x: n.x, z: n.z }),
     });
   }
+  // The sheath is the widest, softest thing on screen and is where faceting
+  // would show first, so it carries the finest ring count of the three shells.
   parts.push({
-    geometry: plumeShell({ y0: body.exitY + 0.2, len, r0: body.sheathR, flare: 1.1, power: 0.85, layer: 1, seg: 18, steps: 10 }),
+    geometry: plumeShell({ y0: body.exitY + 0.2, len, r0: body.sheathR, flare: 1.1, power: 0.85, layer: 1, seg: 24, steps: 10 }),
   });
   const g = mergeParts(parts);
   parts.forEach((p) => p.geometry.dispose());
@@ -890,9 +898,13 @@ void main() {
   vec3 cMid = mix( uColorHot, uColorCool, pow( t, 0.7 ) );
   float aMid = 0.5 * pow( 1.0 - t, 1.15 ) * ( 0.52 + 0.8 * shock * decay ) * ( 0.9 + 0.1 * turb );
 
-  // Outer sheath: entrained air, only really visible edge-on.
+  // Outer sheath: entrained air, only really visible edge-on. It is faded in
+  // over the first tenth of its length so the shell does not begin as a hard
+  // ring at the nozzle plane, and the rim term is spread wide enough that the
+  // silhouette reads as haze rather than as an outline drawn round the cone.
   vec3 cOut = mix( uColorCool, uColorCool * 0.35, t );
-  float aOut = 0.22 * pow( 1.0 - t, 1.6 ) * ( 0.14 + 1.0 * rim ) * ( 0.85 + 0.15 * turb );
+  float rimSoft = pow( 1.0 - abs( dot( normalize( vN ), vView ) ), 0.9 );
+  float aOut = 0.2 * pow( 1.0 - t, 1.5 ) * smoothstep( 0.0, 0.12, t ) * ( 0.1 + 0.8 * rimSoft ) * ( 0.85 + 0.15 * turb );
 
   vec3 c = cCore * isCore + cMid * isMid + cOut * isOut;
   float a = ( aCore * isCore + aMid * isMid + aOut * isOut ) * uIntensity;
@@ -1207,8 +1219,14 @@ export class Interceptor {
     const boost = THREE.MathUtils.clamp(dist / 1100, 1, 8);
     this.group.scale.setScalar(boost);
 
+    // Exposure by eye. A boosting motor a few metres off the lens would white
+    // out the whole frame through the bloom, so plume, glow and smoke are all
+    // pulled back inside ~90 m. Nothing changes past that, which is what keeps
+    // a round 20 km out readable as a bright point with a trail.
+    const near = THREE.MathUtils.clamp(dist / 90, 0.4, 1);
+
     const burning = thrust > 1;
-    this.plumeMat.uniforms.uIntensity.value = burning ? (this.flight === FLIGHT.BOOST ? 1.0 : 0.42) : 0;
+    this.plumeMat.uniforms.uIntensity.value = burning ? (this.flight === FLIGHT.BOOST ? 1.0 : 0.42) * (0.5 + 0.5 * near) : 0;
     this.plumeMat.uniforms.uTime.value = time;
     if (this.plume) this.plume.visible = burning;
 
@@ -1216,13 +1234,16 @@ export class Interceptor {
     // a bright point; only an extreme close pass is damped so the airframe and
     // its markings stay readable.
     this.glow.mesh.position.copy(this.pos).addScaledVector(fwd, -this.glowOffset * boost);
-    const near = THREE.MathUtils.clamp(dist / 70, 0.5, 1);
     this.glow.update(camera, (burning ? (this.flight === FLIGHT.BOOST ? 1.5 : 0.8) : 0.35) * near);
     this.glow.opacity = burning ? 1 : 0.4;
 
     const persist = trailPersistence(this.pos.y);
     const tangent = fwd;
-    const widthScale = Math.max(1, dist * 0.0007);
+    // Far out the ribbon is widened so a round 20 km away still reads as a line
+    // in the sky. Close in it is pulled back towards the motor's own exit
+    // diameter, otherwise the airframe is born inside its own smoke column and
+    // nothing of the round is visible at all.
+    const widthScale = Math.max(1, dist * 0.0007) * THREE.MathUtils.clamp(dist / 110, 0.3, 1);
     if (this.trail) {
       this.trail.push(
         this.pos,

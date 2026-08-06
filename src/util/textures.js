@@ -1667,8 +1667,8 @@ export function apronWearTexture(size = 512, seed = 5) {
     // Break the blobs up so they never read as circles.
     const n = fbmCanvas(size, { seed: 210 + seed, octaves: 6, scale: 4, contrast: 1.5 });
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.globalAlpha = 0.6;
-    ctx.drawImage(n, 0, 0);
+    ctx.globalAlpha = 0.85;
+    ctx.drawImage(alphaMaskFrom(n, 0.48, 0.88), 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     return finish(c);
@@ -1791,5 +1791,209 @@ export function helipadDecal(size = 512, label = 'H') {
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     return finish(c, { wrap: THREE.ClampToEdgeWrapping });
+  });
+}
+
+/**
+ * Compacted hardcore for roads, hardstanding, skirts and bulldozed spoil.
+ *
+ * `gravelMaps` draws its stones for a much larger tile and fixes their colour
+ * regardless of the tint asked for, so at the ~1.4 m tile the surfacing needs
+ * it comes out as dark seeds over whatever base it was given. This keeps the
+ * stones sun-bleached and close in value to the fines around them, which mips
+ * down to an even graded surface instead of a rash.
+ */
+export function hardcoreMaps(size = 512, tint = '#a89b80') {
+  return memo(`hardcore${size}${tint}`, () => {
+    const rnd = seeded(8123);
+    const base = new THREE.Color(tint);
+    const s = size / 512;
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const hc = makeCanvas(size);
+    const hctx = hc.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = tint;
+    ctx.fillRect(0, 0, size, size);
+    hctx.fillStyle = '#808080';
+    hctx.fillRect(0, 0, size, size);
+
+    // Broad grading: the fines wash and settle unevenly. Soft-light rather than
+    // overlay, which drove the mid tones apart hard enough to read as staining.
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(fbmCanvas(size, { seed: 71, octaves: 5, scale: 3 }), 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+
+    // Chippings, in two passes. The sparse coarse pass is nearly flat in value
+    // and carries mid-frequency interest through the height field; the dense
+    // fine pass does the colour work. Radii are texels: at 512 px over ~1.4 m of
+    // ground the fine pass spans roughly 0.8–5 cm.
+    const layStones = (count, radius, spread, relief) => {
+      for (let i = 0; i < count; i++) {
+        const x = rnd() * size;
+        const y = rnd() * size;
+        const r = radius();
+        const ry = r * (0.66 + rnd() * 0.34);
+        const rot = rnd() * Math.PI;
+        // Sun-bleached chippings stay within a stop or so of the fines they lie
+        // in. Wide swings turn the surfacing into blob camouflage; no swing at
+        // all leaves it a painted plane.
+        const lift = rnd() < 0.2 ? -(0.08 + rnd() * 0.2) : rnd() * 0.3 - 0.05;
+        const fill = `#${base
+          .clone()
+          .offsetHSL((rnd() - 0.5) * 0.015, (rnd() - 0.5) * 0.04, lift * spread)
+          .getHexString()}`;
+        const hv = Math.round(128 + lift * relief);
+        const grey = `rgb(${hv},${hv},${hv})`;
+        // Stones overhanging an edge get repeated on the far side so the tile
+        // still joins cleanly.
+        const ox = x < r ? size : x > size - r ? -size : 0;
+        const oy = y < r ? size : y > size - r ? -size : 0;
+        for (let q = 0; q < 4; q++) {
+          if (q & 1 && !ox) continue;
+          if (q & 2 && !oy) continue;
+          const px = x + (q & 1 ? ox : 0);
+          const py = y + (q & 2 ? oy : 0);
+          ctx.fillStyle = fill;
+          ctx.beginPath();
+          ctx.ellipse(px, py, r, ry, rot, 0, Math.PI * 2);
+          ctx.fill();
+          hctx.fillStyle = grey;
+          hctx.beginPath();
+          hctx.ellipse(px, py, r, ry, rot, 0, Math.PI * 2);
+          hctx.fill();
+        }
+      }
+    };
+    layStones(Math.round(700 * s * s), () => s * (7 + Math.pow(rnd(), 1.6) * 11), 0.14, 200);
+    layStones(Math.round(20000 * s * s), () => s * (1.4 + Math.pow(rnd(), 2.2) * 8), 0.42, 150);
+
+    // Dust settled back into the interstices, then fines.
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = tint;
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalAlpha = 1;
+    splotches(ctx, size, size, 18, [[168, 152, 122], [132, 120, 98], [186, 172, 146]], [size * 0.06, size * 0.26], 41, [0.02, 0.06]);
+    grain(ctx, size, size, 0.07);
+
+    // Round the chipping profiles off before differencing them: hard ellipse
+    // edges become cliff normals and give every stone a black rim. The eight
+    // offset copies carry the blur across the tile seam.
+    const hb = makeCanvas(size);
+    const bctx = hb.getContext('2d', { willReadFrequently: true });
+    bctx.filter = `blur(${(s * 0.7).toFixed(2)}px)`;
+    bctx.drawImage(hc, 0, 0);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        if (dx || dy) bctx.drawImage(hc, dx * size, dy * size);
+      }
+    }
+    bctx.filter = 'none';
+    return { map: finish(c), normalMap: finish(normalFromCanvas(hb, 1.5), { srgb: false }) };
+  });
+}
+
+/**
+ * Turn a greyscale noise canvas into a transparent eraser mask.
+ *
+ * `fbmCanvas` writes a fully opaque canvas, so compositing it straight in
+ * `destination-out` scales the whole layer by `globalAlpha` instead of eating
+ * holes in it. Remapping luminance on to the alpha channel is what actually
+ * breaks a decal up.
+ */
+function alphaMaskFrom(src, lo = 0.4, hi = 0.85) {
+  const w = src.width;
+  const h = src.height;
+  const d = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+  const out = makeCanvas(w, h);
+  const octx = out.getContext('2d', { willReadFrequently: true });
+  const img = octx.createImageData(w, h);
+  for (let i = 0; i < d.length; i += 4) {
+    const t = Math.min(1, Math.max(0, (d[i] / 255 - lo) / (hi - lo)));
+    img.data[i + 3] = Math.round(t * t * (3 - 2 * t) * 255);
+  }
+  octx.putImageData(img, 0, 0);
+  return out;
+}
+
+/**
+ * A heavier-worn version of `tireTrackTexture` for routes across the apron.
+ *
+ * The original is a pair of soft gradients at half alpha, further flattened by
+ * an opaque erosion pass, and it all but disappears over pale concrete in flat
+ * sun. This keeps the same layout — two wheel bands running up V, clamped in U
+ * — but darkens the cores, cuts tread lugs into them and edges each band with a
+ * rubbed-in dust halo, so the route still reads from 60 m without turning into
+ * a painted stripe up close.
+ */
+export function wornTrackTexture(size = 256, seed = 71) {
+  return memo(`worntrack${size}${seed}`, () => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, size, size);
+    const rnd = seeded(seed * 977 + 13);
+
+    // The lane itself: everything between the wheels gets ground down too, and
+    // the whole strip has to carry tone or it mips away to nothing the moment
+    // the camera drops towards the deck.
+    const lane = ctx.createLinearGradient(0, 0, size, 0);
+    lane.addColorStop(0, 'rgba(126,114,94,0)');
+    lane.addColorStop(0.16, 'rgba(126,114,94,0.27)');
+    lane.addColorStop(0.5, 'rgba(134,122,100,0.2)');
+    lane.addColorStop(0.84, 'rgba(126,114,94,0.27)');
+    lane.addColorStop(1, 'rgba(126,114,94,0)');
+    ctx.fillStyle = lane;
+    ctx.fillRect(0, 0, size, size);
+
+    // Pale dust pushed out to either side of the wheel paths.
+    for (const off of [0.28, 0.72]) {
+      const halo = ctx.createLinearGradient((off - 0.19) * size, 0, (off + 0.19) * size, 0);
+      halo.addColorStop(0, 'rgba(178,164,134,0)');
+      halo.addColorStop(0.5, 'rgba(178,164,134,0.3)');
+      halo.addColorStop(1, 'rgba(178,164,134,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect((off - 0.19) * size, 0, size * 0.38, size);
+    }
+
+    // Compacted, rubber-darkened cores.
+    for (const off of [0.28, 0.72]) {
+      const g = ctx.createLinearGradient((off - 0.1) * size, 0, (off + 0.1) * size, 0);
+      g.addColorStop(0, 'rgba(82,70,54,0)');
+      g.addColorStop(0.2, 'rgba(74,62,46,0.44)');
+      g.addColorStop(0.5, 'rgba(58,48,36,0.72)');
+      g.addColorStop(0.8, 'rgba(74,62,46,0.44)');
+      g.addColorStop(1, 'rgba(82,70,54,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect((off - 0.1) * size, 0, size * 0.2, size);
+    }
+
+    // Tread lugs: a shallow chevron every ~0.15 m at the ribbon's 3.4 m tile.
+    const lugs = 22;
+    const step = size / lugs;
+    ctx.lineCap = 'round';
+    for (const off of [0.28, 0.72]) {
+      const half = size * 0.07;
+      for (let i = 0; i < lugs; i++) {
+        const y = i * step + rnd() * step * 0.2;
+        ctx.strokeStyle = `rgba(28,22,16,${0.22 + rnd() * 0.24})`;
+        ctx.lineWidth = step * 0.36;
+        ctx.beginPath();
+        ctx.moveTo(off * size - half, y);
+        ctx.lineTo(off * size, y + step * 0.32);
+        ctx.lineTo(off * size + half, y);
+        ctx.stroke();
+      }
+    }
+
+    // Scuffed-off patches, so no track survives its whole length.
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalAlpha = 0.7;
+    ctx.drawImage(alphaMaskFrom(fbmCanvas(size, { seed: 240 + seed, octaves: 5, scale: 13 }), 0.54, 0.88), 0, 0);
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(alphaMaskFrom(fbmCanvas(size, { seed: 91 + seed, octaves: 3, scale: 3 }), 0.58, 0.82), 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    return finish(c, { wrap: THREE.RepeatWrapping });
   });
 }
