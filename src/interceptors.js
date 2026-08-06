@@ -241,10 +241,13 @@ class Interceptor {
       life: def.trail.life,
       colour: def.trail.colour,
       hot: 0xff9a3c,
-      opacity: 0.92,
+      opacity: 0.66,
       expand: 2.1,
       minPixels: 2.2,
       hotSpan: 0.03,
+      // Seconds for the ribbon to open from a pencil line to full width. The
+      // first couple of seconds off the rail belong to the particle plume.
+      openTime: 2.4,
     });
     this.glowMat.color.set(0xfff0c8);
     return this;

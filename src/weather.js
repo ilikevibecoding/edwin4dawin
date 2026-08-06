@@ -727,7 +727,17 @@ export class Weather {
     mu.uWind.value.copy(this.wind).multiplyScalar(0.22);
 
     if (this.effects) {
-      this.effects.setLighting(l.sunDir, l.sunColour, c.b.copy(l.ambientColour).lerp(l.haze, 0.5));
+      // Smoke and dust are lit by the same sun as the cumulus decks, so they
+      // get the same treatment: the key colour is scaled by intensity and
+      // authored above 1.0 so a sunlit billow tone-maps to white instead of the
+      // muddy mid-grey that comes out of an unscaled light colour.
+      this.effects.setLighting(
+        l.sunDir,
+        c.a.copy(l.sunColour).multiplyScalar(0.7 + l.sunIntensity * 0.30),
+        c.b.copy(l.ambientColour).lerp(l.haze, 0.5)
+          .multiplyScalar(0.6 + l.ambient * 0.55),
+        0.8 + l.sunIntensity * 0.14,
+      );
       this.effects.setHaze({
         colour: l.haze,
         density: l.hazeDensity,

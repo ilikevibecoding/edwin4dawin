@@ -28,17 +28,20 @@ const VERT = /* glsl */`
   uniform float uPixelScale;  // viewportHeight / (2 tan(fov/2))
   uniform float uMinPixels;
   uniform float uExpand;
+  uniform float uOpenTime;
 
   varying float vAge;
   varying float vSide;
   varying float vDensity;
   varying float vArc;
   varying float vHaze;
+  varying float vOpen;
 
   ${AERIAL_PARS}
 
   void main() {
-    float age = (uTime - aBirth) / max(uMaxAge, 0.001);
+    float ageS = uTime - aBirth;
+    float age = ageS / max(uMaxAge, 0.001);
     vAge = age;
     vSide = aSide;
     vDensity = aMeta.x;
@@ -47,9 +50,26 @@ const VERT = /* glsl */`
     vec4 mv = viewMatrix * vec4(position, 1.0);
     float dist = max(length(mv.xyz), 0.001);
 
+    // The nozzle end is a pencil line that opens out as the efflux entrains
+    // air. Without this the ribbon leaves the motor at full width, and seen
+    // from the ground along its own axis that reads as one flat opaque cone
+    // with the missile stuck on the point of it.
+    float open = 0.16 + 0.84 * (1.0 - exp(-ageS / max(uOpenTime, 0.01)));
+    vOpen = open;
+
     // Thick close to the nozzle in dense air; thin and slowly spreading up high.
-    float w = uWidth * (0.42 + aMeta.x * 0.85);
-    w += uWidth * uExpand * age * (0.8 + (1.0 - aMeta.x) * 1.6);
+    float w = uWidth * (0.42 + aMeta.x * 0.85) * open;
+    // Spreading is per second of real time, not per fraction of the ribbon's
+    // life: a 30-second contrail and a 12-second one both drift apart at the
+    // same physical rate.
+    w += uWidth * uExpand * 0.05 * ageS * (0.45 + (1.0 - aMeta.x) * 1.4);
+
+    // Knot the silhouette along the spine. Arc length is fixed per point, so
+    // the lumps are locked to the smoke rather than crawling along it.
+    float knot = sin(aMeta.y * 0.019 + aBirth * 1.7) * 0.55
+               + sin(aMeta.y * 0.058 - aBirth * 0.7) * 0.3
+               + sin(aMeta.y * 0.0071 + 2.1) * 0.4;
+    w *= 1.0 + 0.3 * knot * smoothstep(0.0, 1.2, ageS);
 
     // Never let a distant trail fall below a readable pixel width.
     float minW = dist * uMinPixels / max(uPixelScale, 1.0);
@@ -61,7 +81,10 @@ const VERT = /* glsl */`
     float sl = length(side);
     side = sl > 0.0001 ? side / sl : vec3(1.0, 0.0, 0.0);
 
-    mv.xyz += side * (aSide * w);
+    // Slow lateral wander so the column meanders instead of ruling a straight
+    // edge across the sky.
+    float wander = sin(aMeta.y * 0.0039 + 1.3) + 0.55 * sin(aMeta.y * 0.0121 - 2.2);
+    mv.xyz += side * (aSide * w + wander * uWidth * 0.4 * (1.0 - exp(-ageS / 3.0)));
     vHaze = aerialFactor(position);
     gl_Position = projectionMatrix * mv;
   }
@@ -82,6 +105,7 @@ const FRAG = /* glsl */`
   varying float vDensity;
   varying float vArc;
   varying float vHaze;
+  varying float vOpen;
 
   void main() {
     if (vAge < 0.0 || vAge > 1.0) discard;
@@ -93,17 +117,22 @@ const FRAG = /* glsl */`
     // Break the trail up so it reads as billowing smoke rather than a decal.
     float n = texture2D(uNoise, vec2(vArc * 0.02, vSide * 0.5 + 0.5 + vAge * 0.15)).r;
     float n2 = texture2D(uNoise, vec2(vArc * 0.0061 - vAge * 0.08, vSide * 0.25 + 0.5)).g;
-    float breakup = mix(0.55, 1.25, n * 0.6 + n2 * 0.4);
+    float n3 = texture2D(uNoise, vec2(vArc * 0.0032 + 0.37, vSide * 0.12 + 0.5)).b;
+    // Deeper than a gentle wobble: the column has to have holes in it, or it
+    // stays a solid slab whatever its width.
+    float breakup = mix(0.28, 1.35, n * 0.45 + n2 * 0.3 + n3 * 0.25);
 
     // Hold most of the opacity for the first two thirds of the life, then let
     // go: a linear fade makes a long contrail look like it is dissolving from
     // the moment it is laid.
-    float fade = pow(1.0 - vAge, 2.2) * 0.75 + (1.0 - smoothstep(0.55, 1.0, vAge)) * 0.35;
+    float fade = pow(1.0 - vAge, 2.2) * 0.66 + (1.0 - smoothstep(0.55, 1.0, vAge)) * 0.3;
     // Thin air => fainter trail, but it lingers; dense air => opaque and brief.
     float dens = mix(0.5, 1.0, vDensity);
 
     float a = edge * fade * breakup * dens * uOpacity;
-    a *= smoothstep(0.0, 0.02, vAge);
+    // The freshly laid tip is thin gas, not smoke yet. Fading it lets the
+    // particle plume own the region right behind the motor.
+    a *= smoothstep(0.0, 0.02, vAge) * mix(0.35, 1.0, vOpen);
     if (a < 0.004) discard;
 
     // Hot exhaust right behind the nozzle cools into smoke.
@@ -258,6 +287,7 @@ export class TrailManager {
         uPixelScale: { value: 700 },
         uMinPixels: { value: 1.4 },
         uExpand: { value: 1.5 },
+        uOpenTime: { value: 1.6 },
         uSmokeColor: { value: new THREE.Color(0xffffff) },
         uHotColor: { value: new THREE.Color(0xff9a3c) },
         uLightColor: { value: new THREE.Color(0xffffff) },
@@ -312,6 +342,7 @@ export class TrailManager {
     u.uExpand.value = style.expand ?? 1.5;
     u.uMinPixels.value = style.minPixels ?? 1.4;
     u.uHotSpan.value = style.hotSpan ?? 0.05;
+    u.uOpenTime.value = style.openTime ?? 1.6;
     r.mesh.visible = true;
     this.live.push(r);
     return r;
@@ -379,7 +410,9 @@ export class TrailManager {
       r.push(pos, this.time, airDensity(pos.y));
       return;
     }
-    const step = Math.min(220, Math.max(minStep, speed * 0.055));
+    // Spend roughly a tenth of a second of flight per segment, so a ribbon
+    // spans the whole boost-to-intercept path instead of the last few seconds.
+    const step = Math.min(260, Math.max(minStep, speed * 0.09));
     const d = r._last.distanceTo(pos);
     if (d >= step) r.push(pos, this.time, airDensity(pos.y));
     else r.updateHead(pos, this.time, airDensity(pos.y));

@@ -102,6 +102,7 @@ class Game {
     this.lookTarget = null;
     this.pendingResults = [];
     this.lastResultText = '';
+    this.summaryDelay = 0;
     this._alarmOn = false;
     this._scopeTexClock = 0;
     this._screenClock = 0;
@@ -331,6 +332,7 @@ class Game {
     for (const b of this.batteries) b.reset();
     this.ui.clearLog();
     this.ui.hideResult();
+    this.summaryDelay = 0;
     state.resetRun(seed);
     this.rng = new Random(state.seed);
     this.pendingResults.length = 0;
@@ -699,7 +701,13 @@ class Game {
       const done = state.checkComplete(
         this.threats.activeCount, this.threats.pendingCount, this.interceptors.activeCount,
       );
-      if (done) this._finishScenario();
+      // Hold the summary back so the detonation the player just earned is not
+      // immediately covered by a banner across the middle of the screen.
+      if (done) this.summaryDelay = 1.7;
+    }
+    if (this.summaryDelay > 0) {
+      this.summaryDelay -= dt;
+      if (this.summaryDelay <= 0) { this.summaryDelay = 0; this._finishScenario(); }
     }
 
     this.post.update(dt);
@@ -1036,6 +1044,85 @@ class Game {
           smoke: fx.smoke.ring.count,
           trails: fx.trails.live.map((r) => r.count),
         };
+      },
+      /** TEMP DEBUG: where the live particles of one system actually are. */
+      particleDebug(which = 'smoke') {
+        const ps = g.effects[which];
+        const st = ps.aStart.array, tm = ps.aTime.array, cl = ps.aColor.array;
+        const sh = ps.aShape.array, pr = ps.aParams.array, vl = ps.aVel.array;
+        const rows = [];
+        const box = { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9, z0: 1e9, z1: -1e9 };
+        for (let i = 0; i < ps.capacity; i++) {
+          const birth = tm[i * 4], life = tm[i * 4 + 1];
+          const age = ps.time - birth;
+          if (life <= 0.001 || age < 0 || age > life) continue;
+          const k = age / life;
+          const d = pr[i * 4 + 1];
+          const f = d > 0.0001 ? (1 - Math.exp(-d * age)) / d : age;
+          const x = st[i * 3] + vl[i * 3] * f;
+          const y = st[i * 3 + 1] + vl[i * 3 + 1] * f + 0.5 * pr[i * 4 + 2] * age * age;
+          const z = st[i * 3 + 2] + vl[i * 3 + 2] * f;
+          box.x0 = Math.min(box.x0, x); box.x1 = Math.max(box.x1, x);
+          box.y0 = Math.min(box.y0, y); box.y1 = Math.max(box.y1, y);
+          box.z0 = Math.min(box.z0, z); box.z1 = Math.max(box.z1, z);
+          const size = tm[i * 4 + 2]
+            + (tm[i * 4 + 3] - tm[i * 4 + 2]) * (1 - Math.pow(1 - k, Math.max(sh[i * 2], 0.05)));
+          rows.push({
+            x: Math.round(x), y: Math.round(y), z: Math.round(z),
+            k: +k.toFixed(2), size: Math.round(size),
+            op: +cl[i * 4 + 3].toFixed(2), shade: +sh[i * 2 + 1].toFixed(2),
+          });
+        }
+        for (const key of Object.keys(box)) box[key] = Math.round(box[key]);
+        return {
+          count: rows.length,
+          psTime: +ps.time.toFixed(3),
+          uTime: +ps.material.uniforms.uTime.value.toFixed(3),
+          meshMat: ps.mesh.material === ps.material,
+          visible: ps.mesh.visible,
+          instanceCount: ps.geometry.instanceCount,
+          box,
+          sample: rows.slice(0, 4),
+          high: rows.filter((r) => r.y > 3).length,
+        };
+      },
+      /** TEMP DEBUG: show/hide one effect layer to attribute what is on screen. */
+      fxLayer(name, on) {
+        const fx = g.effects;
+        const map = {
+          smoke: () => { fx.smoke.mesh.visible = on; },
+          dust: () => { fx.dust.mesh.visible = on; },
+          hot: () => { fx.hot.mesh.visible = on; },
+          sparks: () => { fx.sparks.mesh.visible = on; },
+          trails: () => { fx.trails.group.visible = on; },
+          glares: () => { fx.glareGroup.visible = on; },
+          fire: () => { fx.fire.group.visible = on; },
+          shock: () => { fx.shock.group.visible = on; },
+        };
+        map[name]?.();
+        return !!map[name];
+      },
+      /** Per-ribbon spine state: how long each contrail actually is. */
+      trailDebug() {
+        const tm = g.effects.trails;
+        return tm.live.map((r) => {
+          const n = r.count;
+          let span = 0;
+          for (let i = 1; i < n; i++) {
+            const a = i * 6, b = (i - 1) * 6;
+            span += Math.hypot(
+              r.pos[a] - r.pos[b], r.pos[a + 1] - r.pos[b + 1], r.pos[a + 2] - r.pos[b + 2],
+            );
+          }
+          return {
+            count: n,
+            span: span / 1000,
+            oldest: n ? tm.time - r.birth[0] : 0,
+            maxAge: r.maxAge,
+            dead: r.deadAt !== null,
+            drawRange: r.geometry.drawRange.count,
+          };
+        });
       },
       three() { return THREE; },
       colliderCount() { return g.player.colliders.length; },

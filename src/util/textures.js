@@ -613,7 +613,15 @@ export function chainLink(size = 256) {
 // Sprites (particles, flares, decals)
 // ---------------------------------------------------------------------------
 
-/** Soft turbulent puff used for smoke, dust and exhaust. */
+/**
+ * Turbulent puff used for smoke, dust and exhaust.
+ *
+ * The silhouette is lobed rather than circular and the interior carries a wide
+ * multiplicative noise range. Both matter because these are stacked dozens deep:
+ * a smooth radial falloff integrates to an even gradient no matter how many are
+ * layered, so a launch plume built from them comes out as one soft blob with no
+ * billows in it at all.
+ */
 export function smokePuff(size = 128, seed = 3) {
   return cached(`puff:${seed}:${size}`, () => {
     const c = canvas(size);
@@ -625,14 +633,17 @@ export function smokePuff(size = 128, seed = 3) {
       for (let x = 0; x < size; x++) {
         const dx = (x - half) / half, dy = (y - half) / half;
         const r = Math.hypot(dx, dy);
-        let a = clamp01(1 - r);
-        a = Math.pow(a, 1.5);
-        const turb = n.fbm2(x / size * 4.5, y / size * 4.5, 5) * 0.5 + 0.5;
-        a *= 0.35 + turb * 0.95;
-        a = clamp01(a * smoothstep((1 - r) * 1.6));
+        const ang = Math.atan2(dy, dx);
+        // Outer radius wanders with bearing, so the edge is knuckled.
+        const lobe = n.fbm2(Math.cos(ang) * 2.1 + seed * 3, Math.sin(ang) * 2.1, 4) * 0.5 + 0.5;
+        const edge = 0.58 + lobe * 0.4;
+        let a = 1 - smoothstep(clamp01((r - edge * 0.34) / Math.max(0.06, edge * 0.66)));
+        const turb = n.fbm2(x / size * 3.8 + 11, y / size * 3.8, 5) * 0.5 + 0.5;
+        const fine = n.fbm2(x / size * 9.5 - 4, y / size * 9.5 + 7, 3) * 0.5 + 0.5;
+        a *= (0.4 + turb * 0.9) * (0.72 + fine * 0.42);
         const i = (y * size + x) * 4;
         img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
-        img.data[i + 3] = a * 255;
+        img.data[i + 3] = clamp01(a) * 255;
       }
     }
     ctx.putImageData(img, 0, 0);

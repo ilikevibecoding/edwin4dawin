@@ -85,9 +85,17 @@ export class SlotRing {
     this.count = 0;
   }
 
-  /** Claim a slot, recycling the oldest if the ring is saturated. */
-  claim() {
-    for (let tries = 0; tries < this.capacity; tries++) {
+  /**
+   * Claim a slot, recycling the oldest if the ring is saturated.
+   *
+   * The scan is bounded: an owner that expires its slots lazily can leave the
+   * ring looking full for a while, and walking the whole capacity on every one
+   * of a few hundred emissions per frame costs far more than reusing a slot
+   * slightly early.
+   */
+  claim(maxScan = 64) {
+    const tries = Math.min(this.capacity, maxScan);
+    for (let n = 0; n < tries; n++) {
       const i = this.cursor;
       this.cursor = (this.cursor + 1) % this.capacity;
       if (!this.alive[i]) {

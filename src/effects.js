@@ -24,7 +24,18 @@ import { QUALITY } from './config.js';
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
+const _v5 = new THREE.Vector3();
+const _v6 = new THREE.Vector3();
 const _c1 = new THREE.Color();
+
+/** Fill `a` and `b` with an arbitrary orthonormal basis perpendicular to `n`. */
+function perpBasis(n, a, b) {
+  a.set(0, 1, 0);
+  if (Math.abs(n.dot(a)) > 0.9) a.set(1, 0, 0);
+  a.crossVectors(n, a).normalize();
+  b.crossVectors(n, a).normalize();
+}
 
 // ---------------------------------------------------------------------------
 // Rocket exhaust flame (per-missile mesh)
@@ -225,11 +236,13 @@ export class Effects {
   // ---------------------------------------------------------------- lighting
 
   /** Called by the weather system whenever the light preset changes. */
-  setLighting(sunDirWorld, lightColour, shadowColour) {
+  setLighting(sunDirWorld, lightColour, shadowColour, trailGain = 1) {
     this._sunDir.copy(sunDirWorld);
     this._lightColour.copy(lightColour);
     this._shadowColour.copy(shadowColour);
-    this.trails.setLighting(lightColour);
+    this.trails.setLighting(_c1.copy(lightColour).multiplyScalar(
+      trailGain / Math.max(0.001, Math.max(lightColour.r, lightColour.g, lightColour.b)),
+    ));
   }
 
   // ------------------------------------------------------------------ update
@@ -273,9 +286,26 @@ export class Effects {
     return c;
   }
 
+  /** Pixels per world unit at unit distance, for the current viewport and fov. */
+  get pixelScale() {
+    return this._viewportHeight / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
+  }
+
+  /**
+   * World size that renders to roughly `px` pixels at `pos`.
+   *
+   * The intercept is the payoff of the whole engagement and happens 5-15 km
+   * from the observer, where an honest debris cloud is a handful of pixels.
+   * Sizing the one-shot burst effects through this keeps them legible from the
+   * ground while leaving a close-range burst at its physical scale.
+   */
+  screenSize(pos, px) {
+    const dist = this.camera.position.distanceTo(pos);
+    return (dist * px) / Math.max(1, this.pixelScale);
+  }
+
   _updateBursts(dt) {
-    const pixelScale = this._viewportHeight
-      / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
+    const pixelScale = this.pixelScale;
     for (const b of this.bursts) {
       if (!b.sprite.visible) continue;
       b.t += dt;
@@ -360,6 +390,22 @@ export class Effects {
     return hazeFactor(this.camera.position, worldPos, h.density, h.scaleHeight, h.curve);
   }
 
+  /**
+   * Lit fraction for a puff sitting at `offset` from the axis of its plume.
+   *
+   * Launch smoke is optically thick, so the sunward face of the column is
+   * near-white and its core sits in its own shadow. Handing that to the shader
+   * per puff is the whole difference between a stack of sprites reading as
+   * billows and reading as one flat silhouette. `bury` is how deep in the
+   * column the puff sits: 0 at the surface, 1 on the axis.
+   */
+  _shade(offset, bury = 0) {
+    const len = offset.length();
+    const d = len > 1e-4 ? offset.dot(this._sunDir) / len : 0;
+    const sunward = clamp01(d * 0.5 + 0.5);
+    return clamp01((0.1 + 1.0 * Math.pow(sunward, 1.5)) * (1 - bury * 0.7));
+  }
+
   /** Distance-based emission scale: far events emit fewer, larger particles. */
   _lod(pos) {
     const d = this.camera.position.distanceTo(pos);
@@ -389,22 +435,42 @@ export class Effects {
     const dens = 0.25 + rho * 0.9;
     const n = rate * dt * lod * dens * scale;
     const back = _v1.copy(vel).normalize().multiplyScalar(-1);
+    // Perpendicular frame, so puffs can be placed on the surface of the column
+    // rather than jittered inside a cube around its axis.
+    perpBasis(back, _v4, _v5);
+    // The whole column drifts on a slow wander, which is what stops it ruling a
+    // straight-sided cone up the frame.
+    const t = this.time;
+    const wx = Math.sin(t * 0.9) * 0.55 + Math.sin(t * 2.3 + 1.7) * 0.28;
+    const wz = Math.cos(t * 1.1 + 0.4) * 0.55 + Math.sin(t * 1.9) * 0.24;
+    const radius = (2.2 + rho * 3.4) * scale;
     for (let i = 0; i < n; i++) {
-      const jitter = _v2.set(
-        (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9,
-      );
-      // Alternating light and dark puffs give the trailing column visible roll.
-      const dark = i % 3 === 0;
+      const a = Math.random() * Math.PI * 2;
+      // Weighted to the surface: a shell of puffs reads as a rolling column,
+      // a solid cylinder of them reads as fog.
+      const rr = Math.sqrt(0.25 + Math.random() * 0.75);
+      const off = _v6.copy(_v4).multiplyScalar(Math.cos(a) * rr)
+        .addScaledVector(_v5, Math.sin(a) * rr);
+      const bury = 1 - rr;
+      const shade = this._shade(off, bury);
+      // Dark puffs are the ones the sun cannot reach; tie the tint to the same
+      // shading term so colour and light agree.
+      const tint = shade < 0.4 ? 0x6f6a62 : colour;
       this.smoke.emit(
-        _v3.copy(pos).addScaledVector(back, Math.random() * 6 * scale),
-        jitter.addScaledVector(back, 14 * scale),
+        _v3.copy(pos).addScaledVector(back, Math.random() * 7 * scale)
+          .addScaledVector(off, radius),
+        _v2.copy(off).multiplyScalar(5.5 * scale)
+          .addScaledVector(back, 13 * scale)
+          .add(_v3.set(wx * 4, 0, wz * 4)),
         {
-          life: lerp(5.5, 2.2, rho) * (0.7 + Math.random() * 0.6),
-          sizeStart: 1.6 * scale * (0.6 + Math.random() * 0.9),
-          sizeEnd: (12 + rho * 22) * scale * (0.7 + Math.random() * 0.7),
-          color: dark ? 0x8f887c : colour,
-          opacity: (0.10 + rho * 0.22) * (dark ? 1.25 : 0.9),
+          life: lerp(5.5, 2.6, rho) * (0.7 + Math.random() * 0.6),
+          sizeStart: 2.2 * scale * (0.6 + Math.random() * 0.9),
+          sizeEnd: (7 + rho * 9) * scale * (0.7 + Math.random() * 0.7),
+          color: tint,
+          opacity: (0.14 + rho * 0.5) * (0.75 + Math.random() * 0.5),
           drag: 0.9, gravity: 0.4,
+          // Reach most of the width fast, then hold it: a column, not a cone.
+          grow: 3.4, shade,
         },
       );
     }
@@ -455,23 +521,31 @@ export class Effects {
     const down = _v1.copy(dir).multiplyScalar(-1).normalize();
     const groundDist = Math.max(0, pos.y - groundY);
 
-    // Efflux jet driven straight out of the tail. Two populations - a bright
-    // fast core and a slower, darker, longer-lived outer roll - so the column
-    // has internal structure instead of reading as a smooth cone.
-    for (let i = 0; i < 110 * scale; i++) {
-      const core = i % 3 !== 0;
-      const spread = core ? 0.26 : 0.62;
-      const v = _v2.copy(down).multiplyScalar((core ? 75 : 34) + Math.random() * 90).add(
-        _v3.set((Math.random() - 0.5) * 70 * spread, (Math.random() - 0.5) * 70 * spread,
-          (Math.random() - 0.5) * 70 * spread),
-      );
+    // Efflux jet: the violent gas actually leaving the tube. Short-lived and
+    // fast, aimed down the launch axis, and deliberately kept small - this is
+    // the bright root of the plume, not the plume itself.
+    // Heavily damped so the jet spends itself within a few tube lengths. Left
+    // to coast it sinks tens of metres straight through the pad and the whole
+    // population is wasted underground.
+    perpBasis(down, _v4, _v5);
+    for (let i = 0; i < 34 * scale; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const rr = 0.3 + Math.random() * 0.7;
+      // Shade from the lateral offset only. Every jet particle travels down the
+      // launch axis, so shading them by their velocity puts the entire
+      // population on the anti-sun side and the plume comes out uniformly grey.
+      const off = _v6.copy(_v4).multiplyScalar(Math.cos(a) * rr)
+        .addScaledVector(_v5, Math.sin(a) * rr);
+      const shade = this._shade(off, 1 - rr);
+      const v = _v2.copy(down).multiplyScalar(40 + Math.random() * 60)
+        .addScaledVector(off, 18);
       this.smoke.emit(pos, v, {
-        life: (core ? 2.6 : 5.0) + Math.random() * 3.6,
-        sizeStart: (core ? 2.2 : 4.5) * scale,
-        sizeEnd: ((core ? 22 : 40) + Math.random() * 44) * scale,
-        color: core ? 0xd6cfc0 : 0x8d867a,
-        opacity: (core ? 0.34 : 0.26) * (0.7 + Math.random() * 0.6),
-        drag: core ? 1.0 : 1.5, gravity: core ? 1.9 : 0.8,
+        life: 1.9 + Math.random() * 2.0,
+        sizeStart: 2.2 * scale, sizeEnd: (8 + Math.random() * 7) * scale,
+        color: shade > 0.7 ? 0xefebde : 0xa8a297,
+        opacity: 0.5 * (0.7 + Math.random() * 0.6),
+        drag: 2.6, gravity: 1.9,
+        grow: 3.0, shade,
       });
     }
     for (let i = 0; i < 55 * scale; i++) {
@@ -480,24 +554,71 @@ export class Effects {
       );
       this.hot.emit(pos, v, {
         life: 0.3 + Math.random() * 0.55,
-        sizeStart: 5 * scale, sizeEnd: 1.6 * scale,
+        sizeStart: 4 * scale, sizeEnd: 1.2 * scale,
         color: p.colour, opacity: 0.95, drag: 2.2,
       });
     }
 
+    // The rolling ground cloud. This is what a launch actually looks like from
+    // a hundred metres away: a dense mass boiling out sideways at pad level
+    // that the missile climbs out of, not a wedge hanging in mid-air. Each puff
+    // is shaded from its own position on the surface of the cloud, so the
+    // sunward billows read bright against a shadowed core.
+    const cloudN = Math.round(130 * scale);
+    const spread = 11 + 7 * scale;
+    for (let i = 0; i < cloudN; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const rr = Math.pow(Math.random(), 0.62);
+      const r = spread * rr;
+      const h = Math.random();
+      const lift = h * 15 * scale;
+      _v3.set(pos.x + Math.cos(a) * r, groundY + 1.5 + lift, pos.z + Math.sin(a) * r);
+      // Offset from the centre of the cloud drives both the shading and the
+      // direction it rolls. Puffs higher up the mass face further skyward, so
+      // the top of the cloud takes the sun and the skirt stays in shadow.
+      const off = _v6.set(
+        Math.cos(a) * (1 - h * 0.55), 0.2 + h * 1.1, Math.sin(a) * (1 - h * 0.55),
+      ).normalize();
+      const bury = 1 - rr;
+      const shade = this._shade(off, bury);
+      // High drag: the cloud boils in place and is left behind, it does not
+      // keep sailing outward until it is a thin sheet across the horizon.
+      const sp = (5 + Math.random() * 13) * (0.4 + rr);
+      this.smoke.emit(
+        _v3,
+        _v2.set(Math.cos(a) * sp, 3 + Math.random() * 11 * (1 - bury * 0.6), Math.sin(a) * sp),
+        {
+          life: 7 + Math.random() * 6,
+          sizeStart: 4 * scale * (0.7 + Math.random() * 0.7),
+          sizeEnd: (9 + Math.random() * 8) * scale,
+          color: shade < 0.3 ? 0x6a655b : (shade > 0.66 ? 0xf6f2e6 : 0xb5b0a4),
+          opacity: (0.62 + Math.random() * 0.32),
+          drag: 2.1, gravity: 0.55,
+          grow: 4.2, shade,
+        },
+      );
+    }
+
     // Ground wash: dust thrown radially outward from the pad.
-    const dustN = 130 * p.dust;
+    // Dust is a low skirt around the pad, not weather. Kept dense, short and
+    // heavily damped: thrown far and thin it turns the whole horizon into a
+    // flat brown haze that reads as a dust storm rather than a launch.
+    const dustN = 110 * p.dust;
     for (let i = 0; i < dustN; i++) {
       const a = Math.random() * Math.PI * 2;
-      const sp = 14 + Math.random() * 46;
-      const r = 2 + Math.random() * 12 * p.dust;
+      const sp = 8 + Math.random() * 22;
+      const r = 2 + Math.random() * 8 * p.dust;
+      const off = _v6.set(Math.cos(a), 0.3, Math.sin(a)).normalize();
+      const shade = this._shade(off, Math.random() * 0.5);
       this.dust.emit(
         _v3.set(pos.x + Math.cos(a) * r, groundY + 0.4 + Math.random() * 2.5, pos.z + Math.sin(a) * r),
-        _v2.set(Math.cos(a) * sp, 3 + Math.random() * 16, Math.sin(a) * sp),
+        _v2.set(Math.cos(a) * sp, 2 + Math.random() * 7, Math.sin(a) * sp),
         {
           life: 4.5 + Math.random() * 5,
-          sizeStart: 4 * p.dust, sizeEnd: (34 + Math.random() * 36) * p.dust,
-          color: 0xa8946f, opacity: 0.32, drag: 1.5, gravity: -0.4,
+          sizeStart: 3.4 * p.dust, sizeEnd: (11 + Math.random() * 11) * p.dust,
+          color: shade > 0.7 ? 0xc3b598 : 0x877d69,
+          opacity: 0.42, drag: 2.4, gravity: -0.35,
+          grow: 3.4, shade,
         },
       );
     }
@@ -522,7 +643,13 @@ export class Effects {
     this.lights.flash(pos, {
       colour: p.colour, intensity: 2600 * scale, life: 0.75, distance: 420 * scale,
     });
-    this.glare(pos, { scale: 46 * scale, life: 1.1, peak: 0.45, colour: p.colour });
+    // A lens streak should read as lens response, not as a light source of its
+    // own. Cap it in screen space so a launch fifty metres away does not paint
+    // a bright bar across half the frame.
+    this.glare(pos, {
+      scale: Math.min(46 * scale, this.screenSize(pos, 190)),
+      life: 1.1, peak: 0.4, colour: p.colour,
+    });
     if (groundDist < 40) {
       this.decals.spawn(_v3.set(pos.x, groundY, pos.z), 7 * scale, { opacity: 0.62 });
     }
@@ -537,14 +664,18 @@ export class Effects {
     const n = 70 * dt * k * def.plume.dust;
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
-      const sp = (10 + Math.random() * 40) * (0.4 + k);
+      const sp = (7 + Math.random() * 20) * (0.4 + k);
+      const off = _v6.set(Math.cos(a), 0.3, Math.sin(a)).normalize();
+      const shade = this._shade(off, Math.random() * 0.5);
       this.dust.emit(
         _v3.set(padPos.x + Math.cos(a) * (2 + Math.random() * 9), padPos.y + 0.5, padPos.z + Math.sin(a) * (2 + Math.random() * 9)),
-        _v2.set(Math.cos(a) * sp, 2 + Math.random() * 12, Math.sin(a) * sp),
+        _v2.set(Math.cos(a) * sp, 2 + Math.random() * 8, Math.sin(a) * sp),
         {
           life: 4 + Math.random() * 4,
-          sizeStart: 3.4, sizeEnd: 30 + Math.random() * 26,
-          color: 0xb9a482, opacity: 0.3 * k, drag: 1.5, gravity: -0.3,
+          sizeStart: 3.4, sizeEnd: 11 + Math.random() * 9,
+          color: shade > 0.7 ? 0xc9b489 : 0x8d7c5e,
+          opacity: 0.46 * k, drag: 2.3, gravity: -0.3,
+          grow: 3.4, shade,
         },
       );
     }
@@ -566,51 +697,91 @@ export class Effects {
     // Thin air lets the fireball expand far further before it is quenched,
     // which is also what makes a distant high-altitude burst legible.
     const expand = 1 + (1 - rho) * 2.6;
+    const d = this.camera.position.distanceTo(pos);
+    // Every world-sized element of the burst takes the larger of its physical
+    // size and the size that renders to a given pixel count. Up close the
+    // physical value wins and the burst is honest; at 10 km the screen-space
+    // floor takes over and the intercept still reads as an event.
+    const px = (n) => this.screenSize(pos, n);
 
     this.fire.spawn(pos, {
-      r0: 5 * s, r1: (30 + rho * 30) * s * expand, life: 0.9 + rho * 0.4,
-      hot: 0xfff8e0, cool: 0xe0621c, opacity: 1,
+      r0: Math.max(5 * s, px(9)), r1: Math.max((30 + rho * 30) * s * expand, px(46)),
+      life: 0.9 + rho * 0.4, hot: 0xfff8e0, cool: 0xe0621c, opacity: 1,
     });
     this.shock.spawn(pos, {
-      r0: 8 * s, r1: (170 + rho * 130) * s * expand, life: 0.9,
-      colour: 0xe8f4ff, opacity: 0.45 + rho * 0.35, rim: 2.6,
+      r0: Math.max(8 * s, px(10)), r1: Math.max((170 + rho * 130) * s * expand, px(150)),
+      life: 0.9, colour: 0xe8f4ff, opacity: 0.45 + rho * 0.35, rim: 2.6,
     });
     // Secondary slower shell reads as the expanding gas cloud.
     this.shock.spawn(pos, {
-      r0: 4 * s, r1: 90 * s * expand, life: 1.6, colour, opacity: 0.28, rim: 1.5,
+      r0: Math.max(4 * s, px(6)), r1: Math.max(90 * s * expand, px(88)),
+      life: 1.6, colour, opacity: 0.28, rim: 1.5,
     });
 
     const hotN = Math.round(90 * s * lod);
+    const hotSize = Math.max(6 * s, px(6));
     for (let i = 0; i < hotN; i++) {
-      const sp = 40 + Math.random() * 190 * s;
+      // Speeds are set from the distance the debris should cover on screen over
+      // its life, not from a fixed muzzle velocity, so the burst blooms at the
+      // same rate whether it is 2 km or 12 km away.
+      const sp = Math.max(40 + Math.random() * 190 * s, px(60) * (0.35 + Math.random()));
       _v2.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(sp);
       this.hot.emit(pos, _v2, {
         life: 0.35 + Math.random() * 0.7,
-        sizeStart: 6 * s, sizeEnd: 1.5 * s,
+        sizeStart: hotSize, sizeEnd: hotSize * 0.25,
         color: i % 3 === 0 ? 0xffffff : colour, opacity: 1, drag: 1.7,
       });
     }
     const sparkN = Math.round(110 * s * lod);
+    const sparkSize = Math.max(1.5 * s, px(2.4));
     for (let i = 0; i < sparkN; i++) {
-      const sp = 90 + Math.random() * 340 * s;
+      const sp = Math.max(90 + Math.random() * 340 * s, px(110) * (0.3 + Math.random()));
       _v2.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(sp);
       if (relVel) _v2.addScaledVector(relVel, 0.06);
       this.sparks.emit(pos, _v2, {
         life: 0.7 + Math.random() * 1.4,
-        sizeStart: 1.5 * s, sizeEnd: 0.2,
+        sizeStart: sparkSize, sizeEnd: sparkSize * 0.15,
         color: 0xffd18a, opacity: 1, drag: 0.55, gravity: -9.81, stretch: 1.3,
       });
     }
     const smokeN = Math.round((60 + rho * 80) * s * lod);
+    const smokeS0 = Math.max(7 * s, px(7));
     for (let i = 0; i < smokeN; i++) {
-      const sp = (16 + Math.random() * 80 * s) * expand * 0.6;
+      const sp = Math.max((16 + Math.random() * 80 * s) * expand * 0.6, px(22) * (0.3 + Math.random()));
       _v2.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(sp);
       this.smoke.emit(pos, _v2, {
         life: 5 + Math.random() * 8,
-        sizeStart: 7 * s, sizeEnd: (40 + Math.random() * 60) * s * expand * 0.7,
+        sizeStart: smokeS0,
+        sizeEnd: Math.max((40 + Math.random() * 60) * s * expand * 0.7, px(30 + Math.random() * 34)),
         color: i % 3 === 0 ? 0x6a6258 : 0x413d38,
         opacity: 0.22 + rho * 0.3, drag: 1.1, gravity: 0.8,
       });
+    }
+
+    // Radial debris fingers. A warhead intercept throws fragments outward on
+    // smoke filaments, and that starburst - not the fireball - is what makes a
+    // kill unmistakable from the ground. Each finger is a short chain of puffs
+    // launched along one ray, so it draws itself as a spike.
+    const fingers = Math.round(16 * lod);
+    const fingerReach = Math.max(180 * s * expand, px(150));
+    for (let f = 0; f < fingers; f++) {
+      _v2.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      if (relVel) _v2.addScaledVector(relVel, 0.00018 * (Math.random() - 0.2));
+      _v2.normalize();
+      const reach = fingerReach * (0.5 + Math.random() * 0.9);
+      const beads = 5;
+      for (let b = 0; b < beads; b++) {
+        const t = (b + 1) / beads;
+        _v3.copy(pos).addScaledVector(_v2, reach * t * 0.22);
+        _v1.copy(_v2).multiplyScalar(reach * (0.55 + t * 0.5));
+        this.smoke.emit(_v3, _v1, {
+          life: 3.2 + Math.random() * 3.4,
+          sizeStart: Math.max(3 * s, px(2.6)),
+          sizeEnd: Math.max(26 * s, px(11 + Math.random() * 9)),
+          color: b === 0 ? 0x8a8074 : 0x55504a,
+          opacity: 0.5 - t * 0.16, drag: 1.5, gravity: -1.2,
+        });
+      }
     }
 
     this.lights.flash(pos, {
@@ -625,25 +796,28 @@ export class Effects {
       r0: 20 * s, r1: (240 + rho * 90) * s * expand, life: 1.7,
       minPixels: 60 * s, colour: 0xffb057, intensity: 1.5,
     });
-    // The cloud that is still there a beat later. Three overlapping puffs give
-    // it an irregular edge instead of reading as one soft disc.
-    for (let i = 0; i < 4; i++) {
+    // The cloud that is still there a beat later. Overlapping puffs of differing
+    // tone give it an irregular edge and a shaded core rather than reading as
+    // one soft disc, and it is what the player looks at while the HUD confirms.
+    for (let i = 0; i < 5; i++) {
       _v2.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5)
-        .normalize().multiplyScalar(16 * s * expand);
+        .normalize().multiplyScalar(Math.max(16 * s * expand, px(16)));
       _v3.copy(pos).add(_v2);
+      const lead = i === 0;
       this.burstCloud(_v3, {
-        r0: 18 * s, r1: (260 + rho * 140) * s * expand * (0.7 + Math.random() * 0.7),
-        life: 9 + Math.random() * 7, minPixels: (i === 3 ? 14 : 26) * s,
+        r0: Math.max(18 * s, px(14)),
+        r1: Math.max((260 + rho * 140) * s * expand, px(76)) * (0.7 + Math.random() * 0.7),
+        life: 9 + Math.random() * 7,
+        minPixels: (lead ? 62 : (i === 4 ? 30 : 44)) * (0.85 + Math.random() * 0.3),
         // Sunlit debris reads bright against the sky; the dark core underneath
         // stops the cloud from looking like a soft white sticker.
-        colour: i === 3 ? 0x3d382f : (i === 0 ? 0xe4ded1 : 0xb9b1a2),
-        peak: i === 3 ? 0.7 : 0.9 - i * 0.12,
+        colour: i === 4 ? 0x3d382f : (lead ? 0xe4ded1 : 0xb0a899),
+        peak: i === 4 ? 0.68 : 0.92 - i * 0.10,
         vel: relVel ? _v1.copy(relVel).multiplyScalar(0.03) : null,
       });
     }
     // Glare is sized in world units, so it has to scale with viewing distance
     // to stay a lens artefact rather than a wall of white.
-    const d = this.camera.position.distanceTo(pos);
     this.glare(pos, {
       scale: clamp(d * 0.05, 40, 900) * s, life: 0.9, peak: 0.7, colour: 0xfff2d8,
     });
