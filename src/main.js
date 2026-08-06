@@ -683,6 +683,7 @@ class Game {
     const simDt = this.paused ? 0 : dt;
 
     // ---- player + camera --------------------------------------------
+    this.player.allowKeyboard = !this.ui.overlay && state.phase !== PHASE.BRIEFING;
     this.player.update(dt);
     this.audio.update(dt, this.camera.position);
 

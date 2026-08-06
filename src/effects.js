@@ -51,6 +51,63 @@ function withAtm(uniforms) {
   return Object.assign({}, atmosphere, uniforms);
 }
 
+/* ------------------------------------------------------ logarithmic depth */
+
+// The renderer runs with `logarithmicDepthBuffer`, which means the depth buffer
+// holds log2( 1 + w ) * FC * 0.5 rather than the usual projected z. A custom
+// shader that does not encode depth the same way is compared against the
+// terrain in the wrong space and loses the depth test everywhere it overlaps
+// solid geometry - which is exactly where blast and impact effects live.
+// ShaderMaterial does not get the <common> chunk, so the helper the stock
+// vertex chunk relies on has to be declared here.
+const LOGDEPTH_PARS_VERT = /* glsl */ `
+bool isPerspectiveMatrix( mat4 m ) { return m[ 2 ][ 3 ] == -1.0; }
+#include <logdepthbuf_pars_vertex>
+`;
+const LOGDEPTH_VERT = /* glsl */ `
+#include <logdepthbuf_vertex>
+`;
+const LOGDEPTH_PARS_FRAG = /* glsl */ `
+#include <logdepthbuf_pars_fragment>
+`;
+const LOGDEPTH_FRAG = /* glsl */ `
+#include <logdepthbuf_fragment>
+`;
+
+// Billboards are camera-facing quads offset purely in view-space XY, so all four
+// corners share one w. Encoding the log depth into gl_Position.z is therefore
+// exact for them and, unlike writing gl_FragDepth, it keeps early-Z rejection -
+// which matters a lot for the layer with the heaviest overdraw.
+const LOGDEPTH_FLAT_PARS = /* glsl */ `
+#ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+  uniform float logDepthBufFC;
+#endif
+`;
+const LOGDEPTH_FLAT = /* glsl */ `
+#ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+  if ( projectionMatrix[ 2 ][ 3 ] == -1.0 ) {
+    gl_Position.z = ( log2( max( 1e-6, gl_Position.w + 1.0 ) ) * logDepthBufFC - 1.0 ) * gl_Position.w;
+  }
+#endif
+`;
+
+/**
+ * Premultiplied "over" blending. RGB is written pre-multiplied by coverage, so a
+ * fragment with alpha 0 adds light like additive blending while a fragment with
+ * alpha 1 occludes what is behind it. One material can then carry a fireball
+ * from incandescent gas to opaque soot without a second draw call.
+ */
+const PREMULT = {
+  transparent: true,
+  blending: THREE.CustomBlending,
+  blendEquation: THREE.AddEquation,
+  blendSrc: THREE.OneFactor,
+  blendDst: THREE.OneMinusSrcAlphaFactor,
+  blendEquationAlpha: THREE.AddEquation,
+  blendSrcAlpha: THREE.OneFactor,
+  blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+};
+
 /* ------------------------------------------------------- billboard layer */
 
 const PARTICLE_VERT = /* glsl */ `
@@ -64,11 +121,14 @@ varying vec2 vUv;
 varying vec3 vColor;
 varying float vAlpha;
 varying vec3 vWorld;
+varying float vRot;
 uniform float uStretchAmount;
+${LOGDEPTH_FLAT_PARS}
 void main() {
   vUv = uv;
   vColor = aColor;
   vAlpha = aAlpha;
+  vRot = aRot;
   vec4 mv = viewMatrix * vec4( aPos, 1.0 );
   vec2 q = position.xy * aScale;
   float c = cos( aRot ), s = sin( aRot );
@@ -84,6 +144,7 @@ void main() {
   mv.xy += r;
   vWorld = aPos;
   gl_Position = projectionMatrix * mv;
+  ${LOGDEPTH_FLAT}
 }
 `;
 
@@ -91,16 +152,39 @@ const PARTICLE_FRAG = /* glsl */ `
 precision highp float;
 uniform sampler2D uMap;
 uniform float uEmissive;
+uniform float uSunLit;
 varying vec2 vUv;
 varying vec3 vColor;
 varying float vAlpha;
 varying vec3 vWorld;
+varying float vRot;
 ${ATM_PARS}
 void main() {
   vec4 t = texture2D( uMap, vUv );
   float a = t.a * vAlpha;
   if ( a < 0.003 ) discard;
   vec3 col = t.rgb * vColor;
+  if ( uSunLit > 0.0 ) {
+    // Treat the billboard as a sphere so puffs pick up a sun side and a shadow
+    // side. Cheap, but it is what stops smoke reading as flat grey paper.
+    float c = cos( -vRot ), s = sin( -vRot );
+    vec2 q = vUv * 2.0 - 1.0;
+    vec2 r = vec2( q.x * c - q.y * s, q.x * s + q.y * c );
+    float rr = min( dot( r, r ), 1.0 );
+    vec3 n = vec3( r, sqrt( 1.0 - rr ) );
+    vec3 right = vec3( viewMatrix[ 0 ][ 0 ], viewMatrix[ 1 ][ 0 ], viewMatrix[ 2 ][ 0 ] );
+    vec3 up = vec3( viewMatrix[ 0 ][ 1 ], viewMatrix[ 1 ][ 1 ], viewMatrix[ 2 ][ 1 ] );
+    vec3 fwd = vec3( viewMatrix[ 0 ][ 2 ], viewMatrix[ 1 ][ 2 ], viewMatrix[ 2 ][ 2 ] );
+    vec3 wn = normalize( right * n.x + up * n.y + fwd * n.z );
+    float ndl = clamp( dot( wn, uAtmSunDir ) * 0.5 + 0.5, 0.0, 1.0 );
+    float lit = pow( ndl, 1.8 );
+    col *= mix( 1.0, 0.6 + 0.8 * lit, uSunLit );
+    col += uAtmSunColor * ( lit * lit ) * uSunLit * 0.22;
+    // Forward scattering: a puff between the eye and the sun glows at the edge.
+    vec3 viewDir = normalize( vWorld - cameraPosition );
+    float ms = pow( max( dot( viewDir, uAtmSunDir ), 0.0 ), 6.0 );
+    col += uAtmSunColor * ms * uSunLit * 0.2 * ( 1.0 - t.a );
+  }
   float trans;
   vec3 lit = applyAtm( col, vWorld, trans );
   // Emissive material keeps its own colour through the haze.
@@ -109,8 +193,10 @@ void main() {
 }
 `;
 
+const NO_HUG = -1e9;
+
 class BillboardLayer {
-  constructor(capacity, texture, { blending = THREE.NormalBlending, sorted = false, stretch = 0, emissive = 0, depthWrite = false } = {}) {
+  constructor(capacity, texture, { blending = THREE.NormalBlending, sorted = false, stretch = 0, emissive = 0, sunLit = 0, depthWrite = false, renderOrder = null } = {}) {
     this.capacity = capacity;
     this.count = 0;
     this.sorted = sorted;
@@ -134,12 +220,20 @@ class BillboardLayer {
     this.cr1 = new Float32Array(n);
     this.cg1 = new Float32Array(n);
     this.cb1 = new Float32Array(n);
+    this.cr2 = new Float32Array(n);
+    this.cg2 = new Float32Array(n);
+    this.cb2 = new Float32Array(n);
     this.alpha0 = new Float32Array(n);
     this.drag = new Float32Array(n);
     this.buoy = new Float32Array(n);
     this.gravity = new Float32Array(n);
     this.fadeIn = new Float32Array(n);
     this.wind = new Float32Array(n);
+    // Turbulence: a per-particle wander that makes smoke churn instead of drift.
+    this.turb = new Float32Array(n);
+    this.phase = new Float32Array(n);
+    // Ground-hugging particles (blast surges) never sink below this height.
+    this.hugY = new Float32Array(n).fill(NO_HUG);
 
     const base = new THREE.PlaneGeometry(1, 1);
     this.geo = new THREE.InstancedBufferGeometry();
@@ -169,6 +263,7 @@ class BillboardLayer {
         uMap: { value: texture },
         uStretchAmount: { value: stretch },
         uEmissive: { value: emissive },
+        uSunLit: { value: sunLit },
       }),
       vertexShader: PARTICLE_VERT,
       fragmentShader: PARTICLE_FRAG,
@@ -181,9 +276,13 @@ class BillboardLayer {
     });
     this.mesh = new THREE.Mesh(this.geo, this.mat);
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = blending === THREE.AdditiveBlending ? 12 : 10;
+    this.mesh.renderOrder = renderOrder !== null ? renderOrder : blending === THREE.AdditiveBlending ? 12 : 10;
     this._order = new Int32Array(n);
     this._depth = new Float32Array(n);
+    // Reused between frames: sorting must not allocate every draw.
+    this._sortList = [];
+    /** Particles actually written last frame. */
+    this.live = 0;
   }
 
   spawn(opts) {
@@ -225,16 +324,23 @@ class BillboardLayer {
     this.cr1[i] = c1.r;
     this.cg1[i] = c1.g;
     this.cb1[i] = c1.b;
+    const c2 = opts.color2 || c1;
+    this.cr2[i] = c2.r;
+    this.cg2[i] = c2.g;
+    this.cb2[i] = c2.b;
     this.alpha0[i] = opts.alpha !== undefined ? opts.alpha : 1;
     this.drag[i] = opts.drag !== undefined ? opts.drag : 1.2;
     this.buoy[i] = opts.buoyancy || 0;
     this.gravity[i] = opts.gravity || 0;
     this.fadeIn[i] = opts.fadeIn || 0.06;
     this.wind[i] = opts.wind !== undefined ? opts.wind : 1;
+    this.turb[i] = opts.turb || 0;
+    this.phase[i] = Math.random() * 100;
+    this.hugY[i] = opts.hugY !== undefined ? opts.hugY : NO_HUG;
     return i;
   }
 
-  update(dt, wind) {
+  update(dt, wind, time) {
     const wx = wind.x;
     const wy = wind.y;
     const wz = wind.z;
@@ -246,9 +352,24 @@ class BillboardLayer {
       this.vz[i] = (this.vz[i] - wz * this.wind[i]) * d + wz * this.wind[i];
       this.vy[i] = (this.vy[i] - wy * this.wind[i]) * d + wy * this.wind[i];
       this.vy[i] += (this.buoy[i] - this.gravity[i]) * dt;
+      const tb = this.turb[i];
+      if (tb > 0) {
+        const a = time * 0.9 + this.phase[i];
+        this.vx[i] += Math.sin(a * 1.7) * tb * dt;
+        this.vy[i] += Math.sin(a * 1.31 + 2.1) * tb * 0.55 * dt;
+        this.vz[i] += Math.cos(a * 1.13 + 4.2) * tb * dt;
+      }
       this.px[i] += this.vx[i] * dt;
       this.py[i] += this.vy[i] * dt;
       this.pz[i] += this.vz[i] * dt;
+      const hug = this.hugY[i];
+      if (hug > NO_HUG * 0.5 && this.py[i] < hug) {
+        // A surge rolling over the deck cannot go through it; it spreads instead.
+        this.py[i] = hug;
+        if (this.vy[i] < 0) this.vy[i] *= -0.2;
+        this.vx[i] *= 1.004;
+        this.vz[i] *= 1.004;
+      }
       this.rot[i] += this.rotV[i] * dt;
     }
   }
@@ -261,14 +382,16 @@ class BillboardLayer {
       const cy = camera.position.y;
       const cz = camera.position.z;
       for (let i = 0; i < n; i++) {
-        this._order[i] = i;
         const dx = this.px[i] - cx;
         const dy = this.py[i] - cy;
         const dz = this.pz[i] - cz;
         this._depth[i] = dx * dx + dy * dy + dz * dz;
       }
-      const ord = Array.prototype.slice.call(this._order.subarray(0, n));
-      ord.sort((a, b) => this._depth[b] - this._depth[a]);
+      const ord = this._sortList;
+      ord.length = n;
+      for (let i = 0; i < n; i++) ord[i] = i;
+      const depth = this._depth;
+      ord.sort((a, b) => depth[b] - depth[a]);
       for (let k = 0; k < n; k++) this._order[k] = ord[k];
     } else {
       for (let i = 0; i < n; i++) this._order[i] = i;
@@ -291,10 +414,18 @@ class BillboardLayer {
       pos[o + 2] = this.pz[i];
       sc[live] = this.size0[i] + (this.size1[i] - this.size0[i]) * t;
       rt[live] = this.rot[i];
-      const ct = t;
-      col[o] = this.cr[i] + (this.cr1[i] - this.cr[i]) * ct;
-      col[o + 1] = this.cg[i] + (this.cg1[i] - this.cg[i]) * ct;
-      col[o + 2] = this.cb[i] + (this.cb1[i] - this.cb[i]) * ct;
+      // Three colour stops: hot -> warm -> cold reads as a cooling ember.
+      if (t < 0.5) {
+        const ct = t * 2;
+        col[o] = this.cr[i] + (this.cr1[i] - this.cr[i]) * ct;
+        col[o + 1] = this.cg[i] + (this.cg1[i] - this.cg[i]) * ct;
+        col[o + 2] = this.cb[i] + (this.cb1[i] - this.cb[i]) * ct;
+      } else {
+        const ct = t * 2 - 1;
+        col[o] = this.cr1[i] + (this.cr2[i] - this.cr1[i]) * ct;
+        col[o + 1] = this.cg1[i] + (this.cg2[i] - this.cg1[i]) * ct;
+        col[o + 2] = this.cb1[i] + (this.cb2[i] - this.cb1[i]) * ct;
+      }
       const fin = Math.min(1, t / Math.max(1e-4, this.fadeIn[i]));
       const fout = 1 - Math.pow(t, 1.6);
       al[live] = this.alpha0[i] * fin * Math.max(0, fout);
@@ -320,11 +451,13 @@ class BillboardLayer {
     }
     // Compact: drop fully dead particles from the tail.
     while (this.count > 0 && this.age[this.count - 1] >= this.life[this.count - 1]) this.count--;
+    this.live = live;
     return live;
   }
 
   clear() {
     this.count = 0;
+    this.live = 0;
     this.geo.instanceCount = 0;
   }
 }
@@ -338,25 +471,44 @@ attribute float aBirth;
 attribute float aWidth;
 attribute float aOpacity;
 attribute vec3 aColor;
+// x: fade multiplier, y: growth multiplier, z: per-segment turbulence seed
+attribute vec3 aMod;
 uniform float uTime;
 uniform float uGrow;
 uniform float uFade;
+uniform float uTurb;
+uniform vec3 uWind;
 varying float vAlpha;
 varying vec3 vColor;
 varying vec3 vWorld;
 varying float vAcross;
+varying float vAge;
+varying float vSeed;
+${LOGDEPTH_PARS_VERT}
 void main() {
   float age = max( 0.0, uTime - aBirth );
-  float w = aWidth * ( 1.0 + age * uGrow );
+  float w = aWidth * ( 1.0 + age * uGrow * aMod.y );
   vec3 world = position;
+  // Old ribbon drifts downwind and wanders: a smoke trail is not a wire.
+  world += uWind * age * 0.4;
+  float sd = aMod.z;
+  vec3 wob = vec3(
+    sin( sd * 11.3 + age * 0.83 ),
+    sin( sd * 7.1 + age * 0.61 + 2.1 ),
+    cos( sd * 5.7 + age * 0.72 + 4.2 )
+  );
+  world += wob * ( uTurb * w * min( age, 10.0 ) * 0.14 );
   vec3 toCam = normalize( cameraPosition - world );
   vec3 side = normalize( cross( aTangent, toCam ) );
   world += side * ( aSide * w );
-  vAlpha = aOpacity * exp( -age * uFade );
+  vAlpha = aOpacity * exp( -age * uFade * aMod.x );
   vColor = aColor;
   vWorld = world;
   vAcross = aSide;
+  vAge = age;
+  vSeed = sd;
   gl_Position = projectionMatrix * viewMatrix * vec4( world, 1.0 );
+  ${LOGDEPTH_VERT}
 }
 `;
 
@@ -366,21 +518,37 @@ varying float vAlpha;
 varying vec3 vColor;
 varying vec3 vWorld;
 varying float vAcross;
+varying float vAge;
+varying float vSeed;
 uniform float uEmissive;
+uniform float uSunLit;
 ${ATM_PARS}
+${LOGDEPTH_PARS_FRAG}
 void main() {
+  ${LOGDEPTH_FRAG}
+  float aged = clamp( vAge * 0.055, 0.0, 1.0 );
+  // The cross-section profile softens with age, so the ribbon goes wispy.
   float edge = 1.0 - abs( vAcross ) * 2.0;
-  float a = vAlpha * pow( clamp( edge, 0.0, 1.0 ), 0.85 );
+  float a = vAlpha * pow( clamp( edge, 0.0, 1.0 ), mix( 0.85, 2.6, aged ) );
+  // Longitudinal break-up: adjacent segments carry different seeds.
+  float wisp = 0.55 + 0.45 * sin( vSeed * 19.0 );
+  a *= mix( 1.0, wisp, aged * 0.75 );
   if ( a < 0.004 ) discard;
+  vec3 col = vColor;
+  if ( uSunLit > 0.0 ) {
+    vec3 viewDir = normalize( vWorld - cameraPosition );
+    float ms = pow( max( dot( viewDir, uAtmSunDir ), 0.0 ), 5.0 );
+    col += uAtmSunColor * ms * uSunLit * 0.25;
+  }
   float trans;
-  vec3 lit = applyAtm( vColor, vWorld, trans );
-  vec3 col = mix( lit, vColor, uEmissive );
+  vec3 lit = applyAtm( col, vWorld, trans );
+  col = mix( lit, col, uEmissive );
   gl_FragColor = vec4( col, a );
 }
 `;
 
 class Trail {
-  constructor(capacity, { additive = false, emissive = 0 } = {}) {
+  constructor(capacity, { additive = false, emissive = 0, sunLit = 0 } = {}) {
     this.capacity = capacity;
     this.head = 0;
     this.n = 0;
@@ -396,6 +564,7 @@ class Trail {
     this.widths = new Float32Array(verts);
     this.opacities = new Float32Array(verts);
     this.colors = new Float32Array(verts * 3);
+    this.mods = new Float32Array(verts * 3);
     for (let i = 0; i < capacity; i++) {
       this.sides[i * 2] = -0.5;
       this.sides[i * 2 + 1] = 0.5;
@@ -420,6 +589,7 @@ class Trail {
     this.geo.setAttribute('aWidth', new THREE.BufferAttribute(this.widths, 1).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('aOpacity', new THREE.BufferAttribute(this.opacities, 1).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('aColor', new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage));
+    this.geo.setAttribute('aMod', new THREE.BufferAttribute(this.mods, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setIndex(new THREE.BufferAttribute(idx, 1));
     this.geo.setDrawRange(0, 0);
     this.geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e7);
@@ -429,7 +599,10 @@ class Trail {
         uTime: { value: 0 },
         uGrow: { value: 0.9 },
         uFade: { value: 0.06 },
+        uTurb: { value: 1 },
         uEmissive: { value: emissive },
+        uSunLit: { value: sunLit },
+        uWind: { value: new THREE.Vector3() },
       }),
       vertexShader: TRAIL_VERT,
       fragmentShader: TRAIL_FRAG,
@@ -454,6 +627,7 @@ class Trail {
     this.mat.uniforms.uGrow.value = opts.grow !== undefined ? opts.grow : 0.9;
     this.mat.uniforms.uFade.value = opts.fade !== undefined ? opts.fade : 0.06;
     this.mat.uniforms.uEmissive.value = opts.emissive !== undefined ? opts.emissive : 0;
+    this.mat.uniforms.uTurb.value = opts.turbulence !== undefined ? opts.turbulence : opts.emissive ? 0.35 : 1;
     this.minStep = opts.minStep !== undefined ? opts.minStep : 3;
     this._first = true;
   }
@@ -466,6 +640,12 @@ class Trail {
     this.lastPos.copy(pos);
     const i = this.head % this.capacity;
     const v = i * 2;
+    // Thin air holds neither width nor opacity: bake the altitude response into
+    // the segment so one ribbon can be a fat contrail low down and a thread high up.
+    const persist = trailPersistence(pos.y);
+    const fadeMul = 1 + (1 - persist) * 1.6;
+    const growMul = 0.4 + persist * 1.15;
+    const seed = ((this.head * 0.6180339887) % 1) * 10;
     for (const k of [v, v + 1]) {
       this.positions[k * 3] = pos.x;
       this.positions[k * 3 + 1] = pos.y;
@@ -479,13 +659,16 @@ class Trail {
       this.colors[k * 3] = color.r;
       this.colors[k * 3 + 1] = color.g;
       this.colors[k * 3 + 2] = color.b;
+      this.mods[k * 3] = fadeMul;
+      this.mods[k * 3 + 1] = growMul;
+      this.mods[k * 3 + 2] = seed;
     }
     this.head++;
     this.n = Math.min(this.n + 1, this.capacity);
     // Ring buffer: draw only the contiguous run to avoid a wrap-around ribbon.
     const drawn = Math.min(this.head, this.capacity);
     this.geo.setDrawRange(0, Math.max(0, (drawn - 1) * 6));
-    for (const a of ['position', 'aTangent', 'aBirth', 'aWidth', 'aOpacity', 'aColor']) {
+    for (const a of ['position', 'aTangent', 'aBirth', 'aWidth', 'aOpacity', 'aColor', 'aMod']) {
       this.geo.attributes[a].needsUpdate = true;
     }
     return true;
@@ -493,6 +676,10 @@ class Trail {
 
   setTime(t) {
     this.mat.uniforms.uTime.value = t;
+  }
+
+  setWind(w) {
+    this.mat.uniforms.uWind.value.copy(w);
   }
 
   detach() {
@@ -515,19 +702,29 @@ uniform float uTime;
 uniform float uProgress;
 uniform float uSeed;
 uniform float uTurb;
+uniform float uRoll;
 varying vec3 vNormalW;
 varying vec3 vWorld;
 varying float vNoise;
 ${GLSL_NOISE}
+${LOGDEPTH_PARS_VERT}
 void main() {
   vec3 p = normalize( position );
-  float n = fbm3g( p * 2.4 + vec3( uSeed, uSeed * 0.7, -uSeed ) + vec3( 0.0, -uTime * 0.6, 0.0 ), 4 );
-  vNoise = n;
-  float bulge = 1.0 + n * uTurb * ( 0.35 + uProgress * 0.55 );
+  // The noise field is advected downward and outward, which reads as the
+  // fireball rolling over on itself as it climbs.
+  vec3 q = p * mix( 2.4, 1.5, uProgress ) + vec3( uSeed, uSeed * 0.7, -uSeed );
+  q += vec3( 0.0, -uTime * uRoll, 0.0 );
+  q -= p * uProgress * 1.1;
+  float n = fbm3g( q, 4 );
+  // A second, finer band breaks the silhouette into individual billows.
+  float n2 = fbm3g( q * 3.3 + 17.0, 3 );
+  vNoise = n * 0.72 + n2 * 0.5;
+  float bulge = 1.0 + n * uTurb * ( 0.35 + uProgress * 0.85 ) + n2 * uTurb * 0.34;
   vec3 world = ( modelMatrix * vec4( p * bulge, 1.0 ) ).xyz;
   vWorld = world;
   vNormalW = normalize( mat3( modelMatrix ) * p );
   gl_Position = projectionMatrix * viewMatrix * vec4( world, 1.0 );
+  ${LOGDEPTH_VERT}
 }
 `;
 
@@ -538,47 +735,78 @@ uniform vec3 uHot;
 uniform vec3 uMid;
 uniform vec3 uCool;
 uniform float uOpacity;
+uniform float uSmoke;
+uniform float uGlow;
 varying vec3 vNormalW;
 varying vec3 vWorld;
 varying float vNoise;
 ${ATM_PARS}
+${LOGDEPTH_PARS_FRAG}
 void main() {
+  ${LOGDEPTH_FRAG}
   vec3 v = normalize( cameraPosition - vWorld );
   float fres = pow( 1.0 - abs( dot( v, vNormalW ) ), 1.6 );
   float band = clamp( vNoise * 0.5 + 0.5, 0.0, 1.0 );
-  float heat = clamp( ( 1.0 - uProgress * 1.35 ) + band * 0.45 - fres * 0.25, 0.0, 1.0 );
-  vec3 col = mix( uCool, uMid, smoothstep( 0.12, 0.55, heat ) );
-  col = mix( col, uHot, smoothstep( 0.6, 0.98, heat ) );
-  float a = uOpacity * ( 1.0 - uProgress ) * ( 0.55 + 0.45 * band ) * ( 0.6 + fres * 0.7 );
+  // Heat drains from the outside in; the deepest folds stay bright longest.
+  // Multiplying (rather than adding) the noise band means even the first frames
+  // are mostly incandescent orange with white only in the hottest creases.
+  float heat = clamp( ( 1.0 - uProgress * 2.1 ) * ( 0.5 + band * 0.8 ) - fres * 0.28, 0.0, 1.0 );
+  vec3 col = mix( uCool, uMid, smoothstep( 0.04, 0.40, heat ) );
+  col = mix( col, uHot, smoothstep( 0.64, 1.0, heat ) );
+  // The ball is opaque gas, not a glow: it has to replace the sky behind it or
+  // an HDR daylight background shows straight through and washes it white.
+  // As it cools, uSmoke decides whether it settles into soot (low altitude) or
+  // simply disperses (thin air up high).
+  float coolT = smoothstep( 0.22, 0.85, uProgress );
+  float young = 1.0 - smoothstep( 0.0, 0.34, uProgress );
+  // Feather the silhouette. Without this the icosphere's outline reads as a
+  // hard polygon the moment the ball stops being bright enough to hide it.
+  float rim = pow( clamp( 1.0 - fres, 0.0, 1.0 ), 0.5 );
+  float dense = uOpacity * ( 0.6 + 0.4 * band ) * rim
+    * ( 1.0 - smoothstep( 0.42, 0.92, uProgress ) ) * mix( 1.0, uSmoke, coolT );
+  // While it is still incandescent the ball is optically thick: force it opaque
+  // so a bright HDR sky cannot bleed through and desaturate the fire.
+  dense = mix( dense, rim, young * 0.85 );
+  float a = clamp( dense, 0.0, 1.0 );
   if ( a < 0.004 ) discard;
   float trans;
   vec3 lit = applyAtm( col, vWorld, trans );
-  gl_FragColor = vec4( mix( lit, col, 0.55 ), clamp( a, 0.0, 1.0 ) );
+  // Mostly self-coloured soot: pushing a near-black cool palette through the
+  // haze in-scatter turns the cold rim into a pale glassy shell.
+  vec3 bodyCol = mix( col * 0.32, lit, 0.3 );
+  // Emission goes as heat squared so only the deepest folds punch through the
+  // tonemapper: a uniformly bright ball just reads as a white blob. The birth
+  // frames get several times the output of the cooling phase.
+  float emit = uGlow * heat * heat * ( 1.1 + 3.1 * young ) * ( 1.0 - uProgress * 0.5 );
+  vec3 base = mix( bodyCol, col, heat );
+  gl_FragColor = vec4( ( base + col * emit ) * a, a );
 }
 `;
 
 class Fireball {
-  constructor() {
+  constructor(detail = 4) {
     this.mat = new THREE.ShaderMaterial({
       uniforms: withAtm({
         uTime: { value: 0 },
         uProgress: { value: 0 },
         uSeed: { value: 0 },
         uTurb: { value: 0.42 },
+        uRoll: { value: 0.6 },
         uHot: { value: new THREE.Color(1.0, 0.96, 0.82) },
         uMid: { value: new THREE.Color(1.0, 0.52, 0.14) },
         uCool: { value: new THREE.Color(0.12, 0.1, 0.1) },
         uOpacity: { value: 1 },
+        uSmoke: { value: 0.8 },
+        uGlow: { value: 1 },
       }),
       vertexShader: FIREBALL_VERT,
       fragmentShader: FIREBALL_FRAG,
-      transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
       side: THREE.FrontSide,
       toneMapped: true,
+      ...PREMULT,
     });
-    this.mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 4), this.mat);
+    this.mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1, detail), this.mat);
     this.mesh.frustumCulled = false;
     this.mesh.visible = false;
     this.mesh.renderOrder = 13;
@@ -587,9 +815,13 @@ class Fireball {
     this.life = 1;
     this.r0 = 1;
     this.r1 = 2;
+    this.rise = 0;
+    this.grow = 2.6;
+    this._p = new THREE.Vector3();
   }
 
-  fire(pos, r0, r1, life, palette) {
+  fire(pos, r0, r1, life, palette, opts = {}) {
+    this._p.copy(pos);
     this.mesh.position.copy(pos);
     this.mesh.visible = true;
     this.alive = true;
@@ -597,20 +829,34 @@ class Fireball {
     this.life = life;
     this.r0 = r0;
     this.r1 = r1;
+    this.rise = opts.rise !== undefined ? opts.rise : 0;
+    this.grow = opts.grow !== undefined ? opts.grow : 2.6;
+    this.mat.uniforms.uGlow.value = opts.glow !== undefined ? opts.glow : 1;
     this.mat.uniforms.uSeed.value = Math.random() * 40;
+    this.mat.uniforms.uTurb.value = opts.turb !== undefined ? opts.turb : 0.42;
+    this.mat.uniforms.uRoll.value = opts.roll !== undefined ? opts.roll : 0.6;
+    this.mat.uniforms.uSmoke.value = opts.smoke !== undefined ? opts.smoke : 0.8;
+    this.mat.uniforms.uOpacity.value = opts.opacity !== undefined ? opts.opacity : 1;
     if (palette) {
-      this.mat.uniforms.uHot.value.copy(palette.hot);
-      this.mat.uniforms.uMid.value.copy(palette.mid);
-      this.mat.uniforms.uCool.value.copy(palette.cool);
+      if (palette.hot) this.mat.uniforms.uHot.value.copy(palette.hot);
+      if (palette.mid) this.mat.uniforms.uMid.value.copy(palette.mid);
+      if (palette.cool) this.mat.uniforms.uCool.value.copy(palette.cool);
     }
   }
 
-  update(dt, time) {
+  update(dt, time, wind) {
     if (!this.alive) return;
     this.t += dt;
     const p = Math.min(1, this.t / this.life);
-    const eased = 1 - Math.pow(1 - p, 2.6);
+    const eased = 1 - Math.pow(1 - p, this.grow);
     this.mesh.scale.setScalar(this.r0 + (this.r1 - this.r0) * eased);
+    // Buoyant rise plus wind drift: the ball does not hang where it was born.
+    if (this.rise !== 0) this._p.y += this.rise * dt * (0.35 + p);
+    if (wind) {
+      this._p.x += wind.x * dt * 0.6;
+      this._p.z += wind.z * dt * 0.6;
+    }
+    this.mesh.position.copy(this._p);
     this.mat.uniforms.uProgress.value = p;
     this.mat.uniforms.uTime.value = time;
     if (p >= 1) {
@@ -625,11 +871,13 @@ class Fireball {
 const SHOCK_VERT = /* glsl */ `
 varying vec2 vUv;
 varying vec3 vWorld;
+${LOGDEPTH_PARS_VERT}
 void main() {
   vUv = uv;
   vec4 wp = modelMatrix * vec4( position, 1.0 );
   vWorld = wp.xyz;
   gl_Position = projectionMatrix * viewMatrix * wp;
+  ${LOGDEPTH_VERT}
 }
 `;
 const SHOCK_FRAG = /* glsl */ `
@@ -637,17 +885,26 @@ precision highp float;
 uniform float uProgress;
 uniform vec3 uColor;
 uniform float uThickness;
+uniform float uIntensity;
+uniform float uEmit;
 varying vec2 vUv;
 varying vec3 vWorld;
 ${ATM_PARS}
+${LOGDEPTH_PARS_FRAG}
 void main() {
+  ${LOGDEPTH_FRAG}
   float d = length( vUv - 0.5 ) * 2.0;
   float ring = exp( -pow( ( d - 0.86 ) / uThickness, 2.0 ) );
-  float a = ring * ( 1.0 - uProgress ) * ( 1.0 - smoothstep( 0.94, 1.0, d ) );
+  // A faint compressed shell trails the leading edge inward.
+  float shell = smoothstep( 0.86, 0.4, d ) * ( 1.0 - smoothstep( 0.86, 0.99, d ) ) * 0.18;
+  float a = ( ring + shell ) * uIntensity * pow( 1.0 - uProgress, 1.6 ) * ( 1.0 - smoothstep( 0.94, 1.0, d ) );
+  a = clamp( a, 0.0, 1.0 );
   if ( a < 0.004 ) discard;
   float trans;
   vec3 lit = applyAtm( uColor, vWorld, trans );
-  gl_FragColor = vec4( mix( lit, uColor, 0.6 ), a );
+  vec3 col = mix( lit, uColor, 0.6 );
+  float occl = a * ( 1.0 - uEmit );
+  gl_FragColor = vec4( col * a, occl );
 }
 `;
 
@@ -658,14 +915,15 @@ class Shockwave {
         uProgress: { value: 0 },
         uColor: { value: new THREE.Color(1, 0.92, 0.8) },
         uThickness: { value: 0.09 },
+        uIntensity: { value: 1 },
+        uEmit: { value: 1 },
       }),
       vertexShader: SHOCK_VERT,
       fragmentShader: SHOCK_FRAG,
-      transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       toneMapped: true,
+      ...PREMULT,
     });
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.mat);
     this.mesh.frustumCulled = false;
@@ -675,9 +933,13 @@ class Shockwave {
     this.t = 0;
     this.life = 1;
     this.r1 = 10;
+    this.ground = false;
+    this.thick0 = 0.05;
+    this.thick1 = 0.14;
+    this.ease = 0.55;
   }
 
-  fire(pos, r1, life, color, camera) {
+  fire(pos, r1, life, color, camera, opts = {}) {
     this.mesh.position.copy(pos);
     this.mesh.visible = true;
     this.alive = true;
@@ -685,18 +947,25 @@ class Shockwave {
     this.life = life;
     this.r1 = r1;
     if (color) this.mat.uniforms.uColor.value.copy(color);
+    this.mat.uniforms.uIntensity.value = opts.intensity !== undefined ? opts.intensity : 1;
+    this.mat.uniforms.uEmit.value = opts.emit !== undefined ? opts.emit : 1;
+    this.thick0 = opts.thickness !== undefined ? opts.thickness : 0.05;
+    this.thick1 = opts.thickness1 !== undefined ? opts.thickness1 : this.thick0 + 0.09;
+    this.ease = opts.ease !== undefined ? opts.ease : 0.55;
+    this.ground = !!opts.ground;
     this.camera = camera;
+    if (this.ground) this.mesh.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI);
   }
 
   update(dt) {
     if (!this.alive) return;
     this.t += dt;
     const p = Math.min(1, this.t / this.life);
-    const eased = Math.pow(p, 0.55);
+    const eased = Math.pow(p, this.ease);
     this.mesh.scale.setScalar(Math.max(0.01, this.r1 * eased));
     this.mat.uniforms.uProgress.value = p;
-    this.mat.uniforms.uThickness.value = 0.05 + p * 0.14;
-    if (this.camera) this.mesh.quaternion.copy(this.camera.quaternion);
+    this.mat.uniforms.uThickness.value = this.thick0 + p * (this.thick1 - this.thick0);
+    if (!this.ground && this.camera) this.mesh.quaternion.copy(this.camera.quaternion);
     if (p >= 1) {
       this.alive = false;
       this.mesh.visible = false;
@@ -709,7 +978,9 @@ class Shockwave {
 class DebrisPool {
   constructor(capacity) {
     this.capacity = capacity;
-    const geo = new THREE.TetrahedronGeometry(0.55, 0);
+    // A 20-face solid silhouettes as a chunk from any angle; a tetrahedron
+    // tumbles through orientations where it reads as a flat triangle.
+    const geo = new THREE.IcosahedronGeometry(0.5, 0);
     this.mat = std({ color: 0x4a4642, roughness: 0.75, metalness: 0.5, emissive: 0x220b04, emissiveIntensity: 0.6 });
     this.mesh = new THREE.InstancedMesh(geo, this.mat, capacity);
     this.mesh.frustumCulled = false;
@@ -723,6 +994,9 @@ class DebrisPool {
     this.age = new Float32Array(capacity);
     this.life = new Float32Array(capacity);
     this.scale = new Float32Array(capacity);
+    /** Seconds until this fragment sheds its next smoke puff; <=0 means none. */
+    this.smokeIn = new Float32Array(capacity);
+    this.smokeEvery = new Float32Array(capacity);
     for (let i = 0; i < capacity; i++) {
       this.pos.push(new THREE.Vector3());
       this.vel.push(new THREE.Vector3());
@@ -737,7 +1011,7 @@ class DebrisPool {
     this._dq = new THREE.Quaternion();
   }
 
-  spawn(pos, vel, scale, life) {
+  spawn(pos, vel, scale, life, smokeEvery = 0) {
     let i = -1;
     for (let k = 0; k < this.capacity; k++) {
       if (this.age[k] >= this.life[k]) {
@@ -753,10 +1027,12 @@ class DebrisPool {
     this.age[i] = 0;
     this.life[i] = life;
     this.scale[i] = scale;
+    this.smokeEvery[i] = smokeEvery;
+    this.smokeIn[i] = smokeEvery > 0 ? Math.random() * smokeEvery : 0;
     this.count = Math.max(this.count, i + 1);
   }
 
-  update(dt, groundFn, onLand) {
+  update(dt, groundFn, onLand, onSmoke) {
     let live = 0;
     for (let i = 0; i < this.count; i++) {
       if (this.age[i] >= this.life[i]) continue;
@@ -771,6 +1047,15 @@ class DebrisPool {
         this.vel[i].multiplyScalar(-0.22);
         this.vel[i].y = Math.abs(this.vel[i].y) * 0.5;
         this.spin[i].multiplyScalar(0.5);
+        this.smokeEvery[i] = 0;
+      }
+      const every = this.smokeEvery[i];
+      if (every > 0 && onSmoke) {
+        this.smokeIn[i] -= dt;
+        if (this.smokeIn[i] <= 0) {
+          this.smokeIn[i] = every;
+          onSmoke(this.pos[i], this.vel[i], this.age[i] / this.life[i], this.scale[i]);
+        }
       }
       this._dq.setFromAxisAngle(
         this._s.copy(this.spin[i]).normalize(),
@@ -792,6 +1077,7 @@ class DebrisPool {
     for (let i = 0; i < this.capacity; i++) {
       this.age[i] = 1;
       this.life[i] = 0;
+      this.smokeEvery[i] = 0;
     }
     this.count = 0;
     this.mesh.count = 0;
@@ -825,9 +1111,11 @@ class DecalPool {
       this.items.push({ mesh: m, age: 1, life: 0, fade: 40 });
     }
     this.next = 0;
+    this._q = new THREE.Quaternion();
+    this._up = new THREE.Vector3(0, 1, 0);
   }
 
-  place(pos, size, normal, life = 1e9, rot = Math.random() * Math.PI * 2) {
+  place(pos, size, normal, life = 1e9, rot = Math.random() * Math.PI * 2, opacity = 1) {
     const it = this.items[this.next % this.items.length];
     this.next++;
     it.mesh.visible = true;
@@ -836,10 +1124,11 @@ class DecalPool {
     it.mesh.scale.set(size, 1, size);
     it.mesh.rotation.set(0, rot, 0);
     if (normal) {
-      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
-      it.mesh.quaternion.premultiply(q);
+      this._q.setFromUnitVectors(this._up, normal);
+      it.mesh.quaternion.premultiply(this._q);
     }
-    it.mesh.material.opacity = 1;
+    it.mesh.material.opacity = opacity;
+    it.peak = opacity;
     it.age = 0;
     it.life = life;
     return it;
@@ -851,7 +1140,7 @@ class DecalPool {
       it.age += dt;
       if (it.life < 1e8) {
         const t = it.age / it.life;
-        it.mesh.material.opacity = Math.max(0, 1 - t);
+        it.mesh.material.opacity = Math.max(0, (it.peak || 1) * (1 - t));
         if (t >= 1) it.mesh.visible = false;
       }
     }
@@ -869,6 +1158,49 @@ class DecalPool {
 /* ------------------------------------------------------------- Effects mgr */
 
 const C = (hex) => new THREE.Color(hex);
+const TAU = Math.PI * 2;
+
+// Scratch objects: spawn() copies every field immediately, so a handful of
+// shared temporaries is enough to keep the hot paths allocation-free.
+const _p = new THREE.Vector3();
+const _p2 = new THREE.Vector3();
+const _v = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _axis = new THREE.Vector3();
+const _side = new THREE.Vector3();
+const _up = new THREE.Vector3();
+const _ca = new THREE.Color();
+const _cb = new THREE.Color();
+const _cc = new THREE.Color();
+
+// Shared palettes; none of these allocate at spawn time.
+const COL = {
+  dustHot: C(0xd8bf98),
+  dust: C(0xc2a880),
+  dustDark: C(0x8f7a5f),
+  grit: C(0x6a5a45),
+  gritDark: C(0x3c3225),
+  smokeLight: C(0xcfcac2),
+  smokeMid: C(0x8e8a84),
+  smokeDark: C(0x4a4744),
+  soot: C(0x2b2826),
+  sootDeep: C(0x1a1817),
+  flameWhite: C(0xfff6e2),
+  flameHot: C(0xffd79a),
+  flameMid: C(0xff7a24),
+  flameDeep: C(0xd23a06),
+  emberWhite: C(0xfffbe8),
+  emberOrange: C(0xff8a24),
+  emberDark: C(0x501202),
+  ringWarm: C(0xfff0d0),
+  ringPale: C(0xd8cbb4),
+  coldWhite: C(0xf2f6ff),
+  coldBlue: C(0xa9c4e8),
+  mote: C(0xfff2d8),
+};
+
+const rnd = Math.random;
+const rr = (a, b) => a + Math.random() * (b - a);
 
 export class Effects {
   constructor(scene, quality, weather) {
@@ -881,30 +1213,49 @@ export class Effects {
     scene.add(this.group);
 
     const budget = quality.particleBudget;
-    this.smoke = new BillboardLayer(Math.round(budget * 0.5), smokeSprite(256, 3), {
+    // Spawn counts scale with the preset so LOW does not simply drop particles
+    // on the floor of an over-subscribed pool.
+    this.q = THREE.MathUtils.clamp(budget / 2800, 0.4, 1.5);
+
+    this.smoke = new BillboardLayer(Math.round(budget * 0.42), smokeSprite(256, 3), {
       blending: THREE.NormalBlending,
       sorted: true,
+      sunLit: 0.9,
     });
-    this.dust = new BillboardLayer(Math.round(budget * 0.2), smokeSprite(256, 11), {
+    this.dust = new BillboardLayer(Math.round(budget * 0.26), smokeSprite(256, 11), {
       blending: THREE.NormalBlending,
       sorted: true,
+      sunLit: 0.85,
     });
     this.fire = new BillboardLayer(Math.round(budget * 0.18), softSprite(128, { power: 1.7 }), {
       blending: THREE.AdditiveBlending,
       emissive: 1,
     });
-    this.sparks = new BillboardLayer(Math.round(budget * 0.12), sparkSprite(64), {
+    this.sparks = new BillboardLayer(Math.round(budget * 0.13), sparkSprite(64), {
       blending: THREE.AdditiveBlending,
       stretch: 0.012,
       emissive: 1,
     });
-    this.glow = new BillboardLayer(96, flareSprite(256), { blending: THREE.AdditiveBlending, emissive: 1 });
-    this.layers = [this.smoke, this.dust, this.fire, this.sparks, this.glow];
+    // Ejected grit: opaque, gravity-bound and unlit, so it silhouettes against
+    // the dust instead of glowing like the sparks do.
+    this.grit = new BillboardLayer(Math.round(budget * 0.08), softSprite(64, { power: 0.6, core: 1.6 }), {
+      blending: THREE.NormalBlending,
+      sunLit: 0.6,
+      renderOrder: 10,
+    });
+    this.glow = new BillboardLayer(112, flareSprite(256), { blending: THREE.AdditiveBlending, emissive: 1 });
+    this.motesEnabled = budget >= 1500;
+    this.motes = new BillboardLayer(this.motesEnabled ? 140 : 1, softSprite(64, { power: 1.4 }), {
+      blending: THREE.AdditiveBlending,
+      emissive: 1,
+      renderOrder: 12,
+    });
+    this.layers = [this.smoke, this.dust, this.grit, this.fire, this.sparks, this.glow, this.motes];
     for (const l of this.layers) this.group.add(l.mesh);
 
     this.trails = [];
     for (let i = 0; i < 18; i++) {
-      const t = new Trail(quality.trailSegments, {});
+      const t = new Trail(quality.trailSegments, { sunLit: 0.8 });
       this.group.add(t.mesh);
       this.trails.push(t);
     }
@@ -916,18 +1267,19 @@ export class Effects {
     }
 
     this.fireballs = [];
-    for (let i = 0; i < 10; i++) {
-      const f = new Fireball();
+    const fbDetail = budget >= 2400 ? 4 : 3;
+    for (let i = 0; i < 12; i++) {
+      const f = new Fireball(fbDetail);
       this.group.add(f.mesh);
       this.fireballs.push(f);
     }
     this.shocks = [];
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 14; i++) {
       const s = new Shockwave();
       this.group.add(s.mesh);
       this.shocks.push(s);
     }
-    this.debris = new DebrisPool(Math.min(260, Math.round(budget * 0.09)));
+    this.debris = new DebrisPool(Math.min(300, Math.round(budget * 0.1)));
     this.group.add(this.debris.mesh);
 
     this.scorch = new DecalPool(Math.round(quality.decals * 0.6), [scorchDecalTexture(256, 9), scorchDecalTexture(256, 23)]);
@@ -943,9 +1295,18 @@ export class Effects {
       this.flashLights.push({ light: l, t: 0, life: 0, peak: 0 });
     }
 
+    // Lingering emitters: a launch pad or a crater keeps producing smoke for
+    // seconds after the event, which is what makes a column build rather than pop.
+    this.sources = [];
+    for (let i = 0; i < 12; i++) {
+      this.sources.push({ active: false, kind: 0, pos: new THREE.Vector3(), gy: 0, t: 0, life: 0, scale: 1, acc: 0 });
+    }
+
     this.wind = new THREE.Vector3(1.4, 0, 0.5);
     this.terrainFn = null;
     this.shakeTarget = null;
+    this.particleCount = 0;
+    this._moteTimer = 0;
   }
 
   setWind(v) {
@@ -983,6 +1344,15 @@ export class Effects {
 
   /* ---------------------------------------------------------- primitives */
 
+  /**
+   * Daylight-relative brightness. The tonemapper opens right up at night, so a
+   * flash sized for noon turns the whole apron into a white card after dark.
+   */
+  _expScale() {
+    const elev = this.weather && this.weather.tod ? this.weather.tod.sunElev : 0.6;
+    return 0.42 + 0.58 * THREE.MathUtils.clamp(elev / 0.22, 0, 1);
+  }
+
   flash(pos, peak, life = 0.32, color = 0xffc07a) {
     let slot = this.flashLights.find((f) => f.t >= f.life);
     if (!slot) slot = this.flashLights.reduce((a, b) => (a.t / a.life > b.t / b.life ? a : b));
@@ -991,16 +1361,50 @@ export class Effects {
     slot.light.visible = true;
     slot.t = 0;
     slot.life = life;
-    slot.peak = peak;
+    slot.peak = peak * this._expScale();
   }
 
   glowPuff(pos, size, life, color, alpha = 1) {
     this.glow.spawn({ pos, size0: size, size1: size * 1.5, life, color0: C(color), alpha, drag: 3, fadeIn: 0.02 });
   }
 
+  /** Grab a free shockwave, or the one closest to finishing. */
+  _shock() {
+    let best = null;
+    for (const s of this.shocks) {
+      if (!s.alive) return s;
+      if (!best || s.t / s.life > best.t / best.life) best = s;
+    }
+    return best;
+  }
+
+  _fireball() {
+    let best = null;
+    for (const f of this.fireballs) {
+      if (!f.alive) return f;
+      if (!best || f.t / f.life > best.t / best.life) best = f;
+    }
+    return best;
+  }
+
+  /** Register a lingering smoke source. kind 0 = launch pad, 1 = crater. */
+  _source(pos, gy, life, scale, kind) {
+    let slot = this.sources.find((s) => !s.active);
+    if (!slot) slot = this.sources[0];
+    slot.active = true;
+    slot.kind = kind;
+    slot.pos.copy(pos);
+    slot.gy = gy;
+    slot.t = 0;
+    slot.life = life;
+    slot.scale = scale;
+    slot.acc = 0;
+    return slot;
+  }
+
   /**
-   * Rocket exhaust: hot core puffs plus a cooler smoke column that drifts with
-   * the wind and thins out with altitude.
+   * Rocket exhaust: a short incandescent core wrapped in a turbulent smoke
+   * sheath. Both thin out with altitude via `trailPersistence`.
    */
   exhaust(pos, vel, opts) {
     const {
@@ -1013,305 +1417,682 @@ export class Effects {
       backDir = null,
     } = opts;
     const dens = trailPersistence(pos.y);
-    const n = Math.max(1, Math.round(rate * dt * 60));
+    const n = Math.max(1, Math.round(rate * dt * 60 * this.q));
+    _ca.set(hot);
+    _cb.set(smokeColor);
     for (let i = 0; i < n; i++) {
       const jitter = 0.6 * scale;
-      const p = pos.clone();
-      p.x += (Math.random() - 0.5) * jitter;
-      p.y += (Math.random() - 0.5) * jitter;
-      p.z += (Math.random() - 0.5) * jitter;
-      const v = backDir ? backDir.clone().multiplyScalar(28 * scale * (0.4 + Math.random())) : new THREE.Vector3();
-      v.x += (Math.random() - 0.5) * 6 * scale;
-      v.y += (Math.random() - 0.5) * 6 * scale;
-      v.z += (Math.random() - 0.5) * 6 * scale;
+      _p.copy(pos);
+      _p.x += (rnd() - 0.5) * jitter;
+      _p.y += (rnd() - 0.5) * jitter;
+      _p.z += (rnd() - 0.5) * jitter;
+      if (backDir) _v.copy(backDir).multiplyScalar(28 * scale * (0.4 + rnd()));
+      else _v.set(0, 0, 0);
+      _v.x += (rnd() - 0.5) * 6 * scale;
+      _v.y += (rnd() - 0.5) * 6 * scale;
+      _v.z += (rnd() - 0.5) * 6 * scale;
       if (boosting) {
+        // Flame is attached to the nozzle, so it has to carry most of the
+        // airframe's velocity. Without this the missile outruns its own plume in
+        // a single frame and the boost phase reads as a bare ribbon. The core
+        // holds station best; the sheath lags, which tapers the cone.
+        _v2.copy(_v).addScaledVector(vel, 0.88);
+        // Core: small, very bright, dies almost immediately.
         this.fire.spawn({
-          pos: p,
-          vel: v,
-          size0: 3.2 * scale,
-          size1: 12 * scale,
-          life: 0.24 + Math.random() * 0.16,
-          color0: C(hot),
-          color1: C(0xff6a20),
-          alpha: 0.95,
-          drag: 3.4,
-          fadeIn: 0.04,
+          pos: _p,
+          vel: _v2,
+          size0: 1.9 * scale,
+          size1: 6.5 * scale,
+          life: 0.1 + rnd() * 0.07,
+          color0: COL.flameWhite,
+          color1: _ca,
+          color2: COL.flameMid,
+          alpha: 1,
+          drag: 5.5,
+          fadeIn: 0.02,
+          wind: 0.05,
+        });
+        // Sheath: the flame that actually reads at distance.
+        _v2.copy(_v).addScaledVector(vel, 0.55);
+        this.fire.spawn({
+          pos: _p,
+          vel: _v2,
+          size0: 3.4 * scale,
+          size1: 14 * scale,
+          life: 0.24 + rnd() * 0.18,
+          color0: _ca,
+          color1: COL.flameMid,
+          color2: COL.flameDeep,
+          alpha: 0.8,
+          drag: 3.2,
+          fadeIn: 0.05,
           wind: 0.1,
+          turb: 5 * scale,
         });
       }
+      // Smoke column, offset off the axis so the sheath churns outward.
+      _p2.copy(_p);
+      const off = 1.1 * scale;
+      _p2.x += (rnd() - 0.5) * off;
+      _p2.y += (rnd() - 0.5) * off;
+      _p2.z += (rnd() - 0.5) * off;
+      // Just enough inheritance for the sheath to wrap the core for a moment
+      // before drag parks it in the air as trail smoke.
+      _v2.copy(_v).multiplyScalar(0.34).addScaledVector(vel, 0.24);
       this.smoke.spawn({
-        pos: p,
-        vel: v.clone().multiplyScalar(0.4),
-        size0: 4 * scale,
-        size1: (26 + Math.random() * 18) * scale * (0.5 + dens),
-        life: (1.6 + Math.random() * 2.4) * (0.5 + dens * 1.4),
-        rot: Math.random() * 6.28,
-        rotV: (Math.random() - 0.5) * 0.6,
-        color0: C(smokeColor),
-        color1: C(0x8d8d8d),
-        alpha: 0.42 * (0.35 + dens * 0.8),
-        drag: 0.9,
-        buoyancy: 1.2,
-        fadeIn: 0.09,
+        pos: _p2,
+        vel: _v2,
+        size0: 3.4 * scale,
+        size1: (24 + rnd() * 20) * scale * (0.45 + dens),
+        life: (1.5 + rnd() * 2.4) * (0.45 + dens * 1.5),
+        rot: rnd() * TAU,
+        rotV: (rnd() - 0.5) * 0.9,
+        color0: COL.smokeLight,
+        color1: _cb,
+        color2: COL.smokeMid,
+        alpha: 0.4 * (0.3 + dens * 0.85),
+        drag: 0.85,
+        buoyancy: 1.1,
+        fadeIn: 0.1,
         wind: 0.85,
+        turb: 1.6 + dens * 2.2,
       });
     }
   }
 
-  /** Ground-interacting launch blast: dust ring, fire wash, scorch mark. */
+  /**
+   * Ground-interacting launch signature: deck surge, ignition flash, churning
+   * column, ejected grit and a pressure ring. Everything keys off `plumeScale`
+   * so a Sentinel round dwarfs a Patriot round.
+   */
   launchBlast(pos, dir, batteryCfg, camera) {
-    const scale = batteryCfg.plumeScale;
-    const up = new THREE.Vector3(0, 1, 0);
-    for (let i = 0; i < Math.round(34 * scale); i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = 12 + Math.random() * 26 * scale;
-      const v = new THREE.Vector3(Math.cos(a) * sp, 1.2 + Math.random() * 5, Math.sin(a) * sp);
-      const p = pos.clone();
-      p.y += 0.4;
+    const s = batteryCfg.plumeScale;
+    const q = this.q;
+    const ex = 0.45 + 0.55 * this._expScale();
+    // Sprite sizes grow sub-linearly with plume scale: a Sentinel should dwarf a
+    // Patriot through a wider, denser cloud rather than 2.2x-wide single puffs.
+    const sz = 0.55 + s * 0.45;
+    const gy = this.groundAt(pos.x, pos.z);
+    _p2.set(pos.x, gy, pos.z);
+    const deckX = pos.x;
+    const deckZ = pos.z;
+
+    // ---- ignition flash core -----------------------------------------
+    _p.set(deckX, gy + 2.2 * s, deckZ);
+    this.glow.spawn({
+      pos: _p,
+      size0: 7 * s,
+      size1: 26 * s,
+      life: 0.17,
+      color0: COL.flameWhite,
+      color1: COL.flameHot,
+      color2: COL.flameMid,
+      alpha: 0.8 * ex,
+      drag: 4,
+      fadeIn: 0.01,
+      wind: 0,
+    });
+
+    // ---- deck surge: dense dust ring that hugs the ground and rolls out --
+    // Sprites start large: a launch cloud is metres across the instant the
+    // motor lights, and small puffs that grow slowly just read as haze.
+    const nRing = Math.round(58 * s * q);
+    for (let i = 0; i < nRing; i++) {
+      const a = (i / nRing) * TAU + rr(-0.11, 0.11);
+      const r0 = (2.5 + rnd() * 4) * s;
+      const sp = (20 + rnd() * 24) * (0.6 + s * 0.55);
+      _p.set(deckX + Math.cos(a) * r0, gy + 0.4 + rnd() * 4 * s, deckZ + Math.sin(a) * r0);
+      _v.set(Math.cos(a) * sp, 3 + rnd() * 10, Math.sin(a) * sp);
       this.dust.spawn({
-        pos: p,
-        vel: v,
-        size0: 3 * scale,
-        size1: (34 + Math.random() * 26) * scale,
-        life: 3.4 + Math.random() * 3.2,
-        rot: Math.random() * 6.28,
-        rotV: (Math.random() - 0.5) * 0.5,
-        color0: C(0xbda480),
-        color1: C(0x9a8368),
-        alpha: 0.5,
-        drag: 1.1,
-        buoyancy: 0.9,
-        fadeIn: 0.08,
+        pos: _p,
+        vel: _v,
+        size0: (10 + rnd() * 7) * sz,
+        size1: (30 + rnd() * 24) * sz,
+        life: 5 + rnd() * 4,
+        rot: rnd() * TAU,
+        rotV: (rnd() - 0.5) * 0.7,
+        color0: COL.dustHot,
+        color1: COL.dust,
+        color2: COL.dustDark,
+        alpha: 0.88,
+        // Drag sets the radius the ring stalls at (v0/drag), so it stays a
+        // readable ring near the pad instead of sweeping past the viewer.
+        drag: 1.15,
+        buoyancy: 1.6,
+        fadeIn: 0.04,
         wind: 1,
+        turb: 2.4,
+        hugY: gy + 0.4,
       });
     }
-    for (let i = 0; i < Math.round(26 * scale); i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = 18 + Math.random() * 30 * scale;
-      this.fire.spawn({
-        pos: pos.clone().add(new THREE.Vector3(0, 0.5, 0)),
-        vel: new THREE.Vector3(Math.cos(a) * sp, Math.random() * 6, Math.sin(a) * sp),
-        size0: 4 * scale,
-        size1: 20 * scale,
-        life: 0.36 + Math.random() * 0.3,
-        color0: C(0xfff0c0),
-        color1: C(0xff5a12),
-        alpha: 0.9,
-        drag: 2.6,
+    // A second, faster and lower skirt gives the surge a defined leading edge.
+    const nSkirt = Math.round(34 * s * q);
+    for (let i = 0; i < nSkirt; i++) {
+      const a = (i / nSkirt) * TAU + rr(-0.14, 0.14);
+      const sp = (36 + rnd() * 32) * (0.65 + s * 0.5);
+      _p.set(deckX + Math.cos(a) * 3 * s, gy + 0.3, deckZ + Math.sin(a) * 3 * s);
+      _v.set(Math.cos(a) * sp, 0.4 + rnd() * 1.6, Math.sin(a) * sp);
+      this.dust.spawn({
+        pos: _p,
+        vel: _v,
+        size0: (5 + rnd() * 4) * sz,
+        size1: (20 + rnd() * 18) * sz,
+        life: 2.6 + rnd() * 2,
+        rot: rnd() * TAU,
+        rotV: (rnd() - 0.5) * 1.1,
+        color0: COL.dustHot,
+        color1: COL.dust,
+        color2: COL.dustDark,
+        alpha: 0.66,
+        drag: 1.8,
+        buoyancy: 0.15,
         fadeIn: 0.03,
-        wind: 0.3,
+        wind: 0.9,
+        turb: 1.6,
+        hugY: gy + 0.3,
       });
     }
-    for (let i = 0; i < Math.round(30 * scale); i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = 26 + Math.random() * 50;
+
+    // ---- prompt column: the stack is already building at t=0, the lingering
+    // source below only keeps feeding it -------------------------------------
+    const nCol = Math.round(20 * s * q);
+    for (let i = 0; i < nCol; i++) {
+      const a = rnd() * TAU;
+      const r0 = rnd() * 4 * s;
+      _p.set(deckX + Math.cos(a) * r0, gy + rr(1, 7) * s, deckZ + Math.sin(a) * r0);
+      _v.set(Math.cos(a) * rr(2, 8), 8 + rnd() * 20, Math.sin(a) * rr(2, 8));
+      this.smoke.spawn({
+        pos: _p,
+        vel: _v,
+        size0: (6 + rnd() * 5) * sz,
+        size1: (26 + rnd() * 22) * sz,
+        life: 5 + rnd() * 5,
+        rot: rnd() * TAU,
+        rotV: (rnd() - 0.5) * 0.4,
+        color0: COL.smokeLight,
+        color1: COL.smokeMid,
+        color2: COL.smokeDark,
+        alpha: 0.62,
+        drag: 0.6,
+        buoyancy: 2,
+        fadeIn: 0.04,
+        wind: 1,
+        turb: 2.6,
+      });
+    }
+
+    // ---- fire wash off the deflector ----------------------------------
+    const nFire = Math.round(22 * s * q);
+    for (let i = 0; i < nFire; i++) {
+      const a = rnd() * TAU;
+      const sp = 18 + rnd() * 34 * s;
+      _p.set(deckX, gy + 0.6 + rnd() * 2.5 * s, deckZ);
+      _v.set(Math.cos(a) * sp, rnd() * 8 * s, Math.sin(a) * sp);
+      this.fire.spawn({
+        pos: _p,
+        vel: _v,
+        size0: 2.6 * s,
+        size1: 12 * s,
+        life: 0.26 + rnd() * 0.3,
+        color0: COL.flameHot,
+        color1: COL.flameMid,
+        color2: COL.flameDeep,
+        alpha: 0.5 * ex,
+        drag: 2.8,
+        fadeIn: 0.02,
+        wind: 0.25,
+        turb: 6,
+      });
+    }
+
+    // ---- ejected grit and sparks --------------------------------------
+    const nGrit = Math.round(26 * s * q);
+    for (let i = 0; i < nGrit; i++) {
+      const a = rnd() * TAU;
+      const sp = 12 + rnd() * 34 * s;
+      _p.set(deckX + Math.cos(a) * 2 * s, gy + 0.4, deckZ + Math.sin(a) * 2 * s);
+      _v.set(Math.cos(a) * sp, 4 + rnd() * 12 * s, Math.sin(a) * sp);
+      this.grit.spawn({
+        pos: _p,
+        vel: _v,
+        size0: 0.1 + rnd() * 0.17,
+        size1: 0.08 + rnd() * 0.12,
+        life: 1.2 + rnd() * 1.4,
+        color0: COL.grit,
+        color1: COL.grit,
+        color2: COL.gritDark,
+        alpha: 0.95,
+        drag: 0.16,
+        gravity: 9.81,
+        fadeIn: 0.01,
+        wind: 0.15,
+      });
+    }
+    const nSpark = Math.round(34 * s * q);
+    for (let i = 0; i < nSpark; i++) {
+      const a = rnd() * TAU;
+      const sp = 24 + rnd() * 54;
+      _p.set(deckX, gy + 0.6, deckZ);
+      _v.set(Math.cos(a) * sp, rnd() * 22, Math.sin(a) * sp);
       this.sparks.spawn({
-        pos: pos.clone().add(new THREE.Vector3(0, 0.6, 0)),
-        vel: new THREE.Vector3(Math.cos(a) * sp, Math.random() * 20, Math.sin(a) * sp),
+        pos: _p,
+        vel: _v,
         size0: 0.9,
-        size1: 0.25,
-        life: 0.5 + Math.random() * 0.7,
-        color0: C(0xffe9b0),
-        color1: C(0xff5a10),
+        size1: 0.22,
+        life: 0.5 + rnd() * 0.8,
+        color0: COL.emberWhite,
+        color1: COL.emberOrange,
+        color2: COL.emberDark,
         alpha: 1,
         drag: 0.5,
         gravity: 9,
-        fadeIn: 0.02,
+        fadeIn: 0.01,
         wind: 0.2,
       });
     }
-    this.scorch.place(new THREE.Vector3(pos.x, this.groundAt(pos.x, pos.z), pos.z), 9 * scale, null, 1e9);
-    this.flash(pos.clone().add(new THREE.Vector3(0, 3, 0)), 2400 * scale, 0.5, 0xffb060);
-    this.shocks
-      .find((s) => !s.alive)
-      ?.fire(pos.clone().add(new THREE.Vector3(0, 2, 0)), 30 * scale, 0.5, C(0xfff0d0), camera);
-    if (this.weather) this.weather.addFlash(0.24 * scale, C(0xffb877));
+
+    // ---- pressure ring on the deck, plus a faint air shock -------------
+    _p.set(deckX, gy + 0.5, deckZ);
+    this._shock().fire(_p, 34 * s, 0.62, COL.ringPale, camera, {
+      ground: true,
+      emit: 0.35,
+      intensity: 0.85 * ex,
+      thickness: 0.035,
+      thickness1: 0.12,
+      ease: 0.5,
+    });
+    _p.set(deckX, gy + 3 * s, deckZ);
+    this._shock().fire(_p, 20 * s, 0.34, COL.ringWarm, camera, {
+      emit: 1,
+      intensity: 0.5 * ex,
+      thickness: 0.05,
+      ease: 0.45,
+    });
+
+    // ---- lingering column ---------------------------------------------
+    _p.set(deckX, gy, deckZ);
+    this._source(_p, gy, 2.4 + s * 1.1, s, 0);
+
+    this.scorch.place(_p2, 9 * s, null, 1e9);
+    _p.set(pos.x, pos.y + 3, pos.z);
+    this.flash(_p, 2400 * s, 0.5, 0xffb060);
+    if (this.weather) this.weather.addFlash(0.24 * s, COL.flameHot);
   }
 
-  /** Air intercept: fireball, ring, debris cone, lingering smoke. */
+  /**
+   * Air intercept: flash core, rolling fireball that cools to smoke, shock ring,
+   * a smoking debris cone and a lingering smoke ball. Thin air at altitude cuts
+   * the smoke back and shifts the whole event colder.
+   */
   intercept(pos, size, camera, palette) {
-    const fb = this.fireballs.find((f) => !f.alive) || this.fireballs[0];
-    fb.fire(pos, size * 0.35, size * 2.6, 0.85 + size * 0.006, palette);
-    const sw = this.shocks.find((s) => !s.alive);
-    if (sw) sw.fire(pos, size * 9, 0.75, C(0xffe6c0), camera);
-
     const dens = trailPersistence(pos.y);
-    for (let i = 0; i < 26; i++) {
-      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+    const thin = 1 - dens;
+    const q = this.q;
+    const hot = palette && palette.hot ? palette.hot : COL.flameWhite;
+    const mid = palette && palette.mid ? palette.mid : COL.flameMid;
+    const cool = palette && palette.cool ? palette.cool : COL.sootDeep;
+    // High up there is nothing to burn and nothing to glow off: the event goes
+    // white-blue and disperses instead of rolling into a sooty ball.
+    _ca.copy(hot).lerp(COL.coldWhite, thin * 0.6);
+    _cb.copy(mid).lerp(COL.coldBlue, thin * 0.7);
+    _cc.copy(cool).lerp(COL.coldBlue, thin * 0.35);
+
+    // ---- flash core ----------------------------------------------------
+    this.glow.spawn({
+      pos,
+      size0: size * 1.2,
+      size1: size * 4.2,
+      life: 0.14,
+      color0: COL.flameWhite,
+      color1: _ca,
+      color2: _cb,
+      alpha: 0.85,
+      drag: 5,
+      fadeIn: 0.005,
+      wind: 0,
+    });
+
+    // ---- fireball ------------------------------------------------------
+    const fb = this._fireball();
+    fb.fire(pos, size * 0.22, size * (1.5 + dens * 0.8), (0.55 + size * 0.008) * (0.55 + dens * 0.7), { hot: _ca, mid: _cb, cool: _cc }, {
+      rise: 4 + dens * 16,
+      roll: 0.8 + dens * 0.6,
+      smoke: 0.08 + dens * 0.5,
+      turb: 0.44 + dens * 0.34,
+      grow: 1.9,
+      glow: 0.8 + thin * 0.35,
+    });
+    // A second, smaller ball a beat later reads as the burn rolling over.
+    const fb2 = this._fireball();
+    if (fb2 !== fb) {
+      _p.copy(pos);
+      _p.x += rr(-1, 1) * size * 0.5;
+      _p.y += rr(-0.3, 0.9) * size * 0.5;
+      _p.z += rr(-1, 1) * size * 0.5;
+      fb2.fire(_p, size * 0.16, size * (0.9 + dens * 0.6), (0.75 + size * 0.01) * (0.55 + dens * 0.8), { hot: _ca, mid: _cb, cool: _cc }, {
+        rise: 6 + dens * 18,
+        roll: 0.5,
+        smoke: 0.1 + dens * 0.45,
+        turb: 0.6,
+        grow: 1.7,
+        glow: 0.55,
+        opacity: 0.7,
+      });
+    }
+
+    // ---- shock ring ----------------------------------------------------
+    this._shock().fire(pos, size * (4.5 + dens * 3), 0.22 + dens * 0.16, _ca, camera, {
+      emit: 1,
+      intensity: 0.42,
+      thickness: 0.03,
+      thickness1: 0.1,
+      ease: 0.42,
+    });
+
+    // ---- burning fragments of the airframe -----------------------------
+    const nFire = Math.round((16 + 14 * dens) * q);
+    for (let i = 0; i < nFire; i++) {
+      _v.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
+      _p.copy(pos).addScaledVector(_v, size * 0.4);
+      _v.multiplyScalar(26 + rnd() * 95);
       this.fire.spawn({
-        pos: pos.clone().addScaledVector(dir, size * 0.4),
-        vel: dir.clone().multiplyScalar(30 + Math.random() * 90),
-        size0: size * 0.5,
-        size1: size * 2.2,
-        life: 0.4 + Math.random() * 0.4,
-        color0: C(0xfff4d2),
-        color1: C(0xff5512),
-        alpha: 1,
-        drag: 1.8,
-        fadeIn: 0.02,
+        pos: _p,
+        vel: _v,
+        size0: size * 0.22,
+        size1: size * (0.9 + dens * 0.5),
+        life: (0.3 + rnd() * 0.4) * (0.6 + dens * 0.6),
+        color0: COL.flameHot,
+        color1: _cb,
+        color2: COL.flameDeep,
+        alpha: 0.55,
+        drag: 1.7,
+        fadeIn: 0.015,
         wind: 0.1,
+        turb: 8,
       });
     }
-    for (let i = 0; i < 40; i++) {
-      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+
+    // ---- embers: white, then orange, then dark ------------------------
+    const nSpark = Math.round((30 + 22 * dens) * q);
+    for (let i = 0; i < nSpark; i++) {
+      _v.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize().multiplyScalar(80 + rnd() * 260);
       this.sparks.spawn({
-        pos: pos.clone(),
-        vel: dir.multiplyScalar(90 + Math.random() * 240),
-        size0: 1.6,
-        size1: 0.3,
-        life: 0.7 + Math.random() * 1.2,
-        color0: C(0xffffe0),
-        color1: C(0xff7a20),
+        pos,
+        vel: _v,
+        size0: 0.85,
+        size1: 0.2,
+        life: 0.7 + rnd() * 1.4,
+        color0: COL.emberWhite,
+        color1: COL.emberOrange,
+        color2: COL.emberDark,
         alpha: 1,
-        drag: 0.28,
-        gravity: 9.8,
-        fadeIn: 0.01,
+        drag: 0.26,
+        gravity: 9.8 * dens,
+        fadeIn: 0.008,
         wind: 0.1,
       });
     }
-    for (let i = 0; i < 22; i++) {
-      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+
+    // ---- debris cone ----------------------------------------------------
+    // Fragments leave along a preferred axis, so the wreck reads as a cone
+    // rather than a uniform sphere.
+    _axis.set(rr(-1, 1), rr(-0.6, 0.4), rr(-1, 1)).normalize();
+    _side.set(-_axis.z, 0, _axis.x);
+    if (_side.lengthSq() < 1e-4) _side.set(1, 0, 0);
+    _side.normalize();
+    _up.crossVectors(_axis, _side);
+    const nDebris = Math.round((12 + size * 0.42) * Math.min(1, q + 0.25));
+    for (let i = 0; i < nDebris; i++) {
+      const spread = 0.42 + rnd() * 0.5;
+      const ang = rnd() * TAU;
+      _v.copy(_axis)
+        .addScaledVector(_side, Math.cos(ang) * spread)
+        .addScaledVector(_up, Math.sin(ang) * spread)
+        .normalize()
+        .multiplyScalar(40 + rnd() * 150);
+      _p.copy(pos);
+      const scl = 0.3 + rnd() * 1.3;
+      // Only the bigger pieces are worth a smoke ribbon.
+      this.debris.spawn(_p, _v, scl, 11 + rnd() * 10, scl > 0.85 && dens > 0.1 ? 0.055 + rnd() * 0.05 : 0);
+    }
+
+    // ---- prompt smoke plus a lingering, wind-drifting ball --------------
+    const nSmoke = Math.round((10 + 20 * dens) * q);
+    for (let i = 0; i < nSmoke; i++) {
+      _v.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
+      _p.copy(pos).addScaledVector(_v, size * 0.6);
+      _v.multiplyScalar(12 + rnd() * 38);
       this.smoke.spawn({
-        pos: pos.clone().addScaledVector(dir, size * 0.6),
-        vel: dir.clone().multiplyScalar(14 + Math.random() * 40),
-        size0: size * 0.8,
-        size1: size * (5 + Math.random() * 4) * (0.5 + dens),
-        life: (3.5 + Math.random() * 4) * (0.4 + dens),
-        rot: Math.random() * 6.28,
-        rotV: (Math.random() - 0.5) * 0.4,
-        color0: C(0x6f6a66),
-        color1: C(0x4a4744),
-        alpha: 0.55 * (0.3 + dens),
-        drag: 0.8,
-        buoyancy: 0.5,
-        fadeIn: 0.07,
+        pos: _p,
+        vel: _v,
+        size0: size * 0.7,
+        size1: size * (3.4 + rnd() * 3.4) * (0.45 + dens),
+        life: (3.2 + rnd() * 4) * (0.3 + dens),
+        rot: rnd() * TAU,
+        rotV: (rnd() - 0.5) * 0.5,
+        color0: COL.smokeMid,
+        color1: COL.smokeDark,
+        color2: COL.soot,
+        alpha: 0.6 * (0.22 + dens * 0.9),
+        drag: 0.75,
+        buoyancy: 0.5 * dens,
+        fadeIn: 0.22,
         wind: 1,
+        turb: 1.2 + dens * 1.6,
       });
     }
-    const nDebris = Math.round(14 + size * 0.5);
-    for (let i = 0; i < nDebris; i++) {
-      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).normalize();
-      this.debris.spawn(pos.clone(), dir.multiplyScalar(40 + Math.random() * 140), 0.6 + Math.random() * 2.4, 12 + Math.random() * 10);
+    if (dens > 0.12) {
+      _p.copy(pos);
+      this._source(_p, pos.y, 1.1 + dens * 1.4, size * 0.06 * (0.4 + dens), 2);
     }
-    this.glowPuff(pos, size * 6, 0.5, 0xffd9a0, 0.9);
+
     this.flash(pos, 60000 * size, 0.45, 0xffcc8a);
-    if (this.weather) this.weather.addFlash(0.5, C(0xffd2a0));
+    if (this.weather) this.weather.addFlash(0.5, COL.flameHot);
   }
 
-  /** Ground impact of a leaker. */
+  /** Ground impact of a leaker: base surge, rising column, ejecta and decals. */
   groundImpact(pos, size, camera) {
     const gy = this.groundAt(pos.x, pos.z);
-    const p = new THREE.Vector3(pos.x, gy, pos.z);
-    const fb = this.fireballs.find((f) => !f.alive) || this.fireballs[0];
-    fb.fire(p.clone().add(new THREE.Vector3(0, size * 0.5, 0)), size * 0.4, size * 3.0, 1.3, {
-      hot: C(0xfff2cf),
-      mid: C(0xff7a24),
-      cool: C(0x1a1512),
-    });
-    const sw = this.shocks.find((s) => !s.alive);
-    if (sw) sw.fire(p.clone().add(new THREE.Vector3(0, 2, 0)), size * 14, 1.1, C(0xffe0b0), camera);
+    const q = this.q;
+    _p2.set(pos.x, gy, pos.z);
+    const px = pos.x;
+    const pz = pos.z;
 
-    for (let i = 0; i < 70; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = 20 + Math.random() * 70;
+    const fb = this._fireball();
+    _p.set(px, gy + size * 0.35, pz);
+    fb.fire(_p, size * 0.22, size * 1.5, 1.5, { hot: COL.flameWhite, mid: COL.flameMid, cool: COL.sootDeep }, {
+      rise: 14,
+      roll: 0.75,
+      smoke: 0.62,
+      turb: 0.66,
+      // Compact and bright for the first frames, then it rolls open.
+      grow: 1.5,
+      glow: 0.62,
+      opacity: 0.95,
+    });
+
+    // ---- base surge: the dirty ring that rolls out along the deck -------
+    const nSurge = Math.round(64 * q);
+    for (let i = 0; i < nSurge; i++) {
+      const a = (i / nSurge) * TAU + rr(-0.08, 0.08);
+      const sp = 30 + rnd() * 52;
+      _p.set(px + Math.cos(a) * size * 0.2, gy + 0.5 + rnd() * 3, pz + Math.sin(a) * size * 0.2);
+      _v.set(Math.cos(a) * sp, 2 + rnd() * 7, Math.sin(a) * sp);
       this.dust.spawn({
-        pos: p.clone().add(new THREE.Vector3(0, 1, 0)),
-        vel: new THREE.Vector3(Math.cos(a) * sp, Math.random() * 26, Math.sin(a) * sp),
-        size0: size * 0.6,
-        size1: size * (5 + Math.random() * 5),
-        life: 6 + Math.random() * 6,
-        rot: Math.random() * 6.28,
-        rotV: (Math.random() - 0.5) * 0.3,
-        color0: C(0xc0a582),
-        color1: C(0x8a7660),
-        alpha: 0.6,
-        drag: 0.8,
-        buoyancy: 1.6,
-        fadeIn: 0.06,
+        pos: _p,
+        vel: _v,
+        size0: size * 0.7,
+        size1: size * (2.6 + rnd() * 2.6),
+        life: 6 + rnd() * 6,
+        rot: rnd() * TAU,
+        rotV: (rnd() - 0.5) * 0.4,
+        color0: COL.dustHot,
+        color1: COL.dust,
+        color2: COL.dustDark,
+        alpha: 0.75,
+        drag: 1.05,
+        buoyancy: 0.45,
+        fadeIn: 0.05,
         wind: 1,
+        turb: 2.4,
+        hugY: gy + 0.5,
       });
     }
-    for (let i = 0; i < 46; i++) {
-      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.9, Math.random() - 0.5).normalize();
+
+    // ---- rising stem ----------------------------------------------------
+    const nStem = Math.round(30 * q);
+    for (let i = 0; i < nStem; i++) {
+      const a = rnd() * TAU;
+      const r0 = rnd() * size * 0.5;
+      _p.set(px + Math.cos(a) * r0, gy + rnd() * size * 0.8, pz + Math.sin(a) * r0);
+      _v.set(Math.cos(a) * rr(2, 9), 12 + rnd() * 26, Math.sin(a) * rr(2, 9));
+      this.dust.spawn({
+        pos: _p,
+        vel: _v,
+        size0: size * 0.8,
+        size1: size * (2.6 + rnd() * 2.4),
+        life: 7 + rnd() * 5,
+        rot: rnd() * TAU,
+        rotV: (rnd() - 0.5) * 0.3,
+        color0: COL.dust,
+        color1: COL.dustDark,
+        color2: COL.smokeDark,
+        alpha: 0.62,
+        drag: 0.5,
+        buoyancy: 2.6,
+        fadeIn: 0.05,
+        wind: 1,
+        turb: 2.6,
+      });
+    }
+
+    // ---- fireball wash --------------------------------------------------
+    const nFire = Math.round(24 * q);
+    for (let i = 0; i < nFire; i++) {
+      _v.set(rnd() - 0.5, rnd() * 0.9, rnd() - 0.5).normalize();
+      _p.set(px, gy + 0.6, pz);
+      _v.multiplyScalar(22 + rnd() * 64);
       this.fire.spawn({
-        pos: p.clone(),
-        vel: dir.multiplyScalar(24 + Math.random() * 70),
-        size0: size * 0.7,
-        size1: size * 3,
-        life: 0.7 + Math.random() * 0.7,
-        color0: C(0xfff0c0),
-        color1: C(0xff4a0c),
-        alpha: 1,
-        drag: 1.4,
+        pos: _p,
+        vel: _v,
+        size0: size * 0.32,
+        size1: size * 1.25,
+        life: 0.45 + rnd() * 0.6,
+        color0: COL.flameHot,
+        color1: COL.flameMid,
+        color2: COL.flameDeep,
+        alpha: 0.55,
+        drag: 1.5,
         fadeIn: 0.02,
+        wind: 0.2,
+        turb: 7,
+      });
+    }
+
+    // ---- ejecta arcs: grit and embers on ballistic paths ----------------
+    const nEject = Math.round(48 * q);
+    for (let i = 0; i < nEject; i++) {
+      const a = rnd() * TAU;
+      const el = 0.7 + rnd() * 0.8;
+      const sp = 26 + rnd() * 62;
+      _p.set(px, gy + 0.5, pz);
+      _v.set(Math.cos(a) * sp * Math.cos(el), sp * Math.sin(el), Math.sin(a) * sp * Math.cos(el));
+      this.grit.spawn({
+        pos: _p,
+        vel: _v,
+        size0: 0.16 + rnd() * 0.34,
+        size1: 0.12 + rnd() * 0.24,
+        life: 2.4 + rnd() * 2.2,
+        color0: COL.grit,
+        color1: COL.grit,
+        color2: COL.gritDark,
+        alpha: 0.95,
+        drag: 0.1,
+        gravity: 9.81,
+        fadeIn: 0.01,
         wind: 0.2,
       });
     }
-    for (let i = 0; i < 60; i++) {
-      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() * 1.2, Math.random() - 0.5).normalize();
+    const nSpark = Math.round(46 * q);
+    for (let i = 0; i < nSpark; i++) {
+      _v.set(rnd() - 0.5, rnd() * 1.2, rnd() - 0.5).normalize().multiplyScalar(55 + rnd() * 190);
+      _p.set(px, gy + 0.5, pz);
       this.sparks.spawn({
-        pos: p.clone(),
-        vel: dir.multiplyScalar(60 + Math.random() * 200),
-        size0: 1.8,
-        size1: 0.4,
-        life: 1.2 + Math.random() * 1.6,
-        color0: C(0xfff6d8),
-        color1: C(0xff6010),
+        pos: _p,
+        vel: _v,
+        size0: 1,
+        size1: 0.25,
+        life: 1.1 + rnd() * 1.6,
+        color0: COL.emberWhite,
+        color1: COL.emberOrange,
+        color2: COL.emberDark,
         alpha: 1,
-        drag: 0.25,
+        drag: 0.24,
         gravity: 9.8,
         fadeIn: 0.01,
         wind: 0.2,
       });
     }
-    for (let i = 0; i < 30; i++) {
-      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() * 1.4, Math.random() - 0.5).normalize();
-      this.debris.spawn(p.clone(), dir.multiplyScalar(30 + Math.random() * 90), 0.8 + Math.random() * 3, 14);
+
+    // ---- tumbling wreckage, smoking on the way up ------------------------
+    const nDebris = Math.round(26 * Math.min(1, q + 0.25));
+    for (let i = 0; i < nDebris; i++) {
+      _v.set(rnd() - 0.5, rnd() * 1.4, rnd() - 0.5).normalize().multiplyScalar(26 + rnd() * 82);
+      _p.set(px, gy + 0.6, pz);
+      const scl = 0.35 + rnd() * 1.5;
+      this.debris.spawn(_p, _v, scl, 14, scl > 1.25 ? 0.045 : 0);
     }
-    // Rising smoke column
-    for (let i = 0; i < 30; i++) {
-      this.smoke.spawn({
-        pos: p.clone().add(new THREE.Vector3((Math.random() - 0.5) * size, Math.random() * size, (Math.random() - 0.5) * size)),
-        vel: new THREE.Vector3((Math.random() - 0.5) * 8, 6 + Math.random() * 14, (Math.random() - 0.5) * 8),
-        size0: size,
-        size1: size * (6 + Math.random() * 5),
-        life: 12 + Math.random() * 10,
-        rot: Math.random() * 6.28,
-        rotV: (Math.random() - 0.5) * 0.25,
-        color0: C(0x4d4844),
-        color1: C(0x2e2b28),
-        alpha: 0.68,
-        drag: 0.5,
-        buoyancy: 2.4,
-        fadeIn: 0.05,
-        wind: 1,
-      });
-    }
-    this.craters.place(p, size * 2.4, null, 1e9);
-    this.scorch.place(p, size * 4.4, null, 1e9);
-    this.flash(p.clone().add(new THREE.Vector3(0, size, 0)), 90000, 0.7, 0xffb060);
-    if (this.weather) this.weather.addFlash(0.85, C(0xffb070));
+
+    // ---- rings and light -------------------------------------------------
+    _p.set(px, gy + 0.6, pz);
+    this._shock().fire(_p, size * 6.5, 0.9, COL.ringPale, camera, {
+      ground: true,
+      emit: 0.3,
+      intensity: 0.9,
+      thickness: 0.035,
+      thickness1: 0.13,
+      ease: 0.5,
+    });
+    _p.set(px, gy + size * 0.5, pz);
+    this._shock().fire(_p, size * 4.5, 0.42, COL.ringWarm, camera, {
+      emit: 1,
+      intensity: 0.7,
+      thickness: 0.045,
+      ease: 0.42,
+    });
+
+    _p.set(px, gy, pz);
+    this._source(_p, gy, 5.5, size * 0.09, 1);
+
+    this.craters.place(_p2, size * 2.4, null, 1e9);
+    this.scorch.place(_p2, size * 4.4, null, 1e9);
+    _p.set(px, gy + size, pz);
+    this.flash(_p, 90000, 0.7, 0xffb060);
+    if (this.weather) this.weather.addFlash(0.85, COL.flameHot);
   }
 
   /** Small puff for staging events, decoy release and minor debris. */
   puff(pos, size, color = 0xb0aca8, count = 8) {
+    _ca.set(color);
     for (let i = 0; i < count; i++) {
-      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      _v.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize().multiplyScalar(6 + rnd() * 22);
       this.smoke.spawn({
-        pos: pos.clone(),
-        vel: dir.multiplyScalar(6 + Math.random() * 22),
+        pos,
+        vel: _v,
         size0: size * 0.5,
         size1: size * 3,
-        life: 1.6 + Math.random() * 2,
-        rot: Math.random() * 6.28,
-        rotV: (Math.random() - 0.5) * 0.5,
-        color0: C(color),
-        color1: C(0x777270),
+        life: 1.6 + rnd() * 2,
+        rot: rnd() * TAU,
+        rotV: (rnd() - 0.5) * 0.6,
+        color0: _ca,
+        color1: COL.smokeMid,
+        color2: COL.smokeDark,
         alpha: 0.5,
         drag: 1.2,
         buoyancy: 0.4,
         fadeIn: 0.06,
         wind: 1,
+        turb: 1.4,
       });
     }
   }
@@ -1320,14 +2101,19 @@ export class Effects {
   ablation(pos, vel, intensity) {
     const n = intensity > 0.6 ? 2 : 1;
     for (let i = 0; i < n; i++) {
+      _v.copy(vel).multiplyScalar(-0.12);
+      _v.x += (rnd() - 0.5) * 30;
+      _v.y += (rnd() - 0.5) * 30;
+      _v.z += (rnd() - 0.5) * 30;
       this.sparks.spawn({
-        pos: pos.clone(),
-        vel: vel.clone().multiplyScalar(-0.12).add(new THREE.Vector3((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30)),
+        pos,
+        vel: _v,
         size0: 2.2 * intensity,
         size1: 0.4,
-        life: 0.5 + Math.random() * 0.8,
-        color0: C(0xfff2d0),
-        color1: C(0xff7a2a),
+        life: 0.5 + rnd() * 0.8,
+        color0: COL.emberWhite,
+        color1: COL.emberOrange,
+        color2: COL.emberDark,
         alpha: intensity,
         drag: 0.4,
         gravity: 4,
@@ -1352,6 +2138,7 @@ export class Effects {
       s.alive = false;
       s.mesh.visible = false;
     }
+    for (const s of this.sources) s.active = false;
     this.debris.clear();
     this.scorch.clear();
     this.craters.clear();
@@ -1363,15 +2150,131 @@ export class Effects {
     }
   }
 
+  /* ------------------------------------------------------------ internals */
+
+  /** Feed the lingering smoke sources (launch pads, craters, wrecks). */
+  _updateSources(dt) {
+    for (const s of this.sources) {
+      if (!s.active) continue;
+      s.t += dt;
+      if (s.t >= s.life) {
+        s.active = false;
+        continue;
+      }
+      const k = 1 - s.t / s.life;
+      s.acc += dt * (s.kind === 2 ? 26 : 34) * k * this.q;
+      let n = Math.floor(s.acc);
+      if (n <= 0) continue;
+      s.acc -= n;
+      n = Math.min(n, 6);
+      const sc = s.scale;
+      for (let i = 0; i < n; i++) {
+        if (s.kind === 2) {
+          // Air burst: a smoke ball that expands in place and drifts downwind.
+          _v.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
+          _p.copy(s.pos).addScaledVector(_v, sc * rr(1, 9));
+          _v.multiplyScalar(rr(1, 7));
+          this.smoke.spawn({
+            pos: _p,
+            vel: _v,
+            size0: sc * 5,
+            size1: sc * rr(13, 24),
+            life: rr(4.5, 8.5),
+            rot: rnd() * TAU,
+            rotV: (rnd() - 0.5) * 0.3,
+            color0: COL.smokeMid,
+            color1: COL.smokeDark,
+            color2: COL.soot,
+            alpha: 0.4,
+            drag: 0.55,
+            buoyancy: 0.5,
+            fadeIn: 0.16,
+            wind: 1,
+            turb: 1.6,
+          });
+          continue;
+        }
+        const a = rnd() * TAU;
+        const r0 = rnd() * sc * (s.kind === 1 ? 5 : 2.6);
+        _p.set(s.pos.x + Math.cos(a) * r0, s.gy + rr(0.5, 3) * sc, s.pos.z + Math.sin(a) * r0);
+        _v.set(Math.cos(a) * rr(1, 5) * sc, rr(5, 15) * (s.kind === 1 ? 1.4 : 1), Math.sin(a) * rr(1, 5) * sc);
+        this.smoke.spawn({
+          pos: _p,
+          vel: _v,
+          size0: sc * 6,
+          size1: sc * rr(22, 40),
+          life: rr(5, 11) * (s.kind === 1 ? 1.4 : 1),
+          rot: rnd() * TAU,
+          rotV: (rnd() - 0.5) * 0.35,
+          color0: s.kind === 1 ? COL.smokeDark : COL.smokeLight,
+          color1: s.kind === 1 ? COL.soot : COL.smokeMid,
+          color2: s.kind === 1 ? COL.sootDeep : COL.smokeDark,
+          alpha: s.kind === 1 ? 0.7 : 0.58,
+          drag: 0.5,
+          buoyancy: s.kind === 1 ? 2.6 : 1.8,
+          fadeIn: 0.09,
+          wind: 1,
+          turb: 2.4,
+        });
+      }
+    }
+  }
+
+  /**
+   * Dust motes hanging in the air a few metres from the eye. Only worth drawing
+   * in daylight, where they catch the sun and give the air some depth.
+   */
+  _updateMotes(dt, camera) {
+    if (!this.motesEnabled) return;
+    const layer = this.motes;
+    const sunUp = this.weather && this.weather.tod ? this.weather.tod.sunElev : 0.6;
+    if (sunUp <= 0.08) return;
+    this._moteTimer -= dt;
+    if (this._moteTimer > 0) return;
+    this._moteTimer = 0.05;
+    const want = Math.round(layer.capacity * 0.6);
+    let spawn = Math.min(10, want - layer.live);
+    const cam = camera.position;
+    while (spawn-- > 0) {
+      const a = rnd() * TAU;
+      const r0 = 1.5 + rnd() * 9;
+      _p.set(cam.x + Math.cos(a) * r0, cam.y + rr(-1.5, 1.8), cam.z + Math.sin(a) * r0);
+      const gy = this.groundAt(_p.x, _p.z);
+      if (_p.y < gy + 0.15) _p.y = gy + 0.15;
+      _v.set(rr(-0.12, 0.12), rr(-0.05, 0.09), rr(-0.12, 0.12));
+      layer.spawn({
+        pos: _p,
+        vel: _v,
+        size0: 0.012 + rnd() * 0.035,
+        size1: 0.012 + rnd() * 0.035,
+        life: 2.6 + rnd() * 3.4,
+        color0: COL.mote,
+        color1: COL.mote,
+        alpha: (0.16 + rnd() * 0.3) * Math.min(1, sunUp * 2),
+        drag: 0.6,
+        buoyancy: 0.015,
+        fadeIn: 0.25,
+        wind: 0.12,
+        turb: 0.05,
+      });
+    }
+  }
+
   update(dt, camera) {
     this.time += dt;
+    this._updateSources(dt);
+    this._updateMotes(dt, camera);
     let count = 0;
     for (const l of this.layers) {
-      l.update(dt, this.wind);
+      l.update(dt, this.wind, this.time);
       count += l.writeBuffers(camera);
     }
-    for (const t of [...this.trails, ...this.hotTrails]) {
+    for (const t of this.trails) {
       t.setTime(this.time);
+      t.setWind(this.wind);
+    }
+    for (const t of this.hotTrails) t.setTime(this.time);
+    for (const t of [...this.trails, ...this.hotTrails]) {
       if (!t.active && t.mesh.visible) {
         // Fade the orphaned ribbon out, then release it.
         const fade = t.mat.uniforms.uFade.value;
@@ -1384,23 +2287,53 @@ export class Effects {
         t._orphan = 0;
       }
     }
-    for (const f of this.fireballs) f.update(dt, this.time);
+    for (const f of this.fireballs) f.update(dt, this.time, this.wind);
     for (const s of this.shocks) s.update(dt);
-    count += this.debris.update(dt, this.terrainFn, (p) => {
-      this.dust.spawn({
-        pos: p.clone(),
-        vel: new THREE.Vector3((Math.random() - 0.5) * 4, 2 + Math.random() * 3, (Math.random() - 0.5) * 4),
-        size0: 0.8,
-        size1: 5,
-        life: 1.6,
-        color0: C(0xbda480),
-        color1: C(0x9a8368),
-        alpha: 0.4,
-        drag: 1.4,
-        buoyancy: 0.5,
-        fadeIn: 0.08,
-      });
-    });
+    count += this.debris.update(
+      dt,
+      this.terrainFn,
+      (p, v) => {
+        _v.set((rnd() - 0.5) * 4, 2 + rnd() * 3, (rnd() - 0.5) * 4);
+        this.dust.spawn({
+          pos: p,
+          vel: _v,
+          size0: 0.8,
+          size1: 5,
+          life: 1.6,
+          color0: COL.dust,
+          color1: COL.dustDark,
+          alpha: 0.4,
+          drag: 1.4,
+          buoyancy: 0.5,
+          fadeIn: 0.08,
+          turb: 0.8,
+        });
+      },
+      (p, v, t, scl) => {
+        // Smoke ribbon shed by a tumbling fragment. Puffs start wide enough to
+        // overlap their neighbours along the arc, otherwise the trail reads as a
+        // string of beads rather than a continuous wisp.
+        _v.copy(v).multiplyScalar(-0.05);
+        this.smoke.spawn({
+          pos: p,
+          vel: _v,
+          size0: scl * (2 + rnd()),
+          size1: scl * (7 + rnd() * 5),
+          life: 1 + rnd() * 1.1,
+          rot: rnd() * TAU,
+          rotV: (rnd() - 0.5) * 0.6,
+          color0: COL.dustDark,
+          color1: COL.smokeDark,
+          color2: COL.soot,
+          alpha: 0.16 * (1 - t * 0.6),
+          drag: 1.1,
+          buoyancy: 0.9,
+          fadeIn: 0.1,
+          wind: 1,
+          turb: 1.6,
+        });
+      }
+    );
     this.scorch.update(dt);
     this.craters.update(dt);
     for (const f of this.flashLights) {

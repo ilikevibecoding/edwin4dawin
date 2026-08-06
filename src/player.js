@@ -28,8 +28,11 @@ export class Player {
     this.bobOffset = new THREE.Vector3();
     this.stepDistance = 0;
     this.shake = 0;
-    this.shakeSeed = Math.random() * 100;
+    // Accumulated from dt rather than wall-clock so test captures are stable.
+    this.shakeTime = 0;
     this.recoilKick = new THREE.Vector2();
+    /** Set by the game when keyboard movement should be accepted. */
+    this.allowKeyboard = false;
 
     this.keys = new Set();
     this.locked = false;
@@ -157,10 +160,11 @@ export class Player {
     this.camera.rotation.z = roll * 0.6;
 
     // ---- shake -------------------------------------------------------
+    this.shakeTime += dt;
     this.shake = Math.max(0, this.shake - dt * 1.5);
     if (this.shake > 0.001) {
       const s = this.shake * this.shake;
-      const t = performance.now() * 0.001 + this.shakeSeed;
+      const t = this.shakeTime;
       const amp = state.reducedMotion ? 0.1 : 1;
       this.camera.position.x += Math.sin(t * 61.3) * 0.055 * s * amp;
       this.camera.position.y += Math.sin(t * 47.1 + 1.7) * 0.062 * s * amp;
@@ -174,7 +178,9 @@ export class Player {
 
   _move(dt) {
     const k = this.keys;
-    const canMove = this.enabled && !this.docked && (this.locked || state.testMode);
+    // Pointer lock is the normal path, but keyboard movement also works when the
+    // game says input is live — some browsers refuse or drop the lock.
+    const canMove = this.enabled && !this.docked && (this.locked || this.allowKeyboard || state.testMode);
     let fwd = 0;
     let side = 0;
     if (canMove) {

@@ -1407,6 +1407,359 @@ export function signBoardTexture(w, h, { lines = [], bg = '#c8bda2', fg = '#2021
   });
 }
 
+/**
+ * Rough sawn timber for pallets, crates and dunnage: plank banding, grain,
+ * nail heads and a faint stencil band across the middle.
+ */
+export function plywoodMaps(size = 256, tint = '#a2865a') {
+  return memo(`plywood${size}${tint}`, () => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const hgt = makeCanvas(size);
+    const hctx = hgt.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = tint;
+    ctx.fillRect(0, 0, size, size);
+    hctx.fillStyle = '#8a8a8a';
+    hctx.fillRect(0, 0, size, size);
+    const rnd = seeded(3313);
+    const planks = 5;
+    const pw = size / planks;
+    for (let i = 0; i < planks; i++) {
+      const k = 0.86 + rnd() * 0.3;
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = `rgb(${(255 * k) | 0},${(250 * k) | 0},${(242 * k) | 0})`;
+      ctx.fillRect(i * pw, 0, pw, size);
+      ctx.globalCompositeOperation = 'source-over';
+      // plank gap
+      ctx.fillStyle = 'rgba(38,30,20,0.75)';
+      ctx.fillRect(i * pw - 1.5, 0, 3, size);
+      hctx.fillStyle = '#4a4a4a';
+      hctx.fillRect(i * pw - 1.5, 0, 3, size);
+      // grain
+      for (let g = 0; g < 26; g++) {
+        const y = rnd() * size;
+        ctx.strokeStyle = `rgba(${60 + rnd() * 50},${44 + rnd() * 36},${26 + rnd() * 24},${0.08 + rnd() * 0.16})`;
+        ctx.lineWidth = 0.7 + rnd() * 1.6;
+        ctx.beginPath();
+        ctx.moveTo(i * pw + 2, y);
+        for (let s = 0; s < 5; s++) ctx.lineTo(i * pw + 2 + (s + 1) * (pw / 5), y + (rnd() - 0.5) * 7);
+        ctx.stroke();
+      }
+      // nail heads at the ends
+      for (const ny of [size * 0.08, size * 0.92]) {
+        const nx = i * pw + pw * 0.5;
+        ctx.fillStyle = 'rgba(52,48,44,0.8)';
+        ctx.beginPath();
+        ctx.arc(nx, ny, size / 110, 0, Math.PI * 2);
+        ctx.fill();
+        hctx.fillStyle = '#c8c8c8';
+        hctx.beginPath();
+        hctx.arc(nx, ny, size / 110, 0, Math.PI * 2);
+        hctx.fill();
+      }
+    }
+    // stencil band
+    ctx.save();
+    ctx.globalAlpha = 0.42;
+    ctx.fillStyle = '#2b2723';
+    ctx.font = `bold ${size * 0.09}px "Arial Narrow", Impact, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('THIS SIDE UP', size / 2, size * 0.44);
+    ctx.font = `bold ${size * 0.06}px "Arial Narrow", Impact, sans-serif`;
+    ctx.fillText('AEGIS RIDGE  ·  LOT 07', size / 2, size * 0.56);
+    ctx.restore();
+    splotches(ctx, size, size, 34, [[64, 50, 32], [172, 150, 112], [96, 80, 54]], [6, 34], 41, [0.04, 0.18]);
+    grain(ctx, size, size, 0.1);
+    const rough = makeCanvas(size);
+    const rc = rough.getContext('2d', { willReadFrequently: true });
+    rc.fillStyle = '#eaeaea';
+    rc.fillRect(0, 0, size, size);
+    return {
+      map: finish(c),
+      normalMap: finish(normalFromCanvas(hgt, 1.4), { srgb: false }),
+      roughnessMap: finish(rough, { srgb: false }),
+    };
+  });
+}
+
+/**
+ * Invented unit banner for the site flagpole: horizontal bands, a chevron and
+ * the fictional site name. Double-sided use is fine — it is symmetrical.
+ */
+export function unitFlagTexture(w = 256, h = 160) {
+  return memo(`unitflag${w}${h}`, () => {
+    const c = makeCanvas(w, h);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#20303c';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#b8471f';
+    ctx.fillRect(0, h * 0.72, w, h * 0.14);
+    ctx.fillStyle = '#d8cba6';
+    ctx.fillRect(0, h * 0.86, w, h * 0.14);
+    // chevron
+    ctx.fillStyle = '#d8cba6';
+    ctx.beginPath();
+    ctx.moveTo(w * 0.1, h * 0.18);
+    ctx.lineTo(w * 0.3, h * 0.18);
+    ctx.lineTo(w * 0.44, h * 0.45);
+    ctx.lineTo(w * 0.3, h * 0.62);
+    ctx.lineTo(w * 0.1, h * 0.62);
+    ctx.lineTo(w * 0.24, h * 0.45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#e6dcc0';
+    ctx.font = `bold ${h * 0.19}px "Arial Narrow", Impact, sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '2px';
+    ctx.fillText('AEGIS', w * 0.5, h * 0.3);
+    ctx.fillText('RIDGE', w * 0.5, h * 0.52);
+    // sun bleaching toward the fly end plus general wear
+    const bl = ctx.createLinearGradient(0, 0, w, 0);
+    bl.addColorStop(0, 'rgba(232,226,200,0)');
+    bl.addColorStop(1, 'rgba(232,226,200,0.3)');
+    ctx.fillStyle = bl;
+    ctx.fillRect(0, 0, w, h);
+    const n = fbmCanvas(Math.max(64, h), { seed: 53, octaves: 5, scale: 9, contrast: 1.6 });
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = 0.3;
+    ctx.drawImage(n, 0, 0, w, h);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    grain(ctx, w, h, 0.06);
+    return finish(c, { wrap: THREE.ClampToEdgeWrapping });
+  });
+}
+
+/**
+ * Dry, sun-bleached concrete for the large ground planes.
+ *
+ * Two things separate this from `concreteMaps`. The roughness map stays inside
+ * a narrow high band, so no patch of the apron can drop to a near-mirror
+ * roughness and pick up the sky as a wet blue sheen. And the albedo keeps very
+ * low contrast, so one tile repeated across a 380 m pad reads as a surface
+ * rather than as a pattern. Expansion joints are left to the decal sheet.
+ */
+export function dryConcreteMaps(size = 512, tint = '#b0a897', seed = 11) {
+  return memo(`dryconcrete${size}${tint}${seed}`, () => {
+    // Broad cement mottle, plus a fine aggregate break-up for the normal map.
+    const broad = fbmCanvas(size, { seed: 60 + seed, octaves: 6, scale: 5, contrast: 0.6 });
+    const fine = fbmCanvas(size, { seed: 140 + seed * 7, octaves: 4, scale: 34, contrast: 1.15 });
+    const rnd = seeded(seed * 613 + 29);
+
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = tint;
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = 0.42;
+    ctx.drawImage(broad, 0, 0);
+    ctx.globalAlpha = 0.16;
+    ctx.drawImage(fine, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+
+    // Slow tonal drift: bleached patches and ground-in dirt, both weak.
+    splotches(ctx, size, size, 40, [[214, 208, 192], [138, 130, 116]], [size * 0.12, size * 0.36], seed * 3 + 1, [0.02, 0.07]);
+    splotches(ctx, size, size, 90, [[196, 190, 174], [128, 120, 106], [166, 158, 142]], [size * 0.02, size * 0.1], seed * 11 + 5, [0.02, 0.08]);
+
+    // Broom finish: faint parallel drag lines from the float pass.
+    ctx.strokeStyle = 'rgba(150,144,130,0.05)';
+    ctx.lineWidth = Math.max(1, size / 512);
+    for (let i = 0; i < size; i += 3) {
+      ctx.beginPath();
+      ctx.moveTo(0, i + rnd() * 2);
+      ctx.lineTo(size, i + rnd() * 2);
+      ctx.stroke();
+    }
+
+    // Exposed aggregate specks where the surface has worn through. Kept small
+    // and faint: at a 24 m tile these are read from a metre away, and heavy
+    // ones turn the apron into shingle.
+    for (let i = 0; i < 900; i++) {
+      const r = 0.5 + rnd() * 1.1;
+      const dark = rnd() > 0.45;
+      ctx.fillStyle = dark ? `rgba(126,118,104,${0.05 + rnd() * 0.1})` : `rgba(206,200,184,${0.05 + rnd() * 0.1})`;
+      ctx.beginPath();
+      ctx.arc(rnd() * size, rnd() * size, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Sparse hairline cracks, kept light so they do not tile obviously.
+    ctx.strokeStyle = 'rgba(96,90,82,0.34)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 14; i++) {
+      ctx.beginPath();
+      let x = rnd() * size;
+      let y = rnd() * size;
+      ctx.moveTo(x, y);
+      for (let k = 0; k < 8; k++) {
+        x += (rnd() - 0.5) * size * 0.12;
+        y += (rnd() - 0.5) * size * 0.12;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    grain(ctx, size, size, 0.05);
+
+    // Roughness clamped to 0.84 .. 1.0 — dry concrete, never a sheen.
+    const rough = makeCanvas(size);
+    const rctx = rough.getContext('2d', { willReadFrequently: true });
+    rctx.fillStyle = '#ffffff';
+    rctx.fillRect(0, 0, size, size);
+    rctx.globalAlpha = 0.1;
+    rctx.drawImage(broad, 0, 0);
+    rctx.globalAlpha = 0.08;
+    rctx.drawImage(fine, 0, 0);
+    rctx.globalAlpha = 1;
+
+    // Height for the normal map: mostly aggregate, a little broad waviness.
+    const hgt = makeCanvas(size);
+    const hctx = hgt.getContext('2d', { willReadFrequently: true });
+    hctx.drawImage(fine, 0, 0);
+    hctx.globalAlpha = 0.45;
+    hctx.drawImage(broad, 0, 0);
+    hctx.globalAlpha = 1;
+
+    return {
+      map: finish(c, { repeat: [1, 1] }),
+      normalMap: finish(normalFromCanvas(hgt, 1.1), { srgb: false }),
+      roughnessMap: finish(rough, { srgb: false }),
+    };
+  });
+}
+
+/**
+ * Slow, large-scale grime for a big paved surface: a transparent sheet of
+ * dust-blown pale patches and traffic-darkened lanes. Laid over the apron at a
+ * tile of ~90 m, it gives the pad the tonal drift a 380 m slab needs without
+ * touching the metre-scale concrete tiling underneath.
+ */
+export function apronWearTexture(size = 512, seed = 5) {
+  return memo(`apronwear${size}${seed}`, () => {
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, size, size);
+    const rnd = seeded(seed * 331 + 17);
+
+    // Ground-in traffic grime, then wind-blown dust on top of it.
+    for (let i = 0; i < 26; i++) {
+      const x = rnd() * size;
+      const y = rnd() * size;
+      const r = size * (0.08 + rnd() * 0.24);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(88,82,72,${0.1 + rnd() * 0.14})`);
+      g.addColorStop(1, 'rgba(88,82,72,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+    }
+    for (let i = 0; i < 34; i++) {
+      const x = rnd() * size;
+      const y = rnd() * size;
+      const r = size * (0.06 + rnd() * 0.22);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(190,172,136,${0.08 + rnd() * 0.14})`);
+      g.addColorStop(1, 'rgba(190,172,136,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+    }
+    // Break the blobs up so they never read as circles.
+    const n = fbmCanvas(size, { seed: 210 + seed, octaves: 6, scale: 4, contrast: 1.5 });
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalAlpha = 0.6;
+    ctx.drawImage(n, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    return finish(c);
+  });
+}
+
+/**
+ * Open desert hardpan for the terrain sheets.
+ *
+ * `sandMaps` is tuned for mid-distance, where its dark gravel layer mips down
+ * to an even brown. Stood on, that same layer is a high-contrast orange and
+ * black rash. This keeps the albedo range narrow, puts the detail into small
+ * scattered stones and a fine grain, and leaves the relief gentle.
+ */
+export function desertGroundMaps(size = 512, tint = '#9c7f56') {
+  return memo(`desertground${size}${tint}`, () => {
+    const rnd = seeded(4127);
+    const broad = fbmCanvas(size, { seed: 71, octaves: 6, scale: 4, contrast: 0.7 });
+    const fine = fbmCanvas(size, { seed: 133, octaves: 5, scale: 22, contrast: 0.9 });
+
+    const c = makeCanvas(size);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = tint;
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = 0.3;
+    ctx.drawImage(broad, 0, 0);
+    ctx.globalAlpha = 0.18;
+    ctx.drawImage(fine, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    // Kept faint: the terrain sheet tiles every 18 m, so anything with real
+    // contrast here reads as metre-wide brown clouds from standing height.
+    splotches(ctx, size, size, 60, [[176, 158, 126], [134, 118, 92], [158, 142, 114]], [size * 0.03, size * 0.18], 31, [0.02, 0.06]);
+
+    // Scattered desert pavement: small stones, most of them pale.
+    const hgt = makeCanvas(size);
+    const hctx = hgt.getContext('2d', { willReadFrequently: true });
+    hctx.drawImage(fine, 0, 0);
+    hctx.globalAlpha = 0.5;
+    hctx.drawImage(broad, 0, 0);
+    hctx.globalAlpha = 1;
+    for (let i = 0; i < 1100; i++) {
+      const x = rnd() * size;
+      const y = rnd() * size;
+      const r = 0.8 + rnd() * 1.9;
+      const shade = rnd();
+      const tone = shade > 0.72 ? [118, 108, 90] : shade > 0.3 ? [170, 156, 130] : [198, 186, 160];
+      ctx.fillStyle = `rgba(${tone[0]},${tone[1]},${tone[2]},${0.1 + rnd() * 0.16})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      // Only a hint of relief: pushed further these read as craters, not stones.
+      hctx.fillStyle = `rgba(210,210,210,${0.1 + rnd() * 0.16})`;
+      hctx.beginPath();
+      hctx.arc(x, y, r, 0, Math.PI * 2);
+      hctx.fill();
+    }
+    // Shallow rills where run-off has combed the surface.
+    ctx.strokeStyle = 'rgba(128,116,94,0.1)';
+    ctx.lineWidth = 1.6;
+    for (let i = 0; i < 40; i++) {
+      let x = rnd() * size;
+      let y = rnd() * size;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let k = 0; k < 9; k++) {
+        x += (rnd() - 0.3) * size * 0.09;
+        y += (rnd() - 0.5) * size * 0.05;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    grain(ctx, size, size, 0.07);
+
+    const rough = makeCanvas(size);
+    const rctx = rough.getContext('2d', { willReadFrequently: true });
+    rctx.fillStyle = '#fafafa';
+    rctx.fillRect(0, 0, size, size);
+    rctx.globalAlpha = 0.12;
+    rctx.drawImage(broad, 0, 0);
+    rctx.globalAlpha = 1;
+
+    return {
+      map: finish(c, { repeat: [1, 1] }),
+      normalMap: finish(normalFromCanvas(hgt, 1.3), { srgb: false }),
+      roughnessMap: finish(rough, { srgb: false }),
+    };
+  });
+}
+
 /** Landing-circle markings for the utility pad. */
 export function helipadDecal(size = 512, label = 'H') {
   return memo(`helipad${size}${label}`, () => {
