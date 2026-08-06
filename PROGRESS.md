@@ -148,3 +148,38 @@ adaptive quality scaler + shadow cadence protect the 60 fps target on mid-range 
 
 **Next (iteration 4 / final):** scripted demo video of a full engagement, final artifact
 gallery, README polish, PR.
+
+### Iteration 4 — manual playthrough, real-time fix, presentation polish
+
+**Manual test 1 (computer-use agent, live browser):** full engagement played end-to-end —
+SATURATION + SUNSET via console, TRK-01 killed by ZENITH ("SPLASH TRK-01 — PROXIMITY KILL"),
+TRK-02 missed by RAMPART with the correct explained reason (predicted intercept above its
+ceiling, closest 51 m). Video review of the recording surfaced three real issues:
+1. ESC mid-game re-showed the full start screen over gameplay (looked broken).
+2. Result banners too short-lived to register in a time-compressed video.
+3. High-altitude intercept flash read as a pixel at 6-8 km.
+
+**Manual test 2 exposed the big one:** on a slow/software GPU the game ran in deep slow motion
+— threats took minutes to appear. Root cause: frame dt clamped to 0.1 s *and* the stepper
+capped at 10×(1/120 s) per frame, so below ~10.4 fps sim time always lagged wall time (at the
+recorded ~2 fps: 6× slow-mo, radar tracks "never" formed). The old fps stat also silently
+clamped at 10 fps minimum, hiding the truth (the "11.7 fps" SwiftShader reading was partly an
+artifact of 0.1 s sample clamping).
+
+**Fixes:**
+- Real-time catch-up stepping: up to 0.25 s of fixed 1/120 s steps per rendered frame (sim
+  steps are cheap next to a render); game stays real-time down to ~4 fps, graceful below.
+- Honest fps stat (unclamped samples) → adaptive quality scaler now sees real numbers.
+- ESC now shows a compact PAUSED overlay ("CLICK TO RE-ENTER THE RANGE"); full start screen
+  only before first entry. Verified manually — screenshot in artifacts.
+- Result banners 3.2 s → 5 s; air-burst distance compensation cap 3× → 5× (+ partial
+  compensation on the hanging smoke ball) so 6-8 km kills read as events.
+- Perf test re-based on sim pace (>0.4× on software raster) + draw/tri budget instead of the
+  now-honest fps number; pace measured 0.56× under SwiftShader (real GPUs: 30-100× faster).
+
+**Manual test 3 (recorded, after fixes):** clean full playthrough — ZENITH kill with banner,
+RAMPART proximity kill, two unengaged threats impacting the base, debrief "DEFENSE OVERRUN,
+2 intercepted / 2 impacts". Recording saved as a walkthrough artifact.
+
+**Test results: 18/18 passing.** Final capture: cinematic 24 fps stepped-render video of the
+same engagement flow (smooth offline render of the real deterministic sim).

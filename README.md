@@ -39,8 +39,12 @@ Scenarios: `SINGLE TRACK`, `SATURATION` (3–5 arcs), `NIGHT RAID` (targets + ha
 ## Controls
 
 `WASD` move · `Shift` sprint · `mouse` look · `E` interact / assign · `F` authorize · `1·2·3` battery ·
-`TAB` console · `R` restart · `H` help · `M` mute · `F3` performance HUD.
+`TAB` console · `R` restart · `H` help · `M` mute · `F3` performance HUD · `ESC` pause (click to re-enter).
 Reduced-motion setting (start screen) disables head-bob and camera shake.
+
+The fixed-timestep simulation self-corrects on slow machines (up to 0.25 s of catch-up per
+frame), and an adaptive quality scaler steps down post-processing, pixel ratio and shadows
+if the frame rate can't hold.
 
 ## Testing hooks
 
