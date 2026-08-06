@@ -242,10 +242,16 @@ for (const cue of cues) {
 
 // --------------------------------------------------------------------- mastering
 
-// Soft-knee limiter, then a short fade at each end.
-let peak = 0;
-for (let i = 0; i < N; i++) peak = Math.max(peak, Math.abs(left[i]), Math.abs(right[i]));
-const norm = peak > 0.001 ? Math.min(1.6, 0.9 / peak) : 1;
+// Normalise on a high percentile rather than the absolute peak, then let the
+// limiter deal with the transients. Normalising on the peak means one gunshot
+// decides the level of nine minutes of dialogue, which is how a mix ends up
+// sitting at five percent of full scale.
+const sampleStep = Math.max(1, Math.floor(N / 200000));
+const mags = [];
+for (let i = 0; i < N; i += sampleStep) mags.push(Math.max(Math.abs(left[i]), Math.abs(right[i])));
+mags.sort((a, b) => a - b);
+const loud = mags[Math.floor(mags.length * 0.995)] || 0.001;
+const norm = Math.max(0.5, Math.min(8, 0.62 / loud));
 const fade = Math.floor(1.2 * RATE);
 const pcm = Buffer.alloc(N * 4);
 for (let i = 0; i < N; i++) {
