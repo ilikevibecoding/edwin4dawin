@@ -41,6 +41,16 @@ export interface ActorOptions {
   hasLed?: boolean;
   /** Faceless chassis characters skip visemes and blinks. */
   hasFace?: boolean;
+  /**
+   * Whether the additive pose library may drive this rig.
+   *
+   * The library is authored in body space against each bone's rest orientation,
+   * which only holds while the animated pose is near the rest pose. The armoured
+   * rig rests in a T-pose and idles with its arms at its sides, so the same
+   * numbers that give the avatars a two-handed aim put the troopers' arms over
+   * their heads. Those characters keep their native locomotion instead.
+   */
+  posable?: boolean;
   eyeHeight?: number;
 }
 
@@ -131,6 +141,7 @@ export class Actor {
   private smile = 0;
   private smileTarget = 0;
   readonly hasFace: boolean;
+  readonly posable: boolean;
 
   // led
   private ledMesh: THREE.Mesh | null = null;
@@ -148,6 +159,7 @@ export class Actor {
     this.name = opts.name;
     this.model = model;
     this.hasFace = opts.hasFace ?? true;
+    this.posable = opts.posable ?? true;
 
     model.traverse((o) => {
       const mesh = o as THREE.SkinnedMesh;
@@ -595,7 +607,7 @@ export class Actor {
     opts: { fadeIn?: number; fadeOut?: number; hold?: number; now?: number } = {}
   ): void {
     const pose = POSES[name];
-    if (!pose) return;
+    if (!pose || !this.posable) return;
     const existing = this.activePoses.get(name);
     const entry: ActivePose = existing ?? {
       pose,

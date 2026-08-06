@@ -7,13 +7,16 @@
  * additive, "lean in", "point" and "shield the child" can all be layered over a
  * breathing idle without authoring new clips.
  *
- * Rotations are degrees in the character's own frame, not the bone's:
+ * Rotations are degrees in the character's own frame, not the bone's. The signs
+ * below were read off the axis probes in the character lab (`probe_*` framings),
+ * which exist because getting them wrong is invisible in code and glaring on
+ * screen — an aiming pose spent a while as both arms flung overhead:
  *
- *   +X  pitch forward  — spine bends forward, an arm swings forward and up
+ *   -X  pitch forward  — spine bends forward, an arm swings forward and up
  *   +Y  yaw right      — head/chest turns to the character's right
- *   +Z  roll left      — spine leans left; for arms, the sign that lifts the
- *                        limb away from the body differs per side (left arm
- *                        abducts on -Z, right arm on +Z)
+ *   -Z  roll           — lifts an arm away from the body on the character's
+ *                        right; the left arm abducts on +Z. On the spine, -Z
+ *                        leans to the character's right.
  *
  * Authoring in body space is what lets one library drive every character: the
  * source rigs disagree about which local axis runs down a bone, so local-space
@@ -44,6 +47,17 @@ const pose = (name: string, offsets: PoseOffsets, fadeIn = 0.35, fadeOut = 0.45)
 });
 
 export const POSES: Record<string, Pose> = {
+  // ---- axis probes ---------------------------------------------------------
+  // Single-bone, single-axis poses used by the character lab to verify what the
+  // body-space convention actually does on each rig. Cheap to keep and the only
+  // way to author an arm pose without guessing at signs.
+  probeArmPitchNeg: pose('probeArmPitchNeg', { RightArm: [-70, 0, 0] }, 0, 0),
+  probeArmPitchPos: pose('probeArmPitchPos', { RightArm: [70, 0, 0] }, 0, 0),
+  probeArmRollNeg: pose('probeArmRollNeg', { RightArm: [0, 0, -70] }, 0, 0),
+  probeArmRollPos: pose('probeArmRollPos', { RightArm: [0, 0, 70] }, 0, 0),
+  probeArmYawPos: pose('probeArmYawPos', { RightArm: [0, 70, 0] }, 0, 0),
+  probeForeArmPitchNeg: pose('probeForeArmPitchNeg', { RightForeArm: [-70, 0, 0] }, 0, 0),
+
   // ---- conversational -------------------------------------------------------
   /** One hand opens outward, chest turns slightly off-axis. */
   talkOpen: pose('talkOpen', {
@@ -230,18 +244,18 @@ export const POSES: Record<string, Pose> = {
       Spine1: [0, 14, 0],
       Spine2: [0, 8, 0],
       Neck: [0, -10, 0],
-      RightShoulder: [-14, 0, 0],
-      RightArm: [-82, 16, -4, 40],
-      RightForeArm: [-8, 0, 0],
+      RightShoulder: [-10, 0, 0],
+      RightArm: [-62, 14, 16],
+      RightForeArm: [-26, 0, 0],
       RightHand: [-4, 0, -4],
       RightHandIndex1: [0, 0, 40],
       RightHandMiddle1: [0, 0, 70],
       RightHandRing1: [0, 0, 74],
       RightHandPinky1: [0, 0, 76],
       RightHandThumb1: [0, 0, 28],
-      LeftShoulder: [-12, 0, 0],
-      LeftArm: [-76, -8, 6, -30],
-      LeftForeArm: [-26, 0, 0],
+      LeftShoulder: [-8, 0, 0],
+      LeftArm: [-56, -6, -22],
+      LeftForeArm: [-46, 0, 0],
       LeftHand: [-8, 0, 0],
       LeftHandIndex1: [0, 0, -40],
       LeftHandMiddle1: [0, 0, -66],

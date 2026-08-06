@@ -43,6 +43,8 @@ export interface CharacterDef {
   height: number;
   hasFace: boolean;
   hasLed: boolean;
+  /** False for rigs the body-space pose library cannot drive; see ActorOptions. */
+  posable?: boolean;
   ledOffset?: [number, number, number];
   accent: number;
   /** Materials and costume, applied to the cloned model before rigging. */
@@ -427,6 +429,7 @@ export const CAST: Record<CharacterId, CharacterDef> = {
     height: 1.88,
     hasFace: false,
     hasLed: false,
+    posable: false,
     accent: PALETTE.policeBlue,
     restyle: (root) => {
       replaceMaterial(root, (m) => /visor/i.test(m.name), () =>
@@ -443,8 +446,10 @@ export const CAST: Record<CharacterId, CharacterDef> = {
         return new THREE.MeshStandardMaterial({
           map: src.map ?? null,
           normalMap: src.normalMap ?? null,
-          // The stock armour is pale tan; tint it to riot black.
-          color: 0x454c58,
+          // The stock armour is a saturated desert tan and the diffuse map wins
+          // any gentle tint, so the multiplier has to be dark and cool enough to
+          // drag it to riot blue-black while leaving the painted panel detail.
+          color: 0x252c38,
           roughness: 0.58,
           metalness: 0.3,
           envMapIntensity: 1.1,
@@ -462,6 +467,7 @@ export const CAST: Record<CharacterId, CharacterDef> = {
     height: 1.9,
     hasFace: false,
     hasLed: false,
+    posable: false,
     accent: PALETTE.policeRed,
     restyle: (root) => {
       replaceMaterial(root, (m) => /visor/i.test(m.name), () =>
@@ -478,7 +484,7 @@ export const CAST: Record<CharacterId, CharacterDef> = {
         return new THREE.MeshStandardMaterial({
           map: src.map ?? null,
           normalMap: src.normalMap ?? null,
-          color: 0x3c4350,
+          color: 0x2e3442,
           roughness: 0.58,
           metalness: 0.28,
           envMapIntensity: 1.1,
@@ -666,6 +672,7 @@ export class ActorFactory {
       height: opts.height ?? def.height,
       hasFace: def.hasFace,
       hasLed: def.hasLed,
+      posable: def.posable ?? true,
       ledOffset: def.ledOffset ? new THREE.Vector3(...def.ledOffset) : undefined,
     });
 

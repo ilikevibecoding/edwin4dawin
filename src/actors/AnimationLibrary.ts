@@ -45,6 +45,52 @@ const RIG_OF_FILE: Record<SourceFile, string> = {
   Michelle: 'michelle',
 };
 
+/**
+ * Clips a rig already owns, preferred over any retargeted equivalent.
+ *
+ * The armoured rig has its own locomotion set, and it is both cheaper and exact
+ * to use it. It is also the only version that works: retargeting the mannequin's
+ * idle onto that skeleton collapses it into a heap, which is what put a pile of
+ * flattened limbs on screen where a trooper should have been standing.
+ */
+const NATIVE_CLIPS: Record<string, Record<string, string>> = {
+  soldier: { idle: 'Idle', idleAlt: 'Idle', walk: 'Walk', run: 'Run' },
+  michelle: { dance: 'SambaDance' },
+};
+
+/** Vertical extent of a posed skeleton, measured from bone positions. */
+function skeletonSpan(skeleton: THREE.Skeleton): number {
+  const box = new THREE.Box3();
+  const p = new THREE.Vector3();
+  for (const bone of skeleton.bones) box.expandByPoint(bone.getWorldPosition(p));
+  return Math.max(1e-3, box.max.y - box.min.y);
+}
+
+/** True when a clip leaves the skeleton within a sane fraction of its rest span. */
+function clipKeepsShape(
+  clip: THREE.AnimationClip,
+  proxy: THREE.SkinnedMesh,
+  proxyRoot: THREE.Object3D,
+  restHeight: number
+): boolean {
+  const mixer = new THREE.AnimationMixer(proxyRoot);
+  const action = mixer.clipAction(clip);
+  action.play();
+  let ok = true;
+  for (const fraction of [0, 0.34, 0.67]) {
+    mixer.setTime(clip.duration * fraction);
+    proxyRoot.updateMatrixWorld(true);
+    const span = skeletonSpan(proxy.skeleton);
+    if (span < restHeight * 0.62 || span > restHeight * 1.55) {
+      ok = false;
+      break;
+    }
+  }
+  action.stop();
+  mixer.uncacheRoot(proxyRoot);
+  return ok;
+}
+
 export class AnimationLibrary {
   private sources = new Map<SourceFile, SourceRig>();
   private cache = new Map<string, Map<string, THREE.AnimationClip>>();
@@ -112,17 +158,46 @@ export class AnimationLibrary {
     const size = new THREE.Vector3();
     new THREE.Box3().setFromObject(proxyRoot).getSize(size);
     const targetUnitHeight = size.y || 1;
+    const restHeight = skeletonSpan(proxy.skeleton);
 
+    // Validation poses a skeleton, so it runs on its own clone: doing it on the
+    // retarget proxy would leave that skeleton off its rest pose and corrupt
+    // every clip transferred after the first.
+    const validationRoot = SkeletonUtils.clone(template);
+    validationRoot.position.set(0, 0, 0);
+    validationRoot.rotation.set(0, 0, 0);
+    validationRoot.scale.set(1, 1, 1);
+    validationRoot.updateMatrixWorld(true);
+    let validationMesh: THREE.SkinnedMesh | null = null;
+    validationRoot.traverse((o) => {
+      const m = o as THREE.SkinnedMesh;
+      if (!m.isSkinnedMesh) return;
+      if (!validationMesh || (m.geometry.attributes.position?.count ?? 0) > (validationMesh.geometry.attributes.position?.count ?? 0)) {
+        validationMesh = m;
+      }
+    });
+
+    const nativeFile = (Object.keys(RIG_OF_FILE) as SourceFile[]).find((f) => RIG_OF_FILE[f] === rigKey);
+    const native = NATIVE_CLIPS[rigKey] ?? {};
     for (const [name, [file, clipName]] of Object.entries(CLIP_SOURCES)) {
+      // A clip the target rig owns itself needs no retargeting, and is exact.
+      const own = nativeFile ? this.sources.get(nativeFile)?.clips.get(native[name] ?? '') : undefined;
+      if (own) {
+        const copy = own.clone();
+        copy.name = name;
+        out.set(name, copy);
+        continue;
+      }
+
       const source = this.sources.get(file as SourceFile);
       if (!source) continue;
       const clip = source.clips.get(clipName);
       if (!clip) continue;
 
-      // A clip authored for this very rig needs no retargeting; using it as-is is
-      // both cheaper and exact.
       if (RIG_OF_FILE[file as SourceFile] === rigKey) {
-        out.set(name, clip.clone());
+        const copy = clip.clone();
+        copy.name = name;
+        out.set(name, copy);
         continue;
       }
 
@@ -132,6 +207,14 @@ export class AnimationLibrary {
           positionScale: targetUnitHeight / source.unitHeight,
         });
         retargeted.name = name;
+        // Retargeting across rigs whose rest poses disagree can fail silently and
+        // catastrophically rather than by throwing. A clip that no longer leaves
+        // the skeleton roughly person-shaped is dropped: an actor standing still
+        // in its rest pose is a far smaller problem than one folded inside out.
+        if (validationMesh && !clipKeepsShape(retargeted, validationMesh, validationRoot, restHeight)) {
+          console.warn(`[anim] discarding '${name}' for rig '${rigKey}': skeleton collapsed`);
+          continue;
+        }
         out.set(name, retargeted);
       } catch (err) {
         console.warn(`[anim] retarget failed for ${name}:`, err);

@@ -121,6 +121,14 @@ const FRAMINGS: Framing[] = [
   { name: 'pose_wound', id: 'atlas', clip: 'idle', pose: [['clutchWound', 0.9]], view: 'full', led: 'stress' },
   { name: 'pose_talk', id: 'cass', clip: 'idle', pose: [['talkOpen', 0.9]], view: 'threeQuarter' },
   { name: 'owner_face', id: 'owner', clip: 'idle', view: 'face', lookAtCamera: true },
+  // Axis probes: one bone, one axis, so the body-space convention can be read off
+  // the picture instead of inferred from the code that implements it.
+  { name: 'probe_pitchneg', id: 'orion', clip: 'idle', pose: [['probeArmPitchNeg', 1]], view: 'full' },
+  { name: 'probe_pitchpos', id: 'orion', clip: 'idle', pose: [['probeArmPitchPos', 1]], view: 'full' },
+  { name: 'probe_rollneg', id: 'orion', clip: 'idle', pose: [['probeArmRollNeg', 1]], view: 'full' },
+  { name: 'probe_rollpos', id: 'orion', clip: 'idle', pose: [['probeArmRollPos', 1]], view: 'full' },
+  { name: 'probe_yawpos', id: 'orion', clip: 'idle', pose: [['probeArmYawPos', 1]], view: 'full' },
+  { name: 'probe_forearm', id: 'orion', clip: 'idle', pose: [['probeForeArmPitchNeg', 1]], view: 'full' },
 ];
 
 const only = (params.get('only') ?? '').split(',').filter(Boolean);
