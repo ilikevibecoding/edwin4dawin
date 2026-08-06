@@ -224,7 +224,24 @@ export class HouseholdSet extends SceneSet {
       h: 160,
       color: '#cfe4ff',
     });
-    this.tvMaterial = new THREE.MeshBasicMaterial({ map: newsTex, toneMapped: false, color: 0x8fb4d8 });
+    // Transparent and tone-mapped, so the caption sits as lit text on the dark
+    // screen behind it. Opaque and unmapped it was three clipped white bars —
+    // the background of the caption texture blowing out along with the letters.
+    this.tvMaterial = new THREE.MeshBasicMaterial({
+      map: newsTex,
+      toneMapped: true,
+      transparent: true,
+      color: 0x8fb4d8,
+    });
+    const glow = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.24, 0.7),
+      new THREE.MeshBasicMaterial({ color: 0x0e1622, toneMapped: true })
+    );
+    glow.position.set(-3.86, 1.15, 1.0);
+    glow.rotation.y = Math.PI / 2;
+    this.scene.add(glow);
+    this.reflect(glow);
+
     const tvScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.24, 0.7), this.tvMaterial);
     tvScreen.position.set(-3.85, 1.15, 1.0);
     tvScreen.rotation.y = Math.PI / 2;

@@ -46,7 +46,10 @@ export async function playChapter2(d: Director, set: HouseholdSet, factory: Acto
   set.addActor('cass', cass);
   d.playerActor = cass;
 
-  const girl = await factory.spawn('child', { name: 'ALICE' });
+  // Dark hair: this room is lit by one sodium lamp, and the default mid-brown
+  // shell sits at the same value as her skin under it, so from behind her head
+  // read as a bald orange ball through the whole climax of the chapter.
+  const girl = await factory.spawn('child', { name: 'ALICE', hair: 0x2c1c10 });
   girl.root.position.copy(marks.child);
   girl.faceToward(marks.cass, true);
   set.addActor('girl', girl);

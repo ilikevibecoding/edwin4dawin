@@ -661,7 +661,13 @@ export class ActorFactory {
     return gltfScene;
   }
 
-  async spawn(id: CharacterId, opts: { name?: string; height?: number } = {}): Promise<Actor> {
+  /**
+   * @param opts.hair Overrides the character's hair colour for this instance.
+   *   Hair is a generated shell with no strand detail, so it separates from skin
+   *   on value alone: the child's mid-brown reads correctly under the roof's cool
+   *   light and as a bald orange dome under the household's sodium lamp.
+   */
+  async spawn(id: CharacterId, opts: { name?: string; height?: number; hair?: number } = {}): Promise<Actor> {
     await this.preload();
     const def = CAST[id];
     const template = this.templates.get(def.file) ?? this.prepareTemplate(def.file, (await this.assets.gltf(`models/${def.file}.glb`)).scene);
@@ -669,6 +675,7 @@ export class ActorFactory {
     const root = SkeletonUtils.clone(template);
     root.name = `model:${def.id}`;
     def.restyle(root, def);
+    if (opts.hair !== undefined) styleHair(root, { color: opts.hair, roughness: 0.86, sheen: 0.1 });
 
     const actor = new Actor(root, {
       name: opts.name ?? def.displayName,
