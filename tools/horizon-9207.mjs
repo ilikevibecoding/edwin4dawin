@@ -1,6 +1,6 @@
 // Verification sweep for the environment pass: pad-centre skyline on several
-// bearings, a raised overview, the three emplacements, a shadow-flag audit and
-// the scene draw-call / triangle budget.
+// bearings, a raised overview, the three emplacements, and the scene
+// draw-call / triangle budget.
 import { chromium } from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -135,50 +135,10 @@ const worst = horizon.reduce((a, b) => (b.ang > a.ang ? b : a));
 console.log('near-field skyline worst (within 3 km):', JSON.stringify(worst));
 console.log(horizon.map((h) => `${h.deg}:${h.ang}`).join('  '));
 
-const audit = await page.evaluate(() => {
-  const G = window.__GAME;
-  const flat = [];
-  const noCast = [];
-  let bags = 0;
-  G.game.scene.traverse((o) => {
-    if (!o.isMesh && !o.isInstancedMesh) return;
-    if (!o.geometry) return;
-    o.geometry.computeBoundingBox();
-    const bb = o.geometry.boundingBox;
-    const span = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z);
-    const chain = [];
-    for (let p = o; p && p.parent; p = p.parent) chain.unshift(p.name || p.type);
-    const entry = {
-      chain: chain.join('/'),
-      geo: o.geometry.type,
-      tris: Math.round((o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3),
-      span: Math.round(span),
-      h: Number((bb.max.y - bb.min.y).toFixed(2)),
-    };
-    const wp = o.getWorldPosition(new (o.position.constructor)());
-    entry.at = [Math.round(wp.x), Math.round(wp.z)];
-    entry.mat = o.material && (o.material.name || o.material.type);
-    entry.emissive = !!(o.material && o.material.emissiveIntensity > 0.5);
-    let underBase = false;
-    for (let p = o; p; p = p.parent) if (p.name === 'base') underBase = true;
-    if (!underBase) return;
-    if (bb.max.y - bb.min.y < 1.2 && span > 8 && !o.receiveShadow && !entry.emissive) flat.push(entry);
-    // Anything standing more than knee-high inside the shadow volume should be
-    // putting something on the ground.
-    if (bb.max.y - bb.min.y > 0.8 && Math.hypot(wp.x, wp.z) < 240 && !o.castShadow && !(o.material && o.material.transparent) && !entry.emissive) {
-      noCast.push(entry);
-    }
-    if (o.isInstancedMesh && o.material && o.material.map && o.geometry.type === 'SphereGeometry') bags += o.count;
-  });
-  return { unshadowedFlats: flat, nonCasting: noCast, bagInstances: bags };
-});
-console.log('sandbag instances:', audit.bagInstances);
-console.log('flat surfaces not receiving shadows:');
-for (const f of audit.unshadowedFlats) console.log('   ', JSON.stringify(f));
-console.log('standing objects not casting:');
-for (const f of audit.nonCasting) console.log('   ', JSON.stringify(f));
+// Shadow flags live in tools/shadowaudit-9207.mjs: classifying meshes needs
+// per-copy bounds and world orientation, which is more than belongs here.
 
-await fs.writeFile(path.join(OUT, 'report.json'), JSON.stringify({ perf, horizon, audit, problems }, null, 2));
+await fs.writeFile(path.join(OUT, 'report.json'), JSON.stringify({ perf, horizon, problems }, null, 2));
 console.log('problems', problems.length, problems.slice(0, 8).join('\n'));
 await browser.close();
 process.exit(0);
