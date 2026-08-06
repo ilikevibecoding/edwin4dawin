@@ -3,4 +3,5 @@ dist/
 test-results/
 playwright-report/
 shots/
+cine/
 .DS_Store
