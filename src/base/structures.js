@@ -16,9 +16,12 @@ import {
 import {
   matOliveArmour, matSandArmour, matGrayArmour, matShelter, matSteel, matSteelDark,
   matChrome, matRubber, matTyre, matHazard, matHazardRed, matHeat, matWhitePaint,
-  matGlass, matRadome, matEmissive, makeLamp, matGravel, matFence, PALETTE,
+  matGlass, matRadome, matEmissive, makeLamp, matGravel, matFence, matConcrete,
+  matLensGlass, PALETTE,
 } from '../util/materials.js';
-import { concreteMaps, padMarking, screenTexture, hazardStripes } from '../util/textures.js';
+import {
+  concreteMaps, padMarking, screenTexture, hazardStripes, macroGround,
+} from '../util/textures.js';
 import { Random } from '../util/rng.js';
 
 /** Collider helper: axis-aligned-ish box with optional Y rotation. */
@@ -540,11 +543,13 @@ export function buildSupportTruck({ variant = 'cargo', seed = 1 } = {}) {
   truckGrille.rotation.y = -Math.PI / 2;
   g.add(truckGrille);
   g.add(box(0.24, 0.26, 2.5, matSteelDark(), -4.15, 0.92, 0));
+  // Headlamps are dark reflectors in daylight, not lit lamps: an emissive lens
+  // on a parked truck reads as headlights left on at noon.
   for (const sz of [-0.85, 0.85]) {
-    const lamp = warningLamp('#fff0d0', 0.11, 1.4);
-    lamp.position.set(-4.12, 1.34, sz);
-    lamp.rotation.z = Math.PI / 2;
-    g.add(lamp);
+    g.add(cyl(0.115, 0.06, matSteelDark(), -4.1, 1.34, sz, 12).rotateZ(Math.PI / 2));
+    const lens = cyl(0.1, 0.02, matLensGlass(), -4.14, 1.34, sz, 12);
+    lens.rotation.z = Math.PI / 2;
+    g.add(lens);
   }
   // Mirrors, exhaust, spare wheel
   for (const sz of [-1, 1]) {
@@ -833,6 +838,53 @@ export function buildSearchlight({ height = 5.2 } = {}) {
 // Ground infrastructure: pads, roads, barriers, fencing
 // ===========================================================================
 
+/**
+ * Weather a concrete slab: sand drifting in from the edges, dark service
+ * staining, and broad tonal drift across the pour.
+ *
+ * A tiled concrete map alone gives a slab one flat tone with a visible repeat,
+ * and a hard sand-to-concrete edge that reads as a decal dropped on the desert.
+ * The un-repeated slab UV is recovered by dividing out the map repeat, so this
+ * survives the static-merge pass that moves pads out of their own object space.
+ */
+function addPadWeathering(mat, repU, repV, sandTint = 0x9d8f6f) {
+  const macro = macroGround(256, 4);
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uPadMacro = { value: macro };
+    shader.uniforms.uPadRepeat = { value: new THREE.Vector2(repU, repV) };
+    shader.uniforms.uPadSand = { value: new THREE.Color(sandTint) };
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', /* glsl */`
+        #include <common>
+        uniform sampler2D uPadMacro;
+        uniform vec2 uPadRepeat;
+        uniform vec3 uPadSand;
+      `)
+      .replace('#include <color_fragment>', /* glsl */`
+        #include <color_fragment>
+        {
+          vec2 pu = vMapUv / uPadRepeat;
+          vec3 mA = texture2D(uPadMacro, pu * 0.85 + 0.31).rgb;
+          vec3 mB = texture2D(uPadMacro, pu * 3.1).rgb;
+          // Broad drift across the pour, centred so mean albedo is unchanged.
+          diffuseColor.rgb *= 1.0 + ((mA.r - 0.5) * 1.1 + (mB.b - 0.5) * 0.6) * 0.42;
+          // Service staining: fuel, hydraulic fluid, rubber.
+          diffuseColor.rgb *= 1.0 - smoothstep(0.52, 0.84, mB.g) * 0.46;
+          // Sand blows in from the edges and never stops. The noise makes the
+          // reach of the drift uneven, which is what stops it reading as a
+          // vignette painted round the border.
+          float border = min(min(pu.x, 1.0 - pu.x), min(pu.y, 1.0 - pu.y));
+          float reach = 0.06 + mA.g * 0.22;
+          float drift = 1.0 - smoothstep(0.0, reach, border);
+          drift *= 0.3 + mB.r * 1.05;
+          diffuseColor.rgb = mix(diffuseColor.rgb, uPadSand, clamp(drift, 0.0, 0.95));
+        }
+      `);
+  };
+  mat.customProgramCacheKey = () => 'padweather';
+  return mat;
+}
+
 export function buildConcretePad(w, d, { marking = null, sub = '', seed = 5, kerb = true } = {}) {
   const g = new THREE.Group();
   const conc = concreteMaps(512, seed);
@@ -841,10 +893,12 @@ export function buildConcretePad(w, d, { marking = null, sub = '', seed = 5, ker
     roughness: 0.94, metalness: 0.02, color: 0xa8a49c,
   });
   const rep = Math.max(1, Math.round(Math.max(w, d) / 8));
+  const repV = rep * (d / w);
   for (const t of [mat.map, mat.normalMap, mat.roughnessMap]) {
-    t.repeat.set(rep, rep * (d / w));
+    t.repeat.set(rep, repV);
     t.needsUpdate = true;
   }
+  addPadWeathering(mat, rep, repV);
   const slab = box(w, 0.24, d, mat, 0, 0.11, 0);
   slab.receiveShadow = true;
   g.add(slab);
@@ -1040,7 +1094,7 @@ export function buildBarrierRun(from, to, { height = 1.0, kind = 'jersey' } = {}
     const p = new THREE.Vector3().copy(from).addScaledVector(dir, (i + 0.5) * (len / n));
     let piece;
     if (kind === 'jersey') {
-      piece = jerseyBarrier(len / n - 0.08, matWhitePaint());
+      piece = jerseyBarrier(len / n - 0.08, matConcrete());
       piece.scale.y = height;
     } else {
       piece = barrierBlock(len / n - 0.1, height, 1.1, matSandArmour());

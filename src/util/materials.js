@@ -7,7 +7,9 @@
  */
 
 import * as THREE from 'three';
-import { paintedMetal, heatMetal, hazardStripes, tyreTread, chainLink, gravelMap } from './textures.js';
+import {
+  paintedMetal, heatMetal, hazardStripes, tyreTread, chainLink, gravelMap, concreteMaps,
+} from './textures.js';
 
 const reg = new Map();
 
@@ -84,9 +86,34 @@ export function matGrayArmour() {
 
 export function matWhitePaint() {
   return def('whitePaint', () => {
-    const t = paintedMetal({ key: 'whitePaint', color: '#cfcdc4', seed: 55, panel: 4, wear: 0.55, grime: 0.75 });
-    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.66, metalness: 0.08 });
+    const t = paintedMetal({ key: 'whitePaint', color: '#bfbcb2', seed: 55, panel: 4, wear: 0.55, grime: 0.75 });
+    // Site white is a chalky, weathered off-white. Anything brighter than this
+    // clips through ACES in direct sun and pulls bloom with it.
+    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.78, metalness: 0.04 });
   });
+}
+
+/**
+ * Cast concrete: barriers, kerbs, blast walls. Distinctly darker than site
+ * white paint - a barrier rendered in white paint blows out in direct sun and
+ * turns every perimeter into a glowing stripe.
+ */
+export function matConcrete() {
+  return def('concrete', () => {
+    const t = concreteMaps(512, 77);
+    return new THREE.MeshStandardMaterial({
+      map: t.map, normalMap: t.normalMap, roughnessMap: t.roughnessMap,
+      color: 0x8d8a81, roughness: 0.95, metalness: 0.0,
+      normalScale: new THREE.Vector2(0.7, 0.7),
+    });
+  });
+}
+
+/** Unlit headlamp / worklight lens: a dished reflector behind clear glass. */
+export function matLensGlass() {
+  return def('lensGlass', () => new THREE.MeshStandardMaterial({
+    color: 0x9aa3a8, roughness: 0.14, metalness: 0.5, envMapIntensity: 1.2,
+  }));
 }
 
 export function matShelter() {

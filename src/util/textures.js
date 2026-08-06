@@ -38,6 +38,68 @@ function cached(key, fn) {
   return cache.get(key);
 }
 
+/**
+ * Seamlessly tiling value-noise fbm.
+ *
+ * The general-purpose `Noise` here is not periodic, so tiling a texture built
+ * from it leaves a visible seam. This walks a hash grid whose indices wrap at
+ * the octave frequency, which makes every octave periodic over the unit square
+ * and the assembled texture tileable at any repeat.
+ */
+function tileableFbm(u, v, octaves, base, seed) {
+  let amp = 0.5, sum = 0, norm = 0, f = base;
+  for (let o = 0; o < octaves; o++) {
+    const fx = Math.floor(u * f), fy = Math.floor(v * f);
+    const tx = u * f - fx, ty = v * f - fy;
+    const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+    const h = (i, j) => {
+      const a = ((i % f) + f) % f, b = ((j % f) + f) % f;
+      let n = a * 374761393 + b * 668265263 + seed * 1274126177 + o * 2246822519;
+      n = (n ^ (n >>> 13)) * 1274126177;
+      return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
+    };
+    const n = lerp(
+      lerp(h(fx, fy), h(fx + 1, fy), sx),
+      lerp(h(fx, fy + 1), h(fx + 1, fy + 1), sx),
+      sy,
+    );
+    sum += n * amp; norm += amp;
+    amp *= 0.5; f *= 2;
+  }
+  return sum / norm;
+}
+
+/**
+ * Macro ground variation, three independent bands in RGB.
+ *
+ * Tiled detail alone leaves a desert reading as one flat tone with an obvious
+ * repeat. This is sampled at a much larger scale than the detail map to break
+ * the surface into drifts, gravel patches and washes.
+ *
+ *   R - broad tonal drift
+ *   G - patchiness for the gravel / rock blend
+ *   B - fine mottle, still well above detail-map frequency
+ */
+export function macroGround(size = 256, seed = 4) {
+  return cached(`macro:${size}:${seed}`, () => {
+    const c = canvas(size);
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const u = x / size, v = y / size;
+        const i = (y * size + x) * 4;
+        img.data[i] = tileableFbm(u, v, 4, 2, seed) * 255;
+        img.data[i + 1] = tileableFbm(u, v, 5, 3, seed + 91) * 255;
+        img.data[i + 2] = tileableFbm(u, v, 4, 6, seed + 217) * 255;
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return finish(c, { repeat: 1, srgb: false, aniso: 2 });
+  });
+}
+
 /** Derive a tangent-space normal map from a grayscale height canvas. */
 export function heightToNormal(heightCanvas, strength = 2.2) {
   const w = heightCanvas.width, h = heightCanvas.height;

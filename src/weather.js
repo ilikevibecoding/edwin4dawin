@@ -9,8 +9,8 @@
 
 import * as THREE from 'three';
 import { WORLD, CONDITIONS, QUALITY } from './config.js';
-import { clamp01, damp, lerp, DEG } from './util/mathx.js';
-import { noise } from './util/noise.js';
+import { clamp01, damp, lerp, smoothstep, DEG } from './util/mathx.js';
+import { noise, Noise } from './util/noise.js';
 import { makeCanvas, smokePuff } from './util/textures.js';
 import { Random } from './util/rng.js';
 
@@ -40,7 +40,6 @@ const SKY_FRAG = /* glsl */`
   uniform float uCloudStrength;
   uniform vec3  uCloudTint;
   uniform float uTime;
-  uniform sampler2D uCloudTex;
   uniform vec3  uHazeColor;
 
   varying vec3 vDir;
@@ -49,6 +48,39 @@ const SKY_FRAG = /* glsl */`
     p = fract(p * 0.1031);
     p += dot(p, p.yzx + 33.33);
     return fract((p.x + p.y) * p.z);
+  }
+
+  float sHash(vec2 p) {
+    p = fract(p * vec2(127.31, 311.7));
+    p += dot(p, p + 34.23);
+    return fract(p.x * p.y * 0.5453);
+  }
+
+  float sNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = sHash(i);
+    float b = sHash(i + vec2(1.0, 0.0));
+    float c = sHash(i + vec2(0.0, 1.0));
+    float d = sHash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
+
+  // Rotating-octave fbm. uDetail-style weighting on the fine octaves lets the
+  // field be flattened toward the horizon, where the cloud-plane projection
+  // stretches faster than the screen can resolve and detail turns to aliasing.
+  float sFbm(vec2 p, int oct, float detail) {
+    float v = 0.0, a = 0.5, norm = 0.0;
+    mat2 rot = mat2(0.80, 0.60, -0.60, 0.80);
+    for (int i = 0; i < 7; i++) {
+      if (i >= oct) break;
+      float w = a * (i < 2 ? 1.0 : detail);
+      v += w * sNoise(p);
+      norm += w;
+      p = rot * p * 2.03;
+      a *= 0.5;
+    }
+    return v / max(norm, 0.0001);
   }
 
   void main() {
@@ -95,24 +127,44 @@ const SKY_FRAG = /* glsl */`
       col += vec3(0.4, 0.45, 0.68) * band * uNight;
     }
 
-    // High cirrus, projected onto a virtual cloud plane.
-    if (h > 0.008 && uCloudStrength > 0.001) {
-      // Projection onto a virtual cloud plane. The UV scale has to be large
-      // enough that the sheet still has structure overhead - at a small scale
-      // the zenith samples a single texel and smears across half the sky.
-      vec2 cuv = d.xz / (h + 0.10);
-      vec2 uv1 = cuv * 0.46 + vec2(uTime * 0.0022, uTime * 0.0009);
-      vec2 uv2 = cuv * 0.17 - vec2(uTime * 0.0011, uTime * 0.0005);
-      float c1 = texture2D(uCloudTex, uv1).r;
-      float c2 = texture2D(uCloudTex, uv2).g;
-      float raw = c1 * 0.75 + c2 * 0.95;
-      // Cover drives a soft threshold so the sheet thickens smoothly.
-      float cloud = smoothstep(1.24 - uCloudCover * 0.7, 1.60 - uCloudCover * 0.5, raw);
-      cloud *= smoothstep(0.008, 0.16, h);
+    // High cirrus. Evaluated analytically rather than sampled from a texture:
+    // the deck is projected onto a plane 9 km up, so straight overhead a
+    // texture covers a few texels and magnifies into blurry smears. Noise has
+    // no such resolution, and it is what lets the deck stay fibrous overhead.
+    if (h > 0.02 && uCloudStrength > 0.001) {
+      // Kilometres across the cirrus plane, 9 km up. Clamping the elevation
+      // used for the projection stops the deck running to infinity at the
+      // horizon; past this it compresses into a band, which is what a real
+      // deck does anyway.
+      vec2 p = d.xz * (9.0 / max(h, 0.055));
+      p += vec2(uTime * 0.017, uTime * 0.006);
+      // Detail rolls off toward the horizon, where the plane stretches faster
+      // than the screen can resolve and fine octaves turn into aliasing.
+      float det = smoothstep(0.03, 0.32, h);
+      // Where the deck is at all: banks of cirrus separated by open sky, on a
+      // ~25 km scale. Without this the sheet covers the whole hemisphere and
+      // reads as overcast rather than as high cloud.
+      float banks = sFbm(p * 0.10 + 61.0, 3, 1.0);
+      // Sheared along the wind, the way a jet stream combs cirrus out.
+      float sheet = sFbm(vec2(p.x * 0.16, p.y * 0.34), 5, det);
+      // Domain warp by a slower field curves the streaks instead of leaving
+      // them as parallel bands. The anisotropy stays near 3:1 - stretch it
+      // harder and the radial projection turns the deck into crepuscular rays.
+      float warp = sFbm(p * 0.075 + 19.0, 3, 1.0) - 0.5;
+      vec2 wq = vec2(p.x * 0.44, p.y * 1.25) + warp * 5.0;
+      float fib = sFbm(wq, 5, det);
+      float raw = sheet * 0.42 + fib * 0.58;
+      float cover = uCloudCover;
+      // Banks gate the coverage: high where a bank sits, nothing between.
+      float gate = smoothstep(0.30, 0.58, banks + cover * 0.26);
+      float cloud = smoothstep(0.46 - cover * 0.16, 0.68 - cover * 0.14, raw) * gate;
+      // Wispy edges: the deck should never present a hard boundary.
+      cloud *= 0.3 + 0.7 * smoothstep(0.42 - cover * 0.1, 0.78, raw);
+      cloud *= smoothstep(0.02, 0.10, h);
       // Sunward edges catch the light.
-      float lit = clamp(mie * 2.2 + 0.62, 0.0, 1.35);
+      float lit = clamp(mie * 2.4 + 0.72, 0.0, 1.5);
       vec3 cc = uCloudTint * lit;
-      col = mix(col, cc, clamp(cloud * 0.85, 0.0, 0.66) * uCloudStrength);
+      col = mix(col, cc, clamp(cloud, 0.0, 1.0) * 0.85 * uCloudStrength);
     }
 
     // Horizon haze wash ties the sky to the terrain fog colour.
@@ -122,54 +174,111 @@ const SKY_FRAG = /* glsl */`
   }
 `;
 
-/** Two-channel procedural cloud sheet (cirrus + mid-level). */
-function cloudTexture(size = 512) {
-  const c = makeCanvas(size);
-  const ctx = c.getContext('2d');
-  const img = ctx.createImageData(size, size);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const u = (x / size) * 6, v = (y / size) * 6;
-      // Wispy, stretched cirrus.
-      const a = noise.fbm2(u * 2.4, v * 0.7, 5) * 0.5 + 0.5;
-      const wisp = clamp01(Math.pow(a, 1.7) * 1.5);
-      // Broader, softer sheet.
-      const b = noise.fbm2(u * 0.8 + 40, v * 0.8 + 40, 4) * 0.5 + 0.5;
-      const sheet = clamp01(Math.pow(b, 2.1) * 1.6);
-      const i = (y * size + x) * 4;
-      img.data[i] = wisp * 255;
-      img.data[i + 1] = sheet * 255;
-      img.data[i + 2] = ((a + b) * 0.5) * 255;
-      img.data[i + 3] = 255;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.colorSpace = THREE.NoColorSpace;
-  return t;
-}
-
 // ---------------------------------------------------------------------------
 // Cumulus billboard layer (one draw call, lit, drifting)
 // ---------------------------------------------------------------------------
 
+/**
+ * Cumulus sprite: a baked optical-thickness field and the normal of that field.
+ *
+ * A soft radial puff standing in for a whole cloud reads as smoke. What makes a
+ * cumulus legible is the lumpy, flat-based silhouette and the way light rakes
+ * across the billows, so the sprite stores thickness in alpha and the gradient
+ * of the thickness in RGB. The shader then lights it as if it were a surface,
+ * which costs one texture fetch and gives every puff real form.
+ */
+function cloudSprite(size = 192, seed = 3, { lumps = 30, base = 0.24 } = {}) {
+  const rng = new Random(seed);
+  const N = new Noise(seed * 7 + 1);
+  const thick = new Float32Array(size * size);
+
+  // Lump layout: a wide flat base with towers rising from the middle.
+  const specs = [];
+  for (let i = 0; i < lumps; i++) {
+    const big = rng.float(0, 1) < 0.3;
+    const rad = big ? rng.float(0.15, 0.24) : rng.float(0.055, 0.135);
+    const x = 0.5 + rng.float(-0.38, 0.38);
+    // Towers build toward the centre; the flanks stay low and ragged.
+    const centre = 1 - Math.abs(x - 0.5) * 1.9;
+    const y = base + rad * 0.55 + Math.pow(rng.float(0, 1), 1.7) * 0.5 * Math.max(0.15, centre);
+    specs.push({ x, y, rad, r2: rad * rad });
+  }
+
+  let peak = 0;
+  for (let py = 0; py < size; py++) {
+    // Texture v runs top-down; the cloud's own y runs bottom-up.
+    const cy = 1 - (py + 0.5) / size;
+    for (let px = 0; px < size; px++) {
+      const cx = (px + 0.5) / size;
+      let t = 0;
+      for (const s of specs) {
+        const dx = cx - s.x, dy = cy - s.y;
+        const d2 = dx * dx + dy * dy;
+        // Chord through a sphere: the honest thickness integral, and the reason
+        // the billows get a rounded rather than a linear falloff.
+        if (d2 < s.r2) t += Math.sqrt(s.r2 - d2) * 2;
+      }
+      if (t <= 0) { thick[py * size + px] = 0; continue; }
+      // Erode with noise so the silhouette is ragged and the interior billows.
+      const n = N.fbm2(cx * 7.5, cy * 7.5, 5) * 0.5 + 0.5;
+      t *= 0.45 + n * 1.0;
+      // Cumulus bases are cut flat by the condensation level.
+      t *= smoothstep(clamp01((cy - base + 0.06) / 0.09));
+      thick[py * size + px] = t;
+      if (t > peak) peak = t;
+    }
+  }
+  const inv = peak > 0 ? 1 / peak : 1;
+  for (let i = 0; i < thick.length; i++) thick[i] *= inv;
+
+  const c = makeCanvas(size);
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const at = (x, y) => thick[Math.min(size - 1, Math.max(0, y)) * size
+    + Math.min(size - 1, Math.max(0, x))];
+  for (let py = 0; py < size; py++) {
+    for (let px = 0; px < size; px++) {
+      const t = thick[py * size + px];
+      // Normal from the thickness gradient. Screen y is flipped relative to the
+      // cloud, so the vertical derivative is negated back.
+      const gx = at(px + 1, py) - at(px - 1, py);
+      const gy = at(px, py - 1) - at(px, py + 1);
+      const k = 0.055;
+      let nx = -gx, ny = -gy, nz = k;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      nx /= len; ny /= len; nz /= len;
+      const i = (py * size + px) * 4;
+      img.data[i] = (nx * 0.5 + 0.5) * 255;
+      img.data[i + 1] = (ny * 0.5 + 0.5) * 255;
+      img.data[i + 2] = (nz * 0.5 + 0.5) * 255;
+      img.data[i + 3] = clamp01(t) * 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  return tex;
+}
+
 const CUMULUS_VERT = /* glsl */`
   attribute vec3 aPos;
-  attribute vec3 aScale;   // x: width, y: height, z: seed
+  attribute vec4 aScale;   // xy: half extents, z: sprite index, w: flip
   uniform float uTime;
   uniform vec3  uWind;
+  uniform float uSprites;
   varying vec2  vUv;
-  varying float vSeed;
-  varying vec3  vWorld;
   void main() {
-    vUv = uv;
-    vSeed = aScale.z;
+    // Sub-rect of the sprite strip, optionally mirrored so the same handful of
+    // baked shapes never reads as a repeated stamp.
+    float u = aScale.w > 0.5 ? 1.0 - uv.x : uv.x;
+    vUv = vec2((aScale.z + u) / uSprites, uv.y);
     vec3 wp = aPos + uWind * uTime;
-    // Wrap the layer so it drifts forever without leaving the sky.
-    wp.x = mod(wp.x + 30000.0, 60000.0) - 30000.0;
-    wp.z = mod(wp.z + 30000.0, 60000.0) - 30000.0;
-    vWorld = wp;
+    // Wrap far outside the visible field: the layer is depth-sorted at build
+    // time and a wrap inside view would jump a cloud in front of its neighbour.
+    wp.x = mod(wp.x + 120000.0, 240000.0) - 120000.0;
+    wp.z = mod(wp.z + 120000.0, 240000.0) - 120000.0;
     vec4 mv = viewMatrix * vec4(wp, 1.0);
     mv.xy += position.xy * aScale.xy;
     gl_Position = projectionMatrix * mv;
@@ -178,64 +287,111 @@ const CUMULUS_VERT = /* glsl */`
 
 const CUMULUS_FRAG = /* glsl */`
   uniform sampler2D uMap;
-  uniform vec3 uSunDir;
-  uniform vec3 uLit;
-  uniform vec3 uShadow;
+  uniform vec3  uSunView;   // key light direction, view space
+  uniform vec3  uLit;
+  uniform vec3  uShadow;
+  uniform vec3  uSky;
   uniform float uOpacity;
-  varying vec2 vUv;
-  varying float vSeed;
-  varying vec3 vWorld;
+  varying vec2  vUv;
   void main() {
     vec4 tex = texture2D(uMap, vUv);
-    float a = tex.a * uOpacity;
-    if (a < 0.01) discard;
-    // Light wraps around the puff from the sun side.
-    vec3 n = normalize(vec3((vUv - 0.5) * 2.0, 0.7));
-    float ndl = clamp(dot(n, normalize(uSunDir)) * 0.5 + 0.5, 0.0, 1.0);
-    vec3 col = mix(uShadow, uLit, pow(ndl, 0.8));
-    // Bright silver rim toward the light.
-    col += uLit * pow(ndl, 6.0) * 0.5;
-    gl_FragColor = vec4(col, a);
+    float thick = tex.a;
+    if (thick < 0.004) discard;
+    // Billboards face the camera, so the baked normal is already view space.
+    vec3 n = normalize(tex.rgb * 2.0 - 1.0);
+    float ndl = dot(n, uSunView);
+    // Multiple scattering dominates inside a cloud: the terminator wraps most
+    // of the way round instead of falling to black at 90 degrees.
+    float wrap = clamp(ndl * 0.55 + 0.45, 0.0, 1.0);
+    vec3 col = mix(uShadow, uLit, pow(wrap, 1.35));
+    // Sky bounce fills the shaded underside.
+    col = mix(col, uSky, (1.0 - wrap) * 0.4);
+    // Silver lining: thin edges transmit, strongly so when backlit.
+    float back = clamp(-uSunView.z, 0.0, 1.0);
+    col += uLit * exp(-thick * 4.5) * (0.18 + back * 0.85);
+    gl_FragColor = vec4(col, clamp(thick * 1.7, 0.0, 1.0) * uOpacity);
   }
 `;
 
 class CumulusLayer {
-  constructor(scene, count, seed = 4) {
+  /**
+   * `masses` cloud systems, each built from several overlapping sprites so a
+   * cloud has an irregular outline rather than one billboard's silhouette.
+   */
+  constructor(scene, masses, seed = 4) {
     const rng = new Random(seed);
-    const base = new THREE.PlaneGeometry(1, 1);
-    const geo = new THREE.InstancedBufferGeometry();
-    geo.index = base.index;
-    geo.setAttribute('position', base.attributes.position);
-    geo.setAttribute('uv', base.attributes.uv);
-    const pos = new Float32Array(count * 3);
-    const scl = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      const a = rng.float(0, Math.PI * 2);
-      const r = rng.float(5000, 30000);
-      pos[i * 3] = Math.cos(a) * r;
-      pos[i * 3 + 1] = rng.float(2600, 6400);
-      pos[i * 3 + 2] = Math.sin(a) * r;
-      // Puffs are sized relative to their range so the layer keeps a
-      // consistent apparent scale across the sky.
-      const w = r * rng.float(0.045, 0.11);
-      scl[i * 3] = w;
-      scl[i * 3 + 1] = w * rng.float(0.4, 0.62);
-      scl[i * 3 + 2] = rng.float(0, 1);
+    const SPRITES = 4;
+    const strip = makeCanvas(192 * SPRITES, 192);
+    const sctx = strip.getContext('2d');
+    for (let i = 0; i < SPRITES; i++) {
+      const tex = cloudSprite(192, 11 + i * 13, {
+        lumps: 22 + i * 5, base: 0.2 + i * 0.03,
+      });
+      sctx.drawImage(tex.image, i * 192, 0);
+      tex.dispose();
     }
-    geo.setAttribute('aPos', new THREE.InstancedBufferAttribute(pos, 3));
-    geo.setAttribute('aScale', new THREE.InstancedBufferAttribute(scl, 3));
+    const map = new THREE.CanvasTexture(strip);
+    map.colorSpace = THREE.NoColorSpace;
+    map.minFilter = THREE.LinearMipmapLinearFilter;
+
+    // Lay out the masses, then sort far-to-near. The camera never leaves a
+    // ~1 km disc at the site while the deck starts 3 km out, so a static sort
+    // about the origin holds for the whole session and alpha blending stays
+    // correct without re-sorting per frame.
+    const groups = [];
+    for (let i = 0; i < masses; i++) {
+      const a = rng.float(0, Math.PI * 2);
+      // Square-root distribution fills the sky evenly by area, which puts most
+      // of the deck out near the horizon the way a real cumulus field looks.
+      const r = 2200 + Math.sqrt(rng.float(0, 1)) * 34000;
+      const alt = rng.float(1850, 3200);
+      const width = rng.float(700, 1900) * (1 + rng.float(0, 0.7));
+      groups.push({ a, r, alt, width, key: r });
+    }
+    groups.sort((p, q) => q.key - p.key);
+
+    const pos = [];
+    const scl = [];
+    for (const gp of groups) {
+      const cx = Math.cos(gp.a) * gp.r, cz = Math.sin(gp.a) * gp.r;
+      const parts = 2 + rng.int(0, 2);
+      for (let j = 0; j < parts; j++) {
+        const lead = j === 0;
+        const w = gp.width * (lead ? 1 : rng.float(0.45, 0.8));
+        const off = lead ? 0 : gp.width * 0.55;
+        const oa = rng.float(0, Math.PI * 2);
+        pos.push(
+          cx + Math.cos(oa) * off,
+          gp.alt + (lead ? 0 : rng.float(-0.1, 0.16) * gp.width),
+          cz + Math.sin(oa) * off,
+        );
+        scl.push(w * 0.5, w * rng.float(0.30, 0.42), rng.int(0, SPRITES - 1), rng.int(0, 1));
+      }
+    }
+    const count = pos.length / 3;
+
+    const baseGeo = new THREE.PlaneGeometry(1, 1);
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.index = baseGeo.index;
+    geo.setAttribute('position', baseGeo.attributes.position);
+    geo.setAttribute('uv', baseGeo.attributes.uv);
+    geo.setAttribute('aPos', new THREE.InstancedBufferAttribute(new Float32Array(pos), 3));
+    geo.setAttribute('aScale', new THREE.InstancedBufferAttribute(new Float32Array(scl), 4));
     geo.instanceCount = count;
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
+    this.count = count;
 
     this.material = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
         uWind: { value: new THREE.Vector3(6, 0, 2) },
-        uMap: { value: smokePuff(128, 21) },
-        uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+        uMap: { value: map },
+        uSprites: { value: SPRITES },
+        uSunView: { value: new THREE.Vector3(0, 0, 1) },
         uLit: { value: new THREE.Color(0xffffff) },
         uShadow: { value: new THREE.Color(0x8fa4bd) },
-        uOpacity: { value: 0.5 },
+        uSky: { value: new THREE.Color(0x6f90c0) },
+        uOpacity: { value: 0.9 },
       },
       vertexShader: CUMULUS_VERT,
       fragmentShader: CUMULUS_FRAG,
@@ -243,7 +399,9 @@ class CumulusLayer {
     });
     this.mesh = new THREE.Mesh(geo, this.material);
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = -0.5;
+    // First of the transparent passes, so contrails and smoke composite on top
+    // of the deck. Depth testing stays on so the mountains still occlude it.
+    this.mesh.renderOrder = -10;
     this.mesh.matrixAutoUpdate = false;
     scene.add(this.mesh);
   }
@@ -403,7 +561,6 @@ export class Weather {
     scene.add(this.fill);
 
     // Sky -------------------------------------------------------------------
-    this.cloudTex = cloudTexture(512);
     const skyGeo = new THREE.SphereGeometry(WORLD.skyRadius, 48, 32);
     this.skyMat = new THREE.ShaderMaterial({
       uniforms: {
@@ -419,7 +576,6 @@ export class Weather {
         uCloudStrength: { value: 1 },
         uCloudTint: { value: new THREE.Color(0xffffff) },
         uTime: { value: 0 },
-        uCloudTex: { value: this.cloudTex },
         uHazeColor: { value: new THREE.Color(0xa8c0d6) },
       },
       vertexShader: SKY_VERT, fragmentShader: SKY_FRAG,
@@ -449,7 +605,7 @@ export class Weather {
     this._envDirty = true;
 
     this.cumulus = this.q.cloudLayers > 0
-      ? new CumulusLayer(scene, this.q.cloudLayers === 1 ? 22 : 46)
+      ? new CumulusLayer(scene, this.q.cloudLayers === 1 ? 90 : 210)
       : null;
     this.motes = new DustMotes(scene, this.q.dustInstances, 46);
 
@@ -555,10 +711,14 @@ export class Weather {
 
     if (this.cumulus) {
       const cu = this.cumulus.material.uniforms;
-      cu.uSunDir.value.copy(l.sunDir);
-      cu.uLit.value.copy(l.sunColour).multiplyScalar(0.55 + l.sunIntensity * 0.16);
-      cu.uShadow.value.copy(l.haze).lerp(l.zenith, 0.4);
-      cu.uOpacity.value = 0.14 + l.cloudCover * 0.38;
+      // Sunlit cloud tops are the brightest thing in a daylight scene; they
+      // have to be authored above 1.0 so tone mapping leaves them white.
+      cu.uLit.value.copy(l.sunColour).multiplyScalar(0.7 + l.sunIntensity * 0.30);
+      // Shaded flanks are lit by the sky, not by the horizon haze.
+      cu.uShadow.value.copy(l.zenith).lerp(c.b.set(l.haze), 0.45)
+        .multiplyScalar(0.62 + l.sunIntensity * 0.10);
+      cu.uSky.value.copy(l.zenith).multiplyScalar(0.7 + l.ambient * 0.3);
+      cu.uOpacity.value = 0.55 + l.cloudCover * 0.45;
       cu.uWind.value.copy(this.wind).multiplyScalar(2.4);
     }
     const mu = this.motes.material.uniforms;
@@ -594,7 +754,16 @@ export class Weather {
     const w = noise.noise2(this.time * 0.03, 11.5);
     const w2 = noise.noise2(this.time * 0.024, 71.2);
     this.wind.set(3.0 + w * 2.2, 0, 1.2 + w2 * 2.0);
-    if (this.cumulus) this.cumulus.update(dt);
+    if (this.cumulus) {
+      this.cumulus.update(dt);
+      // The baked cloud normals live in the billboard's own frame, which for a
+      // camera-facing quad is view space, so the key light has to be rotated
+      // into view space every frame as the player looks around.
+      this.camera.updateMatrixWorld();
+      this.cumulus.material.uniforms.uSunView.value
+        .copy(this.live.sunDir)
+        .transformDirection(this.camera.matrixWorldInverse);
+    }
     this.motes.update(dt, this.camera.position);
 
     // Shadow map follows the player so 2048px covers the walkable area.

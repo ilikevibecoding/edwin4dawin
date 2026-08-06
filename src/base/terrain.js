@@ -9,10 +9,65 @@ import { WORLD } from '../config.js';
 import { noise, noiseB, Noise } from '../util/noise.js';
 import { clamp01, smoothstep, lerp } from '../util/mathx.js';
 import { Random } from '../util/rng.js';
-import { sandMaps, gravelMap } from '../util/textures.js';
+import { sandMaps, gravelMap, macroGround } from '../util/textures.js';
 import { matGravel } from '../util/materials.js';
 
 const ridgeNoise = new Noise(4242);
+
+/**
+ * Break up a tiled ground material with world-space macro variation.
+ *
+ * A detail map tiled a couple of hundred times reads as one flat tone with an
+ * obvious repeat, because every square metre gets the same average colour. This
+ * injects two much larger scales of tonal drift plus a gravel-patch blend keyed
+ * off world XZ, so the surface gains the drifts and washes that make desert
+ * ground legible. The terrain meshes sit at the origin, so object-space XZ is
+ * world XZ and no extra attribute is needed.
+ */
+function addGroundMacro(mat, {
+  broad = 900, patch = 260, tint = 0x6c6355, strength = 0.34, patchAmount = 0.42,
+} = {}) {
+  const macro = macroGround(256, 4);
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uMacro = { value: macro };
+    shader.uniforms.uMacroBroad = { value: 1 / broad };
+    shader.uniforms.uMacroPatch = { value: 1 / patch };
+    shader.uniforms.uMacroTint = { value: new THREE.Color(tint) };
+    shader.uniforms.uMacroStrength = { value: strength };
+    shader.uniforms.uMacroPatchAmount = { value: patchAmount };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vGroundXZ;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGroundXZ = position.xz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', /* glsl */`
+        #include <common>
+        varying vec2 vGroundXZ;
+        uniform sampler2D uMacro;
+        uniform float uMacroBroad;
+        uniform float uMacroPatch;
+        uniform vec3  uMacroTint;
+        uniform float uMacroStrength;
+        uniform float uMacroPatchAmount;
+      `)
+      .replace('#include <color_fragment>', /* glsl */`
+        #include <color_fragment>
+        {
+          vec3 mA = texture2D(uMacro, vGroundXZ * uMacroBroad).rgb;
+          vec3 mB = texture2D(uMacro, vGroundXZ * uMacroPatch).rgb;
+          // Tonal drift across two scales, centred so the average albedo is
+          // unchanged and the lighting balance of the site is preserved.
+          float drift = (mA.r - 0.5) * 1.15 + (mB.b - 0.5) * 0.75;
+          diffuseColor.rgb *= 1.0 + drift * uMacroStrength;
+          // Gravel and rock scatter collect in patches rather than evenly.
+          float grav = smoothstep(0.52, 0.78, mA.g * 0.55 + mB.g * 0.55);
+          diffuseColor.rgb = mix(diffuseColor.rgb, uMacroTint, grav * uMacroPatchAmount);
+        }
+      `);
+  };
+  // Any change to the injected program needs a fresh compile.
+  mat.customProgramCacheKey = () => `groundmacro:${broad}:${patch}:${tint}`;
+  return mat;
+}
 
 /**
  * Site elevation. Flat and level across the operating area, then rolling
@@ -112,6 +167,9 @@ export function createTerrain(quality) {
   });
   mat.map.repeat.set(240, 240);
   mat.normalMap.repeat.set(240, 240);
+  // Broad scales out here: the far terrain covers 21 km, so the drifts have to
+  // be kilometres across to read as landscape rather than as noise.
+  addGroundMacro(mat, { broad: 2600, patch: 620, strength: 0.30, patchAmount: 0.34 });
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
@@ -136,6 +194,9 @@ export function createTerrain(quality) {
   nearMat.map.needsUpdate = true;
   nearMat.normalMap.repeat.set(90, 90);
   nearMat.normalMap.needsUpdate = true;
+  // Tighter scales in the walkable area, where the player can see individual
+  // gravel patches and scuffed ground rather than landscape-scale drift.
+  addGroundMacro(nearMat, { broad: 340, patch: 74, strength: 0.36, patchAmount: 0.46 });
   const near = new THREE.Mesh(nearGeo, nearMat);
   near.position.y = 0.012;
   near.receiveShadow = true;
