@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import './ui.css';
 import { Rand, Events, clamp, fmtKm } from './util.js';
 import { createTextures } from './textures.js';
-import { predictIntercept } from './physics.js';
+import { predictIntercept, timeToGround } from './physics.js';
 import { createWeather } from './weather.js';
 import { createBase } from './base.js';
 import { createPlayer } from './player.js';
@@ -159,6 +159,11 @@ function selectBattery(id) {
   if (!BATTERY_DEFS[id]) return;
   game.selectedBatteryId = id;
   ctx.events.emit('battery-selected', { id });
+  // mid-engagement battery switch re-points the new battery at the same
+  // threat, so 1/2/3 + F puts interceptors from several batteries on one bomb
+  if (game.phase === 'active' && game.assignment && game.assignment.batteryId !== id) {
+    assign(game.assignment.trackId, id);
+  }
 }
 function setTimeOfDay(t) {
   ctx.weather.setTimeOfDay(t);
@@ -197,22 +202,37 @@ function restartScenario() {
   startScenario();
 }
 
-/** validate + assign track to battery (defaults: selected track/battery) */
+/** validate + assign track to battery (defaults: selected track/battery).
+ *  If the requested battery can't make the shot, automatically falls back to
+ *  the best battery that can (keeps the engage flow to a single keypress). */
 function assign(trackId = ctx.radar.selectedTrackId ?? game.aimTrackId, batteryId = game.selectedBatteryId) {
   const track = ctx.radar.getTrack(trackId);
   if (!track || track.gone) { game.engageHint = 'NO TRACK SELECTED'; return false; }
-  const battery = ctx.batteries.get(batteryId);
+  let battery = ctx.batteries.get(batteryId);
   if (!battery) return false;
-  if (battery.ammo <= 0) {
-    game.engageHint = `${battery.def.name} IS WINCHESTER (NO AMMO)`;
-    ctx.ui.toast(game.engageHint, 'warn');
-    return false;
-  }
-  const sol = predictIntercept(battery.rig.group.position, track.threat.pos, track.threat.vel, battery.def.interceptor.avgSpeed);
+
+  const tryValidate = (b) => {
+    if (b.ammo <= 0) return null;
+    return predictIntercept(b.rig.group.position, track.threat.pos, track.threat.vel, b.def.interceptor.avgSpeed);
+  };
+
+  let sol = tryValidate(battery);
+  let auto = false;
   if (!sol) {
-    game.engageHint = `CANNOT ACHIEVE INTERCEPT — ${battery.def.name} TOO SLOW / TOO LATE`;
-    ctx.ui.toast(game.engageHint, 'warn');
-    return false;
+    const fallbackId = bestBatteryFor(track);
+    const fb = fallbackId ? ctx.batteries.get(fallbackId) : null;
+    const fbSol = fb ? tryValidate(fb) : null;
+    if (fb && fbSol) {
+      battery = fb; sol = fbSol; auto = true;
+      game.selectedBatteryId = battery.id;
+      ctx.events.emit('battery-selected', { id: battery.id });
+    } else {
+      game.engageHint = battery.ammo <= 0
+        ? `${battery.def.name} IS WINCHESTER (NO AMMO)`
+        : `CANNOT ACHIEVE INTERCEPT — ${battery.def.name} TOO SLOW / TOO LATE`;
+      ctx.ui.toast(game.engageHint, 'warn');
+      return false;
+    }
   }
   const env = battery.def.envelope;
   const alt = sol.point.y;
@@ -223,8 +243,13 @@ function assign(trackId = ctx.radar.selectedTrackId ?? game.aimTrackId, batteryI
   } else if (alt < env.sweetLow || alt > env.sweetHigh) {
     hint = `MARGINAL GEOMETRY FOR ${battery.def.name} — REDUCED PK`;
   }
-  game.assignment = { trackId: track.id, batteryId };
-  track.assignedBattery = batteryId;
+  if (auto) hint = `AUTO: ${battery.def.name} TAKES ${track.id} — ${hint}`;
+  if (game.assignment && game.assignment.trackId !== track.id) {
+    const prev = ctx.radar.getTrack(game.assignment.trackId);
+    if (prev) prev.assignedBattery = null;
+  }
+  game.assignment = { trackId: track.id, batteryId: battery.id };
+  track.assignedBattery = battery.id;
   battery.pointAt(sol.point);
   game.engageHint = hint;
   ctx.events.emit('track-assigned', { track, battery, sol });
@@ -235,21 +260,41 @@ function authorize() {
   const a = game.assignment;
   if (!a) { game.engageHint = 'NO ASSIGNMENT — ASSIGN A TRACK FIRST'; return false; }
   const track = ctx.radar.getTrack(a.trackId);
-  const battery = ctx.batteries.get(a.batteryId);
   if (!track || track.gone) { game.assignment = null; return false; }
+  let battery = ctx.batteries.get(a.batteryId);
   if (!battery.canAccept()) {
-    game.engageHint = `${battery.def.name} NOT READY (${battery.displayState})`;
-    return false;
+    // ripple fire: roll to another ready battery so repeated presses keep
+    // putting interceptors on the same threat while this one reloads
+    const altId = bestBatteryFor(track);
+    if (altId && altId !== battery.id && assign(track.id, altId)) {
+      battery = ctx.batteries.get(altId);
+    } else {
+      game.engageHint = `${battery.def.name} NOT READY (${battery.displayState})`;
+      return false;
+    }
   }
   const ok = battery.launch(track);
   if (ok) {
     track.engagedBy++;
-    game.engageHint = `${battery.def.name} FIRING ON ${track.id}`;
+    game.engageHint = `${battery.def.name} FIRING ON ${track.id} — F: FIRE AGAIN  E: NEW TARGET`;
     ctx.events.emit('launch-authorized', { track, battery });
-    game.assignment = null;
-    track.assignedBattery = null;
+    // assignment stays: pressing F again ripple-fires at the same threat
   }
   return ok;
+}
+
+/** most urgent live track: shortest time-to-impact, deprioritizing
+ *  classified decoys (radar knows once classification completes) */
+function mostUrgentTrack() {
+  let best = null;
+  let bestT = Infinity;
+  for (const tr of ctx.radar.activeTracks()) {
+    const tImpact = timeToGround(tr.threat.pos, tr.threat.vel, 0);
+    let t = tImpact > 0 ? tImpact : 1e6;
+    if (tr.classified && tr.threat.isDecoy) t += 1e7; // engage decoys last
+    if (t < bestT) { bestT = t; best = tr; }
+  }
+  return best;
 }
 
 /** pick best battery for a track (used by autoplay/tests) */
@@ -344,10 +389,15 @@ window.addEventListener('keydown', (e) => {
       else if (game.aimTrackId) { ctx.radar.selectTrack(game.aimTrackId); assign(game.aimTrackId); }
       break;
     case 'KeyF':
-      if (game.mode === 'freeroam') {
-        if (!game.assignment && game.aimTrackId) assign(game.aimTrackId);
-        authorize();
+      // works in freeroam AND console mode. Fallback chain keeps the flow to
+      // one key: aimed threat -> selected track -> most urgent track.
+      if (!game.assignment) {
+        const tid = (game.mode === 'freeroam' && game.aimTrackId)
+          || ctx.radar.selectedTrackId
+          || mostUrgentTrack()?.id;
+        if (tid) assign(tid);
       }
+      authorize();
       break;
     case 'KeyR':
       if (game.phase === 'debrief') { ctx.ui.hideDebrief(); restartScenario(); }
@@ -399,7 +449,7 @@ function updateAim() {
   if (game.mode !== 'freeroam') return;
 
   camera.getWorldDirection(_aimDir);
-  let bestAngle = 0.06; // ~3.4° cone
+  let bestAngle = 0.12; // ~7° cone — generous aim assist, threats are distant dots
   let best = null;
   for (const tr of ctx.radar.activeTracks()) {
     _rel.copy(tr.threat.pos).sub(camera.position);
