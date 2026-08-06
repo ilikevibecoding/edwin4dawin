@@ -286,17 +286,12 @@ export function wetGroundMaterial(reflection: THREE.Texture): THREE.ShaderMateri
         float puddle = texture2D(tPuddle, vUv * uRepeat * 0.5).r;
 
         // Expanding rain rings on the water surface.
-        vec2 rip = vec2(0.0);
-        for (int i = 0; i < 3; i++) {
-          float fi = float(i);
-          vec2 cell = floor(vWorld.xz * 1.4 + fi * 13.0);
-          float t = fract(uTime * 0.6 + hash(cell + fi));
-          vec2 c = (cell + vec2(hash(cell), hash(cell + 7.7))) / 1.4;
-          float d = length(vWorld.xz - c);
-          float r = t * 1.2;
-          float ring = exp(-abs(d - r) * 22.0) * (1.0 - t);
-          rip += normalize(vWorld.xz - c + 1e-5) * ring * 0.06;
-        }
+        vec2 cell = floor(vWorld.xz * 1.4);
+        float rt = fract(uTime * 0.6 + hash(cell));
+        vec2 rc = (cell + vec2(hash(cell), hash(cell + 7.7))) / 1.4;
+        float rd = length(vWorld.xz - rc);
+        float ring = exp(-abs(rd - rt * 1.2) * 22.0) * (1.0 - rt);
+        vec2 rip = normalize(vWorld.xz - rc + 1e-5) * ring * 0.07;
         vec3 n = texture2D(tNormal, uv).rgb * 2.0 - 1.0;
         vec2 distort = (n.xy * 0.035 + rip * uRipple) * mix(0.35, 1.0, puddle);
 

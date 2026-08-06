@@ -138,7 +138,7 @@ export class MistLayers {
         }
         void main() {
           vec2 p = vWorld.xz * 0.12 + vec2(uTime * 0.012, uTime * 0.008);
-          float n = noise(p) * 0.6 + noise(p * 2.3 + 4.0) * 0.3 + noise(p * 5.1) * 0.1;
+          float n = noise(p) * 0.72 + noise(p * 2.3 + 4.0) * 0.28;
           float edge = smoothstep(0.0, 0.35, vUv.x) * smoothstep(1.0, 0.65, vUv.x) *
                        smoothstep(0.0, 0.3, vUv.y) * smoothstep(1.0, 0.7, vUv.y);
           float a = smoothstep(0.35, 0.9, n) * edge * uOpacity;

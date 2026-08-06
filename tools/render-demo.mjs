@@ -28,6 +28,7 @@ const format = args.png ? 'png' : 'jpeg';
 const quality_jpeg = Number(args.jq ?? 92);
 const resume = !!args.resume;
 const checkOnly = !!args.check;
+const settleSeconds = Number(args.settle ?? 0);
 
 console.log('building...');
 await buildOnce();
@@ -55,6 +56,12 @@ const t0 = Date.now();
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 300000 });
 await page.waitForFunction('window.__ready === true', { timeout: 900000, polling: 500 });
 console.log(`page ready in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+
+// Let the scene settle (damping, auto exposure) before the first captured frame.
+if (settleSeconds > 0) {
+  const n = Math.max(1, Math.round(settleSeconds / dt));
+  await page.evaluate(`(() => { for (let i = 0; i < ${n}; i++) window.__capture.frame(${dt}); })()`);
+}
 
 // Skip ahead when resuming.
 if (startIndex > 0) {
