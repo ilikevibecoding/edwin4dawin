@@ -48,6 +48,7 @@ declare global {
     __ready?: boolean;
     __finished?: boolean;
     __step?: (frames?: number) => void;
+    __skip?: (frames?: number) => void;
     __cues?: () => unknown;
     __progress?: () => { time: number; frame: number; finished: boolean };
   }
@@ -123,6 +124,13 @@ async function boot(): Promise<void> {
     window.__step = (frames = 1) => {
       for (let i = 0; i < frames; i++) {
         engine.step(engine.fixedStep);
+        frame++;
+      }
+    };
+    // Simulate without drawing, to catch back up after an interrupted capture.
+    window.__skip = (frames = 1) => {
+      for (let i = 0; i < frames; i++) {
+        engine.step(engine.fixedStep, { draw: false });
         frame++;
       }
     };

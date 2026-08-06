@@ -143,17 +143,27 @@ export class Engine {
     this.frameCallbacks.push(cb);
   }
 
-  /** Advances the simulation and renders exactly one frame. */
-  step(dt: number): void {
+  /**
+   * Advances the simulation and renders exactly one frame.
+   *
+   * With `draw` false the frame is simulated but not drawn. Nothing in the game's
+   * state depends on the image — the camera, the performances and the story
+   * timers are all functions of the clock — so this is how an interrupted offline
+   * capture fast-forwards back to where it stopped instead of starting over.
+   */
+  step(dt: number, opts: { draw?: boolean } = {}): void {
+    const draw = opts.draw ?? true;
     const t0 = performance.now();
     this.clock.advance(dt);
     for (const cb of this.frameCallbacks) cb(this.clock.dt);
     this.stage?.update(this.clock.dt, this.clock.time);
     this.postFX?.update(this.clock.realDt, this.clock.realTime);
-    this.renderer.info.reset();
-    this.stage?.preRender?.(this.renderer, this.clock.time);
-    if (this.postFX) this.postFX.render(this.clock.dt);
-    else if (this.stage) this.renderer.render(this.stage.scene, this.stage.camera);
+    if (draw) {
+      this.renderer.info.reset();
+      this.stage?.preRender?.(this.renderer, this.clock.time);
+      if (this.postFX) this.postFX.render(this.clock.dt);
+      else if (this.stage) this.renderer.render(this.stage.scene, this.stage.camera);
+    }
     this.input.endFrame(this.clock.time);
     this.frameCount++;
     this.lastFrameMs = performance.now() - t0;

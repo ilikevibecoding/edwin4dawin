@@ -49,10 +49,40 @@ const url = `${BASE}/index.html?render=1&tier=${TIER}&w=${W}&h=${H}&fps=${FPS}`;
 console.log('loading', url);
 await page.goto(url, { waitUntil: 'load', timeout: 600000 });
 await page.waitForFunction('window.__ready === true', { timeout: 600000 });
+
+/**
+ * Resume point: the highest contiguous frame already on disk. A ten-minute
+ * capture takes hours, so losing it to a browser crash is not acceptable; the
+ * game is re-simulated up to this point without drawing, which costs seconds
+ * rather than hours, and capture continues from there.
+ */
+let frame = START;
+if (!argv.includes('--no-resume')) {
+  const existing = fs
+    .readdirSync(FRAME_DIR)
+    .filter((f) => /^f\d{6}\.jpg$/.test(f))
+    .map((f) => Number(f.slice(1, 7)))
+    .sort((a, b) => a - b);
+  let contiguous = 0;
+  for (const n of existing) {
+    if (n === contiguous) contiguous++;
+    else break;
+  }
+  // Drop the last frame in case it was half-written when the process died.
+  frame = Math.max(START, contiguous - 1);
+  if (frame > 0) {
+    fs.rmSync(path.join(FRAME_DIR, `f${String(frame).padStart(6, '0')}.jpg`), { force: true });
+    console.log(`resuming at frame ${frame}; fast-forwarding`);
+    const batch = 240;
+    for (let done = 0; done < frame; done += batch) {
+      await page.evaluate((n) => window.__skip(n), Math.min(batch, frame - done));
+    }
+    console.log('caught up');
+  }
+}
 console.log('ready; capturing');
 
 const t0 = Date.now();
-let frame = START;
 let finished = false;
 while (frame < MAX_FRAMES && !finished) {
   await page.evaluate(() => window.__step(1));
@@ -66,9 +96,12 @@ while (frame < MAX_FRAMES && !finished) {
     const p = await page.evaluate(() => window.__progress());
     finished = p.finished;
     const elapsed = (Date.now() - t0) / 1000;
-    console.log(
-      `frame ${frame} · story ${p.time.toFixed(1)}s · ${(frame / elapsed).toFixed(2)} fps capture · ` +
-        `${(elapsed / 60).toFixed(1)} min elapsed`
+    // Flushed per line: when the browser dies the buffered tail is lost, and the
+    // log is the only record of where the capture got to.
+    fs.appendFileSync(
+      '.render/progress.log',
+      `frame ${frame} · story ${p.time.toFixed(1)}s · ${((frame - START) / elapsed).toFixed(2)} fps · ` +
+        `${(elapsed / 60).toFixed(1)} min\n`
     );
   }
 }
