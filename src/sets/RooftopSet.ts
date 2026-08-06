@@ -290,7 +290,7 @@ export class RooftopSet extends SceneSet {
     // the wet deck catches them, and off to the sides so they cross the acting
     // area rather than flattening it from the camera's side.
     for (const spec of [
-      { at: new THREE.Vector3(-7.6, 0, 5.0), aim: new THREE.Vector3(2.4, 0.0, -1.4), intensity: 210, color: 0xfff2e0, shadows: true },
+      { at: new THREE.Vector3(-7.6, 0, 5.0), aim: new THREE.Vector3(2.4, 0.0, -1.4), intensity: 210, color: 0xfff2e0, shadows: false },
       { at: new THREE.Vector3(7.4, 0, 3.4), aim: new THREE.Vector3(-1.2, 0.1, -3.4), intensity: 110, color: 0xe4f0ff, shadows: false },
       { at: new THREE.Vector3(-7.8, 0, -4.6), aim: new THREE.Vector3(2.8, 0.1, 3.2), intensity: 90, color: 0xd8e8ff, shadows: false },
     ]) {

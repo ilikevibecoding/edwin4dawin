@@ -93,7 +93,13 @@ export abstract class SceneSet {
   }
 
   protected initCharacterLights(opts: Parameters<typeof CharacterLights.prototype.setColors> extends never ? never : ConstructorParameters<typeof CharacterLights>[0] = {}): CharacterLights {
-    const lights = new CharacterLights({ shadowMapSize: this.quality.shadowMapSize, shadows: this.quality.shadows, ...opts });
+    // The portrait key only casts when the tier can afford a fourth shadow map:
+    // on a software rasteriser each one is a full extra scene pass.
+    const lights = new CharacterLights({
+      shadowMapSize: this.quality.shadowMapSize,
+      shadows: this.quality.shadows && this.quality.shadowLights > 2,
+      ...opts,
+    });
     this.scene.add(lights.group);
     this.characterLights = lights;
     return lights;
