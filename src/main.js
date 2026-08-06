@@ -152,6 +152,8 @@ class Game {
     window.addEventListener('resize', () => this._onResize());
 
     this.weather.setCondition(state.condition, true);
+    // One update primes the environment capture before the first visible frame.
+    this.weather.update(0.016);
     this.base.update(0.016, { nightFactor: 0, floodOn: false, radarSweep: 0 });
 
     // Warm the shader cache before the first visible frame so the opening
@@ -574,11 +576,12 @@ class Game {
   // -------------------------------------------------------------------- loop
 
   loop() {
+    if (this.paused) { this._raf = null; return; }
     this._raf = requestAnimationFrame(() => this.loop());
     const raw = this.clock.getDelta();
     const dt = Math.min(raw, 1 / 20) * this.timeScale;
     const t0 = performance.now();
-    if (!this.paused) this.step(dt);
+    this.step(dt);
     this.render(dt);
     const t1 = performance.now();
     this.frameTimes.push(t1 - t0);
@@ -695,12 +698,15 @@ class Game {
     this.nearConsole = this.base.consoleDistance(this.player.position) < 3.2;
     state.set('nearConsole', this.nearConsole);
     if (skipUI) {
-      // Keep the refresh clocks running so the interface catches up in one go.
+      // Bank the elapsed time so the interface catches up in one go: banners
+      // and timers must age by the real amount, not by a single frame.
       this._scopeTexClock += dt;
       this._screenClock += dt;
+      this._uiBacklog = (this._uiBacklog || 0) + dt;
       return;
     }
-    this.updateInterface(dt);
+    this.updateInterface(dt + (this._uiBacklog || 0));
+    this._uiBacklog = 0;
   }
 
   updateInterface(dt) {
@@ -810,7 +816,19 @@ class Game {
         return g.snapshot();
       },
       renderOnce() { g.render(1 / 60); },
-      setPaused(p) { g.paused = !!p; },
+      /**
+       * Pausing stops the animation frame entirely. On a software rasteriser a
+       * background frame costs the better part of a second and blocks every
+       * subsequent test call behind it.
+       */
+      setPaused(p) {
+        const was = g.paused;
+        g.paused = !!p;
+        if (was && !g.paused && g._raf === null) {
+          g.clock.getDelta();
+          g.loop();
+        }
+      },
       setTimeScale(s) { g.timeScale = s; },
       enter() { g.enterRange(); },
       setCondition(id) { g.setCondition(id); },

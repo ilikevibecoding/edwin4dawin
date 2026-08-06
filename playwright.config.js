@@ -16,7 +16,7 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: 'http://127.0.0.1:5173',
-    viewport: { width: 1600, height: 900 },
+    viewport: { width: 1440, height: 810 },
     deviceScaleFactor: 1,
     launchOptions: {
       args: [

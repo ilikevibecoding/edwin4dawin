@@ -156,10 +156,13 @@ class Threat {
     this.group.add(this.body);
     this.group.add(this.decoyBody);
 
-    // Distance-compensated glow so a 9 m body stays visible at 40 km.
+    // Distance-compensated glow so a 9 m body stays visible at 40 km. Scene
+    // fog is disabled here and replaced with altitude-aware haze, otherwise
+    // distance fog erases the marker long before the target is close.
     const glowMat = new THREE.SpriteMaterial({
       map: glowSprite(128, 2.4), color: 0xffd9a0, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.9,
+      fog: false,
     });
     this.glow = new THREE.Sprite(glowMat);
     this.glow.renderOrder = 14;
@@ -270,12 +273,15 @@ class Threat {
     }
     this.effects.followTrail(this.trail, this.pos, this.isDecoy ? 30 : 60);
 
-    // Keep the marker glow at a readable on-screen size.
+    // Keep the marker glow at a readable on-screen size, dimmed by the amount
+    // of atmosphere between it and the observer rather than by raw distance.
     const dist = camera.position.distanceTo(this.pos);
     const px = THREAT.minPixelScale * dist / 700;
     const s = Math.max(THREAT.bodyLength * 0.9, px * (this.isDecoy ? 5 : 9));
     this.glow.scale.setScalar(s);
-    this.glowMat.opacity = clamp01(0.22 + this.heat * 0.85) * (this.isDecoy ? 0.8 : 1);
+    const haze = this.effects.hazeAt(this.pos);
+    this.glowMat.opacity = clamp01(0.3 + this.heat * 0.8)
+      * (this.isDecoy ? 0.85 : 1) * (1 - haze * 0.8);
     // Fade the detailed body out when it is too small to matter.
     const showBody = dist < 6000;
     this.body.visible = showBody && !this.isDecoy;

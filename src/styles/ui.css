@@ -128,6 +128,7 @@ html, body {
 .st.reload { color: var(--amber); }
 .st.empty, .st.down { color: var(--red); }
 .st.busy   { color: var(--blue); }
+.st.idle   { color: var(--text-dim); }
 .bat-ammo { display: flex; gap: 2px; margin-top: 3px; }
 .bat-ammo i { width: 7px; height: 4px; background: var(--green-dim); }
 .bat-ammo i.used { background: rgba(255,255,255,.1); }
@@ -244,8 +245,20 @@ html, body {
   font-size: 9px; letter-spacing: .2em; color: #0a1210; background: var(--amber);
   padding: 2px 8px; display: inline-block;
 }
-.console-body { display: grid; grid-template-columns: 1fr 380px; gap: 14px; padding: 14px; overflow: auto; }
-.console-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.console-body {
+  display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 14px;
+  padding: 14px; min-height: 0; flex: 1; overflow: hidden;
+}
+.console-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
+/* The control column scrolls on short screens; START stays pinned to the
+   bottom of the column so the primary action is never scrolled out of view. */
+.ctrl-col { overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
+.ctrl-col::-webkit-scrollbar { width: 6px; }
+.ctrl-col::-webkit-scrollbar-thumb { background: rgba(126,247,189,.25); }
+.start-dock {
+  position: sticky; bottom: 0; margin-top: auto; padding-top: 8px;
+  background: linear-gradient(to top, rgba(6,11,12,1) 65%, rgba(6,11,12,0));
+}
 
 .panel { border: 1px solid var(--line); background: rgba(8,14,15,.7); }
 .panel-title {
@@ -255,10 +268,13 @@ html, body {
 }
 .panel-title span { color: var(--amber); }
 
-.scope-panel { flex: 1; display: flex; flex-direction: column; }
-.scope-wrap { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; padding: 10px; }
+.scope-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.scope-wrap {
+  position: relative; flex: 1; min-height: 0;
+  display: flex; align-items: center; justify-content: center; padding: 8px;
+}
 #scope-canvas {
-  width: 100%; height: auto; max-height: 62vh; aspect-ratio: 1;
+  width: auto; height: 100%; max-width: 100%; aspect-ratio: 1;
   cursor: crosshair; outline: none; object-fit: contain;
 }
 #scope-canvas:focus-visible { box-shadow: 0 0 0 2px var(--amber); }
@@ -291,7 +307,8 @@ html, body {
 .seg-btn:disabled { opacity: .4; cursor: not-allowed; }
 .seg-btn .tag { float: right; font-size: 9px; letter-spacing: .1em; }
 .seg-btn .tag.ready { color: var(--phos); } .seg-btn .tag.reload { color: var(--amber); }
-.seg-btn .tag.empty { color: var(--red); }
+.seg-btn .tag.empty { color: var(--red); } .seg-btn .tag.idle { color: var(--text-dim); }
+.seg-btn .tag.busy { color: var(--blue); }
 
 /* Buttons ------------------------------------------------------------- */
 .btn {

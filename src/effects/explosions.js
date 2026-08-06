@@ -121,7 +121,7 @@ export class DebrisField {
     }
     geo.computeVertexNormals();
     this.material = new THREE.MeshStandardMaterial({
-      color: 0x50524f, roughness: 0.72, metalness: 0.65,
+      color: 0x6e6f68, roughness: 0.62, metalness: 0.55,
     });
     this.mesh = new THREE.InstancedMesh(geo, this.material, capacity);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

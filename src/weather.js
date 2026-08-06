@@ -37,6 +37,7 @@ const SKY_FRAG = /* glsl */`
   uniform float uNight;
   uniform float uMoon;
   uniform float uCloudCover;
+  uniform float uCloudStrength;
   uniform vec3  uCloudTint;
   uniform float uTime;
   uniform sampler2D uCloudTex;
@@ -79,30 +80,36 @@ const SKY_FRAG = /* glsl */`
       col += uSunColor * disc * 26.0 * uSunIntensity;
     }
 
-    // Star field and a faint galactic band, only at night.
+    // Star field and a faint galactic band, only at night. Kept sparse and
+    // small: a dense field reads as noise rather than sky.
     if (uNight > 0.01 && h > -0.02) {
-      vec3 q = floor(d * 620.0);
+      vec3 q = floor(d * 900.0);
       float n = hash13(q);
-      float star = smoothstep(0.9975, 0.99985, n);
-      float tw = 0.65 + 0.35 * sin(uTime * 2.4 + n * 90.0);
-      float band = exp(-pow((d.y * 1.35 + d.x * 0.42) * 2.6, 2.0)) * 0.055;
-      col += vec3(0.9, 0.94, 1.0) * star * 2.6 * tw * uNight;
-      col += vec3(0.55, 0.6, 0.85) * band * uNight;
+      float star = smoothstep(0.99935, 0.99995, n);
+      float tw = 0.6 + 0.4 * sin(uTime * 2.4 + n * 90.0);
+      // A second, much rarer set of brighter stars gives the field structure.
+      float bright = smoothstep(0.99992, 1.0, hash13(q + 7.0));
+      float band = exp(-pow((d.y * 1.35 + d.x * 0.42) * 2.6, 2.0)) * 0.03;
+      col += vec3(0.86, 0.9, 1.0) * star * 1.5 * tw * uNight;
+      col += vec3(1.0, 0.96, 0.9) * bright * 4.0 * tw * uNight;
+      col += vec3(0.4, 0.45, 0.68) * band * uNight;
     }
 
     // High cirrus, projected onto a virtual cloud plane.
-    if (h > 0.008) {
+    if (h > 0.008 && uCloudStrength > 0.001) {
       vec2 cuv = d.xz / (h + 0.10);
       vec2 uv1 = cuv * 0.055 + vec2(uTime * 0.0022, uTime * 0.0009);
       vec2 uv2 = cuv * 0.019 - vec2(uTime * 0.0011, uTime * 0.0005);
       float c1 = texture2D(uCloudTex, uv1).r;
       float c2 = texture2D(uCloudTex, uv2).g;
-      float cloud = clamp(c1 * 0.55 + c2 * 0.75 - (1.05 - uCloudCover), 0.0, 1.0);
-      cloud *= smoothstep(0.008, 0.16, h);
+      float raw = c1 * 0.75 + c2 * 0.95;
+      // Cover drives a soft threshold so the sheet thickens smoothly.
+      float cloud = smoothstep(1.30 - uCloudCover * 0.75, 1.62 - uCloudCover * 0.5, raw);
+      cloud *= smoothstep(0.008, 0.13, h);
       // Sunward edges catch the light.
-      float lit = clamp(mie * 3.0 + 0.55, 0.0, 1.6);
+      float lit = clamp(mie * 3.0 + 0.6, 0.0, 1.7);
       vec3 cc = uCloudTint * lit;
-      col = mix(col, cc, clamp(cloud * 1.25, 0.0, 0.92));
+      col = mix(col, cc, clamp(cloud * 0.9, 0.0, 0.8) * uCloudStrength);
     }
 
     // Horizon haze wash ties the sky to the terrain fog colour.
@@ -201,13 +208,15 @@ class CumulusLayer {
     const scl = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
       const a = rng.float(0, Math.PI * 2);
-      const r = rng.float(3000, 26000);
+      const r = rng.float(5000, 30000);
       pos[i * 3] = Math.cos(a) * r;
-      pos[i * 3 + 1] = rng.float(2200, 5200);
+      pos[i * 3 + 1] = rng.float(2600, 6400);
       pos[i * 3 + 2] = Math.sin(a) * r;
-      const w = rng.float(900, 2600);
+      // Puffs are sized relative to their range so the layer keeps a
+      // consistent apparent scale across the sky.
+      const w = r * rng.float(0.045, 0.11);
       scl[i * 3] = w;
-      scl[i * 3 + 1] = w * rng.float(0.38, 0.62);
+      scl[i * 3 + 1] = w * rng.float(0.4, 0.62);
       scl[i * 3 + 2] = rng.float(0, 1);
     }
     geo.setAttribute('aPos', new THREE.InstancedBufferAttribute(pos, 3));
@@ -404,6 +413,7 @@ export class Weather {
         uNight: { value: 0 },
         uMoon: { value: 0 },
         uCloudCover: { value: 0.35 },
+        uCloudStrength: { value: 1 },
         uCloudTint: { value: new THREE.Color(0xffffff) },
         uTime: { value: 0 },
         uCloudTex: { value: this.cloudTex },
@@ -416,6 +426,24 @@ export class Weather {
     this.sky.renderOrder = -1000;
     this.sky.frustumCulled = false;
     scene.add(this.sky);
+
+    // Image-based lighting captured from the sky itself. Without it every
+    // metal surface on the site renders near-black in shadow, and the whole
+    // place reads as flat painted cardboard.
+    this.pmrem = new THREE.PMREMGenerator(renderer);
+    this.envScene = new THREE.Scene();
+    const envSky = new THREE.Mesh(skyGeo, this.skyMat);
+    envSky.frustumCulled = false;
+    this.envScene.add(envSky);
+    // A dim ground hemisphere so the lower half of the environment is not void.
+    const envGround = new THREE.Mesh(
+      new THREE.SphereGeometry(WORLD.skyRadius * 0.98, 16, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x6b6250, side: THREE.BackSide }),
+    );
+    this.envGroundMat = envGround.material;
+    this.envScene.add(envGround);
+    this.envRT = null;
+    this._envDirty = true;
 
     this.cumulus = this.q.cloudLayers > 0
       ? new CumulusLayer(scene, this.q.cloudLayers === 1 ? 22 : 46)
@@ -456,6 +484,19 @@ export class Weather {
     this.targetDir = this._dirFor(preset);
     this.blend = immediate ? 1 : 0;
     if (immediate) this._apply(1, true);
+    this._envDirty = true;
+  }
+
+  /** Re-capture the sky into a prefiltered environment map. */
+  _refreshEnvironment() {
+    this.envGroundMat.color.copy(this.live.ground).multiplyScalar(0.75);
+    const rt = this.pmrem.fromScene(this.envScene, 0, 100, WORLD.skyRadius * 1.4);
+    if (this.envRT) this.envRT.dispose();
+    this.envRT = rt;
+    this.scene.environment = rt.texture;
+    // Night needs the extra bounce or shadowed metal goes to black.
+    this.scene.environmentIntensity = this.preset.id === 'night' ? 1.5 : 1.0;
+    this._envDirty = false;
   }
 
   _apply(k, snap = false) {
@@ -513,7 +554,7 @@ export class Weather {
       cu.uSunDir.value.copy(l.sunDir);
       cu.uLit.value.copy(l.sunColour).multiplyScalar(0.55 + l.sunIntensity * 0.16);
       cu.uShadow.value.copy(l.haze).lerp(l.zenith, 0.4);
-      cu.uOpacity.value = 0.16 + l.cloudCover * 0.55;
+      cu.uOpacity.value = 0.14 + l.cloudCover * 0.38;
       cu.uWind.value.copy(this.wind).multiplyScalar(2.4);
     }
     const mu = this.motes.material.uniforms;
@@ -538,6 +579,10 @@ export class Weather {
     if (this.blend < 1) {
       this.blend = Math.min(1, this.blend + dt / 1.4);
       this._apply(1 - Math.exp(-dt * 2.6));
+      this._envDirty = true;
+    } else if (this._envDirty) {
+      // Captured once the crossfade settles: this is the expensive step.
+      this._refreshEnvironment();
     }
     // Once the crossfade lands there is nothing to re-derive each frame; only
     // the shadow frustum below still needs to follow the player.

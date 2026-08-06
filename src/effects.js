@@ -17,6 +17,7 @@ import {
   ShockwavePool, DebrisField, DecalPool, FlashLights, FireballPool,
 } from './effects/explosions.js';
 import { smokePuff, glowSprite, noiseTexture, streakSprite } from './util/textures.js';
+import { hazeFactor } from './effects/aerial.js';
 import { airDensity, clamp, clamp01, lerp } from './util/mathx.js';
 import { QUALITY } from './config.js';
 
@@ -110,7 +111,7 @@ export class Effects {
 
     this.smoke = new ParticleSystem({
       kind: 'smoke', capacity: Math.round(budget * 0.62),
-      texture: smokePuff(128, 3), turbulence: 0.55, softness: 0.95,
+      texture: smokePuff(128, 3), turbulence: 0.55, softness: 0.78,
     });
     this.dust = new ParticleSystem({
       kind: 'smoke', capacity: Math.round(budget * 0.2),
@@ -237,6 +238,17 @@ export class Effects {
     this.shakeImpulse = Math.max(0, this.shakeImpulse - dt * 2.2);
   }
 
+  /**
+   * How much haze sits between the camera and a world point (0..1).
+   * Missile marker glows use this instead of scene fog: at 40 km the standard
+   * distance fog would erase them entirely, even though a real contrail at
+   * altitude is perfectly visible from the ground.
+   */
+  hazeAt(worldPos) {
+    const h = this._haze;
+    return hazeFactor(this.camera.position, worldPos, h.density, h.scaleHeight, h.curve);
+  }
+
   /** Distance-based emission scale: far events emit fewer, larger particles. */
   _lod(pos) {
     const d = this.camera.position.distanceTo(pos);
@@ -276,7 +288,7 @@ export class Effects {
         {
           life: lerp(5.5, 2.2, rho) * (0.7 + Math.random() * 0.6),
           sizeStart: 1.6 * scale, sizeEnd: (12 + rho * 22) * scale,
-          color: colour, opacity: 0.13 + rho * 0.3,
+          color: colour, opacity: 0.10 + rho * 0.22,
           drag: 0.9, gravity: 0.4,
         },
       );
@@ -338,7 +350,7 @@ export class Effects {
       this.smoke.emit(pos, v, {
         life: 3.4 + Math.random() * 3.6,
         sizeStart: 3 * scale, sizeEnd: (34 + Math.random() * 40) * scale,
-        color: 0xd8d2c6, opacity: 0.5, drag: 1.15, gravity: 1.4,
+        color: 0xbdb7ab, opacity: 0.34, drag: 1.15, gravity: 1.4,
       });
     }
     for (let i = 0; i < 55 * scale; i++) {
@@ -364,7 +376,7 @@ export class Effects {
         {
           life: 4.5 + Math.random() * 5,
           sizeStart: 4 * p.dust, sizeEnd: (34 + Math.random() * 36) * p.dust,
-          color: 0xb9a482, opacity: 0.42, drag: 1.5, gravity: -0.4,
+          color: 0xa8946f, opacity: 0.32, drag: 1.5, gravity: -0.4,
         },
       );
     }
@@ -389,7 +401,7 @@ export class Effects {
     this.lights.flash(pos, {
       colour: p.colour, intensity: 2600 * scale, life: 0.75, distance: 420 * scale,
     });
-    this.glare(pos, { scale: 130 * scale, life: 1.5, peak: 0.85, colour: p.colour });
+    this.glare(pos, { scale: 46 * scale, life: 1.1, peak: 0.45, colour: p.colour });
     if (groundDist < 40) {
       this.decals.spawn(_v3.set(pos.x, groundY, pos.z), 7 * scale, { opacity: 0.62 });
     }
@@ -476,7 +488,12 @@ export class Effects {
     this.lights.flash(pos, {
       colour: 0xfff0d0, intensity: 9000 * s, life: 0.9, distance: 2600 * s,
     });
-    this.glare(pos, { scale: 260 * s, life: 1.1, peak: 1, colour: 0xfff2d8 });
+    // Glare is sized in world units, so it has to scale with viewing distance
+    // to stay a lens artefact rather than a wall of white.
+    const d = this.camera.position.distanceTo(pos);
+    this.glare(pos, {
+      scale: clamp(d * 0.05, 40, 900) * s, life: 0.9, peak: 0.7, colour: 0xfff2d8,
+    });
     return { rho };
   }
 
@@ -557,7 +574,10 @@ export class Effects {
     this.lights.flash(_v3.set(p.x, 12 * s, p.z), {
       colour: 0xffd090, intensity: 16000 * s, life: 1.1, distance: 3200,
     });
-    this.glare(_v3.set(p.x, 14 * s, p.z), { scale: 300 * s, life: 1.4, peak: 1, colour: 0xffd8a0 });
+    const gd = this.camera.position.distanceTo(p);
+    this.glare(_v3.set(p.x, 14 * s, p.z), {
+      scale: clamp(gd * 0.06, 50, 700) * s, life: 1.1, peak: 0.8, colour: 0xffd8a0,
+    });
     this.shakeImpulse = 1.6;
   }
 

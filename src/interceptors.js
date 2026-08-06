@@ -149,10 +149,13 @@ class Interceptor {
     this.bodies = {};
     scene.add(this.group);
 
-    // Distance-compensated exhaust glow
+    // Distance-compensated exhaust glow. Scene fog is off for the same reason
+    // as the threat markers: a burning motor at 20 km is a bright point, not a
+    // fog-coloured smudge.
     const glowMat = new THREE.SpriteMaterial({
       map: glowSprite(128, 2.1), color: 0xfff0c8, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false, opacity: 1,
+      fog: false,
     });
     this.glow = new THREE.Sprite(glowMat);
     this.glow.renderOrder = 15;
@@ -326,7 +329,8 @@ class Interceptor {
     const px = 2.6 * dist / 700;
     const s = Math.max(4, px * (burning ? 10 : 4));
     this.glow.scale.setScalar(s);
-    this.glowMat.opacity = burning ? 1 : 0.28;
+    const haze = this.effects.hazeAt(this.pos);
+    this.glowMat.opacity = (burning ? 1 : 0.3) * (1 - haze * 0.75);
 
     // --- termination -------------------------------------------------------
     if (this.pos.y <= WORLD.groundY) {

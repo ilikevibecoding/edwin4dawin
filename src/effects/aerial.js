@@ -46,6 +46,27 @@ export const AERIAL_PARS = /* glsl */`
   }
 `;
 
+/**
+ * CPU-side twin of `aerialFactor`, for things that are attenuated by hand
+ * rather than in a shader (billboard glows on missiles, marker opacity).
+ * @returns {number} 0 = clear, 1 = fully obscured
+ */
+export function hazeFactor(camPos, worldPos, density, scaleHeight = 2600, curve = 0.5) {
+  const dx = worldPos.x - camPos.x;
+  const dy = worldPos.y - camPos.y;
+  const dz = worldPos.z - camPos.z;
+  const dist = Math.hypot(dx, dy, dz);
+  const h0 = Math.max(camPos.y, 0);
+  const h1 = Math.max(worldPos.y, 0);
+  const H = Math.max(scaleHeight, 1);
+  const dh = Math.abs(h1 - h0);
+  const avg = dh < 1
+    ? Math.exp(-h0 / H)
+    : (H * (Math.exp(-Math.min(h0, h1) / H) - Math.exp(-Math.max(h0, h1) / H))) / dh;
+  const tau = density * dist * avg;
+  return 1 - Math.exp(-(tau * tau * curve + tau * (1 - curve)));
+}
+
 /** Copy live haze settings into a material's uniforms. */
 export function syncAerial(material, { colour, density, scaleHeight, camPos, curve }) {
   const u = material.uniforms;

@@ -53,7 +53,7 @@ export function matOliveArmour() {
       ],
     });
     return new THREE.MeshStandardMaterial({
-      ...t, roughness: 0.85, metalness: 0.32,
+      ...t, roughness: 0.82, metalness: 0.08,
       normalScale: new THREE.Vector2(0.8, 0.8),
     });
   });
@@ -69,7 +69,7 @@ export function matSandArmour() {
       ],
     });
     return new THREE.MeshStandardMaterial({
-      ...t, roughness: 0.88, metalness: 0.28,
+      ...t, roughness: 0.85, metalness: 0.06,
       normalScale: new THREE.Vector2(0.85, 0.85),
     });
   });
@@ -78,14 +78,14 @@ export function matSandArmour() {
 export function matGrayArmour() {
   return def('grayArmour', () => {
     const t = paintedMetal({ key: 'grayArmour', color: PALETTE.grayPaint, seed: 41, panel: 7, wear: 0.5, grime: 0.5 });
-    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.8, metalness: 0.4 });
+    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.74, metalness: 0.14 });
   });
 }
 
 export function matWhitePaint() {
   return def('whitePaint', () => {
     const t = paintedMetal({ key: 'whitePaint', color: '#cfcdc4', seed: 55, panel: 4, wear: 0.55, grime: 0.75 });
-    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.72, metalness: 0.15 });
+    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.66, metalness: 0.08 });
   });
 }
 
@@ -95,7 +95,7 @@ export function matShelter() {
       key: 'shelter', color: '#43503f', seed: 71, panel: 8, wear: 0.6, grime: 0.9,
       camo: [{ color: 'rgba(56,50,38,0.55)', blobs: 16, scale: 0.14 }],
     });
-    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.86, metalness: 0.3 });
+    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.84, metalness: 0.07 });
   });
 }
 
@@ -131,7 +131,7 @@ export function matTyre() {
 
 export function matHazard() {
   return def('hazard', () => new THREE.MeshStandardMaterial({
-    map: hazardStripes(), roughness: 0.72, metalness: 0.2,
+    map: hazardStripes(), roughness: 0.68, metalness: 0.06,
   }));
 }
 
@@ -153,7 +153,7 @@ export function matCanister() {
     const t = paintedMetal({
       key: 'canister', color: '#5a6350', seed: 91, panel: 3, wear: 0.45, grime: 0.5,
     });
-    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.7, metalness: 0.45 });
+    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.62, metalness: 0.22 });
   });
 }
 
@@ -162,7 +162,7 @@ export function matMissileBody() {
     const t = paintedMetal({
       key: 'missileBody', color: '#c8c6bd', seed: 33, panel: 3, rivets: false, wear: 0.3, grime: 0.25,
     });
-    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.44, metalness: 0.6 });
+    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.38, metalness: 0.45 });
   });
 }
 
@@ -171,7 +171,7 @@ export function matThreatBody() {
     const t = paintedMetal({
       key: 'threatBody', color: '#5d5f61', seed: 65, panel: 3, rivets: false, wear: 0.6, grime: 0.5,
     });
-    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.55, metalness: 0.7 });
+    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.5, metalness: 0.55 });
   });
 }
 

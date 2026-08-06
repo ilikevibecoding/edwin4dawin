@@ -861,8 +861,9 @@ export class Battery {
       case BATTERY_STATE.PREP: return 'busy';
       case BATTERY_STATE.FIRING: return 'busy';
       case BATTERY_STATE.RELOAD: return 'reload';
-      case BATTERY_STATE.EMPTY: return 'empty';
-      default: return 'down';
+      case BATTERY_STATE.EMPTY: return this.ammo > 0 ? 'idle' : 'empty';
+      // Stowed with rounds available is a normal resting state, not a fault.
+      default: return this.ammo > 0 ? 'idle' : 'empty';
     }
   }
 
