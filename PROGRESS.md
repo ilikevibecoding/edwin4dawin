@@ -19,6 +19,27 @@ telemetry from `tools/balance.mjs`, `tools/audio-check.mjs` and the test suite.
 | 7 | Gameplay loop — pacing, difficulty, readability of cause and effect |
 | 8 | Performance discipline — draw calls, triangles, pooling, CPU frame cost |
 
+## Cross-module contract: render order
+
+Transparent draw order is a contract shared between `effects.js` and `radar.js`
+and it is not enforced anywhere, so it is worth writing down. The holographic
+volume sits half a metre from the operator's eye but is additive and depth-light,
+so it loses to anything drawn later. Effects occupy a band and the holo has to
+start above it:
+
+| Band | Owner | Contents |
+|---|---|---|
+| 1–2 | `base.js`, `effects.js` | ground decals, pad markings |
+| 9–11 | `effects.js` | smoke ribbons, normal-blended particle layers |
+| 12–14 | `effects.js` | additive particles, fireballs, shockwaves |
+| 15 | `threats.js`, `interceptors.js` | glow sprites |
+| `HOLO_ORDER`+ | `radar.js` | console holographic volume |
+
+This was a real bug, not a hypothetical: the holo was at 1–6 and a launch plume
+300 m downrange painted straight over a display in front of the player's face,
+which read as the volume being too dim. Anything new and transparent needs a
+render order chosen against this table.
+
 ## Test environment caveat
 
 The build VM has **no GPU**; Chromium runs WebGL2 through SwiftShader (software),
