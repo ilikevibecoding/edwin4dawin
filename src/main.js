@@ -457,7 +457,10 @@ class Game {
     if (this.mode === 'play') {
       // fixed-step simulation
       if (TEST_MODE) {
-        this.simStep(1 / 60);
+        // testSpeed lets video capture play at natural speed despite slow
+        // headless rendering (n sim steps per rendered frame)
+        const n = Math.max(1, Math.round(this.testSpeed || 1));
+        for (let i = 0; i < n; i++) this.simStep(1 / 60);
       } else {
         this.accum += dt;
         const step = 1 / 60;
@@ -613,6 +616,7 @@ class Game {
         return true;
       },
       setQuality(q) { self.setQuality(q); return true; },
+      setSpeed(n) { self.testSpeed = n; return true; },
       weatherPreset() { return self.weather.presetName; },
     };
   }
