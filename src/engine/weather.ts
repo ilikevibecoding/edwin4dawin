@@ -10,6 +10,8 @@ import { clamp, Rng } from './math';
 export type RainOpts = {
   count?: number;
   splashes?: number;
+  /** Interior sets place rain outside a window; it must not trail the camera. */
+  follow?: boolean;
   radius?: number;
   height?: number;
   speed?: number;
@@ -23,6 +25,7 @@ export class Rain {
   group = new THREE.Group();
   private streaks?: THREE.Mesh;
   private splashes?: THREE.Mesh;
+  private follow = true;
   private mist?: THREE.Mesh;
   private uniforms: Record<string, THREE.IUniform> = {};
   private splashUniforms: Record<string, THREE.IUniform> = {};
@@ -32,6 +35,7 @@ export class Rain {
 
   constructor(o: RainOpts = {}) {
     const count = o.count ?? 12000;
+    this.follow = o.follow ?? true;
     const radius = o.radius ?? 26;
     const height = o.height ?? 26;
     const rng = new Rng(20380815);
@@ -188,7 +192,7 @@ export class Rain {
           void main() {
             float a = texture2D( tSprite, vUv ).a;
             a *= ( 1.0 - vLife ) * smoothstep( 0.0, 0.12, vLife );
-            gl_FragColor = vec4( uColor * 0.8, a * 0.22 );
+            gl_FragColor = vec4( uColor * 0.7, a * 0.12 );
           }
         `,
       });
@@ -261,8 +265,10 @@ export class Rain {
   /** Rain volume trails the camera, snapped to avoid visible drift. */
   update(dt: number, time: number, camera: THREE.Camera): void {
     void dt;
-    const p = camera.position;
-    this.group.position.set(Math.round(p.x * 0.5) * 2, this.groundY, Math.round(p.z * 0.5) * 2);
+    if (this.follow) {
+      const p = camera.position;
+      this.group.position.set(Math.round(p.x * 0.5) * 2, this.groundY, Math.round(p.z * 0.5) * 2);
+    }
     this.uniforms.uTime.value = time;
     this.uniforms.uAmount.value = this.amount;
     if (this.splashes) {

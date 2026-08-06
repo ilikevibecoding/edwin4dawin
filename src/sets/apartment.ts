@@ -29,11 +29,12 @@ export function buildApartment(ctx: SetContext): GameSet {
   scene.fog = new THREE.FogExp2(0x0a1219, 0.02);
   const env = sky.buildEnvironment(renderer, [envPanel(0xffb066, 1.6, 6, 4, new THREE.Vector3(0, 2.2, -3))]);
   scene.environment = env;
-  scene.environmentIntensity = 0.6;
+  scene.environmentIntensity = 0.95;
 
   /* -------------------------------------------------------------- shell */
   const W = 7.2, D = 6.4, H = 2.75;
   const floorMat = MAT.wood(4, 0.8);
+  floorMat.color.multiplyScalar(2.2);
   const floor = plane(W, D, floorMat);
   floor.rotation.x = -Math.PI / 2;
   scene.add(floor);
@@ -184,6 +185,7 @@ export function buildApartment(ctx: SetContext): GameSet {
 
   /* Rain outside the window only — the volume is parked beyond the glass. */
   const rain = new Rain({
+    follow: false,
     count: Math.round(q.rainCount * 0.35),
     splashes: 0,
     radius: 7,
@@ -291,7 +293,7 @@ export function buildApartment(ctx: SetContext): GameSet {
       fx.setStreak(0.16, new THREE.Vector3(0.9, 0.66, 0.4));
       fx.highlightCeiling = 6.0;
       fx.applyLook({
-        uExposure: 1.5,
+        uExposure: 1.95,
         uContrast: 1.12,
         uSaturation: 1.02,
         uSplit: 0.22,

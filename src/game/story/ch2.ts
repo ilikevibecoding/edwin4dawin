@@ -49,11 +49,12 @@ export const CH2: Chapter = {
     // --- Hand over control: the chores are the tutorial.
     { t: 'letterbox', on: false },
     { t: 'objective', text: 'FINISH THE HOUSEWORK' },
+    { t: 'do', who: 'kara', mark: 'livingCentre', pose: 'idle', look: null },
     {
       t: 'explore', who: 'kara',
       objective: 'FINISH THE HOUSEWORK',
       require: ['i_window', 'i_bottles'],
-      goal: { mark: 'livingCentre', radius: 1.2 },
+      goal: { mark: 'byWindow', radius: 1.3 },
       demoPath: ['i_window', 'i_tv', 'i_bottles', 'i_drawing'],
       timeout: 150,
     },

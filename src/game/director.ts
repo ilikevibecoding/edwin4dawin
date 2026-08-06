@@ -370,13 +370,20 @@ export class Director {
           this.player = new Player(ch, this.set.camera);
           this.player.attachPost(this.fx);
         }
+        const interior = this.set.name === 'apartment' || this.set.name === 'interrogation';
         this.player.configure({
           colliders: this.set.colliders,
           interactables: this.set.interactables,
           bounds: this.set.bounds,
           scene: this.set.scene,
           // Interiors are already lit; exteriors at night need the full rig.
-          keyScale: this.set.name === 'apartment' || this.set.name === 'interrogation' ? 0.45 : 1,
+          keyScale: interior ? 1.25 : 1,
+          boom: interior
+            ? { start: 2.7, min: 1.0, max: 3.4 }
+            : { start: 4.4, min: 2.4, max: 7.0 },
+          ceiling: interior ? 2.35 : Infinity,
+          pitch: interior ? 0.4 : 0.08,
+          ambient: interior ? 3.0 : 1.1,
         });
         this.player.activate();
         const goalMark = step.goal ? this.set.marks[step.goal.mark] : undefined;

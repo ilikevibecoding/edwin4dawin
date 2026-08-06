@@ -231,7 +231,7 @@ export function buildInterrogation(ctx: SetContext): GameSet {
       fx.setStreak(0.12, new THREE.Vector3(0.5, 0.7, 1.0));
       fx.highlightCeiling = 5.5;
       fx.applyLook({
-        uExposure: 1.45,
+        uExposure: 1.85,
         uContrast: 1.16,
         uSaturation: 0.94,
         uSplit: 0.2,

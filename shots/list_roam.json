@@ -1,0 +1,4 @@
+[
+  { "url": "?chapter=ch2&q=high&roam=1&rf=3", "out": "shots/RM2_apartment.png", "settle": 4000 },
+  { "url": "?chapter=ch3&q=high&roam=1&rf=3", "out": "shots/RM3_interrogation.png", "settle": 4000 }
+]

@@ -80,11 +80,27 @@ export class Player {
     scene?: THREE.Object3D;
     /** Scale the follow rig for bright interiors. */
     keyScale?: number;
+    /** Boom length limits: rooms need a short leash or the camera exits the walls. */
+    boom?: { start: number; min: number; max: number };
+    /** Highest the camera may float, so it stays under a room's ceiling. */
+    ceiling?: number;
+    /** Resting camera pitch; interiors look down over the furniture. */
+    pitch?: number;
+    /** Ambient lift for the whole room, separate from the character key. */
+    ambient?: number;
   }): void {
     this.colliders = opts.colliders ?? [];
     this.interactables = opts.interactables ?? [];
     if (opts.bounds) this.bounds = opts.bounds;
     this.keyScale = opts.keyScale ?? 1;
+    if (opts.boom) {
+      this.boom = opts.boom;
+      this.distance = opts.boom.start;
+      this.targetDistance = opts.boom.start;
+    }
+    this.ceiling = opts.ceiling ?? Infinity;
+    this.restPitch = opts.pitch ?? 0.08;
+    this.ambientLift = opts.ambient ?? 1.1;
     if (opts.scene && this.scene !== opts.scene) {
       this.scene = opts.scene;
       for (const l of [this.keyLight, this.rimLight]) {
@@ -95,6 +111,10 @@ export class Player {
     }
   }
   private keyScale = 1;
+  private boom = { start: 4.4, min: 2.4, max: 7.0 };
+  private ceiling = Infinity;
+  private restPitch = 0.08;
+  private ambientLift = 1.1;
 
   /** Hand control to the player, snapping the orbit behind the character. */
   activate(): void {
@@ -102,9 +122,9 @@ export class Player {
     this.keyLight.intensity = 20 * this.keyScale;
     this.rimLight.intensity = 9 * this.keyScale;
     this.fillLight.intensity = 9 * this.keyScale;
-    this.ambLift.intensity = 1.1 * this.keyScale;
+    this.ambLift.intensity = this.ambientLift;
     this.yaw = this.character.group.rotation.y + Math.PI;
-    this.pitch = 0.08;
+    this.pitch = this.restPitch;
     this.initialised = false;
   }
   deactivate(): void {
@@ -131,7 +151,7 @@ export class Player {
   }
 
   zoom(delta: number): void {
-    this.targetDistance = clamp(this.targetDistance + delta * 0.0016, 2.6, 7.0);
+    this.targetDistance = clamp(this.targetDistance + delta * 0.0016, this.boom.min, this.boom.max);
   }
 
   /** Scripted walking, used by the autoplay demo and film capture. */
@@ -233,17 +253,22 @@ export class Player {
       aim.y + Math.sin(this.pitch) * this.distance + 0.42,
       aim.z + Math.cos(this.yaw) * cp * this.distance,
     );
-    // Keep the camera out of the floor and out of solid boxes.
-    desired.y = Math.max(desired.y, 0.45);
+    // Keep the camera off the floor, and under the ceiling when indoors.
+    desired.y = clamp(desired.y, 0.45, this.ceiling);
     let d = this.distance;
-    while (d > 2.4 && this.blocked(desired.x, desired.z, 0.25)) {
+    while (d > this.boom.min && this.blocked(desired.x, desired.z, 0.25)) {
       d -= 0.25;
       desired.set(
         aim.x + Math.sin(this.yaw) * cp * d,
-        Math.max(0.45, aim.y + Math.sin(this.pitch) * d + 0.42),
+        clamp(aim.y + Math.sin(this.pitch) * d + 0.42, 0.45, this.ceiling),
         aim.z + Math.cos(this.yaw) * cp * d,
       );
     }
+    // A short boom can still poke through a wall in a small room, so the final
+    // say belongs to the play volume: pull the camera back inside it.
+    desired.x = clamp(desired.x, this.bounds.minX + 0.25, this.bounds.maxX - 0.25);
+    desired.z = clamp(desired.z, this.bounds.minZ + 0.25, this.bounds.maxZ - 0.25);
+
     if (!this.initialised) {
       this.camPos.copy(desired);
       this.camAim.copy(aim);

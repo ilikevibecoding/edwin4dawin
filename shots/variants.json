@@ -1,18 +1,23 @@
 [
-  { "name": "a_full", "steps": 3 },
+  { "name": "a_high_base", "steps": 3 },
   {
-    "name": "b_nogarments",
+    "name": "b_nograin",
     "steps": 3,
-    "eval": "(()=>{const s=window.__engine.set.scene;s.traverse(o=>{if(o.name&&/-(jacket|shirt|coat|trousers|vest|suit|tie|belt|strip|led)/.test(o.name))o.visible=false;});})()"
+    "eval": "(()=>{window.__engine.fx.applyLook({uGrain:0.0});})()"
   },
   {
-    "name": "c_bodyonly_dark",
+    "name": "c_norain",
     "steps": 3,
-    "eval": "(()=>{const s=window.__engine.set.scene;s.traverse(o=>{if(/-body$/.test(o.name||'')){o.material.forEach?o.material.forEach(m=>{m.color.setHex(0x101317);m.clearcoat=0;m.sheen=0;}):(o.material.color.setHex(0x101317));}});})()"
+    "eval": "(()=>{const s=window.__game.set.scene;s.traverse(o=>{if(o.name==='rain'||(o.isMesh&&o.material&&o.material.blending===2&&o.renderOrder>=3))o.visible=false;});if(window.__game.set.rain)window.__game.set.rain.group.visible=false;})()"
   },
   {
-    "name": "d_nobloom",
+    "name": "d_noshadow",
     "steps": 3,
-    "eval": "(()=>{window.__engine.fx.setBloom(0.0,0.7,2.0);window.__engine.fx.setStreak(0.0);})()"
+    "eval": "(()=>{window.__engine.renderer.shadowMap.enabled=false;window.__engine.set.scene.traverse(o=>{if(o.isLight)o.castShadow=false;});})()"
+  },
+  {
+    "name": "e_nodof",
+    "steps": 3,
+    "eval": "(()=>{window.__engine.fx.aperture=0.0;})()"
   }
 ]

@@ -258,12 +258,12 @@ export function buildRooftop(ctx: SetContext): GameSet {
   ];
   const interactables: GameSet['interactables'] = [
     {
-      id: 'i_gun', at: [-3.9, 0.1, 5.1], label: 'EXAMINE THE SERVICE PISTOL', marker: true,
+      id: 'i_gun', at: [-3.9, 0.1, 5.1], label: 'EXAMINE THE SERVICE PISTOL', marker: true, radius: 2.6,
       think: 'DPD issue. Two rounds fired. The officer who owned it is downstairs on a stretcher.',
       flag: 'sawGun',
     },
     {
-      id: 'i_blood', at: [-2.6, 0.05, 7.4], label: 'ANALYSE THE THIRIUM', marker: true,
+      id: 'i_blood', at: [-2.6, 0.05, 7.4], label: 'ANALYSE THE THIRIUM', marker: true, radius: 2.6,
       think: 'Thirium 310, six minutes old. He is losing pressure. He does not have long either.',
       flag: 'sawBlood',
     },
