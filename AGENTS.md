@@ -69,11 +69,27 @@ The dev server usually already runs on `http://127.0.0.1:5173`. Start it with
 | `node tools/quick.mjs out.png '["day",[x,y,z],[lookX,lookY,lookZ]]' 'extraJS'` | one screenshot from an arbitrary viewpoint (`y` may be `null` to sit on the ground); `extraJS` is evaluated in the page before rendering |
 | `node tools/gallery.mjs shots/dir --w 1280 --h 720 [--only a,b]` | full site tour + scripted engagements |
 | `node tools/sim.mjs [runs]` | headless gameplay matrix (no rendering, fast) |
+| `node tools/balance.mjs` | one run per scenario with the full result list and reasons |
 | `node tools/perf.mjs` | draw calls, triangles, sim/render cost |
-| `npx playwright test` | the committed Playwright suite |
+| `node tools/overdraw.mjs` | particle overdraw in full-screen equivalents |
+| `node tools/fillcheck.mjs` | live particle counts and sizes around a launch |
+| `node tools/audiocheck.mjs` | confirms the WebAudio graph produces signal |
+| `node tools/film.mjs out.mp4 --phase intercept --pin` | renders a demo clip offline frame by frame, then encodes at real speed |
+| `npx playwright test` | the committed suite: `tests/game.spec.js` asserts, `tests/shots.spec.js` captures |
 
-Headless rendering uses SwiftShader, so absolute frame times are not meaningful.
-Use draw calls, triangle counts and sim step cost as the perf signal.
+**Performance measurement on this VM.** There is no GPU: headless Chromium falls
+back to SwiftShader. Measured frame rates there are 4-6 fps and feature-toggle
+profiling gives self-contradictory results, so they say nothing about real hardware.
+Trust these instead:
+
+- draw calls, triangles and sim step cost from `tools/perf.mjs` (budget: < 800,
+  < 900k, < 1 ms)
+- particle overdraw from `tools/overdraw.mjs` (worst case should stay under ~35
+  full-screen equivalents at high quality)
+
+Because real GPU cost cannot be verified here, `main.js` runs an adaptive quality
+governor that steps between tiers to hold 60 fps. If you add anything fill-heavy,
+re-run `tools/overdraw.mjs` standing next to a firing pad.
 
 ### Test API (`window.__GAME`)
 

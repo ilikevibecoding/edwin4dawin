@@ -37,6 +37,8 @@ const PHASE = flag('phase', 'launch');
 const LEAD = Number(flag('lead', 4));
 const WARMUP = Number(flag('warmup', 0));
 const VIEW = flag('view', '2,26');
+const LOOKAT = flag('lookat', null);   // hold a fixed aim instead of tracking
+const PIN = args.includes('--pin');    // lock onto the round in flight
 const FRAMES = Math.round(FPS * SECONDS);
 const STEPS_PER_FRAME = Math.max(1, Math.round(60 / FPS));
 
@@ -100,27 +102,38 @@ console.log(`capture: warmup ${warmup.toFixed(1)}s then ${FRAMES} frames @ ${FPS
 
 await setup();
 if (warmup > 0) {
-  await page.evaluate(([warmup]) => {
+  await page.evaluate(([warmup, lookat]) => {
     const G = window.__GAME;
     const steps = Math.round(warmup * 60);
     for (let i = 0; i < steps; i++) {
       G.stepOnce();
       if (i % 21 === 0) G.autoPilot();
     }
-    G.watch();
-  }, [warmup]);
+    if (lookat) {
+      const [x, y, z] = lookat.split(',').map(Number);
+      G.lookAt(x, y, z);
+    } else {
+      G.watch();
+    }
+  }, [warmup, LOOKAT]);
 }
+if (PIN) console.log('pinned subject:', await page.evaluate(() => window.__GAME.pinWatch()));
 
 const t0 = Date.now();
 for (let f = 0; f < FRAMES; f++) {
-  await page.evaluate(([steps, frame]) => {
+  await page.evaluate(([steps, frame, lookat]) => {
     const G = window.__GAME;
     for (let i = 0; i < steps; i++) G.stepOnce();
     if (frame % 7 === 0) G.autoPilot();
-    G.watchSmooth(0.09);
+    if (lookat) {
+      const [x, y, z] = lookat.split(',').map(Number);
+      G.lookAt(x, y, z);
+    } else {
+      G.watchSmooth(0.09);
+    }
     G.render();
-  }, [STEPS_PER_FRAME, f]);
-  await page.screenshot({ path: path.join(frameDir, `f${String(f).padStart(5, '0')}.png`), timeout: 180_000 });
+  }, [STEPS_PER_FRAME, f, LOOKAT]);
+  await page.screenshot({ path: path.join(frameDir, `f${String(f).padStart(5, '0')}.png`), timeout: 600_000 });
   if (f % 20 === 0) {
     const el = (Date.now() - t0) / 1000;
     const eta = (el / Math.max(1, f)) * (FRAMES - f);

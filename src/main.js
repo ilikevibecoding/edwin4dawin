@@ -186,7 +186,10 @@ class Game {
       onStartScenario: () => this.startScenario(),
       onAssign: () => this.assign(),
       onAuthorize: () => this.authorize(),
-      onRestart: () => this.restart(),
+      onRestart: () => {
+        if (this.state === 'running' || this.state === 'complete') this.startScenario(true);
+        else this.restart();
+      },
       onCloseConsole: () => this._setConsole(false),
       onSelectTrackIndex: (i) => {
         const tr = this.radar.tracks[i];
@@ -255,7 +258,10 @@ class Game {
           this._cycleBattery();
           break;
         case 'KeyR':
-          this.restart();
+          // restart means "run it again": if a scenario has already been started,
+          // reset and immediately relaunch it rather than dropping to standby
+          if (this.state === 'running' || this.state === 'complete') this.startScenario(true);
+          else this.restart();
           break;
         case 'KeyP':
           this._toggle('perf');
@@ -427,8 +433,8 @@ class Game {
 
   // ------------------------------------------------------------- game control
 
-  startScenario() {
-    if (this.state === 'running') return false;
+  startScenario(force = false) {
+    if (this.state === 'running' && !force) return false;
     const scenario = SCENARIOS[this.scenarioId];
     this.restart(true);
     this.state = 'running';
@@ -743,7 +749,7 @@ class Game {
     this.post.addFlash(0.3 * Math.exp(-d / 200));
     this.audio.explosion(t.pos, 1.7);
     this.ui.log(`<b>IMPACT</b> ${t.trackId} struck the site.`, 'bad');
-    this.ui.showBanner('IMPACT', `${t.trackId} was not intercepted`, 'bad', 3.4);
+    this.ui.showBanner('IMPACT', `${t.trackId} was not intercepted`, 'bad', 5.5);
     this.ui.caption(`Impact - ${t.trackId} struck the site`);
     this.results.push({ result: 'IMPACT', id: t.trackId });
   }
@@ -756,19 +762,19 @@ class Game {
       this.player.addShake(Math.max(0.05, 0.9 * Math.exp(-d / 300)));
       this.post.addFlash(0.34 * Math.exp(-d / 1400));
       this.ui.log(`<b>INTERCEPT</b> ${r.message}`, 'good');
-      this.ui.showBanner('INTERCEPTED', r.message, 'good', 3.4);
+      this.ui.showBanner('INTERCEPTED', r.message, 'good', 5.5);
       this.ui.caption('Intercept - target destroyed');
     } else if (r.result === 'DECOY') {
       this.audio.explosion(pos, 1.1);
       this.post.addFlash(0.2 * Math.exp(-d / 1400));
       this.ui.log(`<b>DECOY</b> ${r.message}`, 'warn');
-      this.ui.showBanner('DECOY', r.message, 'warn', 3.4);
+      this.ui.showBanner('DECOY', r.message, 'warn', 5.5);
       this.ui.caption('Decoy destroyed - round wasted');
     } else {
       this.audio.explosion(pos, 0.8);
       this.post.addFlash(0.14 * Math.exp(-d / 1400));
       this.ui.log(`<b>MISS</b> ${r.message}`, 'bad');
-      this.ui.showBanner('MISSED', r.message, 'bad', 3.4);
+      this.ui.showBanner('MISSED', r.message, 'bad', 5.5);
       this.ui.caption('Miss - round failed to intercept');
     }
     this.results.push({ result: r.result, message: r.message });
@@ -1081,16 +1087,28 @@ class Game {
        * Ease the view toward whatever is most interesting, so an offline capture
        * gets a smooth operator-style pan instead of snapping between targets.
        */
+      /**
+       * Pin the camera subject to the round currently in flight so a later
+       * launch elsewhere on the site cannot yank the view away mid-shot.
+       */
+      pinWatch: () => {
+        this._watchPin = this.interceptors.active[0] || null;
+        return !!this._watchPin;
+      },
       watchSmooth: (k = 0.08, lead = 0) => {
-        const it = this.interceptors.active[0];
+        const pinned = this._watchPin && this._watchPin.alive ? this._watchPin : null;
+        const it = pinned || (this._watchPin ? null : this.interceptors.active[0]);
         let target = null;
         if (it && it.target && it.target.alive) {
           _solveVec.copy(it.target.pos);
           if (lead) _solveVec.addScaledVector(it.target.vel, lead);
           target = _solveVec;
         } else if (it) target = it.pos;
+        else if (this._watchLast) target = this._watchLast;
         else if (this.threats.active.length) target = this.threats.active[0].pos;
         if (!target) return false;
+        // remember where the action was so the view holds on the aftermath
+        this._watchLast = (this._watchLast || new THREE.Vector3()).copy(target);
         const cam = this.camera.position;
         const dx = target.x - cam.x;
         const dy = target.y - cam.y;

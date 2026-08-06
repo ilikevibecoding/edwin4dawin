@@ -33,9 +33,9 @@ export const SCENARIOS = {
     name: 'NIGHT RAID',
     blurb: 'Multiple inbounds with occasional harmless decoys under searchlights.',
     waves: [
-      { at: 2.5, count: 2, decoys: 1 },
-      { at: 9.0, count: 2, decoys: 1 },
-      { at: 16.0, count: 1, decoys: 0 },
+      { at: 2.0, count: 2, decoys: 1 },
+      { at: 7.5, count: 2, decoys: 1 },
+      { at: 12.5, count: 1, decoys: 0 },
     ],
     duration: 95,
     timeOfDayHint: 'night',
