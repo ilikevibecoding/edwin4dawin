@@ -56,8 +56,11 @@ let frame = START;
 let finished = false;
 while (frame < MAX_FRAMES && !finished) {
   await page.evaluate(() => window.__step(1));
-  const file = path.join(FRAME_DIR, `f${String(frame).padStart(6, '0')}.png`);
-  await page.screenshot({ path: file, optimizeForSpeed: true });
+  // JPEG rather than PNG: a ten-minute capture is over thirteen thousand frames,
+  // and lossless intermediates cost ten times the disk for no visible gain once
+  // the result is x264 at CRF 19.
+  const file = path.join(FRAME_DIR, `f${String(frame).padStart(6, '0')}.jpg`);
+  await page.screenshot({ path: file, type: 'jpeg', quality: 94, optimizeForSpeed: true });
   frame++;
   if (frame % 25 === 0) {
     const p = await page.evaluate(() => window.__progress());
@@ -91,7 +94,7 @@ execFileSync(
     '-framerate',
     String(FPS),
     '-i',
-    path.join(FRAME_DIR, 'f%06d.png'),
+    path.join(FRAME_DIR, 'f%06d.jpg'),
     '-i',
     '.render/track.wav',
     '-c:v',

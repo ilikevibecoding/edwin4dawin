@@ -29,8 +29,8 @@ export const GRADE: Record<string, GradeConfig> = {
   // Chapter 1 — rooftop, night, downpour, neon bounce.
   noirRain: {
     exposure: 1.05,
-    tint: [0.94, 1.0, 1.12],
-    contrast: 1.22,
+    tint: [0.97, 1.0, 1.07],
+    contrast: 1.32,
     saturation: 1.04,
     shadowTint: [0.68, 0.82, 1.0],
     highlightTint: [1.0, 0.93, 0.82],
@@ -150,5 +150,5 @@ export const RAIN = {
   windX: 2.4,
   windZ: 0.6,
   opacity: 0.46,
-  lensDrops: 0.55,
+  lensDrops: 0.22,
 };

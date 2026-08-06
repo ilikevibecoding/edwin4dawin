@@ -80,13 +80,13 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
     dp.y += uTime * 0.06;
     float drops = vnoise(dp * 2.3);
     float streak = vnoise(vec2(uv.x * 26.0, uv.y * 3.0 - uTime * 0.55));
-    float mask = smoothstep(0.62, 0.95, drops) + smoothstep(0.78, 1.0, streak) * 0.55;
+    float mask = smoothstep(0.76, 0.99, drops) + smoothstep(0.88, 1.0, streak) * 0.3;
     wet = mask * uRain;
     vec2 grad = vec2(
       vnoise(dp * 2.3 + vec2(0.02, 0.0)) - drops,
       vnoise(dp * 2.3 + vec2(0.0, 0.02)) - drops
     );
-    duv += grad * wet * 0.06;
+    duv += grad * wet * 0.022;
   }
 
   // Chromatic aberration grows toward the edges like a real lens.
@@ -135,7 +135,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), r2 * uDesaturateEdges);
 
   // Lens water brightens and blooms where it pools.
-  col += wet * vec3(0.05, 0.07, 0.1);
+  col += wet * vec3(0.012, 0.016, 0.024);
 
   // Vignette.
   float vig = 1.0 - uVignette * pow(smoothstep(uVignetteSoftness, 1.0, r2 * 2.0), 1.4);

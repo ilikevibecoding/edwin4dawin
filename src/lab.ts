@@ -15,6 +15,7 @@ import { PlazaSet } from './sets/PlazaSet';
 import { ActorFactory } from './actors/Cast';
 import type { SceneSet } from './sets/SceneSet';
 import { closeUp, establish, lowAngle, overShoulder, single, twoShot, type Shot } from './cine/Framing';
+import { RAIN } from './render/LookConfig';
 
 type SetKind = 'rooftop' | 'household' | 'plaza';
 
@@ -303,7 +304,7 @@ window.__shot = async (i: number): Promise<void> => {
     if (engine.postFX) engine.postFX.bokeh = shot.bokeh;
   };
 
-  engine.postFX?.setLensRain(def.set === 'household' ? 0.1 : 0.45, true);
+  engine.postFX?.setLensRain(def.set === 'household' ? 0.05 : RAIN.lensDrops, true);
   applyShot();
   if (def.subject && set.hasActor(def.subject)) {
     set.lightSubject(set.actor(def.subject).getChestPosition(new THREE.Vector3()), { keySide: def.keySide ?? 1 });
