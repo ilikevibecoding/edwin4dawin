@@ -1,0 +1,1281 @@
+/* ==========================================================================
+   DEVIANT — diegetic UI layer.
+
+   Every rule is scoped under .dv-root so this sheet can never leak into the
+   base document sheet (src/ui/styles.css).
+
+   Compositing budget: the capture path renders through a software rasteriser,
+   so this sheet never uses backdrop-filter, mix-blend-mode, animated filters
+   or large blurred shadows. Motion is expressed as transform + opacity only,
+   and is driven from JS (the UIClock) so it can run on the world's clock
+   during offline capture. CSS keyframes are used only where a frozen frame is
+   still a correct frame.
+   ========================================================================== */
+
+.dv-root {
+  /* Palette — cold clinical, white / ice-blue over near-black petrol. */
+  --dv-accent: var(--ui-accent, #4fc3ff);
+  --dv-warn: var(--ui-warn, #ff4d5e);
+  --dv-good: #7ff0c4;
+  --dv-text: var(--ui-text, #eaf6ff);
+  --dv-dim: rgba(234, 246, 255, 0.52);
+  --dv-faint: rgba(234, 246, 255, 0.26);
+  --dv-ink: #0a1620;
+  --dv-line: rgba(234, 246, 255, 0.24);
+  --dv-line-hot: rgba(79, 195, 255, 0.6);
+  --dv-fill: rgba(10, 22, 32, 0.72);
+  --dv-fill-soft: rgba(10, 22, 32, 0.46);
+  --dv-font: var(--ui-font, 'Roboto Condensed', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif);
+  --dv-mono: var(--ui-mono, 'SF Mono', Consolas, ui-monospace, monospace);
+
+  /* Cinematic bars. The bars themselves are drawn in 3D post; the UI only
+     needs to keep its chrome inside them. 2.39:1 inside 16:9 = 12.8% each. */
+  --dv-bar: 0%;
+
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  font-family: var(--dv-font);
+  font-size: 13px; /* everything below is em-based; this is the master scale */
+  line-height: 1.25;
+  color: var(--dv-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.dv-root.dv-lb {
+  --dv-bar: 12.8%;
+}
+
+@media (min-width: 1200px) {
+  .dv-root { font-size: 15px; }
+}
+@media (min-width: 1600px) {
+  .dv-root { font-size: 17px; }
+}
+@media (min-width: 2200px) {
+  .dv-root { font-size: 20px; }
+}
+@media (max-height: 480px) {
+  .dv-root { font-size: 11px; }
+}
+
+/* --- layers ------------------------------------------------------------- */
+
+/* Component roots. Each one is a full-frame, click-through overlay; anything
+   interactive re-enables pointer events on itself. */
+.dv-root .dv-c {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.dv-root .dv-c-hud { z-index: 10; }
+.dv-root .dv-c-dlg { z-index: 20; }
+.dv-root .dv-c-choice { z-index: 30; }
+.dv-root .dv-c-qte { z-index: 40; }
+.dv-root .dv-c-stats { z-index: 50; }
+.dv-root .dv-c-flow { z-index: 60; }
+.dv-root .dv-c-menu { z-index: 70; }
+
+/* Static scanlines. One cached pattern tile, no animation. */
+.dv-root .dv-scan {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(190, 225, 255, 0.055) 0,
+    rgba(190, 225, 255, 0.055) 1px,
+    rgba(0, 0, 0, 0) 1px,
+    rgba(0, 0, 0, 0) 3px
+  );
+}
+
+/* --- primitives --------------------------------------------------------- */
+
+.dv-root .dv-label {
+  font-size: 0.72em;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--dv-dim);
+}
+.dv-root .dv-mono {
+  font-family: var(--dv-mono);
+  font-size: 0.76em;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.dv-root .dv-rule {
+  display: block;
+  height: 1px;
+  background: var(--dv-line);
+}
+
+/* 1px bracket corners. The host element carries top-left + bottom-right;
+   an inner <i class="dv-brk"> carries the other two. */
+.dv-root .dv-panel {
+  position: relative;
+  background: var(--dv-fill);
+  border: 1px solid rgba(234, 246, 255, 0.1);
+}
+.dv-root .dv-panel::before,
+.dv-root .dv-panel::after {
+  content: '';
+  position: absolute;
+  width: 0.62em;
+  height: 0.62em;
+  pointer-events: none;
+}
+.dv-root .dv-panel::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid var(--dv-line-hot);
+  border-left: 1px solid var(--dv-line-hot);
+}
+.dv-root .dv-panel::after {
+  right: -1px;
+  bottom: -1px;
+  border-right: 1px solid var(--dv-line-hot);
+  border-bottom: 1px solid var(--dv-line-hot);
+}
+.dv-root .dv-brk {
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+}
+.dv-root .dv-brk::before,
+.dv-root .dv-brk::after {
+  content: '';
+  position: absolute;
+  width: 0.62em;
+  height: 0.62em;
+}
+.dv-root .dv-brk::before {
+  top: 0;
+  right: 0;
+  border-top: 1px solid var(--dv-line-hot);
+  border-right: 1px solid var(--dv-line-hot);
+}
+.dv-root .dv-brk::after {
+  bottom: 0;
+  left: 0;
+  border-bottom: 1px solid var(--dv-line-hot);
+  border-left: 1px solid var(--dv-line-hot);
+}
+
+/* Signature motif: the temple LED. --dv-p (0..1) is written by the UIClock. */
+.dv-root .dv-led {
+  position: relative;
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--dv-accent);
+  opacity: calc(0.42 + var(--dv-p, 0.5) * 0.58);
+}
+.dv-root .dv-led::after {
+  content: '';
+  position: absolute;
+  inset: -0.34em;
+  border: 1px solid var(--dv-accent);
+  border-radius: 50%;
+  opacity: calc(0.5 - var(--dv-p, 0.5) * 0.42);
+  transform: scale(calc(0.72 + var(--dv-p, 0.5) * 0.42));
+}
+.dv-root .dv-led-warn {
+  background: var(--dv-warn);
+}
+.dv-root .dv-led-warn::after {
+  border-color: var(--dv-warn);
+}
+
+/* Key caps. */
+.dv-root .dv-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.72em;
+  height: 1.72em;
+  padding: 0 0.34em;
+  border: 1px solid var(--dv-line-hot);
+  background: rgba(10, 22, 32, 0.66);
+  color: var(--dv-text);
+  font-family: var(--dv-mono);
+  font-size: 0.78em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Generic interactive row. */
+.dv-root .dv-btn {
+  pointer-events: auto;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.46em 0.9em;
+  border: 0;
+  border-left: 1px solid rgba(234, 246, 255, 0.16);
+  background: none;
+  color: var(--dv-dim);
+  font: inherit;
+  font-size: 1em;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+  transition: color 200ms ease-out, border-color 200ms ease-out, background-color 200ms ease-out;
+}
+.dv-root .dv-btn:hover,
+.dv-root .dv-btn.dv-sel {
+  color: var(--dv-text);
+  border-left-color: var(--dv-accent);
+  background: rgba(79, 195, 255, 0.08);
+}
+.dv-root .dv-btn.dv-off {
+  color: rgba(234, 246, 255, 0.2);
+  cursor: default;
+  border-left-color: rgba(234, 246, 255, 0.08);
+  background: none;
+}
+
+/* ==========================================================================
+   HUD
+   ========================================================================== */
+
+/* Objective — top-left column. */
+.dv-root .dv-obj {
+  position: absolute;
+  top: calc(var(--dv-bar) + 2.6em);
+  left: 2.4em;
+  width: 28%;
+  min-width: 11em;
+  padding-left: 0.72em;
+  border-left: 1px solid var(--dv-line-hot);
+  opacity: 0;
+}
+.dv-root .dv-obj-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 0.24em;
+}
+.dv-root .dv-obj-text {
+  font-size: 0.98em;
+  letter-spacing: 0.06em;
+  color: var(--dv-text);
+  text-transform: uppercase;
+}
+
+/* Relationship meters — top-right column. */
+.dv-root .dv-meters {
+  position: absolute;
+  top: calc(var(--dv-bar) + 2.6em);
+  right: 2.4em;
+  width: 12.6em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.62em;
+  opacity: 0;
+}
+.dv-root .dv-meter-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+  margin-bottom: 0.26em;
+}
+.dv-root .dv-meter-name {
+  flex: 1 1 auto;
+  font-size: 0.7em;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dv-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dv-root .dv-meter-val {
+  color: var(--dv-text);
+}
+.dv-root .dv-trend {
+  width: 0;
+  height: 0;
+  flex: 0 0 auto;
+  border-left: 0.26em solid transparent;
+  border-right: 0.26em solid transparent;
+}
+.dv-root .dv-trend-up {
+  border-bottom: 0.34em solid var(--dv-good);
+}
+.dv-root .dv-trend-down {
+  border-top: 0.34em solid var(--dv-warn);
+}
+.dv-root .dv-trend-flat {
+  width: 0.5em;
+  height: 1px;
+  border: 0;
+  background: var(--dv-faint);
+}
+.dv-root .dv-track {
+  position: relative;
+  height: 2px;
+  background: rgba(234, 246, 255, 0.14);
+  overflow: hidden;
+}
+.dv-root .dv-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  background: var(--dv-accent);
+}
+
+/* Instability (android stress) — bottom-right, clear of the subtitle block. */
+.dv-root .dv-instab {
+  position: absolute;
+  right: 2.4em;
+  bottom: calc(var(--dv-bar) + 2.2em);
+  width: 10.6em;
+  opacity: 0;
+}
+.dv-root .dv-instab-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5em;
+  margin-bottom: 0.26em;
+}
+.dv-root .dv-instab .dv-fill {
+  background: var(--dv-accent);
+  transition: background-color 260ms ease-out;
+}
+.dv-root .dv-instab.dv-lvl-mid .dv-fill {
+  background: #ffd166;
+}
+.dv-root .dv-instab.dv-lvl-hi .dv-fill {
+  background: var(--dv-warn);
+}
+.dv-root .dv-instab.dv-lvl-hi .dv-instab-val {
+  color: var(--dv-warn);
+}
+
+/* Contextual prompt. Default anchor sits above the subtitle block. */
+.dv-root .dv-prompt {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--dv-bar) + 9.4em);
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.3em 0.7em;
+  background: rgba(10, 22, 32, 0.5);
+  border: 1px solid rgba(234, 246, 255, 0.12);
+  opacity: 0;
+  white-space: nowrap;
+}
+.dv-root .dv-prompt-t {
+  font-size: 0.8em;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.dv-root .dv-prompt.dv-anchored {
+  bottom: auto;
+}
+
+/* Scan / analysis chrome. */
+.dv-root .dv-scanmode {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+.dv-root .dv-corner {
+  position: absolute;
+  width: 2.2em;
+  height: 2.2em;
+}
+.dv-root .dv-corner-tl {
+  top: calc(var(--dv-bar) + 1.4em);
+  left: 1.4em;
+  border-top: 1px solid var(--dv-line-hot);
+  border-left: 1px solid var(--dv-line-hot);
+}
+.dv-root .dv-corner-tr {
+  top: calc(var(--dv-bar) + 1.4em);
+  right: 1.4em;
+  border-top: 1px solid var(--dv-line-hot);
+  border-right: 1px solid var(--dv-line-hot);
+}
+.dv-root .dv-corner-bl {
+  bottom: calc(var(--dv-bar) + 1.4em);
+  left: 1.4em;
+  border-bottom: 1px solid var(--dv-line-hot);
+  border-left: 1px solid var(--dv-line-hot);
+}
+.dv-root .dv-corner-br {
+  bottom: calc(var(--dv-bar) + 1.4em);
+  right: 1.4em;
+  border-bottom: 1px solid var(--dv-line-hot);
+  border-right: 1px solid var(--dv-line-hot);
+}
+.dv-root .dv-cross {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5.2em;
+  height: 5.2em;
+  margin: -2.6em 0 0 -2.6em;
+}
+.dv-root .dv-cross-ring {
+  position: absolute;
+  inset: 1.5em;
+  border: 1px solid var(--dv-line-hot);
+  border-radius: 50%;
+  opacity: calc(0.4 + var(--dv-p, 0.5) * 0.5);
+  transform: scale(calc(0.9 + var(--dv-p, 0.5) * 0.16));
+}
+.dv-root .dv-cross-h,
+.dv-root .dv-cross-v {
+  position: absolute;
+  background: var(--dv-accent);
+  opacity: 0.7;
+}
+.dv-root .dv-cross-h {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+}
+.dv-root .dv-cross-v {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+}
+.dv-root .dv-cross-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 2px;
+  margin: -1px 0 0 -1px;
+  background: var(--dv-text);
+}
+.dv-root .dv-scan-read {
+  position: absolute;
+  left: 2.4em;
+  bottom: calc(var(--dv-bar) + 2.2em);
+  color: var(--dv-dim);
+  line-height: 1.6;
+}
+.dv-root .dv-scan-read b {
+  color: var(--dv-accent);
+  font-weight: 500;
+}
+
+/* Clue readout — right side, below the meters. */
+.dv-root .dv-clue {
+  position: absolute;
+  right: 2.4em;
+  top: calc(var(--dv-bar) + 32%);
+  width: 15.4em;
+  padding: 0.72em 0.86em;
+  opacity: 0;
+}
+.dv-root .dv-clue-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 0.44em;
+}
+.dv-root .dv-clue-label {
+  font-size: 0.94em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dv-text);
+  margin-bottom: 0.3em;
+}
+.dv-root .dv-clue-detail {
+  color: var(--dv-dim);
+  line-height: 1.5;
+}
+
+/* Notices — top centre, clear of the slate. */
+.dv-root .dv-notices {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--dv-bar) + 6.4em);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4em;
+}
+.dv-root .dv-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.56em;
+  padding: 0.34em 0.86em;
+  background: rgba(10, 22, 32, 0.66);
+  border: 1px solid var(--dv-line);
+  border-left: 2px solid var(--dv-accent);
+  font-size: 0.8em;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+}
+.dv-root .dv-notice-warn {
+  border-left-color: var(--dv-warn);
+  color: #ffd9dd;
+}
+.dv-root .dv-notice-good {
+  border-left-color: var(--dv-good);
+  color: #d6fff1;
+}
+
+/* Chapter title card. */
+.dv-root .dv-chapter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 10, 16, 0.62);
+  opacity: 0;
+}
+.dv-root .dv-chapter-in {
+  text-align: center;
+  max-width: 74%;
+}
+.dv-root .dv-chapter-num {
+  font-size: 0.82em;
+  letter-spacing: 0.5em;
+  color: var(--dv-accent);
+  margin-bottom: 0.9em;
+  opacity: 0;
+}
+.dv-root .dv-chapter-title {
+  font-size: 3.1em;
+  font-weight: 300;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  line-height: 1.05;
+  margin: 0 0 0 0.34em;
+  opacity: 0;
+}
+.dv-root .dv-chapter-rule {
+  display: block;
+  height: 1px;
+  width: 12em;
+  margin: 1em auto;
+  background: var(--dv-line-hot);
+  transform: scaleX(0);
+}
+.dv-root .dv-chapter-sub {
+  letter-spacing: 0.34em;
+  opacity: 0;
+}
+
+/* ==========================================================================
+   Dialogue
+   ========================================================================== */
+
+/* Location / time slate — top centre. */
+.dv-root .dv-slate {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--dv-bar) + 2.4em);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  max-width: 36%;
+  opacity: 0;
+}
+.dv-root .dv-slate-t {
+  font-size: 0.78em;
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dv-text);
+}
+.dv-root .dv-slate-tick {
+  display: block;
+  width: 1.6em;
+  height: 1px;
+  background: var(--dv-line-hot);
+  flex: 0 0 auto;
+}
+
+/* Subtitle block — lower third. */
+.dv-root .dv-dlg {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--dv-bar) + 2.2em);
+  width: 64%;
+  max-width: 46em;
+  transform: translateX(-50%);
+  opacity: 0;
+  text-align: center;
+}
+.dv-root .dv-dlg-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 0.42em;
+  padding-bottom: 0.34em;
+  border-bottom: 1px solid var(--dv-line);
+}
+.dv-root .dv-dlg-name span {
+  font-size: 0.76em;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--dv-accent);
+}
+.dv-root .dv-dlg-line {
+  display: block;
+  font-size: 1.18em;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  line-height: 1.36;
+  text-wrap: balance;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+}
+/* The whole line is always in the DOM and the un-typed tail is simply
+   transparent, so the typewriter can never change the wrap or the block
+   height. The tail drops its shadow, which would otherwise still paint. */
+.dv-root .dv-dlg-rest {
+  color: transparent;
+  text-shadow: none;
+}
+
+/* ==========================================================================
+   Choice wheel
+   ========================================================================== */
+
+.dv-root .dv-choice-hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5.4em;
+  height: 5.4em;
+  margin: -2.7em 0 0 -2.7em;
+  opacity: 0;
+}
+.dv-root .dv-ring {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  transform: rotate(-90deg);
+}
+.dv-root .dv-ring-bg {
+  fill: none;
+  stroke: rgba(234, 246, 255, 0.16);
+  stroke-width: 1.5;
+}
+.dv-root .dv-ring-fg {
+  fill: none;
+  stroke: var(--dv-accent);
+  stroke-width: 2.5;
+  stroke-linecap: butt;
+}
+.dv-root .dv-choice-hub.dv-low .dv-ring-fg {
+  stroke: var(--dv-warn);
+}
+.dv-root .dv-ring-num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--dv-mono);
+  font-size: 1.28em;
+  font-variant-numeric: tabular-nums;
+  color: var(--dv-text);
+}
+.dv-root .dv-choice-hub.dv-low .dv-ring-num {
+  color: var(--dv-warn);
+}
+/* Low-time pulse: --dv-p is written per frame from the countdown itself. */
+.dv-root .dv-choice-hub.dv-low .dv-ring-pulse {
+  opacity: calc(var(--dv-p, 0) * 0.5);
+  transform: scale(calc(1 + var(--dv-p, 0) * 0.18));
+  transform-origin: 50% 50%;
+}
+.dv-root .dv-ring-pulse {
+  fill: none;
+  stroke: var(--dv-warn);
+  stroke-width: 1;
+  opacity: 0;
+}
+
+.dv-root .dv-slot {
+  position: absolute;
+  width: 26%;
+  min-width: 9em;
+  max-width: 17em;
+}
+.dv-root .dv-slot-l {
+  left: 6%;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: right;
+}
+.dv-root .dv-slot-r {
+  right: 6%;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: left;
+}
+.dv-root .dv-slot-t {
+  left: 50%;
+  top: calc(var(--dv-bar) + 12%);
+  transform: translateX(-50%);
+  text-align: center;
+}
+.dv-root .dv-slot-b {
+  left: 50%;
+  bottom: calc(var(--dv-bar) + 12%);
+  transform: translateX(-50%);
+  text-align: center;
+}
+.dv-root .dv-opt {
+  pointer-events: auto;
+  display: block;
+  width: 100%;
+  padding: 0.6em 0.8em;
+  border: 0;
+  background: rgba(10, 22, 32, 0.56);
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: background-color 200ms ease-out;
+}
+.dv-root .dv-opt .dv-opt-idx {
+  font-family: var(--dv-mono);
+  font-size: 0.66em;
+  letter-spacing: 0.12em;
+  color: var(--dv-accent);
+  display: block;
+  margin-bottom: 0.24em;
+}
+.dv-root .dv-opt .dv-opt-label {
+  display: block;
+  font-size: 0.96em;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dv-dim);
+  transition: color 200ms ease-out;
+}
+.dv-root .dv-opt .dv-opt-hint {
+  display: block;
+  margin-top: 0.3em;
+  color: rgba(234, 246, 255, 0.4);
+  font-family: var(--dv-mono);
+  font-size: 0.7em;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+}
+.dv-root .dv-opt.dv-sel {
+  background: rgba(79, 195, 255, 0.12);
+}
+.dv-root .dv-opt.dv-sel .dv-opt-label {
+  color: var(--dv-text);
+}
+.dv-root .dv-opt.dv-danger .dv-opt-idx {
+  color: var(--dv-warn);
+}
+.dv-root .dv-opt.dv-danger.dv-sel {
+  background: rgba(255, 77, 94, 0.14);
+}
+.dv-root .dv-opt.dv-danger.dv-sel .dv-opt-label {
+  color: #ffdde1;
+}
+.dv-root .dv-opt.dv-off {
+  cursor: default;
+  background: rgba(10, 22, 32, 0.34);
+}
+.dv-root .dv-opt.dv-off .dv-opt-label,
+.dv-root .dv-opt.dv-off .dv-opt-idx {
+  color: rgba(234, 246, 255, 0.2);
+}
+/* Selection marker: a 1px tick that grows from the panel edge. */
+.dv-root .dv-opt-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--dv-accent);
+  transform: scaleY(0);
+  transform-origin: 50% 50%;
+  transition: transform 200ms ease-out;
+}
+.dv-root .dv-slot-l .dv-opt-mark { right: -1px; }
+.dv-root .dv-slot-r .dv-opt-mark { left: -1px; }
+.dv-root .dv-slot-t .dv-opt-mark,
+.dv-root .dv-slot-b .dv-opt-mark { left: -1px; }
+.dv-root .dv-opt.dv-sel .dv-opt-mark { transform: scaleY(1); }
+.dv-root .dv-opt.dv-danger .dv-opt-mark { background: var(--dv-warn); }
+
+/* ==========================================================================
+   QTE
+   ========================================================================== */
+
+.dv-root .dv-qte {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  width: 12em;
+  margin-left: -6em;
+  text-align: center;
+  opacity: 0;
+}
+.dv-root .dv-qte-ringbox {
+  position: relative;
+  width: 5em;
+  height: 5em;
+  margin: 0 auto;
+}
+.dv-root .dv-qte-ring {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.dv-root .dv-qte-ring .dv-ring-bg {
+  stroke: rgba(234, 246, 255, 0.18);
+  stroke-width: 1.5;
+}
+.dv-root .dv-qte-ring .dv-ring-fg {
+  stroke: var(--dv-accent);
+  stroke-width: 3;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+.dv-root .dv-qte-core {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dv-root .dv-qte-glyph {
+  font-family: var(--dv-mono);
+  font-size: 1.3em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dv-text);
+}
+.dv-root .dv-qte-chev {
+  position: absolute;
+  inset: 0;
+}
+.dv-root .dv-qte-chev i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.6em;
+  height: 0.6em;
+  margin: -0.3em 0 0 -0.3em;
+  border-top: 1px solid var(--dv-accent);
+  border-right: 1px solid var(--dv-accent);
+}
+.dv-root .dv-qte-label {
+  margin-top: 0.7em;
+  font-size: 0.76em;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--dv-dim);
+}
+.dv-root .dv-qte.dv-hit .dv-ring-fg { stroke: var(--dv-good); }
+.dv-root .dv-qte.dv-hit .dv-qte-label { color: var(--dv-good); }
+.dv-root .dv-qte.dv-miss .dv-ring-fg { stroke: var(--dv-warn); }
+.dv-root .dv-qte.dv-miss .dv-qte-label { color: var(--dv-warn); }
+.dv-root .dv-qte.dv-low .dv-ring-fg { stroke: var(--dv-warn); }
+.dv-root .dv-qte-flash {
+  position: absolute;
+  inset: -0.5em;
+  border: 1px solid var(--dv-good);
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(0.9);
+}
+.dv-root .dv-qte.dv-miss .dv-qte-flash { border-color: var(--dv-warn); }
+
+/* ==========================================================================
+   Flowchart
+   ========================================================================== */
+
+.dv-root .dv-flow {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgba(4, 10, 16, 0.9);
+  opacity: 0;
+}
+.dv-root .dv-flow-head {
+  display: flex;
+  align-items: baseline;
+  gap: 1.2em;
+  padding: 1.6em 2.4em 0.9em;
+  border-bottom: 1px solid var(--dv-line);
+  margin: 0 2.4em;
+}
+.dv-root .dv-flow-title {
+  font-size: 1.5em;
+  font-weight: 300;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+.dv-root .dv-flow-legend {
+  margin-left: auto;
+  display: flex;
+  gap: 1.2em;
+  align-items: center;
+}
+.dv-root .dv-flow-legend span {
+  display: flex;
+  align-items: center;
+  gap: 0.44em;
+}
+.dv-root .dv-flow-legend i {
+  display: block;
+  width: 1.4em;
+  height: 0;
+  border-top: 1px solid var(--dv-accent);
+}
+.dv-root .dv-flow-legend i.dv-dash {
+  border-top-style: dashed;
+  border-top-color: var(--dv-faint);
+}
+.dv-root .dv-flow-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 1.2em 2.4em;
+}
+.dv-root .dv-flow-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.dv-root .dv-flow-foot {
+  padding: 0 2.4em 1.4em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.dv-root .dv-edge {
+  fill: none;
+  stroke: var(--dv-faint);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+.dv-root .dv-edge-taken {
+  stroke: var(--dv-accent);
+  stroke-width: 1.6;
+  stroke-dasharray: none;
+  opacity: 0.9;
+}
+.dv-root .dv-node rect {
+  fill: rgba(10, 22, 32, 0.86);
+  stroke: rgba(234, 246, 255, 0.2);
+  stroke-width: 1;
+}
+.dv-root .dv-node text {
+  font-family: var(--dv-font);
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  fill: rgba(234, 246, 255, 0.42);
+}
+.dv-root .dv-node-taken rect {
+  fill: rgba(79, 195, 255, 0.12);
+  stroke: var(--dv-accent);
+}
+.dv-root .dv-node-taken text {
+  fill: var(--dv-text);
+}
+.dv-root .dv-node-missed rect {
+  stroke-dasharray: 3 3;
+  stroke: rgba(234, 246, 255, 0.18);
+}
+.dv-root .dv-node-ending rect {
+  stroke: var(--dv-text);
+  stroke-width: 1.4;
+}
+.dv-root .dv-node-ending.dv-node-taken rect {
+  fill: rgba(234, 246, 255, 0.16);
+}
+.dv-root .dv-node-tag {
+  font-family: var(--dv-mono);
+  font-size: 7px;
+  letter-spacing: 1px;
+  fill: var(--dv-accent);
+}
+.dv-root .dv-node-corner {
+  fill: none;
+  stroke: var(--dv-accent);
+  stroke-width: 1;
+}
+
+/* ==========================================================================
+   Menu
+   ========================================================================== */
+
+.dv-root .dv-menu {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 8, 13, 0.9);
+  opacity: 0;
+}
+.dv-root .dv-menu-pause {
+  background: rgba(3, 8, 13, 0.76);
+}
+.dv-root .dv-menu-in {
+  position: absolute;
+  left: 8%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34%;
+  min-width: 17em;
+}
+.dv-root .dv-menu-pause .dv-menu-in {
+  left: 50%;
+  width: 22em;
+  transform: translate(-50%, -50%);
+}
+.dv-root .dv-wordmark {
+  font-size: 3.6em;
+  font-weight: 200;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  line-height: 1;
+  margin-left: 0.1em;
+}
+.dv-root .dv-menu-tag {
+  margin: 1em 0 0;
+  letter-spacing: 0.3em;
+  color: var(--dv-accent);
+}
+.dv-root .dv-menu-rule {
+  display: block;
+  height: 1px;
+  background: var(--dv-line);
+  margin: 1.5em 0;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+}
+.dv-root .dv-menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dv-root .dv-menu-list li {
+  opacity: 0;
+}
+.dv-root .dv-menu-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8em;
+}
+.dv-root .dv-menu-item .dv-menu-idx {
+  font-family: var(--dv-mono);
+  font-size: 0.66em;
+  color: rgba(234, 246, 255, 0.32);
+  min-width: 2em;
+}
+.dv-root .dv-menu-item .dv-menu-name {
+  flex: 1 1 auto;
+}
+.dv-root .dv-menu-item .dv-menu-aux {
+  font-family: var(--dv-mono);
+  font-size: 0.72em;
+  letter-spacing: 0.1em;
+  color: var(--dv-accent);
+}
+.dv-root .dv-btn.dv-off .dv-menu-aux {
+  color: rgba(234, 246, 255, 0.2);
+}
+.dv-root .dv-menu-foot {
+  margin-top: 1.6em;
+  display: flex;
+  gap: 1.4em;
+  color: rgba(234, 246, 255, 0.34);
+}
+.dv-root .dv-menu-side {
+  position: absolute;
+  right: 8%;
+  bottom: 12%;
+  text-align: right;
+  color: rgba(234, 246, 255, 0.3);
+  line-height: 1.7;
+}
+.dv-root .dv-menu-pane {
+  display: none;
+}
+.dv-root .dv-menu-pane.dv-on {
+  display: block;
+}
+.dv-root .dv-menu-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  margin-bottom: 1.1em;
+}
+
+/* ==========================================================================
+   Stats / ending card
+   ========================================================================== */
+
+.dv-root .dv-stats {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 30em;
+  max-width: 74%;
+  transform: translate(-50%, -50%);
+  padding: 1.4em 1.5em 1.5em;
+  opacity: 0;
+}
+.dv-root .dv-stats-q {
+  font-size: 1.02em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0.5em 0 1.1em;
+  color: var(--dv-text);
+}
+.dv-root .dv-stat {
+  margin-bottom: 0.86em;
+  opacity: 0;
+}
+.dv-root .dv-stat-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  margin-bottom: 0.3em;
+}
+.dv-root .dv-stat-label {
+  flex: 1 1 auto;
+  font-size: 0.84em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dv-dim);
+}
+.dv-root .dv-stat.dv-chosen .dv-stat-label {
+  color: var(--dv-text);
+}
+.dv-root .dv-stat.dv-chosen .dv-fill {
+  background: var(--dv-accent);
+}
+.dv-root .dv-stat .dv-fill {
+  background: rgba(234, 246, 255, 0.34);
+}
+.dv-root .dv-stat-you {
+  font-family: var(--dv-mono);
+  font-size: 0.62em;
+  letter-spacing: 0.14em;
+  color: var(--dv-ink);
+  background: var(--dv-accent);
+  padding: 0.1em 0.34em;
+}
+.dv-root .dv-stats-foot {
+  margin-top: 1.2em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: rgba(234, 246, 255, 0.34);
+}
+
+.dv-root .dv-ending {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 10, 0.92);
+  opacity: 0;
+}
+.dv-root .dv-ending-in {
+  width: 46em;
+  max-width: 78%;
+  text-align: center;
+}
+.dv-root .dv-ending-kicker {
+  letter-spacing: 0.5em;
+  color: var(--dv-accent);
+  opacity: 0;
+}
+.dv-root .dv-ending-title {
+  font-size: 2.9em;
+  font-weight: 200;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  margin: 0.5em 0 0 0.3em;
+  opacity: 0;
+}
+.dv-root .dv-ending-rule {
+  display: block;
+  height: 1px;
+  width: 100%;
+  margin: 1.2em 0;
+  background: var(--dv-line);
+  transform: scaleX(0);
+}
+.dv-root .dv-ending-desc {
+  font-size: 1em;
+  line-height: 1.6;
+  color: rgba(234, 246, 255, 0.72);
+  margin: 0 auto 1.4em;
+  max-width: 34em;
+  opacity: 0;
+}
+.dv-root .dv-ending-lines {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: 30em;
+  text-align: left;
+}
+.dv-root .dv-ending-lines li {
+  display: flex;
+  gap: 0.8em;
+  padding: 0.42em 0;
+  border-top: 1px solid rgba(234, 246, 255, 0.1);
+  opacity: 0;
+}
+.dv-root .dv-ending-lines li i {
+  flex: 0 0 auto;
+  width: 0.3em;
+  height: 0.3em;
+  margin-top: 0.62em;
+  background: var(--dv-accent);
+}
+.dv-root .dv-ending-lines li span {
+  font-size: 0.9em;
+  letter-spacing: 0.06em;
+  color: rgba(234, 246, 255, 0.62);
+  line-height: 1.5;
+}
+.dv-root .dv-ending-foot {
+  margin-top: 1.6em;
+  color: rgba(234, 246, 255, 0.3);
+  opacity: 0;
+}
+
+/* --- reduced motion ----------------------------------------------------- */
+/* JS collapses its own tween durations; this removes the CSS transitions the
+   hover / selection states rely on. */
+@media (prefers-reduced-motion: reduce) {
+  .dv-root * {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+}
