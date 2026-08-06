@@ -132,18 +132,22 @@ vec3 pointStars( vec3 dir, float t ) {
   return tint * s * ( 0.25 + 3.2 * amp ) * tw;
 }
 
-/** Full-detail cloud field: two octave sets so edges stay crisp. */
+/**
+ * Cloud density. Two octave sets so edges stay crisp; the octave counts are
+ * deliberately mean, because the dome is a full-screen shader and every octave
+ * of gradient noise is eight hashes.
+ */
 float cloudField( vec2 p, float t, float cov ) {
   vec2 q = p + uWind * t;
-  float base = fbm3g( vec3( q, t * 0.03 ), 4 ) * 0.5 + 0.5;
-  float det = fbm3g( vec3( q * 3.3 + 19.0, t * 0.08 ), 3 ) * 0.5 + 0.5;
+  float base = fbm3g( vec3( q, t * 0.03 ), 3 ) * 0.5 + 0.5;
+  float det = fbm3g( vec3( q * 3.3 + 19.0, t * 0.08 ), 2 ) * 0.5 + 0.5;
   float d = base * 0.74 + det * 0.26;
   return smoothstep( 1.0 - cov, 1.0 - cov * 0.30, d );
 }
 
 /** Cheap field used only for the light-march taps. */
 float cloudBulk( vec2 p, float t, float cov ) {
-  float base = fbm3g( vec3( p + uWind * t, t * 0.03 ), 3 ) * 0.5 + 0.5;
+  float base = fbm3g( vec3( p + uWind * t, t * 0.03 ), 2 ) * 0.5 + 0.5;
   return smoothstep( 1.0 - cov, 1.0 - cov * 0.30, base );
 }
 
@@ -272,13 +276,13 @@ void main() {
     // Grazing rays smear the projection, so let coverage thin out down there.
     float thin = mix( 0.45, 1.0, smoothstep( 0.03, 0.30, dir.y ) );
 
-    // High cirrus first — it sits behind the main deck.
+    // High cirrus first — it sits behind the main deck. Thin enough that its
+    // own density stands in for a shadow march.
     if ( uCloudLayers > 1.5 ) {
       vec2 cuv = dir.xz * ( uCloudScale * 2.35 * invY ) + vec2( 41.0, 17.0 );
       float d = cloudField( cuv, uCloudTime * 1.7, uCloudCoverage * 0.62 );
       if ( d > 0.002 ) {
-        float shd = cloudBulk( cuv + sdir * 0.22, uCloudTime * 1.7, uCloudCoverage * 0.62 );
-        float trans = exp( -shd * 0.65 );
+        float trans = exp( -d * 0.65 );
         vec3 col = uCloudSun * ( 0.55 + 0.45 * trans ) + uCloudAmb * 0.6;
         col += uCloudSun * phase * ( 1.0 - d ) * 0.30;
         sky = mix( sky, col, clamp( d * horizonFade * thin * 0.48, 0.0, 1.0 ) );
@@ -288,10 +292,9 @@ void main() {
     vec2 cuv = dir.xz * ( uCloudScale * invY );
     float d = cloudField( cuv, uCloudTime, uCloudCoverage );
     if ( d > 0.002 ) {
-      // Three-tap march toward the key light approximates self-shadowing.
-      float shd = cloudBulk( cuv + sdir * 0.11, uCloudTime, uCloudCoverage )
-                + cloudBulk( cuv + sdir * 0.28, uCloudTime, uCloudCoverage ) * 0.68
-                + cloudBulk( cuv + sdir * 0.60, uCloudTime, uCloudCoverage ) * 0.36;
+      // Two-tap march toward the key light approximates self-shadowing.
+      float shd = cloudBulk( cuv + sdir * 0.13, uCloudTime, uCloudCoverage ) * 1.25
+                + cloudBulk( cuv + sdir * 0.42, uCloudTime, uCloudCoverage ) * 0.60;
       float trans = exp( -shd * 1.45 );
       // Powder term keeps thin wisps from reading as flat grey cut-outs.
       float powder = 1.0 - exp( -d * 4.5 );
@@ -314,6 +317,24 @@ void main() {
   gl_FragColor = vec4( max( sky, vec3( 0.0 ) ), 1.0 );
 }
 `;
+
+// ---- sun shadow frustum ------------------------------------------------
+// The key light is parked this far along its own direction, so the shadow
+// camera sits there and every depth below is measured from it.
+const SHADOW_STANDOFF = 420;
+// Depth the box spans either side of the focus point. It has to reach the far
+// corner of the box at a high sun and a long way down-sun at a grazing one;
+// the extra room on the near plane keeps tall casters — masts, erected launch
+// rails — from being clipped off the front of the frustum. Keeping the total
+// range tight matters because `shadow.bias` is in normalised depth, so its
+// world-space effect scales with (far - near).
+const SHADOW_NEAR = SHADOW_STANDOFF - 300;
+const SHADOW_FAR = SHADOW_STANDOFF + 260;
+// How far ahead of the player the box is led, as a fraction of its extent.
+// Scaled by how much the camera is actually looking along the ground, so a
+// top-down view keeps the box centred on the player instead of throwing it
+// out to the horizon.
+const SHADOW_LEAD = 0.42;
 
 /**
  * Per-preset sky/cloud/lighting look. Kept next to the shader rather than in
@@ -353,8 +374,9 @@ const LOOK = {
     fillDir: [-0.35, 0.62, -0.42],
     bounceIntensity: 0.24,
     atmHeight: 1900,
-    shadowBias: -0.0005,
-    shadowNormalBias: 0.28,
+    shadowExtent: 110,
+    shadowBias: -0.00006,
+    shadowNormalBias: 0.06,
   },
   sunset: {
     rayleigh: 3.1,
@@ -389,8 +411,12 @@ const LOOK = {
     fillDir: [0.42, 0.55, -0.30],
     bounceIntensity: 0.30,
     atmHeight: 1500,
-    shadowBias: -0.0006,
-    shadowNormalBias: 0.34,
+    // A 3.5-degree sun stretches every texel ~16x along its own direction, so
+    // this preset needs a much larger normal offset than the other two to stay
+    // free of acne on the apron.
+    shadowExtent: 120,
+    shadowBias: -0.00012,
+    shadowNormalBias: 0.22,
   },
   night: {
     rayleigh: 1.4,
@@ -425,8 +451,9 @@ const LOOK = {
     fillDir: [-0.4, 0.7, 0.35],
     bounceIntensity: 0.05,
     atmHeight: 2400,
-    shadowBias: -0.0007,
-    shadowNormalBias: 0.42,
+    shadowExtent: 110,
+    shadowBias: -0.00008,
+    shadowNormalBias: 0.09,
   },
 };
 
@@ -490,31 +517,34 @@ export class Weather {
       fragmentShader: SKY_FRAG,
       side: THREE.BackSide,
       depthWrite: false,
-      depthTest: false,
+      // The dome is the most expensive shader in the frame, so it is depth
+      // tested and queued after the opaque scene: pixels the site or the
+      // mountains already cover never run it. The vertex stage pins it to the
+      // far plane, which beats every logarithmic depth the scene writes, and
+      // it still lands before the transparent queue so plumes composite over
+      // it normally.
+      depthTest: true,
       fog: false,
       toneMapped: false,
     });
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), this.skyMat);
     this.sky.frustumCulled = false;
-    this.sky.renderOrder = -1000;
+    this.sky.renderOrder = 5;
     this.sky.scale.setScalar(WORLD.cameraFar * 0.42);
     scene.add(this.sky);
 
     // ---- lighting rig ------------------------------------------------
     this.sun = new THREE.DirectionalLight(0xfff3df, 3.4);
     this.sun.castShadow = true;
-    const s = this.sun.shadow;
-    s.mapSize.setScalar(quality.shadowMapSize);
-    s.camera.near = 1;
-    s.camera.far = 900;
-    const ext = 260;
-    s.camera.left = -ext;
-    s.camera.right = ext;
-    s.camera.top = ext;
-    s.camera.bottom = -ext;
-    s.bias = -0.0005;
-    s.normalBias = 0.28;
-    s.blurSamples = 12;
+    this.sun.shadow.mapSize.setScalar(quality.shadowMapSize);
+    this.sun.shadow.blurSamples = 12;
+    // Scratch vectors for the per-frame shadow focus, which runs every frame.
+    this.shadowRight = new THREE.Vector3();
+    this.shadowUp = new THREE.Vector3();
+    this.shadowFocus = new THREE.Vector3();
+    this.shadowLead = new THREE.Vector3();
+    this.groundAnchor = new THREE.Vector3();
+    this.setShadowExtent(LOOK.day.shadowExtent);
     scene.add(this.sun);
     scene.add(this.sun.target);
 
@@ -548,6 +578,61 @@ export class Weather {
     this.envIntensityBase = 0.5;
 
     this.setTimeOfDay('day');
+  }
+
+  /**
+   * Resize the sun's shadow box.
+   *
+   * THREE.DirectionalLightShadow constructs its camera as a fixed
+   * OrthographicCamera(-5, 5, 5, -5, 0.5, 500) and LightShadow.updateMatrices()
+   * only ever refreshes the *view* matrix, so writing left/right/top/bottom or
+   * near/far is inert until the projection is rebuilt by hand. Every extent
+   * change has to come through here or the map silently keeps covering 10 m.
+   */
+  setShadowExtent(ext) {
+    this.shadowExtent = ext;
+    this.shadowTexel = (2 * ext) / this.sun.shadow.mapSize.x;
+    const c = this.sun.shadow.camera;
+    c.left = -ext;
+    c.right = ext;
+    c.top = ext;
+    c.bottom = -ext;
+    c.near = SHADOW_NEAR;
+    c.far = SHADOW_FAR;
+    c.updateProjectionMatrix();
+  }
+
+  /**
+   * Park the shadow box on the ground the player is looking at, then snap it to
+   * whole shadow texels along the light's own screen axes. At roughly a tenth
+   * of a metre per texel an unsnapped box crawls along every shadow edge as the
+   * player walks, which reads worse than the softer box it replaced.
+   */
+  focusShadow(camera) {
+    const dir = this.tod.sunElev < 0 ? this.moonDir : this.sunDir;
+    // Lead the box in the view direction, but only as far as the camera is
+    // actually looking along the ground: zeroing y leaves a vector whose length
+    // is cos(pitch), so a straight-down view leads by nothing.
+    const lead = this.shadowLead.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    lead.y = 0;
+    const focus = this.shadowFocus
+      .set(camera.position.x, 0, camera.position.z)
+      .addScaledVector(lead, this.shadowExtent * SHADOW_LEAD);
+
+    // The shadow camera is aimed with lookAt() and the default (0,1,0) up, so
+    // these are exactly its horizontal and vertical screen axes.
+    const right = this.shadowRight.set(0, 1, 0).cross(dir);
+    if (right.lengthSq() < 1e-8) right.set(1, 0, 0);
+    right.normalize();
+    const up = this.shadowUp.copy(dir).cross(right).normalize();
+
+    const q = this.shadowTexel;
+    const t = this.sun.target.position;
+    t.set(0, 0, 0)
+      .addScaledVector(right, Math.round(focus.dot(right) / q) * q)
+      .addScaledVector(up, Math.round(focus.dot(up) / q) * q)
+      .addScaledVector(dir, focus.dot(dir));
+    this.sun.position.copy(t).addScaledVector(dir, SHADOW_STANDOFF);
   }
 
   setTimeOfDay(id) {
@@ -604,7 +689,8 @@ export class Weather {
     const sh = this.sun.shadow;
     sh.bias = look.shadowBias;
     sh.normalBias = look.shadowNormalBias;
-    this.sun.position.copy(keyDir).multiplyScalar(420);
+    this.setShadowExtent(look.shadowExtent);
+    this.sun.position.copy(keyDir).multiplyScalar(SHADOW_STANDOFF);
 
     this.hemiBase.setHex(tod.ambient);
     this.hemiIntensityBase = tod.ambientIntensity;
@@ -667,13 +753,11 @@ export class Weather {
       this.applyFlashResponse(0);
     }
 
-    // Follow the camera so the shadow cascade always covers the play area.
-    const t = this.sun.target;
-    t.position.set(camera.position.x, 0, camera.position.z);
-    const dir = this.tod.sunElev < 0 ? this.moonDir : this.sunDir;
-    this.sun.position.copy(t.position).addScaledVector(dir, 420);
-    this.fill.target.position.copy(t.position);
-    this.fill.position.copy(t.position).add(this.fillOffset);
+    // Follow the camera so the shadow box always covers the play area.
+    this.focusShadow(camera);
+    const anchor = this.groundAnchor.set(camera.position.x, 0, camera.position.z);
+    this.fill.target.position.copy(anchor);
+    this.fill.position.copy(anchor).add(this.fillOffset);
   }
 
   /** Night reads much darker, so the same flash should lift the sky further. */
