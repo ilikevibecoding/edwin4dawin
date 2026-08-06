@@ -55,8 +55,11 @@ const ARROW_AXIS: Record<string, { x: number; y: number }> = {
 
 /** Canonical key name, so 'space', ' ' and 'Space' are one thing. */
 function normKey(raw: string): string {
-  const s = (raw ?? '').trim();
-  if (s === ' ' || /^space(bar)?$/i.test(s)) return 'SPACE';
+  const value = raw ?? '';
+  // KeyboardEvent.key for the space bar is a single space, which trims away.
+  if (value === ' ' || value === '\u0020' || /^\s+$/.test(value)) return 'SPACE';
+  const s = value.trim();
+  if (/^space(bar)?$/i.test(s)) return 'SPACE';
   if (/^arrow(left|right|up|down)$/i.test(s)) return s.toUpperCase();
   if (/^(left|right|up|down)$/i.test(s)) return `ARROW${s.toUpperCase()}`;
   if (/^esc(ape)?$/i.test(s)) return 'ESCAPE';
@@ -202,12 +205,10 @@ export class QTEUI {
     if (req.uv) {
       this.box.style.left = `${(uiClamp01(req.uv.x) * 100).toFixed(2)}%`;
       this.box.style.top = `${(uiClamp01(req.uv.y) * 100).toFixed(2)}%`;
-      this.box.style.marginLeft = '';
       base = 'translate(-50%, -50%)';
     } else {
       this.box.style.left = '50%';
       this.box.style.top = '';
-      this.box.style.marginLeft = '';
       base = 'translateX(-50%)';
     }
 

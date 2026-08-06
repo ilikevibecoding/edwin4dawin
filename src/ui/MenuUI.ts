@@ -92,7 +92,7 @@ export class MenuUI {
     const wordmark = uiEl('div', 'dv-wordmark', 'Deviant');
     this.titleLed = uiLed();
     const tagRow = uiEl('div', 'dv-menu-tag dv-label');
-    tagRow.append(this.titleLed, uiEl('span', '', ' A story about machines who choose'));
+    tagRow.append(this.titleLed, uiEl('span', '', 'A story about machines who choose'));
     this.titleRule = uiEl('i', 'dv-menu-rule');
 
     this.panes = {

@@ -613,17 +613,17 @@ export function buildPostFX(
 
   const dof = new DepthOfFieldEffect(camera, {
     focusDistance: 4,
-    focusRange: 1.6,
-    bokehScale: highEnd ? 4.5 : 2.5,
+    focusRange: 3.4,
+    bokehScale: highEnd ? 2.6 : 1.8,
     resolutionScale: tier === 'ultra' ? 0.75 : 0.5,
   });
   composer.addPass(new EffectPass(camera, dof));
 
   const bloom = new BloomEffect({
     blendFunction: BlendFunction.ADD,
-    luminanceThreshold: 0.62,
-    luminanceSmoothing: 0.32,
-    intensity: 1.5,
+    luminanceThreshold: 0.78,
+    luminanceSmoothing: 0.28,
+    intensity: 0.85,
     radius: 0.72,
     levels: highEnd ? 8 : 6,
     mipmapBlur: true,
@@ -635,7 +635,7 @@ export function buildPostFX(
     mode: ToneMappingMode.AGX,
     resolution: 256,
     whitePoint: 4,
-    middleGrey: 0.6,
+    middleGrey: 0.18,
     adaptive: false,
   });
   const grade = new FilmGradeEffect();

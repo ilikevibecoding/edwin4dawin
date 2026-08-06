@@ -37,7 +37,7 @@ export function buildStill(stage: Stage, params: URLSearchParams) {
   stage.fx.atmosphere.apply(build.atmosphere);
   stage.fx.grade.apply(build.grade);
   const rain = extras.rainOverride ?? build.rain;
-  stage.fx.lensRain.intensity = rain * 0.85;
+  stage.fx.lensRain.intensity = rain * 0.34;
 
   for (let i = 0; i < 2; i++) {
     const s = (build.shafts ?? [])[i];

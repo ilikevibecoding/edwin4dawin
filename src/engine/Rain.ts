@@ -84,8 +84,8 @@ varying float vLife;
 void main() {
   float r = length(gl_PointCoord - 0.5) * 2.0;
   // Hollow ring that fades as it grows
-  float ring = smoothstep(0.45, 0.85, r) * smoothstep(1.05, 0.9, r);
-  float a = max(texture2D(uMap, gl_PointCoord).a * 0.25, ring) * (1.0 - vLife) * uOpacity;
+  float ring = smoothstep(0.6, 0.88, r) * smoothstep(1.02, 0.92, r);
+  float a = max(texture2D(uMap, gl_PointCoord).a * 0.15, ring * 0.55) * pow(1.0 - vLife, 1.6) * uOpacity;
   if (a < 0.01) discard;
   gl_FragColor = vec4(uColor, a);
 }
@@ -160,7 +160,7 @@ export class RainSystem {
         uArea: { value: new THREE.Vector2(26, 26) },
         uCenter: { value: new THREE.Vector3(0, opts.groundY + 0.012, 0) },
         uRate: { value: 1.5 },
-        uSize: { value: 1.6 },
+        uSize: { value: 0.95 },
         uMap: { value: radialAlphaTexture(2, 64) },
         uColor: { value: new THREE.Color(0xcfe2ff) },
         uOpacity: { value: 0.35 },
@@ -187,7 +187,7 @@ export class RainSystem {
     this.dropUniforms.uOpacity.value = 0.55 * this.intensity;
     this.dropUniforms.uSize.value = 0.7 + this.intensity * 0.5;
     if (this.splashUniforms) {
-      this.splashUniforms.uOpacity.value = 0.4 * this.intensity;
+      this.splashUniforms.uOpacity.value = 0.22 * this.intensity;
       this.splashUniforms.uRate.value = 0.9 + this.intensity * 1.4;
     }
     this.group.visible = this.intensity > 0.01;

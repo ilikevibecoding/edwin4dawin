@@ -13,6 +13,7 @@ import type { Stage } from '../engine/Stage';
 import { Rng, fbm2D, hash2, lerp, smoothstep } from '../engine/Noise';
 import {
   buildSurface,
+  neonSignTexture,
   posterTexture,
   radialAlphaTexture,
   screenTexture,
@@ -554,17 +555,199 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
   const ambient = new THREE.AmbientLight(0x161d29, 0.45);
   root.add(ambient);
   lights.ambient = ambient;
-  const bounce = new THREE.HemisphereLight(0x2a3purple as unknown as number, 0x000000, 0);
-  void bounce;
+
+  const bounce = new THREE.HemisphereLight(0x2b3a52, 0x1e1610, 0.3);
+  root.add(bounce);
+  lights.bounce = bounce;
+
+  // Shadow caster 1: the standing lamp, the only warm source in the room.
+  const lampKey = new THREE.SpotLight(0xffb066, 38, 8, 1.05, 0.72, 2);
+  lampKey.position.set(lampX, lampY + 0.02, lampZ);
+  lampKey.target.position.set(-1.0, 0, -1.5);
+  lampKey.castShadow = true;
+  lampKey.shadow.mapSize.set(2048, 2048);
+  lampKey.shadow.bias = -0.0008;
+  lampKey.shadow.normalBias = 0.02;
+  lampKey.shadow.camera.near = 0.2;
+  lampKey.shadow.camera.far = 8;
+  root.add(lampKey, lampKey.target);
+  lights.lampKey = lampKey;
+
+  // Shadow caster 2: cold city light through the window, which also draws the
+  // mullion shadows across the floor.
+  const windowKey = new THREE.DirectionalLight(0x7ea6e8, 1.5);
+  windowKey.position.set(-4.2, 9.5, -24);
+  windowKey.target.position.set(0.3, 0.9, -0.5);
+  windowKey.castShadow = true;
+  windowKey.shadow.mapSize.set(2048, 2048);
+  windowKey.shadow.bias = -0.0008;
+  windowKey.shadow.normalBias = 0.02;
+  windowKey.shadow.camera.near = 14;
+  windowKey.shadow.camera.far = 34;
+  windowKey.shadow.camera.left = -5;
+  windowKey.shadow.camera.right = 5;
+  windowKey.shadow.camera.top = 5;
+  windowKey.shadow.camera.bottom = -5;
+  root.add(windowKey, windowKey.target);
+  lights.windowKey = windowKey;
+
+  // Ambient wash of city light just inside the glass.
+  const winFill = new THREE.PointLight(0x6f96d8, 26, 7, 2);
+  winFill.position.set(winCX, 1.72, -HZ + 0.5);
+  root.add(winFill);
+  lights.windowFill = winFill;
+
+  const tvLight = new THREE.PointLight(0x8fc0ff, 13, 5.5, 2);
+  tvLight.position.set(-1.82, 0.84, -0.6);
+  root.add(tvLight);
+  lights.tv = tvLight;
+
+  const lampBounce = new THREE.PointLight(0xffb872, 11, 4.2, 2);
+  lampBounce.position.set(lampX, lampY + 0.42, lampZ);
+  root.add(lampBounce);
+  lights.lampBounce = lampBounce;
+
+  const kitchenLight = new THREE.PointLight(0xffcb8a, 11, 4.6, 2);
+  kitchenLight.position.set(0.55, 1.44, 2.44);
+  root.add(kitchenLight);
+  lights.kitchen = kitchenLight;
+
+  const hallLight = new THREE.PointLight(0x4a6070, 3.5, 4, 2);
+  hallLight.position.set(doorX, 1.9, HZ + 0.9);
+  root.add(hallLight);
+  lights.hall = hallLight;
+
+  // -------------------------------------------------------------------------
+  // Marks
+  // -------------------------------------------------------------------------
+  const hero = new THREE.Vector3(-1.05, 0, -1.75);
+  const other = new THREE.Vector3(0.25, 0, -1.05);
+  const heroYaw = facing(hero, other);
+  const heroHead = new THREE.Vector3(hero.x, 1.6, hero.z);
+  const otherHead = new THREE.Vector3(other.x, 1.6, other.z);
+  const establish = new THREE.Vector3(1.86, 1.82, 2.32);
+  const overShoulder = new THREE.Vector3(-1.66, 1.6, -2.14);
+  const windowCam = new THREE.Vector3(0.98, 1.5, -0.52);
+  const kitchenCam = new THREE.Vector3(-0.05, 1.62, 0.85);
+
+  const marks: Record<string, Mark> = {
+    'cam.establish': mark(establish.x, establish.y, establish.z, facing(establish, new THREE.Vector3(-0.5, 1.15, -1.5))),
+    'cam.overShoulder': mark(overShoulder.x, overShoulder.y, overShoulder.z, facing(overShoulder, otherHead)),
+    'cam.window': mark(windowCam.x, windowCam.y, windowCam.z, facing(windowCam, new THREE.Vector3(-0.6, 1.5, -HZ))),
+    'cam.kitchen': mark(kitchenCam.x, kitchenCam.y, kitchenCam.z, facing(kitchenCam, new THREE.Vector3(1.1, 1.1, 2.7))),
+    'actor.hero': mark(hero.x, hero.y, hero.z, heroYaw),
+    'actor.other': mark(other.x, other.y, other.z, heroYaw - Math.PI),
+    'actor.sofa': mark(1.86, 0, -0.72, -Math.PI / 2 + 0.22),
+    'actor.window': mark(-0.72, 0, -2.5, Math.PI),
+    'look.hero': mark(heroHead.x, heroHead.y, heroHead.z, heroYaw),
+    'look.other': mark(otherHead.x, otherHead.y, otherHead.z, heroYaw - Math.PI),
+  };
+
+  const clues: ClueSpec[] = [
+    {
+      id: 'family_photo',
+      label: 'Family photograph',
+      position: new THREE.Vector3(-2.26, 1.12, 1.7),
+      detail: 'Three people at the lake. The frame has been turned face down and set back up more than once.',
+    },
+    {
+      id: 'broken_glass',
+      label: 'Broken glass',
+      position: new THREE.Vector3(0.34, 0.06, -1.92),
+      detail: 'A tumbler, thrown rather than dropped. The spray pattern points away from the sofa.',
+    },
+    {
+      id: 'pill_bottle',
+      label: 'Pill bottle',
+      position: new THREE.Vector3(0.72, 0.52, -0.34),
+      detail: 'Red ice cut with a sedative. Prescribed to nobody. Two-thirds of it is on the table, not in the bottle.',
+    },
+    {
+      id: 'childs_drawing',
+      label: "Child's drawing",
+      position: new THREE.Vector3(2.02, 1.3, 2.19),
+      detail: 'Two figures in wax crayon, holding hands. One of them has been scribbled over and drawn again.',
+    },
+  ];
+
+  // -------------------------------------------------------------------------
+  // Animation
+  // -------------------------------------------------------------------------
+  let staticTimer = 0;
+  let staticIndex = 0;
+  const update = (dt: number, elapsed: number) => {
+    outerWindows.update(elapsed);
+    glassRain.update(dt);
+    teaSteam.update(dt, elapsed);
+
+    // CRT snow: swap frames fast, and let the whole picture breathe.
+    staticTimer += dt;
+    if (staticTimer > 1 / 14) {
+      staticTimer = 0;
+      staticIndex = (staticIndex + 1) % staticFrames.length;
+      tvMat.map = staticFrames[staticIndex];
+      tvMat.needsUpdate = true;
+    }
+    const roll = 1 + Math.sin(elapsed * 8.3) * 0.09 + Math.sin(elapsed * 23.7) * 0.05;
+    const surge = Math.sin(elapsed * 0.9) * Math.sin(elapsed * 2.6) > 0.93 ? 1.7 : 1;
+    tvMat.color.setRGB(1.5 * roll * surge, 1.62 * roll * surge, 1.95 * roll * surge);
+    tvLight.intensity = 13 * roll * surge;
+    tvGlowMat.opacity = 0.4 * roll * surge;
+
+    // The lamp is on a failing socket.
+    const lampLevel = 1 + Math.sin(elapsed * 2.3) * 0.02 + Math.sin(elapsed * 7.1) * 0.012;
+    lampBulbMat.emissiveIntensity = 7 * lampLevel;
+    lampKey.intensity = 38 * lampLevel;
+    lampBounce.intensity = 11 * lampLevel;
+    stripMat.emissiveIntensity = 2.2 + Math.sin(elapsed * 31) * 0.05;
+
+    for (const s of flickerNeon) {
+      const t = elapsed * s.rate + s.phase;
+      const n = Math.sin(t) * Math.sin(t * 2.3 + 0.4);
+      s.material.opacity = n > 0.02 ? 0.9 : n > -0.3 ? 0.3 : 0.06;
+    }
+  };
 
   return {
     root,
     sky: 'interiorNight',
     showSkyBackground: false,
-    atmosphere: {},
-    grade: {},
+    atmosphere: {
+      fogColor: new THREE.Color(0x101725),
+      fogColorFar: new THREE.Color(0x1c2130),
+      density: 0.022,
+      heightFalloff: 0.05,
+      fogBase: -2,
+      noise: 0.4,
+    },
+    grade: {
+      lift: new THREE.Vector3(0.014, 0.016, 0.03),
+      gamma: new THREE.Vector3(1.02, 1.0, 0.99),
+      gain: new THREE.Vector3(1.07, 1.0, 1.0),
+      shadowTint: new THREE.Vector3(0.0, 0.08, 0.24),
+      highlightTint: new THREE.Vector3(0.22, 0.1, 0.0),
+      saturation: 1.18,
+      contrast: 1.14,
+      temperature: 0.06,
+      bleach: 0.05,
+      vignette: 0.44,
+    },
     rain: 0.5,
-    marks: {},
+    shafts: [
+      { position: new THREE.Vector3(winCX - 0.4, 1.85, -HZ - 0.1), color: new THREE.Color(0x7ea6e8), intensity: 0.26 },
+      { position: new THREE.Vector3(lampX, lampY, lampZ), color: new THREE.Color(0xffb066), intensity: 0.2 },
+    ],
+    marks,
     lights,
+    clues,
+    cameraBounds: new THREE.Box3(
+      new THREE.Vector3(-HX + 0.35, 0.6, -HZ + 0.35),
+      new THREE.Vector3(HX - 0.35, CEIL - 0.2, HZ - 0.35)
+    ),
+    update,
+    dispose: () => {
+      disposal.run();
+      root.clear();
+    },
   };
 }

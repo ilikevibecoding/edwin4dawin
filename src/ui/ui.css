@@ -335,10 +335,11 @@
 }
 
 /* Instability (android stress) — bottom-right, clear of the subtitle block. */
+/* Sits above the subtitle band so a two-line subtitle can never reach it. */
 .dv-root .dv-instab {
   position: absolute;
   right: 2.4em;
-  bottom: calc(var(--dv-bar) + 2.2em);
+  bottom: calc(var(--dv-bar) + 6.4em);
   width: 10.6em;
   opacity: 0;
 }
@@ -467,7 +468,7 @@
 .dv-root .dv-scan-read {
   position: absolute;
   left: 2.4em;
-  bottom: calc(var(--dv-bar) + 2.2em);
+  bottom: calc(var(--dv-bar) + 6.4em);
   color: var(--dv-dim);
   line-height: 1.6;
 }
@@ -618,8 +619,8 @@
   position: absolute;
   left: 50%;
   bottom: calc(var(--dv-bar) + 2.2em);
-  width: 64%;
-  max-width: 46em;
+  width: 60%;
+  max-width: 44em;
   transform: translateX(-50%);
   opacity: 0;
   text-align: center;
@@ -829,12 +830,13 @@
    QTE
    ========================================================================== */
 
+/* Centring is done with a transform (set from JS, which also handles the
+   world-anchored case), so there must be no margin offset here as well. */
 .dv-root .dv-qte {
   position: absolute;
   left: 50%;
   top: 58%;
   width: 12em;
-  margin-left: -6em;
   text-align: center;
   opacity: 0;
 }
@@ -1061,6 +1063,9 @@
   margin-left: 0.1em;
 }
 .dv-root .dv-menu-tag {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
   margin: 1em 0 0;
   letter-spacing: 0.3em;
   color: var(--dv-accent);

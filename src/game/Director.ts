@@ -153,7 +153,7 @@ export class Director {
     this.stage.fx.atmosphere.apply(build.atmosphere);
     this.stage.fx.grade.apply(build.grade);
     const rain = extras.rainOverride ?? build.rain;
-    this.stage.fx.lensRain.intensity = rain * 0.85;
+    this.stage.fx.lensRain.intensity = rain * 0.34;
     this.rain.setIntensity(rain);
 
     const shafts = build.shafts ?? [];
@@ -460,7 +460,7 @@ export class Director {
     }
     if (beat.rain !== undefined) {
       this.rain.setIntensity(beat.rain);
-      this.stage.fx.lensRain.intensity = beat.rain * 0.85;
+      this.stage.fx.lensRain.intensity = beat.rain * 0.34;
     }
     if (beat.shake) this.camera.shake(beat.shake);
     if (beat.glitch !== undefined) {
