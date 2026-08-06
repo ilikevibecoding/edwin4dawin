@@ -8,6 +8,9 @@ import type { Actor } from '../actors/Actor';
 import type { QualitySettings } from '../core/Quality';
 import type { LightShaft } from '../render/Volumetric';
 import { CharacterLights } from '../render/CharacterLights';
+import type { Shot } from '../cine/Framing';
+
+const UP = new THREE.Vector3(0, 1, 0);
 
 interface HazeOptions {
   color?: THREE.ColorRepresentation;
@@ -103,6 +106,107 @@ export abstract class SceneSet {
     this.scene.add(lights.group);
     this.characterLights = lights;
     return lights;
+  }
+
+  // ------------------------------------------------------------- camera safety
+
+  private occluders: THREE.Mesh[] | null = null;
+  private readonly ray = new THREE.Raycaster();
+
+  /**
+   * Static geometry the camera must not end up behind.
+   *
+   * Actors are excluded on purpose: an over-the-shoulder shot is *meant* to sit
+   * behind someone's head. Glows, sprites and rain are excluded because they are
+   * not solid. Everything else — walls, plant, parapets, the stairwell house —
+   * counts, and a shot placed inside one produces a black frame.
+   */
+  private collectOccluders(): THREE.Mesh[] {
+    const skip = new Set<THREE.Object3D>();
+    if (this.rain) skip.add(this.rain.group);
+    if (this.haze) skip.add(this.haze.group);
+    for (const s of this.shafts) skip.add(s.mesh);
+    for (const a of this.actors.values()) skip.add(a.root);
+    const out: THREE.Mesh[] = [];
+    const walk = (o: THREE.Object3D): void => {
+      if (skip.has(o) || !o.visible) return;
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh && !(mesh as unknown as THREE.SkinnedMesh).isSkinnedMesh) {
+        const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        const solid = mat && !(mat as THREE.Material).transparent;
+        if (solid && mesh.userData.noCameraCollide !== true) out.push(mesh);
+      }
+      for (const c of o.children) walk(c);
+    };
+    walk(this.scene);
+    return out;
+  }
+
+  /** Drops the cached occluder list; call after changing set geometry. */
+  invalidateOccluders(): void {
+    this.occluders = null;
+  }
+
+  /**
+   * Pulls a camera position in until it has line of sight to what it is aiming
+   * at. Shots are composed from actor positions and hand-placed viewpoints, and
+   * either can drift into a wall when staging changes; without this the result
+   * is a frame of solid black or a blurred close-up of a prop's inside face.
+   */
+  clearCamera(shot: Shot, minDistance = 0.5): void {
+    const offset = new THREE.Vector3().subVectors(shot.position, shot.target);
+    const far = offset.length();
+    if (far < minDistance) return;
+    if (!this.occluders) this.occluders = this.collectOccluders();
+
+    // Anyone the shot is not built around is an obstacle. Standing a camera
+    // inside a bystander produces a frame of unreadable limbs, and the troopers
+    // on the roof stand close enough together for a clean single on one of them
+    // to land inside another.
+    const crowd: THREE.Vector3[] = [];
+    for (const a of this.actors.values()) {
+      if (shot.subjects?.includes(a)) continue;
+      crowd.push(a.getChestPosition(new THREE.Vector3()));
+    }
+
+    const candidate = new THREE.Vector3();
+    const swings = [0, 0.4, -0.4, 0.85, -0.85, 1.35, -1.35];
+    let fallback: THREE.Vector3 | null = null;
+    for (const swing of swings) {
+      candidate.copy(offset).applyAxisAngle(UP, swing).add(shot.target);
+      const clamped = this.firstClearDistance(shot.target, candidate, minDistance);
+      const position = clamped.position;
+      if (!fallback) fallback = position.clone();
+      if (clamped.blocked) continue;
+      if (crowd.some((p) => p.distanceTo(position) < 0.62)) continue;
+      shot.position.copy(position);
+      return;
+    }
+    if (fallback) shot.position.copy(fallback);
+  }
+
+  /** Distance along target -> position that still has line of sight. */
+  private firstClearDistance(
+    target: THREE.Vector3,
+    position: THREE.Vector3,
+    minDistance: number
+  ): { position: THREE.Vector3; blocked: boolean } {
+    const dir = new THREE.Vector3().subVectors(position, target);
+    const far = dir.length();
+    dir.divideScalar(far);
+    // Start a little way out so geometry at the aim point itself — the floor an
+    // insert is framing, the prop being examined — is not treated as an occluder.
+    const skin = 0.3;
+    this.ray.set(new THREE.Vector3().copy(target).addScaledVector(dir, skin), dir);
+    this.ray.near = 0;
+    this.ray.far = Math.max(0.001, far - skin);
+    const hits = this.ray.intersectObjects(this.occluders ?? [], false);
+    if (!hits.length) return { position: position.clone(), blocked: false };
+    const distance = Math.max(minDistance, skin + hits[0].distance - 0.15);
+    return {
+      position: new THREE.Vector3().copy(target).addScaledVector(dir, Math.min(distance, far)),
+      blocked: true,
+    };
   }
 
   /** Points the portrait rig at a subject, keeping the key off the camera axis. */

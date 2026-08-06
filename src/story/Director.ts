@@ -108,6 +108,8 @@ export class Director {
   private subject: Actor | null = null;
   private subjectSide = 1;
   private speaking: Actor | null = null;
+  private speakingLine: string | null = null;
+  private speakingSince = 0;
   private freeLook = { yaw: 0, pitch: -0.18, active: false };
   /** Muted during offline render: WebAudio cannot be captured from a screenshot. */
   silent = false;
@@ -176,13 +178,18 @@ export class Director {
 
   /** Cuts to a shot. Named framings are resolved against live actor positions. */
   cut(shot: Shot, opts: { blend?: number; move?: MoveKind; moveAmount?: number; moveDuration?: number; handheld?: number } = {}): void {
+    this.set.clearCamera(shot);
     this.rig.cut(shot, opts);
     if (!opts.blend) this.rig.snap();
   }
 
   /** Re-derives the current shot every frame so the camera tracks a mover. */
   follow(build: () => Shot): () => void {
-    const fn = (): void => this.rig.retarget(build());
+    const fn = (): void => {
+      const shot = build();
+      this.set.clearCamera(shot);
+      this.rig.retarget(shot);
+    };
     this.trackers.push(fn);
     return () => {
       this.trackers = this.trackers.filter((t) => t !== fn);
@@ -221,6 +228,8 @@ export class Director {
     const speaker = typeof actor === 'string' ? null : actor;
     const name = typeof actor === 'string' ? actor : actor.name;
     this.speaking = speaker;
+    this.speakingLine = voiceId ?? null;
+    this.speakingSince = this.clock.time;
     this.hud.say(name, text, { thought: opts.thought });
 
     let duration = opts.hold ?? readingTime(text);
@@ -246,6 +255,7 @@ export class Director {
       if (opts.pose) speaker.clearPose(opts.pose, 0.5);
     }
     this.speaking = null;
+    this.speakingLine = null;
     if (opts.beat) await this.wait(opts.beat);
   }
 
@@ -441,10 +451,14 @@ export class Director {
       });
     }
 
-    // Lip sync from the live voice envelope.
+    // Lip sync: from the playing voice when there is one, from the same viseme
+    // track driven by the story clock when the run is silent, and from a
+    // synthetic wave only when the line has no recorded envelope at all.
     if (this.speaking) {
-      const open = this.silent ? syntheticMouth(time) : this.audio.mouthOpen();
-      this.speaking.setMouth(open);
+      let open: number | null = null;
+      if (!this.silent) open = this.audio.mouthOpen();
+      else if (this.speakingLine) open = this.audio.visemeAt(this.speakingLine, time - this.speakingSince);
+      this.speaking.setMouth(open ?? syntheticMouth(time));
     }
 
     this.tickChoice(dt);

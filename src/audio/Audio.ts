@@ -162,8 +162,27 @@ export class AudioEngine {
    */
   mouthOpen(): number {
     const line = this.voicePlaying;
-    if (!line || !line.visemes.length) return 0;
-    const t = this.ctx.currentTime - this.voiceStartedAt;
+    if (!line) return 0;
+    return this.sampleVisemes(line, this.ctx.currentTime - this.voiceStartedAt);
+  }
+
+  /**
+   * Mouth-open amount for a line at an arbitrary offset into it.
+   *
+   * The offline capture never starts an audio node, so there is no playback
+   * position to read — but the viseme track is just data, and the story clock
+   * knows how far into the line the scene is. Sampling it here means the
+   * recording lip-syncs to the same envelope the mixed soundtrack was built
+   * from, instead of falling back to a generic chatter wave.
+   */
+  visemeAt(id: string, elapsed: number): number | null {
+    const line = this.bank[id];
+    if (!line || !line.visemes.length) return null;
+    return this.sampleVisemes(line, elapsed);
+  }
+
+  private sampleVisemes(line: VoiceLine, t: number): number {
+    if (!line.visemes.length) return 0;
     if (t < 0 || t > line.duration + 0.1) return 0;
     const idx = t / line.visemeStep;
     const i0 = Math.max(0, Math.min(line.visemes.length - 1, Math.floor(idx)));

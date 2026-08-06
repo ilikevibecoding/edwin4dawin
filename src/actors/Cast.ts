@@ -212,6 +212,41 @@ function styleHair(root: THREE.Object3D, opts: { color: number; roughness?: numb
   });
 }
 
+/** Bare android shell: moulded ceramic over a dark structural core. */
+function ceramicChassis(tint: number, roughness: number): THREE.MeshPhysicalMaterial {
+  const maps = Tex.ceramic;
+  return new THREE.MeshPhysicalMaterial({
+    map: maps.map,
+    normalMap: maps.normalMap,
+    roughnessMap: maps.roughnessMap,
+    color: new THREE.Color(tint),
+    roughness,
+    metalness: 0.05,
+    clearcoat: 0.38,
+    clearcoatRoughness: 0.42,
+    envMapIntensity: 1,
+    normalScale: new THREE.Vector2(0.6, 0.6),
+  });
+}
+
+/**
+ * Catchlights.
+ *
+ * Eyes are the only thing on a face bright enough to survive this grade, and
+ * without a hot specular they go dead in a close-up. The iris is tinted and the
+ * environment contribution pushed well past one so the key leaves a highlight.
+ */
+function brightenEyes(root: THREE.Object3D, iris: number): void {
+  eachMaterial(root, (m) => {
+    if (!/eye/i.test(m.name)) return;
+    const std = m as THREE.MeshStandardMaterial;
+    std.roughness = 0.07;
+    std.metalness = 0;
+    std.envMapIntensity = 2.4;
+    std.color = new THREE.Color(iris);
+  });
+}
+
 /** Glowing seams along the chassis of a skinless android. */
 function chassisSeamMesh(color: number, radius: number): THREE.Mesh {
   return new THREE.Mesh(
@@ -257,14 +292,7 @@ export const CAST: Record<CharacterId, CharacterDef> = {
         syntheticSkin(m, { clearcoat: 0.18 })
       );
       styleHair(root, { color: 0x241b14, roughness: 0.62 });
-      eachMaterial(root, (m) => {
-        if (/eye/i.test(m.name)) {
-          const std = m as THREE.MeshStandardMaterial;
-          std.roughness = 0.08;
-          std.metalness = 0;
-          std.envMapIntensity = 2.2;
-        }
-      });
+      brightenEyes(root, 0xc9dcea);
     },
     decorate: (actor) => addAndroidHardware(actor, { accent: PALETTE.neonCyan, model: 'RK-900', bandRadius: 0.064 }),
   },
@@ -293,7 +321,7 @@ export const CAST: Record<CharacterId, CharacterDef> = {
       replaceMaterial(root, (m) => /footwear/i.test(m.name), () =>
         new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.55, metalness: 0.1 })
       );
-      styleHair(root, { color: 0x4a3728, roughness: 0.58 });
+      styleHair(root, { color: 0x7d5c33, roughness: 0.52 });
       replaceMaterial(root, (m) => /body/i.test(m.name) && !/outfit/i.test(m.name), (m) =>
         syntheticSkin(m, { clearcoat: 0.2 })
       );
@@ -305,70 +333,89 @@ export const CAST: Record<CharacterId, CharacterDef> = {
     id: 'atlas',
     displayName: 'ATLAS',
     model: 'WR-600 · UNSKINNED',
-    file: 'Xbot',
-    rigKey: 'xbot',
+    file: 'readyplayer.me',
+    rigKey: 'rpm',
     height: 1.86,
-    hasFace: false,
+    hasFace: true,
     hasLed: true,
-    ledOffset: [0.078, 0.075, 0.012],
+    ledOffset: [0.072, 0.088, 0.018],
     accent: PALETTE.neonCyan,
     restyle: (root) => {
-      // The leader lost his skin; what's left is the ceramic chassis underneath.
-      replaceMaterial(root, (m) => /joint/i.test(m.name), () =>
-        new THREE.MeshStandardMaterial({ color: 0x14171c, roughness: 0.42, metalness: 0.72 })
-      );
-      replaceMaterial(root, (m) => !/joint/i.test(m.name), () => {
-        const maps = Tex.ceramic;
-        return new THREE.MeshPhysicalMaterial({
-          map: maps.map,
-          normalMap: maps.normalMap,
-          roughnessMap: maps.roughnessMap,
-          color: 0xe8ecef,
-          roughness: 0.5,
-          metalness: 0.04,
-          clearcoat: 0.4,
-          clearcoatRoughness: 0.4,
-          envMapIntensity: 1.1,
-          normalScale: new THREE.Vector2(0.5, 0.5),
-        });
+      hideMesh(root, /headwear|hat|beard|mustache/i);
+      // The leader's synthetic skin has failed across his body: the face still
+      // holds, but everything the torn jacket does not cover is bare chassis.
+      // Faces carry the performance, so the head keeps its geometry and reads in
+      // close-up while the exposed ceramic sells what he is.
+      replaceMaterial(root, (m) => /skin/i.test(m.name), (m) => {
+        const mat = syntheticSkin(m, { clearcoat: 0.34 }) as THREE.MeshPhysicalMaterial;
+        mat.color.setHex(0xd8dee6);
+        mat.roughness = 0.44;
+        mat.sheenColor.setHex(0x35506e);
+        return mat;
       });
+      replaceMaterial(root, (m) => /body/i.test(m.name) && !/outfit/i.test(m.name), () =>
+        ceramicChassis(0xe8ecef, 0.5)
+      );
+      replaceMaterial(root, (m) => /outfit_top/i.test(m.name), () =>
+        fabricMaterial(Tex.darkFabric, 0x33302c, 0.82)
+      );
+      replaceMaterial(root, (m) => /outfit_bottom/i.test(m.name), () =>
+        fabricMaterial(Tex.darkFabric, 0x22242a, 0.85)
+      );
+      replaceMaterial(root, (m) => /footwear/i.test(m.name), () =>
+        new THREE.MeshStandardMaterial({ color: 0x121417, roughness: 0.45, metalness: 0.2 })
+      );
+      // Silver: the one lead who has to read instantly against Orion in a
+      // crowd, and the two of them share a face.
+      styleHair(root, { color: 0xa8adb6, roughness: 0.6 });
+      brightenEyes(root, 0xbfe4ff);
     },
-    decorate: (actor) => addChassisSeams(actor, PALETTE.neonCyan),
+    decorate: (actor) => {
+      addAndroidHardware(actor, { accent: PALETTE.neonCyan, model: 'WR-600', bandRadius: 0.064 });
+      addChassisSeams(actor, PALETTE.neonCyan);
+    },
   },
 
   deviant: {
     id: 'deviant',
     displayName: 'UNKNOWN',
     model: 'MODEL UNREADABLE',
-    file: 'Xbot',
-    rigKey: 'xbot',
+    file: 'readyplayer.me',
+    rigKey: 'rpm',
     height: 1.79,
-    hasFace: false,
+    hasFace: true,
     hasLed: true,
-    ledOffset: [0.078, 0.075, 0.012],
+    ledOffset: [0.072, 0.088, 0.018],
     accent: PALETTE.ledStress,
     restyle: (root) => {
-      replaceMaterial(root, (m) => /joint/i.test(m.name), () =>
-        new THREE.MeshStandardMaterial({ color: 0x0c0e11, roughness: 0.5, metalness: 0.6 })
-      );
-      replaceMaterial(root, (m) => !/joint/i.test(m.name), () => {
-        const maps = Tex.ceramic;
-        return new THREE.MeshPhysicalMaterial({
-          map: maps.map,
-          normalMap: maps.normalMap,
-          roughnessMap: maps.roughnessMap,
-          // Scorched and rain-streaked rather than showroom white.
-          color: 0xbcc2c8,
-          roughness: 0.62,
-          metalness: 0.05,
-          clearcoat: 0.35,
-          clearcoatRoughness: 0.45,
-          envMapIntensity: 0.95,
-          normalScale: new THREE.Vector2(0.8, 0.8),
-        });
+      hideMesh(root, /headwear|hat|beard|mustache/i);
+      // The negotiation only works if the audience can read his face, so the
+      // deviant keeps his skin. What marks him is the state of it: bloodless,
+      // rain-soaked, and a stress LED locked red.
+      replaceMaterial(root, (m) => /skin/i.test(m.name), (m) => {
+        const mat = syntheticSkin(m, { clearcoat: 0.4 }) as THREE.MeshPhysicalMaterial;
+        mat.color.setHex(0xc9c6cc);
+        mat.roughness = 0.4;
+        mat.sheen = 0.5;
+        mat.sheenColor.setHex(0x44364a);
+        return mat;
       });
+      replaceMaterial(root, (m) => /outfit_top/i.test(m.name), () =>
+        fabricMaterial(Tex.paleFabric, 0x59606b, 0.66)
+      );
+      replaceMaterial(root, (m) => /outfit_bottom/i.test(m.name), () =>
+        fabricMaterial(Tex.paleFabric, 0x3a4049, 0.72)
+      );
+      replaceMaterial(root, (m) => /footwear/i.test(m.name), () =>
+        new THREE.MeshStandardMaterial({ color: 0x1d2026, roughness: 0.4, metalness: 0.18 })
+      );
+      replaceMaterial(root, (m) => /body/i.test(m.name) && !/outfit/i.test(m.name), () =>
+        ceramicChassis(0xb9bfc6, 0.6)
+      );
+      styleHair(root, { color: 0x9d8f76, roughness: 0.46 });
+      brightenEyes(root, 0xffd2c8);
     },
-    decorate: (actor) => addChassisSeams(actor, 0xff4d3d),
+    decorate: (actor) => addAndroidHardware(actor, { accent: 0xff4d3d, model: 'AP-700', bandRadius: 0.062 }),
   },
 
   trooper: {
@@ -546,9 +593,28 @@ export class ActorFactory {
 
   constructor(private assets: Assets) {}
 
+  /**
+   * Loads and prepares everything the cast needs.
+   *
+   * This has to be exhaustive. The chapters spawn actors from inside the story
+   * script, and the offline capture advances the game a fixed step at a time
+   * while draining only microtasks — so an `await` that waits on the network
+   * stalls the script for however many frames the load happens to take, and the
+   * recording stops being reproducible. Warming every model, template and clip
+   * set up front means every later spawn resolves without touching I/O.
+   */
   async preload(): Promise<void> {
     if (this.loaded) return;
     await this.library.load(this.assets);
+    const files = [...new Set(Object.values(CAST).map((d) => d.file))];
+    for (const file of files) {
+      const gltf = await this.assets.gltf(`models/${file}.glb`);
+      this.prepareTemplate(file, gltf.scene);
+    }
+    for (const def of Object.values(CAST)) {
+      const template = this.templates.get(def.file);
+      if (template) this.library.clipsFor(def.rigKey, template);
+    }
     this.loaded = true;
   }
 
@@ -573,7 +639,7 @@ export class ActorFactory {
 
         const headBone = skeleton.bones.find((b) => /(^|[^A-Za-z])Head$/.test(b.name));
         if (headBone) {
-          const hair = buildHairCap(head, headBone, eyes, { thickness: 0.014, frontLift: 0.058, napeDrop: 0.032 });
+          const hair = buildHairCap(head, headBone, eyes, { thickness: 0.036, frontLift: 0.052, napeDrop: 0.115 });
           if (hair) {
             hair.name = `${head.name}${HAIR_MESH_SUFFIX}`;
             head.parent?.add(hair);
@@ -589,8 +655,7 @@ export class ActorFactory {
   async spawn(id: CharacterId, opts: { name?: string; height?: number } = {}): Promise<Actor> {
     await this.preload();
     const def = CAST[id];
-    const gltf = await this.assets.gltf(`models/${def.file}.glb`);
-    const template = this.prepareTemplate(def.file, gltf.scene);
+    const template = this.templates.get(def.file) ?? this.prepareTemplate(def.file, (await this.assets.gltf(`models/${def.file}.glb`)).scene);
 
     const root = SkeletonUtils.clone(template);
     root.name = `model:${def.id}`;

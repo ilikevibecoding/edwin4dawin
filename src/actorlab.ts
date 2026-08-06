@@ -20,7 +20,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(1);
 renderer.setSize(W, H);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 0.95;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
@@ -33,20 +33,24 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.4;
 
-const key = new THREE.SpotLight(0xd8e8ff, 90, 22, 0.75, 0.55, 2);
+// Levels are matched to the character rig the sets actually use. A brighter
+// "so nothing can hide in the dark" setup was worse than useless: it drove skin
+// and hair past the top of the curve, so a dark hair shell read as a bald scalp
+// here and the lab disagreed with every frame the game produced.
+const key = new THREE.SpotLight(0xd8e8ff, 26, 22, 0.75, 0.55, 2);
 key.position.set(2.4, 3.4, 2.8);
 key.castShadow = true;
 key.shadow.mapSize.set(1024, 1024);
 key.shadow.bias = -0.001;
 key.shadow.normalBias = 0.02;
 scene.add(key);
-const rim = new THREE.SpotLight(0x53a8ff, 140, 22, 0.8, 0.6, 2);
+const rim = new THREE.SpotLight(0x53a8ff, 40, 22, 0.8, 0.6, 2);
 rim.position.set(-2.8, 2.6, -2.6);
 scene.add(rim);
-const fill = new THREE.PointLight(0xff9b5e, 8, 14, 2);
+const fill = new THREE.PointLight(0xff9b5e, 2.6, 14, 2);
 fill.position.set(-2.0, 1.5, 2.2);
 scene.add(fill);
-scene.add(new THREE.HemisphereLight(0x2c3c52, 0x0a0a0c, 0.35));
+scene.add(new THREE.HemisphereLight(0x2c3c52, 0x0a0a0c, 0.28));
 
 const floor = new THREE.Mesh(
   new THREE.CircleGeometry(8, 48),
@@ -128,8 +132,12 @@ declare global {
     __shot?: (i: number) => Promise<void>;
     __shotNames?: () => string[];
     __shotDone?: boolean;
+    /** Handle for inspecting generated geometry and materials from a harness. */
+    __scene?: THREE.Scene;
   }
 }
+
+window.__scene = scene;
 
 window.__shotNames = () => framings.map((f) => f.name);
 

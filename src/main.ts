@@ -60,11 +60,23 @@ async function boot(): Promise<void> {
 
   director.hud.setLoading(0.05, 'LOADING MODELS');
   await factory.preload();
-  director.hud.setLoading(0.35, 'BUILDING SET');
+  director.hud.setLoading(0.3, 'BUILDING ROOFTOP');
   await rooftop.build(engine.renderer);
   director.useSet(rooftop, 'noirRain');
-  director.hud.setLoading(0.6, 'LOADING VOICES');
-  if (!renderMode) await director.audio.loadVoiceBank();
+  // Later chapters are built now rather than when they start. Building mid-story
+  // stalls the script for as long as the build takes, which in a fixed-step
+  // capture is a run of identical frames in the middle of the film.
+  director.hud.setLoading(0.5, 'BUILDING INTERIOR');
+  const house = new HouseholdSet(engine.quality);
+  await house.build(engine.renderer);
+  director.hud.setLoading(0.7, 'BUILDING SQUARE');
+  const plaza = new PlazaSet(engine.quality);
+  await plaza.build(engine.renderer);
+  director.hud.setLoading(0.85, 'LOADING VOICES');
+  // The manifest is loaded even for a silent capture: it carries the real line
+  // durations and viseme tracks, so the subtitles hold for as long as the mixed
+  // soundtrack actually speaks and the mouths match it.
+  await director.audio.loadVoiceBank();
   director.hud.setLoading(1, 'READY');
 
   // Autoplay runs first so injected keys are visible to the Director in the same
@@ -88,15 +100,11 @@ async function boot(): Promise<void> {
     if (startChapter <= 1) await playChapter1(director, rooftop, factory);
 
     if (startChapter <= 2) {
-      const house = new HouseholdSet(engine.quality);
-      await house.build(engine.renderer);
       director.useSet(house, 'domestic');
       await playChapter2(director, house, factory);
     }
 
     if (startChapter <= 3) {
-      const plaza = new PlazaSet(engine.quality);
-      await plaza.build(engine.renderer);
       director.useSet(plaza, 'uprising');
       await playChapter3(director, plaza, factory);
     }

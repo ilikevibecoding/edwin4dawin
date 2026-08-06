@@ -19,6 +19,12 @@ export interface Shot {
   bokeh: number;
   /** Camera roll in radians, for unease. */
   roll?: number;
+  /**
+   * Actors this framing is built around. The camera is allowed to sit close to
+   * these — an over-the-shoulder is meant to be behind someone's head — but must
+   * be moved clear of anyone else.
+   */
+  subjects?: Actor[];
 }
 
 const v = (): THREE.Vector3 => new THREE.Vector3();
@@ -90,6 +96,7 @@ export function single(actor: Actor, opts: SingleOptions = {}): Shot {
       focus: eyes.clone(),
       fov: lensToFov(lens),
       bokeh: opts.bokeh ?? 3.4,
+      subjects: [actor],
     },
     opts.eyeline ?? 0.36
   );
@@ -128,11 +135,17 @@ export function overShoulder(
   const subjEyes = subject.getEyePosition(v());
   const dir = flatDir(fgEyes, subjEyes);
   const perp = perpendicular(dir).multiplyScalar(side);
+  // Floor on the pull-back. Closer than this and the foreground head stops being
+  // a shoulder that frames the subject and becomes an out-of-focus wall filling
+  // a third of the picture, which is what it was doing at 1.25m.
+  const distance = Math.max(2.1, opts.distance ?? 2.3);
+  // The lateral offset scales with the pull-back so the shoulder keeps the same
+  // share of the frame whatever distance a scene asks for.
   const position = fgEyes
     .clone()
-    .addScaledVector(dir, -(opts.distance ?? 1.9))
-    .addScaledVector(perp, 0.46);
-  position.y += opts.rise ?? 0.1;
+    .addScaledVector(dir, -distance)
+    .addScaledVector(perp, distance * 0.27);
+  position.y += opts.rise ?? 0.08;
   const shot = applyEyeline(
     {
       position,
@@ -140,6 +153,7 @@ export function overShoulder(
       focus: subjEyes.clone(),
       fov: lensToFov(lens),
       bokeh: opts.bokeh ?? 3.2,
+      subjects: [foreground, subject],
     },
     opts.eyeline ?? 0.33
   );
@@ -171,6 +185,7 @@ export function twoShot(
       focus: mid.clone(),
       fov: lensToFov(opts.lens ?? 40),
       bokeh: 1.2,
+      subjects: [a, b],
     },
     0.34
   );
@@ -216,6 +231,7 @@ export function lowAngle(
       focus: eyes.clone(),
       fov: lensToFov(opts.lens ?? 40),
       bokeh: 2.0,
+      subjects: [actor],
     },
     0.3
   );
@@ -228,6 +244,8 @@ export function insert(point: THREE.Vector3, from: THREE.Vector3, lens = 85): Sh
     target: point.clone(),
     focus: point.clone(),
     fov: lensToFov(lens),
-    bokeh: 5.5,
+    // Enough separation to say "detail" without dissolving the detail itself:
+    // at 5.5 the subject of the insert was the only thing not readable in it.
+    bokeh: 2.6,
   };
 }

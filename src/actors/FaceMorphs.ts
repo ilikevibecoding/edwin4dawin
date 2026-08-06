@@ -171,15 +171,20 @@ export function buildHairCap(
   const v = new THREE.Vector3();
   const selected = new Uint8Array(pos.count);
   const weight = new Float32Array(pos.count);
-  // Wide feather: the fade has to span several vertex rings or the alpha
-  // gradient collapses into the same faceted edge it was meant to hide.
-  const feather = 0.055;
+  // The feather has to span a few vertex rings so the alpha gradient does not
+  // collapse into the faceted edge it exists to hide, but no wider: a fade a
+  // quarter of the skull deep is not a hairline, it is a receding one.
+  const feather = 0.026;
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     const forward = Math.max(-1, Math.min(1, (v.z - eyeZ) / 0.09));
     // A little noise keeps the hairline from being a perfect contour line.
     const jitter = Math.sin(v.x * 210) * 0.0022 + Math.sin(v.z * 143 + 1.7) * 0.0016;
-    const threshold = eyeY + frontLift - napeDrop * (1 - (forward + 1) / 2) + jitter;
+    // The drop is weighted to the very back of the skull. Spreading it evenly
+    // front-to-back either leaves the occiput bare — which reads as a bald patch
+    // from behind — or swallows the ears when pushed far enough to cover it.
+    const back = Math.max(0, -forward);
+    const threshold = eyeY + frontLift - napeDrop * back * back + jitter;
     const t = (v.y - threshold + feather) / feather;
     if (t > 0) {
       selected[i] = 1;
@@ -217,7 +222,10 @@ export function buildHairCap(
     colors[i * 4] = 1;
     colors[i * 4 + 1] = 1;
     colors[i * 4 + 2] = 1;
-    colors[i * 4 + 3] = Math.min(1, weight[i] * 1.15);
+    // Alpha saturates well before the shell reaches full thickness. Tying it
+    // directly to the displacement leaves the whole scalp semi-transparent, and
+    // pale skin reading through dark hair is what makes a shell look shaved.
+    colors[i * 4 + 3] = Math.min(1, weight[i] * 2.6);
   }
   hairGeo.setAttribute('color', new THREE.BufferAttribute(colors, 4));
   hairGeo.setAttribute('position', new THREE.BufferAttribute(newPos, 3));

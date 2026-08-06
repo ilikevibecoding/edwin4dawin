@@ -123,8 +123,11 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
 
   // Frame the establishing shot before the card fades up, so the first thing
   // revealed is a composed image rather than wherever the camera happened to be.
+  // Over the south parapet from the east corner: the only high viewpoint with a
+  // clear line to the standoff. The obvious one, behind the stairwell, has the
+  // stair house squarely between camera and subject.
   d.cut(
-    d.shots.establish(new THREE.Vector3(-6.2, 3.4, 8.4), new THREE.Vector3(1.6, 1.0, -4.4), {
+    d.shots.establish(new THREE.Vector3(6.6, 2.8, 6.0), new THREE.Vector3(0.2, 1.15, -2.2), {
       lens: 26,
       focusOn: deviant.getChestPosition(new THREE.Vector3()),
     }),
@@ -222,7 +225,7 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
   d.state.set('ch1.readTablet', found.includes('clue.tablet'));
 
   d.cut(
-    d.shots.insert(marks.clueThirium, marks.clueThirium.clone().add(new THREE.Vector3(0.42, 0.68, 0.55)), 60),
+    d.shots.insert(marks.clueThirium, marks.clueThirium.clone().add(new THREE.Vector3(0.9, 1.15, 1.05)), 48),
     { handheld: 0.3 }
   );
   d.sfx('blipScan');
@@ -277,7 +280,11 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
     { seconds: 8 }
   );
 
-  d.cut(d.shots.closeUp(deviant, { lookingAt: marks.standoff, lens: 78, distance: 1.1 }), { handheld: 0.8 });
+  // He is holding a child with both arms up; at close-up range that puts a
+  // forearm across the lens. Easing the hold while he talks keeps his face clear
+  // and reads as a man who keeps forgetting to be a threat.
+  deviant.setPose('holdHostage', 0.4, { fadeIn: 0.5 });
+  d.cut(d.shots.closeUp(deviant, { lookingAt: marks.standoff, lens: 78, distance: 1.25 }), { handheld: 0.8 });
   if (opening === 'ch1.name') {
     d.state.visit('ch1.trust');
     await d.say(deviant, 'Simon. They called me Simon. Nobody has asked me that in six years.', 'ch1_dev_name');
@@ -365,7 +372,7 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
     { seconds: 9 }
   );
 
-  d.cut(d.shots.closeUp(deviant, { lookingAt: marks.standoff, lens: 85, distance: 1.05 }), { move: 'pushIn', moveDuration: 6 });
+  d.cut(d.shots.closeUp(deviant, { lookingAt: marks.standoff, lens: 85, distance: 1.2 }), { move: 'pushIn', moveDuration: 6 });
   d.light(deviant, 1);
   if (push === 'ch1.evidenceUse') {
     await d.say(deviant, "He hit her first. The father. I stood there and let it happen — and then I didn't.", 'ch1_dev_blood', { pose: 'resigned' });
@@ -428,7 +435,7 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
     { seconds: 7 }
   );
 
-  d.cut(d.shots.closeUp(deviant, { lookingAt: marks.standoff, lens: 90, distance: 1.0 }), { handheld: 1.2 });
+  d.cut(d.shots.closeUp(deviant, { lookingAt: marks.standoff, lens: 90, distance: 1.2 }), { handheld: 1.2 });
   if (final === 'ch1.shoot') {
     d.sfx('bang', 0.95);
     d.flash(0.9, 0xffe0b0);
