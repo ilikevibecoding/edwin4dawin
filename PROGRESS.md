@@ -113,9 +113,18 @@ Bugs the integration pass caught that the specialists had not:
   pixel-identical with `castShadow` toggled. Fixed and retuned for close range.
 - **A continuous sand berm walled in the pad**, breaking the requirement for an
   unobstructed view of the sky and horizon from the operating area.
-- **Aerial-perspective inversion.** With a 1400 m height falloff, flat desert at
-  12 km accumulated more optical depth than a 2 km ridge behind it, producing a
-  white band of ground in front of darker mountains.
+- **A white band on the horizon, from two unrelated causes.** Three different
+  diagnoses were offered for it and only two were right, which is worth recording:
+  a slab of the far terrain mesh was wound backwards, so it was back-face culled
+  and the sky dome's below-horizon tint showed through where ground should have
+  been; *and* the aerial-perspective scale height sat below the mountain crests,
+  so a 2 km ridge bought less optical depth than flat desert at the same range
+  and the plain hazed to pure inscatter while the ridges behind it stayed
+  contrasty. A third diagnosis — horizon bloom from the post chain — was wrong.
+  Fixing the winding and raising the scale height above the crests resolved it;
+  the near-ground `hazeStrength` multiplier was folded back into density, since
+  applying extra optical depth to flat ground and nothing else was the saturation
+  mechanism itself.
 - **Launch dust stayed fully lit at midnight** — smoke is drawn in a custom
   shader with no scene lights, so it needed an explicit ambient term.
 - **The DOM HUD covered the physical console** it was sitting on.
