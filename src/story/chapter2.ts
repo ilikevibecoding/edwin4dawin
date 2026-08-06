@@ -92,7 +92,10 @@ export async function playChapter2(d: Director, set: HouseholdSet, factory: Acto
 
   // The rooftop is on the television in this room. Whatever happened there is
   // already changing how the humans in this house look at the android in it.
-  d.cut(d.shots.insert(marks.tv.clone().add(new THREE.Vector3(0.55, 1.15, 0)), marks.tv.clone().add(new THREE.Vector3(2.5, 1.5, 0.5)), 52), {
+  // Framed off the set rather than down the barrel of the screen: the broadcast
+  // is emissive and unaffected by exposure, so a tight insert on it is a white
+  // rectangle. From here it reads as a lit television in a dark room.
+  d.cut(d.shots.insert(marks.tv.clone().add(new THREE.Vector3(0.55, 1.05, 0)), marks.tv.clone().add(new THREE.Vector3(3.5, 1.7, 1.5)), 38), {
     handheld: 0.4,
   });
   await d.say('NEWSCAST', 'The android has been described as deviant. Owners are advised to report any unit behaving outside its programming.', 'ch2_news_2', { hold: 5.6 });

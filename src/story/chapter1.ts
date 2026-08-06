@@ -463,7 +463,9 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
     { seconds: 7 }
   );
 
-  d.cut(d.shots.closeUp(deviant, { lookingAt: marks.standoff, lens: 90, distance: 1.2 }), { handheld: 1.2 });
+  // Wider than the beats before it. At 90mm and just over a metre his pale
+  // synthetic skin fills the frame and clips; there is nothing left to read.
+  d.cut(d.shots.closeUp(deviant, { lookingAt: marks.standoff, lens: 68, distance: 1.95 }), { handheld: 1.2 });
   if (final === 'ch1.shoot') {
     d.sfx('bang', 0.95);
     d.flash(0.9, 0xffe0b0);

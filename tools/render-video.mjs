@@ -56,8 +56,28 @@ await page.waitForFunction('window.__ready === true', { timeout: 600000 });
  * game is re-simulated up to this point without drawing, which costs seconds
  * rather than hours, and capture continues from there.
  */
+/**
+ * Patch mode: re-render one shot rather than the whole film.
+ *
+ * A single mis-framed cut is a couple of seconds of a ten-minute capture, and
+ * re-rendering the rest of the film to fix it costs hours. Because the
+ * simulation is reproducible and a fast-forward lands in exactly the same place
+ * as playback, a range of frames can be re-rendered on its own and dropped over
+ * the originals — as long as the change is to framing and not to timing, which
+ * would desynchronise everything after it.
+ *
+ *   node tools/render-video.mjs --patch --start 4290 --frames 4420 \
+ *     --frames-dir .render/patch --no-encode
+ */
+const patch = argv.includes('--patch');
 let frame = START;
-if (!argv.includes('--no-resume')) {
+if (patch) {
+  console.log(`patching frames ${START}..${MAX_FRAMES}; fast-forwarding`);
+  for (let done = 0; done < START; done += 240) {
+    await page.evaluate(async (n) => { await window.__skip(n); }, Math.min(240, START - done));
+  }
+  console.log('caught up');
+} else if (!argv.includes('--no-resume')) {
   const existing = fs
     .readdirSync(FRAME_DIR)
     .filter((f) => /^f\d{6}\.jpg$/.test(f))
@@ -108,12 +128,15 @@ while (frame < MAX_FRAMES && !finished) {
   }
 }
 
-const cues = await page.evaluate(() => window.__cues());
-fs.writeFileSync('.render/cues.json', JSON.stringify(cues, null, 1));
+if (!patch) {
+  const cues = await page.evaluate(() => window.__cues());
+  fs.writeFileSync('.render/cues.json', JSON.stringify(cues, null, 1));
+}
 await browser.close();
 
 const seconds = frame / FPS;
 console.log(`captured ${frame} frames (${seconds.toFixed(1)}s of story)`);
+if (patch || argv.includes('--no-encode')) process.exit(0);
 
 // Soundtrack, mixed to the same timeline the cues were recorded on.
 execFileSync('node', ['tools/mix-audio.mjs', '--cues', '.render/cues.json', '--out', '.render/track.wav', '--duration', String(seconds)], {
@@ -135,9 +158,15 @@ execFileSync(
     '-c:v',
     'libx264',
     '-preset',
-    'slow',
+    'medium',
+    // Heavy film grain is close to incompressible: at CRF 19 a ten-minute 540p
+    // cut came out at 672 MB, almost all of it spent encoding noise. 26 with a
+    // stronger psychovisual weighting keeps the grain reading without paying
+    // full price for every frame of it.
     '-crf',
-    '19',
+    '26',
+    '-x264-params',
+    'aq-mode=3:psy-rd=1.0,0.15',
     '-pix_fmt',
     'yuv420p',
     '-c:a',
