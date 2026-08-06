@@ -1353,11 +1353,12 @@ function drawHoloRuler(surface, bands) {
     ctx.fillText(String(Math.round((f * HOLO_CEILING) / 1000)), axis - w * 0.25, y);
   }
 
+  // One line, clear of the ceiling tick: stacked over two rows it landed on
+  // the 30 numeral and the pair read as a single smudge.
   setFont(ctx, 30, '700', MONO, 2);
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(178, 244, 228, 0.9)';
-  ctx.fillText('KM', axis - w * 0.16, y0 - span - 34);
-  ctx.fillText('ALT', axis - w * 0.16, y0 - span - 2);
+  ctx.fillText('KM ALT', axis - w * 0.14, y0 - span - 30);
   surface.commit();
 }
 
@@ -2164,7 +2165,6 @@ export class ConsoleRig {
     this.scopeTick = 0;
     this.pulse = 0;
     this.applyButtonState();
-    if (typeof window !== 'undefined') window.__RIG = this;
   }
 
   /** Keep canvas surfaces referenced so their textures stay alive. */
@@ -2240,7 +2240,6 @@ export class ConsoleRig {
   }
 
   update(dt, radar, camera, opts) {
-    if (typeof window !== 'undefined') window.__CAM = camera;
     // Screens redraw on a slow cadence, but any change to what they show forces
     // an immediate repaint so a fast-forwarded frame is never stale.
     this.scopeTick += dt;
