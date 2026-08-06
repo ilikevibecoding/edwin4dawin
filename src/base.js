@@ -572,6 +572,16 @@ function slabGeometry(cx, cz, w, d, yaw, uvScale, chamfer = 1.6) {
   return g;
 }
 
+/**
+ * Sandbag coursing for the emplacement revetments. Bags are 0.88 m long and
+ * 0.36 m deep, so a 0.58 m pitch and a 0.19 m rise still overlap in both
+ * directions; six courses put the crest at chest height on 1.9 m eyes.
+ */
+const BAG_PITCH = 0.58;
+const BAG_RISE = 0.19;
+const BAG_BASE = 0.1;
+const BAG_DEPTH = 0.18;
+
 /** Battery hardstand slabs, each big enough to hold its pair of vehicles. */
 const HARDSTANDS = [
   { pos: [-64, 3], size: [36, 68], yaw: 0.03 },
@@ -3484,11 +3494,14 @@ export class Base {
     // the middle of all four runs. The gap on the flank facing the pad is the
     // lane crews walk in on; the end gaps are wide enough to drive a launcher
     // through. Every run is sized from the hardstand it belongs to and the
-    // instance budget is counted from that, because one shared cap spent the
-    // whole allowance on the first emplacement and left the others bare.
+    // instance count follows from that, because one shared cap spent the whole
+    // allowance on the first emplacement and left the others bare.
+    //
+    // The walls cast, so every bag is drawn twice and the count is the largest
+    // single line in the site's triangle budget. Coursing is what pays for the
+    // height rather than a denser bag.
     const bagGeo = new THREE.SphereGeometry(0.3, 6, 4);
     bagGeo.scale(1.46, 0.6, 0.94);
-    const BAG_PITCH = 0.52;
     const bagRng = rng.fork('bags');
     const revetments = [];
     for (const hs of HARDSTANDS) {
@@ -3507,7 +3520,7 @@ export class Base {
             dir: along,
             yaw: dirYaw,
             len: runAxis * 0.4,
-            courses: 5,
+            courses: 6,
           });
           // End return: kept low so it does not fence in the drive-through.
           revetments.push({
@@ -3516,7 +3529,7 @@ export class Base {
             dir: out,
             yaw: dirYaw + Math.PI / 2,
             len: half * 0.36,
-            courses: 3,
+            courses: 4,
           });
         }
       }
@@ -3532,7 +3545,7 @@ export class Base {
         const n = rowCount(rev, row);
         for (let i = 0; i < n; i++) {
           const t = (i / (n - 1) - 0.5) * rowLen * 2 + (row % 2 ? 0.16 : 0);
-          const y = 0.1 + row * 0.17 + bagRng.range(-0.015, 0.015);
+          const y = BAG_BASE + row * BAG_RISE + bagRng.range(-0.015, 0.015);
           q.setFromEuler(
             new THREE.Euler(bagRng.range(-0.05, 0.05), rev.yaw + Math.PI / 2 + bagRng.range(-0.09, 0.09), bagRng.range(-0.05, 0.05))
           );
@@ -3846,7 +3859,7 @@ export class Base {
     }
     // sandbag revetment walls ringing each hardstand
     for (const rev of this.revetments || []) {
-      const top = 0.28 + (rev.courses - 1) * 0.17;
+      const top = BAG_BASE + BAG_DEPTH + (rev.courses - 1) * BAG_RISE;
       world.addBox(new THREE.Vector3(rev.cx, top / 2, rev.cz), new THREE.Vector3(0.55, top / 2, rev.len + 0.3), rev.yaw, {
         walkable: false,
       });
