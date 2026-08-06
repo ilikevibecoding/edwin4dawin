@@ -5,6 +5,7 @@
  */
 import type { Engine } from '../app/engine';
 import { UI } from './ui';
+import * as Tex from '../engine/textures';
 import { Director, type GameState } from './director';
 import { CHAPTERS } from './story';
 import type { Chapter } from './script';
@@ -54,7 +55,7 @@ export class Game {
     txt.textContent = 'GENERATING MATERIALS';
     fill.style.width = '35%';
     await frame();
-    const { asphalt, concrete, brick, stoneTile, metal, wood } = await import('../engine/textures');
+    const { asphalt, concrete, brick, stoneTile, metal, wood } = Tex;
     asphalt(512); concrete(512); brick(512); stoneTile(512); metal(512); wood(512);
     fill.style.width = '70%';
     txt.textContent = 'COMPILING SHADERS';

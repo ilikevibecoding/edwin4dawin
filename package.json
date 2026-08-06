@@ -10,7 +10,8 @@
     "preview": "vite preview --port 4173 --strictPort",
     "typecheck": "tsc --noEmit",
     "shoot": "node scripts/shoot.mjs",
-    "film": "node scripts/film.mjs"
+    "film": "node scripts/film.mjs",
+    "build:single": "vite build --config vite.single.config.ts"
   },
   "devDependencies": {
     "@types/three": "^0.185.4",

@@ -1,4 +1,7 @@
 import { Engine } from './app/engine';
+import { runHeads } from './dev/heads';
+import { runPortrait } from './dev/portrait';
+import { Game } from './game/game';
 import type { QualityName } from './engine/quality';
 
 const params = new URLSearchParams(location.search);
@@ -38,7 +41,6 @@ async function boot(): Promise<void> {
 
   if (dev === 'heads') {
     document.getElementById('menu')?.classList.add('hidden');
-    const { runHeads } = await import('./dev/heads');
     const set = runHeads(engine, params);
     engine.setSet(set);
     if (params.get('stage')) engine.fx.debugStage = Number(params.get('stage'));
@@ -51,7 +53,6 @@ async function boot(): Promise<void> {
 
   if (dev === 'portrait') {
     document.getElementById('menu')?.classList.add('hidden');
-    const { runPortrait } = await import('./dev/portrait');
     const set = runPortrait(engine, params);
     engine.setSet(set);
     engine.warm(Number(params.get('warm') ?? 3.5));
@@ -61,7 +62,6 @@ async function boot(): Promise<void> {
     return;
   }
 
-  const { Game } = await import('./game/game');
   const game = new Game(engine, params);
   (window as unknown as { __game: unknown }).__game = game;
   await game.boot();
