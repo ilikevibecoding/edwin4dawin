@@ -333,9 +333,10 @@ window.addEventListener('keydown', (e) => {
       else if (game.mode === 'console') exitConsole();
       break;
     case 'Tab':
+      // works from anywhere: the camera flies to the console seat and the
+      // player's outdoor position is restored on exit (walk-up + E still works)
       if (game.mode === 'console') exitConsole();
-      else if (game.nearConsole || game.phase === 'active' || game.phase === 'debrief') enterConsole();
-      else ctx.ui.toast('FIRE DIRECTION CONSOLE IS IN THE C2 SHELTER (FOLLOW THE LIT DOOR)', 'info', 4);
+      else enterConsole();
       break;
     case 'KeyE':
       if (game.mode === 'console') { exitConsole(); break; }

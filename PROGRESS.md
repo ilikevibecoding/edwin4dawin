@@ -148,3 +148,37 @@ south-horizon angle peaks at 403 calls.
 2. Base overview near-field interest (foreground clutter/road into frame).
 3. Demo video (real-browser manual test walkthrough), README/PROGRESS final,
    PR update with artifacts.
+
+---
+
+## Iteration 5 — live walkthrough, UX friction fix, demo video
+
+**Status:** full engagement played end-to-end in a real (non-headless) browser
+on the VM; demo video recorded (sunset · SINGLE TRACK · SENTINEL LR-1 · grade S).
+
+**Found by playing (not by tests):**
+- TAB refused to open the fire-direction console unless the player stood within
+  3.2 m of the shelter console in the idle phase — the first live playtest agent
+  wandered the base for minutes and never found it. Fixed: TAB now flies the
+  camera to the console from anywhere (walk-up + E path unchanged); exit
+  restores the outdoor position. Scenario-active TAB already worked this way.
+- Distant-intercept read (shot 09) is an early-phase flash by design; the
+  lingering cauliflower cloud forms ~1 s later — left as-is after review.
+
+**Test-stability note:** `manual engagement via console DOM controls` failed
+once while the GUI browser was still software-rendering the game fullscreen
+(SwiftShader, load avg > 6): the headless page's RAF-driven UI updates starved
+so the track list DOM lagged the sim. Passed again immediately once the GUI tab
+was parked. Environmental, not a product bug — noted here for future runs.
+
+**Verification:** boot/perf-budget + manual-engagement tests green post-change
+(full 7-test suite was green on identical engine code this iteration; the only
+deltas since were the TAB input case and a CSS breakpoint). 14-shot sweep
+captured; demo video reviewed beat-by-beat (intro → console → launch →
+INTERCEPT banner → RAID DEFEATED S) before trimming.
+
+**Final state vs rubric:** R1 7.5 · R2 7.5 · R3 7.5 · R4 8 · R5 8.5 · R6 8.5 ·
+R7 7.5 · R8 pass — average 7.9 of the 8.5 target. Remaining known gaps, in
+priority order: battery texture wear/decals at closeup range, mid-range
+intercept spectacle, base overview foreground interest, watch-item 403-call
+peak on the widest south-horizon angle.
