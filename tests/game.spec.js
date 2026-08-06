@@ -150,6 +150,27 @@ test.describe('battery mechanics', () => {
   });
 });
 
+test.describe('player collision', () => {
+  test('walking into a T-wall stops the player', async ({ page }) => {
+    await boot(page, { seed: '7' });
+    // approach the motor-pool T-wall row (x≈-22.6) from the open west side,
+    // walking +X; the wall face is at x≈-23.18
+    await page.evaluate(() => {
+      window.__game.walkTo(-28, -62, -Math.PI / 2, 0);
+      window.__game.setTestDrive(true);
+    });
+    await page.keyboard.down('KeyW');
+    await adv(page, 3); // 3 s of walking ≈ 10 m without obstruction
+    await page.keyboard.up('KeyW');
+    await page.evaluate(() => window.__game.setTestDrive(false));
+    const pos = await page.evaluate(() => window.__game.playerPos());
+    console.log('player stopped at', JSON.stringify(pos));
+    expect(pos[0]).toBeGreaterThan(-25.5); // input worked — moved forward
+    expect(pos[0]).toBeLessThan(-23.3);    // blocked by the wall face
+    expect(Math.abs(pos[1])).toBeLessThan(0.5); // still on the ground
+  });
+});
+
 test.describe('console', () => {
   test('console opens with scenario controls and track list', async ({ page }) => {
     await boot(page, { seed: '7' });

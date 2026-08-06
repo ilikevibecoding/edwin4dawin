@@ -126,6 +126,12 @@ export class Interceptors {
 
   get active() { return this.pool.filter(m => m.active); }
 
+  /** any missile low enough to cast a visible moving shadow near the base */
+  get anyLow() {
+    for (const m of this.pool) if (m.active && m.pos.y < 500) return true;
+    return false;
+  }
+
   /**
    * Fire from a battery muzzle against a radar track.
    * Kill probability is a fictional gameplay abstraction: geometry inside the

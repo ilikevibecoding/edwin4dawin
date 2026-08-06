@@ -14,7 +14,7 @@ const GradeShader = {
     uTime: { value: 0 },
     uVignette: { value: 0.30 },
     uGrain: { value: 0.035 },
-    uAberration: { value: 0.00038 },
+    uAberration: { value: 0.00026 },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -103,7 +103,7 @@ export class Post {
     this.bloom.radius = q >= 2 ? 0.5 : 0.42;
     this.bloom.threshold = q >= 2 ? 0.8 : 0.86;
     this.grade.uniforms.uGrain.value = q >= 1 ? 0.035 : 0;
-    this.grade.uniforms.uAberration.value = q >= 2 ? 0.00038 : 0;
+    this.grade.uniforms.uAberration.value = q >= 2 ? 0.00026 : 0;
     this.fxaa.enabled = q >= 1;
   }
 

@@ -293,7 +293,9 @@ ui.init({
 player.reducedMotion = ui.initialSettings.reduced;
 audio.setMuted(ui.initialSettings.mute || params.get('mute') === '1');
 
+let currentQuality = 2;
 function setQuality(q) {
+  currentQuality = q;
   post?.setQuality(q);
   renderer.setPixelRatio(q >= 2 ? Math.min(window.devicePixelRatio, 1.75) : (q === 1 ? 1 : 0.85));
   renderer.shadowMap.enabled = q >= 1;
@@ -471,6 +473,25 @@ function syncUI(dt, force = false) {
     : '<b>TAB</b> console · <b>E</b> assign · <b>F</b> authorize · <b>1·2·3</b> battery · <b>H</b> help');
 }
 
+// ------------------------------------------------- adaptive quality scaler
+// If a real GPU can't hold ~60 fps, step quality down rather than stutter.
+let autoScaleAccum = 0;
+function autoScaleQuality(dt) {
+  if (TEST_MODE || document.hidden) return;
+  const f = fpsStats();
+  if (fpsCount < 60) return;
+  if (f.fps < 45 && currentQuality > 0) {
+    autoScaleAccum += dt;
+    if (autoScaleAccum > 4) {
+      autoScaleAccum = 0;
+      setQuality(currentQuality - 1);
+      ui.log(`AUTO QUALITY → ${['LOW', 'MEDIUM', 'HIGH'][currentQuality]}`, 'warn');
+    }
+  } else {
+    autoScaleAccum = Math.max(0, autoScaleAccum - dt);
+  }
+}
+
 // --------------------------------------------------------------- perf HUD
 let perfVisible = false;
 const fpsSamples = new Float32Array(90);
@@ -521,6 +542,22 @@ let acc = 0;
 let firstFrame = true;
 renderer.info.autoReset = false;
 
+// Shadow cadence: the scene is mostly static, so re-render the (single) shadow
+// map at 20 Hz for ambient motion (radar spin, windsock) and at full rate only
+// while something actually moves through the shadow frustum. Tests keep
+// autoUpdate so deterministic stepping always sees fresh shadows.
+let shadowTimer = 0;
+if (!TEST_MODE) renderer.shadowMap.autoUpdate = false;
+function updateShadowCadence(dt) {
+  if (TEST_MODE) return;
+  shadowTimer -= dt;
+  const hot = weather.blending || batteries.anyMoving || interceptors.anyLow || threats.anyLow;
+  if (hot || shadowTimer <= 0) {
+    renderer.shadowMap.needsUpdate = true;
+    shadowTimer = hot ? 0 : 0.05;
+  }
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
   // first RAF timestamp can predate module evaluation — never trust it
@@ -538,6 +575,8 @@ function frame(now) {
 
   updateAim();
   syncUI(dt);
+  autoScaleQuality(dt);
+  updateShadowCadence(dt);
 
   if (perfVisible) {
     const f = fpsStats();
@@ -644,7 +683,20 @@ window.__game = {
   openConsole, closeConsole,
   setView,
   clearView: () => { game.freeCam = false; player.enabled = !game.consoleMode; },
+  /** teleport the walking player (eye-level testing without pointer lock) */
+  walkTo(x, z, yaw = 0, pitch = 0) {
+    game.freeCam = false;
+    player.enabled = true;
+    player.pos.set(x, base.groundHeight(x, z), z);
+    player.vel.set(0, 0, 0);
+    player.yaw = yaw;
+    player.pitch = pitch;
+    player.update(1 / 120);
+  },
   lookAt: lookAtWorld,
+  /** let tests drive WASD without pointer lock */
+  setTestDrive: (v) => { player.testDrive = v; },
+  playerPos: () => player.pos.toArray().map(v => +v.toFixed(2)),
   views: Object.keys(VIEWS),
   setQuality,
   setReducedMotion: (v) => { player.reducedMotion = v; },

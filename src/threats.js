@@ -181,6 +181,12 @@ export class Threats {
 
   get active() { return this.pool.filter(t => t.active); }
 
+  /** any threat low enough to cast a moving shadow near the base */
+  get anyLow() {
+    for (const t of this.pool) if (t.active && t.pos.y < 500) return true;
+    return false;
+  }
+
   /** build a randomized-but-deterministic spawn plan for a scenario */
   startScenario(scenarioId) {
     const sc = SCENARIOS[scenarioId];

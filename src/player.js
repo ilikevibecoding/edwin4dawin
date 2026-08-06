@@ -137,7 +137,7 @@ export class Player {
     _fwd.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     _right.set(-_fwd.z, 0, _fwd.x);
     _wish.set(0, 0, 0);
-    if (this.locked) {
+    if (this.locked || this.testDrive) {
       if (this.keys.has('KeyW')) _wish.add(_fwd);
       if (this.keys.has('KeyS')) _wish.sub(_fwd);
       if (this.keys.has('KeyD')) _wish.add(_right);

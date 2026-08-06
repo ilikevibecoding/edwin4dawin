@@ -393,6 +393,15 @@ export class Batteries {
 
   get(id) { return this.map.get(id); }
 
+  /** true while any launcher is visibly slewing/elevating (shadow cadence) */
+  get anyMoving() {
+    for (const b of this.list) {
+      if (Math.abs(wrapPI(b.currentYaw - b.targetYaw)) > 0.01) return true;
+      if (Math.abs(b.currentElev - b.targetElev) > 0.01) return true;
+    }
+    return false;
+  }
+
   resetAll() {
     for (const b of this.list) {
       b.state = BSTATE.READY;

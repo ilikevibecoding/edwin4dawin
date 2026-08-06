@@ -416,6 +416,9 @@ export class Weather {
 
   isNight() { return this.tod === 'night'; }
 
+  /** true while lighting is still blending toward the target preset */
+  get blending() { return this._blend < 1; }
+
   /** re-bake the PMREM environment map from the current sky */
   updateEnvironment() {
     const rt = this.pmrem.fromScene(this._envScene, 0.04, 10, 20000);

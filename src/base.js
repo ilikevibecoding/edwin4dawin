@@ -93,9 +93,14 @@ export class Base {
         const h = terrainHeight(x, z);
         verts.push(x, h, z);
         uvs.push(x / 26, z / 26);
-        // color by height + noise patchiness
+        // color by height + noise patchiness. Three octaves of vertex mottle:
+        // texture mips flatten past a few hundred metres, so geometry-based
+        // variation is what keeps mid/far dirt from reading as flat paint.
         const patch = fbm2(x * 0.0012 + 9, z * 0.0012, 3) * 0.5 + 0.5;
-        c.copy(sand).lerp(sandLight, patch * 0.7);
+        c.copy(sand).lerp(sandLight, patch * 0.85);
+        const mid = fbm2(x * 0.003 + 31, z * 0.003, 2);
+        const mottle = fbm2(x * 0.017 + 3.7, z * 0.017, 2);
+        c.multiplyScalar(1 + mid * 0.16 + mottle * 0.12);
         if (h > 40) c.lerp(rock, smoothstep(40, 320, h));
         if (h > 600) c.lerp(rockHigh, smoothstep(600, 1500, h));
         // mute the far rim (beyond the mountain ring) so low sunlit sand does
@@ -121,6 +126,25 @@ export class Base {
     const mat = new THREE.MeshStandardMaterial({
       map: sandTexture([1, 1]), vertexColors: true, roughness: 0.97, metalness: 0,
     });
+    // Multi-scale albedo: macro luminance mottle (breaks up mid/far flatness)
+    // plus a near-field detail octave that fades out past ~90 m.
+    mat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vTerrWorld;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTerrWorld = (modelMatrix * vec4(position, 1.0)).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vTerrWorld;')
+        .replace('#include <map_fragment>', /* glsl */`
+          vec4 sandA = texture2D( map, vMapUv );
+          // zero-centered luminance deltas (linear-space mean of the sand map ~0.26)
+          float macro = dot(texture2D( map, vMapUv * 0.061 + vec2(0.37, 0.19) ).rgb, vec3(0.3333)) - 0.26;
+          float dCam = distance(vTerrWorld, cameraPosition);
+          float nearK = 1.0 - smoothstep(18.0, 95.0, dCam);
+          float det = dot(texture2D( map, vMapUv * 4.7 + vec2(0.13, 0.53) ).rgb, vec3(0.3333)) - 0.26;
+          vec3 sandMix = sandA.rgb * clamp(1.0 + macro * 2.1 + det * nearK * 1.5, 0.55, 1.55);
+          diffuseColor *= vec4(sandMix, sandA.a);
+        `);
+    };
     const terrain = new THREE.Mesh(geo, mat);
     terrain.receiveShadow = true;
     terrain.name = 'terrain';
@@ -244,6 +268,27 @@ export class Base {
       scrub.setMatrixAt(i, m);
     }
     this.group.add(scrub);
+
+    // disturbed-ground patches on the dirt inside the perimeter (graded but
+    // not uniform: darker compacted areas, blade marks, dust splays)
+    const patchGeo = new THREE.PlaneGeometry(1, 1);
+    patchGeo.rotateX(-Math.PI / 2);
+    const patchMat = new THREE.MeshBasicMaterial({
+      map: stainTexture(), transparent: true, opacity: 0.42, depthWrite: false,
+      color: 0x5d5140, polygonOffset: true, polygonOffsetFactor: -1,
+    });
+    const patches = new THREE.InstancedMesh(patchGeo, patchMat, 54);
+    for (let i = 0; i < 54; i++) {
+      const aa = rng.range(0, Math.PI * 2);
+      const rr = 55 + 175 * Math.pow(rng.next(), 0.8);
+      p.set(Math.cos(aa) * rr, 0.045, Math.sin(aa) * rr);
+      q.setFromEuler(e.set(0, rng.range(0, Math.PI * 2), 0));
+      const sc = rng.range(7, 24);
+      s.set(sc, 1, sc * rng.range(0.5, 1));
+      m.compose(p, q, s);
+      patches.setMatrixAt(i, m);
+    }
+    this.group.add(patches);
   }
 
   // ------------------------------------------------------- pads + roads --
@@ -1590,7 +1635,8 @@ export class Base {
     const mkSign = (text, x, z, yaw, w = 2.6, h = 0.8, bg = '#8a2e26') => {
       const board = new THREE.Mesh(
         new THREE.PlaneGeometry(w, h),
-        new THREE.MeshBasicMaterial({ map: stencilTexture(text, { w: 512, h: 128, size: 44, color: '#f0ead8', bg }) }),
+        // lit material: painted sign, not a glowing panel
+        new THREE.MeshStandardMaterial({ map: stencilTexture(text, { w: 512, h: 128, size: 44, color: '#e7e0cc', bg }), roughness: 0.92, metalness: 0, side: THREE.DoubleSide }),
       );
       board.position.set(x, 1.35, z);
       board.rotation.y = yaw;
