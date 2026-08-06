@@ -147,7 +147,13 @@ const TIERS: Record<TierName, QualitySettings> = {
   // extra forty-five minutes of wall time.
   video: {
     name: 'video',
-    renderScale: 1,
+    // Measured, not guessed: frame cost on the software rasteriser is almost
+    // purely fill-rate bound, and nothing else came close as a lever — dropping
+    // shadows saved 9%, dropping wet-floor reflections 7%, dropping the rain
+    // nothing measurable, while rendering at 0.8 and letting the compositor scale
+    // to the capture size saved 31%. At 540p under this much grain and rain the
+    // softness costs less than the four hours it buys back.
+    renderScale: 0.8,
     maxPixelRatio: 1,
     shadows: true,
     shadowMapSize: 1024,
