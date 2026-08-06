@@ -332,19 +332,22 @@ export class UI {
     hud.appendChild(seq);
     this.sequence = seq;
 
+    // The sequence rail above already carries T / E / F, so this row only lists
+    // the keys it does not cover. `assign` and `authorize` stay in the map
+    // (detached) because the update pass still reflects their availability.
     const actions = el('div');
     actions.id = 'actions';
     this.actionNodes = {};
-    for (const [key, html] of [
-      ['assign', '<b>E</b> ASSIGN'],
-      ['authorize', '<b>F</b> AUTHORIZE LAUNCH'],
-      ['track', '<b>T</b> NEXT TRACK'],
-      ['battery', '<b>B</b> NEXT BATTERY'],
-      ['console', '<b>TAB</b> CONSOLE'],
-      ['restart', '<b>R</b> RESTART'],
+    for (const [key, html, attach] of [
+      ['assign', '<b>E</b> ASSIGN', false],
+      ['authorize', '<b>F</b> AUTHORIZE LAUNCH', false],
+      ['battery', '<b>B</b> NEXT BATTERY', true],
+      ['console', '<b>TAB</b> CONSOLE', true],
+      ['restart', '<b>R</b> RESTART', true],
+      ['mute', '<b>M</b> MUTE', true],
     ]) {
       const a = el('div', 'act', html);
-      actions.appendChild(a);
+      if (attach) actions.appendChild(a);
       this.actionNodes[key] = a;
     }
     hud.appendChild(actions);

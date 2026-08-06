@@ -27,6 +27,7 @@ const SEED = Number(params.get('seed') || 20260805);
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS = 5;
+const _solveVec = new THREE.Vector3();
 
 class Game {
   constructor() {
@@ -404,6 +405,7 @@ class Game {
     for (const b of this.batteries) {
       b.ammo = b.spec.ammo;
       b.loaded = b.spec.tubes;
+      b.autoTarget = null;
       b.status = 'READY';
       b.armed = false;
       b.prepTimer = 0;
@@ -445,6 +447,13 @@ class Game {
       this.ui.log(`<b>${b.spec.name}</b> is reloading - ${b.reloadTimer.toFixed(0)}s.`, 'warn');
       return false;
     }
+    const sol = this._solveEngagement(b, tr.threat);
+    if (!sol.ok) {
+      this.audio.deny();
+      this.ui.log(`<b>${b.spec.name}</b> cannot engage <b>${tr.id}</b>: ${sol.reason}. Try another battery <b>[B]</b>.`, 'bad');
+      this.ui.caption(`${b.spec.name} has no window on ${tr.id}`);
+      return false;
+    }
     this.assignedTrack = tr;
     this.assignedBattery = b;
     tr.threat.assignedTo = b;
@@ -452,7 +461,10 @@ class Game {
     b.aimAt(this._leadPoint(b, tr.threat) || tr.threat.pos);
     this.audio.confirm();
     this.audio.servo(b.group.position, 1.2);
-    this.ui.log(`<b>${b.spec.name}</b> assigned to <b>${tr.id}</b>. Launcher slewing.`, 'info');
+    this.ui.log(`<b>${b.spec.name}</b> assigned to <b>${tr.id}</b>. Launcher slewing. Predicted intercept ${(sol.altitude / 1000).toFixed(0)} km in ${sol.flightTime.toFixed(0)}s.`, 'info');
+    if (sol.quality === 'MARGINAL') {
+      this.ui.log(`Window is <b>MARGINAL</b>: ${sol.reason}.`, 'warn');
+    }
     this.ui.caption(`${b.spec.name} assigned to ${tr.id}`);
     return true;
   }
@@ -497,53 +509,124 @@ class Game {
   }
 
   /**
-   * Estimate the altitude at which a given battery would meet a threat, used to
-   * pick a sensible battery. Deliberately crude - it is a gameplay heuristic.
+   * Work out whether a battery has a usable engagement window against a threat,
+   * and where the meeting point would be. This is a deliberately simplified
+   * gameplay abstraction, not a fire-control solution: it iterates a
+   * constant-velocity target against an average round speed a few times and
+   * then compares the result with the battery's fictional preferred band.
+   *
+   * @returns {{ok:boolean, reason:string, quality:string, altitude:number,
+   *            flightTime:number, timeToImpact:number, point:THREE.Vector3}}
    */
-  _predictInterceptAltitude(battery, threat) {
+  _solveEngagement(battery, threat) {
     const spec = INTERCEPTOR_SPECS[battery.spec.interceptor];
-    const d = battery.group.position.distanceTo(threat.pos);
-    const t = d / (spec.maxSpeed * 0.55);
-    return Math.max(0, threat.pos.y + threat.vel.y * t);
+    // average speed over the whole flight, well below the peak: the round starts
+    // from rest, loses energy to drag in the dense lower air and coasts at the end
+    const avgSpeed = spec.maxSpeed * 0.42;
+    const from = battery.group.position;
+    let t = from.distanceTo(threat.pos) / avgSpeed;
+    const point = _solveVec;
+    for (let i = 0; i < 4; i++) {
+      point.copy(threat.vel).multiplyScalar(t).add(threat.pos);
+      t = from.distanceTo(point) / avgSpeed;
+    }
+    // add the time the launcher still needs before the round can leave the tube
+    const readyDelay = battery.status === 'PREPARING' ? battery.prepTimer
+      : battery.status === 'RELOADING' ? battery.reloadTimer : 0;
+    const flightTime = t + readyDelay;
+    point.copy(threat.vel).multiplyScalar(flightTime).add(threat.pos);
+    const altitude = point.y;
+
+    const vy = -threat.vel.y;
+    const g = 9.81;
+    const disc = vy * vy + 2 * g * Math.max(0, threat.pos.y);
+    const timeToImpact = disc > 0 ? (-vy + Math.sqrt(disc)) / g : 0;
+
+    const [lo, hi] = battery.spec.idealAltitude;
+    let ok = true;
+    let reason = '';
+    let quality = 'OPTIMAL';
+    if (battery.ammo <= 0) {
+      ok = false;
+      reason = 'NO ROUNDS REMAINING';
+    } else if (flightTime > timeToImpact - 3.0) {
+      ok = false;
+      reason = 'NO WINDOW - TARGET IMPACTS BEFORE THE ROUND ARRIVES';
+    } else if (altitude < 1200) {
+      ok = false;
+      reason = 'MEETING POINT TOO LOW - TARGET IS ALREADY IN ITS TERMINAL DIVE';
+    } else if (altitude < lo * 0.35) {
+      ok = false;
+      reason = 'TARGET WILL BE BELOW THIS BATTERY\'S FLOOR';
+    } else if (altitude > hi * 1.6) {
+      ok = false;
+      reason = 'TARGET WILL BE ABOVE THIS BATTERY\'S CEILING';
+    } else if (from.distanceTo(point) > spec.reach) {
+      ok = false;
+      reason = 'TARGET BEYOND THIS BATTERY\'S REACH';
+    } else if (altitude < lo || altitude > hi) {
+      quality = 'MARGINAL';
+      reason = `INTERCEPT AT ${(altitude / 1000).toFixed(0)} KM IS OUTSIDE THE OPTIMUM BAND`;
+    }
+    return { ok, reason, quality, altitude, flightTime, timeToImpact, point };
   }
 
   /**
-   * One decision tick of the demonstration autopilot. Used by the headless
-   * tests to play the game, and available in-game as an assist.
+   * One decision tick of the demonstration autopilot. Every battery works its
+   * own engagement, so a saturation raid is met by all three at once instead of
+   * one at a time. Used by the headless tests to play the game.
    * @returns {string} what it decided to do
    */
   autoPilot() {
-    // finish an existing engagement first
-    if (this.assignedBattery && this.assignedTrack && this.assignedTrack.threat.alive) {
-      const b = this.assignedBattery;
-      if (this.assignedTrack.threat.engagedBy) {
-        // one round per assignment - release and look for the next threat
-        this.assignedTrack = null;
+    const acts = [];
+
+    // retire finished engagements
+    for (const b of this.batteries) {
+      const t = b.autoTarget;
+      if (!t) continue;
+      if (!t.threat.alive || t.threat.engagedBy || b.status === 'EMPTY') {
+        b.autoTarget = null;
+        if (b === this.assignedBattery) {
+          this.assignedBattery = null;
+          this.assignedTrack = null;
+        }
         b.stow();
-        this.assignedBattery = null;
-        return 'ENGAGED';
+        acts.push('RELEASE');
       }
-      if (b.canFire && b.aimError < 0.14) {
-        return this.authorize() ? 'FIRE' : 'FIRE_FAILED';
-      }
-      return b.status === 'PREPARING' ? 'PREPARING' : 'SLEWING';
     }
+
+    // fire the batteries that are ready and on target
+    for (const b of this.batteries) {
+      if (!b.autoTarget) continue;
+      if (b.canFire && b.aimError < 0.16) {
+        this.assignedBattery = b;
+        this.assignedTrack = b.autoTarget;
+        if (this.authorize()) {
+          b.autoTarget = null;
+          acts.push('FIRE');
+        } else {
+          acts.push('FIRE_FAILED');
+        }
+      } else {
+        b.aimAt(this._leadPoint(b, b.autoTarget.threat));
+        acts.push(b.status === 'PREPARING' ? 'PREPARING' : 'SLEWING');
+      }
+    }
+
+    // hand every idle battery the most urgent track it can actually reach
+    const taken = new Set(this.batteries.map((b) => b.autoTarget).filter(Boolean));
     const candidates = this.radar.tracks.filter(
-      (t) => t.threat.alive && !t.engaged && t.classification !== 'DECOY',
+      (t) => t.threat.alive && !t.engaged && !taken.has(t) && t.classification !== 'DECOY',
     );
-    if (!candidates.length) return 'NO_TARGET';
-    // engage the most urgent track first
     candidates.sort((a, b) => a.timeToImpact - b.timeToImpact);
     for (const tr of candidates) {
       let best = null;
       let bestScore = -Infinity;
       for (const b of this.batteries) {
-        if (b.status !== 'READY' || b.loaded <= 0) continue;
-        const alt = this._predictInterceptAltitude(b, tr.threat);
-        const [lo, hi] = b.spec.idealAltitude;
-        const inBand = alt >= lo && alt <= hi;
-        const margin = inBand ? 0 : Math.min(Math.abs(alt - lo), Math.abs(alt - hi));
-        const score = (inBand ? 1000 : 0) - margin / 100 + b.loaded * 2;
+        if (b.autoTarget || b.status !== 'READY' || b.loaded <= 0) continue;
+        const sol = this._solveEngagement(b, tr.threat);
+        if (!sol.ok) continue;
+        const score = (sol.quality === 'OPTIMAL' ? 1000 : 0) + b.loaded * 2 - sol.flightTime;
         if (score > bestScore) {
           bestScore = score;
           best = b;
@@ -552,9 +635,16 @@ class Game {
       if (!best) continue;
       this.radar.selectTrack(tr);
       this._selectBattery(best);
-      return this.assign() ? 'ASSIGN' : 'ASSIGN_FAILED';
+      best.autoTarget = tr;
+      if (this.assign()) acts.push('ASSIGN');
+      else {
+        best.autoTarget = null;
+        acts.push('ASSIGN_FAILED');
+      }
     }
-    return 'NO_BATTERY';
+
+    if (!acts.length) return this.radar.tracks.length ? 'NO_WINDOW' : 'NO_TARGET';
+    return acts.join('+');
   }
 
   /** Convenience used by the tests and by the auto-cue: best available battery. */
@@ -584,7 +674,7 @@ class Game {
   _leadPoint(battery, threat) {
     const spec = INTERCEPTOR_SPECS[battery.spec.interceptor];
     const out = new THREE.Vector3();
-    const t = predictInterceptPoint(out, battery.group.position, spec.maxSpeed * 0.62, threat.pos, threat.vel, 0.4);
+    const t = predictInterceptPoint(out, battery.group.position, spec.maxSpeed * 0.62, threat.pos, threat.vel, 0);
     out.__tti = t;
     return out;
   }
@@ -835,12 +925,14 @@ class Game {
     // predicted intercept cue
     if (this.assignedBattery && this.assignedTrack && this.assignedTrack.threat.alive) {
       const lead = this._leadPoint(this.assignedBattery, this.assignedTrack.threat);
+      const sol = this._solveEngagement(this.assignedBattery, this.assignedTrack.threat);
       v.copy(lead).project(cam);
       if (v.z <= 1) {
         this.ui.updateLeadCue({
           x: (v.x * 0.5 + 0.5) * w,
           y: (-v.y * 0.5 + 0.5) * h,
-          text: `PREDICTED INTERCEPT ~${(lead.__tti || 0).toFixed(0)}s (ESTIMATE)`,
+          text: `PREDICTED INTERCEPT ${(sol.altitude / 1000).toFixed(0)} KM / ~${(lead.__tti || 0).toFixed(0)}s / ${sol.ok ? sol.quality : 'NO WINDOW'} (ESTIMATE)`,
+          quality: sol.ok ? sol.quality : 'NONE',
         });
       } else {
         this.ui.updateLeadCue(null);
@@ -929,6 +1021,21 @@ class Game {
       },
       lookAt: (x, y, z) => {
         this.player.lookAt(new THREE.Vector3(x, y, z));
+        this.player.applyToCamera(0);
+        return true;
+      },
+      /**
+       * Aim the view at whatever is most interesting right now: the round in
+       * flight, otherwise the highest-priority track. Used by the capture tools
+       * to frame the action without hand-authored camera moves.
+       */
+      watch: () => {
+        const it = this.interceptors.active[0];
+        let target = null;
+        if (it) target = it.target && it.target.alive ? it.target.pos : it.pos;
+        else if (this.threats.active.length) target = this.threats.active[0].pos;
+        if (!target) return false;
+        this.player.lookAt(target);
         this.player.applyToCamera(0);
         return true;
       },

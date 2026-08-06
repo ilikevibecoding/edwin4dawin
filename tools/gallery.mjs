@@ -90,13 +90,23 @@ async function engagement(tag, { condition, scenario, battery }) {
   await page.evaluate(() => window.__GAME.render());
   await shot(`${tag}-a-tracks`);
 
-  const fired = await page.evaluate(() => {
+  // let the autopilot assign, wait out the preparation time and launch
+  let fired = 0;
+  for (let i = 0; i < 90 && !fired; i++) {
+    fired = await page.evaluate(() => {
+      const G = window.__GAME;
+      G.sim(12);
+      G.autoPilot();
+      return G.state().roundStats.launched;
+    });
+  }
+  await page.evaluate(() => {
     const G = window.__GAME;
-    G.autoEngage();
-    G.sim(60 * 3);
-    return G.authorize();
+    const g = window.__gameInstance;
+    const it = g.interceptors.active[0];
+    if (it) G.lookAt(it.pos.x, it.pos.y + 60, it.pos.z);
+    G.render();
   });
-  await page.evaluate(() => window.__GAME.render());
   await shot(`${tag}-b-launch`);
 
   await page.evaluate(() => window.__GAME.sim(45));
@@ -107,18 +117,19 @@ async function engagement(tag, { condition, scenario, battery }) {
   await page.evaluate(() => window.__GAME.render());
   await shot(`${tag}-d-climb`);
 
-  // follow to intercept
+  // follow to intercept, keeping the camera on the target
   let state = null;
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 120; i++) {
     state = await page.evaluate(() => {
       const G = window.__GAME;
-      G.sim(30);
-      const s = G.state();
-      if (s.interceptors.length) {
-        const it = window.__gameInstance.interceptors.active[0];
-        const tgt = it.target;
-        if (tgt) G.lookAt(tgt.pos.x, tgt.pos.y, tgt.pos.z);
+      const g = window.__gameInstance;
+      for (let k = 0; k < 5; k++) {
+        G.sim(6);
+        G.autoPilot();
       }
+      const s = G.state();
+      const it = g.interceptors.active[0];
+      if (it && it.target) G.lookAt(it.target.pos.x, it.target.pos.y, it.target.pos.z);
       return s;
     });
     if (state.results.length) break;

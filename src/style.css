@@ -144,7 +144,13 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible {
   gap: 9px;
   z-index: 3;
 }
-#hud-left { left: calc(16px * var(--hud-scale)); width: calc(var(--hud-col-l) - 16px * var(--hud-scale)); }
+/* the left column grows from the bottom so its panels hug the battery readout
+   instead of stretching an empty log box up the side of the frame */
+#hud-left {
+  left: calc(16px * var(--hud-scale));
+  width: calc(var(--hud-col-l) - 16px * var(--hud-scale));
+  justify-content: flex-end;
+}
 #hud-right {
   right: calc(16px * var(--hud-scale));
   width: calc(var(--hud-col-r) - 16px * var(--hud-scale));
@@ -238,8 +244,8 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible {
 
 /* event log */
 #log-panel {
-  flex: 1 1 auto;
-  min-height: calc(96px * var(--hud-scale));
+  flex: 0 1 auto;
+  max-height: calc(190px * var(--hud-scale));
   display: flex;
   flex-direction: column;
 }

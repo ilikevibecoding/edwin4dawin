@@ -19,11 +19,11 @@ export const SCENARIOS = {
   saturation: {
     id: 'saturation',
     name: 'SATURATION',
-    blurb: 'Four inbounds on separate arcs inside a short interval.',
+    blurb: 'Five inbounds on separate arcs inside a short interval.',
     waves: [
       { at: 2.5, count: 2, decoys: 0 },
-      { at: 9.0, count: 1, decoys: 0 },
-      { at: 14.0, count: 1, decoys: 0 },
+      { at: 7.0, count: 2, decoys: 0 },
+      { at: 12.0, count: 1, decoys: 0 },
     ],
     duration: 85,
     timeOfDayHint: null,
@@ -34,8 +34,8 @@ export const SCENARIOS = {
     blurb: 'Multiple inbounds with occasional harmless decoys under searchlights.',
     waves: [
       { at: 2.5, count: 2, decoys: 1 },
-      { at: 10.0, count: 2, decoys: 1 },
-      { at: 19.0, count: 1, decoys: 0 },
+      { at: 9.0, count: 2, decoys: 1 },
+      { at: 16.0, count: 1, decoys: 0 },
     ],
     duration: 95,
     timeOfDayHint: 'night',

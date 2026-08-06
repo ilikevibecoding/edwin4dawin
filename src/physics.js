@@ -50,27 +50,58 @@ export function integrate(pos, vel, accel, dt, ballisticCoeff = 3200) {
 }
 
 /**
- * Iteratively estimate time-to-go for a constant-velocity target given our
- * closing speed. Three passes is plenty and keeps the cue visibly imperfect,
- * which is intentional - it is a gameplay abstraction.
+ * Time-to-go against a constant-velocity target, solved in closed form.
+ *
+ * The meeting condition |tgtPos + tgtVel*t - selfPos| = selfSpeed*t is a
+ * quadratic in t. Solving it directly matters: the obvious fixed-point
+ * iteration only converges while the interceptor is the faster body, and a
+ * round that has bled its energy (or has not built any up yet) drives it to
+ * absurd values, which drags the aim point tens of kilometres off into space.
+ *
+ * When no meeting exists - the target is simply faster and opening - there is
+ * no lead to compute, so we fall back to the time of closest approach. That
+ * keeps a doomed round pointed sensibly at its target instead of chasing a
+ * runaway solution.
  */
-export function timeToGo(selfPos, selfSpeed, tgtPos, tgtVel, iterations = 4) {
-  let t = selfPos.distanceTo(tgtPos) / Math.max(selfSpeed, 50);
-  for (let i = 0; i < iterations; i++) {
-    _tmp.copy(tgtVel).multiplyScalar(t).add(tgtPos);
-    t = _tmp.distanceTo(selfPos) / Math.max(selfSpeed, 50);
+export function timeToGo(selfPos, selfSpeed, tgtPos, tgtVel) {
+  const s = Math.max(selfSpeed, 50);
+  _tmp.copy(tgtPos).sub(selfPos);
+  const rr = _tmp.lengthSq();
+  const rv = _tmp.dot(tgtVel);
+  const vv = tgtVel.lengthSq();
+  const a = vv - s * s;
+  let t = Infinity;
+  if (Math.abs(a) < 1e-6) {
+    if (rv < -1e-6) t = rr / (-2 * rv);
+  } else {
+    const disc = rv * rv - a * rr;
+    if (disc >= 0) {
+      const root = Math.sqrt(disc);
+      const t1 = (-rv + root) / a;
+      const t2 = (-rv - root) / a;
+      const lo = Math.min(t1, t2);
+      const hi = Math.max(t1, t2);
+      t = lo > 1e-4 ? lo : (hi > 1e-4 ? hi : Infinity);
+    }
   }
+  if (!Number.isFinite(t)) t = vv > 1e-6 ? Math.max(0, -rv / vv) : 0;
   return t;
 }
 
 /**
- * Predicted intercept point using the simplified lead model (constant target
- * velocity plus a gravity sag term). Written into `out`.
+ * Predicted intercept point using the simplified lead model: constant target
+ * velocity, plus an optional upward bias that compensates for the interceptor's
+ * own gravity drop over the time of flight. `gravityComp` of 0 gives the plain
+ * meeting point (what the HUD cue should show); a positive value raises the aim
+ * so a gravity-affected round actually arrives there. `maxLead` bounds how far
+ * ahead we are willing to extrapolate - beyond a round's own remaining burn
+ * time the constant-velocity assumption is worthless and the bias term, which
+ * grows with t^2, starts to dominate. Written into `out`.
  */
-export function predictInterceptPoint(out, selfPos, selfSpeed, tgtPos, tgtVel, gravitySag = 0.35) {
-  const t = timeToGo(selfPos, selfSpeed, tgtPos, tgtVel);
+export function predictInterceptPoint(out, selfPos, selfSpeed, tgtPos, tgtVel, gravityComp = 0, maxLead = Infinity) {
+  const t = Math.min(timeToGo(selfPos, selfSpeed, tgtPos, tgtVel), maxLead);
   out.copy(tgtVel).multiplyScalar(t).add(tgtPos);
-  out.y -= 0.5 * GRAVITY * gravitySag * t * t;
+  if (gravityComp) out.y += 0.5 * GRAVITY * gravityComp * t * t;
   return t;
 }
 

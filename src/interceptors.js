@@ -14,6 +14,7 @@ import {
 export const INTERCEPTOR_SPECS = {
   palisade: {
     id: 'palisade',
+    reach: 26000,
     label: 'PALISADE ROUND',
     length: 5.0,
     radius: 0.2,
@@ -37,6 +38,7 @@ export const INTERCEPTOR_SPECS = {
   },
   halberd: {
     id: 'halberd',
+    reach: 72000,
     label: 'HALBERD ROUND',
     length: 6.6,
     radius: 0.26,
@@ -60,6 +62,7 @@ export const INTERCEPTOR_SPECS = {
   },
   sentinel: {
     id: 'sentinel',
+    reach: 130000,
     label: 'SENTINEL ROUND',
     length: 9.8,
     radius: 0.42,
@@ -68,13 +71,16 @@ export const INTERCEPTOR_SPECS = {
     sustainTime: 4.5,
     sustainAccel: 80,
     maxSpeed: 3500,
-    maxLateral: 120,
-    turnGain: 2.7,
+    // SENTINEL leaves a near-vertical rail (72-87 deg) and has to swing ~30 deg
+    // onto its intercept bearing. Turn rate is accel/speed, so the pitch-over
+    // has to start early while the round is still slow or it can never catch up.
+    maxLateral: 190,
+    turnGain: 3.2,
     killRadius: 55,
     maxFlightTime: 110,
     ballisticCoeff: 15500,
-    pitchOverDelay: 1.9,
-    pitchOverRate: 0.6,
+    pitchOverDelay: 0.7,
+    pitchOverRate: 1.3,
     trailColor: 0xf6f2ea,
     trailWidth: 30,
     plumeScale: 2.0,
@@ -82,6 +88,9 @@ export const INTERCEPTOR_SPECS = {
     bodyColor: 0xe6e4dd,
   },
 };
+
+// Range at which a round switches to terminal guidance and arms its fuze.
+const TERMINAL_RANGE = 2600;
 
 const _v = new THREE.Vector3();
 const _aim = new THREE.Vector3();
@@ -242,6 +251,7 @@ export class InterceptorManager {
     it.aCmd.set(0, 0, 0);
     it.prevErr = undefined;
     it.prevDist = Infinity;
+    it.minDist = Infinity;
     it.launchDir = shot.direction.clone();
     it.staged = false;
     it.result = null;
@@ -301,7 +311,7 @@ export class InterceptorManager {
         }
       } else {
         const tgt = it.target;
-        it.phase = tgt && it.pos.distanceTo(tgt.pos) < 2600 ? 'TERMINAL' : 'COAST';
+        it.phase = tgt && it.pos.distanceTo(tgt.pos) < TERMINAL_RANGE ? 'TERMINAL' : 'COAST';
       }
 
       // limit top speed by cutting thrust rather than clamping velocity
@@ -316,7 +326,13 @@ export class InterceptorManager {
           // fly the rail direction briefly, then begin the pitch-over
           _aim.copy(it.pos).addScaledVector(it.launchDir, 2000);
         } else {
-          tti = predictInterceptPoint(_aim, it.pos, Math.max(speed, 300), target.pos, target.vel, 0.5);
+          // aim above the meeting point by roughly the gravity drop over the
+          // time of flight, so the round arrives there instead of short
+          tti = predictInterceptPoint(_aim, it.pos, Math.max(speed, 300), target.pos, target.vel, 0.55,
+            Math.max(2, spec.maxFlightTime - it.age));
+          // never steer into the dirt while there is still time to climb
+          const floor = groundHeightAt(_aim.x, _aim.z) + 250;
+          if (_aim.y < floor) _aim.y = floor;
           const blend = Math.min(1, (it.age - spec.pitchOverDelay) * spec.pitchOverRate);
           if (blend < 1) {
             _v.copy(it.pos).addScaledVector(it.launchDir, 2000);
@@ -379,12 +395,25 @@ export class InterceptorManager {
       // ---- kill assessment -------------------------------------------------
       if (target && target.alive) {
         const dist = it.pos.distanceTo(target.pos);
-        if (dist > it.prevDist && it.prevDist < 900) {
+        if (dist > it.prevDist && it.prevDist < TERMINAL_RANGE) {
           // closest approach has just been passed - fuze here
           this._evaluate(it, target, it.prevDist);
           continue;
         }
         it.prevDist = dist;
+        it.minDist = Math.min(it.minDist ?? Infinity, dist);
+        // A round that has passed its target well outside the terminal window
+        // can never turn back onto it; destroy it here rather than let it fly
+        // a long ballistic arc out into the desert.
+        if (it.age > spec.boostTime && dist > it.minDist + 2000) {
+          this.effects.emitIntercept(it.pos, it.vel, { scale: 0.6, debrisCount: 10 });
+          target.engagedBy = null;
+          target.assignedTo = null;
+          this._finish(it, 'MISS',
+            `${target.trackId} MISSED - ROUND OVERSHOT AND LOST THE INTERCEPT`,
+            { target });
+          continue;
+        }
       }
 
       const ground = groundHeightAt(it.pos.x, it.pos.z);
@@ -395,7 +424,17 @@ export class InterceptorManager {
       }
       if (it.age > spec.maxFlightTime) {
         this.effects.emitIntercept(it.pos, it.vel, { scale: 0.5, debrisCount: 6 });
-        this._finish(it, 'MISS', 'ROUND EXPENDED - BATTERY ENERGY DEPLETED');
+        this._finish(it, 'MISS', 'ROUND EXPENDED - MOTOR ENERGY DEPLETED');
+        continue;
+      }
+      // a round that has run out of energy and is falling away from a target
+      // still high above it destroys itself rather than littering the desert
+      if (it.phase === 'COAST' && it.vel.y < -80 && target && target.alive
+          && target.pos.y - it.pos.y > 3000 && it.pos.y < 12000) {
+        this.effects.emitIntercept(it.pos, it.vel, { scale: 0.55, debrisCount: 8 });
+        this._finish(it, 'MISS',
+          `${target.trackId} MISSED - ROUND RAN OUT OF ENERGY BELOW THE TARGET`,
+          { target });
         continue;
       }
       if (it.pos.y > 90000) {
