@@ -370,7 +370,7 @@ export const mat = {
       'grimyGlass',
       grimyGlass,
       { size: texSize(o.tier, 384), repeat, normalStrength: 0.8 },
-      { transparent: true, opacity: 0.26, roughness: 0.14, metalness: 0.0, envMapIntensity: 0.9, side: THREE.DoubleSide }
+      { transparent: true, opacity: 0.26, roughness: 0.14, metalness: 0.0, envMapIntensity: 0.55, side: THREE.DoubleSide }
     ),
 };
 

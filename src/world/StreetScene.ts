@@ -271,17 +271,30 @@ export function buildStreetScene(stage: Stage): SceneBuild {
       batch.add(mDarkWall, box(0.1, shopTop, 2.4, s0 + 0.05, shopTop / 2, iz / 2), false, true);
       batch.add(mDarkWall, box(0.1, shopTop, 2.4, s1 - 0.05, shopTop / 2, iz / 2), false, true);
       batch.add(mPave, box(s1 - s0, 0.1, 2.5, (s0 + s1) / 2, PAVE_Y - 0.05, iz / 2), false, true);
-      const glow = b.x0 < -10 ? emitter(0xffc07a, 0.9) : emitter(0xc8e6ff, 0.8);
+      const glow = b.x0 < -10 ? emitter(0xffc07a, 0.5) : emitter(0xc8e6ff, 0.42);
       batch.add(glow, plane(s1 - s0 - 0.4, shopTop - 0.7, (s0 + s1) / 2, shopTop * 0.55, iz + 0.06), false, false);
-      // Silhouetted stock so the interior is not a flat card
+      // Silhouetted stock so the interior is not a flat card. The tall units are
+      // pulled up close behind the glazing: further back they fall outside the
+      // lit strip and the whole opening flattens into one lightbox.
       const shelf = paint(0x1a1c20, 0.8);
       for (let i = 0; i < 5; i++) {
         const px = s0 + 0.5 + ((i + 0.5) * (s1 - s0 - 1)) / 5;
-        batch.add(shelf, box(0.6, rng.range(0.9, 1.9), 0.42, px, rng.range(0.5, 1.1), iz + 0.55));
+        batch.add(shelf, box(0.6, rng.range(0.9, 1.9), 0.42, px, rng.range(0.5, 1.1), iz + 1.35));
       }
       batch.add(shelf, box(s1 - s0 - 1.2, 0.9, 0.55, (s0 + s1) / 2, 0.6, -0.95));
-      // Grimy glazing across the opening
-      batch.add(mGlass, plane(s1 - s0 - 0.1, shopTop - 0.45, (s0 + s1) / 2, 0.4 + (shopTop - 0.45) / 2, 0.02), false, false);
+      // Grimy glazing across the opening, divided by mullions. Undivided it is a
+      // single storey-high sheet, which is what made this corner read as a blank
+      // slab rather than a shop.
+      const glazeH = shopTop - 0.45;
+      const glazeY = 0.4 + glazeH / 2;
+      batch.add(mGlass, plane(s1 - s0 - 0.1, glazeH, (s0 + s1) / 2, glazeY, 0.02), false, false);
+      const mullion = paint(0x191b1f, 0.55, 0.45);
+      const bays = Math.max(2, Math.round((s1 - s0) / 1.5));
+      for (let i = 1; i < bays; i++) {
+        batch.add(mullion, box(0.07, glazeH, 0.12, s0 + ((s1 - s0) * i) / bays, glazeY, 0.05));
+      }
+      batch.add(mullion, box(s1 - s0, 0.08, 0.12, (s0 + s1) / 2, glazeY + glazeH * 0.28, 0.05));
+      batch.add(mullion, box(s1 - s0, 0.1, 0.14, (s0 + s1) / 2, glazeY + glazeH / 2, 0.05));
       // Awning
       batch.add(
         paint(0x2b1620, 0.85),
@@ -294,6 +307,15 @@ export function buildStreetScene(stage: Stage): SceneBuild {
     // storey, which is the part of the facade the camera actually sees.
     batch.add(mConcrete, box(w + 0.1, 0.18, 0.2, cx, b.ground - 0.5, 0.08));
     batch.add(mConcrete, box(w + 0.1, 0.26, 0.16, cx, 0.34, 0.06), false, true);
+
+    // A downpipe on the party edge. Cheap, but it is the one strong vertical on
+    // an otherwise horizontal facade, and it catches the sodium lamp.
+    const pipeX = b.x0 + 0.16;
+    batch.add(mRust, cyl(0.06, 0.06, b.height - 0.4, segs, pipeX, (b.height - 0.4) / 2, 0.13));
+    batch.add(mRust, cyl(0.085, 0.085, 0.16, segs, pipeX, b.height - 0.5, 0.13));
+    for (let f = 0; f <= b.floors; f++) {
+      batch.add(mRust, box(0.05, 0.05, 0.18, pipeX, b.ground * 0.5 + f * b.storey, 0.06));
+    }
 
     gridWindows(cells, {
       origin: new THREE.Vector3(b.x0, 0, FACADE_Z + 0.01),
@@ -491,9 +513,23 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   for (let i = 0; i < 4; i++) {
     batch.add(mRust, cyl(0.075, 0.085, 0.75, 8, 17.4 + i * 0.9, PAVE_Y + 0.375, 2.35));
   }
-  batch.add(paint(0x6d2020, 0.7), cyl(0.11, 0.13, 0.62, 10, 11.2, PAVE_Y + 0.31, 2.2));
-  batch.add(paint(0x6d2020, 0.7), sphere(0.11, 8, 11.2, PAVE_Y + 0.63, 2.2));
-  batch.add(paint(0x6d2020, 0.7), cyl(0.05, 0.05, 0.34, 8, 11.2, PAVE_Y + 0.45, 2.2, { rz: Math.PI / 2 }));
+  const hydrantMat = paint(0x6d2020, 0.7);
+  for (const hx of [11.2, -1.7]) {
+    batch.add(hydrantMat, cyl(0.11, 0.13, 0.62, 10, hx, PAVE_Y + 0.31, 2.2));
+    batch.add(hydrantMat, sphere(0.11, 8, hx, PAVE_Y + 0.63, 2.2));
+    batch.add(hydrantMat, cyl(0.05, 0.05, 0.34, 8, hx, PAVE_Y + 0.45, 2.2, { rz: Math.PI / 2 }));
+  }
+
+  // A bin at the kerb by the alley mouth. The establish shot looks straight down
+  // the block on that side, and without something at pavement height the lit
+  // shopfront runs from the kerb to the awning as one unbroken panel.
+  // Kept off the alley-mouth axis: sat any closer to the alley it lands between
+  // the establish camera and the second actor and eats her legs.
+  const binMat = mat.rusted(opts, 2);
+  const binX = -0.95;
+  batch.add(binMat, cyl(0.27, 0.23, 0.86, segs, binX, PAVE_Y + 0.43, 2.3));
+  batch.add(binMat, cyl(0.29, 0.29, 0.06, segs, binX, PAVE_Y + 0.88, 2.3));
+  batch.add(paint(0x0a0b0d, 0.9), cyl(0.24, 0.24, 0.04, segs, binX, PAVE_Y + 0.9, 2.3));
 
   // Overhead cables crossing the street
   const cableMat = paint(0x0a0b0e, 0.85);
@@ -726,7 +762,10 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   lights.moon = moon;
 
   // Shadow caster 2: the sodium lamp standing over the actors.
-  const lamp = new THREE.SpotLight(0xffa752, 420, 22, 0.62, 0.45, 2);
+  // Tight enough that the pool stays on the actors and the pavement: opened up
+  // any further it washes the block behind them into a flat sodium-coloured
+  // backdrop and the alley mouth stops reading as a gap.
+  const lamp = new THREE.SpotLight(0xffa752, 420, 22, 0.52, 0.45, 2);
   lamp.position.copy(lampHeadA);
   lamp.target.position.set(-3.9, PAVE_Y, 0.9);
   lamp.castShadow = true;
@@ -861,10 +900,12 @@ export function buildStreetScene(stage: Stage): SceneBuild {
       noise: 0.55,
     },
     grade: {
-      lift: new THREE.Vector3(0.008, 0.02, 0.036),
+      // A little red in the lift: with none the cyan shadow tint drives the red
+      // channel to a hard zero across the alley and the shadows posterise.
+      lift: new THREE.Vector3(0.026, 0.032, 0.046),
       gamma: new THREE.Vector3(1.0, 1.02, 1.06),
       gain: new THREE.Vector3(1.06, 1.0, 1.07),
-      shadowTint: new THREE.Vector3(0.0, 0.16, 0.25),
+      shadowTint: new THREE.Vector3(0.012, 0.15, 0.23),
       highlightTint: new THREE.Vector3(0.22, 0.11, 0.05),
       saturation: 1.1,
       contrast: 1.16,

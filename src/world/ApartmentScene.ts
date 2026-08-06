@@ -217,11 +217,11 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
 
   const paneMat = new THREE.MeshPhysicalMaterial({
     color: 0xaebfd0,
-    roughness: 0.06,
+    roughness: 0.15,
     metalness: 0,
     transparent: true,
     opacity: 0.13,
-    envMapIntensity: 1.4,
+    envMapIntensity: 1.1,
     side: THREE.DoubleSide,
   });
   disposal.own(paneMat);
@@ -277,8 +277,11 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
   ];
   for (const [bx, bz, h, w] of outerBlocks) {
     batch.add(mBlock, box(w, h, 7, bx, h / 2 - 3.2, bz - 3.5), false, false);
-    const cols = Math.max(2, Math.floor(w / 2.3));
-    const rows = Math.max(2, Math.floor((h - 2) / 2.7));
+    // These blocks sit 15-20 m out, so a domestic-sized opening subtends far too
+    // much of the view: dense small panes read as a city, a few big ones read as
+    // coloured slabs stuck to a wall.
+    const cols = Math.max(3, Math.floor(w / 1.35));
+    const rows = Math.max(3, Math.floor((h - 2) / 1.6));
     for (let c = 0; c < cols; c++) {
       for (let r = 0; r < rows; r++) {
         outerCells.push({
@@ -287,14 +290,14 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
             -3.2 + 1.8 + ((r + 0.5) * (h - 2)) / rows,
             bz + 0.01
           ),
-          width: 1.15,
-          height: 1.5,
+          width: 0.66,
+          height: 0.88,
           yaw: 0,
         });
       }
     }
   }
-  const outerWindows = buildWindowField(outerCells, new Rng(4477), 1.15);
+  const outerWindows = buildWindowField(outerCells, new Rng(4477), 0.68);
   root.add(outerWindows.group);
 
   // Distant signage, mostly to break the window grid up with colour
@@ -599,11 +602,11 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
   root.add(windowKey, windowKey.target);
   lights.windowKey = windowKey;
 
-  // Ambient wash of city light. It sits hard against the glass: any further
-  // into the room and inverse-square turns it into a hotspot on whoever is
-  // standing in the playing area.
-  const winFill = new THREE.PointLight(0x6f96d8, 6, 8, 2);
-  winFill.position.set(winCX, 1.72, -HZ + 0.12);
+  // Ambient wash of city light. Held off the glass by a good half metre: sat
+  // right against a pane this smooth it burns a specular hole straight through
+  // the view, which reads as a lamp hanging outside the window.
+  const winFill = new THREE.PointLight(0x6f96d8, 9, 8, 2);
+  winFill.position.set(winCX, 1.66, -HZ + 0.78);
   root.add(winFill);
   lights.windowFill = winFill;
 

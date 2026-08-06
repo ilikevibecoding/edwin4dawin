@@ -355,10 +355,12 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
   const lights: Record<string, THREE.Light> = {};
 
   // Nothing is ever truly black in here — there is always a little bounce.
-  const ambient = new THREE.AmbientLight(0x1e2523, 1.8);
+  // Enough that no corner is a hole, but kept low: ambient is flat by
+  // definition, and this room is supposed to fall off hard away from the table.
+  const ambient = new THREE.AmbientLight(0x1e2523, 1.9);
   root.add(ambient);
   lights.ambient = ambient;
-  const bounce = new THREE.HemisphereLight(0x3d4850, 0x161c19, 0.9);
+  const bounce = new THREE.HemisphereLight(0x3d4850, 0x161c19, 0.95);
   root.add(bounce);
   lights.bounce = bounce;
 
@@ -391,21 +393,23 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
   lights.panelKey = panelKey;
 
   // Remaining panels: unshadowed fill, deliberately weaker than the key.
-  const fillA = new THREE.PointLight(0xd6e6ff, 20, 6.5, 2);
+  const fillA = new THREE.PointLight(0xd6e6ff, 24, 6.5, 2);
   fillA.position.set(-1.05, CEIL - 0.16, -1.15);
   root.add(fillA);
   lights.fillA = fillA;
-  const fillB = new THREE.PointLight(0xd6e6ff, 16, 6, 2);
+  const fillB = new THREE.PointLight(0xd6e6ff, 20, 6, 2);
   fillB.position.set(-1.05, CEIL - 0.16, 1.15);
   root.add(fillB);
   lights.fillB = fillB;
-  const fillC = new THREE.PointLight(0xd6e6ff, 15, 6, 2);
-  fillC.position.set(1.05, CEIL - 0.16, -1.15);
+  // Pushed out towards the panelled +X wall: that wall fills half the establish
+  // frame and was reading as an unlit black field with a dot pattern on it.
+  const fillC = new THREE.PointLight(0xd6e6ff, 21, 6, 2);
+  fillC.position.set(1.62, CEIL - 0.16, -0.85);
   root.add(fillC);
   lights.fillC = fillC;
 
   // Grazes the mirror wall so the glass and its surround read at all.
-  const mirrorWash = new THREE.PointLight(0xc6d8ee, 14, 4.4, 2);
+  const mirrorWash = new THREE.PointLight(0xc6d8ee, 18, 4.4, 2);
   mirrorWash.position.set(-1.5, 2.42, 0.1);
   root.add(mirrorWash);
   lights.mirrorWash = mirrorWash;
@@ -423,8 +427,10 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
   // Bounce off the pale tabletop. Real interrogation rooms get this for free
   // and it is the only thing that keeps a face from going to pure silhouette
   // when the sitter leans back out of the lamp's cone.
-  const tableBounce = new THREE.PointLight(0xe4e8ea, 7, 3.2, 2);
-  tableBounce.position.set(0, 0.95, -0.24);
+  // Kept centred over the table: off to one side it sits close enough to an
+  // actor's mark to become a hotspot on their hip rather than a bounce.
+  const tableBounce = new THREE.PointLight(0xe4e8ea, 5, 3.2, 2);
+  tableBounce.position.set(0, 0.98, -0.02);
   root.add(tableBounce);
   lights.tableBounce = tableBounce;
 
@@ -526,17 +532,20 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
       fogBase: 0,
       noise: 0.3,
     },
+    // The grade pivots contrast about 0.5, so anything much above 1.1 folds the
+    // whole room — walls, panelling, mirror — into the same black. The contrast
+    // the brief asks for comes from the lighting rig instead.
     grade: {
-      lift: new THREE.Vector3(0.016, 0.024, 0.022),
+      lift: new THREE.Vector3(0.03, 0.038, 0.035),
       gamma: new THREE.Vector3(1.0, 1.0, 0.99),
       gain: new THREE.Vector3(0.97, 1.0, 1.01),
-      shadowTint: new THREE.Vector3(0.0, 0.055, 0.032),
+      shadowTint: new THREE.Vector3(0.006, 0.05, 0.03),
       highlightTint: new THREE.Vector3(0.02, 0.045, 0.06),
-      saturation: 0.5,
-      contrast: 1.3,
+      saturation: 0.56,
+      contrast: 1.18,
       temperature: -0.12,
-      bleach: 0.2,
-      vignette: 0.52,
+      bleach: 0.12,
+      vignette: 0.44,
     },
     rain: 0,
     shafts: [{ position: new THREE.Vector3(0, lampY - 0.1, -0.05), color: new THREE.Color(0xfff0d6), intensity: 0.2 }],
