@@ -93,7 +93,15 @@ export class UI {
     hud.appendChild(this.interactPrompt);
     this.perfBox = el('div', 'perf hidden');
     hud.appendChild(this.perfBox);
+
+    // compact mid-session pause overlay (pointer lock lost via ESC)
+    this.pauseEl = el('div', 'pause-overlay hidden');
+    this.pauseEl.innerHTML = '<div class="pause-box"><div class="pause-title">PAUSED</div><div class="pause-sub">CLICK TO RE-ENTER THE RANGE</div></div>';
+    this.pauseEl.addEventListener('click', () => this.actions.enterRange());
+    this.root.appendChild(this.pauseEl);
   }
+
+  showPause(v) { this.pauseEl.classList.toggle('hidden', !v); }
 
   setPerf(text) {
     if (text === null) { this.perfBox.classList.add('hidden'); return; }

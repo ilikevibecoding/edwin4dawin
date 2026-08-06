@@ -673,9 +673,10 @@ export class Effects {
     return t;
   }
 
-  /** apparent-size compensation: 1 near, up to 3× at >1.8 km */
+  /** apparent-size compensation: 1 near, up to 5× at >2.75 km (high-altitude
+   *  intercepts at 6-8 km must still read as an event, not a pixel) */
   _distK(pos) {
-    return THREE.MathUtils.clamp(this._camPos.distanceTo(pos) / 600, 1, 3);
+    return THREE.MathUtils.clamp(this._camPos.distanceTo(pos) / 550, 1, 5);
   }
 
   _schedulePop(delay, x, y, z, scale) {
@@ -836,11 +837,12 @@ export class Effects {
     // smoke ball that hangs ~10 s and drifts downwind — big chunky lobes so it
     // still reads as a volume from 600 m+
     const ns = Math.round(36 * scale);
+    const smokeK = 1 + (k - 1) * 0.5; // partial distance compensation for the hang cloud
     for (let i = 0; i < ns; i++) {
       _v4.set(r.gauss(0, 1), r.gauss(0, 1), r.gauss(0, 1)).normalize().multiplyScalar(r.range(2, 9) * scale);
       this.smoke.spawn(pos.x + _v4.x, pos.y + _v4.y, pos.z + _v4.z,
         _v4.x * r.range(1.4, 3), _v4.y * r.range(1.4, 3), _v4.z * r.range(1.4, 3),
-        { size: r.range(14, 24) * scale, life: r.range(7, 12), color: 0x5c5852, alpha: 0.72, grow: 2.6, damp: 0.8, grav: 0.5, fadeIn: 0.1 });
+        { size: r.range(14, 24) * scale * smokeK, life: r.range(7, 12), color: 0x5c5852, alpha: 0.72, grow: 2.6, damp: 0.8, grav: 0.5, fadeIn: 0.1 });
     }
     // debris cloud + a few big glowing shards that trail smoke as they fall
     this.debris.burst(pos, Math.round(9 * scale), 65, { glow: 1, scale: 0.9 * scale, life: 6 }, r);

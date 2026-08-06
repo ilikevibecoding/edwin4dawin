@@ -162,6 +162,18 @@ button:focus-visible, select:focus-visible, input:focus-visible,
 }
 @keyframes redPulse { 50% { box-shadow: 0 0 26px rgba(255, 70, 50, 0.5); } }
 
+.pause-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(2, 6, 4, 0.55); pointer-events: auto; cursor: pointer; z-index: 40;
+  backdrop-filter: blur(1.5px);
+}
+.pause-box {
+  text-align: center; padding: 22px 46px; background: var(--panel);
+  border: 1px solid var(--line); box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+}
+.pause-title { font-size: 30px; font-weight: 700; letter-spacing: 6px; color: var(--green); text-shadow: 0 0 16px rgba(120, 255, 170, 0.45); }
+.pause-sub { margin-top: 8px; font-size: 12px; letter-spacing: 2px; color: var(--text); opacity: 0.85; }
+
 .perf {
   position: absolute; right: 14px; bottom: 12px; font-size: 11px; color: var(--cyan);
   background: rgba(0, 10, 16, 0.75); border: 1px solid rgba(80, 200, 255, 0.3); padding: 5px 9px;

@@ -71,6 +71,7 @@ const game = {
   endTimer: 0,
   time: 0,
   freeCam: false,           // test viewpoints
+  everEntered: false,       // start screen dismissed at least once
 };
 weather.setTimeOfDay(game.tod, true);
 
@@ -237,12 +238,12 @@ events.on('intercept-hit', ({ threat, decoy, reason, missile }) => {
   if (decoy) {
     game.stats.decoysHit++;
     game.results.push({ type: RESULT.DECOY, text: `${track?.id ?? 'track'} — ${reason}` });
-    ui.showBanner('DECOY NEUTRALIZED — ROUND WASTED', 'warn');
+    ui.showBanner('DECOY NEUTRALIZED — ROUND WASTED', 'warn', 5);
     ui.log(`${track?.id} was a DECOY — interceptor wasted`, 'warn');
   } else {
     game.stats.intercepted++;
     game.results.push({ type: RESULT.INTERCEPTED, text: `${track?.id ?? 'track'} — ${reason} (${missile.def.name})` });
-    ui.showBanner(`INTERCEPT — ${track?.id ?? 'TARGET'} DESTROYED`, 'ok');
+    ui.showBanner(`INTERCEPT — ${track?.id ?? 'TARGET'} DESTROYED`, 'ok', 5);
     ui.log(`SPLASH ${track?.id} — ${reason}`, 'ok');
   }
 });
@@ -250,14 +251,14 @@ events.on('intercept-miss', ({ threat, reason, missile }) => {
   game.stats.missed++;
   const track = missile.track;
   game.results.push({ type: RESULT.MISSED, text: `${track?.id ?? 'interceptor'} — ${reason}` });
-  if (threat) ui.showBanner('INTERCEPT MISSED', 'warn');
+  if (threat) ui.showBanner('INTERCEPT MISSED', 'warn', 5);
   ui.log(`MISS — ${reason}`, 'warn');
 });
 events.on('threat-impact', ({ threat }) => {
   const track = trackForThreat(threat);
   game.stats.impacts++;
   game.results.push({ type: RESULT.IMPACT, text: `${track?.id ?? 'untracked threat'} struck the base area` });
-  ui.showBanner('IMPACT — BASE AREA HIT', 'bad');
+  ui.showBanner('IMPACT — BASE AREA HIT', 'bad', 5);
   ui.log(`IMPACT — ${track?.id ?? 'threat'} hit the deck`, 'bad');
 });
 events.on('threat-burnout', ({ threat }) => {
@@ -358,9 +359,13 @@ function startHidden() { return ui.startEl.classList.contains('hidden'); }
 
 events.on('lock-changed', ({ locked }) => {
   if (!locked && !game.consoleMode && !TEST_MODE && !ui.debriefVisible) {
-    ui.showStart(true);
+    // mid-session ESC → compact pause overlay; full start screen only pre-entry
+    if (game.everEntered) ui.showPause(true);
+    else ui.showStart(true);
   } else if (locked) {
+    game.everEntered = true;
     ui.showStart(false);
+    ui.showPause(false);
   }
 });
 
@@ -561,16 +566,21 @@ function updateShadowCadence(dt) {
 function frame(now) {
   requestAnimationFrame(frame);
   // first RAF timestamp can predate module evaluation — never trust it
-  const dt = last < 0 ? 0 : Math.max(0, Math.min(0.1, (now - last) / 1000));
+  const rawDt = last < 0 ? 0 : Math.max(0, (now - last) / 1000);
   last = now;
-  trackFps(dt);
+  trackFps(rawDt);
   renderer.info.reset();
+  // sim catch-up budget: fixed steps are cheap next to rendering, so allow up
+  // to 0.25 s of simulation per rendered frame — the game stays real-time down
+  // to ~4 fps instead of dropping into slow motion on weak/software GPUs.
+  const dt = Math.min(0.25, rawDt);
 
   if (!MANUAL) {
     acc += dt;
     let n = 0;
-    while (acc >= STEP && n < 10) { simStep(STEP); acc -= STEP; n++; }
-    if (n === 10) acc = 0; // dropped frames — don't spiral
+    const maxSteps = Math.ceil(0.25 / STEP) + 1;
+    while (acc >= STEP && n < maxSteps) { simStep(STEP); acc -= STEP; n++; }
+    if (n === maxSteps) acc = 0; // hopeless backlog — don't spiral
   }
 
   updateAim();
