@@ -278,6 +278,8 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
   if (opening === 'ch1.name') {
     d.state.visit('ch1.trust');
     await d.say(deviant, 'Simon. They called me Simon. Nobody has asked me that in six years.', 'ch1_dev_name');
+    // From here on the subtitles call him by name rather than by his model class.
+    deviant.name = 'SIMON';
     d.state.set('ch1.name', 'Simon');
   } else if (opening === 'ch1.orders') {
     d.state.visit('ch1.pressure');

@@ -70,7 +70,8 @@ export class Actor {
   readonly root = new THREE.Group();
   readonly model: THREE.Object3D;
   readonly bones: BoneIndex;
-  readonly name: string;
+  /** Speaker name shown in subtitles; a character can earn a new one. */
+  name: string;
   readonly mixer: THREE.AnimationMixer;
   readonly skinnedMeshes: THREE.SkinnedMesh[] = [];
 
