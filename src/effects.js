@@ -39,7 +39,9 @@ const SPARK_COOL = { r: 1.5, g: 0.42, b: 0.1 };
 const FLARE_HOT = { r: 6.0, g: 5.2, b: 3.4 };
 const FLARE_COOL = { r: 2.4, g: 1.0, b: 0.3 };
 const RING_WARM = { r: 2.4, g: 2.0, b: 1.35 };
-const RING_COLD = { r: 2.2, g: 2.5, b: 3.2 };
+// Barely cool rather than actually blue: an additive ring this large lays a
+// wash over the whole cloud, and a saturated blue one fringes it violet.
+const RING_COLD = { r: 2.75, g: 2.9, b: 3.1 };
 
 // Haze is a ground phenomenon: fade the fog contribution out with altitude so
 // a contrail at 20 km is not washed out like a mountain 20 km downrange.
@@ -217,11 +219,14 @@ function emberTexture() {
   return fxTexture('fx_ember', () => {
     const S = 64;
     const { c, ctx } = fxCanvas(S);
+    // The opaque core has to be a decent fraction of the quad. Sparks get
+    // stretched along their velocity, and a pinprick core turns into a
+    // sub-pixel line that pixel coverage erases completely.
     const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
     g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.16, 'rgba(255,250,236,0.9)');
-    g.addColorStop(0.42, 'rgba(255,226,178,0.24)');
-    g.addColorStop(0.72, 'rgba(255,188,120,0.05)');
+    g.addColorStop(0.27, 'rgba(255,250,236,0.92)');
+    g.addColorStop(0.5, 'rgba(255,226,178,0.38)');
+    g.addColorStop(0.76, 'rgba(255,188,120,0.08)');
     g.addColorStop(1, 'rgba(255,160,90,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, S, S);
@@ -278,15 +283,21 @@ function ribbonTexture() {
       // y is across the ribbon after flipY, x is along it
       const v = (y + 0.5) / S;
       const across = Math.abs(v - 0.5) * 2;
-      const profile = Math.pow(Math.max(0, 1 - across * across), 1.35);
+      // a soft gaussian-ish core: a hard-shouldered profile clips to flat white
+      // across the whole width and the ribbon reads as a cut-out blade
+      const profile = Math.exp(-across * across * 3.1) - 0.045;
       for (let x = 0; x < S; x++) {
         const u = (x + 0.5) / S;
         // tile seamlessly along u by sampling noise on a circle
         const ang = u * TAU;
         const along = n.fbm(Math.cos(ang) * 1.9 + 3, Math.sin(ang) * 1.9 + 3, 3) * 0.5 + 0.5;
-        const a = profile * (0.62 + along * 0.62) * (0.86 + 0.14 * along);
+        // break the edges up with a second, higher-frequency band so the
+        // silhouette frays instead of running dead straight
+        const edge = n.fbm(Math.cos(ang) * 4.7 + 11, Math.sin(ang) * 4.7 + 11, 3) * 0.5 + 0.5;
+        const frill = 1 - across * across * (0.55 + edge * 0.85);
+        const a = profile * frill * (0.6 + along * 0.66) * (0.84 + 0.16 * edge);
         const i = (y * S + x) * 4;
-        const v255 = (222 + along * 33) | 0;
+        const v255 = (214 + along * 41) | 0;
         d[i] = v255;
         d[i + 1] = v255;
         d[i + 2] = v255;
@@ -310,6 +321,7 @@ const PARTICLE_VS = /* glsl */`
   attribute vec3 iPos;
   attribute vec4 iColor;
   attribute vec4 iMisc; // x: size, y: rotation, z: ground-flat flag, w: atlas cell
+  attribute float iFloor; // world height of the ground under this particle
   #ifdef STRETCH
     attribute vec4 iVel; // xyz: world velocity, w: stretch per unit speed
   #endif
@@ -317,10 +329,27 @@ const PARTICLE_VS = /* glsl */`
   varying vec2 vUv;
   varying float vFogDepth;
   varying float vHeight;
+  varying float vGround;
+
+  /**
+   * How far this corner sits above the ground, in units of the particle's own
+   * size. A camera-facing quad whose lower half is below the terrain gets
+   * sliced by the depth test along a dead straight line, which is the single
+   * most obvious artefact in any shot with smoke lying on the pad. Fading the
+   * corner out before it reaches the ground turns that cut into contact.
+   * The offset is applied in view space, so the world rise of a corner is its
+   * screen offset projected onto the world up axis, which is the second row of
+   * the view rotation.
+   */
+  float groundFade(vec2 off, float size) {
+    float worldY = iPos.y + off.x * viewMatrix[1][0] + off.y * viewMatrix[1][1];
+    return clamp((worldY - iFloor) / max(size * 0.5, 0.35), 0.0, 1.0);
+  }
 
   void main() {
     vColor = iColor;
     vHeight = iPos.y;
+    vGround = 1.0;
     #ifdef ATLAS2
       vec2 cell = vec2(mod(iMisc.w, 2.0), floor(iMisc.w * 0.5));
       vUv = (uv + cell) * 0.5;
@@ -339,17 +368,27 @@ const PARTICLE_VS = /* glsl */`
     } else {
       mv = modelViewMatrix * vec4(iPos, 1.0);
       #ifdef STRETCH
-        // elongate along the screen-space velocity so fast sparks streak
-        vec3 vv = (modelViewMatrix * vec4(iVel.xyz, 0.0)).xyz;
-        float dl = length(vv.xy);
-        vec2 ax = dl > 1e-4 ? vv.xy / dl : vec2(0.0, 1.0);
-        mv.xy += vec2(-ax.y, ax.x) * (position.x * s)
-               + ax * (position.y * s * (1.0 + iVel.w * dl));
+        // Elongate along the screen-space velocity so fast sparks streak.
+        // The bias keeps the normalisation defined for a stationary particle:
+        // a select on a 0/0 division still lets the NaN through on some
+        // drivers and the whole batch vanishes.
+        // The perpendicular is (ay, -ax) and not (-ay, ax): the latter is a
+        // mirrored basis, which reverses the quad's winding and hands the
+        // whole batch to the backface cull.
+        vec2 vd = (modelViewMatrix * vec4(iVel.xyz, 0.0)).xy;
+        float dl = length(vd);
+        vec2 ax = (vd + vec2(0.0, 1e-5)) / (dl + 1e-5);
+        vec2 off = vec2(ax.y, -ax.x) * (position.x * s)
+                 + ax * (position.y * s * (1.0 + iVel.w * dl));
+        mv.xy += off;
+        vGround = groundFade(off, s);
       #else
         float r = iMisc.y;
         float cr = cos(r);
         float sr = sin(r);
-        mv.xy += vec2(position.x * cr - position.y * sr, position.x * sr + position.y * cr) * s;
+        vec2 off = vec2(position.x * cr - position.y * sr, position.x * sr + position.y * cr) * s;
+        mv.xy += off;
+        vGround = groundFade(off, s);
       #endif
     }
     vFogDepth = -mv.z;
@@ -370,11 +409,12 @@ const PARTICLE_FS = /* glsl */`
   varying vec2 vUv;
   varying float vFogDepth;
   varying float vHeight;
+  varying float vGround;
 
   void main() {
     #include <logdepthbuf_fragment>
     vec4 t = texture2D(map, vUv);
-    float a = vColor.a * t.a;
+    float a = vColor.a * t.a * vGround;
     if (a < 0.004) discard;
     vec3 c = vColor.rgb * t.rgb;
     float fd = uFogDensity * vFogDepth;
@@ -402,12 +442,15 @@ class BillboardParticles {
     this.iPos = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
     this.iColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
     this.iMisc = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
+    this.iFloor = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
     this.iPos.setUsage(THREE.DynamicDrawUsage);
     this.iColor.setUsage(THREE.DynamicDrawUsage);
     this.iMisc.setUsage(THREE.DynamicDrawUsage);
+    this.iFloor.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('iPos', this.iPos);
     geo.setAttribute('iColor', this.iColor);
     geo.setAttribute('iMisc', this.iMisc);
+    geo.setAttribute('iFloor', this.iFloor);
     this.stretched = stretch;
     if (stretch) {
       this.iVel = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
@@ -550,6 +593,7 @@ class BillboardParticles {
     const pos = this.iPos.array;
     const col = this.iColor.array;
     const misc = this.iMisc.array;
+    const flr = this.iFloor.array;
     const vel = this.iVel ? this.iVel.array : null;
     for (let i = 0; i < this.capacity; i++) {
       if (!this.live[i]) continue;
@@ -623,6 +667,7 @@ class BillboardParticles {
       misc[o4 + 1] = this.rot[i];
       misc[o4 + 2] = this.flat[i];
       misc[o4 + 3] = this.cell[i];
+      flr[n] = fy;
       if (vel) {
         vel[o4] = vxi;
         vel[o4 + 1] = vyi;
@@ -636,9 +681,11 @@ class BillboardParticles {
       this.iPos.needsUpdate = true;
       this.iColor.needsUpdate = true;
       this.iMisc.needsUpdate = true;
+      this.iFloor.needsUpdate = true;
       this.iPos.addUpdateRange(0, n * 3);
       this.iColor.addUpdateRange(0, n * 4);
       this.iMisc.addUpdateRange(0, n * 4);
+      this.iFloor.addUpdateRange(0, n);
       if (this.iVel) {
         this.iVel.needsUpdate = true;
         this.iVel.addUpdateRange(0, n * 4);
@@ -735,6 +782,7 @@ class Trail {
     this.widthScale = 1;
     this.baseWidth = 3;
     this.soot = 0.3;
+    this.seed = slot * 2.399963;
   }
 
   reset(opts = {}) {
@@ -748,6 +796,7 @@ class Trail {
     this.widthScale = opts.widthScale ?? 1;
     this.baseWidth = opts.baseWidth ?? 3;
     this.soot = opts.soot ?? 0.3;
+    this.seed = (this.seed + 1.7305) % TAU;
   }
 
   /**
@@ -759,16 +808,29 @@ class Trail {
     const dr = densityRatio(y);
     this.dens[i] = dr;
     const thin = 1 - dr;
-    this.width[i] = this.baseWidth * (0.55 + Math.pow(thin, 1.7) * 5.5) * this.widthScale;
+    const w0 = this.baseWidth * (0.35 + Math.pow(thin, 1.8) * 11.5) * this.widthScale;
     if (i === 0) {
       this.arc[i] = 0;
       this.uu[i] = 0;
+      this.width[i] = w0;
       return;
     }
     const seg = Math.hypot(x - this.px[i - 1], y - this.py[i - 1], z - this.pz[i - 1]);
-    this.arc[i] = this.arc[i - 1] + seg;
+    const arc = this.arc[i - 1] + seg;
+    this.arc[i] = arc;
+    // A flat ribbon of constant width is a blade, not a plume. Beating two
+    // slow waves against each other along the arc gives the silhouette the
+    // lumpy, rolling edge a real contrail has, for the price of two sines.
+    // The wavelength is a small multiple of the width, which is what makes the
+    // billows read as the same size as the plume rather than as a slow bend.
+    const f = TAU / Math.max(w0 * 3.0, 40);
+    this.width[i] = w0 * (1
+      + 0.27 * Math.sin(arc * f + this.seed)
+      + 0.15 * Math.sin(arc * f * 2.7 + this.seed * 3.1));
     const w = (this.width[i] + this.width[i - 1]) * 0.5;
-    this.uu[i] = this.uu[i - 1] + seg / Math.max(w * 2.4, 2);
+    // the along-ribbon texture must stretch over several widths: repeat it
+    // every couple of segments and the noise reads as regular banding
+    this.uu[i] = this.uu[i - 1] + seg / Math.max(w * 4.5, 24);
   }
 
   /**
@@ -907,6 +969,9 @@ class TrailSystem {
     this.mesh = new THREE.Mesh(geo, this.material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 8;
+    // lighting mood applied to every ribbon: a contrail is lit by the same sun
+    // the smoke is, so at night it must not stay a blown-out white streak
+    this.mood = new THREE.Color(1, 1, 1);
     this.trails = [];
     this.free = [];
     for (let i = 0; i < maxTrails; i++) {
@@ -1032,9 +1097,13 @@ class TrailSystem {
       // in world distance rather than point index so it never steps
       const headTaper = clamp01((headArc - t.arc[i]) / (t.width[i] * 2.2 + 6));
       const shape = 0.3 + 0.7 * headTaper;
-      // the constant term is an angular floor: a contrail thirty kilometres
-      // away is a couple of metres of subpixel nothing without it
-      const w = (t.width[i] * (0.5 + lt * 1.5) + dist * 0.0055) * shape;
+      // the second term is an angular floor: a tight rope thirty kilometres
+      // away is a couple of metres of subpixel nothing without it. It is
+      // capped against the real width so wide contrails do not balloon.
+      // diffusion: a rope in dense air stays a rope, a stratospheric contrail
+      // keeps spreading for the whole minute it hangs there
+      const wn = t.width[i] * (0.5 + lt * 1.8 * (0.3 + 0.7 * thin));
+      const w = (wn + Math.min(dist * 0.0045, wn * 1.6)) * shape;
       _side.multiplyScalar(w * 0.5);
       const vi3 = vi * 3;
       pos[vi3] = t.px[i] + _side.x;
@@ -1045,14 +1114,17 @@ class TrailSystem {
       pos[vi3 + 5] = t.pz[i] - _side.z;
 
       // dark and sooty in dense air, luminous and cold in the stratosphere
-      const bright = 0.24 + 1.5 * Math.pow(thin, 0.75);
-      const soot = 1 - t.soot * dens * 0.75;
-      const m = bright * soot;
-      const a = t.alpha * Math.pow(1 - lt, 1.15) * (0.55 + 0.45 * thin) * shape;
+      const bright = 0.62 + 1.15 * Math.pow(thin, 0.75);
+      const sk = t.soot * dens;
+      const m = bright * (1 - sk * 0.6);
+      // A rope this dark only holds its own colour if it is close to opaque:
+      // left translucent it picks up the sky behind it and fringes violet.
+      const a = t.alpha * Math.pow(1 - lt, 1.15) * (0.82 + 0.18 * thin) * shape;
       const vi4 = vi * 4;
-      const r = t.color.r * m;
-      const g = t.color.g * m * (1 - dens * 0.05);
-      const b = t.color.b * m * (1 + thin * 0.06);
+      // soot is warm and grey; only the thin-air vapour is allowed to go cold
+      const r = t.color.r * m * (1 + sk * 0.12) * this.mood.r;
+      const g = t.color.g * m * (1 - dens * 0.05) * this.mood.g;
+      const b = t.color.b * m * (1 + thin * 0.06) * (1 - sk * 0.24) * this.mood.b;
       col[vi4] = r;
       col[vi4 + 1] = g;
       col[vi4 + 2] = b;
@@ -1100,6 +1172,20 @@ function shardGeometry() {
   geo.computeVertexNormals();
   return geo;
 }
+
+/**
+ * Seconds between smoke puffs behind a tumbling fragment. Emitting on a fixed
+ * clock leaves a fast shard dropping a bead every ten metres, so the cadence
+ * follows the speed. The puff emitter reads the same function to size its
+ * puffs against the gap they have to cover, which is what keeps the trail
+ * continuous instead of dotted.
+ */
+function debrisPuffInterval(speed) {
+  return Math.min(0.13, Math.max(0.022, DEBRIS_PUFF_GAP / Math.max(speed, 1)));
+}
+
+/** Target spacing between debris smoke puffs, in metres. */
+const DEBRIS_PUFF_GAP = 5.5;
 
 class DebrisSystem {
   constructor(capacity = 240, rng) {
@@ -1225,7 +1311,7 @@ class DebrisSystem {
         this.smoking[i] -= dt;
         this.smokeT[i] -= dt;
         if (this.smokeT[i] <= 0 && onDebrisTick) {
-          this.smokeT[i] = 0.13;
+          this.smokeT[i] = debrisPuffInterval(v.length());
           onDebrisTick(this.pos[i], v, this.hot[i], i);
         }
       }
@@ -1416,6 +1502,8 @@ export class Effects {
     this._exY = new Float32Array(24);
     this._exZ = new Float32Array(24);
     this._exAge = new Float32Array(24).fill(1e6);
+    this._exAcc = new Float32Array(24);
+    this._exSlot = 0;
     this._exPrev = new THREE.Vector3();
 
     // ambient near-camera dust motes
@@ -1429,6 +1517,13 @@ export class Effects {
   setLightingMood(lightColor, shadowColor) {
     this.smokeLight.copy(lightColor);
     this.smokeShadow.copy(shadowColor);
+    // 0.81 is the daylight value of this blend, so daylight comes out at 1
+    const m = this.trails.mood.copy(lightColor).lerp(shadowColor, 0.3).multiplyScalar(1 / 0.81);
+    // A contrail has no light of its own. The linear blend alone still leaves
+    // a moonlit one reading as a white streak, so bend it down by its own
+    // luminance: daylight is untouched, night loses roughly half again.
+    const l = Math.min(1, m.r * 0.3 + m.g * 0.6 + m.b * 0.1);
+    m.multiplyScalar(l * (0.55 + 0.45 * l));
   }
 
   // ---- helpers -----------------------------------------------------------
@@ -1517,12 +1612,17 @@ export class Effects {
     const sz = seg ? seg.z : pos.z;
     const segLen = seg ? Math.hypot(pos.x - sx, pos.y - sy, pos.z - sz) : 0;
 
-    // thin air needs far fewer, far bigger puffs to fill the same volume
+    // Emission is driven by distance flown, not by frame rate: a puff every
+    // `pitch` metres is what makes the rope continuous, and in thin air the
+    // puffs are so large that a handful per second already fills the volume.
     const puff0 = 1.7 * scale * (0.55 + thin * 1.1);
-    let n = this._n(rate * dt * (0.32 + dens * 0.85));
-    // never leave a gap: one puff per (roughly) puff diameter of travel
-    const need = Math.ceil(segLen / Math.max(puff0 * 1.25, 1));
-    if (need > n) n = Math.min(need, 14);
+    const pitch = puff0 * 1.25 * (1 + thin * 5);
+    this._exAcc[this._exSlot] += segLen;
+    const byDist = Math.floor(this._exAcc[this._exSlot] / pitch);
+    if (byDist > 0) this._exAcc[this._exSlot] -= byDist * pitch;
+    // a baseline so a slow or hovering emitter still smokes
+    let n = this._n(rate * dt * (0.1 + dens * 0.5));
+    if (byDist > n) n = Math.min(byDist, 12);
     if (n <= 0) return;
     const hotEvery = hot ? 2 : 0;
     for (let i = 0; i < n; i++) {
@@ -1566,16 +1666,28 @@ export class Effects {
       // dense air: dark, tight, short-lived. thin air: bright, wide, hanging.
       const grey = 0.3 + rng.float() * 0.3;
       const lit = clamp01(grey + thin * 0.55);
+      // thin-air puffs get their punch from opacity, not from a colour
+      // multiplier above 1: that only reads as "bright" against a lit sky and
+      // turns into a self-luminous streak at night
       const sk = sooty * dens;
-      this._sootify(this._tint(this._c0, lit, (0.5 + thin * 1.45) * (1 - sk * 0.55)), sk);
-      this._sootify(this._tint(this._c1, lit * 0.5, (0.34 + thin * 1.3) * (1 - sk * 0.4)), sk);
+      // Dense-air exhaust is soot, and soot is warm grey however dim it gets.
+      // Left on the sky-lit shadow tone it comes out cyan against the sky, so
+      // the neutralisation is driven by air density rather than by the soot
+      // fraction alone; up in the stratosphere the vapour is allowed to stay
+      // cold. Aluminised smoke also scatters hard, so a rope that is too dark
+      // never wins against a bright sky: it just lets it through.
+      const nk = dens * (0.55 + sooty * 0.45);
+      this._sootify(this._tint(this._c0, lit, (0.86 + thin * 0.42) * (1 - sk * 0.4)), nk);
+      this._sootify(this._tint(this._c1, lit * 0.5, (0.55 + thin * 0.38) * (1 - sk * 0.32)), nk);
       _v.multiplyScalar(0.42);
       this.smoke.spawn(ex, ey, ez, {
         vel: _v,
-        life: (0.7 + rng.float() * 0.9) * (1.7 + Math.pow(thin, 1.4) * 11),
+        // the ribbon carries the long-lived contrail; these puffs only have to
+        // give it body around the round, so their life is bounded
+        life: (0.7 + rng.float() * 0.9) * (1.7 + Math.pow(thin, 1.4) * 5.5),
         size0: puff0 * (0.75 + rng.float() * 0.5),
         size1: (7 + rng.float() * 7) * scale * (0.5 + Math.pow(thin, 1.2) * 6.5),
-        sizeExp: 0.55,
+        sizeExp: 0.45,
         drag: 1.7 - thin * 1.45,
         grav: 1.1 * dens,
         turb: 0.9 * scale * dens,
@@ -1586,7 +1698,7 @@ export class Effects {
         cell: this._cell(),
         color0: this._c0,
         color1: this._c1,
-        alpha: (0.2 + dens * 0.36) * (0.7 + scale * 0.14),
+        alpha: (0.44 + dens * 0.24) * (0.7 + scale * 0.14),
         fadeIn: 0.05,
         fadeExp: 0.9 + dens * 0.55,
       });
@@ -1623,10 +1735,12 @@ export class Effects {
     }
     const slot = best >= 0 ? best : oldest;
     const out = best >= 0 ? this._exPrev.set(x[slot], y[slot], z[slot]) : null;
+    if (best < 0) this._exAcc[slot] = 0;
     x[slot] = pos.x;
     y[slot] = pos.y;
     z[slot] = pos.z;
     age[slot] = 0;
+    this._exSlot = slot;
     return out;
   }
 
@@ -1722,8 +1836,8 @@ export class Effects {
         -dir.z * sp * 0.3 + Math.sin(a) * sp * (0.5 + S * 0.24),
       );
       const lit = rng.float();
-      this._tint(this._c0, lit, 0.52 + lit * 0.68);
-      this._tint(this._c1, lit * 0.35, 0.34 + lit * 0.42);
+      this._sootify(this._tint(this._c0, lit, 0.52 + lit * 0.68), 0.7);
+      this._sootify(this._tint(this._c1, lit * 0.35, 0.34 + lit * 0.42), 0.9);
       this.smoke.spawn(pos.x, gy + rng.float() * 5 * S, pos.z, {
         vel: _v,
         life: 4.5 + rng.float() * 5,
@@ -1748,10 +1862,10 @@ export class Effects {
     }
 
     // ground interaction: a fast dust ring driven radially outwards
-    const nDust = this._n(26 + 30 * S);
+    const nDust = this._n(30 + 34 * S);
     for (let i = 0; i < nDust; i++) {
       const a = rng.float() * TAU;
-      const sp = (11 + rng.float() * 20) * (0.7 + S * 0.4);
+      const sp = (13 + rng.float() * 24) * (0.6 + S * 0.6);
       _v.set(Math.cos(a) * sp, 1.5 + rng.float() * 6, Math.sin(a) * sp);
       const r = 1.5 + rng.float() * 5 * S;
       const lit = rng.float();
@@ -1759,12 +1873,12 @@ export class Effects {
       this._dustTint(this._c1, lit * 0.4, 0.42 + lit * 0.3);
       this.dust.spawn(pos.x + Math.cos(a) * r, gy + rng.float() * 2, pos.z + Math.sin(a) * r, {
         vel: _v,
-        life: 6 + rng.float() * 7,
+        life: 11 + rng.float() * 11,
         size0: 2.4 * S,
-        size1: (7 + rng.float() * 9) * S,
+        size1: (14 + rng.float() * 16) * S,
         sizeExp: 0.5,
-        drag: 0.95,
-        grav: 0.28,
+        drag: 0.4,
+        grav: 0.3,
         floorY: gy,
         turb: 1.5,
         phase: rng.float() * TAU,
@@ -1803,7 +1917,7 @@ export class Effects {
     }
 
     this.decals.spawn(_v2.set(pos.x, gy - 0.3, pos.z), 13 * S, 0.42);
-    this._addPlume(PLUME_LAUNCH, pos, dir, S, gy, 3.4 + 2.4 * S);
+    this._addPlume(PLUME_LAUNCH, pos, dir, S, gy, 4.5 + 6.5 * S);
   }
 
   /**
@@ -1822,8 +1936,8 @@ export class Effects {
     this.fire.spawn(pos.x, pos.y, pos.z, {
       vel: null,
       life: 0.12,
-      size0: 14 * S,
-      size1: 95 * S,
+      size0: 16 * S,
+      size1: 150 * S,
       sizeExp: 0.45,
       cell: this._cell(),
       color0: FLASH_KILL,
@@ -1834,9 +1948,9 @@ export class Effects {
     });
     this.fire.spawn(pos.x, pos.y, pos.z, {
       vel: null,
-      life: 0.26,
-      size0: 22 * S,
-      size1: 150 * S,
+      life: 0.28,
+      size0: 24 * S,
+      size1: 250 * S,
       sizeExp: 0.5,
       cell: this._cell(),
       color0: FLASH_KILL_END,
@@ -1848,10 +1962,10 @@ export class Effects {
 
     // shock rings: a fast bluish one and a slower dirty one behind it
     this.rings.spawn(pos.x, pos.y, pos.z, {
-      life: 0.7,
+      life: 0.85,
       size0: 20 * S,
-      size1: 330 * S,
-      sizeExp: 0.48,
+      size1: 620 * S,
+      sizeExp: 0.45,
       rot: rng.float() * TAU,
       color0: RING_COLD,
       color1: RING_COLD,
@@ -1860,10 +1974,10 @@ export class Effects {
       fadeExp: 1.9,
     });
     this.rings.spawn(pos.x, pos.y, pos.z, {
-      life: 1.6,
+      life: 1.7,
       size0: 30 * S,
-      size1: 210 * S,
-      sizeExp: 0.55,
+      size1: 430 * S,
+      sizeExp: 0.5,
       rot: rng.float() * TAU,
       color0: RING_WARM,
       color1: RING_WARM,
@@ -1882,9 +1996,9 @@ export class Effects {
       _v.set(sb * Math.cos(a) * sp, Math.cos(b) * sp, sb * Math.sin(a) * sp);
       this.fire.spawn(pos.x, pos.y, pos.z, {
         vel: _v,
-        life: 0.3 + rng.float() * 0.7,
+        life: 0.35 + rng.float() * 0.8,
         size0: 9 * S,
-        size1: (48 + rng.float() * 56) * S,
+        size1: (74 + rng.float() * 86) * S,
         sizeExp: 0.55,
         drag: 1.4,
         cell: this._cell(),
@@ -1899,11 +2013,11 @@ export class Effects {
     // the fireball's residue: a dirty cloud that keeps expanding for a minute.
     // High up it becomes the only thing marking the kill, so it has to grow to
     // hundreds of metres to stay readable from the site.
-    const nSmoke = this._n(16 + 14 * S);
+    const nSmoke = this._n(20 + 18 * S);
     for (let i = 0; i < nSmoke; i++) {
       const a = rng.float() * TAU;
       const b = Math.acos(2 * rng.float() - 1);
-      const sp = 14 + rng.float() * 80;
+      const sp = 60 + rng.float() * 210;
       const sb = Math.sin(b);
       _v.set(sb * Math.cos(a) * sp, Math.cos(b) * sp, sb * Math.sin(a) * sp);
       // a third of the puffs are unburnt propellant and casing soot: keeping
@@ -1914,16 +2028,20 @@ export class Effects {
         this._sootTint(this._c0, lit, 0.3 + lit * 0.6);
         this._sootTint(this._c1, lit * 0.4, 0.2 + lit * 0.35);
       } else {
-        this._sootTint(this._c0, lit, 0.85 + thin * 0.45);
-        this._sootTint(this._c1, lit * 0.5, 0.45 + thin * 0.3);
+        // Nothing shadows a cloud at twenty kilometres, so the non-soot half
+        // stays bright even as it dissipates. Let the late tone fall away and
+        // the thinning rim darkens instead of fading, which against a blue sky
+        // composites into a deep blue halo rather than disappearing.
+        this._sootTint(this._c0, lit, 1.05 + thin * 0.5);
+        this._sootTint(this._c1, lit * 0.65, 0.85 + thin * 0.6);
       }
       this.smoke.spawn(pos.x, pos.y, pos.z, {
         vel: _v,
         life: (9 + rng.float() * 12) * (0.7 + thin * 0.9),
         size0: 12 * S,
-        size1: (80 + rng.float() * 210) * S * (0.55 + thin * 1.1),
-        sizeExp: 0.38,
-        drag: 0.45,
+        size1: (130 + rng.float() * 250) * S * (0.55 + thin * 1.1),
+        sizeExp: 0.28,
+        drag: 0.32,
         grav: 0.5 * dens,
         turb: 4.5,
         phase: rng.float() * TAU,
@@ -1933,29 +2051,42 @@ export class Effects {
         cell: this._cell(),
         color0: this._c0,
         color1: this._c1,
-        alpha: soot ? 0.5 : 0.4,
+        // The cloud has to carry its own colour rather than let the sky
+        // through: a translucent grey puff over a saturated sky composites to
+        // violet once the grade has had a go at it.
+        alpha: soot ? 0.64 : 0.52,
         fadeIn: 0.05,
         fadeExp: 1.1,
       });
     }
 
-    // streaking sparks
-    const nSpark = this._n(46 + 26 * S);
+    // Streaking sparks. They have to clear the fireball to be worth drawing at
+    // all: anything slower than the cloud's own expansion is an additive dot
+    // inside a saturated white ball. The cube skews the distribution towards a
+    // few very fast ones that rake right out of the frame.
+    const nSpark = this._n(38 + 22 * S);
     for (let i = 0; i < nSpark; i++) {
       const a = rng.float() * TAU;
       const b = Math.acos(2 * rng.float() - 1);
-      const sp = 140 + rng.float() * 520;
+      const q = rng.float();
+      const sp = (260 + q * q * q * 1500) * (0.7 + S * 0.3);
       const sb = Math.sin(b);
       _v.set(sb * Math.cos(a) * sp, Math.cos(b) * sp, sb * Math.sin(a) * sp);
+      // half of them are burning casing rather than white-hot fragments
+      const white = rng.float() < 0.45;
+      // The stretch multiplies length only, so a thin spark turns into a
+      // sub-pixel line that pixel coverage washes away: keep them fat and
+      // stretch them gently instead.
       this.sparks.spawn(pos.x, pos.y, pos.z, {
         vel: _v,
-        life: 0.6 + rng.float() * 2.2,
-        size0: (4 + rng.float() * 3) * S,
-        size1: 0.5,
-        drag: 0.3,
+        life: 0.9 + rng.float() * 2.8,
+        size0: (2.2 + rng.float() * 2.6) * S,
+        size1: 0.4,
+        sizeExp: 1.7,
+        drag: 0.1,
         grav: -9,
-        stretch: 0.03,
-        color0: SPARK_WHITE,
+        stretch: 0.019,
+        color0: white ? SPARK_WHITE : SPARK_HOT,
         color1: SPARK_COOL,
         alpha: 1,
         fadeIn: 0.008,
@@ -1968,13 +2099,13 @@ export class Effects {
     for (let i = 0; i < nDebris; i++) {
       const a = rng.float() * TAU;
       const b = Math.acos(2 * rng.float() - 1);
-      const sp = 40 + rng.float() * 190;
+      const sp = 55 + rng.float() * 240;
       const sb = Math.sin(b);
       _v.set(sb * Math.cos(a) * sp, Math.cos(b) * sp, sb * Math.sin(a) * sp);
       if (vel) _v.addScaledVector(vel, 0.35);
-      const smoking = i < Math.min(9, nDebris * 0.5);
+      const smoking = i < Math.min(12, nDebris * 0.6);
       this.debris.spawn(pos, _v, {
-        size: 0.5 + rng.float() * 1.4 * S,
+        size: 0.7 + rng.float() * 2.2 * S,
         life: 8 + rng.float() * 14,
         hot: i < Math.min(14, nDebris * 0.65) ? 0.6 + rng.float() * 0.4 : 0,
         smoking,
@@ -2026,7 +2157,12 @@ export class Effects {
       fadeIn: 0.01,
       fadeExp: 2.1,
     });
-    this.decals.spawn(pos, 24 * S, 0.92);
+    // A single scorch disc reads as a scuff mark next to a hundred-metre dirt
+    // column. Two overlapping discs give it a burnt core sitting inside a much
+    // wider, fainter apron of thrown earth, which is what actually sells the
+    // scale of the hit once the smoke has drifted off.
+    this.decals.spawn(pos, 66 * S, 0.3);
+    this.decals.spawn(pos, 30 * S, 0.95);
 
     // burning core of the crater
     const nFire = this._n(20 + 18 * S);
@@ -2298,7 +2434,9 @@ export class Effects {
   _launchPlumeStep(p, dt, u) {
     const rng = this.rng;
     const S = p.s;
-    const k = (1 - u) * (1 - u);
+    // the column keeps boiling long after the round has gone: a square falloff
+    // shuts the pad down in a couple of seconds and reads as a puff, not a plume
+    const k = Math.pow(1 - u, 1.3);
 
     // deflected jet, only while the round is still over the pad
     if (p.t < 0.85) {
@@ -2329,8 +2467,8 @@ export class Effects {
           rot: rng.float() * TAU,
           rotVel: (rng.float() - 0.5) * 0.4,
           cell: this._cell(),
-          color0: this._tint(this._c0, lit, 0.5 + lit * 0.62),
-          color1: this._tint(this._c1, lit * 0.35, 0.32 + lit * 0.38),
+          color0: this._sootify(this._tint(this._c0, lit, 0.5 + lit * 0.62), 0.7),
+          color1: this._sootify(this._tint(this._c1, lit * 0.35, 0.32 + lit * 0.38), 0.9),
           alpha: 0.55,
           fadeIn: 0.07,
           fadeExp: 1.0,
@@ -2357,36 +2495,44 @@ export class Effects {
     // the rolling column: smoke boiling up off the concrete around the pad.
     // It has to climb slowly enough that the base stays fed, or the cloud
     // detaches and floats away from the launcher.
-    p.a1 += (26 + 30 * S) * k * dt;
+    p.a1 += (17 + 17 * S) * k * dt;
     while (p.a1 >= 1) {
       p.a1 -= 1;
       const a = rng.float() * TAU;
       const r = (2 + 7 * S) * (0.3 + u * 0.8) * (0.4 + rng.float());
-      const rise = (5 + rng.float() * 10) * (0.75 + S * 0.25);
+      const rise = (13 + rng.float() * 23) * (0.7 + S * 0.6);
       _v.set(
         Math.cos(a) * (1.2 + rng.float() * 4.5),
         rise,
         Math.sin(a) * (1.2 + rng.float() * 4.5),
       );
+      // Drag has to stay low or the puff sheds its launch velocity in the
+      // first half second and the column tops out at head height. What lifts
+      // it afterwards is buoyancy against that same low drag: grav/drag is
+      // the terminal climb rate, and it is what sets the final column height.
       const lit = rng.float();
       this.smoke.spawn(p.x + Math.cos(a) * r, p.gy + rng.float() * 3 * S, p.z + Math.sin(a) * r, {
         vel: _v,
-        life: 8 + rng.float() * 9,
-        size0: 3 * S,
-        size1: (9 + rng.float() * 12) * S,
-        sizeExp: 0.55,
-        drag: 0.75,
-        grav: 1.35 * (1 - u * 0.5),
+        life: 11 + rng.float() * 12,
+        size0: 3.5 * S,
+        size1: (20 + rng.float() * 24) * S,
+        sizeExp: 0.5,
+        drag: 0.3,
+        grav: 2.6 * (1 - u * 0.5),
         floorY: p.gy,
-        turb: 2.8 * S,
+        turb: 3.2 * S,
         phase: rng.float() * TAU,
         wind: 0.8,
         rot: rng.float() * TAU,
         rotVel: (rng.float() - 0.5) * 0.3,
         cell: this._cell(),
-        color0: this._tint(this._c0, lit, 0.5 + lit * 0.7),
-        color1: this._tint(this._c1, lit * 0.4, 0.32 + lit * 0.42),
-        alpha: 0.5,
+        // Wide lit/shadow spread so the column has bright sunlit crowns over
+        // dark cores rather than reading as one flat grey mass. The shadow
+        // tone is sky-lit and therefore blue, which is right for a vapour
+        // cloud and wrong for a propellant column, so pull it back to neutral.
+        color0: this._sootify(this._tint(this._c0, lit, 0.34 + lit * 0.95), 0.7),
+        color1: this._sootify(this._tint(this._c1, lit * 0.4, 0.24 + lit * 0.56), 0.9),
+        alpha: 0.63,
         fadeIn: 0.05,
         fadeExp: 0.95,
       });
@@ -2395,22 +2541,22 @@ export class Effects {
     // the pall that settles over the pad: barely buoyant, spreads sideways and
     // keeps the base of the column attached to the ground long after the
     // energetic part of the plume has climbed away
-    p.a3 += (10 + 13 * S) * Math.pow(1 - u, 0.5) * dt;
+    p.a3 += (8 + 9 * S) * Math.pow(1 - u, 0.5) * dt;
     while (p.a3 >= 1) {
       p.a3 -= 1;
       const a = rng.float() * TAU;
       const r = (2.5 + 9 * S) * (0.3 + u * 1.1) * (0.3 + rng.float() * 0.9);
       _v.set(
-        Math.cos(a) * (1.5 + rng.float() * 4.5),
+        Math.cos(a) * (2 + rng.float() * 6),
         0.6 + rng.float() * 2.6,
-        Math.sin(a) * (1.5 + rng.float() * 4.5),
+        Math.sin(a) * (2 + rng.float() * 6),
       );
       const lit = rng.float();
       this.smoke.spawn(p.x + Math.cos(a) * r, p.gy + rng.float() * 2.5, p.z + Math.sin(a) * r, {
         vel: _v,
-        life: 9 + rng.float() * 9,
+        life: 12 + rng.float() * 12,
         size0: 3.4 * S,
-        size1: (9 + rng.float() * 12) * S,
+        size1: (12 + rng.float() * 15) * S,
         sizeExp: 0.5,
         drag: 0.6,
         grav: 0.16,
@@ -2421,8 +2567,8 @@ export class Effects {
         rot: rng.float() * TAU,
         rotVel: (rng.float() - 0.5) * 0.25,
         cell: this._cell(),
-        color0: this._tint(this._c0, lit, 0.48 + lit * 0.6),
-        color1: this._tint(this._c1, lit * 0.4, 0.3 + lit * 0.36),
+        color0: this._sootify(this._tint(this._c0, lit, 0.48 + lit * 0.6), 0.7),
+        color1: this._sootify(this._tint(this._c1, lit * 0.4, 0.3 + lit * 0.36), 0.9),
         alpha: 0.34,
         fadeIn: 0.06,
         fadeExp: 1.0,
@@ -2430,22 +2576,22 @@ export class Effects {
     }
 
     // dust still streaming outwards across the pad, front-loaded
-    const kd = Math.pow(1 - u, 3);
-    p.a2 += (24 + 28 * S) * kd * dt;
+    const kd = Math.pow(1 - u, 1.8);
+    p.a2 += (20 + 22 * S) * kd * dt;
     while (p.a2 >= 1) {
       p.a2 -= 1;
       const a = rng.float() * TAU;
-      const sp = (8 + rng.float() * 16) * (0.7 + S * 0.4);
+      const sp = (12 + rng.float() * 22) * (0.6 + S * 0.55);
       const r = (3.5 + 8 * S) * (0.4 + u * 1.2) * (0.4 + rng.float() * 0.8);
       _v.set(Math.cos(a) * sp, 0.8 + rng.float() * 4, Math.sin(a) * sp);
       const lit = rng.float();
       this.dust.spawn(p.x + Math.cos(a) * r, p.gy + rng.float() * 2, p.z + Math.sin(a) * r, {
         vel: _v,
-        life: 7 + rng.float() * 8,
+        life: 12 + rng.float() * 12,
         size0: 2.4 * S,
-        size1: (6.5 + rng.float() * 9) * S,
+        size1: (12 + rng.float() * 14) * S,
         sizeExp: 0.55,
-        drag: 0.9,
+        drag: 0.45,
         grav: 0.22,
         floorY: p.gy,
         turb: 1.4,
@@ -2494,13 +2640,49 @@ export class Effects {
         rot: rng.float() * TAU,
         rotVel: (rng.float() - 0.5) * 0.3,
         cell: this._cell(),
-        color0: this._tint(this._c0, lit, 0.55),
-        color1: this._tint(this._c1, lit * 0.4, 0.34),
-        alpha: 0.46,
+        color0: this._sootTint(this._c0, lit, 0.62),
+        color1: this._sootTint(this._c1, lit * 0.4, 0.38),
+        alpha: 0.6,
         fadeIn: 0.08,
         fadeExp: 0.95,
       });
     }
+    // Pulverised earth thrown up with the soot. Without it the column is pure
+    // black and reads as a fuel fire rather than something that dug a hole.
+    p.a2 += (30 + 28 * S) * Math.pow(1 - u, 1.5) * dt;
+    while (p.a2 >= 1) {
+      p.a2 -= 1;
+      const a = rng.float() * TAU;
+      const r = rng.float() * 7 * S;
+      _v.set(
+        Math.cos(a) * (3 + rng.float() * 10),
+        11 + rng.float() * 30,
+        Math.sin(a) * (3 + rng.float() * 10),
+      );
+      const lit = 0.35 + rng.float() * 0.6;
+      this.dust.spawn(p.x + Math.cos(a) * r, p.gy + 1, p.z + Math.sin(a) * r, {
+        vel: _v,
+        life: 10 + rng.float() * 10,
+        size0: 4 * S,
+        size1: (28 + rng.float() * 32) * S,
+        sizeExp: 0.46,
+        drag: 0.34,
+        grav: 0.9,
+        floorY: p.gy,
+        turb: 2.2,
+        phase: rng.float() * TAU,
+        wind: 1.1,
+        rot: rng.float() * TAU,
+        rotVel: (rng.float() - 0.5) * 0.3,
+        cell: this._cell(),
+        color0: this._dustTint(this._c0, lit, 1.0),
+        color1: this._dustTint(this._c1, lit * 0.45, 0.6),
+        alpha: 0.46,
+        fadeIn: 0.07,
+        fadeExp: 1.0,
+      });
+    }
+
     p.a1 += 9 * k * dt;
     while (p.a1 >= 1) {
       p.a1 -= 1;
@@ -2528,13 +2710,20 @@ export class Effects {
     const rng = this.rng;
     const dens = densityRatio(pos.y);
     const thin = 1 - dens;
+    const speed = vel.length();
     _v.set(vel.x * -0.05, vel.y * -0.05 + 1, vel.z * -0.05);
     const lit = 0.3 + hot * 0.4;
+    // A puff has to be wider than the gap the shard opens up before the next
+    // one, or the trail is a string of beads rather than a line of smoke. The
+    // quad is soft-edged, so it needs to be comfortably wider than the gap,
+    // not merely as wide.
+    const gap = speed * debrisPuffInterval(speed);
+    const size0 = Math.max(2.2 + hot * 2.0, gap * 1.5);
     this.smoke.spawn(pos.x, pos.y, pos.z, {
       vel: _v,
       life: 1.6 + rng.float() * 2.4 + thin * 3,
-      size0: 1.2 + hot * 1.5,
-      size1: (5 + rng.float() * 7) * (1 + thin * 1.1),
+      size0,
+      size1: Math.max((5 + rng.float() * 7) * (1 + thin * 1.1), size0 * 1.7),
       sizeExp: 0.55,
       drag: 0.9,
       grav: 0.6 * dens,

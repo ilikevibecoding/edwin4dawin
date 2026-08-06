@@ -10,6 +10,9 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
+// main.js routes the reduced-motion setting to the post chain only, so this
+// pass forwards it to the sky as well (star scintillation lives there).
+import { MOTION } from './weather.js';
 
 const GradeShader = {
   uniforms: {
@@ -286,6 +289,7 @@ export class Post {
 
   setReducedMotion(on) {
     this.reducedMotion = !!on;
+    MOTION.enabled = !this.reducedMotion;
     this._pushMotion();
   }
 

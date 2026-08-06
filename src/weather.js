@@ -7,6 +7,13 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 
+/**
+ * Shared reduced-motion flag. `main.js` only routes the setting to the post
+ * chain, so post.js forwards it here to keep star scintillation - the one
+ * animated thing the sky owns - honest about the preference too.
+ */
+export const MOTION = { enabled: true };
+
 // Condition fields that hold colours rather than plain numbers. The transition
 // blender has to interpolate these in colour space instead of lerping the raw
 // hex integer, which would slide through nonsense hues.
@@ -248,9 +255,9 @@ export const CONDITIONS = {
 
     exposure: 0.66,
 
-    bloomStrength: 0.72,
-    bloomThreshold: 0.50,
-    bloomRadius: 0.86,
+    bloomStrength: 0.58,
+    bloomThreshold: 0.56,
+    bloomRadius: 0.84,
     grain: 0.060,
     vignette: 0.52,
     contrast: 1.15,
@@ -948,6 +955,7 @@ export class Weather {
     const su = this.stars.material.uniforms;
     su.uTime.value = elapsed;
     su.uPixelRatio.value = this.renderer.getPixelRatio();
+    su.uMotion.value = MOTION.enabled ? 1 : 0;
 
     if (this.transition) {
       const tr = this.transition;
@@ -968,6 +976,7 @@ export class Weather {
 
   /** Reduced motion freezes star scintillation along with everything else. */
   setReducedMotion(on) {
+    MOTION.enabled = !on;
     this.stars.material.uniforms.uMotion.value = on ? 0 : 1;
   }
 
