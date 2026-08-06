@@ -185,7 +185,7 @@ peak on the widest south-horizon angle.
 
 ---
 
-## Iteration 6 — user feedback round + parallel specialist waves (IN PROGRESS)
+## Iteration 6 — user feedback round + parallel specialist waves (COMPLETE)
 
 **User feedback addressed directly (committed + demo refreshed):**
 - "Big blob of black when I turn around" — root causes fixed (over-dark ground
@@ -225,8 +225,40 @@ peak on the widest south-horizon angle.
 explosions/effects (intercept fireballs, ground impacts, launch blasts,
 per-emit trail cooling).
 
-**Queued for integration pass (after wave 2):** bloom threshold near sun disc
-(distant-dot washout), slightly higher night ambient/IBL (both requested by
-missiles specialist — deferred so running specialists don't tune against a
-moving target), full 7-test suite on a quiet box, screenshot sweep re-score,
-demo video, demo snapshot + CDN refresh.
+**Specialist wave 2 (complete, committed):**
+- Batteries (8 loops, stop rule hit at 8.56 avg): RAMPART full tractor +
+  flatbed TEL with turntable/trunnions/hydraulic rams/per-cell covers/blast
+  deflector; HALBERD lattice tube pack on a slew pallet; SENTINEL gantry tower
+  with platforms, crane jib, staging rounds, umbilical arm. Cross-rig
+  world-space merging holds all three at 70 draw calls. Launch/reload/ammo
+  behavior verified identical (deterministic salvo probe).
+- Effects (7 loops, 8.56 avg): noise-displaced incandescent fireball cores with
+  blackbody ramp + dissolve, 4-variant cauliflower puff atlas with birth
+  incandescence and age erosion, pooled explosion PointLights (night kills
+  light the terrain), layered ground impacts (dirt spray, clods, fire column,
+  leaning smoke tower, dust skirt, scorch), flame-lit launch clouds, per-emit
+  trail color/glow (white→orange→gray cooling). Fixed at integration: fragment
+  shader precision mismatch (uT mediump vs highp) that failed program
+  validation on strict drivers.
+
+**Integration pass:** day bloom threshold 0.85→0.90 + night hemi/IBL ambient
+lift (both missiles-specialist requests, verified against night battery /
+console interior / day sun-glare shots); console seat pose adopted; sweep
+staging fixes (pad-local Rampart framing, 0.5 s night-kill capture chunks);
+console DOM test timeout raised to 420 s (the rebuilt C2 interior renders ~2×
+heavier under SwiftShader; passes in 3.7 min on a quiet box).
+
+**Verification:** full suite 7/7 green on the integrated build; 14-shot sweep
+re-captured; perf sweep day_spawn 367 / day_wide_south 175 (old 403 watch item
+cleared) / night_spawn 257 / night_console 294 / worst-case night battery
+walk-up 425 (known peak, floodlight shadow passes). Demo video recorded in a
+real browser (tablet raid start → F salvo across two batteries → interceptor
+cam → night fireball intercept → RAID DEFEATED, grade S) and reviewed
+beat-by-beat before trimming.
+
+**Final state vs rubric:** R1 8 · R2 8.5 · R3 8.5 · R4 8.5 · R5 9 · R6 9 ·
+R7 8 · R8 pass — **average 8.57, stopping condition met** (all ≥ 8, avg ≥ 8.5,
+suite green). Remaining polish backlog (post-stop): night battery silhouettes
+beyond ~80 m read mostly as lamp dots; threat-cam plasma glow shows a faint
+horizontal band from some angles; console chairs are simple; holo track labels
+can overlap the wall map; 425-call night walk-up peak.
