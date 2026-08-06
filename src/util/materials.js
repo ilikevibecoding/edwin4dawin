@@ -101,8 +101,25 @@ export function matShelter() {
 
 export function matSteel() {
   return def('steel', () => new THREE.MeshStandardMaterial({
-    color: PALETTE.steel, roughness: 0.42, metalness: 0.92,
+    color: PALETTE.steel, roughness: 0.5, metalness: 0.82, envMapIntensity: 0.8,
   }));
+}
+
+/**
+ * Painted structural steel for launcher cages, trusses and erector rails.
+ * Bare metal at this scale turns every lattice into a sky mirror; site
+ * hardware is painted, and paint is what makes the structure readable.
+ */
+export function matStructure() {
+  return def('structure', () => {
+    const t = paintedMetal({
+      key: 'structure', color: '#7a7f78', seed: 137, panel: 0, rivets: false,
+      wear: 0.6, grime: 0.55,
+    });
+    return new THREE.MeshStandardMaterial({
+      ...t, roughness: 0.66, metalness: 0.2, envMapIntensity: 0.85,
+    });
+  });
 }
 
 export function matSteelDark() {
@@ -144,7 +161,11 @@ export function matHazardRed() {
 export function matHeat() {
   return def('heat', () => {
     const t = heatMetal();
-    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.5, metalness: 0.9 });
+    // Scorched steel is dull. At high metalness the big aft blast plates turn
+    // into sky mirrors and read as sheets of blue glass from a distance.
+    return new THREE.MeshStandardMaterial({
+      ...t, roughness: 0.68, metalness: 0.42, envMapIntensity: 0.55,
+    });
   });
 }
 
@@ -153,7 +174,7 @@ export function matCanister() {
     const t = paintedMetal({
       key: 'canister', color: '#5a6350', seed: 91, panel: 3, wear: 0.45, grime: 0.5,
     });
-    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.62, metalness: 0.22 });
+    return new THREE.MeshStandardMaterial({ ...t, roughness: 0.74, metalness: 0.10 });
   });
 }
 

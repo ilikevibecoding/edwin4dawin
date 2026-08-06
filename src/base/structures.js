@@ -799,16 +799,20 @@ export function buildSearchlight({ height = 5.2 } = {}) {
       void main() {
         float along = 1.0 - vUv.y;
         float rim = 1.0 - abs(dot(normalize(vNormalView), normalize(-vViewPos)));
-        float a = pow(along, 1.9) * (0.25 + rim * 0.9) * uOpacity;
+        // A high rim power keeps the beam reading as scattered light rather
+        // than as the hollow cone it actually is - at low powers the silhouette
+        // of the geometry is plainly visible against a dark sky.
+        rim = pow(clamp(rim, 0.0, 1.0), 3.2);
+        float a = pow(along, 2.4) * (0.06 + rim * 0.85) * uOpacity;
         if (a < 0.003) discard;
-        gl_FragColor = vec4(uColor * (0.8 + rim), a);
+        gl_FragColor = vec4(uColor * (0.7 + rim * 0.6), a);
       }
     `,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
   });
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 46, 620, 18, 1, true), beamMat);
-  beam.geometry.translate(0, -310, 0);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 20, 560, 20, 1, true), beamMat);
+  beam.geometry.translate(0, -280, 0);
   beam.rotation.x = -Math.PI / 2;
   beam.position.z = 0.4;
   beam.frustumCulled = false;
@@ -857,15 +861,20 @@ export function buildConcretePad(w, d, { marking = null, sub = '', seed = 5, ker
   if (marking) {
     const decal = new THREE.Mesh(
       SHARED.plane,
-      new THREE.MeshBasicMaterial({
+      // Lit rather than unlit: painted concrete has to darken at dusk with the
+      // slab it sits on, or the stencil floats above the scene at night.
+      new THREE.MeshStandardMaterial({
         map: padMarking(marking, { sub }), transparent: true, depthWrite: false,
+        roughness: 0.95, metalness: 0.0,
         polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
       }),
     );
-    const s = Math.min(w, d) * 0.62;
+    // Stencils are painted at a legible walking scale, not stretched across
+    // the whole apron, and set back toward one end so the pad stays usable.
+    const s = Math.min(Math.min(w, d) * 0.42, 5.5);
     decal.scale.set(s, s, 1);
     decal.rotation.x = -Math.PI / 2;
-    decal.position.y = 0.235;
+    decal.position.set(0, 0.235, d * 0.5 - s * 0.75);
     decal.renderOrder = 3;
     g.add(decal);
   }

@@ -10,7 +10,7 @@ import { boot, advance, snapshot, shot, waitForReady } from './helpers.js';
  */
 
 test.describe('visual capture', () => {
-  test.describe.configure({ timeout: 600_000 });
+  test.describe.configure({ timeout: 900_000 });
 
   test('site tour in daylight', async ({ page }) => {
     await boot(page);
@@ -44,9 +44,9 @@ test.describe('visual capture', () => {
 
     // Each battery, close up.
     const spots = [
-      ['vanguard', -44, -26, -62, 5, -38],
-      ['highlance', 48, -32, 66, 6, -46],
-      ['sentinel', -14, -88, 4, 8, -104],
+      ['vanguard', -46, -18, -62, 5, -38],
+      ['highlance', 78, -28, 66, 6, -46],
+      ['sentinel', -18, -86, 4, 7, -104],
     ];
     for (const [name, px, pz, tx, ty, tz] of spots) {
       await page.evaluate(([a, b, c, d, e]) => {

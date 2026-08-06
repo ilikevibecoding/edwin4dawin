@@ -9,7 +9,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const SHOT_DIR = path.resolve('test-results/shots');
+// Deliberately outside test-results/, which Playwright wipes at the start of
+// every run - captures need to survive across iterations for comparison.
+export const SHOT_DIR = path.resolve('captures');
 export const ART_DIR = process.env.AEGIS_ARTIFACT_DIR || '/opt/cursor/artifacts';
 
 export function ensureDirs() {

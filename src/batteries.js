@@ -14,14 +14,14 @@
 import * as THREE from 'three';
 import {
   box, cyl, sphere, cone, chamferBox, bolts, flangeBolts, panelBolts, cable,
-  saggingCable, cableBundle, cableMaterial, hydraulicRam, trussPanel, ladder,
-  handrail, gratingDeck, grille, warningLamp, antennaMast, equipmentCase,
+  saggingCable, cableBundle, cableMaterial, pinnedRam, trussPanel,
+  ladder, handrail, gratingDeck, grille, warningLamp, antennaMast, equipmentCase,
   cableTray, wheel, jackLeg, generatorSet, optimizeStatic, SHARED,
 } from './util/kit.js';
 import {
   matOliveArmour, matSandArmour, matGrayArmour, matSteel, matSteelDark, matChrome,
   matRubber, matHazard, matHazardRed, matHeat, matWhitePaint, matCanister,
-  matEmissive, makeLamp, matGlass, PALETTE,
+  matEmissive, makeLamp, matGlass, matStructure, PALETTE,
 } from './util/materials.js';
 import { padMarking, hazardStripes, screenTexture } from './util/textures.js';
 import { boxCollider, cylCollider } from './base/structures.js';
@@ -191,6 +191,76 @@ function buildRoundCanister({ r = 0.5, len = 7, mat = matCanister(), label = '' 
   return g;
 }
 
+/**
+ * Pin a pair of elevation rams between the traversing station and the erector.
+ *
+ * Rams that are simply parked at a fixed angle read as poles standing next to
+ * the launcher. These are anchored at both ends: the barrel pivots on the
+ * station and the rod stretches to a point that rides on the erector frame, so
+ * the mechanism stays believable through the whole travel.
+ *
+ * The barrel is sized from the travel actually measured by sweeping the
+ * mechanism at build time, which keeps the rod partly housed at every angle
+ * regardless of how the surrounding geometry is tuned.
+ */
+function linkElevationRams(rig, {
+  base, anchor, elevRange, barrelR = 0.14, rodR = 0.09, pedestal = true,
+}) {
+  const { train, pivot, frame } = rig;
+  const anchors = [];
+  for (const sx of [-1, 1]) {
+    const a = new THREE.Object3D();
+    a.position.set(sx * anchor[0], anchor[1], anchor[2]);
+    frame.add(a);
+    anchors.push(a);
+  }
+
+  const baseVec = new THREE.Vector3(base[0], base[1], base[2]);
+  const probe = new THREE.Vector3();
+  const restore = pivot.rotation.x;
+  let minD = Infinity;
+  for (let i = 0; i <= 10; i++) {
+    pivot.rotation.x = -(elevRange[0] + (i / 10) * (elevRange[1] - elevRange[0])) * DEG;
+    train.updateMatrixWorld(true);
+    probe.setFromMatrixPosition(anchors[1].matrixWorld);
+    train.worldToLocal(probe);
+    minD = Math.min(minD, probe.distanceTo(baseVec));
+  }
+  pivot.rotation.x = restore;
+  const barrelLen = Math.max(0.45, minD * 0.78);
+
+  const rams = [];
+  for (const sx of [-1, 1]) {
+    const ram = pinnedRam(barrelLen, barrelR, rodR);
+    ram.position.set(sx * base[0], base[1], base[2]);
+    train.add(ram);
+    rams.push(ram);
+    if (pedestal && base[1] > 0.12) {
+      const h = base[1];
+      train.add(box(barrelR * 3.6, h, barrelR * 3.6, matSteelDark(), sx * base[0], h / 2, base[2]));
+      train.add(box(barrelR * 5.0, 0.06, barrelR * 5.0, matSteel(), sx * base[0], h * 0.06, base[2]));
+    }
+    // Feed hoses looping from the station into the barrel
+    train.add(saggingCable(
+      new THREE.Vector3(sx * base[0] * 0.35, Math.max(0.12, base[1]) + 0.1, base[2] - 0.3),
+      new THREE.Vector3(sx * base[0], Math.max(0.12, base[1]) + 0.16, base[2]),
+      0.16, 0.026, cableMaterial('#1a1a1e'),
+    ));
+  }
+
+  const p = new THREE.Vector3();
+  const aimRams = () => {
+    train.updateMatrixWorld(true);
+    for (let i = 0; i < rams.length; i++) {
+      p.setFromMatrixPosition(anchors[i].matrixWorld);
+      train.worldToLocal(p);
+      rams[i].aim(p);
+    }
+  };
+  aimRams();
+  return { rams, aimRams };
+}
+
 /** Status light panel: a small board of coloured indicators. */
 function buildStatusPanel(width = 0.7) {
   const g = new THREE.Group();
@@ -244,74 +314,119 @@ function buildVanguard(def) {
   // Traversing launching station: the whole erector, its trunnions and its rams
   // rotate together on the trailer deck.
   const train = new THREE.Group();
-  train.position.set(0, deckY, 0);
+  train.position.set(0.6, deckY, 0);
   root.add(train);
-  const turnRing = cyl(1.5, 0.14, matSteelDark(), 0, 0.07, 0, 20);
+  const turnRing = cyl(1.7, 0.16, matSteelDark(), 0, 0.08, 0, 24);
   train.add(turnRing);
-  train.add(flangeBolts(14, 1.3, 0.028, 0.15, matSteel()));
+  train.add(flangeBolts(16, 1.5, 0.028, 0.17, matSteel()));
+  // Traversing deck the whole launching station stands on
+  train.add(box(3.5, 0.14, 4.6, matSteelDark(), 0, 0.23, 0.7));
+  train.add(gratingDeck(1.0, 2.4, matSteelDark()).translateY(0.31).translateX(1.85));
 
+  // Rear trunnion towers: the erector hinges at the aft end of the pack.
   const pivot = new THREE.Group();
-  pivot.position.set(1.0, 0.36, 0);
+  pivot.position.set(0, 1.05, -0.5);
   train.add(pivot);
   for (const sz of [-1, 1]) {
-    train.add(box(0.5, 0.7, 0.22, matSteelDark(), 1.0, 0.2, sz * 1.05));
-    train.add(cyl(0.11, 0.3, matChrome(), 1.0, 0.36, sz * 1.05, 10).rotateX(Math.PI / 2));
+    const tower = chamferBox(0.42, 1.4, 0.85, 0.05, matGrayArmour());
+    tower.position.set(sz * 1.72, 0.62, -0.5);
+    train.add(tower);
+    train.add(cyl(0.15, 0.34, matChrome(), sz * 1.72, 1.05, -0.5, 12).rotateZ(Math.PI / 2));
+    const plate = panelBolts(0.7, 1.2, 0.3, 0.02, 0, matSteel());
+    plate.rotation.y = sz * Math.PI / 2;
+    plate.position.set(sz * 1.94, 0.62, -0.5);
+    train.add(plate);
   }
 
   // The erector frame carries the canister pack; +Z is "up the rail".
   const frame = new THREE.Group();
   pivot.add(frame);
-  const packW = 2.5, packH = 1.5, packLen = 5.4;
+  const packW = 3.24, packH = 1.86, packLen = 5.8;
 
-  const frameBase = box(0.24, 0.3, packLen + 0.5, matSteelDark(), 0, -packH / 2 - 0.2, packLen / 2 - 0.4);
+  const frameBase = box(packW * 0.5, 0.32, packLen + 0.7, matGrayArmour(), 0, -packH / 2 - 0.24, packLen / 2 - 0.5);
   frame.add(frameBase);
+  // Open side cages: two longerons with a lattice between them, so the tubes
+  // stay visible through the structure instead of behind a plate.
   for (const sz of [-1, 1]) {
-    const rail = box(0.16, packH + 0.4, packLen + 0.4, matSteel(), sz * (packW / 2 + 0.1), 0, packLen / 2 - 0.4);
-    frame.add(rail);
-    // Rail lattice
-    const lat = trussPanel(packLen, packH + 0.3, 5, 0.07, matSteel());
+    for (const sy of [-1, 1]) {
+      frame.add(box(0.2, 0.24, packLen + 0.5, matGrayArmour(),
+        sz * (packW / 2 + 0.14), sy * (packH / 2 + 0.16), packLen / 2 - 0.5));
+    }
+    const lat = trussPanel(packLen + 0.3, packH + 0.06, 5, 0.09, matStructure());
     lat.rotation.y = Math.PI / 2;
-    lat.position.set(sz * (packW / 2 + 0.02), 0, packLen / 2 - 0.4);
+    lat.position.set(sz * (packW / 2 + 0.14), 0, packLen / 2 - 0.5);
     frame.add(lat);
+    // Cable run and hand line down the outside of the cage
+    frame.add(cable([
+      new THREE.Vector3(sz * (packW / 2 + 0.24), -packH / 2 - 0.05, -0.4),
+      new THREE.Vector3(sz * (packW / 2 + 0.24), -packH / 2 - 0.05, packLen - 0.6),
+    ], 0.035, cableMaterial('#121214')));
   }
-  // Blast deflector at the base of the frame
-  const deflector = box(packW + 0.8, 0.1, 1.5, matHeat(), 0, -packH / 2 - 0.3, -0.9);
+  // Aft end: efflux deflector, tie-down beam and a scorched apron. This is the
+  // face the site sees while the launcher is parked downrange, so it carries
+  // as much detail as the muzzle end.
+  const deflector = box(packW + 0.9, 0.12, 1.7, matHeat(), 0, -packH / 2 - 0.34, -1.05);
   deflector.rotation.x = 0.5;
   frame.add(deflector);
-  frame.add(box(packW + 0.9, 0.14, 0.2, matHazard(), 0, -packH / 2 - 0.55, -1.6));
+  frame.add(box(packW + 1.0, 0.16, 0.22, matHazard(), 0, -packH / 2 - 0.62, -1.8));
+  for (const sy of [-1, 1]) {
+    frame.add(box(packW + 0.4, 0.16, 0.22, matHeat(), 0, sy * (packH / 2 + 0.16), -0.55));
+  }
+  for (const sx of [-1, 1]) {
+    frame.add(box(0.16, packH + 0.4, 0.22, matHeat(), sx * (packW / 2 + 0.16), 0, -0.55));
+    // Umbilical break-away connectors on the aft face
+    frame.add(cyl(0.09, 0.22, matSteel(), sx * (packW / 2 - 0.35), packH / 2 - 0.2, -0.62, 8)
+      .rotateX(Math.PI / 2));
+  }
 
-  // 8 canisters in a 4 wide x 2 high pack
+  // 8 canisters in a 4 wide x 2 high pack. The tubes are deliberately spaced so
+  // the individual squares read as canisters rather than as one slab.
   const canisters = [];
   const cw = packW / 4, ch = packH / 2;
   for (let row = 0; row < 2; row++) {
     for (let col = 0; col < 4; col++) {
       const can = buildRectCanister({
-        w: cw * 0.92, h: ch * 0.92, len: packLen, mat: matCanister(),
-        label: `${row * 4 + col + 1}`,
+        w: cw * 0.86, h: ch * 0.86, len: packLen,
+        mat: matCanister(), label: `${row * 4 + col + 1}`,
       });
-      can.position.set(-packW / 2 + (col + 0.5) * cw, -packH / 2 + (row + 0.5) * ch, packLen / 2 - 0.3);
+      can.position.set(-packW / 2 + (col + 0.5) * cw, -packH / 2 + (row + 0.5) * ch, packLen / 2 - 0.4);
       frame.add(can);
       canisters.push(can);
     }
   }
-  // Pack framing over the canister mouths
-  frame.add(box(packW + 0.3, 0.1, 0.12, matSteel(), 0, packH / 2 + 0.1, packLen - 0.3));
-  frame.add(box(packW + 0.3, 0.1, 0.12, matSteel(), 0, -packH / 2 - 0.1, packLen - 0.3));
-
-  // Elevation rams, carried on the traversing station
-  const rams = [];
-  for (const sz of [-1, 1]) {
-    const ram = hydraulicRam(2.2, 0.13, 0.08, 1.9);
-    ram.position.set(-1.2, 0.28, sz * 1.15);
-    ram.rotation.x = -0.32;
-    train.add(ram);
-    rams.push(ram);
+  // Egg-crate webs between the tubes: thin, so the gaps stay legible.
+  for (let col = 1; col < 4; col++) {
+    frame.add(box(0.06, packH + 0.08, 0.14, matSteelDark(), -packW / 2 + col * cw, 0, -0.3));
+    frame.add(box(0.06, packH + 0.08, 0.14, matSteelDark(), -packW / 2 + col * cw, 0, packLen * 0.45));
+    frame.add(box(0.06, packH + 0.08, 0.14, matSteelDark(), -packW / 2 + col * cw, 0, packLen - 0.55));
   }
+  for (const z of [-0.3, packLen * 0.45, packLen - 0.55]) {
+    frame.add(box(packW + 0.02, 0.06, 0.14, matSteelDark(), 0, 0, z));
+  }
+  // Open muzzle collar: a rectangle of bars rather than a plate over the mouths
+  const collarBar = 0.13;
+  for (const sy of [-1, 1]) {
+    frame.add(box(packW + 0.4, collarBar, 0.2, matGrayArmour(), 0, sy * (packH / 2 + 0.14), packLen - 0.5));
+  }
+  for (const sx of [-1, 1]) {
+    frame.add(box(collarBar, packH + 0.4, 0.2, matGrayArmour(), sx * (packW / 2 + 0.14), 0, packLen - 0.5));
+  }
+  frame.add(panelBolts(packW + 0.28, packH + 0.28, 0.42, 0.024, packLen - 0.38, matSteel()));
+
+  // Elevation rams: pinned on the station, riding an anchor under the pack.
+  const { rams, aimRams } = linkElevationRams(
+    { train, pivot, frame },
+    {
+      base: [1.16, 0.32, 2.05],
+      anchor: [1.16, -packH / 2 - 0.42, 2.7],
+      elevRange: [30, 86], barrelR: 0.15, rodR: 0.095,
+    },
+  );
   // Hydraulic hoses from the pump to the station
   for (const sz of [-1, 1]) {
     root.add(saggingCable(
       new THREE.Vector3(-2.2, deckY + 0.4, sz * 0.9),
-      new THREE.Vector3(-1.35, deckY + 0.5, sz * 1.0),
+      new THREE.Vector3(-0.9, deckY + 0.5, sz * 1.0),
       0.18, 0.028, cableMaterial('#26262a'),
     ));
   }
@@ -348,7 +463,7 @@ function buildVanguard(def) {
   root.add(tray);
 
   return {
-    root, colliders, canisters, frame, pivot, train, rams,
+    root, colliders, canisters, frame, pivot, train, rams, aimRams,
     panel, beacon, chassis,
     // Elevation rotates the erector about X; 0 = stowed flat, high = firing.
     setElevation: (deg) => { pivot.rotation.x = -deg * DEG; },
@@ -408,14 +523,20 @@ function buildHighLance(def) {
   const train = new THREE.Group();
   train.position.set(1.9, deckY + 0.3, 0);
   root.add(train);
-  train.add(cyl(1.2, 0.5, matGrayArmour(), 0, 0.25, 0, 20));
-  // Trunnion towers
+  train.add(cyl(1.45, 0.55, matGrayArmour(), 0, 0.27, 0, 24));
+  train.add(box(2.5, 0.16, 3.4, matSteelDark(), 0, 0.6, 0.2));
+  // Trunnion towers: tall enough that the erector visibly stands on them
   for (const sz of [-1, 1]) {
-    const tower = chamferBox(0.7, 1.5, 0.44, 0.05, matGrayArmour());
-    tower.position.set(0, 1.05, sz * 1.15);
+    const tower = chamferBox(0.8, 1.6, 0.6, 0.05, matGrayArmour());
+    tower.position.set(0, 1.0, sz * 1.32);
     train.add(tower);
-    train.add(cyl(0.15, 0.34, matChrome(), 0, 1.55, sz * 1.15, 12).rotateX(Math.PI / 2));
-    train.add(panelBolts(0.6, 1.3, 0.3, 0.02, sz * 0.23, matSteel()));
+    const brace = trussPanel(1.5, 1.3, 2, 0.09, matStructure());
+    brace.rotation.y = Math.PI / 2;
+    brace.position.set(0, 0.95, sz * 1.32);
+    train.add(brace);
+    train.add(cyl(0.17, 0.4, matChrome(), 0, 1.55, sz * 1.32, 12).rotateX(Math.PI / 2));
+    train.add(cyl(0.26, 0.16, matSteelDark(), 0, 1.55, sz * 1.44, 14).rotateX(Math.PI / 2));
+    train.add(panelBolts(0.7, 1.4, 0.3, 0.02, sz * 1.63, matSteel()));
   }
 
   const pivot = new THREE.Group();
@@ -425,13 +546,13 @@ function buildHighLance(def) {
   // 6 large tubes in a 3 wide x 2 high pack, on a long frame
   const frame = new THREE.Group();
   pivot.add(frame);
-  const packLen = 8.2, packW = 2.4, packH = 1.9;
+  const packLen = 8.2, packW = 2.85, packH = 1.96;
   const canisters = [];
   const cw = packW / 3, ch = packH / 2;
   for (let row = 0; row < 2; row++) {
     for (let col = 0; col < 3; col++) {
       const can = buildRoundCanister({
-        r: Math.min(cw, ch) * 0.46, len: packLen, mat: matCanister(),
+        r: Math.min(cw, ch) * 0.47, len: packLen, mat: matCanister(),
         label: `${row * 3 + col + 1}`,
       });
       can.position.set(-packW / 2 + (col + 0.5) * cw, -packH / 2 + (row + 0.5) * ch, packLen / 2 - 1.0);
@@ -439,39 +560,55 @@ function buildHighLance(def) {
       canisters.push(can);
     }
   }
-  // Structural cage around the tube pack
+  // Structural cage: side lattices between longerons, open top and bottom so
+  // the tube pack keeps its shape from every angle.
+  const cz = packLen / 2 - 1.0;
   for (const sz of [-1, 1]) {
-    const lat = trussPanel(packLen, packH + 0.4, 6, 0.09, matSteel());
+    const lat = trussPanel(packLen, packH + 0.4, 6, 0.085, matStructure());
     lat.rotation.y = Math.PI / 2;
-    lat.position.set(sz * (packW / 2 + 0.18), 0, packLen / 2 - 1.0);
+    lat.position.set(sz * (packW / 2 + 0.18), 0, cz);
     frame.add(lat);
+    for (const sy of [-1, 1]) {
+      frame.add(box(0.2, 0.2, packLen, matStructure(),
+        sz * (packW / 2 + 0.18), sy * (packH / 2 + 0.2), cz));
+    }
   }
+  for (let i = 0; i <= 5; i++) {
+    const z = -1.0 + (i / 5) * packLen;
+    for (const sy of [-1, 1]) {
+      frame.add(box(packW + 0.4, 0.12, 0.14, matStructure(), 0, sy * (packH / 2 + 0.2), z));
+    }
+  }
+  // Open muzzle collar and a deep aft blast structure
   for (const sy of [-1, 1]) {
-    const lat = trussPanel(packLen, packW + 0.3, 6, 0.09, matSteel());
-    lat.rotation.x = Math.PI / 2;
-    lat.rotation.z = 0;
-    lat.position.set(0, sy * (packH / 2 + 0.22), packLen / 2 - 1.0);
-    frame.add(lat);
+    frame.add(box(packW + 0.62, 0.2, 0.3, matStructure(), 0, sy * (packH / 2 + 0.24), packLen - 1.05));
   }
-  // Muzzle-end collar and aft blast plate
-  frame.add(box(packW + 0.5, packH + 0.5, 0.22, matSteelDark(), 0, 0, packLen - 1.05));
+  for (const sx of [-1, 1]) {
+    frame.add(box(0.2, packH + 0.62, 0.3, matStructure(), sx * (packW / 2 + 0.24), 0, packLen - 1.05));
+  }
+  frame.add(panelBolts(packW + 0.42, packH + 0.42, 0.44, 0.026, packLen - 0.88, matSteel()));
   frame.add(box(packW + 0.7, packH + 0.7, 0.16, matHeat(), 0, 0, -1.12));
   frame.add(box(packW + 1.4, 0.16, 1.8, matHeat(), 0, -packH / 2 - 0.5, -1.7));
-  // Access walkway and rail along the pack
-  const walk = gratingDeck(0.5, packLen * 0.8, matSteelDark());
+  // Access walkway tucked against the cage, with a rail
+  const walk = gratingDeck(0.55, packLen * 0.78, matSteelDark());
   walk.rotation.y = Math.PI / 2;
-  walk.position.set(packW / 2 + 0.62, -packH / 2, packLen / 2 - 1.0);
+  walk.position.set(packW / 2 + 0.5, -packH / 2 - 0.24, cz);
   frame.add(walk);
+  const walkRail = handrail([
+    new THREE.Vector3(0, 0, -packLen * 0.36), new THREE.Vector3(0, 0, packLen * 0.36),
+  ], 0.8, matStructure());
+  walkRail.position.set(packW / 2 + 0.74, -packH / 2 - 0.22, cz);
+  frame.add(walkRail);
 
-  // Elevation rams (long, from the deck to the frame underside)
-  const rams = [];
-  for (const sz of [-1, 1]) {
-    const ram = hydraulicRam(3.0, 0.16, 0.1, 2.6);
-    ram.position.set(-0.9, deckY + 0.4, sz * 1.5);
-    ram.rotation.x = -0.28;
-    root.add(ram);
-    rams.push(ram);
-  }
+  // Elevation rams, carried on the turntable so they slew with the pack
+  const { rams, aimRams } = linkElevationRams(
+    { train, pivot, frame },
+    {
+      base: [1.34, 0.56, 2.4],
+      anchor: [1.34, -packH / 2 - 0.5, 3.1],
+      elevRange: [22, 82], barrelR: 0.18, rodR: 0.115,
+    },
+  );
   root.add(cableBundle(
     new THREE.Vector3(-2.6, deckY + 0.5, 1.2),
     new THREE.Vector3(1.2, deckY + 0.6, 1.4),
@@ -500,12 +637,12 @@ function buildHighLance(def) {
   const beacon = warningLamp('#ffb028', 0.08, 3, false);
   beacon.position.set(-4.4, deckY + 1.9, 0);
   root.add(beacon);
-  const climb = ladder(deckY + 0.6, 0.44, matSteel());
+  const climb = ladder(deckY + 0.6, 0.44, matStructure());
   climb.position.set(0.2, 0, 1.7);
   root.add(climb);
 
   return {
-    root, colliders, canisters, frame, pivot, train, rams,
+    root, colliders, canisters, frame, pivot, train, rams, aimRams,
     panel, beacon, chassis,
     setElevation: (deg) => { pivot.rotation.x = -deg * DEG; },
     setTrain: (rad) => { train.rotation.y = rad; },
@@ -577,14 +714,15 @@ function buildSentinel(def) {
 
   // Twin-tower erector cradle
   const pivot = new THREE.Group();
-  pivot.position.y = 1.7;
+  pivot.position.y = 2.7;
   train.add(pivot);
   for (const sz of [-1, 1]) {
-    const tower = chamferBox(1.0, 2.2, 0.6, 0.06, matGrayArmour());
-    tower.position.set(0, 0.4, sz * 1.85);
+    const tower = chamferBox(1.1, 3.2, 0.7, 0.06, matGrayArmour());
+    tower.position.set(0, 1.05, sz * 1.9);
     train.add(tower);
-    train.add(cyl(0.2, 0.4, matChrome(), 0, 1.7, sz * 1.85, 14).rotateX(Math.PI / 2));
-    train.add(panelBolts(0.85, 1.9, 0.34, 0.026, sz * 0.31, matSteel()));
+    train.add(trussPanel(1.0, 2.6, 3, 0.09, matStructure()).translateY(1.1).translateZ(sz * 1.9));
+    train.add(cyl(0.22, 0.44, matChrome(), 0, 2.7, sz * 1.9, 14).rotateX(Math.PI / 2));
+    train.add(panelBolts(0.9, 2.8, 0.4, 0.026, sz * 0.36, matSteel()));
   }
 
   const frame = new THREE.Group();
@@ -593,24 +731,30 @@ function buildSentinel(def) {
   // Two very large round canisters side by side, plus a third stowed
   const packLen = 12.5;
   const canisters = [];
-  const r = 0.95;
+  const r = 0.92;
   for (let i = 0; i < 2; i++) {
     const can = buildRoundCanister({
       r, len: packLen, mat: matCanister(), label: `S${i + 1}`,
     });
-    can.position.set(-1.05 + i * 2.1, 0, packLen / 2 - 2.2);
+    can.position.set(-1.32 + i * 2.64, 0, packLen / 2 - 2.2);
     frame.add(can);
     canisters.push(can);
   }
   // Third round stowed under the cradle - the "limited ammunition" reserve
   const reserve = buildRoundCanister({ r: r * 0.98, len: packLen, mat: matCanister(), label: 'S3' });
-  reserve.position.set(0, -1.5, packLen / 2 - 2.2);
+  reserve.position.set(0, -1.62, packLen / 2 - 2.2);
   frame.add(reserve);
   canisters.push(reserve);
+  // Saddle ribs that hold the three rounds apart on the cradle
+  for (let i = 0; i < 5; i++) {
+    const z = -1.6 + i * (packLen / 5);
+    frame.add(box(0.16, 3.0, 0.22, matStructure(), 0, -0.7, z));
+    frame.add(box(4.4, 0.16, 0.22, matStructure(), 0, 0, z));
+  }
 
   // Cradle structure
   for (const sz of [-1, 1]) {
-    const lat = trussPanel(packLen, 2.6, 8, 0.11, matSteel());
+    const lat = trussPanel(packLen, 2.6, 8, 0.11, matStructure());
     lat.rotation.y = Math.PI / 2;
     lat.position.set(sz * 2.15, -0.4, packLen / 2 - 2.2);
     frame.add(lat);
@@ -620,11 +764,22 @@ function buildSentinel(def) {
   for (let i = 0; i < 5; i++) {
     frame.add(box(4.6, 0.22, 0.28, matSteel(), 0, -2.1, -1.4 + i * (packLen / 5)));
   }
-  // Muzzle collar with heat shielding, and a big aft blast plate
-  const collar = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.22, 8, 24), matHeat());
-  collar.position.set(0, 0, packLen - 2.3);
-  frame.add(collar);
-  frame.add(box(5.0, 3.2, 0.3, matHeat(), 0, -0.2, -2.35));
+  // Muzzle collar and aft blast structure. Both are open frames: on a launcher
+  // this size a solid plate reads as a billboard rather than as hardware.
+  for (const sy of [-1, 1]) {
+    frame.add(box(5.2, 0.26, 0.36, matStructure(), 0, sy * 1.32, packLen - 2.35));
+    frame.add(box(5.2, 0.22, 0.3, matHeat(), 0, sy * 1.32, -2.3));
+  }
+  for (const sx of [-1, 1]) {
+    frame.add(box(0.26, 2.9, 0.36, matStructure(), sx * 2.6, 0, packLen - 2.35));
+    frame.add(box(0.22, 2.9, 0.3, matHeat(), sx * 2.6, 0, -2.3));
+    frame.add(cyl(0.2, 0.5, matHeat(), sx * 1.32, -1.6, -2.4, 14).rotateX(Math.PI / 2));
+  }
+  frame.add(panelBolts(4.9, 2.7, 0.55, 0.03, packLen - 2.16, matSteel()));
+  // Efflux deflector under the aft end
+  const aftDeflect = box(5.4, 0.18, 2.2, matHeat(), 0, -2.3, -3.0);
+  aftDeflect.rotation.x = 0.42;
+  frame.add(aftDeflect);
   // Umbilical mast that swings clear of the round
   const mast = new THREE.Group();
   mast.position.set(-2.6, -0.6, 1.0);
@@ -644,27 +799,27 @@ function buildSentinel(def) {
   frame.add(walk);
   const rail = handrail([
     new THREE.Vector3(0, 0, -packLen * 0.32), new THREE.Vector3(0, 0, packLen * 0.32),
-  ], 0.9, matSteel());
+  ], 0.9, matStructure());
   rail.position.set(3.25, -1.0, packLen / 2 - 2.2);
   frame.add(rail);
 
   // Massive elevation rams
-  const rams = [];
-  for (const sz of [-1, 1]) {
-    const ram = hydraulicRam(3.1, 0.24, 0.15, 2.7);
-    ram.position.set(0, 0.85, sz * 2.3);
-    ram.rotation.x = -0.62;
-    train.add(ram);
-    rams.push(ram);
-  }
+  const { rams, aimRams } = linkElevationRams(
+    { train, pivot, frame },
+    {
+      base: [2.35, 0.62, 1.7],
+      anchor: [2.35, -2.35, 2.7],
+      elevRange: [18, 84], barrelR: 0.26, rodR: 0.165,
+    },
+  );
 
   // Surrounding support: gantry, chillers, cable vault, floodlights
   const gantry = new THREE.Group();
   for (const sx of [-1, 1]) {
     gantry.add(cyl(0.16, 7.5, matGrayArmour(), sx * 4.4, 3.75, 0, 10));
-    gantry.add(trussPanel(7.4, 1.0, 5, 0.09, matSteel()));
+    gantry.add(trussPanel(7.4, 1.0, 5, 0.09, matStructure()));
   }
-  const beam = trussPanel(9.0, 1.1, 7, 0.1, matSteel());
+  const beam = trussPanel(9.0, 1.1, 7, 0.1, matStructure());
   beam.position.set(0, 7.6, 0);
   gantry.add(beam);
   const hoist = chamferBox(0.9, 0.7, 0.8, 0.04, matHazard());
@@ -710,7 +865,7 @@ function buildSentinel(def) {
   root.add(beacon);
 
   return {
-    root, colliders, canisters, frame, pivot, train, rams,
+    root, colliders, canisters, frame, pivot, train, rams, aimRams,
     panel, beacon, chassis: null,
     setElevation: (deg) => { pivot.rotation.x = -deg * DEG; },
     setTrain: (rad) => { train.rotation.y = rad; },
@@ -831,6 +986,7 @@ export class Battery {
     this.lampPhase = 0;
     this.firedThisSalvo = 0;
     this.tubeSpent = new Array(built.canisters.length).fill(false);
+    this._ramElev = NaN;
     this._applyRig();
   }
 
@@ -1011,10 +1167,12 @@ export class Battery {
   _applyRig() {
     this.rig.setElevation(this.elevation);
     if (this.rig.trainable) this.rig.setTrain(this.train);
-    // Hydraulic rams follow the elevation so the mechanism reads as connected.
-    const t = clamp01((this.elevation - this.rig.stowedElevation)
-      / Math.max(1, this.def.flight.launchPitch - this.rig.stowedElevation));
-    for (const ram of this.rig.rams) ram.extend(t);
+    // Rams are pinned at both ends, so they only need re-solving when the
+    // erector has actually moved.
+    if (this.rig.aimRams && Math.abs(this.elevation - this._ramElev) > 0.02) {
+      this._ramElev = this.elevation;
+      this.rig.aimRams();
+    }
   }
 
   update(dt, selected) {

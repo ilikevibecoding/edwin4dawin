@@ -240,6 +240,65 @@ export function hydraulicRam(barrelLen, barrelR, rodR, stroke) {
   return g;
 }
 
+const _ramUp = new THREE.Vector3(0, 1, 0);
+const _ramDir = new THREE.Vector3();
+const _ramQ = new THREE.Quaternion();
+
+/**
+ * Two-point hydraulic actuator: pinned at its own origin, always pointing at a
+ * moving anchor with the rod covering whatever gap is left. Unlike
+ * `hydraulicRam`, whose angle is baked at build time, this one stays visually
+ * attached to an erector through its whole travel.
+ *
+ * Call `aim(pointInParentSpace)` whenever the mechanism moves.
+ */
+export function pinnedRam(barrelLen, barrelR, rodR, mat = matSteelDark()) {
+  const g = new THREE.Group();
+  const barrel = cyl(barrelR, barrelLen, mat, 0, barrelLen / 2, 0, 14);
+  g.add(barrel);
+  g.add(cyl(barrelR * 1.22, barrelLen * 0.05, matSteel(), 0, barrelLen * 0.028, 0, 14));
+  g.add(cyl(barrelR * 1.22, barrelLen * 0.05, matSteel(), 0, barrelLen * 0.972, 0, 14));
+  // Base clevis and pivot pin
+  g.add(box(barrelR * 2.6, barrelR * 1.1, barrelR * 2.4, matSteel(), 0, 0, 0));
+  g.add(cyl(barrelR * 0.4, barrelR * 3.0, matChrome(), 0, 0, 0, 10).rotateZ(Math.PI / 2));
+  // Feed ports and a hose loop down the barrel
+  for (const f of [0.12, 0.88]) {
+    const port = cyl(barrelR * 0.24, barrelR * 1.3, matSteel(), barrelR, barrelLen * f, 0, 6);
+    port.rotation.z = Math.PI / 2;
+    g.add(port);
+  }
+
+  // Rod: a unit-height cylinder scaled along Y, with the eye riding its tip.
+  const shaft = cyl(rodR, 1, matChrome(), 0, 0.5, 0, 12);
+  g.add(shaft);
+  const eye = new THREE.Group();
+  eye.add(cyl(rodR * 1.7, rodR * 1.5, matSteel(), 0, 0, 0, 12));
+  eye.add(cyl(rodR * 0.5, rodR * 3.2, matChrome(), 0, 0, 0, 10).rotateZ(Math.PI / 2));
+  g.add(eye);
+
+  const seat = barrelLen * 0.9;
+  g.userData.rod = shaft;
+  g.userData.eye = eye;
+  g.userData.noMerge = true;
+  shaft.userData.noMerge = true;
+  eye.userData.noMerge = true;
+
+  /** Point the barrel at `target` (parent space) and extend the rod to reach. */
+  g.aim = (target) => {
+    _ramDir.copy(target).sub(g.position);
+    const dist = Math.max(seat + 0.05, _ramDir.length());
+    _ramDir.normalize();
+    _ramQ.setFromUnitVectors(_ramUp, _ramDir);
+    g.quaternion.copy(_ramQ);
+    const ext = dist - seat;
+    shaft.scale.y = ext;
+    shaft.position.y = seat + ext / 2;
+    eye.position.y = dist;
+  };
+  g.aim(new THREE.Vector3(0, barrelLen * 1.2, 0));
+  return g;
+}
+
 /** Simple truss / lattice frame in the XY plane, extruded thin in Z. */
 export function trussPanel(w, h, bays = 3, thickness = 0.06, mat = matSteel()) {
   const geos = [];

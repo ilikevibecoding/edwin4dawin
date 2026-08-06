@@ -260,7 +260,7 @@ export class Base {
     const litMasts = this.q.id === 'low' ? 3 : 5;
     for (let i = 0; i < Math.min(litMasts, this.floodMasts.length); i++) {
       const mast = this.floodMasts[i];
-      const spot = new THREE.SpotLight(0xffeccd, 0, 210, 0.8, 0.42, 1.1);
+      const spot = new THREE.SpotLight(0xffeccd, 0, 240, 0.78, 0.55, 1.7);
       spot.position.set(mast.group.position.x, mast.height - 0.3, mast.group.position.z);
       const target = new THREE.Object3D();
       target.position.set(mast.group.position.x * 0.25, 0, mast.group.position.z * 0.25);
@@ -326,7 +326,7 @@ export class Base {
         head.userData.lensMat.emissiveIntensity = 0.15 + lit * 3.4;
       }
     }
-    for (const spot of this.spotLights) spot.intensity = lit * 140;
+    for (const spot of this.spotLights) spot.intensity = lit * 260;
 
     // Beacons blink; faster and redder when the site is on alert.
     const blinkFast = (this.time % 0.9) / 0.9 < 0.3;
@@ -354,7 +354,7 @@ export class Base {
       sl.pitch.rotation.x = -0.55 - 0.35 * Math.sin(sl.phase * 0.73 + 1.1);
       sl.spot.intensity = sl.level * 900;
       sl.lensMat.emissiveIntensity = 0.1 + sl.level * 5.5;
-      sl.beamMat.uniforms.uOpacity.value = sl.level * 0.16;
+      sl.beamMat.uniforms.uOpacity.value = sl.level * 0.11;
       sl.beam.visible = sl.level > 0.02;
     }
   }

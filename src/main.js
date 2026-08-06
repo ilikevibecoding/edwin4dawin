@@ -1024,6 +1024,8 @@ class Game {
           particles: g.effects.stats,
         };
       },
+      scene() { return g.scene; },
+      three() { return THREE; },
       colliderCount() { return g.player.colliders.length; },
       playerPos() {
         const p = g.player.position;
