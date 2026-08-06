@@ -212,7 +212,10 @@ function buildTerrain(quality) {
     for (let j = 0; j < sectors; j++) {
       const a = i * (sectors + 1) + j;
       const b = a + sectors + 1;
-      idx.push(a, b, a + 1, a + 1, b, b + 1);
+      // Wound so the sheet faces up: the other order turns the whole far field
+      // into back faces and the sky shows through from the site out to the
+      // mountains.
+      idx.push(a, a + 1, b, a + 1, b + 1, b);
     }
   }
   const far = new THREE.BufferGeometry();
@@ -699,7 +702,9 @@ function buildPad(rng) {
   const grates = new THREE.Mesh(mergeParts(grateParts), mats.darkMetal);
   // Ground furniture this shallow contributes nothing to the shadow map but
   // costs a draw call per shadow cascade, so it stays out of the depth pass.
+  // It still has to take the shadows the pad around it is taking.
   grates.castShadow = false;
+  grates.receiveShadow = true;
   g.add(grates);
   grateParts.forEach((p) => p.geometry.dispose());
 
@@ -1169,6 +1174,7 @@ function buildShelter(rng) {
   canopyParts.push({ geometry: strut, matrix: transform({ pos: [W / 2 - 1.0, H - 0.9, -D / 2 - 1.2], rot: [0.7, 0, 0] }) });
   const canopy = new THREE.Mesh(mergeParts(canopyParts), mats.tarp);
   canopy.castShadow = true;
+  canopy.receiveShadow = true;
   g.add(canopy);
   canopyParts.forEach((p) => p.geometry.dispose());
 
