@@ -310,8 +310,9 @@ export function smokeTexture(size = 128) {
         const d = Math.sqrt(dx * dx + dy * dy);
         const n = fbm(x * 0.08 + 31, y * 0.08 + 17, 4);
         let a = smoothstep(1.0, 0.25, d + (n - 0.5) * 0.55);
+        a *= 0.58 + 0.62 * n; // interior structure so overlapping puffs don't flatten
         const i = (y * w + x) * 4;
-        const v = 235 + (n - 0.5) * 30;
+        const v = 228 + (n - 0.5) * 52;
         img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = v;
         img.data[i + 3] = clamp(a * 255, 0, 255);
       }
@@ -365,11 +366,12 @@ export function cloudTexture(size = 256, seed = 5) {
 }
 
 // ---------------------------------------------------------------- geometry helpers
-// Vertex tint: treat the hex palette as the *displayed* color. Color.setHex converts
-// sRGB→linear; combined with the multiplicative grunge map that rendered near-black,
-// so we convert back and let the map/lighting provide the darkening.
+// Vertex tint. Raw linear hex values render too dark under the multiplicative grunge
+// map; full sRGB re-encoding washes out darks (rubber turns beige). A partial gamma
+// lift (pow 0.62) keeps midtone paint readable while preserving dark contrast.
 export function tintGeometry(geo, color) {
-  const c = new THREE.Color(color).convertLinearToSRGB();
+  const c = new THREE.Color(color);
+  c.r = Math.pow(c.r, 0.62); c.g = Math.pow(c.g, 0.62); c.b = Math.pow(c.b, 0.62);
   const count = geo.attributes.position.count;
   const arr = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }

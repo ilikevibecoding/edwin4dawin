@@ -6,7 +6,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   tintGeometry, grungeTexture, concreteTexture, asphaltTexture, sandTexture, camoTexture,
   hazardTexture, chainlinkTexture, stencilTexture, scorchTexture, softCircleTexture,
-  cableCurve, fbm, clamp, lerp, smoothstep, rngFx, makeCanvas,
+  cableCurve, fbm, clamp, lerp, smoothstep, rngFx, makeCanvas, mulberry32,
 } from './utils.js';
 import { makeBoxCollider } from './physics.js';
 
@@ -14,6 +14,20 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const E = (x, y, z) => new THREE.Euler(x, y, z);
 
 // ---------------------------------------------------------------- geometry kit
+// Box UVs scale with physical size (3 m tile) so big surfaces keep texture density.
+const UV_TILE = 3;
+function scaleBoxUVs(geo, w, h, d) {
+  const uv = geo.attributes.uv;
+  const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]]; // ±x, ±y, ±z faces
+  for (let f = 0; f < 6; f++) {
+    const [su, sv] = dims[f];
+    for (let i = 0; i < 4; i++) {
+      const k = f * 4 + i;
+      uv.setXY(k, uv.getX(k) * su / UV_TILE, uv.getY(k) * sv / UV_TILE);
+    }
+  }
+}
+
 export class Kit {
   constructor() { this.buckets = new Map(); }
   _push(key, geo, pos, rot, color) {
@@ -24,7 +38,9 @@ export class Kit {
     this.buckets.get(key).push(geo);
   }
   box(key, w, h, d, pos, color, rot = null) {
-    this._push(key, new THREE.BoxGeometry(w, h, d), pos, rot, color);
+    const geo = new THREE.BoxGeometry(w, h, d);
+    scaleBoxUVs(geo, w, h, d);
+    this._push(key, geo, pos, rot, color);
   }
   cyl(key, rt, rb, h, pos, color, rot = null, seg = 10) {
     this._push(key, new THREE.CylinderGeometry(rt, rb, h, seg), pos, rot, color);
@@ -71,12 +87,15 @@ export class Base {
     this.alarm = false;
     this.floodAmount = 0;
 
-    // shared materials
+    // shared materials (maps repeat: kit boxes emit UVs > 1 for big faces)
     const grunge = grungeTexture(512);
+    grunge.wrapS = grunge.wrapT = THREE.RepeatWrapping;
+    const concrete = concreteTexture(512);
+    concrete.wrapS = concrete.wrapT = THREE.RepeatWrapping;
     this.materials = {
       paint: new THREE.MeshStandardMaterial({ vertexColors: true, map: grunge, roughness: 0.82, metalness: 0.18 }),
       steel: new THREE.MeshStandardMaterial({ vertexColors: true, map: grunge, roughness: 0.42, metalness: 0.78 }),
-      concrete: new THREE.MeshStandardMaterial({ vertexColors: true, map: concreteTexture(512), roughness: 0.96, metalness: 0.02 }),
+      concrete: new THREE.MeshStandardMaterial({ vertexColors: true, map: concrete, roughness: 0.96, metalness: 0.02 }),
       lamp: new THREE.MeshStandardMaterial({ color: 0x1c1c18, emissive: 0xfff3d8, emissiveIntensity: 0.0, roughness: 0.4, metalness: 0.3 }),
       redlamp: new THREE.MeshStandardMaterial({ color: 0x220505, emissive: 0xff2211, emissiveIntensity: 1.4, roughness: 0.5 }),
       glass: new THREE.MeshStandardMaterial({ color: 0x0a1210, roughness: 0.12, metalness: 0.85 }),
@@ -291,13 +310,13 @@ export class Base {
         ctx.strokeRect(mx(x - 12), my(z - 12), 24 * px, 24 * py);
         ctx.strokeStyle = 'rgba(215,180,70,0.55)';
         ctx.beginPath(); ctx.arc(mx(x), my(z), 15.5 * px, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = 'rgba(215,205,175,0.85)';
-        ctx.font = `700 ${Math.floor(2.2 * px)}px monospace`;
-        ctx.fillText(label, mx(x), my(z + 13.8));
+        ctx.fillStyle = 'rgba(215,205,175,0.7)';
+        ctx.font = `700 ${Math.floor(1.4 * px)}px monospace`;
+        ctx.fillText(label, mx(x), my(z + 14.2));
       };
-      padMark(58, -52, 'PAD A · MIM-9 RAMPART');
-      padMark(-64, -56, 'PAD B · TX-11 HIGHGUARD');
-      padMark(16, 74, 'PAD C · SENTINEL-X');
+      padMark(58, -52, 'PAD A');
+      padMark(-64, -56, 'PAD B');
+      padMark(16, 74, 'PAD C');
 
       // parking bays
       ctx.strokeStyle = 'rgba(215,205,175,0.55)';
@@ -511,10 +530,158 @@ export class Base {
     chair.position.set(P.x + 0.6, 0, P.z - 0.55);
     chair.rotation.y = 0.3;
     g.add(chair);
-    // interior light
-    this.c2Light = new THREE.PointLight(0xbfd8c8, 1.0, 9, 1.6);
+
+    // ---- interior clutter (props that sell the room)
+    const propMat = (c, r = 0.7) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
+    // keyboards + mug on desk
+    for (const dx of [-0.75, 0.6, 1.95]) {
+      const kb = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.025, 0.16), propMat(0x1b1e1a));
+      kb.position.set(P.x + dx, 0.915, P.z - this.c2.d / 2 + 0.78);
+      kb.rotation.y = (dx * 0.05);
+      g.add(kb);
+    }
+    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.09, 10), propMat(0x7a2f24, 0.4));
+    mug.position.set(P.x + 1.3, 0.945, P.z - this.c2.d / 2 + 0.85);
+    g.add(mug);
+    // binders on desk end
+    for (let i = 0; i < 3; i++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.3, 0.24),
+        propMat([0x51442e, 0x2f3a4a, 0x3a4a34][i]));
+      b.position.set(P.x - 1.75 + i * 0.07, 1.05, P.z - this.c2.d / 2 + 0.6);
+      b.rotation.z = i === 2 ? -0.18 : 0;
+      g.add(b);
+    }
+    // notice board with fictional postings
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.85),
+      new THREE.MeshStandardMaterial({
+        map: new THREE.CanvasTexture(makeCanvas(256, 168, (ctx, w, h) => {
+          ctx.fillStyle = '#5b4a33'; ctx.fillRect(0, 0, w, h);
+          ctx.fillStyle = '#8a7a5e'; ctx.fillRect(6, 6, w - 12, h - 12);
+          const notes = ['#d8d2c0', '#c9b98a', '#d8d2c0', '#a8b8c8', '#d8d2c0'];
+          const r = mulberry32(9);
+          for (let i = 0; i < 7; i++) {
+            ctx.fillStyle = notes[i % notes.length];
+            const nw = 34 + r() * 30, nh = 30 + r() * 26;
+            const x = 14 + r() * (w - nw - 28), y = 12 + r() * (h - nh - 24);
+            ctx.save(); ctx.translate(x + nw / 2, y + nh / 2); ctx.rotate((r() - 0.5) * 0.2);
+            ctx.fillRect(-nw / 2, -nh / 2, nw, nh);
+            ctx.strokeStyle = 'rgba(40,36,28,0.6)'; ctx.lineWidth = 1;
+            for (let l = 0; l < 4; l++) { ctx.beginPath(); ctx.moveTo(-nw / 2 + 4, -nh / 2 + 7 + l * 6); ctx.lineTo(nw / 2 - 4, -nh / 2 + 7 + l * 6); ctx.stroke(); }
+            ctx.restore();
+          }
+        })), roughness: 0.9,
+      }));
+    board.material.map.colorSpace = THREE.SRGBColorSpace;
+    board.position.set(P.x - this.c2.w / 2 + 0.1, 1.7, P.z + 0.7);
+    board.rotation.y = Math.PI / 2;
+    g.add(board);
+    // fire extinguisher (red pop by the door)
+    const ext = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.45, 10), propMat(0xa22318, 0.35));
+    ext.position.set(P.x + 3.9, 0.65, P.z + this.c2.d / 2 - 0.35);
+    g.add(ext);
+    const extTop = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.12, 8), propMat(0x222222));
+    extTop.position.set(P.x + 3.9, 0.93, P.z + this.c2.d / 2 - 0.35);
+    g.add(extTop);
+    // wall cable tray feeding the racks
+    const tray = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.1, 0.16), propMat(0x2c2f29, 0.5));
+    tray.position.set(P.x, this.c2.h - 0.35, P.z - this.c2.d / 2 + 0.15);
+    g.add(tray);
+    // second rack + patch panel LEDs
+    const rack2 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.6, 0.8), deskMat);
+    rack2.position.set(P.x - 4.0, 0.8, P.z + 0.9);
+    g.add(rack2);
+    // floor mat
+    const mat2 = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.6),
+      new THREE.MeshStandardMaterial({ color: 0x23261f, roughness: 1 }));
+    mat2.rotation.x = -Math.PI / 2;
+    mat2.position.set(P.x + 0.6, 0.075, P.z - 0.4);
+    g.add(mat2);
+    // wall map (sector chart)
+    const mapTex = new THREE.CanvasTexture(makeCanvas(256, 192, (ctx, w, h) => {
+      ctx.fillStyle = '#20261e'; ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = 'rgba(140,200,150,0.5)';
+      for (let x = 0; x < w; x += 24) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+      for (let y = 0; y < h; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+      ctx.strokeStyle = '#b8a878'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(20, h - 30);
+      ctx.bezierCurveTo(w * 0.3, h * 0.4, w * 0.6, h * 0.7, w - 24, 26);
+      ctx.stroke();
+      ctx.fillStyle = '#d86a50';
+      ctx.beginPath(); ctx.arc(w / 2, h / 2, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(216,106,80,0.6)';
+      for (const r of [18, 34, 50]) { ctx.beginPath(); ctx.arc(w / 2, h / 2, r, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.fillStyle = '#cfe8d6'; ctx.font = '10px monospace';
+      ctx.fillText('SECTOR KILO-9 — FICTIONAL', 12, 14);
+    }));
+    mapTex.colorSpace = THREE.SRGBColorSpace;
+    const wallMap = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.1),
+      new THREE.MeshStandardMaterial({ map: mapTex, roughness: 0.9 }));
+    wallMap.position.set(P.x + this.c2.w / 2 - 0.1, 1.75, P.z - 0.3);
+    wallMap.rotation.y = -Math.PI / 2;
+    g.add(wallMap);
+    // north wall, left of the screens: clock + readiness placard + duty whiteboard
+    const wallZ = P.z - this.c2.d / 2 + 0.12;
+    const clockTex = new THREE.CanvasTexture(makeCanvas(128, 128, (ctx, w, h) => {
+      ctx.fillStyle = '#1a1d18'; ctx.beginPath(); ctx.arc(w / 2, h / 2, 60, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#d8d5c8'; ctx.beginPath(); ctx.arc(w / 2, h / 2, 54, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#20241e'; ctx.lineWidth = 3;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(w / 2 + Math.cos(a) * 44, h / 2 + Math.sin(a) * 44);
+        ctx.lineTo(w / 2 + Math.cos(a) * 50, h / 2 + Math.sin(a) * 50);
+        ctx.stroke();
+      }
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(w / 2, h / 2); ctx.lineTo(w / 2 + 20, h / 2 - 24); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(w / 2, h / 2); ctx.lineTo(w / 2 - 10, h / 2 - 38); ctx.stroke();
+    }));
+    clockTex.colorSpace = THREE.SRGBColorSpace;
+    const clock = new THREE.Mesh(new THREE.CircleGeometry(0.19, 24),
+      new THREE.MeshStandardMaterial({ map: clockTex, roughness: 0.7 }));
+    clock.position.set(P.x - 3.6, 2.35, wallZ);
+    g.add(clock);
+    const placardTex = new THREE.CanvasTexture(makeCanvas(256, 96, (ctx, w, h) => {
+      ctx.fillStyle = '#242920'; ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#4c5644'; ctx.lineWidth = 4; ctx.strokeRect(3, 3, w - 6, h - 6);
+      ctx.fillStyle = '#cfd6c2'; ctx.font = '700 20px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('READINESS', w / 2, 30);
+      const states = ['#3c4a38', '#c9a13a', '#3c4a38', '#3c4a38'];
+      for (let i = 0; i < 4; i++) { ctx.fillStyle = states[i]; ctx.fillRect(22 + i * 56, 46, 44, 30); }
+      ctx.fillStyle = '#11130f'; ctx.font = '700 15px monospace';
+      const labels = ['1', '2', '3', '4'];
+      for (let i = 0; i < 4; i++) ctx.fillText(labels[i], 44 + i * 56, 67);
+    }));
+    placardTex.colorSpace = THREE.SRGBColorSpace;
+    const placard = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.36),
+      new THREE.MeshStandardMaterial({ map: placardTex, roughness: 0.8 }));
+    placard.position.set(P.x - 3.55, 1.78, wallZ);
+    g.add(placard);
+    const wbTex = new THREE.CanvasTexture(makeCanvas(256, 176, (ctx, w, h) => {
+      ctx.fillStyle = '#d3d6cc'; ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#7a8074'; ctx.lineWidth = 5; ctx.strokeRect(2, 2, w - 4, h - 4);
+      ctx.strokeStyle = 'rgba(60,80,100,0.75)'; ctx.lineWidth = 2;
+      ctx.font = '700 14px monospace'; ctx.fillStyle = '#3a4a5c'; ctx.textAlign = 'left';
+      ctx.fillText('DUTY ROSTER', 14, 24);
+      ctx.strokeStyle = 'rgba(50,60,70,0.5)';
+      for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(14, 44 + i * 24); ctx.lineTo(w - 14, 44 + i * 24); ctx.stroke(); }
+      ctx.strokeStyle = 'rgba(180,60,50,0.8)';
+      ctx.beginPath(); ctx.moveTo(150, 40); ctx.lineTo(220, 40); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(120, 92, 46, 14, -0.06, 0, Math.PI * 2); ctx.stroke();
+    }));
+    wbTex.colorSpace = THREE.SRGBColorSpace;
+    const wb = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 0.72),
+      new THREE.MeshStandardMaterial({ map: wbTex, roughness: 0.6 }));
+    wb.position.set(P.x - 2.45, 1.62, wallZ);
+    wb.rotation.z = 0.012;
+    g.add(wb);
+    // interior lights: ceiling fixture + teal monitor spill onto desk/operator
+    this.c2Light = new THREE.PointLight(0xcfe0d2, 1.5, 10, 1.5);
     this.c2Light.position.set(P.x, this.c2.h - 0.4, P.z);
     g.add(this.c2Light);
+    const screenGlow = new THREE.PointLight(0x9fe8c8, 1.1, 4.5, 1.8);
+    screenGlow.position.set(P.x + 0.6, 1.5, P.z - this.c2.d / 2 + 0.85);
+    g.add(screenGlow);
     const fixture = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 0.16), new THREE.MeshBasicMaterial({ color: 0xd8efe0, toneMapped: false }));
     fixture.position.set(P.x, this.c2.h - 0.12, P.z);
     g.add(fixture);
@@ -803,8 +970,9 @@ export class Base {
     for (const key of Object.keys(this.padPositions)) {
       const { pos, heading } = this.padPositions[key];
       kit.box('concrete', 24, 0.16, 24, V(pos.x, 0.08, pos.z), 0x908e84);
-      // T-walls arc on the back side
-      const back = heading + Math.PI;
+      // T-walls arc on the back side (launcher forward = (sin h, cos h), so the
+      // polar angle of "behind" is π/2 − heading + π in cos/sin convention)
+      const back = Math.PI / 2 - heading + Math.PI;
       for (let i = -2; i <= 2; i++) {
         const a = back + i * 0.32;
         const wx = pos.x + Math.cos(a) * 14.5, wz = pos.z + Math.sin(a) * 14.5;

@@ -113,7 +113,7 @@ class Threat {
     this.glow.scale.setScalar(Math.max(6 + heat * 16, camDist * 0.0038));
 
     // trail: air-density-driven width/alpha (thin bright contrail high, smoky low)
-    const width = lerp(4.5, 14, clamp(rho * 1.6, 0, 1)) * (this.decoy ? 0.6 : 1);
+    const width = lerp(4.5, 10.5, clamp(rho * 1.6, 0, 1)) * (this.decoy ? 0.6 : 1);
     const alpha = (0.26 + 0.5 * clamp(rho * 2.2, 0, 1)) * (this.decoy ? 0.55 : 1);
     this.effects.pushTrail(this.trail, this.pos, width, alpha);
     if (heat > 0.15) {

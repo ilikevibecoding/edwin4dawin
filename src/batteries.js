@@ -29,7 +29,7 @@ export const BATTERY_DEFS = {
       maxSpeed: 1020, boostAccel: 360, boostTime: 4.0, motorTime: 7.5,
       turnBoost: 1.05, turnMid: 1.9, turnTerm: 2.8, fuse: 34, effSpeed: 800,
       envelope: { minAlt: 1500, maxAlt: 9500, maxRange: 11000 },
-      trail: 1.5, plume: 1.4, canisterKick: 0.05,
+      trail: 1.3, plume: 1.4, canisterKick: 0.05,
     },
   },
   sentinel: {
@@ -40,7 +40,7 @@ export const BATTERY_DEFS = {
       maxSpeed: 1350, boostAccel: 400, boostTime: 5.4, motorTime: 9.5,
       turnBoost: 0.8, turnMid: 1.5, turnTerm: 2.3, fuse: 46, effSpeed: 1050,
       envelope: { minAlt: 2400, maxAlt: 16000, maxRange: 18000 },
-      trail: 2.2, plume: 2.0, canisterKick: 0.03,
+      trail: 1.6, plume: 2.0, canisterKick: 0.03,
     },
   },
 };
@@ -142,24 +142,31 @@ export class Battery {
     parent.add(m);
   }
 
+  // two-part telescoping cylinder between two anchors; each anchor is either a static
+  // Vector3 in `parent` space or {obj, local} — a point on another (moving) object.
   _hydraulic(parent, from, to, r1 = 0.09, r2 = 0.055) {
-    // two-part telescoping cylinder; returns updater to keep it connected
     const outer = new THREE.Mesh(new THREE.CylinderGeometry(r1, r1, 1, 8), this.base.materials.steel);
     const inner = new THREE.Mesh(new THREE.CylinderGeometry(r2, r2, 1, 8),
       new THREE.MeshStandardMaterial({ color: 0xc8ccc4, roughness: 0.25, metalness: 0.9 }));
     parent.add(outer, inner);
-    const tmp = new THREE.Vector3();
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), tmp = new THREE.Vector3();
+    const q = new THREE.Quaternion();
+    const resolve = (anchor, out) => {
+      if (anchor.isVector3) return out.copy(anchor);
+      out.copy(anchor.local);
+      anchor.obj.localToWorld(out);
+      return parent.worldToLocal(out);
+    };
     const update = () => {
-      const a = from.clone(), b = to.clone();
+      resolve(from, a);
+      resolve(to, b);
       const len = a.distanceTo(b);
-      const mid = tmp.copy(a).lerp(b, 0.5);
-      const half1 = a.clone().lerp(b, 0.28);
-      outer.position.copy(half1);
+      outer.position.copy(tmp.copy(a).lerp(b, 0.28));
       outer.scale.set(1, len * 0.56, 1);
-      inner.position.copy(mid);
+      inner.position.copy(tmp.copy(a).lerp(b, 0.5));
       inner.scale.set(1, len, 1);
-      const dir = b.sub(a).normalize();
-      const q = new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), dir);
+      const dir = tmp.copy(b).sub(a).normalize();
+      q.setFromUnitVectors(V(0, 1, 0), dir);
       outer.quaternion.copy(q);
       inner.quaternion.copy(q);
     };
@@ -300,54 +307,95 @@ export class Battery {
   _buildSentinel() {
     const kit = new Kit();
     const mats = this.base.materials;
-    // heavy emplacement base
-    kit.box('concrete', 9, 1.0, 7, V(0, 0.5, 0), 0x87857a);
-    kit.box('paint', 8.4, 0.35, 6.4, V(0, 1.15, 0), 0x3d4437);
-    // gantry mast
-    for (const [dx, dz] of [[3.6, 2.6], [3.6, 1.4]]) {
-      kit.cyl('steel', 0.09, 0.11, 7.5, V(dx, 3.75 + 1.0, dz), 0x767b70, null, 8);
+    // heavy emplacement: concrete plinth + steel deck with kick rails
+    kit.box('concrete', 10, 0.9, 8, V(0, 0.45, 0), 0x87857a);
+    kit.box('paint', 9.2, 0.3, 7.2, V(0, 1.05, 0), 0x353c31);
+    kit.box('paint', 9.2, 0.1, 0.16, V(0, 1.32, 3.55), 0x8a8348);
+    kit.box('paint', 9.2, 0.1, 0.16, V(0, 1.32, -3.55), 0x8a8348);
+    // deck handrails (rear + sides)
+    for (const sz of [-1, 1]) {
+      for (let i = 0; i < 5; i++) {
+        kit.cyl('steel', 0.025, 0.025, 0.9, V(-4.4 + i * 2.2, 1.65, sz * 3.5), 0x6a6f64, null, 6);
+      }
+      kit.box('steel', 9.0, 0.05, 0.05, V(0, 2.1, sz * 3.5), 0x6a6f64);
     }
-    kit.box('steel', 0.14, 0.14, 1.4, V(3.6, 8.1, 2.0), 0x767b70);
-    kit.box('steel', 2.6, 0.12, 0.12, V(2.3, 8.1, 2.0), 0x767b70);
-    // control cabin
-    kit.box('paint', 2.4, 2.0, 1.8, V(-3.2, 2.15, 2.2), 0x49523e);
-    kit.box('glass', 2.2, 0.5, 1.6, V(-3.2, 2.75, 2.2), 0x101a16);
-    // cable trunks
-    kit.box('paint', 5.5, 0.16, 0.5, V(-0.4, 1.4, 2.9), 0x22251f);
+    // service tower: 4-leg lattice with platforms and floodlet
+    const TX = 3.9, TZ = 1.6, TH = 9.5;
+    for (const [dx, dz] of [[-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]]) {
+      kit.cyl('steel', 0.07, 0.09, TH, V(TX + dx, TH / 2 + 1.2, TZ + dz), 0x5f645a, null, 8);
+    }
+    for (let y = 2.6; y < TH + 1; y += 1.8) {
+      kit.box('steel', 1.55, 0.07, 0.07, V(TX, y, TZ - 0.7), 0x5f645a);
+      kit.box('steel', 1.55, 0.07, 0.07, V(TX, y, TZ + 0.7), 0x5f645a);
+      kit.box('steel', 0.07, 0.07, 1.55, V(TX - 0.7, y, TZ), 0x5f645a);
+      kit.box('steel', 0.07, 0.07, 1.55, V(TX + 0.7, y, TZ), 0x5f645a);
+    }
+    kit.box('paint', 2.2, 0.12, 2.2, V(TX, 6.2, TZ), 0x3f463a);        // mid platform
+    kit.box('paint', 2.4, 0.12, 2.4, V(TX, TH + 1.1, TZ), 0x3f463a);   // top platform
+    kit.box('steel', 2.9, 0.1, 0.1, V(TX - 1.5, TH + 1.1, TZ), 0x767b70); // service boom
+    kit.plane('lampFace', 0.5, 0.25, V(TX - 2.6, TH + 1.0, TZ), 0xffffff, E(-0.8, 0, 0));
+    // control cabin + cooling unit
+    kit.box('paint', 2.6, 2.1, 1.9, V(-3.4, 2.2, 2.4), 0x49523e);
+    kit.box('glass', 2.4, 0.55, 1.7, V(-3.4, 2.85, 2.4), 0x101a16);
+    kit.box('paint', 1.3, 1.1, 1.2, V(-3.6, 1.7, -2.4), 0x565c50);
+    for (let i = 0; i < 3; i++) kit.box('paint', 0.04, 0.8, 0.9, V(-4.28, 1.7, -2.4 + 0 * i), 0x2f342b);
+    // cable trunks across deck
+    kit.box('paint', 6.5, 0.14, 0.5, V(-0.4, 1.28, 3.0), 0x22251f);
+    kit.box('paint', 0.5, 0.14, 4.5, V(-3.4, 1.28, 0.4), 0x22251f);
+    // trunnion blocks (erector hinge)
+    for (const sx of [-1.35, 1.35]) {
+      kit.box('steel', 0.5, 1.0, 0.9, V(sx, 1.65, -1.4), 0x454a41);
+      kit.cyl('steel', 0.16, 0.16, 0.6, V(sx, 2.05, -1.4), 0x2f332c, E(0, 0, Math.PI / 2), 10);
+    }
     this.staticMeshes = kit.build(mats, this.group);
 
     // erector assembly (rotates from horizontal to near-vertical during prep)
-    this.azGroup.position.set(0, 1.35, -1.2);
+    this.azGroup.position.set(0, 2.05, -1.4);
     this.group.add(this.azGroup);
-    this.elevGroup.position.set(0, 0.45, 0);
-    this.elevGroup.rotation.x = -20 * Math.PI / 180;   // stowed-ish; erects on prep
+    this.elevGroup.position.set(0, 0, 0);
+    this.elevGroup.rotation.x = -16 * Math.PI / 180;   // stowed-ish; erects on prep
     this.azGroup.add(this.elevGroup);
 
     const ck = new Kit();
-    const R = 0.68, L = 8.6;
+    const R = 0.62, L = 8.6;
     let mi = 0;
     for (const sx of [-1, 1]) {
-      const x = sx * 0.85;
-      ck.cyl('paint', R, R, L, V(x, 0.75, 1.2), 0x4e5645, E(Math.PI / 2, 0, 0), 18);
+      const x = sx * 1.05;
+      // two-tone canister: olive body + darker sleeve sections
+      ck.cyl('paint', R, R, L, V(x, 0.55, 1.4), 0x4e5645, E(Math.PI / 2, 0, 0), 18);
+      ck.cyl('paint', R + 0.015, R + 0.015, 1.8, V(x, 0.55, -1.5), 0x39412f, E(Math.PI / 2, 0, 0), 18);
+      ck.cyl('paint', R + 0.015, R + 0.015, 1.2, V(x, 0.55, 3.2), 0x39412f, E(Math.PI / 2, 0, 0), 18);
       // ribs
-      for (const rz of [-2.4, -0.4, 1.6, 3.6]) {
-        ck.cyl('steel', R + 0.06, R + 0.06, 0.22, V(x, 0.75, 1.2 + rz), 0x394038, E(Math.PI / 2, 0, 0), 18);
+      for (const rz of [-2.6, -0.5, 1.7, 3.9]) {
+        ck.cyl('steel', R + 0.06, R + 0.06, 0.2, V(x, 0.55, 1.4 + rz), 0x2c302a, E(Math.PI / 2, 0, 0), 18);
       }
-      this.muzzles.push({ local: V(x, 0.75, 1.2 + L / 2), dirLocal: V(0, 0, 1), spent: false, idx: mi++ });
+      // umbilical conduit along each canister
+      ck.box('paint', 0.12, 0.12, L * 0.85, V(x + (sx > 0 ? 0.62 : -0.62), 0.75, 1.2), 0x23261f);
+      this.muzzles.push({ local: V(x, 0.55, 1.4 + L / 2), dirLocal: V(0, 0, 1), spent: false, idx: mi++ });
     }
-    ck.box('steel', 2.9, 0.3, 8.0, V(0, 0.0, 1.0), 0x3a3e35);
-    ck.box('steel', 2.9, 1.6, 0.25, V(0, 0.8, -3.0), 0x40453c);
+    // A-frame erector cradle under canisters (low side rails keep the round tubes readable)
+    ck.box('steel', 3.3, 0.34, 7.6, V(0, -0.35, 1.0), 0x3a3e35);
+    ck.box('steel', 3.3, 1.2, 0.3, V(0, 0.18, -2.9), 0x40453c);
+    for (const sx of [-1.35, 1.35]) {
+      ck.box('steel', 0.2, 0.5, 0.2, V(sx, 0.6, -2.9), 0x50554b); // rear posts
+    }
+    ck.box('steel', 0.24, 0.55, 6.2, V(-1.62, -0.22, 0.8), 0x40453c);
+    ck.box('steel', 0.24, 0.55, 6.2, V(1.62, -0.22, 0.8), 0x40453c);
+    // cross bracing between canisters
+    for (const bz of [-1.6, 0.8, 3.0]) {
+      ck.box('steel', 2.2, 0.14, 0.14, V(0, 1.05, bz), 0x454a41);
+    }
     this.elevMeshes = ck.build(mats, this.elevGroup);
 
-    this._makeCaps(1.3, 'circle');
-    this._decal('SENTINEL-X', 2.6, 0.6, V(0, 0.85, -3.15), E(0, Math.PI, 0), this.elevGroup, 'XM-EXP · TEST ARTICLE');
-    this._hazardStrip(2.6, 0.3, V(0, -0.18, 4.9), E(0, 0, 0), this.elevGroup);
+    this._makeCaps(1.24, 'circle');
+    this._decal('SENTINEL-X', 2.6, 0.6, V(0, 0.5, -3.08), E(0, Math.PI, 0), this.elevGroup, 'XM-EXP · TEST ARTICLE');
+    this._hazardStrip(2.6, 0.3, V(0, -0.55, 4.9), E(0, 0, 0), this.elevGroup);
 
     this._pistonUpdaters = [
-      this._hydraulic(this.azGroup, V(1.6, -0.6, 2.6), V(1.15, 0.5, 1.8), 0.14, 0.09),
-      this._hydraulic(this.azGroup, V(-1.6, -0.6, 2.6), V(-1.15, 0.5, 1.8), 0.14, 0.09),
+      this._hydraulic(this.azGroup, V(1.6, -1.3, 2.6), { obj: this.elevGroup, local: V(1.45, -0.35, 2.8) }, 0.15, 0.1),
+      this._hydraulic(this.azGroup, V(-1.6, -1.3, 2.6), { obj: this.elevGroup, local: V(-1.45, -0.35, 2.8) }, 0.15, 0.1),
     ];
-    this.erect = { from: -20 * Math.PI / 180, to: -84 * Math.PI / 180, t: 0 };
+    this.erect = { from: -16 * Math.PI / 180, to: -84 * Math.PI / 180, t: 0 };
   }
 
   _makeCaps(size, shape) {

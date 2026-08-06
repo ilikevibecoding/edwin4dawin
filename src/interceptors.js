@@ -30,6 +30,14 @@ class Interceptor {
     nose.geometry.rotateX(Math.PI / 2);
     nose.position.z = 2.25;
     this.group.add(body, nose);
+    // roll-reference paint bands
+    const bandMat = new THREE.MeshStandardMaterial({ color: 0x33363e, roughness: 0.5, metalness: 0.45 });
+    for (const z of [1.35, -0.35]) {
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.262, 0.262, 0.18, 10), bandMat);
+      band.geometry.rotateX(Math.PI / 2);
+      band.position.z = z;
+      this.group.add(band);
+    }
     // fins
     const finMat = new THREE.MeshStandardMaterial({ color: 0x4a4e46, roughness: 0.6, metalness: 0.4 });
     for (let i = 0; i < 4; i++) {
@@ -223,7 +231,7 @@ class Interceptor {
     const alpha = burning ? 0.7 : 0.24;
     this.effects.pushTrail(this.trail, this.pos, width, alpha);
     if (burning) {
-      this.effects.pushTrail(this.glowTrail, this.pos, 2.6 * def.plume, boostPhase ? 0.9 : 0.5);
+      this.effects.pushTrail(this.glowTrail, this.pos, 4.2 * def.plume, boostPhase ? 1.0 : 0.6);
       this.effects.motorExhaust(this.pos, this.vel, boostPhase ? 1 : 0.5, def.plume);
     }
 

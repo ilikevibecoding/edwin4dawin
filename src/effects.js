@@ -6,6 +6,7 @@ import { softCircleTexture, smokeTexture, scorchTexture, rngFx, clamp, lerp } fr
 
 const _v1 = new THREE.Vector3(); const _v2 = new THREE.Vector3(); const _v3 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
+const _white = new THREE.Color(1, 1, 1);
 
 // ================================================================ particle pool (GPU-integrated)
 // Analytic motion in the vertex shader: pos = p0 + v*(1-e^{-kt})/k + 0.5*g*t^2 + wind*t
@@ -59,6 +60,7 @@ class ParticlePool {
         uniform float uTime;
         uniform float uPointScale;
         uniform vec3 uWind;
+        uniform float uAdditive;
         varying vec3 vCol;
         varying float vAlpha;
         varying float vRot;
@@ -87,6 +89,8 @@ class ParticlePool {
           vRot = aMisc.w * age;
           float dist = length(mv.xyz);
           vFog = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist * 2000.0);
+          // smoke dissolves at extreme close range so puffs never white-out the camera
+          if (uAdditive < 0.5) vAlpha *= smoothstep(6.0, 26.0, dist);
         }`,
       fragmentShader: /* glsl */`
         uniform sampler2D uMap;
@@ -174,6 +178,7 @@ class Trail {
     const geo = new THREE.BufferGeometry();
     this.vPos = new THREE.BufferAttribute(new Float32Array(TRAIL_MAX * 2 * 3), 3).setUsage(THREE.DynamicDrawUsage);
     this.vA = new THREE.BufferAttribute(new Float32Array(TRAIL_MAX * 2), 1).setUsage(THREE.DynamicDrawUsage);
+    this.vU = new THREE.BufferAttribute(new Float32Array(TRAIL_MAX * 2), 1).setUsage(THREE.DynamicDrawUsage);
     this.vSide = new THREE.BufferAttribute(new Float32Array(TRAIL_MAX * 2), 1);
     for (let i = 0; i < TRAIL_MAX; i++) { this.vSide.array[i * 2] = 1; this.vSide.array[i * 2 + 1] = -1; }
     const idx = [];
@@ -183,6 +188,7 @@ class Trail {
     }
     geo.setAttribute('position', this.vPos);
     geo.setAttribute('aA', this.vA);
+    geo.setAttribute('aU', this.vU);
     geo.setAttribute('aSide', this.vSide);
     geo.setIndex(idx);
     geo.setDrawRange(0, 0);
@@ -205,29 +211,45 @@ class TrailPool {
       vertexShader: /* glsl */`
         attribute float aA;
         attribute float aSide;
+        attribute float aU;
         varying float vA;
         varying float vSide;
+        varying float vU;
         varying float vFog;
         uniform float uFogDensity;
         void main() {
-          vA = aA; vSide = aSide;
+          vA = aA; vSide = aSide; vU = aU;
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
           gl_Position = projectionMatrix * mv;
           float dist = length(mv.xyz);
           vFog = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist * 2000.0);
+          // dissolve only at extreme close range (walking through a drifting ribbon)
+          vA *= smoothstep(10.0, 48.0, dist);
         }`,
       fragmentShader: /* glsl */`
         varying float vA;
         varying float vSide;
+        varying float vU;
         varying float vFog;
         uniform vec3 uColorMul;
         uniform vec3 uFogColor;
+        float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float vnoise(vec2 p){
+          vec2 i = floor(p), f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+                     mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+        }
         void main() {
           float edge = 1.0 - abs(vSide);
-          float a = vA * smoothstep(0.0, 0.55, edge);
           ${additive
-            ? 'vec3 col = uColorMul * (1.0 - vFog * 0.7);'
-            : 'vec3 col = mix(uColorMul, uFogColor, vFog * 0.8);'}
+            ? `float a = vA * smoothstep(0.0, 0.55, edge);
+          vec3 col = uColorMul * (1.0 - vFog * 0.7);`
+            : `// wispy structure: 2-octave noise along the ribbon breaks up flat alpha
+          float n = vnoise(vec2(vU, vSide * 1.4)) * 0.65 + vnoise(vec2(vU * 2.7 + 13.1, vSide * 3.1)) * 0.35;
+          float mask = 0.62 + 0.76 * (n - 0.5);
+          float a = vA * smoothstep(0.0, 0.42 + 0.35 * n, edge) * mask;
+          vec3 col = mix(uColorMul, uFogColor, vFog * 0.8);`}
           gl_FragColor = vec4(col, a);
           if (a < 0.004) discard;
         }`,
@@ -302,6 +324,7 @@ class TrailPool {
     if (n < 2) { t.geo.setDrawRange(0, 0); return t.released ? 0 : 1; }
     let vi = 0;
     let visible = 0;
+    let along = 0;
     // iterate oldest -> newest
     const start = (t.head - n + TRAIL_MAX) % TRAIL_MAX;
     for (let k = 0; k < n; k++) {
@@ -314,16 +337,23 @@ class TrailPool {
       const iPrev = (start + Math.max(k - 1, 0)) % TRAIL_MAX;
       _v2.set(t.pos[iNext * 3] - t.pos[iPrev * 3], t.pos[iNext * 3 + 1] - t.pos[iPrev * 3 + 1], t.pos[iNext * 3 + 2] - t.pos[iPrev * 3 + 2]);
       if (_v2.lengthSq() < 1e-6) _v2.set(0, 1, 0);
+      along += _v2.length() * 0.5 * (k > 0 ? 1 : 0);
       _v3.subVectors(_v1, camPos);
       const side = _v2.cross(_v3).normalize();
-      const w = t.width[i] * (0.75 + Math.min(age * 0.2, 1.5)); // trails billow with age, capped
+      // billow with age (capped) + per-point jitter so ribbons don't read as perfect cones
+      const jitter = 0.82 + 0.36 * ((i * 2654435761 >>> 16) % 1000) / 1000;
+      const w = t.width[i] * (0.75 + Math.min(age * 0.14, 0.85)) * jitter;
       const a = t.alpha[i] * Math.pow(fade, 1.35);
       if (a > 0.003) visible++;
-      this._setVert(t, vi++, _v1.x + side.x * w, _v1.y + side.y * w, _v1.z + side.z * w, a);
-      this._setVert(t, vi++, _v1.x - side.x * w, _v1.y - side.y * w, _v1.z - side.z * w, a);
+      const u = along * 0.045;
+      this._setVert(t, vi, _v1.x + side.x * w, _v1.y + side.y * w, _v1.z + side.z * w, a);
+      t.vU.array[vi++] = u;
+      this._setVert(t, vi, _v1.x - side.x * w, _v1.y - side.y * w, _v1.z - side.z * w, a);
+      t.vU.array[vi++] = u;
     }
     t.vPos.needsUpdate = true;
     t.vA.needsUpdate = true;
+    t.vU.needsUpdate = true;
     t.geo.setDrawRange(0, Math.max(0, (n - 1) * 6));
     // per-trail color: multiply into vertex alpha only; color via material is global.
     return visible;
@@ -536,9 +566,12 @@ export class Effects {
       p.uniforms.uFogDensity.value = fogDensity;
       p.uniforms.uWind.value.copy(wind);
     }
+    // sunlit exhaust smoke reads brighter than flat ambient
+    this.smoke.uniforms.uAmbient.value.lerp(_white, 0.28);
     this.trails.uniforms.uFogColor.value.copy(fogColor);
     this.trails.uniforms.uFogDensity.value = fogDensity;
-    this.trails.uniforms.uColorMul.value.copy(ambient);
+    // exhaust smoke reads brighter than generic ambient (sun-catching white plume)
+    this.trails.uniforms.uColorMul.value.copy(ambient).lerp(_white, 0.4);
     this.glowTrails.uniforms.uFogColor.value.copy(fogColor);
     this.glowTrails.uniforms.uFogDensity.value = fogDensity;
   }
@@ -577,13 +610,14 @@ export class Effects {
         color: 0xffc37a, alpha: 1, damp: 0.55, gravity: 0.55, wind: 0.1,
       });
     }
-    // core flash (double-pulse, distance-readable)
-    this.fire.emit(this.now, { pos, vel: _v2.set(0, 0, 0), life: 0.2, size0: 38 * size, size1: 64 * size, color: 0xfff3dc, alpha: 1, damp: 1, gravity: 0 });
-    this.fire.emit(this.now, { pos, vel: _v2.set(0, 0, 0), life: 0.55, size0: 20 * size, size1: 44 * size, color: 0xffb060, alpha: 0.8, damp: 1, gravity: 0 });
-    this.shock.spawn(pos, { size: 130 * size, dur: 1.0, alpha: 0.55 });
+    // core flash (double-pulse) — scaled up with camera distance so far intercepts stay readable
+    const d = this.camera.position.distanceTo(pos);
+    const ds = clamp(d / 950, 0.75, 6.5) * size;
+    this.fire.emit(this.now, { pos, vel: _v2.set(0, 0, 0), life: 0.34, size0: 55 * ds, size1: 100 * ds, color: 0xfff3dc, alpha: 1, damp: 1, gravity: 0 });
+    this.fire.emit(this.now, { pos, vel: _v2.set(0, 0, 0), life: 0.9, size0: 30 * ds, size1: 70 * ds, color: 0xffb060, alpha: 0.85, damp: 1, gravity: 0 });
+    this.shock.spawn(pos, { size: 130 * clamp(ds, 1, 3.6), dur: 1.0, alpha: 0.55 });
     this.debris.burst(pos, _v2.set(0, 0, 0), Math.round(10 * size), 62 * size, 0.8 * size);
     this.flash.flash(pos, 1100 * size, 0.45);
-    const d = this.camera.position.distanceTo(pos);
     if (this.onShake) this.onShake(clamp(1 - d / 1500, 0, 1) * 0.5 * size);
     if (this.onBoom) this.onBoom(pos, size, kind);
   }
@@ -664,11 +698,11 @@ export class Effects {
   // continuous motor exhaust — called per-frame per missile while burning
   motorExhaust(pos, vel, intensity, scale = 1) {
     // fire glow puff (short) + smoke puff (long) with probabilistic thinning
-    if (rngFx.next() < 0.85 * intensity) {
+    if (rngFx.next() < 0.6 * intensity) {
       _v1.copy(vel).multiplyScalar(-0.04).add(_v2.set(rngFx.gauss(), rngFx.gauss(), rngFx.gauss()).multiplyScalar(1.5));
       this.smoke.emit(this.now, {
-        pos, vel: _v1, life: rngFx.range(5, 11) * scale, size0: 2.2 * scale, size1: 17 * scale,
-        color: 0xd6d6d6, alpha: 0.5 * intensity, damp: 1.2, gravity: -0.002, wind: 1.0,
+        pos, vel: _v1, life: rngFx.range(5, 11) * scale, size0: 2.2 * scale, size1: 12 * scale,
+        color: 0xd6d6d6, alpha: 0.44 * intensity, damp: 1.2, gravity: -0.002, wind: 1.0,
       });
     }
     if (rngFx.next() < 0.5 * intensity) {

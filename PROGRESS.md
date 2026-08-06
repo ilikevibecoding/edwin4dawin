@@ -38,3 +38,22 @@ Self-evaluating loop: build → run → screenshot → judge vs rubric → fix �
 - Scores: env 6 · batteries 6.5 · physics 7 · effects 5.5 (unverified new trails) · light/post 7 · UI 7.5 · perf 8 · loop 8.
 - Next: gameplay-view screenshots (launch/intercept from player POV), battery mechanical detail, C2 interior,
   night trail readability, plume shape.
+
+### Iteration 3 (gameplay-view polish) — avg ~7.4
+- New `tests/visual.spec.js`: POV launch, intercept flash chase-cam, C2 interior, radar site, sentinel erect
+  sequence, night-raid trail readability. All passing.
+- Fixed: POV launch camera clear of blast walls (T-wall "behind" angle bug — walls were blocking the muzzle),
+  Sentinel rebuilt (spaced canisters w/ ribs + two-tone sleeves, 4-leg lattice service tower w/ platforms,
+  raised steel deck + handrails, trunnion blocks, dynamic hydraulic anchors that track the erecting cradle),
+  partial-gamma vertex tint (pow 0.62 — paint reads correctly, rubber stays dark), Patriot wheels+hubs,
+  C2 interior clutter pass 1 (keyboards, binders, notice board, extinguisher, racks, wall map).
+- Night trails now read beautifully: reentry glow tip + long moonlit ribbons; intercept banner + debrief clear.
+- Observations this pass: threat/booster smoke reads as flat marshmallow (uniform sprite interior + wide ribbon),
+  intercept flash tiny at 6 km, apron pad stencils comically large, C2 too dark w/ bare left wall, Sentinel
+  cradle side plates hid the round tubes.
+- Fixes applied: trail shader wispy noise mask (along-ribbon value noise), smoke sprite interior structure,
+  motor exhaust slimmed (60% emit, size1 12), airBurst flash distance compensation (d/950, cap 6.5×),
+  pad stencils 2.2 m → 1.4 m @ 0.7 alpha, C2 monitor light spill + clock/readiness placard/duty whiteboard,
+  Sentinel cradle rails lowered.
+- Perf: 122–173 DC / ~70k tris across shots. Headroom intact.
+- Scores: env 7 · batteries 7.5 · physics 7.5 · effects 6.5 · light/post 7.5 · UI 8 · perf 8.5 · loop 8.
