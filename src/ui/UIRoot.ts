@@ -494,6 +494,62 @@ export function uiFadeOut(
   );
 }
 
+/**
+ * Owns the visibility of one element.
+ *
+ * Without this, a reveal that lands while a fade-out is still running would be
+ * blanked when the fade's completion callback sets `display:none`. Every
+ * transition cancels the previous one and `display` is only ever touched here.
+ */
+export class UIFader {
+  private handle: UIHandle | null = null;
+  private shown = false;
+
+  constructor(
+    private readonly clock: UIClock,
+    private readonly el: HTMLElement,
+  ) {
+    el.style.display = 'none';
+    el.style.opacity = '0';
+  }
+
+  get visible(): boolean {
+    return this.shown;
+  }
+
+  reveal(opts: RevealOptions = {}): void {
+    this.stop();
+    this.shown = true;
+    this.el.style.display = '';
+    this.handle = uiReveal(this.clock, this.el, opts);
+  }
+
+  fade(duration = 0.18, onHidden?: () => void): void {
+    if (!this.shown) return;
+    this.stop();
+    this.shown = false;
+    this.handle = uiFadeOut(this.clock, this.el, duration, () => {
+      this.handle = null;
+      this.el.style.display = 'none';
+      if (onHidden) onHidden();
+    });
+  }
+
+  hideNow(): void {
+    this.stop();
+    this.shown = false;
+    this.el.style.display = 'none';
+    this.el.style.opacity = '0';
+  }
+
+  private stop(): void {
+    if (this.handle) {
+      this.handle.cancel();
+      this.handle = null;
+    }
+  }
+}
+
 /** Grows a 1px rule from nothing. */
 export function uiGrowRule(
   clock: UIClock,
