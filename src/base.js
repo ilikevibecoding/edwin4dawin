@@ -1197,6 +1197,8 @@ function buildShelter(rng) {
   fan.position.set(-3.4, H + 1.54, 1.2);
   fan.rotation.x = -Math.PI / 2;
   fan.userData.spin = 6.2;
+  fan.castShadow = true;
+  fan.receiveShadow = true;
   g.add(fan);
 
   // Interior floor, rear equipment racks and the side door all share the dark
@@ -1828,6 +1830,8 @@ function buildGenerator(rng) {
   const fan = new THREE.Mesh(fanBlades(0.5), mats.steel);
   fan.position.set(-0.9, 1.05, -0.92);
   fan.userData.spin = 22;
+  fan.castShadow = true;
+  fan.receiveShadow = true;
   g.add(fan);
 
   const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.2), lamp(0x2fff8a, 2.6));
