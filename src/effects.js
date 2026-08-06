@@ -2,17 +2,93 @@
 // shockwaves, craters, flash lights. Zero per-frame allocations in steady
 // state — everything below is preallocated and recycled.
 import * as THREE from 'three';
-import { softSmokeTexture, fireTexture, glowTexture, ringTexture, craterTexture, trailEdgeTexture } from './texgen.js';
+import { glowTexture, ringTexture, craterTexture, trailEdgeTexture } from './texgen.js';
+import { mulberry32 } from './rng.js';
 import { DEBRIS_GRAVITY, groundHeight, contrailFactor, airDensity } from './physics.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _side = new THREE.Vector3();
 const _dir = new THREE.Vector3();
+const _p = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _c = new THREE.Color();
+const UP = new THREE.Vector3(0, 1, 0);
+
+// Local smoke sprite: denser cauliflower clumps + eroded ragged edge for more
+// contrast than the old uniform fog blob. Kept local to effects (fx-only look).
+function clumpySmokeTexture() {
+  const S = 128;
+  const cnv = document.createElement('canvas');
+  cnv.width = S; cnv.height = S;
+  const g = cnv.getContext('2d');
+  const rnd = mulberry32(9137);
+  g.clearRect(0, 0, S, S);
+  const blob = (x, y, r, stops) => {
+    const maxR = Math.min(x, y, S - x, S - y) - 1;
+    const rr = Math.max(2, Math.min(r, maxR));
+    const grad = g.createRadialGradient(x - rr * 0.2, y - rr * 0.2, 0, x, y, rr);
+    for (const [o, a] of stops) grad.addColorStop(o, `rgba(255,255,255,${a})`);
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(x, y, rr, 0, 7); g.fill();
+  };
+  // soft body — fat base mass so the sprite has real coverage
+  for (let i = 0; i < 9; i++) {
+    const a = rnd() * Math.PI * 2, r = rnd() * S * 0.13;
+    blob(S / 2 + Math.cos(a) * r, S / 2 + Math.sin(a) * r, S * (0.17 + rnd() * 0.14),
+      [[0, 0.15], [0.6, 0.07], [1, 0]]);
+  }
+  // dense clumps (cauliflower lobes) — larger + hotter than the base
+  for (let i = 0; i < 30; i++) {
+    const a = rnd() * Math.PI * 2, r = Math.pow(rnd(), 0.8) * S * 0.27;
+    blob(S / 2 + Math.cos(a) * r, S / 2 + Math.sin(a) * r, S * (0.07 + rnd() * 0.075),
+      [[0, 0.3 + rnd() * 0.25], [0.55, 0.13 + rnd() * 0.09], [1, 0]]);
+  }
+  // erode small ragged bites near the rim only (keeps the core solid)
+  g.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 8; i++) {
+    const a = rnd() * Math.PI * 2, r = S * (0.3 + rnd() * 0.14);
+    const x = S / 2 + Math.cos(a) * r, y = S / 2 + Math.sin(a) * r;
+    const rad = S * (0.035 + rnd() * 0.05);
+    const grad = g.createRadialGradient(x, y, 0, x, y, rad);
+    grad.addColorStop(0, `rgba(0,0,0,${0.25 + rnd() * 0.25})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill();
+  }
+  g.globalCompositeOperation = 'source-over';
+  const t = new THREE.CanvasTexture(cnv);
+  t.anisotropy = 2;
+  return t;
+}
+
+// Local fire sprite: hotter core than texgen's fireTexture so fireballs and
+// launch tongues stay readable against a bright day sky at km ranges.
+function denseFireTexture() {
+  const S = 128;
+  const cnv = document.createElement('canvas');
+  cnv.width = S; cnv.height = S;
+  const g = cnv.getContext('2d');
+  const rnd = mulberry32(7411);
+  g.clearRect(0, 0, S, S);
+  for (let i = 0; i < 22; i++) {
+    const a = rnd() * Math.PI * 2, r = rnd() * S * 0.17;
+    const x = S / 2 + Math.cos(a) * r, y = S / 2 + Math.sin(a) * r;
+    const rad = S * (0.09 + rnd() * 0.2);
+    const maxR = Math.min(x, y, S - x, S - y) - 1;
+    const rr = Math.max(3, Math.min(rad, maxR));
+    const grad = g.createRadialGradient(x, y, 0, x, y, rr);
+    grad.addColorStop(0, `rgba(255,255,255,${0.55 + rnd() * 0.3})`);
+    grad.addColorStop(0.45, 'rgba(255,255,255,0.26)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad; g.beginPath(); g.arc(x, y, rr, 0, 7); g.fill();
+  }
+  const t = new THREE.CanvasTexture(cnv);
+  t.anisotropy = 2;
+  return t;
+}
 
 // ------------------------------------------------------------------ QuadPool
 class QuadPool {
@@ -102,7 +178,7 @@ class QuadPool {
     this.alive[idx] = 1;
     this.px[idx] = p.x; this.py[idx] = p.y; this.pz[idx] = p.z;
     this.vx[idx] = p.vx || 0; this.vy[idx] = p.vy || 0; this.vz[idx] = p.vz || 0;
-    this.age[idx] = 0; this.life[idx] = p.life || 1;
+    this.age[idx] = -(p.delay || 0); this.life[idx] = p.life || 1;
     this.size0[idx] = p.size0 ?? 1; this.size1[idx] = p.size1 ?? (p.size0 ?? 1) * 2;
     this.rot[idx] = p.rot ?? Math.random() * 6.28;
     this.rotV[idx] = p.rotV ?? (Math.random() - 0.5) * 1.4;
@@ -122,6 +198,7 @@ class QuadPool {
     for (let i = 0; i < this.capacity; i++) {
       if (!this.alive[i]) continue;
       this.age[i] += dt;
+      if (this.age[i] < 0) continue; // delayed spawn: frozen + invisible until born
       const t = this.age[i] / this.life[i];
       if (t >= 1) { this.alive[i] = 0; continue; }
       const damp = Math.max(0, 1 - this.damp[i] * dt);
@@ -162,6 +239,7 @@ class SparkPool {
     this.vel = new Float32Array(capacity * 3);
     this.age = new Float32Array(capacity);
     this.life = new Float32Array(capacity);
+    this.kindA = new Uint8Array(capacity); // 0 = hot orange, 1 = cool cyan-white
     this.cursor = 0;
     const geo = new THREE.BufferGeometry();
     this.attr = new THREE.BufferAttribute(new Float32Array(capacity * 3), 3);
@@ -182,13 +260,14 @@ class SparkPool {
     this.geo = geo;
   }
 
-  spawn(x, y, z, vx, vy, vz, life) {
+  spawn(x, y, z, vx, vy, vz, life, kind = 0) {
     const i = this.cursor % this.capacity;
     this.cursor++;
     this.alive[i] = 1;
     this.pos[i * 3] = x; this.pos[i * 3 + 1] = y; this.pos[i * 3 + 2] = z;
     this.vel[i * 3] = vx; this.vel[i * 3 + 1] = vy; this.vel[i * 3 + 2] = vz;
     this.age[i] = 0; this.life[i] = life;
+    this.kindA[i] = kind;
   }
 
   update(dt) {
@@ -207,9 +286,16 @@ class SparkPool {
       this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
       P[n * 3] = this.pos[i * 3]; P[n * 3 + 1] = this.pos[i * 3 + 1]; P[n * 3 + 2] = this.pos[i * 3 + 2];
       const heat = 1 - t;
-      C[n * 3] = 1.6 * heat + 0.4;
-      C[n * 3 + 1] = 1.1 * heat * heat + 0.15;
-      C[n * 3 + 2] = 0.5 * heat * heat * heat;
+      if (this.kindA[i]) {
+        // cool cyan-white (decoy burnup streaks)
+        C[n * 3] = 0.55 + 1.0 * heat * heat;
+        C[n * 3 + 1] = 0.8 + 0.9 * heat;
+        C[n * 3 + 2] = 1.1 + 0.9 * heat;
+      } else {
+        C[n * 3] = 1.6 * heat + 0.4;
+        C[n * 3 + 1] = 1.1 * heat * heat + 0.15;
+        C[n * 3 + 2] = 0.5 * heat * heat * heat;
+      }
       n++;
     }
     this.geo.setDrawRange(0, n);
@@ -467,12 +553,12 @@ export class Effects {
     this.now = 0;
     this.quality = 1;
 
-    this.smoke = new QuadPool(scene, softSmokeTexture(), 900, { additive: false });
-    this.fire = new QuadPool(scene, fireTexture(), 320, { additive: true });
+    this.smoke = new QuadPool(scene, clumpySmokeTexture(), 1150, { additive: false });
+    this.fire = new QuadPool(scene, denseFireTexture(), 400, { additive: true });
     this.flash = new QuadPool(scene, glowTexture(), 70, { additive: true });
-    this.sparks = new SparkPool(scene, 700);
-    this.debris = new DebrisPool(scene, 90);
-    this.rings = new RingPool(scene, 14);
+    this.sparks = new SparkPool(scene, 900);
+    this.debris = new DebrisPool(scene, 110);
+    this.rings = new RingPool(scene, 16);
 
     // trails
     const edgeTex = trailEdgeTexture();
@@ -493,10 +579,10 @@ export class Effects {
     this.trails = [];
     for (let i = 0; i < 26; i++) this.trails.push(new Trail(scene));
 
-    // emitters (launch plumes etc.)
+    // emitters (launch plumes, impact columns, mushroom heads)
     this.emitters = [];
     for (let i = 0; i < 12; i++) {
-      this.emitters.push({ alive: false, pos: new THREE.Vector3(), dir: new THREE.Vector3(), age: 0, dur: 0, kind: '', rate: 0, acc: 0 });
+      this.emitters.push({ alive: false, pos: new THREE.Vector3(), dir: new THREE.Vector3(), age: 0, dur: 0, kind: '', rate: 0, acc: 0, scale: 1 });
     }
 
     // burning fragments
@@ -560,10 +646,24 @@ export class Effects {
   feedInterceptorTrail(smokeTrail, coreTrail, pos, vel, thrusting, def) {
     const cf = contrailFactor(pos.y);
     if (smokeTrail) {
-      const width = thrusting ? 1.7 : 1.0 + cf * 1.3;
-      const life = thrusting ? 8 : 2.5 + cf * 13;
-      const alpha = thrusting ? 0.85 : 0.26 + cf * 0.45;
-      smokeTrail.push(pos, width, life, alpha, this.now, 4);
+      if (thrusting) {
+        // slim, turbulent boost column: per-point width jitter (~±30%) and a
+        // slight lateral offset off the flight axis so it billows instead of
+        // reading as a ruler-straight solid slab
+        const width = 1.1 * (0.72 + Math.random() * 0.62);
+        _dir.copy(vel).normalize();
+        _p.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
+        _p.addScaledVector(_dir, -_p.dot(_dir)); // keep offset perpendicular
+        const len = _p.length();
+        if (len > 1e-4) _p.multiplyScalar((0.4 + Math.random() * 0.75) / len);
+        _p.add(pos);
+        smokeTrail.push(_p, width, 8, 0.65, this.now, 4);
+      } else {
+        const width = 1.0 + cf * 1.3;
+        const life = 2.5 + cf * 13;
+        const alpha = 0.26 + cf * 0.45;
+        smokeTrail.push(pos, width, life, alpha, this.now, 4);
+      }
     }
     if (coreTrail && thrusting) {
       coreTrail.push(pos, 0.8, 0.35, 0.95, this.now, 1.5);
@@ -571,13 +671,13 @@ export class Effects {
   }
 
   // ---------------- lights
-  flashLight(pos, intensity, dur, color = 0xffcf9a) {
+  flashLight(pos, intensity, dur, color = 0xffcf9a, delay = 0) {
     const slot = this.lights.find(l => !l.alive) || this.lights[0];
     slot.alive = true;
-    slot.age = 0; slot.dur = dur; slot.peak = intensity;
+    slot.age = -delay; slot.dur = dur; slot.peak = intensity;
     slot.light.position.copy(pos);
     slot.light.color.set(color);
-    slot.light.intensity = intensity;
+    slot.light.intensity = delay > 0 ? 0 : intensity;
   }
 
   // ---------------- compound effects
@@ -620,11 +720,29 @@ export class Effects {
         c0: 0xa4906c, c1: 0x8d7f66, alpha: 0.5, damp: 1.4, grav: -0.4, wind: 1.2,
       });
     }
+    // bright fire tongues punching radially through the dust ring (~first 0.5 s)
+    const tongues = Math.max(4, Math.round(8 * scale * this.quality));
+    for (let i = 0; i < tongues; i++) {
+      const a = (i / tongues) * Math.PI * 2 + Math.random() * 0.7;
+      const spd = (17 + Math.random() * 14) * scale;
+      this.fire.spawn({
+        x: ground.x + Math.cos(a) * 2.5, y: ground.y + 0.6 + Math.random() * 0.9, z: ground.z + Math.sin(a) * 2.5,
+        vx: Math.cos(a) * spd, vy: 1.4 + Math.random() * 2.2, vz: Math.sin(a) * spd,
+        size0: (2.2 + Math.random() * 1.6) * scale, size1: (3.6 + Math.random() * 2.6) * scale,
+        life: 0.28 + Math.random() * 0.2, c0: 0xffe9b8, c1: 0xff6a1a, alpha: 0.9,
+        fadeIn: 0.01, damp: 2.2, delay: Math.random() * 0.2,
+      });
+    }
     // pad smoke emitter
     this._emit('pad', ground, dir, kind === 'huge' ? 7 : 4.5, 26 * this.quality * scale);
-    // shockwave ring on ground for big launches
+    if (kind === 'huge') {
+      // SENTINEL: tall steam-grey exhaust column climbing off the pad
+      this._emit('padcol', ground, UP, 3.4, 30 * this.quality);
+    }
+    // shockwave ring on ground for big launches (wider for huge)
     if (kind !== 'compact') {
-      this.rings.spawn(ground.clone().add(_v.set(0, 0.6, 0)), 2, 26 * scale, 0.7, 0.5, { flat: true });
+      const ringR = 26 * scale * (kind === 'huge' ? 1.45 : 1);
+      this.rings.spawn(ground.clone().add(_v.set(0, 0.6, 0)), 2, ringR, 0.75, 0.5, { flat: true });
     }
     this.ctx.player?.addShake(kind === 'huge' ? 0.5 : 0.3, pos);
   }
@@ -639,7 +757,8 @@ export class Effects {
     f.vel.x += (Math.random() - 0.5) * 12;
     f.vel.z += (Math.random() - 0.5) * 12;
     f.age = 0; f.life = 7; f.acc = 0;
-    for (let i = 0; i < 10; i++) {
+    const n = Math.max(4, Math.round(10 * this.quality));
+    for (let i = 0; i < n; i++) {
       this.sparks.spawn(pos.x, pos.y, pos.z,
         (Math.random() - 0.5) * 26, (Math.random() - 0.5) * 26, (Math.random() - 0.5) * 26, 0.8);
     }
@@ -647,117 +766,162 @@ export class Effects {
 
   interceptKill(pos, velA, velB) {
     const q = this.quality;
-    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 26, size1: 70, life: 0.3, c0: 0xfff4d8, alpha: 1, fadeIn: 0.005 });
-    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 10, size1: 30, life: 0.55, c0: 0xffc27a, alpha: 0.9, fadeIn: 0.005 });
-    this.flashLight(pos, 30000, 0.7, 0xffd9a8);
-    this.rings.spawn(pos, 4, 90, 0.9, 0.85);
+    // The money shot — usually seen 2-5 km away against open sky. Cinematic
+    // distance compensation: gently inflate world sizes for far kills so the
+    // event still reads from the base, without dwarfing close intercepts.
+    const camDist = this.ctx.camera ? this.ctx.camera.position.distanceTo(pos) : 2500;
+    const ds = THREE.MathUtils.clamp(camDist / 1500, 1, 4.2);   // flash + particle sizes
+    const dsO = 1 + (ds - 1) * 0.5;                             // cluster offsets/speeds (tighter, keeps mass dense)
+    const dsR = 1 + (ds - 1) * 0.7;                             // shock ring
+    // primary flash + wide soft halo, delayed secondary pop, warm afterglow
+    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 50 * ds, size1: 150 * ds, life: 0.65, c0: 0xfff4d8, alpha: 1, fadeIn: 0.005 });
+    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 90 * ds, size1: 260 * ds, life: 0.55, c0: 0xfff8e8, alpha: 0.4, fadeIn: 0.005 });
+    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 20 * ds, size1: 70 * ds, life: 0.8, c0: 0xffc27a, alpha: 0.95, fadeIn: 0.005 });
+    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 34 * ds, size1: 100 * ds, life: 0.55, c0: 0xffdca0, alpha: 0.85, fadeIn: 0.02, delay: 0.28 });
+    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 34 * ds, size1: 95 * ds, life: 2.5, c0: 0xff9a4a, alpha: 0.6, fadeIn: 0.12, delay: 0.4 });
+    this.flashLight(pos, 34000 * ds, 0.7, 0xffd9a8);
+    this.flashLight(pos, 16000 * ds, 0.9, 0xff9a50, 0.28);
+    this.rings.spawn(pos, 8 * dsR, 215 * dsR, 1.6, 1.0);
 
-    for (let i = 0; i < 18 * q; i++) {
-      const a = Math.random() * Math.PI * 2, b = Math.random() * Math.PI - Math.PI / 2;
-      const spd = 12 + Math.random() * 30;
+    // burning heart: tight, near-static hot cluster so the kill has a solid
+    // incandescent core that survives the flash wash-out
+    for (let i = 0; i < 8; i++) {
       this.fire.spawn({
-        x: pos.x, y: pos.y, z: pos.z,
+        x: pos.x + (Math.random() - 0.5) * 7 * dsO, y: pos.y + (Math.random() - 0.5) * 7 * dsO, z: pos.z + (Math.random() - 0.5) * 7 * dsO,
+        vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10, vz: (Math.random() - 0.5) * 10,
+        size0: (24 + Math.random() * 15) * ds, size1: (36 + Math.random() * 18) * ds,
+        life: 1.5 + Math.random() * 0.7, c0: 0xfff0c8, c1: 0xff5a14, alpha: 1, damp: 1.2,
+        delay: Math.random() * 0.1, fadeIn: 0.02,
+      });
+    }
+    // fireball cluster: offset volume, sized to read at km range
+    for (let i = 0; i < 34 * q; i++) {
+      const a = Math.random() * Math.PI * 2, b = Math.random() * Math.PI - Math.PI / 2;
+      const spd = (16 + Math.random() * 44) * dsO;
+      this.fire.spawn({
+        x: pos.x + (Math.random() - 0.5) * 14 * dsO, y: pos.y + (Math.random() - 0.5) * 14 * dsO, z: pos.z + (Math.random() - 0.5) * 14 * dsO,
         vx: Math.cos(a) * Math.cos(b) * spd, vy: Math.sin(b) * spd, vz: Math.sin(a) * Math.cos(b) * spd,
-        size0: 3 + Math.random() * 4, size1: 7 + Math.random() * 6,
-        life: 0.5 + Math.random() * 0.5, c0: 0xffe8b8, c1: 0xff4a10, alpha: 0.95, damp: 1.8,
+        size0: (11 + Math.random() * 10) * ds, size1: (24 + Math.random() * 20) * ds,
+        life: 0.7 + Math.random() * 0.9, c0: 0xffe8b8, c1: 0xff4a10, alpha: 0.95, damp: 1.8,
+        delay: Math.random() * 0.14,
       });
     }
-    for (let i = 0; i < 16 * q; i++) {
-      const a = Math.random() * Math.PI * 2, b = Math.random() * Math.PI - Math.PI / 2;
-      const spd = 6 + Math.random() * 14;
+    // smoke: one cohesive dark cloud that marks the hit for 6-10 s. Blast
+    // smoke expands violently then stalls, so spawn near-final size with slow
+    // drift (fast dispersal would thin the cluster into invisibility at range).
+    for (let i = 0; i < 10; i++) {
+      const s1 = (95 + Math.random() * 40) * ds;
       this.smoke.spawn({
-        x: pos.x, y: pos.y, z: pos.z,
-        vx: Math.cos(a) * Math.cos(b) * spd, vy: Math.sin(b) * spd * 0.7, vz: Math.sin(a) * Math.cos(b) * spd,
-        size0: 5, size1: 16 + Math.random() * 8,
-        life: 4 + Math.random() * 5,
-        c0: 0x8e8a84, c1: 0x55534e, alpha: 0.55, damp: 0.9, grav: -0.3, wind: 1,
+        x: pos.x + (Math.random() - 0.5) * 16 * dsO, y: pos.y + (Math.random() - 0.5) * 16 * dsO, z: pos.z + (Math.random() - 0.5) * 16 * dsO,
+        vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5, vz: (Math.random() - 0.5) * 5,
+        size0: s1 * 0.7, size1: s1,
+        life: 7 + Math.random() * 3, fadeIn: 0.5,
+        c0: 0x67635e, c1: 0x4a4844, alpha: 0.95, damp: 0.9, grav: -0.25, wind: 1,
       });
     }
-    for (let i = 0; i < 60 * q; i++) {
+    for (let i = 0; i < 24 * q; i++) {
       const a = Math.random() * Math.PI * 2, b = Math.random() * Math.PI - Math.PI / 2;
-      const spd = 24 + Math.random() * 60;
+      const spd = 5 + Math.random() * 10;
+      const s1 = (58 + Math.random() * 37) * ds;
+      this.smoke.spawn({
+        x: pos.x + (Math.random() - 0.5) * 26 * ds, y: pos.y + (Math.random() - 0.5) * 26 * ds, z: pos.z + (Math.random() - 0.5) * 26 * ds,
+        vx: Math.cos(a) * Math.cos(b) * spd, vy: Math.sin(b) * spd * 0.7, vz: Math.sin(a) * Math.cos(b) * spd,
+        size0: s1 * 0.6, size1: s1,
+        life: 6 + Math.random() * 4, fadeIn: 0.35,
+        c0: 0x6f6b66, c1: 0x4c4a46, alpha: 0.75, damp: 0.9, grav: -0.3, wind: 1,
+      });
+    }
+    const spdS = 1 + (ds - 1) * 0.4;
+    for (let i = 0; i < 130 * q; i++) {
+      const a = Math.random() * Math.PI * 2, b = Math.random() * Math.PI - Math.PI / 2;
+      const spd = (26 + Math.random() * 85) * spdS;
       this.sparks.spawn(pos.x, pos.y, pos.z,
         Math.cos(a) * Math.cos(b) * spd, Math.sin(b) * spd, Math.sin(a) * Math.cos(b) * spd,
-        0.7 + Math.random() * 0.9);
+        0.7 + Math.random() * 1.3);
     }
-    // burning fragments raining down
-    const frags = Math.round(5 * q);
+    // burning fragments raining down in visible arcs (6-8)
+    const frags = Math.round(4 + 4 * q);
     for (let i = 0; i < frags; i++) {
       const f = this.fragments.find(f => !f.alive);
       if (!f) break;
       f.alive = true;
       f.pos.copy(pos);
-      f.vel.set((Math.random() - 0.5) * 55, (Math.random() - 0.3) * 40, (Math.random() - 0.5) * 55);
-      f.age = 0; f.life = 3.5 + Math.random() * 3; f.acc = 0;
+      f.vel.set((Math.random() - 0.5) * 80, (Math.random() - 0.2) * 50, (Math.random() - 0.5) * 80);
+      f.age = 0; f.life = 5 + Math.random() * 3; f.acc = 0;
     }
-    for (let i = 0; i < 8 * q; i++) {
-      this.debris.spawn(pos, _v.set((Math.random() - 0.5) * 45, (Math.random() - 0.4) * 36, (Math.random() - 0.5) * 45), 0.4 + Math.random() * 0.7, 6);
+    for (let i = 0; i < 12 * q; i++) {
+      this.debris.spawn(pos, _v.set((Math.random() - 0.5) * 55, (Math.random() - 0.4) * 44, (Math.random() - 0.5) * 55), 0.5 + Math.random() * 0.9, 7);
     }
-    this.ctx.player?.addShake(0.35, pos);
+    this.ctx.player?.addShake(0.45, pos);
   }
 
   groundImpact(pos, scale = 1) {
     const q = this.quality;
-    this.flash.spawn({ x: pos.x, y: pos.y + 3, z: pos.z, size0: 30 * scale, size1: 80 * scale, life: 0.3, c0: 0xfff0c8, alpha: 1, fadeIn: 0.004 });
+    this.flash.spawn({ x: pos.x, y: pos.y + 3, z: pos.z, size0: 34 * scale, size1: 88 * scale, life: 0.3, c0: 0xfff0c8, alpha: 1, fadeIn: 0.004 });
+    this.flash.spawn({ x: pos.x, y: pos.y + 6 * scale, z: pos.z, size0: 18 * scale, size1: 46 * scale, life: 0.9, c0: 0xff9a4a, alpha: 0.55, fadeIn: 0.08, delay: 0.25 });
     this.flashLight(_v.set(pos.x, pos.y + 8, pos.z), 42000 * scale, 0.8, 0xffc27a);
 
     // fire column
     for (let i = 0; i < 24 * q * scale; i++) {
-      const a = Math.random() * Math.PI * 2, r = Math.random() * 3 * scale;
+      const a = Math.random() * Math.PI * 2, r = Math.random() * 2.2 * scale;
       this.fire.spawn({
         x: pos.x + Math.cos(a) * r, y: pos.y + Math.random() * 2, z: pos.z + Math.sin(a) * r,
-        vx: Math.cos(a) * (4 + Math.random() * 8), vy: 18 + Math.random() * 22 * scale, vz: Math.sin(a) * (4 + Math.random() * 8),
+        vx: Math.cos(a) * (3 + Math.random() * 6), vy: 20 + Math.random() * 24 * scale, vz: Math.sin(a) * (3 + Math.random() * 6),
         size0: (3 + Math.random() * 3) * scale, size1: (8 + Math.random() * 5) * scale,
         life: 0.5 + Math.random() * 0.6, c0: 0xffe2a0, c1: 0xff3a08, alpha: 0.95, damp: 1.2,
       });
     }
-    // dirt fountain (dark)
-    for (let i = 0; i < 22 * q * scale; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const up = 14 + Math.random() * 26 * scale;
-      this.smoke.spawn({
-        x: pos.x, y: pos.y + 1, z: pos.z,
-        vx: Math.cos(a) * (3 + Math.random() * 12), vy: up, vz: Math.sin(a) * (3 + Math.random() * 12),
-        size0: 2.5 * scale, size1: (9 + Math.random() * 6) * scale,
-        life: 2.2 + Math.random() * 2, c0: 0x4a4038, c1: 0x2e2a24, alpha: 0.85, damp: 0.8, grav: 9, wind: 0.6,
-      });
-    }
-    // rolling dust donut
+    // dirt fountain — narrow + tall, a dark columnar geyser
     for (let i = 0; i < 26 * q * scale; i++) {
-      const a = (i / 26) * Math.PI * 2 + Math.random() * 0.4;
-      const spd = (14 + Math.random() * 14) * scale;
+      const a = Math.random() * Math.PI * 2;
+      const up = 26 + Math.random() * 36 * scale;
       this.smoke.spawn({
-        x: pos.x + Math.cos(a) * 2, y: pos.y + 1, z: pos.z + Math.sin(a) * 2,
-        vx: Math.cos(a) * spd, vy: 2 + Math.random() * 3, vz: Math.sin(a) * spd,
-        size0: 3.5 * scale, size1: (13 + Math.random() * 8) * scale,
-        life: 3.4 + Math.random() * 2.4,
-        c0: 0x9d8a68, c1: 0x6f6350, alpha: 0.6, damp: 1.15, grav: -0.2, wind: 1.3,
+        x: pos.x + (Math.random() - 0.5) * 1.6, y: pos.y + 1 + Math.random() * 2, z: pos.z + (Math.random() - 0.5) * 1.6,
+        vx: Math.cos(a) * (1 + Math.random() * 4.5), vy: up, vz: Math.sin(a) * (1 + Math.random() * 4.5),
+        size0: 1.8 * scale, size1: (7.5 + Math.random() * 5) * scale,
+        life: 2.6 + Math.random() * 1.8, c0: 0x4a4038, c1: 0x2e2a24, alpha: 0.85, damp: 0.7, grav: 9.5, wind: 0.6,
       });
     }
-    // lingering column
-    this._emit('column', _v2.copy(pos), new THREE.Vector3(0, 1, 0), 6.5, 8 * q * scale);
+    // rolling dust donut — wider and hugging the ground
+    const donut = Math.round(30 * q * scale);
+    for (let i = 0; i < donut; i++) {
+      const a = (i / donut) * Math.PI * 2 + Math.random() * 0.4;
+      const spd = (20 + Math.random() * 18) * scale;
+      this.smoke.spawn({
+        x: pos.x + Math.cos(a) * 2.5, y: pos.y + 0.7, z: pos.z + Math.sin(a) * 2.5,
+        vx: Math.cos(a) * spd, vy: 0.6 + Math.random() * 1.3, vz: Math.sin(a) * spd,
+        size0: 4 * scale, size1: (16 + Math.random() * 10) * scale,
+        life: 4.4 + Math.random() * 2.6,
+        c0: 0x9d8a68, c1: 0x6f6350, alpha: 0.55, damp: 1.0, grav: -0.06, wind: 1.5,
+      });
+    }
+    // dark rolling mushroom head building over ~1.5 s, then the lingering stem
+    this._emit('mushroom', pos, UP, 1.6, 34 * q * scale, scale);
+    this._emit('column', pos, UP, 12, 11 * q * scale, scale);
     // sparks + debris + ring + crater
-    for (let i = 0; i < 40 * q; i++) {
+    for (let i = 0; i < 46 * q; i++) {
       const a = Math.random() * Math.PI * 2, b = Math.random() * 1.2;
-      const spd = 24 + Math.random() * 50 * scale;
+      const spd = 24 + Math.random() * 55 * scale;
       this.sparks.spawn(pos.x, pos.y + 1, pos.z,
-        Math.cos(a) * Math.cos(b) * spd, Math.sin(b) * spd + 10, Math.sin(a) * Math.cos(b) * spd,
+        Math.cos(a) * Math.cos(b) * spd, Math.sin(b) * spd + 12, Math.sin(a) * Math.cos(b) * spd,
         0.6 + Math.random() * 0.8);
     }
-    for (let i = 0; i < 12 * q * scale; i++) {
+    // debris in big visible arcs
+    for (let i = 0; i < 14 * q * scale; i++) {
       this.debris.spawn(_v.set(pos.x, pos.y + 2, pos.z),
-        _v2.set((Math.random() - 0.5) * 40 * scale, 14 + Math.random() * 30 * scale, (Math.random() - 0.5) * 40 * scale),
-        0.5 + Math.random() * 0.9, 7);
+        _v2.set((Math.random() - 0.5) * 56 * scale, 20 + Math.random() * 40 * scale, (Math.random() - 0.5) * 56 * scale),
+        0.5 + Math.random() * 1.0, 8);
     }
-    this.rings.spawn(_v.set(pos.x, pos.y + 1.2, pos.z), 3, 70 * scale, 1.1, 0.7, { flat: true });
-    this.addCrater(pos, 9 * scale);
+    this.rings.spawn(_v.set(pos.x, pos.y + 1.2, pos.z), 3, 88 * scale, 1.15, 0.7, { flat: true });
+    this.addCrater(pos, 13 * scale);
     this.ctx.player?.addShake(Math.min(1, 1.4 * scale), pos);
   }
 
   selfDestruct(pos) {
+    const q = this.quality;
     this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 10, size1: 26, life: 0.25, c0: 0xffe2b0, alpha: 0.95 });
     this.flashLight(pos, 6000, 0.4);
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < Math.round(8 * q); i++) {
       const a = Math.random() * Math.PI * 2, b = Math.random() * Math.PI - Math.PI / 2;
       const spd = 8 + Math.random() * 12;
       this.smoke.spawn({
@@ -766,7 +930,7 @@ export class Effects {
         size0: 3, size1: 9, life: 2.4, c0: 0x77726a, c1: 0x4e4a44, alpha: 0.5, damp: 1.2,
       });
     }
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < Math.round(20 * q); i++) {
       const a = Math.random() * Math.PI * 2, b = Math.random() * Math.PI - Math.PI / 2;
       const spd = 16 + Math.random() * 26;
       this.sparks.spawn(pos.x, pos.y, pos.z,
@@ -775,13 +939,29 @@ export class Effects {
   }
 
   decoyBurnup(pos) {
-    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 8, size1: 20, life: 0.5, c0: 0x9fd8ff, alpha: 0.8 });
-    for (let i = 0; i < 30; i++) {
+    const q = this.quality;
+    // decoys visibly "fizzle": cyan flash pair + big sparkle shower
+    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 12, size1: 32, life: 0.5, c0: 0x9fd8ff, alpha: 0.9 });
+    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 6, size1: 16, life: 0.3, c0: 0xeaf6ff, alpha: 0.95, fadeIn: 0.005 });
+    for (let i = 0; i < 60 * q; i++) {
       const a = Math.random() * Math.PI * 2, b = Math.random() * Math.PI - Math.PI / 2;
-      const spd = 10 + Math.random() * 30;
+      const spd = 12 + Math.random() * 36;
       this.sparks.spawn(pos.x, pos.y, pos.z,
         Math.cos(a) * Math.cos(b) * spd, Math.sin(b) * spd - 6, Math.sin(a) * Math.cos(b) * spd,
-        0.9 + Math.random() * 1.1);
+        0.9 + Math.random() * 1.2);
+    }
+    // brief cyan-white streaks: short collinear spark strings raking downward
+    const streaks = Math.max(3, Math.round(7 * q));
+    for (let s = 0; s < streaks; s++) {
+      const a = Math.random() * Math.PI * 2;
+      _dir.set(Math.cos(a), -0.25 - Math.random() * 0.6, Math.sin(a)).normalize();
+      const spd = 34 + Math.random() * 30;
+      const life = 0.5 + Math.random() * 0.4;
+      for (let k = 0; k < 5; k++) {
+        this.sparks.spawn(
+          pos.x + _dir.x * k * 2.2, pos.y + _dir.y * k * 2.2, pos.z + _dir.z * k * 2.2,
+          _dir.x * spd, _dir.y * spd, _dir.z * spd, life + k * 0.06, 1);
+      }
     }
   }
 
@@ -805,12 +985,12 @@ export class Effects {
     c.mesh.material.opacity = 0.95;
   }
 
-  _emit(kind, pos, dir, dur, rate) {
+  _emit(kind, pos, dir, dur, rate, scale = 1) {
     const e = this.emitters.find(e => !e.alive) || this.emitters[0];
     e.alive = true;
     e.kind = kind;
     e.pos.copy(pos); e.dir.copy(dir);
-    e.age = 0; e.dur = dur; e.rate = rate; e.acc = 0;
+    e.age = 0; e.dur = dur; e.rate = rate; e.acc = 0; e.scale = scale;
   }
 
   update(dt, camera) {
@@ -840,11 +1020,34 @@ export class Effects {
             c0: 0xbdb5a6, c1: 0x8d867a, alpha: 0.42 * fade + 0.1, damp: 0.7, grav: -0.5, wind: 1.4,
           });
         } else if (e.kind === 'column') {
+          const s = e.scale;
           this.smoke.spawn({
-            x: e.pos.x + (Math.random() - 0.5) * 4, y: e.pos.y + 2 + Math.random() * 6, z: e.pos.z + (Math.random() - 0.5) * 4,
-            vx: (Math.random() - 0.5) * 2, vy: 5 + Math.random() * 6, vz: (Math.random() - 0.5) * 2,
-            size0: 5, size1: 17, life: 5 + Math.random() * 4,
-            c0: 0x3c3630, c1: 0x27231e, alpha: 0.5 * fade + 0.12, damp: 0.5, grav: -0.8, wind: 1.1,
+            x: e.pos.x + (Math.random() - 0.5) * 4 * s, y: e.pos.y + 2 + Math.random() * 6 * s, z: e.pos.z + (Math.random() - 0.5) * 4 * s,
+            vx: (Math.random() - 0.5) * 2, vy: 4 + Math.random() * 5, vz: (Math.random() - 0.5) * 2,
+            size0: 6 * s, size1: 20 * s, life: 7 + Math.random() * 4,
+            c0: 0x3c3630, c1: 0x27231e, alpha: 0.55 * fade + 0.18, damp: 0.5, grav: -0.55, wind: 1.0,
+          });
+        } else if (e.kind === 'mushroom') {
+          // dark rolling head: spawn height climbs and the ring widens with
+          // age, velocities push out + up so the cap appears to roll open
+          const s = e.scale, prog = e.age / e.dur;
+          const a = Math.random() * Math.PI * 2;
+          const rad = (2 + prog * 6) * s;
+          const s1 = (20 + Math.random() * 10) * s;
+          this.smoke.spawn({
+            x: e.pos.x + Math.cos(a) * rad, y: e.pos.y + (9 + prog * 26) * s + (Math.random() - 0.3) * 4 * s, z: e.pos.z + Math.sin(a) * rad,
+            vx: Math.cos(a) * (2.5 + Math.random() * 2.5), vy: 6 + Math.random() * 5, vz: Math.sin(a) * (2.5 + Math.random() * 2.5),
+            size0: s1 * 0.45, size1: s1,
+            life: 9 + Math.random() * 4,
+            c0: 0x3b342c, c1: 0x211d18, alpha: 0.7, damp: 0.55, grav: -0.55, wind: 0.6,
+          });
+        } else if (e.kind === 'padcol') {
+          // SENTINEL launch: tall steam-grey column climbing off the pad
+          this.smoke.spawn({
+            x: e.pos.x + (Math.random() - 0.5) * 2.5, y: e.pos.y + 1 + Math.random() * 3, z: e.pos.z + (Math.random() - 0.5) * 2.5,
+            vx: (Math.random() - 0.5) * 2, vy: 13 + Math.random() * 11, vz: (Math.random() - 0.5) * 2,
+            size0: 3.5, size1: 12 + Math.random() * 6, life: 4.5 + Math.random() * 2.5,
+            c0: 0xcdc5b6, c1: 0x9a9184, alpha: 0.5 * fade + 0.12, damp: 0.55, grav: -0.3, wind: 1.2,
           });
         }
       }
@@ -868,27 +1071,28 @@ export class Effects {
         f.alive = false;
         continue;
       }
-      f.acc += dt * 30;
+      f.acc += dt * 30 * this.quality;
       while (f.acc >= 1) {
         f.acc -= 1;
         this.fire.spawn({
           x: f.pos.x, y: f.pos.y, z: f.pos.z,
           vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2, vz: (Math.random() - 0.5) * 2,
-          size0: 1.6, size1: 0.6, life: 0.3, c0: 0xffd898, c1: 0xff5a10, alpha: 0.9, fadeIn: 0.01,
+          size0: 4, size1: 1.6, life: 0.32, c0: 0xffd898, c1: 0xff5a10, alpha: 0.9, fadeIn: 0.01,
         });
-        if (Math.random() < 0.4) {
+        if (Math.random() < 0.45) {
           this.smoke.spawn({
             x: f.pos.x, y: f.pos.y, z: f.pos.z,
-            size0: 1.2, size1: 4, life: 1.8 + Math.random(), c0: 0x6e6a64, alpha: 0.4, damp: 0.4, wind: 1,
+            size0: 2.6, size1: 9, life: 2.4 + Math.random(), c0: 0x6e6a64, alpha: 0.42, damp: 0.4, wind: 1,
           });
         }
       }
     }
 
-    // lights decay
+    // lights decay (negative age = delayed ignition)
     for (const l of this.lights) {
       if (!l.alive) continue;
       l.age += dt;
+      if (l.age < 0) { l.light.intensity = 0; continue; }
       const t = l.age / l.dur;
       if (t >= 1) { l.alive = false; l.light.intensity = 0; continue; }
       l.light.intensity = l.peak * (1 - t) * (1 - t);

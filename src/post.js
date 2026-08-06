@@ -14,7 +14,9 @@ const GradeShader = {
     uTime: { value: 0 },
     uVignette: { value: 0.42 },
     uGrain: { value: 0.05 },
-    uTint: { value: new THREE.Color(1, 1, 1) },
+    uShadowTint: { value: new THREE.Color(1, 1, 1) },
+    uHighTint: { value: new THREE.Color(1, 1, 1) },
+    uLift: { value: 0 },
     uSaturation: { value: 1.02 },
   },
   vertexShader: /* glsl */`
@@ -23,14 +25,17 @@ const GradeShader = {
   `,
   fragmentShader: /* glsl */`
     uniform sampler2D tDiffuse;
-    uniform float uTime, uVignette, uGrain, uSaturation;
-    uniform vec3 uTint;
+    uniform float uTime, uVignette, uGrain, uSaturation, uLift;
+    uniform vec3 uShadowTint, uHighTint;
     varying vec2 vUv;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
       vec4 col = texture2D(tDiffuse, vUv);
-      // tint & saturation
-      col.rgb *= uTint;
+      // split toning: tint shadows and highlights separately, plus shadow lift
+      float ml = clamp(dot(col.rgb, vec3(0.299, 0.587, 0.114)), 0.0, 1.0);
+      col.rgb *= mix(uShadowTint, uHighTint, smoothstep(0.06, 0.85, ml));
+      col.rgb += uLift * (1.0 - smoothstep(0.0, 0.5, ml));
+      // saturation
       float l = dot(col.rgb, vec3(0.299, 0.587, 0.114));
       col.rgb = mix(vec3(l), col.rgb, uSaturation);
       // vignette
@@ -87,11 +92,13 @@ export class Post {
     if (weather) {
       this.bloom.strength = weather.bloom;
       this.renderer.toneMappingExposure = weather.exposure;
-      // subtle grade per time of day
-      const tint = this.grade.uniforms.uTint.value;
-      if (nightFactor > 0.5) tint.setRGB(0.92, 0.97, 1.08);
-      else tint.setRGB(1.0, 1.0, 1.0).lerp(new THREE.Color(1.06, 0.98, 0.94), weather.presetName === 'sunset' ? 0.8 : 0);
-      this.grade.uniforms.uGrain.value = 0.024 + nightFactor * 0.018;
+      // per-preset grade, already lerped by the weather system
+      const u = this.grade.uniforms;
+      if (weather.gradeShadow) u.uShadowTint.value.copy(weather.gradeShadow);
+      if (weather.gradeHigh) u.uHighTint.value.copy(weather.gradeHigh);
+      u.uSaturation.value = weather.gradeSat ?? 1.02;
+      u.uLift.value = weather.gradeLift ?? 0;
+      u.uGrain.value = 0.024 + nightFactor * 0.018;
     }
 
     // dynamic resolution

@@ -16,8 +16,8 @@ const SKY_VERT = /* glsl */`
 
 const SKY_FRAG = /* glsl */`
   varying vec3 vDir;
-  uniform vec3 uZenith, uHorizon, uSunColor, uSunDir, uMoonDir;
-  uniform float uStars, uTime, uSunDisk;
+  uniform vec3 uZenith, uHorizon, uSunColor, uSunDir, uMoonDir, uWarmColor, uAntiColor;
+  uniform float uStars, uTime, uSunDisk, uWarm;
 
   float hash21(vec2 p) {
     p = fract(p * vec2(123.34, 345.45));
@@ -25,30 +25,53 @@ const SKY_FRAG = /* glsl */`
     return fract(p.x * p.y);
   }
 
+  float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+               mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);
+  }
+
   void main() {
     vec3 dir = normalize(vDir);
     float h = clamp(dir.y, 0.0, 1.0);
-    vec3 col = mix(uHorizon, uZenith, pow(h, 0.58));
+
+    // azimuth-aware horizon: warm band toward the sun, faint purple anti-sun
+    vec2 dh = normalize(dir.xz + vec2(1e-4));
+    vec2 sh = normalize(uSunDir.xz + vec2(1e-4));
+    float az = clamp(dot(dh, sh) * 0.5 + 0.5, 0.0, 1.0); // 1 toward sun azimuth, 0 opposite
+    vec3 hor = mix(uHorizon, uWarmColor, pow(az, 3.2) * uWarm);
+    hor = mix(hor, uAntiColor, pow(1.0 - az, 2.4) * uWarm * 0.55);
+    vec3 col = mix(hor, uZenith, pow(h, 0.58));
 
     // --- sun ---
     float sd = clamp(dot(dir, uSunDir), 0.0, 1.0);
     col += uSunColor * smoothstep(0.99988, 0.99997, sd) * 5.0 * uSunDisk; // disk
     col += uSunColor * pow(sd, 260.0) * 0.85 * uSunDisk;    // inner glow
-    col += uSunColor * pow(sd, 24.0) * 0.22 * uSunDisk;     // mid glow
-    col += uSunColor * pow(sd, 5.0) * 0.10 * uSunDisk;      // wide haze
+    col += uSunColor * pow(sd, 26.0) * 0.18 * uSunDisk;     // mid glow
+    col += uSunColor * pow(sd, 5.0) * 0.055 * uSunDisk;     // wide haze
 
-    // --- moon ---
+    // --- moon: crisp disk with blotchy maria, tight halo ---
     float md = clamp(dot(dir, uMoonDir), 0.0, 1.0);
     float moonDisk = smoothstep(0.99988, 0.99994, md);
-    // simple crater shading
     vec2 mUv = vec2(dot(dir, normalize(cross(uMoonDir, vec3(0.0,1.0,0.0)))),
                     dot(dir, normalize(cross(uMoonDir, cross(uMoonDir, vec3(0.0,1.0,0.0))))));
-    float craters = 0.82 + 0.18 * sin(mUv.x * 900.0) * sin(mUv.y * 700.0);
-    col += vec3(0.86, 0.9, 1.0) * moonDisk * 2.6 * craters * uStars;
-    col += vec3(0.5, 0.62, 0.9) * pow(md, 180.0) * 0.5 * uStars;
+    float blotch = vnoise(mUv * 420.0) * 0.7 + vnoise(mUv * 950.0) * 0.3;
+    float craters = (0.68 + 0.38 * blotch) * (0.92 + 0.08 * clamp(mUv.x * 90.0, -1.0, 1.0));
+    col += vec3(0.88, 0.91, 1.0) * moonDisk * 1.55 * craters * uStars;
+    col += vec3(0.55, 0.65, 0.92) * pow(md, 750.0) * 0.22 * uStars; // tight halo
+    col += vec3(0.4, 0.5, 0.78) * pow(md, 70.0) * 0.035 * uStars;   // faint atmosphere
 
-    // --- stars ---
-    if (uStars > 0.01 && dir.y > 0.02) {
+    // --- stars & milky way ---
+    if (uStars > 0.01 && dir.y > 0.015) {
+      float horizFade = smoothstep(0.02, 0.16, dir.y);
+      // milky way: soft noise-modulated band along a tilted great circle
+      float bd = dot(dir, normalize(vec3(0.9, 0.12, 0.2)));
+      float mw = exp(-bd * bd * 22.0);
+      vec2 mp = dir.xz / (dir.y + 0.55);
+      float mn = vnoise(mp * 6.0) * 0.6 + vnoise(mp * 17.0) * 0.4;
+      col += vec3(0.6, 0.66, 0.84) * mw * (0.3 + 0.7 * mn) * 0.068 * uStars * horizFade;
+
       vec2 sp = dir.xz / (dir.y + 0.42);
       vec2 cell = floor(sp * 160.0);
       float hs = hash21(cell);
@@ -57,12 +80,15 @@ const SKY_FRAG = /* glsl */`
         float star = smoothstep(0.16, 0.0, length(fp));
         float tw = 0.6 + 0.4 * sin(uTime * (1.5 + hs * 4.0) + hs * 40.0);
         float mag = (hs - 0.978) / 0.022;
-        col += vec3(0.8, 0.86, 1.0) * star * tw * mag * 2.6 * uStars * smoothstep(0.02, 0.16, dir.y);
+        // temperature variation: some warm, some cool stars
+        vec3 scol = mix(vec3(1.0, 0.78, 0.56), vec3(0.64, 0.76, 1.0), hash21(cell + 91.7));
+        scol = mix(vec3(0.84, 0.88, 1.0), scol, 0.6);
+        col += scol * star * tw * mag * 2.6 * (1.0 + mw * 0.5) * uStars * horizFade;
       }
     }
 
     // horizon haze
-    col = mix(col, uHorizon, pow(1.0 - h, 3.2) * 0.5);
+    col = mix(col, hor, pow(1.0 - h, 3.2) * 0.5);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -73,33 +99,42 @@ const PRESETS = {
     sunColor: new THREE.Color(1.0, 0.95, 0.86), sunIntensity: 3.1,
     hemiSky: new THREE.Color(0.68, 0.78, 0.92), hemiGround: new THREE.Color(0.62, 0.52, 0.4), hemiIntensity: 0.85,
     zenith: new THREE.Color(0.14, 0.32, 0.68), horizon: new THREE.Color(0.72, 0.8, 0.88),
+    warmBand: 0, horizonWarm: new THREE.Color(0.85, 0.78, 0.66), antiTint: new THREE.Color(0.72, 0.8, 0.88),
     fog: new THREE.Color(0.74, 0.8, 0.87), fogDensity: 0.000075,
     exposure: 1.02, bloom: 0.32, stars: 0, sunDisk: 1,
-    cloudOpacity: 0.75, cloudTint: new THREE.Color(1, 1, 1),
+    cloudOpacity: 0.75, cloudTint: new THREE.Color(1, 1, 1), cloudUnder: new THREE.Color(0.78, 0.79, 0.83),
     wind: 2.6, envIntensity: 0.5,
     trailTint: new THREE.Color(0.93, 0.91, 0.87),
+    gradeShadow: new THREE.Color(1, 1, 1), gradeHigh: new THREE.Color(1.045, 1.0, 0.955),
+    gradeSat: 1.03, gradeLift: 0,
   },
   sunset: {
     sunAz: 258, sunEl: 6.5,
-    sunColor: new THREE.Color(1.0, 0.52, 0.22), sunIntensity: 2.3,
+    sunColor: new THREE.Color(1.0, 0.5, 0.2), sunIntensity: 2.7,
     hemiSky: new THREE.Color(0.55, 0.42, 0.5), hemiGround: new THREE.Color(0.42, 0.3, 0.24), hemiIntensity: 0.55,
-    zenith: new THREE.Color(0.12, 0.15, 0.34), horizon: new THREE.Color(0.98, 0.5, 0.24),
+    zenith: new THREE.Color(0.12, 0.15, 0.34), horizon: new THREE.Color(0.94, 0.52, 0.28),
+    warmBand: 1, horizonWarm: new THREE.Color(1.32, 0.5, 0.14), antiTint: new THREE.Color(0.42, 0.3, 0.54),
     fog: new THREE.Color(0.85, 0.55, 0.35), fogDensity: 0.00009,
     exposure: 1.06, bloom: 0.48, stars: 0.1, sunDisk: 1,
-    cloudOpacity: 0.8, cloudTint: new THREE.Color(1.0, 0.6, 0.42),
+    cloudOpacity: 0.8, cloudTint: new THREE.Color(0.66, 0.45, 0.44), cloudUnder: new THREE.Color(1.22, 0.52, 0.22),
     wind: 1.9, envIntensity: 0.34,
     trailTint: new THREE.Color(0.98, 0.7, 0.5),
+    gradeShadow: new THREE.Color(1.0, 0.975, 1.015), gradeHigh: new THREE.Color(1.09, 0.98, 0.9),
+    gradeSat: 1.06, gradeLift: 0.028,
   },
   night: {
     sunAz: 128, sunEl: 54, // this is the MOON position at night
     sunColor: new THREE.Color(0.62, 0.72, 0.95), sunIntensity: 0.42,
     hemiSky: new THREE.Color(0.1, 0.14, 0.24), hemiGround: new THREE.Color(0.07, 0.06, 0.06), hemiIntensity: 0.3,
     zenith: new THREE.Color(0.008, 0.014, 0.035), horizon: new THREE.Color(0.035, 0.05, 0.09),
+    warmBand: 0, horizonWarm: new THREE.Color(0.035, 0.05, 0.09), antiTint: new THREE.Color(0.035, 0.05, 0.09),
     fog: new THREE.Color(0.028, 0.04, 0.065), fogDensity: 0.0001,
-    exposure: 1.1, bloom: 0.6, stars: 1, sunDisk: 0,
-    cloudOpacity: 0.16, cloudTint: new THREE.Color(0.5, 0.58, 0.75),
+    exposure: 1.1, bloom: 0.66, stars: 1, sunDisk: 0,
+    cloudOpacity: 0.16, cloudTint: new THREE.Color(0.5, 0.58, 0.75), cloudUnder: new THREE.Color(0.3, 0.35, 0.48),
     wind: 1.3, envIntensity: 0.06,
     trailTint: new THREE.Color(0.3, 0.36, 0.5),
+    gradeShadow: new THREE.Color(0.88, 0.96, 1.13), gradeHigh: new THREE.Color(0.97, 1.0, 1.05),
+    gradeSat: 0.92, gradeLift: 0,
   },
 };
 
@@ -108,6 +143,64 @@ function azElToDir(azDeg, elDeg, out) {
   out.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
   return out;
 }
+
+// long, soft-edged stratus slab texture (local so texgen stays untouched)
+function stratusTexture() {
+  const W = 512, H = 128;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, W, H);
+  let s = 1234567;
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 56; i++) {
+    const x = W * (0.12 + rnd() * 0.76), y = H * (0.3 + rnd() * 0.4);
+    const r = H * (0.08 + rnd() * 0.14), sx = 3 + rnd() * 5;
+    g.save(); g.translate(x, y); g.scale(sx, 1);
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, r);
+    grad.addColorStop(0, 'rgba(255,255,255,0.34)');
+    grad.addColorStop(0.7, 'rgba(255,255,255,0.15)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad; g.beginPath(); g.arc(0, 0, r, 0, 7); g.fill();
+    g.restore();
+  }
+  // fade all edges to zero so the quad border can never show
+  let fade = g.createLinearGradient(0, 0, W, 0);
+  fade.addColorStop(0, 'rgba(0,0,0,0)'); fade.addColorStop(0.16, '#fff');
+  fade.addColorStop(0.84, '#fff'); fade.addColorStop(1, 'rgba(0,0,0,0)');
+  g.globalCompositeOperation = 'destination-in';
+  g.fillStyle = fade; g.fillRect(0, 0, W, H);
+  fade = g.createLinearGradient(0, 0, 0, H);
+  fade.addColorStop(0, 'rgba(0,0,0,0)'); fade.addColorStop(0.3, '#fff');
+  fade.addColorStop(0.7, '#fff'); fade.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = fade; g.fillRect(0, 0, W, H);
+  g.globalCompositeOperation = 'source-over';
+  return new THREE.CanvasTexture(c);
+}
+
+const CLOUD_VERT = /* glsl */`
+  attribute vec3 iOffset; attribute vec2 iScale; attribute float iAlpha; attribute float iShade;
+  varying vec2 vUv; varying float vAlpha; varying float vShade;
+  uniform float uDrift;
+  void main() {
+    vUv = uv; vAlpha = iAlpha; vShade = iShade;
+    vec3 wp = iOffset; wp.x += uDrift;
+    vec4 mv = modelViewMatrix * vec4(wp, 1.0);
+    mv.xy += (uv - 0.5) * iScale;
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const CLOUD_FRAG = /* glsl */`
+  varying vec2 vUv; varying float vAlpha; varying float vShade;
+  uniform sampler2D uMap; uniform vec3 uTint; uniform vec3 uUnder; uniform float uOpacity;
+  void main() {
+    float a = texture2D(uMap, vUv).a;
+    vec3 tint = mix(uUnder, uTint, smoothstep(0.05, 0.75, vUv.y)) * vShade;
+    gl_FragColor = vec4(tint, a * vAlpha * uOpacity);
+    if (gl_FragColor.a < 0.004) discard;
+  }
+`;
 
 export class Weather {
   constructor(ctx) {
@@ -149,6 +242,9 @@ export class Weather {
       uSunColor: { value: new THREE.Color() },
       uSunDir: { value: new THREE.Vector3(0, 1, 0) },
       uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
+      uWarmColor: { value: new THREE.Color() },
+      uAntiColor: { value: new THREE.Color() },
+      uWarm: { value: 0 },
       uStars: { value: 0 },
       uTime: { value: 0 },
       uSunDisk: { value: 1 },
@@ -192,69 +288,88 @@ export class Weather {
     // puffy cumulus billboards (instanced quad shader)
     const COUNT = 34;
     const quad = new THREE.PlaneGeometry(1, 1);
-    const geo = new THREE.InstancedBufferGeometry();
-    geo.index = quad.index; geo.attributes.position = quad.attributes.position;
-    geo.attributes.uv = quad.attributes.uv;
-    const offsets = new Float32Array(COUNT * 3);
-    const scales = new Float32Array(COUNT * 2);
-    const alphas = new Float32Array(COUNT);
-    let i3 = 0, i2 = 0;
-    // clusters of puffs
-    const rng = () => Math.random();
-    let n = 0;
-    while (n < COUNT) {
-      const cx = (rng() - 0.5) * 9000, cz = (rng() - 0.5) * 9000;
-      if (Math.hypot(cx, cz) < 1500) continue;
-      const cy = 1500 + rng() * 1400;
-      const puffs = 1 + Math.floor(rng() * 3);
-      for (let p = 0; p < puffs && n < COUNT; p++, n++) {
-        offsets[i3++] = cx + (rng() - 0.5) * 700;
-        offsets[i3++] = cy + (rng() - 0.5) * 160;
-        offsets[i3++] = cz + (rng() - 0.5) * 700;
-        const s = 420 + rng() * 620;
-        scales[i2++] = s; scales[i2++] = s * (0.32 + rng() * 0.18);
-        alphas[n] = 0.45 + rng() * 0.4;
+    const makeGeo = (count, fill) => {
+      const geo = new THREE.InstancedBufferGeometry();
+      geo.index = quad.index; geo.attributes.position = quad.attributes.position;
+      geo.attributes.uv = quad.attributes.uv;
+      const offsets = new Float32Array(count * 3);
+      const scales = new Float32Array(count * 2);
+      const alphas = new Float32Array(count);
+      const shades = new Float32Array(count);
+      fill(offsets, scales, alphas, shades);
+      geo.setAttribute('iOffset', new THREE.InstancedBufferAttribute(offsets, 3));
+      geo.setAttribute('iScale', new THREE.InstancedBufferAttribute(scales, 2));
+      geo.setAttribute('iAlpha', new THREE.InstancedBufferAttribute(alphas, 1));
+      geo.setAttribute('iShade', new THREE.InstancedBufferAttribute(shades, 1));
+      geo.instanceCount = count;
+      return geo;
+    };
+
+    const geo = makeGeo(COUNT, (offsets, scales, alphas, shades) => {
+      let i3 = 0, i2 = 0, n = 0;
+      const rng = () => Math.random();
+      while (n < COUNT) {
+        const cx = (rng() - 0.5) * 9000, cz = (rng() - 0.5) * 9000;
+        if (Math.hypot(cx, cz) < 1500) continue;
+        const cy = 1500 + rng() * 1400;
+        const puffs = 1 + Math.floor(rng() * 3);
+        for (let p = 0; p < puffs && n < COUNT; p++, n++) {
+          offsets[i3++] = cx + (rng() - 0.5) * 700;
+          offsets[i3++] = cy + (rng() - 0.5) * 160;
+          offsets[i3++] = cz + (rng() - 0.5) * 700;
+          const s = 420 + rng() * 620;
+          scales[i2++] = s; scales[i2++] = s * (0.32 + rng() * 0.18);
+          alphas[n] = 0.45 + rng() * 0.4;
+          shades[n] = 0.86 + rng() * 0.2; // per-instance tint variation
+        }
       }
-    }
-    geo.setAttribute('iOffset', new THREE.InstancedBufferAttribute(offsets, 3));
-    geo.setAttribute('iScale', new THREE.InstancedBufferAttribute(scales, 2));
-    geo.setAttribute('iAlpha', new THREE.InstancedBufferAttribute(alphas, 1));
-    geo.instanceCount = COUNT;
+    });
     this.cloudUniforms = {
       uMap: { value: cloudPuffTexture() },
       uTint: { value: new THREE.Color(1, 1, 1) },
+      uUnder: { value: new THREE.Color(0.78, 0.79, 0.83) },
       uOpacity: { value: 0.75 },
       uDrift: { value: 0 },
     };
     const mat = new THREE.ShaderMaterial({
       uniforms: this.cloudUniforms,
       transparent: true, depthWrite: false, fog: false,
-      vertexShader: /* glsl */`
-        attribute vec3 iOffset; attribute vec2 iScale; attribute float iAlpha;
-        varying vec2 vUv; varying float vAlpha;
-        uniform float uDrift;
-        void main() {
-          vUv = uv; vAlpha = iAlpha;
-          vec3 wp = iOffset; wp.x += uDrift;
-          vec4 mv = modelViewMatrix * vec4(wp, 1.0);
-          mv.xy += (uv - 0.5) * iScale;
-          gl_Position = projectionMatrix * mv;
-        }
-      `,
-      fragmentShader: /* glsl */`
-        varying vec2 vUv; varying float vAlpha;
-        uniform sampler2D uMap; uniform vec3 uTint; uniform float uOpacity;
-        void main() {
-          float a = texture2D(uMap, vUv).a;
-          gl_FragColor = vec4(uTint, a * vAlpha * uOpacity);
-          if (gl_FragColor.a < 0.004) discard;
-        }
-      `,
+      vertexShader: CLOUD_VERT, fragmentShader: CLOUD_FRAG,
     });
     this.clouds = new THREE.Mesh(geo, mat);
     this.clouds.frustumCulled = false;
     this.clouds.renderOrder = -80;
     scene.add(this.clouds);
+
+    // 2-3 huge stratus slabs very far out for silhouette variety (1 extra draw call)
+    const SLABS = [
+      { x: -7900, y: 2100, z: -1100, w: 6000, h: 460, a: 0.85, s: 0.92 }, // near sunset sun azimuth
+      { x: 5000, y: 1800, z: -6300, w: 6400, h: 400, a: 0.75, s: 1.0 },
+      { x: 2100, y: 2400, z: 7200, w: 5200, h: 500, a: 0.8, s: 0.85 },
+    ];
+    const strGeo = makeGeo(SLABS.length, (offsets, scales, alphas, shades) => {
+      SLABS.forEach((sl, i) => {
+        offsets[i * 3] = sl.x; offsets[i * 3 + 1] = sl.y; offsets[i * 3 + 2] = sl.z;
+        scales[i * 2] = sl.w; scales[i * 2 + 1] = sl.h;
+        alphas[i] = sl.a; shades[i] = sl.s;
+      });
+    });
+    this.stratusUniforms = {
+      uMap: { value: stratusTexture() },
+      uTint: this.cloudUniforms.uTint,   // share lerped colors with the puffs
+      uUnder: this.cloudUniforms.uUnder,
+      uOpacity: { value: 0.4 },
+      uDrift: { value: 0 },
+    };
+    const strMat = new THREE.ShaderMaterial({
+      uniforms: this.stratusUniforms,
+      transparent: true, depthWrite: false, fog: false,
+      vertexShader: CLOUD_VERT, fragmentShader: CLOUD_FRAG,
+    });
+    this.stratus = new THREE.Mesh(strGeo, strMat);
+    this.stratus.frustumCulled = false;
+    this.stratus.renderOrder = -85; // behind the puffs, in front of cirrus
+    scene.add(this.stratus);
   }
 
   setPreset(name, instant = false) {
@@ -299,6 +414,9 @@ export class Weather {
     u.uSunColor.value.copy(sunColor);
     u.uSunDisk.value = lerpN('sunDisk');
     u.uStars.value = lerpN('stars');
+    u.uWarm.value = lerpN('warmBand');
+    u.uWarmColor.value.copy(lerpC('horizonWarm'));
+    u.uAntiColor.value.copy(lerpC('antiTint'));
     // at night the "sun" light is the moon; sky shows moon disk at same spot
     u.uSunDir.value.copy(sunDir);
     u.uMoonDir.value.copy(sunDir);
@@ -314,10 +432,19 @@ export class Weather {
     this.ctx.scene.environmentIntensity = lerpN('envIntensity');
     this.trailTint = lerpC('trailTint');
 
+    // per-preset grading, consumed by post.js
+    this.gradeShadow = lerpC('gradeShadow');
+    this.gradeHigh = lerpC('gradeHigh');
+    this.gradeSat = lerpN('gradeSat');
+    this.gradeLift = lerpN('gradeLift');
+
     this.cloudUniforms.uOpacity.value = lerpN('cloudOpacity');
     this.cloudUniforms.uTint.value.copy(lerpC('cloudTint'));
+    this.cloudUniforms.uUnder.value.copy(lerpC('cloudUnder'));
+    this.stratusUniforms.uOpacity.value = lerpN('cloudOpacity') * 1.5;
     this.cirrusMat.opacity = lerpN('cloudOpacity') * 0.35;
-    this.cirrusMat.color.copy(lerpC('cloudTint'));
+    // high thin cirrus stays sunlit longer: bias toward the underside color
+    this.cirrusMat.color.copy(lerpC('cloudTint')).lerp(lerpC('cloudUnder'), 0.6);
 
     const windSpd = lerpN('wind');
     this.wind.set(1, 0, 0.35).normalize().multiplyScalar(windSpd);
@@ -331,6 +458,7 @@ export class Weather {
     }
     this.skyUniforms.uTime.value = this.time;
     this.cloudUniforms.uDrift.value = (this.time * this.wind.length() * 4) % 18000;
+    this.stratusUniforms.uDrift.value = (this.time * this.wind.length() * 1.4) % 20000;
     this.cirrus.rotation.y = this.time * 0.0016;
   }
 }
