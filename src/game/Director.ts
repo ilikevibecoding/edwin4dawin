@@ -151,7 +151,14 @@ export class Director {
     const extras = CHAPTER_EXTRAS[chapter.id] ?? {};
     this.stage.setSky(extras.skyOverride ?? build.sky, { showBackground: build.showSkyBackground !== false });
     this.stage.fx.atmosphere.apply(build.atmosphere);
-    this.stage.fx.grade.apply(build.grade);
+    // Per-set exposure trim. The environment modules light generously, which
+    // clips skin and clothing to white under the harsher interiors.
+    const trim: Record<SceneId, { exposure: number; saturation?: number }> = {
+      interrogation: { exposure: 0.55, saturation: 0.72 },
+      apartment: { exposure: 0.8 },
+      street: { exposure: 0.9 },
+    };
+    this.stage.fx.grade.apply({ ...build.grade, ...trim[chapter.scene] });
     const rain = extras.rainOverride ?? build.rain;
     this.stage.fx.lensRain.intensity = rain * 0.34;
     this.rain.setIntensity(rain);

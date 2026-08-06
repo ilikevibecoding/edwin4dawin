@@ -36,9 +36,9 @@ export function makeSkinMaterial(opts: SkinMaterialOptions): THREE.MeshPhysicalM
   const mat = surfaceMaterial(maps, {
     roughness: opts.roughness ?? (opts.android ? 0.92 : 1),
     metalness: 0,
-    clearcoat: opts.android ? 0.18 : 0.1,
-    clearcoatRoughness: opts.android ? 0.28 : 0.42,
-    sheen: 0.25,
+    clearcoat: opts.android ? 0.1 : 0.06,
+    clearcoatRoughness: opts.android ? 0.32 : 0.45,
+    sheen: 0.08,
     sheenRoughness: 0.7,
     sheenColor: new THREE.Color(0xffd8cf),
     normalScale: new THREE.Vector2(0.3, 0.3),
@@ -278,12 +278,15 @@ export function makeClothMaterial(key: string, opts: ClothOptions): THREE.MeshPh
     size: opts.size ?? 512,
     normalStrength: 0.7,
   });
+  // Sheen is additive, so it must be faint and tinted toward the cloth colour
+  // or a dark garment reads as pale grey under strong light.
+  const tint = new THREE.Color(opts.color[0], opts.color[1], opts.color[2]);
   return surfaceMaterial(maps, {
     roughness: opts.roughness ?? 1,
     metalness: opts.metalness ?? 0,
-    sheen: opts.sheen ?? 0.4,
-    sheenRoughness: 0.6,
-    sheenColor: new THREE.Color(0xffffff),
+    sheen: (opts.sheen ?? 0.4) * 0.18,
+    sheenRoughness: 0.75,
+    sheenColor: tint.clone().lerp(new THREE.Color(0xffffff), 0.35),
     normalScale: new THREE.Vector2(0.45, 0.45),
   });
 }

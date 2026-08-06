@@ -35,7 +35,12 @@ export function buildStill(stage: Stage, params: URLSearchParams) {
   const extras = CHAPTER_EXTRAS[chapter.id] ?? {};
   stage.setSky(extras.skyOverride ?? build.sky, { showBackground: build.showSkyBackground !== false });
   stage.fx.atmosphere.apply(build.atmosphere);
-  stage.fx.grade.apply(build.grade);
+  const trim: Record<string, { exposure: number; saturation?: number }> = {
+    interrogation: { exposure: 0.55, saturation: 0.72 },
+    apartment: { exposure: 0.8 },
+    street: { exposure: 0.9 },
+  };
+  stage.fx.grade.apply({ ...build.grade, ...(trim[chapter.scene] ?? {}) });
   const rain = extras.rainOverride ?? build.rain;
   stage.fx.lensRain.intensity = rain * 0.34;
 

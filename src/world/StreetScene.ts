@@ -535,17 +535,26 @@ export function buildStreetScene(stage: Stage): SceneBuild {
 
     // Housing behind the sign so it does not float
     if (spec.vertical) {
-      batch.add(paint(0x121317, 0.8), box(0.1, spec.h + 0.3, spec.w + 0.24, spec.x, spec.y, spec.z, { ry: spec.yaw }));
+      batch.add(paint(0x121317, 0.8), box(0.09, spec.h + 0.3, spec.w + 0.24, spec.x, spec.y, spec.z, { ry: spec.yaw }));
       batch.add(mRust, box(0.07, 0.07, spec.z + 0.3, spec.x, spec.y + spec.h / 2 + 0.1, spec.z / 2 - 0.15, { ry: spec.yaw }));
       batch.add(mRust, box(0.07, 0.07, spec.z + 0.3, spec.x, spec.y - spec.h / 2 - 0.1, spec.z / 2 - 0.15, { ry: spec.yaw }));
     } else {
-      batch.add(paint(0x121317, 0.8), box(spec.w + 0.28, spec.h + 0.24, 0.14, spec.x, spec.y, spec.z - 0.06));
+      batch.add(paint(0x121317, 0.8), box(spec.w + 0.28, spec.h + 0.24, 0.16, spec.x, spec.y, spec.z - 0.09));
     }
 
-    haloGeos.push(halo(Math.max(spec.w, spec.h) * 1.9, spec.light, spec.x, spec.y, spec.z + (spec.vertical ? 0 : 0.02), spec.yaw));
+    haloGeos.push(
+      halo(Math.max(spec.w, spec.h) * 1.15, spec.light, spec.x, spec.y, spec.z + (spec.vertical ? 0 : 0.02), spec.yaw)
+    );
 
     if (spec.reflect) {
-      const refl = buildWetReflection(tex, spec.w * 2.4, spec.reflect, spec.light, spec.vertical ? 0.5 : 0.4, 1);
+      const refl = buildWetReflection(
+        tex,
+        spec.w * (spec.vertical ? 2.0 : 1.15),
+        spec.reflect,
+        spec.light,
+        spec.vertical ? 0.3 : 0.22,
+        1.8
+      );
       refl.mesh.position.set(spec.x, 0.026, spec.z + spec.reflect / 2 - 0.4);
       refl.mesh.rotation.set(-Math.PI / 2, 0, 0);
       refl.mesh.renderOrder = 3;
@@ -566,18 +575,18 @@ export function buildStreetScene(stage: Stage): SceneBuild {
     if (spec.flicker) flickerSigns.push({ material: signMat, light: pl, rate: 4 + i * 1.3, phase: i * 2.7 });
   });
 
-  const haloMat = additive(radialAlphaTexture(2.2, 128), 0xffffff, 0.5, true);
-  batch.add(haloMat, haloGeos[0], false, false);
-  for (let i = 1; i < haloGeos.length; i++) batch.add(haloMat, haloGeos[i], false, false);
+  const haloMat = additive(radialAlphaTexture(2.6, 128), 0xffffff, 0.34, true);
+  for (const g of haloGeos) batch.add(haloMat, g, false, false);
 
   // Sodium cones under the lamp heads
-  const coneMat = additive(null, 0xffffff, 0.14, true);
+  const coneMat = additive(null, 0xffffff, 0.05, true);
   for (const head of [lampHeadA, lampHeadB, lampHeadC]) {
-    const cone = lightCone(0.32, 3.1, head.y - PAVE_Y, 0xffb264, segs);
+    const cone = lightCone(0.3, 1.9, head.y - PAVE_Y, 0xffb264, segs);
     batch.add(coneMat, at(cone, head.x, PAVE_Y + (head.y - PAVE_Y) / 2, head.z), false, false);
-    batch.add(haloMat, halo(2.2, 0xffb264, head.x, head.y - 0.1, head.z), false, false);
+    batch.add(haloMat, halo(1.3, 0xffb264, head.x, head.y - 0.08, head.z), false, false);
+    batch.add(haloMat, halo(1.3, 0xffb264, head.x, head.y - 0.08, head.z, Math.PI / 2), false, false);
   }
-  batch.add(haloMat, halo(1.0, 0x40ff88, tlHead.x, tlHead.y, tlHead.z, -Math.PI / 2), false, false);
+  batch.add(haloMat, halo(0.7, 0x40ff88, tlHead.x, tlHead.y, tlHead.z, -Math.PI / 2), false, false);
 
   // A wall-mounted display in the bus shelter
   const adTex = screenTexture(
@@ -660,16 +669,16 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   // -------------------------------------------------------------------------
   const lights: Record<string, THREE.Light> = {};
 
-  const skyFill = new THREE.HemisphereLight(0x33455f, 0x120e14, 0.42);
+  const skyFill = new THREE.HemisphereLight(0x2a3a52, 0x140f16, 0.22);
   root.add(skyFill);
   lights.skyFill = skyFill;
 
-  const ambient = new THREE.AmbientLight(0x1a2334, 0.35);
+  const ambient = new THREE.AmbientLight(0x141c2c, 0.2);
   root.add(ambient);
   lights.ambient = ambient;
 
   // Shadow caster 1: cold skyglow raking across the street.
-  const moon = new THREE.DirectionalLight(0x7d9ad6, 1.15);
+  const moon = new THREE.DirectionalLight(0x7d9ad6, 0.85);
   moon.position.set(-17, 21, 15);
   moon.target.position.set(-3.6, 0, -1);
   moon.castShadow = true;
@@ -686,7 +695,7 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   lights.moon = moon;
 
   // Shadow caster 2: the sodium lamp standing over the actors.
-  const lamp = new THREE.SpotLight(0xffa752, 900, 22, 0.62, 0.45, 2);
+  const lamp = new THREE.SpotLight(0xffa752, 420, 22, 0.62, 0.45, 2);
   lamp.position.copy(lampHeadA);
   lamp.target.position.set(-3.9, PAVE_Y, 0.9);
   lamp.castShadow = true;
@@ -698,12 +707,12 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   root.add(lamp, lamp.target);
   lights.lamp = lamp;
 
-  const lampB = new THREE.PointLight(0xffa752, 320, 18, 2);
+  const lampB = new THREE.PointLight(0xffa752, 170, 18, 2);
   lampB.position.copy(lampHeadB).add(new THREE.Vector3(0, -0.2, 0));
   root.add(lampB);
   lights.lampB = lampB;
 
-  const lampC = new THREE.PointLight(0xffa752, 300, 17, 2);
+  const lampC = new THREE.PointLight(0xffa752, 150, 17, 2);
   lampC.position.copy(lampHeadC).add(new THREE.Vector3(0, -0.2, 0));
   root.add(lampC);
   lights.lampC = lampC;
@@ -736,7 +745,7 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   const otherPos = new THREE.Vector3(-3.05, PAVE_Y, 0.95);
   const heroYaw = facing(heroPos, otherPos);
   const alleyEnd = new THREE.Vector3(ALLEY_X, PAVE_Y, -8.4);
-  const establishPos = new THREE.Vector3(5.4, 1.95, 8.4);
+  const establishPos = new THREE.Vector3(2.6, 1.66, 6.6);
   const closePos = new THREE.Vector3(-1.9, 1.62, 2.7);
   const mouthPos = new THREE.Vector3(ALLEY_X, 1.62, 3.5);
 
@@ -808,12 +817,12 @@ export function buildStreetScene(stage: Stage): SceneBuild {
     sky: 'nightRain',
     showSkyBackground: true,
     atmosphere: {
-      fogColor: new THREE.Color(0x0b1018),
-      fogColorFar: new THREE.Color(0x191324),
-      density: 0.034,
-      heightFalloff: 0.072,
+      fogColor: new THREE.Color(0x070b12),
+      fogColorFar: new THREE.Color(0x120e1c),
+      density: 0.021,
+      heightFalloff: 0.06,
       fogBase: -0.5,
-      noise: 0.62,
+      noise: 0.55,
     },
     grade: {
       lift: new THREE.Vector3(0.008, 0.02, 0.036),

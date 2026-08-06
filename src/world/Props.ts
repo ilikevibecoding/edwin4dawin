@@ -344,7 +344,7 @@ export const mat = {
       'grimyGlass',
       grimyGlass,
       { size: texSize(o.tier, 384), repeat, normalStrength: 0.8 },
-      { transparent: true, opacity: 0.34, roughness: 0.12, metalness: 0.0, envMapIntensity: 2.2, side: THREE.DoubleSide }
+      { transparent: true, opacity: 0.26, roughness: 0.14, metalness: 0.0, envMapIntensity: 0.9, side: THREE.DoubleSide }
     ),
 };
 
@@ -549,13 +549,15 @@ export function buildWindowField(cells: WindowCell[], rng: Rng, seedTint = 1): W
     e.set(0, c.yaw, 0);
     q.setFromEuler(e);
 
-    p.set(c.center.x - nx * 0.09, c.center.y, c.center.z - nz * 0.09);
+    // The reveal box sits behind the pane, poking just proud of the wall, so
+    // the lit glass is never swallowed by its own frame.
+    p.set(c.center.x - nx * 0.05, c.center.y, c.center.z - nz * 0.05);
+    s.set(c.width + 0.14, c.height + 0.14, 0.17);
+    frames.setMatrixAt(i, m.compose(p, q, s));
+
+    p.set(c.center.x + nx * 0.05, c.center.y, c.center.z + nz * 0.05);
     s.set(c.width, c.height, 1);
     glass.setMatrixAt(i, m.compose(p, q, s));
-
-    p.set(c.center.x + nx * 0.012, c.center.y, c.center.z + nz * 0.012);
-    s.set(c.width + 0.13, c.height + 0.13, 0.2);
-    frames.setMatrixAt(i, m.compose(p, q, s));
 
     const lit = rng.chance(0.72);
     if (lit) {
@@ -872,9 +874,10 @@ export function lightCone(
   const c = new THREE.Color(color);
   for (let i = 0; i < n; i++) {
     const y = pos.getY(i);
-    // Bright at the source, gone by the floor.
+    // Peaks just below the fitting and dies at both ends, so the volume reads
+    // as haze rather than a hard-edged tube.
     const t = clamp((y + height / 2) / height);
-    const f = Math.pow(t, 2.1) * 0.9 + 0.03;
+    const f = Math.pow(t, 2.6) * (1 - Math.pow(t, 5)) * 1.7 + 0.015;
     arr[i * 3] = c.r * f;
     arr[i * 3 + 1] = c.g * f;
     arr[i * 3 + 2] = c.b * f;

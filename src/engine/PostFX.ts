@@ -37,6 +37,7 @@ export type QualityTier = 'low' | 'medium' | 'high' | 'ultra';
 // ---------------------------------------------------------------------------
 
 const GRADE_FRAG = /* glsl */ `
+uniform float uExposure;
 uniform vec3 uLift;
 uniform vec3 uGamma;
 uniform vec3 uGain;
@@ -53,7 +54,7 @@ uniform vec3 uFadeColor;
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-  vec3 c = max(inputColor.rgb, vec3(0.0));
+  vec3 c = max(inputColor.rgb, vec3(0.0)) * uExposure;
   c.r *= 1.0 + uTemperature * 0.16;
   c.b *= 1.0 - uTemperature * 0.16;
   c = c * uGain + uLift * (1.0 - c);
@@ -82,6 +83,8 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
 `;
 
 export interface GradePreset {
+  /** Linear exposure trim applied before the grade. */
+  exposure?: number;
   lift?: THREE.Vector3;
   gamma?: THREE.Vector3;
   gain?: THREE.Vector3;
@@ -99,6 +102,7 @@ export class FilmGradeEffect extends Effect {
     super('FilmGradeEffect', GRADE_FRAG, {
       blendFunction: BlendFunction.NORMAL,
       uniforms: new Map<string, THREE.Uniform>([
+        ['uExposure', new THREE.Uniform(1)],
         ['uLift', new THREE.Uniform(new THREE.Vector3(0.012, 0.016, 0.03))],
         ['uGamma', new THREE.Uniform(new THREE.Vector3(1, 1, 1))],
         ['uGain', new THREE.Uniform(new THREE.Vector3(1.02, 1, 1.02))],
@@ -131,6 +135,7 @@ export class FilmGradeEffect extends Effect {
     const setF = (name: string, v?: number) => {
       if (v !== undefined) this.u(name).value = THREE.MathUtils.lerp(this.u(name).value as number, v, blend);
     };
+    setF('uExposure', p.exposure);
     setF('uSaturation', p.saturation);
     setF('uContrast', p.contrast);
     setF('uTemperature', p.temperature);
