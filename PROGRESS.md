@@ -262,3 +262,19 @@ suite green). Remaining polish backlog (post-stop): night battery silhouettes
 beyond ~80 m read mostly as lamp dots; threat-cam plasma glow shows a faint
 horizontal band from some angles; console chairs are simple; holo track labels
 can overlap the wall map; 425-call night walk-up peak.
+
+**Post-release hardening (user reported "black screen when turning / black
+and glitchy after tab switch" on real hardware — not reproducible under
+SwiftShader):** diagnosis: WebGL context loss (browsers discard backgrounded
+tabs' GL contexts; overloaded drivers reset mid-game) plus two secondary
+real-GPU risks (mid-game shader-compile spikes, NaN pixels smeared into black
+rectangles by the bloom pass). Fixes: full context-loss recovery
+(preventDefault + restore handler that rebuilds PMREM env maps, re-allocates
+composer targets, resets the frame timer, shows a RECOVERING banner, and
+steps quality down after repeat losses), boot-time `compileAsync` shader
+precompile, NaN/Inf clamps on every custom fragment shader (sky, particles,
+streaks, trails, fireball, grade), and a non-black clear color. Verified with
+a forced `WEBGL_lose_context` probe: banner shows during loss, scene fully
+recovers (env maps intact after turn-around), frames advance, second loss
+auto-drops quality high→medium. Also published a stable branch URL so stale
+bookmarked demo links can't serve old builds.
