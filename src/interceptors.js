@@ -79,6 +79,7 @@ class Interceptor {
     this.pipTimer = 0;
     this.noiseSeed = mulberry32((serial * 7919) ^ 0x2f9);
     this.wiggle = rngFx.range(0, Math.PI * 2);
+    this.puffTimer = 0;
     this.group.visible = true;
     this.group.position.copy(this.pos);
     // envelope feasibility drives a persistent bias (fictional): batteries fired
@@ -163,6 +164,20 @@ class Interceptor {
     if (angle > 1e-4) {
       const f = Math.min(1, maxTurn / angle);
       _v3.lerp(_v2, f).normalize();
+    }
+
+    // divert-thruster puffs: once the motor is out, hard terminal corrections show
+    // as cool-white lateral jet pulses (the "kill vehicle working" read)
+    this.puffTimer -= dt;
+    if (this.phase === 'terminal' && this.t >= def.motorTime && thAlive &&
+        angle > maxTurn * 0.55 && this.puffTimer <= 0) {
+      // jet exhausts opposite the direction the nose is being pushed
+      _v1.copy(_v2).addScaledVector(_v3, -_v2.dot(_v3));
+      if (_v1.lengthSq() > 1e-8) {
+        _v1.normalize().multiplyScalar(-1);
+        this.effects.divertPuff(this.pos, _v1, this.vel);
+      }
+      this.puffTimer = rngFx.range(0.09, 0.2);
     }
 
     // thrust / drag

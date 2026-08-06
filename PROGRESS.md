@@ -107,3 +107,35 @@ Self-evaluating loop: build → run → screenshot → judge vs rubric → fix �
 - Scores: env 8 · batteries 8 · physics 8 · effects 8 · light/post 8.5 · UI 8.5 · perf 9 · loop 8.5.
 - Next: battery ground-cable runs + generator hookups, post-launch heat discoloration/scorch verification,
   ground-impact signature (dust column + shock ring) for leakers, mid-ground dune banding from altitude.
+
+### Iteration 8 (leaker impact path) — avg ~8.4
+- Audit: cables, pad heat decals, fired-tube state (cap pops → dark bore) and `groundImpact` all already
+  existed — but the IMPACT result path had never been captured. Added `leaker ground impact` visual test:
+  single track, never engaged, camera tracks the terminal dive, shoots impact +3 frames and aftermath +110.
+- First capture white-screened the frame: ~34 additive fireball sprites stacked on one point × 0.95 alpha
+  ≈ 30× overbright, then bloom ate the rest. Fixed by treating count × alpha as the brightness knob
+  (20 × 0.55), spatially scattering sprites into a fireball volume, flash light 1400 → 950.
+- Impact now reads: violent flash with debris silhouettes + fence line visible through it, GROUND IMPACT
+  banner w/ aim-point callout; aftermath shows towering smoke column, drifting dust ring, burning fire,
+  crater decal, scattered debris. Both from a player-plausible vantage.
+- Suite now 12 specs. Scores: env 8 · batteries 8 · physics 8 · effects 8.5 · light/post 8.5 · UI 8.5 ·
+  perf 9 · loop 8.5.
+- Next: batteries detail pass (cable trays to pads, launcher grime variation), env mid-ground from altitude,
+  physics: visible terminal-phase corrections on interceptor close-in.
+
+### Iteration 9 (terminal corrections + access road) — avg ~8.5
+- Audit first: generator cable runs to every pad/C2/radar and internal service roads already existed, so the
+  batteries "cables" line was already satisfied — spent the iteration where shots showed gaps instead.
+- Divert-thruster puffs: once the motor is out and the turn demand saturates the terminal turn-rate limit,
+  the kill vehicle pulses cool-white lateral jets (rate-limited 5–10/s, jetting opposite the commanded turn,
+  distance-compensated). Consumes only the visual RNG — gameplay determinism verified by identical intercept
+  results before/after (same 42 m proximity kill at 5.9 km). New capture `42a_terminal_homing`: chase cam
+  rides the KV's shoulder — contrail, divert puff, and closing threat all in one readable frame.
+- Access road: analytic dark treated route with pale graded-spoil shoulders, S-curving from the south gate to
+  the horizon — pure fragment-shader SDF against a sine centerline (x = f(z)), so it hugs the terrain mesh
+  exactly with zero geometry/z-fighting. First two attempts (pale packed-dust fill) died against the sand's
+  value range; the dark scheme also visually continues the base's dark internal service roads out the gate.
+- Leaker spec root-cause: it runs ~2.9–3.0 min — exactly the 180 s default budget (the "flake" was the final
+  screenshot encoding pushing past it). Per-test timeout 300 s.
+- Scores: env 8.5 · batteries 8 · physics 8.5 · effects 8.5 · light/post 8.5 · UI 8.5 · perf 9 · loop 8.5.
+- Avg 8.5, no category below 8 — stopping condition MET pending final full-suite green.

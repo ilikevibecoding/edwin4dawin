@@ -81,6 +81,7 @@ test('intercept flash close-up', async ({ page }) => {
   });
   // chase the engagement: aim camera from base toward the closing pair
   let hitShot = false;
+  let homingShot = false;
   for (let i = 0; i < 400; i++) {
     const s = await page.evaluate(() => {
       const g = window.__game;
@@ -94,6 +95,30 @@ test('intercept flash close-up', async ({ page }) => {
       }
       return { d: 1e9, hits: st.results.hits, done: st.scenarioState !== 'running' };
     });
+    if (!homingShot && s.d < 620 && s.hits === 0) {
+      // terminal homing: coasting kill vehicle pulsing its divert thrusters —
+      // ride just off the KV's shoulder looking at the threat (ground cam can't
+      // resolve a 3.6 m vehicle at 6 km)
+      await page.evaluate(() => {
+        const g = window.__game;
+        const st = g.state();
+        if (st.interceptors.length && st.tracks.length) {
+          const it = st.interceptors[0];
+          const tr = st.tracks[0];
+          let bx = it.x - tr.x, by = it.alt - tr.alt, bz = it.z - tr.z;
+          const bl = Math.hypot(bx, by, bz) || 1;
+          bx /= bl; by /= bl; bz /= bl;
+          // side offset perpendicular to the engagement line for parallax
+          const sl = Math.hypot(bz, bx) || 1;
+          const sx = -bz / sl, sz = bx / sl;
+          g.api.cine(it.x + bx * 120 + sx * 55, it.alt + by * 120 + 18, it.z + bz * 120 + sz * 55,
+            tr.x, tr.alt, tr.z);
+        }
+      });
+      await step(page, 2);
+      await shot(page, '42a_terminal_homing');
+      homingShot = true;
+    }
     if (s.hits > 0) {
       // a few frames past detonation: white pop has bloomed off, amber fireball +
       // shock ring + fragment flares are all visible
@@ -139,6 +164,49 @@ test('C2 interior and radar site', async ({ page }) => {
   await shot(page, '46_sentinel_erecting');
   await step(page, 200);
   await shot(page, '47_sentinel_after_launch');
+});
+
+test('leaker ground impact', async ({ page }) => {
+  test.setTimeout(300_000); // full unengaged fall + two heavy particle screenshots
+  await boot(page, 909);
+  await page.evaluate(() => {
+    const g = window.__game;
+    g.api.setCondition('day');
+    g.api.selectScenario('single');
+    g.api.startScenario(); // never engage: let it through
+  });
+  let aim = null;
+  let impactShot = false;
+  for (let i = 0; i < 500; i++) {
+    const s = await page.evaluate((prev) => {
+      const g = window.__game;
+      const st = g.state();
+      let aimOut = prev;
+      if (st.tracks.length) {
+        const tr = st.tracks[0];
+        aimOut = { x: tr.x, alt: tr.alt, z: tr.z };
+      }
+      if (aimOut) g.api.cine(30, 4, 110, aimOut.x, Math.max(aimOut.alt, 3), aimOut.z);
+      return { aim: aimOut, alt: st.tracks.length ? st.tracks[0].alt : 0, impacts: st.results.impacts, done: st.scenarioState !== 'running' };
+    }, aim);
+    aim = s.aim;
+    if (s.impacts > 0) {
+      await step(page, 3); // fireball + dust ring + shock rings developed
+      await shot(page, '50_leaker_impact');
+      impactShot = true;
+      break;
+    }
+    if (s.done) break;
+    await step(page, s.alt > 0 && s.alt < 900 ? 2 : 15);
+  }
+  expect(impactShot).toBe(true);
+  // aftermath: smoke column, burning emitter, crater decal
+  await step(page, 110);
+  await page.evaluate((a) => {
+    window.__game.api.cine(a.x + 34, 3, a.z + 42, a.x, 6, a.z);
+  }, aim);
+  await step(page, 4);
+  await shot(page, '51_leaker_aftermath');
 });
 
 test('night trails readability', async ({ page }) => {

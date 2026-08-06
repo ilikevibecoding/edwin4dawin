@@ -646,15 +646,36 @@ export class Effects {
     if (this.onBoom) this.onBoom(pos, size, kind);
   }
 
+  // small cool-white lateral jet pulse from a coasting kill vehicle; distance-
+  // compensated so the pulse train reads on the chase cam ~1 km out
+  divertPuff(pos, dir, carryVel) {
+    const d = this.camera.position.distanceTo(pos);
+    const ds = Math.max(1, d / 800);
+    // a real divert plume spans several missile lengths for a frame or two —
+    // undersized puffs just read as compression artifacts
+    for (let i = 0; i < 4; i++) {
+      _v1.copy(dir).multiplyScalar(rngFx.range(30, 46))
+        .addScaledVector(carryVel, 0.82)
+        .add(_v2.set(rngFx.gauss() * 3, rngFx.gauss() * 3, rngFx.gauss() * 3));
+      this.fire.emit(this.now, {
+        pos, vel: _v1, life: rngFx.range(0.16, 0.3), size0: 4.0 * ds, size1: 10 * ds,
+        color: 0xdfe8ff, alpha: 0.85, damp: 2.2, gravity: 0,
+      });
+    }
+  }
+
   groundImpact(pos, { size = 1.6 } = {}) {
     const q = this.quality;
     const p = _v3.set(pos.x, Math.max(pos.y, 1), pos.z);
-    const n = Math.round(34 * size * q);
+    // fireball: additive sprites accumulate, so count × alpha is the real
+    // brightness knob — 34 × 0.95 stacked white-screened the whole frame
+    const n = Math.round(20 * size * q);
     for (let i = 0; i < n; i++) {
       _v1.set(rngFx.gauss() * 14, Math.abs(rngFx.gauss()) * 30 + 12, rngFx.gauss() * 14).multiplyScalar(size);
+      _v2.set(rngFx.gauss() * 3.2, Math.abs(rngFx.gauss()) * 2.6 + 0.4, rngFx.gauss() * 3.2).multiplyScalar(size).add(p);
       this.fire.emit(this.now, {
-        pos: p, vel: _v1, life: rngFx.range(0.4, 1.3), size0: 3.5 * size, size1: 10 * size,
-        color: i % 2 ? 0xff7a30 : 0xffb054, alpha: 0.95, damp: 1.6, gravity: 0.12,
+        pos: _v2, vel: _v1, life: rngFx.range(0.4, 1.3), size0: 3.0 * size, size1: 9 * size,
+        color: i % 2 ? 0xff7a30 : 0xffb054, alpha: 0.55, damp: 1.6, gravity: 0.12,
       });
     }
     // dust ring
@@ -680,7 +701,7 @@ export class Effects {
     this.shock.spawn(p, { size: 55 * size, dur: 0.7, alpha: 0.4 });
     this.debris.burst(p, _v2.set(0, 8, 0), Math.round(14 * size), 40 * size, size);
     this.decals.spawn(p, 16 * size);
-    this.flash.flash(_v1.set(p.x, p.y + 6, p.z), 1400 * size, 0.5, 0xffb066);
+    this.flash.flash(_v1.set(p.x, p.y + 6, p.z), 950 * size, 0.45, 0xffb066);
     // burning aftermath emitter
     this.emitters.push({ pos: p.clone(), until: this.now + 16, rate: 14, acc: 0, kind: 'fire' });
     const d = this.camera.position.distanceTo(p);

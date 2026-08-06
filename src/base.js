@@ -250,6 +250,23 @@ export class Base {
           // compacted-aggregate ring: must stay close to the sand's HUE — a neutral
           // gray of equal luminance reads as a pale blue mist band under the sky light
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.27, 0.225, 0.168) * (0.84 + 0.32 * lB), gk * 0.55);
+          // graded dirt access road: leaves the south gate (x=0) and S-curves to the
+          // horizon — analytic strip, so it hugs the terrain with zero extra geometry
+          float rz = vMacroXZ.y - 172.0;
+          if (rz > -30.0) {
+            float rc = 30.0 * sin(rz * 0.004) + 110.0 * sin(rz * 0.00042);
+            float rx = abs(vMacroXZ.x - rc);
+            float rd = rx + (mB.g - 0.5) * 2.2;
+            float gate = smoothstep(-12.0, 26.0, rz);
+            // pale graded-spoil shoulders flanking the route (fresh-bladed dirt)
+            float sk = (1.0 - smoothstep(6.2, 8.8, rd)) * smoothstep(2.6, 4.0, rd) * gate;
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.335, 0.30, 0.243) * (0.88 + 0.26 * lB), sk * 0.5);
+            // running surface: dark treated aggregate — visually continues the base's
+            // dark internal service roads out through the gate
+            float rk = (1.0 - smoothstep(2.4, 3.8, rd)) * gate;
+            vec3 roadCol = vec3(0.152, 0.140, 0.118) * (0.88 + 0.26 * lB);
+            diffuseColor.rgb = mix(diffuseColor.rgb, roadCol, rk * 0.78);
+          }
         }`);
     };
     this.ground = new THREE.Mesh(geo, mat);
