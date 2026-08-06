@@ -75,7 +75,7 @@ export const BATTERIES = [
     ammo: 8, reloadTime: 5.5, prepTime: 1.1, salvoDelay: 1.4,
     fuseRadius: 34, guidanceNoise: 0.50,
     plume: { size: 1.0, colour: 0xffb066, dust: 1.0 },
-    trail: { width: 3.2, colour: 0xf2f4f8, life: 7 },
+    trail: { width: 4.5, colour: 0xf2f4f8, life: 17 },
   },
   {
     id: 'highlance',
@@ -104,7 +104,7 @@ export const BATTERIES = [
     ammo: 6, reloadTime: 8.5, prepTime: 3.2, salvoDelay: 2.4,
     fuseRadius: 32, guidanceNoise: 0.48,
     plume: { size: 1.5, colour: 0xffd9a0, dust: 1.6 },
-    trail: { width: 5.5, colour: 0xffffff, life: 13 },
+    trail: { width: 7.0, colour: 0xffffff, life: 26 },
   },
   {
     id: 'sentinel',
@@ -133,7 +133,7 @@ export const BATTERIES = [
     ammo: 3, reloadTime: 14, prepTime: 4.8, salvoDelay: 3.2,
     fuseRadius: 40, guidanceNoise: 0.44,
     plume: { size: 2.3, colour: 0xfff0c8, dust: 2.4 },
-    trail: { width: 8.5, colour: 0xffffff, life: 20 },
+    trail: { width: 10.5, colour: 0xffffff, life: 34 },
   },
 ];
 

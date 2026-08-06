@@ -97,19 +97,22 @@ const SKY_FRAG = /* glsl */`
 
     // High cirrus, projected onto a virtual cloud plane.
     if (h > 0.008 && uCloudStrength > 0.001) {
+      // Projection onto a virtual cloud plane. The UV scale has to be large
+      // enough that the sheet still has structure overhead - at a small scale
+      // the zenith samples a single texel and smears across half the sky.
       vec2 cuv = d.xz / (h + 0.10);
-      vec2 uv1 = cuv * 0.055 + vec2(uTime * 0.0022, uTime * 0.0009);
-      vec2 uv2 = cuv * 0.019 - vec2(uTime * 0.0011, uTime * 0.0005);
+      vec2 uv1 = cuv * 0.46 + vec2(uTime * 0.0022, uTime * 0.0009);
+      vec2 uv2 = cuv * 0.17 - vec2(uTime * 0.0011, uTime * 0.0005);
       float c1 = texture2D(uCloudTex, uv1).r;
       float c2 = texture2D(uCloudTex, uv2).g;
       float raw = c1 * 0.75 + c2 * 0.95;
       // Cover drives a soft threshold so the sheet thickens smoothly.
-      float cloud = smoothstep(1.30 - uCloudCover * 0.75, 1.62 - uCloudCover * 0.5, raw);
-      cloud *= smoothstep(0.008, 0.13, h);
+      float cloud = smoothstep(1.24 - uCloudCover * 0.7, 1.60 - uCloudCover * 0.5, raw);
+      cloud *= smoothstep(0.008, 0.16, h);
       // Sunward edges catch the light.
-      float lit = clamp(mie * 3.0 + 0.6, 0.0, 1.7);
+      float lit = clamp(mie * 2.2 + 0.62, 0.0, 1.35);
       vec3 cc = uCloudTint * lit;
-      col = mix(col, cc, clamp(cloud * 0.9, 0.0, 0.8) * uCloudStrength);
+      col = mix(col, cc, clamp(cloud * 0.85, 0.0, 0.66) * uCloudStrength);
     }
 
     // Horizon haze wash ties the sky to the terrain fog colour.

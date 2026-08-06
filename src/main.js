@@ -1025,6 +1025,18 @@ class Game {
         };
       },
       scene() { return g.scene; },
+      effectsDebug() {
+        const fx = g.effects;
+        return {
+          clouds: fx.clouds.filter((c) => c.sprite.visible).map((c) => ({
+            o: +c.mat.opacity.toFixed(3), s: Math.round(c.sprite.scale.x),
+            t: +c.t.toFixed(2), life: +c.life.toFixed(1),
+          })),
+          bursts: fx.bursts.filter((b) => b.sprite.visible).length,
+          smoke: fx.smoke.ring.count,
+          trails: fx.trails.live.map((r) => r.count),
+        };
+      },
       three() { return THREE; },
       colliderCount() { return g.player.colliders.length; },
       playerPos() {

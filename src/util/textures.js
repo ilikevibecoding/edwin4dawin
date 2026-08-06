@@ -581,6 +581,45 @@ export function smokePuff(size = 128, seed = 3) {
   });
 }
 
+/**
+ * Dense, lobed cloud used for a whole detonation cloud in one billboard.
+ *
+ * `smokePuff` is built to be stacked hundreds deep, so its alpha falls away
+ * almost immediately from the centre. A single billboard standing in for a
+ * whole cloud needs a wide opaque plateau and an irregular edge instead.
+ */
+export function cloudBlob(size = 256, seed = 5) {
+  return cached(`blob:${seed}:${size}`, () => {
+    const c = canvas(size);
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(size, size);
+    const n = new Noise(seed);
+    const half = size / 2;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = (x - half) / half, dy = (y - half) / half;
+        const r = Math.hypot(dx, dy);
+        // Lobed silhouette: the outer radius wanders with the bearing.
+        const ang = Math.atan2(dy, dx);
+        const lobe = n.fbm2(Math.cos(ang) * 1.7 + seed, Math.sin(ang) * 1.7, 4) * 0.5 + 0.5;
+        const edge = 0.55 + lobe * 0.42;
+        let a = 1 - smoothstep(clamp01((r - edge * 0.42) / Math.max(0.05, edge * 0.58)));
+        // Internal billows so the disc does not read as flat.
+        const turb = n.fbm2(x / size * 3.4 + 17, y / size * 3.4, 5) * 0.5 + 0.5;
+        a *= 0.62 + turb * 0.62;
+        const i = (y * size + x) * 4;
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+        img.data[i + 3] = clamp01(a) * 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.needsUpdate = true;
+    return t;
+  });
+}
+
 /** Hot core sprite: bright center falling off fast - flames, flares, sparks. */
 export function glowSprite(size = 128, power = 3.2, key = 'glow') {
   return cached(`${key}:${size}:${power}`, () => {

@@ -241,10 +241,10 @@ class Interceptor {
       life: def.trail.life,
       colour: def.trail.colour,
       hot: 0xff9a3c,
-      opacity: 0.8,
-      expand: 1.7,
-      minPixels: 1.6,
-      hotSpan: 0.045,
+      opacity: 0.92,
+      expand: 2.1,
+      minPixels: 2.2,
+      hotSpan: 0.03,
     });
     this.glowMat.color.set(0xfff0c8);
     return this;
@@ -323,7 +323,7 @@ class Interceptor {
       });
       this.effects.padWash(this.padPos, this.pos, dt, this.def);
     }
-    this.effects.followTrail(this.trail, this.pos, burning ? 26 : 48);
+    this.effects.followTrail(this.trail, this.pos, burning ? 20 : 34, this.speed);
 
     const dist = camera.position.distanceTo(this.pos);
     const px = 2.6 * dist / 700;

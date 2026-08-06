@@ -16,7 +16,7 @@ import { TrailManager } from './effects/trails.js';
 import {
   ShockwavePool, DebrisField, DecalPool, FlashLights, FireballPool,
 } from './effects/explosions.js';
-import { smokePuff, glowSprite, noiseTexture, streakSprite } from './util/textures.js';
+import { smokePuff, glowSprite, noiseTexture, streakSprite, cloudBlob } from './util/textures.js';
 import { hazeFactor } from './effects/aerial.js';
 import { airDensity, clamp, clamp01, lerp } from './util/mathx.js';
 import { QUALITY } from './config.js';
@@ -168,6 +168,23 @@ export class Effects {
       scene.add(sprite);
       this.bursts.push({ sprite, mat, t: 0, life: 1, r0: 10, r1: 100, minPixels: 70 });
     }
+
+    // The lingering debris cloud. Individual smoke particles are a few pixels
+    // across at intercept range, so the cloud that actually sells a kill from
+    // the ground is drawn as its own distance-compensated billboard.
+    this.clouds = [];
+    const cloudTexes = [cloudBlob(256, 11), cloudBlob(256, 29), cloudBlob(256, 53)];
+    for (let i = 0; i < 12; i++) {
+      const mat = new THREE.SpriteMaterial({
+        map: cloudTexes[i % cloudTexes.length], color: 0x8a8175, transparent: true,
+        depthWrite: false, opacity: 0, fog: false, rotation: 0,
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.visible = false;
+      sprite.renderOrder = 18;
+      scene.add(sprite);
+      this.clouds.push({ sprite, mat, t: 0, life: 1, r0: 10, r1: 100, minPixels: 20, peak: 0.7 });
+    }
     this._viewportHeight = 800;
 
     this._lightDirView = new THREE.Vector3(0, 0, 1);
@@ -236,6 +253,26 @@ export class Effects {
     return b;
   }
 
+  /**
+   * Lingering detonation cloud that stays legible at any range.
+   * Drifts with `vel` so a kill cloud is carried along the engagement geometry
+   * instead of hanging in the sky like a decal.
+   */
+  burstCloud(pos, {
+    r0 = 20, r1 = 260, life = 9, minPixels = 26, colour = 0x8b8175, peak = 0.72,
+    vel = null,
+  } = {}) {
+    let c = this.clouds.find((x) => !x.sprite.visible);
+    if (!c) c = this.clouds.reduce((a, x) => (a.t / a.life > x.t / x.life ? a : x));
+    c.sprite.position.copy(pos);
+    c.mat.color.set(colour);
+    c.mat.rotation = Math.random() * Math.PI * 2;
+    c.sprite.visible = true;
+    c.t = 0; c.life = life; c.r0 = r0; c.r1 = r1; c.minPixels = minPixels; c.peak = peak;
+    c.vx = vel ? vel.x : 0; c.vy = vel ? vel.y : 0; c.vz = vel ? vel.z : 0;
+    return c;
+  }
+
   _updateBursts(dt) {
     const pixelScale = this._viewportHeight
       / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
@@ -252,6 +289,22 @@ export class Effects {
       const s = Math.max(grow, minWorld);
       b.sprite.scale.setScalar(s);
       b.mat.opacity = env * (1 - this.hazeAt(b.sprite.position) * 0.7);
+    }
+    for (const c of this.clouds) {
+      if (!c.sprite.visible) continue;
+      c.t += dt;
+      const k = c.t / c.life;
+      if (k >= 1) { c.sprite.visible = false; c.mat.opacity = 0; continue; }
+      c.sprite.position.x += c.vx * dt;
+      c.sprite.position.y += c.vy * dt;
+      c.sprite.position.z += c.vz * dt;
+      // Fast bloom into a cloud, then a long dissolve.
+      const env = Math.min(1, k / 0.08) * Math.pow(1 - k, 1.5);
+      const grow = c.r0 + (c.r1 - c.r0) * (1 - Math.pow(1 - k, 1.8));
+      const dist = this.camera.position.distanceTo(c.sprite.position);
+      const minWorld = (dist * c.minPixels) / Math.max(1, pixelScale);
+      c.sprite.scale.setScalar(Math.max(grow, minWorld));
+      c.mat.opacity = env * c.peak * (1 - this.hazeAt(c.sprite.position) * 0.85);
     }
   }
 
@@ -319,7 +372,7 @@ export class Effects {
   // ------------------------------------------------------------- trails
 
   acquireTrail(style) { return this.trails.acquire(style); }
-  followTrail(r, pos, minStep) { this.trails.follow(r, pos, minStep); }
+  followTrail(r, pos, minStep, speed) { this.trails.follow(r, pos, minStep, speed); }
   retireTrail(r) { this.trails.retire(r); }
 
   // ------------------------------------------------------------- exhaust
@@ -564,9 +617,30 @@ export class Effects {
       colour: 0xfff0d0, intensity: 9000 * s, life: 0.9, distance: 2600 * s,
     });
     this.burstFlash(pos, {
-      r0: 14 * s, r1: (150 + rho * 60) * s * expand, life: 1.25,
-      minPixels: 86 * s, colour: 0xfff0cc, intensity: 3.4,
+      r0: 14 * s, r1: (150 + rho * 60) * s * expand, life: 0.5,
+      minPixels: 92 * s, colour: 0xfff4d4, intensity: 4.2,
     });
+    // Slower orange bloom behind the white flash.
+    this.burstFlash(pos, {
+      r0: 20 * s, r1: (240 + rho * 90) * s * expand, life: 1.7,
+      minPixels: 60 * s, colour: 0xffb057, intensity: 1.5,
+    });
+    // The cloud that is still there a beat later. Three overlapping puffs give
+    // it an irregular edge instead of reading as one soft disc.
+    for (let i = 0; i < 4; i++) {
+      _v2.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5)
+        .normalize().multiplyScalar(16 * s * expand);
+      _v3.copy(pos).add(_v2);
+      this.burstCloud(_v3, {
+        r0: 18 * s, r1: (260 + rho * 140) * s * expand * (0.7 + Math.random() * 0.7),
+        life: 9 + Math.random() * 7, minPixels: (i === 3 ? 14 : 26) * s,
+        // Sunlit debris reads bright against the sky; the dark core underneath
+        // stops the cloud from looking like a soft white sticker.
+        colour: i === 3 ? 0x3d382f : (i === 0 ? 0xe4ded1 : 0xb9b1a2),
+        peak: i === 3 ? 0.7 : 0.9 - i * 0.12,
+        vel: relVel ? _v1.copy(relVel).multiplyScalar(0.03) : null,
+      });
+    }
     // Glare is sized in world units, so it has to scale with viewing distance
     // to stay a lens artefact rather than a wall of white.
     const d = this.camera.position.distanceTo(pos);
@@ -742,6 +816,7 @@ export class Effects {
     reveal(this.decals.group);
     reveal(this.glareGroup);
     for (const b of this.bursts) reveal(b.sprite);
+    for (const c of this.clouds) reveal(c.sprite);
     for (const root of extraRoots) if (root) reveal(root);
     for (const g of this.glares) { g.mat.opacity = 0; }
     renderer.compile(scene, camera);
@@ -754,6 +829,7 @@ export class Effects {
     this.debris.clear(); this.decals.clear(); this.lights.clear();
     for (const g of this.glares) { g.sprite.visible = false; g.mat.opacity = 0; g.peak = 0; }
     for (const b of this.bursts) { b.sprite.visible = false; b.mat.opacity = 0; }
+    for (const c of this.clouds) { c.sprite.visible = false; c.mat.opacity = 0; }
     this.shakeImpulse = 0;
   }
 

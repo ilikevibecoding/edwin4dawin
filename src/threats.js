@@ -271,7 +271,7 @@ class Threat {
         hotSpan: this.isDecoy ? 0.06 : 0.02,
       });
     }
-    this.effects.followTrail(this.trail, this.pos, this.isDecoy ? 30 : 60);
+    this.effects.followTrail(this.trail, this.pos, this.isDecoy ? 24 : 40, this.speed);
 
     // Keep the marker glow at a readable on-screen size, dimmed by the amount
     // of atmosphere between it and the observer rather than by raw distance.

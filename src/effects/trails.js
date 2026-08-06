@@ -95,9 +95,12 @@ const FRAG = /* glsl */`
     float n2 = texture2D(uNoise, vec2(vArc * 0.0061 - vAge * 0.08, vSide * 0.25 + 0.5)).g;
     float breakup = mix(0.55, 1.25, n * 0.6 + n2 * 0.4);
 
-    float fade = pow(1.0 - vAge, 1.35);
+    // Hold most of the opacity for the first two thirds of the life, then let
+    // go: a linear fade makes a long contrail look like it is dissolving from
+    // the moment it is laid.
+    float fade = pow(1.0 - vAge, 2.2) * 0.75 + (1.0 - smoothstep(0.55, 1.0, vAge)) * 0.35;
     // Thin air => fainter trail, but it lingers; dense air => opaque and brief.
-    float dens = mix(0.28, 1.0, vDensity);
+    float dens = mix(0.5, 1.0, vDensity);
 
     float a = edge * fade * breakup * dens * uOpacity;
     a *= smoothstep(0.0, 0.02, vAge);
@@ -116,7 +119,7 @@ const FRAG = /* glsl */`
 `;
 
 export class TrailRibbon {
-  constructor(capacity = 96) {
+  constructor(capacity = 256) {
     this.capacity = capacity;
     this.count = 0;
     this.arc = 0;
@@ -185,7 +188,9 @@ export class TrailRibbon {
     this.meta[i4 + 2] = density; this.meta[i4 + 3] = this.arc;
     this.count++;
 
-    this._recomputeTangents();
+    // Only the tail end of the spine changed, so leave the rest alone: these
+    // ribbons are long enough that a full rebuild per point would be wasteful.
+    this._recomputeTangents(Math.max(0, this.count - 3));
     this.geometry.setDrawRange(0, Math.max(0, (this.count - 1) * 6));
     this.aPos.needsUpdate = true;
     this.aTan.needsUpdate = true;
@@ -234,7 +239,7 @@ export class TrailRibbon {
  * leaves the sky criss-crossed with smoke after an engagement.
  */
 export class TrailManager {
-  constructor(scene, { capacity = 18, segments = 96 } = {}) {
+  constructor(scene, { capacity = 18, segments = 256 } = {}) {
     this.scene = scene;
     this.time = 0;
     this.segments = segments;
@@ -360,16 +365,23 @@ export class TrailManager {
     for (let i = this.live.length - 1; i >= 0; i--) this.release(this.live[i]);
   }
 
-  /** Auto-emit helper: pushes a point when the missile has moved far enough. */
-  follow(r, pos, minStep = 22) {
+  /**
+   * Auto-emit helper: pushes a point when the missile has moved far enough.
+   *
+   * The step scales with speed so a ribbon covers tens of kilometres of flight
+   * without spending its budget on the slow first second off the rail. A fixed
+   * step is what turned long climbs into short stubs.
+   */
+  follow(r, pos, minStep = 22, speed = 0) {
     if (!r) return;
     if (r.count === 0) {
       r.push(pos, this.time, airDensity(pos.y));
       r.push(pos, this.time, airDensity(pos.y));
       return;
     }
+    const step = Math.min(220, Math.max(minStep, speed * 0.055));
     const d = r._last.distanceTo(pos);
-    if (d >= minStep) r.push(pos, this.time, airDensity(pos.y));
+    if (d >= step) r.push(pos, this.time, airDensity(pos.y));
     else r.updateHead(pos, this.time, airDensity(pos.y));
   }
 }
