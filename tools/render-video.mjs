@@ -83,6 +83,7 @@ if (!argv.includes('--no-resume')) {
 console.log('ready; capturing');
 
 const t0 = Date.now();
+let captured = 0;
 let finished = false;
 while (frame < MAX_FRAMES && !finished) {
   await page.evaluate(() => window.__step(1));
@@ -92,6 +93,7 @@ while (frame < MAX_FRAMES && !finished) {
   const file = path.join(FRAME_DIR, `f${String(frame).padStart(6, '0')}.jpg`);
   await page.screenshot({ path: file, type: 'jpeg', quality: 94, optimizeForSpeed: true });
   frame++;
+  captured++;
   if (frame % 25 === 0) {
     const p = await page.evaluate(() => window.__progress());
     finished = p.finished;
@@ -100,7 +102,7 @@ while (frame < MAX_FRAMES && !finished) {
     // log is the only record of where the capture got to.
     fs.appendFileSync(
       '.render/progress.log',
-      `frame ${frame} · story ${p.time.toFixed(1)}s · ${((frame - START) / elapsed).toFixed(2)} fps · ` +
+      `frame ${frame} · story ${p.time.toFixed(1)}s · ${(captured / elapsed).toFixed(2)} fps · ` +
         `${(elapsed / 60).toFixed(1)} min\n`
     );
   }
