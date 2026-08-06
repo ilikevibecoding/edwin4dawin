@@ -53,6 +53,7 @@ import {
   tint,
   trafficLight,
   trashBags,
+  uvScale,
   wallPipes,
   type MatOpts,
   type StreetPropCtx,
@@ -237,11 +238,19 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   }
   const nearBlocks: Block[] = [
     { x0: -21.5, x1: -5.2, height: 22.8, material: mBrick, storey: 3.2, ground: 3.6, floors: 6, shop: [-14.6, -8.4] },
-    { x0: -2.4, x1: 8.5, height: 28.6, material: mConcrete, storey: 3.1, ground: 4.0, floors: 8, shop: [0.4, 5.4] },
+    { x0: -2.4, x1: 8.5, height: 28.6, material: mConcrete, storey: 3.1, ground: 4.0, floors: 8, shop: [-1.9, 3.4] },
     { x0: 8.5, x1: 21, height: 18.2, material: mPanelA, storey: 3.5, ground: 4.2, floors: 4 },
   ];
 
   const bodyDepth = 13;
+  /**
+   * Facade slabs are far taller than they are wide, and surface maps repeat
+   * uniformly, so the concrete comes out as vertical smears. Correcting the UVs
+   * per slab keeps the grain square without a second material.
+   */
+  const slab = (w: number, h: number, x: number, y: number): THREE.BufferGeometry =>
+    uvScale(box(w, h, 0.55, x, y, -0.275), 1, h / Math.max(w, 0.001));
+
   for (const b of nearBlocks) {
     const w = b.x1 - b.x0;
     const cx = (b.x0 + b.x1) / 2;
@@ -250,10 +259,10 @@ export function buildStreetScene(stage: Stage): SceneBuild {
     if (b.shop) {
       const [s0, s1] = b.shop;
       const shopTop = 3.05;
-      batch.add(b.material, box(s0 - b.x0, b.height, 0.55, (b.x0 + s0) / 2, b.height / 2, -0.275));
-      batch.add(b.material, box(b.x1 - s1, b.height, 0.55, (s1 + b.x1) / 2, b.height / 2, -0.275));
-      batch.add(b.material, box(s1 - s0, 0.4, 0.55, (s0 + s1) / 2, 0.2, -0.275));
-      batch.add(b.material, box(s1 - s0, b.height - shopTop, 0.55, (s0 + s1) / 2, (b.height + shopTop) / 2, -0.275));
+      batch.add(b.material, slab(s0 - b.x0, b.height, (b.x0 + s0) / 2, b.height / 2));
+      batch.add(b.material, slab(b.x1 - s1, b.height, (s1 + b.x1) / 2, b.height / 2));
+      batch.add(b.material, slab(s1 - s0, 0.4, (s0 + s1) / 2, 0.2));
+      batch.add(b.material, slab(s1 - s0, b.height - shopTop, (s0 + s1) / 2, (b.height + shopTop) / 2));
       // Recessed shop interior
       const iz = -2.9;
       batch.add(mDarkWall, box(s1 - s0, shopTop, 0.1, (s0 + s1) / 2, shopTop / 2, iz), false, true);
@@ -277,8 +286,12 @@ export function buildStreetScene(stage: Stage): SceneBuild {
         box(s1 - s0 + 0.3, 0.06, 1.1, (s0 + s1) / 2, shopTop + 0.22, 0.5, { rx: -0.16 })
       );
     } else {
-      batch.add(b.material, box(w, b.height, 0.55, cx, b.height / 2, -0.275));
+      batch.add(b.material, slab(w, b.height, cx, b.height / 2));
     }
+    // A string course at head height breaks up the otherwise blank ground
+    // storey, which is the part of the facade the camera actually sees.
+    batch.add(mConcrete, box(w + 0.1, 0.18, 0.2, cx, b.ground - 0.5, 0.08));
+    batch.add(mConcrete, box(w + 0.1, 0.26, 0.16, cx, 0.34, 0.06), false, true);
 
     gridWindows(cells, {
       origin: new THREE.Vector3(b.x0, 0, FACADE_Z + 0.01),
@@ -428,7 +441,7 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   }
 
   // Steam from the vent grate
-  const grate = mat.brushed(opts, 1);
+  const grate = mat.brushed(opts, 1.2);
   batch.add(grate, box(1.0, 0.03, 0.7, ALLEY_X + 0.2, PAVE_Y + 0.01, -2.2), false, true);
   for (let i = 0; i < 7; i++) batch.add(grate, box(0.94, 0.05, 0.05, ALLEY_X + 0.2, PAVE_Y + 0.03, -2.5 + i * 0.1));
   const steam = buildSteam({
@@ -436,9 +449,9 @@ export function buildStreetScene(stage: Stage): SceneBuild {
     radius: 0.55,
     height: 4.6,
     rise: 0.062,
-    size: 3.4,
+    size: 0.85,
     color: 0x9db4d6,
-    opacity: 0.17,
+    opacity: 0.2,
     drift: new THREE.Vector3(0.16, 0, 0.42),
     seed: 771,
   });
@@ -451,9 +464,9 @@ export function buildStreetScene(stage: Stage): SceneBuild {
     radius: 0.42,
     height: 3.4,
     rise: 0.05,
-    size: 3.0,
+    size: 0.7,
     color: 0x8ea6c8,
-    opacity: 0.12,
+    opacity: 0.14,
     drift: new THREE.Vector3(0.3, 0, 0.1),
     seed: 313,
   });
@@ -486,9 +499,9 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   cable(batch, cableMat, new THREE.Vector3(4.2, 11.6, 0.4), new THREE.Vector3(9.5, 10.8, FAR_FACADE_Z - 0.4), 1.8);
   cable(batch, cableMat, new THREE.Vector3(-5.4, 7.4, 0.4), new THREE.Vector3(-5.4, 7.4, -17.6), 0.9, 6, 0.02);
 
-  litter(ctx, -3.6, PAVE_Y, -1.4, 1.1, Math.round(16 * detail) + 6);
-  litter(ctx, -2.2, PAVE_Y, 1.6, 1.4, Math.round(10 * detail) + 4);
-  litter(ctx, 3.5, 0.0, 3.6, 2.2, Math.round(10 * detail) + 4);
+  litter(ctx, -3.6, PAVE_Y, -1.4, 1.1, Math.round(9 * detail) + 3);
+  litter(ctx, -2.2, PAVE_Y, 1.9, 1.3, Math.round(5 * detail) + 2);
+  litter(ctx, 3.5, 0.0, 3.6, 2.2, Math.round(6 * detail) + 2);
 
   // -------------------------------------------------------------------------
   // Standing water
@@ -507,9 +520,23 @@ export function buildStreetScene(stage: Stage): SceneBuild {
     [-3.8, 0.148, -6.2, 1.4],
     [21.8, 0.008, -4.5, 2.4],
   ];
+  // Two or three overlapping ellipses per spot: a single circle reads as a
+  // painted disc, whereas a lobed outline reads as water finding the camber.
   for (const [px, py, pz, r] of puddleSpots) {
-    const g = new THREE.CircleGeometry(r, 18);
-    puddleGeos.push(at(g, px, py, pz, { rx: -Math.PI / 2, sy: rng.range(0.55, 0.95) }));
+    const lobes = 2 + Math.round(rng.next());
+    for (let i = 0; i < lobes; i++) {
+      const lr = r * rng.range(0.55, 1);
+      const a = rng.range(0, Math.PI * 2);
+      const d = i === 0 ? 0 : r * rng.range(0.3, 0.7);
+      const g = new THREE.CircleGeometry(lr, 16);
+      puddleGeos.push(
+        at(g, px + Math.cos(a) * d, py, pz + Math.sin(a) * d, {
+          rx: -Math.PI / 2,
+          ry: rng.range(0, Math.PI),
+          sy: rng.range(0.5, 0.9),
+        })
+      );
+    }
   }
   for (const g of puddleGeos) batch.add(puddleMat, g, false, false);
 
@@ -523,7 +550,9 @@ export function buildStreetScene(stage: Stage): SceneBuild {
 
   NEON.forEach((spec, i) => {
     const tex = neonSignTexture(spec.text, spec.color, { vertical: spec.vertical, sub: spec.sub });
-    const signMat = additive(tex, 0xffffff, 1);
+    // Tinting by the tube colour kills the white-hot glyph core the canvas
+    // paints in; on screen a white core just reads as a blank light box.
+    const signMat = additive(tex, spec.light, 1.3);
     signMat.side = THREE.DoubleSide;
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(spec.w, spec.h), signMat);
     mesh.position.set(spec.x, spec.y, spec.z);
@@ -579,12 +608,12 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   for (const g of haloGeos) batch.add(haloMat, g, false, false);
 
   // Sodium cones under the lamp heads
-  const coneMat = additive(null, 0xffffff, 0.05, true);
+  const coneMat = additive(null, 0xffffff, 0.026, true);
   for (const head of [lampHeadA, lampHeadB, lampHeadC]) {
-    const cone = lightCone(0.3, 1.9, head.y - PAVE_Y, 0xffb264, segs);
+    const cone = lightCone(0.26, 1.5, head.y - PAVE_Y, 0xffb264, segs);
     batch.add(coneMat, at(cone, head.x, PAVE_Y + (head.y - PAVE_Y) / 2, head.z), false, false);
-    batch.add(haloMat, halo(1.3, 0xffb264, head.x, head.y - 0.08, head.z), false, false);
-    batch.add(haloMat, halo(1.3, 0xffb264, head.x, head.y - 0.08, head.z, Math.PI / 2), false, false);
+    batch.add(haloMat, halo(0.85, 0xffb264, head.x, head.y - 0.08, head.z), false, false);
+    batch.add(haloMat, halo(0.85, 0xffb264, head.x, head.y - 0.08, head.z, Math.PI / 2), false, false);
   }
   batch.add(haloMat, halo(0.7, 0x40ff88, tlHead.x, tlHead.y, tlHead.z, -Math.PI / 2), false, false);
 
@@ -707,7 +736,7 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   root.add(lamp, lamp.target);
   lights.lamp = lamp;
 
-  const lampB = new THREE.PointLight(0xffa752, 170, 18, 2);
+  const lampB = new THREE.PointLight(0xffa752, 95, 18, 2);
   lampB.position.copy(lampHeadB).add(new THREE.Vector3(0, -0.2, 0));
   root.add(lampB);
   lights.lampB = lampB;
@@ -717,9 +746,11 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   root.add(lampC);
   lights.lampC = lampC;
 
-  // Deep alley: a cold shaft so the far mark is not swallowed.
-  const alleyLight = new THREE.PointLight(0x9fc4ff, 46, 13, 2);
-  alleyLight.position.set(ALLEY_X - 0.2, 4.4, -8.4);
+  // The alley only reads as depth if something rims the dumpster and the fire
+  // escape; sitting the shaft near their level does that and still carries far
+  // enough back to pick out the alley-end mark.
+  const alleyLight = new THREE.PointLight(0x9fc4ff, 78, 16, 2);
+  alleyLight.position.set(ALLEY_X - 0.2, 3.5, -5.2);
   root.add(alleyLight);
   lights.alley = alleyLight;
 
@@ -745,9 +776,12 @@ export function buildStreetScene(stage: Stage): SceneBuild {
   const otherPos = new THREE.Vector3(-3.05, PAVE_Y, 0.95);
   const heroYaw = facing(heroPos, otherPos);
   const alleyEnd = new THREE.Vector3(ALLEY_X, PAVE_Y, -8.4);
-  const establishPos = new THREE.Vector3(2.6, 1.66, 6.6);
-  const closePos = new THREE.Vector3(-1.9, 1.62, 2.7);
-  const mouthPos = new THREE.Vector3(ALLEY_X, 1.62, 3.5);
+  // Stood in the carriageway roughly on the alley axis: the mouth stays open
+  // behind the actors instead of collapsing into a flat wall of brick, and the
+  // wet road fills the bottom of the frame with neon.
+  const establishPos = new THREE.Vector3(-1.5, 1.72, 9.4);
+  const closePos = new THREE.Vector3(-1.9, 1.62, 3.4);
+  const mouthPos = new THREE.Vector3(ALLEY_X + 0.1, 1.62, 3.5);
 
   const marks: Record<string, Mark> = {
     'cam.establish': mark(
@@ -804,7 +838,7 @@ export function buildStreetScene(stage: Stage): SceneBuild {
       const t = elapsed * s.rate + s.phase;
       const n = Math.sin(t) * Math.sin(t * 2.71 + 0.7) * Math.sin(t * 0.37);
       const gate = n > 0.05 ? 1 : n > -0.25 ? 0.28 : 0.05;
-      s.material.opacity = gate;
+      s.material.opacity = 1.3 * gate;
       if (s.light) s.light.intensity = 90 * gate;
     }
     // The ad panel breathes so the shelter never sits still.
@@ -828,10 +862,10 @@ export function buildStreetScene(stage: Stage): SceneBuild {
       lift: new THREE.Vector3(0.008, 0.02, 0.036),
       gamma: new THREE.Vector3(1.0, 1.02, 1.06),
       gain: new THREE.Vector3(1.06, 1.0, 1.07),
-      shadowTint: new THREE.Vector3(0.0, 0.17, 0.26),
-      highlightTint: new THREE.Vector3(0.24, 0.07, 0.14),
-      saturation: 1.24,
-      contrast: 1.15,
+      shadowTint: new THREE.Vector3(0.0, 0.16, 0.25),
+      highlightTint: new THREE.Vector3(0.22, 0.11, 0.05),
+      saturation: 1.1,
+      contrast: 1.16,
       temperature: -0.04,
       bleach: 0.04,
       vignette: 0.46,

@@ -34,6 +34,7 @@ import {
   radialSegs,
   steelChair,
   steelTable,
+  uvScale,
   type MatOpts,
 } from './Props';
 
@@ -58,9 +59,12 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
   const disposal = new Disposal();
 
   const mFloor = mat.tiles(opts, 5, 6, [0.4, 0.42, 0.41]);
-  const mWall = mat.plaster(opts, [0.42, 0.44, 0.43], 2.2);
-  const mCeil = mat.plaster(opts, [0.5, 0.51, 0.5], 2);
-  const mAcoustic = mat.acoustic(opts, 4);
+  const mWall = mat.plaster(opts, [0.42, 0.44, 0.43], 2.2, 0.6);
+  const mCeil = mat.plaster(opts, [0.5, 0.51, 0.5], 2, 0.5);
+  // The dado band is three times wider than it is tall, so a uniform repeat
+  // squashes the perforation into stripes that alias into moire. The repeat is
+  // set for the band height and the width is corrected on the UVs.
+  const mAcoustic = mat.acoustic(opts, 0.9);
   const mSteel = mat.brushed(opts, 1.2);
   const mDark = paint(0x0a0b0d, 0.94);
   const mSkirt = paint(0x1c1e21, 0.6, 0.15);
@@ -113,9 +117,10 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
   const bandY1 = 2.44;
   const bandH = bandY1 - bandY0;
   const bandY = (bandY0 + bandY1) / 2;
-  batch.add(mAcoustic, box(HX * 2 - 0.02, bandH, 0.035, 0, bandY, HZ - 0.02), false, true);
-  batch.add(mAcoustic, box(HX * 2 - 0.02, bandH, 0.035, 0, bandY, -HZ + 0.02), false, true);
-  batch.add(mAcoustic, box(0.035, bandH, HZ * 2 - 0.02, HX - 0.02, bandY, 0), false, true);
+  const bandAspect = (HX * 2) / bandH;
+  batch.add(mAcoustic, uvScale(box(HX * 2 - 0.02, bandH, 0.035, 0, bandY, HZ - 0.02), bandAspect, 1), false, true);
+  batch.add(mAcoustic, uvScale(box(HX * 2 - 0.02, bandH, 0.035, 0, bandY, -HZ + 0.02), bandAspect, 1), false, true);
+  batch.add(mAcoustic, uvScale(box(0.035, bandH, HZ * 2 - 0.02, HX - 0.02, bandY, 0), bandAspect, 1), false, true);
   // Trim strips top and bottom of the band
   for (const y of [bandY0 - 0.02, bandY1 + 0.02]) {
     batch.add(mSkirt, box(HX * 2, 0.04, 0.05, 0, y, HZ - 0.025), false, true);
@@ -160,17 +165,24 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
   disposal.own(boothScreenMat);
   batch.add(consoleMat, at(box(0.52, 0.36, 0.03, -3.3, 1.16, -0.42, { rx: 0.22 }), 0, 0, 0, { ry: Math.PI / 2 }));
   steelChair(batch, opts, -3.62, 0, 0.12, Math.PI / 2, 0.45);
+  // A strip on the booth ceiling: without it the glass has nothing behind it
+  // and reads as a black hole in the wall.
+  batch.add(paint(0x1b1e22, 0.5), box(0.22, 0.06, 1.6, -3.5, CEIL - 0.03, 0.1), false, false);
+  batch.add(emitter(0x6f97c4, 1.1), plane(0.18, 1.5, -3.5, CEIL - 0.07, 0.1, { rx: Math.PI / 2 }), false, false);
 
   // -------------------------------------------------------------------------
   // One-way mirror
   // -------------------------------------------------------------------------
+  // Half-silvered glass cannot be both a mirror and a window without a real
+  // probe, so it is weighted towards the window: the booth behind it is the
+  // thing worth seeing, and the surround plus clearcoat sell the glass.
   const mirrorMat = new THREE.MeshPhysicalMaterial({
-    color: 0x1a2028,
+    color: 0x222b34,
     roughness: 0.035,
-    metalness: 0.55,
+    metalness: 0.3,
     transparent: true,
-    opacity: 0.44,
-    envMapIntensity: 1.4,
+    opacity: 0.22,
+    envMapIntensity: 1.0,
     clearcoat: 1,
     clearcoatRoughness: 0.02,
     side: THREE.DoubleSide,
@@ -282,7 +294,7 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
     [-1.05, 1.15],
     [1.05, 1.15],
   ];
-  const panelMat = liveEmitter(0xe8f2ff, 4.5);
+  const panelMat = liveEmitter(0xe8f2ff, 3.4);
   disposal.own(panelMat);
   for (const [px, pz] of panelSpots) {
     batch.add(mCeil, box(1.34, 0.09, 0.58, px, CEIL - 0.045, pz), false, true);
@@ -302,7 +314,7 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
     false,
     false
   );
-  const bulbMat = liveEmitter(0xfff4e2, 14);
+  const bulbMat = liveEmitter(0xfff4e2, 8);
   disposal.own(bulbMat);
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), bulbMat);
   bulb.position.set(0, lampY - 0.09, -0.05);
@@ -343,15 +355,17 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
   const lights: Record<string, THREE.Light> = {};
 
   // Nothing is ever truly black in here — there is always a little bounce.
-  const ambient = new THREE.AmbientLight(0x18211d, 1.5);
+  const ambient = new THREE.AmbientLight(0x1e2523, 1.8);
   root.add(ambient);
   lights.ambient = ambient;
-  const bounce = new THREE.HemisphereLight(0x36424a, 0x121814, 0.7);
+  const bounce = new THREE.HemisphereLight(0x3d4850, 0x161c19, 0.9);
   root.add(bounce);
   lights.bounce = bounce;
 
   // Shadow caster 1: the hanging lamp. This is the shot.
-  const key = new THREE.SpotLight(0xfff0d6, 72, 7, 0.66, 0.38, 2);
+  // The cone has to be wide enough to reach a seated head at the table edge,
+  // otherwise the suspect sits in a hole right under the practical.
+  const key = new THREE.SpotLight(0xfff0d6, 38, 7, 0.82, 0.42, 2);
   key.position.set(0, lampY - 0.06, -0.05);
   key.target.position.set(0, 0, -0.12);
   key.castShadow = true;
@@ -364,7 +378,7 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
   lights.key = key;
 
   // Shadow caster 2: one recessed panel, throwing the second set of shadows.
-  const panelKey = new THREE.SpotLight(0xdcebff, 58, 8, 1.12, 0.72, 2);
+  const panelKey = new THREE.SpotLight(0xdcebff, 34, 8, 1.12, 0.72, 2);
   panelKey.position.set(1.05, CEIL - 0.12, 1.15);
   panelKey.target.position.set(0.2, 0, 0.1);
   panelKey.castShadow = true;
@@ -377,21 +391,21 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
   lights.panelKey = panelKey;
 
   // Remaining panels: unshadowed fill, deliberately weaker than the key.
-  const fillA = new THREE.PointLight(0xd6e6ff, 30, 6.5, 2);
+  const fillA = new THREE.PointLight(0xd6e6ff, 20, 6.5, 2);
   fillA.position.set(-1.05, CEIL - 0.16, -1.15);
   root.add(fillA);
   lights.fillA = fillA;
-  const fillB = new THREE.PointLight(0xd6e6ff, 24, 6, 2);
+  const fillB = new THREE.PointLight(0xd6e6ff, 16, 6, 2);
   fillB.position.set(-1.05, CEIL - 0.16, 1.15);
   root.add(fillB);
   lights.fillB = fillB;
-  const fillC = new THREE.PointLight(0xd6e6ff, 22, 6, 2);
+  const fillC = new THREE.PointLight(0xd6e6ff, 15, 6, 2);
   fillC.position.set(1.05, CEIL - 0.16, -1.15);
   root.add(fillC);
   lights.fillC = fillC;
 
   // Grazes the mirror wall so the glass and its surround read at all.
-  const mirrorWash = new THREE.PointLight(0xc6d8ee, 16, 4.4, 2);
+  const mirrorWash = new THREE.PointLight(0xc6d8ee, 14, 4.4, 2);
   mirrorWash.position.set(-1.5, 2.42, 0.1);
   root.add(mirrorWash);
   lights.mirrorWash = mirrorWash;
@@ -406,6 +420,14 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
   root.add(boothGlow);
   lights.boothGlow = boothGlow;
 
+  // Bounce off the pale tabletop. Real interrogation rooms get this for free
+  // and it is the only thing that keeps a face from going to pure silhouette
+  // when the sitter leans back out of the lamp's cone.
+  const tableBounce = new THREE.PointLight(0xe4e8ea, 7, 3.2, 2);
+  tableBounce.position.set(0, 0.95, -0.24);
+  root.add(tableBounce);
+  lights.tableBounce = tableBounce;
+
   const termLight = new THREE.PointLight(0x74c0ff, 5, 2.4, 2);
   termLight.position.set(HX - 0.3, 1.52, 0.85);
   root.add(termLight);
@@ -418,7 +440,10 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
   const detective = new THREE.Vector3(0, 0, 0.82);
   const suspectYaw = facing(suspect, detective); // 0: looks along +Z
   const observer = new THREE.Vector3(-3.5, 0, 0.1);
-  const establish = new THREE.Vector3(1.82, 1.9, -1.62);
+  // The room is too small to hold both actors square-on at this lens, so the
+  // establish leans into that: a low corner angle with the seated suspect as a
+  // foreground mass and the detective standing over the table.
+  const establish = new THREE.Vector3(1.18, 1.42, -1.82);
   const overSuspect = new THREE.Vector3(0.64, 1.46, -1.6);
   const overDetective = new THREE.Vector3(-0.64, 1.46, 1.6);
   const mirrorCam = new THREE.Vector3(-1.86, 1.5, 0.06);
@@ -475,15 +500,15 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
     // Mains hum in the fluorescent panels, plus a rare dropout.
     const hum = 1 + Math.sin(elapsed * 37) * 0.02 + Math.sin(elapsed * 11.3) * 0.012;
     const dropout = Math.sin(elapsed * 0.61) * Math.sin(elapsed * 2.17) > 0.985 ? 0.35 : 1;
-    panelMat.emissiveIntensity = 4.5 * hum * dropout;
-    panelKey.intensity = 58 * hum * dropout;
-    fillA.intensity = 30 * hum * dropout;
-    fillB.intensity = 24 * hum * dropout;
-    fillC.intensity = 22 * hum * dropout;
+    panelMat.emissiveIntensity = 3.4 * hum * dropout;
+    panelKey.intensity = 34 * hum * dropout;
+    fillA.intensity = 20 * hum * dropout;
+    fillB.intensity = 16 * hum * dropout;
+    fillC.intensity = 15 * hum * dropout;
     // The tungsten bulb breathes very slightly.
     const bulbLevel = 1 + Math.sin(elapsed * 1.9) * 0.015 + Math.sin(elapsed * 6.7) * 0.008;
-    bulbMat.emissiveIntensity = 14 * bulbLevel;
-    key.intensity = 72 * bulbLevel;
+    bulbMat.emissiveIntensity = 8 * bulbLevel;
+    key.intensity = 38 * bulbLevel;
     // Booth monitor refresh
     boothScreenMat.opacity = 0.55 + Math.sin(elapsed * 5.1) * 0.05;
     termMat.opacity = 0.85 + Math.sin(elapsed * 3.3 + 1.2) * 0.04;
@@ -502,12 +527,12 @@ export function buildInterrogationScene(stage: Stage): SceneBuild {
       noise: 0.3,
     },
     grade: {
-      lift: new THREE.Vector3(0.01, 0.018, 0.015),
+      lift: new THREE.Vector3(0.016, 0.024, 0.022),
       gamma: new THREE.Vector3(1.0, 1.0, 0.99),
       gain: new THREE.Vector3(0.97, 1.0, 1.01),
-      shadowTint: new THREE.Vector3(0.0, 0.12, 0.07),
+      shadowTint: new THREE.Vector3(0.0, 0.055, 0.032),
       highlightTint: new THREE.Vector3(0.02, 0.045, 0.06),
-      saturation: 0.44,
+      saturation: 0.5,
       contrast: 1.3,
       temperature: -0.12,
       bleach: 0.2,

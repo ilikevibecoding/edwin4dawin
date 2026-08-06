@@ -528,10 +528,24 @@ export class Director {
       case 'move': {
         const a = this.actor(beat.who);
         if (!a) break;
-        a.walkTo(
-          beat.marks.map((n) => this.mark(n)?.position).filter((p): p is THREE.Vector3 => !!p),
-          beat.speed ?? 1.1
-        );
+        // Two actors sent to the same mark would walk into each other, so each
+        // role gets a small deterministic lateral offset at the destination.
+        const roles = [...this.actors.keys()];
+        const slot = Math.max(0, roles.indexOf(beat.who));
+        const spread = (slot - (roles.length - 1) / 2) * 0.42;
+        const points = beat.marks
+          .map((n) => this.mark(n))
+          .filter((m): m is NonNullable<typeof m> => !!m)
+          .map((m, i, arr) => {
+            const p = m.position.clone();
+            if (i === arr.length - 1 && spread !== 0) {
+              // Offset perpendicular to the mark's facing
+              p.x += Math.cos(m.yaw) * spread;
+              p.z -= Math.sin(m.yaw) * spread;
+            }
+            return p;
+          });
+        a.walkTo(points, beat.speed ?? 1.1);
         if (beat.wait !== false) await this.until(() => !a.isWalking, 20);
         break;
       }

@@ -139,6 +139,19 @@ export function floorQuad(w: number, d: number, x = 0, y = 0, z = 0, ry = 0): TH
   return plane(w, d, x, y, z, { rx: -Math.PI / 2, ry });
 }
 
+/**
+ * Scales a geometry's UVs. Surface maps repeat uniformly, so a texture laid
+ * over a long, shallow face comes out stretched; this restores the aspect
+ * without needing a second material.
+ */
+export function uvScale(geo: THREE.BufferGeometry, su: number, sv: number): THREE.BufferGeometry {
+  const uv = geo.getAttribute('uv') as THREE.BufferAttribute | undefined;
+  if (!uv) return geo;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
+  uv.needsUpdate = true;
+  return geo;
+}
+
 /** Paints a uniform vertex colour so several tints can share one material. */
 export function tint(geo: THREE.BufferGeometry, color: THREE.Color): THREE.BufferGeometry {
   const n = geo.getAttribute('position').count;
@@ -325,8 +338,13 @@ export const mat = {
   wood: (o: MatOpts, repeat = 4) =>
     surf('woodFloor', woodFloor, { size: texSize(o.tier), repeat, normalStrength: 1.8 }, { envMapIntensity: 0.9 }),
 
-  plaster: (o: MatOpts, tintRgb: [number, number, number] = [0.62, 0.6, 0.58], repeat = 3) =>
-    surf(`plaster:${tintRgb.join(',')}`, plaster(tintRgb), { size: texSize(o.tier, 384), repeat, normalStrength: 1.4 }, {}),
+  plaster: (o: MatOpts, tintRgb: [number, number, number] = [0.62, 0.6, 0.58], repeat = 3, normalStrength = 1.4) =>
+    surf(
+      `plaster:${tintRgb.join(',')}`,
+      plaster(tintRgb),
+      { size: texSize(o.tier, 384), repeat, normalStrength },
+      {}
+    ),
 
   fabric: (o: MatOpts, tintRgb: [number, number, number] = [0.28, 0.3, 0.34], repeat = 3, weave = 48) =>
     surf(
@@ -336,8 +354,16 @@ export const mat = {
       {}
     ),
 
+  // Tinted down: the raw panel albedo is half again as bright as the plaster
+  // around it, which makes the dado band the brightest thing in a room that is
+  // supposed to be mostly shadow.
   acoustic: (o: MatOpts, repeat = 3) =>
-    surf('acousticPanel', acousticPanel, { size: texSize(o.tier), repeat, normalStrength: 1.6 }, {}),
+    surf(
+      'acousticPanel',
+      acousticPanel,
+      { size: texSize(o.tier), repeat, normalStrength: 1.6 },
+      { color: 0xb4b8bb, envMapIntensity: 0.5 }
+    ),
 
   grimyGlass: (o: MatOpts, repeat = 2) =>
     surf(
@@ -903,7 +929,7 @@ export interface StreetPropCtx {
 
 export function dumpster(ctx: StreetPropCtx, x: number, y: number, z: number, ry = 0): void {
   const { batch, opts, rng } = ctx;
-  const body = mat.rusted(opts, 1.5);
+  const body = mat.rusted(opts, 2);
   const dark = paint(0x1a2620, 0.85);
   const w = 1.85;
   const h = 1.15;
@@ -956,7 +982,7 @@ export function wallPipes(
   spacing = 0.22
 ): void {
   const { batch, opts, rng } = ctx;
-  const m = mat.rusted(opts, 1.2);
+  const m = mat.rusted(opts, 2);
   const segs = radialSegs(opts.tier, 10);
   for (let i = 0; i < count; i++) {
     const off = (i - (count - 1) / 2) * spacing;
@@ -986,7 +1012,7 @@ export function fireEscape(
   width = 2.4
 ): void {
   const { batch, opts } = ctx;
-  const m = mat.rusted(opts, 1.6);
+  const m = mat.rusted(opts, 2);
   const g: THREE.BufferGeometry[] = [];
   const depth = 1.15;
   for (let l = 0; l < levels; l++) {
@@ -1035,7 +1061,7 @@ export function chainFence(
   ry = 0
 ): void {
   const { batch, opts } = ctx;
-  const post = mat.rusted(opts, 1);
+  const post = mat.rusted(opts, 2);
   const g: THREE.BufferGeometry[] = [];
   const posts = Math.max(2, Math.round(width / 1.6) + 1);
   for (let i = 0; i < posts; i++) {
@@ -1161,7 +1187,7 @@ export function parkedCar(
     })
   );
   const rubber = paint(0x0c0d10, 0.9);
-  const chrome = mat.brushed(opts, 1);
+  const chrome = mat.brushed(opts, 1.2);
 
   const L = 4.35;
   const W = 1.82;
@@ -1240,18 +1266,18 @@ export function litter(ctx: StreetPropCtx, cx: number, y: number, cz: number, sp
     const pz = cz + rng.range(-spread, spread);
     const kind = rng.next();
     if (kind < 0.55) {
-      c.setHSL(0.09, 0.05, rng.range(0.24, 0.52));
+      c.setHSL(0.09, 0.05, rng.range(0.1, 0.26));
       const g = plane(rng.range(0.1, 0.22), rng.range(0.1, 0.26), px, y + 0.004 + i * 0.0006, pz, {
         rx: -Math.PI / 2,
         ry: rng.range(0, Math.PI),
       });
       batch.add(paper, tint(g, c), false, true);
     } else if (kind < 0.82) {
-      c.setHSL(rng.range(0.0, 0.14), 0.35, 0.2);
+      c.setHSL(rng.range(0.0, 0.14), 0.3, 0.11);
       const g = cyl(0.033, 0.033, 0.12, 7, px, y + 0.033, pz, { rz: Math.PI / 2, ry: rng.range(0, Math.PI) });
       batch.add(paper, tint(g, c), true, true);
     } else {
-      c.setHSL(0.11, 0.3, rng.range(0.1, 0.22));
+      c.setHSL(0.11, 0.25, rng.range(0.05, 0.13));
       const g = plane(rng.range(0.06, 0.11), rng.range(0.05, 0.09), px, y + 0.004 + i * 0.0006, pz, {
         rx: -Math.PI / 2,
         ry: rng.range(0, Math.PI),
@@ -1272,9 +1298,9 @@ export function puddleMaterial(opts: MatOpts): THREE.MeshPhysicalMaterial {
       reflectivity: 1,
       clearcoat: 1,
       clearcoatRoughness: 0.02,
-      envMapIntensity: 2.6,
+      envMapIntensity: 0.5,
       transparent: true,
-      opacity: 0.92,
+      opacity: 0.82,
       depthWrite: false,
     })
   );
@@ -1302,7 +1328,7 @@ export function steelChair(
   ry: number,
   seatH = 0.46
 ): void {
-  const m = mat.brushed(opts, 1);
+  const m = mat.brushed(opts, 1.2);
   const g: THREE.BufferGeometry[] = [];
   g.push(box(0.44, 0.035, 0.42, 0, seatH, 0));
   g.push(box(0.42, 0.5, 0.035, 0, seatH + 0.28, -0.2, { rx: -0.1 }));
@@ -1326,7 +1352,7 @@ export function steelTable(
   d = 0.82,
   h = 0.75
 ): void {
-  const top = mat.brushed(opts, 1.4);
+  const top = mat.brushed(opts, 1.2);
   const leg = mat.panel(opts, [0.32, 0.34, 0.37], 1, 2, 2);
   batch.add(top, box(w, 0.045, d, x, y + h, z));
   batch.add(top, box(w - 0.06, 0.05, d - 0.06, x, y + h - 0.06, z));
@@ -1395,8 +1421,8 @@ export function doorway(
 }
 
 export function sofa(batch: Batch, opts: MatOpts, x: number, y: number, z: number, ry: number, len = 2.0): void {
-  const cloth = mat.fabric(opts, [0.2, 0.19, 0.21], 2.2, 44);
-  const worn = mat.fabric(opts, [0.24, 0.22, 0.22], 1.6, 40);
+  const cloth = mat.fabric(opts, [0.2, 0.19, 0.21], 2, 40);
+  const worn = mat.fabric(opts, [0.24, 0.22, 0.22], 2, 40);
   const foot = paint(0x231a12, 0.7);
   const d = 0.88;
   const g: THREE.BufferGeometry[] = [];
@@ -1524,7 +1550,7 @@ export function kitchenCounter(
 }
 
 export function sink(batch: Batch, opts: MatOpts, x: number, y: number, z: number, ry: number): void {
-  const steel = mat.brushed(opts, 1);
+  const steel = mat.brushed(opts, 1.2);
   batch.add(steel, at(box(0.52, 0.02, 0.4, 0, y - 0.005, 0), x, 0, z, { ry }));
   batch.add(steel, at(box(0.46, 0.14, 0.34, 0, y - 0.08, 0), x, 0, z, { ry }));
   batch.add(steel, at(cyl(0.014, 0.014, 0.28, 8, 0, y + 0.14, -0.16), x, 0, z, { ry }));
@@ -1553,11 +1579,9 @@ export function pictureFrame(
 
 /** Crumpled clothing — a few squashed spheres. */
 export function laundryPile(batch: Batch, opts: MatOpts, rng: Rng, x: number, y: number, z: number, count = 4): void {
-  const cloths = [
-    mat.fabric(opts, [0.26, 0.24, 0.3], 2, 40),
-    mat.fabric(opts, [0.3, 0.22, 0.2], 2, 40),
-    mat.fabric(opts, [0.2, 0.24, 0.26], 2, 40),
-  ];
+  // Two tints, not three: every extra tint is another synthesised texture and
+  // another draw call for a prop that never fills more than a few hundred px.
+  const cloths = [mat.fabric(opts, [0.26, 0.24, 0.3], 2, 40), mat.fabric(opts, [0.3, 0.22, 0.2], 2, 40)];
   for (let i = 0; i < count; i++) {
     const m = cloths[i % cloths.length];
     const r = rng.range(0.11, 0.2);

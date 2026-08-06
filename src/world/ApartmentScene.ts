@@ -135,8 +135,13 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
   const disposal = new Disposal();
 
   const mFloor = mat.wood(opts, 4);
-  const mWall = mat.plaster(opts, [0.44, 0.42, 0.39], 2.4);
-  const mCeil = mat.plaster(opts, [0.5, 0.49, 0.47], 2);
+  // A weak normal map: the walls are large, near-flat and lit at a grazing
+  // angle, which turns any strong relief into per-pixel speckle.
+  const mWall = mat.plaster(opts, [0.44, 0.42, 0.39], 2.4, 0.55);
+  // Flat, not plastered: a normal map stretched over 5x6 m of ceiling turns
+  // into per-pixel speckle under the lamp, and a dim ceiling shows no texture
+  // anyway.
+  const mCeil = paint(0x4b4844, 0.94);
   const mTrim = paint(0x2e2822, 0.66);
   const mDark = paint(0x080909, 0.95);
   const mSteel = mat.brushed(opts, 1.2);
@@ -226,7 +231,7 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
   root.add(pane);
   disposal.own(pane.geometry);
 
-  const glassRain = buildGlassRain(winW, winH, 0.42, 0xa8c8ff);
+  const glassRain = buildGlassRain(winW, winH, 0.8, 0xa8c8ff);
   glassRain.mesh.position.set(winCX, winCY, -HZ + 0.028);
   glassRain.mesh.renderOrder = 3;
   root.add(glassRain.mesh);
@@ -250,16 +255,19 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
     depthWrite: false,
     fog: false,
   });
-  backdropMat.color.setRGB(1.5, 1.5, 1.7);
+  backdropMat.color.setRGB(3.4, 3.3, 3.9);
   disposal.own(backdropMat);
   const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(110, 46), backdropMat);
   backdrop.position.set(0, 7, -38);
   root.add(backdrop);
   disposal.own(backdrop.geometry);
 
-  // Mid-ground blocks give the view parallax the flat backdrop cannot.
+  // Mid-ground blocks give the view parallax the flat backdrop cannot. They are
+  // unlit on purpose: the only light that reaches out here comes from behind
+  // them, so shading them would leave five black slabs across the view.
   const outerCells: WindowCell[] = [];
-  const mBlock = mat.concrete(opts, 5);
+  const mBlock = new THREE.MeshBasicMaterial({ color: 0x121a28, fog: false });
+  disposal.own(mBlock);
   const outerBlocks: [number, number, number, number][] = [
     [-9.5, -13.5, 13, 7],
     [-1.5, -17.5, 21, 9],
@@ -298,7 +306,7 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
   const flickerNeon: { material: THREE.MeshBasicMaterial; rate: number; phase: number }[] = [];
   distantNeon.forEach(([text, color, nx, ny, nz, nw, nh, vertical], i) => {
     const tex = neonSignTexture(text, color, { vertical });
-    const m = additive(tex, 0xffffff, 0.9);
+    const m = additive(tex, new THREE.Color(color), 1.1);
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(nw, nh), m);
     sign.position.set(nx, ny, nz);
     root.add(sign);
@@ -310,9 +318,9 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
   // -------------------------------------------------------------------------
   // Living area
   // -------------------------------------------------------------------------
-  const rugMat = mat.fabric(opts, [0.21, 0.14, 0.13], 3.4, 40);
+  const rugMat = mat.fabric(opts, [0.21, 0.14, 0.13], 2, 40);
   batch.add(rugMat, box(2.42, 0.012, 2.62, 0.75, 0.006, -0.6), false, true);
-  batch.add(mat.fabric(opts, [0.28, 0.2, 0.16], 2, 36), box(2.62, 0.008, 2.82, 0.75, 0.004, -0.6), false, true);
+  batch.add(mat.fabric(opts, [0.28, 0.2, 0.16], 2, 40), box(2.62, 0.008, 2.82, 0.75, 0.004, -0.6), false, true);
 
   sofa(batch, opts, 2.02, 0, -0.6, -Math.PI / 2, 2.0);
   coffeeTable(batch, opts, 0.86, 0, -0.6, Math.PI / 2, 1.05, 0.58);
@@ -346,9 +354,9 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
     radius: 0.05,
     height: 0.55,
     rise: 0.16,
-    size: 1.1,
+    size: 0.32,
     color: 0xb8c6d8,
-    opacity: 0.1,
+    opacity: 0.12,
     drift: new THREE.Vector3(0.25, 0, -0.1),
     seed: 5150,
   });
@@ -561,7 +569,7 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
   lights.bounce = bounce;
 
   // Shadow caster 1: the standing lamp, the only warm source in the room.
-  const lampKey = new THREE.SpotLight(0xffb066, 38, 8, 1.05, 0.72, 2);
+  const lampKey = new THREE.SpotLight(0xffb066, 22, 8, 1.05, 0.72, 2);
   lampKey.position.set(lampX, lampY + 0.02, lampZ);
   lampKey.target.position.set(-1.0, 0, -1.5);
   lampKey.castShadow = true;
@@ -591,23 +599,25 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
   root.add(windowKey, windowKey.target);
   lights.windowKey = windowKey;
 
-  // Ambient wash of city light just inside the glass.
-  const winFill = new THREE.PointLight(0x6f96d8, 26, 7, 2);
-  winFill.position.set(winCX, 1.72, -HZ + 0.5);
+  // Ambient wash of city light. It sits hard against the glass: any further
+  // into the room and inverse-square turns it into a hotspot on whoever is
+  // standing in the playing area.
+  const winFill = new THREE.PointLight(0x6f96d8, 6, 8, 2);
+  winFill.position.set(winCX, 1.72, -HZ + 0.12);
   root.add(winFill);
   lights.windowFill = winFill;
 
-  const tvLight = new THREE.PointLight(0x8fc0ff, 13, 5.5, 2);
+  const tvLight = new THREE.PointLight(0x8fc0ff, 8, 5.5, 2);
   tvLight.position.set(-1.82, 0.84, -0.6);
   root.add(tvLight);
   lights.tv = tvLight;
 
-  const lampBounce = new THREE.PointLight(0xffb872, 11, 4.2, 2);
+  const lampBounce = new THREE.PointLight(0xffb872, 3.5, 4.2, 2);
   lampBounce.position.set(lampX, lampY + 0.42, lampZ);
   root.add(lampBounce);
   lights.lampBounce = lampBounce;
 
-  const kitchenLight = new THREE.PointLight(0xffcb8a, 11, 4.6, 2);
+  const kitchenLight = new THREE.PointLight(0xffcb8a, 8, 4.6, 2);
   kitchenLight.position.set(0.55, 1.44, 2.44);
   root.add(kitchenLight);
   lights.kitchen = kitchenLight;
@@ -691,20 +701,20 @@ export function buildApartmentScene(stage: Stage): SceneBuild {
     const roll = 1 + Math.sin(elapsed * 8.3) * 0.09 + Math.sin(elapsed * 23.7) * 0.05;
     const surge = Math.sin(elapsed * 0.9) * Math.sin(elapsed * 2.6) > 0.93 ? 1.7 : 1;
     tvMat.color.setRGB(1.5 * roll * surge, 1.62 * roll * surge, 1.95 * roll * surge);
-    tvLight.intensity = 13 * roll * surge;
+    tvLight.intensity = 8 * roll * surge;
     tvGlowMat.opacity = 0.4 * roll * surge;
 
     // The lamp is on a failing socket.
     const lampLevel = 1 + Math.sin(elapsed * 2.3) * 0.02 + Math.sin(elapsed * 7.1) * 0.012;
     lampBulbMat.emissiveIntensity = 7 * lampLevel;
-    lampKey.intensity = 38 * lampLevel;
-    lampBounce.intensity = 11 * lampLevel;
+    lampKey.intensity = 22 * lampLevel;
+    lampBounce.intensity = 3.5 * lampLevel;
     stripMat.emissiveIntensity = 2.2 + Math.sin(elapsed * 31) * 0.05;
 
     for (const s of flickerNeon) {
       const t = elapsed * s.rate + s.phase;
       const n = Math.sin(t) * Math.sin(t * 2.3 + 0.4);
-      s.material.opacity = n > 0.02 ? 0.9 : n > -0.3 ? 0.3 : 0.06;
+      s.material.opacity = n > 0.02 ? 1.1 : n > -0.3 ? 0.36 : 0.07;
     }
   };
 
