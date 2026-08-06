@@ -34,7 +34,9 @@ body { font-family: var(--font); color: var(--grn); user-select: none; }
 .hud-row { display: flex; justify-content: space-between; gap: 18px; line-height: 1.7; }
 .hud-row .lbl { color: var(--grn-dim); letter-spacing: 1px; }
 .hud-row .val { color: var(--grn); }
-.val.ok { color: var(--grn); } .val.warn { color: var(--amber); } .val.bad { color: var(--red); }
+.val.ok { color: var(--grn); } .val.warn { color: var(--amber); }
+.val.bad { color: var(--red); animation: condpulse 0.8s ease-in-out infinite alternate; }
+@keyframes condpulse { from { text-shadow: none; } to { text-shadow: 0 0 10px rgba(255,90,82,0.9); } }
 
 #hud-batteries { position: absolute; top: 16px; right: 16px; display: flex; flex-direction: column; gap: 8px; width: 250px; }
 .bat-card { background: var(--panel); border: 1px solid var(--panel-brd); border-radius: 4px; padding: 8px 12px; font-size: 11px; transition: border-color .15s; }

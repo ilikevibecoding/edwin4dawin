@@ -764,6 +764,7 @@ export class Base {
       [-24, 16, 0.35, new THREE.Vector3(-18, 0, 9.8)],
       [29, -19.5, 0.3, new THREE.Vector3(36, 0, -12)],
     ];
+    this.gensetPositions = gensets.map(([x, z]) => new THREE.Vector3(x, 1, z));
     for (const [x, z, ry, feed] of gensets) this._genset(vk, x, z, ry, feed);
 
     // trucks + small vehicle depot in the SE quadrant

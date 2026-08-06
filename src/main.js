@@ -104,6 +104,12 @@ class Game {
 
     this._wireEvents();
     this._wireInput();
+    this.prevCondition = 'GREEN';
+    this.redAlertCooldown = 0;
+    // ambient wind level follows the weather preset
+    ctx.bus.on('weather:preset', () => {
+      this.audio.setWind(this.weather.wind.length() / 2.6);
+    });
 
     // resize
     const resize = () => {
@@ -415,10 +421,17 @@ class Game {
     if (this.autoEngageOn) this._autoEngage(dt);
 
     // condition state
-    const anyTerminal = this.threats.list.some(t => t.alive && t.pos.y < 1600);
+    const anyTerminal = this.threats.list.some(t => t.alive && t.pos.y < 1600 && !t.isDecoy);
     this.conditionState = !this.threats.scenario ? 'GREEN'
       : anyTerminal ? 'RED'
         : (this.threats.aliveCount + this.threats.pendingCount) > 0 ? 'AMBER' : 'GREEN';
+    this.redAlertCooldown -= dt;
+    if (this.conditionState === 'RED' && this.prevCondition !== 'RED' && this.redAlertCooldown <= 0) {
+      this.redAlertCooldown = 12;
+      this.ui.banner('TERMINAL PHASE', 'bad', 'THREAT DESCENDING — ENGAGE NOW', 2.4);
+      this.audio.klaxon();
+    }
+    this.prevCondition = this.conditionState;
 
     // completion
     if (this.threats.scenario && this.threats.isComplete(this.interceptors.inFlight)) {
@@ -497,7 +510,7 @@ class Game {
       this.ui.updateMarkers(this.ctx.camera, this);
       if (this.aimedTrack) {
         const bat = this.batteries.get(this.selectedBattery);
-        this.ui.showTargetPrompt(this.aimedTrack, bat ? bat.engagementCheck(this.aimedTrack) : null);
+        this.ui.showTargetPrompt(this.aimedTrack, bat ? bat.engagementCheck(this.aimedTrack) : null, bat ? bat.def.short : '');
       } else {
         this.ui.hideTargetPrompt();
       }
@@ -507,6 +520,9 @@ class Game {
     const tint = this.weather.sun.color.clone().multiplyScalar(0.35 + this.weather.sun.intensity * 0.16);
     tint.add(this.weather.hemi.color.clone().multiplyScalar(0.4));
     this.effects.setLightTint(tint);
+
+    // positional generator hum
+    this.audio.updateProximity(this.player.pos, this.base.gensetPositions);
 
     this.post.update(rawDt, this.weather, this.weather.nightFactor);
     this.post.render();

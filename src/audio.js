@@ -206,9 +206,39 @@ export class GameAudio {
     lfoG.gain.value = 140;
     lfo.connect(lfoG).connect(bp.frequency);
     lfo.start();
+
+    // generator hum (gain driven by proximity in update())
+    const hum = ac.createOscillator();
+    hum.type = 'sawtooth';
+    hum.frequency.value = 56;
+    const hum2 = ac.createOscillator();
+    hum2.type = 'sine';
+    hum2.frequency.value = 112.3;
+    const humLp = ac.createBiquadFilter();
+    humLp.type = 'lowpass'; humLp.frequency.value = 260;
+    this.humGain = ac.createGain();
+    this.humGain.gain.value = 0;
+    hum.connect(humLp); hum2.connect(humLp);
+    humLp.connect(this.humGain).connect(this.master);
+    hum.start(); hum2.start();
   }
 
   setWind(level) {
     if (this.windGain) this.windGain.gain.value = 0.02 + level * 0.02;
+  }
+
+  // called each frame with player position; nearest genset drives hum loudness
+  updateProximity(playerPos, gensetPositions) {
+    if (!this.started || !this.humGain || !gensetPositions) return;
+    let d2 = Infinity;
+    for (const p of gensetPositions) {
+      const dd = (playerPos.x - p.x) ** 2 + (playerPos.z - p.z) ** 2;
+      if (dd < d2) d2 = dd;
+    }
+    const d = Math.sqrt(d2);
+    const target = d < 26 ? 0.09 * (1 - d / 26) : 0;
+    // smooth
+    const cur = this.humGain.gain.value;
+    this.humGain.gain.value = cur + (target - cur) * 0.08;
   }
 }

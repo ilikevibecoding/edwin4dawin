@@ -123,7 +123,7 @@ export class UI {
   }
   hideInteract() { this.els.interact.classList.add('hidden'); }
 
-  showTargetPrompt(track, engage) {
+  showTargetPrompt(track, engage, batShort = '') {
     this.els.targetPrompt.classList.remove('hidden');
     this.els.tpId.textContent = `${track.id} — ${track.classification}`;
     const rng = Math.hypot(track.est.x, track.est.z) / 1000;
@@ -131,6 +131,7 @@ export class UI {
     if (engage) info += engage.ok ? '  ● IN WINDOW' : `  ✕ ${engage.reason}`;
     this.els.tpInfo.textContent = info;
     this.els.tpInfo.style.color = engage && !engage.ok ? 'var(--red)' : 'var(--grn-dim)';
+    this.els.tpKeys.innerHTML = `<span class="key">E</span> ASSIGN${batShort ? ' → ' + batShort : ''} <span class="key">F</span> LAUNCH`;
   }
   hideTargetPrompt() { this.els.targetPrompt.classList.add('hidden'); }
 
@@ -196,6 +197,7 @@ export class UI {
 
   _updateConsole(game) {
     const { radar, batteries } = this.ctx;
+    this.els.btnStart.textContent = this.ctx.threats.scenario ? 'RESTART SCENARIO' : 'START BALLISTIC MISSILES';
     // battery status lines
     let lines = '';
     for (const b of batteries.list) {

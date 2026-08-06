@@ -181,6 +181,20 @@ export class Radar {
       g.moveTo(C, C); g.lineTo(C + Math.cos(a) * R, C + Math.sin(a) * R);
     }
     g.stroke();
+    // compass (world: -Z is north on screen-up)
+    g.fillStyle = 'rgba(90,200,130,0.55)';
+    g.font = '12px monospace';
+    g.fillText('N', C - 4, C - R + 14);
+    g.fillText('S', C - 4, C + R - 6);
+    g.fillText('E', C + R - 14, C + 4);
+    g.fillText('W', C - R + 7, C + 4);
+
+    // receiver noise speckle
+    g.fillStyle = 'rgba(110,255,160,0.10)';
+    for (let i = 0; i < 42; i++) {
+      const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * R;
+      g.fillRect(C + Math.cos(a) * rr, C + Math.sin(a) * rr, 1.6, 1.6);
+    }
 
     // sweep wedge with afterglow
     for (let i = 0; i < 24; i++) {
