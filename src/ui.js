@@ -428,6 +428,7 @@ export class UI {
       ['reducedMotion', 'REDUCED MOTION'],
       ['highContrast', 'HIGH CONTRAST HUD'],
       ['captions', 'AUDIO CAPTIONS'],
+      ['adaptiveQuality', 'ADAPTIVE QUALITY'],
       ['perf', 'PERFORMANCE READOUT'],
     ]) {
       const row = el('div', 'settings-row');

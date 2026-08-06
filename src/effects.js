@@ -521,6 +521,10 @@ class BillboardParticles {
     this.freeList = [];
     for (let i = capacity - 1; i >= 0; i--) this.freeList.push(i);
     this.liveCount = 0;
+    // Quality tiers trade particle count for per-particle opacity. Compensating
+    // with size instead would cancel the saving, because fill cost is the sum of
+    // particle areas - opacity is free.
+    this.alphaScale = 1;
     this.drawn = 0;
   }
 
@@ -567,7 +571,7 @@ class BillboardParticles {
     this.c1[k] = b.r;
     this.c1[k + 1] = b.g;
     this.c1[k + 2] = b.b;
-    this.alpha0[i] = o.alpha ?? 1;
+    this.alpha0[i] = Math.min(0.96, (o.alpha ?? 1) * this.alphaScale);
     this.fadeIn[i] = o.fadeIn ?? 0.08;
     this.fadeExp[i] = o.fadeExp ?? 1.4;
     return i;
@@ -1528,9 +1532,22 @@ export class Effects {
 
   // ---- helpers -----------------------------------------------------------
 
+  /**
+   * Set the particle budget multiplier. Large soft particles are the dominant
+   * source of overdraw, so this is the main lever the quality setting pulls.
+   */
+  setDensity(scale) {
+    this.density = Math.max(0.15, Math.min(1, scale));
+    const alphaScale = 1 + (1 - this.density) * 0.7;
+    for (const sys of [this.smoke, this.dust, this.fire]) {
+      if (sys) sys.alphaScale = alphaScale;
+    }
+  }
+
   /** Probabilistic rounding so low emission rates stay correct on average. */
   _n(x) {
     if (this.reducedMotion) x *= 0.55;
+    if (this.density !== undefined) x *= this.density;
     const f = Math.floor(x);
     return this.rng.float() < x - f ? f + 1 : f;
   }

@@ -28,6 +28,7 @@ const SEED = Number(params.get('seed') || 20260805);
 const FIXED_DT = 1 / 60;
 const MAX_STEPS = 5;
 const _solveVec = new THREE.Vector3();
+const _solveFrom = new THREE.Vector3();
 
 class Game {
   constructor() {
@@ -38,6 +39,7 @@ class Game {
       captions: false,
       perf: TEST_MODE ? false : false,
       quality: 'high',
+      adaptiveQuality: true,
       volume: 0.7,
       sensitivity: 1,
     };
@@ -125,6 +127,7 @@ class Game {
     this.player.teleport(PLAYER_SPAWN.x, this.base.terrainHeight(PLAYER_SPAWN.x, PLAYER_SPAWN.z), PLAYER_SPAWN.z, 0.28, -0.02);
 
     this.post = new Post(renderer, this.scene, this.camera, { quality: this.settings.quality });
+    this.effects.setDensity(0.4);
 
     this.ui = new UI(this._handlers()).mount(root);
     this.ui.attachScope(this.radar.canvas);
@@ -289,25 +292,72 @@ class Game {
       this.ui.setHighContrast(this.settings[key]);
     } else if (key === 'captions') {
       this.ui.setCaptionsEnabled(this.settings[key]);
+    } else if (key === 'adaptiveQuality') {
+      this.ui.log(`Adaptive quality <b>${this.settings[key] ? 'ON' : 'OFF'}</b>.`, 'info');
     }
     this.audio.click(760);
   }
 
-  _setQuality(q) {
+  _setQuality(q, quiet = false) {
     this.settings.quality = q;
     this.post.setQuality(q);
-    const pr = q === 'low' ? 0.75 : q === 'medium' ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.5);
+    const pr = q === 'low' ? 0.7 : q === 'medium' ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.5);
     this.renderer.setPixelRatio(TEST_MODE ? 1 : pr);
     this.renderer.shadowMap.enabled = q !== 'low';
-    this.weather.sun.shadow.mapSize.set(q === 'high' ? 2048 : 1024, q === 'high' ? 2048 : 1024);
+    const shadowSize = q === 'high' ? 2048 : 1024;
+    this.weather.sun.shadow.mapSize.set(shadowSize, shadowSize);
     if (this.weather.sun.shadow.map) {
       this.weather.sun.shadow.map.dispose();
       this.weather.sun.shadow.map = null;
     }
+    // large alpha-blended particles are the main overdraw cost, so the quality
+    // tiers thin them out rather than only touching resolution
+    // even the top tier emits well under the authored counts: the launch plume
+    // was saturating the smoke pool and layering 1500+ puffs of 25 m or more,
+    // which is the single largest fill-rate risk in the frame
+    this.effects.setDensity(q === 'low' ? 0.2 : q === 'medium' ? 0.28 : 0.4);
     this.scene.traverse((o) => {
       if (o.isMesh && o.material) o.material.needsUpdate = true;
     });
-    this.ui.log(`Render quality set to <b>${q.toUpperCase()}</b>.`, 'info');
+    if (!quiet) this.ui.log(`Render quality set to <b>${q.toUpperCase()}</b>.`, 'info');
+  }
+
+  /**
+   * Adaptive quality governor.
+   *
+   * The target is a stable 60 fps on a mid-range laptop GPU. Rather than trusting
+   * one machine's measurements, the game watches its own frame time and steps
+   * quality down when it cannot hold the target, then back up once it has
+   * headroom to spare. Hysteresis on both directions stops it oscillating, and
+   * turning the setting off pins whatever tier is selected.
+   */
+  _governQuality(dt) {
+    if (!this.settings.adaptiveQuality || this.ui.consoleOpen) return;
+    const frameMs = dt * 1000;
+    // ignore hitches from tab switches, scenario starts and shader compiles
+    if (frameMs > 250) return;
+    this._frameAvg = this._frameAvg === undefined
+      ? frameMs
+      : this._frameAvg + (frameMs - this._frameAvg) * 0.06;
+    this._govTimer = (this._govTimer || 0) + dt;
+    if (this._govTimer < 1.5) return;
+    this._govTimer = 0;
+    const tiers = ['low', 'medium', 'high'];
+    const idx = tiers.indexOf(this.settings.quality);
+    if (this._frameAvg > 20.5 && idx > 0) {
+      this._setQuality(tiers[idx - 1], true);
+      this.ui.log(`Frame time ${this._frameAvg.toFixed(1)} ms - quality reduced to <b>${tiers[idx - 1].toUpperCase()}</b> to hold 60 fps.`, 'warn');
+      this._frameAvg = 16;
+      this._govUpHold = 8;
+    } else if (this._frameAvg < 11.5 && idx < tiers.length - 1) {
+      this._govUpHold = (this._govUpHold || 0) - 1.5;
+      if (this._govUpHold <= 0) {
+        this._setQuality(tiers[idx + 1], true);
+        this.ui.log(`Headroom available - quality raised to <b>${tiers[idx + 1].toUpperCase()}</b>.`, 'info');
+        this._frameAvg = 16;
+        this._govUpHold = 12;
+      }
+    }
   }
 
   _setConsole(open) {
@@ -524,17 +574,17 @@ class Game {
     // from rest, loses energy to drag in the dense lower air and coasts at the end
     const avgSpeed = spec.maxSpeed * 0.42;
     const from = battery.group.position;
-    let t = from.distanceTo(threat.pos) / avgSpeed;
-    const point = _solveVec;
-    for (let i = 0; i < 4; i++) {
-      point.copy(threat.vel).multiplyScalar(t).add(threat.pos);
-      t = from.distanceTo(point) / avgSpeed;
-    }
-    // add the time the launcher still needs before the round can leave the tube
+    // the launcher still needs time before the round can leave the tube, so solve
+    // from where the threat will be once it can actually shoot
     const readyDelay = battery.status === 'PREPARING' ? battery.prepTimer
       : battery.status === 'RELOADING' ? battery.reloadTimer : 0;
+    _solveFrom.copy(threat.vel).multiplyScalar(readyDelay).add(threat.pos);
+    // closed-form intercept solve: a fixed-point iteration oscillates badly for a
+    // fast closing target and can return a meeting point that is nowhere near the
+    // real one
+    const point = _solveVec;
+    const t = predictInterceptPoint(point, from, avgSpeed, _solveFrom, threat.vel, 0);
     const flightTime = t + readyDelay;
-    point.copy(threat.vel).multiplyScalar(flightTime).add(threat.pos);
     const altitude = point.y;
 
     const vy = -threat.vel.y;
@@ -745,6 +795,7 @@ class Game {
         this._fpsAcc = 0;
         this._fpsFrames = 0;
       }
+      this._governQuality(rawDt);
       acc += rawDt;
       let steps = 0;
       while (acc >= FIXED_DT && steps < MAX_STEPS) {
@@ -1009,6 +1060,8 @@ class Game {
         for (let i = 0; i < steps; i++) this.stepSim(FIXED_DT);
         return this.simTime;
       },
+      /** One fixed step, for frame-accurate offline capture. */
+      stepOnce: () => this.stepSim(FIXED_DT),
       render: () => this._render(FIXED_DT),
       freezePlayer: (v) => {
         this.player.enabled = !v;
@@ -1021,6 +1074,34 @@ class Game {
       },
       lookAt: (x, y, z) => {
         this.player.lookAt(new THREE.Vector3(x, y, z));
+        this.player.applyToCamera(0);
+        return true;
+      },
+      /**
+       * Ease the view toward whatever is most interesting, so an offline capture
+       * gets a smooth operator-style pan instead of snapping between targets.
+       */
+      watchSmooth: (k = 0.08, lead = 0) => {
+        const it = this.interceptors.active[0];
+        let target = null;
+        if (it && it.target && it.target.alive) {
+          _solveVec.copy(it.target.pos);
+          if (lead) _solveVec.addScaledVector(it.target.vel, lead);
+          target = _solveVec;
+        } else if (it) target = it.pos;
+        else if (this.threats.active.length) target = this.threats.active[0].pos;
+        if (!target) return false;
+        const cam = this.camera.position;
+        const dx = target.x - cam.x;
+        const dy = target.y - cam.y;
+        const dz = target.z - cam.z;
+        const wantYaw = Math.atan2(-dx, -dz);
+        const wantPitch = Math.atan2(dy, Math.hypot(dx, dz));
+        let dYaw = wantYaw - this.player.yaw;
+        while (dYaw > Math.PI) dYaw -= Math.PI * 2;
+        while (dYaw < -Math.PI) dYaw += Math.PI * 2;
+        this.player.yaw += dYaw * k;
+        this.player.pitch += (wantPitch - this.player.pitch) * k;
         this.player.applyToCamera(0);
         return true;
       },

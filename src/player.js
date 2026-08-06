@@ -116,7 +116,7 @@ export class Player {
     this._prevPos.copy(this.pos);
     const moving = !this.frozen && this.locked;
     const { f, s } = moving ? this.moveInput : { f: 0, s: 0 };
-    const sprinting = moving && this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    const sprinting = moving && (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'));
     const targetSpeed = sprinting ? this.sprintSpeed : this.walkSpeed;
 
     this._euler.set(0, this.yaw, 0);
