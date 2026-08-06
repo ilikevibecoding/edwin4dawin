@@ -221,7 +221,10 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
   d.state.set('ch1.hasEvidence', found.includes('clue.thirium'));
   d.state.set('ch1.readTablet', found.includes('clue.tablet'));
 
-  d.cut(d.shots.insert(new THREE.Vector3(0.6, 0.06, 0.2), new THREE.Vector3(0.2, 0.62, 1.25), 70), { handheld: 0.3 });
+  d.cut(
+    d.shots.insert(marks.clueThirium, marks.clueThirium.clone().add(new THREE.Vector3(0.42, 0.68, 0.55)), 60),
+    { handheld: 0.3 }
+  );
   d.sfx('blipScan');
   if (complete) {
     await d.say(orion, 'He carried her. Whatever this is, he has not hurt her yet.', 'ch1_orion_4', { thought: true });
