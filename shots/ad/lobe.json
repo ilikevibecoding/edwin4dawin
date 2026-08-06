@@ -1,0 +1,12 @@
+[
+  {
+    "name": "k_base",
+    "steps": 26,
+    "eval": "(()=>{const e=window.__engine,s=e.set.scene;e.fx.setBloom(0,0.7,1.2);e.fx.setStreak(0);const j=s.getObjectByName('connor-jacket');const m=Array.isArray(j.material)?j.material[0]:j.material;window.__j=m;window.__js={sheen:m.sheen,env:m.envMapIntensity,spec:m.specularIntensity,rough:m.roughness};window.__jr=()=>{const q=window.__js;m.sheen=q.sheen;m.envMapIntensity=q.env;m.specularIntensity=q.spec;m.roughness=q.rough;m.needsUpdate=true;};return JSON.stringify(window.__js);})()"
+  },
+  { "name": "l_nosheen", "steps": 12, "eval": "(()=>{window.__jr();window.__j.sheen=0;window.__j.needsUpdate=true;return 'ok';})()" },
+  { "name": "m_noenv", "steps": 12, "eval": "(()=>{window.__jr();window.__j.envMapIntensity=0;return 'ok';})()" },
+  { "name": "n_nospec", "steps": 12, "eval": "(()=>{window.__jr();window.__j.specularIntensity=0;return 'ok';})()" },
+  { "name": "o_rough1", "steps": 12, "eval": "(()=>{window.__jr();window.__j.roughness=1;return 'ok';})()" },
+  { "name": "p_all", "steps": 12, "eval": "(()=>{window.__jr();const m=window.__j;m.sheen=0;m.envMapIntensity=0;m.specularIntensity=0;m.needsUpdate=true;return 'ok';})()" }
+]

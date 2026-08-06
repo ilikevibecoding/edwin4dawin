@@ -1,0 +1,6 @@
+[
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=captain&shot=full&q=low&rf=2&nopost=1", "out": "shots/ad/kind_captain.png" },
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=todd&shot=full&q=low&rf=2&nopost=1", "out": "shots/ad/kind_todd.png" },
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=emma&shot=full&q=low&rf=2&nopost=1", "out": "shots/ad/kind_emma.png" },
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=markus&shot=full&q=low&rf=2&nopost=1", "out": "shots/ad/kind_markus.png" }
+]

@@ -1,0 +1,11 @@
+[
+  {
+    "name": "q_base",
+    "steps": 26,
+    "eval": "(()=>{const e=window.__engine,s=e.set.scene;const ch=s.getObjectByName('connor');const cl=[];ch.traverse(o=>{if(!(o.isMesh||o.isSkinnedMesh))return;const a=Array.isArray(o.material)?o.material:[o.material];for(const m of a)if(m.sheenRoughness===0.85)cl.push(m);});window.__cl=cl;window.__cs=cl.map(m=>[m,m.sheen,m.specularIntensity,m.roughness]);window.__cr=()=>{for(const[m,sh,sp,r]of window.__cs){m.sheen=sh;m.specularIntensity=sp;m.roughness=r;}};return 'cloth mats: '+cl.length;})()"
+  },
+  { "name": "r_spec05", "steps": 12, "eval": "(()=>{window.__cr();for(const m of window.__cl)m.specularIntensity=0.5;return 'ok';})()" },
+  { "name": "s_spec035", "steps": 12, "eval": "(()=>{window.__cr();for(const m of window.__cl)m.specularIntensity=0.35;return 'ok';})()" },
+  { "name": "t_spec035_sh06", "steps": 12, "eval": "(()=>{window.__cr();for(const[m,sh]of window.__cs){m.specularIntensity=0.35;m.sheen=sh*0.6;}return 'ok';})()" },
+  { "name": "u_spec02_sh05", "steps": 12, "eval": "(()=>{window.__cr();for(const[m,sh]of window.__cs){m.specularIntensity=0.2;m.sheen=sh*0.5;}return 'ok';})()" }
+]

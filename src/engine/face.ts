@@ -358,12 +358,14 @@ function hairMaterial(spec: HairSpec): THREE.MeshPhysicalMaterial {
   col.lerp(new THREE.Color(0x9aa0a4), grey);
   return new THREE.MeshPhysicalMaterial({
     color: col.convertSRGBToLinear(),
-    roughness: lerp(0.62, 0.24, spec.gloss ?? 0.35),
+    roughness: lerp(0.66, 0.34, spec.gloss ?? 0.35),
     metalness: 0.03,
-    clearcoat: lerp(0.1, 0.75, spec.gloss ?? 0.35),
-    clearcoatRoughness: 0.32,
-    sheen: 0.6,
-    sheenColor: new THREE.Color(0.35, 0.3, 0.28),
+    // A wide, soft strand highlight: a tight clearcoat lobe on a smooth cap
+    // reads as a plastic helmet and clips to white under a close key.
+    clearcoat: lerp(0.06, 0.3, spec.gloss ?? 0.35),
+    clearcoatRoughness: 0.5,
+    sheen: 0.25,
+    sheenColor: new THREE.Color(0.2, 0.17, 0.15),
     side: THREE.DoubleSide,
   });
 }

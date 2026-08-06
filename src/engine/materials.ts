@@ -128,16 +128,30 @@ export function clothMaterial(
   const set = Tex.fabric(opts.size ?? 256, rgb[0], rgb[1], rgb[2], opts.weave ?? 140);
   const rep = opts.repeat ?? 3;
   for (const t of [set.map, set.normalMap, set.roughnessMap]) t?.repeat.set(rep, rep);
+  const base = new THREE.Color(rgb[0], rgb[1], rgb[2]).convertSRGBToLinear();
   return new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(rgb[0], rgb[1], rgb[2]).convertSRGBToLinear(),
+    // `fabric` already paints the garment colour into the map, and three.js
+    // multiplies colour by map: tinting again squares the albedo, which drops a
+    // navy suit to ~0.0002 and leaves the silhouette specular as the only thing
+    // you can see of a character. The map carries the colour; this stays white.
+    color: 0xffffff,
     map: set.map,
     normalMap: set.normalMap,
     roughnessMap: set.roughnessMap,
     roughness: opts.rough ?? 0.86,
     metalness: 0,
-    sheen: opts.sheen ?? 0.16,
+    // Sheen is a grazing-angle lobe: a neutral one at full weight paints a
+    // white halo around dark cloth whenever a light is close. `sheen` is read
+    // as relative silkiness and mapped into a range that reads as nap rather
+    // than as a rim light, tinted towards the fabric itself.
+    sheen: THREE.MathUtils.lerp(0.06, 0.3, THREE.MathUtils.clamp(opts.sheen ?? 0.16, 0, 1)),
     sheenRoughness: 0.85,
-    sheenColor: new THREE.Color(0.42, 0.44, 0.5).convertSRGBToLinear(),
+    sheenColor: base.clone().lerp(new THREE.Color(0.26, 0.28, 0.32), 0.55),
+    // Fibres scatter rather than reflect, so cloth carries far less specular
+    // than the 0.04 dielectric default; the sheen lobe above already stands in
+    // for the fibre highlight. At full strength both lobes stack and a close
+    // key turns a dark garment into a pale mannequin.
+    specularIntensity: 0.32,
     normalScale: new THREE.Vector2(0.7, 0.7),
   });
 }

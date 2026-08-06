@@ -236,7 +236,7 @@ export function buildRooftop(ctx: SetContext): GameSet {
 
   /* --------------------------------------------------------------- marks */
   const marks: GameSet['marks'] = {
-    entry: { pos: [-5.0, 0, -1.5], rotY: 0.4 },
+    entry: { pos: [-3.4, 0, -0.6], rotY: 0.35 },
     approach: { pos: [-1.6, 0, 6.2], rotY: 0.18 },
     negotiate: { pos: [-0.4, 0, 9.1], rotY: 0.05 },
     edgeDeviant: { pos: [0.5, 0, 13.1], rotY: Math.PI + 0.1 },

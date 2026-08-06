@@ -1,0 +1,9 @@
+[
+  {
+    "name": "a_base",
+    "steps": 45,
+    "eval": "(()=>{const e=window.__engine,s=e.set.scene;const names=[];s.traverse(o=>{if(o.name)names.push(o.name+'['+o.type+']');});window.__names=names.join(' ');const chars=[];s.traverse(o=>{if(o.isGroup&&o.name&&o.getObjectByName(o.name+'-body'))chars.push(o);});window.__chars=chars;return window.__names.slice(0,600)+' || chars='+chars.map(c=>c.name);})()"
+  },
+  { "name": "b_nochar", "steps": 30, "eval": "(()=>{for(const c of window.__chars)c.visible=false;return 'ok';})()" },
+  { "name": "c_charback", "steps": 30, "eval": "(()=>{for(const c of window.__chars)c.visible=true;const s=window.__engine.set.scene;s.traverse(o=>{if(o.isPoints||/snow|rain|dust|particle|flake/i.test(o.name||''))o.visible=false;});return 'ok';})()" }
+]

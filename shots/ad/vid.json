@@ -1,0 +1,6 @@
+[
+  { "name": "a_plain", "steps": 16, "eval": "(()=>{ const w=window; const e=w.__engine; const g=e.set.scene.getObjectByName('connor'); const meshes=[]; g.traverse(o=>{ if(o.isMesh||o.isSkinnedMesh) meshes.push(o); }); w.__H={ g, meshes, show(){ this.meshes.forEach(m=>m.visible=true); } }; })()" },
+  { "name": "b_body_only", "steps": 16, "eval": "(()=>{ const H=window.__H; H.show(); H.meshes.forEach(m=>{ if(/jacket|trousers|collar|armband|stripe|scalp/.test(m.name)) m.visible=false; }); })()" },
+  { "name": "c_garments_only", "steps": 16, "eval": "(()=>{ const H=window.__H; H.show(); H.meshes.forEach(m=>{ if(m.name.indexOf('connor-body')>=0 || m.name==='') m.visible=false; }); })()" },
+  { "name": "d_nohands", "steps": 16, "eval": "(()=>{ const H=window.__H; H.show(); H.meshes.forEach(m=>{ if(m.name==='' && m.parent && /hand/.test(m.parent.name)) m.visible=false; }); })()" }
+]

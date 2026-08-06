@@ -35,8 +35,8 @@ export class Player {
   /** Camera orbit state. */
   yaw = 0;
   pitch = 0.06;
-  distance = 2.85;
-  private targetDistance = 2.85;
+  distance = 4.4;
+  private targetDistance = 4.4;
   private colliders: Collider[] = [];
   private interactables: Interactable[] = [];
   private bounds = { minX: -60, maxX: 60, minZ: -60, maxZ: 60 };
@@ -53,7 +53,7 @@ export class Player {
    */
   private keyLight = new THREE.SpotLight(0xd2e4ff, 0, 16, 0.62, 0.85, 2);
   /** Lantern at the lens so the floor around the player reads at all. */
-  private fillLight = new THREE.PointLight(0xbcd2ee, 0, 13, 2);
+  private fillLight = new THREE.PointLight(0xbcd2ee, 0, 18, 1.4);
   private rimLight = new THREE.SpotLight(0x9fd0ff, 0, 14, 0.7, 0.9, 2);
   private ambLift = new THREE.HemisphereLight(0x2c4260, 0x11161d, 0);
   private scene: THREE.Object3D | null = null;
@@ -101,7 +101,7 @@ export class Player {
     this.enabled = true;
     this.keyLight.intensity = 20 * this.keyScale;
     this.rimLight.intensity = 9 * this.keyScale;
-    this.fillLight.intensity = 20 * this.keyScale;
+    this.fillLight.intensity = 9 * this.keyScale;
     this.ambLift.intensity = 1.1 * this.keyScale;
     this.yaw = this.character.group.rotation.y + Math.PI;
     this.pitch = 0.08;
@@ -131,7 +131,7 @@ export class Player {
   }
 
   zoom(delta: number): void {
-    this.targetDistance = clamp(this.targetDistance + delta * 0.0016, 1.5, 5.5);
+    this.targetDistance = clamp(this.targetDistance + delta * 0.0016, 2.6, 7.0);
   }
 
   /** Scripted walking, used by the autoplay demo and film capture. */
@@ -225,22 +225,22 @@ export class Player {
 
     /* ---- third-person camera ---- */
     const head = ch.worldPoint('headCenter', new THREE.Vector3());
-    const aim = head.clone().add(new THREE.Vector3(0, -0.06, 0));
+    const aim = head.clone().add(new THREE.Vector3(0, 0.02, 0));
     this.distance = damp(this.distance, this.targetDistance, 6, dt);
     const cp = Math.cos(this.pitch);
     const desired = new THREE.Vector3(
       aim.x + Math.sin(this.yaw) * cp * this.distance,
-      aim.y + Math.sin(this.pitch) * this.distance + 0.28,
+      aim.y + Math.sin(this.pitch) * this.distance + 0.42,
       aim.z + Math.cos(this.yaw) * cp * this.distance,
     );
     // Keep the camera out of the floor and out of solid boxes.
     desired.y = Math.max(desired.y, 0.45);
     let d = this.distance;
-    while (d > 0.9 && this.blocked(desired.x, desired.z, 0.25)) {
+    while (d > 2.4 && this.blocked(desired.x, desired.z, 0.25)) {
       d -= 0.25;
       desired.set(
         aim.x + Math.sin(this.yaw) * cp * d,
-        Math.max(0.45, aim.y + Math.sin(this.pitch) * d + 0.28),
+        Math.max(0.45, aim.y + Math.sin(this.pitch) * d + 0.42),
         aim.z + Math.cos(this.yaw) * cp * d,
       );
     }
@@ -255,7 +255,7 @@ export class Player {
     // Slight shoulder offset so the character does not block the centre.
     const rightX = Math.cos(this.yaw);
     const rightZ = -Math.sin(this.yaw);
-    this.camera.position.set(this.camPos.x + rightX * 0.24, this.camPos.y, this.camPos.z + rightZ * 0.24);
+    this.camera.position.set(this.camPos.x + rightX * 0.46, this.camPos.y, this.camPos.z + rightZ * 0.46);
     this.camera.up.set(0, 1, 0);
     this.camera.lookAt(this.camAim);
     if (this.camera.fov !== 52) {
@@ -270,10 +270,12 @@ export class Player {
     this.keyLight.target.position.set(pos.x, chest, pos.z);
     this.rimLight.position.set(pos.x - kx * 2.2 - Math.sin(this.yaw) * 2.0, chest + 1.9, pos.z - kz * 2.2 - Math.cos(this.yaw) * 2.0);
     this.rimLight.target.position.set(pos.x, chest, pos.z);
+    // Sits behind and above the lens so it grazes the ground rather than
+    // flooding whatever is directly in front of the camera.
     this.fillLight.position.set(
-      this.camera.position.x + (aim.x - this.camera.position.x) * 0.35,
-      this.camera.position.y - 0.2,
-      this.camera.position.z + (aim.z - this.camera.position.z) * 0.35,
+      this.camera.position.x - (aim.x - this.camera.position.x) * 0.5,
+      this.camera.position.y + 1.1,
+      this.camera.position.z - (aim.z - this.camera.position.z) * 0.5,
     );
 
     if (this.fx) {

@@ -1,0 +1,12 @@
+[
+  {
+    "name": "a_base",
+    "steps": 30,
+    "eval": "(()=>{const e=window.__engine,s=e.set.scene,c=e.set.camera;const st={lights:[],rain:null,fog:s.fog,bloom:null};s.traverse(o=>{if(o.isLight)st.lights.push([o,o.intensity]);if(o.name==='rain')st.rain=o;});window.__st=st;window.__reset=()=>{for(const[l,i]of st.lights)l.intensity=i;if(st.rain)st.rain.visible=true;s.fog=st.fog;e.fx.setBloom(0.62,0.7,0.62);e.fx.setStreak(0.5);};window.__near=()=>{const c2=e.set.camera;let best=null,bd=1e9;for(const[l]of st.lights){if(!(l.isPointLight||l.isSpotLight))continue;const v=c2.position.clone();l.getWorldPosition(v);const d=v.distanceTo(c2.position);if(d<bd){bd=d;best=l;}}return best;};return 'ok';})()"
+  },
+  { "name": "b_nobloom", "steps": 12, "eval": "(()=>{window.__reset();const e=window.__engine;e.fx.setBloom(0,0.7,1.2);e.fx.setStreak(0);return 'ok';})()" },
+  { "name": "c_norain", "steps": 12, "eval": "(()=>{window.__reset();if(window.__st.rain)window.__st.rain.visible=false;return 'ok';})()" },
+  { "name": "d_nofog", "steps": 12, "eval": "(()=>{window.__reset();window.__engine.set.scene.fog=null;return 'ok';})()" },
+  { "name": "e_nocamlight", "steps": 12, "eval": "(()=>{window.__reset();const l=window.__near();if(l)l.intensity=0;return 'ok';})()" },
+  { "name": "f_onlychar", "steps": 12, "eval": "(()=>{window.__reset();const e=window.__engine;e.fx.setBloom(0,0.7,1.2);e.fx.setStreak(0);if(window.__st.rain)window.__st.rain.visible=false;e.set.scene.fog=null;return 'ok';})()" }
+]

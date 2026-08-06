@@ -1,0 +1,7 @@
+[
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=alice&shot=full&q=medium&rf=3", "out": "shots/ad/FINAL_alice.png" },
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=kara&shot=full&q=medium&rf=3", "out": "shots/ad/FINAL_kara.png" },
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=hank&shot=full&q=medium&rf=3", "out": "shots/ad/FINAL_hank.png" },
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=emma&shot=full&q=medium&rf=3", "out": "shots/ad/FINAL_emma.png" },
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=connor&shot=closeup&q=medium&rf=3", "out": "shots/ad/FINAL_connor_closeup.png" }
+]

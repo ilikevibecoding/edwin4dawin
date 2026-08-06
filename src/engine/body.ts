@@ -247,6 +247,60 @@ function tube(
   if (capEnd) capIt(rings[rings.length - 1], pts[pts.length - 1].clone(), false);
 }
 
+/**
+ * Ring, tube and grid builders stitch with different handedness, so several
+ * shells end up wound inside out. That leaves their vertex normals pointing
+ * into the mesh, which inflates garment shells *inwards* (bare skin then shows
+ * as a lit rim along every silhouette) and flips shadow casting onto the near
+ * face, so the body shadows itself. Re-orient each connected shell by the sign
+ * of its own volume.
+ */
+function orientOutward(geo: THREE.BufferGeometry): void {
+  const pos = geo.getAttribute('position');
+  const index = geo.getIndex();
+  if (!index) return;
+
+  const root = new Int32Array(pos.count);
+  for (let i = 0; i < root.length; i++) root[i] = i;
+  const find = (a: number): number => {
+    while (root[a] !== a) {
+      root[a] = root[root[a]];
+      a = root[a];
+    }
+    return a;
+  };
+  const join = (a: number, b: number): void => {
+    const ra = find(a), rb = find(b);
+    if (ra !== rb) root[rb] = ra;
+  };
+  for (let t = 0; t < index.count; t += 3) {
+    const a = index.getX(t);
+    join(a, index.getX(t + 1));
+    join(a, index.getX(t + 2));
+  }
+
+  const volume = new Map<number, number>();
+  for (let t = 0; t < index.count; t += 3) {
+    const ia = index.getX(t), ib = index.getX(t + 1), ic = index.getX(t + 2);
+    const ax = pos.getX(ia), ay = pos.getY(ia), az = pos.getZ(ia);
+    const bx = pos.getX(ib), by = pos.getY(ib), bz = pos.getZ(ib);
+    const cx = pos.getX(ic), cy = pos.getY(ic), cz = pos.getZ(ic);
+    const v = (ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx)) / 6;
+    const r = find(ia);
+    volume.set(r, (volume.get(r) ?? 0) + v);
+  }
+
+  const arr = index.array as Uint16Array | Uint32Array;
+  for (let t = 0; t < index.count; t += 3) {
+    if ((volume.get(find(index.getX(t))) ?? 0) >= 0) continue;
+    const tmp = arr[t + 1];
+    arr[t + 1] = arr[t + 2];
+    arr[t + 2] = tmp;
+  }
+  index.needsUpdate = true;
+  geo.computeVertexNormals();
+}
+
 /** Sample a smooth chain through joints so elbows/knees round off. */
 function chain(joints: THREE.Vector3[], radii: number[], perSeg: number): { pts: THREE.Vector3[]; rad: number[] } {
   const pts: THREE.Vector3[] = [];
@@ -839,7 +893,7 @@ export function buildBody(spec: CharacterSpec, quality = 1): BodyBuild {
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(s.uv, 2));
   geometry.setAttribute('aRegion', new THREE.Float32BufferAttribute(s.region, 1));
   geometry.setIndex(s.index);
-  geometry.computeVertexNormals();
+  orientOutward(geometry);
 
   // Two material slots: the painted face map on the head, plain skin elsewhere.
   geometry.clearGroups();
@@ -1098,7 +1152,7 @@ export function buildHand(d: Dim, side: -1 | 1, pose: HandPose = 'relaxed'): THR
   geo.setAttribute('position', new THREE.Float32BufferAttribute(s.pos, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(s.uv, 2));
   geo.setIndex(s.index);
-  geo.computeVertexNormals();
+  orientOutward(geo);
   return geo;
 }
 
@@ -1137,7 +1191,7 @@ export function buildShoe(d: Dim): THREE.BufferGeometry {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(s.pos, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(s.uv, 2));
   geo.setIndex(s.index);
-  geo.computeVertexNormals();
+  orientOutward(geo);
   return geo;
 }
 

@@ -33,12 +33,13 @@ export function extractShell(src: THREE.BufferGeometry, o: ShellOpts): THREE.Buf
   const yMin = o.yMin ?? -Infinity;
   const yMax = o.yMax ?? Infinity;
 
-  const ok = new Uint8Array(pos.count);
+  const inRegion = new Uint8Array(pos.count);
+  const inTrim = new Uint8Array(pos.count);
   const p = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     p.fromBufferAttribute(pos, i);
-    const inRegion = o.regions.includes(reg.getX(i));
-    ok[i] = inRegion && p.y >= yMin && p.y <= yMax && (!o.keep || o.keep(p)) ? 1 : 0;
+    inRegion[i] = o.regions.includes(reg.getX(i)) ? 1 : 0;
+    inTrim[i] = p.y >= yMin && p.y <= yMax && (!o.keep || o.keep(p)) ? 1 : 0;
   }
 
   const remap = new Int32Array(pos.count).fill(-1);
@@ -65,9 +66,14 @@ export function extractShell(src: THREE.BufferGeometry, o: ShellOpts): THREE.Buf
     return id;
   };
 
+  // A triangle joins the shell if it *touches* the region: dropping the ones
+  // that straddle a seam would tear the garment open (the torso/hips seam sits
+  // exactly at the waist, between jacket and trousers). Trim cuts still need
+  // every corner inside, so hems and lapel openings stay crisp.
   for (let t = 0; t < index.count; t += 3) {
     const a = index.getX(t), b = index.getX(t + 1), c = index.getX(t + 2);
-    if (!ok[a] || !ok[b] || !ok[c]) continue;
+    if (!inRegion[a] && !inRegion[b] && !inRegion[c]) continue;
+    if (!inTrim[a] || !inTrim[b] || !inTrim[c]) continue;
     outIdx.push(take(a), take(b), take(c));
   }
   if (outIdx.length === 0) return null;
@@ -94,10 +100,18 @@ export type OutfitPiece = {
   castShadow?: boolean;
 };
 
-const c = (hex: number): [number, number, number] => {
-  const col = new THREE.Color(hex);
-  return [col.r, col.g, col.b];
-};
+/**
+ * Plain sRGB components, which is what the fabric texture painter expects: it
+ * writes them straight into an sRGB-tagged map. THREE.Color would hand back
+ * working-space (linear) values, which then get re-encoded as sRGB and sampled
+ * back an order of magnitude too dark — the cloth loses its diffuse response
+ * and only speculars survive.
+ */
+const c = (hex: number): [number, number, number] => [
+  ((hex >> 16) & 255) / 255,
+  ((hex >> 8) & 255) / 255,
+  (hex & 255) / 255,
+];
 
 /** Build the garment set for an outfit spec. */
 export function buildOutfit(

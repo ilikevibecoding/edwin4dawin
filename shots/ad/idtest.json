@@ -1,0 +1,14 @@
+[
+  {
+    "name": "g_base",
+    "steps": 26,
+    "eval": "(()=>{const e=window.__engine,s=e.set.scene;const ch=s.getObjectByName('connor');const ms=[];ch.traverse(o=>{if(o.isMesh||o.isSkinnedMesh){const a=Array.isArray(o.material)?o.material:[o.material];ms.push([o,a]);}});window.__ms=ms;window.__save=ms.map(([o,a])=>[o,o.visible,a.map(m=>[m,m.emissive?m.emissive.clone():null,m.emissiveIntensity,m.color?m.color.clone():null])]);window.__rst=()=>{for(const[o,v,mm]of window.__save){o.visible=v;for(const[m,em,ei,co]of mm){if(em)m.emissive.copy(em);m.emissiveIntensity=ei;if(co)m.color.copy(co);}}};return ms.length;})()"
+  },
+  {
+    "name": "h_idmap",
+    "steps": 12,
+    "eval": "(()=>{window.__rst();const e=window.__engine;e.fx.setBloom(0,0.7,1.2);e.fx.setStreak(0);const pick=(n)=>{const o=e.set.scene.getObjectByName(n);return o;};const paint=(o,r,g,b)=>{if(!o)return;const a=Array.isArray(o.material)?o.material:[o.material];for(const m of a){if(m.emissive){m.emissive.setRGB(r,g,b);m.emissiveIntensity=1;}if(m.color)m.color.setRGB(0,0,0);}};for(const[o,a]of window.__ms)paint(o,0,0,0);paint(pick('connor-body'),0,1,0);paint(pick('connor-jacket'),1,0,0);paint(pick('connor-trousers'),0,0,1);return 'ok';})()"
+  },
+  { "name": "i_hidebody", "steps": 12, "eval": "(()=>{window.__rst();const e=window.__engine;e.fx.setBloom(0,0.7,1.2);e.fx.setStreak(0);const o=e.set.scene.getObjectByName('connor-body');if(o)o.visible=false;return 'ok';})()" },
+  { "name": "j_hidegarments", "steps": 12, "eval": "(()=>{window.__rst();const e=window.__engine;e.fx.setBloom(0,0.7,1.2);e.fx.setStreak(0);for(const n of ['connor-jacket','connor-trousers','connor-collar']){const o=e.set.scene.getObjectByName(n);if(o)o.visible=false;}return 'ok';})()" }
+]

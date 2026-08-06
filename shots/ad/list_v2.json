@@ -1,0 +1,6 @@
+[
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=connor&shot=full&q=medium&rf=3", "out": "shots/ad/v2_connor_full.png" },
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=connor&shot=closeup&q=medium&rf=3", "out": "shots/ad/v2_connor_closeup.png" },
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=kara&shot=full&q=medium&rf=3", "out": "shots/ad/v2_kara_full.png" },
+  { "url": "http://127.0.0.1:5173/?dev=portrait&who=alice&shot=full&q=medium&rf=3", "out": "shots/ad/v2_alice_full.png" }
+]
