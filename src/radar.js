@@ -177,6 +177,21 @@ function setFont(ctx, size, weight = '400', family = MONO, spacing = 0) {
   if ('letterSpacing' in ctx) ctx.letterSpacing = `${spacing}px`;
 }
 
+/**
+ * Set a font, shrinking it until the string fits. The condensed stack is not
+ * guaranteed to resolve on every machine and the fallback face is far wider,
+ * so every stencilled legend goes through here rather than a fixed size.
+ */
+function fitFont(ctx, text, maxWidth, size, weight = '700', family = COND, spacing = 0) {
+  let s = size;
+  for (let i = 0; i < 26; i++) {
+    setFont(ctx, s, weight, family, spacing);
+    if (ctx.measureText(text).width <= maxWidth || s < 8) break;
+    s *= 0.94;
+  }
+  return s;
+}
+
 /** Text with a dark halo so it survives being drawn over phosphor glow. */
 function inkText(ctx, text, x, y, fill, halo = PH.ink, width = 5) {
   ctx.lineJoin = 'round';
@@ -748,26 +763,28 @@ export class StatusPanelRenderer {
 
 /* ------------------------------------------------------------ 3D holo track */
 
-const HOLO_GRID_FRAG = /* glsl */ `
+// The volume between the two screens is the console's centrepiece, so it is
+// built as a real tank rather than a lit disc: an engraved plan grid on the
+// floor, a live sweep over it, an altitude cage and ruler above it, and stems
+// that carry each blip up to its height. Every emissive part is additive with
+// its gain held below 1 so bloom lifts the volume without blowing it out.
+
+const HOLO_SWEEP_FRAG = /* glsl */ `
 precision highp float;
 varying vec2 vUv;
-uniform float uTime;
+uniform float uAngle;
 uniform vec3 uColor;
 uniform float uGain;
 void main() {
   vec2 p = vUv * 2.0 - 1.0;
   float r = length( p );
   if ( r > 1.0 ) discard;
-  float rw = fwidth( r ) * 2.0 + 0.001;
-  float rings = 1.0 - smoothstep( 0.0, rw, abs( fract( r * 4.0 + 0.5 ) - 0.5 ) * 0.25 );
   float ang = atan( p.y, p.x );
-  float sp = abs( fract( ang / 3.14159265 * 6.0 + 0.5 ) - 0.5 );
-  float spokes = ( 1.0 - smoothstep( 0.0, 0.018, sp ) ) * smoothstep( 0.06, 0.22, r );
-  float sweep = pow( max( 0.0, cos( ang + uTime * 1.15 ) ), 36.0 ) * smoothstep( 0.0, 0.14, r );
-  float edge = smoothstep( 0.95, 0.99, r ) * ( 1.0 - smoothstep( 0.99, 1.0, r ) );
-  float fill = 0.055 * ( 1.0 - r * 0.5 );
-  float a = rings * 0.30 + spokes * 0.15 + sweep * 0.24 + edge * 0.5 + fill;
-  gl_FragColor = vec4( uColor, clamp( a, 0.0, 1.0 ) * uGain );
+  // Trailing wedge behind the antenna, decaying over about a third of a turn.
+  float d = mod( ang - uAngle, 6.2831853 );
+  float sweep = exp( -d * 3.2 ) * smoothstep( 0.0, 0.08, r ) * ( 1.0 - smoothstep( 0.94, 1.0, r ) );
+  float haze = 0.055 * ( 1.0 - r * 0.6 );
+  gl_FragColor = vec4( uColor, clamp( sweep * 0.60 + haze, 0.0, 1.0 ) * uGain );
 }
 `;
 
@@ -778,130 +795,330 @@ void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(
 
 const HOLO_COL = { tentative: 0xd8ca60, rv: 0xff6a4a, decoy: 0x74bcff, inter: 0xffd06a };
 const HOLO_CEILING = 30000;
+/** Altitude reference planes, as fractions of the 30 km ceiling. */
+const HOLO_BANDS = [1 / 3, 2 / 3, 1];
 const UP = new THREE.Vector3(0, 1, 0);
 const TMP_DIR = new THREE.Vector3();
 
+/**
+ * Engraved polar plan for the tank floor. Drawn once into a canvas rather than
+ * a shader because the range figures and compass letters have to stay crisp at
+ * the roughly 450 px the disc covers in a docked frame.
+ *
+ * Canvas up maps to the volume's -Z after the floor plane is laid flat, which
+ * is the same north-up convention the PPI uses.
+ */
+function holoFloorTexture(surface) {
+  const ctx = surface.ctx;
+  const n = surface.w;
+  const c = n / 2;
+  const R = c - 8;
+  ctx.clearRect(0, 0, n, n);
+
+  // The disc covers roughly 450 px in a docked frame, so every stroke here is
+  // drawn several texels wide or it disappears on the way to the screen.
+  const fill = ctx.createRadialGradient(c, c, 0, c, c, R);
+  fill.addColorStop(0, 'rgba(86, 226, 200, 0.16)');
+  fill.addColorStop(0.55, 'rgba(56, 184, 164, 0.08)');
+  fill.addColorStop(1, 'rgba(44, 158, 142, 0.03)');
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.arc(c, c, R, 0, Math.PI * 2);
+  ctx.fill();
+
+  // radial spokes every 30 degrees, cardinals full length
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const cardinal = i % 3 === 0;
+    ctx.strokeStyle = cardinal ? 'rgba(160, 252, 230, 0.85)' : 'rgba(120, 232, 208, 0.42)';
+    ctx.lineWidth = cardinal ? 9 : 6;
+    ctx.beginPath();
+    ctx.moveTo(c + Math.sin(a) * R * 0.1, c - Math.cos(a) * R * 0.1);
+    ctx.lineTo(c + Math.sin(a) * R * (cardinal ? 0.99 : 0.9), c - Math.cos(a) * R * (cardinal ? 0.99 : 0.9));
+    ctx.stroke();
+  }
+
+  // range rings, quartered across the radar's advertised reach
+  const km = RADAR.range / 1000;
+  for (let i = 1; i <= 4; i++) {
+    const rr = (R * i) / 4;
+    const outer = i === 4;
+    ctx.strokeStyle = outer ? 'rgba(200, 255, 244, 0.98)' : 'rgba(140, 246, 224, 0.7)';
+    ctx.lineWidth = outer ? 14 : 8;
+    ctx.setLineDash(outer ? [] : [34, 24]);
+    ctx.beginPath();
+    ctx.arc(c, c, rr, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Range figures sit on the north-east diagonal, away from the ruler.
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  setFont(ctx, 58, '700', MONO, 2);
+  for (let i = 1; i <= 4; i++) {
+    const rr = (R * i) / 4;
+    const a = Math.PI * 0.25;
+    inkText(ctx, String(Math.round((km * i) / 4)), c + Math.sin(a) * rr, c - Math.cos(a) * rr, 'rgba(214, 255, 246, 0.95)', 'rgba(0, 18, 16, 0.85)', 10);
+  }
+
+  setFont(ctx, 86, '700', MONO, 4);
+  ['N', 'E', 'S', 'W'].forEach((letter, i) => {
+    const a = (i / 4) * Math.PI * 2;
+    inkText(
+      ctx,
+      letter,
+      c + Math.sin(a) * R * 0.86,
+      c - Math.cos(a) * R * 0.86,
+      i === 0 ? 'rgba(236, 255, 250, 1)' : 'rgba(178, 246, 228, 0.85)',
+      'rgba(0, 18, 16, 0.85)',
+      12
+    );
+  });
+
+  // own site
+  ctx.strokeStyle = 'rgba(240, 255, 252, 0.98)';
+  ctx.lineWidth = 9;
+  ctx.beginPath();
+  ctx.arc(c, c, 22, 0, Math.PI * 2);
+  ctx.moveTo(c - 42, c);
+  ctx.lineTo(c + 42, c);
+  ctx.moveTo(c, c - 42);
+  ctx.lineTo(c, c + 42);
+  ctx.stroke();
+
+  setFont(ctx, 42, '700', MONO, 4);
+  inkText(ctx, `SURVEILLANCE VOLUME \u00B7 ${Math.round(km)} KM`, c, c + R * 0.60, 'rgba(190, 250, 234, 0.9)', 'rgba(0, 18, 16, 0.85)', 10);
+  surface.commit();
+}
+
+/** Smoked canopy: the dark backdrop the additive symbology is read against. */
+function holoCanopyTexture(h = 128) {
+  const s = new CanvasSurface(4, h);
+  const ctx = s.ctx;
+  // Cylinder v runs 0 at the base to 1 at the rim, and canvas row 0 is v = 1.
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, 'rgba(6, 24, 26, 0.06)');
+  g.addColorStop(0.4, 'rgba(5, 21, 23, 0.46)');
+  g.addColorStop(1, 'rgba(2, 13, 15, 0.9)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, h);
+  s.commit();
+  return s;
+}
+
+/** Soft round falloff: the halo that makes a blip pop out of the grid. */
+function holoGlowTexture(size = 128) {
+  const s = new CanvasSurface(size, size);
+  const ctx = s.ctx;
+  const c = size / 2;
+  const g = ctx.createRadialGradient(c, c, 0, c, c, c);
+  g.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+  g.addColorStop(0.25, 'rgba(255, 255, 255, 0.42)');
+  g.addColorStop(0.6, 'rgba(255, 255, 255, 0.10)');
+  g.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  s.commit();
+  return s;
+}
+
 export class HoloDisplay {
-  constructor(radius = 0.30, height = 0.36) {
+  /**
+   * @param radius half-width of the plan disc, in metres
+   * @param height how far the 30 km ceiling stands above the floor, in metres
+   * @param yaw    the console's heading, cancelled out so the plan view is
+   *               north-up and agrees with the PPI and with the sky outside
+   */
+  constructor(radius = 0.36, height = 0.54, yaw = 0) {
     this.group = new THREE.Group();
+    this.volume = new THREE.Group();
+    this.volume.rotation.y = -yaw;
+    this.group.add(this.volume);
+
     this.radius = radius;
     this.height = height;
     this.rangeScale = radius / RADAR.range;
     this.altScale = height / HOLO_CEILING;
     this._q = new THREE.Quaternion();
     this._pq = new THREE.Quaternion();
+    this.surfaces = [];
 
-    // ---- ground grid disc ------------------------------------------------
-    this.gridMat = new THREE.ShaderMaterial({
-      // uGain is kept well under 1 so the additive disc reads as a lit surface
-      // rather than a clipped white blob once bloom is applied.
-      uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(0x46cdb6) }, uGain: { value: 0.55 } },
+    // ---- smoked canopy ---------------------------------------------------
+    // Additive symbology needs something dark to sit on, and in daylight the
+    // shelter opening behind the console is anything but. Only the far wall is
+    // drawn, so the volume gets a backdrop without a second veil in front of
+    // the blips.
+    const canopy = holoCanopyTexture();
+    this.surfaces.push(canopy);
+    const canopyMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius * 1.01, radius * 1.01, height, 48, 1, true),
+      new THREE.MeshBasicMaterial({ map: canopy.texture, transparent: true, side: THREE.BackSide, depthWrite: false })
+    );
+    canopyMesh.position.y = height / 2;
+    canopyMesh.renderOrder = 1;
+    this.volume.add(canopyMesh);
+
+    const base = new THREE.Mesh(
+      new THREE.CircleGeometry(radius * 1.01, 48),
+      new THREE.MeshBasicMaterial({ color: 0x03181a, transparent: true, opacity: 0.94, depthWrite: false, side: THREE.DoubleSide })
+    );
+    base.rotation.x = -Math.PI / 2;
+    base.renderOrder = 1;
+    this.volume.add(base);
+
+    // ---- floor: engraved plan grid with a live sweep over it -------------
+    const floor = new CanvasSurface(1024, 1024);
+    holoFloorTexture(floor);
+    this.surfaces.push(floor);
+    const floorMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(radius * 2, radius * 2),
+      new THREE.MeshBasicMaterial({
+        map: floor.texture,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      })
+    );
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.renderOrder = 2;
+    this.volume.add(floorMesh);
+
+    this.sweepMat = new THREE.ShaderMaterial({
+      uniforms: { uAngle: { value: 0 }, uColor: { value: new THREE.Color(0x5ce8cc) }, uGain: { value: 0.62 } },
       vertexShader: HOLO_VERT,
-      fragmentShader: HOLO_GRID_FRAG,
+      fragmentShader: HOLO_SWEEP_FRAG,
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       toneMapped: false,
     });
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(radius * 2, radius * 2), this.gridMat);
-    plane.rotation.x = -Math.PI / 2;
-    plane.renderOrder = 2;
-    this.group.add(plane);
+    const sweepMesh = new THREE.Mesh(new THREE.PlaneGeometry(radius * 2, radius * 2), this.sweepMat);
+    sweepMesh.rotation.x = -Math.PI / 2;
+    sweepMesh.position.y = 0.0018;
+    sweepMesh.renderOrder = 3;
+    this.volume.add(sweepMesh);
 
-    // ---- altitude reference cage -------------------------------------------
-    // Reference rings plus corner posts read as a volume without adding a
-    // second transparent surface for the sorter to worry about.
-    const bands = [1 / 3, 2 / 3, 1];
-    const pts = [];
-    for (const f of bands) {
+    // ---- altitude cage ---------------------------------------------------
+    // Reference planes at 10 / 20 / 30 km, corner posts and a centre mast.
+    // Built from thin tubes rather than lines: WebGL will not widen a line, and
+    // a one-pixel wireframe vanishes the moment there is daylight behind it.
+    const cageParts = [];
+    HOLO_BANDS.forEach((f, bi) => {
       const yy = height * f;
-      const seg = 48;
-      for (let i = 0; i < seg; i++) {
-        if (f < 1 && i % 2) continue;
-        const a0 = (i / seg) * Math.PI * 2;
-        const a1 = ((i + 1) / seg) * Math.PI * 2;
-        pts.push(Math.cos(a0) * radius, yy, Math.sin(a0) * radius, Math.cos(a1) * radius, yy, Math.sin(a1) * radius);
+      const ceiling = bi === HOLO_BANDS.length - 1;
+      cageParts.push({
+        geometry: new THREE.TorusGeometry(radius, ceiling ? 0.0026 : 0.0016, 4, 72),
+        matrix: transform({ pos: [0, yy, 0], rot: [Math.PI / 2, 0, 0] }),
+      });
+      // spurs from the mast out to the ring, so the plane reads as a plane
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        cageParts.push({
+          geometry: pathTube([new THREE.Vector3(0, yy, 0), new THREE.Vector3(Math.cos(a) * radius, yy, Math.sin(a) * radius)], 0.0013, 4),
+        });
       }
-    }
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
+    });
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
       const x = Math.cos(a) * radius;
       const z = Math.sin(a) * radius;
-      pts.push(x, 0, z, x, height, z);
+      cageParts.push({ geometry: pathTube([new THREE.Vector3(x, 0, z), new THREE.Vector3(x, height, z)], 0.0015, 4) });
     }
-    const cageGeo = new THREE.BufferGeometry();
-    cageGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-    const cage = new THREE.LineSegments(
-      cageGeo,
-      new THREE.LineBasicMaterial({ color: 0x38a99b, transparent: true, opacity: 0.26, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+    // Centre mast: the altitude datum every stem is read against.
+    cageParts.push({ geometry: pathTube([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, height, 0)], 0.0022, 5) });
+    const cage = new THREE.Mesh(
+      mergeParts(cageParts),
+      new THREE.MeshBasicMaterial({ color: 0x6fe4cc, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
     );
-    cage.renderOrder = 2;
-    this.group.add(cage);
+    cage.renderOrder = 3;
+    this.volume.add(cage);
+    cageParts.forEach((p) => p.geometry.dispose());
 
-    // ---- altitude legend ----------------------------------------------------
-    const legend = new CanvasSurface(256, 256);
-    drawHoloLegend(legend, bands);
-    const legendMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(height * 1.15, height * 1.15),
-      new THREE.MeshBasicMaterial({ map: legend.texture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, opacity: 0.8 })
+    // ---- altitude ruler --------------------------------------------------
+    // Fixed to the console frame, not the plan view, so it always faces the
+    // operator however the site is oriented.
+    const ruler = new CanvasSurface(256, 640);
+    drawHoloRuler(ruler, HOLO_BANDS);
+    this.surfaces.push(ruler);
+    const rulerMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(height * 0.40, height * 1.10),
+      new THREE.MeshBasicMaterial({ map: ruler.texture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })
     );
-    legendMesh.position.set(-radius * 1.06, height * 0.50, radius * 0.60);
-    legendMesh.rotation.y = 0.62;
-    legendMesh.renderOrder = 3;
-    this.group.add(legendMesh);
-    this.legend = legend;
+    rulerMesh.position.set(-radius * 0.94, height * 0.50, radius * 0.60);
+    rulerMesh.renderOrder = 5;
+    this.group.add(rulerMesh);
 
-    // ---- track blips ----------------------------------------------------------
+    // ---- track blips -----------------------------------------------------
     this.maxTracks = 10;
     this.blips = [];
-    const blipGeo = new THREE.OctahedronGeometry(0.020, 0);
-    const stemGeo = new THREE.CylinderGeometry(0.0022, 0.0022, 1, 4, 1, true);
+    const glow = holoGlowTexture();
+    this.surfaces.push(glow);
+    const blipGeo = new THREE.OctahedronGeometry(0.027, 0);
+    const stemGeo = new THREE.CylinderGeometry(0.0035, 0.0035, 1, 6, 1, true);
     stemGeo.translate(0, 0.5, 0);
-    const ringGeo = new THREE.RingGeometry(0.023, 0.030, 24);
+    const ringGeo = new THREE.RingGeometry(0.024, 0.032, 28);
+    const glowGeo = new THREE.PlaneGeometry(0.12, 0.12);
+    const labelGeo = new THREE.PlaneGeometry(0.208, 0.0736);
     for (let i = 0; i < this.maxTracks; i++) {
-      const mat = new THREE.MeshBasicMaterial({ color: HOLO_COL.rv, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+      const mat = new THREE.MeshBasicMaterial({ color: HOLO_COL.rv, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
       const blip = new THREE.Mesh(blipGeo, mat);
+      const halo = new THREE.Mesh(
+        glowGeo,
+        new THREE.MeshBasicMaterial({ map: glow.texture, color: HOLO_COL.rv, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+      );
       const stem = new THREE.Mesh(stemGeo, mat.clone());
-      stem.material.opacity = 0.22;
+      stem.material.opacity = 0.32;
       const ring = new THREE.Mesh(
         ringGeo,
-        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false })
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false })
       );
       ring.rotation.x = -Math.PI / 2;
-      const label = new CanvasSurface(288, 104);
+      const label = new CanvasSurface(384, 136);
+      this.surfaces.push(label);
       const labelMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.170, 0.0614),
+        labelGeo,
         new THREE.MeshBasicMaterial({ map: label.texture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })
       );
-      blip.renderOrder = 4;
-      stem.renderOrder = 3;
-      ring.renderOrder = 3;
-      labelMesh.renderOrder = 5;
-      blip.visible = false;
-      stem.visible = false;
-      ring.visible = false;
-      labelMesh.visible = false;
-      this.group.add(blip, stem, ring, labelMesh);
-      this.blips.push({ blip, stem, ring, label, labelMesh, trackId: null, labelKey: '' });
+      halo.renderOrder = 4;
+      stem.renderOrder = 4;
+      ring.renderOrder = 4;
+      blip.renderOrder = 5;
+      labelMesh.renderOrder = 6;
+      for (const o of [halo, stem, ring, blip, labelMesh]) {
+        o.visible = false;
+        this.volume.add(o);
+      }
+      this.blips.push({ blip, halo, stem, ring, label, labelMesh, trackId: null, labelKey: '' });
     }
 
-    // ---- interceptor marks -------------------------------------------------------
+    // ---- interceptor marks -----------------------------------------------
     this.interMarks = [];
-    const iGeo = new THREE.ConeGeometry(0.010, 0.032, 5);
+    const iGeo = new THREE.ConeGeometry(0.013, 0.044, 6);
+    const iStemGeo = new THREE.CylinderGeometry(0.0022, 0.0022, 1, 4, 1, true);
+    iStemGeo.translate(0, 0.5, 0);
     for (let i = 0; i < 6; i++) {
-      const m = new THREE.Mesh(iGeo, new THREE.MeshBasicMaterial({ color: HOLO_COL.inter, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
-      m.visible = false;
-      m.renderOrder = 4;
-      this.group.add(m);
-      this.interMarks.push(m);
+      const mat = new THREE.MeshBasicMaterial({ color: HOLO_COL.inter, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+      const mark = new THREE.Mesh(iGeo, mat);
+      const stem = new THREE.Mesh(iStemGeo, mat.clone());
+      stem.material.opacity = 0.28;
+      mark.visible = false;
+      stem.visible = false;
+      mark.renderOrder = 5;
+      stem.renderOrder = 4;
+      this.volume.add(mark, stem);
+      this.interMarks.push({ mark, stem });
     }
   }
 
   update(dt, radar, camera, opts) {
-    this.gridMat.uniforms.uTime.value += dt;
+    // Matching the PPI antenna keeps the two displays telling the same story.
+    this.sweepMat.uniforms.uAngle.value = radar.angle;
     const tracks = radar.tracks.slice(0, this.maxTracks);
-    this.group.getWorldQuaternion(this._pq);
+    this.volume.getWorldQuaternion(this._pq);
     this._pq.invert();
 
     for (let i = 0; i < this.blips.length; i++) {
@@ -909,6 +1126,7 @@ export class HoloDisplay {
       const tr = tracks[i];
       if (!tr) {
         item.blip.visible = false;
+        item.halo.visible = false;
         item.stem.visible = false;
         item.ring.visible = false;
         item.labelMesh.visible = false;
@@ -919,7 +1137,7 @@ export class HoloDisplay {
       const k = rr > this.radius ? this.radius / rr : 1;
       const x = tr.pos.x * this.rangeScale * k;
       const z = tr.pos.z * this.rangeScale * k;
-      const y = Math.max(0.004, Math.min(this.height, tr.alt * this.altScale));
+      const y = Math.max(0.006, Math.min(this.height, tr.alt * this.altScale));
       const decoy = tr.classified.includes('DECOY');
       const col = !tr.firm ? HOLO_COL.tentative : decoy ? HOLO_COL.decoy : HOLO_COL.rv;
       const sel = tr.id === opts.selectedTrackId;
@@ -929,81 +1147,115 @@ export class HoloDisplay {
       item.blip.position.set(x, y, z);
       item.blip.visible = true;
       item.blip.material.color.setHex(col);
-      item.blip.material.opacity = tr.firm ? 0.85 : 0.5;
+      item.blip.material.opacity = tr.firm ? 0.9 : 0.55;
       item.blip.rotation.y += dt * (sel ? 3.2 : 1.5);
-      item.blip.scale.setScalar(sel ? 1.7 : assigned ? 1.35 : 1);
+      item.blip.scale.setScalar(sel ? 1.55 : assigned ? 1.28 : 1);
+
+      item.halo.position.copy(item.blip.position);
+      item.halo.visible = true;
+      item.halo.material.color.setHex(sel ? 0xffffff : col);
+      item.halo.material.opacity = sel ? 0.62 : tr.firm ? 0.46 : 0.3;
+      item.halo.scale.setScalar(sel ? 1.35 : assigned ? 1.15 : 1);
+      item.halo.quaternion.copy(camera.quaternion).premultiply(this._pq);
 
       item.stem.position.set(x, 0, z);
       item.stem.scale.set(1, y, 1);
       item.stem.visible = true;
       item.stem.material.color.setHex(col);
-      item.stem.material.opacity = sel || assigned ? 0.45 : 0.2;
+      item.stem.material.opacity = sel || assigned ? 0.55 : 0.3;
 
-      item.ring.position.set(x, 0.0035, z);
-      item.ring.visible = sel || assigned;
-      item.ring.material.color.setHex(assigned ? 0xffc846 : 0xffffff);
-      item.ring.material.opacity = assigned ? 0.7 : 0.5;
-      item.ring.scale.setScalar(assigned ? 1.3 : 1);
+      // Every track keeps a ground mark so its plan position is unambiguous
+      // even when the stem is nearly edge-on.
+      item.ring.position.set(x, 0.004, z);
+      item.ring.visible = true;
+      item.ring.material.color.setHex(assigned ? 0xffc846 : sel ? 0xffffff : col);
+      item.ring.material.opacity = assigned ? 0.75 : sel ? 0.6 : 0.3;
+      item.ring.scale.setScalar(assigned ? 1.3 : sel ? 1.15 : 0.9);
 
-      const key = `${tr.id}|${tr.firm ? 1 : 0}|${decoy ? 1 : 0}|${Math.round(tr.alt / 200)}|${sel ? 1 : 0}${assigned ? 1 : 0}`;
+      const key = `${tr.id}|${tr.firm ? 1 : 0}|${decoy ? 1 : 0}|${Math.round(tr.alt / 200)}|${Math.round(tr.speed / 20)}|${sel ? 1 : 0}${assigned ? 1 : 0}`;
       if (item.labelKey !== key) {
         item.labelKey = key;
         drawHoloLabel(item.label, tr, { decoy, sel, assigned });
       }
       item.labelMesh.visible = true;
-      item.labelMesh.position.set(x, y + 0.052, z);
+      item.labelMesh.position.set(x, y + 0.066, z);
       item.labelMesh.quaternion.copy(camera.quaternion).premultiply(this._pq);
     }
 
     const inters = opts.interceptors || [];
     for (let i = 0; i < this.interMarks.length; i++) {
-      const m = this.interMarks[i];
+      const { mark, stem } = this.interMarks[i];
       const it = inters[i];
       if (!it) {
-        m.visible = false;
+        mark.visible = false;
+        stem.visible = false;
         continue;
       }
-      m.visible = true;
       const rr = Math.hypot(it.pos.x, it.pos.z) * this.rangeScale;
       const k = rr > this.radius ? this.radius / rr : 1;
-      m.position.set(it.pos.x * this.rangeScale * k, Math.max(0.004, Math.min(this.height, it.pos.y * this.altScale)), it.pos.z * this.rangeScale * k);
+      const x = it.pos.x * this.rangeScale * k;
+      const z = it.pos.z * this.rangeScale * k;
+      const y = Math.max(0.006, Math.min(this.height, it.pos.y * this.altScale));
+      mark.visible = true;
+      mark.position.set(x, y, z);
       this._q.setFromUnitVectors(UP, TMP_DIR.copy(it.vel).normalize());
-      m.quaternion.copy(this._q);
+      mark.quaternion.copy(this._q);
+      stem.visible = true;
+      stem.position.set(x, 0, z);
+      stem.scale.set(1, y, 1);
     }
   }
 }
 
-function drawHoloLegend(surface, bands) {
+/** Operator-facing altitude ruler standing at the near-left of the tank. */
+function drawHoloRuler(surface, bands) {
   const ctx = surface.ctx;
   const w = surface.w;
   const h = surface.h;
   ctx.clearRect(0, 0, w, h);
   ctx.textBaseline = 'middle';
-  ctx.strokeStyle = 'rgba(120, 232, 212, 0.8)';
-  ctx.lineWidth = 3;
+
+  const axis = w * 0.78;
+  const y0 = h * 0.955;
+  const span = h * 0.86;
+  ctx.strokeStyle = 'rgba(132, 240, 220, 0.85)';
+  ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(w * 0.74, h * 0.06);
-  ctx.lineTo(w * 0.74, h * 0.94);
+  ctx.moveTo(axis, y0);
+  ctx.lineTo(axis, y0 - span);
   ctx.stroke();
-  for (const f of bands) {
-    const y = h * 0.94 - h * 0.88 * f;
+
+  // minor ticks every 2 km so the scale reads as continuous
+  const steps = HOLO_CEILING / 2000;
+  ctx.strokeStyle = 'rgba(132, 240, 220, 0.4)';
+  ctx.lineWidth = 3;
+  for (let i = 1; i <= steps; i++) {
+    const y = y0 - (span * i) / steps;
     ctx.beginPath();
-    ctx.moveTo(w * 0.64, y);
-    ctx.lineTo(w * 0.84, y);
+    ctx.moveTo(axis - w * 0.06, y);
+    ctx.lineTo(axis, y);
     ctx.stroke();
-    setFont(ctx, 32, '700', MONO, 1);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#c2ffee';
-    ctx.fillText(String(Math.round((f * HOLO_CEILING) / 1000)), w * 0.60, y);
   }
-  setFont(ctx, 22, '400', MONO, 1);
+
+  for (const f of bands) {
+    const y = y0 - span * f;
+    ctx.strokeStyle = 'rgba(186, 255, 240, 0.95)';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(axis - w * 0.20, y);
+    ctx.lineTo(axis + w * 0.10, y);
+    ctx.stroke();
+    setFont(ctx, 46, '700', MONO, 1);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#d6fff2';
+    ctx.fillText(String(Math.round((f * HOLO_CEILING) / 1000)), axis - w * 0.25, y);
+  }
+
+  setFont(ctx, 30, '700', MONO, 2);
   ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(158, 232, 214, 0.85)';
-  ctx.fillText('KM ALT', w * 0.74, h * 0.035);
-  ctx.textAlign = 'left';
-  setFont(ctx, 22, '700', MONO, 1);
-  ctx.fillStyle = 'rgba(158, 232, 214, 0.8)';
-  ctx.fillText(`R${Math.round(RADAR.range / 1000)}`, w * 0.02, h * 0.955);
+  ctx.fillStyle = 'rgba(178, 244, 228, 0.9)';
+  ctx.fillText('KM', axis - w * 0.16, y0 - span - 34);
+  ctx.fillText('ALT', axis - w * 0.16, y0 - span - 2);
   surface.commit();
 }
 
@@ -1013,40 +1265,49 @@ function drawHoloLabel(surface, tr, { decoy, sel, assigned }) {
   const h = surface.h;
   ctx.clearRect(0, 0, w, h);
   const col = !tr.firm ? '#f2e8ac' : decoy ? '#9fd6ff' : '#ffb59c';
+  const body = h - 24;
   // A leader line ties the floating caption back to its blip.
-  ctx.strokeStyle = 'rgba(150, 226, 212, 0.5)';
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(150, 226, 212, 0.55)';
+  ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(w * 0.5, h - 2);
-  ctx.lineTo(w * 0.5, h - 14);
+  ctx.lineTo(w * 0.5, body);
   ctx.stroke();
-  ctx.fillStyle = assigned ? 'rgba(72, 48, 4, 0.62)' : sel ? 'rgba(18, 60, 54, 0.62)' : 'rgba(6, 26, 24, 0.5)';
-  roundRect(ctx, 3, 3, w - 6, h - 20, 9);
+
+  ctx.fillStyle = assigned ? 'rgba(78, 52, 4, 0.72)' : sel ? 'rgba(20, 66, 60, 0.72)' : 'rgba(6, 28, 26, 0.62)';
+  roundRect(ctx, 4, 4, w - 8, body - 6, 11);
   ctx.fill();
-  ctx.strokeStyle = assigned ? '#ffc846' : sel ? '#ffffff' : 'rgba(120, 210, 194, 0.45)';
-  ctx.lineWidth = assigned || sel ? 4 : 2;
-  roundRect(ctx, 3, 3, w - 6, h - 20, 9);
+  ctx.strokeStyle = assigned ? '#ffc846' : sel ? '#ffffff' : 'rgba(126, 218, 202, 0.55)';
+  ctx.lineWidth = assigned || sel ? 5 : 3;
+  roundRect(ctx, 4, 4, w - 8, body - 6, 11);
   ctx.stroke();
+  // Colour spine, matching the blip, so the caption is attributable at a glance.
+  ctx.fillStyle = col;
+  ctx.fillRect(8, 10, 8, body - 18);
 
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
-  setFont(ctx, 46, '700', MONO, 1);
+  setFont(ctx, 54, '700', MONO, 1);
   ctx.fillStyle = sel ? '#ffffff' : col;
-  ctx.fillText(tr.id, 14, 48);
-  setFont(ctx, 30, '400', MONO, 0);
-  ctx.fillStyle = 'rgba(182, 244, 228, 0.95)';
-  ctx.fillText(`${(tr.alt / 1000).toFixed(1)} KM`, 14, 80);
+  ctx.fillText(tr.id, 28, 60);
+  setFont(ctx, 34, '400', MONO, 0);
+  ctx.fillStyle = 'rgba(196, 250, 236, 0.95)';
+  ctx.fillText(`${(tr.alt / 1000).toFixed(1)}KM ${Math.round(tr.speed)}M/S`, 28, 100);
+
   ctx.textAlign = 'right';
-  setFont(ctx, 30, '700', MONO, 0);
+  setFont(ctx, 36, '700', MONO, 0);
   if (assigned) {
     ctx.fillStyle = '#ffc846';
-    ctx.fillText('ASG', w - 14, 48);
+    ctx.fillText('ASG', w - 20, 60);
   } else if (!tr.firm) {
     ctx.fillStyle = '#f2e8ac';
-    ctx.fillText('ACQ', w - 14, 48);
+    ctx.fillText('ACQ', w - 20, 60);
   } else if (decoy) {
     ctx.fillStyle = '#9fd6ff';
-    ctx.fillText('DCY', w - 14, 48);
+    ctx.fillText('DCY', w - 20, 60);
+  } else if (sel) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('SEL', w - 20, 60);
   }
   surface.commit();
 }
@@ -1060,7 +1321,7 @@ function drawHoloLabel(surface, tr, { decoy, sel, assigned }) {
 // with the shelter opening still visible above the hardware.
 
 const PANEL_W = 2.60;
-const PANEL_H = 0.50;
+const PANEL_H = 0.54;
 const PANEL_TILT = -1.089; // 62.4 deg from vertical, i.e. a 27.6 deg desk slope
 const PANEL_ORIGIN = [0, 0.905, -0.10];
 
@@ -1078,9 +1339,12 @@ const FACE_Z = HOUSE_D / 2 + HOUSE_CH * 0.8 + 0.008;
 const SCOPE = { x: -0.80, y: 1.42, z: -0.64, w: 0.70, h: 0.70, toe: SCREEN_TOE };
 const STATUS = { x: 0.82, y: 1.38, z: -0.64, w: 0.72, h: 0.54, toe: -SCREEN_TOE };
 
+// The tank fills the whole gap between the two screen housings — the scope's
+// inner edge sits at x = -0.45 and the status board's at 0.46 — and stands tall
+// enough to read as a volume without climbing past the top of either screen.
 const HOLO_POS = [0, 1.14, -0.46];
-const HOLO_R = 0.33;
-const HOLO_H = 0.40;
+const HOLO_R = 0.34;
+const HOLO_H = 0.54;
 
 const DOCK_EYE = [0, 1.45, 1.05];
 const DOCK_PITCH = -0.20;
@@ -1093,16 +1357,16 @@ const BUTTON_SPECS = {
   ASSIGN: { label: 'ASSIGN', sub: 'TARGET', color: 0xffd23f, w: 0.255, h: 0.112 },
   AUTHORIZE: { label: 'AUTHORIZE', sub: 'RELEASE', color: 0xff4436, w: 0.300, h: 0.126, danger: true },
   START: { label: 'START', sub: 'THREAT WAVE', color: 0xff8a2b, w: 0.330, h: 0.126, danger: true },
-  SCN_SINGLE: { label: 'SINGLE', color: 0xc4d2da, w: 0.235, h: 0.098 },
-  SCN_SATURATION: { label: 'SATURATION', color: 0xc4d2da, w: 0.235, h: 0.098 },
-  SCN_NIGHT_RAID: { label: 'NIGHT RAID', color: 0xc4d2da, w: 0.235, h: 0.098 },
-  TOD_day: { label: 'DAY', color: 0xffe9b0, w: 0.235, h: 0.098 },
-  TOD_sunset: { label: 'SUNSET', color: 0xffa060, w: 0.235, h: 0.098 },
-  TOD_night: { label: 'NIGHT', color: 0x9db4ff, w: 0.235, h: 0.098 },
+  SCN_SINGLE: { label: 'SINGLE', color: 0xc4d2da, w: 0.235, h: 0.092 },
+  SCN_SATURATION: { label: 'SATURATION', color: 0xc4d2da, w: 0.235, h: 0.092 },
+  SCN_NIGHT_RAID: { label: 'NIGHT RAID', color: 0xc4d2da, w: 0.235, h: 0.092 },
+  TOD_day: { label: 'DAY', color: 0xffe9b0, w: 0.235, h: 0.092 },
+  TOD_sunset: { label: 'SUNSET', color: 0xffa060, w: 0.235, h: 0.092 },
+  TOD_night: { label: 'NIGHT', color: 0x9db4ff, w: 0.235, h: 0.092 },
 };
 
 const ROW1 = 0.0620;
-const ROW2 = -0.1100;
+const ROW2 = -0.1180;
 
 /** [id, panel-local x, panel-local y] */
 const BUTTON_LAYOUT = [
@@ -1122,12 +1386,12 @@ const BUTTON_LAYOUT = [
 ];
 
 const PANEL_GROUPS = [
-  { title: 'WEAPON SELECT', x0: -1.255, x1: -0.475, y0: 0.152, y1: -0.018 },
-  { title: 'TRACK CONTROL', x0: -0.415, x1: 0.160, y0: 0.152, y1: -0.018 },
-  { title: 'FIRE CONTROL', x0: 0.290, x1: 1.255, y0: 0.152, y1: -0.018, hazard: true },
-  { title: 'EXERCISE PROFILE', x0: -1.255, x1: -0.475, y0: -0.044, y1: -0.176 },
-  { title: 'SITE CONDITIONS', x0: -0.415, x1: 0.378, y0: -0.044, y1: -0.176 },
-  { title: 'MASTER ARM', x0: 0.470, x1: 1.255, y0: -0.044, y1: -0.176 },
+  { title: 'WEAPON SELECT', x0: -1.255, x1: -0.475, y0: 0.156, y1: -0.020 },
+  { title: 'TRACK CONTROL', x0: -0.415, x1: 0.160, y0: 0.156, y1: -0.020 },
+  { title: 'FIRE CONTROL', x0: 0.290, x1: 1.255, y0: 0.156, y1: -0.020, hazard: true },
+  { title: 'EXERCISE PROFILE', x0: -1.255, x1: -0.475, y0: -0.050, y1: -0.188 },
+  { title: 'SITE CONDITIONS', x0: -0.415, x1: 0.378, y0: -0.050, y1: -0.188 },
+  { title: 'MASTER ARM', x0: 0.470, x1: 1.255, y0: -0.050, y1: -0.188 },
 ];
 
 /** Backlit legend lamps along the top rail of the sloped panel. */
@@ -1141,7 +1405,7 @@ const LAMPS = [
   { id: 'RELOAD', text: 'RELOAD', color: 0xffc846 },
   { id: 'CAUTION', text: 'CAUTION', color: 0xff6b58 },
 ];
-const LAMP_Y = 0.2115;
+const LAMP_Y = 0.2320;
 const LAMP_X0 = -1.16;
 const LAMP_DX = 0.3314;
 const lampX = (i) => LAMP_X0 + i * LAMP_DX;
@@ -1183,8 +1447,8 @@ function panelLegendTexture() {
   ctx.textBaseline = 'middle';
 
   // ---- lamp rail ---------------------------------------------------------
-  const railTop = uy(0.247);
-  const railBot = uy(0.176);
+  const railTop = uy(0.266);
+  const railBot = uy(0.198);
   ctx.fillStyle = 'rgba(8, 11, 13, 0.72)';
   roundRect(ctx, ux(-1.275), railTop, um(2.55), railBot - railTop, 9);
   ctx.fill();
@@ -1194,7 +1458,7 @@ function panelLegendTexture() {
   ctx.stroke();
   ctx.textAlign = 'left';
   LAMPS.forEach((l, i) => {
-    setFont(ctx, 34, '700', COND, 2);
+    fitFont(ctx, l.text, um(0.205), 34, '700', COND, 2);
     ctx.fillStyle = `#${new THREE.Color(l.color).getHexString()}`;
     ctx.globalAlpha = 0.85;
     ctx.fillText(l.text, ux(lampX(i) - 0.086), uy(LAMP_Y));
@@ -1233,7 +1497,7 @@ function panelLegendTexture() {
     ctx.lineWidth = 3.5;
     roundRect(ctx, x0, yTop, x1 - x0, yBot - yTop, 12);
     ctx.stroke();
-    setFont(ctx, 30, '700', COND, 5);
+    fitFont(ctx, grp.title, (x1 - x0) * 0.66, 30, '700', COND, 5);
     const tw = ctx.measureText(grp.title).width + 30;
     ctx.fillStyle = '#2a3134';
     ctx.fillRect(x0 + 24, yTop - 5, tw, 10);
@@ -1244,19 +1508,20 @@ function panelLegendTexture() {
 
   // ---- master-arm block detail --------------------------------------------
   ctx.textAlign = 'center';
-  setFont(ctx, 24, '700', COND, 3);
   const swLabels = [['ARM', 'SAFE'], ['BATT', 'EXT'], ['LINK', 'LOCAL']];
   SWITCH_X.forEach((sx, i) => {
+    fitFont(ctx, swLabels[i][0], um(0.18), 24, '700', COND, 3);
     ctx.fillStyle = 'rgba(216, 230, 234, 0.82)';
-    ctx.fillText(swLabels[i][0], ux(sx), uy(-0.072));
+    ctx.fillText(swLabels[i][0], ux(sx), uy(-0.078));
+    fitFont(ctx, swLabels[i][1], um(0.18), 24, '700', COND, 3);
     ctx.fillStyle = 'rgba(180, 198, 204, 0.6)';
-    ctx.fillText(swLabels[i][1], ux(sx), uy(-0.162));
+    ctx.fillText(swLabels[i][1], ux(sx), uy(-0.174));
   });
 
   // ---- screws and bottom stencil -------------------------------------------
   ctx.fillStyle = 'rgba(190, 202, 206, 0.4)';
   for (const px of [-1.272, -0.64, 0, 0.64, 1.272]) {
-    for (const py of [0.236, -0.214]) {
+    for (const py of [0.254, -0.228]) {
       const cyv = uy(py);
       ctx.beginPath();
       ctx.arc(ux(px), cyv, 8, 0, Math.PI * 2);
@@ -1269,13 +1534,16 @@ function panelLegendTexture() {
       ctx.stroke();
     }
   }
+  const stencilL = 'AEGIS RIDGE \u00B7 C2 CONSOLE 01 \u00B7 FIRE DIRECTION';
+  const stencilR = 'EXERCISE ONLY \u2014 FICTIONAL SYSTEM';
   ctx.textAlign = 'left';
-  setFont(ctx, 20, '700', COND, 4);
-  ctx.fillStyle = 'rgba(200, 216, 220, 0.68)';
-  ctx.fillText('AEGIS RIDGE \u00B7 C2 CONSOLE 01 \u00B7 FIRE DIRECTION', ux(-1.22), uy(-0.214));
+  fitFont(ctx, stencilL, um(1.06), 21, '700', COND, 4);
+  ctx.fillStyle = 'rgba(200, 216, 220, 0.66)';
+  ctx.fillText(stencilL, ux(-1.22), uy(-0.228));
   ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(224, 176, 96, 0.72)';
-  ctx.fillText('EXERCISE ONLY \u2014 FICTIONAL SYSTEM', ux(1.22), uy(-0.214));
+  fitFont(ctx, stencilR, um(0.94), 21, '700', COND, 4);
+  ctx.fillStyle = 'rgba(224, 176, 96, 0.7)';
+  ctx.fillText(stencilR, ux(1.22), uy(-0.228));
 
   s.commit();
   return s;
@@ -1308,11 +1576,11 @@ function buttonCapTexture(spec) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const hasSub = !!spec.sub;
-  setFont(ctx, Math.round(H * (hasSub ? 0.36 : 0.44)), '700', COND, 3);
+  fitFont(ctx, spec.label, W - 46, Math.round(H * (hasSub ? 0.36 : 0.44)), '700', COND, 3);
   ctx.fillStyle = '#f8fdff';
-  ctx.fillText(spec.label, W / 2, hasSub ? H * 0.39 : H * 0.46);
+  ctx.fillText(spec.label, W / 2, hasSub ? H * 0.39 : H * 0.47);
   if (hasSub) {
-    setFont(ctx, Math.round(H * 0.21), '400', MONO, 1);
+    fitFont(ctx, spec.sub, W - 60, Math.round(H * 0.21), '400', MONO, 1);
     ctx.fillStyle = hex;
     ctx.fillText(spec.sub, W / 2, H * 0.72);
   }
@@ -1367,11 +1635,11 @@ function equipmentPlateTexture(lines, accent = '#c9d6da') {
   ctx.strokeRect(5, 5, W - 10, H - 10);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  setFont(ctx, 42, '700', COND, 5);
+  fitFont(ctx, lines[0], W - 44, 42, '700', COND, 5);
   ctx.fillStyle = accent;
   ctx.fillText(lines[0], 22, lines[1] ? 46 : H / 2);
   if (lines[1]) {
-    setFont(ctx, 26, '400', MONO, 2);
+    fitFont(ctx, lines[1], W - 44, 26, '400', MONO, 2);
     ctx.fillStyle = 'rgba(184,202,208,0.72)';
     ctx.fillText(lines[1], 22, 90);
   }
@@ -1391,7 +1659,7 @@ function bezelTexture(title, right) {
   ctx.fillRect(0, 0, W, H * 0.86);
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
-  setFont(ctx, 19, '700', COND, 3);
+  fitFont(ctx, title, W * 0.5, 20, '700', COND, 3);
   ctx.fillStyle = 'rgba(206, 224, 228, 0.72)';
   ctx.fillText(title, 24, H * 0.945);
   ctx.textAlign = 'right';
@@ -1635,13 +1903,13 @@ export class ConsoleRig {
     mountScreen(this.statusMesh, STATUS);
 
     /* ---- holographic track volume ---------------------------------------- */
-    this.holo = new HoloDisplay(HOLO_R, HOLO_H);
+    this.holo = new HoloDisplay(HOLO_R, HOLO_H, yaw);
     this.holo.group.position.set(HOLO_POS[0], HOLO_POS[1], HOLO_POS[2]);
     this.group.add(this.holo.group);
 
     const tank = [];
     const [hx, hy, hz] = HOLO_POS;
-    tank.push({ geometry: cylinder(0.20, 0.27, 0.10, 22), matrix: transform({ pos: [hx, hy - 0.056, hz] }) });
+    tank.push({ geometry: cylinder(0.22, 0.30, 0.10, 22), matrix: transform({ pos: [hx, hy - 0.056, hz] }) });
     tank.push({ geometry: new THREE.TorusGeometry(HOLO_R, 0.011, 6, 40), matrix: transform({ pos: [hx, hy - 0.006, hz], rot: [Math.PI / 2, 0, 0] }) });
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
@@ -1651,8 +1919,9 @@ export class ConsoleRig {
       });
     }
     tank.push({ geometry: new THREE.TorusGeometry(HOLO_R - 0.02, 0.008, 5, 34), matrix: transform({ pos: [hx, hy - 0.094, hz], rot: [Math.PI / 2, 0, 0] }) });
-    // pedestal down to the bridge shelf
-    tank.push({ geometry: chamferBox(0.34, 0.09, 0.26, 0.02), matrix: transform({ pos: [hx, BRIDGE_Y + 0.085, hz] }) });
+    // pedestal down to the bridge shelf, kept inside the cowl so it cannot
+    // show through the tank floor
+    tank.push({ geometry: chamferBox(0.30, 0.09, 0.24, 0.02), matrix: transform({ pos: [hx, BRIDGE_Y + 0.048, hz] }) });
     const tankMesh = new THREE.Mesh(mergeParts(tank), chrome);
     tankMesh.castShadow = true;
     this.group.add(tankMesh);
@@ -1660,8 +1929,8 @@ export class ConsoleRig {
 
     // Soft fill so the tank rim and nearby panel pick up the holo's colour
     // without the point light itself becoming a bloom source.
-    this.holoGlow = new THREE.PointLight(0x46d8c0, 0.75, 2.2, 2);
-    this.holoGlow.position.set(hx, hy + 0.14, hz);
+    this.holoGlow = new THREE.PointLight(0x46d8c0, 0.75, 2.4, 2);
+    this.holoGlow.position.set(hx, hy + 0.20, hz);
     this.group.add(this.holoGlow);
 
     /* ---- keyboard, trackball and desk clutter ---------------------------- */

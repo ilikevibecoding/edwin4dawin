@@ -37,7 +37,13 @@ export class UI {
     // ---- threat board -------------------------------------------------
     this.threats = el('div', 'panel');
     this.threats.id = 'threats';
-    this.threats.innerHTML = `<h3><span>THREAT BOARD</span><span class="dim" data-count>0</span></h3><div data-list></div>`;
+    this.threats.innerHTML = `
+      <h3><span>THREAT BOARD</span><span class="dim" data-count>0 TRK</span></h3>
+      <div class="thead"><span>TRACK</span><span>CLASS</span><span>ALT</span><span>SPD</span></div>
+      <div data-list></div>
+      <div class="key">
+        <span class="k firm">RV</span><span class="k tentative">ACQ</span><span class="k decoy">DECOY</span><span class="k assigned">ASSIGNED</span>
+      </div>`;
     r.appendChild(this.threats);
     this.threatList = this.threats.querySelector('[data-list]');
     this.threatCount = this.threats.querySelector('[data-count]');
@@ -52,14 +58,17 @@ export class UI {
     for (const b of BATTERIES) {
       const row = el('div', 'bat');
       row.innerHTML = `
-        <div class="row"><span class="name" style="color:${b.accent}">${b.short}</span><span data-state>READY</span></div>
-        <div class="row dim"><span data-code>${b.codeName}</span><span class="pips" data-ammo></span></div>
+        <div class="row top"><span class="name" style="color:${b.accent}">${b.short}</span><span class="pill" data-state>READY</span></div>
+        <div class="row sub"><span class="dim">${b.codeName}</span><span data-tgt class="dim">NO TARGET</span></div>
+        <div class="row sub"><span class="pips" data-ammo></span><span class="dim" data-rds></span></div>
         <div class="bar"><i data-bar></i></div>`;
       this.batteryList.appendChild(row);
       this.batteryRows[b.id] = {
         row,
         stateEl: row.querySelector('[data-state]'),
         ammoEl: row.querySelector('[data-ammo]'),
+        rdsEl: row.querySelector('[data-rds]'),
+        tgtEl: row.querySelector('[data-tgt]'),
         barEl: row.querySelector('[data-bar]'),
       };
     }
@@ -182,7 +191,16 @@ export class UI {
         <div class="actions">
           <button class="hud go big" data-action="deploy">DEPLOY TO SITE</button>
           <button class="hud" data-action="settings">SETTINGS</button>
-          <span class="dim">Mouse look after clicking &middot; <span class="kbd">WASD</span> move &middot; <span class="kbd">SHIFT</span> sprint &middot; <span class="kbd">E</span> assign &middot; <span class="kbd">F</span> authorize</span>
+        </div>
+        <div class="keys">
+          <span><span class="kbd">WASD</span> move</span>
+          <span><span class="kbd">SHIFT</span> sprint</span>
+          <span><span class="kbd">Q</span> take console</span>
+          <span><span class="kbd">E</span> assign</span>
+          <span><span class="kbd">F</span> authorize</span>
+          <span><span class="kbd">TAB</span> next track</span>
+          <span><span class="kbd">1-3</span> battery</span>
+          <span><span class="kbd">R</span> start wave</span>
         </div>
       </div>`;
     r.appendChild(this.briefing);
@@ -209,12 +227,13 @@ export class UI {
     this.debrief = el('div', 'overlay');
     this.debrief.id = 'debrief';
     this.debrief.innerHTML = `
-      <div class="card">
+      <div class="card outcome">
+        <div class="ribbon"></div>
         <h1 data-title>SCENARIO COMPLETE</h1>
         <h2 data-sub></h2>
         <div class="scores" data-scores></div>
         <h4>ENGAGEMENT RECORD</h4>
-        <div data-record></div>
+        <div class="record" data-record></div>
         <div class="actions">
           <button class="hud go big" data-action="restart">RESTART SCENARIO</button>
           <button class="hud" data-action="briefing">CHANGE SETUP</button>
@@ -279,8 +298,13 @@ export class UI {
   showBanner(title, sub, color = '#eafffb', seconds = 2.8) {
     this.bannerT.textContent = title;
     this.bannerT.style.color = color;
+    this.banner.style.setProperty('--bc', color);
     this.bannerS.textContent = sub || '';
     this.banner.classList.add('on');
+    // Restart the sweep-in so back-to-back results still register as new.
+    this.banner.classList.remove('pop');
+    void this.banner.offsetWidth;
+    this.banner.classList.add('pop');
     this.bannerTimer = seconds;
   }
 
@@ -297,9 +321,15 @@ export class UI {
     this.overlay = name;
   }
 
+  /**
+   * At the console the in-world hardware is the interface, so the overlay steps
+   * back: `#hud.docked` in the stylesheet retires the panels the two screens
+   * already carry and packs the rest into the margins the console leaves free.
+   */
   setConsoleMode(on) {
     this.console.classList.toggle('on', on);
-    this.engMode.textContent = on ? 'CONSOLE' : 'OBSERVE';
+    this.root.classList.toggle('docked', on);
+    if (this.engMode) this.engMode.textContent = on ? 'CONSOLE' : 'OBSERVE';
   }
 
   updateSelections() {
@@ -336,29 +366,38 @@ export class UI {
   updateThreats(tracks, selectedId, assignedId) {
     this.threatCount.textContent = `${tracks.length} TRK`;
     const seen = new Set();
-    for (const tr of tracks) {
+    // Closest first: the board should read top-down as "deal with this next".
+    const ordered = tracks.slice().sort((a, b) => a.range - b.range);
+    ordered.forEach((tr, i) => {
       seen.add(tr.id);
       let row = this.threatList.querySelector(`[data-id="${tr.id}"]`);
       if (!row) {
         row = el('div', 'trk');
         row.dataset.id = tr.id;
-        row.innerHTML = `<span data-id2></span><span data-cls></span><span data-alt></span><span data-spd></span>`;
+        row.innerHTML = `<span class="tid" data-id2></span><span class="tcls" data-cls></span><span class="num" data-alt></span><span class="num" data-spd></span>`;
         this.threatList.appendChild(row);
       }
+      if (this.threatList.children[i] !== row) this.threatList.insertBefore(row, this.threatList.children[i] || null);
       const decoy = tr.classified.includes('DECOY');
-      row.className = `trk${tr.id === selectedId ? ' sel' : ''}${tr.id === assignedId ? ' assigned' : ''}${decoy ? ' decoy' : ''}${tr.firm ? '' : ' tentative'}`;
+      const kind = !tr.firm ? 'tentative' : decoy ? 'decoy' : 'firm';
+      row.className = `trk ${kind}${tr.id === selectedId ? ' sel' : ''}${tr.id === assignedId ? ' assigned' : ''}`;
       row.querySelector('[data-id2]').textContent = tr.id;
-      row.querySelector('[data-cls]').textContent = tr.firm ? (decoy ? 'DECOY?' : 'BALLISTIC') : 'ACQUIRING';
+      row.querySelector('[data-cls]').textContent = tr.firm
+        ? decoy
+          ? 'DECOY'
+          : tr.ambiguous
+            ? 'RV (UNRESOLVED)'
+            : 'BALLISTIC RV'
+        : 'ACQUIRING';
       row.querySelector('[data-alt]').textContent = `${fmtKm(tr.alt)}km`;
       row.querySelector('[data-spd]').textContent = `${Math.round(tr.speed)}`;
-    }
+    });
     for (const row of Array.from(this.threatList.children)) {
       if (!seen.has(row.dataset.id)) row.remove();
     }
     if (!tracks.length) {
       if (!this.threatList.querySelector('.empty')) {
-        const e = el('div', 'empty dim', 'NO TRACKS — SEARCH');
-        this.threatList.appendChild(e);
+        this.threatList.appendChild(el('div', 'empty dim', 'NO TRACKS \u2014 SEARCHING'));
       }
     } else {
       const e = this.threatList.querySelector('.empty');
@@ -371,6 +410,7 @@ export class UI {
       const st = state.batteries[b.id];
       const ui = this.batteryRows[b.id];
       ui.row.classList.toggle('sel', b.id === state.selectedBatteryId);
+      ui.row.style.setProperty('--accent', b.accent);
       let label = st.state;
       let cls = 'green';
       if (st.state === BATTERY_STATE.RELOAD) {
@@ -384,8 +424,12 @@ export class UI {
         cls = 'red';
       }
       ui.stateEl.textContent = label;
-      ui.stateEl.className = cls;
-      ui.ammoEl.textContent = `${'|'.repeat(st.ammo)}${'.'.repeat(Math.max(0, b.ammo - st.ammo))} ${st.ammo}/${b.ammo}`;
+      ui.stateEl.className = `pill ${cls}`;
+      ui.ammoEl.innerHTML = Array.from({ length: b.ammo }, (_, i) => `<i class="${i < st.ammo ? 'on' : ''}"></i>`).join('');
+      ui.rdsEl.textContent = `${st.ammo}/${b.ammo} RDS`;
+      ui.rdsEl.className = st.ammo ? 'dim' : 'red';
+      ui.tgtEl.textContent = st.assignedTrackId ? `\u25B6 ${st.assignedTrackId}` : 'NO TARGET';
+      ui.tgtEl.className = st.assignedTrackId ? 'amber' : 'dim';
       const frac =
         st.state === BATTERY_STATE.RELOAD ? 1 - st.timer / b.reloadTime :
         st.state === BATTERY_STATE.PREP ? 1 - st.timer / b.prepTime : 1;
@@ -395,24 +439,56 @@ export class UI {
   }
 
   updateEngagement(info) {
+    const w = info.window;
+    const sel = info.selected;
+    const bstate = state.batteries[info.battery.id];
+    const ready = bstate && bstate.ammo > 0 && bstate.state !== BATTERY_STATE.RELOAD;
+
+    // Headline: one line that answers "can I shoot, and at what".
+    let verdict = 'NO TRACK SELECTED';
+    let vcls = 'idle';
+    if (info.assigned) {
+      verdict = ready ? `CLEARED \u2014 AUTHORIZE ${info.assigned.id}` : 'BATTERY NOT READY';
+      vcls = ready ? 'go' : 'warn';
+    } else if (sel && w) {
+      if (!w.okAlt || !w.okRange) {
+        verdict = 'OUT OF BASKET';
+        vcls = 'bad';
+      } else if (!ready) {
+        verdict = 'BATTERY NOT READY';
+        vcls = 'warn';
+      } else {
+        verdict = `ASSIGN ${sel.id} TO ${info.battery.short}`;
+        vcls = 'go';
+      }
+    }
+
     const rows = [];
-    rows.push(`<div class="row"><span class="dim">BATTERY</span><span style="color:${info.battery.accent}">${info.battery.label}</span></div>`);
-    rows.push(`<div class="row"><span class="dim">SEL TRACK</span><span class="white">${info.selected ? info.selected.id : '—'}</span></div>`);
-    rows.push(`<div class="row"><span class="dim">ASSIGNED</span><span class="amber">${info.assigned ? info.assigned.id : '—'}</span></div>`);
-    if (info.window) {
-      const w = info.window;
-      rows.push(`<div class="row"><span class="dim">CUED INTERCEPT</span><span>${fmtKm(w.alt)}km / ${fmtKm(w.range)}km</span></div>`);
-      rows.push(`<div class="row"><span class="dim">TIME TO INTERCEPT</span><span>${w.tti.toFixed(1)}s</span></div>`);
+    rows.push(`<div class="verdict ${vcls}">${verdict}</div>`);
+    rows.push(`<div class="grid2">
+      <div><label>SELECTED</label><b class="white">${sel ? sel.id : '\u2014\u2014'}</b><span class="dim">${sel ? (sel.firm ? sel.classified : 'ACQUIRING') : 'none'}</span></div>
+      <div><label>ASSIGNED</label><b class="amber">${info.assigned ? info.assigned.id : '\u2014\u2014'}</b><span class="dim">${info.assigned ? 'round committed on cue' : 'no commitment'}</span></div>
+    </div>`);
+    rows.push(
+      `<div class="row"><span class="dim">BATTERY</span><span style="color:${info.battery.accent}">${info.battery.label}</span></div>`
+    );
+    if (w) {
       const pct = Math.round(w.quality * 100);
       const col = w.quality > 0.7 ? 'var(--green)' : w.quality > 0.35 ? 'var(--amber)' : 'var(--red)';
+      rows.push(`<div class="row"><span class="dim">CUED INTERCEPT</span><span>${fmtKm(w.alt)}km ALT / ${fmtKm(w.range)}km OUT</span></div>`);
+      rows.push(`<div class="row"><span class="dim">TIME TO INTERCEPT</span><span class="white">${w.tti.toFixed(1)}s</span></div>`);
       rows.push(`<div class="row"><span class="dim">SOLUTION (CUE)</span><span style="color:${col}">${pct}%</span></div>`);
       rows.push(`<div class="bar"><i style="width:${pct}%;background:${col}"></i></div>`);
-      if (!w.okAlt) rows.push(`<div class="row red"><span>ALT OUTSIDE BASKET</span><span></span></div>`);
-      if (!w.okRange) rows.push(`<div class="row red"><span>RANGE OUTSIDE BASKET</span><span></span></div>`);
+      if (!w.okAlt) rows.push(`<div class="flag red">ALT OUTSIDE ${info.battery.short} BASKET</div>`);
+      if (!w.okRange) rows.push(`<div class="flag red">RANGE OUTSIDE ${info.battery.short} BASKET</div>`);
     }
-    rows.push(`<div class="row"><span class="dim">IN FLIGHT</span><span>${state.stats.inFlight}</span></div>`);
+    rows.push(
+      `<div class="row"><span class="dim">INTERCEPTORS IN FLIGHT</span><span class="${state.stats.inFlight ? 'amber' : 'dim'}">${state.stats.inFlight}</span></div>`
+    );
     if (info.lastResult) {
-      rows.push(`<div class="row" style="margin-top:4px"><span class="dim">LAST</span><span class="${info.lastResult.cls}">${info.lastResult.text}</span></div>`);
+      rows.push(
+        `<div class="last ${info.lastResult.cls}"><label>LAST ENGAGEMENT</label><b>${info.lastResult.text}</b><span>${info.lastResult.detail || ''}</span></div>`
+      );
     }
     this.engBody.innerHTML = rows.join('');
   }
@@ -420,12 +496,12 @@ export class UI {
   updateMission(info) {
     this.mission.innerHTML = `
       <div class="big">${info.title}</div>
-      <div class="row" style="justify-content:center;gap:16px;margin-top:3px">
-        <span class="dim">${info.tod}</span>
-        <span>T+${info.time.toFixed(1)}s</span>
-        <span class="dim">INBOUND</span><span class="${info.active > 0 ? 'red' : 'dim'}">${info.active}</span>
-        <span class="dim">DOWN</span><span class="green">${info.killed}</span>
-        <span class="dim">LEAK</span><span class="${info.leaks > 0 ? 'red' : 'dim'}">${info.leaks}</span>
+      <div class="strip">
+        <span class="tag">${info.tod}</span>
+        <span class="tag">T+${info.time.toFixed(1)}s</span>
+        <span class="stat ${info.active > 0 ? 'red' : ''}"><b>${info.active}</b><i>INBOUND</i></span>
+        <span class="stat ${info.killed > 0 ? 'green' : ''}"><b>${info.killed}</b><i>DOWN</i></span>
+        <span class="stat ${info.leaks > 0 ? 'red' : ''}"><b>${info.leaks}</b><i>LEAKERS</i></span>
       </div>`;
   }
 
@@ -455,27 +531,36 @@ export class UI {
 
   /* --------------------------------------------------------- 3D markers */
 
+  /**
+   * World-space target markers. The caller supplies a `<br>`-joined label; the
+   * first line becomes a solid ID chip so it survives a bright sky, and the
+   * remainder becomes a smaller readout under the symbol.
+   */
   updateMarkers(items) {
     const seen = new Set();
     for (const it of items) {
       seen.add(it.key);
-      let m = this.markers.get(it.key);
-      if (!m) {
-        m = el('div', 'marker');
-        m.innerHTML = `<div class="box"></div><div class="lbl"></div>`;
+      let rec = this.markers.get(it.key);
+      if (!rec) {
+        const m = el('div', 'marker');
+        m.innerHTML = `<div class="sym"><i></i></div><div class="lbl"><b class="id"></b><span class="ro"></span></div>`;
         this.markerLayer.appendChild(m);
-        this.markers.set(it.key, { node: m, lbl: m.querySelector('.lbl'), box: m.querySelector('.box') });
+        rec = { node: m, lbl: m.querySelector('.lbl'), id: m.querySelector('.id'), ro: m.querySelector('.ro'), sym: m.querySelector('.sym') };
+        this.markers.set(it.key, rec);
       }
-      const rec = this.markers.get(it.key);
-      rec.node.className = `marker ${it.cls || ''}${it.offscreen ? ' offscreen' : ''}`;
+      const cls = it.cls || '';
+      const kind = cls.includes('inter') ? 'inter' : cls.includes('assigned') ? 'assigned' : cls.includes('decoy') ? 'decoy' : cls.includes('tentative') ? 'tentative' : 'firm';
+      rec.node.className = `marker ${kind}${cls.includes('tentative') && kind !== 'tentative' ? ' tentative' : ''}${it.offscreen ? ' offscreen' : ''}`;
       rec.node.style.transform = `translate(${it.x.toFixed(1)}px, ${it.y.toFixed(1)}px) translate(-50%,-50%)`;
       rec.node.style.opacity = String(it.opacity !== undefined ? it.opacity : 1);
-      const scale = it.scale || 1;
-      rec.box.style.width = `${Math.round(26 * scale)}px`;
-      rec.box.style.height = `${Math.round(26 * scale)}px`;
+      const size = Math.round(24 * (it.scale || 1));
+      rec.sym.style.width = `${size}px`;
+      rec.sym.style.height = `${size}px`;
       if (rec.lbl.dataset.txt !== it.label) {
-        rec.lbl.innerHTML = it.label;
         rec.lbl.dataset.txt = it.label;
+        const parts = String(it.label).split(/<br\s*\/?>/i);
+        rec.id.textContent = parts[0] || '';
+        rec.ro.innerHTML = parts.slice(1).join('<br>');
       }
     }
     for (const [key, rec] of this.markers) {
@@ -488,15 +573,22 @@ export class UI {
 
   showDebrief(data) {
     const card = this.debrief.querySelector('.card');
-    card.querySelector('[data-title]').textContent = data.title;
-    card.querySelector('[data-title]').style.color = data.color;
+    const title = card.querySelector('[data-title]');
+    title.textContent = data.title;
+    title.style.color = data.color;
+    card.style.setProperty('--outcome', data.color);
     card.querySelector('[data-sub]').textContent = data.sub;
     card.querySelector('[data-scores]').innerHTML = data.scores
-      .map((s) => `<div class="score"><b>${s.value}</b><span>${s.label}</span></div>`)
+      .map((s, i) => `<div class="score${i === 1 ? ' hero' : ''}"><b>${s.value}</b><span>${s.label}</span></div>`)
       .join('');
     card.querySelector('[data-record]').innerHTML = data.record.length
-      ? data.record.map((r) => `<div class="row"><span class="${r.cls}">${r.text}</span><span class="dim">${r.detail}</span></div>`).join('')
-      : '<div class="row dim"><span>NO ENGAGEMENTS RECORDED</span><span></span></div>';
+      ? data.record
+          .map(
+            (r, i) =>
+              `<div class="rec ${r.cls}"><span class="n">${String(i + 1).padStart(2, '0')}</span><span class="verdict">${r.text}</span><span class="detail">${r.detail}</span></div>`
+          )
+          .join('')
+      : '<div class="rec"><span class="n">\u2014</span><span class="verdict dim">NO ENGAGEMENTS RECORDED</span><span class="detail dim">no rounds were committed</span></div>';
     this.setOverlay('debrief');
   }
 
