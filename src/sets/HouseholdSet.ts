@@ -53,6 +53,7 @@ export class HouseholdSet extends SceneSet {
 
     this.buildShell();
     this.buildFurniture();
+    this.buildDressing();
     this.buildLights();
 
     // Rain belongs outside the glass. The volume is parked beyond the back wall
@@ -263,12 +264,199 @@ export class HouseholdSet extends SceneSet {
     this.reflect(shade);
   }
 
-  private buildLights(): void {
-    this.scene.add(new THREE.HemisphereLight(0x2a3646, 0x0b0a09, 0.9));
+  /**
+   * Everything that makes the room look inhabited.
+   *
+   * The furniture alone was not enough: shots kept landing on bare wall, and a
+   * flat rectangle of plaster with nothing in front of it reads as a stage flat
+   * rather than a house. What fixes that is silhouette — skirting to give the
+   * wall/floor join a line, curtains and pictures to break the vertical
+   * expanse, a sideboard and clutter so the middle distance has objects in it,
+   * and a doorway the camera can see through to somewhere else.
+   */
+  private buildDressing(): void {
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x241a13, roughness: 0.62, metalness: 0.05 });
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x554b3f, roughness: 0.78, metalness: 0.03 });
 
-    this.lampLight = new THREE.PointLight(PALETTE.sodium, 16, 7.5, 2);
+    // Skirting: a continuous line where wall meets floor, which is most of what
+    // stops a wall reading as a flat.
+    for (const [w, x, z, rotY] of [
+      [8.2, 0, -3.86, 0],
+      [8.2, -4.26, 0, Math.PI / 2],
+      [3.0, 4.26, -2.4, Math.PI / 2],
+    ] as [number, number, number, number][]) {
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(w, 0.14, 0.05), trimMat);
+      skirt.position.set(x, 0.07, z);
+      skirt.rotation.y = rotY;
+      skirt.receiveShadow = true;
+      this.scene.add(skirt);
+      this.reflect(skirt);
+    }
+
+    // Curtains either side of the window, hanging past the frame.
+    const drape = fabricSurface({ size: 256, repeat: 2, tint: [0.13, 0.11, 0.13], weave: 40, seed: 19 });
+    const curtainMat = new THREE.MeshStandardMaterial({
+      map: drape.map,
+      normalMap: drape.normalMap,
+      color: 0x3a2f33,
+      roughness: 0.92,
+      metalness: 0,
+      side: THREE.DoubleSide,
+    });
+    for (const x of [-0.95, 2.25]) {
+      const curtain = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 2.15, 8, 1, true, 0, Math.PI), curtainMat);
+      curtain.position.set(x, 1.42, -3.72);
+      curtain.rotation.y = x < 0 ? -0.5 : Math.PI + 0.5;
+      curtain.castShadow = true;
+      this.scene.add(curtain);
+      this.reflect(curtain);
+    }
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 3.5, 6), trimMat);
+    rail.rotation.z = Math.PI / 2;
+    rail.position.set(0.65, 2.55, -3.7);
+    this.scene.add(rail);
+
+    // Framed pictures: the only thing on the walls, and they break the height.
+    for (const [x, y, z, rotY, w, h] of [
+      [-4.3, 1.72, -1.1, Math.PI / 2, 0.52, 0.66],
+      [-4.3, 1.62, 0.9, Math.PI / 2, 0.44, 0.34],
+      [-2.4, 1.8, -3.86, 0, 0.62, 0.42],
+    ] as [number, number, number, number, number, number][]) {
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.04), woodMat);
+      frame.position.set(x, y, z);
+      frame.rotation.y = rotY;
+      frame.castShadow = true;
+      this.scene.add(frame);
+      const art = new THREE.Mesh(
+        new THREE.PlaneGeometry(w * 0.84, h * 0.84),
+        new THREE.MeshStandardMaterial({ color: 0x6a5b4a, roughness: 0.85, metalness: 0 })
+      );
+      art.position.set(x + Math.sin(rotY) * 0.025, y, z + Math.cos(rotY) * 0.025);
+      art.rotation.y = rotY;
+      this.scene.add(art);
+      this.reflect(frame);
+    }
+
+    // Sideboard against the long wall, with bottles: middle-distance objects the
+    // camera can rake across, and the reason the room feels occupied.
+    const sideboard = new THREE.Group();
+    const carcass = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.78, 0.44), woodMat);
+    carcass.position.y = 0.39;
+    sideboard.add(carcass);
+    for (const dx of [-0.4, 0.4]) {
+      const door = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.6, 0.03), trimMat);
+      door.position.set(dx, 0.4, 0.235);
+      sideboard.add(door);
+    }
+    sideboard.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) {
+        m.castShadow = true;
+        m.receiveShadow = true;
+      }
+    });
+    sideboard.position.set(-2.9, 0, -3.55);
+    this.scene.add(sideboard);
+    this.reflect(sideboard);
+
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: 0x3a2a14,
+      roughness: 0.08,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.72,
+      envMapIntensity: 1.8,
+    });
+    for (const [dx, h, r] of [
+      [-0.5, 0.28, 0.042],
+      [-0.3, 0.22, 0.036],
+      [0.42, 0.3, 0.038],
+    ] as [number, number, number][]) {
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.7, r, h, 9), glassMat);
+      b.position.set(-2.9 + dx, 0.78 + h / 2, -3.55);
+      b.castShadow = true;
+      this.scene.add(b);
+    }
+
+    // Rug: separates the seating area from the rest of the floor and kills the
+    // uninterrupted expanse of boards.
+    const weave = fabricSurface({ size: 256, repeat: 4, tint: [0.17, 0.12, 0.12], weave: 60, seed: 33 });
+    const rug = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.1, 2.2),
+      new THREE.MeshStandardMaterial({
+        map: weave.map,
+        normalMap: weave.normalMap,
+        color: 0x4a3630,
+        roughness: 0.95,
+        metalness: 0,
+      })
+    );
+    rug.rotation.x = -Math.PI / 2;
+    rug.position.set(-0.5, 0.008, 1.1);
+    rug.receiveShadow = true;
+    this.scene.add(rug);
+
+    // Doorway to the hall, with light beyond it: something for the room to be
+    // next to, so it stops feeling like a sealed box.
+    const jambMat = trimMat;
+    for (const dx of [-0.52, 0.52]) {
+      const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.1, 0.18), jambMat);
+      jamb.position.set(4.32, 1.05, 2.6 + dx);
+      jamb.castShadow = true;
+      this.scene.add(jamb);
+      this.reflect(jamb);
+    }
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 1.22), jambMat);
+    lintel.position.set(4.32, 2.13, 2.6);
+    this.scene.add(lintel);
+    const hall = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.0, 2.05),
+      new THREE.MeshBasicMaterial({ color: 0x2a1c10, toneMapped: false })
+    );
+    hall.position.set(4.4, 1.02, 2.6);
+    hall.rotation.y = -Math.PI / 2;
+    this.scene.add(hall);
+
+    // Clutter on the table: a tumbler and a folded newspaper.
+    const tumbler = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.09, 10), glassMat);
+    tumbler.position.set(-0.3, 0.49, 0.86);
+    tumbler.castShadow = true;
+    this.scene.add(tumbler);
+    const paper = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.012, 0.22),
+      new THREE.MeshStandardMaterial({ color: 0x6b6256, roughness: 0.9 })
+    );
+    paper.position.set(-0.85, 0.46, 0.82);
+    paper.rotation.y = 0.3;
+    this.scene.add(paper);
+
+    // Unlit ceiling pendant: reads as a room where somebody chose not to put the
+    // main light on.
+    const flex = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.55, 5), trimMat);
+    flex.position.set(-0.4, 2.62, -0.4);
+    this.scene.add(flex);
+    const pendant = new THREE.Mesh(
+      new THREE.ConeGeometry(0.19, 0.2, 12, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0x30333a, roughness: 0.6, metalness: 0.4, side: THREE.DoubleSide })
+    );
+    pendant.position.set(-0.4, 2.28, -0.4);
+    this.scene.add(pendant);
+  }
+
+  private buildLights(): void {
+    // Low ambient on purpose: the practicals are the light in this room, and a
+    // strong hemisphere fill was flattening every face in the chapter.
+    this.scene.add(new THREE.HemisphereLight(0x2a3646, 0x0b0a09, 0.34));
+
+    this.lampLight = new THREE.PointLight(PALETTE.sodium, 22, 7.5, 2);
     this.lampLight.position.set(1.95, 1.6, 1.35);
     this.scene.add(this.lampLight);
+
+    // A second practical behind the doorway, so the hall reads as somewhere with
+    // its own light rather than a painted rectangle.
+    const hallLight = new THREE.PointLight(PALETTE.sodium, 5, 4.5, 2);
+    hallLight.position.set(4.9, 1.4, 2.6);
+    this.scene.add(hallLight);
 
     this.tvLight = new THREE.PointLight(0x86b4ff, 7, 6.5, 2);
     this.tvLight.position.set(-3.5, 1.15, 1.0);

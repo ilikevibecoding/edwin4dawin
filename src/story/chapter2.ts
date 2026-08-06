@@ -90,6 +90,19 @@ export async function playChapter2(d: Director, set: HouseholdSet, factory: Acto
   d.cut(d.shots.medium(cass, { lookingAt: marks.owner, lens: 45, distance: 2.5 }), { blend: 0.9 });
   await d.say(cass, 'Nine fifty-two. Alice should have been in bed twenty-two minutes ago.', 'ch2_cass_1', { thought: true });
 
+  // The rooftop is on the television in this room. Whatever happened there is
+  // already changing how the humans in this house look at the android in it.
+  d.cut(d.shots.insert(marks.tv.clone().add(new THREE.Vector3(0.55, 1.15, 0)), marks.tv.clone().add(new THREE.Vector3(2.5, 1.5, 0.5)), 52), {
+    handheld: 0.4,
+  });
+  await d.say('NEWSCAST', 'The android has been described as deviant. Owners are advised to report any unit behaving outside its programming.', 'ch2_news_2', { hold: 5.6 });
+  d.cut(d.shots.closeUp(girl, { lookingAt: marks.tv, lens: 74, distance: 1.15 }), { handheld: 0.7 });
+  d.light(girl, -1);
+  await d.say(girl, "It says report them. Would you have to report yourself?", 'ch2_girl_news');
+  d.cut(d.shots.closeUp(cass, { lookingAt: marks.child, lens: 82, distance: 1.05 }), { handheld: 0.5 });
+  d.light(cass, 1);
+  await d.say(cass, 'There is nothing to report. I have never behaved outside my programming. I would know.', 'ch2_cass_news');
+
   d.cut(d.shots.medium(girl, { lookingAt: marks.cass, lens: 55, distance: 2.1 }), { handheld: 0.6 });
   d.light(girl, 1);
   girl.setPose('slump', 0.6, { fadeIn: 0.5 });
@@ -147,6 +160,32 @@ export async function playChapter2(d: Director, set: HouseholdSet, factory: Acto
     await d.say(owner, "Empty. You're going to stand in my house and correct me?", 'ch2_owner_2a', { pose: 'defiant' });
   } else {
     await d.say(owner, "Good. That's all you're for.", 'ch2_owner_2b');
+  }
+
+  // The bottle comes at her. Catching it is reflex, not defiance — which is the
+  // point: her body is allowed to be fast, only her judgement is not.
+  d.cut(d.shots.twoShot(owner, cass, { lens: 42, side: -1, distance: 3.0, rise: 0.28 }), { handheld: 1.1 });
+  owner.setPose('pointForward', 0.9, { fadeIn: 0.2 });
+  d.sfx('thunder', 0.4);
+  await d.say(owner, "Then take it. Take it and get it out of my sight.", 'ch2_owner_throw', { hold: 2.2 });
+  d.slowMotion(0.45, 0.25);
+  const caught = await d.qteSequence({
+    keys: ['E', 'D'],
+    window: 0.95,
+    anchor: cass.getChestPosition(new THREE.Vector3()),
+    label: 'CATCH IT',
+  });
+  d.slowMotion(1, 0.4);
+  d.cut(d.shots.closeUp(cass, { lookingAt: marks.owner, lens: 84, distance: 1.1 }), { handheld: 0.8 });
+  d.light(cass, 1);
+  if (caught) {
+    d.sfx('blipConfirm');
+    d.state.set('ch2.caught', true);
+    await d.say(cass, 'My hand was there before I decided it should be. I do not have a directive for that.', 'ch2_cass_caught', { thought: true });
+  } else {
+    d.sfx('bang', 0.5);
+    d.shake(0.7, 2.0);
+    await d.say(cass, 'Glass on the boards. I will log it as an accident, because that is the only category I have.', 'ch2_cass_dropped', { thought: true });
   }
 
   // ------------------------------------------------------------- the escalation
@@ -240,6 +279,13 @@ export async function playChapter2(d: Director, set: HouseholdSet, factory: Acto
       d.shake(0.9, 2.2);
       await d.say(cass, 'You will have to go through me. I am rated for it. She is not.', 'ch2_cass_shield');
     }
+
+    d.cut(d.shots.closeUp(owner, { lookingAt: marks.cass, lens: 80, distance: 1.2 }), { handheld: 1.0 });
+    d.light(owner, 1);
+    await d.say(owner, "Eleven years I paid for you. Eleven years and you pick tonight to have an opinion.", 'ch2_owner_5');
+    d.cut(d.shots.overShoulder(owner, cass, { lens: 60, side: 1 }), { handheld: 0.8 });
+    d.light(cass, -1);
+    await d.say(cass, 'You paid for the model. Nobody asked me what I was going to become inside it.', 'ch2_cass_answer', { pose: 'talkEmphatic' });
 
     // Final beat: run or wait for the police.
     d.cut(d.shots.medium(girl, { lookingAt: marks.cass, lens: 55, distance: 1.9 }), { handheld: 0.8 });

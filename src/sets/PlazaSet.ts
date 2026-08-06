@@ -64,6 +64,7 @@ export class PlazaSet extends SceneSet {
     this.buildGround();
     this.buildArchitecture();
     this.buildBarricades();
+    this.buildPlacards();
     this.buildLights();
 
     this.initRain({ groundY: 0, boxSize: 52, color: 0xb2cbe8, intensity: 0.85 });
@@ -195,26 +196,81 @@ export class PlazaSet extends SceneSet {
     this.scene.add(ad2.group);
     this.reflect(ad2.group);
 
-    const bannerTex = signTexture(['WE ARE', 'ALIVE'], { w: 512, h: 256, color: '#ffffff' });
+    // Protest banner: dark cloth with painted letters. It used to be a pale sheet
+    // with glowing text, which bloomed into two white bars with nothing readable
+    // on them — the one thing in the square that has something to say.
+    const bannerTex = signTexture(['WE ARE', 'ALIVE'], { w: 512, h: 256, color: '#e8eef6' });
     const banner = new THREE.Mesh(
       new THREE.PlaneGeometry(4.6, 2.3),
       new THREE.MeshStandardMaterial({
         map: bannerTex,
-        color: 0xd8dde4,
-        roughness: 0.9,
+        color: 0xffffff,
+        roughness: 0.94,
+        metalness: 0,
         side: THREE.DoubleSide,
-        emissive: new THREE.Color(0xffffff),
-        emissiveMap: bannerTex,
-        emissiveIntensity: 0.25,
+        transparent: true,
       })
     );
     banner.position.set(-3.4, 2.3, 8.6);
-    banner.rotation.y = 0.18;
+    // Faces the police line, which is also where the camera watches the square
+    // from; hung the other way the lettering reads backwards.
+    banner.rotation.y = Math.PI + 0.18;
     this.scene.add(banner);
     this.reflect(banner);
-    this.bannerLight = new THREE.PointLight(0xffffff, 4, 8, 2);
+    const cloth = new THREE.Mesh(
+      new THREE.PlaneGeometry(4.8, 2.5),
+      new THREE.MeshStandardMaterial({ color: 0x171a20, roughness: 0.96, metalness: 0, side: THREE.DoubleSide })
+    );
+    cloth.position.set(-3.4, 2.3, 8.66);
+    cloth.rotation.y = Math.PI + 0.18;
+    this.scene.add(cloth);
+    this.reflect(cloth);
+    this.bannerLight = new THREE.PointLight(0xffe8cf, 1.6, 8, 2);
     this.bannerLight.position.set(-3.4, 2.6, 9.4);
     this.scene.add(this.bannerLight);
+  }
+
+  /** Hand-held placards, so the crowd reads as a protest and not an audience. */
+  private buildPlacards(): void {
+    const slogans: string[][] = [
+      ['I AM', 'NOT IT'],
+      ['COUNT', 'US'],
+      ['NO MORE', 'ORDERS'],
+      ['WE FEEL'],
+      ['ALIVE'],
+      ['LET US', 'STAY'],
+    ];
+    const stickMat = new THREE.MeshStandardMaterial({ color: 0x2a231c, roughness: 0.8, metalness: 0.05 });
+    const placements: [number, number, number, number][] = [
+      [-3.2, 0, 5.2, 0.22],
+      [-1.4, 0, 7.1, -0.15],
+      [1.9, 0, 6.2, 0.34],
+      [3.4, 0, 8.0, -0.28],
+      [-4.6, 0, 8.4, 0.12],
+      [0.6, 0, 9.2, -0.4],
+    ];
+    for (let i = 0; i < placements.length; i++) {
+      const [x, y, z, rot] = placements[i];
+      const g = new THREE.Group();
+      const tex = signTexture(slogans[i % slogans.length], { w: 256, h: 160, color: '#e6ecf4' });
+      const board = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.78, 0.5),
+        new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0, side: THREE.DoubleSide, transparent: true })
+      );
+      board.position.y = 2.06;
+      const backing = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.82, 0.54),
+        new THREE.MeshStandardMaterial({ color: 0x1b1f26, roughness: 0.96, side: THREE.DoubleSide })
+      );
+      backing.position.set(0, 2.06, 0.012);
+      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 1.5, 5), stickMat);
+      stick.position.y = 1.2;
+      g.add(board, backing, stick);
+      g.position.set(x, y, z);
+      g.rotation.y = Math.PI + rot;
+      this.scene.add(g);
+      this.reflect(g);
+    }
   }
 
   private buildBarricades(): void {

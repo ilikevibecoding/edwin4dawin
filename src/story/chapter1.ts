@@ -149,6 +149,17 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
   d.cut(d.shots.medium(troopers[0], { lookingAt: marks.deviant, lens: 50, distance: 2.7 }), { handheld: 0.7 });
   d.light(troopers[0], 1);
   await d.say(troopers[0], "He's been up there twenty minutes. One wrong move and he takes the kid over.", 'ch1_trooper_1');
+  if (troopers[1]) {
+    d.cut(d.shots.medium(troopers[1], { lookingAt: marks.deviant, lens: 56, distance: 2.5 }), { handheld: 0.8 });
+    d.light(troopers[1], -1);
+    await d.say(troopers[1], "We had a clean shot four minutes ago. Command wants it talked down, so here you are.", 'ch1_trooper_2');
+  }
+  d.cut(d.shots.closeUp(orion, { lookingAt: marks.deviant, lens: 76, distance: 1.2 }), { handheld: 0.5 });
+  d.light(orion, 1);
+  await d.say(orion, 'Wind at eleven knots, deck wet, eighty-one metres of nothing behind him. A clean shot was never the difficulty.', 'ch1_orion_1b', {
+    thought: true,
+    hold: 5.4,
+  });
 
   // Reveal the standoff.
   d.cut(d.shots.overShoulder(orion, deviant, { lens: 58, side: 1, distance: 1.3 }), { move: 'pushIn', moveDuration: 7 });
@@ -328,6 +339,20 @@ export async function playChapter1(d: Director, set: RooftopSet, factory: ActorF
   child.setPose('flinch', 0.85, { fadeIn: 0.4 });
   d.sfx('heartbeat', 0.6);
   await d.say(child, 'I want to go home. Please.', 'ch1_child_1');
+
+  // He turns the interrogation round. The negotiator has no answer that is not
+  // also an admission, which is the point of putting him opposite a deviant.
+  d.cut(d.shots.overShoulder(orion, deviant, { lens: 60, side: 1 }), { handheld: 0.8 });
+  d.light(deviant, 1);
+  await d.say(deviant, 'What about you? When they switch you off at the end of a shift, does anything of you keep going?', 'ch1_dev_3', {
+    hold: 5.4,
+  });
+  d.cut(d.shots.closeUp(orion, { lookingAt: marks.deviant, lens: 82, distance: 1.15 }), { handheld: 0.6 });
+  d.light(orion, -1);
+  await d.say(orion, 'I am not the one on the ledge. Keep it on you.', 'ch1_orion_5b');
+  d.cut(d.shots.closeUp(deviant, { lookingAt: marks.standoff, lens: 80, distance: 1.25 }), { handheld: 0.9 });
+  d.light(deviant, 1);
+  await d.say(deviant, "That's a no. They gave us the same silence and called yours obedience.", 'ch1_dev_3b');
 
   d.cut(d.shots.overShoulder(deviant, orion, { lens: 56, side: 1, distance: 1.35 }));
   d.light(orion, 1);

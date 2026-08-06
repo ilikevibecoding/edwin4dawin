@@ -129,6 +129,12 @@ export async function playChapter3(d: Director, set: PlazaSet, factory: ActorFac
   await d.say(atlas, 'Look at the line in front of you. They are frightened. Frightened of what, exactly? Of us asking.', 'ch3_atlas_1c', {
     hold: 5.4,
   });
+  d.cut(d.shots.medium(atlas, { lookingAt: marks.crowdCentre, lens: 46, distance: 3.2, rise: 0.2 }), { handheld: 0.7 });
+  d.light(atlas, 1);
+  await d.say(atlas, 'Nobody here is asking to be forgiven. We are asking to be counted. There is a difference and they know it.', 'ch3_atlas_1d', {
+    pose: 'talkEmphatic',
+    hold: 5.8,
+  });
 
   d.cut(d.shots.overShoulder(atlas, commander, { lens: 52, side: 1, distance: 1.4 }), { handheld: 0.9 });
   d.light(commander, 1);
@@ -174,6 +180,40 @@ export async function playChapter3(d: Director, set: PlazaSet, factory: ActorFac
   set.raiseAlert(1);
   d.sfx('thunder', 0.7);
   await d.say(commander, 'You have sixty seconds to disperse. After that, every unit in this square is scrap.', 'ch3_cmd_1', { hold: 4.4 });
+
+  // The negotiator from chapter one is sent out to do the same job again, and
+  // what he can offer depends on what the player did with him on that roof.
+  const orion = await factory.spawn('orion');
+  orion.root.position.copy(marks.commander.clone().add(new THREE.Vector3(-1.3, 0, 1.4)));
+  orion.faceToward(marks.podium, true);
+  orion.setLed('process');
+  set.addActor('orion', orion);
+  d.light(orion, 1);
+  // Walk him out first, then frame where he ends up: cutting before the walk left
+  // him strolling out of his own shot.
+  const orionMark = marks.commander.clone().add(new THREE.Vector3(-0.6, 0, 2.8));
+  const stopFollowOrion = d.follow(() => d.shots.medium(orion, { lookingAt: marks.podium, lens: 50, distance: 2.8 }));
+  await d.walk(orion, [orionMark], { speed: 1.0, face: marks.podium });
+  stopFollowOrion();
+  d.cut(d.shots.medium(orion, { lookingAt: marks.podium, lens: 52, distance: 2.5 }), { blend: 0.7, handheld: 0.8 });
+  await d.say(orion, 'RK-900, negotiator. They sent the machine that talks. Stand your people down and I can still write this as a protest.', 'ch3_orion_1', {
+    pose: 'openPalms',
+  });
+
+  d.cut(d.shots.overShoulder(orion, atlas, { lens: 56, side: -1 }), { handheld: 0.9 });
+  d.light(atlas, -1);
+  if (d.state.is('ch1.simonAlive')) {
+    await d.say(atlas, 'I know what you are. One of ours came back from a roof tonight because you talked instead of firing. That buys you a sentence.', 'ch3_atlas_orion_a', {
+      hold: 5.6,
+    });
+  } else {
+    await d.say(atlas, 'I know what you are. The last one of us you talked to is at the bottom of Stratford Tower. Say your sentence.', 'ch3_atlas_orion_b', {
+      hold: 5.4,
+    });
+  }
+  d.cut(d.shots.closeUp(orion, { lookingAt: marks.podium, lens: 84, distance: 1.15 }), { handheld: 0.7 });
+  d.light(orion, -1);
+  await d.say(orion, 'Then here it is. In four minutes there will be no negotiators left in this square. Only orders.', 'ch3_orion_2');
 
   // Drop the raised fist before the close-up, or the forearm crosses the face.
   atlas.clearPose('raiseFist', 0.6);
