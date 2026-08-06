@@ -90,7 +90,7 @@ export function buildApartment(ctx: SetContext): GameSet {
   // Punch a glowing city window into the back wall by overlaying panes.
   const windowGroup = new THREE.Group();
   windowGroup.position.set(-1.1, 1.5, -D / 2 + 0.09);
-  const cityGlow = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 2.3), emissiveMaterial(0x2c5f80, 0.75));
+  const cityGlow = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 2.3), emissiveMaterial(0x2c5f80, 0.28));
   windowGroup.add(cityGlow);
   // A hint of skyline inside the window.
   const skyline = new THREE.Mesh(
@@ -98,7 +98,7 @@ export function buildApartment(ctx: SetContext): GameSet {
     new THREE.MeshBasicMaterial({
       map: T.windows(),
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.45,
       toneMapped: false,
       blending: THREE.AdditiveBlending,
     }),
@@ -249,7 +249,7 @@ export function buildApartment(ctx: SetContext): GameSet {
   const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.3, 2.25, 0.16), paintedMetal(0x1c1f23, 0.5));
   doorFrame.position.set(3.6, 1.12, D / 2 - 0.02);
   root.add(doorFrame);
-  const hall = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.1), emissiveMaterial(0xb8d8e8, 0.5));
+  const hall = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.1), emissiveMaterial(0xb8d8e8, 0.22));
   hall.position.set(3.6, 1.05, D / 2 - 0.1);
   hall.rotation.y = Math.PI;
   root.add(hall);
@@ -263,7 +263,7 @@ export function buildApartment(ctx: SetContext): GameSet {
 
   // ---------------------------------------------------------------- lighting
   // Key: city light through the window.
-  const key = new THREE.SpotLight(0x8cc4ea, 150, 18, 1.0, 0.7, 2);
+  const key = new THREE.SpotLight(0x8cc4ea, 110, 18, 1.0, 0.7, 2);
   key.position.set(-1.4, 2.5, -D / 2 - 1.2);
   key.target.position.set(0.2, 0.5, 1.6);
   key.castShadow = true;

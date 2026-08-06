@@ -301,15 +301,15 @@ export function wetGroundMaterial(reflection: THREE.Texture): THREE.ShaderMateri
         vec3 viewDir = normalize(cameraPosition - vWorld);
         float fres = mix(0.12, 1.0, pow(1.0 - clamp(viewDir.y, 0.0, 1.0), 3.0));
         float wet = mix(0.3, 1.0, puddle);
-        vec3 col = albedo * uAmbient * 38.0;
-        col += refl * fres * uReflectStrength * 1.25 * wet;
+        vec3 col = albedo * uAmbient * 16.0;
+        col += refl * fres * uReflectStrength * 1.1 * wet;
         // Sheen where the water film catches grazing light.
         col += refl * 0.2 * wet;
         // Broad wet specular so the road never goes flat black.
         vec3 sheenDir = normalize(vec3(0.35, 0.75, 0.55));
         vec3 nrm = normalize(vec3(n.x * 0.35, 1.0, n.y * 0.35));
         float spec = pow(max(dot(reflect(-viewDir, nrm), sheenDir), 0.0), 24.0);
-        col += vec3(0.55, 0.68, 0.85) * spec * wet * 0.5;
+        col += vec3(0.55, 0.68, 0.85) * spec * wet * 0.35;
 
         float dist = length(cameraPosition - vWorld);
         float fog = 1.0 - exp(-dist * dist * uFogDensity * 0.02);

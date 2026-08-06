@@ -10,8 +10,7 @@ render () {
     --w 960 --h 540 --q balanced --fps 24 --stride 2 --encodeFps 12 --outFps 24 \
     --settle 1.5 --maxSeconds "$secs" --jq 94 --encode false
 }
-render ledge     ch3.hold  55
-render interro   ch4.start 30
-render garden    ch5.warn  35
-render ending    epi.free  30
+render ledge2    ch3.empathy 34
+render garden    ch5.warn    30
+render ending    epi.free    26
 echo "ALL SEGMENTS DONE"

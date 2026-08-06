@@ -246,13 +246,17 @@ export class StoryRunner {
         const cb = this.actor(b);
         const m = mid();
         if (!ca || !cb) return m.clone().add(new THREE.Vector3(0, 0.2, dist));
-        // Stand off perpendicular to the line between the two actors.
-        const axis = cb.position.clone().sub(ca.position).setY(0).normalize();
+        // Stand off on the perpendicular bisector, far enough back to hold both
+        // actors in frame, and never closer than the pair's own separation.
+        const delta = cb.position.clone().sub(ca.position).setY(0);
+        const separation = Math.max(0.6, delta.length());
+        const axis = delta.lengthSq() > 1e-6 ? delta.clone().normalize() : new THREE.Vector3(1, 0, 0);
         const perp = new THREE.Vector3(-axis.z, 0, axis.x).multiplyScalar(Math.sign(side) || 1);
+        const back = Math.max(dist, separation * 1.15);
         return m
           .clone()
-          .add(perp.multiplyScalar(dist * Math.abs(Math.cos(side))))
-          .add(axis.multiplyScalar(dist * Math.sin(side) * 0.35))
+          .add(perp.multiplyScalar(back))
+          .add(axis.clone().multiplyScalar(side * 0.35))
           .add(new THREE.Vector3(0, height, 0));
       };
       to = mid;

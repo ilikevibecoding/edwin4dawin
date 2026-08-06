@@ -154,9 +154,9 @@ const CH2: Beat[] = [
   {
     kind: 'place',
     actors: [
-      { who: 'kai', at: 'entry', yaw: 2.5, clearGestures: true, gestures: ['scanPose'], emotion: 'neutral', led: 'blue' },
+      { who: 'kai', at: [2.2, 0, 1.4], yaw: 2.6, clearGestures: true, gestures: ['scanPose'], emotion: 'neutral', led: 'blue' },
       { who: 'voss', at: [3.4, 0, 3.1], yaw: 3.0, clearGestures: true, gestures: ['handInPocket'], hidden: false },
-      { who: 'maya', at: 'witness', yaw: 2.4, clearGestures: true, gestures: ['headBowed'], emotion: 'afraid', led: 'amber' },
+      { who: 'maya', at: [1.9, 0, -1.2], yaw: 2.35, clearGestures: true, gestures: ['headBowed'], emotion: 'afraid', led: 'amber' },
     ],
   },
   shot(free([3.4, 0, 3.4], [-1.4, 0, -0.6], { fov: 33, heightFrom: 1.72, heightTo: 1.25, aperture: 9, focalRange: 6.5, handheld: 0.45, dolly: { offset: [-1.9, -0.1, -1.4], duration: 8, ease: 'sine' } })),
@@ -222,7 +222,7 @@ const CH2: Beat[] = [
 
   label('ch2.kneel'),
   { kind: 'place', actors: [{ who: 'kai', clearGestures: true, gestures: ['kneel', 'presentPalm'], look: 'actor:maya' }] },
-  shot(two('kai', 'maya', { side: 0.7, dist: 1.9, height: -0.15, fov: 42, aperture: 12, focalRange: 1.8, blend: 1.0 })),
+  shot(two('kai', 'maya', { side: -0.6, dist: 2.6, height: 0.05, fov: 40, aperture: 11, focalRange: 2.4, blend: 1.0 })),
   line('kai', 'Maya. Look at me. Nobody here is going to reset you.', { emotion: 'warm', look: 'actor:maya' }),
   shot(cu('maya', { side: 0.3, dist: 0.68, fov: 42, aperture: 18, focalRange: 0.7, blend: 0.8 })),
   line('maya', 'He was shouting at Noah. He shouts every night. Tonight Noah answered him.', {
