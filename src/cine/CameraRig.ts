@@ -203,6 +203,12 @@ export class CameraRig {
     if (Math.abs(this.roll) > 0.0001 || this.handheld > 0) {
       this.camera.rotateZ(this.roll + this.noise(t * 0.7, 4) * this.handheld * 0.004);
     }
+    // The renderer would do this on the way to drawing, but anything that
+    // projects a world point through this camera in the same frame — the
+    // investigation reticle, for one — needs it now. Relying on the render to
+    // refresh it meant the reticle used a stale camera, so during a fast-forward
+    // with nothing drawn no clue was ever under it and the scan never finished.
+    this.camera.updateMatrixWorld(true);
 
     if (postFX) {
       postFX.focusOn(this.focusPoint, this.camera);
@@ -214,6 +220,7 @@ export class CameraRig {
   snap(): void {
     this.camera.position.copy(this.current);
     this.camera.lookAt(this.currentTarget);
+    this.camera.updateMatrixWorld(true);
   }
 
   get focus(): THREE.Vector3 {

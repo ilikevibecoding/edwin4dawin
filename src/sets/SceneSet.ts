@@ -251,6 +251,13 @@ export abstract class SceneSet {
   update(dt: number, time: number): void {
     for (const a of this.actors.values()) a.update(dt, time);
     for (const fn of this.updatables) fn(dt, time);
+    // The renderer refreshes world matrices on its way to drawing, but the frame
+    // also projects world points (the investigation reticle) and raycasts against
+    // the set (camera clearance) before anything is drawn — and during a
+    // fast-forward nothing is drawn at all. Doing it here keeps a simulated frame
+    // and a rendered frame in agreement, which is what makes a resumed capture
+    // continue the same film rather than a similar one.
+    this.scene.updateMatrixWorld(true);
     const camPos = this.camera.getWorldPosition(new THREE.Vector3());
     for (const s of this.shafts) s.update(time, camPos);
     this.rain?.update(dt, this.camera);

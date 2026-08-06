@@ -227,7 +227,9 @@ export async function playChapter3(d: Director, set: PlazaSet, factory: ActorFac
       d.sfx('bang', 0.9 - i * 0.08);
       d.flash(0.6, 0xffd9a0);
       d.shake(1.2, 2.2);
-      await d.wait(0.16 + Math.random() * 0.12);
+      // Uneven on purpose — a volley on a metronome sounds like a drum machine —
+      // but authored rather than random, so the beat lands the same every run.
+      await d.wait([0.17, 0.24, 0.15, 0.27, 0.19][i]);
     }
     if (!d.silent) d.audio.setMusicIntensity(1);
     atlas.setPose('clutchWound', 1, { fadeIn: 0.25 });

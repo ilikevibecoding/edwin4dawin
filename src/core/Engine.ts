@@ -19,6 +19,10 @@ export type RunMode = 'realtime' | 'fixed';
 
 export interface EngineOptions {
   tier?: TierName;
+  /** Keeps the drawing buffer past end-of-frame; needed to read pixels back. */
+  preserveDrawingBuffer?: boolean;
+  /** Per-setting overrides applied on top of the tier, for measurement. */
+  qualityOverrides?: Partial<QualitySettings>;
   mode?: RunMode;
   /** Fixed timestep in seconds, used when mode is 'fixed'. */
   fixedStep?: number;
@@ -63,11 +67,11 @@ export class Engine {
       depth: true,
       // Offline capture reads the frame back for exposure metering, which only
       // works if the drawing buffer survives past the end of the frame.
-      preserveDrawingBuffer: (opts.mode ?? 'realtime') === 'fixed',
+      preserveDrawingBuffer: opts.preserveDrawingBuffer ?? (opts.mode ?? 'realtime') === 'fixed',
     });
     const gl = this.renderer.getContext();
     const tier = opts.tier ?? detectTier(gl);
-    this.quality = getTier(tier);
+    this.quality = { ...getTier(tier), ...(opts.qualityOverrides ?? {}) };
     this.mode = opts.mode ?? 'realtime';
     this.fixedStep = opts.fixedStep ?? 1 / 24;
 

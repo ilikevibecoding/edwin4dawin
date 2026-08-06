@@ -51,7 +51,8 @@ page.on('console', (m) => {
   if (t === 'error' || t === 'warning') console.log(`console.${t}:`, m.text().slice(0, 240));
 });
 
-const url = `${BASE}/index.html?render=1&tier=${TIER}&w=${W}&h=${H}&fps=${FPS}`;
+const EXTRA = arg('params', '');
+const url = `${BASE}/index.html?render=1&tier=${TIER}&w=${W}&h=${H}&fps=${FPS}${EXTRA ? `&${EXTRA}` : ''}`;
 console.log('loading', url);
 await page.goto(url, { waitUntil: 'load', timeout: 600000 });
 await page.waitForFunction('window.__ready === true', { timeout: 600000 });

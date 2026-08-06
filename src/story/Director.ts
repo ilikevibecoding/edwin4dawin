@@ -183,13 +183,16 @@ export class Director {
     if (!opts.blend) this.rig.snap();
   }
 
-  /** Re-derives the current shot every frame so the camera tracks a mover. */
+  /**
+   * Re-derives the current shot every frame so the camera tracks a mover.
+   *
+   * Deliberately not put through the occlusion check that `cut` uses: a per-frame
+   * pull-in would jitter, and a follow shot aimed at a point in mid-air — the
+   * free-look camera during an investigation is aimed 5m in front of the player's
+   * eyes — has nothing meaningful between camera and target to check against.
+   */
   follow(build: () => Shot): () => void {
-    const fn = (): void => {
-      const shot = build();
-      this.set.clearCamera(shot);
-      this.rig.retarget(shot);
-    };
+    const fn = (): void => this.rig.retarget(build());
     this.trackers.push(fn);
     return () => {
       this.trackers = this.trackers.filter((t) => t !== fn);

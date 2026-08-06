@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Engine } from './core/Engine';
-import type { TierName } from './core/Quality';
+import type { QualitySettings, TierName } from './core/Quality';
 import { RooftopSet } from './sets/RooftopSet';
 import { HouseholdSet } from './sets/HouseholdSet';
 import { PlazaSet } from './sets/PlazaSet';
@@ -33,10 +33,53 @@ const fps = Number(params.get('fps') || 24);
 // together, so the script can be walked end to end in a fraction of the frames.
 const speed = Number(params.get('speed') || 1);
 
+/**
+ * Reproducible capture.
+ *
+ * The rain, the haze, the crowd layout, the handheld camera noise and every
+ * actor's breathing phase are all seeded from the global source of randomness,
+ * so two captures of the same script produced visibly different films — and a
+ * capture that crashed and resumed produced a film that jumped. Rather than
+ * thread a seeded generator through several dozen call sites, the capture path
+ * replaces the global source. Live play keeps the real thing, because there the
+ * variety is the point.
+ */
+function seedRandomness(seed: number): void {
+  let s = seed >>> 0 || 1;
+  Math.random = () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+if (renderMode || params.has('seed')) seedRandomness(Number(params.get('seed') ?? 20380811));
+
+/**
+ * Per-setting quality overrides, as `q.<setting>=<value>` in the query string.
+ * Used to measure what a given cost is actually worth on the target machine —
+ * `?q.planarReflections=0` answers "how much are the wet-floor reflections
+ * costing us per frame" in one capture rather than by guessing.
+ */
+function qualityOverrides(): Partial<QualitySettings> {
+  const out: Record<string, number | boolean | string> = {};
+  for (const [key, raw] of params) {
+    if (!key.startsWith('q.')) continue;
+    const name = key.slice(2);
+    if (raw === 'true' || raw === 'false') out[name] = raw === 'true';
+    else if (raw !== '' && !Number.isNaN(Number(raw))) out[name] = Number(raw);
+    else out[name] = raw;
+  }
+  return out as Partial<QualitySettings>;
+}
+
 const container = document.getElementById('app') as HTMLElement;
 const engine = new Engine(container, {
   tier,
+  qualityOverrides: qualityOverrides(),
   mode: renderMode ? 'fixed' : 'realtime',
+  preserveDrawingBuffer: params.has('nopreserve') ? false : undefined,
   fixedStep: 1 / fps,
   width,
   height,
@@ -49,6 +92,16 @@ declare global {
     __finished?: boolean;
     __step?: (frames?: number) => Promise<void>;
     __skip?: (frames?: number) => Promise<void>;
+    __flush?: () => void;
+    __where?: () => {
+      time: number;
+      frame: number;
+      path: string[];
+      scanActive: boolean;
+      cluesFound: number;
+      subtitle: string;
+      camera: number[];
+    };
     __cues?: () => unknown;
     __progress?: () => { time: number; frame: number; finished: boolean };
   }
@@ -154,7 +207,29 @@ async function boot(): Promise<void> {
         await drain();
       }
     };
+    /**
+     * Blocks until the frame is actually rasterised.
+     *
+     * WebGL draw calls only queue work, and on a software rasteriser the queue is
+     * where nearly all of the cost sits. Without this, a step appears to take
+     * 200ms and whatever forces the pipeline to drain — the screenshot — appears
+     * to take 1.5s, which sends you optimising the wrong half of the pipeline.
+     */
+    window.__flush = () => {
+      engine.renderer.getContext().finish();
+    };
     window.__progress = () => ({ time: engine.clock.time, frame, finished: Boolean(window.__finished) });
+    // Where the script has actually got to, for checking that two captures of the
+    // same story agree rather than only that two frames look similar.
+    window.__where = () => ({
+      time: engine.clock.time,
+      frame,
+      path: [...director.state.path],
+      scanActive: director.scanActive,
+      cluesFound: director.hud.clueList.filter((c) => c.found).length,
+      subtitle: document.querySelector('#subtitle .line')?.textContent ?? '',
+      camera: director.set.camera.position.toArray().map((n) => Number(n.toFixed(2))),
+    });
     window.__cues = () => director.cues;
     void run();
   } else {
