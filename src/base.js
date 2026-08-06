@@ -1256,11 +1256,17 @@ function buildShelter(rng) {
   g.add(darkMesh);
   darkParts.forEach((p) => p.geometry.dispose());
 
-  // stencils
-  const sign = decalPlane(stencilDecal(['C2 SHELTER 01', 'AEGIS RIDGE'], { w: 512, h: 160, color: '#e6e0cd', font: 'bold 62px "Arial Narrow", Impact, sans-serif' }), [4.4, 1.4]);
-  sign.rotation.x = 0;
+  // Building nameplate. It faces outward and is sized to be read on approach:
+  // at 4.4 m on the inner face it filled the top-left corner of the docked
+  // console frame with two unreadable letter fragments.
+  // Interior placard on the front bulkhead. It keeps the original upright
+  // orientation — standing the decal the other way flips it in V and the
+  // lettering comes out inverted — and is instead sized and tucked into the
+  // corner, because at 4.4 m it filled the top-left of the docked console frame
+  // with two unreadable letter fragments.
+  const sign = decalPlane(stencilDecal(['C2 SHELTER 01', 'AEGIS RIDGE'], { w: 512, h: 160, color: '#e6e0cd', font: 'bold 62px "Arial Narrow", Impact, sans-serif' }), [2.1, 0.66]);
   sign.rotation.set(Math.PI / 2, 0, 0);
-  sign.position.set(-W / 2 + 3.2, 2.55, -D / 2 - 0.06);
+  sign.position.set(-W / 2 + 1.35, 2.92, -D / 2 - 0.06);
   g.add(sign);
 
   const hazard = decalPlane(warningStripes(512, 96), [W - 6.2, 0.42], { transparent: false });
