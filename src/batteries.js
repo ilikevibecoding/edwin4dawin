@@ -417,9 +417,9 @@ function tubeHeatTexture() {
   const g = c.getContext('2d');
   g.clearRect(0, 0, W, H);
   const grad = g.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0.0, 'rgba(14,11,9,0.88)');
-  grad.addColorStop(0.3, 'rgba(52,36,26,0.55)');
-  grad.addColorStop(0.62, 'rgba(66,60,92,0.26)');
+  grad.addColorStop(0.0, 'rgba(10,8,6,0.82)');
+  grad.addColorStop(0.32, 'rgba(30,22,15,0.45)');
+  grad.addColorStop(0.62, 'rgba(22,19,16,0.18)');
   grad.addColorStop(1.0, 'rgba(0,0,0,0)');
   g.fillStyle = grad; g.fillRect(0, 0, W, H);
   let seed = 55;
@@ -826,8 +826,8 @@ function buildThaad(bat) {
   kit.torus(M.steel, 0.1, 0.02, 5, 10, -1.34, 1.9, 2.42, Math.PI / 2, 0, 0);
   kit.torus(M.steel, 0.1, 0.02, 5, 10, -1.34, 3.2, 2.42, Math.PI / 2, 0, 0);
   // air intake snorkel (right, behind cab)
-  kit.box(M.galv, 0.2, 1.6, 0.34, 1.32, 2.9, 2.6);
-  kit.box(M.galv, 0.34, 0.42, 0.42, 1.32, 3.9, 2.6);
+  kit.box(M.tanPanel, 0.2, 1.6, 0.34, 1.32, 2.9, 2.6);
+  kit.box(M.oliveDark, 0.34, 0.42, 0.42, 1.32, 3.9, 2.6);
   for (let s2 = -1; s2 <= 1; s2++) kit.box(M.dark, 0.36, 0.05, 0.36, 1.32, 3.9 + s2 * 0.13, 2.62);
   // saddle fuel tank (right, between axles) + straps + fill cap + step
   kit.cyl(M.metal, 0.32, 0.32, 1.7, 14, 1.42, 0.85, 0.55, Math.PI / 2, 0, 0);
@@ -929,7 +929,7 @@ function buildThaad(bat) {
     ek.box(M.steel, 0.06, 2.75, 0.26, 0, 1.6, fz);
   }
   for (const ty of [0.3, 2.9]) for (const tx of [-0.76, 0.76]) {
-    ek.cyl(M.galv, 0.032, 0.032, 4.6, 6, tx, ty, 1.9, Math.PI / 2, 0, 0);
+    ek.cyl(M.dark, 0.028, 0.028, 4.6, 6, tx, ty, 1.9, Math.PI / 2, 0, 0);
   }
   elev.add(ek.build({ name: 'halo-rack' }));
 
@@ -1140,14 +1140,14 @@ function buildSentinel(bat) {
   g.add(beacon);
 
   // ---- cable tray from the gantry base toward the pad edge + interface cabinet
-  kit.box(M.galv, 0.55, 0.05, 1.5, 1.35, 0.58, 2.75);
-  kit.box(M.galv, 0.55, 0.05, 0.75, 1.35, 0.38, 3.78, 0.5, 0, 0);
-  kit.box(M.galv, 0.55, 0.05, 2.9, 1.35, 0.16, 5.55);
+  kit.box(M.steel, 0.55, 0.05, 1.5, 1.35, 0.58, 2.75);
+  kit.box(M.steel, 0.55, 0.05, 0.75, 1.35, 0.38, 3.78, 0.5, 0, 0);
+  kit.box(M.steel, 0.55, 0.05, 2.9, 1.35, 0.16, 5.55);
   for (const [ty, tz, tl] of [[0.61, 2.75, 1.5], [0.19, 5.55, 2.9]]) {
-    kit.box(M.galv, 0.05, 0.12, tl, 1.1, ty, tz);
-    kit.box(M.galv, 0.05, 0.12, tl, 1.6, ty, tz);
+    kit.box(M.steel, 0.05, 0.12, tl, 1.1, ty, tz);
+    kit.box(M.steel, 0.05, 0.12, tl, 1.6, ty, tz);
   }
-  for (const cz of [2.3, 3.1, 4.6, 5.4, 6.2]) kit.box(M.galv, 0.55, 0.05, 0.06, 1.35, cz < 4 ? 0.63 : 0.21, cz);
+  for (const cz of [2.3, 3.1, 4.6, 5.4, 6.2]) kit.box(M.steel, 0.55, 0.05, 0.06, 1.35, cz < 4 ? 0.63 : 0.21, cz);
   for (const [cxo, cr] of [[-0.14, 0.038], [0, 0.045], [0.14, 0.038]]) {
     kit.cyl(M.rubber, cr, cr, 2.8, 5, 1.35 + cxo, 0.24, 5.5, Math.PI / 2, 0, 0);
     kit.cyl(M.rubber, cr, cr, 1.4, 5, 1.35 + cxo, 0.65, 2.72, Math.PI / 2, 0, 0);
