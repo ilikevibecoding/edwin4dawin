@@ -775,15 +775,17 @@ export class Effects {
     // distance compensation: gently inflate world sizes for far kills so the
     // event still reads from the base, without dwarfing close intercepts.
     const camDist = this.ctx.camera ? this.ctx.camera.position.distanceTo(pos) : 2500;
-    const ds = THREE.MathUtils.clamp(camDist / 1500, 1, 4.2);   // flash + particle sizes
+    const ds = THREE.MathUtils.clamp(camDist / 1500, 1, 4.2);   // fireball/smoke particle sizes
+    const dsF = 1 + (ds - 1) * 0.45;                            // flash sprites: gentler growth so the halo never whites out the sky
     const dsO = 1 + (ds - 1) * 0.5;                             // cluster offsets/speeds (tighter, keeps mass dense)
     const dsR = 1 + (ds - 1) * 0.7;                             // shock ring
-    // primary flash + wide soft halo, delayed secondary pop, warm afterglow
-    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 50 * ds, size1: 150 * ds, life: 0.65, c0: 0xfff4d8, alpha: 1, fadeIn: 0.005 });
-    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 90 * ds, size1: 260 * ds, life: 0.55, c0: 0xfff8e8, alpha: 0.4, fadeIn: 0.005 });
+    // primary flash + soft halo, delayed secondary pop, warm afterglow.
+    // Halo stays modest so the orange fireball + dark smoke stay readable.
+    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 46 * dsF, size1: 130 * dsF, life: 0.55, c0: 0xfff4d8, alpha: 1, fadeIn: 0.005 });
+    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 70 * dsF, size1: 175 * dsF, life: 0.42, c0: 0xfff8e8, alpha: 0.26, fadeIn: 0.005 });
     this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 20 * ds, size1: 70 * ds, life: 0.8, c0: 0xffc27a, alpha: 0.95, fadeIn: 0.005 });
-    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 34 * ds, size1: 100 * ds, life: 0.55, c0: 0xffdca0, alpha: 0.85, fadeIn: 0.02, delay: 0.28 });
-    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 34 * ds, size1: 95 * ds, life: 2.5, c0: 0xff9a4a, alpha: 0.6, fadeIn: 0.12, delay: 0.4 });
+    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 30 * dsF, size1: 85 * dsF, life: 0.5, c0: 0xffdca0, alpha: 0.85, fadeIn: 0.02, delay: 0.28 });
+    this.flash.spawn({ x: pos.x, y: pos.y, z: pos.z, size0: 26 * dsF, size1: 68 * dsF, life: 1.9, c0: 0xff7a30, alpha: 0.5, fadeIn: 0.12, delay: 0.4 });
     this.flashLight(pos, 34000 * ds, 0.7, 0xffd9a8);
     this.flashLight(pos, 16000 * ds, 0.9, 0xff9a50, 0.28);
     this.rings.spawn(pos, 8 * dsR, 215 * dsR, 1.6, 1.0);
@@ -811,29 +813,29 @@ export class Effects {
         delay: Math.random() * 0.14,
       });
     }
-    // smoke: one cohesive dark cloud that marks the hit for 6-10 s. Blast
+    // smoke: one cohesive dark cloud that marks the hit for 10-15 s. Blast
     // smoke expands violently then stalls, so spawn near-final size with slow
     // drift (fast dispersal would thin the cluster into invisibility at range).
     for (let i = 0; i < 10; i++) {
-      const s1 = (95 + Math.random() * 40) * ds;
+      const s1 = (115 + Math.random() * 50) * ds;
       this.smoke.spawn({
         x: pos.x + (Math.random() - 0.5) * 16 * dsO, y: pos.y + (Math.random() - 0.5) * 16 * dsO, z: pos.z + (Math.random() - 0.5) * 16 * dsO,
         vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5, vz: (Math.random() - 0.5) * 5,
-        size0: s1 * 0.7, size1: s1,
-        life: 7 + Math.random() * 3, fadeIn: 0.5,
-        c0: 0x67635e, c1: 0x4a4844, alpha: 0.95, damp: 0.9, grav: -0.25, wind: 1,
+        size0: s1 * 0.65, size1: s1,
+        life: 10 + Math.random() * 4, fadeIn: 0.4,
+        c0: 0x5e5a55, c1: 0x454340, alpha: 0.95, damp: 0.9, grav: -0.25, wind: 1,
       });
     }
     for (let i = 0; i < 24 * q; i++) {
       const a = Math.random() * Math.PI * 2, b = Math.random() * Math.PI - Math.PI / 2;
       const spd = 5 + Math.random() * 10;
-      const s1 = (58 + Math.random() * 37) * ds;
+      const s1 = (68 + Math.random() * 42) * ds;
       this.smoke.spawn({
         x: pos.x + (Math.random() - 0.5) * 26 * ds, y: pos.y + (Math.random() - 0.5) * 26 * ds, z: pos.z + (Math.random() - 0.5) * 26 * ds,
         vx: Math.cos(a) * Math.cos(b) * spd, vy: Math.sin(b) * spd * 0.7, vz: Math.sin(a) * Math.cos(b) * spd,
         size0: s1 * 0.6, size1: s1,
-        life: 6 + Math.random() * 4, fadeIn: 0.35,
-        c0: 0x6f6b66, c1: 0x4c4a46, alpha: 0.75, damp: 0.9, grav: -0.3, wind: 1,
+        life: 8 + Math.random() * 4, fadeIn: 0.35,
+        c0: 0x6a6660, c1: 0x4a4844, alpha: 0.8, damp: 0.9, grav: -0.3, wind: 1,
       });
     }
     const spdS = 1 + (ds - 1) * 0.4;

@@ -16,7 +16,13 @@ async function main() {
   await page.goto('http://127.0.0.1:5173/?test=1&seed=11');
   await page.waitForFunction(() => window.__game?.ready, null, { timeout: 40000 });
 
-  await page.evaluate(() => { window.__game.setTime('day'); window.__game.deployBatteries(); });
+  await page.evaluate(() => {
+    const g = window.__game;
+    g.setTime('day');
+    g.deployBatteries();
+    // open on the flyover framing so the recording head isn't a static shot
+    g.flyCam(-95, 26, 130, 0, 8, 0);
+  });
   // calibrate: real RAF rate over 2s
   const fps = await page.evaluate(() => new Promise((res) => {
     let n = 0; const t0 = performance.now();
@@ -60,6 +66,9 @@ async function main() {
   ];
   const t0 = await page.evaluate(() => window.__game.state().time);
   let done = false;
+  let prevBirds = 0;
+  let lastAim = null;
+  let holdUntil = 0; // wall-clock ms: dwell on a kill so fireball + smoke read
   for (let guard = 0; guard < 500 && !done; guard++) {
     const st = await page.evaluate(() => {
       const s = window.__game.state();
@@ -71,8 +80,12 @@ async function main() {
     });
     const t = st.t - t0;
     if (st.summary) { done = true; break; }
+    if (st.birds.length < prevBirds && lastAim) holdUntil = Date.now() + 2600;
+    prevBirds = st.birds.length;
     const seg = plan.find(p => t < p.until) || plan[plan.length - 1];
-    if (seg.cam) {
+    if (Date.now() < holdUntil && lastAim && !seg.cam) {
+      await page.evaluate((p) => window.__game.flyCam(0, 3, 150, p.x, p.y, p.z), lastAim);
+    } else if (seg.cam) {
       const [c, l] = seg.cam;
       await page.evaluate(({ c, l }) => window.__game.flyCam(c[0], c[1], c[2], l[0], l[1], l[2]), { c, l });
     } else {
@@ -81,6 +94,7 @@ async function main() {
           : st.birds.length ? st.birds[st.birds.length - 1]
             : st.threats.length ? st.threats[0] : null;
       if (target) {
+        lastAim = target;
         await page.evaluate((p) => window.__game.flyCam(0, 3, 150, p.x, p.y, p.z), target);
       }
     }
