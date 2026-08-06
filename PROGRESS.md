@@ -149,6 +149,12 @@ Bugs the integration pass caught that the specialists had not:
 - **Launch dust stayed fully lit at midnight** — smoke is drawn in a custom
   shader with no scene lights, so it needed an explicit ambient term.
 - **The DOM HUD covered the physical console** it was sitting on.
+- **Launch dust washed out the busiest frame.** A dust puff grows past 100 m
+  across, so standing on the apron during a three-battery salvo put the camera
+  inside several at once and the frame flattened into a dome that hid the mountain
+  ring — worst in exactly the shot that should look best. Billboards now fade as
+  the eye enters them, which is both the standard fix and the honest one, since
+  you cannot see the far side of a cloud you are in.
 - **Exhaust puffs went pink at close range.** The cooling stop was very nearly
   pure red, and an additive sprite whose green sits far below its red adds red
   and blue to a blue sky while leaving green behind — which lands on magenta in

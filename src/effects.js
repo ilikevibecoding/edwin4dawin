@@ -129,6 +129,7 @@ varying vec3 vColor;
 varying float vAlpha;
 varying vec3 vWorld;
 varying float vRot;
+varying float vRadius;
 uniform float uStretchAmount;
 ${LOGDEPTH_FLAT_PARS}
 void main() {
@@ -136,6 +137,7 @@ void main() {
   vColor = aColor;
   vAlpha = aAlpha;
   vRot = aRot;
+  vRadius = aScale * 0.5;
   vec4 mv = viewMatrix * vec4( aPos, 1.0 );
   vec2 q = position.xy * aScale;
   float c = cos( aRot ), s = sin( aRot );
@@ -166,10 +168,17 @@ varying vec3 vColor;
 varying float vAlpha;
 varying vec3 vWorld;
 varying float vRot;
+varying float vRadius;
 ${ATM_PARS}
 void main() {
   vec4 t = texture2D( uMap, vUv );
   float a = t.a * vAlpha;
+  // Near fade. A launch dust puff grows past 100 m across, so standing on the
+  // apron during a salvo used to put the camera *inside* several of them at once
+  // and the frame washed to a flat dome that hid the mountain ring. Fading a
+  // billboard as the eye enters it is the standard answer and is also the honest
+  // one: you cannot see the far side of a cloud you are in.
+  a *= smoothstep( vRadius * 0.35, vRadius * 1.3, length( vWorld - cameraPosition ) );
   if ( a < 0.003 ) discard;
   vec3 col = t.rgb * vColor;
   if ( uSunLit > 0.0 ) {
