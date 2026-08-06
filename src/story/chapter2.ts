@@ -70,13 +70,19 @@ export async function playChapter2(d: Director, set: HouseholdSet, factory: Acto
   d.state.visit('ch2.open');
   d.hud.letterbox(true);
 
-  // Establish the room: slow lateral drift past the television toward Cass.
+  // Establish the room from the hall door, looking across the seating area.
+  //
+  // The previous viewpoint aimed into the one unlit corner, so the chapter opened
+  // on eight seconds where nothing in frame reached 40% brightness — the card and
+  // the first line of the newscast played over murk. This one has the floor lamp,
+  // the television and the doorway all in shot, so the frame has somewhere bright
+  // to sit and the room's geography is legible before anyone speaks.
   d.cut(
-    d.shots.establish(new THREE.Vector3(3.1, 1.6, 3.2), new THREE.Vector3(-1.4, 1.15, -1.0), {
-      lens: 27,
+    d.shots.establish(new THREE.Vector3(3.5, 1.66, 2.95), new THREE.Vector3(-1.0, 1.15, 0.1), {
+      lens: 25,
       focusOn: cass.getChestPosition(new THREE.Vector3()),
     }),
-    { move: 'driftLeft', moveAmount: 1.6, moveDuration: 9, handheld: 0.4 }
+    { move: 'driftLeft', moveAmount: 1.4, moveDuration: 9, handheld: 0.4 }
   );
   d.light(cass, -1);
   set.setBroadcast(['DETROIT', 'ROOFTOP', 'STANDOFF']);
