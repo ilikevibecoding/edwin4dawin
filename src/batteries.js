@@ -234,6 +234,11 @@ export class Battery {
     // canister front caps (blow off on launch) + hazard stripes
     this._makeCaps(1.06, 'box');
     this._decal('RAMPART-1', 2.0, 0.5, V(0, 1.15, -2.45), E(0, Math.PI, 0), this.elevGroup, 'MIM-9 · BTRY A');
+    // side stencils on the outer canister faces (read on walk-around)
+    for (const sx of [-1, 1]) {
+      this._decal('MIM-9', 1.5, 0.42, V(sx * 1.115, 1.86, 0.9), E(0, sx * Math.PI / 2, 0), this.elevGroup, 'RAMPART · NO STEP');
+      this._decal('BTRY A · 173 ADA', 1.7, 0.4, V(sx * 1.115, 0.7, 0.6), E(0, sx * Math.PI / 2, 0), this.elevGroup);
+    }
     this._hazardStrip(2.2, 0.22, V(0, 0.16, 2.75), E(0, 0, 0), this.elevGroup);
 
     // elevation pistons
@@ -314,6 +319,10 @@ export class Battery {
 
     this._makeCaps(0.68, 'circle');
     this._decal('HIGHGUARD', 2.4, 0.55, V(0, 0.2, -2.85), E(0, Math.PI, 0), this.elevGroup, 'TX-11 · BTRY B');
+    // stencils between the side-panel ribs
+    for (const sx of [-1, 1]) {
+      this._decal('TX-11', 0.95, 0.3, V(sx * 2.005, 1.15, -0.25), E(0, sx * Math.PI / 2, 0), this.elevGroup, 'NO STEP');
+    }
     this._hazardStrip(3.4, 0.26, V(0, -0.04, 3.2), E(0, 0, 0), this.elevGroup);
 
     this._pistonUpdaters = [
@@ -413,6 +422,10 @@ export class Battery {
 
     this._makeCaps(1.24, 'circle');
     this._decal('SENTINEL-X', 2.6, 0.6, V(0, 0.5, -3.08), E(0, Math.PI, 0), this.elevGroup, 'XM-EXP · TEST ARTICLE');
+    // cradle-rail stencils (visible while horizontal and during erection)
+    for (const sx of [-1, 1]) {
+      this._decal('XM-EXP · ROUND 02', 2.1, 0.34, V(sx * 1.75, -0.22, 0.8), E(0, sx * Math.PI / 2, 0), this.elevGroup);
+    }
     this._hazardStrip(2.6, 0.3, V(0, -0.55, 4.9), E(0, 0, 0), this.elevGroup);
 
     this._pistonUpdaters = [

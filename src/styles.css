@@ -52,7 +52,8 @@ html, body {
 #crosshair.interact { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
 
 #center-prompt {
-  position: absolute; left: 50%; top: 54%;
+  /* sits well below the crosshair so it never covers the launcher/target */
+  position: absolute; left: 50%; top: 63%;
   transform: translateX(-50%);
   text-align: center;
   font-size: 13px;

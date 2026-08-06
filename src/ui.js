@@ -276,10 +276,13 @@ export class UI {
     this.els.alert.classList.toggle('hidden', !s.alarm);
     this.els.fps.textContent = s.fpsText || '';
 
-    // result banner
+    // result banner (yields to the debrief panel to avoid double center overlays)
     if (this.resultTimer > 0) {
       this.resultTimer -= dt;
-      if (this.resultTimer <= 0) this.els.result.classList.add('hidden');
+      if (this.resultTimer <= 0 || (s.scenarioState === 'debrief' && this.mode === 'fps')) {
+        this.resultTimer = 0;
+        this.els.result.classList.add('hidden');
+      }
     }
 
     // battery cards + track list (throttled)
