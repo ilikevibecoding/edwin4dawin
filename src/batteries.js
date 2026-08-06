@@ -398,8 +398,6 @@ function haloCapTexture(n) {
   // wear specks
   let seed = 91 + n * 29;
   const rnd = () => { seed = (seed * 16807 + 11) % 2147483647; return seed / 2147483647; };
-  g.globalCompositeOperation = 'destination-over';
-  g.globalCompositeOperation = 'source-over';
   for (let i = 0; i < 60; i++) {
     g.fillStyle = `rgba(18,20,14,${0.08 + rnd() * 0.18})`;
     g.fillRect(rnd() * S, rnd() * S, 1 + rnd() * 3, 1 + rnd() * 2);
@@ -428,7 +426,7 @@ function tubeHeatTexture() {
   const rnd = () => { seed = (seed * 16807 + 11) % 2147483647; return seed / 2147483647; };
   for (let i = 0; i < 90; i++) {
     g.fillStyle = `rgba(8,7,5,${0.12 + rnd() * 0.24})`;
-    g.fillRect(rnd() * W, rnd() * H * 0.45, 1 + rnd() * 3, 2 + rnd() * 7;
+    g.fillRect(rnd() * W, rnd() * H * 0.45, 1 + rnd() * 3, 2 + rnd() * 7);
   }
   _tubeHeatTex = new THREE.CanvasTexture(c);
   return _tubeHeatTex;
@@ -495,168 +493,230 @@ function makePiston(parent, M, x, y, z, rx, len, r) {
 }
 
 // ---------------------------------------------------------------- PAC-X
+// Towed trailer running along +z (hitch at -z), 2x2 canister pack elevating
+// over the rear (+z) to ~39 deg. Muzzles fire along local +z as before.
 function buildPatriot(bat) {
   const M = bat.mats = commonMats();
   M.hazMuted = new THREE.MeshStandardMaterial({ map: mutedHazardTex(), roughness: 0.85, metalness: 0.15 });
+  M.chevron = new THREE.MeshStandardMaterial({ map: chevronBandTexture(), roughness: 0.85, metalness: 0.15 });
   const kit = new Kit();
   const g = bat.group;
 
-  // trailer chassis
-  kit.box(M.oliveDark, 8.4, 0.5, 2.5, 0, 1.0, 0);
-  kit.box(M.dark, 8.0, 0.22, 1.0, 0, 0.72, 0);
-  // rear twin axles
-  const wheelGeo = new THREE.CylinderGeometry(0.52, 0.52, 0.38, 14);
+  // ---- trailer chassis: twin rails, cross members, deck plate
+  for (const rx2 of [-0.58, 0.58]) {
+    kit.box(M.oliveDark, 0.24, 0.34, 7.6, rx2, 0.88, -0.25);
+  }
+  for (const cz of [-3.6, -2.2, -0.8, 0.6, 1.6, 3.2]) {
+    kit.box(M.oliveDark, 2.15, 0.16, 0.14, 0, 0.88, cz);
+  }
+  kit.box(M.olive, 2.3, 0.1, 7.4, 0, 1.1, -0.3);            // deck plate
+  kit.box(M.dark, 2.3, 0.03, 0.5, 0, 1.16, 1.3);            // anti-skid strip at pedestal
+  // hitch A-frame + ring + parking jack
+  kit.box(M.oliveDark, 0.16, 0.2, 1.6, -0.45, 0.84, -4.65, 0, 0.28, 0);
+  kit.box(M.oliveDark, 0.16, 0.2, 1.6, 0.45, 0.84, -4.65, 0, -0.28, 0);
+  kit.box(M.steel, 0.3, 0.14, 0.5, 0, 0.82, -5.35);
+  kit.torus(M.steel, 0.13, 0.045, 6, 12, 0, 0.82, -5.62, Math.PI / 2, 0, 0);
+  kit.cyl(M.steel, 0.05, 0.05, 0.6, 8, 0.35, 0.5, -4.6);
+  kit.cyl(M.dark, 0.09, 0.11, 0.08, 8, 0.35, 0.18, -4.6);
+  kit.cyl(M.steel, 0.02, 0.02, 0.26, 5, 0.48, 0.86, -4.6, 0, 0, Math.PI / 2);
+  // rear twin axles + leaf spring blocks
+  const wheelGeo = new THREE.CylinderGeometry(0.52, 0.52, 0.4, 16);
   const wheels = [];
-  for (const lx of [-2.9, -1.9]) for (const lz of [1.25, -1.25]) {
-    wheels.push({ x: lx, y: 0.52, z: lz, rx: Math.PI / 2 });
+  for (const wz of [1.9, 2.9]) {
+    kit.cyl(M.dark, 0.07, 0.07, 2.7, 8, 0, 0.52, wz, 0, 0, Math.PI / 2);
+    for (const wx of [-1.32, 1.32]) {
+      wheels.push({ x: wx, y: 0.52, z: wz, rz: Math.PI / 2 });
+      kit.cyl(M.steel, 0.2, 0.2, 0.44, 10, wx, 0.52, wz, 0, 0, Math.PI / 2);
+    }
   }
-  const wheelMesh = instanced(wheelGeo, M.rubber, wheels);
-  g.add(wheelMesh);
-  // fenders
-  kit.box(M.olive, 2.6, 0.1, 0.5, -2.4, 1.14, 1.25);
-  kit.box(M.olive, 2.6, 0.1, 0.5, -2.4, 1.14, -1.25);
-  // front landing legs + hitch
-  kit.box(M.steel, 0.16, 0.9, 0.16, 3.4, 0.45, 0.8);
-  kit.box(M.steel, 0.16, 0.9, 0.16, 3.4, 0.45, -0.8);
-  kit.box(M.dark, 0.3, 0.12, 0.3, 3.4, 0.03, 0.8);
-  kit.box(M.dark, 0.3, 0.12, 0.3, 3.4, 0.03, -0.8);
-  kit.box(M.oliveDark, 1.2, 0.4, 1.2, 3.9, 1.0, 0);
-  // outriggers (deployed) — chunky articulated feet
-  for (const [lx, lz] of [[-3.6, 1.5], [-3.6, -1.5], [2.6, 1.5], [2.6, -1.5]]) {
-    kit.box(M.steel, 0.9, 0.14, 0.2, lx + 0.45, 0.7, lz * 1.15, 0, 0, lz > 0 ? -0.5 : 0.5);
-    kit.cyl(M.piston, 0.06, 0.06, 0.5, 6, lx + 0.85, 0.42, lz * 1.35);
-    kit.cyl(M.steel, 0.09, 0.09, 0.28, 8, lx + 0.85, 0.24, lz * 1.35);
-    kit.cyl(M.dark, 0.26, 0.3, 0.16, 8, lx + 0.85, 0.1, lz * 1.35);
-    kit.box(M.dark, 0.56, 0.05, 0.56, lx + 0.85, 0.025, lz * 1.35);
+  for (const wx of [-0.85, 0.85]) kit.box(M.dark, 0.24, 0.22, 1.7, wx, 0.68, 2.4);
+  g.add(instanced(wheelGeo, M.rubber, wheels));
+  // mudguards over the tandem axles: top plate + sloped ends + flaps
+  for (const fx of [-1.34, 1.34]) {
+    kit.box(M.olive, 0.56, 0.06, 1.9, fx, 1.17, 2.4);
+    kit.box(M.olive, 0.56, 0.06, 0.5, fx, 1.06, 1.32, 0.5, 0, 0);
+    kit.box(M.olive, 0.56, 0.06, 0.5, fx, 1.06, 3.48, -0.5, 0, 0);
+    kit.box(M.rubber, 0.5, 0.42, 0.03, fx, 0.72, 3.72);
   }
-  // equipment boxes on trailer front
-  kit.box(M.olive, 1.4, 0.9, 2.2, 2.6, 1.7, 0);
-  kit.box(M.dark, 0.5, 0.5, 0.6, 1.7, 1.5, 0.8);
-  // cable loops
-  kit.torus(M.rubber, 0.3, 0.035, 5, 12, 2.0, 1.35, -1.2, 0, 0.4, 0, Math.PI * 1.3);
-  // cable conduits: equipment bay -> launcher pivot, with junction boxes
-  kit.cyl(M.rubber, 0.045, 0.045, 3.8, 6, 0.0, 1.31, 0.95, 0, 0, Math.PI / 2);
-  kit.cyl(M.rubber, 0.045, 0.045, 3.8, 6, 0.15, 1.31, -0.95, 0, 0, Math.PI / 2);
-  kit.box(M.dark, 0.34, 0.16, 0.28, 1.95, 1.31, 0.95);
-  kit.box(M.dark, 0.34, 0.16, 0.28, -1.9, 1.31, 0.95);
-  kit.box(M.dark, 0.34, 0.16, 0.28, -1.9, 1.31, -0.95);
-  kit.cyl(M.rubber, 0.04, 0.04, 0.5, 6, -2.05, 1.5, 0.85, 0.5, 0, 0);
-  kit.cyl(M.rubber, 0.04, 0.04, 0.5, 6, -2.05, 1.5, -0.85, -0.5, 0, 0);
-  // rear blast deflector plate on the trailer edge behind the pack
-  kit.box(M.steel, 2.5, 0.09, 1.2, -2.2, 1.7, -1.7, 0.8, 0, 0);
-  kit.box(M.steel, 0.09, 0.55, 0.09, -3.3, 1.35, -1.4);
-  kit.box(M.steel, 0.09, 0.55, 0.09, -1.1, 1.35, -1.4);
+  // ---- 4 corner leveling jacks: housing + animated screw + ground pad
+  const jackPos = [[-1.14, -3.45], [1.14, -3.45], [-0.98, 3.66], [0.98, 3.66]];
+  for (const [jx, jz] of jackPos) {
+    kit.box(M.oliveDark, 0.5, 0.16, 0.2, jx * 0.72, 0.95, jz);            // outboard arm
+    kit.box(M.steel, 0.18, 0.62, 0.18, jx, 0.85, jz);                     // screw housing
+    kit.cyl(M.dark, 0.11, 0.11, 0.1, 8, jx, 0.5, jz);                     // gland nut
+    kit.cyl(M.steel, 0.016, 0.016, 0.3, 5, jx, 1.08, jz, 0, 0, Math.PI / 2); // crank
+    kit.cyl(M.dark, 0.17, 0.21, 0.1, 8, jx, 0.1, jz);                     // foot
+    kit.box(M.dark, 0.38, 0.04, 0.38, jx, 0.03, jz);
+  }
+  const jk = new Kit();
+  const shaftGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.55, 8);
+  shaftGeo.translate(0, -0.275, 0);
+  for (const [jx, jz] of jackPos) jk.addGeo(shaftGeo, M.piston, jx, 0, jz);
+  const jackGroup = jk.build({ name: 'pac-jacks' });
+  jackGroup.position.y = 1.02;
+  g.add(jackGroup);
+  bat.hydraulics = [];
+  bat.hydraulics.push({ piston: jackGroup.children[0], stretch: 0.68 });
+  // ---- side toolboxes + stowage under the deck
+  kit.box(M.olive, 0.42, 0.55, 1.6, 1.14, 0.66, -0.7);
+  kit.box(M.dark, 0.03, 0.4, 1.44, 1.36, 0.64, -0.7);
+  kit.box(M.tanPanel, 0.42, 0.5, 1.1, -1.14, 0.64, -1.1);
+  kit.box(M.dark, 0.03, 0.36, 0.96, -1.36, 0.62, -1.1);
+  for (const lz of [-1.25, -0.55, -0.15]) kit.box(M.dark, 0.05, 0.1, 0.12, 1.37, 0.48, lz - 0.05);
+  kit.box(M.olive, 0.4, 0.4, 0.8, -1.13, 0.6, 0.35);
+  // ---- generator / ECS cabinet on the deck front
+  kit.box(M.olive, 1.9, 1.2, 1.5, 0, 1.76, -2.9);
+  kit.box(M.oliveDark, 1.96, 0.1, 1.56, 0, 2.4, -2.9);
+  for (const vx of [-0.55, 0.1]) {                       // louver panels
+    kit.box(M.dark, 0.5, 0.72, 0.05, vx, 1.72, -2.13);
+    for (let s = -2; s <= 2; s++) kit.box(M.galv, 0.46, 0.045, 0.03, vx, 1.72 + s * 0.15, -2.1);
+  }
+  kit.cyl(M.dark, 0.06, 0.06, 0.5, 6, 0.7, 2.6, -3.3);   // gen exhaust stub
+  kit.cyl(M.dark, 0.045, 0.06, 0.14, 6, 0.7, 2.9, -3.24, 0.4, 0, 0);
+  kit.box(M.dark, 0.5, 0.42, 0.16, 0.62, 1.6, -2.1);     // control panel
+  kit.box(M.dark, 0.56, 0.5, 0.2, 0, 2.62, -2.9);        // AZ data antenna
+  // ---- pivot pedestal (A-frame cheeks + trunnion) at z=+1.3
+  for (const px2 of [-0.7, 0.7]) {
+    kit.box(M.oliveDark, 0.16, 0.95, 0.75, px2, 1.6, 1.3);
+    kit.box(M.oliveDark, 0.16, 0.2, 1.3, px2, 1.2, 1.05);
+    kit.box(M.oliveDark, 0.14, 0.5, 0.16, px2, 1.35, 0.72, 0.5, 0, 0); // gusset
+  }
+  kit.cyl(M.steel, 0.1, 0.1, 1.62, 10, 0, 2.0, 1.3, 0, 0, Math.PI / 2); // trunnion
+  kit.cyl(M.dark, 0.14, 0.14, 0.1, 8, -0.78, 2.0, 1.3, 0, 0, Math.PI / 2);
+  kit.cyl(M.dark, 0.14, 0.14, 0.1, 8, 0.78, 2.0, 1.3, 0, 0, Math.PI / 2);
+  // ---- junction box + cable bundle drooping from the pack pivot area
+  // (kept forward of z=0 so the pack rear clears it when elevated)
+  kit.box(M.dark, 0.4, 0.34, 0.26, 0.92, 1.32, -0.6);
+  kit.box(M.dark, 0.3, 0.24, 0.2, -0.9, 1.28, -0.4);
+  kit.cyl(M.rubber, 0.035, 0.035, 0.34, 5, 0.92, 1.02, -0.6);
+  kit.tube(M.rubber, cableCurve(new THREE.Vector3(0.68, 2.02, 1.12), new THREE.Vector3(0.92, 1.51, -0.52), 0.34), 12, 0.034, 6);
+  kit.tube(M.rubber, cableCurve(new THREE.Vector3(0.75, 1.96, 1.28), new THREE.Vector3(0.99, 1.51, -0.46), 0.42), 12, 0.03, 6);
+  kit.tube(M.rubber, cableCurve(new THREE.Vector3(-0.68, 1.98, 1.18), new THREE.Vector3(-0.9, 1.42, -0.32), 0.32), 12, 0.032, 6);
+  kit.tube(M.rubber, cableCurve(new THREE.Vector3(0.92, 1.13, -0.68), new THREE.Vector3(0.3, 1.28, -2.35), 0.16), 12, 0.03, 6);
+  kit.torus(M.rubber, 0.22, 0.03, 5, 12, -0.9, 1.4, 0.1, 0, 0.35, 0, Math.PI * 1.4);
 
-  // ---- elevating launcher frame (2x4 canisters)
+  // ---- elevating launcher pack: 4 distinct canisters (2 cells each)
   const elev = new THREE.Group();
-  elev.position.set(-2.2, 1.45, 0);
+  elev.position.set(0, 2.0, 1.3);
   g.add(elev);
   bat.elevGroup = elev;
-  bat.travelAngle = 0.04;
-  bat.deployAngle = -0.94; // ~54 deg up
+  bat.travelAngle = -0.02;
+  bat.deployAngle = -0.68; // ~39 deg, Patriot-like
 
   const ek = new Kit();
-  ek.box(M.oliveDark, 0.5, 0.6, 2.4, 1.9, 0.0, 0); // pivot beam
-  const canW = 1.02, canH = 1.02, canL = 5.6;
-  const faceZ = canL / 2 - 0.4;
-  const closedTex = blowoutCoverTexture(false);
+  // tilt frame under the canisters
+  for (const fx of [-0.62, 0.62]) ek.box(M.oliveDark, 0.2, 0.26, 4.6, fx, -0.2, 1.0);
+  ek.box(M.oliveDark, 1.5, 0.24, 0.34, 0, -0.18, -1.15);
+  ek.box(M.oliveDark, 1.5, 0.24, 0.34, 0, -0.18, 2.9);
+  ek.box(M.oliveDark, 1.5, 0.2, 0.3, 0, -0.18, 0.6);
+  // pivot lugs at the trunnion
+  for (const fx of [-0.5, 0.5]) ek.box(M.steel, 0.12, 0.5, 0.6, fx, -0.15, 0.0);
+  // ram clevis under the frame
+  for (const fx of [-0.11, 0.11]) ek.box(M.steel, 0.06, 0.3, 0.42, fx, -0.4, 1.5);
+  ek.cyl(M.steel, 0.05, 0.05, 0.36, 6, 0, -0.45, 1.5, 0, 0, Math.PI / 2);
+
+  const canW = 1.0, canH = 1.0, canL = 5.0;
+  const zC = 1.1;                       // canister centre (rear -1.4, face +3.6)
+  const faceZ = zC + canL / 2;
   const openTex = blowoutCoverTexture(true);
   const heatTex = heatTexture();
-  const canisterGeo = new THREE.BoxGeometry(canW - 0.06, canH - 0.06, canL);
+  const canisterGeo = new THREE.BoxGeometry(canW - 0.05, canH - 0.05, canL);
   const canisters = [];
   const bolts = [];
   const heat = new THREE.MeshBasicMaterial({ map: heatTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1.5 });
+  let cell = 0;
   for (let cx = 0; cx < 2; cx++) {
     for (let cy = 0; cy < 2; cy++) {
-      // each visual canister has 2 cells side by side -> 8 rounds total (2x2 packs of 2)
-      const px = (cx - 0.5) * (canW + 0.1);
-      const py = (cy) * (canH + 0.1) + 0.75;
-      canisters.push({ x: px, y: py, z: -0.4 });
-      // ribs
-      for (const rz of [-2.6, -1.2, 0.4, 1.6]) {
-        ek.box(M.olive, canW + 0.04, canH + 0.04, 0.1, px, py, rz + 0.8);
+      // visible gap of ~0.22 between the 4 canisters
+      const px = (cx - 0.5) * (canW + 0.22);
+      const py = cy * (canH + 0.22) + 0.62;
+      canisters.push({ x: px, y: py, z: zC });
+      // front + rear ring frames (slightly proud of the tube body)
+      ek.box(M.oliveDark, canW + 0.1, canH + 0.1, 0.16, px, py, faceZ - 0.09);
+      ek.box(M.oliveDark, canW + 0.1, canH + 0.1, 0.16, px, py, zC - canL / 2 + 0.1);
+      // mid ribs
+      for (const rz of [zC - 1.3, zC + 0.5]) ek.box(M.olive, canW + 0.05, canH + 0.05, 0.09, px, py, rz);
+      // corner bolts on both ring frames
+      for (const bz of [faceZ - 0.02, zC - canL / 2 + 0.1]) {
+        for (const bxs of [-1, 1]) for (const bys of [-1, 1]) {
+          bolts.push({ x: px + bxs * (canW / 2 + 0.028), y: py + bys * (canH / 2 + 0.028), z: bz, rx: Math.PI / 2 });
+        }
       }
-      // muted hazard band wrapping the canister near the muzzle
-      ek.box(M.hazMuted, canW + 0.02, canH + 0.02, 0.16, px, py, faceZ - 0.9);
-      // framed square front face: perimeter frame + centre mullion
-      const fz = faceZ + 0.035;
-      ek.box(M.oliveDark, canW + 0.06, 0.08, 0.09, px, py + canH / 2 - 0.01, fz);
-      ek.box(M.oliveDark, canW + 0.06, 0.08, 0.09, px, py - canH / 2 + 0.01, fz);
-      ek.box(M.oliveDark, 0.08, canH + 0.06, 0.09, px - canW / 2 + 0.01, py, fz);
-      ek.box(M.oliveDark, 0.08, canH + 0.06, 0.09, px + canW / 2 - 0.01, py, fz);
-      ek.box(M.oliveDark, 0.07, canH + 0.06, 0.09, px, py, fz);
-      // two square X-seam blowout covers per canister face
+      // recessed front face plate + hazard chevron band across the top
+      ek.box(M.oliveDark, canW - 0.04, canH - 0.04, 0.06, px, py, faceZ - 0.015);
+      ek.box(M.chevron, canW - 0.06, 0.17, 0.05, px, py + 0.37, faceZ + 0.005);
+      // rear closure + exhaust ring
+      ek.box(M.dark, canW - 0.1, canH - 0.1, 0.06, px, py, zC - canL / 2 + 0.03);
+      ek.torus(M.dark, 0.3, 0.03, 6, 12, px, py, zC - canL / 2 + 0.01, 0, 0, 0);
+      // two square numbered blowout covers per canister face
       for (let c = 0; c < 2; c++) {
-        const cellX = px + (c - 0.5) * 0.49;
-        const coverMat = new THREE.MeshStandardMaterial({ map: closedTex, roughness: 0.75 });
+        cell++;
+        const cellX = px + (c - 0.5) * 0.47;
+        const cellY = py - 0.09;
+        const coverMat = new THREE.MeshStandardMaterial({ map: pacCoverTexture(cell), roughness: 0.78 });
         const openMat = new THREE.MeshStandardMaterial({ map: openTex, roughness: 0.9 });
         const cover = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), coverMat);
-        cover.position.set(cellX, py, faceZ + 0.012);
+        cover.position.set(cellX, cellY, faceZ + 0.018);
         elev.add(cover);
         bat.tubes.push({
           covered: true, coverMesh: cover, closedMat: coverMat, openMat,
-          muzzleLocal: new THREE.Vector3(cellX, py, faceZ + 0.1),
+          muzzleLocal: new THREE.Vector3(cellX, cellY, faceZ + 0.1),
           dirLocal: new THREE.Vector3(0, 0, 1),
           parent: elev,
         });
-        // corner bolts around each cover frame
-        for (const bxs of [-1, 1]) for (const bys of [-1, 1]) {
-          bolts.push({ x: cellX + bxs * 0.185, y: py + bys * 0.185, z: faceZ + 0.03, rx: Math.PI / 2 });
-        }
-        // heat discoloration on the top surface behind each muzzle (enlarged)
-        ek.plane(heat, 0.85, 0.4, cellX, py + canH / 2 + 0.005, faceZ - 0.42, -Math.PI / 2, 0, Math.PI / 2);
+        // heat discoloration on the top surface behind each muzzle
+        ek.plane(heat, 0.85, 0.4, cellX, py + canH / 2 + 0.006, faceZ - 0.55, -Math.PI / 2, 0, Math.PI / 2);
       }
-      // heat wash down the outer flank of each pack
-      if (cx === 0) ek.plane(heat, 0.85, 0.72, px - canW / 2 - 0.005, py, faceZ - 0.42, 0, -Math.PI / 2, Math.PI);
-      else ek.plane(heat, 0.85, 0.72, px + canW / 2 + 0.005, py, faceZ - 0.42, 0, Math.PI / 2, 0);
+      // heat wash down the outer flank of each canister
+      if (cx === 0) ek.plane(heat, 0.85, 0.7, px - canW / 2 - 0.006, py, faceZ - 0.55, 0, -Math.PI / 2, Math.PI);
+      else ek.plane(heat, 0.85, 0.7, px + canW / 2 + 0.006, py, faceZ - 0.55, 0, Math.PI / 2, 0);
     }
   }
-  const canisterMesh = instanced(canisterGeo, M.olive, canisters.map(c => ({ ...c })));
-  elev.add(canisterMesh);
-  // cover corner bolts (single instanced mesh)
-  elev.add(instanced(new THREE.CylinderGeometry(0.024, 0.024, 0.045, 6), M.steel, bolts));
-  // rear blast frame
-  ek.box(M.oliveDark, 2.4, 2.3, 0.14, 0, 1.3, -3.3);
-  ek.box(M.steel, 0.14, 2.2, 0.4, -1.1, 1.3, -3.1);
-  ek.box(M.steel, 0.14, 2.2, 0.4, 1.1, 1.3, -3.1);
+  elev.add(instanced(canisterGeo, M.olive, canisters.map(c => ({ ...c }))));
+  elev.add(instanced(new THREE.CylinderGeometry(0.024, 0.024, 0.05, 6), M.steel, bolts));
+  // rear blast frame + lifting lugs
+  ek.box(M.oliveDark, 2.35, 2.4, 0.12, 0, 1.23, zC - canL / 2 - 0.08);
+  ek.box(M.steel, 0.1, 2.9, 0.1, -0.75, 1.23, zC - canL / 2 - 0.1, 0, 0, 0.42);
+  ek.box(M.steel, 0.1, 2.9, 0.1, 0.75, 1.23, zC - canL / 2 - 0.1, 0, 0, -0.42);
+  for (const lx of [-0.61, 0.61]) ek.torus(M.steel, 0.09, 0.028, 5, 10, lx, 2.42, zC - 0.4, 0, Math.PI / 2, 0, Math.PI);
+  // umbilical plate on the left flank + pigtail toward the pivot
+  ek.box(M.dark, 0.06, 0.34, 0.5, -1.14, 0.62, 0.1);
+  ek.tube(M.rubber, cableCurve(new THREE.Vector3(-1.12, 0.5, -0.1), new THREE.Vector3(-0.68, 0.05, -0.9), 0.22), 10, 0.028, 5);
   elev.add(ek.build({ name: 'pac-frame' }));
 
   // stencils + serials on canister flanks
-  addDecal(elev, stencilTexture('PAC-X', { size: 36 }), 1.5, 0.42, -1.1, 1.87, 0.6, -Math.PI / 2);
-  addDecal(elev, stencilTexture('SN 0114-A8', { size: 20 }), 1.1, 0.28, -1.1, 0.9, 0.4, -Math.PI / 2);
-  addDecal(elev, stencilTexture('NO STEP', { size: 24 }), 1.0, 0.25, 1.1, 0.7, 0.2, Math.PI / 2);
-  addDecal(elev, stencilTexture('LOT 7 INERT TRNG', { size: 18 }), 1.2, 0.26, 1.1, 1.87, 0.4, Math.PI / 2);
+  addDecal(elev, stencilTexture('PAC-X', { size: 36 }), 1.4, 0.4, -1.16, 1.84, 1.1, -Math.PI / 2);
+  addDecal(elev, stencilTexture('SN 0114-A8', { size: 20 }), 1.0, 0.26, -1.16, 0.42, 0.9, -Math.PI / 2);
+  addDecal(elev, stencilTexture('NO STEP', { size: 24 }), 0.95, 0.24, 1.16, 0.42, 1.4, Math.PI / 2);
+  addDecal(elev, stencilTexture('LOT 7 INERT TRNG', { size: 18 }), 1.15, 0.25, 1.16, 1.84, 1.0, Math.PI / 2);
 
-  // hydraulics trailer->frame
-  bat.hydraulics = [];
-  const hydro = new THREE.Group();
-  const cylOuter = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.6, 8), M.steel);
-  const piston = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.4, 8), M.piston);
-  piston.position.y = 0.9;
-  hydro.add(cylOuter, piston);
-  hydro.position.set(-0.6, 1.6, 0.9);
-  hydro.rotation.z = 0.5; hydro.rotation.x = -0.5;
-  g.add(hydro);
-  const hydro2 = hydro.clone();
-  hydro2.position.z = -0.9;
-  g.add(hydro2);
-  bat.hydraulics.push({ piston, stretch: 0.42 }, { piston: hydro2.children[1], stretch: 0.42 });
+  // ---- big erection ram: deck bracket -> pack clevis (visibly connected when up)
+  const ramA = 1.1; // tilt toward +z
+  for (const fx of [-0.12, 0.12]) kit.box(M.steel, 0.07, 0.3, 0.4, fx, 1.2, -0.15);
+  kit.cyl(M.steel, 0.05, 0.05, 0.4, 6, 0, 1.26, -0.15, 0, 0, Math.PI / 2);
+  ramBarrel(kit, M, 0, 1.22, -0.15, ramA, 1.55, 0.105);
+  const pacPiston = makePiston(g, M, 0, 1.22, -0.15, ramA, 1.15, 0.06);
+  bat.hydraulics.push({ piston: pacPiston, stretch: 1.5 });
 
-  // status lamp mast + AZ antenna
-  bat._statusLampStack(kit, 4.6, 1.4);
-  kit.box(M.dark, 0.5, 0.4, 0.14, 4.0, 2.1, 0);
+  // status lamp mast at the front right deck corner + placard on the cabinet
+  bat._statusLampStack(kit, 0.95, -3.8);
+  addDecal(g, placardTexture('DANGER', 'STAND CLEAR WHEN ARMED'), 0.72, 0.36, -0.2, 1.32, -2.12);
 
   g.add(kit.build({ name: 'pac-body' }));
 
-  // small engagement-radar trailer parked beside
+  // small engagement-radar trailer parked beside (kept in place)
   const rk = new Kit();
   rk.box(M.oliveDark, 2.6, 1.1, 1.9, 8.4, 1.15, 2.4, 0, 0.5, 0);
   rk.box(M.olive, 2.3, 1.8, 0.3, 8.4, 2.4, 2.4, -0.42, 0.5, 0);
+  rk.box(M.dark, 1.9, 1.4, 0.06, 8.4, 2.42, 2.58, -0.42, 0.5, 0);
   rk.cyl(M.rubber, 0.4, 0.4, 0.3, 12, 7.4, 0.4, 3.1, Math.PI / 2, 0.5, 0);
   rk.cyl(M.rubber, 0.4, 0.4, 0.3, 12, 9.3, 0.4, 1.9, Math.PI / 2, 0.5, 0);
+  rk.box(M.steel, 0.14, 0.7, 0.14, 7.55, 0.35, 1.55);
+  rk.box(M.steel, 0.14, 0.7, 0.14, 9.2, 0.35, 3.4);
+  rk.tube(M.rubber, cableCurve(new THREE.Vector3(7.2, 1.0, 2.0), new THREE.Vector3(1.6, 0.35, 0.6), 0.5), 14, 0.04, 6);
   g.add(rk.build({ name: 'pac-radar' }));
 
-  bat.collider = new BoxCollider(bat.pos.x, bat.pos.z, 4.6, 2.2, bat.yaw, 2.6, 'patriot');
+  bat.collider = new BoxCollider(bat.pos.x, bat.pos.z, 1.9, 5.1, bat.yaw, 2.6, 'patriot');
   bat.extraColliders = [new BoxCollider(
     bat.pos.x + Math.cos(-bat.yaw) * 8.4 - Math.sin(-bat.yaw) * 2.4,
     bat.pos.z + Math.sin(-bat.yaw) * 8.4 + Math.cos(-bat.yaw) * 2.4,
@@ -664,156 +724,255 @@ function buildPatriot(bat) {
 }
 
 // ---------------------------------------------------------------- HALO (THAAD-like)
+// 8x8 truck running along +z (cab at +z), 2x4 tube rack pivoting at the rear
+// and elevating to ~60 deg. Muzzles fire along local +z as before.
 function buildThaad(bat) {
   const M = bat.mats = commonMats();
   M.hazMuted = new THREE.MeshStandardMaterial({ map: mutedHazardTex(), roughness: 0.85, metalness: 0.15 });
+  M.heatWrap = new THREE.MeshBasicMaterial({
+    map: tubeHeatTexture(), transparent: true, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -1.5, side: THREE.DoubleSide,
+  });
   const kit = new Kit();
   const g = bat.group;
 
-  // long 8x8 truck
-  kit.box(M.tanPanel, 9.6, 0.55, 2.6, 0, 1.15, 0);      // chassis deck
-  kit.box(M.dark, 9.2, 0.3, 1.2, 0, 0.8, 0);
-  // cab
-  kit.box(M.tanPanel, 1.9, 1.7, 2.5, 4.6, 2.0, 0);
-  kit.box(M.glass, 0.08, 0.62, 2.0, 5.42, 2.35, 0, 0, 0, -0.12);
-  kit.box(M.glass, 0.72, 0.5, 0.05, 4.95, 2.42, 1.26);   // side door windows
-  kit.box(M.glass, 0.72, 0.5, 0.05, 4.95, 2.42, -1.26);
-  kit.box(M.dark, 0.06, 0.5, 0.06, 4.55, 2.42, 1.27);    // door pillars
-  kit.box(M.dark, 0.06, 0.5, 0.06, 4.55, 2.42, -1.27);
-  // wing mirrors
-  for (const mz of [1, -1]) {
-    kit.box(M.steel, 0.05, 0.05, 0.5, 5.4, 2.78, mz * 1.42);
-    kit.box(M.dark, 0.08, 0.42, 0.24, 5.4, 2.52, mz * 1.66);
-    kit.box(M.glass, 0.02, 0.34, 0.18, 5.45, 2.52, mz * 1.66);
-  }
-  // grille slats + headlights
-  kit.box(M.dark, 0.1, 0.5, 1.7, 5.57, 1.62, 0);
-  kit.box(M.metal, 0.05, 0.06, 1.6, 5.63, 1.5, 0);
-  kit.box(M.metal, 0.05, 0.06, 1.6, 5.63, 1.65, 0);
-  kit.box(M.metal, 0.05, 0.06, 1.6, 5.63, 1.8, 0);
-  kit.box(M.white, 0.06, 0.15, 0.28, 5.63, 1.42, 0.95);
-  kit.box(M.white, 0.06, 0.15, 0.28, 5.63, 1.42, -0.95);
-  kit.box(M.dark, 0.3, 0.3, 2.6, 5.6, 1.0, 0);
-  kit.box(M.metal, 0.3, 0.2, 2.7, 5.62, 0.75, 0);
-  // wheels 4 axles
-  const wheelGeo = new THREE.CylinderGeometry(0.58, 0.58, 0.45, 14);
+  // ---- chassis: twin rails + cross members + deck plate (deck ends at z=-3.4
+  // so the elevated rack's blast end swings clear of it)
+  for (const rx2 of [-0.6, 0.6]) kit.box(M.dark, 0.26, 0.36, 9.6, rx2, 0.95, 0);
+  for (const cz of [-4.5, -3.4, -2.4, -0.9, 0.6, 1.9]) kit.box(M.dark, 2.3, 0.16, 0.16, 0, 0.95, cz);
+  kit.box(M.tanPanel, 2.6, 0.16, 5.3, 0, 1.36, -0.8);
+  kit.box(M.dark, 2.4, 0.04, 0.6, 0, 1.45, -2.9); // anti-skid at pedestal
+  // ---- wheels: 4 axles, hubs, axle tubes
+  const wheelGeo = new THREE.CylinderGeometry(0.58, 0.58, 0.5, 16);
   const wheels = [];
-  for (const lx of [3.9, 2.5, -1.9, -3.3]) for (const lz of [1.35, -1.35]) {
-    wheels.push({ x: lx, y: 0.58, z: lz, rx: Math.PI / 2 });
+  for (const wz of [3.6, 2.2, -1.7, -3.1]) {
+    kit.cyl(M.dark, 0.08, 0.08, 2.8, 8, 0, 0.58, wz, 0, 0, Math.PI / 2);
+    for (const wx of [-1.38, 1.38]) {
+      wheels.push({ x: wx, y: 0.58, z: wz, rz: Math.PI / 2 });
+      kit.cyl(M.steel, 0.22, 0.22, 0.54, 10, wx, 0.58, wz, 0, 0, Math.PI / 2);
+    }
   }
   g.add(instanced(wheelGeo, M.rubber, wheels));
-  // fenders
-  for (const lx of [3.2, -2.6]) {
-    kit.box(M.tanPanel, 2.6, 0.1, 0.5, lx, 1.28, 1.4);
-    kit.box(M.tanPanel, 2.6, 0.1, 0.5, lx, 1.28, -1.4);
+  // fenders + mudflaps over both axle pairs
+  for (const [fz, flapZ] of [[2.9, 1.5], [-2.4, -3.8]]) {
+    for (const fx of [-1.44, 1.44]) {
+      kit.box(M.tanPanel, 0.6, 0.07, 2.7, fx, 1.33, fz);
+      kit.box(M.tanPanel, 0.6, 0.07, 0.45, fx, 1.24, fz + 1.5, -0.45, 0, 0);
+      kit.box(M.tanPanel, 0.6, 0.07, 0.45, fx, 1.24, fz - 1.5, 0.45, 0, 0);
+      kit.box(M.rubber, 0.52, 0.42, 0.03, fx, 0.85, flapZ);
+    }
   }
-  // rear stabilizers
-  for (const lz of [1.4, -1.4]) {
-    kit.box(M.steel, 0.2, 0.2, 1.0, -4.4, 0.9, lz, 0, 0, 0);
-    kit.cyl(M.piston, 0.07, 0.07, 0.8, 6, -4.7, 0.45, lz * 1.3);
-    kit.cyl(M.dark, 0.24, 0.28, 0.1, 8, -4.7, 0.06, lz * 1.3);
+  // ---- cab (armored LVSR-style) at +z
+  kit.box(M.tanPanel, 2.5, 1.5, 2.3, 0, 2.75, 3.75);            // cab body
+  kit.box(M.tanPanel, 2.3, 0.6, 1.05, 0, 1.85, 5.22);           // hood
+  kit.box(M.tanPanel, 2.56, 0.12, 2.4, 0, 3.56, 3.75);          // roof slab
+  kit.box(M.tanPanel, 2.44, 0.13, 0.5, 0, 3.47, 4.94, 0.2, 0, 0); // brow visor
+  // windshield inset: recessed dark frame + raked split glass + pillars
+  kit.box(M.dark, 2.34, 0.86, 0.1, 0, 3.02, 4.87);
+  kit.plane(M.glass, 0.98, 0.62, -0.53, 3.03, 4.94, -0.1, 0, 0);
+  kit.plane(M.glass, 0.98, 0.62, 0.53, 3.03, 4.94, -0.1, 0, 0);
+  kit.box(M.tanPanel, 0.1, 0.86, 0.12, 0, 3.02, 4.9);
+  kit.box(M.tanPanel, 0.16, 0.95, 0.18, -1.2, 3.05, 4.86, 0, 0, 0.05);
+  kit.box(M.tanPanel, 0.16, 0.95, 0.18, 1.2, 3.05, 4.86, 0, 0, -0.05);
+  // wipers
+  kit.box(M.dark, 0.025, 0.4, 0.02, -0.62, 2.85, 4.97, 0, 0, 0.5);
+  kit.box(M.dark, 0.025, 0.4, 0.02, 0.44, 2.85, 4.97, 0, 0, 0.5);
+  // door seams, handles, windows, steps, grab rails (both sides)
+  for (const s of [-1, 1]) {
+    kit.box(M.dark, 0.03, 1.32, 0.03, s * 1.26, 2.62, 3.28);
+    kit.box(M.dark, 0.03, 1.32, 0.03, s * 1.26, 2.62, 4.36);
+    kit.box(M.dark, 0.03, 0.03, 1.1, s * 1.26, 3.28, 3.82);
+    kit.box(M.dark, 0.05, 0.06, 0.22, s * 1.27, 2.62, 3.44);
+    kit.box(M.glass, 0.05, 0.52, 0.82, s * 1.255, 3.08, 3.92);
+    kit.box(M.dark, 0.06, 0.6, 0.06, s * 1.26, 2.6, 2.72); // rear cab pillar trim
+    kit.box(M.galv, 0.42, 0.05, 0.38, s * 1.42, 1.06, 3.82);
+    kit.box(M.galv, 0.42, 0.05, 0.38, s * 1.36, 0.62, 3.82);
+    kit.box(M.dark, 0.05, 0.5, 0.04, s * 1.42, 0.84, 3.64);
+    kit.cyl(M.steel, 0.02, 0.02, 0.85, 6, s * 1.28, 2.72, 4.52);
   }
-  // deck equipment
-  kit.box(M.olive, 1.2, 0.8, 2.2, 3.0, 1.85, 0);
-  kit.cyl(M.dark, 0.5, 0.5, 0.4, 10, 2.0, 1.6, -1.0, Math.PI / 2, 0, 0); // cable drum
-  kit.torus(M.rubber, 0.42, 0.05, 5, 12, 2.0, 1.6, -1.0, Math.PI / 2, 0, 0);
-  // saddle fuel tank between axles, strapped
-  kit.cyl(M.metal, 0.3, 0.3, 1.5, 12, 0.5, 0.85, 1.42, 0, 0, Math.PI / 2);
-  kit.torus(M.steel, 0.31, 0.025, 6, 14, 0.15, 0.85, 1.42, 0, Math.PI / 2, 0);
-  kit.torus(M.steel, 0.31, 0.025, 6, 14, 0.85, 0.85, 1.42, 0, Math.PI / 2, 0);
-  kit.box(M.steel, 1.3, 0.06, 0.24, 0.5, 1.18, 1.42);
-  // exhaust stack behind cab with rain cap + heat shield
-  kit.cyl(M.dark, 0.075, 0.075, 1.8, 8, 3.5, 2.15, -1.16);
-  kit.cyl(M.dark, 0.05, 0.075, 0.2, 8, 3.5, 3.13, -1.16, 0, 0, 0.45);
-  kit.box(M.galv, 0.26, 1.2, 0.05, 3.5, 2.0, -1.3);
-  // dark hydraulic hoses: chassis manifold -> rack pivot
-  kit.box(M.dark, 0.55, 0.28, 0.9, -1.6, 1.56, 0.35);
-  kit.tube(M.rubber, cableCurve(new THREE.Vector3(-1.85, 1.6, 0.7), new THREE.Vector3(-3.15, 1.75, 0.45), 0.22), 10, 0.035, 6);
-  kit.tube(M.rubber, cableCurve(new THREE.Vector3(-1.85, 1.6, 0.35), new THREE.Vector3(-3.2, 1.7, 0.1), 0.26), 10, 0.035, 6);
-  kit.tube(M.rubber, cableCurve(new THREE.Vector3(-1.85, 1.55, 0.0), new THREE.Vector3(-3.1, 1.65, -0.3), 0.3), 10, 0.03, 6);
+  // side mirrors on forward arms
+  for (const s of [-1, 1]) {
+    kit.bar(M.galv, s * 1.15, 3.38, 4.8, s * 1.64, 3.34, 5.14, 0.022, 6);
+    kit.bar(M.galv, s * 1.15, 2.95, 4.8, s * 1.64, 2.82, 5.14, 0.022, 6);
+    kit.box(M.dark, 0.1, 0.52, 0.28, s * 1.66, 3.06, 5.12);
+    kit.box(M.glass, 0.04, 0.42, 0.2, s * 1.66, 3.06, 4.97);
+  }
+  // front: bumper, winch, tow shackles, grille + slats, headlights, brush guard
+  kit.box(M.dark, 2.75, 0.34, 0.3, 0, 1.22, 5.85);
+  kit.box(M.steel, 0.7, 0.26, 0.24, 0, 1.5, 5.8);
+  kit.box(M.steel, 0.12, 0.2, 0.12, -0.78, 1.06, 5.94);
+  kit.box(M.steel, 0.12, 0.2, 0.12, 0.78, 1.06, 5.94);
+  kit.box(M.dark, 1.5, 0.55, 0.08, 0, 1.9, 5.72);
+  for (const gy of [1.74, 1.9, 2.06]) kit.box(M.galv, 1.38, 0.05, 0.04, 0, gy, 5.77);
+  for (const s of [-1, 1]) {
+    kit.box(M.dark, 0.36, 0.26, 0.06, s * 0.88, 1.9, 5.74);
+    kit.box(M.white, 0.26, 0.16, 0.05, s * 0.88, 1.9, 5.78);
+  }
+  for (const bx of [-1.05, -0.55, 0.55, 1.05]) kit.cyl(M.galv, 0.028, 0.028, 1.0, 6, bx, 1.95, 5.95);
+  kit.box(M.galv, 2.3, 0.05, 0.05, 0, 1.62, 5.95);
+  kit.box(M.galv, 2.3, 0.05, 0.05, 0, 2.3, 5.95);
+  // roof: marker lights, AC pack, hatch, antennas
+  for (let i = -2; i <= 2; i++) kit.box(M.white, 0.09, 0.05, 0.05, i * 0.3, 3.64, 4.94);
+  kit.box(M.oliveDark, 0.8, 0.2, 0.85, -0.55, 3.7, 3.3);
+  kit.box(M.dark, 0.62, 0.07, 0.62, 0.5, 3.65, 3.3);
+  kit.cyl(M.steel, 0.03, 0.04, 0.14, 6, -1.02, 3.68, 2.85);
+  kit.cyl(M.dark, 0.012, 0.012, 1.3, 5, -1.02, 4.4, 2.85);
+  kit.cyl(M.steel, 0.03, 0.04, 0.14, 6, 1.02, 3.68, 3.05);
+  kit.cyl(M.dark, 0.012, 0.012, 1.05, 5, 1.02, 4.28, 3.05);
+  // exhaust stack (left, behind cab) + heat shield + rain cap
+  kit.cyl(M.dark, 0.085, 0.085, 2.5, 8, -1.34, 2.62, 2.42);
+  kit.cyl(M.dark, 0.06, 0.085, 0.2, 8, -1.34, 3.96, 2.48, 0.5, 0, 0);
+  kit.box(M.galv, 0.07, 1.9, 0.38, -1.52, 2.62, 2.42);
+  kit.torus(M.steel, 0.1, 0.02, 5, 10, -1.34, 1.9, 2.42, Math.PI / 2, 0, 0);
+  kit.torus(M.steel, 0.1, 0.02, 5, 10, -1.34, 3.2, 2.42, Math.PI / 2, 0, 0);
+  // air intake snorkel (right, behind cab)
+  kit.box(M.galv, 0.2, 1.6, 0.34, 1.32, 2.9, 2.6);
+  kit.box(M.galv, 0.34, 0.42, 0.42, 1.32, 3.9, 2.6);
+  for (let s2 = -1; s2 <= 1; s2++) kit.box(M.dark, 0.36, 0.05, 0.36, 1.32, 3.9 + s2 * 0.13, 2.62);
+  // saddle fuel tank (right, between axles) + straps + fill cap + step
+  kit.cyl(M.metal, 0.32, 0.32, 1.7, 14, 1.42, 0.85, 0.55, Math.PI / 2, 0, 0);
+  kit.torus(M.steel, 0.33, 0.025, 6, 14, 1.42, 0.85, 0.15, 0, 0, 0);
+  kit.torus(M.steel, 0.33, 0.025, 6, 14, 1.42, 0.85, 0.98, 0, 0, 0);
+  kit.cyl(M.steel, 0.06, 0.06, 0.1, 8, 1.42, 1.2, 0.35);
+  kit.box(M.galv, 0.5, 0.05, 1.1, 1.42, 1.24, 0.55);
+  // battery/tool boxes (left) + air tanks
+  kit.box(M.dark, 0.5, 0.6, 1.3, -1.4, 0.82, 0.5);
+  kit.box(M.galv, 0.03, 0.44, 1.14, -1.66, 0.8, 0.5);
+  kit.cyl(M.steel, 0.11, 0.11, 0.85, 10, -1.05, 0.5, -0.7, Math.PI / 2, 0, 0);
+  kit.cyl(M.steel, 0.11, 0.11, 0.85, 10, -1.05, 0.78, -0.7, Math.PI / 2, 0, 0);
+  // deck gear: equipment cabinet behind cab, cable drum, hydraulic manifold
+  kit.box(M.olive, 2.2, 0.85, 1.1, 0, 1.88, 1.75);
+  kit.box(M.dark, 0.6, 0.5, 0.06, -0.6, 1.85, 1.18);
+  for (let s2 = -1; s2 <= 1; s2++) kit.box(M.galv, 0.54, 0.045, 0.03, -0.6, 1.85 + s2 * 0.15, 1.15);
+  kit.box(M.dark, 0.5, 0.4, 0.14, 0.6, 1.85, 1.16);
+  kit.cyl(M.dark, 0.42, 0.42, 0.34, 12, -0.85, 1.85, 0.55, 0, 0, Math.PI / 2);
+  kit.torus(M.rubber, 0.36, 0.05, 5, 12, -0.85, 1.85, 0.55, 0, Math.PI / 2, 0);
+  kit.box(M.steel, 0.1, 0.5, 0.4, -1.06, 1.6, 0.55);
+  kit.box(M.dark, 0.55, 0.32, 0.7, 0.7, 1.6, -1.5);
+  kit.tube(M.rubber, cableCurve(new THREE.Vector3(0.55, 1.72, -1.75), new THREE.Vector3(0.14, 1.5, -1.1), 0.14), 10, 0.03, 5);
+  kit.tube(M.rubber, cableCurve(new THREE.Vector3(0.7, 1.72, -1.85), new THREE.Vector3(0.1, 1.42, -1.02), 0.2), 10, 0.028, 5);
+  kit.tube(M.rubber, cableCurve(new THREE.Vector3(0.85, 1.68, -1.7), new THREE.Vector3(0.55, 1.9, 1.18), 0.24), 12, 0.028, 5);
+  // rear bumper + taillights + outrigger stabilizers (extended)
+  kit.box(M.oliveDark, 2.5, 0.24, 0.24, 0, 0.9, -4.86);
+  for (const s of [-1, 1]) {
+    kit.box(M.dark, 0.22, 0.16, 0.08, s * 0.95, 0.9, -4.99);
+    kit.box(M.steel, 1.15, 0.2, 0.24, s * 1.32, 1.02, -3.95);
+    kit.cyl(M.piston, 0.065, 0.065, 0.75, 6, s * 1.85, 0.55, -3.95);
+    kit.cyl(M.dark, 0.2, 0.24, 0.1, 8, s * 1.85, 0.1, -3.95);
+    kit.box(M.dark, 0.42, 0.04, 0.42, s * 1.85, 0.03, -3.95);
+  }
 
-  // ---- elevating tube rack (2x4 round tubes)
+  // ---- pivot pedestal at the rear (z=-3.2)
+  for (const s of [-1, 1]) {
+    kit.box(M.oliveDark, 0.22, 1.2, 0.95, s * 0.74, 1.72, -3.2);
+    kit.box(M.oliveDark, 0.2, 0.16, 1.1, s * 0.74, 1.5, -2.62, 0.4, 0, 0);
+  }
+  kit.cyl(M.steel, 0.11, 0.11, 1.7, 10, 0, 2.2, -3.2, 0, 0, Math.PI / 2);
+  kit.cyl(M.dark, 0.15, 0.15, 0.1, 8, -0.82, 2.2, -3.2, 0, 0, Math.PI / 2);
+  kit.cyl(M.dark, 0.15, 0.15, 0.1, 8, 0.82, 2.2, -3.2, 0, 0, Math.PI / 2);
+
+  // ---- elevating tube rack (2x4 round tubes, numbered caps)
   const elev = new THREE.Group();
-  elev.position.set(-3.4, 1.6, 0);
+  elev.position.set(0, 2.2, -3.2);
   g.add(elev);
   bat.elevGroup = elev;
   bat.travelAngle = 0.03;
-  bat.deployAngle = -1.22; // ~70 deg
+  bat.deployAngle = -1.05; // ~60 deg, THAAD-like
 
   const ek = new Kit();
-  ek.box(M.oliveDark, 1.2, 0.5, 2.5, 0.8, 0, 0); // cradle
-  const tubeGeo = new THREE.CylinderGeometry(0.3, 0.3, 6.4, 14);
+  // cradle rails + cross members + pivot lugs + ram clevis
+  for (const s of [-0.52, 0.52]) ek.box(M.oliveDark, 0.18, 0.16, 6.3, s, 0.16, 2.0);
+  for (const cz of [-0.9, 0.6, 4.2]) ek.box(M.oliveDark, 1.3, 0.2, 0.3, 0, 0.14, cz);
+  for (const s of [-0.62, 0.62]) ek.box(M.steel, 0.16, 0.5, 0.62, s, 0, 0);
+  for (const s of [-0.1, 0.1]) ek.box(M.steel, 0.06, 0.32, 0.44, s, -0.14, 2.2);
+  ek.cyl(M.steel, 0.045, 0.045, 0.34, 6, 0, -0.16, 2.2, 0, 0, Math.PI / 2);
+  const tubeGeo = new THREE.CylinderGeometry(0.3, 0.3, 6.2, 16);
   tubeGeo.rotateX(Math.PI / 2);
   const tubes = [];
-  const capGeo = new THREE.CircleGeometry(0.28, 16);
-  const capMat = new THREE.MeshStandardMaterial({ color: 0x3c4436, roughness: 0.8 });
+  const capGeo = new THREE.CircleGeometry(0.285, 18);
+  const zC = 2.0, muzZ = zC + 3.1;
+  let tubeNo = 0;
   for (let cx = 0; cx < 2; cx++) for (let cy = 0; cy < 4; cy++) {
+    tubeNo++;
     const px = (cx - 0.5) * 0.75;
-    const py = cy * 0.72 + 0.7;
-    tubes.push({ x: px, y: py, z: 0.6 });
-    const cap = new THREE.Mesh(capGeo, capMat.clone());
-    cap.position.set(px, py, 0.6 + 3.2 + 0.012);
+    const py = cy * 0.7 + 0.55;
+    tubes.push({ x: px, y: py, z: zC });
+    const capMat = new THREE.MeshStandardMaterial({ map: haloCapTexture(tubeNo), roughness: 0.8 });
+    const cap = new THREE.Mesh(capGeo, capMat);
+    cap.position.set(px, py, muzZ + 0.012);
     elev.add(cap);
     if (bat.tubes.length < 6) {
       bat.tubes.push({
-        covered: true, coverMesh: cap, closedMat: cap.material, openMat: cap.material,
-        muzzleLocal: new THREE.Vector3(px, py, 3.7),
+        covered: true, coverMesh: cap, closedMat: capMat, openMat: capMat,
+        muzzleLocal: new THREE.Vector3(px, py, muzZ + 0.06),
         dirLocal: new THREE.Vector3(0, 0, 1),
         parent: elev,
       });
     }
-    // collar rings + muzzle lip + muted hazard band near muzzle
-    ek.torus(M.oliveDark, 0.32, 0.03, 6, 14, px, py, 2.9, 0, 0, 0);
-    ek.torus(M.oliveDark, 0.32, 0.03, 6, 14, px, py, 0.7, 0, 0, 0);
-    ek.torus(M.oliveDark, 0.32, 0.03, 6, 14, px, py, -1.6, 0, 0, 0);
-    ek.torus(M.oliveDark, 0.33, 0.035, 6, 14, px, py, 3.62, 0, 0, 0);
-    ek.cyl(M.hazMuted, 0.315, 0.315, 0.2, 14, px, py, 3.35, Math.PI / 2, 0, 0);
+    // muzzle lip + collar + muted hazard band + heat discoloration wrap
+    ek.torus(M.oliveDark, 0.325, 0.035, 6, 14, px, py, muzZ - 0.04, 0, 0, 0);
+    ek.torus(M.oliveDark, 0.32, 0.03, 6, 14, px, py, muzZ - 0.42, 0, 0, 0);
+    ek.cyl(M.hazMuted, 0.315, 0.315, 0.2, 14, px, py, muzZ - 0.68, Math.PI / 2, 0, 0);
+    ek.addGeo(new THREE.CylinderGeometry(0.318, 0.318, 0.62, 14, 1, true), M.heatWrap, px, py, muzZ - 0.75, Math.PI / 2, 0, 0);
+    // rear closure + exhaust ring
+    ek.cyl(M.dark, 0.29, 0.29, 0.05, 14, px, py, zC - 3.08, Math.PI / 2, 0, 0);
+    ek.torus(M.dark, 0.3, 0.028, 5, 14, px, py, zC - 3.06, 0, 0, 0);
   }
   elev.add(instanced(tubeGeo, M.olive, tubes));
-  // frame around tubes
-  ek.box(M.steel, 1.9, 0.14, 0.14, 0, 0.32, 2.9);
-  ek.box(M.steel, 1.9, 0.14, 0.14, 0, 3.24, 2.9);
-  ek.box(M.steel, 0.14, 3.1, 0.14, -0.9, 1.75, 2.9);
-  ek.box(M.steel, 0.14, 3.1, 0.14, 0.9, 1.75, 2.9);
-  ek.box(M.steel, 1.9, 0.14, 0.14, 0, 0.32, -1.9);
-  ek.box(M.steel, 1.9, 0.14, 0.14, 0, 3.24, -1.9);
-  ek.box(M.steel, 0.14, 3.1, 0.14, -0.9, 1.75, -1.9);
-  ek.box(M.steel, 0.14, 3.1, 0.14, 0.9, 1.75, -1.9);
+  // retaining ring frames at two stations + inter-tube webs + tie rods
+  for (const fz of [4.2, -0.4]) {
+    ek.box(M.steel, 1.74, 0.16, 0.3, 0, 3.03, fz);
+    ek.box(M.steel, 1.74, 0.16, 0.3, 0, 0.17, fz);
+    ek.box(M.steel, 0.16, 3.15, 0.3, -0.83, 1.6, fz);
+    ek.box(M.steel, 0.16, 3.15, 0.3, 0.83, 1.6, fz);
+    for (const wy of [0.9, 1.6, 2.3]) ek.box(M.steel, 1.45, 0.06, 0.26, 0, wy, fz);
+    ek.box(M.steel, 0.06, 2.75, 0.26, 0, 1.6, fz);
+  }
+  for (const ty of [0.3, 2.9]) for (const tx of [-0.76, 0.76]) {
+    ek.cyl(M.galv, 0.032, 0.032, 4.6, 6, tx, ty, 1.9, Math.PI / 2, 0, 0);
+  }
   elev.add(ek.build({ name: 'halo-rack' }));
 
-  addDecal(elev, stencilTexture('HALO-9', { size: 30 }), 1.6, 0.4, -1.0, 1.75, 0.5, -Math.PI / 2);
-  addDecal(elev, stencilTexture('HL-9 BAT 2', { size: 24 }), 1.5, 0.36, 1.0, 1.75, 0.5, Math.PI / 2);
-  addDecal(elev, stencilTexture('NO LIFT', { size: 26, fg: '#e8ecdf' }), 0.44, 0.15, -0.69, 2.86, 2.3, -Math.PI / 2);
-  addDecal(elev, stencilTexture('NO LIFT', { size: 26, fg: '#e8ecdf' }), 0.44, 0.15, 0.69, 2.86, 2.3, Math.PI / 2);
+  addDecal(elev, stencilTexture('HALO-9', { size: 30 }), 1.6, 0.4, -0.93, 1.6, 1.9, -Math.PI / 2);
+  addDecal(elev, stencilTexture('HL-9 BAT 2', { size: 24 }), 1.4, 0.34, 0.93, 1.6, 1.9, Math.PI / 2);
+  addDecal(elev, stencilTexture('NO LIFT', { size: 26, fg: '#e8ecdf' }), 0.44, 0.15, -0.92, 2.6, 4.2, -Math.PI / 2);
+  addDecal(elev, stencilTexture('NO LIFT', { size: 26, fg: '#e8ecdf' }), 0.44, 0.15, 0.92, 2.6, 4.2, Math.PI / 2);
 
-  // big hydraulic
-  bat.hydraulics = [];
-  const hydro = new THREE.Group();
-  hydro.add(new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 2.2, 8), M.steel));
-  const piston = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.0, 8), M.piston);
-  piston.position.y = 1.3;
-  hydro.add(piston);
-  hydro.position.set(-1.4, 1.8, 0);
-  hydro.rotation.z = 0.9;
-  g.add(hydro);
-  bat.hydraulics.push({ piston, stretch: 0.5 });
+  // ---- the big single elevation ram: chassis bracket -> rack clevis
+  const ramA = -0.33;
+  for (const s of [-0.13, 0.13]) kit.box(M.steel, 0.08, 0.34, 0.46, s, 1.32, -1.05);
+  kit.cyl(M.steel, 0.055, 0.055, 0.44, 6, 0, 1.36, -1.05, 0, 0, Math.PI / 2);
+  ramBarrel(kit, M, 0, 1.28, -1.05, ramA, 1.85, 0.155);
+  const haloPiston = makePiston(g, M, 0, 1.28, -1.05, ramA, 1.2, 0.09);
+  bat.hydraulics = [{ piston: haloPiston, stretch: 1.4 }];
 
-  bat._statusLampStack(kit, 5.4, 1.3);
+  bat._statusLampStack(kit, 1.7, 1.0);
+  addDecal(g, placardTexture('DANGER', 'STAND CLEAR — ELEVATING RACK'), 0.72, 0.36, 1.265, 2.4, 3.35, Math.PI / 2);
   g.add(kit.build({ name: 'halo-body' }));
 
-  bat.collider = new BoxCollider(bat.pos.x, bat.pos.z, 5.2, 2.0, bat.yaw, 3, 'thaad');
+  bat.collider = new BoxCollider(bat.pos.x, bat.pos.z, 2.0, 5.4, bat.yaw, 3, 'thaad');
   bat.extraColliders = [];
 }
 
 // ---------------------------------------------------------------- SENTINEL
+// Fictional vertical-launch test rig: one large cylindrical launch canister
+// (hinged dome cap, ring stiffeners, umbilical conduit) inside a 4-leg lattice
+// gantry with X bracing, service platform ring, floods and aviation beacon.
+// Both rounds launch from the twin-cell canister; the dome opens on round 1,
+// each service arm swings clear as its round fires.
 function buildSentinel(bat) {
   const M = bat.mats = commonMats();
   M.hazMuted = new THREE.MeshStandardMaterial({ map: mutedHazardTex(), roughness: 0.85, metalness: 0.15 });
+  M.oliveCan = new THREE.MeshStandardMaterial({ map: metalPanelTexture('#4a5243', 57), roughness: 0.82, metalness: 0.3 });
+  M.heatWrap = new THREE.MeshBasicMaterial({
+    map: tubeHeatTexture(), transparent: true, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -1.5, side: THREE.DoubleSide,
+  });
   const kit = new Kit();
   const g = bat.group;
   bat.perTubeAnim = true;
 
-  // blast pen walls
+  // ---- blast pen walls (kept: colliders + context)
   const hzTex = hazardStripesTexture();
   const hzMat = new THREE.MeshStandardMaterial({ map: hzTex, roughness: 0.8 });
   kit.box(M.concrete, 14, 2.6, 1.2, 0, 1.3, -6.5);
@@ -821,126 +980,192 @@ function buildSentinel(bat) {
   kit.box(M.concrete, 1.2, 2.6, 8, 6.5, 1.3, -2.2);
   kit.box(hzMat, 14, 0.35, 1.24, 0, 2.75, -6.5);
 
-  // two vertical silo boxes
-  const heatTex = heatTexture();
-  for (const sx of [-2.2, 2.2]) {
-    const side = sx < 0 ? -1 : 1;
-    kit.box(M.oliveDark, 2.5, 9.0, 2.5, sx, 4.5, 0);
-    kit.box(M.steel, 2.7, 0.3, 2.7, sx, 0.35, 0);
-    kit.box(M.steel, 2.7, 0.25, 2.7, sx, 8.9, 0);
-    // muted hazard rim band around the silo mouth
-    kit.box(M.hazMuted, 2.76, 0.26, 0.1, sx, 8.62, 1.28);
-    kit.box(M.hazMuted, 2.76, 0.26, 0.1, sx, 8.62, -1.28);
-    kit.box(M.hazMuted, 0.1, 0.26, 2.76, sx + 1.28, 8.62, 0);
-    kit.box(M.hazMuted, 0.1, 0.26, 2.76, sx - 1.28, 8.62, 0);
-    // vents with galvanised grille slats
-    for (let vy = 1.5; vy < 8; vy += 1.6) {
-      kit.box(M.dark, 0.5, 0.8, 0.06, sx - 0.7, vy, 1.28);
-      kit.box(M.dark, 0.5, 0.8, 0.06, sx + 0.7, vy, 1.28);
-      for (let s = -1; s <= 1; s++) {
-        kit.box(M.galv, 0.54, 0.05, 0.03, sx - 0.7, vy + s * 0.26, 1.3);
-        kit.box(M.galv, 0.54, 0.05, 0.03, sx + 0.7, vy + s * 0.26, 1.3);
-      }
-    }
-    // external service pipes with flanges (rear face) + elbows into the head
-    for (const pxo of [-0.55, 0.55]) {
-      kit.cyl(M.galv, 0.07, 0.07, 8.2, 8, sx + pxo, 4.2, -1.38);
-      for (const fy of [1.3, 3.9, 6.5]) kit.cyl(M.galv, 0.125, 0.125, 0.06, 8, sx + pxo, fy, -1.38);
-      kit.cyl(M.galv, 0.07, 0.07, 0.4, 6, sx + pxo, 8.35, -1.1, Math.PI / 2, 0, 0);
-    }
-    // conduit boxes + drops on the outer face
-    kit.box(M.dark, 0.16, 0.6, 0.45, sx + side * 1.3, 2.4, 0.2);
-    kit.box(M.dark, 0.14, 0.4, 0.35, sx + side * 1.3, 5.2, 0.2);
-    kit.cyl(M.galv, 0.04, 0.04, 2.2, 6, sx + side * 1.3, 3.8, 0.2);
-    kit.cyl(M.galv, 0.04, 0.04, 2.1, 6, sx + side * 1.3, 1.05, 0.2);
-    // tube inside (visible when lid open)
-    kit.cyl(M.dark, 0.72, 0.72, 8.6, 16, sx, 4.4, 0);
-    // heat streaks near mouth
-    const hq = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.9, 1.2),
-      new THREE.MeshBasicMaterial({ map: heatTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1.5 }),
-    );
-    hq.position.set(sx, 8.4, 1.26);
-    g.add(hq);
+  // ---- octagonal launch pad
+  kit.cyl(M.concrete, 3.7, 3.85, 0.5, 8, 0, 0.25, 0);
+  const padScorch = new THREE.Mesh(
+    new THREE.PlaneGeometry(4.6, 4.6),
+    new THREE.MeshBasicMaterial({ map: scorchTexture(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
+  );
+  padScorch.rotation.x = -Math.PI / 2;
+  padScorch.position.set(0, 0.515, 0);
+  g.add(padScorch);
 
-    // hinged lid — thick slab, with hinge blocks flanking the pivot
-    const lid = new THREE.Group();
-    lid.position.set(sx, 9.06, -1.25);
-    const lidMesh = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.32, 2.4), M.olive);
-    lidMesh.position.set(0, 0.16, 1.2);
-    lidMesh.castShadow = true;
-    lid.add(lidMesh);
-    lid.userData = { open: 0, targetOpen: 0 };
-    g.add(lid);
-    kit.box(M.steel, 0.32, 0.26, 0.4, sx - 0.85, 8.9, -1.34);
-    kit.box(M.steel, 0.32, 0.26, 0.4, sx + 0.85, 8.9, -1.34);
+  // ---- launch canister: cylinder + skirt + ring stiffeners + top collar
+  kit.cyl(M.oliveCan, 1.35, 1.35, 9.2, 20, 0, 5.1, 0);
+  kit.cyl(M.oliveDark, 1.55, 1.62, 0.7, 20, 0, 0.85, 0);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + 0.2;
+    kit.box(M.steel, 0.16, 0.24, 0.16, Math.cos(a) * 1.62, 0.62, Math.sin(a) * 1.62, 0, -a, 0);
+  }
+  for (const ry2 of [2.2, 4.2, 6.2, 8.2]) kit.torus(M.oliveDark, 1.39, 0.05, 6, 24, 0, ry2, 0, Math.PI / 2, 0, 0);
+  kit.cyl(M.oliveDark, 1.42, 1.42, 0.35, 20, 0, 9.5, 0);
+  kit.box(M.hazMuted, 0.16, 0.26, 2.86, 0, 9.55, 0, 0, 0, 0); // rim tab marks
+  kit.box(M.hazMuted, 2.86, 0.26, 0.16, 0, 9.55, 0, 0, 0, 0);
+  // heat discoloration below the mouth + dark bore inside
+  kit.addGeo(new THREE.CylinderGeometry(1.37, 1.37, 1.0, 20, 1, true), M.heatWrap, 0, 8.95, 0);
+  kit.cyl(M.dark, 1.12, 1.12, 8.8, 16, 0, 5.0, 0);
 
-    // umbilical arm
+  // ---- hinged dome cap (animated lid, hinge on -z rim)
+  const lid = new THREE.Group();
+  lid.position.set(0, 9.72, -1.36);
+  const domeGeo = new THREE.SphereGeometry(1.36, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+  domeGeo.scale(1, 0.55, 1);
+  const dome = new THREE.Mesh(domeGeo, M.olive);
+  dome.position.set(0, 0.1, 1.36);
+  const lidRim = new THREE.Mesh(new THREE.CylinderGeometry(1.41, 1.41, 0.14, 20), M.oliveDark);
+  lidRim.position.set(0, 0.03, 1.36);
+  lid.add(dome, lidRim);
+  lid.userData = { open: 0, targetOpen: 0 };
+  g.add(lid);
+  kit.box(M.steel, 0.34, 0.28, 0.42, -0.55, 9.58, -1.42);
+  kit.box(M.steel, 0.34, 0.28, 0.42, 0.55, 9.58, -1.42);
+  const lid2 = new THREE.Group(); // hidden pivot driving the second service arm
+  lid2.userData = { open: 0, targetOpen: 0 };
+  g.add(lid2);
+
+  // ---- umbilical conduit mast running up the +x side
+  kit.box(M.oliveDark, 0.42, 8.9, 0.36, 1.63, 4.95, 0);
+  for (const pz of [-0.1, 0, 0.1]) kit.cyl(M.galv, 0.042, 0.042, 8.6, 6, 1.86, 4.8, pz);
+  for (const jy of [1.9, 5.0, 7.6]) kit.box(M.dark, 0.3, 0.44, 0.44, 1.78, jy, 0);
+  kit.tube(M.rubber, cableCurve(new THREE.Vector3(1.8, 9.15, -0.08), new THREE.Vector3(1.16, 9.42, -0.14), 0.16), 10, 0.035, 5);
+  kit.tube(M.rubber, cableCurve(new THREE.Vector3(1.8, 9.15, 0.08), new THREE.Vector3(1.2, 9.4, 0.14), 0.2), 10, 0.035, 5);
+  kit.tube(M.rubber, cableCurve(new THREE.Vector3(1.72, 0.75, 0.4), new THREE.Vector3(1.35, 0.62, 2.35), 0.12), 10, 0.04, 5);
+
+  // ---- two service arms hinged on the mast; rotation.x=-PI/2 turns the
+  // animated umbilical rotation.z into a horizontal swing away from the tube
+  const mkArm = (ay) => {
     const umb = new THREE.Group();
-    umb.position.set(sx + 1.35, 7.6, 0);
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.6, 0.3), M.steel);
-    arm.position.y = 0.8;
-    const armHead = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.4), M.dark);
-    armHead.position.y = 1.6;
-    umb.add(arm, armHead);
-    umb.rotation.z = 0; // rotates away on launch
+    umb.position.set(1.95, ay, 0);
+    umb.rotation.x = -Math.PI / 2;
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.2, 0.15), M.steel);
+    arm.position.x = -0.33;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.34, 0.32), M.dark);
+    head.position.x = -0.62;
+    umb.add(arm, head);
     g.add(umb);
+    kit.box(M.steel, 0.16, 0.5, 0.22, 1.88, ay, 0);
+    kit.cyl(M.dark, 0.055, 0.055, 0.56, 6, 1.95, ay, 0);
+    return umb;
+  };
+  const armHigh = mkArm(6.6);
+  const armLow = mkArm(4.3);
 
-    bat.tubes.push({
-      covered: true, coverMesh: null, lid, umbilical: umb,
-      muzzleLocal: new THREE.Vector3(sx, 9.0, 0),
-      dirLocal: new THREE.Vector3(0, 1, 0),
-      parent: g,
-    });
-  }
+  // ---- tube records: both rounds from the twin-cell canister
+  bat.tubes.push({
+    covered: true, coverMesh: null, lid, umbilical: armHigh,
+    muzzleLocal: new THREE.Vector3(0.42, 9.8, 0),
+    dirLocal: new THREE.Vector3(0, 1, 0),
+    parent: g,
+  });
+  bat.tubes.push({
+    covered: true, coverMesh: null, lid: lid2, umbilical: armLow,
+    muzzleLocal: new THREE.Vector3(-0.42, 9.8, 0),
+    dirLocal: new THREE.Vector3(0, 1, 0),
+    parent: g,
+  });
 
-  // gantry frame + platforms + ladder
-  const gk = new Kit();
-  for (const gx of [-4.2, 0, 4.2]) {
-    gk.box(M.steel, 0.22, 10.4, 0.22, gx, 5.2, -1.8);
-    gk.box(M.steel, 0.22, 10.4, 0.22, gx, 5.2, 1.8);
+  // ---- 4-leg lattice gantry with X cross-bracing
+  const legs = [[-2.5, -2.5], [2.5, -2.5], [-2.5, 2.5], [2.5, 2.5]];
+  for (const [lx, lz] of legs) {
+    kit.box(M.steel, 0.26, 10.7, 0.26, lx, 5.85, lz);
+    kit.box(M.steel, 0.52, 0.12, 0.52, lx, 0.56, lz);          // base plate
+    kit.box(M.hazMuted, 0.34, 1.0, 0.34, lx, 1.05, lz);        // warning stripes, lower 1m
   }
-  gk.box(M.steel, 8.8, 0.22, 0.22, 0, 10.3, -1.8);
-  gk.box(M.steel, 8.8, 0.22, 0.22, 0, 10.3, 1.8);
-  gk.box(M.steel, 0.22, 0.22, 3.8, -4.2, 10.3, 0);
-  gk.box(M.steel, 0.22, 0.22, 3.8, 4.2, 10.3, 0);
-  // service platform + rails
-  gk.box(M.metal, 8.6, 0.1, 1.1, 0, 7.55, -2.4);
-  for (let px = -4; px <= 4; px += 1) gk.cyl(M.galv, 0.025, 0.025, 0.9, 4, px, 8.05, -2.9);
-  gk.box(M.steel, 8.6, 0.04, 0.04, 0, 8.5, -2.9);
-  // ladder
-  for (let ly = 0.4; ly < 7.4; ly += 0.38) gk.box(M.steel, 0.36, 0.035, 0.035, -4.6, ly, -2.4);
-  gk.box(M.steel, 0.04, 7.4, 0.04, -4.8, 3.7, -2.4);
-  gk.box(M.steel, 0.04, 7.4, 0.04, -4.4, 3.7, -2.4);
-  // floods on gantry
-  for (const gx of [-4.2, 4.2]) {
+  const beltYs = [2.7, 5.0, 9.55, 11.2];
+  for (const by of beltYs) {
+    kit.box(M.steel, 5.0, 0.16, 0.16, 0, by, -2.5);
+    kit.box(M.steel, 5.0, 0.16, 0.16, 0, by, 2.5);
+    kit.box(M.steel, 0.16, 0.16, 5.0, -2.5, by, 0);
+    kit.box(M.steel, 0.16, 0.16, 5.0, 2.5, by, 0);
+  }
+  // X braces (thin cylinders) on all 4 faces, 4 bays
+  const bays = [[0.6, 2.7], [2.7, 5.0], [5.0, 7.3], [7.3, 9.55]];
+  for (const [y0, y1] of bays) {
+    for (const s of [-2.5, 2.5]) {
+      kit.bar(M.galv, -2.5, y0, s, 2.5, y1, s, 0.045, 5);
+      kit.bar(M.galv, -2.5, y1, s, 2.5, y0, s, 0.045, 5);
+      kit.bar(M.galv, s, y0, -2.5, s, y1, 2.5, 0.045, 5);
+      kit.bar(M.galv, s, y1, -2.5, s, y0, 2.5, 0.045, 5);
+    }
+  }
+  // top frame cross beams
+  kit.bar(M.steel, -2.5, 11.2, -2.5, 2.5, 11.2, 2.5, 0.06, 6);
+  kit.bar(M.steel, -2.5, 11.2, 2.5, 2.5, 11.2, -2.5, 0.06, 6);
+
+  // ---- service platform ring with handrails at 2/3 height
+  kit.box(M.galv, 5.4, 0.08, 1.3, 0, 7.3, -2.05);
+  kit.box(M.galv, 5.4, 0.08, 1.3, 0, 7.3, 2.05);
+  kit.box(M.galv, 1.3, 0.08, 5.4, -2.05, 7.31, 0);
+  kit.box(M.galv, 1.3, 0.08, 5.4, 2.05, 7.31, 0);
+  for (const s of [-2.71, 2.71]) {
+    kit.box(M.oliveDark, 5.46, 0.14, 0.03, 0, 7.4, s);
+    kit.box(M.oliveDark, 0.03, 0.14, 5.46, s, 7.4, 0);
+  }
+  const postR = 0.022;
+  for (const [hx, hz] of [[-2.68, -2.68], [0, -2.68], [2.68, -2.68], [-2.68, 2.68], [0, 2.68], [2.68, 2.68],
+    [-2.68, 0], [2.68, 0], [-1.34, -2.68], [1.34, -2.68], [-1.34, 2.68], [1.34, 2.68]]) {
+    kit.cyl(M.galv, postR, postR, 1.05, 5, hx, 7.86, hz);
+  }
+  for (const ry2 of [8.38, 8.02]) {
+    kit.box(M.galv, 5.42, 0.045, 0.045, 0, ry2, -2.68);
+    kit.box(M.galv, 5.42, 0.045, 0.045, 0, ry2, 2.68);
+    kit.box(M.galv, 0.045, 0.045, 5.42, -2.68, ry2, 0);
+    kit.box(M.galv, 0.045, 0.045, 5.42, 2.68, ry2, 0);
+  }
+  // access ladder up the -z face with cage hoops
+  for (let ly = 0.7; ly < 7.25; ly += 0.41) kit.box(M.steel, 0.4, 0.03, 0.03, -1.7, ly, -2.62);
+  kit.box(M.steel, 0.035, 6.9, 0.035, -1.9, 3.85, -2.62);
+  kit.box(M.steel, 0.035, 6.9, 0.035, -1.5, 3.85, -2.62);
+  for (const hy of [3.2, 4.1, 5.9, 6.8]) kit.torus(M.galv, 0.38, 0.018, 4, 12, -1.7, hy, -2.45, Math.PI / 2, 0, 0);
+
+  // ---- floodlight heads on two top corners, aimed at the canister
+  bat.gantryLamps = [];
+  for (const [fx, fz] of [[-2.5, -2.5], [2.5, 2.5]]) {
+    kit.box(M.steel, 0.12, 0.4, 0.12, fx, 11.4, fz);
     const lm = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0xfff0cc, emissiveIntensity: 0 });
-    bat.gantryLamps = bat.gantryLamps || [];
     bat.gantryLamps.push(lm);
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.18), lm);
-    lamp.position.set(gx, 10.1, 0);
-    lamp.rotation.x = 0.7;
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.26, 0.3), lm);
+    lamp.position.set(fx * 0.94, 11.62, fz * 0.94);
+    lamp.rotation.order = 'YXZ';
+    lamp.rotation.y = Math.atan2(-fx, -fz);
+    lamp.rotation.x = 0.6;
     g.add(lamp);
   }
-  // red obstruction beacon on the gantry corner
-  gk.cyl(M.dark, 0.07, 0.09, 0.14, 8, -4.2, 10.47, 1.8);
-  const beaconMat = new THREE.MeshStandardMaterial({ color: 0x2a0605, emissive: 0xff2216, emissiveIntensity: 1.8, roughness: 0.4 });
-  const beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.11, 0.24, 10), beaconMat);
-  beacon.position.set(-4.2, 10.66, 1.8);
+  // blinking red aviation lamp on the remaining top corner
+  kit.cyl(M.dark, 0.03, 0.03, 0.5, 6, -2.5, 11.5, 2.5);
+  kit.cyl(M.dark, 0.075, 0.095, 0.1, 8, -2.5, 11.78, 2.5);
+  bat.beaconMat = new THREE.MeshStandardMaterial({ color: 0x2a0605, emissive: 0xff2216, emissiveIntensity: 1.8, roughness: 0.4 });
+  const beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.11, 0.24, 10), bat.beaconMat);
+  beacon.position.set(-2.5, 11.94, 2.5);
   g.add(beacon);
-  g.add(gk.build({ name: 'sentinel-gantry' }));
 
-  // cable trunks
-  kit.box(M.dark, 0.5, 0.25, 6, -5.4, 0.13, 1.5);
-  kit.box(M.dark, 0.5, 0.25, 6, 5.4, 0.13, 1.5);
-  kit.cyl(M.rubber, 0.09, 0.09, 4.4, 6, -3.6, 0.2, 2.5, 0, 0, Math.PI / 2);
-  kit.cyl(M.rubber, 0.09, 0.09, 4.4, 6, 3.6, 0.24, 2.5, 0, 0, Math.PI / 2);
+  // ---- cable tray from the gantry base toward the pad edge + interface cabinet
+  kit.box(M.galv, 0.55, 0.05, 1.5, 1.35, 0.58, 2.75);
+  kit.box(M.galv, 0.55, 0.05, 0.75, 1.35, 0.38, 3.78, 0.5, 0, 0);
+  kit.box(M.galv, 0.55, 0.05, 2.9, 1.35, 0.16, 5.55);
+  for (const [ty, tz, tl] of [[0.61, 2.75, 1.5], [0.19, 5.55, 2.9]]) {
+    kit.box(M.galv, 0.05, 0.12, tl, 1.1, ty, tz);
+    kit.box(M.galv, 0.05, 0.12, tl, 1.6, ty, tz);
+  }
+  for (const cz of [2.3, 3.1, 4.6, 5.4, 6.2]) kit.box(M.galv, 0.55, 0.05, 0.06, 1.35, cz < 4 ? 0.63 : 0.21, cz);
+  for (const [cxo, cr] of [[-0.14, 0.038], [0, 0.045], [0.14, 0.038]]) {
+    kit.cyl(M.rubber, cr, cr, 2.8, 5, 1.35 + cxo, 0.24, 5.5, Math.PI / 2, 0, 0);
+    kit.cyl(M.rubber, cr, cr, 1.4, 5, 1.35 + cxo, 0.65, 2.72, Math.PI / 2, 0, 0);
+  }
+  kit.box(M.dark, 0.9, 1.05, 0.45, 1.35, 0.62, 7.25);
+  kit.box(M.dark, 1.0, 0.08, 0.55, 1.35, 0.06, 7.25);
+  kit.cyl(M.rubber, 0.05, 0.05, 0.5, 5, 1.2, 0.2, 6.95, 0.5, 0, 0);
 
   bat._statusLampStack(kit, 5.8, 4.2, 2.4);
-  g.add(kit.build({ name: 'sentinel-body' }));
 
-  addDecal(g, stencilTexture('SENTINEL LR-1', { size: 24, w: 320 }), 2.6, 0.5, -2.2, 5.2, 1.29);
-  addDecal(g, stencilTexture('TEST ARTICLE', { size: 22, w: 320 }), 2.2, 0.42, 2.2, 4.4, 1.29);
+  // sign board on the platform edge + placards + stencils
+  kit.box(M.oliveDark, 0.05, 0.55, 2.7, 2.74, 7.72, 0);
+  addDecal(g, stencilTexture('SENTINEL LR-1', { size: 24, w: 320 }), 2.55, 0.48, 2.78, 7.72, 0, Math.PI / 2);
+  addDecal(g, stencilTexture('TEST ARTICLE', { size: 22, w: 320 }), 2.2, 0.42, 2.8, 1.6, -5.87);
+  addDecal(g, stencilTexture('LR-1', { size: 34 }), 0.7, 0.32, 1.87, 3.1, 0, Math.PI / 2);
+  addDecal(g, placardTexture('DANGER', 'HIGH VOLTAGE UMBILICAL'), 0.62, 0.31, 1.81, 0.85, 7.24, Math.PI / 2);
+
+  g.add(kit.build({ name: 'sentinel-body' }));
 
   // scorch streaks up the blast-pen back wall
   const scorch = new THREE.Mesh(
