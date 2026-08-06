@@ -99,7 +99,8 @@ void main() {
   float er = mix(-0.5, uErode, vT);
   float a = tex.a * smoothstep(er, er + 0.5, tex.a) * vAlpha;
   if (a < 0.004) discard;
-  gl_FragColor = vec4(vCol * tex.rgb * uTint, a);
+  // clamp: NaN/Inf pixels smear black through the bloom pass on real GPUs
+  gl_FragColor = vec4(clamp(vCol * tex.rgb * uTint, vec3(0.0), vec3(30.0)), clamp(a, 0.0, 1.0));
 }
 `;
 
@@ -257,7 +258,7 @@ void main() {
   float head = smoothstep(0.55, 0.95, vUv.x);
   float a = pow(across, 1.9) * (0.3 + 0.7 * along) * vAlpha;
   if (a < 0.004) discard;
-  gl_FragColor = vec4(vCol * (1.0 + head * 0.8), a);
+  gl_FragColor = vec4(clamp(vCol * (1.0 + head * 0.8), vec3(0.0), vec3(30.0)), clamp(a, 0.0, 1.0));
 }
 `;
 
@@ -420,7 +421,7 @@ void main() {
   // smoke is lit by the environment (uTint); emissive segments ignore it and
   // get a brightness kick so fresh exhaust reads white-hot through bloom
   vec3 col = vCol * mix(uTint, vec3(1.0), em) * (1.0 + vGlow * 2.2);
-  gl_FragColor = vec4(col, a);
+  gl_FragColor = vec4(clamp(col, vec3(0.0), vec3(30.0)), clamp(a, 0.0, 1.0));
 }
 `;
 
@@ -663,7 +664,7 @@ void main() {
   // late-life soot: survivors darken toward smoke before the dissolve finishes
   col = mix(col, vec3(0.16, 0.14, 0.13), smoothstep(0.55, 0.95, uT));
   if (a < 0.01) discard;
-  gl_FragColor = vec4(col, a);
+  gl_FragColor = vec4(clamp(col, vec3(0.0), vec3(30.0)), clamp(a, 0.0, 1.0));
 }
 `;
 

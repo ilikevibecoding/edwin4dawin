@@ -33,6 +33,9 @@ renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.info.autoReset = false; // accumulate per-frame stats across composer passes
+// never clear to pure black: even a catastrophic shader/geometry failure shows
+// as dark slate instead of a "big black screen"
+renderer.setClearColor(0x11151d, 1);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(66, innerWidth / innerHeight, 0.15, 26000);
@@ -876,6 +879,45 @@ function update(dt) {
 }
 
 let lastT = performance.now();
+
+// ============================================================ GPU resilience
+// Browsers discard the WebGL context of backgrounded tabs, and overloaded
+// drivers reset mid-game (classic symptom: the 3D view turns into a black /
+// glitchy screen while the DOM HUD keeps working). Recover instead of dying.
+const gfx = { contextLost: false, losses: 0 };
+canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault(); // required — tells the browser we will handle restore
+  gfx.contextLost = true;
+  gfx.losses++;
+  ctx.ui.showBanner('GRAPHICS DEVICE RESET', 'warn', 'RECOVERING — ONE MOMENT…', 10);
+}, false);
+canvas.addEventListener('webglcontextrestored', () => {
+  gfx.contextLost = false;
+  // PMREM env maps live only in GPU render targets — rebuild them, then force
+  // the composer to re-allocate its targets at the current size
+  ctx.weather.rebuildEnvironment();
+  onResize();
+  // a lost context usually means the GPU was overwhelmed: step quality down
+  if (gfx.losses >= 2 && ctx.settings.quality !== 'low') {
+    setQuality(ctx.settings.quality === 'high' ? 'medium' : 'low');
+    ctx.ui.toast(`RENDER QUALITY → ${ctx.settings.quality.toUpperCase()} (GPU RESET ×${gfx.losses})`, 'warn', 6);
+  }
+  lastT = performance.now();
+  ctx.ui.showBanner('GRAPHICS RESTORED', 'good', '', 2.5);
+}, false);
+// returning to a backgrounded tab: restart the frame timer cleanly
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) lastT = performance.now();
+});
+
+// compile every material up front (pooled effects included) so first-look
+// directions and first explosions never hitch or spike the driver mid-game
+if (renderer.compileAsync) {
+  renderer.compileAsync(scene, camera)
+    .then(() => console.info('[IRONVEIL] shaders precompiled'))
+    .catch(() => { /* non-fatal: lazy compilation still works */ });
+}
+
 function frame() {
   const nowMs = performance.now();
   let unscaled = (nowMs - lastT) / 1000;
@@ -884,8 +926,10 @@ function frame() {
   ctx.time.unscaledDt = unscaled;
   const dt = paused ? 0 : unscaled * ctx.time.timeScale;
   update(dt);
-  renderer.info.reset();
-  ctx.post.render(dt);
+  if (!gfx.contextLost) {
+    renderer.info.reset();
+    ctx.post.render(dt);
+  }
   updatePerf(unscaled);
 }
 renderer.setAnimationLoop(frame);
@@ -1001,6 +1045,15 @@ window.__game = {
   setReducedMotion(v) { ctx.settings.reducedMotion = v; },
   setQuality(q) { setQuality(q); },
   mute() { ctx.audio.setMuted(true); },
+  /** simulate a GPU reset / backgrounded-tab context discard (tests) */
+  loseContext(restoreMs = 800) {
+    const ext = renderer.getContext().getExtension('WEBGL_lose_context');
+    if (!ext) return false;
+    ext.loseContext();
+    if (restoreMs >= 0) setTimeout(() => ext.restoreContext(), restoreMs);
+    return true;
+  },
+  gfxState() { return { ...gfx, quality: ctx.settings.quality }; },
 };
 
 console.info('[IRONVEIL] ready — fictional interceptor base demo v' + VERSION);

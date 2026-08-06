@@ -169,6 +169,9 @@ void main() {
     }
   }
 
+  // hard clamp: one NaN/Inf pixel fed into the bloom pass smears a giant
+  // black rectangle across the frame on real GPUs — never let it exist
+  sky = clamp(sky, vec3(0.0), vec3(24.0));
   gl_FragColor = vec4(sky, 1.0);
 }
 `;
@@ -285,8 +288,14 @@ export function createWeather(ctx) {
 
   // ---- image-based lighting: tiny equirect gradient per preset -> PMREM.
   // Gives metals/gloss real reflections instead of rendering black.
+  // Rebuildable: PMREM textures live in GPU render targets, which are lost for
+  // good on WebGL context loss — buildEnvMaps() runs again on restore.
   const envMaps = {};
-  {
+  function buildEnvMaps() {
+    for (const key of Object.keys(envMaps)) {
+      envMaps[key]?.dispose?.();
+      delete envMaps[key];
+    }
     const pmrem = new THREE.PMREMGenerator(renderer);
     const cTop = new THREE.Color(), cMid = new THREE.Color(), cHor = new THREE.Color(),
       cBot = new THREE.Color(), cSun = new THREE.Color();
@@ -325,6 +334,7 @@ export function createWeather(ctx) {
     }
     pmrem.dispose();
   }
+  buildEnvMaps();
 
   const state = {
     timeOfDay: 'day',
@@ -419,6 +429,11 @@ export function createWeather(ctx) {
     get timeOfDay() { return state.timeOfDay; },
     get preset() { return PRESETS[state.timeOfDay]; },
     get floodlightsOn() { return PRESETS[state.timeOfDay].floodlights; },
+    /** regenerate PMREM env maps (GPU-only resources die on context loss) */
+    rebuildEnvironment() {
+      buildEnvMaps();
+      scene.environment = envMaps[state.timeOfDay];
+    },
     setTimeOfDay(t, instant = false) {
       if (!PRESETS[t]) return;
       scene.environment = envMaps[t];

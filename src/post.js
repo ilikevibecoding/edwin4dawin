@@ -76,7 +76,7 @@ const GradeShader = {
       col += gr;
       // ~1.5/255 hash dither breaks 8-bit banding in smooth sky gradients
       col += (hash(uv * vec2(913.1, 719.7) + fract(uTime * 0.37) * 29.0) - 0.5) * 0.0059;
-      gl_FragColor = vec4(col, 1.0);
+      gl_FragColor = vec4(max(col, vec3(0.0)), 1.0);
     }
   `,
 };
