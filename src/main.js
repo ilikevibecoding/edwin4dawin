@@ -127,7 +127,7 @@ class Game {
     this.player.teleport(PLAYER_SPAWN.x, this.base.terrainHeight(PLAYER_SPAWN.x, PLAYER_SPAWN.z), PLAYER_SPAWN.z, 0.28, -0.02);
 
     this.post = new Post(renderer, this.scene, this.camera, { quality: this.settings.quality });
-    this.effects.setDensity(0.4);
+    this.effects.setDensity(0.3);
 
     this.ui = new UI(this._handlers()).mount(root);
     this.ui.attachScope(this.radar.canvas);
@@ -321,7 +321,7 @@ class Game {
     // even the top tier emits well under the authored counts: the launch plume
     // was saturating the smoke pool and layering 1500+ puffs of 25 m or more,
     // which is the single largest fill-rate risk in the frame
-    this.effects.setDensity(q === 'low' ? 0.2 : q === 'medium' ? 0.28 : 0.4);
+    this.effects.setDensity(q === 'low' ? 0.14 : q === 'medium' ? 0.2 : 0.3);
     this.scene.traverse((o) => {
       if (o.isMesh && o.material) o.material.needsUpdate = true;
     });
@@ -1092,11 +1092,18 @@ class Game {
        * launch elsewhere on the site cannot yank the view away mid-shot.
        */
       pinWatch: () => {
-        this._watchPin = this.interceptors.active[0] || null;
-        return !!this._watchPin;
+        // prefer a round that is chasing a real inbound rather than a decoy, so a
+        // capture frames the kill instead of a wasted round
+        const rounds = this.interceptors.active;
+        const it = rounds.find((r) => r.target && r.target.alive && !r.target.isDecoy)
+          || rounds[0] || null;
+        this._watchPin = it;
+        this._watchPinUid = it ? it.uid : -1;
+        return !!it;
       },
       watchSmooth: (k = 0.08, lead = 0) => {
-        const pinned = this._watchPin && this._watchPin.alive ? this._watchPin : null;
+        const pinned = this._watchPin && this._watchPin.alive
+          && this._watchPin.uid === this._watchPinUid ? this._watchPin : null;
         const it = pinned || (this._watchPin ? null : this.interceptors.active[0]);
         let target = null;
         if (it && it.target && it.target.alive) {

@@ -243,6 +243,9 @@ export class InterceptorManager {
     it.spec = spec;
     it.battery = battery;
     it.target = target;
+    // monotonic launch id: pooled bodies are recycled, so anything holding a
+    // reference to a round needs to tell one flight from the next
+    it.uid = (this._uid = (this._uid || 0) + 1);
     it.alive = true;
     it.age = 0;
     it.phase = 'BOOST';

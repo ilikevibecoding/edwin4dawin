@@ -330,6 +330,8 @@ const PARTICLE_VS = /* glsl */`
   varying float vFogDepth;
   varying float vHeight;
   varying float vGround;
+  varying float vNear;
+  uniform vec2 uNearFade;
 
   /**
    * How far this corner sits above the ground, in units of the particle's own
@@ -392,6 +394,12 @@ const PARTICLE_VS = /* glsl */`
       #endif
     }
     vFogDepth = -mv.z;
+    // Near-camera fade. These puffs are tens to hundreds of metres across, so
+    // the view can end up *inside* one - and a camera-facing quad seen from
+    // inside covers the entire frame as an opaque wall. Fading a particle out
+    // as it approaches the near plane keeps a plume readable when the player is
+    // standing in it, which is exactly where a launch is watched from.
+    vNear = smoothstep(uNearFade.x, uNearFade.y, vFogDepth);
     gl_Position = projectionMatrix * mv;
     #include <logdepthbuf_vertex>
   }
@@ -410,11 +418,12 @@ const PARTICLE_FS = /* glsl */`
   varying float vFogDepth;
   varying float vHeight;
   varying float vGround;
+  varying float vNear;
 
   void main() {
     #include <logdepthbuf_fragment>
     vec4 t = texture2D(map, vUv);
-    float a = vColor.a * t.a * vGround;
+    float a = vColor.a * t.a * vGround * vNear;
     if (a < 0.004) discard;
     vec3 c = vColor.rgb * t.rgb;
     float fd = uFogDensity * vFogDepth;
@@ -471,6 +480,8 @@ class BillboardParticles {
         uFogDensity: { value: 0 },
         uFogAmount: { value: fogAmount },
         uFogHeight: { value: FOG_HEIGHT_FALLOFF },
+        // fully transparent within 3 m of the eye, fully opaque past 26 m
+        uNearFade: { value: new THREE.Vector2(3, 26) },
       },
       vertexShader: PARTICLE_VS,
       fragmentShader: PARTICLE_FS,
@@ -525,6 +536,7 @@ class BillboardParticles {
     // with size instead would cancel the saving, because fill cost is the sum of
     // particle areas - opacity is free.
     this.alphaScale = 1;
+    this.lifeScale = 1;
     this.drawn = 0;
   }
 
@@ -547,7 +559,10 @@ class BillboardParticles {
     this.vy[i] = v ? v.y : 0;
     this.vz[i] = v ? v.z : 0;
     this.age[i] = 0;
-    this.life[i] = o.life ?? 1;
+    // lifeScale bounds how long smoke lingers. Without it, six launches over a
+    // compact site leave enough long-lived, very large puffs to blanket the whole
+    // sky, which destroys readability far more than it adds atmosphere.
+    this.life[i] = (o.life ?? 1) * this.lifeScale;
     this.size0[i] = o.size0 ?? 1;
     this.size1[i] = o.size1 ?? this.size0[i] * 2;
     this.sizeExp[i] = o.sizeExp ?? 1;
@@ -1538,10 +1553,16 @@ export class Effects {
    */
   setDensity(scale) {
     this.density = Math.max(0.15, Math.min(1, scale));
-    const alphaScale = 1 + (1 - this.density) * 0.7;
+    const alphaScale = 1 + (1 - this.density) * 0.32;
     for (const sys of [this.smoke, this.dust, this.fire]) {
       if (sys) sys.alphaScale = alphaScale;
     }
+    // A shorter life also makes a particle reach its terminal size sooner, so
+    // cutting persistence hard actually *raises* fill cost. Trim it only enough
+    // to stop smoke blanketing the sky across several launches, and take the
+    // fill saving out of the count instead.
+    if (this.smoke) this.smoke.lifeScale = 0.7;
+    if (this.dust) this.dust.lifeScale = 0.65;
   }
 
   /** Probabilistic rounding so low emission rates stay correct on average. */

@@ -28,6 +28,8 @@ and balanced for gameplay. Nothing here represents real system performance.
 | 4 look pass | 8 | 8 | 6 | 8 | 9 | 9 | 8 | 7 |
 | 5 physics fix | 8 | 8 | 9 | 8 | 9 | 9 | 8 | 9 |
 | 6 polish | 9 | 8 | 9 | 9 | 9 | 9 | 8 | 9 |
+| 7 pacing | 9 | 8 | 9 | 9 | 9 | 9 | 8 | 9 |
+| 8 fill rate | 9 | 8 | 9 | 9 | 9 | 9 | 9 | 9 |
 
 ---
 
@@ -201,6 +203,45 @@ importantly - the particle density multiplier, since large alpha-blended particl
 are the dominant overdraw risk. The setting can be switched off to pin a tier.
 
 ---
+
+## Iteration 8 - the smoke wall, and what fill rate actually costs
+
+Reviewing a rendered night clip turned up a severe artefact: a huge opaque grey mass
+filling the centre of the frame from the moment a decoy was destroyed, persisting to
+the end. The first hypothesis - the camera ending up *inside* a single enormous
+camera-facing quad - was wrong, but worth fixing anyway, so particles now fade out
+within 26 m of the eye. Reproducing the exact frame deterministically showed the real
+cause: after six launches over a compact site there were 4166 live smoke particles,
+enough long-lived, very large puffs to blanket the entire sky.
+
+The instructive part was the fix attempt that made things worse. Cutting particle
+*lifetime* hard (to 0.4x) reduced the count but **raised** worst-case overdraw from 35
+to 54 full-screen equivalents, because a particle's size ramps over its life: a
+shorter life means it reaches terminal size sooner and spends more of its existence
+large. The same trap applies to compensating a count reduction with a size increase -
+fill cost is the sum of particle *areas*, so 0.55x count at 1.2x size saves almost
+nothing.
+
+What actually works: cut the count, keep the size ramp, and compensate visually with
+per-particle **opacity**, which is free. Final settings trim lifetime only enough to
+stop the sky blanketing (0.7x smoke, 0.65x dust) and take the fill saving out of the
+count (0.3x at high quality, 0.2x medium, 0.14x low).
+
+| | before | after |
+|---|---|---|
+| worst-case overdraw beside a firing pad | 49 screens | 35 screens |
+| live smoke particles, six launches | 4166 (pool saturated) | ~1950 |
+| plume appearance | reference | unchanged on review |
+
+Also this iteration: the camera pin for offline capture was re-attaching to newly
+launched rounds because the pool recycles interceptor bodies, so rounds now carry a
+monotonic launch id; the pin prefers a round chasing a real inbound over one chasing
+a decoy; and the production bundle was verified to boot and play a full scenario
+(`tools/buildcheck.mjs`).
+
+**Verification:** 24/24 Playwright tests pass (21 assertions plus 3 capture specs).
+A live functional pass through a real browser confirmed pointer lock, mouse look,
+WASD, sprint, collision, the console overlay and every keyboard action work.
 
 ## Known limitations
 

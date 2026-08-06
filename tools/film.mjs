@@ -76,17 +76,19 @@ async function findMoments() {
     const G = window.__GAME;
     let firstLaunch = -1;
     let firstResult = -1;
+    let firstIntercept = -1;
     for (let i = 0; i < 60 * 150; i++) {
       G.stepOnce();
       if (i % 21 === 0) G.autoPilot();
       const s = G.state();
       if (firstLaunch < 0 && s.roundStats.launched > 0) firstLaunch = s.simTime;
-      if (firstResult < 0 && s.results.length > 0) {
-        firstResult = s.simTime;
+      if (firstResult < 0 && s.results.length > 0) firstResult = s.simTime;
+      if (firstIntercept < 0 && s.results.some((r) => r.result === 'INTERCEPT')) {
+        firstIntercept = s.simTime;
         break;
       }
     }
-    return { firstLaunch, firstResult };
+    return { firstLaunch, firstResult, firstIntercept };
   });
 }
 
@@ -95,7 +97,9 @@ if (PHASE !== 'start' && !WARMUP) {
   await setup();
   const m = await findMoments();
   console.log('milestones', JSON.stringify(m));
-  const anchor = PHASE === 'intercept' ? m.firstResult : m.firstLaunch;
+  const anchor = PHASE === 'intercept'
+    ? (m.firstIntercept > 0 ? m.firstIntercept : m.firstResult)
+    : m.firstLaunch;
   warmup = Math.max(0, (anchor > 0 ? anchor : 8) - LEAD);
 }
 console.log(`capture: warmup ${warmup.toFixed(1)}s then ${FRAMES} frames @ ${FPS}fps (${W}x${H})`);

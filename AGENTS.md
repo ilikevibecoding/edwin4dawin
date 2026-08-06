@@ -74,6 +74,7 @@ The dev server usually already runs on `http://127.0.0.1:5173`. Start it with
 | `node tools/overdraw.mjs` | particle overdraw in full-screen equivalents |
 | `node tools/fillcheck.mjs` | live particle counts and sizes around a launch |
 | `node tools/audiocheck.mjs` | confirms the WebAudio graph produces signal |
+| `npm run build && npm run preview` then `node tools/buildcheck.mjs` | confirms the production bundle boots and plays |
 | `node tools/film.mjs out.mp4 --phase intercept --pin` | renders a demo clip offline frame by frame, then encodes at real speed |
 | `npx playwright test` | the committed suite: `tests/game.spec.js` asserts, `tests/shots.spec.js` captures |
 
