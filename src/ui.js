@@ -279,10 +279,12 @@ export class UI {
     const el = this.els.summary;
     el.classList.remove('hidden');
     const score = stats.intercepted * 100 - stats.impactsBase * 120 - stats.decoysEngaged * 40 - stats.missed * 20;
-    const grade = stats.impactsBase === 0 && stats.missed === 0 ? 'S'
-      : stats.impactsBase === 0 ? 'A'
-        : stats.impactsBase === 1 ? 'B'
-          : stats.impactsBase === 2 ? 'C' : 'D';
+    const realThreats = stats.launched - stats.decoysTotal;
+    const grade = stats.impactsBase === 0 && stats.missed === 0 && stats.decoysEngaged === 0
+      && stats.intercepted >= realThreats ? 'S'
+      : stats.impactsBase === 0 && stats.intercepted > 0 ? 'A'
+        : stats.impactsBase === 0 ? 'B'
+          : stats.impactsBase === 1 ? 'C' : 'D';
     const gcol = { S: 'var(--cyan)', A: 'var(--grn)', B: 'var(--grn)', C: 'var(--amber)', D: 'var(--red)' }[grade];
     this.els.summaryGrade.textContent = `GRADE ${grade}`;
     this.els.summaryGrade.style.color = gcol;

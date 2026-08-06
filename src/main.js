@@ -436,7 +436,7 @@ class Game {
 
     // completion
     if (this.threats.scenario && this.threats.isComplete(this.interceptors.inFlight)) {
-      if (this.completeTimer < 0) this.completeTimer = 2.4;
+      if (this.completeTimer < 0) this.completeTimer = 4.6;
       this.completeTimer -= dt;
       if (this.completeTimer <= 0) {
         const stats = this.threats.stats;

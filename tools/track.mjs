@@ -11,13 +11,14 @@ async function main() {
   await page.goto(`http://127.0.0.1:5173/?test=1&seed=${seed}`);
   await page.waitForFunction(() => window.__game?.ready, null, { timeout: 40000 });
 
-  await page.evaluate(({ scenario, seed }) => {
+  const auto = process.argv[4] !== 'noauto';
+  await page.evaluate(({ scenario, seed, auto }) => {
     const g = window.__game;
     g.startScenario(scenario, seed);
-    g.autoEngage(true);
-  }, { scenario, seed });
+    g.autoEngage(auto);
+  }, { scenario, seed, auto });
 
-  for (let t = 2; t <= 30; t += 2) {
+  for (let t = 2; t <= 60; t += 2) {
     const st = await page.evaluate(() => {
       window.__game.step(2);
       const s = window.__game.state();

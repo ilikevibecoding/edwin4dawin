@@ -67,3 +67,40 @@ fence rails render as floating bright lines at distance; battery detail level st
    hazard rim, truck cab glass/mirrors.
 7. Verify base-impact ground explosion visuals + camera shake; screenshot it.
 8. Re-run full Playwright suite.
+
+## Iteration 4 — specialist passes (base density, VFX overhaul, sky/grade)
+
+**Changes:** container yard + quonsets + comms dishes + cable ramps + cones + dirt decals;
+gensets shrunk/detailed; strobe/night-dimmer conflict fixed; searchlight beam shader fix;
+sky shader horizon tint + moon craters + Milky Way band; luminance-split grade tint.
+
+**Observations (shots/iter4):** density much better; sky/night strong. Two flaky tests passed
+on rerun (SwiftShader timing under load). Day ground washed-out pale; mountains read faceted;
+mesas look like tents; batteries still "kit demo" level.
+
+**Scores:** env 6.5 · batteries 6 · flight 6.5 · effects 6.5 · light 7 · UX 7.5 · loop 7.5 · perf 8 → avg 7.0
+
+## Iteration 5 — terrain & flight visibility pass
+
+**Changes:** mountains rebuilt smooth-shaded (260×14 ring geometry, welded wrap seam,
+slope+height vertex coloring, erosion detail); sandy foothill ring at 2.85 km; tent-mesas →
+noise-displaced rounded hills; ground vertex tone deepened w/ meso-scale patches; ground
+texture contrast up; day fog 0.000075→0.000095 (aerial perspective). Trails: distance-adaptive
+minimum apparent width (dist·0.003) so ribbons read at km range; altitude-scaled widths
+(cf²·7-13 m); longer high-altitude life; later alpha fade knee (0.42); threat trails darkened
+(0.42× tint) to read against bright sky; threat reentry glow + interceptor exhaust get
+distance-based minimum apparent size. Summary DURATION now reports sim time (was wall-clock 0s).
+
+**Observations (shots/fx_*, check_terrain*):** mountain ranges now read as layered desert
+terrain; saturation shot shows curving white interceptor contrail + dark kill smoke + live
+feed — the intended cinematic look. Threat trails foreshorten to a point on head-on approaches
+(geometry, expected) — reentry glow point carries readability. Console verified working
+(black shot was a SwiftShader frame-timing artifact).
+
+**Scores:** env 7.5 · batteries 6 (pass in flight) · flight 7.5 · effects 7.5 · light 7 · UX 8 · loop 8 · perf 8 → avg 7.4
+
+### Next fix list (iteration 6)
+1. Integrate battery detail pass (PAC-X canisters/trailer, HALO-9 cab/tubes, SENTINEL cylinder+gantry).
+2. Ground-impact explosion + camera shake verification shot.
+3. Sunset preset review; base overview cinematic shots for README/PR.
+4. Full Playwright suite + perf budget check; demo video.
