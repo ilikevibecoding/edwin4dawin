@@ -45,39 +45,41 @@ export function buildControlRoom(mats, collision, interactables, animators) {
   const z1 = LAYOUT.rooms.control.z1;
   const mid = (z0 + z1) * 0.5;
 
-  const viewportFrame = mesh(roundedBox(1.08, 0.08, 0.14, 0.02, 1), mats.chipped);
-  viewportFrame.position.set(0, 1.58, 0.38);
+  const viewportFrame = mesh(roundedBox(1.22, 0.08, 0.14, 0.02, 1), mats.chipped);
+  viewportFrame.position.set(0, 1.64, 0.38);
   g.add(viewportFrame);
-  const frameBot = mesh(roundedBox(1.08, 0.08, 0.14, 0.02, 1), mats.chipped);
-  frameBot.position.set(0, 0.98, 0.38);
+  const frameBot = mesh(roundedBox(1.22, 0.08, 0.14, 0.02, 1), mats.chipped);
+  frameBot.position.set(0, 0.92, 0.38);
   g.add(frameBot);
-  const frameL = mesh(roundedBox(0.08, 0.68, 0.14, 0.02, 1), mats.chipped);
-  frameL.position.set(-0.5, 1.28, 0.38);
+  const frameL = mesh(roundedBox(0.08, 0.8, 0.14, 0.02, 1), mats.chipped);
+  frameL.position.set(-0.57, 1.28, 0.38);
   g.add(frameL);
   const frameR = frameL.clone();
-  frameR.position.x = 0.5;
+  frameR.position.x = 0.57;
   g.add(frameR);
-  const inner = mesh(roundedBox(0.9, 0.06, 0.06, 0.015, 1), mats.brushed);
-  inner.position.set(0, 1.54, 0.36);
+  const inner = mesh(roundedBox(1.02, 0.06, 0.06, 0.015, 1), mats.brushed);
+  inner.position.set(0, 1.6, 0.36);
   g.add(inner);
-  const glass = mesh(roundedBox(0.8, 0.48, 0.03, 0.01, 1), mats.glassThick);
+  const glass = mesh(roundedBox(0.96, 0.58, 0.03, 0.01, 1), mats.glassThick);
   glass.position.set(0, 1.28, 0.34);
   glass.castShadow = false;
+  glass.renderOrder = 4;
   g.add(glass);
-  const glass2 = mesh(roundedBox(0.78, 0.46, 0.02, 0.008, 1), mats.glass);
+  const glass2 = mesh(roundedBox(0.94, 0.56, 0.02, 0.008, 1), mats.glass);
   glass2.position.set(0, 1.28, 0.3);
   glass2.castShadow = false;
+  glass2.renderOrder = 4;
   g.add(glass2);
-  const seal = mesh(roundedBox(0.9, 0.04, 0.04, 0.01, 1), mats.rubber);
+  const seal = mesh(roundedBox(1.0, 0.04, 0.04, 0.01, 1), mats.rubber);
   seal.position.set(0, 1.28, 0.34);
   g.add(seal);
   for (const [x, y] of [
-    [-0.48, 1.55],
-    [0.48, 1.55],
-    [-0.48, 1.02],
-    [0.48, 1.02],
-    [0, 1.58],
-    [0, 0.98],
+    [-0.55, 1.6],
+    [0.55, 1.6],
+    [-0.55, 0.96],
+    [0.55, 0.96],
+    [0, 1.64],
+    [0, 0.92],
   ]) {
     const bolt = mesh(cyl(0.012, 0.012, 0.03, 8), mats.brushed);
     bolt.rotation.x = Math.PI * 0.5;

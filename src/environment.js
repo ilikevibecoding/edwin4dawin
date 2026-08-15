@@ -58,19 +58,19 @@ function point(color, intensity, dist) {
 
 export function createLighting(scene) {
   const lights = {
-    ambient: new AmbientLight(0x2a2620, 0.38),
-    hemi: new HemisphereLight(0xb8c4c0, 0x3a3228, 0.55),
-    keyControl: spot(0xf0d8a8, 8.5, 9, 0.85, 0.5),
-    fillControl: point(0x8ab8b8, 3.2, 7),
-    windowFill: spot(0x6ab0b8, 5.5, 8, 0.7, 0.55),
-    corridorA: spot(0xf0d090, 6.2, 7, 0.7, 0.45),
-    corridorB: spot(0xf0d090, 5.8, 7, 0.7, 0.45),
-    crewWarm: spot(0xf4d0a0, 6.4, 7.5, 0.85, 0.5),
-    crewRead: point(0xf0c878, 1.8, 3.2),
-    engineKey: spot(0xf6d080, 9.2, 10, 0.9, 0.45),
-    engineFill: point(0x8a9aa8, 4.2, 8),
-    engineWork: spot(0xf4d8a0, 6.5, 6, 0.55, 0.4),
-    extraFill: point(0xe8d4b0, 2.4, 12),
+    ambient: new AmbientLight(0x3a342c, 0.62),
+    hemi: new HemisphereLight(0xc4d0cc, 0x3a3228, 0.82),
+    keyControl: spot(0xf0d8a8, 11.5, 9, 0.9, 0.55),
+    fillControl: point(0x9ac4c4, 4.6, 8),
+    windowFill: spot(0x7ec4cc, 8.5, 8, 0.75, 0.55),
+    corridorA: spot(0xf0d090, 8.4, 7, 0.75, 0.5),
+    corridorB: spot(0xf0d090, 8.0, 7, 0.75, 0.5),
+    crewWarm: spot(0xf4d0a0, 8.2, 7.5, 0.9, 0.55),
+    crewRead: point(0xf0c878, 2.2, 3.4),
+    engineKey: spot(0xf6d080, 12.5, 10, 0.95, 0.5),
+    engineFill: point(0x9aaab4, 5.6, 8),
+    engineWork: spot(0xf4d8a0, 8.2, 6, 0.6, 0.45),
+    extraFill: point(0xe8d4b0, 3.4, 14),
     restReds: [],
     instruments: [],
     floodL: spot(0x8ec8c4, 14, 32, 0.38, 0.4),
@@ -80,11 +80,11 @@ export function createLighting(scene) {
   lights.keyControl.position.set(0.15, 2.05, 1.6);
   lights.keyControl.target.position.set(0.1, 0.9, 2.4);
   lights.keyControl.castShadow = true;
-  lights.keyControl.shadow.mapSize.set(1024, 1024);
-  lights.keyControl.shadow.bias = -0.00025;
-  lights.keyControl.shadow.normalBias = 0.02;
-  lights.keyControl.shadow.camera.near = 0.2;
-  lights.keyControl.shadow.camera.far = 8;
+  lights.keyControl.shadow.mapSize.set(512, 512);
+  lights.keyControl.shadow.bias = -0.0004;
+  lights.keyControl.shadow.normalBias = 0.04;
+  lights.keyControl.shadow.camera.near = 0.3;
+  lights.keyControl.shadow.camera.far = 7;
 
   lights.fillControl.position.set(-0.55, 1.35, 2.1);
   lights.windowFill.position.set(0, 1.25, 0.35);
@@ -101,12 +101,7 @@ export function createLighting(scene) {
 
   lights.engineKey.position.set(-0.15, 2.08, 18.2);
   lights.engineKey.target.position.set(0.2, 0.7, 19.4);
-  lights.engineKey.castShadow = true;
-  lights.engineKey.shadow.mapSize.set(1024, 1024);
-  lights.engineKey.shadow.bias = -0.0003;
-  lights.engineKey.shadow.normalBias = 0.025;
-  lights.engineKey.shadow.camera.near = 0.3;
-  lights.engineKey.shadow.camera.far = 10;
+  lights.engineKey.castShadow = false;
 
   lights.engineFill.position.set(0.45, 1.4, 17.4);
   lights.engineWork.position.set(-0.35, 1.9, 19.8);
@@ -136,22 +131,22 @@ export function createLighting(scene) {
   }
 
   scene.background = new Color(PALETTE.waterDeep);
-  scene.fog = new FogExp2(0x0a1214, 0.006);
+  scene.fog = new FogExp2(0x0c1618, 0.0025);
 
   lights._base = {
-    keyControl: 8.5,
-    fillControl: 3.2,
-    windowFill: 5.5,
-    corridorA: 6.2,
-    corridorB: 5.8,
-    crewWarm: 6.4,
-    crewRead: 1.8,
-    engineKey: 9.2,
-    engineFill: 4.2,
-    engineWork: 6.5,
-    ambient: 0.38,
-    hemi: 0.55,
-    extraFill: 2.4,
+    keyControl: 11.5,
+    fillControl: 4.6,
+    windowFill: 8.5,
+    corridorA: 8.4,
+    corridorB: 8.0,
+    crewWarm: 8.2,
+    crewRead: 2.2,
+    engineKey: 12.5,
+    engineFill: 5.6,
+    engineWork: 8.2,
+    ambient: 0.62,
+    hemi: 0.82,
+    extraFill: 3.4,
   };
 
   applyLightingState(lights, 'cruising');

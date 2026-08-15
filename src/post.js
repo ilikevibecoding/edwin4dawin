@@ -9,12 +9,12 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
-    vignette: { value: 0.18 },
-    grain: { value: 0.014 },
+    vignette: { value: 0.12 },
+    grain: { value: 0.006 },
     time: { value: 0 },
-    lift: { value: 0.03 },
-    gain: { value: 1.02 },
-    warm: { value: 0.03 },
+    lift: { value: 0.045 },
+    gain: { value: 1.06 },
+    warm: { value: 0.02 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -70,7 +70,7 @@ export function createPost(renderer, scene, camera) {
     console.warn('GTAO unavailable', err);
   }
 
-  const bloom = new UnrealBloomPass(new Vector2(size.x, size.y), 0.14, 0.36, 0.86);
+  const bloom = new UnrealBloomPass(new Vector2(size.x, size.y), software ? 0.08 : 0.12, 0.32, 0.88);
   composer.addPass(bloom);
 
   const grade = new ShaderPass(new ShaderMaterial(GradeShader));

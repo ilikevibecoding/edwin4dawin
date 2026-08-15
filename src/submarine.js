@@ -1,8 +1,8 @@
-import { Group, Mesh, CylinderGeometry } from 'three';
+import { CircleGeometry, CylinderGeometry, Group } from 'three';
 import { LAYOUT, hullHalfWidthAt } from './seed.js';
 import { addUv2, bulkheadPlate, invertNormals, roundedBox, tBeamRing, windowBulkhead } from './geom.js';
 import { makeHatchDoor, makeLightFixture, makeWarningPlate, mesh } from './kit.js';
-import { punchHullOpenings } from './materials.js';
+import { mergeStatic } from './batch.js';
 import { CollisionWorld, wallCollidersForHull } from './collision.js';
 import { buildControlRoom } from './controlRoom.js';
 import { buildCorridor } from './corridor.js';
@@ -18,13 +18,12 @@ function createHullShell(mats) {
   geo.rotateX(Math.PI * 0.5);
   invertNormals(geo);
   addUv2(geo);
-  punchHullOpenings(mats.hull);
   const shell = mesh(geo, mats.hull);
   shell.position.set(0, LAYOUT.hullCenterY, 0.55 + hullLen * 0.5);
   g.add(shell);
 
   const bowPlate = mesh(
-    windowBulkhead(r - 0.01, 0.82, 0.5, 1.28 - LAYOUT.hullCenterY, 0.09),
+    windowBulkhead(r - 0.01, 1.02, 0.64, 1.28 - LAYOUT.hullCenterY, 0.1),
     mats.chipped
   );
   bowPlate.position.set(0, LAYOUT.hullCenterY, 0.36);
@@ -36,6 +35,10 @@ function createHullShell(mats) {
   const sternMesh = mesh(stern, mats.hull);
   sternMesh.position.set(0, LAYOUT.hullCenterY, len - 0.15);
   g.add(sternMesh);
+  const sternCap = mesh(new CircleGeometry(r * 0.72, 28), mats.hull);
+  sternCap.rotation.y = Math.PI;
+  sternCap.position.set(0, LAYOUT.hullCenterY, len + 0.22);
+  g.add(sternCap);
 
   return g;
 }
@@ -62,15 +65,18 @@ function createDeck(mats) {
 
 function createLining(mats) {
   const g = new Group();
-  for (let z = 1.1; z < LAYOUT.length - 0.6; z += 0.72) {
-    const plate = mesh(roundedBox(0.42, 0.55, 0.04, 0.01, 1), mats.hullGreen);
-    plate.position.set(-0.78, 1.15, z);
-    plate.rotation.y = 0.55;
+  const y = 1.08;
+  const hw = Math.max(0.2, hullHalfWidthAt(y) - 0.04);
+  const tilt = Math.atan2(y - LAYOUT.hullCenterY, hw);
+  for (let z = 1.2; z < 15.6; z += 0.84) {
+    if (Math.abs(z - 6.55) < 0.4 || Math.abs(z - 10.7) < 0.4) continue;
+    const plate = mesh(roundedBox(0.38, 0.48, 0.03, 0.008, 1), mats.hullGreen);
+    plate.position.set(-hw, y, z);
+    plate.rotation.z = -tilt;
     g.add(plate);
-    if (Math.abs(z - 6.55) < 0.45 || Math.abs(z - 10.7) < 0.45) continue;
     const plateR = plate.clone();
-    plateR.position.x = 0.78;
-    plateR.rotation.y = -0.55;
+    plateR.position.x = hw;
+    plateR.rotation.z = tilt;
     g.add(plateR);
   }
   return g;
@@ -153,6 +159,13 @@ export function buildSubmarine(scene, mats) {
     light.position.set(0, 2.08, z);
     root.add(light);
   }
+
+  const skip = new Set(interactables);
+  for (const a of animators) {
+    if (a.object) skip.add(a.object);
+    if (a.group) skip.add(a.group);
+  }
+  mergeStatic(root, skip);
 
   scene.add(root);
   return { root, collision, interactables, animators };

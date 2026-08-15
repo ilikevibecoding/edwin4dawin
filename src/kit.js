@@ -1,8 +1,10 @@
 import {
+  CircleGeometry,
   Group,
   InstancedMesh,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   Object3D,
   Quaternion,
   Vector3,
@@ -30,7 +32,7 @@ const _z = new Vector3(0, 0, 1);
 
 function mesh(geo, mat) {
   const m = new Mesh(geo, mat);
-  m.castShadow = true;
+  m.castShadow = false;
   m.receiveShadow = true;
   return m;
 }
@@ -103,12 +105,12 @@ export function makePipeRun(mats, path, radius = 0.035, color = 'pipe') {
 export function makeStraightPipe(mats, x, y, z, length, radius, axis = 'z', color = 'pipe') {
   const g = new Group();
   const mat = mats[color] || mats.pipe;
-  const body = mesh(cyl(radius, radius, length, 12), mat);
+  const body = mesh(cyl(radius, radius, length, 10), mat);
   if (axis === 'z') body.rotation.x = Math.PI * 0.5;
   if (axis === 'x') body.rotation.z = Math.PI * 0.5;
   body.position.set(x, y, z);
   g.add(body);
-  const flA = mesh(flangeRing(radius * 0.9, radius * 1.5, 0.014, 12), mats.brushed);
+  const flA = mesh(flangeRing(radius * 0.9, radius * 1.5, 0.014, 10), mats.brushed);
   const flB = flA.clone();
   if (axis === 'z') {
     flA.rotation.x = Math.PI * 0.5;
@@ -407,10 +409,20 @@ export function makePorthole(mats, radius = 0.16) {
   inner.rotation.x = Math.PI * 0.5;
   inner.position.z = 0.02;
   g.add(inner);
+  const water = new Mesh(
+    new CircleGeometry(radius * 0.96, 20),
+    new MeshBasicMaterial({ color: 0x3d7a82, fog: false })
+  );
+  water.position.z = -0.02;
+  water.castShadow = false;
+  water.receiveShadow = false;
+  water.userData.noMerge = true;
+  g.add(water);
   const glass = mesh(cyl(radius, radius, 0.024, 18), mats.glassThick);
   glass.rotation.x = Math.PI * 0.5;
   glass.position.z = 0.01;
   glass.castShadow = false;
+  glass.renderOrder = 3;
   g.add(glass);
   const seal = mesh(torus(radius + 0.012, 0.008, 8, 18), mats.rubber);
   g.add(seal);

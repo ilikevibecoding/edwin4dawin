@@ -116,7 +116,7 @@ export function createUnderwater(scene) {
 
   const terrain = new Group();
   const rand = mulberry32(SEED + 200);
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < 10; i++) {
     const rock = new Mesh(rockGeometry(SEED + i * 13, 1.4 + rand() * 2.2), rockMat);
     rock.position.set(
       -10 + rand() * 20,
@@ -128,7 +128,7 @@ export function createUnderwater(scene) {
     terrain.add(rock);
   }
   const ridge = new Group();
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 6; i++) {
     const rock = new Mesh(rockGeometry(SEED + 400 + i * 7, 2.4), rockMat);
     rock.position.set(3.2 + rand() * 2.2, -2.4, -2.5 - i * 3.4);
     rock.scale.set(1.6, 2.2 + rand(), 1.4);
@@ -141,10 +141,10 @@ export function createUnderwater(scene) {
   terrain.add(hero);
   root.add(terrain);
 
-  const near = makeParticles(420, new Vector3(8, 5, 10), 0.035, 0xb7d4d8, 0.35);
-  const midP = makeParticles(280, new Vector3(16, 8, 22), 0.05, 0x7aa8b0, 0.22);
-  const farP = makeParticles(160, new Vector3(28, 10, 36), 0.08, 0x3a6870, 0.14);
-  const bio = makeParticles(40, new Vector3(20, 8, 24), 0.04, 0x6ad0c8, 0.18);
+  const near = makeParticles(160, new Vector3(6, 3.5, 8), 0.04, 0xc4e0e4, 0.42);
+  const midP = makeParticles(110, new Vector3(12, 6, 16), 0.055, 0x7aa8b0, 0.24);
+  const farP = makeParticles(70, new Vector3(20, 8, 24), 0.08, 0x3a6870, 0.16);
+  const bio = makeParticles(18, new Vector3(14, 6, 16), 0.045, 0x6ad0c8, 0.2);
   root.add(near, midP, farP, bio);
 
   const bubbles = makeParticles(24, new Vector3(3, 2, 4), 0.025, 0xd0e8ec, 0.28);
@@ -164,7 +164,7 @@ export function createUnderwater(scene) {
   cone2.position.set(0.55, 0.85, -2.4);
   root.add(cone, cone2);
 
-  const silt = makeParticles(80, new Vector3(10, 2, 14), 0.09, 0x6a8080, 0.1);
+  const silt = makeParticles(36, new Vector3(10, 2, 14), 0.09, 0x6a8080, 0.1);
   silt.position.y = -4.5;
   root.add(silt);
 

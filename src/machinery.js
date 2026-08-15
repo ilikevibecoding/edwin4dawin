@@ -12,8 +12,9 @@ import { makeGaugeFace } from './displays.js';
 
 export function makePropulsionMotor(mats) {
   const g = new Group();
-  const housing = mesh(cyl(0.38, 0.4, 1.35, 28), mats.oily);
+  const housing = mesh(motorHousing(0.4, 1.35), mats.oily);
   housing.rotation.x = Math.PI * 0.5;
+  housing.castShadow = true;
   g.add(housing);
   const nose = mesh(cyl(0.28, 0.38, 0.22, 24), mats.oily);
   nose.rotation.x = Math.PI * 0.5;

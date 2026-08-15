@@ -3,7 +3,6 @@ import {
   Color,
   LinearFilter,
   LinearMipmapLinearFilter,
-  MeshPhysicalMaterial,
   MeshStandardMaterial,
   RepeatWrapping,
   SRGBColorSpace,
@@ -61,7 +60,7 @@ function canvasTex(canvas, srgb = false, repeat = 2) {
   t.generateMipmaps = true;
   t.minFilter = LinearMipmapLinearFilter;
   t.magFilter = LinearFilter;
-  t.anisotropy = 8;
+  t.anisotropy = 4;
   if (srgb) t.colorSpace = SRGBColorSpace;
   t.needsUpdate = true;
   return t;
@@ -131,7 +130,7 @@ function usedAmt() {
 }
 
 function paintedSteelMaps(tint, seed) {
-  const size = 512;
+  const size = 256;
   const u = usedAmt();
   const maps = writeMaps(size, (x, y) => {
     const n = fbm(x * 7, y * 7, seed, 5);
@@ -158,7 +157,7 @@ function paintedSteelMaps(tint, seed) {
 }
 
 function metalMaps(seed, oily = false) {
-  const size = 512;
+  const size = 256;
   const u = usedAmt();
   return writeMaps(size, (x, y) => {
     const brush = Math.sin((x * 180 + fbm(x * 4, y * 40, seed, 2) * 8) * Math.PI);
@@ -180,7 +179,7 @@ function metalMaps(seed, oily = false) {
 }
 
 function rubberMaps(seed) {
-  const size = 512;
+  const size = 256;
   return writeMaps(size, (x, y) => {
     const tread = Math.abs(Math.sin(x * Math.PI * 28)) * 0.35 + Math.abs(Math.sin(y * Math.PI * 10)) * 0.2;
     const n = fbm(x * 12, y * 12, seed, 4);
@@ -197,7 +196,7 @@ function rubberMaps(seed) {
 }
 
 function fabricMaps(seed, tint) {
-  const size = 512;
+  const size = 256;
   return writeMaps(size, (x, y) => {
     const weave = (Math.sin(x * Math.PI * 90) * Math.sin(y * Math.PI * 70)) * 0.5 + 0.5;
     const fold = fbm(x * 3.5, y * 2.2, seed, 4);
@@ -260,16 +259,6 @@ function std(opts) {
   });
 }
 
-function phys(opts) {
-  return new MeshPhysicalMaterial({
-    color: 0xffffff,
-    roughness: 0.4,
-    metalness: 0.1,
-    envMapIntensity: 0.9,
-    ...opts,
-  });
-}
-
 export function createMaterials() {
   return cached(`mats:${wearMode}:${SEED}`, () => {
     const hullTint = toColor(PALETTE.hull);
@@ -319,13 +308,11 @@ export function createMaterials() {
       normalScale: { x: 0.45, y: 0.45 },
     });
 
-    const oily = phys({
+    const oily = std({
       ...oilyMaps,
       color: 0xb4b8be,
       roughness: 0.3,
       metalness: 0.86,
-      clearcoat: 0.28,
-      clearcoatRoughness: 0.42,
       envMapIntensity: 1.15,
       normalScale: { x: 0.22, y: 0.22 },
     });
@@ -368,39 +355,32 @@ export function createMaterials() {
       metalness: 0.02,
     });
 
-    const glass = phys({
-      color: 0xb7c8cc,
-      roughness: 0.06,
-      metalness: 0.0,
-      transparent: true,
-      opacity: 0.08,
-      envMapIntensity: 1.4,
-      clearcoat: 1,
-      clearcoatRoughness: 0.04,
-      thickness: 0.12,
-      ior: 1.48,
-      attenuationColor: 0x7aa0a8,
-      attenuationDistance: 0.6,
-    });
-
-    const glassThick = phys({
-      color: 0x9bb0b6,
+    const glass = std({
+      color: 0x8aa8b0,
       roughness: 0.08,
-      metalness: 0.0,
+      metalness: 0.12,
       transparent: true,
-      opacity: 0.1,
-      envMapIntensity: 1.25,
-      clearcoat: 1,
-      clearcoatRoughness: 0.06,
+      opacity: 0.16,
+      envMapIntensity: 1.35,
+      depthWrite: false,
     });
 
-    const wet = phys({
+    const glassThick = std({
+      color: 0x7a98a0,
+      roughness: 0.1,
+      metalness: 0.1,
+      transparent: true,
+      opacity: 0.2,
+      envMapIntensity: 1.2,
+      depthWrite: false,
+    });
+
+    const wet = std({
       ...hullMaps,
       color: 0xcfd4d2,
       roughness: 0.22,
       metalness: 0.12,
-      clearcoat: 0.7,
-      clearcoatRoughness: 0.18,
+      envMapIntensity: 1.05,
       normalScale: { x: 0.35, y: 0.35 },
     });
 
@@ -593,24 +573,5 @@ export function cloneMat(mat, overrides = {}) {
 }
 
 export function punchHullOpenings(material) {
-  material.onBeforeCompile = (shader) => {
-    shader.vertexShader = `varying vec3 vWorldPos;\n${shader.vertexShader}`.replace(
-      '#include <project_vertex>',
-      `#include <project_vertex>
-      vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`
-    );
-    shader.fragmentShader = `varying vec3 vWorldPos;\n${shader.fragmentShader}`.replace(
-      '#include <dithering_fragment>',
-      `
-      if (vWorldPos.z < 0.48 && abs(vWorldPos.x) < 0.44 && abs(vWorldPos.y - 1.28) < 0.28) discard;
-      vec2 pPort = vec2(vWorldPos.z - 6.55, vWorldPos.y - 1.32);
-      if (vWorldPos.x > 0.52 && dot(pPort, pPort) < 0.028) discard;
-      vec2 pCrew = vec2(vWorldPos.z - 10.7, vWorldPos.y - 1.38);
-      if (vWorldPos.x > 0.52 && dot(pCrew, pCrew) < 0.02) discard;
-      #include <dithering_fragment>
-      `
-    );
-  };
-  material.customProgramCacheKey = () => 'hull-openings-v1';
   return material;
 }

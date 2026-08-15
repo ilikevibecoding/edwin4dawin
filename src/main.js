@@ -1,8 +1,8 @@
 import {
   ACESFilmicToneMapping,
+  BasicShadowMap,
   Clock,
   Color,
-  PCFSoftShadowMap,
   PerspectiveCamera,
   SRGBColorSpace,
   Scene,
@@ -24,17 +24,21 @@ import { drawSonar } from './displays.js';
 const canvas = document.getElementById('c');
 const renderer = new WebGLRenderer({
   canvas,
-  antialias: true,
+  antialias: false,
   powerPreference: 'high-performance',
   stencil: false,
 });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+const glBoot = renderer.getContext();
+const dbgBoot = glBoot.getExtension && glBoot.getExtension('WEBGL_debug_renderer_info');
+const rendererNameBoot = dbgBoot ? String(glBoot.getParameter(dbgBoot.UNMASKED_RENDERER_WEBGL)) : '';
+const softwareGL = /swiftshader|llvmpipe|software/i.test(rendererNameBoot);
+renderer.setPixelRatio(softwareGL ? 1 : Math.min(window.devicePixelRatio || 1, 1.25));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = SRGBColorSpace;
 renderer.toneMapping = ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.22;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = PCFSoftShadowMap;
+renderer.toneMappingExposure = 1.28;
+renderer.shadowMap.enabled = !softwareGL;
+renderer.shadowMap.type = BasicShadowMap;
 renderer.setClearColor(new Color(0x06141c), 1);
 
 const scene = new Scene();
@@ -47,6 +51,7 @@ const envMap = createPMREM(renderer);
 applyEnvMap(mats, envMap, 0.95);
 
 const lights = createLighting(scene);
+if (softwareGL) lights.keyControl.castShadow = false;
 const water = createUnderwater(scene);
 const vista = createWindowVista();
 scene.add(vista);
@@ -170,37 +175,39 @@ function simulate(dt) {
     if (a.type === 'spin' && a.object) {
       a.object.rotation.z += dt * a.speed * mul;
     } else if (a.type === 'vibrate' && a.object) {
-      a.object.position.y += Math.sin(clock.elapsedTime * 28) * a.amp * mul;
+      if (a._baseY == null) a._baseY = a.object.position.y;
+      a.object.position.y = a._baseY + Math.sin(clock.elapsedTime * 28) * a.amp * mul;
     } else if (a.type === 'needle' && a.object) {
       a.object.rotation.z = -0.4 + Math.sin(clock.elapsedTime * a.speed) * 0.12;
     }
   }
-  if (sonarAnim) {
+  if (sonarAnim && (interact.sonarPing > 0 || interact.sonarTime < 0.05)) {
     drawSonar(sonarAnim.tex, interact.sonarTime, interact.sonarPing);
-  }
-  if (app.motionEnabled) {
-    scene.rotation.z = Math.sin(clock.elapsedTime * 0.15) * 0.004;
-    scene.rotation.x = Math.sin(clock.elapsedTime * 0.11) * 0.002;
-  } else {
-    scene.rotation.set(0, 0, 0);
   }
 }
 
 app.simulate = simulate;
 let lastSim = performance.now();
+let lastRaf = 0;
 setInterval(() => {
+  if (performance.now() - lastRaf < 80) return;
   const now = performance.now();
   const dt = Math.min(0.05, (now - lastSim) / 1000);
   lastSim = now;
-  clock.getDelta();
+  clock.elapsedTime += dt;
+  simulate(dt);
+}, 50);
+
+function tick(now) {
+  lastRaf = now;
+  const dt = Math.min(0.05, (now - lastSim) / 1000);
+  lastSim = now;
+  clock.elapsedTime += dt;
   simulate(dt);
   app.frameTimes.push(dt * 1000);
   if (app.frameTimes.length > 120) app.frameTimes.shift();
-}, 50);
-
-function tick() {
   post.setCamera(app.activeCamera);
-  post.render(0.016);
+  post.render(dt);
   requestAnimationFrame(tick);
 }
 

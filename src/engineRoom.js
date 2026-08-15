@@ -233,8 +233,8 @@ export function buildEngineRoom(mats, collision, interactables, animators) {
   beam2.position.z = 20.2;
   g.add(beam2);
 
-  const aftWall = mesh(roundedBox(1.6, 1.6, 0.12, 0.02, 1), mats.hull);
-  aftWall.position.set(0, 0.9, 21.72);
+  const aftWall = mesh(roundedBox(2.35, 2.15, 0.14, 0.02, 1), mats.hull);
+  aftWall.position.set(0, 0.95, 21.72);
   g.add(aftWall);
   const aftMach = makeElectricalCabinet(mats, 0.3, 0.8, 0.16);
   aftMach.position.set(-0.45, 0.5, 21.45);
