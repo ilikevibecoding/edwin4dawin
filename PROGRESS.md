@@ -195,7 +195,7 @@ Used, maintained, cramped expedition submarine. Industrial realism rather than s
 
 ### Commit
 
-- Commit hash: pending final
+- Commit hash: bed9f458
 - Commit message: Complete iteration 12 and record the final production verification.
 
 ## Final summary
@@ -273,4 +273,4 @@ Iteration 12 completed. Every numbered iteration regenerated screenshots, record
 
 ### Final commit hash
 
-Recorded on the commit that includes this summary and `shots/iter_final`.
+`bed9f4584d172014324cae4541689da698b42f17`
