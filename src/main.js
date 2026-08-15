@@ -110,11 +110,40 @@ async function bootApp() {
     const post = createPost(renderer, scene, camera, { fast: quality === 'fast' });
 
     const clock = new THREE.Clock();
+    const STEP = 1 / 60;
+    let acc = 0;
     let paused = capture;
     let frames = 0;
     let fpsAccum = 0;
     let fps = 60;
     const gl = renderer.getContext();
+
+    function simulate(dt) {
+      drive.update(dt);
+      vehicle.update(dt, drive.state);
+      player.update(dt, drive.state);
+    }
+
+    function presentHud() {
+      const hover = interact.update();
+      atmosphere.update(STEP, vehicle.root.position);
+      if (sky.follow) sky.follow(vehicle.root.position);
+      hud.speed(drive.state.mph, player.seated);
+      hud.crosshair(!player.seated || player.camMode === 'cockpit');
+      if (player.seated) {
+        hud.hint(player.camMode === 'chase' ? 'WASD drive · C cockpit · E out' : 'WASD drive · C chase · E out');
+      } else {
+        hud.hint('WASD walk · E climb in');
+      }
+      if (hover && hover.worldPoint && !player.seated) {
+        highlight.visible = true;
+        highlight.position.copy(hover.worldPoint);
+        highlight.position.y += 0.05;
+      } else {
+        highlight.visible = false;
+      }
+      return hover;
+    }
 
     function resize() {
       const w = window.innerWidth;
@@ -126,36 +155,28 @@ async function bootApp() {
     }
     window.addEventListener('resize', resize);
 
-    function tick() {
+    function tick(forcedDt) {
       renderer.info.reset();
-      const raw = clock.getDelta();
-      const dt = THREE.MathUtils.clamp(Number.isFinite(raw) && raw > 0 ? raw : 1 / 60, 1e-4, 0.05);
+      const raw = forcedDt ?? clock.getDelta();
+      const frameDt = THREE.MathUtils.clamp(Number.isFinite(raw) && raw > 0 ? raw : STEP, 1e-4, 0.25);
       if (!paused) {
-        drive.update(dt);
-        vehicle.update(dt, drive.state);
-        player.update(dt, drive.state);
-        const hover = interact.update();
-        atmosphere.update(dt, vehicle.root.position);
-        if (sky.follow) sky.follow(vehicle.root.position);
-        hud.speed(drive.state.mph, player.seated);
-        hud.crosshair(!player.seated || player.camMode === 'cockpit');
-        if (player.seated) {
-          hud.hint(player.camMode === 'chase' ? 'WASD drive · C cockpit · E out' : 'WASD drive · C chase · E out');
+        if (forcedDt != null) {
+          simulate(frameDt);
         } else {
-          hud.hint('WASD walk · E climb in');
+          acc += frameDt;
+          let n = 0;
+          while (acc >= STEP && n < 10) {
+            simulate(STEP);
+            acc -= STEP;
+            n++;
+          }
         }
-        if (hover && hover.worldPoint && !player.seated) {
-          highlight.visible = true;
-          highlight.position.copy(hover.worldPoint);
-          highlight.position.y += 0.05;
-          highlight.rotation.z += dt * 1.4;
-        } else {
-          highlight.visible = false;
-        }
+        const hover = presentHud();
+        if (hover && highlight.visible) highlight.rotation.z += frameDt * 1.4;
       }
-      post.render(dt);
+      post.render(Math.min(frameDt, 0.05));
       frames++;
-      fpsAccum += dt;
+      fpsAccum += frameDt;
       if (fpsAccum > 0.5) {
         fps = frames / fpsAccum;
         frames = 0;
@@ -255,6 +276,11 @@ async function bootApp() {
       },
       setCamMode(mode) {
         player.setCamMode(mode);
+      },
+      step(seconds = STEP) {
+        const n = Math.max(1, Math.round(seconds * 60));
+        for (let i = 0; i < n; i++) simulate(STEP);
+        presentHud();
       },
     };
 
