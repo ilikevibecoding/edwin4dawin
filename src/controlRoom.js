@@ -11,6 +11,7 @@ import {
   createLightFixture,
   createVent,
   markShadows,
+  invisibleHitbox,
   boxGeo,
   mergeGroup,
 } from './kit.js';
@@ -31,8 +32,8 @@ export function createControlRoom(mats, collider) {
   const z1 = ROOMS.control.z1;
   const mid = (z0 + z1) / 2;
 
-  const viewport = createWindowFrame(mats, 0.78, 0.78, 0.22);
-  viewport.position.set(0, 1.18, 12.28);
+  const viewport = createWindowFrame(mats, 0.92, 0.86, 0.24);
+  viewport.position.set(0, 1.18, 12.32);
   g.add(viewport);
 
   const brow = new THREE.Mesh(beveledBox(1.1, 0.1, 0.18, 0.012), mats.steel);
@@ -217,7 +218,35 @@ export function createControlRoom(mats, collider) {
   fire.position.set(-0.6, 0.55, 9.55);
   g.add(fire);
 
-  const interactSonar = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.5), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 }));
+  const extraSw = createSwitchBank(mats, 6);
+  extraSw.position.set(-0.38, 0.9, 10.42);
+  extraSw.rotation.x = -0.45;
+  extraSw.rotation.y = 0.28;
+  g.add(extraSw);
+  const extraSw2 = createSwitchBank(mats, 6);
+  extraSw2.position.set(0.4, 0.9, 10.38);
+  extraSw2.rotation.x = -0.45;
+  extraSw2.rotation.y = -0.32;
+  g.add(extraSw2);
+
+  const binoc = new THREE.Group();
+  const barrelL = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.02, 0.12, 10), mats.brushed);
+  barrelL.rotation.x = Math.PI / 2;
+  barrelL.position.set(-0.02, 0, 0);
+  const barrelR = barrelL.clone();
+  barrelR.position.x = 0.04;
+  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.02), mats.steel);
+  binoc.add(barrelL, barrelR, bridge);
+  binoc.position.set(0.18, 1.0, 11.22);
+  binoc.rotation.x = -0.2;
+  g.add(binoc);
+
+  const clip = new THREE.Mesh(beveledBox(0.12, 0.16, 0.01, 0.002), mats.chippedPaint);
+  clip.position.set(-0.18, 0.98, 11.22);
+  clip.rotation.x = -0.5;
+  g.add(clip);
+
+  const interactSonar = invisibleHitbox(0.7, 0.8, 0.5);
   interactSonar.position.set(-0.38, 1.1, 10.4);
   g.add(interactSonar);
 

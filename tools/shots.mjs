@@ -188,33 +188,8 @@ async function runInteractionTests(page) {
   }
 
   try {
-    await page.evaluate(() => {
-      window.debugAPI.clearStatus?.();
-      const prompt = window.debugAPI.aimInteract('rest');
-      for (let i = 0; i < 12; i++) window.debugAPI.step(0.05);
-      return prompt || window.debugAPI.getPrompt();
-    });
-    await page.waitForFunction(() => /rest/i.test(window.debugAPI.getPrompt()), null, { timeout: 8000 });
-    await page.waitForTimeout(150);
-    await page.keyboard.press('e');
-    await page.waitForTimeout(500);
-    const rest = await page.evaluate(() => ({
-      status: window.debugAPI.getStatus(),
-      fade: window.debugAPI.getFade(),
-    }));
-    result.rest = /hours|rest/i.test(rest.status) || rest.fade > 0.2;
-    result.restDetail = rest;
-    await page.waitForTimeout(4500);
-    await page.evaluate(() => {
-      window.debugAPI.setBusy?.(false);
-      window.debugAPI.setSubmarineState('cruising');
-    });
-  } catch (err) {
-    result.restError = String(err);
-  }
-
-  try {
     const silentPrompt = await page.evaluate(() => {
+      window.debugAPI.completeRest?.();
       window.debugAPI.setBusy?.(false);
       window.debugAPI.clearStatus?.();
       window.debugAPI.setSubmarineState('cruising');
@@ -223,16 +198,51 @@ async function runInteractionTests(page) {
       return p || window.debugAPI.getPrompt();
     });
     await page.keyboard.press('e');
-    await page.waitForTimeout(300);
-    const a = await page.evaluate(() => window.debugAPI.getStatus());
+    await page.evaluate(() => window.debugAPI.step(0.05));
+    const a = await page.evaluate(() => ({
+      status: window.debugAPI.getStatus(),
+      state: window.debugAPI.getState?.(),
+    }));
     await page.keyboard.press('e');
-    await page.waitForTimeout(300);
-    const b = await page.evaluate(() => window.debugAPI.getStatus());
+    await page.evaluate(() => window.debugAPI.step(0.05));
+    const b = await page.evaluate(() => ({
+      status: window.debugAPI.getStatus(),
+      state: window.debugAPI.getState?.(),
+    }));
     const silent = { a, b, prompt: silentPrompt };
-    result.silentRunning = /silent/i.test(`${silent.a} ${silent.b}`);
+    result.silentRunning =
+      /silent/i.test(`${silent.a.status} ${silent.b.status} ${silent.a.state} ${silent.b.state}`);
     result.silentDetail = silent;
   } catch (err) {
     result.silentError = String(err);
+  }
+
+  try {
+    await page.evaluate(() => {
+      window.debugAPI.completeRest?.();
+      window.debugAPI.setBusy?.(false);
+      window.debugAPI.clearStatus?.();
+      window.debugAPI.setSubmarineState('cruising');
+      window.debugAPI.aimInteract('rest');
+      for (let i = 0; i < 12; i++) window.debugAPI.step(0.05);
+    });
+    await page.waitForFunction(() => /rest/i.test(window.debugAPI.getPrompt()), null, { timeout: 8000 });
+    await page.waitForTimeout(150);
+    await page.keyboard.press('e');
+    await page.evaluate(() => {
+      for (let i = 0; i < 20; i++) window.debugAPI.step(0.05);
+    });
+    const rest = await page.evaluate(() => ({
+      status: window.debugAPI.getStatus(),
+      fade: window.debugAPI.getFade(),
+      state: window.debugAPI.getState?.(),
+    }));
+    result.rest = /hours|rest/i.test(rest.status) || rest.fade > 0.2;
+    result.restDetail = rest;
+    await page.evaluate(() => window.debugAPI.completeRest?.());
+  } catch (err) {
+    result.restError = String(err);
+    await page.evaluate(() => window.debugAPI.completeRest?.());
   }
 
   try {

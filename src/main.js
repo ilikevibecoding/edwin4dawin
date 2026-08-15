@@ -34,7 +34,7 @@ configureRenderer(renderer, { shadows: !gpu.software });
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x071018);
-scene.fog = new THREE.FogExp2(0x1a1814, 0.012);
+scene.fog = new THREE.FogExp2(0x161410, 0.007);
 
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.05, 120);
 camera.position.set(START_POSE.x, START_POSE.y, START_POSE.z);
@@ -211,6 +211,46 @@ function getMetrics() {
   };
 }
 
+function updateRest(dt) {
+  if (!restAnim) return;
+  restAnim.t += dt;
+  if (restAnim.phase === 'out') {
+    hud.setFade(Math.min(1, restAnim.t / 0.7));
+    if (restAnim.t > 0.75) {
+      env.setSubmarineState('restCycle');
+      hud.setStatus('6 hours pass.');
+      restAnim = { t: 0, phase: 'hold', done: restAnim.done };
+    }
+  } else if (restAnim.phase === 'hold') {
+    hud.setFade(1);
+    if (restAnim.t > 1.1) restAnim = { t: 0, phase: 'in', done: restAnim.done };
+  } else if (restAnim.phase === 'in') {
+    hud.setFade(Math.max(0, 1 - restAnim.t / 0.9));
+    if (restAnim.t > 0.4) env.setSubmarineState('cruising');
+    if (restAnim.t > 1.0) {
+      hud.setFade(0);
+      hud.setStatus('Rested.');
+      restAnim.done?.();
+      restAnim = null;
+    }
+  }
+}
+
+function completeRest() {
+  restAnim = null;
+  interact.setBusy(false);
+  interact.clearHover?.();
+  hud.setFade(0);
+  hud.setStatus('Rested.');
+  env.setSubmarineState('cruising');
+}
+
+function tickSystems(dt) {
+  updateRest(dt);
+  hud.update(dt);
+  engine.anim.update(dt);
+}
+
 function resetScene() {
   player.setPose(START_POSE.x, START_POSE.y, START_POSE.z, START_POSE.yaw, START_POSE.pitch);
   env.setSubmarineState('used');
@@ -220,6 +260,8 @@ function resetScene() {
   hud.setPrompt('');
   sonarPulse = 0;
   restAnim = null;
+  interact.setBusy(false);
+  interact.clearHover?.();
   water.setTime(8);
   interior.rotation.set(0, 0, 0);
 }
@@ -234,6 +276,8 @@ const debugAPI = createDebugAPI({
   getMetrics,
   resetScene,
   trigger,
+  tickSystems,
+  completeRest,
   get motionEnabled() {
     return motionEnabled;
   },
@@ -266,8 +310,7 @@ function tick(now) {
 
   player.update(dt);
   interact.update();
-  hud.update(dt);
-  engine.anim.update(dt);
+  tickSystems(dt);
   if (motionEnabled) water.update(dt);
 
   vesselSway += dt;
@@ -281,30 +324,6 @@ function tick(now) {
   const t = now * 0.001;
   tickDisplays(displays, t + sonarPulse * 8);
   if (sonarPulse > 0) sonarPulse = Math.max(0, sonarPulse - dt);
-
-  if (restAnim) {
-    restAnim.t += dt;
-    if (restAnim.phase === 'out') {
-      hud.setFade(Math.min(1, restAnim.t / 0.7));
-      if (restAnim.t > 0.75) {
-        env.setSubmarineState('restCycle');
-        hud.setStatus('6 hours pass.');
-        restAnim = { t: 0, phase: 'hold', done: restAnim.done };
-      }
-    } else if (restAnim.phase === 'hold') {
-      hud.setFade(1);
-      if (restAnim.t > 1.1) restAnim = { t: 0, phase: 'in', done: restAnim.done };
-    } else if (restAnim.phase === 'in') {
-      hud.setFade(Math.max(0, 1 - restAnim.t / 0.9));
-      if (restAnim.t > 0.4) env.setSubmarineState('cruising');
-      if (restAnim.t > 1.0) {
-        hud.setFade(0);
-        hud.setStatus('Rested.');
-        restAnim.done?.();
-        restAnim = null;
-      }
-    }
-  }
 
   renderer.info.reset();
   post.render(dt);

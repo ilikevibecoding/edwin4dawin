@@ -18,7 +18,7 @@ export function createLighting(scene) {
   configureShadow(keyControl, 8, 1024);
   group.add(keyControl, keyControl.target);
 
-  const keyEngine = makeSpot(0xffd6a0, 5.2, 12, 0.72, 0.48);
+  const keyEngine = makeSpot(0xffd6a0, 7.4, 12, 0.72, 0.48);
   keyEngine.position.set(-0.1, 2.08, -4.4);
   keyEngine.target.position.set(0.1, 0.7, -5.6);
   keyEngine.castShadow = true;
@@ -38,9 +38,11 @@ export function createLighting(scene) {
     [0.2, 1.92, 3.4, 1.8, 3.8],
     [0.15, 1.9, 2.2, 1.2, 3.2],
     [0, 1.98, -0.2, 1.4, 3.4],
-    [0.25, 2.0, -3.2, 2.2, 4.2],
-    [-0.2, 1.85, -6.2, 1.8, 3.8],
-    [0.15, 1.4, -5.4, 1.2, 3.0],
+    [0.25, 2.0, -3.2, 2.6, 4.4],
+    [-0.2, 1.85, -6.2, 2.4, 4.0],
+    [0.15, 1.4, -5.4, 2.2, 3.4],
+    [0.32, 1.55, -6.05, 2.0, 2.8],
+    [-0.28, 1.25, -3.4, 1.4, 2.6],
   ];
   for (const [x, y, z, i, dist] of warmPoints) {
     const p = new THREE.PointLight(0xffd4a4, i, dist, 2);
@@ -96,7 +98,7 @@ export function createLighting(scene) {
     hemi: 0.22,
     ambient: 0.1,
     keyC: 4.2,
-    keyE: 5.2,
+    keyE: 7.4,
       practical: practicals.map((p) => p.intensity),
       window: windowFills.map((p) => p.intensity),
       instrument: 0.35,

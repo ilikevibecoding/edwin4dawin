@@ -12,8 +12,17 @@ export function createInteractions({ camera, scene, hud, onSonar, onRest, onSile
     targets.push(mesh);
   }
 
+  function clearHover() {
+    if (hover) setHighlight(hover, false);
+    hover = null;
+    if (hud) hud.setPrompt('');
+  }
+
   function update() {
-    if (busy) return hover;
+    if (busy) {
+      clearHover();
+      return null;
+    }
     raycaster.setFromCamera(ndc, camera);
     const hits = raycaster.intersectObjects(targets, true);
     let next = null;
@@ -67,7 +76,9 @@ export function createInteractions({ camera, scene, hud, onSonar, onRest, onSile
     getHover: () => hover,
     setBusy(v) {
       busy = v;
+      if (v) clearHover();
     },
+    clearHover,
     isBusy: () => busy,
     targets,
   };

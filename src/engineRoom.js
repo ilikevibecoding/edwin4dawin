@@ -14,6 +14,7 @@ import {
   createWarning,
   createGrate,
   markShadows,
+  invisibleHitbox,
 } from './kit.js';
 import {
   createPropulsionMotor,
@@ -39,9 +40,12 @@ export function createEngineRoom(mats, collider) {
   motor.rotation.y = Math.PI / 2;
   motor.scale.setScalar(1.15);
   g.add(motor);
-  const motorLamp = new THREE.PointLight(0xffe0b0, 2.4, 3.2, 2);
-  motorLamp.position.set(0.25, 1.45, -5.55);
+  const motorLamp = new THREE.PointLight(0xffe0b0, 3.6, 3.6, 2);
+  motorLamp.position.set(0.28, 1.48, -5.45);
   g.add(motorLamp);
+  const motorFill = new THREE.PointLight(0xd8e4ea, 1.6, 2.8, 2);
+  motorFill.position.set(-0.15, 1.15, -5.35);
+  g.add(motorFill);
   collider.addBox(0.08, 0.7, -6.35, 1.15, 1.15, 2.1, 'motor');
 
   const gear = createGearbox(mats);
@@ -194,7 +198,7 @@ export function createEngineRoom(mats, collider) {
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.3), mats.screen(panelTex));
   screen.position.set(0.35, 1.18, -1.79);
   g.add(screen);
-  const interact = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.5), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 }));
+  const interact = invisibleHitbox(0.7, 0.8, 0.5);
   interact.position.set(0.32, 1.15, -1.75);
   g.add(interact);
 

@@ -151,6 +151,37 @@ export function createCorridor(mats, collider) {
   step.position.set(0, 0.02, 9.05);
   g.add(step);
 
+  const hose = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.018, 8, 16), mats.rubber);
+  hose.position.set(-0.58, 1.05, 8.05);
+  hose.rotation.y = Math.PI / 2;
+  g.add(hose);
+  const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.08, 8), mats.steel);
+  reel.rotation.z = Math.PI / 2;
+  reel.position.set(-0.58, 1.05, 8.05);
+  g.add(reel);
+
+  const rack = new THREE.Mesh(beveledBox(0.08, 0.55, 0.36, 0.006), mats.machine);
+  rack.position.set(-0.62, 0.72, 7.15);
+  g.add(rack);
+  for (let i = 0; i < 3; i++) {
+    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.14, 8), mats.pipe);
+    can.position.set(-0.58, 0.55 + i * 0.16, 7.05);
+    g.add(can);
+  }
+
+  const phone = createJunctionBox(mats, 0.12, 0.18, 0.07);
+  phone.position.set(0.58, 1.55, 7.35);
+  phone.rotation.y = -Math.PI / 2;
+  g.add(phone);
+  const handset = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.025), mats.bakelite);
+  handset.position.set(0.5, 1.48, 7.35);
+  g.add(handset);
+
+  const stencil = createWarning(mats, 'FWD', '#c4a032');
+  stencil.position.set(0.0, 0.22, 7.85);
+  stencil.rotation.x = -Math.PI / 2;
+  g.add(stencil);
+
   markShadows(g);
   return { group: g, fans: [fan], porthole };
 }

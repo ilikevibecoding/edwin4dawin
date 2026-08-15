@@ -27,7 +27,7 @@ export function createPropulsionMotor(mats) {
     new THREE.Vector2(0.22, 0.92),
     new THREE.Vector2(0.0, 0.92),
   ];
-  const housing = new THREE.Mesh(new THREE.LatheGeometry(points, 28), mats.machine);
+  const housing = new THREE.Mesh(new THREE.LatheGeometry(points, 28), mats.brushed);
   housing.rotation.z = Math.PI / 2;
   g.add(housing);
 
@@ -58,6 +58,9 @@ export function createPropulsionMotor(mats) {
   const plate = new THREE.Mesh(beveledBox(0.28, 0.22, 0.04, 0.006), mats.chippedPaint);
   plate.position.set(0.1, 0.42, 0);
   g.add(plate);
+  const name = new THREE.Mesh(beveledBox(0.22, 0.08, 0.012, 0.002), mats.steel);
+  name.position.set(0.1, 0.42, 0.03);
+  g.add(name);
 
   const terminal = createJunctionBox(mats, 0.18, 0.14, 0.1);
   terminal.position.set(0.35, 0.38, 0.32);

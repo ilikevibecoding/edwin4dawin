@@ -28,9 +28,9 @@ export const ROOMS = {
 export const BULKHEADS = [9.15, 5.35, 1.15, -1.55];
 
 export const PALETTE = {
-  hullWarm: '#c2b49a',
-  hullWarmDark: '#8d826c',
-  hullGreen: '#6f7464',
+  hullWarm: '#b6b3a6',
+  hullWarmDark: '#7a776c',
+  hullGreen: '#6a7062',
   hullGreenDark: '#4d5246',
   primer: '#6a5340',
   steel: '#3c4148',

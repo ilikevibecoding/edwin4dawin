@@ -9,6 +9,7 @@ import {
   createVent,
   createWarning,
   markShadows,
+  invisibleHitbox,
 } from './kit.js';
 import { createWindowFrame } from './water.js';
 
@@ -34,7 +35,7 @@ export function createCrewQuarters(mats, collider) {
     collider.addBox(spec.x, spec.y + 0.08, spec.z, 0.55, 0.38, 1.05, 'bunk');
   }
 
-  const interactBunk = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 1.1), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 }));
+  const interactBunk = invisibleHitbox(0.7, 0.7, 1.1);
   interactBunk.position.set(-0.4, 0.85, 4.55);
   g.add(interactBunk);
 
@@ -117,9 +118,19 @@ export function createCrewQuarters(mats, collider) {
   g.add(warn);
 
   const curtain = createCurtain(mats);
-  curtain.position.set(-0.22, 1.35, 3.82);
-  curtain.scale.set(0.7, 0.85, 1);
+  curtain.position.set(-0.18, 1.42, 3.88);
+  curtain.scale.set(0.55, 0.7, 1);
   g.add(curtain);
+
+  const book = new THREE.Mesh(beveledBox(0.08, 0.02, 0.12, 0.002), mats.bakelite);
+  book.position.set(0.38, 0.82, 2.5);
+  g.add(book);
+  const shoes = new THREE.Mesh(beveledBox(0.1, 0.04, 0.18, 0.006), mats.rubber);
+  shoes.position.set(-0.22, 0.06, 4.95);
+  g.add(shoes);
+  const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.022, 0.06, 10), mats.plastic);
+  mug.position.set(-0.28, 0.94, 2.15);
+  g.add(mug);
 
   markShadows(g);
   return { group: g, bunkTarget: interactBunk, bunks };

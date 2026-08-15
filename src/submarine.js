@@ -32,7 +32,7 @@ export function createHull(mats, collider) {
   hull.receiveShadow = true;
   root.add(hull);
 
-  const bowRing = new THREE.Mesh(new THREE.RingGeometry(0.48, R - 0.02, 40), mats.steel);
+  const bowRing = new THREE.Mesh(new THREE.RingGeometry(0.55, R - 0.02, 40), mats.steel);
   bowRing.position.set(0, cy, LAYOUT.hullZMax - 0.28);
   root.add(bowRing);
   const bowRingB = bowRing.clone();
@@ -157,11 +157,11 @@ function createBulkhead(z, mats, collider, bolts) {
 
   const door = new THREE.Mesh(
     new THREE.CylinderGeometry(LAYOUT.hatchRadius - 0.02, LAYOUT.hatchRadius - 0.02, 0.04, 22),
-    mats.hullPaint,
+    mats.hullGreen,
   );
   door.rotation.x = Math.PI / 2;
-  door.position.set(-0.72, 0.92, 0.18);
-  door.rotation.y = 1.15;
+  door.position.set(-1.02, 0.92, 0.16);
+  door.rotation.y = 1.52;
   g.add(door);
 
   const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.016, 8, 16), mats.steel);
@@ -205,10 +205,10 @@ function createEndBulkhead(z, mats, bow) {
   g.position.z = z;
   const R = LAYOUT.hullRadius;
   if (bow) {
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.46, R - 0.01, 40), mats.hullGreen);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.54, R - 0.01, 40), mats.hullGreen);
     ring.position.y = LAYOUT.hullCenterY;
     g.add(ring);
-    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.47, 0.035, 8, 28), mats.steel);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.035, 8, 28), mats.steel);
     lip.position.y = LAYOUT.hullCenterY;
     g.add(lip);
   } else {

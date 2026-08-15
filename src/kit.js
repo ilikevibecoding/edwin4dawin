@@ -344,9 +344,26 @@ export function createSwitchBank(mats, count = 6) {
 }
 
 export function createWarning(mats, text, color) {
+  const g = new THREE.Group();
   const map = createWarningPlate(text, color);
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), mats.label(map));
-  return mesh;
+  const plate = new THREE.Mesh(beveledBox(0.18, 0.18, 0.02, 0.003), mats.steel);
+  g.add(plate);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.15), mats.label(map));
+  face.position.z = 0.012;
+  g.add(face);
+  return g;
+}
+
+export function invisibleHitbox(w, h, d) {
+  return new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      colorWrite: false,
+    }),
+  );
 }
 
 export function createFan(mats, radius = 0.12) {

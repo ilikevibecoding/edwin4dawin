@@ -2,15 +2,15 @@ import * as THREE from 'three';
 import { LAYOUT } from './layout.js';
 
 export const VIEWS = {
-  controlRoom: { pos: [0.12, 1.38, 10.85], look: [-0.32, 1.12, 10.35], fov: 50 },
-  corridor: { pos: [0.2, 1.46, 8.25], look: [-0.32, 1.2, 6.7], fov: 54 },
-  crewQuarters: { pos: [0.26, 1.44, 4.7], look: [-0.5, 0.88, 3.7], fov: 54 },
-  engineRoom: { pos: [0.22, 1.18, -4.55], look: [0.02, 0.78, -6.25], fov: 48 },
-  machineryCloseup: { pos: [0.28, 1.02, -5.45], look: [0.04, 0.8, -6.3], fov: 38 },
+  controlRoom: { pos: [0.46, 1.46, 10.08], look: [-0.12, 1.18, 11.55], fov: 52 },
+  corridor: { pos: [0.22, 1.48, 8.42], look: [-0.18, 1.18, 6.55], fov: 50 },
+  crewQuarters: { pos: [0.34, 1.46, 5.08], look: [-0.38, 0.92, 3.55], fov: 50 },
+  engineRoom: { pos: [0.4, 1.38, -3.05], look: [-0.08, 0.88, -5.85], fov: 50 },
+  machineryCloseup: { pos: [0.46, 1.08, -5.05], look: [0.02, 0.86, -6.2], fov: 38 },
   sonarConsole: { pos: [-0.06, 1.36, 10.72], look: [-0.38, 1.12, 10.28], fov: 40 },
-  forwardViewport: { pos: [0.0, 1.28, 10.95], look: [0.0, 1.12, 14.2], fov: 50 },
-  porthole: { pos: [0.1, 1.32, 7.65], look: [0.82, 1.3, 7.55], fov: 46 },
-  aftWide: { pos: [-0.26, 1.48, -2.55], look: [0.15, 0.72, -6.2], fov: 56 },
+  forwardViewport: { pos: [0.0, 1.2, 11.92], look: [0.12, 0.72, 17.4], fov: 56 },
+  porthole: { pos: [0.12, 1.32, 7.62], look: [0.82, 1.3, 7.55], fov: 46 },
+  aftWide: { pos: [-0.22, 1.52, -2.15], look: [0.12, 0.78, -6.05], fov: 54 },
   walking: { pos: [0.06, LAYOUT.eyeHeight, 7.0], look: [-0.08, 1.22, 4.7], fov: 60 },
 };
 
@@ -85,8 +85,15 @@ export function createDebugAPI(ctx) {
       player.setHoldForward(!!v);
     },
     step(dt = 0.05) {
+      ctx.tickSystems?.(dt);
       player.update(dt);
       interact.update();
+    },
+    completeRest() {
+      ctx.completeRest?.();
+    },
+    getState() {
+      return env.getState?.()?.mode ?? '';
     },
     aimInteract(name) {
       const mesh = interact.targets.find((t) => t.userData.interact?.name === name);
@@ -97,15 +104,21 @@ export function createDebugAPI(ctx) {
       stand.y = LAYOUT.eyeHeight;
       if (name === 'rest') {
         stand.set(0.22, LAYOUT.eyeHeight, 4.55);
+        interact.setBusy(false);
+        interact.clearHover?.();
         player.setEnabled(true);
         player.setPose(stand.x, stand.y, stand.z);
+        camera.position.set(stand.x, stand.y, stand.z);
         player.lookAt(new THREE.Vector3(-0.4, 0.85, 4.55));
         interact.update();
         return hud.getPrompt();
       }
       else if (name === 'silentRunning') {
+        interact.setBusy(false);
+        interact.clearHover?.();
         player.setEnabled(true);
         player.setPose(0.02, LAYOUT.eyeHeight, -1.15);
+        camera.position.set(0.02, LAYOUT.eyeHeight, -1.15);
         player.lookAt(new THREE.Vector3(0.32, 1.15, -1.75));
         interact.update();
         return hud.getPrompt();

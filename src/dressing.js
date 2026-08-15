@@ -75,5 +75,13 @@ export function createHullDressing(mats) {
   const kick = mergeGroup(kickLights, mats.lightWarm);
   if (kick) g.add(kick);
 
+  const midBoxes = [];
+  for (let z = z0 + 1.1; z < z1; z += 2.1) {
+    midBoxes.push(boxGeo(0.07, 0.22, 0.16, -0.66, 0.95, z));
+    midBoxes.push(boxGeo(0.05, 0.14, 0.12, 0.66, 0.62, z + 0.7));
+  }
+  const mid = mergeGroup(midBoxes, mats.plastic);
+  if (mid) g.add(mid);
+
   return g;
 }

@@ -11,7 +11,7 @@ export function createUnderwater(seed = 0x51) {
   const volume = new THREE.Mesh(
     new THREE.SphereGeometry(80, 24, 16),
     new THREE.MeshBasicMaterial({
-      color: 0x061820,
+      color: 0x041218,
       side: THREE.BackSide,
       fog: false,
     }),
@@ -66,15 +66,15 @@ export function createUnderwater(seed = 0x51) {
   ridge.position.set(3.5, 0.2, 22);
   terrain.add(ridge);
   const nearRock = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(2.8, 0),
-    new THREE.MeshStandardMaterial({ color: 0x4a646c, roughness: 0.9 }),
+    new THREE.DodecahedronGeometry(1.1, 0),
+    new THREE.MeshStandardMaterial({ color: 0x24363c, roughness: 0.94 }),
   );
-  nearRock.position.set(1.6, 9.2, -1.2);
-  nearRock.scale.set(1.6, 2.2, 1.8);
+  nearRock.position.set(3.4, 7.6, 8);
+  nearRock.scale.set(1.8, 2.4, 1.6);
   terrain.add(nearRock);
-  const floodHit = new THREE.SpotLight(0xb8dce0, 40, 22, 0.35, 0.45, 1.2);
-  floodHit.position.set(0, 9.4, -5);
-  floodHit.target.position.set(1.6, 9.0, -1.2);
+  const floodHit = new THREE.SpotLight(0x8eb8c0, 12, 18, 0.32, 0.5, 1.2);
+  floodHit.position.set(0, 9.2, 2);
+  floodHit.target.position.set(3.2, 7.4, 8);
   terrain.add(floodHit, floodHit.target);
 
   const wall = new THREE.Mesh(
@@ -101,32 +101,39 @@ export function createUnderwater(seed = 0x51) {
   root.add(bio);
 
   const floodL = new THREE.SpotLight(0x9fd4dc, 18, 28, 0.28, 0.55, 1.4);
-  floodL.position.set(-0.45, 0.85, 13.1);
-  floodL.target.position.set(-1.2, -1.5, 22);
+  floodL.position.set(-0.38, 1.05, 12.55);
+  floodL.target.position.set(-0.8, -1.8, 22);
   const floodR = new THREE.SpotLight(0x9fd4dc, 16, 26, 0.26, 0.6, 1.4);
-  floodR.position.set(0.45, 0.85, 13.1);
-  floodR.target.position.set(1.4, -2.0, 21);
+  floodR.position.set(0.38, 1.05, 12.55);
+  floodR.target.position.set(1.1, -2.2, 21);
   const windowRock = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(2.2, 1),
-    new THREE.MeshStandardMaterial({ color: 0x6e8a90, roughness: 0.88, metalness: 0.04 }),
+    new THREE.DodecahedronGeometry(0.85, 1),
+    new THREE.MeshStandardMaterial({ color: 0x2a3e44, roughness: 0.92, metalness: 0.04 }),
   );
-  windowRock.position.set(0.35, 0.35, 15.2);
+  windowRock.position.set(1.15, -0.35, 17.8);
+  windowRock.scale.set(1.35, 1.7, 1.2);
   const silhouette = new THREE.Mesh(
-    new THREE.SphereGeometry(2.4, 10, 7, 0, Math.PI, 0.2, 1.8),
-    new THREE.MeshBasicMaterial({ color: 0x2a444c, side: THREE.DoubleSide }),
+    new THREE.SphereGeometry(1.6, 10, 7, 0, Math.PI, 0.2, 1.8),
+    new THREE.MeshBasicMaterial({ color: 0x152428, side: THREE.DoubleSide }),
   );
-  silhouette.position.set(0.25, -0.8, 17.6);
+  silhouette.position.set(2.4, -1.6, 22);
   silhouette.rotation.y = Math.PI;
   root.add(silhouette);
-  windowRock.scale.set(1.4, 2.1, 1.6);
   root.add(windowRock);
   const windowRock2 = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(1.4, 0),
-    new THREE.MeshStandardMaterial({ color: 0x3a5056, roughness: 0.92 }),
+    new THREE.IcosahedronGeometry(0.7, 0),
+    new THREE.MeshStandardMaterial({ color: 0x1c2c30, roughness: 0.94 }),
   );
-  windowRock2.position.set(-2.2, -0.6, 17.5);
-  windowRock2.scale.set(1.8, 1.3, 1.5);
+  windowRock2.position.set(-1.35, -0.85, 19.2);
+  windowRock2.scale.set(1.6, 1.15, 1.3);
   root.add(windowRock2);
+  const midRidge = new THREE.Mesh(
+    new THREE.ConeGeometry(1.4, 4.2, 6),
+    new THREE.MeshStandardMaterial({ color: 0x132026, roughness: 0.96 }),
+  );
+  midRidge.position.set(3.8, -2.2, 26);
+  midRidge.rotation.z = 0.4;
+  root.add(midRidge);
 
   root.add(floodL, floodL.target, floodR, floodR.target);
 
