@@ -51,9 +51,10 @@ const dW = await page.evaluate(() => window.debugAPI.driveState());
 await holdStep('KeyS', 1.0);
 const dS = await page.evaluate(() => window.debugAPI.driveState());
 
+await holdStep('KeyW', 0.55);
 await page.evaluate(() => window.debugAPI.keys.add('KeyW'));
 await page.evaluate(() => window.debugAPI.keys.add('KeyA'));
-await page.evaluate(() => window.debugAPI.step(0.9));
+await page.evaluate(() => window.debugAPI.step(1.0));
 const dA = await page.evaluate(() => window.debugAPI.driveState());
 await page.evaluate(() => {
   window.debugAPI.keys.delete('KeyW');
@@ -81,7 +82,7 @@ if (!sat.seated) ok = fail('climb-in did not seat', report.sit);
 if (!dW.enabled) ok = fail('drive was not enabled in the seat', report.driveW);
 if (!(dW.z > d0.z + 1.5) || !(dW.speed > 3)) ok = fail('W did not drive the Jeep forward', report.driveW);
 if (!(dS.speed < dW.speed - 2)) ok = fail('S did not slow / reverse the Jeep', report.driveS);
-if (!(dA.heading < -0.12)) ok = fail('A did not steer left', report.steerA);
+if (!(dA.heading < -0.2)) ok = fail('A did not steer left', report.steerA);
 if (after.seated) ok = fail('climb-out left the player seated', report.exit);
 if (dExit.enabled) ok = fail('drive stayed enabled after climb-out', report.exit);
 if (Math.hypot(after.x - dExit.x, after.z - dExit.z) > 3.2) ok = fail('exit was not beside the Jeep', report.exit);
