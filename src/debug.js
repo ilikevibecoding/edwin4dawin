@@ -94,6 +94,7 @@ export function createDebugAPI(app) {
     },
     getMetrics() {
       const info = app.renderer.info;
+      const sceneStats = app.sceneStats || info.render;
       const frames = app.frameTimes;
       const avg = frames.length ? frames.reduce((a, b) => a + b, 0) / frames.length : 16.6;
       const sorted = frames.slice().sort((a, b) => b - a);
@@ -105,10 +106,10 @@ export function createDebugAPI(app) {
         fps: 1000 / avg,
         averageFrameTimeMs: avg,
         onePercentLowFps: 1000 / onePct,
-        drawCalls: info.render.calls,
-        triangles: info.render.triangles,
-        points: info.render.points,
-        lines: info.render.lines,
+        drawCalls: sceneStats.calls ?? info.render.calls,
+        triangles: sceneStats.triangles ?? info.render.triangles,
+        points: sceneStats.points ?? info.render.points,
+        lines: sceneStats.lines ?? info.render.lines,
         geometries: info.memory.geometries,
         textures: info.memory.textures,
         programs: info.programs ? info.programs.length : 0,

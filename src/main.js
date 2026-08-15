@@ -122,6 +122,18 @@ app.interact = interact;
 
 const post = createPost(renderer, scene, playerCam);
 app.post = post;
+app.sceneStats = { calls: 0, triangles: 0, points: 0, lines: 0 };
+const _renderPassRender = post.renderPass.render.bind(post.renderPass);
+post.renderPass.render = function renderPassSnap(...args) {
+  renderer.info.reset();
+  _renderPassRender(...args);
+  app.sceneStats = {
+    calls: renderer.info.render.calls,
+    triangles: renderer.info.render.triangles,
+    points: renderer.info.render.points,
+    lines: renderer.info.render.lines,
+  };
+};
 
 const debug = createDebugAPI(app);
 debug.ready = true;
@@ -174,7 +186,6 @@ function tick() {
     scene.rotation.set(0, 0, 0);
   }
 
-  renderer.info.reset();
   post.setCamera(app.activeCamera);
   post.render(dt);
   requestAnimationFrame(tick);

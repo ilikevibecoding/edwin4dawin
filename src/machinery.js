@@ -1,5 +1,5 @@
 import { Group } from 'three';
-import { cyl, motorHousing, pumpBody, roundedBox, sphere, torus } from './geom.js';
+import { box, cyl, motorHousing, pumpBody, roundedBox, sphere, torus } from './geom.js';
 import {
   makeFan,
   makeGauge,

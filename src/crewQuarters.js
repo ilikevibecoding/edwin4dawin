@@ -212,10 +212,10 @@ export function buildCrewQuarters(mats, collision, interactables, animators) {
   const vent = makeVent(mats, 0.2, 0.08);
   vent.position.set(0.15, 1.94, 10.2);
   g.add(vent);
-  const box = makeJunctionBox(mats, 0.14, 0.16, 0.06);
-  box.position.set(0.7, 1.55, 10.15);
-  box.rotation.y = -Math.PI * 0.5;
-  g.add(box);
+  const jbox = makeJunctionBox(mats, 0.14, 0.16, 0.06);
+  jbox.position.set(0.7, 1.55, 10.15);
+  jbox.rotation.y = -Math.PI * 0.5;
+  g.add(jbox);
   const grate = makeFloorGrate(mats, 0.36, 0.5);
   grate.position.set(0.05, 0.03, 10.55);
   g.add(grate);

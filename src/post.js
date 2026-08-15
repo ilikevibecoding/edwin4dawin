@@ -55,11 +55,17 @@ export function createPost(renderer, scene, camera) {
   composer.addPass(renderPass);
 
   let aoPass = null;
+  const gl = renderer.getContext();
+  const dbg = gl.getExtension && gl.getExtension('WEBGL_debug_renderer_info');
+  const rendererName = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+  const software = /swiftshader|llvmpipe|software/i.test(rendererName);
   try {
-    aoPass = new GTAOPass(scene, camera, size.x, size.y);
-    aoPass.output = GTAOPass.OUTPUT.Default;
-    if (aoPass.blendIntensity !== undefined) aoPass.blendIntensity = 0.55;
-    composer.addPass(aoPass);
+    if (!software) {
+      aoPass = new GTAOPass(scene, camera, size.x, size.y);
+      aoPass.output = GTAOPass.OUTPUT.Default;
+      if (aoPass.blendIntensity !== undefined) aoPass.blendIntensity = 0.55;
+      composer.addPass(aoPass);
+    }
   } catch (err) {
     console.warn('GTAO unavailable', err);
   }
