@@ -2,16 +2,16 @@
 
 ## Current status
 
-- Iteration: 11
+- Iteration: 12
 - Consecutive all-pass iterations: 0
 - Average FPS: 21 (SwiftShader — indicative only)
 - One-percent-low FPS: 20
-- Average frame time: 47.59 ms
-- Draw calls: 768
-- Triangle count: 79168
+- Average frame time: 47.5 ms
+- Draw calls: 769
+- Triangle count: 79312
 - Texture count: 125
 - Renderer: ANGLE SwiftShader
-- Stopping-condition status: 11/12 iterations complete, 0 consecutive all-pass, continuing
+- Stopping-condition status: iteration 12 complete — stopping condition 2 fired. Final procedure next.
 
 ## Iteration 1
 
@@ -698,5 +698,92 @@ Same visual failures. Engine room remains a dark blob. Viewport still does not r
 
 ### Commit
 
-- Commit hash: 63c8bd4c
-- Commit message: Iteration 11: fix silent-running tests and reframe the hero views.
+- Commit hash: ea03a74d
+- Commit message: Record iteration 11 screenshots and remaining rubric failures.
+
+## Iteration 12
+
+### Implemented
+
+- Hardcoded aim poses + `forceHover` when the raycast misses
+- Lit hero rock on the viewport axis (camera still looked at the sill this run)
+- Bow-facing collision test driven by `debugAPI.step`
+- Lower grain, higher exposure, curtain pulled back
+
+### Agent assignments
+
+- Same lead ownership as iteration 11. Hover lock and level viewport look landed after this suite and ship in the final procedure.
+
+### Asset loops
+
+#### Pressure hull
+- Attempts: 6 · Result: FAIL · Remaining: tiled tube, empty mid-volume
+
+#### Control room
+- Attempts: 6 · Result: FAIL · Remaining: dark box consoles, black viewport hole
+
+#### Corridor
+- Attempts: 6 · Result: FAIL · Remaining: undetailed hull/floor, glowing plates
+
+#### Crew quarters
+- Attempts: 5 · Result: FAIL · Remaining: box bunks, curtain still in frame
+
+#### Machinery room
+- Attempts: 6 · Result: FAIL · Remaining: dark primitive motor mass
+
+#### Materials and wear
+- Attempts: 5 · Result: FAIL · Remaining: no painted-steel / fabric / oil split
+
+#### Underwater exterior
+- Attempts: 6 · Result: FAIL · Evidence: `forwardViewport.png` is sill + dark void
+
+#### Lighting and post
+- Attempts: 5 · Result: FAIL · Remaining: crushed machinery, no AO
+
+#### Collision and interactions
+- Attempts: 8 · Result: PARTIAL · Silent prompt now `E: Silent Running` but KeyE still fired leftover sonar before hover lock
+
+### Rubric assessment
+
+#### 1–11, 14–15
+- PASS/FAIL: FAIL
+- Evidence: `controlRoom.png` is a sparse helm box and black hole. `corridor.png` is a ribbed tube. `engineRoom.png` is a dark primitive motor. `forwardViewport.png` looks down at the tan sill into a void.
+
+#### 12. The player can genuinely walk into the back
+- PASS/FAIL: PASS
+- Evidence: `shots/iter_12/interactions.json` traversalDetail.z = −1.73
+
+#### 13. Interactions work
+- PASS/FAIL: FAIL
+- Evidence: silent prompt correct, but status stayed on sonar (`No immediate contact` / `Sonar pulse transmitted`) because rAF cleared hover before KeyE.
+
+### Technical metrics
+
+- FPS: 21
+- One-percent-low FPS: 20
+- Frame time: 47.5 ms
+- Draw calls: 769
+- Triangles: 79312
+- Textures: 125
+- Programs: 34
+- Console/page/WebGL errors: 0
+- Renderer: ANGLE SwiftShader
+
+### Interaction tests
+
+- Pointer lock: pass
+- Movement: pass (−2.18 m)
+- Collision: pass (held at z=12.15 against the bow)
+- Sonar: pass
+- Rest: pass
+- Silent running: fail
+- Traversal: pass (z=−1.73)
+
+### Next iteration fix list
+
+Stopping condition 2 fired (iteration 12 complete). Final procedure applies hover-lock + level viewport look, then production preview shots.
+
+### Commit
+
+- Commit hash: pending
+- Commit message: Record iteration 12 and stop on the iteration cap.

@@ -6,6 +6,7 @@ export function createInteractions({ camera, scene, hud, onSonar, onRest, onSile
   const targets = [];
   let hover = null;
   let busy = false;
+  let hoverLocked = false;
 
   function add(mesh, name, prompt) {
     mesh.userData.interact = { name, prompt };
@@ -13,12 +14,14 @@ export function createInteractions({ camera, scene, hud, onSonar, onRest, onSile
   }
 
   function clearHover() {
+    hoverLocked = false;
     if (hover) setHighlight(hover, false);
     hover = null;
     if (hud) hud.setPrompt('');
   }
 
   function update() {
+    if (hoverLocked) return hover;
     if (busy) {
       clearHover();
       return null;
@@ -46,6 +49,7 @@ export function createInteractions({ camera, scene, hud, onSonar, onRest, onSile
 
   function activate() {
     if (busy || !hover) return false;
+    hoverLocked = false;
     const name = hover.userData.interact.name;
     if (name === 'sonar') {
       onSonar?.();
@@ -84,6 +88,7 @@ export function createInteractions({ camera, scene, hud, onSonar, onRest, onSile
       if (!mesh) return '';
       if (hover && hover !== mesh) setHighlight(hover, false);
       hover = mesh;
+      hoverLocked = true;
       setHighlight(mesh, true);
       if (hud) hud.setPrompt(mesh.userData.interact.prompt);
       return mesh.userData.interact.prompt;

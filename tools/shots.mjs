@@ -197,14 +197,17 @@ async function runInteractionTests(page) {
       for (let i = 0; i < 12; i++) window.debugAPI.step(0.05);
       return p || window.debugAPI.getPrompt();
     });
-    await page.keyboard.press('e');
-    await page.evaluate(() => window.debugAPI.step(0.05));
+    await page.evaluate(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e' }));
+    });
     const a = await page.evaluate(() => ({
       status: window.debugAPI.getStatus(),
       state: window.debugAPI.getState?.(),
     }));
-    await page.keyboard.press('e');
-    await page.evaluate(() => window.debugAPI.step(0.05));
+    await page.evaluate(() => {
+      window.debugAPI.aimInteract('silentRunning');
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e' }));
+    });
     const b = await page.evaluate(() => ({
       status: window.debugAPI.getStatus(),
       state: window.debugAPI.getState?.(),

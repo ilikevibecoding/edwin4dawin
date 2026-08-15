@@ -110,7 +110,7 @@ export function createUnderwater(seed = 0x51) {
     new THREE.DodecahedronGeometry(0.72, 1),
     new THREE.MeshStandardMaterial({ color: 0x3a5458, roughness: 0.9, metalness: 0.05 }),
   );
-  heroRock.position.set(0.28, 0.22, 16.55);
+  heroRock.position.set(0.22, 1.02, 16.7);
   heroRock.scale.set(1.15, 1.45, 1.05);
   heroRock.rotation.set(0.4, 0.8, 0.2);
   root.add(heroRock);
