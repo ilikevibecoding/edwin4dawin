@@ -2,6 +2,16 @@
 
 First-person walk-around of a procedurally built Jeep on a dirt two-track in a pine forest. Vite + Three.js. No downloaded models or textures.
 
+## Play it
+
+Self-contained `demo/index.html` (no runtime fetches). Needs WebGL2.
+
+| Link | |
+|------|--|
+| [rawcdn.githack.com](https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/cursor/jeep-forza-demo-2084/demo/index.html) | CDN edge, runs the demo |
+| [htmlpreview](https://htmlpreview.github.io/?https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/jeep-forza-demo-2084/demo/index.html) | Renders from raw GitHub |
+| [cdn.jsdelivr.net](https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@cursor/jeep-forza-demo-2084/demo/index.html) | Fastest raw file; jsDelivr serves `.html` as text |
+
 ## Run
 
 ```bash
