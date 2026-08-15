@@ -63,9 +63,10 @@ function makeLateAfternoonEnv(size = 256) {
       // Soft aureole only — a hard HDR disc turns bronze paint mint/white.
       const aureole = mu * mu * mu * mu;
       const haze = aureole * aureole;
-      pixel.r += sunCol.r * (aureole * 0.22 + haze * 0.08);
-      pixel.g += sunCol.g * (aureole * 0.22 + haze * 0.08);
-      pixel.b += sunCol.b * (aureole * 0.22 + haze * 0.08);
+      const disc = mu > 0.985 ? 0.55 : 0;
+      pixel.r += sunCol.r * (aureole * 0.28 + haze * 0.12 + disc);
+      pixel.g += sunCol.g * (aureole * 0.28 + haze * 0.12 + disc);
+      pixel.b += sunCol.b * (aureole * 0.28 + haze * 0.12 + disc);
 
       pixel.r = THREE.MathUtils.clamp(pixel.r, 0, 1.6);
       pixel.g = THREE.MathUtils.clamp(pixel.g, 0, 1.6);

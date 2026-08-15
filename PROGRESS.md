@@ -99,3 +99,48 @@ Shots at 960×540. Forest mean luma 0.032 (black). Wheel 0.069, interior 0.067.
 2. Move cameras into the clearing; sit the interior view in the seat.
 3. Kill the cheap god-ray planes. Lift crushed shadows.
 4. Shift paint off fire-engine red.
+
+---
+
+## Iteration 3 — lighting and cameras
+
+Sun to 46°, cabin/well fills, cameras in the clearing. Luma recovered
+(forest 0.30, interior 0.18, hero 0.31). The Jeep is lit. It is still a toy.
+
+| # | Result | Note |
+|---|--------|------|
+| 1 Lighting | FAIL | Key exists, shadows exist, but the body is still ambient-flat. Interior is a brown slab. |
+| 2 Materials | FAIL | Matte plastic. No flake, no tread map, no wet dirt. |
+| 3 Detail | FAIL | Box panels, cone pines, empty dash. |
+| 4 Post | FAIL | Bloom on lamps in some views. AO/grain not selling the frame. |
+| 5 Place | FAIL | Road is a dark strip. Trees are Christmas cones. |
+| 6 Palette | FAIL | Red toy + beige fog. Closer, not cohesive bronze/pine. |
+| 7 Tech | FAIL | Faceted everything. Stats still noisy. |
+| 8 Cold-look | FAIL | Low-poly indie prototype. |
+| 9 Interact | PASS | Unchanged, still proven. |
+
+---
+
+## Iteration 4 — albedo maps actually show
+
+White material color so canvas maps are not multiplied into mud. Stronger
+paint/dirt contrast. Contact shadow under the Jeep. Paint now reads orange
+with a mottled hood in the detail shot. Still a toy.
+
+| # | Result | Note |
+|---|--------|------|
+| 1 Lighting | FAIL | Directional + contact. No clearcoat streak. Wheel well still dim. |
+| 2 Materials | FAIL | Mottling on paint, still no metal/rubber read. |
+| 3 Detail | FAIL | Tread blocks and hinges exist; large flats remain. Cone forest. |
+| 4 Post | FAIL | Bloom on lamps. No readable AO. |
+| 5 Place | FAIL | Two-track hinted. Cones + fog. |
+| 6 Palette | FAIL | Orange / pine / tan is closer. Still toy-orange. |
+| 7 Tech | FAIL | Jagged edges, floating rocks in some views. |
+| 8 Cold-look | FAIL | Anyone says Three.js low-poly. |
+| 9 Interact | PASS | |
+
+### Fix list for iteration 5
+
+1. Break the Christmas-tree cone silhouette.
+2. Put a catchlight in the env so clearcoat/metal have something to reflect.
+3. Keep scoring honestly. Do not inflate.

@@ -27,22 +27,18 @@ function inJeepPad(x, z) {
   return Math.abs(x) < 2.6 && Math.abs(z) < 9;
 }
 
-function shadedConeGeo(segments = 7) {
-  const geo = new THREE.ConeGeometry(1, 1, segments, 1, false);
+function shadedCrownGeo() {
+  const geo = new THREE.IcosahedronGeometry(1, 0);
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
   const top = new THREE.Color(PALETTE.pineHi);
   const mid = new THREE.Color(PALETTE.pine);
-  const under = new THREE.Color(PALETTE.pine).multiplyScalar(0.55);
+  const under = new THREE.Color(PALETTE.pine).multiplyScalar(0.5);
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i);
-    if (y < -0.48) {
-      c.copy(under);
-    } else {
-      const t = THREE.MathUtils.clamp(y + 0.5, 0, 1);
-      c.copy(mid).lerp(top, t * t);
-    }
+    if (y < -0.15) c.copy(under);
+    else c.copy(mid).lerp(top, THREE.MathUtils.clamp(y * 0.7 + 0.3, 0, 1));
     colors[i * 3] = c.r;
     colors[i * 3 + 1] = c.g;
     colors[i * 3 + 2] = c.b;
@@ -85,7 +81,7 @@ function makePine(barkMat, crownMat, underMat, coneGeo, seed) {
     cone.rotation.y = hash(seed * 11 + i * 9.1) * Math.PI * 2;
     cone.rotation.z = (hash(seed * 6.6 + i) - 0.5) * 0.1;
     cone.rotation.x = (hash(seed * 3.3 + i * 4) - 0.5) * 0.08;
-    cone.scale.set(r, h, r * (0.92 + hash(i + seed) * 0.12));
+    cone.scale.set(r, h * 0.55, r * (0.92 + hash(i + seed) * 0.12));
     g.add(cone);
   }
   return g;
@@ -294,7 +290,7 @@ export function createForest(env, { treeCount = 90 } = {}) {
     envMapIntensity: 0.2,
   });
 
-  const coneGeo = shadedConeGeo(7);
+  const coneGeo = shadedCrownGeo();
   const puffGeo = new THREE.SphereGeometry(1, 6, 5);
   const frondGeo = new THREE.ConeGeometry(0.28, 0.52, 5);
   const mossGeo = new THREE.SphereGeometry(1, 5, 4);

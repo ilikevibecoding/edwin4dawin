@@ -220,9 +220,9 @@ export function dirtAlbedo() {
         const peb = hash(u * 180 + v * 93);
         const rut = Math.exp(-Math.pow((u - 0.28) * 14, 2)) + Math.exp(-Math.pow((u - 0.72) * 14, 2));
         const wet = Math.max(0, fbm(u * 3 + 4, v * 3, 3) - 0.62) * (1 - rut * 0.4);
-        const r = 108 + n * 40 - rut * 28 - wet * 50 + (peb > 0.97 ? 30 : 0);
-        const g = 72 + n * 22 - rut * 18 - wet * 30 + (peb > 0.97 ? 22 : 0);
-        const b = 40 + n * 10 - rut * 10 - wet * 12;
+        const r = 92 + n * 70 - rut * 40 - wet * 60 + (peb > 0.97 ? 40 : 0);
+        const g = 58 + n * 38 - rut * 24 - wet * 36 + (peb > 0.97 ? 28 : 0);
+        const b = 32 + n * 16 - rut * 12 - wet * 14;
         return [r, g, b];
       });
     },
