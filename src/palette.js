@@ -1,0 +1,50 @@
+// One cohesive late-afternoon trail palette.
+// Warm bronze Jeep, terracotta dirt, deep pine, amber practicals.
+
+export const PALETTE = {
+  paint: 0xb06a32,
+  paintFlake: 0xd4924a,
+  paintShade: 0x6a3a18,
+  blackout: 0x141210,
+  plastic: 0x1c1a18,
+  chrome: 0xc8c2b6,
+  steel: 0x6e6a64,
+  rusty: 0x6a4030,
+  rubber: 0x1a1816,
+  tireSide: 0x2a2622,
+  glass: 0x8aa0a8,
+  fabric: 0x3a3228,
+  fabricHi: 0x5a4c3c,
+  amber: 0xffb040,
+  tail: 0xff2a18,
+  headlight: 0xfff2d0,
+  led: 0xf4f7ff,
+  dirt: 0x6b4423,
+  dirtDry: 0x8a6a42,
+  dirtWet: 0x3a2818,
+  grass: 0x3d4a22,
+  moss: 0x2f3d1c,
+  pine: 0x1c3320,
+  pineHi: 0x3a5a30,
+  bark: 0x3a2a1c,
+  rock: 0x5a5348,
+  skyZenith: 0x4a6a88,
+  skyHorizon: 0xe8c090,
+  sun: 0xffe2b0,
+  bounce: 0xffc888,
+};
+
+export const SUN = {
+  // Front-three-quarter rake. Bounce card fills the shadow side.
+  elevation: 48,
+  azimuth: 38,
+  intensity: 3.4,
+  bounceIntensity: 0.85,
+  bounceAzimuth: 230,
+  hemiSky: 0xc8d4e0,
+  hemiGround: 0x3a2e1c,
+  hemiIntensity: 0.38,
+  fog: 0xc4b28a,
+  fogDensity: 0.012,
+  exposure: 0.92,
+};
