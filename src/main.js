@@ -24,7 +24,8 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.22;
+renderer.info.autoReset = false;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.physicallyCorrectLights = true;
@@ -61,18 +62,19 @@ let ready = false;
 const frameTimes = [];
 let last = performance.now();
 let simTime = 0;
+let lastRenderInfo = { calls: 0, triangles: 0, points: 0, lines: 0 };
 
 const views = {
-  controlRoom: { pos: [0.08, 1.62, -7.15], look: [0.05, 1.35, -9.6], fov: 62 },
-  corridor: { pos: [0.02, 1.62, -3.15], look: [0.0, 1.45, -5.6], fov: 60 },
-  crewQuarters: { pos: [0.18, 1.58, 0.95], look: [-0.7, 1.15, -0.6], fov: 60 },
-  engineRoom: { pos: [0.05, 1.58, 6.35], look: [0.1, 0.85, 9.6], fov: 62 },
-  machineryCloseup: { pos: [0.42, 1.28, 8.55], look: [0.1, 0.7, 9.35], fov: 50 },
-  sonarConsole: { pos: [0.42, 1.48, -6.95], look: [0.72, 1.22, -7.55], fov: 48 },
-  forwardViewport: { pos: [0.0, 1.55, -9.15], look: [0.0, 1.38, -10.5], fov: 55 },
-  porthole: { pos: [0.35, 1.5, -4.85], look: [0.99, 1.42, -4.85], fov: 48 },
-  aftWide: { pos: [0.0, 1.7, 5.55], look: [0.05, 0.9, 10.4], fov: 64 },
-  walking: { pos: [0.05, 1.7, -5.4], look: [0.0, 1.55, -2.2], fov: 62 },
+  controlRoom: { pos: [0.22, 1.58, -6.85], look: [-0.05, 1.28, -9.35], fov: 58 },
+  corridor: { pos: [0.12, 1.58, -2.55], look: [-0.15, 1.32, -5.85], fov: 58 },
+  crewQuarters: { pos: [0.28, 1.52, 1.55], look: [-0.62, 0.95, -0.35], fov: 55 },
+  engineRoom: { pos: [-0.08, 1.52, 6.55], look: [0.12, 0.72, 9.15], fov: 58 },
+  machineryCloseup: { pos: [0.55, 1.18, 8.25], look: [0.12, 0.62, 9.25], fov: 46 },
+  sonarConsole: { pos: [0.28, 1.42, -6.72], look: [0.7, 1.18, -7.52], fov: 46 },
+  forwardViewport: { pos: [0.18, 1.48, -8.55], look: [0.0, 1.36, -10.35], fov: 50 },
+  porthole: { pos: [0.18, 1.48, -4.35], look: [0.95, 1.4, -4.85], fov: 46 },
+  aftWide: { pos: [0.06, 1.62, 5.85], look: [0.08, 0.78, 9.85], fov: 60 },
+  walking: { pos: [0.1, 1.68, -5.15], look: [0.02, 1.4, -2.05], fov: 58 },
 };
 
 function setView(name) {
@@ -153,9 +155,13 @@ function bindWindowTargets() {
   });
 }
 
+let displayAcc = 0;
 function updateDisplays(dt) {
   sonarSweep += dt * 0.7;
   if (sonarPing > 0) sonarPing = Math.max(0, sonarPing - dt * 0.85);
+  displayAcc += dt;
+  const refresh = displayAcc > 0.2 || sonarPing > 0;
+  if (refresh) displayAcc = 0;
   ctx.animated.forEach((a) => {
     if (a.type === 'fan' && a.object) {
       const spd = silent && a.silentStop ? 0.15 : silent ? a.speed * 0.45 : a.speed;
@@ -168,7 +174,7 @@ function updateDisplays(dt) {
       const amp = silent ? a.amp * 0.3 : a.amp;
       a.object.position.y += Math.sin(simTime * 38) * amp;
     }
-    if (a.type === 'sonarDisplay') {
+    if (refresh && a.type === 'sonarDisplay') {
       const { texture, canvas: c, ctx2d } = a;
       const d = makeDisplay('sonar', simTime, { sweep: sonarSweep, ping: sonarPing > 0 ? 1 - sonarPing : 0 });
       ctx2d.clearRect(0, 0, c.width, c.height);
@@ -176,7 +182,7 @@ function updateDisplays(dt) {
       d.texture.dispose();
       texture.needsUpdate = true;
     }
-    if (a.type === 'display') {
+    if (refresh && a.type === 'display') {
       const d = makeDisplay(a.kind, simTime, { silent, hdg: 247, depth: 412 });
       a.ctx.clearRect(0, 0, a.canvas.width, a.canvas.height);
       a.ctx.drawImage(d.canvas, 0, 0);
@@ -198,10 +204,10 @@ function getMetrics() {
     fps: Number((1000 / avg).toFixed(1)),
     averageFrameTimeMs: Number(avg.toFixed(2)),
     onePercentLowFps: Number((1000 / p1).toFixed(1)),
-    drawCalls: info.render.calls,
-    triangles: info.render.triangles,
-    points: info.render.points,
-    lines: info.render.lines,
+    drawCalls: lastRenderInfo.calls || info.render.calls,
+    triangles: lastRenderInfo.triangles || info.render.triangles,
+    points: lastRenderInfo.points || info.render.points,
+    lines: lastRenderInfo.lines || info.render.lines,
     geometries: info.memory.geometries,
     textures: info.memory.textures,
     programs: info.programs?.length ?? 0,
@@ -242,6 +248,9 @@ window.debugAPI = {
     return interactions.trigger(name);
   },
   resetScene,
+  holdKey(code, down) {
+    player.holdKey(code, down);
+  },
   getMetrics,
   getState() {
     return {
@@ -295,6 +304,13 @@ function tick(now) {
     sub.rotation.x = Math.sin(simTime * 0.11) * 0.0025;
   }
   post.render(dt);
+  lastRenderInfo = {
+    calls: renderer.info.render.calls,
+    triangles: renderer.info.render.triangles,
+    points: renderer.info.render.points,
+    lines: renderer.info.render.lines,
+  };
+  renderer.info.reset();
   requestAnimationFrame(tick);
 }
 

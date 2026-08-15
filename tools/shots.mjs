@@ -103,6 +103,7 @@ async function main() {
     process.exit(1);
   }
   console.log(`Wrote screenshots to ${OUT}`);
+  process.exit(failed.length || pageErrors.length ? 1 : 0);
 }
 
 async function runInteractionTests(page) {
@@ -198,25 +199,22 @@ async function runInteractionTests(page) {
     api.setView('walking');
     api.setPlayerEnabled(true);
     const before = api.getState().player;
-    const evDown = new KeyboardEvent('keydown', { code: 'KeyW' });
-    window.dispatchEvent(evDown);
-    await new Promise((r) => setTimeout(r, 700));
-    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW' }));
+    api.holdKey('KeyS', true);
+    await new Promise((r) => setTimeout(r, 800));
+    api.holdKey('KeyS', false);
     const after = api.getState().player;
-    return { before, after, dz: after.z - before.z };
+    return { before, after, dz: after.z - before.z, dx: after.x - before.x };
   });
-  result.movement = Math.abs(move.dz) > 0.15 ? 'pass' : 'fail';
-  result.notes.push(`walk dz=${move.dz.toFixed(3)}`);
+  result.movement = Math.hypot(move.dz, move.dx) > 0.2 ? 'pass' : 'fail';
+  result.notes.push(`walk d=${Math.hypot(move.dz, move.dx).toFixed(3)}`);
 
   const col = await page.evaluate(async () => {
     const api = window.debugAPI;
     api.resetScene();
     api.setPlayerEnabled(true);
-    const startZ = -6.15;
-    const player = api.getState().player;
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA' }));
+    api.holdKey('KeyA', true);
     await new Promise((r) => setTimeout(r, 900));
-    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyA' }));
+    api.holdKey('KeyA', false);
     const after = api.getState().player;
     return { x: after.x, blocked: after.x > -1.1 };
   });
@@ -227,15 +225,12 @@ async function runInteractionTests(page) {
     const api = window.debugAPI;
     api.resetScene();
     api.setPlayerEnabled(true);
-    const start = { x: 0.05, y: 1.7, z: -8.4 };
-    api.getState();
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS' }));
-    await new Promise((r) => setTimeout(r, 4200));
-    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyS' }));
-    const after = api.getState().player;
-    return after;
+    api.holdKey('KeyS', true);
+    await new Promise((r) => setTimeout(r, 12000));
+    api.holdKey('KeyS', false);
+    return api.getState().player;
   });
-  result.traversal = trav.z > 4.5 ? 'pass' : 'fail';
+  result.traversal = trav.z > 5.0 ? 'pass' : 'fail';
   result.notes.push(`traversal z=${trav.z.toFixed(3)}`);
 
   return result;

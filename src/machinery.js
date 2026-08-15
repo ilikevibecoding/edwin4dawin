@@ -111,6 +111,10 @@ export function createMotor(mats) {
   ], 28), mats.oilyMachine);
   housing.rotation.z = Math.PI / 2;
   const jacket = mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.7, 28), mats.machineBlue, 0, 0, 0, 0, 0, Math.PI / 2);
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    g.add(mesh(beveledBox(0.018, 0.08, 0.55, 0.003), mats.gunmetal, 0, Math.sin(a) * 0.38, Math.cos(a) * 0.38));
+  }
   const ringF = mesh(new THREE.TorusGeometry(0.36, 0.03, 10, 28), mats.gunmetal, -0.36, 0, 0, 0, Math.PI / 2, 0);
   const ringA = mesh(new THREE.TorusGeometry(0.36, 0.03, 10, 28), mats.gunmetal, 0.36, 0, 0, 0, Math.PI / 2, 0);
   const shaft = mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.55, 16), mats.brushedMetal, 0.62, 0, 0, 0, 0, Math.PI / 2);

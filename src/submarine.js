@@ -47,13 +47,9 @@ function buildHull(ctx) {
   hull.castShadow = false;
   root.add(hull);
 
-  const liner = new THREE.CylinderGeometry(HULL.radius - 0.045, HULL.radius - 0.045, length, 48, 1, true);
-  liner.rotateX(Math.PI / 2);
-  liner.scale(-1, 1, 1);
-  liner.computeVertexNormals();
-  const inner = mesh(liner, mats.hullGreen, 0, HULL.centerY, zMid);
-  inner.castShadow = false;
-  root.add(inner);
+  const wainscotL = mesh(beveledBox(0.05, 0.72, length - 0.4, 0.006), mats.hullGreen, -1.08, 0.58, zMid);
+  const wainscotR = mesh(beveledBox(0.05, 0.72, length - 0.4, 0.006), mats.hullGreen, 1.08, 0.58, zMid);
+  root.add(wainscotL, wainscotR);
 
   const fwdDome = new THREE.SphereGeometry(HULL.radius, 40, 18, 0, Math.PI * 2, 0, Math.PI * 0.52);
   fwdDome.scale(-1, 1, 1);
@@ -134,25 +130,25 @@ function buildRibs(ctx) {
   for (let z = z0; z < z1; z += 0.68) {
     if (isHatchZ(z)) continue;
     const ring = mesh(
-      new THREE.TorusGeometry(HULL.radius - 0.07, 0.028, 10, 48, Math.PI * 1.35),
+      new THREE.TorusGeometry(HULL.radius - 0.055, 0.042, 12, 52, Math.PI * 1.55),
       mats.chippedPaint,
       0,
       HULL.centerY,
       z,
     );
     ring.rotation.y = Math.PI / 2;
-    ring.rotation.z = Math.PI * 0.325;
+    ring.rotation.z = Math.PI * 0.22;
     root.add(ring);
 
     const flange = mesh(
-      new THREE.TorusGeometry(HULL.radius - 0.11, 0.01, 6, 40, Math.PI * 1.2),
+      new THREE.TorusGeometry(HULL.radius - 0.1, 0.016, 8, 44, Math.PI * 1.4),
       mats.gunmetal,
       0,
       HULL.centerY,
-      z + 0.03,
+      z + 0.035,
     );
     flange.rotation.y = Math.PI / 2;
-    flange.rotation.z = Math.PI * 0.4;
+    flange.rotation.z = Math.PI * 0.3;
     root.add(flange);
 
     if (i % 2 === 0) {
@@ -221,21 +217,24 @@ function zoneNameForBulkhead(idx) {
 
 function createHatch(mats, idx) {
   const g = new THREE.Group();
-  const door = mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.045, 28), mats.chippedPaint, 0.52, 0, 0.02, 0, 0, Math.PI / 2);
-  door.rotation.y = 0.15;
-  const wheel = mesh(new THREE.TorusGeometry(0.11, 0.016, 8, 16), mats.warning, 0.18, 0.02, 0.06);
-  const hub = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.03, 10), mats.brushedMetal, 0.18, 0.02, 0.06, Math.PI / 2, 0, 0);
+  const hinge = mesh(beveledBox(0.07, 0.82, 0.06, 0.006), mats.gunmetal, 0.56, 0, 0.02);
+  const door = new THREE.Group();
+  door.add(mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.04, 28), mats.chippedPaint, 0, 0, 0, 0, 0, Math.PI / 2));
+  const wheel = mesh(new THREE.TorusGeometry(0.1, 0.015, 8, 16), mats.warning, 0, 0, 0.03);
+  const hub = mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.02, 10), mats.brushedMetal, 0, 0, 0.03, Math.PI / 2, 0, 0);
   for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI;
-    g.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.2, 6), mats.brushedMetal, 0.18, 0.02, 0.06, 0, 0, a));
+    const spoke = mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.18, 6), mats.brushedMetal, 0, 0, 0.03);
+    spoke.rotation.z = (i / 4) * Math.PI;
+    door.add(spoke);
   }
-  const hinge = mesh(beveledBox(0.06, 0.7, 0.05, 0.006), mats.gunmetal, 0.5, 0, 0);
-  const dogs = [];
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    dogs.push(mesh(beveledBox(0.05, 0.02, 0.03, 0.003), mats.brushedMetal, Math.cos(a) * 0.48, Math.sin(a) * 0.48, 0.03));
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    door.add(mesh(beveledBox(0.055, 0.02, 0.028, 0.003), mats.brushedMetal, Math.cos(a) * 0.46, Math.sin(a) * 0.46, 0.02));
   }
-  g.add(door, wheel, hub, hinge, ...dogs);
+  door.add(wheel, hub);
+  door.position.set(0.58, 0, 0.12);
+  door.rotation.y = 1.42;
+  g.add(hinge, door);
   g.userData.open = true;
   return g;
 }

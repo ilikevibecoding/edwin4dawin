@@ -77,7 +77,7 @@ export function buildCrewQuarters(ctx) {
 function createBunk(mats, id, interact) {
   const g = new THREE.Group();
   g.add(mesh(beveledBox(0.52, 0.06, 1.12, 0.008), mats.gunmetal, 0, 0.08, 0));
-  const mattress = mesh(beveledBox(0.48, 0.07, 1.06, 0.02), mats.fabric, 0, 0.145, 0);
+  const mattress = mesh(beveledBox(0.5, 0.09, 1.08, 0.022), mats.pillow, 0, 0.155, 0);
   wrinkle(mattress);
   g.add(mattress);
   const blanket = mesh(beveledBox(0.46, 0.035, 0.72, 0.016), mats.blanket, 0.01, 0.19, 0.12);

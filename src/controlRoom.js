@@ -85,6 +85,11 @@ export function buildControlRoom(ctx) {
 
   const floorPanel = mesh(beveledBox(0.5, 0.02, 0.7, 0.003), mats.grate, 0, 0.012, zMid);
   root.add(floorPanel);
+  for (let i = 0; i < 5; i++) {
+    root.add(mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.9, 6), i % 2 ? mats.pipeCopper : mats.plastic, -0.28 + i * 0.04, 0.08, -8.9, 0.9, 0, 0.15));
+  }
+  root.add(mesh(beveledBox(0.18, 0.12, 0.08, 0.004), mats.plastic, 0.88, 1.72, -8.1));
+  root.add(mesh(beveledBox(0.14, 0.22, 0.06, 0.004), mats.gunmetal, -0.95, 0.55, -9.1));
 
   ctx.control = { sonar, helm, nav };
 }
@@ -140,7 +145,9 @@ function buildHelmStation(ctx) {
 
   const wheel = mesh(new THREE.TorusGeometry(0.13, 0.016, 8, 20), mats.leather, 0, 0.95, 0.22, 0.55, 0, 0);
   for (let i = 0; i < 3; i++) {
-    g.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.24, 6), mats.brushedMetal, 0, 0.95, 0.22, 0, 0, (i / 3) * Math.PI));
+    const spoke = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.22, 6), mats.brushedMetal, 0, 0.95, 0.22);
+    spoke.rotation.set(0.55, 0, (i / 3) * Math.PI);
+    g.add(spoke);
   }
   g.add(wheel);
   g.add(mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.12, 10), mats.gunmetal, 0, 0.86, 0.16, 0.55, 0, 0));

@@ -23,10 +23,11 @@ export function buildEngineRoom(ctx) {
   buildElectricalPassage(ctx);
 
   const motor = createMotor(mats);
-  motor.position.set(0.15, 0.62, 9.35);
+  motor.position.set(0.12, 0.68, 9.15);
   motor.rotation.y = Math.PI / 2;
+  motor.scale.setScalar(1.18);
   root.add(motor);
-  addCollider(colliders, 0.15, 0.62, 9.35, 0.7, 1.15, 1.15);
+  addCollider(colliders, 0.12, 0.68, 9.15, 0.82, 1.25, 1.28);
   animated.push({ type: 'vibrate', object: motor, amp: 0.0012 });
   ctx.motor = motor;
 
@@ -152,6 +153,9 @@ export function buildEngineRoom(ctx) {
   const lamp2 = mesh(beveledBox(0.12, 0.06, 0.18, 0.004), mats.lightWarm, 0.25, 2.08, 9.1);
   root.add(lamp1, lamp2);
   ctx.workLights = [lamp1, lamp2];
+
+  root.add(mesh(beveledBox(0.7, 0.015, 2.8, 0.002), mats.yellow, 0.02, 0.018, 8.4));
+  root.add(mesh(beveledBox(0.18, 0.22, 0.9, 0.008), mats.warning, 0.12, 0.22, 9.15));
 
   const stencil = new THREE.Mesh(
     new THREE.PlaneGeometry(0.55, 0.12),

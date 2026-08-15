@@ -4,8 +4,8 @@ import { makeCaustic } from './textures.js';
 
 export function createWaterSystem(renderer, seed = 1) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x021018);
-  scene.fog = new THREE.FogExp2(0x031820, 0.055);
+  scene.background = new THREE.Color(0x041820);
+  scene.fog = new THREE.FogExp2(0x062830, 0.028);
 
   const cam = new THREE.PerspectiveCamera(55, 16 / 9, 0.1, 180);
   cam.position.set(0, 0, 0);
@@ -17,16 +17,16 @@ export function createWaterSystem(renderer, seed = 1) {
     colorSpace: THREE.SRGBColorSpace,
   });
 
-  const ambient = new THREE.AmbientLight(0x143040, 0.35);
+  const ambient = new THREE.AmbientLight(0x245060, 0.7);
   scene.add(ambient);
-  const key = new THREE.DirectionalLight(0x6aa8b8, 0.55);
+  const key = new THREE.DirectionalLight(0x8ac8d4, 1.15);
   key.position.set(4, 8, 2);
   scene.add(key);
-  const floodL = new THREE.SpotLight(0x88c8d8, 18, 40, 0.35, 0.55, 1.1);
+  const floodL = new THREE.SpotLight(0xa8e0ec, 36, 48, 0.38, 0.45, 1.0);
   floodL.position.set(-1.2, 0.4, -1.4);
   floodL.target.position.set(-3, -4, -18);
   scene.add(floodL, floodL.target);
-  const floodR = new THREE.SpotLight(0x88c8d8, 18, 40, 0.35, 0.55, 1.1);
+  const floodR = new THREE.SpotLight(0xa8e0ec, 36, 48, 0.38, 0.45, 1.0);
   floodR.position.set(1.2, 0.4, -1.4);
   floodR.target.position.set(3, -5, -20);
   scene.add(floodR, floodR.target);
@@ -66,18 +66,23 @@ export function createWaterSystem(renderer, seed = 1) {
     const geo = new THREE.IcosahedronGeometry(1.2 + (i % 5) * 0.45, 1);
     displace(geo, seed + i, 0.35);
     const m = new THREE.Mesh(geo, i < 8 ? rockMat : silMat);
-    m.position.set(((i * 17) % 40) - 20, -12 + (i % 4) * 0.6, -18 - (i * 3) % 36);
+    m.position.set(((i * 17) % 36) - 16, -9 + (i % 4) * 0.8, -10 - (i * 2.4) % 28);
     m.scale.set(1.2 + (i % 3) * 0.8, 0.8 + (i % 4) * 0.5, 1.4 + (i % 3));
     rocks.add(m);
   }
 
-  const ridge = new THREE.Mesh(new THREE.BoxGeometry(8, 14, 28), silMat);
-  ridge.position.set(-16, -8, -40);
-  ridge.rotation.z = 0.3;
+  const ridge = new THREE.Mesh(new THREE.BoxGeometry(8, 16, 32), silMat);
+  ridge.position.set(-10, -5, -22);
+  ridge.rotation.z = 0.35;
   rocks.add(ridge);
-  const ridge2 = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 22), silMat);
-  ridge2.position.set(18, -10, -50);
+  const ridge2 = new THREE.Mesh(new THREE.BoxGeometry(12, 12, 26), silMat);
+  ridge2.position.set(12, -6, -28);
   rocks.add(ridge2);
+  const nearRock = new THREE.Mesh(new THREE.IcosahedronGeometry(3.2, 1), rockMat);
+  displace(nearRock.geometry, seed + 40, 0.45);
+  nearRock.position.set(-4.5, -6.5, -11);
+  nearRock.scale.set(1.6, 1.1, 2.2);
+  rocks.add(nearRock);
 
   const near = makeParticles(420, 0x9ad0c8, 0.018, 6, seed);
   const mid = makeParticles(280, 0x6a9aa0, 0.03, 16, seed + 3);

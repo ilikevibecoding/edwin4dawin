@@ -32,7 +32,7 @@ export function createMaterials(seed = 1) {
   const grate = grateMaps(seed + 13);
 
   const hullPaint = new THREE.MeshStandardMaterial({
-    color: 0xc4bfb0,
+    color: 0xd4cfc0,
     map: painted.map,
     roughnessMap: painted.roughnessMap,
     normalMap: painted.normalMap,
@@ -43,7 +43,7 @@ export function createMaterials(seed = 1) {
   hullPaint.normalScale.set(0.45, 0.45);
 
   const hullGreen = new THREE.MeshStandardMaterial({
-    color: 0x7a8472,
+    color: 0x8a9480,
     map: green.map,
     roughnessMap: green.roughnessMap,
     normalMap: green.normalMap,
@@ -130,7 +130,7 @@ export function createMaterials(seed = 1) {
   });
 
   const fabricMat = new THREE.MeshStandardMaterial({
-    color: 0x6a7380,
+    color: 0x8a96a4,
     map: fabric.map,
     roughnessMap: fabric.roughnessMap,
     normalMap: fabric.normalMap,
@@ -141,7 +141,7 @@ export function createMaterials(seed = 1) {
   fabricMat.normalScale.set(0.8, 0.8);
 
   const blanketMat = new THREE.MeshStandardMaterial({
-    color: 0x3d4a58,
+    color: 0x5a6a7a,
     map: blanket.map,
     roughnessMap: blanket.roughnessMap,
     normalMap: blanket.normalMap,

@@ -10,9 +10,9 @@ export function buildCorridor(ctx) {
   const z0 = ZONES.corridor.z0;
   const z1 = ZONES.corridor.z1;
 
-  for (let z = z0 + 0.35; z < z1 - 0.2; z += 0.55) {
-    const panelL = mesh(beveledBox(0.04, 1.15, 0.48, 0.006), mats.hullGreen, -0.98, 1.05, z);
-    const panelR = mesh(beveledBox(0.04, 1.15, 0.48, 0.006), mats.hullGreen, 0.98, 1.05, z);
+  for (let z = z0 + 0.45; z < z1 - 0.2; z += 0.85) {
+    const panelL = mesh(beveledBox(0.035, 0.62, 0.32, 0.006), mats.hullGreen, -1.02, 0.95, z);
+    const panelR = mesh(beveledBox(0.035, 0.62, 0.32, 0.006), mats.hullGreen, 1.02, 0.95, z);
     root.add(panelL, panelR);
   }
 
@@ -86,6 +86,12 @@ export function buildCorridor(ctx) {
   root.add(conduit);
   const conduit2 = mesh(new THREE.CylinderGeometry(0.016, 0.016, 3.8, 8), mats.pipeCopper, 0.78, 1.78, (z0 + z1) * 0.5, Math.PI / 2, 0, 0);
   root.add(conduit2);
+  for (let z = z0 + 0.4; z < z1; z += 0.7) {
+    root.add(mesh(beveledBox(0.08, 0.05, 0.1, 0.003), mats.gunmetal, -0.88, 1.78, z));
+    root.add(mesh(new THREE.TorusGeometry(0.03, 0.007, 6, 10), mats.brushedMetal, 0.86, 1.55, z, 0, Math.PI / 2, 0));
+  }
+  root.add(mesh(beveledBox(0.2, 0.16, 0.08, 0.006), mats.plastic, -0.94, 1.22, -3.85));
+  root.add(mesh(beveledBox(0.12, 0.28, 0.1, 0.005), mats.chippedPaint, 0.94, 0.55, -4.15));
 
   addCollider(colliders, -0.98, 1.05, (z0 + z1) * 0.5, 0.12, 1.4, z1 - z0);
   addCollider(colliders, 0.98, 1.05, (z0 + z1) * 0.5, 0.12, 1.4, z1 - z0);

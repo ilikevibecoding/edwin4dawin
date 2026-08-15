@@ -9,8 +9,8 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
-    vignette: { value: 0.32 },
-    grain: { value: 0.045 },
+    vignette: { value: 0.22 },
+    grain: { value: 0.018 },
     time: { value: 0 },
     lift: { value: new THREE.Vector3(0.02, 0.02, 0.018) },
     gamma: { value: new THREE.Vector3(1.02, 1.0, 0.98) },
@@ -61,17 +61,17 @@ export function createPost(renderer, scene, camera) {
   gtao.output = GTAOPass.OUTPUT.Default;
   if (gtao.updateGtaoMaterial) {
     gtao.updateGtaoMaterial({
-      radius: 0.35,
-      distanceExponent: 1.4,
-      thickness: 0.08,
-      scale: 0.85,
-      samples: 8,
+      radius: 0.28,
+      distanceExponent: 1.2,
+      thickness: 0.06,
+      scale: 0.55,
+      samples: 6,
       screenSpaceRadius: false,
     });
   }
   composer.addPass(gtao);
 
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.22, 0.55, 0.82);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.14, 0.42, 0.88);
   composer.addPass(bloom);
 
   const grade = new ShaderPass(GradeShader);
