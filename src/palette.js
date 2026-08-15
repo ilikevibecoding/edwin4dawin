@@ -3,7 +3,7 @@
 // No default gray, no neon — every neutral is biased warm or forest-cool.
 
 export const PALETTE = {
-  paint: 0xb06a32,
+  paint: 0x8a4e24,
   paintFlake: 0xd4924a,
   paintShade: 0x6a3a18,
   blackout: 0x161310,
@@ -38,18 +38,18 @@ export const PALETTE = {
 export const SUN = {
   // Late-afternoon rake. Keys the hero front-three-quarter (+X/+Z),
   // leaves the rear-port flank in shadow for the bounce card.
-  elevation: 24,
-  azimuth: 58,
-  intensity: 2.85,
+  elevation: 46,
+  azimuth: 42,
+  intensity: 3.55,
   bounce: 0xffc080,
-  bounceIntensity: 0.58,
+  bounceIntensity: 1.05,
   bounceAzimuth: 228,
-  bounceElevation: 14,
-  hemiSky: 0x8aa4b8,
+  bounceElevation: 16,
+  hemiSky: 0x9ab0c0,
   hemiGround: 0x4a3820,
-  hemiIntensity: 0.24,
-  fog: 0xd2b888,
-  fogDensity: 0.007,
-  exposure: 0.9,
-  envIntensity: 0.68,
+  hemiIntensity: 0.42,
+  fog: 0xd4bc90,
+  fogDensity: 0.0045,
+  exposure: 1.05,
+  envIntensity: 0.72,
 };

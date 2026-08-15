@@ -1,5 +1,5 @@
 // Late-afternoon trail lighting (do not use three/Sky — NaN sun poisons bloom).
-// Sun: elev 24° / az 58°, I=2.85 — keys hero front-three-quarter, rakes flanks.
+// Sun: elev 46° / az 42°, I=3.55 — high enough to clear the canopy, still raked.
 // Bounce: unshadowed warm card, elev 14° / az 228°, I=0.58.
 // Hemi: 0.24 (cool sky / terracotta ground) so it does not flatten the key.
 // Fog: warm FogExp2 0.007 — depth down the road, not soup.

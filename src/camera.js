@@ -2,44 +2,44 @@ import * as THREE from 'three';
 
 export const VIEWS = {
   hero: {
-    position: [5.4, 1.7, 6.8],
-    target: [0.1, 0.95, 0.2],
-    fov: 42,
+    position: [4.6, 1.55, 5.6],
+    target: [0.05, 0.92, 0.15],
+    fov: 40,
   },
   front: {
-    position: [0.15, 1.25, 5.6],
-    target: [0, 1.0, 1.4],
-    fov: 38,
+    position: [0.2, 1.2, 5.2],
+    target: [0, 0.98, 1.5],
+    fov: 36,
   },
   rear: {
-    position: [1.4, 1.35, -5.4],
-    target: [0, 1.05, -1.6],
-    fov: 40,
+    position: [1.55, 1.3, -5.0],
+    target: [0, 1.02, -1.5],
+    fov: 38,
   },
   wheel: {
-    position: [2.55, 0.72, 2.35],
-    target: [0.82, 0.48, 1.23],
-    fov: 34,
+    position: [2.7, 0.82, 2.45],
+    target: [0.82, 0.5, 1.23],
+    fov: 32,
   },
   interior: {
-    position: [0.32, 1.46, 0.16],
-    target: [0.18, 1.16, 0.72],
-    fov: 58,
+    position: [0.3, 1.4, -0.08],
+    target: [0.12, 1.14, 0.62],
+    fov: 55,
   },
   forest: {
-    position: [8.5, 2.4, 14.5],
-    target: [0.2, 1.1, 0.0],
-    fov: 44,
+    position: [4.9, 1.85, 8.4],
+    target: [0.1, 1.0, 0.1],
+    fov: 42,
   },
   road: {
-    position: [0.2, 1.6, 16.5],
-    target: [0.1, 0.7, 2.0],
-    fov: 40,
+    position: [0.15, 1.55, 14.2],
+    target: [0.05, 0.75, 1.6],
+    fov: 38,
   },
   detail: {
-    position: [1.15, 1.05, 3.15],
-    target: [0.15, 0.98, 2.0],
-    fov: 32,
+    position: [1.35, 1.08, 3.35],
+    target: [0.12, 0.98, 2.02],
+    fov: 30,
   },
 };
 

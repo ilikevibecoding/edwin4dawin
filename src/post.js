@@ -48,10 +48,10 @@ const GradeShader = {
   name: 'Grade',
   uniforms: {
     tDiffuse: { value: null },
-    uVignette: { value: 0.36 },
-    uGrain: { value: 0.03 },
+    uVignette: { value: 0.26 },
+    uGrain: { value: 0.022 },
     uTime: { value: 0 },
-    uLift: { value: 0.034 },
+    uLift: { value: 0.055 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -100,7 +100,7 @@ export function createPost(renderer, scene, camera, { fast = false } = {}) {
   composer.addPass(new RenderPass(scene, camera));
 
   const ao = new GTAOPass(scene, camera, size.x, size.y);
-  ao.blendIntensity = fast ? 0.64 : 0.7;
+  ao.blendIntensity = fast ? 0.4 : 0.55;
   composer.addPass(ao);
 
   composer.addPass(new ShaderPass(SanitizeShader));

@@ -29,17 +29,17 @@ export function createAtmosphere() {
   root.add(motes);
 
   const shaftMat = new THREE.MeshBasicMaterial({
-    color: 0xffd8a0,
+    color: 0xffe2b4,
     transparent: true,
-    opacity: 0.045,
+    opacity: 0.016,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
-  for (let i = 0; i < 6; i++) {
-    const shaft = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 9), shaftMat);
-    shaft.position.set(-2 + i * 0.85, 4.2, -1 + (i % 3) * 1.4);
-    shaft.rotation.x = 0.55;
-    shaft.rotation.y = 0.35;
+  for (let i = 0; i < 3; i++) {
+    const shaft = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 7), shaftMat);
+    shaft.position.set(-1.2 + i * 1.15, 5.2, 1.2 + i * 0.4);
+    shaft.rotation.x = 0.62;
+    shaft.rotation.y = 0.28;
     root.add(shaft);
   }
 
