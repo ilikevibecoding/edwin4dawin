@@ -130,7 +130,7 @@ export function createMaterials(seed = 1) {
   });
 
   const fabricMat = new THREE.MeshStandardMaterial({
-    color: 0x8a96a4,
+    color: 0xb0a898,
     map: fabric.map,
     roughnessMap: fabric.roughnessMap,
     normalMap: fabric.normalMap,
