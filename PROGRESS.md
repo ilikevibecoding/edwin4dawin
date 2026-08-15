@@ -98,7 +98,7 @@ Treat FPS as indicative. This environment has no discrete GPU.
 
 ### Final commit hash
 
-Recorded after this file is committed.
+`e8f0c575888069a39bad1ea9316471895b9d215b`
 
 ## Art direction
 
@@ -276,5 +276,5 @@ Stopped. If work continued, start with the engine-room hero and hatch mass.
 
 ### Commit
 
-- Commit hash: pending
-- Commit message: Final iteration 12 production preview and progress summary
+- Commit hash: e8f0c575888069a39bad1ea9316471895b9d215b
+- Commit message: docs: iteration 12 final stop summary and honest rubric
