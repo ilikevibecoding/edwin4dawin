@@ -31,7 +31,7 @@ export function createVehicle(env) {
     return { ...wp, pivot, spin };
   });
 
-  const cabinFill = new THREE.PointLight(0xffe2c0, 2.4, 3.2, 1.4);
+  const cabinFill = new THREE.PointLight(0xffe2c0, 3.6, 3.4, 1.2);
   cabinFill.position.set(0.05, 1.52, 0.12);
   cabinFill.castShadow = false;
   sprung.add(cabinFill);

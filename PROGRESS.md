@@ -194,3 +194,22 @@ Palette is the second pass. Do not inflate the others.
 
 1. Kill capture-time god-ray cards. Shrink motes.
 2. Darken verge rocks so they stop reading as white crystals.
+
+---
+
+## Iteration 7 — quieter air, darker rocks
+
+Motes no longer dominate. Rocks no longer blow out. The hero still reads as
+a kit-bashed orange truck in a foggy pine stand.
+
+| # | Result | Note |
+|---|--------|------|
+| 1 Lighting | FAIL | Key + hard shadows. Paint has no specular peak. |
+| 2 Materials | FAIL | Satin orange, not clearcoat. |
+| 3 Detail | FAIL | Grille and light bar read. Hood is still a slab. |
+| 4 Post | FAIL | Vignette/grain/SMAA on. AO not visible. |
+| 5 Place | FAIL | Path + trees + puddles. Not a trail you'd drive. |
+| 6 Palette | PASS | |
+| 7 Tech | FAIL | Faceted crowns, some haze-floaters. |
+| 8 Cold-look | FAIL | |
+| 9 Interact | PASS | |

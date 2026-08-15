@@ -244,7 +244,7 @@ export function createRoad(env) {
     color: 0xffffff,
     map: dirtMap,
     normalMap: dirtN,
-    normalScale: new THREE.Vector2(0.55, 0.55),
+    normalScale: new THREE.Vector2(1.15, 1.15),
     roughnessMap: dirtR,
     roughness: 0.92,
     metalness: 0.0,

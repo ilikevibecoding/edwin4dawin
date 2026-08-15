@@ -60,6 +60,9 @@ export function buildBody(mat) {
     box(0.54, 0.04, 0.9, mat.paint, 0, 0.032, 0.02),
     box(0.08, 0.028, 0.98, mat.paint, 0, 0.052, 0.0),
     box(1.46, 0.04, 0.16, mat.paint, 0, -0.008, 0.52),
+    box(1.48, 0.006, 0.012, mat.chrome, 0, 0.03, 0.56),
+    box(0.012, 0.006, 1.08, mat.chrome, 0.74, 0.03, 0),
+    box(0.012, 0.006, 1.08, mat.chrome, -0.74, 0.03, 0),
   );
   for (const sx of [-0.36, 0.36]) {
     add(

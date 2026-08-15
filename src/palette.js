@@ -50,6 +50,6 @@ export const SUN = {
   hemiIntensity: 0.42,
   fog: 0xd4bc90,
   fogDensity: 0.0032,
-  exposure: 1.05,
+  exposure: 1.12,
   envIntensity: 0.72,
 };
