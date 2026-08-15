@@ -50,16 +50,20 @@ export function createWaterSystem(renderer, seed = 1) {
   const rocks = new THREE.Group();
   scene.add(rocks);
   const rockMat = new THREE.MeshStandardMaterial({
-    color: 0x243230,
-    roughness: 0.9,
+    color: 0x3a5848,
+    roughness: 0.88,
     metalness: 0.04,
     flatShading: true,
+    emissive: 0x0a2018,
+    emissiveIntensity: 0.25,
   });
   const silMat = new THREE.MeshStandardMaterial({
-    color: 0x0a181c,
+    color: 0x163038,
     roughness: 1,
     metalness: 0,
     fog: true,
+    emissive: 0x041018,
+    emissiveIntensity: 0.2,
   });
 
   for (let i = 0; i < 18; i++) {

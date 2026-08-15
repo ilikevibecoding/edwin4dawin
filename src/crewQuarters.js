@@ -36,20 +36,20 @@ export function buildCrewQuarters(ctx) {
   }
 
   const table = createFoldTable(mats);
-  table.position.set(0.15, 0.72, 1.15);
+  table.position.set(0.62, 0.72, 1.05);
   root.add(table);
-  addCollider(colliders, 0.15, 0.72, 1.15, 0.55, 0.08, 0.38);
+  addCollider(colliders, 0.62, 0.72, 1.05, 0.42, 0.08, 0.32);
 
-  const bench = mesh(beveledBox(0.32, 0.08, 0.5, 0.01), mats.leather, 0.42, 0.42, 1.15);
+  const bench = mesh(beveledBox(0.28, 0.08, 0.42, 0.01), mats.leather, 0.72, 0.42, 1.05);
   root.add(bench);
-  root.add(mesh(beveledBox(0.28, 0.36, 0.28, 0.008), mats.gunmetal, 0.42, 0.2, 1.15));
-  addCollider(colliders, 0.42, 0.3, 1.15, 0.34, 0.5, 0.5);
+  root.add(mesh(beveledBox(0.24, 0.36, 0.24, 0.008), mats.gunmetal, 0.72, 0.2, 1.05));
+  addCollider(colliders, 0.72, 0.3, 1.05, 0.3, 0.5, 0.42);
 
   buildGalley(ctx, 0.72, 1.85);
   buildWashroom(ctx, -0.55, 1.85);
 
-  const rail = createHandrail(mats, 1.6);
-  rail.position.set(0.15, 0.88, -0.3);
+  const rail = createHandrail(mats, 1.4);
+  rail.position.set(0.58, 0.88, -0.35);
   root.add(rail);
 
   const reading = mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.04, 10), mats.lightWarm, -0.55, 1.55, -1.15);
@@ -66,9 +66,9 @@ export function buildCrewQuarters(ctx) {
     root.add(mesh(beveledBox(0.24, 0.008, 0.008, 0.001), mats.blackout, -0.2, 2.05, 0.22, 0, 0, 0));
   }
 
-  const mug = mesh(new THREE.CylinderGeometry(0.028, 0.024, 0.05, 10), mats.plastic, 0.22, 0.78, 1.05);
+  const mug = mesh(new THREE.CylinderGeometry(0.028, 0.024, 0.05, 10), mats.plastic, 0.58, 0.78, 0.95);
   root.add(mug);
-  const mug2 = mesh(new THREE.CylinderGeometry(0.026, 0.022, 0.045, 10), mats.bakelite, 0.05, 0.78, 1.22);
+  const mug2 = mesh(new THREE.CylinderGeometry(0.026, 0.022, 0.045, 10), mats.bakelite, 0.7, 0.78, 1.12);
   root.add(mug2);
 
   windows.push({ mesh: ctx.crewPorthole, kind: 'porthole' });

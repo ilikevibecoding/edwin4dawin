@@ -65,7 +65,7 @@ let simTime = 0;
 let lastRenderInfo = { calls: 0, triangles: 0, points: 0, lines: 0 };
 
 const views = {
-  controlRoom: { pos: [0.16, 1.52, -8.05], look: [0.02, 1.22, -10.15], fov: 55 },
+  controlRoom: { pos: [0.2, 1.5, -7.55], look: [0.04, 1.08, -9.55], fov: 54 },
   corridor: { pos: [0.06, 1.52, -4.15], look: [0.12, 1.28, -6.05], fov: 55 },
   crewQuarters: { pos: [0.22, 1.48, 0.15], look: [-0.72, 0.82, -1.05], fov: 52 },
   engineRoom: { pos: [0.18, 1.42, 7.55], look: [0.1, 0.58, 9.25], fov: 52 },

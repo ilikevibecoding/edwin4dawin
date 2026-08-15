@@ -192,8 +192,8 @@ function buildBulkheads(ctx) {
     hatch.position.set(0, 0.86, z);
     root.add(hatch);
 
-    addCollider(colliders, -0.78, 1.05, z, 0.62, 2.1, 0.14);
-    addCollider(colliders, 0.78, 1.05, z, 0.62, 2.1, 0.14);
+    addCollider(colliders, -0.86, 1.05, z, 0.48, 2.1, 0.12);
+    addCollider(colliders, 0.86, 1.05, z, 0.48, 2.1, 0.12);
     addCollider(colliders, 0, 2.02, z, 0.95, 0.42, 0.14);
     addCollider(colliders, 0, 0.04, z, 0.95, 0.1, 0.14);
 

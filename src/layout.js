@@ -32,7 +32,7 @@ export const PLAYER = {
   eyeHeight: 1.7,
   radius: 0.2,
   height: 1.78,
-  walkSpeed: 1.35,
+  walkSpeed: 1.55,
   spawn: { x: 0.08, y: 1.7, z: -8.55 },
 };
 

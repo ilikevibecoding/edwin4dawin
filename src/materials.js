@@ -69,9 +69,9 @@ export function createMaterials(seed = 1) {
     map: brushed.map,
     roughnessMap: brushed.roughnessMap,
     normalMap: brushed.normalMap,
-    roughness: 0.32,
-    metalness: 0.86,
-    envMapIntensity: 1.1,
+    roughness: 0.42,
+    metalness: 0.72,
+    envMapIntensity: 0.75,
   });
   brushedMetal.normalScale.set(0.85, 0.85);
 

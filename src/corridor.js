@@ -28,13 +28,13 @@ export function buildCorridor(ctx) {
   }
 
   const railL = createHandrail(mats, 3.6);
-  railL.position.set(-0.52, 0.9, (z0 + z1) * 0.5);
+  railL.position.set(-0.68, 0.9, (z0 + z1) * 0.5);
   root.add(railL);
   const railR = createHandrail(mats, 3.6);
-  railR.position.set(0.52, 0.9, (z0 + z1) * 0.5);
+  railR.position.set(0.68, 0.9, (z0 + z1) * 0.5);
   root.add(railR);
-  addCollider(colliders, -0.52, 0.9, (z0 + z1) * 0.5, 0.06, 0.12, 3.6);
-  addCollider(colliders, 0.52, 0.9, (z0 + z1) * 0.5, 0.06, 0.12, 3.6);
+  addCollider(colliders, -0.68, 0.9, (z0 + z1) * 0.5, 0.06, 0.12, 3.6);
+  addCollider(colliders, 0.68, 0.9, (z0 + z1) * 0.5, 0.06, 0.12, 3.6);
 
   valveOnPipe(root, mats, 0.88, 1.15, -4.4, 0.9, -Math.PI / 2);
   valveOnPipe(root, mats, -0.88, 1.48, -3.2, 0.75, Math.PI / 2);

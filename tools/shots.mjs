@@ -218,10 +218,10 @@ async function runInteractionTests(page) {
     const api = window.debugAPI;
     api.resetScene();
     let after = api.getState().player;
-    for (let i = 0; i < 280; i++) after = api.stepPlayer(0.05, ['KeyS']);
+    for (let i = 0; i < 420; i++) after = api.stepPlayer(0.05, ['KeyS']);
     return after;
   });
-  result.traversal = trav.z > 5.0 ? 'pass' : 'fail';
+  result.traversal = trav.z > 5.2 ? 'pass' : 'fail';
   result.notes.push(`traversal z=${trav.z.toFixed(3)}`);
 
   return result;
