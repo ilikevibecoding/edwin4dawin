@@ -52,6 +52,36 @@
         text-transform: uppercase;
         opacity: 0.92;
       }
+      #hint {
+        position: absolute;
+        left: 22px;
+        bottom: 42px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.55;
+      }
+      #speedo {
+        position: absolute;
+        right: 28px;
+        bottom: 22px;
+        text-align: right;
+        opacity: 0;
+        transition: opacity 160ms linear;
+      }
+      #speedo.show { opacity: 1; }
+      #speedo-num {
+        font-size: 44px;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.02em;
+      }
+      #speedo-unit {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        opacity: 0.7;
+      }
       #fade {
         position: absolute;
         inset: 0;
@@ -95,7 +125,12 @@
     <div id="hud">
       <div id="crosshair"></div>
       <div id="prompt"></div>
-      <div id="status">WASD look · click to lock · E interact</div>
+      <div id="hint">WASD walk · E climb in</div>
+      <div id="status">Trailhead · on foot</div>
+      <div id="speedo">
+        <div id="speedo-num">0</div>
+        <div id="speedo-unit">mph</div>
+      </div>
       <div id="fade"></div>
     </div>
     <script type="module" src="/src/main.js"></script>

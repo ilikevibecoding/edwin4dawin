@@ -81,7 +81,10 @@ export function buildInterior(mat) {
 
   g.add(seat(mat, 0.32, 0.1));
   g.add(seat(mat, -0.32, 0.1));
-  g.add(steering(mat));
+  const wheel = steering(mat);
+  wheel.rotation.order = 'XZY';
+  g.add(wheel);
+  g.userData.steering = wheel;
 
   // Dash body, brow, cowled cluster
   add(

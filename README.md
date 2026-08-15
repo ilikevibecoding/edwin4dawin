@@ -1,6 +1,6 @@
 # Trailhead
 
-First-person walk-around of a procedurally built Jeep on a dirt two-track in a pine forest. Vite + Three.js. No downloaded models or textures.
+First-person walk-around and arcade drive of a procedurally built Jeep on a dirt two-track in a pine forest. Vite + Three.js. No downloaded models or textures.
 
 ## Play it
 
@@ -20,7 +20,11 @@ npx playwright install chromium
 npm run dev
 ```
 
-Click the canvas to lock the pointer. WASD to walk, mouse to look, E to interact (climb in, headlights, check engine).
+Click the canvas to lock the pointer.
+
+- **On foot:** WASD walk (W is forward along your look), mouse look, E to climb in / lights / engine
+- **In the Jeep:** WASD drive (W throttle, S brake/reverse, A/D steer), C chase/cockpit camera, E climb out
+- Space is a handbrake. Shift sprints on foot.
 
 ## Beauty shots
 
@@ -35,11 +39,12 @@ Screenshots land in `shots/iter_N/`. The harness talks to `window.debugAPI.setVi
 
 | File | Owns |
 |------|------|
-| `src/player.js` | First-person capsule, pointer lock, head bob |
+| `src/player.js` | First-person capsule, pointer lock, chase/cockpit cameras |
+| `src/drive.js` | Arcade throttle, steer, terrain follow |
 | `src/vehicle/*` | Jeep body, wheels, interior, lights, kit-bash details |
-| `src/forest.js` | Pines, deciduous trees, undergrowth |
+| `src/forest.js` | Designed pine corridor along the trail |
 | `src/road.js` | Dirt two-track, ruts, puddles, rocks |
-| `src/interact.js` | Ray-adjacent prompts and the three interactions |
+| `src/interact.js` | Prompts and climb in / lights / engine |
 | `src/post.js` | ACES, bloom, GTAO, vignette, grain |
 | `src/main.js` | Boot, loop, debug API |
 

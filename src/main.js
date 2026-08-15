@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { applyView, VIEW_NAMES } from './camera.js';
+import { createDrive } from './drive.js';
 import { createForest } from './forest.js';
 import { createHud } from './hud.js';
 import { createInteract } from './interact.js';
@@ -62,7 +63,11 @@ async function bootApp() {
 
     setBoot(52);
     await yieldFrame();
-    const forest = createForest(sky.env, { treeCount: TIER.trees });
+    const forest = createForest(sky.env, {
+      treeCount: TIER.trees,
+      wanderAt: road.wanderAt,
+      heightAt: road.heightAt,
+    });
     scene.add(forest.mesh);
 
     setBoot(70);
@@ -75,8 +80,16 @@ async function bootApp() {
     const player = createPlayer(camera, colliders, road.heightAt);
     player.attach(renderer.domElement);
 
+    const drive = createDrive({
+      keys: player.keys,
+      heightAt: road.heightAt,
+      wanderAt: road.wanderAt,
+    });
+    drive.update(0);
+    vehicle.update(0, drive.state);
+
     const hud = createHud();
-    const interact = createInteract({ player, vehicle, hud });
+    const interact = createInteract({ player, vehicle, hud, drive });
     const atmosphere = createAtmosphere();
     scene.add(atmosphere.mesh);
 
@@ -118,13 +131,23 @@ async function bootApp() {
       const raw = clock.getDelta();
       const dt = THREE.MathUtils.clamp(Number.isFinite(raw) && raw > 0 ? raw : 1 / 60, 1e-4, 0.05);
       if (!paused) {
-        player.update(dt);
+        drive.update(dt);
+        vehicle.update(dt, drive.state);
+        player.update(dt, drive.state);
         const hover = interact.update();
-        vehicle.update(dt, { speed: 0, steer: 0 });
         atmosphere.update(dt, vehicle.root.position);
-        if (hover && hover.point && !player.seated) {
+        if (sky.follow) sky.follow(vehicle.root.position);
+        hud.speed(drive.state.mph, player.seated);
+        hud.crosshair(!player.seated || player.camMode === 'cockpit');
+        if (player.seated) {
+          hud.hint(player.camMode === 'chase' ? 'WASD drive · C cockpit · E out' : 'WASD drive · C chase · E out');
+        } else {
+          hud.hint('WASD walk · E climb in');
+        }
+        if (hover && hover.worldPoint && !player.seated) {
           highlight.visible = true;
-          highlight.position.set(hover.point.x, hover.point.y + 0.05, hover.point.z);
+          highlight.position.copy(hover.worldPoint);
+          highlight.position.y += 0.05;
           highlight.rotation.z += dt * 1.4;
         } else {
           highlight.visible = false;
@@ -212,6 +235,27 @@ async function bootApp() {
       setLights(on) {
         vehicle.setLights(on);
       },
+      keys: player.keys,
+      driveState() {
+        return { ...drive.state };
+      },
+      playerState() {
+        return {
+          x: player.position.x,
+          y: player.position.y,
+          z: player.position.z,
+          yaw: player.yaw,
+          seated: player.seated,
+          camMode: player.camMode,
+          look: player.lookDir(),
+        };
+      },
+      setLook(y, p) {
+        player.setLook(y, p);
+      },
+      setCamMode(mode) {
+        player.setCamMode(mode);
+      },
     };
 
     setBoot(100);
@@ -221,9 +265,8 @@ async function bootApp() {
     if (capture) {
       applyView(camera, 'hero');
       renderFrames(1);
-    } else {
-      loop();
     }
+    loop();
 
     window.__READY__ = true;
   } catch (err) {

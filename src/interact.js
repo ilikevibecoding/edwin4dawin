@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export function createInteract({ player, vehicle, hud }) {
+export function createInteract({ player, vehicle, hud, drive }) {
   const targets = [
     {
       id: 'door',
@@ -26,6 +26,8 @@ export function createInteract({ player, vehicle, hud }) {
   let busy = false;
   const ray = { origin: null, dir: null };
   const worldEye = new THREE.Vector3();
+  const worldPt = new THREE.Vector3();
+  const exitPt = new THREE.Vector3();
   const marker = new THREE.Group();
   marker.name = 'interact-marker';
   const ring = new THREE.Mesh(
@@ -47,23 +49,21 @@ export function createInteract({ player, vehicle, hud }) {
     return player.seated ? 'Trailhead · in the seat' : 'Trailhead · on foot';
   }
 
-  function worldFromVehicle(local) {
-    worldEye.set(local.x, local.y, local.z);
+  function worldFromVehicle(local, out = worldEye) {
+    out.set(local.x, local.y, local.z);
     if (vehicle.root) {
       vehicle.root.updateMatrixWorld(true);
-      worldEye.applyMatrix4(vehicle.root.matrixWorld);
+      out.applyMatrix4(vehicle.root.matrixWorld);
     }
-    return worldEye;
+    return out;
   }
 
   function nearest(origin) {
     let best = null;
     let bestD = 2.4;
     for (const t of targets) {
-      const dx = t.point.x - origin.x;
-      const dy = t.point.y - origin.y;
-      const dz = t.point.z - origin.z;
-      const d = Math.hypot(dx, dy, dz);
+      worldFromVehicle(t.point, worldPt);
+      const d = origin.distanceTo(worldPt);
       if (d < t.radius && d < bestD) {
         best = t;
         bestD = d;
@@ -88,18 +88,33 @@ export function createInteract({ player, vehicle, hud }) {
     marker.visible = true;
   }
 
+  function exitWorld() {
+    const heading = drive ? drive.state.heading : 0;
+    const hx = Math.sin(heading);
+    const hz = Math.cos(heading);
+    // Driver door is +X in vehicle space.
+    exitPt.set(
+      (drive ? drive.state.x : 0) + hz * 1.7,
+      0,
+      (drive ? drive.state.z : 0) - hx * 1.7,
+    );
+    return exitPt;
+  }
+
   async function fire(id) {
     if (busy) return;
     busy = true;
     if (id === 'door') {
       if (player.seated) {
         await fade();
-        player.stand();
+        if (drive) drive.state.enabled = false;
+        player.stand(exitWorld());
         hud.status(placeLine());
         hud.fade(false);
       } else {
         await fade();
-        player.sit(worldFromVehicle(vehicle.driverEye));
+        if (drive) drive.state.enabled = true;
+        player.sit(() => worldFromVehicle(vehicle.driverEye, worldEye), drive ? drive.state.heading : 0);
         hud.status(placeLine());
         hud.fade(false);
       }
@@ -125,12 +140,23 @@ export function createInteract({ player, vehicle, hud }) {
 
   function update() {
     if (player.seated) {
-      hover = { id: 'door', label: 'E: Climb out', point: targets[0].point };
+      hover = {
+        id: 'door',
+        label: player.camMode === 'chase' ? 'E: Climb out · C: Cockpit' : 'E: Climb out · C: Chase',
+        point: targets[0].point,
+        worldPoint: worldFromVehicle(targets[0].point, worldPt).clone(),
+      };
       hud.prompt(hover.label);
       setMarker(hover.point);
       return hover;
     }
     hover = nearest(player.position);
+    if (hover) {
+      hover = {
+        ...hover,
+        worldPoint: worldFromVehicle(hover.point, worldPt).clone(),
+      };
+    }
     hud.prompt(hover ? hover.label : '');
     setMarker(hover ? hover.point : null);
     return hover;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createWheelDust } from '../dust.js';
 import { group } from '../geo.js';
 import { buildBody } from './body.js';
 import { buildDetails } from './details.js';
@@ -71,9 +72,12 @@ export function createVehicle(env) {
   bar.target.position.set(0, 0.6, 22);
   lamps.add(bar, bar.target);
 
-  const colliders = [
-    new THREE.Box3(new THREE.Vector3(-1.05, 0, -2.2), new THREE.Vector3(1.05, 1.95, 2.25)),
-  ];
+  const localBox = new THREE.Box3(new THREE.Vector3(-1.05, 0, -2.2), new THREE.Vector3(1.05, 1.95, 2.25));
+  const worldBox = localBox.clone();
+  worldBox.userData = { vehicle: true };
+  const colliders = [worldBox];
+  const dust = createWheelDust();
+  root.add(dust.mesh);
 
   const state = { lightsOn: false, wheelAngle: 0 };
 
@@ -88,14 +92,34 @@ export function createVehicle(env) {
   }
   setLights(false);
 
+  function syncCollider() {
+    root.updateMatrixWorld(true);
+    worldBox.copy(localBox).applyMatrix4(root.matrixWorld);
+    worldBox.userData = { vehicle: true };
+  }
+
   function update(dt, drive = {}) {
     const speed = drive.speed ?? 0;
     const steer = drive.steer ?? 0;
-    state.wheelAngle += (speed * dt) / S.wheelRadius;
+    if (drive.x != null) {
+      root.position.set(drive.x, drive.y ?? 0, drive.z ?? 0);
+      root.rotation.order = 'YXZ';
+      root.rotation.y = drive.heading ?? 0;
+      root.rotation.x = drive.pitch ?? 0;
+      root.rotation.z = drive.roll ?? 0;
+    }
+    sprung.position.y = Math.sin(performance.now() * 0.012) * Math.min(0.018, Math.abs(speed) * 0.0014);
+    state.wheelAngle -= (speed * dt) / S.wheelRadius;
     for (const w of wheels) {
       w.spin.rotation.x = state.wheelAngle;
       if (w.steer) w.pivot.rotation.y = steer;
     }
+    if (cabin.userData.steering) {
+      cabin.userData.steering.rotation.x = -0.38;
+      cabin.userData.steering.rotation.z = -steer * 2.6;
+    }
+    dust.update(dt, speed);
+    syncCollider();
   }
 
   return {
