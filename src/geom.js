@@ -84,6 +84,42 @@ export function hatchOpeningShape(width, height, radius = 0.22) {
   return shape;
 }
 
+export function windowBulkhead(outerR, winW, winH, winY, depth = 0.08) {
+  const shape = new Shape();
+  const segs = 48;
+  for (let i = 0; i <= segs; i++) {
+    const a = (i / segs) * Math.PI * 2;
+    const x = Math.cos(a) * outerR;
+    const y = Math.sin(a) * outerR;
+    if (i === 0) shape.moveTo(x, y);
+    else shape.lineTo(x, y);
+  }
+  const hole = new Path();
+  const hw = winW * 0.5;
+  const hh = winH * 0.5;
+  const r = Math.min(0.12, hw - 0.02, hh - 0.02);
+  hole.moveTo(-hw + r, winY - hh);
+  hole.lineTo(hw - r, winY - hh);
+  hole.absarc(hw - r, winY - hh + r, r, -Math.PI * 0.5, 0, false);
+  hole.lineTo(hw, winY + hh - r);
+  hole.absarc(hw - r, winY + hh - r, r, 0, Math.PI * 0.5, false);
+  hole.lineTo(-hw + r, winY + hh);
+  hole.absarc(-hw + r, winY + hh - r, r, Math.PI * 0.5, Math.PI, false);
+  hole.lineTo(-hw, winY - hh + r);
+  hole.absarc(-hw + r, winY - hh + r, r, Math.PI, Math.PI * 1.5, false);
+  hole.closePath();
+  shape.holes.push(hole);
+  const geo = new ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: true,
+    bevelThickness: 0.012,
+    bevelSize: 0.01,
+    bevelSegments: 2,
+  });
+  geo.translate(0, 0, -depth * 0.5);
+  return geo;
+}
+
 export function bulkheadPlate(outerR, width, height, sill, depth = 0.08) {
   const shape = new Shape();
   const segs = 48;

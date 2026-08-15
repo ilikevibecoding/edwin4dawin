@@ -2,7 +2,7 @@
 
 ## Current status
 
-- Iteration: 2
+- Iteration: 4
 - Consecutive all-pass iterations: 0
 - Average FPS: 20.2 (SwiftShader software renderer; indicative only)
 - One-percent-low FPS: 20
@@ -308,5 +308,75 @@ Used, maintained, cramped expedition submarine. Industrial realism rather than s
 
 ### Commit
 
-- Commit hash: pending
+- Commit hash: efe0d4cc
 - Commit message: Record iteration 2 screenshots and start bow/vista fixes.
+
+## Iteration 3
+
+### Implemented
+
+- Bow hull shortened; window vista added
+- Fixed-interval simulation started (still throttled in headless)
+
+### Rubric assessment
+
+All visual items FAIL. `forwardViewport.png` still black. Sonar and silent running passed. Movement/rest/traversal failed due to timer throttle.
+
+### Commit
+
+- Commit hash: 5c189a08
+
+## Iteration 4
+
+### Implemented
+
+- `debugAPI.simulateSeconds` unthrottles physics for tests
+- Viewport frame changed from a solid box to four rails
+- All Playwright interaction tests passed
+- Traversal reached z=18.3 in the engine room
+
+### Rubric assessment
+
+#### 1–11, 15 visual items
+- PASS/FAIL: FAIL
+- Evidence: `controlRoom.png` still box consoles; `corridor.png` is the strongest shot but still sparse; `engineRoom.png` is primitive machinery; `forwardViewport.png` looks at a pillar and dark metal, not a water vista.
+
+#### 12. The player can genuinely walk into the back
+- PASS/FAIL: PASS
+- Evidence: `interactions.json` traversal ended at z=18.3 with no teleport.
+
+#### 13. Interactions work
+- PASS/FAIL: PASS
+- Evidence: pointer lock, movement, collision, sonar (`No immediate contact.`), rest (`6 hours pass.` / `Rested.` / restCycle), silent running toggle all recorded.
+
+#### 14. Technical quality is clean
+- PASS/FAIL: FAIL
+- Evidence: SwiftShader 20 fps / 50 ms; 670 draw calls; no page errors. Performance is indicative only, but the image still shows floating discs and primitive construction.
+
+### Technical metrics
+
+- FPS: 20 (SwiftShader)
+- Draw calls: 670
+- Triangles: 93240
+- Textures: 73
+- Page errors: none
+- Renderer: SwiftShader
+
+### Interaction tests
+
+- Pointer lock: PASS
+- Movement: PASS
+- Collision: PASS
+- Sonar: PASS
+- Rest: PASS
+- Silent running: PASS
+- Full forward-to-aft traversal: PASS
+
+### Next iteration fix list
+
+1. Cut a real observation window in the bow bulkhead and aim the viewport camera through it.
+2. Keep densifying control room, corridor, and engine room until the cold-look test can pass.
+
+### Commit
+
+- Commit hash: pending

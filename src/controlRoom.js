@@ -184,7 +184,7 @@ export function buildControlRoom(mats, collision, interactables, animators) {
   eyepiece.rotation.x = Math.PI * 0.5;
   eyepiece.position.set(0, 1.55, 0.1);
   periscope.add(eyepiece);
-  periscope.position.set(0.42, 0, 1.12);
+  periscope.position.set(0.52, 0, 1.35);
   g.add(periscope);
 
   for (const [x, y, z, label] of [

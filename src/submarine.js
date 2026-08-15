@@ -1,6 +1,6 @@
 import { Group, Mesh, CylinderGeometry } from 'three';
 import { LAYOUT, hullHalfWidthAt } from './seed.js';
-import { addUv2, bulkheadPlate, cyl, invertNormals, mergeGeoms, placed, roundedBox, tBeamRing } from './geom.js';
+import { addUv2, bulkheadPlate, invertNormals, roundedBox, tBeamRing, windowBulkhead } from './geom.js';
 import { makeHatchDoor, makeLightFixture, makeWarningPlate, mesh } from './kit.js';
 import { punchHullOpenings } from './materials.js';
 import { CollisionWorld, wallCollidersForHull } from './collision.js';
@@ -24,10 +24,10 @@ function createHullShell(mats) {
   g.add(shell);
 
   const bowPlate = mesh(
-    bulkheadPlate(r - 0.01, 0.86, 0.56, 1.0 - LAYOUT.hullCenterY, 0.08),
+    windowBulkhead(r - 0.01, 0.82, 0.5, 1.28 - LAYOUT.hullCenterY, 0.09),
     mats.chipped
   );
-  bowPlate.position.set(0, LAYOUT.hullCenterY, 0.42);
+  bowPlate.position.set(0, LAYOUT.hullCenterY, 0.36);
   g.add(bowPlate);
 
   const stern = new CylinderGeometry(r * 0.7, r, 0.8, 32, 3, true);
