@@ -49,7 +49,7 @@ export const SUN = {
   hemiGround: 0x4a3820,
   hemiIntensity: 0.42,
   fog: 0xd4bc90,
-  fogDensity: 0.0045,
+  fogDensity: 0.0032,
   exposure: 1.05,
   envIntensity: 0.72,
 };

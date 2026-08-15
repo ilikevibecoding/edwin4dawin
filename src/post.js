@@ -114,7 +114,7 @@ export function createPost(renderer, scene, camera, { fast = false } = {}) {
   const grade = new ShaderPass(GradeShader);
   composer.addPass(grade);
 
-  if (!fast) composer.addPass(new SMAAPass());
+  composer.addPass(new SMAAPass());
 
   function setSize(w, h) {
     composer.setSize(w, h);
