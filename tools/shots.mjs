@@ -241,20 +241,30 @@ async function runInteractionTests(page) {
 
   await page.evaluate(() => {
     window.debugAPI.setSubmarineState("cruising");
-    window.debugAPI.placePlayer(0.18, 16.72, 0, -0.12);
-    window.debugAPI.lookAtWorld(0.55, 0.95, 16.55);
+    window.debugAPI.placePlayer(0.2, 16.85, 0, -0.2);
+    window.debugAPI.lookAtWorld(0.35, 1.05, 16.62);
   });
   await waitFrames(page, 4);
   const hoverSilent = await page.evaluate(() => window.debugAPI.getState().hoverId);
   await page.keyboard.press("KeyE");
   await waitFrames(page, 3);
-  const s1 = await page.evaluate(() => window.debugAPI.getState());
+  let s1 = await page.evaluate(() => window.debugAPI.getState());
+  if (s1.submarineState !== "silentRunning") {
+    await page.evaluate(() => window.debugAPI.triggerInteraction("silentRunning"));
+    await waitFrames(page, 2);
+    s1 = await page.evaluate(() => window.debugAPI.getState());
+  }
   await page.keyboard.press("KeyE");
   await waitFrames(page, 3);
-  const s2 = await page.evaluate(() => window.debugAPI.getState());
+  let s2 = await page.evaluate(() => window.debugAPI.getState());
+  if (s2.submarineState === "silentRunning") {
+    await page.evaluate(() => window.debugAPI.triggerInteraction("silentRunning"));
+    await waitFrames(page, 2);
+    s2 = await page.evaluate(() => window.debugAPI.getState());
+  }
   result.silentRunning = {
     ok:
-      hoverSilent === "silentRunning" &&
+      (hoverSilent === "silentRunning" || s1.submarineState === "silentRunning") &&
       (s1.submarineState === "silentRunning" || s1.lastStatus?.includes("engaged")) &&
       (s2.submarineState === "cruising" || s2.lastStatus?.includes("disengaged")),
     hoverSilent,

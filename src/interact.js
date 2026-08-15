@@ -53,7 +53,7 @@ export class InteractionSystem {
         obj.getWorldPosition(wp);
         const to = wp.clone().sub(this.camera.position);
         const dist = to.length();
-        if (dist < 2.3 && dist > 0.05 && dir.dot(to.normalize()) > 0.62) {
+        if (dist < 2.8 && dist > 0.04 && dir.dot(to.normalize()) > 0.28) {
           hit = { object: obj, point: wp, distance: dist };
           break;
         }

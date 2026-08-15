@@ -161,7 +161,7 @@ function makeBowCap(mats) {
   const shape = new THREE.Shape();
   shape.absarc(0, HULL.centerY, HULL.radius - 0.01, 0, Math.PI * 2, false);
   const hole = new THREE.Path();
-  hole.absellipse(0, 1.28, 0.42, 0.32, 0, Math.PI * 2, true);
+  hole.absellipse(0, 1.32, 0.62, 0.4, 0, Math.PI * 2, true);
   shape.holes.push(hole);
   const geo = new THREE.ExtrudeGeometry(shape, {
     depth: 0.16,
@@ -175,34 +175,34 @@ function makeBowCap(mats) {
   cap.position.z = -0.02;
   g.add(cap);
 
-  const frame = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.035, 10, 28), mats.brushedMetal);
-  frame.position.set(0, 1.28, 0.1);
-  frame.scale.set(1.12, 0.86, 1);
+  const frame = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.04, 10, 28), mats.brushedMetal);
+  frame.position.set(0, 1.32, 0.1);
+  frame.scale.set(1.18, 0.78, 1);
   g.add(frame);
 
-  const inner = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.018, 8, 24), mats.chippedPaint);
-  inner.position.set(0, 1.28, 0.14);
-  inner.scale.set(1.12, 0.86, 1);
+  const inner = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.02, 8, 24), mats.chippedPaint);
+  inner.position.set(0, 1.32, 0.14);
+  inner.scale.set(1.18, 0.78, 1);
   g.add(inner);
 
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.03, 6), mats.brushedMetal);
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.03, 6), mats.brushedMetal);
     bolt.rotation.x = Math.PI / 2;
-    bolt.position.set(Math.cos(a) * 0.4, 1.28 + Math.sin(a) * 0.3, 0.16);
+    bolt.position.set(Math.cos(a) * 0.55, 1.32 + Math.sin(a) * 0.36, 0.16);
     g.add(bolt);
   }
 
-  const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.07, 28), mats.glassThick);
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.08, 28), mats.glassThick);
   glass.rotation.x = Math.PI / 2;
-  glass.scale.set(1.12, 1, 0.86);
-  glass.position.set(0, 1.28, 0.02);
+  glass.scale.set(1.18, 1, 0.78);
+  glass.position.set(0, 1.32, 0.02);
   glass.userData.window = "forward";
   g.add(glass);
 
-  const seal = new THREE.Mesh(new THREE.TorusGeometry(0.355, 0.012, 8, 24), mats.rubber);
-  seal.position.set(0, 1.28, 0.08);
-  seal.scale.set(1.12, 0.86, 1);
+  const seal = new THREE.Mesh(new THREE.TorusGeometry(0.49, 0.014, 8, 24), mats.rubber);
+  seal.position.set(0, 1.32, 0.08);
+  seal.scale.set(1.18, 0.78, 1);
   g.add(seal);
 
   return g;

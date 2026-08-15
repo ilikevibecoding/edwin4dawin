@@ -65,14 +65,14 @@ export const PALETTE = {
 
 export const VIEWS = {
   controlRoom: {
-    position: [0.06, 1.58, 3.85],
-    target: [0.0, 1.22, 0.7],
-    fov: 60,
+    position: [0.0, 1.5, 0.82],
+    target: [0.02, 1.18, 2.55],
+    fov: 62,
   },
   corridor: {
-    position: [0.0, 1.62, 5.05],
-    target: [0.0, 1.35, 7.7],
-    fov: 64,
+    position: [0.0, 1.55, 5.55],
+    target: [0.05, 1.28, 7.85],
+    fov: 62,
   },
   crewQuarters: {
     position: [0.12, 1.6, 8.55],

@@ -244,7 +244,7 @@ export function buildEngineRoom(mats, collision, ctx) {
     new THREE.BoxGeometry(0.7, 0.9, 0.5),
     new THREE.MeshBasicMaterial({ visible: false })
   );
-  interact.position.set(0.55, 0.95, 16.55);
+  interact.position.set(0.35, 1.05, 16.62);
   interact.userData.interact = { id: "silentRunning", prompt: "E: Silent Running" };
   g.add(interact);
   ctx.interactables.push(interact);

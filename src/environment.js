@@ -67,8 +67,12 @@ export function buildLights(parent, ctx) {
 
   lights.controlFill.position.set(0.0, 1.4, 0.55);
 
-  lights.corridorA.position.set(0, 1.95, 5.5);
-  lights.corridorB.position.set(0, 1.95, 7.15);
+  lights.corridorA.position.set(0, 1.85, 5.7);
+  lights.corridorB.position.set(0, 1.85, 7.15);
+  const corridorFill = new THREE.PointLight(0xffe0c0, 4.2, 4.8, 1.1);
+  corridorFill.position.set(0.1, 1.55, 6.2);
+  parent.add(corridorFill);
+  lights.corridorFill = corridorFill;
   lights.corridorCool.position.set(1.0, 1.4, 6.55);
 
   lights.crewKey.position.set(0.1, 2.05, 10.4);
@@ -110,6 +114,7 @@ export function buildLights(parent, ctx) {
     corridorA: 5.2,
     corridorB: 5.0,
     corridorCool: 2.4,
+    corridorFill: 4.2,
     crewKey: 8.0,
     crewFill: 3.4,
     engineKey: 13.0,
