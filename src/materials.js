@@ -194,7 +194,7 @@ export function createMaterials(seed = 1) {
     roughness: 0.08,
     metalness: 0.02,
     transparent: true,
-    opacity: 0.12,
+    opacity: 0.08,
     envMapIntensity: 1.6,
     clearcoat: 1,
     clearcoatRoughness: 0.04,

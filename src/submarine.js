@@ -51,12 +51,11 @@ function buildHull(ctx) {
   const wainscotR = mesh(beveledBox(0.05, 0.72, length - 0.4, 0.006), mats.hullGreen, 1.08, 0.58, zMid);
   root.add(wainscotL, wainscotR);
 
-  const fwdDome = new THREE.SphereGeometry(HULL.radius, 40, 18, 0, Math.PI * 2, 0, Math.PI * 0.52);
-  fwdDome.scale(-1, 1, 1);
-  fwdDome.computeVertexNormals();
-  const dome = mesh(fwdDome, mats.hullPaint, 0, HULL.centerY, ZONES.control.z0 + 0.05);
-  dome.rotation.x = Math.PI / 2;
-  root.add(dome);
+  const fwdPlate = new THREE.RingGeometry(0.4, HULL.radius + 0.05, 48);
+  const fwd = mesh(fwdPlate, mats.hullPaint, 0, 1.38, ZONES.control.z0 + 0.08);
+  root.add(fwd);
+  const fwdBack = mesh(new THREE.CircleGeometry(HULL.radius + 0.02, 40), mats.blackout, 0, HULL.centerY, ZONES.control.z0 - 0.12);
+  root.add(fwdBack);
 
   const aftCap = mesh(beveledBox(HULL.radius * 1.7, HULL.radius * 1.7, 0.12, 0.02), mats.hullPaint, 0, HULL.centerY, ZONES.engine.z1 + 0.04);
   root.add(aftCap);
