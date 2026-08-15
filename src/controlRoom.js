@@ -73,7 +73,9 @@ export function buildControlRoom(mats, collision, ctx) {
   const helmFace = new THREE.Group();
   helmFace.position.set(0, 0.86, 1.28);
   helmFace.rotation.x = -0.5;
-  addDisplay(helmFace, helmDisp, 0.42, 0.24, mats);
+  addDisplay(helmFace, helmDisp, 0.5, 0.3, mats);
+  const bigSonar = addDisplay(helmFace, ctx.displays.sonar, 0.36, 0.22, mats);
+  bigSonar.position.set(0, 0.2, 0.02);
   const helmG1 = createGauge(mats, "SPD", 0.34);
   helmG1.position.set(-0.22, 0.02, 0.02);
   helmG1.scale.setScalar(0.7);
