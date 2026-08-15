@@ -115,6 +115,9 @@ export function createDebugAPI(ctx) {
       hud.setStatus('');
       hud.setPrompt('');
     },
+    setBusy(v) {
+      interact.setBusy(!!v);
+    },
   };
 
   window.debugAPI = api;

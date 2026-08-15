@@ -204,13 +204,18 @@ async function runInteractionTests(page) {
     }));
     result.rest = /hours|rest/i.test(rest.status) || rest.fade > 0.2;
     result.restDetail = rest;
-    await page.waitForTimeout(2800);
+    await page.waitForTimeout(4500);
+    await page.evaluate(() => {
+      window.debugAPI.setBusy?.(false);
+      window.debugAPI.setSubmarineState('cruising');
+    });
   } catch (err) {
     result.restError = String(err);
   }
 
   try {
     await page.evaluate(() => {
+      window.debugAPI.setBusy?.(false);
       window.debugAPI.clearStatus?.();
       window.debugAPI.setSubmarineState('cruising');
       window.debugAPI.aimInteract('silentRunning');
