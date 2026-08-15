@@ -31,13 +31,17 @@ export function mergeStatic(root, skipSet = new Set()) {
   for (const { material, meshes } of buckets.values()) {
     if (meshes.length < 2) continue;
     const geos = meshes.map((m) => {
-      const g = m.geometry.clone();
+      let g = m.geometry.clone();
+      if (g.index) {
+        const ni = g.toNonIndexed();
+        g.dispose();
+        g = ni;
+      }
       for (const key of Object.keys(g.attributes)) {
         if (key !== 'position' && key !== 'normal' && key !== 'uv') g.deleteAttribute(key);
       }
       if (!g.attributes.uv && g.attributes.position) {
-        const n = g.attributes.position.count;
-        g.setAttribute('uv', new Float32BufferAttribute(n * 2, 2));
+        g.setAttribute('uv', new Float32BufferAttribute(g.attributes.position.count * 2, 2));
       }
       g.morphAttributes = {};
       if (g.clearGroups) g.clearGroups();

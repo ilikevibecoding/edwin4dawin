@@ -63,25 +63,6 @@ function createDeck(mats) {
   return g;
 }
 
-function createLining(mats) {
-  const g = new Group();
-  const y = 1.08;
-  const hw = Math.max(0.2, hullHalfWidthAt(y) - 0.04);
-  const tilt = Math.atan2(y - LAYOUT.hullCenterY, hw);
-  for (let z = 1.2; z < 15.6; z += 0.84) {
-    if (Math.abs(z - 6.55) < 0.4 || Math.abs(z - 10.7) < 0.4) continue;
-    const plate = mesh(roundedBox(0.38, 0.48, 0.03, 0.008, 1), mats.hullGreen);
-    plate.position.set(-hw, y, z);
-    plate.rotation.z = -tilt;
-    g.add(plate);
-    const plateR = plate.clone();
-    plateR.position.x = hw;
-    plateR.rotation.z = tilt;
-    g.add(plateR);
-  }
-  return g;
-}
-
 function createRibs(mats) {
   const g = new Group();
   const r = LAYOUT.hullRadius - 0.02;
@@ -133,7 +114,6 @@ export function buildSubmarine(scene, mats) {
   root.add(createHullShell(mats));
   root.add(createDeck(mats));
   root.add(createRibs(mats));
-  root.add(createLining(mats));
 
   const rooms = LAYOUT.rooms;
   root.add(createBulkhead(mats, rooms.control.z1, 1));

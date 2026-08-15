@@ -1,0 +1,16 @@
+[debug] [vite] connecting...
+[debug] [vite] connected.
+[error] THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index 3. All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them.
+[error] THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index 3. All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them.
+[error] THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index 4. All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them.
+[error] THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index 8. All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them.
+[error] THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index 1. All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them.
+[error] THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index 2. All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them.
+[error] THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index 1. All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them.
+[error] THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index 1. All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them.
+[error] THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index 4. All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them.
+[error] THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index 1. All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them.
+[warning] [.WebGL-0x3dc00114e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[warning] [.WebGL-0x3dc00114e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[warning] [.WebGL-0x3dc00114e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[warning] [.WebGL-0x3dc00114e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)

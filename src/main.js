@@ -204,10 +204,11 @@ function tick(now) {
   lastSim = now;
   clock.elapsedTime += dt;
   simulate(dt);
-  app.frameTimes.push(dt * 1000);
-  if (app.frameTimes.length > 120) app.frameTimes.shift();
   post.setCamera(app.activeCamera);
+  const t0 = performance.now();
   post.render(dt);
+  app.frameTimes.push(Math.max(performance.now() - t0, dt * 1000));
+  if (app.frameTimes.length > 120) app.frameTimes.shift();
   requestAnimationFrame(tick);
 }
 

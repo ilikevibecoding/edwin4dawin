@@ -59,9 +59,12 @@ export function buildCorridor(mats, collision, interactables, animators) {
   porthole.rotation.y = -Math.PI * 0.5;
   g.add(porthole);
 
-  const frame = mesh(roundedBox(0.12, 0.42, 0.42, 0.02, 2), mats.chipped);
-  frame.position.set(0.72, 1.32, 6.55);
-  g.add(frame);
+  const cheek = mesh(roundedBox(0.06, 0.42, 0.08, 0.012, 1), mats.chipped);
+  cheek.position.set(0.68, 1.32, 6.32);
+  g.add(cheek);
+  const cheek2 = cheek.clone();
+  cheek2.position.z = 6.78;
+  g.add(cheek2);
 
   const grate1 = makeFloorGrate(mats, 0.5, 0.7);
   grate1.position.set(0, 0.03, 5.4);

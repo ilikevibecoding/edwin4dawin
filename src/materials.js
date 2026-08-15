@@ -280,7 +280,7 @@ export function createMaterials() {
       color: 0xf0ebe0,
       roughness: 0.58,
       metalness: 0.06,
-      normalScale: { x: 0.22, y: 0.22 },
+      normalScale: { x: 0.1, y: 0.1 },
     });
 
     const hullGreen = std({

@@ -1,0 +1,106 @@
+{
+  "pointerLock": {
+    "pass": true,
+    "lockOn": true,
+    "lockOff": false,
+    "note": "headless pointer lock may be limited"
+  },
+  "movement": {
+    "pass": true,
+    "before": {
+      "x": 0,
+      "y": 0,
+      "z": 5.4,
+      "yaw": 0,
+      "pitch": 0,
+      "locked": true
+    },
+    "after": {
+      "x": 0,
+      "y": 0,
+      "z": 3.5298004799999796,
+      "yaw": 0,
+      "pitch": 0,
+      "locked": true
+    }
+  },
+  "collision": {
+    "pass": true,
+    "c0": {
+      "x": 0,
+      "y": 0,
+      "z": 0.55,
+      "yaw": 0,
+      "pitch": 0,
+      "locked": true
+    },
+    "c1": {
+      "x": 0,
+      "y": 0,
+      "z": 0.46,
+      "yaw": 0,
+      "pitch": 0,
+      "locked": true
+    }
+  },
+  "sonar": {
+    "pass": true,
+    "state": {
+      "prompt": "E: Active Sonar Ping",
+      "status": "No immediate contact.",
+      "hovered": "sonar",
+      "fade": 0,
+      "lighting": "cruising",
+      "silent": false
+    }
+  },
+  "rest": {
+    "pass": true,
+    "restMid": {
+      "prompt": "E: Rest",
+      "status": "6 hours pass.",
+      "hovered": "rest",
+      "fade": 0.9946099999997823,
+      "lighting": "restCycle",
+      "silent": false
+    },
+    "restEnd": {
+      "prompt": "E: Rest",
+      "status": "Rested.",
+      "hovered": "rest",
+      "fade": 0,
+      "lighting": "cruising",
+      "silent": false
+    }
+  },
+  "silentRunning": {
+    "pass": true,
+    "silentOn": {
+      "prompt": "E: Silent Running",
+      "status": "Silent running engaged.",
+      "hovered": "silentRunning",
+      "fade": 0,
+      "lighting": "silentRunning",
+      "silent": true
+    },
+    "silentOff": {
+      "prompt": "E: Silent Running",
+      "status": "Silent running disengaged.",
+      "hovered": "silentRunning",
+      "fade": 0,
+      "lighting": "cruising",
+      "silent": false
+    }
+  },
+  "traversal": {
+    "pass": true,
+    "end": {
+      "x": 0.21999999999999997,
+      "y": 0,
+      "z": 18.3,
+      "yaw": 3.141592653589793,
+      "pitch": 0,
+      "locked": true
+    }
+  }
+}

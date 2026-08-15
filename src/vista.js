@@ -22,10 +22,10 @@ function waterCanvas() {
   c.height = 512;
   const ctx = c.getContext('2d');
   const g = ctx.createLinearGradient(0, 0, 0, 512);
-  g.addColorStop(0, '#3a7a88');
-  g.addColorStop(0.35, '#1d5360');
-  g.addColorStop(0.7, '#123844');
-  g.addColorStop(1, '#0a242c');
+  g.addColorStop(0, '#6eb4c0');
+  g.addColorStop(0.3, '#3a7e8c');
+  g.addColorStop(0.65, '#1e5360');
+  g.addColorStop(1, '#12343c');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 512, 512);
   ctx.fillStyle = 'rgba(140,200,210,0.16)';
@@ -58,7 +58,7 @@ export function createWindowVista() {
     new PlaneGeometry(4.2, 2.4),
     new MeshBasicMaterial({
       map: waterCanvas(),
-      color: 0xc8e8ec,
+      color: 0xe4f4f6,
       fog: false,
       side: DoubleSide,
       depthWrite: false,
@@ -92,7 +92,7 @@ export function createWindowVista() {
       latheProfile(pts, 6),
       new MeshBasicMaterial({ color: new Color().setHSL(0.48, 0.18, 0.16 + rand() * 0.06), fog: false })
     );
-    rock.position.set(-1.15 + i * 0.55, -0.62 - rand() * 0.12, -0.62 - rand() * 0.28);
+    rock.position.set(-1.15 + i * 0.55, -0.28 - rand() * 0.1, -0.58 - rand() * 0.22);
     rock.scale.set(1.3 + rand() * 0.4, 1.2 + rand() * 0.5, 1.1);
     rock.renderOrder = -1;
     g.add(rock);
