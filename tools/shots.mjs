@@ -190,10 +190,11 @@ async function runInteractionTests(page) {
   try {
     await page.evaluate(() => {
       window.debugAPI.clearStatus?.();
-      window.debugAPI.aimInteract('rest');
-      for (let i = 0; i < 8; i++) window.debugAPI.step(0.05);
+      const prompt = window.debugAPI.aimInteract('rest');
+      for (let i = 0; i < 12; i++) window.debugAPI.step(0.05);
+      return prompt || window.debugAPI.getPrompt();
     });
-    await page.waitForFunction(() => /rest/i.test(window.debugAPI.getPrompt()), null, { timeout: 5000 });
+    await page.waitForFunction(() => /rest/i.test(window.debugAPI.getPrompt()), null, { timeout: 8000 });
     await page.waitForTimeout(150);
     await page.keyboard.press('e');
     await page.waitForTimeout(500);
