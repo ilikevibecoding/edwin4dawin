@@ -136,8 +136,7 @@ function buildRibs(ctx) {
       HULL.centerY,
       z,
     );
-    ring.rotation.y = Math.PI / 2;
-    ring.rotation.z = Math.PI * 0.22;
+    ring.rotation.z = -Math.PI * 0.22;
     root.add(ring);
 
     const flange = mesh(
@@ -147,8 +146,7 @@ function buildRibs(ctx) {
       HULL.centerY,
       z + 0.035,
     );
-    flange.rotation.y = Math.PI / 2;
-    flange.rotation.z = Math.PI * 0.3;
+    flange.rotation.z = -Math.PI * 0.28;
     root.add(flange);
 
     if (i % 2 === 0) {
@@ -175,11 +173,9 @@ function buildBulkheads(ctx) {
   const { mats, root, colliders } = ctx;
   BULKHEADS.forEach((z, idx) => {
     const frame = mesh(new THREE.TorusGeometry(0.58, 0.038, 10, 32), mats.chippedPaint, 0, 0.86, z);
-    frame.rotation.y = Math.PI / 2;
     root.add(frame);
 
     const ringInner = mesh(new THREE.TorusGeometry(0.54, 0.018, 8, 28), mats.gunmetal, 0, 0.86, z);
-    ringInner.rotation.y = Math.PI / 2;
     root.add(ringInner);
 
     const plateL = mesh(beveledBox(0.55, 2.05, 0.07, 0.01), mats.hullGreen, -0.72, 1.02, z);
