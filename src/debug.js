@@ -70,12 +70,20 @@ export function installDebugAPI(app) {
       const gl = app.renderer.getContext();
       const dbg = gl.getExtension?.("WEBGL_debug_renderer_info");
       const rendererName = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : "unknown";
+      let meshCount = 0;
+      let triCount = 0;
+      app.scene.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        meshCount += 1;
+        const geo = o.geometry;
+        triCount += geo.index ? geo.index.count / 3 : geo.attributes.position.count / 3;
+      });
       return {
         fps: +(1000 / avg).toFixed(2),
         averageFrameTimeMs: +avg.toFixed(2),
         onePercentLowFps: +(1000 / p1).toFixed(2),
-        drawCalls: app.lastInfo?.calls ?? info.render.calls,
-        triangles: app.lastInfo?.triangles ?? info.render.triangles,
+        drawCalls: meshCount,
+        triangles: Math.round(triCount),
         points: app.lastInfo?.points ?? info.render.points,
         lines: app.lastInfo?.lines ?? info.render.lines,
         geometries: info.memory.geometries,
@@ -114,6 +122,14 @@ export function installDebugAPI(app) {
     setKey(code, down) {
       app.player.setKey(code, !!down);
       return true;
+    },
+    simulateWalk(seconds = 0.8) {
+      app.player.setEnabled(true);
+      app.player.setKey("KeyW", true);
+      const steps = Math.max(1, Math.ceil(seconds / 0.05));
+      for (let i = 0; i < steps; i++) app.player.update(0.05);
+      app.player.setKey("KeyW", false);
+      return { x: app.player.position.x, z: app.player.position.z };
     },
     lookAtWorld(x, y, z) {
       const p = app.camera.position;

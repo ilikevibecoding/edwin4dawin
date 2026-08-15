@@ -185,7 +185,12 @@ export function buildCrewQuarters(mats, collision, ctx) {
   const frame = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.022, 8, 18), mats.brushedMetal);
   const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.05, 18), mats.glassThick);
   glass.rotation.x = Math.PI / 2;
-  porthole.add(frame, glass);
+  const waterCard = new THREE.Mesh(
+    new THREE.CircleGeometry(0.115, 18),
+    new THREE.MeshBasicMaterial({ color: 0x082830, fog: false })
+  );
+  waterCard.position.z = -0.03;
+  porthole.add(frame, waterCard, glass);
   porthole.position.set(1.2, 1.45, 10.8);
   porthole.rotation.y = -Math.PI / 2;
   g.add(porthole);

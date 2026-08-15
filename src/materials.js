@@ -577,9 +577,9 @@ export function createMaterials() {
       envMapIntensity: 1.15,
     }, 1.5),
     oilyMachinery: makeMat(oily, {
-      roughness: 0.38,
-      metalness: 0.78,
-      envMapIntensity: 1.05,
+      roughness: 0.52,
+      metalness: 0.7,
+      envMapIntensity: 0.8,
     }, 2),
     rubber: makeMat(rubber, {
       roughness: 0.92,

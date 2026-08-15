@@ -288,8 +288,19 @@ export function buildEngineRoom(mats, collision, ctx) {
   g.add(access);
 
   const drip = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.01, 0.22), mats.wetMetal);
-  drip.position.set(-0.55, 0.02, 19.7);
+  drip.position.set(-0.72, 0.02, 19.7);
   g.add(drip);
+
+  for (let i = 0; i < 4; i++) {
+    const box = createJunctionBox(mats, 0.16 + i * 0.02, 0.13, 0.07);
+    box.position.set(1.05, 0.85 + (i % 2) * 0.22, 17.6 + Math.floor(i / 2) * 0.35);
+    box.rotation.y = -Math.PI / 2;
+    g.add(box);
+  }
+  const extraPump = createPump(mats, 0.75);
+  extraPump.position.set(-0.95, 0.24, 18.7);
+  g.add(extraPump);
+  collision.addAABB(-0.95, 0.3, 18.7, 0.4, 0.55, 0.35, "pump3");
 
   ctx.rooms.engine = g;
   return g;

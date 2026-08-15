@@ -20,7 +20,7 @@ function makeHullSkin(mats) {
     HULL.radius,
     HULL.radius,
     HULL.length,
-    56,
+    80,
     10,
     true
   );

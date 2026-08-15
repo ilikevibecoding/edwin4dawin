@@ -27,21 +27,21 @@ export function buildUnderwater(mats, renderer) {
     side: THREE.BackSide,
     fog: false,
   });
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(90, 24, 16), waterMat);
-  dome.position.set(0, 1.2, -8);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(28, 24, 16), waterMat);
+  dome.position.set(0, 0.4, -22);
   g.add(dome);
 
   const mid = new THREE.Mesh(
-    new THREE.SphereGeometry(55, 20, 12),
+    new THREE.SphereGeometry(16, 20, 12),
     new THREE.MeshBasicMaterial({
       color: PALETTE.waterMid,
       side: THREE.BackSide,
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.28,
       fog: false,
     })
   );
-  mid.position.set(0, 0.8, -6);
+  mid.position.set(0, -0.4, -14);
   g.add(mid);
 
   const rockMat = new THREE.MeshStandardMaterial({
@@ -55,14 +55,14 @@ export function buildUnderwater(mats, renderer) {
   const geos = [];
   for (let i = 0; i < 18; i++) {
     const mesh = new THREE.Mesh(rockGeometry(rng, rng.range(1.8, 5.5)), rockMat);
-    mesh.position.set(rng.range(-18, 14), rng.range(-8, -1.2), rng.range(-28, 8));
+    mesh.position.set(rng.range(-14, 10), rng.range(-7, -1.6), rng.range(-34, -6));
     mesh.rotation.set(rng.range(0, 1), rng.range(0, 6), rng.range(0, 1));
     rocks.add(mesh);
     geos.push(mesh);
   }
   const ridge = new THREE.Mesh(rockGeometry(rng, 14), rockMat);
-  ridge.position.set(-16, -6, -12);
-  ridge.scale.set(1.8, 0.7, 2.4);
+  ridge.position.set(-8.5, -3.2, -16);
+  ridge.scale.set(1.1, 0.55, 1.6);
   rocks.add(ridge);
   rocks.userData.ridge = ridge;
   g.add(rocks);
@@ -72,9 +72,9 @@ export function buildUnderwater(mats, renderer) {
   const positions = new Float32Array(N * 3);
   const seeds = new Float32Array(N);
   for (let i = 0; i < N; i++) {
-    positions[i * 3] = rng.range(-8, 8);
-    positions[i * 3 + 1] = rng.range(-3, 4);
-    positions[i * 3 + 2] = rng.range(-20, 6);
+    positions[i * 3] = rng.range(-6, 6);
+    positions[i * 3 + 1] = rng.range(-2, 3.2);
+    positions[i * 3 + 2] = rng.range(-18, -0.4);
     seeds[i] = rng.next();
   }
   siltGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -96,7 +96,7 @@ export function buildUnderwater(mats, renderer) {
   const midGeo = siltGeo.clone();
   const midPos = midGeo.attributes.position;
   for (let i = 0; i < midPos.count; i++) {
-    midPos.setXYZ(i, midPos.getX(i) * 1.8, midPos.getY(i) - 1, midPos.getZ(i) - 8);
+    midPos.setXYZ(i, midPos.getX(i) * 1.6, midPos.getY(i) - 1.2, Math.min(-6, midPos.getZ(i) - 6));
   }
   const siltMid = new THREE.Points(
     midGeo,
@@ -140,7 +140,7 @@ export function buildUnderwater(mats, renderer) {
   for (let i = 0; i < B; i++) {
     bp[i * 3] = rng.range(-12, 12);
     bp[i * 3 + 1] = rng.range(-4, 3);
-    bp[i * 3 + 2] = rng.range(-22, 2);
+    bp[i * 3 + 2] = rng.range(-20, -2);
   }
   bioGeo.setAttribute("position", new THREE.BufferAttribute(bp, 3));
   const bio = new THREE.Points(
@@ -195,27 +195,39 @@ export function buildUnderwater(mats, renderer) {
   }
   g.add(bubbles);
 
+  const portVolume = new THREE.Mesh(
+    new THREE.SphereGeometry(1.1, 12, 10),
+    new THREE.MeshBasicMaterial({ color: 0x062028, fog: false })
+  );
+  portVolume.position.set(1.85, 1.38, 6.55);
+  g.add(portVolume);
+  const crewVolume = portVolume.clone();
+  crewVolume.position.set(1.85, 1.45, 10.8);
+  g.add(crewVolume);
+
   g.userData.update = (t, motion) => {
     const m = motion ? 1 : 0;
     const tt = motion ? t : 12.0;
-    rocks.position.x = Math.sin(tt * 0.012) * 2.2 * m + (motion ? 0 : -1.1);
-    rocks.position.z = (tt * 0.085) % 18;
-    if (!motion) rocks.position.z = 6.4;
+    rocks.position.x = (motion ? Math.sin(tt * 0.012) * 2.4 : -2.4);
+    rocks.position.z = 0;
+    ridge.position.x = -8.5 + (motion ? ((tt * 0.12) % 22) - 8 : -2.2);
     const p = silt.geometry.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const s = seeds[i];
-      p.setX(i, ((positions[i * 3] + tt * (0.12 + s * 0.15) * (motion ? 1 : 0)) % 16) - 8);
+      const z = positions[i * 3 + 2] + (motion ? (tt * (0.18 + s * 0.2)) % 16 : 4.2);
+      p.setX(i, positions[i * 3] + Math.sin(tt * 0.2 + s * 6) * 0.08 * m);
       p.setY(i, positions[i * 3 + 1] + Math.sin(tt * 0.3 + s * 8) * 0.05 * m);
+      p.setZ(i, Math.min(-0.35, z > -0.35 ? z - 16 : z));
     }
-    p.needsUpdate = motion;
-    siltMid.position.x = Math.sin(tt * 0.05) * 0.8 * m;
-    siltMid.position.z = ((tt * 0.04) % 6) * m;
-    siltFar.position.z = ((tt * 0.02) % 8) * m;
+    p.needsUpdate = true;
+    siltMid.position.x = Math.sin(tt * 0.04) * 0.6 * m;
+    siltFar.position.x = Math.sin(tt * 0.02) * 1.2 * m;
     bio.position.x = Math.sin(tt * 0.08) * 0.6 * m;
-    bubbles.children.forEach((b, i) => {
+    bubbles.children.forEach((b) => {
       const ph = b.userData.phase;
       b.position.y = 0.5 + ((tt * 0.12 + ph) % 1.6);
       b.position.x = Math.sin(tt * 0.4 + ph) * 0.15;
+      b.position.z = -0.6 - (ph % 0.5);
     });
   };
 

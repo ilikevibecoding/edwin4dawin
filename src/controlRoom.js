@@ -240,6 +240,20 @@ export function buildControlRoom(mats, collision, ctx) {
   collision.addAABB(0.58, 0.4, 2.58, 0.42, 0.8, 0.42, "nav-seat");
   collision.addAABB(0.42, 1.0, 0.72, 0.2, 1.8, 0.24, "periscope");
 
+  for (let i = 0; i < 6; i++) {
+    const bank = createSwitchBank(mats, 6);
+    bank.position.set(-1.02, 0.72 + (i % 3) * 0.16, 2.6 + Math.floor(i / 3) * 0.35);
+    bank.rotation.y = Math.PI / 2;
+    g.add(bank);
+  }
+  const cable = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, 1.6, 6),
+    mats.plastic
+  );
+  cable.rotation.x = Math.PI / 2;
+  cable.position.set(-0.9, 1.85, 2.2);
+  g.add(cable);
+
   const radio = new THREE.Mesh(beveledBox(0.28, 0.42, 0.22, 0.01), mats.hullGreen);
   radio.position.set(1.05, 1.15, 1.35);
   g.add(radio);

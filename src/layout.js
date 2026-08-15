@@ -65,9 +65,9 @@ export const PALETTE = {
 
 export const VIEWS = {
   controlRoom: {
-    position: [0.08, 1.62, 4.15],
-    target: [0.02, 1.28, 0.55],
-    fov: 62,
+    position: [0.06, 1.58, 3.85],
+    target: [0.0, 1.22, 0.7],
+    fov: 60,
   },
   corridor: {
     position: [0.0, 1.62, 5.05],
@@ -90,9 +90,9 @@ export const VIEWS = {
     fov: 50,
   },
   sonarConsole: {
-    position: [-0.55, 1.52, 2.55],
-    target: [-0.72, 1.18, 1.55],
-    fov: 48,
+    position: [-0.12, 1.5, 2.95],
+    target: [-0.7, 1.12, 1.85],
+    fov: 50,
   },
   forwardViewport: {
     position: [0.0, 1.58, 1.85],

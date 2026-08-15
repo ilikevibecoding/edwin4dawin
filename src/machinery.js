@@ -270,8 +270,8 @@ export function createMotorHousing(mats, length = 1.35, radius = 0.42) {
     const a = (i / 10) * Math.PI * 2;
     if (Math.sin(a) < -0.55) continue;
     const fin = new THREE.Mesh(finGeo, mats.brushedMetal);
-    fin.position.set(Math.cos(a) * radius * 0.98, Math.sin(a) * radius * 0.98, 0.05);
-    fin.lookAt(0, 0, 0.05);
+    fin.position.set(Math.cos(a) * radius * 1.02, Math.sin(a) * radius * 1.02, 0.05);
+    fin.rotation.z = a;
     g.add(fin);
   }
 

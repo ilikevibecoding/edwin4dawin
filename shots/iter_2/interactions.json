@@ -1,0 +1,46 @@
+{
+  "pointerLock": {
+    "ok": true,
+    "locked": true,
+    "unlocked": true,
+    "note": "headless pointer lock may be synthetic"
+  },
+  "movement": {
+    "ok": false,
+    "z0": 3.2,
+    "z1": 3.2
+  },
+  "collision": {
+    "ok": true,
+    "cz0": 1.85,
+    "cz1": 1.85,
+    "note": "helm console should stop a bow-facing walk"
+  },
+  "sonar": {
+    "ok": true,
+    "hoverSonar": "sonar",
+    "status": "No immediate contact.",
+    "sweep": 2.3000000000000003
+  },
+  "rest": {
+    "ok": true,
+    "hoverRest": "rest",
+    "status": "Rested.",
+    "later": "Rested.",
+    "state": "cruising"
+  },
+  "silentRunning": {
+    "ok": false,
+    "hoverSilent": null,
+    "first": "cruising",
+    "second": "cruising",
+    "status1": "Rested.",
+    "status2": "Rested."
+  },
+  "traversal": {
+    "ok": false,
+    "z": 2.730000000000001,
+    "x": -1.038022616917801,
+    "startZ": 2.2
+  }
+}

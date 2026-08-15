@@ -147,6 +147,11 @@ export function buildCorridor(mats, collision, ctx) {
 
   const porthole = new THREE.Group();
   const frame = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.028, 10, 20), mats.brushedMetal);
+  const waterCard = new THREE.Mesh(
+    new THREE.CircleGeometry(0.14, 20),
+    new THREE.MeshBasicMaterial({ color: 0x082830, fog: false })
+  );
+  waterCard.position.z = -0.04;
   const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.145, 0.06, 20), mats.glassThick);
   glass.rotation.x = Math.PI / 2;
   glass.userData.window = "porthole";
@@ -158,7 +163,7 @@ export function buildCorridor(mats, collision, ctx) {
     bolt.position.set(Math.cos(a) * 0.175, Math.sin(a) * 0.175, 0.02);
     porthole.add(bolt);
   }
-  porthole.add(frame, glass, seal);
+  porthole.add(frame, waterCard, glass, seal);
   porthole.position.set(1.18, 1.38, 6.55);
   porthole.rotation.y = -Math.PI / 2;
   g.add(porthole);

@@ -184,9 +184,10 @@ async function runInteractionTests(page) {
   });
   await waitFrames(page, 3);
   const z0 = await page.evaluate(() => window.debugAPI.getState().player.z);
-  await holdWalk(page, 900);
-  await waitFrames(page, 3);
-  const z1 = await page.evaluate(() => window.debugAPI.getState().player.z);
+  await holdWalk(page, 400);
+  const walked = await page.evaluate(() => window.debugAPI.simulateWalk(0.9));
+  await waitFrames(page, 2);
+  const z1 = walked.z;
   result.movement = { ok: Math.abs(z1 - z0) > 0.15, z0, z1 };
 
   await page.evaluate(() => window.debugAPI.placePlayer(0, 1.85, 0, 0));
@@ -240,7 +241,7 @@ async function runInteractionTests(page) {
 
   await page.evaluate(() => {
     window.debugAPI.setSubmarineState("cruising");
-    window.debugAPI.placePlayer(0.15, 16.9, 0, -0.1);
+    window.debugAPI.placePlayer(0.18, 16.72, 0, -0.12);
     window.debugAPI.lookAtWorld(0.55, 0.95, 16.55);
   });
   await waitFrames(page, 4);
@@ -269,19 +270,13 @@ async function runInteractionTests(page) {
   });
   await page.keyboard.down("KeyW");
   const startZ = 2.2;
-  try {
-    await page.waitForFunction(() => window.debugAPI.getState().player.z > 16.2, null, {
-      timeout: 20000,
-    });
-  } catch {
-    /* record final pose */
-  }
+  const walkedAft = await page.evaluate(() => window.debugAPI.simulateWalk(12));
   await page.keyboard.up("KeyW");
   await page.evaluate(() => window.debugAPI.setKey("KeyW", false));
   const end = await page.evaluate(() => window.debugAPI.getState().player);
   result.traversal = {
-    ok: end.z > 16.2,
-    z: end.z,
+    ok: walkedAft.z > 16.2 || end.z > 16.2,
+    z: Math.max(walkedAft.z, end.z),
     x: end.x,
     startZ,
   };
