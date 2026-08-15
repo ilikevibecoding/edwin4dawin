@@ -269,11 +269,16 @@ async function runInteractionTests(page) {
 
   try {
     const cz0 = await page.evaluate(() => {
-      window.debugAPI.setPlayerPose(0, 1.7, 12.15, 0, 0);
+      window.debugAPI.setPlayerPose(0, 1.7, 12.15, Math.PI, 0);
+      window.debugAPI.setHoldForward(true);
       return window.debugAPI.getPlayer().z;
     });
     await page.keyboard.down('w');
-    await page.waitForTimeout(700);
+    await page.evaluate(() => {
+      window.debugAPI.setHoldForward(true);
+      for (let i = 0; i < 20; i++) window.debugAPI.step(0.04);
+      window.debugAPI.setHoldForward(false);
+    });
     await page.keyboard.up('w');
     const cz1 = await page.evaluate(() => window.debugAPI.getPlayer().z);
     const col = { z0: cz0, z1: cz1, delta: cz1 - cz0 };

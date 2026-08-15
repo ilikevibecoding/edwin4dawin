@@ -191,6 +191,9 @@ export function createControlRoom(mats, collider) {
   vent.rotation.y = -0.4;
   g.add(vent);
 
+  const helmFill = new THREE.PointLight(0xffe2b8, 1.8, 3.2, 2);
+  helmFill.position.set(0.08, 1.55, 11.35);
+  g.add(helmFill);
   const lamp = createLightFixture(mats, 'warm');
   lamp.position.set(0, 2.12, 11.15);
   g.add(lamp);

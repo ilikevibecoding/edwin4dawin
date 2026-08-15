@@ -79,6 +79,15 @@ export function createInteractions({ camera, scene, hud, onSonar, onRest, onSile
       if (v) clearHover();
     },
     clearHover,
+    forceHover(name) {
+      const mesh = targets.find((t) => t.userData.interact?.name === name);
+      if (!mesh) return '';
+      if (hover && hover !== mesh) setHighlight(hover, false);
+      hover = mesh;
+      setHighlight(mesh, true);
+      if (hud) hud.setPrompt(mesh.userData.interact.prompt);
+      return mesh.userData.interact.prompt;
+    },
     isBusy: () => busy,
     targets,
   };

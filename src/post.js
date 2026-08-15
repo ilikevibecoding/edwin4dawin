@@ -76,8 +76,8 @@ export function createPost(renderer, scene, camera, options = {}) {
 
   const grade = new ShaderPass(GradeShader);
   if (simple) {
-    grade.uniforms.grain.value = 0.02;
-    grade.uniforms.vignette.value = 0.34;
+    grade.uniforms.grain.value = 0.012;
+    grade.uniforms.vignette.value = 0.28;
   }
   composer.addPass(grade);
   composer.addPass(new OutputPass());
@@ -102,7 +102,7 @@ export function createPost(renderer, scene, camera, options = {}) {
 export function configureRenderer(renderer, options = {}) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.18;
+  renderer.toneMappingExposure = 1.28;
   renderer.shadowMap.enabled = options.shadows !== false;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.setClearColor(0x05070a, 1);

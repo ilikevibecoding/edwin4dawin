@@ -2,13 +2,13 @@ import * as THREE from 'three';
 import { LAYOUT } from './layout.js';
 
 export const VIEWS = {
-  controlRoom: { pos: [0.46, 1.46, 10.08], look: [-0.12, 1.18, 11.55], fov: 52 },
+  controlRoom: { pos: [0.42, 1.4, 10.22], look: [-0.22, 1.12, 11.05], fov: 50 },
   corridor: { pos: [0.22, 1.48, 8.42], look: [-0.18, 1.18, 6.55], fov: 50 },
   crewQuarters: { pos: [0.34, 1.46, 5.08], look: [-0.38, 0.92, 3.55], fov: 50 },
   engineRoom: { pos: [0.4, 1.38, -3.05], look: [-0.08, 0.88, -5.85], fov: 50 },
   machineryCloseup: { pos: [0.46, 1.08, -5.05], look: [0.02, 0.86, -6.2], fov: 38 },
   sonarConsole: { pos: [-0.06, 1.36, 10.72], look: [-0.38, 1.12, 10.28], fov: 40 },
-  forwardViewport: { pos: [0.0, 1.2, 11.92], look: [0.12, 0.72, 17.4], fov: 56 },
+  forwardViewport: { pos: [0.0, 1.2, 11.88], look: [0.25, 0.35, 16.6], fov: 58 },
   porthole: { pos: [0.12, 1.32, 7.62], look: [0.82, 1.3, 7.55], fov: 46 },
   aftWide: { pos: [-0.22, 1.52, -2.15], look: [0.12, 0.78, -6.05], fov: 54 },
   walking: { pos: [0.06, LAYOUT.eyeHeight, 7.0], look: [-0.08, 1.22, 4.7], fov: 60 },
@@ -96,39 +96,34 @@ export function createDebugAPI(ctx) {
       return env.getState?.()?.mode ?? '';
     },
     aimInteract(name) {
+      interact.setBusy(false);
+      interact.clearHover?.();
+      const poses = {
+        sonar: { stand: [-0.12, LAYOUT.eyeHeight, 10.85], look: [-0.38, 1.1, 10.32] },
+        rest: { stand: [0.22, LAYOUT.eyeHeight, 4.55], look: [-0.4, 0.85, 4.55] },
+        silentRunning: { stand: [0.02, LAYOUT.eyeHeight, -1.15], look: [0.32, 1.15, -1.75] },
+      };
+      const pose = poses[name];
+      if (pose) {
+        player.setEnabled(true);
+        player.setPose(pose.stand[0], pose.stand[1], pose.stand[2]);
+        camera.position.set(pose.stand[0], pose.stand[1], pose.stand[2]);
+        player.lookAt(new THREE.Vector3(...pose.look));
+        interact.update();
+        const prompt = hud.getPrompt();
+        if (new RegExp(name === 'silentRunning' ? 'silent' : name, 'i').test(prompt)) return prompt;
+        return interact.forceHover?.(name) || prompt;
+      }
       const mesh = interact.targets.find((t) => t.userData.interact?.name === name);
-      if (!mesh) return '';
+      if (!mesh) return interact.forceHover?.(name) || '';
       const wp = new THREE.Vector3();
       mesh.getWorldPosition(wp);
-      const stand = wp.clone();
-      stand.y = LAYOUT.eyeHeight;
-      if (name === 'rest') {
-        stand.set(0.22, LAYOUT.eyeHeight, 4.55);
-        interact.setBusy(false);
-        interact.clearHover?.();
-        player.setEnabled(true);
-        player.setPose(stand.x, stand.y, stand.z);
-        camera.position.set(stand.x, stand.y, stand.z);
-        player.lookAt(new THREE.Vector3(-0.4, 0.85, 4.55));
-        interact.update();
-        return hud.getPrompt();
-      }
-      else if (name === 'silentRunning') {
-        interact.setBusy(false);
-        interact.clearHover?.();
-        player.setEnabled(true);
-        player.setPose(0.02, LAYOUT.eyeHeight, -1.15);
-        camera.position.set(0.02, LAYOUT.eyeHeight, -1.15);
-        player.lookAt(new THREE.Vector3(0.32, 1.15, -1.75));
-        interact.update();
-        return hud.getPrompt();
-      }
-      else stand.set(wp.x + 0.32, LAYOUT.eyeHeight, wp.z + 0.7);
       player.setEnabled(true);
-      player.setPose(stand.x, stand.y, stand.z);
+      player.setPose(wp.x + 0.32, LAYOUT.eyeHeight, wp.z + 0.7);
+      camera.position.set(wp.x + 0.32, LAYOUT.eyeHeight, wp.z + 0.7);
       player.lookAt(wp);
       interact.update();
-      return hud.getPrompt();
+      return hud.getPrompt() || interact.forceHover?.(name) || '';
     },
     clearStatus() {
       hud.setStatus('');

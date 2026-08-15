@@ -118,8 +118,8 @@ export function createCrewQuarters(mats, collider) {
   g.add(warn);
 
   const curtain = createCurtain(mats);
-  curtain.position.set(-0.18, 1.42, 3.88);
-  curtain.scale.set(0.55, 0.7, 1);
+  curtain.position.set(-0.08, 1.55, 3.72);
+  curtain.scale.set(0.42, 0.55, 1);
   g.add(curtain);
 
   const book = new THREE.Mesh(beveledBox(0.08, 0.02, 0.12, 0.002), mats.bakelite);

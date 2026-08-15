@@ -106,11 +106,23 @@ export function createUnderwater(seed = 0x51) {
   const floodR = new THREE.SpotLight(0x9fd4dc, 16, 26, 0.26, 0.6, 1.4);
   floodR.position.set(0.38, 1.05, 12.55);
   floodR.target.position.set(1.1, -2.2, 21);
+  const heroRock = new THREE.Mesh(
+    new THREE.DodecahedronGeometry(0.72, 1),
+    new THREE.MeshStandardMaterial({ color: 0x3a5458, roughness: 0.9, metalness: 0.05 }),
+  );
+  heroRock.position.set(0.28, 0.22, 16.55);
+  heroRock.scale.set(1.15, 1.45, 1.05);
+  heroRock.rotation.set(0.4, 0.8, 0.2);
+  root.add(heroRock);
+  const heroLit = new THREE.SpotLight(0xb8dce4, 28, 8, 0.28, 0.4, 1.1);
+  heroLit.position.set(0.05, 1.15, 12.7);
+  heroLit.target.position.copy(heroRock.position);
+  root.add(heroLit, heroLit.target);
   const windowRock = new THREE.Mesh(
     new THREE.DodecahedronGeometry(0.85, 1),
     new THREE.MeshStandardMaterial({ color: 0x2a3e44, roughness: 0.92, metalness: 0.04 }),
   );
-  windowRock.position.set(1.15, -0.35, 17.8);
+  windowRock.position.set(1.55, -0.55, 18.4);
   windowRock.scale.set(1.35, 1.7, 1.2);
   const silhouette = new THREE.Mesh(
     new THREE.SphereGeometry(1.6, 10, 7, 0, Math.PI, 0.2, 1.8),
