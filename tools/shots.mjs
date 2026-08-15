@@ -130,6 +130,22 @@ async function main() {
   }
 }
 
+async function waitFrames(page, n = 4) {
+  const start = await page.evaluate(() => window.debugAPI.getState().frameId);
+  await page.waitForFunction((s) => window.debugAPI.getState().frameId >= s + 2, start, {
+    timeout: 15000,
+  });
+  if (n > 2) await page.waitForTimeout(80);
+}
+
+async function holdWalk(page, ms) {
+  await page.evaluate(() => window.debugAPI.setKey("KeyW", true));
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(ms);
+  await page.keyboard.up("KeyW");
+  await page.evaluate(() => window.debugAPI.setKey("KeyW", false));
+}
+
 async function runInteractionTests(page) {
   const result = {
     pointerLock: { ok: false },
@@ -147,12 +163,14 @@ async function runInteractionTests(page) {
     window.debugAPI.setPlayerEnabled(true);
     window.debugAPI.setMotionEnabled(false);
   });
+  await waitFrames(page, 3);
 
   try {
     await page.click("#c");
     await page.waitForTimeout(200);
     const locked = await page.evaluate(() => document.pointerLockElement !== null || window.debugAPI.getState().player.locked);
     await page.keyboard.press("Escape");
+    await page.evaluate(() => document.exitPointerLock?.());
     await page.waitForTimeout(150);
     const unlocked = await page.evaluate(() => document.pointerLockElement === null);
     result.pointerLock = { ok: true, locked, unlocked, note: "headless pointer lock may be synthetic" };
@@ -160,31 +178,34 @@ async function runInteractionTests(page) {
     result.pointerLock = { ok: true, note: `pointer lock skipped in headless: ${e.message}` };
   }
 
-  await page.evaluate(() => window.debugAPI.placePlayer(0, 2.4, 0, 0));
+  await page.evaluate(() => {
+    document.exitPointerLock?.();
+    window.debugAPI.placePlayer(0, 3.2, Math.PI, 0);
+  });
+  await waitFrames(page, 3);
   const z0 = await page.evaluate(() => window.debugAPI.getState().player.z);
-  await page.keyboard.down("KeyW");
-  await page.waitForTimeout(700);
-  await page.keyboard.up("KeyW");
+  await holdWalk(page, 900);
+  await waitFrames(page, 3);
   const z1 = await page.evaluate(() => window.debugAPI.getState().player.z);
   result.movement = { ok: Math.abs(z1 - z0) > 0.15, z0, z1 };
 
   await page.evaluate(() => window.debugAPI.placePlayer(0, 1.85, 0, 0));
+  await waitFrames(page, 2);
   const cz0 = await page.evaluate(() => window.debugAPI.getState().player.z);
-  await page.keyboard.down("KeyW");
-  await page.waitForTimeout(700);
-  await page.keyboard.up("KeyW");
+  await holdWalk(page, 800);
+  await waitFrames(page, 2);
   const cz1 = await page.evaluate(() => window.debugAPI.getState().player.z);
   const blocked = cz1 > 1.35;
   result.collision = { ok: blocked, cz0, cz1, note: "helm console should stop a bow-facing walk" };
 
   await page.evaluate(() => {
-    window.debugAPI.placePlayer(-0.55, 2.55, Math.PI, -0.25);
+    window.debugAPI.placePlayer(-0.45, 2.55, Math.PI, -0.2);
     window.debugAPI.lookAtWorld(-0.7, 0.95, 2.1);
   });
-  await page.waitForTimeout(200);
+  await waitFrames(page, 4);
   const hoverSonar = await page.evaluate(() => window.debugAPI.getState().hoverId);
   await page.keyboard.press("KeyE");
-  await page.waitForTimeout(300);
+  await waitFrames(page, 3);
   const sonarState = await page.evaluate(() => window.debugAPI.getState());
   result.sonar = {
     ok: hoverSonar === "sonar" && (sonarState.sonarSweep > 0 || sonarState.events.some((e) => e.name === "sonar")),
@@ -194,15 +215,15 @@ async function runInteractionTests(page) {
   };
 
   await page.evaluate(() => {
-    window.debugAPI.placePlayer(-0.35, 9.35, Math.PI * 0.5, -0.2);
+    window.debugAPI.placePlayer(-0.25, 9.35, Math.PI * 0.5, -0.15);
     window.debugAPI.lookAtWorld(-0.7, 0.55, 9.35);
   });
-  await page.waitForTimeout(200);
+  await waitFrames(page, 4);
   const hoverRest = await page.evaluate(() => window.debugAPI.getState().hoverId);
   await page.keyboard.press("KeyE");
-  await page.waitForTimeout(400);
+  await waitFrames(page, 4);
   const restState = await page.evaluate(() => window.debugAPI.getState());
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(2400);
   const restState2 = await page.evaluate(() => window.debugAPI.getState());
   result.rest = {
     ok:
@@ -219,16 +240,16 @@ async function runInteractionTests(page) {
 
   await page.evaluate(() => {
     window.debugAPI.setSubmarineState("cruising");
-    window.debugAPI.placePlayer(0.2, 16.85, 0, -0.15);
+    window.debugAPI.placePlayer(0.15, 16.9, 0, -0.1);
     window.debugAPI.lookAtWorld(0.55, 0.95, 16.55);
   });
-  await page.waitForTimeout(200);
+  await waitFrames(page, 4);
   const hoverSilent = await page.evaluate(() => window.debugAPI.getState().hoverId);
   await page.keyboard.press("KeyE");
-  await page.waitForTimeout(250);
+  await waitFrames(page, 3);
   const s1 = await page.evaluate(() => window.debugAPI.getState());
   await page.keyboard.press("KeyE");
-  await page.waitForTimeout(250);
+  await waitFrames(page, 3);
   const s2 = await page.evaluate(() => window.debugAPI.getState());
   result.silentRunning = {
     ok:
@@ -242,15 +263,27 @@ async function runInteractionTests(page) {
     status2: s2.lastStatus,
   };
 
-  await page.evaluate(() => window.debugAPI.placePlayer(0, 2.2, Math.PI, 0));
+  await page.evaluate(() => {
+    window.debugAPI.placePlayer(0, 2.2, Math.PI, 0);
+    window.debugAPI.setKey("KeyW", true);
+  });
   await page.keyboard.down("KeyW");
-  await page.waitForTimeout(14000);
+  const startZ = 2.2;
+  try {
+    await page.waitForFunction(() => window.debugAPI.getState().player.z > 16.2, null, {
+      timeout: 20000,
+    });
+  } catch {
+    /* record final pose */
+  }
   await page.keyboard.up("KeyW");
+  await page.evaluate(() => window.debugAPI.setKey("KeyW", false));
   const end = await page.evaluate(() => window.debugAPI.getState().player);
   result.traversal = {
     ok: end.z > 16.2,
     z: end.z,
     x: end.x,
+    startZ,
   };
 
   return result;

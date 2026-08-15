@@ -68,7 +68,7 @@ export function buildUnderwater(mats, renderer) {
   g.add(rocks);
 
   const siltGeo = new THREE.BufferGeometry();
-  const N = 900;
+  const N = 420;
   const positions = new Float32Array(N * 3);
   const seeds = new Float32Array(N);
   for (let i = 0; i < N; i++) {

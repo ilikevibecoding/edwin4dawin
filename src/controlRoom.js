@@ -105,7 +105,7 @@ export function buildControlRoom(mats, collision, ctx) {
   g.add(sonarFace);
 
   const interact = new THREE.Mesh(
-    new THREE.BoxGeometry(0.55, 0.45, 0.35),
+    new THREE.BoxGeometry(0.7, 0.7, 0.55),
     new THREE.MeshBasicMaterial({ visible: false })
   );
   interact.position.set(-0.7, 0.95, 2.1);
@@ -239,6 +239,16 @@ export function buildControlRoom(mats, collision, ctx) {
   collision.addAABB(-0.55, 0.4, 2.62, 0.42, 0.8, 0.42, "sonar-seat");
   collision.addAABB(0.58, 0.4, 2.58, 0.42, 0.8, 0.42, "nav-seat");
   collision.addAABB(0.42, 1.0, 0.72, 0.2, 1.8, 0.24, "periscope");
+
+  const radio = new THREE.Mesh(beveledBox(0.28, 0.42, 0.22, 0.01), mats.hullGreen);
+  radio.position.set(1.05, 1.15, 1.35);
+  g.add(radio);
+  for (let i = 0; i < 3; i++) {
+    const face = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.01), mats.emissiveGreen);
+    face.position.set(0.93, 1.02 + i * 0.1, 1.35);
+    g.add(face);
+  }
+  collision.addAABB(1.05, 1.15, 1.35, 0.3, 0.45, 0.24, "radio");
 
   ctx.rooms.control = g;
   return g;

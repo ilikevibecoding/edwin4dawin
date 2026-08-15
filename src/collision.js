@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { PLAYER } from "./layout.js";
+import { PLAYER, hullXAtY, HULL } from "./layout.js";
 
 export class CollisionWorld {
   constructor() {
@@ -72,6 +72,13 @@ export class CollisionWorld {
       if (dx * dx + dz * dz < radius * radius) return true;
     }
     return false;
+  }
+
+  clampToHull(pos, radius = PLAYER.radius) {
+    const maxX = Math.max(0.28, hullXAtY(1.05, 0.28) - radius);
+    pos.x = THREE.MathUtils.clamp(pos.x, -maxX, maxX);
+    pos.z = THREE.MathUtils.clamp(pos.z, 0.35, HULL.length - 0.55);
+    return pos;
   }
 
   insideHull(x, y, radius, hullRadius, centerY) {

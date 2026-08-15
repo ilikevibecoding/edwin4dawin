@@ -74,10 +74,10 @@ export function installDebugAPI(app) {
         fps: +(1000 / avg).toFixed(2),
         averageFrameTimeMs: +avg.toFixed(2),
         onePercentLowFps: +(1000 / p1).toFixed(2),
-        drawCalls: info.render.calls,
-        triangles: info.render.triangles,
-        points: info.render.points,
-        lines: info.render.lines,
+        drawCalls: app.lastInfo?.calls ?? info.render.calls,
+        triangles: app.lastInfo?.triangles ?? info.render.triangles,
+        points: app.lastInfo?.points ?? info.render.points,
+        lines: app.lastInfo?.lines ?? info.render.lines,
         geometries: info.memory.geometries,
         textures: info.memory.textures,
         programs: info.programs?.length || 0,
@@ -103,11 +103,16 @@ export function installDebugAPI(app) {
           locked: app.player.locked,
         },
         fadeOn: document.getElementById("fade")?.classList.contains("on") || false,
+        frameId: app.frameId || 0,
       };
     },
     placePlayer(x, z, yaw, pitch = 0) {
       app.player.setEnabled(true);
       app.player.setPose(x, z, yaw, pitch);
+      return true;
+    },
+    setKey(code, down) {
+      app.player.setKey(code, !!down);
       return true;
     },
     lookAtWorld(x, y, z) {

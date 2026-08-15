@@ -81,7 +81,7 @@ export function buildCrewQuarters(mats, collision, ctx) {
   });
 
   const bunkInteract = new THREE.Mesh(
-    new THREE.BoxGeometry(0.7, 0.5, 1.6),
+    new THREE.BoxGeometry(0.95, 0.7, 1.9),
     new THREE.MeshBasicMaterial({ visible: false })
   );
   bunkInteract.position.set(-0.7, 0.55, 9.35);

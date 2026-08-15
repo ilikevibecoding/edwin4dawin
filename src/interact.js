@@ -44,7 +44,21 @@ export class InteractionSystem {
     }
     this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
     const hits = this.raycaster.intersectObjects(this.ctx.interactables, false);
-    const hit = hits.find((h) => h.distance < 2.15);
+    let hit = hits.find((h) => h.distance < 2.25);
+    if (!hit) {
+      const dir = new THREE.Vector3();
+      this.camera.getWorldDirection(dir);
+      const wp = new THREE.Vector3();
+      for (const obj of this.ctx.interactables) {
+        obj.getWorldPosition(wp);
+        const to = wp.clone().sub(this.camera.position);
+        const dist = to.length();
+        if (dist < 2.3 && dist > 0.05 && dir.dot(to.normalize()) > 0.62) {
+          hit = { object: obj, point: wp, distance: dist };
+          break;
+        }
+      }
+    }
     if (hit) {
       this.hover = hit.object;
       const prompt = hit.object.userData.interact?.prompt || "";

@@ -38,9 +38,14 @@ export class Player {
     };
     window.addEventListener("keydown", this._onKeyDown);
     window.addEventListener("keyup", this._onKeyUp);
+    document.addEventListener("keydown", this._onKeyDown);
+    document.addEventListener("keyup", this._onKeyUp);
+    this.canvas.addEventListener("keydown", this._onKeyDown);
+    this.canvas.addEventListener("keyup", this._onKeyUp);
     window.addEventListener("mousemove", this._onMouse);
     document.addEventListener("pointerlockchange", this._onLockChange);
     this.canvas.addEventListener("click", this._onClick);
+    this.canvas.tabIndex = 0;
   }
 
   setEnabled(v) {
@@ -62,9 +67,13 @@ export class Player {
     return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
   }
 
+  setKey(code, down) {
+    if (down) this.keys.add(code);
+    else this.keys.delete(code);
+  }
+
   update(dt) {
     if (!this.enabled) {
-      this.syncCamera(0);
       return;
     }
     const accel = 9.5;
@@ -93,6 +102,7 @@ export class Player {
     this.position.z = next.z;
     this.collision.resolve(this.position);
     if (Math.abs(this.position.z - next.z) > 0.0001) this.vel.z = 0;
+    this.collision.clampToHull(this.position);
 
     const moving = this.vel.length() > 0.12;
     this.bob += dt * (moving ? 9.5 : 2.0);

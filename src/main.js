@@ -21,13 +21,18 @@ const renderer = new THREE.WebGLRenderer({
   antialias: true,
   powerPreference: "high-performance",
 });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(1);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.12;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+
+const gl = renderer.getContext();
+const dbgExt = gl.getExtension?.("WEBGL_debug_renderer_info");
+const rendererName = dbgExt ? gl.getParameter(dbgExt.UNMASKED_RENDERER_WEBGL) : "";
+const softwareRenderer = /swiftshader|llvmpipe|softpipe|software/i.test(rendererName);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x07080a);
@@ -84,7 +89,7 @@ applyLightingState(ctx, "cruising");
 
 const player = new Player(camera, collision, canvas);
 const interact = new InteractionSystem(camera, ctx);
-const post = createPost(renderer, scene, camera);
+const post = createPost(renderer, scene, camera, { software: softwareRenderer });
 
 const frameTimes = [];
 const clock = new THREE.Clock();
@@ -101,6 +106,9 @@ const app = {
   motionEnabled: true,
   viewName: "walking",
   fixedTime: 0,
+  frameId: 0,
+  softwareRenderer,
+  lastInfo: { calls: 0, triangles: 0, points: 0, lines: 0 },
 };
 
 installDebugAPI(app);
@@ -116,18 +124,24 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 
+let displayTick = 0;
 function updateDisplays(t) {
+  displayTick += 1;
+  const dirty = ctx.sonarSweep > 0 || displayTick % 4 === 0;
+  if (!dirty) return;
   const sonarT = ctx.sonarSweep > 0 ? t * 3.2 : t * 0.25;
   ctx.displays.sonar.draw(sonarT);
   ctx.displays.sonar.texture.needsUpdate = true;
-  ctx.displays.nav.draw(t);
-  ctx.displays.nav.texture.needsUpdate = true;
-  ctx.displays.depth.draw(t);
-  ctx.displays.depth.texture.needsUpdate = true;
-  ctx.displays.status.draw(t);
-  ctx.displays.status.texture.needsUpdate = true;
-  ctx.displays.helm.draw(t);
-  ctx.displays.helm.texture.needsUpdate = true;
+  if (displayTick % 8 === 0) {
+    ctx.displays.nav.draw(t);
+    ctx.displays.nav.texture.needsUpdate = true;
+    ctx.displays.depth.draw(t);
+    ctx.displays.depth.texture.needsUpdate = true;
+    ctx.displays.status.draw(t);
+    ctx.displays.status.texture.needsUpdate = true;
+    ctx.displays.helm.draw(t);
+    ctx.displays.helm.texture.needsUpdate = true;
+  }
 }
 
 function tick() {
@@ -154,6 +168,13 @@ function tick() {
   }
   renderer.info.reset();
   post.render(dt);
+  app.lastInfo = {
+    calls: renderer.info.render.calls,
+    triangles: renderer.info.render.triangles,
+    points: renderer.info.render.points,
+    lines: renderer.info.render.lines,
+  };
+  app.frameId += 1;
   frameTimes.push(dt * 1000);
   if (frameTimes.length > 180) frameTimes.shift();
   requestAnimationFrame(tick);

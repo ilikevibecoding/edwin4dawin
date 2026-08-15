@@ -9,6 +9,10 @@ import {
   createAccessPanel,
   createWarningPlate,
   createLightFixture,
+  createPipeRun,
+  createCableTray,
+  createJunctionBox,
+  createValveAssembly,
 } from "./machinery.js";
 
 function makeHullSkin(mats) {
@@ -48,13 +52,13 @@ function makeRib(mats, z) {
 }
 
 function makeStringer(mats, angle, z0, z1) {
-  const r = HULL.radius - 0.07;
+  const r = HULL.radius - 0.08;
   const y = HULL.centerY + Math.sin(angle) * r;
   const x = Math.cos(angle) * r;
   const len = z1 - z0;
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, len), mats.chippedPaint);
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, len), mats.chippedPaint);
   bar.position.set(x, y, z0 + len * 0.5);
-  bar.lookAt(0, HULL.centerY, z0 + len * 0.5);
+  bar.rotation.z = Math.atan2(y - HULL.centerY, x);
   return bar;
 }
 
@@ -283,6 +287,60 @@ export function buildSubmarine(mats, collision) {
   const keel = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 21.4), mats.oilyMachinery);
   keel.position.set(0, -0.16, 11);
   root.add(keel);
+
+  const servicePipes = [
+    new THREE.Mesh(
+      createPipeRun(
+        [
+          [-1.05, 1.78, 0.6],
+          [-1.05, 1.78, 21.2],
+        ],
+        0.034,
+        8,
+        20
+      ),
+      mats.paintedPipe
+    ),
+    new THREE.Mesh(
+      createPipeRun(
+        [
+          [1.05, 1.88, 0.6],
+          [1.05, 1.88, 21.2],
+        ],
+        0.026,
+        7,
+        18
+      ),
+      mats.pipeBlue
+    ),
+    new THREE.Mesh(
+      createPipeRun(
+        [
+          [-0.88, 1.98, 0.6],
+          [-0.88, 1.98, 21.2],
+        ],
+        0.018,
+        6,
+        16
+      ),
+      mats.pipeOrange
+    ),
+  ];
+  servicePipes.forEach((p) => root.add(p));
+
+  for (const z of [2.4, 6.3, 10.6, 14.5, 18.8]) {
+    const tray = createCableTray(2.2, mats, 0.16);
+    tray.position.set(0.48, 2.04, z);
+    root.add(tray);
+    const box = createJunctionBox(mats, 0.18, 0.14, 0.07);
+    box.position.set(-1.08, 1.35, z);
+    box.rotation.y = Math.PI / 2;
+    root.add(box);
+  }
+
+  const midValve = createValveAssembly(mats, 1, "paintedPipe");
+  midValve.position.set(-1.05, 1.62, 10.2);
+  root.add(midValve);
 
   return root;
 }

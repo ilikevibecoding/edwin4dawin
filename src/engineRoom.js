@@ -19,7 +19,7 @@ import {
   createJunctionBox,
   createSwitchBank,
 } from "./machinery.js";
-import { createDisplayTexture, createLabelTexture } from "./materials.js";
+import { createDisplayTexture } from "./materials.js";
 
 export function buildEngineRoom(mats, collision, ctx) {
   const g = new THREE.Group();
@@ -241,7 +241,7 @@ export function buildEngineRoom(mats, collision, ctx) {
   g.add(panel);
 
   const interact = new THREE.Mesh(
-    new THREE.BoxGeometry(0.5, 0.7, 0.3),
+    new THREE.BoxGeometry(0.7, 0.9, 0.5),
     new THREE.MeshBasicMaterial({ visible: false })
   );
   interact.position.set(0.55, 0.95, 16.55);

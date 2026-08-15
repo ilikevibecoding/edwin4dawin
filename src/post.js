@@ -9,8 +9,8 @@ import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
-    vignette: { value: 0.32 },
-    grain: { value: 0.035 },
+    vignette: { value: 0.22 },
+    grain: { value: 0.012 },
     time: { value: 0 },
     lift: { value: 0.03 },
     gain: { value: 1.02 },
@@ -51,17 +51,26 @@ const GradeShader = {
   `,
 };
 
-export function createPost(renderer, scene, camera) {
+export function createPost(renderer, scene, camera, options = {}) {
   const size = renderer.getSize(new THREE.Vector2());
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
-  const gtao = new GTAOPass(scene, camera, size.x, size.y);
-  if (gtao.blendIntensity !== undefined) gtao.blendIntensity = 0.72;
-  if (GTAOPass.OUTPUT) gtao.output = GTAOPass.OUTPUT.Default;
-  composer.addPass(gtao);
+  const software = !!options.software;
+  let gtao = null;
+  if (!software) {
+    gtao = new GTAOPass(scene, camera, size.x, size.y);
+    if (gtao.blendIntensity !== undefined) gtao.blendIntensity = 0.62;
+    if (GTAOPass.OUTPUT) gtao.output = GTAOPass.OUTPUT.Default;
+    composer.addPass(gtao);
+  }
 
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.16, 0.38, 0.84);
+  const bloom = new UnrealBloomPass(
+    new THREE.Vector2(size.x, size.y),
+    software ? 0.1 : 0.16,
+    0.34,
+    0.86
+  );
   composer.addPass(bloom);
 
   const grade = new ShaderPass(GradeShader);
@@ -75,7 +84,7 @@ export function createPost(renderer, scene, camera) {
     grade,
     setSize(w, h) {
       composer.setSize(w, h);
-      gtao.setSize?.(w, h);
+      gtao?.setSize?.(w, h);
     },
     render(dt) {
       grade.uniforms.time.value += dt;
