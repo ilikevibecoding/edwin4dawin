@@ -1,0 +1,88 @@
+{
+  "iter": "8",
+  "width": 960,
+  "height": 540,
+  "views": {
+    "hero": {
+      "fps": 60,
+      "drawCalls": 5306,
+      "triangles": 258147,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.3085175379629638,
+        "max": 0.9680454901960783
+      }
+    },
+    "front": {
+      "fps": 60,
+      "drawCalls": 5399,
+      "triangles": 259701,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.24479236857298223,
+        "max": 0.8727592156862745
+      }
+    },
+    "rear": {
+      "fps": 60,
+      "drawCalls": 5180,
+      "triangles": 252423,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.2644105116013092,
+        "max": 0.9092376470588235
+      }
+    },
+    "wheel": {
+      "fps": 60,
+      "drawCalls": 4692,
+      "triangles": 240333,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.13386142935729567,
+        "max": 0.9512062745098039
+      }
+    },
+    "interior": {
+      "fps": 60,
+      "drawCalls": 4149,
+      "triangles": 217149,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.21193116111109594,
+        "max": 0.8118705882352942
+      }
+    },
+    "forest": {
+      "fps": 60,
+      "drawCalls": 5546,
+      "triangles": 264021,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.3038176574074003,
+        "max": 0.8761458823529411
+      }
+    },
+    "road": {
+      "fps": 31.9,
+      "drawCalls": 5960,
+      "triangles": 278913,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.2657249682461874,
+        "max": 0.9540109803921569
+      }
+    },
+    "detail": {
+      "fps": 31.9,
+      "drawCalls": 4497,
+      "triangles": 232149,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.23492795942265535,
+        "max": 0.8954392156862745
+      }
+    }
+  },
+  "consoleErrors": []
+}
