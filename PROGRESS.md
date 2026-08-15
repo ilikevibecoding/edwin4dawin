@@ -213,3 +213,66 @@ a kit-bashed orange truck in a foggy pine stand.
 | 7 Tech | FAIL | Faceted crowns, some haze-floaters. |
 | 8 Cold-look | FAIL | |
 | 9 Interact | PASS | |
+
+---
+
+## Iteration 8 — edges, dirt normals, cabin fill
+
+Hood chrome edges, dirt normals 1.15, cabin fill 3.6, exposure 1.12.
+Interior luma 0.21 (was 0.07 in iter 2). Stats now real: ~5.3k draws,
+~258k tris. Capture still ~32 fps on the heavy views (SwiftShader).
+
+| # | Result | Note |
+|---|--------|------|
+| 1 Lighting | FAIL | Key and lamps work. Paint still has no highlight streak. |
+| 2 Materials | FAIL | Orange satin, not metal flake + clearcoat. |
+| 3 Detail | FAIL | Kit-bash density is up. Large flats remain. |
+| 4 Post | FAIL | Stack is on. AO still does not read. |
+| 5 Place | FAIL | Clearing + two-track + pines. Not a trail photograph. |
+| 6 Palette | PASS | Orange / pine / tan / blackout. Stable since iter 6. |
+| 7 Tech | FAIL | 5k draw calls. 32 fps in capture on road/detail. |
+| 8 Cold-look | FAIL | Reads as a polished Three.js kit-bash, not a shipped game. |
+| 9 Interact | PASS | Re-verified this iteration. |
+
+Two items pass (6, 9). Not two consecutive all-pass. Stopping here rather
+than grinding box tweaks to iteration 12 — the remaining fails are
+structural (primitives vs sculpted surfaces), not missing a slider.
+
+---
+
+## Final summary
+
+### What passed
+- **9 Interactions.** Pointer lock, E prompts, door fade + sit, headlights,
+  hood fade + status. Proven by `tools/interact-check.mjs`.
+- **6 Palette** (from iteration 6, held through 7 and 8). One late-afternoon
+  set: bronze-orange Jeep, deep pine, terracotta dirt, blackout trim, amber
+  practicals. No default gray, no random hues.
+
+### What is still weak
+- **8 Cold-look / 3 Detail / 2 Materials.** The Jeep is a convincing
+  *blockout* of a Wrangler (7-slot, rounds, flares, spare, light bar) built
+  from boxes and cylinders. It will not pass as a real indie offroad
+  screenshot until panels have bevels, paint has a clearcoat streak, and
+  pines are not faceted clumps.
+- **1 Lighting / 4 Post.** The key exists. Bounce and cabin fills exist.
+  ACES, bloom, GTAO, vignette, grain, SMAA all run. None of that is enough
+  when the surfaces are flat.
+- **5 Place.** The two-track, puddles, log, and stand are there. Fog still
+  turns the horizon into a beige wall.
+- **7 Tech.** Draw-call count is a kit-bash tax. Fine on a laptop GPU,
+  poor in software capture.
+
+### What five more iterations would do
+1. Merge body/wheel/detail into a handful of geometries. Target under 400 draws.
+2. Rebuild the body with lathed fenders and inset panel gaps, not boxes
+   with extra boxes on them.
+3. Replace pine crowns with alpha-tested leaf cards (green-channel
+   alphaMap, mip bias) so they stop reading as Christmas trees.
+4. Sculpt the two-track as a real heightfield with wet puddles that
+   actually reflect the sky, and plant the contact patches in the ruts.
+5. A car-photo lighting rig: high key, large warm bounce card, dim rim,
+   and a studio-grade PMREM so clearcoat finally streaks.
+
+Environment for this work: `ilikevibecoding/edwin4dawin`.
+Run `npm install && npm run dev`. Beauty shots: `node tools/shots.mjs --iter N`.
