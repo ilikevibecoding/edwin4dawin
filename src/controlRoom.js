@@ -92,6 +92,9 @@ export function buildControlRoom(ctx) {
   root.add(mesh(beveledBox(0.14, 0.22, 0.06, 0.004), mats.gunmetal, -0.95, 0.55, -9.1));
 
   ctx.control = { sonar, helm, nav };
+  for (let i = 0; i < 4; i++) {
+    root.add(mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.55, 8), mats.pipeCopper, -0.82, 1.85, -9.4 + i * 0.18, 0, 0, 0.9));
+  }
 }
 
 function buildViewport(ctx, z) {

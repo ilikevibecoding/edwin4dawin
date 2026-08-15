@@ -17,6 +17,10 @@ export function createWaterSystem(renderer, seed = 1) {
     colorSpace: THREE.SRGBColorSpace,
   });
 
+  const backdrop = makeWaterBackdrop(seed);
+  backdrop.position.set(0, -1.2, -11);
+  scene.add(backdrop);
+
   const ambient = new THREE.AmbientLight(0x245060, 0.7);
   scene.add(ambient);
   const key = new THREE.DirectionalLight(0x8ac8d4, 1.15);
@@ -192,6 +196,49 @@ function displace(geo, seed, amp) {
   }
   pos.needsUpdate = true;
   geo.computeVertexNormals();
+}
+
+function makeWaterBackdrop(seed) {
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 576;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 576);
+  g.addColorStop(0, '#0a2a38');
+  g.addColorStop(0.45, '#0c3a42');
+  g.addColorStop(1, '#061820');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 1024, 576);
+  ctx.fillStyle = '#1a2e28';
+  ctx.beginPath();
+  ctx.moveTo(0, 420);
+  ctx.bezierCurveTo(180, 300, 320, 480, 520, 340);
+  ctx.bezierCurveTo(700, 220, 860, 360, 1024, 280);
+  ctx.lineTo(1024, 576);
+  ctx.lineTo(0, 576);
+  ctx.fill();
+  ctx.fillStyle = '#0e221c';
+  ctx.beginPath();
+  ctx.moveTo(80, 576);
+  ctx.lineTo(220, 250);
+  ctx.lineTo(360, 576);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(180,230,220,0.18)';
+  for (let i = 0; i < 80; i++) {
+    const x = (hash(seed + i) * 1024);
+    const y = (hash(seed + i * 3) * 400);
+    ctx.beginPath();
+    ctx.arc(x, y, 1 + hash(seed + i * 5) * 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(120,200,190,0.35)';
+  ctx.beginPath();
+  ctx.arc(640, 210, 7, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshBasicMaterial({ map: tex });
+  return new THREE.Mesh(new THREE.PlaneGeometry(22, 12), mat);
 }
 
 function hash(n) {

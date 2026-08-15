@@ -68,7 +68,7 @@ const views = {
   controlRoom: { pos: [0.2, 1.5, -7.55], look: [0.04, 1.08, -9.55], fov: 54 },
   corridor: { pos: [0.06, 1.52, -4.15], look: [0.12, 1.28, -6.05], fov: 55 },
   crewQuarters: { pos: [0.22, 1.48, 0.15], look: [-0.72, 0.82, -1.05], fov: 52 },
-  engineRoom: { pos: [-0.22, 1.28, 7.25], look: [0.22, 0.72, 9.05], fov: 50 },
+  engineRoom: { pos: [0.02, 1.32, 8.15], look: [0.18, 0.68, 9.35], fov: 48 },
   machineryCloseup: { pos: [0.58, 0.88, 8.05], look: [0.05, 0.7, 9.15], fov: 40 },
   sonarConsole: { pos: [0.38, 1.36, -7.08], look: [0.7, 1.2, -7.52], fov: 44 },
   forwardViewport: { pos: [0.12, 1.46, -8.55], look: [0.0, 1.34, -10.35], fov: 48 },
