@@ -38,7 +38,7 @@ export function createVehicleMaterials(env) {
 
   return {
     paint: new THREE.MeshPhysicalMaterial({
-      color: PALETTE.paint,
+      color: 0xffffff,
       map: paintMap,
       roughnessMap: paintR,
       normalMap: paintN,
@@ -95,7 +95,7 @@ export function createVehicleMaterials(env) {
       envMapIntensity: 0.2,
     }),
     tire: new THREE.MeshStandardMaterial({
-      color: 0x22201c,
+      color: 0xffffff,
       map: tireMap,
       normalMap: tireN,
       roughness: 0.86,
@@ -122,7 +122,7 @@ export function createVehicleMaterials(env) {
       envMapIntensity: 1.0,
     }),
     fabric: new THREE.MeshStandardMaterial({
-      color: PALETTE.fabric,
+      color: 0xffffff,
       map: fabric,
       roughness: 0.92,
       metalness: 0.0,

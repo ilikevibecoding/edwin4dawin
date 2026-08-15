@@ -41,6 +41,21 @@ export function createVehicle(env) {
   wellFill.castShadow = false;
   sprung.add(wellFill);
 
+  const contact = new THREE.Mesh(
+    new THREE.CircleGeometry(1.35, 24),
+    new THREE.MeshBasicMaterial({
+      color: 0x1a120c,
+      transparent: true,
+      opacity: 0.38,
+      depthWrite: false,
+    }),
+  );
+  contact.rotation.x = -Math.PI / 2;
+  contact.position.y = 0.03;
+  contact.scale.set(1.15, 1.7, 1);
+  contact.renderOrder = 1;
+  root.add(contact);
+
   const lamps = new THREE.Group();
   sprung.add(lamps);
   const beams = [];

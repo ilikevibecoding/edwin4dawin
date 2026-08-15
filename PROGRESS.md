@@ -73,3 +73,29 @@ Looked at every shot. This is a blockout, not a beauty pass.
 7. **Camera** — wheel view is too low and inside the arch; interior is staring at a flat hood.
 
 Eight parallel asset agents launched after this iteration.
+
+---
+
+## Iteration 2 — parallel asset pass
+
+Agents thickened every module. Interactions pass the harness (door / lights / hood).
+Shots at 960×540. Forest mean luma 0.032 (black). Wheel 0.069, interior 0.067.
+
+| # | Result | Note |
+|---|--------|------|
+| 1 Lighting | FAIL | Front is a silhouette. Sun at 24° never clears the canopy. Wheel/cabin crushed. |
+| 2 Materials | FAIL | Still reads as matte red plastic. Tread blocks exist but sit in darkness. |
+| 3 Detail | FAIL | More gizmos, still boxy. Forest still stacked cones. Road still a brown strip. |
+| 4 Post | FAIL | God-ray cards dominate. Grain + vignette crush the dark views. |
+| 5 Place | FAIL | Fog + cheap shafts. Wheels not clearly planted. |
+| 6 Palette | FAIL | Fire-engine red vs beige soup. |
+| 7 Tech | FAIL | Forest camera inside a trunk. Interior camera on the hood. |
+| 8 Cold-look | FAIL | Still a Three.js blockout with extra parts. |
+| 9 Interact | PASS | `tools/interact-check.mjs`: lights, hood fade, climb-in all fire. |
+
+### Fix list for iteration 3
+
+1. Raise the sun so the key actually hits the Jeep. Bounce + cabin/well fills.
+2. Move cameras into the clearing; sit the interior view in the seat.
+3. Kill the cheap god-ray planes. Lift crushed shadows.
+4. Shift paint off fire-engine red.

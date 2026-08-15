@@ -80,9 +80,9 @@ export function paintAlbedo() {
         const dirt = Math.max(0, fbm(u * 2.4, v * 11, 4) - 0.64) * 2.6;
         const chip = hash(u * 880 + v * 311) > 0.996 ? 0.55 : 0;
         const edge = Math.pow(Math.abs(u - 0.5) * 2, 3) * 0.1;
-        const r = 172 + flake * 42 + orange * 16 - dirt * 55 - edge * 36 - chip * 40;
-        const g = 100 + flake * 20 + orange * 8 - dirt * 42 - edge * 18 - chip * 20;
-        const b = 46 + flake * 8 - dirt * 16;
+        const r = 148 + flake * 70 + orange * 28 - dirt * 70 - edge * 40 - chip * 50;
+        const g = 82 + flake * 36 + orange * 14 - dirt * 48 - edge * 22 - chip * 24;
+        const b = 38 + flake * 16 - dirt * 14;
         return [r, g, b];
       });
     },

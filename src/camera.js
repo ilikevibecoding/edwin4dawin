@@ -27,8 +27,8 @@ export const VIEWS = {
     fov: 55,
   },
   forest: {
-    position: [4.9, 1.85, 8.4],
-    target: [0.1, 1.0, 0.1],
+    position: [3.55, 1.8, 7.8],
+    target: [0.1, 1.0, 0.15],
     fov: 42,
   },
   road: {
