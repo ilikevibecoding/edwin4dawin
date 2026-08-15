@@ -93,7 +93,7 @@ Iteration 12 finished with a clean production install, production build, preview
 
 ### Final commit hash
 
-Recorded after this summary is committed.
+`31dc06da86b2ee2b0c6ec2a40027857af5343ec0`
 
 ## Art direction
 
@@ -240,5 +240,5 @@ Clean `npm ci`, production build, preview on :4173, full shot suite `shots/iter_
 
 ### Commit
 
-- Commit hash: (this commit)
+- Commit hash: 31dc06da
 - Commit message: Final iteration 12 production verify and progress summary
