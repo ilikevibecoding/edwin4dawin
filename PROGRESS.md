@@ -2,16 +2,16 @@
 
 ## Current status
 
-- Iteration: 7
+- Iteration: 10
 - Consecutive all-pass iterations: 0
 - Average FPS: 21 (SwiftShader — indicative only)
 - One-percent-low FPS: 20
-- Average frame time: 47.59 ms
-- Draw calls: 720
-- Triangle count: 77090
-- Texture count: 124
+- Average frame time: 47.41 ms
+- Draw calls: 723
+- Triangle count: 77394
+- Texture count: 121
 - Renderer: ANGLE SwiftShader
-- Stopping-condition status: 7/12 iterations complete, 0 consecutive all-pass, continuing
+- Stopping-condition status: 10/12 iterations complete, 0 consecutive all-pass, continuing
 
 ## Iteration 1
 
@@ -334,4 +334,211 @@ All 15 FAIL. `forwardViewport.png` was a blown-out close surface. Movement still
 
 ### Commit
 
+- Commit hash: 4eeb5d83
+- Commit message: Record iteration 7: full forward-to-aft traversal passes.
+
+## Iteration 8
+
+### Implemented
+
+- Hardcoded rest aim pose
+- `setBusy(false)` after rest so later tests can run
+
+### Interaction tests
+
+- Pointer lock, movement, collision, sonar, rest, traversal: pass
+- Silent running: fail (busy / leftover rest hover)
+
+### Rubric assessment
+
+Visual items 1–11, 14–15 FAIL from regenerated screenshots. Item 12 remains PASS.
+
+### Commit
+
+- Commit hash: e4311e5b
+- Commit message: Record iteration 8: rest and traversal pass; clear rest-cycle busy flag.
+
+## Iteration 9
+
+### Implemented
+
+- Silent-running test no longer waits on prompt (waitForFunction threw before KeyE)
+
+### Interaction tests
+
+- Silent running still fail; rest and traversal pass
+
+### Rubric assessment
+
+Same visual failures. Engine room remains a dark blob. Viewport still does not read as underwater travel.
+
+### Commit
+
+- Commit hash: 0838153f
+- Commit message: Record iteration 9 and stop failing silent-running on prompt wait.
+
+## Iteration 10
+
+### Implemented
+
+- No new visual systems this iteration; suite re-run after prior camera and interact helpers
+- Rest and traversal remain reliable; silent running still blocked by leftover rest hover/status
+
+### Agent assignments
+
+- Pressure hull: lead
+- Control room: lead
+- Corridor: lead
+- Crew spaces: lead
+- Machinery: lead
+- Materials: lead
+- Water: lead
+- Lighting: lead
+- Player and interactions: lead
+- Performance: SwiftShader path (no GTAO, no shadows)
+
+### Asset loops
+
+#### Pressure hull
+- Attempts: 4
+- Result: FAIL — cylinder and ribs read, but interior still looks like a tiled tan tube
+- Remaining weaknesses: wood-like hull albedo, empty mid-volume, hatch discs clip the corridor
+
+#### Control room
+- Attempts: 4
+- Result: FAIL — `controlRoom.png` is a sonar close-up, not a dense station
+- Remaining weaknesses: helm/nav barely in frame, viewport not in the room shot
+
+#### Corridor
+- Attempts: 4
+- Result: FAIL — pipes exist; a large tan disc clips the walkway; warning plates read as glowing squares
+- Remaining weaknesses: eye-level density, supported pipe logic, no empty wall slabs
+
+#### Crew quarters
+- Attempts: 3
+- Result: FAIL — stacked brown box bunks, black curtain plane, sparse lived-in detail
+- Remaining weaknesses: fabric folds, personal props, galley readability
+
+#### Machinery room
+- Attempts: 4
+- Result: FAIL — `engineRoom.png` is a black foreground mass; closeup is an unreadable curve
+- Remaining weaknesses: readable motor, work-light fill, layered pumps in frame
+
+#### Materials and wear
+- Attempts: 3
+- Result: FAIL — hull looks like tiled tan wood; metals crush to black
+- Remaining weaknesses: cooler painted steel, roughness contrast, logical wear
+
+#### Underwater exterior
+- Attempts: 4
+- Result: FAIL — `forwardViewport.png` is a washed-out green-grey void with dark silhouettes
+- Remaining weaknesses: camera inside/against oversized rock, no readable water layers
+
+#### Lighting and post
+- Attempts: 3
+- Result: FAIL — flat SwiftShader lighting, blown viewport, crushed machinery
+- Remaining weaknesses: room keys, fake contact darkening, balanced bloom
+
+#### Collision and interactions
+- Attempts: 6
+- Result: PARTIAL — pointer, movement, collision, sonar, rest, traversal pass; silent running fail
+- Remaining weaknesses: rest leaves hover/status so silent test aims at the bunk
+
+### Rubric assessment
+
+#### 1. Spatial layout and submarine silhouette
+- PASS/FAIL: FAIL
+- Evidence: `controlRoom.png`, `corridor.png` read as a cylinder, but as a sparse tube with primitives, not a packed vessel.
+
+#### 2. Control-room quality
+- PASS/FAIL: FAIL
+- Evidence: `controlRoom.png` is a sonar-screen close-up. Stations are blocky; the room is not shown as a dense helm.
+
+#### 3. Corridor detail density
+- PASS/FAIL: FAIL
+- Evidence: `corridor.png` has overhead pipes and a clipping tan disc; large undetailed hull regions remain.
+
+#### 4. Crew quarters feel inhabited
+- PASS/FAIL: FAIL
+- Evidence: `crewQuarters.png` shows stacked brown box bunks and a black curtain plane.
+
+#### 5. Aft machinery room looks mechanically believable
+- PASS/FAIL: FAIL
+- Evidence: `engineRoom.png` is a dark central blob. `machineryCloseup.png` is an unreadable dark curve.
+
+#### 6. Materials read as physical
+- PASS/FAIL: FAIL
+- Evidence: hull looks like tiled tan wood; metals crush to black; fabric is a brown box.
+
+#### 7. Wear and grime follow physical logic
+- PASS/FAIL: FAIL
+- Evidence: no readable contact wear, grease, or condensation in primary shots.
+
+#### 8. Lighting reads as intentional
+- PASS/FAIL: FAIL
+- Evidence: `engineRoom.png` crushed; `forwardViewport.png` blown; rooms lack distinct key/fill.
+
+#### 9. Post-processing is active and balanced
+- PASS/FAIL: FAIL
+- Evidence: ACES/bloom/grade exist, but viewport highlights blow and machinery blacks crush. GTAO off on SwiftShader.
+
+#### 10. Underwater view sells depth and motion
+- PASS/FAIL: FAIL
+- Evidence: `forwardViewport.png` is a featureless pale void, not deep-water parallax.
+
+#### 11. One cohesive palette across every room
+- PASS/FAIL: FAIL
+- Evidence: tan wood hull + black blobs + glowing warning squares do not read as one naval palette.
+
+#### 12. The player can genuinely walk into the back
+- PASS/FAIL: PASS
+- Evidence: `shots/iter_10/interactions.json` traversalDetail.z = −1.73.
+
+#### 13. Interactions work
+- PASS/FAIL: FAIL
+- Evidence: silent running status stayed `6 hours pass.` with prompt `E: Rest`. Other interactions pass.
+
+#### 14. Technical quality is clean
+- PASS/FAIL: FAIL
+- Evidence: 21 fps on SwiftShader (indicative); clipping hatch disc; no page/WebGL errors.
+
+#### 15. The cold-look test
+- PASS/FAIL: FAIL
+- Evidence: four primaries still read as a primitive Three.js tube, not an AA submarine game.
+
+### Technical metrics
+
+- FPS: 21
+- One-percent-low FPS: 20
+- Frame time: 47.41 ms
+- Draw calls: 723
+- Triangles: 77394
+- Textures: 121
+- Programs: 34
+- Console errors: 0
+- Page errors: 0
+- WebGL errors: 0
+- Renderer: ANGLE SwiftShader
+
+### Interaction tests
+
+- Pointer lock: pass
+- Movement: pass (−2.18 m)
+- Collision: pass
+- Sonar: pass
+- Rest: pass
+- Silent running: fail
+- Full forward-to-aft traversal: pass (z=−1.73)
+
+### Next iteration fix list
+
+1. Run silent-running before rest; complete rest animation in `debugAPI.step`; clear hover when busy
+2. Reframe `forwardViewport` past the helm; shrink window rocks so they stay outside the camera
+3. 3/4 cameras on consoles, bunks, and the motor — stop centerline tube shots
+4. Lighten machinery materials and add work-light fill
+5. Park hatch doors against the hull; cooler painted-steel hull; denser eye-level corridor/crew dressing
+
+### Commit
+
 - Commit hash: pending
+- Commit message: Record iteration 10 screenshots and rubric failures.
