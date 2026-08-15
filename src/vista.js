@@ -47,7 +47,7 @@ export function createWindowVista() {
     new PlaneGeometry(14, 8),
     new MeshBasicMaterial({
       map: waterCanvas(),
-      color: 0x6aa8b0,
+      color: 0x8ec4c8,
       fog: false,
       side: DoubleSide,
     })

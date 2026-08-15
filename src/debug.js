@@ -7,7 +7,7 @@ const VIEWS = {
   engineRoom: { pos: [-0.22, 1.5, 17.35], look: [0.22, 0.88, 19.7], fov: 58 },
   machineryCloseup: { pos: [-0.05, 1.22, 18.7], look: [0.3, 0.82, 19.95], fov: 48 },
   sonarConsole: { pos: [-0.12, 1.42, 2.65], look: [-0.46, 1.18, 1.88], fov: 46 },
-  forwardViewport: { pos: [0.0, 1.3, 1.55], look: [0.0, 1.28, -2.2], fov: 50 },
+  forwardViewport: { pos: [0.0, 1.3, 1.55], look: [0.0, 1.18, -2.2], fov: 50 },
   porthole: { pos: [0.18, 1.32, 6.55], look: [1.15, 1.32, 6.55], fov: 42 },
   aftWide: { pos: [-0.18, 1.55, 16.7], look: [0.2, 0.95, 20.3], fov: 64 },
   walking: { pos: [0.0, 1.65, 5.05], look: [0.0, 1.28, 7.6], fov: 64 },
