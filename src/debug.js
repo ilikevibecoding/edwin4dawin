@@ -96,7 +96,7 @@ export function createDebugAPI(ctx) {
       const stand = wp.clone();
       stand.y = LAYOUT.eyeHeight;
       if (name === 'rest') stand.set(0.2, LAYOUT.eyeHeight, wp.z);
-      else if (name === 'silentRunning') stand.set(0.0, LAYOUT.eyeHeight, wp.z + 0.95);
+      else if (name === 'silentRunning') stand.set(0.02, LAYOUT.eyeHeight, -1.15);
       else stand.set(wp.x + 0.32, LAYOUT.eyeHeight, wp.z + 0.7);
       player.setEnabled(true);
       player.setPose(stand.x, stand.y, stand.z);
