@@ -45,13 +45,22 @@ export function buildControlRoom(mats, collision, interactables, animators) {
   const z1 = LAYOUT.rooms.control.z1;
   const mid = (z0 + z1) * 0.5;
 
-  const viewportFrame = mesh(roundedBox(1.05, 0.72, 0.16, 0.03, 2), mats.chipped);
-  viewportFrame.position.set(0, 1.28, 0.38);
+  const viewportFrame = mesh(roundedBox(1.08, 0.08, 0.14, 0.02, 1), mats.chipped);
+  viewportFrame.position.set(0, 1.58, 0.38);
   g.add(viewportFrame);
-  const inner = mesh(roundedBox(0.86, 0.54, 0.08, 0.02, 2), mats.brushed);
-  inner.position.set(0, 1.28, 0.4);
+  const frameBot = mesh(roundedBox(1.08, 0.08, 0.14, 0.02, 1), mats.chipped);
+  frameBot.position.set(0, 0.98, 0.38);
+  g.add(frameBot);
+  const frameL = mesh(roundedBox(0.08, 0.68, 0.14, 0.02, 1), mats.chipped);
+  frameL.position.set(-0.5, 1.28, 0.38);
+  g.add(frameL);
+  const frameR = frameL.clone();
+  frameR.position.x = 0.5;
+  g.add(frameR);
+  const inner = mesh(roundedBox(0.9, 0.06, 0.06, 0.015, 1), mats.brushed);
+  inner.position.set(0, 1.54, 0.36);
   g.add(inner);
-  const glass = mesh(roundedBox(0.8, 0.48, 0.04, 0.01, 1), mats.glassThick);
+  const glass = mesh(roundedBox(0.8, 0.48, 0.03, 0.01, 1), mats.glassThick);
   glass.position.set(0, 1.28, 0.34);
   glass.castShadow = false;
   g.add(glass);
@@ -59,7 +68,7 @@ export function buildControlRoom(mats, collision, interactables, animators) {
   glass2.position.set(0, 1.28, 0.3);
   glass2.castShadow = false;
   g.add(glass2);
-  const seal = mesh(roundedBox(0.9, 0.58, 0.02, 0.01, 1), mats.rubber);
+  const seal = mesh(roundedBox(0.9, 0.04, 0.04, 0.01, 1), mats.rubber);
   seal.position.set(0, 1.28, 0.34);
   g.add(seal);
   for (const [x, y] of [

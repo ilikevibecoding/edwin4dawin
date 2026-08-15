@@ -186,6 +186,7 @@ function simulate(dt) {
   }
 }
 
+app.simulate = simulate;
 let lastSim = performance.now();
 setInterval(() => {
   const now = performance.now();

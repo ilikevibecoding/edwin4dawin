@@ -22,9 +22,9 @@ function waterCanvas() {
   c.height = 512;
   const ctx = c.getContext('2d');
   const g = ctx.createLinearGradient(0, 0, 0, 512);
-  g.addColorStop(0, '#0a2430');
-  g.addColorStop(0.45, '#0c3a42');
-  g.addColorStop(1, '#07161c');
+  g.addColorStop(0, '#1a4a58');
+  g.addColorStop(0.45, '#0e3a44');
+  g.addColorStop(1, '#0a2228');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 512, 512);
   ctx.fillStyle = 'rgba(90,140,150,0.12)';
@@ -46,7 +46,8 @@ export function createWindowVista() {
     new PlaneGeometry(8, 5),
     new MeshBasicMaterial({ map: waterCanvas(), fog: false })
   );
-  backdrop.position.set(0, 0.2, -7.5);
+  backdrop.position.set(0, 0.15, -2.8);
+  backdrop.scale.set(1.15, 1.15, 1);
   g.add(backdrop);
 
   const rand = mulberry32(SEED + 90);

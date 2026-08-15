@@ -155,7 +155,7 @@ async function runInteractionTests(page) {
   await page.evaluate(() => window.debugAPI.setPlayerPose(0.0, 0, 5.4, 0, 0));
   const before = await page.evaluate(() => window.debugAPI.getPlayerState());
   await page.keyboard.down('KeyW');
-  await page.waitForTimeout(900);
+  await page.evaluate(() => window.debugAPI.simulateSeconds(1.0));
   await page.keyboard.up('KeyW');
   const after = await page.evaluate(() => window.debugAPI.getPlayerState());
   result.movement = {
@@ -167,7 +167,7 @@ async function runInteractionTests(page) {
   await page.evaluate(() => window.debugAPI.setPlayerPose(0.0, 0, 0.55, 0, 0));
   const c0 = await page.evaluate(() => window.debugAPI.getPlayerState());
   await page.keyboard.down('KeyW');
-  await page.waitForTimeout(600);
+  await page.evaluate(() => window.debugAPI.simulateSeconds(0.7));
   await page.keyboard.up('KeyW');
   const c1 = await page.evaluate(() => window.debugAPI.getPlayerState());
   result.collision = {
@@ -195,9 +195,9 @@ async function runInteractionTests(page) {
   });
   await page.waitForTimeout(300);
   await page.keyboard.press('KeyE');
-  await page.waitForTimeout(1200);
+  await page.evaluate(() => window.debugAPI.simulateSeconds(1.2));
   const restMid = await page.evaluate(() => window.debugAPI.getInteractionState());
-  await page.waitForTimeout(2800);
+  await page.evaluate(() => window.debugAPI.simulateSeconds(2.4));
   const restEnd = await page.evaluate(() => window.debugAPI.getInteractionState());
   result.rest = {
     pass: /6 hours|Rested/i.test(`${restMid.status} ${restEnd.status}`) || restMid.fade > 0.4 || restMid.lighting === 'restCycle',
@@ -225,7 +225,7 @@ async function runInteractionTests(page) {
 
   await page.evaluate(() => window.debugAPI.setPlayerPose(0.0, 0, 2.7, Math.PI, 0));
   await page.keyboard.down('KeyW');
-  await page.waitForTimeout(12000);
+  await page.evaluate(() => window.debugAPI.simulateSeconds(12));
   await page.keyboard.up('KeyW');
   const end = await page.evaluate(() => window.debugAPI.getPlayerState());
   result.traversal = {
