@@ -31,8 +31,8 @@ export function createControlRoom(mats, collider) {
   const z1 = ROOMS.control.z1;
   const mid = (z0 + z1) / 2;
 
-  const viewport = createWindowFrame(mats, 0.86, 0.52, 0.2);
-  viewport.position.set(0, 1.28, 12.32);
+  const viewport = createWindowFrame(mats, 0.78, 0.78, 0.22);
+  viewport.position.set(0, 1.18, 12.28);
   g.add(viewport);
 
   const brow = new THREE.Mesh(beveledBox(1.1, 0.1, 0.18, 0.012), mats.steel);
@@ -92,19 +92,19 @@ export function createControlRoom(mats, collider) {
   navPanel.rotation.x = -0.16;
   g.add(navPanel);
 
-  const depthPanel = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.14), mats.screen(depthScreen));
-  depthPanel.position.set(-0.16, 1.18, 11.36);
-  depthPanel.rotation.x = -0.35;
+  const depthPanel = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.16), mats.screen(depthScreen));
+  depthPanel.position.set(-0.2, 1.16, 11.28);
+  depthPanel.rotation.x = -0.28;
   g.add(depthPanel);
 
-  const hdgPanel = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.14), mats.screen(headingScreen));
-  hdgPanel.position.set(0.18, 1.18, 11.36);
-  hdgPanel.rotation.x = -0.35;
+  const hdgPanel = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.16), mats.screen(headingScreen));
+  hdgPanel.position.set(0.22, 1.16, 11.28);
+  hdgPanel.rotation.x = -0.28;
   g.add(hdgPanel);
 
-  const statusPanel = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.2), mats.screen(statusScreen));
-  statusPanel.position.set(0.02, 1.28, 11.32);
-  statusPanel.rotation.x = -0.4;
+  const statusPanel = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.22), mats.screen(statusScreen));
+  statusPanel.position.set(0.02, 1.26, 11.24);
+  statusPanel.rotation.x = -0.32;
   g.add(statusPanel);
 
   const map = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.28), mats.label(mapTex));

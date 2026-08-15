@@ -149,6 +149,7 @@ async function runInteractionTests(page) {
 
   try {
     await page.evaluate(() => {
+      window.debugAPI.clearStatus?.();
       window.debugAPI.setPlayerEnabled(true);
       window.debugAPI.setHUDVisible(true);
       window.debugAPI.setPlayerPose(-0.12, 1.7, 10.85, 0.35, 0.12);
@@ -167,11 +168,13 @@ async function runInteractionTests(page) {
 
   try {
     await page.evaluate(() => {
+      window.debugAPI.clearStatus?.();
       window.debugAPI.setPlayerEnabled(true);
       window.debugAPI.setPlayerPose(-0.1, 1.7, 10.7, 0.4, 0.15);
       window.debugAPI.lookAt(-0.38, 1.08, 10.32);
     });
-    await page.waitForTimeout(250);
+    await page.waitForFunction(() => /sonar/i.test(window.debugAPI.getPrompt()), null, { timeout: 4000 });
+    await page.waitForTimeout(150);
     const sonar = await page.evaluate(async () => {
       const before = window.debugAPI.getPrompt();
       const ev = new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', bubbles: true });
@@ -190,10 +193,12 @@ async function runInteractionTests(page) {
 
   try {
     await page.evaluate(() => {
-      window.debugAPI.setPlayerPose(-0.15, 1.7, 4.55, 1.2, 0.2);
+      window.debugAPI.clearStatus?.();
+      window.debugAPI.setPlayerPose(0.12, 1.7, 4.55, 1.4, 0.35);
       window.debugAPI.lookAt(-0.48, 0.62, 4.55);
     });
-    await page.waitForTimeout(200);
+    await page.waitForFunction(() => /rest/i.test(window.debugAPI.getPrompt()), null, { timeout: 4000 });
+    await page.waitForTimeout(150);
     const rest = await page.evaluate(async () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', bubbles: true }));
       await new Promise((r) => setTimeout(r, 400));
@@ -211,11 +216,13 @@ async function runInteractionTests(page) {
 
   try {
     await page.evaluate(() => {
+      window.debugAPI.clearStatus?.();
       window.debugAPI.setSubmarineState('cruising');
-      window.debugAPI.setPlayerPose(0.1, 1.7, -1.55, 0.1, 0.1);
+      window.debugAPI.setPlayerPose(0.05, 1.7, -1.35, 0.05, 0.12);
       window.debugAPI.lookAt(0.35, 1.15, -1.82);
     });
-    await page.waitForTimeout(200);
+    await page.waitForFunction(() => /silent/i.test(window.debugAPI.getPrompt()), null, { timeout: 4000 });
+    await page.waitForTimeout(150);
     const silent = await page.evaluate(async () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', bubbles: true }));
       await new Promise((r) => setTimeout(r, 250));
@@ -234,16 +241,16 @@ async function runInteractionTests(page) {
   try {
     const moved = await page.evaluate(async () => {
       window.debugAPI.setPlayerEnabled(true);
-      window.debugAPI.setPlayerPose(0, 1.7, 10.2, Math.PI, 0);
+      window.debugAPI.setPlayerPose(0, 1.7, 8.4, 0, 0);
       const z0 = window.debugAPI.getPlayer().z;
       const down = new KeyboardEvent('keydown', { code: 'KeyW', key: 'w', bubbles: true });
       window.dispatchEvent(down);
-      await new Promise((r) => setTimeout(r, 700));
+      await new Promise((r) => setTimeout(r, 1100));
       window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', key: 'w', bubbles: true }));
       const z1 = window.debugAPI.getPlayer().z;
       return { z0, z1, delta: z1 - z0 };
     });
-    result.movement = moved.delta < -0.15;
+    result.movement = moved.delta < -0.25;
     result.movementDetail = moved;
   } catch (err) {
     result.movementError = String(err);
@@ -267,9 +274,9 @@ async function runInteractionTests(page) {
 
   try {
     const walk = await page.evaluate(async () => {
-      window.debugAPI.setPlayerPose(0, 1.7, 10.4, Math.PI, 0);
+      window.debugAPI.setPlayerPose(0, 1.7, 9.2, 0, 0);
       window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', key: 'w', bubbles: true }));
-      await new Promise((r) => setTimeout(r, 9000));
+      await new Promise((r) => setTimeout(r, 16000));
       window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', key: 'w', bubbles: true }));
       const p = window.debugAPI.getPlayer();
       return p;

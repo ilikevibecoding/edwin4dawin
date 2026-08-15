@@ -20,8 +20,8 @@ export function createHull(mats, collider) {
 
   const R = LAYOUT.hullRadius;
   const cy = LAYOUT.hullCenterY;
-  const len = LAYOUT.hullZMax - LAYOUT.hullZMin;
-  const midZ = (LAYOUT.hullZMax + LAYOUT.hullZMin) / 2;
+  const len = (LAYOUT.hullZMax - 0.45) - LAYOUT.hullZMin;
+  const midZ = (LAYOUT.hullZMax - 0.45 + LAYOUT.hullZMin) / 2;
 
   const hullGeo = new THREE.CylinderGeometry(R, R, len, 56, 10, true);
   hullGeo.rotateX(Math.PI / 2);
@@ -32,14 +32,13 @@ export function createHull(mats, collider) {
   hull.receiveShadow = true;
   root.add(hull);
 
-  const bow = new THREE.Mesh(
-    new THREE.SphereGeometry(R, 40, 24, 0, Math.PI * 2, 0, Math.PI * 0.55),
-    mats.hullPaint,
-  );
-  bow.rotation.x = Math.PI;
-  bow.scale.set(-1, 1, 0.55);
-  bow.position.set(0, cy, LAYOUT.hullZMax);
-  root.add(bow);
+  const bowRing = new THREE.Mesh(new THREE.RingGeometry(0.48, R - 0.02, 40), mats.steel);
+  bowRing.position.set(0, cy, LAYOUT.hullZMax - 0.28);
+  root.add(bowRing);
+  const bowRingB = bowRing.clone();
+  bowRingB.position.z -= 0.04;
+  bowRingB.rotation.y = Math.PI;
+  root.add(bowRingB);
 
   const stern = new THREE.Mesh(
     new THREE.SphereGeometry(R, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.5),
@@ -204,13 +203,17 @@ function createEndBulkhead(z, mats, bow) {
   const g = new THREE.Group();
   g.position.z = z;
   const R = LAYOUT.hullRadius;
-  const plate = new THREE.Mesh(new THREE.CircleGeometry(R - 0.01, 36), mats.hullGreen);
-  plate.position.y = LAYOUT.hullCenterY;
-  g.add(plate);
   if (bow) {
-    const opening = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.58), mats.blackout);
-    opening.position.set(0, 1.28, 0.02);
-    g.add(opening);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.46, R - 0.01, 40), mats.hullGreen);
+    ring.position.y = LAYOUT.hullCenterY;
+    g.add(ring);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.47, 0.035, 8, 28), mats.steel);
+    lip.position.y = LAYOUT.hullCenterY;
+    g.add(lip);
+  } else {
+    const plate = new THREE.Mesh(new THREE.CircleGeometry(R - 0.01, 36), mats.hullGreen);
+    plate.position.y = LAYOUT.hullCenterY;
+    g.add(plate);
   }
   return g;
 }

@@ -16,14 +16,13 @@ export function createHullDressing(mats) {
   const z0 = LAYOUT.hullZMin + 0.4;
   const z1 = LAYOUT.hullZMax - 0.3;
 
-  const panels = [];
-  for (let z = z0; z < z1; z += 0.78) {
-    panels.push(boxGeo(0.02, 0.55, 0.62, -0.68, 1.15, z + 0.39));
-    panels.push(boxGeo(0.02, 0.55, 0.62, 0.68, 1.15, z + 0.39));
-    panels.push(boxGeo(0.42, 0.02, 0.62, 0, 2.02, z + 0.39));
+  const racks = [];
+  for (let z = z0; z < z1; z += 1.56) {
+    racks.push(boxGeo(0.06, 0.42, 0.28, -0.64, 1.22, z + 0.5));
+    racks.push(boxGeo(0.06, 0.42, 0.28, 0.64, 1.22, z + 0.5));
   }
-  const panelMesh = mergeGroup(panels, mats.hullGreen);
-  if (panelMesh) g.add(panelMesh);
+  const rackMesh = mergeGroup(racks, mats.machine);
+  if (rackMesh) g.add(rackMesh);
 
   const pipeL = createPipeRun(
     [new THREE.Vector3(-0.62, 1.88, z1), new THREE.Vector3(-0.62, 1.88, z0)],

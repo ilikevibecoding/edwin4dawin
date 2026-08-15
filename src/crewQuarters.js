@@ -54,9 +54,9 @@ export function createCrewQuarters(mats, collider) {
   collider.addBox(0.55, 0.48, 4.25, 0.22, 0.9, 1.15, 'lockers');
 
   const table = createFoldTable(mats);
-  table.position.set(0.18, 0.78, 2.35);
+  table.position.set(0.42, 0.78, 2.55);
   g.add(table);
-  collider.addBox(0.18, 0.55, 2.35, 0.5, 0.2, 0.4, 'table');
+  collider.addBox(0.48, 0.55, 2.55, 0.36, 0.2, 0.36, 'table');
 
   const bench = new THREE.Mesh(beveledBox(0.22, 0.08, 0.55, 0.01), mats.leather);
   bench.position.set(0.42, 0.42, 2.35);

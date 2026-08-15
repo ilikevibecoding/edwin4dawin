@@ -39,6 +39,9 @@ export function createEngineRoom(mats, collider) {
   motor.rotation.y = Math.PI / 2;
   motor.scale.setScalar(1.15);
   g.add(motor);
+  const motorLamp = new THREE.PointLight(0xffe0b0, 2.4, 3.2, 2);
+  motorLamp.position.set(0.25, 1.45, -5.55);
+  g.add(motorLamp);
   collider.addBox(0.08, 0.7, -6.35, 1.15, 1.15, 2.1, 'motor');
 
   const gear = createGearbox(mats);

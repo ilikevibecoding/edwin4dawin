@@ -5,10 +5,10 @@ export function createLighting(scene) {
   const group = new THREE.Group();
   group.name = 'lighting';
 
-  const hemi = new THREE.HemisphereLight(0xc4c0b4, 0x2a241c, 0.32);
+  const hemi = new THREE.HemisphereLight(0xb8b4a8, 0x1a1814, 0.22);
   group.add(hemi);
 
-  const ambient = new THREE.AmbientLight(0x8a8074, 0.16);
+  const ambient = new THREE.AmbientLight(0x6a645c, 0.1);
   group.add(ambient);
 
   const keyControl = makeSpot(0xffe2b0, 4.2, 10, 0.62, 0.45);
@@ -93,8 +93,8 @@ export function createLighting(scene) {
     instrument,
     mode: 'cruising',
     base: {
-    hemi: 0.32,
-    ambient: 0.16,
+    hemi: 0.22,
+    ambient: 0.1,
     keyC: 4.2,
     keyE: 5.2,
       practical: practicals.map((p) => p.intensity),

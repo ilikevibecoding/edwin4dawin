@@ -63,8 +63,19 @@ export function createUnderwater(seed = 0x51) {
   );
   ridge.rotation.z = 1.15;
   ridge.rotation.y = 0.3;
-  ridge.position.set(8, 2, 24);
+  ridge.position.set(3.5, 0.2, 22);
   terrain.add(ridge);
+  const nearRock = new THREE.Mesh(
+    new THREE.DodecahedronGeometry(2.8, 0),
+    new THREE.MeshStandardMaterial({ color: 0x4a646c, roughness: 0.9 }),
+  );
+  nearRock.position.set(1.6, 9.2, -1.2);
+  nearRock.scale.set(1.6, 2.2, 1.8);
+  terrain.add(nearRock);
+  const floodHit = new THREE.SpotLight(0xb8dce0, 40, 22, 0.35, 0.45, 1.2);
+  floodHit.position.set(0, 9.4, -5);
+  floodHit.target.position.set(1.6, 9.0, -1.2);
+  terrain.add(floodHit, floodHit.target);
 
   const wall = new THREE.Mesh(
     new THREE.BoxGeometry(4, 18, 50),

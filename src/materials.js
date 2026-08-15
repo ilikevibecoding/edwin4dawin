@@ -170,7 +170,7 @@ export function createMaterials() {
   const mats = {
     hullPaint: physical({
       ...hull,
-      color: 0xd2c4a8,
+      color: 0xb4b09c,
       metalness: 0.12,
       roughness: 0.56,
       clearcoat: 0.22,
@@ -216,14 +216,14 @@ export function createMaterials() {
     }),
     oily: physical({
       ...oily,
-      color: 0x2a2e32,
+      color: 0x4a545c,
       metalness: 0.72,
       roughness: 0.28,
       envMapIntensity: 0.95,
     }),
     machine: physical({
       ...machine,
-      color: 0x4a5864,
+      color: 0x7a8a96,
       metalness: 0.55,
       roughness: 0.46,
       clearcoat: 0.08,
@@ -326,7 +326,7 @@ export function createMaterials() {
       metalness: 0.05,
       roughness: 0.08,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.12,
       envMapIntensity: 1.6,
       clearcoat: 1,
       clearcoatRoughness: 0.04,
