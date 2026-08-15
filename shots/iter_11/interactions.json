@@ -1,0 +1,45 @@
+{
+  "pointerLock": true,
+  "movement": true,
+  "collision": true,
+  "sonar": true,
+  "rest": true,
+  "silentRunning": false,
+  "traversal": true,
+  "sonarDetail": {
+    "prompt": "E: Active Sonar Ping",
+    "status": "Sonar pulse transmitted."
+  },
+  "silentDetail": {
+    "a": {
+      "status": "No immediate contact.",
+      "state": "cruising"
+    },
+    "b": {
+      "status": "Sonar pulse transmitted.",
+      "state": "cruising"
+    },
+    "prompt": "E: Active Sonar Ping"
+  },
+  "restDetail": {
+    "status": "6 hours pass.",
+    "fade": 1,
+    "state": "restCycle"
+  },
+  "movementDetail": {
+    "z0": 7.2,
+    "z1": 5.021974564520267,
+    "delta": -2.178025435479733
+  },
+  "collisionDetail": {
+    "z0": 12.15,
+    "z1": 12.15,
+    "delta": 0
+  },
+  "traversalDetail": {
+    "x": 0,
+    "y": 1.7103621864985048,
+    "z": -1.73,
+    "locked": true
+  }
+}

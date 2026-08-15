@@ -2,16 +2,16 @@
 
 ## Current status
 
-- Iteration: 10
+- Iteration: 11
 - Consecutive all-pass iterations: 0
 - Average FPS: 21 (SwiftShader — indicative only)
 - One-percent-low FPS: 20
-- Average frame time: 47.41 ms
-- Draw calls: 723
-- Triangle count: 77394
-- Texture count: 121
+- Average frame time: 47.59 ms
+- Draw calls: 768
+- Triangle count: 79168
+- Texture count: 125
 - Renderer: ANGLE SwiftShader
-- Stopping-condition status: 10/12 iterations complete, 0 consecutive all-pass, continuing
+- Stopping-condition status: 11/12 iterations complete, 0 consecutive all-pass, continuing
 
 ## Iteration 1
 
@@ -540,5 +540,163 @@ Same visual failures. Engine room remains a dark blob. Viewport still does not r
 
 ### Commit
 
-- Commit hash: pending
+- Commit hash: afa11f9e
 - Commit message: Record iteration 10 screenshots and rubric failures.
+
+## Iteration 11
+
+### Implemented
+
+- Silent-running test runs before rest; `completeRest` / `debugAPI.step` drive the rest fade
+- Hatch doors parked against the hull; cooler painted-steel hull; larger bow opening
+- Window rocks shrunk; 3/4 cameras on stations and motor; lighter machinery + work lights
+- Corridor hose/rack/phone; crew props; invisible hitboxes with `colorWrite: false`
+
+### Agent assignments
+
+- Pressure hull: lead (hatch park, bow ring)
+- Control room: lead (wider station camera, extra switches)
+- Corridor: lead (eye-level dressing)
+- Crew spaces: lead (props, curtain scale)
+- Machinery: lead (brushed motor, fill lights)
+- Materials: lead (cooler hull, lighter gunmetal)
+- Water: lead (smaller exterior rocks)
+- Lighting: lead (engine key + practicals)
+- Player and interactions: lead (rest complete, hover clear)
+- Performance: SwiftShader path unchanged
+
+### Asset loops
+
+#### Pressure hull
+- Attempts: 5
+- Result: FAIL — cylinder reads; still a tiled tube
+- Remaining weaknesses: empty mid-volume, panel tiling
+
+#### Control room
+- Attempts: 5
+- Result: FAIL — `controlRoom.png` now looks toward the helm/viewport but stations read as dark boxes
+- Remaining weaknesses: generated displays not in frame, sparse composition
+
+#### Corridor
+- Attempts: 5
+- Result: FAIL — more pipes and a gauge; glowing plates and empty floor remain
+- Remaining weaknesses: supported construction, no undetailed slabs
+
+#### Crew quarters
+- Attempts: 4
+- Result: FAIL — bunks still brown boxes; curtain still clips
+- Remaining weaknesses: fabric, personal density
+
+#### Machinery room
+- Attempts: 5
+- Result: FAIL — more of the room is visible, but the motor is still a dark primitive mass
+- Remaining weaknesses: readable housing, layered close-up
+
+#### Materials and wear
+- Attempts: 4
+- Result: FAIL — hull slightly cooler, still not painted steel vs fabric vs oil
+- Remaining weaknesses: wear logic, roughness contrast
+
+#### Underwater exterior
+- Attempts: 5
+- Result: FAIL — `forwardViewport.png` is a dark grainy void with two light blobs
+- Remaining weaknesses: centered lit terrain, particle layers, window frame
+
+#### Lighting and post
+- Attempts: 4
+- Result: FAIL — engine still crushed; viewport under-exposed; GTAO off
+- Remaining weaknesses: keys that survive SwiftShader
+
+#### Collision and interactions
+- Attempts: 7
+- Result: PARTIAL — pointer, movement, collision, sonar, rest, traversal pass; silent running fail (KeyE still fired sonar)
+
+### Rubric assessment
+
+#### 1. Spatial layout and submarine silhouette
+- PASS/FAIL: FAIL
+- Evidence: `corridor.png` / `engineRoom.png` read as a ribbed tube, not a packed vessel.
+
+#### 2. Control-room quality
+- PASS/FAIL: FAIL
+- Evidence: `controlRoom.png` shows a dark helm block and a black viewport hole, not dense stations.
+
+#### 3. Corridor detail density
+- PASS/FAIL: FAIL
+- Evidence: `corridor.png` has pipes and a gauge; large hull and floor regions stay empty.
+
+#### 4. Crew quarters feel inhabited
+- PASS/FAIL: FAIL
+- Evidence: `crewQuarters.png` still has box bunks and a clipping curtain.
+
+#### 5. Aft machinery room looks mechanically believable
+- PASS/FAIL: FAIL
+- Evidence: `engineRoom.png` shows a dark primitive motor and a ROTATING GEAR plate.
+
+#### 6. Materials read as physical
+- PASS/FAIL: FAIL
+- Evidence: hull still tiled beige; metals crush; fabric is flat brown.
+
+#### 7. Wear and grime follow physical logic
+- PASS/FAIL: FAIL
+- Evidence: no readable contact wear in primary shots.
+
+#### 8. Lighting reads as intentional
+- PASS/FAIL: FAIL
+- Evidence: high-contrast SwiftShader; machinery lost in shadow; viewport black.
+
+#### 9. Post-processing is active and balanced
+- PASS/FAIL: FAIL
+- Evidence: grain dominates `forwardViewport.png`; no AO; crushed blacks.
+
+#### 10. Underwater view sells depth and motion
+- PASS/FAIL: FAIL
+- Evidence: `forwardViewport.png` is a dark void with two bloom blobs.
+
+#### 11. One cohesive palette across every room
+- PASS/FAIL: FAIL
+- Evidence: beige tube + black boxes + glowing plates.
+
+#### 12. The player can genuinely walk into the back
+- PASS/FAIL: PASS
+- Evidence: `shots/iter_11/interactions.json` traversalDetail.z = −1.73.
+
+#### 13. Interactions work
+- PASS/FAIL: FAIL
+- Evidence: silent test prompt stayed `E: Active Sonar Ping`; KeyE retriggered sonar.
+
+#### 14. Technical quality is clean
+- PASS/FAIL: FAIL
+- Evidence: 21 fps SwiftShader; curtain clip; no page/WebGL errors.
+
+#### 15. The cold-look test
+- PASS/FAIL: FAIL
+- Evidence: four primaries still read as a Three.js prototype, not an AA submarine game.
+
+### Technical metrics
+
+- FPS: 21 · frame 47.59 ms · draw 768 · tris 79168 · textures 125 · programs 34
+- Console/page/WebGL errors: 0
+- Renderer: ANGLE SwiftShader
+
+### Interaction tests
+
+- Pointer lock: pass
+- Movement: pass (−2.18 m)
+- Collision: pass (weak — rAF, delta 0)
+- Sonar: pass
+- Rest: pass
+- Silent running: fail
+- Traversal: pass (z=−1.73)
+
+### Next iteration fix list
+
+1. `forceHover` after pose so silent KeyE cannot retrigger sonar
+2. Place a lit rock on the viewport optical axis
+3. Face the bow collider for the collision test
+4. Reduce grain; raise exposure; pull curtain off the bunks
+
+### Commit
+
+- Commit hash: 63c8bd4c
+- Commit message: Iteration 11: fix silent-running tests and reframe the hero views.
