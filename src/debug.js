@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { LAYOUT } from './layout.js';
 
 export const VIEWS = {
-  controlRoom: { pos: [0.28, 1.4, 10.15], look: [-0.2, 1.12, 11.7], fov: 52 },
+  controlRoom: { pos: [0.12, 1.38, 10.85], look: [-0.32, 1.12, 10.35], fov: 50 },
   corridor: { pos: [0.2, 1.46, 8.25], look: [-0.32, 1.2, 6.7], fov: 54 },
   crewQuarters: { pos: [0.26, 1.44, 4.7], look: [-0.5, 0.88, 3.7], fov: 54 },
   engineRoom: { pos: [0.22, 1.18, -4.55], look: [0.02, 0.78, -6.25], fov: 48 },

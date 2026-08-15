@@ -2,16 +2,16 @@
 
 ## Current status
 
-- Iteration: 1
+- Iteration: 2
 - Consecutive all-pass iterations: 0
-- Average FPS: 21 (SwiftShader software renderer — indicative only)
+- Average FPS: 21 (SwiftShader — indicative only)
 - One-percent-low FPS: 20
-- Average frame time: 47.22 ms
-- Draw calls: 718
-- Triangle count: 78920
+- Average frame time: 47.59 ms
+- Draw calls: 720
+- Triangle count: 77090
 - Texture count: 124
-- Renderer: ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)
-- Stopping-condition status: iteration 1 complete, 0/15 rubric items pass, continuing
+- Renderer: ANGLE SwiftShader
+- Stopping-condition status: 2/12 iterations complete, 0 consecutive all-pass, continuing
 
 ## Iteration 1
 
@@ -186,5 +186,42 @@
 
 ### Commit
 
+- Commit hash: 35d15643
+- Commit message: Record iteration 1 screenshots and rubric failures.
+
+## Iteration 2
+
+### Implemented
+
+- Bow ring opening so the hull no longer occludes the viewport
+- Larger circular viewport; lighter machinery colors
+- Fold-down table moved off the walkable centerline
+- Cameras reframed; motor work light added
+- Interaction tests wait for prompts
+
+### Rubric assessment
+
+All 15 items FAIL. `controlRoom.png` looks at hull/void instead of stations. `forwardViewport.png` shows floodlight blobs in a dark void, not terrain. `engineRoom.png` is still a black box in a tube. `crewQuarters.png` has a curtain clipping a bunk. Rest/silent prompts never appeared. Movement delta 0 (synthetic keydown). Traversal only 0.38 m — bulkhead friction.
+
+### Technical metrics
+
+- FPS: 21 · frame 47.59 ms · draw 720 · tris 77090 · textures 124 · page errors 0
+- Renderer: SwiftShader
+
+### Interaction tests
+
+- Pointer lock: pass · Collision: pass · Sonar: pass
+- Movement: fail · Rest: fail · Silent: fail · Traversal: fail
+
+### Next iteration fix list
+
+1. Use Playwright `keyboard.down('w')` / `press('e')` instead of synthetic events
+2. Start walk tests in open corridor, widen hatch colliders
+3. Place a large lit rock immediately outside the bow window
+4. Frame cameras on consoles, bunks, and the motor — not the tube axis
+5. Remove clipping curtain; enlarge interact volumes
+
+### Commit
+
 - Commit hash: pending
-- Commit message: Iteration 1 screenshots, metrics, and rubric (all fail)
+- Commit message: Iteration 2 screenshots and rubric (all fail)

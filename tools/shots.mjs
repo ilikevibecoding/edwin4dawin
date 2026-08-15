@@ -175,16 +175,12 @@ async function runInteractionTests(page) {
     });
     await page.waitForFunction(() => /sonar/i.test(window.debugAPI.getPrompt()), null, { timeout: 4000 });
     await page.waitForTimeout(150);
-    const sonar = await page.evaluate(async () => {
-      const before = window.debugAPI.getPrompt();
-      const ev = new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', bubbles: true });
-      window.dispatchEvent(ev);
-      await new Promise((r) => setTimeout(r, 200));
-      return {
-        prompt: before || window.debugAPI.getPrompt(),
-        status: window.debugAPI.getStatus(),
-      };
-    });
+    await page.keyboard.press('e');
+    await page.waitForTimeout(250);
+    const sonar = await page.evaluate(() => ({
+      prompt: window.debugAPI.getPrompt(),
+      status: window.debugAPI.getStatus(),
+    }));
     result.sonar = /sonar|pulse|contact/i.test(`${sonar.prompt} ${sonar.status}`);
     result.sonarDetail = sonar;
   } catch (err) {
@@ -194,19 +190,17 @@ async function runInteractionTests(page) {
   try {
     await page.evaluate(() => {
       window.debugAPI.clearStatus?.();
-      window.debugAPI.setPlayerPose(0.12, 1.7, 4.55, 1.4, 0.35);
-      window.debugAPI.lookAt(-0.48, 0.62, 4.55);
+      window.debugAPI.setPlayerPose(0.18, 1.7, 4.55, 1.45, 0.28);
+      window.debugAPI.lookAt(-0.4, 0.85, 4.55);
     });
     await page.waitForFunction(() => /rest/i.test(window.debugAPI.getPrompt()), null, { timeout: 4000 });
     await page.waitForTimeout(150);
-    const rest = await page.evaluate(async () => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', bubbles: true }));
-      await new Promise((r) => setTimeout(r, 400));
-      return {
-        status: window.debugAPI.getStatus(),
-        fade: window.debugAPI.getFade(),
-      };
-    });
+    await page.keyboard.press('e');
+    await page.waitForTimeout(500);
+    const rest = await page.evaluate(() => ({
+      status: window.debugAPI.getStatus(),
+      fade: window.debugAPI.getFade(),
+    }));
     result.rest = /hours|rest/i.test(rest.status) || rest.fade > 0.2;
     result.restDetail = rest;
     await page.waitForTimeout(2800);
@@ -218,20 +212,18 @@ async function runInteractionTests(page) {
     await page.evaluate(() => {
       window.debugAPI.clearStatus?.();
       window.debugAPI.setSubmarineState('cruising');
-      window.debugAPI.setPlayerPose(0.05, 1.7, -1.35, 0.05, 0.12);
-      window.debugAPI.lookAt(0.35, 1.15, -1.82);
+      window.debugAPI.setPlayerPose(0.0, 1.7, -1.15, 0.15, 0.12);
+      window.debugAPI.lookAt(0.32, 1.15, -1.75);
     });
     await page.waitForFunction(() => /silent/i.test(window.debugAPI.getPrompt()), null, { timeout: 4000 });
     await page.waitForTimeout(150);
-    const silent = await page.evaluate(async () => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', bubbles: true }));
-      await new Promise((r) => setTimeout(r, 250));
-      const a = window.debugAPI.getStatus();
-      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', bubbles: true }));
-      await new Promise((r) => setTimeout(r, 250));
-      const b = window.debugAPI.getStatus();
-      return { a, b };
-    });
+    await page.keyboard.press('e');
+    await page.waitForTimeout(300);
+    const a = await page.evaluate(() => window.debugAPI.getStatus());
+    await page.keyboard.press('e');
+    await page.waitForTimeout(300);
+    const b = await page.evaluate(() => window.debugAPI.getStatus());
+    const silent = { a, b };
     result.silentRunning = /silent/i.test(`${silent.a} ${silent.b}`);
     result.silentDetail = silent;
   } catch (err) {
@@ -239,17 +231,16 @@ async function runInteractionTests(page) {
   }
 
   try {
-    const moved = await page.evaluate(async () => {
+    const z0 = await page.evaluate(() => {
       window.debugAPI.setPlayerEnabled(true);
-      window.debugAPI.setPlayerPose(0, 1.7, 8.4, 0, 0);
-      const z0 = window.debugAPI.getPlayer().z;
-      const down = new KeyboardEvent('keydown', { code: 'KeyW', key: 'w', bubbles: true });
-      window.dispatchEvent(down);
-      await new Promise((r) => setTimeout(r, 1100));
-      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', key: 'w', bubbles: true }));
-      const z1 = window.debugAPI.getPlayer().z;
-      return { z0, z1, delta: z1 - z0 };
+      window.debugAPI.setPlayerPose(0, 1.7, 7.2, 0, 0);
+      return window.debugAPI.getPlayer().z;
     });
+    await page.keyboard.down('w');
+    await page.waitForTimeout(1200);
+    await page.keyboard.up('w');
+    const z1 = await page.evaluate(() => window.debugAPI.getPlayer().z);
+    const moved = { z0, z1, delta: z1 - z0 };
     result.movement = moved.delta < -0.25;
     result.movementDetail = moved;
   } catch (err) {
@@ -257,15 +248,15 @@ async function runInteractionTests(page) {
   }
 
   try {
-    const col = await page.evaluate(async () => {
-      window.debugAPI.setPlayerPose(0, 1.7, 12.1, 0, 0);
-      const z0 = window.debugAPI.getPlayer().z;
-      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', key: 'w', bubbles: true }));
-      await new Promise((r) => setTimeout(r, 600));
-      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', key: 'w', bubbles: true }));
-      const z1 = window.debugAPI.getPlayer().z;
-      return { z0, z1, delta: z1 - z0 };
+    const cz0 = await page.evaluate(() => {
+      window.debugAPI.setPlayerPose(0, 1.7, 12.15, 0, 0);
+      return window.debugAPI.getPlayer().z;
     });
+    await page.keyboard.down('w');
+    await page.waitForTimeout(700);
+    await page.keyboard.up('w');
+    const cz1 = await page.evaluate(() => window.debugAPI.getPlayer().z);
+    const col = { z0: cz0, z1: cz1, delta: cz1 - cz0 };
     result.collision = col.z1 < 12.45;
     result.collisionDetail = col;
   } catch (err) {
@@ -273,14 +264,14 @@ async function runInteractionTests(page) {
   }
 
   try {
-    const walk = await page.evaluate(async () => {
-      window.debugAPI.setPlayerPose(0, 1.7, 9.2, 0, 0);
-      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', key: 'w', bubbles: true }));
-      await new Promise((r) => setTimeout(r, 16000));
-      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', key: 'w', bubbles: true }));
-      const p = window.debugAPI.getPlayer();
-      return p;
+    await page.evaluate(() => {
+      window.debugAPI.setPlayerEnabled(true);
+      window.debugAPI.setPlayerPose(0, 1.7, 8.6, 0, 0);
     });
+    await page.keyboard.down('w');
+    await page.waitForTimeout(18000);
+    await page.keyboard.up('w');
+    const walk = await page.evaluate(() => window.debugAPI.getPlayer());
     result.traversal = walk.z < -1.2;
     result.traversalDetail = walk;
   } catch (err) {

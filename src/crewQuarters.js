@@ -34,8 +34,8 @@ export function createCrewQuarters(mats, collider) {
     collider.addBox(spec.x, spec.y + 0.08, spec.z, 0.55, 0.38, 1.05, 'bunk');
   }
 
-  const interactBunk = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.9), new THREE.MeshBasicMaterial({ visible: false }));
-  interactBunk.position.set(-0.48, 0.62, 4.55);
+  const interactBunk = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 1.1), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 }));
+  interactBunk.position.set(-0.4, 0.85, 4.55);
   g.add(interactBunk);
 
   const lockers = new THREE.Group();
@@ -117,7 +117,8 @@ export function createCrewQuarters(mats, collider) {
   g.add(warn);
 
   const curtain = createCurtain(mats);
-  curtain.position.set(-0.18, 1.15, 3.85);
+  curtain.position.set(-0.22, 1.35, 3.82);
+  curtain.scale.set(0.7, 0.85, 1);
   g.add(curtain);
 
   markShadows(g);

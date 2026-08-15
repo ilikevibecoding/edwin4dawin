@@ -217,8 +217,8 @@ export function createControlRoom(mats, collider) {
   fire.position.set(-0.6, 0.55, 9.55);
   g.add(fire);
 
-  const interactSonar = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.2), new THREE.MeshBasicMaterial({ visible: false }));
-  interactSonar.position.set(-0.38, 1.05, 10.38);
+  const interactSonar = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.5), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 }));
+  interactSonar.position.set(-0.38, 1.1, 10.4);
   g.add(interactSonar);
 
   const extras = mergeGroup([

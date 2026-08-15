@@ -194,8 +194,8 @@ export function createEngineRoom(mats, collider) {
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.3), mats.screen(panelTex));
   screen.position.set(0.35, 1.18, -1.79);
   g.add(screen);
-  const interact = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.45, 0.16), new THREE.MeshBasicMaterial({ visible: false }));
-  interact.position.set(0.35, 1.15, -1.82);
+  const interact = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.5), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 }));
+  interact.position.set(0.32, 1.15, -1.75);
   g.add(interact);
 
   for (const z of [-2.4, -4.4, -6.5]) {

@@ -106,6 +106,21 @@ export function createUnderwater(seed = 0x51) {
   const floodR = new THREE.SpotLight(0x9fd4dc, 16, 26, 0.26, 0.6, 1.4);
   floodR.position.set(0.45, 0.85, 13.1);
   floodR.target.position.set(1.4, -2.0, 21);
+  const windowRock = new THREE.Mesh(
+    new THREE.DodecahedronGeometry(2.2, 1),
+    new THREE.MeshStandardMaterial({ color: 0x6e8a90, roughness: 0.88, metalness: 0.04 }),
+  );
+  windowRock.position.set(1.8, 0.4, 15.4);
+  windowRock.scale.set(1.4, 2.1, 1.6);
+  root.add(windowRock);
+  const windowRock2 = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.4, 0),
+    new THREE.MeshStandardMaterial({ color: 0x3a5056, roughness: 0.92 }),
+  );
+  windowRock2.position.set(-2.2, -0.6, 17.5);
+  windowRock2.scale.set(1.8, 1.3, 1.5);
+  root.add(windowRock2);
+
   root.add(floodL, floodL.target, floodR, floodR.target);
 
   const coneMat = new THREE.MeshBasicMaterial({

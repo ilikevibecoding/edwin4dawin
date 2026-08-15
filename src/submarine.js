@@ -184,8 +184,8 @@ function createBulkhead(z, mats, collider, bolts) {
   label.position.set(0.42, 1.55, 0.04);
   g.add(label);
 
-  collider.addBox(-0.85, 1.1, z, 0.55, 2.2, 0.12, 'bulk-side');
-  collider.addBox(0.85, 1.1, z, 0.55, 2.2, 0.12, 'bulk-side');
+  collider.addBox(-0.95, 1.1, z, 0.42, 2.2, 0.1, 'bulk-side');
+  collider.addBox(0.95, 1.1, z, 0.42, 2.2, 0.1, 'bulk-side');
   collider.addBox(0, 0.2, z, 1.4, 0.4, 0.16, 'sill');
   collider.addBox(0, 1.85, z, 1.6, 0.5, 0.12, 'bulk-top');
 
