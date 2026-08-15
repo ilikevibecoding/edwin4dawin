@@ -18,6 +18,7 @@ export function createMaterials() {
     chips: 90,
     chipColor: PALETTE.primer,
     streaks: 10,
+    panels: true,
     roughness: 0.58,
     normalStrength: 1.15,
     seed: 11,
@@ -32,6 +33,7 @@ export function createMaterials() {
     scratches: 50,
     chips: 70,
     chipColor: PALETTE.primer,
+    panels: true,
     roughness: 0.6,
     seed: 19,
     size: 1024,
@@ -168,13 +170,15 @@ export function createMaterials() {
   const mats = {
     hullPaint: physical({
       ...hull,
-      color: 0xc4b69c,
+      color: 0xd2c4a8,
       metalness: 0.12,
       roughness: 0.56,
       clearcoat: 0.22,
       clearcoatRoughness: 0.45,
       envMapIntensity: 0.7,
-      normalScale: new THREE.Vector2(0.55, 0.55),
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      repeatX: 3,
+      repeatY: 12,
     }),
     hullGreen: physical({
       ...hullGreen,
@@ -184,6 +188,8 @@ export function createMaterials() {
       clearcoat: 0.16,
       clearcoatRoughness: 0.5,
       envMapIntensity: 0.55,
+      repeatX: 2,
+      repeatY: 4,
     }),
     chippedPaint: physical({
       ...hull,
@@ -297,7 +303,7 @@ export function createMaterials() {
     }),
     leather: physical({
       ...leather,
-      color: 0x3e2e24,
+      color: 0x6a4a38,
       metalness: 0.04,
       roughness: 0.68,
       sheen: 0.2,
@@ -392,7 +398,7 @@ export function createMaterials() {
     map,
     emissive: 0xffffff,
     emissiveMap: map,
-    emissiveIntensity: 0.55,
+      emissiveIntensity: 0.95,
     roughness: 0.28,
     metalness: 0.05,
   });
@@ -407,11 +413,7 @@ export function createMaterials() {
 }
 
 function physical(opts) {
-  const mat = new THREE.MeshPhysicalMaterial({
-    map: opts.map,
-    roughnessMap: opts.roughnessMap,
-    normalMap: opts.normalMap,
-    aoMap: opts.aoMap,
+  const params = {
     color: opts.color ?? 0xffffff,
     metalness: opts.metalness ?? 0.2,
     roughness: opts.roughness ?? 0.5,
@@ -420,11 +422,22 @@ function physical(opts) {
     envMapIntensity: opts.envMapIntensity ?? 0.6,
     sheen: opts.sheen ?? 0,
     sheenRoughness: opts.sheenRoughness ?? 0.6,
-    sheenColor: opts.sheenColor,
     normalScale: opts.normalScale ?? new THREE.Vector2(0.6, 0.6),
-  });
-  if (opts.map) {
-    opts.map.repeat.set(opts.repeatX ?? 1, opts.repeatY ?? 1);
+  };
+  if (opts.map) params.map = opts.map.clone();
+  if (opts.roughnessMap) params.roughnessMap = opts.roughnessMap.clone();
+  if (opts.normalMap) params.normalMap = opts.normalMap.clone();
+  if (opts.aoMap) params.aoMap = opts.aoMap.clone();
+  if (opts.sheenColor) params.sheenColor = opts.sheenColor;
+  const mat = new THREE.MeshPhysicalMaterial(params);
+  if (params.map) {
+    const rx = opts.repeatX ?? 1;
+    const ry = opts.repeatY ?? 1;
+    params.map.repeat.set(rx, ry);
+    params.map.needsUpdate = true;
+    if (params.roughnessMap) params.roughnessMap.repeat.set(rx, ry);
+    if (params.normalMap) params.normalMap.repeat.set(rx, ry);
+    if (params.aoMap) params.aoMap.repeat.set(rx, ry);
   }
   return mat;
 }
@@ -442,14 +455,16 @@ export function applyEnvMap(materials, envMap, intensityScale = 1) {
 export function setWearState(materials, used) {
   const scale = used ? 1 : 0.35;
   for (const value of Object.values(materials)) {
-    if (value && value.normalScale) {
+    if (!value || !value.isMaterial) continue;
+    if (!value.userData) value.userData = {};
+    if (value.normalScale) {
       value.userData.baseNormal = value.userData.baseNormal ?? value.normalScale.clone();
       value.normalScale.copy(value.userData.baseNormal).multiplyScalar(used ? 1 : 0.55);
     }
-    if (value && value.roughness != null && value.userData.baseRough == null) {
+    if (value.roughness != null && value.userData.baseRough == null) {
       value.userData.baseRough = value.roughness;
     }
-    if (value && value.userData.baseRough != null) {
+    if (value.userData.baseRough != null) {
       value.roughness = THREE.MathUtils.lerp(value.userData.baseRough * 0.85, value.userData.baseRough, scale);
     }
   }

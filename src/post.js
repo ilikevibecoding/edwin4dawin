@@ -50,20 +50,35 @@ const GradeShader = {
   `,
 };
 
-export function createPost(renderer, scene, camera) {
+export function detectSoftwareRenderer(renderer) {
+  const gl = renderer.getContext();
+  const dbg = gl.getExtension?.('WEBGL_debug_renderer_info');
+  const name = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '') : '';
+  return { name, software: /swiftshader|llvmpipe|softpipe|software/i.test(name) };
+}
+
+export function createPost(renderer, scene, camera, options = {}) {
+  const simple = !!options.simple;
   const size = renderer.getSize(new THREE.Vector2());
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
-  const gtao = new GTAOPass(scene, camera, size.x, size.y);
-  gtao.output = GTAOPass.OUTPUT.Default;
-  if (gtao.blendIntensity != null) gtao.blendIntensity = 0.65;
-  composer.addPass(gtao);
+  let gtao = null;
+  if (!simple) {
+    gtao = new GTAOPass(scene, camera, size.x, size.y);
+    gtao.output = GTAOPass.OUTPUT.Default;
+    if (gtao.blendIntensity != null) gtao.blendIntensity = 0.65;
+    composer.addPass(gtao);
+  }
 
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.18, 0.42, 0.82);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), simple ? 0.1 : 0.18, 0.4, 0.84);
   composer.addPass(bloom);
 
   const grade = new ShaderPass(GradeShader);
+  if (simple) {
+    grade.uniforms.grain.value = 0.02;
+    grade.uniforms.vignette.value = 0.34;
+  }
   composer.addPass(grade);
   composer.addPass(new OutputPass());
 
@@ -72,9 +87,10 @@ export function createPost(renderer, scene, camera) {
     bloom,
     gtao,
     grade,
+    simple,
     setSize(w, h) {
       composer.setSize(w, h);
-      gtao.setSize(w, h);
+      gtao?.setSize(w, h);
     },
     render(dt) {
       grade.uniforms.time.value += dt;
@@ -83,12 +99,11 @@ export function createPost(renderer, scene, camera) {
   };
 }
 
-export function configureRenderer(renderer) {
+export function configureRenderer(renderer, options = {}) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
-  renderer.shadowMap.enabled = true;
+  renderer.toneMappingExposure = 1.18;
+  renderer.shadowMap.enabled = options.shadows !== false;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.setClearColor(0x05070a, 1);
-  renderer.physicallyCorrectLights = true;
 }

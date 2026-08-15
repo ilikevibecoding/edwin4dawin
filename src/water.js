@@ -75,9 +75,9 @@ export function createUnderwater(seed = 0x51) {
   terrain.add(wall);
   root.add(terrain);
 
-  const silt = makePoints(900, 14, 8, 22, 0x9bb8b0, 0.035, rng);
-  const midSilt = makePoints(700, 28, 12, 40, 0x6a8884, 0.05, rng.fork(2));
-  const farSilt = makePoints(400, 50, 18, 70, 0x3a5858, 0.08, rng.fork(3));
+  const silt = makePoints(420, 14, 8, 22, 0x9bb8b0, 0.04, rng);
+  const midSilt = makePoints(320, 28, 12, 40, 0x6a8884, 0.055, rng.fork(2));
+  const farSilt = makePoints(180, 50, 18, 70, 0x3a5858, 0.09, rng.fork(3));
   root.add(silt, midSilt, farSilt);
 
   const bubbles = makePoints(80, 6, 4, 10, 0xcfe4e0, 0.04, rng.fork(4));

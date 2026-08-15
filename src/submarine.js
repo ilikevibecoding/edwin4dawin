@@ -51,11 +51,11 @@ export function createHull(mats, collider) {
 
   const ribGeos = [];
   for (let z = LAYOUT.hullZMin + 0.4; z < LAYOUT.hullZMax - 0.2; z += LAYOUT.ribSpacing) {
-    ribGeos.push(torusGeo(R - 0.028, 0.032, 8, 40, 0, cy, z, 0, 0, 0));
+    ribGeos.push(torusGeo(R - 0.022, 0.042, 8, 40, 0, cy, z, 0, 0, 0));
     ribGeos.push(boxGeo(0.05, 0.08, 0.08, 0.62, 0.08, z));
     ribGeos.push(boxGeo(0.05, 0.08, 0.08, -0.62, 0.08, z));
   }
-  const ribs = mergeGroup(ribGeos, mats.chippedPaint);
+  const ribs = mergeGroup(ribGeos, mats.steel);
   if (ribs) root.add(ribs);
 
   const stringerGeos = [];

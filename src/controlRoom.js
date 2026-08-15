@@ -38,14 +38,28 @@ export function createControlRoom(mats, collider) {
   const brow = new THREE.Mesh(beveledBox(1.1, 0.1, 0.18, 0.012), mats.steel);
   brow.position.set(0, 1.62, 12.22);
   g.add(brow);
+
+  for (const [x, y] of [[-0.48, 1.55], [0.48, 1.55], [-0.48, 1.05], [0.48, 1.05]]) {
+    const bezel = new THREE.Mesh(beveledBox(0.2, 0.16, 0.06, 0.006), mats.plastic);
+    bezel.position.set(x, y, 12.18);
+    g.add(bezel);
+  }
   const sill = new THREE.Mesh(beveledBox(1.1, 0.08, 0.2, 0.01), mats.chippedPaint);
   sill.position.set(0, 0.96, 12.2);
   g.add(sill);
 
-  const helm = buildConsole(mats, 0.72, 0.78, 0.46, 'HELM');
-  helm.position.set(0.02, 0, 11.55);
+  const helm = buildConsole(mats, 0.84, 0.78, 0.52, 'HELM');
+  helm.position.set(0.02, 0, 11.48);
   g.add(helm);
-  collider.addBox(0.02, 0.4, 11.55, 0.76, 0.85, 0.5, 'helm');
+  collider.addBox(0.02, 0.4, 11.48, 0.88, 0.85, 0.56, 'helm');
+
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.018, 8, 18), mats.steel);
+  wheel.position.set(0.02, 0.98, 11.32);
+  wheel.rotation.x = 1.15;
+  g.add(wheel);
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.16, 8), mats.oily);
+  col.position.set(0.02, 0.88, 11.36);
+  g.add(col);
 
   const sonar = buildConsole(mats, 0.58, 0.86, 0.5, 'SONAR');
   sonar.position.set(-0.38, 0, 10.55);
@@ -66,8 +80,8 @@ export function createControlRoom(mats, collider) {
   const statusScreen = createStatusTexture();
   const mapTex = createMapTexture();
 
-  const sonarPanel = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.36), mats.screen(sonarScreen));
-  sonarPanel.position.set(-0.38, 1.12, 10.32);
+  const sonarPanel = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), mats.screen(sonarScreen));
+  sonarPanel.position.set(-0.38, 1.14, 10.32);
   sonarPanel.rotation.y = 0.28;
   sonarPanel.rotation.x = -0.18;
   g.add(sonarPanel);
@@ -139,12 +153,12 @@ export function createControlRoom(mats, collider) {
 
   const periscope = new THREE.Group();
   const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 1.1, 14), mats.brushed);
-  tube.position.set(0.02, 1.55, 11.85);
+  tube.position.set(0.38, 1.55, 11.88);
   const head = new THREE.Mesh(beveledBox(0.16, 0.1, 0.18, 0.01), mats.steel);
-  head.position.set(0.02, 2.05, 11.85);
+  head.position.set(0.38, 2.05, 11.88);
   const eyepiece = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.08, 12), mats.oily);
   eyepiece.rotation.x = Math.PI / 2;
-  eyepiece.position.set(0.02, 1.42, 11.72);
+  eyepiece.position.set(0.38, 1.42, 11.75);
   periscope.add(tube, head, eyepiece);
   g.add(periscope);
 
@@ -242,11 +256,11 @@ function buildConsole(mats, w, h, d) {
 
 function createSeat(mats) {
   const g = new THREE.Group();
-  const pad = new THREE.Mesh(beveledBox(0.28, 0.07, 0.28, 0.01), mats.leather);
-  pad.position.y = 0.42;
-  const back = new THREE.Mesh(beveledBox(0.28, 0.32, 0.06, 0.01), mats.leather);
-  back.position.set(0, 0.62, -0.12);
-  back.rotation.x = -0.12;
+  const pad = new THREE.Mesh(beveledBox(0.3, 0.08, 0.3, 0.012), mats.leather);
+  pad.position.y = 0.44;
+  const back = new THREE.Mesh(beveledBox(0.3, 0.36, 0.07, 0.012), mats.leather);
+  back.position.set(0, 0.66, -0.13);
+  back.rotation.x = -0.14;
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.4, 8), mats.steel);
   post.position.y = 0.2;
   const base = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.04, 10), mats.steel);

@@ -54,14 +54,40 @@ function paintBase(ctx, size, color, variation, seed) {
       const i = (y * size + x) * 4;
       const n = fbm(x / size * 6, y / size * 6, seed, 5);
       const m = fbm(x / size * 18, y / size * 18, seed + 3, 3);
-      const t = (n - 0.5) * variation + (m - 0.5) * variation * 0.35;
-      d[i] = clampByte(rgb.r + t * 40);
-      d[i + 1] = clampByte(rgb.g + t * 36);
-      d[i + 2] = clampByte(rgb.b + t * 30);
+      const t = (n - 0.5) * variation + (m - 0.5) * variation * 0.45;
+      d[i] = clampByte(rgb.r + t * 70);
+      d[i + 1] = clampByte(rgb.g + t * 62);
+      d[i + 2] = clampByte(rgb.b + t * 52);
       d[i + 3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
+}
+
+function addPanelLines(ctx, size) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(40,34,28,0.32)';
+  ctx.lineWidth = 2;
+  const step = size / 6;
+  for (let i = 1; i < 6; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * step, 0);
+    ctx.lineTo(i * step, size);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, i * step);
+    ctx.lineTo(size, i * step);
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(30,28,26,0.6)';
+  for (let y = step; y < size; y += step) {
+    for (let x = step; x < size; x += step) {
+      ctx.beginPath();
+      ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
 }
 
 function addBlotches(ctx, size, color, count, seed, alpha = 0.18) {
@@ -206,6 +232,7 @@ export function createPBRMaps(name, spec) {
   const seed = spec.seed ?? 1;
   const { canvas, ctx } = canvas2d(size);
   paintBase(ctx, size, spec.color, spec.variation ?? 0.55, seed);
+  if (spec.panels) addPanelLines(ctx, size);
   if (spec.blotches) addBlotches(ctx, size, spec.blotchColor ?? '#2a241c', spec.blotches, seed + 9, spec.blotchAlpha ?? 0.16);
   if (spec.streaks) addStreaks(ctx, size, seed + 17, spec.streakColor ?? 'rgba(30,24,18,0.2)', spec.streaks);
   if (spec.scratches) addScratches(ctx, size, seed + 21, spec.scratches, spec.scratchColor);

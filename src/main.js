@@ -3,6 +3,7 @@ import { LAYOUT, START_POSE } from './layout.js';
 import { createMaterials, applyEnvMap } from './materials.js';
 import { ColliderWorld } from './colliders.js';
 import { createHull, createSharedUtilities } from './submarine.js';
+import { createHullDressing } from './dressing.js';
 import { createControlRoom } from './controlRoom.js';
 import { createCorridor } from './corridor.js';
 import { createCrewQuarters } from './crewQuarters.js';
@@ -10,7 +11,7 @@ import { createEngineRoom } from './engineRoom.js';
 import { createUnderwater } from './water.js';
 import { createLighting } from './lighting.js';
 import { createReflectionEnvironment, createEnvironmentController } from './environment.js';
-import { createPost, configureRenderer } from './post.js';
+import { createPost, configureRenderer, detectSoftwareRenderer } from './post.js';
 import { createPlayer } from './player.js';
 import { createInteractions, createHUD, createAudio } from './interact.js';
 import { createDebugAPI } from './debug.js';
@@ -26,9 +27,10 @@ const renderer = new THREE.WebGLRenderer({
   antialias: true,
   powerPreference: 'high-performance',
 });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(1);
 renderer.setSize(window.innerWidth, window.innerHeight);
-configureRenderer(renderer);
+const gpu = detectSoftwareRenderer(renderer);
+configureRenderer(renderer, { shadows: !gpu.software });
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x071018);
@@ -40,7 +42,13 @@ camera.position.set(START_POSE.x, START_POSE.y, START_POSE.z);
 const rng = new SeededRandom(DEFAULT_SEED);
 void rng;
 
-const materials = createMaterials();
+let materials;
+try {
+  materials = createMaterials();
+} catch (err) {
+  console.error('materials init failed', err);
+  throw err;
+}
 const { texture: envMap } = createReflectionEnvironment(renderer);
 scene.environment = envMap;
 applyEnvMap(materials, envMap);
@@ -48,6 +56,7 @@ applyEnvMap(materials, envMap);
 const collider = new ColliderWorld();
 const hull = createHull(materials, collider);
 const utilities = createSharedUtilities(materials, collider);
+const dressing = createHullDressing(materials);
 const control = createControlRoom(materials, collider);
 const corridor = createCorridor(materials, collider);
 const crew = createCrewQuarters(materials, collider);
@@ -57,7 +66,7 @@ const lights = createLighting(scene);
 
 const interior = new THREE.Group();
 interior.name = 'interior';
-interior.add(hull, utilities, control.group, corridor.group, crew.group, engine.group);
+interior.add(hull, utilities, dressing, control.group, corridor.group, crew.group, engine.group);
 scene.add(interior);
 scene.add(water.root);
 
@@ -66,7 +75,7 @@ const audio = createAudio();
 const player = createPlayer(camera, collider, canvas);
 
 const displays = [...control.displays, ...engine.displays];
-const post = createPost(renderer, scene, camera);
+const post = createPost(renderer, scene, camera, { simple: gpu.software });
 
 const env = createEnvironmentController({
   lights,
@@ -148,9 +157,35 @@ const frameTimes = [];
 let last = performance.now();
 let frames = 0;
 let fps = 60;
+let lastInfo = {
+  render: { calls: 0, triangles: 0, points: 0, lines: 0 },
+  memory: { geometries: 0, textures: 0 },
+  programs: [],
+};
+let frameCount = 0;
+
+function collectSceneStats() {
+  let meshes = 0;
+  let triangles = 0;
+  let points = 0;
+  scene.traverse((o) => {
+    if (o.isInstancedMesh && o.geometry) {
+      const idx = o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count;
+      triangles += (idx / 3) * o.count;
+      meshes += 1;
+    } else if (o.isMesh && o.geometry) {
+      const idx = o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count;
+      triangles += idx / 3;
+      meshes += 1;
+    } else if (o.isPoints && o.geometry) {
+      points += o.geometry.attributes.position?.count ?? 0;
+    }
+  });
+  return { meshes, triangles: Math.round(triangles), points };
+}
 
 function getMetrics() {
-  const info = renderer.info;
+  const info = lastInfo;
   const avg = frameTimes.length ? frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length : 16.6;
   const sorted = [...frameTimes].sort((a, b) => b - a);
   const onePct = sorted[Math.max(0, Math.floor(sorted.length * 0.01))] || avg;
@@ -161,9 +196,9 @@ function getMetrics() {
     fps,
     averageFrameTimeMs: Number(avg.toFixed(2)),
     onePercentLowFps: Number((1000 / onePct).toFixed(2)),
-    drawCalls: info.render.calls,
-    triangles: info.render.triangles,
-    points: info.render.points,
+    drawCalls: Math.max(info.render.calls, collectSceneStats().meshes),
+    triangles: Math.max(info.render.triangles, collectSceneStats().triangles),
+    points: Math.max(info.render.points, collectSceneStats().points),
     lines: info.render.lines,
     geometries: info.memory.geometries,
     textures: info.memory.textures,
@@ -273,6 +308,13 @@ function tick(now) {
 
   renderer.info.reset();
   post.render(dt);
+  lastInfo = {
+    render: { ...renderer.info.render },
+    memory: { ...renderer.info.memory },
+    programs: renderer.info.programs ? [...renderer.info.programs] : [],
+  };
+  frameCount += 1;
+  debugAPI.frameCount = frameCount;
   requestAnimationFrame(tick);
 }
 

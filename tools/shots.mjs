@@ -100,8 +100,9 @@ async function main() {
         window.debugAPI.setHUDVisible(false);
         window.debugAPI.setView(view);
       }, name);
-      await page.waitForTimeout(2000);
-      await page.screenshot({ path: path.join(outDir, `${name}.png`), type: 'png' });
+      await page.waitForFunction(() => (window.debugAPI.frameCount || 0) > 3, null, { timeout: 30000 });
+      await page.waitForTimeout(1200);
+      await page.screenshot({ path: path.join(outDir, `${name}.png`), type: 'png', timeout: 120000 });
     }
 
     const metrics = await page.evaluate(() => window.debugAPI.getMetrics());

@@ -5,20 +5,20 @@ export function createLighting(scene) {
   const group = new THREE.Group();
   group.name = 'lighting';
 
-  const hemi = new THREE.HemisphereLight(0xb8c4c0, 0x1a1612, 0.18);
+  const hemi = new THREE.HemisphereLight(0xc4c0b4, 0x2a241c, 0.32);
   group.add(hemi);
 
-  const ambient = new THREE.AmbientLight(0x6a645c, 0.07);
+  const ambient = new THREE.AmbientLight(0x8a8074, 0.16);
   group.add(ambient);
 
-  const keyControl = makeSpot(0xffe2b0, 7.5, 10, 0.55, 0.35);
+  const keyControl = makeSpot(0xffe2b0, 4.2, 10, 0.62, 0.45);
   keyControl.position.set(0.15, 2.05, 11.1);
   keyControl.target.position.set(0, 0.9, 10.6);
   keyControl.castShadow = true;
   configureShadow(keyControl, 8, 1024);
   group.add(keyControl, keyControl.target);
 
-  const keyEngine = makeSpot(0xffd6a0, 9.5, 12, 0.7, 0.4);
+  const keyEngine = makeSpot(0xffd6a0, 5.2, 12, 0.72, 0.48);
   keyEngine.position.set(-0.1, 2.08, -4.4);
   keyEngine.target.position.set(0.1, 0.7, -5.6);
   keyEngine.castShadow = true;
@@ -31,14 +31,16 @@ export function createLighting(scene) {
   const windowFills = [];
 
   const warmPoints = [
-    [0, 2.0, 10.8, 1.15, 4.2],
-    [0.35, 1.95, 7.2, 0.7, 3.4],
-    [-0.1, 1.95, 6.2, 0.55, 3.2],
-    [0.2, 1.92, 3.4, 0.85, 3.6],
-    [0.15, 1.9, 2.2, 0.55, 3.0],
-    [0, 1.98, -0.2, 0.6, 3.2],
-    [0.25, 2.0, -3.2, 1.0, 4.0],
-    [-0.2, 1.85, -6.2, 0.75, 3.6],
+    [0, 2.0, 10.8, 2.4, 4.6],
+    [0.2, 1.55, 11.4, 1.1, 3.2],
+    [0.35, 1.95, 7.2, 1.6, 3.6],
+    [-0.1, 1.95, 6.2, 1.3, 3.4],
+    [0.2, 1.92, 3.4, 1.8, 3.8],
+    [0.15, 1.9, 2.2, 1.2, 3.2],
+    [0, 1.98, -0.2, 1.4, 3.4],
+    [0.25, 2.0, -3.2, 2.2, 4.2],
+    [-0.2, 1.85, -6.2, 1.8, 3.8],
+    [0.15, 1.4, -5.4, 1.2, 3.0],
   ];
   for (const [x, y, z, i, dist] of warmPoints) {
     const p = new THREE.PointLight(0xffd4a4, i, dist, 2);
@@ -91,10 +93,10 @@ export function createLighting(scene) {
     instrument,
     mode: 'cruising',
     base: {
-      hemi: 0.18,
-      ambient: 0.07,
-      keyC: 7.5,
-      keyE: 9.5,
+    hemi: 0.32,
+    ambient: 0.16,
+    keyC: 4.2,
+    keyE: 5.2,
       practical: practicals.map((p) => p.intensity),
       window: windowFills.map((p) => p.intensity),
       instrument: 0.35,

@@ -35,8 +35,9 @@ export function createEngineRoom(mats, collider) {
   const mid = (z0 + z1) / 2;
 
   const motor = createPropulsionMotor(mats);
-  motor.position.set(0.08, 0.78, -6.35);
+  motor.position.set(0.08, 0.82, -6.2);
   motor.rotation.y = Math.PI / 2;
+  motor.scale.setScalar(1.15);
   g.add(motor);
   collider.addBox(0.08, 0.7, -6.35, 1.15, 1.15, 2.1, 'motor');
 
@@ -199,7 +200,7 @@ export function createEngineRoom(mats, collider) {
     lamp.position.set(0.1, 2.1, z);
     g.add(lamp);
   }
-  const work = new THREE.Mesh(new THREE.SpotLightHelper ? new THREE.BoxGeometry(0.08, 0.08, 0.08) : new THREE.BoxGeometry(0.08, 0.08, 0.08), mats.lightWarm);
+  const work = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), mats.lightWarm);
   work.position.set(-0.2, 1.72, -5.8);
   g.add(work);
 
