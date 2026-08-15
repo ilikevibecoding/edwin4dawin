@@ -11,7 +11,7 @@
 - Triangle count: 79312
 - Texture count: 125
 - Renderer: ANGLE SwiftShader
-- Stopping-condition status: iteration 12 complete — stopping condition 2 fired. Final procedure next.
+- Stopping-condition status: stopped — iteration 12 complete (condition 2). 0 consecutive all-pass.
 
 ## Iteration 1
 
@@ -785,5 +785,81 @@ Stopping condition 2 fired (iteration 12 complete). Final procedure applies hove
 
 ### Commit
 
-- Commit hash: pending
-- Commit message: Record iteration 12 and stop on the iteration cap.
+- Commit hash: 2ff90cad
+- Commit message: Record iteration 12 and lock interaction hover for the final suite.
+
+## Final summary
+
+### Why the stopping condition fired
+
+Iteration 12 completed. Consecutive all-pass count is 0. Condition 2 (iteration 12 complete) fired. Visual items never reached two consecutive all-pass runs.
+
+### Rubric items that passed
+
+- **12** Spatial walkability: continuous control-room → engine-room traversal (`z = −1.73`) on iterations 7–12 and the final production suite.
+- **13** Interactions (final production suite only): pointer lock, movement, bow collision hold, sonar, rest fade/`6 hours pass.`, silent running engage/disengage. `shots/iter_final/interactions.json`.
+
+### Rubric items that remain weak / fail
+
+- **1–11, 14–15** fail from inspected screenshots. The interior still reads as a ribbed Three.js tube with primitive consoles, box bunks, a dark motor mass, tiled beige hull, and a viewport that does not sell deep water.
+
+### Strongest screenshot
+
+`shots/iter_final/sonarConsole.png` — generated 7.4 kHz sonar sweep with a readable blip and console bezel.
+
+### Weakest screenshot
+
+`shots/iter_final/forwardViewport.png` — dark grainy void; does not read as travelling underwater.
+
+### Final metrics (production preview, SwiftShader)
+
+- FPS: 21 (indicative only — software renderer)
+- One-percent-low FPS: 20
+- Frame time: 47.96 ms
+- Draw calls: 769
+- Triangles: 79312
+- Textures: 125
+- Programs: 34
+- Renderer: ANGLE (Google, Vulkan 1.3.0 SwiftShader Device Subzero)
+- Page / console / WebGL errors: 0
+
+### Known technical limitations
+
+- Playwright Chromium uses SwiftShader. GTAO and shadow maps are disabled. Measured FPS is not a hardware benchmark.
+- EffectComposer last-pass `renderer.info` is unusable; metrics come from scene traversal.
+- rAF is throttled under Playwright; movement, rest, and silent tests must be driven with `debugAPI.step` / in-page `KeyE`.
+- Hover must be locked between `aimInteract` and `KeyE` or rAF clears it.
+
+### Remaining visual limitations
+
+- Hull albedo still tiles like painted board, not naval steel.
+- Control room stations are dark boxes; generated displays only read in the sonar close-up.
+- Corridor has pipes and a gauge but large empty hull/floor slabs and glowing stencil plates.
+- Crew bunks are brown boxes; curtain is a flat plane.
+- Aft motor is a dark primitive silhouette with a ROTATING GEAR plate.
+- Viewport does not show layered water, silt parallax, or a readable rock wall.
+- No convincing wear logic, condensation, or contact shadows on this renderer.
+
+### What five more iterations would do
+
+1. Rebuild the bow window as a true thick circular port with a dedicated exterior stage (lit ridge + three particle layers) framed by the camera.
+2. Replace the motor lathe with a readable housing: cooling fins, bolted rings, oil pans, and a 3/4 work-light rig.
+3. Break hull tiling with fewer, larger plates, cooler enamel, and edge-only chips.
+4. Sculpt bunk mattresses and wool blankets with vertex folds and sheen; remove the clipping curtain.
+5. Merge/instance corridor greebles and add fake contact darkening so SwiftShader shots stop looking ambient-flat.
+
+### System descriptions
+
+- **Pressure-hull:** X-rotated inverted cylinder, torus ribs, raised deck, circular bulkheads with parked hatch discs, bow ring opening, stern cap. Length ~21.6 m, radius 1.26 m.
+- **Control room:** Helm / sonar / nav consoles, canvas sonar/nav/depth/heading/status/map, gauges, switch banks, seats, periscope tube, forward window frame.
+- **Crew spaces:** Four stacked bunks, lockers, fold table, galley, washroom alcove, porthole, reading lamps.
+- **Aft machinery:** Lathe motor, gearbox, shaft, pumps, compressor, heat exchanger, tanks, cabinets, catwalk, silent-running panel, fans, underfloor grate pit.
+- **Procedural materials:** Canvas PBR families (hull, green enamel, steel, brushed, oily, machine, rubber, fabric weave, glass, rust, pipes) plus PMREM RoomFlow environment.
+- **Underwater:** Back-face volume, instanced rocks, silt/bubble/bio points, flood spots, a hero rock off the bow. Motion is time-scrubbed for shots.
+- **Lighting:** Hemisphere + room practicals + window cool fills + rest/silent reds. Shadows off on software GL.
+- **Post:** ACES, bloom, grade (vignette/grain), GTAO only on hardware.
+- **Collision / interaction:** Capsule-vs-box world; raycast `E` on sonar, bunk rest fade, silent-running toggle; `window.debugAPI` for views, states, step, metrics.
+
+### Final commit hash
+
+- Pending this commit.
