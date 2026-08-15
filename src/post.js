@@ -1,3 +1,10 @@
+// Post stack (HDR → display):
+// Render → GTAO (blend 0.68) → sanitize/firefly clamp → UnrealBloom
+//   (thr 0.86, strength 0.26 — lamps + sun disc only)
+// → ACES OutputPass → grade (vignette 0.36, grain 0.03, shadow toe 0.034) → SMAA.
+// Sanitize MUST run before bloom. Bloom MUST run before ACES.
+// Do not use three/Sky (NaN around the sun turns bloom into a black frame).
+
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
@@ -12,7 +19,7 @@ const SanitizeShader = {
   name: 'Sanitize',
   uniforms: {
     tDiffuse: { value: null },
-    uClamp: { value: 12.0 },
+    uClamp: { value: 10.0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -28,9 +35,9 @@ const SanitizeShader = {
     void main() {
       vec4 t = texture2D(tDiffuse, vUv);
       vec3 c = t.rgb;
-      if (!(c.r == c.r)) c.r = 0.0;
-      if (!(c.g == c.g)) c.g = 0.0;
-      if (!(c.b == c.b)) c.b = 0.0;
+      if (!(c.r == c.r) || c.r > 1.0e10) c.r = 0.0;
+      if (!(c.g == c.g) || c.g > 1.0e10) c.g = 0.0;
+      if (!(c.b == c.b) || c.b > 1.0e10) c.b = 0.0;
       c = clamp(c, vec3(0.0), vec3(uClamp));
       gl_FragColor = vec4(c, 1.0);
     }
@@ -41,10 +48,10 @@ const GradeShader = {
   name: 'Grade',
   uniforms: {
     tDiffuse: { value: null },
-    uVignette: { value: 0.38 },
-    uGrain: { value: 0.045 },
+    uVignette: { value: 0.36 },
+    uGrain: { value: 0.03 },
     uTime: { value: 0 },
-    uLift: { value: 0.03 },
+    uLift: { value: 0.034 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -65,10 +72,15 @@ const GradeShader = {
     }
     void main() {
       vec3 c = texture2D(tDiffuse, vUv).rgb;
+      float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      float toe = uLift * (1.0 - smoothstep(0.0, 0.22, luma));
+      c += toe;
       vec2 d = vUv * 2.0 - 1.0;
       float vig = 1.0 - uVignette * dot(d, d);
+      c *= vig;
       float g = (hash(vUv * vec2(1920.0, 1080.0)) - 0.5) * uGrain;
-      c = c * vig + g + uLift * (1.0 - c);
+      c += g;
+      c = clamp(c, vec3(0.0), vec3(1.0));
       gl_FragColor = vec4(c, 1.0);
     }
   `,
@@ -88,12 +100,12 @@ export function createPost(renderer, scene, camera, { fast = false } = {}) {
   composer.addPass(new RenderPass(scene, camera));
 
   const ao = new GTAOPass(scene, camera, size.x, size.y);
-  ao.blendIntensity = fast ? 0.55 : 0.72;
+  ao.blendIntensity = fast ? 0.64 : 0.7;
   composer.addPass(ao);
 
   composer.addPass(new ShaderPass(SanitizeShader));
 
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), fast ? 0.22 : 0.32, 0.55, 0.72);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), fast ? 0.24 : 0.28, 0.48, 0.86);
   composer.addPass(bloom);
 
   const output = new OutputPass();

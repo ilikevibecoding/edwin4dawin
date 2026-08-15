@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 export function createInteract({ player, vehicle, hud }) {
   const targets = [
     {
@@ -23,6 +25,36 @@ export function createInteract({ player, vehicle, hud }) {
   let hover = null;
   let busy = false;
   const ray = { origin: null, dir: null };
+  const worldEye = new THREE.Vector3();
+  const marker = new THREE.Group();
+  marker.name = 'interact-marker';
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.08, 0.12, 22),
+    new THREE.MeshBasicMaterial({
+      color: 0xf3ead6,
+      transparent: true,
+      opacity: 0.82,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  marker.add(ring);
+  marker.visible = false;
+  if (vehicle.root) vehicle.root.add(marker);
+
+  function placeLine() {
+    return player.seated ? 'Trailhead · in the seat' : 'Trailhead · on foot';
+  }
+
+  function worldFromVehicle(local) {
+    worldEye.set(local.x, local.y, local.z);
+    if (vehicle.root) {
+      vehicle.root.updateMatrixWorld(true);
+      worldEye.applyMatrix4(vehicle.root.matrixWorld);
+    }
+    return worldEye;
+  }
 
   function nearest(origin) {
     let best = null;
@@ -45,6 +77,17 @@ export function createInteract({ player, vehicle, hud }) {
     return new Promise((r) => setTimeout(r, ms));
   }
 
+  function setMarker(point) {
+    if (!point) {
+      marker.visible = false;
+      return;
+    }
+    marker.position.set(point.x, point.y, point.z);
+    const pulse = 1 + Math.sin(performance.now() * 0.006) * 0.1;
+    marker.scale.setScalar(pulse);
+    marker.visible = true;
+  }
+
   async function fire(id) {
     if (busy) return;
     busy = true;
@@ -52,12 +95,12 @@ export function createInteract({ player, vehicle, hud }) {
       if (player.seated) {
         await fade();
         player.stand();
-        hud.status('Boots on the dirt.');
+        hud.status(placeLine());
         hud.fade(false);
       } else {
         await fade();
-        player.sit(vehicle.driverEye);
-        hud.status('You settle into the seat.');
+        player.sit(worldFromVehicle(vehicle.driverEye));
+        hud.status(placeLine());
         hud.fade(false);
       }
     } else if (id === 'lights') {
@@ -82,14 +125,16 @@ export function createInteract({ player, vehicle, hud }) {
 
   function update() {
     if (player.seated) {
-      hover = { id: 'door', label: 'E: Climb out' };
+      hover = { id: 'door', label: 'E: Climb out', point: targets[0].point };
       hud.prompt(hover.label);
+      setMarker(hover.point);
       return hover;
     }
     hover = nearest(player.position);
     hud.prompt(hover ? hover.label : '');
+    setMarker(hover ? hover.point : null);
     return hover;
   }
 
-  return { update, fire, targets, get hover() { return hover; }, ray };
+  return { update, fire, targets, marker, get hover() { return hover; }, ray };
 }

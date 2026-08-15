@@ -45,4 +45,31 @@ ruts and puddles, instanced-feeling forest, analytic sky + bounce-card lighting,
 ACES / bloom / GTAO / vignette / grain, first-person walk, three interactions,
 Playwright harness.
 
-Scoring after screenshots.
+Eight views captured at 960×540 in 33s (SwiftShader). Luma is healthy on most
+frames (hero mean 0.28) except **wheel** (mean 0.07) which is crushed.
+
+Looked at every shot. This is a blockout, not a beauty pass.
+
+| # | Result | Note |
+|---|--------|------|
+| 1 Lighting | FAIL | Headlights bloom, but paint is ambient-flat. Wheel well is a black hole. No readable key/fill on the body. |
+| 2 Materials | FAIL | Bronze reads as toy red plastic. No metal flake, no rubber tread, no wet dirt. Glass is a pale plane. |
+| 3 Detail | FAIL | Box body, Christmas-tree cones, empty hood, grille is a dark slab, road is a brown plane with pyramid ferns. |
+| 4 Post | FAIL | Grain + vignette + bloom are on, but blacks crush (wheel) and highlights on lamps blow. AO not readable. |
+| 5 Place | FAIL | Fog soup. Road does not read as a two-track. Wheels not planted. Shafts look like stacked cards. |
+| 6 Palette | FAIL | Cohesive haze, but the Jeep is fire-engine red against beige fog — not the bronze / pine / terracotta brief. |
+| 7 Tech | FAIL | Stats report 1 triangle (info reset bug). Wheel view underexposed. Geometry is visibly faceted. |
+| 8 Cold-look | FAIL | Anyone would say "low-poly Three.js demo". Not close. |
+| 9 Interact | FAIL | Harness not yet proven in this iteration. Prompts exist in code only. |
+
+### Fix list for iteration 2 (worst first)
+
+1. **Cold-look / detail** — agents on body, wheels, interior, details, forest, road. Silhouette must read Wrangler. Tread, 7-slot grille, bark, ruts.
+2. **Materials** — paint must read metal flake + clearcoat, not red plastic. Tire map must show. Dirt must show ruts.
+3. **Lighting** — bounce card actually on the subject; lift wheel-well; stop crushing the wheel shot. Paint less red.
+4. **Post** — raise shadow lift, drop bloom on always-on lamps, fix renderer.info stats.
+5. **Place** — real two-track, planted wheels, forest that is not stacked cones.
+6. **Interact** — prove door / lights / hood with the harness.
+7. **Camera** — wheel view is too low and inside the arch; interior is staring at a flat hood.
+
+Eight parallel asset agents launched after this iteration.

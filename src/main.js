@@ -8,6 +8,7 @@ import { createPlayer } from './player.js';
 import { configureRenderer, createPost } from './post.js';
 import { createRoad } from './road.js';
 import { createSky } from './sky.js';
+import { createAtmosphere } from './atmosphere.js';
 import { createVehicle } from './vehicle/index.js';
 
 const params = new URLSearchParams(location.search);
@@ -43,6 +44,7 @@ async function bootApp() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, TIER.pixelRatio));
     renderer.setSize(window.innerWidth, window.innerHeight);
     configureRenderer(renderer);
+    renderer.info.autoReset = false;
     document.body.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -75,6 +77,22 @@ async function bootApp() {
 
     const hud = createHud();
     const interact = createInteract({ player, vehicle, hud });
+    const atmosphere = createAtmosphere();
+    scene.add(atmosphere.mesh);
+
+    const highlight = new THREE.Mesh(
+      new THREE.RingGeometry(0.16, 0.2, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0xffc070,
+        transparent: true,
+        opacity: 0.85,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    highlight.rotation.x = -Math.PI / 2;
+    highlight.visible = false;
+    scene.add(highlight);
 
     const post = createPost(renderer, scene, camera, { fast: quality === 'fast' });
 
@@ -96,14 +114,22 @@ async function bootApp() {
     window.addEventListener('resize', resize);
 
     function tick() {
+      renderer.info.reset();
       const raw = clock.getDelta();
       const dt = THREE.MathUtils.clamp(Number.isFinite(raw) && raw > 0 ? raw : 1 / 60, 1e-4, 0.05);
       if (!paused) {
         player.update(dt);
-        interact.update();
+        const hover = interact.update();
         vehicle.update(dt, { speed: 0, steer: 0 });
+        atmosphere.update(dt, vehicle.root.position);
+        if (hover && hover.point && !player.seated) {
+          highlight.visible = true;
+          highlight.position.set(hover.point.x, hover.point.y + 0.05, hover.point.z);
+          highlight.rotation.z += dt * 1.4;
+        } else {
+          highlight.visible = false;
+        }
       }
-      sky.sun.position.set(42, 48, 36);
       post.render(dt);
       frames++;
       fpsAccum += dt;

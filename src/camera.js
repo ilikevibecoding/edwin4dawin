@@ -17,14 +17,14 @@ export const VIEWS = {
     fov: 40,
   },
   wheel: {
-    position: [2.15, 0.55, 1.85],
-    target: [0.82, 0.42, 1.23],
-    fov: 36,
+    position: [2.55, 0.72, 2.35],
+    target: [0.82, 0.48, 1.23],
+    fov: 34,
   },
   interior: {
-    position: [0.32, 1.48, 0.28],
-    target: [0.1, 1.22, 1.4],
-    fov: 62,
+    position: [0.32, 1.46, 0.16],
+    target: [0.18, 1.16, 0.72],
+    fov: 58,
   },
   forest: {
     position: [8.5, 2.4, 14.5],

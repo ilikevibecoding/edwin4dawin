@@ -75,13 +75,14 @@ export function paintAlbedo() {
     1024,
     (ctx, s) => {
       put(ctx, s, (u, v) => {
-        const flake = fbm(u * 90, v * 90, 3);
-        const orange = fbm(u * 6 + 2, v * 6, 4);
-        const dirt = Math.max(0, fbm(u * 3, v * 14, 4) - 0.62) * 2.4;
-        const edge = Math.pow(Math.abs(u - 0.5) * 2, 3) * 0.12;
-        const r = 168 + flake * 38 + orange * 18 - dirt * 50 - edge * 40;
-        const g = 98 + flake * 22 + orange * 10 - dirt * 40 - edge * 20;
-        const b = 44 + flake * 10 - dirt * 18;
+        const flake = fbm(u * 140, v * 140, 2);
+        const orange = fbm(u * 5 + 2, v * 5, 4);
+        const dirt = Math.max(0, fbm(u * 2.4, v * 11, 4) - 0.64) * 2.6;
+        const chip = hash(u * 880 + v * 311) > 0.996 ? 0.55 : 0;
+        const edge = Math.pow(Math.abs(u - 0.5) * 2, 3) * 0.1;
+        const r = 172 + flake * 42 + orange * 16 - dirt * 55 - edge * 36 - chip * 40;
+        const g = 100 + flake * 20 + orange * 8 - dirt * 42 - edge * 18 - chip * 20;
+        const b = 46 + flake * 8 - dirt * 16;
         return [r, g, b];
       });
     },
@@ -162,10 +163,13 @@ export function tireAlbedo() {
     (ctx, s) => {
       put(ctx, s, (u, v) => {
         // v wraps around the tread; u is across the width.
-        const blocks = Math.abs(Math.sin(v * Math.PI * 28 + Math.sin(u * 18) * 0.6));
-        const grooves = blocks < 0.22 ? 0.35 : 1;
-        const siping = 0.92 + 0.08 * Math.sin(u * 80);
-        const letter = v > 0.78 && v < 0.92 && Math.abs(Math.sin(u * Math.PI * 12)) > 0.55 ? 1.35 : 1;
+        const blocks = Math.abs(Math.sin(v * Math.PI * 32 + Math.sin(u * 22) * 0.8));
+        const stagger = Math.abs(Math.sin(v * Math.PI * 16 + u * 9));
+        const grooves = blocks < 0.2 || stagger < 0.08 ? 0.32 : 1;
+        const siping = 0.9 + 0.1 * Math.sin(u * 90);
+        const letterBand = v > 0.8 && v < 0.93;
+        const glyph = Math.abs(Math.sin(u * Math.PI * 14 + 0.4));
+        const letter = letterBand && glyph > 0.62 ? 1.55 : 1;
         const n = fbm(u * 30, v * 30, 3);
         const base = 22 + n * 16;
         const c = base * grooves * siping * letter;
