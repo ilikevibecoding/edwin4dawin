@@ -150,6 +150,21 @@ export function buildCrewQuarters(mats, collision, ctx) {
   kettle.position.set(0.7, 0.97, 12.28);
   g.add(kettle);
 
+  const book = new THREE.Mesh(beveledBox(0.12, 0.02, 0.18, 0.004), mats.leather);
+  book.position.set(0.48, 0.82, 10.5);
+  book.rotation.y = 0.2;
+  g.add(book);
+  const photo = new THREE.Mesh(
+    beveledPanel(0.08, 0.1, 0.004, 0.004, 0.001),
+    new THREE.MeshStandardMaterial({
+      map: createLabelTexture("HOME\nPORT", { bg: "#d2c4a0", fg: "#3a2a18", w: 128, h: 160, size: 22 }),
+      roughness: 0.65,
+    })
+  );
+  photo.position.set(0.82, 1.35, 8.7);
+  photo.rotation.y = -Math.PI / 2;
+  g.add(photo);
+
   const wash = new THREE.Group();
   const wall = new THREE.Mesh(beveledBox(0.08, 1.7, 1.05, 0.01), mats.hullPaint);
   wall.position.set(-0.55, 0.9, 12.55);
