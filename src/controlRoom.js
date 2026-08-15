@@ -46,17 +46,17 @@ export function buildControlRoom(mats, collision, interactables, animators) {
   const mid = (z0 + z1) * 0.5;
 
   const viewportFrame = mesh(roundedBox(1.05, 0.72, 0.16, 0.03, 2), mats.chipped);
-  viewportFrame.position.set(0, 1.28, 0.28);
+  viewportFrame.position.set(0, 1.28, 0.38);
   g.add(viewportFrame);
   const inner = mesh(roundedBox(0.86, 0.54, 0.08, 0.02, 2), mats.brushed);
-  inner.position.set(0, 1.28, 0.3);
+  inner.position.set(0, 1.28, 0.4);
   g.add(inner);
   const glass = mesh(roundedBox(0.8, 0.48, 0.04, 0.01, 1), mats.glassThick);
-  glass.position.set(0, 1.28, 0.22);
+  glass.position.set(0, 1.28, 0.34);
   glass.castShadow = false;
   g.add(glass);
   const glass2 = mesh(roundedBox(0.78, 0.46, 0.02, 0.008, 1), mats.glass);
-  glass2.position.set(0, 1.28, 0.18);
+  glass2.position.set(0, 1.28, 0.3);
   glass2.castShadow = false;
   g.add(glass2);
   const seal = mesh(roundedBox(0.9, 0.58, 0.02, 0.01, 1), mats.rubber);

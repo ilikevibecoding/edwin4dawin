@@ -1,0 +1,106 @@
+{
+  "pointerLock": {
+    "pass": true,
+    "lockOn": true,
+    "lockOff": false,
+    "note": "headless pointer lock may be limited"
+  },
+  "movement": {
+    "pass": false,
+    "before": {
+      "x": 0,
+      "y": 0,
+      "z": 5.4,
+      "yaw": 0,
+      "pitch": 0,
+      "locked": true
+    },
+    "after": {
+      "x": 0,
+      "y": 0,
+      "z": 5.3325000000000005,
+      "yaw": 0,
+      "pitch": 0,
+      "locked": true
+    }
+  },
+  "collision": {
+    "pass": true,
+    "c0": {
+      "x": 0,
+      "y": 0,
+      "z": 0.55,
+      "yaw": 0,
+      "pitch": 0,
+      "locked": true
+    },
+    "c1": {
+      "x": 0,
+      "y": 0,
+      "z": 0.4825,
+      "yaw": 0,
+      "pitch": 0,
+      "locked": true
+    }
+  },
+  "sonar": {
+    "pass": false,
+    "state": {
+      "prompt": "",
+      "status": "",
+      "hovered": null,
+      "fade": 0,
+      "lighting": "cruising",
+      "silent": false
+    }
+  },
+  "rest": {
+    "pass": false,
+    "restMid": {
+      "prompt": "",
+      "status": "",
+      "hovered": null,
+      "fade": 0,
+      "lighting": "cruising",
+      "silent": false
+    },
+    "restEnd": {
+      "prompt": "",
+      "status": "",
+      "hovered": null,
+      "fade": 0,
+      "lighting": "cruising",
+      "silent": false
+    }
+  },
+  "silentRunning": {
+    "pass": true,
+    "silentOn": {
+      "prompt": "E: Silent Running",
+      "status": "Silent running engaged.",
+      "hovered": "silentRunning",
+      "fade": 0,
+      "lighting": "silentRunning",
+      "silent": true
+    },
+    "silentOff": {
+      "prompt": "E: Silent Running",
+      "status": "Silent running disengaged.",
+      "hovered": "silentRunning",
+      "fade": 0,
+      "lighting": "cruising",
+      "silent": false
+    }
+  },
+  "traversal": {
+    "pass": false,
+    "end": {
+      "x": -8.358214404180685e-17,
+      "y": 0,
+      "z": 3.3825000000000003,
+      "yaw": 3.141592653589793,
+      "pitch": 0,
+      "locked": true
+    }
+  }
+}

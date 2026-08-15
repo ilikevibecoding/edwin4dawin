@@ -7,7 +7,7 @@ const VIEWS = {
   engineRoom: { pos: [-0.22, 1.5, 17.35], look: [0.22, 0.88, 19.7], fov: 58 },
   machineryCloseup: { pos: [-0.05, 1.22, 18.7], look: [0.3, 0.82, 19.95], fov: 48 },
   sonarConsole: { pos: [-0.12, 1.42, 2.65], look: [-0.46, 1.18, 1.88], fov: 46 },
-  forwardViewport: { pos: [0.0, 1.32, 0.92], look: [0.0, 1.18, -3.4], fov: 55 },
+  forwardViewport: { pos: [0.0, 1.34, 1.22], look: [0.0, 1.2, -2.8], fov: 55 },
   porthole: { pos: [0.18, 1.32, 6.55], look: [1.15, 1.32, 6.55], fov: 42 },
   aftWide: { pos: [-0.18, 1.55, 16.7], look: [0.2, 0.95, 20.3], fov: 64 },
   walking: { pos: [0.0, 1.65, 5.05], look: [0.0, 1.28, 7.6], fov: 64 },
@@ -69,6 +69,22 @@ export function createDebugAPI(app) {
     },
     setPlayerPose(x, y, z, yaw, pitch) {
       app.player.setPose(x, y, z, yaw, pitch);
+      return true;
+    },
+    lookAtInteractable(name) {
+      const obj = app.sub.interactables.find((o) => o.userData.interact === name);
+      if (!obj) return false;
+      const p = new Vector3();
+      obj.getWorldPosition(p);
+      p.y += 0.45;
+      const eye = app.player.state.position.clone();
+      eye.y = app.player.eye;
+      const dx = p.x - eye.x;
+      const dy = p.y - eye.y;
+      const dz = p.z - eye.z;
+      app.player.state.yaw = Math.atan2(-dx, -dz);
+      app.player.state.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+      app.player.syncCamera(0);
       return true;
     },
     getPlayerState() {

@@ -13,21 +13,22 @@ function createHullShell(mats) {
   const g = new Group();
   const len = LAYOUT.length;
   const r = LAYOUT.hullRadius;
-  const geo = new CylinderGeometry(r, r, len, 48, 12, true);
+  const hullLen = len - 0.55;
+  const geo = new CylinderGeometry(r, r, hullLen, 48, 12, true);
   geo.rotateX(Math.PI * 0.5);
   invertNormals(geo);
   addUv2(geo);
   punchHullOpenings(mats.hull);
   const shell = mesh(geo, mats.hull);
-  shell.position.set(0, LAYOUT.hullCenterY, len * 0.5);
+  shell.position.set(0, LAYOUT.hullCenterY, 0.55 + hullLen * 0.5);
   g.add(shell);
 
-  const bow = new CylinderGeometry(r, r * 0.55, 0.7, 32, 3, true);
-  bow.rotateX(Math.PI * 0.5);
-  invertNormals(bow);
-  const bowMesh = mesh(bow, mats.hull);
-  bowMesh.position.set(0, LAYOUT.hullCenterY, 0.05);
-  g.add(bowMesh);
+  const bowPlate = mesh(
+    bulkheadPlate(r - 0.01, 0.86, 0.56, 1.0 - LAYOUT.hullCenterY, 0.08),
+    mats.chipped
+  );
+  bowPlate.position.set(0, LAYOUT.hullCenterY, 0.42);
+  g.add(bowPlate);
 
   const stern = new CylinderGeometry(r * 0.7, r, 0.8, 32, 3, true);
   stern.rotateX(-Math.PI * 0.5);

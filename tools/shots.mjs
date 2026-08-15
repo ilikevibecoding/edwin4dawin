@@ -178,6 +178,7 @@ async function runInteractionTests(page) {
 
   await page.evaluate(() => {
     window.debugAPI.setPlayerPose(-0.12, 0, 2.55, 0.35, 0.22);
+    window.debugAPI.lookAtInteractable('sonar');
   });
   await page.waitForTimeout(300);
   await page.keyboard.press('KeyE');
@@ -188,7 +189,10 @@ async function runInteractionTests(page) {
     state: sonarState,
   };
 
-  await page.evaluate(() => window.debugAPI.setPlayerPose(-0.08, 0, 9.2, 1.55, 0.25));
+  await page.evaluate(() => {
+    window.debugAPI.setPlayerPose(-0.08, 0, 9.2, 1.55, 0.25);
+    window.debugAPI.lookAtInteractable('rest');
+  });
   await page.waitForTimeout(300);
   await page.keyboard.press('KeyE');
   await page.waitForTimeout(1200);
@@ -204,6 +208,7 @@ async function runInteractionTests(page) {
   await page.evaluate(() => {
     window.debugAPI.setSubmarineState('cruising');
     window.debugAPI.setPlayerPose(-0.12, 0, 16.75, 0.05, 0.2);
+    window.debugAPI.lookAtInteractable('silentRunning');
   });
   await page.waitForTimeout(300);
   await page.keyboard.press('KeyE');

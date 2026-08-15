@@ -70,7 +70,7 @@ export function createPost(renderer, scene, camera) {
     console.warn('GTAO unavailable', err);
   }
 
-  const bloom = new UnrealBloomPass(new Vector2(size.x, size.y), 0.22, 0.42, 0.82);
+  const bloom = new UnrealBloomPass(new Vector2(size.x, size.y), 0.14, 0.36, 0.86);
   composer.addPass(bloom);
 
   const grade = new ShaderPass(new ShaderMaterial(GradeShader));

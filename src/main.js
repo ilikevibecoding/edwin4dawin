@@ -18,6 +18,7 @@ import { createPlayer, createWorldCamera } from './player.js';
 import { createInteractions } from './interact.js';
 import { createDebugAPI } from './debug.js';
 import { createUnderwater, updateUnderwater, setWaterFrozen } from './water.js';
+import { createWindowVista, updateVista } from './vista.js';
 import { drawSonar } from './displays.js';
 
 const canvas = document.getElementById('c');
@@ -47,6 +48,8 @@ applyEnvMap(mats, envMap, 0.95);
 
 const lights = createLighting(scene);
 const water = createUnderwater(scene);
+const vista = createWindowVista();
+scene.add(vista);
 const sub = buildSubmarine(scene, mats);
 const player = createPlayer(playerCam, sub.collision, {
   spawn: new Vector3(0.05, 0, 2.15),
@@ -63,6 +66,7 @@ const app = {
   post: null,
   water,
   waterApi: { setWaterFrozen },
+  sub,
   motionEnabled: true,
   lightingState: 'cruising',
   wear: 'used',
@@ -156,15 +160,11 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-function tick() {
-  const dt = Math.min(0.05, clock.getDelta());
-  app.frameTimes.push(dt * 1000);
-  if (app.frameTimes.length > 120) app.frameTimes.shift();
-
+function simulate(dt) {
   player.update(dt);
   interact.update(dt);
   updateUnderwater(water, dt, app.motionEnabled, clock.elapsedTime);
-
+  updateVista(vista, clock.elapsedTime);
   const mul = app.speedMul ?? 1;
   for (const a of sub.animators) {
     if (a.type === 'spin' && a.object) {
@@ -178,16 +178,28 @@ function tick() {
   if (sonarAnim) {
     drawSonar(sonarAnim.tex, interact.sonarTime, interact.sonarPing);
   }
-
   if (app.motionEnabled) {
     scene.rotation.z = Math.sin(clock.elapsedTime * 0.15) * 0.004;
     scene.rotation.x = Math.sin(clock.elapsedTime * 0.11) * 0.002;
   } else {
     scene.rotation.set(0, 0, 0);
   }
+}
 
+let lastSim = performance.now();
+setInterval(() => {
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - lastSim) / 1000);
+  lastSim = now;
+  clock.getDelta();
+  simulate(dt);
+  app.frameTimes.push(dt * 1000);
+  if (app.frameTimes.length > 120) app.frameTimes.shift();
+}, 50);
+
+function tick() {
   post.setCamera(app.activeCamera);
-  post.render(dt);
+  post.render(0.016);
   requestAnimationFrame(tick);
 }
 

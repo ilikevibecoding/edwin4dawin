@@ -2,16 +2,16 @@
 
 ## Current status
 
-- Iteration: 1
+- Iteration: 2
 - Consecutive all-pass iterations: 0
 - Average FPS: 20.2 (SwiftShader software renderer; indicative only)
 - One-percent-low FPS: 20
 - Average frame time: 49.4 ms
-- Draw calls: 446
-- Triangle count: 67952
-- Texture count: 69
+- Draw calls: 670
+- Triangle count: 93240
+- Texture count: 72
 - Renderer: ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)
-- Stopping-condition status: iteration 1 complete, all visual rubric items fail, continuing
+- Stopping-condition status: iteration 2 complete, visual items still fail, continuing
 
 ## Art direction
 
@@ -203,5 +203,110 @@ Used, maintained, cramped expedition submarine. Industrial realism rather than s
 
 ### Commit
 
-- Commit hash: pending
+- Commit hash: afdf8485
 - Commit message: Record iteration 1 screenshots and rubric failures.
+
+## Iteration 2
+
+### Implemented
+
+- Brighter practical lighting and higher exposure
+- Hull shader cutouts and softer materials
+- Reframed debug cameras
+- Horizontal propulsion motor
+- Cleared bunk AABBs that blocked the aisle
+- Silent-running interaction now works in Playwright
+
+### Rubric assessment
+
+#### 1. Spatial layout and submarine silhouette
+- PASS/FAIL: FAIL
+- Evidence: `corridor.png` reads as a cylindrical hull with ribs and a hatch, but `controlRoom.png` still looks like boxes in a tube.
+
+#### 2. Control-room quality
+- PASS/FAIL: FAIL
+- Evidence: `controlRoom.png` consoles remain dark boxes; displays still unreadable.
+
+#### 3. Corridor detail density
+- PASS/FAIL: FAIL
+- Evidence: `corridor.png` improved (pipes, rails, panels, KEEP CLEAR) but still has empty painted regions.
+
+#### 4. Crew quarters feel inhabited
+- PASS/FAIL: FAIL
+- Evidence: bunks reoriented; `crewQuarters.png` still too dark and boxy.
+
+#### 5. Aft machinery room looks mechanically believable
+- PASS/FAIL: FAIL
+- Evidence: `engineRoom.png` shows a dark motor mass and floating green wall plates.
+
+#### 6. Materials read as physical
+- PASS/FAIL: FAIL
+- Evidence: hull still orange-peel; machinery matte black.
+
+#### 7. Wear and grime follow physical logic
+- PASS/FAIL: FAIL
+- Evidence: no localized wear readable in shots.
+
+#### 8. Lighting reads as intentional
+- PASS/FAIL: FAIL
+- Evidence: brighter than iter 1 but bloom washes `controlRoom.png`; `forwardViewport.png` is black.
+
+#### 9. Post-processing is active and balanced
+- PASS/FAIL: FAIL
+- Evidence: bloom/grain still conceal geometry; viewport crushed to black.
+
+#### 10. Underwater view sells depth and motion
+- PASS/FAIL: FAIL
+- Evidence: `forwardViewport.png` is a blank dark field.
+
+#### 11. One cohesive palette across every room
+- PASS/FAIL: FAIL
+- Evidence: tan hull vs black machinery vs green plates still look assembled, not designed.
+
+#### 12. The player can genuinely walk into the back
+- PASS/FAIL: FAIL
+- Evidence: traversal ended at z=3.38 because simulation was tied to a starved rAF loop.
+
+#### 13. Interactions work
+- PASS/FAIL: FAIL
+- Evidence: silent running passed; sonar and rest produced no status.
+
+#### 14. Technical quality is clean
+- PASS/FAIL: FAIL
+- Evidence: 670 draw calls; SwiftShader ~20 fps; no page errors. Maybe is a fail.
+
+#### 15. The cold-look test
+- PASS/FAIL: FAIL
+- Evidence: still a Three.js blockout.
+
+### Technical metrics
+
+- FPS: 20.2
+- Draw calls: 670
+- Triangles: 93240
+- Textures: 72
+- Console errors: ReadPixels warnings
+- Page errors: none
+- Renderer: SwiftShader
+
+### Interaction tests
+
+- Pointer lock: PASS
+- Movement: FAIL
+- Collision: PASS
+- Sonar: FAIL
+- Rest: FAIL
+- Silent running: PASS
+- Traversal: FAIL
+
+### Next iteration fix list
+
+1. Decouple simulation from rAF so movement works under SwiftShader.
+2. Open the bow with a real window bulkhead and a dedicated water vista.
+3. Aim helper for interaction tests.
+4. Reduce bloom and keep filling machinery/control density.
+
+### Commit
+
+- Commit hash: pending
+- Commit message: Record iteration 2 screenshots and start bow/vista fixes.
