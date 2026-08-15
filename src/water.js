@@ -4,12 +4,12 @@ import { makeCaustic } from './textures.js';
 
 export function createWaterSystem(renderer, seed = 1) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x041820);
-  scene.fog = new THREE.FogExp2(0x062830, 0.028);
+  scene.background = new THREE.Color(0x0a3a42);
+  scene.fog = new THREE.FogExp2(0x0a3840, 0.018);
 
   const cam = new THREE.PerspectiveCamera(55, 16 / 9, 0.1, 180);
-  cam.position.set(0, 0.2, 0.4);
-  cam.lookAt(1.2, -2.4, -10);
+  cam.position.set(0, 0.15, 0.2);
+  cam.lookAt(0.4, -1.6, -8);
 
   const rt = new THREE.WebGLRenderTarget(1024, 576, {
     minFilter: THREE.LinearFilter,
@@ -82,15 +82,18 @@ export function createWaterSystem(renderer, seed = 1) {
   const ridge2 = new THREE.Mesh(new THREE.BoxGeometry(12, 12, 26), silMat);
   ridge2.position.set(12, -6, -28);
   rocks.add(ridge2);
-  const nearRock = new THREE.Mesh(new THREE.IcosahedronGeometry(3.2, 1), rockMat);
-  displace(nearRock.geometry, seed + 40, 0.45);
-  nearRock.position.set(1.4, -3.2, -9);
-  nearRock.scale.set(2.1, 1.4, 2.6);
+  const nearRock = new THREE.Mesh(new THREE.IcosahedronGeometry(3.6, 1), rockMat);
+  displace(nearRock.geometry, seed + 40, 0.5);
+  nearRock.position.set(-1.1, -1.8, -7.2);
+  nearRock.scale.set(2.4, 1.8, 2.8);
   rocks.add(nearRock);
-  const wall = new THREE.Mesh(new THREE.BoxGeometry(22, 10, 4), silMat);
-  wall.position.set(2, -3.5, -16);
-  wall.rotation.y = 0.25;
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(18, 12, 3.5), silMat);
+  wall.position.set(3.2, -2.2, -12);
+  wall.rotation.y = -0.35;
   rocks.add(wall);
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(1.4, 6.5, 7), silMat);
+  spire.position.set(1.6, -2.8, -9.5);
+  rocks.add(spire);
 
   const near = makeParticles(520, 0xc8fff0, 0.035, 5, seed);
   const mid = makeParticles(280, 0x6a9aa0, 0.03, 16, seed + 3);
