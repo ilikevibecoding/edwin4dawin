@@ -214,22 +214,21 @@ async function runInteractionTests(page) {
   }
 
   try {
-    await page.evaluate(() => {
+    const silentPrompt = await page.evaluate(() => {
       window.debugAPI.setBusy?.(false);
       window.debugAPI.clearStatus?.();
       window.debugAPI.setSubmarineState('cruising');
-      window.debugAPI.aimInteract('silentRunning');
-      for (let i = 0; i < 8; i++) window.debugAPI.step(0.05);
+      const p = window.debugAPI.aimInteract('silentRunning');
+      for (let i = 0; i < 12; i++) window.debugAPI.step(0.05);
+      return p || window.debugAPI.getPrompt();
     });
-    await page.waitForFunction(() => /silent/i.test(window.debugAPI.getPrompt()), null, { timeout: 5000 });
-    await page.waitForTimeout(150);
     await page.keyboard.press('e');
     await page.waitForTimeout(300);
     const a = await page.evaluate(() => window.debugAPI.getStatus());
     await page.keyboard.press('e');
     await page.waitForTimeout(300);
     const b = await page.evaluate(() => window.debugAPI.getStatus());
-    const silent = { a, b };
+    const silent = { a, b, prompt: silentPrompt };
     result.silentRunning = /silent/i.test(`${silent.a} ${silent.b}`);
     result.silentDetail = silent;
   } catch (err) {

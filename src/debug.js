@@ -103,7 +103,13 @@ export function createDebugAPI(ctx) {
         interact.update();
         return hud.getPrompt();
       }
-      else if (name === 'silentRunning') stand.set(0.02, LAYOUT.eyeHeight, -1.15);
+      else if (name === 'silentRunning') {
+        player.setEnabled(true);
+        player.setPose(0.02, LAYOUT.eyeHeight, -1.15);
+        player.lookAt(new THREE.Vector3(0.32, 1.15, -1.75));
+        interact.update();
+        return hud.getPrompt();
+      }
       else stand.set(wp.x + 0.32, LAYOUT.eyeHeight, wp.z + 0.7);
       player.setEnabled(true);
       player.setPose(stand.x, stand.y, stand.z);
