@@ -65,9 +65,9 @@ export const PALETTE = {
 
 export const VIEWS = {
   controlRoom: {
-    position: [0.0, 1.5, 0.82],
-    target: [0.02, 1.18, 2.55],
-    fov: 62,
+    position: [0.0, 1.52, 3.25],
+    target: [0.0, 1.12, 1.15],
+    fov: 58,
   },
   corridor: {
     position: [0.04, 1.56, 6.95],

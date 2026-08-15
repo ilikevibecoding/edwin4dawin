@@ -298,8 +298,14 @@ export function buildEngineRoom(mats, collision, ctx) {
     g.add(box);
   }
   const extraPump = createPump(mats, 0.75);
-  extraPump.position.set(-0.95, 0.24, 18.7);
+  extraPump.position.set(-0.95, 0.24, 17.55);
   g.add(extraPump);
+  const midValve = createValveAssembly(mats, 1.15, "pipeOrange");
+  midValve.position.set(0.22, 1.15, 17.85);
+  g.add(midValve);
+  const midGauge = createGauge(mats, "SHAFT", 0.44);
+  midGauge.position.set(0.18, 1.42, 17.55);
+  g.add(midGauge);
   collision.addAABB(-0.95, 0.3, 18.7, 0.4, 0.55, 0.35, "pump3");
 
   ctx.rooms.engine = g;

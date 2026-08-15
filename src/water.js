@@ -61,8 +61,11 @@ export function buildUnderwater(mats, renderer) {
     geos.push(mesh);
   }
   const ridge = new THREE.Mesh(rockGeometry(rng, 14), rockMat);
-  ridge.position.set(-8.5, -3.2, -16);
-  ridge.scale.set(1.1, 0.55, 1.6);
+  ridge.position.set(-2.4, -1.6, -11);
+  ridge.scale.set(0.85, 0.45, 1.15);
+  const nearRock = new THREE.Mesh(rockGeometry(rng, 3.2), rockMat);
+  nearRock.position.set(1.6, -1.1, -7.5);
+  rocks.add(nearRock);
   rocks.add(ridge);
   rocks.userData.ridge = ridge;
   g.add(rocks);
