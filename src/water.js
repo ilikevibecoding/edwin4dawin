@@ -110,7 +110,14 @@ export function createUnderwater(seed = 0x51) {
     new THREE.DodecahedronGeometry(2.2, 1),
     new THREE.MeshStandardMaterial({ color: 0x6e8a90, roughness: 0.88, metalness: 0.04 }),
   );
-  windowRock.position.set(1.8, 0.4, 15.4);
+  windowRock.position.set(0.35, 0.35, 15.2);
+  const silhouette = new THREE.Mesh(
+    new THREE.SphereGeometry(5.5, 10, 7, 0, Math.PI, 0.2, 1.8),
+    new THREE.MeshBasicMaterial({ color: 0x2a444c, side: THREE.DoubleSide }),
+  );
+  silhouette.position.set(0.2, -1.4, 16.8);
+  silhouette.rotation.y = Math.PI;
+  root.add(silhouette);
   windowRock.scale.set(1.4, 2.1, 1.6);
   root.add(windowRock);
   const windowRock2 = new THREE.Mesh(

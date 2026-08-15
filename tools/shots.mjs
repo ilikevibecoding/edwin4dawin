@@ -169,11 +169,10 @@ async function runInteractionTests(page) {
   try {
     await page.evaluate(() => {
       window.debugAPI.clearStatus?.();
-      window.debugAPI.setPlayerEnabled(true);
-      window.debugAPI.setPlayerPose(-0.1, 1.7, 10.7, 0.4, 0.15);
-      window.debugAPI.lookAt(-0.38, 1.08, 10.32);
+      window.debugAPI.setHUDVisible(true);
+      window.debugAPI.aimInteract('sonar');
     });
-    await page.waitForFunction(() => /sonar/i.test(window.debugAPI.getPrompt()), null, { timeout: 4000 });
+    await page.waitForFunction(() => /sonar/i.test(window.debugAPI.getPrompt()), null, { timeout: 5000 });
     await page.waitForTimeout(150);
     await page.keyboard.press('e');
     await page.waitForTimeout(250);
@@ -190,10 +189,9 @@ async function runInteractionTests(page) {
   try {
     await page.evaluate(() => {
       window.debugAPI.clearStatus?.();
-      window.debugAPI.setPlayerPose(0.18, 1.7, 4.55, 1.45, 0.28);
-      window.debugAPI.lookAt(-0.4, 0.85, 4.55);
+      window.debugAPI.aimInteract('rest');
     });
-    await page.waitForFunction(() => /rest/i.test(window.debugAPI.getPrompt()), null, { timeout: 4000 });
+    await page.waitForFunction(() => /rest/i.test(window.debugAPI.getPrompt()), null, { timeout: 5000 });
     await page.waitForTimeout(150);
     await page.keyboard.press('e');
     await page.waitForTimeout(500);
@@ -212,10 +210,9 @@ async function runInteractionTests(page) {
     await page.evaluate(() => {
       window.debugAPI.clearStatus?.();
       window.debugAPI.setSubmarineState('cruising');
-      window.debugAPI.setPlayerPose(0.0, 1.7, -1.15, 0.15, 0.12);
-      window.debugAPI.lookAt(0.32, 1.15, -1.75);
+      window.debugAPI.aimInteract('silentRunning');
     });
-    await page.waitForFunction(() => /silent/i.test(window.debugAPI.getPrompt()), null, { timeout: 4000 });
+    await page.waitForFunction(() => /silent/i.test(window.debugAPI.getPrompt()), null, { timeout: 5000 });
     await page.waitForTimeout(150);
     await page.keyboard.press('e');
     await page.waitForTimeout(300);
@@ -234,11 +231,13 @@ async function runInteractionTests(page) {
     const z0 = await page.evaluate(() => {
       window.debugAPI.setPlayerEnabled(true);
       window.debugAPI.setPlayerPose(0, 1.7, 7.2, 0, 0);
+      window.debugAPI.setHoldForward(true);
       return window.debugAPI.getPlayer().z;
     });
     await page.keyboard.down('w');
-    await page.waitForTimeout(1200);
+    await page.waitForTimeout(1400);
     await page.keyboard.up('w');
+    await page.evaluate(() => window.debugAPI.setHoldForward(false));
     const z1 = await page.evaluate(() => window.debugAPI.getPlayer().z);
     const moved = { z0, z1, delta: z1 - z0 };
     result.movement = moved.delta < -0.25;
@@ -267,10 +266,12 @@ async function runInteractionTests(page) {
     await page.evaluate(() => {
       window.debugAPI.setPlayerEnabled(true);
       window.debugAPI.setPlayerPose(0, 1.7, 8.6, 0, 0);
+      window.debugAPI.setHoldForward(true);
     });
     await page.keyboard.down('w');
     await page.waitForTimeout(18000);
     await page.keyboard.up('w');
+    await page.evaluate(() => window.debugAPI.setHoldForward(false));
     const walk = await page.evaluate(() => window.debugAPI.getPlayer());
     result.traversal = walk.z < -1.2;
     result.traversalDetail = walk;

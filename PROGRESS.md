@@ -2,7 +2,7 @@
 
 ## Current status
 
-- Iteration: 2
+- Iteration: 3
 - Consecutive all-pass iterations: 0
 - Average FPS: 21 (SwiftShader — indicative only)
 - One-percent-low FPS: 20
@@ -223,5 +223,29 @@ All 15 items FAIL. `controlRoom.png` looks at hull/void instead of stations. `fo
 
 ### Commit
 
+- Commit hash: 7520b71e
+- Commit message: Record iteration 2 screenshots and harden interaction tests.
+
+## Iteration 3
+
+### Implemented
+
+- Control-room camera framed on the sonar station
+- Larger transparent interact volumes
+- Playwright real keyboard events
+- Rocks added outside the bow (still mostly out of frame)
+
+### Rubric assessment
+
+All 15 items FAIL. `controlRoom.png` now reads as a sonar station with a generated display — strongest shot so far — but still sparse. `forwardViewport.png` remains a dark void with floodlight blobs. Movement delta −0.019 m; rest/silent prompts timed out; traversal z=8.39 from 8.6.
+
+### Next iteration fix list
+
+1. `holdForward` plus `aimInteract` so tests hit the real movement and raycast paths
+2. Center a large unlit rock silhouette in the viewport
+3. Keep densifying rooms and lighting
+
+### Commit
+
 - Commit hash: pending
-- Commit message: Iteration 2 screenshots and rubric (all fail)
+- Commit message: Iteration 3 screenshots; reliable interact/move helpers

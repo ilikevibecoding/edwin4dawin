@@ -54,7 +54,7 @@ export function createPlayer(camera, collider, canvas) {
     if (!state.enabled) return;
 
     wish.set(0, 0, 0);
-    if (state.keys.has('KeyW') || state.keys.has('ArrowUp')) wish.z -= 1;
+    if (state.holdForward || state.keys.has('KeyW') || state.keys.has('ArrowUp')) wish.z -= 1;
     if (state.keys.has('KeyS') || state.keys.has('ArrowDown')) wish.z += 1;
     if (state.keys.has('KeyA') || state.keys.has('ArrowLeft')) wish.x -= 1;
     if (state.keys.has('KeyD') || state.keys.has('ArrowRight')) wish.x += 1;
@@ -114,7 +114,13 @@ export function createPlayer(camera, collider, canvas) {
     lookAt,
     setEnabled(v) {
       state.enabled = v;
-      if (!v) state.velocity.set(0, 0, 0);
+      if (!v) {
+        state.velocity.set(0, 0, 0);
+        state.holdForward = false;
+      }
+    },
+    setHoldForward(v) {
+      state.holdForward = !!v;
     },
     isLocked() {
       return state.locked;
