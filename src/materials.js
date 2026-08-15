@@ -141,7 +141,7 @@ export function createMaterials(seed = 1) {
   fabricMat.normalScale.set(0.8, 0.8);
 
   const blanketMat = new THREE.MeshStandardMaterial({
-    color: 0x5a6a7a,
+    color: 0x4a6a78,
     map: blanket.map,
     roughnessMap: blanket.roughnessMap,
     normalMap: blanket.normalMap,
