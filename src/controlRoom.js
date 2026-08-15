@@ -96,12 +96,12 @@ export function buildControlRoom(ctx) {
 
 function buildViewport(ctx, z) {
   const { mats, root, windows } = ctx;
-  const frame = mesh(new THREE.TorusGeometry(0.42, 0.055, 14, 36), mats.chippedPaint, 0, 1.38, z);
-  const outer = mesh(new THREE.TorusGeometry(0.48, 0.03, 10, 32), mats.gunmetal, 0, 1.38, z);
-  const inner = mesh(new THREE.TorusGeometry(0.36, 0.02, 8, 28), mats.brushedMetal, 0, 1.38, z + 0.02);
-  const glass = mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.06, 32), mats.thickGlass, 0, 1.38, z + 0.01, Math.PI / 2, 0, 0);
+  const frame = mesh(new THREE.TorusGeometry(0.42, 0.055, 16, 48), mats.chippedPaint, 0, 1.38, z);
+  const outer = mesh(new THREE.TorusGeometry(0.48, 0.03, 12, 40), mats.gunmetal, 0, 1.38, z);
+  const inner = mesh(new THREE.TorusGeometry(0.36, 0.02, 10, 36), mats.brushedMetal, 0, 1.38, z + 0.02);
+  const glass = mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.08, 40), mats.thickGlass, 0, 1.38, z + 0.01, Math.PI / 2, 0, 0);
   const view = mesh(
-    new THREE.CircleGeometry(0.355, 32),
+    new THREE.CircleGeometry(0.355, 40),
     new THREE.MeshBasicMaterial({ color: 0x0a3040 }),
     0,
     1.38,

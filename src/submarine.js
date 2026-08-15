@@ -149,6 +149,13 @@ function buildRibs(ctx) {
     flange.rotation.z = -Math.PI * 0.28;
     root.add(flange);
 
+    if (i % 3 === 0) {
+      const plate = new THREE.CylinderGeometry(HULL.radius - 0.08, HULL.radius - 0.08, 0.62, 20, 1, true, 0.4, 1.1);
+      plate.rotateX(Math.PI / 2);
+      plate.scale(-1, 1, 1);
+      plate.computeVertexNormals();
+      root.add(mesh(plate, mats.hullGreen, 0, HULL.centerY, z + 0.32));
+    }
     if (i % 2 === 0) {
       const bolts = [];
       for (let k = 0; k < 10; k++) {

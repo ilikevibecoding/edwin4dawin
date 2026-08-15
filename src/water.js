@@ -92,7 +92,7 @@ export function createWaterSystem(renderer, seed = 1) {
   wall.rotation.y = 0.25;
   rocks.add(wall);
 
-  const near = makeParticles(420, 0x9ad0c8, 0.018, 6, seed);
+  const near = makeParticles(520, 0xc8fff0, 0.035, 5, seed);
   const mid = makeParticles(280, 0x6a9aa0, 0.03, 16, seed + 3);
   const far = makeParticles(160, 0x3a6068, 0.05, 32, seed + 7);
   const bio = makeParticles(40, 0x6ad0c8, 0.012, 22, seed + 11, true);

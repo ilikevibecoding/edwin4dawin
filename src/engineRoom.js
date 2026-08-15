@@ -157,6 +157,20 @@ export function buildEngineRoom(ctx) {
   root.add(mesh(beveledBox(0.7, 0.015, 2.8, 0.002), mats.yellow, 0.02, 0.018, 8.4));
   root.add(mesh(beveledBox(0.18, 0.22, 0.9, 0.008), mats.warning, 0.12, 0.22, 9.15));
 
+  for (let i = 0; i < 6; i++) {
+    root.add(mesh(beveledBox(0.08, 0.05, 0.1, 0.003), mats.gunmetal, -0.35 + (i % 3) * 0.12, 0.95 + Math.floor(i / 3) * 0.14, 8.95));
+  }
+  root.add(mesh(beveledBox(0.34, 0.16, 0.06, 0.006), mats.warning, 0.12, 1.05, 8.55));
+  const motorTag = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.28, 0.07),
+    new THREE.MeshStandardMaterial({
+      map: makeLabelTexture('PROP MOTOR', { w: 320, h: 80, bg: '#3a3830', fg: '#e8d090' }),
+      roughness: 0.5,
+    }),
+  );
+  motorTag.position.set(0.12, 1.08, 8.59);
+  root.add(motorTag);
+
   const stencil = new THREE.Mesh(
     new THREE.PlaneGeometry(0.55, 0.12),
     new THREE.MeshStandardMaterial({
