@@ -70,9 +70,9 @@ export const VIEWS = {
     fov: 62,
   },
   corridor: {
-    position: [0.0, 1.55, 5.55],
-    target: [0.05, 1.28, 7.85],
-    fov: 62,
+    position: [0.04, 1.56, 6.95],
+    target: [0.0, 1.28, 5.15],
+    fov: 60,
   },
   crewQuarters: {
     position: [0.12, 1.6, 8.55],

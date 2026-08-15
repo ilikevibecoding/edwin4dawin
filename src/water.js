@@ -195,15 +195,13 @@ export function buildUnderwater(mats, renderer) {
   }
   g.add(bubbles);
 
-  const portVolume = new THREE.Mesh(
-    new THREE.SphereGeometry(1.1, 12, 10),
-    new THREE.MeshBasicMaterial({ color: 0x062028, fog: false })
+  const portCard = new THREE.Mesh(
+    new THREE.CircleGeometry(0.22, 16),
+    new THREE.MeshBasicMaterial({ color: 0x082830, fog: false, side: THREE.DoubleSide })
   );
-  portVolume.position.set(1.85, 1.38, 6.55);
-  g.add(portVolume);
-  const crewVolume = portVolume.clone();
-  crewVolume.position.set(1.85, 1.45, 10.8);
-  g.add(crewVolume);
+  portCard.position.set(1.45, 1.38, 6.55);
+  portCard.rotation.y = Math.PI / 2;
+  g.add(portCard);
 
   g.userData.update = (t, motion) => {
     const m = motion ? 1 : 0;

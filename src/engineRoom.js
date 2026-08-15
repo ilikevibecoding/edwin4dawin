@@ -26,25 +26,25 @@ export function buildEngineRoom(mats, collision, ctx) {
   g.name = "engineRoom";
 
   const motor = createMotorHousing(mats, 1.45, 0.4);
-  motor.position.set(-0.72, 0.62, 19.35);
+  motor.position.set(-0.58, 0.62, 18.85);
   motor.rotation.y = 0;
   g.add(motor);
-  collision.addAABB(-0.72, 0.7, 19.35, 0.82, 1.15, 1.7, "motor");
+  collision.addAABB(-0.58, 0.7, 18.85, 0.78, 1.15, 1.6, "motor");
 
   const gear = new THREE.Mesh(beveledBox(0.55, 0.42, 0.48, 0.02), mats.oilyMachinery);
-  gear.position.set(-0.72, 0.38, 20.25);
+  gear.position.set(-0.58, 0.38, 19.75);
   const gearLid = new THREE.Mesh(beveledPanel(0.4, 0.28, 0.02, 0.012, 0.004), mats.chippedPaint);
-  gearLid.position.set(-0.72, 0.62, 20.25);
+  gearLid.position.set(-0.58, 0.62, 19.75);
   gearLid.rotation.x = -Math.PI / 2;
   g.add(gear, gearLid);
-  collision.addAABB(-0.72, 0.4, 20.25, 0.55, 0.5, 0.52, "gear");
+  collision.addAABB(-0.58, 0.4, 19.75, 0.55, 0.5, 0.52, "gear");
 
   const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.9, 14), mats.brushedMetal);
   shaft.rotation.x = Math.PI / 2;
-  shaft.position.set(-0.72, 0.38, 20.85);
+  shaft.position.set(-0.58, 0.38, 20.35);
   const bearing = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 12), mats.oilyMachinery);
   bearing.rotation.x = Math.PI / 2;
-  bearing.position.set(-0.72, 0.38, 21.2);
+  bearing.position.set(-0.58, 0.38, 20.7);
   g.add(shaft, bearing);
 
   const pump1 = createPump(mats, 1.05);
