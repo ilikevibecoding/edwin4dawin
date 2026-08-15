@@ -2,18 +2,14 @@ import {
   AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
-  Color,
+  CanvasTexture,
   CylinderGeometry,
   Group,
-  InstancedMesh,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
-  Object3D,
   Points,
   PointsMaterial,
-  ShaderMaterial,
-  SphereGeometry,
   Vector3,
 } from 'three';
 import { SEED, mulberry32, PALETTE } from './seed.js';
@@ -54,6 +50,23 @@ function rockGeometry(seed, scale) {
   return geo;
 }
 
+function particleMap() {
+  const c = document.createElement('canvas');
+  c.width = 32;
+  c.height = 32;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(16, 16, 1, 16, 16, 15);
+  g.addColorStop(0, 'rgba(255,255,255,0.9)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 32, 32);
+  const t = new CanvasTexture(c);
+  t.needsUpdate = true;
+  return t;
+}
+
+const _particleMap = particleMap();
+
 function makeParticles(count, spread, size, color, opacity) {
   const geo = new BufferGeometry();
   const pos = new Float32Array(count * 3);
@@ -67,6 +80,7 @@ function makeParticles(count, spread, size, color, opacity) {
   const mat = new PointsMaterial({
     color,
     size,
+    map: _particleMap,
     transparent: true,
     opacity,
     depthWrite: false,
@@ -104,9 +118,9 @@ export function createUnderwater(scene) {
   for (let i = 0; i < 18; i++) {
     const rock = new Mesh(rockGeometry(SEED + i * 13, 1.4 + rand() * 2.2), rockMat);
     rock.position.set(
-      -18 + rand() * 36,
-      -7.5 - rand() * 3.5,
-      -8 - rand() * 40
+      -10 + rand() * 20,
+      -3.2 - rand() * 2.2,
+      -3 - rand() * 22
     );
     rock.rotation.y = rand() * Math.PI * 2;
     rock.scale.setScalar(0.8 + rand() * 1.6);
@@ -115,11 +129,15 @@ export function createUnderwater(scene) {
   const ridge = new Group();
   for (let i = 0; i < 10; i++) {
     const rock = new Mesh(rockGeometry(SEED + 400 + i * 7, 2.4), rockMat);
-    rock.position.set(7 + rand() * 3, -5.2, -6 - i * 4.2);
-    rock.scale.set(1.4, 1.8 + rand(), 1.2);
+    rock.position.set(3.2 + rand() * 2.2, -2.4, -2.5 - i * 3.4);
+    rock.scale.set(1.6, 2.2 + rand(), 1.4);
     ridge.add(rock);
   }
   terrain.add(ridge);
+  const hero = new Mesh(rockGeometry(SEED + 77, 3.4), rockMat);
+  hero.position.set(1.6, -2.1, -6.5);
+  hero.scale.set(2.2, 2.6, 1.8);
+  terrain.add(hero);
   root.add(terrain);
 
   const near = makeParticles(420, new Vector3(8, 5, 10), 0.035, 0xb7d4d8, 0.35);
@@ -138,9 +156,9 @@ export function createUnderwater(scene) {
     opacity: 0.045,
     depthWrite: false,
   });
-  const cone = new Mesh(new CylinderGeometry(0.08, 1.6, 6, 16, 1, true), coneMat);
-  cone.position.set(-0.55, 0.85, -2.4);
-  cone.rotation.x = Math.PI * 0.62;
+  const cone = new Mesh(new CylinderGeometry(0.08, 1.8, 7, 16, 1, true), coneMat);
+  cone.position.set(-0.45, 0.7, -2.1);
+  cone.rotation.x = Math.PI * 0.72;
   const cone2 = cone.clone();
   cone2.position.set(0.55, 0.85, -2.4);
   root.add(cone, cone2);

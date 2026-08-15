@@ -81,18 +81,17 @@ export function buildCrewQuarters(mats, collision, interactables, animators) {
 
   const bunks = [];
   const positions = [
-    [-0.42, 0.18, 9.15],
-    [-0.42, 1.05, 9.15],
-    [-0.42, 0.18, 11.15],
-    [-0.42, 1.05, 11.15],
+    [-0.5, 0.18, 9.2],
+    [-0.5, 1.05, 9.2],
+    [-0.5, 0.18, 11.2],
+    [-0.5, 1.05, 11.2],
   ];
-  positions.forEach((p, i) => {
+  positions.forEach((p) => {
     const bunk = makeBunk(mats);
     bunk.position.set(p[0], p[1], p[2]);
-    bunk.rotation.y = Math.PI * 0.5;
     g.add(bunk);
     bunks.push(bunk);
-    collision.addBox(p[0], p[1] + 0.2, p[2], 1.85, 0.45, 0.75);
+    collision.addBox(p[0], p[1] + 0.2, p[2], 0.72, 0.45, 1.85);
   });
   const restBunk = bunks[0];
   restBunk.userData.interact = 'rest';

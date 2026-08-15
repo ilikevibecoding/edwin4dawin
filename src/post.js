@@ -9,8 +9,8 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
-    vignette: { value: 0.32 },
-    grain: { value: 0.035 },
+    vignette: { value: 0.18 },
+    grain: { value: 0.014 },
     time: { value: 0 },
     lift: { value: 0.03 },
     gain: { value: 1.02 },

@@ -12,10 +12,17 @@ import { makeGaugeFace } from './displays.js';
 
 export function makePropulsionMotor(mats) {
   const g = new Group();
-  const housing = mesh(motorHousing(0.42, 1.55), mats.oily);
-  housing.rotation.z = Math.PI * 0.5;
-  housing.rotation.y = Math.PI * 0.5;
+  const housing = mesh(cyl(0.38, 0.4, 1.35, 28), mats.oily);
+  housing.rotation.x = Math.PI * 0.5;
   g.add(housing);
+  const nose = mesh(cyl(0.28, 0.38, 0.22, 24), mats.oily);
+  nose.rotation.x = Math.PI * 0.5;
+  nose.position.z = -0.76;
+  g.add(nose);
+  const tail = mesh(cyl(0.4, 0.22, 0.2, 24), mats.oily);
+  tail.rotation.x = Math.PI * 0.5;
+  tail.position.z = 0.76;
+  g.add(tail);
 
   const finGroup = new Group();
   for (let i = 0; i < 16; i++) {

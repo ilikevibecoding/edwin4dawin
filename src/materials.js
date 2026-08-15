@@ -288,18 +288,18 @@ export function createMaterials() {
 
     const hull = std({
       ...hullMaps,
-      color: 0xe7e3d6,
-      roughness: 0.62,
-      metalness: 0.08,
-      normalScale: { x: 0.55, y: 0.55 },
+      color: 0xf0ebe0,
+      roughness: 0.58,
+      metalness: 0.06,
+      normalScale: { x: 0.22, y: 0.22 },
     });
 
     const hullGreen = std({
       ...greenMaps,
-      color: 0xc5cbb6,
-      roughness: 0.64,
-      metalness: 0.1,
-      normalScale: { x: 0.5, y: 0.5 },
+      color: 0xd4d8c6,
+      roughness: 0.6,
+      metalness: 0.08,
+      normalScale: { x: 0.2, y: 0.2 },
     });
 
     const chipped = std({
@@ -321,13 +321,13 @@ export function createMaterials() {
 
     const oily = phys({
       ...oilyMaps,
-      color: 0x8a8d92,
-      roughness: 0.28,
-      metalness: 0.88,
-      clearcoat: 0.35,
-      clearcoatRoughness: 0.4,
-      envMapIntensity: 1.05,
-      normalScale: { x: 0.4, y: 0.4 },
+      color: 0xb4b8be,
+      roughness: 0.3,
+      metalness: 0.86,
+      clearcoat: 0.28,
+      clearcoatRoughness: 0.42,
+      envMapIntensity: 1.15,
+      normalScale: { x: 0.22, y: 0.22 },
     });
 
     const rubber = std({
@@ -373,7 +373,7 @@ export function createMaterials() {
       roughness: 0.06,
       metalness: 0.0,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.14,
       envMapIntensity: 1.4,
       clearcoat: 1,
       clearcoatRoughness: 0.04,
@@ -388,7 +388,7 @@ export function createMaterials() {
       roughness: 0.08,
       metalness: 0.0,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.16,
       envMapIntensity: 1.25,
       clearcoat: 1,
       clearcoatRoughness: 0.06,
@@ -590,4 +590,27 @@ export function cloneMat(mat, overrides = {}) {
   const m = mat.clone();
   Object.assign(m, overrides);
   return m;
+}
+
+export function punchHullOpenings(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = `varying vec3 vWorldPos;\n${shader.vertexShader}`.replace(
+      '#include <project_vertex>',
+      `#include <project_vertex>
+      vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`
+    );
+    shader.fragmentShader = `varying vec3 vWorldPos;\n${shader.fragmentShader}`.replace(
+      '#include <dithering_fragment>',
+      `
+      if (vWorldPos.z < 0.48 && abs(vWorldPos.x) < 0.44 && abs(vWorldPos.y - 1.28) < 0.28) discard;
+      vec2 pPort = vec2(vWorldPos.z - 6.55, vWorldPos.y - 1.32);
+      if (vWorldPos.x > 0.52 && dot(pPort, pPort) < 0.028) discard;
+      vec2 pCrew = vec2(vWorldPos.z - 10.7, vWorldPos.y - 1.38);
+      if (vWorldPos.x > 0.52 && dot(pCrew, pCrew) < 0.02) discard;
+      #include <dithering_fragment>
+      `
+    );
+  };
+  material.customProgramCacheKey = () => 'hull-openings-v1';
+  return material;
 }

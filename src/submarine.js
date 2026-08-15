@@ -2,6 +2,7 @@ import { Group, Mesh, CylinderGeometry } from 'three';
 import { LAYOUT, hullHalfWidthAt } from './seed.js';
 import { addUv2, bulkheadPlate, cyl, invertNormals, mergeGeoms, placed, roundedBox, tBeamRing } from './geom.js';
 import { makeHatchDoor, makeLightFixture, makeWarningPlate, mesh } from './kit.js';
+import { punchHullOpenings } from './materials.js';
 import { CollisionWorld, wallCollidersForHull } from './collision.js';
 import { buildControlRoom } from './controlRoom.js';
 import { buildCorridor } from './corridor.js';
@@ -16,6 +17,7 @@ function createHullShell(mats) {
   geo.rotateX(Math.PI * 0.5);
   invertNormals(geo);
   addUv2(geo);
+  punchHullOpenings(mats.hull);
   const shell = mesh(geo, mats.hull);
   shell.position.set(0, LAYOUT.hullCenterY, len * 0.5);
   g.add(shell);
@@ -54,6 +56,22 @@ function createDeck(mats) {
   const stringerR = stringerL.clone();
   stringerR.position.x = w * 0.42;
   g.add(stringerL, stringerR);
+  return g;
+}
+
+function createLining(mats) {
+  const g = new Group();
+  for (let z = 1.1; z < LAYOUT.length - 0.6; z += 0.72) {
+    const plate = mesh(roundedBox(0.42, 0.55, 0.04, 0.01, 1), mats.hullGreen);
+    plate.position.set(-0.78, 1.15, z);
+    plate.rotation.y = 0.55;
+    g.add(plate);
+    if (Math.abs(z - 6.55) < 0.45 || Math.abs(z - 10.7) < 0.45) continue;
+    const plateR = plate.clone();
+    plateR.position.x = 0.78;
+    plateR.rotation.y = -0.55;
+    g.add(plateR);
+  }
   return g;
 }
 
@@ -108,6 +126,7 @@ export function buildSubmarine(scene, mats) {
   root.add(createHullShell(mats));
   root.add(createDeck(mats));
   root.add(createRibs(mats));
+  root.add(createLining(mats));
 
   const rooms = LAYOUT.rooms;
   root.add(createBulkhead(mats, rooms.control.z1, 1));

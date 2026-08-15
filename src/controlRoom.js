@@ -32,7 +32,7 @@ function screen(mats, tex, w, h) {
   m.color.set(0xffffff);
   m.emissiveMap = tex;
   m.emissive.set(0x6a8a70);
-  m.emissiveIntensity = 0.28;
+  m.emissiveIntensity = 0.85;
   m.roughness = 0.28;
   const panel = mesh(roundedBox(w, h, 0.03, 0.006, 1), m);
   return panel;
@@ -81,7 +81,7 @@ export function buildControlRoom(mats, collision, interactables, animators) {
 
   const helm = new Group();
   helm.add(mesh(roundedBox(0.72, 0.62, 0.48, 0.02, 2), mats.hullGreen));
-  helm.position.set(0.22, 0.55, 1.55);
+  helm.position.set(0.36, 0.55, 1.55);
   const helmTop = mesh(roundedBox(0.7, 0.04, 0.46, 0.01, 1), mats.chipped);
   helmTop.position.set(0, 0.33, 0);
   helm.add(helmTop);
@@ -124,7 +124,7 @@ export function buildControlRoom(mats, collision, interactables, animators) {
 
   const sonar = new Group();
   sonar.add(mesh(roundedBox(0.62, 0.78, 0.46, 0.02, 2), mats.hullGreen));
-  sonar.position.set(-0.48, 0.62, 1.85);
+  sonar.position.set(-0.46, 0.62, 1.72);
   const sonarTex = makeSonarTexture();
   const sonarScreen = screen(mats, sonarTex, 0.42, 0.42);
   sonarScreen.position.set(0, 0.18, 0.14);
@@ -147,12 +147,12 @@ export function buildControlRoom(mats, collision, interactables, animators) {
   });
 
   const seat1 = makeSeat(mats);
-  seat1.position.set(0.22, 0, 2.15);
+  seat1.position.set(0.36, 0, 2.18);
   seat1.rotation.y = Math.PI;
   g.add(seat1);
   const seat2 = makeSeat(mats);
-  seat2.position.set(-0.42, 0, 2.45);
-  seat2.rotation.y = Math.PI + 0.2;
+  seat2.position.set(-0.46, 0, 2.35);
+  seat2.rotation.y = Math.PI + 0.15;
   g.add(seat2);
 
   const overhead = mesh(roundedBox(0.9, 0.08, 1.6, 0.015, 1), mats.chipped);
@@ -175,7 +175,7 @@ export function buildControlRoom(mats, collision, interactables, animators) {
   eyepiece.rotation.x = Math.PI * 0.5;
   eyepiece.position.set(0, 1.55, 0.1);
   periscope.add(eyepiece);
-  periscope.position.set(0.02, 0, 1.05);
+  periscope.position.set(0.42, 0, 1.12);
   g.add(periscope);
 
   for (const [x, y, z, label] of [
@@ -232,13 +232,13 @@ export function buildControlRoom(mats, collision, interactables, animators) {
     g.add(kn);
   }
 
-  collision.addBox(0.22, 0.45, 1.55, 0.72, 0.9, 0.5);
-  collision.addBox(0.48, 0.5, 2.55, 0.58, 0.95, 0.44);
-  collision.addBox(-0.48, 0.5, 1.85, 0.62, 1.0, 0.48);
-  collision.addBox(0.22, 0.45, 2.15, 0.4, 0.9, 0.4);
-  collision.addBox(-0.42, 0.45, 2.45, 0.4, 0.9, 0.4);
-  collision.addBox(0.02, 1.0, 1.05, 0.16, 2.0, 0.2);
-  collision.addBox(0, 1.2, 0.22, 1.1, 1.4, 0.2);
+  collision.addBox(0.36, 0.45, 1.55, 0.62, 0.9, 0.48);
+  collision.addBox(0.48, 0.5, 2.55, 0.5, 0.95, 0.4);
+  collision.addBox(-0.46, 0.5, 1.72, 0.52, 1.0, 0.42);
+  collision.addBox(0.36, 0.45, 2.18, 0.36, 0.9, 0.36);
+  collision.addBox(-0.46, 0.45, 2.35, 0.36, 0.9, 0.36);
+  collision.addBox(0.42, 1.0, 1.12, 0.16, 2.0, 0.2);
+  collision.addBox(0, 1.2, 0.18, 1.1, 1.4, 0.16);
 
   return g;
 }

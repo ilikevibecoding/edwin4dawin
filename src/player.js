@@ -44,7 +44,7 @@ export function createPlayer(camera, collision, options = {}) {
       return;
     }
     const accel = 18;
-    const maxSpeed = 1.35;
+    const maxSpeed = 1.7;
     const damp = 10;
     _fwd.set(-Math.sin(state.yaw), 0, -Math.cos(state.yaw));
     _right.set(Math.cos(state.yaw), 0, -Math.sin(state.yaw));

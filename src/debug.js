@@ -1,16 +1,16 @@
 import { Vector3 } from 'three';
 
 const VIEWS = {
-  controlRoom: { pos: [0.08, 1.58, 3.55], look: [0.02, 1.15, 1.15], fov: 62 },
-  corridor: { pos: [0.0, 1.55, 5.15], look: [0.0, 1.25, 7.55], fov: 60 },
-  crewQuarters: { pos: [0.12, 1.52, 9.55], look: [-0.35, 1.15, 11.3], fov: 62 },
-  engineRoom: { pos: [-0.08, 1.58, 17.15], look: [0.28, 1.05, 20.1], fov: 60 },
-  machineryCloseup: { pos: [0.22, 1.28, 18.55], look: [0.35, 0.95, 20.05], fov: 50 },
-  sonarConsole: { pos: [-0.42, 1.48, 2.55], look: [-0.55, 1.12, 1.55], fov: 48 },
-  forwardViewport: { pos: [0.0, 1.55, 1.85], look: [0.0, 1.15, -1.2], fov: 58 },
-  porthole: { pos: [0.05, 1.48, 6.35], look: [0.72, 1.28, 6.55], fov: 46 },
-  aftWide: { pos: [0.0, 1.62, 16.55], look: [0.15, 1.0, 20.6], fov: 68 },
-  walking: { pos: [0.0, 1.7, 8.35], look: [0.0, 1.45, 10.8], fov: 68 },
+  controlRoom: { pos: [0.04, 1.52, 3.25], look: [0.08, 1.12, 1.35], fov: 60 },
+  corridor: { pos: [0.0, 1.52, 4.95], look: [0.05, 1.22, 7.35], fov: 58 },
+  crewQuarters: { pos: [0.2, 1.48, 10.05], look: [-0.42, 0.95, 9.2], fov: 58 },
+  engineRoom: { pos: [-0.22, 1.5, 17.35], look: [0.22, 0.88, 19.7], fov: 58 },
+  machineryCloseup: { pos: [-0.05, 1.22, 18.7], look: [0.3, 0.82, 19.95], fov: 48 },
+  sonarConsole: { pos: [-0.12, 1.42, 2.65], look: [-0.46, 1.18, 1.88], fov: 46 },
+  forwardViewport: { pos: [0.0, 1.32, 0.92], look: [0.0, 1.18, -3.4], fov: 55 },
+  porthole: { pos: [0.18, 1.32, 6.55], look: [1.15, 1.32, 6.55], fov: 42 },
+  aftWide: { pos: [-0.18, 1.55, 16.7], look: [0.2, 0.95, 20.3], fov: 64 },
+  walking: { pos: [0.0, 1.65, 5.05], look: [0.0, 1.28, 7.6], fov: 64 },
 };
 
 export function createDebugAPI(app) {

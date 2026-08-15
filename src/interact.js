@@ -1,4 +1,4 @@
-import { Raycaster, Vector2, Color } from 'three';
+import { BoxGeometry, Mesh, MeshBasicMaterial, Raycaster, Vector2, Vector3, Color } from 'three';
 
 const raycaster = new Raycaster();
 const ndc = new Vector2(0, 0);
@@ -81,16 +81,43 @@ export function createInteractions(ctx) {
   function register(name, object, prompt) {
     object.userData.interact = name;
     object.userData.prompt = prompt;
+    const hit = new Mesh(
+      new BoxGeometry(0.7, 0.9, 0.7),
+      new MeshBasicMaterial({ visible: false })
+    );
+    hit.position.y = 0.35;
+    object.add(hit);
     targets.push(object);
   }
 
   function currentAim() {
     raycaster.setFromCamera(ndc, camera);
     const hits = raycaster.intersectObjects(targets, true);
-    if (!hits.length || hits[0].distance > 1.85) return null;
-    let obj = hits[0].object;
-    while (obj && !obj.userData.interact) obj = obj.parent;
-    return obj || null;
+    if (hits.length && hits[0].distance <= 2.2) {
+      let obj = hits[0].object;
+      while (obj && !obj.userData.interact) obj = obj.parent;
+      if (obj) return obj;
+    }
+    const origin = camera.position;
+    const dir = new Vector3();
+    camera.getWorldDirection(dir);
+    let best = null;
+    let bestScore = 0.28;
+    for (const obj of targets) {
+      const p = new Vector3();
+      obj.getWorldPosition(p);
+      p.y += 0.35;
+      const to = p.clone().sub(origin);
+      const dist = to.length();
+      if (dist > 2.3 || dist < 0.2) continue;
+      const align = to.normalize().dot(dir);
+      const score = (1 - align) + dist * 0.04;
+      if (align > 0.72 && score < bestScore) {
+        bestScore = score;
+        best = obj;
+      }
+    }
+    return best;
   }
 
   function playPing() {

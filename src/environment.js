@@ -58,22 +58,23 @@ function point(color, intensity, dist) {
 
 export function createLighting(scene) {
   const lights = {
-    ambient: new AmbientLight(0x1c1a16, 0.12),
-    hemi: new HemisphereLight(0x8a9aa0, 0x2a221c, 0.18),
-    keyControl: spot(0xf0d8a8, 3.4, 8, 0.7, 0.45),
-    fillControl: point(0x6aa0a8, 1.1, 6),
-    windowFill: spot(0x4a8a92, 2.2, 7, 0.55, 0.5),
-    corridorA: spot(0xe8c888, 2.1, 6, 0.55, 0.4),
-    corridorB: spot(0xe8c888, 1.8, 6, 0.55, 0.4),
-    crewWarm: spot(0xf0c890, 2.0, 6.5, 0.7, 0.5),
-    crewRead: point(0xe8b86a, 0.55, 2.4),
-    engineKey: spot(0xf2c070, 3.6, 9, 0.75, 0.4),
-    engineFill: point(0x6a7a88, 1.3, 7),
-    engineWork: spot(0xf0d090, 2.2, 5, 0.45, 0.35),
+    ambient: new AmbientLight(0x2a2620, 0.38),
+    hemi: new HemisphereLight(0xb8c4c0, 0x3a3228, 0.55),
+    keyControl: spot(0xf0d8a8, 8.5, 9, 0.85, 0.5),
+    fillControl: point(0x8ab8b8, 3.2, 7),
+    windowFill: spot(0x6ab0b8, 5.5, 8, 0.7, 0.55),
+    corridorA: spot(0xf0d090, 6.2, 7, 0.7, 0.45),
+    corridorB: spot(0xf0d090, 5.8, 7, 0.7, 0.45),
+    crewWarm: spot(0xf4d0a0, 6.4, 7.5, 0.85, 0.5),
+    crewRead: point(0xf0c878, 1.8, 3.2),
+    engineKey: spot(0xf6d080, 9.2, 10, 0.9, 0.45),
+    engineFill: point(0x8a9aa8, 4.2, 8),
+    engineWork: spot(0xf4d8a0, 6.5, 6, 0.55, 0.4),
+    extraFill: point(0xe8d4b0, 2.4, 12),
     restReds: [],
     instruments: [],
-    floodL: spot(0x8ec8c4, 6.5, 28, 0.32, 0.35),
-    floodR: spot(0x8ec8c4, 6.5, 28, 0.32, 0.35),
+    floodL: spot(0x8ec8c4, 14, 32, 0.38, 0.4),
+    floodR: spot(0x8ec8c4, 14, 32, 0.38, 0.4),
   };
 
   lights.keyControl.position.set(0.15, 2.05, 1.6);
@@ -115,6 +116,7 @@ export function createLighting(scene) {
   lights.floodL.target.position.set(-1.4, -2.2, -8);
   lights.floodR.position.set(0.55, 0.95, -0.15);
   lights.floodR.target.position.set(1.4, -2.2, -8);
+  lights.extraFill.position.set(0, 1.4, 11);
 
   const restA = point(0xa04030, 0.0, 5);
   restA.position.set(0, 1.7, 2.4);
@@ -134,21 +136,22 @@ export function createLighting(scene) {
   }
 
   scene.background = new Color(PALETTE.waterDeep);
-  scene.fog = new FogExp2(0x0a1214, 0.012);
+  scene.fog = new FogExp2(0x0a1214, 0.006);
 
   lights._base = {
-    keyControl: 3.4,
-    fillControl: 1.1,
-    windowFill: 2.2,
-    corridorA: 2.1,
-    corridorB: 1.8,
-    crewWarm: 2.0,
-    crewRead: 0.55,
-    engineKey: 3.6,
-    engineFill: 1.3,
-    engineWork: 2.2,
-    ambient: 0.12,
-    hemi: 0.18,
+    keyControl: 8.5,
+    fillControl: 3.2,
+    windowFill: 5.5,
+    corridorA: 6.2,
+    corridorB: 5.8,
+    crewWarm: 6.4,
+    crewRead: 1.8,
+    engineKey: 9.2,
+    engineFill: 4.2,
+    engineWork: 6.5,
+    ambient: 0.38,
+    hemi: 0.55,
+    extraFill: 2.4,
   };
 
   applyLightingState(lights, 'cruising');

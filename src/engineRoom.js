@@ -220,6 +220,12 @@ export function buildEngineRoom(mats, collision, interactables, animators) {
   warn2.position.set(-0.55, 1.55, 16.4);
   g.add(warn2);
 
+  g.add(makeStraightPipe(mats, 0.18, 1.35, 19.1, 1.8, 0.034, 'z', 'pipeOrange'));
+  g.add(makeStraightPipe(mats, -0.28, 1.42, 18.9, 1.6, 0.028, 'z', 'pipeBlue'));
+  const cluster2 = makeValveCluster(mats);
+  cluster2.position.set(0.02, 0.72, 18.35);
+  g.add(cluster2);
+
   const beam = mesh(roundedBox(1.3, 0.06, 0.06, 0.01, 1), mats.oily);
   beam.position.set(0, 1.98, 18.4);
   g.add(beam);

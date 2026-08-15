@@ -126,6 +126,17 @@ export function buildCorridor(mats, collision, interactables, animators) {
   brace.position.set(0, 1.98, 6.3);
   g.add(brace);
 
+  for (const z of [5.2, 6.0, 6.8, 7.55]) {
+    const plate = makeAccessPanel(mats, 0.22, 0.16);
+    plate.position.set(-0.72, 1.05, z);
+    plate.rotation.y = Math.PI * 0.5;
+    g.add(plate);
+    const plateR = makeAccessPanel(mats, 0.2, 0.14);
+    plateR.position.set(0.72, 0.95, z + 0.18);
+    plateR.rotation.y = -Math.PI * 0.5;
+    g.add(plateR);
+  }
+
   collision.addBox(-0.48, 0.45, mid, 0.08, 0.9, len - 0.6);
   collision.addBox(0.48, 0.45, mid, 0.08, 0.9, len - 0.6);
   collision.addBox(0.62, 0.32, 5.7, 0.22, 0.6, 0.34);

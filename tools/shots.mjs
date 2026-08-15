@@ -152,14 +152,14 @@ async function runInteractionTests(page) {
   if (lockOn && lockOff) result.pointerLock.pass = true;
   else result.pointerLock.pass = true;
 
-  await page.evaluate(() => window.debugAPI.setPlayerPose(0.05, 0, 2.2, 0, 0));
+  await page.evaluate(() => window.debugAPI.setPlayerPose(0.0, 0, 5.4, 0, 0));
   const before = await page.evaluate(() => window.debugAPI.getPlayerState());
   await page.keyboard.down('KeyW');
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(900);
   await page.keyboard.up('KeyW');
   const after = await page.evaluate(() => window.debugAPI.getPlayerState());
   result.movement = {
-    pass: Math.abs(after.z - before.z) > 0.15,
+    pass: Math.abs(after.z - before.z) > 0.2,
     before,
     after,
   };
@@ -177,50 +177,50 @@ async function runInteractionTests(page) {
   };
 
   await page.evaluate(() => {
-    window.debugAPI.setPlayerPose(-0.25, 0, 2.35, 0.15, 0.25);
+    window.debugAPI.setPlayerPose(-0.12, 0, 2.55, 0.35, 0.22);
   });
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(300);
   await page.keyboard.press('KeyE');
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(500);
   const sonarState = await page.evaluate(() => window.debugAPI.getInteractionState());
   result.sonar = {
     pass: /Sonar|contact/i.test(sonarState.status || ''),
     state: sonarState,
   };
 
-  await page.evaluate(() => window.debugAPI.setPlayerPose(-0.15, 0, 9.15, 1.2, 0.2));
-  await page.waitForTimeout(200);
+  await page.evaluate(() => window.debugAPI.setPlayerPose(-0.08, 0, 9.2, 1.55, 0.25));
+  await page.waitForTimeout(300);
   await page.keyboard.press('KeyE');
-  await page.waitForTimeout(900);
+  await page.waitForTimeout(1200);
   const restMid = await page.evaluate(() => window.debugAPI.getInteractionState());
-  await page.waitForTimeout(2200);
+  await page.waitForTimeout(2800);
   const restEnd = await page.evaluate(() => window.debugAPI.getInteractionState());
   result.rest = {
-    pass: /6 hours|Rested/i.test(`${restMid.status} ${restEnd.status}`) || restMid.fade > 0.2 || restEnd.lighting === 'cruising',
+    pass: /6 hours|Rested/i.test(`${restMid.status} ${restEnd.status}`) || restMid.fade > 0.4 || restMid.lighting === 'restCycle',
     restMid,
     restEnd,
   };
 
   await page.evaluate(() => {
     window.debugAPI.setSubmarineState('cruising');
-    window.debugAPI.setPlayerPose(-0.15, 0, 16.9, 0, 0.15);
+    window.debugAPI.setPlayerPose(-0.12, 0, 16.75, 0.05, 0.2);
   });
-  await page.waitForTimeout(200);
-  await page.keyboard.press('KeyE');
   await page.waitForTimeout(300);
+  await page.keyboard.press('KeyE');
+  await page.waitForTimeout(400);
   const silentOn = await page.evaluate(() => window.debugAPI.getInteractionState());
   await page.keyboard.press('KeyE');
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(400);
   const silentOff = await page.evaluate(() => window.debugAPI.getInteractionState());
   result.silentRunning = {
-    pass: /Silent running/i.test(`${silentOn.status} ${silentOff.status}`) || silentOn.silent || silentOff.lighting === 'cruising',
+    pass: /Silent running/i.test(`${silentOn.status} ${silentOff.status}`) || silentOn.silent === true,
     silentOn,
     silentOff,
   };
 
-  await page.evaluate(() => window.debugAPI.setPlayerPose(0.0, 0, 2.3, Math.PI, 0));
+  await page.evaluate(() => window.debugAPI.setPlayerPose(0.0, 0, 2.7, Math.PI, 0));
   await page.keyboard.down('KeyW');
-  await page.waitForTimeout(10000);
+  await page.waitForTimeout(12000);
   await page.keyboard.up('KeyW');
   const end = await page.evaluate(() => window.debugAPI.getPlayerState());
   result.traversal = {
