@@ -8,7 +8,7 @@ export const VIEWS = {
   engineRoom: { pos: [0.22, 1.18, -4.55], look: [0.02, 0.78, -6.25], fov: 48 },
   machineryCloseup: { pos: [0.28, 1.02, -5.45], look: [0.04, 0.8, -6.3], fov: 38 },
   sonarConsole: { pos: [-0.06, 1.36, 10.72], look: [-0.38, 1.12, 10.28], fov: 40 },
-  forwardViewport: { pos: [0.0, 1.22, 11.35], look: [0.0, 1.16, 13.4], fov: 48 },
+  forwardViewport: { pos: [0.0, 1.28, 10.95], look: [0.0, 1.12, 14.2], fov: 50 },
   porthole: { pos: [0.1, 1.32, 7.65], look: [0.82, 1.3, 7.55], fov: 46 },
   aftWide: { pos: [-0.26, 1.48, -2.55], look: [0.15, 0.72, -6.2], fov: 56 },
   walking: { pos: [0.06, LAYOUT.eyeHeight, 7.0], look: [-0.08, 1.22, 4.7], fov: 60 },
@@ -83,6 +83,10 @@ export function createDebugAPI(ctx) {
     },
     setHoldForward(v) {
       player.setHoldForward(!!v);
+    },
+    step(dt = 0.05) {
+      player.update(dt);
+      interact.update();
     },
     aimInteract(name) {
       const mesh = interact.targets.find((t) => t.userData.interact?.name === name);

@@ -1,0 +1,31 @@
+{
+  "pointerLock": true,
+  "movement": false,
+  "collision": true,
+  "sonar": true,
+  "rest": false,
+  "silentRunning": false,
+  "traversal": false,
+  "sonarDetail": {
+    "prompt": "E: Active Sonar Ping",
+    "status": "Sonar pulse transmitted."
+  },
+  "restError": "TimeoutError: page.waitForFunction: Timeout 5000ms exceeded.",
+  "silentError": "TimeoutError: page.waitForFunction: Timeout 5000ms exceeded.",
+  "movementDetail": {
+    "z0": 7.2,
+    "z1": 7.18104340264705,
+    "delta": -0.01895659735295041
+  },
+  "collisionDetail": {
+    "z0": 12.15,
+    "z1": 12.122088940103737,
+    "delta": -0.027911059896263524
+  },
+  "traversalDetail": {
+    "x": 0,
+    "y": 1.7056562928401788,
+    "z": 8.361305596153679,
+    "locked": true
+  }
+}

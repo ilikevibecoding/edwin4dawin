@@ -112,10 +112,10 @@ export function createUnderwater(seed = 0x51) {
   );
   windowRock.position.set(0.35, 0.35, 15.2);
   const silhouette = new THREE.Mesh(
-    new THREE.SphereGeometry(5.5, 10, 7, 0, Math.PI, 0.2, 1.8),
+    new THREE.SphereGeometry(2.4, 10, 7, 0, Math.PI, 0.2, 1.8),
     new THREE.MeshBasicMaterial({ color: 0x2a444c, side: THREE.DoubleSide }),
   );
-  silhouette.position.set(0.2, -1.4, 16.8);
+  silhouette.position.set(0.25, -0.8, 17.6);
   silhouette.rotation.y = Math.PI;
   root.add(silhouette);
   windowRock.scale.set(1.4, 2.1, 1.6);

@@ -171,6 +171,7 @@ async function runInteractionTests(page) {
       window.debugAPI.clearStatus?.();
       window.debugAPI.setHUDVisible(true);
       window.debugAPI.aimInteract('sonar');
+      for (let i = 0; i < 8; i++) window.debugAPI.step(0.05);
     });
     await page.waitForFunction(() => /sonar/i.test(window.debugAPI.getPrompt()), null, { timeout: 5000 });
     await page.waitForTimeout(150);
@@ -190,6 +191,7 @@ async function runInteractionTests(page) {
     await page.evaluate(() => {
       window.debugAPI.clearStatus?.();
       window.debugAPI.aimInteract('rest');
+      for (let i = 0; i < 8; i++) window.debugAPI.step(0.05);
     });
     await page.waitForFunction(() => /rest/i.test(window.debugAPI.getPrompt()), null, { timeout: 5000 });
     await page.waitForTimeout(150);
@@ -211,6 +213,7 @@ async function runInteractionTests(page) {
       window.debugAPI.clearStatus?.();
       window.debugAPI.setSubmarineState('cruising');
       window.debugAPI.aimInteract('silentRunning');
+      for (let i = 0; i < 8; i++) window.debugAPI.step(0.05);
     });
     await page.waitForFunction(() => /silent/i.test(window.debugAPI.getPrompt()), null, { timeout: 5000 });
     await page.waitForTimeout(150);
@@ -235,9 +238,12 @@ async function runInteractionTests(page) {
       return window.debugAPI.getPlayer().z;
     });
     await page.keyboard.down('w');
-    await page.waitForTimeout(1400);
+    await page.evaluate(() => {
+      window.debugAPI.setHoldForward(true);
+      for (let i = 0; i < 50; i++) window.debugAPI.step(0.04);
+      window.debugAPI.setHoldForward(false);
+    });
     await page.keyboard.up('w');
-    await page.evaluate(() => window.debugAPI.setHoldForward(false));
     const z1 = await page.evaluate(() => window.debugAPI.getPlayer().z);
     const moved = { z0, z1, delta: z1 - z0 };
     result.movement = moved.delta < -0.25;
@@ -269,9 +275,12 @@ async function runInteractionTests(page) {
       window.debugAPI.setHoldForward(true);
     });
     await page.keyboard.down('w');
-    await page.waitForTimeout(18000);
+    await page.evaluate(() => {
+      window.debugAPI.setHoldForward(true);
+      for (let i = 0; i < 280; i++) window.debugAPI.step(0.05);
+      window.debugAPI.setHoldForward(false);
+    });
     await page.keyboard.up('w');
-    await page.evaluate(() => window.debugAPI.setHoldForward(false));
     const walk = await page.evaluate(() => window.debugAPI.getPlayer());
     result.traversal = walk.z < -1.2;
     result.traversalDetail = walk;
