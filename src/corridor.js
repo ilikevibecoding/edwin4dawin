@@ -128,6 +128,9 @@ export function buildCorridor(mats, collision, ctx) {
   label2.position.set(-0.5, 1.62, 4.72);
   g.add(label2);
 
+  const stencil2 = createWarningPlate("KEEP\nCLEAR", mats);
+  stencil2.position.set(-0.48, 1.48, 6.4);
+  g.add(stencil2);
   const stencil = new THREE.Mesh(
     beveledPanel(0.36, 0.1, 0.004, 0.006, 0.001),
     new THREE.MeshStandardMaterial({
