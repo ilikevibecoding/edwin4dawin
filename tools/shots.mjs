@@ -192,43 +192,34 @@ async function runInteractionTests(page) {
   result.silentRunning =
     /engaged/i.test(silent.a.status) && /disengaged/i.test(silent.b.status) ? 'pass' : 'fail';
 
-  const move = await page.evaluate(async () => {
+  const move = await page.evaluate(() => {
     const api = window.debugAPI;
     api.resetScene();
-    api.setPlayerEnabled(true);
     api.setView('walking');
-    api.setPlayerEnabled(true);
     const before = api.getState().player;
-    api.holdKey('KeyS', true);
-    await new Promise((r) => setTimeout(r, 800));
-    api.holdKey('KeyS', false);
-    const after = api.getState().player;
-    return { before, after, dz: after.z - before.z, dx: after.x - before.x };
+    let after = before;
+    for (let i = 0; i < 40; i++) after = api.stepPlayer(0.05, ['KeyS']);
+    return { before, after, d: Math.hypot(after.z - before.z, after.x - before.x) };
   });
-  result.movement = Math.hypot(move.dz, move.dx) > 0.2 ? 'pass' : 'fail';
-  result.notes.push(`walk d=${Math.hypot(move.dz, move.dx).toFixed(3)}`);
+  result.movement = move.d > 0.35 ? 'pass' : 'fail';
+  result.notes.push(`walk d=${move.d.toFixed(3)} z=${move.after.z.toFixed(3)}`);
 
-  const col = await page.evaluate(async () => {
+  const col = await page.evaluate(() => {
     const api = window.debugAPI;
     api.resetScene();
-    api.setPlayerEnabled(true);
-    api.holdKey('KeyA', true);
-    await new Promise((r) => setTimeout(r, 900));
-    api.holdKey('KeyA', false);
-    const after = api.getState().player;
+    let after = api.getState().player;
+    for (let i = 0; i < 50; i++) after = api.stepPlayer(0.05, ['KeyA']);
     return { x: after.x, blocked: after.x > -1.1 };
   });
   result.collision = col.blocked && col.x > -1.08 ? 'pass' : 'fail';
   result.notes.push(`collision x=${col.x.toFixed(3)}`);
 
-  const trav = await page.evaluate(async () => {
+  const trav = await page.evaluate(() => {
     const api = window.debugAPI;
     api.resetScene();
-    api.setPlayerEnabled(true);
-    api.holdKey('KeyS', true);
-    await new Promise((r) => setTimeout(r, 12000));
-    api.holdKey('KeyS', false);
-    return api.getState().player;
+    let after = api.getState().player;
+    for (let i = 0; i < 280; i++) after = api.stepPlayer(0.05, ['KeyS']);
+    return after;
   });
   result.traversal = trav.z > 5.0 ? 'pass' : 'fail';
   result.notes.push(`traversal z=${trav.z.toFixed(3)}`);

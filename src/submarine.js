@@ -174,7 +174,7 @@ function buildRibs(ctx) {
 function buildBulkheads(ctx) {
   const { mats, root, colliders } = ctx;
   BULKHEADS.forEach((z, idx) => {
-    const frame = mesh(new THREE.TorusGeometry(0.62, 0.055, 12, 36), mats.chippedPaint, 0, 0.86, z);
+    const frame = mesh(new THREE.TorusGeometry(0.58, 0.038, 10, 32), mats.chippedPaint, 0, 0.86, z);
     frame.rotation.y = Math.PI / 2;
     root.add(frame);
 

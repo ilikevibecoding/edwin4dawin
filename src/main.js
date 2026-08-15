@@ -65,16 +65,16 @@ let simTime = 0;
 let lastRenderInfo = { calls: 0, triangles: 0, points: 0, lines: 0 };
 
 const views = {
-  controlRoom: { pos: [0.22, 1.58, -6.85], look: [-0.05, 1.28, -9.35], fov: 58 },
-  corridor: { pos: [0.12, 1.58, -2.55], look: [-0.15, 1.32, -5.85], fov: 58 },
-  crewQuarters: { pos: [0.28, 1.52, 1.55], look: [-0.62, 0.95, -0.35], fov: 55 },
-  engineRoom: { pos: [-0.08, 1.52, 6.55], look: [0.12, 0.72, 9.15], fov: 58 },
-  machineryCloseup: { pos: [0.55, 1.18, 8.25], look: [0.12, 0.62, 9.25], fov: 46 },
-  sonarConsole: { pos: [0.28, 1.42, -6.72], look: [0.7, 1.18, -7.52], fov: 46 },
-  forwardViewport: { pos: [0.18, 1.48, -8.55], look: [0.0, 1.36, -10.35], fov: 50 },
-  porthole: { pos: [0.18, 1.48, -4.35], look: [0.95, 1.4, -4.85], fov: 46 },
-  aftWide: { pos: [0.06, 1.62, 5.85], look: [0.08, 0.78, 9.85], fov: 60 },
-  walking: { pos: [0.1, 1.68, -5.15], look: [0.02, 1.4, -2.05], fov: 58 },
+  controlRoom: { pos: [0.16, 1.52, -8.05], look: [0.02, 1.22, -10.15], fov: 55 },
+  corridor: { pos: [0.06, 1.52, -4.15], look: [0.12, 1.28, -6.05], fov: 55 },
+  crewQuarters: { pos: [0.22, 1.48, 0.15], look: [-0.72, 0.82, -1.05], fov: 52 },
+  engineRoom: { pos: [0.18, 1.42, 7.55], look: [0.1, 0.58, 9.25], fov: 52 },
+  machineryCloseup: { pos: [0.42, 0.95, 8.15], look: [0.08, 0.62, 9.2], fov: 42 },
+  sonarConsole: { pos: [0.38, 1.36, -7.08], look: [0.7, 1.2, -7.52], fov: 44 },
+  forwardViewport: { pos: [0.0, 1.42, -9.05], look: [0.0, 1.36, -10.4], fov: 48 },
+  porthole: { pos: [0.02, 1.42, -4.85], look: [0.98, 1.4, -4.85], fov: 44 },
+  aftWide: { pos: [0.04, 1.5, 6.95], look: [0.1, 0.62, 9.8], fov: 56 },
+  walking: { pos: [0.06, 1.62, -4.25], look: [0.0, 1.35, -1.6], fov: 55 },
 };
 
 function setView(name) {
@@ -250,6 +250,14 @@ window.debugAPI = {
   resetScene,
   holdKey(code, down) {
     player.holdKey(code, down);
+  },
+  stepPlayer(dt = 0.05, codes = []) {
+    player.state.enabled = true;
+    player.state.keys.clear();
+    codes.forEach((c) => player.holdKey(c, true));
+    player.update(dt);
+    codes.forEach((c) => player.holdKey(c, false));
+    return { x: player.state.position.x, y: player.state.position.y, z: player.state.position.z };
   },
   getMetrics,
   getState() {

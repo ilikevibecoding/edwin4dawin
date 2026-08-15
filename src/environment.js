@@ -36,6 +36,10 @@ export function createEnvironment(renderer, scene, mats) {
   windowSpill.position.set(0, 1.4, -9.9);
   scene.add(windowSpill);
   lights.windowSpill = windowSpill;
+  const viewportFill = new THREE.PointLight(0xffe0b4, 2.4, 4.5, 1.3);
+  viewportFill.position.set(0.15, 1.7, -9.2);
+  scene.add(viewportFill);
+  lights.fixtures.push(viewportFill);
 
   const crewRead = new THREE.PointLight(0xffd0a0, 1.15, 3.2, 1.6);
   crewRead.position.set(-0.45, 1.45, -1.05);

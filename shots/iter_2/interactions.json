@@ -1,0 +1,15 @@
+{
+  "pointerLock": "pass",
+  "sonar": "pass",
+  "rest": "pass",
+  "silentRunning": "pass",
+  "movement": "fail",
+  "collision": "pass",
+  "traversal": "fail",
+  "notes": [
+    "sonar status: Sonar pulse transmitted.",
+    "walk d=0.059",
+    "collision x=0.021",
+    "traversal z=-8.281"
+  ]
+}

@@ -114,8 +114,10 @@ function buildViewport(ctx, z) {
     const a = (i / 16) * Math.PI * 2;
     bolts.push(mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.03, 8), mats.brushedMetal, Math.cos(a) * 0.46, 1.38 + Math.sin(a) * 0.46, z + 0.03, Math.PI / 2, 0, 0));
   }
-  const brow = mesh(beveledBox(1.05, 0.12, 0.18, 0.01), mats.hullGreen, 0, 1.88, z + 0.08);
-  const sill = mesh(beveledBox(1.0, 0.1, 0.2, 0.01), mats.chippedPaint, 0, 0.92, z + 0.1);
+  const brow = mesh(beveledBox(1.15, 0.16, 0.28, 0.012), mats.hullGreen, 0, 1.92, z + 0.12);
+  const sill = mesh(beveledBox(1.12, 0.14, 0.32, 0.012), mats.chippedPaint, 0, 0.88, z + 0.14);
+  root.add(mesh(beveledBox(0.12, 0.7, 0.22, 0.01), mats.gunmetal, -0.58, 1.38, z + 0.1));
+  root.add(mesh(beveledBox(0.12, 0.7, 0.22, 0.01), mats.gunmetal, 0.58, 1.38, z + 0.1));
   const cond = mesh(new THREE.CircleGeometry(0.37, 28), mats.condensation, 0, 1.38, z + 0.035);
   root.add(frame, outer, inner, glass, view, seal, brow, sill, cond, ...bolts);
   windows.push({ mesh: view, kind: 'forward' });

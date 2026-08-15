@@ -8,8 +8,8 @@ export function createWaterSystem(renderer, seed = 1) {
   scene.fog = new THREE.FogExp2(0x062830, 0.028);
 
   const cam = new THREE.PerspectiveCamera(55, 16 / 9, 0.1, 180);
-  cam.position.set(0, 0, 0);
-  cam.lookAt(0, -0.08, -12);
+  cam.position.set(0, 0.2, 0.4);
+  cam.lookAt(1.2, -2.4, -10);
 
   const rt = new THREE.WebGLRenderTarget(1024, 576, {
     minFilter: THREE.LinearFilter,
@@ -80,9 +80,13 @@ export function createWaterSystem(renderer, seed = 1) {
   rocks.add(ridge2);
   const nearRock = new THREE.Mesh(new THREE.IcosahedronGeometry(3.2, 1), rockMat);
   displace(nearRock.geometry, seed + 40, 0.45);
-  nearRock.position.set(-4.5, -6.5, -11);
-  nearRock.scale.set(1.6, 1.1, 2.2);
+  nearRock.position.set(1.4, -3.2, -9);
+  nearRock.scale.set(2.1, 1.4, 2.6);
   rocks.add(nearRock);
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(22, 10, 4), silMat);
+  wall.position.set(2, -3.5, -16);
+  wall.rotation.y = 0.25;
+  rocks.add(wall);
 
   const near = makeParticles(420, 0x9ad0c8, 0.018, 6, seed);
   const mid = makeParticles(280, 0x6a9aa0, 0.03, 16, seed + 3);
