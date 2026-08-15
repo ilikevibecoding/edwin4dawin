@@ -10,6 +10,7 @@ import {
   MeshStandardMaterial,
   Points,
   PointsMaterial,
+  SphereGeometry,
   Vector3,
 } from 'three';
 import { SEED, mulberry32, PALETTE } from './seed.js';
