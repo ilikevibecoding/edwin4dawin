@@ -34,8 +34,8 @@ function n2(x, z) {
   );
 }
 
-function wanderAt(z) {
-  return 0.11 * Math.sin(z * 0.17) + 0.05 * Math.sin(z * 0.43 + 0.9);
+export function wanderAt(z) {
+  return 0.58 * Math.sin(z * 0.078) + 0.2 * Math.sin(z * 0.21);
 }
 
 function heightAt(x, z) {
@@ -83,6 +83,12 @@ const PUDDLES = [
   { x: 0.58, z: 6.7, rx: 0.55, rz: 1.05 },
   { x: 0.88, z: 4.05, rx: 0.4, rz: 0.64 },
   { x: -0.9, z: -7.15, rx: 0.36, rz: 0.82 },
+  { x: 0.72, z: 28.4, rx: 0.34, rz: 0.7 },
+  { x: -0.8, z: 41.2, rx: 0.3, rz: 0.58 },
+  { x: 0.64, z: -22.6, rx: 0.36, rz: 0.66 },
+  { x: -0.7, z: -38.5, rx: 0.32, rz: 0.6 },
+  { x: 0.78, z: 58.8, rx: 0.3, rz: 0.52 },
+  { x: -0.68, z: -54.2, rx: 0.28, rz: 0.5 },
 ];
 
 function joinRanges(ranges) {
@@ -229,16 +235,16 @@ export function createRoad(env) {
   const g = group('ground');
 
   const dirtMap = dirtAlbedo();
-  dirtMap.repeat.set(6.7, 18.3);
+  dirtMap.repeat.set(6.7, 32);
   dirtMap.offset.set(0.21, 0.08);
   const dirtN = dirtNormal();
-  dirtN.repeat.set(6.7, 18.3);
+  dirtN.repeat.set(6.7, 32);
   dirtN.offset.set(0.21, 0.08);
   const dirtR = dirtRough();
-  dirtR.repeat.set(6.7, 18.3);
+  dirtR.repeat.set(6.7, 32);
   dirtR.offset.set(0.21, 0.08);
   const grassMap = grassAlbedo();
-  grassMap.repeat.set(1.4, 22);
+  grassMap.repeat.set(1.4, 40);
 
   const dirtMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
@@ -315,9 +321,9 @@ export function createRoad(env) {
     [4, 23, 12],
   ]);
   const zs = joinRanges([
-    [-44, -6, 26],
-    [-6, 18, 76],
-    [18, 46, 24],
+    [-80, -20, 30],
+    [-20, 20, 92],
+    [20, 80, 30],
   ]);
   const geo = makeTerrain(xs, zs);
   paintRoadColors(geo);
@@ -329,7 +335,7 @@ export function createRoad(env) {
   g.add(ground);
 
   // Grass ribbon draped on the raised median — follows heightAt, not a flat card.
-  const strip = new THREE.PlaneGeometry(0.58, 62, 4, 52);
+  const strip = new THREE.PlaneGeometry(0.58, 152, 4, 96);
   strip.rotateX(-Math.PI / 2);
   const sPos = strip.attributes.position;
   for (let i = 0; i < sPos.count; i++) {
@@ -350,7 +356,7 @@ export function createRoad(env) {
   // Center-strip and verge tufts for volume in the road view.
   const tuftGeo = new THREE.ConeGeometry(0.075, 0.17, 5);
   tuftGeo.translate(0, 0.08, 0);
-  const tuftCount = 42;
+  const tuftCount = 72;
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, tuftCount);
   tufts.castShadow = true;
   tufts.receiveShadow = true;
@@ -359,10 +365,10 @@ export function createRoad(env) {
     const u = hash(i * 17.3 + 2.1);
     const v = hash(i * 9.9 + 4.4);
     const alongCenter = u < 0.62;
+    const z = -70 + v * 140;
     const x = alongCenter
-      ? wanderAt(-22 + v * 48) + (hash(i * 3.7) - 0.5) * 0.28
-      : (u < 0.81 ? 1 : -1) * (2.45 + hash(i * 5.1) * 1.6);
-    const z = -22 + v * 48;
+      ? wanderAt(z) + (hash(i * 3.7) - 0.5) * 0.28
+      : wanderAt(z) + (u < 0.81 ? 1 : -1) * (2.45 + hash(i * 5.1) * 1.6);
     if (Math.abs(x) < 1.5 && Math.abs(z) < 2.7) continue;
     dummy.position.set(x, heightAt(x, z), z);
     dummy.rotation.set(0, hash(i * 11.2) * Math.PI * 2, (hash(i * 2.2) - 0.5) * 0.25);
@@ -391,7 +397,7 @@ export function createRoad(env) {
     let n = 0;
     for (let i = 0; n < count && i < count * 7; i++) {
       const side = hash(seed + i * 3.1) > 0.5 ? 1 : -1;
-      const z = -32 + hash(seed + i * 8.8) * 62;
+      const z = -70 + hash(seed + i * 8.8) * 140;
       const x = side * (minAbsX + hash(seed + i * 5.5) * 4.2);
       if (Math.abs(x) < 2.35 && Math.abs(z) < 3.2) continue;
       if (Math.abs(x) < 2.15) continue;
@@ -434,6 +440,10 @@ export function createRoad(env) {
     [-4.35, 8.15, 1.12, 5.1],
     [4.55, 5.05, 0.74, 8.4],
     [-3.85, 14.35, 0.86, 3.7],
+    [4.15, 32.4, 0.88, 6.2],
+    [-4.25, -26.8, 0.8, 4.4],
+    [4.45, 54.2, 0.7, 7.1],
+    [-4.05, -48.6, 0.76, 3.2],
   ];
   for (const [x, z, s, seed] of boulderSpots) {
     const boulder = new THREE.Mesh(mossyRockGeo(seed, 1), boulderMat);
@@ -461,7 +471,8 @@ export function createRoad(env) {
     }
     pgeo.computeVertexNormals();
     const mesh = new THREE.Mesh(pgeo, i % 2 === 0 ? puddleMat : puddleMatSky);
-    mesh.position.set(pud.x, heightAt(pud.x, pud.z) + 0.025, pud.z);
+    const px = pud.x + wanderAt(pud.z);
+    mesh.position.set(px, heightAt(px, pud.z) + 0.025, pud.z);
     mesh.scale.set(pud.rx, 1, pud.rz);
     mesh.receiveShadow = true;
     g.add(mesh);
@@ -516,9 +527,16 @@ export function createRoad(env) {
     0.026,
   );
 
+  // Extra water-bars so the long trail keeps a rhythm.
+  for (const wz of [26.2, -18.4, 48.6, -42.2]) {
+    const bar = cyl(0.09, 0.075, 4.15, 8, barkMat, wanderAt(wz) * 0.4, heightAt(0, wz) + 0.07, wz, 0.04, 0.16, Math.PI / 2);
+    g.add(bar);
+  }
+
   return {
     mesh: g,
     heightAt,
+    wanderAt,
     colliders: [],
   };
 }

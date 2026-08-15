@@ -41,6 +41,11 @@ export const VIEWS = {
     target: [0.12, 0.98, 2.02],
     fov: 30,
   },
+  chase: {
+    position: [0.55, 2.15, -6.6],
+    target: [0.05, 1.05, 1.35],
+    fov: 52,
+  },
 };
 
 export const VIEW_NAMES = Object.keys(VIEWS);

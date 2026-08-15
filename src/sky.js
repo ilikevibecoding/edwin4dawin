@@ -163,17 +163,20 @@ export function createSky(scene, renderer, { shadowMapSize = 2048 } = {}) {
   sun.castShadow = true;
   sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
   sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 140;
-  sun.shadow.camera.left = -30;
-  sun.shadow.camera.right = 30;
-  sun.shadow.camera.top = 24;
-  sun.shadow.camera.bottom = -20;
+  sun.shadow.camera.far = 160;
+  sun.shadow.camera.left = -36;
+  sun.shadow.camera.right = 36;
+  sun.shadow.camera.top = 28;
+  sun.shadow.camera.bottom = -24;
   sun.shadow.bias = -0.00025;
   sun.shadow.normalBias = 0.035;
   scene.add(sun);
-  pinLightPosition(sun, keyPos);
+  scene.add(sun.target);
+  const keyLive = keyPos.clone();
+  pinLightPosition(sun, keyLive);
 
   const bouncePos = dirFromAngles(SUN.bounceElevation, SUN.bounceAzimuth).multiplyScalar(40);
+  const bounceOffset = bouncePos.clone();
   const bounce = new THREE.DirectionalLight(SUN.bounce, SUN.bounceIntensity);
   bounce.name = 'bounceCard';
   bounce.position.copy(bouncePos);
@@ -194,5 +197,14 @@ export function createSky(scene, renderer, { shadowMapSize = 2048 } = {}) {
 
   scene.fog = new THREE.FogExp2(SUN.fog, SUN.fogDensity);
 
-  return { sky, sun, bounce, hemi, env };
+  function follow(origin) {
+    if (!origin) return;
+    keyLive.set(origin.x + keyPos.x, origin.y + keyPos.y, origin.z + keyPos.z);
+    sun.position.copy(keyLive);
+    sun.target.position.set(origin.x, origin.y, origin.z);
+    sun.target.updateMatrixWorld();
+    bounce.position.set(origin.x + bounceOffset.x, origin.y + bounceOffset.y, origin.z + bounceOffset.z);
+  }
+
+  return { sky, sun, bounce, hemi, env, follow };
 }
