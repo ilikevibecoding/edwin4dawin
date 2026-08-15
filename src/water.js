@@ -23,7 +23,7 @@ export function buildUnderwater(mats, renderer) {
   const rng = new Seeded(0x51f00d);
 
   const waterMat = new THREE.MeshBasicMaterial({
-    color: PALETTE.waterDeep,
+    color: 0x031018,
     side: THREE.BackSide,
     fog: false,
   });
@@ -61,10 +61,10 @@ export function buildUnderwater(mats, renderer) {
     geos.push(mesh);
   }
   const ridge = new THREE.Mesh(rockGeometry(rng, 14), rockMat);
-  ridge.position.set(-2.4, -1.6, -11);
-  ridge.scale.set(0.85, 0.45, 1.15);
-  const nearRock = new THREE.Mesh(rockGeometry(rng, 3.2), rockMat);
-  nearRock.position.set(1.6, -1.1, -7.5);
+  ridge.position.set(-1.8, -1.35, -8.5);
+  ridge.scale.set(0.7, 0.4, 0.95);
+  const nearRock = new THREE.Mesh(rockGeometry(rng, 2.4), rockMat);
+  nearRock.position.set(1.1, -0.85, -6.2);
   rocks.add(nearRock);
   rocks.add(ridge);
   rocks.userData.ridge = ridge;
@@ -175,10 +175,10 @@ export function buildUnderwater(mats, renderer) {
   coneR.position.x = 0.45;
   g.add(coneL, coneR);
 
-  const floodL = new THREE.SpotLight(0x8fd0dc, 18, 28, 0.42, 0.55, 1.1);
+  const floodL = new THREE.SpotLight(0x8fd0dc, 9, 22, 0.4, 0.55, 1.1);
   floodL.position.set(-0.5, 1.55, 0.15);
   floodL.target.position.set(-1.2, 0.2, -8);
-  const floodR = new THREE.SpotLight(0x8fd0dc, 18, 28, 0.42, 0.55, 1.1);
+  const floodR = new THREE.SpotLight(0x8fd0dc, 9, 22, 0.4, 0.55, 1.1);
   floodR.position.set(0.5, 1.55, 0.15);
   floodR.target.position.set(1.2, 0.2, -8);
   g.add(floodL, floodL.target, floodR, floodR.target);
