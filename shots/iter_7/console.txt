@@ -1,0 +1,4 @@
+pageErrors: 0
+
+[debug] [vite] connecting...
+[debug] [vite] connected.

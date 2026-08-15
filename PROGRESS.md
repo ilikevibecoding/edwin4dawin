@@ -2,7 +2,7 @@
 
 ## Current status
 
-- Iteration: 5
+- Iteration: 7
 - Consecutive all-pass iterations: 0
 - Average FPS: 21 (SwiftShader — indicative only)
 - One-percent-low FPS: 20
@@ -11,7 +11,7 @@
 - Triangle count: 77090
 - Texture count: 124
 - Renderer: ANGLE SwiftShader
-- Stopping-condition status: 2/12 iterations complete, 0 consecutive all-pass, continuing
+- Stopping-condition status: 7/12 iterations complete, 0 consecutive all-pass, continuing
 
 ## Iteration 1
 
@@ -247,5 +247,91 @@ All 15 items FAIL. `controlRoom.png` now reads as a sonar station with a generat
 
 ### Commit
 
+- Commit hash: 10f2c89a
+- Commit message: Record iteration 3 and add reliable movement/interact helpers.
+
+## Iteration 4
+
+### Implemented
+
+- Underwater silhouette (too large — swallowed the viewport camera)
+- holdForward helper
+
+### Rubric assessment
+
+All 15 FAIL. `forwardViewport.png` was a blown-out close surface. Movement still ~0 because Playwright throttles rAF.
+
+### Commit
+
+- Commit hash: 998b801d
+
+## Iteration 5
+
+### Implemented
+
+- `debugAPI.step()` runs the real player/collision update without rAF
+
+### Interaction tests
+
+- Pointer lock, movement (−1.57 m), collision, sonar, rest: pass
+- Silent running, traversal: fail (stuck at z=5.63 hatch sill/header)
+
+### Commit
+
+- Commit hash: 0b0867a7
+
+## Iteration 6
+
+### Implemented
+
+- Narrowed hatch sill colliders
+- Hardcoded silent-running aim pose
+
+### Interaction tests
+
+- Silent running: pass (`Silent running engaged/disengaged`)
+- Rest: flaky fail
+- Traversal: fail at z=5.61 (header collider still filled the hatch)
+
+### Commit
+
+- Commit hash: 2706c161
+
+## Iteration 7
+
+### Implemented
+
+- Raised hatch header colliders above eye height
+
+### Interaction tests
+
+- Pointer lock: pass
+- Movement: pass (−2.24 m)
+- Collision: pass
+- Sonar: pass
+- Rest: fail (prompt timeout)
+- Silent running: pass
+- Traversal: **pass** (z=8.6 → z=−1.73, inside the engine room)
+
+### Rubric assessment
+
+#### 1–11, 14–15
+- FAIL from screenshots. Strongest image is still `sonarConsole` / control-room sonar framing. Engine room, corridor, crew, and viewport do not pass the cold-look test.
+
+#### 12. The player can genuinely walk into the back
+- PASS/FAIL: PASS
+- Evidence: `shots/iter_7/interactions.json` traversalDetail.z = −1.73 with no teleport.
+
+#### 13. Interactions work
+- PASS/FAIL: FAIL
+- Evidence: rest prompt timed out this run; sonar and silent running pass.
+
+### Next iteration fix list
+
+1. Hardcode rest aim the same way as silent running
+2. Keep improving viewport framing and machinery readability
+3. Continue until two all-pass iterations or iteration 12
+
+### Commit
+
 - Commit hash: pending
-- Commit message: Iteration 3 screenshots; reliable interact/move helpers

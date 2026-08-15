@@ -95,7 +95,14 @@ export function createDebugAPI(ctx) {
       mesh.getWorldPosition(wp);
       const stand = wp.clone();
       stand.y = LAYOUT.eyeHeight;
-      if (name === 'rest') stand.set(0.2, LAYOUT.eyeHeight, wp.z);
+      if (name === 'rest') {
+        stand.set(0.22, LAYOUT.eyeHeight, 4.55);
+        player.setEnabled(true);
+        player.setPose(stand.x, stand.y, stand.z);
+        player.lookAt(new THREE.Vector3(-0.4, 0.85, 4.55));
+        interact.update();
+        return hud.getPrompt();
+      }
       else if (name === 'silentRunning') stand.set(0.02, LAYOUT.eyeHeight, -1.15);
       else stand.set(wp.x + 0.32, LAYOUT.eyeHeight, wp.z + 0.7);
       player.setEnabled(true);

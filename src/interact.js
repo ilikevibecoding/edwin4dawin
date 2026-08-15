@@ -20,7 +20,7 @@ export function createInteractions({ camera, scene, hud, onSonar, onRest, onSile
     for (const hit of hits) {
       let o = hit.object;
       while (o && !o.userData.interact) o = o.parent;
-      if (o && o.userData.interact && hit.distance < 2.15) {
+      if (o && o.userData.interact && hit.distance < 2.8) {
         next = o;
         break;
       }
