@@ -4,6 +4,7 @@ import {
   BufferGeometry,
   CanvasTexture,
   Color,
+  DoubleSide,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -43,12 +44,29 @@ export function createWindowVista() {
   const g = new Group();
   g.name = 'windowVista';
   const backdrop = new Mesh(
-    new PlaneGeometry(8, 5),
-    new MeshBasicMaterial({ map: waterCanvas(), fog: false })
+    new PlaneGeometry(14, 8),
+    new MeshBasicMaterial({
+      map: waterCanvas(),
+      color: 0x6aa8b0,
+      fog: false,
+      side: DoubleSide,
+    })
   );
-  backdrop.position.set(0, 0.15, -2.8);
-  backdrop.scale.set(1.15, 1.15, 1);
+  backdrop.position.set(0, 0.05, -2.2);
   g.add(backdrop);
+  const nearWash = new Mesh(
+    new PlaneGeometry(6, 3.4),
+    new MeshBasicMaterial({
+      color: 0x245864,
+      transparent: true,
+      opacity: 0.35,
+      fog: false,
+      side: DoubleSide,
+      depthWrite: false,
+    })
+  );
+  nearWash.position.set(0, 0.05, -1.15);
+  g.add(nearWash);
 
   const rand = mulberry32(SEED + 90);
   const rockMat = new MeshStandardMaterial({
@@ -62,8 +80,9 @@ export function createWindowVista() {
     const h = 1.4 + rand() * 2.2;
     for (let k = 0; k < 7; k++) pts.push([(0.25 + rand() * 0.45) * (1 - k / 8), (k / 6) * h]);
     const rock = new Mesh(latheProfile(pts, 7), rockMat);
-    rock.position.set(-2.2 + i * 0.85, -1.7 - rand() * 0.4, -3.2 - rand() * 3.5);
-    rock.scale.set(1.3 + rand(), 1.2 + rand(), 1.3);
+    rock.position.set(-2.4 + i * 0.8, -1.15 - rand() * 0.25, -1.4 - rand() * 1.6);
+    rock.scale.set(1.6 + rand(), 1.5 + rand() * 0.8, 1.4);
+    rock.material = new MeshBasicMaterial({ color: 0x1c3338, fog: false });
     g.add(rock);
   }
 

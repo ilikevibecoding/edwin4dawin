@@ -231,6 +231,14 @@ export function buildControlRoom(mats, collision, interactables, animators) {
   const warn = makeWarningPlate(mats, 'CONTROL', 'DECK 1');
   warn.position.set(0.55, 1.72, 3.95);
   g.add(warn);
+  const chart = screen(mats, makeNavMapTexture(), 0.36, 0.24);
+  chart.position.set(-0.62, 1.42, 2.95);
+  chart.rotation.y = 0.55;
+  g.add(chart);
+  const depthWall = screen(mats, makeDepthTexture(), 0.14, 0.26);
+  depthWall.position.set(0.66, 1.38, 2.05);
+  depthWall.rotation.y = -0.6;
+  g.add(depthWall);
 
   const radio = mesh(roundedBox(0.2, 0.16, 0.16, 0.01, 1), mats.plastic);
   radio.position.set(-0.55, 1.15, 2.85);
