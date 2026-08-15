@@ -144,3 +144,53 @@ with a mottled hood in the detail shot. Still a toy.
 1. Break the Christmas-tree cone silhouette.
 2. Put a catchlight in the env so clearcoat/metal have something to reflect.
 3. Keep scoring honestly. Do not inflate.
+
+---
+
+## Iteration 5 — pine crowns and env disc
+
+Icosahedron clumps instead of cones. Brighter clamped sun in the PMREM.
+Vision still reads the trees as stacked pyramids. Paint still toy-orange.
+
+| # | Result | Note |
+|---|--------|------|
+| 1 Lighting | FAIL | Hero has direction and lamp bloom. Body still flat. |
+| 2 Materials | FAIL | Mottled orange, not metal flake. |
+| 3 Detail | FAIL | Faceted crowns, box body, empty-looking ground from the road view. |
+| 4 Post | FAIL | Fast path skipped SMAA — jagged. |
+| 5 Place | FAIL | Fog + dark strip. Log in the road helps a little. |
+| 6 Palette | FAIL | Orange / pine / tan is a palette, still toy. |
+| 7 Tech | FAIL | Jagged edges, floating debris. |
+| 8 Cold-look | FAIL | |
+| 9 Interact | PASS | |
+
+### Fix list for iteration 6
+
+1. SMAA on in the capture path.
+2. Thin the fog so the stand reads as a forest, not a beige wall.
+
+---
+
+## Iteration 6 — SMAA and thinner fog
+
+Edges are cleaner. The read is now "stylized indie racer" (Art of Rally /
+Lonely Mountains), not Forza. That is progress on cohesion, not on realism.
+
+| # | Result | Note |
+|---|--------|------|
+| 1 Lighting | FAIL | Directional, lamps bloom, still no clearcoat streak on paint. |
+| 2 Materials | FAIL | Grainy orange panels, matte rubber, no wet dirt. |
+| 3 Detail | FAIL | 7-slot grille reads. Large flats remain. |
+| 4 Post | FAIL | SMAA + vignette + grain on. AO still invisible. |
+| 5 Place | FAIL | Forest + path exist. Motes read as floating shards. |
+| 6 Palette | PASS | Orange Jeep, pine, tan haze, blackout trim. Same in every shot. |
+| 7 Tech | FAIL | Some floating debris, faceted rocks. |
+| 8 Cold-look | FAIL | Indie low-poly, not a shipped offroad game. |
+| 9 Interact | PASS | |
+
+Palette is the second pass. Do not inflate the others.
+
+### Fix list for iteration 7
+
+1. Kill capture-time god-ray cards. Shrink motes.
+2. Darken verge rocks so they stop reading as white crystals.

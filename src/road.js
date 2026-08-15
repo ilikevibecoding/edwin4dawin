@@ -271,18 +271,18 @@ export function createRoad(env) {
     envMapIntensity: 0.18,
   });
   const rockMat = new THREE.MeshStandardMaterial({
-    color: PALETTE.rock,
-    roughness: 0.88,
-    metalness: 0.08,
-    envMap: env,
-    envMapIntensity: 0.32,
-  });
-  const boulderMat = new THREE.MeshStandardMaterial({
-    color: PALETTE.rock,
+    color: 0x3a342c,
     roughness: 0.9,
     metalness: 0.06,
     envMap: env,
-    envMapIntensity: 0.28,
+    envMapIntensity: 0.22,
+  });
+  const boulderMat = new THREE.MeshStandardMaterial({
+    color: 0x3a342c,
+    roughness: 0.92,
+    metalness: 0.05,
+    envMap: env,
+    envMapIntensity: 0.2,
     vertexColors: true,
   });
   const barkMat = new THREE.MeshStandardMaterial({

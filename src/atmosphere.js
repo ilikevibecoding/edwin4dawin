@@ -7,7 +7,7 @@ export function createAtmosphere() {
   const root = new THREE.Group();
   root.name = 'atmosphere';
 
-  const moteCount = 220;
+  const moteCount = 80;
   const positions = new Float32Array(moteCount * 3);
   for (let i = 0; i < moteCount; i++) {
     positions[i * 3] = (Math.random() - 0.5) * 14;
@@ -17,10 +17,10 @@ export function createAtmosphere() {
   const moteGeo = new THREE.BufferGeometry();
   moteGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const moteMat = new THREE.PointsMaterial({
-    color: 0xffe2b8,
-    size: 0.045,
+    color: 0xe8d2a8,
+    size: 0.028,
     transparent: true,
-    opacity: 0.35,
+    opacity: 0.18,
     depthWrite: false,
     sizeAttenuation: true,
   });
@@ -28,10 +28,11 @@ export function createAtmosphere() {
   motes.frustumCulled = false;
   root.add(motes);
 
+  const capture = typeof location !== 'undefined' && /capture=1/.test(location.search);
   const shaftMat = new THREE.MeshBasicMaterial({
     color: 0xffe2b4,
     transparent: true,
-    opacity: 0.016,
+    opacity: capture ? 0 : 0.016,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
