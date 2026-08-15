@@ -1,0 +1,17 @@
+{
+  "fps": 24.15,
+  "averageFrameTimeMs": 41.41,
+  "onePercentLowFps": 20,
+  "drawCalls": 1309,
+  "triangles": 174474,
+  "points": 0,
+  "lines": 0,
+  "geometries": 1064,
+  "textures": 98,
+  "programs": 28,
+  "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "rendererInfo": {
+    "vendor": "Google Inc. (Google)",
+    "webgl": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+  }
+}

@@ -44,7 +44,7 @@ export function buildEngineRoom(mats, collision, ctx) {
   shaft.position.set(-0.78, 0.38, 20.05);
   const bearing = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 12), mats.oilyMachinery);
   bearing.rotation.x = Math.PI / 2;
-  bearing.position.set(-0.58, 0.38, 20.7);
+  bearing.position.set(-0.78, 0.38, 20.4);
   g.add(shaft, bearing);
 
   const pump1 = createPump(mats, 1.05);
@@ -256,6 +256,9 @@ export function buildEngineRoom(mats, collision, ctx) {
   beam2.position.z = 20.2;
   g.add(beam2);
 
+  const workLamp = createLightFixture(mats);
+  workLamp.position.set(0.12, 1.72, 17.15);
+  g.add(workLamp);
   const fix1 = createLightFixture(mats);
   fix1.position.set(0.15, 2.08, 17.4);
   const fix2 = createLightFixture(mats);
