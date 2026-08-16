@@ -14,11 +14,12 @@ const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
     uTime: { value: 0 },
-    uVignette: { value: 0.42 },
+    uVignette: { value: 0.46 },
     uGrain: { value: 0.028 },
-    uLift: { value: new THREE.Vector3(0.012, 0.014, 0.02) },
-    uGain: { value: new THREE.Vector3(1.0, 0.995, 0.97) },
-    uSat: { value: 0.98 },
+    uLift: { value: new THREE.Vector3(0.008, 0.010, 0.016) },
+    uGain: { value: new THREE.Vector3(1.0, 0.99, 0.965) },
+    uSat: { value: 1.04 },
+    uContrast: { value: 1.09 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -26,7 +27,7 @@ const GradeShader = {
   `,
   fragmentShader: `
     uniform sampler2D tDiffuse;
-    uniform float uTime, uVignette, uGrain, uSat;
+    uniform float uTime, uVignette, uGrain, uSat, uContrast;
     uniform vec3 uLift, uGain;
     varying vec2 vUv;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + fract(uTime) * 43.7) * 43758.5453); }
@@ -34,7 +35,9 @@ const GradeShader = {
       vec3 col = texture2D(tDiffuse, vUv).rgb;
       // gentle lift/gain grade (cool shadows, slightly warm-neutral highlights)
       col = col * uGain + uLift * (1.0 - col);
-      // saturation trim
+      // filmic-ish contrast around mid gray (post-tonemap, sRGB domain)
+      col = clamp((col - 0.42) * uContrast + 0.42, 0.0, 1.0);
+      // saturation
       float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
       col = mix(vec3(l), col, uSat);
       // vignette
@@ -58,10 +61,10 @@ export function createPost(renderer, scene, camera, { width, height, quality = '
   if (!low) {
     try {
       n8ao = new N8AOPass(scene, camera, width, height);
-      n8ao.configuration.aoRadius = 0.85;
-      n8ao.configuration.distanceFalloff = 1.2;
-      n8ao.configuration.intensity = 2.6;
-      n8ao.configuration.color = new THREE.Color(0x02030a);
+      n8ao.configuration.aoRadius = 1.05;
+      n8ao.configuration.distanceFalloff = 1.1;
+      n8ao.configuration.intensity = 3.6;
+      n8ao.configuration.color = new THREE.Color(0x01020a);
       n8ao.setQualityMode('Medium');
       composer.addPass(n8ao);
     } catch (e) {

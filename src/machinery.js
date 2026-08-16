@@ -8,72 +8,226 @@ import * as K from './greebles.js';
 import { makeCanvas, fillBase, stencilText, canvasTexture, mottle, speckle } from './textures.js';
 
 // ---------------------------------------------------------------------------
-// Main propulsion motor: finned cylinder, end bells, feet, terminal box
+// Deferred fasteners. Builders are constructed in LOCAL space and positioned
+// by the room afterwards, but K.addBolt wants WORLD coordinates. Builders (and
+// rooms) record bolt specs on any group's userData.bolts; the room calls
+// emitBolts(roomGroup) once, after all placement, to convert and emit them.
+// ---------------------------------------------------------------------------
+function noteBolt(g, pos, normal, size = 'S') {
+  if (!g.userData.bolts) g.userData.bolts = [];
+  g.userData.bolts.push({ p: pos, n: normal, s: size });
+}
+
+export function emitBolts(root) {
+  root.updateWorldMatrix(true, true);
+  const q = new THREE.Quaternion();
+  root.traverse((o) => {
+    const list = o.userData.bolts;
+    if (!list || !list.length) return;
+    o.getWorldQuaternion(q);
+    for (const b of list) {
+      K.addBolt(o.localToWorld(b.p.clone()), b.n.clone().applyQuaternion(q).normalize(), b.s);
+    }
+    o.userData.bolts = [];
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Main propulsion motor: finned stator, cast end bells, feet, terminal box.
+// Axis along Z. Forward face (-z) is the hero face seen from the catwalk.
 // ---------------------------------------------------------------------------
 export function propulsionMotor({ r = 0.58, len = 2.1 } = {}) {
   const g = new THREE.Group();
   g.userData.static = true;
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 28, 1, false), M.gunmetal());
+  const half = len / 2, bellLen = 0.26;
+
+  // stator body
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 36, 1, false), M.gunmetal());
   body.rotation.x = Math.PI / 2;
   body.castShadow = true; body.receiveShadow = true;
   g.add(body);
-  // cooling fins: rings along the body
-  const finGeo = new THREE.TorusGeometry(r + 0.022, 0.011, 4, 36);
-  const nFins = Math.floor(len / 0.078);
-  const fins = new THREE.InstancedMesh(finGeo, M.darkSteel(), nFins);
+
+  // cooling fins: thin annular discs, low protrusion (12 mm), matte dark
+  const finBand = len * 0.72;
+  const finStep = 0.036;
+  const nFins = Math.floor(finBand / finStep);
+  const finGeo = K.ringPlate(r - 0.006, r + 0.012, 0.006, 44);
+  const fins = new THREE.InstancedMesh(finGeo, M.gunmetal(), nFins);
   const m4 = new THREE.Matrix4();
+  const qFin = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  const one = new THREE.Vector3(1, 1, 1);
   for (let i = 0; i < nFins; i++) {
-    m4.makeTranslation(0, 0, -len / 2 + 0.09 + i * 0.078);
+    m4.compose(new THREE.Vector3(0, 0, -finBand / 2 + (i + 0.5) * finStep), qFin, one);
     fins.setMatrixAt(i, m4);
   }
   fins.instanceMatrix.needsUpdate = true;
   fins.receiveShadow = true;
+  fins.userData.static = true;
   g.add(fins);
-  // end bells with bolted plates
+  // stator frame rings closing the fin band
   for (const s of [-1, 1]) {
-    const bell = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.99, r * 0.8, 0.3, 28), M.gunmetal());
-    bell.rotation.x = Math.PI / 2;
-    bell.position.z = s * (len / 2 + 0.15);
-    if (s > 0) bell.rotation.z = Math.PI;
-    bell.scale.y = s > 0 ? -1 : 1;
-    bell.castShadow = true;
+    const ring = new THREE.Mesh(K.ringPlate(r - 0.004, r + 0.018, 0.055, 44), M.gunmetal());
+    ring.rotation.x = Math.PI / 2;
+    ring.position.z = s * (finBand / 2 + 0.032);
+    ring.receiveShadow = true;
+    g.add(ring);
+  }
+
+  // end bells (large radius toward the body)
+  for (const s of [-1, 1]) {
+    const bell = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.99, r * 0.85, bellLen, 36), M.gunmetal());
+    bell.rotation.x = s < 0 ? Math.PI / 2 : -Math.PI / 2;
+    bell.position.z = s * (half + bellLen / 2);
+    bell.castShadow = true; bell.receiveShadow = true;
     g.add(bell);
-    const plate = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.45, r * 0.45, 0.05, 22), M.darkSteel());
-    plate.rotation.x = Math.PI / 2;
-    plate.position.z = s * (len / 2 + 0.31);
-    g.add(plate);
+  }
+
+  // ---- forward face: bolted end-bell with casting detail -------------------
+  {
+    const s = -1;
+    const faceZ = s * (half + bellLen);
+    const face = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.70, r * 0.70, 0.05, 32), M.gunmetal());
+    face.rotation.x = Math.PI / 2;
+    face.position.z = faceZ + s * 0.006;
+    face.castShadow = true; face.receiveShadow = true;
+    g.add(face);
+    // raised, bolted rim ring
+    const rim = new THREE.Mesh(K.ringPlate(r * 0.66, r * 0.85, 0.07, 40), M.gunmetal());
+    rim.rotation.x = Math.PI / 2;
+    rim.position.z = faceZ + s * 0.012;
+    rim.castShadow = true; rim.receiveShadow = true;
+    g.add(rim);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + Math.PI / 12;
+      noteBolt(g, new THREE.Vector3(Math.cos(a) * r * 0.755, Math.sin(a) * r * 0.755, faceZ + s * 0.045), new THREE.Vector3(0, 0, s), 'M');
+    }
+    // radial casting ribs between hub and rim
+    const ribLen = r * 0.38;
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      K.addBolt(new THREE.Vector3(Math.cos(a) * r * 0.36, Math.sin(a) * r * 0.36, s * (len / 2 + 0.335)), new THREE.Vector3(0, 0, s), 'M');
+      const rib = new THREE.Mesh(K.roundedBox(0.034, ribLen, 0.032, 0.008), M.gunmetal());
+      rib.position.set(Math.cos(a) * r * 0.44, Math.sin(a) * r * 0.44, faceZ + s * 0.026);
+      rib.rotation.z = a - Math.PI / 2;
+      rib.receiveShadow = true;
+      g.add(rib);
     }
+    // bearing housing boss + cap + center plug
+    const boss = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.34, r * 0.29, 0.07, 26), M.gunmetal());
+    boss.rotation.x = Math.PI / 2; // large end toward body
+    boss.position.z = faceZ + s * 0.055;
+    boss.castShadow = true;
+    g.add(boss);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.165, r * 0.165, 0.05, 22), M.darkSteel());
+    cap.rotation.x = Math.PI / 2;
+    cap.position.z = faceZ + s * 0.10;
+    cap.castShadow = true;
+    g.add(cap);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      noteBolt(g, new THREE.Vector3(Math.cos(a) * r * 0.115, Math.sin(a) * r * 0.115, faceZ + s * 0.126), new THREE.Vector3(0, 0, s), 'S');
+    }
+    const plug = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.05, r * 0.05, 0.02, 12), M.bareSteel());
+    plug.rotation.x = Math.PI / 2;
+    plug.position.z = faceZ + s * 0.132;
+    g.add(plug);
+    // grease fitting on the boss, lower-left
+    const ga = Math.PI * 1.14;
+    const nip = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.009, 0.035, 8), M.brass());
+    nip.rotation.x = Math.PI / 2;
+    nip.position.set(Math.cos(ga) * r * 0.28, Math.sin(ga) * r * 0.28, faceZ + s * 0.10);
+    g.add(nip);
+    const nipTip = new THREE.Mesh(new THREE.SphereGeometry(0.0085, 8, 6), M.brass());
+    nipTip.position.set(Math.cos(ga) * r * 0.28, Math.sin(ga) * r * 0.28, faceZ + s * 0.12);
+    g.add(nipTip);
+    // maker's plate riveted between two ribs, upper area
+    const pa = Math.PI * 0.31;
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.055),
+      M.labelMaterial('ELEKTRA 990 kW', { w: 224, h: 72, size: 22 }));
+    plate.position.set(Math.cos(pa) * r * 0.45, Math.sin(pa) * r * 0.45, faceZ + s * 0.034);
+    plate.rotation.y = Math.PI;
+    g.add(plate);
   }
-  // feet
+
+  // ---- aft face: plain bolted disc + shaft stub into the coupling -----------
+  {
+    const s = 1;
+    const faceZ = s * (half + bellLen);
+    const face = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.78, r * 0.78, 0.05, 32), M.gunmetal());
+    face.rotation.x = Math.PI / 2;
+    face.position.z = faceZ + s * 0.006;
+    g.add(face);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      noteBolt(g, new THREE.Vector3(Math.cos(a) * r * 0.60, Math.sin(a) * r * 0.60, faceZ + s * 0.035), new THREE.Vector3(0, 0, s), 'M');
+    }
+    const stub = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.34, 16), M.bareSteel());
+    stub.rotation.x = Math.PI / 2;
+    stub.position.z = faceZ + s * 0.16;
+    g.add(stub);
+  }
+
+  // feet + sole pads
   for (const sz of [-0.7, 0.7]) for (const sx of [-1, 1]) {
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.3, 0.18), M.gunmetal());
+    const foot = new THREE.Mesh(K.roundedBox(0.22, 0.3, 0.18, 0.015), M.gunmetal());
     foot.position.set(sx * (r * 0.72), -r * 0.78, sz);
+    foot.receiveShadow = true;
     g.add(foot);
-    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.24), M.oilySteel());
+    const pad = new THREE.Mesh(K.roundedBox(0.3, 0.05, 0.24, 0.01), M.oilySteel());
     pad.position.set(sx * (r * 0.72), -r * 0.95, sz);
     g.add(pad);
+    noteBolt(g, new THREE.Vector3(sx * (r * 0.72) - 0.1, -r * 0.905, sz), new THREE.Vector3(0, 1, 0), 'M');
+    noteBolt(g, new THREE.Vector3(sx * (r * 0.72) + 0.1, -r * 0.905, sz), new THREE.Vector3(0, 1, 0), 'M');
   }
-  // terminal box on top with cable glands
-  const tbox = new THREE.Mesh(K.roundedBox(0.42, 0.26, 0.3, 0.02), M.machineBlue());
-  tbox.position.set(0, r + 0.1, -len * 0.18);
-  tbox.castShadow = true;
+
+  // terminal box on a saddle plinth, bolted lid, gland plate, conduit drop
+  const tz = -len * 0.18;
+  const plinth = new THREE.Mesh(K.roundedBox(0.34, 0.10, 0.26, 0.015), M.gunmetal());
+  plinth.position.set(0, r - 0.01, tz);
+  plinth.receiveShadow = true;
+  g.add(plinth);
+  const tbox = new THREE.Mesh(K.roundedBox(0.42, 0.26, 0.30, 0.02), M.machineBlue());
+  tbox.position.set(0, r + 0.16, tz);
+  tbox.castShadow = true; tbox.receiveShadow = true;
   g.add(tbox);
-  const label = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.09),
-    M.labelMaterial('PROPULSION MTR 1', { w: 256, h: 72, size: 26 }));
-  label.position.set(0, r + 0.1, -len * 0.18 + 0.155);
-  g.add(label);
-  for (const sx of [-0.1, 0.1]) {
-    const gland = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.032, 0.09, 10), M.bareSteel());
-    gland.position.set(sx, r + 0.26, -len * 0.18);
-    g.add(gland);
+  const lid = new THREE.Mesh(K.roundedBox(0.36, 0.20, 0.016, 0.008), M.machineBlue());
+  lid.position.set(0, r + 0.16, tz - 0.155);
+  g.add(lid);
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    noteBolt(g, new THREE.Vector3(sx * 0.15, r + 0.16 + sy * 0.078, tz - 0.164), new THREE.Vector3(0, 0, -1), 'S');
   }
-  // lifted inspection ring + eyebolts
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.075),
+    M.labelMaterial('PROPULSION MTR 1', { w: 256, h: 72, size: 26 }));
+  label.position.set(0, r + 0.175, tz - 0.165);
+  label.rotation.y = Math.PI;
+  g.add(label);
+  // three cable glands on top (feeder cables from the room land here)
+  for (const sx of [-0.11, 0, 0.11]) {
+    const gl = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.030, 0.09, 10), M.bareSteel());
+    gl.position.set(sx, r + 0.33, tz);
+    g.add(gl);
+    const nut = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.016, 6), M.bareSteel());
+    nut.position.set(sx, r + 0.30, tz);
+    g.add(nut);
+  }
+  // rigid conduit from box flank down to a field junction box on the body
+  g.add(K.pipeRun([[0.20, r + 0.13, tz + 0.02], [0.37, r + 0.01, tz + 0.13], [0.50, r * 0.66, tz + 0.24], [0.525, r * 0.47, tz + 0.26]], {
+    r: 0.015, material: M.galvanized(), flanges: 'none', cornerR: 0.06, capEnds: true,
+  }));
+  const sbDir = new THREE.Vector3(Math.sin(1.05), Math.cos(1.05), 0);
+  const sideBox = new THREE.Mesh(K.roundedBox(0.15, 0.19, 0.09, 0.012), M.machineBlue());
+  sideBox.position.copy(sbDir.clone().multiplyScalar(r + 0.04));
+  sideBox.position.z = tz + 0.27;
+  sideBox.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), sbDir);
+  sideBox.castShadow = true;
+  g.add(sideBox);
+
+  // lifting eyes on bosses
   for (const sz of [-len * 0.4, len * 0.4]) {
-    const eye = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.012, 6, 14), M.bareSteel());
-    eye.position.set(0, r + 0.03, sz);
+    const boss = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.032, 0.035, 10), M.gunmetal());
+    boss.position.set(0, r + 0.005, sz);
+    g.add(boss);
+    const eye = new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.011, 6, 14), M.bareSteel());
+    eye.position.set(0, r + 0.05, sz);
     g.add(eye);
   }
   return g;
@@ -100,7 +254,7 @@ export function reductionGear() {
   g.add(split);
   for (let i = 0; i < 7; i++) {
     for (const s of [-1, 1]) {
-      K.addBolt(new THREE.Vector3(s * 0.5, 0.028, -0.33 + i * 0.11), new THREE.Vector3(0, 1, 0), 'M');
+      noteBolt(g, new THREE.Vector3(s * 0.5, 0.028, -0.33 + i * 0.11), new THREE.Vector3(0, 1, 0), 'M');
     }
   }
   // round inspection cover
@@ -110,7 +264,7 @@ export function reductionGear() {
   g.add(cover);
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
-    K.addBolt(new THREE.Vector3(Math.cos(a) * 0.115, 0.16 + Math.sin(a) * 0.115, 0.425), new THREE.Vector3(0, 0, 1), 'S');
+    noteBolt(g, new THREE.Vector3(Math.cos(a) * 0.115, 0.16 + Math.sin(a) * 0.115, 0.425), new THREE.Vector3(0, 0, 1), 'S');
   }
   // oil sight glass
   const sight = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.09, 10), M.brass());
@@ -167,7 +321,7 @@ export function pump({ scale = 1, seed = 'pump' } = {}) {
   drip.position.y = 0.008 * scale;
   g.add(drip);
   for (const sx of [-0.3, 0.3]) for (const sz of [-0.11, 0.11]) {
-    K.addBolt(new THREE.Vector3(sx * scale, 0.065 * scale, sz * scale), new THREE.Vector3(0, 1, 0), 'S');
+    noteBolt(g, new THREE.Vector3(sx * scale, 0.065 * scale, sz * scale), new THREE.Vector3(0, 1, 0), 'S');
   }
   const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.05 * scale, 0.05 * scale, 0.09 * scale, 12), M.safetyOrangePaint());
   coupling.rotation.z = Math.PI / 2;
@@ -356,7 +510,7 @@ export function heatExchanger({ r = 0.15, len = 1.1 } = {}) {
     g.add(flange);
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2;
-      K.addBolt(new THREE.Vector3(s * (len / 2 + 0.012), Math.cos(a) * r * 1.1, Math.sin(a) * r * 1.1), new THREE.Vector3(s, 0, 0), 'S');
+      noteBolt(g, new THREE.Vector3(s * (len / 2 + 0.012), Math.cos(a) * r * 1.1, Math.sin(a) * r * 1.1), new THREE.Vector3(s, 0, 0), 'S');
     }
     // nozzles
     const noz = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.12, 10), M.pipePaint('gray'));
@@ -411,9 +565,7 @@ export function dripPan(w = 0.5, d = 0.4) {
   const pan = new THREE.Mesh(K.roundedBox(w, 0.05, d, 0.01), M.darkSteel());
   pan.position.y = 0.025;
   g.add(pan);
-  const oil = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.86, d * 0.86), new THREE.MeshPhysicalMaterial({
-    color: 0x0a0908, roughness: 0.05, metalness: 0.4, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 1.5,
-  }));
+  const oil = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.86, d * 0.86), M.oilySteel());
   oil.rotation.x = -Math.PI / 2;
   oil.position.y = 0.042;
   g.add(oil);

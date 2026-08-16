@@ -62,6 +62,7 @@ export async function shootView(page, view, outPath, { settleMs = 2000 } = {}) {
   if (!ok) throw new Error(`unknown view: ${view}`);
   await page.waitForTimeout(settleMs);
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  await page.screenshot({ path: outPath });
+  // SwiftShader + a heavy scene can take >30s to produce the frame
+  await page.screenshot({ path: outPath, timeout: 180000 });
   return outPath;
 }

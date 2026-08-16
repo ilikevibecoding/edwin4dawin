@@ -657,8 +657,8 @@ export function whiteEnamel() {
 export function glassThick() {
   return def('glassThick', () => new THREE.MeshPhysicalMaterial({
     name: 'glassThick', color: 0x9fb4ae, roughness: 0.03, metalness: 0,
-    transparent: true, opacity: 0.08, envMapIntensity: 0.3,
-    clearcoat: 0.35, clearcoatRoughness: 0.22, side: THREE.FrontSide, depthWrite: false,
+    transparent: true, opacity: 0.045, envMapIntensity: 0.18,
+    clearcoat: 0.25, clearcoatRoughness: 0.28, side: THREE.FrontSide, depthWrite: false,
   }));
 }
 export function glassInstrument() {
@@ -744,12 +744,12 @@ export function condensation() {
       actx.fillStyle = 'rgba(255,255,255,0.8)'; actx.beginPath(); actx.arc(x, y0 + len, 3, 0, Math.PI * 2); actx.fill();
     }
     const mat = new THREE.MeshPhysicalMaterial({
-      name: 'condensation', color: 0x9fb4b0, roughness: 0.08, metalness: 0,
-      transparent: true, opacity: 0.55, depthWrite: false,
+      name: 'condensation', color: 0x8fa4a0, roughness: 0.14, metalness: 0,
+      transparent: true, opacity: 0.3, depthWrite: false,
       alphaMap: canvasTexture(alpha, {}),
       normalMap: canvasTexture(normalFromHeight(height, 2.6), {}),
-      normalScale: new THREE.Vector2(1.4, 1.4),
-      envMapIntensity: 1.3, clearcoat: 1, clearcoatRoughness: 0.1,
+      normalScale: new THREE.Vector2(1.1, 1.1),
+      envMapIntensity: 0.6, clearcoat: 0.8, clearcoatRoughness: 0.18,
     });
     return mat;
   });

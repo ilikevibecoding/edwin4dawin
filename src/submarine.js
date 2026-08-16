@@ -106,20 +106,23 @@ function ribGeometry(depth = HULL.ribDepth, thick = HULL.ribThick) {
 
 function buildRibs(group, z0, z1) {
   const { web, flange } = ribGeometry();
-  const mat = M.panelPaint('ribPaint', '#a9a496');
-  const matF = M.panelPaint('ribFlange', '#8f8a7a');
-  const rng = makeRng('ribs');
+  const deep = ribGeometry(0.17, 0.07);
+  const mat = M.panelPaint('ribPaint', '#a09a8b');
+  const matF = M.panelPaint('ribFlange', '#7f7a6c');
+  let i = 0;
   for (let z = Math.ceil(z0 / HULL.ribEvery) * HULL.ribEvery; z < z1; z += HULL.ribEvery) {
     // skip ribs where bulkheads sit
     if (Math.abs(z - Z.bulkhead1) < 0.3 || Math.abs(z - Z.bulkhead2) < 0.3 || Math.abs(z - Z.frameRing) < 0.3) continue;
-    const w = new THREE.Mesh(web, mat);
+    const heavy = i % 4 === 1; // every 4th frame is a deep web frame
+    const w = new THREE.Mesh(heavy ? deep.web : web, mat);
     w.position.set(0, AY, z - HULL.ribThick / 2);
     w.receiveShadow = true; w.userData.static = true;
     group.add(w);
-    const f = new THREE.Mesh(flange, matF);
+    const f = new THREE.Mesh(heavy ? deep.flange : flange, matF);
     f.position.set(0, AY, z - HULL.ribThick / 2);
     f.receiveShadow = true; f.userData.static = true;
     group.add(f);
+    i++;
   }
 }
 
@@ -190,19 +193,19 @@ function buildBulkhead(group, z, { doorSide = 1, name = 'BH' } = {}) {
 
   // coaming ring (rounded lip) around the opening, both sides
   const ringCurve = stadiumPath3(HATCH.width + 0.02, HATCH.height + 0.02, 0, openCY, z);
-  const ring = new THREE.Mesh(new THREE.TubeGeometry(ringCurve, 64, 0.035, 10, true), M.panelPaint('hatchRim', '#8f948a'));
+  const ring = new THREE.Mesh(new THREE.TubeGeometry(ringCurve, 64, 0.028, 10, true), M.panelPaint('hatchRim', '#79806f'));
   ring.userData.static = true; ring.receiveShadow = true;
   group.add(ring);
 
   // reinforcement plate with bolts
   const plateShape = new THREE.Shape();
   {
-    const r = HATCH.width / 2 + 0.11, hh = HATCH.height / 2 - HATCH.width / 2;
+    const r = HATCH.width / 2 + 0.085, hh = HATCH.height / 2 - HATCH.width / 2;
     plateShape.absarc(0, hh, r, 0, Math.PI, false);
     plateShape.absarc(0, -hh, r, Math.PI, Math.PI * 2, false);
     plateShape.closePath();
     const ph = new THREE.Path();
-    const r2 = HATCH.width / 2 + 0.035;
+    const r2 = HATCH.width / 2 + 0.03;
     ph.absarc(0, hh, r2, 0, Math.PI, false);
     ph.absarc(0, -hh, r2, Math.PI, Math.PI * 2, false);
     ph.closePath();
@@ -211,12 +214,12 @@ function buildBulkhead(group, z, { doorSide = 1, name = 'BH' } = {}) {
   for (const zz of [z - thick / 2 - 0.012, z + thick / 2 + 0.012]) {
     const pg = new THREE.ExtrudeGeometry(plateShape, { depth: 0.012, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 1, curveSegments: 24 });
     scaleUv(pg, 0.4, 0.4);
-    const plate = new THREE.Mesh(pg, M.panelPaint('hatchRim', '#8f948a'));
+    const plate = new THREE.Mesh(pg, M.panelPaint('hatchRim', '#79806f'));
     plate.position.set(0, openCY, zz - 0.006);
     plate.userData.static = true; plate.receiveShadow = true;
     group.add(plate);
     // bolt ring
-    const curve = stadiumPath3(HATCH.width + 0.15, HATCH.height + 0.15, 0, openCY, zz + (zz > z ? 0.014 : -0.002));
+    const curve = stadiumPath3(HATCH.width + 0.12, HATCH.height + 0.12, 0, openCY, zz + (zz > z ? 0.014 : -0.002));
     for (let i = 0; i < 18; i++) {
       const p = curve.getPointAt(i / 18);
       K.addBolt(p, new THREE.Vector3(0, 0, zz > z ? 1 : -1), 'S');
@@ -445,17 +448,24 @@ function buildPorthole(group, ph) {
   edge.material.side = THREE.BackSide;
   edge.userData.static = true;
   g.add(edge);
-  // hinged deadlight cover, swung open flat against the hull beside the port
-  const cover = new THREE.Mesh(new THREE.CylinderGeometry(ph.r + 0.045, ph.r + 0.045, 0.018, 24), M.darkSteel());
-  cover.rotation.x = Math.PI / 2;
-  cover.position.set(-(ph.r * 2 + 0.14), 0.05, 0.155);
-  cover.rotation.y = -0.28;
+  // hinged deadlight cover stowed flush against the hull above the port
+  const cover = new THREE.Mesh(new THREE.CylinderGeometry(ph.r + 0.04, ph.r + 0.04, 0.016, 24), M.darkSteel());
+  cover.rotation.x = Math.PI / 2 - 0.16; // hug the hull curvature
+  cover.position.set(0, ph.r * 2 + 0.14, 0.1);
   cover.userData.static = true;
   g.add(cover);
-  const coverHinge = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.07, 8), M.bareSteel());
-  coverHinge.position.set(-(ph.r + 0.1), 0.02, 0.16);
+  const coverHinge = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.09, 8), M.bareSteel());
+  coverHinge.rotation.z = Math.PI / 2;
+  coverHinge.position.set(0, ph.r + 0.09, 0.13);
   coverHinge.userData.static = true;
   g.add(coverHinge);
+  // butterfly retaining clips holding the stowed cover
+  for (const s of [-1, 1]) {
+    const clip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.05, 0.03), M.bareSteel());
+    clip.position.set(s * (ph.r - 0.02), ph.r * 2 + 0.2, 0.09);
+    clip.userData.static = true;
+    g.add(clip);
+  }
   group.add(g);
 }
 
@@ -520,8 +530,8 @@ function buildForwardBulkhead(group) {
   edge.material.side = THREE.BackSide;
   edge.userData.static = true;
   vg.add(edge);
-  // condensation film at lower glass edge (annular arc, not a pie wedge)
-  const condGeo = new THREE.RingGeometry(VIEWPORT.r * 0.55, VIEWPORT.r * 0.96, 28, 2, Math.PI + 0.35, Math.PI - 0.7);
+  // condensation film at the lower glass rim (annular arc, not a pie wedge)
+  const condGeo = new THREE.RingGeometry(VIEWPORT.r * 0.72, VIEWPORT.r * 0.97, 28, 2, Math.PI + 0.5, Math.PI - 1.0);
   const cond = new THREE.Mesh(condGeo, M.condensation());
   cond.position.z = 0.005;
   cond.userData.noRaycast = true; cond.userData.static = true;

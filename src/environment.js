@@ -22,7 +22,7 @@ export function createEnvironment(scene, renderer) {
   scene.fog = new THREE.FogExp2(0x10161a, 0.032);
 
   // rooms author semantic intensities; one global scale sets overall key level
-  const LIGHT_SCALE = 0.42;
+  const LIGHT_SCALE = 0.34;
 
   function register(f) {
     if (f.light) f.light.intensity *= LIGHT_SCALE;
@@ -75,7 +75,7 @@ export function createEnvironment(scene, renderer) {
       envMaps.dim = pmrem.fromScene(buildEnvScene(true), 0.035).texture;
     }
     scene.environment = envMaps.normal;
-    scene.environmentIntensity = 0.42;
+    scene.environmentIntensity = 0.3;
   }
 
   function setState(name, { duration = 2.2 } = {}) {
@@ -109,7 +109,7 @@ export function createEnvironment(scene, renderer) {
       const cur = scene.environment;
       const want = wantDim ? envMaps.dim : envMaps.normal;
       if (cur !== want) scene.environment = want;
-      scene.environmentIntensity = 0.42 * (0.55 + 0.45 * factors.env);
+      scene.environmentIntensity = 0.3 * (0.55 + 0.45 * factors.env);
     }
     return changed;
   }
