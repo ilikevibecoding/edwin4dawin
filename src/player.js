@@ -22,6 +22,10 @@ export function createPlayer(camera, collision, options = {}) {
     keys: new Set(),
     locked: false,
     onGround: true,
+    lookDx: 0,
+    lookDy: 0,
+    ignoreLook: 0,
+    bound: false,
   };
 
   function applyLook() {
@@ -38,7 +42,18 @@ export function createPlayer(camera, collision, options = {}) {
     applyLook();
   }
 
+  function applyPendingLook() {
+    if (!state.locked || (!state.lookDx && !state.lookDy)) return;
+    state.yaw -= state.lookDx * 0.0015;
+    state.pitch -= state.lookDy * 0.0015;
+    state.pitch = Math.max(-1.15, Math.min(1.15, state.pitch));
+    state.lookDx = 0;
+    state.lookDy = 0;
+    applyLook();
+  }
+
   function update(dt) {
+    applyPendingLook();
     if (!state.enabled) {
       syncCamera(dt);
       return;
@@ -74,10 +89,15 @@ export function createPlayer(camera, collision, options = {}) {
 
   function look(dx, dy) {
     if (!state.enabled || !state.locked) return;
-    state.yaw -= dx * 0.0022;
-    state.pitch -= dy * 0.0022;
-    state.pitch = Math.max(-1.2, Math.min(1.2, state.pitch));
-    applyLook();
+    if (state.ignoreLook > 0) {
+      state.ignoreLook -= 1;
+      return;
+    }
+    const cx = Math.max(-48, Math.min(48, Number.isFinite(dx) ? dx : 0));
+    const cy = Math.max(-48, Math.min(48, Number.isFinite(dy) ? dy : 0));
+    if (cx === 0 && cy === 0) return;
+    state.lookDx += cx;
+    state.lookDy += cy;
   }
 
   function setPose(x, y, z, yaw, pitch) {
@@ -89,6 +109,8 @@ export function createPlayer(camera, collision, options = {}) {
   }
 
   function bind(dom) {
+    if (state.bound) return;
+    state.bound = true;
     const onKey = (e, down) => {
       if (down) state.keys.add(e.code);
       else state.keys.delete(e.code);
@@ -96,12 +118,23 @@ export function createPlayer(camera, collision, options = {}) {
     window.addEventListener('keydown', (e) => onKey(e, true));
     window.addEventListener('keyup', (e) => onKey(e, false));
     dom.addEventListener('click', () => {
-      if (document.pointerLockElement !== dom) dom.requestPointerLock();
+      if (document.pointerLockElement === dom) return;
+      try {
+        const req = dom.requestPointerLock({ unadjustedMovement: true });
+        if (req && typeof req.catch === 'function') req.catch(() => dom.requestPointerLock());
+      } catch {
+        dom.requestPointerLock();
+      }
     });
     document.addEventListener('pointerlockchange', () => {
-      state.locked = document.pointerLockElement === dom;
+      const locked = document.pointerLockElement === dom;
+      state.locked = locked;
+      state.lookDx = 0;
+      state.lookDy = 0;
+      if (locked) state.ignoreLook = 3;
     });
     document.addEventListener('mousemove', (e) => {
+      if (!state.locked) return;
       look(e.movementX, e.movementY);
     });
   }

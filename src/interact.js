@@ -59,6 +59,22 @@ export function createInteractions(ctx) {
     }
   }
 
+  function isolateMaterials(object) {
+    object.traverse((child) => {
+      if (!child.isMesh || !child.material || child.userData._isolated) return;
+      if (Array.isArray(child.material)) {
+        child.material = child.material.map((m) => m.clone());
+      } else {
+        const cloned = child.material.clone();
+        if (object.userData.panelMat && child.material === object.userData.panelMat) {
+          object.userData.panelMat = cloned;
+        }
+        child.material = cloned;
+      }
+      child.userData._isolated = true;
+    });
+  }
+
   function highlight(obj, on) {
     obj.traverse((child) => {
       if (!child.isMesh || !child.material) return;
@@ -68,8 +84,8 @@ export function createInteractions(ctx) {
         if (on) {
           if (m.userData._em == null) m.userData._em = m.emissiveIntensity;
           if (!m.userData._ec) m.userData._ec = m.emissive.clone();
-          m.emissive = new Color(0xc8b070);
-          m.emissiveIntensity = 0.18;
+          m.emissive.setHex(0xc8b070);
+          m.emissiveIntensity = 0.22;
         } else if (m.userData._em != null) {
           m.emissiveIntensity = m.userData._em;
           if (m.userData._ec) m.emissive.copy(m.userData._ec);
@@ -81,6 +97,7 @@ export function createInteractions(ctx) {
   function register(name, object, prompt) {
     object.userData.interact = name;
     object.userData.prompt = prompt;
+    isolateMaterials(object);
     const hit = new Mesh(
       new BoxGeometry(0.7, 0.9, 0.7),
       new MeshBasicMaterial({ visible: false })
@@ -88,6 +105,19 @@ export function createInteractions(ctx) {
     hit.position.y = 0.35;
     object.add(hit);
     targets.push(object);
+  }
+
+  function aimedAt(obj, minAlign, maxDist) {
+    const origin = camera.position;
+    const dir = new Vector3();
+    camera.getWorldDirection(dir);
+    const p = new Vector3();
+    obj.getWorldPosition(p);
+    p.y += 0.35;
+    const to = p.sub(origin);
+    const dist = to.length();
+    if (dist > maxDist || dist < 0.15) return false;
+    return to.normalize().dot(dir) > minAlign;
   }
 
   function currentAim() {
@@ -98,21 +128,22 @@ export function createInteractions(ctx) {
       while (obj && !obj.userData.interact) obj = obj.parent;
       if (obj) return obj;
     }
+    if (hovered && aimedAt(hovered, 0.55, 2.6)) return hovered;
     const origin = camera.position;
     const dir = new Vector3();
     camera.getWorldDirection(dir);
     let best = null;
-    let bestScore = 0.28;
+    let bestScore = 0.22;
     for (const obj of targets) {
       const p = new Vector3();
       obj.getWorldPosition(p);
       p.y += 0.35;
       const to = p.clone().sub(origin);
       const dist = to.length();
-      if (dist > 2.3 || dist < 0.2) continue;
+      if (dist > 2.1 || dist < 0.2) continue;
       const align = to.normalize().dot(dir);
       const score = (1 - align) + dist * 0.04;
-      if (align > 0.72 && score < bestScore) {
+      if (align > 0.82 && score < bestScore) {
         bestScore = score;
         best = obj;
       }

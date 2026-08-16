@@ -146,6 +146,7 @@ post.renderPass.render = function renderPassSnap(...args) {
 
 const debug = createDebugAPI(app);
 debug.ready = true;
+window.app = app;
 
 const clock = new Clock();
 let sonarAnim = null;

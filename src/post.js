@@ -10,7 +10,7 @@ const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
     vignette: { value: 0.12 },
-    grain: { value: 0.006 },
+    grain: { value: 0.003 },
     time: { value: 0 },
     lift: { value: 0.045 },
     gain: { value: 1.06 },
@@ -33,7 +33,7 @@ const GradeShader = {
     uniform float warm;
     varying vec2 vUv;
     float hash(vec2 p) {
-      return fract(sin(dot(p, vec2(127.1, 311.7)) + time) * 43758.5453);
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
     }
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
