@@ -1,0 +1,108 @@
+{
+  "iter": "10",
+  "width": 960,
+  "height": 540,
+  "views": {
+    "hero": {
+      "fps": 6,
+      "drawCalls": 3846,
+      "triangles": 284621,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.32721613523965837,
+        "max": 0.9166988235294117
+      }
+    },
+    "front": {
+      "fps": 6,
+      "drawCalls": 3870,
+      "triangles": 284405,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.26060393240740604,
+        "max": 0.8685545098039215
+      }
+    },
+    "rear": {
+      "fps": 15.7,
+      "drawCalls": 3852,
+      "triangles": 285479,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.2853322114379121,
+        "max": 0.8786525490196078
+      }
+    },
+    "wheel": {
+      "fps": 15.7,
+      "drawCalls": 3295,
+      "triangles": 269765,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.14068358371459275,
+        "max": 0.9467184313725489
+      }
+    },
+    "interior": {
+      "fps": 17.7,
+      "drawCalls": 2827,
+      "triangles": 249605,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.19420316285401837,
+        "max": 0.7860556862745097
+      }
+    },
+    "forest": {
+      "fps": 17.7,
+      "drawCalls": 3945,
+      "triangles": 286001,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.32990920795207324,
+        "max": 0.9627035294117646
+      }
+    },
+    "road": {
+      "fps": 18.5,
+      "drawCalls": 4032,
+      "triangles": 288599,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.3117730358932404,
+        "max": 0.8342627450980392
+      }
+    },
+    "detail": {
+      "fps": 18.5,
+      "drawCalls": 3061,
+      "triangles": 259853,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.24396454727669056,
+        "max": 0.914795294117647
+      }
+    },
+    "chase": {
+      "fps": 18.6,
+      "drawCalls": 3999,
+      "triangles": 288905,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.2806029372004308,
+        "max": 0.903596862745098
+      }
+    },
+    "driving": {
+      "fps": 4.4,
+      "drawCalls": 3685,
+      "triangles": 281991,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.3767060367102451,
+        "max": 0.8496658823529413
+      }
+    }
+  },
+  "consoleErrors": []
+}
