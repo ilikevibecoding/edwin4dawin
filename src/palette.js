@@ -1,0 +1,55 @@
+// One cohesive late-afternoon trail palette.
+// Warm bronze Jeep, terracotta dirt, deep pine, amber practicals.
+// No default gray, no neon — every neutral is biased warm or forest-cool.
+
+export const PALETTE = {
+  paint: 0x8a4e24,
+  paintFlake: 0xd4924a,
+  paintShade: 0x6a3a18,
+  blackout: 0x161310,
+  plastic: 0x1c1a17,
+  chrome: 0xc4b8a6,
+  steel: 0x6a6258,
+  rusty: 0x6a4030,
+  rubber: 0x1a1816,
+  tireSide: 0x2a2420,
+  glass: 0x7a9098,
+  fabric: 0x3a3228,
+  fabricHi: 0x5a4c3c,
+  amber: 0xffb040,
+  tail: 0xe01c14,
+  headlight: 0xfff0cc,
+  led: 0xf0e8d8,
+  dirt: 0x6b4423,
+  dirtDry: 0x8a6a42,
+  dirtWet: 0x3a2818,
+  grass: 0x3d4a22,
+  moss: 0x2f3d1c,
+  pine: 0x1c3320,
+  pineHi: 0x3a5a30,
+  bark: 0x3a2a1c,
+  rock: 0x5a4e40,
+  skyZenith: 0x3a5c7a,
+  skyHorizon: 0xf0c090,
+  sun: 0xffd8a0,
+  bounce: 0xffc080,
+};
+
+export const SUN = {
+  // Late-afternoon rake. Keys the hero front-three-quarter (+X/+Z),
+  // leaves the rear-port flank in shadow for the bounce card.
+  elevation: 46,
+  azimuth: 42,
+  intensity: 3.55,
+  bounce: 0xffc080,
+  bounceIntensity: 1.05,
+  bounceAzimuth: 228,
+  bounceElevation: 16,
+  hemiSky: 0x9ab0c0,
+  hemiGround: 0x4a3820,
+  hemiIntensity: 0.42,
+  fog: 0xb8a878,
+  fogDensity: 0.0035,
+  exposure: 1.12,
+  envIntensity: 0.72,
+};

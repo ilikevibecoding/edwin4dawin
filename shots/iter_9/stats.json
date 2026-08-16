@@ -1,0 +1,98 @@
+{
+  "iter": "9",
+  "width": 960,
+  "height": 540,
+  "views": {
+    "hero": {
+      "fps": 5.9,
+      "drawCalls": 3841,
+      "triangles": 284931,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.2740901997276683,
+        "max": 0.9155819607843138
+      }
+    },
+    "front": {
+      "fps": 11.2,
+      "drawCalls": 3865,
+      "triangles": 284715,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.2422759563725477,
+        "max": 0.8688376470588234
+      }
+    },
+    "rear": {
+      "fps": 11.2,
+      "drawCalls": 3847,
+      "triangles": 285789,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.25157785299564595,
+        "max": 0.8755647058823529
+      }
+    },
+    "wheel": {
+      "fps": 17,
+      "drawCalls": 3290,
+      "triangles": 270075,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.132366907897601,
+        "max": 0.945884705882353
+      }
+    },
+    "interior": {
+      "fps": 17,
+      "drawCalls": 2822,
+      "triangles": 249915,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.19525989537035862,
+        "max": 0.7854894117647058
+      }
+    },
+    "forest": {
+      "fps": 16.1,
+      "drawCalls": 3940,
+      "triangles": 286311,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.2917774080065347,
+        "max": 0.9629866666666667
+      }
+    },
+    "road": {
+      "fps": 16.1,
+      "drawCalls": 4027,
+      "triangles": 288909,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.2915052966775605,
+        "max": 0.8342627450980392
+      }
+    },
+    "detail": {
+      "fps": 18.3,
+      "drawCalls": 3056,
+      "triangles": 260163,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.22276567875817013,
+        "max": 0.9218047058823529
+      }
+    },
+    "chase": {
+      "fps": 18.3,
+      "drawCalls": 3994,
+      "triangles": 289215,
+      "exposure": 1.12,
+      "luma": {
+        "mean": 0.2520633388888854,
+        "max": 0.9038799999999999
+      }
+    }
+  },
+  "consoleErrors": []
+}
