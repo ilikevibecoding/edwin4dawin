@@ -2,17 +2,169 @@
 
 ## Current status
 
-- Iteration: 2
+- Iteration: 3
 - Consecutive all-pass iterations: 0
-- Average FPS: renderCost ≈10 ms/frame in-page (≈100 fps indicative) on SwiftShader software rasterizer; rAF-measured FPS is meaningless here (headless renders on demand)
+- Average FPS: renderCost ≈10 ms/frame in-page (≈98 fps indicative) on SwiftShader software rasterizer; rAF-measured FPS is meaningless here (headless renders on demand)
 - One-percent-low FPS: n/a on software rasterizer (on-demand frame scheduling)
 - Average frame time: see renderCost above
-- Draw calls: 416
-- Triangle count: 424,719
-- Texture count: 224 (mostly tiny label canvases — see budget note in iter 2)
+- Draw calls: 418
+- Triangle count: 426,589
+- Texture count: 225 (mostly tiny label canvases — see budget note in iter 2)
 - Renderer: ANGLE Vulkan SwiftShader (software) in CI — all FPS numbers are
   indicative only, not a hardware benchmark. Target is a mid-range laptop GPU.
-- Stopping-condition status: not met (iteration 2 of 12; 6/15 rubric items pass)
+- Stopping-condition status: not met (iteration 3 of 12; 12/15 rubric items pass)
+
+## Iteration 3
+
+### Implemented
+
+- Porthole read fixed end-to-end: root cause of the "pale wedges floating in
+  the glass" was the hull-shell cutout ellipse being only 0.01 m larger than
+  the sleeve bore while shell quads are 0.25 m long — leftover quads poked into
+  the tube. Cutout widened past the quad footprint, sleeve rebuilt in matte
+  near-black, wide matte boot disc added outboard, painted interior doubler pad
+  covers the rim. Verified by ray probes + hide-bisection (tools/probe-ray.mjs,
+  tools/probe-hide.mjs).
+- Exposure grade now actually applies: environment states were writing
+  toneMappingExposure ABSOLUTELY every frame, silently undoing the main.js
+  base exposure. States now multiply BASE_EXPOSURE (0.86). Verified by pixel
+  stats (crew mean 110 -> 101).
+- glassThick de-mirrored (roughness 0.18, envMapIntensity 0.03) — the PMREM
+  synthetic room's bright panels no longer reflect as hard pale quads in
+  windows; grade contrast up to 1.11.
+- Water: rock detail 3 + high-frequency displacement octave (kills faceted
+  slabs), floodlight beams re-aimed with axis-alignment gain (visible through
+  the viewport), rock floodlight pool boosted, backdrop horizon lifted,
+  baseline screenshots frozen at sim t=40 (hero rock / beam crossover staging).
+- Crew jacket rebuilt as an over-rail drape in near-black fabric (was a tan
+  cone reading as a lampshade); valve station moved clear of the washroom
+  alcove; motor nameplate no longer truncated (label canvas shrink-to-fit).
+- Camera reframes: crewQuarters, forwardViewport, porthole (axial, pulled
+  back), corridor.
+
+### Rubric assessment (from shots/iter_3/*.png, all 10 opened and inspected)
+
+#### 1. Spatial layout reads as a real submarine
+- PASS
+- Evidence: corridor.png/crewQuarters.png/aftWide.png — curved hull, rib
+  rhythm + deep web frames, framed hatches, one continuous route with the
+  motor visible from the crew space (walking.png).
+
+#### 2. Control room looks production quality
+- PASS
+- Evidence: controlRoom.png — dense consoles with bezels + lamps, nav table
+  with rolled charts and task lamp, periscope column, sonar bay; dome viewport
+  now shows blue water + marine snow instead of a dark hole; right-edge rack
+  reads as a detailed foreground occluder (valve wheel, bolted panel).
+
+#### 3. Corridor passes the detail-density test
+- PASS
+- Evidence: corridor.png/walking.png — layered trays, conduit crossings,
+  junction boxes, ballast main + spectacle flange, DC station, frame plates,
+  signs, grates with clips; washroom partitions paneled with hardware.
+
+#### 4. Crew quarters feel inhabited
+- PASS
+- Evidence: crewQuarters.png/walking.png — varied bedding (fold band, cuffs,
+  slept-in rack), navy blanket, mug/jug/caddy/dominoes, jacket now reads as a
+  dark hung drape over the rail, boots, postcard, paneled washroom with
+  OCCUPIED/VACANT slider. Bedding still bright but has believable variation.
+
+#### 5. Aft machinery room looks mechanically believable
+- PASS
+- Evidence: engineRoom.png/aftWide.png/machineryCloseup.png — motor with
+  bolted end-bell + brushed drum band, cabled terminal box, sea main with red
+  handwheels, lagged silencer, catwalk with yellow nosing, stern densified.
+
+#### 6. Materials read as physical
+- PASS
+- Evidence: machineryCloseup.png (gloss drum vs satin rail vs red iron vs
+  cream enamel), sonarConsole.png (crackle panel, brass bezel, glass), and the
+  0.86 exposure + 1.11 contrast finally separate sage/cream/gunmetal in wide
+  shots. PROPULSION MTR 1 nameplate fits.
+
+#### 7. Wear and grime follow physical logic
+- FAIL (close)
+- Evidence: deck wear strips, chips, rib grime read at deck level
+  (walking.png), but crown panels near lamp fixtures still render hot-clean —
+  upper-half grime and lamp-adjacent scorch/dust shadows are missing
+  (corridor.png).
+
+#### 8. Lighting reads as intentional
+- FAIL (close)
+- Evidence: sonarConsole.png/engineRoom.png/controlRoom.png now carry clear
+  key pools, practical accents and falloff; but the corridor/crew crown still
+  shows hot paint patches under each fixture and the mid-tunnel stays evenly
+  bright (corridor.png, crewQuarters.png).
+
+#### 9. Post-processing is active and balanced
+- PASS
+- Evidence: AO grounds furniture and machines; bloom confined to lamps and
+  displays; vignette + grain subtle; no blown highlights or banding.
+
+#### 10. Underwater view sells depth and motion
+- PASS
+- Evidence: forwardViewport.png — hero pinnacle silhouette center-left, lit
+  seabed pool below, floodlight glow, layered marine snow; porthole.png now
+  shows clean open water with a depth gradient + snow (no more wedges/facets).
+  Deterministic t=40 staging documented in views.js.
+
+#### 11. One cohesive palette across every room
+- PASS
+- Evidence: sage cabinets / cream crown / gunmetal machines / oxide-red
+  accents recur in every room; label style consistent (all shots).
+
+#### 12. The player can genuinely walk into the back
+- PASS
+- Evidence: traversal test walked z=0.9 -> z=19.55 (motor guardrail) through
+  both hatches without teleports; interactions.json.
+
+#### 13. Interactions work
+- PASS
+- Evidence: interactions.json — pointer lock + look, movement 2.40 m,
+  collision at z=2.43, sonar s1+s2 both green with the widened poll window,
+  rest full sequence (fade, "6 hours pass.", restCycle, return, "Rested."),
+  silent running both ways.
+
+#### 14. Technical quality is clean
+- PASS
+- Evidence: zero console/page/WebGL errors (console.txt); 418 draws / 426,589
+  tris / 225 textures healthy; iter-2 defects (nameplate truncation, jacket
+  cone, porthole wedges) all fixed and verified in shots.
+
+#### 15. The cold-look test
+- FAIL (close)
+- Evidence: sonarConsole/machineryCloseup/aftWide/controlRoom would pass a
+  cold look as high-end indie; the corridor/crew axis is one notch too evenly
+  bright to fully sell "submarine at depth" (ties to items 7-8).
+
+### Technical metrics
+
+- renderCost ≈10 ms/frame (1600×900 high, SwiftShader — indicative only).
+  drawCalls 418; triangles 426,589; textures 225. Console errors: 0.
+  Page errors: 0. WebGL errors: 0.
+
+### Interaction tests
+
+- Pointer lock PASS, movement PASS (2.40 m), collision PASS (z=2.43),
+  traversal PASS (z=19.55), sonar PASS (s1+s2), rest PASS, silent running
+  PASS. ALL REQUIRED TESTS PASSED.
+
+### Next iteration fix list (worst first)
+
+1. Crown lighting shaping (corridor + crew): kill per-fixture hot paint
+   patches (lamp emissive vs point intensity balance, subtle fixture-adjacent
+   grime/dust shadow), deepen upper-half falloff so the tunnel vaults away
+   (lighting agent).
+2. Upper-half wear pass riding on 1: crown panel streaks/grime that survive
+   the lighting (lighting agent).
+3. Side-porthole exterior interest at t=40: stage a readable rock/parallax
+   event in the stbd porthole sight cone; keep the clean water read as the
+   default for the others (water agent).
+4. Cold-look re-check after 1-3; micro-reframe crewQuarters to drop the
+   cropped porthole ring at frame edge (lead).
+
+## Iteration 2
 
 ## Iteration 2
 
