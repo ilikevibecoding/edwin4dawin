@@ -2,17 +2,162 @@
 
 ## Current status
 
-- Iteration: 3
-- Consecutive all-pass iterations: 0
-- Average FPS: renderCost ≈10 ms/frame in-page (≈98 fps indicative) on SwiftShader software rasterizer; rAF-measured FPS is meaningless here (headless renders on demand)
+- Iteration: 4
+- Consecutive all-pass iterations: 1
+- Average FPS: renderCost ≈16 ms/frame in-page (≈62 fps indicative) on SwiftShader software rasterizer; rAF-measured FPS is meaningless here (headless renders on demand)
 - One-percent-low FPS: n/a on software rasterizer (on-demand frame scheduling)
 - Average frame time: see renderCost above
-- Draw calls: 418
-- Triangle count: 426,589
-- Texture count: 225 (mostly tiny label canvases — see budget note in iter 2)
+- Draw calls: 444
+- Triangle count: 427,109
+- Texture count: 228 (mostly tiny label canvases — see budget note in iter 2)
 - Renderer: ANGLE Vulkan SwiftShader (software) in CI — all FPS numbers are
   indicative only, not a hardware benchmark. Target is a mid-range laptop GPU.
-- Stopping-condition status: not met (iteration 3 of 12; 12/15 rubric items pass)
+- Stopping-condition status: not met — first all-pass iteration (4 of 12;
+  15/15 rubric items pass); a second consecutive all-pass run is required.
+
+## Iteration 4
+
+### Implemented
+
+- Crown lighting shaped (lighting agent, corridor + crew): per-fixture omni
+  points replaced by downward-pool SpotLights (cones aimed inside the vault
+  line) plus short-range dome-glow points; intensities staggered 4.6/3.3/3.3/2.2
+  (corridor) and 3.4/2.9/2.9 (crew) so the vault dips between pools; dome/cage
+  emissive raised so fixtures clearly read switched on; red practicals lowered
+  and shortened; washroom leak through the partition fixed (range 2.6 -> 1.8).
+  Corridor whole-frame luminance 108.7 -> 80.7 (engine room: 79.5); crown
+  blown-highlight fraction 7.5% -> 0.3%.
+- Upper-half wear riding on the lighting (lighting agent): new hullDecal()
+  conformal decal kit (greebles) + crownGrime()/hullRunGrime() materials;
+  soot halo above every lamp, seam-run streaks between fixtures; shared
+  hullPaint got a dusked crown stop, crown/shoulder dust bands, grime radials,
+  seam streaks and a matte roughness band (kills the grazing specular pool);
+  envMapIntensity 0.45 -> 0.36.
+- Porthole exterior staging (water agent): stbdMid crag restaged to cross the
+  stbd porthole sight cone at t=40, finer y-aware caustic octave + fresnel
+  water-glow rim on rocks, stbd bubble column retuned to thread the window.
+- Camera reframes (lead, from agent suggestions): corridor target y 1.15 ->
+  1.05 (weights deck pools + hatch glow), crewQuarters camera x 0.3 -> 0.2
+  (galley lamp pool enters frame-right), porthole moved closer/lower
+  ([0.35, 1.18, 7.18] fov 49) so the window dominates the frame with the rock
+  shoulder + bubble lane visible.
+- Tooling: tools/px-stats.py (region luminance/hot-pixel comparisons).
+
+### Rubric assessment (from shots/iter_4/*.png, all 10 opened and inspected)
+
+#### 1. Spatial layout reads as a real submarine
+- PASS
+- Evidence: corridor.png/crewQuarters.png/aftWide.png — curved hull, rib
+  rhythm + deep web frames, framed hatches, continuous route with the motor
+  visible from the crew space (walking.png).
+
+#### 2. Control room looks production quality
+- PASS
+- Evidence: controlRoom.png — dense consoles, nav table with task lamp,
+  periscope, sonar bay, water + snow in the dome viewport; slight global
+  deepening from the shared crown wear, composition intact.
+
+#### 3. Corridor passes the detail-density test
+- PASS
+- Evidence: corridor.png/walking.png — layered trays, conduit crossings,
+  junction boxes, ballast main, DC station, frame plates, signs, grates;
+  now with readable seam runs and lamp halos on the upper half.
+
+#### 4. Crew quarters feel inhabited
+- PASS
+- Evidence: crewQuarters.png/walking.png — varied bedding, navy blanket,
+  dark draped jacket, mugs/jug/caddy, paneled washroom; reading-lamp pools
+  give the bunk wall warm counterpoint against the dim port crown.
+
+#### 5. Aft machinery room looks mechanically believable
+- PASS
+- Evidence: engineRoom.png/aftWide.png/machineryCloseup.png — motor end-bell
+  + brushed drum, cabled terminal box, sea main with red handwheels, lagged
+  silencer, catwalk with yellow nosing.
+
+#### 6. Materials read as physical
+- PASS
+- Evidence: machineryCloseup.png (gloss drum vs satin rail vs red iron vs
+  crackle enamel), sonarConsole.png (brass bezel, glass, crackle panel);
+  matte crown band removes the last paint-specular pool (corridor.png).
+
+#### 7. Wear and grime follow physical logic
+- PASS
+- Evidence: corridor.png/crewQuarters.png — soot halos above every lamp,
+  seam-run streaks between fixtures, crown/shoulder dust bands, grime
+  radials; deck wear strips and rib grime unchanged at deck level
+  (walking.png). Wear now covers the upper half, not just the deck.
+
+#### 8. Lighting reads as intentional
+- PASS
+- Evidence: corridor.png/crewQuarters.png/walking.png — staggered warm pools
+  with the vault falling to shadow between fixtures, aft hatch glow as the
+  depth cue, fixtures clearly read switched on; corridor whole-frame
+  luminance now matches the engine room (80.7 vs 79.5), crown blown fraction
+  0.3%.
+
+#### 9. Post-processing is active and balanced
+- PASS
+- Evidence: AO grounds furniture and machines; bloom confined to lamps and
+  displays; vignette + grain subtle; no blown highlights or banding.
+
+#### 10. Underwater view sells depth and motion
+- PASS
+- Evidence: forwardViewport.png — pinnacle silhouette, floodlit seabed pool,
+  layered marine snow; porthole.png — window now dominates the frame, rock
+  shoulder crosses the lower glass with the bubble lane rising through
+  t=40 staging (views.js).
+
+#### 11. One cohesive palette across every room
+- PASS
+- Evidence: sage cabinets / cream crown / gunmetal machines / oxide-red
+  accents recur in every room; label style consistent (all shots).
+
+#### 12. The player can genuinely walk into the back
+- PASS
+- Evidence: traversal test walked z=0.9 -> z=19.55 (motor guardrail) through
+  both hatches without teleports; interactions.json.
+
+#### 13. Interactions work
+- PASS
+- Evidence: interactions.json — pointer lock + look, movement 2.30 m,
+  collision at z=2.43, sonar s1+s2, rest full sequence, silent running both
+  ways, debug triggers.
+
+#### 14. Technical quality is clean
+- PASS
+- Evidence: zero console/page/WebGL errors (console.txt); 444 draws /
+  427,109 tris / 228 textures within budget; no visual defects found in any
+  of the 10 shots.
+
+#### 15. The cold-look test
+- PASS
+- Evidence: every room now carries deliberate light pools, falloff and
+  upper-half wear; the corridor/crew axis that failed iter 3 reads moody and
+  intentional (corridor.png, crewQuarters.png, walking.png) and matches the
+  aft rooms' mood.
+
+### Technical metrics
+
+- renderCost ≈16 ms/frame (1600×900 high, SwiftShader — indicative only).
+  drawCalls 444; triangles 427,109; textures 228. Console errors: 0.
+  Page errors: 0. WebGL errors: 0.
+
+### Interaction tests
+
+- Pointer lock PASS, movement PASS (2.30 m), collision PASS (z=2.43),
+  traversal PASS (z=19.55), sonar PASS (s1+s2), rest PASS, silent running
+  PASS. ALL REQUIRED TESTS PASSED.
+
+### Next iteration fix list (worst first)
+
+1. Confirmation run for the stopping condition (two consecutive all-pass
+   iterations). Keep changes minimal and low-risk (lead).
+2. Micro-polish candidates only if safe: dim the bright bezel crescent inside
+   the stbd porthole tube; sanity-check restCycle/silentRunning readability
+   on the corridor/crew axis after the warm-pool conversion (lighting agent
+   flagged those states may sit too dark; bump warm-role factors in
+   environment.js by +10-15% if so) (lead).
 
 ## Iteration 3
 
