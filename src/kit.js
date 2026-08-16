@@ -411,7 +411,7 @@ export function makePorthole(mats, radius = 0.16) {
   g.add(inner);
   const water = new Mesh(
     new CircleGeometry(radius * 0.96, 20),
-    new MeshBasicMaterial({ color: 0x3d7a82, fog: false })
+    new MeshBasicMaterial({ color: 0x62a8b0, fog: false })
   );
   water.position.z = -0.02;
   water.castShadow = false;

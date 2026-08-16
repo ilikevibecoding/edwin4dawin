@@ -2,16 +2,16 @@
 
 ## Current status
 
-- Iteration: 12
+- Iteration: 13 (performance / glitch pass after the original stop)
 - Consecutive all-pass iterations: 0
-- Average FPS: 20 (SwiftShader software renderer; indicative only, not a hardware benchmark)
-- One-percent-low FPS: 20
-- Average frame time: 50 ms
-- Draw calls: 671
-- Triangle count: 93242
-- Texture count: 74
+- Average FPS: 55 render-side on SwiftShader (indicative; 1% lows hitch on first compiles)
+- One-percent-low FPS: ~1.5 on first hitch, then ~20–55
+- Average frame time: 18 ms (render duration, not the old 50 ms interval lock)
+- Draw calls: 91–138
+- Triangle count: 108704
+- Texture count: 69–72
 - Renderer: ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)
-- Stopping-condition status: fired because iteration 12 is complete. Two consecutive all-pass iterations were not reached.
+- Stopping-condition status: original stop already fired at iteration 12. This pass does not claim two all-passes. Visual rubric items still fail. Interactions still pass.
 
 ## Art direction
 
@@ -30,6 +30,178 @@ Used, maintained, cramped expedition submarine. Industrial realism rather than s
 - Lighting: `src/environment.js`
 - Player and interactions: `src/player.js`, `src/interact.js`
 - Presentation: `src/post.js`, `src/debug.js`, `src/main.js`
+
+## Iteration 13
+
+### Implemented
+
+- Stopped glass from writing depth over the underwater vista
+- Merged static meshes after converting to non-indexed geometry (671 → ~100 draw calls)
+- Replaced the 50 ms `setInterval` FPS lock with rAF + measured render time
+- Fixed vibration drift (`+= sine` every frame)
+- Removed shader-discard hull holes that leaked jagged water through the cylinder
+- Closed the open stern cap; removed floating lining plates
+- One shadow map, cheaper materials, smaller textures, fewer particles
+- Brighter room lights, less fog/grain
+- Bow window insert so the viewport is a teal water plane instead of a black void
+
+### Agent assignments
+
+- Pressure hull: lead
+- Control room: lead
+- Corridor: lead
+- Crew spaces: lead
+- Machinery: lead
+- Materials: lead
+- Water: lead
+- Lighting: lead
+- Player and interactions: lead
+- Performance: lead
+
+### Asset loops
+
+#### Pressure hull
+- Attempts: 1
+- Result: FAIL
+- Remaining weaknesses: still a faceted tube with thin ribs
+
+#### Control room
+- Attempts: 1
+- Result: FAIL
+- Remaining weaknesses: box consoles; window now readable but still a flat insert
+
+#### Corridor
+- Attempts: 1
+- Result: FAIL
+- Remaining weaknesses: strongest room; still sparse and aliased
+
+#### Crew quarters
+- Attempts: 0 this pass
+- Result: FAIL
+- Remaining weaknesses: block bunks
+
+#### Machinery room
+- Attempts: 1
+- Result: FAIL
+- Remaining weaknesses: primitive masses; better aft wall, still not a hero engine room
+
+#### Materials and wear
+- Attempts: 1
+- Result: FAIL
+- Remaining weaknesses: weaker orange-peel; still no contact wear
+
+#### Underwater exterior
+- Attempts: 1
+- Result: FAIL
+- Remaining weaknesses: window is no longer black; still a flat teal card with dots
+
+#### Lighting and post
+- Attempts: 1
+- Result: FAIL
+- Remaining weaknesses: brighter, less muddy; still flat
+
+#### Collision and interactions
+- Attempts: 1
+- Result: PASS
+- Remaining weaknesses: same headless pointer-lock limits
+
+### Rubric assessment
+
+#### 1. Spatial layout and submarine silhouette
+- PASS/FAIL: FAIL
+- Evidence: `shots/iter_14/corridor.png` is still a tube with props.
+
+#### 2. Control-room quality
+- PASS/FAIL: FAIL
+- Evidence: `shots/iter_14/controlRoom.png` is box consoles and a small window.
+
+#### 3. Corridor detail density
+- PASS/FAIL: FAIL
+- Evidence: `shots/iter_14/corridor.png` has pipes and a hatch, with large empty hull patches.
+
+#### 4. Crew quarters feel inhabited
+- PASS/FAIL: FAIL
+- Evidence: bunks through the hatch remain stacked boxes.
+
+#### 5. Aft machinery room looks mechanically believable
+- PASS/FAIL: FAIL
+- Evidence: `shots/iter_14/engineRoom.png` is dark primitives.
+
+#### 6. Materials read as physical
+- PASS/FAIL: FAIL
+- Evidence: hull noise is still generic.
+
+#### 7. Wear and grime follow physical logic
+- PASS/FAIL: FAIL
+- Evidence: no readable contact wear.
+
+#### 8. Lighting reads as intentional
+- PASS/FAIL: FAIL
+- Evidence: brighter than iter_12, still mostly one warm wash.
+
+#### 9. Post-processing is active and balanced
+- PASS/FAIL: FAIL
+- Evidence: ACES/bloom/grade present; grain reduced. A maybe is a fail.
+
+#### 10. Underwater view sells depth and motion
+- PASS/FAIL: FAIL
+- Evidence: viewport is no longer black; it is a flat teal card. Fail.
+
+#### 11. One cohesive palette across every room
+- PASS/FAIL: FAIL
+- Evidence: tan/olive/black is consistent. A maybe is a fail.
+
+#### 12. The player can genuinely walk into the back
+- PASS/FAIL: PASS
+- Evidence: `shots/iter_14/interactions.json` traversal ended at z=18.3.
+
+#### 13. Interactions work
+- PASS/FAIL: PASS
+- Evidence: sonar, rest, silent running, movement, collision all passed.
+
+#### 14. Technical quality is clean
+- PASS/FAIL: FAIL
+- Evidence: draw calls dropped to ~100 and merge errors are gone, but 1% lows hitch and the image still has aliasing / primitive construction.
+
+#### 15. The cold-look test
+- PASS/FAIL: FAIL
+- Evidence: still reads as a Three.js / student demo.
+
+### Technical metrics
+
+- FPS: 55 (SwiftShader render timing; indicative)
+- One-percent-low FPS: 1.5 on compile hitch
+- Frame time: 18 ms
+- Draw calls: 91–138
+- Triangles: 108704
+- Textures: 69–72
+- Programs: 27
+- Console errors: none after the merge fix (SwiftShader ReadPixels warnings only)
+- Page errors: none
+- WebGL errors: none
+- Renderer: SwiftShader / ANGLE Vulkan
+
+### Interaction tests
+
+- Pointer lock: PASS
+- Movement: PASS
+- Collision: PASS
+- Sonar: PASS
+- Rest: PASS
+- Silent running: PASS
+- Full forward-to-aft traversal: PASS
+
+### Next iteration fix list
+
+1. Rebuild control-room stations and the bow window as a thick opening with a layered underwater vista.
+2. Rebuild the propulsion motor and fill the engine-room frustum.
+3. Panelize hull materials and add contact wear.
+4. Add corridor cable-tray density until empty hull patches are gone.
+
+### Commit
+
+- Commit hash: pending
+- Commit message: Cut draw calls and fix the worst viewport/glitch failures.
 
 ## Iteration 12
 

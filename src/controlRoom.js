@@ -1,4 +1,4 @@
-import { Group, MeshStandardMaterial } from 'three';
+import { CanvasTexture, Group, Mesh, MeshBasicMaterial, PlaneGeometry, SRGBColorSpace } from 'three';
 import { LAYOUT } from './seed.js';
 import { box, cyl, roundedBox } from './geom.js';
 import {
@@ -25,6 +25,42 @@ import {
   makeSonarTexture,
   makeStatusPanelTexture,
 } from './displays.js';
+
+function windowWaterTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 160;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 160);
+  g.addColorStop(0, '#8fd0da');
+  g.addColorStop(0.45, '#3e8490');
+  g.addColorStop(1, '#16343c');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 160);
+  ctx.fillStyle = 'rgba(18, 36, 40, 0.72)';
+  ctx.beginPath();
+  ctx.moveTo(0, 118);
+  ctx.lineTo(70, 88);
+  ctx.lineTo(140, 108);
+  ctx.lineTo(256, 78);
+  ctx.lineTo(256, 160);
+  ctx.lineTo(0, 160);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(230, 246, 248, 0.9)';
+  ctx.beginPath();
+  ctx.arc(78, 86, 7, 0, Math.PI * 2);
+  ctx.fill();
+  for (let i = 0; i < 22; i++) {
+    ctx.fillStyle = `rgba(210, 236, 240, ${0.25 + (i % 3) * 0.18})`;
+    ctx.beginPath();
+    ctx.arc((i * 53) % 256, (i * 37) % 150, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.needsUpdate = true;
+  return t;
+}
 
 function screen(mats, tex, w, h) {
   const m = mats.plastic.clone();
@@ -70,6 +106,13 @@ export function buildControlRoom(mats, collision, interactables, animators) {
   glass2.castShadow = false;
   glass2.renderOrder = 4;
   g.add(glass2);
+  const waterInsert = new Mesh(
+    new PlaneGeometry(0.92, 0.54),
+    new MeshBasicMaterial({ map: windowWaterTexture(), fog: false })
+  );
+  waterInsert.position.set(0, 1.28, 0.2);
+  waterInsert.userData.noMerge = true;
+  g.add(waterInsert);
   const seal = mesh(roundedBox(1.0, 0.04, 0.04, 0.01, 1), mats.rubber);
   seal.position.set(0, 1.28, 0.34);
   g.add(seal);
