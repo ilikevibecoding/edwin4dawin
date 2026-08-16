@@ -200,8 +200,8 @@ Used, maintained, cramped expedition submarine. Industrial realism rather than s
 
 ### Commit
 
-- Commit hash: pending
-- Commit message: Cut draw calls and fix the worst viewport/glitch failures.
+- Commit hash: 37ca814637aa14bd3d7c91b61882fe149cd261ee
+- Commit message: Add a bow-window water insert and record the performance pass.
 
 ## Iteration 12
 
