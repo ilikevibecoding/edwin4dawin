@@ -280,12 +280,18 @@ function buildBulkhead(group, z, { doorSide = 1, name = 'BH' } = {}) {
   sillTop.userData.static = true;
   group.add(sillTop);
 
-  // collision: sides + top + sill + open door
+  // collision: sides + top + open door. The sill is deliberately NOT a collider:
+  // registering it walkable raised the feet by sillY mid-crossing, which lifted
+  // the capsule head (feetY + 1.75) into the lintel box (bottom 1.78) and pinned
+  // the player — the opening is shorter than the capsule, and passing "works" by
+  // the head-skip only while feet stay at deck level. Small-dt frames (60 fps)
+  // could never leap the lintel midplane in one step, so the hatch was
+  // impassable at real frame rates. The capsule now glides over the 11 cm sill
+  // (invisible in first person; the visual sill mesh stays).
   const hw = HATCH.width / 2;
   C.addBox([-2, -0.5, z - 0.12], [-hw, 3, z + 0.12], { name: name + '-port' });
   C.addBox([hw, -0.5, z - 0.12], [2, 3, z + 0.12], { name: name + '-stbd' });
   C.addBox([-2, HATCH.bottomY + HATCH.height - 0.06, z - 0.12], [2, 3, z + 0.12], { name: name + '-top' });
-  C.addBox([-hw - 0.05, 0, z - 0.13], [hw + 0.05, HATCH.sillY + 0.012, z + 0.13], { walkable: true, name: name + '-sill' });
   C.addBox([doorSide * (hw + 0.02), 0, z + 0.06], [doorSide * (hw + 0.75), 2.2, z + 0.34], { name: name + '-door' });
   return group;
 }
