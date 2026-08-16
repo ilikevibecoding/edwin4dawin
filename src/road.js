@@ -168,10 +168,10 @@ function paintRoadColors(geo) {
     const median = Math.exp(-((xc / 0.38) * (xc / 0.38)));
     const mottling = n2(x * 0.55, z * 0.55);
 
-    c.copy(cGrass).lerp(cMoss, saturate(0.35 + mottling * 0.25));
-    c.lerp(cDirt, fade((roadMask - 0.18) / 0.55));
-    c.lerp(cGrass, saturate(median * 0.92) * (1 - rutAmt * 0.85));
-    c.lerp(cWet, fade(rutAmt * 1.05) * 0.78);
+    c.copy(cGrass).lerp(cMoss, saturate(0.42 + mottling * 0.22));
+    c.lerp(cDirt, fade((roadMask - 0.1) / 0.48));
+    c.lerp(cGrass, saturate(median * 0.7) * (1 - rutAmt * 0.9));
+    c.lerp(cWet, fade(rutAmt * 1.2) * 0.86);
     let puddle = 0;
     for (let p = 0; p < PUDDLES.length; p++) {
       const pud = PUDDLES[p];

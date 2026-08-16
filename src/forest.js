@@ -136,6 +136,14 @@ export function createForest(env, { treeCount = 90, wanderAt = () => 0, heightAt
     envMap: env,
     envMapIntensity: 0.2,
   });
+  const pineCrownDark = new THREE.MeshStandardMaterial({
+    color: 0xb8c4b0,
+    vertexColors: true,
+    roughness: 0.9,
+    metalness: 0.0,
+    envMap: env,
+    envMapIntensity: 0.16,
+  });
   const fernMat = new THREE.MeshStandardMaterial({
     color: PALETTE.moss,
     roughness: 0.88,
@@ -190,46 +198,56 @@ export function createForest(env, { treeCount = 90, wanderAt = () => 0, heightAt
   const saplingProto = makeSapling(barkMat, pineCrownMat, coneGeo);
   const stumpProto = makeStump(barkMat, cutMat);
 
-  const maxTrunks = 220;
-  const maxCrowns = 1760;
+  const maxTrunks = 240;
+  const maxCrowns = 2000;
   const trunks = new THREE.InstancedMesh(trunkGeo, barkMat, maxTrunks);
   const crowns = new THREE.InstancedMesh(coneGeo, pineCrownMat, maxCrowns);
+  const crownsDark = new THREE.InstancedMesh(coneGeo, pineCrownDark, maxCrowns);
   trunks.castShadow = true;
   trunks.receiveShadow = true;
   crowns.castShadow = true;
   crowns.receiveShadow = true;
+  crownsDark.castShadow = true;
+  crownsDark.receiveShadow = true;
   const dummy = new THREE.Object3D();
   let trunkN = 0;
   let crownN = 0;
+  let crownDarkN = 0;
   const colliders = [];
 
   function plantPine(x, z, seed, scale) {
     const y0 = heightAt(x, z);
-    const trunkH = (6.6 + hash(seed) * 1.4) * scale;
+    const trunkH = (6.2 + hash(seed) * 2.2) * scale;
+    const leanX = (hash(seed * 4.4) - 0.5) * 0.16;
+    const leanZ = (hash(seed * 5.5) - 0.5) * 0.14;
     dummy.position.set(x, y0 + trunkH * 0.5, z);
-    dummy.rotation.set(0, hash(seed * 3.1) * Math.PI * 2, 0);
-    dummy.scale.set(scale, trunkH, scale);
+    dummy.rotation.set(leanZ, hash(seed * 3.1) * Math.PI * 2, leanX);
+    dummy.scale.set(scale * (0.85 + hash(seed * 1.2) * 0.3), trunkH, scale);
     dummy.updateMatrix();
     trunks.setMatrixAt(trunkN++, dummy.matrix);
 
-    const layers = 7;
-    for (let i = 0; i < layers && crownN < maxCrowns; i++) {
-      const t = i / (layers - 1);
-      const y = y0 + trunkH * 0.3 + t * trunkH * 0.68;
-      const r = (2.2 - t * 1.7) * scale * (0.92 + hash(seed * 5 + i) * 0.12);
+    const layers = 5 + Math.floor(hash(seed * 9.1) * 4);
+    const dark = hash(seed * 6.6) > 0.55;
+    for (let i = 0; i < layers; i++) {
+      if (dark && crownDarkN >= maxCrowns) break;
+      if (!dark && crownN >= maxCrowns) break;
+      const t = i / Math.max(1, layers - 1);
+      const y = y0 + trunkH * 0.28 + t * trunkH * 0.7;
+      const r = (2.35 - t * 1.85) * scale * (0.82 + hash(seed * 5 + i) * 0.28);
       dummy.position.set(
-        x + (hash(seed + i * 1.7) - 0.5) * 0.16 * scale,
+        x + leanX * (y - y0) * 0.35 + (hash(seed + i * 1.7) - 0.5) * 0.22 * scale,
         y,
-        z + (hash(seed * 2 + i) - 0.5) * 0.16 * scale,
+        z + leanZ * (y - y0) * 0.35 + (hash(seed * 2 + i) - 0.5) * 0.22 * scale,
       );
       dummy.rotation.set(
-        (hash(seed * 4 + i) - 0.5) * 0.06,
+        (hash(seed * 4 + i) - 0.5) * 0.12,
         hash(seed * 8 + i) * Math.PI * 2,
-        (hash(seed * 6 + i) - 0.5) * 0.06,
+        (hash(seed * 6 + i) - 0.5) * 0.12,
       );
-      dummy.scale.set(r, (1.05 + (1 - t) * 0.2) * 0.5 * scale, r * 0.96);
+      dummy.scale.set(r, (1.0 + (1 - t) * 0.28) * 0.52 * scale, r * (0.88 + hash(i + seed) * 0.16));
       dummy.updateMatrix();
-      crowns.setMatrixAt(crownN++, dummy.matrix);
+      if (dark) crownsDark.setMatrixAt(crownDarkN++, dummy.matrix);
+      else crowns.setMatrixAt(crownN++, dummy.matrix);
     }
 
     colliders.push(
@@ -247,48 +265,56 @@ export function createForest(env, { treeCount = 90, wanderAt = () => 0, heightAt
     return false;
   }
 
-  const ranks = rich
-    ? [
-        { offset: 5.85, step: 4.05, z0: -76, z1: 76, scale: 1.0, padBoost: 0.55 },
-        { offset: 9.35, step: 5.15, z0: -76, z1: 76, scale: 1.12, padBoost: 0.2 },
-        { offset: 15.8, step: 6.8, z0: -74, z1: 74, scale: 1.35, padBoost: 0 },
-      ]
-    : [
-        { offset: 5.95, step: 5.1, z0: -76, z1: 76, scale: 1.0, padBoost: 0.55 },
-        { offset: 10.1, step: 6.4, z0: -76, z1: 76, scale: 1.18, padBoost: 0.2 },
-      ];
-
   let seed = 11;
-  for (const rank of ranks) {
+  function tryPlant(x, z, scale) {
+    if (trunkN >= maxTrunks) return false;
+    if (keepClear(x, z, 4.35)) return false;
+    plantPine(x, z, seed, scale);
+    seed++;
+    return true;
+  }
+
+  // Inner + mid bands: irregular steps and clumps, not a tree farm.
+  for (const side of [-1, 1]) {
+    let z = -76 + hash(side + 3) * 1.8;
+    while (z < 76 && trunkN < maxTrunks) {
+      const step = 3.1 + hash(seed * 1.3) * 2.6;
+      z += step;
+      const pad = Math.abs(z) < 8.5 ? 0.7 : 0;
+      const inner = hash(seed * 2.1) > 0.38;
+      const offset = (inner ? 5.45 : 8.6) + pad + hash(seed * 3.7) * 2.4;
+      const along = wanderAt(z);
+      const x = along + side * offset + (hash(seed * 4.8) - 0.5) * 0.7;
+      const zz = z + (hash(seed * 5.2) - 0.5) * 1.1;
+      const scale = (inner ? 0.88 : 1.08) * (0.78 + hash(seed * 6.1) * 0.5);
+      tryPlant(x, zz, scale);
+      if (hash(seed * 7.7) > 0.62) {
+        const x2 = x + side * (1.1 + hash(seed * 8.2) * 1.4);
+        tryPlant(x2, zz + (hash(seed * 9.1) - 0.5) * 1.6, scale * (0.7 + hash(seed) * 0.25));
+      }
+    }
+  }
+
+  if (rich) {
     for (const side of [-1, 1]) {
-      for (let z = rank.z0; z <= rank.z1; z += rank.step) {
-        const gapWave = (z + 90) / 22;
-        const gap = Math.abs(gapWave - Math.round(gapWave)) < 0.08 && ((Math.round(gapWave) + side) & 1) === 0;
-        if (gap && rank.offset < 12) continue;
-        const pad = Math.abs(z) < 8.5 ? rank.padBoost : 0;
-        const along = wanderAt(z);
-        const jitterX = (hash(seed * 1.7) - 0.5) * 0.55;
-        const jitterZ = (hash(seed * 2.9) - 0.5) * 0.7;
-        const x = along + side * (rank.offset + pad) + jitterX;
-        const zz = z + jitterZ;
-        if (keepClear(x, zz, 4.35)) {
-          seed++;
-          continue;
-        }
-        if (trunkN >= maxTrunks) break;
-        const scale = rank.scale * (0.92 + 0.1 * Math.sin(z * 0.22 + side) + hash(seed) * 0.08);
-        plantPine(x, zz, seed, scale);
-        seed++;
+      let z = -74;
+      while (z < 74 && trunkN < maxTrunks) {
+        z += 5.4 + hash(seed * 2.2) * 3.8;
+        const x = wanderAt(z) + side * (14.2 + hash(seed * 3.3) * 4.5);
+        tryPlant(x, z + (hash(seed) - 0.5) * 1.8, 1.15 + hash(seed * 4.4) * 0.45);
       }
     }
   }
 
   trunks.count = trunkN;
   crowns.count = crownN;
+  crownsDark.count = crownDarkN;
   trunks.instanceMatrix.needsUpdate = true;
   crowns.instanceMatrix.needsUpdate = true;
+  crownsDark.instanceMatrix.needsUpdate = true;
   root.add(trunks);
   root.add(crowns);
+  root.add(crownsDark);
 
   // Hero pines near the parked Jeep — full meshes for the beauty cameras.
   const heroSpots = [

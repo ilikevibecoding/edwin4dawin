@@ -104,6 +104,31 @@ async function main() {
     );
   }
 
+  try {
+    await page.evaluate(async () => {
+      window.debugAPI.resume();
+      await window.debugAPI.fire('door');
+    });
+    await page.waitForTimeout(650);
+    await page.evaluate(() => {
+      window.debugAPI.keys.add('KeyW');
+      window.debugAPI.step(2.4);
+      window.debugAPI.keys.delete('KeyW');
+    });
+    const ts = Date.now();
+    const { dataUrl, luma } = await page.evaluate(() => {
+      const dataUrl = window.debugAPI.captureFrame(2);
+      return { dataUrl, luma: window.debugAPI.sampleLuma() };
+    });
+    const file = path.join(outDir, 'driving.png');
+    await writeFile(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
+    stats.driving = { ...(await page.evaluate(() => window.debugAPI.stats())), luma };
+    log(`driving -> ${file} (${((Date.now() - ts) / 1000).toFixed(1)}s, luma ${luma.mean.toFixed(3)}/${luma.max.toFixed(3)})`);
+    await page.evaluate(() => window.debugAPI.pause());
+  } catch (e) {
+    log('driving shot skipped:', e.message);
+  }
+
   await writeFile(
     path.join(outDir, 'stats.json'),
     JSON.stringify({ iter, width, height, views: stats, consoleErrors }, null, 2),

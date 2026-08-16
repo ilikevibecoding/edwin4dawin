@@ -48,8 +48,8 @@ export const SUN = {
   hemiSky: 0x9ab0c0,
   hemiGround: 0x4a3820,
   hemiIntensity: 0.42,
-  fog: 0xc8b48a,
-  fogDensity: 0.0039,
+  fog: 0xb8a878,
+  fogDensity: 0.0035,
   exposure: 1.12,
   envIntensity: 0.72,
 };

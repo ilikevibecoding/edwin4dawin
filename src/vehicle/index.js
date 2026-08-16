@@ -47,7 +47,7 @@ export function createVehicle(env) {
     new THREE.MeshBasicMaterial({
       color: 0x1a120c,
       transparent: true,
-      opacity: 0.38,
+      opacity: 0.22,
       depthWrite: false,
     }),
   );
