@@ -8,8 +8,10 @@
 //   along (0,-0.044,-1). At z=-15 it spans x +-2.3 around y 0.6; at z=-30 it
 //   spans x +-4.2 around y 0.0. Anything meant to read through the window must
 //   cross that lane.
-// - starboard porthole camera (0.28,1.45,7.42) looks through the r=0.17 glass
-//   at (1.51,1.42,6.95) -> exterior ray hits (x 8..16, y ~1.2, z 4..2).
+// - starboard porthole camera (0.12,1.3,7.46) looks through the r=0.17 glass
+//   at (1.52,1.42,6.95); the sleeve tube + boot ring vignette the cone (the
+//   lower-left of the glass shows sleeve wall). True water window: at x 2.4..
+//   3.2 it is y 1.3..1.9, z 6.15..6.9; at x=10.5 it is y 1.5..3.5, z 3.0..5.0.
 // - the hull (x +-1.62, y -0.76..2.48, z -3..25 incl. bow fairing) must never
 //   be clipped by conveyor rocks at any point of their drift cycle.
 
@@ -259,9 +261,18 @@ function rockMaterial(extra = {}) {
         float strata = sin(vWorld.y * 1.7 + vWorld.x * 0.22 + vWorld.z * 0.13);
         col *= 0.82 + 0.22 * strata * (1.0 - topLight * 0.7);
         // slow caustic shimmer on up-facing surfaces (kept subtle so crowns
-        // stay dark rock, not pale dapple)
+        // stay dark rock, not pale dapple) + a finer y-aware octave that leaks
+        // slightly onto steep flanks so near rocks (porthole crag at ~8 m)
+        // carry lit-pool detail instead of rendering as flat cutouts
         float caust = max(0.0, sin(vWorld.x * 0.9 + uTime * 0.35) * sin(vWorld.z * 0.8 - uTime * 0.28));
-        col += vec3(0.018, 0.03, 0.028) * caust * topLight * (1.0 - fogF);
+        float caust2 = max(0.0, sin(vWorld.x * 2.3 - uTime * 0.22) * sin(vWorld.y * 1.9 + vWorld.z * 2.1 + uTime * 0.31));
+        float dapple = caust * topLight + caust2 * (0.5 + 0.5 * topLight);
+        col += vec3(0.02, 0.033, 0.03) * dapple * (1.0 - fogF);
+        // faint water-glow fresnel rim: traces crag edges against the veil so
+        // silhouettes read as modeled rock; fades with fog so distant rocks
+        // keep their soft murk-mixed profile
+        float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(cameraPosition - vWorld))), 3.0);
+        col += mix(uNear, uFar, 0.4) * rim * 0.14 * (1.0 - fogF);
         // floodlight pools (absorbed toward green-cyan with distance)
         float cone = coneLight(vWorld);
         col += vec3(0.38, 0.47, 0.44) * cone * (1.0 - fogF);
@@ -328,9 +339,12 @@ export function build(ctx) {
   group.add(silt.mesh); mats.push(silt.mat);
 
   // bubbles rising from hull vents; columns placed on each side so they cross
-  // the porthole sight rays (stbd porthole looks at x 8..16, z 4..2; the near
-  // field right outside the glass is x 2.4..4.6)
-  const bubS = buildParticleLayer({ seed: 'bubbles-s', count: 200, box: { x0: 2.4, x1: 4.2, y0: -2, y1: 4, z0: 4.4, z1: 7.4 }, speed: 0.5, size: 1.0, opacity: 0.8, color: '#c9e6e2', sink: -0.85, pxScale: 18, pxMin: 1.5, pxMax: 9 });
+  // the porthole sight rays. The stbd porthole's water window is vignetted by
+  // the sleeve tube + boot ring to roughly y 1.3..1.9, z 6.15..6.9 at x 2.4..
+  // 3.2 (lower-left of the glass shows the sleeve wall, not water) — the
+  // column threads that lane 1..1.7 m past the glass so bright specks climb
+  // the left-center of the view in front of the dark stbdMid flank.
+  const bubS = buildParticleLayer({ seed: 'bubbles-s', count: 200, box: { x0: 2.4, x1: 3.2, y0: -2, y1: 4, z0: 6.45, z1: 6.95 }, speed: 0.5, size: 1.0, opacity: 0.92, color: '#c9e6e2', sink: -0.85, pxScale: 26, pxMin: 2.0, pxMax: 9 });
   group.add(bubS.mesh); mats.push(bubS.mat);
   const bubP = buildParticleLayer({ seed: 'bubbles-p', count: 60, box: { x0: -4.2, x1: -2.4, y0: -2, y1: 4, z0: 9.8, z1: 12.8 }, speed: 0.5, size: 1.0, opacity: 0.8, color: '#c9e6e2', sink: -0.8, pxScale: 16, pxMin: 1.5, pxMax: 7 });
   group.add(bubP.mesh); mats.push(bubP.mat);
@@ -392,12 +406,19 @@ export function build(ctx) {
   pinn.position.set(-1.5, -5.5, 0);
   addRock(pinn, -57, 76, { xFar: -1.5, xNear: -10.0, z0: -24, z1: -8 });
 
-  // starboard mid-distance rock timed for the porthole view: at t=40 it sits at
-  // z=3 with its crown reaching y ~ +2.5 around x 10, crossing the UPPER half
-  // of the sight ray (the lower half of the glass carries condensation).
+  // starboard porthole hero: crag timed to cross the porthole sight cone at
+  // t=40. Through the tube vignette the window at x~10.5 is y 1.5..3.5,
+  // z 3.0..5.0 (see sight-line notes). Raised to y=-1.9 (rot 5.8 shows its
+  // craggiest ridge) the crown crosses that window diagonally: rock fills the
+  // lower/aft two-thirds at 7..10 m with open water upper-left. Wrap:
+  // z(t=40) = wrap(-23.3 + 40*0.75 + 36, 72) = +6.7;
+  // the pass runs ~t 26..48 and the wrap pop happens at z=+-36, >27 m off the
+  // porthole sight axis (and >3 m off centerline, fog-veiled at the viewport
+  // edge like the other flankers).
   const stbdMid = new THREE.Mesh(displacedRock('stbdMid', 4.2, 3, [1.2, 0.8, 1.5]), rockMat);
-  stbdMid.position.set(9.5, -2.6, 0);
-  addRock(stbdMid, -25.8, 65);
+  stbdMid.position.set(10.5, -1.9, 0);
+  stbdMid.rotation.y = 5.8;
+  addRock(stbdMid, -23.3, 72);
 
   group.add(rocks);
 
