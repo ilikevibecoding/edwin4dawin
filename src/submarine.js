@@ -414,8 +414,8 @@ function buildPorthole(group, ph) {
   // Matte near-black: looking down a port tube the walls should fall to
   // shadow, not catch specular streaks through the glass.
   const sleeveMat = new THREE.MeshStandardMaterial({
-    name: 'portSleeve', color: 0x0d0f10, roughness: 0.92, metalness: 0.1,
-    envMapIntensity: 0.06, side: THREE.DoubleSide,
+    name: 'portSleeve', color: 0x0d0f10, roughness: 0.96, metalness: 0,
+    envMapIntensity: 0.04, side: THREE.DoubleSide,
   });
   const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(ph.r + 0.035, ph.r + 0.035, 0.56, 24, 1, true), sleeveMat);
   sleeve.rotation.x = Math.PI / 2;

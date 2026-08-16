@@ -612,11 +612,15 @@ export function build(ctx) {
   mkLamp(-0.3, 7.8, 'red', 0xb03a28, 2.4, false);
   mkLamp(0.3, 10.2, 'red', 0xb03a28, 2.4, false);
 
-  // cool porthole spill (small spots aimed inward)
+  // cool porthole spill (small spots faking port light pooling on the deck).
+  // MUST sit inboard of the sleeve inner mouth (x < 1.24 at port height): any
+  // outboard position shines straight down the tube bore and renders as a
+  // silver crescent on the sleeve bottom. Inboard, the sleeve is behind the
+  // spot so its cone geometrically cannot touch the tube interior.
   for (const ph of PORTHOLES) {
-    const spot = new THREE.SpotLight(0x6f97a8, 4.5, 5, 0.7, 0.6, 1.8);
-    spot.position.set(ph.side * 2.1, ph.y + 0.3, ph.z);
-    spot.target.position.set(0, 0.4, ph.z + 0.4);
+    const spot = new THREE.SpotLight(0x6f97a8, 3.0, 4, 0.6, 0.65, 1.6);
+    spot.position.set(ph.side * 1.15, ph.y - 0.12, ph.z);
+    spot.target.position.set(ph.side * 0.25, 0.1, ph.z + 0.35);
     g.add(spot, spot.target);
     ctx.lights.register({ light: spot, role: 'cool' });
   }

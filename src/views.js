@@ -25,8 +25,10 @@ export const VIEWS = {
   controlRoom: v([-0.45, 1.62, 5.45], [0.3, 1.0, 1.0], { fov: 66 }),
   // target y at 1.05 weights frame toward deck pools + hatch glow (quiet vault)
   corridor: v([0.0, 1.6, 13.05], [0.0, 1.05, 6.4], { fov: 64 }),
-  // camera x 0.2 lets the galley lamp pool enter frame-right as warm counterpoint
-  crewQuarters: v([0.2, 1.48, 12.55], [-0.9, 0.82, 8.6], { fov: 64 }),
+  // camera x 0.2 lets the galley lamp pool enter frame-right as warm counterpoint;
+  // target x -0.55 swings just enough right to drop the cropped port ring at the
+  // left frame edge while keeping the bunk wall dominant
+  crewQuarters: v([0.2, 1.48, 12.55], [-0.55, 0.82, 8.6], { fov: 64 }),
   engineRoom: v([0.42, 1.18, 17.45], [-0.2, 0.5, 21.8], { fov: 68 }),
   machineryCloseup: v([-0.62, 0.85, 19.35], [0.45, 0.42, 21.2], { fov: 62 }),
   sonarConsole: v([-0.15, 1.52, 3.95], [-1.05, 1.18, 2.6], { fov: 60 }),

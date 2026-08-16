@@ -697,10 +697,12 @@ export function glassThick() {
   // roughness kept well off mirror-sharp: the PMREM env is a synthetic room with
   // bright panels, and at roughness ~0.03 those panels reflect as hard pale
   // quads floating in every window. Blurred + faint they read as a wet sheen.
+  // roughness 0.28 / clearcoat 0.05: grazing-angle direct specular from lamps
+  // near a port otherwise smears a chrome crescent across the lower pane.
   return def('glassThick', () => new THREE.MeshPhysicalMaterial({
-    name: 'glassThick', color: 0x9fb4ae, roughness: 0.18, metalness: 0,
+    name: 'glassThick', color: 0x9fb4ae, roughness: 0.28, metalness: 0,
     transparent: true, opacity: 0.045, envMapIntensity: 0.03,
-    clearcoat: 0.12, clearcoatRoughness: 0.5, side: THREE.FrontSide, depthWrite: false,
+    clearcoat: 0.05, clearcoatRoughness: 0.6, side: THREE.FrontSide, depthWrite: false,
   }));
 }
 export function glassInstrument() {
