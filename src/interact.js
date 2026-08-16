@@ -23,15 +23,37 @@ export function createInteract(camera, hud) {
         }
       }
     }
-    registry.push({ id, prompt, onUse, root, highlightMats, hover: 0 });
+    registry.push({ id, prompt, onUse, root, highlightMats, hover: 0, ignore: null });
+  }
+
+  // collision boxes that overlap the interactable's own bounds don't occlude it
+  const _bb = new THREE.Box3();
+  function ignoreSetFor(entry) {
+    if (entry.ignore) return entry.ignore;
+    entry.root.updateWorldMatrix(true, true);
+    _bb.setFromObject(entry.root);
+    _bb.expandByScalar(0.12);
+    const set = new Set();
+    const boxes = C.getBoxes();
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      if (b.minX <= _bb.max.x && b.maxX >= _bb.min.x &&
+          b.minY <= _bb.max.y && b.maxY >= _bb.min.y &&
+          b.minZ <= _bb.max.z && b.maxZ >= _bb.min.z) set.add(i);
+    }
+    entry.ignore = set;
+    return set;
   }
 
   // occlusion: does any collision box block segment cam->point (rough)
   const _dir = new THREE.Vector3();
-  function occluded(camPos, point, dist) {
+  function occluded(camPos, point, dist, ignoreSet) {
     _dir.copy(point).sub(camPos).normalize();
-    for (const b of C.getBoxes()) {
+    const allBoxes = C.getBoxes();
+    for (let bi = 0; bi < allBoxes.length; bi++) {
+      const b = allBoxes[bi];
       if (b.walkable) continue;
+      if (ignoreSet && ignoreSet.has(bi)) continue;
       // slab test
       let tmin = 0, tmax = dist - 0.12;
       let ok = true;
@@ -49,7 +71,7 @@ export function createInteract(camera, hud) {
           if (tmin > tmax) { ok = false; break; }
         }
       }
-      if (ok && tmin < tmax && tmin > 0.05) return true;
+      if (ok && tmin < tmax && tmin > 0.05 && tmin < dist - 0.1) return true;
     }
     return false;
   }
@@ -68,7 +90,7 @@ export function createInteract(camera, hud) {
           best._hitPoint = hits[0].point;
         }
       }
-      if (best && !occluded(camPos, best._hitPoint, bestDist)) target = best;
+      if (best && !occluded(camPos, best._hitPoint, bestDist, ignoreSetFor(best))) target = best;
     }
     if (target !== hovered) {
       hovered = target;

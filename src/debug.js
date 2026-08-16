@@ -40,11 +40,14 @@ export function installDebugAPI(ctx) {
       return true;
     },
     // test helpers
+    pumpFrame() { return ctx.pumpFrame(); },
     teleport(x, z, yaw = 0, pitch = 0) { ctx.player.teleport(x, z, yaw, pitch); return true; },
     getPose() { return ctx.player.getPose(); },
     getHoveredId() { return ctx.interact.getHoveredId(); },
     getStatusText() { return ctx.hud.getStatusText(); },
     getFadeOpacity() { return ctx.hud.getFadeOpacity(); },
+    markFadePeak() { ctx.hud.markFadePeak(); return true; },
+    getFadePeak() { return ctx.hud.getFadePeak(); },
     getLightingState() { return ctx.env.getState(); },
     getSimTime() { return ctx.time.simTime; },
     getMetrics() {
@@ -59,10 +62,13 @@ export function installDebugAPI(ctx) {
         const ext = gl.getExtension('WEBGL_debug_renderer_info');
         rendererStr = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
       } catch (e) { /* ignore */ }
+      const renderCostMs = ctx.getRenderCostMs ? ctx.getRenderCostMs() : 0;
       return {
         fps: avg > 0 ? 1 / avg : 0,
         averageFrameTimeMs: avg * 1000,
         onePercentLowFps: onePct > 0 ? 1 / onePct : 0,
+        renderCostMs,
+        fpsIndicative: renderCostMs > 0 ? 1000 / renderCostMs : 0,
         drawCalls: info.render.calls,
         triangles: info.render.triangles,
         points: info.render.points,

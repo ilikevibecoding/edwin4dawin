@@ -28,8 +28,8 @@ export async function launchBrowser() {
   });
 }
 
-export async function openApp(browser, url, { seed = 1337, quality = 'high', collect = null } = {}) {
-  const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 });
+export async function openApp(browser, url, { seed = 1337, quality = 'high', collect = null, width = 1600, height = 900 } = {}) {
+  const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
   if (collect) {
     page.on('console', (msg) => {
       const type = msg.type();

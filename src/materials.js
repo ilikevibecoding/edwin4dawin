@@ -755,9 +755,13 @@ export function condensation() {
   });
 }
 
-// gauge/dial face generator (used by greebles) -------------------------------
+// gauge/dial face generator (used by greebles); canvases cached by params ----
+const dialCache = new Map();
 export function makeDialCanvas(label = 'BAR', { max = 10, redFrom = 0.78, size = 128, unit = '' } = {}) {
+  const cacheKey = `${label}:${max}:${redFrom}:${size}:${unit}`;
+  if (dialCache.has(cacheKey)) return dialCache.get(cacheKey);
   const c = makeCanvas(size, size);
+  dialCache.set(cacheKey, c);
   const ctx = c.getContext('2d');
   const cx = size / 2, cy = size / 2, r = size * 0.46;
   ctx.fillStyle = '#ded9cb';
@@ -804,6 +808,15 @@ export function makeLabelCanvas(text, { w = 256, h = 64, bg = '#b9b4a4', fg = '#
   stencilText(ctx, text, w / 2, h / 2, { size, color: fg, spacing: 2 });
   speckle(ctx, 'labelwear-' + text, { count: Math.round(40 * WEAR), colors: ['rgba(60,55,45,0.25)'], size: 1.4 });
   return c;
+}
+
+// shared dial-face material per (label, max, unit)
+export function dialMaterial(label, max, unit = '') {
+  const key = `dial:${label}:${max}:${unit}`;
+  return def(key, () => new THREE.MeshStandardMaterial({
+    map: canvasTexture(makeDialCanvas(label, { max, unit }), { srgb: true, wrap: false }),
+    roughness: 0.7, metalness: 0, envMapIntensity: 0.3,
+  }));
 }
 
 export function labelMaterial(text, opts = {}) {

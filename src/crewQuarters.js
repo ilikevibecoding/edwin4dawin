@@ -492,10 +492,18 @@ export function build(ctx) {
     g.add(fixture);
     const light = new THREE.PointLight(0xffd9a3, intensity, 4.5, 2);
     light.position.set(x, 1.96, z);
-    light.castShadow = shadow;
-    if (shadow) { light.shadow.mapSize.set(512, 512); light.shadow.bias = -0.004; }
     g.add(light);
     ctx.lights.register({ light, lampMats: [fixture.userData.lampMat], role: 'warm' });
+    if (shadow) {
+      const spot = new THREE.SpotLight(0xffd9a3, intensity * 0.7, 5.5, 1.05, 0.65, 2);
+      spot.position.set(x, 2.02, z);
+      spot.target.position.set(x * 0.5, 0, z);
+      spot.castShadow = true;
+      spot.shadow.mapSize.set(512, 512);
+      spot.shadow.bias = -0.004;
+      g.add(spot, spot.target);
+      ctx.lights.register({ light: spot, role: 'warm' });
+    }
   };
   mkWarm(-0.55, 8.7, 3.0, true); // over bunks walkway
   mkWarm(0.6, 10.1, 2.8, false); // galley
@@ -513,20 +521,24 @@ export function build(ctx) {
     prompt: 'E: Rest',
     root: restBunkRoot,
     highlight: [restHighlight],
-    onUse: async () => {
+    onUse: () => {
       if (restBusy) return;
       restBusy = true;
       ctx.player.setEnabled(false);
-      await ctx.hud.fadeTo(1, 950);
-      ctx.env.setState('restCycle', { duration: 0.6 });
-      ctx.hud.setStatus('6 hours pass.', 2400);
-      await new Promise((r) => setTimeout(r, 1900));
-      await ctx.hud.fadeTo(0, 1100);
-      ctx.player.setEnabled(true);
-      await new Promise((r) => setTimeout(r, 1300));
-      ctx.env.setState('cruising', { duration: 5.5 });
-      ctx.hud.setStatus('Rested.', 3200);
-      restBusy = false;
+      ctx.hud.fadeTo(1, 950).then(() => {
+        ctx.env.setState('restCycle', { duration: 0.6 });
+        ctx.hud.setStatus('6 hours pass.', 2400);
+        ctx.sched.after(1.9, () => {
+          ctx.hud.fadeTo(0, 1100).then(() => {
+            ctx.player.setEnabled(true);
+            ctx.sched.after(1.3, () => {
+              ctx.env.setState('cruising', { duration: 5.5 });
+              ctx.hud.setStatus('Rested.', 3200);
+              restBusy = false;
+            });
+          });
+        });
+      });
     },
   });
 

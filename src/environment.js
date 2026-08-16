@@ -88,8 +88,11 @@ export function createEnvironment(scene, renderer) {
 
   function update(dt, renderer2) {
     const k = Math.min(1, dt * lerpSpeed * 3);
+    let changed = 0;
     for (const key of Object.keys(target)) {
-      factors[key] += (target[key] - factors[key]) * k;
+      const d = (target[key] - factors[key]) * k;
+      factors[key] += d;
+      changed = Math.max(changed, Math.abs(d));
     }
     for (const f of fixtures) {
       const fac = factors[f.role] !== undefined ? factors[f.role] : 1;
@@ -108,6 +111,7 @@ export function createEnvironment(scene, renderer) {
       if (cur !== want) scene.environment = want;
       scene.environmentIntensity = 0.42 * (0.55 + 0.45 * factors.env);
     }
+    return changed;
   }
 
   return {

@@ -67,11 +67,33 @@ export function createHUD() {
   document.body.appendChild(fade);
   document.body.appendChild(root);
 
-  let statusTimer = 0;
-  let fadeAnim = null;
+  // All timing is frame-driven via update(dt): in-page timers are throttled in
+  // headless/background contexts, so fades/status must not rely on them.
+  let statusHold = 0;
+  let fadeState = null; // {from, to, t, dur, resolve}
+  let fadePeak = 0; // latched max opacity since last mark (tests can miss transients)
 
   return {
     root,
+    update(dt) {
+      if (statusHold > 0) {
+        statusHold -= dt;
+        if (statusHold <= 0) status.style.opacity = '0';
+      }
+      if (fadeState) {
+        fadeState.t += dt;
+        const k = Math.min(1, fadeState.t / fadeState.dur);
+        fade.style.opacity = String(fadeState.from + (fadeState.to - fadeState.from) * k);
+        if (k >= 1) {
+          const r = fadeState.resolve;
+          fadeState = null;
+          r();
+        }
+      }
+      fadePeak = Math.max(fadePeak, parseFloat(fade.style.opacity) || 0);
+    },
+    markFadePeak() { fadePeak = parseFloat(fade.style.opacity) || 0; },
+    getFadePeak: () => fadePeak,
     setPrompt(text) {
       if (text) { prompt.textContent = text; prompt.style.display = 'block'; ring.style.borderColor = 'rgba(219,226,216,0.75)'; }
       else { prompt.style.display = 'none'; ring.style.borderColor = 'rgba(215,222,214,0)'; }
@@ -79,24 +101,15 @@ export function createHUD() {
     setStatus(text, holdMs = 3800) {
       status.textContent = text;
       status.style.opacity = '1';
-      clearTimeout(statusTimer);
-      statusTimer = setTimeout(() => { status.style.opacity = '0'; }, holdMs);
+      statusHold = holdMs / 1000;
     },
     getStatusText: () => status.textContent,
     setInfo(text) { info.innerHTML = text; },
     setHint(visible) { hint.style.display = visible ? 'block' : 'none'; },
     fadeTo(opacity, durationMs) {
       return new Promise((resolve) => {
-        if (fadeAnim) cancelAnimationFrame(fadeAnim);
-        const from = parseFloat(fade.style.opacity) || 0;
-        const t0 = performance.now();
-        const step = (t) => {
-          const k = Math.min(1, (t - t0) / durationMs);
-          fade.style.opacity = String(from + (opacity - from) * k);
-          if (k < 1) fadeAnim = requestAnimationFrame(step);
-          else { fadeAnim = null; resolve(); }
-        };
-        fadeAnim = requestAnimationFrame(step);
+        if (fadeState) fadeState.resolve();
+        fadeState = { from: parseFloat(fade.style.opacity) || 0, to: opacity, t: 0, dur: durationMs / 1000, resolve };
       });
     },
     getFadeOpacity: () => parseFloat(fade.style.opacity) || 0,

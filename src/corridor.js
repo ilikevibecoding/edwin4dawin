@@ -249,10 +249,18 @@ export function build(ctx) {
     g.add(fixture);
     const light = new THREE.PointLight(color, intensity, 5.5, 2);
     light.position.set(x, 1.98, z);
-    light.castShadow = shadow;
-    if (shadow) { light.shadow.mapSize.set(512, 512); light.shadow.bias = -0.004; }
     g.add(light);
     ctx.lights.register({ light, lampMats: [fixture.userData.lampMat], role });
+    if (shadow) {
+      const spot = new THREE.SpotLight(color, intensity * 0.7, 6, 1.05, 0.65, 2);
+      spot.position.set(x, 2.05, z);
+      spot.target.position.set(x * 0.5, 0, z);
+      spot.castShadow = true;
+      spot.shadow.mapSize.set(512, 512);
+      spot.shadow.bias = -0.004;
+      g.add(spot, spot.target);
+      ctx.lights.register({ light: spot, role });
+    }
   };
   mkLamp(0.28, 6.6, 'warm', 0xffd9a3, 4.2, true);
   mkLamp(-0.28, 9.0, 'warm', 0xffd9a3, 4.2, false);

@@ -49,25 +49,30 @@ const GradeShader = {
   `,
 };
 
-export function createPost(renderer, scene, camera, { width, height }) {
+export function createPost(renderer, scene, camera, { width, height, quality = 'high' }) {
   const composer = new EffectComposer(renderer);
   composer.setSize(width, height);
+  const low = quality === 'low';
 
   let n8ao = null;
-  try {
-    n8ao = new N8AOPass(scene, camera, width, height);
-    n8ao.configuration.aoRadius = 0.85;
-    n8ao.configuration.distanceFalloff = 1.2;
-    n8ao.configuration.intensity = 2.6;
-    n8ao.configuration.color = new THREE.Color(0x02030a);
-    n8ao.setQualityMode('Medium');
-    composer.addPass(n8ao);
-  } catch (e) {
-    console.warn('N8AO unavailable, falling back to plain render:', e.message);
+  if (!low) {
+    try {
+      n8ao = new N8AOPass(scene, camera, width, height);
+      n8ao.configuration.aoRadius = 0.85;
+      n8ao.configuration.distanceFalloff = 1.2;
+      n8ao.configuration.intensity = 2.6;
+      n8ao.configuration.color = new THREE.Color(0x02030a);
+      n8ao.setQualityMode('Medium');
+      composer.addPass(n8ao);
+    } catch (e) {
+      console.warn('N8AO unavailable, falling back to plain render:', e.message);
+      composer.addPass(new RenderPass(scene, camera));
+    }
+  } else {
     composer.addPass(new RenderPass(scene, camera));
   }
 
-  const bloom = new UnrealBloomPass(new THREE.Vector2(width / 2, height / 2), 0.22, 0.42, 0.9);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(width / (low ? 4 : 2), height / (low ? 4 : 2)), 0.22, 0.42, 0.9);
   composer.addPass(bloom);
 
   const output = new OutputPass();
@@ -76,8 +81,11 @@ export function createPost(renderer, scene, camera, { width, height }) {
   const grade = new ShaderPass(GradeShader);
   composer.addPass(grade);
 
-  const smaa = new SMAAPass();
-  composer.addPass(smaa);
+  let smaa = null;
+  if (!low) {
+    smaa = new SMAAPass();
+    composer.addPass(smaa);
+  }
 
   return {
     composer,
@@ -91,8 +99,8 @@ export function createPost(renderer, scene, camera, { width, height }) {
     setSize(w, h) {
       composer.setSize(w, h);
       if (n8ao) n8ao.setSize(w, h);
-      bloom.setSize(w / 2, h / 2);
-      smaa.setSize(w, h);
+      bloom.setSize(w / (low ? 4 : 2), h / (low ? 4 : 2));
+      if (smaa) smaa.setSize(w, h);
     },
   };
 }

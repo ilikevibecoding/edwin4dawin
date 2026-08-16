@@ -243,11 +243,7 @@ export function gauge({ r = 0.07, label = 'BAR', max = 16, value = 0.55, unit = 
   g.add(housing);
   const bezel = new THREE.Mesh(new THREE.TorusGeometry(r * 0.92, r * 0.09, 8, 22), M.chrome());
   g.add(bezel);
-  const dialTex = canvasTexture(M.makeDialCanvas(label, { max, size: 128, unit }), { srgb: true, wrap: false });
-  const dial = new THREE.Mesh(
-    new THREE.CircleGeometry(r * 0.86, 20),
-    new THREE.MeshStandardMaterial({ map: dialTex, roughness: 0.7, metalness: 0, envMapIntensity: 0.3 })
-  );
+  const dial = new THREE.Mesh(new THREE.CircleGeometry(r * 0.86, 20), M.dialMaterial(label, max, unit));
   dial.position.z = r * 0.31;
   g.add(dial);
   const needle = new THREE.Mesh(new THREE.BoxGeometry(r * 0.05, r * 0.72, r * 0.02), new THREE.MeshStandardMaterial({ color: 0x8e3030, roughness: 0.5 }));

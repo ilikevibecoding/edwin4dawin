@@ -629,10 +629,19 @@ export function build(ctx) {
     g.add(fixture);
     const light = new THREE.PointLight(color, intensity, 7, 2);
     light.position.set(x, 1.94, z);
-    light.castShadow = shadow;
-    if (shadow) { light.shadow.mapSize.set(512, 512); light.shadow.bias = -0.004; light.shadow.radius = 3; }
     g.add(light);
     ctx.lights.register({ light, lampMats: [fixture.userData.lampMat], role });
+    if (shadow) {
+      // shadows come from a cheap single-face spot aimed down, not the point
+      const spot = new THREE.SpotLight(color, intensity * 0.7, 6.5, 1.05, 0.65, 2);
+      spot.position.set(x, 2.0, z);
+      spot.target.position.set(x * 0.5, 0, z);
+      spot.castShadow = true;
+      spot.shadow.mapSize.set(512, 512);
+      spot.shadow.bias = -0.004;
+      g.add(spot, spot.target);
+      ctx.lights.register({ light: spot, role });
+    }
   };
   mkDome(0.4, 2.3, 'warm', 0xffd9a3, 5.5, true);
   mkDome(-0.4, 4.5, 'warm', 0xffd9a3, 5.0, false);
@@ -706,9 +715,9 @@ export function build(ctx) {
       // brief instrument surge
       const baseA = instA.intensity;
       instA.intensity = baseA * 3;
-      setTimeout(() => { instA.intensity = baseA; }, 900);
-      setTimeout(() => { ctx.hud.setStatus('No immediate contact.'); }, 2600);
-      setTimeout(() => { sonarBusy = false; }, 3000);
+      ctx.sched.after(0.9, () => { instA.intensity = baseA; });
+      ctx.sched.after(2.4, () => { ctx.hud.setStatus('No immediate contact.'); });
+      ctx.sched.after(2.9, () => { sonarBusy = false; });
     },
   });
 

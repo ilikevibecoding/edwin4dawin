@@ -34,10 +34,10 @@ export const DECK = {
 
 export const HATCH = {
   width: 0.66,
-  height: 1.4,
-  sillY: 0.12,     // coaming height above deck
-  bottomY: 0.12,   // opening bottom above deck
-  centerY: 0.82,   // opening vertical center
+  height: 1.74,    // tall oval door — the player cannot crouch, so the clear
+  sillY: 0.1,      // opening must exceed the 1.75m capsule (still narrow)
+  bottomY: 0.1,
+  centerY: 0.97,
 };
 
 export const PLAYER = {

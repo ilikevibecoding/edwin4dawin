@@ -31,6 +31,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(1);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.autoUpdate = false; // static lights; re-render maps only on lighting changes
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.info.autoReset = false;
@@ -53,11 +54,21 @@ const env = createEnvironment(scene, renderer);
 const player = createPlayer(camera, renderer.domElement);
 const interact = createInteract(camera, hud);
 
+// frame-driven scheduler (in-page timers are throttled when headless/hidden)
+const schedItems = [];
+const sched = {
+  after(seconds, fn) { schedItems.push({ t: seconds, fn }); },
+};
+
 const ctx = {
-  scene, camera, renderer, hud, env, player, interact, time, quality: QUALITY,
+  scene, camera, renderer, hud, env, player, interact, time, sched, quality: QUALITY,
   collision: C,
   anim: { add(fn) { animFns.push(fn); } },
   lights: { register: env.register },
+  getRenderCostMs: () => lastFrameCostMs,
+  // test pump: renders one frame and blocks until the GPU queue drains, so
+  // rapid external polling cannot oversubmit a slow software rasterizer
+  pumpFrame: () => { frame(); try { renderer.getContext().finish(); } catch (e) { /* context lost */ } return framesRendered; },
 };
 
 // ---- build world ------------------------------------------------------------
@@ -83,7 +94,7 @@ installDebugAPI(ctx);
 window.__ctx = ctx; // for tooling (custom debug poses)
 
 // ---- resize ------------------------------------------------------------------
-let post = createPost(renderer, scene, camera, { width: window.innerWidth, height: window.innerHeight });
+let post = createPost(renderer, scene, camera, { width: window.innerWidth, height: window.innerHeight, quality: QUALITY });
 window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -99,19 +110,58 @@ function shipSway(t) {
 }
 
 // ---- main loop -----------------------------------------------------------------
-const clock = new THREE.Clock();
+const clock = new THREE.Clock(); // simple delta source; deprecation warning is harmless
 let framesRendered = 0;
 
+// rAF can stall in headless/backgrounded contexts (headless renders on demand);
+// a watchdog timer keeps the simulation ticking when something is actually
+// animating (player enabled or motion on). It adapts to frame cost so a slow
+// software rasterizer keeps idle headroom for on-demand screenshot frames.
+let rafId = 0, watchdog = 0, lastFrameCostMs = 16;
+function schedule() {
+  cancelAnimationFrame(rafId); // never stack pending rAF callbacks
+  rafId = requestAnimationFrame(frame);
+  clearTimeout(watchdog);
+  const delay = Math.max(110, Math.min(4000, lastFrameCostMs * 2.5));
+  watchdog = setTimeout(() => {
+    if (!time.motion && !player.state.enabled) { schedule(); return; }
+    cancelAnimationFrame(rafId);
+    frame();
+  }, delay);
+}
+
+let inFrame = false;
 function frame() {
-  requestAnimationFrame(frame);
-  const dt = Math.min(0.1, clock.getDelta());
+  if (inFrame) return;
+  inFrame = true;
+  try { frameBody(); } finally { inFrame = false; }
+}
+
+function frameBody() {
+  const frameStart = performance.now();
+  schedule();
+  const rawDt = clock.getDelta();
+  const dt = Math.min(0.1, rawDt);
   if (time.motion) time.simTime += dt;
 
   renderer.info.reset();
 
+  const wallDt = Math.min(0.65, rawDt);
+  for (let i = schedItems.length - 1; i >= 0; i--) {
+    schedItems[i].t -= wallDt;
+    if (schedItems[i].t <= 0) {
+      const fn = schedItems[i].fn;
+      schedItems.splice(i, 1);
+      fn();
+    }
+  }
+  hud.update(wallDt);
   player.update(dt);
   interact.update(dt, player.state.enabled);
   env.update(dt, renderer);
+  // shadow maps hold depth only; every shadow caster is static, so render the
+  // maps once on boot and never again (intensity changes don't affect depth)
+  if (framesRendered < 6) renderer.shadowMap.needsUpdate = true;
   K.kitTick(time.simTime, time.motion ? dt : 0);
   for (const fn of animFns) fn(time.simTime, time.motion ? dt : 0);
 
@@ -125,10 +175,12 @@ function frame() {
 
   post.render(time.simTime);
 
-  if (ctx.metricsSink && framesRendered > 2) ctx.metricsSink.push(dt);
+  if (ctx.metricsSink && framesRendered > 2) ctx.metricsSink.push(rawDt);
   framesRendered++;
+  window.__frameCount = framesRendered;
   if (framesRendered === 3) {
     window.__ready = true;
   }
+  lastFrameCostMs = performance.now() - frameStart;
 }
-frame();
+schedule();

@@ -511,10 +511,18 @@ export function build(ctx) {
     g.add(fixture);
     const light = new THREE.PointLight(0xffd2a0, intensity, 6.5, 2);
     light.position.set(x, DY + 2.26, z);
-    light.castShadow = shadow;
-    if (shadow) { light.shadow.mapSize.set(1024, 1024); light.shadow.bias = -0.0035; }
     g.add(light);
     ctx.lights.register({ light, lampMats: [fixture.userData.lampMat], role: 'work' });
+    if (shadow) {
+      const spot = new THREE.SpotLight(0xffd2a0, intensity * 0.75, 7, 1.1, 0.6, 2);
+      spot.position.set(x, DY + 2.32, z);
+      spot.target.position.set(x * 0.4, DY, z);
+      spot.castShadow = true;
+      spot.shadow.mapSize.set(1024, 1024);
+      spot.shadow.bias = -0.0035;
+      g.add(spot, spot.target);
+      ctx.lights.register({ light: spot, role: 'work' });
+    }
   };
   mkWork(-0.45, 18.2, 4.6, false);
   mkWork(0.45, 19.4, 5.2, true); // hero shadow light
