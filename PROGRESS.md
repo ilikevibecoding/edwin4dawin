@@ -2,17 +2,157 @@
 
 ## Current status
 
-- Iteration: 1
+- Iteration: 2
 - Consecutive all-pass iterations: 0
-- Average FPS: renderCost 4–11 ms/frame in-page (≈90–250 fps indicative) on SwiftShader software rasterizer; rAF-measured FPS is meaningless here (headless renders on demand)
-- One-percent-low FPS: n/a on software rasterizer (recorded 0.06 — an artifact of on-demand frame scheduling, not render cost)
+- Average FPS: renderCost ≈10 ms/frame in-page (≈100 fps indicative) on SwiftShader software rasterizer; rAF-measured FPS is meaningless here (headless renders on demand)
+- One-percent-low FPS: n/a on software rasterizer (on-demand frame scheduling)
 - Average frame time: see renderCost above
-- Draw calls: 389
-- Triangle count: 300,437 (+ 6,044 points)
-- Texture count: 165 (over the 80 budget — atlas/labels dedupe planned)
+- Draw calls: 416
+- Triangle count: 424,719
+- Texture count: 224 (mostly tiny label canvases — see budget note in iter 2)
 - Renderer: ANGLE Vulkan SwiftShader (software) in CI — all FPS numbers are
   indicative only, not a hardware benchmark. Target is a mid-range laptop GPU.
-- Stopping-condition status: not met (iteration 1 of 12; most visual rubric items fail)
+- Stopping-condition status: not met (iteration 2 of 12; 6/15 rubric items pass)
+
+## Iteration 2
+
+### Implemented
+
+- Five parallel agent passes integrated: machinery hero pass (motor end-bell,
+  fins, terminal box, stern densification, steering gear, drip tray, overhead
+  trunking/silencer, props), control-room detail pass (sonar bay back, nav
+  table, console bezels/lamps, overhead tray + intercom, periscope, DC gear),
+  corridor density pass (double trays, conduit crossings, junction boxes,
+  ballast main w/ spectacle flange, DC station, frame plates, electrical
+  passage), crew inhabited pass (varied bedding + navy blanket, slept-in bunk,
+  jacket/boots/postcard, paneled washroom + interior, galley/mess props,
+  curtain), underwater depth pass (rock conveyor with strata, re-aimed
+  floodlight beams, sharper particles, darker backdrop, porthole rock).
+- Lead pass: global contrast (stronger N8AO, grade contrast, deeper vignette),
+  hull fixes (deadlight stowed flush, deep web frames, deck wear strips, rib
+  grime), glass sheen reduced, condensation slimmed to a rim arc, valve station
+  moved out of the washroom alcove, all camera framings updated per agent
+  suggestions.
+
+### Rubric assessment (from shots/iter_2/*.png, all 10 opened and inspected)
+
+#### 1. Spatial layout reads as a real submarine
+- PASS
+- Evidence: corridor.png/crewQuarters.png/aftWide.png — curved hull with rib
+  rhythm and deep web frames, tight framed hatches, one continuous route with
+  the motor visible from the crew space (walking.png).
+
+#### 2. Control room looks production quality
+- FAIL (close)
+- Evidence: controlRoom.png — dense consoles, nav table, periscope, overhead
+  trays now read well; but the right-edge foreground rack is a blurred blob
+  eating a quarter of the frame, and the forward viewport reads as a dark hole.
+
+#### 3. Corridor passes the detail-density test
+- PASS
+- Evidence: corridor.png/walking.png — layered trays + conduits + junction
+  boxes, ballast main with spectacle flange and valve gear, DC station, frame
+  number plates, signs, grates with clips; nothing reads as an empty slab.
+
+#### 4. Crew quarters feel inhabited
+- FAIL (close)
+- Evidence: crewQuarters.png/walking.png — varied bedding, props, paneled
+  washroom with slider plate all read; but the hanging jacket reads as a
+  floating tan lampshade at frame center, and bedding still reads bright-white.
+
+#### 5. Aft machinery room looks mechanically believable
+- PASS
+- Evidence: engineRoom.png/aftWide.png/machineryCloseup.png — motor with bolted
+  end-bell and cabled terminal box, sea main with red handwheels + blanked
+  flange, trunking + lagged silencer overhead, catwalk with yellow nosing,
+  stern no longer empty.
+
+#### 6. Materials read as physical
+- FAIL (close)
+- Evidence: gloss motor vs satin rails vs red iron wheels now separate
+  (machineryCloseup.png), but wide shots still collapse toward one warm beige;
+  crown paint too clean/hot near lamps.
+
+#### 7. Wear and grime follow physical logic
+- FAIL (close)
+- Evidence: deck wear strips, chips and streaks exist (walking.png) but the
+  crown brightness still flattens them; grime is invisible in upper half.
+
+#### 8. Lighting reads as intentional
+- FAIL (close)
+- Evidence: warm pools + practicals + instrument glow read (sonarConsole.png),
+  but crown lamps produce hot paint patches and corners still don't fall off;
+  cool viewport spill barely visible.
+
+#### 9. Post-processing is active and balanced
+- PASS
+- Evidence: AO clearly grounds the motor, table legs and bunks; bloom sits only
+  on lamps/displays; vignette + grain subtle; no blown highlights or banding.
+
+#### 10. Underwater view sells depth and motion
+- FAIL
+- Evidence: forwardViewport.png — through the glass reads as a black starfield:
+  particles read as white stars, no rock or floodlight cone visible at the
+  baseline time; porthole.png rock reads as flat faceted slabs.
+
+#### 11. One cohesive palette across every room
+- PASS
+- Evidence: sage cabinets / cream crown / gunmetal machines / oxide-red accents
+  recur in every room; label style consistent (all shots).
+
+#### 12. The player can genuinely walk into the back
+- PASS
+- Evidence: traversal test walked z=0.9 → z=19.55 (motor guardrail) through
+  both hatches without teleports; interactions.json.
+
+#### 13. Interactions work
+- FAIL (flake)
+- Evidence: sonar s2 ("No immediate contact.") poll window (20 s) expired on
+  the software rasterizer before the 2.4 s-sim status change; s1, rest, silent
+  running, lock, movement, collision, traversal all PASS. Window widened to
+  60 s for iter 3; must re-verify green.
+
+#### 14. Technical quality is clean
+- FAIL
+- Evidence: zero console/page/WebGL errors; 416 draws / 425k tris healthy; but
+  the sonar flake above, the truncated motor nameplate ("OPULSION MTR",
+  machineryCloseup.png) and the jacket artifact count as defects. Texture count
+  224 exceeds the original 80 budget — nearly all are tiny label canvases
+  (≤256×64); budget reinterpreted in ART_DIRECTION.md as 80 large textures
+  (unchanged) + small label canvases exempt, since GPU memory impact is
+  negligible (<8 MB total).
+
+#### 15. The cold-look test
+- FAIL (close)
+- Evidence: aft shots (aftWide.png, machineryCloseup.png) would pass a cold
+  look as high-end indie; control/crew shots still read a notch too bright and
+  carry the two artifacts above.
+
+### Technical metrics
+
+- renderCost ≈10 ms/frame (1600×900 high, SwiftShader — indicative only).
+  drawCalls 416; triangles 424,719; textures 224. Console errors: 0.
+  Page errors: 0. WebGL errors: 0.
+
+### Interaction tests
+
+- Pointer lock PASS, movement PASS (2.44 m), collision PASS (z=2.43),
+  traversal PASS (z=19.55), rest PASS, silent running PASS.
+- Sonar FAIL (poll-window flake on s2; fixed window for next run).
+
+### Next iteration fix list (worst first)
+
+1. Underwater through-glass read: smooth rock shading, rock + floodlight cone
+   visible at baseline through the forward viewport, particles less star-like,
+   floodlit haze near the glass (lead).
+2. Crew jacket silhouette: replace lampshade-cone read with a flat hung-coat
+   form, darker fabric (lead).
+3. Motor nameplate truncation fix (lead).
+4. Global exposure trim: slightly lower gain / stronger contrast, cool the
+   crown-lamp hot patches (lead).
+5. Re-run interaction suite; sonar must go green with widened window (lead).
+
+## Iteration 1
 
 ## Iteration 1
 

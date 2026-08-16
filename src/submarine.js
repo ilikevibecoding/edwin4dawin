@@ -410,12 +410,35 @@ function buildPorthole(group, ph) {
   // orient +z of assembly inward
   g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
 
-  // sleeve through hull
-  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(ph.r + 0.035, ph.r + 0.035, 0.34, 24, 1, true), M.darkSteel());
+  // sleeve through hull — long enough to pass the coarse shell cutout.
+  // Matte near-black: looking down a port tube the walls should fall to
+  // shadow, not catch specular streaks through the glass.
+  const sleeveMat = new THREE.MeshStandardMaterial({
+    name: 'portSleeve', color: 0x0d0f10, roughness: 0.92, metalness: 0.1,
+    envMapIntensity: 0.06, side: THREE.DoubleSide,
+  });
+  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(ph.r + 0.035, ph.r + 0.035, 0.56, 24, 1, true), sleeveMat);
   sleeve.rotation.x = Math.PI / 2;
-  sleeve.material.side = THREE.DoubleSide;
   sleeve.userData.static = true;
   g.add(sleeve);
+  // outer boot plate: a wide matte backing disc just outboard of the shell, so
+  // any sightline through the (deliberately oversized) cutout annulus lands on
+  // near-black instead of open water. darkSteel here reads as a bright
+  // crescent down the tube.
+  const boot = new THREE.Mesh(K.ringPlate(ph.r + 0.02, 0.9, 0.025, 24), sleeveMat);
+  boot.rotation.x = Math.PI / 2;
+  boot.position.z = -0.12;
+  boot.userData.static = true;
+  g.add(boot);
+  // interior doubler pad: painted annular plate flush over the cutout rim, so
+  // from inside the jagged shell edge (and the black boot behind it) reads as
+  // a clean round mounting pad instead of torn plating
+  const pad = new THREE.Mesh(K.ringPlate(ph.r + 0.03, 0.58, 0.02, 28), M.panelPaint('portholePad', '#9fa396'));
+  pad.rotation.x = Math.PI / 2;
+  pad.position.z = 0.105;
+  pad.userData.static = true;
+  pad.receiveShadow = true;
+  g.add(pad);
   // inner ring frame
   const ring = new THREE.Mesh(new THREE.TorusGeometry(ph.r + 0.045, 0.028, 10, 28), M.panelPaint('portholeBrass', '#7a6a4a'));
   ring.position.z = 0.16;
@@ -614,10 +637,13 @@ export function build(ctx) {
   const group = new THREE.Group();
   group.name = 'submarine';
 
-  // porthole holes in hull shell
+  // porthole holes in hull shell. The cut test drops quads by CENTER, and shell
+  // quads are 0.25 long in z — the ellipse must be at least half a quad larger
+  // than the sleeve bore or leftover quads poke into the tube and render as
+  // pale hullPaint wedges "floating" in the glass. Sleeve+boot hide the gap.
   const holes = PORTHOLES.map((ph) => {
     const b = ph.side > 0 ? Math.PI * 2 - Math.acos((AY - ph.y) / R) : Math.acos((AY - ph.y) / R);
-    return { z: ph.z, beta: b, rz: ph.r + 0.045, rb: ph.r + 0.045 };
+    return { z: ph.z, beta: b, rz: ph.r + 0.22, rb: ph.r + 0.12 };
   });
 
   group.add(buildHullShell(Z.controlStart, Z.engineEnd + 0.4, holes));

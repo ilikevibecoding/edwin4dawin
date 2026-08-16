@@ -51,8 +51,12 @@ export async function applyBaseline(page, { state = 'cruising', wear = 'used' } 
     window.debugAPI.setSubmarineState(wear);
     window.debugAPI.setSubmarineState(state);
     window.debugAPI.setMotionEnabled(false);
+    // freeze the sim at the canonical beauty time: the water agent stages the
+    // hero rocks / floodlight crossover for t=40
+    window.debugAPI.setSimTime(40);
     window.debugAPI.setPlayerEnabled(false);
     window.debugAPI.setHUDVisible(false);
+    window.debugAPI.pumpFrame();
   }, { state, wear });
   await page.waitForTimeout(700);
 }

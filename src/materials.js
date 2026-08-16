@@ -655,10 +655,13 @@ export function whiteEnamel() {
 }
 
 export function glassThick() {
+  // roughness kept well off mirror-sharp: the PMREM env is a synthetic room with
+  // bright panels, and at roughness ~0.03 those panels reflect as hard pale
+  // quads floating in every window. Blurred + faint they read as a wet sheen.
   return def('glassThick', () => new THREE.MeshPhysicalMaterial({
-    name: 'glassThick', color: 0x9fb4ae, roughness: 0.03, metalness: 0,
-    transparent: true, opacity: 0.045, envMapIntensity: 0.18,
-    clearcoat: 0.25, clearcoatRoughness: 0.28, side: THREE.FrontSide, depthWrite: false,
+    name: 'glassThick', color: 0x9fb4ae, roughness: 0.18, metalness: 0,
+    transparent: true, opacity: 0.045, envMapIntensity: 0.03,
+    clearcoat: 0.12, clearcoatRoughness: 0.5, side: THREE.FrontSide, depthWrite: false,
   }));
 }
 export function glassInstrument() {
@@ -805,7 +808,18 @@ export function makeLabelCanvas(text, { w = 256, h = 64, bg = '#b9b4a4', fg = '#
   fillBase(ctx, bg);
   mottle(ctx, 'label-' + text, { cells: 5, octaves: 2, amount: 0.06 });
   if (border) { ctx.strokeStyle = fg; ctx.lineWidth = 3; ctx.strokeRect(4, 4, w - 8, h - 8); }
-  stencilText(ctx, text, w / 2, h / 2, { size, color: fg, spacing: 2 });
+  // shrink-to-fit so long stencils never clip at the canvas edge
+  let fitSize = size;
+  ctx.font = `bold ${fitSize}px "Arial Narrow", "DejaVu Sans", sans-serif`;
+  const spacing = 2;
+  const measure = () => [...String(text)].reduce((a, ch) => a + ctx.measureText(ch).width + spacing, 0);
+  const maxW = w - (border ? 22 : 10);
+  let tw = measure();
+  if (tw > maxW) {
+    fitSize = Math.max(9, Math.floor(fitSize * maxW / tw));
+    ctx.font = `bold ${fitSize}px "Arial Narrow", "DejaVu Sans", sans-serif`;
+  }
+  stencilText(ctx, text, w / 2, h / 2, { size: fitSize, color: fg, spacing });
   speckle(ctx, 'labelwear-' + text, { count: Math.round(40 * WEAR), colors: ['rgba(60,55,45,0.25)'], size: 1.4 });
   return c;
 }

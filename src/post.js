@@ -19,7 +19,7 @@ const GradeShader = {
     uLift: { value: new THREE.Vector3(0.008, 0.010, 0.016) },
     uGain: { value: new THREE.Vector3(1.0, 0.99, 0.965) },
     uSat: { value: 1.04 },
-    uContrast: { value: 1.09 },
+    uContrast: { value: 1.11 },
   },
   vertexShader: `
     varying vec2 vUv;

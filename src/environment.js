@@ -4,6 +4,10 @@
 import * as THREE from 'three';
 import * as K from './greebles.js';
 
+// global exposure grade: main.js seeds the renderer with this, and state
+// exposure factors multiply it (never replace it)
+export const BASE_EXPOSURE = 0.86;
+
 // role -> intensity factor per state
 const STATES = {
   cruising:          { warm: 1.0, work: 1.0, red: 0.0, instrument: 1.0, reading: 0.75, cool: 1.0, env: 1.0, exposure: 1.0, machinery: 1.0 },
@@ -102,7 +106,9 @@ export function createEnvironment(scene, renderer) {
       }
     }
     K.setMachineryFactor(factors.machinery);
-    if (renderer2) renderer2.toneMappingExposure = factors.exposure;
+    // state exposure is a MULTIPLIER on the scene base — writing it absolutely
+    // silently undoes any global exposure grade set in main.js
+    if (renderer2) renderer2.toneMappingExposure = BASE_EXPOSURE * factors.exposure;
     // swap env map toward dim states
     if (envMaps.normal) {
       const wantDim = factors.red > 0.4;

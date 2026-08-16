@@ -25,8 +25,8 @@ const WATER_FAR = new THREE.Color('#041418');
 // the view axis around z -10..-16 and rake the rock lane crowns (y ~ -1.3 at
 // z ~ -14).
 const CONES = [
-  { pos: new THREE.Vector3(-1.05, 1.75, -1.3), dir: new THREE.Vector3(0.075, -0.235, -0.969).normalize() },
-  { pos: new THREE.Vector3(1.05, 1.75, -1.3), dir: new THREE.Vector3(-0.075, -0.235, -0.969).normalize() },
+  { pos: new THREE.Vector3(-1.05, 1.75, -1.3), dir: new THREE.Vector3(0.038, -0.27, -0.962).normalize() },
+  { pos: new THREE.Vector3(1.05, 1.75, -1.3), dir: new THREE.Vector3(-0.038, -0.27, -0.962).normalize() },
 ];
 const CONE_LEN = 24.0;
 
@@ -105,8 +105,8 @@ function buildBackdrop() {
         float up = dir.y * 0.5 + 0.5;
         // vertical absorption gradient, compressed around the horizon so the
         // narrow viewport band (up 0.41..0.55) still reads darker-below
-        float g = smoothstep(0.34, 0.62, up);
-        vec3 col = mix(uFar * 0.24, uNear * 0.78, g);
+        float g = smoothstep(0.30, 0.58, up);
+        vec3 col = mix(uFar * 0.24, uNear * 0.95, g);
         // fall to near-black straight down
         col = mix(col, uFar * 0.10, smoothstep(0.40, 0.04, up));
         // large-scale mottling, drifting aft very slowly (suspended murk)
@@ -231,7 +231,7 @@ function rockMaterial(extra = {}) {
       uNear: { value: WATER_NEAR },
       uFar: { value: WATER_FAR },
       uRock: { value: new THREE.Color('#1d302a') },
-      uDensity: { value: extra.density || 0.022 },
+      uDensity: { value: extra.density || 0.018 },
       ...coneUniforms(),
     },
     vertexShader: `
@@ -264,7 +264,7 @@ function rockMaterial(extra = {}) {
         col += vec3(0.018, 0.03, 0.028) * caust * topLight * (1.0 - fogF);
         // floodlight pools (absorbed toward green-cyan with distance)
         float cone = coneLight(vWorld);
-        col += vec3(0.16, 0.21, 0.20) * cone * (1.0 - fogF);
+        col += vec3(0.38, 0.47, 0.44) * cone * (1.0 - fogF);
         // fade toward the water-column veil; slightly lighter than the rock
         // flanks so silhouettes split from the murk instead of washing out
         col = mix(col, mix(uNear * 0.22, uFar * 0.22, smoothstep(10.0, 60.0, dist)), fogF);
@@ -274,7 +274,7 @@ function rockMaterial(extra = {}) {
   });
 }
 
-function displacedRock(seed, radius, detail = 2, stretch = [1, 1, 1]) {
+function displacedRock(seed, radius, detail = 3, stretch = [1, 1, 1]) {
   const rng = makeRng(seed);
   // weld the icosahedron (non-indexed by default) so computeVertexNormals
   // yields smooth organic normals instead of flat crystal facets
@@ -287,7 +287,10 @@ function displacedRock(seed, radius, detail = 2, stretch = [1, 1, 1]) {
     const d = 1
       + 0.35 * Math.sin(n.x * 3.1 + seedOff) * Math.sin(n.y * 2.7 + seedOff * 1.7)
       + 0.22 * Math.sin(n.z * 5.3 + seedOff * 0.6) * Math.sin(n.x * 4.7)
-      + 0.1 * Math.sin(n.y * 9.1 + seedOff * 2.2);
+      + 0.1 * Math.sin(n.y * 9.1 + seedOff * 2.2)
+      // high-frequency octave: breaks the polygonal silhouette at close range
+      + 0.045 * Math.sin(n.x * 16.3 + seedOff * 3.1) * Math.sin(n.y * 13.7 + seedOff * 1.3)
+      + 0.028 * Math.sin(n.z * 21.7 + seedOff * 2.6) * Math.sin(n.y * 18.1);
     v.multiplyScalar(d);
     v.x *= stretch[0]; v.y *= stretch[1]; v.z *= stretch[2];
     pos.setXYZ(i, v.x, v.y, v.z);
@@ -313,7 +316,7 @@ export function build(ctx) {
 
   // marine snow: near window fast, mid, far slow. Small + dense, never blobby.
   const layers = [
-    buildParticleLayer({ seed: 'part-near', count: 1900, box: { x0: -8, x1: 8, y0: -4, y1: 6, z0: -14, z1: 18 }, speed: 1.5, size: 1.15, opacity: 0.62, color: '#8fbcb8', sink: 0.06, pxScale: 26, pxMin: 1.5, pxMax: 7 }),
+    buildParticleLayer({ seed: 'part-near', count: 1900, box: { x0: -8, x1: 8, y0: -4, y1: 6, z0: -14, z1: 18 }, speed: 1.5, size: 1.15, opacity: 0.52, color: '#8fbcb8', sink: 0.06, pxScale: 26, pxMin: 1.5, pxMax: 5.5 }),
     buildParticleLayer({ seed: 'part-mid', count: 2100, box: { x0: -22, x1: 22, y0: -12, y1: 8, z0: -30, z1: 34 }, speed: 0.75, size: 1.05, opacity: 0.5, color: '#639290', sink: 0.035, pxScale: 30, pxMin: 1.2, pxMax: 5 }),
     buildParticleLayer({ seed: 'part-far', count: 1300, box: { x0: -42, x1: 42, y0: -18, y1: 10, z0: -48, z1: 48 }, speed: 0.3, size: 1.0, opacity: 0.3, color: '#456e70', sink: 0.015, pxScale: 34, pxMin: 1.5, pxMax: 4, fade0: 26, fade1: 55 }),
   ];
@@ -368,10 +371,10 @@ export function build(ctx) {
 
   // center-lane seamounts: low crowns (top ~ -1.3) that slide beneath the bow.
   // sea1 is timed to sit at z=-13 at t=40, in the floodlight crossover.
-  const sea1 = new THREE.Mesh(displacedRock('sea1', 4.2, 2, [1.35, 0.6, 1.5]), rockMat);
+  const sea1 = new THREE.Mesh(displacedRock('sea1', 4.2, 3, [1.35, 0.6, 1.5]), rockMat);
   sea1.position.set(1.2, -4.9, 0);
   addRock(sea1, -43, 58);
-  const sea2 = new THREE.Mesh(displacedRock('sea2', 3.6, 2, [1.2, 0.55, 1.4]), rockMat);
+  const sea2 = new THREE.Mesh(displacedRock('sea2', 3.6, 3, [1.2, 0.55, 1.4]), rockMat);
   sea2.position.set(-2.0, -5.0, 0);
   addRock(sea2, 48, 64);
 
@@ -392,7 +395,7 @@ export function build(ctx) {
   // starboard mid-distance rock timed for the porthole view: at t=40 it sits at
   // z=3 with its crown reaching y ~ +2.5 around x 10, crossing the UPPER half
   // of the sight ray (the lower half of the glass carries condensation).
-  const stbdMid = new THREE.Mesh(displacedRock('stbdMid', 4.2, 2, [1.2, 0.8, 1.5]), rockMat);
+  const stbdMid = new THREE.Mesh(displacedRock('stbdMid', 4.2, 3, [1.2, 0.8, 1.5]), rockMat);
   stbdMid.position.set(9.5, -2.6, 0);
   addRock(stbdMid, -25.8, 65);
 
@@ -457,8 +460,13 @@ export function build(ctx) {
           // fade fragments close to the camera so standing beside the lamps
           // (or at the glass) never floods the whole frame with bloom
           float nearFade = smoothstep(1.5, 4.5, length(vWorld - cameraPosition));
-          float a = pow(radial, 3.5) * axial * 0.13 * flick * stria * nearFade;
-          gl_FragColor = vec4(vec3(0.36, 0.50, 0.48), a);
+          // looking down-beam from inside the hull the eye ray runs the whole
+          // length of the volume, but BackSide gives a single fragment layer —
+          // compensate with an axis-alignment gain so the cones read through
+          // the forward viewport
+          float align = pow(max(0.0, dot(vd, uDir)), 10.0);
+          float a = (pow(radial, 3.5) * 0.18 + pow(radial, 2.0) * align * 0.30) * axial * flick * stria * nearFade;
+          gl_FragColor = vec4(vec3(0.30, 0.43, 0.41), a);
         }
       `,
     });

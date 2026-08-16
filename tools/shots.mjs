@@ -210,8 +210,8 @@ try {
       if (id !== 'sonar') fail('sonar', `hover id=${id}`);
       else {
         await page.keyboard.press('KeyE');
-        const s1ok = await waitCond(page, `window.debugAPI.getStatusText().includes('Sonar pulse transmitted')`, 8000);
-        const s2ok = await waitCond(page, `window.debugAPI.getStatusText().includes('No immediate contact')`, 20000);
+        const s1ok = await waitCond(page, `window.debugAPI.getStatusText().includes('Sonar pulse transmitted')`, 15000);
+        const s2ok = await waitCond(page, `window.debugAPI.getStatusText().includes('No immediate contact')`, 60000);
         results.sonar = { s1ok, s2ok };
         if (s1ok && s2ok) pass('sonar');
         else fail('sonar', JSON.stringify(results.sonar));

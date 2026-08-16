@@ -12,7 +12,7 @@ import * as M from './materials.js';
 import * as K from './greebles.js';
 import * as C from './collision.js';
 import { mergeStaticMeshes } from './mergeStatic.js';
-import { createEnvironment } from './environment.js';
+import { createEnvironment, BASE_EXPOSURE } from './environment.js';
 import { createPlayer } from './player.js';
 import { createHUD } from './hud.js';
 import { createInteract } from './interact.js';
@@ -33,7 +33,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.shadowMap.autoUpdate = false; // static lights; re-render maps only on lighting changes
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = BASE_EXPOSURE;
 renderer.info.autoReset = false;
 app.appendChild(renderer.domElement);
 
@@ -61,6 +61,7 @@ const sched = {
 };
 
 const ctx = {
+  THREE, // for tooling (probe raycasts from Playwright)
   scene, camera, renderer, hud, env, player, interact, time, sched, quality: QUALITY,
   collision: C,
   anim: { add(fn) { animFns.push(fn); } },

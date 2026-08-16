@@ -20,6 +20,7 @@ export function installDebugAPI(ctx) {
       return ctx.env.setState(name, { duration: 0.25 });
     },
     setMotionEnabled(enabled) { ctx.time.setMotion(!!enabled); return true; },
+    setSimTime(t) { ctx.time.setSim(Math.max(0, +t || 0)); return true; },
     setPlayerEnabled(enabled) {
       ctx.player.setEnabled(!!enabled);
       if (enabled) ctx.hud.setVisible(true);

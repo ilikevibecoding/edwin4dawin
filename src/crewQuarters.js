@@ -129,63 +129,61 @@ function mug(color) {
   return g;
 }
 
-// foul-weather jacket hung from a hook: volumetric cloth mass gathered at the
-// hook and flaring to the hem, with hanging sleeves + collar roll. A flattened
-// cone with radial fold ridges reads far better in raking light than a plane.
-function hangingJacket(mat, seed) {
+// foul-weather jacket slung over the bunk walkway rail: a folded flap on top
+// of the rail with layered hanging panels and one dangling sleeve. Draped-flat
+// cloth reads unambiguously as a garment (the earlier hook-hung cone read as a
+// lampshade at walkway height). +x is outboard (walkway side), z runs along
+// the rail.
+function railJacket(mat, seed) {
   const g = new THREE.Group();
   g.userData.static = true;
   const rng = makeRng(seed);
-  const h = 0.36;
-  const ph = rng.range(0, 6);
-  const torsoGeo = new THREE.CylinderGeometry(0.05, 0.112, h, 22, 6, false);
-  const pos = torsoGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-    const r = Math.hypot(x, z);
-    if (r < 1e-4) continue;
-    const th = Math.atan2(z, x);
-    const t = 0.5 - y / h; // 0 top .. 1 hem
-    // soft vertical fold ridges, stronger toward the hem
-    const fold = 1 + (Math.sin(th * 4 + ph) * 0.09 + Math.sin(th * 7 + ph * 2.3) * 0.045) * (0.3 + 0.7 * t);
-    pos.setX(i, x * fold);
-    pos.setZ(i, z * fold * 0.46); // flatten front-back
-    // uneven hem
-    if (t > 0.9) pos.setY(i, y + Math.sin(th * 3 + ph) * 0.012 + Math.sin(th * 6 + ph * 3) * 0.006);
-  }
-  torsoGeo.computeVertexNormals();
-  const torso = new THREE.Mesh(torsoGeo, mat);
-  torso.castShadow = true;
-  torso.userData.static = true;
-  g.add(torso);
-  // sleeves hang at the sides, breaking the cone outline, one lower than the other
-  for (const s of [-1, 1]) {
-    const sLen = s < 0 ? 0.24 : 0.2;
-    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.03, sLen, 10), mat);
-    sleeve.position.set(s * 0.094, s < 0 ? -0.055 : -0.03, 0.032);
-    sleeve.rotation.z = s * 0.16;
-    sleeve.rotation.x = -0.05;
-    sleeve.castShadow = true;
-    sleeve.userData.static = true;
-    g.add(sleeve);
-    const cuffFold = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.026, 0.03, 10), mat);
-    cuffFold.position.set(s * 0.113, (s < 0 ? -0.055 : -0.03) - sLen / 2 + 0.01, 0.038);
-    cuffFold.rotation.z = s * 0.16;
-    cuffFold.userData.static = true;
-    g.add(cuffFold);
-  }
-  // collar roll bunched at the gather point, tucked inside the top radius
-  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.031, 0.011, 7, 14), mat);
-  collar.rotation.x = Math.PI / 2 - 0.2;
-  collar.rotation.z = 0.12;
-  collar.position.set(0.006, h / 2 + 0.002, 0.005);
+  const W = 0.24; // width along the rail
+  const wobble = () => rng.range(-0.03, 0.03);
+  // fold over the rail top
+  const flap = new THREE.Mesh(K.roundedBox(0.1, 0.022, W, 0.01), mat);
+  flap.position.set(0.008, 0.026, 0);
+  flap.rotation.set(wobble(), 0, -0.1);
+  flap.userData.static = true;
+  g.add(flap);
+  // outer hanging body: two layered panels at slightly different angles so the
+  // silhouette breaks like folded cloth
+  const p1 = new THREE.Mesh(K.roundedBox(0.026, 0.33, W, 0.012), mat);
+  p1.position.set(0.052, -0.135, 0.004);
+  p1.rotation.set(wobble(), 0.05, -0.055);
+  p1.castShadow = true;
+  p1.userData.static = true;
+  g.add(p1);
+  const p2 = new THREE.Mesh(K.roundedBox(0.022, 0.24, W * 0.62, 0.01), mat);
+  p2.position.set(0.072, -0.1, -0.045);
+  p2.rotation.set(wobble(), 0.14, -0.12);
+  p2.userData.static = true;
+  g.add(p2);
+  // inner tail hanging on the bunk side, shorter
+  const p3 = new THREE.Mesh(K.roundedBox(0.02, 0.17, W * 0.88, 0.009), mat);
+  p3.position.set(-0.036, -0.06, 0);
+  p3.rotation.set(wobble(), 0, 0.09);
+  p3.userData.static = true;
+  g.add(p3);
+  // one sleeve dangling below the outer panels
+  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.027, 0.21, 10), mat);
+  sleeve.position.set(0.06, -0.32, W * 0.24);
+  sleeve.rotation.set(0.1, 0, -0.12);
+  sleeve.castShadow = true;
+  sleeve.userData.static = true;
+  g.add(sleeve);
+  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.029, 0.024, 0.03, 10), mat);
+  cuff.position.set(0.072, -0.415, W * 0.24 + 0.01);
+  cuff.rotation.set(0.1, 0, -0.12);
+  cuff.userData.static = true;
+  g.add(cuff);
+  // collar roll bunched at one end of the fold
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.012, 7, 14), mat);
+  collar.rotation.x = Math.PI / 2 - 0.25;
+  collar.position.set(0.01, 0.045, -W * 0.36);
+  collar.scale.set(1, 0.8, 1);
   collar.userData.static = true;
   g.add(collar);
-  // hanging loop reaching up to the hook
-  const loop = new THREE.Mesh(new THREE.TorusGeometry(0.011, 0.003, 6, 12), M.bareSteel());
-  loop.position.set(0, h / 2 + 0.022, 0.005);
-  loop.userData.static = true;
-  g.add(loop);
   return g;
 }
 
@@ -224,10 +222,10 @@ export function build(ctx) {
     normalMap: M.fabricBlanket().normalMap, normalScale: new THREE.Vector2(0.7, 0.7),
     side: THREE.DoubleSide, envMapIntensity: 0.25,
   });
-  // worn foul-weather jacket cloth: very dark umber so it stays dark even
-  // directly under the warm corridor lamps
+  // worn foul-weather jacket cloth: near-black waxed canvas so it stays dark
+  // even directly under the warm corridor lamps
   const jacketMat = new THREE.MeshStandardMaterial({
-    color: 0x35291d, roughness: 0.92, metalness: 0,
+    color: 0x24221e, roughness: 0.95, metalness: 0,
     normalMap: M.fabricBlanket().normalMap, normalScale: new THREE.Vector2(0.7, 0.7),
     envMapIntensity: 0.2,
   });
@@ -404,8 +402,8 @@ export function build(ctx) {
     curtain2.rotation.y = Math.PI / 2;
     curtain2.position.set(-0.7, 0.62, bunkL / 2 - 0.18);
     col.add(curtain2);
-    // hanging jacket on a hook at the aft bunk end (aft column only),
-    // hung low on the post so it clears the walkway grab rail above
+    // coat hook on the aft bunk post (aft column only) + jacket slung over the
+    // upper-bunk walkway rail at the foot end, below eye height
     if (zc > 9) {
       const hookBase = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.012, 8), M.gunmetal());
       hookBase.rotation.x = Math.PI / 2;
@@ -421,12 +419,11 @@ export function build(ctx) {
       hookTip.position.set(-0.72, 1.434, bunkL / 2 + 0.062);
       hookTip.userData.static = true;
       col.add(hookTip);
-      const jacket = hangingJacket(jacketMat, 'jacket:' + zc);
-      jacket.position.set(-0.722, 1.222, bunkL / 2 + 0.068);
-      jacket.rotation.y = 0.3;
-      jacket.rotation.z = 0.03;
+      const jacket = railJacket(jacketMat, 'jacket:' + zc);
+      // upper bunk walkway rail: col-local x -1.02+0.3, y 1.12, foot (aft) end
+      jacket.position.set(-0.72, 1.12, bunkL / 2 - 0.17);
       col.add(jacket);
-      C.addBox([-0.86, 0.9, zc + bunkL / 2 - 0.02], [-0.6, 1.5, zc + bunkL / 2 + 0.16], { name: 'jacket' + zc });
+      C.addBox([-0.78, 0.66, zc + bunkL / 2 - 0.32], [-0.6, 1.2, zc + bunkL / 2 - 0.02], { name: 'jacket' + zc });
     }
     g.add(col);
     C.addBox([-1.45, 0, zc - bunkL / 2 - 0.05], [-0.68, 1.9, zc + bunkL / 2 + 0.05], { name: 'bunks' + zc });

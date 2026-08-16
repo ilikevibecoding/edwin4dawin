@@ -196,7 +196,7 @@ export function propulsionMotor({ r = 0.58, len = 2.1 } = {}) {
     noteBolt(g, new THREE.Vector3(sx * 0.15, r + 0.16 + sy * 0.078, tz - 0.164), new THREE.Vector3(0, 0, -1), 'S');
   }
   const label = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.075),
-    M.labelMaterial('PROPULSION MTR 1', { w: 256, h: 72, size: 26 }));
+    M.labelMaterial('PROPULSION MTR 1', { w: 288, h: 80, size: 24 }));
   label.position.set(0, r + 0.175, tz - 0.165);
   label.rotation.y = Math.PI;
   g.add(label);
