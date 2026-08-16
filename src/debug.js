@@ -21,6 +21,7 @@ export function installDebugAPI(ctx) {
     },
     setMotionEnabled(enabled) { ctx.time.setMotion(!!enabled); return true; },
     setSimTime(t) { ctx.time.setSim(Math.max(0, +t || 0)); return true; },
+    setFixedDt(v) { ctx.setFixedDt(v); return true; },
     setPlayerEnabled(enabled) {
       ctx.player.setEnabled(!!enabled);
       if (enabled) ctx.hud.setVisible(true);

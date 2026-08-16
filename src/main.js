@@ -70,6 +70,9 @@ const ctx = {
   // test pump: renders one frame and blocks until the GPU queue drains, so
   // rapid external polling cannot oversubmit a slow software rasterizer
   pumpFrame: () => { frame(); try { renderer.getContext().finish(); } catch (e) { /* context lost */ } return framesRendered; },
+  // video capture: force a constant dt per pumped frame regardless of wall time,
+  // so an offline frame-by-frame capture plays back at true speed (null = wall)
+  setFixedDt: (v) => { fixedDt = v == null ? null : Math.max(0, +v || 0); },
 };
 
 // ---- build world ------------------------------------------------------------
@@ -113,6 +116,7 @@ function shipSway(t) {
 // ---- main loop -----------------------------------------------------------------
 const clock = new THREE.Clock(); // simple delta source; deprecation warning is harmless
 let framesRendered = 0;
+let fixedDt = null;
 
 // rAF can stall in headless/backgrounded contexts (headless renders on demand);
 // a watchdog timer keeps the simulation ticking when something is actually
@@ -141,7 +145,8 @@ function frame() {
 function frameBody() {
   const frameStart = performance.now();
   schedule();
-  const rawDt = clock.getDelta();
+  const measuredDt = clock.getDelta(); // always sample so unsetting fixedDt can't dump a huge delta
+  const rawDt = fixedDt !== null ? fixedDt : measuredDt;
   const dt = Math.min(0.1, rawDt);
   if (time.motion) time.simTime += dt;
 

@@ -2,9 +2,9 @@
 
 ## Current status
 
-- Iteration: 4
-- Consecutive all-pass iterations: 1
-- Average FPS: renderCost ≈16 ms/frame in-page (≈62 fps indicative) on SwiftShader software rasterizer; rAF-measured FPS is meaningless here (headless renders on demand)
+- Iteration: 5 (final)
+- Consecutive all-pass iterations: 2
+- Average FPS: renderCost ≈10.7 ms/frame in-page (≈93 fps indicative) on SwiftShader software rasterizer; rAF-measured FPS is meaningless here (headless renders on demand)
 - One-percent-low FPS: n/a on software rasterizer (on-demand frame scheduling)
 - Average frame time: see renderCost above
 - Draw calls: 444
@@ -12,8 +12,84 @@
 - Texture count: 228 (mostly tiny label canvases — see budget note in iter 2)
 - Renderer: ANGLE Vulkan SwiftShader (software) in CI — all FPS numbers are
   indicative only, not a hardware benchmark. Target is a mid-range laptop GPU.
-- Stopping-condition status: not met — first all-pass iteration (4 of 12;
-  15/15 rubric items pass); a second consecutive all-pass run is required.
+- Stopping-condition status: MET — iterations 4 and 5 both pass all 15 rubric
+  items (two consecutive all-pass iterations). Project complete.
+
+## Iteration 5 (confirmation run)
+
+### Implemented
+
+- Porthole tube crescent root-caused and fixed (lead): the cool porthole spill
+  spot sat outboard of the sleeve (x 2.1, then 3.2 — hull half-width at port
+  height is only 1.52) so it fired straight down the tube bore and lit the
+  sleeve bottom as a silver crescent. Moved inboard of the sleeve inner mouth
+  (x 1.15, aimed down-inward at the deck) so the cone geometrically cannot
+  touch the tube interior; sleeve duller (roughness 0.96, metalness 0,
+  envMapIntensity 0.04); glassThick specular softened (roughness 0.28,
+  clearcoat 0.05). Corridor luminance unchanged (80.7 -> 80.4).
+- crewQuarters reframe (lead): target x -0.9 -> -0.55 swings just enough right
+  that the port ring at the left frame edge reads as a porthole (3/4 visible,
+  red pipe behind) instead of an ambiguous cropped donut; the far hatch now
+  frames the control room glow; bunk wall stays dominant.
+- State sanity-check (lead): restCycle and silentRunning rendered for the
+  corridor/crew axis after the iter-4 warm-pool conversion — red practicals
+  hold readability and mood; no warm-role factor bump needed.
+- Video tooling: debugAPI.setFixedDt(v) forces a constant per-frame dt so an
+  offline frame-by-frame capture plays back at true speed;
+  tools/walkthrough-video.mjs drives the real player controller (collision,
+  head bob) through the full route with scripted stand-and-pan beats.
+
+### Rubric assessment (from shots/iter_5/*.png, all 10 opened and inspected)
+
+All 15 items PASS — evidence identical to iteration 4 except where improved:
+
+1. Spatial layout reads as a real submarine — PASS (corridor/crewQuarters/
+   aftWide: curved hull, rib rhythm, framed hatches, continuous route).
+2. Control room looks production quality — PASS (controlRoom.png unchanged).
+3. Corridor passes the detail-density test — PASS (corridor.png/walking.png).
+4. Crew quarters feel inhabited — PASS (crewQuarters.png; reframe improves the
+   foreground porthole read).
+5. Aft machinery room looks mechanically believable — PASS (engineRoom/
+   aftWide/machineryCloseup unchanged).
+6. Materials read as physical — PASS (machineryCloseup/sonarConsole; porthole
+   sleeve now falls to shadow instead of catching a specular crescent).
+7. Wear and grime follow physical logic — PASS (lamp soot halos, seam runs,
+   crown dust bands, deck wear strips all as iter 4).
+8. Lighting reads as intentional — PASS (staggered pools intact; corridor
+   whole-frame luminance 80.4 vs engine room 79.5; port spill now pools on
+   the deck below the port instead of blasting the tube).
+9. Post-processing is active and balanced — PASS (AO, confined bloom, subtle
+   vignette/grain; no blown highlights).
+10. Underwater view sells depth and motion — PASS (forwardViewport pinnacle +
+    floodlit seabed; porthole window dominates frame, rock shoulder + snow,
+    tube interior clean).
+11. One cohesive palette across every room — PASS (all shots).
+12. The player can genuinely walk into the back — PASS (traversal z=0.9 ->
+    z=19.55 through both hatches; interactions.json).
+13. Interactions work — PASS (pointer lock, movement 2.46 m, collision z=2.43,
+    sonar s1+s2, rest full sequence, silent running both ways, debug
+    triggers; interactions.json).
+14. Technical quality is clean — PASS (zero console/page/WebGL errors; 444
+    draws / 427,109 tris / 228 textures; renderCost 10.7 ms).
+15. The cold-look test — PASS (all rooms carry deliberate pools, falloff and
+    upper-half wear; both failed-then-fixed axes hold up).
+
+### Technical metrics
+
+- renderCost ≈10.7 ms/frame (1600×900 high, SwiftShader — indicative only).
+  drawCalls 444; triangles 427,109; textures 228. Console errors: 0.
+  Page errors: 0. WebGL errors: 0.
+
+### Interaction tests
+
+- Pointer lock PASS, movement PASS (2.46 m), collision PASS (z=2.43),
+  traversal PASS (z=19.55), sonar PASS (s1+s2), rest PASS, silent running
+  PASS. ALL REQUIRED TESTS PASSED.
+
+### Stopping condition
+
+Iterations 4 and 5 both scored 15/15 with the full interaction suite green —
+two consecutive all-pass iterations. Loop complete after 5 of 12 iterations.
 
 ## Iteration 4
 
