@@ -71,8 +71,12 @@ const ctx = {
   // rapid external polling cannot oversubmit a slow software rasterizer
   pumpFrame: () => { frame(); try { renderer.getContext().finish(); } catch (e) { /* context lost */ } return framesRendered; },
   // video capture: force a constant dt per pumped frame regardless of wall time,
-  // so an offline frame-by-frame capture plays back at true speed (null = wall)
-  setFixedDt: (v) => { fixedDt = v == null ? null : Math.max(0, +v || 0); },
+  // so an offline frame-by-frame capture plays back at true speed (null = wall).
+  // Entering capture mode parks the rAF/watchdog loop; leaving restarts it.
+  setFixedDt: (v) => {
+    fixedDt = v == null ? null : Math.max(0, +v || 0);
+    schedule();
+  },
 };
 
 // ---- build world ------------------------------------------------------------
@@ -125,8 +129,11 @@ let fixedDt = null;
 let rafId = 0, watchdog = 0, lastFrameCostMs = 16;
 function schedule() {
   cancelAnimationFrame(rafId); // never stack pending rAF callbacks
-  rafId = requestAnimationFrame(frame);
   clearTimeout(watchdog);
+  // fixed-dt capture mode: only explicit pumpFrame() calls may advance the sim,
+  // otherwise rAF/watchdog frames would each add fixedDt between captures
+  if (fixedDt !== null) return;
+  rafId = requestAnimationFrame(frame);
   const delay = Math.max(110, Math.min(4000, lastFrameCostMs * 2.5));
   watchdog = setTimeout(() => {
     if (!time.motion && !player.state.enabled) { schedule(); return; }
