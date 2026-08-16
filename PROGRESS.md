@@ -35,9 +35,22 @@
   corridor/crew axis after the iter-4 warm-pool conversion — red practicals
   hold readability and mood; no warm-role factor bump needed.
 - Video tooling: debugAPI.setFixedDt(v) forces a constant per-frame dt so an
-  offline frame-by-frame capture plays back at true speed;
+  offline frame-by-frame capture plays back at true speed (and parks the
+  rAF/watchdog loop so only explicit pumps advance the sim);
   tools/walkthrough-video.mjs drives the real player controller (collision,
-  head bob) through the full route with scripted stand-and-pan beats.
+  head bob) through the full route with scripted stand-and-pan beats, reading
+  frames back in-page (canvas blit + HUD redraw) because page.screenshot costs
+  ~45 s/frame on SwiftShader.
+- Hatch collision bug found by the video capture and fixed (lead): the
+  walkable sill collider raised the feet by 0.11 mid-crossing, lifting the
+  capsule head (feetY + 1.75) into the lintel box (bottom 1.78) and pinning
+  the player. The suite's traversal only ever crossed because its clamped
+  dt=0.1 steps (~15 cm) leapt the lintel midplane in a single frame — at real
+  frame rates (60 fps, ~2.7 cm steps) both hatches were impassable. Fix: the
+  sill is no longer a collider (visual mesh stays; the capsule glides over the
+  11 cm step, invisible in first person). Verified with fixed-dt walks at both
+  24 and 60 fps: straight centerline W-hold now crosses both hatches and
+  reaches the engine room (z 16.5) without stalls.
 
 ### Rubric assessment (from shots/iter_5/*.png, all 10 opened and inspected)
 
@@ -90,6 +103,20 @@ All 15 items PASS — evidence identical to iteration 4 except where improved:
 
 Iterations 4 and 5 both scored 15/15 with the full interaction suite green —
 two consecutive all-pass iterations. Loop complete after 5 of 12 iterations.
+
+### Final validation (post-stop)
+
+- Production build (vite build, 1.17 MB / 378 kB gzip) validated with the full
+  suite against the preview server (shots/iter_5_prod): all 10 shots render
+  identically, all 7 interaction tests pass (traversal crosses both fixed
+  hatches to z=19.55), zero console/page errors, same budgets (444 draws /
+  427,109 tris / 228 textures).
+- 24 s first-person walkthrough video captured with tools/walkthrough-video.mjs
+  (real player controller, fixed 1/24 s dt): control room viewport -> 180° turn
+  -> sonar ping (status text + sweep) -> fwd hatch -> stbd porthole beat ->
+  corridor + crew quarters -> aft hatch -> engine room, ending at the
+  propulsion motor. Reviewed frame-by-frame and by an independent video pass:
+  continuous, believable pace, no clipping/glitches.
 
 ## Iteration 4
 
