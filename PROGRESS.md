@@ -240,6 +240,34 @@ structural (primitives vs sculpted surfaces), not missing a slider.
 
 ---
 
+## Iteration 9–10 — drive the truck, designed corridor
+
+The walk-around is now a playable trail: W follows look, the Jeep drives,
+and the forest is a pine corridor instead of a scatter pack.
+
+Proven by `tools/drive-check.mjs` and `tools/interact-check.mjs`.
+Beauty frames in `shots/iter_10/` including `driving.png` (chase cam after
+2.4 s of throttle, luma 0.38).
+
+| # | Result | Note |
+|---|--------|------|
+| 1 Lighting | FAIL | Key still follows the Jeep. Paint has no streak. |
+| 2 Materials | FAIL | Same kit-bash satin. |
+| 3 Detail | FAIL | Pines vary more. Still cones. |
+| 4 Post | FAIL | Stack unchanged. |
+| 5 Place | FAIL | Corridor + two-track + driveable length. Still a demo forest. |
+| 6 Palette | PASS | Held. |
+| 7 Tech | FAIL | Instanced pines help. Capture still SwiftShader-slow. |
+| 8 Cold-look | FAIL | |
+| 9 Interact | PASS | Climb in, drive, climb out beside the truck. |
+
+### Drive
+- On foot: W along look, A/D unchanged.
+- In the seat: WASD arcade drive, Space handbrake, C chase/cockpit, E out.
+- Wheels spin/steer, body follows ruts, sun shadows travel, dust at speed.
+
+---
+
 ## Final summary
 
 ### What passed

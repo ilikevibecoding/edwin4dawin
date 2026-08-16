@@ -335,14 +335,14 @@ export function createRoad(env) {
   g.add(ground);
 
   // Grass ribbon draped on the raised median — follows heightAt, not a flat card.
-  const strip = new THREE.PlaneGeometry(0.58, 152, 4, 96);
+  const strip = new THREE.PlaneGeometry(0.34, 152, 4, 96);
   strip.rotateX(-Math.PI / 2);
   const sPos = strip.attributes.position;
   for (let i = 0; i < sPos.count; i++) {
     const lx = sPos.getX(i);
     const z = sPos.getZ(i);
     const x = lx + wanderAt(z);
-    const edge = Math.abs(lx) / 0.29;
+    const edge = Math.abs(lx) / 0.17;
     sPos.setX(i, x);
     sPos.setY(i, heightAt(x, z) + 0.012 + (1 - edge) * 0.006);
   }
