@@ -477,6 +477,33 @@ export function lampCage({ r = 0.075, on = true, color = 0xffd9a3, intensity = 2
   return g;
 }
 
+// Transparent grime/wear decal conformal to the INSIDE of the pressure hull.
+// thetaCenter is the angle around the hull axis: PI = crown top, angles < PI
+// fall to starboard (+x), > PI to port (-x). arc/len in meters. The patch is
+// a thin open cylinder sector pulled `inset` inside the shell so it never
+// z-fights; material should be transparent with side=BackSide (viewed from
+// within). u runs with theta (+u = +theta), v runs with +z (aft).
+export function hullDecal({ z, thetaCenter, arc = 0.5, len = 0.6, mat, axisY = 0.86, radius = 1.62, inset = 0.005 }) {
+  const r = radius - inset;
+  const arcAngle = arc / r;
+  const geo = new THREE.CylinderGeometry(r, r, len, 10, 1, true, thetaCenter - arcAngle / 2, arcAngle);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = Math.PI / 2; // cylinder axis -> world z
+  mesh.position.set(0, axisY, z);
+  mesh.userData.static = true;
+  mesh.userData.noRaycast = true;
+  return mesh;
+}
+// theta for a crown point at horizontal offset x (small |x| near the top)
+export function hullThetaAtX(x, radius = 1.62) {
+  return Math.PI - Math.asin(Math.max(-1, Math.min(1, x / radius)));
+}
+// theta for a hull-wall point at height y on a given side (+1 stbd, -1 port)
+export function hullThetaAtY(side, y, axisY = 0.86, radius = 1.62) {
+  const t = Math.acos(Math.max(-1, Math.min(1, (axisY - y) / radius)));
+  return side > 0 ? t : Math.PI * 2 - t;
+}
+
 export function axialFan(r = 0.16, { blades = 5, speed = 6, mat = null } = {}) {
   const g = new THREE.Group();
   g.userData.static = false;

@@ -4,6 +4,7 @@
 // not just color. Wear is driven by a global wear factor (used=1, clean=0.25).
 
 import * as THREE from 'three';
+import { makeRng } from './rng.js';
 import {
   makeCanvas, fillBase, mottle, streaks, splotches, scratches, speckle,
   edgeGrime, paintChips, stencilText, normalFromHeight, fbmField, fieldToCanvas,
@@ -163,7 +164,7 @@ export function hullPaint() {
       g.addColorStop(0.175, PALETTE.navalGreen);
       g.addColorStop(0.185, '#b9b4a4');
       g.addColorStop(0.34, PALETTE.hullWhite);
-      g.addColorStop(0.5, '#d6d1c2');
+      g.addColorStop(0.5, '#c5bfae'); // crown: dusty, NOT lighter than the walls
       g.addColorStop(0.66, PALETTE.hullWhite);
       g.addColorStop(0.815, '#b9b4a4');
       g.addColorStop(0.825, PALETTE.navalGreen);
@@ -171,6 +172,31 @@ export function hullPaint() {
       g.addColorStop(1.0, '#5c675c');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
       mottle(ctx, 'hull-mottle', { cells: 13, octaves: 4, amount: 0.045 });
+      // upper-half tonal falloff: a fine dust film along the crown lane and
+      // duskier shoulders (nobody wipes above the trays). Bands are soft +
+      // cloud-broken so they read as accumulated grime, not painted stripes.
+      // canvas y = (1-v)*H: crown v=0.5 -> y 0.5H; shoulders v~0.7/0.3.
+      const dustBand = (y0, y1, a) => {
+        const bg = ctx.createLinearGradient(0, y0 * H, 0, y1 * H);
+        bg.addColorStop(0, 'rgba(56,52,44,0)');
+        bg.addColorStop(0.5, `rgba(56,52,44,${a})`);
+        bg.addColorStop(1, 'rgba(56,52,44,0)');
+        ctx.fillStyle = bg; ctx.fillRect(0, y0 * H, W, (y1 - y0) * H);
+      };
+      dustBand(0.40, 0.60, 0.075 + aWear(0.06)); // crown dust film
+      dustBand(0.20, 0.38, 0.04 + aWear(0.035)); // stbd shoulder (v 0.62..0.8)
+      dustBand(0.62, 0.80, 0.04 + aWear(0.035)); // port shoulder (v 0.2..0.38)
+      const rCloud = makeRng('hull-crown-clouds');
+      for (let i = 0; i < 46; i++) {
+        const band = i % 3; // 0 crown, 1 stbd shoulder, 2 port shoulder
+        const cy = (band === 0 ? 0.42 + rCloud() * 0.16 : band === 1 ? 0.2 + rCloud() * 0.18 : 0.62 + rCloud() * 0.18) * H;
+        const cx = rCloud() * W, cr = 30 + rCloud() * 85;
+        const cg = ctx.createRadialGradient(cx, cy, cr * 0.15, cx, cy, cr);
+        cg.addColorStop(0, `rgba(52,48,40,${0.03 + aWear(0.035) * rCloud()})`);
+        cg.addColorStop(1, 'rgba(52,48,40,0)');
+        ctx.fillStyle = cg;
+        ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.fill();
+      }
       // rib shadow/grime bands where frames land (x = 0 and 0.5 of the 1.5m tile)
       for (const rx of [0, 0.5, 1.0]) {
         const bg = ctx.createLinearGradient((rx - 0.045) * W, 0, (rx + 0.045) * W, 0);
@@ -205,11 +231,15 @@ export function hullPaint() {
       ctx.fillStyle = trimShadow; ctx.fillRect(0, H * 0.185, W, H * 0.03);
       // grime: streaks running DOWN each side. y<0.5 is port side (down = toward y=0)
       streaks(ctx, 'hull-streak-a', { count: Math.round(26 * WEAR) + 4, color: `rgba(56,50,40,${aWear(0.16)})`, y0: 0.5, y1: 0.9, minLen: 0.05, maxLen: 0.22, width: 3 });
+      // fine short runs seeded right AT the crown seam lane, so the vault top
+      // carries visible weathering that survives nearby fixtures
+      streaks(ctx, 'hull-crown-run-a', { count: Math.round(22 * WEAR) + 10, color: `rgba(52,47,38,${0.07 + aWear(0.12)})`, y0: 0.485, y1: 0.56, minLen: 0.025, maxLen: 0.1, width: 2 });
       const c2 = api._c2 || (api._c2 = canvas(W, H));
       // draw mirrored streaks for port half by transform
       const ctx2 = c2.getContext('2d');
       ctx2.clearRect(0, 0, W, H);
       streaks(ctx2, 'hull-streak-b', { count: Math.round(26 * WEAR) + 4, color: `rgba(56,50,40,${aWear(0.16)})`, y0: 0.5, y1: 0.9, minLen: 0.05, maxLen: 0.22, width: 3 });
+      streaks(ctx2, 'hull-crown-run-b', { count: Math.round(22 * WEAR) + 10, color: `rgba(52,47,38,${0.07 + aWear(0.12)})`, y0: 0.485, y1: 0.56, minLen: 0.025, maxLen: 0.1, width: 2 });
       ctx.save(); ctx.scale(1, -1); ctx.drawImage(c2, 0, -H); ctx.restore();
       // floor-level scuffs and grime (both edges of texture = floor)
       edgeGrime(ctx, { inset: 0.05, color: `rgba(24,22,20,${aWear(0.4)})`, sides: { top: 1, bottom: 1, left: 0, right: 0 } });
@@ -235,13 +265,22 @@ export function hullPaint() {
       }
       rctx.putImageData(img, 0, 0);
       streaks(rctx, 'hull-rough-streak', { count: 20, color: `rgba(225,225,225,${aWear(0.35)})`, y0: 0.4, y1: 0.9, width: 4 });
+      // dusty crown = matte crown: kill the semi-gloss sheen right where the
+      // dome lamps graze the paint, so fixtures don't print hot specular pools
+      const rBand = rctx.createLinearGradient(0, 512 * 0.38, 0, 512 * 0.62);
+      rBand.addColorStop(0, 'rgba(228,228,228,0)');
+      rBand.addColorStop(0.5, `rgba(228,228,228,${0.3 + aWear(0.2)})`);
+      rBand.addColorStop(1, 'rgba(228,228,228,0)');
+      rctx.fillStyle = rBand; rctx.fillRect(0, 512 * 0.38, 512, 512 * 0.24);
       if (!mat.roughnessMap) mat.roughnessMap = canvasTexture(rc, {});
       textures.push(mat.roughnessMap);
     });
     run();
     mat.normalMap = paintNormal();
     mat.normalScale = new THREE.Vector2(0.3, 0.3);
-    mat.envMapIntensity = 0.45;
+    // trimmed from 0.45: the PMREM room's warm strips put an even ambient
+    // sheen on the whole shell that flattened the corridor vault
+    mat.envMapIntensity = 0.36;
     return mat;
   });
 }
@@ -755,6 +794,111 @@ export function condensation() {
       envMapIntensity: 0.6, clearcoat: 0.8, clearcoatRoughness: 0.18,
     });
     return mat;
+  });
+}
+
+// sooty dust halo printed on the crown paint around a dome-lamp fixture:
+// warm air convects dust straight up off the hot glass, darkest right above
+// the lamp, wisping outward down both sides. Transparent decal, matte (dust
+// kills the paint sheen where it sits). Use on hullDecal patches.
+export function crownGrime() {
+  return def('crownGrime', () => {
+    const W = 256, H = 256;
+    const c = makeCanvas(W, H);
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+    // stacked soft soot blobs, densest at center
+    for (const [r, a] of [[120, 0.13], [88, 0.15], [60, 0.20], [36, 0.20]]) {
+      const g = ctx.createRadialGradient(128, 128, r * 0.1, 128, 128, r);
+      g.addColorStop(0, `rgba(43,39,32,${a})`);
+      g.addColorStop(1, 'rgba(43,39,32,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(128, 128, r, 0, Math.PI * 2); ctx.fill();
+    }
+    // faint heat-yellowed ring just outside the soot core
+    const hy = ctx.createRadialGradient(128, 128, 52, 128, 128, 96);
+    hy.addColorStop(0, 'rgba(96,78,48,0)');
+    hy.addColorStop(0.5, 'rgba(96,78,48,0.07)');
+    hy.addColorStop(1, 'rgba(96,78,48,0)');
+    ctx.fillStyle = hy;
+    ctx.beginPath(); ctx.arc(128, 128, 96, 0, Math.PI * 2); ctx.fill();
+    // dust specks with radial falloff
+    const rng = makeRng('crown-halo-specks');
+    for (let i = 0; i < 150; i++) {
+      const a = rng() * Math.PI * 2, rr = rng() * rng() * 108;
+      const x = 128 + Math.cos(a) * rr, y = 128 + Math.sin(a) * rr * 0.85;
+      ctx.fillStyle = `rgba(36,32,26,${(0.3 * (1 - rr / 120)).toFixed(3)})`;
+      const s = 1 + rng() * 1.8;
+      ctx.fillRect(x, y, s, s);
+    }
+    // wisps running toward both x edges (down both hull sides from the crown)
+    for (const dir of [-1, 1]) {
+      for (let i = 0; i < 8; i++) {
+        const y = 108 + rng() * 44;
+        const x0 = 128 + dir * (18 + rng() * 34);
+        const len = (28 + rng() * 62) * dir;
+        const g = ctx.createLinearGradient(x0, 0, x0 + len, 0);
+        g.addColorStop(0, `rgba(46,42,34,${0.14 + rng() * 0.12})`);
+        g.addColorStop(1, 'rgba(46,42,34,0)');
+        ctx.fillStyle = g;
+        const w2 = 1.6 + rng() * 2.4;
+        ctx.fillRect(Math.min(x0, x0 + len), y - w2 / 2, Math.abs(len), w2);
+      }
+    }
+    return new THREE.MeshStandardMaterial({
+      name: 'crownGrime', map: canvasTexture(c, { srgb: true, wrap: false }),
+      transparent: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.15,
+      side: THREE.BackSide, depthWrite: false,
+    });
+  });
+}
+
+// grime runs bleeding down the hull from a crown/shoulder seam or fitting:
+// thin gravity streaks along the decal's u axis (u = around the hull, +u is
+// DOWN on the port side, up on starboard — use flip=true for starboard).
+let _hullRunCanvas = null;
+function hullRunCanvas() {
+  if (_hullRunCanvas) return _hullRunCanvas;
+  const W = 256, H = 256;
+  const c = makeCanvas(W, H);
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  const rng = makeRng('hull-run-decal');
+  // source smudge along the left (seam) edge
+  const src = ctx.createLinearGradient(0, 0, 46, 0);
+  src.addColorStop(0, 'rgba(48,44,36,0.3)');
+  src.addColorStop(1, 'rgba(48,44,36,0)');
+  ctx.fillStyle = src; ctx.fillRect(0, 26, 46, H - 52);
+  // individual runs of varied reach
+  for (let i = 0; i < 13; i++) {
+    const y = 18 + rng() * (H - 36);
+    const len = 50 + rng() * 170;
+    const a = 0.14 + rng() * 0.2;
+    const g = ctx.createLinearGradient(4, 0, 4 + len, 0);
+    g.addColorStop(0, `rgba(50,45,36,${a})`);
+    g.addColorStop(0.75, `rgba(46,41,33,${a * 0.5})`);
+    g.addColorStop(1, 'rgba(46,41,33,0)');
+    ctx.fillStyle = g;
+    const w2 = 1.6 + rng() * 3.4;
+    ctx.fillRect(4, y - w2 / 2, len, w2);
+    // droplet blob at the end of longer runs
+    if (len > 150) {
+      ctx.fillStyle = `rgba(46,41,33,${a * 0.7})`;
+      ctx.beginPath(); ctx.arc(4 + len * 0.96, y, 2.2, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  _hullRunCanvas = c;
+  return c;
+}
+export function hullRunGrime(flip = false) {
+  return def('hullRunGrime' + (flip ? ':flip' : ''), () => {
+    const tex = canvasTexture(hullRunCanvas(), { srgb: true, wrap: false });
+    if (flip) { tex.repeat.x = -1; tex.offset.x = 1; }
+    return new THREE.MeshStandardMaterial({
+      name: 'hullRunGrime', map: tex,
+      transparent: true, roughness: 0.85, metalness: 0, envMapIntensity: 0.2,
+      side: THREE.BackSide, depthWrite: false,
+    });
   });
 }
 

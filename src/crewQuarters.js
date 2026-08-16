@@ -1079,31 +1079,47 @@ export function build(ctx) {
   }
 
   // ============================ lighting =====================================
+  // Same crown-splash control as the corridor rig: each fixture is a downward
+  // pool spot (cone excludes the vault) + a short-range glow point at the dome
+  // that grazes the grime halo; dome emissive raised so fixtures read on.
   const mkWarm = (x, z, intensity = 3.2, shadow = false) => {
-    const fixture = K.lampCage({ r: 0.06, color: 0xffd9a3, intensity: 2.0 });
+    const fixture = K.lampCage({ r: 0.06, color: 0xffd9a3, intensity: 3.2 });
     fixture.position.set(x, 2.16, z);
     fixture.rotation.x = Math.PI;
     g.add(fixture);
-    const light = new THREE.PointLight(0xffd9a3, intensity, 4.5, 2);
-    light.position.set(x, 1.96, z);
-    g.add(light);
-    ctx.lights.register({ light, lampMats: [fixture.userData.lampMat], role: 'warm' });
+    const glow = new THREE.PointLight(0xffd9a3, Math.min(0.95, 0.3 * intensity), 2.1, 2);
+    glow.position.set(x, 1.88, z);
+    g.add(glow);
+    ctx.lights.register({ light: glow, lampMats: [fixture.userData.lampMat], role: 'warm' });
+    const pool = new THREE.SpotLight(0xffd9a3, intensity, 4.4, 1.2, 0.55, 2);
+    pool.position.set(x, 1.94, z);
+    pool.target.position.set(x * 0.72, 0, z);
+    g.add(pool, pool.target);
+    ctx.lights.register({ light: pool, role: 'warm' });
     if (shadow) {
-      const spot = new THREE.SpotLight(0xffd9a3, intensity * 0.7, 5.5, 1.05, 0.65, 2);
-      spot.position.set(x, 2.02, z);
-      spot.target.position.set(x * 0.5, 0, z);
-      spot.castShadow = true;
-      spot.shadow.mapSize.set(512, 512);
-      spot.shadow.bias = -0.004;
-      g.add(spot, spot.target);
-      ctx.lights.register({ light: spot, role: 'warm' });
+      pool.castShadow = true;
+      pool.shadow.mapSize.set(512, 512);
+      pool.shadow.bias = -0.004;
     }
+    // dust/soot halo on the crown paint above the fixture
+    g.add(K.hullDecal({ z, thetaCenter: K.hullThetaAtX(x), arc: 0.58, len: 0.66, mat: M.crownGrime() }));
   };
-  mkWarm(-0.55, 8.7, 3.0, true); // over bunks walkway
-  mkWarm(0.6, 10.1, 2.8, false); // galley
-  mkWarm(-0.6, 11.7, 2.6, false); // mess
-  // washroom lamp over the basin (reads through the open door)
-  const wLight = new THREE.PointLight(0xffe6c0, 2.6, 2.6, 2);
+  mkWarm(-0.55, 8.7, 3.4, true); // over bunks walkway
+  mkWarm(0.6, 10.1, 2.9, false); // galley
+  mkWarm(-0.6, 11.7, 2.9, false); // mess
+
+  // shoulder grime runs where the vault meets the furniture line, in the dim
+  // stretches between the fixtures (crew keeps the low half wiped, not this)
+  for (const [side, y, zR] of [[-1, 2.08, 7.55], [+1, 2.1, 9.5], [-1, 2.02, 10.55]]) {
+    g.add(K.hullDecal({
+      z: zR, thetaCenter: K.hullThetaAtY(side, y) + (side > 0 ? -0.09 : 0.09),
+      arc: 0.48, len: 0.55, mat: M.hullRunGrime(side > 0),
+    }));
+  }
+  // washroom lamp over the basin (reads through the open door). Short range:
+  // points ignore the partitions (no shadows), so a long throw leaks onto the
+  // corridor-side shoulder and crown above the alcove.
+  const wLight = new THREE.PointLight(0xffe6c0, 2.6, 1.8, 2);
   wLight.position.set(1.06, 1.72, 11.85);
   g.add(wLight);
   ctx.lights.register({ light: wLight, lampMats: [lampTube.material], role: 'warm' });

@@ -565,40 +565,72 @@ export function build(ctx) {
   }
 
   // ===================== lighting (corridor) =================================
+  // Crown-splash control. A point light parked under the dome glass (old
+  // y 1.98) torched the paint straight above it — 1/d^2 with d~0.5 m gave the
+  // crown ~17x the deck irradiance — and 7 overlapping warm points washed the
+  // whole vault even. Each warm fixture is now a DOWNWARD pool spot (the cone
+  // never touches the vault: a wall point above ~1.1 m falls outside the 64
+  // degree half-angle) plus a small short-range glow point at the fixture that
+  // grazes the grime halo, so the lamp still reads as the source. Dome
+  // emissive raised so fixtures read switched on; the paint no longer glows.
   const mkLamp = (x, z, role = 'warm', color = 0xffd9a3, intensity = 4.2, shadow = false) => {
-    const fixture = K.lampCage({ r: 0.065, color, intensity: role === 'red' ? 0 : 2.2 });
+    const fixture = K.lampCage({ r: 0.065, color, intensity: role === 'red' ? 0 : 3.4 });
     fixture.position.set(x, 2.2, z);
     fixture.rotation.x = Math.PI;
     g.add(fixture);
-    const light = new THREE.PointLight(color, intensity, 5.5, 2);
-    light.position.set(x, 1.98, z);
-    g.add(light);
-    ctx.lights.register({ light, lampMats: [fixture.userData.lampMat], role });
-    if (shadow) {
-      const spot = new THREE.SpotLight(color, intensity * 0.7, 6, 1.05, 0.65, 2);
-      spot.position.set(x, 2.05, z);
-      spot.target.position.set(x * 0.5, 0, z);
-      spot.castShadow = true;
-      spot.shadow.mapSize.set(512, 512);
-      spot.shadow.bias = -0.004;
-      g.add(spot, spot.target);
-      ctx.lights.register({ light: spot, role });
+    if (role === 'red') {
+      // red practicals stay omni: they are the whole mood in red states
+      const light = new THREE.PointLight(color, intensity, 3.9, 2);
+      light.position.set(x, 1.72, z);
+      g.add(light);
+      ctx.lights.register({ light, lampMats: [fixture.userData.lampMat], role });
+    } else {
+      const glow = new THREE.PointLight(color, Math.min(1.0, 0.3 * intensity), 2.0, 2);
+      glow.position.set(x, 1.9, z);
+      g.add(glow);
+      ctx.lights.register({ light: glow, lampMats: [fixture.userData.lampMat], role });
+      const pool = new THREE.SpotLight(color, intensity, 4.8, 1.2, 0.55, 2);
+      pool.position.set(x, 1.98, z);
+      pool.target.position.set(x * 0.72, 0, z);
+      g.add(pool, pool.target);
+      ctx.lights.register({ light: pool, role });
+      if (shadow) {
+        pool.castShadow = true;
+        pool.shadow.mapSize.set(512, 512);
+        pool.shadow.bias = -0.004;
+      }
     }
+    // dust/soot halo the fixture has cooked onto the crown right above itself
+    g.add(K.hullDecal({ z, thetaCenter: K.hullThetaAtX(x), arc: 0.62, len: 0.72, mat: M.crownGrime() }));
   };
-  mkLamp(0.28, 6.6, 'warm', 0xffd9a3, 4.2, true);
-  mkLamp(-0.28, 9.0, 'warm', 0xffd9a3, 4.2, false);
-  mkLamp(0.28, 11.4, 'warm', 0xffd9a3, 4.2, false);
-  mkLamp(-0.2, 13.1, 'warm', 0xffd9a3, 3.2, false);
+  // staggered brightness: hatch ends anchor the run, mid-tunnel lamps sit low
+  // so the vault dips toward shadow between pools
+  mkLamp(0.28, 6.6, 'warm', 0xffd9a3, 4.6, true);
+  mkLamp(-0.28, 9.0, 'warm', 0xffd9a3, 3.3, false);
+  mkLamp(0.28, 11.4, 'warm', 0xffd9a3, 3.3, false);
+  mkLamp(-0.2, 13.1, 'warm', 0xffd9a3, 2.2, false);
   mkLamp(-0.3, 7.8, 'red', 0xb03a28, 2.4, false);
   mkLamp(0.3, 10.2, 'red', 0xb03a28, 2.4, false);
 
   // cool porthole spill (small spots aimed inward)
   for (const ph of PORTHOLES) {
-    const spot = new THREE.SpotLight(0x6f97a8, 6, 5, 0.7, 0.6, 1.8);
+    const spot = new THREE.SpotLight(0x6f97a8, 4.5, 5, 0.7, 0.6, 1.8);
     spot.position.set(ph.side * 2.1, ph.y + 0.3, ph.z);
     spot.target.position.set(0, 0.4, ph.z + 0.4);
     g.add(spot, spot.target);
     ctx.lights.register({ light: spot, role: 'cool' });
+  }
+
+  // grime runs bleeding down from crown seams / rib feet on the upper walls,
+  // placed in the dim stretches between fixtures where they read as tone
+  for (const [side, y, zR, lenR] of [
+    [+1, 2.06, 7.95, 0.6], [+1, 1.98, 10.35, 0.55], [+1, 2.04, 12.4, 0.6],
+    [-1, 2.14, 8.4, 0.55], [-1, 2.12, 11.05, 0.5], [-1, 1.72, 12.62, 0.5],
+  ]) {
+    g.add(K.hullDecal({
+      z: zR, thetaCenter: K.hullThetaAtY(side, y) + (side > 0 ? -0.09 : 0.09),
+      arc: 0.5, len: lenR, mat: M.hullRunGrime(side > 0),
+    }));
   }
 
   // ===================== aft electrical passage (13.5..16.8) =================
@@ -736,9 +768,10 @@ export function build(ctx) {
   hv.userData.static = true;
   g.add(hv);
 
-  // aft passage lighting
-  mkLamp(0.24, 14.6, 'warm', 0xffd9a3, 4.0, false);
-  mkLamp(-0.24, 16.2, 'warm', 0xffd9a3, 3.6, false);
+  // aft passage lighting (kept a touch brighter than the corridor: the glow
+  // through bulkhead 2's hatch is the corridor view's depth cue)
+  mkLamp(0.24, 14.6, 'warm', 0xffd9a3, 3.9, false);
+  mkLamp(-0.24, 16.2, 'warm', 0xffd9a3, 3.3, false);
   mkLamp(0.0, 15.4, 'red', 0xb03a28, 2.6, false);
 
   return g;
