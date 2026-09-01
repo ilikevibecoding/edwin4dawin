@@ -4,6 +4,16 @@ A playable, browser-based **Minecraft-style voxel sandbox** with a large **Red D
 
 Everything is generated at runtime from code: pixel-art textures, character skins, sounds, terrain and the town itself. No third-party game assets are used.
 
+## Play in the browser (no install)
+
+The production build is committed in `dist/`, so it can be served straight from a GitHub-backed CDN:
+
+**https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/b3e1102f52fa3088c952480355ede4239fdbb4f2/dist/index.html**
+
+That link is pinned to a commit so it never goes stale. To play the latest build on this branch use
+`https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/cursor/minecraft-western-town-54d6/dist/index.html`
+(CDN caches may lag behind pushes). After changing the source, run `npm run build` and commit `dist/` to refresh the hosted build.
+
 ## Run it
 
 ```bash
