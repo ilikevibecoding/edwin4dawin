@@ -24,16 +24,13 @@ export class Building {
   addStructure(solid) {
     if (this.byKey.has(solid.key)) return null;
     this.byKey.set(solid.key, solid);
-    this.game.world.addSolid(solid);
-    this.game.scene.add(solid.mesh);
-    solid.mesh.updateMatrixWorld(true);
+    this.game.spawnSolid(solid);
     return solid;
   }
 
   removeStructure(solid) {
     this.byKey.delete(solid.key);
-    this.game.world.removeSolid(solid);
-    this.game.scene.remove(solid.mesh);
+    this.game.despawnSolid(solid);
   }
 
   neighbors(solid) {

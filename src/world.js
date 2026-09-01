@@ -97,60 +97,81 @@ function terrainColor(terrain, x, z, h, out) {
   out.setRGB(r, g, b);
 }
 
+const TERRAIN_CHUNKS = 5;
+
+/** Terrain as a grid of frustum-culled chunks with analytic (seam-free) normals. */
 function buildTerrainMesh(terrain) {
-  const segs = MAP_SIZE / CELL;
-  const n = segs + 1;
-  const positions = new Float32Array(n * n * 3);
-  const colors = new Float32Array(n * n * 3);
-  const uvs = new Float32Array(n * n * 2);
-  const c = new THREE.Color();
-  let p = 0;
-  let u = 0;
-  for (let jz = 0; jz < n; jz++) {
-    for (let ix = 0; ix < n; ix++) {
-      const x = -HALF + ix * CELL;
-      const z = -HALF + jz * CELL;
-      const h = terrain.heightAt(x, z);
-      positions[p] = x;
-      positions[p + 1] = h;
-      positions[p + 2] = z;
-      terrainColor(terrain, x, z, h, c);
-      colors[p] = c.r;
-      colors[p + 1] = c.g;
-      colors[p + 2] = c.b;
-      p += 3;
-      uvs[u] = (x + HALF) / 8;
-      uvs[u + 1] = (z + HALF) / 8;
-      u += 2;
-    }
-  }
-  const indices = new Uint32Array(segs * segs * 6);
-  let q = 0;
-  for (let jz = 0; jz < segs; jz++) {
-    for (let ix = 0; ix < segs; ix++) {
-      const a = jz * n + ix;
-      const b = a + 1;
-      const cIdx = a + n;
-      const d = cIdx + 1;
-      indices[q++] = a;
-      indices[q++] = cIdx;
-      indices[q++] = b;
-      indices[q++] = b;
-      indices[q++] = cIdx;
-      indices[q++] = d;
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-  geo.setIndex(new THREE.BufferAttribute(indices, 1));
-  geo.computeVertexNormals();
+  const group = new THREE.Group();
+  group.name = 'terrain';
   const mat = new THREE.MeshLambertMaterial({ map: getTextures().grass, vertexColors: true });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.receiveShadow = true;
-  mesh.name = 'terrain';
-  return mesh;
+  const chunkSize = MAP_SIZE / TERRAIN_CHUNKS;
+  const segs = chunkSize / CELL;
+  const n = segs + 1;
+  const c = new THREE.Color();
+  const normal = new THREE.Vector3();
+  for (let cz = 0; cz < TERRAIN_CHUNKS; cz++) {
+    for (let cx = 0; cx < TERRAIN_CHUNKS; cx++) {
+      const x0 = -HALF + cx * chunkSize;
+      const z0 = -HALF + cz * chunkSize;
+      const positions = new Float32Array(n * n * 3);
+      const normals = new Float32Array(n * n * 3);
+      const colors = new Float32Array(n * n * 3);
+      const uvs = new Float32Array(n * n * 2);
+      let p = 0;
+      let u = 0;
+      for (let jz = 0; jz < n; jz++) {
+        for (let ix = 0; ix < n; ix++) {
+          const x = x0 + ix * CELL;
+          const z = z0 + jz * CELL;
+          const h = terrain.heightAt(x, z);
+          positions[p] = x;
+          positions[p + 1] = h;
+          positions[p + 2] = z;
+          const dhx = (terrain.heightAt(x + 2, z) - terrain.heightAt(x - 2, z)) / 4;
+          const dhz = (terrain.heightAt(x, z + 2) - terrain.heightAt(x, z - 2)) / 4;
+          normal.set(-dhx, 1, -dhz).normalize();
+          normals[p] = normal.x;
+          normals[p + 1] = normal.y;
+          normals[p + 2] = normal.z;
+          terrainColor(terrain, x, z, h, c);
+          colors[p] = c.r;
+          colors[p + 1] = c.g;
+          colors[p + 2] = c.b;
+          p += 3;
+          uvs[u] = (x + HALF) / 8;
+          uvs[u + 1] = (z + HALF) / 8;
+          u += 2;
+        }
+      }
+      const indices = new Uint32Array(segs * segs * 6);
+      let q = 0;
+      for (let jz = 0; jz < segs; jz++) {
+        for (let ix = 0; ix < segs; ix++) {
+          const a = jz * n + ix;
+          const b = a + 1;
+          const cIdx = a + n;
+          const d = cIdx + 1;
+          indices[q++] = a;
+          indices[q++] = cIdx;
+          indices[q++] = b;
+          indices[q++] = b;
+          indices[q++] = cIdx;
+          indices[q++] = d;
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      geo.setIndex(new THREE.BufferAttribute(indices, 1));
+      geo.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+  }
+  return group;
 }
 
 function buildWater() {
@@ -223,9 +244,9 @@ function buildHouse(rng, i0, j0, w, d, floors, k0, material, out, opts = {}) {
 // ---------- Props ----------
 
 const propGeo = {
-  trunk: new THREE.CylinderGeometry(0.22, 0.42, 3.4, 7),
-  cone: new THREE.ConeGeometry(1.6, 3.2, 8),
-  blob: new THREE.IcosahedronGeometry(1.7, 1),
+  trunk: new THREE.CylinderGeometry(0.22, 0.42, 3.4, 6),
+  cone: new THREE.ConeGeometry(1.6, 3.2, 6),
+  blob: new THREE.IcosahedronGeometry(1.7, 0),
   rock: new THREE.DodecahedronGeometry(1, 0),
   carBody: new THREE.BoxGeometry(2.0, 0.8, 4.4),
   carCabin: new THREE.BoxGeometry(1.8, 0.7, 2.1),
@@ -248,89 +269,86 @@ const propMat = {
   ammoTrim: new THREE.MeshLambertMaterial({ color: 0xb9e66b }),
 };
 
+const _m = new THREE.Matrix4();
+const _p = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _s = new THREE.Vector3();
+const _e = new THREE.Euler();
+
+/** Composes a world matrix for an instanced part; `parent` (position + yaw) is applied first. */
+function part(key, geometry, material, pos, rot, scale, parent, hittable = true, capacity = 256) {
+  _p.set(pos[0], pos[1], pos[2]);
+  _q.setFromEuler(_e.set(rot[0], rot[1], rot[2]));
+  _s.set(scale[0], scale[1], scale[2]);
+  const matrix = new THREE.Matrix4().compose(_p, _q, _s);
+  if (parent) {
+    _p.set(parent.x, parent.y, parent.z);
+    _q.setFromEuler(_e.set(0, parent.yaw || 0, 0));
+    _s.set(1, 1, 1);
+    _m.compose(_p, _q, _s);
+    matrix.premultiply(_m);
+  }
+  return { key, geometry, material, matrix, hittable, capacity };
+}
+
 function createTree(rng, x, y, z) {
-  const group = new THREE.Group();
   const scale = rng.range(0.85, 1.45);
-  const trunk = new THREE.Mesh(propGeo.trunk, propMat.trunk);
-  trunk.position.y = 1.7 * scale;
-  trunk.scale.setScalar(scale);
-  trunk.castShadow = true;
-  group.add(trunk);
-  const pine = rng.chance(0.55);
-  if (pine) {
-    const mat = rng.pick(propMat.pine);
+  const parent = { x, y: y - 0.2, z, yaw: rng.range(0, Math.PI * 2) };
+  const parts = [part('trunk', propGeo.trunk, propMat.trunk, [0, 1.7 * scale, 0], [0, 0, 0], [scale, scale, scale], parent, true, 512)];
+  if (rng.chance(0.55)) {
+    const mi = rng.int(0, propMat.pine.length - 1);
     for (let l = 0; l < 3; l++) {
-      const cone = new THREE.Mesh(propGeo.cone, mat);
       const s = (1.15 - l * 0.28) * scale;
-      cone.scale.set(s, s * 0.9, s);
-      cone.position.y = (3.2 + l * 1.6) * scale;
-      cone.castShadow = true;
-      group.add(cone);
+      parts.push(part(`pine${mi}`, propGeo.cone, propMat.pine[mi], [0, (3.2 + l * 1.6) * scale, 0], [0, 0, 0], [s, s * 0.9, s], parent, false, 512));
     }
   } else {
-    const blob = new THREE.Mesh(propGeo.blob, rng.pick(propMat.leafy));
-    blob.position.y = 4.4 * scale;
-    blob.scale.set(scale * 1.1, scale * 0.95, scale * 1.1);
-    blob.castShadow = true;
-    group.add(blob);
+    const mi = rng.int(0, propMat.leafy.length - 1);
+    parts.push(part(`leafy${mi}`, propGeo.blob, propMat.leafy[mi], [0, 4.4 * scale, 0], [0, 0, 0], [scale * 1.1, scale * 0.95, scale * 1.1], parent, false, 256));
   }
-  group.position.set(x, y - 0.2, z);
-  group.rotation.y = rng.range(0, Math.PI * 2);
   const r = 0.45 * scale;
   const box = makeBox(x - r, y - 0.2, z - r, x + r, y + 3.4 * scale, z + r);
   return {
     kind: 'prop', prop: 'tree', material: PROPS.tree.material, hp: PROPS.tree.hp, maxHp: PROPS.tree.hp,
     yieldPerHit: PROPS.tree.yieldPerHit,
-    boxes: [box], ramp: null, bounds: box, mesh: group, hitMeshes: [trunk], blocksShots: true,
+    boxes: [box], ramp: null, bounds: box, parts, blocksShots: true,
     centerX: x, centerZ: z,
   };
 }
 
 function createRock(rng, x, y, z) {
-  const mesh = new THREE.Mesh(propGeo.rock, rng.pick(propMat.rock));
+  const mi = rng.int(0, propMat.rock.length - 1);
   const sx = rng.range(1.0, 2.2);
   const sy = rng.range(0.7, 1.5);
   const sz = rng.range(1.0, 2.2);
-  mesh.scale.set(sx, sy, sz);
-  mesh.rotation.set(rng.range(0, 0.4), rng.range(0, Math.PI * 2), rng.range(0, 0.4));
-  mesh.position.set(x, y + sy * 0.35, z);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
+  const parts = [part(`rock${mi}`, propGeo.rock, propMat.rock[mi], [x, y + sy * 0.35, z], [rng.range(0, 0.4), rng.range(0, Math.PI * 2), rng.range(0, 0.4)], [sx, sy, sz], null, true, 128)];
   const rx = sx * 0.8;
   const rz = sz * 0.8;
   const box = makeBox(x - rx, y - 0.5, z - rz, x + rx, y + sy * 1.1, z + rz);
   return {
     kind: 'prop', prop: 'rock', material: PROPS.rock.material, hp: PROPS.rock.hp, maxHp: PROPS.rock.hp,
     yieldPerHit: PROPS.rock.yieldPerHit,
-    boxes: [box], ramp: null, bounds: box, mesh, hitMeshes: [mesh], blocksShots: true,
+    boxes: [box], ramp: null, bounds: box, parts, blocksShots: true,
     centerX: x, centerZ: z,
   };
 }
 
 function createCar(rng, x, y, z, alongZ) {
-  const group = new THREE.Group();
-  const body = new THREE.Mesh(propGeo.carBody, rng.pick(propMat.car));
-  body.position.y = 0.75;
-  const cabin = new THREE.Mesh(propGeo.carCabin, propMat.glass);
-  cabin.position.set(0, 1.45, -0.2);
-  body.castShadow = true;
-  cabin.castShadow = true;
-  group.add(body, cabin);
+  const parent = { x, y, z, yaw: alongZ ? 0 : Math.PI / 2 };
+  const ci = rng.int(0, propMat.car.length - 1);
+  const parts = [
+    part(`carBody${ci}`, propGeo.carBody, propMat.car[ci], [0, 0.75, 0], [0, 0, 0], [1, 1, 1], parent, true, 64),
+    part('carCabin', propGeo.carCabin, propMat.glass, [0, 1.45, -0.2], [0, 0, 0], [1, 1, 1], parent, true, 64),
+  ];
   for (const [wx, wz] of [[-1, 1.4], [1, 1.4], [-1, -1.4], [1, -1.4]]) {
-    const wheel = new THREE.Mesh(propGeo.wheel, propMat.wheel);
-    wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(wx, 0.36, wz);
-    group.add(wheel);
+    parts.push(part('wheel', propGeo.wheel, propMat.wheel, [wx, 0.36, wz], [0, 0, Math.PI / 2], [1, 1, 1], parent, false, 256));
   }
-  group.position.set(x, y, z);
-  if (!alongZ) group.rotation.y = Math.PI / 2;
   const hx = alongZ ? 1.0 : 2.2;
   const hz = alongZ ? 2.2 : 1.0;
   const box = makeBox(x - hx, y, z - hz, x + hx, y + 1.55, z + hz);
   return {
     kind: 'prop', prop: 'car', material: PROPS.car.material, hp: PROPS.car.hp, maxHp: PROPS.car.hp,
     yieldPerHit: PROPS.car.yieldPerHit,
-    boxes: [box], ramp: null, bounds: box, mesh: group, hitMeshes: [body, cabin], blocksShots: true,
+    boxes: [box], ramp: null, bounds: box, parts, blocksShots: true,
     centerX: x, centerZ: z,
   };
 }

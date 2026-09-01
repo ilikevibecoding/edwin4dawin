@@ -234,9 +234,18 @@ export class World {
     this.raycaster.far = maxDist;
     const hits = this.raycaster.intersectObjects(this.raycastTargets, false);
     let best = null;
+    let bestSolid = null;
     for (const h of hits) {
       if (filter && !filter(h.object)) continue;
+      const ud = h.object.userData;
+      let solid = ud.solid || null;
+      if (ud.pool) {
+        // instanced part: resolve the instance slot; decorative parts (foliage) don't stop shots
+        solid = ud.pool.slots[h.instanceId];
+        if (!solid) continue;
+      }
       best = h;
+      bestSolid = solid;
       break;
     }
     const limit = best ? best.distance : maxDist;
@@ -251,7 +260,7 @@ export class World {
       return {
         kind: ud.bot ? 'bot' : ud.player ? 'player' : 'solid',
         bot: ud.bot || null,
-        solid: ud.solid || null,
+        solid: bestSolid,
         part: ud.part || null,
         distance: best.distance,
         point: best.point,

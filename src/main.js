@@ -14,6 +14,7 @@ import { Effects } from './effects.js';
 import { HUD } from './hud.js';
 import { AudioSys } from './audio.js';
 import { Input } from './input.js';
+import { InstanceRegistry } from './instancing.js';
 
 class Game {
   constructor() {
@@ -28,7 +29,9 @@ class Game {
 
     this.canvas = document.getElementById('game');
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.maxPixelScale = Math.min(window.devicePixelRatio || 1, 1.5);
+    this.pixelScale = this.maxPixelScale;
+    this.renderer.setPixelRatio(this.pixelScale);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.shadows = params.get('shadows') !== '0';
@@ -53,23 +56,20 @@ class Game {
     this.world = new World((x, z) => Math.max(this.terrain.heightAt(x, z), WATER_Y - 0.9));
     this.scene.add(gen.terrainMesh, gen.waterMesh);
 
+    this.instances = new InstanceRegistry(this.scene, this.world);
     this.effects = new Effects(this.scene, this.camera);
     this.hud = new HUD(this);
     this.loot = new LootSystem(this);
     this.building = new Building(this);
     for (const s of gen.structures) this.building.addStructure(s);
-    for (const p of gen.props) {
-      this.world.addSolid(p);
-      this.scene.add(p.mesh);
-      p.mesh.updateMatrixWorld(true);
-    }
+    for (const p of gen.props) this.spawnSolid(p);
     for (const c of gen.containers) {
       const solid = c.type === 'chest' ? createChest(c.x, c.y, c.z, c.yaw) : createAmmoBox(c.x, c.y, c.z, c.yaw);
-      this.world.addSolid(solid);
-      this.scene.add(solid.mesh);
-      solid.mesh.updateMatrixWorld(true);
+      this.spawnSolid(solid);
       this.loot.addContainer(solid);
     }
+    this.cullables = this.loot.containers.map((c) => c.mesh);
+    this.cullTimer = 0;
     for (const f of gen.floorLoot) this.loot.spawnPickup(rollFloorLoot(this.rng), f.x, f.y, f.z);
 
     this.player = new Player(this);
@@ -84,6 +84,7 @@ class Game {
     this.last = performance.now();
     this.frameTimes = [];
     this.menuAngle = 0;
+    this.menuTown = this.towns.slice().sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
     requestAnimationFrame((t) => this.loop(t));
   }
 
@@ -251,6 +252,23 @@ class Game {
 
   // ---------- solids ----------
 
+  /** Registers a solid for collision/raycasts and shows it (instanced parts or a regular mesh). */
+  spawnSolid(solid) {
+    this.world.addSolid(solid);
+    if (solid.parts) this.instances.addSolid(solid);
+    if (solid.mesh) {
+      this.scene.add(solid.mesh);
+      solid.mesh.updateMatrixWorld(true);
+    }
+    return solid;
+  }
+
+  despawnSolid(solid) {
+    this.world.removeSolid(solid);
+    if (solid.parts) this.instances.removeSolid(solid);
+    if (solid.mesh) this.scene.remove(solid.mesh);
+  }
+
   damageSolid(solid, dmg, source, point) {
     if (!solid || solid.hp === Infinity || !this.world.solids.has(solid)) return;
     solid.hp -= dmg;
@@ -261,10 +279,7 @@ class Game {
     if (!this.world.solids.has(solid)) return;
     const neighbors = solid.kind === 'structure' && checkSupport ? this.building.neighbors(solid) : [];
     if (solid.kind === 'structure') this.building.removeStructure(solid);
-    else {
-      this.world.removeSolid(solid);
-      this.scene.remove(solid.mesh);
-    }
+    else this.despawnSolid(solid);
     const b = solid.bounds;
     const center = new THREE.Vector3((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, (b.minZ + b.maxZ) / 2);
     const color = solid.material ? MATERIALS[solid.material].color : 0x999999;
@@ -292,23 +307,59 @@ class Game {
     this.sky.position.set(p.x, 0, p.z);
   }
 
+  /** Hides small far-away objects (they are lost in the fog anyway) to save draw calls. */
+  updateCulling(dt) {
+    this.cullTimer -= dt;
+    if (this.cullTimer > 0) return;
+    this.cullTimer = 0.4;
+    const cp = this.camera.position;
+    for (const c of this.loot.containers) {
+      const dx = c.centerX - cp.x;
+      const dz = c.centerZ - cp.z;
+      c.mesh.visible = dx * dx + dz * dz < 160 * 160;
+    }
+    for (const p of this.loot.pickups) {
+      const dx = p.pos.x - cp.x;
+      const dz = p.pos.z - cp.z;
+      const d2 = dx * dx + dz * dz;
+      p.group.visible = d2 < 120 * 120; // beams are visible from afar...
+      p.mesh.visible = d2 < 45 * 45; // ...the item model only up close
+    }
+    for (const b of this.bots.bots) {
+      if (!b.alive) continue;
+      const dx = b.pos.x - cp.x;
+      const dz = b.pos.z - cp.z;
+      const d2 = dx * dx + dz * dz;
+      const vis = d2 < 240 * 240;
+      b.char.group.visible = vis;
+      b.weaponModel.visible = d2 < 80 * 80;
+      b.glider.visible = vis && b.phase === 'glide';
+    }
+  }
+
   loop(now) {
     requestAnimationFrame((t) => this.loop(t));
     let dt = (now - this.last) / 1000;
     this.last = now;
-    if (dt > 0.05) dt = 0.05;
+    if (dt > 0.1) dt = 0.1;
     if (dt <= 0) dt = 0.001;
 
     if (this.state === 'menu') {
-      this.menuAngle += dt * 0.08;
-      const r = 300;
-      this.camera.position.set(Math.cos(this.menuAngle) * r, 150, Math.sin(this.menuAngle) * r);
-      this.camera.lookAt(0, 10, 0);
-      this.sky.position.set(0, 0, 0);
-      this.sun.position.set(80, 120, 50);
+      // slow orbit around the most central town
+      this.menuAngle += dt * 0.06;
+      const t = this.menuTown;
+      const r = 95;
+      this.camera.position.set(t.x + Math.cos(this.menuAngle) * r, t.h + 42, t.z + Math.sin(this.menuAngle) * r);
+      this.camera.lookAt(t.x, t.h + 4, t.z);
+      this.sky.position.set(t.x, 0, t.z);
+      this.sun.position.set(t.x + 80, t.h + 120, t.z + 50);
+      this.sun.target.position.set(t.x, t.h, t.z);
+      this.sun.target.updateMatrixWorld();
       this.effects.update(dt);
+      this.updateCulling(dt);
       this.renderer.render(this.scene, this.camera);
       this.input.endFrame();
+      this.adaptQuality(dt);
       return;
     }
 
@@ -328,21 +379,37 @@ class Game {
     this.loot.update(dt, this.player);
     this.effects.update(dt);
     this.updateSun();
+    this.updateCulling(dt);
     this.hud.update(dt);
     if (this.debug) this.hud.el.storm.textContent += `  |  ${Math.round(1 / dt)} fps`;
 
     this.renderer.render(this.scene, this.camera);
     input.endFrame();
 
-    // auto-disable shadows on weak machines
-    if (this.shadows) {
-      this.frameTimes.push(dt);
-      if (this.frameTimes.length >= 90) {
-        const avg = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
-        this.frameTimes.length = 0;
-        if (avg > 0.045) this.setShadows(false);
+    this.adaptQuality(dt);
+  }
+
+  /** Drops shadows and then render resolution on machines that can't keep up; scales back up when they can. */
+  adaptQuality(dt) {
+    this.frameTimes.push(dt);
+    if (this.frameTimes.length < 60) return;
+    const avg = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
+    this.frameTimes.length = 0;
+    if (avg > 0.04) {
+      if (this.shadows) {
+        this.setShadows(false);
+      } else if (this.pixelScale > 0.4) {
+        this.setPixelScale(Math.max(0.4, this.pixelScale - 0.15));
       }
+    } else if (avg < 0.02 && this.pixelScale < this.maxPixelScale) {
+      this.setPixelScale(Math.min(this.maxPixelScale, this.pixelScale + 0.1));
     }
+  }
+
+  setPixelScale(scale) {
+    this.pixelScale = scale;
+    this.renderer.setPixelRatio(scale);
+    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
   }
 }
 

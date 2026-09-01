@@ -474,11 +474,14 @@ export class Player {
     if (this.phase !== 'ground') pivot.y += 1.2;
     if (!this.alive) pivot.y += 2.5;
     let dist = this.camDist;
-    // keep the camera out of walls
+    // keep the camera out of walls (cheap AABB test against nearby solids) and above the terrain
     const back = this.forward.clone().negate();
-    const hit = this.game.world.raycast(pivot, back, dist + 0.3, (o) => !o.userData.player && !o.userData.bot);
-    if (hit) dist = Math.max(0.6, hit.distance - 0.35);
+    const end = pivot.clone().addScaledVector(back, dist + 0.3);
+    const hit = this.game.world.segmentSolid(pivot.x, pivot.y, pivot.z, end.x, end.y, end.z);
+    if (hit) dist = Math.max(0.6, hit.t * (dist + 0.3) - 0.35);
     cam.position.copy(pivot).addScaledVector(back, dist);
+    const terrainY = this.game.world.heightAt(cam.position.x, cam.position.z) + 0.4;
+    if (cam.position.y < terrainY) cam.position.y = terrainY;
     const shake = this.game.effects.shake;
     if (shake > 0) {
       cam.position.x += (Math.random() - 0.5) * shake * 0.25;
