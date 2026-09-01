@@ -5,7 +5,7 @@ import { Reflector } from "three/addons/objects/Reflector.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { Kit, panelWithHoles, rng, insideOut } from "./kit.js";
 import { PALETTE } from "./materials.js";
-import { decalRect } from "./textures.js";
+import { decalRect, GRATE_TILE } from "./textures.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
@@ -376,9 +376,21 @@ function porthole(frame, cu, cv, cw, ch, depth, op) {
   const r = op.r || Math.min(cw, ch) * 0.33;
   const plate = panelWithHoles(cw, ch, depth, [{ x: 0, y: 0, r: r }]);
   frame.add("metal", plate, cu, cv, -depth / 2, { color: PALETTE.gunmetal, uv: "world", texel: 1.0 });
-  // outer ring frame (proud), inner bevel ring
-  frame.add("metal", new THREE.TorusGeometry(r + 0.03, 0.045, 10, 36), cu, cv, 0.0, { color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
-  frame.add("metal", new THREE.TorusGeometry(r + 0.07, 0.03, 8, 36), cu, cv, -0.02, { color: PALETTE.orange, uv: "scale", uvScale: [4, 1] });
+  // outer ring frame (proud, cast metal so lights spread rather than ring-flare), inner bevel ring
+  frame.add("metalRough", new THREE.TorusGeometry(r + 0.03, 0.045, 10, 36), cu, cv, 0.0, { color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
+  frame.add("metalRough", new THREE.TorusGeometry(r + 0.07, 0.03, 8, 36), cu, cv, -0.02, { color: PALETTE.orange, uv: "scale", uvScale: [4, 1] });
+  // shutter control box in the lower corner of the cell (bezel, lever, status LEDs, spec plate)
+  const bu = cu + r + 0.12;
+  const bv = cv - r - 0.01;
+  frame.box("metalRough", bu, bv, -0.02, 0.14, 0.24, 0.05, { color: PALETTE.gunmetal });
+  frame.box("painted", bu, bv, 0.006, 0.11, 0.21, 0.01, { color: PALETTE.creamDark, uv: "keep" });
+  frame.box("metal", bu - 0.03, bv + 0.05, 0.025, 0.02, 0.09, 0.03, { color: PALETTE.steel });
+  frame.box("rubber", bu - 0.03, bv + 0.095, 0.03, 0.03, 0.03, 0.04, { color: PALETTE.rubber });
+  frame.box("emitTeal", bu + 0.03, bv + 0.06, 0.012, 0.02, 0.02, 0.006);
+  frame.box("emitOrange", bu + 0.03, bv + 0.02, 0.012, 0.02, 0.02, 0.006);
+  frame.add("decal", new THREE.PlaneGeometry(0.09, 0.09), bu, bv - 0.05, 0.012, { uv: "keep", uvRect: decalRect(9) });
+  // conduit dropping out of the box to the panel edge
+  frame.cylV("metal", bu, bv - 0.2, 0.012, 0.012, 0.16, { color: PALETTE.steel, segments: 8 });
   // hull sleeve through the wall thickness, faces flipped so it renders from inside the tube
   const sleeveLen = 0.2;
   const sleeve = insideOut(new THREE.CylinderGeometry(r, r, sleeveLen, 36, 1, true));
@@ -425,12 +437,14 @@ function buildCorridor(kit, ctx) {
     kit.box("metal", -0.22, -0.24, z, 0.15, 0.15, 0.08, { color: PALETTE.darkMetal });
     kit.box("metal", 0.24, -0.25, z + 0.4, 0.22, 0.12, 0.08, { color: PALETTE.darkMetal });
   }
-  // grate: crossbars + rails
-  for (let z = zAft - 0.04; z > zFwd - 0.4; z -= 0.09) {
-    kit.box("metal", 0, -0.02, z, 1.24, 0.035, 0.022, { color: PALETTE.steel, texel: 2 });
-  }
-  for (const x of [-0.61, -0.305, 0, 0.305, 0.61]) {
-    kit.box("metal", x, -0.03, zMid, 0.035, 0.05, len + 0.8, { color: PALETTE.gunmetal, texel: 2 });
+  // grate: one cut-out textured quad (tile = 1.24 m across x, 0.9 m along z)
+  {
+    const gl = len + 0.8;
+    const g = new THREE.PlaneGeometry(1.24, gl);
+    g.rotateX(-Math.PI / 2);
+    kit.add("grate", g, { pos: [0, -0.004, zMid], uv: "scale", uvScale: [1.24 / GRATE_TILE[0], gl / GRATE_TILE[1]], color: 0xffffff });
+    // grate edge rails (solid) so the quad meets the trim without a paper edge
+    for (const x of [-0.61, 0.61]) kit.box("metal", x, -0.03, zMid, 0.035, 0.05, gl, { color: PALETTE.gunmetal, texel: 2 });
   }
   // rubber trim between grate and plates
   kit.boxMM("rubber", [0.62, 0, zFwd - 0.4], [0.7, 0.02, zAft + 0.4], { color: PALETTE.rubber, texel: 2 });
@@ -499,15 +513,20 @@ function buildCorridor(kit, ctx) {
   }
   // channel recess + light strips per bay (diffuser strip is narrower than the housing so it reads as a fixture)
   kit.boxMM("metal", [-chanHalf, h - 0.02, zFwd], [chanHalf, h + 0.12, zAft], { color: PALETTE.darkMetal });
+  // fixtures in the gaps between ribs: housing, end caps, louvre fins over a narrow diffuser (a fixture
+  // with a shape, not a bare glowing bar)
   for (let z = zAft - 1.5; z > zFwd; z -= 3) {
-    kit.box("metal", 0, h - 0.06, z, 0.26, 0.06, 2.3, { color: PALETTE.gunmetal });
-    kit.box("emitWarm", 0, h - 0.1, z, 0.12, 0.03, 2.1);
-    for (const dz of [-1.1, 1.1]) kit.box("metal", 0, h - 0.09, z + dz, 0.2, 0.05, 0.06, { color: PALETTE.darkMetal });
-    // light sits well below the fixture so the ceiling panels beside it don't blow out
-    ctx.lights.warm.push(pointLight(0xffc48c, 5.5, 9, [0, h - 0.6, z]));
+    kit.box("metalRough", 0, h - 0.06, z, 0.28, 0.06, 2.3, { color: PALETTE.gunmetal });
+    kit.box("emitWarm", 0, h - 0.1, z, 0.1, 0.03, 2.1);
+    for (const dz of [-1.11, 1.11]) kit.box("metalRough", 0, h - 0.1, z + dz, 0.26, 0.08, 0.08, { color: PALETTE.darkMetal });
+    for (let f = -0.9; f <= 0.9; f += 0.2) kit.box("metalRough", 0, h - 0.115, z + f, 0.2, 0.01, 0.02, { color: PALETTE.darkMetal });
+    for (const dx of [-0.13, 0.13]) kit.box("metalRough", dx, h - 0.09, z, 0.02, 0.07, 2.3, { color: PALETTE.darkMetal });
   }
-  // teal trench lights (soft floor glow)
-  for (let z = zAft - 4; z > zFwd; z -= 8) ctx.lights.teal.push(pointLight(0x4fd8cc, 2.2, 5, [0, -0.1, z]));
+  // four warm point lights hung well below the ceiling (the panels beside the fixtures don't blow out,
+  // and 0.6 m down nobody can tell which fixture a pool belongs to)
+  for (const z of [-1.5, -5.5, -9.5, -13.5]) ctx.lights.warm.push(pointLight(0xffc48c, 6.5, 10, [0, h - 0.6, z]));
+  // teal trench light (soft floor glow; the strips themselves carry the look through bloom)
+  ctx.lights.teal.push(pointLight(0x4fd8cc, 3.5, 10, [0, -0.1, zMid]));
 
   // --- handrails along both walls (broken at the doorways), with brackets
   const railY = 1.02;
@@ -678,13 +697,11 @@ function buildCorridor(kit, ctx) {
     kit.box("emitTeal", s * (hw - 0.125), DOOR_H + 0.11, zc, 0.02, 0.05, 0.22);
   }
 
-  // porthole cool lights: far enough into the corridor that the steel rings don't blow out
-  for (const p of [
-    [-hw + 0.8, 1.6, -12.6],
-    [-hw + 0.8, 1.6, -2.5],
-    [hw - 0.8, 1.6, -7.2],
-  ]) {
-    ctx.lights.cool.push(pointLight(0x9fc6ff, 1.4, 5, p));
+  // cool space light through the two port portholes: spots parked outside the hull, aimed down across
+  // the corridor. From outside they cannot hit the ring's face (no hot specular), and without shadows
+  // the cone simply reads as a shaft of planet-light on the far wall and floor.
+  for (const z of [-12.6, -2.5]) {
+    ctx.lights.cool.push(windowSpot(0x9fc6ff, 14, [-hw - 0.6, 1.65, z], [hw - 0.3, 0.0, z]));
   }
 }
 
@@ -703,7 +720,20 @@ function buildCockpit(kit, ctx) {
   kit.boxMM("rubber", [-1.3, 0, -20.2], [1.3, 0.02, -17.2], { color: PALETTE.rubber, texel: 2 });
   {
     const f = ceilingFrame(kit, -hwC, wsTopZ, h);
-    panelGrid(f, hwC * 2, zBack - wsTopZ, { rows: [0, 1.2, 2.5, zBack - wsTopZ], panelW: 1.2, kick: false, topPipes: false, seed: 909, collide: false, styles: { panel: 0.7, greeble: 0.15, conduit: 0.15 } });
+    panelGrid(f, hwC * 2, zBack - wsTopZ, { rows: [0, 1.2, 2.5, 3.8, zBack - wsTopZ], panelW: 0.96, kick: false, topPipes: false, seed: 909, collide: false, styles: { panel: 0.45, greeble: 0.2, conduit: 0.2, vent: 0.15 } });
+    // two conduit runs the length of the cockpit ceiling with clamps, plus a cable tray
+    const zc = (zBack + wsTopZ) / 2 + 0.2;
+    const runL = zBack - wsTopZ - 0.6;
+    for (const [x, r, col] of [
+      [-1.75, 0.05, PALETTE.steel],
+      [-1.62, 0.03, PALETTE.orange],
+      [1.7, 0.045, PALETTE.gunmetal],
+    ]) {
+      kit.cyl("metal", x, h - 0.1 - r, zc, r, runL, "z", { color: col, segments: 10 });
+      for (let z = zc - runL / 2 + 0.4; z < zc + runL / 2; z += 1.2) kit.box("metalRough", x, h - 0.09 - r, z, r * 2 + 0.05, 0.05, 0.06, { color: PALETTE.darkMetal });
+    }
+    kit.boxMM("metalRough", [1.9, h - 0.16, zBack - 3.6], [2.3, h - 0.13, zBack - 0.4], { color: PALETTE.darkMetal, texel: 1 });
+    for (let z = zBack - 3.4; z < zBack - 0.5; z += 0.35) kit.box("rubber", 2.1, h - 0.17, z, 0.34, 0.02, 0.06, { color: PALETTE.rubber });
   }
   // rear wall (faces -Z into cockpit) with doorway
   {
@@ -850,6 +880,11 @@ function buildCockpit(kit, ctx) {
     // console glow lights
     ctx.lights.warm.push(pointLight(0xff9d55, 2.4, 4, [-1.2, 1.3, -20.4]));
     ctx.lights.teal.push(pointLight(0x4fd8cc, 2.0, 4, [1.2, 1.3, -20.4]));
+    // teal kick strip along the console base + pedestal foot: lifts the floor out of black
+    kit.boxMM("emitTeal", [-2.1, 0.13, cz0 + 0.8], [2.1, 0.16, cz0 + 0.812]);
+    kit.boxMM("metalRough", [-2.15, 0.11, cz0 + 0.75], [2.15, 0.18, cz0 + 0.8], { color: PALETTE.darkMetal });
+    for (const s of [-1, 1]) kit.boxMM("emitTeal", [s > 0 ? hwC - 0.56 : -hwC + 0.55, 0.12, -20.5], [s > 0 ? hwC - 0.548 : -hwC + 0.562, 0.15, -18.5]);
+    ctx.lights.teal.push(pointLight(0x4fd8cc, 2.2, 4.5, [0, 0.3, -19.7]));
   }
 
   // --- pilot seats
@@ -934,7 +969,6 @@ function buildCockpit(kit, ctx) {
     kit.boxMM("screen3", [-0.5, 2.405, -19.92], [0.5, 2.41, -19.63], { uv: "keep" });
     kit.boxMM("leds", [-1.1, 2.4, -19.5], [1.1, 2.44, -19.45], { uv: "keep" });
   }
-  ctx.lights.teal.push(pointLight(0x4fd8cc, 1.6, 4, [0, 2.3, -19.9]));
 
   // --- side consoles
   for (const s of [-1, 1]) {
@@ -1068,9 +1102,9 @@ function buildQuarters(kit, ctx) {
   // ceiling fixture + key light
   kit.box("metal", (x0 + x1) / 2, h - 0.05, (z0 + z1) / 2, 0.9, 0.08, 0.9, { color: PALETTE.gunmetal });
   kit.box("emitWarm", (x0 + x1) / 2, h - 0.1, (z0 + z1) / 2, 0.7, 0.03, 0.7);
-  const spot = new THREE.SpotLight(0xffc08a, 30 * LIGHT_SCALE, 8, 0.72, 0.65, 1.7);
+  const spot = new THREE.SpotLight(0xffc08a, 32 * LIGHT_SCALE, 8, 0.8, 0.6, 1.7);
   spot.position.set((x0 + x1) / 2, h - 0.15, (z0 + z1) / 2);
-  spot.target.position.set((x0 + x1) / 2 - 0.6, 0, (z0 + z1) / 2 - 0.3);
+  spot.target.position.set((x0 + x1) / 2 - 0.45, 0, (z0 + z1) / 2 - 0.2);
   spot.castShadow = true;
   spot.shadow.mapSize.set(1024, 1024);
   spot.shadow.bias = -0.0003;
@@ -1079,7 +1113,8 @@ function buildQuarters(kit, ctx) {
   spot.shadow.camera.far = 7;
   ctx.lights.spots.push(spot);
   ctx.lights.warm.push(spot);
-  ctx.lights.cool.push(pointLight(0x9fc6ff, 2.0, 4, [x0 + 0.4, 1.75, -7.3]));
+  // planet-light through the porthole over the bunk: cool rim on the pillow end and the deck
+  ctx.lights.cool.push(windowSpot(0x9fc6ff, 16, [x0 - 0.6, 1.75, -7.3], [x0 + 2.6, 0.0, -7.1], 0.45));
 }
 
 function buildGalley(kit, ctx) {
@@ -1131,16 +1166,38 @@ function buildGalley(kit, ctx) {
   kit.boxMM("metal", [cx0 - 0.04, 0.86, cz0 - 0.03], [cx1 + 0.04, 0.92, cz1 + 0.03], { color: PALETTE.steel, texel: 1 });
   // backsplash
   kit.boxMM("metal", [x1 - 0.2, 0.92, cz0], [x1 - 0.02, 1.55, cz1], { color: PALETTE.gunmetal, texel: 1 });
-  // upper cabinets
+  // upper cabinets: doors with recessed pulls, a teal band, vent slots and stencilled contents labels
   kit.boxMM("painted", [x1 - 0.42, 1.62, cz0], [x1 - 0.02, 2.3, cz1], { color: PALETTE.cream, uv: "keep" });
-  for (let z = cz0 + 0.8; z < cz1 - 0.3; z += 0.8) {
-    kit.boxMM("metal", [x1 - 0.425, 1.65, z - 0.01], [x1 - 0.415, 2.27, z + 0.01], { color: PALETTE.darkMetal });
+  {
+    const gRand = rng(2323);
+    const doorW = 0.8;
+    let d = 0;
+    for (let z = cz0; z < cz1 - 0.3; z += doorW, d++) {
+      const zc = Math.min(z + doorW / 2, cz1 - 0.2);
+      if (z > cz0) kit.boxMM("metal", [x1 - 0.425, 1.65, z - 0.01], [x1 - 0.415, 2.27, z + 0.01], { color: PALETTE.darkMetal });
+      // recessed pull
+      kit.boxMM("metalRough", [x1 - 0.43, 1.7, zc - 0.12], [x1 - 0.415, 1.76, zc + 0.12], { color: PALETTE.darkMetal });
+      kit.boxMM("metal", [x1 - 0.445, 1.72, zc - 0.1], [x1 - 0.425, 1.74, zc + 0.1], { color: PALETTE.steel });
+      // label on every other door, vent slots on the rest
+      if (d % 2 === 0) {
+        const g = new THREE.PlaneGeometry(0.22, 0.22);
+        g.rotateY(-Math.PI / 2);
+        kit.add("decal", g, { pos: [x1 - 0.421, 1.98, zc], uv: "keep", uvRect: decalRect([11, 9, 11][Math.floor(gRand() * 3)]) });
+      } else {
+        for (let k = 0; k < 5; k++) kit.boxMM("metal", [x1 - 0.425, 1.9 + k * 0.05, zc - 0.14], [x1 - 0.415, 1.915 + k * 0.05, zc + 0.14], { color: PALETTE.darkMetal });
+      }
+    }
   }
   kit.boxMM("painted", [x1 - 0.43, 2.1, cz0], [x1 - 0.41, 2.18, cz1], { color: PALETTE.tealPaint, uv: "keep" });
-  // under-cabinet light (recessed diffuser; the point light hangs out over the counter, not on the wall)
+  kit.boxMM("metalRough", [x1 - 0.44, 2.3, cz0 - 0.02], [x1 - 0.02, 2.36, cz1 + 0.02], { color: PALETTE.gunmetal, texel: 1 });
+  // under-cabinet diffuser strip (emissive only)
   kit.boxMM("metal", [x1 - 0.4, 1.56, cz0 + 0.1], [x1 - 0.25, 1.62, cz1 - 0.1], { color: PALETTE.darkMetal });
   kit.boxMM("emitWarm", [x1 - 0.36, 1.555, cz0 + 0.15], [x1 - 0.29, 1.565, cz1 - 0.15]);
-  ctx.lights.warm.push(pointLight(0xffc48c, 2.2, 4, [x1 - 0.9, 1.3, (cz0 + cz1) / 2]));
+  // the room's key: a warm downlight over the counter (fixture on the ceiling, light hung below it), so
+  // the counter, backsplash and cabinet fronts carry the highlights and the far wall falls off
+  kit.box("metalRough", x1 - 0.95, h - 0.05, (cz0 + cz1) / 2, 0.4, 0.08, 2.2, { color: PALETTE.gunmetal });
+  kit.box("emitWarm", x1 - 0.95, h - 0.1, (cz0 + cz1) / 2, 0.16, 0.03, 2.0);
+  ctx.lights.warm.push(pointLight(0xffc48c, 6.0, 7, [x1 - 1.0, h - 0.6, (cz0 + cz1) / 2]));
   // sink
   kit.boxMM("metal", [cx0 + 0.1, 0.9, cz1 - 1.0], [cx1 - 0.08, 0.93, cz1 - 0.45], { color: PALETTE.darkMetal, texel: 1 });
   kit.cyl("metal", cx1 - 0.15, 1.05, cz1 - 0.72, 0.015, 0.3, "y", { color: PALETTE.steel, segments: 8 });
@@ -1150,23 +1207,32 @@ function buildGalley(kit, ctx) {
   for (const hz of [cz0 + 0.45, cz0 + 0.75]) {
     kit.add("emitOrange", new THREE.TorusGeometry(0.09, 0.012, 8, 24), { pos: [(cx0 + cx1) / 2, 0.945, hz], rot: [Math.PI / 2, 0, 0] });
   }
-  // dispenser (interactable)
+  // dispenser (interactable): painted appliance body with a cast-metal face plate (a polished steel box
+  // right under the counter light was one big specular blob)
   const disp = new THREE.Group();
   disp.name = "galley";
-  const dm = ctx.materials.metal.clone();
+  const dm = ctx.materials.painted.clone();
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.45), dm);
-  colorGeo(body.geometry, PALETTE.steel, 1);
+  colorGeo(body.geometry, PALETTE.creamDark, 1);
   body.position.set(cx0 + 0.3, 0.92 + 0.31, cz0 + 1.55);
   disp.add(body);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.56, 0.4), ctx.materials.metalRough);
+  colorGeo(face.geometry, PALETTE.gunmetal, 1);
+  face.position.set(cx0 + 0.045, 1.23, cz0 + 1.55);
+  disp.add(face);
+  const band = new THREE.Mesh(new THREE.BoxGeometry(0.51, 0.05, 0.46), ctx.materials.painted);
+  colorGeo(band.geometry, PALETTE.orange, 1);
+  band.position.set(cx0 + 0.3, 1.48, cz0 + 1.55);
+  disp.add(band);
   const slot = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.22, 0.32), ctx.materials.darkGloss);
-  slot.position.set(cx0 + 0.04, 1.1, cz0 + 1.55);
+  slot.position.set(cx0 + 0.028, 1.1, cz0 + 1.55);
   disp.add(slot);
   const dscreen = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.18), ctx.materials.screens[2]);
-  dscreen.position.set(cx0 + 0.045, 1.38, cz0 + 1.55);
+  dscreen.position.set(cx0 + 0.033, 1.38, cz0 + 1.55);
   dscreen.rotation.y = -Math.PI / 2;
   disp.add(dscreen);
   const dled = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.03, 0.26), ctx.materials.emitOrange);
-  dled.position.set(cx0 + 0.05, 1.25, cz0 + 1.55);
+  dled.position.set(cx0 + 0.032, 1.25, cz0 + 1.55);
   disp.add(dled);
   for (const m of disp.children) {
     m.castShadow = true;
@@ -1210,11 +1276,32 @@ function buildGalley(kit, ctx) {
     kit.box("hazard", cx, cy + sy * 0.32, cz, sx + 0.01, 0.06, sz + 0.01, { texel: 3 });
     kit.collider([cx - sx / 2, 0, cz - sz / 2], [cx + sx / 2, cy + sy / 2, cz + sz / 2], "crate");
   }
-  // ceiling fixture
-  kit.box("metal", (x0 + x1) / 2, h - 0.05, (z0 + z1) / 2, 1.6, 0.08, 0.3, { color: PALETTE.gunmetal });
-  kit.box("emitWarm", (x0 + x1) / 2, h - 0.1, (z0 + z1) / 2, 1.4, 0.03, 0.1);
-  ctx.lights.warm.push(pointLight(0xffc48c, 4.0, 6, [(x0 + x1) / 2, h - 0.55, (z0 + z1) / 2]));
-  ctx.lights.teal.push(pointLight(0x4fd8cc, 1.2, 3, [x0 + 0.6, 1.6, z1 - 0.4]));
+  // --- wall rack over the table on the north wall: shelf with a lip, canisters, control box, LED bar
+  {
+    const rz = z0 + 0.02;
+    const rx = 2.45;
+    kit.boxMM("metalRough", [rx - 0.45, 1.25, rz], [rx + 0.45, 1.28, rz + 0.3], { color: PALETTE.gunmetal, texel: 1 });
+    kit.boxMM("metal", [rx - 0.45, 1.28, rz], [rx - 0.43, 1.31, rz + 0.3], { color: PALETTE.steel });
+    kit.boxMM("metal", [rx + 0.43, 1.28, rz], [rx + 0.45, 1.31, rz + 0.3], { color: PALETTE.steel });
+    kit.boxMM("metal", [rx - 0.45, 1.28, rz + 0.28], [rx + 0.45, 1.31, rz + 0.3], { color: PALETTE.steel });
+    for (const [dx, col, hgt] of [
+      [-0.3, PALETTE.tealPaint, 0.26],
+      [-0.1, PALETTE.creamDark, 0.22],
+      [0.12, PALETTE.orange, 0.26],
+      [0.32, PALETTE.creamDark, 0.18],
+    ]) {
+      kit.cyl("painted", rx + dx, 1.28 + hgt / 2, rz + 0.15, 0.07, hgt, "y", { color: col, uv: "keep", segments: 14 });
+      kit.cyl("metal", rx + dx, 1.28 + hgt + 0.015, rz + 0.15, 0.05, 0.03, "y", { color: PALETTE.steel, segments: 14 });
+    }
+    kit.boxMM("metalRough", [rx - 0.4, 1.7, rz], [rx + 0.4, 1.74, rz + 0.06], { color: PALETTE.darkMetal });
+    kit.boxMM("metalRough", [rx - 0.4, 0.95, rz], [rx + 0.4, 1.25, rz + 0.06], { color: PALETTE.gunmetal });
+    kit.box("leds", rx, 1.1, rz + 0.062, 0.5, 0.03, 0.004, { uv: "keep" });
+    kit.collider([rx - 0.5, 0.9, rz], [rx + 0.5, 1.8, rz + 0.35], "rack");
+  }
+  // centre ceiling fixture (emissive only; the counter downlight is the room's key)
+  kit.box("metalRough", (x0 + x1) / 2 - 0.4, h - 0.05, (z0 + z1) / 2, 1.6, 0.08, 0.3, { color: PALETTE.gunmetal });
+  kit.box("emitWarm", (x0 + x1) / 2 - 0.4, h - 0.1, (z0 + z1) / 2, 1.4, 0.03, 0.1);
+  ctx.lights.teal.push(pointLight(0x4fd8cc, 1.6, 4, [x0 + 0.6, 1.6, z1 - 0.4]));
 }
 
 function buildBathroom(kit, ctx) {
@@ -1304,17 +1391,16 @@ function buildBathroom(kit, ctx) {
   // vanity light bar above the mirror
   kit.boxMM("metal", [x1 - 0.3, 2.06, sz - 0.42], [x1 + 0.01, 2.14, sz + 0.42], { color: PALETTE.darkMetal });
   kit.boxMM("emitCool", [x1 - 0.28, 2.05, sz - 0.38], [x1 - 0.16, 2.06, sz + 0.38]);
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 2.4, 4.5, [x1 - 0.7, 1.95, sz]));
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 3.4, 5.5, [x1 - 0.7, 2.0, sz]));
   // towel rail + shelf greebles
   kit.cyl("metal", x0 + 0.9, 1.3, z1 - 0.2, 0.015, 0.7, "x", { color: PALETTE.steel, segments: 8 });
   kit.boxMM("fabric", [x0 + 0.65, 0.75, z1 - 0.23], [x0 + 1.05, 1.3, z1 - 0.19], { color: PALETTE.fabricOrange, uv: "world", texel: 2 });
   kit.boxMM("metal", [x1 - 0.35, 1.05, z0 + 0.15], [x1 - 0.05, 1.08, z0 + 0.9], { color: PALETTE.steel });
   kit.cyl("painted", x1 - 0.2, 1.15, z0 + 0.35, 0.04, 0.14, "y", { color: PALETTE.tealPaint, uv: "keep" });
   kit.cyl("painted", x1 - 0.2, 1.13, z0 + 0.6, 0.035, 0.1, "y", { color: PALETTE.cream, uv: "keep" });
-  // ceiling vent light
-  kit.box("metal", (x0 + x1) / 2, h - 0.05, (z0 + z1) / 2, 0.6, 0.08, 0.6, { color: PALETTE.gunmetal });
+  // ceiling vent light (emissive only; the vanity bar is the room's light)
+  kit.box("metalRough", (x0 + x1) / 2, h - 0.05, (z0 + z1) / 2, 0.6, 0.08, 0.6, { color: PALETTE.gunmetal });
   kit.box("emitCool", (x0 + x1) / 2, h - 0.1, (z0 + z1) / 2, 0.45, 0.03, 0.45);
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 2.0, 4, [(x0 + x1) / 2, h - 0.3, (z0 + z1) / 2]));
 }
 
 // ---------------------------------------------------------------------------
@@ -1327,6 +1413,15 @@ function pointLight(color, intensity, distance, pos) {
   const l = new THREE.PointLight(color, intensity * LIGHT_SCALE, distance, 2);
   l.position.set(pos[0], pos[1], pos[2]);
   return l;
+}
+
+// Unshadowed spot standing outside a window, aimed into the room: cool "space light" that cannot
+// reach the window frame's own face.
+function windowSpot(color, intensity, pos, target, angle = 0.42) {
+  const s = new THREE.SpotLight(color, intensity * LIGHT_SCALE, 7, angle, 0.7, 1.8);
+  s.position.set(pos[0], pos[1], pos[2]);
+  s.target.position.set(target[0], target[1], target[2]);
+  return s;
 }
 
 // Mirror a box's default UVs at random so repeated panel textures don't read as copies.

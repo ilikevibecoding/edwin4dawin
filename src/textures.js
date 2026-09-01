@@ -127,6 +127,8 @@ export class TexGen {
     this.rough = new Float32Array(n).fill(0.5);
     this.metal = new Float32Array(n).fill(0);
     this.height = new Float32Array(n).fill(0.5);
+    // optional coverage channel (cut-out materials such as grating); null = opaque
+    this.alpha = null;
   }
 
   // fn(u, v, i) -> void, may write channels through `this`
@@ -188,7 +190,7 @@ export class TexGen {
       imgA.data[i * 4] = clamp01(this.r[i]) * 255;
       imgA.data[i * 4 + 1] = clamp01(this.g[i]) * 255;
       imgA.data[i * 4 + 2] = clamp01(this.b[i]) * 255;
-      imgA.data[i * 4 + 3] = 255;
+      imgA.data[i * 4 + 3] = this.alpha ? clamp01(this.alpha[i]) * 255 : 255;
       imgRM.data[i * 4] = 255;
       imgRM.data[i * 4 + 1] = clamp01(this.rough[i]) * 255;
       imgRM.data[i * 4 + 2] = clamp01(this.metal[i]) * 255;
@@ -267,16 +269,20 @@ export function makePaintedPanel(size = 512, seed = 11) {
     // base paint: slight warm variation
     const n1 = fbm(u, v, { octaves: 4, freq: 6, seed: seed });
     const n2 = fbm(u, v, { octaves: 5, freq: 16, seed: seed + 5 });
-    let lum = 0.92 + (n1 - 0.5) * 0.08 + (n2 - 0.5) * 0.05;
+    let lum = 0.92 + (n1 - 0.5) * 0.1 + (n2 - 0.5) * 0.05;
     // grime concentrating near edges (slightly warm-dark, like handled paint)
     const grime = clamp01(1 - ed / 0.16) * fbm(u, v, { octaves: 4, freq: 9, seed: seed + 9 });
     // streaky dirt running down (v direction)
     const streak = Math.pow(fbm(u * 1.0, v * 0.15, { octaves: 3, freq: 20, seed: seed + 21 }), 3);
     lum *= 1 - streak * 0.1;
+    // broad handling smudges across the face so the centre is never one flat tone
+    const smudge = fbm(u, v, { octaves: 3, freq: 2.5, seed: seed + 31 });
+    const smudgeK = clamp01((smudge - 0.5) * 2.2) * 0.07;
+    lum *= 1 - smudgeK;
     let r = lum * (1 - grime * 0.18),
       g = lum * 0.995 * (1 - grime * 0.21),
       b = lum * 0.985 * (1 - grime * 0.25);
-    let rough = 0.5 + (n2 - 0.5) * 0.25 + grime * 0.28;
+    let rough = 0.5 + (n2 - 0.5) * 0.25 + grime * 0.28 + smudgeK * 1.5;
     let metal = 0;
     // bevel height
     let hgt = 0.5 + clamp01(ed / 0.03) * 0.35;
@@ -299,34 +305,35 @@ export function makePaintedPanel(size = 512, seed = 11) {
     g += wear * 0.07;
     b += wear * 0.06;
     rough -= wear * 0.18;
-    // chipping: sharp flakes revealing mid-grey primer/steel. Confined to the outer ~5% of the panel,
-    // its corners and the dents; the centre stays almost clean (the noise threshold there is ~never met).
-    const chipNoise = fbm(u, v, { octaves: 3, freq: 40, seed: seed + 3 });
+    // chipping: small flakes of paint gone, exposing grey primer (dielectric — a metallic chip would only
+    // mirror the dark interior and read as a black blot). Confined to the outer ~4% of the panel, its
+    // corners and the dents; the centre stays clean (the noise threshold there is ~never met).
+    const chipNoise = fbm(u, v, { octaves: 3, freq: 48, seed: seed + 3 });
     // some stretches of edge stay intact: modulate by a slow noise along the perimeter
-    const edgeVar = 0.35 + 0.65 * clamp01((fbm(u, v, { octaves: 2, freq: 3, seed: seed + 17 }) - 0.38) * 3.2);
-    const edgeBias = Math.pow(clamp01(1 - ed / 0.055), 1.5) * edgeVar;
-    const cornerBias = clamp01(1 - Math.hypot(Math.min(u, 1 - u), Math.min(v, 1 - v)) / 0.1);
-    const chipMask = chipNoise - (0.9 - edgeBias * 0.34 - cornerBias * 0.1 - dentK * 0.3);
+    const edgeVar = 0.3 + 0.7 * clamp01((fbm(u, v, { octaves: 2, freq: 3, seed: seed + 17 }) - 0.4) * 3.2);
+    const edgeBias = Math.pow(clamp01(1 - ed / 0.045), 1.6) * edgeVar;
+    const cornerBias = clamp01(1 - Math.hypot(Math.min(u, 1 - u), Math.min(v, 1 - v)) / 0.08);
+    const chipMask = chipNoise - (0.93 - edgeBias * 0.3 - cornerBias * 0.06 - dentK * 0.28);
     if (chipMask > 0) {
-      const k = clamp01(chipMask * 40);
-      const m = 0.52 + (n2 - 0.5) * 0.12;
-      r = lerp(r, m * 1.0, k);
-      g = lerp(g, m * 1.01, k);
-      b = lerp(b, m * 1.04, k);
-      rough = lerp(rough, 0.36, k);
-      metal = lerp(metal, 1, k);
+      const k = clamp01(chipMask * 45);
+      const m = 0.6 + (n2 - 0.5) * 0.1;
+      r = lerp(r, m * 0.98, k);
+      g = lerp(g, m * 1.0, k);
+      b = lerp(b, m * 1.03, k);
+      rough = lerp(rough, 0.62, k);
+      metal = lerp(metal, 0.1, k);
       hgt -= k * 0.05;
     }
     // fine scratches (light, glancing)
     const sc = worley(u, v, 18, seed + 7);
     if (sc < 0.014) {
       const k = 1 - sc / 0.014;
-      r = lerp(r, 0.55, k * 0.45);
-      g = lerp(g, 0.55, k * 0.45);
-      b = lerp(b, 0.57, k * 0.45);
+      r = lerp(r, 0.6, k * 0.45);
+      g = lerp(g, 0.6, k * 0.45);
+      b = lerp(b, 0.62, k * 0.45);
       hgt -= k * 0.03;
       rough -= k * 0.08;
-      metal = lerp(metal, 0.6, k * 0.5);
+      metal = lerp(metal, 0.2, k * 0.5);
     }
     // rivets
     for (const [rx, ry] of rivets) {
@@ -334,11 +341,11 @@ export function makePaintedPanel(size = 512, seed = 11) {
       if (dd < 0.02) {
         const k = smooth(clamp01(1 - dd / 0.02));
         hgt += k * 0.25;
-        const ring = dd > 0.014 ? 1 : 0.55;
-        r = lerp(r, 0.42 * ring, 0.85);
-        g = lerp(g, 0.43 * ring, 0.85);
-        b = lerp(b, 0.46 * ring, 0.85);
-        rough = 0.4;
+        const ring = dd > 0.014 ? 1 : 0.7;
+        r = lerp(r, 0.6 * ring, 0.85);
+        g = lerp(g, 0.61 * ring, 0.85);
+        b = lerp(b, 0.64 * ring, 0.85);
+        rough = 0.42;
         metal = 1;
       }
     }
@@ -351,19 +358,20 @@ export function makePaintedPanel(size = 512, seed = 11) {
 }
 
 // Brushed / worn metal, tileable. Vertex colors / material color tint it.
-export function makeWornMetal(size = 512, seed = 23) {
+export function makeWornMetal(size = 1024, seed = 23) {
   const t = new TexGen(size, size);
   t.each((u, v, i) => {
-    // brushed streaks along u
-    const streak = vnoise(u * 0.02, v, 220, seed) * 0.55 + vnoise(u * 0.05, v, 90, seed + 1) * 0.3 + vnoise(u * 0.01, v, 400, seed + 3) * 0.15;
+    // brushed grain along u: fine, low-contrast in albedo (real brushing shows up in the roughness /
+    // specular, not as visible light-and-dark bands, which read as wood grain)
+    const streak = vnoise(u * 0.02, v, 240, seed) * 0.6 + vnoise(u * 0.01, v, 480, seed + 3) * 0.4;
     const blotch = fbm(u, v, { octaves: 4, freq: 3, seed: seed + 2 });
     const spots = fbm(u, v, { octaves: 5, freq: 12, seed: seed + 6 });
-    let lum = 0.66 + (streak - 0.5) * 0.2 + (blotch - 0.5) * 0.07;
+    let lum = 0.66 + (streak - 0.5) * 0.07 + (blotch - 0.5) * 0.045;
     // dull oxidised patches
     const dull = clamp01((spots - 0.6) * 6);
-    lum *= 1 - dull * 0.12;
-    let rough = 0.32 + (streak - 0.5) * 0.18 + dull * 0.35 + (blotch - 0.5) * 0.12;
-    let hgt = 0.5 + (streak - 0.5) * 0.08 + (spots - 0.5) * 0.04;
+    lum *= 1 - dull * 0.1;
+    let rough = 0.34 + (streak - 0.5) * 0.22 + dull * 0.32 + (blotch - 0.5) * 0.1;
+    let hgt = 0.5 + (streak - 0.5) * 0.05 + (spots - 0.5) * 0.04;
     // scratches
     const sc = worley(u, v, 10, seed + 4);
     if (sc < 0.012) {
@@ -518,6 +526,42 @@ export function makeHazard(size = 256, seed = 71) {
     t.height[i] = 0.5 - wear * 0.05;
   });
   return finish(t.bake({ normalStrength: 1.0 }));
+}
+
+// Floor grating as a cut-out texture: one tile = GRATE_TILE metres (x across the trench, z along it),
+// 5 rails running along z and a crossbar every 9 cm. A single textured quad with mipmaps replaces
+// ~180 thin boxes, which shimmered into moiré arcs in the distance.
+export const GRATE_TILE = [1.24, 0.9];
+export function makeGrate(w = 1024, h = 768, seed = 61) {
+  const t = new TexGen(w, h);
+  t.alpha = new Float32Array(w * h);
+  const railHalf = 0.017 / 1.24;
+  const barHalf = 0.011 / 0.9;
+  const bars = 10;
+  const px = 1 / w;
+  t.each((u, v, i) => {
+    // distance to the nearest rail (u wraps) and crossbar (v wraps)
+    const du = Math.abs(((u * 4 + 0.5) % 1) - 0.5) / 4;
+    const dv = Math.abs(((v * bars + 0.5) % 1) - 0.5) / bars;
+    const railK = clamp01((railHalf - du) / px + 0.5);
+    const barK = clamp01((barHalf - dv) / (1 / h) + 0.5);
+    const cover = Math.max(railK, barK);
+    const streak = vnoise(u * 0.02, v, 260, seed) * 0.6 + vnoise(u, v * 0.02, 260, seed + 1) * 0.4;
+    const grime = fbm(u, v, { octaves: 4, freq: 5, seed: seed + 2 });
+    let lum = 0.58 + (streak - 0.5) * 0.08 - grime * 0.12;
+    if (railK > barK) lum *= 0.85;
+    // worn bright tops where boots land
+    const wear = clamp01((fbm(u, v, { octaves: 3, freq: 3, seed: seed + 4 }) - 0.55) * 4);
+    lum += wear * 0.14 * barK;
+    t.setColor(i, lum, lum * 1.01, lum * 1.04);
+    t.rough[i] = clamp01(0.46 + (streak - 0.5) * 0.2 + grime * 0.2 - wear * 0.18);
+    t.metal[i] = 1;
+    // alpha never quite zero: canvases store premultiplied colour, and a fully transparent texel would
+    // turn black and darken the mip chain
+    t.alpha[i] = 0.02 + 0.98 * cover;
+    t.height[i] = 0.25 + cover * 0.45 + (streak - 0.5) * 0.04;
+  });
+  return finish(t.bake({ normalStrength: 1.4 }));
 }
 
 function finish(set) {

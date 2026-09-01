@@ -79,7 +79,7 @@ export class Kit {
       if (!material) throw new Error("Unknown material " + key);
       const mesh = new THREE.Mesh(merged, material);
       mesh.name = "kit_" + key;
-      mesh.castShadow = castShadow && !key.startsWith("emit") && key !== "glass" && key !== "decal";
+      mesh.castShadow = castShadow && !key.startsWith("emit") && key !== "glass" && key !== "decal" && key !== "grate";
       mesh.receiveShadow = receiveShadow && key !== "glass" && key !== "decal";
       parent.add(mesh);
       this.meshes.push(mesh);

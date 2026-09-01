@@ -10,6 +10,7 @@ import {
   makeScreen,
   makeLedStrip,
   makeDecalSheet,
+  makeGrate,
 } from "./textures.js";
 
 export const PALETTE = {
@@ -34,7 +35,8 @@ export function buildMaterials() {
   const painted = makePaintedPanel(512, 11);
   const painted1 = makePaintedPanel(512, 47);
   const painted2 = makePaintedPanel(512, 83);
-  const metal = makeWornMetal(512, 23);
+  const metal = makeWornMetal(1024, 23);
+  const grate = makeGrate(1024, 768, 61);
   const deck = makeDeckPlate(1024, 41);
   const rubber = makeRubber(256, 53);
   const fabric = makeFabric(256, 67);
@@ -60,6 +62,18 @@ export function buildMaterials() {
     painted2: std(painted2, { normalScale: new THREE.Vector2(0.9, 0.9), envMapIntensity: 0.8 }),
     // Structural / trim metal (tint from vertex colors)
     metal: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), envMapIntensity: 0.85 }),
+    // Cast / sand-blasted metal: same wear, but the roughness map is pushed up so point lights spread
+    // into a soft sheen instead of a hot ring (porthole frames, fixtures, appliance bezels)
+    metalRough: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.7, envMapIntensity: 0.5 }),
+    // Floor grating: cut-out texture on a single quad (mipmapped, so no distance moiré)
+    grate: std(grate, {
+      normalScale: new THREE.Vector2(1.0, 1.0),
+      envMapIntensity: 0.8,
+      transparent: true,
+      depthWrite: true,
+      alphaTest: 0,
+      side: THREE.DoubleSide,
+    }),
     // Deck plating
     deck: std(deck, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 1.0 }),
     // Rubber / plastics
@@ -80,7 +94,7 @@ export function buildMaterials() {
     emitWarm: new THREE.MeshStandardMaterial({
       color: 0x1a1410,
       emissive: PALETTE.warm,
-      emissiveIntensity: 2.1,
+      emissiveIntensity: 1.7,
       roughness: 0.5,
       metalness: 0,
     }),
@@ -101,7 +115,7 @@ export function buildMaterials() {
     emitCool: new THREE.MeshStandardMaterial({
       color: 0x0a0e14,
       emissive: new THREE.Color("#cfe4ff"),
-      emissiveIntensity: 2.6,
+      emissiveIntensity: 2.2,
       roughness: 0.5,
       metalness: 0,
     }),

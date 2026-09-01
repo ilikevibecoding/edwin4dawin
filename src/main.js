@@ -39,7 +39,7 @@ const materials = buildMaterials();
 const ship = buildShip(scene, materials);
 const space = buildSpace(scene);
 
-const hemi = new THREE.HemisphereLight(0x5a6f86, 0x2a1f16, 0.14);
+const hemi = new THREE.HemisphereLight(0x5a6f86, 0x3a2f26, 0.16);
 scene.add(hemi);
 
 // Bootstrap environment (neutral room), replaced by a capture of the actual interior below.

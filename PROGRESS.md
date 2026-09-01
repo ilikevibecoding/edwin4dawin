@@ -160,3 +160,49 @@ Fix list for iteration 5 (worst first):
    Quarters: floor fill so the deck reads.
 5. Light count 25 → ≤ 16: remove redundant point lights, let emissives + bloom carry the rest.
 6. Window shot: vent grille + conduit on the bare top-left panel.
+
+## Iteration 5 — primer chips, grate quad, exterior window light, galley key
+
+Root causes found while reading the iteration-4 close-ups: the "black" chips were *metallic* (metalness 1
+with a dark interior env map → no diffuse, nothing to reflect → black); the "wood grain" was albedo
+banding from a 90-cycle streak layer; the porthole halo was the cool point light 0.8 m in front of a
+low-roughness torus; the galley "blown screen" was the counter light's specular in a polished steel
+dispenser body; and the corridor floor showed concentric arcs at distance — moiré from ~180 thin
+crossbar boxes at 9 cm pitch going sub-pixel.
+
+Changes: chips → dielectric grey primer (metalness 0.1, roughness 0.62), smaller and sparser, broad
+handling smudges across panel faces; worn metal 1024², streaks carried by roughness not albedo; new
+`metalRough` material (roughness map ×1.7) for porthole rings, fixtures, bezels; floor grate → one
+cut-out textured quad (`makeGrate`, mipmapped alpha) + solid edge rails; corridor fixtures rebuilt
+with housings, end caps and louvre fins over a narrow diffuser; porthole shutter control box (lever,
+LEDs, spec-plate decal); corridor/quarters porthole cool point lights → unshadowed SpotLights parked
+outside the hull aimed into the room (`windowSpot`); cockpit ceiling: 4 rows, conduit runs with
+clamps, cable tray; teal kick strips under the consoles + low teal fill light; quarters spot 0.8 rad
+aimed more centrally; galley: counter downlight as the room key, dispenser body painted with a cast
+face plate, cabinet pulls / vents / stencil labels, canister rack over the table; bathroom on the
+vanity light alone; emitWarm 2.1 → 1.7, emitCool 2.6 → 2.2; bloom 0.35/0.45/1.05 → 0.3/0.38/1.15;
+hemisphere ground colour lifted. Lights 25 → 20 (17 point/spot + 2 shadowed spots + hemi).
+
+Shots: `shots/iter_5/`. Drift: sky region meanAbsDiff 36.8, 63.4% pixels changed; interior control 0 / 0.
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Lighting intentional | FAIL | Corridor, aft, cockpit, quarters, windshield all read as lit rooms with a key and coloured fill; cockpit floor no longer black. But the new exterior spots land wrong: the window shot's sleeve bottom is a white crescent, a shelf mug in the quarters is a hot spot, and the galley key washes the upper cabinets to white. |
+| 2 | Materials physical | PASS | Chips read as flaked paint over primer, panels have smudge variation, brushed metal reads brushed, rails/pipes/ring reflect the room, fabric and rubber distinct. |
+| 3 | Detail density | FAIL | Corridor/aft/cockpit/quarters/galley pass. Window shot: the dark porthole plate is still one big flat surface, the top-left chamfer panel carries nothing. |
+| 4 | Post stack balanced | FAIL | Fixture blob fixed (fixtures now have shape). Blown: sleeve crescent (window), mug (quarters), galley upper cabinets. Blacks OK everywhere now. |
+| 5 | Space view sells motion | PASS | Ringed gas giant with rim glow in cockpit/window, ocean world limb in both portholes, star band; drift measured (63% of sky pixels change in 2 s). |
+| 6 | Cohesive palette | PASS | Cream / orange / teal / gunmetal throughout. |
+| 7 | Tech clean | PASS | Floor moiré gone; no z-fighting, acne or missing faces in 8 views; 107–165 calls, 205–340k tris, 20 lights. fps still not measurable under SwiftShader — scored from budget (well within a mid-range GPU at 1080p) plus the adaptive scaler; flagged as unverified in the final summary. |
+| 8 | Cold-look test | FAIL | Closest yet, but the white crescent in the porthole and the strong teal floor rails still make me hesitate. |
+| 9 | Interactions | PASS | All three fire with prompts, fades, status text, rest-cycle lighting. |
+
+Fix list for iteration 6 (worst first):
+1. Exterior spots: 3 m out with a narrow cone (≈0.11 rad) so the beam passes the sleeve at grazing
+   incidence and lands as a soft disc low on the opposite wall; quarters beam aimed at the pillow at
+   a quarter of the intensity.
+2. Galley key: half intensity, moved up and away from the cabinet fronts.
+3. Porthole plate: lighter slate plate + raised cast bezel square with corner bolts (breaks the flat
+   dark area); a clamp-and-conduit run on the chamfer above the portholes.
+4. Grate: put the three inner rails back as real geometry proud of the quad (relief up close, no moiré
+   since they run along the view axis); teal trench light down a notch.
