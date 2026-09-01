@@ -312,6 +312,21 @@ export class NPCManager {
   updateNPC(npc, dt, hour, dayFactor, player, d2) {
     if (npc.hurt > 0) npc.hurt -= dt;
     if (npc.talkCooldown > 0) npc.talkCooldown -= dt;
+    // gravity: if the ground was removed under the NPC, fall until something supports it
+    if (d2 < 48 * 48 && (this.tickCount + npc.id) % 2 === 0) {
+      const fx = Math.floor(npc.pos.x), fz = Math.floor(npc.pos.z), fy = Math.floor(npc.pos.y + 0.01);
+      const below = BLOCKS[this.world.getBlock(fx, fy - 1, fz)];
+      const here = BLOCKS[this.world.getBlock(fx, fy, fz)];
+      if (!below.solid && !here.solid && this.world.isLoaded(fx, fz)) {
+        let landed = null;
+        for (let y = fy - 1; y >= fy - 12 && y > 0; y--) { const h = standHeight(this.world, fx, y, fz); if (h !== null) { landed = h; break; } }
+        if (landed !== null) { npc.pos.y = Math.max(landed, npc.pos.y - 0.6); if (npc.state === 'walk') { npc.path = null; npc.state = 'idle'; npc.idleTimer = 0.5; if (npc.target) this.requestPath(npc); } }
+      } else if (here.solid && here.shape === SHAPE.CUBE) {
+        // buried by a placed block: pop up
+        const h = standHeight(this.world, fx, fy + 1, fz);
+        if (h !== null) npc.pos.y = h;
+      }
+    }
     // look at the player when close and not walking
     if (d2 < 9 && npc.state !== 'walk') npc.lookAt = { x: player.pos.x, y: player.pos.y + 1.6, z: player.pos.z };
     else if (npc.state !== 'walk') { if (npc.rng.chance(0.01)) npc.lookAt = npc.rng.chance(0.5) ? null : { x: npc.pos.x + npc.rng.range(-5, 5), y: npc.pos.y + 1.4, z: npc.pos.z + npc.rng.range(-5, 5) }; }

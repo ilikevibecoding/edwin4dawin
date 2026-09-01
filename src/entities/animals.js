@@ -138,6 +138,14 @@ export class AnimalManager {
       const dt = 0.05;
       a.soundTimer -= dt;
       if (a.soundTimer <= 0) { a.soundTimer = a.rng.range(a.spec.soundGap[0], a.spec.soundGap[1]); if (d2 < 40 * 40) this.audio[a.spec.sound](a.pos); }
+      // gravity when the ground under the animal is removed
+      if (d2 < 48 * 48 && this.world.isLoaded(Math.floor(a.pos.x), Math.floor(a.pos.z))) {
+        const fx = Math.floor(a.pos.x), fz = Math.floor(a.pos.z), fy = Math.floor(a.pos.y + 0.01);
+        const below = this.world.getBlockDef(fx, fy - 1, fz), here = this.world.getBlockDef(fx, fy, fz);
+        if (!below.solid && !here.solid) {
+          for (let y = fy - 1; y >= fy - 12 && y > 0; y--) { const h = standHeight(this.world, fx, y, fz); if (h !== null) { a.pos.y = Math.max(h, a.pos.y - 0.6); break; } }
+        }
+      }
       if (a.tie) {
         a.timer -= dt;
         if (a.timer <= 0) { a.timer = a.rng.range(4, 12); a.graze = !a.graze; if (a.rng.chance(0.3)) a.targetYaw = a.yaw + a.rng.range(-0.4, 0.4); }
