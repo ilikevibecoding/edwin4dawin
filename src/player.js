@@ -30,30 +30,35 @@ export function collectBoxes(world, region, out = []) {
   return out;
 }
 
+// Overlap tests use a small tolerance so floating point drift (e.g. y = 57.99999) never turns a
+// floor we stand on into a wall.
+const T = 1e-5;
 function clipY(box, boxes, dy) {
   for (const b of boxes) {
-    if (box.x1 <= b.x0 || box.x0 >= b.x1 || box.z1 <= b.z0 || box.z0 >= b.z1) continue;
-    if (dy > 0 && box.y1 <= b.y0) { const d = b.y0 - box.y1; if (d < dy) dy = d; }
-    else if (dy < 0 && box.y0 >= b.y1) { const d = b.y1 - box.y0; if (d > dy) dy = d; }
+    if (box.x1 <= b.x0 + T || box.x0 >= b.x1 - T || box.z1 <= b.z0 + T || box.z0 >= b.z1 - T) continue;
+    if (dy > 0 && box.y1 <= b.y0 + T) { const d = b.y0 - box.y1; if (d < dy) dy = d; }
+    else if (dy < 0 && box.y0 >= b.y1 - T) { const d = b.y1 - box.y0; if (d > dy) dy = d; }
   }
   return dy;
 }
 function clipX(box, boxes, dx) {
   for (const b of boxes) {
-    if (box.y1 <= b.y0 || box.y0 >= b.y1 || box.z1 <= b.z0 || box.z0 >= b.z1) continue;
-    if (dx > 0 && box.x1 <= b.x0) { const d = b.x0 - box.x1; if (d < dx) dx = d; }
-    else if (dx < 0 && box.x0 >= b.x1) { const d = b.x1 - box.x0; if (d > dx) dx = d; }
+    if (box.y1 <= b.y0 + T || box.y0 >= b.y1 - T || box.z1 <= b.z0 + T || box.z0 >= b.z1 - T) continue;
+    if (dx > 0 && box.x1 <= b.x0 + T) { const d = b.x0 - box.x1; if (d < dx) dx = d; }
+    else if (dx < 0 && box.x0 >= b.x1 - T) { const d = b.x1 - box.x0; if (d > dx) dx = d; }
   }
   return dx;
 }
 function clipZ(box, boxes, dz) {
   for (const b of boxes) {
-    if (box.y1 <= b.y0 || box.y0 >= b.y1 || box.x1 <= b.x0 || box.x0 >= b.x1) continue;
-    if (dz > 0 && box.z1 <= b.z0) { const d = b.z0 - box.z1; if (d < dz) dz = d; }
-    else if (dz < 0 && box.z0 >= b.z1) { const d = b.z1 - box.z0; if (d > dz) dz = d; }
+    if (box.y1 <= b.y0 + T || box.y0 >= b.y1 - T || box.x1 <= b.x0 + T || box.x0 >= b.x1 - T) continue;
+    if (dz > 0 && box.z1 <= b.z0 + T) { const d = b.z0 - box.z1; if (d < dz) dz = d; }
+    else if (dz < 0 && box.z0 >= b.z1 - T) { const d = b.z1 - box.z0; if (d > dz) dz = d; }
   }
   return dz;
 }
+// snap values that are within rounding error of a 1/16 grid position
+function snap(v) { const s = Math.round(v * 16) / 16; return Math.abs(v - s) < 1e-6 ? s : v; }
 
 // Moves an AABB through the world with collision. Returns {dx,dy,dz, onGround, hitX, hitZ}
 export function moveBox(world, box, dx, dy, dz, stepHeight = 0, canStep = false, scratch = []) {
@@ -83,6 +88,11 @@ export function moveBox(world, box, dx, dy, dz, stepHeight = 0, canStep = false,
       dx = sx; dz = sz; dy = sy + down;
     }
   }
+  // remove floating point drift after the sweep
+  const h = box.y1 - box.y0, w = box.x1 - box.x0, l = box.z1 - box.z0;
+  box.y0 = snap(box.y0); box.y1 = box.y0 + h;
+  box.x0 = snap(box.x0); box.x1 = box.x0 + w;
+  box.z0 = snap(box.z0); box.z1 = box.z0 + l;
   return { dx, dy, dz, hitY: dy !== oy, hitX: Math.abs(dx - ox) > EPS, hitZ: Math.abs(dz - oz) > EPS, oy };
 }
 

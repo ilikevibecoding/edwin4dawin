@@ -118,7 +118,7 @@ export function saloon(fr, F) {
   // bar stools/spots in front of bar
   for (let u = 8; u <= 22; u += 2) addSpot(fr, rec, u, d - 4, F + 1);
   // tables with chairs
-  for (const [u, v] of [[4, 4], [4, 9], [9, 6], [17, 6], [22, 4], [22, 9], [13, 10]]) {
+  for (const [u, v] of [[4, 4], [4, 9], [9, 6], [17, 6], [22, 4], [22, 9], [9, 11], [17, 11]]) {
     fr.set(u, F + 1, v, B.TABLE);
     fr.set(u - 1, F + 1, v, B.SPRUCE_SLAB); fr.set(u + 1, F + 1, v, B.SPRUCE_SLAB);
     addSpot(fr, rec, u - 1, v, F + 1); addSpot(fr, rec, u + 1, v, F + 1);
@@ -127,6 +127,7 @@ export function saloon(fr, F) {
   // piano + stage corner
   fr.set(2, F + 1, d - 4, B.PIANO); fr.set(1, F + 1, d - 4, B.SPRUCE_SLAB);
   addSpot(fr, rec, 1, d - 5, F + 1, 'work');
+  { const [px, pz] = fr.world(2, d - 4); rec.piano = { x: px, z: pz }; }
   fr.fill(1, F + 1, d - 8, 4, F + 1, d - 6, B.SPRUCE_SLAB); // small stage
   // chandelier lanterns
   for (const [u, v] of [[7, 5], [13, 5], [19, 5], [7, 11], [19, 11]]) fr.lantern(u, F + 4, v);

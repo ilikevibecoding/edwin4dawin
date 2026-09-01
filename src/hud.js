@@ -245,8 +245,8 @@ export class HUD {
     for (let i = this.messages.length - 1; i >= 0; i--) {
       const m = this.messages[i];
       const age = now - m.time;
-      if (age > 10000) continue;
-      const alpha = age > 8000 ? 1 - (age - 8000) / 2000 : 1;
+      if (age > 12000) continue;
+      const alpha = age > 10000 ? 1 - (age - 10000) / 2000 : 1;
       this.ctx.globalAlpha = alpha;
       const w = measureText(m.text, s);
       this.ctx.fillStyle = 'rgba(0,0,0,0.5)';

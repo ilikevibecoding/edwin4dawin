@@ -178,6 +178,7 @@ export class NPCManager {
       const st = findStand(this.world, Math.floor(npc.pos.x), Math.floor(npc.pos.y), Math.floor(npc.pos.z), 4);
       if (st) npc.pos.y = st.h;
       npc.prevPos.copy(npc.pos);
+      if (d.work) { this.faceTarget(npc, { kind: 'work', building: d.work }); npc.yaw = npc.targetYaw; npc.lastKind = 'work'; }
     });
   }
 
@@ -205,9 +206,11 @@ export class NPCManager {
     const church = () => mk(spotIn(t.church), 'church', r.range(20, 50), t.church);
     const stationSpot = () => mk(spotIn(t.station), 'station', r.range(15, 40), t.station);
 
-    if (npc.stay) { // saloon staff
+    if (npc.stay) { // saloon staff keep to their own station (bar / piano)
       if (night && hour >= 2 && hour < 6) return home();
-      return r.chance(0.85) ? work() : saloon();
+      const arr = npc.work.work;
+      const sp = arr[npc.workIndex % arr.length];
+      return r.chance(0.92) ? mk(sp, 'work', r.range(30, 90), npc.work) : saloon();
     }
     if (npc.patrol) {
       if (npc.role === 'sheriff' && night) return r.chance(0.7) ? work() : street();
@@ -337,9 +340,9 @@ export class NPCManager {
       if (npc.idleTimer <= 0 && !npc.waitingPath) {
         const target = this.chooseTarget(npc, hour, dayFactor);
         if (!target) { npc.idleTimer = 3; return; }
-        // already there? just dwell
+        // already there? just dwell (and face the right way)
         const ddx = target.x + 0.5 - npc.pos.x, ddz = target.z + 0.5 - npc.pos.z;
-        if (ddx * ddx + ddz * ddz < 1.5) { npc.idleTimer = target.dwell; npc.target = null; return; }
+        if (ddx * ddx + ddz * ddz < 1.5) { npc.idleTimer = target.dwell; this.faceTarget(npc, target); npc.lastKind = target.kind; npc.target = null; return; }
         npc.target = target;
         npc.speed = target.kind === 'home' && (hour >= 21 || hour < 6) ? HURRY_SPEED : WALK_SPEED;
         this.requestPath(npc);
@@ -374,13 +377,23 @@ export class NPCManager {
     }
   }
 
+  faceTarget(npc, t) {
+    if (!t) return;
+    if (t.face) npc.targetYaw = Math.atan2(t.face.x - npc.pos.x, t.face.z - npc.pos.z);
+    else if (t.kind === 'work' && t.building) {
+      // face the customers: the pianist faces the piano, everyone else faces the door
+      const b = t.building;
+      const f = npc.role === 'pianist' && b.piano ? b.piano : b.door;
+      if (f) npc.targetYaw = Math.atan2(f.x + 0.5 - npc.pos.x, f.z + 0.5 - npc.pos.z);
+    }
+  }
+
   arrive(npc) {
     const t = npc.target;
     npc.state = 'idle';
     npc.path = null;
     npc.idleTimer = t ? t.dwell : npc.rng.range(3, 8);
-    if (t && t.face) npc.targetYaw = Math.atan2(t.face.x - npc.pos.x, t.face.z - npc.pos.z);
-    else if (t && t.kind === 'work' && t.building && t.building.kind === 'saloon') npc.targetYaw = npc.rng.range(0, Math.PI * 2);
+    this.faceTarget(npc, t);
     // sit on benches (bottom slabs)
     const under = this.world.getBlock(Math.floor(npc.pos.x), Math.floor(npc.pos.y - 0.01), Math.floor(npc.pos.z));
     npc.sitting = BLOCKS[under].shape === SHAPE.SLAB && t && (t.kind === 'street' || t.kind === 'church' || t.kind === 'station' || t.kind === 'saloon');
