@@ -280,13 +280,15 @@ export function makePaintedPanel(size = 512, seed = 11) {
     let metal = 0;
     // bevel height
     let hgt = 0.5 + clamp01(ed / 0.03) * 0.35;
-    // dents
+    // dents (paint also tends to flake inside them)
+    let dentK = 0;
     for (const [dx, dy, dr, ds] of dents) {
       const dd = Math.hypot(u - dx, v - dy);
       if (dd < dr) {
         const k = smooth(1 - dd / dr);
         hgt -= k * 0.08 * ds;
         rough += k * 0.15;
+        dentK = Math.max(dentK, k * ds);
       }
     }
     // edge wear: paint polished lighter and smoother along the bevel where hands / gear rub
@@ -297,13 +299,16 @@ export function makePaintedPanel(size = 512, seed = 11) {
     g += wear * 0.07;
     b += wear * 0.06;
     rough -= wear * 0.18;
-    // chipping: small sharp flakes revealing mid-grey primer/steel, mostly at edges and corners
-    const chipNoise = fbm(u, v, { octaves: 3, freq: 52, seed: seed + 3 });
-    const edgeBias = clamp01(1 - ed / 0.07);
-    const cornerBias = clamp01(1 - Math.hypot(Math.min(u, 1 - u), Math.min(v, 1 - v)) / 0.12);
-    const chipMask = chipNoise - (0.74 - edgeBias * 0.17 - cornerBias * 0.08);
+    // chipping: sharp flakes revealing mid-grey primer/steel. Confined to the outer ~5% of the panel,
+    // its corners and the dents; the centre stays almost clean (the noise threshold there is ~never met).
+    const chipNoise = fbm(u, v, { octaves: 3, freq: 40, seed: seed + 3 });
+    // some stretches of edge stay intact: modulate by a slow noise along the perimeter
+    const edgeVar = 0.35 + 0.65 * clamp01((fbm(u, v, { octaves: 2, freq: 3, seed: seed + 17 }) - 0.38) * 3.2);
+    const edgeBias = Math.pow(clamp01(1 - ed / 0.055), 1.5) * edgeVar;
+    const cornerBias = clamp01(1 - Math.hypot(Math.min(u, 1 - u), Math.min(v, 1 - v)) / 0.1);
+    const chipMask = chipNoise - (0.9 - edgeBias * 0.34 - cornerBias * 0.1 - dentK * 0.3);
     if (chipMask > 0) {
-      const k = clamp01(chipMask * 45);
+      const k = clamp01(chipMask * 40);
       const m = 0.52 + (n2 - 0.5) * 0.12;
       r = lerp(r, m * 1.0, k);
       g = lerp(g, m * 1.01, k);
@@ -356,7 +361,7 @@ export function makeWornMetal(size = 512, seed = 23) {
     let lum = 0.66 + (streak - 0.5) * 0.2 + (blotch - 0.5) * 0.07;
     // dull oxidised patches
     const dull = clamp01((spots - 0.6) * 6);
-    lum *= 1 - dull * 0.18;
+    lum *= 1 - dull * 0.12;
     let rough = 0.32 + (streak - 0.5) * 0.18 + dull * 0.35 + (blotch - 0.5) * 0.12;
     let hgt = 0.5 + (streak - 0.5) * 0.08 + (spots - 0.5) * 0.04;
     // scratches

@@ -242,20 +242,33 @@ function panelGrid(frame, length, height, opts = {}) {
           break;
         }
         case "greeble": {
+          // equipment panel: painted backing, a dark bezel, then a cluster of small devices
           paintBox(cu, cv, -0.05, cw - gap * 2, ch - gap * 2, 0.06, PALETTE.creamDark);
-          const n = 3 + Math.floor(rand() * 4);
+          frame.box("metal", cu, cv, -0.015, cw - 0.16, ch - 0.16, 0.01, { color: PALETTE.darkMetal });
+          const n = 4 + Math.floor(rand() * 4);
           for (let g = 0; g < n; g++) {
-            const gw = 0.1 + rand() * Math.min(0.35, cw * 0.4);
-            const gh = 0.06 + rand() * Math.min(0.3, ch * 0.4);
-            const gd = 0.04 + rand() * 0.1;
-            const gu = u0 + 0.12 + rand() * (cw - 0.24);
-            const gv = v0 + 0.12 + rand() * (ch - 0.24);
-            const cols = [PALETTE.gunmetal, PALETTE.steel, PALETTE.gunmetal, PALETTE.darkMetal];
-            if (rand() < 0.7) frame.box("metal", gu, gv, -0.02 + gd / 2, gw, gh, gd, { color: cols[Math.floor(rand() * cols.length)] });
-            else frame.cylN("metal", gu, gv, -0.02 + gd / 2, 0.02 + rand() * 0.04, gd, { color: PALETTE.steel });
+            const gw = 0.06 + rand() * Math.min(0.18, cw * 0.25);
+            const gh = 0.04 + rand() * Math.min(0.14, ch * 0.25);
+            const gd = 0.025 + rand() * 0.05;
+            const gu = u0 + 0.15 + rand() * (cw - 0.3);
+            const gv = v0 + 0.15 + rand() * (ch - 0.3);
+            const cols = [PALETTE.gunmetal, PALETTE.steel, PALETTE.slate, PALETTE.darkMetal];
+            const r = rand();
+            if (r < 0.55) {
+              frame.box("metal", gu, gv, -0.01 + gd / 2, gw, gh, gd, { color: cols[Math.floor(rand() * cols.length)], texel: 3 });
+              if (rand() < 0.5) frame.box(rand() < 0.5 ? "emitOrange" : "emitTeal", gu + gw * 0.3, gv, -0.01 + gd + 0.004, 0.018, 0.018, 0.008);
+            } else if (r < 0.8) {
+              frame.cylN("metal", gu, gv, -0.01 + gd / 2, 0.02 + rand() * 0.03, gd, { color: PALETTE.steel, segments: 12 });
+            } else {
+              // small labelled plate
+              frame.box("painted", gu, gv, -0.005, gw + 0.04, gh + 0.02, 0.01, { color: PALETTE.cream, uv: "keep" });
+              frame.add("decal", new THREE.PlaneGeometry(gh, gh), gu, gv, 0.001, { uv: "keep", uvRect: decalRect(9 + Math.floor(rand() * 3)) });
+            }
           }
-          if (rand() < 0.6) frame.box("leds", u0 + cw * 0.5, v0 + 0.1, 0.0, Math.min(0.5, cw - 0.3), 0.045, 0.02, { uv: "keep" });
-          if (rand() < 0.5) frame.box(rand() < 0.5 ? "emitOrange" : "emitTeal", u0 + 0.16, v1 - 0.14, 0.0, 0.05, 0.05, 0.02);
+          // a run of conduit feeding the panel
+          const pu = u0 + 0.1 + rand() * (cw - 0.2);
+          frame.cylV("metal", pu, cv, 0.0, 0.014, ch - 0.1, { color: PALETTE.steel, segments: 8 });
+          if (rand() < 0.7) frame.box("leds", u0 + cw * 0.5, v0 + 0.1, 0.0, Math.min(0.5, cw - 0.3), 0.045, 0.02, { uv: "keep" });
           break;
         }
         case "strip": {
@@ -367,7 +380,7 @@ function porthole(frame, cu, cv, cw, ch, depth, op) {
   frame.add("metal", new THREE.TorusGeometry(r + 0.03, 0.045, 10, 36), cu, cv, 0.0, { color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
   frame.add("metal", new THREE.TorusGeometry(r + 0.07, 0.03, 8, 36), cu, cv, -0.02, { color: PALETTE.orange, uv: "scale", uvScale: [4, 1] });
   // hull sleeve through the wall thickness, faces flipped so it renders from inside the tube
-  const sleeveLen = 0.34;
+  const sleeveLen = 0.2;
   const sleeve = insideOut(new THREE.CylinderGeometry(r, r, sleeveLen, 36, 1, true));
   sleeve.rotateX(Math.PI / 2);
   frame.add("metal", sleeve, cu, cv, 0.01 - sleeveLen / 2, { color: PALETTE.gunmetal, uv: "scale", uvScale: [6, 1] });
@@ -377,7 +390,7 @@ function porthole(frame, cu, cv, cw, ch, depth, op) {
   frame.add("metal", lip, cu, cv, 0.01 - sleeveLen - 0.02, { color: PALETTE.darkMetal, uv: "scale", uvScale: [6, 1] });
   // glass, set into the tube
   const glass = new THREE.CircleGeometry(r, 36);
-  frame.add("glass", glass, cu, cv, -0.15, { uv: "keep" });
+  frame.add("glass", glass, cu, cv, -0.1, { uv: "keep" });
   // bolts
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
@@ -818,9 +831,14 @@ function buildCockpit(kit, ctx) {
       const p = place(x, -0.25, 0.04);
       kit.add("metal", new THREE.CylinderGeometry(0.03, 0.035, 0.08, 10), { pos: [p.x, p.y, p.z], quat: q, color: PALETTE.steel, uv: "scale", uvScale: [0.2, 0.1] });
     }
-    // levers (throttle) on the center pedestal
+    // levers (throttle) on the center pedestal: metal frame with proud painted side/back panels
     kit.boxMM("metal", [-0.35, 0, -19.6], [0.35, 0.78, -18.7], { color: PALETTE.gunmetal, texel: 1 });
-    kit.boxMM("painted", [-0.33, 0.2, -19.62], [0.33, 0.6, -18.72], { color: PALETTE.cream, uv: "keep" });
+    kit.boxMM("painted", [-0.36, 0.14, -19.5], [0.36, 0.66, -18.8], { color: PALETTE.cream, uv: "keep" });
+    kit.boxMM("painted", [-0.3, 0.14, -19.62], [0.3, 0.66, -18.68], { color: PALETTE.cream, uv: "keep" });
+    kit.boxMM("painted", [-0.37, 0.36, -19.48], [0.37, 0.42, -18.82], { color: PALETTE.orange, uv: "keep" });
+    kit.boxMM("hazard", [-0.34, 0.02, -19.58], [0.34, 0.1, -18.72], { texel: 4 });
+    kit.box("darkGloss", 0, 0.5, -18.675, 0.3, 0.08, 0.01);
+    kit.box("leds", 0, 0.5, -18.672, 0.26, 0.04, 0.004, { uv: "keep" });
     kit.boxMM("darkGloss", [-0.28, 0.78, -19.55], [0.28, 0.8, -19.1]);
     kit.boxMM("screen1", [-0.25, 0.8, -19.5], [0.25, 0.805, -19.15], { uv: "keep" });
     for (const lx of [-0.15, 0.15]) {
@@ -990,10 +1008,12 @@ function buildQuarters(kit, ctx) {
   kit.boxMM("metal", [x0 + 0.05, 1.2, bz1 + 0.15], [x0 + 0.35, 1.32, bz1 + 0.35], { color: PALETTE.steel });
   kit.boxMM("painted", [x0 + 0.5, 1.2, bz1 + 0.1], [x0 + 0.72, 1.42, bz1 + 0.32], { color: PALETTE.orange, uv: "keep" });
   kit.cyl("painted", x0 + 0.85, 1.28, bz1 + 0.3, 0.05, 0.16, "y", { color: PALETTE.tealPaint, uv: "keep" });
-  // wall lamp: hooded housing + warm emitter
+  // wall lamp: hooded housing, recessed warm emitter behind three louvre slats
   kit.boxMM("metal", [x0 + 0.0, 1.55, bz1 + 0.12], [x0 + 0.34, 1.78, bz1 + 0.46], { color: PALETTE.darkMetal, texel: 1 });
-  kit.boxMM("emitWarm", [x0 + 0.33, 1.6, bz1 + 0.17], [x0 + 0.35, 1.72, bz1 + 0.41]);
+  kit.boxMM("emitWarm", [x0 + 0.3, 1.6, bz1 + 0.17], [x0 + 0.31, 1.72, bz1 + 0.41]);
+  for (const ly of [1.62, 1.66, 1.7]) kit.boxMM("metal", [x0 + 0.31, ly, bz1 + 0.16], [x0 + 0.36, ly + 0.015, bz1 + 0.42], { color: PALETTE.gunmetal });
   kit.boxMM("metal", [x0 + 0.3, 1.52, bz1 + 0.1], [x0 + 0.42, 1.55, bz1 + 0.48], { color: PALETTE.gunmetal });
+  kit.boxMM("metal", [x0 + 0.3, 1.78, bz1 + 0.1], [x0 + 0.42, 1.81, bz1 + 0.48], { color: PALETTE.gunmetal });
   ctx.lights.warm.push(pointLight(0xffb070, 2.2, 4, [x0 + 0.75, 1.55, bz1 + 0.3]));
   kit.collider([x0, 0, bz0], [bx1 + 0.05, 0.75, bz1], "bunk");
 
@@ -1048,9 +1068,9 @@ function buildQuarters(kit, ctx) {
   // ceiling fixture + key light
   kit.box("metal", (x0 + x1) / 2, h - 0.05, (z0 + z1) / 2, 0.9, 0.08, 0.9, { color: PALETTE.gunmetal });
   kit.box("emitWarm", (x0 + x1) / 2, h - 0.1, (z0 + z1) / 2, 0.7, 0.03, 0.7);
-  const spot = new THREE.SpotLight(0xffc08a, 26 * LIGHT_SCALE, 8, 1.05, 0.7, 1.7);
+  const spot = new THREE.SpotLight(0xffc08a, 30 * LIGHT_SCALE, 8, 0.72, 0.65, 1.7);
   spot.position.set((x0 + x1) / 2, h - 0.15, (z0 + z1) / 2);
-  spot.target.position.set((x0 + x1) / 2 - 0.4, 0, (z0 + z1) / 2);
+  spot.target.position.set((x0 + x1) / 2 - 0.6, 0, (z0 + z1) / 2 - 0.3);
   spot.castShadow = true;
   spot.shadow.mapSize.set(1024, 1024);
   spot.shadow.bias = -0.0003;
@@ -1120,7 +1140,7 @@ function buildGalley(kit, ctx) {
   // under-cabinet light (recessed diffuser; the point light hangs out over the counter, not on the wall)
   kit.boxMM("metal", [x1 - 0.4, 1.56, cz0 + 0.1], [x1 - 0.25, 1.62, cz1 - 0.1], { color: PALETTE.darkMetal });
   kit.boxMM("emitWarm", [x1 - 0.36, 1.555, cz0 + 0.15], [x1 - 0.29, 1.565, cz1 - 0.15]);
-  ctx.lights.warm.push(pointLight(0xffc48c, 1.6, 4, [x1 - 1.0, 1.3, (cz0 + cz1) / 2]));
+  ctx.lights.warm.push(pointLight(0xffc48c, 2.2, 4, [x1 - 0.9, 1.3, (cz0 + cz1) / 2]));
   // sink
   kit.boxMM("metal", [cx0 + 0.1, 0.9, cz1 - 1.0], [cx1 - 0.08, 0.93, cz1 - 0.45], { color: PALETTE.darkMetal, texel: 1 });
   kit.cyl("metal", cx1 - 0.15, 1.05, cz1 - 0.72, 0.015, 0.3, "y", { color: PALETTE.steel, segments: 8 });

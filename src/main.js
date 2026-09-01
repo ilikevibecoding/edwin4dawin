@@ -39,7 +39,7 @@ const materials = buildMaterials();
 const ship = buildShip(scene, materials);
 const space = buildSpace(scene);
 
-const hemi = new THREE.HemisphereLight(0x5a6f86, 0x2a1f16, 0.18);
+const hemi = new THREE.HemisphereLight(0x5a6f86, 0x2a1f16, 0.14);
 scene.add(hemi);
 
 // Bootstrap environment (neutral room), replaced by a capture of the actual interior below.
@@ -70,14 +70,14 @@ function captureEnvironment() {
   // keep the light fixtures from turning every metal into a blown-out mirror of them
   const emissives = [materials.emitTeal, materials.emitWarm, materials.emitOrange, materials.emitRed, materials.emitCool, materials.leds, ...materials.screens];
   const saved = emissives.map((m) => m.emissiveIntensity);
-  emissives.forEach((m) => (m.emissiveIntensity *= 0.35));
+  emissives.forEach((m) => (m.emissiveIntensity *= 0.25));
   cubeCam.update(renderer, scene);
   emissives.forEach((m, i) => (m.emissiveIntensity = saved[i]));
   space.root.visible = true;
   scene.fog = savedFog;
   const env = pmrem.fromCubemap(cubeRT.texture).texture;
   scene.environment = env;
-  scene.environmentIntensity = 0.4;
+  scene.environmentIntensity = 0.3;
   cubeRT.dispose();
 }
 
@@ -94,6 +94,44 @@ window.addEventListener("resize", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Adaptive quality: hold 60 fps on mid-range GPUs by stepping render resolution and AO quality,
+// never by removing content. Steps down after ~0.5 s of slow frames, back up after ~10 s of headroom.
+// ---------------------------------------------------------------------------
+const QUALITY_LEVELS = [
+  { ratio: 0.66, ao: "Low" },
+  { ratio: 0.8, ao: "Low" },
+  { ratio: 1.0, ao: "Medium" },
+  { ratio: Math.min(window.devicePixelRatio, 1.5), ao: "Medium" },
+];
+const quality = { level: QUALITY_LEVELS.length - 1, slow: 0, fast: 0, enabled: true };
+function applyQuality() {
+  const q = QUALITY_LEVELS[quality.level];
+  renderer.setPixelRatio(q.ratio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  post.setSize(window.innerWidth, window.innerHeight);
+  post.ao.setQualityMode(q.ao);
+}
+function updateQuality(dt) {
+  if (!quality.enabled) return;
+  if (dt > 1 / 52) {
+    quality.slow++;
+    quality.fast = 0;
+  } else if (dt < 1 / 75) {
+    quality.fast++;
+    quality.slow = 0;
+  }
+  if (quality.slow > 30 && quality.level > 0) {
+    quality.level--;
+    quality.slow = 0;
+    applyQuality();
+  } else if (quality.fast > 600 && quality.level < QUALITY_LEVELS.length - 1) {
+    quality.level++;
+    quality.fast = 0;
+    applyQuality();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Debug API (deterministic camera placement for screenshots)
 // ---------------------------------------------------------------------------
 let debugMode = false;
@@ -101,7 +139,7 @@ const VIEWS = {
   // just inside the cockpit doorway looking over the seats and consoles at the windshield
   cockpit: { x: 0.0, z: -17.1, yaw: 0, pitch: -4, planet: 0, planetOffset: -12, time: 40 },
   // aft end of the corridor looking forward; the ocean world's limb sits in the near port porthole
-  corridor: { x: 0.3, z: -0.9, yaw: 4, pitch: -2, planet: 1, planetOffset: 50, time: 40 },
+  corridor: { x: 0.4, z: -1.3, yaw: 12, pitch: -2, planet: 1, planetOffset: 51, time: 40 },
   // inside the crew quarters looking at the bunk; ocean world limb in the porthole above the bed
   quarters: { x: -2.3, z: -6.3, yaw: 52, pitch: -8, planet: 1, planetOffset: 26, time: 40 },
   // nose to the port corridor porthole
@@ -123,6 +161,7 @@ const debugAPI = {
     const v = VIEWS[name];
     if (!v) throw new Error("unknown view " + name);
     debugMode = true;
+    quality.enabled = false; // deterministic resolution for screenshots
     hud.hideStart();
     player.headBob = false;
     player.frozen = true;
@@ -148,6 +187,12 @@ const debugAPI = {
     });
   },
   freezeGrain: false,
+  // PNG data URL of a material's albedo canvas (texture QA)
+  textureDataURL(name) {
+    const m = materials[name];
+    const img = m && m.map && m.map.image;
+    return img && img.toDataURL ? img.toDataURL("image/png") : null;
+  },
   // Place the player in front of an interactable, looking at it (for prompt / interaction tests)
   lookAt(id) {
     const poses = {
@@ -158,6 +203,7 @@ const debugAPI = {
     const p = poses[id];
     if (!p) throw new Error("unknown interactable " + id);
     debugMode = true;
+    quality.enabled = false;
     hud.hideStart();
     player.headBob = false;
     player.frozen = false;
@@ -203,6 +249,8 @@ const debugAPI = {
       programs: info.programs ? info.programs.length : 0,
       colliders: ship.colliders.length,
       lights: ship.lights.warm.length + ship.lights.cool.length + ship.lights.teal.length + ship.lights.spots.length,
+      qualityLevel: quality.level,
+      pixelRatio: renderer.getPixelRatio(),
     };
   },
   setPixelRatio(r) {
@@ -253,6 +301,7 @@ function frame() {
   space.update(dt);
   lighting.update(dt);
   interactions.update();
+  if (framesRendered > 60) updateQuality(dt);
 
   if (debugAPI.directRender) renderer.render(scene, camera);
   else post.render(debugAPI.freezeGrain ? 0.37 : t);

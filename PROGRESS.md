@@ -121,3 +121,42 @@ Fix list for iteration 4 (worst first):
 5. Greebles smaller and device-like (LEDs, bezels); pedestal insert was fully enclosed (invisible).
 6. Rubric 7: dynamic resolution scaler (drop pixel ratio / AO quality when frame time > 18 ms) so 60 fps
    holds on mid-range GPUs; trim redundant lights.
+
+## Iteration 4 — edge-only chips, porthole framing, env blowout, quality scaler
+
+Changes: painted texture chips restricted to edges/corners/dents with low-frequency variation; worn
+metal less blotchy; porthole sleeve 0.34 → 0.2 m, glass moved forward; corridor view yawed 12° and moved
+nearer so the ocean world's limb sits in the porthole; ocean world brightness 1.3 → 1.0; environment
+intensity 0.3, metal envMapIntensity 0.85, emissives ×0.25 during env capture, hemisphere 0.14; quarters
+key spot narrowed (angle 0.72, intensity 30), hooded lamp emitter visible through louvres; galley counter
+light up/out; greebles rebuilt as small bezelled devices with LEDs and labelled plates; pedestal's painted
+insert made proud (was fully enclosed); porthole cool lights moved outside the hull; adaptive quality
+scaler (pixel ratio 1.0 → 0.5 and AO quality steps when frame time > 18 ms for 20 frames, steps back up
+when < 12 ms; disabled while `debugAPI.setView` is active).
+
+Shots: `shots/iter_4/`. Drift: sky region meanAbsDiff 49.9, 68.9% pixels changed; interior control 0 / 0.
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Lighting intentional | FAIL | Corridor/aft/cockpit/quarters now read as lit rooms (warm ceiling key, teal fill, key highlight on the mattress, orange lamp). Galley is flat: upper cabinets evenly lit, counter light invisible, the only bright thing is a blown dispenser screen. Far corridor ceiling light is a formless white blob, not a fixture. |
+| 2 | Materials physical | FAIL | Rails, pipes, grate, screens, fabric mattress, rubber seat bolsters: good. Chips are now edge-biased but still *black* — at porthole distance they read as ink splatter rather than paint flaked to primer. Dark metal around the porthole shows coarse wood-grain streaks. |
+| 3 | Detail density | FAIL | Corridor/aft/quarters pass. Window shot: top-left cream panel + orange trim carry nothing; galley upper cabinets are plain cream boxes; cockpit ceiling is a large bare cream expanse. |
+| 4 | Post stack balanced | FAIL | Porthole steel ring is a blown white-blue halo (now lit by the exterior cool light, low-roughness torus); far ceiling strip blob; galley dispenser screen clips; cockpit lower third and quarters floor crushed near black. |
+| 5 | Space view sells motion | PASS | Ringed gas giant with rim glow in cockpit/window, ocean world limb with atmosphere rim in both portholes, dense star band, black sky. Drift measured objectively (69% of sky pixels change in 2 s; 1.3°/s → a planet crosses the windshield in ~70 s). |
+| 6 | Cohesive palette | PASS | Cream / orange / teal / gunmetal in all eight views. |
+| 7 | Tech clean | FAIL | No z-fighting, acne or missing faces in 8 views; 100–147 draw calls, 200–260k tris. Still 25 lights (22 point) — every fragment pays for all of them in a forward renderer; fps unmeasurable here so light count is the lever I can actually verify. |
+| 8 | Cold-look test | FAIL | Corridor is the closest yet (planet in the porthole, rails, decals, depth fog). I still hesitate: black splatter on the panels, halo ring, blob light. Fail. |
+| 9 | Interactions | PASS | All three fire with prompts, fades, status text, rest-cycle lighting. |
+
+Fix list for iteration 5 (worst first):
+1. Chips: colour → mid-grey primer/bare metal (not black), smaller, sparser; faint centre-panel smudges
+   and streaks so panels are not uniform; worn metal brushed streaks finer + lower contrast.
+2. Porthole ring: rougher cast-metal material (roughness ~0.5, envMapIntensity 0.5); exterior cool light
+   dimmer and further out. Corridor ceiling: `emitWarm` 2.1 → 1.6, bloom threshold up, fixture housings
+   with louvres so the source has shape.
+3. Galley: dispenser screen intensity down; a real under-cabinet key light on the counter; handles,
+   vents and labels on the upper cabinets; rack on the left wall.
+4. Cockpit: teal floor fill strip under the consoles; overhead conduits + vents on the ceiling.
+   Quarters: floor fill so the deck reads.
+5. Light count 25 → ≤ 16: remove redundant point lights, let emissives + bloom carry the rest.
+6. Window shot: vent grille + conduit on the bare top-left panel.

@@ -333,7 +333,7 @@ export function buildSpace(scene) {
     elevation: 40,
     atmo: "#5fc8ff",
     atmoStrength: 1.7,
-    brightness: 1.3,
+    brightness: 1.0,
     spin: 0.02,
     tilt: 0.1,
   });

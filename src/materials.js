@@ -59,7 +59,7 @@ export function buildMaterials() {
     painted1: std(painted1, { normalScale: new THREE.Vector2(0.9, 0.9), envMapIntensity: 0.8 }),
     painted2: std(painted2, { normalScale: new THREE.Vector2(0.9, 0.9), envMapIntensity: 0.8 }),
     // Structural / trim metal (tint from vertex colors)
-    metal: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), envMapIntensity: 1.2 }),
+    metal: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), envMapIntensity: 0.85 }),
     // Deck plating
     deck: std(deck, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 1.0 }),
     // Rubber / plastics

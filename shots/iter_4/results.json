@@ -1,0 +1,165 @@
+{
+  "iter": "4",
+  "views": {
+    "cockpit": {
+      "frameMs": 2461.72,
+      "fps": 0.4,
+      "calls": 104,
+      "triangles": 225794,
+      "geometries": 62,
+      "textures": 72,
+      "programs": 45,
+      "colliders": 66,
+      "lights": 25,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "corridor": {
+      "frameMs": 2876.16,
+      "fps": 0.3,
+      "calls": 111,
+      "triangles": 202408,
+      "geometries": 62,
+      "textures": 72,
+      "programs": 45,
+      "colliders": 66,
+      "lights": 25,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "quarters": {
+      "frameMs": 2218.09,
+      "fps": 0.5,
+      "calls": 102,
+      "triangles": 202338,
+      "geometries": 62,
+      "textures": 72,
+      "programs": 45,
+      "colliders": 66,
+      "lights": 25,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "window": {
+      "frameMs": 1984.09,
+      "fps": 0.5,
+      "calls": 106,
+      "triangles": 227556,
+      "geometries": 62,
+      "textures": 72,
+      "programs": 45,
+      "colliders": 66,
+      "lights": 25,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "windshield": {
+      "frameMs": 2149.25,
+      "fps": 0.5,
+      "calls": 102,
+      "triangles": 225672,
+      "geometries": 62,
+      "textures": 72,
+      "programs": 45,
+      "colliders": 66,
+      "lights": 25,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "galley": {
+      "frameMs": 2020.98,
+      "fps": 0.5,
+      "calls": 107,
+      "triangles": 225806,
+      "geometries": 62,
+      "textures": 72,
+      "programs": 45,
+      "colliders": 66,
+      "lights": 25,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "bathroom": {
+      "frameMs": 2393.92,
+      "fps": 0.4,
+      "calls": 155,
+      "triangles": 311192,
+      "geometries": 64,
+      "textures": 74,
+      "programs": 45,
+      "colliders": 66,
+      "lights": 25,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "aft": {
+      "frameMs": 2433.01,
+      "fps": 0.4,
+      "calls": 147,
+      "triangles": 334018,
+      "geometries": 64,
+      "textures": 74,
+      "programs": 45,
+      "colliders": 66,
+      "lights": 25,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    }
+  },
+  "interactions": {
+    "bed": {
+      "hovered": true,
+      "promptVisible": true,
+      "promptText": "ESleep",
+      "status": "You slept 8 hours. Rest cycle lighting engaged.",
+      "restLevel": 0.8239999999999998
+    },
+    "galley": {
+      "hovered": true,
+      "promptVisible": true,
+      "promptText": "EEat",
+      "status": "You eat. Energy restored.",
+      "restLevel": 0
+    },
+    "bathroom": {
+      "hovered": true,
+      "promptVisible": true,
+      "promptText": "EWash up",
+      "status": "Refreshed.",
+      "restLevel": 0
+    }
+  },
+  "stats": {
+    "frameMs": 2202.04,
+    "fps": 0.5,
+    "calls": 147,
+    "triangles": 262874,
+    "geometries": 64,
+    "textures": 74,
+    "programs": 45,
+    "colliders": 66,
+    "lights": 25,
+    "qualityLevel": 3,
+    "pixelRatio": 1
+  },
+  "logs": [
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected.",
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected.",
+    "[warning] [.WebGL-0x236400126400]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[warning] [.WebGL-0x236400126400]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[warning] [.WebGL-0x236400126400]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[warning] [.WebGL-0x236400126400]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)"
+  ],
+  "drift": {
+    "skyRegion": {
+      "meanAbsDiff": 49.85,
+      "changedFraction": 0.689
+    },
+    "interiorControl": {
+      "meanAbsDiff": 0,
+      "changedFraction": 0
+    }
+  }
+}
