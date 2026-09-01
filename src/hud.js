@@ -1,5 +1,6 @@
-import { HALF, MAP_SIZE, WEAPONS, CONSUMABLES, AMMO, TOTAL_PLAYERS, MATERIALS } from './config.js';
+import { HALF, MAP_SIZE, WEAPONS, CONSUMABLES, TOTAL_PLAYERS, MATERIALS } from './config.js';
 import { clamp } from './utils.js';
+import { drawTownLabels } from './world.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -333,6 +334,7 @@ export class HUD {
     ctx.drawImage(img, sx, sy, sw, sw, 0, 0, size, size);
     const toX = (x) => (x - p.pos.x) * scale + size / 2;
     const toY = (z) => (z - p.pos.z) * scale + size / 2;
+    drawTownLabels(ctx, game.towns, toX, toY, 10, -30 * scale);
     this.drawStormOn(ctx, toX, toY, scale, game.storm);
     if (this.dropPoint && p.phase !== 'ground') {
       ctx.fillStyle = '#ffd23f';
@@ -366,6 +368,7 @@ export class HUD {
     ctx.drawImage(game.mapImage, 0, 0, size, size);
     const toX = (x) => (x + HALF) * scale;
     const toY = (z) => (z + HALF) * scale;
+    drawTownLabels(ctx, game.towns, toX, toY, 13, -50 * scale);
     this.drawStormOn(ctx, toX, toY, scale, game.storm);
     if (this.dropPoint && p.phase !== 'ground') {
       ctx.fillStyle = '#ffd23f';
@@ -388,6 +391,8 @@ export class HUD {
     const ctx = c.getContext('2d');
     const draw = () => {
       ctx.drawImage(this.game.mapImage, 0, 0, c.width, c.height);
+      const s = c.width / MAP_SIZE;
+      drawTownLabels(ctx, this.game.towns, (x) => (x + HALF) * s, (z) => (z + HALF) * s, 10, -50 * s);
       if (this.dropPoint) {
         const x = ((this.dropPoint.x + HALF) / MAP_SIZE) * c.width;
         const y = ((this.dropPoint.z + HALF) / MAP_SIZE) * c.height;

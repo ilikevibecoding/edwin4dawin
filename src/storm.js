@@ -18,12 +18,13 @@ export class Storm {
     this.finished = false;
     this.computeNext();
 
-    const geo = new THREE.CylinderGeometry(1, 1, 500, 96, 1, true);
+    const geo = new THREE.CylinderGeometry(1, 1, 2400, 96, 1, true);
     const mat = new THREE.MeshBasicMaterial({
       color: 0x9b3dff, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false, fog: false,
     });
     this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.position.y = 200;
+    this.mesh.position.y = 1100;
+    this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 5;
     game.scene.add(this.mesh);
     this.updateMesh();

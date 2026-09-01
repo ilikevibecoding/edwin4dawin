@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { CELL, BUILD_COST, MATERIAL_ORDER, MATERIALS, WALL_T } from './config.js';
 import { aabbIntersects } from './utils.js';
-import { createStructure, createGhost, structureKey, RAMP_LEN } from './structures.js';
+import { createStructure, createGhost, structureKey } from './structures.js';
+import { World } from './physics.js';
 
 const PIECES = ['wall', 'floor', 'ramp'];
 const PIECE_KEYS = { KeyZ: 'wall', KeyX: 'floor', KeyC: 'ramp' };
@@ -162,7 +163,7 @@ export class Building {
     const fz = p.flatForward.z;
     const px = p.pos.x;
     const pz = p.pos.z;
-    const k = Math.floor((p.pos.y + 1.2) / CELL);
+    let k = Math.floor((p.pos.y + 1.2) / CELL);
     const lookingDown = p.pitch < -0.95;
     const domX = Math.abs(fx) >= Math.abs(fz);
     const piece = p.buildPiece;
@@ -190,8 +191,44 @@ export class Building {
         orient = (base + p.buildRot) % 4;
       }
     }
+    const world = this.game.world;
+    const pieceBounds = (level) => {
+      const y0 = level * CELL;
+      if (piece === 'wall') {
+        return orient === 0
+          ? { minX: i * CELL - WALL_T / 2, maxX: i * CELL + WALL_T / 2, minY: y0, maxY: y0 + CELL, minZ: j * CELL, maxZ: (j + 1) * CELL }
+          : { minX: i * CELL, maxX: (i + 1) * CELL, minY: y0, maxY: y0 + CELL, minZ: j * CELL - WALL_T / 2, maxZ: j * CELL + WALL_T / 2 };
+      }
+      if (piece === 'floor') {
+        return { minX: i * CELL, maxX: (i + 1) * CELL, minY: y0 - 0.1, maxY: y0 + 0.2, minZ: j * CELL, maxZ: (j + 1) * CELL };
+      }
+      return { minX: i * CELL, maxX: (i + 1) * CELL, minY: y0, maxY: y0 + CELL, minZ: j * CELL, maxZ: (j + 1) * CELL };
+    };
+    // a piece is "visible" when some part of it pokes out of the terrain
+    const margin = piece === 'floor' ? -0.6 : 0.8;
+    const isVisible = (b) => {
+      const cx = (b.minX + b.maxX) / 2;
+      const cz = (b.minZ + b.maxZ) / 2;
+      return [[cx, cz], [b.minX, b.minZ], [b.maxX, b.minZ], [b.minX, b.maxZ], [b.maxX, b.maxZ]]
+        .some(([sx, sz]) => world.heightAt(sx, sz) < b.maxY - margin);
+    };
+    let bounds = pieceBounds(k);
+    // floors sunk into a hillside snap one level up instead
+    if (piece === 'floor' && !isVisible(bounds)) {
+      k += 1;
+      bounds = pieceBounds(k);
+      // a raised slab at head height in the cell we're touching would trap us: push it one cell out
+      const r = p.radius;
+      const touching = px + r > bounds.minX && px - r < bounds.maxX && pz + r > bounds.minZ && pz - r < bounds.maxZ;
+      if (touching && bounds.minY < p.pos.y + p.height && !lookingDown) {
+        if (domX) i += fx > 0 ? 1 : -1;
+        else j += fz > 0 ? 1 : -1;
+        bounds = pieceBounds(k);
+      }
+    }
+    const y0 = k * CELL;
     const key = structureKey(piece, i, k, j, orient);
-    const pl = { piece, i, k, j, orient, key, valid: true, reason: '' };
+    const pl = { piece, i, k, j, orient, key, valid: true, reason: '', bounds };
     if (this.byKey.has(key)) {
       pl.valid = false;
       pl.reason = '';
@@ -202,24 +239,7 @@ export class Building {
       pl.reason = `Not enough ${MATERIALS[p.buildMat].name.toLowerCase()}`;
       return pl;
     }
-    // bounds of the would-be piece
-    const y0 = k * CELL;
-    let bounds;
-    if (piece === 'wall') {
-      bounds = orient === 0
-        ? { minX: i * CELL - WALL_T / 2, maxX: i * CELL + WALL_T / 2, minY: y0, maxY: y0 + CELL, minZ: j * CELL, maxZ: (j + 1) * CELL }
-        : { minX: i * CELL, maxX: (i + 1) * CELL, minY: y0, maxY: y0 + CELL, minZ: j * CELL - WALL_T / 2, maxZ: j * CELL + WALL_T / 2 };
-    } else if (piece === 'floor') {
-      bounds = { minX: i * CELL, maxX: (i + 1) * CELL, minY: y0 - 0.1, maxY: y0 + 0.2, minZ: j * CELL, maxZ: (j + 1) * CELL };
-    } else {
-      bounds = { minX: i * CELL, maxX: (i + 1) * CELL, minY: y0, maxY: y0 + CELL, minZ: j * CELL, maxZ: (j + 1) * CELL };
-    }
-    pl.bounds = bounds;
-    const world = this.game.world;
-    const cx = (bounds.minX + bounds.maxX) / 2;
-    const cz = (bounds.minZ + bounds.maxZ) / 2;
-    const terrainC = world.heightAt(cx, cz);
-    if (terrainC > bounds.maxY - 0.8) {
+    if (!isVisible(bounds)) {
       pl.valid = false;
       pl.reason = 'Blocked by terrain';
       return pl;
@@ -239,10 +259,19 @@ export class Building {
     if (piece !== 'wall') {
       const r = p.radius;
       const overlaps = px + r > bounds.minX && px - r < bounds.maxX && pz + r > bounds.minZ && pz - r < bounds.maxZ;
-      if (overlaps && bounds.maxY > p.pos.y + p.step && bounds.minY < p.pos.y + p.height) {
-        pl.valid = false;
-        pl.reason = 'Move out of the way';
-        return pl;
+      if (overlaps) {
+        let surface = bounds.maxY;
+        if (piece === 'ramp') {
+          const rampDesc = { minX: bounds.minX, maxX: bounds.maxX, minZ: bounds.minZ, maxZ: bounds.maxZ, y0, dir: orient };
+          const sx = Math.min(bounds.maxX, Math.max(bounds.minX, px));
+          const sz = Math.min(bounds.maxZ, Math.max(bounds.minZ, pz));
+          surface = World.rampHeight(rampDesc, sx, sz);
+        }
+        if (surface > p.pos.y + p.step + 0.25 && bounds.minY < p.pos.y + p.height) {
+          pl.valid = false;
+          pl.reason = 'Move out of the way';
+          return pl;
+        }
       }
     }
     return pl;

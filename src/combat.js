@@ -184,13 +184,59 @@ export class Combat {
     setTimeout(() => this.pickaxeImpact(), 130);
   }
 
+  /** Generous pickaxe hit detection: aim ray, then a fan of rays, then anything within arm's reach. */
+  findPickaxeTarget() {
+    const game = this.game;
+    const p = game.player;
+    const world = game.world;
+    const filter = (o) => !o.userData.player;
+    const range = PICKAXE.range + 0.6;
+    p.aimOrigin(this._origin);
+    let hit = world.raycast(this._origin, p.forward, range, filter);
+    if (hit && hit.kind !== 'terrain') return hit;
+    const camUp = this._camUp.crossVectors(p.right, p.forward).normalize();
+    for (const [dy, dx] of [[-0.35, 0], [-0.75, 0], [0, 0.3], [0, -0.3], [0.3, 0], [-0.4, 0.3], [-0.4, -0.3]]) {
+      const d = this._dir.copy(p.forward).addScaledVector(camUp, dy).addScaledVector(p.right, dx).normalize();
+      const h = world.raycast(this._origin, d, range, filter);
+      if (h && h.kind !== 'terrain') return h;
+    }
+    // proximity fallback: closest destructible solid right in front of the player
+    const fx = p.pos.x + p.flatForward.x * 1.0;
+    const fz = p.pos.z + p.flatForward.z * 1.0;
+    const solids = world.query(fx - 1.8, fz - 1.8, fx + 1.8, fz + 1.8, []);
+    let best = null;
+    let bestD = 1.7;
+    let bx = 0;
+    let bz = 0;
+    for (const s of solids) {
+      if (s.hp === Infinity) continue;
+      const b = s.bounds;
+      if (b.minY > p.pos.y + p.height || b.maxY < p.pos.y) continue;
+      const cx = clamp(fx, b.minX, b.maxX);
+      const cz = clamp(fz, b.minZ, b.maxZ);
+      const d = Math.hypot(cx - fx, cz - fz);
+      if (d < bestD) {
+        bestD = d;
+        best = s;
+        bx = cx;
+        bz = cz;
+      }
+    }
+    if (best) return { kind: 'solid', solid: best, point: new THREE.Vector3(bx, p.pos.y + 1.2, bz), distance: bestD };
+    return hit;
+  }
+
   pickaxeImpact() {
     const game = this.game;
     const p = game.player;
     if (!p.alive) return;
-    p.aimOrigin(this._origin);
-    const hit = game.world.raycast(this._origin, p.forward, PICKAXE.range + 0.6, (o) => !o.userData.player);
+    const hit = this.findPickaxeTarget();
     if (!hit) return;
+    if (hit.kind === 'terrain') {
+      game.effects.burst(hit.point, 0x6b5a3a, 6, 2, 8, 0.4);
+      game.audio.play('harvest_brick', 0.3);
+      return;
+    }
     if (hit.kind === 'bot') {
       const dmg = 20;
       const res = game.bots.damageBot(hit.bot, dmg, p, hit.point, false);

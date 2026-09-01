@@ -503,10 +503,10 @@ export function generateWorld(seed) {
   for (let a = 0; a < 5000 && botSpawns.length < 60; a++) {
     let x;
     let z;
-    if (rng.chance(0.6)) {
+    if (rng.chance(0.45)) {
       const t = rng.pick(towns);
-      x = t.x + rng.range(-70, 70);
-      z = t.z + rng.range(-70, 70);
+      x = t.x + rng.range(-75, 75);
+      z = t.z + rng.range(-75, 75);
     } else {
       x = rng.range(-290, 290);
       z = rng.range(-290, 290);
@@ -565,16 +565,24 @@ function renderMapImage(terrain, houses, props, towns) {
     ctx.strokeStyle = 'rgba(0,0,0,0.5)';
     ctx.strokeRect((h.minX + HALF) * s, (h.minZ + HALF) * s, (h.maxX - h.minX) * s, (h.maxZ - h.minZ) * s);
   }
-  ctx.font = 'bold 11px sans-serif';
+  return c;
+}
+
+/** Draws town names on any map canvas given world->canvas mapping functions. */
+export function drawTownLabels(ctx, towns, toX, toY, fontSize = 11, offsetY = -40) {
+  ctx.save();
+  ctx.font = `bold ${fontSize}px sans-serif`;
   ctx.textAlign = 'center';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = Math.max(2, fontSize * 0.28);
+  ctx.lineJoin = 'round';
   for (const t of towns) {
-    const x = (t.x + HALF) * s;
-    const y = (t.z + HALF) * s - 36;
-    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    const x = toX(t.x);
+    const y = toY(t.z) + offsetY;
+    if (x < -60 || y < -20 || x > ctx.canvas.width + 60 || y > ctx.canvas.height + 20) continue;
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
     ctx.strokeText(t.name.toUpperCase(), x, y);
     ctx.fillStyle = '#fff';
     ctx.fillText(t.name.toUpperCase(), x, y);
   }
-  return c;
+  ctx.restore();
 }

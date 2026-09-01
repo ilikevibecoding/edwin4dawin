@@ -155,9 +155,9 @@ class Game {
       url.searchParams.delete('seed');
       location.href = url.toString();
     });
-    this.canvas.addEventListener('click', () => {
-      if ((this.state === 'drop' || this.state === 'play') && !this.input.locked) this.resume();
-    });
+    this.input.onUnlockedClick = () => {
+      if (this.state === 'drop' || this.state === 'play') this.resume();
+    };
     this.input.onLockChange = (locked) => {
       if (!locked && (this.state === 'drop' || this.state === 'play')) {
         this.paused = true;

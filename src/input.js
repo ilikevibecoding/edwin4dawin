@@ -10,7 +10,9 @@ export class Input {
     this.mouseDY = 0;
     this.wheel = 0;
     this.onLockChange = null;
+    this.onUnlockedClick = null;
     this.sensitivity = 0.0022;
+    this._retry = null;
 
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -26,7 +28,7 @@ export class Input {
       this.buttons.fill(false);
     });
     canvas.addEventListener('mousedown', (e) => {
-      if (!this.locked) return;
+      if (!this.locked && this.onUnlockedClick) this.onUnlockedClick();
       this.buttons[e.button] = true;
       this.clicked[e.button] = true;
     });
@@ -58,13 +60,31 @@ export class Input {
     return document.pointerLockElement === this.canvas;
   }
 
-  requestLock() {
+  requestLock(retry = true) {
     if (this.locked) return;
+    clearTimeout(this._retry);
+    const fallback = () => {
+      // Browsers refuse a new lock for ~1.5s after the user pressed Esc; try once more later.
+      if (retry) this._retry = setTimeout(() => this.requestLock(false), 1600);
+    };
     try {
       const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
-      if (p && p.catch) p.catch(() => this.canvas.requestPointerLock());
+      if (p && p.catch) {
+        p.catch(() => {
+          try {
+            const q = this.canvas.requestPointerLock();
+            if (q && q.catch) q.catch(fallback);
+          } catch (err) {
+            fallback();
+          }
+        });
+      }
     } catch (err) {
-      this.canvas.requestPointerLock();
+      try {
+        this.canvas.requestPointerLock();
+      } catch (err2) {
+        fallback();
+      }
     }
   }
 

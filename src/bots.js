@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WEAPONS, RARITY_MULT, BOT_NAMES, PLAYER, WEAPON_TYPES, MATERIALS } from './config.js';
+import { WEAPONS, RARITY_MULT, BOT_NAMES, PLAYER, MATERIALS, TOTAL_PLAYERS } from './config.js';
 import { createCharacter, animateCharacter, createWeaponModel, randomOutfit, flashCharacter } from './characters.js';
 import { botLootDrop } from './loot.js';
 import { angleLerp, clamp, wrapAngle } from './utils.js';
@@ -69,6 +69,7 @@ export class BotManager {
     this.game = game;
     this.bots = [];
     this.aliveCount = 0;
+    this._pacing = 1;
     this._v = new THREE.Vector3();
     this._o = new THREE.Vector3();
     this._d = new THREE.Vector3();
@@ -122,11 +123,24 @@ export class BotManager {
 
   onStructurePlaced() {}
 
-  update(dt) {
+  /**
+   * Match pacing: compares the number of players still alive with the number we would expect
+   * at this point of the match and speeds up / slows down bot-vs-bot fights accordingly.
+   */
+  pacing() {
     const game = this.game;
-    if (game.player.phase !== 'ground' && game.state === 'drop') {
-      // bots roam while the player is still in the air, but never fight the player
-    }
+    const t = Math.max(0, game.time - game.startTime);
+    if (t < 45) return 0.15; // everyone is still looting
+    const expected = Math.max(4, TOTAL_PLAYERS - (TOTAL_PLAYERS - 8) * ((t - 45) / 450));
+    const alive = this.aliveCount + (game.player.alive ? 1 : 0);
+    const diff = alive - expected;
+    if (diff < -3) return 0.15;
+    if (diff > 4) return 1.6;
+    return 0.7;
+  }
+
+  update(dt) {
+    this._pacing = this.pacing();
     for (const b of this.bots) {
       if (b.alive) this.updateBot(b, dt);
     }
@@ -150,7 +164,9 @@ export class BotManager {
       let target = null;
       if (player.alive && player.phase === 'ground') {
         const d = b.pos.distanceTo(player.pos);
-        if (d < 80) {
+        // early in the match bots are "busy looting" and only notice nearby players
+        const range = now - game.startTime < 45 ? 30 : 80;
+        if (d < range) {
           const toP = Math.atan2(-(player.pos.x - b.pos.x), -(player.pos.z - b.pos.z));
           const facing = Math.abs(wrapAngle(toP - b.yaw)) < 1.8 || d < 14 || now - b.lastSeenTime < 3 || b.combatTarget === player;
           if (facing && this.hasLOS(b, player.pos)) target = player;
@@ -158,7 +174,8 @@ export class BotManager {
       }
       if (!target) {
         let best = null;
-        let bestD = b.combatTarget && b.combatTarget !== player ? 60 : 42;
+        const looting = now - game.startTime < 45;
+        let bestD = b.combatTarget && b.combatTarget !== player ? 50 : looting ? 16 : 34;
         for (const o of this.bots) {
           if (o === b || !o.alive) continue;
           const d = b.pos.distanceTo(o.pos);
@@ -167,12 +184,15 @@ export class BotManager {
             bestD = d;
           }
         }
-        if (best && (b.aggro || b.combatTarget === best || rng.chance(0.35))) {
+        const keep = b.combatTarget === best;
+        const engageChance = (b.aggro ? 0.25 : 0.06) * this._pacing;
+        if (best && (keep || rng.chance(engageChance))) {
           target = best;
           b.aggro = true;
         }
       }
       if (target) {
+        if (b.combatTarget !== target) b.fireTimer = Math.max(b.fireTimer, rng.range(0.5, 1.2));
         b.combatTarget = target;
         b.lastKnown.copy(target.pos);
         b.lastSeenTime = now;
@@ -345,9 +365,11 @@ export class BotManager {
     dir.normalize();
     const right = this._r.set(-dir.z, 0, dir.x).normalize();
     const up = this._u.crossVectors(right, dir).normalize();
-    let sigma = (0.016 + dist * 0.0011) * b.aimSkill;
+    let sigma = (0.022 + dist * 0.0014) * b.aimSkill;
     if (t === player && player.speedXZ > 4) sigma *= 1.35;
-    if (t === player && player.ads > 0.5) sigma *= 1.1;
+    if (t === player && !player.onGround) sigma *= 1.3;
+    const earlyMatch = game.time - game.startTime < 45;
+    const dmgScale = t === player ? (earlyMatch ? 0.4 : 0.7) : 0.4 * this._pacing;
     const ox = (rng.next() + rng.next() - 1) * sigma * 1.8;
     const oy = (rng.next() + rng.next() - 1) * sigma * 1.8;
     dir.addScaledVector(right, ox).addScaledVector(up, oy).normalize();
@@ -370,7 +392,7 @@ export class BotManager {
       if (hit.distance > def.falloff[0]) {
         falloff = clamp(1 - ((hit.distance - def.falloff[0]) / (def.falloff[1] - def.falloff[0])) * 0.6, 0.4, 1);
       }
-      const dmg = Math.max(1, Math.round(def.damage * RARITY_MULT[b.weapon.rarity] * falloff * 0.8));
+      const dmg = Math.max(1, Math.round(def.damage * RARITY_MULT[b.weapon.rarity] * falloff * dmgScale));
       if (hit.kind === 'player') {
         player.takeDamage(dmg, b, 'bullet');
         game.effects.burst(hit.point, 0xff6060, 4, 2, 6, 0.3);
@@ -394,10 +416,10 @@ export class BotManager {
     const interval = 60 / def.rpm;
     b.burst--;
     if (b.burst <= 0) {
-      b.burst = def.auto ? rng.int(3, 7) : rng.int(1, 3);
-      b.fireTimer = rng.range(0.7, 1.7);
+      b.burst = def.auto ? rng.int(2, 5) : rng.int(1, 2);
+      b.fireTimer = rng.range(1.0, 2.2);
     } else {
-      b.fireTimer = interval * (def.auto ? rng.range(1.0, 1.5) : rng.range(1.3, 2.2));
+      b.fireTimer = interval * (def.auto ? rng.range(1.1, 1.6) : rng.range(1.4, 2.4));
     }
     this.onNoise(b.pos, 70, b);
   }
