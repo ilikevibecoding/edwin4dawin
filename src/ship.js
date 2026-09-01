@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { Reflector } from "three/addons/objects/Reflector.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { Kit, panelWithHoles, rng, insideOut } from "./kit.js";
+import { Kit, panelWithHoles, rng, insideOut, fitUVs } from "./kit.js";
 import { PALETTE } from "./materials.js";
 import { decalRect, GRATE_TILE } from "./textures.js";
 
@@ -374,26 +374,38 @@ function panelGrid(frame, length, height, opts = {}) {
 // Round porthole set into a wall cell.
 function porthole(frame, cu, cv, cw, ch, depth, op) {
   const r = op.r || Math.min(cw, ch) * 0.33;
+  // painted (dielectric) plate: a metal plate only mirrors the dark interior env and reads black
   const plate = panelWithHoles(cw, ch, depth, [{ x: 0, y: 0, r: r }]);
-  frame.add("metal", plate, cu, cv, -depth / 2, { color: PALETTE.gunmetal, uv: "world", texel: 1.0 });
+  fitUVs(plate, cw, ch);
+  frame.add("painted1", plate, cu, cv, -depth / 2, { color: PALETTE.slate, uv: "keep" });
+  // raised cast bezel square around the ring with corner bolts (breaks up the flat plate); the
+  // lower-right corner carries the shutter control box instead of a bolt
+  const bz = r + 0.14;
+  const bezel = panelWithHoles(bz * 2, bz * 2, 0.02, [{ x: 0, y: 0, r: r + 0.11 }]);
+  fitUVs(bezel, bz * 2, bz * 2);
+  // dark *paint* rather than bare metal: a metallic bezel only mirrors the dark interior env map
+  frame.add("painted2", bezel, cu, cv, 0.01, { color: PALETTE.gunmetal, uv: "keep" });
+  for (const [su, sv] of [[-1, -1], [-1, 1], [1, 1]]) {
+    frame.cylN("metal", cu + su * (bz - 0.045), cv + sv * (bz - 0.045), 0.02, 0.016, 0.02, { color: PALETTE.steel, segments: 8 });
+  }
   // outer ring frame (proud, cast metal so lights spread rather than ring-flare), inner bevel ring
   frame.add("metalRough", new THREE.TorusGeometry(r + 0.03, 0.045, 10, 36), cu, cv, 0.0, { color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
   frame.add("metalRough", new THREE.TorusGeometry(r + 0.07, 0.03, 8, 36), cu, cv, -0.02, { color: PALETTE.orange, uv: "scale", uvScale: [4, 1] });
-  // shutter control box in the lower corner of the cell (bezel, lever, status LEDs, spec plate)
-  const bu = cu + r + 0.12;
-  const bv = cv - r - 0.01;
-  frame.box("metalRough", bu, bv, -0.02, 0.14, 0.24, 0.05, { color: PALETTE.gunmetal });
-  frame.box("painted", bu, bv, 0.006, 0.11, 0.21, 0.01, { color: PALETTE.creamDark, uv: "keep" });
-  frame.box("metal", bu - 0.03, bv + 0.05, 0.025, 0.02, 0.09, 0.03, { color: PALETTE.steel });
-  frame.box("rubber", bu - 0.03, bv + 0.095, 0.03, 0.03, 0.03, 0.04, { color: PALETTE.rubber });
-  frame.box("emitTeal", bu + 0.03, bv + 0.06, 0.012, 0.02, 0.02, 0.006);
-  frame.box("emitOrange", bu + 0.03, bv + 0.02, 0.012, 0.02, 0.02, 0.006);
-  frame.add("decal", new THREE.PlaneGeometry(0.09, 0.09), bu, bv - 0.05, 0.012, { uv: "keep", uvRect: decalRect(9) });
-  // conduit dropping out of the box to the panel edge
-  frame.cylV("metal", bu, bv - 0.2, 0.012, 0.012, 0.16, { color: PALETTE.steel, segments: 8 });
+  // shutter control box on the bezel's lower-right corner (lever, status LEDs, spec plate)
+  const bu = cu + bz - 0.065;
+  const bv = cv - bz + 0.1;
+  const bn = 0.02;
+  frame.box("metalRough", bu, bv, bn + 0.025, 0.11, 0.18, 0.05, { color: PALETTE.gunmetal });
+  frame.box("painted", bu, bv, bn + 0.051, 0.09, 0.16, 0.01, { color: PALETTE.creamDark, uv: "keep" });
+  frame.box("metal", bu - 0.025, bv + 0.02, bn + 0.07, 0.02, 0.08, 0.03, { color: PALETTE.steel });
+  frame.box("rubber", bu - 0.025, bv + 0.065, bn + 0.075, 0.03, 0.03, 0.04, { color: PALETTE.rubber });
+  frame.box("emitTeal", bu + 0.025, bv + 0.05, bn + 0.057, 0.02, 0.02, 0.006);
+  frame.box("emitOrange", bu + 0.025, bv + 0.02, bn + 0.057, 0.02, 0.02, 0.006);
+  frame.add("decal", new THREE.PlaneGeometry(0.08, 0.08), bu, bv - 0.05, bn + 0.057, { uv: "keep", uvRect: decalRect(9) });
   // hull sleeve through the wall thickness, faces flipped so it renders from inside the tube
   const sleeveLen = 0.2;
-  const sleeve = insideOut(new THREE.CylinderGeometry(r, r, sleeveLen, 36, 1, true));
+  // a hair inside the plate's hole wall so the two never fight
+  const sleeve = insideOut(new THREE.CylinderGeometry(r - 0.004, r - 0.004, sleeveLen, 36, 1, true));
   sleeve.rotateX(Math.PI / 2);
   frame.add("metal", sleeve, cu, cv, 0.01 - sleeveLen / 2, { color: PALETTE.gunmetal, uv: "scale", uvScale: [6, 1] });
   // outer lip so the far end of the tube reads as hull plating, not a paper edge
@@ -403,11 +415,6 @@ function porthole(frame, cu, cv, cw, ch, depth, op) {
   // glass, set into the tube
   const glass = new THREE.CircleGeometry(r, 36);
   frame.add("glass", glass, cu, cv, -0.1, { uv: "keep" });
-  // bolts
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    frame.cylN("metal", cu + Math.cos(a) * (r + 0.1), cv + Math.sin(a) * (r + 0.1), 0.0, 0.018, 0.03, { color: PALETTE.steel, segments: 8 });
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -443,8 +450,9 @@ function buildCorridor(kit, ctx) {
     const g = new THREE.PlaneGeometry(1.24, gl);
     g.rotateX(-Math.PI / 2);
     kit.add("grate", g, { pos: [0, -0.004, zMid], uv: "scale", uvScale: [1.24 / GRATE_TILE[0], gl / GRATE_TILE[1]], color: 0xffffff });
-    // grate edge rails (solid) so the quad meets the trim without a paper edge
-    for (const x of [-0.61, 0.61]) kit.box("metal", x, -0.03, zMid, 0.035, 0.05, gl, { color: PALETTE.gunmetal, texel: 2 });
+    // rails as real geometry, proud of the quad: relief up close, and running along the view axis they
+    // never alias the way the crossbars did
+    for (const x of [-0.61, -0.305, 0, 0.305, 0.61]) kit.box("metal", x, -0.02, zMid, 0.035, 0.05, gl, { color: PALETTE.gunmetal, texel: 2 });
   }
   // rubber trim between grate and plates
   kit.boxMM("rubber", [0.62, 0, zFwd - 0.4], [0.7, 0.02, zAft + 0.4], { color: PALETTE.rubber, texel: 2 });
@@ -482,10 +490,13 @@ function buildCorridor(kit, ctx) {
     panelGrid(f, len, chLen, { rows: [0, chLen], kick: false, topPipes: false, seed: 303, collide: false, styles: { panel: 1 }, paints: [[PALETTE.cream, 0.8], [PALETTE.creamDark, 0.2]] });
     f.cylU("metal", len / 2, chLen * 0.35, 0.09, 0.07, len + 0.8, { color: PALETTE.steel, segments: 14 });
     f.cylU("metal", len / 2, chLen * 0.7, 0.07, 0.045, len + 0.8, { color: PALETTE.gunmetal, segments: 10 });
+    f.cylU("rubber", len / 2, chLen * 0.53, 0.03, 0.02, len + 0.8, { color: PALETTE.rubber, segments: 8 });
     for (let u = 1.5; u < len; u += 3) {
       f.box("metal", u, chLen * 0.35, 0.09, 0.12, 0.22, 0.2, { color: PALETTE.darkMetal });
       f.box("painted", u + 0.7, chLen * 0.7, 0.07, 0.4, 0.12, 0.12, { color: PALETTE.orange, uv: "keep" });
+      f.box("metal", u + 1.5, chLen * 0.53, 0.03, 0.06, 0.07, 0.07, { color: PALETTE.gunmetal });
     }
+    chamferBoxes(f, len, chLen, 2.5);
   }
   {
     const o = new THREE.Vector3(hw, wallH, zFwd);
@@ -495,9 +506,12 @@ function buildCorridor(kit, ctx) {
     panelGrid(f, len, chLen, { rows: [0, chLen], kick: false, topPipes: false, seed: 404, collide: false, styles: { panel: 1 }, paints: [[PALETTE.cream, 0.8], [PALETTE.creamDark, 0.2]] });
     f.cylU("metal", len / 2, chLen * 0.35, 0.09, 0.07, len + 0.8, { color: PALETTE.steel, segments: 14 });
     f.cylU("metal", len / 2, chLen * 0.7, 0.07, 0.045, len + 0.8, { color: PALETTE.orange, segments: 10 });
+    f.cylU("rubber", len / 2, chLen * 0.53, 0.03, 0.02, len + 0.8, { color: PALETTE.rubber, segments: 8 });
     for (let u = 1.5; u < len; u += 3) {
       f.box("metal", u, chLen * 0.35, 0.09, 0.12, 0.22, 0.2, { color: PALETTE.darkMetal });
+      f.box("metal", u + 1.5, chLen * 0.53, 0.03, 0.06, 0.07, 0.07, { color: PALETTE.gunmetal });
     }
+    chamferBoxes(f, len, chLen, 4.0);
   }
 
   // --- flat ceiling: two panel strips with a central light channel
@@ -526,7 +540,7 @@ function buildCorridor(kit, ctx) {
   // and 0.6 m down nobody can tell which fixture a pool belongs to)
   for (const z of [-1.5, -5.5, -9.5, -13.5]) ctx.lights.warm.push(pointLight(0xffc48c, 6.5, 10, [0, h - 0.6, z]));
   // teal trench light (soft floor glow; the strips themselves carry the look through bloom)
-  ctx.lights.teal.push(pointLight(0x4fd8cc, 3.5, 10, [0, -0.1, zMid]));
+  ctx.lights.teal.push(pointLight(0x4fd8cc, 2.6, 10, [0, -0.1, zMid]));
 
   // --- handrails along both walls (broken at the doorways), with brackets
   const railY = 1.02;
@@ -658,6 +672,9 @@ function buildCorridor(kit, ctx) {
     frame.box("metal", hw - 0.9, 1.18, -0.06, 0.12, 2.5, 0.22, { color: PALETTE.darkMetal });
     frame.box("metal", hw + 0.9, 1.18, -0.06, 0.12, 2.5, 0.22, { color: PALETTE.darkMetal });
     frame.box("metal", hw, 2.4, -0.06, 1.92, 0.12, 0.22, { color: PALETTE.darkMetal });
+    // door sill: closes the trench where it runs under the slab
+    kit.boxMM("hazard", [-0.8, -0.005, zAft - 0.06], [0.8, 0.012, zAft + 0.42], { texel: 3 });
+    kit.boxMM("metal", [-0.7, -0.5, zAft - 0.08], [0.7, -0.005, zAft - 0.02], { color: PALETTE.darkMetal, texel: 1 });
     kit.collider([-hw, 0, zAft - 0.3], [hw, h, zAft + 0.2], "aftdoor");
   }
 
@@ -700,8 +717,10 @@ function buildCorridor(kit, ctx) {
   // cool space light through the two port portholes: spots parked outside the hull, aimed down across
   // the corridor. From outside they cannot hit the ring's face (no hot specular), and without shadows
   // the cone simply reads as a shaft of planet-light on the far wall and floor.
+  // 3 m out with a narrow cone: the beam passes the sleeve at grazing incidence (no hot crescent) and
+  // lands as a soft disc low on the starboard wall, the way a distant planet would light a window.
   for (const z of [-12.6, -2.5]) {
-    ctx.lights.cool.push(windowSpot(0x9fc6ff, 14, [-hw - 0.6, 1.65, z], [hw - 0.3, 0.0, z]));
+    ctx.lights.cool.push(windowSpot(0x9fc6ff, 26, [-hw - 3.0, 2.6, z], [hw, 0.75, z], 0.12));
   }
 }
 
@@ -1114,7 +1133,7 @@ function buildQuarters(kit, ctx) {
   ctx.lights.spots.push(spot);
   ctx.lights.warm.push(spot);
   // planet-light through the porthole over the bunk: cool rim on the pillow end and the deck
-  ctx.lights.cool.push(windowSpot(0x9fc6ff, 16, [x0 - 0.6, 1.75, -7.3], [x0 + 2.6, 0.0, -7.1], 0.45));
+  ctx.lights.cool.push(windowSpot(0x9fc6ff, 6, [x0 - 1.0, 3.25, -7.3], [x0 + 1.0, 0.25, -7.3], 0.17));
 }
 
 function buildGalley(kit, ctx) {
@@ -1155,6 +1174,8 @@ function buildGalley(kit, ctx) {
   const cz0 = z0 + 0.25,
     cz1 = z1 - 0.25;
   kit.boxMM("metal", [cx0 + 0.05, 0, cz0], [cx1, 0.1, cz1], { color: PALETTE.darkMetal, texel: 1 });
+  // toe-kick glow under the counter overhang
+  kit.boxMM("emitOrange", [cx0 + 0.04, 0.03, cz0 + 0.1], [cx0 + 0.052, 0.05, cz1 - 0.1]);
   kit.boxMM("painted", [cx0, 0.1, cz0], [cx1, 0.86, cz1], { color: PALETTE.cream, uv: "keep" });
   // cabinet door lines
   for (let z = cz0 + 0.6; z < cz1 - 0.3; z += 0.6) {
@@ -1197,7 +1218,7 @@ function buildGalley(kit, ctx) {
   // the counter, backsplash and cabinet fronts carry the highlights and the far wall falls off
   kit.box("metalRough", x1 - 0.95, h - 0.05, (cz0 + cz1) / 2, 0.4, 0.08, 2.2, { color: PALETTE.gunmetal });
   kit.box("emitWarm", x1 - 0.95, h - 0.1, (cz0 + cz1) / 2, 0.16, 0.03, 2.0);
-  ctx.lights.warm.push(pointLight(0xffc48c, 6.0, 7, [x1 - 1.0, h - 0.6, (cz0 + cz1) / 2]));
+  ctx.lights.warm.push(pointLight(0xffc48c, 3.6, 7, [x1 - 1.35, h - 0.4, (cz0 + cz1) / 2]));
   // sink
   kit.boxMM("metal", [cx0 + 0.1, 0.9, cz1 - 1.0], [cx1 - 0.08, 0.93, cz1 - 0.45], { color: PALETTE.darkMetal, texel: 1 });
   kit.cyl("metal", cx1 - 0.15, 1.05, cz1 - 0.72, 0.015, 0.3, "y", { color: PALETTE.steel, segments: 8 });
@@ -1415,10 +1436,21 @@ function pointLight(color, intensity, distance, pos) {
   return l;
 }
 
+// Junction boxes with a status LED and a short cable drop along a chamfer, every `step` metres.
+function chamferBoxes(f, len, chLen, step) {
+  for (let u = step; u < len - 0.5; u += step * 2) {
+    f.box("metalRough", u, chLen * 0.18, 0.05, 0.28, 0.16, 0.1, { color: PALETTE.gunmetal });
+    f.box("painted", u, chLen * 0.18, 0.101, 0.22, 0.11, 0.008, { color: PALETTE.creamDark, uv: "keep" });
+    f.box("emitTeal", u + 0.08, chLen * 0.18 + 0.03, 0.106, 0.02, 0.012, 0.006);
+    f.box("leds", u - 0.03, chLen * 0.18 - 0.03, 0.106, 0.1, 0.02, 0.006, { uv: "keep" });
+    f.cylV("rubber", u - 0.1, chLen * 0.3, 0.04, 0.012, chLen * 0.1, { color: PALETTE.rubber, segments: 8 });
+  }
+}
+
 // Unshadowed spot standing outside a window, aimed into the room: cool "space light" that cannot
 // reach the window frame's own face.
 function windowSpot(color, intensity, pos, target, angle = 0.42) {
-  const s = new THREE.SpotLight(color, intensity * LIGHT_SCALE, 7, angle, 0.7, 1.8);
+  const s = new THREE.SpotLight(color, intensity * LIGHT_SCALE, 10, angle, 0.7, 1.8);
   s.position.set(pos[0], pos[1], pos[2]);
   s.target.position.set(target[0], target[1], target[2]);
   return s;

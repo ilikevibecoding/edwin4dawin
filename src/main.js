@@ -77,7 +77,8 @@ function captureEnvironment() {
   scene.fog = savedFog;
   const env = pmrem.fromCubemap(cubeRT.texture).texture;
   scene.environment = env;
-  scene.environmentIntensity = 0.3;
+  // metals have no diffuse term: this is the only thing that keeps gunmetal from reading as black
+  scene.environmentIntensity = 0.45;
   cubeRT.dispose();
 }
 

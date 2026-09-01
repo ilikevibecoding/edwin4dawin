@@ -124,6 +124,14 @@ export function scaleUVs(geo, su, sv) {
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
 }
 
+// Remap shape-space UVs of a w×h plate centred on the origin (as ExtrudeGeometry emits them) to [0,1],
+// so a per-panel texture (bevel, edge chips) lines up with the plate's edges.
+export function fitUVs(geo, w, h) {
+  const uv = geo.attributes.uv;
+  if (!uv) return;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / w + 0.5, uv.getY(i) / h + 0.5);
+}
+
 // Remap [0,1] UVs into a sub-rectangle [u0, v0, u1, v1] of an atlas.
 export function rectUVs(geo, [u0, v0, u1, v1]) {
   const uv = geo.attributes.uv;

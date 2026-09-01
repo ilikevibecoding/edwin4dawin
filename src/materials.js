@@ -64,7 +64,7 @@ export function buildMaterials() {
     metal: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), envMapIntensity: 0.85 }),
     // Cast / sand-blasted metal: same wear, but the roughness map is pushed up so point lights spread
     // into a soft sheen instead of a hot ring (porthole frames, fixtures, appliance bezels)
-    metalRough: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.7, envMapIntensity: 0.5 }),
+    metalRough: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.7, envMapIntensity: 0.7 }),
     // Floor grating: cut-out texture on a single quad (mipmapped, so no distance moiré)
     grate: std(grate, {
       normalScale: new THREE.Vector2(1.0, 1.0),

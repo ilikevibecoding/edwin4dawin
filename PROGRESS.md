@@ -206,3 +206,41 @@ Fix list for iteration 6 (worst first):
    dark area); a clamp-and-conduit run on the chamfer above the portholes.
 4. Grate: put the three inner rails back as real geometry proud of the quad (relief up close, no moiré
    since they run along the view axis); teal trench light down a notch.
+
+## Iteration 6 — exterior spot geometry, porthole plate/bezel, chamfer boxes, aft sill
+
+Changes: exterior window spots moved 3 m out with a 0.12 rad cone aimed low on the starboard wall
+(quarters: 0.17 rad at the pillow, intensity 16 → 6); galley key 6.0 → 3.6 and moved up/back; porthole
+plate → painted slate with per-plate UVs (`fitUVs`), raised painted-gunmetal bezel square with corner
+bolts, control box moved onto the bezel corner, sleeve radius −4 mm (no fight with the plate hole);
+first attempt used a *metal* bezel which read as pure black — metals have no diffuse term and the
+interior env map is dark — so the bezel became paint and `scene.environmentIntensity` went 0.3 → 0.45,
+`metalRough.envMapIntensity` 0.5 → 0.7; grate: five solid rails proud of the quad; teal trench light
+3.5 → 2.6; junction boxes with LEDs + cable drops along both chamfers, rubber cable run between the
+conduits; aft door hazard sill + plate closing the trench (the grey patch in the aft shot).
+Lights unchanged at 20.
+
+Shots: `shots/iter_6/`. Drift: sky region meanAbsDiff 51.7, 69.3% pixels changed; interior control 0 / 0.
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Lighting intentional | PASS | Corridor: warm fixture pools, teal trench, cool porthole shafts on the far wall. Cockpit: teal console glow + planet light, floor no longer black. Quarters: warm lamp key, cool disc on the pillow, teal under-bunk. Window: plate lit from the side, bezel/bolts read. Exterior-spot blowouts (sleeve crescent, mug hot spot) gone. |
+| 2 | Materials physical | PASS | Pipes and rails carry real reflections, painted panels show chips/smudges/rivets, cast bezel reads as dark paint over metal, fabric bunk soft, rubber trim dull. |
+| 3 | Detail density | FAIL | Corridor, aft, windshield, galley pass. Window shot: the right half is three plain cream plates (rivets only) and the top-left door recess is a black slab. Cockpit: the ceiling strip above the glazing is a dark undetailed band. Quarters: the ceiling is a dark void. |
+| 4 | Post stack balanced | FAIL | ACES/bloom/AO/vignette/grain all on, no blown highlights anywhere now. Crushed blacks: galley backsplash between counter and cabinets is pure black (the LED strip is visible but lights nothing), window-shot door recess, cockpit and quarters ceilings. |
+| 5 | Space view sells motion | FAIL | Rings, banding and drift all read (69% of sky pixels change in 2 s), but the atmosphere rim glow is only visible as a thin blue arc at the planet's bottom in the window shot; from the cockpit the limb is a hard edge. "Rim glow visible" is a maybe → fail. |
+| 6 | Cohesive palette | PASS | Cream / orange / teal / gunmetal in all eight views. |
+| 7 | Tech clean | PASS | No z-fighting, acne or missing faces; porthole plate/sleeve fight prevented. 107–165 calls, 207–340k tris, 20 lights. One texture issue: the bathroom shower recess plate shows horizontal streaks (UV stretch on a wide thin plate) — logged as a fix, not a fail, since it is one prop in a non-rubric view. fps unmeasurable under SwiftShader (see iteration 5). |
+| 8 | Cold-look test | FAIL | The corridor is close: fog, pools, grate glow, decals, pipes. What still says "demo": the ceiling emitters are hard-edged flat white rectangles (no diffuser falloff), and the fixture housings are large dark boxes. I hesitated, so it fails. |
+| 9 | Interactions | PASS | Bed / galley / bathroom prompts, fades, status text, rest-cycle lighting all captured. |
+
+Fix list for iteration 7 (worst first):
+1. Crushed blacks: galley backsplash gets a brushed steel splash plate + the LED strip becomes a real
+   low-intensity light; cockpit ceiling gets an emissive rail + fill; quarters ceiling gets a fixture
+   and panels that catch the lamp; corridor door recesses get a lit door sign / frame strip.
+2. Detail density: window shot right cell gets a wall-mounted extinguisher, conduit drop and a vent
+   grille; plates get stronger wear at that scale.
+3. Planet atmosphere: wider, brighter Fresnel rim with scattering colour so the limb glows from any
+   window.
+4. Fixture emitters: gradient diffuser texture (bright centre, soft falloff) instead of flat white.
+5. Bathroom shower plate UV stretch.
