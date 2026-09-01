@@ -42,11 +42,12 @@ varying vec2 vUv;
 varying float vShade;
 varying float vDist;
 float lightCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.4); }
+float blockCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.6); }
 void main() {
   vec4 tex = texture2D(map, vUv);
   if (tex.a < 0.5) discard;
   float sky = lightCurve(uLight.x) * uSkyLight;
-  float blk = lightCurve(uLight.y);
+  float blk = blockCurve(uLight.y);
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
   light = max(light, vec3(0.035));
   vec3 col = tex.rgb * uTint * light * vShade;

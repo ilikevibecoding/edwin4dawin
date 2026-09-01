@@ -21,7 +21,7 @@ export const ATLAS_TILES = 16;              // atlas is ATLAS_TILES x ATLAS_TILE
 
 // Time ------------------------------------------------------------------------
 export const DAY_LENGTH_SECONDS = 12 * 60;  // one full day/night cycle in real seconds
-export const START_TIME = 0.30;             // fraction of day (0 = midnight, 0.25 = sunrise, 0.5 = noon)
+export const START_TIME = 0.285;            // fraction of day (0 = midnight, 0.25 = sunrise, 0.5 = noon): early morning glow
 
 // Directions (used by mesher, lighting, raycasts) ------------------------------
 // index: 0 +x, 1 -x, 2 +y, 3 -y, 4 +z, 5 -z

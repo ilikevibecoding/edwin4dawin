@@ -37,11 +37,15 @@ float lightCurve(float l) {
   float c = l / (4.0 - 3.0 * l);
   return mix(c, l, 0.4);
 }
+float blockCurve(float l) {
+  float c = l / (4.0 - 3.0 * l);
+  return mix(c, l, 0.6);
+}
 void main() {
   vec4 tex = texture2D(map, vUv);
   if (tex.a < uAlphaTest) discard;
   float sky = lightCurve(vLight.x) * uSkyLight;
-  float blk = lightCurve(vLight.y);
+  float blk = blockCurve(vLight.y);
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
   light = max(light, vec3(0.035));
   vec3 col = tex.rgb * light * vShade;
@@ -174,11 +178,24 @@ export class Terrain {
     c.mesh = null; c.waterMesh = null;
   }
 
-  // Synchronous preload around a position; calls onProgress(fraction). Returns a generator to step.
+  // Chunks in this block region are always kept generated (the town, so NPCs simulate everywhere)
+  pinRegion(x0, z0, x1, z1) {
+    this.pinned = { cx0: Math.floor(x0 / CS) - 1, cz0: Math.floor(z0 / CS) - 1, cx1: Math.floor(x1 / CS) + 1, cz1: Math.floor(z1 / CS) + 1 };
+  }
+
+  // Synchronous preload around a position; yields progress fraction after each step.
   *preload(px, pz) {
     const pcx = Math.floor(px / CS), pcz = Math.floor(pz / CS);
-    const total = this.offsets.length * 2;
+    const pinnedList = [];
+    if (this.pinned) for (let cx = this.pinned.cx0; cx <= this.pinned.cx1; cx++) for (let cz = this.pinned.cz0; cz <= this.pinned.cz1; cz++) pinnedList.push([cx, cz]);
+    const total = this.offsets.length * 2 + pinnedList.length;
     let done = 0;
+    for (const [cx, cz] of pinnedList) {
+      const c = this.ensureChunk(cx, cz);
+      c.pinned = true;
+      done++;
+      yield done / total;
+    }
     for (const [dx, dz] of this.offsets) {
       this.ensureChunk(pcx + dx, pcz + dz);
       done++;
@@ -226,7 +243,8 @@ export class Terrain {
         const ddx = c.cx - pcx, ddz = c.cz - pcz;
         if (ddx * ddx + ddz * ddz > maxD * maxD) {
           this.disposeChunk(c);
-          this.world.chunks.delete(key);
+          c.dirty = true;
+          if (!c.pinned) this.world.chunks.delete(key);
         }
       }
       // hide meshes beyond render distance

@@ -30,6 +30,7 @@ uniform sampler2D map;
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar;
 varying vec4 vUV; varying vec3 vColor; varying float vAlpha; varying vec2 vLight; varying float vDist;
 float lightCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.4); }
+float blockCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.6); }
 void main() {
   vec3 col;
   float a = vAlpha;
@@ -41,7 +42,7 @@ void main() {
     col = vColor;
   }
   float sky = lightCurve(vLight.x) * uSkyLight;
-  float blk = lightCurve(vLight.y);
+  float blk = blockCurve(vLight.y);
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
   light = max(light, vec3(0.035));
   col *= light;

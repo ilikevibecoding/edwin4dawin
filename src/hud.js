@@ -210,7 +210,7 @@ export class HUD {
     const ctx = this.ctx, s = this.scale;
     const W = this.canvas.width;
     const left = Math.floor(W / 2 - 91 * s);
-    const y = hotbarY - 10 * s - 1 * s;
+    const y = hotbarY - 16 * s;
     const shake = player.hurtTime > 0;
     // hearts
     for (let i = 0; i < 10; i++) {
@@ -233,7 +233,7 @@ export class HUD {
       else this.pixelArt(inner, fx, y, '#3a2a1a', s);
     }
     // xp bar
-    const bx = Math.floor(W / 2 - 91 * s), by = hotbarY - 6 * s;
+    const bx = Math.floor(W / 2 - 91 * s), by = hotbarY - 7 * s;
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx, by, 182 * s, 5 * s);
     ctx.fillStyle = '#2e3a2e'; ctx.fillRect(bx + s, by + s, 180 * s, 3 * s);
     ctx.fillStyle = '#80ff20'; ctx.fillRect(bx + s, by + s, Math.floor(180 * s * clamp(this.xp, 0, 1)), 3 * s);
@@ -376,7 +376,7 @@ export class HUD {
     this.button('time', `Time: ${game.sky.clockString()}  (skip 2h)`, bx, by, bw, bh, () => { game.sky.time = (game.sky.time + 2 / 24) % 1; }); by += 24 * s;
     this.button('bob', `View Bobbing: ${game.viewBobbing ? 'ON' : 'OFF'}`, bx, by, bw, bh, () => { game.viewBobbing = !game.viewBobbing; }); by += 24 * s;
     this.button('spawn', 'Return to Spawn', bx, by, bw, bh, () => { game.respawn(); game.closeScreen(); }); by += 30 * s;
-    const lines = ['WASD move   Space jump   Ctrl sprint   Shift sneak', 'Left click break   Right click place   E inventory', '1-9 / wheel select   T skip time   F3 debug   Esc menu'];
+    const lines = ['WASD move   Space jump   Double-tap W or R sprint   Shift sneak', 'Left click break   Right click place / talk   E inventory', '1-9 / wheel select   T skip time   F3 debug   Esc menu'];
     const ls = Math.max(1, s - 1);
     for (const l of lines) { this.textCentered(l, W / 2, by, '#c0c0c0', ls); by += 11 * ls; }
   }
@@ -415,7 +415,7 @@ export class HUD {
     if (!game.input.locked && !game.loading) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(0, 0, W, H);
       this.textCentered('Click to play', W / 2, H / 2 - 30 * s, '#ffffff', s);
-      this.textCentered('WASD move - Space jump - Ctrl sprint - Left/Right click break/place', W / 2, H / 2 - 14 * s, '#c0c0c0', Math.max(1, s - 1));
+      this.textCentered('WASD move - Space jump - Double-tap W to sprint - Left/Right click break/place', W / 2, H / 2 - 14 * s, '#c0c0c0', Math.max(1, s - 1));
     }
     this.mouse.clicked = false;
   }

@@ -1,9 +1,13 @@
 // Game orchestration: rendering, fixed-step simulation, interaction, HUD, audio.
 import * as THREE from 'three';
-import { buildAtlas, atlasTexture, tileUV, TILES } from './textures.js';
+import { buildAtlas, atlasTexture, tileUV, TILES, addSignTiles, finalizeAtlas } from './textures.js';
 import { initBlocks, B, BLOCKS, SHAPE } from './blocks.js';
 import { WorldGen, SPAWN } from './worldgen.js';
 import { World } from './world.js';
+import { buildTown } from './town/town.js';
+import { NPCManager } from './npc/npc.js';
+import { AnimalManager } from './entities/animals.js';
+import { Train } from './entities/train.js';
 import { Terrain } from './terrain.js';
 import { Player } from './player.js';
 import { Input } from './input.js';
@@ -66,7 +70,9 @@ export class Game {
     this.gen = new WorldGen(1337);
     await this.setupTown();
     this.world = new World(this.gen);
+    for (const [x, y, z, tile] of this.signAssignments) this.world.signTiles.set(World.posKey(x, y, z), tile);
     this.terrain = new Terrain(this.world, this.scene, atlasTexture);
+    this.terrain.pinRegion(this.town.bounds.x0, this.town.bounds.z0, this.town.bounds.x1, this.town.bounds.z1);
     this.sky = new Sky(this.scene, this.camera);
     this.player = new Player(this.world);
     this.input = new Input(this.canvas);
@@ -87,8 +93,14 @@ export class Game {
     const kit = [[B.OAK_PLANKS, 64], [B.COBBLESTONE, 64], [B.SPRUCE_PLANKS, 64], [B.GLASS, 32], [B.OAK_LOG, 32], [B.BRICKS, 64], [B.LANTERN, 16], [B.OAK_FENCE, 32], [B.TORCH, 32]];
     kit.forEach(([id, n], i) => this.inventory.set(i, id, n));
 
-    // spawn
-    const sx = SPAWN.x, sz = SPAWN.z;
+    // spawn (URL params ?x=&z=&time=&yaw= allow starting elsewhere, handy for demos)
+    const params = new URLSearchParams(location.search);
+    const sx = params.has('x') ? parseFloat(params.get('x')) : SPAWN.x;
+    const sz = params.has('z') ? parseFloat(params.get('z')) : SPAWN.z;
+    if (params.has('time')) this.sky.time = parseFloat(params.get('time'));
+    if (params.has('rd')) this.terrain.setRenderDistance(parseInt(params.get('rd'), 10));
+    this.debugLog = params.has('debuglog');
+    this.startYaw = params.has('yaw') ? parseFloat(params.get('yaw')) * Math.PI / 180 : -Math.PI / 2;
     this.setLoading('Building terrain...', 0.05);
     const pre = this.terrain.preload(sx, sz);
     let last = performance.now();
@@ -98,23 +110,43 @@ export class Game {
     this.setLoading('Waking up the town...', 0.96);
     await this.nextFrame();
     await this.setupEntities();
-    const sy = this.world.surfaceY(Math.floor(sx), Math.floor(sz)) + 1;
+    const sy = params.has('y') ? parseFloat(params.get('y')) : this.world.surfaceY(Math.floor(sx), Math.floor(sz)) + 1;
     this.player.teleport(sx, sy, sz);
-    this.player.yaw = -Math.PI / 2; // face east toward town
-    this.player.pitch = -0.08;
+    this.player.yaw = this.startYaw; // default: face east toward town
+    this.player.pitch = params.has('pitch') ? parseFloat(params.get('pitch')) * Math.PI / 180 : -0.08;
     this.spawnPoint = { x: sx, y: sy, z: sz };
 
     this.bindEvents();
     this.loading = false;
     document.getElementById('loading').style.display = 'none';
     this.hud.addMessage('Welcome to the frontier. Click to grab the mouse.');
-    this.hud.addMessage('WASD to move, Space to jump, Ctrl to sprint, E for blocks.');
+    this.hud.addMessage('WASD to move, Space to jump, double-tap W to sprint, E for blocks.');
     this.lastTime = performance.now();
     requestAnimationFrame((t) => this.loop(t));
   }
 
-  async setupTown() { /* filled in by town integration */ }
-  async setupEntities() { /* filled in by entity integration */ }
+  async setupTown() {
+    const town = buildTown();
+    this.town = town;
+    this.gen.addOverlay(town.overlay());
+    const sb = town.saloon.bounds;
+    town.saloonPos = { x: (sb.x0 + sb.x1) / 2, z: (sb.z0 + sb.z1) / 2 };
+    this.smokeSources = town.smoke;
+    // sign text tiles are baked into the atlas, then the atlas texture is rebuilt
+    this.signAssignments = [];
+    for (const sign of town.signs) {
+      const tiles = addSignTiles(sign.text, sign.order.length);
+      sign.order.forEach(([x, z], i) => this.signAssignments.push([x, sign.y, z, tiles[i]]));
+    }
+    finalizeAtlas();
+  }
+
+  async setupEntities() {
+    this.npcs = new NPCManager(this.scene, this.world, this.town, this.audio, this.hud);
+    await this.nextFrame();
+    this.animals = new AnimalManager(this.scene, this.world, this.town, this.audio);
+    this.train = new Train(this.scene, this.world, this.audio, this.particles);
+  }
 
   nextFrame() { return new Promise((r) => requestAnimationFrame(r)); }
   setLoading(text, p) {
@@ -148,6 +180,11 @@ export class Game {
       if (this.hud.screen === 'death') return;
       if (e.code === 'KeyE') { if (this.hud.screen === 'inventory') this.closeScreen(); else if (!this.hud.screen) this.openScreen('inventory'); }
       if (this.hud.screen) return;
+      if (e.code === 'KeyW') {
+        const now = performance.now();
+        if (now - (this.lastWPress || 0) < 300) this.doubleTapSprint = true;
+        this.lastWPress = now;
+      }
       if (e.code === 'F3') this.hud.debug = !this.hud.debug;
       if (e.code === 'KeyT') { this.sky.time = (this.sky.time + 1 / 12) % 1; this.hud.addMessage('Time set to ' + this.sky.clockString()); }
       if (e.code.startsWith('Digit')) { const n = parseInt(e.code.slice(5), 10); if (n >= 1 && n <= 9) { this.inventory.selected = n - 1; this.audio.click(); } }
@@ -270,6 +307,24 @@ export class Game {
     this.input.endFrame();
     this.jsAccum = (this.jsAccum || 0) + (performance.now() - frameStart);
     this.jsFrames = (this.jsFrames || 0) + 1;
+    if (this.debugLog) this.logDebug(dt);
+  }
+
+  // Periodic console summary used for automated verification (?debuglog)
+  logDebug(dt) {
+    this.logTimer = (this.logTimer || 0) + dt;
+    if (this.logTimer < 5) return;
+    this.logTimer = 0;
+    if (!this.npcs) return;
+    const states = {};
+    let moved = 0;
+    for (const n of this.npcs.list) {
+      states[n.state] = (states[n.state] || 0) + 1;
+      if (n._lastLog) { const d = Math.hypot(n.pos.x - n._lastLog.x, n.pos.z - n._lastLog.z); if (d > 1) moved++; }
+      n._lastLog = { x: n.pos.x, z: n.pos.z };
+    }
+    const sample = this.npcs.list.slice(0, 4).map((n) => `${n.name}@${n.pos.x.toFixed(1)},${n.pos.y.toFixed(1)},${n.pos.z.toFixed(1)}:${n.state}${n.target ? '->' + n.target.kind : ''}`).join(' | ');
+    console.log(`[dbg] t=${this.sky.clockString()} fps=${this.fps} js=${(this.jsMs || 0).toFixed(1)}ms chunks=${this.terrain.stats.chunks} meshes=${this.terrain.stats.meshed} npcs=${JSON.stringify(states)} moved5s=${moved} pathQ=${this.npcs.pathQueue.length} train=${this.train ? this.train.state + '@' + this.train.x.toFixed(0) : '-'} | ${sample}`);
   }
 
   updateEntitiesFrame(dt, alpha) {
@@ -288,6 +343,13 @@ export class Game {
       if (d2 > 120 * 120) continue;
       if (Math.random() < 0.7) this.particles.smoke(s.x + 0.5, s.y + 1.0, s.z + 0.5);
     }
+    // wind-blown dust over dirt/mud streets during the day
+    if (this.sky.dayFactor > 0.3 && Math.random() < 0.6) {
+      const x = Math.floor(p.x + (Math.random() - 0.5) * 30), z = Math.floor(p.z + (Math.random() - 0.5) * 30);
+      const y = this.world.surfaceY(x, z);
+      const id = this.world.getBlock(x, y, z);
+      if (id === B.MUD || id === B.DIRT_PATH || id === B.COARSE_DIRT || id === B.SAND) this.particles.dust(x + Math.random(), y + 1, z + Math.random());
+    }
   }
 
   tick(playing) {
@@ -300,7 +362,10 @@ export class Game {
       if (inp.isDown('KeyD')) ctrl.strafe += 1;
       ctrl.jump = inp.isDown('Space');
       ctrl.sneak = inp.isDown('ShiftLeft') || inp.isDown('ShiftRight');
-      ctrl.sprint = inp.isDown('ControlLeft') || inp.isDown('ControlRight') || inp.isDown('KeyR');
+      // Sprint: hold R, or double-tap W (Minecraft's alternate binding). Ctrl is avoided because
+      // Ctrl+W closes the browser tab.
+      if (!inp.isDown('KeyW')) this.doubleTapSprint = false;
+      ctrl.sprint = inp.isDown('KeyR') || this.doubleTapSprint;
     }
     this.player.tick(ctrl);
     for (const ev of this.player.events) this.handlePlayerEvent(ev);

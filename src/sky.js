@@ -15,9 +15,9 @@ function makeSunTexture() {
   const c = document.createElement('canvas'); c.width = 32; c.height = 32;
   const ctx = c.getContext('2d');
   ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillRect(0, 0, 32, 32);
-  ctx.fillStyle = 'rgba(255, 240, 200, 0.35)'; ctx.fillRect(4, 4, 24, 24);
-  ctx.fillStyle = 'rgba(255, 246, 220, 0.8)'; ctx.fillRect(7, 7, 18, 18);
-  ctx.fillStyle = '#fffbe8'; ctx.fillRect(9, 9, 14, 14);
+  ctx.fillStyle = 'rgba(255, 236, 170, 0.45)'; ctx.fillRect(3, 3, 26, 26);
+  ctx.fillStyle = 'rgba(255, 244, 200, 0.9)'; ctx.fillRect(6, 6, 20, 20);
+  ctx.fillStyle = '#fff9d8'; ctx.fillRect(8, 8, 16, 16);
   const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.NoColorSpace;
   return t;
 }
@@ -88,12 +88,13 @@ export class Sky {
     this.celestial = new THREE.Group();
     this.celestial.renderOrder = -9;
     scene.add(this.celestial);
-    const sunMat = new THREE.MeshBasicMaterial({ map: makeSunTexture(), transparent: true, depthWrite: false, depthTest: false, fog: false, blending: THREE.AdditiveBlending });
+    // Celestial bodies sit far away (inside the far plane) and depth-test so terrain occludes them.
+    const sunMat = new THREE.MeshBasicMaterial({ map: makeSunTexture(), transparent: true, depthWrite: false, depthTest: true, fog: false });
     this.sun = new THREE.Mesh(new THREE.PlaneGeometry(105, 105), sunMat);
     this.sun.position.set(0, 0, -440); // rotated into place by the group
     this.sun.renderOrder = -9;
     this.celestial.add(this.sun);
-    const moonMat = new THREE.MeshBasicMaterial({ map: makeMoonTexture(), transparent: true, depthWrite: false, depthTest: false, fog: false });
+    const moonMat = new THREE.MeshBasicMaterial({ map: makeMoonTexture(), transparent: true, depthWrite: false, depthTest: true, fog: false });
     this.moon = new THREE.Mesh(new THREE.PlaneGeometry(70, 70), moonMat);
     this.moon.position.set(0, 0, 440);
     this.moon.rotation.y = Math.PI;
@@ -108,7 +109,7 @@ export class Sky {
     }
     const sg = new THREE.BufferGeometry();
     sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-    this.starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, depthTest: false, fog: false });
+    this.starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.8, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, depthTest: true, fog: false });
     this.stars = new THREE.Points(sg, this.starMat);
     this.stars.renderOrder = -9;
     this.celestial.add(this.stars);
@@ -190,7 +191,7 @@ export class Sky {
     const day = smoothstep(-0.12, 0.22, e);
     this.dayFactor = day;
     const sunset = (1 - smoothstep(0.0, 0.22, Math.abs(e))) * (e > -0.15 ? 1 : 0);
-    this.skyLight = lerp(0.2, 1.0, day);
+    this.skyLight = lerp(0.27, 1.0, day);
     this.skyTint.set(lerp(0.55, 1, day), lerp(0.62, 1, day), lerp(1.0, 1, day));
     // colours
     const top = NIGHT_TOP.clone().lerp(DAY_TOP, day);

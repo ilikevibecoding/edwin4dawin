@@ -132,11 +132,14 @@ export class WorldGen {
       }
       if (nearWater && info.town < 0.5) { surface = B.SAND; filler = B.SAND; fillerDepth = 2; }
       if (h < SEA_LEVEL - 3) { surface = hash2(x, z, 3) < 0.4 ? B.GRAVEL : B.DIRT; filler = B.DIRT; }
-      // Trail leading east-west through the spawn hill into town
-      if (Math.abs(z) <= 2 && info.town < 0.999 && x < -60 && x > -300 && !nearWater && biome !== 'mountain') {
+      // Trail leading east-west through the spawn hill into town and out the other side
+      if (Math.abs(z) <= 2 && info.town < 0.999 && ((x < -60 && x > -300) || (x > 60 && x < 300)) && !nearWater && biome !== 'mountain') {
         const edge = Math.abs(z) === 2 && hash2(x, z, 11) < 0.35;
         if (!edge) surface = B.DIRT_PATH;
       }
+      // railway bed outside the town overlay (the overlay writes its own inside)
+      let railHere = false;
+      if (info.rail > 0.999 && Math.abs(z - RAIL_Z) <= 1) { surface = B.GRAVEL; filler = B.GRAVEL; railHere = z === RAIL_Z; }
 
       blocks[base] = B.BEDROCK;
       for (let y = 1; y <= h; y++) {
@@ -170,6 +173,7 @@ export class WorldGen {
       }
       // water
       if (h < SEA_LEVEL) for (let y = h + 1; y <= SEA_LEVEL; y++) blocks[base + y] = B.WATER;
+      if (railHere) { blocks[base + h + 1] = B.RAIL; if (x % 3 === 0) blocks[base + h] = B.SPRUCE_PLANKS; }
 
       // plants
       if (h >= SEA_LEVEL + 1 && blocks[base + h] === B.GRASS && blocks[base + h + 1] === B.AIR) {
