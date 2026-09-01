@@ -143,7 +143,7 @@ export class Building {
     this.showGhost(pl);
 
     this.placeTimer -= dt;
-    if (input.buttons[0]) {
+    if (input.firing(0)) {
       const fresh = input.clicked[0] || pl.key !== this.lastPlacedKey || this.placeTimer <= 0;
       if (fresh) {
         if (pl.valid) {

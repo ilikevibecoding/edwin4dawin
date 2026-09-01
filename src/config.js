@@ -84,7 +84,7 @@ export const CONSUMABLES = {
 
 // Storm phases: wait, then shrink to `radius` over `shrink` seconds.
 export const STORM_PHASES = [
-  { wait: 50, shrink: 55, radius: 210, dps: 1 },
+  { wait: 75, shrink: 60, radius: 220, dps: 1 },
   { wait: 40, shrink: 45, radius: 120, dps: 2 },
   { wait: 30, shrink: 35, radius: 65, dps: 3 },
   { wait: 25, shrink: 30, radius: 30, dps: 5 },

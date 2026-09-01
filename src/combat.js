@@ -39,12 +39,12 @@ export class Combat {
 
     const item = p.activeItem;
     if (!item) {
-      if (input.buttons[0]) this.swingPickaxe();
+      if (input.firing(0)) this.swingPickaxe();
       return;
     }
     if (item.kind === 'weapon') {
       const def = WEAPONS[item.type];
-      const wantFire = def.auto ? input.buttons[0] : input.clicked[0];
+      const wantFire = def.auto ? input.firing(0) : input.clicked[0];
       if (wantFire) this.fireWeapon(item, def);
     } else if (item.kind === 'consumable') {
       if (input.clicked[0] && !p.using) this.startConsumable(item);

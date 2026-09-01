@@ -92,6 +92,11 @@ export class Input {
     return this.keys.has(code);
   }
 
+  /** True while a mouse button is held, or if it was clicked (even briefly) this frame. */
+  firing(button = 0) {
+    return this.buttons[button] || this.clicked[button];
+  }
+
   wasPressed(code) {
     return this.pressed.has(code);
   }
