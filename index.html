@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cloudbreak Royale</title>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <!-- In-game HUD -->
+    <div id="hud" class="hidden">
+      <div id="crosshair">
+        <span class="ch ch-t"></span><span class="ch ch-b"></span>
+        <span class="ch ch-l"></span><span class="ch ch-r"></span>
+        <span class="ch-dot"></span>
+      </div>
+      <div id="hitmarker"></div>
+      <div id="damage-overlay"></div>
+      <div id="storm-overlay"></div>
+      <div id="damage-numbers"></div>
+
+      <div id="top-left">
+        <div id="killfeed"></div>
+      </div>
+
+      <div id="top-right">
+        <div class="panel stats">
+          <div class="stat"><span class="label">PLAYERS</span><span id="players-left">40</span></div>
+          <div class="stat"><span class="label">ELIMS</span><span id="kills">0</span></div>
+        </div>
+        <div id="storm-status" class="panel"></div>
+        <canvas id="minimap" width="220" height="220"></canvas>
+      </div>
+
+      <div id="announce"></div>
+      <div id="drop-info" class="hidden">
+        <div class="alt">ALT <span id="altitude">0</span>m</div>
+        <div class="hint">Steer with WASD &middot; SPACE deploys the glider</div>
+      </div>
+
+      <div id="bottom-center">
+        <div id="prompt" class="hidden"></div>
+        <div id="action-status" class="hidden">
+          <div class="label" id="action-label">Reloading</div>
+          <div class="bar"><div id="action-fill"></div></div>
+        </div>
+        <div id="build-panel" class="hidden">
+          <div class="piece" data-piece="wall"><span class="key">Z</span><span class="name">WALL</span></div>
+          <div class="piece" data-piece="floor"><span class="key">X</span><span class="name">FLOOR</span></div>
+          <div class="piece" data-piece="ramp"><span class="key">C</span><span class="name">RAMP</span></div>
+          <div class="mat"><span class="key">RMB</span><span id="build-mat">WOOD</span></div>
+        </div>
+      </div>
+
+      <div id="bottom-left">
+        <div class="vitals">
+          <div class="bar-row">
+            <div class="bar shield"><div id="shield-fill"></div><span id="shield-text">0</span></div>
+          </div>
+          <div class="bar-row">
+            <div class="bar health"><div id="health-fill"></div><span id="health-text">100</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="bottom-right">
+        <div id="materials">
+          <div class="mat-item wood"><i></i><span id="mat-wood">0</span></div>
+          <div class="mat-item brick"><i></i><span id="mat-brick">0</span></div>
+          <div class="mat-item metal"><i></i><span id="mat-metal">0</span></div>
+        </div>
+        <div id="ammo">
+          <div id="weapon-name">Pickaxe</div>
+          <div id="ammo-count"><span id="ammo-mag">-</span><span class="sep">/</span><span id="ammo-reserve">-</span></div>
+        </div>
+        <div id="inventory"></div>
+      </div>
+    </div>
+
+    <!-- Full map -->
+    <div id="bigmap" class="overlay hidden">
+      <canvas id="bigmap-canvas" width="640" height="640"></canvas>
+      <div class="hint">Press M to close</div>
+    </div>
+
+    <!-- Start screen -->
+    <div id="menu" class="overlay">
+      <div class="menu-card">
+        <h1 class="title">CLOUDBREAK<span>ROYALE</span></h1>
+        <p class="tagline">Drop in. Loot up. Build fast. Outlast the storm.</p>
+        <div class="menu-body">
+          <div class="drop-select">
+            <canvas id="drop-map" width="320" height="320"></canvas>
+            <div class="hint">Click the map to pick your drop point</div>
+          </div>
+          <div class="controls">
+            <h3>CONTROLS</h3>
+            <ul>
+              <li><b>WASD</b> Move &middot; <b>Shift</b> Sprint &middot; <b>Space</b> Jump</li>
+              <li><b>Mouse</b> Look &middot; <b>LMB</b> Fire / Swing &middot; <b>RMB</b> Aim</li>
+              <li><b>1</b> Pickaxe &middot; <b>2-6</b> Inventory slots &middot; <b>Wheel</b> cycle</li>
+              <li><b>R</b> Reload &middot; <b>E</b> Open / Swap &middot; <b>G</b> Drop item</li>
+              <li><b>Q</b> Build mode &middot; <b>Z/X/C</b> Wall / Floor / Ramp</li>
+              <li><b>RMB</b> (build) Material &middot; <b>R</b> (build) Rotate</li>
+              <li><b>M</b> Map &middot; <b>Esc</b> Pause</li>
+            </ul>
+            <p class="tip">Harvest trees, rocks and cars with the pickaxe for wood, brick and metal. Stay inside the circle.</p>
+          </div>
+        </div>
+        <button id="btn-drop" class="big-btn">DROP IN</button>
+        <div class="footnote">40 players &middot; last one standing wins</div>
+      </div>
+    </div>
+
+    <!-- Pause -->
+    <div id="pause" class="overlay hidden">
+      <div class="menu-card small">
+        <h2>PAUSED</h2>
+        <p>Click to resume</p>
+        <button id="btn-resume" class="big-btn">RESUME</button>
+      </div>
+    </div>
+
+    <!-- Game over -->
+    <div id="gameover" class="overlay hidden">
+      <div class="menu-card small">
+        <h1 id="result-title" class="title">VICTORY</h1>
+        <p id="result-sub"></p>
+        <div id="result-stats" class="result-stats"></div>
+        <button id="btn-again" class="big-btn">PLAY AGAIN</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
