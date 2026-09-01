@@ -72,6 +72,36 @@ for (const name of [...VIEWS, ...EXTRA]) {
   console.log(`shot ${name}: ${stats.calls} calls, ${stats.triangles} tris, ${stats.frameMs} ms/frame (software GL)`);
 }
 
+// --- motion check: the sky must visibly drift. Compare the porthole interior between two frames whose
+// sky time differs by 2 s (interior static, grain frozen). A wall patch is captured as a control.
+{
+  await page.evaluate(() => window.debugAPI.setView("window"));
+  await settle(3, 1000);
+  const sky = { x: 562, y: 294, w: 200, h: 200 }; // porthole interior at 1280x720
+  const wall = { x: 40, y: 560, w: 120, h: 120 }; // static interior control
+  const grab = (r) => page.evaluate((rr) => window.debugAPI.capturePixels(rr.x, rr.y, rr.w, rr.h), r);
+  const a = await grab(sky);
+  const aw = await grab(wall);
+  await page.evaluate(() => window.debugAPI.advanceSky(2));
+  await settle(3, 500);
+  await page.screenshot({ path: resolve(outDir, "window_plus2s.png") });
+  const b = await grab(sky);
+  const bw = await grab(wall);
+  const diff = (p, q) => {
+    let sum = 0;
+    let changed = 0;
+    const n = p.length / 4;
+    for (let i = 0; i < p.length; i += 4) {
+      const d = Math.abs(p[i] - q[i]) + Math.abs(p[i + 1] - q[i + 1]) + Math.abs(p[i + 2] - q[i + 2]);
+      sum += d;
+      if (d > 30) changed++;
+    }
+    return { meanAbsDiff: +(sum / n / 3).toFixed(2), changedFraction: +(changed / n).toFixed(3) };
+  };
+  results.drift = { skyRegion: diff(a, b), interiorControl: diff(aw, bw) };
+  console.log("drift (2 s of sky time):", JSON.stringify(results.drift));
+}
+
 // --- interaction checks: prompt appears when looking at each interactable, action fires, status updates
 for (const id of ["bed", "galley", "bathroom"]) {
   const hovered = await page.evaluate((i) => window.debugAPI.lookAt(i), id);

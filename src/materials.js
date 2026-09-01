@@ -9,6 +9,7 @@ import {
   makeHazard,
   makeScreen,
   makeLedStrip,
+  makeDecalSheet,
 } from "./textures.js";
 
 export const PALETTE = {
@@ -79,7 +80,7 @@ export function buildMaterials() {
     emitWarm: new THREE.MeshStandardMaterial({
       color: 0x1a1410,
       emissive: PALETTE.warm,
-      emissiveIntensity: 3.0,
+      emissiveIntensity: 2.1,
       roughness: 0.5,
       metalness: 0,
     }),
@@ -108,20 +109,30 @@ export function buildMaterials() {
     // Dark glass / plastic for screens frame etc.
     darkGloss: new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.25, metalness: 0.2, envMapIntensity: 1.0 }),
 
-    // Window glass: nearly transparent, faint reflective sheen
+    // Window glass: nearly transparent, faint reflective sheen (kept dim so deep space stays black)
     glass: new THREE.MeshPhysicalMaterial({
-      color: 0xbfe3ee,
-      roughness: 0.08,
+      color: 0x6d8a96,
+      roughness: 0.22,
       metalness: 0,
       transparent: true,
-      opacity: 0.05,
+      opacity: 0.06,
       depthWrite: false,
-      envMapIntensity: 0.3,
+      envMapIntensity: 0.12,
       side: THREE.DoubleSide,
     }),
 
-    // Mirror (bathroom)
-    mirror: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.02, metalness: 1.0, envMapIntensity: 2.0 }),
+    // Stencil decals (labels / hazard markings) laid over painted panels
+    decal: new THREE.MeshStandardMaterial({
+      map: makeDecalSheet(1024, 19),
+      transparent: true,
+      depthWrite: false,
+      roughness: 0.7,
+      metalness: 0,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+      envMapIntensity: 0.3,
+    }),
   };
 
   // Console screens: black diffuse, emissive UI

@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { makeStarSprite, makeNebula, makeGasGiant, makeOceanWorld, makeMoon, makeClouds, mulberry32 } from "./textures.js";
 
-const TURN_RATE = THREE.MathUtils.degToRad(1.0); // ship slowly banking: everything slides past at 1 deg/s
+const TURN_RATE = THREE.MathUtils.degToRad(1.3); // ship slowly banking: the sky slides past at 1.3 deg/s (a planet crosses the windshield in ~80 s)
 
 const planetVert = /* glsl */ `
   varying vec3 vN;
@@ -42,7 +42,8 @@ const planetFrag = /* glsl */ `
     }
     float ndv = max(dot(n, v), 0.0);
     float fres = pow(1.0 - ndv, 3.2);
-    vec3 col = alb * (day * brightness + 0.01);
+    // faint night-side ambient so the dark hemisphere still reads as a sphere
+    vec3 col = alb * (day * brightness + 0.035 * vec3(0.55, 0.65, 1.0));
     // terminator warmth
     float term = smoothstep(-0.2, 0.15, ndl) * (1.0 - smoothstep(0.15, 0.55, ndl));
     col += vec3(0.9, 0.45, 0.2) * term * 0.12;
@@ -117,22 +118,42 @@ export function buildSpace(scene) {
   // --- star layers (parallax: nearer layers drift faster)
   const starTex = makeStarSprite(64);
   const layers = [];
+  // galactic band: a great circle tilted across the sky; the faint far layer clusters along it
+  const bandN = new THREE.Vector3(0.35, 0.8, -0.5).normalize();
+  const bandE1 = new THREE.Vector3(1, 0, 0).cross(bandN).normalize();
+  const bandE2 = new THREE.Vector3().crossVectors(bandN, bandE1);
+  const gauss = () => {
+    let s = 0;
+    for (let k = 0; k < 4; k++) s += rand();
+    return (s - 2) / Math.sqrt(4 / 12);
+  };
   const layerCfg = [
-    { n: 2600, r: 4200, size: 1.9, rate: 0.7, tint: 0.95 },
-    { n: 1600, r: 3600, size: 2.7, rate: 1.0, tint: 1.05 },
-    { n: 520, r: 3000, size: 3.8, rate: 1.55, tint: 1.2 },
+    { n: 9000, r: 4400, size: 1.35, rate: 0.6, tint: 0.7, band: 0.16 },
+    { n: 3200, r: 4200, size: 1.9, rate: 0.7, tint: 0.95, band: 0 },
+    { n: 1900, r: 3600, size: 2.7, rate: 1.0, tint: 1.05, band: 0 },
+    { n: 640, r: 3000, size: 3.9, rate: 1.55, tint: 1.25, band: 0 },
+    { n: 60, r: 2800, size: 6.5, rate: 1.7, tint: 1.6, band: 0 },
   ];
   for (const cfg of layerCfg) {
     const pos = new Float32Array(cfg.n * 3);
     const col = new Float32Array(cfg.n * 3);
+    const p = new THREE.Vector3();
     for (let i = 0; i < cfg.n; i++) {
-      // uniform on sphere
-      const u = rand() * 2 - 1;
-      const th = rand() * Math.PI * 2;
-      const s = Math.sqrt(1 - u * u);
-      pos[i * 3] = s * Math.cos(th) * cfg.r;
-      pos[i * 3 + 1] = u * cfg.r;
-      pos[i * 3 + 2] = s * Math.sin(th) * cfg.r;
+      if (cfg.band > 0) {
+        // along the band: uniform in longitude, gaussian in latitude
+        const phi = rand() * Math.PI * 2;
+        const lat = gauss() * cfg.band;
+        p.copy(bandE1).multiplyScalar(Math.cos(phi) * Math.cos(lat)).addScaledVector(bandE2, Math.sin(phi) * Math.cos(lat)).addScaledVector(bandN, Math.sin(lat));
+      } else {
+        // uniform on sphere
+        const u = rand() * 2 - 1;
+        const th = rand() * Math.PI * 2;
+        const s = Math.sqrt(1 - u * u);
+        p.set(s * Math.cos(th), u, s * Math.sin(th));
+      }
+      pos[i * 3] = p.x * cfg.r;
+      pos[i * 3 + 1] = p.y * cfg.r;
+      pos[i * 3 + 2] = p.z * cfg.r;
       // colour temperature spread
       const k = rand();
       const b = 0.55 + rand() * 0.45;
@@ -174,8 +195,8 @@ export function buildSpace(scene) {
     layers.push(pts);
   }
 
-  // --- sun (behind-right of the ship, lights the planets from the upper right)
-  const sunDirLocal = new THREE.Vector3(0.62, 0.42, 0.66).normalize();
+  // --- sun: aft-left-above the ship, so the planets ahead / abeam show their lit face to the windows
+  const sunDirLocal = new THREE.Vector3(-0.464, 0.375, 0.803).normalize();
   const sunTex = makeStarSprite(128);
   const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, color: 0xfff1d6, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
   sun.position.copy(sunDirLocal).multiplyScalar(4400);
@@ -191,16 +212,31 @@ export function buildSpace(scene) {
   const nebTexB = makeNebula(512, 9, [0.45, 0.35, 0.8], [0.25, 0.75, 0.7]);
   const nebulae = [];
   for (const cfg of [
-    { tex: nebTexA, dir: [-0.6, 0.15, -0.78], size: 3200, op: 0.6 },
-    { tex: nebTexB, dir: [0.8, -0.2, -0.55], size: 2600, op: 0.45 },
-    { tex: nebTexA, dir: [-0.2, 0.55, 0.8], size: 2800, op: 0.4 },
-    { tex: nebTexB, dir: [0.1, -0.6, 0.75], size: 2200, op: 0.35 },
+    { tex: nebTexA, dir: [-0.6, 0.15, -0.78], size: 3000, op: 0.7 },
+    { tex: nebTexB, dir: [0.8, -0.2, -0.55], size: 2400, op: 0.55 },
+    { tex: nebTexA, dir: [-0.2, 0.55, 0.8], size: 2600, op: 0.5 },
+    { tex: nebTexB, dir: [0.1, -0.6, 0.75], size: 2000, op: 0.45 },
   ]) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: cfg.tex, transparent: true, opacity: cfg.op, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, rotation: rand() * Math.PI * 2 }));
     sp.position.set(cfg.dir[0], cfg.dir[1], cfg.dir[2]).normalize().multiplyScalar(4000);
     sp.scale.set(cfg.size, cfg.size, 1);
     root.add(sp);
     nebulae.push(sp);
+  }
+  // soft galactic glow along the star band (very low opacity, many overlapping blobs)
+  {
+    const glowTex = makeNebula(256, 27, [0.75, 0.8, 0.95], [0.95, 0.85, 0.75]);
+    const p = new THREE.Vector3();
+    for (let i = 0; i < 26; i++) {
+      const phi = (i / 26) * Math.PI * 2 + rand() * 0.2;
+      const lat = gauss() * 0.06;
+      p.copy(bandE1).multiplyScalar(Math.cos(phi) * Math.cos(lat)).addScaledVector(bandE2, Math.sin(phi) * Math.cos(lat)).addScaledVector(bandN, Math.sin(lat));
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0.07 + rand() * 0.05, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, rotation: rand() * Math.PI * 2 }));
+      sp.position.copy(p).multiplyScalar(4500);
+      const s = 1100 + rand() * 700;
+      sp.scale.set(s, s * 0.6, 1);
+      root.add(sp);
+    }
   }
 
   // --- planets
@@ -282,8 +318,8 @@ export function buildSpace(scene) {
     bearingDeg: 0,
     elevation: -60,
     atmo: "#f2b07a",
-    atmoStrength: 1.1,
-    brightness: 0.95,
+    atmoStrength: 1.2,
+    brightness: 1.05,
     spin: 0.006,
     tilt: 0.28,
     ring: { inner: 1.35, outer: 2.25, colA: "#c9b393", colB: "#7d6a55", tiltX: 0.42, tiltY: 0.15 },
@@ -293,11 +329,11 @@ export function buildSpace(scene) {
     clouds: makeClouds(1024, 512, 111),
     radius: 300,
     dist: 1900,
-    bearingDeg: 112,
-    elevation: 60,
+    bearingDeg: 60,
+    elevation: 40,
     atmo: "#5fc8ff",
-    atmoStrength: 1.5,
-    brightness: 1.05,
+    atmoStrength: 1.7,
+    brightness: 1.3,
     spin: 0.02,
     tilt: 0.1,
   });

@@ -78,3 +78,46 @@ Fix list for iteration 3 (worst first):
 4. Detail density: default panel style always gets sub-seams/bolts/label; corridor handrails; procedural
    stencil decals (canvas text); richer seat backs; cockpit camera pulled back slightly.
 5. Light count down, verify no z-fighting/missing faces in every shot.
+
+## Iteration 3 — props, decals, portholes, sun layout
+
+Diagnosis first (probe with the ship hidden): the quarters porthole *was* pointed at the ocean world, but
+the sun sat only ~33° from it in the sky, so the window showed its night side. Moved the sun aft-left-above
+the ship and the ocean world 50° away from it; all framed planets now show a lit face.
+
+Changes: sun/planet layout; night-side ambient on planets; 5 star layers incl. a 9k-star galactic band with
+soft glow sprites; more structured nebulae (dust lanes); drift 1.0 → 1.3°/s; porthole sleeves render from
+inside (`insideOut` winding flip) with an outer lip; glass darker/less reflective (space stays black);
+painted texture: chips → small sharp flakes + edge-wear highlights; worn metal: less blotchy; procedural
+stencil decal sheet (canvas text: CAUTION / A-07 / O2 / AIRLOCK / barcodes…, eroded) with `uvRect` atlas
+mapping; default panel style now always adds seams / bolts / hatch / inner plate / decal; corridor
+handrails with brackets (broken at doors), extinguisher, junction box with cable drop; pilot seat backs
+(fabric rear panel, harness straps, spine, LED); mirror backing plate removed (it was on the room side of
+the reflector plane and occluded the reflection) → mirror now reflects the room; light intensities /
+positions retuned; harness measures sky drift: porthole region 2 s apart vs a wall control patch.
+
+Shots: `shots/iter_3/`. Drift: sky region meanAbsDiff 48.8, 67.5% pixels changed; interior control 0 / 0.
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Lighting intentional | FAIL | Corridor/aft/cockpit read well (warm key, teal fill, glowing strips, harness/seat accents). Quarters walls still evenly lit (spot cone too wide); porthole steel ring still blown. |
+| 2 | Materials physical | FAIL | Chips over-corrected: dense dark speckles across the *whole* panel — reads as dirt splatter, not wear. Greeble boxes show wood-grain-looking metal. Mirror, pipes, rails, floor: good. |
+| 3 | Detail density | FAIL | Much better (rails, decals, bolts, seams, extinguisher, junction box). The window close-up still has two big panels carrying nothing but speckles + one decal. |
+| 4 | Post stack balanced | FAIL | Galley/ceiling blowouts fixed. Porthole ring still white (env-map reflection of the fixtures, not the point light); ocean world in the quarters porthole clips to white. |
+| 5 | Space view sells motion | FAIL | Gas giant: lit, ringed, rim glow, black sky, stars — good. Ocean limb visible in the quarters porthole. Corridor porthole: at that oblique angle the 0.34 m sleeve hides almost all sky. Drift objectively measured. |
+| 6 | Cohesive palette | PASS | Cream / orange / teal / gunmetal; red extinguisher is the only accent outside it and reads as a prop. |
+| 7 | Tech clean | FAIL | No z-fighting / acne / missing faces in 8 views; sleeves now solid from inside. 25 lights unchanged; fps not measurable here and no runtime safeguard yet. |
+| 8 | Cold-look test | FAIL | Aft/corridor are close (rails, decals, depth, lighting). Speckled panels everywhere kill it. |
+| 9 | Interactions | PASS | All three fire with prompts, fades, status text, rest-cycle lighting (`prompt_*`, `fade_*`, `rest_cycle_bed.png`). |
+
+Fix list for iteration 4 (worst first):
+1. Painted texture: chips only within ~5% of edges/corners and inside dents; centre nearly clean; keep
+   edge-wear highlight; slightly larger flakes.
+2. Porthole sleeve 0.34 → 0.2 m; corridor camera moved nearer the porthole and yawed 12° so the limb
+   is framed through it; ocean world brightness down.
+3. Blown steel ring: environment intensity 0.4 → 0.3, metal envMapIntensity 1.2 → 0.85, emissives ×0.25
+   during env capture.
+4. Quarters: narrower key spot, hooded lamp emitter; galley counter light up a touch.
+5. Greebles smaller and device-like (LEDs, bezels); pedestal insert was fully enclosed (invisible).
+6. Rubric 7: dynamic resolution scaler (drop pixel ratio / AO quality when frame time > 18 ms) so 60 fps
+   holds on mid-range GPUs; trim redundant lights.

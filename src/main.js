@@ -98,12 +98,12 @@ window.addEventListener("resize", () => {
 // ---------------------------------------------------------------------------
 let debugMode = false;
 const VIEWS = {
-  // standing in the cockpit doorway looking over the consoles at the windshield
-  cockpit: { x: 0.0, z: -17.6, yaw: 0, pitch: -3, planet: 0, planetOffset: -14, time: 40 },
-  // aft end of the corridor looking forward
-  corridor: { x: 0.3, z: -0.9, yaw: 4, pitch: -2, planet: 0, planetOffset: 0, time: 40 },
-  // inside the crew quarters looking at the bunk
-  quarters: { x: -2.3, z: -6.3, yaw: 52, pitch: -8, planet: 1, planetOffset: 19, time: 40 },
+  // just inside the cockpit doorway looking over the seats and consoles at the windshield
+  cockpit: { x: 0.0, z: -17.1, yaw: 0, pitch: -4, planet: 0, planetOffset: -12, time: 40 },
+  // aft end of the corridor looking forward; the ocean world's limb sits in the near port porthole
+  corridor: { x: 0.3, z: -0.9, yaw: 4, pitch: -2, planet: 1, planetOffset: 50, time: 40 },
+  // inside the crew quarters looking at the bunk; ocean world limb in the porthole above the bed
+  quarters: { x: -2.3, z: -6.3, yaw: 52, pitch: -8, planet: 1, planetOffset: 26, time: 40 },
   // nose to the port corridor porthole
   window: { x: -0.55, z: -12.55, yaw: 90, pitch: 2, planet: 0, planetOffset: -12, time: 40 },
   // extra QA views
@@ -115,6 +115,7 @@ const VIEWS = {
 
 let framesRendered = 0;
 let frameMs = 16;
+let pendingCapture = null;
 const debugAPI = {
   ready: false,
   views: Object.keys(VIEWS),
@@ -130,9 +131,23 @@ const debugAPI = {
     space.setTime(v.time ?? 40);
     space.framePlanet(v.planet ?? 0, new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)));
     post.finalPass.uniforms.seed.value = 0.37;
+    debugAPI.freezeGrain = true;
     framesRendered = 0;
     return true;
   },
+  // Advance only the sky (stars / planets / dust) by dt seconds; interior stays put. For drift measurement.
+  advanceSky(dt) {
+    space.setTime(space.state.time + dt);
+    space.update(0);
+    framesRendered = 0;
+  },
+  // Resolve with RGBA bytes of a screen region (CSS px) from the next rendered frame.
+  capturePixels(x, y, w, h) {
+    return new Promise((resolve) => {
+      pendingCapture = { x, y, w, h, resolve };
+    });
+  },
+  freezeGrain: false,
   // Place the player in front of an interactable, looking at it (for prompt / interaction tests)
   lookAt(id) {
     const poses = {
@@ -240,8 +255,20 @@ function frame() {
   interactions.update();
 
   if (debugAPI.directRender) renderer.render(scene, camera);
-  else post.render(t);
+  else post.render(debugAPI.freezeGrain ? 0.37 : t);
   framesRendered++;
+  if (pendingCapture) {
+    // copy the freshly presented frame synchronously (valid without preserveDrawingBuffer)
+    const { x, y, w, h, resolve } = pendingCapture;
+    pendingCapture = null;
+    const c2 = document.createElement("canvas");
+    c2.width = w;
+    c2.height = h;
+    const ctx = c2.getContext("2d");
+    const pr = renderer.getPixelRatio();
+    ctx.drawImage(canvas, x * pr, y * pr, w * pr, h * pr, 0, 0, w, h);
+    resolve(Array.from(ctx.getImageData(0, 0, w, h).data));
+  }
   if (showStats) {
     const s = debugAPI.getStats();
     hud.setStats(`${s.fps} fps  ${s.frameMs} ms\n${s.calls} calls  ${(s.triangles / 1000).toFixed(1)}k tris\n${s.lights} lights`);

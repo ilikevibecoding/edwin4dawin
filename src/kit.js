@@ -23,7 +23,7 @@ export class Kit {
    * @param {object} opts { pos:[x,y,z], rot:[rx,ry,rz] | quat, scale, color: THREE.Color|number, uv:'world'|'keep'|'scale', uvScale:[su,sv], texel: number }
    */
   add(mat, geo, opts = {}) {
-    const { pos = [0, 0, 0], rot = null, quat = null, color = 0xffffff, uv = "world", texel = 1.0, uvScale = null } = opts;
+    const { pos = [0, 0, 0], rot = null, quat = null, color = 0xffffff, uv = "world", texel = 1.0, uvScale = null, uvRect = null } = opts;
     if (quat) _q.copy(quat);
     else if (rot) _q.setFromEuler(new THREE.Euler(rot[0], rot[1], rot[2]));
     else _q.identity();
@@ -32,6 +32,7 @@ export class Kit {
     if (geo.index) geo = geo.toNonIndexed();
     if (uv === "world") worldUVs(geo, texel);
     else if (uv === "scale" && uvScale) scaleUVs(geo, uvScale[0], uvScale[1]);
+    if (uvRect) rectUVs(geo, uvRect);
     setVertexColor(geo, color);
     // drop attributes that would break merging
     for (const key of Object.keys(geo.attributes)) {
@@ -78,8 +79,8 @@ export class Kit {
       if (!material) throw new Error("Unknown material " + key);
       const mesh = new THREE.Mesh(merged, material);
       mesh.name = "kit_" + key;
-      mesh.castShadow = castShadow && !key.startsWith("emit") && key !== "glass";
-      mesh.receiveShadow = receiveShadow && key !== "glass";
+      mesh.castShadow = castShadow && !key.startsWith("emit") && key !== "glass" && key !== "decal";
+      mesh.receiveShadow = receiveShadow && key !== "glass" && key !== "decal";
       parent.add(mesh);
       this.meshes.push(mesh);
     }
@@ -121,6 +122,32 @@ export function scaleUVs(geo, su, sv) {
   const uv = geo.attributes.uv;
   if (!uv) return;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
+}
+
+// Remap [0,1] UVs into a sub-rectangle [u0, v0, u1, v1] of an atlas.
+export function rectUVs(geo, [u0, v0, u1, v1]) {
+  const uv = geo.attributes.uv;
+  if (!uv) return;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), v0 + uv.getY(i) * (v1 - v0));
+}
+
+// Turn a geometry inside out (flip winding + normals) so a tube reads from within.
+export function insideOut(geo) {
+  const g = geo.index ? geo.toNonIndexed() : geo;
+  const attrs = ["position", "normal", "uv"].map((k) => g.attributes[k]).filter(Boolean);
+  const count = g.attributes.position.count;
+  for (let i = 0; i + 2 < count; i += 3) {
+    for (const a of attrs) {
+      for (let k = 0; k < a.itemSize; k++) {
+        const t = a.getComponent(i + 1, k);
+        a.setComponent(i + 1, k, a.getComponent(i + 2, k));
+        a.setComponent(i + 2, k, t);
+      }
+    }
+  }
+  const n = g.attributes.normal;
+  if (n) for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+  return g;
 }
 
 export function setVertexColor(geo, color) {

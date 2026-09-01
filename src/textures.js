@@ -268,16 +268,15 @@ export function makePaintedPanel(size = 512, seed = 11) {
     const n1 = fbm(u, v, { octaves: 4, freq: 6, seed: seed });
     const n2 = fbm(u, v, { octaves: 5, freq: 16, seed: seed + 5 });
     let lum = 0.92 + (n1 - 0.5) * 0.08 + (n2 - 0.5) * 0.05;
-    // grime concentrating near edges
-    const grime = clamp01(1 - ed / 0.18) * fbm(u, v, { octaves: 4, freq: 9, seed: seed + 9 });
-    lum *= 1 - grime * 0.22;
+    // grime concentrating near edges (slightly warm-dark, like handled paint)
+    const grime = clamp01(1 - ed / 0.16) * fbm(u, v, { octaves: 4, freq: 9, seed: seed + 9 });
     // streaky dirt running down (v direction)
     const streak = Math.pow(fbm(u * 1.0, v * 0.15, { octaves: 3, freq: 20, seed: seed + 21 }), 3);
-    lum *= 1 - streak * 0.12;
-    let r = lum,
-      g = lum * 0.995,
-      b = lum * 0.985;
-    let rough = 0.48 + (n2 - 0.5) * 0.25 + grime * 0.3;
+    lum *= 1 - streak * 0.1;
+    let r = lum * (1 - grime * 0.18),
+      g = lum * 0.995 * (1 - grime * 0.21),
+      b = lum * 0.985 * (1 - grime * 0.25);
+    let rough = 0.5 + (n2 - 0.5) * 0.25 + grime * 0.28;
     let metal = 0;
     // bevel height
     let hgt = 0.5 + clamp01(ed / 0.03) * 0.35;
@@ -290,28 +289,39 @@ export function makePaintedPanel(size = 512, seed = 11) {
         rough += k * 0.15;
       }
     }
-    // chipping: threshold on noise, stronger near edges
-    const chipNoise = fbm(u, v, { octaves: 4, freq: 24, seed: seed + 3 });
-    const chipMask = chipNoise - 0.42 - clamp01(ed / 0.05) * 0.4;
+    // edge wear: paint polished lighter and smoother along the bevel where hands / gear rub
+    const wearBand = smooth(clamp01(1 - Math.abs(ed - 0.028) / 0.022));
+    const wearNoise = fbm(u, v, { octaves: 3, freq: 30, seed: seed + 13 });
+    const wear = wearBand * clamp01((wearNoise - 0.48) * 3);
+    r += wear * 0.07;
+    g += wear * 0.07;
+    b += wear * 0.06;
+    rough -= wear * 0.18;
+    // chipping: small sharp flakes revealing mid-grey primer/steel, mostly at edges and corners
+    const chipNoise = fbm(u, v, { octaves: 3, freq: 52, seed: seed + 3 });
+    const edgeBias = clamp01(1 - ed / 0.07);
+    const cornerBias = clamp01(1 - Math.hypot(Math.min(u, 1 - u), Math.min(v, 1 - v)) / 0.12);
+    const chipMask = chipNoise - (0.74 - edgeBias * 0.17 - cornerBias * 0.08);
     if (chipMask > 0) {
-      const k = clamp01(chipMask * 12);
-      const m = 0.3 + (n2 - 0.5) * 0.12;
+      const k = clamp01(chipMask * 45);
+      const m = 0.52 + (n2 - 0.5) * 0.12;
       r = lerp(r, m * 1.0, k);
-      g = lerp(g, m * 1.02, k);
-      b = lerp(b, m * 1.08, k);
-      rough = lerp(rough, 0.38, k);
+      g = lerp(g, m * 1.01, k);
+      b = lerp(b, m * 1.04, k);
+      rough = lerp(rough, 0.36, k);
       metal = lerp(metal, 1, k);
       hgt -= k * 0.05;
     }
-    // fine scratches
+    // fine scratches (light, glancing)
     const sc = worley(u, v, 18, seed + 7);
-    if (sc < 0.02) {
-      const k = 1 - sc / 0.02;
-      r = lerp(r, 0.35, k * 0.5);
-      g = lerp(g, 0.35, k * 0.5);
-      b = lerp(b, 0.37, k * 0.5);
+    if (sc < 0.014) {
+      const k = 1 - sc / 0.014;
+      r = lerp(r, 0.55, k * 0.45);
+      g = lerp(g, 0.55, k * 0.45);
+      b = lerp(b, 0.57, k * 0.45);
       hgt -= k * 0.03;
-      rough += k * 0.1;
+      rough -= k * 0.08;
+      metal = lerp(metal, 0.6, k * 0.5);
     }
     // rivets
     for (const [rx, ry] of rivets) {
@@ -340,14 +350,14 @@ export function makeWornMetal(size = 512, seed = 23) {
   const t = new TexGen(size, size);
   t.each((u, v, i) => {
     // brushed streaks along u
-    const streak = vnoise(u * 0.02, v, 220, seed) * 0.6 + vnoise(u * 0.05, v, 90, seed + 1) * 0.4;
+    const streak = vnoise(u * 0.02, v, 220, seed) * 0.55 + vnoise(u * 0.05, v, 90, seed + 1) * 0.3 + vnoise(u * 0.01, v, 400, seed + 3) * 0.15;
     const blotch = fbm(u, v, { octaves: 4, freq: 3, seed: seed + 2 });
     const spots = fbm(u, v, { octaves: 5, freq: 12, seed: seed + 6 });
-    let lum = 0.62 + (streak - 0.5) * 0.22 + (blotch - 0.5) * 0.18;
+    let lum = 0.66 + (streak - 0.5) * 0.2 + (blotch - 0.5) * 0.07;
     // dull oxidised patches
-    const dull = clamp01((spots - 0.58) * 6);
-    lum *= 1 - dull * 0.25;
-    let rough = 0.34 + (streak - 0.5) * 0.2 + dull * 0.35 + (blotch - 0.5) * 0.1;
+    const dull = clamp01((spots - 0.6) * 6);
+    lum *= 1 - dull * 0.18;
+    let rough = 0.32 + (streak - 0.5) * 0.18 + dull * 0.35 + (blotch - 0.5) * 0.12;
     let hgt = 0.5 + (streak - 0.5) * 0.08 + (spots - 0.5) * 0.04;
     // scratches
     const sc = worley(u, v, 10, seed + 4);
@@ -614,6 +624,207 @@ export function makeLedStrip(w = 256, h = 32, seed = 9) {
 }
 
 // ---------------------------------------------------------------------------
+// Stencil decals: a 4x4 sheet of worn labels / markings (transparent background).
+// Cell (col,row) -> uv rect via decalRect(). Text is drawn with canvas fonts, then eroded.
+// ---------------------------------------------------------------------------
+export const DECAL_CELLS = 4;
+export function decalRect(index) {
+  const c = index % DECAL_CELLS;
+  const r = Math.floor(index / DECAL_CELLS);
+  const s = 1 / DECAL_CELLS;
+  // canvas rows run top-down, texture v runs bottom-up
+  return [c * s, 1 - (r + 1) * s, (c + 1) * s, 1 - r * s];
+}
+export function makeDecalSheet(size = 1024, seed = 19) {
+  const c = makeCanvas(size, size);
+  const ctx = c.getContext("2d");
+  const rand = mulberry32(seed);
+  const cell = size / DECAL_CELLS;
+  const INK = "#1d1e21";
+  const ORANGE = "#e9782f";
+  const CREAM = "#e8dfcc";
+  const TEAL = "#4fd8cc";
+  const font = (px, bold = true) => `${bold ? "bold " : ""}${px}px "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace`;
+  const at = (i, fn) => {
+    const cx = (i % DECAL_CELLS) * cell;
+    const cy = Math.floor(i / DECAL_CELLS) * cell;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.beginPath();
+    ctx.rect(0, 0, cell, cell);
+    ctx.clip();
+    fn(cell);
+    ctx.restore();
+  };
+  const text = (s, x, y, px, color, align = "center", bold = true) => {
+    ctx.fillStyle = color;
+    ctx.font = font(px, bold);
+    ctx.textAlign = align;
+    ctx.textBaseline = "middle";
+    ctx.fillText(s, x, y);
+  };
+  const chevrons = (x, y, w, h, n, color) => {
+    ctx.fillStyle = color;
+    const step = w / n;
+    for (let k = 0; k < n; k++) {
+      ctx.beginPath();
+      ctx.moveTo(x + k * step, y);
+      ctx.lineTo(x + k * step + step * 0.5, y);
+      ctx.lineTo(x + k * step + step * 0.5 + h * 0.6, y + h);
+      ctx.lineTo(x + k * step + h * 0.6, y + h);
+      ctx.closePath();
+      ctx.fill();
+    }
+  };
+  // 0: bay code
+  at(0, (s) => {
+    text("A-07", s / 2, s * 0.42, s * 0.34, INK);
+    ctx.fillStyle = ORANGE;
+    ctx.fillRect(s * 0.15, s * 0.64, s * 0.7, s * 0.05);
+    text("DECK 02", s / 2, s * 0.8, s * 0.13, INK);
+  });
+  // 1: caution block
+  at(1, (s) => {
+    chevrons(s * 0.08, s * 0.18, s * 0.84, s * 0.14, 5, ORANGE);
+    text("CAUTION", s / 2, s * 0.5, s * 0.17, INK);
+    text("LOW CLEARANCE", s / 2, s * 0.68, s * 0.09, INK);
+    chevrons(s * 0.08, s * 0.78, s * 0.84, s * 0.14, 5, ORANGE);
+  });
+  // 2: big numeral
+  at(2, (s) => {
+    text("3", s / 2, s * 0.5, s * 0.78, INK);
+  });
+  // 3: arrow + AIRLOCK
+  at(3, (s) => {
+    ctx.fillStyle = ORANGE;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.12, s * 0.32);
+    ctx.lineTo(s * 0.55, s * 0.32);
+    ctx.lineTo(s * 0.55, s * 0.18);
+    ctx.lineTo(s * 0.9, s * 0.42);
+    ctx.lineTo(s * 0.55, s * 0.66);
+    ctx.lineTo(s * 0.55, s * 0.52);
+    ctx.lineTo(s * 0.12, s * 0.52);
+    ctx.closePath();
+    ctx.fill();
+    text("AIRLOCK", s / 2, s * 0.82, s * 0.16, INK);
+  });
+  // 4: O2 roundel
+  at(4, (s) => {
+    ctx.strokeStyle = TEAL;
+    ctx.lineWidth = s * 0.05;
+    ctx.beginPath();
+    ctx.arc(s / 2, s / 2, s * 0.36, 0, Math.PI * 2);
+    ctx.stroke();
+    text("O2", s / 2, s * 0.5, s * 0.3, TEAL);
+  });
+  // 5: power warning
+  at(5, (s) => {
+    ctx.fillStyle = ORANGE;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.5, s * 0.08);
+    ctx.lineTo(s * 0.92, s * 0.8);
+    ctx.lineTo(s * 0.08, s * 0.8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = INK;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.55, s * 0.3);
+    ctx.lineTo(s * 0.42, s * 0.55);
+    ctx.lineTo(s * 0.52, s * 0.55);
+    ctx.lineTo(s * 0.44, s * 0.74);
+    ctx.lineTo(s * 0.62, s * 0.48);
+    ctx.lineTo(s * 0.52, s * 0.48);
+    ctx.lineTo(s * 0.6, s * 0.3);
+    ctx.closePath();
+    ctx.fill();
+    text("HV", s / 2, s * 0.91, s * 0.12, INK);
+  });
+  // 6: maintenance panel label with fake barcode
+  at(6, (s) => {
+    text("MAINT", s / 2, s * 0.3, s * 0.2, INK);
+    text("PNL 114-C", s / 2, s * 0.48, s * 0.1, INK);
+    ctx.fillStyle = INK;
+    let x = s * 0.15;
+    while (x < s * 0.85) {
+      const w = s * (0.008 + rand() * 0.02);
+      ctx.fillRect(x, s * 0.6, w, s * 0.22);
+      x += w + s * (0.006 + rand() * 0.02);
+    }
+  });
+  // 7: NO STEP
+  at(7, (s) => {
+    ctx.fillStyle = CREAM;
+    ctx.fillRect(s * 0.08, s * 0.3, s * 0.84, s * 0.4);
+    text("NO STEP", s / 2, s * 0.5, s * 0.17, INK);
+  });
+  // 8: hatch code
+  at(8, (s) => {
+    text("H-2", s / 2, s * 0.36, s * 0.32, ORANGE);
+    text("PRESSURE DOOR", s / 2, s * 0.66, s * 0.09, INK);
+    text("KEEP CLEAR", s / 2, s * 0.78, s * 0.09, INK);
+  });
+  // 9: small text block (spec plate)
+  at(9, (s) => {
+    for (let k = 0; k < 6; k++) text(k % 2 ? "SN 0091-77-A  LOT 14" : "KESTREL FLEET SYS", s / 2, s * (0.25 + k * 0.1), s * 0.06, INK, "center", false);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = s * 0.015;
+    ctx.strokeRect(s * 0.1, s * 0.15, s * 0.8, s * 0.7);
+  });
+  // 10: stripe band
+  at(10, (s) => {
+    chevrons(s * 0.02, s * 0.35, s * 0.96, s * 0.3, 4, ORANGE);
+  });
+  // 11: cargo
+  at(11, (s) => {
+    text("CARGO", s / 2, s * 0.4, s * 0.22, INK);
+    text("↑ THIS SIDE UP", s / 2, s * 0.64, s * 0.1, INK);
+  });
+  // 12: vent label
+  at(12, (s) => {
+    text("ATMO", s / 2, s * 0.38, s * 0.2, TEAL);
+    text("RECYC 04", s / 2, s * 0.6, s * 0.11, INK);
+  });
+  // 13: emergency
+  at(13, (s) => {
+    ctx.fillStyle = ORANGE;
+    ctx.fillRect(s * 0.1, s * 0.22, s * 0.8, s * 0.56);
+    text("EMERG", s / 2, s * 0.42, s * 0.17, INK);
+    text("RELEASE", s / 2, s * 0.6, s * 0.13, INK);
+  });
+  // 14: B-12
+  at(14, (s) => {
+    text("B-12", s / 2, s * 0.5, s * 0.34, INK);
+  });
+  // 15: fine hazard text
+  at(15, (s) => {
+    text("MIND", s / 2, s * 0.36, s * 0.18, INK);
+    text("THE GAP", s / 2, s * 0.58, s * 0.18, INK);
+  });
+  // erode: knock out speckles + scuffed streaks so stencils look worn
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  for (let y = 0; y < size; y++) {
+    const v = y / size;
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      if (d[i + 3] === 0) continue;
+      const u = x / size;
+      const n = fbm(u, v, { octaves: 4, freq: 60, seed: seed + 2 });
+      const scuff = Math.pow(fbm(u * 0.3, v, { octaves: 3, freq: 40, seed: seed + 5 }), 2);
+      let a = d[i + 3] / 255;
+      a *= clamp01((n - 0.3) * 4);
+      a *= 1 - scuff * 0.7;
+      d[i + 3] = a * 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = toTexture(c, { srgb: true, wrap: false });
+  tex.anisotropy = 8;
+  return tex;
+}
+
+// ---------------------------------------------------------------------------
 // Space textures
 // ---------------------------------------------------------------------------
 export function makeStarSprite(size = 64) {
@@ -644,7 +855,10 @@ export function makeNebula(size = 512, seed = 3, colA = [0.25, 0.75, 0.8], colB 
       const fall = clamp01(1 - rad);
       const n = fbm(u, v, { octaves: 6, freq: 3, seed });
       const n2 = fbm(u, v, { octaves: 5, freq: 7, seed: seed + 3 });
-      const wisp = Math.pow(clamp01(n * 1.3 - 0.3), 1.8) * smooth(fall) * smooth(fall);
+      const lanes = fbm(u, v, { octaves: 4, freq: 5, seed: seed + 11 });
+      // filamentary body with dark dust lanes cutting through it
+      let wisp = Math.pow(clamp01(n * 1.55 - 0.42), 2.2) * smooth(fall) * smooth(fall);
+      wisp *= 0.45 + 0.55 * clamp01((lanes - 0.42) * 3.5);
       const mix = clamp01(n2 * 1.4 - 0.2);
       const i = (y * size + x) * 4;
       d[i] = lerp(colA[0], colB[0], mix) * 255;
@@ -726,14 +940,15 @@ export function makeOceanWorld(w = 1024, h = 512, seed = 88) {
       let r, g, b;
       if (land) {
         const hgt = clamp01((n - 0.53) / 0.2);
-        r = lerp(0.62, 0.85, hgt) + (detail - 0.5) * 0.1;
-        g = lerp(0.58, 0.78, hgt) + (detail - 0.5) * 0.1;
-        b = lerp(0.42, 0.66, hgt) + (detail - 0.5) * 0.1;
+        r = lerp(0.6, 0.88, hgt) + (detail - 0.5) * 0.12;
+        g = lerp(0.55, 0.8, hgt) + (detail - 0.5) * 0.12;
+        b = lerp(0.36, 0.66, hgt) + (detail - 0.5) * 0.1;
       } else {
-        const depth = clamp01((0.53 - n) / 0.25);
-        r = lerp(0.2, 0.06, depth);
-        g = lerp(0.62, 0.3, depth);
-        b = lerp(0.62, 0.42, depth);
+        // bright turquoise shelves falling to deep blue; shallows glow near coasts
+        const depth = clamp01((0.53 - n) / 0.22);
+        r = lerp(0.22, 0.05, depth);
+        g = lerp(0.78, 0.3, depth);
+        b = lerp(0.82, 0.62, depth);
       }
       const ice = clamp01((lat - 0.78 + (detail - 0.5) * 0.1) / 0.08);
       r = lerp(r, 0.95, ice);
