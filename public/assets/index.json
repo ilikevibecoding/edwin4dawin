@@ -1,0 +1,344 @@
+{
+  "textures": {
+    "pavement_01": {
+      "res": "2k",
+      "role": "plaza stone slabs",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "marble_tiles": {
+      "res": "2k",
+      "role": "plaza light paving",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "cobblestone_floor_08": {
+      "res": "2k",
+      "role": "street cobbles",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "patterned_cobblestone_02": {
+      "res": "1k",
+      "role": "sidewalk pattern",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "terracotta_floor_tiles": {
+      "res": "1k",
+      "role": "orange accent bands",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "brick_villa_floor": {
+      "res": "1k",
+      "role": "brick paving accents",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "painted_plaster_wall": {
+      "res": "2k",
+      "role": "weathered stucco facade",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "plaster_stone_wall_01": {
+      "res": "2k",
+      "role": "plaster with stone showing",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "beige_wall_001": {
+      "res": "1k",
+      "role": "beige stucco",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "beige_wall_002": {
+      "res": "1k",
+      "role": "textured beige stucco",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "plastered_wall_02": {
+      "res": "1k",
+      "role": "weathered plaster",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "white_plaster_rough_02": {
+      "res": "1k",
+      "role": "white rough plaster",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "clay_plaster": {
+      "res": "1k",
+      "role": "ochre clay plaster",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "medieval_blocks_03": {
+      "res": "1k",
+      "role": "large stone blocks",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "sandstone_blocks_05": {
+      "res": "1k",
+      "role": "sandstone block wall",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "rustic_stone_wall": {
+      "res": "1k",
+      "role": "rustic stone wall / fence pillars",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "red_brick_plaster_patch_02": {
+      "res": "1k",
+      "role": "brick under broken plaster",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "clay_roof_tiles_02": {
+      "res": "2k",
+      "role": "terracotta roof tiles",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "roof_07": {
+      "res": "1k",
+      "role": "old ceramic roof tiles",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "wood_planks_grey": {
+      "res": "1k",
+      "role": "weathered grey wood (shutters, balconies)",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "wood_plank_wall": {
+      "res": "1k",
+      "role": "varnished brown wood (doors)",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "painted_metal_shutter": {
+      "res": "1k",
+      "role": "painted metal",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "metal_plate_02": {
+      "res": "1k",
+      "role": "worn steel",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "green_metal_rust": {
+      "res": "1k",
+      "role": "military green painted metal",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "gravel_floor_02": {
+      "res": "1k",
+      "role": "gravel",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    },
+    "dirt_floor": {
+      "res": "1k",
+      "role": "dirt / planter soil",
+      "maps": [
+        "diff",
+        "nor_gl",
+        "arm",
+        "disp"
+      ]
+    }
+  },
+  "models": {
+    "street_lamp_01": {
+      "file": "models/street_lamp_01/street_lamp_01_1k.gltf"
+    },
+    "outdoor_table_chair_set_01": {
+      "file": "models/outdoor_table_chair_set_01/outdoor_table_chair_set_01_1k.gltf"
+    },
+    "potted_plant_02": {
+      "file": "models/potted_plant_02/potted_plant_02_1k.gltf"
+    },
+    "planter_pot_clay": {
+      "file": "models/planter_pot_clay/planter_pot_clay_1k.gltf"
+    },
+    "wooden_crate_02": {
+      "file": "models/wooden_crate_02/wooden_crate_02_1k.gltf"
+    },
+    "wooden_barrels_01": {
+      "file": "models/wooden_barrels_01/wooden_barrels_01_1k.gltf"
+    },
+    "metal_trash_can": {
+      "file": "models/metal_trash_can/metal_trash_can_1k.gltf"
+    },
+    "utility_box_01": {
+      "file": "models/utility_box_01/utility_box_01_1k.gltf"
+    },
+    "shrub_04": {
+      "file": "models/shrub_04/shrub_04_1k.gltf"
+    },
+    "shrub_02": {
+      "file": "models/shrub_02/shrub_02_1k.gltf"
+    },
+    "old_military_crate": {
+      "file": "models/old_military_crate/old_military_crate_1k.gltf"
+    },
+    "wooden_military_crate": {
+      "file": "models/wooden_military_crate/wooden_military_crate_1k.gltf"
+    },
+    "ammo_box": {
+      "file": "models/ammo_box/ammo_box_1k.gltf"
+    },
+    "medical_box": {
+      "file": "models/medical_box/medical_box_1k.gltf"
+    },
+    "metal_jerrycan_green": {
+      "file": "models/metal_jerrycan_green/metal_jerrycan_green_1k.gltf"
+    },
+    "cement_bag": {
+      "file": "models/cement_bag/cement_bag_1k.gltf"
+    },
+    "old_tyre": {
+      "file": "models/old_tyre/old_tyre_1k.gltf"
+    },
+    "painted_wooden_bench": {
+      "file": "models/painted_wooden_bench/painted_wooden_bench_1k.gltf"
+    },
+    "water_manhole_cover": {
+      "file": "models/water_manhole_cover/water_manhole_cover_1k.gltf"
+    },
+    "horse_statue_01": {
+      "file": "models/horse_statue_01/horse_statue_01_1k.gltf"
+    },
+    "cardboard_box_01": {
+      "file": "models/cardboard_box_01/cardboard_box_01_1k.gltf"
+    },
+    "standing_chalkboard_01": {
+      "file": "models/standing_chalkboard_01/standing_chalkboard_01_1k.gltf"
+    },
+    "plastic_crate_02": {
+      "file": "models/plastic_crate_02/plastic_crate_02_1k.gltf"
+    },
+    "security_light": {
+      "file": "models/security_light/security_light_1k.gltf"
+    }
+  },
+  "hdris": {
+    "kloofendal_48d_partly_cloudy_puresky": {
+      "file": "hdri/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+      "res": "2k"
+    }
+  }
+}

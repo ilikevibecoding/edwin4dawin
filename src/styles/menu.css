@@ -1,0 +1,23 @@
+/* Menu styles — owned by src/ui (see docs/ARCHITECTURE.md). Placeholder click-to-play overlay. */
+.menu__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 18px;
+  background: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+.menu__title {
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+}
+.menu__hint {
+  font-size: 13px;
+  letter-spacing: 0.25em;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: var(--hud-mono);
+}

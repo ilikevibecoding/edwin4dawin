@@ -1,0 +1,68 @@
+{
+  "$comment": "All assets are CC0 from polyhaven.com unless noted. Resolution keys: 1k / 2k. Maps: diff, nor_gl, arm (AO/Rough/Metal packed).",
+  "hdris": [
+    { "id": "kloofendal_48d_partly_cloudy_puresky", "res": "2k" }
+  ],
+  "textures": [
+    { "id": "pavement_01", "res": "2k", "role": "plaza stone slabs" },
+    { "id": "marble_tiles", "res": "2k", "role": "plaza light paving" },
+    { "id": "cobblestone_floor_08", "res": "2k", "role": "street cobbles" },
+    { "id": "patterned_cobblestone_02", "res": "1k", "role": "sidewalk pattern" },
+    { "id": "terracotta_floor_tiles", "res": "1k", "role": "orange accent bands" },
+    { "id": "brick_villa_floor", "res": "1k", "role": "brick paving accents" },
+    { "id": "painted_plaster_wall", "res": "2k", "role": "weathered stucco facade" },
+    { "id": "plaster_stone_wall_01", "res": "2k", "role": "plaster with stone showing" },
+    { "id": "beige_wall_001", "res": "1k", "role": "beige stucco" },
+    { "id": "beige_wall_002", "res": "1k", "role": "textured beige stucco" },
+    { "id": "plastered_wall_02", "res": "1k", "role": "weathered plaster" },
+    { "id": "white_plaster_rough_02", "res": "1k", "role": "white rough plaster" },
+    { "id": "clay_plaster", "res": "1k", "role": "ochre clay plaster" },
+    { "id": "medieval_blocks_03", "res": "1k", "role": "large stone blocks" },
+    { "id": "sandstone_blocks_05", "res": "1k", "role": "sandstone block wall" },
+    { "id": "rustic_stone_wall", "res": "1k", "role": "rustic stone wall / fence pillars" },
+    { "id": "red_brick_plaster_patch_02", "res": "1k", "role": "brick under broken plaster" },
+    { "id": "clay_roof_tiles_02", "res": "2k", "role": "terracotta roof tiles" },
+    { "id": "roof_07", "res": "1k", "role": "old ceramic roof tiles" },
+    { "id": "wood_planks_grey", "res": "1k", "role": "weathered grey wood (shutters, balconies)" },
+    { "id": "wood_plank_wall", "res": "1k", "role": "varnished brown wood (doors)" },
+    { "id": "painted_metal_shutter", "res": "1k", "role": "painted metal" },
+    { "id": "metal_plate_02", "res": "1k", "role": "worn steel" },
+    { "id": "green_metal_rust", "res": "1k", "role": "military green painted metal" },
+    { "id": "gravel_floor_02", "res": "1k", "role": "gravel" },
+    { "id": "dirt_floor", "res": "1k", "role": "dirt / planter soil" }
+  ],
+  "models": [
+    { "id": "street_lamp_01", "res": "1k" },
+    { "id": "outdoor_table_chair_set_01", "res": "1k" },
+    { "id": "potted_plant_02", "res": "1k" },
+    { "id": "planter_pot_clay", "res": "1k" },
+    { "id": "wooden_crate_02", "res": "1k" },
+    { "id": "wooden_barrels_01", "res": "1k" },
+    { "id": "metal_trash_can", "res": "1k" },
+    { "id": "utility_box_01", "res": "1k" },
+    { "id": "shrub_04", "res": "1k" },
+    { "id": "shrub_02", "res": "1k" },
+    { "id": "old_military_crate", "res": "1k" },
+    { "id": "wooden_military_crate", "res": "1k" },
+    { "id": "ammo_box", "res": "1k" },
+    { "id": "medical_box", "res": "1k" },
+    { "id": "metal_jerrycan_green", "res": "1k" },
+    { "id": "cement_bag", "res": "1k" },
+    { "id": "old_tyre", "res": "1k" },
+    { "id": "painted_wooden_bench", "res": "1k" },
+    { "id": "water_manhole_cover", "res": "1k" },
+    { "id": "horse_statue_01", "res": "1k" },
+    { "id": "cardboard_box_01", "res": "1k" },
+    { "id": "standing_chalkboard_01", "res": "1k" },
+    { "id": "plastic_crate_02", "res": "1k" },
+    { "id": "security_light", "res": "1k" }
+  ],
+  "external": [
+    {
+      "id": "Soldier.glb",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/r185/examples/models/gltf/Soldier.glb",
+      "dest": "models/soldier/Soldier.glb",
+      "license": "Mixamo character shipped with three.js examples (MIT repo)"
+    }
+  ]
+}

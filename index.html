@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEASIDE STRIKE</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/src/styles/base.css" />
+  <link rel="stylesheet" href="/src/styles/hud.css" />
+  <link rel="stylesheet" href="/src/styles/menu.css" />
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+  <div id="hud" class="hud" aria-hidden="true"></div>
+  <div id="menu" class="menu"></div>
+  <div id="loading" class="loading">
+    <div class="loading__inner">
+      <div class="loading__title">SEASIDE STRIKE</div>
+      <div class="loading__bar"><div id="loading-fill" class="loading__fill"></div></div>
+      <div id="loading-label" class="loading__label">INITIALIZING</div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
