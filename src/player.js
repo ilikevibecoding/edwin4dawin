@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PLAYER, WEAPONS, CONSUMABLES, AMMO, MAX_MATS, MATERIAL_ORDER } from './config.js';
 import { clamp, lerp } from './utils.js';
-import { createCharacter, animateCharacter, createWeaponModel, createPickaxeModel, createConsumableModel, flashCharacter } from './characters.js';
+import { createCharacter, animateCharacter, createWeaponModel, createPickaxeModel, createConsumableModel, createGliderMesh, flashCharacter } from './characters.js';
 import { WATER_Y } from './world.js';
 
 const PHYS_STEP = 1 / 90;
@@ -62,7 +62,7 @@ export class Player {
     this.setHeld(this.pickaxeModel, 'pickaxe');
 
     // glider
-    this.glider = this.buildGlider();
+    this.glider = createGliderMesh(0xff8f2b);
     this.glider.visible = false;
     game.scene.add(this.glider);
 
@@ -70,26 +70,6 @@ export class Player {
     this.right = new THREE.Vector3();
     this.flatForward = new THREE.Vector3();
     this._tmp = new THREE.Vector3();
-  }
-
-  buildGlider() {
-    const g = new THREE.Group();
-    const canopy = new THREE.Mesh(
-      new THREE.SphereGeometry(2.3, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2.4),
-      new THREE.MeshLambertMaterial({ color: 0xff8f2b, side: THREE.DoubleSide }),
-    );
-    canopy.scale.set(1.25, 0.55, 1);
-    canopy.position.y = 2.5;
-    g.add(canopy);
-    const lineMat = new THREE.MeshBasicMaterial({ color: 0xdddddd });
-    for (const [x, z] of [[-1.6, 0.6], [1.6, 0.6], [-1.6, -0.6], [1.6, -0.6]]) {
-      const line = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.6, 4), lineMat);
-      line.position.set(x * 0.4, 1.9, z * 0.5);
-      line.lookAt(new THREE.Vector3(x, 3.2, z));
-      line.rotateX(Math.PI / 2);
-      g.add(line);
-    }
-    return g;
   }
 
   get activeItem() {

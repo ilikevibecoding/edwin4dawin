@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { WEAPONS, RARITY_MULT, BOT_NAMES, PLAYER, MATERIALS, TOTAL_PLAYERS } from './config.js';
-import { createCharacter, animateCharacter, createWeaponModel, randomOutfit, flashCharacter } from './characters.js';
+import { createCharacter, animateCharacter, createWeaponModel, createGliderMesh, randomOutfit, flashCharacter } from './characters.js';
 import { botLootDrop } from './loot.js';
 import { angleLerp, clamp, wrapAngle } from './utils.js';
 
@@ -11,8 +11,11 @@ class Bot {
     const rng = game.rng;
     this.game = game;
     this.name = name;
-    this.pos = new THREE.Vector3(x, game.world.heightAt(x, z), z);
+    this.pos = new THREE.Vector3(x, 330 + rng.range(0, 40), z);
     this.vel = new THREE.Vector3();
+    this.phase = 'skydive';
+    this.dropDelay = rng.range(0, 4);
+    this.landedAt = Infinity;
     this.radius = PLAYER.radius;
     this.height = PLAYER.height;
     this.step = PLAYER.step;
@@ -61,6 +64,14 @@ class Bot {
     this.char.group.rotation.y = this.yaw + Math.PI;
     game.scene.add(this.char.group);
     this.char.group.updateMatrixWorld(true);
+    this.glider = createGliderMesh(rng.pick([0xff8f2b, 0x3fa7f5, 0x58d68d, 0xf5b041, 0xaf7ac5, 0xff6fb5]));
+    this.glider.visible = false;
+    game.scene.add(this.glider);
+  }
+
+  /** Seconds since this bot touched the ground (Infinity while still airborne). */
+  timeOnGround(now) {
+    return now - this.landedAt;
   }
 }
 
@@ -146,6 +157,46 @@ export class BotManager {
     }
   }
 
+  /** Skydive + glide, mirroring the player's drop. */
+  updateBotDrop(b, dt) {
+    const game = this.game;
+    const world = game.world;
+    if (b.dropDelay > 0) {
+      b.dropDelay -= dt;
+      b.char.group.position.copy(b.pos);
+      return;
+    }
+    const ground = world.groundAt(b.pos.x, b.pos.z, b.pos.y, b.radius, b.step);
+    const alt = b.pos.y - ground;
+    if (b.phase === 'skydive') {
+      b.vel.y = Math.max(-48, b.vel.y - 30 * dt);
+      if (alt < 70) {
+        b.phase = 'glide';
+        b.glider.visible = true;
+      }
+    } else {
+      b.vel.y += (-8.5 - b.vel.y) * Math.min(1, dt * 4);
+    }
+    b.pos.y += b.vel.y * dt;
+    if (b.pos.y <= ground) {
+      b.pos.y = ground;
+      b.vel.set(0, 0, 0);
+      b.phase = 'ground';
+      b.glider.visible = false;
+      b.landedAt = game.time;
+      b.onGround = true;
+    }
+    b.char.group.position.copy(b.pos);
+    b.char.group.rotation.y = b.yaw + Math.PI;
+    b.glider.position.set(b.pos.x, b.pos.y + 1.6, b.pos.z);
+    b.glider.rotation.y = b.yaw;
+    const parts = b.char.parts;
+    parts.leftArmPivot.rotation.set(0, 0, 1.2);
+    parts.rightArmPivot.rotation.set(0, 0, -1.2);
+    parts.leftLeg.rotation.x = 0.3;
+    parts.rightLeg.rotation.x = -0.3;
+  }
+
   updateBot(b, dt) {
     const game = this.game;
     const world = game.world;
@@ -154,8 +205,17 @@ export class BotManager {
     const rng = game.rng;
     const now = game.time;
 
+    if (b.phase !== 'ground') {
+      this.updateBotDrop(b, dt);
+      return;
+    }
+
     if (b.combatTarget && !b.combatTarget.alive) b.combatTarget = null;
     if (b.combatTarget === player && player.phase !== 'ground') b.combatTarget = null;
+    if (b.combatTarget && b.combatTarget !== player && b.combatTarget.phase !== 'ground') b.combatTarget = null;
+
+    // freshly landed bots are "busy looting" and only react to threats right next to them
+    const looting = b.timeOnGround(now) < 40;
 
     // ---- perception ----
     b.perceptionTimer -= dt;
@@ -164,8 +224,7 @@ export class BotManager {
       let target = null;
       if (player.alive && player.phase === 'ground') {
         const d = b.pos.distanceTo(player.pos);
-        // early in the match bots are "busy looting" and only notice nearby players
-        const range = now - game.startTime < 45 ? 30 : 80;
+        const range = looting ? 14 : 80;
         if (d < range) {
           const toP = Math.atan2(-(player.pos.x - b.pos.x), -(player.pos.z - b.pos.z));
           const facing = Math.abs(wrapAngle(toP - b.yaw)) < 1.8 || d < 14 || now - b.lastSeenTime < 3 || b.combatTarget === player;
@@ -174,10 +233,9 @@ export class BotManager {
       }
       if (!target) {
         let best = null;
-        const looting = now - game.startTime < 45;
-        let bestD = b.combatTarget && b.combatTarget !== player ? 50 : looting ? 16 : 34;
+        let bestD = b.combatTarget && b.combatTarget !== player ? 50 : looting ? 14 : 34;
         for (const o of this.bots) {
-          if (o === b || !o.alive) continue;
+          if (o === b || !o.alive || o.phase !== 'ground') continue;
           const d = b.pos.distanceTo(o.pos);
           if (d < bestD && this.hasLOS(b, o.pos)) {
             best = o;
@@ -365,11 +423,12 @@ export class BotManager {
     dir.normalize();
     const right = this._r.set(-dir.z, 0, dir.x).normalize();
     const up = this._u.crossVectors(right, dir).normalize();
-    let sigma = (0.022 + dist * 0.0014) * b.aimSkill;
+    // bots are dangerous up close and sloppy at range
+    let sigma = (0.03 + dist * 0.002) * b.aimSkill;
     if (t === player && player.speedXZ > 4) sigma *= 1.35;
     if (t === player && !player.onGround) sigma *= 1.3;
-    const earlyMatch = game.time - game.startTime < 45;
-    const dmgScale = t === player ? (earlyMatch ? 0.4 : 0.7) : 0.4 * this._pacing;
+    const looting = b.timeOnGround(game.time) < 40;
+    const dmgScale = t === player ? (looting ? 0.35 : 0.55) : 0.4 * this._pacing;
     const ox = (rng.next() + rng.next() - 1) * sigma * 1.8;
     const oy = (rng.next() + rng.next() - 1) * sigma * 1.8;
     dir.addScaledVector(right, ox).addScaledVector(up, oy).normalize();
@@ -425,7 +484,7 @@ export class BotManager {
   }
 
   damageBot(bot, dmg, source, point, head) {
-    if (!bot.alive) return { killed: false, shieldHit: false };
+    if (!bot.alive || bot.phase !== 'ground') return { killed: false, shieldHit: false };
     const game = this.game;
     let remaining = dmg;
     let shieldHit = false;
@@ -464,6 +523,7 @@ export class BotManager {
     bot.combatTarget = null;
     this.aliveCount--;
     game.scene.remove(bot.char.group);
+    game.scene.remove(bot.glider);
     for (const m of bot.char.meshes) game.world.removeRaycastTarget(m);
     game.loot.spawnItems(botLootDrop(game.rng, bot), bot.pos.x, bot.pos.y, bot.pos.z, game.rng);
     game.effects.burst(this._v.set(bot.pos.x, bot.pos.y + 1, bot.pos.z), 0xffffff, 24, 4, 6, 0.7);

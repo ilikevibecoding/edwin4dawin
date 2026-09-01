@@ -172,6 +172,27 @@ export function createPickaxeModel() {
   return group;
 }
 
+/** Parachute-style glider shown above a skydiving character. */
+export function createGliderMesh(color = 0xff8f2b) {
+  const g = new THREE.Group();
+  const canopy = new THREE.Mesh(
+    new THREE.SphereGeometry(2.3, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2.4),
+    new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }),
+  );
+  canopy.scale.set(1.25, 0.55, 1);
+  canopy.position.y = 2.5;
+  g.add(canopy);
+  const lineMat = new THREE.MeshBasicMaterial({ color: 0xdddddd });
+  for (const [x, z] of [[-1.6, 0.6], [1.6, 0.6], [-1.6, -0.6], [1.6, -0.6]]) {
+    const line = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.6, 4), lineMat);
+    line.position.set(x * 0.4, 1.9, z * 0.5);
+    line.lookAt(new THREE.Vector3(x, 3.2, z));
+    line.rotateX(Math.PI / 2);
+    g.add(line);
+  }
+  return g;
+}
+
 /** Placeholder held-item for consumables. */
 export function createConsumableModel(color) {
   const group = new THREE.Group();
