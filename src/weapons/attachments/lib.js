@@ -431,14 +431,14 @@ export function grainNormal(game, repeat = 6) {
  * oxide layer over the metal), fine grain, mottled roughness, worn to a lighter grey along bevels. The bevel
  * vertex tint from bakeEdgeWear() is turned into real wear by the shared surface hook.
  */
-export function anodisedMaterial(game, { color = 0x2b2b2a, roughness = 0.65, metalness = 0.1, name = 'anodised', wear = 0.75, grain = 0.35, repeat = 6 } = {}) {
+export function anodisedMaterial(game, { color = 0x212121, roughness = 0.56, metalness = 0.1, name = 'anodised', wear = 0.75, grain = 0.35, repeat = 6 } = {}) {
   const m = new THREE.MeshStandardMaterial({
     color,
     roughness,
     metalness,
     normalMap: grainNormal(game, repeat),
     normalScale: new THREE.Vector2(grain, grain),
-    envMapIntensity: 0.28,
+    envMapIntensity: 0.18,
     vertexColors: true,
   });
   m.name = name;
@@ -493,14 +493,14 @@ export function polymerMaterial(game, { color = 0x232322, roughness = 0.82, name
 }
 
 /** Black-oxide steel hardware (bolts, screws, pins): dark with bright, tight highlights. */
-export function steelMaterial(game, { color = 0x555860, roughness = 0.4, metalness = 0.9, name = 'steel' } = {}) {
+export function steelMaterial(game, { color = 0x2a2b2e, roughness = 0.35, metalness = 0.9, name = 'steel' } = {}) {
   const m = new THREE.MeshStandardMaterial({
     color,
     roughness,
     metalness,
     normalMap: grainNormal(game, 4),
     normalScale: new THREE.Vector2(0.25, 0.25),
-    envMapIntensity: 0.8,
+    envMapIntensity: 0.4,
     vertexColors: true,
   });
   m.name = name;
@@ -516,7 +516,7 @@ export function steelMaterial(game, { color = 0x555860, roughness = 0.4, metalne
     cavity: 0.5,
     aoDirect: 0.5,
     scratch: 0.4,
-    wearColor: [0.5, 0.5, 0.52],
+    wearColor: [0.35, 0.35, 0.36],
     wearRough: 0.3,
     wearMetal: 1.0,
   });
@@ -558,8 +558,19 @@ export function matteBlackMaterial(game, { name = 'matteBlack' } = {}) {
 /**
  * Optical glass: physically layered blend (specular added on top, background attenuated by alpha, faint
  * coating tint) so it reads as clear coated glass instead of a grey sheet. Custom blending = premultiplied.
+ * Two panes stack in the optic, so each attenuates the scene by only `opacity` (5 % → 90 % through both). The
+ * `tint` is the pane's diffuse albedo, i.e. haze on the glass: it must stay near black — at 0.5 the two panes
+ * laid a +40 sRGB grey veil over the scene (that, not attenuation, was the "darkened teal" window). The
+ * reflection is desaturated by `specularNeutral` because the sky IBL is a saturated blue and a real AR-coated
+ * window reflects it as a faint neutral-grey sheen, not a teal wash. `specularIntensity` scales F0 *and* F90:
+ * measured on the ADS frame, the sun's direct specular (r185's multiscatter GGX term, not the IBL — it survives
+ * envMapIntensity 0 and is roughness-independent) added ~+15 sRGB over the whole pane at 0.5; 0.15 ≈ 0.6 %
+ * reflectance, what a multi-layer AR coating actually does.
  */
-export function glassMaterial(game, { opacity = 0.1, tint = [0.1, 0.27, 0.28], name = 'holoGlass' } = {}) {
+export function glassMaterial(
+  game,
+  { opacity = 0.05, tint = [0.04, 0.04, 0.04], envMapIntensity = 0.4, iridescence = 0.0, specularIntensity = 0.15, specularNeutral = 0.9, name = 'holoGlass' } = {},
+) {
   const m = new THREE.MeshPhysicalMaterial({
     color: new THREE.Color(tint[0], tint[1], tint[2]),
     roughness: 0.05,
@@ -568,11 +579,11 @@ export function glassMaterial(game, { opacity = 0.1, tint = [0.1, 0.27, 0.28], n
     opacity,
     side: THREE.DoubleSide,
     depthWrite: false,
-    envMapIntensity: 0.85,
+    envMapIntensity,
     ior: 1.52,
-    specularIntensity: 0.9,
-    specularColor: new THREE.Color(0.8, 0.95, 1.0),
-    iridescence: 0.12,
+    specularIntensity,
+    specularColor: new THREE.Color(1, 1, 1),
+    iridescence,
     iridescenceIOR: 1.35,
     iridescenceThicknessRange: [140, 380],
     blending: THREE.CustomBlending,
@@ -583,13 +594,18 @@ export function glassMaterial(game, { opacity = 0.1, tint = [0.1, 0.27, 0.28], n
     blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
   });
   m.name = name;
+  const uniforms = { glassSpecNeutral: { value: specularNeutral } };
+  m.userData.glass = uniforms;
   m.onBeforeCompile = (shader) => {
-    shader.fragmentShader = shader.fragmentShader.replace(
+    Object.assign(shader.uniforms, uniforms);
+    shader.fragmentShader = shader.fragmentShader.replace('void main() {', 'uniform float glassSpecNeutral;\nvoid main() {').replace(
       'vec3 outgoingLight = totalDiffuse + totalSpecular + totalEmissiveRadiance;',
-      'vec3 outgoingLight = ( totalDiffuse + totalEmissiveRadiance ) * diffuseColor.a + totalSpecular;',
+      /* glsl */ `
+	float glSpecLum = dot( totalSpecular, vec3( 0.2126, 0.7152, 0.0722 ) );
+	vec3 outgoingLight = ( totalDiffuse + totalEmissiveRadiance ) * diffuseColor.a + mix( totalSpecular, vec3( glSpecLum ), glassSpecNeutral );`,
     );
   };
-  m.customProgramCacheKey = () => 'holoGlass1';
+  m.customProgramCacheKey = () => 'holoGlass2';
   return m;
 }
 
@@ -731,7 +747,7 @@ export class LabelAtlas {
   }
 
   /** Finalise the texture and the decal materials (call once after all regions are drawn). */
-  finish({ roughness = 0.55, metalness = 0.25 } = {}) {
+  finish({ roughness = 0.6, metalness = 0.05 } = {}) {
     if (this.texture) return this;
     const tex = this.game.assets.canvasTexture(this.canvas, { srgb: true });
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
@@ -744,14 +760,15 @@ export class LabelAtlas {
       depthWrite: false,
       roughness,
       metalness,
-      envMapIntensity: 0.3,
+      envMapIntensity: 0.2,
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -2,
     });
     this.material.name = 'labels';
-    // same view-model fill / macro roughness as the surfaces the decals sit on (no wear, no scratches)
-    applyGunDetail(this.material, this.game, { objectUv: true, grainScale: 0, roughVar: 0.25, toneVar: 0, edgeWear: 0, cavity: 0.3, aoDirect: 0, scratch: 0 });
+    // same view-model fill / macro roughness as the surfaces the decals sit on (no wear, no scratches); the
+    // fill matches the rifle's so a decal never reads brighter than the paint next to it
+    applyGunDetail(this.material, this.game, { objectUv: true, grainScale: 0, roughVar: 0.25, toneVar: 0, edgeWear: 0, cavity: 0.3, aoDirect: 0, scratch: 0, fill: 2.4 });
     return this;
   }
 }

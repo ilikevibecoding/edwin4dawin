@@ -71,6 +71,7 @@ export async function buildAttachments(game, rig) {
       setBrightness: (v) => holo.setBrightness(v),
       setEyeRelief: (d) => holo.setEyeRelief(d),
       reticle: holo.reticle,
+      glass: holo.glass,
       group: holo.group,
     },
     groups: { holo: holo.group, rearSight: rearSight.group, handStop: handStop.group, laser: laser.group, sling: sling.group, receiver: receiver.group },
@@ -104,7 +105,7 @@ function registerViews(game) {
     yaw: 0,
     pitch: -2,
     hud: false,
-    exec: `${reset} for (const c of [game.render.camera, game.render.weaponCamera]) c.setViewOffset(960, 540, 520, 185, 440, 247.5);`,
+    exec: `${reset} for (const c of [game.render.camera, game.render.weaponCamera]) c.setViewOffset(960, 540, 333, 143, 560, 315);`,
   });
   d.registerView('sight_ads_closeup', { pos: [0, 0, 12], yaw: 0, pitch: 0, ads: true, hud: false, exec: `${reset} game.render.baseWeaponFov = 28;` });
   d.registerView('attach_hero', { pos: [0, 0, 12], yaw: 0, pitch: -2, hud: false, exec: reset });

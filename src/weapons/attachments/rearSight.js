@@ -33,30 +33,33 @@ export function buildRearSight(game, rig, mats, atlas, { zCentre = 0.042 } = {})
   b.add(cylX(3.2, 20, 20), mats.anod, { pos: [0, top + 2.6, -8.5] });
   b.add(cylX(1.6, 22, 12), mats.steel, { pos: [0, top + 2.6, -8.5] });
 
-  // folded leaf lying rearward on the plate: flat plate + raised aperture drum (knurled rim) + aperture
+  // folded leaf lying rearward on the plate: filleted plate + raised aperture drum (knurled rim) + aperture
   const leafY = top + 1.9; // leaf plate centre
-  b.add(rbox(18, 3.4, 30, 1.2), mats.anod, { pos: [0, leafY, 7], wear: 0.55 });
-  b.add(rbox(14, 1.2, 8, 0.5), mats.anod, { pos: [0, leafY + 2.2, -3], wear: 0.5 }); // leaf root
+  b.add(rbox(18, 3.4, 30, 1.6), mats.anod, { pos: [0, leafY, 7], wear: 0.55 });
+  b.add(rbox(14, 1.2, 8, 0.55), mats.anod, { pos: [0, leafY + 2.2, -3], wear: 0.5 }); // leaf root
   const drumY = leafY + 1.7 + 1.9;
   b.add(knurlY(7.2, 3.8, 32, 0.4), mats.anod, { pos: [0, drumY, 12] });
   b.add(cylY(6.0, 4.0, 32), mats.anod, { pos: [0, drumY + 0.2, 12] });
   b.add(torusZ(2.9, 0.9, 8, 28).rotateX(Math.PI / 2), mats.steel, { pos: [0, drumY + 2.2, 12] }); // aperture ring
   b.add(cylY(2.1, 0.5, 20), mats.matte, { pos: [0, drumY + 2.05, 12] }); // dark aperture hole
-  // windage wheel (right) on its axle, with a small index screw on the left
+  // windage wheel (right) on its axle, with a small index screw on the left; hex sockets in both screw heads
   b.add(cylX(1.8, 10, 12), mats.steel, { pos: [9, drumY, 12] });
   b.add(knurlX(5.6, 4.2, 22, 0.55), mats.anod, { pos: [13.4, drumY, 12] });
   b.add(cylX(3.4, 1.0, 16), mats.steel, { pos: [16.0, drumY, 12] });
+  b.add(cylX(1.5, 0.3, 6), mats.matte, { pos: [16.6, drumY, 12] });
   b.add(cylX(2.4, 1.6, 12), mats.steel, { pos: [-9.6, drumY, 12] });
-  // rear notch protector: two small ears at the back of the plate
-  for (const x of [-6.5, 6.5]) b.add(rbox(3.4, 3.0, 5, 0.7), mats.anod, { pos: [x, top + 1.5, half - 2.5], wear: 0.6 });
+  b.add(cylX(1.1, 0.3, 6), mats.matte, { pos: [-10.5, drumY, 12] });
+  // hex socket in the cross-bolt's left pin head
+  b.add(cylX(1.5, 0.3, 6), mats.matte, { pos: [-(HW + 1.7), -3.0, -8] });
+  // rear notch protector: two small filleted ears at the back of the plate
+  for (const x of [-6.5, 6.5]) b.add(rbox(3.4, 3.0, 5, 1.0), mats.anod, { pos: [x, top + 1.5, half - 2.5], wear: 0.6 });
   b.build(group);
 
-  // etched labels: rear face (visible when the rifle is lowered / at the hip) and left side
+  // etched labels: one low-contrast logo on the rear face (visible when the rifle is lowered / at the hip) and
+  // the model mark on the right side
   const labels = new PartsBuilder('RearSightLabels');
-  labels.add(atlas.text(18, 4.2, 'CRONEN', { size: 2.9, color: '#c2c5ca', letterSpacing: 0.35 }), atlas.material, { pos: [0, 2.2, half + 0.12], rot: [0, 0, 0] });
-  // side mark: smaller and lower contrast than the rear logo so the two never read as a repeated decal
-  labels.add(atlas.text(14, 3.4, 'CRONEN', { size: 2.1, color: '#8b8f94', letterSpacing: 0.3 }), atlas.material, { pos: [-(HW + 0.12), 2.4, 6], rot: [0, -Math.PI / 2, 0] });
-  labels.add(atlas.text(14, 3, 'MK.3 REAR', { size: 1.5, color: '#9a9ea3' }), atlas.material, { pos: [HW + 0.12, 2.4, 8], rot: [0, Math.PI / 2, 0] });
+  labels.add(atlas.text(18, 4.2, 'CRONEN', { size: 2.9, color: '#7e8186', letterSpacing: 0.35 }), atlas.material, { pos: [0, 2.2, half + 0.12], rot: [0, 0, 0] });
+  labels.add(atlas.text(14, 3, 'MK.3 REAR', { size: 1.5, color: '#6f7378' }), atlas.material, { pos: [HW + 0.12, 2.4, 8], rot: [0, Math.PI / 2, 0] });
   labels.build(group, { castShadow: false });
 
   return { group, topY: RAIL.topY + (drumY + 4.2) * MM };

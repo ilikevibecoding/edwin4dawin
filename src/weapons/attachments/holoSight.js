@@ -31,10 +31,11 @@ HOLO.winCY = HOLO.winY0 + HOLO.winH / 2;
 
 const RETICLE_VERT = /* glsl */ `
 uniform float uRefDist;
-varying vec2 vUv;
+varying vec2 vPat;
 varying vec2 vPos;
 void main() {
-	vUv = uv;
+	// pattern-space position (m on the window plane at the reference eye distance)
+	vPat = position.xy;
 	// Eye position in reticle space. A hologram is collimated: the pattern sits where the eye's ray parallel to
 	// the optical axis meets the window plane, at a constant angular size (scaled by eye distance).
 	vec3 camObj = ( inverse( modelViewMatrix ) * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
@@ -45,74 +46,56 @@ void main() {
 	gl_Position = projectionMatrix * modelViewMatrix * vec4( p, position.z, 1.0 );
 }`;
 
+/**
+ * EOTech pattern drawn analytically: 68 MOA ring, 4 ticks (6 o'clock extended), 1 MOA dot, a soft speckle
+ * halo. A texture version mip-blurred the ~1 px ring into a pale half-coverage line; the signed-distance
+ * version keeps a full-coverage core (widened to a minimum of ~1.6 px on screen) whatever the resolution.
+ */
 const RETICLE_FRAG = /* glsl */ `
-uniform sampler2D uMap;
 uniform vec3 uColor;
 uniform float uIntensity;
+uniform float uCover;
+uniform float uRing;
+uniform float uLine;
+uniform float uTick;
+uniform float uDot;
+uniform float uHalo;
+uniform float uHaloA;
 uniform vec2 uHalf;
 uniform vec2 uRadii;
-varying vec2 vUv;
+varying vec2 vPat;
 varying vec2 vPos;
 float sdRounded( vec2 p, vec2 b, float rTop, float rBot ) {
 	float r = p.y > 0.0 ? rTop : rBot;
 	vec2 q = abs( p ) - b + r;
 	return min( max( q.x, q.y ), 0.0 ) + length( max( q, 0.0 ) ) - r;
 }
+float sdSeg( vec2 p, vec2 a, vec2 b ) {
+	vec2 pa = p - a, ba = b - a;
+	float h = clamp( dot( pa, ba ) / dot( ba, ba ), 0.0, 1.0 );
+	return length( pa - ba * h );
+}
 void main() {
 	float d = sdRounded( vPos, uHalf, uRadii.x, uRadii.y );
 	if ( d > 0.0 ) discard;
-	vec4 t = texture2D( uMap, vUv );
-	float a = t.a * smoothstep( 0.0, -0.0012, d );
-	gl_FragColor = vec4( uColor * ( uIntensity * a ), 1.0 );
+	float r = length( vPat );
+	float stroke = abs( r - uRing );
+	stroke = min( stroke, sdSeg( vPat, vec2( 0.0, uRing - uTick ), vec2( 0.0, uRing + uTick ) ) );
+	stroke = min( stroke, sdSeg( vPat, vec2( uRing - uTick, 0.0 ), vec2( uRing + uTick, 0.0 ) ) );
+	stroke = min( stroke, sdSeg( vPat, vec2( -uRing - uTick, 0.0 ), vec2( -uRing + uTick, 0.0 ) ) );
+	stroke = min( stroke, sdSeg( vPat, vec2( 0.0, -uRing + uTick ), vec2( 0.0, -uRing - uTick * 2.4 ) ) );
+	float sd = min( stroke - uLine, r - uDot );
+	float px = fwidth( r );
+	sd -= max( 0.0, 0.8 * px - uLine );
+	float core = 1.0 - smoothstep( -px, px, sd );
+	float halo = uHaloA * exp( -max( sd, 0.0 ) / uHalo );
+	float a = max( core, halo ) * smoothstep( 0.0, -0.0012, d );
+	// premultiplied: the pattern's light plus partial coverage of the scene behind it
+	gl_FragColor = vec4( uColor * ( uIntensity * a ), a * uCover );
 }`;
 
-/** EOTech pattern: 68 MOA ring, 4 ticks (6 o'clock extended), 1 MOA dot — with a soft speckle halo. */
-function reticleTexture(game, size = 512) {
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, size, size);
-  const cx = size / 2;
-  const cy = size / 2;
-  const R = size * 0.33;
-  const lw = size * 0.015;
-  const tick = size * 0.03;
-  const drawPattern = (alpha, widen) => {
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = '#ffffff';
-    ctx.fillStyle = '#ffffff';
-    ctx.lineWidth = lw + widen;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.stroke();
-    const seg = (x0, y0, x1, y1) => {
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1, y1);
-      ctx.stroke();
-    };
-    seg(cx, cy - R - tick, cx, cy - R + tick);
-    seg(cx + R - tick, cy, cx + R + tick, cy);
-    seg(cx - R - tick, cy, cx - R + tick, cy);
-    seg(cx, cy + R - tick, cx, cy + R + tick * 2.4);
-    ctx.beginPath();
-    ctx.arc(cx, cy, size * 0.014 + widen * 0.5, 0, Math.PI * 2);
-    ctx.fill();
-  };
-  // halo (laser speckle glow) then the crisp core
-  ctx.filter = `blur(${size * 0.012}px)`;
-  drawPattern(0.55, lw * 1.2);
-  ctx.filter = 'none';
-  drawPattern(1.0, 0);
-  ctx.globalAlpha = 1;
-  const tex = game.assets.canvasTexture(c, { srgb: false });
-  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  tex.anisotropy = game.assets.anisotropy;
-  tex.needsUpdate = true;
-  return tex;
-}
+/** Reticle intensity at brightness 1 (see setBrightness). */
+const RETICLE_INTENSITY = 1.4;
 
 /* --------------------------------------------------------------------------------- housing */
 
@@ -165,10 +148,11 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
   const rear = hoodOuter(new THREE.Shape());
   rear.holes.push(roundedRect(H.rearW, H.rearH, [8, 8, 2.6, 2.6], new THREE.Path(), 0, H.winCY));
   b.add(extrude(rear, frameT, { bevel: 2.2, bevelSeg: 1, curveSegments: 10 }), mats.anod, { pos: [0, 0, bezelZ], wear: 0.5 });
-  // hood seam: shallow raised band a third of the way back (the 553's bolt-on front hood section)
-  const band = hoodOuter(new THREE.Shape(), -0.25);
-  band.holes.push(hoodOuter(new THREE.Path(), 0.6));
-  b.add(extrude(band, 2.2, { bevel: 0.25, bevelSeg: 1, curveSegments: 9 }), mats.anod, { pos: [0, 0, -14], wear: 0.4 });
+  // hood seam: the joint between the bolt-on front hood section and the body, a thin dark gap line flush with
+  // the surface (a raised, bevelled band read as two stacked cylinders)
+  const band = hoodOuter(new THREE.Shape(), -0.06);
+  band.holes.push(hoodOuter(new THREE.Path(), 0.5));
+  b.add(extrude(band, 0.9, { bevel: 0, curveSegments: 9 }), mats.matte, { pos: [0, 0, -14] });
   // roof: shallow rib + four cap screws
   b.add(rbox(9, 1.6, 60, 0.6), mats.anod, { pos: [0, H.hoodY1 + 0.5, 3], wear: 0.7 });
   for (const z of [-28, 28]) {
@@ -226,9 +210,12 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
 
   // --- labels (decals in the shared atlas)
   const labels = new PartsBuilder('HoloLabels');
-  const etch = '#b4b8be';
+  // legends are worn white paint fill in engraved lettering: mid-grey in the atlas, so under the view-model
+  // fill they land a step above the anodising, never brighter than the receiver paint
+  const etch = '#666a70';
   const arrow = (dir) => (ctx, w, h) => {
-    ctx.fillStyle = '#d2d5da';
+    // moulded arrows on the rubber caps: a shade lighter than the rubber, not painted white
+    ctx.fillStyle = '#464850';
     ctx.beginPath();
     const cx = w / 2;
     const cy = h / 2;
@@ -259,21 +246,22 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
   });
   const leftFace = px - 0.4 - 0.6 - 0.12;
   labels.add(
-    atlas.decal(32, 10.5, (ctx, w, h, ppm) => {
-      // laser warning sticker: pale label with a red header band
-      ctx.fillStyle = '#d9d6c8';
+    atlas.decal(24, 8, (ctx, w, h, ppm) => {
+      // laser warning sticker: dark-grey label with a deep red header band and light lettering (the pale
+      // paper version read brighter than the sunlit pavement)
+      ctx.fillStyle = '#5e5b54';
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#b3261e';
+      ctx.fillStyle = '#6e1a14';
       ctx.fillRect(0, 0, w, h * 0.32);
-      ctx.fillStyle = '#f2efe6';
+      ctx.fillStyle = '#c9c4b8';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = `bold ${2.0 * ppm}px Arial, Helvetica, sans-serif`;
+      ctx.font = `bold ${1.6 * ppm}px Arial, Helvetica, sans-serif`;
       ctx.fillText('CAUTION', w / 2, h * 0.16);
-      ctx.fillStyle = '#1a1a1a';
-      ctx.font = `bold ${1.15 * ppm}px Arial, Helvetica, sans-serif`;
+      ctx.fillStyle = '#9a978e';
+      ctx.font = `bold ${0.9 * ppm}px Arial, Helvetica, sans-serif`;
       ctx.fillText('LASER RADIATION - DO NOT STARE', w / 2, h * 0.5);
-      ctx.font = `${1.05 * ppm}px Arial, Helvetica, sans-serif`;
+      ctx.font = `${0.82 * ppm}px Arial, Helvetica, sans-serif`;
       ctx.fillText('INTO BEAM   CLASS II LASER PRODUCT', w / 2, h * 0.68);
       ctx.fillText('MADE IN USA   ' + String.fromCharCode(0x2022) + '   IEC 60825-1', w / 2, h * 0.86);
     }),
@@ -282,27 +270,39 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
   );
   labels.build(group, { castShadow: false });
 
-  // --- glass: front window (holographic) + rear window
+  // --- glass: front window (holographic, coated) + a plain protective rear window (near-invisible so the two
+  // panes together attenuate the scene by < 10 %)
   const glass = glassMaterial(game);
   const frontGlass = new THREE.Mesh(flatShape(roundedRect(H.winW + 0.6, H.winH + 0.6, [8.2, 8.2, 1.7, 1.7], new THREE.Shape(), 0, H.winCY)), glass);
   frontGlass.position.set(0, 0, (-half + H.glassInset) * MM);
   frontGlass.name = 'HoloFrontGlass';
   neverCastShadow(frontGlass);
   group.add(frontGlass);
-  const rearGlass = new THREE.Mesh(flatShape(roundedRect(H.rearW + 0.6, H.rearH + 0.6, [8.2, 8.2, 1.7, 1.7], new THREE.Shape(), 0, H.winCY)), glass);
+  const rearGlassMat = glassMaterial(game, { opacity: 0.03, envMapIntensity: 0.3, specularIntensity: 0.1, name: 'holoGlassRear' });
+  const rearGlass = new THREE.Mesh(flatShape(roundedRect(H.rearW + 0.6, H.rearH + 0.6, [8.2, 8.2, 1.7, 1.7], new THREE.Shape(), 0, H.winCY)), rearGlassMat);
   rearGlass.position.set(0, 0, (half - H.glassInset) * MM);
   rearGlass.name = 'HoloRearGlass';
   neverCastShadow(rearGlass);
   group.add(rearGlass);
 
-  // --- reticle: additive, collimated, clipped to the window aperture in the shader
+  // --- reticle: collimated, clipped to the window aperture in the shader. Composited with (premultiplied)
+  // alpha rather than added: an additive ring over a daylight scene can only go white in the core (the
+  // background's green/blue survive underneath), whereas the reference reticle is a saturated red-orange.
+  // The core covers 90 % of the background, the baked halo fades over it.
+  const ringDiameter = 12.5; // mm on the window plane at the reference eye distance (0.21 m) — ≈ 3.4°, game-readable
   const reticleMat = new THREE.ShaderMaterial({
     vertexShader: RETICLE_VERT,
     fragmentShader: RETICLE_FRAG,
     uniforms: {
-      uMap: { value: reticleTexture(game) },
-      uColor: { value: new THREE.Color(1.0, 0.16, 0.035) },
-      uIntensity: { value: 9.0 },
+      uColor: { value: new THREE.Color(1.0, 0.05, 0.002) },
+      uIntensity: { value: RETICLE_INTENSITY },
+      uCover: { value: 0.94 },
+      uRing: { value: (ringDiameter / 2) * MM },
+      uLine: { value: 0.15 * MM }, // half stroke width: 0.3 mm ≈ 1.9 px at 720p
+      uTick: { value: 0.6 * MM },
+      uDot: { value: 0.25 * MM },
+      uHalo: { value: 0.28 * MM },
+      uHaloA: { value: 0.15 },
       uRefDist: { value: 0.21 },
       uHalf: { value: new THREE.Vector2((H.winW / 2 - 0.4) * MM, (H.winH / 2 - 0.4) * MM) },
       uRadii: { value: new THREE.Vector2(7.6 * MM, 1.4 * MM) },
@@ -310,15 +310,14 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
     transparent: true,
     depthWrite: false,
     depthTest: true,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
     premultipliedAlpha: true,
     side: THREE.DoubleSide,
     fog: false,
     toneMapped: false,
   });
   reticleMat.name = 'holoReticle';
-  const ringDiameter = 12.5; // mm on the window plane at the reference eye distance (0.21 m) — ≈ 3.4°, game-readable
-  const quad = ringDiameter / 0.66; // the pattern spans 66 % of the texture
+  const quad = ringDiameter + 2 * (0.6 * 2.4 + 0.15 + 4 * 0.35); // ring + longest tick + stroke + halo tail
   const reticle = new THREE.Mesh(plane(quad, quad), reticleMat);
   reticle.name = 'HoloReticle';
   reticle.position.set(0, H.winCY * MM, (-half + H.reticleInset) * MM);
@@ -338,7 +337,7 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
       group.visible = v;
     },
     setBrightness(v) {
-      reticleMat.uniforms.uIntensity.value = 9.0 * v;
+      reticleMat.uniforms.uIntensity.value = RETICLE_INTENSITY * v;
     },
     setEyeRelief(d) {
       reticleMat.uniforms.uRefDist.value = d;

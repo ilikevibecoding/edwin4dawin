@@ -242,6 +242,8 @@ uniform float gunMapRef;
 uniform float gunFill;
 uniform vec3 gunFillColor;
 uniform float gunNeutral;
+uniform float gunSpeckle;
+uniform float gunDirt;
 uniform float gunObjUvScale;
 varying vec2 vGunUv;
 varying float vGunAO;
@@ -318,6 +320,8 @@ float gunAmbientOcclusion = 1.0;
 	float gdMott = gdMacro * 0.55 + gdSurf.b * 0.45;
 	roughnessFactor *= 1.0 + ( gdMott - 0.5 ) * gunRoughVar;
 	diffuseColor.rgb *= 1.0 + ( gdMott - 0.5 ) * gunToneVar;
+	// fine speckle: the finish's own grain / dust at sub-millimetre scale (the reference's micro-contrast)
+	diffuseColor.rgb *= 1.0 + ( gdSurf.g - 0.5 ) * gunSpeckle;
 
 	// hairline scratches: polished through the finish, denser near edges and in the mottle's bright (handled) zones
 	float gdScr = gdSurf.r * gunScratch * ( 0.25 + 0.75 * smoothstep( 0.2, 0.9, gdBake.g * 0.8 + gdMott * 0.6 ) );
@@ -336,8 +340,15 @@ float gunAmbientOcclusion = 1.0;
 
 	// cavity grime: darker + duller in concave corners and in deeply occluded areas
 	float gdCav = clamp( gdBake.b * gunCavity + ( 1.0 - gunAmbientOcclusion ) * 0.35 * gunCavity, 0.0, 1.0 );
-	diffuseColor.rgb *= 1.0 - gdCav * 0.5;
+	diffuseColor.rgb *= 1.0 - gdCav * 0.65;
 	roughnessFactor = mix( roughnessFactor, 0.92, gdCav * 0.45 );
+
+	// dirt: mid-frequency grime patches (mottle + low-frequency mask) that settle where the bake says the
+	// surface is sheltered; a warm-grey darkening of the albedo, duller
+	float gdDirtMask = smoothstep( 0.42, 1.0, gdSurf.b * 0.6 + gdMacroLow * 0.4 );
+	float gdDirt = gdDirtMask * mix( 0.35, 1.0, smoothstep( 0.97, 0.6, gunAmbientOcclusion ) ) * gunDirt;
+	diffuseColor.rgb *= mix( vec3( 1.0 ), vec3( 0.6, 0.6, 0.59 ), gdDirt );
+	roughnessFactor = mix( roughnessFactor, 0.9, gdDirt * 0.5 );
 
 	roughnessFactor = clamp( roughnessFactor, 0.04, 1.0 );
 	metalnessFactor = clamp( metalnessFactor, 0.0, 1.0 );
@@ -348,7 +359,7 @@ float gunAmbientOcclusion = 1.0;
  * Appended to aomap_fragment: baked occlusion on indirect light (fully) and direct light (partially), a partial
  * desaturation of the scene ambient, plus the view-model fill. The scene's only ambient is a saturated blue sky
  * IBL + a sky-blue hemisphere light: a first-person weapon lit by that alone drops to ~sRGB 40 and goes blue in
- * shade (reference: ~95, neutral). The fill is a neutral hemispherical irradiance (full from above, 45 % from
+ * shade (reference: ~95, neutral). The fill is a neutral hemispherical irradiance (full from above, a third from
  * below) scaled by the baked occlusion, i.e. the classic dedicated view-model fill light, done per material
  * because the lighting rig is not ours to change.
  */
@@ -364,11 +375,15 @@ const FRAG_AO = /* glsl */ `
 	float gdDirect = mix( 1.0, gdOcc, gunAODirect );
 	reflectedLight.directDiffuse *= gdDirect;
 	reflectedLight.directSpecular *= gdDirect;
-	// the scene ambient (sky hemisphere light + blue IBL) tints shaded metal blue; pull it toward grey
+	// the scene ambient (sky hemisphere light + blue IBL) tints shaded metal blue, and its specular reflection
+	// puts the same blue on every black part; pull both toward grey
 	float gdIndLum = dot( reflectedLight.indirectDiffuse, vec3( 0.2126, 0.7152, 0.0722 ) );
 	reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse, vec3( gdIndLum ), gunNeutral );
+	float gdIndSpecLum = dot( reflectedLight.indirectSpecular, vec3( 0.2126, 0.7152, 0.0722 ) );
+	reflectedLight.indirectSpecular = mix( reflectedLight.indirectSpecular, vec3( gdIndSpecLum ), gunNeutral );
+	// the fill is hemispherical (full from above, a third from below) so the sun owns the top-to-side gradient
 	vec3 gdUp = normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz );
-	float gdHemi = mix( 0.45, 1.0, 0.5 + 0.5 * dot( geometryNormal, gdUp ) );
+	float gdHemi = mix( 0.33, 1.0, 0.5 + 0.5 * dot( geometryNormal, gdUp ) );
 	reflectedLight.indirectDiffuse += gunFill * gdHemi * gunFillColor * BRDF_Lambert( material.diffuseColor ) * gdOcc;
 }
 `;
@@ -402,9 +417,11 @@ export function applyGunDetail(
     polymerRough = 0.78,
     paintMetal = 0.18,
     mapRef = 0.041,
-    fill = 3.6,
+    fill = 3.0,
     fillColor = [1.0, 0.945, 0.855],
-    neutral = 0.55,
+    neutral = 0.6,
+    speckle = 0.0,
+    dirt = 0.0,
     objectUv = false,
     objectUvScale = 8,
   } = {},
@@ -435,6 +452,8 @@ export function applyGunDetail(
     gunFill: { value: fill },
     gunFillColor: { value: new THREE.Vector3(...fillColor) },
     gunNeutral: { value: neutral },
+    gunSpeckle: { value: speckle },
+    gunDirt: { value: dirt },
     gunObjUvScale: { value: objectUvScale },
   };
   material.userData.gun = uniforms;
@@ -450,7 +469,7 @@ export function applyGunDetail(
       .replace('#include <normal_fragment_maps>', FRAG_SURFACE)
       .replace('#include <aomap_fragment>', FRAG_AO);
   };
-  material.customProgramCacheKey = () => `gunSurface6|${paint ? 'p' : 'a'}|${objectUv ? 'o' : 'u'}|${material.defines.GUN_AO_ATTR !== undefined ? 'ao' : ''}`;
+  material.customProgramCacheKey = () => `gunSurface7|${paint ? 'p' : 'a'}|${objectUv ? 'o' : 'u'}|${material.defines.GUN_AO_ATTR !== undefined ? 'ao' : ''}`;
   material.needsUpdate = true;
   return material;
 }
@@ -564,19 +583,22 @@ export function upgradeGunMaterials(game, rig) {
       applyGunDetail(m, game, {
         paint: true,
         grainRepeat: 46,
-        grainScale: 0.14,
+        grainScale: 0.26,
         macroRepeat: 5.3,
         surfRepeat: 6.5,
         roughVar: 0.5,
-        toneVar: 0.14,
+        toneVar: 0.2,
         edgeWear: 0.65,
         cavity: 0.85,
-        aoDirect: 0.55,
-        scratch: 0.22,
-        paintColor: [0.1, 0.1, 0.103],
+        aoDirect: 0.75,
+        scratch: 0.36,
+        speckle: 0.42,
+        dirt: 0.22,
+        paintColor: [0.085, 0.086, 0.09],
         paintRough: 0.55,
         paintMetal: 0.15,
-        fill: 3.4,
+        fill: 2.4,
+        fillColor: [1.0, 0.98, 0.97],
       });
     }
     m.needsUpdate = true;

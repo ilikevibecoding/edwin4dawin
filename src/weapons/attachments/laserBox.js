@@ -93,8 +93,8 @@ export function buildLaserBox(game, rig, mats, atlas, { zCentre = -0.2395 } = {}
     atlas.material,
     { pos: [lx, 14, -14], quat: upFace },
   );
-  labels.add(atlas.text(40, 6, ['AN/PEQ-15  ATPIAL', 'NSN 5855-01-534-5931'], { size: 1.9, color: '#b6b9be', align: 'left' }), atlas.material, { pos: [lx, 34, -14], quat: upFace });
-  labels.add(atlas.text(14, 4, 'REMOTE', { size: 1.6, color: '#9a9ea3' }), atlas.material, { pos: [-20, 32, BL / 2 + 1 + 0.12], rot: [0, 0, 0] });
+  labels.add(atlas.text(40, 6, ['AN/PEQ-15  ATPIAL', 'NSN 5855-01-534-5931'], { size: 1.9, color: '#80848a', align: 'left' }), atlas.material, { pos: [lx, 34, -14], quat: upFace });
+  labels.add(atlas.text(14, 4, 'REMOTE', { size: 1.6, color: '#6f7378' }), atlas.material, { pos: [-20, 32, BL / 2 + 1 + 0.12], rot: [0, 0, 0] });
   labels.build(group, { castShadow: false });
 
   return { group };

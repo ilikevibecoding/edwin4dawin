@@ -55,7 +55,7 @@ export function buildHandStop(game, rig, mats, atlas, { zCentre = -0.265 } = {})
   b.build(group);
 
   const labels = new PartsBuilder('HandStopLabels');
-  labels.add(atlas.text(12, 3, 'KAG', { size: 2.0, color: '#8e9196' }), atlas.material, { pos: [-(HW + 0.12), -13, 2], rot: [0, -Math.PI / 2, 0] });
+  labels.add(atlas.text(12, 3, 'KAG', { size: 2.0, color: '#6f7378' }), atlas.material, { pos: [-(HW + 0.12), -13, 2], rot: [0, -Math.PI / 2, 0] });
   labels.build(group, { castShadow: false });
 
   // Palm centre for the support hand: just behind the fin, under/left of the handguard (the index finger
