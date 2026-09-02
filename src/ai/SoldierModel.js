@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { ANIM, DEATH, MODEL_SOURCE_HEIGHT, MOVE, SOLDIER_HEIGHT } from './constants.js';
 import { createSoldierRifle } from './SoldierRifle.js';
+import { createSoldierMaterials } from './SoldierMaterials.js';
+import { buildGearGeometry, createGearMesh } from './SoldierGear.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const _v1 = new THREE.Vector3();
@@ -72,7 +74,8 @@ function alignBoneWorld(bone, from, to, maxAngle = Math.PI) {
 /**
  * One AI soldier's visuals: Soldier.glb clone, animation mixer (Idle/Walk/Run blended by speed),
  * procedural upper-body aim (Spine1/Spine2/Head), procedural crouch, a rifle held with two-bone IK
- * arms, red-team accents, recoil, and the death collapse.
+ * arms, shared tactical materials (SoldierMaterials.js), a skinned gear mesh (SoldierGear.js) with the
+ * red-team armband/patch, recoil, and the death collapse.
  *
  * Root frame: `root` sits at the feet (world metres), rotated by `yaw` (model forward is -Z like the
  * player/camera convention). The skeleton lives in centimetres under the glTF 'Character' node.
@@ -113,52 +116,32 @@ export class SoldierModel {
       rLower: len(this.bones.rForeArm, this.bones.rHand),
     };
 
-    // --- Materials: per-instance clones so tint/roughness tweaks do not leak ----------------------
-    this.materials = [];
+    // --- Materials: shared tactical set (remapped albedo + ORM), one tint variant per soldier ---------
+    // Nothing is cloned per instance: the body picks one of the shared variants by seed, the visor and
+    // gear materials are shared outright. Enemies.spawn() runs render.setupObject() on the root so the
+    // materials are registered for cascaded shadows before their first frame.
+    const mats = shared.materials;
+    const variant = mats.body[Math.floor(THREE.MathUtils.clamp(tint, 0, 0.999) * mats.body.length)];
+    this.materials = [variant, mats.visor, mats.gear];
     this.skinned = [];
-    const hsl = { h: 0, s: 0, l: 0 };
+    let bodyMesh = null;
     model.traverse((o) => {
       if (!o.isMesh && !o.isSkinnedMesh) return;
       o.castShadow = true;
       o.receiveShadow = true;
       o.frustumCulled = false; // skinned bounds are unreliable while animating/ragdolling
       if (o.isSkinnedMesh) this.skinned.push(o);
-      const src = o.material;
-      const mat = src.clone();
-      mat.roughness = 0.85;
-      mat.metalness = 0.0;
-      mat.envMapIntensity = 0.85;
-      if (mat.normalMap) mat.normalScale.set(1.2, 1.2);
-      // Red team: warmer, darker uniform with slight per-soldier variation.
-      if (/visor/i.test(mat.name) || /visor/i.test(o.name)) {
-        mat.color.setRGB(0.35, 0.3, 0.28);
-        mat.roughness = 0.5;
-      } else {
-        // The source texture is a light tan; pull it toward a darker, warm red-brown so the team reads
-        // from across the plaza, with a little hue/lightness variation per soldier.
-        mat.color.setRGB(0.56, 0.44, 0.35);
-        mat.color.getHSL(hsl);
-        mat.color.setHSL(hsl.h + (tint - 0.5) * 0.04, THREE.MathUtils.clamp(hsl.s + (tint - 0.5) * 0.1, 0, 1), THREE.MathUtils.clamp(hsl.l + (seed - 0.5) * 0.08, 0.2, 0.7));
-      }
-      o.material = mat;
-      this.materials.push(mat);
+      const isVisor = /visor/i.test(o.material?.name || '') || /visor/i.test(o.name);
+      o.material = isVisor ? mats.visor : variant;
+      if (!isVisor && o.isSkinnedMesh && !bodyMesh) bodyMesh = o;
     });
 
-    // --- Team accents: helmet band + left armband (bone-parented, centimetre units) ------------------
-    this.accentMeshes = [];
-    if (this.bones.head) {
-      const band = new THREE.Mesh(shared.helmetBandGeo, shared.accentMat);
-      band.position.set(0, 9.5, 1.2);
-      band.castShadow = true;
-      this.bones.head.add(band);
-      this.accentMeshes.push(band);
-    }
-    if (this.bones.lArm) {
-      const arm = new THREE.Mesh(shared.armbandGeo, shared.accentMat);
-      arm.position.set(0, 12.5, 0);
-      arm.castShadow = true;
-      this.bones.lArm.add(arm);
-      this.accentMeshes.push(arm);
+    // --- Tactical gear: one skinned mesh riding the body's skeleton (helmet kit, plate carrier, mags,
+    // radio, holster, knee pads, team armband). Authored in bind space, so it follows every pose.
+    this.gear = null;
+    if (bodyMesh && shared.gearGeo) {
+      this.gear = createGearMesh(bodyMesh, shared.gearGeo, mats.gear);
+      this.skinned.push(this.gear);
     }
 
     // --- Rifle (root space, metres) ----------------------------------------------------------------
@@ -611,10 +594,14 @@ export class SoldierModel {
     const twist = _q3.setFromAxisAngle(UP, d.twist * Math.min(1, t / T));
     rot.multiply(twist);
     this.model.quaternion.copy(rootInv).multiply(rot).multiply(this.root.quaternion).multiply(d.startQuat);
-    // Slight slide along the fall direction so the body lands ahead of the feet, not on them.
-    const slide = 0.25 * Math.min(1, t / T);
+    // Slight slide along the fall direction so the body lands ahead of the feet, not on them. The whole
+    // body pivots about the feet, so lift it to the body's resting half-thickness (shoulders / chest
+    // rig ≈ 0.2 m) or the torso ends up half-buried in the pavement; the legs are dipped back down
+    // toward the ground below (rotated about the fall axis) so the boots still touch.
+    const settle = Math.min(1, t / T);
+    const slide = 0.25 * settle;
     _v1.copy(d.dir).multiplyScalar(slide).applyQuaternion(rootInv);
-    this.model.position.copy(d.startPos).add(_v1).setY(d.startPos.y + 0.08 * Math.min(1, t / T));
+    this.model.position.copy(d.startPos).add(_v1).setY(d.startPos.y + DEATH.restLift * settle * settle);
     this.model.updateMatrixWorld(true);
     // Limp pose: knees fold, torso curls, arms drop, head lolls.
     const L = d.limp;
@@ -622,6 +609,9 @@ export class SoldierModel {
     const right = _v2.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const fwd = _v3.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const alongFall = d.dir.dot(fwd) > 0 ? 1 : -1; // falling forward vs backward
+    const dip = -DEATH.legDip * settle * (angle / Math.max(0.01, d.finalAngle));
+    rotateBoneWorld(b.lUpLeg, d.axis, dip);
+    rotateBoneWorld(b.rUpLeg, d.axis, dip);
     rotateBoneWorld(b.lUpLeg, right, 0.4 * L * alongFall);
     rotateBoneWorld(b.rUpLeg, right, 0.22 * L * alongFall);
     rotateBoneWorld(b.lLeg, right, -0.55 * L);
@@ -653,7 +643,7 @@ export class SoldierModel {
   dispose() {
     this.mixer.stopAllAction();
     this.mixer.uncacheRoot(this.model);
-    for (const m of this.materials) m.dispose();
+    // Materials and the gear geometry are shared across soldiers — nothing to dispose per instance.
     this.root.removeFromParent();
   }
 }
@@ -665,20 +655,32 @@ export function wrapAngle(a) {
   return a;
 }
 
-/** Load-time shared resources: gltf, clips, accent geometry/material, hand-frame conventions. */
+/**
+ * Load-time shared resources: gltf, clips, the procedural material set (remapped albedo, visor, gear),
+ * the merged skinned gear geometry and hand-frame conventions.
+ */
 export function createSharedSoldierAssets(game, gltf, id) {
   const clips = {};
   for (const c of gltf.animations) clips[c.name] = c;
-  const helmetBandGeo = new THREE.CylinderGeometry(12.0, 12.4, 2.6, 18, 1, false);
-  const armbandGeo = new THREE.CylinderGeometry(6.6, 6.9, 6, 12, 1, false);
-  const accentMat = new THREE.MeshStandardMaterial({ color: 0xa8231a, roughness: 0.78, metalness: 0.0, name: 'SoldierTeamAccent' });
+  const materials = createSoldierMaterials(game, gltf);
+  let gearGeo = null;
+  let gearTriangles = 0;
+  let body = null;
+  gltf.scene.traverse((o) => {
+    if (!body && o.isSkinnedMesh && !/visor/i.test(o.name) && !/visor/i.test(o.material?.name || '')) body = o;
+  });
+  if (body?.skeleton) {
+    const gear = buildGearGeometry(body.skeleton);
+    gearGeo = gear.geometry;
+    gearTriangles = gear.triangles;
+  }
   return {
     id,
     gltf,
     clips,
-    helmetBandGeo,
-    armbandGeo,
-    accentMat,
+    materials,
+    gearGeo,
+    gearTriangles,
     // Mixamo hands: +Y along the fingers; palm normal is ±Z (mirrored between hands). Verified in-game.
     palmAxis: { left: -1, right: 1 },
     fingerCurl: { angle: 0.55, left: -1, right: 1 }, // curl = rotate +Y toward the palm normal about local X

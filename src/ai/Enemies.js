@@ -16,6 +16,11 @@ const _down = new THREE.Vector3(0, -1, 0);
  * Enemy soldiers (red team): Soldier.glb models with blended locomotion, upper-body aim, IK-held
  * rifles, bone hitboxes, a tactical state machine and burst fire that damages the player.
  *
+ * Visuals: the GLB's tan albedo is remapped at load into a dark tactical palette (SoldierMaterials.js —
+ * shared materials, a few tint variants) and every soldier wears a skinned procedural gear set
+ * (SoldierGear.js — helmet kit, plate carrier, mags, radio, holster, knee pads, red armband/patch).
+ * Per soldier: 5 draw calls (body, visor, gear, rifle metal, rifle furniture), ≈13.8k triangles.
+ *
  * Public interface:
  *   async load()
  *   update(dt)
@@ -30,7 +35,8 @@ const _down = new THREE.Vector3(0, -1, 0);
  * Emits: 'enemy:spawned' {enemy}, 'enemy:damaged' {enemy, damage, point, headshot, source, direction},
  *        'enemy:killed' {enemy, position, headshot, source, cause}, 'enemy:fire' {enemy, origin, direction}.
  *
- * Debug views (game.debug): enemy_lineup, enemy_death, enemy_cover, enemy_combat — see debugViews.js.
+ * Debug views (game.debug): enemy_lineup, enemy_death, enemy_cover, enemy_combat, enemy_closeup*,
+ * enemy_death_close, enemy_far, enemy_fire — see debugViews.js.
  */
 export class Enemies {
   constructor(game) {
@@ -63,7 +69,7 @@ export class Enemies {
     this.nav = new NavGrid(this.game, this.game.world.getNavGraph());
     this.fx = new EnemyFx(this.game);
     this._loaded = true;
-    console.info(`[enemies] soldier ready — ${gltf.animations.map((a) => a.name).join('/')} · nav ${this.nav.size} nodes, ${this.nav.coverNodes.length} cover · rifle ${getRifleAssets().triangles} tris`);
+    console.info(`[enemies] soldier ready — ${gltf.animations.map((a) => a.name).join('/')} · nav ${this.nav.size} nodes, ${this.nav.coverNodes.length} cover · rifle ${getRifleAssets().triangles} tris · gear ${this.shared.gearTriangles} tris`);
   }
 
   get aliveCount() {

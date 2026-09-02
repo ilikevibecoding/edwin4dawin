@@ -81,6 +81,8 @@ export const DEATH = {
   bodyTime: 15,
   sinkTime: 2.5,
   sinkDepth: 1.4,
+  restLift: 0.17, // metres the fallen body's axis rests above the ground (shoulder / chest-rig half-thickness)
+  legDip: 0.16, // radians the legs hinge back down toward the ground once the body is flat (boots touch)
 };
 
 export const ANIM = {

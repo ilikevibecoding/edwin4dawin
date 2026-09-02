@@ -49,6 +49,7 @@ export class EnemyFx {
       this.items.push({ root, star, flame, flame2, life: 0 });
     }
     this._next = 0;
+    this.hold = 2; // frames a flash stays visible (debug views raise it so a still frame can catch one)
   }
 
   _makeTexture() {
@@ -83,7 +84,7 @@ export class EnemyFx {
     it.root.visible = true;
     it.root.updateMatrixWorld(true);
     it.star.lookAt(this.game.camera.getWorldPosition(_dir)); // billboard (lookAt handles the rotated parent)
-    it.life = 2;
+    it.life = this.hold;
   }
 
   update() {
