@@ -43,12 +43,28 @@ for all forests on the prefix.
 | `aggregate.py` | order-independent aggregation, extremal (tightest) cells, multiset hashes |
 | `run_forests.py` | exhaustive run over all forests (and tree-only reports) for `n <= NMAX`, parallel |
 | `lemma_check.py` | symbolic + finite verification of the descent lemma and the assembly |
+| `iso2_theorem.py` | exact proof (machine-verified identities) that `ISO_2` holds for every forest |
+| `extremal_families.py` | exact ISO ratios along the extremal families (stars, stars+isolates, double brooms, empty forest) |
+| `known_counterexamples.py` | Kadrawi–Levit and Galvin non-log-concave tree families versus `ISO`/`WR`/`TAIL` |
 | `selftest.py` | cross-validation of the two generators, DP vs brute force, count formulas |
+| `crosscheck_independent.py` | compares the reports with the brute-force replay in `independent/` |
 | `manifest.py` | SHA256 manifest of all sources and reports |
-| `fast/` | C verifier for trees at larger `n` (WROM enumeration, `__int128` arithmetic) |
-| `independent/` | deliberately simple brute-force replay (2^n subsets) for `n <= 12` |
+| `fast/` | C verifier for trees at larger `n` (WROM enumeration, `__int128` arithmetic) + cross-check vs Python |
+| `independent/` | deliberately simple brute-force replay (2^n subsets) for `n <= 14` |
 | `reports/` | JSON reports, one per `n`, plus summaries and the manifest |
 | `docs/` | status, literature refresh, and the handoff-programme gap analysis |
+
+## Headline results (all exact)
+
+- Every forest on `n <= 22` vertices, every multi-component forest on `n = 23, 24`,
+  and every tree on `n <= 27` vertices satisfies `UNIMODAL`, `ISO_r` (all `r`),
+  `WR_r` on the prefix and `TAIL`.
+- Log-concavity fails for exactly 2 trees at `n = 26` and none at `n <= 25` or
+  `n = 27` (matching Kadrawi–Levit–Yosef–Mizrachi and the public record).
+- Weakened Newton `NW_r` fails first at `n = 24` (1 tree), so it is not a valid
+  universal strengthening; all failures found are in the tail.
+- `ISO_2` is proved for all forests; the descent lemma and the assembly are
+  verified symbolically.  The conjecture itself remains open.
 
 ## Running
 
@@ -56,9 +72,14 @@ for all forests on the prefix.
 cd erdos993
 python3 selftest.py 14 10            # generators / DP / counts cross-checks
 python3 lemma_check.py               # descent lemma and assembly (sympy)
-python3 run_forests.py 22            # all forests and trees on n <= 22 (~15 min, 4 cores)
-python3 independent/bruteforce_forests.py   # independent replay, n <= 12
-make -C fast && fast/treecheck --nmax 24    # all trees on n <= 24 (C)
+python3 iso2_theorem.py              # ISO_2 for all forests (sympy identities + n<=11 replay)
+python3 run_forests.py 22            # all forests and trees on n <= 22 (~10 min, 4 cores)
+python3 run_forests.py 24 --nmin 23 --multi-only   # forests with >= 2 components, n = 23, 24
+python3 independent/bruteforce_forests.py   # independent replay, n <= 11 (12/14 optional)
+python3 crosscheck_independent.py    # CROSSCHECK_INDEPENDENT_PASS
+make -C fast && fast/wromcheck --nmin 23 --nmax 27   # all trees, one JSON line per n
+make -C fast crosscheck              # CROSSCHECK_C_VS_PYTHON_PASS (n <= 22)
+python3 known_counterexamples.py     # ISO on the known non-log-concave families
 python3 manifest.py                  # hashes of sources and reports
 ```
 
