@@ -4178,7 +4178,7 @@
    }
   }
  ],
- "seconds": 15.08,
+ "seconds": 15.04,
  "marker": "PASS_EXACT_DESCENT_GATED_TARGET_COLLAR",
  "scope": "finite collar only; falsification evidence, not a proof"
 }

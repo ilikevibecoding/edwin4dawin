@@ -218,7 +218,7 @@
    "p_3": "C(n,3) - e(n-2) + S,  S = sum_v C(d_v,2) <= C(e,2)"
   },
   "pass_marker": "PASS_EXACT_ISO2_ALL_FORESTS",
-  "runtime_seconds": 0.76,
+  "runtime_seconds": 0.69,
   "script": "iso2_all_forests_proof.py",
   "script_sha256": "3c8c218d060c3810d55df8d8c848807850e83b4a7ae4ea96ab38c935409d8ca1",
   "status": "PROVED",
@@ -1018,7 +1018,7 @@
    "=> Q_3 >= B_n(e) (drop 2e^3, 3S^2, M P4 >= 0); B_n concave in e, B_n(1) > 0 (n >= 5), B_n(n-1) = (n-1)beta(n)/48 > 0 (n >= 14)",
    "n <= 13: exhaustive over all 6606 forests"
   ],
-  "runtime_seconds": 7.06,
+  "runtime_seconds": 6.44,
   "script": "iso3_subgraph_expansion.py",
   "script_sha256": "5d5ba942c17985a1646d9fb415c889b8f0821434e22066099a2de706adc59e42",
   "status": "PROVED (Theorem 2: ISO_3 for every forest) + EXPLORED (minimizers, n <= 16)",

@@ -561,7 +561,7 @@
     }
    ]
   },
-  "seconds": 0.555,
+  "seconds": 0.539,
   "all_ok": true
  },
  "random_sequences": {
@@ -651,7 +651,7 @@
    "sequences_with_p[L-1]_equal_p[L]": 31525,
    "sequences_with_some_tail_plateau": 65282
   },
-  "seconds": 2.458,
+  "seconds": 2.361,
   "all_ok": true
  },
  "necessity": {
@@ -882,7 +882,7 @@
     "single_WR_fail_not_unimodal": 10
    }
   },
-  "seconds": 0.794,
+  "seconds": 0.776,
   "all_ok": true
  },
  "klym_t1": {
@@ -1449,7 +1449,7 @@
   },
   "all_ok": true
  },
- "seconds_total": 4.178,
+ "seconds_total": 4.027,
  "failures": [],
  "pass": true
 }

@@ -2301,7 +2301,7 @@
   }
  },
  "pass_marker": "PASS_EXACT_ISO4_ALL_FORESTS",
- "runtime_seconds": 28.63,
+ "runtime_seconds": 29.08,
  "script": "iso4_subgraph_expansion.py",
  "script_sha256": "86afd13c841e4fdd5bd2372620931bd0bb0a0daa4836747dd805737913913d4e",
  "status": "PROVED (Theorem 3: ISO_4 for every forest) + EXPLORED (minimizers, n <= 16)",

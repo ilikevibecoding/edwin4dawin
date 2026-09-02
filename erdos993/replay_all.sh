@@ -32,15 +32,18 @@ run python3 forest_indep.py
 [ -f audit_forest_indep_independent.py ]           && run python3 audit_forest_indep_independent.py
 [ -f replay_wr_iso_tail_logic.py ]                 && run python3 replay_wr_iso_tail_logic.py
 [ -f iso2_all_forests_proof.py ]                   && run python3 iso2_all_forests_proof.py
+[ -f iso3_subgraph_expansion.py ]                  && run python3 iso3_subgraph_expansion.py
+[ -f iso4_subgraph_expansion.py ]                  && run python3 iso4_subgraph_expansion.py
+[ -f audit_iso234_independent.py ]                 && run python3 audit_iso234_independent.py
 [ -f scope_lemma_adjacent_k00_producer.py ]        && run python3 scope_lemma_adjacent_k00_producer.py
 [ -f scope_lemma_adjacent_k00_audit_independent.py ] && run python3 scope_lemma_adjacent_k00_audit_independent.py
 [ -f descent_gated_target.py ]                     && run python3 descent_gated_target.py
 
 if [ "$FULL" = 1 ]; then
   [ -f run_census_trees.sh ]      && run bash run_census_trees.sh
-  [ -f census_forests.py ]        && run python3 census_forests.py --nmax 20
+  [ -f census_forests.py ]        && run python3 census_forests.py --nmax 21
   [ -f families_stress.py ]       && run python3 families_stress.py
-  [ -f iso3_subgraph_expansion.py ] && run python3 iso3_subgraph_expansion.py
+  [ -f iso5_subgraph_expansion.py ] && run python3 iso5_subgraph_expansion.py
   [ -f adversarial_iso_search.py ] && run python3 adversarial_iso_search.py
 fi
 
