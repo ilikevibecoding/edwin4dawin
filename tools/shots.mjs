@@ -10,8 +10,14 @@ const base = process.argv[3] || "http://127.0.0.1:5173/";
 const outDir = resolve("shots", `iter_${iter}`);
 mkdirSync(outDir, { recursive: true });
 
-const VIEWS = ["cockpit", "corridor", "quarters", "window"];
-const EXTRA = ["windshield", "galley", "bathroom", "aft"];
+// SHOT_VIEWS=a,b limits the views; SHOT_QUICK=1 skips the drift / interaction passes (spot re-checks
+// during an iteration; the full run is what gets scored).
+const ALL_VIEWS = ["cockpit", "corridor", "quarters", "window"];
+const ALL_EXTRA = ["windshield", "galley", "bathroom", "aft"];
+const only = process.env.SHOT_VIEWS ? process.env.SHOT_VIEWS.split(",") : null;
+const VIEWS = only ? ALL_VIEWS.filter((v) => only.includes(v)) : ALL_VIEWS;
+const EXTRA = only ? ALL_EXTRA.filter((v) => only.includes(v)) : ALL_EXTRA;
+const QUICK = !!process.env.SHOT_QUICK;
 
 const executablePath = ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].find((p) => existsSync(p));
 
@@ -70,6 +76,12 @@ for (const name of [...VIEWS, ...EXTRA]) {
   const stats = await page.evaluate(() => window.debugAPI.getStats());
   results.views[name] = stats;
   console.log(`shot ${name}: ${stats.calls} calls, ${stats.triangles} tris, ${stats.frameMs} ms/frame (software GL)`);
+}
+
+if (QUICK) {
+  console.log("quick mode: skipping drift + interaction passes ->", outDir);
+  await browser.close();
+  process.exit(0);
 }
 
 // --- motion check: the sky must visibly drift. Compare the porthole interior between two frames whose

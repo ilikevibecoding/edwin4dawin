@@ -244,3 +244,51 @@ Fix list for iteration 7 (worst first):
    window.
 4. Fixture emitters: gradient diffuser texture (bright centre, soft falloff) instead of flat white.
 5. Bathroom shower plate UV stretch.
+
+## Iteration 7 — painted structural steel, diffuser emitters, galley backsplash, planet limb
+
+Changes: new `paintedMetal` material (worn-metal maps, metalness 0.15, roughness 1.15) for ribs,
+header beam, overhead console, fixture housings and bezels — bare `metal` boxes in a dim room have no
+diffuse term and were rendering as black slabs; `makeDiffuser` texture + `emitWarmSoft` /
+`emitCoolSoft` (centre-bright pillow falloff) on every ceiling fixture, vanity light and vent; galley
+backsplash → riveted teal paint with a utensil rail (ladle, tongs, cloth) and a 0.5-intensity
+under-cabinet light (first pass at 1.8 put a hot spot on the cabinet door edge); cockpit overhead
+console rear face: access plate, vent slots, stencil, teal edge strip, grab rail; quarters ceiling
+fixture with teal rings + a warm uplight; port-wall utility cluster (three conduits, manifolds,
+clamps, valve wheel, gauge plate, intercom, cable drop) forward of the corridor porthole; worn metal
+streaks → anisotropic `vnoise2` (short 4 cm strokes, wear carried in roughness — the old continuous
+streaks read as wood grain on the bathroom plate); gas giant zonal streaks sharpened; ocean world
+darkened (land olive→ochre, ocean turquoise→deep blue), clouds thinned to ~35% cover (a cloud-white
+disc filling the porthole was reading as a blown highlight); planet shader: Lambert roll-off across
+the lit face, Fresnel 3.5 with the haze mix capped below white and a separate additive limb edge;
+atmosphere shell 1.075 → 1.11 R with alpha fixed at 1 (additive blend was squaring the falloff into
+a hairline). `tools/shots.mjs`: `SHOT_VIEWS` / `SHOT_QUICK=1` for partial re-checks.
+Lights 20 → 22 (quarters uplight, galley under-cabinet).
+
+Shots: `shots/iter_7/`. Drift: sky region meanAbsDiff 48.6, 70.8% pixels changed; interior control 0 / 0.
+
+Pixel audit (luma < 8/255, 1280×720): cockpit 25.5%, corridor 17.5%, quarters 17.8%, window 28.6%.
+No pixel above 250 in any of the four rubric shots.
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Lighting intentional | PASS | Corridor: warm ceiling pools with soft-edged diffusers, teal trench, cool porthole shaft. Cockpit: teal console glow, planet light, warm rear fixture. Quarters: lamp key + cool pillow disc + uplit ceiling. Galley: counter key, under-cabinet warm on the teal splash. |
+| 2 | Materials physical | PASS | Painted steel reads as dark paint over metal (no more black boxes), pipes/rails reflect, panels chipped and smudged, fabric/rubber distinct. |
+| 3 | Detail density | FAIL | Cockpit ceiling strip, quarters ceiling and galley backsplash now carry detail. Window shot: the rib's inner face (0.3 × 2.5 m of painted gunmetal, seen from 0.75 m) fills the left 16% of the frame as one featureless slab. |
+| 4 | Post stack balanced | FAIL | No blown highlights in any view (0 px > 250). Crushed blacks are still there: the cockpit floor (deck plate is metalness 1 → no diffuse response, the rubber mat is 0.14 sRGB) and seat bases are pure black across the whole bottom row; the quarters floor mat is a black void bottom-left; the rib face in the window shot averages luma 12. |
+| 5 | Space view sells motion | FAIL | Rings, bands, cloud-broken ocean world and drift (71% of sky pixels change in 2 s) all read. Rim glow: present on the gas giant in both cockpit and window shots, but only convincingly at 3× zoom — at 1× the limb still reads as a nearly hard edge. A maybe → fail. |
+| 6 | Cohesive palette | PASS | Cream / orange / teal / gunmetal in all eight views; the teal backsplash and blue ocean sit inside the palette. |
+| 7 | Tech clean | PASS | No z-fighting, acne or missing faces in 8 views; 110–170 calls, 211–346k tris, 22 lights. Bathroom plate streaks fixed. fps unmeasurable under SwiftShader (see iteration 5). |
+| 8 | Cold-look test | FAIL | The corridor shot is the best so far and I would not hesitate on it alone. But the four-shot set still has the black floors and the black rib slab, and the shots have to hold together. Fails until 3/4 pass. |
+| 9 | Interactions | PASS | Bed / galley / bathroom prompts, fades, status text, rest-cycle lighting all captured. |
+
+Fix list for iteration 8 (worst first):
+1. Crushed blacks at the source: deck plate becomes worn *painted* plating (metalness map 0.35 base,
+   knurl tops and rivets 0.7–0.85, bright scuffs 0.9) with a lighter base so floors respond to the
+   ceiling lights; rubber albedo 0.14 → 0.21 sRGB; ribs in slate instead of gunmetal; vignette
+   0.42 → 0.34 and pushed outward; AO tint lifted off pure black; a small cool shadow lift in the
+   final grade (filmic toe) so the darkest pixels sit at ~(6, 8, 11) instead of 0.
+2. Rib inner faces: vertical conduit with clamps, bolt rows and a stencil plate on every rib, so the
+   window shot's left cell is a structure rather than a slab.
+3. Planet limb: mild limb darkening on the disc, atmosphere shell 1.11 → 1.15 R, glow falloff
+   2.2 → 2.0, shell strength ×0.9 → ×1.3 so the limb crosses the bloom threshold and reads at 1×.

@@ -34,20 +34,27 @@ const planetFrag = /* glsl */ `
     vec3 n = normalize(vN);
     vec3 v = normalize(cameraPosition - vW);
     float ndl = dot(n, sunDir);
-    float day = smoothstep(-0.06, 0.32, ndl);
+    // soft terminator, then a Lambert roll-off across the lit face so the disc reads as a sphere
+    float day = smoothstep(-0.06, 0.25, ndl) * (0.6 + 0.4 * clamp(ndl, 0.0, 1.0));
     vec3 alb = texture2D(map, vUv).rgb;
     if (hasClouds > 0.5) {
       float c = texture2D(clouds, vec2(vUv.x + cloudShift, vUv.y)).a;
       alb = mix(alb, vec3(1.0), c * 0.85);
     }
     float ndv = max(dot(n, v), 0.0);
-    float fres = pow(1.0 - ndv, 3.2);
+    // atmosphere seen through a thickening column toward the limb: wide, bright and blue-shifted
+    float fres = pow(1.0 - ndv, 3.5);
     // faint night-side ambient so the dark hemisphere still reads as a sphere
     vec3 col = alb * (day * brightness + 0.035 * vec3(0.55, 0.65, 1.0));
     // terminator warmth
     float term = smoothstep(-0.2, 0.15, ndl) * (1.0 - smoothstep(0.15, 0.55, ndl));
     col += vec3(0.9, 0.45, 0.2) * term * 0.12;
-    col += atmo * fres * atmoStrength * (0.2 + 0.8 * day);
+    float lit = smoothstep(-0.25, 0.3, ndl);
+    // haze toward the limb is capped below 1.0 so a planet filling a porthole never goes white;
+    // only the last few degrees of the limb get the additive edge that blooms
+    vec3 rim = atmo * (0.3 + 0.7 * lit) * min(atmoStrength * 0.55, 0.95);
+    col = mix(col, rim, fres * 0.65);
+    col += atmo * fres * fres * fres * atmoStrength * 0.5 * lit;
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -62,10 +69,12 @@ const atmoFrag = /* glsl */ `
   void main() {
     vec3 n = normalize(vN);
     vec3 v = normalize(cameraPosition - vW);
+    // d = 1 at the planet's limb, 0 at the shell's silhouette
     float d = clamp(-dot(n, v) / limb, 0.0, 1.0);
-    float glow = pow(d, 3.0);
+    float glow = pow(d, 2.2);
     float day = smoothstep(-0.35, 0.35, dot(n, sunDir));
-    gl_FragColor = vec4(atmo * glow * strength * (0.12 + 0.88 * day), glow);
+    // additive blend multiplies by alpha, so keep it at 1 or the falloff gets squared into a hairline
+    gl_FragColor = vec4(atmo * glow * strength * (0.18 + 0.82 * day), 1.0);
   }
 `;
 
@@ -263,13 +272,13 @@ export function buildSpace(scene) {
     const body = new THREE.Mesh(new THREE.SphereGeometry(radius, 96, 64), mat);
     body.rotation.z = tilt;
     g.add(body);
-    const shellR = radius * 1.075;
+    const shellR = radius * 1.11;
     const limb = Math.sqrt(1 - (radius * radius) / (shellR * shellR));
     const atmoMat = new THREE.ShaderMaterial({
       uniforms: {
         atmo: { value: new THREE.Color(atmo) },
         sunDir: { value: new THREE.Vector3() },
-        strength: { value: atmoStrength * 1.6 },
+        strength: { value: atmoStrength * 0.9 },
         limb: { value: limb },
       },
       vertexShader: planetVert,
@@ -317,9 +326,9 @@ export function buildSpace(scene) {
     dist: 2150,
     bearingDeg: 0,
     elevation: -60,
-    atmo: "#f2b07a",
-    atmoStrength: 1.2,
-    brightness: 1.05,
+    atmo: "#ffcf9c",
+    atmoStrength: 1.35,
+    brightness: 1.15,
     spin: 0.006,
     tilt: 0.28,
     ring: { inner: 1.35, outer: 2.25, colA: "#c9b393", colB: "#7d6a55", tiltX: 0.42, tiltY: 0.15 },
@@ -331,9 +340,9 @@ export function buildSpace(scene) {
     dist: 1900,
     bearingDeg: 60,
     elevation: 40,
-    atmo: "#5fc8ff",
-    atmoStrength: 1.7,
-    brightness: 1.0,
+    atmo: "#6fd0ff",
+    atmoStrength: 1.6,
+    brightness: 0.85,
     spin: 0.02,
     tilt: 0.1,
   });
@@ -344,7 +353,7 @@ export function buildSpace(scene) {
     bearingDeg: -62,
     elevation: -20,
     atmo: "#8a8f99",
-    atmoStrength: 0.25,
+    atmoStrength: 0.15,
     brightness: 0.85,
     spin: 0.01,
     tilt: 0.05,
@@ -356,7 +365,7 @@ export function buildSpace(scene) {
     bearingDeg: 190,
     elevation: 90,
     atmo: "#ff8a5a",
-    atmoStrength: 0.9,
+    atmoStrength: 0.7,
     brightness: 0.8,
     spin: 0.008,
     tilt: 0.3,

@@ -14,12 +14,16 @@ export function createLightingController({ lights, materials, hemi }) {
   const emitWarm = materials.emitWarm;
   const emitOrange = materials.emitOrange;
   const emitCool = materials.emitCool;
+  const emitWarmSoft = materials.emitWarmSoft;
+  const emitCoolSoft = materials.emitCoolSoft;
   const screens = materials.screens;
   const base = {
     emitTeal: emitTeal.emissiveIntensity,
     emitWarm: emitWarm.emissiveIntensity,
     emitOrange: emitOrange.emissiveIntensity,
     emitCool: emitCool.emissiveIntensity,
+    emitWarmSoft: emitWarmSoft.emissiveIntensity,
+    emitCoolSoft: emitCoolSoft.emissiveIntensity,
     screens: screens.map((m) => m.emissiveIntensity),
     leds: materials.leds.emissiveIntensity,
     hemi: hemi ? hemi.intensity : 0,
@@ -45,10 +49,13 @@ export function createLightingController({ lights, materials, hemi }) {
     for (const l of cool) l.intensity = l.userData.baseIntensity * (0.55 + 0.45 * day);
     emitWarm.emissiveIntensity = base.emitWarm * (0.05 + 0.95 * day);
     emitWarm.emissive.copy(warmBase).lerp(NIGHT_WARM, t * 0.7);
+    emitWarmSoft.emissiveIntensity = base.emitWarmSoft * (0.05 + 0.95 * day);
+    emitWarmSoft.emissive.copy(emitWarm.emissive);
     emitTeal.emissiveIntensity = base.emitTeal * (0.75 + 0.25 * day);
     emitTeal.emissive.copy(tealBase).lerp(NIGHT_TEAL, t);
     emitOrange.emissiveIntensity = base.emitOrange * (0.6 + 0.4 * day);
     emitCool.emissiveIntensity = base.emitCool * (0.35 + 0.65 * day);
+    emitCoolSoft.emissiveIntensity = base.emitCoolSoft * (0.35 + 0.65 * day);
     screens.forEach((m, i) => (m.emissiveIntensity = base.screens[i] * (0.45 + 0.55 * day)));
     materials.leds.emissiveIntensity = base.leds;
     if (hemi) hemi.intensity = base.hemi * (0.35 + 0.65 * day);

@@ -11,6 +11,7 @@ import {
   makeLedStrip,
   makeDecalSheet,
   makeGrate,
+  makeDiffuser,
 } from "./textures.js";
 
 export const PALETTE = {
@@ -41,6 +42,7 @@ export function buildMaterials() {
   const rubber = makeRubber(256, 53);
   const fabric = makeFabric(256, 67);
   const hazard = makeHazard(256, 71);
+  const diffuser = makeDiffuser(256, 13);
 
   const std = (set, extra = {}) =>
     new THREE.MeshStandardMaterial({
@@ -65,6 +67,9 @@ export function buildMaterials() {
     // Cast / sand-blasted metal: same wear, but the roughness map is pushed up so point lights spread
     // into a soft sheen instead of a hot ring (porthole frames, fixtures, appliance bezels)
     metalRough: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.7, envMapIntensity: 0.7 }),
+    // Dark painted structural steel (ribs, beams, housings): the worn-metal maps for wear, but
+    // dielectric — a bare-metal box that reflects nothing but a dim interior reads as a black hole
+    paintedMetal: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), metalness: 0.15, roughness: 1.15, envMapIntensity: 0.6 }),
     // Floor grating: cut-out texture on a single quad (mipmapped, so no distance moiré)
     grate: std(grate, {
       normalScale: new THREE.Vector2(1.0, 1.0),
@@ -116,6 +121,23 @@ export function buildMaterials() {
       color: 0x0a0e14,
       emissive: new THREE.Color("#cfe4ff"),
       emissiveIntensity: 2.2,
+      roughness: 0.5,
+      metalness: 0,
+    }),
+    // Fixture diffusers: same emitters with a centre-bright falloff map (uv "keep" per emitter face)
+    emitWarmSoft: new THREE.MeshStandardMaterial({
+      color: 0x1a1410,
+      emissive: PALETTE.warm,
+      emissiveMap: diffuser,
+      emissiveIntensity: 1.9,
+      roughness: 0.5,
+      metalness: 0,
+    }),
+    emitCoolSoft: new THREE.MeshStandardMaterial({
+      color: 0x0a0e14,
+      emissive: new THREE.Color("#cfe4ff"),
+      emissiveMap: diffuser,
+      emissiveIntensity: 2.4,
       roughness: 0.5,
       metalness: 0,
     }),

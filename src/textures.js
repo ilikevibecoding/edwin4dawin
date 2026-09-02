@@ -55,6 +55,29 @@ export function vnoise(u, v, freq, seed = 0) {
   return (a + (b - a) * sx) * (1 - sy) + (c + (d - c) * sx) * sy;
 }
 
+// Anisotropic tileable value noise: independent integer frequencies per axis (streaks, brushing).
+export function vnoise2(u, v, fu, fv, seed = 0) {
+  const x = u * fu;
+  const y = v * fv;
+  let xi = Math.floor(x);
+  let yi = Math.floor(y);
+  const xf = x - xi;
+  const yf = y - yi;
+  xi = ((xi % fu) + fu) % fu;
+  yi = ((yi % fv) + fv) % fv;
+  const xj = (xi + 1) % fu;
+  const yj = (yi + 1) % fv;
+  const s = seed & 255;
+  const h = (i, j) => PERM[(PERM[(i + s) & 255] + j) & 255] / 255;
+  const a = h(xi, yi);
+  const b = h(xj, yi);
+  const c = h(xi, yj);
+  const d = h(xj, yj);
+  const sx = smooth(xf);
+  const sy = smooth(yf);
+  return (a + (b - a) * sx) * (1 - sy) + (c + (d - c) * sx) * sy;
+}
+
 export function fbm(u, v, { octaves = 5, freq = 4, gain = 0.5, seed = 0 } = {}) {
   let sum = 0;
   let amp = 1;
@@ -362,15 +385,16 @@ export function makeWornMetal(size = 1024, seed = 23) {
   const t = new TexGen(size, size);
   t.each((u, v, i) => {
     // brushed grain along u: fine, low-contrast in albedo (real brushing shows up in the roughness /
-    // specular, not as visible light-and-dark bands, which read as wood grain)
-    const streak = vnoise(u * 0.02, v, 240, seed) * 0.6 + vnoise(u * 0.01, v, 480, seed + 3) * 0.4;
+    // specular, not as visible light-and-dark bands, which read as wood grain). Strokes are short
+    // (~4 cm at 1 m tiling) and 2–3 mm tall; long coherent strokes read as motion blur on a flat plate.
+    const streak = vnoise2(u, v, 24, 300, seed) * 0.55 + vnoise2(u, v, 20, 520, seed + 3) * 0.45;
     const blotch = fbm(u, v, { octaves: 4, freq: 3, seed: seed + 2 });
     const spots = fbm(u, v, { octaves: 5, freq: 12, seed: seed + 6 });
-    let lum = 0.66 + (streak - 0.5) * 0.07 + (blotch - 0.5) * 0.045;
+    let lum = 0.66 + (streak - 0.5) * 0.06 + (blotch - 0.5) * 0.045;
     // dull oxidised patches
     const dull = clamp01((spots - 0.6) * 6);
     lum *= 1 - dull * 0.1;
-    let rough = 0.34 + (streak - 0.5) * 0.22 + dull * 0.32 + (blotch - 0.5) * 0.1;
+    let rough = 0.36 + (streak - 0.5) * 0.16 + dull * 0.32 + (blotch - 0.5) * 0.1;
     let hgt = 0.5 + (streak - 0.5) * 0.05 + (spots - 0.5) * 0.04;
     // scratches
     const sc = worley(u, v, 10, seed + 4);
@@ -672,6 +696,30 @@ export function makeLedStrip(w = 256, h = 32, seed = 9) {
   return toTexture(c, { srgb: true, wrap: false });
 }
 
+// Light-fixture diffuser: emissive multiplier that is full-bright down the middle and falls off to the
+// edges and ends, with a faint mottle, so a strip light reads as a diffuser over a tube instead of a
+// flat white rectangle. Mapped 0..1 across each emitter face.
+export function makeDiffuser(size = 256, seed = 13) {
+  const c = makeCanvas(size, size);
+  const ctx = c.getContext("2d");
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  const g = (t) => 0.3 + 0.7 * (1 - Math.pow(Math.abs(2 * t - 1), 3.5));
+  for (let y = 0; y < size; y++) {
+    const v = (y + 0.5) / size;
+    for (let x = 0; x < size; x++) {
+      const u = (x + 0.5) / size;
+      const mottle = 1 + (fbm(u, v, { octaves: 3, freq: 6, seed }) - 0.5) * 0.08;
+      const k = clamp01(g(u) * g(v) * mottle);
+      const i = (y * size + x) * 4;
+      d[i] = d[i + 1] = d[i + 2] = k * 255;
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTexture(c, { srgb: true, wrap: false });
+}
+
 // ---------------------------------------------------------------------------
 // Stencil decals: a 4x4 sheet of worn labels / markings (transparent background).
 // Cell (col,row) -> uv rect via decalRect(). Text is drawn with canvas fonts, then eroded.
@@ -947,8 +995,10 @@ export function makeGasGiant(w = 1024, h = 512, seed = 77) {
       const cB = palette[(((bi + 1) % palette.length) + palette.length) % palette.length];
       const k = smooth(clamp01((bf - 0.35) / 0.3));
       const swirl = fbm(u * 3, v, { octaves: 4, freq: 24, seed: seed + 4 });
+      // fine zonal streaks (stretched 8:1 along the bands) so the disc stays crisp at window distance
+      const fine = vnoise2(u, v, 14, 100, seed + 13) * 0.6 + vnoise2(u, v, 28, 190, seed + 17) * 0.4;
       const i = (y * w + x) * 4;
-      const shade = 0.92 + (swirl - 0.5) * 0.25;
+      const shade = 0.9 + (swirl - 0.5) * 0.3 + (fine - 0.5) * 0.16;
       d[i] = clamp01(lerp(cA[0], cB[0], k) * shade) * 255;
       d[i + 1] = clamp01(lerp(cA[1], cB[1], k) * shade) * 255;
       d[i + 2] = clamp01(lerp(cA[2], cB[2], k) * shade) * 255;
@@ -985,19 +1035,22 @@ export function makeOceanWorld(w = 1024, h = 512, seed = 88) {
       const u = x / w;
       const n = fbm(u, v, { octaves: 7, freq: 5, seed });
       const detail = fbm(u, v, { octaves: 4, freq: 30, seed: seed + 2 });
-      const land = n > 0.53;
+      const land = n > 0.56;
       let r, g, b;
       if (land) {
-        const hgt = clamp01((n - 0.53) / 0.2);
-        r = lerp(0.6, 0.88, hgt) + (detail - 0.5) * 0.12;
-        g = lerp(0.55, 0.8, hgt) + (detail - 0.5) * 0.12;
-        b = lerp(0.36, 0.66, hgt) + (detail - 0.5) * 0.1;
+        // olive lowlands rising to ochre highlands; nowhere near cloud-white, so land, sea and cloud
+        // stay three distinct reads even through a small porthole
+        const hgt = clamp01((n - 0.56) / 0.18);
+        r = lerp(0.3, 0.6, hgt) + (detail - 0.5) * 0.12;
+        g = lerp(0.36, 0.5, hgt) + (detail - 0.5) * 0.12;
+        b = lerp(0.2, 0.34, hgt) + (detail - 0.5) * 0.1;
       } else {
-        // bright turquoise shelves falling to deep blue; shallows glow near coasts
-        const depth = clamp01((0.53 - n) / 0.22);
-        r = lerp(0.22, 0.05, depth);
-        g = lerp(0.78, 0.3, depth);
-        b = lerp(0.82, 0.62, depth);
+        // turquoise shelves falling to deep blue; shallows glow near coasts. Kept well under the cloud
+        // albedo so the disc reads as sea with clouds over it, not a white ball with blue edges.
+        const depth = clamp01((0.56 - n) / 0.22);
+        r = lerp(0.14, 0.03, depth);
+        g = lerp(0.6, 0.2, depth);
+        b = lerp(0.7, 0.48, depth);
       }
       const ice = clamp01((lat - 0.78 + (detail - 0.5) * 0.1) / 0.08);
       r = lerp(r, 0.95, ice);
@@ -1062,7 +1115,8 @@ export function makeClouds(w = 1024, h = 512, seed = 111) {
       const u = x / w;
       const n = fbm(u, v, { octaves: 6, freq: 6, seed });
       const n2 = fbm(u * 2, v, { octaves: 4, freq: 18, seed: seed + 5 });
-      const a = clamp01((n - 0.48) * 3.2) * (0.6 + n2 * 0.4);
+      // ~35 % coverage in broken bands, wispy at the edges
+      const a = clamp01((n - 0.53) * 3.4) * (0.5 + n2 * 0.5);
       const i = (y * w + x) * 4;
       d[i] = d[i + 1] = d[i + 2] = 255;
       d[i + 3] = a * 255;

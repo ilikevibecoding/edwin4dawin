@@ -68,7 +68,7 @@ function captureEnvironment() {
   scene.fog = null;
   space.root.visible = false;
   // keep the light fixtures from turning every metal into a blown-out mirror of them
-  const emissives = [materials.emitTeal, materials.emitWarm, materials.emitOrange, materials.emitRed, materials.emitCool, materials.leds, ...materials.screens];
+  const emissives = [materials.emitTeal, materials.emitWarm, materials.emitOrange, materials.emitRed, materials.emitCool, materials.emitWarmSoft, materials.emitCoolSoft, materials.leds, ...materials.screens];
   const saved = emissives.map((m) => m.emissiveIntensity);
   emissives.forEach((m) => (m.emissiveIntensity *= 0.25));
   cubeCam.update(renderer, scene);
