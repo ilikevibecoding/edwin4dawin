@@ -292,3 +292,50 @@ Fix list for iteration 8 (worst first):
    window shot's left cell is a structure rather than a slab.
 3. Planet limb: mild limb darkening on the disc, atmosphere shell 1.11 → 1.15 R, glow falloff
    2.2 → 2.0, shell strength ×0.9 → ×1.3 so the limb crosses the bloom threshold and reads at 1×.
+
+## Iteration 8 — painted deck plating, rib inner faces, shadow lift, atmosphere halo
+
+Changes: deck plate texture → worn *painted* plating: metalness map (0.35 paint/oxide base, 0.75 on
+polished knurl tops, 0.85 rivets, 0.9 bright scuffs, 0.1 rubber drag marks, halved in seam grime),
+base albedo 0.36 → 0.42 — the old metalness-1 floor had no diffuse term and rendered black wherever
+no specular highlight fell; rubber albedo 0.14 → 0.21 sRGB (charcoal that shows grain, not a void);
+ribs painted slate instead of gunmetal, with inner-face detail on every rib (clamped conduit drop,
+elbow + junction cap, bolt rows along both edges, HV / O2 / hatch stencil, hazard kick block);
+cockpit rear fixture light 5 → 6 and 0.15 m lower so it reaches the mat between the seats; post:
+vignette 0.42 → 0.34 starting further out, AO intensity 3.0 → 2.6 with a blue-grey tint instead of
+near-black, filmic shadow lift (+0.024/0.030/0.042 in display space, after the vignette) so the
+darkest pixels settle on a cool (6, 8, 11) instead of 0; hover highlight 0.28 → 0.12 with a slow
+pulse so the fabric keeps its shading under the tint. Atmosphere: the halo shell's `day` term used
+the back-face normal, which points away from the camera — with the sun behind the viewer it read as
+night around the whole limb and the halo ran at 18%. Diagnosed with a fixed-time pixel probe
+(shell on / off / ×3): the shell *was* rendering 19 px wide but, once the day term was corrected,
+as a near-white band the same colour as the disc, i.e. a bigger planet with a soft edge. Fix: day
+from the screen-radial direction, cubic falloff (bright line at the limb fading across the halo),
+peak ×0.9, saturated amber (`#ffae5c`) / blue (`#58b8ff`) halo colours distinct from the disc, disc
+limb darkening 0.38, disc rim-haze mix 0.55 → 0.35. Lights unchanged at 22.
+
+Shots: `shots/iter_8/`. Drift: sky region meanAbsDiff 44.5, 71.0% pixels changed; interior control 0 / 0.
+
+Pixel audit (luma < 8/255, 1280×720): cockpit 25.5 → 5.2%, corridor 17.5 → 3.0%, quarters
+17.8 → 5.6%, window 28.6 → 6.7% (the remainder is deep space through the glazing and rubber gaskets).
+Mean luma cockpit 45.8 → 57.7, corridor 50.7 → 61.8, quarters 63.1 → 73.8, window 34.2 → 44.5.
+Still no pixel above 250 in the four rubric shots. Limb profile (window shot, row through the
+upper-left limb): 12 → 28 45 61 71 86 100 116 129 140 146 157 162 169 175 181 185 193 197 → disc,
+i.e. a 19 px amber ramp where iteration 7 had a 5 px hard edge.
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Lighting intentional | PASS | Same key/fill/accent structure as iteration 7, and the floors now take the ceiling light (cockpit mat, quarters mat, corridor side plates read as lit surfaces). |
+| 2 | Materials physical | PASS | Deck plating reads as chipped paint over steel with polished knurl tops and bright scuffs; ribs read as painted structural steel; pipes and rails reflect; fabric, rubber, painted panels distinct. |
+| 3 | Detail density | PASS | Window shot's left cell is a rib with a conduit, clamps, junction cap, bolts, stencil and kick block. Cockpit ceiling, quarters ceiling and galley splash carry detail from iteration 7. Corridor, aft, windshield dense. Weakest remaining: the galley's left wall (rivets + one stencil) and the bathroom shower plate — both outside the four rubric views. |
+| 4 | Post stack balanced | PASS | ACES, bloom, AO, vignette, grain all on. 0 px > 250 in the rubric shots. Near-black 3–7% and it is space and gaskets; the cockpit floor / seat bases are dark grey with visible mat grain and plate seams rather than a void. Window shot is the dimmest (mean 44.5) but its darks hold detail. |
+| 5 | Space view sells motion | PASS | Amber halo around the gas giant visible at 1× in cockpit, window and windshield; blue limb on the ocean world in corridor and quarters portholes; rings, bands, cloud-broken continents; 71% of sky pixels change over 2 s while the interior is pixel-identical. |
+| 6 | Cohesive palette | PASS | Cream / orange / teal / slate-gunmetal in all eight views; halo amber and blue sit inside the palette. |
+| 7 | Tech clean | PASS | No z-fighting, acne or missing faces in 8 views + 6 interaction shots; 110–170 calls, 224–364k tris, 22 lights, 49 programs. fps unmeasurable under SwiftShader (see iteration 5) — scored from budget + the adaptive scaler. |
+| 8 | Cold-look test | PASS | Corridor: fog, warm pools with diffuser falloff, teal trench, cool porthole shaft on the planet, decals, rails, conduits, painted ribs — I would not hesitate. Cockpit, quarters and window each read as a game location rather than a primitive demo; the specific tells from iterations 5–7 (black floors, black slab, flat emitters, blown planet) are gone. |
+| 9 | Interactions | PASS | Bed / galley / bathroom prompts, fades, status text, rest-cycle lighting all captured; hover tint now keeps the fabric shading. |
+
+First all-pass iteration. Stopping rule needs a second consecutive all-pass, so iteration 9 runs
+with conservative changes aimed at the weak points named above (nothing that can move a passing
+item): galley left wall gets a wall-mounted prop cluster, bathroom shower recess gets a head, hose
+and dispenser, and the window view keeps its camera so the fix is re-verified from the same angle.

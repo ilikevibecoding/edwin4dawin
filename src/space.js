@@ -49,12 +49,17 @@ const planetFrag = /* glsl */ `
     // terminator warmth
     float term = smoothstep(-0.2, 0.15, ndl) * (1.0 - smoothstep(0.15, 0.55, ndl));
     col += vec3(0.9, 0.45, 0.2) * term * 0.12;
-    float lit = smoothstep(-0.25, 0.3, ndl);
+    // grazing sunlight still lights the atmosphere column at the limb (ndl ~ 0 there when the sun is
+    // behind the viewer), so the ramp is centred below zero
+    float lit = smoothstep(-0.5, 0.15, ndl);
+    // limb darkening: the disc falls off toward its edge so the additive atmosphere outside it has
+    // something dark to stand against (a limb as bright as the halo hides the halo)
+    col *= 1.0 - 0.38 * pow(1.0 - ndv, 1.6);
     // haze toward the limb is capped below 1.0 so a planet filling a porthole never goes white;
     // only the last few degrees of the limb get the additive edge that blooms
     vec3 rim = atmo * (0.3 + 0.7 * lit) * min(atmoStrength * 0.55, 0.95);
-    col = mix(col, rim, fres * 0.65);
-    col += atmo * fres * fres * fres * atmoStrength * 0.5 * lit;
+    col = mix(col, rim, fres * 0.35);
+    col += atmo * fres * fres * fres * atmoStrength * 0.6 * lit;
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -71,10 +76,16 @@ const atmoFrag = /* glsl */ `
     vec3 v = normalize(cameraPosition - vW);
     // d = 1 at the planet's limb, 0 at the shell's silhouette
     float d = clamp(-dot(n, v) / limb, 0.0, 1.0);
-    float glow = pow(d, 2.2);
-    float day = smoothstep(-0.35, 0.35, dot(n, sunDir));
+    // cubic: a bright line right at the limb that fades across the halo — with a slower falloff the
+    // whole 15% shell rendered near-white and read as a bigger planet with a soft edge
+    float glow = pow(d, 3.0);
+    // lit side of the limb: judge by the screen-radial direction, not the back-face normal (that
+    // points away from the camera, so with the sun behind the viewer it read as night everywhere
+    // and the whole halo ran at 18%). Grazing light still lights the column, hence the wide ramp.
+    vec3 nr = normalize(n - v * dot(n, v));
+    float day = smoothstep(-0.55, 0.15, dot(nr, sunDir));
     // additive blend multiplies by alpha, so keep it at 1 or the falloff gets squared into a hairline
-    gl_FragColor = vec4(atmo * glow * strength * (0.18 + 0.82 * day), 1.0);
+    gl_FragColor = vec4(atmo * glow * strength * (0.15 + 0.85 * day), 1.0);
   }
 `;
 
@@ -272,7 +283,9 @@ export function buildSpace(scene) {
     const body = new THREE.Mesh(new THREE.SphereGeometry(radius, 96, 64), mat);
     body.rotation.z = tilt;
     g.add(body);
-    const shellR = radius * 1.11;
+    // 15% shell: ~19 px of halo on a 1080p frame for the gas giant in a porthole; the peak at the
+    // limb (~0.9 × strength) sits just over the disc's limb-darkened edge so the line reads as glow
+    const shellR = radius * 1.15;
     const limb = Math.sqrt(1 - (radius * radius) / (shellR * shellR));
     const atmoMat = new THREE.ShaderMaterial({
       uniforms: {
@@ -326,7 +339,8 @@ export function buildSpace(scene) {
     dist: 2150,
     bearingDeg: 0,
     elevation: -60,
-    atmo: "#ffcf9c",
+    // saturated amber: the halo has to differ from the cream disc or it reads as more disc
+    atmo: "#ffae5c",
     atmoStrength: 1.35,
     brightness: 1.15,
     spin: 0.006,
@@ -340,8 +354,8 @@ export function buildSpace(scene) {
     dist: 1900,
     bearingDeg: 60,
     elevation: 40,
-    atmo: "#6fd0ff",
-    atmoStrength: 1.6,
+    atmo: "#58b8ff",
+    atmoStrength: 1.4,
     brightness: 0.85,
     spin: 0.02,
     tilt: 0.1,

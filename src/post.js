@@ -12,9 +12,11 @@ const FinalShader = {
     tDiffuse: { value: null },
     time: { value: 0 },
     resolution: { value: new THREE.Vector2(1, 1) },
-    vignette: { value: 0.42 },
+    vignette: { value: 0.34 },
     grain: { value: 0.045 },
     seed: { value: 0.37 },
+    // filmic toe: the darkest pixels settle on a cool near-black instead of 0,0,0
+    lift: { value: new THREE.Vector3(0.024, 0.03, 0.042) },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -30,6 +32,7 @@ const FinalShader = {
     uniform float vignette;
     uniform float grain;
     uniform float seed;
+    uniform vec3 lift;
     varying vec2 vUv;
     float hash(vec2 p) {
       vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -38,10 +41,13 @@ const FinalShader = {
     }
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
-      // soft vignette, slightly wider than tall
+      // soft vignette, slightly wider than tall; starts further out so wall edges keep their value
       vec2 d = (vUv - 0.5) * vec2(1.0, 0.9);
-      float v = smoothstep(0.3, 0.98, length(d) * 1.35);
+      float v = smoothstep(0.38, 1.0, length(d) * 1.35);
       c.rgb *= 1.0 - vignette * v;
+      // shadow lift (display space, after the vignette so the toe is uniform): raises the darkest
+      // values onto a cool near-black and leaves highlights untouched
+      c.rgb += lift * (1.0 - c.rgb);
       // film grain (stronger in the shadows, finer in highlights)
       float lum = dot(c.rgb, vec3(0.299, 0.587, 0.114));
       float n = hash(vUv * resolution + vec2(seed * 1000.0, fract(time) * 700.0)) - 0.5;
@@ -62,8 +68,9 @@ export function createPost(renderer, scene, camera) {
   const ao = new N8AOPass(scene, camera, w, h);
   ao.configuration.aoRadius = 0.9;
   ao.configuration.distanceFalloff = 0.9;
-  ao.configuration.intensity = 3.0;
-  ao.configuration.color = new THREE.Color(0x02040a);
+  ao.configuration.intensity = 2.6;
+  // occluded corners tint toward a dark blue-grey rather than dropping to black
+  ao.configuration.color = new THREE.Color(0x0a0e16);
   ao.configuration.halfRes = true;
   ao.configuration.depthAwareUpsampling = true;
   ao.configuration.screenSpaceRadius = false;

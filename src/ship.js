@@ -672,10 +672,12 @@ function buildCorridor(kit, ctx) {
     [-hw + 0.06, wallH - 0.03],
   ];
   const stripeShape = new THREE.Shape(stripeProfile.map(([x, y]) => new THREE.Vector2(x, y)));
-  for (let z = zAft - 3; z > zFwd; z -= 3) {
+  let ribIndex = 0;
+  for (let z = zAft - 3; z > zFwd; z -= 3, ribIndex++) {
     const rib = new THREE.ExtrudeGeometry(ribShape, { depth: 0.3, bevelEnabled: false });
-    // painted structural steel: seen end-on beside a porthole, a bare-metal rib face was a black slab
-    kit.add("paintedMetal", rib, { pos: [0, 0, z - 0.15], color: PALETTE.gunmetal, uv: "world", texel: 1 });
+    // painted structural steel in slate: seen end-on beside a porthole, a gunmetal rib face
+    // (0.19 sRGB after the wear map) was a black slab filling a sixth of the frame
+    kit.add("paintedMetal", rib, { pos: [0, 0, z - 0.15], color: PALETTE.slate, uv: "world", texel: 1 });
     const stripe = new THREE.ExtrudeGeometry(stripeShape, { depth: 0.34, bevelEnabled: false });
     kit.add("painted", stripe, { pos: [0, 0, z - 0.17], color: PALETTE.orange, uv: "world", texel: 1 });
     // bolts on the rib face
@@ -687,6 +689,29 @@ function buildCorridor(kit, ctx) {
     ]) {
       kit.cyl("metal", bx, by, z - 0.17, 0.03, 0.04, "z", { color: PALETTE.steel, segments: 8 });
       kit.cyl("metal", bx, by, z + 0.17, 0.03, 0.04, "z", { color: PALETTE.steel, segments: 8 });
+    }
+    // inner faces (the 0.3 m sides that face the corridor): a clamped conduit drop, bolt rows along
+    // both edges, a stencil plate and a hazard kick block — structure, not a slab, when seen close
+    for (const side of [-1, 1]) {
+      const fx = side * (hw - 0.2); // face plane
+      const o = (d) => fx - side * d; // offset d into the corridor
+      const conduitCol = ribIndex % 2 === 0 ? PALETTE.steel : PALETTE.gunmetal;
+      kit.cyl("metal", o(0.05), 1.05, z + 0.06, 0.024, 1.6, "y", { color: conduitCol, segments: 10 });
+      for (const y of [0.42, 1.32, 1.72]) {
+        kit.box("paintedMetal", o(0.035), y, z + 0.06, 0.07, 0.045, 0.09, { color: PALETTE.darkMetal, texel: 2 });
+        kit.cyl("metal", o(0.072), y, z + 0.06, 0.01, 0.012, "x", { color: PALETTE.steel, segments: 6 });
+      }
+      // elbow into the wall at the top, junction cap at the bottom
+      kit.box("metal", o(0.03), 1.86, z + 0.06, 0.07, 0.07, 0.07, { color: PALETTE.darkMetal });
+      kit.box("paintedMetal", o(0.04), 0.22, z + 0.06, 0.08, 0.1, 0.1, { color: PALETTE.gunmetal, texel: 2 });
+      for (const y of [0.3, 0.75, 1.25, 1.7]) {
+        kit.cyl("metal", o(0.008), y, z - 0.11, 0.016, 0.016, "x", { color: PALETTE.steel, segments: 8 });
+        kit.cyl("metal", o(0.008), y, z + 0.11, 0.016, 0.016, "x", { color: PALETTE.steel, segments: 8 });
+      }
+      const g = new THREE.PlaneGeometry(0.16, 0.16);
+      g.rotateY(side < 0 ? Math.PI / 2 : -Math.PI / 2);
+      kit.add("decal", g, { pos: [o(0.004), 1.5, z - 0.04], uv: "keep", uvRect: decalRect([5, 4, 8, 5, 4][ribIndex % 5]) });
+      kit.box("hazard", o(0.01), 0.075, z, 0.02, 0.15, 0.3, { texel: 3 });
     }
     // small ceiling-mounted lamp/box at each rib
     kit.box("metal", 0, h - 0.24, z, 0.5, 0.12, 0.3, { color: PALETTE.darkMetal });
@@ -1059,7 +1084,8 @@ function buildCockpit(kit, ctx) {
   // ceiling light fixture at cockpit rear (fills the seat backs)
   kit.box("paintedMetal", 0, h - 0.06, -17.9, 1.4, 0.08, 0.3, { color: PALETTE.gunmetal });
   kit.box("emitWarmSoft", 0, h - 0.11, -17.9, 1.2, 0.03, 0.1, { uv: "keep" });
-  ctx.lights.warm.push(pointLight(0xffc48c, 5, 7, [0, h - 0.55, -17.9]));
+  // hung lower than the corridor lights: this one has to reach the mat between the seats
+  ctx.lights.warm.push(pointLight(0xffc48c, 6, 7, [0, h - 0.7, -17.9]));
 }
 
 function buildQuarters(kit, ctx) {

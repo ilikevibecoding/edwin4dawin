@@ -46,6 +46,11 @@ export class Interactions {
     const hits = this.ray.intersectObjects(this.targets, false);
     const hit = hits.length ? hits[0].object.userData.interactable : null;
     this.setHovered(hit);
+    if (this.hovered) {
+      // slow pulse, kept low so the object's own shading still reads under the tint
+      const k = 0.1 + 0.05 * (0.5 + 0.5 * Math.sin(performance.now() * 0.004));
+      this.hovered.material.emissive.copy(HIGHLIGHT).multiplyScalar(k);
+    }
   }
 
   setHovered(item) {
@@ -56,7 +61,7 @@ export class Interactions {
     }
     this.hovered = item;
     if (item) {
-      item.material.emissive.copy(HIGHLIGHT).multiplyScalar(0.28);
+      item.material.emissive.copy(HIGHLIGHT).multiplyScalar(0.12);
       item.material.emissiveIntensity = 1;
       this.hud.showPrompt(item.key, item.label);
     } else {

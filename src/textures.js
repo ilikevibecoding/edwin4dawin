@@ -433,9 +433,13 @@ export function makeDeckPlate(size = 1024, seed = 41) {
     const ed = edgeDist(pu, pv);
     const n1 = fbm(u, v, { octaves: 4, freq: 5, seed: seed });
     const n2 = fbm(u, v, { octaves: 5, freq: 24, seed: seed + 3 });
-    let lum = 0.36 + (n1 - 0.5) * 0.14 + (n2 - 0.5) * 0.08;
-    let rough = 0.55 + (n2 - 0.5) * 0.2;
-    let metal = 1;
+    // Worn *painted* plating rather than bare metal: a metalness-1 floor has no diffuse term, so
+    // away from a specular highlight it renders black no matter how many lights are in the room.
+    // Paint/oxide base (metalness 0.35) with the metal showing through on the raised knurl tops,
+    // rivet heads and bright scuffs.
+    let lum = 0.42 + (n1 - 0.5) * 0.14 + (n2 - 0.5) * 0.08;
+    let rough = 0.62 + (n2 - 0.5) * 0.2;
+    let metal = 0.35 + (n1 - 0.5) * 0.2;
     let hgt = 0.55;
     // seams between plates
     const seam = 0.018;
@@ -444,6 +448,7 @@ export function makeDeckPlate(size = 1024, seed = 41) {
       hgt -= 0.35 * smooth(k);
       lum *= 0.55;
       rough += 0.25;
+      metal = 0.2;
     } else {
       // knurl: raised dots in a grid, rotated 45deg
       const kx = (pu + pv) * 42;
@@ -454,7 +459,11 @@ export function makeDeckPlate(size = 1024, seed = 41) {
       if (dd < 0.28) {
         const k = smooth(1 - dd / 0.28);
         hgt += k * 0.12;
-        lum += k * 0.05;
+        lum += k * 0.06;
+        // boots polish the paint off the dot tops
+        const worn = smooth(clamp01((k - 0.55) / 0.45)) * clamp01((n2 - 0.35) * 2.5);
+        metal = lerp(metal, 0.75, worn);
+        rough = lerp(rough, 0.42, worn);
       }
       // rivets in plate corners
       const rin = 0.06;
@@ -464,15 +473,17 @@ export function makeDeckPlate(size = 1024, seed = 41) {
       if (rd < 0.022) {
         const k = smooth(1 - rd / 0.022);
         hgt += k * 0.3;
-        lum = lerp(lum, 0.5, 0.6);
+        lum = lerp(lum, 0.55, 0.6);
         rough = 0.4;
+        metal = 0.85;
       }
     }
     // dark grime toward seams
     const grime = clamp01(1 - ed / 0.12) * fbm(u, v, { octaves: 3, freq: 10, seed: seed + 11 });
     lum *= 1 - grime * 0.35;
     rough += grime * 0.2;
-    // scuff marks: lighter, smoother streaks
+    metal *= 1 - grime * 0.5;
+    // scuff marks: bright ones are paint worn through to steel, dark ones are rubber drag
     for (const s of scuffs) {
       const dx = u - s.x;
       const dy = v - s.y;
@@ -482,11 +493,12 @@ export function makeDeckPlate(size = 1024, seed = 41) {
         const k = (1 - Math.abs(perp) / s.w) * (1 - Math.abs(along) / s.l) * 0.8;
         lum = lerp(lum, s.k > 0.5 ? 0.62 : 0.18, k);
         rough = lerp(rough, s.k > 0.5 ? 0.3 : 0.75, k);
+        metal = lerp(metal, s.k > 0.5 ? 0.9 : 0.1, k);
       }
     }
     t.setColor(i, lum * 1.0, lum * 0.98, lum * 0.95);
     t.rough[i] = clamp01(rough);
-    t.metal[i] = metal;
+    t.metal[i] = clamp01(metal);
     t.height[i] = hgt;
   });
   return finish(t.bake({ normalStrength: 2.2 }));
@@ -498,7 +510,9 @@ export function makeRubber(size = 256, seed = 53) {
   t.each((u, v, i) => {
     const n = fbm(u, v, { octaves: 5, freq: 24, seed });
     const n2 = fbm(u, v, { octaves: 3, freq: 6, seed: seed + 2 });
-    const lum = 0.14 + (n - 0.5) * 0.06 + (n2 - 0.5) * 0.05;
+    // charcoal, not black: 0.21 sRGB (~0.037 linear) is dark rubber that still shows its grain
+    // under a ceiling light; the old 0.14 rendered as a void wherever it covered a floor
+    const lum = 0.21 + (n - 0.5) * 0.07 + (n2 - 0.5) * 0.06;
     t.setColor(i, lum, lum, lum * 1.05);
     t.rough[i] = clamp01(0.86 + (n - 0.5) * 0.15);
     t.metal[i] = 0;
