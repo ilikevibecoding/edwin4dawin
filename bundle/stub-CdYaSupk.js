@@ -1,0 +1,1 @@
+async function e(){return{root:null,update(){},setPose(){},dispose(){}}}export{e as buildArms};
