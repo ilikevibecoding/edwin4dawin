@@ -411,10 +411,16 @@ def payment_lp(R: np.ndarray, N: np.ndarray, terms: Dict[str, np.ndarray], mask:
     if res.status != 0:
         return out
     lam_f = [float(x) for x in res.x]
-    lam = [rationalise_down(x) for x in lam_f]
     term_arrays = [terms[nm] for nm in names]
-    ok, viol = exact_verify_payment(R, term_arrays, lam, mask)
-    shrink = 0
+    # rationalise by flooring to a coarse grid (only ever decreases the payments, so the exact
+    # check can only fail through float error in the LP itself), then verify exactly
+    ok, viol, shrink = False, -1, 0
+    lam: List[Fraction] = []
+    for D in (10**3, 10**4, 10**6):
+        lam = [Fraction(math.floor(x * D * (1 - 1e-9)), D) if x > 0 else Fraction(0) for x in lam_f]
+        ok, viol = exact_verify_payment(R, term_arrays, lam, mask)
+        if ok:
+            break
     while not ok and shrink < 12:
         lam = [f * Fraction(999, 1000) for f in lam]
         ok, viol = exact_verify_payment(R, term_arrays, lam, mask)
@@ -1329,6 +1335,8 @@ def main() -> int:
         "sync: a_{r-1}*b_r-a_r*b_{r-1}": (b0 + cm) * b1 - (b1 + c0) * b0,
         "sync: a_{r-1}*c_{r-1}-a_r*c_{r-2}": (b0 + cm) * c0 - (b1 + c0) * cm,
         "sync: a_r*c_{r-2}-a_{r-1}*c_{r-1}": (b1 + c0) * cm - (b0 + cm) * c0,
+        "sync: p_r*b_{r-1}-p_{r-1}*b_r": (b1 + b0 + c0) * b0 - (b0 + bm + cm) * b1,
+        "sync: p_{r-1}*b_r-p_r*b_{r-1}": (b0 + bm + cm) * b1 - (b1 + b0 + c0) * b0,
         "ULC: (r+1)b_{r-1}b_r-(r-1)b_{r-2}b_{r+1}": None,
     }
     universal_extra = [(nm, ex) for nm, ex in extra_candidates.items() if ex is not None and univ_all.get(nm, {}).get("universal_all_indices")]

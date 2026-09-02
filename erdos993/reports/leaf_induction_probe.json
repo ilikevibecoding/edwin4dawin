@@ -1,6 +1,8 @@
 {
  "certificate_lps": {
-  "extra_hypothetical_forms_universal_on_data": [],
+  "extra_hypothetical_forms_universal_on_data": [
+   "sync: p_r*b_{r-1}-p_{r-1}*b_r"
+  ],
   "per_r": {
    "1": {
     "E_FLC_menu0": {
@@ -999,7 +1001,7 @@
     "float_lp_message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
     "float_lp_status": 2,
     "menu_level": 3,
-    "num_forms": 64,
+    "num_forms": 65,
     "num_monomials": 28,
     "r": 2,
     "target": "R",
@@ -1010,7 +1012,7 @@
     "float_lp_message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
     "float_lp_status": 2,
     "menu_level": 3,
-    "num_forms": 64,
+    "num_forms": 65,
     "num_monomials": 28,
     "r": 3,
     "target": "R",
@@ -1021,7 +1023,7 @@
     "float_lp_message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
     "float_lp_status": 2,
     "menu_level": 3,
-    "num_forms": 64,
+    "num_forms": 65,
     "num_monomials": 28,
     "r": 4,
     "target": "R",
@@ -1032,7 +1034,7 @@
     "float_lp_message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
     "float_lp_status": 2,
     "menu_level": 3,
-    "num_forms": 64,
+    "num_forms": 65,
     "num_monomials": 28,
     "r": 5,
     "target": "R",
@@ -1043,7 +1045,7 @@
     "float_lp_message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
     "float_lp_status": 2,
     "menu_level": 3,
-    "num_forms": 64,
+    "num_forms": 65,
     "num_monomials": 28,
     "r": 6,
     "target": "R",
@@ -1054,7 +1056,7 @@
     "float_lp_message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
     "float_lp_status": 2,
     "menu_level": 3,
-    "num_forms": 64,
+    "num_forms": 65,
     "num_monomials": 28,
     "r": 7,
     "target": "R",
@@ -1065,7 +1067,7 @@
     "float_lp_message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
     "float_lp_status": 2,
     "menu_level": 3,
-    "num_forms": 64,
+    "num_forms": 65,
     "num_monomials": 28,
     "r": 8,
     "target": "R",
@@ -1648,10 +1650,10 @@
   "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
   "python": "3.12.3",
   "script": "probe_leaf_induction.py",
-  "script_sha256": "3F4CD679ABD5E03E3A77EDC35818D8A1C8A7EBF277B1108F2C5BC2948F2E457C"
+  "script_sha256": "7E7D233937DB3D36A015319416F7A8319C4BC01A5B5D69B3F1D7302B87A623D7"
  },
- "seconds_elapsed": 163.6,
- "seconds_total": 163.6,
+ "seconds_elapsed": 161.7,
+ "seconds_total": 161.7,
  "status": "complete",
  "task1_signs": {
   "per_r": {
@@ -16147,13 +16149,13 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "LC_{r-1}(b)=b_{r-1}^2-b_{r-2}b_r": "2999999997/1000000000"
+      "LC_{r-1}(b)=b_{r-1}^2-b_{r-2}b_r": "2999/1000"
      },
      "lambda_float": {
       "LC_{r-1}(b)=b_{r-1}^2-b_{r-2}b_r": 3.000000000043
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.8749998775824395e-10,
+     "min_residual_normalised_float": 6.249999999999312e-05,
      "objective_float": 0.1962311763257815,
      "rows": 244690,
      "status": 0
@@ -16481,13 +16483,13 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "LC_{r-1}(b)=b_{r-1}^2-b_{r-2}b_r": "2999999997/1000000000"
+      "LC_{r-1}(b)=b_{r-1}^2-b_{r-2}b_r": "2999/1000"
      },
      "lambda_float": {
       "LC_{r-1}(b)=b_{r-1}^2-b_{r-2}b_r": 3.0000000000000004
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.8749998775824395e-10,
+     "min_residual_normalised_float": 6.249999999999312e-05,
      "objective_float": 0.19622008016446102,
      "rows": 244686,
      "status": 0
@@ -16637,13 +16639,13 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "c_{r-1}*b_{r-1}": "2999999997/1000000000"
+      "c_{r-1}*b_{r-1}": "2999/1000"
      },
      "lambda_float": {
       "c_{r-1}*b_{r-1}": 3.0
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.8749998775824395e-10,
+     "min_residual_normalised_float": 6.249999999999312e-05,
      "objective_float": 0.1962311763256418,
      "rows": 244690,
      "status": 0
@@ -18189,12 +18191,12 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "2889290997110709/734980000000000",
-      "(a_r-p_{r-1})^2": "21075666645591/115471000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "2295469133507/187750000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "1331222220891/22484750000000",
-      "Q_{r-1}(c)": "74439222147783/68761000000000",
-      "c_{r-1}*b_{r-2}": "3825142996174857/908290000000000"
+      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "3931/1000",
+      "(a_r-p_{r-1})^2": "91/500",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "6113/500",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "59/1000",
+      "Q_{r-1}(c)": "541/500",
+      "c_{r-1}*b_{r-2}": "4211/1000"
      },
      "lambda_float": {
       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": 3.9311151323840816,
@@ -18205,7 +18207,7 @@
       "c_{r-1}*b_{r-2}": 4.211367514781482
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.2657410924219895e-09,
+     "min_residual_normalised_float": 0.0006666666666667757,
      "objective_float": 1.697529959025308,
      "rows": 56619,
      "status": 0
@@ -18966,11 +18968,11 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "2603666664063/650720000000",
-      "(a_r-p_{r-1})^2": "190333333143/1016750000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "477138999522861/38971640000000",
-      "Q_{r-1}(c)": "107481222114741/101375000000000",
-      "c_{r-1}*b_{r-2}": "2180286997819713/507161000000000"
+      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "4001/1000",
+      "(a_r-p_{r-1})^2": "187/1000",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "12243/1000",
+      "Q_{r-1}(c)": "53/50",
+      "c_{r-1}*b_{r-2}": "4299/1000"
      },
      "lambda_float": {
       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": 4.001208917297222,
@@ -18980,7 +18982,7 @@
       "c_{r-1}*b_{r-2}": 4.299003669446598
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.266666837290824e-09,
+     "min_residual_normalised_float": 0.00026666666666671026,
      "objective_float": 1.6920195310667534,
      "rows": 56619,
      "status": 0
@@ -20532,12 +20534,12 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "1802816998197183/521416000000000",
-      "(a_r-p_{r-1})^2": "78360999921639/727765000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "5551770994448229/282633500000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "666742999333257/876511000000000",
-      "Q_{r-1}(c)": "1206836998793163/846385000000000",
-      "c_{r-1}*b_{r-2}": "256116999743883/83458750000000"
+      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "3457/1000",
+      "(a_r-p_{r-1})^2": "107/1000",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "19643/1000",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "19/25",
+      "Q_{r-1}(c)": "57/40",
+      "c_{r-1}*b_{r-2}": "767/250"
      },
      "lambda_float": {
       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": 3.4575406201567658,
@@ -20548,7 +20550,7 @@
       "c_{r-1}*b_{r-2}": 3.0687854778578756
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.3996486005585452e-09,
+     "min_residual_normalised_float": 0.0016080808080810298,
      "objective_float": 1.7313673467026254,
      "rows": 13571,
      "status": 0
@@ -21319,11 +21321,11 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-p_{r-1})^2": "151576999848423/852862000000000",
-      "(b_{r-1}-c_{r-1})*b_{r-1}": "4070886995929113/906254000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "1621822998378177/112871600000000",
-      "Q_{r-1}(c)": "532092999467907/475197500000000",
-      "c_{r-1}*b_{r-2}": "1309780998690219/309564500000000"
+      "(a_r-p_{r-1})^2": "177/1000",
+      "(b_{r-1}-c_{r-1})*b_{r-1}": "4491/1000",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "1796/125",
+      "Q_{r-1}(c)": "1119/1000",
+      "c_{r-1}*b_{r-2}": "4231/1000"
      },
      "lambda_float": {
       "(a_r-p_{r-1})^2": 0.1777274635296032,
@@ -21333,7 +21335,7 @@
       "c_{r-1}*b_{r-2}": 4.231043934300686
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.3995086441276836e-09,
+     "min_residual_normalised_float": 0.0014787878787880587,
      "objective_float": 1.7154809680496528,
      "rows": 13571,
      "status": 0
@@ -23057,13 +23059,13 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-p_{r-1})^2": "9367666657299/76750000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "705406999294593/40682600000000",
-      "(b_{r-2}-c_{r-2})*b_r": "40714297256583/11552500000000",
-      "Q_{r-1}(c)": "217948999782051/152826200000000",
-      "c_{r-1}*b_{r-2}": "1170140998829859/494667500000000",
-      "sync: p_r*a_{r-1}-p_{r-1}*a_r": "2716680997283319/298642000000000",
-      "sync: p_r*b_{r-1}-p_{r-1}*b_r": "23990999976009/17572420000000"
+      "(a_r-p_{r-1})^2": "61/500",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "17339/1000",
+      "(b_{r-2}-c_{r-2})*b_r": "881/250",
+      "Q_{r-1}(c)": "713/500",
+      "c_{r-1}*b_{r-2}": "473/200",
+      "sync: p_r*a_{r-1}-p_{r-1}*a_r": "1137/125",
+      "sync: p_r*b_{r-1}-p_{r-1}*b_r": "273/200"
      },
      "lambda_float": {
       "(a_r-p_{r-1})^2": 0.12205428881465588,
@@ -23075,7 +23077,7 @@
       "sync: p_r*b_{r-1}-p_{r-1}*b_r": 1.3652644314201745
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.5331694041814598e-09,
+     "min_residual_normalised_float": 0.0002533333333333918,
      "objective_float": 1.797165032642599,
      "rows": 2042,
      "status": 0
@@ -23856,11 +23858,11 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "4842630995157369/942805000000000",
-      "(a_r-p_{r-1})^2": "4888999995111/29199200000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "754906332578427/20120000000000",
-      "Q_{r-1}(c)": "266578999733421/225031250000000",
-      "c_{r-1}*b_{r-2}": "2906726997093273/707027000000000"
+      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "642/125",
+      "(a_r-p_{r-1})^2": "167/1000",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "938/25",
+      "Q_{r-1}(c)": "148/125",
+      "c_{r-1}*b_{r-2}": "4111/1000"
      },
      "lambda_float": {
       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": 5.136407846798047,
@@ -23870,7 +23872,7 @@
       "c_{r-1}*b_{r-2}": 4.111196602110859
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.5317832731909834e-09,
+     "min_residual_normalised_float": 0.0012266666666665947,
      "objective_float": 1.7507007757896322,
      "rows": 2042,
      "status": 0
@@ -25468,12 +25470,12 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-p_{r-1})^2": "8118999991881/64429750000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "140325053913729/2113250000000",
-      "(b_{r-2}-c_{r-2})*b_r": "3543958996456041/736154000000000",
-      "LC_{r-1}(b)=b_{r-1}^2-b_{r-2}b_r": "1590968998409031/165677750000000",
-      "Q_{r-1}(c)": "213648999786351/118924000000000",
-      "sync: b_{r-1}*c_{r-2}-b_{r-2}*c_{r-1}": "1933516998066483/197694800000000"
+      "(a_r-p_{r-1})^2": "63/500",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "33201/500",
+      "(b_{r-2}-c_{r-2})*b_r": "2407/500",
+      "LC_{r-1}(b)=b_{r-1}^2-b_{r-2}b_r": "4801/500",
+      "Q_{r-1}(c)": "449/250",
+      "sync: b_{r-1}*c_{r-2}-b_{r-2}*c_{r-1}": "489/50"
      },
      "lambda_float": {
       "(a_r-p_{r-1})^2": 0.12601321594550033,
@@ -25484,7 +25486,7 @@
       "sync: b_{r-1}*c_{r-2}-b_{r-2}*c_{r-1}": 9.780312886330535
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.6750888567571862e-09,
+     "min_residual_normalised_float": 0.00012307692307702054,
      "objective_float": 1.8002268041260563,
      "rows": 205,
      "status": 0
@@ -26112,10 +26114,10 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "1410595665256071/233426000000000",
-      "(a_r-p_{r-1})^2": "447816816369/2944000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "97639636902360363/728005000000000",
-      "Q_{r-1}(c)": "293475666373191/160256000000000"
+      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "6043/1000",
+      "(a_r-p_{r-1})^2": "19/125",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "134119/1000",
+      "Q_{r-1}(c)": "1831/1000"
      },
      "lambda_float": {
       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": 6.0430100617176095,
@@ -26124,7 +26126,7 @@
       "Q_{r-1}(c)": 1.8312928481080586
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.6621220418291526e-09,
+     "min_residual_normalised_float": 0.0004564102564101102,
      "objective_float": 1.7876507426943415,
      "rows": 205,
      "status": 0
@@ -26862,13 +26864,13 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "Q_r(b)": "26999999973/2000000000"
+      "Q_r(b)": "13499/1000"
      },
      "lambda_float": {
       "Q_r(b)": 13.50000000003375
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.800000020358268e-09,
+     "min_residual_normalised_float": 0.00013333333333335643,
      "objective_float": 1.8000000000045,
      "rows": 15,
      "status": 0
@@ -27034,13 +27036,13 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "Q_r(b)": "26999999973/2000000000"
+      "Q_r(b)": "13499/1000"
      },
      "lambda_float": {
       "Q_r(b)": 13.50000000003375
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.800000020358268e-09,
+     "min_residual_normalised_float": 0.00013333333333335643,
      "objective_float": 1.8000000000045,
      "rows": 15,
      "status": 0
@@ -28822,12 +28824,12 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "4352030995647969/830326000000000",
-      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "10999999989/318500000000",
-      "FLC_{r-1}(c)": "595488999404511/199418200000000",
-      "Q_r(c)": "46999999953/946400000000",
-      "c_{r-1}*b_{r-2}": "201962999798037/140457800000000",
-      "c_{r-1}^2": "105036999894963/39254240000000"
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "5241/1000",
+      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "17/500",
+      "FLC_{r-1}(c)": "1493/500",
+      "Q_r(c)": "49/1000",
+      "c_{r-1}*b_{r-2}": "1437/1000",
+      "c_{r-1}^2": "107/40"
      },
      "lambda_float": {
       "(b_{r-1}-c_{r-1})*c_{r-1}": 5.24135219178872,
@@ -28838,7 +28840,7 @@
       "c_{r-1}^2": 2.6758128548790867
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 2.619047412806486e-11,
+     "min_residual_normalised_float": 0.00036507936507930373,
      "objective_float": 0.4596891378980249,
      "rows": 244686,
      "status": 0
@@ -29689,12 +29691,12 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "4352030995647969/830326000000000",
-      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "10999999989/318500000000",
-      "FLC_{r-1}(c)": "595488999404511/199418200000000",
-      "Q_r(c)": "46999999953/946400000000",
-      "c_{r-1}*b_{r-2}": "201962999798037/140457800000000",
-      "c_{r-1}^2": "105036999894963/39254240000000"
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "5241/1000",
+      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "17/500",
+      "FLC_{r-1}(c)": "1493/500",
+      "Q_r(c)": "49/1000",
+      "c_{r-1}*b_{r-2}": "1437/1000",
+      "c_{r-1}^2": "107/40"
      },
      "lambda_float": {
       "(b_{r-1}-c_{r-1})*c_{r-1}": 5.24135219178872,
@@ -29705,7 +29707,7 @@
       "c_{r-1}^2": 2.6758128548790867
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 2.619047412806486e-11,
+     "min_residual_normalised_float": 0.00036507936507930373,
      "objective_float": 0.4596744689643838,
      "rows": 244673,
      "status": 0
@@ -30402,11 +30404,11 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "2548112997451887/472678000000000",
-      "Q_r(b)": "8994333324339/324308000000000",
-      "Q_r(c)": "22922999977077/385278500000000",
-      "Q_{r-1}(c)": "541750999458249/167666000000000",
-      "c_{r-1}^2": "466844332866489/176686000000000"
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "539/100",
+      "Q_r(b)": "27/1000",
+      "Q_r(c)": "59/1000",
+      "Q_{r-1}(c)": "3231/1000",
+      "c_{r-1}^2": "1321/500"
      },
      "lambda_float": {
       "(b_{r-1}-c_{r-1})*c_{r-1}": 5.390800925789005,
@@ -30416,7 +30418,7 @@
       "c_{r-1}^2": 2.6422259450855745
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 2.732894545585753e-11,
+     "min_residual_normalised_float": 0.00042261904761920464,
      "objective_float": 0.4573633027921681,
      "rows": 244686,
      "status": 0
@@ -32198,12 +32200,12 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "586512999413487/235525250000000",
-      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "9116999990883/38127812500000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "909216999090783/404706500000000",
-      "FLC_{r-1}(c)": "1656860998343139/496784000000000",
-      "Q_r(c)": "17290999982709/233219000000000",
-      "c_{r-1}*b_{r-1}": "302360999697639/504205000000000"
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "249/100",
+      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "239/1000",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "1123/500",
+      "FLC_{r-1}(c)": "667/200",
+      "Q_r(c)": "37/500",
+      "c_{r-1}*b_{r-1}": "599/1000"
      },
      "lambda_float": {
       "(b_{r-1}-c_{r-1})*c_{r-1}": 2.490234061952384,
@@ -32214,7 +32216,7 @@
       "c_{r-1}*b_{r-1}": 0.5996787021139847
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 3.0460186343535504e-10,
+     "min_residual_normalised_float": 0.00012565742714996654,
      "objective_float": 0.6477809595530244,
      "rows": 244673,
      "status": 0
@@ -33050,12 +33052,12 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "1047428998952571/475225000000000",
-      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "165640999834359/734543000000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "1522526998477473/585737000000000",
-      "FLC_{r-1}(c)": "2657982997342017/862784000000000",
-      "Q_r(c)": "55060999944939/889547000000000",
-      "c_{r-1}*b_{r-1}": "662186999337813/894727000000000"
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "551/250",
+      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "9/40",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "2599/1000",
+      "FLC_{r-1}(c)": "77/25",
+      "Q_r(c)": "61/1000",
+      "c_{r-1}*b_{r-1}": "37/50"
      },
      "lambda_float": {
       "(b_{r-1}-c_{r-1})*c_{r-1}": 2.204069651217842,
@@ -33066,7 +33068,7 @@
       "c_{r-1}*b_{r-1}": 0.7400994940360643
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 3.0723631858736986e-10,
+     "min_residual_normalised_float": 0.00030766666666663477,
      "objective_float": 0.6519995454029245,
      "rows": 244416,
      "status": 0
@@ -33614,10 +33616,10 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "1305110998694889/458938000000000",
-      "Q_r(b)": "58048999941951/195276500000000",
-      "Q_r(c)": "3527888885361/94721000000000",
-      "Q_{r-1}(c)": "1432999998567/318500000000"
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "2843/1000",
+      "Q_r(b)": "297/1000",
+      "Q_r(c)": "37/1000",
+      "Q_{r-1}(c)": "4499/1000"
      },
      "lambda_float": {
       "(b_{r-1}-c_{r-1})*c_{r-1}": 2.843763209845626,
@@ -33626,7 +33628,7 @@
       "Q_{r-1}(c)": 4.499215070639826
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 3.051979800053444e-10,
+     "min_residual_normalised_float": 0.00014285714285721594,
      "objective_float": 0.5868681601840089,
      "rows": 244673,
      "status": 0
@@ -35544,13 +35546,13 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "696387665970279/320188000000000",
-      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "206250999793749/456758500000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "112584333220749/54279250000000",
-      "FLC_{r-1}(c)": "817237665849429/308782000000000",
-      "c_{r-1}*a_{r-1}": "7195666659471/57310000000000",
-      "c_{r-1}*c_{r-2}": "1086160998913839/671210000000000",
-      "sync: p_r*b_{r-1}-p_{r-1}*b_r": "22412999977587/57322750000000"
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "1087/500",
+      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "451/1000",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "1037/500",
+      "FLC_{r-1}(c)": "1323/500",
+      "c_{r-1}*a_{r-1}": "1/8",
+      "c_{r-1}*c_{r-2}": "809/500",
+      "sync: p_r*b_{r-1}-p_{r-1}*b_r": "39/100"
      },
      "lambda_float": {
       "(b_{r-1}-c_{r-1})*c_{r-1}": 2.174933684794767,
@@ -35562,7 +35564,7 @@
       "sync: p_r*b_{r-1}-p_{r-1}*b_r": 0.3909965938468876
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 4.518252196303239e-10,
+     "min_residual_normalised_float": 0.0004016254780817399,
      "objective_float": 0.801339097332515,
      "rows": 244623,
      "status": 0
@@ -36517,13 +36519,13 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "341896999658103/152187200000000",
-      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "66070999933929/175132750000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "850632999149367/403734500000000",
-      "FLC_{r-1}(c)": "2102902997897097/947660000000000",
-      "Q_r(c)": "962999999037/20096937500000",
-      "c_{r-1}*c_{r-2}": "22060999977939/23442800000000",
-      "sync: p_r*b_{r-1}-p_{r-1}*b_r": "1111452998888547/938897000000000"
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "1123/500",
+      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "377/1000",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "1053/500",
+      "FLC_{r-1}(c)": "2219/1000",
+      "Q_r(c)": "47/1000",
+      "c_{r-1}*c_{r-2}": "941/1000",
+      "sync: p_r*b_{r-1}-p_{r-1}*b_r": "1183/1000"
      },
      "lambda_float": {
       "(b_{r-1}-c_{r-1})*c_{r-1}": 2.2465555578913983,
@@ -36535,7 +36537,7 @@
       "sync: p_r*b_{r-1}-p_{r-1}*b_r": 1.1837858678847173
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 4.5228570414990705e-10,
+     "min_residual_normalised_float": 0.00029909532215357154,
      "objective_float": 0.8102538377054156,
      "rows": 243473,
      "status": 0
@@ -37086,10 +37088,10 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "4745666661921/4925840000000",
-      "Q_r(b)": "2333333331/4000000000",
-      "Q_r(c)": "61078999938921/978412000000000",
-      "Q_{r-1}(c)": "2266668997733331/690059000000000"
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "963/1000",
+      "Q_r(b)": "583/1000",
+      "Q_r(c)": "31/500",
+      "Q_{r-1}(c)": "821/250"
      },
      "lambda_float": {
       "(b_{r-1}-c_{r-1})*c_{r-1}": 0.9634228206085524,
@@ -37098,7 +37100,7 @@
       "Q_{r-1}(c)": 3.2847466665898626
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 4.543409484289978e-10,
+     "min_residual_normalised_float": 0.00026666666666665914,
      "objective_float": 0.6471552065952553,
      "rows": 244623,
      "status": 0
@@ -39117,13 +39119,13 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "364955666301711/330128000000000",
-      "(b_{r-2}-c_{r-2})*b_r": "2010999997989/3135500000000",
-      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "182286999817713/474076000000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "96300999903699/84304250000000",
-      "FLC_{r-1}(c)": "158600999841399/84667600000000",
-      "c_{r-1}*b_{r-2}": "628696999371303/153909200000000",
-      "sync: p_r*a_{r-1}-p_{r-1}*a_r": "479018999520981/224352500000000"
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "221/200",
+      "(b_{r-2}-c_{r-2})*b_r": "641/1000",
+      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "48/125",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "571/500",
+      "FLC_{r-1}(c)": "1873/1000",
+      "c_{r-1}*b_{r-2}": "1021/250",
+      "sync: p_r*a_{r-1}-p_{r-1}*a_r": "427/200"
      },
      "lambda_float": {
       "(b_{r-1}-c_{r-1})*c_{r-1}": 1.105497463595211,
@@ -39135,7 +39137,7 @@
       "sync: p_r*a_{r-1}-p_{r-1}*a_r": 2.1351177276839794
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 5.970889192846828e-10,
+     "min_residual_normalised_float": 0.0001945171230885618,
      "objective_float": 0.9369735991245938,
      "rows": 244416,
      "status": 0
@@ -40244,14 +40246,14 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "195500999804499/111583375000000",
-      "(b_{r-2}-c_{r-2})*b_r": "321270999678729/412364000000000",
-      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "91878999908121/200019250000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "113919666552747/54415000000000",
-      "FLC_{r-1}(c)": "736112999263887/593399000000000",
-      "Q_{r-1}(c)": "21410999978589/95861000000000",
-      "c_{r-1}*b_{r-2}": "1480552998519447/370600000000000",
-      "sync: p_r*a_{r-1}-p_{r-1}*a_r": "44606999955393/453713500000000"
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "219/125",
+      "(b_{r-2}-c_{r-2})*b_r": "779/1000",
+      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "459/1000",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "2093/1000",
+      "FLC_{r-1}(c)": "31/25",
+      "Q_{r-1}(c)": "223/1000",
+      "c_{r-1}*b_{r-2}": "799/200",
+      "sync: p_r*a_{r-1}-p_{r-1}*a_r": "49/500"
      },
      "lambda_float": {
       "(b_{r-1}-c_{r-1})*c_{r-1}": 1.752062079140528,
@@ -40264,7 +40266,7 @@
       "sync: p_r*a_{r-1}-p_{r-1}*a_r": 0.09831534657861575
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 6.021160579608574e-10,
+     "min_residual_normalised_float": 0.000206306284457853,
      "objective_float": 0.9360557825225092,
      "rows": 214602,
      "status": 0
@@ -40932,11 +40934,11 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "621248999378751/280169000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "2552620997447379/494393500000000",
-      "Q_r(c)": "73895666592771/126628000000000",
-      "Q_{r-1}(c)": "309072999690927/168554000000000",
-      "c_{r-1}*b_{r-2}": "101753666564913/29801375000000"
+      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "2217/1000",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "5163/1000",
+      "Q_r(c)": "583/1000",
+      "Q_{r-1}(c)": "1833/1000",
+      "c_{r-1}*b_{r-2}": "1707/500"
      },
      "lambda_float": {
       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": 2.217408064416859,
@@ -40946,7 +40948,7 @@
       "c_{r-1}*b_{r-2}": 3.414395029313681
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 5.713679174790675e-10,
+     "min_residual_normalised_float": 8.864042738817102e-05,
      "objective_float": 0.7645012070146999,
      "rows": 244416,
      "status": 0
@@ -43102,14 +43104,14 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(b_{r-1}-c_{r-1})*b_{r-1}": "994111110117/75680000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "908105665758561/285766000000000",
-      "(b_{r-2}-c_{r-2})*b_r": "421638999578361/164601800000000",
-      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "3202333330131/151463500000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "1341832998658167/883864000000000",
-      "FLC_{r-1}(c)": "100188999899811/369119500000000",
-      "Q_{r-1}(c)": "13130111097981/11594200000000",
-      "c_{r-1}*b_{r-2}": "2490302997509697/645611000000000"
+      "(b_{r-1}-c_{r-1})*b_{r-1}": "13/1000",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "3177/1000",
+      "(b_{r-2}-c_{r-2})*b_r": "2561/1000",
+      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "21/1000",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "759/500",
+      "FLC_{r-1}(c)": "271/1000",
+      "Q_{r-1}(c)": "283/250",
+      "c_{r-1}*b_{r-2}": "3857/1000"
      },
      "lambda_float": {
       "(b_{r-1}-c_{r-1})*b_{r-1}": 0.013135717641366758,
@@ -43122,7 +43124,7 @@
       "c_{r-1}*b_{r-2}": 3.8572809323272463
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 7.253919270897005e-10,
+     "min_residual_normalised_float": 0.00018924693533334207,
      "objective_float": 1.1200392251937519,
      "rows": 243473,
      "status": 0
@@ -44271,15 +44273,15 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-p_{r-1})^2": "1344333331989/31241750000000",
-      "(b_{r-1}-c_{r-1})*b_{r-1}": "108336999891663/564007000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "917743665748923/281981000000000",
-      "(b_{r-2}-c_{r-2})*b_r": "774576999225423/407164000000000",
-      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "14890999985109/113102875000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "1622256998377743/971216000000000",
-      "FLC_{r-1}(c)": "110518999889481/553666000000000",
-      "Q_{r-1}(c)": "32462333300871/26204000000000",
-      "c_{r-1}*b_{r-2}": "66314333267019/19029125000000"
+      "(a_r-p_{r-1})^2": "43/1000",
+      "(b_{r-1}-c_{r-1})*b_{r-1}": "24/125",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "1627/500",
+      "(b_{r-2}-c_{r-2})*b_r": "951/500",
+      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "131/1000",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "167/100",
+      "FLC_{r-1}(c)": "199/1000",
+      "Q_{r-1}(c)": "619/500",
+      "c_{r-1}*b_{r-2}": "871/250"
      },
      "lambda_float": {
       "(a_r-p_{r-1})^2": 0.043030026594467294,
@@ -44293,7 +44295,7 @@
       "c_{r-1}*b_{r-2}": 3.4848861066027594
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 7.425044462130425e-10,
+     "min_residual_normalised_float": 0.0003312548740697515,
      "objective_float": 1.0375923051444884,
      "rows": 141031,
      "status": 0
@@ -44983,11 +44985,11 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-p_{r-1})^2": "1614495493881/5512000000000",
-      "(b_{r-1}-c_{r-1})*b_{r-1}": "419822332913511/161275000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "37858481443623/17599000000000",
-      "Q_r(c)": "1370999998629/1886168000000",
-      "c_{r-1}*b_{r-2}": "59303444385141/10220750000000"
+      "(a_r-p_{r-1})^2": "73/250",
+      "(b_{r-1}-c_{r-1})*b_{r-1}": "2603/1000",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "2151/1000",
+      "Q_r(c)": "363/500",
+      "c_{r-1}*b_{r-2}": "2901/500"
      },
      "lambda_float": {
       "(a_r-p_{r-1})^2": 0.2929055688485237,
@@ -44997,7 +44999,7 @@
       "c_{r-1}*b_{r-2}": 5.802259564556839
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 7.53384863654303e-10,
+     "min_residual_normalised_float": 0.0001116547640226057,
      "objective_float": 1.018227121812909,
      "rows": 243473,
      "status": 0
@@ -47035,13 +47037,13 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-p_{r-1})^2": "105088999894911/962744000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "3852808996147191/955117000000000",
-      "(b_{r-2}-c_{r-2})*b_r": "1491616998508383/493126000000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "145433666521233/127462000000000",
-      "FLC_{r-1}(c)": "54448999945551/195109750000000",
-      "Q_{r-1}(c)": "23710999976289/22679468750000",
-      "c_{r-1}*b_{r-2}": "2495288997504711/647164000000000"
+      "(a_r-p_{r-1})^2": "109/1000",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "4033/1000",
+      "(b_{r-2}-c_{r-2})*b_r": "378/125",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "57/50",
+      "FLC_{r-1}(c)": "279/1000",
+      "Q_{r-1}(c)": "209/200",
+      "c_{r-1}*b_{r-2}": "771/200"
      },
      "lambda_float": {
       "(a_r-p_{r-1})^2": 0.1091557049437019,
@@ -47053,7 +47055,7 @@
       "c_{r-1}*b_{r-2}": 3.855728996049245
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 8.65778577963644e-10,
+     "min_residual_normalised_float": 0.0003535916061339779,
      "objective_float": 1.3389680903080743,
      "rows": 238813,
      "status": 0
@@ -48265,14 +48267,14 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-p_{r-1})^2": "24390999975609/55940125000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "9850999990149/4199703125000",
-      "(b_{r-2}-c_{r-2})*b_r": "102356999897643/74504000000000",
-      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "655768999344231/711967000000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "535388999464611/540836000000000",
-      "Q_{r-1}(c)": "208610999791389/496560500000000",
-      "c_{r-1}*b_{r-2}": "412526999587473/104563750000000",
-      "sync: p_r*b_{r-1}-p_{r-1}*b_r": "50792999949207/55920125000000"
+      "(a_r-p_{r-1})^2": "109/250",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "469/200",
+      "(b_{r-2}-c_{r-2})*b_r": "1373/1000",
+      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "921/1000",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "989/1000",
+      "Q_{r-1}(c)": "21/50",
+      "c_{r-1}*b_{r-2}": "789/200",
+      "sync: p_r*b_{r-1}-p_{r-1}*b_r": "227/250"
      },
      "lambda_float": {
       "(a_r-p_{r-1})^2": 0.43601976219976146,
@@ -48285,7 +48287,7 @@
       "sync: p_r*b_{r-1}-p_{r-1}*b_r": 0.9083134202584738
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 8.669111840553779e-10,
+     "min_residual_normalised_float": 0.00024043619603424067,
      "objective_float": 1.0590592741539526,
      "rows": 13571,
      "status": 0
@@ -48986,11 +48988,11 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "646166999353833/218894000000000",
-      "(a_r-p_{r-1})^2": "29950999970049/122492000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "5920956994079043/995285000000000",
-      "Q_{r-1}(c)": "505632999494367/974671000000000",
-      "c_{r-1}*b_{r-2}": "145794783637989/27019000000000"
+      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "2951/1000",
+      "(a_r-p_{r-1})^2": "61/250",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "5949/1000",
+      "Q_{r-1}(c)": "259/500",
+      "c_{r-1}*b_{r-2}": "1349/250"
      },
      "lambda_float": {
       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": 2.951963050611151,
@@ -49000,7 +49002,7 @@
       "c_{r-1}*b_{r-2}": 5.396009614860099
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 9.415972090165856e-10,
+     "min_residual_normalised_float": 0.0002923062049373093,
      "objective_float": 1.2988868577316801,
      "rows": 238813,
      "status": 0
@@ -50958,12 +50960,12 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-p_{r-1})^2": "183470999816529/960962000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "175226999824773/35061640000000",
-      "(b_{r-2}-c_{r-2})*b_r": "623558999376441/173077600000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "4296333329037/6638000000000",
-      "Q_{r-1}(c)": "101698999898301/120334600000000",
-      "c_{r-1}*b_{r-2}": "685486999314513/156298600000000"
+      "(a_r-p_{r-1})^2": "19/100",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "4997/1000",
+      "(b_{r-2}-c_{r-2})*b_r": "1801/500",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "647/1000",
+      "Q_{r-1}(c)": "169/200",
+      "c_{r-1}*b_{r-2}": "877/200"
      },
      "lambda_float": {
       "(a_r-p_{r-1})^2": 0.19092430293612728,
@@ -50974,7 +50976,7 @@
       "c_{r-1}*b_{r-2}": 4.385752655494101
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 9.94125230904566e-10,
+     "min_residual_normalised_float": 0.0004888888888888386,
      "objective_float": 1.5535621581711043,
      "rows": 214602,
      "status": 0
@@ -52196,15 +52198,15 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-p_{r-1})^2": "15336703688367/28280000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "270197444174247/91010000000000",
-      "(b_{r-2}-c_{r-2})*b_r": "338928999661071/355827500000000",
-      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "1046688998953311/713570000000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "2748999997251/15371890625000",
-      "LC_r(c)": "267762999732237/115894625000000",
-      "Q_{r-1}(c)": "1766629627863/3607100000000",
-      "c_{r-1}*b_{r-2}": "538078999461921/190371800000000",
-      "sync: p_r*b_{r-1}-p_{r-1}*b_r": "669596999330403/195174400000000"
+      "(a_r-p_{r-1})^2": "271/500",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "371/125",
+      "(b_{r-2}-c_{r-2})*b_r": "119/125",
+      "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "733/500",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "89/500",
+      "LC_r(c)": "231/100",
+      "Q_{r-1}(c)": "489/1000",
+      "c_{r-1}*b_{r-2}": "1413/500",
+      "sync: p_r*b_{r-1}-p_{r-1}*b_r": "343/100"
      },
      "lambda_float": {
       "(a_r-p_{r-1})^2": 0.5423162554336949,
@@ -52218,7 +52220,7 @@
       "sync: p_r*b_{r-1}-p_{r-1}*b_r": 3.430762436056677
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.0071428497126323e-09,
+     "min_residual_normalised_float": 0.0005841897233201779,
      "objective_float": 1.1422542179480746,
      "rows": 2042,
      "status": 0
@@ -52952,11 +52954,11 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-p_{r-1})^2": "1036777776741/5004800000000",
-      "(b_{r-1}-c_{r-1})*b_{r-1}": "517444443927/156400000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "1484618998515381/451574000000000",
-      "Q_{r-1}(c)": "32770999967229/55605437500000",
-      "c_{r-1}*b_{r-2}": "4124826995875173/747044000000000"
+      "(a_r-p_{r-1})^2": "207/1000",
+      "(b_{r-1}-c_{r-1})*b_{r-1}": "827/250",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "3287/1000",
+      "Q_{r-1}(c)": "589/1000",
+      "c_{r-1}*b_{r-2}": "5521/1000"
      },
      "lambda_float": {
       "(a_r-p_{r-1})^2": 0.2071566851379032,
@@ -52966,7 +52968,7 @@
       "c_{r-1}*b_{r-2}": 5.521531529601406
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 9.999999824139256e-10,
+     "min_residual_normalised_float": 0.00017777777777779218,
      "objective_float": 1.5238675904056853,
      "rows": 214602,
      "status": 0
@@ -54883,12 +54885,12 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "3153590996846409/916834000000000",
-      "(a_r-p_{r-1})^2": "5280851846571/30064000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "13766999986233/1834000000000",
-      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "39690999960309/201433000000000",
-      "Q_{r-1}(c)": "402066999597933/551330000000000",
-      "c_{r-1}*b_{r-2}": "1037955665628711/191878000000000"
+      "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "3439/1000",
+      "(a_r-p_{r-1})^2": "7/40",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "3753/500",
+      "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "197/1000",
+      "Q_{r-1}(c)": "729/1000",
+      "c_{r-1}*b_{r-2}": "5409/1000"
      },
      "lambda_float": {
       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": 3.439653197852822,
@@ -54899,7 +54901,7 @@
       "c_{r-1}*b_{r-2}": 5.409456355947879
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.133985761409348e-09,
+     "min_residual_normalised_float": 0.0005955555555555704,
      "objective_float": 1.657040844760642,
      "rows": 141031,
      "status": 0
@@ -55062,13 +55064,13 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "Q_r(b)": "16999999983/7000000000"
+      "Q_r(b)": "607/250"
      },
      "lambda_float": {
       "Q_r(b)": 2.4285714285689797
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.1333331711755282e-09,
+     "min_residual_normalised_float": 0.00026666666666661117,
      "objective_float": 1.1333333333321907,
      "rows": 15,
      "status": 0
@@ -55825,11 +55827,11 @@
       "violations": 0
      },
      "lambda_exact_verified": {
-      "(a_r-p_{r-1})^2": "38600333294733/208000000000000",
-      "(b_{r-1}-c_{r-1})*b_{r-1}": "3227726996772273/885955000000000",
-      "(b_{r-1}-c_{r-1})*c_{r-1}": "1922672998077327/489293000000000",
-      "Q_{r-1}(c)": "5611469130191/8678000000000",
-      "c_{r-1}*b_{r-2}": "212758999787241/36924560000000"
+      "(a_r-p_{r-1})^2": "37/200",
+      "(b_{r-1}-c_{r-1})*b_{r-1}": "3643/1000",
+      "(b_{r-1}-c_{r-1})*c_{r-1}": "3929/1000",
+      "Q_{r-1}(c)": "323/500",
+      "c_{r-1}*b_{r-2}": "5761/1000"
      },
      "lambda_float": {
       "(a_r-p_{r-1})^2": 0.18557852564101793,
@@ -55839,7 +55841,7 @@
       "c_{r-1}*b_{r-2}": 5.761991476671305
      },
      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-     "min_residual_normalised_float": 1.1336147033678568e-09,
+     "min_residual_normalised_float": 0.00041396825396835944,
      "objective_float": 1.6177948282531123,
      "rows": 141031,
      "status": 0
@@ -58479,12 +58481,12 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "2889290997110709/734980000000000",
-       "(a_r-p_{r-1})^2": "21075666645591/115471000000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "2295469133507/187750000000",
-       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "1331222220891/22484750000000",
-       "Q_{r-1}(c)": "74439222147783/68761000000000",
-       "c_{r-1}*b_{r-2}": "3825142996174857/908290000000000"
+       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "3931/1000",
+       "(a_r-p_{r-1})^2": "91/500",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "6113/500",
+       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "59/1000",
+       "Q_{r-1}(c)": "541/500",
+       "c_{r-1}*b_{r-2}": "4211/1000"
       },
       "lambda_float": {
        "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": 3.9311151323840816,
@@ -58495,7 +58497,7 @@
        "c_{r-1}*b_{r-2}": 4.211367514781482
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 1.2657410924219895e-09,
+      "min_residual_normalised_float": 0.0006666666666667757,
       "objective_float": 1.697529959025308,
       "rows": 56619,
       "status": 0
@@ -59978,12 +59980,12 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "1802816998197183/521416000000000",
-       "(a_r-p_{r-1})^2": "78360999921639/727765000000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "5551770994448229/282633500000000",
-       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "666742999333257/876511000000000",
-       "Q_{r-1}(c)": "1206836998793163/846385000000000",
-       "c_{r-1}*b_{r-2}": "256116999743883/83458750000000"
+       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "3457/1000",
+       "(a_r-p_{r-1})^2": "107/1000",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "19643/1000",
+       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "19/25",
+       "Q_{r-1}(c)": "57/40",
+       "c_{r-1}*b_{r-2}": "767/250"
       },
       "lambda_float": {
        "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": 3.4575406201567658,
@@ -59994,7 +59996,7 @@
        "c_{r-1}*b_{r-2}": 3.0687854778578756
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 1.3996486005585452e-09,
+      "min_residual_normalised_float": 0.0016080808080810298,
       "objective_float": 1.7313673467026254,
       "rows": 13571,
       "status": 0
@@ -61647,13 +61649,13 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-p_{r-1})^2": "9367666657299/76750000000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "705406999294593/40682600000000",
-       "(b_{r-2}-c_{r-2})*b_r": "40714297256583/11552500000000",
-       "Q_{r-1}(c)": "217948999782051/152826200000000",
-       "c_{r-1}*b_{r-2}": "1170140998829859/494667500000000",
-       "sync: p_r*a_{r-1}-p_{r-1}*a_r": "2716680997283319/298642000000000",
-       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "23990999976009/17572420000000"
+       "(a_r-p_{r-1})^2": "61/500",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "17339/1000",
+       "(b_{r-2}-c_{r-2})*b_r": "881/250",
+       "Q_{r-1}(c)": "713/500",
+       "c_{r-1}*b_{r-2}": "473/200",
+       "sync: p_r*a_{r-1}-p_{r-1}*a_r": "1137/125",
+       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "273/200"
       },
       "lambda_float": {
        "(a_r-p_{r-1})^2": 0.12205428881465588,
@@ -61665,7 +61667,7 @@
        "sync: p_r*b_{r-1}-p_{r-1}*b_r": 1.3652644314201745
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 1.5331694041814598e-09,
+      "min_residual_normalised_float": 0.0002533333333333918,
       "objective_float": 1.797165032642599,
       "rows": 2042,
       "status": 0
@@ -63185,12 +63187,12 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-p_{r-1})^2": "8118999991881/64429750000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "140325053913729/2113250000000",
-       "(b_{r-2}-c_{r-2})*b_r": "3543958996456041/736154000000000",
-       "LC_{r-1}(b)=b_{r-1}^2-b_{r-2}b_r": "1590968998409031/165677750000000",
-       "Q_{r-1}(c)": "213648999786351/118924000000000",
-       "sync: b_{r-1}*c_{r-2}-b_{r-2}*c_{r-1}": "1933516998066483/197694800000000"
+       "(a_r-p_{r-1})^2": "63/500",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "33201/500",
+       "(b_{r-2}-c_{r-2})*b_r": "2407/500",
+       "LC_{r-1}(b)=b_{r-1}^2-b_{r-2}b_r": "4801/500",
+       "Q_{r-1}(c)": "449/250",
+       "sync: b_{r-1}*c_{r-2}-b_{r-2}*c_{r-1}": "489/50"
       },
       "lambda_float": {
        "(a_r-p_{r-1})^2": 0.12601321594550033,
@@ -63201,7 +63203,7 @@
        "sync: b_{r-1}*c_{r-2}-b_{r-2}*c_{r-1}": 9.780312886330535
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 1.6750888567571862e-09,
+      "min_residual_normalised_float": 0.00012307692307702054,
       "objective_float": 1.8002268041260563,
       "rows": 205,
       "status": 0
@@ -63888,13 +63890,13 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "Q_r(b)": "26999999973/2000000000"
+       "Q_r(b)": "13499/1000"
       },
       "lambda_float": {
        "Q_r(b)": 13.50000000003375
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 1.800000020358268e-09,
+      "min_residual_normalised_float": 0.00013333333333335643,
       "objective_float": 1.8000000000045,
       "rows": 15,
       "status": 0
@@ -64201,13 +64203,13 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "Q_r(b)": "333333333/250000000"
+       "Q_r(b)": "1333/1000"
       },
       "lambda_float": {
        "Q_r(b)": 1.333333333334
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 6.666666478120457e-10,
+      "min_residual_normalised_float": 0.00016666666666672233,
       "objective_float": 0.666666666667,
       "rows": 3,
       "status": 0
@@ -65145,17 +65147,17 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-p_{r-1})^2": "67372999932627/169177600000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "1206516998793483/405968500000000",
-       "(b_{r-2}-c_{r-2})*b_r": "872046999127953/395849500000000",
-       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "122918999877081/203911000000000",
-       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "145928999854071/328474000000000",
-       "FLC_{r-1}(c)": "531778999468221/281055500000000",
-       "LC_r(c)": "142636999857363/162784000000000",
-       "c_{r-1}*b_r": "1034333332299/751421875000",
-       "c_{r-1}*b_{r-2}": "56735074017339/34976000000000",
-       "c_{r-1}*c_{r-2}": "108628999891371/115166125000000",
-       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "120482999879517/95295800000000"
+       "(a_r-p_{r-1})^2": "199/500",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "2971/1000",
+       "(b_{r-2}-c_{r-2})*b_r": "1101/500",
+       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "301/500",
+       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "111/250",
+       "FLC_{r-1}(c)": "473/250",
+       "LC_r(c)": "219/250",
+       "c_{r-1}*b_r": "172/125",
+       "c_{r-1}*b_{r-2}": "811/500",
+       "c_{r-1}*c_{r-2}": "943/1000",
+       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "158/125"
       },
       "lambda_float": {
        "(a_r-p_{r-1})^2": 0.39823830105357405,
@@ -65171,7 +65173,7 @@
        "sync: p_r*b_{r-1}-p_{r-1}*b_r": 1.2643054573245627
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 8.162621666904157e-10,
+      "min_residual_normalised_float": 0.0003435897435894894,
       "objective_float": 1.194672047794606,
       "rows": 66,
       "status": 0
@@ -66355,16 +66357,16 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-p_{r-1})^2": "50999999949/170540000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "56760999943239/12061000000000",
-       "(b_{r-2}-c_{r-2})*b_r": "1719326998280673/987854000000000",
-       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "134536999865463/261326500000000",
-       "FLC_{r-1}(c)": "760336999239663/495183500000000",
-       "Q_r(c)": "63362999936637/426275000000000",
-       "Q_{r-1}(c)": "172716999827283/659704000000000",
-       "c_{r-1}*c_{r-2}": "214336999785663/112686400000000",
-       "sync: p_r*a_{r-1}-p_{r-1}*a_r": "289170999710829/456563000000000",
-       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "6119222216103/2465875000000"
+       "(a_r-p_{r-1})^2": "299/1000",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "2353/500",
+       "(b_{r-2}-c_{r-2})*b_r": "87/50",
+       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "257/500",
+       "FLC_{r-1}(c)": "307/200",
+       "Q_r(c)": "37/250",
+       "Q_{r-1}(c)": "261/1000",
+       "c_{r-1}*c_{r-2}": "951/500",
+       "sync: p_r*a_{r-1}-p_{r-1}*a_r": "633/1000",
+       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "2481/1000"
       },
       "lambda_float": {
        "(a_r-p_{r-1})^2": 0.29905007623599106,
@@ -66379,7 +66381,7 @@
        "sync: p_r*b_{r-1}-p_{r-1}*b_r": 2.4815622130949246
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 9.074772688290106e-10,
+      "min_residual_normalised_float": 0.0003784328546233189,
       "objective_float": 1.2155733930660262,
       "rows": 1130,
       "status": 0
@@ -67609,16 +67611,16 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-p_{r-1})^2": "133336333199997/280198000000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "1830426998169573/398967500000000",
-       "(b_{r-2}-c_{r-2})*b_r": "237662999762337/180539800000000",
-       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "261800999738199/351079000000000",
-       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "1376999998623/37955950000000",
-       "FLC_{r-1}(c)": "144658999855341/231438250000000",
-       "LC_r(c)": "84382999915617/108517000000000",
-       "Q_{r-1}(c)": "149152999850847/100127375000000",
-       "c_{r-1}*b_r": "4873962958089/30028000000000",
-       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "71432999928567/26133280000000"
+       "(a_r-p_{r-1})^2": "19/40",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "4587/1000",
+       "(b_{r-2}-c_{r-2})*b_r": "329/250",
+       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "149/200",
+       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "9/250",
+       "FLC_{r-1}(c)": "5/8",
+       "LC_r(c)": "777/1000",
+       "Q_{r-1}(c)": "1489/1000",
+       "c_{r-1}*b_r": "81/500",
+       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "2733/1000"
       },
       "lambda_float": {
        "(a_r-p_{r-1})^2": 0.47586468616354644,
@@ -67633,7 +67635,7 @@
        "sync: p_r*b_{r-1}-p_{r-1}*b_r": 2.733411190635428
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 9.07234599418787e-10,
+      "min_residual_normalised_float": 0.0005120772946858542,
       "objective_float": 1.0403202964495184,
       "rows": 276,
       "status": 0
@@ -69028,15 +69030,15 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-p_{r-1})^2": "14066777763711/71251000000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "25998555529557/7973000000000",
-       "(b_{r-2}-c_{r-2})*b_r": "726860999273139/839063000000000",
-       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "14260777763517/20493800000000",
-       "FLC_{r-1}(c)": "1101016998898983/913640000000000",
-       "Q_{r-1}(c)": "283620999716379/415341500000000",
-       "c_{r-1}*b_{r-2}": "1020652998979347/615883000000000",
-       "sync: p_r*a_{r-1}-p_{r-1}*a_r": "47455444396989/26022500000000",
-       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "91034333242299/33356500000000"
+       "(a_r-p_{r-1})^2": "197/1000",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "163/50",
+       "(b_{r-2}-c_{r-2})*b_r": "433/500",
+       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "139/200",
+       "FLC_{r-1}(c)": "241/200",
+       "Q_{r-1}(c)": "341/500",
+       "c_{r-1}*b_{r-2}": "1657/1000",
+       "sync: p_r*a_{r-1}-p_{r-1}*a_r": "1823/1000",
+       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "2729/1000"
       },
       "lambda_float": {
        "(a_r-p_{r-1})^2": 0.19742568915104936,
@@ -69050,7 +69052,7 @@
        "sync: p_r*b_{r-1}-p_{r-1}*b_r": 2.729133252389818
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 9.416338056249826e-10,
+      "min_residual_normalised_float": 0.00040698684032012156,
       "objective_float": 1.2135052561271864,
       "rows": 20016,
       "status": 0
@@ -70525,15 +70527,15 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-p_{r-1})^2": "36042999963957/75729800000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "178136999821863/35446960000000",
-       "(b_{r-2}-c_{r-2})*b_r": "1087366998912633/876578000000000",
-       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "362276999637723/459964000000000",
-       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "163140999836859/496856000000000",
-       "FLC_{r-1}(c)": "6391108101717/16009000000000",
-       "Q_{r-1}(c)": "815162999184837/452471500000000",
-       "sync: p_r*a_{r-1}-p_{r-1}*a_r": "33502999966497/723641000000000",
-       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "10598999989401/4003460000000"
+       "(a_r-p_{r-1})^2": "19/40",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "201/40",
+       "(b_{r-2}-c_{r-2})*b_r": "31/25",
+       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "787/1000",
+       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "41/125",
+       "FLC_{r-1}(c)": "399/1000",
+       "Q_{r-1}(c)": "1801/1000",
+       "sync: p_r*a_{r-1}-p_{r-1}*a_r": "23/500",
+       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "2647/1000"
       },
       "lambda_float": {
        "(a_r-p_{r-1})^2": 0.47594209941120597,
@@ -70547,7 +70549,7 @@
        "sync: p_r*b_{r-1}-p_{r-1}*b_r": 2.647459947146539
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 9.50591949107842e-10,
+      "min_residual_normalised_float": 0.0005097273097275087,
       "objective_float": 1.0592706131095104,
       "rows": 3158,
       "status": 0
@@ -72077,15 +72079,15 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "112982999887017/178574750000000",
-       "(a_r-p_{r-1})^2": "8532999991467/58728062500000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "237668999762331/57771200000000",
-       "(b_{r-2}-c_{r-2})*b_r": "589948999410051/509726000000000",
-       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "11209666655457/14381000000000",
-       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "106012999893987/98335000000000",
-       "FLC_{r-1}(c)": "127080999872919/103076375000000",
-       "Q_{r-1}(c)": "61382999938617/92152625000000",
-       "c_{r-1}*b_{r-2}": "812322999187677/229458250000000"
+       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "79/125",
+       "(a_r-p_{r-1})^2": "29/200",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "4113/1000",
+       "(b_{r-2}-c_{r-2})*b_r": "1157/1000",
+       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "779/1000",
+       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "539/500",
+       "FLC_{r-1}(c)": "154/125",
+       "Q_{r-1}(c)": "333/500",
+       "c_{r-1}*b_{r-2}": "177/50"
       },
       "lambda_float": {
        "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": 0.6326930319091522,
@@ -72099,7 +72101,7 @@
        "c_{r-1}*b_{r-2}": 3.5401777883348933
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 9.422445106156427e-10,
+      "min_residual_normalised_float": 0.00025927765970402327,
       "objective_float": 1.1970720593406692,
       "rows": 203632,
       "status": 0
@@ -73757,16 +73759,16 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-p_{r-1})^2": "12618555542937/27687500000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "726577665940089/154638500000000",
-       "(b_{r-2}-c_{r-2})*b_r": "18183864846681/12776500000000",
-       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "60242999939757/58440500000000",
-       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "5549222216673/8002400000000",
-       "FLC_{r-1}(c)": "401288999598711/190371200000000",
-       "Q_{r-1}(c)": "93176999906823/464562500000000",
-       "c_{r-1}*b_{r-2}": "253372999746627/199974400000000",
-       "c_{r-1}*c_{r-2}": "276226999723773/211442500000000",
-       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "16226999983773/16568260000000"
+       "(a_r-p_{r-1})^2": "91/200",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "2349/500",
+       "(b_{r-2}-c_{r-2})*b_r": "1423/1000",
+       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "103/100",
+       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "693/1000",
+       "FLC_{r-1}(c)": "2107/1000",
+       "Q_{r-1}(c)": "1/5",
+       "c_{r-1}*b_{r-2}": "1267/1000",
+       "c_{r-1}*c_{r-2}": "653/500",
+       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "979/1000"
       },
       "lambda_float": {
        "(a_r-p_{r-1})^2": 0.45574918485060684,
@@ -73781,7 +73783,7 @@
        "sync: p_r*b_{r-1}-p_{r-1}*b_r": 0.9794027858093478
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 9.458589740699346e-10,
+      "min_residual_normalised_float": 0.0005047819063005498,
       "objective_float": 1.108575003902561,
       "rows": 101199,
       "status": 0
@@ -75285,13 +75287,13 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-p_{r-1})^2": "27528999972471/242152250000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "946996332386337/239459000000000",
-       "(b_{r-2}-c_{r-2})*b_r": "81630999918369/25831120000000",
-       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "254072999745927/227422750000000",
-       "FLC_{r-1}(c)": "13912999986087/37627450000000",
-       "Q_{r-1}(c)": "977978999022021/963142000000000",
-       "c_{r-1}*b_{r-2}": "884406332448927/229943000000000"
+       "(a_r-p_{r-1})^2": "113/1000",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "1977/500",
+       "(b_{r-2}-c_{r-2})*b_r": "79/25",
+       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "1117/1000",
+       "FLC_{r-1}(c)": "369/1000",
+       "Q_{r-1}(c)": "203/200",
+       "c_{r-1}*b_{r-2}": "1923/500"
       },
       "lambda_float": {
        "(a_r-p_{r-1})^2": 0.11368467565327225,
@@ -75303,7 +75305,7 @@
        "c_{r-1}*b_{r-2}": 3.846198115766222
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 9.409933999186062e-10,
+      "min_residual_normalised_float": 0.00030066186082895345,
       "objective_float": 1.3473836052457242,
       "rows": 238148,
       "status": 0
@@ -77082,15 +77084,15 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-p_{r-1})^2": "77842999922157/133337000000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "158358999841641/41553400000000",
-       "(b_{r-2}-c_{r-2})*b_r": "230162333103171/234755000000000",
-       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "46248925879677/34858000000000",
-       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "217210999782789/994346000000000",
-       "FLC_{r-1}(c)": "202966999797033/435917500000000",
-       "Q_{r-1}(c)": "267108999732891/234085750000000",
-       "c_{r-1}*b_{r-2}": "177252333156081/135129500000000",
-       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "217602999782397/74297600000000"
+       "(a_r-p_{r-1})^2": "583/1000",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "381/100",
+       "(b_{r-2}-c_{r-2})*b_r": "49/50",
+       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "663/500",
+       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "109/500",
+       "FLC_{r-1}(c)": "93/200",
+       "Q_{r-1}(c)": "1141/1000",
+       "c_{r-1}*b_{r-2}": "1311/1000",
+       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "366/125"
       },
       "lambda_float": {
        "(a_r-p_{r-1})^2": 0.5838064453246181,
@@ -77104,7 +77106,7 @@
        "sync: p_r*b_{r-1}-p_{r-1}*b_r": 2.928802545438188
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 9.537925087440835e-10,
+      "min_residual_normalised_float": 0.0005354366549336596,
       "objective_float": 1.0708381467398358,
       "rows": 12906,
       "status": 0
@@ -78540,12 +78542,12 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-p_{r-1})^2": "183470999816529/960962000000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "175226999824773/35061640000000",
-       "(b_{r-2}-c_{r-2})*b_r": "623558999376441/173077600000000",
-       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "4296333329037/6638000000000",
-       "Q_{r-1}(c)": "101698999898301/120334600000000",
-       "c_{r-1}*b_{r-2}": "685486999314513/156298600000000"
+       "(a_r-p_{r-1})^2": "19/100",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "4997/1000",
+       "(b_{r-2}-c_{r-2})*b_r": "1801/500",
+       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "647/1000",
+       "Q_{r-1}(c)": "169/200",
+       "c_{r-1}*b_{r-2}": "877/200"
       },
       "lambda_float": {
        "(a_r-p_{r-1})^2": 0.19092430293612728,
@@ -78556,7 +78558,7 @@
        "c_{r-1}*b_{r-2}": 4.385752655494101
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 9.94125230904566e-10,
+      "min_residual_normalised_float": 0.0004888888888888386,
       "objective_float": 1.5535621581711043,
       "rows": 214602,
       "status": 0
@@ -80364,15 +80366,15 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-p_{r-1})^2": "15336703688367/28280000000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "270197444174247/91010000000000",
-       "(b_{r-2}-c_{r-2})*b_r": "338928999661071/355827500000000",
-       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "1046688998953311/713570000000000",
-       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "2748999997251/15371890625000",
-       "LC_r(c)": "267762999732237/115894625000000",
-       "Q_{r-1}(c)": "1766629627863/3607100000000",
-       "c_{r-1}*b_{r-2}": "538078999461921/190371800000000",
-       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "669596999330403/195174400000000"
+       "(a_r-p_{r-1})^2": "271/500",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "371/125",
+       "(b_{r-2}-c_{r-2})*b_r": "119/125",
+       "FLC_r(b)=r*b_r^2-(r+1)b_{r-1}b_{r+1}": "733/500",
+       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "89/500",
+       "LC_r(c)": "231/100",
+       "Q_{r-1}(c)": "489/1000",
+       "c_{r-1}*b_{r-2}": "1413/500",
+       "sync: p_r*b_{r-1}-p_{r-1}*b_r": "343/100"
       },
       "lambda_float": {
        "(a_r-p_{r-1})^2": 0.5423162554336949,
@@ -80386,7 +80388,7 @@
        "sync: p_r*b_{r-1}-p_{r-1}*b_r": 3.430762436056677
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 1.0071428497126323e-09,
+      "min_residual_normalised_float": 0.0005841897233201779,
       "objective_float": 1.1422542179480746,
       "rows": 2042,
       "status": 0
@@ -81851,12 +81853,12 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "3153590996846409/916834000000000",
-       "(a_r-p_{r-1})^2": "5280851846571/30064000000000",
-       "(b_{r-1}-c_{r-1})*c_{r-1}": "13766999986233/1834000000000",
-       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "39690999960309/201433000000000",
-       "Q_{r-1}(c)": "402066999597933/551330000000000",
-       "c_{r-1}*b_{r-2}": "1037955665628711/191878000000000"
+       "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": "3439/1000",
+       "(a_r-p_{r-1})^2": "7/40",
+       "(b_{r-1}-c_{r-1})*c_{r-1}": "3753/500",
+       "FLC_{r-1}(b)=(r-1)b_{r-1}^2-r*b_{r-2}b_r": "197/1000",
+       "Q_{r-1}(c)": "729/1000",
+       "c_{r-1}*b_{r-2}": "5409/1000"
       },
       "lambda_float": {
        "(a_r-b_r-b_{r-1})^2=(c_{r-1}-b_{r-1})^2": 3.439653197852822,
@@ -81867,7 +81869,7 @@
        "c_{r-1}*b_{r-2}": 5.409456355947879
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 1.133985761409348e-09,
+      "min_residual_normalised_float": 0.0005955555555555704,
       "objective_float": 1.657040844760642,
       "rows": 141031,
       "status": 0
@@ -82548,13 +82550,13 @@
        "violations": 0
       },
       "lambda_exact_verified": {
-       "Q_r(b)": "16999999983/7000000000"
+       "Q_r(b)": "607/250"
       },
       "lambda_float": {
        "Q_r(b)": 2.4285714285689797
       },
       "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
-      "min_residual_normalised_float": 1.1333331711755282e-09,
+      "min_residual_normalised_float": 0.00026666666666661117,
       "objective_float": 1.1333333333321907,
       "rows": 15,
       "status": 0
@@ -97695,7 +97697,7 @@
      "trees": 47
     }
    },
-   "seconds": 19.2
+   "seconds": 19.0
   }
  },
  "task5_closure": {
@@ -98072,7 +98074,7 @@
    "iso_closure_counterexamples": 0,
    "pairs": 200000
   },
-  "seconds": 12.1,
+  "seconds": 12.2,
   "times_(1+x)^k_k_le_5_trees_n_le_12": {
    "iso_violations": 0,
    "polys": 4935

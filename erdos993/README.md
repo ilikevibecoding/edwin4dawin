@@ -12,6 +12,10 @@ this directory proves it. What is here:
 | `docs/REDUCTION_LEMMA_AND_PROVED_CASES.md` | Rigorous proofs of the small theorems that *are* available: the WR+ISO reduction lemma, the conditional unimodality theorem, `ISO_1`, `ISO_2`, `WR_1`, `WR_2`, `WR_3` for all forests, and `ISO` for real-rooted polynomials. |
 | `docs/ISO3_TREES_THEOREM.md` | Exact computer-assisted proof that `ISO_3` holds for every tree (`scripts/prove_iso3_trees.py`). |
 | `docs/ISO3_FORESTS_THEOREM.md` | Extension of that proof to every forest (`scripts/prove_iso3_forests.py`). |
+| `docs/ISO_TAIL_THEOREM.md` | `ISO_r` proved for every forest when `(alpha-r)^2 <= r` (plus a tabulated refinement), and an exact obstruction showing the general tools cannot reach the whole tail (`scripts/prove_iso_tail.py`). |
+| `docs/LEAF_INDUCTION_PROBE.md` | The whole problem as one inductive inequality (the leaf lemma); exhaustive evidence, tightness on stars, and LP proof that it is not derivable from the obvious relations (`scripts/probe_leaf_induction.py`). |
+| `docs/DISPERSION_LEAD.md` | A single-level probabilistic sufficient condition (`Var(e) <= E(e)` for random independent sets) implying the whole chain; exhaustive evidence, `k = 1` proved (`scripts/probe_dispersion.py`). |
+| `docs/ISO4_TREES_PROBE.md` | Feasibility probe for extending the `ISO_3` method to `ISO_4` (if present). |
 | `docs/LITERATURE_STATUS_2026-09-02.md` | Primary-source literature check (erdosproblems.com, arXiv, Zenodo, GitHub). |
 | `erdos993lib/` | Exact-arithmetic library: independence polynomials of forests, WROM enumeration of non-isomorphic trees/forests, WR/ISO/TAIL/unimodality checks, named tree families, JSON reports with SHA-256. |
 | `audit/` | Independent re-implementation (different algorithms) used to cross-check `erdos993lib`. |

@@ -18,6 +18,19 @@ if [ -f scripts/prove_iso3_forests.py ]; then
   python3 scripts/prove_iso3_forests.py | grep -E "^(PASS|FAIL|ISO3|report)" | tail -n 3 || true
 fi
 
+echo "== ISO in the tail: proved range r >= r_A(alpha), refinement, exact obstruction (~3 min)"
+python3 scripts/prove_iso_tail.py -q 2>/dev/null | grep -E "^(PASS|FAIL)" | tail -n 6 || python3 scripts/prove_iso_tail.py | grep -E "^(PASS|FAIL)" | tail -n 6
+
+echo "== dispersion lead (single-level sufficient condition), trees <= 17, forests <= 14 (~1 min)"
+python3 scripts/probe_dispersion.py --trees-max 17 --forests-max 14 --out /tmp/erdos993_dispersion_replay.json | tail -n 1
+
+if python3 -c "import scipy" 2>/dev/null; then
+  echo "== leaf-induction structural probe (LP certificates; ~3 min)"
+  python3 scripts/probe_leaf_induction.py | tail -n 3 || true
+else
+  echo "== leaf-induction probe skipped (pip install scipy to run it)"
+fi
+
 echo "== independent re-implementation audit"
 python3 scripts/audit_independent.py | tail -n 2
 
