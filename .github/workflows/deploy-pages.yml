@@ -1,11 +1,11 @@
 name: Deploy to GitHub Pages
 
+# Requires GitHub Pages to be enabled once in the repository settings
+# (Settings -> Pages -> Build and deployment -> Source: "GitHub Actions").
 on:
   push:
     branches:
       - main
-      # temporary: lets the game go live before the feature branch is merged
-      - cursor/battle-royale-game-c7e6
   workflow_dispatch:
 
 permissions:

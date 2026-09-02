@@ -9,12 +9,25 @@ vanilla JavaScript on top of [Three.js](https://threejs.org/), bundled with Vite
 
 ## Play
 
+**In the browser, no install:** a production build lives on the `cursor/cloudbreak-royale-play-c7e6`
+branch and is served straight from GitHub through githack (click "Open the page" on its one-time notice):
+
+https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/50cd00553acacd3d16ce1f5363fc6e432ebd77a9/index.html
+
+(jsDelivr and Statically also mirror the branch but serve HTML as `text/plain`, so they can't host the page.
+For a permanent clean URL, enable GitHub Pages once — Settings → Pages → Source: *GitHub Actions* — and the
+`.github/workflows/deploy-pages.yml` workflow publishes every push to `main` at
+`https://ilikevibecoding.github.io/edwin4dawin/`.)
+
+**Locally:**
+
 ```bash
 npm install
 npm run dev        # then open http://localhost:5173
 ```
 
 `npm run build` produces a static site in `dist/` (serve it with any static file server, or `npm run preview`).
+To refresh the online build, copy `dist/*` onto the `cursor/cloudbreak-royale-play-c7e6` branch and push.
 
 ### Controls
 
