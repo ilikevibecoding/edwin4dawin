@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kestrel — Ship Interior</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+
+    <div id="hud">
+      <div id="crosshair"></div>
+      <div id="prompt" class="hidden"></div>
+      <div id="status">
+        <span id="status-tag">KESTREL</span>
+        <span id="status-text">Systems nominal. Cruising.</span>
+      </div>
+      <div id="stats" class="hidden"></div>
+    </div>
+
+    <div id="fade">
+      <div id="fade-text"></div>
+    </div>
+
+    <div id="start">
+      <div class="card">
+        <h1>KESTREL</h1>
+        <p class="sub">light freighter · in transit</p>
+        <p class="hint">Click to take the deck</p>
+        <p class="keys">WASD move · mouse look · E interact · Esc release</p>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
