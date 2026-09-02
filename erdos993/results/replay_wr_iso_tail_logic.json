@@ -1,0 +1,1455 @@
+{
+ "task": "certify the WR/ISO-prefix + decreasing-tail => unimodal reduction (Erd\u0151s #993 project)",
+ "lemma": "Let p_0, ..., p_alpha be positive integers (alpha >= 0) and, for alpha >= 1, L = ceil((2 alpha - 1)/3). Assume WR_r: p_{r-1} <= r p_r and ISO_r: r p_r^2 + p_{r-1}^2 - (r+1) p_{r-1} p_{r+1} >= 0 for every 1 <= r <= L-1, and p_r >= p_{r+1} for every L <= r <= alpha-1. Then (p_r) is unimodal: there is an m with p_0 <= ... <= p_m >= ... >= p_alpha. More precisely, with r_0 the first index in 1..L-1 with p_{r_0} <= p_{r_0-1} (if any): p is strictly increasing on [0, r_0-1] and non-increasing on [r_0-1, alpha]; if there is no such r_0, p is strictly increasing on [0, L-1] and non-increasing on [L, alpha].",
+ "definitions": {
+  "L(alpha)": "ceil((2 alpha - 1)/3) for alpha >= 1; 0 for alpha = 0",
+  "prefix": "r = 1 .. L-1 (WR_r and ISO_r assumed)",
+  "tail": "r = L .. alpha-1 (p_r >= p_{r+1} assumed)",
+  "WR_r": "p_{r-1} <= r p_r",
+  "ISO_r": "Q_r = r p_r^2 + p_{r-1}^2 - (r+1) p_{r-1} p_{r+1} >= 0",
+  "unimodal": "exists m: p_0 <= ... <= p_m >= ... >= p_alpha (plateaus allowed)",
+  "L_values_alpha_0_to_7": [
+   0,
+   1,
+   1,
+   2,
+   3,
+   3,
+   4,
+   5
+  ],
+  "L_matches_core_and_exact_ceiling_alpha<=500": true
+ },
+ "environment": {
+  "python": "3.12.3",
+  "sympy": "1.14.0",
+  "seed": 993
+ },
+ "identities": {
+  "ratio_identity": {
+   "statement": "r*x + 1/x - (r + 1) == (r*x - 1)*(x - 1)/x",
+   "sympy_simplify(lhs - rhs)": "0",
+   "verified": true
+  },
+  "sign_certificate": {
+   "parametrisation": "x = 1/r + t*(1 - 1/r), t in [0, 1] covers x in [1/r, 1]",
+   "(r*x - 1)*(x - 1) in terms of t": "t*(r - 1)**2*(t - 1)/r",
+   "manifestly <= 0 on t in [0,1]": "t*(t - 1) <= 0, (r - 1)^2/r >= 0, and x > 0",
+   "sympy_simplify(cert - t*(t-1)*(r-1)**2/r)": "0",
+   "verified": true,
+   "conclusion": "for x in [1/r, 1]: r*x + 1/x <= r + 1"
+  },
+  "equality_cases": {
+   "sympy_solve(r*x + 1/x = r + 1, x)": [
+    "1",
+    "1/r"
+   ],
+   "expected": [
+    "1",
+    "1/r"
+   ],
+   "verified": true,
+   "remark": "for r = 1 the interval [1/r, 1] is the single point x = 1 (equality)"
+  },
+  "exact_rational_spot_check": {
+   "grid": "r = 1..12, x = 1/r + (k/24)(1 - 1/r), k = 0..24",
+   "r*x + 1/x <= r+1 everywhere, equality exactly at x in {1/r, 1}": true
+  },
+  "integer_identity_WR_times_descent": {
+   "statement": "(r*p_r - p_{r-1})*(p_r - p_{r-1}) == r*p_r^2 + p_{r-1}^2 - (r+1)*p_{r-1}*p_r",
+   "sympy_expand(lhs - rhs)": "0",
+   "verified": true,
+   "use": "WR_r (first factor >= 0) and a weak descent p_r <= p_{r-1} (second factor <= 0) give r*p_r^2 + p_{r-1}^2 <= (r+1)*p_{r-1}*p_r"
+  },
+  "integer_master_identity": {
+   "statement": "(r+1)*p_{r-1}*(p_r - p_{r+1}) == Q_r + (r*p_r - p_{r-1})*(p_{r-1} - p_r)",
+   "Q_r": "r*p_r^2 + p_{r-1}^2 - (r+1)*p_{r-1}*p_{r+1}",
+   "sympy_expand(lhs - rhs)": "0",
+   "verified": true,
+   "use": "ISO_r (Q_r >= 0), WR_r (r*p_r - p_{r-1} >= 0) and a weak descent (p_{r-1} - p_r >= 0) make the right side >= 0; since (r+1)*p_{r-1} >= 1 the integer p_r - p_{r+1} is >= 0."
+  },
+  "ratio_form_of_ISO": {
+   "statement": "Q_r/(p_{r-1}*p_r) == r*x + 1/x - (r+1)*y with x = p_r/p_{r-1}, y = p_{r+1}/p_r",
+   "sympy_simplify(lhs - rhs)": "0",
+   "verified": true,
+   "handoff_chain": "WR_r: 1/r <= x; descent: x <= 1; ISO_r: (r+1)*y <= r*x + 1/x <= r+1; hence y <= 1"
+  },
+  "exhaustive_one_step_box": {
+   "box": "r = 1..6, p_{r-1} = 1..12, p_r = 1..12, p_{r+1} = 1..24",
+   "triples_with_WR_and_ISO_and_weak_descent": 1475,
+   "all_have_p_{r+1} <= p_r": true
+  },
+  "all_verified": true
+ },
+ "forests_n_le_14": {
+  "nmax": 14,
+  "forest_counts_per_n": {
+   "0": 1,
+   "1": 1,
+   "2": 2,
+   "3": 3,
+   "4": 6,
+   "5": 10,
+   "6": 20,
+   "7": 37,
+   "8": 76,
+   "9": 153,
+   "10": 329,
+   "11": 710,
+   "12": 1601,
+   "13": 3658,
+   "14": 8599
+  },
+  "forest_counts_match_A005195": true,
+  "total_forests_n0_to_nmax": 15206,
+  "total_forests_n1_to_nmax": 15205,
+  "hypotheses_hold": 15206,
+  "conclusion_unimodal": 15206,
+  "propagation_property_holds": 15206,
+  "core_crosscheck_agree": 15206,
+  "proof_case_counts": {
+   "alpha=0": 1,
+   "empty_prefix(alpha in {1,2})": 7,
+   "A_no_descent_p[L-1]<=p[L]": 1450,
+   "A_no_descent_p[L-1]>p[L]": 9952,
+   "B_plateau_descent": 128,
+   "B_strict_descent": 3668
+  },
+  "min_prefix_ISO_ratio": "281/273",
+  "min_prefix_ISO_ratio_witness": {
+   "n": 14,
+   "component_sizes": [
+    14
+   ],
+   "poly": [
+    1,
+    14,
+    78,
+    286,
+    715,
+    1287,
+    1716,
+    1716,
+    1287,
+    715,
+    286,
+    78,
+    13,
+    1
+   ],
+   "r": 2
+  },
+  "min_prefix_ISO_ratio_per_n": {
+   "3": {
+    "ratio": "5/3",
+    "float": 1.6666666666666667,
+    "component_sizes": [
+     1,
+     1,
+     1
+    ],
+    "poly": [
+     1,
+     3,
+     3,
+     1
+    ],
+    "r": 1
+   },
+   "4": {
+    "ratio": "17/12",
+    "float": 1.4166666666666667,
+    "component_sizes": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "poly": [
+     1,
+     4,
+     6,
+     4,
+     1
+    ],
+    "r": 1
+   },
+   "5": {
+    "ratio": "13/10",
+    "float": 1.3,
+    "component_sizes": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "poly": [
+     1,
+     5,
+     10,
+     10,
+     5,
+     1
+    ],
+    "r": 1
+   },
+   "6": {
+    "ratio": "37/30",
+    "float": 1.2333333333333334,
+    "component_sizes": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "poly": [
+     1,
+     6,
+     15,
+     20,
+     15,
+     6,
+     1
+    ],
+    "r": 1
+   },
+   "7": {
+    "ratio": "499/420",
+    "float": 1.188095238095238,
+    "component_sizes": [
+     7
+    ],
+    "poly": [
+     1,
+     7,
+     15,
+     20,
+     15,
+     6,
+     1
+    ],
+    "r": 2
+   },
+   "8": {
+    "ratio": "473/420",
+    "float": 1.1261904761904762,
+    "component_sizes": [
+     8
+    ],
+    "poly": [
+     1,
+     8,
+     21,
+     35,
+     35,
+     21,
+     7,
+     1
+    ],
+    "r": 2
+   },
+   "9": {
+    "ratio": "1649/1512",
+    "float": 1.0906084656084656,
+    "component_sizes": [
+     9
+    ],
+    "poly": [
+     1,
+     9,
+     28,
+     56,
+     70,
+     56,
+     28,
+     8,
+     1
+    ],
+    "r": 2
+   },
+   "10": {
+    "ratio": "673/630",
+    "float": 1.0682539682539682,
+    "component_sizes": [
+     10
+    ],
+    "poly": [
+     1,
+     10,
+     36,
+     84,
+     126,
+     126,
+     84,
+     36,
+     9,
+     1
+    ],
+    "r": 2
+   },
+   "11": {
+    "ratio": "4171/3960",
+    "float": 1.0532828282828284,
+    "component_sizes": [
+     11
+    ],
+    "poly": [
+     1,
+     11,
+     45,
+     120,
+     210,
+     252,
+     210,
+     120,
+     45,
+     10,
+     1
+    ],
+    "r": 2
+   },
+   "12": {
+    "ratio": "3097/2970",
+    "float": 1.0427609427609428,
+    "component_sizes": [
+     12
+    ],
+    "poly": [
+     1,
+     12,
+     55,
+     165,
+     330,
+     462,
+     462,
+     330,
+     165,
+     55,
+     11,
+     1
+    ],
+    "r": 2
+   },
+   "13": {
+    "ratio": "8881/8580",
+    "float": 1.035081585081585,
+    "component_sizes": [
+     13
+    ],
+    "poly": [
+     1,
+     13,
+     66,
+     220,
+     495,
+     792,
+     924,
+     792,
+     495,
+     220,
+     66,
+     12,
+     1
+    ],
+    "r": 2
+   },
+   "14": {
+    "ratio": "281/273",
+    "float": 1.0293040293040292,
+    "component_sizes": [
+     14
+    ],
+    "poly": [
+     1,
+     14,
+     78,
+     286,
+     715,
+     1287,
+     1716,
+     1716,
+     1287,
+     715,
+     286,
+     78,
+     13,
+     1
+    ],
+    "r": 2
+   }
+  },
+  "min_prefix_Q": 4,
+  "min_prefix_Q_witness": {
+   "n": 3,
+   "component_sizes": [
+    1,
+    1,
+    1
+   ],
+   "poly": [
+    1,
+    3,
+    3,
+    1
+   ],
+   "r": 1
+  },
+  "min_prefix_WR_slack": 2,
+  "min_prefix_WR_slack_witness": {
+   "n": 3,
+   "component_sizes": [
+    1,
+    1,
+    1
+   ],
+   "poly": [
+    1,
+    3,
+    3,
+    1
+   ],
+   "r": 1
+  },
+  "forests_with_some_prefix_Q_r_equal_0": 0,
+  "forests_with_some_prefix_WR_slack_equal_0": 0,
+  "data_not_needed_by_lemma": {
+   "forests_with_ISO_r_for_all_r_1_to_alpha-1": 15206,
+   "forests_with_WR_r_for_all_r_1_to_alpha-1": 15200,
+   "forests_with_WR_r_for_all_r_1_to_alpha": 6585,
+   "forests_with_WR_alpha_failing": 8621,
+   "forests_with_WR_failing_at_some_r_before_alpha": [
+    {
+     "n": 14,
+     "component_sizes": [
+      14
+     ],
+     "poly": [
+      1,
+      14,
+      78,
+      224,
+      356,
+      307,
+      127,
+      18,
+      1
+     ],
+     "alpha": 8,
+     "L": 5,
+     "WR_fails_at_r": [
+      7
+     ],
+     "all_in_tail": true
+    },
+    {
+     "n": 14,
+     "component_sizes": [
+      14
+     ],
+     "poly": [
+      1,
+      14,
+      78,
+      222,
+      343,
+      280,
+      107,
+      15,
+      1
+     ],
+     "alpha": 8,
+     "L": 5,
+     "WR_fails_at_r": [
+      7
+     ],
+     "all_in_tail": true
+    },
+    {
+     "n": 14,
+     "component_sizes": [
+      14
+     ],
+     "poly": [
+      1,
+      14,
+      78,
+      223,
+      350,
+      296,
+      120,
+      17,
+      1
+     ],
+     "alpha": 8,
+     "L": 5,
+     "WR_fails_at_r": [
+      7
+     ],
+     "all_in_tail": true
+    },
+    {
+     "n": 14,
+     "component_sizes": [
+      14
+     ],
+     "poly": [
+      1,
+      14,
+      78,
+      225,
+      362,
+      319,
+      135,
+      18,
+      1
+     ],
+     "alpha": 8,
+     "L": 5,
+     "WR_fails_at_r": [
+      7
+     ],
+     "all_in_tail": true
+    },
+    {
+     "n": 14,
+     "component_sizes": [
+      14
+     ],
+     "poly": [
+      1,
+      14,
+      78,
+      224,
+      355,
+      304,
+      124,
+      17,
+      1
+     ],
+     "alpha": 8,
+     "L": 5,
+     "WR_fails_at_r": [
+      7
+     ],
+     "all_in_tail": true
+    },
+    {
+     "n": 14,
+     "component_sizes": [
+      14
+     ],
+     "poly": [
+      1,
+      14,
+      78,
+      223,
+      349,
+      292,
+      115,
+      15,
+      1
+     ],
+     "alpha": 8,
+     "L": 5,
+     "WR_fails_at_r": [
+      7
+     ],
+     "all_in_tail": true
+    }
+   ]
+  },
+  "seconds": 0.555,
+  "all_ok": true
+ },
+ "random_sequences": {
+  "seed": 993,
+  "total_sequences": 100000,
+  "rejection_sampler": {
+   "description": "alpha uniform in 2..7, entries uniform in 1..M with M in {2,3,5,10,30}; accept iff hypotheses",
+   "tried": 215969,
+   "accepted": 40000,
+   "acceptance_rate": "40000/215969",
+   "acceptance_rate_float": 0.18521176650352597,
+   "per_alpha_tried_accepted": {
+    "2": [
+     35982,
+     22162
+    ],
+    "3": [
+     35917,
+     10073
+    ],
+    "4": [
+     35789,
+     4353
+    ],
+    "5": [
+     36104,
+     2164
+    ],
+    "6": [
+     35918,
+     848
+    ],
+    "7": [
+     36259,
+     400
+    ]
+   }
+  },
+  "constructive_sampler": {
+   "description": "alpha from a menu up to 30, magnitudes up to 1e18; p_j chosen inside the exact integer interval [ceil(p_{j-1}/j) if WR_j needed else 1, floor((r p_r^2+p_{r-1}^2)/((r+1)p_{r-1})) if ISO_r needed] with r=j-1; tail non-increasing; strategies uniform/lo/hi/near_hi/mixed",
+   "tried": 70368,
+   "accepted": 60000,
+   "empty_interval_rejections": 10368,
+   "constructed_but_failed_hypotheses(bug_indicator)": 0,
+   "acceptance_rate": "625/733",
+   "acceptance_rate_float": 0.8526603001364257
+  },
+  "hypotheses_hold": 100000,
+  "conclusion_unimodal": 100000,
+  "propagation_property_holds": 100000,
+  "core_crosscheck_agree": 100000,
+  "proof_case_counts": {
+   "alpha=0": 2807,
+   "empty_prefix(alpha in {1,2})": 27609,
+   "A_no_descent_p[L-1]<=p[L]": 11968,
+   "A_no_descent_p[L-1]>p[L]": 5710,
+   "B_plateau_descent": 42037,
+   "B_strict_descent": 9869
+  },
+  "alpha_histogram": {
+   "0": 2807,
+   "1": 2757,
+   "2": 24852,
+   "3": 15551,
+   "4": 9752,
+   "5": 7609,
+   "6": 5965,
+   "7": 5130,
+   "8": 4761,
+   "9": 2150,
+   "10": 2137,
+   "11": 2068,
+   "12": 2024,
+   "13": 1846,
+   "14": 1836,
+   "16": 1876,
+   "18": 1812,
+   "20": 1771,
+   "24": 1713,
+   "30": 1583
+  },
+  "max_alpha": 30,
+  "edge_coverage": {
+   "sequences_with_some_prefix_Q_r_equal_0": 33512,
+   "sequences_with_some_prefix_WR_slack_equal_0": 34797,
+   "sequences_with_some_prefix_plateau_p_r_equal_p_r-1": 43598,
+   "sequences_with_p[L-1]_equal_p[L]": 31525,
+   "sequences_with_some_tail_plateau": 65282
+  },
+  "seconds": 2.458,
+  "all_ok": true
+ },
+ "necessity": {
+  "seed": 994,
+  "description": "random alpha in 3..8, entries uniform in 1..V, V in {3,5,10,20}; a sequence is a 'single_ISO' (resp. 'single_WR') violator if TAIL holds, every prefix WR_r (resp. ISO_r) holds, and exactly one prefix ISO_r (resp. WR_r) fails",
+  "tried": 200000,
+  "sequences_satisfying_all_hypotheses": 12217,
+  "of_which_unimodal": 12217,
+  "single_ISO": {
+   "in_category": 16688,
+   "not_unimodal": 6534,
+   "per_alpha_not_unimodal": {
+    "4": 2231,
+    "5": 1105,
+    "6": 1606,
+    "7": 1130,
+    "8": 462
+   },
+   "examples": [
+    {
+     "p": [
+      1,
+      2,
+      1,
+      2,
+      1
+     ],
+     "alpha": 4,
+     "L": 3,
+     "failing_r": 2,
+     "Q_r": -6,
+     "WR_slack_r": 0
+    },
+    {
+     "p": [
+      1,
+      2,
+      1,
+      2,
+      2
+     ],
+     "alpha": 4,
+     "L": 3,
+     "failing_r": 2,
+     "Q_r": -6,
+     "WR_slack_r": 0
+    },
+    {
+     "p": [
+      2,
+      2,
+      1,
+      2,
+      1
+     ],
+     "alpha": 4,
+     "L": 3,
+     "failing_r": 2,
+     "Q_r": -6,
+     "WR_slack_r": 0
+    },
+    {
+     "p": [
+      2,
+      2,
+      1,
+      2,
+      2
+     ],
+     "alpha": 4,
+     "L": 3,
+     "failing_r": 2,
+     "Q_r": -6,
+     "WR_slack_r": 0
+    },
+    {
+     "p": [
+      1,
+      2,
+      1,
+      3,
+      1
+     ],
+     "alpha": 4,
+     "L": 3,
+     "failing_r": 2,
+     "Q_r": -12,
+     "WR_slack_r": 0
+    },
+    {
+     "p": [
+      1,
+      2,
+      1,
+      3,
+      2
+     ],
+     "alpha": 4,
+     "L": 3,
+     "failing_r": 2,
+     "Q_r": -12,
+     "WR_slack_r": 0
+    }
+   ],
+   "distinct_not_unimodal_sequences": 4167
+  },
+  "single_WR": {
+   "in_category": 3314,
+   "not_unimodal": 533,
+   "per_alpha_not_unimodal": {
+    "3": 279,
+    "4": 185,
+    "5": 47,
+    "6": 17,
+    "7": 5
+   },
+   "examples": [
+    {
+     "p": [
+      4,
+      1,
+      2,
+      1
+     ],
+     "alpha": 3,
+     "L": 2,
+     "failing_r": 1,
+     "Q_r": 1,
+     "WR_slack_r": -3
+    },
+    {
+     "p": [
+      4,
+      1,
+      2,
+      2
+     ],
+     "alpha": 3,
+     "L": 2,
+     "failing_r": 1,
+     "Q_r": 1,
+     "WR_slack_r": -3
+    },
+    {
+     "p": [
+      5,
+      1,
+      2,
+      1
+     ],
+     "alpha": 3,
+     "L": 2,
+     "failing_r": 1,
+     "Q_r": 6,
+     "WR_slack_r": -4
+    },
+    {
+     "p": [
+      5,
+      1,
+      2,
+      2
+     ],
+     "alpha": 3,
+     "L": 2,
+     "failing_r": 1,
+     "Q_r": 6,
+     "WR_slack_r": -4
+    },
+    {
+     "p": [
+      6,
+      1,
+      2,
+      1
+     ],
+     "alpha": 3,
+     "L": 2,
+     "failing_r": 1,
+     "Q_r": 13,
+     "WR_slack_r": -5
+    },
+    {
+     "p": [
+      6,
+      1,
+      2,
+      2
+     ],
+     "alpha": 3,
+     "L": 2,
+     "failing_r": 1,
+     "Q_r": 13,
+     "WR_slack_r": -5
+    }
+   ],
+   "distinct_not_unimodal_sequences": 424
+  },
+  "exhaustive_boxes": {
+   "alpha=3,entries 1..6": {
+    "L": 2,
+    "sequences": 1296,
+    "all_hypotheses": 303,
+    "all_hypotheses_not_unimodal": 0,
+    "single_ISO_fail": 138,
+    "single_ISO_fail_not_unimodal": 0,
+    "single_WR_fail": 82,
+    "single_WR_fail_not_unimodal": 12
+   },
+   "alpha=4,entries 1..6": {
+    "L": 3,
+    "sequences": 7776,
+    "all_hypotheses": 596,
+    "all_hypotheses_not_unimodal": 0,
+    "single_ISO_fail": 1362,
+    "single_ISO_fail_not_unimodal": 548,
+    "single_WR_fail": 206,
+    "single_WR_fail_not_unimodal": 57
+   },
+   "alpha=5,entries 1..4": {
+    "L": 3,
+    "sequences": 4096,
+    "all_hypotheses": 176,
+    "all_hypotheses_not_unimodal": 0,
+    "single_ISO_fail": 454,
+    "single_ISO_fail_not_unimodal": 190,
+    "single_WR_fail": 41,
+    "single_WR_fail_not_unimodal": 10
+   }
+  },
+  "seconds": 0.794,
+  "all_ok": true
+ },
+ "klym_t1": {
+  "poly": [
+   1,
+   26,
+   300,
+   2040,
+   9142,
+   28551,
+   63933,
+   103736,
+   121376,
+   100144,
+   55499,
+   18683,
+   2979,
+   51,
+   1
+  ],
+  "recomputed_from_klym_3kk_tree(4)_matches": true,
+  "n": 26,
+  "alpha": 14,
+  "L": 9,
+  "prefix_indices": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8
+  ],
+  "hypotheses_hold": true,
+  "unimodal": true,
+  "prefix_WR_slack": {
+   "1": 25,
+   "2": 574,
+   "3": 5820,
+   "4": 34528,
+   "5": 133613,
+   "6": 355047,
+   "7": 662219,
+   "8": 867272
+  },
+  "prefix_Q": {
+   "1": 77,
+   "2": 21556,
+   "3": 1604400,
+   "4": 47246056,
+   "5": 652521253,
+   "6": 4607364783,
+   "7": 17336077897,
+   "8": 35121382848
+  },
+  "prefix_ISO_ratio": {
+   "1": "677/600",
+   "2": "2657/2340",
+   "3": "1497/1306",
+   "4": "42308282/36402525",
+   "5": "4159374169/3506852916",
+   "6": "1206653835/987255512",
+   "7": "79415532361/62079454464",
+   "8": "223295529/162320906"
+  },
+  "tail_holds": true,
+  "log_concavity_failures_r": [
+   13
+  ],
+  "WR_failures_all_r_1_to_alpha": [
+   13,
+   14
+  ],
+  "WR_14_detail": "p_13 = 51 > 14 * p_14 = 14",
+  "WR_13_detail": "p_12 = 2979 > 13 * p_13 = 663",
+  "ISO_failures_all_r_1_to_alpha-1": [],
+  "Q_all_r": {
+   "1": 77,
+   "2": 21556,
+   "3": 1604400,
+   "4": 47246056,
+   "5": 652521253,
+   "6": 4607364783,
+   "7": 17336077897,
+   "8": 35121382848,
+   "9": 37629053760,
+   "10": 20249316874,
+   "11": 4935760128,
+   "12": 443160952,
+   "13": 8866548
+  },
+  "mode_index_first_last": [
+   8,
+   8
+  ],
+  "proof_case": "A_no_descent_p[L-1]>p[L]",
+  "all_ok": true
+ },
+ "sharpness": {
+  "edgeless_binomial": {
+   "ratio": "(r*binomial(n, r)**2 + binomial(n, r - 1)**2)/((r + 1)*binomial(n, r - 1)*binomial(n, r + 1))",
+   "claimed_product_form": "(1 + 1/(n - r))*(r/(n - r + 1)**2 + 1)",
+   "sympy_simplify(combsimp(ratio - product_form))": "0",
+   "equivalent_simple_form": "(n + 1)/((n - r)*(n - r + 1)) + 1",
+   "sympy_simplify(product_form - simple_form)": "0",
+   "binomial_ratio_identities": {
+    "C(n,r)/C(n,r-1) - (n-r+1)/r": "0",
+    "C(n,r+1)/C(n,r-1) - (n-r+1)(n-r)/(r(r+1))": "0"
+   },
+   "limit_n_to_oo_at_r=1": "1",
+   "limit_n_to_oo_at_r=2n/3": "1",
+   "exact_Fraction_check_n<=40_all_1<=r<=n-1": true,
+   "ratio_strictly_increasing_in_r_(min_over_prefix_is_r=1)": true,
+   "min_over_prefix_ratio_at_r=1": "1 + (n+1)/(n(n-1))",
+   "consequence": "inf over forests and prefix r of the ISO ratio is 1: ISO_r cannot be strengthened to r p_r^2 + p_{r-1}^2 >= c (r+1) p_{r-1} p_{r+1} with any constant c > 1",
+   "verified": true
+  },
+  "star_K1m_r2": {
+   "sequence": "p_0 = 1, p_1 = m + 1, p_k = C(m, k) for k >= 2 (alpha = m)",
+   "Q_2_sympy": "2*m**2 + m + 1",
+   "Q_2_claimed": "2*m**2 + m + 1",
+   "ratio_r2_rational_function": "(m**4 - 2*m**3 + 3*m**2 + 4*m + 2)/(m**4 - 2*m**3 - m**2 + 2*m)",
+   "ratio_r2_minus_1_factored": "2*(2*m**2 + m + 1)/(m*(m - 2)*(m - 1)*(m + 1))",
+   "ratio_r2_series_at_m_oo": "54/m**5 + 26/m**4 + 10/m**3 + 4/m**2 + 1 + O(m**(-6), (m, oo))",
+   "r=2_lies_in_the_prefix_iff": "m >= 4",
+   "exact_integer_check_m=3..40_and_core_polynomial_m<=14": true,
+   "verified": true
+  },
+  "cutoff_data_forests_n_le_12": {
+   "forests_examined_n=1..12": 2948,
+   "WR_failures_inside_prefix": 0,
+   "ISO_failures_inside_prefix": 0,
+   "smallest_r_where_WR_r_ever_fails": {
+    "r": 2,
+    "n": 3,
+    "component_sizes": [
+     3
+    ],
+    "poly": [
+     1,
+     3,
+     1
+    ],
+    "alpha": 2,
+    "L": 1
+   },
+   "smallest_r_where_ISO_r_ever_fails": "ISO_r never fails for any r, any forest n <= 12",
+   "per_alpha": {
+    "1": {
+     "L": 1,
+     "forests": 2,
+     "WR_fails_somewhere": 0,
+     "min_first_WR_fail_r": null,
+     "ISO_fails_somewhere": 0,
+     "min_first_ISO_fail_r": null,
+     "max_first_mode_index": 1,
+     "max_last_mode_index": 1,
+     "witness_max_first_mode_index": {
+      "n": 2,
+      "component_sizes": [
+       2
+      ],
+      "poly": [
+       1,
+       2
+      ]
+     },
+     "min_first_WR_fail_minus_L": null,
+     "min_first_ISO_fail_minus_L": null,
+     "L_minus_max_first_mode_index": 0
+    },
+    "2": {
+     "L": 1,
+     "forests": 5,
+     "WR_fails_somewhere": 1,
+     "min_first_WR_fail_r": 2,
+     "ISO_fails_somewhere": 0,
+     "min_first_ISO_fail_r": null,
+     "max_first_mode_index": 1,
+     "max_last_mode_index": 2,
+     "witness_max_first_mode_index": {
+      "n": 2,
+      "component_sizes": [
+       1,
+       1
+      ],
+      "poly": [
+       1,
+       2,
+       1
+      ]
+     },
+     "min_first_WR_fail_minus_L": 1,
+     "min_first_ISO_fail_minus_L": null,
+     "L_minus_max_first_mode_index": 0
+    },
+    "3": {
+     "L": 2,
+     "forests": 13,
+     "WR_fails_somewhere": 3,
+     "min_first_WR_fail_r": 3,
+     "ISO_fails_somewhere": 0,
+     "min_first_ISO_fail_r": null,
+     "max_first_mode_index": 2,
+     "max_last_mode_index": 2,
+     "witness_max_first_mode_index": {
+      "n": 4,
+      "component_sizes": [
+       2,
+       1,
+       1
+      ],
+      "poly": [
+       1,
+       4,
+       5,
+       2
+      ]
+     },
+     "min_first_WR_fail_minus_L": 1,
+     "min_first_ISO_fail_minus_L": null,
+     "L_minus_max_first_mode_index": 0
+    },
+    "4": {
+     "L": 3,
+     "forests": 39,
+     "WR_fails_somewhere": 11,
+     "min_first_WR_fail_r": 4,
+     "ISO_fails_somewhere": 0,
+     "min_first_ISO_fail_r": null,
+     "max_first_mode_index": 3,
+     "max_last_mode_index": 3,
+     "witness_max_first_mode_index": {
+      "n": 7,
+      "component_sizes": [
+       2,
+       2,
+       2,
+       1
+      ],
+      "poly": [
+       1,
+       7,
+       18,
+       20,
+       8
+      ]
+     },
+     "min_first_WR_fail_minus_L": 1,
+     "min_first_ISO_fail_minus_L": null,
+     "L_minus_max_first_mode_index": 0
+    },
+    "5": {
+     "L": 3,
+     "forests": 127,
+     "WR_fails_somewhere": 46,
+     "min_first_WR_fail_r": 5,
+     "ISO_fails_somewhere": 0,
+     "min_first_ISO_fail_r": null,
+     "max_first_mode_index": 3,
+     "max_last_mode_index": 4,
+     "witness_max_first_mode_index": {
+      "n": 6,
+      "component_sizes": [
+       2,
+       1,
+       1,
+       1,
+       1
+      ],
+      "poly": [
+       1,
+       6,
+       14,
+       16,
+       9,
+       2
+      ]
+     },
+     "min_first_WR_fail_minus_L": 2,
+     "min_first_ISO_fail_minus_L": null,
+     "L_minus_max_first_mode_index": 0
+    },
+    "6": {
+     "L": 4,
+     "forests": 467,
+     "WR_fails_somewhere": 191,
+     "min_first_WR_fail_r": 6,
+     "ISO_fails_somewhere": 0,
+     "min_first_ISO_fail_r": null,
+     "max_first_mode_index": 4,
+     "max_last_mode_index": 4,
+     "witness_max_first_mode_index": {
+      "n": 9,
+      "component_sizes": [
+       2,
+       2,
+       2,
+       1,
+       1,
+       1
+      ],
+      "poly": [
+       1,
+       9,
+       33,
+       63,
+       66,
+       36,
+       8
+      ]
+     },
+     "min_first_WR_fail_minus_L": 2,
+     "min_first_ISO_fail_minus_L": null,
+     "L_minus_max_first_mode_index": 0
+    },
+    "7": {
+     "L": 5,
+     "forests": 1004,
+     "WR_fails_somewhere": 550,
+     "min_first_WR_fail_r": 7,
+     "ISO_fails_somewhere": 0,
+     "min_first_ISO_fail_r": null,
+     "max_first_mode_index": 4,
+     "max_last_mode_index": 4,
+     "witness_max_first_mode_index": {
+      "n": 8,
+      "component_sizes": [
+       2,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "poly": [
+       1,
+       8,
+       27,
+       50,
+       55,
+       36,
+       13,
+       2
+      ]
+     },
+     "min_first_WR_fail_minus_L": 2,
+     "min_first_ISO_fail_minus_L": null,
+     "L_minus_max_first_mode_index": 1
+    },
+    "8": {
+     "L": 5,
+     "forests": 852,
+     "WR_fails_somewhere": 498,
+     "min_first_WR_fail_r": 8,
+     "ISO_fails_somewhere": 0,
+     "min_first_ISO_fail_r": null,
+     "max_first_mode_index": 5,
+     "max_last_mode_index": 5,
+     "witness_max_first_mode_index": {
+      "n": 11,
+      "component_sizes": [
+       2,
+       2,
+       2,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "poly": [
+       1,
+       11,
+       52,
+       138,
+       225,
+       231,
+       146,
+       52,
+       8
+      ]
+     },
+     "min_first_WR_fail_minus_L": 3,
+     "min_first_ISO_fail_minus_L": null,
+     "L_minus_max_first_mode_index": 0
+    },
+    "9": {
+     "L": 6,
+     "forests": 345,
+     "WR_fails_somewhere": 175,
+     "min_first_WR_fail_r": 9,
+     "ISO_fails_somewhere": 0,
+     "min_first_ISO_fail_r": null,
+     "max_first_mode_index": 5,
+     "max_last_mode_index": 5,
+     "witness_max_first_mode_index": {
+      "n": 10,
+      "component_sizes": [
+       2,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "poly": [
+       1,
+       10,
+       44,
+       112,
+       182,
+       196,
+       140,
+       64,
+       17,
+       2
+      ]
+     },
+     "min_first_WR_fail_minus_L": 3,
+     "min_first_ISO_fail_minus_L": null,
+     "L_minus_max_first_mode_index": 1
+    },
+    "10": {
+     "L": 7,
+     "forests": 81,
+     "WR_fails_somewhere": 24,
+     "min_first_WR_fail_r": 10,
+     "ISO_fails_somewhere": 0,
+     "min_first_ISO_fail_r": null,
+     "max_first_mode_index": 5,
+     "max_last_mode_index": 5,
+     "witness_max_first_mode_index": {
+      "n": 10,
+      "component_sizes": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "poly": [
+       1,
+       10,
+       45,
+       120,
+       210,
+       252,
+       210,
+       120,
+       45,
+       10,
+       1
+      ]
+     },
+     "min_first_WR_fail_minus_L": 3,
+     "min_first_ISO_fail_minus_L": null,
+     "L_minus_max_first_mode_index": 2
+    },
+    "11": {
+     "L": 7,
+     "forests": 12,
+     "WR_fails_somewhere": 1,
+     "min_first_WR_fail_r": 11,
+     "ISO_fails_somewhere": 0,
+     "min_first_ISO_fail_r": null,
+     "max_first_mode_index": 6,
+     "max_last_mode_index": 6,
+     "witness_max_first_mode_index": {
+      "n": 12,
+      "component_sizes": [
+       2,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "poly": [
+       1,
+       12,
+       65,
+       210,
+       450,
+       672,
+       714,
+       540,
+       285,
+       100,
+       21,
+       2
+      ]
+     },
+     "min_first_WR_fail_minus_L": 4,
+     "min_first_ISO_fail_minus_L": null,
+     "L_minus_max_first_mode_index": 1
+    },
+    "12": {
+     "L": 8,
+     "forests": 1,
+     "WR_fails_somewhere": 0,
+     "min_first_WR_fail_r": null,
+     "ISO_fails_somewhere": 0,
+     "min_first_ISO_fail_r": null,
+     "max_first_mode_index": 6,
+     "max_last_mode_index": 6,
+     "witness_max_first_mode_index": {
+      "n": 12,
+      "component_sizes": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "poly": [
+       1,
+       12,
+       66,
+       220,
+       495,
+       792,
+       924,
+       792,
+       495,
+       220,
+       66,
+       12,
+       1
+      ]
+     },
+     "min_first_WR_fail_minus_L": null,
+     "min_first_ISO_fail_minus_L": null,
+     "L_minus_max_first_mode_index": 2
+    }
+   },
+   "reading": {
+    "larger_cutoff": "a cutoff L'' > L would need WR_r/ISO_r for r in [L, L''-1]; the columns min_first_WR_fail_minus_L / min_first_ISO_fail_minus_L say how far beyond L that is possible on the data (0 means: already fails at r = L for some forest)",
+    "smaller_cutoff": "a cutoff L' < L never adds WR/ISO requirements but asks TAIL from L'; TAIL from L' holds iff L' >= first mode index, so L_minus_max_first_mode_index is the slack the data leaves for lowering the cutoff at that alpha"
+   },
+   "verified_prefix_clean_and_L_at_least_first_mode": true
+  },
+  "all_ok": true
+ },
+ "seconds_total": 4.178,
+ "failures": [],
+ "pass": true
+}
