@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<!-- Dev model viewer: /dev/viewer.html?m=/assets/models/weapons/M4A1.glb&v=side|front|top|close&focus=NodeName&dist=1.2 -->
+<html><body style="margin:0;background:#2a2d33"><canvas id="c"></canvas>
+<script type="module">
+import * as THREE from '/node_modules/three/build/three.module.js';
+import { GLTFLoader } from '/node_modules/three/examples/jsm/loaders/GLTFLoader.js';
+import { RGBELoader } from '/node_modules/three/examples/jsm/loaders/RGBELoader.js';
+const params = new URLSearchParams(location.search);
+const W = parseInt(params.get('w') || '1280'), H = parseInt(params.get('h') || '720');
+const canvas = document.getElementById('c'); canvas.width = W; canvas.height = H;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(parseFloat(params.get('fov') || '35'), W / H, 0.005, 200);
+const hdr = await new RGBELoader().loadAsync('/assets/hdri/kloofendal_48d_partly_cloudy_puresky_2k.hdr');
+hdr.mapping = THREE.EquirectangularReflectionMapping; scene.environment = hdr; scene.background = new THREE.Color(0x2a2d33);
+const sun = new THREE.DirectionalLight(0xfff0dd, 3); sun.position.set(2, 3, 2); scene.add(sun);
+const gltf = await new GLTFLoader().loadAsync(params.get('m') || '/assets/models/weapons/M4A1.glb');
+const root = gltf.scene; scene.add(root);
+if (params.get('anim') && gltf.animations.length) { const mixer = new THREE.AnimationMixer(root); mixer.clipAction(gltf.animations[parseInt(params.get('anim'))]).play(); mixer.update(parseFloat(params.get('t') || '0.5')); }
+root.updateMatrixWorld(true);
+const bones = []; root.traverse((o) => { if (o.isBone) bones.push(o.name); });
+console.log('BONES', bones.length, bones.join(' | '));
+console.log('ANIMS', gltf.animations.map((a) => a.name + ':' + a.duration.toFixed(2)).join(', '));
+root.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) { const g = o.geometry; console.log('MESH', o.name, o.type, 'tris', g.index ? g.index.count / 3 : g.attributes.position.count / 3, 'mat', o.material.name, 'map', o.material.map ? o.material.map.image?.width + 'x' + o.material.map.image?.height : '-', 'nrm', !!o.material.normalMap, 'skin', !!o.skeleton); } });
+if (params.get('dump')) {
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const b = new THREE.Box3().setFromObject(o);
+    const p = o.getWorldPosition(new THREE.Vector3());
+    const q = o.getWorldQuaternion(new THREE.Quaternion());
+    console.log('PART', o.name, 'wmin', b.min.toArray().map((v) => v.toFixed(3)).join(','), 'wmax', b.max.toArray().map((v) => v.toFixed(3)).join(','), 'pos', p.toArray().map((v) => v.toFixed(3)).join(','), 'q', q.toArray().map((v) => v.toFixed(3)).join(','), 'parent', o.parent?.name);
+  });
+  const rq = root.children[0]; console.log('ROOTNODE', rq?.name, 'pos', rq?.position.toArray().map((v) => v.toFixed(3)).join(','), 'quat', rq?.quaternion.toArray().map((v) => v.toFixed(3)).join(','), 'scale', rq?.scale.toArray().join(','));
+}
+let target = root;
+const focus = params.get('focus');
+if (focus) root.traverse((o) => { if (o.name === focus) target = o; });
+const box = new THREE.Box3().setFromObject(target);
+if (target.isBone) { const p = target.getWorldPosition(new THREE.Vector3()); box.setFromCenterAndSize(p, new THREE.Vector3(0.25, 0.25, 0.25)); }
+const size = box.getSize(new THREE.Vector3()); const center = box.getCenter(new THREE.Vector3());
+console.log('SIZE', size.x.toFixed(3), size.y.toFixed(3), size.z.toFixed(3), 'CENTER', center.x.toFixed(3), center.y.toFixed(3), center.z.toFixed(3));
+const d = Math.max(size.x, size.y, size.z) * parseFloat(params.get('dist') || '1.2');
+const v = params.get('v') || 'side';
+const offs = { side: [1, 0.3, 0.2], front: [0.1, 0.3, -1.2], back: [0.1, 0.3, 1.2], top: [0.001, 1.5, 0.001], close: [0.35, 0.25, -0.1], left: [-1, 0.3, 0.2] }[v] || [1, 0.3, 0.2];
+cam.position.set(center.x + offs[0] * d, center.y + offs[1] * d, center.z + offs[2] * d);
+cam.lookAt(center);
+if (params.get('axes')) scene.add(new THREE.AxesHelper(d));
+renderer.render(scene, cam); window.__done = true;
+</script></body></html>
