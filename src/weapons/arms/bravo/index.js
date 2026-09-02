@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Spring3 } from '../../springs.js';
 import { defineHand, buildHandGeometry, mirrorGeometry, buildSkeleton, BONES, FOREARM } from './hand.js';
-import { buildArmGeometry } from './arm.js';
+import { buildArmGeometry, SKIN_BAND } from './arm.js';
 import { makeKnit, makeLeather, makeCuff, makeCamo, makeSkin } from './textures.js';
 import { makeGloveMaterial, makeCuffMaterial, makeSkinMaterial, makeSleeveMaterial } from './materials.js';
 import { CHANNELS, POSES, resolvePose } from './poses.js';
@@ -21,6 +21,7 @@ const IDENTITY = new THREE.Matrix4();
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
+const FINGERS = ['index', 'middle', 'ring', 'pinky'];
 const L_FORE = FOREARM.segment * 3;
 const L_UPPER = 0.32;
 const MAX_WRIST_BEND = 62 * DEG;
@@ -50,13 +51,16 @@ export const FIT = {
     pole: [0.75, -1, 0.3],
   },
   left: {
-    // palm flat on the left rail face (rolled 15° so the back of the hand faces the camera), fingers tilted
-    // 12° forward, knuckle row at the top-left rail corner so the fingers lie over the top rail
+    // underhand grip: palm under the handguard (heel just left of the bottom rail, pressed 3 mm into the rail
+    // flange, which stays hidden inside the glove), knuckle row along the bottom-right corner so the fingers
+    // wrap up the right side of the handguard with the tips on the top-right rail edge, index finger against
+    // the hand stop's rear face, thumb along the left side rail pointing forward; the wrist sits below-left of
+    // the handguard and swings 40° back toward the shoulder (fitted numerically — see preview.js ?fitFingers=1)
     palm: [-0.002, 0.05, -0.003],
-    pos: [-0.05, 0.0125, -0.216],
-    y: [0.253, 0.945, -0.208],
-    z: [-0.966, 0.259, 0],
-    pole: [-0.7, -1, 0.35],
+    pos: [-0.008, -0.0225, -0.175],
+    y: [0.766, -0.056, -0.64],
+    z: [0, -0.996, 0.087],
+    pole: [-0.55, -1, 0.3],
     // Reload poses: the rig moves the palm target but keeps the handguard orientation, so each pose carries its
     // own hand orientation (gun space) and palm-centre offset from the target.
     poses: {
@@ -187,9 +191,8 @@ export class HandRig {
     const bones = this.bones;
     const rest = this.rest.quat;
     const side = this.side;
-    const names = ['index', 'middle', 'ring', 'pinky'];
     for (let f = 0; f < 4; f++) {
-      const ids = BONES[names[f]];
+      const ids = BONES[FINGERS[f]];
       const o = f * 4;
       const b0 = bones[ids[0]];
       _qa.setFromAxisAngle(Z_AXIS, cur[o + 3] * DEG * side);
@@ -271,7 +274,7 @@ export async function buildArms(game, rig) {
   const leather = makeLeather(aniso);
   const cuff = makeCuff(aniso);
   const camo = makeCamo(aniso);
-  const skin = makeSkin(aniso);
+  const skin = makeSkin(aniso, SKIN_BAND);
   const mats = {
     glove: makeGloveMaterial(knit, leather),
     cuff: makeCuffMaterial(cuff),
@@ -289,18 +292,17 @@ export async function buildArms(game, rig) {
   const tris = (handGeoR.index.count / 3) * 2 + (armGeoR.index.count / 3) * 2;
   console.info(`[arms/bravo] built in ${(performance.now() - t0).toFixed(0)} ms — ${tris} triangles, ${Object.keys(mats).length} materials`);
 
-  // While the left hand holds the magazine, the rig keeps its target at the magazine's REST position although the
-  // WeaponSystem slides the magazine pivot out of / into the well. Carry the target along with the pivot's
-  // displacement so the hand visibly pulls the mag out and pushes the fresh one in.
+  // While the left hand holds the magazine, the WeaponSystem's target already rides on the (translated) magazine
+  // pivot but keeps the handguard orientation; add the pivot's tilt about itself so the hand stays glued to the
+  // tilted magazine while it is pulled out / pushed in.
   const followTarget = new THREE.Object3D();
   const _dq = new THREE.Quaternion();
   const magFollow = (target) => {
     const pivot = rig.parts.magazine?.parent;
     const rest = pivot?.userData?.rest;
-    if (!rest || !rest.position) return target;
-    if (pivot.position.equals(rest.position) && pivot.quaternion.equals(rest.quaternion)) return target;
+    if (!rest || !rest.quaternion || pivot.quaternion.equals(rest.quaternion)) return target;
     _dq.copy(rest.quaternion).invert().premultiply(pivot.quaternion);
-    followTarget.position.copy(target.position).sub(rest.position).applyQuaternion(_dq).add(pivot.position);
+    followTarget.position.copy(target.position).sub(pivot.position).applyQuaternion(_dq).add(pivot.position);
     followTarget.quaternion.copy(_dq).multiply(target.quaternion);
     return followTarget;
   };
@@ -330,6 +332,7 @@ export async function buildArms(game, rig) {
       for (const set of [knit, leather, cuff, camo, skin]) {
         set.map.dispose();
         set.normalMap.dispose();
+        set.roughnessMap?.dispose();
       }
     },
   };

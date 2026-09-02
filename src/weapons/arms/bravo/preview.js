@@ -253,7 +253,7 @@ async function fitLeftFingers() {
     let best = { cost: Infinity, angles: [0, 0, 0] };
     for (let mcp = 0; mcp <= 90; mcp += 5) {
       for (let pip = 0; pip <= 100; pip += 5) {
-        for (let dip = 0; dip <= 70; dip += 10) {
+        for (let dip = 0; dip <= Math.min(70, pip + 10); dip += 10) {
           raw[name][0] = mcp;
           raw[name][1] = pip;
           raw[name][2] = dip;
@@ -318,6 +318,7 @@ async function fitLeftFingers() {
   window.__fit = { raw, report };
 }
 
+const MAG_GRAB_OFFSET = new THREE.Vector3(-0.005, -0.075, 0);
 const driveTargets = () => {
   const s = rig.sockets;
   s.rightHandTarget.position.copy(s.gripRight.position);
@@ -327,6 +328,10 @@ const driveTargets = () => {
   s.leftHandTarget.quaternion.copy(s.gripLeft.quaternion);
   s.leftHandTarget.userData.pose = params.get('lpose') || 'grip';
   if (params.has('ltarget')) s.leftHandTarget.position.fromArray(vec('ltarget'));
+  else if (s.leftHandTarget.userData.pose === 'magGrab' && rig.parts.magazine?.parent?.userData?.rest) {
+    // WeaponSystem: palm target = (moved) magazine pivot + (-5, -75, 0) mm
+    s.leftHandTarget.position.copy(rig.parts.magazine.parent.position).add(MAG_GRAB_OFFSET);
+  }
 };
 
 let viewCam = camera;

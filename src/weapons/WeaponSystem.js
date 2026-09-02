@@ -14,7 +14,8 @@ import { upgradeGunMaterials } from './materials.js';
  * Emits: weapon:fire, weapon:casing, weapon:reload:start/end, weapon:empty, weapon:ammo, weapon:aim, weapon:magdrop, weapon:draw
  */
 
-const HIP_POSE = { pos: new THREE.Vector3(0.13, -0.115, -0.34), rot: new THREE.Euler(0.0, 0.05, -0.015) };
+// Reference framing (MW2019): receiver bottom-right, handguard running to the upper-left, gun close to the lens.
+const HIP_POSE = { pos: new THREE.Vector3(0.10, -0.092, -0.23), rot: new THREE.Euler(0.055, 0.25, -0.055) };
 const SPRINT_POSE = { pos: new THREE.Vector3(0.07, -0.15, -0.30), rot: new THREE.Euler(0.2, 0.6, -0.25) };
 const LOWERED_POSE = { pos: new THREE.Vector3(0.15, -0.5, -0.28), rot: new THREE.Euler(-0.75, 0.15, 0) };
 const RELOAD_TILT = { pos: new THREE.Vector3(0.02, -0.035, 0.02), rot: new THREE.Euler(-0.12, 0.12, -0.42) };
@@ -87,6 +88,7 @@ export class WeaponSystem {
     this._fireModeSelector = 'AUTO';
     this.debugAim = null; // true/false forces ADS on/off (screenshot tooling); null = use input
     this.debugSprint = false;
+    this.poses = { hip: HIP_POSE, sprint: SPRINT_POSE, lowered: LOWERED_POSE, reloadTilt: RELOAD_TILT }; // live-tunable
   }
 
   /* ------------------------------------------------------------------ loading */

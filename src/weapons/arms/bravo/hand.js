@@ -36,10 +36,10 @@ export const FOREARM = {
 export function defineHand() {
   const fingers = [
     // MCP joints sit slightly palmar of the slab's mid-plane so the fingers' palmar faces run flush with the palm.
-    { name: 'index', mcp: [-0.031, 0.094, -0.004], len: [0.044, 0.026, 0.023], r: [0.0102, 0.0091, 0.0082, 0.0071], spread: -7, curl: [10, 20, 10] },
-    { name: 'middle', mcp: [-0.009, 0.1, -0.003], len: [0.049, 0.03, 0.024], r: [0.0104, 0.0093, 0.0084, 0.0073], spread: -1.5, curl: [10, 20, 10] },
-    { name: 'ring', mcp: [0.013, 0.095, -0.004], len: [0.045, 0.028, 0.024], r: [0.01, 0.0089, 0.008, 0.0069], spread: 4, curl: [12, 22, 10] },
-    { name: 'pinky', mcp: [0.034, 0.084, -0.006], len: [0.035, 0.022, 0.021], r: [0.009, 0.008, 0.0072, 0.0063], spread: 10, curl: [14, 24, 12] },
+    { name: 'index', mcp: [-0.031, 0.094, -0.004], len: [0.044, 0.026, 0.023], r: [0.0097, 0.0088, 0.008, 0.007], spread: -7, curl: [10, 20, 10] },
+    { name: 'middle', mcp: [-0.009, 0.1, -0.003], len: [0.049, 0.03, 0.024], r: [0.0099, 0.009, 0.0082, 0.0072], spread: -1.5, curl: [10, 20, 10] },
+    { name: 'ring', mcp: [0.013, 0.095, -0.004], len: [0.045, 0.028, 0.024], r: [0.0095, 0.0086, 0.0078, 0.0068], spread: 4, curl: [12, 22, 10] },
+    { name: 'pinky', mcp: [0.034, 0.084, -0.006], len: [0.035, 0.022, 0.021], r: [0.0086, 0.0077, 0.007, 0.0062], spread: 10, curl: [14, 24, 12] },
   ];
   const zAxis = new THREE.Vector3(0, 0, 1);
   const q = new THREE.Quaternion();
@@ -146,18 +146,63 @@ export function makeHandField(def) {
     return d;
   };
 
+  // Knuckle padding: rubber standing ~1.5–2 mm proud of the knit — one rounded pad over each MCP knuckle and
+  // transverse ridge bars across the backs of the proximal (two) and middle (one) phalanges, leaving the joints
+  // free so the fingers still bend visibly.
+  const pads = [];
+  {
+    const dx = new THREE.Vector3();
+    const dz = new THREE.Vector3();
+    const c = new THREE.Vector3();
+    const pa = new THREE.Vector3();
+    const pb = new THREE.Vector3();
+    for (let i = 0; i < 4; i++) {
+      const f = F[i];
+      const bars = [
+        [0, 0.36],
+        [0, 0.7],
+        [1, 0.5],
+      ];
+      for (const [k, t] of bars) {
+        const a = f.joints[k];
+        const b = f.joints[k + 1];
+        dx.set(1, 0, 0).applyQuaternion(f.frames[k]);
+        dz.set(0, 0, 1).applyQuaternion(f.frames[k]);
+        const r = f.r[k] + (f.r[k + 1] - f.r[k]) * t;
+        // wide, low bar (≈ 1.8 mm proud) spanning the back of the finger
+        c.copy(a).lerp(b, t).addScaledVector(dz, r * 0.76);
+        pa.copy(c).addScaledVector(dx, -r * 0.5);
+        pb.copy(c).addScaledVector(dx, r * 0.5);
+        pads.push({ cone: true, a: [pa.x, pa.y, pa.z], b: [pb.x, pb.y, pb.z], r1: r * 0.42, r2: r * 0.42 });
+      }
+      const j0 = f.joints[0];
+      const rk = f.r[0] * (i === 3 ? 1.12 : 1.16);
+      pads.push({ cone: false, c: [j0.x, j0.y - 0.0015, j0.z + 0.005 + rk * 0.45], rx: rk * 0.78, ry: rk * 0.86, rz: rk * 0.72 });
+    }
+  }
+  const padDist = (x, y, z) => {
+    let d = Infinity;
+    for (let i = 0; i < pads.length; i++) {
+      const p = pads[i];
+      const dp = p.cone ? sdCone(x, y, z, p.a[0], p.a[1], p.a[2], p.b[0], p.b[1], p.b[2], p.r1, p.r2) : sdEllipsoid(x, y, z, p.c[0], p.c[1], p.c[2], p.rx, p.ry, p.rz);
+      if (dp < d) d = dp;
+    }
+    return d;
+  };
+
   const dist = (x, y, z) => {
     let df = fingerDist(0, x, y, z);
     df = Math.min(df, fingerDist(1, x, y, z));
     df = Math.min(df, fingerDist(2, x, y, z));
     df = Math.min(df, fingerDist(3, x, y, z));
-    let d = smin(palmDist(x, y, z), df, 0.007);
+    let d = smin(palmDist(x, y, z), df, 0.0045);
     d = smin(d, thumbDist(x, y, z), 0.013);
+    d = smin(d, padDist(x, y, z), 0.0025);
     // cut below the wrist (hidden inside the cuff)
     return Math.max(d, -(y + 0.018));
   };
 
-  return { dist, fingerDist, thumbDist, palmDist };
+  return { dist, fingerDist, thumbDist, palmDist, padDist };
 }
 
 /* ------------------------------------------------------------------------------------------------ chains */
@@ -286,7 +331,7 @@ function smoothstep(a, b, x) {
 /**
  * Mesh the hand field and compute all per-vertex attributes:
  * position, normal, uv (metres; cylindrical per finger / around the palm), skinIndex/skinWeight,
- * aMask = (leather, cuffTrim(unused here), ao).
+ * aMask = (leather, piping, ao, wristPanel), aDetail = (knucklePad, seamSuppress).
  */
 export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
   const field = makeHandField(def);
@@ -302,6 +347,7 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
   const pos = net.positions;
   const uv = new Float32Array(n * 2);
   const mask = new Float32Array(n * 4); // (leather, piping, ao, wristPanel)
+  const detail = new Float32Array(n * 2); // (knucklePad, seamSuppress)
   const skinIndex = new Uint16Array(n * 4);
   const skinWeight = new Float32Array(n * 4);
   const region = new Int16Array(n); // -1 palm, 0..3 finger, 4 thumb
@@ -351,17 +397,20 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
       uv[i * 2] = ang * R;
       uv[i * 2 + 1] = bq.s;
       circ[i] = 2 * Math.PI * R;
-      // palm-facing → leather; fingertips (distal) → leather cap; thumb inner side → leather
-      let palmness = -cz;
-      if (c.thumb) palmness = Math.max(-cz, 0.8 * bq.rx - 0.2 * bq.rz); // inner side of the thumb (faces the palm) is leather too
-      leather = smoothstep(-0.05, 0.5, palmness);
+      // palm-facing → leather; fingertips (distal) → leather cap. The thumb keeps knit all round except its pad
+      // (the reference glove shows a knit thumb lying along the rail).
+      const palmness = -cz;
+      leather = c.thumb ? smoothstep(0.5, 0.9, palmness) : smoothstep(-0.05, 0.5, palmness);
       const tipStart = c.arc[3] - 0.009; // small leather cap over the fingertip only
       leather = Math.max(leather, smoothstep(tipStart - 0.003, tipStart + 0.003, bq.s));
-      // palm-side creases at the joints
+      // palm-side creases at the joints; softer stretch creases across the knit on the back of the joints
       const pf = smoothstep(0.1, 0.6, palmness);
+      const df = smoothstep(0.1, 0.6, cz) * 0.45;
       for (let k = 1; k <= 2; k++) {
         const dj = (bq.s - c.arc[k]) / 0.0028;
         crease = Math.max(crease, pf * Math.exp(-dj * dj));
+        const dk = (bq.s - c.arc[k]) / 0.0022;
+        crease = Math.max(crease, df * Math.exp(-dk * dk));
       }
       if (c.thumb) {
         const dj = (bq.s - c.arc[1]) / 0.0035;
@@ -374,8 +423,9 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
       uv[i * 2 + 1] = y;
       circ[i] = 2 * Math.PI * PALM_R;
       const nz = normals[i * 3 + 2];
-      // leather on the palm side wrapping to the middle of the side edges; the wrist stays knit (cuff covers it)
-      leather = smoothstep(0.15, -0.25, nz);
+      // leather on the palm side, ending just past the side edges (the thenar / hypothenar bulges show knit on
+      // their outward faces like the reference glove); the wrist stays knit (cuff covers it)
+      leather = smoothstep(-0.28, -0.62, nz);
       // heel-of-palm creases (thenar line)
       const tx = x + 0.012;
       const ty = y - 0.03;
@@ -407,14 +457,17 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
           d1 = dd;
         } else if (dd < d2) d2 = dd;
       }
-      crevice = 1 - smoothstep(0.0008, 0.005, d2);
+      crevice = 1 - smoothstep(0.0008, 0.0062, d2);
       if (y < 0.075) crevice *= smoothstep(0.055, 0.075, y); // fade out below the webbing
     }
     // MCP knuckle creases on the back are handled by AO; combine AO + creases
     mask[i * 4] = leather;
     mask[i * 4 + 1] = trim;
-    mask[i * 4 + 2] = Math.max(0, Math.min(1, ao[i])) * (1 - 0.55 * crease) * (1 - 0.55 * crevice);
+    mask[i * 4 + 2] = Math.max(0, Math.min(1, ao[i])) * (1 - 0.55 * crease) * (1 - 0.7 * crevice);
     mask[i * 4 + 3] = panel;
+    // rubber knuckle pads (vertices on a pad sit on / just outside its own surface), no stitch seams near the wrist
+    detail[i * 2] = (1 - smoothstep(0.0003, 0.0022, field.padDist(x, y, z))) * (1 - leather);
+    detail[i * 2 + 1] = smoothstep(0.036, 0.024, y);
     solve(x, y, z, idx4, w4, false);
     for (let k = 0; k < 4; k++) {
       skinIndex[i * 4 + k] = idx4[k];
@@ -428,6 +481,7 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
   const outNrm = Array.from(normals);
   const outUv = Array.from(uv);
   const outMask = Array.from(mask);
+  const outDetail = Array.from(detail);
   const outSI = Array.from(skinIndex);
   const outSW = Array.from(skinWeight);
   const dupMap = new Map(); // key "v|k" → new index
@@ -441,6 +495,7 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
     outNrm.push(normals[v * 3], normals[v * 3 + 1], normals[v * 3 + 2]);
     outUv.push(uv[v * 2] + k * circ[v], uv[v * 2 + 1]);
     outMask.push(mask[v * 4], mask[v * 4 + 1], mask[v * 4 + 2], mask[v * 4 + 3]);
+    outDetail.push(detail[v * 2], detail[v * 2 + 1]);
     for (let j = 0; j < 4; j++) {
       outSI.push(skinIndex[v * 4 + j]);
       outSW.push(skinWeight[v * 4 + j]);
@@ -469,6 +524,7 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(outNrm, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(outUv, 2));
   geo.setAttribute('aMask', new THREE.Float32BufferAttribute(outMask, 4));
+  geo.setAttribute('aDetail', new THREE.Float32BufferAttribute(outDetail, 2));
   geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(outSI, 4));
   geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(outSW, 4));
   geo.setIndex(new THREE.BufferAttribute(outIdx, 1));

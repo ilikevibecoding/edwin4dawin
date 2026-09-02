@@ -138,11 +138,11 @@ function segDist(px, py, ax, ay, bx, by) {
 
 /* ------------------------------------------------------------------------------------------- knit */
 
-/** Olive knit: interlocking V stitches (24 wales × 32 courses per tile). Tile = 36 mm. */
+/** Olive knit: interlocking V stitches (30 wales × 40 courses per tile → 1.1 mm wales). Tile = 34 mm. */
 export function makeKnit(aniso) {
   const S = 512;
-  const COLS = 24;
-  const ROWS = 32;
+  const COLS = 30;
+  const ROWS = 40;
   const cw = S / COLS;
   const ch = S / ROWS;
   const height = new Float32Array(S * S);
@@ -193,7 +193,7 @@ export function makeKnit(aniso) {
     rgb[1] = 0.42 * l;
     rgb[2] = 0.275 * l;
   });
-  return { map: toTexture(albedo, { srgb: true, anisotropy: aniso }), normalMap: toTexture(heightToNormal(height, S, S, 6), { srgb: false, anisotropy: aniso }), size: 0.036 };
+  return { map: toTexture(albedo, { srgb: true, anisotropy: aniso }), normalMap: toTexture(heightToNormal(height, S, S, 5), { srgb: false, anisotropy: aniso }), size: 0.034 };
 }
 
 /* ------------------------------------------------------------------------------------------- leather */
@@ -259,9 +259,10 @@ export function makeCuff(aniso) {
       const n = fbm(u, v, 6, 3, 41);
       const strap = strapBand(v);
       const tab = strap * tabU(u);
-      // webbing rib pattern on the strap, raised tab edge
+      // webbing rib pattern on the strap; the tab's outer face is the fuzzy loop side of the hook-and-loop closure
       const rib = 0.5 + 0.5 * Math.sin(v * Math.PI * 2 * 40);
-      height[y * W + x] = weave * 0.35 * (1 - strap) + grid * 0.25 * (1 - strap) + n * 0.3 + stripe(v) * 0.12 + strap * (0.12 + 0.1 * rib) + tab * 0.15 - stitch(u, v) * 0.25;
+      const loop = fbm(u, v, 180, 2, 53);
+      height[y * W + x] = weave * 0.35 * (1 - strap) + grid * 0.25 * (1 - strap) + n * 0.3 + stripe(v) * 0.12 + strap * (0.12 + 0.1 * rib) * (1 - tab) + tab * (0.2 + 0.25 * loop) - stitch(u, v) * 0.25;
     }
   }
   const albedo = writeRGB(makeCanvas(W, H), (x, y, rgb) => {
@@ -273,9 +274,10 @@ export function makeCuff(aniso) {
     const strap = strapBand(v);
     const tab = strap * tabU(u);
     const rib = 0.5 + 0.5 * Math.sin(v * Math.PI * 2 * 40);
+    const loop = fbm(u, v, 180, 2, 53);
     let black = 0.045 * (0.75 + 0.5 * weave + (n - 0.5) * 0.4);
-    black *= 1 + strap * (0.9 + 0.7 * rib) + tab * 0.7;
-    const grey = 0.5 * (0.85 + 0.3 * weave + (n - 0.5) * 0.3);
+    black *= 1 + strap * (0.9 + 0.7 * rib) * (1 - tab) + tab * (1.2 + 1.4 * loop);
+    const grey = 0.3 * (0.85 + 0.3 * weave + (n - 0.5) * 0.3);
     const st = Math.min(1, stitch(u, v));
     const l = (black + (grey - black) * s) * (1 - 0.6 * st);
     rgb[0] = l;
@@ -339,23 +341,195 @@ export function makeCamo(aniso) {
 
 /* ------------------------------------------------------------------------------------------- skin */
 
-/** Forearm skin: warm mid tone with mottling, faint veins and pore normals. Tile = 0.12 m. */
-export function makeSkin(aniso) {
-  const S = 512;
-  const height = new Float32Array(S * S);
-  const albedo = writeRGB(makeCanvas(S, S), (x, y, rgb) => {
-    const u = x / S;
-    const v = y / S;
-    const mottle = fbm(u, v, 6, 4, 701, 0.55);
+/**
+ * Forearm skin as ONE unwrapped map: u runs once around the forearm (0.25 = dorsal/extensor side, 0.75 = inner/
+ * flexor side), v runs from the glove cuff (0) to the rolled sleeve (1). Albedo: desaturated warm base, redder toward
+ * the elbow and on the dorsal/ulnar side, lighter on the inner forearm, multi-scale mottling, sparse freckles/moles,
+ * faint bluish veins on the inner forearm, fine dark arm hair (dorsal side), soft compression darkening at the cuff.
+ * Height (→ normal map): pores, micro-wrinkles across the arm, raised veins, flexor tendons near the wrist.
+ * Roughness map: pores/oilier areas vary around 0.6.
+ * `circumference`/`length` (metres) give the map its physical scale so pores and hairs come out life-sized.
+ */
+export function makeSkin(aniso, { circumference = 0.23, length = 0.12 } = {}) {
+  const W = 1024;
+  const H = 512;
+  const height = new Float32Array(W * H);
+  const rough = new Float32Array(W * H);
+  const hairField = new Float32Array(W * H);
+  const mmU = (circumference * 1000) / W; // mm per texel around
+  const mmV = (length * 1000) / H; // mm per texel along
+
+  // --- veins: a few meandering longitudinal paths on the inner forearm (u ≈ 0.55..0.95), with branches.
+  const veins = [];
+  const VEIN_N = 24;
+  const addVein = (u0, v0, v1, width, seed, wander = 0.03) => {
+    const pts = [];
+    let u = u0;
+    for (let i = 0; i <= VEIN_N; i++) {
+      const t = i / VEIN_N;
+      u += (vnoise(t * 6, seed, 64, seed) - 0.5) * wander;
+      pts.push([u, v0 + (v1 - v0) * t]);
+    }
+    veins.push({ pts, width, v0, v1 });
+  };
+  addVein(0.66, 0.0, 1.0, 1.7, 5.1, 0.035); // basilic-ish, whole length
+  addVein(0.8, 0.1, 1.0, 1.4, 9.7, 0.03); // median antebrachial
+  addVein(0.73, 0.55, 0.98, 1.1, 3.3, 0.05); // branch joining toward the elbow
+  addVein(0.6, 0.35, 0.72, 0.9, 7.9, 0.04); // short tributary
+  addVein(0.9, 0.0, 0.45, 1.0, 2.2, 0.025); // ulnar-side small vein
+  const vein = { d: Infinity, width: 1 };
+  // distance (mm) to the nearest vein centre line; the polylines are monotonic in v, so only the segments around
+  // the matching parameter need testing
+  const veinDist = (u, v) => {
+    let best = Infinity;
+    let width = 1;
+    for (const vn of veins) {
+      const p = vn.pts;
+      const k = Math.floor(((v - vn.v0) / (vn.v1 - vn.v0)) * VEIN_N);
+      const i0 = Math.max(0, k - 2);
+      const i1 = Math.min(VEIN_N - 1, k + 2);
+      for (let i = i0; i <= i1; i++) {
+        // wrap-aware distance in mm
+        let du = u - p[i][0];
+        du -= Math.round(du);
+        const bx = (p[i + 1][0] - p[i][0]) * circumference * 1000;
+        const by = (p[i + 1][1] - p[i][1]) * length * 1000;
+        const px = du * circumference * 1000;
+        const py = (v - p[i][1]) * length * 1000;
+        const d = segDist(px, py, 0, 0, bx, by);
+        if (d < best) {
+          best = d;
+          width = vn.width;
+        }
+      }
+    }
+    vein.d = best;
+    vein.width = width;
+    return vein;
+  };
+
+  // --- hairs: short dark strokes, denser on the dorsal side, lying roughly along the arm (toward the wrist)
+  const hairs = [];
+  {
+    let seed = 1;
+    const rnd = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    for (let i = 0; i < 6000; i++) {
+      const u = rnd();
+      const v = rnd();
+      // density: dorsal side (u ≈ 0.25) high, inner side (u ≈ 0.75) near zero; fewer right at the cuff
+      const dorsal = 0.5 + 0.5 * Math.cos((u - 0.25) * Math.PI * 2);
+      const density = Math.pow(dorsal, 1.8) * (0.3 + 0.7 * sstep(0.05, 0.3, v)) * (0.3 + 0.7 * fbm(u, v, 5, 2, 77));
+      if (rnd() > density) continue;
+      const len = 3.5 + rnd() * 3.5; // mm
+      // hairs lie along the arm toward the wrist (canvas +y = texture -v), fanning slightly around the arm
+      const ang = Math.PI / 2 + (rnd() - 0.5) * 0.7 + Math.sin(u * Math.PI * 2) * 0.3;
+      const curve = (rnd() - 0.5) * 0.7;
+      hairs.push({ x: u * W, y: (1 - v) * H, len, ang, curve, dark: 0.16 + rnd() * 0.24, w: 0.22 + rnd() * 0.14 });
+    }
+  }
+  // rasterise hairs into hairField (coverage 0..1)
+  for (const h of hairs) {
+    const steps = Math.ceil((h.len / mmU) * 2);
+    let x = h.x;
+    let y = h.y;
+    let a = h.ang;
+    const dl = h.len / steps;
+    for (let s = 0; s < steps; s++) {
+      x += (Math.cos(a) * dl) / mmU;
+      y += (Math.sin(a) * dl) / mmV;
+      a += h.curve / steps;
+      const t = s / steps;
+      const taper = Math.min(1, t * 6) * (1 - t * 0.7); // fine root, tapering tip
+      const rad = h.w * taper;
+      const xi = Math.round(x);
+      const yi = Math.round(y);
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const px = (((xi + ox) % W) + W) % W;
+          const py = yi + oy;
+          if (py < 0 || py >= H) continue;
+          const dd = Math.hypot((xi + ox - x) * mmU, (yi + oy - y) * mmV) / (rad * 0.55);
+          const cov = Math.exp(-dd * dd) * h.dark;
+          const i = py * W + px;
+          hairField[i] = Math.max(hairField[i], cov);
+        }
+      }
+    }
+  }
+
+  const albedo = writeRGB(makeCanvas(W, H), (x, y, rgb) => {
+    const u = x / W;
+    const v = 1 - y / H; // canvas row 0 = v 1 (flipY upload)
+    const i = y * W + x;
+    const dorsal = 0.5 + 0.5 * Math.cos((u - 0.25) * Math.PI * 2); // 1 dorsal, 0 inner forearm
+    const mottle = fbm(u, v, 5, 4, 701, 0.55);
+    const mottleFine = fbm(u, v, 14, 3, 702, 0.5);
     const red = fbm(u, v, 3, 3, 802);
-    const freck = sstep(0.78, 0.84, fbm(u, v, 40, 2, 903));
-    const pores = fbm(u, v, 120, 2, 1004);
-    const l = 0.92 + (mottle - 0.5) * 0.28 - freck * 0.25;
-    // base sRGB ≈ (200, 148, 118)
-    rgb[0] = 0.78 * l + (red - 0.5) * 0.04;
-    rgb[1] = 0.58 * l - (red - 0.5) * 0.03;
-    rgb[2] = 0.47 * l - (red - 0.5) * 0.03;
-    height[y * S + x] = pores * 0.35 + mottle * 0.25;
+    const freck = sstep(0.8, 0.86, fbm(u, v, 46, 2, 903)) * (0.5 + 0.5 * dorsal);
+    const mole = sstep(0.9, 0.93, fbm(u, v, 18, 1, 904)) * dorsal;
+    const pores = fbm(u, v, 200, 2, 1004);
+    const wrinkle = Math.sin(v * Math.PI * 2 * 90 + fbm(u, v, 8, 2, 1102) * 9) * 0.5 + 0.5; // fine transverse creases
+    const vein = veinDist(u, v);
+    const veinCore = Math.exp(-((vein.d / vein.width) ** 2)) * (1 - dorsal) * 0.85;
+    const veinHalo = Math.exp(-((vein.d / (vein.width * 2.6)) ** 2)) * (1 - dorsal) * 0.5;
+    const hair = hairField[i];
+    // flexor tendons: two soft longitudinal ridges converging to the wrist on the inner side
+    const tendon = (uc) => Math.exp(-(((u - uc) / 0.028) ** 2)) * (1 - sstep(0.2, 0.55, v));
+    const tendons = (tendon(0.71 + 0.04 * v) + tendon(0.8 - 0.03 * v)) * 0.6;
+    // ulnar bone ridge near the wrist (u ≈ 0.5)
+    const ulna = Math.exp(-(((u - 0.5) / 0.05) ** 2)) * (1 - sstep(0.05, 0.4, v)) * 0.5;
+    const cuffShade = 1 - 0.22 * (1 - sstep(0.0, 0.09, v)) - 0.08 * Math.exp(-(((v - 0.03) / 0.03) ** 2));
+
+    // --- albedo (sRGB) ---
+    // base ≈ (176, 117, 97): medium warm tan (matched to the MW2019 reference forearm), kept short of saturated
+    // peach; inner forearm lighter/yellower, dorsal + elbow end ruddier
+    let R = 0.69;
+    let G = 0.46;
+    let B = 0.38;
+    const inner = 1 - dorsal;
+    R += inner * 0.035 - dorsal * 0.01;
+    G += inner * 0.04 - dorsal * 0.02;
+    B += inner * 0.035 - dorsal * 0.025;
+    const elbowRed = sstep(0.55, 1.0, v) * 0.5 + dorsal * 0.3 + (red - 0.5) * 0.6;
+    R += elbowRed * 0.03;
+    G -= elbowRed * 0.035;
+    B -= elbowRed * 0.03;
+    let l = 0.95 + (mottle - 0.5) * 0.16 + (mottleFine - 0.5) * 0.08 + (pores - 0.5) * 0.05;
+    l *= cuffShade;
+    l -= freck * 0.2 + mole * 0.3;
+    // veins: cooler and slightly darker (faint — they read mostly through the soft ridge in the normal map)
+    R -= veinCore * 0.05 + veinHalo * 0.02;
+    G -= veinCore * 0.03 + veinHalo * 0.008;
+    B += veinCore * 0.005;
+    // cuff compression: a touch of redness along with the darkening
+    const press = 1 - sstep(0.0, 0.08, v);
+    R += press * 0.025;
+    G -= press * 0.01;
+    // hair: dark brown strokes
+    const hr = 0.18;
+    const hg = 0.12;
+    const hb = 0.08;
+    rgb[0] = R * l * (1 - hair) + hr * hair;
+    rgb[1] = G * l * (1 - hair) + hg * hair;
+    rgb[2] = B * l * (1 - hair) + hb * hair;
+
+    // --- height & roughness ---
+    height[i] = 0.5 + (pores - 0.5) * 0.5 + (wrinkle - 0.5) * 0.08 + (mottleFine - 0.5) * 0.12 + veinCore * 0.18 + veinHalo * 0.06 + tendons * 0.35 + ulna * 0.3 - freck * 0.05 + hair * 0.15 - press * 0.15;
+    rough[i] = 0.64 + (pores - 0.5) * 0.18 + (mottle - 0.5) * 0.06 - veinCore * 0.04 - inner * 0.03 + hair * 0.15;
   });
-  return { map: toTexture(albedo, { srgb: true, anisotropy: aniso }), normalMap: toTexture(heightToNormal(height, S, S, 1.6), { srgb: false, anisotropy: aniso }), size: 0.12 };
+  const roughCanvas = writeRGB(makeCanvas(W, H), (x, y, rgb) => {
+    const r = Math.max(0.35, Math.min(0.85, rough[y * W + x]));
+    rgb[0] = 1;
+    rgb[1] = r;
+    rgb[2] = 0;
+  });
+  return {
+    map: toTexture(albedo, { srgb: true, anisotropy: aniso }),
+    normalMap: toTexture(heightToNormal(height, W, H, 2.4), { srgb: false, anisotropy: aniso }),
+    roughnessMap: toTexture(roughCanvas, { srgb: false, anisotropy: aniso }),
+    size: 1,
+  };
 }
