@@ -210,7 +210,7 @@ the JSON).  24(2e−1)c is concave in S (S²-coefficient −60), 2cP_eff is affi
 
 In the exhaustive run, whenever the side conditions hold for a forest with n ≤ 16 (with
 Δ′ = Δ_max(S) and with Δ′ = Δ_t: 170 783 instances) the inequality Q_4 ≥ bound is
-asserted; it is tight (slack 0) for the star K_{1,12} with Δ′ = Δ_max = 12, so the
+asserted; it is tight (slack 0) for every star K_{1,n−1}, 13 ≤ n ≤ 16, with either Δ′ variant (Δ_t = Δ_max = e at S = C(e,2)), so the
 chain cannot be sharpened without using more structure.  The side conditions fail
 in 341 instances, all with n ≤ 12 (at n = 13, 14 they hold at every integer point
 (e,S) for both Δ′ variants, but the bound is ≤ 0 at 72 resp. 33 of the 594 resp. 752
@@ -220,12 +220,21 @@ in 341 instances, all with n ≤ 12 (at n = 13, 14 they hold at every integer po
 
 ## 6. Lemma I (positivity of the bound and of the side conditions)
 
-Let n ≥ 15, 2 ≤ e ≤ n−1, 0 ≤ S ≤ C(e,2).  Then cP_eff > 0, c > 0, L0 > 0 for S ≤ e−1
-and L_I > 0 for S ≥ e−1, where c and L_I are taken with Δ′ = Δ_t in (a) and with
-Δ′ = Δ_max(S) in (b).  (Since Δ_max ≤ Δ_t, p_3 > 0 and Tmin ≥ 0 in case I, positivity
-for Δ_t implies positivity for Δ_max; either variant is a valid instance of Lemma H.)
-Consequently Lemma H applies with all side conditions satisfied and Q_4 > 0 for every
-forest with n ≥ 15 and e ≥ 2.
+Let n ≥ 15, 2 ≤ e ≤ n−1, 0 ≤ S ≤ C(e,2).  Then cP_eff > 0, L0 > 0 for S ≤ e−1,
+L_I > 0 for S ≥ e−1, and the side conditions of Lemma H hold: c > 0 for every
+n ≥ 18, while for 15 ≤ n ≤ 17 the quantity c is negative at 22 integer points
+(Δ′ = Δ_max; 29 with Δ_t), all of them case-I points (S ≥ e−1) at which
+8Tmin + c > 0 — e.g. n = 15, e = 14, S = 91 (the star K_{1,14}): c = −1365,
+8Tmin + c = 1547 — so the case-I condition "c ≥ 0 or 8Tmin + c ≥ 0" is satisfied
+there; c ≥ 0 holds at every case-II point (S ≤ e−2).  Here c and L_I are taken
+with Δ′ = Δ_t in (a) and with Δ′ = Δ_max(S) in (b).  (Since Δ_max ≤ Δ_t, p_3 > 0
+and Tmin ≥ 0 in case I, positivity for Δ_t implies positivity for Δ_max; either
+variant is a valid instance of Lemma H.)  Consequently Lemma H applies with all
+side conditions satisfied and Q_4 > 0 for every forest with n ≥ 15 and e ≥ 2.
+(This wording was corrected after the independent audit
+`audit_iso234_independent.py`, which found the earlier sentence "c > 0" overstated
+for 15 ≤ n ≤ 17; the script's assertions and the proof of Theorem 3 were already
+using the weaker, correct condition.)
 
 **(a) n ≥ 18 — exact Bernstein certificates (six polynomials).**  Parametrise
 e = 2 + t(n−3), t ∈ [0,1] (covers 2 ≤ e ≤ n−1), and S affinely: S = (e−1) + σ(e−1)(e−2)/2
@@ -358,6 +367,6 @@ is **open** here.
   (Q_4 in both variable sets, Φ0, cT, cP, E, L0, L_I, c, cP_eff, closed forms), certificate
   and scan records, per-order minimizers with level sequences and degree sequences,
   script sha256 `86afd13c841e4fdd5bd2372620931bd0bb0a0daa4836747dd805737913913d4e`.
-* Anomalies: none.  Observations: the chain of Lemma H is tight for stars (slack 0 at
+* Anomalies: one wording overstatement in the original Lemma I statement, corrected in §6 after the independent audit; the mathematics and the script's assertions were unaffected.  Observations: the chain of Lemma H is tight for stars (slack 0 at
   K_{1,12}); the lower bound is not positive at all integer (e,S) for n ≤ 14, so the
   exhaustive range n ≤ 14 is exactly what the analytic part requires.
