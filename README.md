@@ -1,4 +1,18 @@
-# edwin4dawin
+# Erdős Problem #993 — independence-polynomial unimodality of forests
+
+Status: **open** (see `docs/STATUS_2026-09-02.md`). This repository holds the
+transferred research workspace `erdos993_goal/` (sources committed, every file
+pinned in `reports/erdos993_goal_manifest_sha256.txt`), the 2026-09-02 session
+results, and an independent exact scanning toolkit.
+
+Start with `docs/STATUS_2026-09-02.md`, then `docs/HANDOFF_2026-09-02.md`,
+`docs/FRAMEWORK_LOGIC_AUDIT_2026-09-02.md`,
+`docs/TARGET_THEOREM_FALSIFICATION_SCAN_2026-09-02.md`,
+`docs/REPLAY_AUDIT_LINUX_2026-09-02.md`, `docs/LITERATURE_STATUS_2026-09-02.md`.
+
+Exhaustive tree scans: `tools/run_iso_scan.sh N` (C scanner over
+`nauty-gentreeg`, reaches n = 29 in about 15 minutes on 4 cores) and
+`scripts/run_tree_scan.sh` (second, independent scanner). Results in `reports/`.
 
 ## Python toolkit (`erdos993/`)
 
