@@ -7,6 +7,12 @@ Notation (``p`` is an independence polynomial, ``a = alpha`` its degree)::
     ISO_r(p)  : Q_r = r p_r^2 + p_{r-1}^2 - (r+1) p_{r-1} p_{r+1} >= 0,   1 <= r <= a-1
     TAIL(p)   : p[r] >= p[r+1] for all r >= L(a)
 
+TAIL is the Levit-Mandrescu theorem (arXiv:math/0406623, Cor. 2.7/2.8): it is
+proved for bipartite graphs -- hence for every forest -- and for
+Koenig-Egervary / quasi-regularizable graphs; it is NOT true for arbitrary
+graphs with the same threshold (the paper gives counterexamples), so nothing
+here should be applied outside forests without re-checking that hypothesis.
+
 Reduction lemma (verified symbolically in ``tests/test_lemma.py``): for r >= 1
 with p_{r-1} > 0,
 
