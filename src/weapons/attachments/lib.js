@@ -29,6 +29,7 @@ export const RAIL = {
  * Cross-section of a picatinny clamp (the mount's base plate + two jaws hugging the rail "T").
  * Built in a frame where the rail surface is y = 0 and the rail body extends toward -y. `flip` mirrors
  * it for a rail whose body extends toward +y (the handguard bottom rail). Extrude along z for the mount length.
+ * `chamfer` cuts the two top corners at 45° (machined mounts: the chamfer is what catches the sky).
  */
 export function railClampShape({
   halfWidth = 13,
@@ -38,8 +39,10 @@ export function railClampShape({
   jawDepth = 6.0, // jaw bottom (must stay above the receiver shoulders)
   jawInner = 6.6, // jaw bottom inner x
   sunk = 0.5, // the plate reaches this far into the rail so no face is coplanar
+  chamfer = 0,
   flip = false,
 } = {}) {
+  const c = Math.min(chamfer, halfWidth * 0.4, height * 0.6);
   const pts = [
     [-halfWidth, -jawDepth],
     [-jawInner, -jawDepth],
@@ -49,8 +52,7 @@ export function railClampShape({
     [flangeHalf, -hookDepth],
     [jawInner, -jawDepth],
     [halfWidth, -jawDepth],
-    [halfWidth, height],
-    [-halfWidth, height],
+    ...(c > 0 ? [[halfWidth, height - c], [halfWidth - c, height], [-(halfWidth - c), height], [-halfWidth, height - c]] : [[halfWidth, height], [-halfWidth, height]]),
   ];
   if (flip) {
     for (const p of pts) p[1] = -p[1];
@@ -136,6 +138,30 @@ export function roundedRect(w, h, radii, out = new THREE.Shape(), cx = 0, cy = 0
   if (tl > 0) out.absarc(x0 + tl, y1 - tl, tl, Math.PI / 2, Math.PI, false);
   out.lineTo(x0, y0 + bl);
   if (bl > 0) out.absarc(x0 + bl, y0 + bl, bl, Math.PI, Math.PI * 1.5, false);
+  out.closePath();
+  return out;
+}
+
+/**
+ * Rectangle path (mm) centred on (cx, cy) with 45° chamfers: `top` on the two upper corners, `bottom` on the
+ * lower ones. Extruded along z it gives a machined slab whose flat chamfers read as lit bands (a fillet only
+ * gives a gradient).
+ */
+export function chamferRect(w, h, top, bottom = top, out = new THREE.Shape(), cx = 0, cy = 0) {
+  const x0 = cx - w / 2;
+  const x1 = cx + w / 2;
+  const y0 = cy - h / 2;
+  const y1 = cy + h / 2;
+  const t = Math.min(top, w * 0.45, h * 0.6);
+  const b = Math.min(bottom, w * 0.45, h * 0.6);
+  out.moveTo(x0 + b, y0);
+  out.lineTo(x1 - b, y0);
+  if (b > 0) out.lineTo(x1, y0 + b);
+  out.lineTo(x1, y1 - t);
+  if (t > 0) out.lineTo(x1 - t, y1);
+  out.lineTo(x0 + t, y1);
+  if (t > 0) out.lineTo(x0, y1 - t);
+  out.lineTo(x0, y0 + b);
   out.closePath();
   return out;
 }
@@ -431,14 +457,14 @@ export function grainNormal(game, repeat = 6) {
  * oxide layer over the metal), fine grain, mottled roughness, worn to a lighter grey along bevels. The bevel
  * vertex tint from bakeEdgeWear() is turned into real wear by the shared surface hook.
  */
-export function anodisedMaterial(game, { color = 0x212121, roughness = 0.56, metalness = 0.1, name = 'anodised', wear = 0.75, grain = 0.35, repeat = 6 } = {}) {
+export function anodisedMaterial(game, { color = 0x212121, roughness = 0.4, metalness = 0.1, name = 'anodised', wear = 0.75, grain = 0.35, repeat = 6, envMapIntensity = 0.28 } = {}) {
   const m = new THREE.MeshStandardMaterial({
     color,
     roughness,
     metalness,
     normalMap: grainNormal(game, repeat),
     normalScale: new THREE.Vector2(grain, grain),
-    envMapIntensity: 0.18,
+    envMapIntensity,
     vertexColors: true,
   });
   m.name = name;
@@ -539,15 +565,18 @@ export function rubberMaterial(game, { color = 0x161617, name = 'rubber' } = {})
   return m;
 }
 
-/** Dark glass-fibre / matte interior black (hood interior, lens barrels). */
-export function matteBlackMaterial(game, { name = 'matteBlack' } = {}) {
+/**
+ * Dark glass-fibre / matte interior black (screw sockets, slots, lens barrels, the hood liner). Not a void: a
+ * real matte black still returns a few percent, and the reference's hood interior reads as a lit dark grey.
+ */
+export function matteBlackMaterial(game, { color = 0x1c1d1f, envMapIntensity = 0.6, name = 'matteBlack' } = {}) {
   const m = new THREE.MeshStandardMaterial({
-    color: 0x0b0b0c,
+    color,
     roughness: 0.95,
     metalness: 0.0,
     normalMap: grainNormal(game, 3),
     normalScale: new THREE.Vector2(0.2, 0.2),
-    envMapIntensity: 0.3,
+    envMapIntensity,
     vertexColors: true,
   });
   m.name = name;
@@ -566,10 +595,17 @@ export function matteBlackMaterial(game, { name = 'matteBlack' } = {}) {
  * measured on the ADS frame, the sun's direct specular (r185's multiscatter GGX term, not the IBL — it survives
  * envMapIntensity 0 and is roughness-independent) added ~+15 sRGB over the whole pane at 0.5; 0.15 ≈ 0.6 %
  * reflectance, what a multi-layer AR coating actually does.
+ *
+ * `sheen` is the off-axis sky reflection seen from the hip: a coated window with the usual film of dust and
+ * fingerprints scatters the sky back well before Schlick's grazing lobe wakes up (at the hip's ≈ 40° incidence
+ * (1 − cos)^5 is 0.0005, yet the reference pane reads as a grey sheen at L ≈ 65 over a black interior). Modelled
+ * as `sheen · min((1 − N·V)², 0.06)` of the heavily blurred, desaturated IBL radiance — 0.05 at 40°, saturating
+ * past 45°, and nothing on the ADS axis, where every pixel of the pane is within 5° of normal incidence, so the
+ * through-glass veil is untouched (measured: +2/+2/+3 sRGB with both panes on vs off).
  */
 export function glassMaterial(
   game,
-  { opacity = 0.05, tint = [0.04, 0.04, 0.04], envMapIntensity = 0.4, iridescence = 0.0, specularIntensity = 0.15, specularNeutral = 0.9, name = 'holoGlass' } = {},
+  { opacity = 0.05, tint = [0.04, 0.04, 0.04], envMapIntensity = 0.4, iridescence = 0.0, specularIntensity = 0.15, specularNeutral = 0.9, sheen = 0.5, name = 'holoGlass' } = {},
 ) {
   const m = new THREE.MeshPhysicalMaterial({
     color: new THREE.Color(tint[0], tint[1], tint[2]),
@@ -594,18 +630,28 @@ export function glassMaterial(
     blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
   });
   m.name = name;
-  const uniforms = { glassSpecNeutral: { value: specularNeutral } };
+  const uniforms = { glassSpecNeutral: { value: specularNeutral }, glassSheen: { value: sheen } };
   m.userData.glass = uniforms;
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
-    shader.fragmentShader = shader.fragmentShader.replace('void main() {', 'uniform float glassSpecNeutral;\nvoid main() {').replace(
+    shader.fragmentShader = shader.fragmentShader.replace('void main() {', 'uniform float glassSpecNeutral;\nuniform float glassSheen;\nvoid main() {').replace(
       'vec3 outgoingLight = totalDiffuse + totalSpecular + totalEmissiveRadiance;',
       /* glsl */ `
+	#ifdef USE_ENVMAP
+	{
+		// (1 − N·V)², saturating past ≈ 45° so the pane never turns into a frosted mirror from the side
+		float glOff = 1.0 - saturate( dot( normal, geometryViewDir ) );
+		float glSheen = glassSheen * min( glOff * glOff, 0.06 );
+		vec3 glSky = getIBLRadiance( geometryViewDir, normal, 0.7 ) / max( envMapIntensity, 1e-3 );
+		float glSkyLum = dot( glSky, vec3( 0.2126, 0.7152, 0.0722 ) );
+		totalSpecular += mix( glSky, vec3( glSkyLum ), glassSpecNeutral ) * glSheen;
+	}
+	#endif
 	float glSpecLum = dot( totalSpecular, vec3( 0.2126, 0.7152, 0.0722 ) );
 	vec3 outgoingLight = ( totalDiffuse + totalEmissiveRadiance ) * diffuseColor.a + mix( totalSpecular, vec3( glSpecLum ), glassSpecNeutral );`,
     );
   };
-  m.customProgramCacheKey = () => 'holoGlass2';
+  m.customProgramCacheKey = () => 'holoGlass3';
   return m;
 }
 
@@ -768,7 +814,7 @@ export class LabelAtlas {
     this.material.name = 'labels';
     // same view-model fill / macro roughness as the surfaces the decals sit on (no wear, no scratches); the
     // fill matches the rifle's so a decal never reads brighter than the paint next to it
-    applyGunDetail(this.material, this.game, { objectUv: true, grainScale: 0, roughVar: 0.25, toneVar: 0, edgeWear: 0, cavity: 0.3, aoDirect: 0, scratch: 0, fill: 2.4 });
+    applyGunDetail(this.material, this.game, { objectUv: true, grainScale: 0, roughVar: 0.25, toneVar: 0, edgeWear: 0, cavity: 0.3, aoDirect: 0, scratch: 0, fill: 1.6 });
     return this;
   }
 }

@@ -1,12 +1,33 @@
 import * as THREE from 'three';
-import { MM, RAIL, PartsBuilder, railClampShape, extrude, rbox, cylX, cylY, cylZ, knurlX, knurlZ, roundedRect, flatShape, plane, glassMaterial, neverCastShadow } from './lib.js';
+import {
+  MM,
+  RAIL,
+  PartsBuilder,
+  railClampShape,
+  extrude,
+  rbox,
+  cylX,
+  cylY,
+  cylZ,
+  knurlX,
+  knurlZ,
+  roundedRect,
+  flatShape,
+  plane,
+  glassMaterial,
+  anodisedMaterial,
+  matteBlackMaterial,
+  neverCastShadow,
+} from './lib.js';
 
 /**
  * EOTech 553 / EXPS-style holographic weapon sight.
  *
  * Sight-local frame: origin at the rail top surface on the rail centreline, mid-length of the housing;
  * +Y up, -Z forward, +X right. All dimensions in mm (real: 95 long, 54 wide, 60 tall to the hood roof,
- * window 30 × 24 with a round top, optical centre 43 mm above the rail).
+ * window ≈ 33 × 26 with a round top, optical centre 43 mm above the rail). The window is opened up to ≈ 53 % of
+ * the hood outline like the reference game's (5.5 mm walls, 5 mm roof); thinner frame plates keep the tunnel out
+ * of the sight picture.
  */
 export const HOLO = {
   length: 95,
@@ -15,13 +36,13 @@ export const HOLO = {
   lowerY1: 30,
   hoodW: 44,
   hoodY0: 28,
-  hoodY1: 60,
-  winW: 30,
-  winH: 24,
-  winY0: 31,
-  rearW: 30, // the 553's rear window matches the front one, so the tunnel walls stay out of the sight picture
-  rearH: 24,
-  frameT: 5, // front / rear frame plate thickness
+  hoodY1: 61,
+  winW: 33,
+  winH: 26,
+  winY0: 30,
+  rearW: 33, // the 553's rear window matches the front one, so the tunnel walls stay out of the sight picture
+  rearH: 26,
+  frameT: 3, // front / rear frame plate thickness
   glassInset: 2.2, // glass behind the front face
   reticleInset: 3.3, // reticle plane behind the front face
 };
@@ -94,8 +115,11 @@ void main() {
 	gl_FragColor = vec4( uColor * ( uIntensity * a ), a * uCover );
 }`;
 
-/** Reticle intensity at brightness 1 (see setBrightness). */
-const RETICLE_INTENSITY = 1.4;
+/**
+ * Reticle intensity at brightness 1 (see setBrightness). With the colour below the composer's ACES curve lands
+ * the core at ≈ sRGB (255, 65, 42), hue ≈ 7° — EOTech red-orange; 1.4 pushed it to (255, 105, 30), hue 20°.
+ */
+const RETICLE_INTENSITY = 1.05;
 
 /* --------------------------------------------------------------------------------- housing */
 
@@ -144,10 +168,10 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
   const bezelZ = half - frameT / 2 + 0.4;
   const front = hoodOuter(new THREE.Shape());
   front.holes.push(roundedRect(H.winW, H.winH, [8, 8, 2.6, 2.6], new THREE.Path(), 0, H.winCY));
-  b.add(extrude(front, frameT, { bevel: 2.2, bevelSeg: 1, curveSegments: 10 }), mats.anod, { pos: [0, 0, -bezelZ], wear: 0.5 });
+  b.add(extrude(front, frameT, { bevel: 1.6, bevelSeg: 1, curveSegments: 10 }), mats.anod, { pos: [0, 0, -bezelZ], wear: 0.5 });
   const rear = hoodOuter(new THREE.Shape());
   rear.holes.push(roundedRect(H.rearW, H.rearH, [8, 8, 2.6, 2.6], new THREE.Path(), 0, H.winCY));
-  b.add(extrude(rear, frameT, { bevel: 2.2, bevelSeg: 1, curveSegments: 10 }), mats.anod, { pos: [0, 0, bezelZ], wear: 0.5 });
+  b.add(extrude(rear, frameT, { bevel: 1.6, bevelSeg: 1, curveSegments: 10 }), mats.anod, { pos: [0, 0, bezelZ], wear: 0.5 });
   // hood seam: the joint between the bolt-on front hood section and the body, a thin dark gap line flush with
   // the surface (a raised, bevelled band read as two stacked cylinders)
   const band = hoodOuter(new THREE.Shape(), -0.06);
@@ -161,16 +185,21 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
       b.add(cylY(1.0, 0.6, 6), mats.matte, { pos: [x, H.hoodY1 + 0.95, z] });
     }
   }
-  // hood interior: matte black liner (sits inside the channel, hides the anodised interior walls)
+  // hood interior: matte liner (sits inside the channel, hides the anodised interior walls). Seen through the
+  // rear window from the hip it is the "far inner wall" of the reference: a lit dark grey, not a void, so it
+  // gets its own lighter matte material than the screw sockets
   const liner = roundedRect(H.winW + 0.9, H.winH + 1.4, [8.4, 8.4, 2.4, 2.4], new THREE.Shape(), 0, H.winCY + 0.25);
   liner.holes.push(roundedRect(H.winW - 0.4, H.winH - 0.2, [8.2, 8.2, 2.0, 2.0], new THREE.Path(), 0, H.winCY + 0.25));
-  b.add(extrude(liner, H.length - 2 * H.frameT - 1, { bevel: 0 }), mats.matte, { pos: [0, 0, 0] });
+  const linerMat = matteBlackMaterial(game, { color: 0x36373a, envMapIntensity: 0.6, name: 'hoodLiner' });
+  b.add(extrude(liner, H.length - 2 * H.frameT - 1, { bevel: 0 }), linerMat, { pos: [0, 0, 0] });
 
   // --- rear face: control panel below the window — two round brightness buttons (▼ ▲) with bevelled bezels, a
-  // rectangular NV button between them, ON / OFF legends, corner screws (as on the EXPS reference)
+  // rectangular NV button between them, ON / OFF legends, corner screws (as on the EXPS reference). The panel
+  // faces the shooter at ADS and reflects nothing but sky, so it gets the anodising with less IBL (reference L ≈ 38)
   const rearZ = half; // rear face of the housing
   const panelW = H.hoodW + 2;
-  b.add(rbox(panelW, 19.5, 3.4, 2.4), mats.anod, { pos: [0, 18.6, rearZ + 1.0], wear: 0.55 });
+  const panelMat = anodisedMaterial(game, { envMapIntensity: 0.1, name: 'anodisedPanel' });
+  b.add(rbox(panelW, 19.5, 3.4, 2.4), panelMat, { pos: [0, 18.6, rearZ + 1.0], wear: 0.55 });
   const panelZ = rearZ + 1.0 + 1.7; // panel front face
   const btnY = 17.8;
   const btnX = 12.5;
@@ -179,7 +208,7 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
     b.add(cylZ(4.4, 2.4, 28), mats.rubber, { pos: [x, btnY, panelZ + 1.9] }); // rubber cap
   }
   b.add(rbox(11, 6.4, 2.4, 1.4), mats.rubber, { pos: [0, 21.2, panelZ + 1.0] }); // NV button
-  b.add(rbox(12.4, 7.8, 1.2, 1.6), mats.anod, { pos: [0, 21.2, panelZ + 0.5], wear: 0.5 }); // its surround
+  b.add(rbox(12.4, 7.8, 1.2, 1.6), panelMat, { pos: [0, 21.2, panelZ + 0.5], wear: 0.5 }); // its surround
   for (const [x, y] of [
     [-19.5, 11.2],
     [19.5, 11.2],
@@ -271,14 +300,15 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
   labels.build(group, { castShadow: false });
 
   // --- glass: front window (holographic, coated) + a plain protective rear window (near-invisible so the two
-  // panes together attenuate the scene by < 10 %)
-  const glass = glassMaterial(game);
+  // panes together attenuate the scene by < 10 %). The off-axis sky sheen (lib.glassMaterial `sheen`) sits
+  // mostly on the rear pane, the one the hip view looks at; the front pane adds a little through it
+  const glass = glassMaterial(game, { sheen: 0.4 });
   const frontGlass = new THREE.Mesh(flatShape(roundedRect(H.winW + 0.6, H.winH + 0.6, [8.2, 8.2, 1.7, 1.7], new THREE.Shape(), 0, H.winCY)), glass);
   frontGlass.position.set(0, 0, (-half + H.glassInset) * MM);
   frontGlass.name = 'HoloFrontGlass';
   neverCastShadow(frontGlass);
   group.add(frontGlass);
-  const rearGlassMat = glassMaterial(game, { opacity: 0.03, envMapIntensity: 0.3, specularIntensity: 0.1, name: 'holoGlassRear' });
+  const rearGlassMat = glassMaterial(game, { opacity: 0.03, envMapIntensity: 0.3, specularIntensity: 0.1, sheen: 1.1, name: 'holoGlassRear' });
   const rearGlass = new THREE.Mesh(flatShape(roundedRect(H.rearW + 0.6, H.rearH + 0.6, [8.2, 8.2, 1.7, 1.7], new THREE.Shape(), 0, H.winCY)), rearGlassMat);
   rearGlass.position.set(0, 0, (half - H.glassInset) * MM);
   rearGlass.name = 'HoloRearGlass';
@@ -294,7 +324,7 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
     vertexShader: RETICLE_VERT,
     fragmentShader: RETICLE_FRAG,
     uniforms: {
-      uColor: { value: new THREE.Color(1.0, 0.05, 0.002) },
+      uColor: { value: new THREE.Color(1.0, 0.02, 0.012) },
       uIntensity: { value: RETICLE_INTENSITY },
       uCover: { value: 0.94 },
       uRing: { value: (ringDiameter / 2) * MM },

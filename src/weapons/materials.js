@@ -69,7 +69,9 @@ export function getDetailTexture(game) {
 
 /**
  * Shared tileable surface-story texture: R = hairline scratches, G = chip noise (fine cellular noise that breaks
- * the edge-wear boundary), B = mid-frequency mottle (smudges / uneven finish).
+ * the edge-wear boundary), B = mid-frequency mottle (smudges / uneven finish), A = fine even grain (the
+ * sandblasted finish itself: 3–5 texel features, stored in the upper half of the channel so the canvas's
+ * premultiplied storage costs the RGB channels at most one bit).
  */
 export function getSurfaceTexture(game) {
   if (_surfaceTex) return _surfaceTex;
@@ -108,17 +110,25 @@ export function getSurfaceTexture(game) {
   const mottA = lattice(9, rnd);
   const mottB = lattice(21, rnd);
   const mottC = lattice(47, rnd);
+  // grain: white noise blurred once and twice (features ≈ 3 and 5 texels) plus a little raw noise, stretched to
+  // a std of ≈ 0.2 so the pattern still has contrast after one mip level
+  const raw = new Float32Array(size * size);
+  for (let i = 0; i < raw.length; i++) raw[i] = rnd();
+  const soft = blur3(raw, size);
+  const softer = blur3(soft, size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = x / size;
       const v = y / size;
       const o = (y * size + x) * 4;
+      const i = y * size + x;
       img.data[o] = scr.data[o];
       const chip = chipA(u, v) * 0.6 + chipB(u, v) * 0.25 + rnd() * 0.15;
       img.data[o + 1] = Math.round(THREE.MathUtils.clamp(chip, 0, 1) * 255);
       const mott = mottA(u, v) * 0.5 + mottB(u, v) * 0.32 + mottC(u, v) * 0.18;
       img.data[o + 2] = Math.round(THREE.MathUtils.clamp(mott, 0, 1) * 255);
-      img.data[o + 3] = 255;
+      const grain = (softer[i] * 0.5 + soft[i] * 0.35 + raw[i] * 0.15 - 0.5) * 3.2;
+      img.data[o + 3] = Math.round(THREE.MathUtils.clamp(0.75 + grain * 0.25, 0.5, 1) * 255);
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -245,6 +255,9 @@ uniform float gunNeutral;
 uniform float gunSpeckle;
 uniform float gunDirt;
 uniform float gunObjUvScale;
+uniform float gunGradTop;
+uniform float gunGradRange;
+uniform float gunGradLow;
 varying vec2 vGunUv;
 varying float vGunAO;
 #ifdef GUN_OBJUV
@@ -286,7 +299,7 @@ float gunAmbientOcclusion = 1.0;
 {
 	vec4 gdBake = texture2D( gunBakeMap, vGunUv );
 	float gdMacro = texture2D( gunDetailMap, gdUv * gunMacroRepeat ).a;
-	vec3 gdSurf = texture2D( gunSurfaceMap, gdUv * gunSurfRepeat ).xyz;
+	vec4 gdSurf = texture2D( gunSurfaceMap, gdUv * gunSurfRepeat );
 	float gdChip = texture2D( gunSurfaceMap, gdUv * gunSurfRepeat * 2.63 + vec2( 0.37, 0.11 ) ).g;
 	gunAmbientOcclusion = min( gdBake.r, vGunAO );
 
@@ -301,7 +314,8 @@ float gunAmbientOcclusion = 1.0;
 		diffuseColor.rgb = mix( gunPaintColor, gunPolymerColor, gdPoly ) * mix( 1.0, gdMapK, 0.5 );
 		roughnessFactor = mix( gunPaintRough, gunPolymerRough, gdPoly );
 		metalnessFactor = gunPaintMetal * ( 1.0 - gdPoly );
-		gdWear = gdBake.g * gunEdgeWear * ( 1.0 - gdPoly * 0.75 );
+		// unscaled edge proximity here; the amount (gunEdgeWear) is applied to the chips below
+		gdWear = gdBake.g * ( 1.0 - gdPoly * 0.75 );
 		// polished polymer goes lighter and glossier, never metallic
 		gdWearColor = mix( gunWearColor, gunPolymerColor * 2.6, gdPoly );
 		gdWearRough = mix( gunWearRough, 0.55, gdPoly );
@@ -320,20 +334,30 @@ float gunAmbientOcclusion = 1.0;
 	float gdMott = gdMacro * 0.55 + gdSurf.b * 0.45;
 	roughnessFactor *= 1.0 + ( gdMott - 0.5 ) * gunRoughVar;
 	diffuseColor.rgb *= 1.0 + ( gdMott - 0.5 ) * gunToneVar;
-	// fine speckle: the finish's own grain / dust at sub-millimetre scale (the reference's micro-contrast)
-	diffuseColor.rgb *= 1.0 + ( gdSurf.g - 0.5 ) * gunSpeckle;
+	// fine even grain: the sandblasted finish itself (the reference's sub-4 px micro-contrast), a little of it in
+	// the roughness so sunlit faces sparkle rather than smear
+	float gdGrain = ( gdSurf.a - 0.75 ) * 4.0;
+	diffuseColor.rgb *= 1.0 + gdGrain * gunSpeckle;
+	roughnessFactor += gdGrain * gunSpeckle * 0.2;
 
 	// hairline scratches: polished through the finish, denser near edges and in the mottle's bright (handled) zones
 	float gdScr = gdSurf.r * gunScratch * ( 0.25 + 0.75 * smoothstep( 0.2, 0.9, gdBake.g * 0.8 + gdMott * 0.6 ) );
 	roughnessFactor -= gdScr * 0.3;
-	diffuseColor.rgb = mix( diffuseColor.rgb, gdWearColor, gdScr * 0.25 );
+	diffuseColor.rgb = mix( diffuseColor.rgb, gdWearColor, gdScr * 0.2 );
 
 	// edge wear: chips, not an outline — only some stretches of edge are worn (two octaves of low-frequency
 	// mask, features 3–7 cm) and the proximity band is thresholded against fine chip noise so the boundary is
 	// ragged
 	float gdMacroLow = texture2D( gunDetailMap, gdUv * gunMacroRepeat * 0.37 + vec2( 0.53, 0.29 ) ).a;
 	float gdWearMask = smoothstep( 0.3, 0.7, gdMacroLow * 0.55 + gdMacro * 0.3 + gdSurf.b * 0.15 + 0.06 );
-	float gdChipped = smoothstep( 0.35, 0.55, gdWear * gdWearMask * ( 0.3 + 0.7 * gdChip ) );
+	#ifdef GUN_PAINT
+		// paint: rare, partially worn chips (a high threshold against the chip noise) over a faint lightening
+		// of the bevel itself — the reference's soft lighter bevels, never a light rim
+		float gdChipped = smoothstep( 0.55, 0.75, gdWear * gdWearMask * ( 0.3 + 0.7 * gdChip ) ) * gunEdgeWear;
+		gdChipped = max( gdChipped, gdWear * gdWear * 0.2 * gunEdgeWear );
+	#else
+		float gdChipped = smoothstep( 0.35, 0.55, gdWear * gdWearMask * ( 0.3 + 0.7 * gdChip ) );
+	#endif
 	diffuseColor.rgb = mix( diffuseColor.rgb, gdWearColor, gdChipped );
 	roughnessFactor = mix( roughnessFactor, gdWearRough, gdChipped );
 	metalnessFactor = mix( metalnessFactor, gdWearMetal, gdChipped );
@@ -362,15 +386,22 @@ float gunAmbientOcclusion = 1.0;
  * shade (reference: ~95, neutral). The fill is a neutral hemispherical irradiance (full from above, a third from
  * below) scaled by the baked occlusion, i.e. the classic dedicated view-model fill light, done per material
  * because the lighting rig is not ours to change.
+ *
+ * Sky visibility also falls off toward the bottom of the weapon — the shooter's hands, arms and torso shade the
+ * lower receiver and the magazine from below and behind, which is what gives the reference its top-to-bottom
+ * gradient on flat flanks. The bake cannot see the shooter, so it is a vertical gradient on the ambient terms in
+ * view space (the rifle hangs at a fixed height under the camera in every pose: rail top ≈ 3 cm below the axis),
+ * from full at `gunGradTop` down to `gunGradLow` at `gunGradTop − gunGradRange`. The sun is untouched.
  */
 const FRAG_AO = /* glsl */ `
 #include <aomap_fragment>
 {
 	float gdOcc = gunAmbientOcclusion;
-	reflectedLight.indirectDiffuse *= gdOcc;
+	float gdSky = mix( 1.0, gunGradLow, smoothstep( gunGradTop, gunGradTop - gunGradRange, -vViewPosition.y ) );
+	reflectedLight.indirectDiffuse *= gdOcc * gdSky;
 	#if defined( USE_ENVMAP ) && defined( STANDARD )
 		float gdDotNV = saturate( dot( geometryNormal, geometryViewDir ) );
-		reflectedLight.indirectSpecular *= computeSpecularOcclusion( gdDotNV, gdOcc, material.roughness );
+		reflectedLight.indirectSpecular *= computeSpecularOcclusion( gdDotNV, gdOcc, material.roughness ) * mix( 1.0, gdSky, 0.5 );
 	#endif
 	float gdDirect = mix( 1.0, gdOcc, gunAODirect );
 	reflectedLight.directDiffuse *= gdDirect;
@@ -384,7 +415,7 @@ const FRAG_AO = /* glsl */ `
 	// the fill is hemispherical (full from above, a third from below) so the sun owns the top-to-side gradient
 	vec3 gdUp = normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz );
 	float gdHemi = mix( 0.33, 1.0, 0.5 + 0.5 * dot( geometryNormal, gdUp ) );
-	reflectedLight.indirectDiffuse += gunFill * gdHemi * gunFillColor * BRDF_Lambert( material.diffuseColor ) * gdOcc;
+	reflectedLight.indirectDiffuse += gunFill * gdHemi * gdSky * gunFillColor * BRDF_Lambert( material.diffuseColor ) * gdOcc;
 }
 `;
 
@@ -417,11 +448,14 @@ export function applyGunDetail(
     polymerRough = 0.78,
     paintMetal = 0.18,
     mapRef = 0.041,
-    fill = 3.0,
+    fill = 1.6,
     fillColor = [1.0, 0.945, 0.855],
     neutral = 0.6,
     speckle = 0.0,
     dirt = 0.0,
+    gradTop = -0.05,
+    gradRange = 0.07,
+    gradLow = 0.35,
     objectUv = false,
     objectUvScale = 8,
   } = {},
@@ -455,6 +489,9 @@ export function applyGunDetail(
     gunSpeckle: { value: speckle },
     gunDirt: { value: dirt },
     gunObjUvScale: { value: objectUvScale },
+    gunGradTop: { value: gradTop },
+    gunGradRange: { value: gradRange },
+    gunGradLow: { value: gradLow },
   };
   material.userData.gun = uniforms;
   material.defines = material.defines || {};
@@ -469,7 +506,7 @@ export function applyGunDetail(
       .replace('#include <normal_fragment_maps>', FRAG_SURFACE)
       .replace('#include <aomap_fragment>', FRAG_AO);
   };
-  material.customProgramCacheKey = () => `gunSurface7|${paint ? 'p' : 'a'}|${objectUv ? 'o' : 'u'}|${material.defines.GUN_AO_ATTR !== undefined ? 'ao' : ''}`;
+  material.customProgramCacheKey = () => `gunSurface8|${paint ? 'p' : 'a'}|${objectUv ? 'o' : 'u'}|${material.defines.GUN_AO_ATTR !== undefined ? 'ao' : ''}`;
   material.needsUpdate = true;
   return material;
 }
@@ -580,25 +617,32 @@ export function upgradeGunMaterials(game, rig) {
     if (m.normalScale) m.normalScale.set(1.0, 1.0);
     m.side = THREE.FrontSide;
     if (m.normalMap) {
+      // Cerakote: an even mid grey with fine grain, faint mottle (mostly roughness), soft lighter bevels and rare
+      // chips; the sun and the sky gradient own the shading, the fill only lifts the shade to the reference's ~100
       applyGunDetail(m, game, {
         paint: true,
         grainRepeat: 46,
-        grainScale: 0.26,
+        grainScale: 0.3,
         macroRepeat: 5.3,
         surfRepeat: 6.5,
-        roughVar: 0.5,
-        toneVar: 0.2,
-        edgeWear: 0.65,
+        roughVar: 0.3,
+        toneVar: 0.08,
+        edgeWear: 0.4,
         cavity: 0.85,
         aoDirect: 0.75,
-        scratch: 0.36,
-        speckle: 0.42,
-        dirt: 0.22,
-        paintColor: [0.085, 0.086, 0.09],
+        scratch: 0.2,
+        speckle: 0.6,
+        dirt: 0.1,
+        wearColor: [0.3, 0.3, 0.31],
+        wearRough: 0.42,
+        paintColor: [0.075, 0.075, 0.078],
         paintRough: 0.55,
         paintMetal: 0.15,
-        fill: 2.4,
+        fill: 1.6,
         fillColor: [1.0, 0.98, 0.97],
+        gradTop: -0.05,
+        gradRange: 0.07,
+        gradLow: 0.3,
       });
     }
     m.needsUpdate = true;
