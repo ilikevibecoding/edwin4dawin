@@ -20,6 +20,7 @@ Items (numbering follows the note and the task statement):
   [8]  all trees n<=14: reduction lemma never fails; Q_1, Q_2 formulas exact
   [9]  scope of TAIL: fails for 2K_3 (not bipartite), holds for all forests n<=12
   [10] p_4 formula and failure of the crude ISO_3 bound on stars (not-proved section)
+  [11] algebra of WR_3 wherever the framework needs it (Addendum, Theorem 11.2)
 
 Usage:  python3 scripts/verify_lemmas_symbolic.py [-q]
 Prints PASS/FAIL per item; exit status 1 if any sub-check fails.
@@ -625,6 +626,51 @@ def check_crude_iso3_bound(c: Check) -> None:
 
 
 # --------------------------------------------------------------------------
+# [11] algebra behind WR_3 (Addendum, Theorem 11.2)
+# --------------------------------------------------------------------------
+
+
+def check_wr3_addendum(c: Check) -> None:
+    n, e, S = sp.symbols("n e S")
+    slack3 = 3 * (Cs(n, 3) - e * (n - 2) + S) - (Cs(n, 2) - e)  # 3 p_3 - p_2 by Theorem 3.1
+    c.expect(sp.expand(slack3 - (3 * Cs(n, 3) - Cs(n, 2) - e * (3 * n - 7) + 3 * S)) == 0,
+             "3 p_3 - p_2 = 3 C(n,3) - C(n,2) - e (3n-7) + 3 S")
+    c.expect(sp.expand(3 * Cs(n, 3) - Cs(n, 2) - (n - 1) * (3 * n - 7) - (n - 1) * (n - 2) * (n - 7) / 2) == 0,
+             "3 C(n,3) - C(n,2) - (n-1)(3n-7) = (n-1)(n-2)(n-7)/2  (>= 0 for n >= 7)")
+    tree_bound = slack3.subs({e: n - 1, S: n - 2})
+    c.expect(sp.expand(tree_bound - ((n - 2) * (n - 3) * (n - 4) - (n - 1) * (n - 2)) / 2) == 0
+             and sp.expand(tree_bound - (n - 2) * (n**2 - 8 * n + 13) / 2) == 0,
+             "trees (e = n-1, S = n-2): 3 p_3 - p_2 = [(n-2)(n-3)(n-4) - (n-1)(n-2)]/2 = (n-2)(n^2-8n+13)/2  (>= 0 for n >= 6)")
+    c.expect(all((k - 1) * (k - 2) * (k - 7) >= 0 for k in range(7, 400)) and all((k - 2) * (k * k - 8 * k + 13) > 0 for k in range(6, 400)),
+             "numeric sign checks of both closed forms (n < 400)")
+    c.expect(all((tail_cutoff(a) - 1 >= 3) == (a >= 6) for a in range(1, 300)),
+             "L(alpha) - 1 >= 3  <=>  alpha >= 6  (WR_3 is needed exactly when alpha >= 6)")
+    p6 = indpoly_forest(6, [])
+    c.expect(p6 == [1, 6, 15, 20, 15, 6, 1] and wr_slack(p6, 3) == 45,
+             "the only forest with n <= 6 and alpha >= 6 is 6 K_1: p_2 = 15 <= 60 = 3 p_3")
+
+    bad = 0
+    for k in range(2, 13):
+        for parent in free_trees(k):
+            edges = parent_to_edges(parent)
+            _e, S_, _T, _P = forest_invariants(k, edges)
+            is_path = all(d <= 2 for d in degrees(k, edges))
+            if S_ < k - 2 or (S_ == k - 2) != is_path:
+                bad += 1
+    c.expect(bad == 0, "all trees 2 <= n <= 12: S >= n - 2 with equality iff the tree is a path")
+    cache: Dict[int, list] = {}
+    bad = seen = 0
+    for k in range(1, 13):
+        for _sizes, _idxs, p in forest_polys(k, cache):
+            if len(p) - 1 >= 6:
+                seen += 1
+                if wr_slack(p, 3) < 0:
+                    bad += 1
+    c.expect(bad == 0 and seen > 0, f"WR_3 holds for all {seen} non-isomorphic forests n <= 12 with alpha >= 6")
+    c.expect(no_floats(slack3, tree_bound), "no floating point atoms")
+
+
+# --------------------------------------------------------------------------
 # driver
 # --------------------------------------------------------------------------
 
@@ -639,6 +685,7 @@ CHECKS: List[Tuple[str, str, Callable[[Check], None]]] = [
     ("8", "All trees n <= 14: reduction lemma never fails; Q_1, Q_2 formulas exact", check_trees_up_to_14),
     ("9", "Scope of TAIL: fails for 2K_3, holds for all forests n <= 12", check_tail_scope),
     ("10", "p_4 formula and failure of the crude ISO_3 bound on stars", check_crude_iso3_bound),
+    ("11", "Algebra of WR_3 wherever the framework needs it (Addendum, Theorem 11.2)", check_wr3_addendum),
 ]
 
 

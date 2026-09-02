@@ -8739,11 +8739,11 @@
   }
  ],
  "provenance": {
+  "date_note": "no timestamp by design; see git history for dates",
   "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
   "python": "3.12.3",
   "script": "verify_lc_families.py",
-  "script_sha256": "F8573680A7AB302C4AED0AA0244DB7A96B831A9F1F8E55BB215D0D2D0741BA2B",
-  "utc": "2026-09-02T05:33:44+00:00"
+  "script_sha256": "F8573680A7AB302C4AED0AA0244DB7A96B831A9F1F8E55BB215D0D2D0741BA2B"
  },
  "published_families": [
   {

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as _dt
 import hashlib
 import json
 import os
@@ -24,12 +23,15 @@ def sha256_text(text: str) -> str:
 
 
 def provenance(script_path: str) -> Dict[str, Any]:
+    """Provenance block. Deliberately contains no timestamp so that a faithful
+    replay of a deterministic script reproduces the report byte-for-byte (and
+    hence its SHA-256)."""
     return {
         "script": os.path.basename(script_path),
         "script_sha256": sha256_file(script_path),
         "python": sys.version.split()[0],
         "platform": platform.platform(),
-        "utc": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+        "date_note": "no timestamp by design; see git history for dates",
     }
 
 

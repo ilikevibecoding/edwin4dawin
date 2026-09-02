@@ -316,7 +316,7 @@ class WitnessTable:
     structured witnesses of the large per-(n, r) table they are kept up to ``edge_cap``.
     """
 
-    def __init__(self, edge_cap: int = 800) -> None:
+    def __init__(self, edge_cap: int = 400) -> None:
         self.ids: Dict[Tuple[int, Tuple[Tuple[int, int], ...]], int] = {}
         self.entries: Dict[str, Dict[str, Any]] = {}
         self.edge_cap = edge_cap
@@ -349,7 +349,13 @@ class WitnessTable:
         return str(wid)
 
 
-def record_json(rec: Optional[Record], table: Optional[WitnessTable] = None, keep_poly: bool = False, inline_edges: bool = False) -> Optional[Dict[str, Any]]:
+def record_json(
+    rec: Optional[Record],
+    table: Optional[WitnessTable] = None,
+    keep_poly: bool = False,
+    inline_edges: bool = False,
+    force_edges: bool = True,
+) -> Optional[Dict[str, Any]]:
     if rec is None:
         return None
     num, den, r, wit = rec
@@ -360,7 +366,7 @@ def record_json(rec: Optional[Record], table: Optional[WitnessTable] = None, kee
         if keep_poly:
             out["poly"] = wit["poly"]
     elif table is not None:
-        out["witness_id"] = table.register(wit, keep_poly=keep_poly, force_edges=True)
+        out["witness_id"] = table.register(wit, keep_poly=keep_poly, force_edges=force_edges)
     return out
 
 
@@ -964,42 +970,38 @@ class Search:
                 entry["argmin_r"] = rec[2]
                 entry["family"] = rec[3]["family"]
                 entry["label"] = rec[3]["label"]
-                entry["witness_id"] = table.register(rec[3], keep_poly=True, force_edges=True)
+                entry["witness_id"] = table.register(rec[3], keep_poly=(n <= 120), force_edges=True)
             rec = pn["min_desc"]
             if rec is not None:
                 entry["min_margin_r3plus_at_descent"] = str(Fraction(rec[0], rec[1]))
                 entry["min_margin_r3plus_at_descent_float"] = float(Fraction(rec[0], rec[1]))
                 entry["argmin_r_at_descent"] = rec[2]
                 entry["label_at_descent"] = rec[3]["label"]
-                entry["witness_id_at_descent"] = table.register(rec[3], force_edges=True)
+                entry["witness_id_at_descent"] = table.register(rec[3])
             rec = pn["max_wr"]
             if rec is not None:
                 entry["max_wr_ratio"] = str(Fraction(rec[0], rec[1]))
                 entry["max_wr_ratio_float"] = float(Fraction(rec[0], rec[1]))
                 entry["argmax_wr_r"] = rec[2]
                 entry["label_wr"] = rec[3]["label"]
-                entry["witness_id_wr"] = table.register(rec[3], force_edges=True)
+                entry["witness_id_wr"] = table.register(rec[3])
             per_n_minima[str(n)] = entry
 
+        # compact rows: [exact margin, float, witness_id]; the witness carries family/label/edges
         per_nr: Dict[str, Dict[str, Any]] = {}
         for (n, r) in sorted(trees.per_nr):
             num, den, _r, wit = trees.per_nr[(n, r)]
-            per_nr.setdefault(str(n), {})[str(r)] = {
-                "margin": str(Fraction(num, den)),
-                "float": float(Fraction(num, den)),
-                "family": wit["family"],
-                "label": wit["label"],
-                "witness_id": table.register(wit),
-            }
+            f = Fraction(num, den)
+            per_nr.setdefault(str(n), {})[str(r)] = [str(f), float(f), table.register(wit)]
 
         forest_per_n: Dict[str, Any] = {}
         for n in sorted(forests.per_n):
             pn = forests.per_n[n]
             forest_per_n[str(n)] = {
                 "count": pn["count"],
-                "min_margin_r3plus": record_json(pn["min"], table),
-                "min_margin_r3plus_at_descent": record_json(pn["min_desc"], table),
-                "max_wr_ratio": record_json(pn["max_wr"], table),
+                "min_margin_r3plus": record_json(pn["min"], table, force_edges=False),
+                "min_margin_r3plus_at_descent": record_json(pn["min_desc"], table, force_edges=False),
+                "max_wr_ratio": record_json(pn["max_wr"], table, force_edges=False),
             }
 
         def family_json(tr: Tracker) -> Dict[str, Any]:
@@ -1110,7 +1112,9 @@ class Search:
                 "top_witnesses_by_canonical_form": topk_json,
             },
             "forests": {**self.forest_report, "per_n": forest_per_n, "family_stats": family_json(forests)},
+            "per_n_r_minima_format": "per_n_r_minima[n][r] = [exact min margin m_r over trees of order n, float, witness_id into 'witnesses']",
             "per_n_r_minima": per_nr,
+            "witnesses_format": "witness_id -> {n, family, label, edges (list of [u, v]; null only for label-reconstructible structured trees beyond the edge cap), poly (extremal records only)}",
             "witnesses": table.entries,
             "caveat": "Heuristic search over finite orders: falsification evidence only; it proves nothing about all forests.",
             "provenance": provenance(os.path.abspath(__file__)),
@@ -1416,6 +1420,7 @@ class Search:
             ("iso", "best_structured", 1.0),
             ("iso", "random_prufer", 1.0),
             ("iso", "random_attachment_h0.9", 1.0),
+            ("iso", "path", 1.0),
             ("iso_desc", "random_prufer", 0.6),
             ("iso_desc", "best_structured", 0.6),
             ("wr", "random_prufer", 0.6),
@@ -1436,6 +1441,8 @@ class Search:
                         start = random_tree(n, self.rng)[1]
                     elif start_kind == "star":
                         start = star(n)[1]
+                    elif start_kind == "path":
+                        start = path(n)[1]
                     elif start_kind == "random_attachment_h0.9":
                         start = random_attachment_tree(n, self.rng, 0.9)[1]
                     else:

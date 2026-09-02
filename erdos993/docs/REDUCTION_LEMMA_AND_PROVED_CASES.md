@@ -224,8 +224,9 @@ $\mathrm{ISO}_2$ holds for every forest (Theorem 5.1); $\mathrm{WR}_2$ holds for
 with $n \ge 4$, and if $n \le 3$ then $\alpha \le 3$ and $L \le 2$, so $r = 2$ is not in the
 prefix (Theorem 6.1). TAIL is Theorem 8.1. Apply Theorem 2.1. $\square$
 
-For $\alpha \ge 6$ the prefix contains $r = 3$, and $\mathrm{ISO}_3$, $\mathrm{WR}_3$ are not
-proved (Section 10).
+For $\alpha \ge 6$ the prefix contains $r = 3$. $\mathrm{ISO}_3$ for general forests is not
+proved in Sections 1–9 (Section 10); $\mathrm{WR}_3$ wherever it is needed, and $\mathrm{ISO}_3$
+for *trees*, are treated in the Addendum (Section 11).
 
 ---
 
@@ -559,6 +560,7 @@ any expression used.
 | [S-8] | all 5447 trees $n \le 14$ (`free_tree_layouts` → `layout_to_parent` → `indpoly_parent_array`): the reduction lemma's conclusion never fails (16117 hypothesis instances), $Q_1 = n + 1 + 2e$ exactly, $Q_2$ equals (5.0) exactly and $Q_2 \ge g(e)$, star unique minimiser, `analyze` consistent |
 | [S-9] | $I(2K_3;x) = 1 + 6x + 9x^2$ (TAIL fails), $\alpha K_m$ ratio; TAIL on all forests $n \le 12$ |
 | [S-10] | $Q_3(K_{1,m}) = \binom m2\binom{m+1}{3}$; crude bound equals $\binom m2 m(m-1)(3-m)/2 < 0$ for $m \ge 4$; stars $m \le 40$ numerically |
+| [S-11] | algebra of Theorem 11.2 (Addendum): $3p_3 - p_2 = 3\binom n3 - \binom n2 - e(3n-7) + 3S$, $3\binom n3 - \binom n2 - (n-1)(3n-7) = \tfrac{(n-1)(n-2)(n-7)}{2}$, tree case $\tfrac{(n-2)(n-3)(n-4) - (n-1)(n-2)}{2}$; $S \ge n-2$ for trees (equality iff path) and $\mathrm{WR}_3$ on all forests $n \le 12$ with $\alpha \ge 6$ |
 
 `tests/test_lemmas.py` runs each item as a pytest test, checks that an injected failing
 sub-check produces a `FAIL` line and exit status 1, and adds independent tests (named tree
@@ -569,11 +571,15 @@ $n \le 11$, etc.).
 
 ## 10. What is NOT proved
 
-1. **$\mathrm{ISO}_r$ for $r \ge 3$ for general forests is not proved**, and neither is
-   $\mathrm{WR}_r$ for $r \ge 3$. The framework needs both for $1 \le r \le L(\alpha) - 1$,
-   so for forests with $\alpha \ge 6$ (where $L \ge 4$) this note does *not* establish
-   unimodality; Corollary 2.4 covers exactly $\alpha \le 5$. The repository's exhaustive scans
-   (`scripts/verify_exhaustive.py`) are falsification evidence for finitely many orders only.
+1. **$\mathrm{ISO}_r$ for $r \ge 3$ for general forests is not proved** in Sections 1–9, and
+   neither is $\mathrm{WR}_r$ for $r \ge 3$. The framework needs both for
+   $1 \le r \le L(\alpha) - 1$, so for forests with $\alpha \ge 6$ (where $L \ge 4$) Sections 1–9
+   do *not* establish unimodality; Corollary 2.4 covers exactly $\alpha \le 5$. (The Addendum,
+   Section 11, adds $\mathrm{WR}_3$ wherever the framework needs it — algebra machine-checked in
+   [S-11] — and, for *trees only*, $\mathrm{ISO}_3$ via `docs/ISO3_TREES_THEOREM.md`, which is not
+   audited here. $\mathrm{ISO}_3$ for forests and everything at $r \ge 4$ remain open.) The
+   repository's exhaustive scans (`scripts/verify_exhaustive.py`) are falsification evidence for
+   finitely many orders only.
 
 2. **Why $r = 3$ is already hard.** By Prop. 3.3,
    $p_4 = \binom n4 - e\binom{n-2}2 + (n-3)S + \bigl(\binom e2 - S\bigr) - T - P$ with
