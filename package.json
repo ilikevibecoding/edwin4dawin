@@ -9,6 +9,7 @@
     "build": "vite build",
     "preview": "vite preview --port 5173",
     "fetch-assets": "node tools/fetch-assets.mjs",
+    "publish:play": "bash tools/publish-play.sh",
     "shot": "node tools/shot.mjs"
   },
   "repository": {

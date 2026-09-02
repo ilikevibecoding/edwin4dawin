@@ -9,7 +9,12 @@ Domination-style objective, and a callable **air strike** killstreak.
 ```bash
 npm install
 npm run dev          # http://localhost:5173
+npm run build        # static site in dist/ (relative base: runs from any sub-path)
+npm run publish:play # build HEAD, snapshot dist/ onto the `cursor/play-6ead` branch, print a playable raw-CDN URL
 ```
+
+Needs a WebGL2 browser with hardware acceleration (Chrome/Edge/Firefox on a desktop GPU); first load pulls
+~170 MB of CC0 textures/models.
 
 | Input | Action |
 |---|---|

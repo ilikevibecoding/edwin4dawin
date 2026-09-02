@@ -117,7 +117,8 @@ export const ErrorOverlay = class {};`,
 });
 
 try {
-  await page.goto(`${url}/?${params.toString()}`, { waitUntil: 'domcontentloaded', timeout });
+  // A URL ending in a file (…/index.html) is used as-is (static hosts without directory indexes).
+  await page.goto(`${url}${/\.html?$/.test(url) ? '' : '/'}?${params.toString()}`, { waitUntil: 'domcontentloaded', timeout });
   await page.waitForFunction(() => window.__shotReady === true || window.__gameError, { timeout, polling: 250 });
   const err = await page.evaluate(() => window.__gameError);
   if (err) throw new Error(`game failed to init: ${err}`);
