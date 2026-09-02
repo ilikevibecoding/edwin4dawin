@@ -477,7 +477,8 @@ export class Player {
     // keep the camera out of walls (cheap AABB test against nearby solids) and above the terrain
     const back = this.forward.clone().negate();
     const end = pivot.clone().addScaledVector(back, dist + 0.3);
-    const hit = this.game.world.segmentSolid(pivot.x, pivot.y, pivot.z, end.x, end.y, end.z);
+    // ramps are thin slopes whose bounding box would needlessly yank the camera in, so skip them
+    const hit = this.game.world.segmentSolid(pivot.x, pivot.y, pivot.z, end.x, end.y, end.z, (s) => !!s.ramp);
     if (hit) dist = Math.max(0.6, hit.t * (dist + 0.3) - 0.35);
     cam.position.copy(pivot).addScaledVector(back, dist);
     const terrainY = this.game.world.heightAt(cam.position.x, cam.position.z) + 0.4;
