@@ -8,6 +8,7 @@ export class AudioSys {
   }
 
   ensure() {
+    if (!this.enabled) return;
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) {

@@ -12,6 +12,7 @@ export class Input {
     this.onLockChange = null;
     this.onUnlockedClick = null;
     this.sensitivity = 0.0022;
+    this.rawMouse = true; // request unaccelerated mouse input when available
     this._retry = null;
 
     window.addEventListener('keydown', (e) => {
@@ -67,24 +68,23 @@ export class Input {
       // Browsers refuse a new lock for ~1.5s after the user pressed Esc; try once more later.
       if (retry) this._retry = setTimeout(() => this.requestLock(false), 1600);
     };
-    try {
-      const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
-      if (p && p.catch) {
-        p.catch(() => {
-          try {
-            const q = this.canvas.requestPointerLock();
-            if (q && q.catch) q.catch(fallback);
-          } catch (err) {
-            fallback();
-          }
-        });
-      }
-    } catch (err) {
+    const plain = () => {
       try {
-        this.canvas.requestPointerLock();
-      } catch (err2) {
+        const q = this.canvas.requestPointerLock();
+        if (q && q.catch) q.catch(fallback);
+      } catch (err) {
         fallback();
       }
+    };
+    if (!this.rawMouse) {
+      plain();
+      return;
+    }
+    try {
+      const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
+      if (p && p.catch) p.catch(plain);
+    } catch (err) {
+      plain();
     }
   }
 

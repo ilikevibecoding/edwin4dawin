@@ -97,7 +97,7 @@ function terrainColor(terrain, x, z, h, out) {
   out.setRGB(r, g, b);
 }
 
-const TERRAIN_CHUNKS = 5;
+const TERRAIN_CHUNKS = 4;
 
 /** Terrain as a grid of frustum-culled chunks with analytic (seam-free) normals. */
 function buildTerrainMesh(terrain) {
@@ -244,9 +244,9 @@ function buildHouse(rng, i0, j0, w, d, floors, k0, material, out, opts = {}) {
 // ---------- Props ----------
 
 const propGeo = {
-  trunk: new THREE.CylinderGeometry(0.22, 0.42, 3.4, 6),
-  cone: new THREE.ConeGeometry(1.6, 3.2, 6),
-  blob: new THREE.IcosahedronGeometry(1.7, 0),
+  trunk: new THREE.CylinderGeometry(0.22, 0.42, 3.4, 7),
+  cone: new THREE.ConeGeometry(1.6, 3.2, 8),
+  blob: new THREE.IcosahedronGeometry(1.7, 1),
   rock: new THREE.DodecahedronGeometry(1, 0),
   carBody: new THREE.BoxGeometry(2.0, 0.8, 4.4),
   carCabin: new THREE.BoxGeometry(1.8, 0.7, 2.1),
@@ -547,7 +547,7 @@ function renderMapImage(terrain, houses, props, towns) {
   const c = document.createElement('canvas');
   c.width = size;
   c.height = size;
-  const ctx = c.getContext('2d');
+  const ctx = c.getContext('2d', { willReadFrequently: true });
   const img = ctx.createImageData(size, size);
   const col = new THREE.Color();
   for (let py = 0; py < size; py++) {

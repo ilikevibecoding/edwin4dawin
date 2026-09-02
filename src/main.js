@@ -46,7 +46,9 @@ class Game {
     this.buildLights();
 
     this.audio = new AudioSys();
+    if (params.get('mute') === '1') this.audio.enabled = false;
     this.input = new Input(this.canvas);
+    if (params.get('rawmouse') === '0') this.input.rawMouse = false;
 
     // ---- world ----
     const gen = generateWorld(this.seed);
@@ -92,7 +94,7 @@ class Game {
     const c = document.createElement('canvas');
     c.width = 2;
     c.height = 256;
-    const ctx = c.getContext('2d');
+    const ctx = c.getContext('2d', { willReadFrequently: true });
     const g = ctx.createLinearGradient(0, 0, 0, 256);
     g.addColorStop(0, '#2f7fdc');
     g.addColorStop(0.45, '#7fb8f5');

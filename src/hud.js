@@ -48,8 +48,8 @@ export class HUD {
       resultStats: $('result-stats'),
       dropMap: $('drop-map'),
     };
-    this.mm = this.el.minimap.getContext('2d');
-    this.bm = this.el.bigmapCanvas.getContext('2d');
+    this.mm = this.el.minimap.getContext('2d', { willReadFrequently: true });
+    this.bm = this.el.bigmapCanvas.getContext('2d', { willReadFrequently: true });
     this.slotEls = [];
     for (let i = -1; i < 5; i++) {
       const s = document.createElement('div');
@@ -275,7 +275,7 @@ export class HUD {
 
   // ---------- maps ----------
 
-  drawStormOn(ctx, toX, toY, scale, storm) {
+  drawStormOn(ctx, toX, toY, scale, storm, lineWidth = 2) {
     const w = ctx.canvas.width;
     const h = ctx.canvas.height;
     ctx.save();
@@ -288,13 +288,13 @@ export class HUD {
     ctx.beginPath();
     ctx.arc(toX(storm.center.x), toY(storm.center.y), Math.max(0.1, storm.radius * scale), 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(220, 150, 255, 0.95)';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = lineWidth;
     ctx.stroke();
     if (!storm.finished) {
       ctx.beginPath();
       ctx.arc(toX(storm.nextCenter.x), toY(storm.nextCenter.y), Math.max(0.1, storm.nextRadius * scale), 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = lineWidth;
       ctx.stroke();
     }
   }
@@ -369,7 +369,7 @@ export class HUD {
     const toX = (x) => (x + HALF) * scale;
     const toY = (z) => (z + HALF) * scale;
     drawTownLabels(ctx, game.towns, toX, toY, 13, -50 * scale);
-    this.drawStormOn(ctx, toX, toY, scale, game.storm);
+    this.drawStormOn(ctx, toX, toY, scale, game.storm, 3.5);
     if (this.dropPoint && p.phase !== 'ground') {
       ctx.fillStyle = '#ffd23f';
       ctx.beginPath();
@@ -388,7 +388,7 @@ export class HUD {
   /** Menu map used to choose the drop point. */
   setupDropMap(onPick) {
     const c = this.el.dropMap;
-    const ctx = c.getContext('2d');
+    const ctx = c.getContext('2d', { willReadFrequently: true });
     const draw = () => {
       ctx.drawImage(this.game.mapImage, 0, 0, c.width, c.height);
       const s = c.width / MAP_SIZE;

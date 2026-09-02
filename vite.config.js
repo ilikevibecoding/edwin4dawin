@@ -9,5 +9,6 @@ export default defineConfig({
   build: {
     target: 'es2020',
     sourcemap: false,
+    chunkSizeWarningLimit: 800, // three.js is a single large dependency by design
   },
 });
