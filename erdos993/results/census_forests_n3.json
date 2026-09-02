@@ -1,0 +1,660 @@
+{
+ "n": 3,
+ "forest_count": 3,
+ "expected_A005195": 3,
+ "forest_count_matches_A005195": true,
+ "tree_count": 1,
+ "expected_A000055": 1,
+ "non_unimodal_count": 0,
+ "tail_fail_count": 0,
+ "wr_prefix_fail_count": 0,
+ "iso_prefix_fail_count": 0,
+ "non_log_concave_count": 0,
+ "prefix_empty_count": 2,
+ "offenders": {
+  "non_unimodal": [],
+  "tail_fail": [],
+  "wr_prefix_fail": [],
+  "iso_prefix_fail": []
+ },
+ "offenders_truncated": {
+  "non_unimodal": false,
+  "tail_fail": false,
+  "wr_prefix_fail": false,
+  "iso_prefix_fail": false
+ },
+ "min_wr_prefix_slack": {
+  "slack": 2,
+  "r": 1,
+  "forest": {
+   "components": [
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ]
+   ],
+   "component_descriptions": [
+    "K1",
+    "K1",
+    "K1"
+   ],
+   "level_sequences": [
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ]
+   ],
+   "poly": [
+    1,
+    3,
+    3,
+    1
+   ],
+   "alpha": 3,
+   "L": 2
+  }
+ },
+ "min_wr_prefix_slack_r_ge_2": null,
+ "min_wr_prefix_ratio": {
+  "ratio_exact": "3/1",
+  "ratio_approx": 3.0,
+  "r": 1,
+  "forest": {
+   "components": [
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ]
+   ],
+   "component_descriptions": [
+    "K1",
+    "K1",
+    "K1"
+   ],
+   "level_sequences": [
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ]
+   ],
+   "poly": [
+    1,
+    3,
+    3,
+    1
+   ],
+   "alpha": 3,
+   "L": 2
+  }
+ },
+ "min_iso_prefix_Q": {
+  "Q": 4,
+  "r": 1,
+  "forest": {
+   "components": [
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ]
+   ],
+   "component_descriptions": [
+    "K1",
+    "K1",
+    "K1"
+   ],
+   "level_sequences": [
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ]
+   ],
+   "poly": [
+    1,
+    3,
+    3,
+    1
+   ],
+   "alpha": 3,
+   "L": 2
+  }
+ },
+ "min_iso_prefix_ratio": {
+  "ratio_exact": "5/3",
+  "ratio_approx": 1.6666666666666667,
+  "r": 1,
+  "forest": {
+   "components": [
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ]
+   ],
+   "component_descriptions": [
+    "K1",
+    "K1",
+    "K1"
+   ],
+   "level_sequences": [
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ]
+   ],
+   "poly": [
+    1,
+    3,
+    3,
+    1
+   ],
+   "alpha": 3,
+   "L": 2
+  }
+ },
+ "top5_iso_prefix_ratio": [
+  {
+   "ratio_exact": "5/3",
+   "ratio_approx": 1.6666666666666667,
+   "r": 1,
+   "forest": {
+    "components": [
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ]
+    ],
+    "component_descriptions": [
+     "K1",
+     "K1",
+     "K1"
+    ],
+    "level_sequences": [
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ]
+    ],
+    "poly": [
+     1,
+     3,
+     3,
+     1
+    ],
+    "alpha": 3,
+    "L": 2
+   }
+  }
+ ],
+ "classes": {
+  "all": {
+   "count": 3,
+   "prefix_empty_count": 2,
+   "min_wr_prefix_slack": {
+    "slack": 2,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "K1",
+      "K1",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      3,
+      3,
+      1
+     ],
+     "alpha": 3,
+     "L": 2
+    }
+   },
+   "min_wr_prefix_slack_r_ge_2": null,
+   "min_wr_prefix_ratio": {
+    "ratio_exact": "3/1",
+    "ratio_approx": 3.0,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "K1",
+      "K1",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      3,
+      3,
+      1
+     ],
+     "alpha": 3,
+     "L": 2
+    }
+   },
+   "min_iso_prefix_Q": {
+    "Q": 4,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "K1",
+      "K1",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      3,
+      3,
+      1
+     ],
+     "alpha": 3,
+     "L": 2
+    }
+   },
+   "min_iso_prefix_ratio": {
+    "ratio_exact": "5/3",
+    "ratio_approx": 1.6666666666666667,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "K1",
+      "K1",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      3,
+      3,
+      1
+     ],
+     "alpha": 3,
+     "L": 2
+    }
+   }
+  },
+  "connected": {
+   "count": 1,
+   "prefix_empty_count": 1,
+   "min_wr_prefix_slack": null,
+   "min_wr_prefix_slack_r_ge_2": null,
+   "min_wr_prefix_ratio": null,
+   "min_iso_prefix_Q": null,
+   "min_iso_prefix_ratio": null
+  },
+  "multi_nontrivial": {
+   "count": 0,
+   "prefix_empty_count": 0,
+   "min_wr_prefix_slack": null,
+   "min_wr_prefix_slack_r_ge_2": null,
+   "min_wr_prefix_ratio": null,
+   "min_iso_prefix_Q": null,
+   "min_iso_prefix_ratio": null
+  },
+  "has_isolated": {
+   "count": 2,
+   "prefix_empty_count": 1,
+   "min_wr_prefix_slack": {
+    "slack": 2,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "K1",
+      "K1",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      3,
+      3,
+      1
+     ],
+     "alpha": 3,
+     "L": 2
+    }
+   },
+   "min_wr_prefix_slack_r_ge_2": null,
+   "min_wr_prefix_ratio": {
+    "ratio_exact": "3/1",
+    "ratio_approx": 3.0,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "K1",
+      "K1",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      3,
+      3,
+      1
+     ],
+     "alpha": 3,
+     "L": 2
+    }
+   },
+   "min_iso_prefix_Q": {
+    "Q": 4,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "K1",
+      "K1",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      3,
+      3,
+      1
+     ],
+     "alpha": 3,
+     "L": 2
+    }
+   },
+   "min_iso_prefix_ratio": {
+    "ratio_exact": "5/3",
+    "ratio_approx": 1.6666666666666667,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "K1",
+      "K1",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      3,
+      3,
+      1
+     ],
+     "alpha": 3,
+     "L": 2
+    }
+   }
+  }
+ },
+ "class_definitions": {
+  "all": "every forest of order n",
+  "connected": "(a) connected: a single tree",
+  "multi_nontrivial": "(b) at least two components, each of order >= 2 (no isolated vertex): the disjoint-union class",
+  "has_isolated": "(c) at least one isolated vertex (for n = 1 this is K1, which is also connected)"
+ },
+ "tightest_disjoint_union_iso_ratio": null,
+ "tightest_disjoint_union_note": "argmin ISO prefix ratio among forests with no isolated vertex and >= 2 components (identical to classes.multi_nontrivial)",
+ "wall_time_seconds": 0.0046345420000761806,
+ "workers": 2,
+ "definitions": {
+  "prefix": "1 <= r <= L(alpha)-1, L(alpha) = ceil((2 alpha - 1)/3)",
+  "WR_r": "p_{r-1} <= r p_r; slack = r p_r - p_{r-1} (at r = 1 the slack is p_1 - p_0 = n - 1 for every forest of order n, hence the extra r >= 2 and ratio r p_r / p_{r-1} fields)",
+  "ISO_r": "Q_r = r p_r^2 + p_{r-1}^2 - (r+1) p_{r-1} p_{r+1} >= 0",
+  "ISO_ratio": "(r p_r^2 + p_{r-1}^2) / ((r+1) p_{r-1} p_{r+1})",
+  "TAIL": "p_r >= p_{r+1} for r >= L(alpha)",
+  "components": "(size, index) pairs; index into tree_level_sequences(size) in generator order (forest_indep.py, WROM)",
+  "ratio_approx": "approximate (float) value of ratio_exact",
+  "tie_break": "ties in a minimum are broken by the lexicographically smallest components tuple"
+ },
+ "note": "Exact arithmetic; finite enumeration is falsification evidence only.",
+ "report_time_seconds": 0.00010950899968520389
+}

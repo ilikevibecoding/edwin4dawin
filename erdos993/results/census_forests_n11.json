@@ -1,0 +1,2096 @@
+{
+ "n": 11,
+ "forest_count": 710,
+ "expected_A005195": 710,
+ "forest_count_matches_A005195": true,
+ "tree_count": 235,
+ "expected_A000055": 235,
+ "non_unimodal_count": 0,
+ "tail_fail_count": 0,
+ "wr_prefix_fail_count": 0,
+ "iso_prefix_fail_count": 0,
+ "non_log_concave_count": 0,
+ "prefix_empty_count": 0,
+ "offenders": {
+  "non_unimodal": [],
+  "tail_fail": [],
+  "wr_prefix_fail": [],
+  "iso_prefix_fail": []
+ },
+ "offenders_truncated": {
+  "non_unimodal": false,
+  "tail_fail": false,
+  "wr_prefix_fail": false,
+  "iso_prefix_fail": false
+ },
+ "min_wr_prefix_slack": {
+  "slack": 10,
+  "r": 1,
+  "forest": {
+   "components": [
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ]
+   ],
+   "component_descriptions": [
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1"
+   ],
+   "level_sequences": [
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ]
+   ],
+   "poly": [
+    1,
+    11,
+    55,
+    165,
+    330,
+    462,
+    462,
+    330,
+    165,
+    55,
+    11,
+    1
+   ],
+   "alpha": 11,
+   "L": 7
+  }
+ },
+ "min_wr_prefix_slack_r_ge_2": {
+  "slack": 79,
+  "r": 2,
+  "forest": {
+   "components": [
+    [
+     11,
+     0
+    ]
+   ],
+   "component_descriptions": [
+    "path P_11 (n=11, maxdeg=2, leaves=2, diameter=10)"
+   ],
+   "level_sequences": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   ],
+   "poly": [
+    1,
+    11,
+    45,
+    84,
+    70,
+    21,
+    1
+   ],
+   "alpha": 6,
+   "L": 4
+  }
+ },
+ "min_wr_prefix_ratio": {
+  "ratio_exact": "160/43",
+  "ratio_approx": 3.7209302325581395,
+  "r": 4,
+  "forest": {
+   "components": [
+    [
+     11,
+     36
+    ]
+   ],
+   "component_descriptions": [
+    "caterpillar (n=11, maxdeg=3, leaves=4, diameter=8)"
+   ],
+   "level_sequences": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     2,
+     1,
+     2,
+     3,
+     4,
+     2
+    ]
+   ],
+   "poly": [
+    1,
+    11,
+    45,
+    86,
+    80,
+    36,
+    9,
+    1
+   ],
+   "alpha": 7,
+   "L": 5
+  }
+ },
+ "min_iso_prefix_Q": {
+  "Q": 12,
+  "r": 1,
+  "forest": {
+   "components": [
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     0
+    ]
+   ],
+   "component_descriptions": [
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1",
+    "K1"
+   ],
+   "level_sequences": [
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ]
+   ],
+   "poly": [
+    1,
+    11,
+    55,
+    165,
+    330,
+    462,
+    462,
+    330,
+    165,
+    55,
+    11,
+    1
+   ],
+   "alpha": 11,
+   "L": 7
+  }
+ },
+ "min_iso_prefix_ratio": {
+  "ratio_exact": "4171/3960",
+  "ratio_approx": 1.0532828282828284,
+  "r": 2,
+  "forest": {
+   "components": [
+    [
+     11,
+     234
+    ]
+   ],
+   "component_descriptions": [
+    "star K_{1,10} (n=11, maxdeg=10, leaves=10, diameter=2)"
+   ],
+   "level_sequences": [
+    [
+     0,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   ],
+   "poly": [
+    1,
+    11,
+    45,
+    120,
+    210,
+    252,
+    210,
+    120,
+    45,
+    10,
+    1
+   ],
+   "alpha": 10,
+   "L": 7
+  }
+ },
+ "top5_iso_prefix_ratio": [
+  {
+   "ratio_exact": "4171/3960",
+   "ratio_approx": 1.0532828282828284,
+   "r": 2,
+   "forest": {
+    "components": [
+     [
+      11,
+      234
+     ]
+    ],
+    "component_descriptions": [
+     "star K_{1,10} (n=11, maxdeg=10, leaves=10, diameter=2)"
+    ],
+    "level_sequences": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "poly": [
+     1,
+     11,
+     45,
+     120,
+     210,
+     252,
+     210,
+     120,
+     45,
+     10,
+     1
+    ],
+    "alpha": 10,
+    "L": 7
+   }
+  },
+  {
+   "ratio_exact": "1451/1320",
+   "ratio_approx": 1.0992424242424241,
+   "r": 2,
+   "forest": {
+    "components": [
+     [
+      10,
+      105
+     ],
+     [
+      1,
+      0
+     ]
+    ],
+    "component_descriptions": [
+     "star K_{1,9} (n=10, maxdeg=9, leaves=9, diameter=2)",
+     "K1"
+    ],
+    "level_sequences": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     [
+      0
+     ]
+    ],
+    "poly": [
+     1,
+     11,
+     46,
+     120,
+     210,
+     252,
+     210,
+     120,
+     45,
+     10,
+     1
+    ],
+    "alpha": 10,
+    "L": 7
+   }
+  },
+  {
+   "ratio_exact": "61/55",
+   "ratio_approx": 1.1090909090909091,
+   "r": 1,
+   "forest": {
+    "components": [
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ]
+    ],
+    "component_descriptions": [
+     "K1",
+     "K1",
+     "K1",
+     "K1",
+     "K1",
+     "K1",
+     "K1",
+     "K1",
+     "K1",
+     "K1",
+     "K1"
+    ],
+    "level_sequences": [
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ]
+    ],
+    "poly": [
+     1,
+     11,
+     55,
+     165,
+     330,
+     462,
+     462,
+     330,
+     165,
+     55,
+     11,
+     1
+    ],
+    "alpha": 11,
+    "L": 7
+   }
+  },
+  {
+   "ratio_exact": "4171/3696",
+   "ratio_approx": 1.128517316017316,
+   "r": 2,
+   "forest": {
+    "components": [
+     [
+      11,
+      233
+     ]
+    ],
+    "component_descriptions": [
+     "double star S(8,1) (n=11, maxdeg=9, leaves=9, diameter=3)"
+    ],
+    "level_sequences": [
+     [
+      0,
+      1,
+      2,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "poly": [
+     1,
+     11,
+     45,
+     112,
+     182,
+     196,
+     140,
+     64,
+     17,
+     2
+    ],
+    "alpha": 9,
+    "L": 6
+   }
+  },
+  {
+   "ratio_exact": "61/54",
+   "ratio_approx": 1.1296296296296295,
+   "r": 1,
+   "forest": {
+    "components": [
+     [
+      2,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ]
+    ],
+    "component_descriptions": [
+     "K2 (n=2)",
+     "K1",
+     "K1",
+     "K1",
+     "K1",
+     "K1",
+     "K1",
+     "K1",
+     "K1",
+     "K1"
+    ],
+    "level_sequences": [
+     [
+      0,
+      1
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ]
+    ],
+    "poly": [
+     1,
+     11,
+     54,
+     156,
+     294,
+     378,
+     336,
+     204,
+     81,
+     19,
+     2
+    ],
+    "alpha": 10,
+    "L": 7
+   }
+  }
+ ],
+ "classes": {
+  "all": {
+   "count": 710,
+   "prefix_empty_count": 0,
+   "min_wr_prefix_slack": {
+    "slack": 10,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      55,
+      165,
+      330,
+      462,
+      462,
+      330,
+      165,
+      55,
+      11,
+      1
+     ],
+     "alpha": 11,
+     "L": 7
+    }
+   },
+   "min_wr_prefix_slack_r_ge_2": {
+    "slack": 79,
+    "r": 2,
+    "forest": {
+     "components": [
+      [
+       11,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "path P_11 (n=11, maxdeg=2, leaves=2, diameter=10)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      45,
+      84,
+      70,
+      21,
+      1
+     ],
+     "alpha": 6,
+     "L": 4
+    }
+   },
+   "min_wr_prefix_ratio": {
+    "ratio_exact": "160/43",
+    "ratio_approx": 3.7209302325581395,
+    "r": 4,
+    "forest": {
+     "components": [
+      [
+       11,
+       36
+      ]
+     ],
+     "component_descriptions": [
+      "caterpillar (n=11, maxdeg=3, leaves=4, diameter=8)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       2,
+       3,
+       4,
+       2,
+       1,
+       2,
+       3,
+       4,
+       2
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      45,
+      86,
+      80,
+      36,
+      9,
+      1
+     ],
+     "alpha": 7,
+     "L": 5
+    }
+   },
+   "min_iso_prefix_Q": {
+    "Q": 12,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      55,
+      165,
+      330,
+      462,
+      462,
+      330,
+      165,
+      55,
+      11,
+      1
+     ],
+     "alpha": 11,
+     "L": 7
+    }
+   },
+   "min_iso_prefix_ratio": {
+    "ratio_exact": "4171/3960",
+    "ratio_approx": 1.0532828282828284,
+    "r": 2,
+    "forest": {
+     "components": [
+      [
+       11,
+       234
+      ]
+     ],
+     "component_descriptions": [
+      "star K_{1,10} (n=11, maxdeg=10, leaves=10, diameter=2)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      45,
+      120,
+      210,
+      252,
+      210,
+      120,
+      45,
+      10,
+      1
+     ],
+     "alpha": 10,
+     "L": 7
+    }
+   }
+  },
+  "connected": {
+   "count": 235,
+   "prefix_empty_count": 0,
+   "min_wr_prefix_slack": {
+    "slack": 10,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       11,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "path P_11 (n=11, maxdeg=2, leaves=2, diameter=10)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      45,
+      84,
+      70,
+      21,
+      1
+     ],
+     "alpha": 6,
+     "L": 4
+    }
+   },
+   "min_wr_prefix_slack_r_ge_2": {
+    "slack": 79,
+    "r": 2,
+    "forest": {
+     "components": [
+      [
+       11,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "path P_11 (n=11, maxdeg=2, leaves=2, diameter=10)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      45,
+      84,
+      70,
+      21,
+      1
+     ],
+     "alpha": 6,
+     "L": 4
+    }
+   },
+   "min_wr_prefix_ratio": {
+    "ratio_exact": "160/43",
+    "ratio_approx": 3.7209302325581395,
+    "r": 4,
+    "forest": {
+     "components": [
+      [
+       11,
+       36
+      ]
+     ],
+     "component_descriptions": [
+      "caterpillar (n=11, maxdeg=3, leaves=4, diameter=8)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       2,
+       3,
+       4,
+       2,
+       1,
+       2,
+       3,
+       4,
+       2
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      45,
+      86,
+      80,
+      36,
+      9,
+      1
+     ],
+     "alpha": 7,
+     "L": 5
+    }
+   },
+   "min_iso_prefix_Q": {
+    "Q": 32,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       11,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "path P_11 (n=11, maxdeg=2, leaves=2, diameter=10)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      45,
+      84,
+      70,
+      21,
+      1
+     ],
+     "alpha": 6,
+     "L": 4
+    }
+   },
+   "min_iso_prefix_ratio": {
+    "ratio_exact": "4171/3960",
+    "ratio_approx": 1.0532828282828284,
+    "r": 2,
+    "forest": {
+     "components": [
+      [
+       11,
+       234
+      ]
+     ],
+     "component_descriptions": [
+      "star K_{1,10} (n=11, maxdeg=10, leaves=10, diameter=2)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      45,
+      120,
+      210,
+      252,
+      210,
+      120,
+      45,
+      10,
+      1
+     ],
+     "alpha": 10,
+     "L": 7
+    }
+   }
+  },
+  "multi_nontrivial": {
+   "count": 146,
+   "prefix_empty_count": 0,
+   "min_wr_prefix_slack": {
+    "slack": 10,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       3,
+       0
+      ],
+      [
+       2,
+       0
+      ],
+      [
+       2,
+       0
+      ],
+      [
+       2,
+       0
+      ],
+      [
+       2,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "star K_{1,2} (n=3, maxdeg=2, leaves=2, diameter=2)",
+      "K2 (n=2)",
+      "K2 (n=2)",
+      "K2 (n=2)",
+      "K2 (n=2)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       1
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       1
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      49,
+      112,
+      136,
+      80,
+      16
+     ],
+     "alpha": 6,
+     "L": 4
+    }
+   },
+   "min_wr_prefix_slack_r_ge_2": {
+    "slack": 81,
+    "r": 2,
+    "forest": {
+     "components": [
+      [
+       6,
+       0
+      ],
+      [
+       5,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "path P_6 (n=6, maxdeg=2, leaves=2, diameter=5)",
+      "path P_5 (n=5, maxdeg=2, leaves=2, diameter=4)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       2,
+       3,
+       1,
+       2
+      ],
+      [
+       0,
+       1,
+       2,
+       1,
+       2
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      46,
+      91,
+      86,
+      34,
+      4
+     ],
+     "alpha": 6,
+     "L": 4
+    }
+   },
+   "min_wr_prefix_ratio": {
+    "ratio_exact": "91/23",
+    "ratio_approx": 3.9565217391304346,
+    "r": 4,
+    "forest": {
+     "components": [
+      [
+       8,
+       6
+      ],
+      [
+       3,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "spider with legs [3, 3, 1] (n=8, maxdeg=3, leaves=3, diameter=6)",
+      "star K_{1,2} (n=3, maxdeg=2, leaves=2, diameter=2)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       2,
+       3,
+       1,
+       2,
+       3,
+       1
+      ],
+      [
+       0,
+       1,
+       1
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      46,
+      92,
+      91,
+      43,
+      10,
+      1
+     ],
+     "alpha": 7,
+     "L": 5
+    }
+   },
+   "min_iso_prefix_Q": {
+    "Q": 24,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       3,
+       0
+      ],
+      [
+       2,
+       0
+      ],
+      [
+       2,
+       0
+      ],
+      [
+       2,
+       0
+      ],
+      [
+       2,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "star K_{1,2} (n=3, maxdeg=2, leaves=2, diameter=2)",
+      "K2 (n=2)",
+      "K2 (n=2)",
+      "K2 (n=2)",
+      "K2 (n=2)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       1
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       1
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      49,
+      112,
+      136,
+      80,
+      16
+     ],
+     "alpha": 6,
+     "L": 4
+    }
+   },
+   "min_iso_prefix_ratio": {
+    "ratio_exact": "1451/1232",
+    "ratio_approx": 1.1777597402597402,
+    "r": 2,
+    "forest": {
+     "components": [
+      [
+       9,
+       46
+      ],
+      [
+       2,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "star K_{1,8} (n=9, maxdeg=8, leaves=8, diameter=2)",
+      "K2 (n=2)"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      [
+       0,
+       1
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      46,
+      112,
+      182,
+      196,
+      140,
+      64,
+      17,
+      2
+     ],
+     "alpha": 9,
+     "L": 6
+    }
+   }
+  },
+  "has_isolated": {
+   "count": 329,
+   "prefix_empty_count": 0,
+   "min_wr_prefix_slack": {
+    "slack": 10,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      55,
+      165,
+      330,
+      462,
+      462,
+      330,
+      165,
+      55,
+      11,
+      1
+     ],
+     "alpha": 11,
+     "L": 7
+    }
+   },
+   "min_wr_prefix_slack_r_ge_2": {
+    "slack": 81,
+    "r": 2,
+    "forest": {
+     "components": [
+      [
+       10,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "path P_10 (n=10, maxdeg=2, leaves=2, diameter=9)",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       1,
+       2,
+       3,
+       4
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      46,
+      92,
+      91,
+      41,
+      6
+     ],
+     "alpha": 6,
+     "L": 4
+    }
+   },
+   "min_wr_prefix_ratio": {
+    "ratio_exact": "380/93",
+    "ratio_approx": 4.086021505376344,
+    "r": 4,
+    "forest": {
+     "components": [
+      [
+       10,
+       66
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "spider with legs [3, 3, 3] (n=10, maxdeg=3, leaves=3, diameter=6)",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       2,
+       3,
+       1,
+       2,
+       3,
+       1,
+       2,
+       3
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      46,
+      93,
+      95,
+      47,
+      10,
+      1
+     ],
+     "alpha": 7,
+     "L": 5
+    }
+   },
+   "min_iso_prefix_Q": {
+    "Q": 12,
+    "r": 1,
+    "forest": {
+     "components": [
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      55,
+      165,
+      330,
+      462,
+      462,
+      330,
+      165,
+      55,
+      11,
+      1
+     ],
+     "alpha": 11,
+     "L": 7
+    }
+   },
+   "min_iso_prefix_ratio": {
+    "ratio_exact": "1451/1320",
+    "ratio_approx": 1.0992424242424241,
+    "r": 2,
+    "forest": {
+     "components": [
+      [
+       10,
+       105
+      ],
+      [
+       1,
+       0
+      ]
+     ],
+     "component_descriptions": [
+      "star K_{1,9} (n=10, maxdeg=9, leaves=9, diameter=2)",
+      "K1"
+     ],
+     "level_sequences": [
+      [
+       0,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      [
+       0
+      ]
+     ],
+     "poly": [
+      1,
+      11,
+      46,
+      120,
+      210,
+      252,
+      210,
+      120,
+      45,
+      10,
+      1
+     ],
+     "alpha": 10,
+     "L": 7
+    }
+   }
+  }
+ },
+ "class_definitions": {
+  "all": "every forest of order n",
+  "connected": "(a) connected: a single tree",
+  "multi_nontrivial": "(b) at least two components, each of order >= 2 (no isolated vertex): the disjoint-union class",
+  "has_isolated": "(c) at least one isolated vertex (for n = 1 this is K1, which is also connected)"
+ },
+ "tightest_disjoint_union_iso_ratio": {
+  "ratio_exact": "1451/1232",
+  "ratio_approx": 1.1777597402597402,
+  "r": 2,
+  "forest": {
+   "components": [
+    [
+     9,
+     46
+    ],
+    [
+     2,
+     0
+    ]
+   ],
+   "component_descriptions": [
+    "star K_{1,8} (n=9, maxdeg=8, leaves=8, diameter=2)",
+    "K2 (n=2)"
+   ],
+   "level_sequences": [
+    [
+     0,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    [
+     0,
+     1
+    ]
+   ],
+   "poly": [
+    1,
+    11,
+    46,
+    112,
+    182,
+    196,
+    140,
+    64,
+    17,
+    2
+   ],
+   "alpha": 9,
+   "L": 6
+  }
+ },
+ "tightest_disjoint_union_note": "argmin ISO prefix ratio among forests with no isolated vertex and >= 2 components (identical to classes.multi_nontrivial)",
+ "wall_time_seconds": 0.00910323200014318,
+ "workers": 2,
+ "definitions": {
+  "prefix": "1 <= r <= L(alpha)-1, L(alpha) = ceil((2 alpha - 1)/3)",
+  "WR_r": "p_{r-1} <= r p_r; slack = r p_r - p_{r-1} (at r = 1 the slack is p_1 - p_0 = n - 1 for every forest of order n, hence the extra r >= 2 and ratio r p_r / p_{r-1} fields)",
+  "ISO_r": "Q_r = r p_r^2 + p_{r-1}^2 - (r+1) p_{r-1} p_{r+1} >= 0",
+  "ISO_ratio": "(r p_r^2 + p_{r-1}^2) / ((r+1) p_{r-1} p_{r+1})",
+  "TAIL": "p_r >= p_{r+1} for r >= L(alpha)",
+  "components": "(size, index) pairs; index into tree_level_sequences(size) in generator order (forest_indep.py, WROM)",
+  "ratio_approx": "approximate (float) value of ratio_exact",
+  "tie_break": "ties in a minimum are broken by the lexicographically smallest components tuple"
+ },
+ "note": "Exact arithmetic; finite enumeration is falsification evidence only.",
+ "report_time_seconds": 0.0009080849999918428
+}
