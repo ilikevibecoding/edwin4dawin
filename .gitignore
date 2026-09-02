@@ -1,4 +1,6 @@
 __pycache__/
 *.pyc
+erdos993/fast/wromcheck
+erdos993/fast/wromcheck_asan
 erdos993/fast/treecheck
 erdos993/fast/*.o
