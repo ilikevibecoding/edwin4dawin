@@ -61,9 +61,9 @@ export const TUNE = {
   skyClamp: 15.0, // radiance clamp for the visible sky (× backgroundIntensity ≈ 35: the sun blooms as a glare, not a blob)
   // Art direction baked into the visible sky texture at load (IBL untouched): the HDRI zenith is a deep saturated
   // blue; the reference is a pale, hazy coastal sky. Haze mixes toward the horizon colour, strongest at the horizon.
-  skySaturation: 0.55,
-  skyHaze: 0.62,
-  skyHazePower: 1.0, // haze weight = skyHaze × (1 − sin(elevation))^power
+  skySaturation: 0.88,
+  skyHaze: 0.42,
+  skyHazePower: 1.6, // haze weight = skyHaze × (1 − sin(elevation))^power — concentrated near the horizon
   // Ground-bounce fill (HemisphereLight): the IBL's lower hemisphere is dark, so walls and undersides get a warm
   // pavement bounce from below; the sky half is kept dim so ground shadows stay at the IBL level (sun:sky ≈ 3.5:1).
   hemiSky: 0x2a3344,
@@ -71,7 +71,7 @@ export const TUNE = {
   hemiIntensity: 0.5,
 
   // --- Fog / aerial perspective ---------------------------------------------------------------
-  fogDensity: 0.0036, // FogExp2: ~12% at 100 m, ~40% at 200 m; colour sampled from the HDRI horizon
+  fogDensity: 0.0017, // FogExp2: ~10% at 60 m (plaza width), ~28% at 200 m; colour sampled from the HDRI horizon
   fogTint: new THREE.Color(1.0, 1.0, 1.0), // multiplied into the sampled horizon colour
 
   // --- Shadows (cascaded shadow maps) ---------------------------------------------------------
