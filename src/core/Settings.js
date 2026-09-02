@@ -98,7 +98,7 @@ export class Settings {
 
     // Gameplay / camera
     this.fov = parseFloat(params.get('fov') || '62'); // vertical FOV in degrees (~94 horizontal @16:9)
-    this.weaponFov = parseFloat(params.get('weaponFov') || '56'); // wider view-model FOV: MW-style rail convergence with the gun held close
+    this.weaponFov = parseFloat(params.get('weaponFov') || '52'); // wider view-model FOV: MW-style rail convergence with the gun held close
     this.mouseSensitivity = parseFloat(params.get('sens') || '0.0022');
     this.invertY = params.get('invertY') === '1';
 
