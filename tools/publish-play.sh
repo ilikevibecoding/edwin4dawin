@@ -11,7 +11,8 @@ set -euo pipefail
 
 BRANCH="${1:-cursor/play-6ead}"
 ROOT="$(git rev-parse --show-toplevel)"
-REPO_SLUG="$(git -C "$ROOT" remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')"
+# owner/repo from ssh or https remotes, including token-embedded https://user:token@github.com/… URLs
+REPO_SLUG="$(git -C "$ROOT" remote get-url origin | sed -E 's#^(git@github.com:|https://([^@/]+@)?github.com/)##; s#\.git$##')"
 SRC_SHA="$(git -C "$ROOT" rev-parse HEAD)"
 BUILD_DIR="$(mktemp -d /tmp/play-build.XXXX)"
 SITE_DIR="$(mktemp -d /tmp/play-site.XXXX)"
@@ -34,12 +35,18 @@ else
 fi
 find "$SITE_DIR" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 cp -R "$BUILD_DIR/dist/." "$SITE_DIR/"
+# The snapshot branch carries the Pages workflow so it self-deploys once Pages is enabled for the repo.
+mkdir -p "$SITE_DIR/.github/workflows"
+cp "$ROOT/.github/workflows/play-pages.yml" "$SITE_DIR/.github/workflows/"
 printf 'built from %s\n' "$SRC_SHA" > "$SITE_DIR/BUILD_INFO.txt"
 git -C "$SITE_DIR" add -A
 git -C "$SITE_DIR" commit -q -m "Play build of $SRC_SHA"
 SITE_SHA="$(git -C "$SITE_DIR" rev-parse HEAD)"
 git -C "$SITE_DIR" push -q origin "HEAD:refs/heads/$BRANCH"
 
+OWNER="${REPO_SLUG%%/*}"
+REPO="${REPO_SLUG#*/}"
 echo
 echo "published $BRANCH @ $SITE_SHA"
-echo "play: https://rawcdn.githack.com/$REPO_SLUG/$SITE_SHA/index.html"
+echo "play (raw CDN, one 'Open the page' click on the githack notice): https://rawcdn.githack.com/$REPO_SLUG/$SITE_SHA/index.html"
+echo "play (GitHub Pages, once enabled for the repo):                  https://$OWNER.github.io/$REPO/"
