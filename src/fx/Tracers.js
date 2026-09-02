@@ -55,7 +55,8 @@ export class Tracers {
     const hit = this.game.physics.raycast(e.origin, _dir, 400, { filter: this._enemyFilter });
     if (hit) _end.copy(hit.point);
     else _end.copy(e.origin).addScaledVector(_dir, 300);
-    this.fire(e.origin, _end, { r: 6.5, g: 2.6, b: 0.8, width: 0.1, length: 6 });
+    // Slower than the player's tracers so incoming fire reads at plaza ranges (COD-style readability over realism).
+    this.fire(e.origin, _end, { r: 6.5, g: 2.6, b: 0.8, width: 0.12, length: 7, speed: 170 });
   }
 
   /** Generic tracer between two world points. */

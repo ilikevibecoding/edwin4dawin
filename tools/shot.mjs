@@ -82,7 +82,7 @@ page.on('console', (msg) => {
   const text = `[${msg.type()}] ${msg.text()}`;
   logs.push(text);
   if (text.includes('favicon')) return;
-  if (msg.type() === 'error' || msg.type() === 'warning' || verbose) console.error(text);
+  if (msg.type() === 'error' || msg.type() === 'warn' || verbose) console.error(text);
 });
 page.on('pageerror', (err) => {
   logs.push(`[pageerror] ${err.message}`);
