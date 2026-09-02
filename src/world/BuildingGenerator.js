@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { box, plane, cylinder, sphere, extrudeProfile, setVertexColor, placement, polygon } from './geo.js';
 import { makeRng, smoothstep } from './util.js';
 import { SIDEWALK_H } from './layout.js';
+import { PATCH_SIZE } from './materials.js';
+import { addWetPatch } from './Ground.js';
 
 export const FLOOR_H = 3.3;
 const T = 0.45; // wall thickness
@@ -19,8 +21,11 @@ export const STYLES = {
   white_blue: { wall: 'plastered_wall_02', tint: [1.2, 1.18, 1.12], groundStone: 'stoneBlocks', quoins: true, shutter: [0.2, 0.42, 0.75], frame: [0.3, 0.5, 0.85], door: [0.25, 0.42, 0.72], roof: 'roofTiles', stoneSurround: true },
   pink: { wall: 'beige_wall_002', tint: [1.35, 0.98, 0.9], groundStone: null, quoins: true, shutter: [0.38, 0.33, 0.28], frame: [1.7, 1.66, 1.6], door: [0.4, 0.28, 0.18], roof: 'roofTiles' },
   yellow: { wall: 'beige_wall_001', tint: [1.3, 1.12, 0.78], groundStone: 'sandstone', quoins: false, shutter: [0.25, 0.33, 0.3], frame: [1.7, 1.66, 1.6], door: [0.35, 0.25, 0.16], roof: 'roofTiles' },
-  beige: { wall: 'painted_plaster_wall', tint: [1.12, 1.04, 0.92], groundStone: 'stoneBlocks', quoins: true, shutter: [0.5, 0.36, 0.24], frame: [1.6, 1.55, 1.45], door: [0.45, 0.3, 0.18], roof: 'roofTilesOld' },
-  cafe: { wall: 'painted_plaster_wall', tint: [1.18, 1.1, 0.98], groundStone: 'stoneBlocks', quoins: true, shutter: [0.25, 0.3, 0.35], frame: [0.28, 0.3, 0.33], door: [0.62, 0.46, 0.32], roof: 'roofTiles', shop: true },
+  // painted_plaster_wall scans grey-mauve; the warm tints below pull it to cream so it never reads lilac in shade.
+  beige: { wall: 'painted_plaster_wall', tint: [1.16, 1.06, 0.88], groundStone: 'stoneBlocks', quoins: true, shutter: [0.5, 0.36, 0.24], frame: [1.6, 1.55, 1.45], door: [0.45, 0.3, 0.18], roof: 'roofTilesOld' },
+  // The café front faces east and sits in shade most of the day: neutral beige plaster keeps it cream there
+  // (painted_plaster_wall went lilac under the blue skylight).
+  cafe: { wall: 'plastered_wall_02', tint: [1.16, 1.11, 0.98], groundStone: 'stoneBlocks', quoins: true, shutter: [0.25, 0.3, 0.35], frame: [0.28, 0.3, 0.33], door: [0.62, 0.46, 0.32], roof: 'roofTiles', shop: true },
   white_green: { wall: 'white_plaster_rough_02', tint: [1.25, 1.24, 1.2], groundStone: 'sandstone', quoins: false, shutter: [0.2, 0.4, 0.3], frame: [1.7, 1.68, 1.6], door: [0.24, 0.4, 0.3], roof: 'roofTilesOld', stoneSurround: true },
 };
 
@@ -32,7 +37,10 @@ export const STYLES = {
 export function buildBuilding(ctx, spec) {
   const { mats, batch } = ctx;
   const rng = makeRng(hashId(spec.id));
-  const style = STYLES[spec.style] || STYLES.beige;
+  const baseStyle = STYLES[spec.style] || STYLES.beige;
+  // Per-building paint variation: two houses sharing a style never read as copies.
+  const jit = [rng.range(0.93, 1.07), rng.range(0.95, 1.05), rng.range(0.93, 1.07)];
+  const style = { ...baseStyle, tint: baseStyle.tint.map((c, i) => c * jit[i]) };
   const floors = spec.floors;
   const H = floors * FLOOR_H + 0.35; // wall height to the eave
   const { w, d } = spec;
@@ -81,6 +89,7 @@ export function buildBuilding(ctx, spec) {
     const openings = layoutOpenings(side, spec, style, floors, rng, plain);
     buildWallPieces(side.L, H, openings, frame, { wallMat, stoneMat, stoneTop, tint: style.tint, grimeTint, addWall, mats });
     for (const op of openings) buildOpening(op, side, frame, { style, mats, addWall, rng, plain, results, spec, M, H });
+    if (side.detail !== 'low') buildFacadeLayers(side, openings, frame, H, { style, mats, addWall, rng, plain, stoneMat, stoneTop, wallMat, floors, spec });
 
     // Gable end wall (triangle under the roof) on the sides perpendicular to the ridge.
     if (pitch > 0) {
@@ -111,17 +120,26 @@ export function buildBuilding(ctx, spec) {
 
     // Drainpipes + gutter on detailed sides.
     if (!plain && side.detail !== 'low') {
-      const pipeU = side.name === 'front' ? [0.32, side.L - 0.32] : [side.L - 0.32];
+      // Side pipes go at the back corner (right side: u = L is the back; left side: u = 0), so they never
+      // double up with the front pipes on the same corner.
+      const pipeU = side.name === 'front' ? [0.32, side.L - 0.32] : [side.name === 'right' ? side.L - 0.32 : 0.32];
       for (const u of pipeU) {
         addWall(mats.zinc, cylinder(0.055, 0.055, H - 0.25, 10, { x: u, y: (H + 0.05) / 2 + 0.1, z: 0.1 }), [1, 1, 1], frame);
         for (let y = 1.2; y < H; y += 2.6) addWall(mats.zinc, box(0.16, 0.05, 0.14, { x: u, y, z: 0.06 }), [0.8, 0.8, 0.8], frame);
         addWall(mats.zinc, cylinder(0.055, 0.055, 0.5, 10, { x: u, y: 0.2, z: 0.2, rotX: Math.PI / 2 }), [1, 1, 1], frame);
+        // Run-off staining: a dark streak up the wall behind the pipe and a damp patch where the shoe spills.
+        addWall(mats.grime, decalPlane(0.5, 1.6, { x: u, y: GROUND_Y + 0.8, z: 0.008, uRepeat: 0.3 }), null, frame);
+        const foot = new THREE.Vector3(u, 0, 0.75).applyMatrix4(frame);
+        const dir = new THREE.Vector3(0, 0, 1).transformDirection(frame);
+        addWetPatch(ctx, foot.x, foot.z, 0.42, 0.62, Math.atan2(dir.x, dir.z));
       }
       if (pitch > 0) addWall(mats.zinc, cylinder(0.07, 0.07, side.L + 0.1, 10, { x: side.L / 2, y: H + 0.04, z: 0.12, rotZ: Math.PI / 2 }), [1, 1, 1], frame);
     }
   }
 
   // --- Quoins (alternating corner blocks) ----------------------------------------------------------
+  // Flatter (6 cm proud) and toned to a sandy dressed stone so they frame the corner instead of
+  // reading as bright white pillows against the plaster.
   if (style.quoins && !plain) {
     const corners = [
       [w / 2, d / 2, 1, 1],
@@ -129,15 +147,16 @@ export function buildBuilding(ctx, spec) {
       [w / 2, -d / 2, 1, -1],
       [-w / 2, -d / 2, -1, -1],
     ];
+    const qTint = [0.88, 0.85, 0.79];
     for (const [cx, cz, sx, sz] of corners) {
-      for (let y = stoneTop + 0.25, k = 0; y < H - 0.3; y += 0.5, k++) {
-        const long = k % 2 === 0 ? 0.66 : 0.42;
-        const short = k % 2 === 0 ? 0.42 : 0.66;
-        const g1 = box(long, 0.42, 0.1, { x: cx - (sx * long) / 2 + sx * 0.04, y, z: cz + sz * 0.0 });
-        const g2 = box(0.1, 0.42, short, { x: cx + sx * 0.0, y, z: cz - (sz * short) / 2 + sz * 0.04 });
+      for (let y = stoneTop + 0.25, k = 0; y < H - 0.55; y += 0.5, k++) {
+        const long = k % 2 === 0 ? 0.62 : 0.4;
+        const short = k % 2 === 0 ? 0.4 : 0.62;
+        const g1 = box(long, 0.4, 0.06, { x: cx - (sx * long) / 2 + sx * 0.03, y, z: cz + sz * 0.0 });
+        const g2 = box(0.06, 0.4, short, { x: cx + sx * 0.0, y, z: cz - (sz * short) / 2 + sz * 0.03 });
         for (const g of [g1, g2]) {
           g.applyMatrix4(M);
-          batch.add(mats.trimStone, g, [1.02, 1.0, 0.96]);
+          batch.add(mats.trimStone, g, qTint.map((c) => c * rng.range(0.94, 1.04)));
         }
       }
     }
@@ -244,6 +263,158 @@ function buildWallPieces(L, H, openings, frame, o) {
   }
 }
 
+/**
+ * Decal quad facing +Z with v ∈ [0,1] over its height (alpha maps are authored bottom-opaque → top-clear)
+ * and u repeating every `1/uRepeat` of the width. `flip` puts the opaque end at the top (streaks).
+ */
+function decalPlane(w, h, { x = 0, y = 0, z = 0, uRepeat = 1, flip = false } = {}) {
+  const g = new THREE.PlaneGeometry(w, h);
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * uRepeat, flip ? 1 - uv.getY(i) : uv.getY(i));
+  g.translate(x, y, z);
+  return g;
+}
+
+/** u-intervals of the wall free of any opening that intersects the vertical band [y0, y1] (margin m). */
+function bandPieces(L, openings, y0, y1, m = 0.08) {
+  const hits = openings.filter((op) => op.v1 + m > y0 && op.v0 - m < y1).sort((a, b) => a.u0 - b.u0);
+  const out = [];
+  let u = 0;
+  for (const op of hits) {
+    if (op.u0 - m > u + 1e-3) out.push([u, op.u0 - m]);
+    u = Math.max(u, op.u1 + m);
+  }
+  if (u < L - 1e-3) out.push([u, L]);
+  return out;
+}
+
+/**
+ * Second-layer facade detail (all sides except the hidden backs): cornice under the eaves, floor string
+ * courses, a cement skirting on plaster-only facades, a splash-zone grime band, chipped-plaster brick
+ * patches, and the café fascia sign / street plaques. Everything is thin geometry or alpha decals with
+ * polygonOffset, batched into the existing materials.
+ */
+function buildFacadeLayers(side, openings, frame, H, o) {
+  const { style, mats, addWall, rng, plain, stoneMat, stoneTop, floors, spec } = o;
+  const L = side.L;
+  const isFront = side.name === 'front';
+  const detailed = !plain;
+  const stone = [0.93, 0.9, 0.85];
+  // Side walls are T shorter at each end than the building; run their bands out to the corners.
+  const ext = isFront || side.name === 'back' ? 0 : T;
+  const extend = ([u0, u1]) => [u0 <= 1e-3 ? -ext : u0, u1 >= L - 1e-3 ? L + ext : u1];
+
+  // Cornice: dressed-stone band just under the soffit, proud of the wall (roof fascia is at H - 0.1).
+  addWall(mats.trimStone, box(L + 2 * ext + 0.3, 0.24, 0.14, { x: L / 2, y: H - 0.34, z: 0.07 }), stone, frame);
+  addWall(mats.trimStone, box(L + 2 * ext + 0.22, 0.08, 0.08, { x: L / 2, y: H - 0.5, z: 0.04 }), stone.map((c) => c * 0.96), frame);
+
+  // Floor string courses (skip the level already marked by the stone base's course).
+  for (let f = 1; f < floors; f++) {
+    const y = f * FLOOR_H + GROUND_Y + 0.05;
+    if (stoneMat && Math.abs(y - stoneTop) < 0.3) continue;
+    for (const [u0, u1] of bandPieces(L, openings, y - 0.06, y + 0.06, 0.02).map(extend)) {
+      if (u1 - u0 < 0.3) continue;
+      addWall(mats.trimStone, box(u1 - u0, 0.12, 0.06, { x: (u0 + u1) / 2, y, z: 0.03 }), stone, frame);
+    }
+  }
+
+  // Skirting (cement plinth band) on facades with no stone ground floor, split around doors/shopfronts.
+  const skirtH = 0.5;
+  if (!stoneMat) {
+    for (const [u0, u1] of bandPieces(L, openings, GROUND_Y, GROUND_Y + skirtH, 0.12).map(extend)) {
+      if (u1 - u0 < 0.15) continue;
+      addWall(mats.concrete, box(u1 - u0, skirtH, 0.035, { x: (u0 + u1) / 2, y: GROUND_Y + skirtH / 2, z: 0.0175 }), [0.66, 0.64, 0.6], frame);
+    }
+  }
+
+  // Splash-zone grime: dark band fading upward from the skirting / pavement, split around openings.
+  const gy0 = stoneMat ? GROUND_Y : GROUND_Y + skirtH;
+  const gh = stoneMat ? 0.9 : 0.75;
+  for (const [u0, u1] of bandPieces(L, openings, gy0, gy0 + gh, 0.05).map(extend)) {
+    if (u1 - u0 < 0.2) continue;
+    addWall(mats.grime, decalPlane(u1 - u0, gh, { x: (u0 + u1) / 2, y: gy0 + gh / 2, z: 0.006, uRepeat: (u1 - u0) / gh }), null, frame);
+  }
+
+  // Chipped plaster revealing brick (plaster facades only; never over an opening or another patch).
+  if (detailed && style.wall !== 'rustic') {
+    const n = rng.int(isFront ? 1 : 0, isFront ? 3 : 2);
+    const placed = [];
+    const [pw, ph] = PATCH_SIZE;
+    const yLow = (stoneMat ? stoneTop : GROUND_Y + skirtH) + ph * 0.5 + 0.1;
+    for (let i = 0; i < n; i++) {
+      for (let tries = 0; tries < 14; tries++) {
+        const s = rng.range(0.7, 1.15);
+        const hw = (pw * s) / 2;
+        const hh = (ph * s) / 2;
+        const u = rng.range(hw + 0.8, L - hw - 0.8); // clear of the corner quoins, which would slice the blob
+        // Mostly low (base damage), occasionally high under a sill.
+        const v = rng.chance(0.75) ? rng.range(yLow, Math.min(H - 1, yLow + 1.4)) : rng.range(yLow, H - 1.0);
+        const rect = { u0: u - hw, u1: u + hw, v0: v - hh, v1: v + hh };
+        const hit = [...openings, ...placed].some((r) => r.u0 - 0.12 < rect.u1 && r.u1 + 0.12 > rect.u0 && r.v0 - 0.12 < rect.v1 && r.v1 + 0.12 > rect.v0);
+        if (hit || rect.v1 > H - 0.6) continue;
+        placed.push(rect);
+        const g = new THREE.PlaneGeometry(pw * s, ph * s);
+        if (rng.chance(0.5)) {
+          const uv = g.attributes.uv;
+          for (let k = 0; k < uv.count; k++) uv.setX(k, 1 - uv.getX(k));
+        }
+        g.rotateZ(rng.range(-0.12, 0.12));
+        g.translate(u, v, 0.005);
+        addWall(mats.brickPatch, g, null, frame);
+        break;
+      }
+    }
+  }
+
+  // Service clutter on the fronts: a black cable clipped along the facade just above the ground-floor
+  // lintels, and on some gable-roofed houses a satellite dish on a short mast at the eave.
+  if (detailed && isFront) {
+    const cy = GROUND_Y + 2.98;
+    const dark = [0.08, 0.08, 0.08];
+    addWall(mats.iron, cylinder(0.011, 0.011, L, 4, { x: L / 2, y: cy, z: 0.03, rotZ: Math.PI / 2, open: true }), dark, frame);
+    for (let u = 0.9; u < L - 0.5; u += 2.3) addWall(mats.iron, box(0.04, 0.05, 0.04, { x: u, y: cy, z: 0.02 }), dark, frame);
+    const eaveFront = spec.roof !== 'flat' && (spec.ridge ? spec.ridge === 'x' : spec.w >= spec.d); // not a gable end
+    if (eaveFront && rng.chance(0.5)) {
+      // Mast 0.7 m in from the wall line so the dish sits low against the tiles (roof top there is
+      // ≈ H + 0.68 for the 24° pitch) instead of floating against the sky beyond the eave.
+      const du = rng.chance(0.5) ? 1.6 : L - 1.6;
+      const ry = H + 0.46;
+      const tilt = Math.PI / 2 - 0.6;
+      addWall(mats.iron, cylinder(0.035, 0.035, 0.7, 6, { x: du, y: ry + 0.3, z: -0.7 }), dark, frame);
+      addWall(mats.paintedMetal, cylinder(0.36, 0.32, 0.035, 14, { x: du, y: ry + 0.62, z: -0.55, rotX: -tilt }), [0.86, 0.86, 0.84], frame);
+      addWall(mats.iron, cylinder(0.012, 0.012, 0.34, 4, { x: du, y: ry + 0.5, z: -0.4, rotX: -tilt + 0.95, open: true }), dark, frame);
+    }
+  }
+
+  // Café fascia sign over the shopfront, centred on the door bay; street plaques on a few corners.
+  if (style.shop && isFront) {
+    const door = openings.find((op) => op.kind === 'door');
+    const uc = door ? (door.u0 + door.u1) / 2 : L / 2;
+    const sw = 3.0; // narrow enough to clear the neighbouring balcony slabs
+    const sh = 0.62;
+    const sy = FLOOR_H + GROUND_Y + 0.28; // between awning bar and first-floor sills
+    addWall(mats.paint, box(sw + 0.1, sh + 0.1, 0.06, { x: uc, y: sy, z: 0.03 }), [0.22, 0.2, 0.18], frame);
+    const g = new THREE.PlaneGeometry(sw, sh);
+    g.translate(uc, sy, 0.065);
+    addWall(mats.signCafe, g, null, frame);
+    // Two small downlights on the board.
+    for (const s of [-1, 1]) {
+      addWall(mats.iron, cylinder(0.02, 0.02, 0.35, 6, { x: uc + s * (sw / 2 - 0.4), y: sy + sh / 2 + 0.2, z: 0.2, rotX: Math.PI / 2 }), [1, 1, 1], frame);
+      addWall(mats.iron, cylinder(0.06, 0.04, 0.12, 8, { x: uc + s * (sw / 2 - 0.4), y: sy + sh / 2 + 0.14, z: 0.36 }), [1, 1, 1], frame);
+    }
+  }
+  if (isFront && spec.plaque) {
+    // Above the first/last ground-floor window, between the string course and the first-floor sills
+    // (clear of the drainpipe at the corner, the balcony slab and the facade cable).
+    const u = spec.plaque === 'left' ? 1.15 : L - 1.15;
+    const py = 3.85;
+    const g = new THREE.PlaneGeometry(0.62, 0.31);
+    g.translate(u, py, 0.03);
+    addWall(mats.paint, box(0.64, 0.33, 0.03, { x: u, y: py, z: 0.012 }), [0.75, 0.75, 0.72], frame);
+    addWall(mats.streetPlaque, g, null, frame);
+  }
+}
+
 /** Window / door / balcony contents for one opening (wall frame). */
 function buildOpening(op, side, frame, o) {
   const { style, mats, addWall, rng, plain, spec } = o;
@@ -294,6 +465,9 @@ function buildOpening(op, side, frame, o) {
     // Threshold step (12 cm, climbable) and wall lamp.
     addWall(mats.trimStone, box(wo + 0.5, 0.1, 0.5, { x: uc, y: op.v0 + 0.05, z: 0.1 }), [0.95, 0.94, 0.9], frame);
     if (detailed) {
+      // Coir doormat on the step (colour varies house to house) — small eye-height cue that someone lives here.
+      const matCol = rng.pick([[0.34, 0.2, 0.11], [0.16, 0.13, 0.1], [0.3, 0.26, 0.18]]);
+      addWall(mats.paint, box(Math.min(wo - 0.1, 0.78), 0.02, 0.42, { x: uc, y: op.v0 + 0.11, z: 0.06 }), matCol, frame);
       const lampU = op.u1 + 0.55;
       addWall(mats.iron, box(0.05, 0.05, 0.32, { x: lampU, y: op.v0 + 2.55, z: 0.16 }), [1, 1, 1], frame);
       addWall(mats.iron, box(0.2, 0.32, 0.2, { x: lampU, y: op.v0 + 2.37, z: 0.3 }), [1, 1, 1], frame);
@@ -371,9 +545,14 @@ function buildOpening(op, side, frame, o) {
     const leafW = wo / 2 + 0.02;
     const leafH = ho - 0.06;
     const shutterLeaf = (x, z, col) => {
-      // Louvres live in the shutter texture; a thin top/bottom rail gives the leaf a real edge.
-      addWall(mats.shutter, box(leafW, leafH, 0.035, { x, y: (op.v0 + op.v1) / 2, z }), col, frame);
-      addWall(mats.paint, box(leafW, 0.09, 0.045, { x, y: op.v1 - 0.075, z }), col.map((c) => c * 0.9), frame);
+      // Louvres live in the shutter texture; rails and stiles (2 mm proud) frame the leaf so it reads as a
+      // built panel instead of a textured slab.
+      const yc = (op.v0 + op.v1) / 2;
+      const rail = col.map((c) => c * 0.88);
+      addWall(mats.shutter, box(leafW, leafH, 0.035, { x, y: yc, z }), col, frame);
+      addWall(mats.paint, box(leafW, 0.09, 0.045, { x, y: op.v1 - 0.075, z }), rail, frame);
+      addWall(mats.paint, box(leafW, 0.11, 0.045, { x, y: op.v0 + 0.03 + 0.055, z }), rail, frame);
+      for (const s of [-1, 1]) addWall(mats.paint, box(0.06, leafH, 0.045, { x: x + s * (leafW / 2 - 0.03), y: yc, z }), rail, frame);
     };
     const openL = () => shutterLeaf(op.u0 - leafW / 2 - 0.02, 0.03, style.shutter);
     const openR = () => shutterLeaf(op.u1 + leafW / 2 + 0.02, 0.03, style.shutter);
@@ -398,8 +577,9 @@ function buildOpening(op, side, frame, o) {
   }
 
   // Grime streaks under the sill (alpha decal, flipped so the dark end is at the top).
-  if (detailed && !bal && rng.chance(0.7)) {
-    addWall(mats.grime, plane(wo + 0.25, 0.9 + rng.range(0, 0.5), { x: uc, y: op.v0 - 0.55, z: 0.006, rotZ: Math.PI }), null, frame);
+  if (detailed && !bal && rng.chance(0.75)) {
+    const gh = 0.9 + rng.range(0, 0.5);
+    addWall(mats.grime, decalPlane(wo + 0.25, gh, { x: uc, y: op.v0 - 0.05 - gh / 2, z: 0.006, uRepeat: (wo + 0.25) / gh, flip: true }), null, frame);
   }
 
   // Balcony structure.
@@ -548,6 +728,9 @@ function buildGableRoof(spec, H, ridgeAlongX, pitch, o, r) {
     const cz = s * (half / 2);
     const cy = (yE + yR) / 2 + 0.05;
     addR(roofMat, box(along + 2 * o, 0.1, slopeLen, { x: 0, y: cy, z: cz, rotX: -s * pitch }), shade);
+    // Eave course: the bottom row of tiles hangs 4 cm past the slab and turns down, giving the roof edge a
+    // visible thickness/shadow line (the reference eaves read as a dark tile lip, not a knife edge).
+    addR(roofMat, box(along + 2 * o + 0.04, 0.09, 0.16, { x: 0, y: yE + 0.02, z: s * (half + 0.03) }), tileTint.map((c) => c * 0.72));
     // Fascia + soffit under the overhang, rafter tails.
     addR(mats.woodBrown, box(along + 2 * o, 0.17, 0.05, { x: 0, y: yE - 0.12, z: s * (half - 0.02) }), [0.5, 0.4, 0.3]);
     addR(mats.woodBrown, box(along + 2 * o, 0.04, o + 0.05, { x: 0, y: yE - 0.2, z: s * (half - o / 2 - 0.02) }), [0.6, 0.5, 0.4]);
@@ -573,11 +756,15 @@ function buildGableRoof(spec, H, ridgeAlongX, pitch, o, r) {
     addR(mats.terracotta, cylinder(0.12, 0.14, 0.35, 10, { x: cx - 0.15, y: ySlope + chH - 0.08, z: cz }), [0.75, 0.6, 0.5]);
     addR(mats.terracotta, cylinder(0.12, 0.14, 0.35, 10, { x: cx + 0.15, y: ySlope + chH - 0.08, z: cz }), [0.75, 0.6, 0.5]);
   }
-  // Satellite dish on the ridge occasionally.
+  // Satellite dish on the ridge occasionally. Kept low on a stout mast with a foot bracket: a tall thin mast
+  // vanishes at distance (sub-pixel) and the dish then reads as a disc floating over the roof.
   if (!plain && rng.chance(0.6)) {
     const x = rng.range(-along / 2 + 1, along / 2 - 1);
-    addR(mats.iron, cylinder(0.025, 0.025, 1.1, 6, { x, y: yR + 0.6, z: 0 }), [1, 1, 1]);
-    addR(mats.paintedMetal, sphere(0.42, { x, y: yR + 1.2, z: 0.15, sz: 0.3, seg: 14, rotX: -0.9 }), [0.9, 0.9, 0.9]);
+    const dark = [0.1, 0.1, 0.1];
+    addR(mats.iron, box(0.3, 0.12, 0.4, { x, y: yR + 0.18, z: 0 }), dark);
+    addR(mats.iron, cylinder(0.04, 0.04, 0.4, 6, { x, y: yR + 0.34, z: 0 }), dark);
+    addR(mats.paintedMetal, cylinder(0.34, 0.3, 0.035, 14, { x, y: yR + 0.5, z: 0.16, rotX: -(Math.PI / 2 - 0.6) }), [0.86, 0.86, 0.84]);
+    addR(mats.iron, cylinder(0.012, 0.012, 0.34, 4, { x, y: yR + 0.4, z: 0.32, rotX: -(Math.PI / 2 - 0.6) + 0.95, open: true }), dark);
   }
   // Colliders for the two slopes.
   for (const s of [-1, 1]) {

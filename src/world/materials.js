@@ -35,6 +35,12 @@ export const TILE = {
   dirt_floor: 1.5,
 };
 
+/** Width / height of non-square texture sets (everything else is square). */
+const TEX_ASPECT = { beige_wall_002: 4 };
+
+/** Chipped-plaster brick decal size (m); all patches share one material so they must share one size. */
+export const PATCH_SIZE = [1.5, 1.1];
+
 /**
  * Material library: caches materials by name so batching merges as much geometry as possible.
  * All textured materials use vertexColors so per-building tints and grime gradients cost no extra
@@ -53,8 +59,10 @@ export class MaterialLib {
     const k = key || `${id}|${JSON.stringify(opts)}`;
     if (this._cache.has(k)) return this._cache.get(k);
     const { tile = TILE[id] || 2, tileV = null, rotation = 0, vertexColors = true, noShadow = false, ...rest } = opts;
+    // Non-square scans (beige_wall_002 is 4:1) would be squashed by a uniform repeat; keep texels square.
+    const aspect = TEX_ASPECT[id] || 1;
     const mat = this.game.assets.createPBRMaterial(id, {
-      repeat: [1 / tile, 1 / (tileV || tile)],
+      repeat: [1 / tile, aspect / (tileV || tile)],
       rotation,
       vertexColors,
       roughness: 1,
@@ -103,17 +111,61 @@ export class MaterialLib {
 
   /** Ground */
   get plaza() {
-    return this.pbr('pavement_01', { normalScale: 0.9, noShadow: true }, 'plaza');
+    // Stronger normal so the slab joints still read at eye height; grout is the main close-range cue.
+    return this.pbr('pavement_01', { normalScale: 1.35, noShadow: true }, 'plaza');
   }
   get plazaLight() {
-    return this.pbr('marble_tiles', { normalScale: 0.7, tile: 2.0, noShadow: true }, 'plaza_light');
+    return this.pbr('marble_tiles', { normalScale: 0.8, tile: 2.0, noShadow: true }, 'plaza_light');
   }
   get terracotta() {
-    // Brightened toward the reference's sunlit orange bands; polygonOffset keeps inlays free of z-fighting.
-    return this.pbr('terracotta_floor_tiles', { color: new THREE.Color(2.1, 1.6, 1.08), polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, roughness: 0.9, noShadow: true }, 'terracotta');
+    // Reference bands are rows of brick pavers in a muted salmon-terracotta (sunlit ≈ sRGB 191,138,112),
+    // not saturated red mosaic: brick paving scan, lifted and desaturated toward that. polygonOffset keeps
+    // the layered inlays free of z-fighting.
+    return this.pbr('brick_villa_floor', { color: new THREE.Color(3.6, 3.0, 3.7), tile: 1.1, normalScale: 0.9, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, roughness: 0.92, noShadow: true }, 'terracotta');
   }
   get blueStone() {
-    return this.pbr('marble_tiles', { color: new THREE.Color(0.3, 0.55, 1.15), tile: 1.2, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, roughness: 0.75, noShadow: true }, 'blue_stone');
+    // Slate blue-grey (reference ≈ sRGB 99,132,151), not sky blue.
+    return this.pbr('marble_tiles', { color: new THREE.Color(0.17, 0.4, 0.74), tile: 1.2, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, roughness: 0.8, noShadow: true }, 'blue_stone');
+  }
+  get wetStain() {
+    // Damp/dark patch decal for gutters, drains and fountain splash: darker and less brown than groundGrime,
+    // with a touch of gloss so it reads as moisture rather than soot.
+    const alphaMap = this.canvasTexture('blotch_alpha', makeBlotchCanvas, { srgb: false, repeat: [1, 1] });
+    return this.plain('wet_stain', {
+      color: 0x1a1c1e,
+      alphaMap,
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
+      roughness: 0.35,
+      polygonOffset: true,
+      polygonOffsetFactor: -3,
+      polygonOffsetUnits: -3,
+      vertexColors: false,
+      noShadow: true,
+    });
+  }
+  get leafLitter() {
+    const map = this.canvasTexture('leaf_litter', makeLitterCanvas);
+    return this.plain('leaf_litter', { map, color: 0xffffff, roughness: 0.9, alphaTest: 0.5, vertexColors: false, noShadow: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  }
+  get groundMottle() {
+    // Whole-plaza tonal variation: a single low-frequency noise sheet laid over the slabs so the paving is
+    // not one even tone from curb to curb (the reference slabs drift between dusty and darker patches).
+    const alphaMap = this.canvasTexture('mottle_alpha', makeMottleCanvas, { srgb: false, repeat: [1, 1] });
+    return this.plain('ground_mottle', {
+      color: 0x2b2824,
+      alphaMap,
+      transparent: true,
+      opacity: 0.3,
+      depthWrite: false,
+      roughness: 1,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+      vertexColors: false,
+      noShadow: true,
+    });
   }
   get groundGrime() {
     // Soft dark blotches layered on the paving: wear around the fountain, under trees, at street mouths.
@@ -168,12 +220,25 @@ export class MaterialLib {
     // Smooth dressed stone for sills, lintels, cornices, copings.
     return this.pbr('sandstone_blocks_05', { tile: 3.5, normalScale: 0.35, roughness: 0.85 }, 'trim_stone');
   }
+  get brickPatch() {
+    // Chipped plaster revealing brick: decal plane with 0..1 UVs, alpha = ragged blob. The brick map repeat
+    // is set for the PATCH_SIZE decal so bricks stay ~8 × 20 cm.
+    const alphaMap = this.canvasTexture('patch_alpha', makePatchCanvas, { srgb: false, repeat: [1, 1] });
+    return this.pbr(
+      'red_brick_plaster_patch_02',
+      { tile: TILE.red_brick_plaster_patch_02 / PATCH_SIZE[0], tileV: TILE.red_brick_plaster_patch_02 / PATCH_SIZE[1], normalScale: 1.0, roughness: 0.95, color: new THREE.Color(0.9, 0.86, 0.82), alphaMap, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, vertexColors: false, noShadow: true },
+      'brick_patch',
+    );
+  }
   get roofTiles() {
-    // The scan is a vivid new-tile orange; knock it toward the weathered brown-red of the reference.
-    return this.pbr('clay_roof_tiles_02', { normalScale: 1.0, roughness: 0.9, color: new THREE.Color(0.8, 0.74, 0.7) }, 'roof_tiles');
+    // The scan is a vivid new-tile orange; the reference roofs are darker, dustier brown-red. Pull the
+    // saturation down (blue > red multiplier) and the value down.
+    return this.pbr('clay_roof_tiles_02', { normalScale: 1.1, roughness: 0.92, color: new THREE.Color(0.66, 0.62, 0.66) }, 'roof_tiles');
   }
   get roofTilesOld() {
-    return this.pbr('roof_07', { normalScale: 1.0 }, 'roof_tiles_old');
+    // roof_07 (lichen-grey northern tile) read as tar paper from the balconies, whatever the tint. Use the
+    // clay scan again but lighter and pinker: sun-faded terracotta, distinct from the darker roofTiles.
+    return this.pbr('clay_roof_tiles_02', { normalScale: 1.0, roughness: 0.95, color: new THREE.Color(0.98, 0.84, 0.76) }, 'roof_tiles_old');
   }
   get woodGrey() {
     return this.pbr('wood_planks_grey', { normalScale: 0.8, roughness: 0.85 }, 'wood_grey');
@@ -195,10 +260,20 @@ export class MaterialLib {
 
   /** Solid-color / special */
   get iron() {
-    return this.plain('iron', { color: 0x1b1b1e, roughness: 0.5, metalness: 0.85 });
+    // Painted wrought iron: mostly dielectric so thin bars do not mirror the sky as bright violet streaks.
+    return this.plain('iron', { color: 0x1c1c1f, roughness: 0.62, metalness: 0.45 });
   }
   get zinc() {
-    return this.plain('zinc', { color: 0x777770, roughness: 0.45, metalness: 0.9 });
+    // Drainpipes / gutters: dull weathered grey rather than polished chrome.
+    return this.plain('zinc', { color: 0x4d4f4c, roughness: 0.6, metalness: 0.55 });
+  }
+  get bronzeDark() {
+    // Statue bronze: dark, slightly greened, with the scan's own normal/ARM maps applied by the caller.
+    const map = this.canvasTexture('patina', makePatinaCanvas, { repeat: [3, 3] });
+    return this.plain('bronze_dark', { map, color: 0xcfc2ac, roughness: 0.46, metalness: 0.78, vertexColors: false, envMapIntensity: 1.1 });
+  }
+  get waterStream() {
+    return this.plain('water_stream', { color: 0xdfeef5, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.45, depthWrite: false, vertexColors: false, noShadow: true, side: THREE.DoubleSide }, true);
   }
   get glass() {
     // Semi-transparent so the dim `interior` backing plane shows through under the sky reflection;
@@ -216,9 +291,10 @@ export class MaterialLib {
     return this.plain('interior', { map, color: 0xffffff, roughness: 1, vertexColors: false, noShadow: true, emissive: new THREE.Color(0.7, 0.58, 0.44), emissiveMap: map, emissiveIntensity: 1.1 });
   }
   get water() {
+    // Deep teal, near-mirror: the sky reflection is what sells still water; the basin tiles show through faintly.
     return this.plain(
       'water',
-      { color: 0x123a48, roughness: 0.04, metalness: 0.0, transparent: true, opacity: 0.86, envMapIntensity: 1.6, clearcoat: 1, clearcoatRoughness: 0.03, reflectivity: 1, vertexColors: false, depthWrite: true, noShadow: true },
+      { color: 0x0b2a36, roughness: 0.03, metalness: 0.0, transparent: true, opacity: 0.8, envMapIntensity: 1.8, clearcoat: 1, clearcoatRoughness: 0.02, reflectivity: 1, vertexColors: false, depthWrite: true, noShadow: true },
       true,
     );
   }
@@ -245,9 +321,28 @@ export class MaterialLib {
     const map = this.canvasTexture('awning_stripe', makeStripeCanvas, { repeat: [1, 1] });
     return this.plain('awning', { map, color: 0xffffff, roughness: 0.95, side: THREE.DoubleSide });
   }
+  get canvasPlain() {
+    // Sun-bleached cream canvas (parasols): a fine, low-contrast weave so it reads as cotton duck, not sacking.
+    const map = this.canvasTexture('canvas_weave', makeCanvasWeaveCanvas, { repeat: [5, 5] });
+    return this.plain('canvas_plain', { map, color: 0xffffff, roughness: 0.92, side: THREE.DoubleSide });
+  }
   get burlap() {
+    // Sandbags are an InstancedMesh of a bare SphereGeometry (no color attribute): with vertexColors on, the
+    // missing attribute reads as black. Per-bag variation comes from instanceColor instead.
     const map = this.canvasTexture('burlap', makeBurlapCanvas, { repeat: [1, 1] });
-    return this.plain('burlap', { map, color: 0xffffff, roughness: 1 });
+    return this.plain('burlap', { map, color: 0xffffff, roughness: 1, vertexColors: false });
+  }
+  get shrubLeaf() {
+    const map = this.canvasTexture('shrub_cards', makeShrubCanvas);
+    return this.plain('shrub_leaf', { map, color: 0xffffff, roughness: 0.9, alphaTest: 0.5, side: THREE.DoubleSide, vertexColors: false });
+  }
+  get signCafe() {
+    const map = this.canvasTexture('sign_cafe', makeCafeSignCanvas);
+    return this.plain('sign_cafe', { map, color: 0xffffff, roughness: 0.55, vertexColors: false, noShadow: true });
+  }
+  get streetPlaque() {
+    const map = this.canvasTexture('street_plaque', makePlaqueCanvas);
+    return this.plain('street_plaque', { map, color: 0xffffff, roughness: 0.4, vertexColors: false, noShadow: true });
   }
   get concrete() {
     return this.pbr('white_plaster_rough_02', { tile: 1.6, color: new THREE.Color(0.72, 0.7, 0.66), roughness: 0.95 }, 'concrete');
@@ -365,20 +460,160 @@ export function makeLeafCanvas() {
   };
   // Twigs
   ctx.strokeStyle = '#4a3a26';
-  ctx.lineWidth = 3;
-  for (let i = 0; i < 6; i++) {
+  ctx.lineWidth = 2.5;
+  for (let i = 0; i < 7; i++) {
     ctx.beginPath();
     ctx.moveTo(S / 2, S / 2);
-    ctx.lineTo(rng.range(60, S - 60), rng.range(60, S - 60));
+    ctx.lineTo(rng.range(50, S - 50), rng.range(50, S - 50));
     ctx.stroke();
   }
-  for (let i = 0; i < 150; i++) {
-    const r = rng.range(0, S * 0.42);
+  // A 1.3–2 m card carries ~400 leaves of 8–14 cm (plane-tree scale); the old 8 huge leaves per card read
+  // as cardboard cut-outs from under the tree. Darker shades toward the card centre fake self-shadowing.
+  for (let i = 0; i < 420; i++) {
+    const r = Math.pow(rng(), 0.7) * S * 0.46;
     const a = rng.range(0, Math.PI * 2);
     const x = S / 2 + Math.cos(a) * r;
     const y = S / 2 + Math.sin(a) * r;
-    drawLeaf(x, y, rng.range(48, 86), rng.range(22, 40), rng.range(0, Math.PI * 2), rng.pick(shades));
+    const shade = rng.pick(shades);
+    const inner = r < S * 0.2 && rng.chance(0.5);
+    drawLeaf(x, y, rng.range(26, 46), rng.range(14, 24), rng.range(0, Math.PI * 2), inner ? '#2d4a1e' : shade);
   }
+  return c;
+}
+
+/** Shrub cards: small dense oval leaves (box / laurel), lighter tips, dark interior. */
+export function makeShrubCanvas() {
+  const S = 256;
+  const c = makeCanvas(S, S);
+  const ctx = c.getContext('2d');
+  const rng = makeRng(4242);
+  ctx.clearRect(0, 0, S, S);
+  const shades = ['#2f5a22', '#3b6a2a', '#4a7d33', '#57893a', '#28481c', '#6a9a44'];
+  for (let i = 0; i < 520; i++) {
+    const r = Math.pow(rng(), 0.6) * S * 0.47;
+    const a = rng.range(0, Math.PI * 2);
+    const x = S / 2 + Math.cos(a) * r;
+    const y = S / 2 + Math.sin(a) * r;
+    const len = rng.range(9, 16);
+    const wid = rng.range(5, 9);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rng.range(0, Math.PI * 2));
+    // Interior leaves darker (in shadow), rim leaves brighter.
+    ctx.fillStyle = r < S * 0.25 ? rng.pick(shades.slice(0, 3)) : rng.pick(shades.slice(2));
+    ctx.beginPath();
+    ctx.ellipse(0, 0, len / 2, wid / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  return c;
+}
+
+/** Ground leaf litter card: a scatter of dry brown/ochre leaves on transparent background. */
+export function makeLitterCanvas() {
+  const S = 256;
+  const c = makeCanvas(S, S);
+  const ctx = c.getContext('2d');
+  const rng = makeRng(808);
+  ctx.clearRect(0, 0, S, S);
+  const shades = ['#8a6a3a', '#a07a40', '#6f5430', '#b08a4c', '#7a5a2c', '#9c7038'];
+  for (let i = 0; i < 46; i++) {
+    const r = Math.pow(rng(), 0.55) * S * 0.44;
+    const a = rng.range(0, Math.PI * 2);
+    const x = S / 2 + Math.cos(a) * r;
+    const y = S / 2 + Math.sin(a) * r;
+    const len = rng.range(14, 26);
+    const wid = rng.range(8, 16);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rng.range(0, Math.PI * 2));
+    ctx.fillStyle = rng.pick(shades);
+    ctx.beginPath();
+    ctx.moveTo(0, -len / 2);
+    ctx.bezierCurveTo(wid / 2, -len / 4, wid / 2, len / 4, 0, len / 2);
+    ctx.bezierCurveTo(-wid / 2, len / 4, -wid / 2, -len / 4, 0, -len / 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(40,25,10,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -len / 2);
+    ctx.lineTo(0, len / 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+  return c;
+}
+
+/** Ragged blob alpha for chipped-plaster patches: hard-edged, irregular, fully opaque inside. */
+export function makePatchCanvas() {
+  const S = 256;
+  const c = makeCanvas(S, S);
+  const ctx = c.getContext('2d');
+  const rng = makeRng(606);
+  const n = noise2(rng, S, S, 4);
+  const img = ctx.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const dx = (x - S / 2) / (S / 2);
+      const dy = (y - S / 2) / (S / 2);
+      const ang = Math.atan2(dy, dx);
+      // Lumpy radius: 3 lobes + noise, so the outline is never an ellipse.
+      const rad = 0.62 + 0.14 * Math.sin(ang * 3 + 1.2) + 0.1 * Math.sin(ang * 5 - 0.6) + (n[y * S + x] - 0.5) * 0.5;
+      const r = Math.hypot(dx, dy);
+      const a = r < rad ? 1 : 0;
+      const i = (y * S + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = a * 255;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/** Café fascia sign: dark green board, gold serif lettering, thin gold border. 4:1. */
+export function makeCafeSignCanvas() {
+  const W = 1024;
+  const H = 256;
+  const c = makeCanvas(W, H);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#1f3a2c';
+  ctx.fillRect(0, 0, W, H);
+  const rng = makeRng(77);
+  for (let i = 0; i < 4000; i++) {
+    ctx.fillStyle = `rgba(0,0,0,${rng.range(0.03, 0.12)})`;
+    ctx.fillRect(rng.range(0, W), rng.range(0, H), rng.range(1, 6), rng.range(1, 3));
+  }
+  ctx.strokeStyle = '#c9a54a';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(18, 18, W - 36, H - 36);
+  ctx.fillStyle = '#d8b455';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 118px Georgia, "Times New Roman", serif';
+  ctx.fillText('CAFÉ  DEL  PUERTO', W / 2, H / 2 - 14);
+  ctx.font = 'italic 44px Georgia, "Times New Roman", serif';
+  ctx.fillStyle = '#b89a48';
+  ctx.fillText('bar · tapas · helados', W / 2, H / 2 + 74);
+  return c;
+}
+
+/** Enamel street-name plaque (blue field, white border + text). 2:1. */
+export function makePlaqueCanvas() {
+  const W = 512;
+  const H = 256;
+  const c = makeCanvas(W, H);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#e9ebe6';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#1d3f7a';
+  ctx.fillRect(14, 14, W - 28, H - 28);
+  ctx.fillStyle = '#f2f3ee';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 74px "Helvetica Neue", Arial, sans-serif';
+  ctx.fillText('PLAZA  MAYOR', W / 2, H / 2 - 22);
+  ctx.font = '40px "Helvetica Neue", Arial, sans-serif';
+  ctx.fillText('— del Puerto —', W / 2, H / 2 + 52);
   return c;
 }
 
@@ -459,19 +694,28 @@ export function makePatinaCanvas() {
   return c;
 }
 
-/** Awning stripes (weathered burgundy / cream). */
+/** Awning stripes: sun-faded burgundy / unbleached canvas, with weave noise and dust so it is not a candy stripe. */
 export function makeStripeCanvas() {
   const S = 256;
   const c = makeCanvas(S, S);
   const ctx = c.getContext('2d');
   const stripes = 8;
   for (let i = 0; i < stripes; i++) {
-    ctx.fillStyle = i % 2 ? '#e9dcc4' : '#8d2f2a';
+    ctx.fillStyle = i % 2 ? '#d9cdb4' : '#7d3a34';
     ctx.fillRect((i * S) / stripes, 0, S / stripes + 1, S);
   }
   const rng = makeRng(9);
-  for (let i = 0; i < 3000; i++) {
-    ctx.fillStyle = `rgba(60,40,30,${rng.range(0.02, 0.1)})`;
+  // Weave: fine horizontal + vertical thread lines.
+  for (let y = 0; y < S; y += 2) {
+    ctx.fillStyle = `rgba(30,20,15,${rng.range(0.03, 0.08)})`;
+    ctx.fillRect(0, y, S, 1);
+  }
+  for (let x = 0; x < S; x += 2) {
+    ctx.fillStyle = `rgba(255,250,240,${rng.range(0.02, 0.06)})`;
+    ctx.fillRect(x, 0, 1, S);
+  }
+  for (let i = 0; i < 2500; i++) {
+    ctx.fillStyle = `rgba(60,40,30,${rng.range(0.02, 0.09)})`;
     ctx.fillRect(rng.range(0, S), rng.range(0, S), rng.range(1, 4), rng.range(1, 4));
   }
   return c;
@@ -493,6 +737,51 @@ export function makeBurlapCanvas() {
       img.data[i] = 120 + t * 55;
       img.data[i + 1] = 105 + t * 48;
       img.data[i + 2] = 72 + t * 36;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/** Low-frequency mottle alpha for the whole-plaza tonal variation sheet (one 512² texture over ~50 m). */
+export function makeMottleCanvas() {
+  const S = 512;
+  const c = makeCanvas(S, S);
+  const ctx = c.getContext('2d');
+  const rng = makeRng(31);
+  const n = noise2(rng, S, S, 6);
+  const img = ctx.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const v = n[y * S + x];
+      // Only the darker half of the field shows, so about half the plaza keeps the clean slab tone.
+      const a = Math.max(0, Math.min(1, (v - 0.46) * 2.4)) * (0.6 + 0.4 * v);
+      const i = (y * S + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.round(a * 255);
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/** Light cotton-duck weave for parasol canvas: near-white with a faint thread grid and soft blotching. */
+export function makeCanvasWeaveCanvas() {
+  const S = 256;
+  const c = makeCanvas(S, S);
+  const ctx = c.getContext('2d');
+  const rng = makeRng(23);
+  const n = noise2(rng, S, S, 3);
+  const img = ctx.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const weave = 0.5 + 0.25 * Math.sin(x * 1.6) + 0.25 * Math.sin(y * 1.6);
+      const t = n[y * S + x] * 0.6 + weave * 0.4;
+      const i = (y * S + x) * 4;
+      img.data[i] = 222 + t * 30;
+      img.data[i + 1] = 214 + t * 30;
+      img.data[i + 2] = 196 + t * 30;
       img.data[i + 3] = 255;
     }
   }
@@ -523,31 +812,32 @@ export function makeGrimeCanvas() {
 }
 
 /**
- * Louvred shutter: one repeat = 0.4 m = 5 slats. Each slat is lit on top and shadowed underneath;
- * the base is a light grey so the vertex-color tint sets the paint colour.
+ * Louvred shutter: one repeat = 0.4 m = 9 slats (≈ 4.5 cm pitch, real louvre scale). Each slat has a
+ * narrow highlight on its top edge, a gentle falloff and a thin shadow line beneath; the base is a light
+ * grey so the vertex-color tint sets the paint colour. Subtle vertical stile shading at the card edges.
  */
 export function makeLouvreCanvas() {
-  const S = 128;
+  const S = 256;
   const c = makeCanvas(S, S);
   const ctx = c.getContext('2d');
   const rng = makeRng(21);
-  const slats = 5;
+  const slats = 9;
   const sh = S / slats;
   for (let i = 0; i < slats; i++) {
     const y0 = i * sh;
     const grad = ctx.createLinearGradient(0, y0, 0, y0 + sh);
-    grad.addColorStop(0, '#f2f2f0');
-    grad.addColorStop(0.35, '#d8d8d4');
-    grad.addColorStop(0.8, '#9a9a96');
-    grad.addColorStop(0.92, '#5a5a58');
-    grad.addColorStop(1, '#3a3a38');
+    grad.addColorStop(0, '#e6e6e2');
+    grad.addColorStop(0.12, '#d2d2ce');
+    grad.addColorStop(0.7, '#b4b4b0');
+    grad.addColorStop(0.9, '#8e8e8a');
+    grad.addColorStop(1, '#5c5c5a');
     ctx.fillStyle = grad;
     ctx.fillRect(0, y0, S, sh + 1);
   }
-  // Faint wood grain / paint wear speckle.
-  for (let i = 0; i < 900; i++) {
-    ctx.fillStyle = `rgba(40,30,20,${rng.range(0.03, 0.1)})`;
-    ctx.fillRect(rng.range(0, S), rng.range(0, S), rng.range(1, 3), rng.range(1, 6));
+  // Paint wear / dust speckle and faint vertical grain.
+  for (let i = 0; i < 1400; i++) {
+    ctx.fillStyle = `rgba(40,30,20,${rng.range(0.02, 0.07)})`;
+    ctx.fillRect(rng.range(0, S), rng.range(0, S), rng.range(1, 2), rng.range(2, 9));
   }
   return c;
 }

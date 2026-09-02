@@ -80,7 +80,8 @@ export class World {
       const res = buildBuilding(ctx, spec);
       for (const c of res.colliders) this._colliders.push(c);
     }
-    buildFountain(ctx);
+    // Fountain stonework is batched synchronously; the statue scan loads in parallel with the props.
+    const fountainReady = buildFountain(ctx);
     buildFences(ctx);
     buildTrees(ctx);
     buildIvy(ctx);
@@ -88,7 +89,7 @@ export class World {
     buildBackdrop(ctx);
 
     // Props: Poly Haven models load async; generated clutter (planters, sandbags, barriers) is batched.
-    await buildProps(ctx);
+    await Promise.all([buildProps(ctx), fountainReady]);
 
     const meshes = this.batch.build(this.root, { name: 'Static' });
     this.stats.meshes = meshes.length;

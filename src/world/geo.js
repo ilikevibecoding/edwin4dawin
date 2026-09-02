@@ -278,9 +278,10 @@ export function ringPrism(outer, inner, y0, y1, { top = true } = {}) {
   return mergeGeometries(parts.map(prepareForMerge));
 }
 
-/** Extruded 2D profile (points in [x,y]) along Z for length `len`, centered. Meter UVs. */
-export function extrudeProfile(profile, len, { x = 0, y = 0, z = 0, rotY = 0 } = {}) {
+/** Extruded 2D profile (points in [x,y]) along Z for length `len`, centered. Optional holes. Meter UVs. */
+export function extrudeProfile(profile, len, { x = 0, y = 0, z = 0, rotY = 0, holes = [] } = {}) {
   const shape = new THREE.Shape(profile.map(([px, py]) => new THREE.Vector2(px, py)));
+  for (const hole of holes) shape.holes.push(new THREE.Path(hole.map(([px, py]) => new THREE.Vector2(px, py))));
   const g = new THREE.ExtrudeGeometry(shape, { depth: len, bevelEnabled: false });
   g.translate(0, 0, -len / 2);
   planarUV(g);

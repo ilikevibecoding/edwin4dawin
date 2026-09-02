@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { prepareForMerge, cylinder } from './geo.js';
-import { STRING_LIGHTS } from './layout.js';
+import { prepareForMerge, cylinder, sphere } from './geo.js';
+import { STRING_LIGHTS, CABLES } from './layout.js';
 
 /**
  * Festoon lighting across the plaza: sagging cables (parabolic catenary approximation, TubeGeometry,
@@ -14,7 +14,7 @@ export function buildStringLights(ctx) {
   const _q = new THREE.Quaternion();
   const _s = new THREE.Vector3(1, 1, 1);
 
-  for (const s of STRING_LIGHTS) {
+  const catenary = (s) => {
     const a = new THREE.Vector3(...s.a);
     const b = new THREE.Vector3(...s.b);
     const pts = [];
@@ -25,7 +25,18 @@ export function buildStringLights(ctx) {
       p.y -= 4 * s.sag * t * (1 - t);
       pts.push(p);
     }
-    const curve = new THREE.CatmullRomCurve3(pts);
+    return new THREE.CatmullRomCurve3(pts);
+  };
+
+  // Bare utility cables: thinner, darker, and higher than the festoons; wall anchors at each end.
+  for (const s of CABLES) {
+    const curve = catenary(s);
+    batch.add(mats.iron, new THREE.TubeGeometry(curve, 48, 0.011, 4, false), [0.1, 0.1, 0.1]);
+    for (const p of [s.a, s.b]) batch.add(mats.iron, sphere(0.045, { x: p[0], y: p[1], z: p[2], seg: 6 }), [0.12, 0.12, 0.12]);
+  }
+
+  for (const s of STRING_LIGHTS) {
+    const curve = catenary(s);
     const tube = new THREE.TubeGeometry(curve, 56, 0.013, 5, false);
     batch.add(mats.iron, tube, [0.35, 0.35, 0.35]);
     const len = curve.getLength();

@@ -14,7 +14,7 @@
  */
 const candidates = import.meta.glob('./*/index.js');
 
-export const DEFAULT_ARMS = 'stub';
+export const DEFAULT_ARMS = 'bravo';
 
 export async function buildArms(game, rig) {
   const requested = game.settings.params.get('arms') || DEFAULT_ARMS;

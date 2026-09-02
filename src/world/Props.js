@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { polygon, prism, ringPrism, sphere, extrudeProfile, cylinder, box, cone } from './geo.js';
-import { regularPolygon } from './util.js';
-import { STREET_LAMPS, STREETS } from './layout.js';
+import { polygon, prism, ringPrism, sphere, extrudeProfile, cylinder, box, cone, capsule } from './geo.js';
+import { regularPolygon, makeRng } from './util.js';
+import { STREET_LAMPS, STREETS, TREES } from './layout.js';
 
 /**
  * Expected real-world heights (m) for the Poly Haven props; used to sanity-check scale after load.
@@ -218,18 +218,25 @@ export async function buildProps(ctx) {
 
   // Street lamps: three photoscans where the spawn view lands, cheap cast-iron posts elsewhere.
   STREET_LAMPS.forEach((l, i) => {
-    if (i < 3) P('street_lamp_01', { x: l.x, z: l.z, rotY: rng.range(0, Math.PI * 2), collider: 'cylinder', radius: 0.22, surface: 'metal' });
-    else lampPost(ctx, l.x, l.z, rng.range(0, Math.PI * 2));
+    if (i < 3) P('street_lamp_01', { x: l.x, y: l.y || 0, z: l.z, rotY: rng.range(0, Math.PI * 2), collider: 'cylinder', radius: 0.22, surface: 'metal' });
+    else lampPost(ctx, l.x, l.z, rng.range(0, Math.PI * 2), l.y || 0);
   });
 
-  // Café terrace in front of W2 (awning above the shop windows)
+  // Café terrace in front of W2 (awning above the shop windows): two rows of tables, two parasols,
+  // menu board, planters, a bin — a lived-in corner rather than a line of furniture.
   for (let i = 0; i < 4; i++) P('outdoor_table_chair_set_01', { x: -22.3, z: -0.5 + i * 2.6, rotY: rng.range(-0.4, 0.4), surface: 'metal' });
-  P('standing_chalkboard_01', { x: -23.0, y: 0.15, z: -2.6, rotY: 0.35 + Math.PI / 2, surface: 'wood' });
+  for (let i = 0; i < 2; i++) P('outdoor_table_chair_set_01', { x: -19.6, z: 1.6 + i * 3.4, rotY: rng.range(-0.6, 0.6), surface: 'metal' });
+  parasol(ctx, -19.6, 1.9, 0.3);
+  parasol(ctx, -19.6, 5.1, -0.4);
+  // West sidewalk is x ∈ [-26, -23.5] (+0.15 m): anything at y = 0.15 must sit at x ≤ -24 or it floats.
+  P('standing_chalkboard_01', { x: -24.1, y: 0.15, z: -2.6, rotY: 0.35 + Math.PI / 2, surface: 'wood' });
   // (potted_plant_02 is a 70k-triangle scan; clay pots + card shrubs read the same from 3 m away.)
   for (const [z, rot] of [[5.6, 0.4], [2.1, 2.0], [9.6, 1.0]]) {
-    P('planter_pot_clay', { x: -23.2, y: 0.15, z, rotY: rot, collider: 'cylinder', surface: 'stone' });
-    shrubCards.push(...shrub(-23.2, 0.5, z, 0.32, 0.5, rng));
+    P('planter_pot_clay', { x: -24.3, y: 0.15, z, rotY: rot, collider: 'cylinder', surface: 'stone' });
+    shrubCards.push(...shrub(-24.3, 0.5, z, 0.32, 0.5, rng));
   }
+  P('planter_pot_clay', { x: -18.2, y: 0.0, z: 8.2, rotY: 1.4, collider: 'cylinder', surface: 'stone' });
+  shrubCards.push(...shrub(-18.2, 0.35, 8.2, 0.32, 0.5, rng));
 
   // Benches near the trees and along the south edge
   P('painted_wooden_bench', { x: -17.6, z: 12.5, rotY: Math.PI / 2, surface: 'wood' });
@@ -239,12 +246,12 @@ export async function buildProps(ctx) {
   P('painted_wooden_bench', { x: 22.2, z: 3.0, rotY: -Math.PI / 2, surface: 'wood' });
   P('painted_wooden_bench', { x: 29.5, z: -12, rotY: Math.PI / 2, surface: 'wood' });
 
-  // Trash cans, utility boxes
-  P('trash_can', { x: -22.9, z: 14.2, y: 0.15, collider: 'cylinder', surface: 'metal' });
-  P('trash_can_rust', { x: 12.2, z: -14.9, y: 0.15, rotY: 1.2, collider: 'cylinder', surface: 'metal' });
-  P('trash_can', { x: -9.6, z: 20.9, y: 0.15, rotY: 0.4, collider: 'cylinder', surface: 'metal' });
+  // Trash cans, utility boxes (sidewalk items at y = 0.15 must lie inside the 2.5 m sidewalk bands)
+  P('trash_can', { x: -25.2, z: 14.2, y: 0.15, collider: 'cylinder', surface: 'metal' });
+  P('trash_can_rust', { x: 12.2, z: -14.9, y: 0.0, rotY: 1.2, collider: 'cylinder', surface: 'metal' });
+  P('trash_can', { x: -9.6, z: 22.9, y: 0.15, rotY: 0.4, collider: 'cylinder', surface: 'metal' });
   P('trash_can_rust', { x: 24.8, z: -15.2, rotY: 2.6, collider: 'cylinder', surface: 'metal' });
-  P('utility_box_01', { x: -23.0, z: -11.4, y: 0.15, rotY: Math.PI / 2, surface: 'metal' });
+  P('utility_box_01', { x: -25.5, z: -11.4, y: 0.15, rotY: Math.PI / 2, surface: 'metal' });
   P('utility_box_01', { x: 11.6, z: -15.7, y: 0.15, rotY: 0, surface: 'metal' });
   P('utility_box_01', { x: 32.9, z: -5.2, y: 0.15, rotY: -Math.PI / 2, surface: 'metal' });
 
@@ -253,8 +260,8 @@ export async function buildProps(ctx) {
   P('barrel_b', { x: -12.5, z: -22.4, rotY: 1.9, collider: 'cylinder', surface: 'wood' });
   P('barrel_a', { x: -22.6, z: 18.4, rotY: 1.9, collider: 'cylinder', surface: 'wood' });
   P('barrel_b', { x: -23.0, z: 19.2, rotY: 0.3, collider: 'cylinder', surface: 'wood' });
-  P('wooden_crate_02', { x: -23.1, z: 16.6, y: 0.15, rotY: 0.2, surface: 'wood' });
-  P('plastic_crate_02', { x: -22.9, z: 10.8, y: 0.15, rotY: 0.9, surface: 'metal' });
+  P('wooden_crate_02', { x: -24.6, z: 16.6, y: 0.15, rotY: 0.2, surface: 'wood' });
+  P('plastic_crate_02', { x: -24.6, z: 10.8, y: 0.15, rotY: 0.9, surface: 'metal' });
   P('cardboard_box_01', { x: -11.2, z: -21.2, rotY: 0.3, surface: 'wood' });
   P('plastic_crate_02', { x: -12.6, z: -20.6, rotY: 1.4, surface: 'metal' });
   P('old_tyre', { x: -12.5, z: -25.8, rotY: 0.2, surface: 'metal' });
@@ -262,18 +269,39 @@ export async function buildProps(ctx) {
   P('cement_bag', { x: -24.3, z: -10.6, y: 0.15, rotY: 0.5, surface: 'dirt' });
   P('cement_bag', { x: -24.1, z: -10.1, y: 0.15, rotY: 1.1, surface: 'dirt' });
 
-  // Military clutter: NE street mouth emplacement, gate post, fountain-side crates, street-end barricades
-  // (behind the sandbags, on the raised north sidewalk → y = 0.15)
-  P('old_military_crate', { x: 13.0, z: -17.2, y: 0.15, rotY: 0.3, surface: 'wood' });
-  P('wooden_military_crate', { x: 15.6, z: -16.9, y: 0.15, rotY: -0.2, surface: 'wood' });
+  // Side-street kerbside clutter so the three long streets are not bare corridors. All on the 1.2–1.5 m
+  // sidewalks (y = 0.15), between the 4 m nav-grid columns and > 0.7 m from the node rows on the cobbles
+  // (west street nodes run along z = -8; east along z = 0; south along x = 0).
+  // Budget note: every extra instance is drawn whenever its InstancedMesh is on screen, so only the cheap
+  // scans go here (cement bag 0.8k, crates 5–6k, tyre 3k, bin 7k; the 17k cardboard box is not worth it).
+  P('trash_can_rust', { x: -30.5, z: -8.9, y: 0.15, rotY: 2.1, collider: 'cylinder', surface: 'metal' });
+  P('cement_bag', { x: -31.3, z: -8.85, y: 0.15, rotY: 0.6, surface: 'dirt' });
+  P('cement_bag', { x: -29.8, z: -8.95, y: 0.15, rotY: 1.7, surface: 'dirt' });
+  P('wooden_crate_02', { x: -38.0, z: -4.9, y: 0.15, rotY: 0.15, surface: 'wood' });
+  P('plastic_crate_02', { x: -38.9, z: -4.95, y: 0.15, rotY: 1.2, surface: 'metal' });
+  P('old_tyre', { x: -43.0, z: -8.9, y: 0.15, rotY: 0.9, surface: 'metal' });
+  P('trash_can', { x: 39.5, z: 3.05, y: 0.15, rotY: 0.7, collider: 'cylinder', surface: 'metal' });
+  P('cement_bag', { x: 40.3, z: 3.05, y: 0.15, rotY: 2.0, surface: 'dirt' });
+  P('wooden_crate_02', { x: -2.5, z: 31, y: 0.15, rotY: 0.5, surface: 'wood' });
+  P('plastic_crate_02', { x: 2.5, z: 31.5, y: 0.15, rotY: 0.3, surface: 'metal' });
+
+  // Military clutter: NE street mouth emplacement, gate post, fountain-side crates, street-end barricades.
+  // The emplacement sits in the NE street mouth (x 12.6–17.2), where the north sidewalk is cut → y = 0.
+  P('old_military_crate', { x: 13.0, z: -17.2, y: 0.0, rotY: 0.3, surface: 'wood' });
+  P('wooden_military_crate', { x: 15.6, z: -16.9, y: 0.0, rotY: -0.2, surface: 'wood' });
   P('ammo_box', { x: 14.3, z: -18.4, rotY: 0.9, surface: 'metal' });
-  P('ammo_box', { x: 14.0, z: -17.4, y: 0.15, rotY: 0.2, surface: 'metal' });
+  P('ammo_box', { x: 14.0, z: -17.4, y: 0.0, rotY: 0.2, surface: 'metal' });
+  P('metal_jerrycan_green', { x: 15.0, z: -16.3, rotY: 0.8, surface: 'metal' });
+  P('metal_jerrycan_green', { x: 15.4, z: -16.1, rotY: 2.3, surface: 'metal' });
+  P('old_tyre', { x: 16.6, z: -17.6, rotY: 0.5, surface: 'metal' });
   P('medical_box', { x: 20.9, z: -5.6, rotY: 0.4, surface: 'metal' });
   P('metal_jerrycan_green', { x: 21.3, z: -3.1, rotY: 1.3, surface: 'metal' });
   P('metal_jerrycan_green', { x: 21.7, z: -3.4, rotY: 0.6, surface: 'metal' });
+  P('wooden_military_crate', { x: 21.4, z: -4.6, rotY: 0.2, surface: 'wood' });
   P('old_military_crate', { x: -8.2, z: -13.4, rotY: 1.2, surface: 'wood' });
   P('wooden_military_crate', { x: -7.3, z: -12.2, rotY: 0.4, surface: 'wood' });
   P('ammo_box', { x: -6.6, z: -13.2, rotY: 2.2, surface: 'metal' });
+  P('cement_bag', { x: -8.9, z: -12.3, rotY: 0.9, surface: 'dirt' });
   P('wooden_crate_02', { x: 14.9, z: -38.5, rotY: 0.4, surface: 'wood' });
   P('wooden_crate_02', { x: 1.2, z: 43.6, rotY: 0.1, surface: 'wood' });
 
@@ -306,6 +334,7 @@ export async function buildProps(ctx) {
     else shrubCards.push(...shrub(x, 0.02, z, rng.range(0.6, 0.85), rng.range(0.9, 1.3), rng));
   }
   buildShrubCards(ctx, shrubCards);
+  buildLeafLitter(ctx);
 
   // Sandbag emplacements (instanced) and jersey barriers (generated)
   const sandbags = [];
@@ -367,12 +396,12 @@ export function octPlanter(ctx, x, z, r, h) {
  * Cast-iron lamp post (~4.5 m): octagonal plinth, tapered fluted column with collars, four-sided
  * lantern with emissive glass and a pyramid cap. ~350 triangles vs 30k for the photoscan.
  */
-function lampPost(ctx, x, z, rot) {
+function lampPost(ctx, x, z, rot, y0 = 0) {
   const { mats, batch, game } = ctx;
   const iron = [0.9, 0.9, 0.92];
   const at = (g) => {
     g.rotateY(rot);
-    g.translate(x, 0, z);
+    g.translate(x, y0, z);
     return g;
   };
   batch.add(mats.iron, at(cylinder(0.2, 0.25, 0.45, 8, { y: 0.225 })), iron);
@@ -385,7 +414,29 @@ function lampPost(ctx, x, z, rot) {
   batch.add(mats.lampGlass, at(box(0.36, 0.5, 0.36, { y: 4.0 })), null);
   batch.add(mats.iron, at(cone(0.34, 0.26, 4, { y: 4.4, rotY: Math.PI / 4 })), iron);
   batch.add(mats.iron, at(sphere(0.05, { y: 4.56, seg: 8 })), iron);
-  game.physics.addStaticCylinder(new THREE.Vector3(x, 2.3, z), 0.25, 2.3, { surface: 'metal' });
+  game.physics.addStaticCylinder(new THREE.Vector3(x, y0 + 2.3, z), 0.25, 2.3, { surface: 'metal' });
+}
+
+/** Café parasol: octagonal canvas cone on a steel pole with a heavy base. Pole gets a collider. */
+function parasol(ctx, x, z, rot) {
+  const { mats, batch, game } = ctx;
+  const at = (g) => {
+    g.rotateY(rot);
+    g.translate(x, 0, z);
+    return g;
+  };
+  batch.add(mats.concrete, at(cylinder(0.26, 0.3, 0.1, 12, { y: 0.05 })), [0.55, 0.55, 0.55]);
+  batch.add(mats.zinc, at(cylinder(0.025, 0.025, 2.3, 8, { y: 1.2 })), [0.8, 0.8, 0.82]);
+  // Plain ecru canvas so the terrace is not wall-to-wall red stripes next to the awnings; darker underside
+  // tint on the valance fakes the shade under the canopy.
+  batch.add(mats.canvasPlain, at(cone(1.35, 0.42, 8, { y: 2.3 + 0.21 })), [1, 1, 1]);
+  batch.add(mats.canvasPlain, at(cylinder(1.3, 1.3, 0.16, 8, { y: 2.24, open: true })), [0.8, 0.78, 0.74]);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    batch.add(mats.zinc, at(capsule([0, 2.7, 0], [Math.cos(a) * 1.3, 2.3, Math.sin(a) * 1.3], 0.009, 4)), [0.7, 0.7, 0.72]);
+  }
+  batch.add(mats.zinc, at(sphere(0.04, { y: 2.76, seg: 8 })), [0.8, 0.8, 0.82]);
+  game.physics.addStaticCylinder(new THREE.Vector3(x, 1.2, z), 0.05, 1.2, { surface: 'metal' });
 }
 
 /** Leaf-card shrub: an ellipsoid shell of alpha-tested cards. Returns card descriptors. */
@@ -412,7 +463,8 @@ function buildShrubCards(ctx, cards) {
   const { mats, root } = ctx;
   if (!cards.length) return;
   const geo = new THREE.PlaneGeometry(1, 1);
-  const mesh = new THREE.InstancedMesh(geo, mats.ivy, cards.length);
+  const mat = mats.shrubLeaf;
+  const mesh = new THREE.InstancedMesh(geo, mat, cards.length);
   mesh.name = 'Shrubs';
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -431,7 +483,50 @@ function buildShrubCards(ctx, cards) {
   });
   mesh.instanceMatrix.needsUpdate = true;
   mesh.computeBoundingSphere();
-  mesh.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: mats.ivy.map, alphaTest: 0.5, side: THREE.DoubleSide });
+  mesh.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: mat.map, alphaTest: 0.5, side: THREE.DoubleSide });
+  root.add(mesh);
+}
+
+/**
+ * Dry leaf litter under the plaza trees and in the gutters: alpha-tested cards lying flat a few mm above
+ * the paving, one InstancedMesh. Bias toward the downwind (east) side of each tree.
+ */
+function buildLeafLitter(ctx) {
+  const { mats, root } = ctx;
+  const rng = makeRng(2024);
+  const cards = [];
+  for (const t of TREES) {
+    const n = t.planter ? 34 : 22;
+    for (let i = 0; i < n; i++) {
+      const a = rng.range(0, Math.PI * 2);
+      const r = (t.planter ? 2.2 : 1.0) + Math.pow(rng(), 0.6) * 3.2;
+      cards.push({ x: t.x + Math.cos(a) * r + 0.8, z: t.z + Math.sin(a) * r * 0.85, size: rng.range(0.55, 0.95), rot: rng.range(0, Math.PI * 2) });
+    }
+  }
+  // Gutter drift along the north sidewalk curb and the café edge.
+  for (let i = 0; i < 26; i++) cards.push({ x: rng.range(-24, 16), z: -15.2 + rng.range(-0.25, 0.35), size: rng.range(0.4, 0.7), rot: rng.range(0, Math.PI * 2) });
+  for (let i = 0; i < 14; i++) cards.push({ x: -23.0 + rng.range(-0.25, 0.25), z: rng.range(-2, 12), size: rng.range(0.4, 0.7), rot: rng.range(0, Math.PI * 2) });
+  const geo = new THREE.PlaneGeometry(1, 1);
+  geo.rotateX(-Math.PI / 2);
+  const mesh = new THREE.InstancedMesh(geo, mats.leafLitter, cards.length);
+  mesh.name = 'LeafLitter';
+  mesh.castShadow = false;
+  mesh.receiveShadow = true;
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const p = new THREE.Vector3();
+  const s = new THREE.Vector3();
+  const up = new THREE.Vector3(0, 1, 0);
+  cards.forEach((c, i) => {
+    q.setFromAxisAngle(up, c.rot);
+    p.set(c.x, 0.012, c.z);
+    s.set(c.size, 1, c.size);
+    m.compose(p, q, s);
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.computeBoundingSphere();
+  mesh.raycast = () => {};
   root.add(mesh);
 }
 
@@ -471,14 +566,20 @@ function buildSandbags(ctx, bags) {
   const q = new THREE.Quaternion();
   const s = new THREE.Vector3();
   const p = new THREE.Vector3();
+  const col = new THREE.Color();
+  const rng = makeRng(4711);
   bags.forEach((b, i) => {
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), b.yaw);
     s.set(b.scale, b.scale, b.scale);
     p.set(b.x, b.y, b.z);
     m.compose(p, q, s);
     mesh.setMatrixAt(i, m);
+    // Per-bag fading + dirt: lower courses darker (splash / damp), a few bleached ones on top.
+    const k = rng.range(0.78, 1.05) * (b.y < 0.2 ? 0.86 : 1);
+    mesh.setColorAt(i, col.setRGB(k, k * rng.range(0.94, 1.0), k * rng.range(0.86, 0.96)));
   });
   mesh.instanceMatrix.needsUpdate = true;
+  mesh.instanceColor.needsUpdate = true;
   mesh.computeBoundingSphere();
   root.add(mesh);
 }

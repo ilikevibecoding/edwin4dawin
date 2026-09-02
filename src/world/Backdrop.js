@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-import { box, polygon, cylinder, cone, sphere, arcPoints, extrudeProfile, setVertexColor } from './geo.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { box, polygon, cylinder, cone, sphere, arcPoints, extrudeProfile, setVertexColor, prepareForMerge } from './geo.js';
 import { CHURCH, BELL_TOWER, STREETS } from './layout.js';
+import { makeRng } from './util.js';
 
 /**
  * Everything beyond the playable town: earth under the whole town block, a quay/cliff edge dropping to
@@ -60,7 +62,8 @@ export function buildBackdrop(ctx) {
     batch.add(mats.distant, cone(1.1, h, 7, { x, y: h / 2, z }), [0.16, 0.24, 0.14]);
   }
 
-  // Headland hills: flattened ellipsoids far away; fog turns them into hazy silhouettes.
+  // Headland hills: clusters of flattened ellipsoids far away (a main mass plus offset shoulders so the
+  // ridge line is not a row of identical domes); fog turns them into hazy silhouettes. One merged mesh.
   const hills = [
     [-260, -30, -520, 340, 95, 220],
     [120, -40, -560, 300, 80, 200],
@@ -68,14 +71,29 @@ export function buildBackdrop(ctx) {
     [-420, -25, 300, 260, 60, 170],
     [420, -50, -420, 320, 70, 200],
   ];
+  const hillParts = [];
+  const hrng = makeRng(9001); // local stream: keeps the house/cypress placement above stable
   for (const [x, y, z, sx, sy, sz] of hills) {
-    const g = sphere(1, { x, y, z, sx, sy, sz, seg: 24 });
-    const m = new THREE.Mesh(g, mats.hill);
-    m.name = 'Hill';
-    m.castShadow = false;
-    m.receiveShadow = false;
-    ctx.root.add(m);
+    hillParts.push(sphere(1, { x, y, z, sx, sy, sz, seg: 24 }));
+    // Shoulders: lower, narrower lobes pushed to either side along the ridge.
+    const n = 2 + hrng.int(0, 1);
+    for (let i = 0; i < n; i++) {
+      const side = i % 2 === 0 ? -1 : 1;
+      const k = hrng.range(0.45, 0.75);
+      const dx = side * sx * hrng.range(0.55, 0.9);
+      const dz = sz * hrng.range(-0.35, 0.35);
+      hillParts.push(sphere(1, { x: x + dx, y: y - sy * 0.1, z: z + dz, sx: sx * k, sy: sy * hrng.range(0.55, 0.85), sz: sz * k, seg: 20 }));
+    }
+    // A distinct peak on the main mass, offset from centre.
+    hillParts.push(sphere(1, { x: x + sx * hrng.range(-0.3, 0.3), y: y + sy * 0.15, z: z + sz * hrng.range(-0.2, 0.2), sx: sx * 0.4, sy: sy * 1.05, sz: sz * 0.4, seg: 20 }));
   }
+  const hillGeo = mergeGeometries(hillParts.map(prepareForMerge));
+  const hillMesh = new THREE.Mesh(hillGeo, mats.hill);
+  hillMesh.name = 'Hills';
+  hillMesh.castShadow = false;
+  hillMesh.receiveShadow = false;
+  hillMesh.frustumCulled = false;
+  ctx.root.add(hillMesh);
 
   buildChurch(ctx);
 }
@@ -110,35 +128,112 @@ function buildChurch(ctx) {
   const { mats, batch, addBoxCollider } = ctx;
   const C = CHURCH;
   const T = BELL_TOWER;
-  const wall = mats.wall('plastered_wall_02');
-  const tint = [1.12, 1.06, 0.94];
+  // painted_plaster_wall: mottled lime render (plastered_wall_02 carries panel seams that read as stripes).
+  const wall = mats.wall('painted_plaster_wall');
+  const tint = [1.14, 1.08, 0.95];
   const M = new THREE.Matrix4().makeTranslation(C.x, 0, C.z);
   const add = (mat, geo, color) => {
     geo.applyMatrix4(M);
     batch.add(mat, geo, color);
   };
-  // Nave body
-  const body = box(C.w, C.height, C.d, { y: C.height / 2 });
+  // Nave body (stops 0.45 m short of the facade) + a separate 0.45 m front wall with the portal and rose
+  // window cut through it, so the recessed door and glass sit in real openings.
+  const wallT = 0.45;
+  const body = box(C.w, C.height, C.d - wallT, { y: C.height / 2, z: -wallT / 2 });
   setVertexColor(body, (x, y) => tint.map((c) => c * (0.72 + 0.28 * Math.min(1, y / 2.5))));
   add(wall, body, null);
-  // Stone base band, pilasters, cornice
-  add(mats.sandstone, box(C.w + 0.2, 1.4, C.d + 0.2, { y: 0.7 }), [1, 1, 1]);
-  for (let i = 0; i <= 4; i++) add(mats.trimStone, box(0.7, C.height, 0.3, { x: -C.w / 2 + 0.35 + (i * (C.w - 0.7)) / 4, y: C.height / 2, z: C.d / 2 + 0.05 }), [1.02, 1.0, 0.96]);
+  {
+    // Door hole: rectangle + semicircular head, 20 cm larger than the stone reveal that lines it. The hole
+    // must stay strictly inside the outer contour (earcut drops holes that touch the boundary), so it
+    // starts 2 cm above the ground; the threshold stone hides that sliver.
+    const pw0 = 3.2;
+    const ph0 = 5.2;
+    const r0 = pw0 / 2 + 0.2;
+    const ys = ph0 - pw0 / 2;
+    const door = [[-r0, 0.02], [r0, 0.02], [r0, ys]];
+    for (let i = 1; i < 18; i++) {
+      const a = (i / 18) * Math.PI;
+      door.push([Math.cos(a) * r0, ys + Math.sin(a) * r0]);
+    }
+    door.push([-r0, ys]);
+    const rose = [];
+    for (let i = 0; i < 32; i++) rose.push([Math.cos((i / 32) * Math.PI * 2) * 1.12, ph0 + 2.9 + Math.sin((i / 32) * Math.PI * 2) * 1.12]);
+    const front = extrudeProfile([[-C.w / 2, 0], [C.w / 2, 0], [C.w / 2, C.height], [-C.w / 2, C.height]], wallT, { z: C.d / 2 - wallT / 2, holes: [door, rose] });
+    setVertexColor(front, (x, y) => tint.map((c) => c * (0.72 + 0.28 * Math.min(1, y / 2.5))));
+    add(wall, front, null);
+  }
+  // Stone base band (sides/back, plus two front segments that stop clear of the portal jambs), four
+  // pilasters framing the corners and the central bay, cornice.
+  add(mats.sandstone, box(C.w + 0.2, 1.4, C.d - 0.4, { y: 0.7, z: -0.3 }), [1, 1, 1]);
+  {
+    const segW = C.w / 2 + 0.1 - 2.75;
+    for (const s of [-1, 1]) add(mats.sandstone, box(segW, 1.4, 0.6, { x: s * (C.w / 2 + 0.1 - segW / 2), y: 0.7, z: C.d / 2 - 0.2 }), [1, 1, 1]);
+  }
+  for (const px of [-C.w / 2 + 0.35, -4.6, 4.6, C.w / 2 - 0.35]) add(mats.trimStone, box(0.7, C.height, 0.3, { x: px, y: C.height / 2, z: C.d / 2 + 0.05 }), [1.02, 1.0, 0.96]);
   add(mats.trimStone, box(C.w + 0.6, 0.4, C.d + 0.6, { y: C.height - 0.2 }), [1.02, 1.0, 0.96]);
-  // Portal: arched recess with a dark door, round window above.
+  // Portal: a real recess (dark reveal walls + soffit), stepped stone arch orders, a two-leaf timber door
+  // with a fanlight, three steps; rose window above with a stone ring, tracery spokes and dark glass.
   const pw = 3.2;
   const ph = 5.2;
-  add(mats.iron, box(pw, ph, 0.2, { y: ph / 2, z: C.d / 2 - 0.5 }), [0.1, 0.09, 0.08]);
-  add(mats.woodBrown, box(pw - 0.4, ph - 1.9, 0.1, { y: (ph - 1.9) / 2, z: C.d / 2 - 0.45 }), [0.4, 0.28, 0.17]);
-  const arch = [];
   const r = pw / 2;
-  for (let i = 0; i <= 18; i++) arch.push([Math.cos((i / 18) * Math.PI) * (r + 0.5), ph - r + Math.sin((i / 18) * Math.PI) * (r + 0.5)]);
-  for (let i = 18; i >= 0; i--) arch.push([Math.cos((i / 18) * Math.PI) * r, ph - r + Math.sin((i / 18) * Math.PI) * r]);
-  add(mats.trimStone, extrudeProfile(arch, 0.35, { z: C.d / 2 + 0.1 }), [1.02, 1.0, 0.96]);
-  add(mats.trimStone, box(0.5, ph - r, 0.35, { x: -r - 0.25, y: (ph - r) / 2, z: C.d / 2 + 0.1 }), [1.02, 1.0, 0.96]);
-  add(mats.trimStone, box(0.5, ph - r, 0.35, { x: r + 0.25, y: (ph - r) / 2, z: C.d / 2 + 0.1 }), [1.02, 1.0, 0.96]);
-  add(mats.iron, cylinder(1.1, 1.1, 0.3, 24, { y: ph + 2.6, z: C.d / 2 - 0.1, rotX: Math.PI / 2 }), [0.1, 0.1, 0.12]);
-  add(mats.trimStone, cylinder(1.4, 1.4, 0.3, 24, { y: ph + 2.6, z: C.d / 2 - 0.2, rotX: Math.PI / 2, open: true }), [1.02, 1.0, 0.96]);
+  const zf = C.d / 2; // facade plane
+  const reveal = wallT; // door sits at the back of the wall opening
+  // Reveal walls and arched soffit (stone, in shadow) and the recessed back plane carrying the door.
+  const revealTint = [0.78, 0.76, 0.72];
+  add(mats.sandstone, box(0.2, ph - r, reveal, { x: -r - 0.1, y: (ph - r) / 2, z: zf - reveal / 2 + 0.01 }), revealTint);
+  add(mats.sandstone, box(0.2, ph - r, reveal, { x: r + 0.1, y: (ph - r) / 2, z: zf - reveal / 2 + 0.01 }), revealTint);
+  const soffit = [];
+  for (let i = 0; i <= 18; i++) soffit.push([Math.cos((i / 18) * Math.PI) * (r + 0.2), ph - r + Math.sin((i / 18) * Math.PI) * (r + 0.2)]);
+  for (let i = 18; i >= 0; i--) soffit.push([Math.cos((i / 18) * Math.PI) * r, ph - r + Math.sin((i / 18) * Math.PI) * r]);
+  add(mats.sandstone, extrudeProfile(soffit, reveal, { z: zf - reveal / 2 + 0.01 }), revealTint);
+  // Threshold stone level with the top step, then the door leaves (dark varnished timber, vertical boards,
+  // rails and iron studs) and the fanlight glass above.
+  const sill = 0.48;
+  add(mats.trimStone, box(pw + 0.4, sill, reveal + 0.02, { y: sill / 2, z: zf - reveal / 2 }), [0.98, 0.96, 0.92]);
+  const doorH = ph - r - sill;
+  const dy = sill + doorH / 2;
+  add(mats.woodBrown, box(pw, doorH, 0.12, { y: dy, z: zf - reveal + 0.06 }), [0.34, 0.24, 0.15]);
+  for (let x = -r + 0.4; x < r; x += 0.4) add(mats.woodBrown, box(0.03, doorH - 0.1, 0.02, { x, y: dy, z: zf - reveal + 0.13 }), [0.22, 0.15, 0.09]);
+  add(mats.woodBrown, box(0.06, doorH, 0.03, { y: dy, z: zf - reveal + 0.135 }), [0.22, 0.15, 0.09]);
+  for (const yy of [sill + 0.6, dy, sill + doorH - 0.5]) add(mats.woodBrown, box(pw - 0.1, 0.16, 0.03, { y: yy, z: zf - reveal + 0.135 }), [0.26, 0.18, 0.11]);
+  for (const s of [-1, 1]) add(mats.iron, sphere(0.06, { x: s * 0.28, y: sill + 1.0, z: zf - reveal + 0.16, seg: 8 }), [1, 1, 1]);
+  const spring = ph - r; // springing line of the arch = top of the door leaves
+  const fan = [[-r + 0.02, spring]];
+  for (let i = 0; i <= 14; i++) fan.push([Math.cos((i / 14) * Math.PI) * (r - 0.02), spring + Math.sin((i / 14) * Math.PI) * (r - 0.02)]);
+  add(mats.glass, extrudeProfile(fan, 0.03, { z: zf - reveal + 0.1 }), null);
+  add(mats.interior, extrudeProfile(fan, 0.02, { z: zf - reveal + 0.05 }), null);
+  for (let i = 1; i < 5; i++) {
+    const a = (i / 5) * Math.PI;
+    add(mats.iron, cylinder(0.02, 0.02, r - 0.04, 5, { x: (Math.cos(a) * (r - 0.04)) / 2, y: spring + (Math.sin(a) * (r - 0.04)) / 2, z: zf - reveal + 0.12, rotZ: a - Math.PI / 2, open: true }), [1, 1, 1]);
+  }
+  // Two stone arch orders + jambs framing the recess, and a keystone.
+  const arch = (r0, r1, depth, zc) => {
+    const p = [];
+    for (let i = 0; i <= 18; i++) p.push([Math.cos((i / 18) * Math.PI) * r1, ph - r + Math.sin((i / 18) * Math.PI) * r1]);
+    for (let i = 18; i >= 0; i--) p.push([Math.cos((i / 18) * Math.PI) * r0, ph - r + Math.sin((i / 18) * Math.PI) * r0]);
+    return extrudeProfile(p, depth, { z: zc });
+  };
+  add(mats.trimStone, arch(r + 0.16, r + 0.5, 0.35, zf + 0.1), [1.02, 1.0, 0.96]);
+  add(mats.trimStone, arch(r + 0.5, r + 0.8, 0.2, zf + 0.02), [0.96, 0.94, 0.9]);
+  add(mats.trimStone, box(0.5, ph - r, 0.35, { x: -r - 0.41, y: (ph - r) / 2, z: zf + 0.1 }), [1.02, 1.0, 0.96]);
+  add(mats.trimStone, box(0.5, ph - r, 0.35, { x: r + 0.41, y: (ph - r) / 2, z: zf + 0.1 }), [1.02, 1.0, 0.96]);
+  add(mats.trimStone, box(0.3, ph - r, 0.2, { x: -r - 0.81, y: (ph - r) / 2, z: zf + 0.02 }), [0.96, 0.94, 0.9]);
+  add(mats.trimStone, box(0.3, ph - r, 0.2, { x: r + 0.81, y: (ph - r) / 2, z: zf + 0.02 }), [0.96, 0.94, 0.9]);
+  add(mats.trimStone, box(0.42, 0.7, 0.42, { y: ph + 0.5, z: zf + 0.14 }), [1.04, 1.02, 0.98]);
+  // Steps up to the door.
+  for (let i = 0; i < 3; i++) add(mats.trimStone, box(pw + 2.2 - i * 0.5, 0.16, 1.5 - i * 0.45, { y: 0.08 + i * 0.16, z: zf + 0.75 - i * 0.225 }), [0.98, 0.96, 0.92]);
+  addBoxCollider(C.x, 0.24, C.z + zf + 0.6, (pw + 2.2) / 2, 0.24, 0.75, 'stone');
+  // Rose window: recessed dark glass disc, stone ring with a chamfer, eight tracery spokes and a hub.
+  const ry = ph + 2.9;
+  add(mats.glass, cylinder(1.05, 1.05, 0.05, 24, { y: ry, z: zf - 0.25, rotX: Math.PI / 2 }), null);
+  add(mats.interior, cylinder(1.05, 1.05, 0.04, 24, { y: ry, z: zf - 0.3, rotX: Math.PI / 2 }), null);
+  add(mats.sandstone, cylinder(1.1, 1.1, 0.3, 24, { y: ry, z: zf - 0.15, rotX: Math.PI / 2, open: true }), revealTint);
+  add(mats.trimStone, cylinder(1.45, 1.35, 0.32, 24, { y: ry, z: zf + 0.1, rotX: Math.PI / 2, open: true }), [1.02, 1.0, 0.96]);
+  const ringFace = new THREE.RingGeometry(1.1, 1.45, 24);
+  ringFace.translate(0, ry, zf + 0.26);
+  add(mats.trimStone, ringFace, [1.04, 1.02, 0.98]);
+  for (let i = 0; i < 8; i++) add(mats.trimStone, box(0.08, 2.05, 0.1, { y: ry, z: zf - 0.2, rotZ: (i * Math.PI) / 8 }), [0.98, 0.96, 0.92]);
+  add(mats.trimStone, cylinder(0.22, 0.22, 0.12, 12, { y: ry, z: zf - 0.2, rotX: Math.PI / 2 }), [0.98, 0.96, 0.92]);
   // Roof (gable along X)
   const pitch = 26 * (Math.PI / 180);
   const o = 0.6;

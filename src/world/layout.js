@@ -36,20 +36,20 @@ export const BOUNDS = { x0: -40, x1: 48, z0: -36, z1: 38 };
  */
 export const BUILDINGS = [
   // North row (fronts at z = -18)
-  { id: 'N1', x: -19.6, z: -23.5, w: 12.8, d: 11, rot: 0, floors: 2, style: 'ochre_stone', roof: 'gable', balcony: 'wood', door: 0.32 },
+  { id: 'N1', x: -19.6, z: -23.5, w: 12.8, d: 11, rot: 0, floors: 2, style: 'ochre_stone', roof: 'gable', balcony: 'wood', door: 0.32, plaque: 'right' },
   { id: 'N2', x: -4.1, z: -24, w: 13, d: 12, rot: 0, floors: 3, style: 'stone_house', roof: 'gable', balcony: 'loggia', door: 0.5 },
   { id: 'N3', x: 7.5, z: -23, w: 10.2, d: 10, rot: 0, floors: 3, style: 'white_blue', roof: 'gable', balcony: 'iron_top', door: 0.5, ivy: true, arch: true },
   { id: 'N4', x: 25.6, z: -23, w: 16.8, d: 10, rot: 0, floors: 3, style: 'pink', roof: 'gable', balcony: 'iron', door: 0.3 },
   // West row (fronts at x = -26)
   { id: 'W1', x: -31, z: -13.75, w: 8.5, d: 10, rot: Math.PI / 2, floors: 3, style: 'yellow', roof: 'gable', balcony: 'iron', door: 0.5 },
   { id: 'W2', x: -31.5, z: 3.85, w: 16.3, d: 11, rot: Math.PI / 2, floors: 2, style: 'cafe', roof: 'flat', balcony: 'iron', door: 0.5, awning: true },
-  { id: 'W3', x: -31, z: 18, w: 12, d: 10, rot: Math.PI / 2, floors: 3, style: 'white_green', roof: 'gable', balcony: 'iron', door: 0.4 },
+  { id: 'W3', x: -31, z: 18, w: 12, d: 10, rot: Math.PI / 2, floors: 3, style: 'white_green', roof: 'gable', balcony: 'iron', door: 0.4, plaque: 'left' },
   // South row (fronts at z = +24)
   { id: 'S1', x: -14.6, z: 29, w: 22.8, d: 10, rot: Math.PI, floors: 3, style: 'ochre_stone', roof: 'gable', balcony: 'iron', door: 0.3 },
-  { id: 'S2', x: 10.6, z: 29, w: 14.8, d: 10, rot: Math.PI, floors: 2, style: 'beige', roof: 'gable', balcony: 'wood', door: 0.6 },
+  { id: 'S2', x: 10.6, z: 29, w: 14.8, d: 10, rot: Math.PI, floors: 2, style: 'beige', roof: 'gable', balcony: 'wood', door: 0.6, plaque: 'left' },
   { id: 'S3', x: 26, z: 28.5, w: 16, d: 9, rot: Math.PI, floors: 2, style: 'white_blue', roof: 'flat', balcony: 'iron', door: 0.5 },
   // East row beyond the garden (fronts at x = +34)
-  { id: 'E1', x: 39, z: -9.5, w: 17, d: 10, rot: -Math.PI / 2, floors: 3, style: 'pink', roof: 'gable', balcony: 'iron', door: 0.5 },
+  { id: 'E1', x: 39, z: -9.5, w: 17, d: 10, rot: -Math.PI / 2, floors: 3, style: 'beige', roof: 'gable', balcony: 'iron', door: 0.5 },
   { id: 'E2', x: 39, z: 13.8, w: 20.4, d: 10, rot: -Math.PI / 2, floors: 2, style: 'yellow', roof: 'gable', balcony: 'wood', door: 0.5 },
   // Street flanks (plainer)
   { id: 'NEW', x: 6.7, z: -34, w: 12, d: 9.4, rot: Math.PI / 2, floors: 3, style: 'beige', roof: 'gable', balcony: 'iron', door: 0.5, plain: true },
@@ -61,6 +61,17 @@ export const BUILDINGS = [
   { id: 'SSE', x: 12, z: 40, w: 12, d: 14.6, rot: -Math.PI / 2, floors: 3, style: 'beige', roof: 'gable', balcony: 'wood', door: 0.5, plain: true },
   { id: 'EEN', x: 50, z: -7, w: 12, d: 12, rot: 0, floors: 2, style: 'yellow', roof: 'gable', balcony: 'iron', door: 0.5, plain: true },
   { id: 'EES', x: 50, z: 9.6, w: 12, d: 12, rot: Math.PI, floors: 2, style: 'white_green', roof: 'flat', balcony: 'iron', door: 0.5, plain: true },
+  // Vista closers beyond the street barricades (unreachable): the streets appear to continue and bend
+  // instead of ending against the backdrop.
+  { id: 'WV1', x: -56, z: -13.5, w: 10, d: 8, rot: 0, floors: 2, style: 'pink', roof: 'gable', balcony: 'iron', door: 0.5, plain: true },
+  { id: 'WV2', x: -56, z: -0.3, w: 10, d: 8, rot: Math.PI, floors: 3, style: 'beige', roof: 'gable', balcony: 'iron', door: 0.5, plain: true },
+  { id: 'WV3', x: -67, z: -7, w: 14, d: 10, rot: Math.PI / 2, floors: 3, style: 'white_blue', roof: 'gable', balcony: 'iron', door: 0.5, plain: true },
+  { id: 'SV1', x: -10, z: 53, w: 11, d: 10, rot: Math.PI / 2, floors: 2, style: 'yellow', roof: 'gable', balcony: 'iron', door: 0.5, plain: true },
+  { id: 'SV2', x: 10, z: 53, w: 11, d: 10, rot: -Math.PI / 2, floors: 2, style: 'white_green', roof: 'gable', balcony: 'wood', door: 0.5, plain: true },
+  { id: 'SV3', x: 0, z: 66, w: 16, d: 10, rot: Math.PI, floors: 3, style: 'ochre_stone', roof: 'gable', balcony: 'iron', door: 0.5, plain: true },
+  { id: 'EV1', x: 62, z: -7, w: 11, d: 12, rot: 0, floors: 2, style: 'white_blue', roof: 'gable', balcony: 'iron', door: 0.5, plain: true },
+  { id: 'EV2', x: 62, z: 9.6, w: 11, d: 12, rot: Math.PI, floors: 3, style: 'pink', roof: 'gable', balcony: 'iron', door: 0.5, plain: true },
+  { id: 'EV3', x: 76, z: 1.3, w: 14, d: 10, rot: -Math.PI / 2, floors: 2, style: 'beige', roof: 'gable', balcony: 'iron', door: 0.5, plain: true },
 ];
 
 /** Church closing the NE street vista; the bell tower rises beside it. */
@@ -82,7 +93,7 @@ export const STREET_LAMPS = [
   { x: -20, z: 20.5 },
   { x: -22, z: -2 },
   { x: 24, z: -3 },
-  { x: 13.2, z: -30 }, // NE street, on the west sidewalk
+  { x: 13.2, z: -30, y: SIDEWALK_H }, // NE street, on the (raised) west sidewalk
 ];
 
 /** Cable anchors for the string lights (world coords, y = attachment height). */
@@ -111,6 +122,13 @@ export const IVY = [
   { x: 17.2, z: -11.2, yaw: -Math.PI / 2, w: 1.0, h: 2.6, seed: 7, density: 7 },
   { x: 17.2, z: 14.0, yaw: -Math.PI / 2, w: 0.9, h: 2.4, seed: 8, density: 7 },
   { x: -13.15, z: -23.5, yaw: Math.PI / 2, w: 1.6, h: 4.0, seed: 9 },
+];
+
+/** Bare utility cables (no bulbs) strung high between facades, above the festoons. */
+export const CABLES = [
+  { a: [-3.2, 9.3, -17.6], b: [-9, 9.1, 23.6], sag: 1.5 },
+  { a: [-25.6, 9.2, -13], b: [-17, 6.5, -17.6], sag: 0.4 },
+  { a: [22, 9.2, -17.6], b: [33.9, 9.0, -6], sag: 0.6 },
 ];
 
 /** Poles on the fence line the eastern cables attach to (no building there). */

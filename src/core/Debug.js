@@ -47,7 +47,11 @@ export class Debug {
     }
     if (spec.hud != null) this.setHud(spec.hud);
     if (spec.weapon != null) this.setViewModel(spec.weapon);
-    if (spec.ads != null && weapons?.setAiming) weapons.setAiming(!!spec.ads);
+    if (weapons) {
+      weapons.debugAim = spec.ads != null ? !!spec.ads : null;
+      weapons.debugSprint = false;
+      if (spec.ads != null) weapons.setAiming?.(!!spec.ads);
+    }
     if (spec.crouch != null) player.isCrouching = !!spec.crouch;
     if (spec.exec) {
       try {

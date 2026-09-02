@@ -9,6 +9,29 @@ const rect = (x0, z0, x1, z1) => [
   [x0, z1],
 ];
 
+/** Raised paving rectangles [x0, z0, x1, z1, y] recorded while building, for placing decals/props flush. */
+const RAISED = [];
+
+/** Static paving height at (x, z) — sidewalks / garden terrace / street level — usable before physics exists. */
+export function pavingHeight(x, z) {
+  let h = -Infinity;
+  for (const [x0, z0, x1, z1, y] of RAISED) if (x >= x0 && x <= x1 && z >= z0 && z <= z1) h = Math.max(h, y);
+  if (h > -Infinity) return h;
+  const inRect = (x0, z0, x1, z1) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
+  if (inRect(PLAZA.x0, PLAZA.z0, GARDEN.x1, PLAZA.z1)) return 0;
+  if (STREETS.some((s) => inRect(s.x0, s.z0, s.x1, s.z1))) return 0;
+  return -0.03; // bare earth of the backdrop (see Backdrop.js `land`)
+}
+
+/** Damp/dark ellipse decal (rx × rz half-sizes) on the paving at height y0; 0..1 UVs so the blotch alpha spans it. */
+export function addWetPatch(ctx, x, z, rx, rz, rot = 0, y0 = null) {
+  const g = new THREE.PlaneGeometry(rx * 2, rz * 2);
+  g.rotateX(-Math.PI / 2);
+  g.rotateY(rot);
+  g.translate(x, (y0 ?? pavingHeight(x, z)) + 0.007, z);
+  ctx.batch.add(ctx.mats.wetStain, g, null);
+}
+
 /**
  * Plaza paving, compass-rose inlay, decorative terracotta bands, sidewalks with curbs and the
  * cobbled streets. Inlays are real geometry: the plaza slab has a circular hole that the rose pieces
@@ -18,6 +41,7 @@ const rect = (x0, z0, x1, z1) => [
 export function buildGround(ctx) {
   const { mats, batch, addBoxCollider } = ctx;
   const INLAY_Y = 0.003;
+  RAISED.length = 0;
   const seg = circleSegments(ROSE.r);
   const roseHole = arcPoints(ROSE.x, ROSE.z, ROSE.r, 0, Math.PI * 2, seg).slice(0, -1);
 
@@ -75,12 +99,23 @@ export function buildGround(ctx) {
   strip(PLAZA.x0 + inset, PLAZA.z0 + inset, PLAZA.x0 + inset + 0.4, PLAZA.z1 - inset);
   strip(FENCE_X - 1.4, PLAZA.z0 + inset, FENCE_X - 1.0, PLAZA.z1 - inset);
 
+  // Whole-plaza tonal mottle (one quad, one draw call) between the inlays and the wear/wet decals, so the
+  // slabs, bands and rose all drift in tone together instead of reading as flat colour fills.
+  {
+    const g = new THREE.PlaneGeometry(PLAZA.x1 - PLAZA.x0, PLAZA.z1 - PLAZA.z0);
+    g.rotateX(-Math.PI / 2);
+    g.translate((PLAZA.x0 + PLAZA.x1) / 2, INLAY_Y + 0.0015, (PLAZA.z0 + PLAZA.z1) / 2);
+    batch.add(mats.groundMottle, g, null);
+  }
+
   // --- Garden terrace east of the fence (gravel, slightly raised so footsteps read as dirt) --------
   batch.add(mats.gravel, polygon(rect(GARDEN.x0, GARDEN.z0, GARDEN.x1, GARDEN.z1), [], 0.02), [0.9, 0.88, 0.82]);
   addBoxCollider((GARDEN.x0 + GARDEN.x1) / 2, -0.24, 0, (GARDEN.x1 - GARDEN.x0) / 2, 0.26, (GARDEN.z1 - GARDEN.z0) / 2, 'dirt');
+  RAISED.push([GARDEN.x0, GARDEN.z0, GARDEN.x1, GARDEN.z1, 0.02]);
   // Cobbled path from the gate to the east street.
   batch.add(mats.sidewalk, polygon(rect(GARDEN.x0, -8.6, GARDEN.x1, -6.4), [], 0.03), [1, 1, 1]);
   batch.add(mats.sidewalk, polygon(rect(GARDEN.x1 - 2.6, -8.6, GARDEN.x1, 3.6), [], 0.03), [1, 1, 1]);
+  RAISED.push([GARDEN.x0, -8.6, GARDEN.x1, -6.4, 0.03], [GARDEN.x1 - 2.6, -8.6, GARDEN.x1, 3.6, 0.03]);
 
   // --- Sidewalks --------------------------------------------------------------------------------
   // segment: [x0,z0,x1,z1] top slab + a dressed-stone curb along the given edge ('n','s','e','w').
@@ -88,6 +123,7 @@ export function buildGround(ctx) {
     const w = x1 - x0;
     const d = z1 - z0;
     if (w <= 0.05 || d <= 0.05) return;
+    RAISED.push([x0, z0, x1, z1, SIDEWALK_H]);
     batch.add(mat, box(w, SIDEWALK_H, d, { x: (x0 + x1) / 2, y: SIDEWALK_H / 2, z: (z0 + z1) / 2 }), [0.95, 0.93, 0.88]);
     const cw = 0.22;
     const ch = SIDEWALK_H + 0.012;
@@ -164,6 +200,39 @@ export function buildGround(ctx) {
     [-6, 15, 3.0, 1.9],
   ];
   for (const [x, z, r, rot] of wearSpots) wear(x, z, r, rot);
+  const wetPatch = (x, z, rx, rz, rot, y0) => addWetPatch(ctx, x, z, rx, rz, rot, y0);
+
+  // --- Storm drains at the curb line (iron grate set 2 cm into the paving) with a damp halo --------
+  // [x, z, yaw] — long axis of the grate runs along the curb.
+  const drains = [
+    [-7.5, -15.25, 0],
+    [9.5, -15.25, 0],
+    [-6, 21.25, 0],
+    [8, 21.25, 0],
+    [-23.25, -13, Math.PI / 2],
+    [-23.25, 9, Math.PI / 2],
+    [14.05, -26, Math.PI / 2],
+    [-35, -5.75, 0],
+    [-1.45, 33, Math.PI / 2],
+  ];
+  for (const [x, z, yaw] of drains) {
+    const y0 = pavingHeight(x, z);
+    const R = new THREE.Matrix4().makeRotationY(yaw).premultiply(new THREE.Matrix4().makeTranslation(x, y0, z));
+    const put = (mat, g, c) => {
+      g.applyMatrix4(R);
+      batch.add(mat, g, c);
+    };
+    put(mats.iron, box(0.62, 0.05, 0.36, { y: -0.02 }), [0.05, 0.05, 0.05]); // dark sump
+    put(mats.iron, box(0.66, 0.02, 0.4, { y: 0.004 }), [0.03, 0.03, 0.03]); // frame flush with the paving
+    for (let i = -2; i <= 2; i++) put(mats.iron, box(0.6, 0.02, 0.035, { y: 0.008, z: i * 0.075 }), [0.11, 0.11, 0.12]); // bars
+    wetPatch(x + (yaw ? 0.35 : 0), z + (yaw ? 0 : 0.35), 0.75, 1.0, yaw + 0.4, y0);
+  }
+
+  // --- Damp patches: fountain splash zone (outside the bottom step) --------------------------------
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    wetPatch(-12 + Math.cos(a) * 5.7, -3 + Math.sin(a) * 5.7, 1.3, 0.9, a, 0);
+  }
 
   // --- Ground collider: one big slab under everything (streets, plaza, backdrop land) ------------
   addBoxCollider(0, -0.5, 0, 400, 0.5, 400, 'stone');

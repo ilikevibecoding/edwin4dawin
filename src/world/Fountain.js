@@ -5,22 +5,24 @@ import { FOUNTAIN } from './layout.js';
 
 /**
  * Raised octagonal fountain (two steps, blocky basin wall, dressed-stone coping), still reflective
- * water, a tall stone plinth with a stepped cornice and a bronze equestrian statue sculpted from
- * primitives. Stonework gets a trimesh collider; the water gets its own 'water' surface collider.
+ * water, a tall stone plinth with a stepped cornice and a bronze horse statue (Poly Haven photoscan,
+ * re-materialed as patinated bronze). Stonework gets a trimesh collider; the water its own 'water'
+ * surface collider. Async: the statue scan loads in parallel with the props.
  */
-export function buildFountain(ctx) {
+export async function buildFountain(ctx) {
   const { mats, root, game } = ctx;
   const F = FOUNTAIN;
   const fb = new Batcher();
   const oct = (r) => regularPolygon(F.x, F.z, r, 8, Math.PI / 8);
   const stepTint = [1.0, 0.98, 0.94];
 
-  // Steps + basin
+  // Steps + basin. The basin wall carries a damp gradient (darker toward the coping where water laps and
+  // splashes over) and the coping itself reads as wet stone; the outer step stays dry.
   fb.add(mats.trimStone, prism(oct(5.0), 0, 0.17), stepTint);
-  fb.add(mats.trimStone, prism(oct(4.4), 0.17, 0.34), stepTint);
-  fb.add(mats.stoneBlocks, ringPrism(oct(3.6), oct(3.15), 0.34, 1.05, { top: false }), [1.02, 1.0, 0.96]);
-  fb.add(mats.trimStone, ringPrism(oct(3.78), oct(3.02), 1.05, 1.22), [1.04, 1.02, 0.98]);
-  const basinMat = mats.pbr('marble_tiles', { color: new THREE.Color(0.55, 0.8, 0.85), tile: 1.0 }, 'basin_tiles');
+  fb.add(mats.trimStone, prism(oct(4.4), 0.17, 0.34), (x, y) => stepTint.map((c) => c * (y > 0.3 ? 0.93 : 1)));
+  fb.add(mats.stoneBlocks, ringPrism(oct(3.6), oct(3.15), 0.34, 1.05, { top: false }), (x, y) => [1.02, 1.0, 0.96].map((c) => c * (0.72 + 0.28 * Math.min(1, Math.max(0, (1.05 - y) / 0.5)))));
+  fb.add(mats.trimStone, ringPrism(oct(3.78), oct(3.02), 1.05, 1.22), [0.86, 0.85, 0.83]);
+  const basinMat = mats.pbr('marble_tiles', { color: new THREE.Color(0.45, 0.66, 0.72), tile: 1.0 }, 'basin_tiles');
   fb.add(basinMat, polygon(oct(3.15), [], 0.5), [1, 1, 1]);
 
   // Plinth: base block, molding, shaft, stepped cornice, cap
@@ -31,7 +33,7 @@ export function buildFountain(ctx) {
   P(2.4, 4.5, 4.74, mats.trimStone, stepTint);
   P(2.7, 4.74, 4.96, mats.trimStone, stepTint);
   P(2.3, 4.96, 5.12, mats.trimStone, [0.98, 0.96, 0.92]);
-  // Bronze plaque + lion-head spouts on the shaft
+  // Bronze plaque + lion-head spouts on the shaft; a dark damp streak runs from each spout down the shaft.
   fb.add(mats.bronze, box(1.1, 0.7, 0.05, { x: F.x, y: 2.6, z: F.z + 1.04 }));
   for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
     fb.add(mats.bronze, sphere(0.17, { x: F.x + dx * 1.08, y: 1.75, z: F.z + dz * 1.08, seg: 10 }));
@@ -40,27 +42,91 @@ export function buildFountain(ctx) {
   const stone = fb.build(root, { name: 'Fountain' });
   for (const m of stone) game.physics.addStaticMesh(m, { surface: m.material === mats.bronze ? 'metal' : 'stone' });
 
-  // Water surface (separate transparent mesh)
+  // Water surface (separate transparent mesh) + four falling streams from the spouts, each with a splash ring.
   const water = new THREE.Mesh(polygon(oct(3.15), [], 1.0), mats.water);
   water.name = 'FountainWater';
   water.receiveShadow = true;
   water.renderOrder = 2;
   root.add(water);
   game.physics.addStaticBox(new THREE.Vector3(F.x, 0.97, F.z), new THREE.Vector3(3.1, 0.03, 3.1), null, { surface: 'water' });
+  const streams = new Batcher();
+  for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+    const sx = F.x + dx * 1.42;
+    const sz = F.z + dz * 1.42;
+    // Slight outward arc: top of the stream at the spout lip, bottom 12 cm further out.
+    const g = cylinder(0.022, 0.034, 0.64, 7, { x: sx + dx * 0.06, y: 1.31, z: sz + dz * 0.06, rotX: -dz * 0.18, rotZ: dx * 0.18, open: true });
+    streams.add(mats.waterStream, g, null);
+    const ring = new THREE.RingGeometry(0.1, 0.42, 16);
+    ring.rotateX(-Math.PI / 2);
+    ring.translate(sx + dx * 0.12, 1.006, sz + dz * 0.12);
+    streams.add(mats.waterStream, ring, null);
+  }
+  for (const m of streams.build(root, { name: 'FountainStreams', castShadow: false })) m.renderOrder = 3;
 
-  // Statue
-  const statue = buildEquestrianStatue(mats);
-  // Horse faces local +X; rotation.y = φ maps +X to (cos φ, 0, -sin φ). Aim it at the plaza center.
-  statue.position.set(F.x, 5.12, F.z);
-  statue.rotation.y = Math.atan2(F.z, -F.x);
-  statue.scale.setScalar(1.3);
+  await buildStatue(ctx);
+}
+
+/**
+ * Statue: the horse_statue_01 photoscan (12k tris) scaled to monument size, wooden display base removed,
+ * re-materialed as dark patinated bronze while keeping the scan's own normal/roughness maps. Falls back
+ * to the primitive equestrian statue if the scan is unavailable.
+ */
+async function buildStatue(ctx) {
+  const { mats, root, game } = ctx;
+  const F = FOUNTAIN;
+  const capY = 5.12;
+  let statue;
+  try {
+    const gltf = await game.assets.loadModel('horse_statue_01');
+    const src = gltf.scene;
+    src.updateMatrixWorld(true);
+    statue = new THREE.Group();
+    statue.name = 'HorseStatue';
+    const bronze = mats.bronzeDark;
+    const local = new THREE.Box3();
+    src.traverse((o) => {
+      if (!o.isMesh || /base/i.test(o.material?.name || '')) return;
+      const geo = o.geometry.clone();
+      geo.applyMatrix4(o.matrixWorld);
+      const mat = bronze.clone();
+      mat.name = 'bronze_statue';
+      mat.normalMap = o.material.normalMap || null;
+      mat.normalScale.set(1, 1);
+      mat.roughnessMap = o.material.roughnessMap || null;
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      statue.add(mesh);
+      geo.computeBoundingBox();
+      local.union(geo.boundingBox);
+    });
+    if (!statue.children.length) throw new Error('no horse mesh');
+    const size = local.getSize(new THREE.Vector3());
+    const s = 3.4 / size.y; // ~3.4 m tall rearing horse (≈1.4× life-size, monument scale)
+    // Feet on the cap, footprint centred; horse length runs along local X → face the plaza centre.
+    const c = local.getCenter(new THREE.Vector3());
+    for (const m of statue.children) m.geometry.translate(-c.x, -local.min.y, -c.z);
+    statue.scale.setScalar(s);
+    statue.position.set(F.x, capY, F.z);
+    statue.rotation.y = Math.atan2(F.z, -F.x) + STATUE_YAW_OFFSET;
+  } catch (err) {
+    console.warn('[world] horse statue scan unavailable, using primitive statue:', err.message);
+    statue = buildEquestrianStatue(mats);
+    statue.position.set(F.x, capY, F.z);
+    statue.rotation.y = Math.atan2(F.z, -F.x);
+    statue.scale.setScalar(1.3);
+  }
   root.add(statue);
+  game.render.setupObject(statue);
   statue.updateMatrixWorld(true);
   const bb = new THREE.Box3().setFromObject(statue);
   const c = bb.getCenter(new THREE.Vector3());
-  const s = bb.getSize(new THREE.Vector3());
-  game.physics.addStaticBox(c, new THREE.Vector3(s.x * 0.4, s.y / 2, s.z * 0.4), null, { surface: 'metal' });
+  const sz = bb.getSize(new THREE.Vector3());
+  game.physics.addStaticBox(c, new THREE.Vector3(sz.x * 0.4, sz.y / 2, sz.z * 0.4), null, { surface: 'metal' });
 }
+
+/** The scan's horse faces local -X (nose toward negative X); flip so it rears toward the plaza. */
+const STATUE_YAW_OFFSET = Math.PI;
 
 /** Horse + rider from spheres/capsules; silhouette first. Local: horse faces +X, feet at y=0. */
 export function buildEquestrianStatue(mats) {

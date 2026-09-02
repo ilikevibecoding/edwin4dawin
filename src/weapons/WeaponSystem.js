@@ -85,6 +85,8 @@ export class WeaponSystem {
     this._pivots = {};
     this._droppedMags = [];
     this._fireModeSelector = 'AUTO';
+    this.debugAim = null; // true/false forces ADS on/off (screenshot tooling); null = use input
+    this.debugSprint = false;
   }
 
   /* ------------------------------------------------------------------ loading */
@@ -364,9 +366,9 @@ export class WeaponSystem {
         }
       }
 
-      // Input
+      // Input (debugAim / debugSprint let tooling hold a pose without real input)
       if (canUse && this._drawT === 0) {
-        const wantsAim = input.isDown('aim') && !player.isSprinting && this._reloadT < 0;
+        const wantsAim = (this.debugAim ?? input.isDown('aim')) && !player.isSprinting && this._reloadT < 0;
         this.setAiming(wantsAim);
         this._triggerHeld = input.isDown('fire');
         if (this._triggerHeld) this.fire();
@@ -417,7 +419,7 @@ export class WeaponSystem {
     // Blends
     const aimTarget = w.isAiming ? 1 : 0;
     this._aimBlend += (aimTarget - this._aimBlend) * Math.min(1, dt * 11);
-    const sprintTarget = player.isSprinting && this._reloadT < 0 && !w.isAiming ? 1 : 0;
+    const sprintTarget = (player.isSprinting || this.debugSprint) && this._reloadT < 0 && !w.isAiming ? 1 : 0;
     this._sprintBlend += (sprintTarget - this._sprintBlend) * Math.min(1, dt * 7);
 
     st.aiming = w.isAiming;
@@ -706,7 +708,7 @@ export class WeaponSystem {
     if (!d) return;
     d.registerView('weapon_hero', { pos: [0, 0, 12], yaw: 0, pitch: -2, hud: false });
     d.registerView('weapon_ads', { pos: [0, 0, 12], yaw: 0, pitch: 0, ads: true, hud: false });
-    d.registerView('weapon_sprint', { pos: [0, 0, 12], yaw: 0, pitch: -2, hud: false, exec: 'weapons._sprintBlend = 1; game.player.isSprinting = true;' });
-    d.registerView('weapon_inspect', { pos: [0, 0, 12], yaw: 0, pitch: -2, hud: false });
+    d.registerView('weapon_sprint', { pos: [0, 0, 12], yaw: 0, pitch: -2, hud: false, exec: 'weapons.debugSprint = true;' });
+    d.registerView('weapon_inspect', { pos: [0, 0, 12], yaw: 0, pitch: -2, hud: false, exec: 'weapons.inspect();' });
   }
 }

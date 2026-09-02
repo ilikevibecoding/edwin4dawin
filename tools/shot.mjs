@@ -134,7 +134,10 @@ try {
     }
     if (s.freecam) d.freeCam({ pos: parseV(s.freecam), lookAt: s.lookat ? parseV(s.lookat) : undefined, fov: s.fov ? parseFloat(s.fov) : undefined });
     else if (s.fov) game.render.baseFov = parseFloat(s.fov);
-    if (s.ads) game.weapons.setAiming(true);
+    if (s.ads) {
+      game.weapons.debugAim = true;
+      game.weapons.setAiming(true);
+    }
     if (s.nohud) d.setHud(false);
     if (s.noweapon) d.setViewModel(false);
     if (s.exec) {
