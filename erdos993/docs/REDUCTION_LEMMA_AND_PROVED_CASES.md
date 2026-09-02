@@ -32,7 +32,9 @@ consistency checks of the theorems; they are never used as proof steps.
 | real-rooted $I(F;x)$ $\Rightarrow$ $\mathrm{ISO}_r$ for all $r$ (Theorem 7.1) | proved here, from Newton's inequalities (classical, cited) |
 | claw-free graphs have real-rooted $I(G;x)$ (Theorem 8.2) | **cited** (Chudnovsky–Seymour) |
 | TAIL for forests (Theorem 8.1) | **cited** (Levit–Mandrescu; valid for bipartite graphs, **not** for all graphs) |
-| $\mathrm{ISO}_r$, $\mathrm{WR}_r$ for $r \ge 3$ for general forests | **not proved** (Section 10) |
+| $\mathrm{ISO}_3$ for every **tree** (Theorem 11.1, `ISO3_TREES_THEOREM.md`) | proved (exact computer-assisted certificate) |
+| $\mathrm{WR}_3$ wherever the framework needs it (Theorem 11.2) | proved here |
+| $\mathrm{ISO}_3$ for general forests; $\mathrm{ISO}_r$, $\mathrm{WR}_r$ for $r \ge 4$ | **not proved** (Sections 10–11) |
 
 ---
 
@@ -505,8 +507,12 @@ every forest. References:
 * V. E. Levit and E. Mandrescu, *Independence polynomials and the unimodality conjecture for
   very well-covered, quasi-regularizable, and perfect graphs*, in: *Graph Theory in Paris*
   (A. Bondy, J. Fonlupt, J.-L. Fouquet, J.-C. Fournier, J. L. Ramírez Alfonsín, eds.), Trends in
-  Mathematics, Birkhäuser, Basel, 2007, pp. 243–254, doi:10.1007/978-3-7643-7400-6_19
-  (bipartite graphs, and quasi-regularizable graphs on $2\alpha$ vertices; in particular trees).
+  Mathematics, Birkhäuser, Basel, 2007, pp. 243–254, doi:10.1007/978-3-7643-7400-6_19;
+  preprint arXiv:math/0406623 (bipartite graphs — stated there as a corollary of the perfect-graph
+  bound $s_{\lceil(\omega\alpha-1)/(\omega+1)\rceil} \ge \dots \ge s_\alpha$ with $\omega \le 2$ —
+  and quasi-regularizable graphs on $2\alpha$ vertices; in particular trees). The paper itself
+  exhibits non-bipartite graphs, e.g. one with $I(G;x) = 1 + 6x + 8x^2$, for which the tail
+  inequality fails.
 * V. E. Levit and E. Mandrescu, *Partial unimodality for independence polynomials of
   König–Egerváry graphs*, Congressus Numerantium 179 (2006), 109–119.
 
@@ -582,9 +588,13 @@ $n \le 11$, etc.).
    So the crude bound cannot prove $\mathrm{ISO}_3$ even for stars (which do satisfy it,
    Prop. 7.4). Note also that $P = \sum_{uv}(d_u-1)(d_v-1)$ is not a function of the degree
    sequence alone. A rigorous proof of $\mathrm{ISO}_3$ for all forests therefore needs a genuine
-   extremal optimisation over the degree data $(e, S, T, P)$ — keeping the $T$ and $P$ terms and
-   being exact on stars, in the spirit of the equality analysis in Step 5 of Theorem 5.1 — not a
-   term-dropping estimate.
+   extremal optimisation over the degree data $(e, S, T, P)$ — in particular a lower bound for
+   $T$ that is exact on stars (where $P = 0$, so dropping $P$ alone costs nothing there), in the
+   spirit of the equality analysis in Step 5 of Theorem 5.1 — not a term-dropping estimate.
+   At the time of writing, a separate document in this repository,
+   `docs/ISO3_TREES_THEOREM.md` (replayed by `scripts/prove_iso3_trees.py`), pursues exactly
+   such an optimisation for *trees*; it is not audited in this note, and by its own remarks the
+   forest case is not covered there either.
 
 3. **Real-rootedness** is available only for claw-free forests (linear forests), Corollary 7.2;
    it fails for all stars $K_{1,m}$, $m \ge 3$ (Caution 7.3). No claim is made about the roots of
@@ -596,3 +606,34 @@ $n \le 11$, etc.).
 5. The numerical enumerations in the script (all trees $n \le 14$, all forests $n \le 12$,
    random forests $n \le 40$, integer boxes) are consistency checks; none of the theorems above
    depends on them.
+
+---
+
+## 11. Addendum (2026-09-02): $\mathrm{ISO}_3$ for all trees, and $\mathrm{WR}_3$
+
+**Theorem 11.1 ($\mathrm{ISO}_3$ for trees).** For every tree, $Q_3 = 3p_3^2 + p_2^2 - 4p_2p_4 \ge 0$.
+This is proved in `docs/ISO3_TREES_THEOREM.md` (replayed by `scripts/prove_iso3_trees.py`)
+by exactly the route item 2 above calls for: keep $T$ via the Cauchy–Schwarz bound
+$3T \ge 2S^2/D_2 - S$ ($D_2 = 2(n-1) - \ell$, $\ell$ = number of leaves), drop only $P \ge 0$,
+use $S \le \binom{\ell}{2} + n - \ell - 1$, and certify the resulting two-variable polynomial
+with exact algebra (shift certificate, real-root isolation, Bernstein subdivision). Item 2 is
+therefore superseded for **trees**; for forests with several non-trivial components or isolated
+vertices the same chain holds numerically but no certificate has been produced, so
+$\mathrm{ISO}_3$ for general forests remains open.
+
+**Theorem 11.2 ($\mathrm{WR}_3$ wherever needed) [tests/test_core.py].** For every forest,
+$\mathrm{WR}_3$ ($p_2 \le 3p_3$) holds whenever $3 \le L(\alpha) - 1$, i.e. whenever the
+framework needs it.
+
+*Proof.* By Theorem 3.1 and $S \ge 0$, $e \le n-1$,
+$3p_3 - p_2 \ge 3\binom n3 - 3e(n-2) - \binom n2 + e \ge \tfrac{n(n-1)(n-3)}{2} - (n-1)(3n-7)
+= \tfrac{(n-1)(n-2)(n-7)}{2} \ge 0$ for $n \ge 7$. If $n \le 6$ then $\alpha \le 6$ and
+$L(\alpha) - 1 \ge 3$ forces $\alpha = 6 = n$, i.e. $F = \overline{K_6}$, where
+$p_2 = 15 \le 60 = 3p_3$. For trees the bound is sharper ($S \ge n-2$ gives
+$3p_3 - p_2 \ge \tfrac{(n-2)(n-3)(n-4) - (n-1)(n-2)}{2} \ge 0$ for $n \ge 6$). $\square$
+
+**Corollary 11.3.** Every tree with $\alpha \le 6$ has a unimodal independence polynomial by the
+framework alone (Theorem 2.1 with $L(\alpha) \le 4$, Theorems 4.1, 5.1, 6.1, 11.1, 11.2 and the
+cited TAIL). This is of course far weaker than the exhaustive verification for $n \le 29$; its
+point is structural: each further index $r$ for which $\mathrm{ISO}_r$ and $\mathrm{WR}_r$ are
+proved for all forests extends the range of $\alpha$ covered by the framework by $3/2$.

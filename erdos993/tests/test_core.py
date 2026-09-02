@@ -163,6 +163,26 @@ def test_analyze_hypotheses_imply_unimodal_on_all_small_trees():
             assert a["unimodal"]
 
 
+def test_wr3_bounds_all_small_forests_and_trees():
+    # Theorem 11.2 of docs/REDUCTION_LEMMA_AND_PROVED_CASES.md:
+    # forests: 3 p_3 - p_2 >= (n-1)(n-2)(n-7)/2 (n >= 7); trees: >= ((n-2)(n-3)(n-4) - (n-1)(n-2))/2 (n >= 6)
+    for n in range(1, 13):
+        for sizes, idxs, p in forest_polys(n):
+            coef = lambda k: p[k] if k < len(p) else 0  # noqa: E731
+            e = n - len(sizes)
+            lhs = 3 * coef(3) - coef(2)
+            assert 2 * lhs >= n * (n - 1) * (n - 2) - n * (n - 1) - 2 * e * (3 * n - 7)
+            if n >= 7:
+                assert 2 * lhs >= (n - 1) * (n - 2) * (n - 7)
+            a = len(p) - 1
+            if 3 <= tail_cutoff(a) - 1:
+                assert lhs >= 0
+    for n in range(6, 15):
+        for parent in free_trees(n):
+            p = indpoly_parent_array(parent)
+            assert 2 * (3 * p[3] - p[2]) >= (n - 2) * (n - 3) * (n - 4) - (n - 1) * (n - 2) >= 0
+
+
 def test_spider_and_double_broom_shapes():
     n, edges = spider([1, 2, 3])
     assert n == 7 and len(edges) == 6
