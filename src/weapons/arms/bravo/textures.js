@@ -139,11 +139,15 @@ function segDist(px, py, ax, ay, bx, by) {
 
 /* ------------------------------------------------------------------------------------------- knit */
 
-/** Olive knit: interlocking V stitches (30 wales × 40 courses per tile → 1.1 mm wales). Tile = 34 mm. */
+/**
+ * Olive knit: a ribbed jersey — 26 courses per 34 mm tile (1.3 mm pitch) running ACROSS the finger / hand axis
+ * (v runs along the digits in the glove UVs), each course a rounded ridge with the interlocking V stitches (30
+ * wales → 1.1 mm) riding on it, like the transverse ribbing on the MW2019 glove's back. Tile = 34 mm.
+ */
 export function makeKnit(aniso) {
   const S = 512;
   const COLS = 30;
-  const ROWS = 40;
+  const ROWS = 26;
   const cw = S / COLS;
   const ch = S / ROWS;
   const height = new Float32Array(S * S);
@@ -151,10 +155,10 @@ export function makeKnit(aniso) {
     // cell-local V: vertex at bottom centre, legs to the upper corners (in cell units); overlap into next row
     const u = (px - cx * cw) / cw;
     const v = (py - cy * ch) / ch;
-    const dl = segDist(u, v, 0.5, 0.92, 0.08, 0.05);
-    const dr = segDist(u, v, 0.5, 0.92, 0.92, 0.05);
+    const dl = segDist(u, v, 0.5, 0.9, 0.1, 0.1);
+    const dr = segDist(u, v, 0.5, 0.9, 0.9, 0.1);
     const d = Math.min(dl, dr);
-    return Math.exp(-((d / 0.2) ** 2));
+    return Math.exp(-((d / 0.22) ** 2));
   };
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
@@ -178,23 +182,26 @@ export function makeKnit(aniso) {
           hgt = Math.max(hgt, legs(wcx, wcy, px, py));
         }
       }
-      // yarn fuzz + slight waviness; every other course stands a little proud so the knit reads as fine ribbing
-      // across the back of the hand at arm's length (like the reference glove), not just as a uniform fuzz
-      const fuzz = fbm(x / S, y / S, 128, 2, 7) - 0.5;
+      // the course ridge (rounded, slightly wavy so the ribs are not ruler-straight) carries most of the relief;
+      // the V stitches ride on it; yarn fuzz on top
       const wave = fbm(x / S, y / S, 4, 3, 3) - 0.5;
-      const rib = cy % 2 === 0 ? 0.08 : 0;
-      height[y * S + x] = Math.max(0, Math.min(1, hgt * 0.8 + rib + fuzz * 0.12 + wave * 0.1 + 0.05));
+      const ridge = 0.5 + 0.5 * Math.cos(((y / ch + wave * 0.35) % 1) * Math.PI * 2);
+      const fuzz = fbm(x / S, y / S, 128, 2, 7) - 0.5;
+      height[y * S + x] = Math.max(0, Math.min(1, ridge * 0.55 + hgt * 0.3 + fuzz * 0.1 + 0.05));
     }
   }
   const albedo = writeRGB(makeCanvas(S, S), (x, y, rgb) => {
     const hgt = height[y * S + x];
     const cellHash = hash2(Math.floor(x / cw), Math.floor(y / ch), 11);
     const wear = fbm(x / S, y / S, 3, 3, 21);
-    // grey-olive like the MW2019 glove (hue ≈ 66°, low saturation), lighter on the yarn ridges, dark in the gaps
-    const l = 0.48 + 0.6 * hgt + (cellHash - 0.5) * 0.12 + (wear - 0.5) * 0.16;
-    rgb[0] = 0.3 * l;
+    const mottle = fbm(x / S, y / S, 9, 2, 23);
+    // grey-olive like the MW2019 glove (hue ≈ 75°, low saturation — the reference's knit is a near-grey green,
+    // G ≥ R; the first pass leaned yellow in the sun): lighter on the course ridges, dark in the furrows between
+    // them, and mottled at two scales (yarn dye + wear) so the back of the hand is not one flat tone
+    const l = 0.42 + 0.7 * hgt + (cellHash - 0.5) * 0.14 + (wear - 0.5) * 0.3 + (mottle - 0.5) * 0.16;
+    rgb[0] = 0.288 * l;
     rgb[1] = 0.313 * l;
-    rgb[2] = 0.25 * l;
+    rgb[2] = 0.262 * l;
   });
   return { map: toTexture(albedo, { srgb: true, anisotropy: aniso }), normalMap: toTexture(heightToNormal(height, S, S, 5), { srgb: false, anisotropy: aniso }), size: 0.034 };
 }
@@ -294,52 +301,73 @@ export function makeCuff(aniso) {
 
 /* ------------------------------------------------------------------------------------------- camo */
 
-/** Desert camo (tan / khaki / brown / light) with folds and a fine weave in the normal map. Tile = 0.22 m. */
+/**
+ * Desert camo (tan / khaki / brown / light) — printed blotches with HARD edges (a printed pattern does not fade
+ * between colours), a fine 3-tone speckle inside them, a twill weave (diagonal ribs) in the normal map and soft
+ * folds. Tile = 0.22 m; blotches ≈ 25–40 mm so several read on the ≈ 50 mm of rolled sleeve in the hip view.
+ * Tones are kept ≈ 15 % below a neutral read: the plaza sun (plus the view-model fill) lifted the first pass to a
+ * clipped cream in which the blotches vanished (sleeve mean 173, R − B +16 against the reference's +35).
+ */
 export function makeCamo(aniso) {
   const S = 1024;
   const palette = [
-    [0.70, 0.60, 0.44], // sand base
-    [0.55, 0.47, 0.33], // khaki
-    [0.40, 0.31, 0.21], // brown
-    [0.80, 0.74, 0.60], // light
-    [0.30, 0.24, 0.17], // dark speckle
+    [0.60, 0.50, 0.33], // sand base
+    [0.46, 0.39, 0.24], // khaki
+    [0.33, 0.25, 0.15], // brown
+    [0.70, 0.63, 0.47], // light
+    [0.38, 0.30, 0.19], // dark speckle
+    [0.52, 0.44, 0.30], // mid speckle
   ];
   const height = new Float32Array(S * S);
   const albedo = writeRGB(makeCanvas(S, S), (x, y, rgb) => {
     const u = x / S;
     const v = y / S;
-    const big = fbm(u, v, 3, 4, 101, 0.55);
-    const mid = fbm(u, v, 7, 3, 202, 0.5);
-    const small = fbm(u, v, 18, 2, 303, 0.5);
+    const big = fbm(u, v, 7, 4, 101, 0.55);
+    const mid = fbm(u, v, 12, 3, 202, 0.5);
+    // blotch layering with edges one texel wide: khaki where big > 0.53, brown blotches where mid > 0.62 (printed
+    // over sand and khaki alike), light where big < 0.43
+    const e = 0.004;
+    const kh = sstep(0.53 - e, 0.53 + e, big);
+    const br = sstep(0.62 - e, 0.62 + e, mid);
+    const lt = (1 - sstep(0.43 - e, 0.43 + e, big)) * (1 - br);
     let c = palette[0];
-    // blotch layering: khaki where big > 0.52, brown where mid > 0.6 inside khaki, light where big < 0.4
-    const kh = sstep(0.5, 0.54, big);
-    const br = sstep(0.58, 0.62, mid) * sstep(0.45, 0.5, big);
-    const lt = 1 - sstep(0.38, 0.42, big);
-    const sp = sstep(0.66, 0.7, small) * 0.7;
-    const r = c[0] * (1 - kh) + palette[1][0] * kh;
-    const g = c[1] * (1 - kh) + palette[1][1] * kh;
-    const b = c[2] * (1 - kh) + palette[1][2] * kh;
-    let R = r * (1 - br) + palette[2][0] * br;
-    let G = g * (1 - br) + palette[2][1] * br;
-    let B = b * (1 - br) + palette[2][2] * br;
+    let R = c[0] * (1 - kh) + palette[1][0] * kh;
+    let G = c[1] * (1 - kh) + palette[1][1] * kh;
+    let B = c[2] * (1 - kh) + palette[1][2] * kh;
+    R = R * (1 - br) + palette[2][0] * br;
+    G = G * (1 - br) + palette[2][1] * br;
+    B = B * (1 - br) + palette[2][2] * br;
     R = R * (1 - lt) + palette[3][0] * lt;
     G = G * (1 - lt) + palette[3][1] * lt;
     B = B * (1 - lt) + palette[3][2] * lt;
+    // three-tone speckle (≈ 1.5 mm dots): dark and mid flecks printed over every blotch, light flecks on the dark
+    // ones — kept faint so at arm's length it reads as the print's grain, not as dirt
+    const fleck = vnoise(u * 140, v * 140, 140, 303);
+    const fleck2 = vnoise(u * 140 + 0.5, v * 140 + 0.5, 140, 304);
+    const sp = sstep(0.87, 0.895, fleck) * 0.32;
+    const sp2 = sstep(0.8, 0.83, fleck2) * 0.35;
+    const spLight = sstep(0.13, 0.155, fleck) * Math.min(1, br + kh) * 0.35;
     R = R * (1 - sp) + palette[4][0] * sp;
     G = G * (1 - sp) + palette[4][1] * sp;
     B = B * (1 - sp) + palette[4][2] * sp;
-    // fabric weave & dirt
-    const weave = 0.5 + 0.25 * Math.sin(u * Math.PI * 2 * 220) + 0.25 * Math.sin(v * Math.PI * 2 * 220);
+    R = R * (1 - sp2) + palette[5][0] * sp2;
+    G = G * (1 - sp2) + palette[5][1] * sp2;
+    B = B * (1 - sp2) + palette[5][2] * sp2;
+    R = R * (1 - spLight) + palette[3][0] * spLight;
+    G = G * (1 - spLight) + palette[3][1] * spLight;
+    B = B * (1 - spLight) + palette[3][2] * spLight;
+    // twill weave: diagonal ribs ≈ 0.7 mm apart (yarns visible as a fine diagonal in the albedo too) & dirt
+    const twill = 0.5 + 0.5 * Math.sin(((x + y) / S) * 314 * Math.PI * 2); // 314 ribs per tile → 0.7 mm pitch
+    const yarn = 0.5 + 0.25 * Math.sin(u * Math.PI * 2 * 300) + 0.25 * Math.sin(v * Math.PI * 2 * 300);
     const dirt = fbm(u, v, 5, 3, 404);
-    const l = 0.9 + 0.12 * weave + (dirt - 0.5) * 0.25;
+    const l = 0.86 + 0.06 * twill + 0.04 * yarn + (dirt - 0.5) * 0.2;
     rgb[0] = R * l;
     rgb[1] = G * l;
     rgb[2] = B * l;
-    // folds (soft, anisotropic) + weave
+    // folds (soft, anisotropic) + twill
     const fold = fbm(u * 1.0, v * 1.0, 6, 3, 505, 0.5);
     const fold2 = fbm(u, v, 14, 2, 606, 0.5);
-    height[y * S + x] = fold * 0.7 + fold2 * 0.2 + weave * 0.1;
+    height[y * S + x] = fold * 0.6 + fold2 * 0.15 + twill * 0.2 + yarn * 0.05;
   });
   return { map: toTexture(albedo, { srgb: true, anisotropy: aniso }), normalMap: toTexture(heightToNormal(height, S, S, 6), { srgb: false, anisotropy: aniso }), size: 0.22 };
 }
@@ -432,7 +460,7 @@ export function makeSkin(aniso, { circumference = 0.23, length = 0.12 } = {}) {
       // hairs lie along the arm toward the wrist (canvas +y = texture -v), fanning slightly around the arm
       const ang = Math.PI / 2 + (rnd() - 0.5) * 0.7 + Math.sin(u * Math.PI * 2) * 0.3;
       const curve = (rnd() - 0.5) * 0.7;
-      hairs.push({ x: u * W, y: (1 - v) * H, len, ang, curve, dark: 0.07 + rnd() * 0.12, w: 0.18 + rnd() * 0.1 });
+      hairs.push({ x: u * W, y: (1 - v) * H, len, ang, curve, dark: 0.14 + rnd() * 0.22, w: 0.18 + rnd() * 0.1 });
     }
   }
   // rasterise hairs into hairField (coverage 0..1)
@@ -485,18 +513,21 @@ export function makeSkin(aniso, { circumference = 0.23, length = 0.12 } = {}) {
     // flexor tendons: two soft longitudinal ridges converging to the wrist on the inner side
     const tendon = (uc) => Math.exp(-(((u - uc) / 0.028) ** 2)) * (1 - sstep(0.2, 0.55, v));
     const tendons = (tendon(0.71 + 0.04 * v) + tendon(0.8 - 0.03 * v)) * 0.6;
+    // extensor tendons on the back of the wrist (the hand is extended over the handguard, so they stand out):
+    // two ridges either side of the dorsal centre line, fading out a third of the way up the forearm
+    const extensor = (Math.exp(-(((u - 0.215) / 0.02) ** 2)) + 0.8 * Math.exp(-(((u - 0.29) / 0.018) ** 2))) * (1 - sstep(0.12, 0.5, v));
     // ulnar bone ridge near the wrist (u ≈ 0.5)
     const ulna = Math.exp(-(((u - 0.5) / 0.05) ** 2)) * (1 - sstep(0.05, 0.4, v)) * 0.5;
     const cuffShade = 1 - 0.22 * (1 - sstep(0.0, 0.09, v)) - 0.08 * Math.exp(-(((v - 0.03) / 0.03) ** 2));
 
     // --- albedo (sRGB) ---
-    // base ≈ (153, 99, 87): muted rose-tan measured off the MW2019 reference forearm (hue ≈ 12°, sat ≈ 0.43);
-    // the in-game sun lifts it about 15 %, so it is kept short of saturated peach; inner forearm a touch lighter/
-    // yellower, dorsal + elbow end ruddier
-    // muted rose-tan (hue ≈ 15°, saturation ≈ 0.4 like the MW2019 reference forearm)
-    let R = 0.58;
-    let G = 0.404;
-    let B = 0.345;
+    // muted rose-tan (hue ≈ 15°, saturation ≈ 0.4 like the MW2019 reference forearm), kept 15 % darker than a
+    // neutral read since the plaza sun lifts it; the blue channel sits closer to green than a peach tone would
+    // put it (R − B ≈ 47 in the map) so the sunlit render lands near the reference's R − B ≈ 65 rather than 90.
+    // Inner forearm a touch lighter / yellower, dorsal + elbow end ruddier.
+    let R = 0.548;
+    let G = 0.403;
+    let B = 0.384;
     const inner = 1 - dorsal;
     R += inner * 0.03 - dorsal * 0.01;
     G += inner * 0.03 - dorsal * 0.015;
@@ -504,8 +535,8 @@ export function makeSkin(aniso, { circumference = 0.23, length = 0.12 } = {}) {
     const elbowRed = sstep(0.55, 1.0, v) * 0.4 + dorsal * 0.25 + (red - 0.5) * 0.5;
     R += elbowRed * 0.025;
     G -= elbowRed * 0.03;
-    B -= elbowRed * 0.025;
-    let l = 0.88 + (mottle - 0.5) * 0.12 + (mottleFine - 0.5) * 0.06 + (pores - 0.5) * 0.04;
+    B -= elbowRed * 0.02;
+    let l = 0.755 + (mottle - 0.5) * 0.12 + (mottleFine - 0.5) * 0.06 + (pores - 0.5) * 0.04;
     l *= cuffShade;
     l -= freck * 0.1 + mole * 0.16;
     // veins: cooler and slightly darker (faint — they read mostly through the soft ridge in the normal map)
@@ -516,17 +547,17 @@ export function makeSkin(aniso, { circumference = 0.23, length = 0.12 } = {}) {
     const press = 1 - sstep(0.0, 0.08, v);
     R += press * 0.025;
     G -= press * 0.01;
-    // hair: soft mid-brown strokes (they read as a faint peppering at arm's length, not as dashes)
-    const hr = 0.3;
-    const hg = 0.2;
-    const hb = 0.14;
+    // hair: fine dark-brown strokes — a visible peppering on the back of the forearm at arm's length
+    const hr = 0.2;
+    const hg = 0.13;
+    const hb = 0.09;
     rgb[0] = R * l * (1 - hair) + hr * hair;
     rgb[1] = G * l * (1 - hair) + hg * hair;
     rgb[2] = B * l * (1 - hair) + hb * hair;
 
     // --- height & roughness ---
-    height[i] = 0.5 + (pores - 0.5) * 0.5 + (wrinkle - 0.5) * 0.08 + (mottleFine - 0.5) * 0.12 + veinCore * 0.18 + veinHalo * 0.06 + tendons * 0.35 + ulna * 0.3 - freck * 0.05 + hair * 0.03 - press * 0.15;
-    rough[i] = 0.64 + (pores - 0.5) * 0.18 + (mottle - 0.5) * 0.06 - veinCore * 0.04 - inner * 0.03 + hair * 0.1;
+    height[i] = 0.5 + (pores - 0.5) * 0.5 + (wrinkle - 0.5) * 0.08 + (mottleFine - 0.5) * 0.12 + veinCore * 0.22 + veinHalo * 0.08 + tendons * 0.45 + extensor * 0.4 + ulna * 0.3 - freck * 0.05 + hair * 0.08 - press * 0.15;
+    rough[i] = 0.66 + (pores - 0.5) * 0.18 + (mottle - 0.5) * 0.06 - veinCore * 0.04 - inner * 0.03 + hair * 0.1;
   });
   const roughCanvas = writeRGB(makeCanvas(W, H), (x, y, rgb) => {
     const r = Math.max(0.35, Math.min(0.85, rough[y * W + x]));
@@ -536,7 +567,7 @@ export function makeSkin(aniso, { circumference = 0.23, length = 0.12 } = {}) {
   });
   return {
     map: toTexture(albedo, { srgb: true, anisotropy: aniso }),
-    normalMap: toTexture(heightToNormal(height, W, H, 2.4), { srgb: false, anisotropy: aniso }),
+    normalMap: toTexture(heightToNormal(height, W, H, 3.0), { srgb: false, anisotropy: aniso }),
     roughnessMap: toTexture(roughCanvas, { srgb: false, anisotropy: aniso }),
     size: 1,
   };

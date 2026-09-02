@@ -18,11 +18,13 @@ const TAU = Math.PI * 2;
 // The glove mesh is cut at hand y = -0.018 (s = 0.018); the cuff tube starts inside it and only shows past the cut.
 const GLOVE_CUT = 0.018;
 const CUFF_START = 0.006;
-const CUFF_END = 0.046;
+// Short cuff like the reference: only ≈ 16 mm of nylon shows past the glove's cut edge before the bare wrist
+// (the first pass showed 28 mm, which read as a gauntlet ≈ 30 % of the hand's length on screen).
+const CUFF_END = 0.034;
 // The sleeve is rolled well below the elbow so the camo roll enters the hip view at the bottom-left corner like the
 // MW2019 reference (the virtual shoulder anchor keeps the forearm long on screen).
-const SKIN_END = 0.086;
-const ROLL_END = 0.128;
+const SKIN_END = 0.076;
+const ROLL_END = 0.118;
 const ARM_END = 0.58;
 
 /**
@@ -32,8 +34,8 @@ const ARM_END = 0.58;
 export const CUFF = {
   start: CUFF_START,
   end: CUFF_END,
-  meanRadius: 0.0295,
-  tab: { s: [0.022, 0.04], halfWidth: 0.02, corner: 0.003, height: 0.003, angle: 0.25 * TAU }, // 40 × 18 × 3 mm
+  meanRadius: 0.027,
+  tab: { s: [0.0205, 0.031], halfWidth: 0.014, corner: 0.0025, height: 0.0025, angle: 0.25 * TAU }, // 28 × 10.5 × 2.5 mm
   strapHeight: 0.0005,
   stripe: [0.93, 0.985], // grey piping (v) at the forearm end
 };
@@ -73,20 +75,22 @@ function radii(s, out) {
   if (s < CUFF_END) {
     // nylon wrist panel: hidden inside the glove's wrist (≈ 31 × 22 mm half-axes) up to the glove's cut edge,
     // then flaring slightly toward the forearm end like a tailored cuff
+    // (only a slight flare: the reference cuff hugs the wrist and ends without a collar)
     const t = sstep(GLOVE_CUT - 0.002, CUFF_END, s);
-    rx = lerp(0.0304, 0.0352, t);
-    rz = lerp(0.0212, 0.0272, t);
+    rx = lerp(0.0304, 0.0324, t);
+    rz = lerp(0.0212, 0.0242, t);
   } else if (s < SKIN_END) {
     // bare forearm: emerges from inside the cuff, thickens toward the belly of the forearm
     const t = sstep(CUFF_END, SKIN_END + 0.03, s);
-    rx = lerp(0.0316, 0.0412, t);
-    rz = lerp(0.025, 0.0346, t);
+    rx = lerp(0.0308, 0.0412, t);
+    rz = lerp(0.0232, 0.0346, t);
   } else if (s < ROLL_END) {
-    // rolled sleeve: a ledge where the rolled fabric ends over the skin, a fat outer fold, a crease, then a smaller
-    // inner fold before the sleeve proper
+    // rolled sleeve: a ledge where the rolled fabric ends over the skin, then a fat outer roll with one slighter
+    // ring behind it and a crease between them, before the sleeve proper (displace() below wobbles the rings round
+    // the arm so they do not read as machined tubes; three even rings read as corduroy on the 50 mm in view)
     const t = (s - SKIN_END) / (ROLL_END - SKIN_END);
     const ledge = 0.0045 * sstep(0, 0.045, t);
-    const folds = 0.011 * gauss(t - 0.4, 0.32) + 0.0048 * gauss(t - 0.86, 0.13) - 0.0022 * gauss(t - 0.67, 0.07);
+    const folds = 0.0105 * gauss(t - 0.27, 0.16) + 0.0052 * gauss(t - 0.64, 0.13) - 0.0014 * gauss(t - 0.455, 0.05);
     rx = 0.0384 + 0.004 * t + ledge + folds;
     rz = 0.0318 + 0.004 * t + ledge + folds;
   } else {
@@ -113,9 +117,12 @@ function displace(s, ang) {
   }
   if (s < SKIN_END) return 0;
   if (s < ROLL_END - 0.004) {
-    // irregular roll
+    // irregular roll edge, plus the rings' wobble: the inner roll is pinched / swollen round the arm (a hand-rolled
+    // sleeve is never a set of even rings) and the fat outer roll sags a little on one side
     const t = sstep(SKIN_END, SKIN_END + 0.004, s);
-    return t * (0.0012 * Math.sin(ang * 5 + s * 90) + 0.0008 * Math.sin(ang * 9 - 1.3 + s * 40));
+    const u = (s - SKIN_END) / (ROLL_END - SKIN_END);
+    const wobble = 0.0024 * Math.sin(ang * 2 + 0.7) * gauss(u - 0.64, 0.14) + 0.0012 * Math.sin(ang + 1.0) * gauss(u - 0.27, 0.16);
+    return t * (0.0012 * Math.sin(ang * 5 + s * 90) + 0.0008 * Math.sin(ang * 9 - 1.3 + s * 40) + wobble);
   }
   const f = sstep(ROLL_END - 0.004, ROLL_END + 0.012, s);
   // long diagonal folds + finer crumples, damped near the elbow crease
@@ -146,11 +153,11 @@ export function buildArmGeometry(def) {
   const rows = [];
   const add = (g, list) => list.forEach((s) => rows.push({ s, g }));
   // (dense rows across the tab's edges so its 3 mm step and rounded corners are resolved)
-  add(ARM_GROUPS.cuff, [CUFF_START, 0.012, 0.016, 0.0185, 0.02, 0.0212, 0.0222, 0.0232, 0.025, 0.028, 0.031, 0.034, 0.037, 0.0388, 0.0398, 0.0408, 0.042, 0.044, CUFF_END]);
-  add(ARM_GROUPS.skin, [...range(CUFF_END, SKIN_END, (SKIN_END - CUFF_END) / 10), SKIN_END]);
-  add(ARM_GROUPS.sleeve, [SKIN_END, SKIN_END + 0.0007, SKIN_END + 0.002, ...range(SKIN_END + 0.005, ROLL_END, 0.003), ROLL_END, ...range(ROLL_END + 0.008, 0.3, 0.008), ...range(0.3, ARM_END + 1e-6, 0.02)]);
+  add(ARM_GROUPS.cuff, [CUFF_START, 0.012, 0.016, 0.0185, 0.0195, 0.0205, 0.0215, 0.0225, 0.024, 0.026, 0.028, 0.0295, 0.0305, 0.0315, 0.0325, CUFF_END]);
+  add(ARM_GROUPS.skin, [...range(CUFF_END, SKIN_END, (SKIN_END - CUFF_END) / 7), SKIN_END]);
+  add(ARM_GROUPS.sleeve, [SKIN_END, SKIN_END + 0.0007, SKIN_END + 0.002, ...range(SKIN_END + 0.004, ROLL_END, 0.003), ROLL_END, ...range(ROLL_END + 0.01, 0.3, 0.016), ...range(0.3, ARM_END + 1e-6, 0.07)]);
 
-  const SEG = 64;
+  const SEG = 44;
   const cols = SEG + 1;
   const n = rows.length * cols;
   const pos = new Float32Array(n * 3);

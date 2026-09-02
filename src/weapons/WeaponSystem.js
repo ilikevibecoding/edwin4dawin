@@ -18,7 +18,9 @@ import { upgradeGunMaterials } from './materials.js';
 const HIP_POSE = { pos: new THREE.Vector3(0.07, -0.082, -0.16), rot: new THREE.Euler(0.055, 0.25, -0.09) };
 const SPRINT_POSE = { pos: new THREE.Vector3(0.055, -0.13, -0.22), rot: new THREE.Euler(0.2, 0.6, -0.25) };
 const LOWERED_POSE = { pos: new THREE.Vector3(0.15, -0.5, -0.28), rot: new THREE.Euler(-0.75, 0.15, 0) };
-const RELOAD_TILT = { pos: new THREE.Vector3(0.02, -0.035, 0.02), rot: new THREE.Euler(-0.12, 0.12, -0.42) };
+// With the gun held this close the mag well sits below the frame, so the reload lifts and pushes the rifle away
+// while rolling it left, keeping the mag change and the support hand in view.
+const RELOAD_TILT = { pos: new THREE.Vector3(0.0, 0.038, -0.08), rot: new THREE.Euler(-0.06, 0.16, -0.48) };
 const ADS_EYE_RELIEF = 0.2; // tuned with weaponFov 52 so the holo window fills ≈ 20 % of frame height like the reference
 const ADS_ZOOM = 1.32;
 

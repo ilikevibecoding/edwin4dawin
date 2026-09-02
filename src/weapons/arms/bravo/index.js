@@ -54,18 +54,19 @@ export const FIT = {
     pole: [0.75, -1, 0.3],
   },
   left: {
-    // overhand grip from the left (MW2019 reference framing): the wrist is extended so the back of the hand faces
-    // the camera (dorsum up-left-back), the palm faces the top-left corner of the handguard from above-left, the
-    // knuckle row runs diagonally over the top-left rail edge (index knuckle on the top rail, pinky knuckle off
-    // the left edge) so the fingers wrap over the top and down the right side of the quad rail, the thumb runs up
-    // the left face and hooks forward into the top-left rail groove; the forearm heads down-left toward the
-    // shoulder anchor. Fitted numerically against the handguard SDF (preview.js ?fitPalm=1&fitFingers=1) with the
-    // hand-stop palm socket at (-0.026, -0.011, z) — the offset is socket-relative, so the hand rides along when
-    // the hand stop moves along the rail (the quad rail's cross-section is constant along the handguard).
+    // Overhand bar grip from the left, swept forward like the MW2019 reference: the palm sits on the top-left
+    // corner of the quad rail, the fingers point up-forward (≈ 32° off the rail's cross-section) so the knuckle row
+    // runs diagonally along the top-left edge and the index / middle finger backs cross the top rail into the
+    // camera's view before hooking down the far side; the back of the hand faces up-left (seen obliquely from
+    // behind: knuckle row on the top silhouette), the thumb rises on the near side and hooks over the top-left
+    // corner behind the index finger; the forearm heads down-left toward the shoulder anchor. Fitted numerically
+    // against the handguard SDF (preview.js ?lgrip=50,32,22&fitPalm=1&fitFingers=1) with the hand-stop palm socket
+    // at (-0.026, -0.011, z) — the offset is socket-relative, so the hand rides along when the hand stop moves
+    // along the rail (the quad rail's cross-section is constant along the handguard).
     palm: [-0.002, 0.05, -0.003],
-    offset: [-0.024, 0.048, 0.004],
-    y: [0.58, 0.72, -0.38],
-    z: [-0.51, 0.68, 0.51],
+    offset: [-0.019, 0.028, -0.016],
+    y: [0.362, 0.792, -0.491],
+    z: [-0.839, 0.506, 0.199],
     pole: [-1, -0.35, 0.3],
     // Reload poses: the rig moves the palm target but keeps the handguard orientation, so each pose carries its
     // own hand orientation (gun space) and palm-centre offset from the target.

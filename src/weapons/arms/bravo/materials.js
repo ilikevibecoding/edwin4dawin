@@ -11,7 +11,7 @@ export function makeGloveMaterial(knit, leather) {
   const mat = new THREE.MeshStandardMaterial({
     map: knit.map,
     normalMap: knit.normalMap,
-    normalScale: new THREE.Vector2(0.75, 0.75),
+    normalScale: new THREE.Vector2(1.0, 1.0),
     roughness: 1,
     metalness: 0,
     envMapIntensity: 1,
@@ -54,7 +54,7 @@ export function makeGloveMaterial(knit, leather) {
           'leaCol.rgb *= 1.0 + 0.3 * panel;',
           'vec4 sampledDiffuseColor = mix( knitCol, leaCol, leather );',
           // finger-back padding under the knit: the fabric reads a touch darker where it is stretched over the foam
-          'sampledDiffuseColor.rgb = mix( sampledDiffuseColor.rgb, knitCol.rgb * 0.72, vDetail.x * 0.7 );',
+          'sampledDiffuseColor.rgb = mix( sampledDiffuseColor.rgb, knitCol.rgb * 0.8, vDetail.x * 0.35 );',
           // stitched seams where the knit back meets the leather (finger sides, fingertip caps, palm edges):
           // a dashed thread line at the mask's half-way crossing — not along the wrist panel, which has its own
           // piping + top-stitch
@@ -77,7 +77,9 @@ export function makeGloveMaterial(knit, leather) {
       .replace(
         '#include <roughnessmap_fragment>',
         [
-          'float leaRough = mix( 0.58 + 0.14 * leaVar, 0.85, panel );',
+          // matte synthetic leather (the reference's black panels show no highlights in overcast light; in the plaza
+          // sun a glossier value turned the thumb into a plastic sausage)
+          'float leaRough = mix( 0.72 + 0.12 * leaVar, 0.85, panel );',
           'float roughnessFactor = mix( mix( 0.93, leaRough, leather ), 0.8, piping );',
           'roughnessFactor = mix( roughnessFactor, 0.85, vDetail.x );',
           'roughnessFactor = mix( roughnessFactor, 0.9, seam );',
@@ -85,7 +87,7 @@ export function makeGloveMaterial(knit, leather) {
       )
       .replace('#include <normal_fragment_maps>', normalChunk);
   };
-  mat.customProgramCacheKey = () => 'bravo_glove_v10';
+  mat.customProgramCacheKey = () => 'bravo_glove_v12';
   return mat;
 }
 
@@ -115,8 +117,8 @@ export function makeSkinMaterial(skin) {
     roughnessMap: skin.roughnessMap,
     roughness: 1,
     metalness: 0,
-    specularIntensity: 0.4,
-    sheen: 0.1,
+    specularIntensity: 0.3,
+    sheen: 0.05,
     sheenRoughness: 0.7,
     sheenColor: new THREE.Color(0.8, 0.55, 0.5),
     envMapIntensity: 0.75,

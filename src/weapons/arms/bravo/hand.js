@@ -72,7 +72,7 @@ export function defineHand() {
       [-0.34, 0.92, -0.2],
     ],
     len: [0.05, 0.033, 0.029],
-    r: [0.0135, 0.0118, 0.0105, 0.0088],
+    r: [0.0122, 0.011, 0.01, 0.0086],
     dorsal: thumbDorsal,
   };
   {
@@ -132,20 +132,23 @@ export function makeHandField(def) {
     // slab, tapered toward the wrist
     const t = Math.max(0, Math.min(1, (y - 0.005) / 0.09));
     const s = 0.8 + 0.2 * t;
-    // ~24 mm thick slab at the edges, palmar face at z ≈ -0.017 (the fit / fitter rely on that face)
-    let d = sdRoundBox(x / s, y, z, 0.001, 0.052, -0.005, 0.033, 0.041, 0.0025, 0.0095) * s;
-    // transverse metacarpal arch: the back of the hand is a smooth, gently convex surface (≈ 5 mm higher along
-    // the middle than at the edges) tapering into the wrist — like a knit-covered mitten, not a flat plate
-    d = smin(d, sdEllipsoid(x, y, z, 0.0, 0.058, 0.0, 0.045, 0.05, 0.0125), 0.012);
-    d = smin(d, sdEllipsoid(x, y, z, -0.026, 0.038, -0.011, 0.021, 0.034, 0.0125), 0.012);
+    // ~20 mm thick slab at the edges (15 % thinner than the first pass — the reference hand is flat across the
+    // metacarpals), palmar face at z ≈ -0.017 (the fit / fitter rely on that face)
+    let d = sdRoundBox(x / s, y, z, 0.001, 0.052, -0.0065, 0.033, 0.041, 0.0025, 0.008) * s;
+    // transverse metacarpal arch: the back of the hand is a gently convex surface (≈ 4 mm higher along the middle
+    // than at the edges) that falls away before the knuckle row so the four MCP heads stand out from it
+    d = smin(d, sdEllipsoid(x, y, z, 0.0, 0.052, 0.0, 0.044, 0.04, 0.011), 0.01);
+    d = smin(d, sdEllipsoid(x, y, z, -0.026, 0.038, -0.011, 0.02, 0.034, 0.0115), 0.011);
     // hypothenar (pinky-side) bulge, kept within the slab's width so the ulnar edge stays slim from the back
-    d = smin(d, sdEllipsoid(x, y, z, 0.025, 0.032, -0.0095, 0.013, 0.036, 0.0105), 0.012);
+    d = smin(d, sdEllipsoid(x, y, z, 0.025, 0.032, -0.0095, 0.012, 0.036, 0.0095), 0.011);
     // wrist (elliptical: wider than thick)
     d = smin(d, sdCone(x, y, z * 1.42, 0, 0.014, 0, 0, -0.04, 0, 0.0315, 0.031), 0.016);
-    // MCP knuckles on the back: four gentle bumps blended broadly into the arch
+    // MCP knuckle row: four metacarpal heads (≈ 10 mm radius, centred 2 mm dorsal of the finger axes) standing
+    // ≈ 4 mm proud of the slab's back and ≈ 2 mm above the finger backs, blended just enough to read as a row of
+    // knuckles under the knit rather than as separate balls
     for (let i = 0; i < 4; i++) {
       const j = fj[i][0];
-      d = smin(d, sdSphere(x, y, z, j[0], j[1] - 0.002, j[2] + 0.0035, F[i].r[0] * (i === 3 ? 1.06 : 1.1)), 0.011);
+      d = smin(d, sdSphere(x, y, z, j[0], j[1] - 0.001, j[2] + 0.002, F[i].r[0] * (i === 3 ? 0.98 : 1.02)), 0.0055);
     }
     return d;
   };
@@ -196,7 +199,7 @@ export function makeHandField(def) {
     df = Math.min(df, fingerDist(2, x, y, z));
     df = Math.min(df, fingerDist(3, x, y, z));
     let d = smin(palmDist(x, y, z), df, 0.0045);
-    d = smin(d, thumbDist(x, y, z), 0.013);
+    d = smin(d, thumbDist(x, y, z), 0.009);
     d = smin(d, padDist(x, y, z), 0.0025);
     // cut below the wrist (hidden inside the cuff)
     return Math.max(d, -(y + 0.018));
@@ -334,7 +337,7 @@ function smoothstep(a, b, x) {
  * aMask = (leather, pipingEnvelope, ao, wristPanel), aDetail = (knucklePad, seamSuppress, signed distance to the
  * wrist-panel seam line in metres).
  */
-export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
+export function buildHandGeometry(def, { cell = 0.0033 } = {}) {
   const field = makeHandField(def);
   const min = [-0.105, -0.02, -0.058];
   const max = [0.065, 0.2, 0.036];
@@ -398,12 +401,16 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
       uv[i * 2] = ang * R;
       uv[i * 2 + 1] = bq.s;
       circ[i] = 2 * Math.PI * R;
-      // leather only on the palmar face of the digits (the knit wraps up the sides like the reference glove);
-      // fingertips (distal) → leather cap. The thumb keeps knit all round except its pad.
+      // Two-material split like the reference glove: knit over the metacarpals and the backs of the proximal
+      // phalanges, black synthetic on the palmar faces (reaching up the finger sides) and wrapping the fingers
+      // completely from the PIP joint out — so the curled distal segments read as dark leather against the knit
+      // backs where they hook over the rail. The thumb keeps its knit back down to the IP joint (leather pad, and
+      // all round only over the distal segment): a fully black thumb hooking over the rail in front of the knit
+      // back dominated the whole hip frame, whereas the reference shows no black above the rail at all.
       const palmness = -cz;
-      leather = c.thumb ? smoothstep(0.5, 0.9, palmness) : smoothstep(0.3, 0.75, palmness);
-      const tipStart = c.arc[3] - 0.009; // small leather cap over the fingertip only
-      leather = Math.max(leather, smoothstep(tipStart - 0.003, tipStart + 0.003, bq.s));
+      leather = c.thumb ? smoothstep(0.35, 0.8, palmness) : smoothstep(0.12, 0.6, palmness);
+      const wrapStart = c.thumb ? c.arc[2] - 0.003 : c.arc[1] + 0.002;
+      leather = Math.max(leather, smoothstep(wrapStart - 0.0025, wrapStart + 0.0025, bq.s));
       // palm-side creases at the joints; softer stretch creases across the knit on the back of the joints
       const pf = smoothstep(0.1, 0.6, palmness);
       const df = smoothstep(0.1, 0.6, cz) * 0.45;
@@ -442,7 +449,7 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
     let dCuff = 0;
     {
       const nz = normals[i * 3 + 2];
-      const cuffLine = 0.021 + 0.15 * x;
+      const cuffLine = 0.012 + 0.15 * x;
       dCuff = y - cuffLine;
       panel = smoothstep(cuffLine + 0.002, cuffLine - 0.002, y);
       const onBack = smoothstep(-0.35, 0.1, nz);

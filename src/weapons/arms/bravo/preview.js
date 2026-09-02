@@ -85,18 +85,24 @@ if (rig.parts.carryHandle) rig.parts.carryHandle.visible = false;
   handStop.group.visible = params.get('handstop') !== '0';
 }
 
+// View-model camera FOV (Settings.weaponFov = 52; ADS narrows it by 35 % of the 1.32 zoom → ≈ 46.8°)
 const view = params.get('view') || 'hip';
-if (view === 'ads') rig.swayPivot.position.set(0, -0.092, -0.155);
-else if (view === 'sprint') {
-  rig.swayPivot.position.set(0.07, -0.15, -0.3);
+camera.fov = view === 'ads' ? 52 / (1 + 0.32 * 0.35) : 52;
+camera.updateProjectionMatrix();
+if (view === 'ads') {
+  // WeaponSystem: reticle centre on the camera axis at ADS_EYE_RELIEF = 0.2 m
+  const aim = rig.sockets.sightAim?.position || new THREE.Vector3(0, 0.09, -0.05);
+  rig.swayPivot.position.set(-aim.x, -aim.y, -0.2 - aim.z);
+} else if (view === 'sprint') {
+  rig.swayPivot.position.set(0.055, -0.13, -0.22);
   rig.swayPivot.rotation.set(0.2, 0.6, -0.25);
 } else if (view === 'reload') {
   rig.swayPivot.position.set(0.15, -0.15, -0.32);
   rig.swayPivot.rotation.set(-0.12, 0.12, -0.42);
 } else {
-  // WeaponSystem HIP_POSE (gun close to the lens, yawed ~14° left like the MW2019 reference framing)
-  rig.swayPivot.position.set(0.1, -0.092, -0.23);
-  rig.swayPivot.rotation.set(0.055, 0.25, -0.055);
+  // WeaponSystem HIP_POSE (gun held close, yawed ~14° left like the MW2019 reference framing)
+  rig.swayPivot.position.set(0.07, -0.082, -0.16);
+  rig.swayPivot.rotation.set(0.055, 0.25, -0.09);
 }
 if (params.has('pivot')) rig.swayPivot.position.fromArray(vec('pivot'));
 if (params.has('pivotRot')) rig.swayPivot.rotation.fromArray(vec('pivotRot'));
@@ -221,6 +227,9 @@ async function fitLeftFingers() {
     if (z < stopZ + 0.027 && z > stopZ - 0.027) d = Math.min(d, sdBox(x, y, 0, -0.0248, 0.011, 0.0142));
     return d;
   };
+  // ?checkFit=1 — no search: report the clearances of the pose in poses.js (and of the fit in index.js) as is
+  const checkOnly = params.get('checkFit') === '1';
+  const names = ['index', 'middle', 'ring', 'pinky'];
   const raw = {
     index: [0, 0, 0, 0],
     middle: [0, 0, 0, 0],
@@ -228,9 +237,13 @@ async function fitLeftFingers() {
     pinky: [0, 0, 0, 0],
     thumb: Array.from(POSES.gripLeft.slice(16)),
   };
+  if (checkOnly) {
+    const src = hand.poseOverride || POSES.gripLeft; // ?poseJson override or the pose from poses.js
+    names.forEach((n, i) => (raw[n] = Array.from(src.slice(i * 4, i * 4 + 4))));
+    raw.thumb = Array.from(src.slice(16));
+  }
   const spread = params.has('spread') ? vec('spread') : [0, 0, 0, 0];
-  const names = ['index', 'middle', 'ring', 'pinky'];
-  names.forEach((n, i) => (raw[n][3] = spread[i]));
+  if (!checkOnly) names.forEach((n, i) => (raw[n][3] = spread[i]));
   scene.updateMatrixWorld(true);
   inv.copy(rig.gunRoot.matrixWorld).invert();
   const apply = () => {
@@ -317,7 +330,7 @@ async function fitLeftFingers() {
     }
     return cost;
   };
-  for (let f = 0; f < 4; f++) {
+  for (let f = 0; f < 4 && !checkOnly; f++) {
     const name = names[f];
     const ids = BONES[name];
     let best = { cost: Infinity, angles: [0, 0, 0] };
@@ -346,7 +359,7 @@ async function fitLeftFingers() {
   // x = tline[0], y = tline[1] (gun space, parallel to the barrel — i.e. along the left side rail) pointing forward,
   // without penetrating the handguard.
   // ?tdir=x,y,z (gun space) instead fits the two distal segments to a direction (e.g. across the top-left rail).
-  if (params.has('tline') || params.has('tdir')) {
+  if ((params.has('tline') || params.has('tdir')) && !checkOnly) {
     const [lx, ly] = vec('tline') || [0, 0];
     const tdir = params.has('tdir') ? new THREE.Vector3().fromArray(vec('tdir')).normalize() : null;
     const t = BONES.thumb;
@@ -421,6 +434,19 @@ async function fitLeftFingers() {
       const w = hand.group.localToWorld(new THREE.Vector3().fromArray(v)).applyMatrix4(inv);
       palm[k] = mm(sdf(w.x, w.y, w.z));
     }
+    // finger phalanges: smallest clearance along each capsule (negative = inside the handguard / hand stop)
+    const fingers = {};
+    for (let f = 0; f < 4; f++) {
+      const segs = [];
+      for (let joint = 0; joint < 3; joint++) {
+        const a = jointPos(hand.bones[BONES[names[f]][joint]]);
+        const b = boneEnd(hand.bones[BONES[names[f]][joint]], def.fingers[f].len[joint]);
+        let g = Infinity;
+        for (let s = 0; s <= 1.0001; s += 0.25) g = Math.min(g, sdf(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, a.z + (b.z - a.z) * s) - (def.fingers[f].r[joint] + (def.fingers[f].r[joint + 1] - def.fingers[f].r[joint]) * s));
+        segs.push(mm(g));
+      }
+      fingers[names[f]] = segs;
+    }
     // thumb segments: smallest clearance along each capsule (negative = inside the handguard / hand stop)
     const thumb = {};
     ['meta', 'prox', 'dist'].forEach((k, joint) => {
@@ -430,7 +456,7 @@ async function fitLeftFingers() {
       for (let s = 0; s <= 1.0001; s += 0.25) g = Math.min(g, sdf(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, a.z + (b.z - a.z) * s) - (def.thumb.r[joint] + (def.thumb.r[joint + 1] - def.thumb.r[joint]) * s));
       thumb[k] = mm(g);
     });
-    report.clearance = { knuckles, palm, thumb };
+    report.clearance = { knuckles, palm, fingers, thumb };
   }
   console.log(`[fit] gripLeft ${JSON.stringify(raw)}`);
   console.log(`[fit] joints ${JSON.stringify(report)}`);
@@ -461,7 +487,7 @@ if (params.has('cam')) {
   viewCam.updateMatrixWorld(true);
 }
 
-if (params.get('fitFingers') === '1') await fitLeftFingers();
+if (params.get('fitFingers') === '1' || params.get('checkFit') === '1') await fitLeftFingers();
 
 // settle springs & blends, then render
 for (let i = 0; i < 90; i++) {
