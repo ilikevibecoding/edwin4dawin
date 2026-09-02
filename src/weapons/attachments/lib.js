@@ -239,10 +239,15 @@ export function scaleUV(g, s) {
 /**
  * Bake "edge wear" into a colour attribute: vertices whose normal is not axis-aligned (bevels, fillets)
  * get a lighter tint so worn anodising catches the light. Returns the geometry.
+ *
+ * This normal heuristic is only a placeholder: it also fires on every curved surface (cylinders, the holo's
+ * arched hood). The load-time bake (aoBake.js) rewrites the tint from real geometry — per-triangle distance to
+ * the nearest sharp convex edge, gated by exposure (AO) — using the per-part `amount` stored in `aGunWearAmt`.
  */
 export function bakeEdgeWear(geo, amount = 0.45, lo = 0.05, hi = 0.3) {
   const n = geo.attributes.normal;
   const col = new Float32Array(n.count * 3);
+  const amt = new Float32Array(n.count).fill(amount);
   for (let i = 0; i < n.count; i++) {
     const edge = 1 - Math.max(Math.abs(n.getX(i)), Math.abs(n.getY(i)), Math.abs(n.getZ(i)));
     const c = 1 + amount * THREE.MathUtils.smoothstep(edge, lo, hi);
@@ -251,6 +256,7 @@ export function bakeEdgeWear(geo, amount = 0.45, lo = 0.05, hi = 0.3) {
     col[i * 3 + 2] = c;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aGunWearAmt', new THREE.BufferAttribute(amt, 1));
   return geo;
 }
 
@@ -368,14 +374,20 @@ export class PartsBuilder {
       const prepared = geos.map((g) => {
         const ng = g.index ? g.toNonIndexed() : g;
         for (const key of Object.keys(ng.attributes)) {
-          if (key !== 'position' && key !== 'normal' && key !== 'uv' && key !== 'color') ng.deleteAttribute(key);
+          if (key !== 'position' && key !== 'normal' && key !== 'uv' && key !== 'color' && key !== 'aGunWearAmt') ng.deleteAttribute(key);
         }
         if (mat.vertexColors) {
           if (!ng.attributes.color) {
             const c = new Float32Array(ng.attributes.position.count * 3).fill(1);
             ng.setAttribute('color', new THREE.BufferAttribute(c, 3));
           }
-        } else if (ng.attributes.color) ng.deleteAttribute('color');
+          if (!ng.attributes.aGunWearAmt) {
+            ng.setAttribute('aGunWearAmt', new THREE.BufferAttribute(new Float32Array(ng.attributes.position.count), 1));
+          }
+        } else {
+          if (ng.attributes.color) ng.deleteAttribute('color');
+          if (ng.attributes.aGunWearAmt) ng.deleteAttribute('aGunWearAmt');
+        }
         if (!ng.attributes.uv) {
           ng.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(ng.attributes.position.count * 2), 2));
         }
@@ -415,75 +427,131 @@ export function grainNormal(game, repeat = 6) {
 }
 
 /**
- * Matte hard-anodised aluminium (holo housing, sight bodies, PEQ). Dark, slightly metallic, fine grain,
- * roughness variation and edge wear via the shared detail shader.
+ * Matte hard-anodised aluminium (holo housing, sight bodies, PEQ): near-black, low metalness (a dielectric
+ * oxide layer over the metal), fine grain, mottled roughness, worn to a lighter grey along bevels. The bevel
+ * vertex tint from bakeEdgeWear() is turned into real wear by the shared surface hook.
  */
-export function anodisedMaterial(game, { color = 0x37383a, roughness = 0.5, metalness = 0.3, name = 'anodised', wear = 0.55, grain = 0.45, repeat = 6 } = {}) {
+export function anodisedMaterial(game, { color = 0x2b2b2a, roughness = 0.65, metalness = 0.1, name = 'anodised', wear = 0.75, grain = 0.35, repeat = 6 } = {}) {
   const m = new THREE.MeshStandardMaterial({
     color,
     roughness,
     metalness,
     normalMap: grainNormal(game, repeat),
     normalScale: new THREE.Vector2(grain, grain),
-    envMapIntensity: 1.0,
+    envMapIntensity: 0.28,
     vertexColors: true,
   });
   m.name = name;
-  applyGunDetail(m, game, { detailRepeat: 14, detailNormalScale: 0.25, detailRoughness: 0.55, edgeWear: wear, macroRepeat: 2.3 });
+  applyGunDetail(m, game, {
+    objectUv: true,
+    grainRepeat: 14,
+    grainScale: 0.3,
+    macroRepeat: 1.0,
+    surfRepeat: 1.0,
+    roughVar: 0.55,
+    toneVar: 0.16,
+    edgeWear: wear,
+    cavity: 0.7,
+    aoDirect: 0.5,
+    scratch: 0.35,
+    wearColor: [0.13, 0.13, 0.135],
+    wearRough: 0.34,
+    wearMetal: 0.7,
+  });
   return m;
 }
 
 /** Matte textured polymer (grip shells, buttons). */
-export function polymerMaterial(game, { color = 0x2b2b29, roughness = 0.82, name = 'polymer', repeat = 5, grain = 0.7 } = {}) {
+export function polymerMaterial(game, { color = 0x232322, roughness = 0.82, name = 'polymer', repeat = 5, grain = 0.6 } = {}) {
   const m = new THREE.MeshStandardMaterial({
     color,
     roughness,
     metalness: 0.0,
     normalMap: grainNormal(game, repeat),
     normalScale: new THREE.Vector2(grain, grain),
-    envMapIntensity: 0.9,
+    envMapIntensity: 0.6,
     vertexColors: true,
   });
   m.name = name;
-  applyGunDetail(m, game, { detailRepeat: 9, detailNormalScale: 0.35, detailRoughness: 0.4, edgeWear: 0.18, macroRepeat: 1.7 });
+  applyGunDetail(m, game, {
+    objectUv: true,
+    grainRepeat: 20,
+    grainScale: 0.45,
+    macroRepeat: 1.0,
+    surfRepeat: 1.0,
+    roughVar: 0.35,
+    toneVar: 0.1,
+    edgeWear: 0.3,
+    cavity: 0.6,
+    aoDirect: 0.5,
+    scratch: 0.3,
+    wearColor: [0.09, 0.09, 0.088], // polished polymer: lighter, glossier, never metallic
+    wearRough: 0.5,
+    wearMetal: 0.0,
+  });
   return m;
 }
 
-/** Bare steel / stainless (bolts, screws, pins). */
-export function steelMaterial(game, { color = 0x8d9096, roughness = 0.42, metalness = 0.95, name = 'steel' } = {}) {
+/** Black-oxide steel hardware (bolts, screws, pins): dark with bright, tight highlights. */
+export function steelMaterial(game, { color = 0x555860, roughness = 0.4, metalness = 0.9, name = 'steel' } = {}) {
   const m = new THREE.MeshStandardMaterial({
     color,
     roughness,
     metalness,
     normalMap: grainNormal(game, 4),
-    normalScale: new THREE.Vector2(0.3, 0.3),
-    envMapIntensity: 1.0,
+    normalScale: new THREE.Vector2(0.25, 0.25),
+    envMapIntensity: 0.8,
     vertexColors: true,
   });
   m.name = name;
-  applyGunDetail(m, game, { detailRepeat: 10, detailNormalScale: 0.2, detailRoughness: 0.5, edgeWear: 0.0, macroRepeat: 2.0 });
+  applyGunDetail(m, game, {
+    objectUv: true,
+    grainRepeat: 14,
+    grainScale: 0.2,
+    macroRepeat: 1.0,
+    surfRepeat: 1.0,
+    roughVar: 0.5,
+    toneVar: 0.08,
+    edgeWear: 0.5,
+    cavity: 0.5,
+    aoDirect: 0.5,
+    scratch: 0.4,
+    wearColor: [0.5, 0.5, 0.52],
+    wearRough: 0.3,
+    wearMetal: 1.0,
+  });
   return m;
 }
 
 /** Soft black rubber (button caps, pressure pads). */
-export function rubberMaterial(game, { color = 0x1c1c1d, name = 'rubber' } = {}) {
+export function rubberMaterial(game, { color = 0x161617, name = 'rubber' } = {}) {
   const m = new THREE.MeshStandardMaterial({
     color,
-    roughness: 0.92,
+    roughness: 0.9,
     metalness: 0.0,
     normalMap: grainNormal(game, 3),
-    normalScale: new THREE.Vector2(0.5, 0.5),
-    envMapIntensity: 0.6,
+    normalScale: new THREE.Vector2(0.45, 0.45),
+    envMapIntensity: 0.5,
     vertexColors: true,
   });
   m.name = name;
+  applyGunDetail(m, game, { objectUv: true, grainRepeat: 12, grainScale: 0.4, macroRepeat: 1.0, surfRepeat: 1.0, roughVar: 0.2, toneVar: 0.08, edgeWear: 0.25, cavity: 0.5, aoDirect: 0.5, scratch: 0.15, wearColor: [0.06, 0.06, 0.06], wearRough: 0.55, wearMetal: 0.0 });
   return m;
 }
 
 /** Dark glass-fibre / matte interior black (hood interior, lens barrels). */
 export function matteBlackMaterial(game, { name = 'matteBlack' } = {}) {
-  const m = new THREE.MeshStandardMaterial({ color: 0x0c0c0d, roughness: 0.95, metalness: 0.0, envMapIntensity: 0.3, vertexColors: true });
+  const m = new THREE.MeshStandardMaterial({
+    color: 0x0b0b0c,
+    roughness: 0.95,
+    metalness: 0.0,
+    normalMap: grainNormal(game, 3),
+    normalScale: new THREE.Vector2(0.2, 0.2),
+    envMapIntensity: 0.3,
+    vertexColors: true,
+  });
   m.name = name;
+  applyGunDetail(m, game, { objectUv: true, grainRepeat: 14, grainScale: 0.2, macroRepeat: 1.0, surfRepeat: 1.0, roughVar: 0.1, toneVar: 0.05, edgeWear: 0.0, cavity: 0.3, aoDirect: 0.5, scratch: 0.0 });
   return m;
 }
 
@@ -533,10 +601,12 @@ export function nylonMaterial(game, { color = 0x6b5d43, name = 'nylon' } = {}) {
     metalness: 0.0,
     normalMap: weaveNormalTexture(game),
     normalScale: new THREE.Vector2(0.9, 0.9),
-    envMapIntensity: 0.5,
+    envMapIntensity: 0.3,
     vertexColors: false,
   });
   m.name = name;
+  // geometry UVs (the weave normal map must keep tiling along the strap); fill + baked AO like the hardware
+  applyGunDetail(m, game, { grainScale: 0, macroRepeat: 0.4, surfRepeat: 0.5, roughVar: 0.25, toneVar: 0.12, edgeWear: 0, cavity: 0.5, aoDirect: 0.5, scratch: 0 });
   return m;
 }
 
@@ -674,12 +744,14 @@ export class LabelAtlas {
       depthWrite: false,
       roughness,
       metalness,
-      envMapIntensity: 0.8,
+      envMapIntensity: 0.3,
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -2,
     });
     this.material.name = 'labels';
+    // same view-model fill / macro roughness as the surfaces the decals sit on (no wear, no scratches)
+    applyGunDetail(this.material, this.game, { objectUv: true, grainScale: 0, roughVar: 0.25, toneVar: 0, edgeWear: 0, cavity: 0.3, aoDirect: 0, scratch: 0 });
     return this;
   }
 }

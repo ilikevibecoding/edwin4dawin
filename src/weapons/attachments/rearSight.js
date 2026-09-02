@@ -54,7 +54,8 @@ export function buildRearSight(game, rig, mats, atlas, { zCentre = 0.042 } = {})
   // etched labels: rear face (visible when the rifle is lowered / at the hip) and left side
   const labels = new PartsBuilder('RearSightLabels');
   labels.add(atlas.text(18, 4.2, 'CRONEN', { size: 2.9, color: '#c2c5ca', letterSpacing: 0.35 }), atlas.material, { pos: [0, 2.2, half + 0.12], rot: [0, 0, 0] });
-  labels.add(atlas.text(18, 4.2, 'CRONEN', { size: 2.9, color: '#c2c5ca', letterSpacing: 0.35 }), atlas.material, { pos: [-(HW + 0.12), 2.4, 6], rot: [0, -Math.PI / 2, 0] });
+  // side mark: smaller and lower contrast than the rear logo so the two never read as a repeated decal
+  labels.add(atlas.text(14, 3.4, 'CRONEN', { size: 2.1, color: '#8b8f94', letterSpacing: 0.3 }), atlas.material, { pos: [-(HW + 0.12), 2.4, 6], rot: [0, -Math.PI / 2, 0] });
   labels.add(atlas.text(14, 3, 'MK.3 REAR', { size: 1.5, color: '#9a9ea3' }), atlas.material, { pos: [HW + 0.12, 2.4, 8], rot: [0, Math.PI / 2, 0] });
   labels.build(group, { castShadow: false });
 

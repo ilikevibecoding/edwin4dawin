@@ -5,6 +5,8 @@ import { buildRearSight } from './rearSight.js';
 import { buildHandStop } from './foregrip.js';
 import { buildLaserBox } from './laserBox.js';
 import { buildSling } from './sling.js';
+import { bakeViewModelOcclusion } from './aoBake.js';
+import { buildReceiverDetails } from './receiverDetails.js';
 
 /**
  * Weapon attachments for the M4A1 view model (see docs/ARCHITECTURE.md):
@@ -41,6 +43,7 @@ export async function buildAttachments(game, rig) {
   const handStop = buildHandStop(game, rig, mats, atlas, { zCentre: -0.265 });
   const laser = buildLaserBox(game, rig, mats, atlas, { zCentre: -0.2395 });
   const sling = buildSling(game, rig, mats, atlas);
+  const receiver = buildReceiverDetails(game, rig, mats, atlas);
   atlas.texture.needsUpdate = true; // regions were drawn after finish()
 
   // --- sockets: reticle centre drives the ADS pose; the hand stop defines the support-hand palm centre
@@ -48,6 +51,14 @@ export async function buildAttachments(game, rig) {
   rig.sockets.gripLeft.position.copy(handStop.palm);
   rig.sockets.gripLeft.rotation.copy(handStop.palmRotation);
   game.weapons?._computeAdsPose?.();
+
+  // Baked occlusion / edge-wear maps for the rifle and per-vertex AO for the attachments (before the materials
+  // are compiled, so the first frame already has them).
+  try {
+    bakeViewModelOcclusion(game, rig);
+  } catch (err) {
+    console.error('[attachments] occlusion bake failed', err);
+  }
 
   // Materials created after load must be registered for cascaded shadows.
   game.render.setupObject(root);
@@ -62,7 +73,7 @@ export async function buildAttachments(game, rig) {
       reticle: holo.reticle,
       group: holo.group,
     },
-    groups: { holo: holo.group, rearSight: rearSight.group, handStop: handStop.group, laser: laser.group, sling: sling.group },
+    groups: { holo: holo.group, rearSight: rearSight.group, handStop: handStop.group, laser: laser.group, sling: sling.group, receiver: receiver.group },
     materials: mats,
     atlas,
     update() {},
@@ -85,9 +96,17 @@ function registerViews(game) {
     game.events?.once?.('game:ready', () => registerViews(game));
     return;
   }
-  const reset = 'game.render.baseWeaponFov = game.settings.weaponFov;';
-  d.registerView('sight_closeup', { pos: [0, 0, 12], yaw: 0, pitch: -2, hud: false, exec: 'game.render.baseWeaponFov = 24;' });
-  d.registerView('sight_ads_closeup', { pos: [0, 0, 12], yaw: 0, pitch: 0, ads: true, hud: false, exec: 'game.render.baseWeaponFov = 28;' });
+  const reset = 'game.render.baseWeaponFov = game.settings.weaponFov; for (const c of [game.render.camera, game.render.weaponCamera]) c.clearViewOffset();';
+  // Closeup = a sub-frustum crop of the hip view around the optic (both cameras, so world and view model stay
+  // registered) — the view model's own FOV cannot be narrowed without pushing the off-centre sight out of frame.
+  d.registerView('sight_closeup', {
+    pos: [0, 0, 12],
+    yaw: 0,
+    pitch: -2,
+    hud: false,
+    exec: `${reset} for (const c of [game.render.camera, game.render.weaponCamera]) c.setViewOffset(960, 540, 520, 185, 440, 247.5);`,
+  });
+  d.registerView('sight_ads_closeup', { pos: [0, 0, 12], yaw: 0, pitch: 0, ads: true, hud: false, exec: `${reset} game.render.baseWeaponFov = 28;` });
   d.registerView('attach_hero', { pos: [0, 0, 12], yaw: 0, pitch: -2, hud: false, exec: reset });
   d.registerView('attach_ads', { pos: [0, 0, 12], yaw: 0, pitch: 0, ads: true, hud: false, exec: reset });
   // inspect animation shows the left side (--wait ≈ 1.0) then the right side / PEQ (--wait ≈ 2.4)

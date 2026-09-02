@@ -130,7 +130,7 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
   const b = new PartsBuilder('Holo');
   const half = H.length / 2;
 
-  // --- mount: clamp base + two cross-bolts with slotted thumb nuts (right) and hex nuts (left)
+  // --- mount: clamp base + two cross-bolts with slotted thumb nuts (right) and hex nuts (left), QD lever (left)
   const clamp = railClampShape({ halfWidth: 12.5, height: H.lowerY0 + 1.5, jawDepth: 5.9, hookDepth: 5.3 });
   b.add(extrude(clamp, 64, { bevel: 0.8 }), mats.anod, { pos: [0, 0, 8], wear: 0.5 });
   for (const z of [22, -8]) {
@@ -139,6 +139,9 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
     b.add(rbox(1.4, 9.5, 1.2, 0.3), mats.matte, { pos: [12.5 + 4.7, -3.0, z] }); // screwdriver slot
     b.add(cylX(4.2, 2.2, 6), mats.steel, { pos: [-(12.5 + 1.1), -3.0, z] });
   }
+  // QD throw lever along the left jaw (pivots on the front bolt, latched at the rear)
+  b.add(rbox(3.0, 6.5, 30, 1.0), mats.anod, { pos: [-(12.5 + 2.4), -1.8, 7], wear: 0.7 });
+  b.add(cylX(4.6, 3.4, 20), mats.anod, { pos: [-(12.5 + 2.4), -3.0, -8], wear: 0.5 });
 
   // --- lower housing (electronics + battery), slightly narrower at the rear third
   b.add(rbox(H.lowerW, H.lowerY1 - H.lowerY0, H.length - 30, 3.2), mats.anod, { pos: [0, (H.lowerY0 + H.lowerY1) / 2, -15], wear: 0.45 });
@@ -146,63 +149,90 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
   // hood base "sill" (0.3 mm proud of the housing top so no face is coplanar)
   b.add(rbox(H.hoodW + 2, 3.3, H.length - 2, 1.0), mats.anod, { pos: [0, H.lowerY1 - 1.35, 0], wear: 0.4 });
 
-  // --- hood: rounded-top tube with a rectangular channel, front and rear frame plates (raised bezels) with apertures
-  // bottom corners sit inside the sill; their radius must stay >= the extrude bevel (see lib.extrude)
+  // --- hood: arch-topped tube with a rectangular channel; thick front / rear frames with 45° chamfers on both
+  // the outer edge and the window edge (EXPS look). Bottom corners sit inside the sill; corner radii must stay
+  // >= the extrude bevel (see lib.extrude).
   const hoodOuter = (shape, inset = 0) =>
-    roundedRect(H.hoodW - inset * 2, H.hoodY1 - H.hoodY0 - inset, [9 - inset, 9 - inset, 1.8 - inset, 1.8 - inset], shape, 0, (H.hoodY0 + H.hoodY1) / 2 - inset / 2);
+    roundedRect(H.hoodW - inset * 2, H.hoodY1 - H.hoodY0 - inset, [14 - inset, 14 - inset, 2.6 - inset, 2.6 - inset], shape, 0, (H.hoodY0 + H.hoodY1) / 2 - inset / 2);
   const tube = hoodOuter(new THREE.Shape(), 0.35);
-  tube.holes.push(roundedRect(H.winW + 1, H.winH + 1.5, [8.5, 8.5, 1.2, 1.2], new THREE.Path(), 0, H.winCY + 0.25));
-  b.add(extrude(tube, H.length - 2 * H.frameT + 2, { bevel: 0.5, curveSegments: 8 }), mats.anod, { pos: [0, 0, 0], wear: 0.5 });
-  const bezelZ = half - H.frameT / 2 + 0.4;
+  tube.holes.push(roundedRect(H.winW + 1, H.winH + 1.5, [8.5, 8.5, 2.6, 2.6], new THREE.Path(), 0, H.winCY + 0.25));
+  b.add(extrude(tube, H.length - 2 * H.frameT + 2, { bevel: 0.5, curveSegments: 9 }), mats.anod, { pos: [0, 0, 0], wear: 0.5 });
+  const frameT = H.frameT + 1.5;
+  const bezelZ = half - frameT / 2 + 0.4;
   const front = hoodOuter(new THREE.Shape());
-  front.holes.push(roundedRect(H.winW, H.winH, [8, 8, 1.6, 1.6], new THREE.Path(), 0, H.winCY));
-  b.add(extrude(front, H.frameT, { bevel: 1.1, curveSegments: 10 }), mats.anod, { pos: [0, 0, -bezelZ], wear: 0.6 });
+  front.holes.push(roundedRect(H.winW, H.winH, [8, 8, 2.6, 2.6], new THREE.Path(), 0, H.winCY));
+  b.add(extrude(front, frameT, { bevel: 2.2, bevelSeg: 1, curveSegments: 10 }), mats.anod, { pos: [0, 0, -bezelZ], wear: 0.5 });
   const rear = hoodOuter(new THREE.Shape());
-  rear.holes.push(roundedRect(H.rearW, H.rearH, [8, 8, 1.6, 1.6], new THREE.Path(), 0, H.winCY));
-  b.add(extrude(rear, H.frameT, { bevel: 1.1, curveSegments: 10 }), mats.anod, { pos: [0, 0, bezelZ], wear: 0.6 });
-  // roof rib + screws
-  b.add(rbox(7, 1.6, 62, 0.6), mats.anod, { pos: [0, H.hoodY1 + 0.5, 4], wear: 0.6 });
-  for (const z of [-30, 30]) {
-    for (const x of [-15, 15]) {
-      b.add(cylY(2.0, 1.2, 12), mats.steel, { pos: [x, H.hoodY1 + 0.5, z] });
-      b.add(cylY(0.9, 0.6, 6), mats.matte, { pos: [x, H.hoodY1 + 1.05, z] });
+  rear.holes.push(roundedRect(H.rearW, H.rearH, [8, 8, 2.6, 2.6], new THREE.Path(), 0, H.winCY));
+  b.add(extrude(rear, frameT, { bevel: 2.2, bevelSeg: 1, curveSegments: 10 }), mats.anod, { pos: [0, 0, bezelZ], wear: 0.5 });
+  // hood seam: shallow raised band a third of the way back (the 553's bolt-on front hood section)
+  const band = hoodOuter(new THREE.Shape(), -0.25);
+  band.holes.push(hoodOuter(new THREE.Path(), 0.6));
+  b.add(extrude(band, 2.2, { bevel: 0.25, bevelSeg: 1, curveSegments: 9 }), mats.anod, { pos: [0, 0, -14], wear: 0.4 });
+  // roof: shallow rib + four cap screws
+  b.add(rbox(9, 1.6, 60, 0.6), mats.anod, { pos: [0, H.hoodY1 + 0.5, 3], wear: 0.7 });
+  for (const z of [-28, 28]) {
+    for (const x of [-13.5, 13.5]) {
+      b.add(cylY(2.0, 1.2, 14), mats.steel, { pos: [x, H.hoodY1 + 0.35, z] });
+      b.add(cylY(1.0, 0.6, 6), mats.matte, { pos: [x, H.hoodY1 + 0.95, z] });
     }
   }
   // hood interior: matte black liner (sits inside the channel, hides the anodised interior walls)
-  const liner = roundedRect(H.winW + 0.9, H.winH + 1.4, [8.4, 8.4, 1.2, 1.2], new THREE.Shape(), 0, H.winCY + 0.25);
-  liner.holes.push(roundedRect(H.winW - 0.4, H.winH - 0.2, [8.2, 8.2, 1.0, 1.0], new THREE.Path(), 0, H.winCY + 0.25));
+  const liner = roundedRect(H.winW + 0.9, H.winH + 1.4, [8.4, 8.4, 2.4, 2.4], new THREE.Shape(), 0, H.winCY + 0.25);
+  liner.holes.push(roundedRect(H.winW - 0.4, H.winH - 0.2, [8.2, 8.2, 2.0, 2.0], new THREE.Path(), 0, H.winCY + 0.25));
   b.add(extrude(liner, H.length - 2 * H.frameT - 1, { bevel: 0 }), mats.matte, { pos: [0, 0, 0] });
 
-  // --- left side: control panel with two arrow buttons + ON / OFF etching (as on the reference)
-  const px = -H.lowerW / 2; // -27
-  b.add(rbox(48, 17, 1.8, 1.6), mats.anod, { pos: [px - 0.6, 19, -12], wear: 0.45 });
-  const btnY = 17.6;
-  for (const z of [-22, -2]) {
-    b.add(rbox(10.5, 10.5, 2.6, 2.4), mats.rubber, { pos: [px - 2.2, btnY, z] });
+  // --- rear face: control panel below the window — two round brightness buttons (▼ ▲) with bevelled bezels, a
+  // rectangular NV button between them, ON / OFF legends, corner screws (as on the EXPS reference)
+  const rearZ = half; // rear face of the housing
+  const panelW = H.hoodW + 2;
+  b.add(rbox(panelW, 19.5, 3.4, 2.4), mats.anod, { pos: [0, 18.6, rearZ + 1.0], wear: 0.55 });
+  const panelZ = rearZ + 1.0 + 1.7; // panel front face
+  const btnY = 17.8;
+  const btnX = 12.5;
+  for (const x of [-btnX, btnX]) {
+    b.add(cylZ(5.6, 1.8, 28), mats.anod, { pos: [x, btnY, panelZ + 0.9], wear: 0.6 }); // bezel ring
+    b.add(cylZ(4.4, 2.4, 28), mats.rubber, { pos: [x, btnY, panelZ + 1.9] }); // rubber cap
   }
-  // --- right side: model label plate + battery compartment bulge with a knurled cap
-  b.add(rbox(38, 12, 1.4, 1.0), mats.anod, { pos: [-px + 0.4, 21, -8], wear: 0.4 });
-  b.add(cylX(9.0, 6, 32), mats.anod, { pos: [-px - 1, 18.5, -half + 12], wear: 0 });
-  b.add(knurlX(9.3, 3.2, 30, 0.45), mats.anod, { pos: [-px + 3.4, 18.5, -half + 12] });
-  b.add(rbox(14, 2.6, 2.0, 0.6), mats.steel, { pos: [-px + 5.4, 18.5, -half + 12] });
+  b.add(rbox(11, 6.4, 2.4, 1.4), mats.rubber, { pos: [0, 21.2, panelZ + 1.0] }); // NV button
+  b.add(rbox(12.4, 7.8, 1.2, 1.6), mats.anod, { pos: [0, 21.2, panelZ + 0.5], wear: 0.5 }); // its surround
+  for (const [x, y] of [
+    [-19.5, 11.2],
+    [19.5, 11.2],
+    [-19.5, 26.4],
+    [19.5, 26.4],
+  ]) {
+    b.add(cylZ(1.5, 0.8, 12), mats.steel, { pos: [x, y, panelZ + 0.3] });
+    b.add(rbox(0.6, 2.2, 0.5, 0.15), mats.matte, { pos: [x, y, panelZ + 0.75] });
+  }
+
+  // --- right side: battery compartment bulge with a knurled cap and a coin slot, product label plate
+  const px = -H.lowerW / 2; // -27
+  b.add(cylX(9.0, 6, 32), mats.anod, { pos: [-px - 1, 18.5, -half + 14], wear: 0 });
+  b.add(knurlX(9.3, 3.4, 30, 0.45), mats.anod, { pos: [-px + 3.5, 18.5, -half + 14] });
+  b.add(rbox(1.0, 2.6, 14, 0.3), mats.steel, { pos: [-px + 5.5, 18.5, -half + 14] }); // coin slot, proud of the cap face
+  b.add(rbox(1.4, 12, 30, 0.6), mats.anod, { pos: [-px + 0.4, 19.5, 0], wear: 0.4 }); // label plate (thin in X)
+  // --- left side: laser warning sticker plate + serial label plate + side screws
+  b.add(rbox(1.2, 12.5, 34, 0.6), mats.anod, { pos: [px - 0.4, 19.5, -10], wear: 0.4 });
+  for (const z of [-40, 12]) {
+    b.add(cylX(1.8, 0.8, 12), mats.steel, { pos: [px - 0.3, 26.5, z] });
+    b.add(cylX(1.8, 0.8, 12), mats.steel, { pos: [-px + 0.3, 26.5, z] });
+  }
   // --- front face: battery latch lever, sensor window
   b.add(rbox(16, 6, 3.0, 1.2), mats.anod, { pos: [12, 14, -half - 1.0], wear: 0.5 });
   b.add(cylZ(2.2, 1.2, 16), mats.matte, { pos: [-14, 18, -half - 0.4] });
-  // --- rear face: NV button (rubber) and a small recessed label plate
-  b.add(cylZ(4.6, 2.4, 24), mats.rubber, { pos: [17, 19, half + 0.6] });
-  b.add(rbox(20, 5.2, 1.0, 0.6), mats.anod, { pos: [-8, 13.2, half + 0.3], wear: 0.3 });
 
   b.build(group);
 
   // --- labels (decals in the shared atlas)
   const labels = new PartsBuilder('HoloLabels');
-  const etch = '#aeb2b8';
+  const etch = '#b4b8be';
   const arrow = (dir) => (ctx, w, h) => {
-    ctx.fillStyle = '#c9ccd1';
+    ctx.fillStyle = '#d2d5da';
     ctx.beginPath();
     const cx = w / 2;
     const cy = h / 2;
-    const s = Math.min(w, h) * 0.34;
+    const s = Math.min(w, h) * 0.3;
     if (dir === 'up') {
       ctx.moveTo(cx, cy - s);
       ctx.lineTo(cx + s, cy + s * 0.75);
@@ -215,22 +245,41 @@ export function buildHoloSight(game, rig, mats, atlas, { zFront = -0.100 } = {})
     ctx.closePath();
     ctx.fill();
   };
-  const leftFace = px - 2.2 - 1.3 - 0.12;
-  labels.add(atlas.decal(8, 8, arrow('down')), atlas.material, { pos: [leftFace, btnY, -22], rot: [0, -Math.PI / 2, 0] });
-  labels.add(atlas.decal(8, 8, arrow('up')), atlas.material, { pos: [leftFace, btnY, -2], rot: [0, -Math.PI / 2, 0] });
-  const panelFace = px - 0.6 - 0.9 - 0.12;
-  labels.add(atlas.text(10, 4, 'ON', { size: 2.6, color: etch }), atlas.material, { pos: [panelFace, 25.2, -2], rot: [0, -Math.PI / 2, 0] });
-  labels.add(atlas.text(12, 4, 'OFF', { size: 2.6, color: etch }), atlas.material, { pos: [panelFace, 25.2, -22], rot: [0, -Math.PI / 2, 0] });
-  labels.add(atlas.text(20, 3.2, 'NV   -   BRT', { size: 1.7, color: etch }), atlas.material, { pos: [panelFace, 12.2, -12], rot: [0, -Math.PI / 2, 0] });
+  const capZ = panelZ + 1.9 + 1.2 + 0.12;
+  labels.add(atlas.decal(7, 7, arrow('down')), atlas.material, { pos: [-btnX, btnY, capZ] });
+  labels.add(atlas.decal(7, 7, arrow('up')), atlas.material, { pos: [btnX, btnY, capZ] });
+  const panelFace = panelZ + 0.12;
+  labels.add(atlas.text(8, 3.4, 'ON', { size: 2.3, color: etch }), atlas.material, { pos: [btnX + 3.5, 25.6, panelFace] });
+  labels.add(atlas.text(9, 3.4, 'OFF', { size: 2.3, color: etch }), atlas.material, { pos: [0, 12.9, panelFace] });
+  labels.add(atlas.text(7, 3.0, 'NV', { size: 2.0, color: etch }), atlas.material, { pos: [-btnX - 3.2, 25.6, panelFace] });
   const rightFace = -px + 0.4 + 0.7 + 0.12;
-  labels.add(atlas.text(36, 10, ['HWS 553  -  68 MOA / 1 MOA', 'HOLOGRAPHIC WEAPON SIGHT', 'S/N 1147-A03  -  CR123 3V'], { size: 1.9, color: etch }), atlas.material, {
-    pos: [rightFace, 21, -8],
+  labels.add(atlas.text(28, 10, ['EXPS3-0  -  68 MOA / 1 MOA', 'HOLOGRAPHIC WEAPON SIGHT', 'S/N 1147-A03  -  CR123 3V'], { size: 1.7, color: etch }), atlas.material, {
+    pos: [rightFace, 19.5, 0],
     rot: [0, Math.PI / 2, 0],
   });
-  labels.add(atlas.text(19, 4.4, ['CAUTION - LASER RADIATION', 'CLASS 2   DO NOT STARE'], { size: 1.0, color: '#8f8a6e' }), atlas.material, {
-    pos: [-8, 13.2, half + 0.8 + 0.12],
-    rot: [0, 0, 0],
-  });
+  const leftFace = px - 0.4 - 0.6 - 0.12;
+  labels.add(
+    atlas.decal(32, 10.5, (ctx, w, h, ppm) => {
+      // laser warning sticker: pale label with a red header band
+      ctx.fillStyle = '#d9d6c8';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#b3261e';
+      ctx.fillRect(0, 0, w, h * 0.32);
+      ctx.fillStyle = '#f2efe6';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `bold ${2.0 * ppm}px Arial, Helvetica, sans-serif`;
+      ctx.fillText('CAUTION', w / 2, h * 0.16);
+      ctx.fillStyle = '#1a1a1a';
+      ctx.font = `bold ${1.15 * ppm}px Arial, Helvetica, sans-serif`;
+      ctx.fillText('LASER RADIATION - DO NOT STARE', w / 2, h * 0.5);
+      ctx.font = `${1.05 * ppm}px Arial, Helvetica, sans-serif`;
+      ctx.fillText('INTO BEAM   CLASS II LASER PRODUCT', w / 2, h * 0.68);
+      ctx.fillText('MADE IN USA   ' + String.fromCharCode(0x2022) + '   IEC 60825-1', w / 2, h * 0.86);
+    }),
+    atlas.material,
+    { pos: [leftFace, 19.5, -10], rot: [0, -Math.PI / 2, 0] },
+  );
   labels.build(group, { castShadow: false });
 
   // --- glass: front window (holographic) + rear window
