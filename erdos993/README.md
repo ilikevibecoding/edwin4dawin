@@ -57,10 +57,11 @@ for all forests on the prefix.
 ## Headline results (all exact)
 
 - Every forest on `n <= 22` vertices, every multi-component forest on `n = 23, 24`,
-  and every tree on `n <= 27` vertices satisfies `UNIMODAL`, `ISO_r` (all `r`),
+  and every tree on `n <= 28` vertices satisfies `UNIMODAL`, `ISO_r` (all `r`),
   `WR_r` on the prefix and `TAIL`.
-- Log-concavity fails for exactly 2 trees at `n = 26` and none at `n <= 25` or
-  `n = 27` (matching Kadrawi–Levit–Yosef–Mizrachi and the public record).
+- Log-concavity fails for exactly 2 trees at `n = 26`, none at `n = 27`, 19 at
+  `n = 28`, and none at `n <= 25` (matching Kadrawi–Levit–Yosef–Mizrachi and the
+  public record).
 - Weakened Newton `NW_r` fails first at `n = 24` (1 tree), so it is not a valid
   universal strengthening; all failures found are in the tail.
 - `ISO_2` is proved for all forests; the descent lemma and the assembly are
@@ -77,7 +78,7 @@ python3 run_forests.py 22            # all forests and trees on n <= 22 (~10 min
 python3 run_forests.py 24 --nmin 23 --multi-only   # forests with >= 2 components, n = 23, 24
 python3 independent/bruteforce_forests.py   # independent replay, n <= 11 (12/14 optional)
 python3 crosscheck_independent.py    # CROSSCHECK_INDEPENDENT_PASS
-make -C fast && fast/wromcheck --nmin 23 --nmax 27   # all trees, one JSON line per n
+make -C fast && fast/wromcheck --nmin 23 --nmax 28   # all trees, one JSON line per n (n=28: ~1.5 h)
 make -C fast crosscheck              # CROSSCHECK_C_VS_PYTHON_PASS (n <= 22)
 python3 known_counterexamples.py     # ISO on the known non-log-concave families
 python3 manifest.py                  # hashes of sources and reports

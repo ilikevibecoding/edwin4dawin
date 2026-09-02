@@ -1,7 +1,7 @@
 {
  "README.md": {
-  "bytes": 5288,
-  "sha256": "42c7f1a918ec917ac260788bf6e77c27d1f02656985c4aec3058daf64bb0a163"
+  "bytes": 5328,
+  "sha256": "cd98a90f6d5c4a1951422eeb9e1658a6b46f789a45c9f8a1dcfaf72b868668ea"
  },
  "aggregate.py": {
   "bytes": 7760,
@@ -24,8 +24,8 @@
   "sha256": "aef0ca271c0265601822906aa7183891e4d54b083f2df0214afcd6d8ed570882"
  },
  "docs/STATUS_2026-09-02.md": {
-  "bytes": 11386,
-  "sha256": "dda88bc3306e93186ff4e05eb3686c8d43855c446f7a9b246dfbb9f2cd58840f"
+  "bytes": 11368,
+  "sha256": "bb69322c15796ed31f28751fb43d835e1692f66f597bee1e9531e1b4b93574af"
  },
  "extremal_families.py": {
   "bytes": 3731,
@@ -284,8 +284,8 @@
   "sha256": "bb5a167483c692cd71d0d09a8ee41e0d7553518ca41e9afb6a8e81daeb73831d"
  },
  "reports/trees_c_n28_n28.jsonl": {
-  "bytes": 0,
-  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  "bytes": 10405,
+  "sha256": "faf347490f84da0494011591a4885cae8e90f799e327225205adef631af8c471"
  },
  "reports/trees_n01.json": {
   "bytes": 886,
