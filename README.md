@@ -19,7 +19,7 @@ npm run dev          # http://localhost:5173
 | **X** / **4** | Air strike (when ready) — opens the targeting map; click a location, **Esc** cancels |
 | **F1** | Toggle HUD · **Esc** pause |
 
-URL parameters: `?quality=low|medium|high|ultra`, `&fov=62`, `&streaks=1` (air strike available immediately),
+URL parameters: `?quality=potato|low|medium|high|ultra` (`potato` = half-resolution fallback for software GL / weak iGPUs), `&fov=62`, `&streaks=1` (air strike available immediately),
 `&noEnemies=1`, `&god=1`, `&debug=1` (stats overlay), `&arms=<candidate>` (first-person arms variant).
 
 ## Architecture
@@ -54,7 +54,11 @@ particles, decals, UI, audio) is generated procedurally at runtime.
 node tools/shot.mjs --out /tmp/shots/a.png --view weapon_hero --w 1600 --h 900     # deterministic headless screenshot
 node tools/shot.mjs --list                                                           # registered review views
 node tools/view.mjs "m=/assets/models/weapons/M4A1.glb&v=side&axes=1" /tmp/m4.png   # isolated model viewer
+node tools/shot.mjs --record /tmp/demo --seconds 24 --fps 30 --w 1280 --h 720 --quality medium \
+     --script tools/scripts/demo_gameplay.js                                         # deterministic gameplay video
 ```
 
 Screenshots run in headless Chrome with software GL (slow but reproducible) and were used for the side-by-side
-visual critique loop against Call of Duty reference frames during development.
+visual critique loop against Call of Duty reference frames during development. `--record` steps the fixed 60 Hz
+simulation frame by frame (scripted input via `input.press/release/look`), draws only the captured frames and
+encodes an MP4 with ffmpeg, so gameplay videos come out at full frame rate even on software GL.
