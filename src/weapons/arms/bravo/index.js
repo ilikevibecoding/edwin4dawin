@@ -33,19 +33,21 @@ const MIN_ELBOW_DEVIATION = 26 * DEG;
 const MAX_ELBOW_DEVIATION = 72 * DEG;
 
 /**
- * Grip fit, expressed in GUN space (metres, forward -Z) so it can be reasoned about against the model:
- *   palm: hand-space point that should land on the palm-centre target (≈ centre of the palm volume)
- *   pos:  where that palm centre sits in gun space when the hand is on its default socket
- *   x/y/z: hand-space axes in gun space (x = pinky side for the right hand / thumb side for the left, y = toward
- *          the fingers, z = back of the hand). Re-orthogonalised at build time.
- *   pole: elbow direction hint (sway-pivot space)
+ * Grip fit, expressed with GUN-space axes (metres, forward -Z) so it can be reasoned about against the model:
+ *   palm:   hand-space point that should land on the palm-centre target (≈ centre of the palm volume)
+ *   offset: where that palm centre sits RELATIVE TO THE HAND'S SOCKET (rig.sockets.gripLeft / gripRight, whose
+ *           position an attachment may move — e.g. the hand stop sliding along the handguard); nothing here pins
+ *           the hand to an absolute station on the gun
+ *   x/y/z:  hand-space axes in gun space (x = pinky side for the right hand / thumb side for the left, y = toward
+ *           the fingers, z = back of the hand). Re-orthogonalised at build time.
+ *   pole:   elbow direction hint (sway-pivot space)
  */
 export const FIT = {
   right: {
     // palm on the back-right of the pistol grip, knuckle row along the (tilted) grip axis, fingers wrapping the
     // front of the grip toward the left, middle finger up against the trigger guard (fitted numerically)
     palm: [0.002, 0.05, -0.003],
-    pos: [0.0205, -0.083, 0.129],
+    offset: [0.0205, 0.005, 0.057],
     y: [0.337, -0.164, -0.926],
     z: [0.94, 0, 0.342],
     pole: [0.75, -1, 0.3],
@@ -56,9 +58,11 @@ export const FIT = {
     // knuckle row runs diagonally over the top-left rail edge (index knuckle on the top rail, pinky knuckle off
     // the left edge) so the fingers wrap over the top and down the right side of the quad rail, the thumb runs up
     // the left face and hooks forward into the top-left rail groove; the forearm heads down-left toward the
-    // shoulder anchor (fitted numerically — see preview.js ?fitPalm=1&fitFingers=1)
+    // shoulder anchor. Fitted numerically against the handguard SDF (preview.js ?fitPalm=1&fitFingers=1) with the
+    // hand-stop palm socket at (-0.026, -0.011, z) — the offset is socket-relative, so the hand rides along when
+    // the hand stop moves along the rail (the quad rail's cross-section is constant along the handguard).
     palm: [-0.002, 0.05, -0.003],
-    pos: [-0.05, 0.037, -0.194],
+    offset: [-0.024, 0.048, 0.004],
     y: [0.58, 0.72, -0.38],
     z: [-0.51, 0.68, 0.51],
     pole: [-1, -0.35, 0.3],
@@ -137,7 +141,7 @@ export class HandRig {
       const desired = basisQuat(xg, yg, zg, new THREE.Quaternion());
       return { quat: invSocket.clone().multiply(desired), pos: offsetGun.clone().applyQuaternion(invSocket), pole: new THREE.Vector3().fromArray(pole || fit.pole).normalize() };
     };
-    this.fits = { grip: makeFit(fit.y, fit.z, new THREE.Vector3().fromArray(fit.pos).sub(socket.position), fit.pole) };
+    this.fits = { grip: makeFit(fit.y, fit.z, new THREE.Vector3().fromArray(fit.offset), fit.pole) };
     for (const [name, p] of Object.entries(fit.poses || {})) this.fits[name] = makeFit(p.y, p.z, new THREE.Vector3().fromArray(p.offset), p.pole);
     this.offsetQuat = this.fits.grip.quat.clone();
     this.offsetPos = this.fits.grip.pos.clone();

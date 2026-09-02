@@ -117,8 +117,8 @@ export function makeHandField(def) {
     d = smin(d, sdCone(x, y, z, j[1][0], j[1][1], j[1][2], j[2][0], j[2][1], j[2][2], f.r[1], f.r[2]), 0.003);
     d = smin(d, sdCone(x, y, z, j[2][0], j[2][1], j[2][2], j[3][0], j[3][1], j[3][2], f.r[2], f.r[3]), 0.003);
     // knuckle bulges at PIP / DIP (slightly dorsal)
-    d = smin(d, sdSphere(x, y, z, j[1][0], j[1][1] + 0.0005, j[1][2] + 0.0015, f.r[1] * 1.1), 0.004);
-    d = smin(d, sdSphere(x, y, z, j[2][0], j[2][1], j[2][2] + 0.001, f.r[2] * 1.08), 0.003);
+    d = smin(d, sdSphere(x, y, z, j[1][0], j[1][1] + 0.0005, j[1][2] + 0.0015, f.r[1] * 1.07), 0.004);
+    d = smin(d, sdSphere(x, y, z, j[2][0], j[2][1], j[2][2] + 0.001, f.r[2] * 1.05), 0.003);
     return d;
   };
   const thumbDist = (x, y, z) => {
@@ -132,23 +132,27 @@ export function makeHandField(def) {
     // slab, tapered toward the wrist
     const t = Math.max(0, Math.min(1, (y - 0.005) / 0.09));
     const s = 0.8 + 0.2 * t;
-    // ~29 mm thick slab, palmar face at z ≈ -0.017
-    let d = sdRoundBox(x / s, y, z, 0.001, 0.052, -0.0025, 0.033, 0.041, 0.005, 0.0095) * s;
+    // ~24 mm thick slab at the edges, palmar face at z ≈ -0.017 (the fit / fitter rely on that face)
+    let d = sdRoundBox(x / s, y, z, 0.001, 0.052, -0.005, 0.033, 0.041, 0.0025, 0.0095) * s;
+    // transverse metacarpal arch: the back of the hand is a smooth, gently convex surface (≈ 5 mm higher along
+    // the middle than at the edges) tapering into the wrist — like a knit-covered mitten, not a flat plate
+    d = smin(d, sdEllipsoid(x, y, z, 0.0, 0.058, 0.0, 0.045, 0.05, 0.0125), 0.012);
     d = smin(d, sdEllipsoid(x, y, z, -0.026, 0.038, -0.011, 0.021, 0.034, 0.0125), 0.012);
-    d = smin(d, sdEllipsoid(x, y, z, 0.027, 0.032, -0.0085, 0.016, 0.036, 0.011), 0.012);
+    // hypothenar (pinky-side) bulge, kept within the slab's width so the ulnar edge stays slim from the back
+    d = smin(d, sdEllipsoid(x, y, z, 0.025, 0.032, -0.0095, 0.013, 0.036, 0.0105), 0.012);
     // wrist (elliptical: wider than thick)
     d = smin(d, sdCone(x, y, z * 1.42, 0, 0.014, 0, 0, -0.04, 0, 0.0315, 0.031), 0.016);
-    // MCP knuckles on the back
+    // MCP knuckles on the back: four gentle bumps blended broadly into the arch
     for (let i = 0; i < 4; i++) {
       const j = fj[i][0];
-      d = smin(d, sdSphere(x, y, z, j[0], j[1] - 0.002, j[2] + 0.005, F[i].r[0] * (i === 3 ? 1.12 : 1.16)), 0.008);
+      d = smin(d, sdSphere(x, y, z, j[0], j[1] - 0.002, j[2] + 0.0035, F[i].r[0] * (i === 3 ? 1.06 : 1.1)), 0.011);
     }
     return d;
   };
 
-  // Knuckle padding: rubber standing ~1.5–2 mm proud of the knit — one rounded pad over each MCP knuckle and
-  // transverse ridge bars across the backs of the proximal (two) and middle (one) phalanges, leaving the joints
-  // free so the fingers still bend visibly.
+  // Finger-back padding: soft, low (≈ 0.7 mm) transverse ridges under the knit across the backs of the proximal
+  // (two) and middle (one) phalanges, leaving the joints free. The MCP knuckles themselves carry no pads so the
+  // knuckle row reads as gentle bumps under the fabric rather than bony caps.
   const pads = [];
   {
     const dx = new THREE.Vector3();
@@ -169,15 +173,11 @@ export function makeHandField(def) {
         dx.set(1, 0, 0).applyQuaternion(f.frames[k]);
         dz.set(0, 0, 1).applyQuaternion(f.frames[k]);
         const r = f.r[k] + (f.r[k + 1] - f.r[k]) * t;
-        // wide, low bar (≈ 1.8 mm proud) spanning the back of the finger
-        c.copy(a).lerp(b, t).addScaledVector(dz, r * 0.76);
+        c.copy(a).lerp(b, t).addScaledVector(dz, r * 0.72);
         pa.copy(c).addScaledVector(dx, -r * 0.5);
         pb.copy(c).addScaledVector(dx, r * 0.5);
-        pads.push({ cone: true, a: [pa.x, pa.y, pa.z], b: [pb.x, pb.y, pb.z], r1: r * 0.42, r2: r * 0.42 });
+        pads.push({ cone: true, a: [pa.x, pa.y, pa.z], b: [pb.x, pb.y, pb.z], r1: r * 0.35, r2: r * 0.35 });
       }
-      const j0 = f.joints[0];
-      const rk = f.r[0] * (i === 3 ? 1.12 : 1.16);
-      pads.push({ cone: false, c: [j0.x, j0.y - 0.0015, j0.z + 0.005 + rk * 0.45], rx: rk * 0.78, ry: rk * 0.86, rz: rk * 0.72 });
     }
   }
   const padDist = (x, y, z) => {
@@ -331,7 +331,8 @@ function smoothstep(a, b, x) {
 /**
  * Mesh the hand field and compute all per-vertex attributes:
  * position, normal, uv (metres; cylindrical per finger / around the palm), skinIndex/skinWeight,
- * aMask = (leather, piping, ao, wristPanel), aDetail = (knucklePad, seamSuppress).
+ * aMask = (leather, pipingEnvelope, ao, wristPanel), aDetail = (knucklePad, seamSuppress, signed distance to the
+ * wrist-panel seam line in metres).
  */
 export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
   const field = makeHandField(def);
@@ -347,7 +348,7 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
   const pos = net.positions;
   const uv = new Float32Array(n * 2);
   const mask = new Float32Array(n * 4); // (leather, piping, ao, wristPanel)
-  const detail = new Float32Array(n * 2); // (knucklePad, seamSuppress)
+  const detail = new Float32Array(n * 3); // (knucklePad, seamSuppress, signed distance to the wrist-panel seam)
   const skinIndex = new Uint16Array(n * 4);
   const skinWeight = new Float32Array(n * 4);
   const region = new Int16Array(n); // -1 palm, 0..3 finger, 4 thumb
@@ -432,17 +433,20 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
       const line = Math.abs(tx * 0.8 + ty * 0.6 - 0.02);
       crease = smoothstep(0.6, 1, -nz) * 0.6 * Math.exp(-((line / 0.003) ** 2)) * smoothstep(0.075, 0.03, y);
     }
-    // Black wrist panel (neoprene cuff + closure strap) over the heel of the hand, all the way round, its upper
-    // edge running a little higher on the pinky side, with the glove's grey piping along that edge on the
-    // back/sides (the palm side is leather already).
+    // Black nylon wrist panel over the heel of the hand, all the way round, its upper edge running a little higher
+    // on the pinky side, with the glove's grey piping along that edge on the back/sides and a top-stitch below it.
+    // The lines are far thinner than the mesh cells, so instead of baking them into vertex weights (which comes
+    // out blotchy) the signed distance to the seam line goes in aDetail.z and the shader draws panel / piping /
+    // stitch analytically from it; aMask.y only carries the piping's envelope (back/sides, not below the wrist).
     let panel = 0;
+    let dCuff = 0;
     {
       const nz = normals[i * 3 + 2];
       const cuffLine = 0.021 + 0.15 * x;
+      dCuff = y - cuffLine;
       panel = smoothstep(cuffLine + 0.002, cuffLine - 0.002, y);
-      leather = Math.max(leather, panel);
       const onBack = smoothstep(-0.35, 0.1, nz);
-      trim = onBack * Math.exp(-(((y - cuffLine) / 0.0011) ** 2)) * smoothstep(-0.006, 0.0, y);
+      trim = onBack * smoothstep(-0.006, 0.0, y) * (1 - smoothstep(0.006, 0.012, Math.abs(dCuff)));
     }
     // Crevices between neighbouring digits (too narrow for the AO probe): darken where a second digit's surface is
     // within a few mm of this vertex.
@@ -465,9 +469,10 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
     mask[i * 4 + 1] = trim;
     mask[i * 4 + 2] = Math.max(0, Math.min(1, ao[i])) * (1 - 0.55 * crease) * (1 - 0.7 * crevice);
     mask[i * 4 + 3] = panel;
-    // rubber knuckle pads (vertices on a pad sit on / just outside its own surface), no stitch seams near the wrist
-    detail[i * 2] = (1 - smoothstep(0.0003, 0.0022, field.padDist(x, y, z))) * (1 - leather);
-    detail[i * 2 + 1] = smoothstep(0.036, 0.024, y);
+    // finger-back padding (vertices on a pad sit on / just outside its own surface), no stitch seams near the wrist
+    detail[i * 3] = (1 - smoothstep(0.0003, 0.0022, field.padDist(x, y, z))) * (1 - Math.max(leather, panel));
+    detail[i * 3 + 1] = smoothstep(0.036, 0.024, y);
+    detail[i * 3 + 2] = dCuff;
     solve(x, y, z, idx4, w4, false);
     for (let k = 0; k < 4; k++) {
       skinIndex[i * 4 + k] = idx4[k];
@@ -495,7 +500,7 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
     outNrm.push(normals[v * 3], normals[v * 3 + 1], normals[v * 3 + 2]);
     outUv.push(uv[v * 2] + k * circ[v], uv[v * 2 + 1]);
     outMask.push(mask[v * 4], mask[v * 4 + 1], mask[v * 4 + 2], mask[v * 4 + 3]);
-    outDetail.push(detail[v * 2], detail[v * 2 + 1]);
+    outDetail.push(detail[v * 3], detail[v * 3 + 1], detail[v * 3 + 2]);
     for (let j = 0; j < 4; j++) {
       outSI.push(skinIndex[v * 4 + j]);
       outSW.push(skinWeight[v * 4 + j]);
@@ -524,7 +529,7 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(outNrm, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(outUv, 2));
   geo.setAttribute('aMask', new THREE.Float32BufferAttribute(outMask, 4));
-  geo.setAttribute('aDetail', new THREE.Float32BufferAttribute(outDetail, 2));
+  geo.setAttribute('aDetail', new THREE.Float32BufferAttribute(outDetail, 3));
   geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(outSI, 4));
   geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(outSW, 4));
   geo.setIndex(new THREE.BufferAttribute(outIdx, 1));

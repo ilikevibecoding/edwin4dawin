@@ -74,11 +74,12 @@ if (rig.parts.carryHandle) rig.parts.carryHandle.visible = false;
 
 // The angled hand stop moves rig.sockets.gripLeft in-game (attachments/index.js); reproduce it so the socket the
 // fit offsets are derived from matches, and so the index-finger / fin contact can be judged here.
+// ?stopZ=-0.315 slides the station along the handguard (the fit is socket-relative and should ride along).
 {
   const simple = (color, roughness, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness, vertexColors: true });
   const stubMats = { polymer: simple(0x2b2b29, 0.82), steel: simple(0x8d9096, 0.42, 0.95), matte: simple(0x0c0c0d, 0.95) };
   const stubAtlas = { text: (w, h) => plane(w, h), material: new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }) };
-  const handStop = buildHandStop({}, rig, stubMats, stubAtlas, { zCentre: -0.265 });
+  const handStop = buildHandStop({}, rig, stubMats, stubAtlas, { zCentre: num('stopZ', -0.265) });
   rig.sockets.gripLeft.position.copy(handStop.palm);
   rig.sockets.gripLeft.rotation.copy(handStop.palmRotation);
   handStop.group.visible = params.get('handstop') !== '0';
@@ -216,7 +217,8 @@ async function fitLeftFingers() {
     d = Math.min(d, sdBox(x, dy, -0.0159, 0, 0.0159, 0.0077)); // left
     d = Math.min(d, sdBox(x, dy, 0, 0.0159, 0.0077, 0.0159)); // top
     d = Math.min(d, sdBox(x, dy, 0, -0.0159, 0.0077, 0.0159)); // bottom
-    if (z < -0.238 && z > -0.292) d = Math.min(d, sdBox(x, y, 0, -0.0248, 0.011, 0.0142)); // hand stop clamp + fin
+    const stopZ = num('stopZ', -0.265); // hand stop clamp + fin (follows ?stopZ like the socket does)
+    if (z < stopZ + 0.027 && z > stopZ - 0.027) d = Math.min(d, sdBox(x, y, 0, -0.0248, 0.011, 0.0142));
     return d;
   };
   const raw = {
@@ -294,7 +296,8 @@ async function fitLeftFingers() {
     fit.pos.copy(base).add(off);
     apply();
     const centre = hand.group.localToWorld(new THREE.Vector3().fromArray(hand.palm.toArray())).applyMatrix4(inv);
-    report.palm = { offset: best.off.map((v) => +v.toFixed(4)), cost: +best.cost.toFixed(0), centreGun: centre.toArray().map((v) => +v.toFixed(4)) };
+    const fromSocket = centre.clone().sub(rig.sockets.gripLeft.position);
+    report.palm = { offset: best.off.map((v) => +v.toFixed(4)), cost: +best.cost.toFixed(0), centreGun: centre.toArray().map((v) => +v.toFixed(4)), fitOffset: fromSocket.toArray().map((v) => +v.toFixed(4)) };
   }
   // hugging cost of the whole finger: squared gaps to the surface (samples along each phalanx), penetration penalised
   const gapCost = (a, b, ra, rb, hug = true) => {
@@ -365,17 +368,31 @@ async function fitLeftFingers() {
     const ttipw = num('ttipw', 1);
     let best = { cost: Infinity, angles: [0, 0, 0, 0, 0] };
     const twist = num('ttwist', 0);
-    for (let flex = -90; flex <= 60; flex += 10) {
-      for (let abd = -90; abd <= 90; abd += 10) {
+    // self-collision: the thumb must stay on the palmar side of the hand's own slab (a real thumb cannot swing over
+    // the back of the hand) — thumb joint centres over the palm area with hand-space z above the mid-plane are
+    // penalised like a penetration
+    const gunToHand = new THREE.Matrix4();
+    const lp = new THREE.Vector3();
+    const selfCost = (pGun) => {
+      lp.copy(pGun).applyMatrix4(gunToHand);
+      if (lp.y < -0.01 || lp.y > 0.12 || Math.abs(lp.x) > 0.055) return 0;
+      const over = lp.z + 0.004;
+      return over > 0 ? 1e5 + over * 1e7 : 0;
+    };
+    const tstep = num('tstep', 10); // CMC grid step (deg); ?tstep=5 for a fine pass
+    for (let flex = -90; flex <= 60; flex += tstep) {
+      for (let abd = -90; abd <= 90; abd += tstep) {
         for (let mcp = -30; mcp <= 60; mcp += 10) {
           for (let ip = -30; ip <= 60; ip += 15) {
             raw.thumb = [flex, abd, twist, mcp, ip];
             apply();
+            gunToHand.copy(hand.group.matrixWorld).invert().multiply(rig.gunRoot.matrixWorld);
             let cost = 0;
             for (let joint = 0; joint < 3; joint++) {
               const a = jointPos(hand.bones[t[joint]]);
               const b = boneEnd(hand.bones[t[joint]], def.thumb.len[joint]);
               cost += gapCost(a, b, def.thumb.r[joint], def.thumb.r[joint + 1], joint > 0) * (joint > 0 ? num('thug', 0.3) : 1); // hug the rail with the distal segments
+              cost += selfCost(b) * num('tselfw', 1);
               if (joint > 0) cost += tdir ? dirCost(a, b) * num('tlinew', 1) : lineCost(a, b) * num('tlinew', 1);
               if (joint === 2 && !tdir) cost += (b.z - a.z) * 1e5; // reward pointing forward
               if (joint === 2 && ttip) cost += b.distanceToSquared(ttip) * 1e6 * ttipw;
@@ -404,7 +421,16 @@ async function fitLeftFingers() {
       const w = hand.group.localToWorld(new THREE.Vector3().fromArray(v)).applyMatrix4(inv);
       palm[k] = mm(sdf(w.x, w.y, w.z));
     }
-    report.clearance = { knuckles, palm };
+    // thumb segments: smallest clearance along each capsule (negative = inside the handguard / hand stop)
+    const thumb = {};
+    ['meta', 'prox', 'dist'].forEach((k, joint) => {
+      const a = jointPos(hand.bones[BONES.thumb[joint]]);
+      const b = boneEnd(hand.bones[BONES.thumb[joint]], def.thumb.len[joint]);
+      let g = Infinity;
+      for (let s = 0; s <= 1.0001; s += 0.25) g = Math.min(g, sdf(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, a.z + (b.z - a.z) * s) - (def.thumb.r[joint] + (def.thumb.r[joint + 1] - def.thumb.r[joint]) * s));
+      thumb[k] = mm(g);
+    });
+    report.clearance = { knuckles, palm, thumb };
   }
   console.log(`[fit] gripLeft ${JSON.stringify(raw)}`);
   console.log(`[fit] joints ${JSON.stringify(report)}`);

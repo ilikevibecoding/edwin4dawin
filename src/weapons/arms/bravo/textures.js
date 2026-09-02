@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CUFF, cuffTabDist } from './arm.js';
 
 /**
  * Procedural canvas textures for the arms: olive knit, black synthetic leather, glove cuff with grey trim,
@@ -177,22 +178,23 @@ export function makeKnit(aniso) {
           hgt = Math.max(hgt, legs(wcx, wcy, px, py));
         }
       }
-      // yarn fuzz + slight waviness
+      // yarn fuzz + slight waviness; every other course stands a little proud so the knit reads as fine ribbing
+      // across the back of the hand at arm's length (like the reference glove), not just as a uniform fuzz
       const fuzz = fbm(x / S, y / S, 128, 2, 7) - 0.5;
       const wave = fbm(x / S, y / S, 4, 3, 3) - 0.5;
-      height[y * S + x] = Math.max(0, Math.min(1, hgt * 0.85 + fuzz * 0.12 + wave * 0.1 + 0.05));
+      const rib = cy % 2 === 0 ? 0.08 : 0;
+      height[y * S + x] = Math.max(0, Math.min(1, hgt * 0.8 + rib + fuzz * 0.12 + wave * 0.1 + 0.05));
     }
   }
   const albedo = writeRGB(makeCanvas(S, S), (x, y, rgb) => {
     const hgt = height[y * S + x];
     const cellHash = hash2(Math.floor(x / cw), Math.floor(y / ch), 11);
     const wear = fbm(x / S, y / S, 3, 3, 21);
-    // olive base, lighter on the yarn ridges, dark in the gaps
     // grey-olive like the MW2019 glove (hue ≈ 66°, low saturation), lighter on the yarn ridges, dark in the gaps
-    const l = 0.52 + 0.62 * hgt + (cellHash - 0.5) * 0.12 + (wear - 0.5) * 0.16;
+    const l = 0.48 + 0.6 * hgt + (cellHash - 0.5) * 0.12 + (wear - 0.5) * 0.16;
     rgb[0] = 0.3 * l;
-    rgb[1] = 0.315 * l;
-    rgb[2] = 0.245 * l;
+    rgb[1] = 0.313 * l;
+    rgb[2] = 0.25 * l;
   });
   return { map: toTexture(albedo, { srgb: true, anisotropy: aniso }), normalMap: toTexture(heightToNormal(height, S, S, 5), { srgb: false, anisotropy: aniso }), size: 0.034 };
 }
@@ -226,64 +228,66 @@ export function makeLeather(aniso) {
 
 /* ------------------------------------------------------------------------------------------- cuff */
 
-/** Glove cuff: black nylon closure with the light grey trim stripe. u once around, v once along the cuff. */
+/**
+ * Glove cuff: matte black nylon wrist panel (ripstop weave) with the hook-and-loop closure — a thin strap round the
+ * cuff and its rectangular tab over the back of the wrist (layout from arm.js CUFF / cuffTabDist so the paint lines
+ * up with the displaced geometry), stitched outlines, and the thin grey piping at the forearm end.
+ * u once around (0.25 = dorsal), v once along the cuff (0 = inside the glove, 1 = forearm end).
+ */
 export function makeCuff(aniso) {
   const W = 512;
   const H = 256;
   const height = new Float32Array(W * H);
-  // thin grey elastic trim band at the forearm end of the cuff (v → 1), stitched; the hand end (v → 0) sits under
-  // the glove's black wrist panel, so it stays plain black.
-  const stripe = (v) => sstep(0.93, 0.945, v) * (1 - sstep(0.972, 0.985, v));
-  // hook-and-loop closure strap running round the cuff (v 0.22..0.66) whose free end (tab) lies over the back of
-  // the wrist (u ≈ 0.25); the strap is a slightly lighter charcoal webbing with a stitched outline.
-  const strapBand = (v) => sstep(0.2, 0.23, v) * (1 - sstep(0.65, 0.68, v));
-  const tabU = (u) => {
-    const du = Math.abs(((u - 0.24 + 1.5) % 1) - 0.5);
-    return 1 - sstep(0.13, 0.15, du);
-  };
-  const stitch = (u, v) => {
-    let s = Math.exp(-(((v - 0.92) / 0.005) ** 2));
-    s += strapBand(v) > 0.01 ? Math.exp(-(((v - 0.235) / 0.007) ** 2)) + Math.exp(-(((v - 0.645) / 0.007) ** 2)) : 0;
-    // tab outline (vertical stitch lines at the tab's ends)
-    const du = Math.abs(((u - 0.24 + 1.5) % 1) - 0.5);
-    s += strapBand(v) * Math.exp(-(((du - 0.135) / 0.006) ** 2));
-    return s;
+  const cuffLen = CUFF.end - CUFF.start;
+  const [st0, st1] = CUFF.stripe;
+  const stripe = (v) => sstep(st0, st0 + 0.015, v) * (1 - sstep(st1 - 0.013, st1, v));
+  const v0 = (CUFF.tab.s[0] - CUFF.start) / cuffLen;
+  const v1 = (CUFF.tab.s[1] - CUFF.start) / cuffLen;
+  const strapBand = (v) => sstep(v0 - 0.03, v0, v) * (1 - sstep(v1, v1 + 0.03, v));
+  const stitch = (u, v, tabD) => {
+    // piping seam at the forearm end, strap edges, and a box stitch 2 mm inside the tab's edge
+    let s = Math.exp(-(((v - (st0 - 0.012)) / 0.005) ** 2));
+    const band = strapBand(v);
+    if (band > 0.01) s += Math.exp(-(((v - (v0 + 0.012)) / 0.005) ** 2)) + Math.exp(-(((v - (v1 - 0.012)) / 0.005) ** 2));
+    s += Math.exp(-(((tabD + 0.002) / 0.00045) ** 2));
+    // dashed thread
+    const dash = 0.6 + 0.4 * (0.5 + 0.5 * Math.sin(u * Math.PI * 2 * 220) * Math.sin(v * Math.PI * 2 * 60));
+    return Math.min(1, s) * dash;
   };
   // canvas row 0 is texture v = 1 (flipY upload): v below is the texture coordinate (0 = hand end, 1 = forearm end)
+  const sample = (x, y) => {
+    const u = x / W;
+    const v = 1 - y / H;
+    const tabD = cuffTabDist(u, v);
+    const tab = 1 - sstep(-0.0004, 0.0006, tabD);
+    const strap = strapBand(v) * (1 - tab);
+    // ripstop weave: two crossed sine grids over a coarser ripstop lattice
+    const weave = 0.5 + 0.25 * Math.sin(u * Math.PI * 2 * 128) + 0.25 * Math.sin(v * Math.PI * 2 * 48);
+    const grid = Math.max(sstep(0.9, 1, Math.abs(Math.sin(u * Math.PI * 16))), sstep(0.9, 1, Math.abs(Math.sin(v * Math.PI * 6))));
+    const n = fbm(u, v, 6, 3, 41);
+    // webbing rib along the strap and the tab (the tab is the strap's free end, hook side down)
+    const rib = 0.5 + 0.5 * Math.sin(v * Math.PI * 2 * 60);
+    return { u, v, tabD, tab, strap, weave, grid, n, rib, st: stitch(u, v, tabD), s: stripe(v) };
+  };
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const u = x / W;
-      const v = 1 - y / H;
-      // ripstop weave: two crossed sine grids
-      const weave = 0.5 + 0.25 * Math.sin(u * Math.PI * 2 * 128) + 0.25 * Math.sin(v * Math.PI * 2 * 48);
-      const grid = Math.max(sstep(0.9, 1, Math.abs(Math.sin(u * Math.PI * 16))), sstep(0.9, 1, Math.abs(Math.sin(v * Math.PI * 6))));
-      const n = fbm(u, v, 6, 3, 41);
-      const strap = strapBand(v);
-      const tab = strap * tabU(u);
-      // webbing rib pattern on the strap; the tab's outer face is the fuzzy loop side of the hook-and-loop closure
-      const rib = 0.5 + 0.5 * Math.sin(v * Math.PI * 2 * 40);
-      const loop = fbm(u, v, 180, 2, 53);
-      height[y * W + x] = weave * 0.35 * (1 - strap) + grid * 0.25 * (1 - strap) + n * 0.3 + stripe(v) * 0.12 + strap * (0.12 + 0.1 * rib) * (1 - tab) + tab * (0.2 + 0.25 * loop) - stitch(u, v) * 0.25;
+      const k = sample(x, y);
+      const web = k.tab + k.strap;
+      height[y * W + x] = (k.weave * 0.35 + k.grid * 0.25) * (1 - web) + k.n * 0.3 + k.s * 0.12 + web * (0.15 + 0.12 * k.rib) - k.st * 0.25;
     }
   }
   const albedo = writeRGB(makeCanvas(W, H), (x, y, rgb) => {
-    const u = x / W;
-    const v = 1 - y / H;
-    const s = stripe(v);
-    const n = fbm(u, v, 6, 3, 41);
-    const weave = 0.5 + 0.25 * Math.sin(u * Math.PI * 2 * 128) + 0.25 * Math.sin(v * Math.PI * 2 * 48);
-    const strap = strapBand(v);
-    const tab = strap * tabU(u);
-    const rib = 0.5 + 0.5 * Math.sin(v * Math.PI * 2 * 40);
-    const loop = fbm(u, v, 180, 2, 53);
-    let black = 0.045 * (0.75 + 0.5 * weave + (n - 0.5) * 0.4);
-    black *= 1 + strap * (0.35 + 0.35 * rib) * (1 - tab) + tab * (0.5 + 0.6 * loop);
-    const grey = 0.24 * (0.85 + 0.3 * weave + (n - 0.5) * 0.3);
-    const st = Math.min(1, stitch(u, v));
-    const l = (black + (grey - black) * s) * (1 - 0.6 * st);
+    const k = sample(x, y);
+    let black = 0.046 * (0.75 + 0.5 * k.weave + (k.n - 0.5) * 0.4);
+    // strap / tab webbing: a shade lighter charcoal with the rib
+    black *= 1 + (k.tab + k.strap) * (0.25 + 0.3 * k.rib);
+    const grey = 0.24 * (0.85 + 0.3 * k.weave + (k.n - 0.5) * 0.3);
+    let l = black + (grey - black) * k.s;
+    // thread: light grey stitches
+    l = l * (1 - 0.6 * k.st) + 0.38 * k.st;
     rgb[0] = l;
     rgb[1] = l;
-    rgb[2] = l * (s > 0.5 ? 1.03 : 1.05);
+    rgb[2] = l * (k.s > 0.5 ? 1.03 : 1.05);
   });
   return { map: toTexture(albedo, { srgb: true, anisotropy: aniso }), normalMap: toTexture(heightToNormal(height, W, H, 3), { srgb: false, anisotropy: aniso }) };
 }
@@ -489,9 +493,10 @@ export function makeSkin(aniso, { circumference = 0.23, length = 0.12 } = {}) {
     // base ≈ (153, 99, 87): muted rose-tan measured off the MW2019 reference forearm (hue ≈ 12°, sat ≈ 0.43);
     // the in-game sun lifts it about 15 %, so it is kept short of saturated peach; inner forearm a touch lighter/
     // yellower, dorsal + elbow end ruddier
-    let R = 0.6;
-    let G = 0.39;
-    let B = 0.34;
+    // muted rose-tan (hue ≈ 15°, saturation ≈ 0.4 like the MW2019 reference forearm)
+    let R = 0.58;
+    let G = 0.404;
+    let B = 0.345;
     const inner = 1 - dorsal;
     R += inner * 0.03 - dorsal * 0.01;
     G += inner * 0.03 - dorsal * 0.015;
@@ -500,7 +505,7 @@ export function makeSkin(aniso, { circumference = 0.23, length = 0.12 } = {}) {
     R += elbowRed * 0.025;
     G -= elbowRed * 0.03;
     B -= elbowRed * 0.025;
-    let l = 0.96 + (mottle - 0.5) * 0.12 + (mottleFine - 0.5) * 0.06 + (pores - 0.5) * 0.04;
+    let l = 0.88 + (mottle - 0.5) * 0.12 + (mottleFine - 0.5) * 0.06 + (pores - 0.5) * 0.04;
     l *= cuffShade;
     l -= freck * 0.1 + mole * 0.16;
     // veins: cooler and slightly darker (faint — they read mostly through the soft ridge in the normal map)

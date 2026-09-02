@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { makeWeightSolver } from './hand.js';
 
 /**
- * Forearm tube: glove cuff (hook-and-loop closure strap with its tab over the back of the wrist, grey trim ring
- * painted by the cuff texture), bare forearm skin, the rolled-up sleeve (fold edge + two stacked folds) and the
- * desert-camo sleeve continuing past the elbow up the (mostly off-screen) upper arm.
+ * Forearm tube: glove cuff (tailored nylon wrist panel — it starts inside the glove's wrist so the glove's cut edge
+ * is the only visible seam, flares slightly toward the forearm, carries a rectangular hook-and-loop tab over the
+ * back of the wrist and a thin grey piping at its end), bare forearm skin, the rolled-up sleeve (fold edge + two
+ * stacked folds) and the desert-camo sleeve continuing past the elbow up the (mostly off-screen) upper arm.
  * One indexed geometry with three material groups, skinned to the forearm/upper-arm bones so it bends at the
  * wrist and elbow. Built along -Y in hand space (s = distance down the arm from the wrist). Rows at the group
  * boundaries are duplicated so each group gets its own UV layout (cuff / skin maps are unwrapped once around the
@@ -14,14 +15,42 @@ import { makeWeightSolver } from './hand.js';
 export const ARM_GROUPS = { cuff: 0, skin: 1, sleeve: 2 };
 
 const TAU = Math.PI * 2;
-const CUFF_START = -0.012;
-const CUFF_END = 0.044;
+// The glove mesh is cut at hand y = -0.018 (s = 0.018); the cuff tube starts inside it and only shows past the cut.
+const GLOVE_CUT = 0.018;
+const CUFF_START = 0.006;
+const CUFF_END = 0.046;
 // The sleeve is rolled well below the elbow so the camo roll enters the hip view at the bottom-left corner like the
 // MW2019 reference (the virtual shoulder anchor keeps the forearm long on screen).
 const SKIN_END = 0.086;
 const ROLL_END = 0.128;
 const ARM_END = 0.58;
-const TAB_CENTRE = 0.24 * TAU; // angular position of the strap tab (matches the cuff texture; ≈ dorsal)
+
+/**
+ * Cuff layout shared with the cuff texture (textures.makeCuff): u runs once around the wrist (0.25 = dorsal),
+ * v along the cuff from its start inside the glove (0) to the forearm end (1). Distances in metres.
+ */
+export const CUFF = {
+  start: CUFF_START,
+  end: CUFF_END,
+  meanRadius: 0.0295,
+  tab: { s: [0.022, 0.04], halfWidth: 0.02, corner: 0.003, height: 0.003, angle: 0.25 * TAU }, // 40 × 18 × 3 mm
+  strapHeight: 0.0005,
+  stripe: [0.93, 0.985], // grey piping (v) at the forearm end
+};
+
+/** Signed distance (m) to the rounded-rectangle hook-and-loop tab, in cuff texture space (u around, v along). */
+export function cuffTabDist(u, v) {
+  const t = CUFF.tab;
+  const s = CUFF.start + v * (CUFF.end - CUFF.start);
+  let a = u * TAU - t.angle;
+  a -= Math.round(a / TAU) * TAU;
+  const arc = a * CUFF.meanRadius;
+  const sc = (t.s[0] + t.s[1]) * 0.5;
+  const hs = (t.s[1] - t.s[0]) * 0.5;
+  const qx = Math.abs(arc) - (t.halfWidth - t.corner);
+  const qy = Math.abs(s - sc) - (hs - t.corner);
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - t.corner;
+}
 
 /** Physical size of the bare-skin band, so the unwrapped skin map comes out life-sized. */
 export const SKIN_BAND = { length: SKIN_END - CUFF_END, circumference: TAU * 0.0365 };
@@ -42,13 +71,11 @@ function radii(s, out) {
   let rx;
   let rz;
   if (s < CUFF_END) {
-    // snug neoprene cuff over the wrist (≈ 2 mm over the skin), barely flaring toward the forearm, rolled top edge
-    const t = sstep(-0.01, CUFF_END, s);
-    rx = lerp(0.0334, 0.0346, t);
-    rz = lerp(0.0256, 0.0272, t);
-    const lip = gauss(s + 0.004, 0.004) * 0.0008;
-    rx += lip;
-    rz += lip;
+    // nylon wrist panel: hidden inside the glove's wrist (≈ 31 × 22 mm half-axes) up to the glove's cut edge,
+    // then flaring slightly toward the forearm end like a tailored cuff
+    const t = sstep(GLOVE_CUT - 0.002, CUFF_END, s);
+    rx = lerp(0.0304, 0.0352, t);
+    rz = lerp(0.0212, 0.0272, t);
   } else if (s < SKIN_END) {
     // bare forearm: emerges from inside the cuff, thickens toward the belly of the forearm
     const t = sstep(CUFF_END, SKIN_END + 0.03, s);
@@ -75,15 +102,14 @@ function radii(s, out) {
 /** Radial displacement (metres) for fabric wrinkles / folds and the cuff's closure strap + tab. */
 function displace(s, ang) {
   if (s < CUFF_END) {
-    // hook-and-loop closure strap round the cuff (cuff texture v 0.22..0.66) and its free tab over the back of
-    // the wrist; both stand proud of the neoprene cuff
-    const v = (s - CUFF_START) / (CUFF_END - CUFF_START);
-    const band = sstep(0.2, 0.23, v) * (1 - sstep(0.65, 0.68, v));
+    // hook-and-loop closure: a thin strap round the cuff and its rectangular free tab standing 3 mm proud over
+    // the back of the wrist (layout shared with the cuff texture)
+    const [s0, s1] = CUFF.tab.s;
+    const band = sstep(s0 - 0.0015, s0, s) * (1 - sstep(s1, s1 + 0.0015, s));
     if (band <= 0) return 0;
-    let a = ang - TAB_CENTRE;
-    a -= Math.round(a / TAU) * TAU;
-    const tab = 1 - sstep(0.13 * TAU, 0.15 * TAU, Math.abs(a));
-    return band * (0.0007 + 0.0011 * tab);
+    const d = cuffTabDist(ang / TAU, (s - CUFF_START) / (CUFF_END - CUFF_START));
+    const tab = 1 - sstep(-0.0006, 0.0012, d);
+    return band * CUFF.strapHeight * (1 - tab) + tab * CUFF.tab.height;
   }
   if (s < SKIN_END) return 0;
   if (s < ROLL_END - 0.004) {
@@ -119,11 +145,12 @@ export function buildArmGeometry(def) {
   // rows: { s, g } — boundary stations appear in both neighbouring groups
   const rows = [];
   const add = (g, list) => list.forEach((s) => rows.push({ s, g }));
-  add(ARM_GROUPS.cuff, [-0.012, -0.008, -0.004, -0.0015, 0.0012, 0.005, 0.009, 0.013, 0.017, 0.021, 0.0242, 0.0268, 0.031, 0.036, 0.04, CUFF_END]);
+  // (dense rows across the tab's edges so its 3 mm step and rounded corners are resolved)
+  add(ARM_GROUPS.cuff, [CUFF_START, 0.012, 0.016, 0.0185, 0.02, 0.0212, 0.0222, 0.0232, 0.025, 0.028, 0.031, 0.034, 0.037, 0.0388, 0.0398, 0.0408, 0.042, 0.044, CUFF_END]);
   add(ARM_GROUPS.skin, [...range(CUFF_END, SKIN_END, (SKIN_END - CUFF_END) / 10), SKIN_END]);
   add(ARM_GROUPS.sleeve, [SKIN_END, SKIN_END + 0.0007, SKIN_END + 0.002, ...range(SKIN_END + 0.005, ROLL_END, 0.003), ROLL_END, ...range(ROLL_END + 0.008, 0.3, 0.008), ...range(0.3, ARM_END + 1e-6, 0.02)]);
 
-  const SEG = 48;
+  const SEG = 64;
   const cols = SEG + 1;
   const n = rows.length * cols;
   const pos = new Float32Array(n * 3);
