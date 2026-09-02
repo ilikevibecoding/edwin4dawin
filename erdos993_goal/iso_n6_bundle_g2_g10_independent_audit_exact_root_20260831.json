@@ -1,0 +1,59 @@
+{
+  "assembler": "assemble_iso_n6_bundle_g2_g10_root.py",
+  "assembler_sha256": "F75783566E9C649E41D05424CEFCBFA6956BCBBBF601E4F2FC68C093D78E9941",
+  "assembly": "iso_n6_bundle_g2_g10_assembled_exact_root_20260831.json",
+  "assembly_sha256": "6AE97573C08CD55B71C46D630F2ABE1769039D4C4023E0B166D1FFA761C601C1",
+  "coverage_gap_within_g2_through_g10": null,
+  "date": "2026-08-31",
+  "g2_mark_geometries": [
+    "the two distinct marks are adjacent",
+    "the two distinct marks are nonadjacent"
+  ],
+  "g2_parent_modes_per_geometry": 5,
+  "independently_reconstructed_blocks": [
+    [
+      2
+    ],
+    [
+      3
+    ],
+    [
+      4
+    ],
+    [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ]
+  ],
+  "marker": "PASS_INDEPENDENT_EXACT_ISO_N6_BUNDLE_G2_G10_ROOT",
+  "reconstructed_closed_coefficients": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "remaining_bundle_coefficients": [
+    1
+  ],
+  "report_pins": {
+    "iso_n6_bundle_g2_all_geometries_all_parent_modes_assembled_exact_root_20260831.json": "775797AE5909BA103E25AF15EF48F9235CF7F46ADF3C1FDE8A2F9DC643333645",
+    "iso_n6_bundle_g2_complete_independent_audit_exact_root_20260831.json": "139408F0ACA2F7E6BC605AF245A335B8136D233EC8310737A70FFD8F8F771D70",
+    "iso_n6_bundle_g3_marked_edge_bernstein_exact_g1_nonadjacent_20260831.json": "C34717BA42B978C93B01FFDA524609DDA212909832339E790A7761C33FC8ECA5",
+    "iso_n6_bundle_g4_marked_edge_bernstein_exact_g1_bernstein_20260830.json": "664BEF48E70853EEE3C277590385F412CBAA262E424E52E2B4D184AA507B82E3",
+    "iso_n6_bundle_top_g5_g10_assembled_exact_root_20260830.json": "C26D5A80AD4617461971F8AA09ADC2E4C1AEE24BB592D71112992AAD2FA09AF7"
+  },
+  "schema": "iso-n6-bundle-g2-g10-independent-audit-v1",
+  "scope_guard": "This independently audits dependency integrity and the gapless coefficient partition g2 through g10. The pinned producer reports remain the positivity evidence. It does not assert g1, terminal N6, all-N6 induction, higher ranks, or Erdos Problem 993.",
+  "source": "audit_iso_n6_bundle_g2_g10_independent_root.py",
+  "source_sha256": "DF96E601F1409C036514A48FAC5DE4BA18B3879174D73D1B2098E53456BC69A4",
+  "status": "PASS independent hash and coefficient-partition audit for the rank-six g2-through-g10 assembly"
+}

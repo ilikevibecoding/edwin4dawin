@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""Independent exact audit of every analytic bound used in the D=35 boxes."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+
+import sympy as sp
+
+
+HERE = Path(__file__).resolve().parent
+OUTPUT = HERE / "rank8_delta1_order35_bound_chain_independent_audit_delta1d35_20260825.json"
+PINNED = {
+    "FOREST_V6_ALPHA10_THEOREM_2026-08-13.md":
+        "D6F2B1017B3C222167209AC00158423C98607CAE1804415C24ED82F2DC8F91FF",
+    "prove_forest_v6_alpha10.py":
+        "2B3620BEF00E761B857AAFBAA2BABB79A5419D0E0D26AB45C787CED2585DD947",
+    "forest_v6_alpha10_exact_20260813.json":
+        "5F3954C8E3CC8817376CE89685CF283BAEE2FF55214A8E9FCFE816D50A8E9AA4",
+    "TREE_RANK45_PATH_RATIO_THEOREM_2026-07-28.md":
+        "7FE34CDC7F02442ABB9665A0FDC093B78331C6B93CC0793F60B06259BB7B1528",
+    "verify_tree_rank45_path_ratio.py":
+        "AB5D6E395A13BE66276D45C25EB2F869B2410B2445F78A45F4A83648CE1CA86C",
+    "RANK5_FOREST_THREE_HALVES_THEOREM_2026-07-27.md":
+        "CA5323D8DF3110087228193C892F576F4814D4A813AE6FAB184887048377203D",
+    "verify_rank5_three_halves_forest_certificate.py":
+        "56B52DFE4FFA9BBE7273EF8EAA24AA737615338815DF0D41A5792C6728F17DBE",
+    "verify_rank5_three_halves_convolution_cones.py":
+        "06BD1AA9355B1C07DE5B9087AFEE0477D9C583E0ED943EA86FC332FB692A8194",
+}
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
+
+
+def main() -> None:
+    actual = {name: sha256(HERE / name) for name in PINNED}
+    assert actual == PINNED
+
+    n = sp.Integer(35)
+    mu4 = sp.cancel((n - 7) * (n - 8) / (n - 3))
+    assert mu4 == sp.Rational(189, 8)
+
+    max_q = int(n - 4)
+    h_values = [
+        sp.Integer(0) if q_value <= 2 else sp.binomial(q_value - 1, 2)
+        for q_value in range(max_q + 1)
+    ]
+    for q_value, h_value in enumerate(h_values):
+        maximum_forest_edges = max(q_value - 1, 0)
+        assert sp.binomial(q_value, 2) - maximum_forest_edges == h_value
+    first_differences = [
+        h_values[index + 1] - h_values[index]
+        for index in range(max_q)
+    ]
+    assert first_differences == sorted(first_differences)
+
+    q, r, t = sp.symbols("q r t", nonnegative=True)
+    hq = (q - 1) * (q - 2) / 2
+    hq1 = q * (q - 1) / 2
+    phi = sp.expand((1 - r) * hq + r * hq1)
+    smooth = sp.expand((q + r - 1) * (q + r - 2) / 2)
+    interpolation_reserve = sp.factor(phi - smooth)
+    assert sp.factor(interpolation_reserve - r * (1 - r) / 2) == 0
+
+    mu4_integer = int(sp.floor(mu4))
+    mu4_fraction = sp.cancel(mu4 - mu4_integer)
+    phi_mu4 = sp.cancel(
+        (1 - mu4_fraction) * h_values[mu4_integer]
+        + mu4_fraction * h_values[mu4_integer + 1]
+    )
+    mu5 = sp.cancel(2 * phi_mu4 / mu4)
+    assert phi_mu4 == sp.Rational(979, 4)
+    assert mu5 == sp.Rational(3916, 189)
+    smooth_mu5 = sp.cancel(mu4 - 3 + 2 / mu4)
+    assert smooth_mu5 == sp.Rational(31313, 1512)
+    transfer_reserve = sp.cancel(mu5 - smooth_mu5)
+    assert transfer_reserve == sp.Rational(5, 504) > 0
+
+    z = sp.symbols("z", positive=True)
+    derivative_records = []
+    for q_value in range(3, max_q):
+        phi_piece = h_values[q_value] + (z - q_value) * (
+            h_values[q_value + 1] - h_values[q_value]
+        )
+        scaled = sp.factor(z**2 * sp.diff(2 * phi_piece / z, z))
+        assert scaled == (q_value - 1) * (q_value + 2) > 0
+        derivative_records.append(str(scaled))
+
+    x_lower = sp.cancel(6 / (n - 5))
+    x_upper = sp.cancel(6 / mu5)
+    y_lower = sp.cancel(5 / (n - 4))
+    y_upper = sp.cancel(5 / mu4)
+    assert (x_lower, x_upper, y_lower, y_upper) == (
+        sp.Rational(1, 5),
+        sp.Rational(567, 1958),
+        sp.Rational(5, 31),
+        sp.Rational(40, 189),
+    )
+    x = sp.symbols("x", positive=True)
+    q5_cap = 10 * x / (x + 12)
+    assert sp.factor((x + 12) ** 2 * sp.diff(q5_cap, x)) == 120
+
+    small_order = 18
+    small_floors = {
+        rank: math.comb(35, rank)
+        - small_order * math.comb(33, rank - 2)
+        for rank in (4, 5, 6)
+    }
+    assert all(value > 0 for value in small_floors.values())
+    small_caps = {
+        rank: sp.Rational(math.comb(small_order, rank), small_floors[rank])
+        for rank in (4, 5, 6)
+    }
+    small_u6_switch = sp.cancel(
+        small_caps[6] / (sp.Rational(small_order - 5, 6) * x_upper)
+    )
+    assert 0 < small_u6_switch < small_caps[5]
+
+    bridge_records = {}
+    for bridge_order in range(19, 27):
+        floors = {
+            rank: math.comb(35, rank)
+            - bridge_order * math.comb(33, rank - 2)
+            for rank in (4, 5, 6)
+        }
+        assert all(value > 0 for value in floors.values())
+        caps = {
+            rank: sp.Rational(math.comb(bridge_order, rank), floors[rank])
+            for rank in (4, 5, 6)
+        }
+        bridge_mu4 = sp.cancel(
+            (sp.Integer(bridge_order) - 7) * (bridge_order - 8)
+            / (bridge_order - 3)
+        )
+        ratio = sp.cancel(5 / bridge_mu4)
+        u6_switch = sp.cancel(
+            caps[6] / (sp.Rational(bridge_order - 5, 6) * x_upper)
+        )
+        assert ratio > 0 and u6_switch > 0
+        bridge_records[str(bridge_order)] = {
+            "edge_floors": [floors[rank] for rank in (4, 5, 6)],
+            "absolute_caps": [str(caps[rank]) for rank in (4, 5, 6)],
+            "rank4_ratio_cap": str(ratio),
+            "u6_switch": str(u6_switch),
+        }
+    assert [bridge_records[str(m)]["rank4_ratio_cap"] for m in range(19, 27)] == [
+        "20/33", "85/156", "45/91", "19/42", "5/12", "105/272", "55/153",
+        "115/342",
+    ]
+
+    # At M=26 the separate rank-4 and rank-6 endpoint maxima are not jointly
+    # realizable.  The already pinned forest Q5 theorem supplies the exact
+    # coupling.  Below r=10/43 the ordinary shadow cap b<=7/2 is strongest;
+    # above it Q5 gives b<=(10-r)/(12r).
+    m26_rank4_cap = sp.Rational(115, 342)
+    q5_ratio_switch = sp.Rational(10, 43)
+    normalized_q5_switch = sp.cancel(q5_ratio_switch / m26_rank4_cap)
+    assert 0 < normalized_q5_switch < 1
+    rank4_ratio = sp.symbols("rank4_ratio", positive=True)
+    q5_rank6_cap = sp.cancel((10 - rank4_ratio) / (12 * rank4_ratio))
+    assert sp.cancel(q5_rank6_cap.subs(rank4_ratio, q5_ratio_switch)) == sp.Rational(7, 2)
+    assert sp.factor(10 - rank4_ratio - 12 * rank4_ratio * q5_rank6_cap) == 0
+    assert sp.factor(sp.diff(q5_rank6_cap, rank4_ratio)) == (
+        -sp.Rational(5, 6) / rank4_ratio**2
+    )
+
+    x_breaks = (
+        sp.Integer(0), sp.Rational(1, 8), sp.Rational(1, 4),
+        sp.Rational(1, 2), sp.Integer(1),
+    )
+    y_breaks = (
+        sp.Integer(0), sp.Rational(1, 4), sp.Rational(1, 2),
+        sp.Rational(3, 4), sp.Rational(7, 8), sp.Rational(15, 16),
+        sp.Rational(31, 32), sp.Rational(63, 64), sp.Integer(1),
+    )
+    missing_constant = sp.Rational(4, 31)
+    switches = []
+    for m_value in range(27, 35):
+        m = sp.Integer(m_value)
+        ratio_cap = sp.cancel(5 / ((m - 7) * (m - 8) / (m - 3)))
+        for x_hi_norm in x_breaks[1:]:
+            x_hi = x_lower + (x_upper - x_lower) * x_hi_norm
+            y_cap = min(y_upper, sp.cancel(10 * x_hi / (x_hi + 12)))
+            assert y_lower <= y_cap <= y_upper
+            for y_lo_norm in y_breaks[:-1]:
+                y0 = y_lower + (y_cap - y_lower) * y_lo_norm
+                switch = sp.cancel(
+                    (y0 - missing_constant) / (ratio_cap - missing_constant)
+                )
+                assert 0 < switch < 1
+                switches.append(switch)
+    assert len(switches) == 8 * 4 * 8 == 256
+
+    payload = {
+        "schema": "rank8-delta1-order35-bound-chain-independent-audit-v1",
+        "status": "PASS_INDEPENDENT_EXACT_DELTA1_ORDER35_BOUND_CHAIN",
+        "verified": [
+            "pinned tree and forest rank-(4,5) path-ratio theorems",
+            "forest independent-pair floor and convex interpolation",
+            "piecewise exact transfer 2*Phi(t)/t is increasing",
+            "mu4=189/8 implies mu5>=3916/189",
+            "x/y bounds and Q5 cap monotonicity",
+            "small-F edge floors, caps, and rank-6 switch",
+            "exact M=19..26 bridge floors, caps, ratios, and switches",
+            "M=26 forest-Q5 joint rank-4/rank-6 coupling at r=10/43",
+            "all 256 ordinary exact-F shadow switches for M=27..34",
+        ],
+        "interpolation_reserve": str(interpolation_reserve),
+        "phi_at_mu4": str(phi_mu4),
+        "mu4_floor": str(mu4),
+        "mu5_floor": str(mu5),
+        "smooth_mu5_floor": str(smooth_mu5),
+        "smooth_transfer_reserve": str(transfer_reserve),
+        "transfer_derivatives_scaled_by_t_squared": derivative_records,
+        "x_bounds": [str(x_lower), str(x_upper)],
+        "y_bounds": [str(y_lower), str(y_upper)],
+        "small_edge_floors": [small_floors[r] for r in (4, 5, 6)],
+        "small_absolute_caps": [str(small_caps[r]) for r in (4, 5, 6)],
+        "small_u6_switch": str(small_u6_switch),
+        "exact_bridge_records": bridge_records,
+        "M26_q5_coupling": {
+            "rank4_ratio_cap": str(m26_rank4_cap),
+            "rank4_ratio_switch": str(q5_ratio_switch),
+            "normalized_rank4_switch": str(normalized_q5_switch),
+            "rank6_shadow_cap": "7/2",
+            "q5_rank6_cap": str(q5_rank6_cap),
+            "cleared_q5_identity": str(
+                sp.factor(10 - rank4_ratio - 12 * rank4_ratio * q5_rank6_cap)
+            ),
+        },
+        "exact_switch_checks": len(switches),
+        "exact_switch_range": [str(min(switches)), str(max(switches))],
+        "pinned_inputs": actual,
+        "source_sha256": sha256(Path(__file__)),
+    }
+    temporary = OUTPUT.with_suffix(OUTPUT.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, OUTPUT)
+    print(payload["status"])
+    print("SOURCE", payload["source_sha256"])
+    print("REPORT", sha256(OUTPUT))
+
+
+if __name__ == "__main__":
+    main()

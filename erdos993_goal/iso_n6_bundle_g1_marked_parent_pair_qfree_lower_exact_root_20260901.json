@@ -1,0 +1,1089 @@
+{
+  "branch_count": 16,
+  "branches": {
+    "adjacent_t0_u0_v0": {
+      "class_sha256": "4AE5CDEBBED9E052114952D1700F121A13405BD74E2003923D82F9A8B28D441E",
+      "eta": 0,
+      "geometry": "adjacent",
+      "lower_expression": "2*CA2*CB4 - 8*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 + 2*CA2*CW3 - 23*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 11*CA3*CW3 - 11*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 12*CA3 - 8*CA4*CB3 + 5*CA4*CB4 + 11*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 8*CA4 - 7*CA5*CB3 - 11*CA5*CW2 + 8*CA5*CW3 - 23*CA5*n + 30*CA5 - 9*CA6*CW2 - 23*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 + CB3*CW3 - 9*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 + CB5*n - 4*CB5 - 2*CB6*CW2 - 9*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 5*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 21*CW3**2 + 20*CW3*CW4 - CW3*CW5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 2*CW4 - 26*CW5*n + 34*CW5 - 24*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 33,
+        "polynomial_sha256": "4AE5CDEBBED9E052114952D1700F121A13405BD74E2003923D82F9A8B28D441E",
+        "terms": 68
+      },
+      "q_slope": "0",
+      "q_slope_negative_part": "0",
+      "q_slope_positive_part": "0",
+      "retained_mark_count": 0,
+      "retained_mark_mask": [
+        0,
+        0
+      ]
+    },
+    "adjacent_t0_u0_v1": {
+      "class_sha256": "4AE5CDEBBED9E052114952D1700F121A13405BD74E2003923D82F9A8B28D441E",
+      "eta": 0,
+      "geometry": "adjacent",
+      "lower_expression": "2*CA2*CB4 - 8*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 + 2*CA2*CW3 - 23*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 11*CA3*CW3 - 11*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 12*CA3 - 8*CA4*CB3 + 5*CA4*CB4 + 11*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 8*CA4 - 7*CA5*CB3 - 11*CA5*CW2 + 8*CA5*CW3 - 23*CA5*n + 30*CA5 - 9*CA6*CW2 - 23*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 + CB3*CW3 - 9*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 + CB5*n - 4*CB5 - 2*CB6*CW2 - 9*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 5*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 21*CW3**2 + 20*CW3*CW4 - CW3*CW5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 2*CW4 - 26*CW5*n + 34*CW5 - 24*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 33,
+        "polynomial_sha256": "4AE5CDEBBED9E052114952D1700F121A13405BD74E2003923D82F9A8B28D441E",
+        "terms": 68
+      },
+      "q_slope": "0",
+      "q_slope_negative_part": "0",
+      "q_slope_positive_part": "0",
+      "retained_mark_count": 1,
+      "retained_mark_mask": [
+        0,
+        1
+      ]
+    },
+    "adjacent_t0_u1_v0": {
+      "class_sha256": "4AE5CDEBBED9E052114952D1700F121A13405BD74E2003923D82F9A8B28D441E",
+      "eta": 0,
+      "geometry": "adjacent",
+      "lower_expression": "2*CA2*CB4 - 8*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 + 2*CA2*CW3 - 23*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 11*CA3*CW3 - 11*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 12*CA3 - 8*CA4*CB3 + 5*CA4*CB4 + 11*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 8*CA4 - 7*CA5*CB3 - 11*CA5*CW2 + 8*CA5*CW3 - 23*CA5*n + 30*CA5 - 9*CA6*CW2 - 23*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 + CB3*CW3 - 9*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 + CB5*n - 4*CB5 - 2*CB6*CW2 - 9*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 5*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 21*CW3**2 + 20*CW3*CW4 - CW3*CW5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 2*CW4 - 26*CW5*n + 34*CW5 - 24*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 33,
+        "polynomial_sha256": "4AE5CDEBBED9E052114952D1700F121A13405BD74E2003923D82F9A8B28D441E",
+        "terms": 68
+      },
+      "q_slope": "0",
+      "q_slope_negative_part": "0",
+      "q_slope_positive_part": "0",
+      "retained_mark_count": 1,
+      "retained_mark_mask": [
+        1,
+        0
+      ]
+    },
+    "adjacent_t0_u1_v1": {
+      "class_sha256": "4AE5CDEBBED9E052114952D1700F121A13405BD74E2003923D82F9A8B28D441E",
+      "eta": 0,
+      "geometry": "adjacent",
+      "lower_expression": "2*CA2*CB4 - 8*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 + 2*CA2*CW3 - 23*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 11*CA3*CW3 - 11*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 12*CA3 - 8*CA4*CB3 + 5*CA4*CB4 + 11*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 8*CA4 - 7*CA5*CB3 - 11*CA5*CW2 + 8*CA5*CW3 - 23*CA5*n + 30*CA5 - 9*CA6*CW2 - 23*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 + CB3*CW3 - 9*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 + CB5*n - 4*CB5 - 2*CB6*CW2 - 9*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 5*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 21*CW3**2 + 20*CW3*CW4 - CW3*CW5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 2*CW4 - 26*CW5*n + 34*CW5 - 24*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 33,
+        "polynomial_sha256": "4AE5CDEBBED9E052114952D1700F121A13405BD74E2003923D82F9A8B28D441E",
+        "terms": 68
+      },
+      "q_slope": "0",
+      "q_slope_negative_part": "0",
+      "q_slope_positive_part": "0",
+      "retained_mark_count": 2,
+      "retained_mark_mask": [
+        1,
+        1
+      ]
+    },
+    "adjacent_t1_u0_v0": {
+      "class_sha256": "8CA0392BFC677BF30562D5BCDC771607F4B192EFAAF4268F91E9191D9AFD993B",
+      "eta": 1,
+      "geometry": "adjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n - 4*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 30*CA5 - 9*CA6*CW2 - 30*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 4*CB5 - 2*CB6*CW2 - 16*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 30*CW4*n - 49*CW5*n + 34*CW5 - 31*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 37,
+        "polynomial_sha256": "8CA0392BFC677BF30562D5BCDC771607F4B192EFAAF4268F91E9191D9AFD993B",
+        "terms": 68
+      },
+      "q_slope": "4*CA2 + 4*CA3 - 13*CA4 - 15*CA5 - 7*CA6 + 2*CB4 - CB5 - 7*CB6 + 4*CW2 + 2*CW3 - 15*CW4 - 16*CW5 - 7*CW6",
+      "q_slope_negative_part": "-13*CA4 - 15*CA5 - 7*CA6 - CB5 - 7*CB6 - 15*CW4 - 16*CW5 - 7*CW6",
+      "q_slope_positive_part": "2*(2*CA2 + 2*CA3 + CB4 + 2*CW2 + CW3)",
+      "retained_mark_count": 0,
+      "retained_mark_mask": [
+        0,
+        0
+      ]
+    },
+    "adjacent_t1_u0_v1": {
+      "class_sha256": "5E1F1A96C1EE3BF82594B0CE44049894C822830D034C6CC9775B4D7AD3DE0A6A",
+      "eta": 1,
+      "geometry": "adjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n + 9*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 45*CA5 - 9*CA6*CW2 - 30*CA6*n + 39*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 3*CB5 - 2*CB6*CW2 - 16*CB6*n + 11*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 30*CW4*n + 15*CW4 - 49*CW5*n + 50*CW5 - 31*CW6*n + 41*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 36,
+        "polynomial_sha256": "5E1F1A96C1EE3BF82594B0CE44049894C822830D034C6CC9775B4D7AD3DE0A6A",
+        "terms": 69
+      },
+      "q_slope": "4*CA2 + 4*CA3 - 13*CA4 - 15*CA5 - 7*CA6 + 2*CB4 - CB5 - 7*CB6 + 4*CW2 + 2*CW3 - 15*CW4 - 16*CW5 - 7*CW6",
+      "q_slope_negative_part": "-13*CA4 - 15*CA5 - 7*CA6 - CB5 - 7*CB6 - 15*CW4 - 16*CW5 - 7*CW6",
+      "q_slope_positive_part": "2*(2*CA2 + 2*CA3 + CB4 + 2*CW2 + CW3)",
+      "retained_mark_count": 1,
+      "retained_mark_mask": [
+        0,
+        1
+      ]
+    },
+    "adjacent_t1_u1_v0": {
+      "class_sha256": "5E1F1A96C1EE3BF82594B0CE44049894C822830D034C6CC9775B4D7AD3DE0A6A",
+      "eta": 1,
+      "geometry": "adjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n + 9*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 45*CA5 - 9*CA6*CW2 - 30*CA6*n + 39*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 3*CB5 - 2*CB6*CW2 - 16*CB6*n + 11*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 30*CW4*n + 15*CW4 - 49*CW5*n + 50*CW5 - 31*CW6*n + 41*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 36,
+        "polynomial_sha256": "5E1F1A96C1EE3BF82594B0CE44049894C822830D034C6CC9775B4D7AD3DE0A6A",
+        "terms": 69
+      },
+      "q_slope": "4*CA2 + 4*CA3 - 13*CA4 - 15*CA5 - 7*CA6 + 2*CB4 - CB5 - 7*CB6 + 4*CW2 + 2*CW3 - 15*CW4 - 16*CW5 - 7*CW6",
+      "q_slope_negative_part": "-13*CA4 - 15*CA5 - 7*CA6 - CB5 - 7*CB6 - 15*CW4 - 16*CW5 - 7*CW6",
+      "q_slope_positive_part": "2*(2*CA2 + 2*CA3 + CB4 + 2*CW2 + CW3)",
+      "retained_mark_count": 1,
+      "retained_mark_mask": [
+        1,
+        0
+      ]
+    },
+    "adjacent_t1_u1_v1": {
+      "class_sha256": "99164B042B83C825CB09732E010C8C0ADE49BFAD0986184555DCD3BAB3B6A0FB",
+      "eta": 1,
+      "geometry": "adjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n + 22*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 60*CA5 - 9*CA6*CW2 - 30*CA6*n + 46*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 2*CB5 - 2*CB6*CW2 - 16*CB6*n + 18*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 30*CW4*n + 30*CW4 - 49*CW5*n + 66*CW5 - 31*CW6*n + 48*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 36,
+        "polynomial_sha256": "99164B042B83C825CB09732E010C8C0ADE49BFAD0986184555DCD3BAB3B6A0FB",
+        "terms": 69
+      },
+      "q_slope": "4*CA2 + 4*CA3 - 13*CA4 - 15*CA5 - 7*CA6 + 2*CB4 - CB5 - 7*CB6 + 4*CW2 + 2*CW3 - 15*CW4 - 16*CW5 - 7*CW6",
+      "q_slope_negative_part": "-13*CA4 - 15*CA5 - 7*CA6 - CB5 - 7*CB6 - 15*CW4 - 16*CW5 - 7*CW6",
+      "q_slope_positive_part": "2*(2*CA2 + 2*CA3 + CB4 + 2*CW2 + CW3)",
+      "retained_mark_count": 2,
+      "retained_mark_mask": [
+        1,
+        1
+      ]
+    },
+    "nonadjacent_t0_u0_v0": {
+      "class_sha256": "3912EB3C741111784DE1759B6B774CCD542AE553CF629803EF77DF757451EF55",
+      "eta": 0,
+      "geometry": "nonadjacent",
+      "lower_expression": "2*CA2*CB4 - 8*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 + 2*CA2*CW3 - 23*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 11*CA3*CW3 - 11*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 12*CA3 - 8*CA4*CB3 + 5*CA4*CB4 + 11*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 8*CA4 - 7*CA5*CB3 - 11*CA5*CW2 + 8*CA5*CW3 - 23*CA5*n + 30*CA5 - 9*CA6*CW2 - 23*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 + CB3*CW3 - 9*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 + CB5*n - 4*CB5 - 2*CB6*CW2 - 9*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 5*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ4 + 2*CW2*CZ5 + 5*CW2*CZ6 + 21*CW3**2 + 20*CW3*CW4 - CW3*CW5 - 8*CW3*CZ4 + 5*CW3*CZ5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 7*CW4*CZ4 - 2*CW4 - 26*CW5*n + 34*CW5 - 24*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7 - 4*CZ4 + 2*CZ5*n - 4*CZ5 - 8*CZ6*n + 2*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 39,
+        "polynomial_sha256": "3912EB3C741111784DE1759B6B774CCD542AE553CF629803EF77DF757451EF55",
+        "terms": 81
+      },
+      "q_slope": "0",
+      "q_slope_negative_part": "0",
+      "q_slope_positive_part": "0",
+      "retained_mark_count": 0,
+      "retained_mark_mask": [
+        0,
+        0
+      ]
+    },
+    "nonadjacent_t0_u0_v1": {
+      "class_sha256": "3912EB3C741111784DE1759B6B774CCD542AE553CF629803EF77DF757451EF55",
+      "eta": 0,
+      "geometry": "nonadjacent",
+      "lower_expression": "2*CA2*CB4 - 8*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 + 2*CA2*CW3 - 23*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 11*CA3*CW3 - 11*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 12*CA3 - 8*CA4*CB3 + 5*CA4*CB4 + 11*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 8*CA4 - 7*CA5*CB3 - 11*CA5*CW2 + 8*CA5*CW3 - 23*CA5*n + 30*CA5 - 9*CA6*CW2 - 23*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 + CB3*CW3 - 9*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 + CB5*n - 4*CB5 - 2*CB6*CW2 - 9*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 5*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ4 + 2*CW2*CZ5 + 5*CW2*CZ6 + 21*CW3**2 + 20*CW3*CW4 - CW3*CW5 - 8*CW3*CZ4 + 5*CW3*CZ5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 7*CW4*CZ4 - 2*CW4 - 26*CW5*n + 34*CW5 - 24*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7 - 4*CZ4 + 2*CZ5*n - 4*CZ5 - 8*CZ6*n + 2*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 39,
+        "polynomial_sha256": "3912EB3C741111784DE1759B6B774CCD542AE553CF629803EF77DF757451EF55",
+        "terms": 81
+      },
+      "q_slope": "0",
+      "q_slope_negative_part": "0",
+      "q_slope_positive_part": "0",
+      "retained_mark_count": 1,
+      "retained_mark_mask": [
+        0,
+        1
+      ]
+    },
+    "nonadjacent_t0_u1_v0": {
+      "class_sha256": "3912EB3C741111784DE1759B6B774CCD542AE553CF629803EF77DF757451EF55",
+      "eta": 0,
+      "geometry": "nonadjacent",
+      "lower_expression": "2*CA2*CB4 - 8*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 + 2*CA2*CW3 - 23*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 11*CA3*CW3 - 11*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 12*CA3 - 8*CA4*CB3 + 5*CA4*CB4 + 11*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 8*CA4 - 7*CA5*CB3 - 11*CA5*CW2 + 8*CA5*CW3 - 23*CA5*n + 30*CA5 - 9*CA6*CW2 - 23*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 + CB3*CW3 - 9*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 + CB5*n - 4*CB5 - 2*CB6*CW2 - 9*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 5*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ4 + 2*CW2*CZ5 + 5*CW2*CZ6 + 21*CW3**2 + 20*CW3*CW4 - CW3*CW5 - 8*CW3*CZ4 + 5*CW3*CZ5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 7*CW4*CZ4 - 2*CW4 - 26*CW5*n + 34*CW5 - 24*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7 - 4*CZ4 + 2*CZ5*n - 4*CZ5 - 8*CZ6*n + 2*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 39,
+        "polynomial_sha256": "3912EB3C741111784DE1759B6B774CCD542AE553CF629803EF77DF757451EF55",
+        "terms": 81
+      },
+      "q_slope": "0",
+      "q_slope_negative_part": "0",
+      "q_slope_positive_part": "0",
+      "retained_mark_count": 1,
+      "retained_mark_mask": [
+        1,
+        0
+      ]
+    },
+    "nonadjacent_t0_u1_v1": {
+      "class_sha256": "3912EB3C741111784DE1759B6B774CCD542AE553CF629803EF77DF757451EF55",
+      "eta": 0,
+      "geometry": "nonadjacent",
+      "lower_expression": "2*CA2*CB4 - 8*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 + 2*CA2*CW3 - 23*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 11*CA3*CW3 - 11*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 12*CA3 - 8*CA4*CB3 + 5*CA4*CB4 + 11*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 8*CA4 - 7*CA5*CB3 - 11*CA5*CW2 + 8*CA5*CW3 - 23*CA5*n + 30*CA5 - 9*CA6*CW2 - 23*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 + CB3*CW3 - 9*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 + CB5*n - 4*CB5 - 2*CB6*CW2 - 9*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 5*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ4 + 2*CW2*CZ5 + 5*CW2*CZ6 + 21*CW3**2 + 20*CW3*CW4 - CW3*CW5 - 8*CW3*CZ4 + 5*CW3*CZ5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 7*CW4*CZ4 - 2*CW4 - 26*CW5*n + 34*CW5 - 24*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7 - 4*CZ4 + 2*CZ5*n - 4*CZ5 - 8*CZ6*n + 2*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 39,
+        "polynomial_sha256": "3912EB3C741111784DE1759B6B774CCD542AE553CF629803EF77DF757451EF55",
+        "terms": 81
+      },
+      "q_slope": "0",
+      "q_slope_negative_part": "0",
+      "q_slope_positive_part": "0",
+      "retained_mark_count": 2,
+      "retained_mark_mask": [
+        1,
+        1
+      ]
+    },
+    "nonadjacent_t1_u0_v0": {
+      "class_sha256": "91BD9246C3FBA6C2DADA4E9B589D6BB34CD90CA06BAD19C0BDCFA62FD2BDA95A",
+      "eta": 1,
+      "geometry": "nonadjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n - 4*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 30*CA5 - 9*CA6*CW2 - 30*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 4*CB5 - 2*CB6*CW2 - 16*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ4 + 2*CW2*CZ5 + 5*CW2*CZ6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 - 15*CW3*CZ4 + 5*CW3*CZ5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 7*CW4*CZ4 - 30*CW4*n - 49*CW5*n + 34*CW5 - 31*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7 - 4*CZ4 + 2*CZ5*n - 4*CZ5 - 15*CZ6*n + 2*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 43,
+        "polynomial_sha256": "91BD9246C3FBA6C2DADA4E9B589D6BB34CD90CA06BAD19C0BDCFA62FD2BDA95A",
+        "terms": 81
+      },
+      "q_slope": "4*CA2 + 4*CA3 - 13*CA4 - 15*CA5 - 7*CA6 + 2*CB4 - CB5 - 7*CB6 + 4*CW2 + 2*CW3 - 15*CW4 - 16*CW5 - 7*CW6 + 2*CZ4 - 7*CZ6",
+      "q_slope_negative_part": "-13*CA4 - 15*CA5 - 7*CA6 - CB5 - 7*CB6 - 15*CW4 - 16*CW5 - 7*CW6 - 7*CZ6",
+      "q_slope_positive_part": "2*(2*CA2 + 2*CA3 + CB4 + 2*CW2 + CW3 + CZ4)",
+      "retained_mark_count": 0,
+      "retained_mark_mask": [
+        0,
+        0
+      ]
+    },
+    "nonadjacent_t1_u0_v1": {
+      "class_sha256": "FE024E41CB41292CFED8441FC4F6D55383C47C1FCB09AB77F1D6415452CB1D82",
+      "eta": 1,
+      "geometry": "nonadjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n + 9*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 45*CA5 - 9*CA6*CW2 - 30*CA6*n + 39*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 3*CB5 - 2*CB6*CW2 - 16*CB6*n + 11*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ4 + 2*CW2*CZ5 + 5*CW2*CZ6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 - 15*CW3*CZ4 + 5*CW3*CZ5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 7*CW4*CZ4 - 30*CW4*n + 15*CW4 - 49*CW5*n + 50*CW5 - 31*CW6*n + 41*CW6 - 7*CW7*n + 14*CW7 - 4*CZ4 + 2*CZ5*n - 4*CZ5 - 15*CZ6*n + 9*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 42,
+        "polynomial_sha256": "FE024E41CB41292CFED8441FC4F6D55383C47C1FCB09AB77F1D6415452CB1D82",
+        "terms": 82
+      },
+      "q_slope": "4*CA2 + 4*CA3 - 13*CA4 - 15*CA5 - 7*CA6 + 2*CB4 - CB5 - 7*CB6 + 4*CW2 + 2*CW3 - 15*CW4 - 16*CW5 - 7*CW6 + 2*CZ4 - 7*CZ6",
+      "q_slope_negative_part": "-13*CA4 - 15*CA5 - 7*CA6 - CB5 - 7*CB6 - 15*CW4 - 16*CW5 - 7*CW6 - 7*CZ6",
+      "q_slope_positive_part": "2*(2*CA2 + 2*CA3 + CB4 + 2*CW2 + CW3 + CZ4)",
+      "retained_mark_count": 1,
+      "retained_mark_mask": [
+        0,
+        1
+      ]
+    },
+    "nonadjacent_t1_u1_v0": {
+      "class_sha256": "FE024E41CB41292CFED8441FC4F6D55383C47C1FCB09AB77F1D6415452CB1D82",
+      "eta": 1,
+      "geometry": "nonadjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n + 9*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 45*CA5 - 9*CA6*CW2 - 30*CA6*n + 39*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 3*CB5 - 2*CB6*CW2 - 16*CB6*n + 11*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ4 + 2*CW2*CZ5 + 5*CW2*CZ6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 - 15*CW3*CZ4 + 5*CW3*CZ5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 7*CW4*CZ4 - 30*CW4*n + 15*CW4 - 49*CW5*n + 50*CW5 - 31*CW6*n + 41*CW6 - 7*CW7*n + 14*CW7 - 4*CZ4 + 2*CZ5*n - 4*CZ5 - 15*CZ6*n + 9*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 42,
+        "polynomial_sha256": "FE024E41CB41292CFED8441FC4F6D55383C47C1FCB09AB77F1D6415452CB1D82",
+        "terms": 82
+      },
+      "q_slope": "4*CA2 + 4*CA3 - 13*CA4 - 15*CA5 - 7*CA6 + 2*CB4 - CB5 - 7*CB6 + 4*CW2 + 2*CW3 - 15*CW4 - 16*CW5 - 7*CW6 + 2*CZ4 - 7*CZ6",
+      "q_slope_negative_part": "-13*CA4 - 15*CA5 - 7*CA6 - CB5 - 7*CB6 - 15*CW4 - 16*CW5 - 7*CW6 - 7*CZ6",
+      "q_slope_positive_part": "2*(2*CA2 + 2*CA3 + CB4 + 2*CW2 + CW3 + CZ4)",
+      "retained_mark_count": 1,
+      "retained_mark_mask": [
+        1,
+        0
+      ]
+    },
+    "nonadjacent_t1_u1_v1": {
+      "class_sha256": "4D97A8FF0B41B8DDB46F0D378DCE0155ED2A33D6C94F0EDE837DCD7CCA9EEE56",
+      "eta": 1,
+      "geometry": "nonadjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n + 22*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 60*CA5 - 9*CA6*CW2 - 30*CA6*n + 46*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 2*CB5 - 2*CB6*CW2 - 16*CB6*n + 18*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ4 + 2*CW2*CZ5 + 5*CW2*CZ6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 - 15*CW3*CZ4 + 5*CW3*CZ5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 7*CW4*CZ4 - 30*CW4*n + 30*CW4 - 49*CW5*n + 66*CW5 - 31*CW6*n + 48*CW6 - 7*CW7*n + 14*CW7 - 4*CZ4 + 2*CZ5*n - 4*CZ5 - 15*CZ6*n + 16*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 42,
+        "polynomial_sha256": "4D97A8FF0B41B8DDB46F0D378DCE0155ED2A33D6C94F0EDE837DCD7CCA9EEE56",
+        "terms": 82
+      },
+      "q_slope": "4*CA2 + 4*CA3 - 13*CA4 - 15*CA5 - 7*CA6 + 2*CB4 - CB5 - 7*CB6 + 4*CW2 + 2*CW3 - 15*CW4 - 16*CW5 - 7*CW6 + 2*CZ4 - 7*CZ6",
+      "q_slope_negative_part": "-13*CA4 - 15*CA5 - 7*CA6 - CB5 - 7*CB6 - 15*CW4 - 16*CW5 - 7*CW6 - 7*CZ6",
+      "q_slope_positive_part": "2*(2*CA2 + 2*CA3 + CB4 + 2*CW2 + CW3 + CZ4)",
+      "retained_mark_count": 2,
+      "retained_mark_mask": [
+        1,
+        1
+      ]
+    }
+  },
+  "classes": {
+    "3912EB3C741111784DE1759B6B774CCD542AE553CF629803EF77DF757451EF55": {
+      "finite_counts": {
+        "positive": 37080
+      },
+      "finite_minimum": [
+        3085,
+        8,
+        "GpD?GC",
+        4,
+        7,
+        53
+      ],
+      "geometry": "nonadjacent",
+      "lower_expression": "2*CA2*CB4 - 8*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 + 2*CA2*CW3 - 23*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 11*CA3*CW3 - 11*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 12*CA3 - 8*CA4*CB3 + 5*CA4*CB4 + 11*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 8*CA4 - 7*CA5*CB3 - 11*CA5*CW2 + 8*CA5*CW3 - 23*CA5*n + 30*CA5 - 9*CA6*CW2 - 23*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 + CB3*CW3 - 9*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 + CB5*n - 4*CB5 - 2*CB6*CW2 - 9*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 5*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ4 + 2*CW2*CZ5 + 5*CW2*CZ6 + 21*CW3**2 + 20*CW3*CW4 - CW3*CW5 - 8*CW3*CZ4 + 5*CW3*CZ5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 7*CW4*CZ4 - 2*CW4 - 26*CW5*n + 34*CW5 - 24*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7 - 4*CZ4 + 2*CZ5*n - 4*CZ5 - 8*CZ6*n + 2*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 39,
+        "polynomial_sha256": "3912EB3C741111784DE1759B6B774CCD542AE553CF629803EF77DF757451EF55",
+        "terms": 81
+      },
+      "member_count": 4,
+      "members": [
+        "nonadjacent_t0_u0_v0",
+        "nonadjacent_t0_u0_v1",
+        "nonadjacent_t0_u1_v0",
+        "nonadjacent_t0_u1_v1"
+      ]
+    },
+    "4AE5CDEBBED9E052114952D1700F121A13405BD74E2003923D82F9A8B28D441E": {
+      "finite_counts": {
+        "positive": 7802
+      },
+      "finite_minimum": [
+        3378,
+        8,
+        "GpD?GC",
+        4,
+        3,
+        53
+      ],
+      "geometry": "adjacent",
+      "lower_expression": "2*CA2*CB4 - 8*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 + 2*CA2*CW3 - 23*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 11*CA3*CW3 - 11*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 12*CA3 - 8*CA4*CB3 + 5*CA4*CB4 + 11*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 8*CA4 - 7*CA5*CB3 - 11*CA5*CW2 + 8*CA5*CW3 - 23*CA5*n + 30*CA5 - 9*CA6*CW2 - 23*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 + CB3*CW3 - 9*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 + CB5*n - 4*CB5 - 2*CB6*CW2 - 9*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 5*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 21*CW3**2 + 20*CW3*CW4 - CW3*CW5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 2*CW4 - 26*CW5*n + 34*CW5 - 24*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 33,
+        "polynomial_sha256": "4AE5CDEBBED9E052114952D1700F121A13405BD74E2003923D82F9A8B28D441E",
+        "terms": 68
+      },
+      "member_count": 4,
+      "members": [
+        "adjacent_t0_u0_v0",
+        "adjacent_t0_u0_v1",
+        "adjacent_t0_u1_v0",
+        "adjacent_t0_u1_v1"
+      ]
+    },
+    "4D97A8FF0B41B8DDB46F0D378DCE0155ED2A33D6C94F0EDE837DCD7CCA9EEE56": {
+      "finite_counts": {
+        "positive": 37080
+      },
+      "finite_minimum": [
+        2052,
+        8,
+        "GpOGQ?",
+        5,
+        6,
+        61
+      ],
+      "geometry": "nonadjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n + 22*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 60*CA5 - 9*CA6*CW2 - 30*CA6*n + 46*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 2*CB5 - 2*CB6*CW2 - 16*CB6*n + 18*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ4 + 2*CW2*CZ5 + 5*CW2*CZ6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 - 15*CW3*CZ4 + 5*CW3*CZ5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 7*CW4*CZ4 - 30*CW4*n + 30*CW4 - 49*CW5*n + 66*CW5 - 31*CW6*n + 48*CW6 - 7*CW7*n + 14*CW7 - 4*CZ4 + 2*CZ5*n - 4*CZ5 - 15*CZ6*n + 16*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 42,
+        "polynomial_sha256": "4D97A8FF0B41B8DDB46F0D378DCE0155ED2A33D6C94F0EDE837DCD7CCA9EEE56",
+        "terms": 82
+      },
+      "member_count": 1,
+      "members": [
+        "nonadjacent_t1_u1_v1"
+      ]
+    },
+    "5E1F1A96C1EE3BF82594B0CE44049894C822830D034C6CC9775B4D7AD3DE0A6A": {
+      "finite_counts": {
+        "positive": 7802
+      },
+      "finite_minimum": [
+        2456,
+        8,
+        "Gp`?GG",
+        3,
+        2,
+        57
+      ],
+      "geometry": "adjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n + 9*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 45*CA5 - 9*CA6*CW2 - 30*CA6*n + 39*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 3*CB5 - 2*CB6*CW2 - 16*CB6*n + 11*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 30*CW4*n + 15*CW4 - 49*CW5*n + 50*CW5 - 31*CW6*n + 41*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 36,
+        "polynomial_sha256": "5E1F1A96C1EE3BF82594B0CE44049894C822830D034C6CC9775B4D7AD3DE0A6A",
+        "terms": 69
+      },
+      "member_count": 2,
+      "members": [
+        "adjacent_t1_u0_v1",
+        "adjacent_t1_u1_v0"
+      ]
+    },
+    "8CA0392BFC677BF30562D5BCDC771607F4B192EFAAF4268F91E9191D9AFD993B": {
+      "finite_counts": {
+        "positive": 7802
+      },
+      "finite_minimum": [
+        2373,
+        8,
+        "Gp`?GG",
+        3,
+        2,
+        57
+      ],
+      "geometry": "adjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n - 4*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 30*CA5 - 9*CA6*CW2 - 30*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 4*CB5 - 2*CB6*CW2 - 16*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 30*CW4*n - 49*CW5*n + 34*CW5 - 31*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 37,
+        "polynomial_sha256": "8CA0392BFC677BF30562D5BCDC771607F4B192EFAAF4268F91E9191D9AFD993B",
+        "terms": 68
+      },
+      "member_count": 1,
+      "members": [
+        "adjacent_t1_u0_v0"
+      ]
+    },
+    "91BD9246C3FBA6C2DADA4E9B589D6BB34CD90CA06BAD19C0BDCFA62FD2BDA95A": {
+      "finite_counts": {
+        "positive": 37080
+      },
+      "finite_minimum": [
+        1848,
+        8,
+        "G@CO__",
+        0,
+        1,
+        19
+      ],
+      "geometry": "nonadjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n - 4*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 30*CA5 - 9*CA6*CW2 - 30*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 4*CB5 - 2*CB6*CW2 - 16*CB6*n + 4*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ4 + 2*CW2*CZ5 + 5*CW2*CZ6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 - 15*CW3*CZ4 + 5*CW3*CZ5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 7*CW4*CZ4 - 30*CW4*n - 49*CW5*n + 34*CW5 - 31*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7 - 4*CZ4 + 2*CZ5*n - 4*CZ5 - 15*CZ6*n + 2*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 43,
+        "polynomial_sha256": "91BD9246C3FBA6C2DADA4E9B589D6BB34CD90CA06BAD19C0BDCFA62FD2BDA95A",
+        "terms": 81
+      },
+      "member_count": 1,
+      "members": [
+        "nonadjacent_t1_u0_v0"
+      ]
+    },
+    "99164B042B83C825CB09732E010C8C0ADE49BFAD0986184555DCD3BAB3B6A0FB": {
+      "finite_counts": {
+        "positive": 7802
+      },
+      "finite_minimum": [
+        2539,
+        8,
+        "Gp`?GG",
+        3,
+        2,
+        57
+      ],
+      "geometry": "adjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n + 22*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 60*CA5 - 9*CA6*CW2 - 30*CA6*n + 46*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 2*CB5 - 2*CB6*CW2 - 16*CB6*n + 18*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 30*CW4*n + 30*CW4 - 49*CW5*n + 66*CW5 - 31*CW6*n + 48*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 36,
+        "polynomial_sha256": "99164B042B83C825CB09732E010C8C0ADE49BFAD0986184555DCD3BAB3B6A0FB",
+        "terms": 69
+      },
+      "member_count": 1,
+      "members": [
+        "adjacent_t1_u1_v1"
+      ]
+    },
+    "FE024E41CB41292CFED8441FC4F6D55383C47C1FCB09AB77F1D6415452CB1D82": {
+      "finite_counts": {
+        "positive": 37080
+      },
+      "finite_minimum": [
+        2024,
+        8,
+        "GpOGQ?",
+        5,
+        6,
+        61
+      ],
+      "geometry": "nonadjacent",
+      "lower_expression": "2*CA2*CB4 - 15*CA2*CB5 - 7*CA2*CB6 + 4*CA2*CW2 - 24*CA2*CW3 - 45*CA2*CW4 - 30*CA2*CW5 - 7*CA2*CW6 - 8*CA2 + 2*CA3*CB3 + 2*CA3*CB4 + 5*CA3*CB5 + 12*CA3*CW2 + 19*CA3*CW3 - 8*CA3*CW4 - 9*CA3*CW5 + 4*CA3*n - 16*CA3 - 15*CA4*CB3 + 5*CA4*CB4 + 19*CA4*CW2 + 24*CA4*CW3 + 8*CA4*CW4 - 24*CA4*n + 9*CA4 - 7*CA5*CB3 - 8*CA5*CW2 + 8*CA5*CW3 - 45*CA5*n + 45*CA5 - 9*CA6*CW2 - 30*CA6*n + 39*CA6 - 7*CA7*n + 14*CA7 - 16*CB3*CW4 - 7*CB3*CW5 + 4*CB4*CW2 + 2*CB4*CW3 - 2*CB4*CW4 - 4*CB4 + 2*CB5*CW2 + 10*CB5*CW3 - 3*CB5 - 2*CB6*CW2 - 16*CB6*n + 11*CB6 - 7*CB7*n + 14*CB7 + 4*CW2**2 + 16*CW2*CW3 - 4*CW2*CW4 - 39*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ4 + 2*CW2*CZ5 + 5*CW2*CZ6 - 8*CW2 + 21*CW3**2 + 22*CW3*CW4 - CW3*CW5 - 15*CW3*CZ4 + 5*CW3*CZ5 + 4*CW3*n - 12*CW3 + 8*CW4**2 - 7*CW4*CZ4 - 30*CW4*n + 15*CW4 - 49*CW5*n + 50*CW5 - 31*CW6*n + 41*CW6 - 7*CW7*n + 14*CW7 - 4*CZ4 + 2*CZ5*n - 4*CZ5 - 15*CZ6*n + 9*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-49",
+        "negative_scalar_coefficients": 42,
+        "polynomial_sha256": "FE024E41CB41292CFED8441FC4F6D55383C47C1FCB09AB77F1D6415452CB1D82",
+        "terms": 82
+      },
+      "member_count": 2,
+      "members": [
+        "nonadjacent_t1_u0_v1",
+        "nonadjacent_t1_u1_v0"
+      ]
+    }
+  },
+  "dependencies_sha256": {
+    "marked_parent_omega_reduction": "8C49DEA1D1E06AE00DD8582D202220277C568D4FF45FF17A80E90C6B30BDCB9E",
+    "rank6_reconstruction": "5F75A3B985663BB2317FEF134932A7973BABBB2D2C976FC5F8BA5311971B9A52"
+  },
+  "expression_class_count": 8,
+  "finite_collar": {
+    "cells": 179528,
+    "negative_cells": 0,
+    "ordered_stream_sha256": "07F0E6DBC1B4F190FF0DD3C04C0C93D43CF103662A2C204803E625D8C503839B",
+    "orders": [
+      8,
+      10
+    ],
+    "scope_guard": "Finite exact implementation evidence only."
+  },
+  "marker": "DERIVED_EXACT_ISO_N6_BUNDLE_G1_MARKED_PARENT_PAIR_QFREE_LOWER_ROOT",
+  "scope_guard": "The eta=1 reduction keeps the complete response coupled inside the direct leaf increment. Negative lower cells would not refute that increment; finite positivity would not prove its tail.",
+  "source_sha256": "8CB2E7F5A386062A0DA4492257222B86A14F4FEEC921EF5FA45B15C1BA326128",
+  "status": "both marked-parent states reduced to q-free full-forest classes; universal signs remain open",
+  "target_audits": {
+    "0": {
+      "coarse_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 39,
+        "polynomial_sha256": "3912EB3C741111784DE1759B6B774CCD542AE553CF629803EF77DF757451EF55",
+        "terms": 81
+      },
+      "exact_D_linearity": true,
+      "rows": {
+        "DA3": {
+          "cap": "CA3",
+          "derivative": {
+            "minimum_scalar_coefficient": "-8",
+            "negative_scalar_coefficients": 3,
+            "polynomial_sha256": "FE561DE24E0128889DDA2E128BE1DA30C0AEB142301752598592DAF537B605CB",
+            "terms": 5
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-8",
+            "negative_scalar_coefficients": 3,
+            "polynomial_sha256": "35A0794C454F455F181F151B2195D40708E4DC59E60E0CEE3A339A252F715FE4",
+            "terms": 3
+          }
+        },
+        "DA4": {
+          "cap": "CA4",
+          "derivative": {
+            "minimum_scalar_coefficient": "-4",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "922BC06ECBE9BFB981B4E6EBA72002367DA808D3128B184DF07C84FF012818ED",
+            "terms": 4
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-4",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "14A32BD8DBD9A7C108D53A9D9BB92CFA55B003F84EAAC06DEEE20DF558A4989E",
+            "terms": 1
+          }
+        },
+        "DA5": {
+          "cap": "CA5",
+          "derivative": {
+            "minimum_scalar_coefficient": "-8",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "E0824BDFCC0355B86DC7B5FE7B2D9C53152E3AE5282369E7D1E20D472E4F2505",
+            "terms": 3
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-8",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "C4BACFC0050154ED5B995C807E9BED17E07C2A17EA25DA8D519FB7ECD129D224",
+            "terms": 1
+          }
+        },
+        "DA6": {
+          "cap": "CA6",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "48A35574E435D5FDCB95169B6FB17D31012D31DC31DFC90E9B1826E42E97BB6A",
+            "terms": 2
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "0152A02083840AC8CB77C57C7585390D7312BA070A963B0EB78781F140D04848",
+            "terms": 1
+          }
+        },
+        "DB3": {
+          "cap": "CB3",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 3,
+            "polynomial_sha256": "3BA55FE3B2C5056A42FD6314B35E982DEF631F56070A54FB4CE0CCB81881C88B",
+            "terms": 5
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 3,
+            "polynomial_sha256": "D81ED83FB058BA4E25888DC4B546243BBB44593F4969EB92134FB7ADF54DF7FB",
+            "terms": 3
+          }
+        },
+        "DB4": {
+          "cap": "CB4",
+          "derivative": {
+            "minimum_scalar_coefficient": "-4",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "E4034C429C22D161AFA69FB18796759B572CA9FBE9D787694F4E4F1DBEDD5D0F",
+            "terms": 5
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-4",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "14A32BD8DBD9A7C108D53A9D9BB92CFA55B003F84EAAC06DEEE20DF558A4989E",
+            "terms": 1
+          }
+        },
+        "DB5": {
+          "cap": "CB5",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "E07E7B8908EFBFEEE23C6D7C4A74CB028D0417726DDCFC367FB893B50AFD1799",
+            "terms": 4
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "48F94EABB2A76A47768BC9A0182255AEA16D8BC0B73ACBB5AE36ED0394821DDD",
+            "terms": 2
+          }
+        },
+        "DB6": {
+          "cap": "CB6",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "48A35574E435D5FDCB95169B6FB17D31012D31DC31DFC90E9B1826E42E97BB6A",
+            "terms": 2
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "0152A02083840AC8CB77C57C7585390D7312BA070A963B0EB78781F140D04848",
+            "terms": 1
+          }
+        },
+        "DW2": {
+          "cap": "CW2",
+          "derivative": {
+            "minimum_scalar_coefficient": "-9",
+            "negative_scalar_coefficients": 4,
+            "polynomial_sha256": "5E192B1B6CD2E07A17A440B4B2C71826ED39A3CB46DB453D3666B9121BBBB2EA",
+            "terms": 8
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-9",
+            "negative_scalar_coefficients": 4,
+            "polynomial_sha256": "3F0537F3DBAE53D88CC0C2AB1A5C0000ECF23EB5E1A85EB010E3DC41EC252CF5",
+            "terms": 4
+          }
+        },
+        "DW3": {
+          "cap": "CW3",
+          "derivative": {
+            "minimum_scalar_coefficient": "-4",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "2224FAE3DEE98CFEF755FA6771B09CF752F41ECC454A95BC438D550B32944939",
+            "terms": 8
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-4",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "E3C69A8FCA8B05D5E6201BF45E16679A5AD81433B9F5CEF4C74981F9A6D7E435",
+            "terms": 2
+          }
+        },
+        "DW4": {
+          "cap": "CW4",
+          "derivative": {
+            "minimum_scalar_coefficient": "-8",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "CAA0DED393DF26CDC47A763FA784E993024D7947B0B4EBC5469CB5D3F04BAD8D",
+            "terms": 6
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-8",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "A7836E361EE4662ACECB20DFF044EDA6B6E0A800329496AD15DC424597929530",
+            "terms": 2
+          }
+        },
+        "DW5": {
+          "cap": "CW5",
+          "derivative": {
+            "minimum_scalar_coefficient": "-9",
+            "negative_scalar_coefficients": 3,
+            "polynomial_sha256": "B921C7B11F0D97E5E3E077737DF7DB9E4B345C661C62EAAF8739D89DD3A85CA5",
+            "terms": 4
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-9",
+            "negative_scalar_coefficients": 3,
+            "polynomial_sha256": "74EA4DB084F57B12BBEDDDA5124651216C9F3749382AADBAA3E5BBB80A6699C3",
+            "terms": 3
+          }
+        },
+        "DW6": {
+          "cap": "CW6",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "48A35574E435D5FDCB95169B6FB17D31012D31DC31DFC90E9B1826E42E97BB6A",
+            "terms": 2
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "0152A02083840AC8CB77C57C7585390D7312BA070A963B0EB78781F140D04848",
+            "terms": 1
+          }
+        },
+        "DZ4": {
+          "cap": "CZ4",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "7C2F76131B141D03211EB0DCF756A31909D6597ED48A29C2E3FCA615A926C3FD",
+            "terms": 3
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "7F66EEB559461A715AA3ADD5EE0DCD17C08966EA35CB899BAF9D12ABF8CD47D8",
+            "terms": 2
+          }
+        },
+        "DZ5": {
+          "cap": "CZ5",
+          "derivative": {
+            "minimum_scalar_coefficient": "12",
+            "negative_scalar_coefficients": 0,
+            "polynomial_sha256": "47DF7F9D5399F8B3318AF25A164546C9943CBDBCB982528AA7F9F6C69D95AF7F",
+            "terms": 1
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "0",
+            "negative_scalar_coefficients": 0,
+            "polynomial_sha256": "9937A9EB6B34CD5953BB3D90A0353DF5266B6568F4040558FB75E05B051F598C",
+            "terms": 0
+          }
+        },
+        "DZ6": {
+          "cap": "CZ6",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "48A35574E435D5FDCB95169B6FB17D31012D31DC31DFC90E9B1826E42E97BB6A",
+            "terms": 2
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "0152A02083840AC8CB77C57C7585390D7312BA070A963B0EB78781F140D04848",
+            "terms": 1
+          }
+        }
+      },
+      "target_summary": {
+        "minimum_scalar_coefficient": "-21",
+        "negative_scalar_coefficients": 63,
+        "polynomial_sha256": "6CE88ACAD6F077C8FADEAA21E3BA173DABDB1A1E9F3CD21CD746705BEEA43D76",
+        "terms": 142
+      }
+    },
+    "1": {
+      "coarse_summary": {
+        "minimum_scalar_coefficient": "-45",
+        "negative_scalar_coefficients": 64,
+        "polynomial_sha256": "9E7432BF72CF4E26791602C0AFFD34E4516CC62648BEE197E906E84C40B6E85B",
+        "terms": 127
+      },
+      "exact_D_linearity": true,
+      "rows": {
+        "DA2": {
+          "cap": "CA2",
+          "derivative": {
+            "minimum_scalar_coefficient": "-15",
+            "negative_scalar_coefficients": 5,
+            "polynomial_sha256": "58C2BD70262C112A53B9776E237594D7C07636BF0BC74492519089AEF09F949D",
+            "terms": 8
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-15",
+            "negative_scalar_coefficients": 5,
+            "polynomial_sha256": "17724EF92D710A1405BED9E9B99E20EC8FC9AC3806FB373E085F1B6542BC93A9",
+            "terms": 5
+          }
+        },
+        "DA3": {
+          "cap": "CA3",
+          "derivative": {
+            "minimum_scalar_coefficient": "-8",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "7656FE3CCB647AB11B0541D95CDEB27189B719D9C8D1F19A1F17415ED3F24978",
+            "terms": 6
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-8",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "58FC4FD5DA8A980578754809BB8599294660032BAD62B4E9A0140C1FD1946A54",
+            "terms": 2
+          }
+        },
+        "DA4": {
+          "cap": "CA4",
+          "derivative": {
+            "minimum_scalar_coefficient": "-13",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "2F6CF143737C205F62BF0C46BD23C3C09978CEAA0C18292CDC21D7DAAF43EA20",
+            "terms": 5
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-13",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "616C2F8AE4E09540E0668F8EA0929E61B404405CA2D82E004F8681B1C11492A1",
+            "terms": 2
+          }
+        },
+        "DA5": {
+          "cap": "CA5",
+          "derivative": {
+            "minimum_scalar_coefficient": "-15",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "F3C80435AD281DFDEE0B48E2E806B852C01BFF8270F6E060E74D120F54285140",
+            "terms": 3
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-15",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "0A15A8332DE4D7EEDB1435D6A90FDE30A1D306807D4616E049DDC27378A3BC15",
+            "terms": 2
+          }
+        },
+        "DA6": {
+          "cap": "CA6",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "48A35574E435D5FDCB95169B6FB17D31012D31DC31DFC90E9B1826E42E97BB6A",
+            "terms": 2
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "0152A02083840AC8CB77C57C7585390D7312BA070A963B0EB78781F140D04848",
+            "terms": 1
+          }
+        },
+        "DB3": {
+          "cap": "CB3",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 3,
+            "polynomial_sha256": "3BA55FE3B2C5056A42FD6314B35E982DEF631F56070A54FB4CE0CCB81881C88B",
+            "terms": 5
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 3,
+            "polynomial_sha256": "D81ED83FB058BA4E25888DC4B546243BBB44593F4969EB92134FB7ADF54DF7FB",
+            "terms": 3
+          }
+        },
+        "DB4": {
+          "cap": "CB4",
+          "derivative": {
+            "minimum_scalar_coefficient": "-4",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "E4034C429C22D161AFA69FB18796759B572CA9FBE9D787694F4E4F1DBEDD5D0F",
+            "terms": 5
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-4",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "14A32BD8DBD9A7C108D53A9D9BB92CFA55B003F84EAAC06DEEE20DF558A4989E",
+            "terms": 1
+          }
+        },
+        "DB5": {
+          "cap": "CB5",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "E07E7B8908EFBFEEE23C6D7C4A74CB028D0417726DDCFC367FB893B50AFD1799",
+            "terms": 4
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "48F94EABB2A76A47768BC9A0182255AEA16D8BC0B73ACBB5AE36ED0394821DDD",
+            "terms": 2
+          }
+        },
+        "DB6": {
+          "cap": "CB6",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "48A35574E435D5FDCB95169B6FB17D31012D31DC31DFC90E9B1826E42E97BB6A",
+            "terms": 2
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "0152A02083840AC8CB77C57C7585390D7312BA070A963B0EB78781F140D04848",
+            "terms": 1
+          }
+        },
+        "DW2": {
+          "cap": "CW2",
+          "derivative": {
+            "minimum_scalar_coefficient": "-9",
+            "negative_scalar_coefficients": 4,
+            "polynomial_sha256": "D859E0EE3F281D22BE78A2121B11BB96A8D18E99FD42721521E2415325704459",
+            "terms": 14
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-9",
+            "negative_scalar_coefficients": 4,
+            "polynomial_sha256": "AEDD7FCAFA446859ED3F0DA6576F86E087AC67C3E40E04037B8441A90CBBB4FB",
+            "terms": 4
+          }
+        },
+        "DW3": {
+          "cap": "CW3",
+          "derivative": {
+            "minimum_scalar_coefficient": "-13",
+            "negative_scalar_coefficients": 4,
+            "polynomial_sha256": "7958C50F6535F514DCE958F0898FD64ED7C3F02B16403C714C756F37A96C1D2C",
+            "terms": 11
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-13",
+            "negative_scalar_coefficients": 4,
+            "polynomial_sha256": "E7BBA29DDC81F703C9FAE27BE8C53C9B1FBE83244907113C8651C63A248A5336",
+            "terms": 4
+          }
+        },
+        "DW4": {
+          "cap": "CW4",
+          "derivative": {
+            "minimum_scalar_coefficient": "-15",
+            "negative_scalar_coefficients": 5,
+            "polynomial_sha256": "FCE6A68CC6A9FD76CBD97EF8541C33C49672A74DF7382CE283068E92BCED56F3",
+            "terms": 7
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-15",
+            "negative_scalar_coefficients": 5,
+            "polynomial_sha256": "D6172511B5ED964AEA41E1C5E5A94437B7882741DFE5A450EBF33A3F8F6DCC9F",
+            "terms": 5
+          }
+        },
+        "DW5": {
+          "cap": "CW5",
+          "derivative": {
+            "minimum_scalar_coefficient": "-16",
+            "negative_scalar_coefficients": 3,
+            "polynomial_sha256": "78F4AEA6860037E8ED6E7D1B8A82E76E77DA7B9DDC5E3BA2DD8DF53C5A0589C5",
+            "terms": 4
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-16",
+            "negative_scalar_coefficients": 3,
+            "polynomial_sha256": "00EDFA7245749CA6AD948A045034F7471907AB51C7CFF0EBED4029C3A3C6A597",
+            "terms": 3
+          }
+        },
+        "DW6": {
+          "cap": "CW6",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "48A35574E435D5FDCB95169B6FB17D31012D31DC31DFC90E9B1826E42E97BB6A",
+            "terms": 2
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "0152A02083840AC8CB77C57C7585390D7312BA070A963B0EB78781F140D04848",
+            "terms": 1
+          }
+        },
+        "DZ4": {
+          "cap": "CZ4",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "7C2F76131B141D03211EB0DCF756A31909D6597ED48A29C2E3FCA615A926C3FD",
+            "terms": 3
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 2,
+            "polynomial_sha256": "7F66EEB559461A715AA3ADD5EE0DCD17C08966EA35CB899BAF9D12ABF8CD47D8",
+            "terms": 2
+          }
+        },
+        "DZ5": {
+          "cap": "CZ5",
+          "derivative": {
+            "minimum_scalar_coefficient": "12",
+            "negative_scalar_coefficients": 0,
+            "polynomial_sha256": "47DF7F9D5399F8B3318AF25A164546C9943CBDBCB982528AA7F9F6C69D95AF7F",
+            "terms": 1
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "0",
+            "negative_scalar_coefficients": 0,
+            "polynomial_sha256": "9937A9EB6B34CD5953BB3D90A0353DF5266B6568F4040558FB75E05B051F598C",
+            "terms": 0
+          }
+        },
+        "DZ6": {
+          "cap": "CZ6",
+          "derivative": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "48A35574E435D5FDCB95169B6FB17D31012D31DC31DFC90E9B1826E42E97BB6A",
+            "terms": 2
+          },
+          "negative_part": {
+            "minimum_scalar_coefficient": "-7",
+            "negative_scalar_coefficients": 1,
+            "polynomial_sha256": "0152A02083840AC8CB77C57C7585390D7312BA070A963B0EB78781F140D04848",
+            "terms": 1
+          }
+        }
+      },
+      "target_summary": {
+        "minimum_scalar_coefficient": "-21",
+        "negative_scalar_coefficients": 95,
+        "polynomial_sha256": "E488E060C5917D9D2CFA8B3965D5CD7F92E7A16DF669EF3E1CEF8DE8896BBBA5",
+        "terms": 207
+      }
+    }
+  },
+  "targets": {
+    "eta0": "G1_6(A+x(A-u),B)-G1_6(A,B)",
+    "eta1": "G1_6(A+x(A-u),B+x(B-u))-G1_6(A,B)"
+  }
+}

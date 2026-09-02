@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Independent coefficient/hash/no-gap audit of alpha7 sources7..13."""
+from __future__ import annotations
+import csv,hashlib,json
+from pathlib import Path
+ROOT=Path(__file__).resolve().parent
+ASSEMBLER=ROOT/"assemble_rank8_exceptional_first_crossing_alpha7_sources7_13.py";ASSEMBLY=ROOT/"rank8_exceptional_first_crossing_alpha7_sources7_13_complete_exact_20260820.json";DESIGN=ROOT/"rank8_exceptional_first_crossing_alpha7_streaming_design_exact_20260820.json";DESIGN_AUDIT=ROOT/"rank8_exceptional_first_crossing_alpha7_streaming_design_audit_exact_20260820.json";JETS=ROOT/"rank8_exceptional_tree_jets_exact_20260820.tsv";OUTPUT=ROOT/"rank8_exceptional_first_crossing_alpha7_sources7_13_complete_audit_exact_20260820.json"
+SOURCES=range(7,14)
+def digest(p):return hashlib.sha256(p.read_bytes()).hexdigest().upper()
+def files(s):return ROOT/f"rank8_exceptional_first_crossing_alpha7_s{s}_complete_exact_20260820.json",ROOT/f"rank8_exceptional_first_crossing_alpha7_s{s}_complete_audit_exact_20260820.json"
+def main()->int:
+ z=json.loads(ASSEMBLY.read_text(encoding="utf-8"));d=json.loads(DESIGN.read_text(encoding="utf-8"));da=json.loads(DESIGN_AUDIT.read_text(encoding="utf-8"));assert z["status"]=="PASS_EXACT_NO_GAP_RANK8_ALPHA7_SOURCES7_13_COMPLETE"and z["hashes"][ASSEMBLER.name]==digest(ASSEMBLER)and da["status"]=="PASS_INDEPENDENT_EXACT_NO_GAP_RESOURCE_DESIGN_AUDIT_RANK8_ALPHA7"
+ with JETS.open(newline="",encoding="utf-8")as h:rows=list(csv.DictReader(h,delimiter="\t"))
+ c=[0]*14;c[0]=1
+ for row in rows[:247]:
+  w=int(row["alpha"])
+  for a in range(w,14):c[a]+=c[a-w]
+ expected_coeff=[1,2,5,13,39,123,431,925,2209,5437,14047,36079,90460,195031];assert c==expected_coeff and all(c[i]==d["exact_counts"]["lower_raw_multiset_coefficients_alpha0_13"][str(i)]for i in range(14))
+ hashes={Path(__file__).name:digest(Path(__file__)),ASSEMBLER.name:digest(ASSEMBLER),ASSEMBLY.name:digest(ASSEMBLY),DESIGN.name:digest(DESIGN),DESIGN_AUDIT.name:digest(DESIGN_AUDIT),JETS.name:digest(JETS)};raw=checks=products=rk=kp=0;mn=mx=None;shards=0;records=[]
+ for s in SOURCES:
+  cp,aup=files(s);assert z["hashes"][cp.name]==digest(cp)and z["hashes"][aup.name]==digest(aup);x=json.loads(cp.read_text(encoding="utf-8"));u=json.loads(aup.read_text(encoding="utf-8"));assert u["hashes"][cp.name]==digest(cp)and x["status"]==f"PASS_EXACT_NO_GAP_RANK8_ALPHA7_SOURCE{s}_COMPLETE"and u["status"]==f"PASS_INDEPENDENT_NO_GAP_RANK8_ALPHA7_SOURCE{s}_ASSEMBLY_AUDIT"and x["aggregate"]==u["aggregate"]and x["coverage"]["source_alpha"]==s and x["coverage"]["terminal_type_indices"]==[248,947]and x["coverage"]["terminal_type_count"]==700 and x["coverage"]["gaps"]==x["coverage"]["overlaps"]==u["coverage"]["gaps"]==u["coverage"]["overlaps"]==0
+  expected_raw=sum(c[s]+c[s-7]*(i-247)for i in range(248,948));a=x["aggregate"];assert expected_raw==a["independently_enumerated_multisets"]and a["negative_Q8"]==a["zero_Q8"]==0 and a["minimum_Q8"]>0;raw+=expected_raw;checks+=a["canonical_check_keys"];products+=a["distinct_shard_product_jets_sum"];rk+=a["multiset_to_canonical_key_compression"];kp+=a["canonical_key_to_product_compression_within_shards"];mn=a["minimum_Q8"]if mn is None else min(mn,a["minimum_Q8"]);mx=a["maximum_Q8"]if mx is None else max(mx,a["maximum_Q8"]);n=len(x["coverage"]["shard_ranges"]);shards+=n;hashes[cp.name]=digest(cp);hashes[aup.name]=digest(aup);records.append({"source_alpha":s,"coefficient_source":c[s],"coefficient_complement":c[s-7],"raw_formula":f"{c[s]}+{c[s-7]}L","raw_multisets":expected_raw,"shards":n})
+ agg=z["aggregate"];assert(raw,checks,products,rk,kp,mn,mx,shards)==(391576500,agg["canonical_check_keys"],agg["distinct_source_shard_product_jets_sum"],agg["multiset_to_canonical_key_compression"],agg["canonical_key_to_product_compression_within_shards"],agg["minimum_Q8"],agg["maximum_Q8"],909)and agg["negative_Q8"]==agg["zero_Q8"]==0 and z["coverage"]=={"source_alpha_indices":[7,13],"source_alpha_count":7,"terminal_alpha":7,"terminal_type_indices":[248,947],"terminal_type_count_per_source":700,"source_terminal_cells":4900,"shards":909,"gaps":0,"overlaps":0}
+ payload={"schema":"rank8-exceptional-first-crossing-alpha7-sources7-13-complete-audit-v1","status":"PASS_INDEPENDENT_NO_GAP_RANK8_ALPHA7_SOURCES7_13_ASSEMBLY_AUDIT","method":"independently rederive coefficients c0..c13 from the 247 lower jets; verify all seven source formulas, source-package hashes, source-audit hashes, exact source/type union, and aggregate identities","coverage":z["coverage"],"coefficients":expected_coeff,"source_formula_audit":records,"aggregate":agg,"remaining_scope":{"exceptional_first_crossing_terminal_alpha":[8,9],"protected_unrun":["full/full cones","connected Delta0..3"]},"hashes":hashes};OUTPUT.write_text(json.dumps(payload,indent=2,sort_keys=True)+"\n",encoding="utf-8");print(payload["status"]);print(f"sources=7 terminal_cells=4900 shards={shards} raw={raw} checks={checks} products={products} neg=0 zero=0 min_Q8={mn} max_Q8={mx}");print(f"audit_sha256={digest(OUTPUT)}");return 0
+if __name__=="__main__":raise SystemExit(main())

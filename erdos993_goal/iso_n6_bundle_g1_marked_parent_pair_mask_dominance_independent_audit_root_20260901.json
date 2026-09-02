@@ -1,0 +1,33 @@
+{
+  "certificate_sha256": "C6A4BE2F13B3D2DED11AAFA753F44CB717BB709AF530518583A1CF1454E56602",
+  "checks": {
+    "both_geometries_pass": true,
+    "remaining_sign_cores_match": true
+  },
+  "geometries": {
+    "adjacent": {
+      "checks": {
+        "all_reported_coefficients_strictly_positive": true,
+        "all_reported_monomials_have_nonnegative_exponents": true,
+        "reported_increment_matches_u": true,
+        "reported_increment_matches_v": true,
+        "two_increment_matches_twice_reported": true
+      },
+      "terms": 8
+    },
+    "nonadjacent": {
+      "checks": {
+        "all_reported_coefficients_strictly_positive": true,
+        "all_reported_monomials_have_nonnegative_exponents": true,
+        "reported_increment_matches_u": true,
+        "reported_increment_matches_v": true,
+        "two_increment_matches_twice_reported": true
+      },
+      "terms": 9
+    }
+  },
+  "marker": "PASS_INDEPENDENT_EXACT_ISO_N6_BUNDLE_G1_MARKED_PARENT_PAIR_MASK_DOMINANCE_ROOT",
+  "pair_sha256": "715750BD2652F77277C79303296972A383FF08AE288CF34A1A70A9D6E5066B5F",
+  "scope_guard": "This independently replays mask dominance only; the four core all-order signs remain separate obligations.",
+  "source_sha256": "F5BB6F98DC989FABB6340BE2C3858BB44D5CE026114C642EC64C5D67721F5755"
+}

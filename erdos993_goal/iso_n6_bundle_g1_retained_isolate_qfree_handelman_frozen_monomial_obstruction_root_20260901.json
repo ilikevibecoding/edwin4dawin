@@ -1,0 +1,50 @@
+{
+  "branches": {
+    "nonadjacent_u0_v0": {
+      "atoms": 169838,
+      "coefficient_rows": 20475,
+      "cubic_constraints": 8,
+      "frozen_cells": 117,
+      "linear_constraints": 35,
+      "maximum_float_residual": null,
+      "message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
+      "objective": null,
+      "positive_atoms": [],
+      "quadratic_constraints": 25,
+      "quartic_constraints": 8,
+      "status": 2,
+      "success": false,
+      "variables": [
+        "CA2",
+        "CA3",
+        "CA4",
+        "CA5",
+        "CA6",
+        "CA7",
+        "CB2",
+        "CB3",
+        "CB4",
+        "CB5",
+        "CB6",
+        "CB7",
+        "CW2",
+        "CW3",
+        "CW4",
+        "CW5",
+        "CW6",
+        "CW7",
+        "CZ3",
+        "CZ4",
+        "CZ5",
+        "CZ6",
+        "CZ7",
+        "s"
+      ]
+    }
+  },
+  "domain": "n=8+s, s>=0; all category variables are nonnegative",
+  "input_sha256": "239ED96A29102D24B205BAB4A7AD3180B60DEACF42C68C1059D061B0E0E784FE",
+  "marker": "SEARCHED_EXACT_ISO_N6_BUNDLE_G1_RETAINED_ISOLATE_QFREE_HANDELMAN_ROOT",
+  "scope_guard": "A successful floating LP is not promoted until rational reconstruction and exact symbolic replay. Infeasibility obstructs only this finite atom cone.",
+  "source_sha256": "68ACCF8ECC874BDAA8DF6C30EC36D42C1020F395BED674050199A03D6212780E"
+}

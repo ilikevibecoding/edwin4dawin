@@ -1,0 +1,15 @@
+{
+  "audited_families": 32,
+  "certificate_sha256": "7B25D57EBEE367C236AA48CB9565877898BA093C27DE68ACB46CA46710D349D6",
+  "checks": {
+    "24_unique_core_hashes": true,
+    "all_32_families_replayed": true,
+    "no_coefficient_failures": true,
+    "reported_core_hashes_match": true
+  },
+  "failure_count": 0,
+  "lowers_sha256": "22F1F54F597B2CBA68CD24BC547D1C36075B2BE73DCC0416699CEADEF4E02CDF",
+  "marker": "PASS_INDEPENDENT_EXACT_ISO_N6_BUNDLE_G1_ORDINARY_PARENT_HK_JMASK_DOMINANCE_ROOT",
+  "scope_guard": "This independently replays J-mask dominance only; the 24 core all-order signs remain separate obligations.",
+  "source_sha256": "FA0292895A0CFF3C104A961372A39C11FB405280747000CF2D022995C5C194EE"
+}

@@ -1,0 +1,970 @@
+{
+  "checks": {
+    "56_classes_reduce_to_24_sign_cores": true,
+    "all_32_families_pass": true
+  },
+  "families": {
+    "adjacent_e0_t0_k00": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "62305973CB260FDAF323A6508713A52F3C0C73DDD882D810AD15379955475C7C",
+      "labels": {
+        "00": "adjacent_e0_t0_k00_j00",
+        "01": "adjacent_e0_t0_k00_j01",
+        "10": "adjacent_e0_t0_k00_j10",
+        "11": "adjacent_e0_t0_k00_j11"
+      },
+      "u_increment": "0",
+      "u_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      },
+      "v_increment": "0",
+      "v_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      }
+    },
+    "adjacent_e0_t0_k01": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "6868833CD62A55D9302BBC66991ABD1F0837DFD0B7F87F9B38F9A0BDCD2B1E82",
+      "labels": {
+        "00": "adjacent_e0_t0_k01_j00",
+        "01": "adjacent_e0_t0_k01_j01",
+        "10": "adjacent_e0_t0_k01_j10",
+        "11": "adjacent_e0_t0_k01_j11"
+      },
+      "u_increment": "0",
+      "u_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      },
+      "v_increment": "0",
+      "v_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      }
+    },
+    "adjacent_e0_t0_k10": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "6868833CD62A55D9302BBC66991ABD1F0837DFD0B7F87F9B38F9A0BDCD2B1E82",
+      "labels": {
+        "00": "adjacent_e0_t0_k10_j00",
+        "01": "adjacent_e0_t0_k10_j01",
+        "10": "adjacent_e0_t0_k10_j10",
+        "11": "adjacent_e0_t0_k10_j11"
+      },
+      "u_increment": "0",
+      "u_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      },
+      "v_increment": "0",
+      "v_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      }
+    },
+    "adjacent_e0_t0_k11": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "68B96498F4EDDC9BE484C6A6B89CE464CAE49AEDC86B666048BEFB458B5418A9",
+      "labels": {
+        "00": "adjacent_e0_t0_k11_j00",
+        "01": "adjacent_e0_t0_k11_j01",
+        "10": "adjacent_e0_t0_k11_j10",
+        "11": "adjacent_e0_t0_k11_j11"
+      },
+      "u_increment": "0",
+      "u_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      },
+      "v_increment": "0",
+      "v_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      }
+    },
+    "adjacent_e0_t1_k00": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "79CFDCF6D4F55092B31546E7ECB9A8144E3A8CEBC81148802D7112A04B2B8D4E",
+      "labels": {
+        "00": "adjacent_e0_t1_k00_j00",
+        "01": "adjacent_e0_t1_k00_j01",
+        "10": "adjacent_e0_t1_k00_j10",
+        "11": "adjacent_e0_t1_k00_j11"
+      },
+      "u_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "u_increment_sha256": "825B030029CBE5CED56E9EACEDE42E69C7901A4C7C52390E9862B3C44A9AF0DE",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 12
+      },
+      "v_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "v_increment_sha256": "825B030029CBE5CED56E9EACEDE42E69C7901A4C7C52390E9862B3C44A9AF0DE",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 12
+      }
+    },
+    "adjacent_e0_t1_k01": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "23F9C192267D82448DB1E491038AF28E32C32010561D607F9C1AE4FD37412DC2",
+      "labels": {
+        "00": "adjacent_e0_t1_k01_j00",
+        "01": "adjacent_e0_t1_k01_j01",
+        "10": "adjacent_e0_t1_k01_j10",
+        "11": "adjacent_e0_t1_k01_j11"
+      },
+      "u_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "u_increment_sha256": "825B030029CBE5CED56E9EACEDE42E69C7901A4C7C52390E9862B3C44A9AF0DE",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 12
+      },
+      "v_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "v_increment_sha256": "825B030029CBE5CED56E9EACEDE42E69C7901A4C7C52390E9862B3C44A9AF0DE",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 12
+      }
+    },
+    "adjacent_e0_t1_k10": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "23F9C192267D82448DB1E491038AF28E32C32010561D607F9C1AE4FD37412DC2",
+      "labels": {
+        "00": "adjacent_e0_t1_k10_j00",
+        "01": "adjacent_e0_t1_k10_j01",
+        "10": "adjacent_e0_t1_k10_j10",
+        "11": "adjacent_e0_t1_k10_j11"
+      },
+      "u_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "u_increment_sha256": "825B030029CBE5CED56E9EACEDE42E69C7901A4C7C52390E9862B3C44A9AF0DE",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 12
+      },
+      "v_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "v_increment_sha256": "825B030029CBE5CED56E9EACEDE42E69C7901A4C7C52390E9862B3C44A9AF0DE",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 12
+      }
+    },
+    "adjacent_e0_t1_k11": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "8F87119316822EDBF4953C368625034CB4FF0F6386B24463B1BAA12510F6615D",
+      "labels": {
+        "00": "adjacent_e0_t1_k11_j00",
+        "01": "adjacent_e0_t1_k11_j01",
+        "10": "adjacent_e0_t1_k11_j10",
+        "11": "adjacent_e0_t1_k11_j11"
+      },
+      "u_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "u_increment_sha256": "825B030029CBE5CED56E9EACEDE42E69C7901A4C7C52390E9862B3C44A9AF0DE",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 12
+      },
+      "v_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "v_increment_sha256": "825B030029CBE5CED56E9EACEDE42E69C7901A4C7C52390E9862B3C44A9AF0DE",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 12
+      }
+    },
+    "adjacent_e1_t0_k00": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "AC32D80710C22208D26BD5951A443652F9FC221BECA921DEA96C35AAEC221514",
+      "labels": {
+        "00": "adjacent_e1_t0_k00_j00",
+        "01": "adjacent_e1_t0_k00_j01",
+        "10": "adjacent_e1_t0_k00_j10",
+        "11": "adjacent_e1_t0_k00_j11"
+      },
+      "u_increment": "0",
+      "u_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      },
+      "v_increment": "0",
+      "v_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      }
+    },
+    "adjacent_e1_t0_k01": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "6BFC47DA173430EA5D380EFF02141F586A0B3EEA6047B6257730435EFF34F6DA",
+      "labels": {
+        "00": "adjacent_e1_t0_k01_j00",
+        "01": "adjacent_e1_t0_k01_j01",
+        "10": "adjacent_e1_t0_k01_j10",
+        "11": "adjacent_e1_t0_k01_j11"
+      },
+      "u_increment": "0",
+      "u_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      },
+      "v_increment": "HA4 + 7*HA5 + HB4 + 7*HB5 + 2*HW4 + 7*HW5",
+      "v_increment_sha256": "0993644404D981B62CD5229ECE8A211156B585C9DB3D6D711DBFD72D1F839F40",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 6
+      }
+    },
+    "adjacent_e1_t0_k10": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "6BFC47DA173430EA5D380EFF02141F586A0B3EEA6047B6257730435EFF34F6DA",
+      "labels": {
+        "00": "adjacent_e1_t0_k10_j00",
+        "01": "adjacent_e1_t0_k10_j01",
+        "10": "adjacent_e1_t0_k10_j10",
+        "11": "adjacent_e1_t0_k10_j11"
+      },
+      "u_increment": "HA4 + 7*HA5 + HB4 + 7*HB5 + 2*HW4 + 7*HW5",
+      "u_increment_sha256": "0993644404D981B62CD5229ECE8A211156B585C9DB3D6D711DBFD72D1F839F40",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 6
+      },
+      "v_increment": "0",
+      "v_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      }
+    },
+    "adjacent_e1_t0_k11": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "F4460D6D5D24E10E2CB934D490195FD60DA0194FEFD3532802415C4690D6BCB4",
+      "labels": {
+        "00": "adjacent_e1_t0_k11_j00",
+        "01": "adjacent_e1_t0_k11_j01",
+        "10": "adjacent_e1_t0_k11_j10",
+        "11": "adjacent_e1_t0_k11_j11"
+      },
+      "u_increment": "HA4 + 7*HA5 + HB4 + 7*HB5 + 2*HW4 + 7*HW5",
+      "u_increment_sha256": "0993644404D981B62CD5229ECE8A211156B585C9DB3D6D711DBFD72D1F839F40",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 6
+      },
+      "v_increment": "HA4 + 7*HA5 + HB4 + 7*HB5 + 2*HW4 + 7*HW5",
+      "v_increment_sha256": "0993644404D981B62CD5229ECE8A211156B585C9DB3D6D711DBFD72D1F839F40",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 6
+      }
+    },
+    "adjacent_e1_t1_k00": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "FC5D1C6D51A0A6A0F7A8B30524EC529D25BF5AD0DF59D85DCDAF5D5DC279D0D3",
+      "labels": {
+        "00": "adjacent_e1_t1_k00_j00",
+        "01": "adjacent_e1_t1_k00_j01",
+        "10": "adjacent_e1_t1_k00_j10",
+        "11": "adjacent_e1_t1_k00_j11"
+      },
+      "u_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "u_increment_sha256": "825B030029CBE5CED56E9EACEDE42E69C7901A4C7C52390E9862B3C44A9AF0DE",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 12
+      },
+      "v_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "v_increment_sha256": "825B030029CBE5CED56E9EACEDE42E69C7901A4C7C52390E9862B3C44A9AF0DE",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 12
+      }
+    },
+    "adjacent_e1_t1_k01": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "F3765D871AE7C292A9392A105F5CB98EBA75992E1E6ED9655B79ECF011876B06",
+      "labels": {
+        "00": "adjacent_e1_t1_k01_j00",
+        "01": "adjacent_e1_t1_k01_j01",
+        "10": "adjacent_e1_t1_k01_j10",
+        "11": "adjacent_e1_t1_k01_j11"
+      },
+      "u_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "u_increment_sha256": "825B030029CBE5CED56E9EACEDE42E69C7901A4C7C52390E9862B3C44A9AF0DE",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 12
+      },
+      "v_increment": "HA4 + 15*HA5 + 7*HA6 + HB4 + 15*HB5 + 7*HB6 + 2*HW4 + 16*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "v_increment_sha256": "00521F1CDF83C86476A9F295D0EAF3B4395CD5C7A26265116BE37A991E0AC18A",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      }
+    },
+    "adjacent_e1_t1_k10": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "F3765D871AE7C292A9392A105F5CB98EBA75992E1E6ED9655B79ECF011876B06",
+      "labels": {
+        "00": "adjacent_e1_t1_k10_j00",
+        "01": "adjacent_e1_t1_k10_j01",
+        "10": "adjacent_e1_t1_k10_j10",
+        "11": "adjacent_e1_t1_k10_j11"
+      },
+      "u_increment": "HA4 + 15*HA5 + 7*HA6 + HB4 + 15*HB5 + 7*HB6 + 2*HW4 + 16*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "u_increment_sha256": "00521F1CDF83C86476A9F295D0EAF3B4395CD5C7A26265116BE37A991E0AC18A",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      },
+      "v_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "v_increment_sha256": "825B030029CBE5CED56E9EACEDE42E69C7901A4C7C52390E9862B3C44A9AF0DE",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 12
+      }
+    },
+    "adjacent_e1_t1_k11": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "A7A5E911BD2AD6E837962D78EAD9749B1277163391A465A3518736CB00571280",
+      "labels": {
+        "00": "adjacent_e1_t1_k11_j00",
+        "01": "adjacent_e1_t1_k11_j01",
+        "10": "adjacent_e1_t1_k11_j10",
+        "11": "adjacent_e1_t1_k11_j11"
+      },
+      "u_increment": "HA4 + 15*HA5 + 7*HA6 + HB4 + 15*HB5 + 7*HB6 + 2*HW4 + 16*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "u_increment_sha256": "00521F1CDF83C86476A9F295D0EAF3B4395CD5C7A26265116BE37A991E0AC18A",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      },
+      "v_increment": "HA4 + 15*HA5 + 7*HA6 + HB4 + 15*HB5 + 7*HB6 + 2*HW4 + 16*HW5 + 7*HW6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5",
+      "v_increment_sha256": "00521F1CDF83C86476A9F295D0EAF3B4395CD5C7A26265116BE37A991E0AC18A",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      }
+    },
+    "nonadjacent_e0_t0_k00": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "D442FDCD7394892DF7665D3C4FEA731768EDA1307E29C57505EFDEDE7E825060",
+      "labels": {
+        "00": "nonadjacent_e0_t0_k00_j00",
+        "01": "nonadjacent_e0_t0_k00_j01",
+        "10": "nonadjacent_e0_t0_k00_j10",
+        "11": "nonadjacent_e0_t0_k00_j11"
+      },
+      "u_increment": "0",
+      "u_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      },
+      "v_increment": "0",
+      "v_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      }
+    },
+    "nonadjacent_e0_t0_k01": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "1C749C2E4E6E98901837DE195C7504A91B3DE8670B30641E0B456D6EB85CDEFC",
+      "labels": {
+        "00": "nonadjacent_e0_t0_k01_j00",
+        "01": "nonadjacent_e0_t0_k01_j01",
+        "10": "nonadjacent_e0_t0_k01_j10",
+        "11": "nonadjacent_e0_t0_k01_j11"
+      },
+      "u_increment": "0",
+      "u_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      },
+      "v_increment": "0",
+      "v_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      }
+    },
+    "nonadjacent_e0_t0_k10": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "1C749C2E4E6E98901837DE195C7504A91B3DE8670B30641E0B456D6EB85CDEFC",
+      "labels": {
+        "00": "nonadjacent_e0_t0_k10_j00",
+        "01": "nonadjacent_e0_t0_k10_j01",
+        "10": "nonadjacent_e0_t0_k10_j10",
+        "11": "nonadjacent_e0_t0_k10_j11"
+      },
+      "u_increment": "0",
+      "u_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      },
+      "v_increment": "0",
+      "v_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      }
+    },
+    "nonadjacent_e0_t0_k11": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "90E943CC9A4FE70D2CCC29B765BFC9752E0EF944B445172DCA478B9673D0AC8B",
+      "labels": {
+        "00": "nonadjacent_e0_t0_k11_j00",
+        "01": "nonadjacent_e0_t0_k11_j01",
+        "10": "nonadjacent_e0_t0_k11_j10",
+        "11": "nonadjacent_e0_t0_k11_j11"
+      },
+      "u_increment": "0",
+      "u_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      },
+      "v_increment": "0",
+      "v_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      }
+    },
+    "nonadjacent_e0_t1_k00": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "E0B74D88853DB70E7B771DB13395880750F5619F5075C393D7561DBA1429CAA0",
+      "labels": {
+        "00": "nonadjacent_e0_t1_k00_j00",
+        "01": "nonadjacent_e0_t1_k00_j01",
+        "10": "nonadjacent_e0_t1_k00_j10",
+        "11": "nonadjacent_e0_t1_k00_j11"
+      },
+      "u_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + 7*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "u_increment_sha256": "716E29B98ECC9325E920DA8FF1C131A47A31C4E5AD238732AE3AE2F11DCC5CB3",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      },
+      "v_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + 7*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "v_increment_sha256": "716E29B98ECC9325E920DA8FF1C131A47A31C4E5AD238732AE3AE2F11DCC5CB3",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      }
+    },
+    "nonadjacent_e0_t1_k01": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "6038DA6566B36158455F06768B307E840D476326B77E16D28F8332032EEC93CA",
+      "labels": {
+        "00": "nonadjacent_e0_t1_k01_j00",
+        "01": "nonadjacent_e0_t1_k01_j01",
+        "10": "nonadjacent_e0_t1_k01_j10",
+        "11": "nonadjacent_e0_t1_k01_j11"
+      },
+      "u_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + 7*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "u_increment_sha256": "716E29B98ECC9325E920DA8FF1C131A47A31C4E5AD238732AE3AE2F11DCC5CB3",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      },
+      "v_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + 7*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "v_increment_sha256": "716E29B98ECC9325E920DA8FF1C131A47A31C4E5AD238732AE3AE2F11DCC5CB3",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      }
+    },
+    "nonadjacent_e0_t1_k10": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "6038DA6566B36158455F06768B307E840D476326B77E16D28F8332032EEC93CA",
+      "labels": {
+        "00": "nonadjacent_e0_t1_k10_j00",
+        "01": "nonadjacent_e0_t1_k10_j01",
+        "10": "nonadjacent_e0_t1_k10_j10",
+        "11": "nonadjacent_e0_t1_k10_j11"
+      },
+      "u_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + 7*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "u_increment_sha256": "716E29B98ECC9325E920DA8FF1C131A47A31C4E5AD238732AE3AE2F11DCC5CB3",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      },
+      "v_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + 7*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "v_increment_sha256": "716E29B98ECC9325E920DA8FF1C131A47A31C4E5AD238732AE3AE2F11DCC5CB3",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      }
+    },
+    "nonadjacent_e0_t1_k11": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "A2C3BBCACDF5C941952891E3D88E78825A8CEAD63AD93AD1E993F4489EA7DB9A",
+      "labels": {
+        "00": "nonadjacent_e0_t1_k11_j00",
+        "01": "nonadjacent_e0_t1_k11_j01",
+        "10": "nonadjacent_e0_t1_k11_j10",
+        "11": "nonadjacent_e0_t1_k11_j11"
+      },
+      "u_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + 7*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "u_increment_sha256": "716E29B98ECC9325E920DA8FF1C131A47A31C4E5AD238732AE3AE2F11DCC5CB3",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      },
+      "v_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + 7*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "v_increment_sha256": "716E29B98ECC9325E920DA8FF1C131A47A31C4E5AD238732AE3AE2F11DCC5CB3",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      }
+    },
+    "nonadjacent_e1_t0_k00": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "6BAD3953E9659C69CBFC62A24D1E05C97E3EDEF28F9E340E577ECE7CD2A23C86",
+      "labels": {
+        "00": "nonadjacent_e1_t0_k00_j00",
+        "01": "nonadjacent_e1_t0_k00_j01",
+        "10": "nonadjacent_e1_t0_k00_j10",
+        "11": "nonadjacent_e1_t0_k00_j11"
+      },
+      "u_increment": "0",
+      "u_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      },
+      "v_increment": "0",
+      "v_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      }
+    },
+    "nonadjacent_e1_t0_k01": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "9AE9132B720DA005D2186634730BE7E5BE6489121CB52F598CDF6A3430246B91",
+      "labels": {
+        "00": "nonadjacent_e1_t0_k01_j00",
+        "01": "nonadjacent_e1_t0_k01_j01",
+        "10": "nonadjacent_e1_t0_k01_j10",
+        "11": "nonadjacent_e1_t0_k01_j11"
+      },
+      "u_increment": "0",
+      "u_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      },
+      "v_increment": "HA4 + 7*HA5 + HB4 + 7*HB5 + 2*HW4 + 7*HW5 + 7*HZ5",
+      "v_increment_sha256": "4DE0F715006F722BFED1F6B31D3C2C45DD17E856A0C7CBF31F81B27F4093E5E5",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 7
+      }
+    },
+    "nonadjacent_e1_t0_k10": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "9AE9132B720DA005D2186634730BE7E5BE6489121CB52F598CDF6A3430246B91",
+      "labels": {
+        "00": "nonadjacent_e1_t0_k10_j00",
+        "01": "nonadjacent_e1_t0_k10_j01",
+        "10": "nonadjacent_e1_t0_k10_j10",
+        "11": "nonadjacent_e1_t0_k10_j11"
+      },
+      "u_increment": "HA4 + 7*HA5 + HB4 + 7*HB5 + 2*HW4 + 7*HW5 + 7*HZ5",
+      "u_increment_sha256": "4DE0F715006F722BFED1F6B31D3C2C45DD17E856A0C7CBF31F81B27F4093E5E5",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 7
+      },
+      "v_increment": "0",
+      "v_increment_sha256": "5FECEB66FFC86F38D952786C6D696C79C2DBC239DD4E91B46729D73A27FB57E9",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "0",
+        "terms": 0
+      }
+    },
+    "nonadjacent_e1_t0_k11": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "B76FF9FA0473399AA23DF379B1F87F73E1937CB023D07DAAE7F5C5B607502E2E",
+      "labels": {
+        "00": "nonadjacent_e1_t0_k11_j00",
+        "01": "nonadjacent_e1_t0_k11_j01",
+        "10": "nonadjacent_e1_t0_k11_j10",
+        "11": "nonadjacent_e1_t0_k11_j11"
+      },
+      "u_increment": "HA4 + 7*HA5 + HB4 + 7*HB5 + 2*HW4 + 7*HW5 + 7*HZ5",
+      "u_increment_sha256": "4DE0F715006F722BFED1F6B31D3C2C45DD17E856A0C7CBF31F81B27F4093E5E5",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 7
+      },
+      "v_increment": "HA4 + 7*HA5 + HB4 + 7*HB5 + 2*HW4 + 7*HW5 + 7*HZ5",
+      "v_increment_sha256": "4DE0F715006F722BFED1F6B31D3C2C45DD17E856A0C7CBF31F81B27F4093E5E5",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 7
+      }
+    },
+    "nonadjacent_e1_t1_k00": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "2DDF26E89D005172B2286DAD445AECF7293F6BA9E0130F89F90724C01F799D5B",
+      "labels": {
+        "00": "nonadjacent_e1_t1_k00_j00",
+        "01": "nonadjacent_e1_t1_k00_j01",
+        "10": "nonadjacent_e1_t1_k00_j10",
+        "11": "nonadjacent_e1_t1_k00_j11"
+      },
+      "u_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + 7*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "u_increment_sha256": "716E29B98ECC9325E920DA8FF1C131A47A31C4E5AD238732AE3AE2F11DCC5CB3",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      },
+      "v_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + 7*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "v_increment_sha256": "716E29B98ECC9325E920DA8FF1C131A47A31C4E5AD238732AE3AE2F11DCC5CB3",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      }
+    },
+    "nonadjacent_e1_t1_k01": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "F2F2B0F64C2172EF2AB60970D50CB84B62CF6B6312842D60C52009BDC671C7CB",
+      "labels": {
+        "00": "nonadjacent_e1_t1_k01_j00",
+        "01": "nonadjacent_e1_t1_k01_j01",
+        "10": "nonadjacent_e1_t1_k01_j10",
+        "11": "nonadjacent_e1_t1_k01_j11"
+      },
+      "u_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + 7*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "u_increment_sha256": "716E29B98ECC9325E920DA8FF1C131A47A31C4E5AD238732AE3AE2F11DCC5CB3",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      },
+      "v_increment": "HA4 + 15*HA5 + 7*HA6 + HB4 + 15*HB5 + 7*HB6 + 2*HW4 + 16*HW5 + 7*HW6 + 14*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "v_increment_sha256": "53D849DE9BE82736D40B6F718DD657A64A9AE560AEDDBC845A0EC93A82F59938",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 18
+      }
+    },
+    "nonadjacent_e1_t1_k10": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "F2F2B0F64C2172EF2AB60970D50CB84B62CF6B6312842D60C52009BDC671C7CB",
+      "labels": {
+        "00": "nonadjacent_e1_t1_k10_j00",
+        "01": "nonadjacent_e1_t1_k10_j01",
+        "10": "nonadjacent_e1_t1_k10_j10",
+        "11": "nonadjacent_e1_t1_k10_j11"
+      },
+      "u_increment": "HA4 + 15*HA5 + 7*HA6 + HB4 + 15*HB5 + 7*HB6 + 2*HW4 + 16*HW5 + 7*HW6 + 14*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "u_increment_sha256": "53D849DE9BE82736D40B6F718DD657A64A9AE560AEDDBC845A0EC93A82F59938",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 18
+      },
+      "v_increment": "8*HA5 + 7*HA6 + 8*HB5 + 7*HB6 + 9*HW5 + 7*HW6 + 7*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "v_increment_sha256": "716E29B98ECC9325E920DA8FF1C131A47A31C4E5AD238732AE3AE2F11DCC5CB3",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 15
+      }
+    },
+    "nonadjacent_e1_t1_k11": {
+      "checks": {
+        "both_increment_is_sum": true,
+        "u_increment_nonnegative_coefficients": true,
+        "v_increment_nonnegative_coefficients": true
+      },
+      "core_class_sha256": "30A7C50B0EBA2CE7033D3ED850B3F3FA5AB1D00B9FFF57A7737FE9DD1D3C0A2B",
+      "labels": {
+        "00": "nonadjacent_e1_t1_k11_j00",
+        "01": "nonadjacent_e1_t1_k11_j01",
+        "10": "nonadjacent_e1_t1_k11_j10",
+        "11": "nonadjacent_e1_t1_k11_j11"
+      },
+      "u_increment": "HA4 + 15*HA5 + 7*HA6 + HB4 + 15*HB5 + 7*HB6 + 2*HW4 + 16*HW5 + 7*HW6 + 14*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "u_increment_sha256": "53D849DE9BE82736D40B6F718DD657A64A9AE560AEDDBC845A0EC93A82F59938",
+      "u_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 18
+      },
+      "v_increment": "HA4 + 15*HA5 + 7*HA6 + HB4 + 15*HB5 + 7*HB6 + 2*HW4 + 16*HW5 + 7*HW6 + 14*HZ5 + 7*HZ6 + KA4 + 7*KA5 + KB4 + 7*KB5 + 2*KW4 + 7*KW5 + 7*KZ5",
+      "v_increment_sha256": "53D849DE9BE82736D40B6F718DD657A64A9AE560AEDDBC845A0EC93A82F59938",
+      "v_increment_summary": {
+        "all_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 18
+      }
+    }
+  },
+  "family_count": 32,
+  "input_sha256": "22F1F54F597B2CBA68CD24BC547D1C36075B2BE73DCC0416699CEADEF4E02CDF",
+  "marker": "PASS_EXACT_ISO_N6_BUNDLE_G1_ORDINARY_PARENT_HK_JMASK_DOMINANCE_ROOT",
+  "remaining_core_labels": [
+    "adjacent_e0_t0_k00_j00",
+    "adjacent_e0_t0_k01_j00",
+    "adjacent_e0_t0_k10_j00",
+    "adjacent_e0_t0_k11_j00",
+    "adjacent_e0_t1_k00_j00",
+    "adjacent_e0_t1_k01_j00",
+    "adjacent_e0_t1_k10_j00",
+    "adjacent_e0_t1_k11_j00",
+    "adjacent_e1_t0_k00_j00",
+    "adjacent_e1_t0_k01_j00",
+    "adjacent_e1_t0_k10_j00",
+    "adjacent_e1_t0_k11_j00",
+    "adjacent_e1_t1_k00_j00",
+    "adjacent_e1_t1_k01_j00",
+    "adjacent_e1_t1_k10_j00",
+    "adjacent_e1_t1_k11_j00",
+    "nonadjacent_e0_t0_k00_j00",
+    "nonadjacent_e0_t0_k01_j00",
+    "nonadjacent_e0_t0_k10_j00",
+    "nonadjacent_e0_t0_k11_j00",
+    "nonadjacent_e0_t1_k00_j00",
+    "nonadjacent_e0_t1_k01_j00",
+    "nonadjacent_e0_t1_k10_j00",
+    "nonadjacent_e0_t1_k11_j00",
+    "nonadjacent_e1_t0_k00_j00",
+    "nonadjacent_e1_t0_k01_j00",
+    "nonadjacent_e1_t0_k10_j00",
+    "nonadjacent_e1_t0_k11_j00",
+    "nonadjacent_e1_t1_k00_j00",
+    "nonadjacent_e1_t1_k01_j00",
+    "nonadjacent_e1_t1_k10_j00",
+    "nonadjacent_e1_t1_k11_j00"
+  ],
+  "remaining_unique_class_count": 24,
+  "remaining_unique_class_sha256": [
+    "1C749C2E4E6E98901837DE195C7504A91B3DE8670B30641E0B456D6EB85CDEFC",
+    "23F9C192267D82448DB1E491038AF28E32C32010561D607F9C1AE4FD37412DC2",
+    "2DDF26E89D005172B2286DAD445AECF7293F6BA9E0130F89F90724C01F799D5B",
+    "30A7C50B0EBA2CE7033D3ED850B3F3FA5AB1D00B9FFF57A7737FE9DD1D3C0A2B",
+    "6038DA6566B36158455F06768B307E840D476326B77E16D28F8332032EEC93CA",
+    "62305973CB260FDAF323A6508713A52F3C0C73DDD882D810AD15379955475C7C",
+    "6868833CD62A55D9302BBC66991ABD1F0837DFD0B7F87F9B38F9A0BDCD2B1E82",
+    "68B96498F4EDDC9BE484C6A6B89CE464CAE49AEDC86B666048BEFB458B5418A9",
+    "6BAD3953E9659C69CBFC62A24D1E05C97E3EDEF28F9E340E577ECE7CD2A23C86",
+    "6BFC47DA173430EA5D380EFF02141F586A0B3EEA6047B6257730435EFF34F6DA",
+    "79CFDCF6D4F55092B31546E7ECB9A8144E3A8CEBC81148802D7112A04B2B8D4E",
+    "8F87119316822EDBF4953C368625034CB4FF0F6386B24463B1BAA12510F6615D",
+    "90E943CC9A4FE70D2CCC29B765BFC9752E0EF944B445172DCA478B9673D0AC8B",
+    "9AE9132B720DA005D2186634730BE7E5BE6489121CB52F598CDF6A3430246B91",
+    "A2C3BBCACDF5C941952891E3D88E78825A8CEAD63AD93AD1E993F4489EA7DB9A",
+    "A7A5E911BD2AD6E837962D78EAD9749B1277163391A465A3518736CB00571280",
+    "AC32D80710C22208D26BD5951A443652F9FC221BECA921DEA96C35AAEC221514",
+    "B76FF9FA0473399AA23DF379B1F87F73E1937CB023D07DAAE7F5C5B607502E2E",
+    "D442FDCD7394892DF7665D3C4FEA731768EDA1307E29C57505EFDEDE7E825060",
+    "E0B74D88853DB70E7B771DB13395880750F5619F5075C393D7561DBA1429CAA0",
+    "F2F2B0F64C2172EF2AB60970D50CB84B62CF6B6312842D60C52009BDC671C7CB",
+    "F3765D871AE7C292A9392A105F5CB98EBA75992E1E6ED9655B79ECF011876B06",
+    "F4460D6D5D24E10E2CB934D490195FD60DA0194FEFD3532802415C4690D6BCB4",
+    "FC5D1C6D51A0A6A0F7A8B30524EC529D25BF5AD0DF59D85DCDAF5D5DC279D0D3"
+  ],
+  "scope_guard": "This proves all-order dominance among J mark masks.  It does not prove the 24 remaining H--K core signs.",
+  "source_sha256": "03B83FBBE630B1FFFBEB8DD42F88A43609029114CE23A46B0FCCB5F1D4441D72"
+}

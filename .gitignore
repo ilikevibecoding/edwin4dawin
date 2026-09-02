@@ -1,0 +1,40 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# erdos993_goal: the transferred 3.2 GB research workspace. Sources (.py/.md/.c/.rs/.lean/.tex)
+# are committed; bulk JSON reports, logs, third-party code and binaries are not. Every file
+# (committed or not) is pinned by SHA256 in reports/erdos993_goal_manifest_sha256.txt.
+# Small reports named in the handoff and all 2026-09-02 reports are force-added.
+erdos993_goal/**/*.json
+erdos993_goal/**/*.log
+erdos993_goal/**/*.err
+erdos993_goal/**/*.out
+erdos993_goal/**/*.ans
+erdos993_goal/**/*.pkl
+erdos993_goal/**/*.pdf
+erdos993_goal/**/*.png
+erdos993_goal/**/*.zip
+erdos993_goal/**/*.gz
+erdos993_goal/**/*.tar
+erdos993_goal/**/*.7z
+erdos993_goal/**/*.exe
+erdos993_goal/**/*.dll
+erdos993_goal/**/*.so
+erdos993_goal/**/*.o
+erdos993_goal/**/*.olean
+erdos993_goal/**/*.ilean
+erdos993_goal/**/*.trace
+erdos993_goal/**/*.bin
+erdos993_goal/**/*.npy
+erdos993_goal/**/*.npz
+erdos993_goal/**/*.csv
+erdos993_goal/**/*.tsv
+erdos993_goal/**/*.txt
+erdos993_goal/_third_party/
+erdos993_goal/external_brettrey_erdos993/
+erdos993_goal/literature_sources/
+erdos993_goal/arxiv_*_source/
+erdos993_goal/**/.lake/
+erdos993_goal/**/target/
+erdos993_goal/**/node_modules/

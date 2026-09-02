@@ -1,0 +1,34 @@
+{
+  "exact_D_linearity": true,
+  "input_sha256": "239ED96A29102D24B205BAB4A7AD3180B60DEACF42C68C1059D061B0E0E784FE",
+  "marker": "PASS_INDEPENDENT_EXACT_ISO_N6_BUNDLE_G1_RETAINED_ISOLATE_QFREE_REDUCTION_ROOT",
+  "proof_rules": [
+    "For 0<=D_i<=C_i and affine D dependence, D_i*L_i(C)>=C_i*min_coeff_part(L_i,0).",
+    "For q=e+t, 0<=t<=n-e, an affine q slope P_++P_- gives L(C,q)>=L(C,e)+(n-e)P_-.",
+    "Every retained-mark branch differs from its zero-retention branch coefficientwise nonnegatively."
+  ],
+  "qfree_expression_replays": {
+    "adjacent_u0_v0": true,
+    "adjacent_u0_v1": true,
+    "adjacent_u1_v0": true,
+    "adjacent_u1_v1": true,
+    "nonadjacent_u0_v0": true,
+    "nonadjacent_u0_v1": true,
+    "nonadjacent_u1_v0": true,
+    "nonadjacent_u1_v1": true
+  },
+  "retained_mark_branch_domination": {
+    "adjacent_u0_v1": true,
+    "adjacent_u1_v0": true,
+    "adjacent_u1_v1": true,
+    "nonadjacent_u0_v1": true,
+    "nonadjacent_u1_v0": true,
+    "nonadjacent_u1_v1": true
+  },
+  "scope_guard": "This independently verifies the sufficient reduction to two q-free targets. It does not prove either target nonnegative.",
+  "source_sha256": "86433DC48E4E79C55E73AEC683C9FEBAA6C98A5D8158AAEA212A45F10983CB23",
+  "worst_branches": [
+    "adjacent_u0_v0",
+    "nonadjacent_u0_v0"
+  ]
+}

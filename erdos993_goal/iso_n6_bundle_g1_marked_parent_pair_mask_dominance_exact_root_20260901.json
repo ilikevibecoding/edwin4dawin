@@ -1,0 +1,64 @@
+{
+  "checks": {
+    "both_geometries_pass": true,
+    "eight_classes_reduce_to_four_sign_cores": true
+  },
+  "geometries": {
+    "adjacent": {
+      "checks": {
+        "increment_has_nonnegative_coefficients": true,
+        "one_mark_increments_identical": true,
+        "two_mark_increment_is_twice_one": true
+      },
+      "deleted_core_sha256": "F3F0CCA1266B2325BB6146C8381DA11AE4836B4959F431B969A35AC8739BB3F1",
+      "labels": {
+        "deleted_core": "adjacent_t0_u0_v0",
+        "retained_core": "adjacent_t1_u0_v0",
+        "retained_one_u": "adjacent_t1_u1_v0",
+        "retained_one_v": "adjacent_t1_u0_v1",
+        "retained_two": "adjacent_t1_u1_v1"
+      },
+      "one_mark_increment": "13*CA4 + 15*CA5 + 7*CA6 + CB5 + 7*CB6 + 15*CW4 + 16*CW5 + 7*CW6",
+      "one_mark_increment_sha256": "BF7B189EA090C65B61051E7AD7D444535691782E9678202020EFD9A284992A13",
+      "one_mark_increment_summary": {
+        "all_scalar_coefficients_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 8
+      },
+      "retained_core_sha256": "74BB69C6A2476B5BBD61A30925AC48D595057701D02A6A50DBDE911615A8A277"
+    },
+    "nonadjacent": {
+      "checks": {
+        "increment_has_nonnegative_coefficients": true,
+        "one_mark_increments_identical": true,
+        "two_mark_increment_is_twice_one": true
+      },
+      "deleted_core_sha256": "18C87FD31A382F24B3F9D0DA05BFBB4D03B11BD716F0434E8D97377AA479DEDE",
+      "labels": {
+        "deleted_core": "nonadjacent_t0_u0_v0",
+        "retained_core": "nonadjacent_t1_u0_v0",
+        "retained_one_u": "nonadjacent_t1_u1_v0",
+        "retained_one_v": "nonadjacent_t1_u0_v1",
+        "retained_two": "nonadjacent_t1_u1_v1"
+      },
+      "one_mark_increment": "13*CA4 + 15*CA5 + 7*CA6 + CB5 + 7*CB6 + 15*CW4 + 16*CW5 + 7*CW6 + 7*CZ6",
+      "one_mark_increment_sha256": "E3EE007D160419CC6592C09BFCAAB45C579C5041E582E757B0C87AD869935954",
+      "one_mark_increment_summary": {
+        "all_scalar_coefficients_nonnegative": true,
+        "minimum_scalar_coefficient": "1",
+        "terms": 9
+      },
+      "retained_core_sha256": "D7A058B9E1E8BEFDF6ABDD66B99CAE1176D1792847F6CDF9C3D109D7CBA1F783"
+    }
+  },
+  "input_sha256": "715750BD2652F77277C79303296972A383FF08AE288CF34A1A70A9D6E5066B5F",
+  "marker": "PASS_EXACT_ISO_N6_BUNDLE_G1_MARKED_PARENT_PAIR_MASK_DOMINANCE_ROOT",
+  "remaining_sign_cores": [
+    "adjacent_t0_u0_v0",
+    "adjacent_t1_u0_v0",
+    "nonadjacent_t0_u0_v0",
+    "nonadjacent_t1_u0_v0"
+  ],
+  "scope_guard": "This proves exact dominance among mark-retention masks.  It does not prove all-order nonnegativity of the four remaining cores.",
+  "source_sha256": "84F60823AFF822D8C4B244AAA4913AD6E34E01739097059F0D9A0A8968CBEACE"
+}

@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""Fail-closed assembly of complete terminal-alpha7/source13."""
+from __future__ import annotations
+import hashlib,json
+from pathlib import Path
+ROOT=Path(__file__).resolve().parent
+DESIGN=ROOT/"rank8_exceptional_first_crossing_alpha7_streaming_design_exact_20260820.json"
+DESIGN_AUDIT=ROOT/"rank8_exceptional_first_crossing_alpha7_streaming_design_audit_exact_20260820.json"
+OUTPUT=ROOT/"rank8_exceptional_first_crossing_alpha7_s13_complete_exact_20260820.json"
+def digest(p):return hashlib.sha256(p.read_bytes()).hexdigest().upper()
+def paths(s,t):
+ stem=f"rank8_exceptional_first_crossing_alpha7_s13_types{s}_{t}"
+ return ROOT/f"{stem}_exact_20260820.json",ROOT/f"{stem}_keys_exact_20260820.sqlite3",ROOT/f"{stem}_audit_exact_20260820.json"
+def main()->int:
+ design=json.loads(DESIGN.read_text(encoding="utf-8"));da=json.loads(DESIGN_AUDIT.read_text(encoding="utf-8"));assert da["status"]=="PASS_INDEPENDENT_EXACT_NO_GAP_RESOURCE_DESIGN_AUDIT_RANK8_ALPHA7"
+ cell=design["exact_counts"]["source_cells"]["13"];ranges=[(x["terminal_type_index_start"],x["terminal_type_index_stop"])for x in cell["shards"]];assert len(ranges)==cell["shard_count"]==607
+ hashes={DESIGN.name:digest(DESIGN),DESIGN_AUDIT.name:digest(DESIGN_AUDIT),Path(__file__).name:digest(Path(__file__))};raw=keys=products=rk=kp=0;mn=mx=None;ps=ats=0.;pp=ap=0;expected=248;shards=[]
+ for s,t in ranges:
+  assert s==expected;expected=t+1;rp,db,aup=paths(s,t);r=json.loads(rp.read_text(encoding="utf-8"));a=json.loads(aup.read_text(encoding="utf-8"));assert r["status"]=="PASS_EXACT_RESOURCE_GATED_RANK8_ALPHA7_SOURCE13_SHARD"and a["status"]=="PASS_INDEPENDENT_BIDIRECTIONAL_RANK8_ALPHA7_SOURCE13_SHARD_AUDIT"and r["hashes"][db.name]==digest(db)and a["hashes"][rp.name]==digest(rp)and a["hashes"][db.name]==digest(db);x=r["aggregate"];y=a["shard"]
+  for u,v in(("independently_counted_raw_multisets","independently_enumerated_multisets"),("canonical_check_keys","canonical_check_keys"),("distinct_crossing_jets","distinct_crossing_jets"),("minimum_Q8","minimum_Q8"),("maximum_Q8","maximum_Q8")):assert x[u]==y[v]
+  assert x["negative_Q8"]==x["zero_Q8"]==0 and x["minimum_Q8"]>0;raw+=x["independently_counted_raw_multisets"];keys+=x["canonical_check_keys"];products+=x["distinct_crossing_jets"];rk+=x["raw_to_canonical_compression"];kp+=x["canonical_key_to_product_collisions"];mn=x["minimum_Q8"]if mn is None else min(mn,x["minimum_Q8"]);mx=x["maximum_Q8"]if mx is None else max(mx,x["maximum_Q8"]);ps+=r["resources"]["elapsed_seconds"];ats+=a["resources"]["elapsed_seconds"];pp=max(pp,r["resources"]["peak_private_bytes"]);ap=max(ap,a["resources"]["peak_private_bytes"])
+  for p in(rp,db,aup):hashes[p.name]=digest(p)
+  shards.append({"terminal_type_index_start":s,"terminal_type_index_stop":t,"raw_multisets":x["independently_counted_raw_multisets"],"canonical_checks":x["canonical_check_keys"],"products":x["distinct_crossing_jets"],"minimum_Q8":x["minimum_Q8"],"maximum_Q8":x["maximum_Q8"]})
+ assert expected==948 and raw==cell["raw_multiset_crossing_count"]==242267550 and keys+rk==raw and products+kp==keys
+ aggregate={"independently_enumerated_multisets":raw,"canonical_check_keys":keys,"distinct_shard_product_jets_sum":products,"multiset_to_canonical_key_compression":rk,"canonical_key_to_product_compression_within_shards":kp,"negative_Q8":0,"zero_Q8":0,"minimum_Q8":mn,"maximum_Q8":mx}
+ payload={"schema":"rank8-exceptional-first-crossing-alpha7-s13-complete-v1","status":"PASS_EXACT_NO_GAP_RANK8_ALPHA7_SOURCE13_COMPLETE","theorem":"Every exceptional-only first crossing with terminal alpha7 and source alpha13 has literal Q8>0.","coverage":{"source_alpha":13,"terminal_alpha":7,"total_alpha":20,"terminal_type_indices":[248,947],"terminal_type_count":700,"shard_ranges":[list(r)for r in ranges],"gaps":0,"overlaps":0},"aggregate":aggregate,"resources":{"workers":1,"fresh_process_per_shard_and_audit":True,"producer_elapsed_seconds_sum":ps,"audit_elapsed_seconds_sum":ats,"maximum_producer_peak_private_bytes":pp,"maximum_producer_peak_private_MiB":pp/1024**2,"maximum_audit_peak_private_bytes":ap,"maximum_audit_peak_private_MiB":ap/1024**2,"abort_limit_private_bytes":448*1024**2,"hard_limit_private_bytes":512*1024**2},"shards":shards,"scope_warning":"Completes only source alpha13 for terminal alpha7; stops before terminal alpha8.","hashes":hashes}
+ OUTPUT.write_text(json.dumps(payload,indent=2,sort_keys=True)+"\n",encoding="utf-8");print(payload["status"]);print(f"raw={raw} checks={keys} products={products} neg=0 zero=0 min_Q8={mn} max_Q8={mx}");print(f"producer_seconds={ps:.6f} audit_seconds={ats:.6f} producer_peak={pp} audit_peak={ap}");print(f"assembly_sha256={digest(OUTPUT)}");return 0
+if __name__=="__main__":raise SystemExit(main())

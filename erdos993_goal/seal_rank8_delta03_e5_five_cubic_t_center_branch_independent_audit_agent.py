@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""Fail-closed seal for the independent five-cubic-T center-branch audit."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parent
+PRIMARY = ROOT / "rank8_delta03_e5_five_cubic_t_center_branch_all_order_exact_agent_20260823.json"
+RAW = ROOT / "rank8_delta03_e5_five_cubic_t_center_branch_literal_i256_raw_agent_20260823.txt"
+OUTPUT = ROOT / "rank8_delta03_e5_five_cubic_t_center_branch_all_order_independent_audit_agent_20260823.json"
+EXPECTED = {
+    "rank8_delta03_e5_skeleton_root_partition_exact_agent_20260823.json": "A2E5E67E7852E2E663DE8092803C8FB889796E29E5888FB62994B9063E5A374F",
+    "rank8_delta03_e5_skeleton_root_partition_independent_audit_agent_20260823.json": "E1096D465A47A425CCB37DB5C648EEB988389B03B0214757C62E2B4EF097BFF7",
+    "rank8_delta03_e5_five_cubic_t_center_branch_newton_reduction_exact_agent_20260823.json": "3C11EC670614BBBFBC17779003066402D019A0062F04F65A162D4845D1ED2102",
+    "seal_rank8_delta03_e5_five_cubic_t_center_branch_exact_agent.py": "05C974299CE87966E305DCD6A65B9FB124A567858C0498E0FB087AC3897B39C3",
+    "rank8_delta03_e5_five_cubic_t_center_branch_all_order_exact_agent_20260823.json": "97D18566CD570030EBB3A299D66CA540AC57793B3EBA0C7B1F6F5EC19947D8F4",
+    "rank8_delta03_e4_literal_i256_audit_common_agent.rs": "BB9C7E541959A256F4B215C32675D1C1F617DBC097E4B2194A3B0735A16938B6",
+    "rank8_delta03_e3_cubic_exact_i256_core_root.rs": "7502104CEE850E1B621EF35B88B56530D35195703372306F94AF8671A040AD1F",
+    "rank8_delta01_e3_cubic_exact_i256_core_agent.rs": "B9A7398612EC8A77378CEB6CFE42FA461E45AB34381F978621608417677763E0",
+    "audit_rank8_delta03_e5_five_cubic_t_center_branch_literal_i256_agent.rs": "674E6D9173E635DEBC0F344C8E755D8EF2CECFE656A3648CAF30B5D2BEBC0B45",
+    "audit_rank8_delta03_e5_five_cubic_t_center_branch_literal_i256_agent.exe": "DCE82B8546FFC0E5B678FCA2CA5CA6F421DA66C5E18EEA0FC32E2CDCFB1CF3AB",
+    "rank8_delta03_e5_five_cubic_t_center_branch_literal_i256_raw_agent_20260823.txt": "551B6F09073D4CAED98269B97DD7A1FAB33BE5F000EFC0D565DF05AE9F2646F9",
+}
+OBSERVED_AUDIT_RUNTIME_SECONDS = 18_264
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
+
+
+def main() -> None:
+    assert OBSERVED_AUDIT_RUNTIME_SECONDS is not None
+    assert not any(value.startswith("FILL_") for value in EXPECTED.values())
+    actual = {name: sha256(ROOT / name) for name in EXPECTED}
+    assert actual == EXPECTED
+    primary = json.loads(PRIMARY.read_text(encoding="utf-8"))
+    assert primary["status"] == "PASS_EXACT_RANK8_DELTA03_E5_FIVE_CUBIC_T_CENTER_BRANCH_N28_PLUS"
+    lines = RAW.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "PASS_INDEPENDENT_LITERAL_I256_E5_FIVE_CUBIC_T_CENTER_BRANCH"
+    rows = dict(line.split(" ", 1) for line in lines[1:])
+    assert set(rows) == {
+        "COUNTS",
+        "UNSEEN",
+        "LITERAL_TREES",
+        "LITERAL_RAY_POINTS",
+        "COEFFICIENT_MERKLE_STREAM",
+        "FINITE_MERKLE_STREAM",
+    }
+    assert rows["COUNTS"] == "67160772 66375425 248948027 1 248948028"
+    assert rows["UNSEEN"] == "995792112"
+    assert rows["LITERAL_TREES"] == "813219509"
+    assert rows["LITERAL_RAY_POINTS"] == "0 13 29"
+    assert rows["COEFFICIENT_MERKLE_STREAM"] == primary["coefficient_merkle_stream_sha256"]
+    assert rows["FINITE_MERKLE_STREAM"] == primary["finite_merkle_stream_sha256"]
+    payload = {
+        "schema": "rank8-delta03-e5-five-cubic-t-center-branch-all-order-independent-audit-agent-v1",
+        "status": "PASS_INDEPENDENT_RANK8_DELTA03_E5_FIVE_CUBIC_T_CENTER_BRANCH_N28_PLUS_AUDIT",
+        "audit_claim": "A separately compiled and transcribed checked-i256 engine independently enumerated all 316,108,800 canonical keys, matched every finite record and Newton row, and rebuilt every eligible finite tree plus S=0,13,29 on every ray with generic literal forest DP.",
+        "root_orbit": "five_cubic_t:center_branch",
+        "counts": {
+            "all_short_total": 67_160_772,
+            "all_short_n28_plus": 66_375_425,
+            "mixed_rays": 248_948_027,
+            "all_long_rays": 1,
+            "non_all_short_rays": 248_948_028,
+            "literal_trees_evaluated": 813_219_509,
+            "literal_ray_points": [0, 13, 29],
+            "unseen_S29_rank_checks": 995_792_112,
+        },
+        "matching_coefficient_merkle_stream_sha256": rows["COEFFICIENT_MERKLE_STREAM"],
+        "matching_finite_merkle_stream_sha256": rows["FINITE_MERKLE_STREAM"],
+        "observed_audit_runtime_seconds": OBSERVED_AUDIT_RUNTIME_SECONDS,
+        "arithmetic": "six-thread checked signed i256 residual/Newton arithmetic, checked i128 independence-vector arithmetic, and constant-memory ordered shard digests",
+        "immutable_input_hashes": actual,
+        "source_sha256": sha256(Path(__file__)),
+        "scope_guard": "Audit credits only five_cubic_t:center_branch for n>=28; no other e=5 orbit is credited.",
+    }
+    OUTPUT.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    print(payload["status"])
+    print("STREAM", payload["matching_coefficient_merkle_stream_sha256"], payload["matching_finite_merkle_stream_sha256"])
+    print("SOURCE", payload["source_sha256"])
+    print("REPORT", sha256(OUTPUT))
+
+
+if __name__ == "__main__":
+    main()

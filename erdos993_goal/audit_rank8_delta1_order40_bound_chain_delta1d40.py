@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+"""Independent exact audit of every analytic bound used in the D=40 boxes."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+
+import sympy as sp
+
+
+HERE = Path(__file__).resolve().parent
+OUTPUT = HERE / "rank8_delta1_order40_bound_chain_independent_audit_delta1d40_20260825.json"
+PINNED = {
+    "FOREST_V6_ALPHA10_THEOREM_2026-08-13.md":
+        "D6F2B1017B3C222167209AC00158423C98607CAE1804415C24ED82F2DC8F91FF",
+    "prove_forest_v6_alpha10.py":
+        "2B3620BEF00E761B857AAFBAA2BABB79A5419D0E0D26AB45C787CED2585DD947",
+    "forest_v6_alpha10_exact_20260813.json":
+        "5F3954C8E3CC8817376CE89685CF283BAEE2FF55214A8E9FCFE816D50A8E9AA4",
+    "TREE_RANK45_PATH_RATIO_THEOREM_2026-07-28.md":
+        "7FE34CDC7F02442ABB9665A0FDC093B78331C6B93CC0793F60B06259BB7B1528",
+    "verify_tree_rank45_path_ratio.py":
+        "AB5D6E395A13BE66276D45C25EB2F869B2410B2445F78A45F4A83648CE1CA86C",
+    "RANK5_FOREST_THREE_HALVES_THEOREM_2026-07-27.md":
+        "CA5323D8DF3110087228193C892F576F4814D4A813AE6FAB184887048377203D",
+    "verify_rank5_three_halves_forest_certificate.py":
+        "56B52DFE4FFA9BBE7273EF8EAA24AA737615338815DF0D41A5792C6728F17DBE",
+    "verify_rank5_three_halves_convolution_cones.py":
+        "06BD1AA9355B1C07DE5B9087AFEE0477D9C583E0ED943EA86FC332FB692A8194",
+}
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
+
+
+def main() -> None:
+    actual = {name: sha256(HERE / name) for name in PINNED}
+    assert actual == PINNED, (actual, PINNED)
+
+    n = sp.Integer(40)
+    mu4 = sp.cancel((n - 7) * (n - 8) / (n - 3))
+    assert mu4 == sp.Rational(1056, 37)
+    # If S is an independent four-set and q=|D-N[S]|, then the residual
+    # forest has at most q-1 edges.  Consequently its number of independent
+    # pairs is at least h(q), where h(0)=h(1)=h(2)=0 and
+    # h(q)=C(q-1,2) for q>=3.  The first differences of h are increasing,
+    # so its piecewise-linear interpolation Phi is convex and Jensen applies.
+    max_q = int(n - 4)
+    h_values = [
+        sp.Integer(0) if q_value <= 2
+        else sp.binomial(q_value - 1, 2)
+        for q_value in range(max_q + 1)
+    ]
+    for q_value, h_value in enumerate(h_values):
+        maximum_forest_edges = max(q_value - 1, 0)
+        independent_pair_floor = (
+            sp.binomial(q_value, 2) - maximum_forest_edges
+        )
+        assert independent_pair_floor == h_value
+    first_differences = [
+        h_values[index + 1] - h_values[index]
+        for index in range(max_q)
+    ]
+    assert first_differences == sorted(first_differences)
+    assert sp.binomial(5, 4) == 5
+    assert sp.binomial(6, 4) == 15
+
+    # On every interval [q,q+1] with q>=2, Phi exceeds the quadratic
+    # continuation by r(1-r)/2.
+    q, r, t = sp.symbols("q r t", nonnegative=True)
+    hq = (q - 1) * (q - 2) / 2
+    hq1 = q * (q - 1) / 2
+    phi = sp.expand((1 - r) * hq + r * hq1)
+    smooth = sp.expand((q + r - 1) * (q + r - 2) / 2)
+    interpolation_reserve = sp.factor(phi - smooth)
+    assert sp.factor(interpolation_reserve - r * (1 - r) / 2) == 0
+    # Exact evaluation of Phi at mu4 gives a slightly stronger transfer;
+    # the boxes deliberately use the simpler smooth lower bound.
+    mu4_integer = int(sp.floor(mu4))
+    mu4_fraction = sp.cancel(mu4 - mu4_integer)
+    phi_mu4 = sp.cancel(
+        (1 - mu4_fraction) * h_values[mu4_integer]
+        + mu4_fraction * h_values[mu4_integer + 1]
+    )
+    exact_mu5_transfer = sp.cancel(2 * phi_mu4 / mu4)
+    assert phi_mu4 == sp.Rational(13527, 37)
+    assert exact_mu5_transfer == sp.Rational(4509, 176)
+    # Double counting gives E q=5d5/d4=mu4 and
+    # E i2(D-N[S])=15d6/d4, hence
+    # mu5=6d6/d5 >= 2 Phi(mu4)/mu4.
+    mu5_floor = sp.cancel(mu4 - 3 + 2 / mu4)
+    assert mu5_floor == sp.Rational(500329, 19536)
+    transfer_reserve = sp.cancel(exact_mu5_transfer - mu5_floor)
+    assert transfer_reserve == sp.Rational(85, 9768) > 0
+    derivative_numerator = sp.factor(t**2 * sp.diff(t - 3 + 2 / t, t))
+    assert derivative_numerator == t**2 - 2
+    assert mu4**2 - 2 > 0
+
+    x_lower = sp.cancel(6 / (n - 5))
+    x_upper = sp.cancel(6 / mu5_floor)
+    y_lower = sp.cancel(5 / (n - 4))
+    y_upper = sp.cancel(5 / mu4)
+    assert (x_lower, x_upper, y_lower, y_upper) == (
+        sp.Rational(6, 35), sp.Rational(117216, 500329),
+        sp.Rational(5, 36), sp.Rational(185, 1056),
+    )
+    x, y = sp.symbols("x y", positive=True)
+    q5 = 10 * x**2 - x**2 * y - 12 * x * y
+    assert sp.factor(q5 - x * (10 * x - y * (x + 12))) == 0
+    q5_cap = 10 * x / (x + 12)
+    assert sp.factor((x + 12) ** 2 * sp.diff(q5_cap, x)) == 120
+
+    floors = {
+        rank: math.comb(40, rank) - 24 * math.comb(38, rank - 2)
+        for rank in (4, 5, 6)
+    }
+    assert [floors[rank] for rank in (4, 5, 6)] == [
+        74518, 455544, 2066820
+    ]
+    caps = {
+        rank: sp.Rational(math.comb(24, rank), floors[rank])
+        for rank in (4, 5, 6)
+    }
+    assert [caps[rank] for rank in (4, 5, 6)] == [
+        sp.Rational(5313, 37259),
+        sp.Rational(1771, 18981),
+        sp.Rational(253, 3885),
+    ]
+    u6_switch = sp.cancel(caps[6] / (sp.Rational(24 - 5, 6) * x_upper))
+    assert u6_switch == sp.Rational(11507567, 131095440)
+    assert 0 < u6_switch < caps[5]
+
+    x_breaks = (
+        sp.Integer(0), sp.Rational(1, 8), sp.Rational(1, 4),
+        sp.Rational(1, 2), sp.Integer(1),
+    )
+    y_breaks = (
+        sp.Integer(0), sp.Rational(1, 4), sp.Rational(1, 2),
+        sp.Rational(3, 4), sp.Rational(7, 8), sp.Rational(15, 16),
+        sp.Rational(31, 32), sp.Rational(63, 64), sp.Integer(1),
+    )
+    switch_checks = 0
+    switch_min = None
+    switch_max = None
+    for m_value in range(25, 40):
+        m = sp.Integer(m_value)
+        t_m = sp.cancel((m - 7) * (m - 8) / (m - 3))
+        ratio_cap = sp.cancel(5 / t_m)
+        for x_hi_norm in x_breaks[1:]:
+            x_hi = x_lower + (x_upper - x_lower) * x_hi_norm
+            y_cap = min(y_upper, sp.cancel(10 * x_hi / (x_hi + 12)))
+            assert y_lower <= y_cap <= y_upper
+            for y_lo_norm in y_breaks[:-1]:
+                y0 = y_lower + (y_cap - y_lower) * y_lo_norm
+                switch = sp.cancel(
+                    (y0 - sp.Rational(4, 36))
+                    / (ratio_cap - sp.Rational(4, 36))
+                )
+                assert 0 < switch < 1
+                switch_checks += 1
+                switch_min = switch if switch_min is None else min(switch_min, switch)
+                switch_max = switch if switch_max is None else max(switch_max, switch)
+    assert switch_checks == 15 * 4 * 8
+
+    payload = {
+        "schema": "rank8-delta1-order40-bound-chain-independent-audit-v1",
+        "status": "PASS_INDEPENDENT_EXACT_DELTA1_ORDER40_BOUND_CHAIN",
+        "verified": [
+            "pinned sharp tree and forest rank-(4,5) path-ratio chain",
+            "pinned all-forest Q5 theorem chain",
+            "forest residual independent-pair floor for every q=0..36",
+            "convexity of the complete piecewise-linear two-extension envelope",
+            "four-to-five and four-to-six double-counting multipliers",
+            "exact and smooth two-extension interpolation reserves",
+            "mu4=1056/37 implies mu5>=500329/19536 by exact monotonicity",
+            "x and y interval endpoints and Q5 cap monotonicity",
+            "small-F edge-union floors, absolute caps, and u6 switch",
+            "all 480 exact-F rank4/missing-shadow switches lie in (0,1)",
+        ],
+        "two_extension_interpolation_reserve": str(interpolation_reserve),
+        "two_extension_h_support": [str(value) for value in h_values],
+        "two_extension_first_differences": [
+            str(value) for value in first_differences
+        ],
+        "two_extension_double_count_multipliers": [5, 15],
+        "phi_at_mu4": str(phi_mu4),
+        "exact_mu5_transfer": str(exact_mu5_transfer),
+        "smooth_transfer_reserve": str(transfer_reserve),
+        "mu4_floor": str(mu4),
+        "mu5_floor": str(mu5_floor),
+        "x_bounds": [str(x_lower), str(x_upper)],
+        "y_bounds": [str(y_lower), str(y_upper)],
+        "small_edge_floors": [floors[rank] for rank in (4, 5, 6)],
+        "small_absolute_caps": [str(caps[rank]) for rank in (4, 5, 6)],
+        "small_u6_switch": str(u6_switch),
+        "exact_switch_checks": switch_checks,
+        "exact_switch_range": [str(switch_min), str(switch_max)],
+        "pinned_inputs": actual,
+        "source_sha256": sha256(Path(__file__)),
+    }
+    temporary = OUTPUT.with_suffix(OUTPUT.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, OUTPUT)
+    print(payload["status"])
+    print("SOURCE", sha256(Path(__file__)))
+    print("REPORT", sha256(OUTPUT))
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+

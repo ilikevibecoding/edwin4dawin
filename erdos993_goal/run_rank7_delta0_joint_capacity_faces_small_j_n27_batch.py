@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Checkpointed exact batch for the order-27, 5<=|J|<=17 Delta0 faces."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parent
+PROVER = ROOT / "prove_rank7_delta0_joint_capacity_faces_small_j_finite.py"
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
+
+
+def write_report(path: Path, jobs, rows, status: str) -> None:
+    payload = {
+        "schema": "rank7-delta0-joint-capacity-small-j-n27-batch-v1",
+        "status": status,
+        "scope": {"n": [27, 27], "m": [5, 17], "faces": ["containment", "extension"], "q": [0, 1]},
+        "prover_sha256": sha256(PROVER),
+        "expected_jobs": len(jobs),
+        "completed_jobs": len(rows),
+        "passing_jobs": sum(row["pass"] for row in rows),
+        "results": rows,
+    }
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--depth", type=int, default=42)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT / "rank7_delta0_joint_capacity_faces_small_j_n27_exact_20260820.json",
+    )
+    args = parser.parse_args()
+    output = args.output if args.output.is_absolute() else ROOT / args.output
+    jobs = [(27, m, face, q) for m in range(5, 18) for face in ("containment", "extension") for q in (0, 1)]
+    rows = []
+    write_report(output, jobs, rows, "RUNNING")
+    for index, (n, m, face, q) in enumerate(jobs, 1):
+        command = [
+            sys.executable,
+            str(PROVER),
+            "--n", str(n),
+            "--m", str(m),
+            "--face", face,
+            "--q", str(q),
+            "--depth", str(args.depth),
+        ]
+        completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+        row = {
+            "n": n,
+            "m": m,
+            "face": face,
+            "q": q,
+            "returncode": completed.returncode,
+            "stdout": completed.stdout.strip(),
+            "stderr": completed.stderr.strip(),
+            "pass": completed.returncode == 0 and "'status': 'PASS'" in completed.stdout,
+        }
+        rows.append(row)
+        if not row["pass"]:
+            write_report(output, jobs, rows, "STOPPED_ON_NONPASS")
+            print("NONPASS", row, flush=True)
+            return 2
+        write_report(output, jobs, rows, "RUNNING")
+        if index % 8 == 0 or index == len(jobs):
+            print("checkpoint", index, "/", len(jobs), flush=True)
+    write_report(output, jobs, rows, "PASS_EXACT_RANK7_DELTA0_JOINT_CAPACITY_SMALL_J_N27")
+    print("PASS_EXACT_RANK7_DELTA0_JOINT_CAPACITY_SMALL_J_N27", len(jobs), flush=True)
+    print("report", output.name, sha256(output), flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

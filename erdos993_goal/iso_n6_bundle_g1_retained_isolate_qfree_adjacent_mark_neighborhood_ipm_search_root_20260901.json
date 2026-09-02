@@ -1,0 +1,50 @@
+{
+  "branches": {
+    "adjacent_u0_v0": {
+      "atoms": 77720,
+      "build_method": "sparse exact coefficient dictionaries; algebraically identical generator cone",
+      "coefficient_rows": 8855,
+      "cubic_constraints": 9,
+      "equality_constraints": 0,
+      "frozen_cells": 117,
+      "linear_constraints": 13,
+      "matrix_nonzeros": 3711497,
+      "maximum_float_residual": null,
+      "message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
+      "objective": null,
+      "positive_atoms": [],
+      "quadratic_constraints": 24,
+      "quartic_constraints": 9,
+      "status": 2,
+      "success": false,
+      "variables": [
+        "CA2",
+        "CA3",
+        "CA4",
+        "CA5",
+        "CA6",
+        "CA7",
+        "CB2",
+        "CB3",
+        "CB4",
+        "CB5",
+        "CB6",
+        "CB7",
+        "CW2",
+        "CW3",
+        "CW4",
+        "CW5",
+        "CW6",
+        "CW7",
+        "s"
+      ]
+    }
+  },
+  "domain": "n=8+s, s>=0; all category variables are nonnegative",
+  "input_sha256": "239ED96A29102D24B205BAB4A7AD3180B60DEACF42C68C1059D061B0E0E784FE",
+  "mark_cross_edge_source_sha256": "9377CE61053CE3A98DE2C6A17367220DBE729E93D5B3056267DA0ED486E64A9B",
+  "mark_neighborhood_source_sha256": "6735BCD4773B9653210740C3AEA3BB3E8C199AAB7A47ACFF85A76CBDC710017E",
+  "marker": "SEARCHED_EXACT_ISO_N6_BUNDLE_G1_RETAINED_ISOLATE_QFREE_ADJACENT_MARK_NEIGHBORHOOD_IPM_ROOT",
+  "scope_guard": "A successful floating LP is not promoted until rational reconstruction and exact symbolic replay. Infeasibility obstructs only this finite atom cone.",
+  "source_sha256": "FBAB65B50D0B14F84E3CF95C68FDC9CFA18D7A3973D5338DF3CE69FBA7D53A35"
+}

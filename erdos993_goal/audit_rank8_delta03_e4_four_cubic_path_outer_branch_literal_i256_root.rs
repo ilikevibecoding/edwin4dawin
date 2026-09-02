@@ -1,0 +1,361 @@
+// Independent six-thread audit for four_cubic_path:outer_branch.
+//
+// This source does not include or call the producer.  It rederives the core
+// by right-to-left absent/present edge messages and verifies literal adjacency
+// trees on every finite key and at S=0,13,29 on every all-order ray.
+
+include!("rank8_delta03_e4_literal_i256_audit_common_agent.rs");
+
+use std::sync::Arc;
+use std::thread;
+
+const OBA_THREADS: usize = 6;
+
+#[derive(Clone, Copy)]
+struct OBAState { value: i32, long: bool }
+
+#[derive(Clone, Copy)]
+struct OBAPair { first: OBAState, second: OBAState }
+
+#[derive(Clone, Copy)]
+struct OBAPrefix { pair: OBAPair, first_spine: OBAState }
+
+fn oba_arm(index: i32) -> OBAState {
+    if index == 6 { OBAState { value: 7, long: true } }
+    else { OBAState { value: index + 1, long: false } }
+}
+
+fn oba_spine(index: i32) -> OBAState {
+    if index == 7 { OBAState { value: 8, long: true } }
+    else { OBAState { value: index + 1, long: false } }
+}
+
+fn oba_pairs() -> Vec<OBAPair> {
+    let mut out = Vec::with_capacity(28);
+    for first in 0..7_i32 {
+        for second in first..7_i32 {
+            out.push(OBAPair { first: oba_arm(first), second: oba_arm(second) });
+        }
+    }
+    assert_eq!(out.len(), 28);
+    out
+}
+
+fn oba_prefixes() -> Vec<OBAPrefix> {
+    let mut out = Vec::with_capacity(224);
+    for pair in oba_pairs() {
+        for first_spine in 0..8_i32 {
+            out.push(OBAPrefix { pair, first_spine: oba_spine(first_spine) });
+        }
+    }
+    assert_eq!(out.len(), 224);
+    out
+}
+
+fn oba_outer(first: i32, second: i32) -> [V; 2] {
+    [
+        product(&[path(first), path(second)]),
+        shifted(&product(&[path(first - 1), path(second - 1)]), 1),
+    ]
+}
+
+fn oba_inner(pendant: i32) -> [V; 2] {
+    [path(pendant), shifted(&path(pendant - 1), 1)]
+}
+
+fn oba_edge_message(right: &[V; 2], length: i32, left_selected: usize) -> V {
+    let mut out = zero();
+    for right_selected in 0..2_usize {
+        let row = mul(
+            &right[right_selected],
+            &path(length - 1 - left_selected as i32 - right_selected as i32),
+        );
+        out = add(&out, &row);
+    }
+    out
+}
+
+fn oba_formula(lengths: &[i32; 9]) -> (V, V) {
+    let left_outer = oba_outer(lengths[0], lengths[1]);
+    let left_inner = oba_inner(lengths[3]);
+    let right_inner = oba_inner(lengths[5]);
+    let right_outer = oba_outer(lengths[7], lengths[8]);
+
+    let from_outer: [V; 2] = std::array::from_fn(|s2| {
+        oba_edge_message(&right_outer, lengths[6], s2)
+    });
+    let decorated_right: [V; 2] = std::array::from_fn(|s2| {
+        mul(&right_inner[s2], &from_outer[s2])
+    });
+    let from_right: [V; 2] = std::array::from_fn(|s1| {
+        oba_edge_message(&decorated_right, lengths[4], s1)
+    });
+    let decorated_left: [V; 2] = std::array::from_fn(|s1| {
+        mul(&left_inner[s1], &from_right[s1])
+    });
+
+    let mut core = zero();
+    for s0 in 0..2_usize {
+        core = add(&core, &mul(
+            &left_outer[s0],
+            &oba_edge_message(&decorated_left, lengths[2], s0),
+        ));
+    }
+
+    let detached = product(&[path(lengths[0]), path(lengths[1])]);
+    let mut remainder = zero();
+    for s1 in 0..2_usize {
+        remainder = add(&remainder, &product(&[
+            decorated_left[s1],
+            path(lengths[2] - 1 - s1 as i32),
+        ]));
+    }
+    (core, mul(&detached, &remainder))
+}
+
+fn oba_values(lengths: &[i32; 9]) -> [Z; 4] {
+    let (core, deleted) = oba_formula(lengths);
+    deltas03(&core, &deleted)
+}
+
+fn oba_literal(lengths: &[i32; 9]) -> (Vec<Vec<usize>>, usize) {
+    let mut adjacency = vec![Vec::new()];
+    let root = 0;
+    audit_attach(&mut adjacency, root, lengths[0]);
+    audit_attach(&mut adjacency, root, lengths[1]);
+    let left_inner = audit_attach(&mut adjacency, root, lengths[2]);
+    audit_attach(&mut adjacency, left_inner, lengths[3]);
+    let right_inner = audit_attach(&mut adjacency, left_inner, lengths[4]);
+    audit_attach(&mut adjacency, right_inner, lengths[5]);
+    let right_outer = audit_attach(&mut adjacency, right_inner, lengths[6]);
+    audit_attach(&mut adjacency, right_outer, lengths[7]);
+    audit_attach(&mut adjacency, right_outer, lengths[8]);
+    assert_eq!(adjacency.len(), 1 + lengths.iter().sum::<i32>() as usize);
+    (adjacency, root)
+}
+
+fn oba_literal_check(lengths: &[i32; 9], formula_values: &[Z; 4]) {
+    let (adjacency, root) = oba_literal(lengths);
+    let (literal, literal_c, literal_h) = audit_deltas(&adjacency, root);
+    let (formula_c, formula_h) = oba_formula(lengths);
+    assert_eq!(literal_c, formula_c, "literal core mismatch");
+    assert_eq!(literal_h, formula_h, "literal deletion mismatch");
+    assert_eq!(literal, *formula_values, "literal residual mismatch");
+}
+
+fn oba_sha_bytes(mut hash: AuditSha256) -> [u8; 32] {
+    let bits = hash.bytes.checked_mul(8).expect("sha length overflow");
+    hash.buffer[hash.used] = 0x80;
+    hash.used += 1;
+    if hash.used > 56 {
+        for index in hash.used..64 { hash.buffer[index] = 0; }
+        let block = hash.buffer;
+        hash.block(&block);
+        hash.buffer = [0; 64];
+        hash.used = 0;
+    }
+    for index in hash.used..56 { hash.buffer[index] = 0; }
+    hash.buffer[56..64].copy_from_slice(&bits.to_be_bytes());
+    let block = hash.buffer;
+    hash.block(&block);
+    let mut out = [0_u8; 32];
+    for index in 0..8 {
+        out[4 * index..4 * index + 4].copy_from_slice(&hash.state[index].to_be_bytes());
+    }
+    out
+}
+
+fn oba_hash_state(hash: &mut AuditSha256, state: OBAState) {
+    hash.update(&[state.long as u8]);
+    hash.update(&state.value.to_le_bytes());
+}
+
+fn oba_hash_z(hash: &mut AuditSha256, value: Z) {
+    hash.update(&[value.negative as u8]);
+    for limb in value.limbs { hash.update(&limb.to_le_bytes()); }
+}
+
+fn oba_coefficient_leaf(
+    states: &[OBAState; 9],
+    baseline: i32,
+    shift: i32,
+    rows: &[[Z; AUDIT_SAMPLES]; 4],
+) -> [u8; 32] {
+    let mut hash = AuditSha256::new();
+    hash.update(b"four-cubic-path-outer-branch-coefficient-v1\0");
+    for &state in states { oba_hash_state(&mut hash, state); }
+    hash.update(&baseline.to_le_bytes());
+    hash.update(&shift.to_le_bytes());
+    for row in rows { for &value in row { oba_hash_z(&mut hash, value); } }
+    oba_sha_bytes(hash)
+}
+
+fn oba_finite_leaf(states: &[OBAState; 9], order: i32, values: &[Z; 4]) -> [u8; 32] {
+    let mut hash = AuditSha256::new();
+    hash.update(b"four-cubic-path-outer-branch-finite-v1\0");
+    for &state in states { oba_hash_state(&mut hash, state); }
+    hash.update(&order.to_le_bytes());
+    for &value in values { oba_hash_z(&mut hash, value); }
+    oba_sha_bytes(hash)
+}
+
+struct OBAResult {
+    id: usize,
+    counts: [u64; 5],
+    unseen: u64,
+    literal_trees: u64,
+    coefficient_leaves: Vec<u8>,
+    finite_leaves: Vec<u8>,
+}
+
+fn oba_worker(
+    id: usize,
+    start: usize,
+    end: usize,
+    prefixes: Arc<Vec<OBAPrefix>>,
+    pairs: Arc<Vec<OBAPair>>,
+) -> OBAResult {
+    let mut counts = [0_u64; 5];
+    let mut unseen = 0_u64;
+    let mut literal_trees = 0_u64;
+    let mut coefficient_leaves = Vec::new();
+    let mut finite_leaves = Vec::new();
+    for prefix_index in start..end {
+        let prefix = prefixes[prefix_index];
+        for left_inner in 0..7_i32 {
+            for middle_spine in 0..8_i32 {
+                for right_inner in 0..7_i32 {
+                    for final_spine in 0..8_i32 {
+                        for &right_pair in pairs.iter() {
+                            let states = [
+                                prefix.pair.first,
+                                prefix.pair.second,
+                                prefix.first_spine,
+                                oba_arm(left_inner),
+                                oba_spine(middle_spine),
+                                oba_arm(right_inner),
+                                oba_spine(final_spine),
+                                right_pair.first,
+                                right_pair.second,
+                            ];
+                            let flags: [bool; 9] = std::array::from_fn(|index| states[index].long);
+                            let long_count = flags.iter().filter(|&&value| value).count();
+                            let mut lengths: [i32; 9] = std::array::from_fn(|index| states[index].value);
+                            if long_count == 0 {
+                                counts[0] += 1;
+                                let order = 1 + lengths.iter().sum::<i32>();
+                                if order < 27 { continue; }
+                                let values = oba_values(&lengths);
+                                assert!(values.iter().all(|value| value.is_positive()), "finite nonpositive");
+                                oba_literal_check(&lengths, &values);
+                                literal_trees += 1;
+                                finite_leaves.extend_from_slice(&oba_finite_leaf(&states, order, &values));
+                                counts[1] += 1;
+                                continue;
+                            }
+                            if long_count == 9 { counts[3] += 1; } else { counts[2] += 1; }
+                            let baseline = 1 + lengths.iter().sum::<i32>();
+                            let shift = (27 - baseline).max(0);
+                            let first = flags.iter().position(|&value| value).unwrap();
+                            let base_first = lengths[first];
+                            let mut samples = [[Z::zero(); AUDIT_SAMPLES]; 4];
+                            for sample in 0..AUDIT_SAMPLES {
+                                lengths[first] = base_first + shift + sample as i32;
+                                let values = oba_values(&lengths);
+                                for rank in 0..4 { samples[rank][sample] = values[rank]; }
+                                if sample == 0 || sample == 13 {
+                                    oba_literal_check(&lengths, &values);
+                                    literal_trees += 1;
+                                }
+                            }
+                            let coefficients: [[Z; AUDIT_SAMPLES]; 4] =
+                                std::array::from_fn(|rank| audit_differences(&samples[rank]));
+                            audit_assert_gate(&coefficients);
+                            coefficient_leaves.extend_from_slice(
+                                &oba_coefficient_leaf(&states, baseline, shift, &coefficients),
+                            );
+                            lengths[first] = base_first + shift + AUDIT_SAMPLES as i32;
+                            let next = oba_values(&lengths);
+                            oba_literal_check(&lengths, &next);
+                            literal_trees += 1;
+                            for rank in 0..4 {
+                                assert_eq!(next[rank], audit_newton_at_29(&coefficients[rank]), "unseen mismatch");
+                                unseen += 1;
+                            }
+                            counts[4] += 1;
+                        }
+                    }
+                }
+            }
+        }
+        eprintln!("AUDIT WORKER {} PREFIX {}/{}", id, prefix_index + 1, end);
+    }
+    assert_eq!(coefficient_leaves.len(), counts[4] as usize * 32);
+    assert_eq!(finite_leaves.len(), counts[1] as usize * 32);
+    OBAResult { id, counts, unseen, literal_trees, coefficient_leaves, finite_leaves }
+}
+
+fn oba_smoke() {
+    let mut state = 0x243F6A8885A308D3_u64;
+    for sample in 0..256_usize {
+        let mut lengths = [0_i32; 9];
+        for index in 0..9 {
+            state ^= state >> 12;
+            state ^= state << 25;
+            state ^= state >> 27;
+            state = state.wrapping_mul(0x2545F4914F6CDD1D);
+            lengths[index] = 1 + (state % 13) as i32;
+        }
+        let values = oba_values(&lengths);
+        oba_literal_check(&lengths, &values);
+        if sample == 255 { assert!(values.iter().all(|value| !value.is_zero())); }
+    }
+    println!("PASS_INDEPENDENT_FOUR_CUBIC_PATH_OUTER_BRANCH_256_LITERAL_SMOKE");
+}
+
+fn main() {
+    audit_sha_self_test();
+    if std::env::args().nth(1).as_deref() == Some("smoke") {
+        oba_smoke();
+        return;
+    }
+    let prefixes = Arc::new(oba_prefixes());
+    let pairs = Arc::new(oba_pairs());
+    let mut handles = Vec::new();
+    for id in 0..OBA_THREADS {
+        let start = id * prefixes.len() / OBA_THREADS;
+        let end = (id + 1) * prefixes.len() / OBA_THREADS;
+        let prefix_rows = Arc::clone(&prefixes);
+        let pair_rows = Arc::clone(&pairs);
+        handles.push(thread::spawn(move || oba_worker(id, start, end, prefix_rows, pair_rows)));
+    }
+    let mut results: Vec<OBAResult> = handles.into_iter()
+        .map(|handle| handle.join().expect("audit worker panic"))
+        .collect();
+    results.sort_by_key(|row| row.id);
+    let mut counts = [0_u64; 5];
+    let mut unseen = 0_u64;
+    let mut literal_trees = 0_u64;
+    let mut coefficient_master = AuditSha256::new();
+    let mut finite_master = AuditSha256::new();
+    for row in results {
+        for index in 0..5 { counts[index] += row.counts[index]; }
+        unseen += row.unseen;
+        literal_trees += row.literal_trees;
+        coefficient_master.update(&row.coefficient_leaves);
+        finite_master.update(&row.finite_leaves);
+    }
+    assert_eq!(counts, [5_445_468, 4_950_075, 14_223_523, 1, 14_223_524]);
+    assert_eq!(unseen, 56_894_096);
+    assert_eq!(literal_trees, 4_950_075 + 3 * 14_223_524);
+    let raw = format!(
+        "PASS_LITERAL_I256_FOUR_CUBIC_PATH_OUTER_BRANCH\nCOUNTS {} {} {} {} {}\nUNSEEN {}\nLITERAL_TREES {}\nCOEFFICIENT_MERKLE_STREAM {}\nFINITE_MERKLE_STREAM {}\n",
+        counts[0], counts[1], counts[2], counts[3], counts[4], unseen,
+        literal_trees, coefficient_master.hex(), finite_master.hex(),
+    );
+    std::fs::write(
+        "rank8_delta03_e4_four_cubic_path_outer_branch_literal_i256_raw_root_20260823.txt",
+        raw.as_bytes(),
+    ).expect("audit raw write");
+    print!("{}", raw);
+}

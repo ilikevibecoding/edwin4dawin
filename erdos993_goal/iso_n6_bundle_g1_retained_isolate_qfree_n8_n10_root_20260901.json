@@ -1,0 +1,44 @@
+{
+  "cells": 22441,
+  "counts": {
+    "adjacent": {
+      "positive": 3901
+    },
+    "nonadjacent": {
+      "positive": 18540
+    }
+  },
+  "coverage": "Every nonisomorphic forest of orders 8,9,10 and every unordered marked pair; the exact branch-domination reduction makes retained-mark count zero the worst branch.",
+  "input_sha256": "239ED96A29102D24B205BAB4A7AD3180B60DEACF42C68C1059D061B0E0E784FE",
+  "marker": "PASS_EXACT_ISO_N6_BUNDLE_G1_RETAINED_ISOLATE_QFREE_N8_N10_ROOT",
+  "minima": {
+    "adjacent": [
+      2712,
+      8,
+      "GpD?GC",
+      3,
+      4,
+      53
+    ],
+    "nonadjacent": [
+      1976,
+      8,
+      "GpD?GC",
+      4,
+      7,
+      53
+    ]
+  },
+  "order_counts": {
+    "forests_n10": 329,
+    "forests_n8": 76,
+    "forests_n9": 153
+  },
+  "ordered_stream_sha256": "A031ADCD4C43D757ACF86036B590E4471D86060BA558E8366D12CC98389309DA",
+  "orders": [
+    8,
+    10
+  ],
+  "scope_guard": "Finite collar only; it does not prove the q-free tail for order >=11.",
+  "source_sha256": "37DB7F88BAA5D9EB8A8D0E66D76036AB4D0569407159C15C9DE680A16DF87ED4"
+}

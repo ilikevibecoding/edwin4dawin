@@ -1,0 +1,116 @@
+{
+  "branches": {
+    "adjacent_u0_v0": {
+      "lower_expression": "2*CA2*CB3 - 13*CA2*CB4 - 22*CA2*CB5 - 7*CA2*CB6 + 2*CA2*CW3 - 16*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB2 + 6*CA3*CB3 + 6*CA3*CB4 - 2*CA3*CB5 + 4*CA3*CW2 + 8*CA3*CW3 - 6*CA3*CW4 - 9*CA3*CW5 - 4*CA3 - 13*CA4*CB2 + 6*CA4*CB3 + 10*CA4*CB4 + 8*CA4*CW2 + 14*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 6*CA4 - 22*CA5*CB2 - 2*CA5*CB3 - 6*CA5*CW2 + 8*CA5*CW3 - 16*CA5*n - 7*CA6*CB2 - 9*CA6*CW2 - 23*CA6*n + 18*CA6 - 7*CA7*n + 14*CA7 + 2*CB2*CW3 - 16*CB2*CW4 - 23*CB2*CW5 - 7*CB2*CW6 + 4*CB3*CW2 + 8*CB3*CW3 - 6*CB3*CW4 - 9*CB3*CW5 - 4*CB3 + 8*CB4*CW2 + 14*CB4*CW3 + 8*CB4*CW4 + 2*CB4*n - 6*CB4 - 6*CB5*CW2 + 8*CB5*CW3 - 16*CB5*n - 9*CB6*CW2 - 23*CB6*n + 18*CB6 - 7*CB7*n + 14*CB7 + 6*CW2*CW3 + 4*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 9*CW3**2 + 14*CW3*CW4 - CW3*CW5 - 4*CW3 + 8*CW4**2 + 2*CW4*n - 4*CW4 - 19*CW5*n + 2*CW5 - 24*CW6*n + 20*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 40,
+        "polynomial_sha256": "7B891EBDB79A5431F654D3D55314BF5454A9A46184BF580373D9B5C977C1F180",
+        "terms": 75
+      },
+      "q_slope_expression": "2*CA3 + CA4 - 8*CA5 - 7*CA6 + 2*CB3 + CB4 - 8*CB5 - 7*CB6 + 2*CW3 - 9*CW5 - 7*CW6",
+      "q_slope_negative_part": "-8*CA5 - 7*CA6 - 8*CB5 - 7*CB6 - 9*CW5 - 7*CW6",
+      "q_slope_positive_part": "2*CA3 + CA4 + 2*CB3 + CB4 + 2*CW3",
+      "retained_mark_count": 0
+    },
+    "adjacent_u0_v1": {
+      "lower_expression": "2*CA2*CB3 - 13*CA2*CB4 - 22*CA2*CB5 - 7*CA2*CB6 + 2*CA2*CW3 - 16*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB2 + 6*CA3*CB3 + 6*CA3*CB4 - 2*CA3*CB5 + 4*CA3*CW2 + 8*CA3*CW3 - 6*CA3*CW4 - 9*CA3*CW5 - 4*CA3 - 13*CA4*CB2 + 6*CA4*CB3 + 10*CA4*CB4 + 8*CA4*CW2 + 14*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 6*CA4 - 22*CA5*CB2 - 2*CA5*CB3 - 6*CA5*CW2 + 8*CA5*CW3 - 16*CA5*n + 8*CA5 - 7*CA6*CB2 - 9*CA6*CW2 - 23*CA6*n + 25*CA6 - 7*CA7*n + 14*CA7 + 2*CB2*CW3 - 16*CB2*CW4 - 23*CB2*CW5 - 7*CB2*CW6 + 4*CB3*CW2 + 8*CB3*CW3 - 6*CB3*CW4 - 9*CB3*CW5 - 4*CB3 + 8*CB4*CW2 + 14*CB4*CW3 + 8*CB4*CW4 + 2*CB4*n - 6*CB4 - 6*CB5*CW2 + 8*CB5*CW3 - 16*CB5*n + 8*CB5 - 9*CB6*CW2 - 23*CB6*n + 25*CB6 - 7*CB7*n + 14*CB7 + 6*CW2*CW3 + 4*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 9*CW3**2 + 14*CW3*CW4 - CW3*CW5 - 4*CW3 + 8*CW4**2 + 2*CW4*n - 4*CW4 - 19*CW5*n + 11*CW5 - 24*CW6*n + 27*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 40,
+        "polynomial_sha256": "9EF562F96EB2B11AC490BD39117B631910D03BD6E9FABC15549DD2EA0DE1AD7C",
+        "terms": 77
+      },
+      "q_slope_expression": "2*CA3 + CA4 - 8*CA5 - 7*CA6 + 2*CB3 + CB4 - 8*CB5 - 7*CB6 + 2*CW3 - 9*CW5 - 7*CW6",
+      "q_slope_negative_part": "-8*CA5 - 7*CA6 - 8*CB5 - 7*CB6 - 9*CW5 - 7*CW6",
+      "q_slope_positive_part": "2*CA3 + CA4 + 2*CB3 + CB4 + 2*CW3",
+      "retained_mark_count": 1
+    },
+    "adjacent_u1_v0": {
+      "lower_expression": "2*CA2*CB3 - 13*CA2*CB4 - 22*CA2*CB5 - 7*CA2*CB6 + 2*CA2*CW3 - 16*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB2 + 6*CA3*CB3 + 6*CA3*CB4 - 2*CA3*CB5 + 4*CA3*CW2 + 8*CA3*CW3 - 6*CA3*CW4 - 9*CA3*CW5 - 4*CA3 - 13*CA4*CB2 + 6*CA4*CB3 + 10*CA4*CB4 + 8*CA4*CW2 + 14*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 6*CA4 - 22*CA5*CB2 - 2*CA5*CB3 - 6*CA5*CW2 + 8*CA5*CW3 - 16*CA5*n + 8*CA5 - 7*CA6*CB2 - 9*CA6*CW2 - 23*CA6*n + 25*CA6 - 7*CA7*n + 14*CA7 + 2*CB2*CW3 - 16*CB2*CW4 - 23*CB2*CW5 - 7*CB2*CW6 + 4*CB3*CW2 + 8*CB3*CW3 - 6*CB3*CW4 - 9*CB3*CW5 - 4*CB3 + 8*CB4*CW2 + 14*CB4*CW3 + 8*CB4*CW4 + 2*CB4*n - 6*CB4 - 6*CB5*CW2 + 8*CB5*CW3 - 16*CB5*n + 8*CB5 - 9*CB6*CW2 - 23*CB6*n + 25*CB6 - 7*CB7*n + 14*CB7 + 6*CW2*CW3 + 4*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 9*CW3**2 + 14*CW3*CW4 - CW3*CW5 - 4*CW3 + 8*CW4**2 + 2*CW4*n - 4*CW4 - 19*CW5*n + 11*CW5 - 24*CW6*n + 27*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 40,
+        "polynomial_sha256": "9EF562F96EB2B11AC490BD39117B631910D03BD6E9FABC15549DD2EA0DE1AD7C",
+        "terms": 77
+      },
+      "q_slope_expression": "2*CA3 + CA4 - 8*CA5 - 7*CA6 + 2*CB3 + CB4 - 8*CB5 - 7*CB6 + 2*CW3 - 9*CW5 - 7*CW6",
+      "q_slope_negative_part": "-8*CA5 - 7*CA6 - 8*CB5 - 7*CB6 - 9*CW5 - 7*CW6",
+      "q_slope_positive_part": "2*CA3 + CA4 + 2*CB3 + CB4 + 2*CW3",
+      "retained_mark_count": 1
+    },
+    "adjacent_u1_v1": {
+      "lower_expression": "2*CA2*CB3 - 13*CA2*CB4 - 22*CA2*CB5 - 7*CA2*CB6 + 2*CA2*CW3 - 16*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB2 + 6*CA3*CB3 + 6*CA3*CB4 - 2*CA3*CB5 + 4*CA3*CW2 + 8*CA3*CW3 - 6*CA3*CW4 - 9*CA3*CW5 - 4*CA3 - 13*CA4*CB2 + 6*CA4*CB3 + 10*CA4*CB4 + 8*CA4*CW2 + 14*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 6*CA4 - 22*CA5*CB2 - 2*CA5*CB3 - 6*CA5*CW2 + 8*CA5*CW3 - 16*CA5*n + 16*CA5 - 7*CA6*CB2 - 9*CA6*CW2 - 23*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 + 2*CB2*CW3 - 16*CB2*CW4 - 23*CB2*CW5 - 7*CB2*CW6 + 4*CB3*CW2 + 8*CB3*CW3 - 6*CB3*CW4 - 9*CB3*CW5 - 4*CB3 + 8*CB4*CW2 + 14*CB4*CW3 + 8*CB4*CW4 + 2*CB4*n - 6*CB4 - 6*CB5*CW2 + 8*CB5*CW3 - 16*CB5*n + 16*CB5 - 9*CB6*CW2 - 23*CB6*n + 32*CB6 - 7*CB7*n + 14*CB7 + 6*CW2*CW3 + 4*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 9*CW3**2 + 14*CW3*CW4 - CW3*CW5 - 4*CW3 + 8*CW4**2 + 2*CW4*n - 4*CW4 - 19*CW5*n + 20*CW5 - 24*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 40,
+        "polynomial_sha256": "C5D7620409A84733E8F9D6F84F29A0328F07D6D6A8E1B38CACD14C78428ED2FA",
+        "terms": 77
+      },
+      "q_slope_expression": "2*CA3 + CA4 - 8*CA5 - 7*CA6 + 2*CB3 + CB4 - 8*CB5 - 7*CB6 + 2*CW3 - 9*CW5 - 7*CW6",
+      "q_slope_negative_part": "-8*CA5 - 7*CA6 - 8*CB5 - 7*CB6 - 9*CW5 - 7*CW6",
+      "q_slope_positive_part": "2*CA3 + CA4 + 2*CB3 + CB4 + 2*CW3",
+      "retained_mark_count": 2
+    },
+    "nonadjacent_u0_v0": {
+      "lower_expression": "2*CA2*CB3 - 13*CA2*CB4 - 22*CA2*CB5 - 7*CA2*CB6 + 2*CA2*CW3 - 16*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB2 + 6*CA3*CB3 + 6*CA3*CB4 - 2*CA3*CB5 + 4*CA3*CW2 + 8*CA3*CW3 - 6*CA3*CW4 - 9*CA3*CW5 - 4*CA3 - 13*CA4*CB2 + 6*CA4*CB3 + 10*CA4*CB4 + 8*CA4*CW2 + 14*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 6*CA4 - 22*CA5*CB2 - 2*CA5*CB3 - 6*CA5*CW2 + 8*CA5*CW3 - 16*CA5*n - 7*CA6*CB2 - 9*CA6*CW2 - 23*CA6*n + 18*CA6 - 7*CA7*n + 14*CA7 + 2*CB2*CW3 - 16*CB2*CW4 - 23*CB2*CW5 - 7*CB2*CW6 + 4*CB3*CW2 + 8*CB3*CW3 - 6*CB3*CW4 - 9*CB3*CW5 - 4*CB3 + 8*CB4*CW2 + 14*CB4*CW3 + 8*CB4*CW4 + 2*CB4*n - 6*CB4 - 6*CB5*CW2 + 8*CB5*CW3 - 16*CB5*n - 9*CB6*CW2 - 23*CB6*n + 18*CB6 - 7*CB7*n + 14*CB7 + 6*CW2*CW3 + 4*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ3 + 6*CW2*CZ4 + 6*CW2*CZ5 - 2*CW2*CZ6 + 9*CW3**2 + 14*CW3*CW4 - CW3*CW5 - 13*CW3*CZ3 + 6*CW3*CZ4 + 10*CW3*CZ5 - 4*CW3 + 8*CW4**2 - 22*CW4*CZ3 - 2*CW4*CZ4 + 2*CW4*n - 4*CW4 - 7*CW5*CZ3 - 19*CW5*n + 2*CW5 - 24*CW6*n + 20*CW6 - 7*CW7*n + 14*CW7 - 4*CZ3 + 2*CZ4*n - 8*CZ4 - 13*CZ5*n - 2*CZ5 - 22*CZ6*n + 16*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 51,
+        "polynomial_sha256": "EE32B4DE038E208AAB441E8FDA6C0D98B442344685CF550E8C38C84DC800E0A3",
+        "terms": 94
+      },
+      "q_slope_expression": "2*CA3 + CA4 - 8*CA5 - 7*CA6 + 2*CB3 + CB4 - 8*CB5 - 7*CB6 + 2*CW3 - 9*CW5 - 7*CW6 + 2*CZ3 + 2*CZ4 - 7*CZ5 - 7*CZ6",
+      "q_slope_negative_part": "-8*CA5 - 7*CA6 - 8*CB5 - 7*CB6 - 9*CW5 - 7*CW6 - 7*CZ5 - 7*CZ6",
+      "q_slope_positive_part": "2*CA3 + CA4 + 2*CB3 + CB4 + 2*CW3 + 2*CZ3 + 2*CZ4",
+      "retained_mark_count": 0
+    },
+    "nonadjacent_u0_v1": {
+      "lower_expression": "2*CA2*CB3 - 13*CA2*CB4 - 22*CA2*CB5 - 7*CA2*CB6 + 2*CA2*CW3 - 16*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB2 + 6*CA3*CB3 + 6*CA3*CB4 - 2*CA3*CB5 + 4*CA3*CW2 + 8*CA3*CW3 - 6*CA3*CW4 - 9*CA3*CW5 - 4*CA3 - 13*CA4*CB2 + 6*CA4*CB3 + 10*CA4*CB4 + 8*CA4*CW2 + 14*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 6*CA4 - 22*CA5*CB2 - 2*CA5*CB3 - 6*CA5*CW2 + 8*CA5*CW3 - 16*CA5*n + 8*CA5 - 7*CA6*CB2 - 9*CA6*CW2 - 23*CA6*n + 25*CA6 - 7*CA7*n + 14*CA7 + 2*CB2*CW3 - 16*CB2*CW4 - 23*CB2*CW5 - 7*CB2*CW6 + 4*CB3*CW2 + 8*CB3*CW3 - 6*CB3*CW4 - 9*CB3*CW5 - 4*CB3 + 8*CB4*CW2 + 14*CB4*CW3 + 8*CB4*CW4 + 2*CB4*n - 6*CB4 - 6*CB5*CW2 + 8*CB5*CW3 - 16*CB5*n + 8*CB5 - 9*CB6*CW2 - 23*CB6*n + 25*CB6 - 7*CB7*n + 14*CB7 + 6*CW2*CW3 + 4*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ3 + 6*CW2*CZ4 + 6*CW2*CZ5 - 2*CW2*CZ6 + 9*CW3**2 + 14*CW3*CW4 - CW3*CW5 - 13*CW3*CZ3 + 6*CW3*CZ4 + 10*CW3*CZ5 - 4*CW3 + 8*CW4**2 - 22*CW4*CZ3 - 2*CW4*CZ4 + 2*CW4*n - 4*CW4 - 7*CW5*CZ3 - 19*CW5*n + 11*CW5 - 24*CW6*n + 27*CW6 - 7*CW7*n + 14*CW7 - 4*CZ3 + 2*CZ4*n - 8*CZ4 - 13*CZ5*n + 5*CZ5 - 22*CZ6*n + 23*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 50,
+        "polynomial_sha256": "C8678D0F86870F1AA946EBDC5472E17A9320140F972E4DA315873368C12A6BFA",
+        "terms": 96
+      },
+      "q_slope_expression": "2*CA3 + CA4 - 8*CA5 - 7*CA6 + 2*CB3 + CB4 - 8*CB5 - 7*CB6 + 2*CW3 - 9*CW5 - 7*CW6 + 2*CZ3 + 2*CZ4 - 7*CZ5 - 7*CZ6",
+      "q_slope_negative_part": "-8*CA5 - 7*CA6 - 8*CB5 - 7*CB6 - 9*CW5 - 7*CW6 - 7*CZ5 - 7*CZ6",
+      "q_slope_positive_part": "2*CA3 + CA4 + 2*CB3 + CB4 + 2*CW3 + 2*CZ3 + 2*CZ4",
+      "retained_mark_count": 1
+    },
+    "nonadjacent_u1_v0": {
+      "lower_expression": "2*CA2*CB3 - 13*CA2*CB4 - 22*CA2*CB5 - 7*CA2*CB6 + 2*CA2*CW3 - 16*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB2 + 6*CA3*CB3 + 6*CA3*CB4 - 2*CA3*CB5 + 4*CA3*CW2 + 8*CA3*CW3 - 6*CA3*CW4 - 9*CA3*CW5 - 4*CA3 - 13*CA4*CB2 + 6*CA4*CB3 + 10*CA4*CB4 + 8*CA4*CW2 + 14*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 6*CA4 - 22*CA5*CB2 - 2*CA5*CB3 - 6*CA5*CW2 + 8*CA5*CW3 - 16*CA5*n + 8*CA5 - 7*CA6*CB2 - 9*CA6*CW2 - 23*CA6*n + 25*CA6 - 7*CA7*n + 14*CA7 + 2*CB2*CW3 - 16*CB2*CW4 - 23*CB2*CW5 - 7*CB2*CW6 + 4*CB3*CW2 + 8*CB3*CW3 - 6*CB3*CW4 - 9*CB3*CW5 - 4*CB3 + 8*CB4*CW2 + 14*CB4*CW3 + 8*CB4*CW4 + 2*CB4*n - 6*CB4 - 6*CB5*CW2 + 8*CB5*CW3 - 16*CB5*n + 8*CB5 - 9*CB6*CW2 - 23*CB6*n + 25*CB6 - 7*CB7*n + 14*CB7 + 6*CW2*CW3 + 4*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ3 + 6*CW2*CZ4 + 6*CW2*CZ5 - 2*CW2*CZ6 + 9*CW3**2 + 14*CW3*CW4 - CW3*CW5 - 13*CW3*CZ3 + 6*CW3*CZ4 + 10*CW3*CZ5 - 4*CW3 + 8*CW4**2 - 22*CW4*CZ3 - 2*CW4*CZ4 + 2*CW4*n - 4*CW4 - 7*CW5*CZ3 - 19*CW5*n + 11*CW5 - 24*CW6*n + 27*CW6 - 7*CW7*n + 14*CW7 - 4*CZ3 + 2*CZ4*n - 8*CZ4 - 13*CZ5*n + 5*CZ5 - 22*CZ6*n + 23*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 50,
+        "polynomial_sha256": "C8678D0F86870F1AA946EBDC5472E17A9320140F972E4DA315873368C12A6BFA",
+        "terms": 96
+      },
+      "q_slope_expression": "2*CA3 + CA4 - 8*CA5 - 7*CA6 + 2*CB3 + CB4 - 8*CB5 - 7*CB6 + 2*CW3 - 9*CW5 - 7*CW6 + 2*CZ3 + 2*CZ4 - 7*CZ5 - 7*CZ6",
+      "q_slope_negative_part": "-8*CA5 - 7*CA6 - 8*CB5 - 7*CB6 - 9*CW5 - 7*CW6 - 7*CZ5 - 7*CZ6",
+      "q_slope_positive_part": "2*CA3 + CA4 + 2*CB3 + CB4 + 2*CW3 + 2*CZ3 + 2*CZ4",
+      "retained_mark_count": 1
+    },
+    "nonadjacent_u1_v1": {
+      "lower_expression": "2*CA2*CB3 - 13*CA2*CB4 - 22*CA2*CB5 - 7*CA2*CB6 + 2*CA2*CW3 - 16*CA2*CW4 - 23*CA2*CW5 - 7*CA2*CW6 + 2*CA3*CB2 + 6*CA3*CB3 + 6*CA3*CB4 - 2*CA3*CB5 + 4*CA3*CW2 + 8*CA3*CW3 - 6*CA3*CW4 - 9*CA3*CW5 - 4*CA3 - 13*CA4*CB2 + 6*CA4*CB3 + 10*CA4*CB4 + 8*CA4*CW2 + 14*CA4*CW3 + 8*CA4*CW4 + 2*CA4*n - 6*CA4 - 22*CA5*CB2 - 2*CA5*CB3 - 6*CA5*CW2 + 8*CA5*CW3 - 16*CA5*n + 16*CA5 - 7*CA6*CB2 - 9*CA6*CW2 - 23*CA6*n + 32*CA6 - 7*CA7*n + 14*CA7 + 2*CB2*CW3 - 16*CB2*CW4 - 23*CB2*CW5 - 7*CB2*CW6 + 4*CB3*CW2 + 8*CB3*CW3 - 6*CB3*CW4 - 9*CB3*CW5 - 4*CB3 + 8*CB4*CW2 + 14*CB4*CW3 + 8*CB4*CW4 + 2*CB4*n - 6*CB4 - 6*CB5*CW2 + 8*CB5*CW3 - 16*CB5*n + 16*CB5 - 9*CB6*CW2 - 23*CB6*n + 32*CB6 - 7*CB7*n + 14*CB7 + 6*CW2*CW3 + 4*CW2*CW4 - 30*CW2*CW5 - 16*CW2*CW6 + 2*CW2*CZ3 + 6*CW2*CZ4 + 6*CW2*CZ5 - 2*CW2*CZ6 + 9*CW3**2 + 14*CW3*CW4 - CW3*CW5 - 13*CW3*CZ3 + 6*CW3*CZ4 + 10*CW3*CZ5 - 4*CW3 + 8*CW4**2 - 22*CW4*CZ3 - 2*CW4*CZ4 + 2*CW4*n - 4*CW4 - 7*CW5*CZ3 - 19*CW5*n + 20*CW5 - 24*CW6*n + 34*CW6 - 7*CW7*n + 14*CW7 - 4*CZ3 + 2*CZ4*n - 8*CZ4 - 13*CZ5*n + 12*CZ5 - 22*CZ6*n + 30*CZ6 - 7*CZ7*n + 14*CZ7",
+      "lower_summary": {
+        "minimum_scalar_coefficient": "-30",
+        "negative_scalar_coefficients": 50,
+        "polynomial_sha256": "F099C7CB268D17F89E36B68A71EF98FAF96A93DE9BAFA36D0833B51C1DE7DA4A",
+        "terms": 96
+      },
+      "q_slope_expression": "2*CA3 + CA4 - 8*CA5 - 7*CA6 + 2*CB3 + CB4 - 8*CB5 - 7*CB6 + 2*CW3 - 9*CW5 - 7*CW6 + 2*CZ3 + 2*CZ4 - 7*CZ5 - 7*CZ6",
+      "q_slope_negative_part": "-8*CA5 - 7*CA6 - 8*CB5 - 7*CB6 - 9*CW5 - 7*CW6 - 7*CZ5 - 7*CZ6",
+      "q_slope_positive_part": "2*CA3 + CA4 + 2*CB3 + CB4 + 2*CW3 + 2*CZ3 + 2*CZ4",
+      "retained_mark_count": 2
+    }
+  },
+  "input": "iso_n6_bundle_g1_retained_isolate_coarse_lower_exact_root_20260901.json",
+  "input_sha256": "148997F5D5ED3A798B18B4FEEF6FF13166366247ACA4D445495AB6655095E12A",
+  "lower_rule": "L(C,q)>=L(C,e)+(n-e)*P_-(C), coefficientwise in nonnegative C rows",
+  "marker": "DERIVED_EXACT_ISO_N6_BUNDLE_G1_RETAINED_ISOLATE_COARSE_Q_LOWER_ROOT",
+  "q_interval": "retained_mark_count <= q <= n",
+  "scope_guard": "The q elimination is a valid lower reduction. Negative coefficients do not constitute forest counterexamples, and positivity is not asserted here.",
+  "source_sha256": "A2855A1190CC31B82F59F069870FEE43DAE977C1C5049CF94D89CC7EC4012CEB",
+  "status": "exact q-free lower derived; universal nonnegativity remains open"
+}

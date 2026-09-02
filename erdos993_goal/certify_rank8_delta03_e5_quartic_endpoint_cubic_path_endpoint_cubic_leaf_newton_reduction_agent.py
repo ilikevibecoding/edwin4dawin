@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Exact transfer/Newton reduction for the e=5 endpoint-cubic leaf root orbit."""
+
+from __future__ import annotations
+import hashlib, itertools, json
+from collections import Counter
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+OUTPUT = ROOT / "rank8_delta03_e5_quartic_endpoint_cubic_path_endpoint_cubic_leaf_newton_reduction_exact_agent_20260823.json"
+EXPECTED = {
+    "rank8_stable_path_offset_transfer_exact_agent_20260822.json": "3F690BA0FC7CC82EBE40467016C848D53E458744BCFC1FA2CF1EB3C01B507D7D",
+    "rank8_delta03_e5_skeleton_root_partition_exact_agent_20260823.json": "A2E5E67E7852E2E663DE8092803C8FB889796E29E5888FB62994B9063E5A374F",
+    "rank8_delta03_e5_skeleton_root_partition_independent_audit_agent_20260823.json": "E1096D465A47A425CCB37DB5C648EEB988389B03B0214757C62E2B4EF097BFF7",
+    "certify_rank8_delta03_e5_quartic_center_two_cubic_quartic_leaf_newton_reduction_agent.py": "0FCEA510998EA4ABBB45D09261D7954FD7ADE2C942B1CAD061CC4C86B7376B8E",
+    "rank8_delta03_e5_quartic_center_two_cubic_quartic_leaf_newton_reduction_exact_agent_20260823.json": "51E4E7647988CF358152A52444CD25638E342E20421977269F00C279C77F228E",
+}
+def sha256(path: Path) -> str: return hashlib.sha256(path.read_bytes()).hexdigest().upper()
+def convolve(*factors: Counter[tuple[int, int]]) -> Counter[tuple[int, int]]:
+    total = Counter({(0, 0): 1})
+    for factor in factors:
+        out = Counter()
+        for (a, x), ac in total.items():
+            for (b, y), bc in factor.items(): out[(a + b, x + y)] += ac * bc
+        total = out
+    return total
+def main() -> None:
+    actual = {name: sha256(ROOT / name) for name in EXPECTED}; assert actual == EXPECTED
+    universal = json.loads((ROOT / "rank8_delta03_e5_quartic_center_two_cubic_quartic_leaf_newton_reduction_exact_agent_20260823.json").read_text(encoding="utf-8"))
+    assert universal["status"] == "PASS_EXACT_RANK8_DELTA03_E5_QUARTIC_CENTER_TWO_CUBIC_QUARTIC_LEAF_TRANSFER_NEWTON_REDUCTION" and universal["graded_path_transfer"]["literal_pair_checks"] == 4_536
+    assert universal["degree_bounds"] == {"0": {"terms": 15, "degree_bound": 28}, "1": {"terms": 18, "degree_bound": 28}, "2": {"terms": 22, "degree_bound": 27}, "3": {"terms": 26, "degree_bound": 26}} and universal["integer_newton_matrix_determinant"] == 1
+    branch_vertices = ("Q", "C0", "C1")
+    endpoints = {
+        "root_incident_pendant": ("C1",), "endpoint_sibling_pendant": ("C1",), "endpoint_center_spine": ("C1", "C0"),
+        "center_pendant": ("C0",), "center_quartic_spine": ("C0", "Q"),
+        "quartic_pendant_0": ("Q",), "quartic_pendant_1": ("Q",), "quartic_pendant_2": ("Q",),
+    }
+    endpoint_guards = []
+    for root_selected in (0, 1):
+        for bits in itertools.product((0, 1), repeat=3):
+            selected = {vertex for vertex, bit in zip(branch_vertices, bits) if bit}; cap = 8 - root_selected - len(selected); effective = {}
+            for label, edge_endpoints in endpoints.items():
+                base = 8 if label == "root_incident_pendant" or label.endswith("spine") else 7; loss = sum(vertex in selected for vertex in edge_endpoints)
+                if label == "root_incident_pendant": loss += root_selected
+                order = base - loss; assert order >= cap - 1; effective[label] = order
+            endpoint_guards.append({"root_selected": bool(root_selected), "selected_branch_vertices": sorted(selected), "rank_cap": cap, "effective_long_path_orders": effective})
+    assert len(endpoint_guards) == 16
+    pendant = tuple((value, value == 7) for value in range(1, 8)); incident = tuple((value, value == 8) for value in range(1, 9)); spine = tuple((value, value == 8) for value in range(1, 9))
+    triples = tuple(itertools.combinations_with_replacement(pendant, 3))
+    triple_distribution = Counter((sum(item[0] for item in row), sum(int(item[1]) for item in row)) for row in triples)
+    pendant_distribution = Counter((value, int(long)) for value, long in pendant); incident_distribution = Counter((value, int(long)) for value, long in incident); spine_distribution = Counter((value, int(long)) for value, long in spine)
+    distribution = convolve(incident_distribution, pendant_distribution, spine_distribution, pendant_distribution, spine_distribution, triple_distribution)
+    counts = Counter(); order_distribution = Counter()
+    for (stored_order, long_count), multiplicity in distribution.items():
+        order = 1 + stored_order
+        if long_count == 0:
+            counts["all_short"] += multiplicity; order_distribution[order] += multiplicity
+            if order == 27: counts["all_short_order27"] += multiplicity
+            if order >= 28: counts["all_short_n28_plus"] += multiplicity
+        elif long_count == 8: counts["all_long"] += multiplicity
+        else: counts["mixed"] += multiplicity
+    counts["coordinate_patterns"] = sum(distribution.values()); counts["non_all_short_rays"] = counts["mixed"] + counts["all_long"]; counts["n28_plus_records"] = counts["all_short_n28_plus"] + counts["non_all_short_rays"]
+    assert len(triples) == 84
+    assert counts == Counter({"coordinate_patterns": 2_107_392, "mixed": 1_415_903, "non_all_short_rays": 1_415_904, "n28_plus_records": 1_905_124, "all_short": 691_488, "all_short_n28_plus": 489_220, "all_short_order27": 41_216, "all_long": 1})
+    partition = json.loads((ROOT / "rank8_delta03_e5_skeleton_root_partition_exact_agent_20260823.json").read_text(encoding="utf-8")); orbit = next(row for row in partition["root_location_partitions"] if row["root_location_orbit"] == "quartic_endpoint_cubic_path:endpoint_cubic_leaf")
+    assert orbit["stabilizer_order"] == 6 and orbit["coordinate_count"] == 8 and orbit["coordinate_patterns"] == counts["coordinate_patterns"] and orbit["all_short_literal_patterns"] == counts["all_short"] and orbit["all_short_patterns_order27"] == counts["all_short_order27"] and orbit["all_short_patterns_n28_plus"] == counts["all_short_n28_plus"] and orbit["mixed_long_short_patterns"] == counts["mixed"] and orbit["all_long_patterns"] == 1
+    assert {int(key): value for key, value in orbit["all_short_order_distribution"].items()} == dict(sorted(order_distribution.items()))
+    payload = {
+        "schema": "rank8-delta03-e5-quartic-endpoint-cubic-path-endpoint-cubic-leaf-newton-reduction-exact-agent-v1", "status": "PASS_EXACT_RANK8_DELTA03_E5_QUARTIC_ENDPOINT_CUBIC_PATH_ENDPOINT_CUBIC_LEAF_TRANSFER_NEWTON_REDUCTION", "root_orbit": "quartic_endpoint_cubic_path:endpoint_cubic_leaf",
+        "quotient_formula": "root incident pendant 8 * endpoint sibling pendant 7 * endpoint-center spine 8 * center pendant 7 * center-quartic spine 8 * quartic pendant triple C(9,3)=84, total 2,107,392 keys",
+        "canonical_coordinate_order": "root incident arm; endpoint sibling arm; endpoint-center spine; center pendant; center-quartic spine; quartic pendant low,middle,high", "order_formula": "n=1+sum(the eight stored edge lengths)",
+        "quotient_counts": dict(counts), "all_short_order_distribution": {str(key): value for key, value in sorted(order_distribution.items())},
+        "graded_path_transfer": {"universal_rows": universal["graded_path_transfer"]["rows"], "literal_pair_checks": 4_536, "endpoint_state_guards": endpoint_guards, "conclusion": "all long offsets enter core and root-deleted coefficients only through total S"},
+        "degree_bounds": universal["degree_bounds"], "newton_gate": universal["newton_gate"], "integer_newton_matrix_determinant": 1,
+        "order27_requirement": {"status": "OPEN_AT_REDUCTION_CREATION", "full_canonical_subdivisions_expected": 123_131, "burnside_fixed_counts": {"identity": 480_700, "transposition": 76_714, "three_cycle": 13_972}, "all_short_order27_keys": counts["all_short_order27"]},
+        "immutable_input_hashes": actual, "source_sha256": sha256(Path(__file__)), "scope_guard": "Reduction only; no full census or sign claim is made by this script.",
+    }
+    OUTPUT.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8"); print(payload["status"]); print("COUNTS", json.dumps(payload["quotient_counts"], sort_keys=True)); print("TRANSFER_LITERAL_CHECKS", 4_536); print("SOURCE", payload["source_sha256"]); print("REPORT", sha256(OUTPUT))
+if __name__ == "__main__": main()
