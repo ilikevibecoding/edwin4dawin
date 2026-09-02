@@ -32,9 +32,9 @@ consistency checks of the theorems; they are never used as proof steps.
 | real-rooted $I(F;x)$ $\Rightarrow$ $\mathrm{ISO}_r$ for all $r$ (Theorem 7.1) | proved here, from Newton's inequalities (classical, cited) |
 | claw-free graphs have real-rooted $I(G;x)$ (Theorem 8.2) | **cited** (Chudnovsky–Seymour) |
 | TAIL for forests (Theorem 8.1) | **cited** (Levit–Mandrescu; valid for bipartite graphs, **not** for all graphs) |
-| $\mathrm{ISO}_3$ for every **tree** (Theorem 11.1, `ISO3_TREES_THEOREM.md`) | proved (exact computer-assisted certificate) |
+| $\mathrm{ISO}_3$ for every tree (Theorem 11.1, `ISO3_TREES_THEOREM.md`) and every forest (Theorem 11.1', `ISO3_FORESTS_THEOREM.md`) | proved (exact computer-assisted certificates) |
 | $\mathrm{WR}_3$ wherever the framework needs it (Theorem 11.2) | proved here |
-| $\mathrm{ISO}_3$ for general forests; $\mathrm{ISO}_r$, $\mathrm{WR}_r$ for $r \ge 4$ | **not proved** (Sections 10–11) |
+| $\mathrm{ISO}_r$, $\mathrm{WR}_r$ for $r \ge 4$ | **not proved** (Sections 10–11) |
 
 ---
 
@@ -623,9 +623,12 @@ by exactly the route item 2 above calls for: keep $T$ via the Cauchy–Schwarz b
 $3T \ge 2S^2/D_2 - S$ ($D_2 = 2(n-1) - \ell$, $\ell$ = number of leaves), drop only $P \ge 0$,
 use $S \le \binom{\ell}{2} + n - \ell - 1$, and certify the resulting two-variable polynomial
 with exact algebra (shift certificate, real-root isolation, Bernstein subdivision). Item 2 is
-therefore superseded for **trees**; for forests with several non-trivial components or isolated
-vertices the same chain holds numerically but no certificate has been produced, so
-$\mathrm{ISO}_3$ for general forests remains open.
+therefore superseded. **Theorem 11.1' ($\mathrm{ISO}_3$ for forests).** The extension to every
+forest is proved in `docs/ISO3_FORESTS_THEOREM.md` (replayed by `scripts/prove_iso3_forests.py`):
+the leaf bound is weakest for a single non-trivial component, the sparse regime $S \le e-1$ is
+handled through $\ell \ge 2e - 2S$ (from $\binom d2 \ge d/2$), monotonicity of the bound in $n$
+reduces every forest to the tree polynomial at $n = e+1$, forests with $e \le 5$ edges reduce to
+26 explicit cores times $(1+x)^z$, and $I = 0$ is the real-rooted case.
 
 **Theorem 11.2 ($\mathrm{WR}_3$ wherever needed) [tests/test_core.py].** For every forest,
 $\mathrm{WR}_3$ ($p_2 \le 3p_3$) holds whenever $3 \le L(\alpha) - 1$, i.e. whenever the
@@ -638,8 +641,8 @@ $L(\alpha) - 1 \ge 3$ forces $\alpha = 6 = n$, i.e. $F = \overline{K_6}$, where
 $p_2 = 15 \le 60 = 3p_3$. For trees the bound is sharper ($S \ge n-2$ gives
 $3p_3 - p_2 \ge \tfrac{(n-2)(n-3)(n-4) - (n-1)(n-2)}{2} \ge 0$ for $n \ge 6$). $\square$
 
-**Corollary 11.3.** Every tree with $\alpha \le 6$ has a unimodal independence polynomial by the
-framework alone (Theorem 2.1 with $L(\alpha) \le 4$, Theorems 4.1, 5.1, 6.1, 11.1, 11.2 and the
+**Corollary 11.3.** Every forest with $\alpha \le 6$ has a unimodal independence polynomial by the
+framework alone (Theorem 2.1 with $L(\alpha) \le 4$, Theorems 4.1, 5.1, 6.1, 11.1', 11.2 and the
 cited TAIL). This is of course far weaker than the exhaustive verification for $n \le 29$; its
 point is structural: each further index $r$ for which $\mathrm{ISO}_r$ and $\mathrm{WR}_r$ are
 proved for all forests extends the range of $\alpha$ covered by the framework by $3/2$.

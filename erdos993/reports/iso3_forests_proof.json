@@ -1,0 +1,1002 @@
+{
+ "all_steps_pass": true,
+ "cores_step_D": [
+  {
+   "I": 1,
+   "Q3(z)": "z**5/12 + 3*z**4/2 + 65*z**3/12 + 7*z**2 + 4*z + 1",
+   "S": 1,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 2,
+   "l": 2,
+   "n'": 3,
+   "parts": [
+    3
+   ],
+   "poly": [
+    1,
+    3,
+    1
+   ]
+  },
+  {
+   "I": 2,
+   "Q3(z)": "z**5/12 + 25*z**4/12 + 143*z**3/12 + 323*z**2/12 + 26*z + 9",
+   "S": 2,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 4,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 3,
+   "l": 2,
+   "n'": 4,
+   "parts": [
+    4
+   ],
+   "poly": [
+    1,
+    4,
+    3
+   ]
+  },
+  {
+   "I": 1,
+   "Q3(z)": "z**5/12 + 25*z**4/12 + 131*z**3/12 + 263*z**2/12 + 22*z + 12",
+   "S": 3,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 3,
+   "l": 3,
+   "n'": 4,
+   "parts": [
+    4
+   ],
+   "poly": [
+    1,
+    4,
+    3,
+    1
+   ]
+  },
+  {
+   "I": 3,
+   "Q3(z)": "z**5/12 + 8*z**4/3 + 257*z**3/12 + 419*z**2/6 + 91*z + 39",
+   "S": 3,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,1]",
+    "largest_root_upper_bound": "0",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 4,
+   "l": 2,
+   "n'": 5,
+   "parts": [
+    5
+   ],
+   "poly": [
+    1,
+    5,
+    6,
+    1
+   ]
+  },
+  {
+   "I": 2,
+   "Q3(z)": "z**5/12 + 8*z**4/3 + 245*z**3/12 + 383*z**2/6 + 90*z + 48",
+   "S": 4,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-2",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 4,
+   "l": 3,
+   "n'": 5,
+   "parts": [
+    5
+   ],
+   "poly": [
+    1,
+    5,
+    6,
+    2
+   ]
+  },
+  {
+   "I": 1,
+   "Q3(z)": "z**5/12 + 8*z**4/3 + 221*z**3/12 + 299*z**2/6 + 70*z + 60",
+   "S": 6,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-2",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 4,
+   "l": 4,
+   "n'": 5,
+   "parts": [
+    5
+   ],
+   "poly": [
+    1,
+    5,
+    6,
+    4,
+    1
+   ]
+  },
+  {
+   "I": 1,
+   "Q3(z)": "z**5/12 + 5*z**4/2 + 265*z**3/12 + 82*z**2 + 370*z/3 + 61",
+   "S": 1,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 3,
+   "l": 4,
+   "n'": 5,
+   "parts": [
+    3,
+    2
+   ],
+   "poly": [
+    1,
+    5,
+    7,
+    2
+   ]
+  },
+  {
+   "I": 4,
+   "Q3(z)": "z**5/12 + 13*z**4/4 + 407*z**3/12 + 587*z**2/4 + 256*z + 148",
+   "S": 4,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 2,
+   "n'": 6,
+   "parts": [
+    6
+   ],
+   "poly": [
+    1,
+    6,
+    10,
+    4
+   ]
+  },
+  {
+   "I": 3,
+   "Q3(z)": "z**5/12 + 13*z**4/4 + 395*z**3/12 + 551*z**2/4 + 238*z + 135",
+   "S": 5,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 3,
+   "n'": 6,
+   "parts": [
+    6
+   ],
+   "poly": [
+    1,
+    6,
+    10,
+    5,
+    1
+   ]
+  },
+  {
+   "I": 2,
+   "Q3(z)": "z**5/12 + 13*z**4/4 + 383*z**3/12 + 523*z**2/4 + 242*z + 168",
+   "S": 6,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-3",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 4,
+   "n'": 6,
+   "parts": [
+    6
+   ],
+   "poly": [
+    1,
+    6,
+    10,
+    6,
+    1
+   ]
+  },
+  {
+   "I": 3,
+   "Q3(z)": "z**5/12 + 13*z**4/4 + 395*z**3/12 + 559*z**2/4 + 260*z + 175",
+   "S": 5,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 3,
+   "n'": 6,
+   "parts": [
+    6
+   ],
+   "poly": [
+    1,
+    6,
+    10,
+    5
+   ]
+  },
+  {
+   "I": 2,
+   "Q3(z)": "z**5/12 + 13*z**4/4 + 371*z**3/12 + 487*z**2/4 + 224*z + 167",
+   "S": 7,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-2",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 4,
+   "n'": 6,
+   "parts": [
+    6
+   ],
+   "poly": [
+    1,
+    6,
+    10,
+    7,
+    2
+   ]
+  },
+  {
+   "I": 1,
+   "Q3(z)": "z**5/12 + 13*z**4/4 + 335*z**3/12 + 379*z**2/4 + 170*z + 200",
+   "S": 10,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-3",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 5,
+   "n'": 6,
+   "parts": [
+    6
+   ],
+   "poly": [
+    1,
+    6,
+    10,
+    10,
+    5,
+    1
+   ]
+  },
+  {
+   "I": 2,
+   "Q3(z)": "z**5/12 + 37*z**4/12 + 407*z**3/12 + 1919*z**2/12 + 322*z + 229",
+   "S": 2,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 4,
+   "l": 4,
+   "n'": 6,
+   "parts": [
+    4,
+    2
+   ],
+   "poly": [
+    1,
+    6,
+    11,
+    6
+   ]
+  },
+  {
+   "I": 1,
+   "Q3(z)": "z**5/12 + 37*z**4/12 + 395*z**3/12 + 1787*z**2/12 + 284*z + 180",
+   "S": 3,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 4,
+   "l": 5,
+   "n'": 6,
+   "parts": [
+    4,
+    2
+   ],
+   "poly": [
+    1,
+    6,
+    11,
+    7,
+    2
+   ]
+  },
+  {
+   "I": 2,
+   "Q3(z)": "z**5/12 + 37*z**4/12 + 407*z**3/12 + 1895*z**2/12 + 300*z + 185",
+   "S": 2,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 4,
+   "l": 4,
+   "n'": 6,
+   "parts": [
+    3,
+    3
+   ],
+   "poly": [
+    1,
+    6,
+    11,
+    6,
+    1
+   ]
+  },
+  {
+   "I": 3,
+   "Q3(z)": "z**5/12 + 11*z**4/3 + 195*z**3/4 + 1685*z**2/6 + 2111*z/3 + 635",
+   "S": 3,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-26",
+    "negative_values": [],
+    "real_roots": 1,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 4,
+   "n'": 7,
+   "parts": [
+    5,
+    2
+   ],
+   "poly": [
+    1,
+    7,
+    16,
+    13,
+    2
+   ]
+  },
+  {
+   "I": 2,
+   "Q3(z)": "z**5/12 + 11*z**4/3 + 191*z**3/4 + 1613*z**2/6 + 1994*z/3 + 588",
+   "S": 4,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-2",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 5,
+   "n'": 7,
+   "parts": [
+    5,
+    2
+   ],
+   "poly": [
+    1,
+    7,
+    16,
+    14,
+    4
+   ]
+  },
+  {
+   "I": 1,
+   "Q3(z)": "z**5/12 + 11*z**4/3 + 183*z**3/4 + 1457*z**2/6 + 1682*z/3 + 448",
+   "S": 6,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 6,
+   "n'": 7,
+   "parts": [
+    5,
+    2
+   ],
+   "poly": [
+    1,
+    7,
+    16,
+    16,
+    9,
+    2
+   ]
+  },
+  {
+   "I": 3,
+   "Q3(z)": "z**5/12 + 11*z**4/3 + 195*z**3/4 + 1673*z**2/6 + 2033*z/3 + 571",
+   "S": 3,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 4,
+   "n'": 7,
+   "parts": [
+    4,
+    3
+   ],
+   "poly": [
+    1,
+    7,
+    16,
+    13,
+    3
+   ]
+  },
+  {
+   "I": 2,
+   "Q3(z)": "z**5/12 + 11*z**4/3 + 191*z**3/4 + 1589*z**2/6 + 1838*z/3 + 460",
+   "S": 4,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-1",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 5,
+   "n'": 7,
+   "parts": [
+    4,
+    3
+   ],
+   "poly": [
+    1,
+    7,
+    16,
+    14,
+    6,
+    1
+   ]
+  },
+  {
+   "I": 1,
+   "Q3(z)": "z**5/12 + 7*z**4/2 + 577*z**3/12 + 293*z**2 + 2380*z/3 + 785",
+   "S": 1,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-22",
+    "negative_values": [],
+    "real_roots": 1,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 4,
+   "l": 6,
+   "n'": 7,
+   "parts": [
+    3,
+    2,
+    2
+   ],
+   "poly": [
+    1,
+    7,
+    17,
+    16,
+    4
+   ]
+  },
+  {
+   "I": 2,
+   "Q3(z)": "z**5/12 + 49*z**4/12 + 261*z**3/4 + 5579*z**2/12 + 4478*z/3 + 1777",
+   "S": 2,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-26",
+    "negative_values": [],
+    "real_roots": 1,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 6,
+   "n'": 8,
+   "parts": [
+    4,
+    2,
+    2
+   ],
+   "poly": [
+    1,
+    8,
+    23,
+    28,
+    12
+   ]
+  },
+  {
+   "I": 1,
+   "Q3(z)": "z**5/12 + 49*z**4/12 + 257*z**3/4 + 5375*z**2/12 + 4190*z/3 + 1580",
+   "S": 3,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-2",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 7,
+   "n'": 8,
+   "parts": [
+    4,
+    2,
+    2
+   ],
+   "poly": [
+    1,
+    8,
+    23,
+    29,
+    16,
+    4
+   ]
+  },
+  {
+   "I": 2,
+   "Q3(z)": "z**5/12 + 49*z**4/12 + 261*z**3/4 + 5555*z**2/12 + 4388*z/3 + 1685",
+   "S": 2,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-26",
+    "negative_values": [],
+    "real_roots": 1,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 6,
+   "n'": 8,
+   "parts": [
+    3,
+    3,
+    2
+   ],
+   "poly": [
+    1,
+    8,
+    23,
+    28,
+    13,
+    2
+   ]
+  },
+  {
+   "I": 1,
+   "Q3(z)": "z**5/12 + 9*z**4/2 + 1001*z**3/12 + 704*z**2 + 2734*z + 3997",
+   "S": 1,
+   "certified": true,
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,0]",
+    "largest_root_upper_bound": "-26",
+    "negative_values": [],
+    "real_roots": 1,
+    "real_roots_ge_lo": "0"
+   },
+   "e": 5,
+   "l": 8,
+   "n'": 9,
+   "parts": [
+    3,
+    2,
+    2,
+    2
+   ],
+   "poly": [
+    1,
+    9,
+    31,
+    50,
+    36,
+    8
+   ]
+  }
+ ],
+ "direct_check": {
+  "forests": 85624,
+  "min_Q3": 0,
+  "n_max": 16,
+  "regimes": {
+   "I=0": 80,
+   "R1 (S>=e-1)": 83602,
+   "R2 (S<=e-1)": 3951,
+   "e<=5, I>=1 (step D)": 282
+  }
+ },
+ "failed_steps": [],
+ "marker": "PASS_EXACT_ISO3_ALL_FORESTS_ROOT",
+ "polynomials": {
+  "DeltaG0_suc": "5*c**4/12 + 7*c**3*s/3 + 7*c**3*u/3 + 9*c**3/2 + 9*c**2*s**2/2 + 9*c**2*s*u + 19*c**2*s/2 + 9*c**2*u**2/2 + 25*c**2*u/2 + 145*c**2/12 + 11*c*s**3/3 + 11*c*s**2*u + 11*c*s**2/2 + 11*c*s*u**2 + 17*c*s*u + 31*c*s/2 + 11*c*u**3/3 + 23*c*u**2/2 + 33*c*u/2 + 12*c + 13*s**4/12 + 13*s**3*u/3 + s**3/2 + 13*s**2*u**2/2 + 9*s**2*u/2 + 5*s**2/12 + 13*s*u**3/3 + 15*s*u**2/2 + 23*s*u/6 + 12*s + 13*u**4/12 + 7*u**3/2 + 41*u**2/12 + 4*u + 4",
+  "DeltaK_abc": "3*a**5 + 14*a**4*b + 16*a**4*c + 40*a**4 + 92*a**3*b**2 + 112*a**3*b*c + 144*a**3*b + 36*a**3*c**2 + 176*a**3*c + 215*a**3 + 172*a**2*b**3 + 324*a**2*b**2*c + 460*a**2*b**2 + 180*a**2*b*c**2 + 808*a**2*b*c + 578*a**2*b + 28*a**2*c**3 + 276*a**2*c**2 + 712*a**2*c + 578*a**2 + 117*a*b**4 + 308*a*b**3*c + 474*a*b**3 + 270*a*b**2*c**2 + 1182*a*b**2*c + 741*a*b**2 + 84*a*b*c**3 + 846*a*b*c**2 + 2018*a*b*c + 1120*a*b + 5*a*c**4 + 138*a*c**3 + 721*a*c**2 + 1288*a*c + 784*a + 26*b**5 + 88*b**4*c + 142*b**4 + 108*b**3*c**2 + 484*b**3*c + 318*b**3 + 56*b**2*c**3 + 552*b**2*c**2 + 1296*b**2*c + 650*b**2 + 10*b*c**4 + 220*b*c**3 + 1070*b*c**2 + 1780*b*c + 880*b + 10*c**4 + 164*c**3 + 626*c**2 + 880*c + 432",
+  "G(n,e,l,S)": "(2*S**2/(2*e - l) - S)*(-4*e/3 + 2*n**2/3 - 2*n/3) - (-4*e + 2*n**2 - 2*n)*(S*(n - 4) + e**2/2 - e*(n**2/2 - 5*n/2 + 3) - e/2 + n**4/24 - n**3/4 + 11*n**2/24 - n/4) + (-e + n**2/2 - n/2)**2 + 3*(S - e*(n - 2) + n**3/6 - n**2/2 + n/3)**2",
+  "G0(e+1,e,S)": "3*S**2 - S*e**3 + 2*S*e**2 - S*e + e**5/4 - e**4 + 5*e**3/4 - e**2/2",
+  "G0(e+1,e,e-1-w)_e=5+v": "v**5/4 + 17*v**4/4 + v**3*w + 107*v**3/4 + 13*v**2*w + 303*v**2/4 + 50*v*w + 90*v + 3*w**2 + 56*w + 28",
+  "G0(n,e,S)": "3*S**2 - 2*S*e*n - 4*S*e - S*n**3 + 7*S*n**2 - 6*S*n + 2*e**3 - e**2*n - e**2 + e*n**4/6 - 2*e*n**3 + 29*e*n**2/6 - 3*e*n + n**5/12 - n**4/12 - n**3/12 + n**2/12",
+  "K_tilde(n,e,lambda)": "48*e**4 - 24*e**3*lambda - 72*e**3*n - 48*e**3 - 24*e**2*lambda**2*n + 8*e**2*lambda**2 + 108*e**2*lambda*n - 16*e**2*lambda + 4*e**2*n**4 - 72*e**2*n**3 + 284*e**2*n**2 - 216*e**2*n + 10*e*lambda**4 + 12*e*lambda**3*n - 80*e*lambda**3 - 12*e*lambda**2*n**3 + 92*e*lambda**2*n**2 - 116*e*lambda**2*n + 150*e*lambda**2 - 2*e*lambda*n**4 + 72*e*lambda*n**3 - 410*e*lambda*n**2 + 340*e*lambda*n + 2*e*n**5 - 2*e*n**4 - 2*e*n**3 + 2*e*n**2 - 9*lambda**5 + 4*lambda**4*n**2 - 4*lambda**4*n + 54*lambda**4 + 6*lambda**3*n**3 - 62*lambda**3*n**2 + 56*lambda**3*n - 81*lambda**3 - 18*lambda**2*n**3 + 150*lambda**2*n**2 - 132*lambda**2*n - lambda*n**5 + lambda*n**4 + lambda*n**3 - lambda*n**2",
+  "K_tilde_abc_minus_tree": "3*a**5*c + 14*a**4*b*c + 8*a**4*c**2 + 32*a**4*c + 92*a**3*b**2*c + 56*a**3*b*c**2 + 88*a**3*b*c + 12*a**3*c**3 + 70*a**3*c**2 + 133*a**3*c + 172*a**2*b**3*c + 162*a**2*b**2*c**2 + 298*a**2*b**2*c + 60*a**2*b*c**3 + 314*a**2*b*c**2 + 204*a**2*b*c + 7*a**2*c**4 + 78*a**2*c**3 + 225*a**2*c**2 + 268*a**2*c + 117*a*b**4*c + 154*a*b**3*c**2 + 320*a*b**3*c + 90*a*b**2*c**3 + 456*a*b**2*c**2 + 195*a*b**2*c + 21*a*b*c**4 + 240*a*b*c**3 + 607*a*b*c**2 + 252*a*b*c + a*c**5 + 32*a*c**4 + 173*a*c**3 + 318*a*c**2 + 260*a*c + 26*b**5*c + 44*b**4*c**2 + 98*b**4*c + 36*b**3*c**3 + 188*b**3*c**2 + 94*b**3*c + 14*b**2*c**4 + 156*b**2*c**3 + 386*b**2*c**2 + 94*b**2*c + 2*b*c**5 + 50*b*c**4 + 250*b*c**3 + 410*b*c**2 + 168*b*c + 2*c**5 + 36*c**4 + 130*c**3 + 168*c**2 + 96*c",
+  "K_tilde_tree_ab": "a**6 - a**5*b + 11*a**5 + 10*a**4*b**2 - 18*a**4*b + 49*a**4 + 48*a**3*b**3 - 30*a**3*b**2 - 67*a**3*b + 113*a**3 + 63*a**2*b**4 + 62*a**2*b**3 - 221*a**2*b**2 - 78*a**2*b + 142*a**2 + 33*a*b**5 + 72*a*b**4 - 143*a*b**3 - 278*a*b**2 - 4*a*b + 92*a + 6*b**6 + 18*b**5 - 30*b**4 - 114*b**3 - 72*b**2 + 24*b + 24",
+  "Q3_I0(e,z)": "16*e**5/3 + 12*e**4*z - 52*e**4/3 + 32*e**3*z**2/3 - 80*e**3*z/3 + 56*e**3/3 + 14*e**2*z**3/3 - 14*e**2*z**2 + 52*e**2*z/3 - 20*e**2/3 + e*z**4 - 8*e*z**3/3 + 13*e*z**2/3 - 8*e*z/3 + z**5/12 - z**4/12 - z**3/12 + z**2/12",
+  "Q3_I0(e,z+2)": "16*e**5/3 + 12*e**4*z + 20*e**4/3 + 32*e**3*z**2/3 + 16*e**3*z + 8*e**3 + 14*e**2*z**3/3 + 14*e**2*z**2 + 52*e**2*z/3 + 28*e**2/3 + e*z**4 + 16*e*z**3/3 + 37*e*z**2/3 + 44*e*z/3 + 20*e/3 + z**5/12 + 3*z**4/4 + 31*z**3/12 + 17*z**2/4 + 10*z/3 + 1"
+ },
+ "provenance": {
+  "date_note": "no timestamp by design; see git history for dates",
+  "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "script": "prove_iso3_forests.py",
+  "script_sha256": "4F3CCC1AE30AD7CF0C7A28968FA705E58E523C9309325162729EC561D11F40D4"
+ },
+ "steps": {
+  "(0) self-test: Bernstein routine refuses (a-4)^2 - 1/10 and accepts (a-4)^2 + 1/10 on [3,5]x[1,2]": {
+   "detail": {
+    "accepted_boxes": 4,
+    "negative_witness": [
+     "4",
+     "1",
+     "-1/10"
+    ]
+   },
+   "pass": true
+  },
+  "(0) self-test: coefficient certificate accepts (x+y)^2 and refuses (x-y)^2": {
+   "detail": null,
+   "pass": true
+  },
+  "(0) self-test: exact sign of A + B sqrt(D) on four cases": {
+   "detail": null,
+   "pass": true
+  },
+  "(0) self-test: integer certificate accepts (x-5/2)^2-1/8 and x^2(x-1)^2(x+1); refuses (x-4)(x-6) and 1000-x^2": {
+   "detail": null,
+   "pass": true
+  },
+  "(0) self-test: interval certificate accepts (x-1)^2+1/10 and x(x-2) on [-3,0]; refuses (x-1)^2-1/10 and x(x-2) on [0,2]": {
+   "detail": null,
+   "pass": true
+  },
+  "(1)-(5) exact identities and lemmas on all 85624 forests with n <= 16 (counts match OEIS A005195)": {
+   "detail": {
+    "counts": {
+     "1": 1,
+     "2": 2,
+     "3": 3,
+     "4": 6,
+     "5": 10,
+     "6": 20,
+     "7": 37,
+     "8": 76,
+     "9": 153,
+     "10": 329,
+     "11": 710,
+     "12": 1601,
+     "13": 3658,
+     "14": 8599,
+     "15": 20514,
+     "16": 49905
+    },
+    "failures": [],
+    "regimes": {
+     "I=0": 80,
+     "R1 (S>=e-1)": 83602,
+     "R2 (S<=e-1)": 3951,
+     "e<=5, I>=1 (step D)": 282
+    }
+   },
+   "pass": true
+  },
+  "(5) Fraction implementations of G and G0 agree with the symbolic ones on integer samples": {
+   "detail": null,
+   "pass": true
+  },
+  "(5) G(n,e,2e-2S,S) = G0(n,e,S): the Cauchy-Schwarz term vanishes at l = 2e-2S": {
+   "detail": {
+    "G0": "3*S**2 - 2*S*e*n - 4*S*e - S*n**3 + 7*S*n**2 - 6*S*n + 2*e**3 - e**2*n - e**2 + e*n**4/6 - 2*e*n**3 + 29*e*n**2/6 - 3*e*n + n**5/12 - n**4/12 - n**3/12 + n**2/12"
+   },
+   "pass": true
+  },
+  "(5) K~(n,e,lambda) = 12(2e-lambda) G(n,e,lambda,Smax(lambda)) is an integer polynomial": {
+   "detail": {
+    "K~": "48*e**4 - 24*e**3*lambda - 72*e**3*n - 48*e**3 - 24*e**2*lambda**2*n + 8*e**2*lambda**2 + 108*e**2*lambda*n - 16*e**2*lambda + 4*e**2*n**4 - 72*e**2*n..."
+   },
+   "pass": true
+  },
+  "(5) Smax(2) = e-1, Smax(e) = C(e,2), Smax'(lambda) = lambda - 3/2 > 0 on [2,oo)": {
+   "detail": null,
+   "pass": true
+  },
+  "(5) dG/dl = (8 p_2/3) S^2/(2e-l)^2 (G is non-decreasing in l when p_2 >= 0, l < 2e)": {
+   "detail": null,
+   "pass": true
+  },
+  "(A) Q_3((1+2x)^e (1+x)^z) = G0(2e+z, e, 0) as polynomials in (e,z)": {
+   "detail": {
+    "Q3": "(64*e**5 + 144*e**4*z - 208*e**4 + 128*e**3*z**2 - 320*e**3*z + 224*e**3 + 56*e**2*z**3 - 168*e**2*z**2 + 208*e**2*z - 80*e**2 + 12*e*z**4 - 32*e*z**3 + 52*e*z**2 - 32*e*z + z**5 - z**4 - z**3 + z**2)/12"
+   },
+   "pass": true
+  },
+  "(A) numeric: Q_3 >= 0 (and Q_3 >= p_2^2 when alpha >= 4, as Newton predicts) for all e, z <= 30": {
+   "detail": {
+    "cases": 961
+   },
+   "pass": true
+  },
+  "(A) z = 0: Q_3(e,0) = 4e^2(e-1)^2(4e-5)/3 >= 0 for all integers e >= 0": {
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,3]",
+    "largest_root_upper_bound": "2",
+    "negative_values": [],
+    "real_roots": 3,
+    "real_roots_ge_lo": "3"
+   },
+   "pass": true
+  },
+  "(A) z = 1: Q_3(e,1) = 4e^2(4e^3-4e^2+2e+1)/3 >= 0 for all integers e >= 0": {
+   "detail": {
+    "degree": 5,
+    "integers_checked": "[0,1]",
+    "largest_root_upper_bound": "0",
+    "negative_values": [],
+    "real_roots": 2,
+    "real_roots_ge_lo": "1"
+   },
+   "pass": true
+  },
+  "(A) z >= 2: Q_3(e, z+2) has only non-negative coefficients in (e,z)": {
+   "detail": {
+    "negative": [],
+    "terms": 21
+   },
+   "pass": true
+  },
+  "(B1') K~(n,e,lambda) - K~(e+1,e,lambda) has only non-negative coefficients in (a,b,c) (all real n >= e+1)": {
+   "detail": {
+    "negative": [],
+    "terms": 55
+   },
+   "pass": true
+  },
+  "(B1) K~(n+1,e,lambda) - K~(n,e,lambda) has only non-negative coefficients (lambda=2+a, e=2+a+b, n=3+a+b+c)": {
+   "detail": {
+    "negative": [],
+    "terms": 55
+   },
+   "pass": true
+  },
+  "(B2) G0(n+1,e,S) - G0(n,e,S) has only non-negative coefficients (S=s, e=1+s+u, n=2+s+u+c)": {
+   "detail": {
+    "negative": [],
+    "terms": 35
+   },
+   "pass": true
+  },
+  "(C1) K~(e+1,e,lambda) coincides with the tree polynomial K~(a,b) recorded in reports/iso3_trees_proof.json": {
+   "detail": null,
+   "pass": true
+  },
+  "(C1) region coverage: {a,b>=0, a+b>=4} = {a,b>=2} U {a<=2,b>=4} U {b<=2,a>=4} U {a<=2,2<=b<=4,a+b>=4} U {b<=2,2<=a<=4,a+b>=4}": {
+   "detail": null,
+   "pass": true
+  },
+  "(C1) remark: K~(6,5,lambda) < 0 at lambda = 7/2, so the base case genuinely needs e >= 6 (e <= 5 is step D)": {
+   "detail": {
+    "K~(6,5,7/2)": "-7947/32"
+   },
+   "pass": true
+  },
+  "(C1) symbolic K~ matches 12(2e-lambda) G(n,e,lambda,Smax(lambda)) numerically (e <= 20, three n each)": {
+   "detail": null,
+   "pass": true
+  },
+  "(C1a) a,b >= 2: K~(a+2,b+2) - a^4(a^2-ab+10b^2) has only non-negative coefficients, a^2-ab+10b^2 = (a-b/2)^2 + 39b^2/4": {
+   "detail": {
+    "negative": [],
+    "terms": 25
+   },
+   "pass": true
+  },
+  "(C1b) strips 0<=a<=2, b>=4 and 0<=b<=2, a>=4: every coefficient of K~(a,b+4) in b (resp. of K~(a+4,b) in a) is >= 0 on [0,2]": {
+   "detail": {
+    "coefficients": [
+     7,
+     7
+    ]
+   },
+   "pass": true
+  },
+  "(C1c) Bernstein certificate for K~ on a in [0,2], b in [2,4], a+b >= 4": {
+   "detail": {
+    "ok": 4,
+    "skipped": 3,
+    "undecided": 0
+   },
+   "pass": true
+  },
+  "(C1c) Bernstein certificate for K~ on a in [2,4], b in [0,2], a+b >= 4": {
+   "detail": {
+    "ok": 4,
+    "skipped": 0,
+    "undecided": 0
+   },
+   "pass": true
+  },
+  "(C2) G0(e+1,e,S) = 3S^2 - e(e-1)^2 S + e^2(e-1)^2(e-2)/4": {
+   "detail": null,
+   "pass": true
+  },
+  "(C2) G0(e+1,e,e-1-w) with e = 5+v has only non-negative coefficients (e >= 5, S <= e-1)": {
+   "detail": {
+    "negative": [],
+    "terms": 11
+   },
+   "pass": true
+  },
+  "(C2) remark: 3(2e-2) G(e+1,e,2,S) (using only l >= 2) with S = e-1-w, e = 5+v also has only non-negative coefficients": {
+   "detail": {
+    "negative": [],
+    "terms": 15
+   },
+   "pass": true
+  },
+  "(D) Q_3(F' + z K_1) >= 0 for every core F' and every integer z >= 0 (exact real-root isolation; cross-checked for z <= 6)": {
+   "detail": {
+    "all_coefficients_positive": true,
+    "all_real_roots_negative": true,
+    "min_Q3_at_z=0": "1"
+   },
+   "pass": true
+  },
+  "(D) coverage: every forest with n <= 16, I >= 1, e <= 5 is (core) + z K_1 for one of the 26 cores": {
+   "detail": null,
+   "pass": true
+  },
+  "(D) enumeration: 26 cores (forests without isolated vertices, I >= 1, e <= 5)": {
+   "detail": {
+    "by_e": {
+     "2": 1,
+     "3": 3,
+     "4": 7,
+     "5": 15
+    }
+   },
+   "pass": true
+  },
+  "(E) Q_3 >= 0 directly for all 85624 forests with n <= 16": {
+   "detail": {
+    "min_Q3": 0
+   },
+   "pass": true
+  },
+  "(F) case split: I = 0 [A]; I >= 1, e <= 5 [D]; I >= 1, e >= 6 (n >= e+1 >= 7): S >= e-1 via (B1)+(C1), S <= e-1 via (B2)+(C2)": {
+   "detail": null,
+   "pass": true
+  }
+ },
+ "theorem": "For every forest F, Q_3(F) = 3 p_3^2 + p_2^2 - 4 p_2 p_4 >= 0 (ISO_3)."
+}
