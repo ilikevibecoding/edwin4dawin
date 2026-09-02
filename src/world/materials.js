@@ -779,9 +779,10 @@ export function makeCanvasWeaveCanvas() {
       const weave = 0.5 + 0.25 * Math.sin(x * 1.6) + 0.25 * Math.sin(y * 1.6);
       const t = n[y * S + x] * 0.6 + weave * 0.4;
       const i = (y * S + x) * 4;
-      img.data[i] = 222 + t * 30;
-      img.data[i + 1] = 214 + t * 30;
-      img.data[i + 2] = 196 + t * 30;
+      // kept below ~0.6 linear so a sunlit canopy still shows its weave instead of clipping to flat white
+      img.data[i] = 186 + t * 28;
+      img.data[i + 1] = 178 + t * 28;
+      img.data[i + 2] = 160 + t * 28;
       img.data[i + 3] = 255;
     }
   }

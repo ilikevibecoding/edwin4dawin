@@ -31,7 +31,9 @@ rendering conventions, module ownership.
 src/core        game loop, input, asset loader, Rapier wrapper, settings, debug/screenshot API
 src/rendering   renderer, HDRI sky + analytic sun (cascaded shadow maps), N8AO, bloom, SMAA, grading, camera FX
 src/world       Seaside plaza: procedural buildings, plaza pattern, fountain/statue, props, trees, nav graph, minimap
-src/weapons     M4A1 rig + view-model animator, attachments (holo sight …), first-person arms candidates
+src/weapons     M4A1 rig + view-model animator, worn-Cerakote surface shader + load-time AO/edge-wear bake,
+                attachments (EXPS holo, Cronen rear sight, hand stop, PEQ laser, sling, receiver roll marks),
+                procedural first-person arms (knit/leather glove, skin, sleeve) fitted to the rig sockets
 src/ai          AI soldiers (Mixamo rig), pathing, cover, shooting, hitboxes, deaths
 src/combat      hitscan, damage, explosions
 src/fx          GPU particles, decals, muzzle flash, tracers, casings, explosions, debris
