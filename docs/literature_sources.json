@@ -1,0 +1,83 @@
+{
+  "audit_date": "2026-09-02",
+  "problem": "Erdős Problem #993 (Alavi–Malde–Schwenk–Erdős 1987 tree/forest independence-polynomial unimodality conjecture)",
+  "report": "docs/LITERATURE_STATUS_2026-09-02.md",
+  "notes": [
+    "erdosproblems.com is Cloudflare-protected; pages were read through the r.jina.ai text-rendering proxy and cross-checked with search-engine snippets.",
+    "Levit–Mandrescu (2006) was not directly accessible; its statement is quoted from peer-reviewed restatements (Basit–Galvin 2021; Galvin 2011).",
+    "Source types: official-page | peer-reviewed | arxiv-preprint | self-published (Zenodo/GitHub/web) | journalism | dataset."
+  ],
+  "sources": [
+    {"id": 1, "type": "official-page", "title": "Erdős Problem #993", "url": "https://www.erdosproblems.com/993", "accessed": "2026-09-02", "finding": "Status FALSIFIABLE (open); last edited 2026-02-01; Comments (7); Proof claims (0)."},
+    {"id": 2, "type": "official-page", "title": "Forum thread for #993", "url": "https://www.erdosproblems.com/forum/thread/993", "accessed": "2026-09-02", "finding": "7 comments: computational verification reports (n<=29, n<=31, n<=32), LC-failure notes; no proof or counterexample."},
+    {"id": 3, "type": "official-page", "title": "Proof claims for #993", "url": "https://www.erdosproblems.com/forum/thread/993/proof-claims", "accessed": "2026-09-02", "finding": "No proof claims have been submitted yet."},
+    {"id": 4, "type": "official-page", "title": "Revision history for #993", "url": "https://www.erdosproblems.com/history/993", "accessed": "2026-09-02"},
+    {"id": 5, "type": "dataset", "title": "teorth/erdosproblems problems.yaml (entry 993)", "url": "https://raw.githubusercontent.com/teorth/erdosproblems/main/data/problems.yaml", "accessed": "2026-09-02", "finding": "status: falsifiable; last_update: 2025-09-07."},
+    {"id": 6, "type": "dataset", "title": "teorth/erdosproblems wiki: AI contributions to Erdős problems", "url": "https://github.com/teorth/erdosproblems/wiki/AI-contributions-to-Erd%C5%91s-problems", "accessed": "2026-09-02", "finding": "No entry claiming a solution of #993."},
+    {"id": 7, "type": "peer-reviewed", "title": "Alavi, Malde, Schwenk, Erdős — The vertex independence sequence of a graph is not constrained", "venue": "Congr. Numer. 58 (1987) 15–23", "accessed": "2026-09-02", "note": "Cited via secondary sources."},
+    {"id": 8, "type": "peer-reviewed", "title": "Levit, Mandrescu — Partial unimodality for independence polynomials of König–Egerváry graphs", "venue": "Congr. Numer. 179 (2006) 109–119", "accessed": "2026-09-02", "note": "Statement taken from Basit–Galvin 2021 and Galvin 2011."},
+    {"id": 9, "type": "peer-reviewed", "title": "Basit, Galvin — On the independent set sequence of a tree", "venue": "Electron. J. Combin. 28(3) (2021) P3.23", "url": "https://arxiv.org/abs/2006.12562", "url2": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v28i3p23/pdf/", "accessed": "2026-09-02"},
+    {"id": 10, "type": "peer-reviewed", "title": "Galvin — Two problems on independent sets in graphs", "venue": "Discrete Math. (2011)", "url": "https://www.sciencedirect.com/science/article/pii/S0012365X1100272X", "url2": "https://www3.nd.edu/~dgalvin1/pdf/ind-sets-two.pdf", "accessed": "2026-09-02"},
+    {"id": 11, "type": "arxiv-preprint", "title": "Galvin — The independent set sequence of regular bipartite graphs", "url": "https://ar5iv.labs.arxiv.org/html/1110.3760", "accessed": "2026-09-02"},
+    {"id": 12, "type": "arxiv-preprint", "title": "Bhattacharyya, Kahn — A bipartite graph with non-unimodal independent set sequence", "url": "https://arxiv.org/pdf/1301.1752", "accessed": "2026-09-02"},
+    {"id": 13, "type": "arxiv-preprint", "title": "Yosef, Mizrachi, Kadrawi — On unimodality of independence polynomials of trees", "url": "https://arxiv.org/abs/2101.06744", "accessed": "2026-09-02"},
+    {"id": 14, "type": "peer-reviewed", "title": "Kadrawi, Levit, Yosef, Mizrachi — On Computing of Independence Polynomials of Trees", "venue": "IntechOpen 2023, doi:10.5772/intechopen.1001130", "url": "https://www.intechopen.com/chapters/1130709", "accessed": "2026-09-02", "local": "/tmp/erdos993_refs/intechopen_computing_indpoly_trees.txt"},
+    {"id": 15, "type": "peer-reviewed", "title": "Kadrawi, Levit — The independence polynomial of trees is not always log-concave starting from order 26", "venue": "Ars Math. Contemp. 25(4) (2025) #P4.03", "url": "https://doi.org/10.26493/1855-3974.3207.2ad", "url2": "https://arxiv.org/abs/2305.01784", "accessed": "2026-09-02"},
+    {"id": 16, "type": "arxiv-preprint", "title": "Galvin — Trees with non log-concave independent set sequences", "url": "https://arxiv.org/abs/2502.10654", "date": "v2 2026-01-23", "accessed": "2026-09-02"},
+    {"id": 17, "type": "arxiv-preprint", "title": "Ramos, Sun — An AI enhanced approach to the tree unimodality conjecture", "url": "https://arxiv.org/abs/2510.18826", "url2": "https://github.com/ericgramos/TreeUnimodalityPatternBoost", "date": "v2 2025-10-22", "accessed": "2026-09-02", "local": "/tmp/erdos993_refs/arxiv_2510.18826_patternboost.txt"},
+    {"id": 18, "type": "arxiv-preprint", "title": "Bautista-Ramos — Multiple breaks of log-concavity in the independence polynomials of trees", "url": "https://arxiv.org/abs/2511.00334", "accessed": "2026-09-02"},
+    {"id": 19, "type": "peer-reviewed", "title": "Bautista-Ramos, Guillén-Galván, Gómez-Salgado — Linear recurrences for non-log-concave independence polynomials of trees", "venue": "Graphs and Combinatorics (2026), doi:10.1007/s00373-026-03054-4", "url": "https://arxiv.org/abs/2603.14204", "accessed": "2026-09-02"},
+    {"id": 20, "type": "arxiv-preprint", "title": "Levit, Kadrawi — Closing Trees into Unicyclic Counterexamples", "url": "https://arxiv.org/abs/2603.17114", "accessed": "2026-09-02"},
+    {"id": 21, "type": "arxiv-preprint", "title": "Li, Li, Yang, Zhang — A symmetric function approach to log-concavity of independence polynomials (spiders are log-concave)", "url": "https://arxiv.org/abs/2501.04245", "accessed": "2026-09-02"},
+    {"id": 22, "type": "arxiv-preprint", "title": "G. M. X. Li — Unimodality of independence polynomials of two family of trees (T_{3,m,n}, T*_{3,m,n})", "url": "https://arxiv.org/abs/2603.03025", "accessed": "2026-09-02", "local": "/tmp/erdos993_refs/arxiv_2603.03025_two_families_T3mn.txt"},
+    {"id": 23, "type": "arxiv-preprint", "title": "Hibi, Kara, Vien — Symmetric and unimodal independence polynomials of trees", "url": "https://arxiv.org/abs/2604.18824", "date": "2026-04-20", "accessed": "2026-09-02", "finding": "States the conjecture is still open.", "local": "/tmp/erdos993_refs/arxiv_2604.18824_symmetric_unimodal.txt"},
+    {"id": 24, "type": "arxiv-preprint", "title": "Bhardwaj, Chau, Ikram, Lather, Nanjangud, Venugopal — Multiplicity of negative one of independence polynomials of graphs", "url": "https://arxiv.org/abs/2607.08480", "date": "2026-07-09", "accessed": "2026-09-02", "finding": "Cites the tree conjecture as open; no proof."},
+    {"id": 25, "type": "peer-reviewed", "title": "Bendjeddou, Hardiman — Lorentzian polynomials and the independence sequences of graphs", "venue": "Bull. London Math. Soc. 57 (2025) 1305–1323, doi:10.1112/blms.70031", "url": "https://arxiv.org/abs/2405.00511", "accessed": "2026-09-02"},
+    {"id": 26, "type": "peer-reviewed", "title": "Galvin, Hilyard — The independent set sequence of some families of trees", "venue": "Australas. J. Combin. 70(2) (2018)", "url": "https://arxiv.org/abs/1701.02204", "accessed": "2026-09-02"},
+    {"id": 27, "type": "peer-reviewed", "title": "Bencs — On trees with real-rooted independence polynomial", "venue": "Discrete Math. 341 (2018) 3321–3330; arXiv:1703.05409", "url": "https://www.etd.ceu.edu/2020/bencs_ferenc.pdf", "accessed": "2026-09-02"},
+    {"id": 28, "type": "peer-reviewed", "title": "Liu, Tang, Zhao — Trees with Independence Polynomials Having Only Real Zeros", "venue": "Acta Math. Appl. Sin. Engl. Ser. (2025)", "url": "https://doi.org/10.1007/s10255-025-0082-x", "accessed": "2026-09-02"},
+    {"id": 29, "type": "peer-reviewed", "title": "Xie, Zhang — Unimodality of Independence Polynomials of Rooted Products of a Kind of Tree", "venue": "Math. Theory Appl. 45(2) (2025) 53–75", "url": "https://mta.csu.edu.cn/EN/abstract/abstract380.shtml", "accessed": "2026-09-02"},
+    {"id": 30, "type": "arxiv-preprint", "title": "Du, Heilman, Panova — Trees and Graphs with Non Log-concave Dominating Set Sequence via AI Tools", "url": "https://arxiv.org/abs/2605.02193", "date": "May 2026", "accessed": "2026-09-02", "finding": "Concerns dominating-set sequences, not independence polynomials; no bearing on #993."},
+    {"id": 31, "type": "arxiv-preprint", "title": "Heilman — Independent Sets of Random Trees and of Sparse Random Graphs", "url": "https://arxiv.org/abs/2006.04756", "accessed": "2026-09-02"},
+    {"id": 32, "type": "self-published", "title": "Reynolds — Mean bounds, structural reductions, and exhaustive verification for tree independence polynomial unimodality (Zenodo v3, 2026-03-18)", "url": "https://zenodo.org/records/19100781", "doi": "10.5281/zenodo.19100781", "accessed": "2026-09-02", "finding": "Exhaustive unimodality verification n<=29 (8,691,747,673 trees); no proof."},
+    {"id": 33, "type": "self-published", "title": "Reynolds — GitHub BrettRey/erdos-problem-993", "url": "https://github.com/BrettRey/erdos-problem-993", "accessed": "2026-09-02", "local": "/tmp/reynolds993 (README.md, README_erdos993_hunt.txt, STATUS.md, submission-info.md, notes/break_depth_lane_2026-08-14.md, results/lc_census_20260814/)", "finding": "LC census through n=32 (1,228 LC-failure polynomials, all unimodal); E-JC submission 2026-04-25 of partial results; states no full proof."},
+    {"id": 34, "type": "self-published", "title": "Reynolds — valley-hunt / first-descent interactive pages", "url": "https://brettreynolds.ca/valley-hunt.html", "url2": "https://brettreynolds.ca/first-descent.html", "accessed": "2026-09-02"},
+    {"id": 35, "type": "self-published", "title": "Tyorden — erdos-993-trees-n31 (exhaustive unimodality check through n=32)", "url": "https://github.com/Tyorden/erdos-993-trees-n31", "accessed": "2026-09-02", "local": "/tmp/e993/tyorden_readme.md", "finding": "Reports 0 unimodality failures for all trees n<=32 (109,972,410,221 trees at n=32 cumulative frontier); unrefereed."},
+    {"id": 36, "type": "self-published", "title": "willblair0708 — verified-combinatorics/erdos-993", "url": "https://github.com/willblair0708/verified-combinatorics/tree/main/erdos-993", "accessed": "2026-09-02"},
+    {"id": 37, "type": "self-published", "title": "kylekaba — erdos-problem-993", "url": "https://github.com/kylekaba/erdos-problem-993", "accessed": "2026-09-02"},
+    {"id": 38, "type": "journalism", "title": "Quanta Magazine — Why the Legendary Erdős Problems Are Falling to AI", "url": "https://www.quantamagazine.org/why-the-legendary-erdos-problems-are-falling-to-ai-20260803/", "date": "2026-08-03", "accessed": "2026-09-02", "finding": "Does not mention #993."},
+    {"id": 40, "type": "arxiv-preprint", "title": "K-Lorentzian and K-CLC Polynomials in Stability Analysis", "url": "https://arxiv.org/abs/2501.02375", "accessed": "2026-09-02", "finding": "Source for the CLC inequality k a_k^2 >= (k+1) a_{k-1} a_{k+1}; unrelated to trees."}
+  ],
+  "arxiv_api_queries": {
+    "endpoint": "http://export.arxiv.org/api/query?search_query=<q>&sortBy=submittedDate&sortOrder=descending&max_results=50",
+    "run_date": "2026-09-02",
+    "queries": [
+      "all:\"independence polynomial\" AND all:unimodal",
+      "all:\"independence polynomial\" AND all:tree",
+      "all:\"independent set sequence\"",
+      "all:\"independence polynomial\" AND all:\"log-concave\"",
+      "all:\"Alavi\" AND all:\"Schwenk\" AND all:unimodal",
+      "all:\"Erdos problem 993\" OR all:\"Erdős problem 993\"",
+      "all:\"tree unimodality conjecture\"",
+      "all:\"independence polynomial\" AND all:forest"
+    ],
+    "result": "No arXiv submission dated May–September 2026 claims a proof or counterexample of the tree/forest unimodality conjecture. Relevant hits in the window: 2605.02193 (dominating sets, off-topic), 2607.08480 (cites conjecture as open)."
+  },
+  "web_search_queries": [
+    "independence polynomial trees unimodal 2026",
+    "Alavi Malde Schwenk Erdős conjecture proof",
+    "Erdős problem 993 solved",
+    "unimodality independence polynomial forest arXiv 2026",
+    "tree unimodality conjecture counterexample",
+    "erdosproblems.com 993 forum",
+    "Levit Mandrescu partial unimodality König–Egerváry 2006",
+    "\"p_{r-1} <= r p_r\" independence polynomial tree",
+    "Newton-type inequality independence polynomial trees",
+    "ratio-monotone independence polynomial",
+    "ultra log-concave independence polynomial tree"
+  ],
+  "own_computations": [
+    "Verified p_{r-1} <= r p_r for all r <= i(T) (independent domination number) on all trees with n <= 12 via exact DP; the inequality can fail for larger r.",
+    "Verified r p_r^2 + p_{r-1}^2 - (r+1) p_{r-1} p_{r+1} >= 0 on all trees with n <= 12 and on all 1,228 LC-failure polynomials in Reynolds' n<=32 census; no failures found. Neither inequality was found stated under any name in the literature."
+  ]
+}

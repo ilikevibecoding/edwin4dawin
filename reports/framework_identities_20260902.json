@@ -1,0 +1,302 @@
+{
+ "date": "2026-09-02",
+ "script": "/workspace/scripts/verify_framework_identities.py",
+ "seed": 20260902,
+ "versions": {
+  "python": "3.12.3",
+  "sympy": "1.14.0",
+  "networkx": "3.6.1"
+ },
+ "1_descent_propagation_lemma": {
+  "factorisation_rx_plus_1_over_x_minus_r_plus_1": "(x - 1)*(r*x - 1)/x",
+  "factorisation_exact": true,
+  "zeros_of_factorisation": [
+   "1",
+   "1/r"
+  ],
+  "value_at_x_equal_1_over_2r_for_r_2": "3/2",
+  "integer_bruteforce_box_1_to_40": {
+   "2": {
+    "descent_WR_ISO_cases": 7891,
+    "descent_WR_ISO_conclusion_holds": true,
+    "tie_ISO_cases": 860,
+    "tie_ISO_conclusion_holds": true,
+    "witness_descent_ISO_noWR_ascent (p_{r-1},p_r,p_{r+1})": [
+     6,
+     1,
+     2
+    ],
+    "witness_descent_WR_noISO_ascent (p_{r-1},p_r,p_{r+1})": [
+     2,
+     1,
+     2
+    ]
+   },
+   "3": {
+    "descent_WR_ISO_cases": 8938,
+    "descent_WR_ISO_conclusion_holds": true,
+    "tie_ISO_cases": 860,
+    "tie_ISO_conclusion_holds": true,
+    "witness_descent_ISO_noWR_ascent (p_{r-1},p_r,p_{r+1})": [
+     8,
+     1,
+     2
+    ],
+    "witness_descent_WR_noISO_ascent (p_{r-1},p_r,p_{r+1})": [
+     2,
+     1,
+     2
+    ]
+   },
+   "4": {
+    "descent_WR_ISO_cases": 9063,
+    "descent_WR_ISO_conclusion_holds": true,
+    "tie_ISO_cases": 860,
+    "tie_ISO_conclusion_holds": true,
+    "witness_descent_ISO_noWR_ascent (p_{r-1},p_r,p_{r+1})": [
+     10,
+     1,
+     2
+    ],
+    "witness_descent_WR_noISO_ascent (p_{r-1},p_r,p_{r+1})": [
+     2,
+     1,
+     2
+    ]
+   },
+   "5": {
+    "descent_WR_ISO_cases": 8992,
+    "descent_WR_ISO_conclusion_holds": true,
+    "tie_ISO_cases": 860,
+    "tie_ISO_conclusion_holds": true,
+    "witness_descent_ISO_noWR_ascent (p_{r-1},p_r,p_{r+1})": [
+     12,
+     1,
+     2
+    ],
+    "witness_descent_WR_noISO_ascent (p_{r-1},p_r,p_{r+1})": [
+     2,
+     1,
+     2
+    ]
+   },
+   "6": {
+    "descent_WR_ISO_cases": 8887,
+    "descent_WR_ISO_conclusion_holds": true,
+    "tie_ISO_cases": 860,
+    "tie_ISO_conclusion_holds": true,
+    "witness_descent_ISO_noWR_ascent (p_{r-1},p_r,p_{r+1})": [
+     14,
+     1,
+     2
+    ],
+    "witness_descent_WR_noISO_ascent (p_{r-1},p_r,p_{r+1})": [
+     2,
+     1,
+     2
+    ]
+   }
+  },
+  "minimal_hypotheses": {
+   "TAIL": "p_r >= p_{r+1} for all r >= L(alpha)  (Levit-Mandrescu; KE graphs)",
+   "ISO": "Q_r >= 0 for every r with r0 <= r <= L(alpha)-1, where r0 is the first strict descent index (p_{r0-1} > p_{r0}); a fortiori for 2 <= r <= L(alpha)-1",
+   "WR": "p_{r-1} <= r p_r needed ONLY at ranks r in [2, L(alpha)-1] where p_{r-1} > p_r strictly; ties (p_{r-1}=p_r) need ISO alone (x=1); r=1 is never a descent because p_0=1<=n=p_1",
+   "p_{r+1}=0": "conclusion y<=1 trivial; also cannot occur for r+1 <= L(alpha) <= alpha",
+   "empty_range": "for alpha <= 3, L(alpha) <= 2 and no prefix hypothesis is needed (TAIL plus p_0<=p_1 already give unimodality)"
+  },
+  "L_equals_floor_2alpha_plus_1_over_3": true,
+  "L_le_alpha": true,
+  "first_prefix_relevant_alpha_by_rank": {
+   "2": 4,
+   "3": 6,
+   "4": 7,
+   "5": 9,
+   "6": 10,
+   "7": 12,
+   "8": 13,
+   "9": 15,
+   "10": 16,
+   "11": 18,
+   "12": 19,
+   "13": 21,
+   "14": 22,
+   "15": 24
+  },
+  "first_prefix_relevant_alpha_equals_ceil_3r_plus_2_over_2": true
+ },
+ "2_bridge_identity_B": {
+  "identity_B_exact": true,
+  "S_r_implies_ordered_LC_gap": "p_r*p_{r-1}/2",
+  "relations_to_OLC_and_GSB": {
+   "GSB - OLC": "p_r*p_{r-1}",
+   "ISO - GSB": "-p_{r-1}*(p_r - p_{r-1})",
+   "OLC - S/2": "p_r*p_{r-1}/2",
+   "chain": "S_r>=0  =>  OLC_r  =>  GSB_r  =>  ISO_r whenever p_{r-1} >= p_r (the only case the prefix lemma uses)"
+  },
+  "9K1_p4_p5_p6": [
+   126,
+   126,
+   84
+  ],
+  "9K1_S5": 15876,
+  "9K1_ISO5": 31752,
+  "9K1_matches_skeleton": true
+ },
+ "3_first_leaf_identity_1_2": {
+  "symbolic_identity_1_2_exact_in_r_and_coefficients": true,
+  "random_forests": 240,
+  "leaf_rank_cells": 11679,
+  "failures": 0,
+  "dp_vs_bruteforce_polynomials_checked": 40,
+  "star_plus_isolates_terminal_D_cells": 864,
+  "star_plus_isolates_terminal_D_negative": 0
+ },
+ "4_four_minor_N_r": {
+  "definition_used": "N_r(B;u,v) := D_r(F,a) - D_r(F-b,a) - D_{r-1}(F-{b,v},a), F = B + leaf a at u + leaf b at v (a,b nonsibling, u != v); equivalently N_r = D_r(E+xV,U+xW) - D_r(E,U) - D_{r-1}(V,W)",
+  "symbolic_reconstruction_equals_printed_formula": true,
+  "printed_formula_symmetric_in_U_V": true,
+  "random_forests_with_nonsibling_leaf_pairs": 240,
+  "pair_rank_cells": 12222,
+  "second_leaf_D_recurrence_failures": 0,
+  "identity_C_failures": 0,
+  "UV_symmetry_failures": 0,
+  "note": "The bivariate kernel N(z,w) whose diagonal is N_r is not reproduced here (its definition is not printed in the skeleton); the coefficient-level definition above is unambiguous and matches the printed formula exactly."
+ },
+ "5_rank_two_ISO_2": {
+  "Q2_general_graph_in_n_m_wedges_triangles": "-3*S*n + 3*T*n + 2*m**2 + m*n**2 - 4*m*n + n**3/2 + n**2/2",
+  "Q2_forest_in_n_m_S": "-3*S*n + 2*m**2 + m*n**2 - 4*m*n + n**3/2 + n**2/2",
+  "f(n,m) = Q2 at S=C(m,2)": "-3*m**2*n/2 + 2*m**2 + m*n**2 - 5*m*n/2 + n**3/2 + n**2/2",
+  "f_matches_closed_form_(n^2(n+1)+m n(2n-5)-m^2(3n-4))/2": true,
+  "Q2 - f = 3 n s  where s = C(m,2) - S >= 0": "3*n*s",
+  "d2f/dm2": "4 - 3*n",
+  "f(n,0)": "n**3/2 + n**2/2",
+  "f(n,n-1)": "2*n**2 - 3*n + 2",
+  "f(n,n-1)_equals_2n^2-3n+2": true,
+  "proof_sketch": "For a forest: m <= n-1 and S = sum_v C(deg v,2) <= C(m,2) (pairs of edges sharing a vertex are pairs of edges). Q2 = f(n,m) + 3n(C(m,2)-S) >= f(n,m). f is concave in m for n>=2 (second derivative 4-3n<0) with f(n,0)=n^2(n+1)/2>0 and f(n,n-1)=2n^2-3n+2>0, so f>0 on [0,n-1]. Hence ISO_2 > 0 for every forest (n=1 trivially). Triangles only increase Q2, so ISO_2 holds for every graph with at most n-1 edges.",
+  "random_forests_checked": 240,
+  "p2_p3_subgraph_formula_failures": 0,
+  "min_Q2_over_random_forests": 4
+ },
+ "6_exhaustive_trees": {
+  "orders": "1..16",
+  "trees": 32508,
+  "non_unimodal": 0,
+  "tail_failures": 0,
+  "WR_failures_in_prefix_1_le_r_lt_L": 0,
+  "WR_failures_anywhere": 21224,
+  "ISO_failures_in_prefix_2_le_r_lt_L": 0,
+  "ISO_failures_anywhere": 0,
+  "S_r_negative_at_certified_prefix_cells_3_le_r_le_8": 0,
+  "S_r_negative_in_prefix_at_r_equal_2 (not claimed by the framework)": 13,
+  "S_r_negative_in_prefix_any_rank": 13,
+  "S_2_negative_prefix_example": {
+   "tree": "star K_{1,4}",
+   "p": [
+    1,
+    5,
+    6,
+    4,
+    1
+   ],
+   "alpha": 4,
+   "L": 3,
+   "S_2": -6
+  },
+  "lemma_derivation_failures": 0,
+  "trees_where_prefix_lemma_is_invoked": 14175,
+  "trees_where_first_descent_at_or_after_L": 18333,
+  "min_Q2": 1,
+  "WR_failure_example_outside_prefix": {
+   "n": 3,
+   "p": [
+    1,
+    3,
+    1
+   ],
+   "r": 2,
+   "L": 1
+  }
+ },
+ "7_kadrawi_levit_n26": {
+  "T_{3,4,4}": {
+   "n": 26,
+   "alpha": 14,
+   "L": 9,
+   "unimodal": true,
+   "LC_breaks": [
+    13
+   ],
+   "ISO_negative_ranks": [],
+   "WR_failures_in_prefix": [],
+   "S_r_negative_in_prefix": [],
+   "S_r_negative_anywhere": [
+    13
+   ],
+   "first_descent": 9
+  },
+  "T*_{3,3,4}": {
+   "n": 26,
+   "alpha": 14,
+   "L": 9,
+   "unimodal": true,
+   "LC_breaks": [
+    13
+   ],
+   "ISO_negative_ranks": [],
+   "WR_failures_in_prefix": [],
+   "S_r_negative_in_prefix": [],
+   "S_r_negative_anywhere": [
+    13
+   ],
+   "first_descent": 9
+  }
+ },
+ "8_general_graphs": {
+  "WR_general_graph_counterexample": {
+   "graph": "K_13 minus the six edges of a K_4",
+   "p": [
+    1,
+    13,
+    6,
+    4,
+    1
+   ],
+   "alpha": 4,
+   "L": 3,
+   "WR_2_holds (p_1 <= 2 p_2)": false,
+   "unimodal": true
+  },
+  "TAIL_general_graph_counterexample": {
+   "graph": "3 K_10 (three disjoint 10-cliques)",
+   "p": [
+    1,
+    30,
+    300,
+    1000
+   ],
+   "alpha": 3,
+   "L": 2,
+   "tail_holds_from_L": false,
+   "note": "alpha < n/2, so Basit-Galvin Theorem 1.3 gives only l = ceil(3*29/32) = 3 = alpha; the KE/bipartite hypothesis is essential"
+  },
+  "ISO_2_random_graph_search": {
+   "graphs_tried": 3000,
+   "witness_Q2_negative": null
+  }
+ },
+ "verdicts": {
+  "lemma_factorisation": true,
+  "lemma_bruteforce": true,
+  "bridge_B": true,
+  "first_leaf_symbolic": true,
+  "first_leaf_numeric": true,
+  "N_r_symbolic": true,
+  "N_r_numeric_and_identity_C": true,
+  "rank2_elementary_proof": true,
+  "trees_all_hypotheses_hold": true,
+  "trees_no_S_r_negative_at_certified_ranks_3_to_8": true,
+  "kadrawi_levit_n26_ISO_WR_hold_in_prefix": true
+ },
+ "all_pass": true,
+ "elapsed_seconds": 8.6
+}
