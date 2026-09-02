@@ -1,0 +1,441 @@
+{
+ "auditor": "audit_forest_indep_independent.py",
+ "object_under_audit": "forest_indep.py",
+ "sha256": {
+  "forest_indep.py": "aeb9491e6cc066df99d3015e8d096daa3ec7f0c70f84121c4a5bf1c03afaa62b",
+  "audit_forest_indep_independent.py": "77aa48ad2ba1ac818f5e02bf696a3c7b829cc69e193ac230ac18d77f686da76a"
+ },
+ "environment": {
+  "python": "3.12.3",
+  "networkx": "3.6.1",
+  "sympy": "1.14.0",
+  "platform": "Linux-6.12.94+-x86_64-with-glibc2.39"
+ },
+ "parameters": {
+  "N_TREES": 16,
+  "N_CANON": 12,
+  "N_FORESTS": 12,
+  "NX_FULL_CHECK_UPTO": 12,
+  "NX_SAMPLE_PER_N": 300,
+  "N_RANDOM_SEQ": 3000,
+  "L_RANGE": 2000,
+  "SEED": 993
+ },
+ "reference_values": {
+  "A000055_n0_16": [
+   1,
+   1,
+   1,
+   1,
+   2,
+   3,
+   6,
+   11,
+   23,
+   47,
+   106,
+   235,
+   551,
+   1301,
+   3159,
+   7741,
+   19320
+  ],
+  "A005195_n0_12": [
+   1,
+   1,
+   2,
+   3,
+   6,
+   10,
+   20,
+   37,
+   76,
+   153,
+   329,
+   710,
+   1601
+  ]
+ },
+ "methods": [
+  "vertex recurrence I(G)=I(G-v)+xI(G-N[v]), max-degree v, bitmask memo",
+  "explicit independent-set enumeration (increasing-index extension)",
+  "networkx enumerate_all_cliques on the complement graph",
+  "Kronecker-substitution polynomial products, cross-checked with sympy.Poly",
+  "networkx.nonisomorphic_trees as the independent tree generator",
+  "AHU canonical strings rooted at double-BFS diameter centres",
+  "forests = integer partitions x combinations_with_replacement of tree indices",
+  "framework quantities from definitions with Fraction/ceil",
+  "KLYM T1 hand-built from the paper's description + sympy closed form"
+ ],
+ "comparisons": [
+  {
+   "name": "core_tree_counts_vs_A000055_n1_16",
+   "match": true,
+   "count": 32508,
+   "per_n": {
+    "1": 1,
+    "2": 1,
+    "3": 1,
+    "4": 2,
+    "5": 3,
+    "6": 6,
+    "7": 11,
+    "8": 23,
+    "9": 47,
+    "10": 106,
+    "11": 235,
+    "12": 551,
+    "13": 1301,
+    "14": 3159,
+    "15": 7741,
+    "16": 19320
+   }
+  },
+  {
+   "name": "core_level_sequences_are_valid_preorder_depth_sequences",
+   "match": true,
+   "count": 32508
+  },
+  {
+   "name": "level_sequence_to_parent_vs_independent_backward_scan",
+   "match": true,
+   "count": 32508
+  },
+  {
+   "name": "tree_polys_upto_shape_and_counts",
+   "match": true,
+   "count": 32508,
+   "seconds": 0.898
+  },
+  {
+   "name": "networkx_tree_counts_vs_A000055_n1_16",
+   "match": true,
+   "count": 32508,
+   "per_n": {
+    "1": 1,
+    "2": 1,
+    "3": 1,
+    "4": 2,
+    "5": 3,
+    "6": 6,
+    "7": 11,
+    "8": 23,
+    "9": 47,
+    "10": 106,
+    "11": 235,
+    "12": 551,
+    "13": 1301,
+    "14": 3159,
+    "15": 7741,
+    "16": 19320
+   }
+  },
+  {
+   "name": "networkx_graphs_are_trees_and_recurrence_poly_invariants",
+   "match": true,
+   "count": 32508
+  },
+  {
+   "name": "level_sequences_core_vs_networkx_bfs_depths_in_order_n1_16",
+   "match": true,
+   "count": 32508
+  },
+  {
+   "name": "parent_to_edges_vs_networkx_edge_sets_per_index_n1_16",
+   "match": true,
+   "count": 32508
+  },
+  {
+   "name": "tree_polys_upto_vs_recurrence_on_networkx_trees_per_index_n1_16",
+   "match": true,
+   "count": 32508,
+   "recurrence_states_total": 2024386,
+   "recurrence_states_max": 291
+  },
+  {
+   "name": "recurrence_vs_networkx_complement_cliques_sample",
+   "match": true,
+   "count": 2187,
+   "sample": "all trees n<=12 plus 300 seeded per n in 13..16"
+  },
+  {
+   "name": "recurrence_vs_explicit_enumeration_sample",
+   "match": true,
+   "count": 2187
+  },
+  {
+   "name": "tree_polys_upto_vs_recurrence_on_core_level_sequences_per_index_n1_16",
+   "match": true,
+   "count": 32508,
+   "seconds": 2.832
+  },
+  {
+   "name": "tree_poly_multisets_core_vs_networkx_n1_16",
+   "match": true,
+   "count": 32508,
+   "distinct_polys_per_n": {
+    "1": 1,
+    "2": 1,
+    "3": 1,
+    "4": 2,
+    "5": 3,
+    "6": 6,
+    "7": 11,
+    "8": 22,
+    "9": 46,
+    "10": 93,
+    "11": 213,
+    "12": 475,
+    "13": 1102,
+    "14": 2583,
+    "15": 6283,
+    "16": 15443
+   }
+  },
+  {
+   "name": "canonical_forms_core_vs_networkx_per_index_n1_12",
+   "match": true,
+   "count": 987
+  },
+  {
+   "name": "canonical_form_multisets_core_vs_networkx_n1_12",
+   "match": true,
+   "count": 987
+  },
+  {
+   "name": "canonical_forms_pairwise_distinct_count_vs_A000055_n1_12",
+   "match": true,
+   "count": 987
+  },
+  {
+   "name": "canonical_form_invariant_under_random_relabelling_n1_12",
+   "match": true,
+   "count": 987
+  },
+  {
+   "name": "canonical_form_vs_nx_is_isomorphic_all_pairs_n1_8",
+   "match": true,
+   "count": 327
+  },
+  {
+   "name": "forest_counts_independent_enumeration_vs_A005195_n1_12",
+   "match": true,
+   "count": 2948,
+   "per_n": {
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 6,
+    "5": 10,
+    "6": 20,
+    "7": 37,
+    "8": 76,
+    "9": 153,
+    "10": 329,
+    "11": 710,
+    "12": 1601
+   }
+  },
+  {
+   "name": "forest_counts_core_vs_A005195_n1_12",
+   "match": true,
+   "count": 2948,
+   "per_n": {
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 6,
+    "5": 10,
+    "6": 20,
+    "7": 37,
+    "8": 76,
+    "9": 153,
+    "10": 329,
+    "11": 710,
+    "12": 1601
+   }
+  },
+  {
+   "name": "forest_poly_kronecker_product_vs_recurrence_on_union_graph",
+   "match": true,
+   "count": 2948
+  },
+  {
+   "name": "forest_poly_kronecker_product_vs_sympy_product",
+   "match": true,
+   "count": 2948
+  },
+  {
+   "name": "core_forest_components_valid_distinct_int_coefficients",
+   "match": true,
+   "count": 2948
+  },
+  {
+   "name": "forest_component_tuples_core_vs_independent_as_sets_n1_12",
+   "match": true,
+   "count": 2948
+  },
+  {
+   "name": "forest_polys_core_vs_independent_per_forest_n1_12",
+   "match": true,
+   "count": 2948
+  },
+  {
+   "name": "forest_poly_multisets_core_vs_independent_n1_12",
+   "match": true,
+   "count": 2948,
+   "distinct_forest_polys_per_n": {
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 6,
+    "5": 10,
+    "6": 20,
+    "7": 36,
+    "8": 73,
+    "9": 142,
+    "10": 294,
+    "11": 618,
+    "12": 1348
+   }
+  },
+  {
+   "name": "forest_canonical_form_multisets_core_vs_independent_n1_12",
+   "match": true,
+   "count": 2948
+  },
+  {
+   "name": "L_cutoff_vs_ceil_fraction_alpha_0_2000",
+   "match": true,
+   "count": 2001
+  },
+  {
+   "name": "wr_slack_and_Q_iso_vs_independent_on_all_forests_n1_12",
+   "match": true,
+   "count": 21547
+  },
+  {
+   "name": "audit_sequence_with_ratio_all_fields_exact_on_all_forests_n1_12",
+   "match": true,
+   "count": 2948
+  },
+  {
+   "name": "audit_sequence_without_ratio_keys_and_fields_on_all_forests_n1_12",
+   "match": true,
+   "count": 2948
+  },
+  {
+   "name": "audit_sequence_all_fields_exact_on_random_and_handcrafted_sequences",
+   "match": true,
+   "count": 3051,
+   "sequences_not_unimodal": 2290,
+   "sequences_not_log_concave": 2416,
+   "sequences_tail_fails": 2095
+  },
+  {
+   "name": "wr_slack_and_Q_iso_vs_independent_on_random_sequences",
+   "match": true,
+   "count": 3051
+  },
+  {
+   "name": "klym_3kk_tree_4_structure_26_vertices_tree_degree_multiset",
+   "match": true
+  },
+  {
+   "name": "klym_T1_recurrence_vs_published_KLYM_T1_POLY",
+   "match": true,
+   "recurrence_states": 5076
+  },
+  {
+   "name": "klym_T1_handbuilt_from_paper_description_recurrence_vs_published",
+   "match": true,
+   "recurrence_states": 5076
+  },
+  {
+   "name": "klym_T1_handbuilt_isomorphic_to_klym_3kk_tree_4_vf2_and_canonical_form",
+   "match": true
+  },
+  {
+   "name": "klym_T1_explicit_enumeration_vs_published",
+   "match": true,
+   "count": 506462
+  },
+  {
+   "name": "klym_T1_networkx_complement_cliques_vs_published",
+   "match": true,
+   "count": 506462
+  },
+  {
+   "name": "klym_T1_sympy_closed_form_vs_published",
+   "match": true
+  },
+  {
+   "name": "klym_3kk_tree_family_recurrence_vs_sympy_closed_form_left1_3_k1_4",
+   "match": true,
+   "count": 12
+  },
+  {
+   "name": "klym_T1_unimodal_not_log_concave_and_audit_sequence_fields_exact",
+   "match": true
+  }
+ ],
+ "notes": [
+  {
+   "forests_n1_12_all_unimodal": true,
+   "forests_n1_12_all_log_concave": true,
+   "forests_n1_12_all_tail_ok": true,
+   "forests_n1_12_min_wr_prefix": 2,
+   "forests_n1_12_min_iso_prefix_Q": 4,
+   "forests_n1_12_min_iso_prefix_ratio": {
+    "fraction": "3097/2970"
+   },
+   "forests_n1_12_min_iso_prefix_ratio_float": 1.0427609427609428,
+   "forests_n1_12_min_iso_prefix_ratio_attained_at_(n,components)": [
+    12,
+    [
+     [
+      12,
+      550
+     ]
+    ]
+   ],
+   "forests_n1_12_with_nonempty_prefix": 2941
+  },
+  {
+   "klym_T1_audit": {
+    "alpha": 14,
+    "L": 9,
+    "unimodal": true,
+    "log_concave": false,
+    "tail_ok": true,
+    "wr_prefix_min": 25,
+    "iso_prefix_min": 77,
+    "wr_all_min": -2316,
+    "iso_all_min": 77,
+    "iso_prefix_ratio_min": {
+     "fraction": "677/600"
+    }
+   },
+   "klym_T1_log_concavity_violations_r": [
+    13
+   ]
+  }
+ ],
+ "stage_seconds": {
+  "1_core_generator_and_tree_polys": 1.242,
+  "2_networkx_trees_polynomials": 14.881,
+  "3_canonical_forms": 0.045,
+  "4_forests": 0.401,
+  "5_framework_quantities": 0.264,
+  "6_klym_T1": 2.244
+ },
+ "summary": {
+  "n_comparisons": 42,
+  "n_failed": 0,
+  "all_pass": true,
+  "total_seconds": 19.079
+ },
+ "first_mismatch": null,
+ "verdict": "PASS_INDEPENDENT_FOREST_INDEP_CORE"
+}
