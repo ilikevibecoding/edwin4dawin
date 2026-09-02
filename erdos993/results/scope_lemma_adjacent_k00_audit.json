@@ -1,0 +1,428 @@
+{
+  "audit_first_witnesses": {
+    "adjacent:k01": {
+      "H_edges": [
+        [
+          0,
+          1
+        ]
+      ],
+      "K_vertices": [
+        1
+      ],
+      "S": [
+        0
+      ],
+      "components": [
+        [
+          2,
+          0
+        ]
+      ],
+      "n": 2,
+      "u": 0,
+      "v": 1
+    },
+    "adjacent:k10": {
+      "H_edges": [
+        [
+          0,
+          1
+        ]
+      ],
+      "K_vertices": [
+        1
+      ],
+      "S": [
+        0
+      ],
+      "components": [
+        [
+          2,
+          0
+        ]
+      ],
+      "n": 2,
+      "u": 1,
+      "v": 0
+    },
+    "adjacent:k11": {
+      "H_edges": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "K_vertices": [
+        0,
+        2
+      ],
+      "S": [
+        1
+      ],
+      "components": [
+        [
+          3,
+          0
+        ]
+      ],
+      "n": 3,
+      "u": 0,
+      "v": 2
+    },
+    "nonadjacent:k00": {
+      "H_edges": [],
+      "K_vertices": [],
+      "S": [
+        0,
+        1
+      ],
+      "components": [
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "n": 2,
+      "u": 0,
+      "v": 1
+    },
+    "nonadjacent:k01": {
+      "H_edges": [],
+      "K_vertices": [
+        1
+      ],
+      "S": [
+        0
+      ],
+      "components": [
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "n": 2,
+      "u": 0,
+      "v": 1
+    },
+    "nonadjacent:k10": {
+      "H_edges": [],
+      "K_vertices": [
+        1
+      ],
+      "S": [
+        0
+      ],
+      "components": [
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "n": 2,
+      "u": 1,
+      "v": 0
+    },
+    "nonadjacent:k11": {
+      "H_edges": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "K_vertices": [
+        1,
+        2
+      ],
+      "S": [
+        0
+      ],
+      "components": [
+        [
+          3,
+          0
+        ]
+      ],
+      "n": 3,
+      "u": 1,
+      "v": 2
+    }
+  },
+  "comparison_with_producer": {
+    "10": "identical",
+    "2": "identical",
+    "3": "identical",
+    "4": "identical",
+    "5": "identical",
+    "6": "identical",
+    "7": "identical",
+    "8": "identical",
+    "9": "identical"
+  },
+  "counts_ordered_pairs_recomputed": {
+    "10": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 34376,
+        "k10": 34376,
+        "k11": 119670
+      },
+      "nonadjacent": {
+        "k00": 137476,
+        "k01": 295788,
+        "k10": 295788,
+        "k11": 703786
+      }
+    },
+    "2": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 2,
+        "k10": 2,
+        "k11": 0
+      },
+      "nonadjacent": {
+        "k00": 2,
+        "k01": 2,
+        "k10": 2,
+        "k11": 0
+      }
+    },
+    "3": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 8,
+        "k10": 8,
+        "k11": 6
+      },
+      "nonadjacent": {
+        "k00": 16,
+        "k01": 20,
+        "k10": 20,
+        "k11": 12
+      }
+    },
+    "4": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 40,
+        "k10": 40,
+        "k11": 50
+      },
+      "nonadjacent": {
+        "k00": 84,
+        "k01": 122,
+        "k10": 122,
+        "k11": 130
+      }
+    },
+    "5": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 124,
+        "k10": 124,
+        "k11": 220
+      },
+      "nonadjacent": {
+        "k00": 344,
+        "k01": 536,
+        "k10": 536,
+        "k11": 716
+      }
+    },
+    "6": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 450,
+        "k10": 450,
+        "k11": 948
+      },
+      "nonadjacent": {
+        "k00": 1312,
+        "k01": 2238,
+        "k10": 2238,
+        "k11": 3614
+      }
+    },
+    "7": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 1312,
+        "k10": 1312,
+        "k11": 3308
+      },
+      "nonadjacent": {
+        "k00": 4436,
+        "k01": 7992,
+        "k10": 7992,
+        "k11": 14430
+      }
+    },
+    "8": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 4130,
+        "k10": 4130,
+        "k11": 11634
+      },
+      "nonadjacent": {
+        "k00": 14636,
+        "k01": 28204,
+        "k10": 28204,
+        "k11": 56846
+      }
+    },
+    "9": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 11740,
+        "k10": 11740,
+        "k11": 37308
+      },
+      "nonadjacent": {
+        "k00": 45180,
+        "k01": 91776,
+        "k10": 91776,
+        "k11": 201016
+      }
+    }
+  },
+  "failures": [],
+  "forest_counts": {
+    "10": 329,
+    "2": 2,
+    "3": 3,
+    "4": 6,
+    "5": 10,
+    "6": 20,
+    "7": 37,
+    "8": 76,
+    "9": 153
+  },
+  "methods": {
+    "acyclicity": "iterative DFS back-edge detection on an explicit adjacency dict of H + p",
+    "attachability_equivalence": "all 2^n - 1 nonempty S: DFS-acyclic(H+p) == (<= 1 vertex of S per BFS component)",
+    "forests": "integer partitions x combinations_with_replacement of tree indices; counts vs OEIS A005195",
+    "mask": "K = H - N(p) from the adjacency of H + p; bits = [u in V(K)], [v in V(K)]",
+    "pairs": "ordered pairs (u, v) of distinct vertices",
+    "trees": "networkx.nonisomorphic_trees; counts vs OEIS A000055; pairwise networkx.is_isomorphic"
+  },
+  "min_order_recomputed": {
+    "adjacent:k00": null,
+    "adjacent:k01": 2,
+    "adjacent:k10": 2,
+    "adjacent:k11": 3,
+    "nonadjacent:k00": 2,
+    "nonadjacent:k01": 2,
+    "nonadjacent:k10": 2,
+    "nonadjacent:k11": 3
+  },
+  "networkx_version": "3.6.1",
+  "nmax": 10,
+  "oeis_A005195_expected": {
+    "1": 1,
+    "10": 329,
+    "2": 2,
+    "3": 3,
+    "4": 6,
+    "5": 10,
+    "6": 20,
+    "7": 37,
+    "8": 76,
+    "9": 153
+  },
+  "per_n": {
+    "10": {
+      "all_nonempty_subsets_(H,S)_tested": 336567,
+      "attachable_(H,S)_pairs": 18014,
+      "forests": 329,
+      "instances_(H,u,v,S)_ordered_pairs": 1621260
+    },
+    "2": {
+      "all_nonempty_subsets_(H,S)_tested": 6,
+      "attachable_(H,S)_pairs": 5,
+      "forests": 2,
+      "instances_(H,u,v,S)_ordered_pairs": 10
+    },
+    "3": {
+      "all_nonempty_subsets_(H,S)_tested": 21,
+      "attachable_(H,S)_pairs": 15,
+      "forests": 3,
+      "instances_(H,u,v,S)_ordered_pairs": 90
+    },
+    "4": {
+      "all_nonempty_subsets_(H,S)_tested": 90,
+      "attachable_(H,S)_pairs": 49,
+      "forests": 6,
+      "instances_(H,u,v,S)_ordered_pairs": 588
+    },
+    "5": {
+      "all_nonempty_subsets_(H,S)_tested": 310,
+      "attachable_(H,S)_pairs": 130,
+      "forests": 10,
+      "instances_(H,u,v,S)_ordered_pairs": 2600
+    },
+    "6": {
+      "all_nonempty_subsets_(H,S)_tested": 1260,
+      "attachable_(H,S)_pairs": 375,
+      "forests": 20,
+      "instances_(H,u,v,S)_ordered_pairs": 11250
+    },
+    "7": {
+      "all_nonempty_subsets_(H,S)_tested": 4699,
+      "attachable_(H,S)_pairs": 971,
+      "forests": 37,
+      "instances_(H,u,v,S)_ordered_pairs": 40782
+    },
+    "8": {
+      "all_nonempty_subsets_(H,S)_tested": 19380,
+      "attachable_(H,S)_pairs": 2639,
+      "forests": 76,
+      "instances_(H,u,v,S)_ordered_pairs": 147784
+    },
+    "9": {
+      "all_nonempty_subsets_(H,S)_tested": 78183,
+      "attachable_(H,S)_pairs": 6813,
+      "forests": 153,
+      "instances_(H,u,v,S)_ordered_pairs": 490536
+    }
+  },
+  "producer_witnesses_reverified": [
+    "adjacent:k01",
+    "adjacent:k10",
+    "adjacent:k11",
+    "nonadjacent:k00",
+    "nonadjacent:k01",
+    "nonadjacent:k10",
+    "nonadjacent:k11"
+  ],
+  "script": "scope_lemma_adjacent_k00_audit_independent.py",
+  "sha256": {
+    "forest_indep.py (reference only, not imported)": "aeb9491e6cc066df99d3015e8d096daa3ec7f0c70f84121c4a5bf1c03afaa62b",
+    "scope_lemma_adjacent_k00_audit_independent.py": "504e4f5c302b8c752d196ef0cee3d6f3f404450527be526ff45f57b1a695ebab",
+    "scope_lemma_adjacent_k00_producer.json": "bd33ae2a5a115ed3d7b7a9ed4ae5c5b674340d7624afdbda57fd39ac7ebe624a",
+    "scope_lemma_adjacent_k00_producer.py": "e37822f4eb25ba940dee8009c7ac82e929b01d8361f22d12cf0d73396798e13f"
+  },
+  "status": "PASS",
+  "title": "Independent audit of the adjacent-k00 scope lemma census"
+}

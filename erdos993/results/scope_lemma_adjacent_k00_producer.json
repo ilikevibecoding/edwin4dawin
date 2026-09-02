@@ -1,0 +1,697 @@
+{
+  "adjacent_k00_total": 0,
+  "checks": {
+    "all_nonempty_subsets_equivalence_acyclic_iff_one_per_component": true,
+    "closed_form_matches_every_forest": true,
+    "every_direct_S_verified_forest_by_unionfind": true,
+    "forest_counts_match_OEIS_A005195": true,
+    "nonadjacent_k00_always_different_components": true,
+    "u_v_symmetry_k01_equals_k10": true
+  },
+  "conventions": {
+    "H": "nonisomorphic forest of order n, vertices 0..n-1, components from forest_indep.forests concatenated with vertex offsets; tree i of order k = i-th WROM level sequence",
+    "S": "nonempty subset of V(H); p = new vertex n adjacent exactly to S",
+    "attachable": "H + p is a forest; verified by union-find |E| == |V| - #components",
+    "cell_order": [
+      "adjacent:k00",
+      "adjacent:k01",
+      "adjacent:k10",
+      "adjacent:k11",
+      "nonadjacent:k00",
+      "nonadjacent:k01",
+      "nonadjacent:k10",
+      "nonadjacent:k11"
+    ],
+    "geometry": "adjacent iff uv in E(H), else nonadjacent",
+    "marks": "ordered pair (u, v) of distinct vertices; every unordered pair {u, v} is counted with both role assignments (k01 and k10 are distinguished)",
+    "mask": "k<b_u><b_v>, b_u = 1 iff u not in S (u retained in K = H - S), b_v = 1 iff v not in S; k00 = both marks deleted"
+  },
+  "counts_ordered_pairs": {
+    "10": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 34376,
+        "k10": 34376,
+        "k11": 119670
+      },
+      "nonadjacent": {
+        "k00": 137476,
+        "k01": 295788,
+        "k10": 295788,
+        "k11": 703786
+      }
+    },
+    "2": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 2,
+        "k10": 2,
+        "k11": 0
+      },
+      "nonadjacent": {
+        "k00": 2,
+        "k01": 2,
+        "k10": 2,
+        "k11": 0
+      }
+    },
+    "3": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 8,
+        "k10": 8,
+        "k11": 6
+      },
+      "nonadjacent": {
+        "k00": 16,
+        "k01": 20,
+        "k10": 20,
+        "k11": 12
+      }
+    },
+    "4": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 40,
+        "k10": 40,
+        "k11": 50
+      },
+      "nonadjacent": {
+        "k00": 84,
+        "k01": 122,
+        "k10": 122,
+        "k11": 130
+      }
+    },
+    "5": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 124,
+        "k10": 124,
+        "k11": 220
+      },
+      "nonadjacent": {
+        "k00": 344,
+        "k01": 536,
+        "k10": 536,
+        "k11": 716
+      }
+    },
+    "6": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 450,
+        "k10": 450,
+        "k11": 948
+      },
+      "nonadjacent": {
+        "k00": 1312,
+        "k01": 2238,
+        "k10": 2238,
+        "k11": 3614
+      }
+    },
+    "7": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 1312,
+        "k10": 1312,
+        "k11": 3308
+      },
+      "nonadjacent": {
+        "k00": 4436,
+        "k01": 7992,
+        "k10": 7992,
+        "k11": 14430
+      }
+    },
+    "8": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 4130,
+        "k10": 4130,
+        "k11": 11634
+      },
+      "nonadjacent": {
+        "k00": 14636,
+        "k01": 28204,
+        "k10": 28204,
+        "k11": 56846
+      }
+    },
+    "9": {
+      "adjacent": {
+        "k00": 0,
+        "k01": 11740,
+        "k10": 11740,
+        "k11": 37308
+      },
+      "nonadjacent": {
+        "k00": 45180,
+        "k01": 91776,
+        "k10": 91776,
+        "k11": 201016
+      }
+    }
+  },
+  "counts_unordered_pairs_derived": {
+    "adjacent": {
+      "10": {
+        "both_marks_deleted": 0,
+        "exactly_one_mark_deleted": 34376,
+        "no_mark_deleted": 59835
+      },
+      "2": {
+        "both_marks_deleted": 0,
+        "exactly_one_mark_deleted": 2,
+        "no_mark_deleted": 0
+      },
+      "3": {
+        "both_marks_deleted": 0,
+        "exactly_one_mark_deleted": 8,
+        "no_mark_deleted": 3
+      },
+      "4": {
+        "both_marks_deleted": 0,
+        "exactly_one_mark_deleted": 40,
+        "no_mark_deleted": 25
+      },
+      "5": {
+        "both_marks_deleted": 0,
+        "exactly_one_mark_deleted": 124,
+        "no_mark_deleted": 110
+      },
+      "6": {
+        "both_marks_deleted": 0,
+        "exactly_one_mark_deleted": 450,
+        "no_mark_deleted": 474
+      },
+      "7": {
+        "both_marks_deleted": 0,
+        "exactly_one_mark_deleted": 1312,
+        "no_mark_deleted": 1654
+      },
+      "8": {
+        "both_marks_deleted": 0,
+        "exactly_one_mark_deleted": 4130,
+        "no_mark_deleted": 5817
+      },
+      "9": {
+        "both_marks_deleted": 0,
+        "exactly_one_mark_deleted": 11740,
+        "no_mark_deleted": 18654
+      }
+    },
+    "nonadjacent": {
+      "10": {
+        "both_marks_deleted": 68738,
+        "exactly_one_mark_deleted": 295788,
+        "no_mark_deleted": 351893
+      },
+      "2": {
+        "both_marks_deleted": 1,
+        "exactly_one_mark_deleted": 2,
+        "no_mark_deleted": 0
+      },
+      "3": {
+        "both_marks_deleted": 8,
+        "exactly_one_mark_deleted": 20,
+        "no_mark_deleted": 6
+      },
+      "4": {
+        "both_marks_deleted": 42,
+        "exactly_one_mark_deleted": 122,
+        "no_mark_deleted": 65
+      },
+      "5": {
+        "both_marks_deleted": 172,
+        "exactly_one_mark_deleted": 536,
+        "no_mark_deleted": 358
+      },
+      "6": {
+        "both_marks_deleted": 656,
+        "exactly_one_mark_deleted": 2238,
+        "no_mark_deleted": 1807
+      },
+      "7": {
+        "both_marks_deleted": 2218,
+        "exactly_one_mark_deleted": 7992,
+        "no_mark_deleted": 7215
+      },
+      "8": {
+        "both_marks_deleted": 7318,
+        "exactly_one_mark_deleted": 28204,
+        "no_mark_deleted": 28423
+      },
+      "9": {
+        "both_marks_deleted": 22590,
+        "exactly_one_mark_deleted": 91776,
+        "no_mark_deleted": 100508
+      }
+    }
+  },
+  "min_order": {
+    "adjacent:k00": null,
+    "adjacent:k01": 2,
+    "adjacent:k10": 2,
+    "adjacent:k11": 3,
+    "nonadjacent:k00": 2,
+    "nonadjacent:k01": 2,
+    "nonadjacent:k10": 2,
+    "nonadjacent:k11": 3
+  },
+  "nmax": 10,
+  "orders": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "per_n": {
+    "10": {
+      "all_nonempty_subsets_(H,S)_tested": 336567,
+      "attachable_(H,S)_pairs_verified_acyclic_by_unionfind": 18014,
+      "forests": 329,
+      "instances_(H,u,v,S)_ordered_pairs": 1621260,
+      "nonadjacent_k00_instances_checked_different_components": 137476
+    },
+    "2": {
+      "all_nonempty_subsets_(H,S)_tested": 6,
+      "attachable_(H,S)_pairs_verified_acyclic_by_unionfind": 5,
+      "forests": 2,
+      "instances_(H,u,v,S)_ordered_pairs": 10,
+      "nonadjacent_k00_instances_checked_different_components": 2
+    },
+    "3": {
+      "all_nonempty_subsets_(H,S)_tested": 21,
+      "attachable_(H,S)_pairs_verified_acyclic_by_unionfind": 15,
+      "forests": 3,
+      "instances_(H,u,v,S)_ordered_pairs": 90,
+      "nonadjacent_k00_instances_checked_different_components": 16
+    },
+    "4": {
+      "all_nonempty_subsets_(H,S)_tested": 90,
+      "attachable_(H,S)_pairs_verified_acyclic_by_unionfind": 49,
+      "forests": 6,
+      "instances_(H,u,v,S)_ordered_pairs": 588,
+      "nonadjacent_k00_instances_checked_different_components": 84
+    },
+    "5": {
+      "all_nonempty_subsets_(H,S)_tested": 310,
+      "attachable_(H,S)_pairs_verified_acyclic_by_unionfind": 130,
+      "forests": 10,
+      "instances_(H,u,v,S)_ordered_pairs": 2600,
+      "nonadjacent_k00_instances_checked_different_components": 344
+    },
+    "6": {
+      "all_nonempty_subsets_(H,S)_tested": 1260,
+      "attachable_(H,S)_pairs_verified_acyclic_by_unionfind": 375,
+      "forests": 20,
+      "instances_(H,u,v,S)_ordered_pairs": 11250,
+      "nonadjacent_k00_instances_checked_different_components": 1312
+    },
+    "7": {
+      "all_nonempty_subsets_(H,S)_tested": 4699,
+      "attachable_(H,S)_pairs_verified_acyclic_by_unionfind": 971,
+      "forests": 37,
+      "instances_(H,u,v,S)_ordered_pairs": 40782,
+      "nonadjacent_k00_instances_checked_different_components": 4436
+    },
+    "8": {
+      "all_nonempty_subsets_(H,S)_tested": 19380,
+      "attachable_(H,S)_pairs_verified_acyclic_by_unionfind": 2639,
+      "forests": 76,
+      "instances_(H,u,v,S)_ordered_pairs": 147784,
+      "nonadjacent_k00_instances_checked_different_components": 14636
+    },
+    "9": {
+      "all_nonempty_subsets_(H,S)_tested": 78183,
+      "attachable_(H,S)_pairs_verified_acyclic_by_unionfind": 6813,
+      "forests": 153,
+      "instances_(H,u,v,S)_ordered_pairs": 490536,
+      "nonadjacent_k00_instances_checked_different_components": 45180
+    }
+  },
+  "script": "scope_lemma_adjacent_k00_producer.py",
+  "sha256": {
+    "forest_indep.py": "aeb9491e6cc066df99d3015e8d096daa3ec7f0c70f84121c4a5bf1c03afaa62b",
+    "scope_lemma_adjacent_k00_producer.py": "e37822f4eb25ba940dee8009c7ac82e929b01d8361f22d12cf0d73396798e13f"
+  },
+  "status": "PASS",
+  "title": "Scope lemma: adjacent-k00 cell is empty (exact structural producer)",
+  "totals_ordered_pairs": {
+    "adjacent": {
+      "k00": 0,
+      "k01": 52182,
+      "k10": 52182,
+      "k11": 173144
+    },
+    "nonadjacent": {
+      "k00": 203486,
+      "k01": 426678,
+      "k10": 426678,
+      "k11": 980550
+    }
+  },
+  "witnesses_first_in_enumeration_order": {
+    "adjacent:k01": {
+      "H_edges": [
+        [
+          0,
+          1
+        ]
+      ],
+      "H_plus_p_edges": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "K_edges": [],
+      "K_vertices": [
+        1
+      ],
+      "S": [
+        0
+      ],
+      "component_level_sequences": [
+        [
+          0,
+          1
+        ]
+      ],
+      "components": [
+        [
+          2,
+          0
+        ]
+      ],
+      "geometry": "adjacent",
+      "mask": "k01",
+      "n": 2,
+      "p": 2,
+      "u": 0,
+      "u_in_K": false,
+      "v": 1,
+      "v_in_K": true
+    },
+    "adjacent:k10": {
+      "H_edges": [
+        [
+          0,
+          1
+        ]
+      ],
+      "H_plus_p_edges": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "K_edges": [],
+      "K_vertices": [
+        0
+      ],
+      "S": [
+        1
+      ],
+      "component_level_sequences": [
+        [
+          0,
+          1
+        ]
+      ],
+      "components": [
+        [
+          2,
+          0
+        ]
+      ],
+      "geometry": "adjacent",
+      "mask": "k10",
+      "n": 2,
+      "p": 2,
+      "u": 0,
+      "u_in_K": true,
+      "v": 1,
+      "v_in_K": false
+    },
+    "adjacent:k11": {
+      "H_edges": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "H_plus_p_edges": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "K_edges": [
+        [
+          0,
+          1
+        ]
+      ],
+      "K_vertices": [
+        0,
+        1
+      ],
+      "S": [
+        2
+      ],
+      "component_level_sequences": [
+        [
+          0,
+          1,
+          1
+        ]
+      ],
+      "components": [
+        [
+          3,
+          0
+        ]
+      ],
+      "geometry": "adjacent",
+      "mask": "k11",
+      "n": 3,
+      "p": 3,
+      "u": 0,
+      "u_in_K": true,
+      "v": 1,
+      "v_in_K": true
+    },
+    "nonadjacent:k00": {
+      "H_edges": [],
+      "H_plus_p_edges": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "K_edges": [],
+      "K_vertices": [],
+      "S": [
+        0,
+        1
+      ],
+      "component_level_sequences": [
+        [
+          0
+        ],
+        [
+          0
+        ]
+      ],
+      "components": [
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "geometry": "nonadjacent",
+      "mask": "k00",
+      "n": 2,
+      "p": 2,
+      "u": 0,
+      "u_in_K": false,
+      "v": 1,
+      "v_in_K": false
+    },
+    "nonadjacent:k01": {
+      "H_edges": [],
+      "H_plus_p_edges": [
+        [
+          0,
+          2
+        ]
+      ],
+      "K_edges": [],
+      "K_vertices": [
+        1
+      ],
+      "S": [
+        0
+      ],
+      "component_level_sequences": [
+        [
+          0
+        ],
+        [
+          0
+        ]
+      ],
+      "components": [
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "geometry": "nonadjacent",
+      "mask": "k01",
+      "n": 2,
+      "p": 2,
+      "u": 0,
+      "u_in_K": false,
+      "v": 1,
+      "v_in_K": true
+    },
+    "nonadjacent:k10": {
+      "H_edges": [],
+      "H_plus_p_edges": [
+        [
+          1,
+          2
+        ]
+      ],
+      "K_edges": [],
+      "K_vertices": [
+        0
+      ],
+      "S": [
+        1
+      ],
+      "component_level_sequences": [
+        [
+          0
+        ],
+        [
+          0
+        ]
+      ],
+      "components": [
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "geometry": "nonadjacent",
+      "mask": "k10",
+      "n": 2,
+      "p": 2,
+      "u": 0,
+      "u_in_K": true,
+      "v": 1,
+      "v_in_K": false
+    },
+    "nonadjacent:k11": {
+      "H_edges": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "H_plus_p_edges": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "K_edges": [],
+      "K_vertices": [
+        1,
+        2
+      ],
+      "S": [
+        0
+      ],
+      "component_level_sequences": [
+        [
+          0,
+          1,
+          1
+        ]
+      ],
+      "components": [
+        [
+          3,
+          0
+        ]
+      ],
+      "geometry": "nonadjacent",
+      "mask": "k11",
+      "n": 3,
+      "p": 3,
+      "u": 1,
+      "u_in_K": true,
+      "v": 2,
+      "v_in_K": true
+    }
+  }
+}
