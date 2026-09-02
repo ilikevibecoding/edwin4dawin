@@ -1,0 +1,29 @@
+{
+ "marker": "LEAF_LEMMA_UNIFORM_S_PARTIAL",
+ "provenance": {
+  "date_note": "no timestamp by design; see git history for dates",
+  "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "script": "certify_leaf_lemma_uniform_s.py",
+  "script_sha256": "22AFD4EA2EC8EDC02F6D1816928AA44D81A8FB13F68CFC9CBF6EA36FCED013AB"
+ },
+ "results": {
+  "r=3,s=0,d>=1": {
+   "certificate": null,
+   "certified": false,
+   "info": {
+    "columns": 21189,
+    "d0": 1,
+    "degree_relation": true,
+    "float_message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
+    "float_status": 2,
+    "r": 3,
+    "rows": 1249,
+    "s0": 0,
+    "seconds_float": 6.8,
+    "tdeg": 0
+   }
+  }
+ },
+ "title": "Leaf-lemma certificates uniform in the number of sibling leaves"
+}

@@ -1,0 +1,116 @@
+{
+ "marker": "LEAF_LEMMA_UNIFORM_S_PARTIAL",
+ "provenance": {
+  "date_note": "no timestamp by design; see git history for dates",
+  "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "script": "certify_leaf_lemma_uniform_s.py",
+  "script_sha256": "C1D8FBF8FBD941DA9F1EA92274C4330D19B6F631F5D8B32807A4FC3FEC1B81CB"
+ },
+ "results": {
+  "r=2,s>=0,d>=1": {
+   "certificate": {
+    "lambda": {
+     "(c1)*(c1)*[c1]": {
+      "t^0 u^0": "977/1840"
+     },
+     "(c1)*(c1)*[c2]": {
+      "t^0 u^0": "381/920"
+     },
+     "2p2>=p1(p1-3)(b)*[1]": {
+      "t^1 u^0": "1/20"
+     },
+     "2p2>=p1(p1-3)(b)*[c1]": {
+      "t^0 u^0": "287/1840",
+      "t^1 u^0": "777/5980"
+     },
+     "2p2>=p1(p1-3)(b)*[c2]": {
+      "t^1 u^0": "287/4784"
+     },
+     "2p2>=p1(p1-3)(c)*[1]": {
+      "t^1 u^0": "27/1495"
+     },
+     "2p2>=p1(p1-3)(c)*[c1]": {
+      "t^0 u^0": "293/1840"
+     },
+     "2p2>=p1(p1-3)(c)*[c2]": {
+      "t^1 u^0": "15507/95680"
+     },
+     "Q_1(b)*[1]": {
+      "t^0 u^0": "9/20",
+      "t^1 u^0": "1/4"
+     },
+     "Q_1(b)*[c1]": {
+      "t^0 u^0": "743/1840",
+      "t^1 u^0": "33/130"
+     },
+     "Q_1(b)*[c2]": {
+      "t^0 u^0": "151/460",
+      "t^1 u^0": "8039/23920"
+     },
+     "Q_1(b)*[d1]": {
+      "t^0 u^0": "1/10"
+     },
+     "Q_2(b)*[1]": {
+      "t^0 u^0": "1/10"
+     },
+     "SM_bb(1,1)*[c2]": {
+      "t^0 u^0": "149/460"
+     },
+     "SM_bb(1,2)*[1]": {
+      "t^0 u^0": "1/10"
+     },
+     "SM_bb(1,2)*[c1]": {
+      "t^0 u^0": "11/460"
+     },
+     "SM_bb(1,2)*[c2]": {
+      "t^0 u^0": "127/460"
+     },
+     "SM_bc(1,1)*[c2]": {
+      "t^0 u^0": "381/920",
+      "t^1 u^0": "15507/95680"
+     }
+    },
+    "multiplier": {
+     "1": "1/5",
+     "c1-d1": "57/460",
+     "c2-d2": "127/460",
+     "d1": "57/460",
+     "d2": "127/460"
+    }
+   },
+   "certified": true,
+   "info": {
+    "columns": 145214,
+    "d0": 1,
+    "degree_relation": true,
+    "exact": "verified",
+    "float_message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+    "float_status": 0,
+    "r": 2,
+    "rows": 9296,
+    "s0": 0,
+    "seconds_float": 7.1,
+    "seconds_total": 7.3,
+    "tdeg": 12
+   }
+  },
+  "r=3,s>=0,d>=1": {
+   "certificate": null,
+   "certified": false,
+   "info": {
+    "columns": 275205,
+    "d0": 1,
+    "degree_relation": true,
+    "float_message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
+    "float_status": 2,
+    "r": 3,
+    "rows": 16225,
+    "s0": 0,
+    "seconds_float": 18.3,
+    "tdeg": 12
+   }
+  }
+ },
+ "title": "Leaf-lemma certificates uniform in the number of sibling leaves"
+}

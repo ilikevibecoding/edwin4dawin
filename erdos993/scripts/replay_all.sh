@@ -31,6 +31,11 @@ else
   echo "== leaf-induction probe skipped (pip install scipy to run it)"
 fi
 
+if python3 -c "import scipy" 2>/dev/null; then
+  echo "== leaf lemma: complete inductive certification for r <= 3 (exact; ~1 min)"
+  python3 scripts/certify_leaf_lemma_r3_complete.py | grep -E "^(PASS_|LEAF|FAIL)" | tail -n 3 || true
+fi
+
 echo "== independent re-implementation audit"
 python3 scripts/audit_independent.py | tail -n 2
 

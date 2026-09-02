@@ -1,0 +1,65 @@
+{
+ "marker": "PASS_EXACT_LEAF_LEMMA_R3_ALL_CONFIGURATIONS",
+ "provenance": {
+  "date_note": "no timestamp by design; see git history for dates",
+  "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "script": "certify_leaf_lemma_r3_complete.py",
+  "script_sha256": "53958E8D153B7A60FAD15D3E759D0C936E20562B88378AC72293A21B65072F0F"
+ },
+ "results": {
+  "(A) r=1: parent, all s >= 1 (uniform, degree 3)": {
+   "certified": true,
+   "detail": "verified"
+  },
+  "(A) r=2: parent, all s >= 1 (uniform, degree 3)": {
+   "certified": true,
+   "detail": "verified"
+  },
+  "(A) r=3: parent, all s >= 1 (uniform, degree 3)": {
+   "certified": true,
+   "detail": "verified"
+  },
+  "(B) r=1: parent, s = 0, every deg(w) (degree 3, no degree relation)": {
+   "certified": true,
+   "detail": "verified"
+  },
+  "(B) r=2: parent, s = 0, every deg(w) (degree 3, no degree relation)": {
+   "certified": true,
+   "detail": "verified"
+  },
+  "(B) r=3: parent, s = 0, every deg(w) (degree 4, no degree relation)": {
+   "certified": true,
+   "detail": "verified"
+  },
+  "(C) r=1: no parent, all s >= 1 (uniform, degree 3)": {
+   "certified": true,
+   "detail": "verified"
+  },
+  "(C) r=2: no parent, all s >= 1 (uniform, degree 3)": {
+   "certified": true,
+   "detail": "verified"
+  },
+  "(C) r=3: no parent, all s >= 1 (uniform, degree 3)": {
+   "certified": true,
+   "detail": "verified"
+  },
+  "(D) r=1: no parent, s = 0 (degree 3)": {
+   "certified": true,
+   "detail": "verified"
+  },
+  "(D) r=2: no parent, s = 0 (degree 3)": {
+   "certified": true,
+   "detail": "verified"
+  },
+  "(D) r=3: no parent, s = 0 (degree 3)": {
+   "certified": true,
+   "detail": "verified"
+  },
+  "base case: ISO_r((1+x)^n) > 0 for n < 80, all r (identity: margin 1 + r^2/(n-r+1))": {
+   "certified": true,
+   "detail": null
+  }
+ },
+ "theorem": "For every forest T with an edge and every 1 <= r <= 3, choosing a deepest leaf l with neighbour v: Q_r(T) >= Q_r(T - l) + Q_{r-1}(T - l - v). Hence, by induction on |V| with base case the edgeless forests, ISO_1, ISO_2, ISO_3 hold for every forest at every index."
+}

@@ -14,6 +14,7 @@ this directory proves it. What is here:
 | `docs/ISO3_FORESTS_THEOREM.md` | Extension of that proof to every forest (`scripts/prove_iso3_forests.py`). |
 | `docs/ISO_TAIL_THEOREM.md` | `ISO_r` proved for every forest when `(alpha-r)^2 <= r` (plus a tabulated refinement), and an exact obstruction showing the general tools cannot reach the whole tail (`scripts/prove_iso_tail.py`). |
 | `docs/LEAF_INDUCTION_PROBE.md` | The whole problem as one inductive inequality (the leaf lemma); exhaustive evidence, tightness on stars, and LP proof that it is not derivable from the obvious relations (`scripts/probe_leaf_induction.py`). |
+| `docs/LEAF_LEMMA_STRUCTURED.md` | Exact Positivstellensatz certificates for the leaf lemma: complete for `r <= 3` (an inductive proof of `ISO_1..3` for all forests, `scripts/certify_leaf_lemma_r3_complete.py`) and one configuration at `r = 4` (`scripts/certify_leaf_lemma_r4.py`). |
 | `docs/DISPERSION_LEAD.md` | A single-level probabilistic sufficient condition (`Var(e) <= E(e)` for random independent sets) implying the whole chain; exhaustive evidence, `k = 1` proved (`scripts/probe_dispersion.py`). |
 | `docs/ISO4_TREES_PROBE.md` | Feasibility probe for extending the `ISO_3` method to `ISO_4` (if present). |
 | `docs/LITERATURE_STATUS_2026-09-02.md` | Primary-source literature check (erdosproblems.com, arXiv, Zenodo, GitHub). |

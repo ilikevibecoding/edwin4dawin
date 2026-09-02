@@ -1,0 +1,101 @@
+{
+ "marker": "LEAF_LEMMA_UNIFORM_S_PARTIAL",
+ "provenance": {
+  "date_note": "no timestamp by design; see git history for dates",
+  "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "script": "certify_leaf_lemma_uniform_s.py",
+  "script_sha256": "C1D8FBF8FBD941DA9F1EA92274C4330D19B6F631F5D8B32807A4FC3FEC1B81CB"
+ },
+ "results": {
+  "r=2,s>=0,no-parent": {
+   "certificate": {
+    "lambda": {
+     "(c1)*(c1)*[c2]": {
+      "t^0": "1/5"
+     },
+     "2p2>=p1(p1-3)(b)*[1]": {
+      "t^1": "281/1750"
+     },
+     "2p2>=p1(p1-3)(c)*[1]": {
+      "t^1": "379/5250"
+     },
+     "2p2>=p1(p1-3)(c)*[c1]": {
+      "t^1": "29/750"
+     },
+     "2p2>=p1(p1-3)(c)*[c2]": {
+      "t^1": "1/25"
+     },
+     "Q_1(b)*[1]": {
+      "t^0": "3/5",
+      "t^1": "1469/1750"
+     },
+     "Q_1(b)*[c1]": {
+      "t^1": "43/250"
+     },
+     "Q_1(b)*[c2]": {
+      "t^1": "6/25"
+     },
+     "Q_2(b)*[1]": {
+      "t^0": "2/15"
+     },
+     "SM_bb(1,1)*[c1]": {
+      "t^0": "2/3"
+     },
+     "SM_bb(1,2)*[c2]": {
+      "t^0": "1/5"
+     },
+     "SM_bc(1,1)*[1]": {
+      "t^0": "1/2"
+     },
+     "SM_bc(1,1)*[c2]": {
+      "t^0": "14/15"
+     },
+     "SM_bc(2,1)*[1]": {
+      "t^0": "8/15"
+     },
+     "p2<=C(p1,2)(c)*[1]": {
+      "t^0": "31/30"
+     }
+    },
+    "multiplier": {
+     "1": "2/3",
+     "c1": "2/15",
+     "c2": "1/5"
+    }
+   },
+   "certified": true,
+   "info": {
+    "columns": 9135,
+    "d0": null,
+    "degree_relation": false,
+    "exact": "verified",
+    "float_message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+    "float_status": 0,
+    "r": 2,
+    "rows": 456,
+    "s0": 0,
+    "seconds_float": 0.2,
+    "seconds_total": 0.2,
+    "tdeg": 12
+   }
+  },
+  "r=3,s>=0,no-parent": {
+   "certificate": null,
+   "certified": false,
+   "info": {
+    "columns": 16742,
+    "d0": null,
+    "degree_relation": false,
+    "float_message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
+    "float_status": 2,
+    "r": 3,
+    "rows": 729,
+    "s0": 0,
+    "seconds_float": 0.3,
+    "tdeg": 12
+   }
+  }
+ },
+ "title": "Leaf-lemma certificates uniform in the number of sibling leaves"
+}

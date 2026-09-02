@@ -153,6 +153,46 @@ to. The cost is steep (degree 4, `10^5` candidate products, minutes of exact
 linear algebra per configuration), so a proof for all `r` needs the
 certificates to be *understood* and written uniformly, not enumerated.
 
+## 4c. Uniformity in `s`, and the complete inductive proof for `r <= 3`
+
+Replay: `python3 scripts/certify_leaf_lemma_r3_complete.py` (about one minute;
+report `reports/leaf_lemma_r3_complete.json`, marker
+`PASS_EXACT_LEAF_LEMMA_R3_ALL_CONFIGURATIONS`); the uniform certificates alone:
+`scripts/certify_leaf_lemma_uniform_s.py`.
+
+The residual `R_r` is a polynomial in `s` (through the binomial coefficients of
+`(1+x)^s`). Writing `s = 1 + t` and allowing the certificate coefficients to be
+polynomials in `t` with **nonnegative** coefficients gives one identity that is
+valid for every `s >= 1` at once (`t >= 0`). Such identities exist and were
+verified exactly:
+
+| `r` | parent, `s >= 1` (uniform) | parent, `s = 0`, every `deg(w)` | no parent, `s >= 1` (uniform) | no parent, `s = 0` |
+| --- | --- | --- | --- | --- |
+| 1 | degree 3 | degree 3 | degree 3 | degree 3 |
+| 2 | degree 3 (16 generators) | degree 3 | degree 3 | degree 3 |
+| 3 | degree 3 (108 generators) | degree 4 (no degree relation, hence all `deg(w)`) | degree 3 | degree 3 |
+
+Since a deepest leaf always falls into exactly one of these four
+configurations, and the base case (edgeless forests, `(1+x)^n`, margin
+`1 + r^2/(n-r+1) > 0`) is explicit, this is a **complete, exact, inductive
+proof that `ISO_1`, `ISO_2`, `ISO_3` hold for every forest at every index**:
+`Q_r(T) >= Q_r(T-l) + Q_{r-1}(T-l-v) >= 0`. It is a second proof of `ISO_3`
+(the first, `docs/ISO3_FORESTS_THEOREM.md`, went through explicit coefficient
+formulas) and the first that runs through the leaf induction itself.
+
+At `r = 4` the same programme is incomplete: one configuration
+(`s = 1, deg(w) = 2`) is certified (Section 4b); uniform-in-`s` and
+uniform-in-`deg(w)` versions were not attempted at degree 4 (LP size), the
+no-parent configurations are infeasible through degree 4, and the
+`s = 0` degree-4 LP with the degree relation exceeded 15 minutes. Two negative
+findings narrow the search: making the degree relation uniform in `d` fails at
+degree 3 even at `r = 3` (polynomial-in-`d` coefficients up to degree 6, also
+with a `d`-dependent multiplier), so `d`-uniformity needs a different
+mechanism than nonnegative polynomial coefficients; and inducting on the
+stronger FLC (`r! p_r` log-concave) instead of ISO does **not** make `r = 4`
+easier — its residual `E_FLC = R - 2 a_{r-1} b_{r-2}` is infeasible through
+degree 4 in every configuration tested.
+
 ## 5. A cautionary example that the method caught
 
 A first version of this search used the recursion that deletes `v` instead of
