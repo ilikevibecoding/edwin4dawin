@@ -12,7 +12,7 @@
    "all_iso_prefix": true,
    "all_wr_prefix": true,
    "all_tail": true,
-   "seconds": 106.48,
+   "seconds": 137.73,
    "iso_min_prefix_ratio": 0.018040654997176737,
    "iso_min_all_ratio": 0.018040654997176737,
    "nw_all_count": 19574858,
@@ -27,12 +27,12 @@
    "all_iso_prefix": true,
    "all_wr_prefix": true,
    "all_tail": true,
-   "seconds": 288.07,
+   "seconds": 369.82,
    "iso_min_prefix_ratio": 0.016437668611581656,
    "iso_min_all_ratio": 0.016437668611581656,
    "nw_all_count": 51028777,
    "scope": "forests with >= 2 components only (trees of this order are checked by fast/treecheck)"
   }
  ],
- "total_seconds": 1426.4
+ "total_seconds": 1526.6
 }
