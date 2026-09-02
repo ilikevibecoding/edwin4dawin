@@ -89,9 +89,9 @@ def work(task: Tuple[int, int, int, int]) -> Aggregate:
     return agg
 
 
-def tasks_for(n: int, chunk: int) -> List[Tuple[int, int, int, int]]:
+def tasks_for(n: int, chunk: int, multi_only: bool = False) -> List[Tuple[int, int, int, int]]:
     out = []
-    for s in range(n, 0, -1):
+    for s in range(n - 1 if multi_only else n, 0, -1):
         m = NTREES[s]
         for lo in range(0, m, chunk):
             out.append((n, s, lo, min(m, lo + chunk)))
@@ -124,12 +124,15 @@ def main() -> None:
     ap.add_argument("--procs", type=int, default=os.cpu_count() or 1)
     ap.add_argument("--chunk", type=int, default=4000)
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports"))
+    ap.add_argument("--multi-only", action="store_true",
+                    help="only forests with >= 2 components (trees of order n are covered separately by fast/treecheck); "
+                         "tree tables are then built only up to nmax-1")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
 
     t0 = time.time()
-    build_trees(args.nmax)
-    print(f"built {sum(NTREES.values())} trees up to n={args.nmax} in {time.time()-t0:.1f}s", flush=True)
+    build_trees(args.nmax - 1 if args.multi_only else args.nmax)
+    print(f"built {sum(NTREES.values())} trees up to n={max(NTREES)} in {time.time()-t0:.1f}s", flush=True)
     fcounts = forest_counts(args.nmax)
 
     tcounts = free_tree_counts(args.nmax)
@@ -143,19 +146,23 @@ def main() -> None:
                 coeffs = (1,)
                 agg.add(analyze(coeffs), coeffs, tuple(), descent_lemma_holds(coeffs))
             else:
-                tasks = tasks_for(n, args.chunk)
+                tasks = tasks_for(n, args.chunk, args.multi_only)
                 for task, part in zip(tasks, pool.imap(work, tasks)):
                     agg.merge(part)
                     if task[1] == n:
                         agg_trees.merge(part)
-            assert agg.c["count"] == fcounts[n], f"forest count mismatch at n={n}: {agg.c['count']} vs {fcounts[n]}"
+            expected = fcounts[n] - (tcounts[n] if (args.multi_only and n >= 1) else 0)
+            assert agg.c["count"] == expected, f"forest count mismatch at n={n}: {agg.c['count']} vs {expected}"
             rep = resolve_all(agg.to_json(n))
             rep["forest_count_formula_A005195"] = fcounts[n]
+            rep["tree_count_formula_A000055"] = tcounts[n] if n >= 1 else 0
+            rep["scope"] = "forests with >= 2 components only (trees of this order are checked by fast/treecheck)" if args.multi_only else "all forests"
             rep["count_check"] = "PASS"
             rep["seconds"] = round(time.time() - t1, 2)
-            with open(os.path.join(args.out, f"forests_n{n:02d}.json"), "w") as fh:
+            fname = f"forests_multi_n{n:02d}.json" if args.multi_only else f"forests_n{n:02d}.json"
+            with open(os.path.join(args.out, fname), "w") as fh:
                 json.dump(rep, fh, indent=1, sort_keys=True)
-            if n >= 1:
+            if n >= 1 and not args.multi_only:
                 assert agg_trees.c["count"] == tcounts[n], f"tree count mismatch at n={n}"
                 trep = resolve_all(agg_trees.to_json(n))
                 trep["tree_count_formula_A000055"] = tcounts[n]
@@ -166,10 +173,12 @@ def main() -> None:
             line["iso_min_prefix_ratio"] = (rep["iso_min_prefix_2<=r<=L-1"] or {}).get("ratio_float")
             line["iso_min_all_ratio"] = (rep["iso_min_all_r"] or {}).get("ratio_float")
             line["nw_all_count"] = rep["nw_all"]
+            line["scope"] = rep["scope"]
             summary.append(line)
             print(json.dumps(line), flush=True)
-    with open(os.path.join(args.out, "forests_summary.json"), "w") as fh:
-        json.dump({"nmax": args.nmax, "nmin": args.nmin, "rows": summary, "total_seconds": round(time.time() - t0, 1)}, fh, indent=1)
+    sname = "forests_multi_summary.json" if args.multi_only else "forests_summary.json"
+    with open(os.path.join(args.out, sname), "w") as fh:
+        json.dump({"nmax": args.nmax, "nmin": args.nmin, "multi_only": args.multi_only, "rows": summary, "total_seconds": round(time.time() - t0, 1)}, fh, indent=1)
     print(f"done in {time.time()-t0:.1f}s")
 
 
