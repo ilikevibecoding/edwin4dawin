@@ -1,7 +1,7 @@
 import { setText, clamp } from './dom.js';
 import { SOLDIER, SKULL } from './icons.js';
 
-const QUALITIES = ['low', 'medium', 'high', 'ultra'];
+const QUALITIES = ['potato', 'low', 'medium', 'high', 'ultra'];
 const STORAGE_KEY = 'seaside.settings.v1';
 
 const CONTROLS = [
@@ -74,8 +74,9 @@ export class Menu {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return def;
       const saved = JSON.parse(raw);
+      const urlQuality = g.settings.params?.has('quality');
       return {
-        quality: QUALITIES.includes(saved.quality) ? saved.quality : def.quality,
+        quality: !urlQuality && QUALITIES.includes(saved.quality) ? saved.quality : def.quality,
         fov: clamp(Number(saved.fov) || def.fov, 50, 80),
         sens: clamp(Number(saved.sens) || def.sens, 1, 20),
         invertY: !!saved.invertY,

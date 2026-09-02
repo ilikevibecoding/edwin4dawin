@@ -4,6 +4,23 @@
  * headless screenshots: fixed timestep, no pointer-lock gate, audio muted.
  */
 export const QUALITY_PRESETS = {
+  // Software-GL / integrated-GPU fallback: half-resolution, single shadow cascade, no post effects.
+  potato: {
+    pixelRatio: 0.5,
+    shadows: true,
+    shadowMapSize: 1024,
+    shadowCascades: 1,
+    ao: false,
+    aoSamples: 4,
+    bloom: false,
+    smaa: false,
+    anisotropy: 1,
+    particles: 0.25,
+    maxCasings: 12,
+    maxDebris: 20,
+    envMapSize: 128,
+    parallax: false,
+  },
   low: {
     pixelRatio: 1,
     shadows: true,

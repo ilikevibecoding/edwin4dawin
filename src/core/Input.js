@@ -17,7 +17,7 @@ const DEFAULT_BINDINGS = {
   crouch: ['ControlLeft', 'KeyC'],
   reload: ['KeyR'],
   fire: ['Mouse0'],
-  aim: ['Mouse1'],
+  aim: ['Mouse2'], // right button (DOM button 2)
   killstreak: ['KeyX', 'Digit4'],
   grenade: ['KeyG'],
   inspect: ['KeyV'],
@@ -152,6 +152,26 @@ export class Input {
 
   _codes(action) {
     return this.bindings[action] || [];
+  }
+
+  // --- scripted input (tooling / replays): acts like a real key or mouse-move on the action's first binding.
+  press(action) {
+    const c = this._codes(action)[0];
+    if (!c) return;
+    if (!this._down.has(c)) this._pendingPressed.add(c);
+    this._down.add(c);
+  }
+
+  release(action) {
+    const c = this._codes(action)[0];
+    if (!c) return;
+    this._down.delete(c);
+    this._pendingReleased.add(c);
+  }
+
+  look(dx, dy) {
+    this._pendingMouse.x += dx;
+    this._pendingMouse.y += dy;
   }
 
   isDown(action) {

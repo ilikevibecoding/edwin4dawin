@@ -139,12 +139,13 @@ export class Game {
     cancelAnimationFrame(this._raf);
   }
 
-  tick() {
+  /** One frame. `render=false` steps the simulation without drawing (offline recording skips in-between frames). */
+  tick(render = true) {
     const t0 = performance.now();
     let dt = this.settings.fixedDt > 0 ? this.settings.fixedDt : Math.min(this.clock.getDelta(), 1 / 20);
     dt *= this.timeScale;
     if (this.settings.fixedDt > 0) this.clock.getDelta();
-    this.update(dt);
+    this.update(dt, render);
     const ms = performance.now() - t0;
     this.stats.frameMs = ms;
     this.stats._acc += ms;
@@ -156,7 +157,7 @@ export class Game {
     }
   }
 
-  update(dt) {
+  update(dt, render = true) {
     this.frame++;
     this.input.update();
 
@@ -181,7 +182,7 @@ export class Game {
     this.menu.update(dt);
     this.audio.update(dt);
     this.debug.update(dt);
-    this.render.render(dt);
+    this.render.render(dt, render);
     this.events.emit('frame:end', { dt });
   }
 }

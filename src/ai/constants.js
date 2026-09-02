@@ -53,16 +53,17 @@ export const FIRE = {
   burstMin: 3,
   burstMax: 6,
   roundInterval: 0.09,
-  pauseMin: 0.8,
-  pauseMax: 2.0,
-  damageMin: 9,
-  damageMax: 13,
-  baseSpread: 0.03,
-  spreadPerMeter: 0.0009, // + per metre of range
+  pauseMin: 1.0,
+  pauseMax: 2.4,
+  damageMin: 7,
+  damageMax: 10,
+  // Tuned so a competent player wins a 3-v-1 at plaza range but gets punished for standing in the open.
+  baseSpread: 0.05,
+  spreadPerMeter: 0.0012, // + per metre of range
   movingTargetSpread: 1.5, // multiplier when the player is moving
   stillTargetSpread: 0.85,
   burstGrowth: 0.12, // spread grows by this fraction per round in a burst
-  reactionTime: 0.55,
+  reactionTime: 0.75,
   aimTolerance: 0.12, // rad between the rifle axis and the target before the first round
   suppressInterval: [1.6, 3.0],
   suppressBurst: [2, 3],

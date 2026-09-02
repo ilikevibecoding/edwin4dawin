@@ -996,7 +996,8 @@ export class RenderSystem {
    * Frame
    * ========================================================================================== */
 
-  render(dt) {
+  /** Per-frame camera/FX dynamics and the draw. `draw=false` advances the dynamics only (offline recording). */
+  render(dt, draw = true) {
     const cam = this.camera;
     const fx = this.fx;
 
@@ -1081,6 +1082,7 @@ export class RenderSystem {
       if (on) this.effects.dof.blendMode.opacity.value = THREE.MathUtils.smoothstep(this._adsBlend, 0.05, 0.95);
     }
 
+    if (!draw) return;
     if (this.csm) {
       this._updateCsmFrustums(false);
       this.csm.update();

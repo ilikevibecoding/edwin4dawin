@@ -23,10 +23,13 @@
  *   --frames N          extra frames to render before capture, default 3
  *   --params "a=1&b=2"  extra URL params
  *   --seq JSON          extra captures in the same session: '[{"exec":"...","wait":0.2,"out":"/tmp/b.png"}]'
+ *   --record DIR --seconds S --fps F [--script FILE]
+ *                       deterministic offline video (frames in DIR, DIR.mp4 via ffmpeg); see tools/scripts/
  *   --timeout MS        default 900000
  */
 import puppeteer from 'puppeteer-core';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -194,6 +197,48 @@ try {
       console.error(`[shot] saved ${step.out}`);
     }
   }
+  // --record DIR --seconds S --fps F [--script FILE]: deterministic offline video. The sim is stepped manually
+  // at the fixed 60 Hz timestep; only every (60/F)th frame is drawn and captured; ffmpeg encodes DIR.mp4.
+  // The script runs concurrently in the page as `async (game, THREE, debug, input) => { ... }` and sequences
+  // itself with `await debug.waitTime(s)` / `await debug.waitFrames(n)` (input.press/release/look drive the player).
+  if (has('record')) {
+    const dir = resolve(opt('record'));
+    const seconds = parseFloat(opt('seconds', '10'));
+    const fps = parseInt(opt('fps', '30'), 10);
+    const stride = Math.max(1, Math.round(60 / fps));
+    const total = Math.round(seconds * fps);
+    await mkdir(dir, { recursive: true });
+    const script = has('script') ? await readFile(resolve(opt('script')), 'utf8') : null;
+    await page.evaluate((src) => {
+      const game = window.__game;
+      game.stop();
+      if (src) {
+        const fn = new Function('game', 'THREE', 'debug', 'input', `return (async () => { ${src} })();`);
+        window.__scriptDone = false;
+        fn(game, window.THREE, game.debug, game.input)
+          .catch((e) => console.error('[script]', e.message, e.stack))
+          .finally(() => (window.__scriptDone = true));
+      }
+    }, script);
+    const tRec = Date.now();
+    for (let i = 0; i < total; i++) {
+      // One tick per macrotask so the script's awaited frame-waiters resume between ticks (frame-exact timing).
+      await page.evaluate(async (n) => {
+        const g = window.__game;
+        for (let k = 0; k < n; k++) {
+          g.tick(k === n - 1);
+          await new Promise((r) => setTimeout(r, 0));
+        }
+      }, stride);
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())));
+      await page.screenshot({ path: `${dir}/f${String(i).padStart(5, '0')}.jpg`, type: 'jpeg', quality: 93 });
+      if (i % fps === 0) console.error(`[rec] frame ${i}/${total}  t=${(i / fps).toFixed(1)}s  (${((Date.now() - tRec) / 1000).toFixed(0)}s elapsed)`);
+    }
+    const mp4 = `${dir}.mp4`;
+    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(fps), '-i', `${dir}/f%05d.jpg`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '17', '-preset', 'slow', '-movflags', '+faststart', mp4], { stdio: 'inherit' });
+    console.error(`[rec] wrote ${mp4}  (${total} frames @ ${fps} fps, ${((Date.now() - tRec) / 1000).toFixed(0)}s)`);
+  }
+
   const stats = await page.evaluate(() => {
     const g = window.__game;
     const i = g.render.renderer.info;

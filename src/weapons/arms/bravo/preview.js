@@ -93,9 +93,12 @@ else if (view === 'sprint') {
   rig.swayPivot.position.set(0.15, -0.15, -0.32);
   rig.swayPivot.rotation.set(-0.12, 0.12, -0.42);
 } else {
-  rig.swayPivot.position.set(0.13, -0.115, -0.34);
-  rig.swayPivot.rotation.set(0.0, 0.05, -0.015);
+  // WeaponSystem HIP_POSE (gun close to the lens, yawed ~14° left like the MW2019 reference framing)
+  rig.swayPivot.position.set(0.1, -0.092, -0.23);
+  rig.swayPivot.rotation.set(0.055, 0.25, -0.055);
 }
+if (params.has('pivot')) rig.swayPivot.position.fromArray(vec('pivot'));
+if (params.has('pivotRot')) rig.swayPivot.rotation.fromArray(vec('pivotRot'));
 if (params.has('gun') && params.get('gun') === '0') rig.gunRoot.visible = false;
 // ?magOut=e — reproduce the WeaponSystem's magazine pivot, slid out of the well by fraction e (0..1)
 if (params.has('magOut')) {
@@ -153,6 +156,24 @@ if (params.has('lframe')) {
   lY = new THREE.Vector3(1, 0, 0).applyQuaternion(q).toArray();
   lZ = new THREE.Vector3(0, -1, 0).applyQuaternion(q).toArray();
   console.log(`[preview] lframe y=[${lY.map((v) => v.toFixed(3))}] z=[${lZ.map((v) => v.toFixed(3))}]`);
+}
+// ?lgrip=phi,theta,pitch (degrees) — overhand-from-the-left grip: phi = where the palm sits round the handguard
+// (0 = on the left face, palm facing right; 90 = on top, palm facing down), theta = wrist swing so the knuckle
+// row points forward, pitch = tilt of the back of the hand toward the camera (about the hand's own x axis).
+if (params.has('lgrip')) {
+  const [phi, theta, pitch] = vec('lgrip');
+  const DEG = Math.PI / 180;
+  const n = new THREE.Vector3(Math.cos(phi * DEG), -Math.sin(phi * DEG), 0); // palm normal → handguard axis
+  const t = new THREE.Vector3(Math.sin(phi * DEG), Math.cos(phi * DEG), 0); // wrap direction along the surface
+  const y = t.multiplyScalar(Math.cos(theta * DEG)).add(new THREE.Vector3(0, 0, -Math.sin(theta * DEG)));
+  const z = n.clone().negate();
+  const x = new THREE.Vector3().crossVectors(y, z).normalize();
+  const qp = new THREE.Quaternion().setFromAxisAngle(x, pitch * DEG);
+  y.applyQuaternion(qp);
+  z.applyQuaternion(qp);
+  lY = y.toArray();
+  lZ = z.toArray();
+  console.log(`[preview] lgrip y=[${lY.map((v) => v.toFixed(3))}] z=[${lZ.map((v) => v.toFixed(3))}] x=[${x.toArray().map((v) => v.toFixed(3))}]`);
 }
 applyFitOverride(arms.hands.left, rig.sockets.gripLeft, vec('lpos'), lY, lZ);
 applyFitOverride(arms.hands.right, rig.sockets.gripRight, vec('rpos'), vec('ry'), vec('rz'));
@@ -275,8 +296,10 @@ async function fitLeftFingers() {
   // Thumb: grid search over CMC flexion/abduction + MCP/IP flexion so the two distal segments lie along the line
   // x = tline[0], y = tline[1] (gun space, parallel to the barrel — i.e. along the left side rail) pointing forward,
   // without penetrating the handguard.
-  if (params.has('tline')) {
-    const [lx, ly] = vec('tline');
+  // ?tdir=x,y,z (gun space) instead fits the two distal segments to a direction (e.g. across the top-left rail).
+  if (params.has('tline') || params.has('tdir')) {
+    const [lx, ly] = vec('tline') || [0, 0];
+    const tdir = params.has('tdir') ? new THREE.Vector3().fromArray(vec('tdir')).normalize() : null;
     const t = BONES.thumb;
     const lineCost = (a, b) => {
       let c = 0;
@@ -286,6 +309,10 @@ async function fitLeftFingers() {
         c += ((x - lx) * 1000) ** 2 + ((y - ly) * 1000) ** 2;
       }
       return c;
+    };
+    const dirCost = (a, b) => {
+      const d = b.clone().sub(a).normalize();
+      return (1 - d.dot(tdir)) * 2e4;
     };
     let best = { cost: Infinity, angles: [0, 0, 0, 0, 0] };
     const twist = num('ttwist', 0);
@@ -300,8 +327,8 @@ async function fitLeftFingers() {
               const a = jointPos(hand.bones[t[joint]]);
               const b = boneEnd(hand.bones[t[joint]], def.thumb.len[joint]);
               cost += gapCost(a, b, def.thumb.r[joint], def.thumb.r[joint + 1], joint > 0) * (joint > 0 ? num('thug', 0.3) : 1); // hug the rail with the distal segments
-              if (joint > 0) cost += lineCost(a, b) * num('tlinew', 1);
-              if (joint === 2) cost += (b.z - a.z) * 1e5; // reward pointing forward
+              if (joint > 0) cost += tdir ? dirCost(a, b) * num('tlinew', 1) : lineCost(a, b) * num('tlinew', 1);
+              if (joint === 2 && !tdir) cost += (b.z - a.z) * 1e5; // reward pointing forward
             }
             if (cost < best.cost) best = { cost, angles: [flex, abd, twist, mcp, ip] };
           }
