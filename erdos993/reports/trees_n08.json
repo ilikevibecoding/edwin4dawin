@@ -1,0 +1,288 @@
+{
+ "all_iso": true,
+ "all_iso_prefix": true,
+ "all_log_concave": true,
+ "all_tail": true,
+ "all_unimodal": true,
+ "all_wr_prefix": true,
+ "alpha_histogram": {
+  "4": 5,
+  "5": 12,
+  "6": 5,
+  "7": 1
+ },
+ "coefficient_multiset_hashsum_sha256_mod_2^256": "1d1b08102c8a1e5a2fd7a85f943fe26841fc5d446d65d06adae9754f628d14b4",
+ "coefficient_multiset_sorted_sha256": "903ba11376c6dba690b193d87c012d5ed8a368e0f995ae27afbdf8e6fac0348a",
+ "count": 23,
+ "count_check": "PASS",
+ "descent_lemma_data_ok": 23,
+ "iso_all": 23,
+ "iso_min_all_r": {
+  "Q_r": "106",
+  "argmin": {
+   "component_level_sequences": [
+    [
+     0,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   ],
+   "component_orders": [
+    8
+   ]
+  },
+  "coefficients": [
+   1,
+   8,
+   21,
+   35,
+   35,
+   21,
+   7,
+   1
+  ],
+  "denominator_(r+1)p_{r-1}p_{r+1}": "840",
+  "r": 2,
+  "ratio_float": 0.1261904761904762
+ },
+ "iso_min_by_r": {
+  "1": {
+   "Q_r": "23",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0,
+      1,
+      2,
+      3,
+      4,
+      1,
+      2,
+      3
+     ]
+    ],
+    "component_orders": [
+     8
+    ]
+   },
+   "coefficients": [
+    1,
+    8,
+    21,
+    20,
+    5
+   ],
+   "denominator": "42",
+   "ratio_float": 0.5476190476190477
+  },
+  "2": {
+   "Q_r": "106",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "component_orders": [
+     8
+    ]
+   },
+   "coefficients": [
+    1,
+    8,
+    21,
+    35,
+    35,
+    21,
+    7,
+    1
+   ],
+   "denominator": "840",
+   "ratio_float": 0.1261904761904762
+  },
+  "3": {
+   "Q_r": "1176",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "component_orders": [
+     8
+    ]
+   },
+   "coefficients": [
+    1,
+    8,
+    21,
+    35,
+    35,
+    21,
+    7,
+    1
+   ],
+   "denominator": "2940",
+   "ratio_float": 0.4
+  },
+  "4": {
+   "Q_r": "2450",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "component_orders": [
+     8
+    ]
+   },
+   "coefficients": [
+    1,
+    8,
+    21,
+    35,
+    35,
+    21,
+    7,
+    1
+   ],
+   "denominator": "3675",
+   "ratio_float": 0.6666666666666666
+  },
+  "5": {
+   "Q_r": "1960",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "component_orders": [
+     8
+    ]
+   },
+   "coefficients": [
+    1,
+    8,
+    21,
+    35,
+    35,
+    21,
+    7,
+    1
+   ],
+   "denominator": "1470",
+   "ratio_float": 1.3333333333333333
+  },
+  "6": {
+   "Q_r": "588",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "component_orders": [
+     8
+    ]
+   },
+   "coefficients": [
+    1,
+    8,
+    21,
+    35,
+    35,
+    21,
+    7,
+    1
+   ],
+   "denominator": "147",
+   "ratio_float": 4.0
+  }
+ },
+ "iso_min_prefix_2<=r<=L-1": {
+  "Q_r": "106",
+  "argmin": {
+   "component_level_sequences": [
+    [
+     0,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   ],
+   "component_orders": [
+    8
+   ]
+  },
+  "coefficients": [
+   1,
+   8,
+   21,
+   35,
+   35,
+   21,
+   7,
+   1
+  ],
+  "denominator_(r+1)p_{r-1}p_{r+1}": "840",
+  "r": 2,
+  "ratio_float": 0.1261904761904762
+ },
+ "iso_prefix": 23,
+ "iso_violation_examples": [],
+ "log_concave": 23,
+ "n": 8,
+ "nonunimodal_examples": [],
+ "nw_all": 23,
+ "tail_ok": 23,
+ "tree_count_formula_A000055": 23,
+ "unimodal": 23,
+ "wr_prefix_failure_examples": [],
+ "wr_prefix_ok": 23
+}

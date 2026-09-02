@@ -1,0 +1,261 @@
+{
+ "independent_report": "independent/bruteforce_forests_report_nmax14.json",
+ "rows": [
+  {
+   "n": 0,
+   "count": 1,
+   "min_iso_ratio": "None",
+   "hash": "043f347c2cdc0d8ce70c38775d24e556c0290acf6d0c87a3a52aa85471cb8d02",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 1,
+   "count": 1,
+   "min_iso_ratio": "None",
+   "hash": "5cc6a8a697bb6f2fcb468ef02cf2a76e9ad3f5da223682f1ca29288836ee66b3",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 2,
+   "count": 2,
+   "min_iso_ratio": "3/2",
+   "hash": "57a98d2222d8f6a86b4cee69c9cca4b453bae93334e8655d0b5481f311573705",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 3,
+   "count": 3,
+   "min_iso_ratio": "2/3",
+   "hash": "0e036a3d192b03ec164d93b49806bff36cc524b40e6bdd3d7fa90df25e9b0024",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 4,
+   "count": 6,
+   "min_iso_ratio": "5/12",
+   "hash": "82cc6e5bce027fc554b7029be3c90ed1063e5ae0d2ea2f69e77471671226caa9",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 5,
+   "count": 10,
+   "min_iso_ratio": "3/10",
+   "hash": "f205741b832dab9f595d6a4db76d09bbe40290148ea10f9e2e53eae0c0aa7901",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 6,
+   "count": 20,
+   "min_iso_ratio": "7/30",
+   "hash": "73d5410753dc1b7c3c473a783ad6d2f999e0c9d632c9271ece1ab8e658878f2c",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 7,
+   "count": 37,
+   "min_iso_ratio": "79/420",
+   "hash": "cfa90fbf74b58a8d862142465b80156a85bcea1500d05568b15f30a1059d1928",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 8,
+   "count": 76,
+   "min_iso_ratio": "53/420",
+   "hash": "8ec9d61057dd9a0e7a17663e64457570e9c9c44a11d50ded68af01d651d676e8",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 9,
+   "count": 153,
+   "min_iso_ratio": "137/1512",
+   "hash": "07087627b7209073363d007d411ea4d6a78d09ef5db3d5b2ea06bd97841cfdfd",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 10,
+   "count": 329,
+   "min_iso_ratio": "43/630",
+   "hash": "49099b8724f90cd3b6d6fedee31ab2764ba19ebcb5ff97ea6f326899fe48c733",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 11,
+   "count": 710,
+   "min_iso_ratio": "211/3960",
+   "hash": "f9562d99af0949a6d5254b78ce8e4b511d0751960c277279828d94d7232679cc",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 12,
+   "count": 1601,
+   "min_iso_ratio": "127/2970",
+   "hash": "4c281bd997a435b6830c93e1d846873c1f0f5c12738697da8524ad78381791ce",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 13,
+   "count": 3658,
+   "min_iso_ratio": "301/8580",
+   "hash": "b172a51a815ab9b25f46c232ed0c82ff3a6b02f5f62c2324cf8d25b65d663503",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  },
+  {
+   "n": 14,
+   "count": 8599,
+   "min_iso_ratio": "8/273",
+   "hash": "ade15bfdccfe9dfcd65187392aca6d9d4ce5560bee00b328d7dc6f341107c758",
+   "ok": true,
+   "checks": {
+    "count": true,
+    "hash": true,
+    "unimodal": true,
+    "log_concave": true,
+    "iso": true,
+    "tail": true,
+    "wr_prefix": true,
+    "min_iso_ratio": true
+   }
+  }
+ ],
+ "all_match": true
+}

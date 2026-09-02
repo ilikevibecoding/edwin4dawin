@@ -1,0 +1,312 @@
+{
+ "all_iso": true,
+ "all_iso_prefix": true,
+ "all_log_concave": true,
+ "all_tail": true,
+ "all_unimodal": true,
+ "all_wr_prefix": true,
+ "alpha_histogram": {
+  "3": 4,
+  "4": 10,
+  "5": 5,
+  "6": 1
+ },
+ "coefficient_multiset_hashsum_sha256_mod_2^256": "338d3dfc1d22987db3190bfd12f412bfb674ed1805b7385ee193f18bbce7ce71",
+ "coefficient_multiset_sorted_sha256": "73d5410753dc1b7c3c473a783ad6d2f999e0c9d632c9271ece1ab8e658878f2c",
+ "count": 20,
+ "count_check": "PASS",
+ "descent_lemma_data_ok": 20,
+ "forest_count_formula_A005195": 20,
+ "iso_all": 20,
+ "iso_min_all_r": {
+  "Q_r": "7",
+  "argmin": {
+   "component_level_sequences": [
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ]
+   ],
+   "component_orders": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "coefficients": [
+   1,
+   6,
+   15,
+   20,
+   15,
+   6,
+   1
+  ],
+  "denominator_(r+1)p_{r-1}p_{r+1}": "30",
+  "r": 1,
+  "ratio_float": 0.23333333333333334
+ },
+ "iso_min_by_r": {
+  "1": {
+   "Q_r": "7",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ]
+    ],
+    "component_orders": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "coefficients": [
+    1,
+    6,
+    15,
+    20,
+    15,
+    6,
+    1
+   ],
+   "denominator": "30",
+   "ratio_float": 0.23333333333333334
+  },
+  "2": {
+   "Q_r": "56",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "component_orders": [
+     6
+    ]
+   },
+   "coefficients": [
+    1,
+    6,
+    10,
+    10,
+    5,
+    1
+   ],
+   "denominator": "180",
+   "ratio_float": 0.3111111111111111
+  },
+  "3": {
+   "Q_r": "525",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ]
+    ],
+    "component_orders": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "coefficients": [
+    1,
+    6,
+    15,
+    20,
+    15,
+    6,
+    1
+   ],
+   "denominator": "900",
+   "ratio_float": 0.5833333333333334
+  },
+  "4": {
+   "Q_r": "700",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ]
+    ],
+    "component_orders": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "coefficients": [
+    1,
+    6,
+    15,
+    20,
+    15,
+    6,
+    1
+   ],
+   "denominator": "600",
+   "ratio_float": 1.1666666666666667
+  },
+  "5": {
+   "Q_r": "315",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ]
+    ],
+    "component_orders": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "coefficients": [
+    1,
+    6,
+    15,
+    20,
+    15,
+    6,
+    1
+   ],
+   "denominator": "90",
+   "ratio_float": 3.5
+  }
+ },
+ "iso_min_prefix_2<=r<=L-1": {
+  "Q_r": "56",
+  "argmin": {
+   "component_level_sequences": [
+    [
+     0,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   ],
+   "component_orders": [
+    6
+   ]
+  },
+  "coefficients": [
+   1,
+   6,
+   10,
+   10,
+   5,
+   1
+  ],
+  "denominator_(r+1)p_{r-1}p_{r+1}": "180",
+  "r": 2,
+  "ratio_float": 0.3111111111111111
+ },
+ "iso_prefix": 20,
+ "iso_violation_examples": [],
+ "log_concave": 20,
+ "n": 6,
+ "nonunimodal_examples": [],
+ "nw_all": 20,
+ "seconds": 0.0,
+ "tail_ok": 20,
+ "unimodal": 20,
+ "wr_prefix_failure_examples": [],
+ "wr_prefix_ok": 20
+}

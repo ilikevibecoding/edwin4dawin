@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+erdos993/fast/treecheck
+erdos993/fast/*.o

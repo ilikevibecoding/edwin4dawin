@@ -1,0 +1,162 @@
+{
+ "all_iso": true,
+ "all_iso_prefix": true,
+ "all_log_concave": true,
+ "all_tail": true,
+ "all_unimodal": true,
+ "all_wr_prefix": true,
+ "alpha_histogram": {
+  "3": 2,
+  "4": 1
+ },
+ "coefficient_multiset_hashsum_sha256_mod_2^256": "262c07c6fb9655bf2cede82d1dab64a2865bbc2306ba365dbf2c4a9d8bcae271",
+ "coefficient_multiset_sorted_sha256": "db3c99a7f4939e382f4c2264cc717a5703614da8cb576a6d4f49758a9b1c9d90",
+ "count": 3,
+ "count_check": "PASS",
+ "descent_lemma_data_ok": 3,
+ "iso_all": 3,
+ "iso_min_all_r": {
+  "Q_r": "37",
+  "argmin": {
+   "component_level_sequences": [
+    [
+     0,
+     1,
+     1,
+     1,
+     1
+    ]
+   ],
+   "component_orders": [
+    5
+   ]
+  },
+  "coefficients": [
+   1,
+   5,
+   6,
+   4,
+   1
+  ],
+  "denominator_(r+1)p_{r-1}p_{r+1}": "60",
+  "r": 2,
+  "ratio_float": 0.6166666666666667
+ },
+ "iso_min_by_r": {
+  "1": {
+   "Q_r": "14",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0,
+      1,
+      2,
+      1,
+      2
+     ]
+    ],
+    "component_orders": [
+     5
+    ]
+   },
+   "coefficients": [
+    1,
+    5,
+    6,
+    1
+   ],
+   "denominator": "12",
+   "ratio_float": 1.1666666666666667
+  },
+  "2": {
+   "Q_r": "37",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "component_orders": [
+     5
+    ]
+   },
+   "coefficients": [
+    1,
+    5,
+    6,
+    4,
+    1
+   ],
+   "denominator": "60",
+   "ratio_float": 0.6166666666666667
+  },
+  "3": {
+   "Q_r": "60",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "component_orders": [
+     5
+    ]
+   },
+   "coefficients": [
+    1,
+    5,
+    6,
+    4,
+    1
+   ],
+   "denominator": "24",
+   "ratio_float": 2.5
+  }
+ },
+ "iso_min_prefix_2<=r<=L-1": {
+  "Q_r": "37",
+  "argmin": {
+   "component_level_sequences": [
+    [
+     0,
+     1,
+     1,
+     1,
+     1
+    ]
+   ],
+   "component_orders": [
+    5
+   ]
+  },
+  "coefficients": [
+   1,
+   5,
+   6,
+   4,
+   1
+  ],
+  "denominator_(r+1)p_{r-1}p_{r+1}": "60",
+  "r": 2,
+  "ratio_float": 0.6166666666666667
+ },
+ "iso_prefix": 3,
+ "iso_violation_examples": [],
+ "log_concave": 3,
+ "n": 5,
+ "nonunimodal_examples": [],
+ "nw_all": 3,
+ "tail_ok": 3,
+ "tree_count_formula_A000055": 3,
+ "unimodal": 3,
+ "wr_prefix_failure_examples": [],
+ "wr_prefix_ok": 3
+}

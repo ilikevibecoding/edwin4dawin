@@ -1,0 +1,32 @@
+{
+ "all_iso": true,
+ "all_iso_prefix": true,
+ "all_log_concave": true,
+ "all_tail": true,
+ "all_unimodal": true,
+ "all_wr_prefix": true,
+ "alpha_histogram": {
+  "0": 1
+ },
+ "coefficient_multiset_hashsum_sha256_mod_2^256": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+ "coefficient_multiset_sorted_sha256": "043f347c2cdc0d8ce70c38775d24e556c0290acf6d0c87a3a52aa85471cb8d02",
+ "count": 1,
+ "count_check": "PASS",
+ "descent_lemma_data_ok": 1,
+ "forest_count_formula_A005195": 1,
+ "iso_all": 1,
+ "iso_min_all_r": null,
+ "iso_min_by_r": {},
+ "iso_min_prefix_2<=r<=L-1": null,
+ "iso_prefix": 1,
+ "iso_violation_examples": [],
+ "log_concave": 1,
+ "n": 0,
+ "nonunimodal_examples": [],
+ "nw_all": 1,
+ "seconds": 0.0,
+ "tail_ok": 1,
+ "unimodal": 1,
+ "wr_prefix_failure_examples": [],
+ "wr_prefix_ok": 1
+}

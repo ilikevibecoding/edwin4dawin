@@ -1,0 +1,46 @@
+independent brute-force replay: forests on n = 0..12 vertices
+python 3.12.3, networkx 3.6.1
+trees per order k=1..12: [1, 1, 1, 2, 3, 6, 11, 23, 47, 106, 235, 551]  (A000055 ok)
+  n forests A005195  unimod logconc     ISO    TAIL    WR<L  WR<L-1  sha256(coeff multiset)                                           min ISO ratio
+  0       1       1       1       1       1       1       0       0  043f347c2cdc0d8ce70c38775d24e556c0290acf6d0c87a3a52aa85471cb8d02 None  [0.0s]
+  1       1       1       1       1       1       1       0       0  5cc6a8a697bb6f2fcb468ef02cf2a76e9ad3f5da223682f1ca29288836ee66b3 None  [0.0s]
+  2       2       2       2       2       2       2       0       0  57a98d2222d8f6a86b4cee69c9cca4b453bae93334e8655d0b5481f311573705 3/2  [0.0s]
+  3       3       3       3       3       3       3       0       0  0e036a3d192b03ec164d93b49806bff36cc524b40e6bdd3d7fa90df25e9b0024 2/3  [0.0s]
+  4       6       6       6       6       6       6       0       0  82cc6e5bce027fc554b7029be3c90ed1063e5ae0d2ea2f69e77471671226caa9 5/12  [0.0s]
+  5      10      10      10      10      10      10       0       0  f205741b832dab9f595d6a4db76d09bbe40290148ea10f9e2e53eae0c0aa7901 3/10  [0.0s]
+  6      20      20      20      20      20      20       0       0  73d5410753dc1b7c3c473a783ad6d2f999e0c9d632c9271ece1ab8e658878f2c 7/30  [0.0s]
+  7      37      37      37      37      37      37       0       0  cfa90fbf74b58a8d862142465b80156a85bcea1500d05568b15f30a1059d1928 79/420  [0.0s]
+  8      76      76      76      76      76      76       0       0  8ec9d61057dd9a0e7a17663e64457570e9c9c44a11d50ded68af01d651d676e8 53/420  [0.0s]
+  9     153     153     153     153     153     153       0       0  07087627b7209073363d007d411ea4d6a78d09ef5db3d5b2ea06bd97841cfdfd 137/1512  [0.0s]
+ 10     329     329     329     329     329     329       0       0  49099b8724f90cd3b6d6fedee31ab2764ba19ebcb5ff97ea6f326899fe48c733 43/630  [0.1s]
+ 11     710     710     710     710     710     710       0       0  f9562d99af0949a6d5254b78ce8e4b511d0751960c277279828d94d7232679cc 211/3960  [0.5s]
+ 12    1601    1601    1601    1601    1601    1601       0       0  4c281bd997a435b6830c93e1d846873c1f0f5c12738697da8524ad78381791ce 127/2970  [2.1s]
+
+global minimum ISO ratio per n and argmin forest(s):
+  n=0: undefined (no forest has alpha >= 2)
+  n=1: undefined (no forest has alpha >= 2)
+  n=2: min ISO ratio = 3/2 (~1.500000), attained by 1 forest(s)
+        component sizes [1, 1]  coeffs [1, 2, 1]  edges [[],[]]
+  n=3: min ISO ratio = 2/3 (~0.666667), attained by 1 forest(s)
+        component sizes [1, 1, 1]  coeffs [1, 3, 3, 1]  edges [[],[],[]]
+  n=4: min ISO ratio = 5/12 (~0.416667), attained by 1 forest(s)
+        component sizes [1, 1, 1, 1]  coeffs [1, 4, 6, 4, 1]  edges [[],[],[],[]]
+  n=5: min ISO ratio = 3/10 (~0.300000), attained by 1 forest(s)
+        component sizes [1, 1, 1, 1, 1]  coeffs [1, 5, 10, 10, 5, 1]  edges [[],[],[],[],[]]
+  n=6: min ISO ratio = 7/30 (~0.233333), attained by 1 forest(s)
+        component sizes [1, 1, 1, 1, 1, 1]  coeffs [1, 6, 15, 20, 15, 6, 1]  edges [[],[],[],[],[],[]]
+  n=7: min ISO ratio = 79/420 (~0.188095), attained by 1 forest(s)
+        component sizes [7]  coeffs [1, 7, 15, 20, 15, 6, 1]  edges [[[0,1],[0,2],[0,3],[0,4],[0,5],[0,6]]]
+  n=8: min ISO ratio = 53/420 (~0.126190), attained by 1 forest(s)
+        component sizes [8]  coeffs [1, 8, 21, 35, 35, 21, 7, 1]  edges [[[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7]]]
+  n=9: min ISO ratio = 137/1512 (~0.090608), attained by 1 forest(s)
+        component sizes [9]  coeffs [1, 9, 28, 56, 70, 56, 28, 8, 1]  edges [[[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[0,8]]]
+  n=10: min ISO ratio = 43/630 (~0.068254), attained by 1 forest(s)
+        component sizes [10]  coeffs [1, 10, 36, 84, 126, 126, 84, 36, 9, 1]  edges [[[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[0,8],[0,9]]]
+  n=11: min ISO ratio = 211/3960 (~0.053283), attained by 1 forest(s)
+        component sizes [11]  coeffs [1, 11, 45, 120, 210, 252, 210, 120, 45, 10, 1]  edges [[[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[0,8],[0,9],[0,10]]]
+  n=12: min ISO ratio = 127/2970 (~0.042761), attained by 1 forest(s)
+        component sizes [12]  coeffs [1, 12, 55, 165, 330, 462, 462, 330, 165, 55, 11, 1]  edges [[[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[0,8],[0,9],[0,10],[0,11]]]
+
+wrote /workspace/erdos993/independent/bruteforce_forests_report.json
+all A005195 / A000055 / self-consistency assertions passed

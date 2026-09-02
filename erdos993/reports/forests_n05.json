@@ -1,0 +1,269 @@
+{
+ "all_iso": true,
+ "all_iso_prefix": true,
+ "all_log_concave": true,
+ "all_tail": true,
+ "all_unimodal": true,
+ "all_wr_prefix": true,
+ "alpha_histogram": {
+  "3": 5,
+  "4": 4,
+  "5": 1
+ },
+ "coefficient_multiset_hashsum_sha256_mod_2^256": "3dd2c7cbe620c18ca95dc3876873ce1cac771fc213f72c59cabdd3d5feb692a5",
+ "coefficient_multiset_sorted_sha256": "f205741b832dab9f595d6a4db76d09bbe40290148ea10f9e2e53eae0c0aa7901",
+ "count": 10,
+ "count_check": "PASS",
+ "descent_lemma_data_ok": 10,
+ "forest_count_formula_A005195": 10,
+ "iso_all": 10,
+ "iso_min_all_r": {
+  "Q_r": "6",
+  "argmin": {
+   "component_level_sequences": [
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ]
+   ],
+   "component_orders": [
+    1,
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "coefficients": [
+   1,
+   5,
+   10,
+   10,
+   5,
+   1
+  ],
+  "denominator_(r+1)p_{r-1}p_{r+1}": "20",
+  "r": 1,
+  "ratio_float": 0.3
+ },
+ "iso_min_by_r": {
+  "1": {
+   "Q_r": "6",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ]
+    ],
+    "component_orders": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "coefficients": [
+    1,
+    5,
+    10,
+    10,
+    5,
+    1
+   ],
+   "denominator": "20",
+   "ratio_float": 0.3
+  },
+  "2": {
+   "Q_r": "75",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ]
+    ],
+    "component_orders": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "coefficients": [
+    1,
+    5,
+    10,
+    10,
+    5,
+    1
+   ],
+   "denominator": "150",
+   "ratio_float": 0.5
+  },
+  "3": {
+   "Q_r": "200",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ]
+    ],
+    "component_orders": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "coefficients": [
+    1,
+    5,
+    10,
+    10,
+    5,
+    1
+   ],
+   "denominator": "200",
+   "ratio_float": 1.0
+  },
+  "4": {
+   "Q_r": "150",
+   "argmin": {
+    "component_level_sequences": [
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0
+     ]
+    ],
+    "component_orders": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "coefficients": [
+    1,
+    5,
+    10,
+    10,
+    5,
+    1
+   ],
+   "denominator": "50",
+   "ratio_float": 3.0
+  }
+ },
+ "iso_min_prefix_2<=r<=L-1": {
+  "Q_r": "75",
+  "argmin": {
+   "component_level_sequences": [
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ]
+   ],
+   "component_orders": [
+    1,
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "coefficients": [
+   1,
+   5,
+   10,
+   10,
+   5,
+   1
+  ],
+  "denominator_(r+1)p_{r-1}p_{r+1}": "150",
+  "r": 2,
+  "ratio_float": 0.5
+ },
+ "iso_prefix": 10,
+ "iso_violation_examples": [],
+ "log_concave": 10,
+ "n": 5,
+ "nonunimodal_examples": [],
+ "nw_all": 10,
+ "seconds": 0.0,
+ "tail_ok": 10,
+ "unimodal": 10,
+ "wr_prefix_failure_examples": [],
+ "wr_prefix_ok": 10
+}
