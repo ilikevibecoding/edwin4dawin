@@ -88,8 +88,31 @@ page.on('pageerror', (err) => {
   logs.push(`[pageerror] ${err.message}`);
   console.error('[pageerror]', err.message);
 });
-
+page.on('error', (err) => console.error('[shot] page crashed:', err.message));
+page.on('framenavigated', (frame) => {
+  if (frame === page.mainFrame() && Date.now() - t0 > 3000) console.error(`[shot] main frame navigated to ${frame.url()} (unexpected)`);
+});
 const t0 = Date.now();
+
+// Stub Vite's HMR client so concurrent edits by other engineers cannot reload the page mid-capture.
+await page.setRequestInterception(true);
+page.on('request', (req) => {
+  if (req.url().includes('/@vite/client')) {
+    req.respond({
+      status: 200,
+      contentType: 'application/javascript',
+      body: `console.info('[shot] vite HMR client stubbed');
+export const createHotContext = () => ({ accept(){}, dispose(){}, prune(){}, on(){}, off(){}, send(){}, invalidate(){}, data: {} });
+export function updateStyle(id, css) { const el = document.createElement('style'); el.setAttribute('data-vite-dev-id', id); el.textContent = css; document.head.appendChild(el); }
+export function removeStyle() {}
+export function injectQuery(url) { return url; }
+export const ErrorOverlay = class {};`,
+    });
+    return;
+  }
+  req.continue();
+});
+
 try {
   await page.goto(`${url}/?${params.toString()}`, { waitUntil: 'domcontentloaded', timeout });
   await page.waitForFunction(() => window.__shotReady === true || window.__gameError, { timeout, polling: 250 });

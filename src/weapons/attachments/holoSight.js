@@ -75,8 +75,8 @@ function reticleTexture(game, size = 512) {
   const cx = size / 2;
   const cy = size / 2;
   const R = size * 0.33;
-  const lw = size * 0.024;
-  const tick = size * 0.032;
+  const lw = size * 0.015;
+  const tick = size * 0.03;
   const drawPattern = (alpha, widen) => {
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = '#ffffff';
@@ -97,7 +97,7 @@ function reticleTexture(game, size = 512) {
     seg(cx - R - tick, cy, cx - R + tick, cy);
     seg(cx, cy + R - tick, cx, cy + R + tick * 2.4);
     ctx.beginPath();
-    ctx.arc(cx, cy, size * 0.02 + widen * 0.5, 0, Math.PI * 2);
+    ctx.arc(cx, cy, size * 0.014 + widen * 0.5, 0, Math.PI * 2);
     ctx.fill();
   };
   // halo (laser speckle glow) then the crisp core

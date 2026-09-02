@@ -18,7 +18,7 @@ const HIP_POSE = { pos: new THREE.Vector3(0.13, -0.115, -0.34), rot: new THREE.E
 const SPRINT_POSE = { pos: new THREE.Vector3(0.07, -0.15, -0.30), rot: new THREE.Euler(0.2, 0.6, -0.25) };
 const LOWERED_POSE = { pos: new THREE.Vector3(0.15, -0.5, -0.28), rot: new THREE.Euler(-0.75, 0.15, 0) };
 const RELOAD_TILT = { pos: new THREE.Vector3(0.02, -0.035, 0.02), rot: new THREE.Euler(-0.12, 0.12, -0.42) };
-const ADS_EYE_RELIEF = 0.21;
+const ADS_EYE_RELIEF = 0.265;
 const ADS_ZOOM = 1.32;
 
 const _v = new THREE.Vector3();
@@ -113,6 +113,7 @@ export class WeaponSystem {
     upgradeGunMaterials(this.game, this.rig);
 
     this.attachments = await buildAttachments(this.game, this.rig);
+    this.attachments?.holo?.setEyeRelief?.(ADS_EYE_RELIEF);
     this.arms = await buildArms(this.game, this.rig);
 
     this._computeAdsPose();
@@ -705,7 +706,11 @@ export class WeaponSystem {
 
   _registerDebugViews() {
     const d = this.game.debug;
-    if (!d) return;
+    if (!d) {
+      // Debug is created after the weapons load.
+      this.events.once('game:ready', () => this._registerDebugViews());
+      return;
+    }
     d.registerView('weapon_hero', { pos: [0, 0, 12], yaw: 0, pitch: -2, hud: false });
     d.registerView('weapon_ads', { pos: [0, 0, 12], yaw: 0, pitch: 0, ads: true, hud: false });
     d.registerView('weapon_sprint', { pos: [0, 0, 12], yaw: 0, pitch: -2, hud: false, exec: 'weapons.debugSprint = true;' });

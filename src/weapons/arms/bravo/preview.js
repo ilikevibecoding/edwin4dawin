@@ -8,6 +8,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createRig } from '../../rig.js';
+import { buildHandStop } from '../../attachments/foregrip.js';
+import { plane } from '../../attachments/lib.js';
 import { buildArms } from './index.js';
 
 const params = new URLSearchParams(location.search);
@@ -70,6 +72,18 @@ gltf.scene.traverse((o) => {
 const rig = createRig(camera, gltf.scene);
 if (rig.parts.carryHandle) rig.parts.carryHandle.visible = false;
 
+// The angled hand stop moves rig.sockets.gripLeft in-game (attachments/index.js); reproduce it so the socket the
+// fit offsets are derived from matches, and so the index-finger / fin contact can be judged here.
+{
+  const simple = (color, roughness, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness, vertexColors: true });
+  const stubMats = { polymer: simple(0x2b2b29, 0.82), steel: simple(0x8d9096, 0.42, 0.95), matte: simple(0x0c0c0d, 0.95) };
+  const stubAtlas = { text: (w, h) => plane(w, h), material: new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }) };
+  const handStop = buildHandStop({}, rig, stubMats, stubAtlas, { zCentre: -0.265 });
+  rig.sockets.gripLeft.position.copy(handStop.palm);
+  rig.sockets.gripLeft.rotation.copy(handStop.palmRotation);
+  handStop.group.visible = params.get('handstop') !== '0';
+}
+
 const view = params.get('view') || 'hip';
 if (view === 'ads') rig.swayPivot.position.set(0, -0.092, -0.155);
 else if (view === 'sprint') {
@@ -124,7 +138,23 @@ function applyFitOverride(hand, socket, pos, y, z) {
     cur.quat.copy(invSocket).multiply(q);
   }
 }
-applyFitOverride(arms.hands.left, rig.sockets.gripLeft, vec('lpos'), vec('ly'), vec('lz'));
+// ?lframe=roll,yaw,pitch (degrees) — left grip orientation built from the underhand base frame (fingers → gun +X,
+// dorsum → gun -Y, thumb side → gun -Z): roll tilts the palm normal to the right, yaw swings the fingers forward,
+// pitch tilts the palm normal forward. Prints the resulting y/z vectors for FIT.
+let lY = vec('ly');
+let lZ = vec('lz');
+if (params.has('lframe')) {
+  const [roll, yaw, pitch] = vec('lframe');
+  const DEG = Math.PI / 180;
+  const q = new THREE.Quaternion()
+    .setFromAxisAngle(new THREE.Vector3(0, 0, 1), -roll * DEG)
+    .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -pitch * DEG))
+    .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw * DEG));
+  lY = new THREE.Vector3(1, 0, 0).applyQuaternion(q).toArray();
+  lZ = new THREE.Vector3(0, -1, 0).applyQuaternion(q).toArray();
+  console.log(`[preview] lframe y=[${lY.map((v) => v.toFixed(3))}] z=[${lZ.map((v) => v.toFixed(3))}]`);
+}
+applyFitOverride(arms.hands.left, rig.sockets.gripLeft, vec('lpos'), lY, lZ);
 applyFitOverride(arms.hands.right, rig.sockets.gripRight, vec('rpos'), vec('ry'), vec('rz'));
 if (params.has('pose')) arms.setPose(params.get('pose'));
 if (params.has('poseJson')) {
@@ -135,6 +165,158 @@ if (params.has('poseJson')) {
   if (pj.right) arms.hands.right.poseOverride = compilePose(pj.right);
 }
 if (params.get('hideArms') === '1') arms.root.visible = false;
+
+/**
+ * ?fitFingers=1 — greedy wrap of the left hand's fingers around the handguard: for each joint (MCP → PIP → DIP) take
+ * the largest flexion for which the phalanx capsule stays clear of the handguard cross-section (tube body + four
+ * rails + the hand stop). Logs the resulting gripLeft pose. Uses the actual skeleton, so it accounts for the fit
+ * orientation in effect (including ?lframe / ?lpos overrides).
+ */
+async function fitLeftFingers() {
+  const { compilePose, POSES } = await import('./poses.js');
+  const { BONES } = await import('./hand.js');
+  const hand = arms.hands.left;
+  const inv = new THREE.Matrix4();
+  const p = new THREE.Vector3();
+  const AXIS_Y = 0.0203;
+  const CLEAR = num('clear', 0.0008);
+  // signed distance (m) from (x, y, z) in gunRoot space to the handguard + hand stop
+  const sdBox = (px, py, cx, cy, hx, hy) => {
+    const qx = Math.abs(px - cx) - hx;
+    const qy = Math.abs(py - cy) - hy;
+    return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0);
+  };
+  const sdf = (x, y, z) => {
+    const dy = y - AXIS_Y;
+    let d = Math.hypot(x, dy) - 0.0215;
+    // rails: boxes 15.4 mm wide reaching 31.8 mm from the axis (right, top, left, bottom)
+    d = Math.min(d, sdBox(x, dy, 0.0159, 0, 0.0159, 0.0077)); // right
+    d = Math.min(d, sdBox(x, dy, -0.0159, 0, 0.0159, 0.0077)); // left
+    d = Math.min(d, sdBox(x, dy, 0, 0.0159, 0.0077, 0.0159)); // top
+    d = Math.min(d, sdBox(x, dy, 0, -0.0159, 0.0077, 0.0159)); // bottom
+    if (z < -0.238 && z > -0.292) d = Math.min(d, sdBox(x, y, 0, -0.0248, 0.011, 0.0142)); // hand stop clamp + fin
+    return d;
+  };
+  const raw = {
+    index: [0, 0, 0, 0],
+    middle: [0, 0, 0, 0],
+    ring: [0, 0, 0, 0],
+    pinky: [0, 0, 0, 0],
+    thumb: Array.from(POSES.gripLeft.slice(16)),
+  };
+  const spread = params.has('spread') ? vec('spread') : [0, 0, 0, 0];
+  const names = ['index', 'middle', 'ring', 'pinky'];
+  names.forEach((n, i) => (raw[n][3] = spread[i]));
+  scene.updateMatrixWorld(true);
+  inv.copy(rig.gunRoot.matrixWorld).invert();
+  const apply = () => {
+    hand.poseOverride = compilePose(raw);
+    driveTargets();
+    arms.update(0, rig.state); // dt = 0 → poses/offsets applied without blending
+    hand.group.updateMatrixWorld(true);
+  };
+  const jointPos = (bone) => bone.getWorldPosition(p).applyMatrix4(inv).clone();
+  const boneEnd = (bone, len) => bone.localToWorld(new THREE.Vector3(0, len, 0)).applyMatrix4(inv);
+  const clear = (a, b, ra, rb) => {
+    let worst = Infinity;
+    for (let s = 0; s <= 1.0001; s += 0.125) {
+      const x = a.x + (b.x - a.x) * s;
+      const y = a.y + (b.y - a.y) * s;
+      const z = a.z + (b.z - a.z) * s;
+      worst = Math.min(worst, sdf(x, y, z) - (ra + (rb - ra) * s));
+    }
+    return worst;
+  };
+  const def = arms.hands.left.def;
+  const report = {};
+  // hugging cost of the whole finger: squared gaps to the surface (samples along each phalanx), penetration penalised
+  const gapCost = (a, b, ra, rb, hug = true) => {
+    let cost = 0;
+    for (let s = 0; s <= 1.0001; s += 0.25) {
+      const g = sdf(a.x + (b.x - a.x) * s, a.y + (b.y - a.y) * s, a.z + (b.z - a.z) * s) - (ra + (rb - ra) * s);
+      cost += g < CLEAR ? 1e5 + (CLEAR - g) * 1e7 : hug ? g * g * 1e6 : 0; // mm² gaps; penetration dominates
+    }
+    return cost;
+  };
+  const fingerCost = (f, ids) => {
+    let cost = 0;
+    for (let joint = 0; joint < 3; joint++) {
+      const a = jointPos(hand.bones[ids[joint]]);
+      const b = boneEnd(hand.bones[ids[joint]], def.fingers[f].len[joint]);
+      cost += gapCost(a, b, def.fingers[f].r[joint], def.fingers[f].r[joint + 1]) * (joint === 0 ? 1.5 : 1);
+    }
+    return cost;
+  };
+  for (let f = 0; f < 4; f++) {
+    const name = names[f];
+    const ids = BONES[name];
+    let best = { cost: Infinity, angles: [0, 0, 0] };
+    for (let mcp = 0; mcp <= 90; mcp += 5) {
+      for (let pip = 0; pip <= 100; pip += 5) {
+        for (let dip = 0; dip <= 70; dip += 10) {
+          raw[name][0] = mcp;
+          raw[name][1] = pip;
+          raw[name][2] = dip;
+          apply();
+          // mild preference for natural curls (PIP a little more than MCP, DIP less than PIP)
+          const natural = num('natural', 0.03) * ((pip - mcp * 1.1) ** 2 + (dip - pip * 0.5) ** 2);
+          const cost = fingerCost(f, ids) + natural;
+          if (cost < best.cost) best = { cost, angles: [mcp, pip, dip] };
+        }
+      }
+    }
+    raw[name][0] = best.angles[0];
+    raw[name][1] = best.angles[1];
+    raw[name][2] = best.angles[2];
+    apply();
+    const tip = boneEnd(hand.bones[ids[2]], def.fingers[f].len[2]);
+    report[name] = { pose: raw[name].slice(), mcp: jointPos(hand.bones[ids[0]]).toArray().map((v) => +v.toFixed(4)), tip: tip.toArray().map((v) => +v.toFixed(4)) };
+  }
+  // Thumb: grid search over CMC flexion/abduction + MCP/IP flexion so the two distal segments lie along the line
+  // x = tline[0], y = tline[1] (gun space, parallel to the barrel — i.e. along the left side rail) pointing forward,
+  // without penetrating the handguard.
+  if (params.has('tline')) {
+    const [lx, ly] = vec('tline');
+    const t = BONES.thumb;
+    const lineCost = (a, b) => {
+      let c = 0;
+      for (let s = 0; s <= 1.0001; s += 0.25) {
+        const x = a.x + (b.x - a.x) * s;
+        const y = a.y + (b.y - a.y) * s;
+        c += ((x - lx) * 1000) ** 2 + ((y - ly) * 1000) ** 2;
+      }
+      return c;
+    };
+    let best = { cost: Infinity, angles: [0, 0, 0, 0, 0] };
+    const twist = num('ttwist', 0);
+    for (let flex = -90; flex <= 60; flex += 10) {
+      for (let abd = -90; abd <= 90; abd += 10) {
+        for (let mcp = -30; mcp <= 60; mcp += 10) {
+          for (let ip = -30; ip <= 60; ip += 15) {
+            raw.thumb = [flex, abd, twist, mcp, ip];
+            apply();
+            let cost = 0;
+            for (let joint = 0; joint < 3; joint++) {
+              const a = jointPos(hand.bones[t[joint]]);
+              const b = boneEnd(hand.bones[t[joint]], def.thumb.len[joint]);
+              cost += gapCost(a, b, def.thumb.r[joint], def.thumb.r[joint + 1], joint > 0) * (joint > 0 ? num('thug', 0.3) : 1); // hug the rail with the distal segments
+              if (joint > 0) cost += lineCost(a, b) * num('tlinew', 1);
+              if (joint === 2) cost += (b.z - a.z) * 1e5; // reward pointing forward
+            }
+            if (cost < best.cost) best = { cost, angles: [flex, abd, twist, mcp, ip] };
+          }
+        }
+      }
+    }
+    raw.thumb = best.angles.slice();
+    apply();
+    report.thumb = { pose: raw.thumb.slice(), cmc: jointPos(hand.bones[t[0]]).toArray().map((v) => +v.toFixed(4)), mcp: jointPos(hand.bones[t[1]]).toArray().map((v) => +v.toFixed(4)), tip: boneEnd(hand.bones[t[2]], def.thumb.len[2]).toArray().map((v) => +v.toFixed(4)) };
+  }
+  apply();
+  console.log(`[fit] gripLeft ${JSON.stringify(raw)}`);
+  console.log(`[fit] joints ${JSON.stringify(report)}`);
+  window.__fit = { raw, report };
+}
 
 const driveTargets = () => {
   const s = rig.sockets;
@@ -154,6 +336,8 @@ if (params.has('cam')) {
   viewCam.lookAt(new THREE.Vector3().fromArray(vec('look') || [0, -0.1, -0.4]));
   viewCam.updateMatrixWorld(true);
 }
+
+if (params.get('fitFingers') === '1') await fitLeftFingers();
 
 // settle springs & blends, then render
 for (let i = 0; i < 90; i++) {

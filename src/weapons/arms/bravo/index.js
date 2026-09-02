@@ -99,6 +99,7 @@ function basisQuat(x, y, z, out) {
 export class HandRig {
   constructor(side, def, geo, armGeo, mats, fit, socket) {
     this.side = side;
+    this.def = def;
     this.group = new THREE.Group();
     this.group.name = side > 0 ? 'HandRight' : 'HandLeft';
     const sk = buildSkeleton(def, side);
