@@ -5,8 +5,7 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     host: '0.0.0.0',
-    // Poly Haven glTF/.hdr files are large; keep the watcher off the asset tree.
-    watch: { ignored: ['**/public/assets/**'] },
+    // Note: public/ must stay watched so newly added assets are served (Vite indexes public files).
   },
   build: {
     target: 'es2022',

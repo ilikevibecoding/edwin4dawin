@@ -1,20 +1,41 @@
 import * as THREE from 'three';
+import { createParticleAtlas, createDecalAtlas, DECALS } from './textures.js';
+import { ParticleSystem } from './ParticleSystem.js';
+import { FxLights } from './FxLights.js';
+import { MuzzleFlash } from './MuzzleFlash.js';
+import { Tracers } from './Tracers.js';
+import { Decals } from './Decals.js';
+import { Rings } from './Rings.js';
+import { Impacts } from './Impacts.js';
+import { Casings } from './Casings.js';
+import { Debris } from './Debris.js';
+import { Explosions } from './Explosions.js';
+import { Blood } from './Blood.js';
+import { Ambient } from './Ambient.js';
+import { registerFxDebugViews } from './debugViews.js';
+
+const DECAL_TYPES = {
+  stone: DECALS.HOLE_STONE, concrete: DECALS.HOLE_STONE, brick: DECALS.HOLE_STONE, plaster: DECALS.HOLE_PLASTER,
+  metal: DECALS.DENT_METAL, wood: DECALS.HOLE_WOOD, glass: DECALS.GLASS_WEB, dirt: DECALS.HOLE_DIRT, sand: DECALS.HOLE_DIRT,
+  scorch: DECALS.SCORCH, blood: DECALS.BLOOD_SPLAT,
+};
 
 /**
- * Visual effects. STUB — real particles, decals, muzzle flash, tracers, casings, explosions live in src/fx/* (VFX team).
+ * Visual effects orchestrator (VFX team). Sub-systems live in src/fx/*:
+ *   ParticleSystem (one instanced, depth-sorted, sun-lit sprite batch), Decals (instanced oriented quads),
+ *   MuzzleFlash, Tracers, Impacts, Casings (Rapier), Debris (Rapier), Explosions, Blood, Rings, Ambient, FxLights.
  *
- * Required interface:
- *   async load()
- *   update(dt)
- *   muzzleFlash(position, direction)          // usually driven by 'weapon:fire'
- *   impact(point, normal, surface, direction) // driven by 'bullet:hit'
- *   explosion(position, radius, kind)         // driven by 'explosion'
- *   tracer(from, to)
- *   spawnCasing(position, velocity, angularVelocity)   // driven by 'weapon:casing'
+ * Public interface (kept from the stub):
+ *   async load(); update(dt)
+ *   muzzleFlash(position, direction)           'weapon:fire'
+ *   impact(point, normal, surface, direction)  'bullet:hit'
+ *   explosion(position, radius, kind)          'explosion'
+ *   tracer(from, to)                           (+ automatic: every 3rd player shot, every 'enemy:fire')
+ *   spawnCasing(position, velocity, angularVelocity)   'weapon:casing'
  *   decal(point, normal, type, size)
- *   blood(point, direction)                   // driven by 'enemy:damaged'
+ *   blood(point, direction)                    'enemy:damaged'
  *
- * All FX must use game.settings.quality.particles as a density multiplier and pool their meshes.
+ * Density scales with game.settings.quality.particles; casings/debris are capped by quality.maxCasings/maxDebris.
  */
 export class Effects {
   constructor(game) {
@@ -23,62 +44,104 @@ export class Effects {
     this.root = new THREE.Group();
     this.root.name = 'Effects';
     game.scene.add(this.root);
-    this._impacts = [];
-    this._flashLight = new THREE.PointLight(0xffb060, 0, 6, 2);
-    game.scene.add(this._flashLight);
-    this._flashTime = 0;
-    this._impactGeo = new THREE.SphereGeometry(0.03, 6, 4);
-    this._impactMat = new THREE.MeshBasicMaterial({ color: 0xffe0a0 });
+    this.density = game.settings.quality.particles ?? 1;
+    this.particles = null;
+    this.lights = new FxLights(game, 5);
+    this.ready = false;
 
-    this.events.on('weapon:fire', (e) => this.muzzleFlash(e.muzzle, e.direction));
-    this.events.on('bullet:hit', (e) => this.impact(e.point, e.normal, e.surface, e.direction));
+    this.events.on('weapon:fire', (e) => {
+      this.muzzleFlash(e.muzzle, e.direction, e);
+      this.tracers?.onPlayerFire(e);
+    });
+    this.events.on('weapon:casing', (e) => this.spawnCasing(e.position, e.velocity, e.angularVelocity));
+    this.events.on('enemy:fire', (e) => this.tracers?.onEnemyFire(e));
+    this.events.on('bullet:hit', (e) => {
+      this.tracers?.onHit(e);
+      if (e.surface !== 'flesh') this.impact(e.point, e.normal, e.surface, e.direction, e);
+    });
+    this.events.on('enemy:damaged', (e) => this.blood(e.point, e.direction, e));
     this.events.on('explosion', (e) => this.explosion(e.position, e.radius, e.kind));
+    this.events.on('game:ready', () => registerFxDebugViews(game));
   }
 
-  async load() {}
-
-  muzzleFlash(position) {
-    this._flashLight.position.copy(position);
-    this._flashLight.intensity = 25;
-    this._flashTime = 0.05;
+  async load() {
+    this.atlas = createParticleAtlas(256);
+    this.decalAtlas = createDecalAtlas(256);
+    this.particles = new ParticleSystem(this.game, this.atlas, { capacity: 4096 });
+    this.root.add(this.particles.mesh);
+    this.decals = new Decals(this.game, this.decalAtlas, { capacity: 250, lifetime: 60, fadeTime: 8 });
+    this.root.add(this.decals.mesh);
+    this.rings = new Rings(this, 8);
+    this.flash = new MuzzleFlash(this);
+    this.tracers = new Tracers(this);
+    this.impacts = new Impacts(this);
+    this.casings = new Casings(this);
+    this.debris = new Debris(this);
+    this.explosions = new Explosions(this);
+    this.bloodFx = new Blood(this);
+    this.ambient = new Ambient(this);
+    this.ready = true;
   }
 
-  impact(point, normal) {
-    const m = new THREE.Mesh(this._impactGeo, this._impactMat);
-    m.position.copy(point).addScaledVector(normal, 0.01);
-    this.root.add(m);
-    this._impacts.push({ mesh: m, life: 0.6 });
+  muzzleFlash(position, direction) {
+    if (!this.ready) return;
+    if (!position) position = this.game.weapons?.getMuzzleWorldPosition?.(new THREE.Vector3()) || this.game.player.eyePosition;
+    this.flash.fire(position, direction || this.game.player.forward);
   }
 
-  explosion(position, radius) {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.4, 12, 8), new THREE.MeshBasicMaterial({ color: 0xff8830, transparent: true, opacity: 0.8 }));
-    m.position.copy(position);
-    this.root.add(m);
-    this._impacts.push({ mesh: m, life: 0.5, grow: radius });
+  impact(point, normal, surface = 'stone', direction = null, data = null) {
+    if (!this.ready || !point) return;
+    this.impacts.hit(point, normal, surface, direction, data);
   }
 
-  tracer() {}
-  spawnCasing() {}
-  decal() {}
-  blood() {}
+  explosion(position, radius = 6, kind = 'bomb') {
+    if (!this.ready || !position) return;
+    this.explosions.explode(position, radius, kind);
+  }
+
+  tracer(from, to) {
+    if (!this.ready) return;
+    this.tracers.fire(from, to);
+  }
+
+  spawnCasing(position, velocity, angularVelocity) {
+    if (!this.ready) return;
+    this.casings.spawn(position, velocity, angularVelocity);
+  }
+
+  /** Generic decal by type name ('stone'|'metal'|'wood'|'glass'|'scorch'|'blood'|'dirt'|'plaster'), size in meters. */
+  decal(point, normal, type = 'stone', size = 0.12, opts = {}) {
+    if (!this.ready || !point) return;
+    const cell = typeof type === 'number' ? type : (DECAL_TYPES[type] ?? DECALS.HOLE_STONE);
+    this.decals.add(point, normal || new THREE.Vector3(0, 1, 0), cell, size, opts);
+  }
+
+  blood(point, direction, info = null) {
+    if (!this.ready || !point) return;
+    this.bloodFx.hit(point, direction, { headshot: !!info?.headshot, amount: info?.damage ?? 1 });
+  }
+
+  /** Rough per-frame cost figures for the debug overlay / report. */
+  get stats() {
+    return {
+      particles: this.particles?.count ?? 0,
+      particlePeak: this.particles?.stats.peak ?? 0,
+      decals: this.decals?.count ?? 0,
+      casings: this.casings?.items.length ?? 0,
+      debris: this.debris?.items.length ?? 0,
+    };
+  }
 
   update(dt) {
-    if (this._flashTime > 0) {
-      this._flashTime -= dt;
-      if (this._flashTime <= 0) this._flashLight.intensity = 0;
-    }
-    for (let i = this._impacts.length - 1; i >= 0; i--) {
-      const it = this._impacts[i];
-      it.life -= dt;
-      if (it.grow) {
-        it.mesh.scale.multiplyScalar(1 + dt * 4);
-        it.mesh.material.opacity = Math.max(0, it.life * 1.6);
-      }
-      if (it.life <= 0) {
-        this.root.remove(it.mesh);
-        if (it.grow) { it.mesh.geometry.dispose(); it.mesh.material.dispose(); }
-        this._impacts.splice(i, 1);
-      }
-    }
+    if (!this.ready) return;
+    this.flash.update(dt);
+    this.casings.update(dt);
+    this.debris.update(dt);
+    this.explosions.update(dt);
+    this.ambient.update(dt);
+    this.rings.update(dt);
+    this.decals.update(dt);
+    this.lights.update(dt);
+    this.particles.update(dt, this.game.camera);
   }
 }
