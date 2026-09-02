@@ -63,6 +63,7 @@ export function createRig(camera, gltfScene) {
     trigger: byName.Trigger,
     stock: byName.Stock,
     carryHandle: byName.Sight, // detachable carry handle (hidden when an optic is mounted)
+    carryHandleParts: [byName.Sight_2, byName.Switch1, byName.Switch2].filter(Boolean), // its loose knobs (separate siblings in the GLB)
     partsGroup: byName.Parts,
   };
 

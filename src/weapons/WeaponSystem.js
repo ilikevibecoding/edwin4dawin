@@ -15,7 +15,7 @@ import { upgradeGunMaterials } from './materials.js';
  */
 
 // Reference framing (MW2019): receiver bottom-right, handguard running to the upper-left, gun close to the lens.
-const HIP_POSE = { pos: new THREE.Vector3(0.10, -0.092, -0.23), rot: new THREE.Euler(0.055, 0.25, -0.055) };
+const HIP_POSE = { pos: new THREE.Vector3(0.10, -0.094, -0.25), rot: new THREE.Euler(0.055, 0.25, -0.055) };
 const SPRINT_POSE = { pos: new THREE.Vector3(0.07, -0.15, -0.30), rot: new THREE.Euler(0.2, 0.6, -0.25) };
 const LOWERED_POSE = { pos: new THREE.Vector3(0.15, -0.5, -0.28), rot: new THREE.Euler(-0.75, 0.15, 0) };
 const RELOAD_TILT = { pos: new THREE.Vector3(0.02, -0.035, 0.02), rot: new THREE.Euler(-0.12, 0.12, -0.42) };
@@ -103,6 +103,7 @@ export class WeaponSystem {
 
     // The detachable carry handle is replaced by an optic + flip-up sight.
     if (this.rig.parts.carryHandle) this.rig.parts.carryHandle.visible = false;
+    for (const p of this.rig.parts.carryHandleParts || []) p.visible = false;
 
     // Wrap animated GLB parts in metre-space pivots (the GLB nodes live in a cm-scaled, X-rotated root).
     this._pivots.magazine = this._makePivot(this.rig.parts.magazine, 'MagazinePivot');

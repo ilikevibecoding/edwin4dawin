@@ -40,7 +40,7 @@ export async function buildAttachments(game, rig) {
 
   const holo = buildHoloSight(game, rig, mats, atlas, { zFront: -0.1 });
   const rearSight = buildRearSight(game, rig, mats, atlas, { zCentre: 0.042 });
-  const handStop = buildHandStop(game, rig, mats, atlas, { zCentre: -0.265 });
+  const handStop = buildHandStop(game, rig, mats, atlas, { zCentre: -0.315 }); // forward station like the MW2019 reference grip
   const laser = buildLaserBox(game, rig, mats, atlas, { zCentre: -0.2395 });
   const sling = buildSling(game, rig, mats, atlas);
   const receiver = buildReceiverDetails(game, rig, mats, atlas);

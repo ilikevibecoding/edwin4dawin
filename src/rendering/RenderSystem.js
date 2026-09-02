@@ -358,16 +358,19 @@ export class RenderSystem {
         light.color.copy(this.sunColor);
         light.intensity = this.sunIntensity;
         light.shadow.radius = TUNE.shadowRadius;
+        light.layers.enable(LAYER.VIEWMODEL); // the weapon camera only sees this layer; lights must be on it too
       }
       this._updateCsmFrustums(true);
     } else {
       const sun = new THREE.DirectionalLight(this.sunColor, this.sunIntensity);
       sun.name = 'Sun';
       sun.position.copy(this.sunDirection).multiplyScalar(100);
+      sun.layers.enable(LAYER.VIEWMODEL);
       this.scene.add(sun);
       this.scene.add(sun.target);
       this.sunLight = sun;
     }
+    this.hemiLight?.layers.enable(LAYER.VIEWMODEL);
   }
 
   /** Recompute cascade frustums when the camera FOV/aspect changed; refresh per-cascade normal bias. */
