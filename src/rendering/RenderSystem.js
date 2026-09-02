@@ -634,6 +634,9 @@ export class RenderSystem {
       ao: !!q.ao,
       bloom: flag('bloom', !!q.bloom),
       smaa: flag('smaa', !!q.smaa),
+      // Hardware MSAA on the HDR scene buffer (resolved before the effects): with SMAA on top this takes the
+      // geometric "crunch" off the frame; a shipped title's TAA-resolved softness is the reference look.
+      msaa: p.has('msaa') ? parseInt(p.get('msaa'), 10) || 0 : (q.msaa ?? 0),
       godRays: flag('godrays', tier >= 2),
       dof: flag('dof', tier >= 2),
       grain: flag('grain', true),
@@ -652,7 +655,7 @@ export class RenderSystem {
 
     const composer = new EffectComposer(this.renderer, {
       frameBufferType: THREE.HalfFloatType,
-      multisampling: 0,
+      multisampling: this.renderer.capabilities.isWebGL2 ? Math.min(f.msaa, this.renderer.capabilities.maxSamples) : 0,
       depthBuffer: true,
       stencilBuffer: false,
     });

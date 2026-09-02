@@ -20,7 +20,9 @@ npm run dev          # http://localhost:5173
 | **F1** | Toggle HUD · **Esc** pause |
 
 URL parameters: `?quality=potato|low|medium|high|ultra` (`potato` = half-resolution fallback for software GL / weak iGPUs), `&fov=62`, `&streaks=1` (air strike available immediately),
-`&noEnemies=1`, `&god=1`, `&debug=1` (stats overlay), `&arms=<candidate>` (first-person arms variant).
+`&noEnemies=1`, `&god=1`, `&debug=1` (stats overlay), `&arms=<candidate>` (first-person arms variant),
+`&msaa=0|2|4|8` (hardware MSAA on the HDR scene buffer; `high`/`ultra` default to 4×, resolved before the effects and
+followed by SMAA).
 
 ## Architecture
 
@@ -29,7 +31,7 @@ rendering conventions, module ownership.
 
 ```
 src/core        game loop, input, asset loader, Rapier wrapper, settings, debug/screenshot API
-src/rendering   renderer, HDRI sky + analytic sun (cascaded shadow maps), N8AO, bloom, SMAA, grading, camera FX
+src/rendering   renderer, HDRI sky + analytic sun (cascaded shadow maps), N8AO, bloom, MSAA + SMAA, grading, camera FX
 src/world       Seaside plaza: procedural buildings, plaza pattern, fountain/statue, props, trees, nav graph, minimap
 src/weapons     M4A1 rig + view-model animator, worn-Cerakote surface shader + load-time AO/edge-wear bake,
                 attachments (EXPS holo, Cronen rear sight, hand stop, PEQ laser, sling, receiver roll marks),
