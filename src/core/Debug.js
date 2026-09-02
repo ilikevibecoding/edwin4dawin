@@ -49,6 +49,13 @@ export class Debug {
     if (spec.weapon != null) this.setViewModel(spec.weapon);
     if (spec.ads != null && weapons?.setAiming) weapons.setAiming(!!spec.ads);
     if (spec.crouch != null) player.isCrouching = !!spec.crouch;
+    if (spec.exec) {
+      try {
+        new Function('game', 'weapons', 'THREE', spec.exec)(this.game, weapons, THREE);
+      } catch (err) {
+        console.error('[debug] view exec failed', err);
+      }
+    }
     return spec;
   }
 

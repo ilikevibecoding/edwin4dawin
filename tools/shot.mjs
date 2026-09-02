@@ -19,9 +19,11 @@
  *   --nohud / --noweapon
  *   --exec "js"         evaluated in page with `game` and `THREE` in scope (may be async / use await)
  *   --wait SEC          simulated seconds to advance after setup (fixed 60Hz steps), default 0.5
+ *                       NOTE: every simulated frame is rendered (software GL) — keep --wait small unless the shot needs time
  *   --frames N          extra frames to render before capture, default 3
  *   --params "a=1&b=2"  extra URL params
- *   --timeout MS        default 240000
+ *   --seq JSON          extra captures in the same session: '[{"exec":"...","wait":0.2,"out":"/tmp/b.png"}]'
+ *   --timeout MS        default 900000
  */
 import puppeteer from 'puppeteer-core';
 import { mkdir } from 'node:fs/promises';
@@ -42,7 +44,7 @@ const width = parseInt(opt('w', '1600'), 10);
 const height = parseInt(opt('h', '900'), 10);
 const quality = opt('quality', 'high');
 const out = opt('out', '/tmp/shots/shot.png');
-const timeout = parseInt(opt('timeout', '240000'), 10);
+const timeout = parseInt(opt('timeout', '900000'), 10);
 const waitSec = parseFloat(opt('wait', '0.5'));
 const frames = parseInt(opt('frames', '3'), 10);
 const params = new URLSearchParams(opt('params', ''));
@@ -145,6 +147,27 @@ try {
 
   await mkdir(dirname(resolve(out)), { recursive: true });
   await page.screenshot({ path: out, type: out.endsWith('.jpg') ? 'jpeg' : 'png', quality: out.endsWith('.jpg') ? 92 : undefined });
+
+  // --seq '[{"exec":"...","wait":0.5,"out":"/tmp/a.png"}, ...]' : additional captures in the same session
+  if (has('seq')) {
+    const seq = JSON.parse(opt('seq'));
+    for (const step of seq) {
+      await page.evaluate(async (s) => {
+        const game = window.__game;
+        const d = game.debug;
+        if (s.view) d.setView(s.view);
+        if (s.exec) {
+          const fn = new Function('game', 'THREE', 'debug', `return (async () => { ${s.exec} })();`);
+          await fn(game, window.THREE, d);
+        }
+        if (s.wait > 0) await d.waitTime(s.wait);
+        await d.waitFrames(s.frames ?? 2);
+      }, step);
+      await mkdir(dirname(resolve(step.out)), { recursive: true });
+      await page.screenshot({ path: step.out, type: 'png' });
+      console.error(`[shot] saved ${step.out}`);
+    }
+  }
   const stats = await page.evaluate(() => {
     const g = window.__game;
     const i = g.render.renderer.info;
