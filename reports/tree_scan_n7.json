@@ -1,0 +1,825 @@
+{
+ "n": 7,
+ "trees": 11,
+ "expected_trees_A000055": 11,
+ "complete": true,
+ "wall_seconds": 0.004,
+ "mod": 1,
+ "shards": [
+  {
+   "res": 0,
+   "mod": 1,
+   "trees": 11,
+   "wall_seconds": 0.0,
+   "trees_per_second": 65762.3,
+   "kernel": "avx512-u32",
+   "dp_mode": "incremental",
+   "folds": 59
+  }
+ ],
+ "alpha_hist": {
+  "4": 6,
+  "5": 4,
+  "6": 1
+ },
+ "nonunimodal_trees": 0,
+ "nonunimodal_witnesses": [],
+ "lc_fail_trees": 0,
+ "lc_fail_hist_by_k": {},
+ "lc_fail_witnesses": [],
+ "iso_fail_trees": 0,
+ "iso_fail_trees_r_lt_L": 0,
+ "iso_fail_trees_r_ge_L": 0,
+ "iso_fail_trees_descent_conditional": 0,
+ "iso_fail_hist_by_r": {},
+ "iso_fail_descent_conditional_hist_by_r": {},
+ "iso_fail_witnesses": [],
+ "min_ratio": {
+  "par": [
+   0,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "alpha": 6,
+  "L": 4,
+  "poly": [
+   1,
+   7,
+   15,
+   20,
+   15,
+   6,
+   1
+  ],
+  "first_descent": 4,
+  "lc_fail_k": [],
+  "wr_fail_r": [],
+  "iso_fail_r": [],
+  "Q": [
+   20,
+   79,
+   525,
+   700,
+   315
+  ],
+  "r": 2,
+  "r_minus_L": -2,
+  "num": 79,
+  "den": 105,
+  "approx": 0.7523809523809524,
+  "reduced": "79/105"
+ },
+ "min_ratio_descent_conditional": {
+  "par": [
+   0,
+   1,
+   2,
+   2,
+   2,
+   1,
+   6
+  ],
+  "alpha": 5,
+  "L": 3,
+  "poly": [
+   1,
+   7,
+   15,
+   13,
+   6,
+   1
+  ],
+  "first_descent": 3,
+  "lc_fail_k": [],
+  "wr_fail_r": [
+   5
+  ],
+  "iso_fail_r": [],
+  "Q": [
+   20,
+   226,
+   372,
+   248
+  ],
+  "r": 3,
+  "r_minus_L": 0,
+  "num": 372,
+  "den": 195,
+  "approx": 1.9076923076923078,
+  "reduced": "124/65"
+ },
+ "min_ratio_r_lt_L": {
+  "par": [
+   0,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "alpha": 6,
+  "L": 4,
+  "poly": [
+   1,
+   7,
+   15,
+   20,
+   15,
+   6,
+   1
+  ],
+  "first_descent": 4,
+  "lc_fail_k": [],
+  "wr_fail_r": [],
+  "iso_fail_r": [],
+  "Q": [
+   20,
+   79,
+   525,
+   700,
+   315
+  ],
+  "r": 2,
+  "r_minus_L": -2,
+  "num": 79,
+  "den": 105,
+  "approx": 0.7523809523809524,
+  "reduced": "79/105"
+ },
+ "min_ratio_r_ge_L": {
+  "par": [
+   0,
+   1,
+   2,
+   2,
+   2,
+   2,
+   1
+  ],
+  "alpha": 5,
+  "L": 3,
+  "poly": [
+   1,
+   7,
+   15,
+   16,
+   9,
+   2
+  ],
+  "first_descent": 4,
+  "lc_fail_k": [],
+  "wr_fail_r": [],
+  "iso_fail_r": [],
+  "Q": [
+   20,
+   163,
+   453,
+   420
+  ],
+  "r": 3,
+  "r_minus_L": 0,
+  "num": 453,
+  "den": 240,
+  "approx": 1.8875,
+  "reduced": "151/80"
+ },
+ "min_ratio_by_r": {
+  "1": {
+   "par": [
+    0,
+    1,
+    2,
+    3,
+    3,
+    1,
+    6
+   ],
+   "alpha": 4,
+   "L": 3,
+   "poly": [
+    1,
+    7,
+    15,
+    11,
+    3
+   ],
+   "first_descent": 3,
+   "lc_fail_k": [],
+   "wr_fail_r": [],
+   "iso_fail_r": [],
+   "Q": [
+    20,
+    268,
+    408
+   ],
+   "r": 1,
+   "r_minus_L": -2,
+   "num": 20,
+   "den": 7,
+   "approx": 2.857142857142857
+  },
+  "2": {
+   "par": [
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "alpha": 6,
+   "L": 4,
+   "poly": [
+    1,
+    7,
+    15,
+    20,
+    15,
+    6,
+    1
+   ],
+   "first_descent": 4,
+   "lc_fail_k": [],
+   "wr_fail_r": [],
+   "iso_fail_r": [],
+   "Q": [
+    20,
+    79,
+    525,
+    700,
+    315
+   ],
+   "r": 2,
+   "r_minus_L": -2,
+   "num": 79,
+   "den": 105,
+   "approx": 0.7523809523809524
+  },
+  "3": {
+   "par": [
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "alpha": 6,
+   "L": 4,
+   "poly": [
+    1,
+    7,
+    15,
+    20,
+    15,
+    6,
+    1
+   ],
+   "first_descent": 4,
+   "lc_fail_k": [],
+   "wr_fail_r": [],
+   "iso_fail_r": [],
+   "Q": [
+    20,
+    79,
+    525,
+    700,
+    315
+   ],
+   "r": 3,
+   "r_minus_L": -1,
+   "num": 525,
+   "den": 300,
+   "approx": 1.75
+  },
+  "4": {
+   "par": [
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "alpha": 6,
+   "L": 4,
+   "poly": [
+    1,
+    7,
+    15,
+    20,
+    15,
+    6,
+    1
+   ],
+   "first_descent": 4,
+   "lc_fail_k": [],
+   "wr_fail_r": [],
+   "iso_fail_r": [],
+   "Q": [
+    20,
+    79,
+    525,
+    700,
+    315
+   ],
+   "r": 4,
+   "r_minus_L": 0,
+   "num": 700,
+   "den": 300,
+   "approx": 2.3333333333333335
+  },
+  "5": {
+   "par": [
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "alpha": 6,
+   "L": 4,
+   "poly": [
+    1,
+    7,
+    15,
+    20,
+    15,
+    6,
+    1
+   ],
+   "first_descent": 4,
+   "lc_fail_k": [],
+   "wr_fail_r": [],
+   "iso_fail_r": [],
+   "Q": [
+    20,
+    79,
+    525,
+    700,
+    315
+   ],
+   "r": 5,
+   "r_minus_L": 1,
+   "num": 315,
+   "den": 90,
+   "approx": 3.5
+  }
+ },
+ "wr_fail_trees_r_lt_L": 0,
+ "wr_fail_trees_any_r": 5,
+ "wr_fail_hist_by_r": {
+  "4": 3,
+  "5": 2
+ },
+ "wr_first_fail_minus_L_hist": {
+  "1": 3,
+  "2": 2
+ },
+ "wr_first_fail_minus_alpha_hist": {
+  "0": 5
+ },
+ "wr_min_first_fail_minus_L": null,
+ "wr_min_first_fail_minus_L_witness": null,
+ "wr_fail_r_lt_L_witnesses": [],
+ "first_descent": {
+  "definition": "d = min r in 1..alpha with p_r < p_{r-1}; 0 = no descent",
+  "max": 4,
+  "max_witness": {
+   "par": [
+    0,
+    1,
+    2,
+    2,
+    2,
+    2,
+    1
+   ],
+   "alpha": 5,
+   "L": 3,
+   "poly": [
+    1,
+    7,
+    15,
+    16,
+    9,
+    2
+   ],
+   "first_descent": 4,
+   "lc_fail_k": [],
+   "wr_fail_r": [],
+   "iso_fail_r": [],
+   "Q": [
+    20,
+    163,
+    453,
+    420
+   ],
+   "r": 4,
+   "r_minus_L": 1
+  },
+  "hist": {
+   "3": 9,
+   "4": 2
+  },
+  "hist_minus_L": {
+   "0": 10,
+   "1": 1
+  },
+  "trees_d_ge_L": 11,
+  "trees_d_gt_L": 1,
+  "trees_no_descent": 0,
+  "d_ge_L_witnesses": [
+   {
+    "par": [
+     0,
+     1,
+     2,
+     3,
+     3,
+     1,
+     6
+    ],
+    "alpha": 4,
+    "L": 3,
+    "poly": [
+     1,
+     7,
+     15,
+     11,
+     3
+    ],
+    "first_descent": 3,
+    "lc_fail_k": [],
+    "wr_fail_r": [],
+    "iso_fail_r": [],
+    "Q": [
+     20,
+     268,
+     408
+    ],
+    "r": 3,
+    "r_minus_L": 0
+   },
+   {
+    "par": [
+     0,
+     1,
+     2,
+     3,
+     2,
+     1,
+     6
+    ],
+    "alpha": 4,
+    "L": 3,
+    "poly": [
+     1,
+     7,
+     15,
+     11,
+     2
+    ],
+    "first_descent": 3,
+    "lc_fail_k": [],
+    "wr_fail_r": [
+     4
+    ],
+    "iso_fail_r": [],
+    "Q": [
+     20,
+     268,
+     468
+    ],
+    "r": 3,
+    "r_minus_L": 0
+   },
+   {
+    "par": [
+     0,
+     1,
+     2,
+     3,
+     1,
+     5,
+     6
+    ],
+    "alpha": 4,
+    "L": 3,
+    "poly": [
+     1,
+     7,
+     15,
+     10,
+     1
+    ],
+    "first_descent": 3,
+    "lc_fail_k": [],
+    "wr_fail_r": [
+     4
+    ],
+    "iso_fail_r": [],
+    "Q": [
+     20,
+     289,
+     465
+    ],
+    "r": 3,
+    "r_minus_L": 0
+   },
+   {
+    "par": [
+     0,
+     1,
+     2,
+     2,
+     2,
+     2,
+     1
+    ],
+    "alpha": 5,
+    "L": 3,
+    "poly": [
+     1,
+     7,
+     15,
+     16,
+     9,
+     2
+    ],
+    "first_descent": 4,
+    "lc_fail_k": [],
+    "wr_fail_r": [],
+    "iso_fail_r": [],
+    "Q": [
+     20,
+     163,
+     453,
+     420
+    ],
+    "r": 4,
+    "r_minus_L": 1
+   },
+   {
+    "par": [
+     0,
+     1,
+     2,
+     2,
+     2,
+     1,
+     6
+    ],
+    "alpha": 5,
+    "L": 3,
+    "poly": [
+     1,
+     7,
+     15,
+     13,
+     6,
+     1
+    ],
+    "first_descent": 3,
+    "lc_fail_k": [],
+    "wr_fail_r": [
+     5
+    ],
+    "iso_fail_r": [],
+    "Q": [
+     20,
+     226,
+     372,
+     248
+    ],
+    "r": 3,
+    "r_minus_L": 0
+   },
+   {
+    "par": [
+     0,
+     1,
+     2,
+     2,
+     2,
+     1,
+     1
+    ],
+    "alpha": 5,
+    "L": 3,
+    "poly": [
+     1,
+     7,
+     15,
+     14,
+     6,
+     1
+    ],
+    "first_descent": 3,
+    "lc_fail_k": [],
+    "wr_fail_r": [
+     5
+    ],
+    "iso_fail_r": [],
+    "Q": [
+     20,
+     205,
+     453,
+     270
+    ],
+    "r": 3,
+    "r_minus_L": 0
+   },
+   {
+    "par": [
+     0,
+     1,
+     2,
+     2,
+     1,
+     5,
+     5
+    ],
+    "alpha": 5,
+    "L": 3,
+    "poly": [
+     1,
+     7,
+     15,
+     12,
+     5,
+     1
+    ],
+    "first_descent": 3,
+    "lc_fail_k": [],
+    "wr_fail_r": [],
+    "iso_fail_r": [],
+    "Q": [
+     20,
+     247,
+     357,
+     184
+    ],
+    "r": 3,
+    "r_minus_L": 0
+   },
+   {
+    "par": [
+     0,
+     1,
+     2,
+     2,
+     1,
+     5,
+     1
+    ],
+    "alpha": 4,
+    "L": 3,
+    "poly": [
+     1,
+     7,
+     15,
+     12,
+     3
+    ],
+    "first_descent": 3,
+    "lc_fail_k": [],
+    "wr_fail_r": [],
+    "iso_fail_r": [],
+    "Q": [
+     20,
+     247,
+     477
+    ],
+    "r": 3,
+    "r_minus_L": 0
+   },
+   {
+    "par": [
+     0,
+     1,
+     2,
+     1,
+     4,
+     1,
+     6
+    ],
+    "alpha": 4,
+    "L": 3,
+    "poly": [
+     1,
+     7,
+     15,
+     11,
+     1
+    ],
+    "first_descent": 3,
+    "lc_fail_k": [],
+    "wr_fail_r": [
+     4
+    ],
+    "iso_fail_r": [],
+    "Q": [
+     20,
+     268,
+     528
+    ],
+    "r": 3,
+    "r_minus_L": 0
+   },
+   {
+    "par": [
+     0,
+     1,
+     2,
+     1,
+     4,
+     1,
+     1
+    ],
+    "alpha": 4,
+    "L": 3,
+    "poly": [
+     1,
+     7,
+     15,
+     13,
+     4
+    ],
+    "first_descent": 3,
+    "lc_fail_k": [],
+    "wr_fail_r": [],
+    "iso_fail_r": [],
+    "Q": [
+     20,
+     226,
+     492
+    ],
+    "r": 3,
+    "r_minus_L": 0
+   },
+   {
+    "par": [
+     0,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "alpha": 6,
+    "L": 4,
+    "poly": [
+     1,
+     7,
+     15,
+     20,
+     15,
+     6,
+     1
+    ],
+    "first_descent": 4,
+    "lc_fail_k": [],
+    "wr_fail_r": [],
+    "iso_fail_r": [],
+    "Q": [
+     20,
+     79,
+     525,
+     700,
+     315
+    ],
+    "r": 4,
+    "r_minus_L": 0
+   }
+  ]
+ },
+ "witness_caps": {
+  "iso_fail": 50,
+  "lc_fail": 50,
+  "nonunimodal": 50,
+  "wr_fail_r_lt_L": 20,
+  "d_ge_L": 20
+ },
+ "definitions": {
+  "L": "L(alpha) = ceil((2*alpha-1)/3)",
+  "WR_r": "p_{r-1} <= r*p_r, 1<=r<=alpha",
+  "ISO_r": "Q_r = r*p_r^2 + p_{r-1}^2 - (r+1)*p_{r-1}*p_{r+1} >= 0, 1<=r<=alpha-1",
+  "descent_conditional": "ISO_r restricted to r with p_{r-1} >= p_r",
+  "ratio": "Q_r / (p_{r-1}*p_r), exact fraction num/den (unreduced) and reduced",
+  "lc_fail": "p_{k-1}*p_{k+1} > p_k^2",
+  "unimodal": "nondecreasing then nonincreasing",
+  "first_descent": "d = min r in 1..alpha with p_r < p_{r-1}; 0 = no descent"
+ }
+}

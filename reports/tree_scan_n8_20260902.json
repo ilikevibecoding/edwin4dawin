@@ -1,0 +1,108 @@
+{
+ "n": 8,
+ "date": "2026-09-02",
+ "mod": 1,
+ "wall_seconds": 0.002,
+ "shards": 1,
+ "trees": 23,
+ "nonunimodal": 0,
+ "lc_fail_trees": 0,
+ "lc_fail_cells": 0,
+ "iso_fail_cells_target": 0,
+ "iso_fail_trees_target": 0,
+ "iso_fail_cells_outside": 0,
+ "iso_fail_trees_outside": 0,
+ "iso_fail_cells_desc_target": 0,
+ "iso_fail_trees_desc_target": 0,
+ "wr_fail_cells_target": 0,
+ "wr_fail_trees_target": 0,
+ "wr_fail_cells_all": 10,
+ "wr_fail_trees_all": 10,
+ "trees_with_target_descent": 0,
+ "target_descent_cells": 0,
+ "trees_with_target_descent_r_ge_9": 0,
+ "alarms": 0,
+ "lc_by_k": {},
+ "lc_by_k_minus_L": {},
+ "wr_first_fail_r_minus_L": {
+  "2": 10
+ },
+ "alpha_hist": {
+  "4": 5,
+  "5": 12,
+  "6": 5,
+  "7": 1
+ },
+ "mode_hist": {
+  "2": 5,
+  "3": 18
+ },
+ "min_slack_target": {
+  "num": "53",
+  "den": "140",
+  "value": 0.37857142857142856,
+  "Q_r": "106",
+  "p_prev_times_p_next": "280",
+  "r": 2,
+  "alpha": 7,
+  "L": 5,
+  "par": [
+   0,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "poly": [
+   1,
+   8,
+   21,
+   35,
+   35,
+   21,
+   7,
+   1
+  ]
+ },
+ "min_slack_target_descent": null,
+ "min_slack_target_r_ge_open_rank": null,
+ "min_slack_all_r": {
+  "num": "53",
+  "den": "140",
+  "value": 0.37857142857142856,
+  "Q_r": "106",
+  "p_prev_times_p_next": "280",
+  "r": 2,
+  "alpha": 7,
+  "L": 5,
+  "par": [
+   0,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "poly": [
+   1,
+   8,
+   21,
+   35,
+   35,
+   21,
+   7,
+   1
+  ]
+ },
+ "A000055_expected": 23,
+ "A000055_match": true,
+ "alarm_iso_lines": [],
+ "alarm_wr_lines": [],
+ "alarm_nonunimodal_lines": [],
+ "lc_fail_lines": []
+}

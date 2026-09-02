@@ -1,0 +1,10320 @@
+{
+ "date": "2026-09-02",
+ "definitions": {
+  "WR_r": "p_{r-1} <= r p_r, 1<=r<=alpha",
+  "ISO_r": "Q_r = r p_r^2 + p_{r-1}^2 - (r+1) p_{r-1} p_{r+1} >= 0, 1<=r<=alpha-1",
+  "descent_conditional": "ISO_r only for r with p_{r-1} >= p_r",
+  "L(alpha)": "ceil((2 alpha - 1)/3)",
+  "ratio": "Q_r / (p_{r-1} p_r)",
+  "wr_gap": "(first r with WR_r violated) - L(alpha); >= 0 means WR holds for all r < L(alpha)"
+ },
+ "exhaustive": {
+  "table": [
+   {
+    "n": 1,
+    "forests": 1,
+    "A005195": 1,
+    "count_matches_oeis": true,
+    "distinct_polynomials": 1,
+    "unimodality_violations": 0,
+    "lc_failures": 0,
+    "wr_violations_r_lt_L": 0,
+    "wr_violations_any_r": 0,
+    "iso_violations_unconditional": 0,
+    "iso_violations_r_lt_L": 0,
+    "iso_violations_descent_conditional": 0,
+    "min_ratio_unconditional": null,
+    "min_ratio_r_lt_L": null,
+    "min_ratio_descent": null,
+    "min_ratio_r_ge_3": null,
+    "min_wr_gap_first_violation_minus_L": null,
+    "min_wr_gap_witness": null,
+    "seconds": 0.0
+   },
+   {
+    "n": 2,
+    "forests": 2,
+    "A005195": 2,
+    "count_matches_oeis": true,
+    "distinct_polynomials": 2,
+    "unimodality_violations": 0,
+    "lc_failures": 0,
+    "wr_violations_r_lt_L": 0,
+    "wr_violations_any_r": 0,
+    "iso_violations_unconditional": 0,
+    "iso_violations_r_lt_L": 0,
+    "iso_violations_descent_conditional": 0,
+    "min_ratio_unconditional": {
+     "fraction": "3/2",
+     "float": 1.5,
+     "r": 1,
+     "witness": {
+      "n": 2,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       []
+      ],
+      "polynomial": [
+       1,
+       2,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_lt_L": null,
+    "min_ratio_descent": null,
+    "min_ratio_r_ge_3": null,
+    "min_wr_gap_first_violation_minus_L": null,
+    "min_wr_gap_witness": null,
+    "seconds": 0.0
+   },
+   {
+    "n": 3,
+    "forests": 3,
+    "A005195": 3,
+    "count_matches_oeis": true,
+    "distinct_polynomials": 3,
+    "unimodality_violations": 0,
+    "lc_failures": 0,
+    "wr_violations_r_lt_L": 0,
+    "wr_violations_any_r": 1,
+    "iso_violations_unconditional": 0,
+    "iso_violations_r_lt_L": 0,
+    "iso_violations_descent_conditional": 0,
+    "min_ratio_unconditional": {
+     "fraction": "4/3",
+     "float": 1.3333333333333333,
+     "r": 1,
+     "witness": {
+      "n": 3,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       []
+      ],
+      "polynomial": [
+       1,
+       3,
+       3,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_lt_L": {
+     "fraction": "4/3",
+     "float": 1.3333333333333333,
+     "r": 1,
+     "witness": {
+      "n": 3,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       []
+      ],
+      "polynomial": [
+       1,
+       3,
+       3,
+       1
+      ]
+     }
+    },
+    "min_ratio_descent": {
+     "fraction": "2/1",
+     "float": 2.0,
+     "r": 2,
+     "witness": {
+      "n": 3,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       []
+      ],
+      "polynomial": [
+       1,
+       3,
+       3,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_ge_3": null,
+    "min_wr_gap_first_violation_minus_L": 1,
+    "min_wr_gap_witness": {
+     "forest": {
+      "n": 3,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ]
+       ]
+      ]
+     },
+     "polynomial": [
+      1,
+      3,
+      1
+     ],
+     "first_violating_r": 2,
+     "L": 1,
+     "alpha": 2
+    },
+    "seconds": 0.0
+   },
+   {
+    "n": 4,
+    "forests": 6,
+    "A005195": 6,
+    "count_matches_oeis": true,
+    "distinct_polynomials": 6,
+    "unimodality_violations": 0,
+    "lc_failures": 0,
+    "wr_violations_r_lt_L": 0,
+    "wr_violations_any_r": 1,
+    "iso_violations_unconditional": 0,
+    "iso_violations_r_lt_L": 0,
+    "iso_violations_descent_conditional": 0,
+    "min_ratio_unconditional": {
+     "fraction": "5/4",
+     "float": 1.25,
+     "r": 1,
+     "witness": {
+      "n": 4,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       [],
+       []
+      ],
+      "polynomial": [
+       1,
+       4,
+       6,
+       4,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_lt_L": {
+     "fraction": "5/4",
+     "float": 1.25,
+     "r": 1,
+     "witness": {
+      "n": 4,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       [],
+       []
+      ],
+      "polynomial": [
+       1,
+       4,
+       6,
+       4,
+       1
+      ]
+     }
+    },
+    "min_ratio_descent": {
+     "fraction": "11/6",
+     "float": 1.8333333333333333,
+     "r": 2,
+     "witness": {
+      "n": 4,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       4,
+       3,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_ge_3": {
+     "fraction": "5/2",
+     "float": 2.5,
+     "r": 3,
+     "witness": {
+      "n": 4,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       [],
+       []
+      ],
+      "polynomial": [
+       1,
+       4,
+       6,
+       4,
+       1
+      ]
+     }
+    },
+    "min_wr_gap_first_violation_minus_L": 1,
+    "min_wr_gap_witness": {
+     "forest": {
+      "n": 4,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ]
+       ]
+      ]
+     },
+     "polynomial": [
+      1,
+      4,
+      4,
+      1
+     ],
+     "first_violating_r": 3,
+     "L": 2,
+     "alpha": 3
+    },
+    "seconds": 0.0
+   },
+   {
+    "n": 5,
+    "forests": 10,
+    "A005195": 10,
+    "count_matches_oeis": true,
+    "distinct_polynomials": 10,
+    "unimodality_violations": 0,
+    "lc_failures": 0,
+    "wr_violations_r_lt_L": 0,
+    "wr_violations_any_r": 3,
+    "iso_violations_unconditional": 0,
+    "iso_violations_r_lt_L": 0,
+    "iso_violations_descent_conditional": 0,
+    "min_ratio_unconditional": {
+     "fraction": "6/5",
+     "float": 1.2,
+     "r": 1,
+     "witness": {
+      "n": 5,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       [],
+       [],
+       []
+      ],
+      "polynomial": [
+       1,
+       5,
+       10,
+       10,
+       5,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_lt_L": {
+     "fraction": "6/5",
+     "float": 1.2,
+     "r": 1,
+     "witness": {
+      "n": 5,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       [],
+       [],
+       []
+      ],
+      "polynomial": [
+       1,
+       5,
+       10,
+       10,
+       5,
+       1
+      ]
+     }
+    },
+    "min_ratio_descent": {
+     "fraction": "2/1",
+     "float": 2.0,
+     "r": 3,
+     "witness": {
+      "n": 5,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       [],
+       [],
+       []
+      ],
+      "polynomial": [
+       1,
+       5,
+       10,
+       10,
+       5,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_ge_3": {
+     "fraction": "2/1",
+     "float": 2.0,
+     "r": 3,
+     "witness": {
+      "n": 5,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       [],
+       [],
+       []
+      ],
+      "polynomial": [
+       1,
+       5,
+       10,
+       10,
+       5,
+       1
+      ]
+     }
+    },
+    "min_wr_gap_first_violation_minus_L": 1,
+    "min_wr_gap_witness": {
+     "forest": {
+      "n": 5,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        2,
+        1,
+        4
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         3,
+         4
+        ]
+       ]
+      ]
+     },
+     "polynomial": [
+      1,
+      5,
+      6,
+      1
+     ],
+     "first_violating_r": 3,
+     "L": 2,
+     "alpha": 3
+    },
+    "seconds": 0.0
+   },
+   {
+    "n": 6,
+    "forests": 20,
+    "A005195": 20,
+    "count_matches_oeis": true,
+    "distinct_polynomials": 20,
+    "unimodality_violations": 0,
+    "lc_failures": 0,
+    "wr_violations_r_lt_L": 0,
+    "wr_violations_any_r": 6,
+    "iso_violations_unconditional": 0,
+    "iso_violations_r_lt_L": 0,
+    "iso_violations_descent_conditional": 0,
+    "min_ratio_unconditional": {
+     "fraction": "14/15",
+     "float": 0.9333333333333333,
+     "r": 2,
+     "witness": {
+      "n": 6,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       6,
+       10,
+       10,
+       5,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_lt_L": {
+     "fraction": "14/15",
+     "float": 0.9333333333333333,
+     "r": 2,
+     "witness": {
+      "n": 6,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       6,
+       10,
+       10,
+       5,
+       1
+      ]
+     }
+    },
+    "min_ratio_descent": {
+     "fraction": "201/110",
+     "float": 1.8272727272727274,
+     "r": 3,
+     "witness": {
+      "n": 6,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       6,
+       11,
+       10,
+       5,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_ge_3": {
+     "fraction": "7/4",
+     "float": 1.75,
+     "r": 3,
+     "witness": {
+      "n": 6,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       [],
+       [],
+       [],
+       []
+      ],
+      "polynomial": [
+       1,
+       6,
+       15,
+       20,
+       15,
+       6,
+       1
+      ]
+     }
+    },
+    "min_wr_gap_first_violation_minus_L": 1,
+    "min_wr_gap_witness": {
+     "forest": {
+      "n": 6,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        2,
+        2,
+        1,
+        5
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         1,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         4,
+         5
+        ]
+       ]
+      ]
+     },
+     "polynomial": [
+      1,
+      6,
+      10,
+      5,
+      1
+     ],
+     "first_violating_r": 4,
+     "L": 3,
+     "alpha": 4
+    },
+    "seconds": 0.0
+   },
+   {
+    "n": 7,
+    "forests": 37,
+    "A005195": 37,
+    "count_matches_oeis": true,
+    "distinct_polynomials": 36,
+    "unimodality_violations": 0,
+    "lc_failures": 0,
+    "wr_violations_r_lt_L": 0,
+    "wr_violations_any_r": 14,
+    "iso_violations_unconditional": 0,
+    "iso_violations_r_lt_L": 0,
+    "iso_violations_descent_conditional": 0,
+    "min_ratio_unconditional": {
+     "fraction": "79/105",
+     "float": 0.7523809523809524,
+     "r": 2,
+     "witness": {
+      "n": 7,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       7,
+       15,
+       20,
+       15,
+       6,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_lt_L": {
+     "fraction": "79/105",
+     "float": 0.7523809523809524,
+     "r": 2,
+     "witness": {
+      "n": 7,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       7,
+       15,
+       20,
+       15,
+       6,
+       1
+      ]
+     }
+    },
+    "min_ratio_descent": {
+     "fraction": "7/4",
+     "float": 1.75,
+     "r": 3,
+     "witness": {
+      "n": 7,
+      "components_parent_arrays": [
+       [
+        0,
+        1
+       ],
+       [
+        0,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ]
+       ],
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       7,
+       16,
+       16,
+       9,
+       2
+      ]
+     }
+    },
+    "min_ratio_r_ge_3": {
+     "fraction": "31/20",
+     "float": 1.55,
+     "r": 3,
+     "witness": {
+      "n": 7,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       7,
+       16,
+       20,
+       15,
+       6,
+       1
+      ]
+     }
+    },
+    "min_wr_gap_first_violation_minus_L": 1,
+    "min_wr_gap_witness": {
+     "forest": {
+      "n": 7,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        2,
+        3,
+        2,
+        1,
+        6
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         1,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         5,
+         6
+        ]
+       ]
+      ]
+     },
+     "polynomial": [
+      1,
+      7,
+      15,
+      11,
+      2
+     ],
+     "first_violating_r": 4,
+     "L": 3,
+     "alpha": 4
+    },
+    "seconds": 0.0
+   },
+   {
+    "n": 8,
+    "forests": 76,
+    "A005195": 76,
+    "count_matches_oeis": true,
+    "distinct_polynomials": 73,
+    "unimodality_violations": 0,
+    "lc_failures": 0,
+    "wr_violations_r_lt_L": 0,
+    "wr_violations_any_r": 30,
+    "iso_violations_unconditional": 0,
+    "iso_violations_r_lt_L": 0,
+    "iso_violations_descent_conditional": 0,
+    "min_ratio_unconditional": {
+     "fraction": "53/84",
+     "float": 0.6309523809523809,
+     "r": 2,
+     "witness": {
+      "n": 8,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       8,
+       21,
+       35,
+       35,
+       21,
+       7,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_lt_L": {
+     "fraction": "53/84",
+     "float": 0.6309523809523809,
+     "r": 2,
+     "witness": {
+      "n": 8,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       8,
+       21,
+       35,
+       35,
+       21,
+       7,
+       1
+      ]
+     }
+    },
+    "min_ratio_descent": {
+     "fraction": "604/315",
+     "float": 1.9174603174603175,
+     "r": 4,
+     "witness": {
+      "n": 8,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       8,
+       23,
+       36,
+       35,
+       21,
+       7,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_ge_3": {
+     "fraction": "1079/770",
+     "float": 1.4012987012987013,
+     "r": 3,
+     "witness": {
+      "n": 8,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       8,
+       22,
+       35,
+       35,
+       21,
+       7,
+       1
+      ]
+     }
+    },
+    "min_wr_gap_first_violation_minus_L": 2,
+    "min_wr_gap_witness": {
+     "forest": {
+      "n": 8,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        2,
+        3,
+        3,
+        2,
+        1,
+        7
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         2,
+         4
+        ],
+        [
+         1,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         6,
+         7
+        ]
+       ]
+      ]
+     },
+     "polynomial": [
+      1,
+      8,
+      21,
+      22,
+      9,
+      1
+     ],
+     "first_violating_r": 5,
+     "L": 3,
+     "alpha": 5
+    },
+    "seconds": 0.0
+   },
+   {
+    "n": 9,
+    "forests": 153,
+    "A005195": 153,
+    "count_matches_oeis": true,
+    "distinct_polynomials": 142,
+    "unimodality_violations": 0,
+    "lc_failures": 0,
+    "wr_violations_r_lt_L": 0,
+    "wr_violations_any_r": 70,
+    "iso_violations_unconditional": 0,
+    "iso_violations_r_lt_L": 0,
+    "iso_violations_descent_conditional": 0,
+    "min_ratio_unconditional": {
+     "fraction": "137/252",
+     "float": 0.5436507936507936,
+     "r": 2,
+     "witness": {
+      "n": 9,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ],
+        [
+         0,
+         8
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       9,
+       28,
+       56,
+       70,
+       56,
+       28,
+       8,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_lt_L": {
+     "fraction": "137/252",
+     "float": 0.5436507936507936,
+     "r": 2,
+     "witness": {
+      "n": 9,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ],
+        [
+         0,
+         8
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       9,
+       28,
+       56,
+       70,
+       56,
+       28,
+       8,
+       1
+      ]
+     }
+    },
+    "min_ratio_descent": {
+     "fraction": "2852/1517",
+     "float": 1.8800263678312459,
+     "r": 4,
+     "witness": {
+      "n": 9,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        2,
+        2,
+        2,
+        1,
+        6,
+        6,
+        6
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         1,
+         3
+        ],
+        [
+         1,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         5,
+         6
+        ],
+        [
+         5,
+         7
+        ],
+        [
+         5,
+         8
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       9,
+       28,
+       41,
+       37,
+       21,
+       7,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_ge_3": {
+     "fraction": "2129/1624",
+     "float": 1.310960591133005,
+     "r": 3,
+     "witness": {
+      "n": 9,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       9,
+       29,
+       56,
+       70,
+       56,
+       28,
+       8,
+       1
+      ]
+     }
+    },
+    "min_wr_gap_first_violation_minus_L": 2,
+    "min_wr_gap_witness": {
+     "forest": {
+      "n": 9,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        2,
+        3,
+        4,
+        3,
+        1,
+        7,
+        8
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         3,
+         4
+        ],
+        [
+         2,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         6,
+         7
+        ],
+        [
+         7,
+         8
+        ]
+       ]
+      ]
+     },
+     "polynomial": [
+      1,
+      9,
+      28,
+      36,
+      18,
+      2
+     ],
+     "first_violating_r": 5,
+     "L": 3,
+     "alpha": 5
+    },
+    "seconds": 0.0
+   },
+   {
+    "n": 10,
+    "forests": 329,
+    "A005195": 329,
+    "count_matches_oeis": true,
+    "distinct_polynomials": 294,
+    "unimodality_violations": 0,
+    "lc_failures": 0,
+    "wr_violations_r_lt_L": 0,
+    "wr_violations_any_r": 155,
+    "iso_violations_unconditional": 0,
+    "iso_violations_r_lt_L": 0,
+    "iso_violations_descent_conditional": 0,
+    "min_ratio_unconditional": {
+     "fraction": "43/90",
+     "float": 0.4777777777777778,
+     "r": 2,
+     "witness": {
+      "n": 10,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ],
+        [
+         0,
+         8
+        ],
+        [
+         0,
+         9
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       10,
+       36,
+       84,
+       126,
+       126,
+       84,
+       36,
+       9,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_lt_L": {
+     "fraction": "43/90",
+     "float": 0.4777777777777778,
+     "r": 2,
+     "witness": {
+      "n": 10,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ],
+        [
+         0,
+         8
+        ],
+        [
+         0,
+         9
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       10,
+       36,
+       84,
+       126,
+       126,
+       84,
+       36,
+       9,
+       1
+      ]
+     }
+    },
+    "min_ratio_descent": {
+     "fraction": "3629/1891",
+     "float": 1.9190904283447912,
+     "r": 4,
+     "witness": {
+      "n": 10,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        2,
+        3,
+        3,
+        3,
+        1,
+        7,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         2,
+         4
+        ],
+        [
+         2,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         6,
+         7
+        ],
+        [
+         0,
+         8
+        ],
+        [
+         0,
+         9
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       10,
+       36,
+       62,
+       61,
+       37,
+       13,
+       2
+      ]
+     }
+    },
+    "min_ratio_r_ge_3": {
+     "fraction": "3967/3230",
+     "float": 1.228173374613003,
+     "r": 3,
+     "witness": {
+      "n": 10,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       10,
+       38,
+       85,
+       126,
+       126,
+       84,
+       36,
+       9,
+       1
+      ]
+     }
+    },
+    "min_wr_gap_first_violation_minus_L": 2,
+    "min_wr_gap_witness": {
+     "forest": {
+      "n": 10,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        1,
+        7,
+        8,
+        9
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         3,
+         4
+        ],
+        [
+         4,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         6,
+         7
+        ],
+        [
+         7,
+         8
+        ],
+        [
+         8,
+         9
+        ]
+       ]
+      ]
+     },
+     "polynomial": [
+      1,
+      10,
+      36,
+      56,
+      35,
+      6
+     ],
+     "first_violating_r": 5,
+     "L": 3,
+     "alpha": 5
+    },
+    "seconds": 0.0
+   },
+   {
+    "n": 11,
+    "forests": 710,
+    "A005195": 710,
+    "count_matches_oeis": true,
+    "distinct_polynomials": 618,
+    "unimodality_violations": 0,
+    "lc_failures": 0,
+    "wr_violations_r_lt_L": 0,
+    "wr_violations_any_r": 365,
+    "iso_violations_unconditional": 0,
+    "iso_violations_r_lt_L": 0,
+    "iso_violations_descent_conditional": 0,
+    "min_ratio_unconditional": {
+     "fraction": "211/495",
+     "float": 0.4262626262626263,
+     "r": 2,
+     "witness": {
+      "n": 11,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ],
+        [
+         0,
+         8
+        ],
+        [
+         0,
+         9
+        ],
+        [
+         0,
+         10
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       11,
+       45,
+       120,
+       210,
+       252,
+       210,
+       120,
+       45,
+       10,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_lt_L": {
+     "fraction": "211/495",
+     "float": 0.4262626262626263,
+     "r": 2,
+     "witness": {
+      "n": 11,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ],
+        [
+         0,
+         8
+        ],
+        [
+         0,
+         9
+        ],
+        [
+         0,
+         10
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       11,
+       45,
+       120,
+       210,
+       252,
+       210,
+       120,
+       45,
+       10,
+       1
+      ]
+     }
+    },
+    "min_ratio_descent": {
+     "fraction": "8085/4288",
+     "float": 1.8854944029850746,
+     "r": 5,
+     "witness": {
+      "n": 11,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        2,
+        2,
+        2,
+        2,
+        1,
+        7,
+        7,
+        7,
+        7
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         1,
+         3
+        ],
+        [
+         1,
+         4
+        ],
+        [
+         1,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         6,
+         7
+        ],
+        [
+         6,
+         8
+        ],
+        [
+         6,
+         9
+        ],
+        [
+         6,
+         10
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       11,
+       45,
+       96,
+       134,
+       128,
+       84,
+       36,
+       9,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_ge_3": {
+     "fraction": "6652/5687",
+     "float": 1.1696852470546861,
+     "r": 3,
+     "witness": {
+      "n": 11,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ],
+        [
+         0,
+         8
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       11,
+       47,
+       121,
+       210,
+       252,
+       210,
+       120,
+       45,
+       10,
+       1
+      ]
+     }
+    },
+    "min_wr_gap_first_violation_minus_L": 2,
+    "min_wr_gap_witness": {
+     "forest": {
+      "n": 11,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        5,
+        1,
+        8,
+        9,
+        10
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         3,
+         4
+        ],
+        [
+         4,
+         5
+        ],
+        [
+         4,
+         6
+        ],
+        [
+         0,
+         7
+        ],
+        [
+         7,
+         8
+        ],
+        [
+         8,
+         9
+        ],
+        [
+         9,
+         10
+        ]
+       ]
+      ]
+     },
+     "polynomial": [
+      1,
+      11,
+      45,
+      85,
+      76,
+      31,
+      5
+     ],
+     "first_violating_r": 6,
+     "L": 4,
+     "alpha": 6
+    },
+    "seconds": 0.01
+   },
+   {
+    "n": 12,
+    "forests": 1601,
+    "A005195": 1601,
+    "count_matches_oeis": true,
+    "distinct_polynomials": 1348,
+    "unimodality_violations": 0,
+    "lc_failures": 0,
+    "wr_violations_r_lt_L": 0,
+    "wr_violations_any_r": 855,
+    "iso_violations_unconditional": 0,
+    "iso_violations_r_lt_L": 0,
+    "iso_violations_descent_conditional": 0,
+    "min_ratio_unconditional": {
+     "fraction": "127/330",
+     "float": 0.38484848484848483,
+     "r": 2,
+     "witness": {
+      "n": 12,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ],
+        [
+         0,
+         8
+        ],
+        [
+         0,
+         9
+        ],
+        [
+         0,
+         10
+        ],
+        [
+         0,
+         11
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       12,
+       55,
+       165,
+       330,
+       462,
+       462,
+       330,
+       165,
+       55,
+       11,
+       1
+      ]
+     }
+    },
+    "min_ratio_r_lt_L": {
+     "fraction": "127/330",
+     "float": 0.38484848484848483,
+     "r": 2,
+     "witness": {
+      "n": 12,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ],
+        [
+         0,
+         8
+        ],
+        [
+         0,
+         9
+        ],
+        [
+         0,
+         10
+        ],
+        [
+         0,
+         11
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       12,
+       55,
+       165,
+       330,
+       462,
+       462,
+       330,
+       165,
+       55,
+       11,
+       1
+      ]
+     }
+    },
+    "min_ratio_descent": {
+     "fraction": "22253/11556",
+     "float": 1.9256663205261335,
+     "r": 5,
+     "witness": {
+      "n": 12,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0,
+        1
+       ],
+       [
+        0,
+        1,
+        2,
+        2,
+        2,
+        1,
+        6,
+        6,
+        6
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [
+        [
+         0,
+         1
+        ]
+       ],
+       [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         1,
+         3
+        ],
+        [
+         1,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         5,
+         6
+        ],
+        [
+         5,
+         7
+        ],
+        [
+         5,
+         8
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       12,
+       57,
+       143,
+       216,
+       214,
+       144,
+       64,
+       17,
+       2
+      ]
+     }
+    },
+    "min_ratio_r_ge_3": {
+     "fraction": "3559/3154",
+     "float": 1.128408370323399,
+     "r": 3,
+     "witness": {
+      "n": 12,
+      "components_parent_arrays": [
+       [
+        0
+       ],
+       [
+        0
+       ],
+       [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ]
+      ],
+      "components_edge_lists": [
+       [],
+       [],
+       [
+        [
+         0,
+         1
+        ],
+        [
+         0,
+         2
+        ],
+        [
+         0,
+         3
+        ],
+        [
+         0,
+         4
+        ],
+        [
+         0,
+         5
+        ],
+        [
+         0,
+         6
+        ],
+        [
+         0,
+         7
+        ],
+        [
+         0,
+         8
+        ],
+        [
+         0,
+         9
+        ]
+       ]
+      ],
+      "polynomial": [
+       1,
+       12,
+       57,
+       166,
+       330,
+       462,
+       462,
+       330,
+       165,
+       55,
+       11,
+       1
+      ]
+     }
+    },
+    "min_wr_gap_first_violation_minus_L": 2,
+    "min_wr_gap_witness": {
+     "forest": {
+      "n": 12,
+      "components_parent_arrays": [
+       [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        1,
+        8,
+        9,
+        10,
+        11
+       ]
+      ],
+      "components_edge_lists": [
+       [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         3,
+         4
+        ],
+        [
+         4,
+         5
+        ],
+        [
+         5,
+         6
+        ],
+        [
+         0,
+         7
+        ],
+        [
+         7,
+         8
+        ],
+        [
+         8,
+         9
+        ],
+        [
+         9,
+         10
+        ],
+        [
+         10,
+         11
+        ]
+       ]
+      ]
+     },
+     "polynomial": [
+      1,
+      12,
+      55,
+      120,
+      126,
+      56,
+      7
+     ],
+     "first_violating_r": 6,
+     "L": 4,
+     "alpha": 6
+    },
+    "seconds": 0.02
+   }
+  ],
+  "overall_min_ratio_unconditional": {
+   "fraction": "127/330",
+   "float": 0.38484848484848483,
+   "r": 2,
+   "witness": {
+    "n": 12,
+    "components_parent_arrays": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ],
+      [
+       0,
+       10
+      ],
+      [
+       0,
+       11
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     12,
+     55,
+     165,
+     330,
+     462,
+     462,
+     330,
+     165,
+     55,
+     11,
+     1
+    ]
+   }
+  },
+  "overall_min_ratio_r_lt_L": {
+   "fraction": "127/330",
+   "float": 0.38484848484848483,
+   "r": 2,
+   "witness": {
+    "n": 12,
+    "components_parent_arrays": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ],
+      [
+       0,
+       10
+      ],
+      [
+       0,
+       11
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     12,
+     55,
+     165,
+     330,
+     462,
+     462,
+     330,
+     165,
+     55,
+     11,
+     1
+    ]
+   }
+  },
+  "overall_min_ratio_descent": {
+   "fraction": "7/4",
+   "float": 1.75,
+   "r": 3,
+   "witness": {
+    "n": 7,
+    "components_parent_arrays": [
+     [
+      0,
+      1
+     ],
+     [
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ]
+     ],
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     7,
+     16,
+     16,
+     9,
+     2
+    ]
+   }
+  },
+  "overall_min_ratio_r_ge_3": {
+   "fraction": "3559/3154",
+   "float": 1.128408370323399,
+   "r": 3,
+   "witness": {
+    "n": 12,
+    "components_parent_arrays": [
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [],
+     [],
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     12,
+     57,
+     166,
+     330,
+     462,
+     462,
+     330,
+     165,
+     55,
+     11,
+     1
+    ]
+   }
+  },
+  "overall_min_wr_gap": 1,
+  "overall_min_wr_gap_witness": {
+   "forest": {
+    "n": 3,
+    "components_parent_arrays": [
+     [
+      0,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ]
+     ]
+    ]
+   },
+   "polynomial": [
+    1,
+    3,
+    1
+   ],
+   "first_violating_r": 2,
+   "L": 1,
+   "alpha": 2
+  },
+  "q2_lower_bound_violations": 0,
+  "q2_lower_bound_attained_by": 73
+ },
+ "families": {
+  "empty_graph_closed_form_verified_m_le": 60,
+  "empty_graph_closed_form_ok": true,
+  "empty_graph_formula": {
+   "p_r": "C(m,r)",
+   "Q_r": "r (m+1) C(m,r)^2 / (m-r+1)^2  (= r*C(m,r)^2 + C(m,r-1)^2 - (r+1) C(m,r-1) C(m,r+1))",
+   "ratio_r=Q_r/(p_{r-1}p_r)": "(m+1)/(m-r+1) >= (m+1)/m > 1, min at r=1; infimum over m is 1 (never attained)",
+   "sign": "Q_r > 0 for all 1<=r<=m-1, all m",
+   "asymptotic": "at r ~ m theta/(1+theta) (tilt theta = p_{r-1}/p_r), ratio -> 1+theta; descents (r>=(m+1)/2) have ratio >= 2(m+1)/(m+2) -> 2"
+  },
+  "mK1": {
+   "family": "m*K_1",
+   "members": 60,
+   "unimodality_violations": 0,
+   "lc_failures": 0,
+   "iso_violations_unconditional": 0,
+   "iso_violations_descent": 0,
+   "wr_violations_r_lt_L": 0,
+   "min_ratio_unconditional": {
+    "fraction": "61/60",
+    "float": 1.0166666666666666,
+    "r": 1,
+    "witness": {
+     "m": 60
+    }
+   },
+   "min_ratio_r_lt_L": {
+    "fraction": "61/60",
+    "float": 1.0166666666666666,
+    "r": 1,
+    "witness": {
+     "m": 60
+    }
+   },
+   "min_ratio_descent": {
+    "fraction": "2/1",
+    "float": 2.0,
+    "r": 2,
+    "witness": {
+     "m": 3
+    }
+   },
+   "min_ratio_r_ge_3": {
+    "fraction": "61/58",
+    "float": 1.0517241379310345,
+    "r": 3,
+    "witness": {
+     "m": 60
+    }
+   },
+   "min_wr_gap_first_violation_minus_L": null,
+   "min_wr_gap_witness": null
+  },
+  "k2_closed_form_verified_m_le": 60,
+  "k2_closed_form_ok": true,
+  "k2_formula": {
+   "p_r": "2^r C(m,r)",
+   "Q_r": "4^(r-1) C(m,r)^2 r (4(m-r+1)+r) / (m-r+1)^2 > 0",
+   "ratio_r": "2 + r/(2(m-r+1)) >= 2 + 1/(2m), min at r=1; infimum 2"
+  },
+  "mK2": {
+   "family": "m*K_2",
+   "members": 60,
+   "unimodality_violations": 0,
+   "lc_failures": 0,
+   "iso_violations_unconditional": 0,
+   "iso_violations_descent": 0,
+   "wr_violations_r_lt_L": 0,
+   "min_ratio_unconditional": {
+    "fraction": "241/120",
+    "float": 2.0083333333333333,
+    "r": 1,
+    "witness": {
+     "m": 60
+    }
+   },
+   "min_ratio_r_lt_L": {
+    "fraction": "241/120",
+    "float": 2.0083333333333333,
+    "r": 1,
+    "witness": {
+     "m": 60
+    }
+   },
+   "min_ratio_descent": {
+    "fraction": "3/1",
+    "float": 3.0,
+    "r": 4,
+    "witness": {
+     "m": 5
+    }
+   },
+   "min_ratio_r_ge_3": {
+    "fraction": "235/116",
+    "float": 2.0258620689655173,
+    "r": 3,
+    "witness": {
+     "m": 60
+    }
+   },
+   "min_wr_gap_first_violation_minus_L": null,
+   "min_wr_gap_witness": null
+  },
+  "m_stars": {
+   "family": "m*K_{1,s}, s<=12",
+   "members": 360,
+   "unimodality_violations": 0,
+   "lc_failures": 0,
+   "iso_violations_unconditional": 0,
+   "iso_violations_descent": 0,
+   "wr_violations_r_lt_L": 0,
+   "min_ratio_unconditional": {
+    "fraction": "301/858",
+    "float": 0.3508158508158508,
+    "r": 2,
+    "witness": {
+     "m": 1,
+     "s": 12
+    }
+   },
+   "min_ratio_r_lt_L": {
+    "fraction": "301/858",
+    "float": 0.3508158508158508,
+    "r": 2,
+    "witness": {
+     "m": 1,
+     "s": 12
+    }
+   },
+   "min_ratio_descent": {
+    "fraction": "11/6",
+    "float": 1.8333333333333333,
+    "r": 2,
+    "witness": {
+     "m": 1,
+     "s": 3
+    }
+   },
+   "min_ratio_r_ge_3": {
+    "fraction": "26455/24647",
+    "float": 1.073355783665355,
+    "r": 4,
+    "witness": {
+     "m": 2,
+     "s": 12
+    }
+   },
+   "min_wr_gap_first_violation_minus_L": 1,
+   "min_wr_gap_witness": {
+    "params": {
+     "m": 1,
+     "s": 2
+    },
+    "first_violating_r": 2,
+    "L": 1,
+    "alpha": 2
+   }
+  },
+  "m_paths": {
+   "family": "m*P_k, k<=12",
+   "members": 360,
+   "unimodality_violations": 0,
+   "lc_failures": 0,
+   "iso_violations_unconditional": 0,
+   "iso_violations_descent": 0,
+   "wr_violations_r_lt_L": 0,
+   "min_ratio_unconditional": {
+    "fraction": "31/30",
+    "float": 1.0333333333333334,
+    "r": 1,
+    "witness": {
+     "m": 30,
+     "k": 1
+    }
+   },
+   "min_ratio_r_lt_L": {
+    "fraction": "31/30",
+    "float": 1.0333333333333334,
+    "r": 1,
+    "witness": {
+     "m": 30,
+     "k": 1
+    }
+   },
+   "min_ratio_descent": {
+    "fraction": "2/1",
+    "float": 2.0,
+    "r": 2,
+    "witness": {
+     "m": 3,
+     "k": 1
+    }
+   },
+   "min_ratio_r_ge_3": {
+    "fraction": "31/28",
+    "float": 1.1071428571428572,
+    "r": 3,
+    "witness": {
+     "m": 30,
+     "k": 1
+    }
+   },
+   "min_wr_gap_first_violation_minus_L": 1,
+   "min_wr_gap_witness": {
+    "params": {
+     "m": 1,
+     "k": 3
+    },
+    "first_violating_r": 2,
+    "L": 1,
+    "alpha": 2
+   }
+  },
+  "star_closed_form": {
+   "K_{1,s}": "I = x + (1+x)^s; ratio_2 = 2/(s+1) + 2(s+1)/(s(s-1)) -> 0+ (never 0); ratio_r = 1 + r/(s-r+1) > 1 for r >= 3",
+   "verified_exactly_for_s_le": 100,
+   "ok": true
+  },
+  "single_star": {
+   "family": "K_{1,s}, s<=SBIG",
+   "members": 100,
+   "unimodality_violations": 0,
+   "lc_failures": 0,
+   "iso_violations_unconditional": 0,
+   "iso_violations_descent": 0,
+   "wr_violations_r_lt_L": 0,
+   "min_ratio_unconditional": {
+    "fraction": "20101/499950",
+    "float": 0.04020602060206021,
+    "r": 2,
+    "witness": {
+     "s": 100
+    }
+   },
+   "min_ratio_r_lt_L": {
+    "fraction": "20101/499950",
+    "float": 0.04020602060206021,
+    "r": 2,
+    "witness": {
+     "s": 100
+    }
+   },
+   "min_ratio_descent": {
+    "fraction": "11/6",
+    "float": 1.8333333333333333,
+    "r": 2,
+    "witness": {
+     "s": 3
+    }
+   },
+   "min_ratio_r_ge_3": {
+    "fraction": "101/98",
+    "float": 1.030612244897959,
+    "r": 3,
+    "witness": {
+     "s": 100
+    }
+   },
+   "min_wr_gap_first_violation_minus_L": 1,
+   "min_wr_gap_witness": {
+    "params": {
+     "s": 2
+    },
+    "first_violating_r": 2,
+    "L": 1,
+    "alpha": 2
+   }
+  },
+  "star_plus_mK1": {
+   "family": "K_{1,s} + m*K_1, s,m<=SBIG",
+   "members": 10100,
+   "unimodality_violations": 0,
+   "lc_failures": 0,
+   "iso_violations_unconditional": 0,
+   "iso_violations_descent": 0,
+   "wr_violations_r_lt_L": 0,
+   "min_ratio_unconditional": {
+    "fraction": "20101/499950",
+    "float": 0.04020602060206021,
+    "r": 2,
+    "witness": {
+     "s": 100,
+     "m": 0
+    }
+   },
+   "min_ratio_r_lt_L": {
+    "fraction": "20101/499950",
+    "float": 0.04020602060206021,
+    "r": 2,
+    "witness": {
+     "s": 100,
+     "m": 0
+    }
+   },
+   "min_ratio_descent": {
+    "fraction": "201/110",
+    "float": 1.8272727272727274,
+    "r": 3,
+    "witness": {
+     "s": 4,
+     "m": 1
+    }
+   },
+   "min_ratio_r_ge_3": {
+    "fraction": "20594189/24806966",
+    "float": 0.830177660581306,
+    "r": 3,
+    "witness": {
+     "s": 100,
+     "m": 27
+    }
+   },
+   "min_wr_gap_first_violation_minus_L": 1,
+   "min_wr_gap_witness": {
+    "params": {
+     "s": 2,
+     "m": 0
+    },
+    "first_violating_r": 2,
+    "L": 1,
+    "alpha": 2
+   }
+  },
+  "two_stars": {
+   "family": "K_{1,s} + K_{1,t}, s<=t<=SBIG",
+   "members": 5050,
+   "unimodality_violations": 0,
+   "lc_failures": 0,
+   "iso_violations_unconditional": 0,
+   "iso_violations_descent": 0,
+   "wr_violations_r_lt_L": 0,
+   "min_ratio_unconditional": {
+    "fraction": "72417/530656",
+    "float": 0.13646693903395044,
+    "r": 2,
+    "witness": {
+     "s": 1,
+     "t": 100
+    }
+   },
+   "min_ratio_r_lt_L": {
+    "fraction": "72417/530656",
+    "float": 0.13646693903395044,
+    "r": 2,
+    "witness": {
+     "s": 1,
+     "t": 100
+    }
+   },
+   "min_ratio_descent": {
+    "fraction": "7/4",
+    "float": 1.75,
+    "r": 3,
+    "witness": {
+     "s": 1,
+     "t": 4
+    }
+   },
+   "min_ratio_r_ge_3": {
+    "fraction": "4718417/5266333",
+    "float": 0.8959587249799813,
+    "r": 4,
+    "witness": {
+     "s": 100,
+     "t": 100
+    }
+   },
+   "min_wr_gap_first_violation_minus_L": 1,
+   "min_wr_gap_witness": {
+    "params": {
+     "s": 1,
+     "t": 2
+    },
+    "first_violating_r": 3,
+    "L": 2,
+    "alpha": 3
+   }
+  },
+  "star_plus_mK2": {
+   "family": "K_{1,s} + m*K_2",
+   "members": 1240,
+   "unimodality_violations": 0,
+   "lc_failures": 0,
+   "iso_violations_unconditional": 0,
+   "iso_violations_descent": 0,
+   "wr_violations_r_lt_L": 0,
+   "min_ratio_unconditional": {
+    "fraction": "3241/31980",
+    "float": 0.10134459036898061,
+    "r": 2,
+    "witness": {
+     "s": 40,
+     "m": 0
+    }
+   },
+   "min_ratio_r_lt_L": {
+    "fraction": "3241/31980",
+    "float": 0.10134459036898061,
+    "r": 2,
+    "witness": {
+     "s": 40,
+     "m": 0
+    }
+   },
+   "min_ratio_descent": {
+    "fraction": "7/4",
+    "float": 1.75,
+    "r": 3,
+    "witness": {
+     "s": 4,
+     "m": 1
+    }
+   },
+   "min_ratio_r_ge_3": {
+    "fraction": "1306819/1302690",
+    "float": 1.0031695952221942,
+    "r": 3,
+    "witness": {
+     "s": 40,
+     "m": 3
+    }
+   },
+   "min_wr_gap_first_violation_minus_L": 1,
+   "min_wr_gap_witness": {
+    "params": {
+     "s": 2,
+     "m": 0
+    },
+    "first_violating_r": 2,
+    "L": 1,
+    "alpha": 2
+   }
+  },
+  "mixed_stars": {
+   "family": "a*K_{1,s} + b*K_{1,t}",
+   "members": 6840,
+   "unimodality_violations": 0,
+   "lc_failures": 0,
+   "iso_violations_unconditional": 0,
+   "iso_violations_descent": 0,
+   "wr_violations_r_lt_L": 0,
+   "min_ratio_unconditional": {
+    "fraction": "3297/5336",
+    "float": 0.6178785607196402,
+    "r": 2,
+    "witness": {
+     "s": 1,
+     "t": 20,
+     "a": 1,
+     "b": 1
+    }
+   },
+   "min_ratio_r_lt_L": {
+    "fraction": "3297/5336",
+    "float": 0.6178785607196402,
+    "r": 2,
+    "witness": {
+     "s": 1,
+     "t": 20,
+     "a": 1,
+     "b": 1
+    }
+   },
+   "min_ratio_descent": {
+    "fraction": "7/4",
+    "float": 1.75,
+    "r": 3,
+    "witness": {
+     "s": 1,
+     "t": 4,
+     "a": 1,
+     "b": 1
+    }
+   },
+   "min_ratio_r_ge_3": {
+    "fraction": "10997/11100",
+    "float": 0.9907207207207207,
+    "r": 4,
+    "witness": {
+     "s": 19,
+     "t": 20,
+     "a": 1,
+     "b": 1
+    }
+   },
+   "min_wr_gap_first_violation_minus_L": 1,
+   "min_wr_gap_witness": {
+    "params": {
+     "s": 1,
+     "t": 2,
+     "a": 1,
+     "b": 1
+    },
+    "first_violating_r": 3,
+    "L": 2,
+    "alpha": 3
+   }
+  },
+  "m_copies_of_tree_le10": {
+   "family": "m*T, |T|<=8",
+   "members": 1440,
+   "unimodality_violations": 0,
+   "lc_failures": 0,
+   "iso_violations_unconditional": 0,
+   "iso_violations_descent": 0,
+   "wr_violations_r_lt_L": 0,
+   "min_ratio_unconditional": {
+    "fraction": "53/84",
+    "float": 0.6309523809523809,
+    "r": 2,
+    "witness": {
+     "m": 1,
+     "tree_size": 8,
+     "tree_index": 22,
+     "tree_parents": [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   },
+   "min_ratio_r_lt_L": {
+    "fraction": "53/84",
+    "float": 0.6309523809523809,
+    "r": 2,
+    "witness": {
+     "m": 1,
+     "tree_size": 8,
+     "tree_index": 22,
+     "tree_parents": [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   },
+   "min_ratio_descent": {
+    "fraction": "11/6",
+    "float": 1.8333333333333333,
+    "r": 2,
+    "witness": {
+     "m": 1,
+     "tree_size": 4,
+     "tree_index": 1,
+     "tree_parents": [
+      0,
+      1,
+      1,
+      1
+     ]
+    }
+   },
+   "min_ratio_r_ge_3": {
+    "fraction": "31/28",
+    "float": 1.1071428571428572,
+    "r": 3,
+    "witness": {
+     "m": 30,
+     "tree_size": 1,
+     "tree_index": 0,
+     "tree_parents": [
+      0
+     ]
+    }
+   },
+   "min_wr_gap_first_violation_minus_L": 1,
+   "min_wr_gap_witness": {
+    "params": {
+     "m": 1,
+     "tree_size": 3,
+     "tree_index": 0,
+     "tree_parents": [
+      0,
+      1,
+      1
+     ]
+    },
+    "first_violating_r": 2,
+    "L": 1,
+    "alpha": 2
+   }
+  },
+  "T_plus_mK1": {
+   "family": "T + m*K_1, |T|<=10",
+   "members": 6231,
+   "unimodality_violations": 0,
+   "lc_failures": 0,
+   "iso_violations_unconditional": 0,
+   "iso_violations_descent": 0,
+   "wr_violations_r_lt_L": 0,
+   "min_ratio_unconditional": {
+    "fraction": "43/90",
+    "float": 0.4777777777777778,
+    "r": 2,
+    "witness": {
+     "m": 0,
+     "tree_size": 10,
+     "tree_index": 105,
+     "tree_parents": [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   },
+   "min_ratio_r_lt_L": {
+    "fraction": "43/90",
+    "float": 0.4777777777777778,
+    "r": 2,
+    "witness": {
+     "m": 0,
+     "tree_size": 10,
+     "tree_index": 105,
+     "tree_parents": [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   },
+   "min_ratio_descent": {
+    "fraction": "201/110",
+    "float": 1.8272727272727274,
+    "r": 3,
+    "witness": {
+     "m": 1,
+     "tree_size": 5,
+     "tree_index": 2,
+     "tree_parents": [
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   },
+   "min_ratio_r_ge_3": {
+    "fraction": "32/29",
+    "float": 1.103448275862069,
+    "r": 3,
+    "witness": {
+     "m": 30,
+     "tree_size": 1,
+     "tree_index": 0,
+     "tree_parents": [
+      0
+     ]
+    }
+   },
+   "min_wr_gap_first_violation_minus_L": 1,
+   "min_wr_gap_witness": {
+    "params": {
+     "m": 0,
+     "tree_size": 3,
+     "tree_index": 0,
+     "tree_parents": [
+      0,
+      1,
+      1
+     ]
+    },
+    "first_violating_r": 2,
+    "L": 1,
+    "alpha": 2
+   }
+  },
+  "T_plus_mK2": {
+   "family": "T + m*K_2, |T|<=10",
+   "members": 6231,
+   "unimodality_violations": 0,
+   "lc_failures": 0,
+   "iso_violations_unconditional": 0,
+   "iso_violations_descent": 0,
+   "wr_violations_r_lt_L": 0,
+   "min_ratio_unconditional": {
+    "fraction": "43/90",
+    "float": 0.4777777777777778,
+    "r": 2,
+    "witness": {
+     "m": 0,
+     "tree_size": 10,
+     "tree_index": 105,
+     "tree_parents": [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   },
+   "min_ratio_r_lt_L": {
+    "fraction": "43/90",
+    "float": 0.4777777777777778,
+    "r": 2,
+    "witness": {
+     "m": 0,
+     "tree_size": 10,
+     "tree_index": 105,
+     "tree_parents": [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   },
+   "min_ratio_descent": {
+    "fraction": "7/4",
+    "float": 1.75,
+    "r": 3,
+    "witness": {
+     "m": 1,
+     "tree_size": 5,
+     "tree_index": 2,
+     "tree_parents": [
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   },
+   "min_ratio_r_ge_3": {
+    "fraction": "643/546",
+    "float": 1.1776556776556777,
+    "r": 3,
+    "witness": {
+     "m": 1,
+     "tree_size": 10,
+     "tree_index": 105,
+     "tree_parents": [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   },
+   "min_wr_gap_first_violation_minus_L": 1,
+   "min_wr_gap_witness": {
+    "params": {
+     "m": 0,
+     "tree_size": 3,
+     "tree_index": 0,
+     "tree_parents": [
+      0,
+      1,
+      1
+     ]
+    },
+    "first_violating_r": 2,
+    "L": 1,
+    "alpha": 2
+   }
+  },
+  "r2_theorem": {
+   "statement": "For every forest with n vertices and e edges, Q_2 >= (n-e)(3en-4e+n^2+n)/2 > 0; equality iff the forest is K_{1,e} + (n-1-e)K_1. Hence ISO_2 can never fail for forests (in fact for any triangle-free graph with e < n), even though inf ratio_2 = 0 (stars).",
+   "proof_sketch": "p_1=n, p_2=C(n,2)-e, p_3=C(n,3)-e(n-2)+D, D=sum_v C(d_v,2) <= C(e,2); Q_2 decreasing in D.",
+   "symbolic_identity_verified": true
+  },
+  "asymptotic_mT_dispersion_test": {
+   "description": "For m copies of T (m->inf), ratio_r -> R_inf(theta) = [mu - sigma^2 (1-theta^2)]/(theta sigma^2) at tilt theta=p_{r-1}/p_r in (0,1]; ISO fails for large m iff G(theta)=(1-theta^2)(I I' + theta I I'' - theta I'^2) - I' I^2 > 0 somewhere on (0,1). Sturm root count of G on (0,1) plus sign at 1/2 decides exactly; grid min of R_inf reported.",
+   "trees_tested": 48,
+   "trees_with_asymptotic_failure": 0,
+   "tightest": {
+    "min_R_inf_grid": "41/40",
+    "float": 1.025,
+    "tree_size": 1,
+    "tree_index": 0,
+    "tree_parents": [
+     0
+    ],
+    "G_roots_in_(0,1)": 0,
+    "G_at_half_negative": true,
+    "asymptotically_fails": false,
+    "min_R_inf_on_grid": {
+     "fraction": "41/40",
+     "float": 1.025,
+     "theta": "1/40"
+    }
+   }
+  }
+ },
+ "random": {
+  "stats": {
+   "forests": 20000,
+   "iso_fail": 0,
+   "iso_fail_desc": 0,
+   "iso_fail_ltL": 0,
+   "wr_fail_ltL": 0,
+   "lc_fail": 0,
+   "unimodal_fail": 0
+  },
+  "nmax": 80,
+  "seed": 20260902,
+  "min_ratio_unconditional": {
+   "fraction": "6281/123240",
+   "float": 0.05096559558584875,
+   "r": 2,
+   "witness": {
+    "n": 80,
+    "components_parent_arrays": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ],
+      [
+       0,
+       10
+      ],
+      [
+       0,
+       11
+      ],
+      [
+       0,
+       12
+      ],
+      [
+       0,
+       13
+      ],
+      [
+       0,
+       14
+      ],
+      [
+       0,
+       15
+      ],
+      [
+       0,
+       16
+      ],
+      [
+       0,
+       17
+      ],
+      [
+       0,
+       18
+      ],
+      [
+       0,
+       19
+      ],
+      [
+       0,
+       20
+      ],
+      [
+       0,
+       21
+      ],
+      [
+       0,
+       22
+      ],
+      [
+       0,
+       23
+      ],
+      [
+       0,
+       24
+      ],
+      [
+       0,
+       25
+      ],
+      [
+       0,
+       26
+      ],
+      [
+       0,
+       27
+      ],
+      [
+       0,
+       28
+      ],
+      [
+       0,
+       29
+      ],
+      [
+       0,
+       30
+      ],
+      [
+       0,
+       31
+      ],
+      [
+       0,
+       32
+      ],
+      [
+       0,
+       33
+      ],
+      [
+       0,
+       34
+      ],
+      [
+       0,
+       35
+      ],
+      [
+       0,
+       36
+      ],
+      [
+       0,
+       37
+      ],
+      [
+       0,
+       38
+      ],
+      [
+       0,
+       39
+      ],
+      [
+       0,
+       40
+      ],
+      [
+       0,
+       41
+      ],
+      [
+       0,
+       42
+      ],
+      [
+       0,
+       43
+      ],
+      [
+       0,
+       44
+      ],
+      [
+       0,
+       45
+      ],
+      [
+       0,
+       46
+      ],
+      [
+       0,
+       47
+      ],
+      [
+       0,
+       48
+      ],
+      [
+       0,
+       49
+      ],
+      [
+       0,
+       50
+      ],
+      [
+       0,
+       51
+      ],
+      [
+       0,
+       52
+      ],
+      [
+       0,
+       53
+      ],
+      [
+       0,
+       54
+      ],
+      [
+       0,
+       55
+      ],
+      [
+       0,
+       56
+      ],
+      [
+       0,
+       57
+      ],
+      [
+       0,
+       58
+      ],
+      [
+       0,
+       59
+      ],
+      [
+       0,
+       60
+      ],
+      [
+       0,
+       61
+      ],
+      [
+       0,
+       62
+      ],
+      [
+       0,
+       63
+      ],
+      [
+       0,
+       64
+      ],
+      [
+       0,
+       65
+      ],
+      [
+       0,
+       66
+      ],
+      [
+       0,
+       67
+      ],
+      [
+       0,
+       68
+      ],
+      [
+       0,
+       69
+      ],
+      [
+       0,
+       70
+      ],
+      [
+       0,
+       71
+      ],
+      [
+       0,
+       72
+      ],
+      [
+       0,
+       73
+      ],
+      [
+       0,
+       74
+      ],
+      [
+       0,
+       75
+      ],
+      [
+       0,
+       76
+      ],
+      [
+       0,
+       77
+      ],
+      [
+       0,
+       78
+      ],
+      [
+       0,
+       79
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     80,
+     3081,
+     79079,
+     1502501,
+     22537515,
+     277962685,
+     2898753715,
+     26088783435,
+     205811513765,
+     1440680596355,
+     9036996468045,
+     51209646652255,
+     263926640438545,
+     1244225590638855,
+     5391644226101705,
+     21566576904406820,
+     79923196763389980,
+     275291011073898820,
+     883829035553043580,
+     2651487106659130740,
+     7449416156804224460,
+     19639369867938409940,
+     48671481846629972460,
+     113566790975469935740,
+     249846940146033858628,
+     518912875687916475612,
+     1018606755979984192868,
+     1891698261105684929612,
+     3326779700565170048628,
+     5544632834275283414380,
+     8764097060628673784020,
+     13146145590943010676030,
+     18723298265888530356770,
+     25331521183260952835630,
+     32569098664192653645810,
+     39806676145124354455990,
+     46261812817306682205610,
+     51131477324391596121990,
+     53753604366668088230810,
+     53753604366668088230810,
+     51131477324391596121990,
+     46261812817306682205610,
+     39806676145124354455990,
+     32569098664192653645810,
+     25331521183260952835630,
+     18723298265888530356770,
+     13146145590943010676030,
+     8764097060628673784020,
+     5544632834275283414380,
+     3326779700565170048628,
+     1891698261105684929612,
+     1018606755979984192868,
+     518912875687916475612,
+     249846940146033858628,
+     113566790975469935740,
+     48671481846629972460,
+     19639369867938409940,
+     7449416156804224460,
+     2651487106659130740,
+     883829035553043580,
+     275291011073898820,
+     79923196763389980,
+     21566576904406820,
+     5391644226101705,
+     1244225590638855,
+     263926640438545,
+     51209646652255,
+     9036996468045,
+     1440680596355,
+     205811513765,
+     26088783435,
+     2898753715,
+     277962685,
+     22537515,
+     1502501,
+     79079,
+     3081,
+     79,
+     1
+    ]
+   }
+  },
+  "min_ratio_r_lt_L": {
+   "fraction": "6281/123240",
+   "float": 0.05096559558584875,
+   "r": 2,
+   "witness": {
+    "n": 80,
+    "components_parent_arrays": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ],
+      [
+       0,
+       10
+      ],
+      [
+       0,
+       11
+      ],
+      [
+       0,
+       12
+      ],
+      [
+       0,
+       13
+      ],
+      [
+       0,
+       14
+      ],
+      [
+       0,
+       15
+      ],
+      [
+       0,
+       16
+      ],
+      [
+       0,
+       17
+      ],
+      [
+       0,
+       18
+      ],
+      [
+       0,
+       19
+      ],
+      [
+       0,
+       20
+      ],
+      [
+       0,
+       21
+      ],
+      [
+       0,
+       22
+      ],
+      [
+       0,
+       23
+      ],
+      [
+       0,
+       24
+      ],
+      [
+       0,
+       25
+      ],
+      [
+       0,
+       26
+      ],
+      [
+       0,
+       27
+      ],
+      [
+       0,
+       28
+      ],
+      [
+       0,
+       29
+      ],
+      [
+       0,
+       30
+      ],
+      [
+       0,
+       31
+      ],
+      [
+       0,
+       32
+      ],
+      [
+       0,
+       33
+      ],
+      [
+       0,
+       34
+      ],
+      [
+       0,
+       35
+      ],
+      [
+       0,
+       36
+      ],
+      [
+       0,
+       37
+      ],
+      [
+       0,
+       38
+      ],
+      [
+       0,
+       39
+      ],
+      [
+       0,
+       40
+      ],
+      [
+       0,
+       41
+      ],
+      [
+       0,
+       42
+      ],
+      [
+       0,
+       43
+      ],
+      [
+       0,
+       44
+      ],
+      [
+       0,
+       45
+      ],
+      [
+       0,
+       46
+      ],
+      [
+       0,
+       47
+      ],
+      [
+       0,
+       48
+      ],
+      [
+       0,
+       49
+      ],
+      [
+       0,
+       50
+      ],
+      [
+       0,
+       51
+      ],
+      [
+       0,
+       52
+      ],
+      [
+       0,
+       53
+      ],
+      [
+       0,
+       54
+      ],
+      [
+       0,
+       55
+      ],
+      [
+       0,
+       56
+      ],
+      [
+       0,
+       57
+      ],
+      [
+       0,
+       58
+      ],
+      [
+       0,
+       59
+      ],
+      [
+       0,
+       60
+      ],
+      [
+       0,
+       61
+      ],
+      [
+       0,
+       62
+      ],
+      [
+       0,
+       63
+      ],
+      [
+       0,
+       64
+      ],
+      [
+       0,
+       65
+      ],
+      [
+       0,
+       66
+      ],
+      [
+       0,
+       67
+      ],
+      [
+       0,
+       68
+      ],
+      [
+       0,
+       69
+      ],
+      [
+       0,
+       70
+      ],
+      [
+       0,
+       71
+      ],
+      [
+       0,
+       72
+      ],
+      [
+       0,
+       73
+      ],
+      [
+       0,
+       74
+      ],
+      [
+       0,
+       75
+      ],
+      [
+       0,
+       76
+      ],
+      [
+       0,
+       77
+      ],
+      [
+       0,
+       78
+      ],
+      [
+       0,
+       79
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     80,
+     3081,
+     79079,
+     1502501,
+     22537515,
+     277962685,
+     2898753715,
+     26088783435,
+     205811513765,
+     1440680596355,
+     9036996468045,
+     51209646652255,
+     263926640438545,
+     1244225590638855,
+     5391644226101705,
+     21566576904406820,
+     79923196763389980,
+     275291011073898820,
+     883829035553043580,
+     2651487106659130740,
+     7449416156804224460,
+     19639369867938409940,
+     48671481846629972460,
+     113566790975469935740,
+     249846940146033858628,
+     518912875687916475612,
+     1018606755979984192868,
+     1891698261105684929612,
+     3326779700565170048628,
+     5544632834275283414380,
+     8764097060628673784020,
+     13146145590943010676030,
+     18723298265888530356770,
+     25331521183260952835630,
+     32569098664192653645810,
+     39806676145124354455990,
+     46261812817306682205610,
+     51131477324391596121990,
+     53753604366668088230810,
+     53753604366668088230810,
+     51131477324391596121990,
+     46261812817306682205610,
+     39806676145124354455990,
+     32569098664192653645810,
+     25331521183260952835630,
+     18723298265888530356770,
+     13146145590943010676030,
+     8764097060628673784020,
+     5544632834275283414380,
+     3326779700565170048628,
+     1891698261105684929612,
+     1018606755979984192868,
+     518912875687916475612,
+     249846940146033858628,
+     113566790975469935740,
+     48671481846629972460,
+     19639369867938409940,
+     7449416156804224460,
+     2651487106659130740,
+     883829035553043580,
+     275291011073898820,
+     79923196763389980,
+     21566576904406820,
+     5391644226101705,
+     1244225590638855,
+     263926640438545,
+     51209646652255,
+     9036996468045,
+     1440680596355,
+     205811513765,
+     26088783435,
+     2898753715,
+     277962685,
+     22537515,
+     1502501,
+     79079,
+     3081,
+     79,
+     1
+    ]
+   }
+  },
+  "min_ratio_descent": {
+   "fraction": "7/4",
+   "float": 1.75,
+   "r": 3,
+   "witness": {
+    "n": 7,
+    "components_parent_arrays": [
+     [
+      0,
+      1
+     ],
+     [
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ]
+     ],
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     7,
+     16,
+     16,
+     9,
+     2
+    ]
+   }
+  },
+  "min_ratio_r_ge_3": {
+   "fraction": "2137989086/2287506235",
+   "float": 0.9346374900700544,
+   "r": 4,
+   "witness": {
+    "n": 80,
+    "components_parent_arrays": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ],
+      [
+       0,
+       10
+      ],
+      [
+       0,
+       11
+      ],
+      [
+       0,
+       12
+      ],
+      [
+       0,
+       13
+      ],
+      [
+       0,
+       14
+      ],
+      [
+       0,
+       15
+      ],
+      [
+       0,
+       16
+      ],
+      [
+       0,
+       17
+      ],
+      [
+       0,
+       18
+      ],
+      [
+       0,
+       19
+      ],
+      [
+       0,
+       20
+      ],
+      [
+       0,
+       21
+      ],
+      [
+       0,
+       22
+      ],
+      [
+       0,
+       23
+      ],
+      [
+       0,
+       24
+      ],
+      [
+       0,
+       25
+      ],
+      [
+       0,
+       26
+      ],
+      [
+       0,
+       27
+      ],
+      [
+       0,
+       28
+      ],
+      [
+       0,
+       29
+      ],
+      [
+       0,
+       30
+      ],
+      [
+       0,
+       31
+      ],
+      [
+       0,
+       32
+      ],
+      [
+       0,
+       33
+      ],
+      [
+       0,
+       34
+      ],
+      [
+       0,
+       35
+      ],
+      [
+       0,
+       36
+      ],
+      [
+       0,
+       37
+      ],
+      [
+       0,
+       38
+      ],
+      [
+       0,
+       39
+      ],
+      [
+       0,
+       40
+      ],
+      [
+       0,
+       41
+      ],
+      [
+       0,
+       42
+      ]
+     ],
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ],
+      [
+       0,
+       10
+      ],
+      [
+       0,
+       11
+      ],
+      [
+       0,
+       12
+      ],
+      [
+       0,
+       13
+      ],
+      [
+       0,
+       14
+      ],
+      [
+       0,
+       15
+      ],
+      [
+       0,
+       16
+      ],
+      [
+       0,
+       17
+      ],
+      [
+       0,
+       18
+      ],
+      [
+       0,
+       19
+      ],
+      [
+       0,
+       20
+      ],
+      [
+       0,
+       21
+      ],
+      [
+       0,
+       22
+      ],
+      [
+       0,
+       23
+      ],
+      [
+       0,
+       24
+      ],
+      [
+       0,
+       25
+      ],
+      [
+       0,
+       26
+      ],
+      [
+       0,
+       27
+      ],
+      [
+       0,
+       28
+      ],
+      [
+       0,
+       29
+      ],
+      [
+       0,
+       30
+      ],
+      [
+       0,
+       31
+      ],
+      [
+       0,
+       32
+      ],
+      [
+       0,
+       33
+      ],
+      [
+       0,
+       34
+      ],
+      [
+       0,
+       35
+      ],
+      [
+       0,
+       36
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     80,
+     3082,
+     77567,
+     1445045,
+     21281925,
+     258079255,
+     2649095698,
+     23482207323,
+     182512922975,
+     1258855998995,
+     7780406133969,
+     43435847514787,
+     220507984085018,
+     1023757745869305,
+     4367970966279560,
+     17198766834983716,
+     62724707986330152,
+     212566740164586136,
+     671262921420137550,
+     1980225003384056940,
+     5469192129892454450,
+     14170178802971212020,
+     34501304105072442060,
+     79065487837071498700,
+     170781453112997259078,
+     348131423185130747736,
+     670475333216880086042,
+     1221222928154335322924,
+     2105556772562491786020,
+     3439076061791209196740,
+     5325020998874051730920,
+     7821124592084299948158,
+     10902173673809982848858,
+     14429347509452887387600,
+     18139751154740330187975,
+     21666924990384169277194,
+     24594887826922545152567,
+     26536589497469057065878,
+     27217014869199032127530,
+     26536589497469056226690,
+     24594887826922539907641,
+     21666924990384142298872,
+     18139751154740212157161,
+     14429347509452441488650,
+     10902173673808511346980,
+     7821124592080019009790,
+     5325020998862991666240,
+     3439076061765682117780,
+     2105556772509601296600,
+     1221222928055568752028,
+     670475333050116177584,
+     348131422929868015284,
+     170781452758048460328,
+     79065487387985398300,
+     34501303587484537440,
+     14170178259145435020,
+     5469191608792974920,
+     1980224548011249540,
+     671262558647881200,
+     212566476905162380,
+     62724534168736440,
+     17198662594653540,
+     4367914309753280,
+     1023729916348425,
+     220495674290430,
+     43430966148115,
+     7778680504140,
+     1258315963905,
+     182364632450,
+     23446881315,
+     2641902120,
+     256851595,
+     21111090,
+     1426425,
+     76076,
+     3003,
+     78,
+     1
+    ]
+   }
+  },
+  "min_wr_gap_first_violation_minus_L": 1,
+  "min_wr_gap_witness": {
+   "forest": {
+    "n": 5,
+    "components_parent_arrays": [
+     [
+      0,
+      1,
+      2,
+      3,
+      4
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       3
+      ],
+      [
+       3,
+       4
+      ]
+     ]
+    ]
+   },
+   "first_violating_r": 3,
+   "L": 2,
+   "alpha": 3,
+   "polynomial": [
+    1,
+    5,
+    6,
+    1
+   ]
+  },
+  "seconds": 3.3
+ },
+ "hillclimb_unconditional": {
+  "mode": "all",
+  "restarts": 5,
+  "steps": 300,
+  "seed": 7,
+  "best_ratio": "25/24",
+  "best_float": 1.0416666666666667,
+  "best_witness": {
+   "n": 24,
+   "components_parent_arrays": [
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ]
+   ],
+   "components_edge_lists": [
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    []
+   ],
+   "polynomial": [
+    1,
+    24,
+    276,
+    2024,
+    10626,
+    42504,
+    134596,
+    346104,
+    735471,
+    1307504,
+    1961256,
+    2496144,
+    2704156,
+    2496144,
+    1961256,
+    1307504,
+    735471,
+    346104,
+    134596,
+    42504,
+    10626,
+    2024,
+    276,
+    24,
+    1
+   ]
+  },
+  "per_restart": [
+   {
+    "restart": 0,
+    "n_start": 26,
+    "best_ratio": "34672139/22695882",
+    "best_float": 1.527684141114234,
+    "r": 6,
+    "witness": {
+     "n": 26,
+     "components_parent_arrays": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1,
+       2,
+       2,
+       2,
+       2
+      ],
+      [
+       0,
+       1,
+       2,
+       2,
+       2,
+       3,
+       6,
+       6,
+       6
+      ]
+     ],
+     "components_edge_lists": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        1,
+        5
+       ]
+      ],
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        2,
+        5
+       ],
+       [
+        5,
+        6
+       ],
+       [
+        5,
+        7
+       ],
+       [
+        5,
+        8
+       ]
+      ]
+     ],
+     "polynomial": [
+      1,
+      26,
+      312,
+      2311,
+      11922,
+      45804,
+      136758,
+      326687,
+      637390,
+      1030878,
+      1396648,
+      1596201,
+      1545131,
+      1268513,
+      882025,
+      517218,
+      253847,
+      103054,
+      34010,
+      8894,
+      1773,
+      253,
+      23,
+      1
+     ]
+    }
+   },
+   {
+    "restart": 1,
+    "n_start": 9,
+    "best_ratio": "10/9",
+    "best_float": 1.1111111111111112,
+    "r": 1,
+    "witness": {
+     "n": 9,
+     "components_parent_arrays": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "components_edge_lists": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "polynomial": [
+      1,
+      9,
+      36,
+      84,
+      126,
+      126,
+      84,
+      36,
+      9,
+      1
+     ]
+    }
+   },
+   {
+    "restart": 2,
+    "n_start": 24,
+    "best_ratio": "25/24",
+    "best_float": 1.0416666666666667,
+    "r": 1,
+    "witness": {
+     "n": 24,
+     "components_parent_arrays": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "components_edge_lists": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "polynomial": [
+      1,
+      24,
+      276,
+      2024,
+      10626,
+      42504,
+      134596,
+      346104,
+      735471,
+      1307504,
+      1961256,
+      2496144,
+      2704156,
+      2496144,
+      1961256,
+      1307504,
+      735471,
+      346104,
+      134596,
+      42504,
+      10626,
+      2024,
+      276,
+      24,
+      1
+     ]
+    }
+   },
+   {
+    "restart": 3,
+    "n_start": 19,
+    "best_ratio": "3705739/2769633",
+    "best_float": 1.3379891848486785,
+    "r": 5,
+    "witness": {
+     "n": 19,
+     "components_parent_arrays": [
+      [
+       0,
+       1,
+       2,
+       2,
+       2,
+       2,
+       2,
+       4,
+       5,
+       8,
+       8,
+       8,
+       8,
+       8,
+       9,
+       9,
+       9,
+       9,
+       9
+      ]
+     ],
+     "components_edge_lists": [
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        1,
+        5
+       ],
+       [
+        1,
+        6
+       ],
+       [
+        3,
+        7
+       ],
+       [
+        4,
+        8
+       ],
+       [
+        7,
+        9
+       ],
+       [
+        7,
+        10
+       ],
+       [
+        7,
+        11
+       ],
+       [
+        7,
+        12
+       ],
+       [
+        7,
+        13
+       ],
+       [
+        8,
+        14
+       ],
+       [
+        8,
+        15
+       ],
+       [
+        8,
+        16
+       ],
+       [
+        8,
+        17
+       ],
+       [
+        8,
+        18
+       ]
+      ]
+     ],
+     "polynomial": [
+      1,
+      19,
+      153,
+      710,
+      2206,
+      5022,
+      8775,
+      12072,
+      13230,
+      11575,
+      8038,
+      4371,
+      1820,
+      560,
+      120,
+      16,
+      1
+     ]
+    }
+   },
+   {
+    "restart": 4,
+    "n_start": 33,
+    "best_ratio": "3883625392399/2768615339940",
+    "best_float": 1.4027320214454797,
+    "r": 8,
+    "witness": {
+     "n": 33,
+     "components_parent_arrays": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1,
+       2,
+       2,
+       2,
+       2
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       4,
+       10,
+       10,
+       10,
+       10,
+       11,
+       15,
+       15,
+       15,
+       15,
+       15
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "components_edge_lists": [
+      [],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        1,
+        5
+       ]
+      ],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        1,
+        5
+       ],
+       [
+        1,
+        6
+       ],
+       [
+        1,
+        7
+       ],
+       [
+        1,
+        8
+       ],
+       [
+        3,
+        9
+       ],
+       [
+        9,
+        10
+       ],
+       [
+        9,
+        11
+       ],
+       [
+        9,
+        12
+       ],
+       [
+        9,
+        13
+       ],
+       [
+        10,
+        14
+       ],
+       [
+        14,
+        15
+       ],
+       [
+        14,
+        16
+       ],
+       [
+        14,
+        17
+       ],
+       [
+        14,
+        18
+       ],
+       [
+        14,
+        19
+       ]
+      ],
+      [],
+      []
+     ],
+     "polynomial": [
+      1,
+      33,
+      504,
+      4777,
+      31805,
+      159571,
+      631348,
+      2032802,
+      5447880,
+      12354756,
+      23999818,
+      40294754,
+      58854442,
+      75120466,
+      84026795,
+      82480712,
+      71050646,
+      53641105,
+      35398539,
+      20334542,
+      10109117,
+      4315191,
+      1565082,
+      475595,
+      118804,
+      23753,
+      3654,
+      406,
+      29,
+      1
+     ]
+    }
+   }
+  ],
+  "seconds": 0.2
+ },
+ "hillclimb_r_ge_3": {
+  "mode": "ge3",
+  "restarts": 5,
+  "steps": 300,
+  "seed": 10,
+  "best_ratio": "28/25",
+  "best_float": 1.12,
+  "best_witness": {
+   "n": 27,
+   "components_parent_arrays": [
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ]
+   ],
+   "components_edge_lists": [
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    []
+   ],
+   "polynomial": [
+    1,
+    27,
+    351,
+    2925,
+    17550,
+    80730,
+    296010,
+    888030,
+    2220075,
+    4686825,
+    8436285,
+    13037895,
+    17383860,
+    20058300,
+    20058300,
+    17383860,
+    13037895,
+    8436285,
+    4686825,
+    2220075,
+    888030,
+    296010,
+    80730,
+    17550,
+    2925,
+    351,
+    27,
+    1
+   ]
+  },
+  "per_restart": [
+   {
+    "restart": 0,
+    "n_start": 42,
+    "best_ratio": "116769682393905092/65039797134838701",
+    "best_float": 1.7953574201933846,
+    "r": 11,
+    "witness": {
+     "n": 42,
+     "components_parent_arrays": [
+      [
+       0,
+       1,
+       2,
+       2,
+       2,
+       2,
+       3,
+       5,
+       7,
+       7,
+       7,
+       7,
+       7,
+       8,
+       8,
+       8,
+       8,
+       12,
+       18,
+       18,
+       20,
+       21,
+       21,
+       23,
+       24,
+       25,
+       25,
+       25,
+       27,
+       29,
+       29,
+       29,
+       31,
+       31,
+       32,
+       33,
+       34,
+       35,
+       35,
+       35,
+       35,
+       37
+      ]
+     ],
+     "components_edge_lists": [
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        1,
+        5
+       ],
+       [
+        2,
+        6
+       ],
+       [
+        4,
+        7
+       ],
+       [
+        6,
+        8
+       ],
+       [
+        6,
+        9
+       ],
+       [
+        6,
+        10
+       ],
+       [
+        6,
+        11
+       ],
+       [
+        6,
+        12
+       ],
+       [
+        7,
+        13
+       ],
+       [
+        7,
+        14
+       ],
+       [
+        7,
+        15
+       ],
+       [
+        7,
+        16
+       ],
+       [
+        11,
+        17
+       ],
+       [
+        17,
+        18
+       ],
+       [
+        17,
+        19
+       ],
+       [
+        19,
+        20
+       ],
+       [
+        20,
+        21
+       ],
+       [
+        20,
+        22
+       ],
+       [
+        22,
+        23
+       ],
+       [
+        23,
+        24
+       ],
+       [
+        24,
+        25
+       ],
+       [
+        24,
+        26
+       ],
+       [
+        24,
+        27
+       ],
+       [
+        26,
+        28
+       ],
+       [
+        28,
+        29
+       ],
+       [
+        28,
+        30
+       ],
+       [
+        28,
+        31
+       ],
+       [
+        30,
+        32
+       ],
+       [
+        30,
+        33
+       ],
+       [
+        31,
+        34
+       ],
+       [
+        32,
+        35
+       ],
+       [
+        33,
+        36
+       ],
+       [
+        34,
+        37
+       ],
+       [
+        34,
+        38
+       ],
+       [
+        34,
+        39
+       ],
+       [
+        34,
+        40
+       ],
+       [
+        36,
+        41
+       ]
+      ]
+     ],
+     "polynomial": [
+      1,
+      42,
+      820,
+      9917,
+      83577,
+      523851,
+      2546672,
+      9893046,
+      31410573,
+      82967637,
+      184917933,
+      351722497,
+      576030676,
+      817882639,
+      1011865608,
+      1094515840,
+      1037107487,
+      861298958,
+      626385174,
+      398018891,
+      220140160,
+      105399790,
+      43355246,
+      15166617,
+      4450882,
+      1075510,
+      208443,
+      31164,
+      3376,
+      236,
+      8
+     ]
+    }
+   },
+   {
+    "restart": 1,
+    "n_start": 27,
+    "best_ratio": "28/25",
+    "best_float": 1.12,
+    "r": 3,
+    "witness": {
+     "n": 27,
+     "components_parent_arrays": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "components_edge_lists": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "polynomial": [
+      1,
+      27,
+      351,
+      2925,
+      17550,
+      80730,
+      296010,
+      888030,
+      2220075,
+      4686825,
+      8436285,
+      13037895,
+      17383860,
+      20058300,
+      20058300,
+      17383860,
+      13037895,
+      8436285,
+      4686825,
+      2220075,
+      888030,
+      296010,
+      80730,
+      17550,
+      2925,
+      351,
+      27,
+      1
+     ]
+    }
+   },
+   {
+    "restart": 2,
+    "n_start": 57,
+    "best_ratio": "2554314051746791/1782928858053876",
+    "best_float": 1.4326505739185278,
+    "r": 7,
+    "witness": {
+     "n": 57,
+     "components_parent_arrays": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1,
+       2,
+       2,
+       2,
+       2,
+       6,
+       6,
+       6
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1,
+       2,
+       2
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       0
+      ]
+     ],
+     "components_edge_lists": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        1,
+        5
+       ],
+       [
+        5,
+        6
+       ],
+       [
+        5,
+        7
+       ],
+       [
+        5,
+        8
+       ]
+      ],
+      [],
+      [],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ]
+      ],
+      [
+       [
+        0,
+        1
+       ]
+      ],
+      [],
+      [],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ]
+      ],
+      [],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ]
+      ],
+      []
+     ],
+     "polynomial": [
+      1,
+      57,
+      1582,
+      28509,
+      375291,
+      3849267,
+      32040408,
+      222585038,
+      1317157172,
+      6742985405,
+      30227664846,
+      119814612625,
+      423255871007,
+      1341289859497,
+      3833883162384,
+      9929930250176,
+      23395476021047,
+      50306879522648,
+      99002806295944,
+      178739577217842,
+      296628341804262,
+      453256777824206,
+      638566947748912,
+      830367509858100,
+      997461536103752,
+      1107487007146362,
+      1136975331419580,
+      1079411406589882,
+      947546797364454,
+      768855978380386,
+      576325957054752,
+      398756723907768,
+      254380583029863,
+      149412321495177,
+      80660853346910,
+      39939218493161,
+      18092511414815,
+      7475646338607,
+      2807270865592,
+      953974326254,
+      291853637236,
+      79884933657,
+      19415094998,
+      4150672949,
+      771415547,
+      122766277,
+      16398096,
+      1788312,
+      152945,
+      9622,
+      396,
+      8
+     ]
+    }
+   },
+   {
+    "restart": 3,
+    "n_start": 56,
+    "best_ratio": "99051367223466896594475/49505950614758852420866",
+    "best_float": 2.000797196972467,
+    "r": 14,
+    "witness": {
+     "n": 56,
+     "components_parent_arrays": [
+      [
+       0,
+       1,
+       1,
+       1,
+       3
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1,
+       1,
+       1,
+       2,
+       3,
+       4,
+       4,
+       4,
+       4,
+       4,
+       6,
+       6,
+       6,
+       10,
+       13,
+       15,
+       15,
+       15,
+       15,
+       16,
+       16,
+       17,
+       17,
+       20,
+       20,
+       22,
+       23,
+       23,
+       23,
+       25,
+       26,
+       28,
+       32,
+       33,
+       35,
+       35,
+       35,
+       37,
+       39
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1,
+       2,
+       2,
+       2,
+       2,
+       5
+      ]
+     ],
+     "components_edge_lists": [
+      [
+       [
+        0,
+        1
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        2,
+        4
+       ]
+      ],
+      [],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        2,
+        5
+       ],
+       [
+        3,
+        6
+       ],
+       [
+        3,
+        7
+       ],
+       [
+        3,
+        8
+       ],
+       [
+        3,
+        9
+       ],
+       [
+        3,
+        10
+       ],
+       [
+        5,
+        11
+       ],
+       [
+        5,
+        12
+       ],
+       [
+        5,
+        13
+       ],
+       [
+        9,
+        14
+       ],
+       [
+        12,
+        15
+       ],
+       [
+        14,
+        16
+       ],
+       [
+        14,
+        17
+       ],
+       [
+        14,
+        18
+       ],
+       [
+        14,
+        19
+       ],
+       [
+        15,
+        20
+       ],
+       [
+        15,
+        21
+       ],
+       [
+        16,
+        22
+       ],
+       [
+        16,
+        23
+       ],
+       [
+        19,
+        24
+       ],
+       [
+        19,
+        25
+       ],
+       [
+        21,
+        26
+       ],
+       [
+        22,
+        27
+       ],
+       [
+        22,
+        28
+       ],
+       [
+        22,
+        29
+       ],
+       [
+        24,
+        30
+       ],
+       [
+        25,
+        31
+       ],
+       [
+        27,
+        32
+       ],
+       [
+        31,
+        33
+       ],
+       [
+        32,
+        34
+       ],
+       [
+        34,
+        35
+       ],
+       [
+        34,
+        36
+       ],
+       [
+        34,
+        37
+       ],
+       [
+        36,
+        38
+       ],
+       [
+        38,
+        39
+       ]
+      ],
+      [],
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        1,
+        5
+       ],
+       [
+        4,
+        6
+       ]
+      ]
+     ],
+     "polynomial": [
+      1,
+      56,
+      1491,
+      25156,
+      302477,
+      2764035,
+      19990821,
+      117682448,
+      575539371,
+      2375169125,
+      8373174785,
+      25464214436,
+      67342393096,
+      155888302693,
+      317573222362,
+      571857453682,
+      913436658769,
+      1297814132108,
+      1643524521592,
+      1857639944712,
+      1875315624837,
+      1690964431634,
+      1361030470765,
+      976540041982,
+      623273768595,
+      352803781017,
+      176406408550,
+      77510620488,
+      29728274990,
+      9867715148,
+      2803472002,
+      671911488,
+      133232816,
+      21272832,
+      2628216,
+      235776,
+      13664,
+      384
+     ]
+    }
+   },
+   {
+    "restart": 4,
+    "n_start": 9,
+    "best_ratio": "10/7",
+    "best_float": 1.4285714285714286,
+    "r": 3,
+    "witness": {
+     "n": 9,
+     "components_parent_arrays": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ]
+     ],
+     "components_edge_lists": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "polynomial": [
+      1,
+      9,
+      36,
+      84,
+      126,
+      126,
+      84,
+      36,
+      9,
+      1
+     ]
+    }
+   }
+  ],
+  "seconds": 0.2
+ },
+ "hillclimb_descent": {
+  "mode": "desc",
+  "restarts": 2,
+  "steps": 300,
+  "seed": 8,
+  "best_ratio": "201/110",
+  "best_float": 1.8272727272727274,
+  "best_witness": {
+   "n": 6,
+   "components_parent_arrays": [
+    [
+     0,
+     1,
+     1,
+     1,
+     1
+    ],
+    [
+     0
+    ]
+   ],
+   "components_edge_lists": [
+    [
+     [
+      0,
+      1
+     ],
+     [
+      0,
+      2
+     ],
+     [
+      0,
+      3
+     ],
+     [
+      0,
+      4
+     ]
+    ],
+    []
+   ],
+   "polynomial": [
+    1,
+    6,
+    11,
+    10,
+    5,
+    1
+   ]
+  },
+  "per_restart": [
+   {
+    "restart": 0,
+    "n_start": 20,
+    "best_ratio": "34951809/17686048",
+    "best_float": 1.976236240001158,
+    "r": 8,
+    "witness": {
+     "n": 20,
+     "components_parent_arrays": [
+      [
+       0,
+       1,
+       2,
+       2,
+       2,
+       3,
+       6,
+       6,
+       6,
+       6,
+       6,
+       9,
+       10,
+       12,
+       13,
+       13,
+       13,
+       13,
+       14,
+       14
+      ]
+     ],
+     "components_edge_lists": [
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        2,
+        5
+       ],
+       [
+        5,
+        6
+       ],
+       [
+        5,
+        7
+       ],
+       [
+        5,
+        8
+       ],
+       [
+        5,
+        9
+       ],
+       [
+        5,
+        10
+       ],
+       [
+        8,
+        11
+       ],
+       [
+        9,
+        12
+       ],
+       [
+        11,
+        13
+       ],
+       [
+        12,
+        14
+       ],
+       [
+        12,
+        15
+       ],
+       [
+        12,
+        16
+       ],
+       [
+        12,
+        17
+       ],
+       [
+        13,
+        18
+       ],
+       [
+        13,
+        19
+       ]
+      ]
+     ],
+     "polynomial": [
+      1,
+      20,
+      171,
+      836,
+      2657,
+      5951,
+      9912,
+      12657,
+      12576,
+      9752,
+      5859,
+      2677,
+      899,
+      209,
+      30,
+      2
+     ]
+    }
+   },
+   {
+    "restart": 1,
+    "n_start": 6,
+    "best_ratio": "201/110",
+    "best_float": 1.8272727272727274,
+    "r": 3,
+    "witness": {
+     "n": 6,
+     "components_parent_arrays": [
+      [
+       0,
+       1,
+       1,
+       1,
+       1
+      ],
+      [
+       0
+      ]
+     ],
+     "components_edge_lists": [
+      [
+       [
+        0,
+        1
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        0,
+        4
+       ]
+      ],
+      []
+     ],
+     "polynomial": [
+      1,
+      6,
+      11,
+      10,
+      5,
+      1
+     ]
+    }
+   }
+  ],
+  "seconds": 0.0
+ },
+ "hillclimb_r_lt_L": {
+  "mode": "ltL",
+  "restarts": 2,
+  "steps": 300,
+  "seed": 9,
+  "best_ratio": "48/37",
+  "best_float": 1.2972972972972974,
+  "best_witness": {
+   "n": 37,
+   "components_parent_arrays": [
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0
+    ],
+    [
+     0,
+     1
+    ]
+   ],
+   "components_edge_lists": [
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [
+     [
+      0,
+      1
+     ]
+    ],
+    [],
+    [],
+    [],
+    [],
+    [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      2
+     ]
+    ],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [
+     [
+      0,
+      1
+     ]
+    ],
+    [],
+    [
+     [
+      0,
+      1
+     ]
+    ]
+   ],
+   "polynomial": [
+    1,
+    37,
+    661,
+    7596,
+    63113,
+    404027,
+    2073617,
+    8766090,
+    31120713,
+    94123965,
+    245187345,
+    554740680,
+    1097214885,
+    1906606275,
+    2921566605,
+    3958341630,
+    4750100415,
+    5053098735,
+    4765308015,
+    3980652780,
+    2940516075,
+    1915870905,
+    1096954755,
+    549232710,
+    238932915,
+    89561511,
+    28613547,
+    7680736,
+    1699111,
+    301513,
+    41247,
+    4082,
+    260,
+    8
+   ]
+  },
+  "per_restart": [
+   {
+    "restart": 0,
+    "n_start": 35,
+    "best_ratio": "38652935953823/24595962095808",
+    "best_float": 1.5715155114997836,
+    "r": 8,
+    "witness": {
+     "n": 35,
+     "components_parent_arrays": [
+      [
+       0
+      ],
+      [
+       0,
+       1,
+       2,
+       2,
+       2
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1,
+       2,
+       2,
+       2
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1,
+       1,
+       3,
+       3,
+       4,
+       4,
+       4,
+       4
+      ],
+      [
+       0
+      ]
+     ],
+     "components_edge_lists": [
+      [],
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ]
+      ],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ]
+      ],
+      [],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        2,
+        3
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        3,
+        5
+       ],
+       [
+        3,
+        6
+       ],
+       [
+        3,
+        7
+       ],
+       [
+        3,
+        8
+       ]
+      ],
+      []
+     ],
+     "polynomial": [
+      1,
+      35,
+      579,
+      6043,
+      44809,
+      251988,
+      1120092,
+      4048862,
+      12149568,
+      30735205,
+      66325180,
+      123206826,
+      198398673,
+      278407048,
+      341755879,
+      367908560,
+      347793701,
+      288748877,
+      210316011,
+      134077267,
+      74527855,
+      35923292,
+      14901738,
+      5265610,
+      1563122,
+      382491,
+      75110,
+      11376,
+      1247,
+      88,
+      3
+     ]
+    }
+   },
+   {
+    "restart": 1,
+    "n_start": 37,
+    "best_ratio": "48/37",
+    "best_float": 1.2972972972972974,
+    "r": 1,
+    "witness": {
+     "n": 37,
+     "components_parent_arrays": [
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1,
+       2
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       0
+      ],
+      [
+       0,
+       1
+      ]
+     ],
+     "components_edge_lists": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ]
+      ],
+      [],
+      [],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ]
+      ],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [
+       [
+        0,
+        1
+       ]
+      ],
+      [],
+      [
+       [
+        0,
+        1
+       ]
+      ]
+     ],
+     "polynomial": [
+      1,
+      37,
+      661,
+      7596,
+      63113,
+      404027,
+      2073617,
+      8766090,
+      31120713,
+      94123965,
+      245187345,
+      554740680,
+      1097214885,
+      1906606275,
+      2921566605,
+      3958341630,
+      4750100415,
+      5053098735,
+      4765308015,
+      3980652780,
+      2940516075,
+      1915870905,
+      1096954755,
+      549232710,
+      238932915,
+      89561511,
+      28613547,
+      7680736,
+      1699111,
+      301513,
+      41247,
+      4082,
+      260,
+      8
+     ]
+    }
+   }
+  ],
+  "seconds": 0.1
+ },
+ "wr_summary": {
+  "min_over_all_searches_of_(first_violating_r - L(alpha))": 1,
+  "per_source": [
+   [
+    "exhaustive n=3",
+    1
+   ],
+   [
+    "exhaustive n=4",
+    1
+   ],
+   [
+    "exhaustive n=5",
+    1
+   ],
+   [
+    "exhaustive n=6",
+    1
+   ],
+   [
+    "exhaustive n=7",
+    1
+   ],
+   [
+    "exhaustive n=8",
+    2
+   ],
+   [
+    "exhaustive n=9",
+    2
+   ],
+   [
+    "exhaustive n=10",
+    2
+   ],
+   [
+    "exhaustive n=11",
+    2
+   ],
+   [
+    "exhaustive n=12",
+    2
+   ],
+   [
+    "m_stars",
+    1
+   ],
+   [
+    "m_paths",
+    1
+   ],
+   [
+    "single_star",
+    1
+   ],
+   [
+    "star_plus_mK1",
+    1
+   ],
+   [
+    "two_stars",
+    1
+   ],
+   [
+    "star_plus_mK2",
+    1
+   ],
+   [
+    "mixed_stars",
+    1
+   ],
+   [
+    "m_copies_of_tree_le10",
+    1
+   ],
+   [
+    "T_plus_mK1",
+    1
+   ],
+   [
+    "T_plus_mK2",
+    1
+   ],
+   [
+    "random",
+    1
+   ]
+  ],
+  "exhaustive_witness": {
+   "forest": {
+    "n": 3,
+    "components_parent_arrays": [
+     [
+      0,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ]
+     ]
+    ]
+   },
+   "polynomial": [
+    1,
+    3,
+    1
+   ],
+   "first_violating_r": 2,
+   "L": 1,
+   "alpha": 2
+  },
+  "WR_fails_for_some_r_lt_L": false
+ },
+ "counterexamples": [],
+ "verdicts": {
+  "unimodality_violations_found": false,
+  "LC_failures_found": false,
+  "ISO_unconditional_failure_found": false,
+  "ISO_descent_conditional_failure_found": false,
+  "WR_failure_with_r_lt_L_found": false,
+  "tightest_ratio_exhaustive_unconditional": {
+   "fraction": "127/330",
+   "float": 0.38484848484848483,
+   "r": 2,
+   "witness": {
+    "n": 12,
+    "components_parent_arrays": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ],
+      [
+       0,
+       10
+      ],
+      [
+       0,
+       11
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     12,
+     55,
+     165,
+     330,
+     462,
+     462,
+     330,
+     165,
+     55,
+     11,
+     1
+    ]
+   }
+  },
+  "tightest_ratio_exhaustive_r_lt_L": {
+   "fraction": "127/330",
+   "float": 0.38484848484848483,
+   "r": 2,
+   "witness": {
+    "n": 12,
+    "components_parent_arrays": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ],
+      [
+       0,
+       10
+      ],
+      [
+       0,
+       11
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     12,
+     55,
+     165,
+     330,
+     462,
+     462,
+     330,
+     165,
+     55,
+     11,
+     1
+    ]
+   }
+  },
+  "tightest_ratio_exhaustive_descent": {
+   "fraction": "7/4",
+   "float": 1.75,
+   "r": 3,
+   "witness": {
+    "n": 7,
+    "components_parent_arrays": [
+     [
+      0,
+      1
+     ],
+     [
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ]
+     ],
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     7,
+     16,
+     16,
+     9,
+     2
+    ]
+   }
+  },
+  "tightest_ratio_exhaustive_r_ge_3": {
+   "fraction": "3559/3154",
+   "float": 1.128408370323399,
+   "r": 3,
+   "witness": {
+    "n": 12,
+    "components_parent_arrays": [
+     [
+      0
+     ],
+     [
+      0
+     ],
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [],
+     [],
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     12,
+     57,
+     166,
+     330,
+     462,
+     462,
+     330,
+     165,
+     55,
+     11,
+     1
+    ]
+   }
+  },
+  "tightest_ratio_random_unconditional": {
+   "fraction": "6281/123240",
+   "float": 0.05096559558584875,
+   "r": 2,
+   "witness": {
+    "n": 80,
+    "components_parent_arrays": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ],
+      [
+       0,
+       10
+      ],
+      [
+       0,
+       11
+      ],
+      [
+       0,
+       12
+      ],
+      [
+       0,
+       13
+      ],
+      [
+       0,
+       14
+      ],
+      [
+       0,
+       15
+      ],
+      [
+       0,
+       16
+      ],
+      [
+       0,
+       17
+      ],
+      [
+       0,
+       18
+      ],
+      [
+       0,
+       19
+      ],
+      [
+       0,
+       20
+      ],
+      [
+       0,
+       21
+      ],
+      [
+       0,
+       22
+      ],
+      [
+       0,
+       23
+      ],
+      [
+       0,
+       24
+      ],
+      [
+       0,
+       25
+      ],
+      [
+       0,
+       26
+      ],
+      [
+       0,
+       27
+      ],
+      [
+       0,
+       28
+      ],
+      [
+       0,
+       29
+      ],
+      [
+       0,
+       30
+      ],
+      [
+       0,
+       31
+      ],
+      [
+       0,
+       32
+      ],
+      [
+       0,
+       33
+      ],
+      [
+       0,
+       34
+      ],
+      [
+       0,
+       35
+      ],
+      [
+       0,
+       36
+      ],
+      [
+       0,
+       37
+      ],
+      [
+       0,
+       38
+      ],
+      [
+       0,
+       39
+      ],
+      [
+       0,
+       40
+      ],
+      [
+       0,
+       41
+      ],
+      [
+       0,
+       42
+      ],
+      [
+       0,
+       43
+      ],
+      [
+       0,
+       44
+      ],
+      [
+       0,
+       45
+      ],
+      [
+       0,
+       46
+      ],
+      [
+       0,
+       47
+      ],
+      [
+       0,
+       48
+      ],
+      [
+       0,
+       49
+      ],
+      [
+       0,
+       50
+      ],
+      [
+       0,
+       51
+      ],
+      [
+       0,
+       52
+      ],
+      [
+       0,
+       53
+      ],
+      [
+       0,
+       54
+      ],
+      [
+       0,
+       55
+      ],
+      [
+       0,
+       56
+      ],
+      [
+       0,
+       57
+      ],
+      [
+       0,
+       58
+      ],
+      [
+       0,
+       59
+      ],
+      [
+       0,
+       60
+      ],
+      [
+       0,
+       61
+      ],
+      [
+       0,
+       62
+      ],
+      [
+       0,
+       63
+      ],
+      [
+       0,
+       64
+      ],
+      [
+       0,
+       65
+      ],
+      [
+       0,
+       66
+      ],
+      [
+       0,
+       67
+      ],
+      [
+       0,
+       68
+      ],
+      [
+       0,
+       69
+      ],
+      [
+       0,
+       70
+      ],
+      [
+       0,
+       71
+      ],
+      [
+       0,
+       72
+      ],
+      [
+       0,
+       73
+      ],
+      [
+       0,
+       74
+      ],
+      [
+       0,
+       75
+      ],
+      [
+       0,
+       76
+      ],
+      [
+       0,
+       77
+      ],
+      [
+       0,
+       78
+      ],
+      [
+       0,
+       79
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     80,
+     3081,
+     79079,
+     1502501,
+     22537515,
+     277962685,
+     2898753715,
+     26088783435,
+     205811513765,
+     1440680596355,
+     9036996468045,
+     51209646652255,
+     263926640438545,
+     1244225590638855,
+     5391644226101705,
+     21566576904406820,
+     79923196763389980,
+     275291011073898820,
+     883829035553043580,
+     2651487106659130740,
+     7449416156804224460,
+     19639369867938409940,
+     48671481846629972460,
+     113566790975469935740,
+     249846940146033858628,
+     518912875687916475612,
+     1018606755979984192868,
+     1891698261105684929612,
+     3326779700565170048628,
+     5544632834275283414380,
+     8764097060628673784020,
+     13146145590943010676030,
+     18723298265888530356770,
+     25331521183260952835630,
+     32569098664192653645810,
+     39806676145124354455990,
+     46261812817306682205610,
+     51131477324391596121990,
+     53753604366668088230810,
+     53753604366668088230810,
+     51131477324391596121990,
+     46261812817306682205610,
+     39806676145124354455990,
+     32569098664192653645810,
+     25331521183260952835630,
+     18723298265888530356770,
+     13146145590943010676030,
+     8764097060628673784020,
+     5544632834275283414380,
+     3326779700565170048628,
+     1891698261105684929612,
+     1018606755979984192868,
+     518912875687916475612,
+     249846940146033858628,
+     113566790975469935740,
+     48671481846629972460,
+     19639369867938409940,
+     7449416156804224460,
+     2651487106659130740,
+     883829035553043580,
+     275291011073898820,
+     79923196763389980,
+     21566576904406820,
+     5391644226101705,
+     1244225590638855,
+     263926640438545,
+     51209646652255,
+     9036996468045,
+     1440680596355,
+     205811513765,
+     26088783435,
+     2898753715,
+     277962685,
+     22537515,
+     1502501,
+     79079,
+     3081,
+     79,
+     1
+    ]
+   }
+  },
+  "tightest_ratio_random_r_ge_3": {
+   "fraction": "2137989086/2287506235",
+   "float": 0.9346374900700544,
+   "r": 4,
+   "witness": {
+    "n": 80,
+    "components_parent_arrays": [
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     [
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ],
+      [
+       0,
+       10
+      ],
+      [
+       0,
+       11
+      ],
+      [
+       0,
+       12
+      ],
+      [
+       0,
+       13
+      ],
+      [
+       0,
+       14
+      ],
+      [
+       0,
+       15
+      ],
+      [
+       0,
+       16
+      ],
+      [
+       0,
+       17
+      ],
+      [
+       0,
+       18
+      ],
+      [
+       0,
+       19
+      ],
+      [
+       0,
+       20
+      ],
+      [
+       0,
+       21
+      ],
+      [
+       0,
+       22
+      ],
+      [
+       0,
+       23
+      ],
+      [
+       0,
+       24
+      ],
+      [
+       0,
+       25
+      ],
+      [
+       0,
+       26
+      ],
+      [
+       0,
+       27
+      ],
+      [
+       0,
+       28
+      ],
+      [
+       0,
+       29
+      ],
+      [
+       0,
+       30
+      ],
+      [
+       0,
+       31
+      ],
+      [
+       0,
+       32
+      ],
+      [
+       0,
+       33
+      ],
+      [
+       0,
+       34
+      ],
+      [
+       0,
+       35
+      ],
+      [
+       0,
+       36
+      ],
+      [
+       0,
+       37
+      ],
+      [
+       0,
+       38
+      ],
+      [
+       0,
+       39
+      ],
+      [
+       0,
+       40
+      ],
+      [
+       0,
+       41
+      ],
+      [
+       0,
+       42
+      ]
+     ],
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ],
+      [
+       0,
+       5
+      ],
+      [
+       0,
+       6
+      ],
+      [
+       0,
+       7
+      ],
+      [
+       0,
+       8
+      ],
+      [
+       0,
+       9
+      ],
+      [
+       0,
+       10
+      ],
+      [
+       0,
+       11
+      ],
+      [
+       0,
+       12
+      ],
+      [
+       0,
+       13
+      ],
+      [
+       0,
+       14
+      ],
+      [
+       0,
+       15
+      ],
+      [
+       0,
+       16
+      ],
+      [
+       0,
+       17
+      ],
+      [
+       0,
+       18
+      ],
+      [
+       0,
+       19
+      ],
+      [
+       0,
+       20
+      ],
+      [
+       0,
+       21
+      ],
+      [
+       0,
+       22
+      ],
+      [
+       0,
+       23
+      ],
+      [
+       0,
+       24
+      ],
+      [
+       0,
+       25
+      ],
+      [
+       0,
+       26
+      ],
+      [
+       0,
+       27
+      ],
+      [
+       0,
+       28
+      ],
+      [
+       0,
+       29
+      ],
+      [
+       0,
+       30
+      ],
+      [
+       0,
+       31
+      ],
+      [
+       0,
+       32
+      ],
+      [
+       0,
+       33
+      ],
+      [
+       0,
+       34
+      ],
+      [
+       0,
+       35
+      ],
+      [
+       0,
+       36
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     80,
+     3082,
+     77567,
+     1445045,
+     21281925,
+     258079255,
+     2649095698,
+     23482207323,
+     182512922975,
+     1258855998995,
+     7780406133969,
+     43435847514787,
+     220507984085018,
+     1023757745869305,
+     4367970966279560,
+     17198766834983716,
+     62724707986330152,
+     212566740164586136,
+     671262921420137550,
+     1980225003384056940,
+     5469192129892454450,
+     14170178802971212020,
+     34501304105072442060,
+     79065487837071498700,
+     170781453112997259078,
+     348131423185130747736,
+     670475333216880086042,
+     1221222928154335322924,
+     2105556772562491786020,
+     3439076061791209196740,
+     5325020998874051730920,
+     7821124592084299948158,
+     10902173673809982848858,
+     14429347509452887387600,
+     18139751154740330187975,
+     21666924990384169277194,
+     24594887826922545152567,
+     26536589497469057065878,
+     27217014869199032127530,
+     26536589497469056226690,
+     24594887826922539907641,
+     21666924990384142298872,
+     18139751154740212157161,
+     14429347509452441488650,
+     10902173673808511346980,
+     7821124592080019009790,
+     5325020998862991666240,
+     3439076061765682117780,
+     2105556772509601296600,
+     1221222928055568752028,
+     670475333050116177584,
+     348131422929868015284,
+     170781452758048460328,
+     79065487387985398300,
+     34501303587484537440,
+     14170178259145435020,
+     5469191608792974920,
+     1980224548011249540,
+     671262558647881200,
+     212566476905162380,
+     62724534168736440,
+     17198662594653540,
+     4367914309753280,
+     1023729916348425,
+     220495674290430,
+     43430966148115,
+     7778680504140,
+     1258315963905,
+     182364632450,
+     23446881315,
+     2641902120,
+     256851595,
+     21111090,
+     1426425,
+     76076,
+     3003,
+     78,
+     1
+    ]
+   }
+  },
+  "tightest_ratio_random_descent": {
+   "fraction": "7/4",
+   "float": 1.75,
+   "r": 3,
+   "witness": {
+    "n": 7,
+    "components_parent_arrays": [
+     [
+      0,
+      1
+     ],
+     [
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    ],
+    "components_edge_lists": [
+     [
+      [
+       0,
+       1
+      ]
+     ],
+     [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       0,
+       3
+      ],
+      [
+       0,
+       4
+      ]
+     ]
+    ],
+    "polynomial": [
+     1,
+     7,
+     16,
+     16,
+     9,
+     2
+    ]
+   }
+  },
+  "tightest_ratio_hillclimb_unconditional": {
+   "ratio": "25/24",
+   "float": 1.0416666666666667
+  },
+  "tightest_ratio_hillclimb_r_ge_3": {
+   "ratio": "28/25",
+   "float": 1.12
+  },
+  "r2_theorem": {
+   "statement": "For every forest with n vertices and e edges, Q_2 >= (n-e)(3en-4e+n^2+n)/2 > 0; equality iff the forest is K_{1,e} + (n-1-e)K_1. Hence ISO_2 can never fail for forests (in fact for any triangle-free graph with e < n), even though inf ratio_2 = 0 (stars).",
+   "proof_sketch": "p_1=n, p_2=C(n,2)-e, p_3=C(n,3)-e(n-2)+D, D=sum_v C(d_v,2) <= C(e,2); Q_2 decreasing in D.",
+   "symbolic_identity_verified": true
+  },
+  "q2_lower_bound_violations_exhaustive": 0,
+  "tightest_ratio_hillclimb_descent": {
+   "ratio": "201/110",
+   "float": 1.8272727272727274
+  },
+  "tightest_ratio_hillclimb_r_lt_L": {
+   "ratio": "48/37",
+   "float": 1.2972972972972974
+  },
+  "note_descent": "If LC_r holds and p_{r-1} >= p_r then Q_r/(p_{r-1}p_r) = r t + 1/t - (r+1) s >= 1/t - t >= 0 (t=p_r/p_{r-1}<=1, s<=t). So a descent-conditional ISO failure requires an LC failure at a descent; none were found."
+ },
+ "total_seconds": 9.5
+}

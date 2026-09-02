@@ -1,0 +1,9 @@
+[project]
+name = "erdos993"
+version = "0.1.0"
+description = "Exact (integer-only) independence polynomials of forests and unimodality checks"
+requires-python = ">=3.12"
+dependencies = ["sympy>=1.12", "networkx>=3.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
