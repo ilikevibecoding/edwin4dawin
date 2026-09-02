@@ -1,0 +1,1056 @@
+{
+ "iso2": {
+  "corollary_WR2": "p_1 <= 2 p_2 iff 2e <= n(n-2); true for every forest with n >= 4; fails exactly for K_1, K_2, P_3.  r = 2 is a prefix index iff alpha >= 4 (L(alpha) >= 3), which forces n >= 4, so WR_2 holds on the whole prefix.",
+  "exhaustive": {
+   "WR2_failures_all_have_n<=3": [
+    {
+     "components": [
+      [
+       1,
+       0
+      ]
+     ],
+     "e": 0,
+     "n": 1,
+     "poly": [
+      1,
+      1
+     ]
+    },
+    {
+     "components": [
+      [
+       2,
+       0
+      ]
+     ],
+     "e": 1,
+     "n": 2,
+     "poly": [
+      1,
+      2
+     ]
+    },
+    {
+     "components": [
+      [
+       3,
+       0
+      ]
+     ],
+     "e": 2,
+     "n": 3,
+     "poly": [
+      1,
+      3,
+      1
+     ]
+    }
+   ],
+   "nmax": 14,
+   "per_n": {
+    "1": {
+     "forests": 1,
+     "forests_satisfying_WR2": 0,
+     "forests_with_Q2_equal_f": 1,
+     "forests_with_r2_in_prefix(alpha>=4)": 0,
+     "forests_with_star_edge_set": 1,
+     "min_Q2": 1,
+     "min_Q2_forest": "K_{1,0}",
+     "min_Q2_over_prefix_forests": null,
+     "unique_minimizer": true
+    },
+    "10": {
+     "forests": 329,
+     "forests_satisfying_WR2": 329,
+     "forests_with_Q2_equal_f": 10,
+     "forests_with_r2_in_prefix(alpha>=4)": 329,
+     "forests_with_star_edge_set": 10,
+     "min_Q2": 172,
+     "min_Q2_forest": "K_{1,9}",
+     "min_Q2_over_prefix_forests": 172,
+     "unique_minimizer": true
+    },
+    "11": {
+     "forests": 710,
+     "forests_satisfying_WR2": 710,
+     "forests_with_Q2_equal_f": 11,
+     "forests_with_r2_in_prefix(alpha>=4)": 710,
+     "forests_with_star_edge_set": 11,
+     "min_Q2": 211,
+     "min_Q2_forest": "K_{1,10}",
+     "min_Q2_over_prefix_forests": 211,
+     "unique_minimizer": true
+    },
+    "12": {
+     "forests": 1601,
+     "forests_satisfying_WR2": 1601,
+     "forests_with_Q2_equal_f": 12,
+     "forests_with_r2_in_prefix(alpha>=4)": 1601,
+     "forests_with_star_edge_set": 12,
+     "min_Q2": 254,
+     "min_Q2_forest": "K_{1,11}",
+     "min_Q2_over_prefix_forests": 254,
+     "unique_minimizer": true
+    },
+    "13": {
+     "forests": 3658,
+     "forests_satisfying_WR2": 3658,
+     "forests_with_Q2_equal_f": 13,
+     "forests_with_r2_in_prefix(alpha>=4)": 3658,
+     "forests_with_star_edge_set": 13,
+     "min_Q2": 301,
+     "min_Q2_forest": "K_{1,12}",
+     "min_Q2_over_prefix_forests": 301,
+     "unique_minimizer": true
+    },
+    "14": {
+     "forests": 8599,
+     "forests_satisfying_WR2": 8599,
+     "forests_with_Q2_equal_f": 14,
+     "forests_with_r2_in_prefix(alpha>=4)": 8599,
+     "forests_with_star_edge_set": 14,
+     "min_Q2": 352,
+     "min_Q2_forest": "K_{1,13}",
+     "min_Q2_over_prefix_forests": 352,
+     "unique_minimizer": true
+    },
+    "2": {
+     "forests": 2,
+     "forests_satisfying_WR2": 1,
+     "forests_with_Q2_equal_f": 2,
+     "forests_with_r2_in_prefix(alpha>=4)": 0,
+     "forests_with_star_edge_set": 2,
+     "min_Q2": 4,
+     "min_Q2_forest": "K_{1,1}",
+     "min_Q2_over_prefix_forests": null,
+     "unique_minimizer": true
+    },
+    "3": {
+     "forests": 3,
+     "forests_satisfying_WR2": 2,
+     "forests_with_Q2_equal_f": 3,
+     "forests_with_r2_in_prefix(alpha>=4)": 0,
+     "forests_with_star_edge_set": 3,
+     "min_Q2": 11,
+     "min_Q2_forest": "K_{1,2}",
+     "min_Q2_over_prefix_forests": null,
+     "unique_minimizer": true
+    },
+    "4": {
+     "forests": 6,
+     "forests_satisfying_WR2": 6,
+     "forests_with_Q2_equal_f": 4,
+     "forests_with_r2_in_prefix(alpha>=4)": 1,
+     "forests_with_star_edge_set": 4,
+     "min_Q2": 22,
+     "min_Q2_forest": "K_{1,3}",
+     "min_Q2_over_prefix_forests": 40,
+     "unique_minimizer": true
+    },
+    "5": {
+     "forests": 10,
+     "forests_satisfying_WR2": 10,
+     "forests_with_Q2_equal_f": 5,
+     "forests_with_r2_in_prefix(alpha>=4)": 5,
+     "forests_with_star_edge_set": 5,
+     "min_Q2": 37,
+     "min_Q2_forest": "K_{1,4}",
+     "min_Q2_over_prefix_forests": 37,
+     "unique_minimizer": true
+    },
+    "6": {
+     "forests": 20,
+     "forests_satisfying_WR2": 20,
+     "forests_with_Q2_equal_f": 6,
+     "forests_with_r2_in_prefix(alpha>=4)": 16,
+     "forests_with_star_edge_set": 6,
+     "min_Q2": 56,
+     "min_Q2_forest": "K_{1,5}",
+     "min_Q2_over_prefix_forests": 56,
+     "unique_minimizer": true
+    },
+    "7": {
+     "forests": 37,
+     "forests_satisfying_WR2": 37,
+     "forests_with_Q2_equal_f": 7,
+     "forests_with_r2_in_prefix(alpha>=4)": 37,
+     "forests_with_star_edge_set": 7,
+     "min_Q2": 79,
+     "min_Q2_forest": "K_{1,6}",
+     "min_Q2_over_prefix_forests": 79,
+     "unique_minimizer": true
+    },
+    "8": {
+     "forests": 76,
+     "forests_satisfying_WR2": 76,
+     "forests_with_Q2_equal_f": 8,
+     "forests_with_r2_in_prefix(alpha>=4)": 76,
+     "forests_with_star_edge_set": 8,
+     "min_Q2": 106,
+     "min_Q2_forest": "K_{1,7}",
+     "min_Q2_over_prefix_forests": 106,
+     "unique_minimizer": true
+    },
+    "9": {
+     "forests": 153,
+     "forests_satisfying_WR2": 153,
+     "forests_with_Q2_equal_f": 9,
+     "forests_with_r2_in_prefix(alpha>=4)": 153,
+     "forests_with_star_edge_set": 9,
+     "min_Q2": 137,
+     "min_Q2_forest": "K_{1,8}",
+     "min_Q2_over_prefix_forests": 137,
+     "unique_minimizer": true
+    }
+   },
+   "total_forests_checked": 15205
+  },
+  "key_identities": {
+   "Q_2": "f(n,e) + 3n (C(e,2) - S)",
+   "d^2 f / d e^2": "4 - 3n < 0 for n >= 2",
+   "f(n,0)": "n^2(n+1)/2",
+   "f(n,0) - f(n,n-1)": "(n-1)(n^2 - 2n + 4)/2 >= 0",
+   "f(n,e)": "n^2(n+1)/2 + e(n^2 - 5n/2) + e^2(2 - 3n/2)",
+   "f(n,n-1)": "2n^2 - 3n + 2 = 2m^2 + m + 1 (m = n-1)",
+   "p_1": "n",
+   "p_2": "C(n,2) - e",
+   "p_3": "C(n,3) - e(n-2) + S,  S = sum_v C(d_v,2) <= C(e,2)"
+  },
+  "pass_marker": "PASS_EXACT_ISO2_ALL_FORESTS",
+  "runtime_seconds": 0.76,
+  "script": "iso2_all_forests_proof.py",
+  "script_sha256": "3c8c218d060c3810d55df8d8c848807850e83b4a7ae4ea96ab38c935409d8ca1",
+  "status": "PROVED",
+  "sympy_checks": {
+   "2n^2-3n+2=2m^2+m+1 (m=n-1)": true,
+   "2p2-p1=n(n-2)-2e": true,
+   "Q2_minus_f_is_3n(C(e,2)-S)": true,
+   "Q2_polynomial": "-3*S*n + 2*e**2 + e*n**2 - 4*e*n + n**3/2 + n**2/2",
+   "d2f/de2=4-3n": true,
+   "f(n,0)-f(n,n-1)=(n-1)(n^2-2n+4)/2": true,
+   "f(n,0)=n^2(n+1)/2": true,
+   "f(n,n-1)=2n^2-3n+2": true,
+   "f_expansion": true,
+   "f_polynomial": "-3*e**2*n/2 + 2*e**2 + e*n**2 - 5*e*n/2 + n**3/2 + n**2/2",
+   "n(n-2)-2(n-1)=(n-2)^2-2": true,
+   "star_Q2=2m^2+m+1": true,
+   "star_p2=C(m,2)": true,
+   "star_p3=C(m,3)": true
+  },
+  "theorem": "For every forest F of order n >= 1 (p_k := 0 for k > alpha): Q_2(F) = 2 p_2^2 + p_1^2 - 3 p_1 p_3 >= 2 n^2 - 3 n + 2 >= 1, with equality iff F = K_{1,n-1}.  ISO_2 holds strictly for every forest."
+ },
+ "iso3": {
+  "exhaustive": {
+   "B_n_positive_checked_for_all_integer_e_up_to_n": 400,
+   "Q3_zero_cases": [
+    {
+     "components": "K_1",
+     "n": 1,
+     "poly": [
+      1,
+      1
+     ]
+    },
+    {
+     "components": "K_2",
+     "n": 2,
+     "poly": [
+      1,
+      2
+     ]
+    }
+   ],
+   "analytic_part_numerically_confirmed_n=14..16": {
+    "14": {
+     "argmin_Q3_all_forests": [
+      "T(6,5)"
+     ],
+     "forests": 8599,
+     "min_B_n(e)_over_1<=e<=n-1": "130",
+     "min_Q3_all_forests": 22359,
+     "min_over_forests_of(Q3 - B_n(e))_e>=1": "2"
+    },
+    "15": {
+     "argmin_Q3_all_forests": [
+      "T(6,6)"
+     ],
+     "forests": 20514,
+     "min_B_n(e)_over_1<=e<=n-1": "65849/24",
+     "min_Q3_all_forests": 33029,
+     "min_over_forests_of(Q3 - B_n(e))_e>=1": "2"
+    },
+    "16": {
+     "argmin_Q3_all_forests": [
+      "T(7,6)"
+     ],
+     "forests": 49905,
+     "min_B_n(e)_over_1<=e<=n-1": "6970",
+     "min_Q3_all_forests": 47505,
+     "min_over_forests_of(Q3 - B_n(e))_e>=1": "2"
+    }
+   },
+   "exhaustive_part_of_proof_n<=13": {
+    "1": {
+     "argmin_Q3_all_forests": [
+      "K_1"
+     ],
+     "forests": 1,
+     "min_Q3_all_forests": 0
+    },
+    "2": {
+     "argmin_Q3_all_forests": [
+      "K_2"
+     ],
+     "forests": 2,
+     "min_Q3_all_forests": 0
+    },
+    "3": {
+     "argmin_Q3_all_forests": [
+      "K_{1,2}"
+     ],
+     "forests": 3,
+     "min_Q3_all_forests": 1
+    },
+    "4": {
+     "argmin_Q3_all_forests": [
+      "P_4"
+     ],
+     "forests": 6,
+     "min_Q3_all_forests": 9
+    },
+    "5": {
+     "argmin_Q3_all_forests": [
+      "P_5"
+     ],
+     "forests": 10,
+     "min_Q3_all_forests": 39
+    },
+    "6": {
+     "argmin_Q3_all_forests": [
+      "T(2,1)"
+     ],
+     "forests": 20,
+     "min_Q3_all_forests": 135
+    },
+    "7": {
+     "argmin_Q3_all_forests": [
+      "T(2,2)"
+     ],
+     "forests": 37,
+     "min_Q3_all_forests": 357
+    },
+    "8": {
+     "argmin_Q3_all_forests": [
+      "T(3,2)"
+     ],
+     "forests": 76,
+     "min_Q3_all_forests": 825
+    },
+    "9": {
+     "argmin_Q3_all_forests": [
+      "T(3,3)"
+     ],
+     "forests": 153,
+     "min_Q3_all_forests": 1683
+    },
+    "10": {
+     "argmin_Q3_all_forests": [
+      "T(4,3)"
+     ],
+     "forests": 329,
+     "min_Q3_all_forests": 3171
+    },
+    "11": {
+     "argmin_Q3_all_forests": [
+      "T(4,4)"
+     ],
+     "forests": 710,
+     "min_Q3_all_forests": 5553
+    },
+    "12": {
+     "argmin_Q3_all_forests": [
+      "T(5,4)"
+     ],
+     "forests": 1601,
+     "min_Q3_all_forests": 9233
+    },
+    "13": {
+     "argmin_Q3_all_forests": [
+      "T(5,5)"
+     ],
+     "forests": 3658,
+     "min_Q3_all_forests": 14631
+    }
+   },
+   "exploration_prefix_alpha>=6": {
+    "6": {
+     "Q3_edgeless": 525,
+     "Q3_star_K_{1,n-1}": 200,
+     "argmin_Q3": [
+      "6K_1"
+     ],
+     "argmin_Q3_detail": [
+      [
+       {
+        "degree_sequence": [
+         0
+        ],
+        "index": 0,
+        "level_sequence": [
+         0
+        ],
+        "name": "K_1",
+        "order": 1
+       },
+       {
+        "degree_sequence": [
+         0
+        ],
+        "index": 0,
+        "level_sequence": [
+         0
+        ],
+        "name": "K_1",
+        "order": 1
+       },
+       {
+        "degree_sequence": [
+         0
+        ],
+        "index": 0,
+        "level_sequence": [
+         0
+        ],
+        "name": "K_1",
+        "order": 1
+       },
+       {
+        "degree_sequence": [
+         0
+        ],
+        "index": 0,
+        "level_sequence": [
+         0
+        ],
+        "name": "K_1",
+        "order": 1
+       },
+       {
+        "degree_sequence": [
+         0
+        ],
+        "index": 0,
+        "level_sequence": [
+         0
+        ],
+        "name": "K_1",
+        "order": 1
+       },
+       {
+        "degree_sequence": [
+         0
+        ],
+        "index": 0,
+        "level_sequence": [
+         0
+        ],
+        "name": "K_1",
+        "order": 1
+       }
+      ]
+     ],
+     "argmin_ratio": [
+      "6K_1"
+     ],
+     "forests_with_alpha>=6": 1,
+     "min_Q3": 525,
+     "min_ratio": "19/12",
+     "min_ratio_float": 1.5833333333333333,
+     "ratio_edgeless": "19/12",
+     "ratio_star_K_{1,n-1}": "2"
+    },
+    "7": {
+     "Q3_edgeless": 1176,
+     "Q3_star_K_{1,n-1}": 525,
+     "argmin_Q3": [
+      "K_{1,5} + K_1"
+     ],
+     "argmin_Q3_detail": [
+      [
+       {
+        "degree_sequence": [
+         5,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "index": 5,
+        "level_sequence": [
+         0,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "name": "K_{1,5}",
+        "order": 6
+       },
+       {
+        "degree_sequence": [
+         0
+        ],
+        "index": 0,
+        "level_sequence": [
+         0
+        ],
+        "name": "K_1",
+        "order": 1
+       }
+      ]
+     ],
+     "argmin_ratio": [
+      "7K_1"
+     ],
+     "forests_with_alpha>=6": 7,
+     "min_Q3": 496,
+     "min_ratio": "7/5",
+     "min_ratio_float": 1.4,
+     "ratio_edgeless": "7/5",
+     "ratio_star_K_{1,n-1}": "19/12"
+    },
+    "8": {
+     "Q3_edgeless": 2352,
+     "Q3_star_K_{1,n-1}": 1176,
+     "argmin_Q3": [
+      "T(3,2)"
+     ],
+     "argmin_Q3_detail": [
+      [
+       {
+        "degree_sequence": [
+         4,
+         3,
+         2,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "index": 12,
+        "level_sequence": [
+         0,
+         1,
+         2,
+         2,
+         2,
+         1,
+         2,
+         2
+        ],
+        "name": "T(3,2) subdivided double star (stars K_{1,3}, K_{1,2} whose centres are joined to a common vertex)",
+        "order": 8
+       }
+      ]
+     ],
+     "argmin_ratio": [
+      "8K_1"
+     ],
+     "forests_with_alpha>=6": 32,
+     "min_Q3": 825,
+     "min_ratio": "13/10",
+     "min_ratio_float": 1.3,
+     "ratio_edgeless": "13/10",
+     "ratio_star_K_{1,n-1}": "7/5"
+    },
+    "9": {
+     "Q3_edgeless": 4320,
+     "Q3_star_K_{1,n-1}": 2352,
+     "argmin_Q3": [
+      "T(3,3)"
+     ],
+     "argmin_Q3_detail": [
+      [
+       {
+        "degree_sequence": [
+         4,
+         4,
+         2,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "index": 32,
+        "level_sequence": [
+         0,
+         1,
+         2,
+         2,
+         2,
+         1,
+         2,
+         2,
+         2
+        ],
+        "name": "T(3,3) subdivided double star (stars K_{1,3}, K_{1,3} whose centres are joined to a common vertex)",
+        "order": 9
+       }
+      ]
+     ],
+     "argmin_ratio": [
+      "9K_1"
+     ],
+     "forests_with_alpha>=6": 109,
+     "min_Q3": 1683,
+     "min_ratio": "26/21",
+     "min_ratio_float": 1.2380952380952381,
+     "ratio_edgeless": "26/21",
+     "ratio_star_K_{1,n-1}": "13/10"
+    },
+    "10": {
+     "Q3_edgeless": 7425,
+     "Q3_star_K_{1,n-1}": 4320,
+     "argmin_Q3": [
+      "T(4,3)"
+     ],
+     "argmin_Q3_detail": [
+      [
+       {
+        "degree_sequence": [
+         5,
+         4,
+         2,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "index": 83,
+        "level_sequence": [
+         0,
+         1,
+         2,
+         2,
+         2,
+         2,
+         1,
+         2,
+         2,
+         2
+        ],
+        "name": "T(4,3) subdivided double star (stars K_{1,4}, K_{1,3} whose centres are joined to a common vertex)",
+        "order": 10
+       }
+      ]
+     ],
+     "argmin_ratio": [
+      "10K_1"
+     ],
+     "forests_with_alpha>=6": 302,
+     "min_Q3": 3171,
+     "min_ratio": "67/56",
+     "min_ratio_float": 1.1964285714285714,
+     "ratio_edgeless": "67/56",
+     "ratio_star_K_{1,n-1}": "26/21"
+    },
+    "11": {
+     "Q3_edgeless": 12100,
+     "Q3_star_K_{1,n-1}": 7425,
+     "argmin_Q3": [
+      "T(4,4)"
+     ],
+     "argmin_Q3_detail": [
+      [
+       {
+        "degree_sequence": [
+         5,
+         5,
+         2,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "index": 205,
+        "level_sequence": [
+         0,
+         1,
+         2,
+         2,
+         2,
+         2,
+         1,
+         2,
+         2,
+         2,
+         2
+        ],
+        "name": "T(4,4) subdivided double star (stars K_{1,4}, K_{1,4} whose centres are joined to a common vertex)",
+        "order": 11
+       }
+      ]
+     ],
+     "argmin_ratio": [
+      "11K_1"
+     ],
+     "forests_with_alpha>=6": 710,
+     "min_Q3": 5553,
+     "min_ratio": "7/6",
+     "min_ratio_float": 1.1666666666666667,
+     "ratio_edgeless": "7/6",
+     "ratio_star_K_{1,n-1}": "67/56"
+    },
+    "12": {
+     "Q3_edgeless": 18876,
+     "Q3_star_K_{1,n-1}": 12100,
+     "argmin_Q3": [
+      "T(5,4)"
+     ],
+     "argmin_Q3_detail": [
+      [
+       {
+        "degree_sequence": [
+         6,
+         5,
+         2,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "index": 507,
+        "level_sequence": [
+         0,
+         1,
+         2,
+         2,
+         2,
+         2,
+         2,
+         1,
+         2,
+         2,
+         2,
+         2
+        ],
+        "name": "T(5,4) subdivided double star (stars K_{1,5}, K_{1,4} whose centres are joined to a common vertex)",
+        "order": 12
+       }
+      ]
+     ],
+     "argmin_ratio": [
+      "K_{1,9} + 2K_1"
+     ],
+     "forests_with_alpha>=6": 1601,
+     "min_Q3": 9233,
+     "min_ratio": "28639/25080",
+     "min_ratio_float": 1.1419059011164274,
+     "ratio_edgeless": "103/90",
+     "ratio_star_K_{1,n-1}": "7/6"
+    },
+    "13": {
+     "Q3_edgeless": 28392,
+     "Q3_star_K_{1,n-1}": 18876,
+     "argmin_Q3": [
+      "T(5,5)"
+     ],
+     "argmin_Q3_detail": [
+      [
+       {
+        "degree_sequence": [
+         6,
+         6,
+         2,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "index": 1243,
+        "level_sequence": [
+         0,
+         1,
+         2,
+         2,
+         2,
+         2,
+         2,
+         1,
+         2,
+         2,
+         2,
+         2,
+         2
+        ],
+        "name": "T(5,5) subdivided double star (stars K_{1,5}, K_{1,5} whose centres are joined to a common vertex)",
+        "order": 13
+       }
+      ]
+     ],
+     "argmin_ratio": [
+      "K_{1,10} + 2K_1"
+     ],
+     "forests_with_alpha>=6": 3658,
+     "min_Q3": 14631,
+     "min_ratio": "8891/7920",
+     "min_ratio_float": 1.1226010101010102,
+     "ratio_edgeless": "62/55",
+     "ratio_star_K_{1,n-1}": "103/90"
+    },
+    "14": {
+     "Q3_edgeless": 41405,
+     "Q3_star_K_{1,n-1}": 28392,
+     "argmin_Q3": [
+      "T(6,5)"
+     ],
+     "argmin_Q3_detail": [
+      [
+       {
+        "degree_sequence": [
+         7,
+         6,
+         2,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "index": 3077,
+        "level_sequence": [
+         0,
+         1,
+         2,
+         2,
+         2,
+         2,
+         2,
+         2,
+         1,
+         2,
+         2,
+         2,
+         2,
+         2
+        ],
+        "name": "T(6,5) subdivided double star (stars K_{1,6}, K_{1,5} whose centres are joined to a common vertex)",
+        "order": 14
+       }
+      ]
+     ],
+     "argmin_ratio": [
+      "K_{1,11} + 2K_1"
+     ],
+     "forests_with_alpha>=6": 8599,
+     "min_Q3": 22359,
+     "min_ratio": "253507/228800",
+     "min_ratio_float": 1.10798513986014,
+     "ratio_edgeless": "49/44",
+     "ratio_star_K_{1,n-1}": "62/55"
+    },
+    "15": {
+     "Q3_edgeless": 58800,
+     "Q3_star_K_{1,n-1}": 41405,
+     "argmin_Q3": [
+      "T(6,6)"
+     ],
+     "argmin_Q3_detail": [
+      [
+       {
+        "degree_sequence": [
+         7,
+         7,
+         2,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "index": 7636,
+        "level_sequence": [
+         0,
+         1,
+         2,
+         2,
+         2,
+         2,
+         2,
+         2,
+         1,
+         2,
+         2,
+         2,
+         2,
+         2,
+         2
+        ],
+        "name": "T(6,6) subdivided double star (stars K_{1,6}, K_{1,6} whose centres are joined to a common vertex)",
+        "order": 15
+       }
+      ]
+     ],
+     "argmin_ratio": [
+      "K_{1,11} + 3K_1"
+     ],
+     "forests_with_alpha>=6": 20514,
+     "min_Q3": 33029,
+     "min_ratio": "412903/376752",
+     "min_ratio_float": 1.0959543678600245,
+     "ratio_edgeless": "43/39",
+     "ratio_star_K_{1,n-1}": "49/44"
+    },
+    "16": {
+     "Q3_edgeless": 81600,
+     "Q3_star_K_{1,n-1}": 58800,
+     "argmin_Q3": [
+      "T(7,6)"
+     ],
+     "argmin_Q3_detail": [
+      [
+       {
+        "degree_sequence": [
+         8,
+         7,
+         2,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "index": 19174,
+        "level_sequence": [
+         0,
+         1,
+         2,
+         2,
+         2,
+         2,
+         2,
+         2,
+         2,
+         1,
+         2,
+         2,
+         2,
+         2,
+         2,
+         2
+        ],
+        "name": "T(7,6) subdivided double star (stars K_{1,7}, K_{1,6} whose centres are joined to a common vertex)",
+        "order": 16
+       }
+      ]
+     ],
+     "argmin_ratio": [
+      "K_{1,12} + 3K_1"
+     ],
+     "forests_with_alpha>=6": 49905,
+     "min_Q3": 47505,
+     "min_ratio": "53413/49176",
+     "min_ratio_float": 1.086159915405889,
+     "ratio_edgeless": "199/182",
+     "ratio_star_K_{1,n-1}": "43/39"
+    }
+   },
+   "nmax": 16,
+   "total_forests_checked": 85624
+  },
+  "explored_not_proved": {
+   "Q3_minimizer_among_all_forests": "5 <= n <= 16: the unique minimizer of Q_3 over all forests of order n is T(ceil((n-3)/2), floor((n-3)/2)) (P_5 = T(1,1) at n = 5); n = 4: P_4; n = 3: K_{1,2}; n = 1, 2: K_1, K_2 with Q_3 = 0.  Closed forms: Q_3(T(a,a)) = (8a^5+21a^4+38a^3+39a^2+8a+3)/3 (n = 2a+3), Q_3(T(a+1,a)) = (8a^5+41a^4+100a^3+139a^2+90a+27)/3 (n = 2a+4); all of Q_3(edgeless), Q_3(star), Q_3(T) are n^5/12 + O(n^4), T winning at order n^4.",
+   "Q3_minimizer_among_prefix_forests(alpha>=6)": "n = 6: edgeless; n = 7: K_{1,5} + K_1; 8 <= n <= 16: the subdivided double star T(ceil((n-3)/2), floor((n-3)/2)) (two stars whose centres are joined to a common vertex), unique at each order in this range; the star K_{1,n-1} is NOT the minimizer of Q_3 (unlike Q_2).",
+   "ratio_minimizer_among_prefix_forests": "6 <= n <= 11: edgeless forest; 12 <= n <= 14: K_{1,n-3} + 2K_1; n = 15, 16: K_{1,n-4} + 3K_1. All ratios exceed 1 and tend to 1 (edgeless: 1 + 1/(n-3) + 3/((n-2)(n-3))), so ISO_3 has no uniform multiplicative margin; only the additive slack Q_3 (order n^5) is uniform."
+  },
+  "pass_marker": "PASS_EXACT_ISO3_ALL_FORESTS",
+  "proof_outline": [
+   "A: p_2 = C(n,2)-e, p_3 = C(n,3)-e(n-2)+S, p_4 = C(n,4)-eC(n-2,2)+(n-3)S+M2-P4-T (inclusion-exclusion)",
+   "B: Q_3 = n^2(n-1)^2(n+1)/12 + n(n-1)(n-2)(n-9)/6 e - (n+1)e^2 + 2e^3 + 3S^2 - (KS - MT) + M P4, K = n(n-1)(n-6)+2(n+2)e, M = 4p_2",
+   "C: e >= 1 => sum_{d_v>=1}(d_v-1) = e - c' <= e-1;  p_2 > 0 for n >= 3",
+   "D: KS - MT = sum_v (d_v-1) h(d_v), h(d) = d(3K+2M-Md)/6 <= phi = (3K+2M)^2/(24M)  =>  KS - MT <= (e-1) phi",
+   "E: n >= 5 => phi(n,e) <= phi(n,n-1) = C_n = (n-1)(n-2)(3n-2)^2/48",
+   "=> Q_3 >= B_n(e) (drop 2e^3, 3S^2, M P4 >= 0); B_n concave in e, B_n(1) > 0 (n >= 5), B_n(n-1) = (n-1)beta(n)/48 > 0 (n >= 14)",
+   "n <= 13: exhaustive over all 6606 forests"
+  ],
+  "runtime_seconds": 7.06,
+  "script": "iso3_subgraph_expansion.py",
+  "script_sha256": "5d5ba942c17985a1646d9fb415c889b8f0821434e22066099a2de706adc59e42",
+  "status": "PROVED (Theorem 2: ISO_3 for every forest) + EXPLORED (minimizers, n <= 16)",
+  "sympy_checks": {
+   "12B(1)=n^3(n^2+n-25)+59n^2-48n-12": true,
+   "3K+2M=n(n-1)(3n-14)+(6n+4)e": true,
+   "92n^2-80n+32>0 discriminant<0": true,
+   "B(1)": true,
+   "B(n-1)=(n-1)beta/48": true,
+   "B_concave_coeff_e^2=-(n+1)": true,
+   "M=4p2": true,
+   "Q3(T(a+1,a)), n=2a+4": "(8*a**5 + 41*a**4 + 100*a**3 + 139*a**2 + 90*a + 27)/3",
+   "Q3(T(a,a)), n=2a+3": "(8*a**5 + 21*a**4 + 38*a**3 + 39*a**2 + 8*a + 3)/3",
+   "Q3(edgeless n)=n^2(n-1)^2(n+1)/12": true,
+   "Q3(star K_{1,m})=m^2(m-1)^2(m+1)/12": true,
+   "Q3_M2_grouped_form": true,
+   "Q3_M2_substitution_consistent": true,
+   "Q3_in_(n,e,S,M2,P4,T)": "4*M2*e - 2*M2*n**2 + 2*M2*n - 4*P4*e + 2*P4*n**2 - 2*P4*n + 3*S**2 - 2*S*e*n - S*n**3 + 5*S*n**2 - 4*S*n - 4*T*e + 2*T*n**2 - 2*T*n + e**2*n**2 - 2*e**2*n + e**2 + e*n**4/6 - 2*e*n**3 + 23*e*n**2/6 - 2*e*n + n**5/12 - n**4/12 - n**3/12 + n**2/12",
+   "Q3_reduced_identity": true,
+   "beta(13)": -5233,
+   "beta(14)": 480,
+   "beta(15)": 9407,
+   "beta=3n^3(n-16)+92n^2-80n+32": true,
+   "c(d)=(d-1)h(d)": true,
+   "p2>=(n-1)(n-2)/2 at e=n-1": true,
+   "phi(n,n-1)=C_n": true,
+   "phi-h(d)=M(d-d*)^2/6": true,
+   "ratio(edgeless n)=1+1/(n-3)+3/((n-2)(n-3))": true,
+   "top_orders_T(a,a)=(1/12,-13/16)": true,
+   "top_orders_edgeless=(1/12,-1/12)": true,
+   "top_orders_star=(1/12,-1/2)": true
+  },
+  "theorem": "For every forest F (p_k := 0 for k > alpha): Q_3(F) = 3 p_3^2 + p_2^2 - 4 p_2 p_4 >= 0, with equality only for K_1 and K_2 (p_2 = 0).  For n >= 14 and 1 <= e <= n-1: Q_3 >= B_n(e) = n^2(n-1)^2(n+1)/12 + n(n-1)(n-2)(n-9)/6 e - (n+1)e^2 - (e-1)(n-1)(n-2)(3n-2)^2/48 > 0; for e = 0, Q_3 = n^2(n-1)^2(n+1)/12; for n <= 13 exhaustive (6606 forests)."
+ }
+}
