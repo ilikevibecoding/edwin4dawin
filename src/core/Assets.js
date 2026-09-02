@@ -16,7 +16,7 @@ import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 export class Assets {
   constructor(renderer) {
     this.renderer = renderer;
-    this.base = '/assets/';
+    this.base = `${import.meta.env.BASE_URL}assets/`; // '/assets/' in dev, './assets/' in the relative-base build
     this.index = null;
     this.textureLoader = new THREE.TextureLoader();
     this.gltfLoader = new GLTFLoader();
