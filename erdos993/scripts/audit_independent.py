@@ -608,12 +608,22 @@ def main() -> int:
         "families": family_records,
         "non_log_concave_witnesses": special,
         "failures": fails.items,
-        "seconds_total": round(time.time() - t_start, 2),
         "provenance": provenance(os.path.abspath(__file__)),
         "audit_sources_sha256": audit_hashes,
         "library_sources_sha256": library_hashes,
         "caveat": "Finite cross-checks only: they certify that two independent implementations agree on the stated ranges, nothing about larger orders.",
+        "timing_note": "wall-clock timings are printed to stdout only, so that a replay reproduces this file byte-for-byte",
     }
+
+    def _strip_timings(obj):
+        # keep the report deterministic: timings go to stdout, not into the JSON
+        if isinstance(obj, dict):
+            return {k: _strip_timings(v) for k, v in obj.items() if k not in ("seconds", "seconds_total")}
+        if isinstance(obj, list):
+            return [_strip_timings(x) for x in obj]
+        return obj
+
+    payload = _strip_timings(payload)
     out_path = args.out if os.path.isabs(args.out) else os.path.join(ROOT, args.out)
     digest = write_report(out_path, payload)
     mm = overall.summary()["min_iso_margin_prefix"]

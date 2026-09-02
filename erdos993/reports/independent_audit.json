@@ -4,7 +4,7 @@
   "audit/checks_audit.py": "A21484ADBDD9CA0A2BA81D734E1DE995A3847B05E2ECC4DA2F31B83EFB1EFD31",
   "audit/indpoly_audit.py": "32A8993501CC4A80FDE571B5BE6FCF649F7D864D75C203065D7B76AE5B08C7F4",
   "audit/trees_audit.py": "F830FEE5873AAC222B87425AE02E8BBD1AF0A6C43D4B997F2C32344C6AB3A3DB",
-  "scripts/audit_independent.py": "A7FD5D359716B93D506373DC27E783DB20F5374240E285F38661DC0F77C31001",
+  "scripts/audit_independent.py": "F2570E5AD379A3F8357D67D89DA9173CBF6C189708522941E4C51FBAD7582B5F",
   "tests/test_audit.py": "98006B00DC9BAB47E871FE2069FF9FAAFBBD65761E4045D07645CDE04E6F3C2B"
  },
  "caveat": "Finite cross-checks only: they certify that two independent implementations agree on the stated ranges, nothing about larger orders.",
@@ -14,36 +14,31 @@
     "count": 3658,
     "count_formula": 3658,
     "count_match": true,
-    "oeis_A005195": 3658,
-    "seconds": 0.002
+    "oeis_A005195": 3658
    },
    "14": {
     "count": 8599,
     "count_formula": 8599,
     "count_match": true,
-    "oeis_A005195": 8599,
-    "seconds": 0.004
+    "oeis_A005195": 8599
    },
    "15": {
     "count": 20514,
     "count_formula": 20514,
     "count_match": true,
-    "oeis_A005195": 20514,
-    "seconds": 0.008
+    "oeis_A005195": 20514
    },
    "16": {
     "count": 49905,
     "count_formula": 49905,
     "count_match": true,
-    "oeis_A005195": 49905,
-    "seconds": 0.02
+    "oeis_A005195": 49905
    },
    "17": {
     "count": 122963,
     "count_formula": 122963,
     "count_match": true,
-    "oeis_A005195": 122963,
-    "seconds": 0.049
+    "oeis_A005195": 122963
    }
   },
   "trees": {
@@ -53,8 +48,7 @@
     "oeis_A000055": 7741,
     "oeis_A000081": 87811,
     "rooted_count": 87811,
-    "rooted_count_match": true,
-    "seconds": 0.326
+    "rooted_count_match": true
    },
    "16": {
     "count": 19320,
@@ -62,8 +56,7 @@
     "oeis_A000055": 19320,
     "oeis_A000081": 235381,
     "rooted_count": 235381,
-    "rooted_count_match": true,
-    "seconds": 0.884
+    "rooted_count_match": true
    },
    "17": {
     "count": 48629,
@@ -71,8 +64,7 @@
     "oeis_A000055": 48629,
     "oeis_A000081": 634847,
     "rooted_count": 634847,
-    "rooted_count_match": true,
-    "seconds": 2.45
+    "rooted_count_match": true
    },
    "18": {
     "count": 123867,
@@ -80,8 +72,7 @@
     "oeis_A000055": 123867,
     "oeis_A000081": 1721159,
     "rooted_count": 1721159,
-    "rooted_count_match": true,
-    "seconds": 6.683
+    "rooted_count_match": true
    }
   }
  },
@@ -2197,7 +2188,6 @@
    "oeis_A005195": 1,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.0,
    "shape": {
     "count": 1,
     "iso_prefix_failures": 0,
@@ -2224,7 +2214,6 @@
    "oeis_A005195": 2,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.0,
    "shape": {
     "count": 2,
     "iso_prefix_failures": 0,
@@ -2251,7 +2240,6 @@
    "oeis_A005195": 3,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.0,
    "shape": {
     "count": 3,
     "iso_prefix_failures": 0,
@@ -2313,7 +2301,6 @@
    "oeis_A005195": 6,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.001,
    "shape": {
     "count": 6,
     "iso_prefix_failures": 0,
@@ -2380,7 +2367,6 @@
    "oeis_A005195": 10,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.001,
    "shape": {
     "count": 10,
     "iso_prefix_failures": 0,
@@ -2444,7 +2430,6 @@
    "oeis_A005195": 20,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.003,
    "shape": {
     "count": 20,
     "iso_prefix_failures": 0,
@@ -2500,7 +2485,6 @@
    "oeis_A005195": 37,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.005,
    "shape": {
     "count": 37,
     "iso_prefix_failures": 0,
@@ -2561,7 +2545,6 @@
    "oeis_A005195": 76,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.012,
    "shape": {
     "count": 76,
     "iso_prefix_failures": 0,
@@ -2619,7 +2602,6 @@
    "oeis_A005195": 153,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.027,
    "shape": {
     "count": 153,
     "iso_prefix_failures": 0,
@@ -2680,7 +2662,6 @@
    "oeis_A005195": 329,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.066,
    "shape": {
     "count": 329,
     "iso_prefix_failures": 0,
@@ -2740,7 +2721,6 @@
    "oeis_A005195": 710,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.16,
    "shape": {
     "count": 710,
     "iso_prefix_failures": 0,
@@ -2801,7 +2781,6 @@
    "oeis_A005195": 1601,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.397,
    "shape": {
     "count": 1601,
     "iso_prefix_failures": 0,
@@ -2867,7 +2846,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 1,
    "rooted_count_match": true,
-   "seconds": 0.0,
    "shape": {
     "count": 1,
     "iso_prefix_failures": 0,
@@ -2896,7 +2874,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 1,
    "rooted_count_match": true,
-   "seconds": 0.0,
    "shape": {
     "count": 1,
     "iso_prefix_failures": 0,
@@ -2925,7 +2902,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 2,
    "rooted_count_match": true,
-   "seconds": 0.0,
    "shape": {
     "count": 1,
     "iso_prefix_failures": 0,
@@ -2954,7 +2930,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 4,
    "rooted_count_match": true,
-   "seconds": 0.0,
    "shape": {
     "count": 2,
     "iso_prefix_failures": 0,
@@ -3012,7 +2987,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 9,
    "rooted_count_match": true,
-   "seconds": 0.0,
    "shape": {
     "count": 3,
     "iso_prefix_failures": 0,
@@ -3073,7 +3047,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 20,
    "rooted_count_match": true,
-   "seconds": 0.001,
    "shape": {
     "count": 6,
     "iso_prefix_failures": 0,
@@ -3137,7 +3110,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 48,
    "rooted_count_match": true,
-   "seconds": 0.002,
    "shape": {
     "count": 11,
     "iso_prefix_failures": 0,
@@ -3204,7 +3176,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 115,
    "rooted_count_match": true,
-   "seconds": 0.004,
    "shape": {
     "count": 23,
     "iso_prefix_failures": 0,
@@ -3274,7 +3245,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 286,
    "rooted_count_match": true,
-   "seconds": 0.01,
    "shape": {
     "count": 47,
     "iso_prefix_failures": 0,
@@ -3347,7 +3317,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 719,
    "rooted_count_match": true,
-   "seconds": 0.026,
    "shape": {
     "count": 106,
     "iso_prefix_failures": 0,
@@ -3423,7 +3392,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 1842,
    "rooted_count_match": true,
-   "seconds": 0.064,
    "shape": {
     "count": 235,
     "iso_prefix_failures": 0,
@@ -3502,7 +3470,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 4766,
    "rooted_count_match": true,
-   "seconds": 0.168,
    "shape": {
     "count": 551,
     "iso_prefix_failures": 0,
@@ -3584,7 +3551,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 12486,
    "rooted_count_match": true,
-   "seconds": 0.381,
    "shape": {
     "count": 1301,
     "iso_prefix_failures": 0,
@@ -3669,7 +3635,6 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 32973,
    "rooted_count_match": true,
-   "seconds": 1.043,
    "shape": {
     "count": 3159,
     "iso_prefix_failures": 0,
@@ -3753,7 +3718,7 @@
   "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
   "python": "3.12.3",
   "script": "audit_independent.py",
-  "script_sha256": "A7FD5D359716B93D506373DC27E783DB20F5374240E285F38661DC0F77C31001"
+  "script_sha256": "F2570E5AD379A3F8357D67D89DA9173CBF6C189708522941E4C51FBAD7582B5F"
  },
  "scope": {
   "family_max_order": 40,
@@ -3774,7 +3739,7 @@
    14
   ]
  },
- "seconds_total": 12.86,
+ "timing_note": "wall-clock timings are printed to stdout only, so that a replay reproduces this file byte-for-byte",
  "title": "Independent replay audit of the Erd\u0151s #993 core (deletion recursion + Beyer-Hedetniemi + rewritten checks vs erdos993lib)",
  "verdict_keys_compared": [
   "alpha",

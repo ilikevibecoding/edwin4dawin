@@ -50,8 +50,11 @@ python3 scripts/verify_exhaustive.py --trees-max 20 --forests-max 18 --out repor
 python3 scripts/search_iso_adversarial.py --minutes 5  # heuristic hunt for ISO violations
 ```
 
-Reports are deterministic (no timestamps), so a faithful replay reproduces
-each JSON file byte-for-byte and hence its SHA-256.
+Reports are deterministic (no timestamps or timings inside the JSON), so a
+faithful replay reproduces each proof/audit report byte-for-byte and hence its
+SHA-256. The two exceptions are inherently non-deterministic: the adversarial
+search (time-budgeted, randomised) and the exhaustive scans started before
+this convention was adopted (they carry a `utc` field).
 
 Python 3.12; dependencies: `sympy`, `pytest` (and `networkx` only for one
 optional cross-check). All mathematics is done in exact integer/rational
