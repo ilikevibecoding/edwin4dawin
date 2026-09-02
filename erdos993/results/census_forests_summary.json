@@ -3301,6 +3301,804 @@
    "wall_time_seconds": 2.940448777000256,
    "report_time_seconds": 0.3058796200002689,
    "file": "census_forests_n18.json"
+  },
+  {
+   "n": 19,
+   "forest_count": 775529,
+   "forest_count_matches_A005195": true,
+   "non_unimodal_count": 0,
+   "tail_fail_count": 0,
+   "wr_prefix_fail_count": 0,
+   "iso_prefix_fail_count": 0,
+   "non_log_concave_count": 0,
+   "min_wr_prefix_slack": {
+    "slack": 18,
+    "r": 1,
+    "forest": "19 x K1",
+    "components": [
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ]
+    ]
+   },
+   "min_wr_prefix_slack_r_ge_2": {
+    "slack": 287,
+    "r": 2,
+    "forest": "path P_19 (n=19, maxdeg=2, leaves=2, diameter=18)",
+    "components": [
+     [
+      19,
+      0
+     ]
+    ]
+   },
+   "min_wr_prefix_ratio": {
+    "ratio_exact": "3416/697",
+    "ratio_approx": 4.901004304160689,
+    "r": 8,
+    "forest": "tree (n=19, maxdeg=6, leaves=12, diameter=4)",
+    "components": [
+     [
+      19,
+      317918
+     ]
+    ]
+   },
+   "min_iso_prefix_Q": {
+    "Q": 20,
+    "r": 1,
+    "forest": "19 x K1",
+    "components": [
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ]
+    ]
+   },
+   "min_iso_prefix_ratio": {
+    "ratio_exact": "47179/46512",
+    "ratio_approx": 1.0143403852769177,
+    "r": 2,
+    "forest": "star K_{1,18} (n=19, maxdeg=18, leaves=18, diameter=2)",
+    "components": [
+     [
+      19,
+      317954
+     ]
+    ]
+   },
+   "min_iso_prefix_ratio_connected": {
+    "ratio_exact": "47179/46512",
+    "ratio_approx": 1.0143403852769177,
+    "r": 2,
+    "forest": "star K_{1,18} (n=19, maxdeg=18, leaves=18, diameter=2)",
+    "components": [
+     [
+      19,
+      317954
+     ]
+    ]
+   },
+   "min_iso_prefix_ratio_multi_nontrivial": {
+    "ratio_exact": "15931/15200",
+    "ratio_approx": 1.048092105263158,
+    "r": 2,
+    "forest": "star K_{1,16} (n=17, maxdeg=16, leaves=16, diameter=2) + K2 (n=2)",
+    "components": [
+     [
+      17,
+      48628
+     ],
+     [
+      2,
+      0
+     ]
+    ]
+   },
+   "min_iso_prefix_ratio_has_isolated": {
+    "ratio_exact": "15931/15504",
+    "ratio_approx": 1.0275412796697627,
+    "r": 2,
+    "forest": "star K_{1,17} (n=18, maxdeg=17, leaves=17, diameter=2) + K1",
+    "components": [
+     [
+      18,
+      123866
+     ],
+     [
+      1,
+      0
+     ]
+    ]
+   },
+   "wall_time_seconds": 8.00878749399999,
+   "report_time_seconds": 0.7989297419999275,
+   "file": "census_forests_n19.json"
+  },
+  {
+   "n": 20,
+   "forest_count": 1977878,
+   "forest_count_matches_A005195": true,
+   "non_unimodal_count": 0,
+   "tail_fail_count": 0,
+   "wr_prefix_fail_count": 0,
+   "iso_prefix_fail_count": 0,
+   "non_log_concave_count": 0,
+   "min_wr_prefix_slack": {
+    "slack": 19,
+    "r": 1,
+    "forest": "20 x K1",
+    "components": [
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ]
+    ]
+   },
+   "min_wr_prefix_slack_r_ge_2": {
+    "slack": 322,
+    "r": 2,
+    "forest": "path P_20 (n=20, maxdeg=2, leaves=2, diameter=19)",
+    "components": [
+     [
+      20,
+      0
+     ]
+    ]
+   },
+   "min_wr_prefix_ratio": {
+    "ratio_exact": "14460/2917",
+    "ratio_approx": 4.957147754542338,
+    "r": 8,
+    "forest": "tree (n=20, maxdeg=4, leaves=9, diameter=10)",
+    "components": [
+     [
+      20,
+      464785
+     ]
+    ]
+   },
+   "min_iso_prefix_Q": {
+    "Q": 21,
+    "r": 1,
+    "forest": "20 x K1",
+    "components": [
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ]
+    ]
+   },
+   "min_iso_prefix_ratio": {
+    "ratio_exact": "29441/29070",
+    "ratio_approx": 1.0127622979016169,
+    "r": 2,
+    "forest": "star K_{1,19} (n=20, maxdeg=19, leaves=19, diameter=2)",
+    "components": [
+     [
+      20,
+      823064
+     ]
+    ]
+   },
+   "min_iso_prefix_ratio_connected": {
+    "ratio_exact": "29441/29070",
+    "ratio_approx": 1.0127622979016169,
+    "r": 2,
+    "forest": "star K_{1,19} (n=20, maxdeg=19, leaves=19, diameter=2)",
+    "components": [
+     [
+      20,
+      823064
+     ]
+    ]
+   },
+   "min_iso_prefix_ratio_multi_nontrivial": {
+    "ratio_exact": "73/70",
+    "ratio_approx": 1.042857142857143,
+    "r": 2,
+    "forest": "star K_{1,17} (n=18, maxdeg=17, leaves=17, diameter=2) + K2 (n=2)",
+    "components": [
+     [
+      18,
+      123866
+     ],
+     [
+      2,
+      0
+     ]
+    ]
+   },
+   "min_iso_prefix_ratio_has_isolated": {
+    "ratio_exact": "292/285",
+    "ratio_approx": 1.024561403508772,
+    "r": 2,
+    "forest": "star K_{1,18} (n=19, maxdeg=18, leaves=18, diameter=2) + K1",
+    "components": [
+     [
+      19,
+      317954
+     ],
+     [
+      1,
+      0
+     ]
+    ]
+   },
+   "wall_time_seconds": 22.773229003000324,
+   "report_time_seconds": 2.0512457670001822,
+   "file": "census_forests_n20.json"
+  },
+  {
+   "n": 21,
+   "forest_count": 5086638,
+   "forest_count_matches_A005195": true,
+   "non_unimodal_count": 0,
+   "tail_fail_count": 0,
+   "wr_prefix_fail_count": 0,
+   "iso_prefix_fail_count": 0,
+   "non_log_concave_count": 0,
+   "min_wr_prefix_slack": {
+    "slack": 20,
+    "r": 1,
+    "forest": "21 x K1",
+    "components": [
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ]
+    ]
+   },
+   "min_wr_prefix_slack_r_ge_2": {
+    "slack": 359,
+    "r": 2,
+    "forest": "path P_21 (n=21, maxdeg=2, leaves=2, diameter=20)",
+    "components": [
+     [
+      21,
+      0
+     ]
+    ]
+   },
+   "min_wr_prefix_ratio": {
+    "ratio_exact": "42776/8521",
+    "ratio_approx": 5.020068067128271,
+    "r": 8,
+    "forest": "tree (n=21, maxdeg=3, leaves=6, diameter=12)",
+    "components": [
+     [
+      21,
+      473239
+     ]
+    ]
+   },
+   "min_iso_prefix_Q": {
+    "Q": 22,
+    "r": 1,
+    "forest": "21 x K1",
+    "components": [
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      0
+     ]
+    ]
+   },
+   "min_iso_prefix_ratio": {
+    "ratio_exact": "72641/71820",
+    "ratio_approx": 1.0114313561681982,
+    "r": 2,
+    "forest": "star K_{1,20} (n=21, maxdeg=20, leaves=20, diameter=2)",
+    "components": [
+     [
+      21,
+      2144504
+     ]
+    ]
+   },
+   "min_iso_prefix_ratio_connected": {
+    "ratio_exact": "72641/71820",
+    "ratio_approx": 1.0114313561681982,
+    "r": 2,
+    "forest": "star K_{1,20} (n=21, maxdeg=20, leaves=20, diameter=2)",
+    "components": [
+     [
+      21,
+      2144504
+     ]
+    ]
+   },
+   "min_iso_prefix_ratio_multi_nontrivial": {
+    "ratio_exact": "6673/6426",
+    "ratio_approx": 1.0384375972611266,
+    "r": 2,
+    "forest": "star K_{1,18} (n=19, maxdeg=18, leaves=18, diameter=2) + K2 (n=2)",
+    "components": [
+     [
+      19,
+      317954
+     ],
+     [
+      2,
+      0
+     ]
+    ]
+   },
+   "min_iso_prefix_ratio_has_isolated": {
+    "ratio_exact": "73403/71820",
+    "ratio_approx": 1.0220412141464772,
+    "r": 2,
+    "forest": "star K_{1,19} (n=20, maxdeg=19, leaves=19, diameter=2) + K1",
+    "components": [
+     [
+      20,
+      823064
+     ],
+     [
+      1,
+      0
+     ]
+    ]
+   },
+   "wall_time_seconds": 61.150839069000085,
+   "report_time_seconds": 5.273453329999938,
+   "file": "census_forests_n21.json"
   }
  ],
  "table_lines": [
@@ -3321,7 +4119,10 @@
   "n=15 forests=   20514 (A005195 ok) nonuni=0 tailfail=0 WRfail=0 ISOfail=0 nonLC=0 minISOratio~1.024847 @r=2 [star K_{1,14} (n=15, maxdeg=14, leaves=14, diameter=2)] | disjoint-union~1.082891 @r=2 [star K_{1,12} (n=13, maxdeg=12, leaves=12, diameter=2) + K2 (n=2)] | 0.2s",
   "n=16 forests=   49905 (A005195 ok) nonuni=0 tailfail=0 WRfail=0 ISOfail=0 nonLC=0 minISOratio~1.021337 @r=2 [star K_{1,15} (n=16, maxdeg=15, leaves=15, diameter=2)] | disjoint-union~1.071267 @r=2 [star K_{1,13} (n=14, maxdeg=13, leaves=13, diameter=2) + K2 (n=2)] | 0.4s",
   "n=17 forests=  122963 (A005195 ok) nonuni=0 tailfail=0 WRfail=0 ISOfail=0 nonLC=0 minISOratio~1.018522 @r=2 [star K_{1,16} (n=17, maxdeg=16, leaves=16, diameter=2)] | disjoint-union~1.061948 @r=2 [star K_{1,14} (n=15, maxdeg=14, leaves=14, diameter=2) + K2 (n=2)] | 1.1s",
-  "n=18 forests=  307199 (A005195 ok) nonuni=0 tailfail=0 WRfail=0 ISOfail=0 nonLC=0 minISOratio~1.016231 @r=2 [star K_{1,17} (n=18, maxdeg=17, leaves=17, diameter=2)] | disjoint-union~1.054358 @r=2 [star K_{1,15} (n=16, maxdeg=15, leaves=15, diameter=2) + K2 (n=2)] | 2.9s"
+  "n=18 forests=  307199 (A005195 ok) nonuni=0 tailfail=0 WRfail=0 ISOfail=0 nonLC=0 minISOratio~1.016231 @r=2 [star K_{1,17} (n=18, maxdeg=17, leaves=17, diameter=2)] | disjoint-union~1.054358 @r=2 [star K_{1,15} (n=16, maxdeg=15, leaves=15, diameter=2) + K2 (n=2)] | 2.9s",
+  "n=19 forests=  775529 (A005195 ok) nonuni=0 tailfail=0 WRfail=0 ISOfail=0 nonLC=0 minISOratio~1.014340 @r=2 [star K_{1,18} (n=19, maxdeg=18, leaves=18, diameter=2)] | disjoint-union~1.048092 @r=2 [star K_{1,16} (n=17, maxdeg=16, leaves=16, diameter=2) + K2 (n=2)] | 8.0s",
+  "n=20 forests= 1977878 (A005195 ok) nonuni=0 tailfail=0 WRfail=0 ISOfail=0 nonLC=0 minISOratio~1.012762 @r=2 [star K_{1,19} (n=20, maxdeg=19, leaves=19, diameter=2)] | disjoint-union~1.042857 @r=2 [star K_{1,17} (n=18, maxdeg=17, leaves=17, diameter=2) + K2 (n=2)] | 22.8s",
+  "n=21 forests= 5086638 (A005195 ok) nonuni=0 tailfail=0 WRfail=0 ISOfail=0 nonLC=0 minISOratio~1.011431 @r=2 [star K_{1,20} (n=21, maxdeg=20, leaves=20, diameter=2)] | disjoint-union~1.038438 @r=2 [star K_{1,18} (n=19, maxdeg=18, leaves=18, diameter=2) + K2 (n=2)] | 61.2s"
  ],
  "note": "Exact arithmetic; finite enumeration is falsification evidence only.",
  "projections": {
@@ -3329,6 +4130,31 @@
    "projected_seconds": 2.832286754744448,
    "growth_factor": 2.498304367980612,
    "cost_growth_factor": 1.0
+  },
+  "19": {
+   "projected_seconds": 7.70669656795789,
+   "growth_factor": 2.5245166813694055,
+   "cost_growth_factor": 1.0381889376400968
+  },
+  "20": {
+   "projected_seconds": 22.036526230672898,
+   "growth_factor": 2.550359818910705,
+   "cost_growth_factor": 1.0788843841018567
+  },
+  "21": {
+   "projected_seconds": 65.29987209366683,
+   "growth_factor": 2.5717652959383743,
+   "cost_growth_factor": 1.114952551492155
   }
+ },
+ "nmax_completed": 21,
+ "total_census_seconds": 96.88658634100011,
+ "finished_utc": "2026-09-02T05:47:53Z",
+ "all_counts_match_A005195": true,
+ "total_offenders": {
+  "non_unimodal_count": 0,
+  "tail_fail_count": 0,
+  "wr_prefix_fail_count": 0,
+  "iso_prefix_fail_count": 0
  }
 }
