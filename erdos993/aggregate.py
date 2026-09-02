@@ -27,6 +27,7 @@ class Aggregate:
         "iso_all",
         "iso_prefix",
         "nw_all",
+        "nw_prefix",
         "wr_prefix_ok",
         "tail_ok",
         "descent_lemma_data_ok",
@@ -44,6 +45,7 @@ class Aggregate:
         self.iso_min_by_r: Dict[int, Tuple[int, int, Any, Tuple[int, ...]]] = {}
         self.wr_prefix_failures: List[Tuple[Any, Tuple[int, ...]]] = []
         self.iso_violation_examples: List[Tuple[Any, Tuple[int, ...], List[int]]] = []
+        self.nw_violation_examples: List[Tuple[Any, Tuple[int, ...]]] = []
         self.nonunimodal_examples: List[Tuple[Any, Tuple[int, ...]]] = []
         self.alpha_hist: Dict[int, int] = {}
 
@@ -55,7 +57,10 @@ class Aggregate:
         c["iso_all"] += rep.iso_all
         c["iso_prefix"] += rep.iso_prefix
         c["nw_all"] += rep.nw_all
+        c["nw_prefix"] += rep.nw_prefix
         c["wr_prefix_ok"] += rep.wr_prefix_ok
+        if not rep.nw_all and len(self.nw_violation_examples) < 5:
+            self.nw_violation_examples.append((label, coeffs))
         c["tail_ok"] += rep.tail_ok
         c["descent_lemma_data_ok"] += lemma_ok
         self.alpha_hist[rep.alpha] = self.alpha_hist.get(rep.alpha, 0) + 1
@@ -108,6 +113,7 @@ class Aggregate:
                 self.iso_min_by_r[r] = o
         self.wr_prefix_failures = (self.wr_prefix_failures + other.wr_prefix_failures)[:5]
         self.iso_violation_examples = (self.iso_violation_examples + other.iso_violation_examples)[:5]
+        self.nw_violation_examples = (self.nw_violation_examples + other.nw_violation_examples)[:5]
         self.nonunimodal_examples = (self.nonunimodal_examples + other.nonunimodal_examples)[:5]
 
     @staticmethod
@@ -133,6 +139,8 @@ class Aggregate:
         out["all_wr_prefix"] = self.c["wr_prefix_ok"] == self.c["count"]
         out["all_tail"] = self.c["tail_ok"] == self.c["count"]
         out["all_log_concave"] = self.c["log_concave"] == self.c["count"]
+        out["all_nw"] = self.c["nw_all"] == self.c["count"]
+        out["all_nw_prefix"] = self.c["nw_prefix"] == self.c["count"]
         out["alpha_histogram"] = {str(k): v for k, v in sorted(self.alpha_hist.items())}
         out["coefficient_multiset_hashsum_sha256_mod_2^256"] = f"{self.hash_sum:064x}"
         if self.keep_coeffs:
@@ -160,5 +168,8 @@ class Aggregate:
         ]
         out["nonunimodal_examples"] = [
             {"forest": lab, "coefficients": list(cf)} for lab, cf in self.nonunimodal_examples
+        ]
+        out["nw_violation_examples"] = [
+            {"forest": lab, "coefficients": list(cf)} for lab, cf in self.nw_violation_examples
         ]
         return out

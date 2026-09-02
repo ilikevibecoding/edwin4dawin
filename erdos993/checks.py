@@ -44,6 +44,7 @@ class SeqReport:
     iso_all: bool          # ISO_r for all 1 <= r <= alpha-1
     iso_prefix: bool       # ISO_r for all 2 <= r <= L-1
     nw_all: bool           # weakened Newton for all 1 <= r <= alpha-1
+    nw_prefix: bool        # weakened Newton for all 2 <= r <= L-1
     wr_prefix_ok: bool     # WR_r for all 2 <= r <= L-1
     wr_max_R: int          # largest R with WR_r for all 1 <= r <= R
     tail_ok: bool
@@ -62,6 +63,7 @@ def analyze(p: Sequence[int]) -> SeqReport:
     iso_all = True
     iso_prefix = True
     nw_all = True
+    nw_prefix = True
     iso_min = None
     iso_prefix_min = None
     iso_violations: List[int] = []
@@ -73,6 +75,8 @@ def analyze(p: Sequence[int]) -> SeqReport:
         Q = r * b * b + a * a - den
         if r * b * b < den:
             nw_all = False
+            if 2 <= r <= L - 1:
+                nw_prefix = False
         if Q < 0:
             iso_all = False
             iso_violations.append(r)
@@ -102,6 +106,7 @@ def analyze(p: Sequence[int]) -> SeqReport:
         iso_all=iso_all,
         iso_prefix=iso_prefix,
         nw_all=nw_all,
+        nw_prefix=nw_prefix,
         wr_prefix_ok=wr_prefix_ok,
         wr_max_R=wr_max_R,
         tail_ok=tail_ok,

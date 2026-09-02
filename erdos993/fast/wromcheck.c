@@ -150,7 +150,7 @@ static void indep_poly(const int *layout, int n, poly *result) {
 /* ------------------------------------------------------------ checks */
 
 typedef struct {
-    u64 count, unimodal, lc, iso_all, iso_prefix, nw_all, wr_prefix, tail;
+    u64 count, unimodal, lc, iso_all, iso_prefix, nw_all, nw_prefix, wr_prefix, tail;
     /* per r: minimum of Q/den as exact fraction plus argmin */
     u128 minQ[MAXN + 2], minD[MAXN + 2]; int have[MAXN + 2];
     int argmin_levels[MAXN + 2][MAXN]; poly argmin_poly[MAXN + 2];
@@ -162,6 +162,7 @@ typedef struct {
     int uni_fail_levels[MAXN]; poly uni_fail_poly; int have_uni_fail;
     int wr_fail_levels[MAXN]; poly wr_fail_poly; int wr_fail_r; int have_wr_fail;
     int tail_fail_levels[MAXN]; poly tail_fail_poly; int tail_fail_r; int have_tail_fail;
+    int lc_fail_levels[MAXN]; poly lc_fail_poly; int lc_fail_r; int have_lc_fail;
 } agg_t;
 
 static int ceil_div(int a, int b) { return (a + b - 1) / b; }
@@ -187,17 +188,24 @@ static void check_tree(const int *layout, int n, const poly *P, agg_t *G) {
     int uni = (i >= alpha);
     G->unimodal += uni;
     if (!uni && !G->have_uni_fail) { G->have_uni_fail = 1; memcpy(G->uni_fail_levels, layout, sizeof(int) * n); G->uni_fail_poly = *P; }
-    int lc = 1, iso_all = 1, iso_prefix = 1, nw_all = 1;
+    int lc = 1, iso_all = 1, iso_prefix = 1, nw_all = 1, nw_prefix = 1;
     int pbest_have = 0; u128 pbQ = 0, pbD = 1; int pbsign = 1, pbr = 0;
     for (int r = 1; r <= alpha - 1; r++) {
         u128 a = p[r - 1], b = p[r], c = p[r + 1];
         u128 bb = b * b, ac = a * c;
-        if (bb < ac) lc = 0;
+        if (bb < ac) {
+            lc = 0;
+            if (!G->have_lc_fail) { G->have_lc_fail = 1; memcpy(G->lc_fail_levels, layout, sizeof(int) * n); G->lc_fail_poly = *P; G->lc_fail_r = r; }
+        }
         u128 den = (u128)(r + 1) * ac;
         u128 lhs = (u128)r * bb + a * a;
         int sign; u128 Q;
         if (lhs >= den) { sign = (lhs == den) ? 0 : 1; Q = lhs - den; } else { sign = -1; Q = den - lhs; }
-        if ((u128)r * bb < den) { nw_all = 0; if (!G->have_nw_fail) { G->have_nw_fail = 1; memcpy(G->nw_fail_levels, layout, sizeof(int) * n); G->nw_fail_poly = *P; G->nw_fail_r = r; } }
+        if ((u128)r * bb < den) {
+            nw_all = 0;
+            if (2 <= r && r <= L - 1) nw_prefix = 0;
+            if (!G->have_nw_fail) { G->have_nw_fail = 1; memcpy(G->nw_fail_levels, layout, sizeof(int) * n); G->nw_fail_poly = *P; G->nw_fail_r = r; }
+        }
         if (sign < 0) {
             iso_all = 0;
             if (2 <= r && r <= L - 1) iso_prefix = 0;
@@ -220,7 +228,7 @@ static void check_tree(const int *layout, int n, const poly *P, agg_t *G) {
             memcpy(G->pargmin_levels, layout, sizeof(int) * n); G->pargmin_poly = *P;
         }
     }
-    G->lc += lc; G->iso_all += iso_all; G->iso_prefix += iso_prefix; G->nw_all += nw_all;
+    G->lc += lc; G->iso_all += iso_all; G->iso_prefix += iso_prefix; G->nw_all += nw_all; G->nw_prefix += nw_prefix;
     /* WR on prefix 2..L-1 */
     int wr = 1;
     for (int r = 2; r <= L - 1 && r <= alpha; r++) if (p[r - 1] > (u64)r * p[r]) { wr = 0; if (!G->have_wr_fail) { G->have_wr_fail = 1; memcpy(G->wr_fail_levels, layout, sizeof(int) * n); G->wr_fail_poly = *P; G->wr_fail_r = r; } break; }
@@ -309,14 +317,14 @@ int main(int argc, char **argv) {
         if (!count_ok) all_ok = 0;
         double secs = (double)(clock() - t0) / CLOCKS_PER_SEC;
         printf("{\"n\":%d,\"count\":%llu,\"A000055\":%llu,\"count_check\":\"%s\","
-               "\"unimodal\":%llu,\"log_concave\":%llu,\"iso_all\":%llu,\"iso_prefix\":%llu,\"nw_all\":%llu,\"wr_prefix_ok\":%llu,\"tail_ok\":%llu,"
-               "\"all_unimodal\":%s,\"all_log_concave\":%s,\"all_iso\":%s,\"all_iso_prefix\":%s,\"all_nw\":%s,\"all_wr_prefix\":%s,\"all_tail\":%s,",
+               "\"unimodal\":%llu,\"log_concave\":%llu,\"iso_all\":%llu,\"iso_prefix\":%llu,\"nw_all\":%llu,\"nw_prefix\":%llu,\"wr_prefix_ok\":%llu,\"tail_ok\":%llu,"
+               "\"all_unimodal\":%s,\"all_log_concave\":%s,\"all_iso\":%s,\"all_iso_prefix\":%s,\"all_nw\":%s,\"all_nw_prefix\":%s,\"all_wr_prefix\":%s,\"all_tail\":%s,",
                n, (unsigned long long)G->count, (unsigned long long)A000055[n], count_ok ? "PASS" : "FAIL",
                (unsigned long long)G->unimodal, (unsigned long long)G->lc, (unsigned long long)G->iso_all, (unsigned long long)G->iso_prefix,
-               (unsigned long long)G->nw_all, (unsigned long long)G->wr_prefix, (unsigned long long)G->tail,
+               (unsigned long long)G->nw_all, (unsigned long long)G->nw_prefix, (unsigned long long)G->wr_prefix, (unsigned long long)G->tail,
                G->unimodal == G->count ? "true" : "false", G->lc == G->count ? "true" : "false", G->iso_all == G->count ? "true" : "false",
-               G->iso_prefix == G->count ? "true" : "false", G->nw_all == G->count ? "true" : "false", G->wr_prefix == G->count ? "true" : "false",
-               G->tail == G->count ? "true" : "false");
+               G->iso_prefix == G->count ? "true" : "false", G->nw_all == G->count ? "true" : "false", G->nw_prefix == G->count ? "true" : "false",
+               G->wr_prefix == G->count ? "true" : "false", G->tail == G->count ? "true" : "false");
         print_cell("iso_min_prefix_2<=r<=L-1", G->phave, G->pminQ, G->pminD, G->pargmin_r, G->pargmin_levels, n, &G->pargmin_poly);
         printf(",\"iso_min_by_r\":{");
         int first = 1;
@@ -332,7 +340,8 @@ int main(int argc, char **argv) {
         print_fail("iso_violation_example", G->have_iso_fail, G->iso_fail_levels, n, &G->iso_fail_poly, G->iso_fail_r); putchar(',');
         print_fail("nw_violation_example", G->have_nw_fail, G->nw_fail_levels, n, &G->nw_fail_poly, G->nw_fail_r); putchar(',');
         print_fail("wr_prefix_failure_example", G->have_wr_fail, G->wr_fail_levels, n, &G->wr_fail_poly, G->wr_fail_r); putchar(',');
-        print_fail("tail_failure_example", G->have_tail_fail, G->tail_fail_levels, n, &G->tail_fail_poly, G->tail_fail_r);
+        print_fail("tail_failure_example", G->have_tail_fail, G->tail_fail_levels, n, &G->tail_fail_poly, G->tail_fail_r); putchar(',');
+        print_fail("logconcavity_violation_example", G->have_lc_fail, G->lc_fail_levels, n, &G->lc_fail_poly, G->lc_fail_r);
         printf(",\"seconds\":%.2f}\n", secs);
         fflush(stdout);
         free(G);
