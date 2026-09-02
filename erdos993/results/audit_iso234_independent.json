@@ -10,11 +10,11 @@
   "math": 0,
   "document_statement": 0
  },
- "runtime_seconds": 49.01,
+ "runtime_seconds": 48.5,
  "timing": [
   [
    "Part 2 symbolic",
-   2.15
+   2.14
   ],
   [
    "forests n=1 (1)",
@@ -62,35 +62,35 @@
   ],
   [
    "forests n=12 (1601)",
-   1.78
+   1.77
   ],
   [
    "forests n=13 (3658)",
-   1.11
+   1.09
   ],
   [
    "forests n=14 (8599)",
-   2.62
+   2.57
   ],
   [
    "forests n=15 (20514)",
-   6.51
+   6.4
   ],
   [
    "forests n=16 (49905)",
-   15.74
+   15.61
   ],
   [
    "Parts 1/3/5 forests n<=16",
-   30.43
+   30.11
   ],
   [
    "Part 4a integer scans",
-   5.48
+   5.37
   ],
   [
    "Part 4b certificates",
-   10.95
+   10.88
   ]
  ],
  "sha256": {
@@ -99,8 +99,8 @@
   "iso2_all_forests_proof.py": "3c8c218d060c3810d55df8d8c848807850e83b4a7ae4ea96ab38c935409d8ca1",
   "iso3_subgraph_expansion.py": "5d5ba942c17985a1646d9fb415c889b8f0821434e22066099a2de706adc59e42",
   "iso4_subgraph_expansion.py": "86afd13c841e4fdd5bd2372620931bd0bb0a0daa4836747dd805737913913d4e",
-  "results/iso2_iso3.json": "b9b8ed5ad3cf609fb36193dcac4145679c6e4a72a0c8049d87a60db0615f7509",
-  "results/iso4.json": "d9136add557bf381c4d4dfd69b2f22da6099e5f0602b7c44f0fc72defec23901",
+  "results/iso2_iso3.json": "ef71be09b031157971f2c65210ee26af5f174382b8d2e128d48e96ce4d447015",
+  "results/iso4.json": "98b1ef148e79ea6694d17a080cf3764aca6933a8cea540ea71a50c90a46665e0",
   "forest_indep.py": "aeb9491e6cc066df99d3015e8d096daa3ec7f0c70f84121c4a5bf1c03afaa62b",
   "audit_iso234_independent.py (this script)": "5d6e7d632512839ef8d1f27e37a2c888be925dd6c395ce27d67023f7e4c14ed6"
  },

@@ -561,7 +561,7 @@
     }
    ]
   },
-  "seconds": 0.539,
+  "seconds": 0.541,
   "all_ok": true
  },
  "random_sequences": {
@@ -651,7 +651,7 @@
    "sequences_with_p[L-1]_equal_p[L]": 31525,
    "sequences_with_some_tail_plateau": 65282
   },
-  "seconds": 2.361,
+  "seconds": 2.343,
   "all_ok": true
  },
  "necessity": {
@@ -1449,7 +1449,7 @@
   },
   "all_ok": true
  },
- "seconds_total": 4.027,
+ "seconds_total": 4.002,
  "failures": [],
  "pass": true
 }

@@ -106,7 +106,7 @@
    "name": "tree_polys_upto_shape_and_counts",
    "match": true,
    "count": 32508,
-   "seconds": 0.773
+   "seconds": 0.777
   },
   {
    "name": "networkx_tree_counts_vs_A000055_n1_16",
@@ -168,7 +168,7 @@
    "name": "tree_polys_upto_vs_recurrence_on_core_level_sequences_per_index_n1_16",
    "match": true,
    "count": 32508,
-   "seconds": 2.627
+   "seconds": 2.655
   },
   {
    "name": "tree_poly_multisets_core_vs_networkx_n1_16",
@@ -423,18 +423,18 @@
   }
  ],
  "stage_seconds": {
-  "1_core_generator_and_tree_polys": 1.026,
-  "2_networkx_trees_polynomials": 12.844,
-  "3_canonical_forms": 0.042,
-  "4_forests": 0.378,
-  "5_framework_quantities": 0.25,
-  "6_klym_T1": 1.951
+  "1_core_generator_and_tree_polys": 1.029,
+  "2_networkx_trees_polynomials": 12.98,
+  "3_canonical_forms": 0.041,
+  "4_forests": 0.381,
+  "5_framework_quantities": 0.251,
+  "6_klym_T1": 1.949
  },
  "summary": {
   "n_comparisons": 42,
   "n_failed": 0,
   "all_pass": true,
-  "total_seconds": 16.493
+  "total_seconds": 16.631
  },
  "first_mismatch": null,
  "verdict": "PASS_INDEPENDENT_FOREST_INDEP_CORE"
