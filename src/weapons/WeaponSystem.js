@@ -539,9 +539,9 @@ export class WeaponSystem {
       const rate = 1 / Math.max(dt, 1 / 240);
       const swayScale = (1 - this._aimBlend * 0.85) * (1 - this._loweredBlend);
       this._sway.target.set(
-        THREE.MathUtils.clamp(dPitch * rate * 0.012, -0.09, 0.09) * swayScale,
-        THREE.MathUtils.clamp(dYaw * rate * 0.014, -0.1, 0.1) * swayScale,
-        THREE.MathUtils.clamp(-dYaw * rate * 0.008, -0.07, 0.07) * swayScale,
+        THREE.MathUtils.clamp(dPitch * rate * 0.010, -0.07, 0.07) * swayScale,
+        THREE.MathUtils.clamp(dYaw * rate * 0.012, -0.08, 0.08) * swayScale,
+        THREE.MathUtils.clamp(-dYaw * rate * 0.007, -0.055, 0.055) * swayScale,
       );
       this._swayPos.target.set(THREE.MathUtils.clamp(-dYaw * rate * 0.004, -0.03, 0.03) * swayScale, THREE.MathUtils.clamp(-dPitch * rate * 0.003, -0.02, 0.02) * swayScale, 0);
       // Strafing / acceleration lean
@@ -557,13 +557,13 @@ export class WeaponSystem {
 
     // --- Walk / sprint bob (figure-8) + breathing ---
     const bobAmt = player.bobAmount * (1 - this._aimBlend * 0.82) * (1 - this._loweredBlend);
-    const sprintMul = 1 + this._sprintBlend * 1.4;
+    const sprintMul = 1 + this._sprintBlend * 1.1;
     const ph = player.bobPhase;
-    const bobX = Math.sin(ph) * 0.0085 * bobAmt * sprintMul;
-    const bobY = Math.sin(ph * 2) * 0.0055 * bobAmt * sprintMul - Math.abs(Math.sin(ph)) * 0.003 * bobAmt;
-    const bobRotZ = Math.sin(ph) * 0.02 * bobAmt * sprintMul;
-    const bobRotX = Math.sin(ph * 2 + 0.6) * 0.012 * bobAmt * sprintMul;
-    const bobRotY = Math.sin(ph) * 0.01 * bobAmt;
+    const bobX = Math.sin(ph) * 0.007 * bobAmt * sprintMul;
+    const bobY = Math.sin(ph * 2) * 0.0045 * bobAmt * sprintMul - Math.abs(Math.sin(ph)) * 0.0025 * bobAmt;
+    const bobRotZ = Math.sin(ph) * 0.015 * bobAmt * sprintMul;
+    const bobRotX = Math.sin(ph * 2 + 0.6) * 0.009 * bobAmt * sprintMul;
+    const bobRotY = Math.sin(ph) * 0.008 * bobAmt;
     const breathe = 1 - this._aimBlend * 0.6;
     const brX = Math.sin(t * 1.55) * 0.0012 * breathe;
     const brY = Math.sin(t * 1.55 * 0.5 + 1.2) * 0.0016 * breathe;

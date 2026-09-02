@@ -281,8 +281,9 @@ export class Player {
     // --- Camera rig ---
     this.rig.position.copy(this.position);
     this.rig.rotation.set(0, this.yaw, 0);
-    const bobY = Math.abs(Math.sin(this.bobPhase)) * 0.018 * this.bobAmount * (this.isSprinting ? 1.6 : 1);
-    const bobRoll = Math.sin(this.bobPhase * 0.5) * 0.006 * this.bobAmount * (this.isSprinting ? 1.5 : 1);
+    // Head bob is kept subtle (MW-style: the weapon carries most of the movement read; the camera stays steady).
+    const bobY = Math.abs(Math.sin(this.bobPhase)) * 0.011 * this.bobAmount * (this.isSprinting ? 1.5 : 1);
+    const bobRoll = Math.sin(this.bobPhase * 0.5) * 0.004 * this.bobAmount * (this.isSprinting ? 1.4 : 1);
     this.head.position.set(0, this.eyeHeight + bobY, 0);
     this.head.rotation.set(this.pitch + this._punch.x, this._punch.y, bobRoll);
     this.rig.updateMatrixWorld(true);
