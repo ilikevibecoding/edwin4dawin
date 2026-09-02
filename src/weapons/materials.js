@@ -455,6 +455,48 @@ export function applyGunDetail(
   return material;
 }
 
+const FILL_PARS = /* glsl */ `
+uniform float vmFill;
+uniform vec3 vmFillColor;
+uniform float vmNeutral;
+`;
+const FILL_AO = /* glsl */ `
+#include <aomap_fragment>
+{
+	float vmIndLum = dot( reflectedLight.indirectDiffuse, vec3( 0.2126, 0.7152, 0.0722 ) );
+	reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse, vec3( vmIndLum ), vmNeutral );
+	vec3 vmUp = normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz );
+	float vmHemi = mix( 0.45, 1.0, 0.5 + 0.5 * dot( geometryNormal, vmUp ) );
+	reflectedLight.indirectDiffuse += vmFill * vmHemi * vmFillColor * BRDF_Lambert( material.diffuseColor );
+}
+`;
+
+/**
+ * The lightweight version of the view-model fill for materials that are not part of the rifle (arms, gloves,
+ * sleeves): the same neutralised ambient + hemispherical fill as `applyGunDetail`, without the surface story, so
+ * the hands stop dropping to near-black in shade while the weapon next to them stays lit. Chains any existing
+ * onBeforeCompile / cache key; apply before `RenderSystem.registerMaterial`.
+ */
+export function applyViewModelFill(material, { fill = 0.8, fillColor = [1.0, 0.945, 0.855], neutral = 0.5 } = {}) {
+  const uniforms = {
+    vmFill: { value: fill },
+    vmFillColor: { value: new THREE.Vector3(...fillColor) },
+    vmNeutral: { value: neutral },
+  };
+  material.userData.vmFill = uniforms;
+  const prev = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    prev?.(shader, renderer);
+    Object.assign(shader.uniforms, uniforms);
+    if (!shader.fragmentShader.includes('#include <aomap_fragment>')) return;
+    shader.fragmentShader = shader.fragmentShader.replace('void main() {', `${FILL_PARS}\nvoid main() {`).replace('#include <aomap_fragment>', FILL_AO);
+  };
+  const prevKey = material.customProgramCacheKey;
+  material.customProgramCacheKey = () => `${prevKey ? prevKey.call(material) : ''}|vmFill1`;
+  material.needsUpdate = true;
+  return material;
+}
+
 /** Tell a hooked material that its geometries carry the per-vertex `aGunAO` attribute. */
 export function enableVertexAO(material) {
   if (!material.userData.gun) return;

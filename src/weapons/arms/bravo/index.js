@@ -4,6 +4,7 @@ import { defineHand, buildHandGeometry, mirrorGeometry, buildSkeleton, BONES, FO
 import { buildArmGeometry, SKIN_BAND } from './arm.js';
 import { makeKnit, makeLeather, makeCuff, makeCamo, makeSkin } from './textures.js';
 import { makeGloveMaterial, makeCuffMaterial, makeSkinMaterial, makeSleeveMaterial } from './materials.js';
+import { applyViewModelFill } from '../../materials.js';
 import { CHANNELS, POSES, resolvePose } from './poses.js';
 
 /**
@@ -280,11 +281,13 @@ export async function buildArms(game, rig) {
   const cuff = makeCuff(aniso);
   const camo = makeCamo(aniso);
   const skin = makeSkin(aniso, SKIN_BAND);
+  // Same neutral view-model fill the rifle gets (materials.js), scaled per albedo so the sunlit read is unchanged
+  // while shaded gloves/skin keep their colour instead of dropping to near-black under the blue sky ambient.
   const mats = {
-    glove: makeGloveMaterial(knit, leather),
-    cuff: makeCuffMaterial(cuff),
-    skin: makeSkinMaterial(skin),
-    sleeve: makeSleeveMaterial(camo),
+    glove: applyViewModelFill(makeGloveMaterial(knit, leather), { fill: 0.85 }),
+    cuff: applyViewModelFill(makeCuffMaterial(cuff), { fill: 0.9 }),
+    skin: applyViewModelFill(makeSkinMaterial(skin), { fill: 0.45, neutral: 0.35 }),
+    sleeve: applyViewModelFill(makeSleeveMaterial(camo), { fill: 0.6 }),
   };
 
   const root = new THREE.Group();
