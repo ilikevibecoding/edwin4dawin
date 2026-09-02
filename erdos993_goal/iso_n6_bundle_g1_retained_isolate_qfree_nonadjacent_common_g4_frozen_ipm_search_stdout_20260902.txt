@@ -1,0 +1,32 @@
+Wed Sep  2 06:23:45 AM UTC 2026
+nonadjacent_u0_v0: converting 379 base generators
+nonadjacent_u0_v0: assembled 545691 atoms with 32503580 nonzeros
+nonadjacent_u0_v0: entering HiGHS
+{
+  "branches": {
+    "nonadjacent_u0_v0": {
+      "atoms": 545691,
+      "coefficient_rows": 27405,
+      "cubic_constraints": 17,
+      "equality_constraints": 4,
+      "frozen_cells": 271,
+      "linear_constraints": 40,
+      "maximum_float_residual": null,
+      "message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)",
+      "objective": null,
+      "quadratic_constraints": 32,
+      "quartic_constraints": 15,
+      "success": false
+    }
+  },
+  "marker": "SEARCHED_EXACT_ISO_N6_BUNDLE_G1_RETAINED_ISOLATE_QFREE_NONADJACENT_COMMON_G4_FROZEN_IPM_ROOT"
+}
+SOURCE_SHA256 130A63B41776C4FD009FF495942996304D502AFE83E5C0CC4DBAF246C9D1E000
+REPORT_SHA256 7C812A6CC0A6FEC19E40942C33CF34CE4AE8E7D494937DF34E697DFBD05B6CB8
+SEARCHED_EXACT_ISO_N6_BUNDLE_G1_RETAINED_ISOLATE_QFREE_NONADJACENT_COMMON_G4_FROZEN_IPM_ROOT
+
+real	32m33.093s
+user	32m25.717s
+sys	0m6.519s
+EXIT_CODE=0
+Wed Sep  2 06:56:19 AM UTC 2026
