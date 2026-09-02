@@ -339,3 +339,103 @@ First all-pass iteration. Stopping rule needs a second consecutive all-pass, so 
 with conservative changes aimed at the weak points named above (nothing that can move a passing
 item): galley left wall gets a wall-mounted prop cluster, bathroom shower recess gets a head, hose
 and dispenser, and the window view keeps its camera so the fix is re-verified from the same angle.
+
+## Iteration 9 — confirmation run (galley north wall)
+
+Changes: galley north wall, between the canister rack and the counter: medkit cabinet (dark frame,
+cream door, orange cross, steel latch, teal status LED, spec-plate stencil), status panel (painted
+bezel, screen, LED readout, rubber buttons), towel rail on brackets with a folded teal cloth, and a
+clamped supply line with an orange valve wheel along the top of the wall. The "bathroom shower plate"
+from the iteration-8 notes turned out to be a `panelGrid` greeble cell on the south wall, not a
+shower — there is no shower in the room — so nothing was added there. Everything else untouched.
+
+Shots: `shots/iter_9/`. Drift: sky region meanAbsDiff 44.5, 71.0% pixels changed; interior control 0 / 0.
+
+Pixel audit: the renderer is deterministic under the harness — cockpit, corridor, quarters, window,
+windshield, bathroom and aft are pixel-identical to iteration 8 (mean abs diff 0.00); galley differs
+(5.9) where the wall cluster landed. Same clipping numbers as iteration 8; galley near-black 3.9 → 4.8%
+(the dark cabinet frame and bezel), 0 px > 250.
+
+| # | Item | Result | Notes |
+|---|------|--------|-------|
+| 1 | Lighting intentional | PASS | Unchanged from iteration 8 (identical frames). Galley: the cluster sits in the counter downlight's falloff and reads as lit from the right, consistent with the room's key. |
+| 2 | Materials physical | PASS | Unchanged; the new medkit door / bezel / cloth / valve use the existing painted, painted-steel, fabric and metal families. |
+| 3 | Detail density | PASS | Four rubric shots unchanged. Galley's left wall — the last plain surface I had named — now carries a cabinet, panel, rail and pipe run. |
+| 4 | Post stack balanced | PASS | Identical frames; galley still 0 px > 250, darks hold detail. |
+| 5 | Space view sells motion | PASS | Identical frames; 71% of sky pixels change over 2 s, interior 0. |
+| 6 | Cohesive palette | PASS | Cream / orange / teal / slate-gunmetal; the cross and valve are palette orange, the cloth palette teal. |
+| 7 | Tech clean | PASS | No z-fighting, acne or missing faces in 8 views + 6 interaction shots; 110–171 calls, 226–366k tris, 22 lights, 49 programs, 69 colliders. `vite build` clean. fps still unmeasurable under SwiftShader. |
+| 8 | Cold-look test | PASS | Same corridor frame as iteration 8; no hesitation. |
+| 9 | Interactions | PASS | Bed / galley / bathroom: hover, prompt, fade ("8 HOURS PASS" / "Refreshed."), status text and rest-cycle lighting (rest level 0.82 at capture) all recorded again. |
+
+Second consecutive all-pass → stopping condition met at iteration 9.
+
+---
+
+## Final summary
+
+### What passed (iterations 8 and 9, all nine items)
+
+- **Lighting**: every room has a key (corridor ceiling pools, cockpit console glow + cool planet
+  light, quarters reading lamp + cool pillow disc, galley counter downlight, bathroom vanity bar), a
+  coloured fill (teal trench / kick strips / under-bunk) and accents (LED strips, screens, hazard
+  lamps). Warm inside, cool through every window. Emissives are diffusers with falloff, not flat
+  quads.
+- **Materials**: five PBR families from procedural maps — painted panels (three wear variants,
+  primer chips, smudges, rivets, bevels), worn/brushed metal (anisotropic short strokes, wear in
+  roughness), painted structural steel, painted deck plating with a metalness map (knurl tops, rivets
+  and scuffs worn through to steel), rubber, fabric, hazard; PMREM environment captured from the
+  finished interior so pipes, rails and the porthole ring reflect the real corridor.
+- **Detail density**: panel grids with greebles, vents, screens, strips and conduits on every wall,
+  ceiling and chamfer; ribs with conduits, bolt rows and stencils; handrails with brackets; utility
+  clusters; trench pipes and cable trays under the grate; props in every room.
+- **Post**: ACES, bloom (0.3 / 0.38 / threshold 1.15), N8AO (medium, half-res, blue-grey tint),
+  SMAA, vignette 0.34, grain 0.045, exp fog, filmic shadow lift. 0 px > 250 in the rubric shots;
+  near-black 3–7% and it is deep space and rubber gaskets.
+- **Space**: three star layers with parallax + a galactic band, ringed gas giant and cloud-broken
+  ocean world with a proper atmosphere halo (screen-radial day term, cubic falloff, limb-darkened
+  disc), two moons, four nebula billboards, dust streaks. Measured: 71% of sky pixels change in 2 s
+  while the interior is pixel-identical; the planet crosses a porthole in ~60–90 s.
+- **Palette**: off-white hull, orange accents, teal practicals, slate/gunmetal structure — no
+  default greys anywhere.
+- **Tech**: deterministic renders, no z-fighting / acne / missing faces, 110–171 draw calls, up to
+  366k triangles, 22 lights, adaptive quality scaler (pixel ratio + AO quality) instead of content
+  removal.
+- **Interactions**: pointer lock, raycast hover tint + prompt, bed (fade, "8 hours pass", rest-cycle
+  lighting and back), galley ("You eat. Energy restored."), bathroom (fade, "Refreshed."), one-line
+  HUD status.
+
+### What is still weak
+
+- **Frame rate is unverified on real hardware.** Every measurement here came from SwiftShader
+  (~2 s/frame), so rubric 7's 60 fps clause was scored from budget (draw calls, triangles, 22
+  forward-lit lights, half-res AO) plus the adaptive scaler. 22 point/spot lights in a forward
+  renderer is the single most likely reason a mid-range laptop GPU would drop below 60 at 1080p; the
+  scaler would then step the pixel ratio down to 0.66.
+- **The window shot is the dimmest** (mean luma 44.5): the porthole wall sits between two ceiling
+  pools and the rib face beside it is painted slate — legible, but the frame is moodier than the other
+  three.
+- **The cockpit foreground floor** is dark grey, not black: readable mat grain and plate seams, but
+  the bottom fifth of that shot carries little light.
+- **Planet texture fidelity**: the gas giant bands and ocean-world continents are FBM/value-noise
+  at 1024×512; up close in the corridor porthole the ocean world is soft.
+- **Single environment probe** at the corridor centre: metals in the cockpit and rooms reflect the
+  corridor rather than their own room.
+- **Hover highlight** is an emissive tint (0.12, pulsing); an outline or rim effect would read as
+  more "game".
+
+### With five more iterations
+
+1. Real-GPU profiling pass: capture frame times on an actual laptop GPU, then trim the light list
+   (merge the four corridor points into two, drop the galley under-cabinet point in favour of the
+   emissive alone) and move the exterior window spots to baked emissive "light shafts" if needed.
+2. Per-room environment probes (cockpit, quarters, galley) blended by position so the cockpit's
+   metals reflect the windshield and planet.
+3. Higher-frequency planet detail: a second detail-noise octave in the planet shader (world-space,
+   so it never softens), swirling storm cells on the gas giant, specular ocean glint on the ocean
+   world.
+4. Screen-space outline for hovered interactables (depth/normal edge pass) plus a small
+   world-space prompt tag on the object instead of only the HUD line.
+5. Window-shot lighting: a small warm practical over the porthole (a reading lamp on the bezel) so
+   the darkest rubric view lifts to the others' exposure without adding a global fill; cockpit mat
+   gets an under-console teal strip on its aft edge for the foreground floor.

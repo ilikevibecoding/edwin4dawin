@@ -1420,6 +1420,40 @@ function buildGalley(kit, ctx) {
     kit.box("leds", rx, 1.1, rz + 0.062, 0.5, 0.03, 0.004, { uv: "keep" });
     kit.collider([rx - 0.5, 0.9, rz], [rx + 0.5, 1.8, rz + 0.35], "rack");
   }
+  // --- north wall, between the rack and the counter: medkit cabinet, status panel, towel rail with a
+  // cloth, and a valved supply line above (the panels here were bare from the galley doorway)
+  {
+    const wz = z0 + 0.02;
+    // medkit cabinet: dark frame, cream door, orange cross, steel latch, spec-plate below
+    const mx = 3.5;
+    kit.boxMM("paintedMetal", [mx - 0.27, 1.22, wz], [mx + 0.27, 1.9, wz + 0.16], { color: PALETTE.darkMetal, texel: 2 });
+    kit.boxMM("painted", [mx - 0.24, 1.25, wz + 0.16], [mx + 0.24, 1.87, wz + 0.175], { color: PALETTE.cream, uv: "keep" });
+    kit.boxMM("painted", [mx - 0.15, 1.53, wz + 0.175], [mx + 0.15, 1.6, wz + 0.182], { color: PALETTE.orange, uv: "keep" });
+    kit.boxMM("painted", [mx - 0.035, 1.415, wz + 0.175], [mx + 0.035, 1.715, wz + 0.182], { color: PALETTE.orange, uv: "keep" });
+    kit.box("metal", mx + 0.2, 1.56, wz + 0.185, 0.03, 0.12, 0.02, { color: PALETTE.steel });
+    kit.box("emitTeal", mx - 0.2, 1.83, wz + 0.178, 0.02, 0.012, 0.006);
+    {
+      const g = new THREE.PlaneGeometry(0.18, 0.18);
+      kit.add("decal", g, { pos: [mx, 1.1, wz + 0.004], uv: "keep", uvRect: decalRect(9) });
+    }
+    // status panel: bezel, screen, LED readout, two rubber buttons
+    const px = 4.05;
+    kit.boxMM("paintedMetal", [px - 0.22, 1.36, wz], [px + 0.22, 1.76, wz + 0.06], { color: PALETTE.gunmetal, texel: 2 });
+    kit.boxMM("darkGloss", [px - 0.19, 1.46, wz + 0.06], [px + 0.19, 1.73, wz + 0.068]);
+    kit.boxMM("screen3", [px - 0.17, 1.48, wz + 0.068], [px + 0.17, 1.71, wz + 0.072], { uv: "keep" });
+    kit.boxMM("leds", [px - 0.16, 1.39, wz + 0.06], [px + 0.16, 1.43, wz + 0.066], { uv: "keep" });
+    for (const dx of [-0.19, -0.13]) kit.box("rubber", px + dx, 1.41, wz + 0.07, 0.035, 0.035, 0.02, { color: PALETTE.rubber });
+    // towel rail: steel tube on two brackets, a cloth folded over it
+    kit.cyl("metal", 3.78, 1.0, wz + 0.09, 0.012, 0.8, "x", { color: PALETTE.steel, segments: 8 });
+    for (const dx of [-0.36, 0.36]) kit.box("metal", 3.78 + dx, 1.0, wz + 0.045, 0.04, 0.04, 0.09, { color: PALETTE.gunmetal });
+    kit.boxMM("fabric", [3.55, 0.62, wz + 0.075], [3.85, 1.012, wz + 0.115], { color: PALETTE.fabricTeal, uv: "world", texel: 3 });
+    // supply line along the wall with clamps and a valve
+    kit.cyl("metal", 3.9, 2.08, wz + 0.07, 0.03, 1.5, "x", { color: PALETTE.steel, segments: 10 });
+    for (const x of [3.3, 3.9, 4.5]) kit.box("paintedMetal", x, 2.08, wz + 0.05, 0.08, 0.1, 0.1, { color: PALETTE.darkMetal, texel: 2 });
+    kit.cyl("metal", 3.62, 2.16, wz + 0.07, 0.016, 0.16, "y", { color: PALETTE.darkMetal, segments: 8 });
+    kit.add("painted", new THREE.TorusGeometry(0.06, 0.011, 8, 18), { pos: [3.62, 2.25, wz + 0.07], rot: [Math.PI / 2, 0, 0], color: PALETTE.orange, uv: "keep" });
+    kit.collider([3.2, 0.5, z0], [4.3, 2.3, z0 + 0.2], "galleyWall");
+  }
   // centre ceiling fixture (emissive only; the counter downlight is the room's key)
   kit.box("paintedMetal", (x0 + x1) / 2 - 0.4, h - 0.05, (z0 + z1) / 2, 1.6, 0.08, 0.3, { color: PALETTE.gunmetal });
   kit.box("emitWarmSoft", (x0 + x1) / 2 - 0.4, h - 0.1, (z0 + z1) / 2, 1.4, 0.03, 0.1, { uv: "keep" });
