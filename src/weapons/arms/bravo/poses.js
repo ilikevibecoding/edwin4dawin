@@ -34,15 +34,16 @@ const RAW = {
     pinky: [35, 45, 35, -6],
     thumb: [20, -20, 10, 10, 10],
   },
-  // Left hand under the handguard: fingers wrap up the right side of the quad rail (index nearly straight against
-  // the hand stop, the others curling progressively more), thumb lying along the left side rail pointing forward
-  // (fitted numerically to the M4A1 quad rail — preview.js ?fitFingers=1&tline=-0.042,0.026).
+  // Left hand over the top-left of the handguard: the fingers lie across the top rail and hook over the right
+  // edge (index/middle tips on the right side rail, ring flat across the top, the pinky — whose knuckle sits off
+  // the left edge — relaxed), thumb up the left face and hooked forward into the top-left rail groove (fitted
+  // numerically to the M4A1 quad rail — preview.js ?fitPalm=1&fitFingers=1&tdir=0.05,0.05,-1&ttip=-0.023,0.044,-0.225&ttwist=45).
   gripLeft: {
-    index: [10, 40, 10, 0],
-    middle: [40, 40, 50, 0],
-    ring: [50, 40, 40, 0],
-    pinky: [55, 25, 30, 0],
-    thumb: [20, 10, 0, -30, -15],
+    index: [45, 25, 10, 0],
+    middle: [50, 10, 10, 0],
+    ring: [40, 0, 0, 0],
+    pinky: [40, 55, 40, 0],
+    thumb: [0, -90, 45, 60, 45],
   },
   // Holding the magazine from its left face: fingers curl round the front edge with the pads on the far face,
   // thumb extended up the near face toward the mag well (fitted numerically to the M4A1 magazine).

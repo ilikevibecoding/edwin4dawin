@@ -51,16 +51,17 @@ export const FIT = {
     pole: [0.75, -1, 0.3],
   },
   left: {
-    // underhand grip: palm under the handguard (heel just left of the bottom rail, pressed 3 mm into the rail
-    // flange, which stays hidden inside the glove), knuckle row along the bottom-right corner so the fingers
-    // wrap up the right side of the handguard with the tips on the top-right rail edge, index finger against
-    // the hand stop's rear face, thumb along the left side rail pointing forward; the wrist sits below-left of
-    // the handguard and swings 40° back toward the shoulder (fitted numerically — see preview.js ?fitFingers=1)
+    // overhand grip from the left (MW2019 reference framing): the wrist is extended so the back of the hand faces
+    // the camera (dorsum up-left-back), the palm faces the top-left corner of the handguard from above-left, the
+    // knuckle row runs diagonally over the top-left rail edge (index knuckle on the top rail, pinky knuckle off
+    // the left edge) so the fingers wrap over the top and down the right side of the quad rail, the thumb runs up
+    // the left face and hooks forward into the top-left rail groove; the forearm heads down-left toward the
+    // shoulder anchor (fitted numerically — see preview.js ?fitPalm=1&fitFingers=1)
     palm: [-0.002, 0.05, -0.003],
-    pos: [-0.008, -0.0225, -0.175],
-    y: [0.766, -0.056, -0.64],
-    z: [0, -0.996, 0.087],
-    pole: [-0.55, -1, 0.3],
+    pos: [-0.05, 0.037, -0.194],
+    y: [0.58, 0.72, -0.38],
+    z: [-0.51, 0.68, 0.51],
+    pole: [-1, -0.35, 0.3],
     // Reload poses: the rig moves the palm target but keeps the handguard orientation, so each pose carries its
     // own hand orientation (gun space) and palm-centre offset from the target.
     poses: {

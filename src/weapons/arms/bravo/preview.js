@@ -177,6 +177,7 @@ if (params.has('lgrip')) {
 }
 applyFitOverride(arms.hands.left, rig.sockets.gripLeft, vec('lpos'), lY, lZ);
 applyFitOverride(arms.hands.right, rig.sockets.gripRight, vec('rpos'), vec('ry'), vec('rz'));
+if (params.has('lpole')) arms.hands.left.fits.grip.pole.fromArray(vec('lpole')).normalize();
 if (params.has('pose')) arms.setPose(params.get('pose'));
 if (params.has('poseJson')) {
   // ?poseJson={"left":{"index":[..],...}} — raw override compiled on the fly
@@ -250,6 +251,51 @@ async function fitLeftFingers() {
   };
   const def = arms.hands.left.def;
   const report = {};
+  // ?fitPalm=1 — before the fingers, slide the palm centre (grid ±2 cm) so the MCP knuckle row and the palm's
+  // palmar face sit against the handguard without penetrating (knuckles hug, the rest only avoids).
+  if (params.get('fitPalm') === '1') {
+    const fit = hand.fits.grip;
+    const base = fit.pos.clone();
+    const socketQ = rig.sockets.gripLeft.quaternion;
+    const samples = [
+      ...[0, 1, 2, 3].map((f) => ({ p: def.fingers[f].mcp.map((v, i) => (i === 0 ? -v : v)), r: def.fingers[f].r[0] * 1.16, w: 1 })),
+      { p: [-0.002, 0.05, -0.017], r: 0, w: num('palmHug', 0.3) },
+      { p: [-0.002, 0.018, -0.017], r: 0, w: 0 },
+      { p: [0.02, 0.04, -0.02], r: 0, w: 0 },
+      { p: [-0.028, 0.035, -0.017], r: 0, w: 0 },
+      { p: [0.0, 0.085, -0.012], r: 0, w: 0 },
+    ];
+    const wp = new THREE.Vector3();
+    const cost = () => {
+      let c = 0;
+      for (const s of samples) {
+        hand.group.localToWorld(wp.fromArray(s.p)).applyMatrix4(inv);
+        const g = sdf(wp.x, wp.y, wp.z) - s.r;
+        c += g < CLEAR ? 1e5 + (CLEAR - g) * 1e7 : s.w * g * g * 1e6;
+      }
+      return c;
+    };
+    const step = num('palmStep', 0.004);
+    const range = num('palmRange', 0.02);
+    let best = { cost: Infinity, off: [0, 0, 0] };
+    const off = new THREE.Vector3();
+    for (let dx = -range; dx <= range + 1e-9; dx += step) {
+      for (let dy = -range; dy <= range + 1e-9; dy += step) {
+        for (let dz = -range; dz <= range + 1e-9; dz += step) {
+          off.set(dx, dy, dz).applyQuaternion(socketQ.clone().invert());
+          fit.pos.copy(base).add(off);
+          apply();
+          const c = cost();
+          if (c < best.cost) best = { cost: c, off: [dx, dy, dz] };
+        }
+      }
+    }
+    off.fromArray(best.off).applyQuaternion(socketQ.clone().invert());
+    fit.pos.copy(base).add(off);
+    apply();
+    const centre = hand.group.localToWorld(new THREE.Vector3().fromArray(hand.palm.toArray())).applyMatrix4(inv);
+    report.palm = { offset: best.off.map((v) => +v.toFixed(4)), cost: +best.cost.toFixed(0), centreGun: centre.toArray().map((v) => +v.toFixed(4)) };
+  }
   // hugging cost of the whole finger: squared gaps to the surface (samples along each phalanx), penetration penalised
   const gapCost = (a, b, ra, rb, hug = true) => {
     let cost = 0;
@@ -314,6 +360,9 @@ async function fitLeftFingers() {
       const d = b.clone().sub(a).normalize();
       return (1 - d.dot(tdir)) * 2e4;
     };
+    // ?ttip=x,y,z — pull the thumb tip toward a gun-space point (mm² distance, weight ttipw)
+    const ttip = params.has('ttip') ? new THREE.Vector3().fromArray(vec('ttip')) : null;
+    const ttipw = num('ttipw', 1);
     let best = { cost: Infinity, angles: [0, 0, 0, 0, 0] };
     const twist = num('ttwist', 0);
     for (let flex = -90; flex <= 60; flex += 10) {
@@ -329,6 +378,7 @@ async function fitLeftFingers() {
               cost += gapCost(a, b, def.thumb.r[joint], def.thumb.r[joint + 1], joint > 0) * (joint > 0 ? num('thug', 0.3) : 1); // hug the rail with the distal segments
               if (joint > 0) cost += tdir ? dirCost(a, b) * num('tlinew', 1) : lineCost(a, b) * num('tlinew', 1);
               if (joint === 2 && !tdir) cost += (b.z - a.z) * 1e5; // reward pointing forward
+              if (joint === 2 && ttip) cost += b.distanceToSquared(ttip) * 1e6 * ttipw;
             }
             if (cost < best.cost) best = { cost, angles: [flex, abd, twist, mcp, ip] };
           }
@@ -340,6 +390,22 @@ async function fitLeftFingers() {
     report.thumb = { pose: raw.thumb.slice(), cmc: jointPos(hand.bones[t[0]]).toArray().map((v) => +v.toFixed(4)), mcp: jointPos(hand.bones[t[1]]).toArray().map((v) => +v.toFixed(4)), tip: boneEnd(hand.bones[t[2]], def.thumb.len[2]).toArray().map((v) => +v.toFixed(4)) };
   }
   apply();
+  // clearance (mm) of the MCP knuckles and of the palm's palmar face / heel against the handguard (negative = inside)
+  {
+    const mm = (v) => +(v * 1000).toFixed(1);
+    const knuckles = {};
+    for (let f = 0; f < 4; f++) {
+      const jp = jointPos(hand.bones[BONES[names[f]][0]]);
+      knuckles[names[f]] = mm(sdf(jp.x, jp.y, jp.z) - def.fingers[f].r[0] * 1.16);
+    }
+    const palmPts = { centre: [-0.002, 0.05, -0.017], heel: [-0.002, 0.018, -0.017], thenar: [0.02, 0.04, -0.02], hypothenar: [-0.028, 0.035, -0.017], mcpRow: [-0.002, 0.085, -0.012] };
+    const palm = {};
+    for (const [k, v] of Object.entries(palmPts)) {
+      const w = hand.group.localToWorld(new THREE.Vector3().fromArray(v)).applyMatrix4(inv);
+      palm[k] = mm(sdf(w.x, w.y, w.z));
+    }
+    report.clearance = { knuckles, palm };
+  }
   console.log(`[fit] gripLeft ${JSON.stringify(raw)}`);
   console.log(`[fit] joints ${JSON.stringify(report)}`);
   window.__fit = { raw, report };

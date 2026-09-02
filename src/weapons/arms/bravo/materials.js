@@ -106,11 +106,11 @@ export function makeSkinMaterial(skin) {
     roughnessMap: skin.roughnessMap,
     roughness: 1,
     metalness: 0,
-    specularIntensity: 0.5,
-    sheen: 0.18,
-    sheenRoughness: 0.6,
-    sheenColor: new THREE.Color(0.85, 0.5, 0.4),
-    envMapIntensity: 0.85,
+    specularIntensity: 0.45,
+    sheen: 0.14,
+    sheenRoughness: 0.65,
+    sheenColor: new THREE.Color(0.8, 0.55, 0.5),
+    envMapIntensity: 0.8,
   });
   mat.name = 'bravo_skin';
   return mat;

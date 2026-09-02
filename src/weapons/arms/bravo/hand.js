@@ -397,10 +397,10 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
       uv[i * 2] = ang * R;
       uv[i * 2 + 1] = bq.s;
       circ[i] = 2 * Math.PI * R;
-      // palm-facing → leather; fingertips (distal) → leather cap. The thumb keeps knit all round except its pad
-      // (the reference glove shows a knit thumb lying along the rail).
+      // leather only on the palmar face of the digits (the knit wraps up the sides like the reference glove);
+      // fingertips (distal) → leather cap. The thumb keeps knit all round except its pad.
       const palmness = -cz;
-      leather = c.thumb ? smoothstep(0.5, 0.9, palmness) : smoothstep(-0.05, 0.5, palmness);
+      leather = c.thumb ? smoothstep(0.5, 0.9, palmness) : smoothstep(0.3, 0.75, palmness);
       const tipStart = c.arc[3] - 0.009; // small leather cap over the fingertip only
       leather = Math.max(leather, smoothstep(tipStart - 0.003, tipStart + 0.003, bq.s));
       // palm-side creases at the joints; softer stretch creases across the knit on the back of the joints
@@ -423,9 +423,9 @@ export function buildHandGeometry(def, { cell = 0.0028 } = {}) {
       uv[i * 2 + 1] = y;
       circ[i] = 2 * Math.PI * PALM_R;
       const nz = normals[i * 3 + 2];
-      // leather on the palm side, ending just past the side edges (the thenar / hypothenar bulges show knit on
-      // their outward faces like the reference glove); the wrist stays knit (cuff covers it)
-      leather = smoothstep(-0.28, -0.62, nz);
+      // leather on the palm face only — it stops short of the side edges, so the thenar / hypothenar bulges show
+      // knit on their outward faces like the reference glove; the wrist stays knit (cuff covers it)
+      leather = smoothstep(-0.45, -0.8, nz);
       // heel-of-palm creases (thenar line)
       const tx = x + 0.012;
       const ty = y - 0.03;

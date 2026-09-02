@@ -16,8 +16,10 @@ export const ARM_GROUPS = { cuff: 0, skin: 1, sleeve: 2 };
 const TAU = Math.PI * 2;
 const CUFF_START = -0.012;
 const CUFF_END = 0.044;
-const SKIN_END = 0.119;
-const ROLL_END = 0.163;
+// The sleeve is rolled well below the elbow so the camo roll enters the hip view at the bottom-left corner like the
+// MW2019 reference (the virtual shoulder anchor keeps the forearm long on screen).
+const SKIN_END = 0.086;
+const ROLL_END = 0.128;
 const ARM_END = 0.58;
 const TAB_CENTRE = 0.24 * TAU; // angular position of the strap tab (matches the cuff texture; ≈ dorsal)
 
@@ -40,31 +42,31 @@ function radii(s, out) {
   let rx;
   let rz;
   if (s < CUFF_END) {
-    // cuff over the wrist, slight flare toward the forearm, rolled top edge
+    // snug neoprene cuff over the wrist (≈ 2 mm over the skin), barely flaring toward the forearm, rolled top edge
     const t = sstep(-0.01, CUFF_END, s);
-    rx = lerp(0.0338, 0.0368, t);
-    rz = lerp(0.0258, 0.0292, t);
-    const lip = gauss(s + 0.004, 0.004) * 0.001;
+    rx = lerp(0.0334, 0.0346, t);
+    rz = lerp(0.0256, 0.0272, t);
+    const lip = gauss(s + 0.004, 0.004) * 0.0008;
     rx += lip;
     rz += lip;
   } else if (s < SKIN_END) {
     // bare forearm: emerges from inside the cuff, thickens toward the belly of the forearm
-    const t = sstep(CUFF_END, SKIN_END + 0.01, s);
-    rx = lerp(0.0318, 0.0438, t);
-    rz = lerp(0.0252, 0.0368, t);
+    const t = sstep(CUFF_END, SKIN_END + 0.03, s);
+    rx = lerp(0.0316, 0.0412, t);
+    rz = lerp(0.025, 0.0346, t);
   } else if (s < ROLL_END) {
     // rolled sleeve: a ledge where the rolled fabric ends over the skin, a fat outer fold, a crease, then a smaller
     // inner fold before the sleeve proper
     const t = (s - SKIN_END) / (ROLL_END - SKIN_END);
     const ledge = 0.0045 * sstep(0, 0.045, t);
     const folds = 0.011 * gauss(t - 0.4, 0.32) + 0.0048 * gauss(t - 0.86, 0.13) - 0.0022 * gauss(t - 0.67, 0.07);
-    rx = 0.0438 + ledge + folds;
-    rz = 0.0368 + ledge + folds;
+    rx = 0.0384 + 0.004 * t + ledge + folds;
+    rz = 0.0318 + 0.004 * t + ledge + folds;
   } else {
     // sleeve to the elbow and up the upper arm
     const t = sstep(ROLL_END, 0.27, s);
-    rx = lerp(0.0498, 0.047, t) + 0.006 * sstep(0.3, 0.5, s);
-    rz = lerp(0.0425, 0.0435, t) + 0.006 * sstep(0.3, 0.5, s);
+    rx = lerp(0.0484, 0.047, t) + 0.006 * sstep(0.3, 0.5, s);
+    rz = lerp(0.0418, 0.0435, t) + 0.006 * sstep(0.3, 0.5, s);
   }
   out[0] = rx;
   out[1] = rz;
@@ -81,7 +83,7 @@ function displace(s, ang) {
     let a = ang - TAB_CENTRE;
     a -= Math.round(a / TAU) * TAU;
     const tab = 1 - sstep(0.13 * TAU, 0.15 * TAU, Math.abs(a));
-    return band * (0.0014 + 0.0022 * tab);
+    return band * (0.0007 + 0.0011 * tab);
   }
   if (s < SKIN_END) return 0;
   if (s < ROLL_END - 0.004) {
