@@ -111,6 +111,48 @@ Consequences and limits:
   is polynomial in `s` (the binomial factor `(1+x)^{s+1}` makes the target a
   polynomial in `s`), which was not attempted.
 
+## 4b. The degree relation and the first exact certificate at `r = 4`
+
+Replay: `python3 scripts/certify_leaf_lemma_r4.py --r 4 --s 1 --d 2`
+(report `reports/leaf_lemma_r4_certificates.json`, marker
+`PASS_EXACT_LEAF_LEMMA_R4_CONFIGURATIONS`; needs `python-flint` for the exact
+row reduction, about 10 minutes).
+
+If `w` has `d` neighbours in `F'`, every independent `k`-set of `F' - w` that
+meets `N(w)` contains one of them, and removing it leaves an independent
+`(k-1)`-set of `F' - w`; hence the **degree relation**
+
+```text
+gamma_k - delta_k <= d · gamma_{k-1}          (k >= 1),
+```
+
+a family of linear generators with `d = deg_{F'}(w)` as a parameter (the
+handoff's "marked occupation coordinates" in a different guise). Effects:
+
+| configuration | without degree relation | with degree relation |
+| --- | --- | --- |
+| `r = 3`, `s = 0`, any `d ∈ {1,2,3,6}` | degree 4 | degree 3 |
+| `r = 4`, `s = 0..2`, `d ∈ {1,2,3,6}` | infeasible (deg 3, 4) | infeasible at degree 3 |
+| `r = 4`, `s = 1`, `d = 2` | — | **degree 4: exact certificate** (`1,821` monomials, `478` multipliers, `114,481` candidate products; support `52 + 1,124`) |
+| `r = 4`, `s = 0`, `d = 2` | — | degree-4 LP hit the 15-minute limit |
+
+The `r = 4` certificate was only accepted after a first attempt failed
+exactly: the default-tolerance LP solution had a support whose unique exact
+solution contained 24 negative coefficients; re-solving with
+`primal/dual_feasibility_tolerance = 1e-10` produced a support with an exact
+non-negative rational solution, verified coefficient-by-coefficient and at
+random rational points. Floating feasibility alone proves nothing — the
+handoff's rule 2, observed here in practice.
+
+What this does and does not mean: `ISO_4` is **not** proved for all forests
+(that needs every `(s, d)`, the no-parent case, and uniformity in `s` and `d`).
+It does show that the inductive mechanism reaches `r = 4` once the
+second-neighbourhood information enters through the degree relation, which is
+precisely the direction the three independent obstruction analyses pointed
+to. The cost is steep (degree 4, `10^5` candidate products, minutes of exact
+linear algebra per configuration), so a proof for all `r` needs the
+certificates to be *understood* and written uniformly, not enumerated.
+
 ## 5. A cautionary example that the method caught
 
 A first version of this search used the recursion that deletes `v` instead of
