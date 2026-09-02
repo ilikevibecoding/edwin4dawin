@@ -16,10 +16,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import multiprocessing
 import os
 import time
 from array import array
-from multiprocessing import Pool
 from typing import Dict, List, Tuple
 
 from aggregate import Aggregate
@@ -125,10 +125,13 @@ def main() -> None:
     ap.add_argument("--chunk", type=int, default=4000)
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports"))
     ap.add_argument("--multi-only", action="store_true",
-                    help="only forests with >= 2 components (trees of order n are covered separately by fast/treecheck); "
+                    help="only forests with >= 2 components (trees of order n are covered separately by fast/wromcheck); "
                          "tree tables are then built only up to nmax-1")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
+    # Workers read the module-level packed tables, which requires fork semantics
+    # (Python >= 3.14 defaults to forkserver on Linux).
+    ctx = multiprocessing.get_context("fork")
 
     t0 = time.time()
     build_trees(args.nmax - 1 if args.multi_only else args.nmax)
@@ -137,7 +140,7 @@ def main() -> None:
 
     tcounts = free_tree_counts(args.nmax)
     summary = []
-    with Pool(args.procs) as pool:
+    with ctx.Pool(args.procs) as pool:
         for n in range(args.nmin, args.nmax + 1):
             t1 = time.time()
             agg = Aggregate(keep_coeffs=(n <= KEEP_COEFFS_UPTO))
@@ -156,7 +159,7 @@ def main() -> None:
             rep = resolve_all(agg.to_json(n))
             rep["forest_count_formula_A005195"] = fcounts[n]
             rep["tree_count_formula_A000055"] = tcounts[n] if n >= 1 else 0
-            rep["scope"] = "forests with >= 2 components only (trees of this order are checked by fast/treecheck)" if args.multi_only else "all forests"
+            rep["scope"] = "forests with >= 2 components only (trees of this order are checked by fast/wromcheck)" if args.multi_only else "all forests"
             rep["count_check"] = "PASS"
             rep["seconds"] = round(time.time() - t1, 2)
             fname = f"forests_multi_n{n:02d}.json" if args.multi_only else f"forests_n{n:02d}.json"

@@ -18,15 +18,40 @@ directory.
 
 ## Decreasing tail (used by the WR+ISO+TAIL route)
 
-- Levit & Mandrescu (2006): for a tree with independence number `alpha`,
-  `i_k >= i_{k+1}` for `k >= ceil((2 alpha - 1)/3)` (strictly decreasing from
-  there on).  Cited on the Valley Hunt page and in the forum thread; this is the
-  `L(alpha)` of the handoff.  **Verified here** on every forest `n <= 22`, every
-  multi-component forest `n = 23, 24`, and every tree `n <= 28` (`TAIL` check).
-- Basit & Galvin, *On the independent set sequence of a tree*, arXiv:2006.12562
-  (Electron. J. Combin. 2021): for a uniformly random labelled tree,
-  asymptotically almost surely the first ~49.5% of the sequence is increasing
-  and the last ~38.8% decreasing.
+- Levit & Mandrescu, *Very well-covered graphs and the unimodality conjecture*,
+  [arXiv:math/0406623](https://arxiv.org/abs/math/0406623) (2004; published as
+  *Partial unimodality for independence polynomials of König–Egerváry graphs*,
+  Congr. Numer. 179 (2006) 109–119).  Corollary 2.7/2.8 there: for every
+  bipartite graph (hence every forest) with independence number `alpha`,
+  `s_{ceil((2 alpha - 1)/3)} >= ... >= s_{alpha-1} >= s_alpha`.  Proof
+  mechanism: for a stable set `S` of size `k` in a quasi-regularizable graph on
+  `2 alpha` vertices, `|S| <= |N(S)|` gives `(k+1) s_{k+1} <= 2 (alpha - k) s_k`.
+  Tight for a perfect matching.  This is the `L(alpha)` of the handoff.
+  **Verified here** on every forest `n <= 22`, every multi-component forest
+  `n = 23, 24`, and every tree `n <= 28` (`TAIL` check).
+- Basit & Galvin, *On the independent set sequence of a tree*,
+  [arXiv:2006.12562](https://arxiv.org/abs/2006.12562) (Electron. J. Combin.
+  28(3) (2021) P3.23).  Theorem 1.3 generalises the tail to every graph:
+  `(i_k)` is weakly decreasing from `ell = ceil(alpha (n-1)/(alpha + n))`
+  (recovering `2 alpha/3` when `alpha >= n/2`).  Theorem 1.6: for a tree every
+  maximal independent set has size `>= ceil((n - alpha + 1)/2)`, so the sequence
+  is weakly increasing up to `ceil((n - alpha + 1)/4)`.  Theorems 1.4/1.7: for a
+  uniformly random labelled tree, a.a.s. increasing up to `0.280 n` (~49.5% of
+  the nonzero part) and decreasing from `0.347 n` (~38.8%).
+- Heilman, [arXiv:2006.04756](https://arxiv.org/abs/2006.04756): the first
+  ~46.8% of the sequence of a random tree is increasing with exponentially high
+  probability.
+- **Ordered log-concavity.**  Basit–Galvin define ordered log-concavity
+  `a_k^2 >= (1 + 1/k) a_{k-1} a_{k+1}` (Question 1.9: does every tree satisfy
+  it?  Claim 1.10: equivalent to the average extension count `e_k` being weakly
+  decreasing) and note that ultra log-concavity (Newton) fails already for
+  `K_{1,3}`; they report that Radcliffe verified ordered log-concavity for all
+  trees on `<= 25` vertices.  Ordered log-concavity is exactly the `NW_r` of this
+  directory.  **Finding here**: it fails for exactly one tree on 24 vertices
+  (`3,3,4`; see `STATUS_2026-09-02.md` §2.1, verified by four independent
+  computations) and for none with `n <= 23`; so Question 1.9 has a negative
+  answer at `n = 24`, and the cited `n <= 25` verification cannot be correct as
+  stated.
 
 ## Log-concavity is false for trees
 
@@ -95,20 +120,47 @@ still informative for the handoff route.
 
 ## Positive special families (for orientation)
 
-Paths and stars (trivial), centipedes (AMSE 1987), regular caterpillars
-(Galvin–Hilyard 2018), spiders (log-concave; Li–Xie–Zhuang 2025), double brooms,
-and families containing the Kadrawi–Levit examples (2026) are known to be
-unimodal (as listed on brettreynolds.ca/valley-hunt.html; not re-verified here).
-Claw-free graphs are real-rooted (Chudnovsky–Seymour), hence log-concave
-(Hamidoune 1990); trees are not claw-free and, as shown above, not real-rooted
-in general (the `n = 24` tree found here with a weakened-Newton failure has
-exactly 3 real roots out of 13).
+- Paths and stars (trivial); centipedes (Levit–Mandrescu; real-rooted, Zhu 2007);
+  well-covered spiders (Levit–Mandrescu 2003, arXiv:math/0211036);
+  `K_{1,k}`-concatenations (Wang–Zhu 2011); periodic path-attached trees and
+  pendant-edge saturation (Galvin–Hilyard, Australas. J. Combin. 70 (2018),
+  arXiv:1701.02204); non-regular caterpillars (Bahls–Ethridge–Szabo,
+  arXiv:1802.06298); Fibonacci trees and caterpillars real-rooted (Bencs,
+  Discrete Math. 341 (2018), arXiv:1703.05409).
+- Bendjeddou & Hardiman, Bull. LMS 57 (2025) 1305–1323
+  ([arXiv:2405.00511](https://arxiv.org/abs/2405.00511)): log-concavity for all
+  forests obtained by replacing every edge of an arbitrary forest by a
+  caterpillar of size 4 ("pre-Lorentzian" property).
+- Li, Li, Yang & Zhang ([arXiv:2501.04245](https://arxiv.org/abs/2501.04245),
+  2025): all spiders and all pineapple graphs have log-concave independence
+  polynomials (via chromatic symmetric functions).
+- G. M. X. Li ([arXiv:2603.03025](https://arxiv.org/abs/2603.03025), 2026):
+  the Kadrawi–Levit families `T_{3,m,n}` and `T*_{3,m,n}` are unimodal for all
+  `m, n >= 1` (so the known non-log-concave families are unimodal).
+- Hibi, Kara & Vien ([arXiv:2604.18824](https://arxiv.org/abs/2604.18824),
+  2026): trees with symmetric unimodal independence polynomials for every order
+  outside `{2,4,5,7,10}`; describes the conjecture as open as of April 2026.
+- Bautista-Ramos ([arXiv:2511.00334](https://arxiv.org/abs/2511.00334), 2025):
+  for each `m`, trees `TG_{m,t}` breaking log-concavity at `m` indices.
+- Claw-free graphs are real-rooted (Chudnovsky–Seymour 2007), hence log-concave
+  and unimodal (Hamidoune 1990); trees are not claw-free and not real-rooted in
+  general (`K_{1,3}`: `1 + 4x + 3x^2 + x^3`; the `n = 24` tree found here has
+  exactly 3 real roots out of 13).
+- Formalisation: google-deepmind/formal-conjectures PR #4192 states the
+  conjecture in Lean (statement only).
+
+(Family results not re-verified here unless stated.)
 
 ## Bottom line
 
-As of 2026-09-02 Erdős #993 is open for trees and for forests.  The strongest
-public partial results are the Levit–Mandrescu decreasing tail, the
-Basit–Galvin random-tree asymptotics, exhaustive unimodality of all trees with
-`n <= 32`, and the negative results showing that log-concavity (and, verified
-here, weakened Newton) are the wrong strengthening.  None of this closes Gate 5
+As of 2026-09-02 Erdős #993 is open for trees and for forests (erdosproblems.com:
+"FALSIFIABLE — Open", 0 proof claims; the most recent arXiv papers of March and
+April 2026 describe it as open; no retracted claims were found).  The strongest
+public partial results are the Levit–Mandrescu decreasing tail (generalised by
+Basit–Galvin to all graphs), the Basit–Galvin deterministic increasing prefix
+`ceil((n - alpha + 1)/4)` and random-tree asymptotics, exhaustive unimodality of
+all trees with `n <= 26` (refereed), `n <= 29` (preprint) and `n <= 32`
+(unrefereed GitHub record), and the negative results showing that
+log-concavity (from `n = 26`) and ordered log-concavity / weakened Newton (from
+`n = 24`, found here) are the wrong strengthenings.  None of this closes Gate 5
 or Gate 6 of the handoff programme.

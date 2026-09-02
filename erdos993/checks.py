@@ -95,7 +95,7 @@ def analyze(p: Sequence[int]) -> SeqReport:
             wr_max_R = r
         else:
             break
-    wr_prefix_ok = wr_max_R >= L - 1 or L - 1 < 2
+    wr_prefix_ok = all(p[r - 1] <= r * p[r] for r in range(2, min(L - 1, alpha) + 1))
     # tail
     tail_ok = all(p[r] >= p[r + 1] for r in range(max(L, 0), alpha))
     return SeqReport(

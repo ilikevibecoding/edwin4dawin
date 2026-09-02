@@ -1,31 +1,35 @@
 {
  "README.md": {
-  "bytes": 5328,
-  "sha256": "cd98a90f6d5c4a1951422eeb9e1658a6b46f789a45c9f8a1dcfaf72b868668ea"
+  "bytes": 5883,
+  "sha256": "da21af0ab062b57be12eef93f2cb46971bf4cc0294b1c76daa91ce6999a1321d"
  },
  "aggregate.py": {
   "bytes": 7760,
   "sha256": "4598a662e07fa0bc968f746aec0d95c962a3595918ca71838b35553c9908f8de"
  },
+ "certify_distinct.py": {
+  "bytes": 2455,
+  "sha256": "7eca43ab9314bbe2743c584e919dd846c3247851afaaa56a593cc19e0afaaf07"
+ },
  "checks.py": {
-  "bytes": 4478,
-  "sha256": "9273a72dd09dad96e6c23eb34b5607d0ec6493a4f719f42fbc539162aa8cae8e"
+  "bytes": 4514,
+  "sha256": "b7577bfe1dbcefa1f06fd0ff738c1a2eb77e0acb71b31520a4cce77cedaa4eeb"
  },
  "counts.py": {
   "bytes": 2212,
   "sha256": "adffd1ec1683c805c59da655d167669562a75b8d38bc0f9d6280e6b53c639c66"
  },
  "crosscheck_independent.py": {
-  "bytes": 3072,
-  "sha256": "09c76fbe5b5d3689698e9f13a3481ecc3c6353b2d195797848b0d094bf3fff29"
+  "bytes": 3123,
+  "sha256": "d33ee288744ec9c7cd6334de62f567906841228c096af7132f444048f7f4cb2a"
  },
  "docs/LITERATURE_REFRESH_2026-09-02.md": {
-  "bytes": 6690,
-  "sha256": "aef0ca271c0265601822906aa7183891e4d54b083f2df0214afcd6d8ed570882"
+  "bytes": 10326,
+  "sha256": "46a549c78cebab16a333cb882a4776756b8a78dbdaffa836c5eac973da97207a"
  },
  "docs/STATUS_2026-09-02.md": {
-  "bytes": 11368,
-  "sha256": "7fd8d5247d3bc2d850df226018516f743e8f53da761b73b6a4aa4a8ea6596ce5"
+  "bytes": 14209,
+  "sha256": "538b8f163bc97947f870fc188e7bf684999f293f1688ce977bddaefa66a4c286"
  },
  "extremal_families.py": {
   "bytes": 3731,
@@ -140,8 +144,8 @@
   "sha256": "8b292abdfe76beb8b1ef02baa44e7a88a2bef611b3f73d1e8235c1382f212546"
  },
  "iso2_theorem.py": {
-  "bytes": 4057,
-  "sha256": "6d055ba52ac8596cc89c5ba4c4e626745b82ba5f5cb4ff12ca1ca802096fc4ae"
+  "bytes": 4299,
+  "sha256": "8899bd4ddc6982e41bbddcacb2adcd1e6a1638d2e83ee2976fa661a496c8b16f"
  },
  "known_counterexamples.py": {
   "bytes": 5178,
@@ -271,6 +275,10 @@
   "bytes": 7984,
   "sha256": "ce5477dabeaa77b6dd4cf5fd79a229a70e1118a3d664817738fa3258f3daf905"
  },
+ "reports/tree_distinctness_certificate.json": {
+  "bytes": 5469,
+  "sha256": "f32609e69747b8030becc4f9ef47b9a730c42e2ef1e5c8ed16140263bff38608"
+ },
  "reports/trees_c_n23_n25.jsonl": {
   "bytes": 22940,
   "sha256": "affb0352ab79845f09624fc3c4e6d740a0b033800236edad7e80b9c7be16b745"
@@ -376,8 +384,8 @@
   "sha256": "81e8f5c13fc71491283a78fd932e39759f57cb1b65d557f25c952ba69dbfaa55"
  },
  "run_forests.py": {
-  "bytes": 8081,
-  "sha256": "83ff9ab9b4bd0aebc97a9487198a6863e0203e567df72377d6a5a21027e1d85c"
+  "bytes": 8258,
+  "sha256": "2c150bfa0149477d148dde9af083b0bc02517fd2b3c581a08fc39d6ed9833913"
  },
  "selftest.py": {
   "bytes": 4258,

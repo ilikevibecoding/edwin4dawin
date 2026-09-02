@@ -26,11 +26,13 @@ For every non-isomorphic forest `F` on `n <= 22` vertices (and, via
 | `WR_r` | `p_{r-1} <= r p_r` | weak prefix ratio (needed for `2 <= r <= L-1`) |
 | `TAIL` | `p_r >= p_{r+1}` for `L <= r <= alpha-1` | known decreasing-tail theorem |
 
-`lemma_check.py` verifies symbolically that `WR_r`, `ISO_r` and `p_{r-1} >= p_r`
-imply `p_r >= p_{r+1}` (identity `r b^2 + a^2 - (r+1) a b = (r b - a)(b - a)`) and
-that `TAIL` plus `WR_r`, `ISO_r` on the prefix `2 <= r <= L-1` imply unimodality.
-Hence the *only* open ingredient of the `WR+ISO+TAIL` route is `ISO_r` (and `WR_r`)
-for all forests on the prefix.
+`lemma_check.py` verifies the identity `r b^2 + a^2 - (r+1) a b = (r b - a)(b - a)`
+symbolically; from it, `WR_r`, `ISO_r` and `p_{r-1} >= p_r` imply `p_r >= p_{r+1}`
+(two-line proof in the docstring, plus an exhaustive integer-grid check), and
+`TAIL` plus `WR_r`, `ISO_r` on the prefix `2 <= r <= L-1` imply unimodality
+(prose proof, plus brute force on small sequences).  Hence the *only* open
+ingredient of the `WR+ISO+TAIL` route is `ISO_r` (and `WR_r`) for all forests on
+the prefix.
 
 ## Files
 
@@ -47,6 +49,7 @@ for all forests on the prefix.
 | `extremal_families.py` | exact ISO ratios along the extremal families (stars, stars+isolates, double brooms, empty forest) |
 | `known_counterexamples.py` | Kadrawi–Levit and Galvin non-log-concave tree families versus `ISO`/`WR`/`TAIL` |
 | `selftest.py` | cross-validation of the two generators, DP vs brute force, count formulas |
+| `certify_distinct.py` | certifies pairwise-distinct canonical forms + Otter count for the WROM enumeration up to `n = 22` |
 | `crosscheck_independent.py` | compares the reports with the brute-force replay in `independent/` |
 | `manifest.py` | SHA256 manifest of all sources and reports |
 | `fast/` | C verifier for trees at larger `n` (WROM enumeration, `__int128` arithmetic) + cross-check vs Python |
@@ -62,8 +65,10 @@ for all forests on the prefix.
 - Log-concavity fails for exactly 2 trees at `n = 26`, none at `n = 27`, 19 at
   `n = 28`, and none at `n <= 25` (matching Kadrawi–Levit–Yosef–Mizrachi and the
   public record).
-- Weakened Newton `NW_r` fails first at `n = 24` (1 tree), so it is not a valid
-  universal strengthening; all failures found are in the tail.
+- Weakened Newton `NW_r` (= Basit–Galvin's *ordered log-concavity*, their
+  Question 1.9) fails first at `n = 24` (exactly 1 tree, `3,3,4`, which is still
+  log-concave), so it is not a valid universal strengthening; all failures found
+  are in the tail.
 - `ISO_2` is proved for all forests; the descent lemma and the assembly are
   verified symbolically.  The conjecture itself remains open.
 
@@ -72,6 +77,7 @@ for all forests on the prefix.
 ```bash
 cd erdos993
 python3 selftest.py 14 10            # generators / DP / counts cross-checks
+python3 certify_distinct.py 22       # PASS_TREE_ENUMERATION_DISTINCT_AND_COMPLETE
 python3 lemma_check.py               # descent lemma and assembly (sympy)
 python3 iso2_theorem.py              # ISO_2 for all forests (sympy identities + n<=11 replay)
 python3 run_forests.py 22            # all forests and trees on n <= 22 (~10 min, 4 cores)
@@ -84,4 +90,5 @@ python3 known_counterexamples.py     # ISO on the known non-log-concave families
 python3 manifest.py                  # hashes of sources and reports
 ```
 
-Only `sympy` (for `lemma_check.py`) is required beyond the standard library.
+`sympy` is required for `lemma_check.py` and `iso2_theorem.py`; `networkx` only for
+`independent/bruteforce_forests.py`.  Everything else is standard library (Python 3.12) and C11.

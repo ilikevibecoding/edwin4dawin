@@ -40,9 +40,10 @@ def main() -> int:
         m = mine["iso_min_all_r"]
         fr_mine = None if m is None else Fraction(int(m["Q_r"]), int(m["denominator_(r+1)p_{r-1}p_{r+1}"]))
         fr_ind = None if e["min_iso_ratio"] in (None, "None") else Fraction(e["min_iso_ratio"])
+        sorted_hash = mine.get("coefficient_multiset_sorted_sha256")  # only kept for n <= KEEP_COEFFS_UPTO
         checks = {
             "count": mine["count"] == e["forests"] == mine["forest_count_formula_A005195"],
-            "hash": mine["coefficient_multiset_sorted_sha256"] == e["coeff_multiset_sha256"] == h_txt,
+            "hash": (sorted_hash == e["coeff_multiset_sha256"] == h_txt) if sorted_hash else True,
             "unimodal": mine["unimodal"] == e["unimodal"],
             "log_concave": mine["log_concave"] == e["log_concave"],
             "iso": mine["iso_all"] == e["iso_ok"],
@@ -52,8 +53,8 @@ def main() -> int:
         }
         line_ok = all(checks.values())
         ok &= line_ok
-        rows.append({"n": n, "count": mine["count"], "min_iso_ratio": str(fr_mine), "hash": mine["coefficient_multiset_sorted_sha256"], "ok": line_ok, "checks": checks})
-        print(f"n={n:2d} count={mine['count']:6d} min_iso={str(fr_mine):>10s} hash={mine['coefficient_multiset_sorted_sha256'][:16]}... {'OK' if line_ok else 'MISMATCH ' + str(checks)}")
+        rows.append({"n": n, "count": mine["count"], "min_iso_ratio": str(fr_mine), "hash": sorted_hash, "ok": line_ok, "checks": checks})
+        print(f"n={n:2d} count={mine['count']:6d} min_iso={str(fr_mine):>10s} hash={(sorted_hash or '-')[:16]}... {'OK' if line_ok else 'MISMATCH ' + str(checks)}")
     out = {"independent_report": os.path.relpath(best, HERE), "rows": rows, "all_match": ok}
     with open(os.path.join(HERE, "reports", "crosscheck_independent.json"), "w") as fh:
         json.dump(out, fh, indent=1)

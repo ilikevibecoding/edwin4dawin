@@ -80,9 +80,14 @@ def verify_counting_formulas(nmax: int = 11) -> None:
                     for rest in forests(remaining - k * s, s - 1):
                         yield [(s, i) for i in combo] + rest
 
+    from counts import forest_counts
+
+    fcounts = forest_counts(nmax)
     checked = 0
     for n in range(1, nmax + 1):
+        per_n = 0
         for fo in forests(n, n):
+            per_n += 1
             poly = [1]
             m = 0
             P2 = 0
@@ -98,7 +103,8 @@ def verify_counting_formulas(nmax: int = 11) -> None:
             assert P2 <= comb(m, 2)
             assert 2 * p[2] ** 2 + p[1] ** 2 - 3 * p[1] * p[3] >= 0
             checked += 1
-    print(f"counting formulas for p_2, p_3 and P_2 <= C(m,2) verified on {checked} forests (n <= {nmax}); ISO_2 >= 0 on all")
+        assert per_n == fcounts[n], f"forest enumeration incomplete at n={n}: {per_n} vs A005195 {fcounts[n]}"
+    print(f"counting formulas for p_2, p_3 and P_2 <= C(m,2) verified on {checked} forests (n <= {nmax}, counts = A005195); ISO_2 >= 0 on all")
 
 
 if __name__ == "__main__":
