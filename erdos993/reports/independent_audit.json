@@ -29,21 +29,21 @@
     "count_formula": 20514,
     "count_match": true,
     "oeis_A005195": 20514,
-    "seconds": 0.009
+    "seconds": 0.008
    },
    "16": {
     "count": 49905,
     "count_formula": 49905,
     "count_match": true,
     "oeis_A005195": 49905,
-    "seconds": 0.021
+    "seconds": 0.02
    },
    "17": {
     "count": 122963,
     "count_formula": 122963,
     "count_match": true,
     "oeis_A005195": 122963,
-    "seconds": 0.065
+    "seconds": 0.049
    }
   },
   "trees": {
@@ -54,7 +54,7 @@
     "oeis_A000081": 87811,
     "rooted_count": 87811,
     "rooted_count_match": true,
-    "seconds": 0.337
+    "seconds": 0.326
    },
    "16": {
     "count": 19320,
@@ -63,7 +63,7 @@
     "oeis_A000081": 235381,
     "rooted_count": 235381,
     "rooted_count_match": true,
-    "seconds": 0.978
+    "seconds": 0.884
    },
    "17": {
     "count": 48629,
@@ -72,7 +72,7 @@
     "oeis_A000081": 634847,
     "rooted_count": 634847,
     "rooted_count_match": true,
-    "seconds": 3.177
+    "seconds": 2.45
    },
    "18": {
     "count": 123867,
@@ -81,7 +81,7 @@
     "oeis_A000081": 1721159,
     "rooted_count": 1721159,
     "rooted_count_match": true,
-    "seconds": 8.663
+    "seconds": 6.683
    }
   }
  },
@@ -1809,7 +1809,7 @@
   "erdos993lib/checks.py": "1216A5A71D1001FABF00ED692755B911BA3CDC74B9098B8415575435B8A7E07F",
   "erdos993lib/families.py": "A70FDE7D154E9BBB9C01547E0262EE7EA7D6F4631705996531D79D20DC2A906A",
   "erdos993lib/indpoly.py": "DA1BCD10D96B1C9F2CCC95C76D495438B919ED7EB0950B5592DBC4A51E2A40EC",
-  "erdos993lib/report.py": "1D86AF638F29F71264222C5181FBB7C5D0F285AEBDB4D63EC23AC567D7D06EE2",
+  "erdos993lib/report.py": "5897E051A1D51452DE533B1A06A97432305DC6EAEAFCAE7856D4F0937012A480",
   "erdos993lib/scan.py": "ACCC09EF79AD9B4F803DC3A3BD0D1B4E114CE8424B145FEB3B699D6FB68A936C",
   "erdos993lib/trees.py": "C0EEC237C6E601EB7BA44CD1497475230E2BDE897A2DFF27CEE9FFE19C8F4542"
  },
@@ -2619,7 +2619,7 @@
    "oeis_A005195": 153,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.028,
+   "seconds": 0.027,
    "shape": {
     "count": 153,
     "iso_prefix_failures": 0,
@@ -2801,7 +2801,7 @@
    "oeis_A005195": 1601,
    "per_graph_polynomials_match_library": true,
    "polynomial_multiset_matches_library": true,
-   "seconds": 0.398,
+   "seconds": 0.397,
    "shape": {
     "count": 1601,
     "iso_prefix_failures": 0,
@@ -3502,7 +3502,7 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 4766,
    "rooted_count_match": true,
-   "seconds": 0.169,
+   "seconds": 0.168,
    "shape": {
     "count": 551,
     "iso_prefix_failures": 0,
@@ -3584,7 +3584,7 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 12486,
    "rooted_count_match": true,
-   "seconds": 0.39,
+   "seconds": 0.381,
    "shape": {
     "count": 1301,
     "iso_prefix_failures": 0,
@@ -3669,7 +3669,7 @@
    "polynomial_multiset_matches_library": true,
    "rooted_count": 32973,
    "rooted_count_match": true,
-   "seconds": 1.049,
+   "seconds": 1.043,
    "shape": {
     "count": 3159,
     "iso_prefix_failures": 0,
@@ -3749,11 +3749,11 @@
   }
  },
  "provenance": {
+  "date_note": "no timestamp by design; see git history for dates",
   "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
   "python": "3.12.3",
   "script": "audit_independent.py",
-  "script_sha256": "A7FD5D359716B93D506373DC27E783DB20F5374240E285F38661DC0F77C31001",
-  "utc": "2026-09-02T06:14:19+00:00"
+  "script_sha256": "A7FD5D359716B93D506373DC27E783DB20F5374240E285F38661DC0F77C31001"
  },
  "scope": {
   "family_max_order": 40,
@@ -3774,7 +3774,7 @@
    14
   ]
  },
- "seconds_total": 15.76,
+ "seconds_total": 12.86,
  "title": "Independent replay audit of the Erd\u0151s #993 core (deletion recursion + Beyer-Hedetniemi + rewritten checks vs erdos993lib)",
  "verdict_keys_compared": [
   "alpha",
