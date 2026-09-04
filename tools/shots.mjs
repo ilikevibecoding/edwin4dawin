@@ -67,7 +67,9 @@ async function main() {
   // Against the dev server, another agent saving a file reloads the page through
   // HMR mid-capture, and the run dies on debugAPI being undefined. Stubbing the
   // client out makes a capture a snapshot of the code as it was when it booted.
-  await page.route('**/@vite/client', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: '' }));
+  // The stub has to keep the env module: with an empty body the dev server's
+  // `define`s never arrive and the build stamp in the HUD throws.
+  await page.route('**/@vite/client', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: "import '/@vite/env';" }));
 
   log(`loading ${url} at ${width}x${height}`);
   const t0 = Date.now();

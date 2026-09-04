@@ -44,7 +44,7 @@ page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text());
 });
-await page.route('**/@vite/client', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: '' }));
+await page.route('**/@vite/client', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: "import '/@vite/env';" }));
 
 const tNav = Date.now();
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
