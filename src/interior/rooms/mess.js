@@ -10,6 +10,61 @@ import { rng } from "../../kit.js";
 import { decalRect, GRATE_TILE } from "../../textures.js";
 import { ensureCrewMaterials, SIGN, signRect, wallSign, messTable, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, valveWheel, gauge, intercom, stool, wallShelf } from "./crewProps.js";
 
+/** Round pedestal table (light plate top, black rim) with four stools. */
+function roundTable(kit, ctx, { x, z, seed }) {
+  const rand = rng(seed);
+  const h = 0.76;
+  kit.cyl("paintedMetal", x, h - 0.03, z, 0.66, 0.06, "y", { color: PALETTE.impBlack, segments: 24, texel: 2 });
+  kit.cyl("impPanel1", x, h + 0.008, z, 0.6, 0.016, "y", { color: PALETTE.impLight, segments: 24, uv: "scale", uvScale: [1, 1] });
+  kit.cyl("metal", x, (h - 0.06) / 2, z, 0.07, h - 0.06, "y", { color: PALETTE.impMid, segments: 12 });
+  kit.cyl("paintedMetal", x, 0.03, z, 0.42, 0.06, "y", { color: PALETTE.impBlack, segments: 20, texel: 2 });
+  kit.collider([x - 0.66, 0, z - 0.66], [x + 0.66, h + 0.02, z + 0.66], "table");
+  const a0 = rand() * Math.PI;
+  for (let k = 0; k < 4; k++) {
+    const a = a0 + (k * Math.PI) / 2 + (rand() - 0.5) * 0.25;
+    stool(kit, x + Math.cos(a) * 1.02, z + Math.sin(a) * 1.02);
+  }
+  // a couple of cups and a tray
+  kit.cyl("metal", x + 0.25, h + 0.06, z - 0.1, 0.04, 0.1, "y", { color: PALETTE.steel, segments: 8 });
+  if (rand() < 0.7) kit.cyl("paintedMetal", x - 0.2, h + 0.06, z + 0.22, 0.04, 0.1, "y", { color: PALETTE.impRed, segments: 8, texel: 3 });
+  if (rand() < 0.6) kit.box("paintedMetal", x - 0.1, h + 0.03, z - 0.25, 0.42, 0.03, 0.3, { color: PALETTE.impMid, texel: 3 });
+}
+
+/** Tray trolley: open steel cart on castors with three shelves of ration trays. */
+function trayTrolley(kit, x, z, yaw, seed) {
+  const rand = rng(seed);
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+    const p = new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, 0, z));
+    kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: q, ...extra });
+  };
+  const w = 0.9;
+  const d = 0.6;
+  const cylAlong = (r, len, axis) => {
+    const g = new THREE.CylinderGeometry(r, r, len, 8);
+    if (axis === "x") g.rotateZ(Math.PI / 2);
+    else if (axis === "z") g.rotateX(Math.PI / 2);
+    return g;
+  };
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    add("metal", cylAlong(0.014, 1.0, "y"), sx * (w / 2 - 0.03), 0.6, sz * (d / 2 - 0.03), { color: PALETTE.steel });
+    add("rubber", cylAlong(0.05, 0.03, "x"), sx * (w / 2 - 0.05), 0.05, sz * (d / 2 - 0.05), { color: PALETTE.rubber });
+  }
+  for (let k = 0; k < 3; k++) {
+    const y = 0.12 + k * 0.42;
+    add("metal", new THREE.BoxGeometry(w, 0.02, d), 0, y, 0, { color: PALETTE.gunmetal, texel: 1 });
+    const n = 2 + Math.floor(rand() * 4);
+    for (let t = 0; t < n; t++) add("paintedMetal", new THREE.BoxGeometry(0.42, 0.02, 0.3), -w / 2 + 0.28 + (t % 2) * 0.44 + (rand() - 0.5) * 0.04, y + 0.02 + Math.floor(t / 2) * 0.025, (rand() - 0.5) * 0.14, { color: t % 2 ? PALETTE.impMid : PALETTE.impGrey, texel: 3 });
+  }
+  add("metal", cylAlong(0.016, w - 0.1, "x"), 0, 1.1, -d / 2 - 0.05, { color: PALETTE.steel });
+  for (const sx of [-1, 1]) add("metal", cylAlong(0.014, 0.12, "z"), sx * (w / 2 - 0.08), 1.1, -d / 2 + 0.02, { color: PALETTE.steel });
+  const c = Math.abs(Math.cos(yaw));
+  const s = Math.abs(Math.sin(yaw));
+  const ex = (w * c + d * s) / 2 + 0.05;
+  const ez = (w * s + d * c) / 2 + 0.05;
+  kit.collider([x - ex, 0, z - ez], [x + ex, 1.15, z + ez], "trolley");
+}
+
 export function buildMess(kit, ctx) {
   ensureCrewMaterials(ctx);
   const [min, max] = ctx.bounds; // x 2.9..30, y 0..4, z -30..-8
@@ -18,7 +73,8 @@ export function buildMess(kit, ctx) {
   const cols0 = [7.6, 12.6, 17.6];
 
   roomShell(kit, ctx, {
-    ceiling: { lights: false, spacing: 100, along: "x" },
+    // no white ceiling strips: the warm square fixtures own the light hierarchy
+    ceiling: { lights: false, strips: false, along: "x" },
     walls: { rows: [0, 0.5, 1.6, 2.7, H], styles: { panel: 0.66, vent: 0.1, greeble: 0.1, strip: 0.06, screen: 0.04, conduit: 0.04 } },
     wall: {
       xmax: { styles: { panel: 0.55, vent: 0.2, greeble: 0.15, conduit: 0.1 } },
@@ -45,18 +101,29 @@ export function buildMess(kit, ctx) {
   }
 
   // ------------------------------------------------------------------ dining tables
+  // near column (by the door) turned 90° so the first thing seen is bench ends, not a wall of
+  // identical slabs; two mid-column slots are round four-stool tables; bench fabric alternates by column
   const cols = cols0;
   const rows = [-28.3, -25.0, -21.7, -16.3, -13.0, -9.9];
   let ti = 0;
+  for (const z of [-27.4, -23.4, -14.7, -10.6]) {
+    ti++;
+    messTable(kit, ctx, { x: cols[0], z, yaw: Math.PI / 2, seed: ctx.seed * 3 + ti, props: ti % 3 !== 0, fabric: PALETTE.impMid });
+  }
   for (const z of rows) {
-    for (const x of cols) {
+    for (const x of cols.slice(1)) {
       ti++;
       // one slot left empty for the tray-return station
       if (x === 17.6 && z === -9.9) continue;
-      const yaw = ti % 5 === 0 ? 0.03 : ti % 7 === 0 ? -0.025 : 0;
-      messTable(kit, ctx, { x, z, yaw, seed: ctx.seed * 3 + ti, props: ti % 4 !== 0 });
+      if (x === 12.6 && (z === -25.0 || z === -13.0)) {
+        roundTable(kit, ctx, { x, z, seed: ctx.seed * 3 + ti });
+        continue;
+      }
+      messTable(kit, ctx, { x, z, seed: ctx.seed * 3 + ti, props: ti % 4 !== 0, fabric: x === 12.6 ? PALETTE.impDark : PALETTE.impMid });
     }
   }
+  // tray trolley parked at the side of the cross-aisle
+  trayTrolley(kit, 15.1, -20.1, 0.18, ctx.seed + 8);
   // tray-return station in the empty slot: cart with tray slots, waste bin, wall screen above
   {
     const x = 17.6;
@@ -143,6 +210,14 @@ export function buildMess(kit, ctx) {
     g.rotateY(-Math.PI / 2);
     kit.add("crew_signLit", g, { pos: [20.372, 3.25, z], uv: "keep", uvRect: signRect(SIGN.MENU) });
   }
+  // lit GALLEY sign riding on top of the soffit, centred on the aisle and facing the door
+  {
+    kit.box("paintedMetal", 20.5, 3.7, -19, 0.12, 0.5, 2.0, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("darkGloss", 20.44, 3.7, -19, 0.02, 0.42, 1.86);
+    const g = new THREE.PlaneGeometry(1.7, 0.425);
+    g.rotateY(-Math.PI / 2);
+    kit.add("crew_signLit", g, { pos: [20.425, 3.7, -19], uv: "keep", uvRect: signRect(SIGN.GALLEY) });
+  }
   kit.boxMM("paintedMetal", [21.3, 3.0, cz0 + 0.2], [21.7, 3.06, cz1 - 0.2], { color: PALETTE.impBlack, texel: 2 });
   kit.boxMM("emitWarmSoft", [21.38, 3.02, cz0 + 0.3], [21.62, 3.04, cz1 - 0.3], { uv: "keep" });
   for (let i = 0; i < 7; i++) {
@@ -186,7 +261,7 @@ export function buildMess(kit, ctx) {
     kit.boxMM("paintedMetal", [gx - 1.0, 2.0, z0 - 0.1], [gx - 0.02, 2.4, z1 + 0.1], { color: PALETTE.impDark, texel: 1.5 });
     kit.boxMM("metal", [gx - 0.98, 1.98, z0], [gx - 0.1, 2.0, z1], { color: PALETTE.gunmetal, texel: 1 });
     for (let s = 0; s < 6; s++) kit.box("metal", gx - 0.55, 1.99, z0 + 0.3 + s * ((z1 - z0 - 0.6) / 5), 0.8, 0.012, 0.03, { color: PALETTE.steel });
-    kit.box("emitWhiteSoft", gx - 0.5, 1.97, (z0 + z1) / 2, 0.5, 0.02, z1 - z0 - 0.8, { uv: "keep" });
+    kit.box("emitWhiteSoft", gx - 0.5, 1.95, (z0 + z1) / 2, 0.5, 0.06, z1 - z0 - 0.8, { uv: "keep" });
     kit.cyl("metal", gx - 0.5, (2.4 + H) / 2, (z0 + z1) / 2, 0.28, H - 2.4, "y", { color: PALETTE.impMid, segments: 16 });
     kit.collider([gx - d - 0.1, 0, z0 - 0.02], [gx, 1.0, z1 + 0.02], "range");
   };

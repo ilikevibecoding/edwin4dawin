@@ -25,11 +25,13 @@ export const SIGN = {
   POD1: 32, POD2: 33, POD3: 34, POD4: 35,
   POD5: 36, POD6: 37, EVAC_L: 38, MENU: 39,
   BAY5: 40, BAY6: 41, BAY7: 42, GUARD: 43,
+  BAY8: 44, BAY9: 45, BAY10: 46, BAY11: 47,
+  BAY12: 48, BAY13: 49, BAY14: 50, ROSTER: 51,
 };
-/** Sign cell for quarters bay `n` (1-based). */
-export const baySign = (n) => (n <= 4 ? SIGN.BAY1 + n - 1 : SIGN.BAY5 + Math.min(n - 5, 2));
+/** Sign cell for quarters bay `n` (1-based, 1..14). */
+export const baySign = (n) => (n <= 4 ? SIGN.BAY1 + n - 1 : n <= 7 ? SIGN.BAY5 + n - 5 : SIGN.BAY8 + Math.min(n - 8, 6));
 const SIGN_COLS = 4;
-const SIGN_ROWS = 11;
+const SIGN_ROWS = 13;
 const SIGN_TEXT = [
   "MESS HALL", "GALLEY", "RATIONS", "CREW QUARTERS",
   "BAY 1", "BAY 2", "BAY 3", "BAY 4",
@@ -42,6 +44,8 @@ const SIGN_TEXT = [
   "POD 1", "POD 2", "POD 3", "POD 4",
   "POD 5", "POD 6", "\u2190 EVAC", "MENU  CYCLE 04",
   "BAY 5", "BAY 6", "BAY 7", "GUARD STATION",
+  "BAY 8", "BAY 9", "BAY 10", "BAY 11",
+  "BAY 12", "BAY 13", "BAY 14", "DUTY ROSTER",
 ];
 // lit colours per cell family
 const LIT_COL = (i) => {
@@ -113,6 +117,16 @@ export function signRect(i) {
   const col = i % SIGN_COLS;
   const row = Math.floor(i / SIGN_COLS);
   return [col / SIGN_COLS, 1 - (row + 1) / SIGN_ROWS, (col + 1) / SIGN_COLS, 1 - row / SIGN_ROWS];
+}
+
+// numeral sheet: 4 x 2 square cells holding the digits 1..8
+const NUM_COLS = 4;
+/** uvRect for numeral `n` (1..8) on the crew_numeral sheet. */
+export function numeralRect(n) {
+  const i = Math.max(0, Math.min(7, n - 1));
+  const col = i % NUM_COLS;
+  const row = Math.floor(i / NUM_COLS);
+  return [col / NUM_COLS, 1 - (row + 1) / 2, (col + 1) / NUM_COLS, 1 - row / 2];
 }
 
 /** Register the crew-deck materials once (idempotent). */
@@ -208,6 +222,20 @@ export function ensureCrewMaterials(ctx) {
   });
   // matte white armour / medical plastics (vertex tinted)
   m.crew_white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.42, metalness: 0.05, vertexColors: true, envMapIntensity: 0.6 });
+  // frosted privacy glass (medbay screens): a real translucent pane so the beds read through it
+  m.crew_frost = new THREE.MeshPhysicalMaterial({
+    color: 0xe4e8ee,
+    roughness: 0.55,
+    metalness: 0,
+    transparent: true,
+    opacity: 0.45,
+    depthWrite: false,
+    envMapIntensity: 0.3,
+    side: THREE.DoubleSide,
+  });
+  // lounge ceiling glow bands: the warm diffuser held well below the star windows
+  m.crew_warmBand = m.emitWarmSoft.clone();
+  m.crew_warmBand.emissiveIntensity = 1.1;
   // pulsing amber beacon emitter (escape pod bay) and red alert domes (armoury), animated by the rooms
   m.crew_beacon = m.emitAmber.clone();
   m.crew_alert = m.emitRed.clone();
@@ -216,7 +244,89 @@ export function ensureCrewMaterials(ctx) {
   m.crew_cellField.map = m.forceField.map.clone();
   m.crew_cellField.map.needsUpdate = true;
   m.crew_cellField.opacity = 0.3;
-  m.crew_cellField.color = new THREE.Color("#ff4a3a");
+  // pure red-pink: the earlier #ff4a3a read orange under the block's red lights
+  m.crew_cellField.color = new THREE.Color("#ff3040");
+  // security mesh (armoury cage infill): a blended wire grid; at distance it settles into an even
+  // dark veil instead of the aliasing bars would give
+  {
+    const size = 256;
+    const c = makeCanvas(size, size);
+    const g = c.getContext("2d");
+    g.fillStyle = "#000";
+    g.fillRect(0, 0, size, size);
+    g.strokeStyle = "#fff";
+    g.lineWidth = 10;
+    const cells = 4;
+    const step = size / cells;
+    g.beginPath();
+    for (let i = 0; i <= cells; i++) {
+      g.moveTo(i * step, 0);
+      g.lineTo(i * step, size);
+      g.moveTo(0, i * step);
+      g.lineTo(size, i * step);
+    }
+    g.stroke();
+    // diagonal ties inside each cell
+    g.lineWidth = 5;
+    g.beginPath();
+    for (let i = 0; i < cells; i++) {
+      for (let j = 0; j < cells; j++) {
+        g.moveTo(i * step, j * step);
+        g.lineTo((i + 1) * step, (j + 1) * step);
+      }
+    }
+    g.stroke();
+    const tex = toTexture(c, { srgb: false, wrap: true });
+    tex.anisotropy = 4;
+    m.crew_mesh = new THREE.MeshStandardMaterial({
+      color: 0x3a3e45,
+      alphaMap: tex,
+      transparent: true,
+      opacity: 0.95,
+      depthWrite: false,
+      roughness: 0.7,
+      metalness: 0.3,
+      side: THREE.DoubleSide,
+      envMapIntensity: 0.3,
+    });
+  }
+  // numeral stencils 1..8 (white glyphs, tinted by the vertex colour so one material serves dark
+  // ink on light plates and light paint on dark drums)
+  {
+    const cw = 256;
+    const c = makeCanvas(cw * NUM_COLS, cw * 2);
+    const g = c.getContext("2d");
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.font = `bold ${Math.floor(cw * 0.78)}px "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace`;
+    g.fillStyle = "#ffffff";
+    for (let i = 0; i < 8; i++) g.fillText(String(i + 1), (i % NUM_COLS) * cw + cw / 2, Math.floor(i / NUM_COLS) * cw + cw / 2 + cw * 0.04);
+    const img = g.getImageData(0, 0, c.width, c.height);
+    const d = img.data;
+    for (let y = 0; y < c.height; y++) {
+      for (let x = 0; x < c.width; x++) {
+        const k = (y * c.width + x) * 4;
+        if (d[k + 3] === 0) continue;
+        const n = fbm(x / c.width, y / c.height, { octaves: 3, freq: 40, seed: 431 });
+        d[k + 3] *= Math.min(1, Math.max(0, (n - 0.24) * 4));
+      }
+    }
+    g.putImageData(img, 0, 0);
+    const tex = toTexture(c, { srgb: true, wrap: false });
+    tex.anisotropy = 8;
+    m.crew_numeral = new THREE.MeshStandardMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      roughness: 0.75,
+      metalness: 0,
+      vertexColors: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+      envMapIntensity: 0.3,
+    });
+  }
   // starfield "window" screens for the lounge
   {
     const w = 512;
@@ -397,7 +507,7 @@ export function ventGrille(frame, u, v, w, h, n = 0.02) {
 /**
  * Mess table 3.6 x 0.9 with two benches, long axis along X when yaw = 0. `props` adds trays / cups.
  */
-export function messTable(kit, ctx, { x, z, yaw = 0, len = 3.6, seed = 1, props = true }) {
+export function messTable(kit, ctx, { x, z, yaw = 0, len = 3.6, seed = 1, props = true, fabric = PALETTE.impMid }) {
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
   const local = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, 0, z));
   const add = (mat, geo, lx, ly, lz, extra = {}) => {
@@ -407,19 +517,19 @@ export function messTable(kit, ctx, { x, z, yaw = 0, len = 3.6, seed = 1, props 
   const rand = rng(seed);
   const w = 0.9;
   const h = 0.76;
-  // table top: dark gloss slab over a grey panel core, black pedestal legs
-  add("impPanel1", new THREE.BoxGeometry(len, 0.05, w), 0, h - 0.025, 0, { color: PALETTE.impLight, uv: "keep" });
-  add("darkGloss", new THREE.BoxGeometry(len - 0.08, 0.012, w - 0.08), 0, h + 0.006, 0);
-  add("paintedMetal", new THREE.BoxGeometry(len + 0.02, 0.06, w + 0.02), 0, h - 0.08, 0, { color: PALETTE.impBlack, texel: 2 });
+  // table top: light plate slab in a black edge band, black pedestal legs. The light top is what
+  // separates the tables from the dark deck; the earlier gloss-black tops vanished into it.
+  add("paintedMetal", new THREE.BoxGeometry(len + 0.02, 0.07, w + 0.02), 0, h - 0.035, 0, { color: PALETTE.impBlack, texel: 2 });
+  add("impPanel1", new THREE.BoxGeometry(len - 0.1, 0.02, w - 0.1), 0, h + 0.005, 0, { color: PALETTE.impLight, uv: "keep" });
   for (const s of [-1, 1]) {
     add("paintedMetal", new THREE.BoxGeometry(0.12, h - 0.12, 0.5), s * (len / 2 - 0.4), (h - 0.12) / 2, 0, { color: PALETTE.impDark, texel: 2 });
     add("paintedMetal", new THREE.BoxGeometry(0.4, 0.06, 0.8), s * (len / 2 - 0.4), 0.03, 0, { color: PALETTE.impBlack, texel: 2 });
   }
-  // benches: rubber pad on a grey box, black legs
+  // benches: fabric pad on a grey box, black legs
   for (const s of [-1, 1]) {
     const bz = s * (w / 2 + 0.42);
     add("paintedMetal", new THREE.BoxGeometry(len - 0.3, 0.06, 0.36), 0, 0.42, bz, { color: PALETTE.impDark, texel: 2 });
-    add("rubber", new THREE.BoxGeometry(len - 0.34, 0.05, 0.32), 0, 0.475, bz, { color: PALETTE.rubber });
+    add("fabric", new THREE.BoxGeometry(len - 0.34, 0.06, 0.32), 0, 0.48, bz, { color: fabric, texel: 2 });
     for (const e of [-1, 1]) add("paintedMetal", new THREE.BoxGeometry(0.08, 0.4, 0.3), e * (len / 2 - 0.5), 0.2, bz, { color: PALETTE.impBlack, texel: 2 });
     add("paintedMetal", new THREE.BoxGeometry(len - 1.1, 0.04, 0.05), 0, 0.12, bz, { color: PALETTE.impMid, texel: 2 });
   }

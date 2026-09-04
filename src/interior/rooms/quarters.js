@@ -17,8 +17,9 @@ const BUNK_L = 2.0;
 /**
  * Triple bunk stack. Footprint x0..x0+0.9, z0..z0+2.0. `open` = +1: the open (alcove) side faces +x.
  * `aisleEnd` = "zmax" | "zmin": which short end faces the aisle (gets the privacy panel + ladder).
+ * `roster`: the privacy panel carries a stencilled duty-roster sheet; `towel`: a towel hangs on the ladder.
  */
-function bunkStack(kit, ctx, { x0, z0, open, aisleEnd, seed, bay, privacy = true }) {
+function bunkStack(kit, ctx, { x0, z0, open, aisleEnd, seed, roster = false, privacy = true, towel = false }) {
   const rand = rng(seed);
   const x1 = x0 + BUNK_W;
   const z1 = z0 + BUNK_L;
@@ -78,16 +79,31 @@ function bunkStack(kit, ctx, { x0, z0, open, aisleEnd, seed, bay, privacy = true
   const lx = open > 0 ? x1 + 0.05 : x0 - 0.05;
   for (const dz of [-0.14, 0.14]) kit.cyl("metal", lx, 1.15, lz + dz, 0.014, 2.2, "y", { color: PALETTE.steel, segments: 6 });
   for (let k = 0; k < 7; k++) kit.cyl("metal", lx, 0.3 + k * 0.3, lz, 0.012, 0.3, "z", { color: PALETTE.steel, segments: 6 });
-  // privacy panel at the aisle end: grey panel with a bay stencil, black frame
+  if (towel) {
+    // towel folded over the second-from-top rung, hanging down the aisle face of the ladder
+    const tCol = rand() < 0.6 ? PALETTE.impWhite : PALETTE.impMid;
+    kit.box("fabric", lx, 1.45, lz, 0.05, 0.62, 0.24, { color: tCol, uv: "world", texel: 3 });
+    kit.box("fabric", lx, 1.77, lz, 0.07, 0.04, 0.26, { color: tCol, uv: "world", texel: 3 });
+  }
+  // privacy panel at the aisle end: grey panel, black frame, and for the roster stacks a stencilled
+  // duty sheet (ink, not lit: the lit bay numbers live on the lintels)
   if (privacy) {
     const pz = aisleEnd === "zmax" ? z1 + 0.02 : z0 - 0.02;
     kit.box("impPanel", xc, H / 2, pz, BUNK_W + 0.06, H, 0.04, { color: PALETTE.impGrey, uv: "keep" });
     kit.box("paintedMetal", xc, H / 2, pz, BUNK_W + 0.1, 0.06, 0.06, { color: PALETTE.impBlack, texel: 2 });
     kit.box("paintedMetal", xc, 0.08, pz, BUNK_W + 0.1, 0.16, 0.06, { color: PALETTE.impBlack, texel: 2 });
-    if (bay !== undefined) {
+    if (roster) {
       const g = new THREE.PlaneGeometry(0.7, 0.175);
       g.rotateY(aisleEnd === "zmax" ? 0 : Math.PI);
-      kit.add("crew_signLit", g, { pos: [xc, 2.25, pz + (aisleEnd === "zmax" ? 0.025 : -0.025)], uv: "keep", uvRect: signRect(baySign(bay)) });
+      kit.add("crew_sign", g, { pos: [xc, 2.2, pz + (aisleEnd === "zmax" ? 0.025 : -0.025)], uv: "keep", uvRect: signRect(SIGN.ROSTER) });
+      // the roster sheet itself: a light plate with dark text rows
+      const sy = 1.55;
+      kit.box("impPanel1", xc, sy, pz + (aisleEnd === "zmax" ? 0.025 : -0.025), 0.5, 0.7, 0.01, { color: PALETTE.impWhite, uv: "keep" });
+      for (let k = 0; k < 7; k++) kit.box("paintedMetal", xc - 0.04, sy + 0.26 - k * 0.085, pz + (aisleEnd === "zmax" ? 0.032 : -0.032), 0.3 + (k % 3) * 0.04, 0.02, 0.004, { color: PALETTE.impDark, texel: 3 });
+      const d = new THREE.PlaneGeometry(0.3, 0.3);
+      d.rotateY(aisleEnd === "zmax" ? 0 : Math.PI);
+      kit.add("decal", d, { pos: [xc, 0.75, pz + (aisleEnd === "zmax" ? 0.022 : -0.022)], uv: "keep", uvRect: decalRect(seed % 2 ? 9 : 6) });
+    } else if (rand() < 0.5) {
       const d = new THREE.PlaneGeometry(0.3, 0.3);
       d.rotateY(aisleEnd === "zmax" ? 0 : Math.PI);
       kit.add("decal", d, { pos: [xc, 1.3, pz + (aisleEnd === "zmax" ? 0.022 : -0.022)], uv: "keep", uvRect: decalRect(seed % 2 ? 9 : 6) });
@@ -148,21 +164,24 @@ export function buildQuarters(kit, ctx) {
     });
     const L = max[0] - min[0] - 1.2;
     kit.box("paintedMetal", (min[0] + max[0]) / 2, H - 0.06, aisleZ, L + 0.2, 0.1, 0.42, { color: PALETTE.impDark, texel: 2 });
-    kit.box("emitBlue", (min[0] + max[0]) / 2, H - 0.1, aisleZ, L, 0.03, 0.07, { uv: "keep" });
+    kit.box("emitBlueDim", (min[0] + max[0]) / 2, H - 0.1, aisleZ, L, 0.03, 0.07, { uv: "keep" });
   }
 
-  // ------------------------------------------------------------------ lights (6): blue night + amber bays + wash
-  for (const x of [-8.5, -18.5, -28.5]) ctx.light(pointLight(0x3d6fe8, 9, 17, [x, H - 0.5, aisleZ]));
-  ctx.light(pointLight(0xffb060, 3.2, 6, [-7.85, 1.8, -21.4]));
-  ctx.light(pointLight(0xffb060, 3.2, 6, [-11.45, 1.8, -16.6]));
+  // ------------------------------------------------------------------ lights (6): 2 blue night + 3 amber bays + 1 wash
+  // the night blue is a greyed, low-intensity pair (the earlier three saturated lights turned the
+  // aisle into a cyan runway); the amber bay lamps carry the warmth out to the aisle edge
+  for (const x of [-12.5, -25.5]) ctx.light(pointLight(0x6f86c8, 5, 17, [x, H - 0.5, aisleZ]));
+  ctx.light(pointLight(0xffb060, 4.5, 7.5, [-7.85, 2.2, -21.8]));
+  ctx.light(pointLight(0xffb060, 4.5, 7.5, [-15.05, 2.2, -16.2]));
+  ctx.light(pointLight(0xffb060, 4.5, 7.5, [-22.25, 2.2, -21.8]));
   ctx.light(pointLight(0xdfe8ff, 5, 7, [-33.0, 2.8, aisleZ]));
 
-  // blue floor light channels along both aisle edges
+  // dim blue floor light channels along both aisle edges (half the earlier width)
   for (const z of [aisleZ - 1.3, aisleZ + 1.3]) {
-    kit.boxMM("paintedMetal", [-33.6, 0, z - 0.08], [-3.6, 0.02, z + 0.08], { color: PALETTE.impBlack, texel: 2 });
-    kit.boxMM("emitBlue", [-33.4, 0.02, z - 0.025], [-3.8, 0.03, z + 0.025]);
+    kit.boxMM("paintedMetal", [-33.6, 0, z - 0.04], [-3.6, 0.02, z + 0.04], { color: PALETTE.impBlack, texel: 2 });
+    kit.boxMM("emitBlueDim", [-33.4, 0.02, z - 0.0125], [-3.8, 0.03, z + 0.0125]);
   }
-  // ceiling: blue strip lights over each bay lane
+  // ceiling: dim blue strip lights over each bay lane
   const bayX0 = -31.0;
   const pitch = 3.6;
   const nBays = 7;
@@ -173,7 +192,7 @@ export function buildQuarters(kit, ctx) {
       const z0 = s < 0 ? -29.6 : aisleZ + 1.5;
       const z1 = s < 0 ? aisleZ - 1.5 : -8.4;
       kit.box("paintedMetal", xc, H - 0.05, (z0 + z1) / 2, 0.3, 0.08, z1 - z0, { color: PALETTE.impDark, texel: 2 });
-      kit.box("emitBlue", xc, H - 0.095, (z0 + z1) / 2, 0.08, 0.02, z1 - z0 - 0.4);
+      kit.box("emitBlueDim", xc, H - 0.095, (z0 + z1) / 2, 0.08, 0.02, z1 - z0 - 0.4);
     }
   }
 
@@ -198,12 +217,16 @@ export function buildQuarters(kit, ctx) {
         kit.box("paintedMetal", px0, 2.83, (zA + zB) / 2, 0.16, 0.06, zB - zA, { color: PALETTE.impBlack, texel: 2 });
         kit.collider([px0 - 0.08, 0, Math.min(zA, zB)], [px0 + 0.08, 2.85, Math.max(zA, zB)], "partition");
       }
-      // aisle-end lintel over the bay opening with a lit bay number
+      // aisle-end lintel over the bay opening with a lit bay number: odd numbers starboard (zmin),
+      // even port (zmax), counting up from the door, and a dim amber strip under the lintel so the
+      // bays' warmth reaches the aisle
       const lz = s < 0 ? aisleZ - 1.42 : aisleZ + 1.42;
+      const bayNo = 2 * (nBays - i) - (s < 0 ? 1 : 0);
       kit.box("paintedMetal", alc, 2.75, lz, 3.3, 0.2, 0.12, { color: PALETTE.impDark, texel: 2 });
       const g = new THREE.PlaneGeometry(0.9, 0.225);
       g.rotateY(s < 0 ? 0 : Math.PI);
-      kit.add("crew_signLit", g, { pos: [alc, 2.75, lz + (s < 0 ? 0.065 : -0.065)], uv: "keep", uvRect: signRect(baySign(nBays - i)) });
+      kit.add("crew_signLit", g, { pos: [alc, 2.75, lz + (s < 0 ? 0.065 : -0.065)], uv: "keep", uvRect: signRect(baySign(bayNo)) });
+      kit.box("emitAmberDim", alc, 2.635, lz - s * 0.02, 3.0, 0.03, 0.06, { uv: "keep" });
     }
     for (const s of [-1, 1]) {
       // pair 1 (aisle end) and pair 2 (deeper), heads away from the aisle
@@ -211,8 +234,13 @@ export function buildQuarters(kit, ctx) {
       const p1z0 = s < 0 ? aisleZ - 1.4 - BUNK_L : aisleZ + 1.4;
       const p2z0 = s < 0 ? p1z0 - 3.6 : p1z0 + 3.6;
       const seedBase = ctx.seed * 7 + i * 31 + (s < 0 ? 0 : 500);
-      bunkStack(kit, ctx, { x0: bunkA, z0: p1z0, open: 1, aisleEnd, seed: seedBase + 1, bay: nBays - i });
-      bunkStack(kit, ctx, { x0: bunkB, z0: p1z0, open: -1, aisleEnd, seed: seedBase + 2, bay: nBays - i });
+      // aisle-end stacks: every 4th has no end panel (open bunk faces the aisle), one in three of
+      // the rest carries the duty roster; towels hang on a few ladders
+      const k0 = i * 2 + (s < 0 ? 0 : 1);
+      const privA = k0 % 4 !== 1;
+      const privB = k0 % 4 !== 3;
+      bunkStack(kit, ctx, { x0: bunkA, z0: p1z0, open: 1, aisleEnd, seed: seedBase + 1, privacy: privA, roster: privA && k0 % 3 === 0, towel: k0 % 3 === 1 });
+      bunkStack(kit, ctx, { x0: bunkB, z0: p1z0, open: -1, aisleEnd, seed: seedBase + 2, privacy: privB, roster: privB && k0 % 3 === 2, towel: k0 % 4 === 2 });
       bunkStack(kit, ctx, { x0: bunkA, z0: p2z0, open: 1, aisleEnd, seed: seedBase + 3, privacy: false });
       bunkStack(kit, ctx, { x0: bunkB, z0: p2z0, open: -1, aisleEnd, seed: seedBase + 4, privacy: false });
       // footlockers at the head ends of pair 1 (in the cross lane) and pair 2
