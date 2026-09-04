@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FOG, PALETTE, SUN } from './palette.js';
+import { sunDirection } from './sky.js';
 import { clamp as clamp01, fbm, lerp, mulberry32, smoothstep } from './textures/core.js';
 import { WORLD } from './world.js';
 import {
@@ -118,7 +119,12 @@ const MAIN_SHED = 0.078; // extra crossfall per metre of shoulder
 const MAIN_DITCH_D = 0.46;
 // A graded surface still takes a wheel path, it is just a centimetre of it
 // rather than eight. Above about 3 cm it stops reading as maintained.
-const MAIN_RUT_D = 0.017;
+// Up to the ceiling from 1.7 cm: the ruts read as painted at 1.7, and the rest
+// of the relief they need comes from the normal term in the shader rather than
+// from taking the mesh past what a maintained road would show. The truck's
+// track (0.845) sits on the inner wall of a 1.12 m path, so this adds under a
+// centimetre of slow lateral tilt to the ride and nothing to its spectrum.
+const MAIN_RUT_D = 0.03;
 // Outer edge of the graded platform: the ditch's far bank, where the cut or
 // fill batter starts.
 const MAIN_EDGE = MAIN_HALF + MAIN_SHOULDER + MAIN_DITCH;
@@ -2303,6 +2309,38 @@ export function createTerrain({ env = null } = {}) {
         albedo *= mix( vec3( 0.96, 0.99, 1.03 ), vec3( 1.04, 1.0, 0.94 ), mac.a );
         albedo = mix( albedo, albedo * 1.05, dry );
 
+        // --- landform: the plain at two hundred metres -----------------------
+        // Every term above lives inside a hundred metres; the critics' read was
+        // that the ground at 5 m and at 200 m is the same mottle. Two things a
+        // plain has that a tile does not: a colour that drifts over hundreds of
+        // metres — a grazed flat here, a burnt patch there, a drainage line
+        // greener than the rise beside it — and a value that follows the
+        // ground's own shape, because a slope facing the sun is drier and paler
+        // and a slope steep enough to shed its topsoil shows the laterite
+        // gravel under it. Both are slow multiplies, so the close-range
+        // laterite every critic praised keeps its internal ratios exactly.
+        //
+        // The shape comes off the vertex normal, which the mesh already carries
+        // analytically at a 1.15 m radius in the far field — the landform, not
+        // the ruts. Rotated back into world space through the view matrix's
+        // transpose, which is its inverse for a rotation.
+        vec4 macFar = texture2D( uMacro, vTile / 420.0 + vec2( 0.71, 0.13 ) );
+        vec3 formN = normalize( ( vec4( vNormal, 0.0 ) * viewMatrix ).xyz );
+        vec2 sunXZ = normalize( uSunStep );
+        float formSlope = smoothstep( 0.03, 0.22, 1.0 - formN.y );
+        float formAspect = dot( formN.xz, sunXZ );
+        // Held off the graded surfaces: a road is one material by construction,
+        // and the pad was levelled.
+        float offRoad = ( 1.0 - max( share, mTrack ) ) * ( 1.0 - zPad * 0.7 );
+        albedo *= mix( 1.0, mix( 0.86, 1.12, macFar.r ), 1.0 - share * 0.7 );
+        albedo *= mix( vec3( 1.0 ), mix( vec3( 0.95, 1.0, 1.05 ), vec3( 1.07, 1.0, 0.92 ), macFar.a ), offRoad );
+        albedo *= 1.0 + formAspect * 0.11 * offRoad;
+        // Rock exposure on the steep faces: laterite gravel and the grey of the
+        // subsoil, patchy through the mid-scale field so it is a scar and not a
+        // contour band.
+        vec3 exposed = mix( vec3( 0.19, 0.15, 0.115 ), vec3( 0.26, 0.17, 0.11 ), mid.g );
+        albedo = mix( albedo, exposed, formSlope * offRoad * ( 0.3 + 0.4 * mid.g ) );
+
         // No chromatic trim here any more. Under the old 0xffd2a1 / 7.6 key the
         // rendered trail measured a red/blue ratio of 2.4 — terracotta, not
         // loam — and needed a hard 0.88/1.26 correction at this point. With the
@@ -2326,6 +2364,14 @@ export function createTerrain({ env = null } = {}) {
         float mudWet = zMud * ( 0.55 + 0.45 * smoothstep( 0.3, 0.7, mac.g * 0.5 + mid.b * 0.5 + zMud * 0.4 ) );
         soak = max( soak, smoothstep( 0.05, 0.6, mudWet ) * 0.85 );
         water = max( water, smoothstep( 0.8, 0.97, zMud ) );
+        // The wet band at the waterline. zMud is 1 at the sheet's edge (the
+        // dish holds water out to where its depth is half HOLE_DEPTH, which is
+        // where the mud mask's inner plateau ends) and 0.9 about three metres
+        // out, so 0.86-0.97 is the two metres of shore that was under water
+        // last month: saturated, near black, cooler than the dry mud. Broken
+        // by the damp field so it is a shore and not a painted ring.
+        float shoreRing = smoothstep( 0.84, 0.965, zMud ) * ( 0.72 + 0.28 * mid.b );
+        albedo *= mix( vec3( 1.0 ), vec3( 0.4, 0.42, 0.46 ), shoreRing );
         // A soaked rim, several times wider than the water itself. This is most
         // of the cue: a hard-edged dark patch reads as a stain, a dark halo
         // fading out around a smooth centre reads as standing water.
@@ -2397,6 +2443,17 @@ export function createTerrain({ env = null } = {}) {
           // the whole read of a gravel road at any distance past ten metres,
           // and it is the mainline's equivalent of the trail's ruts.
           gAlb *= mix( vec3( 1.0 ), vec3( 0.54, 0.47, 0.41 ), mWheel * 0.96 );
+          // The lip either side of the wheel path: the loose fraction the
+          // tyres shove outward stands a shade paler and dustier than the
+          // surface course beyond it. Paired with the slope term in the normal
+          // stage this is what turns the wheel path from a painted stripe into
+          // a trough with an edge — dark compacted centre, light ridge.
+          float mLipD = abs( mAx - uMain.z );
+          // 25-60 cm off the path's centre: the shoulder of the tyre-width
+          // channel the normal stage cuts, not the whole gap between paths
+          float mLip = smoothstep( 0.22, 0.4, mLipD ) *
+                       ( 1.0 - smoothstep( 0.55, 1.0, mLipD ) ) * mRun;
+          gAlb *= mix( vec3( 1.0 ), vec3( 1.16, 1.13, 1.08 ), mLip * 0.85 );
           // The wheel path is also the only part of this road that holds water,
           // and it holds it because compaction is what made it impermeable —
           // everything either side drains through the voids between the pieces
@@ -2421,6 +2478,14 @@ export function createTerrain({ env = null } = {}) {
           // the verge. Coarse tap on its own, then part way to verge material.
           gAlb = mix( gAlb, mix( tGrav2.rgb * 1.08, tVerge.rgb, 0.45 ), mShld * 0.9 );
           gAlb = mix( gAlb, tGrav2.rgb * 1.2, mWind * 0.85 );
+          // Spill: aggregate thrown past the ditch onto the verge, in patches,
+          // over the two metres beyond the platform's edge. The grass beyond
+          // (the forest's) starts on a line; this is the road's side of a
+          // shoulder blend — pale chips thinning out into the straw.
+          float mSpill = smoothstep( uJunc.w - 0.5, uJunc.w + 0.2, mAxj ) *
+                         ( 1.0 - smoothstep( uJunc.w + 0.4, uJunc.w + 2.2, mAxj ) ) *
+                         smoothstep( 0.3, 0.72, mrs.b * 0.55 + mid.g * 0.55 );
+          gAlb = mix( gAlb, tGrav2.rgb * 1.12, mSpill * 0.6 );
           // Ditch. The one part of this road that is wet, and it is wet because
           // the crown put the water there — which is the argument the whole
           // cross-section is making. Silt, dark, with weed taking hold in it.
@@ -2967,6 +3032,25 @@ export function createTerrain({ env = null } = {}) {
         // is the lateral axis straight off.
         vec2 latRaw = vec2( vTan.y, -vTan.x );
         vec2 lat = latRaw / max( length( latRaw ), 1e-3 );
+        // The mainline's wheel paths as shape. The mesh carries them at 3 cm
+        // on 0.6 m cells, which is a swell the shading cannot find; every
+        // critic read the ruts as painted stripes. This is the gradient of the
+        // same gaussian the mesh was graded to, at a 24 cm effective depth —
+        // exaggerated the way a normal map for a footprint always is — so the
+        // wall toward the sun catches the key and the wall away from it goes
+        // into shade, at every range the road is looked at from. vMain.y is
+        // signed lateral offset and lat is that axis in world xz (see the drag
+        // grain below), so the outward direction is lat against its sign. Off
+        // through the junction apron, where the surface is churned flat.
+        // Two widths: the broad swell the grader left (sigma 0.52 m, the
+        // mesh's own) and a tight tyre-width channel down its middle (sigma
+        // 0.24 m) — the second is what gives the path an *edge*; without it
+        // the first pass this round was still a soft band under a low sun.
+        float rutD = mAx - uMain.z;
+        float rutG = exp( -rutD * rutD / ( 2.0 * uMain.w * uMain.w ) );
+        float rutG2 = exp( -rutD * rutD / 0.1152 );
+        vec2 rutOut = -lat * sign( vMain.y );
+        mapN.xy -= rutOut * ( rutD / ( uMain.w * uMain.w ) * rutG * 0.24 + rutD / 0.0576 * rutG2 * 0.14 ) * share * mRun * ( 1.0 - apM );
         // 0.34, not 0.55. This tier is deliberately anisotropic — it tilts the
         // surface laterally so the grain has a direction — which means it is the one
         // normal term that survives the footprint taper looking like a comb, because
@@ -3357,8 +3441,12 @@ export function createTerrain({ env = null } = {}) {
 // direction agrees with every other shadow in the frame.
 // ---------------------------------------------------------------------------
 
-const STONE_COUNT = 760;
-const GRAVEL_COUNT = 6400;
+// Round 1: every critic read this tier as "grey confetti" — dozens of small
+// uniform shards. Fewer and larger: the small tier's floor is up at 4 cm so
+// nothing under 8 cm across is drawn on the trail, and a third of the tier is
+// now the big prototype rather than a fifth.
+const STONE_COUNT = 520;
+const GRAVEL_COUNT = 4000;
 // The mainline is a surface made of loose stone, so the tier that is decoration
 // on the trail is the substance here — and it has seven metres of width and
 // three hundred metres of length to cover against the trail's two and a half.
@@ -3386,6 +3474,36 @@ const ROOT_SEGS = 11;
 // decals exist to prevent, arrived at from the other direction.
 const SCATTER_LEVEL = 0.5;
 
+// The soil every stone is half-buried in, in the scatter's own pre-level scale
+// (SCATTER_LEVEL halves it on the way into the buffer). PALETTE.earth is
+// 0x9a5a34 — 0.32/0.10/0.034 linear — and the terrain renders it at roughly two
+// thirds of that after its level cut and occlusion stack, so this is the dirt
+// as it actually lands on screen, a touch greyer because it is the dust
+// fraction. A stone lying in laterite is coated in laterite fines: it inherits
+// a good third of the soil's colour before its own mineral shows, and that is
+// what seats it *in* the dirt rather than on it.
+//
+// Round 1 had every stone keyed under the dirt as a cool neutral or a dark
+// basalt. At that albedo the only light a stone returned was the environment
+// map's specular — a blue-grey that never moved with the hour, so the tier sat
+// grey on wine-red dirt at dusk and grey on dark dirt at night, and all three
+// critics called it confetti. Inheriting the soil is the one change that fixes
+// the hour as well as the day: a stone that is mostly diffuse grades with the
+// key like the ground does.
+const SOIL = [0.29, 0.115, 0.05];
+const SOIL_MIX = 0.36;
+/** Mix a mineral colour toward the soil it lies in, with a per-instance dark tint. */
+function soilTint(c, rnd, mixK = SOIL_MIX) {
+  // One stone in three is noticeably darker than its neighbours — shade,
+  // damp, a different face of the same rock. A tier at one value is a stipple.
+  const t = 0.64 + rnd() * 0.36;
+  return [
+    (c[0] * (1 - mixK) + SOIL[0] * mixK) * t,
+    (c[1] * (1 - mixK) + SOIL[1] * mixK) * t,
+    (c[2] * (1 - mixK) + SOIL[2] * mixK) * t,
+  ];
+}
+
 /**
  * Colour of one piece of quarried aggregate, keyed to the mainline's tile.
  *
@@ -3404,17 +3522,21 @@ function mineralColour(rnd) {
   // A quarter of them are the pale weathered fraction. They are what puts an
   // edge on the tier — three hundred metres of uniformly dark chips against a
   // mid-grey surface has no silhouette anywhere on it.
+  // Every piece is dusted with the road's own red fines — less than a trail
+  // stone buried in dirt, but a crushed-rock chip on a murram road is not
+  // clean basalt either. This is what stops the tier reading blue-grey against
+  // the road at dusk.
   if (rnd() < 0.24) {
     const v = 0.05 + rnd() * 0.055;
-    return [v * 0.94, v * 0.98, v];
+    return soilTint([v * 0.94, v * 0.98, v], rnd, 0.26);
   }
   if (rnd() < 0.12) {
     // iron-stained, the only warm piece in the pit
     const v = 0.036 + rnd() ** 1.4 * 0.03;
-    return [v * 1.16, v * 0.94, v * 0.7];
+    return soilTint([v * 1.16, v * 0.94, v * 0.7], rnd, 0.26);
   }
   const v = 0.03 + rnd() ** 1.6 * 0.036;
-  return [v * 0.9, v * 0.97, v];
+  return soilTint([v * 0.9, v * 0.97, v], rnd, 0.26);
 }
 
 const nearSlot = () => ({ dist: 1e6, lat: 1e6, y: 0, t: 0, s: 0, k: 0, tx: 0, tz: 1 });
@@ -3631,7 +3753,11 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
         // say so: it also gives the lump a light top and a dark base, which is
         // the value range that reads as solid rather than as cut paper.
         const ly = src[o + vi * 3 + 1];
-        const seat = 0.54 + 0.46 * Math.min(1, Math.max(0, (ly + 0.35) / 1.15));
+        // Deeper at the base than it was (0.54): with the albedo up at the
+        // soil's level the contact has to be carried by the stone as well as
+        // by the decal under it, or the lit cap and the seated base read as
+        // one value and the stone is a disc again.
+        const seat = 0.4 + 0.6 * Math.min(1, Math.max(0, (ly + 0.35) / 1.15));
         col[q3] = cr * mot * seat * SCATTER_LEVEL;
         col[q3 + 1] = cg * mot * seat * SCATTER_LEVEL;
         col[q3 + 2] = cb * mot * seat * SCATTER_LEVEL;
@@ -3738,9 +3864,13 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
       // warm key these came back as pink flecks in the plan framing; quartz and
       // weathered granite are neutral to slightly cool, and it is the *lack* of
       // the dirt's chroma that says "mineral" rather than "clod".
-      const shade = 0.062 + rnd() * vBias * 1.9;
+      const shade = 0.075 + rnd() * vBias * 2.2;
       const grey = 0.93 + rnd() * 0.07;
-      return [shade, shade * grey, shade * (grey - 0.05 + rnd() * 0.1)];
+      // Coated in the soil it lies in, like every other piece — the neutral
+      // is what shows on the lit cap once the fines are accounted for, not the
+      // whole stone. Bare, these were the confetti; a fifth brighter than the
+      // dark family so a few caps still catch the key and the tier has an edge.
+      return soilTint([shade, shade * grey, shade * (grey - 0.05 + rnd() * 0.1)], rnd, 0.3);
     }
     // Floored at 0.034, not 0.024. Times the 0.68 low end of the per-face mottle
     // and the 0.44 low end of the seat gradient, 0.024 renders at 0.007 — which
@@ -3751,7 +3881,7 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
     const v = rnd() ** 1.7;
     const shade = 0.042 + v * vBias * 1.3;
     const grey = rnd() ** 1.6;
-    return [shade, shade * (0.68 + grey * 0.18), shade * (0.44 + grey * 0.26)];
+    return soilTint([shade, shade * (0.68 + grey * 0.18), shade * (0.44 + grey * 0.26)], rnd);
   }
 
   let placed = 0;
@@ -3785,21 +3915,31 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
     // around, which is what gives the corridor a sense of scale. Anything under
     // about 6 cm across is a sub-pixel speck by the time the camera is a metre
     // off the dirt, so the small tier starts where it can still be read.
-    const big = rnd() < 0.18;
+    const big = rnd() < 0.32;
     // The two tiers used to overlap: the small one ran to 10 cm, which is a
     // 25 cm stone once the width jitter is on it, and at that size a twenty-face
     // lump squashed to 0.4 of its height and sunk four fifths of the way in
     // shows exactly three facets. That is a low pyramid, and the close crops
     // were full of them. The tiers are separated now and the size decides the
     // prototype, so nothing above 7 cm is drawn with twenty faces.
-    const r = big ? 0.075 + rnd() * 0.075 : 0.035 + rnd() * 0.04;
+    // Small tier floored at 4 cm (8 cm across): under that, at the 30 cm the
+    // close framings sit off the dirt, a stone is a grey speck with no shading
+    // range inside it — the confetti.
+    const r = big ? 0.075 + rnd() * 0.075 : 0.04 + rnd() * 0.035;
     s.set(r * (0.8 + rnd() * 0.42), r * (0.55 + rnd() * 0.4), r * (0.8 + rnd() * 0.42));
-    e.set(rnd() * 6.283, rnd() * 6.283, rnd() * 6.283);
+    // Mostly level, not tumbled. A stone pressed into a track by traffic lies
+    // on its broad face; random Euler angles stood a third of them on a corner,
+    // which is the "shard" read — a blade of rock with one facet full to the
+    // key and the dirt showing under its edge.
+    e.set((rnd() - 0.5) * 0.7, rnd() * 6.283, (rnd() - 0.5) * 0.7);
     q.setFromEuler(e);
     // Sunk so only a cap shows, like something the grader pressed in — but not
     // so far that the cap is all that is left. A stone with a third of itself
     // above the dirt has a silhouette; one with a tenth has an outline.
-    const sink = 0.34 + rnd() * 0.3;
+    // A quarter deeper than round 1 (0.34–0.64): the critics read the tier as
+    // lying on the surface, and the lean stones above no longer stand tall
+    // enough for a deeper seat to bury them.
+    const sink = 0.44 + rnd() * 0.3;
     m.compose(new THREE.Vector3(x, info.y - s.y * sink, z), q, s);
 
     // Aggregate value, skewed dark for the same reason the textures are: a
@@ -3815,11 +3955,17 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
     // brightness is a plate however sharp its outline is — the value range
     // *inside* the 8 cm object is the thing that says "solid".
     const proto = big ? boulders[(rnd() * boulders.length) | 0] : lumps[(rnd() * lumps.length) | 0];
-    emit(proto, m, cc[0], cc[1], cc[2], 0.34, placed);
+    // 0.26, from 0.34: with the stones lying flat rather than on a corner the
+    // facet spread is already narrower, so the shading normal can follow the
+    // sun more honestly — a lit side and a shaded side is what says "solid".
+    emit(proto, m, cc[0], cc[1], cc[2], 0.26, placed);
     // Only the ones that stand proud enough to throw anything — but 14 mm was
     // most of the small tier, so most stones sat in the dirt with no contact
     // under them at all and read as pasted on.
-    if (s.y * (1 - sink) > 0.007) decal(x, info.y, z, r * 0.8, s.y * (1 - sink), big ? 0.85 : 0.6);
+    // Stronger and a shade wider than round 1: the contact is what every critic
+    // said was missing, and at 0.6 under a stone the soil's own colour it did
+    // not register against the dirt's cavity term.
+    if (s.y * (1 - sink) > 0.007) decal(x, info.y, z, r * 0.95, s.y * (1 - sink), big ? 1.0 : 0.85);
     placed++;
   }
 
@@ -3875,12 +4021,17 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
     // 8 cm now and keeps two thirds of itself above the dirt, so it has a
     // silhouette against the ground behind it and something for the contact
     // decal to be the shadow of.
-    const r = chip ? 0.012 + rnd() ** 1.4 * 0.019 : 0.03 + rnd() ** 1.3 * 0.05;
+    // Proud tier floored at 4 cm, and lying on a face rather than tumbled —
+    // see the embedded tier for why. Sunk a fifth deeper than it was: a pebble
+    // with three quarters of itself in the air on a packed track is not
+    // something traffic leaves behind.
+    const r = chip ? 0.012 + rnd() ** 1.4 * 0.019 : 0.04 + rnd() ** 1.3 * 0.045;
     const flat = chip ? 0.3 + rnd() * 0.3 : 0.52 + rnd() * 0.44;
     s.set(r * (0.82 + rnd() * 0.42), r * flat, r * (0.82 + rnd() * 0.42));
-    e.set(rnd() * 6.283, rnd() * 6.283, rnd() * 6.283);
+    if (chip) e.set(rnd() * 6.283, rnd() * 6.283, rnd() * 6.283);
+    else e.set((rnd() - 0.5) * 0.8, rnd() * 6.283, (rnd() - 0.5) * 0.8);
     q.setFromEuler(e);
-    const sink = chip ? 0.38 + rnd() * 0.3 : 0.12 + rnd() * 0.26;
+    const sink = chip ? 0.38 + rnd() * 0.3 : 0.24 + rnd() * 0.3;
     m.compose(new THREE.Vector3(x, info.y - s.y * sink, z), q, s);
     const cc = aggColour(0.038);
     // Barely leaned for the proud tier. A stone sitting on the ground is
@@ -3897,7 +4048,7 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
     // the overlap comes from, and they are also the ones whose shadow is a single
     // pixel wide from any framing. Skipping them removes most of the compounding
     // at no visible cost.
-    if (proud > 0.012) decal(x, info.y, z, r * 0.85, proud, chip ? 0.45 : 0.8);
+    if (proud > 0.012) decal(x, info.y, z, r * 0.95, proud, chip ? 0.45 : 0.95);
     gravel++;
   }
 
@@ -4181,7 +4332,14 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
 
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    roughness: 0.88,
+    // 0.92, from 0.88, and the environment term below cut to a third. Together
+    // these are why the tier stopped grading with the hour: the aggregate was
+    // keyed dark enough that its diffuse return was a few thousandths, and at
+    // that level the indirect *specular* off the sky map — which does not
+    // scale with albedo and is blue-grey at every hour — was most of the light
+    // on every stone. Dusk took the dirt to wine red and left the stones the
+    // colour of the noon sky.
+    roughness: 0.92,
     metalness: 0.0,
     // Half the terrain's 2.1, not matched to it. The terrain multiplies its
     // indirect term by a hand-rolled occlusion map and gates its specular on
@@ -4204,7 +4362,11 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
     // the light a stone under a canopy gets, so leaving it at 1.5 against a halved
     // dirt albedo would have handed the whole level cut back on the one surface
     // that most needs to stay keyed under the trail.
-    envMapIntensity: 0.95,
+    // 0.4 now the albedo inherits the soil: the stones no longer need the sky
+    // term to keep them out of black, and it was the sky term that kept them
+    // grey. (The indirect diffuse still comes through the hemisphere light,
+    // which follows the hour.)
+    envMapIntensity: 0.4,
     // Off so the softened per-face normals above are actually used: flat
     // shading derives the normal from screen-space derivatives and throws the
     // normal attribute away.
@@ -4384,7 +4546,10 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
       level: floor + HOLE_DEPTH * 0.5,
       ring: 80,
       step: 0.1,
-      innerF: 0.88,
+      // 0.8 of a 6.5 m radius is a 1.3 m shallows band, which is the shore
+      // depth fade the critics asked for: the sheet thins over the last metre
+      // and a half rather than ending on a line.
+      innerF: 0.8,
       hole: true,
     });
   }
@@ -4526,8 +4691,17 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
       uCanopy: { value: horizonReflection() },
       uSunDir: { value: sunV.clone() },
       uSunCol: { value: new THREE.Color(0xffe2c6) },
+      // Refreshed every frame from sky.js below, so the sheet reflects the
+      // hour's sky rather than the noon one it was authored under. Round 1 had
+      // these as constants and the water hole sat pale blue-grey at dusk and
+      // at night, brighter than the sky above it.
       uSkyTop: { value: new THREE.Color(0x4c7fb5) },
       uSkyLow: { value: new THREE.Color(0xa8b3ae) },
+      // The panorama card's own sky, so its skyline can be re-keyed to the
+      // hour: the card is divided by this and multiplied by the live sky, which
+      // keeps the acacia and hill silhouettes and throws the noon colour away.
+      uCardLow: { value: new THREE.Color(PALETTE.skyHorizon) },
+      uCardTop: { value: new THREE.Color(PALETTE.skyTop) },
       // Silt, not water: what a shallow puddle on a dirt track shows where the
       // reflection is weak is the mud at the bottom of it.
       // Silt under the sheet, down with the dirt it is silt from.
@@ -4560,7 +4734,7 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
       }`,
     fragmentShader: /* glsl */ `
       uniform sampler2D uRipple, uCanopy;
-      uniform vec3 uSunDir, uSunCol, uSkyTop, uSkyLow, uBody, uFog;
+      uniform vec3 uSunDir, uSunCol, uSkyTop, uSkyLow, uBody, uFog, uCardLow, uCardTop;
       uniform float uFogDensity, uTime;
       varying vec3 vWorld;
       varying float vAlpha;
@@ -4587,7 +4761,14 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
         // the size of a tennis court with nothing to break it read as a blue
         // enamel disc.
         float hole = vHole;
-        vec2 slope = ( r1 * 0.7 + r2 * 0.3 ) * mix( 0.03, 0.11, hole );
+        // 0.022 on the hole, from 0.11 then 0.08. From a standing camera the
+        // reflected ray leaves at five to ten degrees, and the whole skyline
+        // in the card — hills, grass line, acacias — lives in the first eight
+        // degrees of it. A 0.08 tilt swings the ray by nine, so every pixel of
+        // the sheet sampled a different row of that band and the average was
+        // a featureless pale grey: the disc. At 0.022 the skyline wobbles but
+        // it is there, which is the difference between water and a plate.
+        vec2 slope = ( r1 * 0.7 + r2 * 0.3 ) * mix( 0.03, 0.022, hole );
         vec3 N = normalize( vec3( slope.x, 1.0, slope.y ) );
 
         vec3 R = reflect( -V, N );
@@ -4600,9 +4781,29 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
         // the lookup at its top row, so every pixel of every puddle sampled the
         // sky and none of them sampled a tree. Twenty metre conifers eight metres
         // away fill everything up to sixty degrees.
-        vec3 refl = texture2D( uCanopy, vec2( az, clamp( max( up, 0.0 ), 0.004, 0.996 ) ) ).rgb;
+        float upC = clamp( max( up, 0.0 ), 0.004, 0.996 );
+        vec3 card = texture2D( uCanopy, vec2( az, upC ) ).rgb;
+        // The card was painted under the noon sky. Divide its own sky back out
+        // and put the hour's in, so what survives of it is the skyline — the
+        // acacias and the hill line as a darkening — and not its colour.
+        // Re-keyed by luminance only. A per-channel ratio compounded the card's
+        // grey-blue hills against its warm horizon and the hour's blue zenith,
+        // and the hole came out cobalt — the skyline is a darkening pattern
+        // laid over the hour's sky, and that is all it is allowed to carry.
+        vec3 cardSky = mix( uCardLow, uCardTop, smoothstep( 0.02, 0.85, upC ) );
+        const vec3 LUMA = vec3( 0.2126, 0.7152, 0.0722 );
+        float key = clamp( dot( card, LUMA ) / max( dot( cardSky, LUMA ), 1e-3 ), 0.0, 1.1 );
+        // The sky leaves the horizon band fast: measured against the camp
+        // framing, four degrees up it is already half way to blue-grey and by
+        // seven it is most of the way. A smoothstep to 0.7 kept the whole of
+        // the sheet's reflection — rays at three to ten degrees — inside the
+        // cream band, and a cream sheet on cream sand is the sand read. A
+        // cubic knee puts the ray at six degrees a third of the way to the
+        // zenith colour, which is the cool grey a pool has against dirt.
+        float skyT = 1.0 - pow( 1.0 - clamp( up / 0.6, 0.0, 1.0 ), 3.0 );
+        vec3 sky = mix( uSkyLow, uSkyTop, skyT );
+        vec3 refl = mix( card, sky * key, hole );
         // Only the last few degrees before the zenith are actually open.
-        vec3 sky = mix( uSkyLow, uSkyTop, smoothstep( 0.0, 0.7, up ) );
         refl = mix( refl, sky, smoothstep( 0.86, 0.99, up ) );
         // The sun's own disc, and only that. At 1.6 the lobe bloomed across the
         // whole sheet and took the canopy image with it — the puddle came back a
@@ -4638,10 +4839,30 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
         // the reflection — turbid water scatters most of what goes in straight
         // back out, unpolarised — and what it does reflect is the sky through
         // dust, so the saturated zenith blue is pulled toward the horizon grey.
-        vec3 murk = mix( vec3( 0.135, 0.105, 0.062 ), vec3( 0.095, 0.082, 0.05 ), smoothstep( 0.1, 0.5, vDepth ) );
+        // Round 1's version mixed the reflection more than half way to a flat
+        // pale grey and let a bright khaki murk through at a 0.16 floor, and the
+        // hole rendered as a pale disc brighter than the sky it stood under.
+        // Now: the deep water is dark — clay in suspension absorbs, it does not
+        // glow — and lightens to the murk only over the shallows, so the
+        // shore has a depth gradient; the reflection is the hour's sky through
+        // the card's skyline, undiluted; and the Fresnel is the dielectric
+        // curve with a small turbidity floor, which at the ten-to-fifteen
+        // degree grazing angle a standing camera sees the hole at comes to a
+        // third — the sky, darkened, with the mud showing through.
+        // The deep colour is a dark olive-brown, not black: seen from above
+        // (the plan probe) a 0.014 floor rendered the sheet as a tar disc,
+        // and half a metre of clay water is opaque *brown*, whatever the angle.
+        // ...and not tar either: at 0.03 the sheet from a raised camera was a
+        // black dish with a soft rim, a hollow rather than a surface. Half a
+        // metre of laterite water is a khaki brown around a tenth.
+        vec3 murk = mix( vec3( 0.15, 0.12, 0.07 ), vec3( 0.085, 0.07, 0.042 ), smoothstep( 0.05, 0.45, vDepth ) );
         body = mix( body, murk, hole );
-        refl = mix( refl, mix( mix( refl, uSkyLow * 0.9, 0.55 ), murk * 2.2, 0.22 ), hole );
-        fres = mix( fres, clamp( 0.16 + 0.74 * pow( 1.0 - f, 4.0 ), 0.0, 1.0 ), hole );
+        // 0.62 of the dielectric curve, not all of it: a ruffled, turbid sheet
+        // never reaches a mirror's grazing reflectance, and at the full curve
+        // the hole from thirty metres was 85 per cent of the horizon sky's
+        // value — a pale sheet a shade under the sky, still a plate. At 0.62
+        // it sits at about two thirds of the sky, with the murk showing.
+        fres = mix( fres, clamp( 0.08 + 0.62 * pow( 1.0 - f, 5.0 ), 0.0, 1.0 ), hole );
         vec3 col = mix( body, refl, fres );
         // Waterline. Where the sheet thins to nothing the reflection goes with
         // it and what is left is saturated mud, so the darkest ring of a puddle
@@ -4653,7 +4874,11 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
 
         float fogFactor = 1.0 - exp( -uFogDensity * uFogDensity * dist * dist );
         col = mix( col, uFog, fogFactor );
-        float a = clamp( vAlpha * mix( 0.62 + fres * 0.5, 0.97, hole ), 0.0, 1.0 );
+        // The hole's shallows: the sheet goes to nothing over the last metre
+        // and a half as a smooth ramp, so the wet mud under it shows through a
+        // thinning film rather than meeting a line.
+        float holeA = smoothstep( 0.0, 1.0, vAlpha ) * 0.97;
+        float a = clamp( mix( vAlpha * ( 0.62 + fres * 0.5 ), holeA, hole ), 0.0, 1.0 );
         gl_FragColor = vec4( max( col, 0.0 ), a );
       }`,
     transparent: true,
@@ -4668,9 +4893,37 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
   mesh.receiveShadow = false;
   mesh.userData.count = puddles;
   mesh.userData.holeRadius = holeRadius;
+  // What the sheet reflects follows the hour. sky.js owns the rig and exposes
+  // the horizon colour and the sun direction for the current mode; the scene
+  // fog colour is the airlight it has already set. The zenith is not exposed,
+  // so it is taken as the horizon pulled toward blue at the ratio the day and
+  // dusk rigs share — the sheet is almost all horizon band from a standing
+  // camera, so that is a small approximation on a small part of the image.
+  // Desaturated on purpose: the sheet is seen at a grazing angle and the
+  // reflected ray never gets far above the horizon band, so the zenith only
+  // has to cool and darken the top of the blend, not turn it cobalt.
+  // Measured off the rendered sky: seven degrees over the horizon it sits at
+  // 0.34/0.55/1.0 of the band. The sheet's gradient reaches this by thirty.
+  const zenithK = new THREE.Color(0.34, 0.55, 1.0);
   skipAoPrepass(mesh, () => {
     mat.uniforms.uTime.value = performance.now() * 0.001;
+    mat.uniforms.uSunDir.value.copy(sunDirection());
   });
+  mesh.onBeforeRender = ((prev) => (renderer, scene, camera, geometry, material) => {
+    if (scene.fog?.color) {
+      // The scene fog colour *is* the hour's horizon band — sky.js builds it
+      // as horizonOf(sky) for every rig — and it is what the far ground and
+      // the sky meet in, so it is what the sheet should mirror. horizonColor()
+      // was tried first and came back a greener grey than the sky actually
+      // renders at the horizon (0.39/0.45/0.42 against the fog's
+      // 0.43/0.41/0.39 at noon), which put a green cast on the pool.
+      mat.uniforms.uFog.value.copy(scene.fog.color);
+      mat.uniforms.uSkyLow.value.copy(scene.fog.color);
+      mat.uniforms.uSkyTop.value.copy(scene.fog.color).multiply(zenithK);
+    }
+    if (scene.fog?.density !== undefined) mat.uniforms.uFogDensity.value = scene.fog.density;
+    prev(renderer, scene, camera, geometry, material);
+  })(mesh.onBeforeRender);
   return mesh;
 }
 
@@ -4746,14 +4999,26 @@ function buildFarHills(env) {
   // put a golden skirt a hundred metres tall under every hill — the plain's
   // colour smeared up the flank. Off the interpolated world height the band is
   // the fifteen metres it is written as.
-  const mat = new THREE.MeshStandardMaterial({
+  // Lambert, not Standard. Every ablation on the pale crests — the map, the
+  // fog, the ridge cards, the environment term — left one thing standing: a
+  // Standard material at roughness 1 still puts a 4 per cent dielectric
+  // specular on the key, and under a 9.4 sun that is a tenth of a stop of
+  // light that does not scale with albedo. On a slope keyed at a twentieth it
+  // was most of the light, which is why no tint ever got the crests under the
+  // sky. Diffuse only: what a dry scrub hillside is at a kilometre.
+  const mat = new THREE.MeshLambertMaterial({
     map: farGroundMap(),
-    roughness: 1.0,
-    metalness: 0.0,
-    envMapIntensity: 0.5,
     dithering: true,
   });
-  if (env) mat.envMap = env;
+  void env;
+  const hillUniforms = {
+    // The same macro tile the ground reads, at a 460 m period, for the
+    // two-tone variation the critics asked for on the mid hills. Its r and a
+    // channels are two unrelated slow fields, which is exactly right here:
+    // one is a value shift, the other a warmth shift, and the slopes stop
+    // being one khaki.
+    uHillMacro: { value: macroVariation() },
+  };
   // The scene fog is authored for the plain — a sand-coloured airlight at a
   // density that has the ground three quarters gone by six hundred metres,
   // which is right for a flat horizon and wrong for anything standing above
@@ -4768,37 +5033,273 @@ function buildFarHills(env) {
   // as brighter than the sky above the crests — which is the dune read again,
   // from the other side. Hills in haze are lighter than they are; they are
   // never lighter than the sky they stand against.
+  // Round 2. Three things changed here, all on the critics' "hills clip toward
+  // white and fight the sky" item:
+  //
+  //   - The plain tint is down from 0.74 to 0.56. The far plain is lit by the
+  //     same 9.4 key as the near ground but carries none of the near ground's
+  //     level cut or occlusion, so at 0.74 it rendered a good stop brighter
+  //     than the dirt in the foreground — and a plain brighter than the ground
+  //     you are standing on is the "white band" read. The forest's straw skirt
+  //     covers this mesh to 420 m and is 40 per cent fogged by then, so the
+  //     join is a soft value step under haze, not a line.
+  //   - The haze runs to 0.62 by the crests rather than a third, and it goes
+  //     toward the *sky's* horizon — fogColor is horizonOf(sky) by
+  //     construction, cooled a little further for the blue the air in front of
+  //     a dark hill scatters. With the lit value held under the haze colour
+  //     (the cap in the fog chunk) the crests cannot come out lighter than
+  //     the sky they stand against at any hour, and the crest tint can sit at
+  //     a real scrub value (0.06) instead of a floor under a highlight.
+  //   - Two-tone macro variation, ±14 per cent in value and a warmth shift,
+  //     at a 460 m period, so the mid hills are not one khaki.
+  //   - The wall no longer goes all the way to the airlight. At 100 per cent
+  //     the escarpment past 780 m rendered as a cream cut-out of hill shape
+  //     standing above the darker nearer slopes — brighter than the blue-grey
+  //     sky over it, which is the "pale band with mesas in it" in the rear and
+  //     camp framings once the ridge cards were gone. Capped at 0.86 and
+  //     cooled, the far crests keep a seventh of their own dark and sit just
+  //     under the horizon band, which is where a range at thirty kilometres
+  //     sits in real air.
+  //   - The flat takes the plain's fog. The slow rate was applied to the whole
+  //     mesh, so the far plain between the forest's skirt (40 per cent fogged
+  //     at 420 m) and the hill foot sat in clearer air than the ground in
+  //     front of it and rendered as a lit cream band under every hill — the
+  //     actual "white band" in the rear and camp frames. Now the scene's own
+  //     fog chunk runs first, its factor is kept for the flat, and only what
+  //     stands above the plain (the same height key as the tint) is held back
+  //     to the slow rate. Same rule for the scrub domes, which stand on slopes
+  //     by construction.
+  const hazeChunk = (hillKExpr, airScale = '1.0') => {
+    const stock = THREE.ShaderChunk.fog_fragment;
+    // the sky's patched chunk carries the view vector and a lit-dust colour;
+    // stock fog only the depth and the flat colour
+    const patched = stock.includes('hzDist');
+    const dist = patched ? 'hzDist' : 'vFogDepth';
+    const air = patched ? 'hzCol' : 'fogColor';
+    // the ray's world-space elevation, which the sky's chunk already has
+    const rayY = patched ? 'hzRayY' : '0.0';
+    const blend = `
+      float hillDist = ${dist};
+      // The airlight is the sky in the ray's own direction, and the sky is not
+      // one colour: it is the cream of the horizon band for the first degree
+      // and then falls steeply to blue-grey — measured in the camp framing,
+      // the sky four degrees over the crests is at 0.48/0.65/1.0 of the band
+      // and 0.34/0.55/1.0 by seven. The scene fog converges on the band
+      // whatever the ray does, which is right for the flat (every ray to the
+      // flat is at the horizon) and wrong for a hill: a crest fogged to the
+      // band stands against sky that is a stop darker, and that is the whole
+      // of the "hills lighter than the sky" defect that survived the tint,
+      // the cap and the Lambert change. So the hills' air takes the sky's
+      // gradient by the ray's elevation. Two knees, one steep, from the
+      // measured gradient.
+      float hillRayY = ${rayY};
+      vec3 hillSkyK = mix( vec3( 1.0 ), vec3( 0.5, 0.66, 1.0 ), smoothstep( -0.004, 0.06, hillRayY ) );
+      hillSkyK = mix( hillSkyK, vec3( 0.36, 0.56, 1.0 ), smoothstep( 0.06, 0.15, hillRayY ) );
+      // The flat past 450 m is folded into the hill treatment as well: the
+      // scene fog converges on the lit-dust colour, which toward the sun is a
+      // cream brighter than the sky just over the horizon, so the fully fogged
+      // far plain rendered as a pale mesa between the hills. Inside 380 m it
+      // keeps the plain's fog and meets the forest's skirt — which covers this
+      // mesh to 420 m — without a step; what shows past the skirt is on the
+      // hill treatment before it has cleared it.
+      float hillK = max( ${hillKExpr}, smoothstep( 380.0, 640.0, hillDist ) );
+      float hillFog = smoothstep( 150.0, 720.0, hillDist ) * 0.62;
+      // ...and then the last fourteen per cent over the final sixty metres, so
+      // the far plane still cuts the mesh in air the exact colour of the sky
+      float hillWall = smoothstep( 690.0, 800.0, hillDist ) * 0.86 + smoothstep( 820.0, 880.0, hillDist ) * 0.14;
+      vec3 hillAir = mix( fogColor * vec3( 0.76, 0.86, 1.0 ), fogColor * vec3( 0.86, 0.91, 0.98 ), smoothstep( 0.0, 0.86, hillWall ) );
+      hillAir = mix( hillAir, ${air}, smoothstep( 0.86, 1.0, hillWall ) );
+      // ...and the whole of it, wall included, goes to the sky at the ray's
+      // elevation: the wall is the far plane cutting the mesh, and past it is
+      // that sky, not the band
+      hillAir *= hillSkyK;
+      // the scrub domes fog to a shade under the air, so one standing past the
+      // crest it grows on — hazier than the crest in front of it — is still a
+      // dark speck in the haze and not a pale plate over a dark ridge. A
+      // darkening, not a cooling: at 0.8 of a cooled air the domes were grey-
+      // blue specks on a cream slope, which is a field of pebbles.
+      hillAir *= ${airScale};
+      float hillF = mix( fogFactor, max( hillFog, hillWall ), hillK );
+      // The rule, enforced rather than tuned for: a hill is never lighter
+      // than the air in front of it. The lit value is soft-compressed under
+      // 0.92 of the haze colour's luminance — a knee, so the sunlit flank
+      // still shades against the shaded one — before the haze is mixed in.
+      // Measured before this: crests at 0.048 albedo under the noon key and
+      // the sky's ambient rendered at 195 sRGB against a sky of 163 above
+      // them, at a range where the slow haze had only reached a third.
+      const vec3 HILL_LUMA = vec3( 0.2126, 0.7152, 0.0722 );
+      float hillAirL = max( dot( hillAir, HILL_LUMA ) * 0.92, 1e-3 );
+      float hillLitL = max( dot( gl_FragColor.rgb, HILL_LUMA ), 1e-4 );
+      float hillCapL = hillAirL * ( 1.0 - exp( -hillLitL / hillAirL ) );
+      gl_FragColor.rgb *= mix( 1.0, hillCapL / hillLitL, hillK );
+      gl_FragColor.rgb = mix( gl_FragColor.rgb, mix( ${air}, hillAir, hillK ), hillF );`;
+    const out = stock.replace(/gl_FragColor\.rgb\s*=\s*mix\([^;]*;/, blend);
+    return out === stock ? stock : out;
+  };
   mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, hillUniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying float vHillY;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHillY = position.y;');
-    // the sky's patched fog chunk carries the view vector; stock fog only the depth
-    const dist = THREE.ShaderChunk.fog_pars_fragment.includes('vFogView') ? 'length( vFogView )' : 'vFogDepth';
+      .replace('#include <common>', '#include <common>\nvarying float vHillY;\nvarying vec2 vHillXZ;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHillY = position.y;\nvHillXZ = position.xz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vHillY;')
+      .replace('#include <common>', '#include <common>\nvarying float vHillY;\nvarying vec2 vHillXZ;\nuniform sampler2D uHillMacro;')
       .replace(
         '#include <map_fragment>',
         `#include <map_fragment>
-      diffuseColor.rgb *= mix( vec3( 0.74, 0.70, 0.60 ), vec3( 0.048, 0.05, 0.044 ), smoothstep( 2.5, 15.0, vHillY ) );`,
+      vec4 hMac = texture2D( uHillMacro, vHillXZ / 460.0 + 0.23 );
+      float hillTint = smoothstep( 2.5, 15.0, vHillY );
+      diffuseColor.rgb *= mix( vec3( 0.56, 0.53, 0.45 ), vec3( 0.06, 0.062, 0.054 ), hillTint );
+      // two-tone: darker, cooler patches of denser bush against lighter dry
+      // grass, strongest on the mid slopes where there is a hill to vary
+      diffuseColor.rgb *= mix( 0.86, 1.14, hMac.r ) * mix( vec3( 0.92, 0.96, 1.03 ), vec3( 1.08, 1.03, 0.95 ), hMac.a );
+      // bush clumps: the tile's vegetation field at a ten metre period,
+      // thresholded to dark patches over the top third of the slopes' albedo,
+      // so a slope is a mottled thing at a kilometre and not a smooth cast
+      float hBush = smoothstep( 0.5, 0.82, texture2D( uHillMacro, vHillXZ / 64.0 + 0.61 ).b );
+      diffuseColor.rgb *= 1.0 - 0.7 * hBush * hillTint;`,
       )
-      .replace(
-        '#include <fog_fragment>',
-        `#ifdef USE_FOG
-      float hillDist = ${dist};
-      float hillFog = smoothstep( 150.0, 700.0, hillDist ) * 0.34;
-      float hillWall = smoothstep( 780.0, 850.0, hillDist );
-      // the air in front of a dark hill scatters blue; the airlight colour is
-      // the plain's, sand-warm, so the haze over the scrub is cooled a little
-      vec3 hillAir = mix( fogColor * vec3( 0.82, 0.9, 1.02 ), fogColor, hillWall );
-      gl_FragColor.rgb = mix( gl_FragColor.rgb, hillAir, max( hillFog, hillWall ) );
-#endif`,
-      );
+      .replace('#include <fog_fragment>', hazeChunk('smoothstep( 2.5, 15.0, vHillY )'));
   };
   const mesh = new THREE.Mesh(g, mat);
   mesh.name = 'farHills';
   mesh.castShadow = false;
   mesh.receiveShadow = false;
   mesh.frustumCulled = false;
+
+  // --- scrub on the slopes ----------------------------------------------------
+  // A vegetated hillside a kilometre off is a smooth value with dark specks on
+  // it, and the far tile's bush cells are two metres across — mipped to their
+  // mean long before that range. What reads at a kilometre is a blob twelve
+  // metres wide, so those are placed as geometry: squashed low-poly domes,
+  // one merged buffer, one draw call, dark olive, gathered along the drainage
+  // lines by a slow noise field and thinning out toward the crests. The
+  // forest's own billboards would be the richer impostor for this, but they
+  // stop at 420 m and this is the range past it; at 16 k triangles the domes
+  // are 3 per cent of the terrain's budget.
+  const scrub = (() => {
+    const rnd = mulberry32(0x7a11);
+    const COUNT = 760;
+    // a polyhedron geometry is already non-indexed: one flat triangle list
+    const proto = new THREE.IcosahedronGeometry(1, 0);
+    const pp = proto.attributes.position.array;
+    const tris = pp.length / 9;
+    const pos = new Float32Array(COUNT * tris * 9);
+    const nrm = new Float32Array(COUNT * tris * 9);
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const c = new THREE.Vector3();
+    const n = new THREE.Vector3();
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const s = new THREE.Vector3();
+    const e = new THREE.Euler();
+    let w = 0;
+    let placed = 0;
+    for (let guard = 0; guard < COUNT * 12 && placed < COUNT; guard++) {
+      // in the annulus the hills mesh actually shows: past the skirt, inside
+      // the wall; denser nearer, where a blob is still a few pixels
+      const r = 430 + rnd() ** 1.4 * 420;
+      const ang = rnd() * Math.PI * 2;
+      const x = Math.cos(ang) * r;
+      const z = Math.sin(ang) * r;
+      const y = baseHeight(x, z);
+      // On the slopes, not the flat. The first pass scattered these over the
+      // plain as well and they read as discs lying on it; bush on a hillside
+      // reads as the hillside's texture. So: only where the far rise has
+      // lifted the ground a few metres, thinning again toward the bare crests.
+      // From 12 m, not 3: the height key that puts the hill on the slow haze
+      // is complete at 15 m, and a dome on lower ground stood in the plain's
+      // fog — half way to cream at 450 m — in front of a hill that was in the
+      // hill's, and read as a pale pebble against a dark slope.
+      const onSlope = smoothstep(12, 22, y) * (1 - smoothstep(70, 150, y));
+      if (rnd() > onSlope) continue;
+      // gathered: bush follows the drainage, so the field that decides where
+      // a blob may stand is slow and most of a slope is still open
+      const gather = fbm(x * 0.0025 + 5, z * 0.0025 + 1, { octaves: 3, period: 64, seed: 811 });
+      if (rnd() > smoothstep(0.34, 0.7, gather) * 0.9 + 0.1) continue;
+      // Acacia-crown sized: 4-9 m across and a dome, not a plate. Round 1's
+      // 6-17 m saucers were thirty pixels wide at the near end, and the first
+      // pass this round sat them on the surface with flat-shaded facets, which
+      // is a field of grey pebbles. Sunk to the equator so only the crown
+      // shows, with sphere normals so the shading is one smooth gradient.
+      // 3-6 m, from 4-9, and sunk to the equator: at 4-9 m the domes on a
+      // crest stood a whole diameter above the silhouette, and one behind the
+      // crest is in more air than the crest — lighter — so the skyline grew a
+      // row of pale lumps. A bush is a speck *in* the slope; at 3-6 m it is
+      // one at 500 m, and what crosses the skyline is a metre of dark.
+      const wid = 3 + rnd() ** 1.4 * 3;
+      const hgt = wid * (0.45 + rnd() * 0.25);
+      s.set(wid * (0.85 + rnd() * 0.3), hgt, wid * (0.85 + rnd() * 0.3));
+      e.set(0, rnd() * 6.283, 0);
+      q.setFromEuler(e);
+      m.compose(new THREE.Vector3(x, y - hgt * 0.5, z), q, s);
+      for (let f = 0; f < tris; f++) {
+        const o = f * 9;
+        for (let k = 0; k < 3; k++) {
+          a.set(pp[o + k * 3], pp[o + k * 3 + 1], pp[o + k * 3 + 2]);
+          // the unit sphere's normal is its position; under a non-uniform
+          // scale it goes through the inverse scale
+          n.set(a.x / s.x, a.y / s.y, a.z / s.z).applyQuaternion(q).normalize();
+          a.applyMatrix4(m);
+          pos[w] = a.x;
+          pos[w + 1] = a.y;
+          pos[w + 2] = a.z;
+          nrm[w] = n.x;
+          nrm[w + 1] = n.y;
+          nrm[w + 2] = n.z;
+          w += 3;
+        }
+      }
+      placed++;
+    }
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.BufferAttribute(pos.subarray(0, w), 3));
+    sg.setAttribute('normal', new THREE.BufferAttribute(nrm.subarray(0, w), 3));
+    sg.computeBoundingSphere();
+    // Dark olive, half the crest tint: a dome's crown faces the sun where the
+    // slope under it faces away, so at equal albedo the domes rendered
+    // *lighter* than the hill they stood on. A bush is the darkest thing on a
+    // hillside at every hour; it has to be darker than the slope after the
+    // key has had its say, not before.
+    //
+    // Lambert, for the reason the hill is. The domes were pale grey plates at
+    // 0.042, at 0.014 and at 0.008 alike — hiding them was the only ablation
+    // that changed the frame — because a Standard material's 4 per cent
+    // dielectric specular on a 9.4 key is a tenth of a stop that no albedo
+    // touches. With that gone the colour is the whole of what a dome returns.
+    //
+    // 0.004, from 0.012. With the hill's air now the sky at the ray's
+    // elevation — a stop darker than the band — the crest at 500 m renders
+    // at about 0.08 linear, and a dome whose crown takes the key at 0.012 puts
+    // 0.03 of warm lit value on top of the same haze: a third lighter than
+    // the slope, and beige. At 0.004 the lit term is under a hundredth and
+    // what a dome is, at any range, is the haze at 0.82 — a speck a fifth
+    // darker than the slope it stands on.
+    const sm = new THREE.MeshLambertMaterial({
+      color: new THREE.Color(0.004, 0.005, 0.003),
+      dithering: true,
+    });
+    // Same height key as the hill under them. With the domes on the slow haze
+    // everywhere and the hill's lower slopes on the plain's fog, a dome on a
+    // low slope was in different air from the ground it stood on — cooler and
+    // clearer — and rendered as a distinct grey pebble on a cream slope.
+    sm.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying float vHillY;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHillY = position.y;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vHillY;')
+        .replace('#include <fog_fragment>', hazeChunk('smoothstep( 2.5, 15.0, vHillY )', '0.82'));
+    };
+    const sMesh = new THREE.Mesh(sg, sm);
+    sMesh.name = 'farScrub';
+    sMesh.castShadow = false;
+    sMesh.receiveShadow = false;
+    sMesh.frustumCulled = false;
+    return sMesh;
+  })();
+  mesh.add(scrub);
+  mesh.userData.scrub = scrub;
   return mesh;
 }
 

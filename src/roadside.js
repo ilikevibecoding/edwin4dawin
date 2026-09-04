@@ -495,13 +495,27 @@ export function createRoadside({ terrain, env = null, quality = 'high' } = {}) {
     }
   }
 
-  /** Concrete kilometre post: white, black cap, sunk a hand into the verge. */
+  /**
+   * Concrete kilometre post: white, black cap, sunk a hand into the verge.
+   *
+   * No two the same. Each leans up to five degrees off plumb — the verge
+   * settles, a grader clips them — and stands a little higher or lower out of
+   * the ground. Round 1 had them identical and perfectly plumb, which is the
+   * one thing a row of concrete posts on a murram road is never.
+   */
   function kmPost(at) {
-    add('white', rbox(0.16, 0.62, 0.16, 0.012, 1), { pos: [0, 0.2, 0] }, at);
+    const tiltX = (rnd() - 0.5) * 0.175;
+    const tiltZ = (rnd() - 0.5) * 0.175;
+    const sink = (rnd() - 0.5) * 0.08;
+    const rot = [tiltX, 0, tiltZ];
+    // every piece is placed up the post's own leaning axis, pivoting at the
+    // ground, so the cap stays on the post: Rx(Ry(Rz (0, d, 0)))
+    const up = (d) => [-d * Math.sin(tiltZ), d * Math.cos(tiltX) * Math.cos(tiltZ), d * Math.cos(tiltZ) * Math.sin(tiltX)];
+    add('white', rbox(0.16, 0.62, 0.16, 0.012, 1), { pos: up(0.2 - sink), rot }, at);
     const cap = new THREE.ConeGeometry(0.115, 0.1, 4);
     cap.rotateY(Math.PI / 4);
-    add('black', cap, { pos: [0, 0.56, 0] }, at);
-    add('black', rbox(0.165, 0.09, 0.165, 0.008, 1), { pos: [0, 0.47, 0] }, at);
+    add('black', cap, { pos: up(0.56 - sink), rot }, at);
+    add('black', rbox(0.165, 0.09, 0.165, 0.008, 1), { pos: up(0.47 - sink), rot }, at);
   }
 
   /** Whitewashed stone, the kind parks line a turnout with. */
@@ -538,9 +552,12 @@ export function createRoadside({ terrain, env = null, quality = 'high' } = {}) {
   signPost(roadFrame(look.t + 30 * tPer, -1, EDGE + 0.6), 'antelope', { w: 0.8, diamond: true, top: 2.3, lean: 0.04 });
   timberBoard(roadFrame(0.83, 1, EDGE + 0.9), 'lions', { w: 1.4, h: 0.95, top: 2.0 });
 
-  // kilometre posts every fifty metres on the right-hand verge
+  // Kilometre posts about every fifty metres on the right-hand verge. The
+  // spacing is what a crew paced out, not what a survey set: each one lands up
+  // to six metres either side of its mark and a hand's width in or out from
+  // the ditch. A row at exactly fifty metres reads as a fence.
   for (let s = 12; s < terrain.mainLength - 8; s += 50) {
-    const f = roadFrame(s * tPer, -1, EDGE + 0.45);
+    const f = roadFrame(Math.min(1, (s + (rnd() - 0.5) * 12) * tPer), -1, EDGE + 0.45 + (rnd() - 0.5) * 0.3);
     f.yaw += (rnd() - 0.5) * 0.3;
     kmPost(f);
   }

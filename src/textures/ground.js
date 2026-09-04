@@ -1822,7 +1822,10 @@ export function rippleMap() {
 export function horizonReflection() {
   return cached('gnd.horizonrefl', () => {
     const w = 512;
-    const h = 96;
+    // 192 rows, from 96: the skyline now lives in the bottom four per cent of
+    // the card, and at 96 rows that was three pixels for hills, grass and
+    // trunks together.
+    const h = 192;
     const skyLow = rgb(PALETTE.skyHorizon);
     const skyHigh = rgb(PALETTE.skyTop);
     // Hills sit in the haze: a fraction darker and bluer than the horizon sky,
@@ -1838,18 +1841,40 @@ export function horizonReflection() {
     const trunk = rgb(0x1a150f);
     const rnd = mulberry32(7703);
     const trees = [];
-    // Forty trees round the panorama. A pool shows a sixteenth of it, so that
-    // is two or three trees in any one reflection — a savanna, not a wood, and
-    // every pool still has something standing in it.
-    for (let k = 0; k < 40; k++) {
+    // Thirty trees round the panorama. A pool shows a sixteenth of it, so that
+    // is one or two trees in any one reflection — a savanna, not a wood, and
+    // most pools still have something standing in them.
+    //
+    // Round 2: the whole skyline is lower. v is elevation over ninety degrees,
+    // so the old ridge at 0.035-0.08 stood two to five degrees high all the
+    // way round — a range of mountains — and a water hole read from twenty
+    // metres, whose reflected ray leaves at four to eight degrees, sampled
+    // nothing but that ridge and came out a uniform dark grey. Real far hills
+    // on a plain are under two degrees; the sheet reflects sky, with the
+    // hills as a thin dark line along its far edge and the acacias as the
+    // only things that stand up into it.
+    // Thirty-four trees, a third of them near enough to stand five to ten
+    // degrees high. With the card the right way up (see flipY below) the
+    // sheet from a standing camera reflects the first eight degrees of it, so
+    // this is the band that decides whether the pool has anything in it: too
+    // few and it is a featureless mirror of the horizon, which reads as a
+    // plate; these give it two or three dark crowns, smeared by the ripple.
+    // Fifty-six, from thirty-four, and the crowns half again as wide. Measured
+    // on the card: at thirty-four the rows a water hole samples from a
+    // standing camera (v 0.03-0.1) were ninety per cent open sky, so a
+    // twenty-degree slice of it — what the hole spans — had a tree in it or
+    // it did not, and mostly did not; the sheet came out the plain colour of
+    // the band. A water hole's own shore is the one place on a savanna where
+    // the trees stand close.
+    for (let k = 0; k < 56; k++) {
       const far = rnd();
       trees.push({
         u: rnd(),
         // acacia: a wide flat crown on a thin trunk, the crown three to five
         // times wider than it is tall
-        top: 0.06 + (1 - far) ** 1.6 * 0.2,
-        wid: 0.004 + (1 - far) ** 1.6 * 0.03,
-        haze: 0.35 + (1 - far) * 0.65,
+        top: 0.03 + (1 - far) ** 1.6 * 0.16,
+        wid: 0.004 + (1 - far) ** 1.6 * 0.042,
+        haze: 0.35 + (1 - far) * 0.6,
         lit: rnd(),
         seed: rnd() * 10,
       });
@@ -1862,12 +1887,12 @@ export function horizonReflection() {
         const v = y / h; // 0 at the horizon, 1 at the zenith
         let c = mixRgb(skyLow, skyHigh, smoothstep(0.02, 0.85, v));
         // Distant hills: two ridgelines in haze, the nearer one darker.
-        const ridgeFar = 0.035 + fbm(u * 5 + 3, 1.7, { octaves: 3, period: 5, seed: 31 }) * 0.045;
-        const ridgeNear = 0.012 + fbm(u * 8 + 9, 4.1, { octaves: 3, period: 8, seed: 37 }) * 0.03;
-        c = mixRgb(c, hillFar, 1 - smoothstep(ridgeFar - 0.006, ridgeFar + 0.006, v));
-        c = mixRgb(c, hillNear, 1 - smoothstep(ridgeNear - 0.004, ridgeNear + 0.004, v));
+        const ridgeFar = 0.012 + fbm(u * 5 + 3, 1.7, { octaves: 3, period: 5, seed: 31 }) * 0.026;
+        const ridgeNear = 0.005 + fbm(u * 8 + 9, 4.1, { octaves: 3, period: 8, seed: 37 }) * 0.012;
+        c = mixRgb(c, hillFar, 1 - smoothstep(ridgeFar - 0.004, ridgeFar + 0.004, v));
+        c = mixRgb(c, hillNear, 1 - smoothstep(ridgeNear - 0.003, ridgeNear + 0.003, v));
         // The grass line at the very bottom: a sliver, lit.
-        const grassTop = 0.006 + fbm(u * 40, 2.2, { octaves: 2, period: 40, seed: 41 }) * 0.008;
+        const grassTop = 0.003 + fbm(u * 40, 2.2, { octaves: 2, period: 40, seed: 41 }) * 0.005;
         c = mixRgb(c, mixRgb(grassShade, grassLine, fbm(u * 24, 0.5, { octaves: 2, period: 24, seed: 43 })), 1 - smoothstep(grassTop - 0.003, grassTop + 0.003, v));
         for (const t of trees) {
           let du = u - t.u;
@@ -1895,7 +1920,18 @@ export function horizonReflection() {
       },
       // No mip chain, for the reason the forest card had none: the tree band is
       // a tenth of the card tall and a mip-filtered reflection is a flat plate.
-      { srgb: true, repeat: [1, 1], aniso: 1, mips: false },
+      //
+      // flipY off. `configure` flips every texture by default, which is right
+      // for an image and wrong for a lookup: with the flip, row 0 — the
+      // horizon, per the painter above — was uploaded to v = 1, and the sheet
+      // shader, which indexes v by the reflected ray's elevation, read the
+      // *zenith* at the horizon. Every pool sampled the card's deep-blue top
+      // rows at the grazing angles a standing camera sees water at: that was
+      // round 1's pale blue-grey disc, and this round's first pass came out
+      // cobalt from dividing that blue by the warm horizon it was supposed to
+      // be. The skyline the card is painted for was sitting in the last four
+      // per cent of v, where no reflected ray ever looked.
+      { srgb: true, repeat: [1, 1], aniso: 1, mips: false, flipY: false },
     );
   });
 }
