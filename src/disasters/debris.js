@@ -96,7 +96,7 @@ export class DebrisSystem {
     const def = BLOCKS[this.block[i]];
     const [tu, tv, ts] = tileUV(def.tex[0]);
     this.uvAttr.setXYZ(i, tu, tv, ts);
-    const l = this.world.sampleLight(x, y, z);
+    const l = opts.light || this.world.sampleLight(x, y, z);
     this.lightAttr.setXY(i, l[0], l[1]);
     this.lightTimer[i] = i % 12;
     this.spawned++;

@@ -127,6 +127,12 @@ export class Game {
     this.setLoading('Waking up the town...', 0.96);
     await this.nextFrame();
     await this.setupEntities();
+    // pre-compile shader programs that would otherwise stall on first use (name tags, debris)
+    if (this.npcs && this.npcs.list.length) {
+      const tag = this.npcs.list[0].tag; tag.visible = true;
+      try { this.renderer.compile(this.scene, this.camera); } catch (e) { /* ignore */ }
+      tag.visible = false;
+    }
     const sy = params.has('y') ? parseFloat(params.get('y')) : this.world.surfaceY(Math.floor(sx), Math.floor(sz)) + 1;
     this.player.teleport(sx, sy, sz);
     this.player.yaw = this.startYaw; // default: face east toward town
