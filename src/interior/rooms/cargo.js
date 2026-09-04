@@ -51,10 +51,11 @@ export function build(kit, ctx, room, lib) {
 
 // ---------------------------------------------------------------- loader lanes
 function lanes(kit, P, room, y0) {
-  const { x0, x1, z0 } = room;
-  // the lane from the door to the island: amber edges, white centre dashes, bay stencil (the door surround
-  // draws the sill band)
-  deckLabel(kit, 0, y0, z0 + 3.2, 6, 3, Math.PI);
+  const { x0, x1 } = room;
+  // the lane from the door to the island: amber edges, white centre dashes, bay stencil 8 m in from the door
+  // view between two dashes (at 3 m it lay under the camera's feet and filled the bottom of the frame as one
+  // blown band; the door surround draws the sill band)
+  deckLabel(kit, 0, y0, 530.2, 6, 3, Math.PI);
   for (const x of [LANE.x0, LANE.x1]) deckStrip(kit, "emitAmber", x - 0.08, LANE.z0, x + 0.08, LANE.z1, y0);
   for (let z = LANE.z0 + 3; z < LANE.z1 - 2; z += 3) deckStrip(kit, "emitAmber", -0.15, z, 0.15, z + 1.4, y0);
   deckDecal(kit, -6.2, y0, 528, 2.6, 11, Math.PI / 2);

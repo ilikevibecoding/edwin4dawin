@@ -172,10 +172,13 @@ await shot("walk_liftPortal");
 await walk("KeyW", 5); // facing +x, through the door
 b = await pose();
 check("corridor portal lets the player into the hangar", near(b.y, DECK, 0.05) && b.x > -31.5, b);
+// hugging the corridor's -z wall (0.08 m of clearance): the 0.34 m pilaster at the corner deflects the capsule
+// inward to z >= 478.66 (its inner face + the 0.32 m radius) and the player still gets through; without the
+// pilaster's collider z would stay at 478.4
 await teleport(-36.2, 478.4, -90, 2);
 await walk("KeyW", 4);
 c = await pose();
-check("portal pilaster blocks the corridor corner", near(c.y, DECK, 0.05) && c.x < -32.8 && c.x > -33.5, c);
+check("portal pilaster deflects a wall-hugging player into the opening", near(c.y, DECK, 0.05) && c.z > 478.6 && c.x > -31.5, c);
 
 const failed = results.filter((r) => !r.ok);
 writeFileSync(resolve(outDir, "walk.json"), JSON.stringify(results, null, 1));

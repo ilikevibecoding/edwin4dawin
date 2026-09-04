@@ -12,7 +12,7 @@ import { roomFloorY } from "../../config/shipSpec.js";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, bayWalls, crate, toolCart, pedestalConsole, shadowCasters,
   cabinet, compactBank, lightBar, pipeRun, stairTower, stairRun, beacons, bayCeiling, shuttleShape, SHUTTLE, fuelBowser,
-  ladder, doorSurround, displayWall, ensureLabels, ensureDiffuser, deckLabel, cableTray, truss, BLACK,
+  ladder, doorSurround, displayWall, ensureLabels, ensureDiffuser, deckLabel, cableTray, truss, floodFixture, BLACK,
 } from "../../hangar/machinery.js";
 
 const CAT_H = 8; // catwalk height above the deck
@@ -227,19 +227,23 @@ function floodMast(kit, P, sx, z, y0) {
   kit.boxMM("paintedMetal", [x - 0.7, y0 + 0.9, z - 0.7], [x + 0.7, y0 + 8.0, z + 0.7], { color: P.slate, uv: "world", texel: 0.8 });
   for (const s of [-1, 1]) kit.boxMM("metal", [x + s * 0.72 - 0.04, y0 + 1.2, z - 0.4], [x + s * 0.72 + 0.04, y0 + 7.6, z + 0.4], { color: P.darkMetal, texel: 1 });
   kit.collider([x - 1.4, y0, z - 1.4], [x + 1.4, y0 + 8.0, z + 1.4], "floodMast");
-  // cantilever arm toward the pad with a flood head at its end (well outside the folded wing tips)
+  // cantilever arm toward the pad with a louvred flood head at its end (well outside the folded wing tips).
+  // The head is a floodFixture on the dim diffuser: its 1.3 m emitWhiteSoft plate, seen from the door 14 m
+  // away, bloomed into a 3 m white blob at both near masts
   const ax = sx * 9.4;
   kit.boxMM("paintedMetal", [Math.min(x, ax), y0 + 7.0, z - 0.45], [Math.max(x, ax), y0 + 7.9, z + 0.45], { color: P.gunmetal, uv: "world", texel: 0.8 });
   kit.boxMM("hazard", [Math.min(x, ax) + 0.5, y0 + 7.2, z - 0.46], [Math.max(x, ax) - 0.5, y0 + 7.5, z - 0.44], { uv: "world", texel: 1.2 });
-  kit.box(BLACK, ax + sx * 0.2, y0 + 6.6, z, 1.6, 0.5, 1.6);
-  kit.box("emitWhiteSoft", ax + sx * 0.2, y0 + 6.34, z, 1.3, 0.02, 1.3, { uv: "keep" });
-  kit.box("emitBlue", ax - sx * 0.61, y0 + 6.7, z, 0.02, 0.2, 0.8);
-  // stays from the tower head down to the arm
+  kit.box(BLACK, ax + sx * 0.2, y0 + 6.85, z, 0.5, 0.3, 0.5);
+  floodFixture(kit, ax + sx * 0.2, y0 + 6.6, z, "emitDiffuser", { alongX: true, w: 1.6, lip: 0.3 });
+  kit.box("emitBlue", ax - sx * 0.61, y0 + 6.6, z, 0.02, 0.16, 0.6);
+  // stays from the tower head down to the middle of the arm (their old anchor hung 0.6 m past the arm tip,
+  // right under where the pooled light now sits above the arm)
+  const stayX = sx * 11.6;
   for (const dz of [-0.3, 0.3]) {
-    const dx = sx * 8.8 - x;
+    const dx = stayX - x;
     const dyy = (y0 + 7.9) - (y0 + 9.0);
     const L = Math.hypot(dx, dyy);
-    kit.add("metal", new THREE.CylinderGeometry(0.1, 0.1, L, 8), { pos: [(x + sx * 8.8) / 2, y0 + 8.45, z + dz], rot: [0, 0, -Math.atan2(dx, dyy)], color: P.steel, uv: "scale", uvScale: [1, 4] });
+    kit.add("metal", new THREE.CylinderGeometry(0.1, 0.1, L, 8), { pos: [(x + stayX) / 2, y0 + 8.45, z + dz], rot: [0, 0, -Math.atan2(dx, dyy)], color: P.steel, uv: "scale", uvScale: [1, 4] });
   }
   kit.box("paintedMetal", x, y0 + 8.6, z, 1.6, 1.2, 1.6, { color: P.gunmetal, texel: 1 });
   kit.box("emitBlue", x + sx * 0.81, y0 + 8.6, z, 0.02, 0.2, 0.8);
@@ -438,8 +442,10 @@ function lights(ctx, lib, y0, yTop) {
   // housings (hung 1.2 m under the plate they lit it into blown white halos); the centre column over the hull
   // is a step weaker so the shuttle's top reads as shape, not glare, from the catwalk
   for (const [x, z] of CEIL_LIGHTS) cool(x === 0 ? 480 : 600, 70, [x, yTop + 0.04, z]);
-  // flood-mast heads light the pad ends, blue accents under the hull and at the nose
-  for (const sx of [-1, 1]) for (const z of [365.5, 394.5]) cool(140, 30, [sx * 9.4, y0 + 6.2, z], 0xe8f0ff);
+  // flood-mast heads light the pad ends, blue accents under the hull and at the nose. The mast light sits
+  // 0.6 m above the arm over its head (nothing there but the arm's top face): inside the head it lit the
+  // housing and the arm's underside from 0.3 m into a blown blob at both near masts
+  for (const sx of [-1, 1]) for (const z of [365.5, 394.5]) cool(140, 30, [sx * 9.6, y0 + 8.5, z], 0xe8f0ff);
   // (the nose accent stands on the deck 3 m ahead of the nose tip: at 60 cd 0.7 m off the tip it blew the
   // nose faces white; under the hull the glow is what lights the gear and the pad between the struts)
   ctx.lights.teal.push(lib.pointLight(0x66b6ff, 80, 30, [0, y0 + 1.0, 380]));
