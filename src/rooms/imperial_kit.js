@@ -317,11 +317,12 @@ export function impWall(frame, length, height, opts = {}) {
 // Ceiling: charcoal coffers between black beams, recessed white light troughs along the room axis
 // ---------------------------------------------------------------------------
 export function impCeiling(kit, x0, z0, x1, z1, y, opts = {}) {
-  const { beamStep = 3.2, troughs = 1, troughW = 0.36, seed = 7, accentKey = "emitBlue", withLights = true, dark = PALETTE.impBlack, lightKey = "emitWhiteDim" } = opts;
+  const { beamStep = 3.2, troughs = 1, troughW = 0.36, seed = 7, accentKey = "emitBlue", withLights = true, dark = PALETTE.impBlack, lightKey = "emitWhiteDim", slabMat = "impMetalRough" } = opts;
   const rand = rng(seed);
   const w = x1 - x0;
   const d = z1 - z0;
-  kit.boxMM("impTrim", [x0, y, z0], [x1, y + 0.4, z1], { color: dark, texel: 0.4 });
+  // matte slab by default: the trim material's metalness mirrored every point key as a hot blob
+  kit.boxMM(slabMat, [x0, y, z0], [x1, y + 0.4, z1], { color: dark, texel: 0.4 });
   // beams across (x direction) every beamStep along z
   const nB = Math.max(1, Math.round(d / beamStep));
   for (let i = 0; i <= nB; i++) {

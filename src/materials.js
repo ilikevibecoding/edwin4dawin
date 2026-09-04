@@ -216,7 +216,8 @@ export function buildMaterials() {
   };
   // Console screens (Kestrel): black diffuse, emissive UI
   const screenTex = [makeScreen(512, 256, 5), makeScreen(512, 256, 17), makeScreen(512, 256, 29, "#f08a3c", "#4fd8cc"), makeScreen(512, 256, 41)];
-  const screenMat = (tex, intensity = 1.3) => new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: intensity, roughness: 0.15, metalness: 0.0, envMapIntensity: 1.0 });
+  // roughness 0.3: glassy enough to catch a sheen, no longer a mirror that flares every point key
+  const screenMat = (tex, intensity = 1.3) => new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: intensity, roughness: 0.3, metalness: 0.0, envMapIntensity: 1.0 });
   mats.screens = screenTex.map((tex) => screenMat(tex));
   mats.leds = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: makeLedStrip(256, 32, 9), emissiveIntensity: 2.0, roughness: 0.3, metalness: 0 });
 
