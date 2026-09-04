@@ -460,17 +460,14 @@ export function createTraffic({ mats, audio, zone } = {}) {
         hangarBus.emit("rack", { rack: f.rack, ext: rackHang(r) - f.pos.y, clamped: true });
         if (done) {
           setState(f, "dropping");
-          f.passed = false;
           hangarBus.emit("rack", { rack: f.rack, ext: T.ramExt, clamped: false });
           emit("launch", { id: f.id, rack: r.id, x: r.x, z: r.z });
+          // the tractor emitters take the fighter from the ram and hold it through the shaft
+          emit("passing", { id: f.id, dir: "out", x: r.x, z: r.z, duration: 7 });
           if (audio) audio.play("tie_launch");
         }
         break;
       case "dropping":
-        if (!f.passed && f.pos.y < HANGAR_WELL.yDeck + 1) {
-          f.passed = true;
-          emit("passing", { id: f.id, dir: "out", x: r.x, z: r.z, duration: 5 });
-        }
         if (done) {
           setState(f, "launching");
           // join the emptier loop so the dorsal / ventral patrols stay balanced over time
