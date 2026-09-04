@@ -9,7 +9,7 @@ import { impWall, wallScreen, impConsole, impChair, crate, pipeRun, wallSegment 
 import { pointLight, wallFrame } from "../builders.js";
 import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
-import { ensureCrewMaterials, SIGN, signRect, wallSign, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, gauge, intercom, valveWheel, propFrame } from "./crewProps.js";
+import { ensureCrewMaterials, SIGN, signRect, numeralRect, wallSign, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, gauge, intercom, valveWheel, propFrame } from "./crewProps.js";
 
 const LS_PAINTS = [
   [PALETTE.impMid, 0.4],
@@ -18,12 +18,17 @@ const LS_PAINTS = [
 ];
 const LS_STYLES = { panel: 0.5, vent: 0.16, greeble: 0.12, strip: 0.05, screen: 0.02, conduit: 0.15 };
 
-/** Big storage tank on a base ring: bands, seams, a flattened dome, label plate, level gauge, ladder. */
-function tank(kit, ctx, { x, z, r, h, color, label, accent, facing, seed, ladder = true }) {
+/**
+ * Big storage tank on a base ring: bands, seams, a light mid band, a flattened dome, lit label plate,
+ * stencilled tank number, level gauge, ladder.
+ */
+function tank(kit, ctx, { x, z, r, h, color, label, accent, facing, seed, ladder = true, number = 1, numeralColor = PALETTE.impWhite }) {
   const rand = rng(seed);
   const y0 = 0.3;
   kit.cyl("paintedMetal", x, 0.15, z, r + 0.18, 0.3, "y", { color: PALETTE.impBlack, segments: 32, texel: 2 });
   kit.cyl("paintedMetal", x, y0 + h / 2, z, r, h, "y", { color, segments: 40, texel: 0.6 });
+  // light mid band between the seams so the drums read as more than dark cylinders
+  kit.cyl("paintedMetal", x, y0 + h * 0.5, z, r + 0.015, 0.5, "y", { color: PALETTE.impLight, segments: 40, texel: 0.6 });
   for (const k of [0.22, 0.5, 0.78]) kit.add("paintedMetal", new THREE.TorusGeometry(r + 0.02, 0.05, 8, 48), { pos: [x, y0 + h * k, z], rot: [Math.PI / 2, 0, 0], color: PALETTE.impDark, texel: 2 });
   kit.add("paintedMetal", new THREE.TorusGeometry(r + 0.04, 0.07, 8, 48), { pos: [x, y0 + 0.08, z], rot: [Math.PI / 2, 0, 0], color: PALETTE.impBlack, texel: 2 });
   for (let i = 0; i < 6; i++) {
@@ -40,10 +45,19 @@ function tank(kit, ctx, { x, z, r, h, color, label, accent, facing, seed, ladder
   // label plate + level gauge facing the trench
   const fz = z + facing * (r + 0.02);
   const F = propFrame(kit, x, fz, facing > 0 ? 0 : Math.PI);
-  F.box("paintedMetal", 0, 1.9, 0.04, 1.3, 0.8, 0.08, { color: PALETTE.impBlack, texel: 2 });
-  F.add("crew_signLit", new THREE.PlaneGeometry(1.0, 0.25), 0, 2.05, 0.085, { uv: "keep", uvRect: signRect(label) });
-  F.box("darkGloss", 0.35, 1.68, 0.082, 0.5, 0.1, 0.006);
-  F.box("leds", -0.3, 1.68, 0.082, 0.5, 0.05, 0.006, { uv: "keep" });
+  // the plate runs back into the drum so its outer edges meet the curved surface instead of floating
+  F.box("paintedMetal", 0, 1.85, -0.16, 1.8, 0.9, 0.48, { color: PALETTE.impBlack, texel: 2 });
+  F.add("crew_signLit", new THREE.PlaneGeometry(1.6, 0.4), 0, 2.05, 0.085, { uv: "keep", uvRect: signRect(label) });
+  F.box("darkGloss", 0.35, 1.6, 0.082, 0.5, 0.1, 0.006);
+  F.box("leds", -0.3, 1.6, 0.082, 0.5, 0.05, 0.006, { uv: "keep" });
+  // stencilled tank number curved onto the drum above the plate
+  {
+    const nr = r + 0.012;
+    const size = 0.6;
+    const th = size / nr;
+    const g = new THREE.CylinderGeometry(nr, nr, size, 12, 1, true, (facing > 0 ? 0 : Math.PI) - th / 2, th);
+    kit.add("crew_numeral", g, { pos: [x, 2.68, z], uv: "keep", uvRect: numeralRect(number), color: numeralColor });
+  }
   // vertical sight gauge: dark slot with the liquid/gas column part-filled
   const fill = 0.35 + rand() * 0.55;
   F.box("paintedMetal", 0, 1.0, 0.04, 0.22, 1.3, 0.08, { color: PALETTE.impDark, texel: 2 });
@@ -150,7 +164,7 @@ function wasteUnit(kit, ctx, x, z) {
   F.cyl("paintedMetal", 0.6, 3.3, -0.2, 0.75, 1.4, "x", { color: PALETTE.impMid, segments: 24, texel: 1.5 });
   for (const dx of [-0.1, 1.3]) F.add("paintedMetal", new THREE.TorusGeometry(0.77, 0.05, 8, 32).rotateY(Math.PI / 2), dx, 3.3, -0.2, { color: PALETTE.impBlack, texel: 2 });
   F.box("paintedMetal", -1.1, 3.2, -0.2, 0.9, 0.9, 0.9, { color: PALETTE.impDark, texel: 1.5 });
-  F.box("hazard", -1.1, 3.66, -0.2, 0.95, 0.04, 0.95, { texel: 3 });
+  F.box("paintedMetal", -1.1, 3.66, -0.2, 0.95, 0.04, 0.95, { color: PALETTE.impBlack, texel: 2 });
   F.cyl("paintedMetal", -1.1, 3.9, -0.2, 0.28, 0.5, "y", { color: PALETTE.impBlack, segments: 16, texel: 2 });
   // loading door with hazard frame, handle wheel, small viewport
   F.box("hazard", 0.3, 1.3, 0.76, 1.5, 1.5, 0.02, { texel: 3 });
@@ -167,11 +181,12 @@ function wasteUnit(kit, ctx, x, z) {
   F.add("decal", new THREE.PlaneGeometry(0.5, 0.5), 1.35, 0.6, 0.77, { uv: "keep", uvRect: decalRect(1) });
   F.cyl("paintedMetal", 1.3, 2.95, 0.6, 0.12, 0.1, "y", { color: PALETTE.impBlack, segments: 14, texel: 2 });
   F.cyl("crew_alert", 1.3, 3.1, 0.6, 0.09, 0.2, "y", { segments: 14 });
-  // ducting from the drum to the wall and a hazard stripe on the deck in front
+  // ducting from the drum to the wall and a plain black kick line on the deck in front (the
+  // hazard-framed loading door is the unit's signature; the deck around it stays quiet)
   pipeRun(kit, [F.at(1.4, 3.3, -0.2).toArray(), F.at(1.4, 3.3, -1.4).toArray(), F.at(1.4, 4.15, -1.4).toArray()], 0.16, PALETTE.impMid);
   const p0 = F.at(-1.9, 0, 1.3);
   const p1 = F.at(1.9, 0, 1.55);
-  kit.boxMM("hazard", [Math.min(p0.x, p1.x), 0, Math.min(p0.z, p1.z)], [Math.max(p0.x, p1.x), 0.012, Math.max(p0.z, p1.z)], { texel: 4 });
+  kit.boxMM("paintedMetal", [Math.min(p0.x, p1.x), 0, Math.min(p0.z, p1.z)], [Math.max(p0.x, p1.x), 0.012, Math.max(p0.z, p1.z)], { color: PALETTE.impBlack, texel: 2 });
   F.collider(-1.8, -1.3, 1.8, 0.85, 3.9, "waste");
   // bin cart in front: box on castors with a lid ajar and refuse sacks
   const cp = F.at(1.0, 0, 1.9);
@@ -194,7 +209,7 @@ export function buildLifesupport(kit, ctx) {
   const trench = { x0: -27.0, x1: -9.6, z0: -0.9, z1: 0.9, depth: 0.9 };
   const pad = 0.4;
   const floorMat = "floorGloss";
-  const fc = 0x8c8f96;
+  const fc = 0x50545c; // close to the corridor deck; the room reads by its lit trench, not a pale floor
   kit.boxMM(floorMat, [min[0] - pad, -0.12, min[2] - pad], [max[0] + pad, 0, trench.z0], { color: fc, texel: 0.33 });
   kit.boxMM(floorMat, [min[0] - pad, -0.12, trench.z1], [max[0] + pad, 0, max[2] + pad], { color: fc, texel: 0.33 });
   kit.boxMM(floorMat, [min[0] - pad, -0.12, trench.z0], [trench.x0, 0, trench.z1], { color: fc, texel: 0.33 });
@@ -206,16 +221,17 @@ export function buildLifesupport(kit, ctx) {
     [max[0] - 0.18, min[2], max[0], max[2]],
   ]) kit.boxMM("paintedMetal", [x0, 0, z0], [x1, 0.015, z1], { color: PALETTE.impBlack, texel: 2 });
   for (const side of ["zmin", "zmax", "xmin", "xmax"]) {
-    impWall(kit, ctx, side, { rows: [0, 0.5, 1.6, 2.6, 3.6, H], paints: LS_PAINTS, styles: LS_STYLES, theme: { accent: "emitGreen", accent2: "emitGreen", screenMats: ["impScreen1", "impScreen3"], pipeCol: PALETTE.impMid } });
+    // wall strips are neutral white; green is reserved for the trench edges and the gauges / indicator dots
+    impWall(kit, ctx, side, { rows: [0, 0.5, 1.6, 2.6, 3.6, H], paints: LS_PAINTS, styles: LS_STYLES, theme: { accent: "emitWhiteDim", accent2: "emitGreen", screenMats: ["impScreen1", "impScreen3"], pipeCol: PALETTE.impMid } });
   }
-  // dark ceiling with a big air duct along the room, green strip over the trench, white strips over the tanks
+  // dark ceiling with a big air duct along the room, neutral strip over the trench, white strips over the tanks
   kit.boxMM("paintedMetal", [min[0] - 0.2, H, min[2] - 0.2], [max[0] + 0.2, H + 0.12, max[2] + 0.2], { color: PALETTE.impDark, texel: 1.5 });
   for (let x = min[0] + 2; x < max[0] - 1; x += 3) kit.box("paintedMetal", x, H - 0.1, (min[2] + max[2]) / 2, 0.24, 0.2, max[2] - min[2] - 0.3, { color: PALETTE.impBlack, texel: 2 });
   const strip = (mat, x0, z0, x1, z1) => {
     kit.boxMM("paintedMetal", [Math.min(x0, x1) - 0.14, H - 0.1, Math.min(z0, z1) - 0.14], [Math.max(x0, x1) + 0.14, H, Math.max(z0, z1) + 0.14], { color: PALETTE.impBlack, texel: 2 });
     kit.boxMM(mat, [Math.min(x0, x1), H - 0.11, Math.min(z0, z1)], [Math.max(x0, x1), H - 0.09, Math.max(z0, z1)]);
   };
-  strip("emitGreen", min[0] + 1, -0.05, max[0] - 1, 0.05);
+  strip("emitStrip", min[0] + 1, -0.05, max[0] - 1, 0.05);
   strip("emitWhiteSoft", min[0] + 1, -4.65, -12, -4.55);
   strip("emitWhiteSoft", min[0] + 1, 5.55, -12, 5.65);
   strip("emitWhiteSoft", -9.5, -5.5, -6.5, -5.4);
@@ -246,12 +262,14 @@ export function buildLifesupport(kit, ctx) {
   }
 
   // ------------------------------------------------------------------ lights (6)
-  const green = 0x7cffa8;
-  ctx.light(pointLight(green, 20, 16, [-23.5, H - 0.6, 0]));
-  ctx.light(pointLight(green, 20, 16, [-15.5, H - 0.6, 0]));
-  ctx.light(pointLight(0xe6f0ff, 14, 13, [-8.5, H - 0.6, -1.5]));
+  // pale mint over the trench (not a green filter): the metal keeps its own colour and the green
+  // identity comes from the trench edge channels and the gauges
+  const mint = 0xbfe9d0;
+  ctx.light(pointLight(mint, 10, 16, [-23.5, H - 0.6, 0]));
+  ctx.light(pointLight(mint, 9, 16, [-15.5, H - 0.6, 0]));
+  ctx.light(pointLight(0xe6f0ff, 12, 13, [-8.5, H - 0.6, -1.5]));
   ctx.light(pointLight(0xd8f0ff, 7, 9, [-22, H - 0.7, -4.6]));
-  ctx.light(pointLight(0xd8ffe8, 7, 9, [-19, H - 0.7, 5.6]));
+  ctx.light(pointLight(0xe6f0ff, 7, 9, [-19, H - 0.7, 5.6]));
   ctx.light(pointLight(0xff4030, 6, 7, [-9.3, 3.6, 5.8]));
 
   // ------------------------------------------------------------------ trench with grating
@@ -281,17 +299,28 @@ export function buildLifesupport(kit, ctx) {
     }
     kit.boxMM("paintedMetal", [x0 - 0.02, -0.08, z0 - 0.2], [x1 + 0.02, 0.0, z0 - 0.02], { color: PALETTE.impBlack, texel: 2 });
     kit.boxMM("paintedMetal", [x0 - 0.02, -0.08, z1 + 0.02], [x1 + 0.02, 0.0, z1 + 0.2], { color: PALETTE.impBlack, texel: 2 });
-    for (const zz of [z0 - 0.1, z1 + 0.1]) {
+    // plain black kick rails with a thin green lip toward the grating (the room's identity colour lives
+    // on the trench edges); hazard only on the last 1.5 m at either end, where the trench starts
+    for (const s of [-1, 1]) {
+      const zz = s < 0 ? z0 - 0.1 : z1 + 0.1;
       kit.boxMM("paintedMetal", [x0, 0, zz - 0.08], [x1, 0.06, zz + 0.08], { color: PALETTE.impBlack, texel: 2 });
-      kit.boxMM("hazard", [x0, 0.06, zz - 0.07], [x1, 0.07, zz + 0.07], { texel: 4 });
+      const lip = zz - s * 0.08; // inner face of the rail; the strip sits proud of it toward the grating
+      const out = lip - s * 0.015;
+      kit.boxMM("emitGreen", [x0 + 1.5, 0.025, Math.min(lip, out)], [x1 - 1.5, 0.045, Math.max(lip, out)]);
+      for (const [ha, hb] of [[x0, x0 + 1.5], [x1 - 1.5, x1]]) kit.boxMM("hazard", [ha, 0.06, zz - 0.07], [hb, 0.072, zz + 0.07], { texel: 4 });
     }
+    for (const [ha, hb] of [[x0 - 0.36, x0 - 0.06], [x1 + 0.06, x1 + 0.36]]) kit.boxMM("hazard", [ha, 0, z0 - 0.2], [hb, 0.012, z1 + 0.2], { texel: 4 });
   }
 
   // ------------------------------------------------------------------ tanks
   const water = new THREE.Color("#5f6a78");
   const air = new THREE.Color("#7b8390");
-  for (const [i, x] of [-26.4, -22.0, -17.6].entries()) tank(kit, ctx, { x, z: -4.6, r: 1.3, h: 3.5, color: water, label: SIGN.H2O, accent: "emitBlue", facing: 1, seed: ctx.seed + i, ladder: i === 1 });
-  for (const [i, x] of [-26.3, -21.4].entries()) tank(kit, ctx, { x, z: 5.6, r: 1.5, h: 3.4, color: air, label: SIGN.O2, accent: "emitGreen", facing: -1, seed: ctx.seed + 10 + i, ladder: i === 0 });
+  // tanks numbered 1-3 (water) and 4-5 (O2); the middle water tank is a newer light-grey unit
+  for (const [i, x] of [-26.4, -22.0, -17.6].entries()) {
+    const grey = i === 1;
+    tank(kit, ctx, { x, z: -4.6, r: 1.3, h: 3.5, color: grey ? PALETTE.impGrey : water, label: SIGN.H2O, accent: "emitBlue", facing: 1, seed: ctx.seed + i, ladder: i === 1, number: i + 1, numeralColor: grey ? PALETTE.impBlack : PALETTE.impWhite });
+  }
+  for (const [i, x] of [-26.3, -21.4].entries()) tank(kit, ctx, { x, z: 5.6, r: 1.5, h: 3.4, color: air, label: SIGN.O2, accent: "emitGreen", facing: -1, seed: ctx.seed + 10 + i, ladder: i === 0, number: 4 + i });
   // ceiling header over the water tanks and the O2 tanks (the tank risers join these)
   pipeRun(kit, [[-27.5, H - 0.35, -4.6], [-16.5, H - 0.35, -4.6], [-16.5, H - 0.35, -2.0], [-9.0, H - 0.35, -2.0]], 0.14, PALETTE.impMid);
   pipeRun(kit, [[-27.5, H - 0.35, 5.6], [-13.0, H - 0.35, 5.6]], 0.14, PALETTE.impMid);
@@ -338,8 +367,9 @@ export function buildLifesupport(kit, ctx) {
   {
     const seg = wallSegment(ctx.bounds, "zmax");
     const { frame } = wallFrame(kit, seg.from, seg.to, 0); // u = max.x - x
-    frame.box("hazard", 6.4, 1.8, 0.02, 0.25, 3.4, 0.03, { texel: 3 });
-    frame.box("hazard", 1.4, 1.8, 0.02, 0.25, 3.4, 0.03, { texel: 3 });
+    // plain black bands frame the waste bay (the hazard stripes live on the loading door only)
+    frame.box("paintedMetal", 6.4, 1.8, 0.02, 0.25, 3.4, 0.03, { color: PALETTE.impBlack, texel: 2 });
+    frame.box("paintedMetal", 1.4, 1.8, 0.02, 0.25, 3.4, 0.03, { color: PALETTE.impBlack, texel: 2 });
     ventGrille(frame, 9.0, 3.6, 1.2, 0.6);
     ventGrille(frame, 16.0, 3.6, 1.2, 0.6);
   }
