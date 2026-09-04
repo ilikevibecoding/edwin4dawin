@@ -5,6 +5,8 @@ import { buildOfficersQuarters } from "./officersQuarters.js";
 import { buildMess } from "./mess.js";
 import { buildLounge } from "./lounge.js";
 import { buildMedbay } from "./medbay.js";
+import { buildArmory } from "./armory.js";
+import { buildDetention } from "./detention.js";
 
 export function register(registerRoom) {
   registerRoom("crewQuarters", buildCrewQuarters);
@@ -12,4 +14,6 @@ export function register(registerRoom) {
   registerRoom("mess", buildMess);
   registerRoom("lounge", buildLounge);
   registerRoom("medbay", buildMedbay);
+  registerRoom("armory", buildArmory);
+  registerRoom("detention", buildDetention);
 }

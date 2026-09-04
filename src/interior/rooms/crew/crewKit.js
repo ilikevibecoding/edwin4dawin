@@ -468,6 +468,58 @@ export function oven(kit, pos, yaw = 0, opts = {}) {
   }
 }
 
+// Standing medical console (built from primitives so its indicators share the crew emissive key).
+// pos = floor centre of the operator's edge, yaw 0 => operator looks toward -Z.
+export function medConsole(kit, ctx, pos, yaw = 0, opts = {}) {
+  const { wide = false } = opts;
+  const W = wide ? 2.2 : 1.3;
+  const q = yawQ(yaw);
+  const o = new THREE.Vector3(...pos);
+  const L = (x, y, z) => o.clone().add(new THREE.Vector3(x, y, z).applyQuaternion(q));
+  const box = (mat, x, y, z, sx, sy, sz, extra = {}) => {
+    const p = L(x, y, z);
+    return kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: [p.x, p.y, p.z], quat: q, ...extra });
+  };
+  box("impPaintedMetal", 0, 0.06, -0.45, W - 0.2, 0.12, 0.7, { color: IMP.trim, texel: 1 });
+  box("impPaintedMetal", 0, 0.45, -0.45, W, 0.78, 0.85, { color: IMP.wallMid, texel: 1 });
+  box("impPaintedMetal", 0, 0.35, -0.02, W - 0.16, 0.42, 0.01, { color: IMP.consoleDark, texel: 1 });
+  box("crewEmit", 0, 0.16, 0.0, W - 0.3, 0.02, 0.01, { color: 0x60c0ff });
+  const tq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.42));
+  const top = L(0, 0.9, -0.5);
+  kit.add("impPaintedMetal", new THREE.BoxGeometry(W, 0.08, 0.62), { pos: [top.x, top.y, top.z], quat: tq, color: IMP.consoleDark, texel: 1 });
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(tq);
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(tq);
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+  const place = (x, along, lift) => top.clone().addScaledVector(right, x).addScaledVector(fwd, along).addScaledVector(up, 0.04 + lift);
+  const n = wide ? 3 : 2;
+  for (let i = 0; i < n; i++) {
+    const x = -W / 2 + (W / n) * (i + 0.5);
+    const sw = W / n - 0.16;
+    const p = place(x, 0.1, 0);
+    kit.add("darkGloss", new THREE.BoxGeometry(sw + 0.04, 0.02, 0.28), { pos: [p.x, p.y, p.z], quat: tq });
+    const p2 = place(x, 0.1, 0.012);
+    const sg = new THREE.PlaneGeometry(sw, 0.24);
+    sg.rotateX(-Math.PI / 2);
+    kit.add(i % 2 ? "screen2" : "screen1", sg, { pos: [p2.x, p2.y, p2.z], quat: tq, uv: "keep" });
+  }
+  const g = place(0, -0.18, 0.008);
+  const gg = new THREE.PlaneGeometry(W - 0.24, 0.1);
+  gg.rotateX(-Math.PI / 2);
+  kit.add("blink", gg, { pos: [g.x, g.y, g.z], quat: tq, uv: "keep" });
+  for (let b = 0; b < Math.floor((W - 0.3) / 0.12); b++) {
+    const p = place(-W / 2 + 0.2 + b * 0.12, -0.27, 0.012);
+    kit.add(b % 3 === 0 ? "crewEmit" : "impRubber", new THREE.BoxGeometry(0.07, 0.025, 0.05), { pos: [p.x, p.y, p.z], quat: tq, color: b % 3 === 0 ? [0x60c0ff, 0xff4040, 0xffffff][(b / 3) % 3 | 0] : IMP.rubber });
+  }
+  // rear riser with a vertical screen
+  box("impPaintedMetal", 0, 1.14, -0.8, W - 0.2, 0.62, 0.1, { color: IMP.consoleDark, texel: 1 });
+  box("darkGloss", 0, 1.16, -0.744, W - 0.4, 0.42, 0.01);
+  box("screen2", 0, 1.16, -0.737, W - 0.5, 0.34, 0.004, { uv: "keep" });
+  box("blinkSparse", 0, 0.87, -0.744, W - 0.4, 0.1, 0.01, { uv: "keep" });
+  const c0 = L(-W / 2, 0, 0.05);
+  const c1 = L(W / 2, 0, -0.9);
+  kit.collider([Math.min(c0.x, c1.x), pos[1], Math.min(c0.z, c1.z)], [Math.max(c0.x, c1.x), pos[1] + 1.5, Math.max(c0.z, c1.z)], "console");
+}
+
 // Security camera pod on a wall or ceiling bracket. pos = mount point, yaw/pitch (deg) of the lens.
 export function cameraPod(kit, pos, yawDeg, pitchDeg = -25, opts = {}) {
   const { bracket = "wall", led = "emitRed" } = opts;
