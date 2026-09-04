@@ -153,8 +153,8 @@ export class NPCManager {
     const male = () => males[(mi++) % males.length], female = () => females[(fi++) % females.length];
     const defs = [];
     defs.push({ name: 'Sheriff Freeman', role: 'sheriff', work: sheriff, home: sheriff, patrol: true });
-    defs.push({ name: 'Deputy Ross', role: 'deputy', work: sheriff, home: nextHouse(), patrol: true });
-    defs.push({ name: 'Deputy Hayes', role: 'deputy', work: sheriff, home: nextHouse(), patrol: true });
+    defs.push({ name: 'Deputy Ross', role: 'deputy', work: sheriff, home: nextHouse(), patrol: true, workIndex: 1 });
+    defs.push({ name: 'Deputy Hayes', role: 'deputy', work: sheriff, home: nextHouse(), patrol: true, workIndex: 2 });
     defs.push({ name: 'Bartender Sam', role: 'bartender', work: saloon, home: saloon, stay: true });
     defs.push({ name: 'Lenny', role: 'pianist', work: saloon, home: saloon, stay: true, workIndex: 2 });
     defs.push({ name: 'Doc Whitmore', role: 'doctor', work: byKind('doctor')[0], home: nextHouse() });
@@ -550,7 +550,7 @@ export class NPCManager {
     this.faceTarget(npc, t);
     // sit on benches (bottom slabs)
     const under = this.world.getBlock(Math.floor(npc.pos.x), Math.floor(npc.pos.y - 0.01), Math.floor(npc.pos.z));
-    npc.sitting = BLOCKS[under].shape === SHAPE.SLAB && t && (t.kind === 'street' || t.kind === 'church' || t.kind === 'station' || t.kind === 'saloon');
+    npc.sitting = BLOCKS[under].shape === SHAPE.SLAB && t && (t.kind === 'street' || t.kind === 'church' || t.kind === 'station' || t.kind === 'saloon' || t.kind === 'work');
     if (npc.sitting) npc.targetYaw = Math.round(npc.yaw / (Math.PI / 2)) * (Math.PI / 2);
     npc.lastKind = t ? t.kind : null;
     npc.target = null;

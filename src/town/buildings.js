@@ -158,6 +158,7 @@ export function sheriff(fr, F) {
   fr.fill(1, F + 1, 1, 1, F + 2, 2, B.SHELF);
   fr.set(w - 8, F + 1, 1, B.CHEST);
   addSpot(fr, rec, 3, 5, F + 1, 'work'); // sheriff at desk
+  addSpot(fr, rec, 6, 2, F + 1, 'work'); addSpot(fr, rec, 5, 8, F + 1, 'work'); // deputies' posts
   addSpot(fr, rec, 5, 3, F + 1); addSpot(fr, rec, 2, 8, F + 1); addSpot(fr, rec, 6, 8, F + 1);
   // jail: two cells at the right side behind a wall of iron bars, cell doors left open
   fr.fill(8, F + 1, 1, 8, F + 3, d - 2, B.IRON_BARS);
