@@ -59,9 +59,10 @@ const settle = async (n = 2) => {
   check("player walks into the corridor", r.room === "cmd_corridor" && r.pos[2] > 206.3, JSON.stringify(r));
   await settle(2);
   await page.screenshot({ path: resolve(outDir, "corridor_after_door.png") });
-  // walk into a wall: must be blocked
+  // walk into a wall (x = -30 has no door on the corridor's aft wall): must be blocked
+  await ev(() => window.debugAPI.nudge(-30, 0, 60));
   const wall = await ev(() => window.debugAPI.nudge(0, 20, 40));
-  check("corridor aft wall blocks the player", wall.pos[2] < 212.2, JSON.stringify(wall));
+  check("corridor aft wall blocks the player", wall.pos[2] < 212.2 && wall.room === "cmd_corridor", JSON.stringify(wall));
   void before;
 }
 
