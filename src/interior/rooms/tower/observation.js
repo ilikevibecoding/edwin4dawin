@@ -3,12 +3,13 @@
 // ribs, a steel sill ledge, blast-shutter housings and clear glass looking aft into the star field.
 // Smaller viewports on the east and west walls are sealed behind armoured shutters. A raised deck-plate
 // walkway leads from the lift lobby door to the glass between two benches rows; a star-chart table
-// (point-cloud galaxy hologram) sits mid-room, the memorial plaque wall is west, the dispenser counter
-// east. Low warm light bands only, so the windows dominate.
+// (point-cloud galaxy hologram) sits mid-room, the memorial plaque wall with its contemplation bench is
+// west, the dispenser counter with stools and standing tables east. Low warm light bands only, so the
+// windows dominate.
 import * as THREE from "three";
 import { buildShell, roomWalls } from "../../shell.js";
 import { wallFrame } from "../../../core/frame.js";
-import { bench, chair, ceilingLight, pointLightDesc, wallScreen, alertBeacon, floorDecal, placard, column, pipeRun, railing } from "../../impKit.js";
+import { bench, chair, table, ceilingLight, pointLightDesc, wallScreen, alertBeacon, floorDecal, placard, column, pipeRun, railing } from "../../impKit.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { makeStarSprite } from "../../../textures.js";
@@ -151,9 +152,10 @@ export function buildObservation(kit, ctx) {
     const th = 0.74;
     kit.add("impPaintedMetal", new THREE.CylinderGeometry(r, r + 0.1, th, 32), { pos: [tx, y + th / 2, tz], color: IMP.consoleDark, uv: "scale", uvScale: [4, 1] });
     kit.add("impMetal", new THREE.CylinderGeometry(r + 0.06, r + 0.06, 0.06, 32), { pos: [tx, y + th, tz], color: IMP.steel, uv: "scale", uvScale: [4, 0.2] });
-    kit.add("emitBlue", new THREE.TorusGeometry(r - 0.08, 0.012, 8, 48), { pos: [tx, y + th + 0.03, tz], rot: [Math.PI / 2, 0, 0] });
-    // matte black top: a gloss top mirrors the hologram light straight into the camera as a white slab
-    kit.add("impMatte", new THREE.CylinderGeometry(r - 0.12, r - 0.12, 0.02, 32), { pos: [tx, y + th + 0.02, tz], color: IMP.black, uv: "keep" });
+    // matte black top 1 cm proud of the steel rim cap (coplanar caps z-fight into a pinwheel); a gloss top
+    // mirrors the hologram light straight into the camera as a white slab
+    kit.add("impMatte", new THREE.CylinderGeometry(r - 0.12, r - 0.12, 0.02, 32), { pos: [tx, y + th + 0.03, tz], color: IMP.black, uv: "keep" });
+    kit.add("emitBlue", new THREE.TorusGeometry(r - 0.08, 0.012, 8, 48), { pos: [tx, y + th + 0.04, tz], rot: [Math.PI / 2, 0, 0] });
     kit.add("blinkSparse", new THREE.CylinderGeometry(r + 0.001, r + 0.001, 0.1, 32, 1, true), { pos: [tx, y + th - 0.18, tz], uv: "scale", uvScale: [6, 1] });
     kit.collider([tx - r, y, tz - r], [tx + r, y + th, tz + r], "chartTable");
     // projector cone from the emitter ring so the chart reads as a hologram from across the deck
@@ -269,6 +271,14 @@ export function buildObservation(kit, ctx) {
     kit.instanced("impPaintedMetal", plate, transforms);
     kit.collider([x0, y, 623.0], [x0 + t + 0.55, y + 4.0, 634.0], "memorial");
     pointLightDesc(ctx, WARM, 2.8, 9, [x0 + 2.0, y + 3.3, 628.5], 1);
+    // a single contemplation bench facing the plaques, a wreath-stand lamp at each end
+    bench(kit, [x0 + 3.6, y, 628.5], 5.0, Math.PI / 2, { color: IMP.fabricBlack });
+    for (const lz of [628.5 - 5.3, 628.5 + 5.3]) {
+      kit.box("impPaintedMetal", x0 + 1.4, y + 0.45, lz, 0.32, 0.9, 0.32, { color: IMP.consoleDark, texel: 1 });
+      kit.box("impMetal", x0 + 1.4, y + 0.915, lz, 0.36, 0.03, 0.36, { color: IMP.steel, texel: 1 });
+      kit.box("emitWarm", x0 + 1.4, y + 0.935, lz, 0.2, 0.01, 0.2);
+      kit.collider([x0 + 1.2, y, lz - 0.2], [x0 + 1.6, y + 0.95, lz + 0.2], "lamp");
+    }
     sealedPort(frame, w.u(639.0), 2.6);
     sealedPort(frame, w.u(645.0), 2.6);
     alertBeacon(frame, ctx, w.u(635.5), 3.4, { intensity: 0 });
@@ -315,6 +325,8 @@ export function buildObservation(kit, ctx) {
     kit.collider([cxE - 0.4, y, 628.5 - BW / 2], [cxE + 0.4, y + 1.05, 628.5 + BW / 2], "counter");
     kit.collider([x1 - t - 0.55, y, 628.5 - BW / 2], [x1 - t, y + 1.05, 628.5 + BW / 2], "backCounter");
     for (let i = 0; i < 4; i++) chair(kit, [cxE - 0.95, y, 625.7 + i * 1.85], -Math.PI / 2);
+    // two standing tables between the counter and the walkway
+    for (const sz of [625.4, 631.6]) table(kit, [x1 - t - 5.0, y, sz], 0.9, 0.9, { h: 1.05, tone: IMP.consoleDark, yaw: Math.PI / 4 });
     placard(frame, ub - 5.2, 2.2, 0.5, 0);
     frame.quad("impDecal", ub + 5.2, 2.2, 0.062, 0.6, 0.6, { uvRect: impDecalRect(13) });
     pointLightDesc(ctx, WARM, 2.2, 8, [x1 - 2.4, y + 3.2, 628.5], 0);
