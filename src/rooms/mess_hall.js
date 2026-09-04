@@ -363,8 +363,8 @@ export function buildMessHall(kit, ctx, room) {
   // ---------------------------------------------------------------- lights (8): 4 warm over the tables, 2 white galley, blue cooler (above), amber south
   const warm = 0xffbf7a;
   for (const [i, z] of rows.entries()) {
-    keyLight(kit, -8.75, 3.1, z, { color: warm, k: 1.9, distance: 13, priority: 0.5 - i * 0.01 });
-    keyLight(kit, 6.25, 3.1, z, { color: warm, k: 1.9, distance: 13, priority: 0.49 - i * 0.01 });
+    keyLight(kit, -8.75, 3.1, z, { color: warm, k: 2.4, distance: 14, priority: 0.5 - i * 0.01 });
+    keyLight(kit, 6.25, 3.1, z, { color: warm, k: 2.4, distance: 14, priority: 0.49 - i * 0.01 });
   }
   keyLight(kit, -5.5, 3.3, -9.6, { color: 0xf0f6ff, k: 2.6, distance: 12, priority: 0.45 });
   keyLight(kit, 2.5, 3.3, -9.6, { color: 0xf0f6ff, k: 2.6, distance: 12, priority: 0.44 });

@@ -91,12 +91,12 @@ function buildCell(kit, ctx, cx, cz, yaw, number, opts = {}) {
   p.box("impMetal", half - 0.115, 1.25, 0.6, 0.005, 0.08, 0.14, { color: STEEL });
   // doorway: emitter pillars, lintel with red strip + number, force field (holo clone, tinted red), floor threshold
   for (const s of [-1, 1]) {
-    p.box("impTrim", s * (half - 0.16), h / 2, half + 0.02, 0.32, h, 0.36, { color: BLK, texel: 1 });
-    p.box("impMetal", s * (half - 0.16), h / 2, half + 0.205, 0.2, h - 0.5, 0.02, { color: CHR, texel: 1 });
+    p.box("impTrim", s * (half - 0.16), h / 2, half + 0.02, 0.32, h, 0.36, { color: CHR, texel: 1 });
+    p.box("impMetal", s * (half - 0.16), h / 2, half + 0.205, 0.2, h - 0.5, 0.02, { color: GD, texel: 1 });
     p.box(ACCENT, s * (half - 0.32) - s * 0.0, 1.5, half + 0.02, 0.012, h - 0.6, 0.06);
     for (let k = 0; k < 5; k++) p.box("impMetal", s * (half - 0.16), 0.5 + k * 0.5, half + 0.21, 0.16, 0.03, 0.01, { color: GD });
   }
-  p.box("impTrim", 0, h - 0.2, half + 0.02, size - 0.3, 0.4, 0.36, { color: BLK, texel: 1 });
+  p.box("impTrim", 0, h - 0.2, half + 0.02, size - 0.3, 0.4, 0.36, { color: CHR, texel: 1 });
   p.box(ACCENT, 0, h - 0.42, half + 0.02, size - 0.66, 0.012, 0.06);
   p.decal(decal, 0, h - 0.2, half + 0.205, 0.32);
   p.box("scrRed1", 0.9, h - 0.2, half + 0.205, 0.4, 0.16, 0.01, { uv: "keep" });
@@ -209,6 +209,15 @@ export function buildDetention(kit, ctx, room) {
     }
     kit.box("leds", 0, my - 0.4, dz - 0.9 + 0.07, 3.0, 0.04, 0.01, { uv: "keep" });
     kit.box(accentKey, 0, my + 0.47, dz - 0.9 + 0.11, 3.4, 0.02, 0.01);
+    // the spine's back faces the blast door: block status board, restricted stencil, red edge strip
+    {
+      const bz = dz - 0.9 - 0.07;
+      kit.box("impGloss", 0.6, my + 0.05, bz, 1.6, 0.5, 0.02);
+      kit.add("scrRed0", new THREE.PlaneGeometry(1.5, 0.42).rotateY(Math.PI), { pos: [0.6, my + 0.05, bz - 0.012], uv: "keep" });
+      kit.add("decalImp", new THREE.PlaneGeometry(0.5, 0.5).rotateY(Math.PI), { pos: [-1.1, my + 0.05, bz - 0.005], uv: "keep", uvRect: impDecalRect(IMP_DECAL.restricted) });
+      kit.box(accentKey, 0, my - 0.38, bz - 0.005, 3.2, 0.03, 0.01);
+      kit.box("leds", -1.1, my - 0.28, bz - 0.005, 0.5, 0.04, 0.01, { uv: "keep" });
+    }
     // desk-side kit: comm unit, datapads, caf mug, holo-projector puck with a slowly turning cell map (animated)
     kit.box("impTrim", -1.3, 0.9, dz - 0.1, 0.3, 0.16, 0.2, { color: BLK });
     kit.box("emitGreen", -1.3, 0.94, dz + 0.005, 0.04, 0.03, 0.005);
@@ -270,8 +279,8 @@ export function buildDetention(kit, ctx, room) {
         lens.rotation.y += dt * 3.2;
       });
       // one pulsing red pool per cell pair: lights the cell fronts / walkway and spills through the doorways
-      const ly = h - 0.76;
-      kit.light({ type: "point", pos: [px, ly, z], color: 0xff3a28, intensity: lux(ly, 2.8) / ly, decay: 1, distance: 12, priority: 0.44, dim: (t) => 0.7 + 0.3 * Math.sin(t * 3.2 + phase) });
+      // the pool sits a little lower and further out than the lens so the cell fronts are lit face-on, not grazed
+      kit.light({ type: "point", pos: [s * (cellX - 3.0), 2.7, z], color: 0xff3a28, intensity: lux(2.7, 3.0) / 2.7, decay: 1, distance: 12, priority: 0.44, dim: (t) => 0.7 + 0.3 * Math.sin(t * 3.2 + phase) });
     }
   }
 

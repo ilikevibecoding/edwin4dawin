@@ -140,7 +140,7 @@ export function buildMedbay(kit, ctx, room) {
     walls: { N: { features: { vent: 0.04, light: 0.14 }, altChance: 0.02 } },
     floor: { laneW: 2.2 },
     floorEdgeLight: accentKey,
-    ceiling: { troughs: 3, troughW: 0.5, beamStep: 4.4 },
+    ceiling: { troughs: 2, troughW: 0.5, beamStep: 4.4 },
   });
   // teal edge strips along the long walls too (the shell only does the short ones)
   for (const s of [-1, 1]) kit.boxMM(accentKey, [-hx + 0.6, 0.002, s * (hz - 0.28) - 0.03], [hx - 0.6, 0.012, s * (hz - 0.28) + 0.03]);
