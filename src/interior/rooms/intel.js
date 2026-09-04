@@ -1,8 +1,10 @@
 // Restricted Command Intelligence (deck 1): a dark, low-ceilinged secure room off the bridge corridor.
 // A planet hologram floats over a black holo table in the middle, the commander's high-backed chair
 // sits behind it facing the door, a briefing wall of three screens glows behind the chair, one long
-// wall is a row of locked data vaults with red status lamps, and restricted-area stencils mark the
-// door and the vault line. One cold ceiling light plus a dim red accent; red readouts throughout.
+// wall is a row of locked data vaults (solid doors, a core-slot door, double lockers, framed racks)
+// with red status lamps, and restricted-area stencils mark the door and the vault line. The ceiling
+// carries two soft red light troughs and one louvred cold fixture over the table; the door has a
+// red/black threshold band. Red readouts throughout, dimmer than the other rooms.
 // Deck-local metres, floor y = 0. Bounds x -16..-2.4, z -13..-4, height 3.6; secure door on the xmax wall at z -9.
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -15,7 +17,10 @@ import { decalRect, makeCanvas, toTexture } from "../../textures.js";
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const BLACK = { color: PALETTE.impBlack, texel: 2 };
 const DARK = { color: PALETTE.impDark, texel: 1.5 };
+const REDPAINT = { color: new THREE.Color("#8e2a20"), texel: 2 }; // matte red paint (threshold band, seal stripes)
 const CEIL = 3.1; // dropped ceiling under the 3.6 m bounds
+const RIBS = [-12.6, -6.2]; // black cross ribs on the ceiling
+const TROUGH_Z = [-11.3, -5.7]; // two soft red light troughs along the room's long axis
 const TABLE = { x: -10.6, z: -8.5 }; // the table's 1 m collider stays clear of the sector spawn at x -9
 const CHAIR = { x: -13.1, z: -7.0, yaw: -1.03 }; // faces the table centre (and, beyond it, the door)
 
@@ -39,20 +44,21 @@ export function buildIntel(kit, ctx) {
     },
   });
   buildCeiling(kit, ctx, B);
-  buildVaultWall(kit, ctx, B, mats);
-  buildBriefingWall(kit, ctx, B, mats);
-  buildLockerWall(kit, ctx, B, mats);
-  buildDoorWall(kit, ctx, B, mats);
+  buildVaultWall(kit, ctx, B);
+  buildBriefingWall(kit, ctx, B);
+  buildLockerWall(kit, ctx, B);
+  buildDoorWall(kit, ctx, B);
   holoTable(kit, ctx, mats, TABLE.x, TABLE.z);
   // the commander's chair sits off the door-table axis (locker side) turned toward the table, so from
   // the door it is silhouetted against the lit briefing screen instead of hiding behind the hologram
   commandChair(kit, CHAIR.x, CHAIR.z, CHAIR.yaw);
   buildFloorDetail(kit, ctx, B);
-  // the single cold light over the table, a dim red accent along the vault wall, a faint cool fill
-  // over the command chair so it reads against the briefing wall
-  ctx.light(pointLight(0xc8dcff, 7, 10, [TABLE.x, CEIL - 0.3, TABLE.z]));
-  ctx.light(pointLight(0xff3a2a, 2.2, 6, [-9.2, 2.2, -12.0]));
-  ctx.light(pointLight(0xc8dcff, 2.2, 6, [CHAIR.x - 0.6, 2.5, CHAIR.z]));
+  buildProps(kit, ctx);
+  // 4 of 6 lights: the cold fixture over the table, one soft red source inside each ceiling trough,
+  // a faint cool fill over the command chair so it reads against the briefing wall
+  ctx.light(pointLight(0xc8dcff, 5.5, 9, [TABLE.x, CEIL - 0.3, TABLE.z]));
+  for (const z of TROUGH_Z) ctx.light(pointLight(0xff3a2a, 3.0, 8, [-9.6, CEIL - 0.2, z]));
+  ctx.light(pointLight(0xc8dcff, 2.0, 6, [CHAIR.x - 0.6, 2.5, CHAIR.z]));
   ctx.anim((dt, t) => {
     mats.pulse.emissiveIntensity = 1.1 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.4));
     mats.lamp.emissiveIntensity = 1.8 + 0.8 * (0.5 + 0.5 * Math.sin(t * 2.2));
@@ -67,17 +73,30 @@ function ensureMaterials(ctx) {
     m.int_pulse.name = "int_pulse";
     m.int_lamp = m.emitRed.clone();
     m.int_lamp.name = "int_lamp";
+    // soft red wash for the trough walls and the cornice hairline (well below the emitter strips)
+    m.int_glow = m.emitRedSoft.clone();
+    m.int_glow.name = "int_glow";
+    m.int_glow.emissiveIntensity = 0.45;
+    // the trough diffusers themselves: softer than the shared emitRedSoft so the two channels read as
+    // glowing recesses rather than red bars
+    m.int_trough = m.emitRedSoft.clone();
+    m.int_trough.name = "int_trough";
+    m.int_trough.emissiveIntensity = 0.95;
     m.int_holoRed = m.holo.clone();
     m.int_holoRed.color = new THREE.Color("#ff5a48");
-    m.int_holoRed.opacity = 0.7;
+    m.int_holoRed.opacity = 0.75;
     m.int_faint = m.holo.clone();
     m.int_faint.opacity = 0.12;
+    // brighter planet body than the shared holo material so the globe carries the room
+    m.int_planet = m.holo.clone();
+    m.int_planet.color = new THREE.Color("#6fb6ff");
+    m.int_planet.opacity = 0.85;
     // untextured additive blue for the planet's wire graticule (reads at distance where the grid
     // texture averages out to nothing)
     m.int_holoBright = m.holo.clone();
     m.int_holoBright.map = null;
-    m.int_holoBright.color = new THREE.Color("#7cc0ff");
-    m.int_holoBright.opacity = 0.7;
+    m.int_holoBright.color = new THREE.Color("#8cc8ff");
+    m.int_holoBright.opacity = 0.9;
     // restricted-area stencils: own 512x256 sheet (2x2 cells), laid over panels like `decal`
     m.int_stencil = new THREE.MeshStandardMaterial({
       map: makeStencilSheet(),
@@ -92,7 +111,7 @@ function ensureMaterials(ctx) {
     });
     m.int_stencil.name = "int_stencil";
   }
-  return { pulse: m.int_pulse, lamp: m.int_lamp, holoRed: m.int_holoRed, faint: m.int_faint, bright: m.int_holoBright };
+  return { pulse: m.int_pulse, lamp: m.int_lamp, holoRed: m.int_holoRed, faint: m.int_faint, bright: m.int_holoBright, planet: m.int_planet };
 }
 
 /** uv rect of stencil cell i (2 columns x 2 rows; cells are 2:1). */
@@ -172,9 +191,10 @@ function makeStencilSheet() {
 }
 
 // ---------------------------------------------------------------------------
-// Ceiling (3.1 m, dropped): dark panel grid without the shared strip lights, two black ribs, one
-// recessed cold fixture over the table (the room's only real light), a black cornice with a red
-// hairline where the dropped ceiling meets the walls
+// Ceiling (3.1 m, dropped): dark panel grid without the shared strip lights, two black cross ribs,
+// two soft red troughs running the length of the room (hanging lips, a segmented diffuser strip
+// inside, red wash on the inner faces), one louvred cold fixture over the table, and a black cornice
+// with a dim red hairline where the dropped ceiling meets the walls
 // ---------------------------------------------------------------------------
 function buildCeiling(kit, ctx, B) {
   const [min, max] = B;
@@ -197,61 +217,140 @@ function buildCeiling(kit, ctx, B) {
     ...IMP_THEME,
     decals: false,
   });
-  for (const x of [-12.6, -6.2]) kit.boxMM("paintedMetal", [x - 0.2, CEIL - 0.22, min[2]], [x + 0.2, CEIL, max[2]], BLACK);
-  // recessed fixture: black housing, cold diffuser, thin red standby lamp at each end
+  for (const x of RIBS) kit.boxMM("paintedMetal", [x - 0.2, CEIL - 0.14, min[2]], [x + 0.2, CEIL, max[2]], BLACK);
+  for (const z of TROUGH_Z) redTrough(kit, B, z);
+  // the cold fixture: a slot housing over the table, dim diffuser recessed behind six black louvres,
+  // a thin red standby lamp at each end
   const { x, z } = TABLE;
-  kit.boxMM("paintedMetal", [x - 0.6, CEIL - 0.16, z - 0.6], [x + 0.6, CEIL, z + 0.6], BLACK);
-  kit.boxMM("emitCoolSoft", [x - 0.42, CEIL - 0.17, z - 0.42], [x + 0.42, CEIL - 0.15, z + 0.42], { uv: "keep" });
-  for (const s of [-1, 1]) kit.box("emitRedSoft", x + s * 0.53, CEIL - 0.165, z, 0.04, 0.01, 0.6, { uv: "keep" });
+  for (const s of [-1, 1]) {
+    kit.boxMM("paintedMetal", [x - 0.6, CEIL - 0.14, z + s * 0.3 - 0.025], [x + 0.6, CEIL, z + s * 0.3 + 0.025], BLACK);
+    kit.boxMM("paintedMetal", [x + s * 0.6 - 0.025, CEIL - 0.14, z - 0.3], [x + s * 0.6 + 0.025, CEIL, z + 0.3], BLACK);
+    kit.box("emitRedSoft", x + s * 0.635, CEIL - 0.12, z, 0.02, 0.01, 0.5, { uv: "keep" });
+  }
+  kit.boxMM("emitWhiteDim", [x - 0.5, CEIL - 0.1, z - 0.2], [x + 0.5, CEIL - 0.09, z + 0.2], { uv: "keep" });
+  for (let i = 0; i < 6; i++) kit.box("paintedMetal", x - 0.4 + i * 0.16, CEIL - 0.085, z, 0.02, 0.11, 0.55, BLACK);
   for (const side of ["xmin", "xmax", "zmin", "zmax"]) {
     const seg = wallSegment(B, side);
     const { frame, length } = wallFrame(kit, seg.from, seg.to, min[1]);
     frame.box("paintedMetal", length / 2, CEIL - 0.12, 0.1, length, 0.24, 0.2, BLACK);
-    frame.box("emitRedSoft", length / 2, CEIL - 0.25, 0.06, length - 0.4, 0.015, 0.04, { uv: "keep" });
+    frame.box("int_glow", length / 2, CEIL - 0.25, 0.06, length - 0.4, 0.015, 0.04, { uv: "keep" });
   }
 }
 
+/** One red ceiling trough at z: two hanging black lips, a red wash on their inner faces, and a
+ *  three-segment soft strip at the top of the channel (broken where the cross ribs pass). */
+function redTrough(kit, B, z) {
+  const [min, max] = B;
+  const x0 = min[0] + 0.5;
+  const x1 = max[0] - 0.5;
+  const hw = 0.22;
+  for (const s of [-1, 1]) {
+    kit.boxMM("paintedMetal", [x0, CEIL - 0.3, z + s * hw - 0.03], [x1, CEIL, z + s * hw + 0.03], BLACK);
+    const zi = z + s * (hw - 0.03);
+    kit.boxMM("int_glow", [x0 + 0.05, CEIL - 0.27, zi - 0.003], [x1 - 0.05, CEIL - 0.06, zi + 0.003], { uv: "keep" });
+  }
+  for (const x of [x0, x1]) kit.boxMM("paintedMetal", [x - 0.03, CEIL - 0.3, z - hw], [x + 0.03, CEIL, z + hw], BLACK);
+  const segs = [
+    [x0 + 0.1, RIBS[0] - 0.3],
+    [RIBS[0] + 0.3, RIBS[1] - 0.3],
+    [RIBS[1] + 0.3, x1 - 0.1],
+  ];
+  for (const [a, b] of segs) kit.boxMM("int_trough", [a, CEIL - 0.05, z - 0.13], [b, CEIL - 0.03, z + 0.13], { uv: "keep" });
+}
+
 // ---------------------------------------------------------------------------
-// zmin wall (z -13): six locked data vaults (racks behind heavy frames with keypads and red status
-// lamps), a red restricted line on the floor in front of them, stencils between the vaults
+// zmin wall (z -13): six locked data vaults in heavy black frames — solid vault doors, a door with a
+// lit core slot, a pair of narrow lockers, and two framed racks — a black rubber mat in front of them,
+// stencils between the last vault and the corner
 // ---------------------------------------------------------------------------
-function buildVaultWall(kit, ctx, B, mats) {
+function buildVaultWall(kit, ctx, B) {
   const [min] = B;
   const side = "zmin";
   const u = (x) => x - min[0];
   const seg = wallSegment(B, side);
   const { frame } = wallFrame(kit, seg.from, seg.to, min[1]);
-  const xs = [-14.6, -13.0, -11.4, -9.8, -8.2, -6.6];
-  xs.forEach((x, i) => {
-    equipmentRack(kit, ctx, { side, u: u(x), w: 1.2, h: 2.3, d: 0.55, seed: ctx.seed + 20 + i, bounds: B, lit: "emitRed" });
-    // heavy vault frame around the rack, keypad plate, status lamp housing above
-    frame.box("paintedMetal", u(x) - 0.68, 1.2, 0.3, 0.16, 2.4, 0.6, BLACK);
-    frame.box("paintedMetal", u(x) + 0.68, 1.2, 0.3, 0.16, 2.4, 0.6, BLACK);
-    frame.box("paintedMetal", u(x), 2.5, 0.3, 1.52, 0.2, 0.6, BLACK);
-    frame.box("paintedMetal", u(x), 2.75, 0.12, 0.6, 0.22, 0.24, DARK);
-    frame.box(i === 3 ? "emitAmber" : "int_lamp", u(x), 2.75, 0.245, 0.4, 0.08, 0.01);
-    frame.box("impPanel1", u(x) + 0.45, 1.55, 0.585, 0.22, 0.32, 0.02, { color: PALETTE.impGrey, uv: "keep" });
-    frame.box("leds", u(x) + 0.45, 1.66, 0.6, 0.16, 0.03, 0.006, { uv: "keep" });
-    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) frame.box(r === 0 && c === 1 ? "emitRed" : "rubber", u(x) + 0.39 + c * 0.06, 1.44 + r * 0.05, 0.6, 0.04, 0.03, 0.006, { color: PALETTE.rubber });
-    frame.add("decal", new THREE.PlaneGeometry(0.34, 0.34), u(x) - 0.42, 2.15, 0.585, { uv: "keep", uvRect: decalRect([9, 6, 10, 9, 6, 10][i]) });
+  const bays = [
+    { x: -14.7, kind: "door", h: 2.4, lamp: "int_lamp", decal: 9 },
+    { x: -13.1, kind: "rack", h: 2.3, lamp: "int_lamp", decal: 6 },
+    { x: -11.5, kind: "lockers", h: 2.2, lamp: "emitRed", decal: 10 },
+    { x: -9.9, kind: "cores", h: 2.4, lamp: "emitAmber", decal: 9 },
+    { x: -8.3, kind: "rack", h: 2.3, lamp: "int_lamp", decal: 6 },
+    { x: -6.7, kind: "door", h: 2.4, lamp: "int_lamp", decal: 10 },
+  ];
+  bays.forEach((b, i) => {
+    if (b.kind === "rack") equipmentRack(kit, ctx, { side, u: u(b.x), w: 1.2, h: b.h, d: 0.55, seed: ctx.seed + 20 + i, bounds: B, lit: "emitRed" });
+    vaultBay(frame, u(b.x), { w: 1.3, h: b.h, kind: b.kind, lamp: b.lamp, decal: b.decal, seed: ctx.seed + 30 + i });
   });
   // stencils on the wall between the last vault and the corner
-  frame.add("int_stencil", new THREE.PlaneGeometry(1.1, 0.55), u(-4.6), 1.9, 0.001, { uv: "keep", uvRect: stencilRect(3) });
-  frame.add("int_stencil", new THREE.PlaneGeometry(0.9, 0.45), u(-4.6), 1.3, 0.001, { uv: "keep", uvRect: stencilRect(0) });
+  frame.add("int_stencil", new THREE.PlaneGeometry(1.1, 0.55), u(-4.7), 1.9, 0.001, { uv: "keep", uvRect: stencilRect(3) });
+  frame.add("int_stencil", new THREE.PlaneGeometry(0.9, 0.45), u(-4.7), 1.3, 0.001, { uv: "keep", uvRect: stencilRect(0) });
   // conduit bundle feeding the vaults along the top
-  pipeRun(kit, [[-15.4, CEIL - 0.42, min[2] + 0.75], [-5.6, CEIL - 0.42, min[2] + 0.75]], 0.06, PALETTE.impMid);
-  pipeRun(kit, [[-15.4, CEIL - 0.56, min[2] + 0.75], [-5.6, CEIL - 0.56, min[2] + 0.75]], 0.04, PALETTE.impDark);
-  // red restricted line on the floor along the vault row
-  kit.boxMM("paintedMetal", [-15.4, 0, min[2] + 1.05], [-5.8, 0.008, min[2] + 1.17], BLACK);
-  kit.boxMM("emitRedSoft", [-15.3, 0.008, min[2] + 1.09], [-5.9, 0.014, min[2] + 1.13], { uv: "keep" });
-  void mats;
+  pipeRun(kit, [[-15.5, CEIL - 0.42, min[2] + 0.75], [-5.7, CEIL - 0.42, min[2] + 0.75]], 0.06, PALETTE.impMid);
+  pipeRun(kit, [[-15.5, CEIL - 0.56, min[2] + 0.75], [-5.7, CEIL - 0.56, min[2] + 0.75]], 0.04, PALETTE.impDark);
+  // black rubber mat along the vault row (no lit line: the floor stays dark)
+  kit.boxMM("paintedMetal", [-15.5, 0, min[2] + 0.66], [-5.9, 0.012, min[2] + 1.5], BLACK);
+}
+
+/** One vault bay on a wall frame: heavy jambs and lintel with a lamp housing, plus a door variant.
+ *  kind "door": solid plate with seam, recessed pull, keypad, vents, seal decal.
+ *  kind "cores": the same door with a lit core slot at chest height.
+ *  kind "lockers": two narrow doors with handles, lamps and louvres.
+ *  kind "rack": frame only (an equipmentRack sits inside). */
+function vaultBay(frame, u, { w, h, kind, lamp, decal, seed }) {
+  const rand = rng(seed);
+  frame.box("paintedMetal", u - w / 2 - 0.08, h / 2, 0.3, 0.16, h, 0.6, BLACK);
+  frame.box("paintedMetal", u + w / 2 + 0.08, h / 2, 0.3, 0.16, h, 0.6, BLACK);
+  frame.box("paintedMetal", u, h + 0.1, 0.3, w + 0.32, 0.2, 0.6, BLACK);
+  frame.box("paintedMetal", u, h + 0.35, 0.12, 0.6, 0.22, 0.24, DARK);
+  frame.box(lamp, u, h + 0.35, 0.245, 0.4, 0.08, 0.01);
+  frame.collider(u - w / 2 - 0.16, u + w / 2 + 0.16, 0, h + 0.2, 0, 0.6, "vault");
+  if (kind === "rack") return;
+  frame.box("paintedMetal", u, h / 2, 0.2, w, h, 0.4, DARK);
+  if (kind === "lockers") {
+    for (const s of [-1, 1]) {
+      const cx = u + s * (w / 4);
+      frame.box("impPanel", cx, h / 2, 0.406, w / 2 - 0.08, h - 0.16, 0.012, { color: PALETTE.impMid, uv: "keep" });
+      frame.box("metal", cx - s * 0.14, 1.15, 0.42, 0.03, 0.28, 0.02, { color: PALETTE.impBlack });
+      frame.box(s < 0 ? "emitRed" : "int_lamp", cx, h - 0.32, 0.415, 0.16, 0.04, 0.01);
+      frame.box("leds", cx, 0.5, 0.415, 0.3, 0.03, 0.01, { uv: "keep" });
+      for (let i = 0; i < 3; i++) frame.box("metal", cx, 0.22 + i * 0.07, 0.415, w / 2 - 0.3, 0.02, 0.01, { color: PALETTE.impBlack });
+      frame.add("decal", new THREE.PlaneGeometry(0.22, 0.22), cx, h - 0.6, 0.413, { uv: "keep", uvRect: decalRect(s < 0 ? decal : 6) });
+    }
+    return;
+  }
+  // solid door: grey plate, vertical seam, recessed pull, keypad, bottom vents, seal decal
+  frame.box("impPanel1", u, h / 2 + 0.06, 0.406, w - 0.16, h - 0.32, 0.012, { color: PALETTE.impGrey, uv: "keep" });
+  frame.box("metal", u + 0.16, h / 2 + 0.06, 0.415, 0.03, h - 0.44, 0.01, { color: PALETTE.impBlack });
+  frame.box("paintedMetal", u - 0.22, 1.1, 0.412, 0.14, 0.34, 0.012, BLACK);
+  frame.box("metal", u - 0.22, 1.1, 0.42, 0.04, 0.26, 0.01, { color: PALETTE.impMid });
+  frame.box("impPanel", u + 0.42, 1.5, 0.415, 0.22, 0.32, 0.02, { color: PALETTE.impMid, uv: "keep" });
+  frame.box("leds", u + 0.42, 1.61, 0.43, 0.16, 0.03, 0.006, { uv: "keep" });
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const lit = r === 0 && c === 1;
+      frame.box(lit ? lamp : "rubber", u + 0.36 + c * 0.06, 1.39 + r * 0.05, 0.43, 0.04, 0.03, 0.006, { color: PALETTE.rubber });
+    }
+  }
+  for (let i = 0; i < 4; i++) frame.box("metal", u, 0.22 + i * 0.07, 0.413, w - 0.5, 0.02, 0.01, { color: PALETTE.impBlack });
+  const [du, dv] = kind === "cores" ? [u + 0.42, 2.05] : [u - 0.3, h - 0.5];
+  frame.add("decal", new THREE.PlaneGeometry(0.34, 0.34), du, dv, 0.413, { uv: "keep", uvRect: decalRect(decal) });
+  frame.box("emitRedSoft", u, 0.62, 0.413, w - 0.6, 0.012, 0.005, { uv: "keep" });
+  if (kind === "cores") {
+    // lit core slot: black surround with four data cores glowing behind thin mullions
+    frame.box("paintedMetal", u - 0.15, 1.85, 0.42, 0.7, 0.34, 0.03, BLACK);
+    for (let i = 0; i < 4; i++) frame.box(i === 1 ? "emitAmber" : "int_lamp", u - 0.39 + i * 0.16, 1.85, 0.437, 0.07, 0.24, 0.006);
+    for (let i = 0; i < 5; i++) frame.box("metal", u - 0.47 + i * 0.16, 1.85, 0.44, 0.02, 0.3, 0.006, { color: PALETTE.impBlack });
+  } else if (rand() < 0.6) {
+    // wide red seal stripe across the seam near the top of a couple of the solid doors
+    frame.box("paintedMetal", u, 2.15, 0.42, w - 0.4, 0.05, 0.006, REDPAINT);
+  }
 }
 
 // ---------------------------------------------------------------------------
 // xmin wall (x -16): briefing wall, three screens in a continuous black band with a readout strip
 // and a low equipment plinth
 // ---------------------------------------------------------------------------
-function buildBriefingWall(kit, ctx, B, mats) {
+function buildBriefingWall(kit, ctx, B) {
   const [min] = B;
   const side = "xmin";
   const u = (z) => B[1][2] - z;
@@ -273,58 +372,90 @@ function buildBriefingWall(kit, ctx, B, mats) {
   frame.box("leds", u(-8.5), 0.68, 0.105, 7.4, 0.05, 0.01, { uv: "keep" });
   for (let i = 0; i < 6; i++) frame.box(i % 3 === 2 ? "int_lamp" : "emitRed", u(-8.5) - 3.4 + i * 1.36, 0.68, 0.105, 0.3, 0.06, 0.01);
   frame.box("paintedMetal", u(-8.5), 0.28, 0.25, 7.4, 0.56, 0.5, DARK);
-  frame.box("emitRedSoft", u(-8.5), 0.1, 0.505, 6.8, 0.02, 0.01, { uv: "keep" });
+  frame.box("int_glow", u(-8.5), 0.1, 0.505, 6.8, 0.02, 0.01, { uv: "keep" });
   frame.collider(u(-8.5) - 3.7, u(-8.5) + 3.7, 0, 0.56, 0, 0.52, "plinth");
   // pulsing readout in the corner and a stencil high on the wall
   frame.box("darkGloss", u(-4.2), 2.5, 0.03, 0.6, 0.4, 0.02);
   frame.add("int_pulse", new THREE.PlaneGeometry(0.52, 0.32), u(-4.2), 2.5, 0.042, { uv: "keep" });
   frame.add("int_stencil", new THREE.PlaneGeometry(1.0, 0.5), u(-12.6), 2.6, 0.001, { uv: "keep", uvRect: stencilRect(0) });
-  void mats;
 }
 
 // ---------------------------------------------------------------------------
-// zmax wall (z -4): evidence lockers, a wall screen, a large restricted stencil, a small sealed hatch
+// zmax wall (z -4): an evidence locker with drawers, an open rack, a wall screen, the large SECURE
+// AREA stencil (placed so the whole word is inside the door-view frame), a sealed hatch, a comm panel
 // ---------------------------------------------------------------------------
-function buildLockerWall(kit, ctx, B, mats) {
+function buildLockerWall(kit, ctx, B) {
   const [min, max] = B;
   const side = "zmax";
   const u = (x) => max[0] - x;
-  equipmentRack(kit, ctx, { side, u: u(-14.4), w: 1.3, h: 2.5, d: 0.5, seed: ctx.seed + 40, bounds: B, lit: "emitRed" });
-  equipmentRack(kit, ctx, { side, u: u(-13.0), w: 1.3, h: 2.5, d: 0.5, seed: ctx.seed + 41, bounds: B, lit: "emitAmber" });
-  wallScreen(kit, ctx, { side, u: u(-10.3), v: 1.75, w: 1.6, h: 0.9, screen: 3, bounds: B });
   const seg = wallSegment(B, side);
   const { frame } = wallFrame(kit, seg.from, seg.to, min[1]);
-  frame.add("int_stencil", new THREE.PlaneGeometry(1.5, 0.75), u(-7.8), 1.9, 0.001, { uv: "keep", uvRect: stencilRect(2) });
-  frame.add("decal", new THREE.PlaneGeometry(0.5, 0.5), u(-7.8), 1.15, 0.001, { uv: "keep", uvRect: decalRect(9) });
+  evidenceLocker(frame, u(-15.2), ctx.seed + 44);
+  equipmentRack(kit, ctx, { side, u: u(-13.8), w: 1.3, h: 2.5, d: 0.5, seed: ctx.seed + 41, bounds: B, lit: "emitAmber" });
+  wallScreen(kit, ctx, { side, u: u(-12.2), v: 1.75, w: 1.6, h: 0.9, screen: 3, bounds: B });
+  frame.add("int_stencil", new THREE.PlaneGeometry(1.5, 0.75), u(-9.9), 1.9, 0.001, { uv: "keep", uvRect: stencilRect(2) });
+  frame.add("decal", new THREE.PlaneGeometry(0.5, 0.5), u(-9.9), 1.15, 0.001, { uv: "keep", uvRect: decalRect(9) });
   // sealed hatch with a red lock lamp
-  frame.box("paintedMetal", u(-5.6), 1.3, 0.04, 1.2, 1.6, 0.08, BLACK);
-  frame.box("impPanel", u(-5.6), 1.3, 0.085, 1.05, 1.45, 0.01, { color: PALETTE.impMid, uv: "keep" });
-  frame.box("metal", u(-5.6), 1.3, 0.09, 0.05, 1.3, 0.01, { color: PALETTE.impBlack });
-  frame.box("int_lamp", u(-5.6) + 0.3, 1.95, 0.095, 0.16, 0.05, 0.01);
-  frame.box("leds", u(-5.6) - 0.2, 0.7, 0.095, 0.5, 0.04, 0.01, { uv: "keep" });
-  void mats;
+  frame.box("paintedMetal", u(-7.6), 1.3, 0.04, 1.2, 1.6, 0.08, BLACK);
+  frame.box("impPanel", u(-7.6), 1.3, 0.085, 1.05, 1.45, 0.01, { color: PALETTE.impMid, uv: "keep" });
+  frame.box("metal", u(-7.6), 1.3, 0.09, 0.05, 1.3, 0.01, { color: PALETTE.impBlack });
+  frame.box("int_lamp", u(-7.6) + 0.3, 1.95, 0.095, 0.16, 0.05, 0.01);
+  frame.box("leds", u(-7.6) - 0.2, 0.7, 0.095, 0.5, 0.04, 0.01, { uv: "keep" });
+  // comm panel near the door corner: speaker grille, key switch, red call lamp
+  frame.box("paintedMetal", u(-5.3), 1.55, 0.05, 0.5, 0.7, 0.1, DARK);
+  frame.box("impPanel", u(-5.3), 1.55, 0.105, 0.42, 0.62, 0.01, { color: PALETTE.impMid, uv: "keep" });
+  for (let i = 0; i < 6; i++) frame.box("metal", u(-5.3), 1.72 - i * 0.04, 0.113, 0.3, 0.015, 0.006, { color: PALETTE.impBlack });
+  frame.box("int_lamp", u(-5.3) - 0.12, 1.36, 0.113, 0.08, 0.04, 0.006);
+  frame.box("metal", u(-5.3) + 0.1, 1.36, 0.125, 0.06, 0.06, 0.03, { color: PALETTE.impBlack });
+  frame.box("leds", u(-5.3), 1.29, 0.113, 0.3, 0.03, 0.006, { uv: "keep" });
+}
+
+/** Evidence locker on a wall frame: closed cabinet with four drawer rows, handles, lamps, a keypad. */
+function evidenceLocker(frame, u, seed) {
+  const rand = rng(seed);
+  const w = 1.3;
+  const h = 2.5;
+  const d = 0.5;
+  frame.box("paintedMetal", u, h / 2, d / 2, w, h, d, DARK);
+  frame.box("impPanel", u, h - 0.2, d + 0.006, w - 0.1, 0.3, 0.012, { color: PALETTE.impMid, uv: "keep" });
+  frame.box("int_lamp", u - 0.4, h - 0.2, d + 0.02, 0.16, 0.04, 0.01);
+  frame.box("leds", u + 0.25, h - 0.2, d + 0.02, 0.5, 0.03, 0.01, { uv: "keep" });
+  const rows = 4;
+  const y0 = 0.16;
+  const rowH = (h - 0.5 - y0) / rows;
+  for (let r = 0; r < rows; r++) {
+    const y = y0 + r * rowH + rowH / 2;
+    frame.box("impPanel1", u, y, d + 0.006, w - 0.1, rowH - 0.05, 0.012, { color: r % 2 ? PALETTE.impGrey : PALETTE.impLight, uv: "keep" });
+    frame.box("metal", u, y + rowH / 2 - 0.1, d + 0.02, w - 0.5, 0.03, 0.02, { color: PALETTE.impBlack });
+    const lamp = rand() < 0.7 ? "emitRed" : rand() < 0.5 ? "emitAmber" : "rubber";
+    frame.box(lamp, u - w / 2 + 0.2, y - rowH / 2 + 0.12, d + 0.02, 0.1, 0.03, 0.01, { color: PALETTE.rubber });
+    frame.box("leds", u + w / 2 - 0.35, y - rowH / 2 + 0.12, d + 0.02, 0.3, 0.02, 0.01, { uv: "keep" });
+  }
+  frame.box("impPanel", u + 0.45, h - 0.62, d + 0.012, 0.22, 0.3, 0.012, { color: PALETTE.impMid, uv: "keep" });
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) frame.box(r === 0 && c === 1 ? "emitRed" : "rubber", u + 0.39 + c * 0.06, h - 0.72 + r * 0.05, d + 0.024, 0.04, 0.03, 0.006, { color: PALETTE.rubber });
+  frame.add("decal", new THREE.PlaneGeometry(0.28, 0.28), u - 0.35, h - 0.62, d + 0.014, { uv: "keep", uvRect: decalRect(10) });
+  frame.collider(u - w / 2, u + w / 2, 0, h, 0, d, "locker");
 }
 
 // ---------------------------------------------------------------------------
 // xmax wall (x -2.4): the secure door wall, a guard terminal, restricted stencils either side
 // ---------------------------------------------------------------------------
-function buildDoorWall(kit, ctx, B, mats) {
+function buildDoorWall(kit, ctx, B) {
   const [min] = B;
   const u = (z) => z - min[2]; // xmax wall runs from zmin to zmax
   const seg = wallSegment(B, "xmax");
   const { frame } = wallFrame(kit, seg.from, seg.to, min[1]);
   frame.box("paintedMetal", u(-9), 3.05, 0.05, 2.6, 0.26, 0.1, BLACK);
-  frame.box("emitRed", u(-9), 3.05, 0.105, 2.2, 0.08, 0.01);
+  frame.box("emitRedSoft", u(-9), 3.05, 0.105, 2.2, 0.08, 0.01, { uv: "keep" });
   frame.add("int_stencil", new THREE.PlaneGeometry(1.2, 0.6), u(-11.3), 1.9, 0.001, { uv: "keep", uvRect: stencilRect(0) });
   frame.add("int_stencil", new THREE.PlaneGeometry(1.2, 0.6), u(-6.7), 1.9, 0.001, { uv: "keep", uvRect: stencilRect(1) });
   // guard terminal beside the door (outside the 2.5 m door clearance), red screen
   slabConsole(kit, { x: -3.2, y: 0, z: -5.6, yaw: Math.PI / 2, w: 0.9, d: 0.5, h: 1.15, screens: ["impScreen3"], pulse: "int_pulse", lampMat: "emitRed", seed: ctx.seed + 61 });
-  void mats;
 }
 
 // ---------------------------------------------------------------------------
-// Holo table: black octagon with a red-lit rim, the planet hologram above it with a red targeting
-// ring and orbit markers, a faint projector cone
+// Holo table: black octagon with a red-lit rim, the planet hologram above it (x1.5) with a red
+// targeting ring and orbit markers, a faint projector cone
 // ---------------------------------------------------------------------------
 function holoTable(kit, ctx, mats, x, z) {
   const top = 0.92;
@@ -343,13 +474,14 @@ function holoTable(kit, ctx, mats, x, z) {
   }
   kit.box("leds", x + 0.86, 0.3, z, 0.01, 0.04, 0.8, { uv: "keep" });
   kit.collider([x - 1.0, 0, z - 1.0], [x + 1.0, top + 0.3, z + 1.0], "holotable");
-  // planet with its ring (helper, grid-textured), spinning slowly; a bright wire graticule follows
-  // it so the globe reads from the door; red targeting reticle and orbit markers on a second group
-  const hy = top + 0.85;
-  const scale = 0.6;
+  // planet with its ring (helper, grid-textured, swapped to the brighter planet material), spinning
+  // slowly; a bright wire graticule follows it so the globe reads from the door; red targeting
+  // reticle and orbit markers on a second group
+  const hy = top + 1.0;
+  const scale = 0.9;
   const R = 0.8 * scale;
   const planet = hologram(kit, ctx, { x, y: hy, z, kind: "planet", scale });
-  mergeGroupMeshes(planet);
+  mergeGroupMeshes(planet, mats.planet);
   const grat = [];
   const torus = (r, tube, rx, ry = 0) => {
     const tg = new THREE.TorusGeometry(r, tube, 5, 64);
@@ -357,41 +489,41 @@ function holoTable(kit, ctx, mats, x, z) {
     if (ry) tg.rotateY(ry);
     return tg;
   };
-  grat.push(torus(R * 1.005, 0.007, Math.PI / 2)); // equator
+  grat.push(torus(R * 1.005, 0.009, Math.PI / 2)); // equator
   for (const lat of [-0.7, 0.7]) {
     const rr = R * Math.cos(lat);
-    const tg = torus(rr, 0.005, Math.PI / 2);
+    const tg = torus(rr, 0.006, Math.PI / 2);
     tg.translate(0, R * Math.sin(lat), 0);
     grat.push(tg);
   }
-  grat.push(torus(R * 1.005, 0.005, 0), torus(R * 1.005, 0.005, 0, Math.PI / 2)); // meridians
-  grat.push(torus(1.5 * scale, 0.006, Math.PI / 2 - 0.3)); // outer edge of the ring
-  const pole = new THREE.CylinderGeometry(0.006, 0.006, R * 2.6, 6);
+  grat.push(torus(R * 1.005, 0.006, 0), torus(R * 1.005, 0.006, 0, Math.PI / 2)); // meridians
+  grat.push(torus(1.5 * scale, 0.007, Math.PI / 2 - 0.3)); // outer edge of the ring
+  const pole = new THREE.CylinderGeometry(0.007, 0.007, R * 2.6, 6);
   grat.push(pole);
   const gm = new THREE.Mesh(mergeGeometries(grat.map((q) => (q.index ? q.toNonIndexed() : q)), false), mats.bright);
   planet.add(gm);
   const g = new THREE.Group();
   g.position.set(x, hy, z);
   const reticle = [];
-  reticle.push(torus(R + 0.1, 0.009, Math.PI / 2));
+  reticle.push(torus(R + 0.12, 0.011, Math.PI / 2));
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2;
-    const tick = new THREE.BoxGeometry(0.18, 0.014, 0.014);
+    const tick = new THREE.BoxGeometry(0.22, 0.016, 0.016);
     tick.rotateY(a);
-    tick.translate(Math.cos(a) * (R + 0.24), 0, Math.sin(a) * (R + 0.24));
+    tick.translate(Math.cos(a) * (R + 0.3), 0, Math.sin(a) * (R + 0.3));
     reticle.push(tick);
   }
-  const arc = new THREE.TorusGeometry(R + 0.3, 0.008, 5, 40, Math.PI * 0.6);
+  const arc = new THREE.TorusGeometry(R + 0.38, 0.009, 5, 40, Math.PI * 0.6);
   arc.rotateX(Math.PI / 2);
   reticle.push(arc);
   const rm = new THREE.Mesh(mergeGeometries(reticle.map((q) => (q.index ? q.toNonIndexed() : q)), false), mats.holoRed);
   g.add(rm);
   // orbit markers: two small satellites on tilted orbits
   const orb = [];
-  for (const [r, tilt] of [[R + 0.18, 0.35], [R + 0.26, -0.5]]) {
-    const ring = torus(r, 0.004, Math.PI / 2 + tilt);
+  for (const [r, tilt] of [[R + 0.22, 0.35], [R + 0.32, -0.5]]) {
+    const ring = torus(r, 0.005, Math.PI / 2 + tilt);
     orb.push(ring);
-    const sat = new THREE.OctahedronGeometry(0.035);
+    const sat = new THREE.OctahedronGeometry(0.045);
     sat.translate(r * Math.cos(tilt), r * Math.sin(tilt) * 0.5, 0);
     orb.push(sat);
   }
@@ -401,10 +533,10 @@ function holoTable(kit, ctx, mats, x, z) {
   // from the door)
   const bars = [];
   const rand = rng(ctx.seed + 90);
-  for (let i = 0; i < 9; i++) {
-    const wbar = 0.12 + rand() * 0.3;
-    const b = new THREE.BoxGeometry(0.01, 0.022, wbar);
-    b.translate(0, -0.3 + i * 0.075, R + 0.62 + wbar / 2);
+  for (let i = 0; i < 11; i++) {
+    const wbar = 0.14 + rand() * 0.34;
+    const b = new THREE.BoxGeometry(0.012, 0.026, wbar);
+    b.translate(0, -0.42 + i * 0.085, R + 0.55 + wbar / 2);
     bars.push(b);
   }
   const bm = new THREE.Mesh(mergeGeometries(bars, false), mats.holoRed);
@@ -516,8 +648,9 @@ function slabConsole(kit, { x, y, z, yaw, w = 0.8, d = 0.5, h = 1.15, screens = 
   kit.collider([x - ex, y, z - ez], [x + ex, y + h, z + ez], "console");
 }
 
-/** Collapse a group's meshes into one draw call (the hologram helper spawns several meshes). */
-function mergeGroupMeshes(group) {
+/** Collapse a group's meshes into one draw call (the hologram helper spawns several meshes); an
+ *  optional replacement material is applied to the merged mesh. */
+function mergeGroupMeshes(group, material = null) {
   const geos = [];
   let mat = null;
   for (const c of [...group.children]) {
@@ -532,7 +665,7 @@ function mergeGroupMeshes(group) {
     group.remove(c);
   }
   if (geos.length) {
-    const m = new THREE.Mesh(mergeGeometries(geos, false), mat);
+    const m = new THREE.Mesh(mergeGeometries(geos, false), material || mat);
     m.castShadow = false;
     m.receiveShadow = false;
     group.add(m);
@@ -540,12 +673,19 @@ function mergeGroupMeshes(group) {
 }
 
 // ---------------------------------------------------------------------------
-// Floor: red guide strip from the door to the table, cable covers, stencil inside the door
+// Floor: red/black threshold band just inside the door (across the walking direction — no runners
+// leading into the room), cable covers along the briefing wall, stencil inside the door
 // ---------------------------------------------------------------------------
 function buildFloorDetail(kit, ctx, B) {
   const [, max] = B;
-  kit.boxMM("paintedMetal", [TABLE.x + 1.1, 0, -9.06], [max[0] - 0.4, 0.008, -8.94], BLACK);
-  kit.boxMM("emitRedSoft", [TABLE.x + 1.2, 0.008, -9.02], [max[0] - 0.5, 0.013, -8.98], { uv: "keep" });
+  const x1 = max[0] - 0.22;
+  const x0 = x1 - 0.34;
+  kit.boxMM("paintedMetal", [x0, 0, -10.35], [x1, 0.008, -7.65], BLACK);
+  for (let i = 0; i < 9; i++) {
+    const z0 = -10.3 + i * 0.3;
+    kit.boxMM("paintedMetal", [x0 + 0.04, 0.008, z0], [x1 - 0.04, 0.012, z0 + 0.15], REDPAINT);
+  }
+  kit.boxMM("int_glow", [x0 - 0.03, 0.006, -10.3], [x0, 0.012, -7.7], { uv: "keep" });
   for (const z of [-11.0, -6.0]) {
     kit.boxMM("paintedMetal", [B[0][0] + 0.5, 0, z - 0.1], [TABLE.x - 1.0, 0.05, z + 0.1], BLACK);
     kit.collider([B[0][0] + 0.5, 0, z - 0.1], [TABLE.x - 1.0, 0.05, z + 0.1], "trunk");
@@ -556,4 +696,107 @@ function buildFloorDetail(kit, ctx, B) {
   dg.rotateY(Math.PI / 2);
   kit.add("int_stencil", dg, { pos: [max[0] - 1.6, 0.004, -10.0], uv: "keep", uvRect: stencilRect(0) });
   void ctx;
+}
+
+// ---------------------------------------------------------------------------
+// Props: an evidence-case stack and a data-core trolley by the locker wall (left of the door view),
+// a sealed transfer crate on a pallet in front of the vaults (right). All off the door-table axis
+// and clear of the spawn.
+// ---------------------------------------------------------------------------
+function buildProps(kit, ctx) {
+  hardCase(kit, -6.65, 0, -4.95, 0.12, 0.85, 0.32, 0.55, ctx.seed + 71);
+  hardCase(kit, -6.6, 0.32, -4.97, -0.06, 0.72, 0.28, 0.48, ctx.seed + 72);
+  kit.collider([-7.1, 0, -5.3], [-6.15, 0.62, -4.62], "cases");
+  coreTrolley(kit, -7.7, -5.15, 0.1);
+  sealedCrate(kit, -8.3, -11.95, -0.08, ctx.seed + 75);
+}
+
+/** Black hard case with edge bands, two latches, a red seal stripe over the lid seam and a decal. */
+function hardCase(kit, x, y, z, yaw, w, h, d, seed) {
+  const q = new THREE.Quaternion().setFromAxisAngle(Y_AXIS, yaw);
+  const P = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
+  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+    const p = P(lx, ly, lz);
+    return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: q, ...extra });
+  };
+  const rand = rng(seed);
+  add("paintedMetal", new THREE.BoxGeometry(w, h, d), 0, h / 2, 0, DARK);
+  add("paintedMetal", new THREE.BoxGeometry(w + 0.02, 0.04, d + 0.02), 0, h * 0.62, 0, BLACK);
+  for (const s of [-1, 1]) add("paintedMetal", new THREE.BoxGeometry(0.06, h + 0.01, d + 0.02), s * (w / 2 - 0.1), h / 2, 0, BLACK);
+  for (const s of [-1, 1]) add("metal", new THREE.BoxGeometry(0.08, 0.1, 0.02), s * (w / 2 - 0.22), h * 0.62, d / 2 + 0.01, { color: PALETTE.impMid });
+  add("metal", new THREE.BoxGeometry(0.24, 0.03, 0.03), 0, h + 0.015, 0, { color: PALETTE.impBlack });
+  add("paintedMetal", new THREE.BoxGeometry(0.16, h * 0.9, 0.006), -w / 2 + 0.34, h / 2, d / 2 + 0.003, REDPAINT);
+  add("decal", new THREE.PlaneGeometry(0.2, 0.2), w / 2 - 0.34, h / 2, d / 2 + 0.005, { uv: "keep", uvRect: decalRect(rand() < 0.5 ? 9 : 10) });
+  add(rand() < 0.5 ? "int_lamp" : "emitRed", new THREE.BoxGeometry(0.04, 0.02, 0.005), w / 2 - 0.12, h - 0.06, d / 2 + 0.003);
+}
+
+/** Wheeled cage trolley carrying four glowing data cores, a handle bar and a small status plate. */
+function coreTrolley(kit, x, z, yaw) {
+  const q = new THREE.Quaternion().setFromAxisAngle(Y_AXIS, yaw);
+  const P = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, 0, z));
+  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+    const p = P(lx, ly, lz);
+    return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: q, ...extra });
+  };
+  const w = 0.7;
+  const d = 0.5;
+  add("paintedMetal", new THREE.BoxGeometry(w, 0.05, d), 0, 0.18, 0, BLACK);
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const wg = new THREE.CylinderGeometry(0.06, 0.06, 0.04, 10);
+      wg.rotateZ(Math.PI / 2);
+      add("rubber", wg, sx * (w / 2 - 0.08), 0.06, sz * (d / 2 - 0.06), { color: PALETTE.rubber });
+      add("paintedMetal", new THREE.BoxGeometry(0.04, 0.9, 0.04), sx * (w / 2 - 0.02), 0.65, sz * (d / 2 - 0.02), DARK);
+    }
+  }
+  add("paintedMetal", new THREE.BoxGeometry(w, 0.04, d), 0, 1.1, 0, DARK);
+  add("paintedMetal", new THREE.BoxGeometry(w, 0.04, 0.04), 0, 0.64, d / 2 - 0.02, DARK);
+  add("paintedMetal", new THREE.BoxGeometry(w, 0.04, 0.04), 0, 0.64, -d / 2 + 0.02, DARK);
+  for (let i = 0; i < 4; i++) {
+    const lx = -w / 2 + 0.11 + i * 0.16;
+    add("paintedMetal", new THREE.CylinderGeometry(0.055, 0.055, 0.7, 10), lx, 0.55, 0, BLACK);
+    add(i === 2 ? "emitAmber" : "emitRedSoft", new THREE.BoxGeometry(0.03, 0.5, 0.115), lx, 0.55, 0, { uv: "keep" });
+    add("metal", new THREE.CylinderGeometry(0.06, 0.06, 0.05, 10), lx, 0.92, 0, { color: PALETTE.impMid });
+  }
+  const bar = new THREE.CylinderGeometry(0.02, 0.02, w, 8);
+  bar.rotateZ(Math.PI / 2);
+  add("metal", bar, 0, 1.25, -d / 2 - 0.05, { color: PALETTE.impMid });
+  for (const s of [-1, 1]) add("metal", new THREE.CylinderGeometry(0.015, 0.015, 0.2, 6), s * (w / 2 - 0.02), 1.18, -d / 2 - 0.04, { color: PALETTE.impMid });
+  add("paintedMetal", new THREE.BoxGeometry(0.3, 0.12, 0.02), 0, 1.02, d / 2 + 0.01, DARK);
+  add("leds", new THREE.BoxGeometry(0.22, 0.03, 0.006), 0, 1.02, d / 2 + 0.023, { uv: "keep" });
+  const c = Math.abs(Math.cos(yaw));
+  const s = Math.abs(Math.sin(yaw));
+  const ex = (w * c + (d + 0.2) * s) / 2 + 0.03;
+  const ez = (w * s + (d + 0.2) * c) / 2 + 0.03;
+  kit.collider([x - ex, 0, z - ez], [x + ex, 1.3, z + ez], "trolley");
+}
+
+/** Sealed transfer crate on a pallet: dark body, black edge frame, matte red band, seal lamp, decal. */
+function sealedCrate(kit, x, z, yaw, seed) {
+  const q = new THREE.Quaternion().setFromAxisAngle(Y_AXIS, yaw);
+  const P = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, 0, z));
+  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+    const p = P(lx, ly, lz);
+    return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: q, ...extra });
+  };
+  const rand = rng(seed);
+  const w = 0.95;
+  const d = 0.65;
+  const h = 0.72;
+  add("paintedMetal", new THREE.BoxGeometry(w + 0.1, 0.08, d + 0.1), 0, 0.04, 0, BLACK);
+  for (let i = 0; i < 3; i++) add("paintedMetal", new THREE.BoxGeometry(0.06, 0.03, d + 0.12), -w / 2 + 0.05 + i * (w / 2 - 0.05), 0.095, 0, DARK);
+  add("paintedMetal", new THREE.BoxGeometry(w, h, d), 0, 0.11 + h / 2, 0, DARK);
+  for (const sx of [-1, 1]) add("paintedMetal", new THREE.BoxGeometry(0.06, h + 0.02, d + 0.02), sx * (w / 2 - 0.03), 0.11 + h / 2, 0, BLACK);
+  add("paintedMetal", new THREE.BoxGeometry(w + 0.02, 0.05, d + 0.02), 0, 0.11 + h - 0.025, 0, BLACK);
+  add("paintedMetal", new THREE.BoxGeometry(w + 0.02, 0.06, d + 0.02), 0, 0.11 + h * 0.55, 0, REDPAINT);
+  add("impPanel", new THREE.BoxGeometry(0.3, 0.22, 0.012), 0.1, 0.11 + h * 0.3, d / 2 + 0.006, { color: PALETTE.impMid, uv: "keep" });
+  add("leds", new THREE.BoxGeometry(0.2, 0.03, 0.006), 0.1, 0.11 + h * 0.3 + 0.05, d / 2 + 0.016, { uv: "keep" });
+  add(rand() < 0.5 ? "int_lamp" : "emitRed", new THREE.BoxGeometry(0.06, 0.03, 0.006), 0.1, 0.11 + h * 0.3 - 0.05, d / 2 + 0.016);
+  add("decal", new THREE.PlaneGeometry(0.24, 0.24), -0.28, 0.11 + h * 0.3, d / 2 + 0.005, { uv: "keep", uvRect: decalRect(9) });
+  for (const s of [-1, 1]) add("metal", new THREE.BoxGeometry(0.16, 0.04, 0.05), s * (w / 2 - 0.2), 0.11 + h + 0.02, 0, { color: PALETTE.impMid });
+  const c = Math.abs(Math.cos(yaw));
+  const s = Math.abs(Math.sin(yaw));
+  const ex = ((w + 0.1) * c + (d + 0.1) * s) / 2 + 0.02;
+  const ez = ((w + 0.1) * s + (d + 0.1) * c) / 2 + 0.02;
+  kit.collider([x - ex, 0, z - ez], [x + ex, h + 0.15, z + ez], "crate");
 }
