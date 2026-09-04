@@ -23,19 +23,29 @@ export const G = {
   doorHW: LIFT_DOOR.w / 2, // 1.2
   doorH: LIFT_DOOR.h, // 3.0
   wallT: 0.16, // lobby wall thickness (doors helper WALL_T)
-  clearHW: 1.14, // frame lips narrow the clear opening to 2.28
+  clearHW: 1.14, // frame reveals narrow the clear opening to 2.28
   clearH: 2.86, // inner header lowers the clear height inside the cabin
   leafW: 1.24,
-  leafTravel: 1.22,
+  leafH: 2.965, // leaf height: from the sill plate (0.045) to 1 cm inside the wall above the hole
+  leafLift: 0.045, // leaf bottom rides just above the sill plate
+  leafTravel: 1.07, // open leaves stop 7 cm short of the reveal so their edge stays visible
   leafT: 0.1,
   leafD: -0.08, // leaf plane centre: inside the lobby wall thickness
+  postOuter: 1.6, // jambs run from the reveal (1.14) out to 1.60: a 0.46 m heavy frame
+  lintelU: 3.3,
+  hoodD: 0.33, // lintel indicator hood front, measured from the bounds face (wall face is at 0.16)
   spawnD: 1.2, // feet position after a ride: 1.2 m inside the doors
   panelD: 1.3, // deck-select panel centre depth on the right-hand wall
   panelU: 1.2,
-  callA: 2.02, // call panel centre, along the lobby face to the viewer's right of the door
+  btnA: 1.2, // deck buttons column (depth) and top button height
+  btnU0: 1.36,
+  btnStep: 0.1,
+  dispA: 1.39, // 7-segment readout column on the deck-select panel
+  callA: 2.13, // call panel centre along the lobby face, viewer's right of the door (0.35 m clear of the jamb)
   callU: 1.2,
-  lintelU: 3.3,
-  hoodD: 0.33, // lintel indicator hood front, measured from the bounds face (wall face is at 0.16)
+  plqU: 1.9, // back-wall deck readout plate centre height
+  lightD: 2.6, // cabin point light: deep and low so it cannot pool on the lobby floor
+  lightU: 2.2,
 };
 
 /** Cabin descriptor for a lobby manifest that carries `lift`. */
@@ -97,12 +107,15 @@ export function makeCabin(ctx, manifest, roomId) {
 
 // ---------------------------------------------------------------------------
 // Imperial panel field on a flat wall: light-grey plates 3 cm proud of a black backing, 2.5 cm seams,
-// dark kick plate, one vent + one equipment panel in the top row.
+// dark kick plate, one vent + one equipment panel in the top row, and a varied middle row of inset
+// details (vent / indicator cluster / raised plate / plain) so no two neighbours repeat.
 // ---------------------------------------------------------------------------
+const MID_VARIANTS = ["inset", "vent", "plain", "lamps"];
+
 function panelField(kit, C, wall, h0, h1, rand, opts = {}) {
   const gap = 0.025;
   const faceT = 0.03;
-  const { kickTop = 0.34, rows = [0.365, 1.3, 1.325, 2.35, 2.375, 3.02], cols = 4, ventCol = 1, gearCol = 3, skip = null } = opts;
+  const { kickTop = 0.34, rows = [0.365, 1.3, 1.325, 2.35, 2.375, 3.02], cols = 4, ventCol = 1, gearCol = 3, skip = null, midRow = null, midOffset = 0 } = opts;
   wall.box(h0 + gap / 2, h1 - gap / 2, G.floorT, kickTop, 0.012, faceT, "paintedMetal", { color: C.impDark, texel: 1.5 });
   const cw = (h1 - h0 - (cols - 1) * gap) / cols;
   for (let ri = 0; ri < rows.length; ri += 2) {
@@ -115,8 +128,8 @@ function panelField(kit, C, wall, h0, h1, rand, opts = {}) {
       if (skip && skip(a, b, v0, v1)) continue;
       const top = row === 2;
       if (top && ci === ventCol) {
-        // vent: black recess with angled slats
-        wall.box(a, b, v0, v1, 0.0, faceT, "paintedMetal", { color: C.impBlack });
+        // vent: matte black recess with angled slats
+        wall.box(a, b, v0, v1, 0.0, faceT, "liftMatte", { color: C.impBlack });
         const slats = 6;
         for (let s = 0; s < slats; s++) {
           const sv = v0 + 0.1 + ((v1 - v0 - 0.2) * s) / (slats - 1);
@@ -133,7 +146,7 @@ function panelField(kit, C, wall, h0, h1, rand, opts = {}) {
         const cx = (a + b) / 2;
         const cv = (v0 + v1) / 2;
         wall.box(cx - 0.13, cx + 0.13, cv - 0.11, cv + 0.09, -0.055, 0.0, "paintedMetal", { color: C.impDark, texel: 2 });
-        wall.box(cx - 0.11, cx + 0.11, cv - 0.09, cv + 0.07, -0.062, -0.055, "darkGloss", {});
+        wall.box(cx - 0.11, cx + 0.11, cv - 0.09, cv + 0.07, -0.062, -0.055, "blackGloss", { color: C.impBlack });
         wall.box(cx - 0.08, cx - 0.05, cv - 0.06, cv - 0.03, -0.066, -0.06, "emitBlue", {});
         wall.box(cx - 0.03, cx + 0.0, cv - 0.06, cv - 0.03, -0.066, -0.06, "emitRedImp", {});
         wall.box(cx + 0.02, cx + 0.05, cv - 0.06, cv - 0.03, -0.066, -0.06, "emitAmber", {});
@@ -141,10 +154,43 @@ function panelField(kit, C, wall, h0, h1, rand, opts = {}) {
         wall.box(cx + 0.045, cx + 0.105, v1 - 0.05, v1 - 0.01, -0.036, 0.0, "paintedMetal", { color: C.impDark });
         continue;
       }
-      if (row === 1 && rand() < 0.45) {
-        // raised inner plate (alternate tint so it reads as a plate, not a stray seam) with a recessed horizontal seam
-        wall.box(a + 0.1, b - 0.1, v0 + 0.1, v1 - 0.1, -0.012, 0.0, "impPanel", { color: col === C.impWhite ? C.impGrey : C.impWhite, texel: 1.0 });
-        wall.box(a + 0.1, b - 0.1, v0 + 0.1 + (v1 - v0 - 0.2) * 0.62, v0 + 0.1 + (v1 - v0 - 0.2) * 0.62 + 0.014, -0.012, -0.004, "paintedMetal", { color: C.impBlack });
+      if (row === 1) {
+        const kind = midRow ? midRow[ci] : MID_VARIANTS[(ci + midOffset) % MID_VARIANTS.length];
+        const cx = (a + b) / 2;
+        const cv = (v0 + v1) / 2;
+        if (kind === "inset") {
+          // raised inner plate (alternate tint so it reads as a plate) with a recessed horizontal seam
+          wall.box(a + 0.1, b - 0.1, v0 + 0.1, v1 - 0.1, -0.012, 0.0, "impPanel", { color: col === C.impWhite ? C.impGrey : C.impWhite, texel: 1.0 });
+          const sv = v0 + 0.1 + (v1 - v0 - 0.2) * 0.62;
+          wall.box(a + 0.1, b - 0.1, sv, sv + 0.014, -0.012, -0.004, "paintedMetal", { color: C.impBlack });
+        } else if (kind === "vent") {
+          // inset louvre: dark recess ringed by the panel, 7 angled slats
+          wall.box(a + 0.12, b - 0.12, v0 + 0.14, v1 - 0.14, -0.008, 0.0, "liftMatte", { color: C.impBlack });
+          const slats = 7;
+          for (let s = 0; s < slats; s++) {
+            const sv = v0 + 0.2 + ((v1 - v0 - 0.4) * s) / (slats - 1);
+            wall.box(a + 0.16, b - 0.16, sv - 0.01, sv + 0.01, -0.02, -0.008, "paintedMetal", { color: C.impMid, texel: 2 });
+          }
+          wall.box(a + 0.12, b - 0.12, v0 + 0.14, v0 + 0.17, -0.014, -0.008, "paintedMetal", { color: C.impMid });
+          wall.box(a + 0.12, b - 0.12, v1 - 0.17, v1 - 0.14, -0.014, -0.008, "paintedMetal", { color: C.impMid });
+        } else if (kind === "lamps") {
+          // indicator cluster: bezel, black gloss plate, two rows of small lamps and a readout strip
+          wall.box(cx - 0.19, cx + 0.19, cv - 0.11, cv + 0.11, -0.006, 0.0, "paintedMetal", { color: C.impMid, texel: 2 });
+          wall.box(cx - 0.17, cx + 0.17, cv - 0.09, cv + 0.09, -0.014, -0.006, "liftMatte", { color: C.impBlack });
+          const lampMats = [
+            ["emitBlue", "emitBlue", "emitAmber", "emitBlue"],
+            ["emitRedImp", "emitGreen", "emitBlue", "emitAmber"],
+          ];
+          lampMats.forEach((rowMats, ri2) => {
+            rowMats.forEach((m, k) => {
+              const lx = cx - 0.13 + k * 0.045;
+              const lv = cv + 0.05 - ri2 * 0.045;
+              wall.box(lx - 0.01, lx + 0.01, lv - 0.01, lv + 0.01, -0.018, -0.014, m, {});
+            });
+          });
+          wall.box(cx + 0.03, cx + 0.15, cv + 0.02, cv + 0.07, -0.018, -0.014, "screenImp2", { uv: "keep" });
+          wall.box(cx - 0.13, cx + 0.15, cv - 0.07, cv - 0.055, -0.017, -0.014, "emitBlue", {});
+        }
       } else if (row === 0 && rand() < 0.5) {
         // low panel: a single dark horizontal groove
         wall.box(a + 0.06, b - 0.06, v0 + (v1 - v0) * 0.5, v0 + (v1 - v0) * 0.5 + 0.014, 0.0, 0.02, "paintedMetal", { color: C.impBlack });
@@ -173,6 +219,22 @@ function decal(frame, name, cu, cv, cn, width) {
   frame.add("liftDecal", new THREE.PlaneGeometry(width, h), cu, cv, cn, { uv: "keep", uvRect: labelRect(name) });
 }
 
+// Recessed push button: dark bezel ring standing 1.3 cm proud of the face, a black gloss cap sunk 5 mm
+// inside it. The lit ring (network.js lamp) sits between cap and bezel.
+function pushButton(frame, C, a, b, nFace, size) {
+  const half = size / 2;
+  const ring = 0.006;
+  for (const [da, db, sa, sb] of [
+    [0, half - ring / 2, size, ring],
+    [0, -half + ring / 2, size, ring],
+    [half - ring / 2, 0, ring, size - 2 * ring],
+    [-half + ring / 2, 0, ring, size - 2 * ring],
+  ]) {
+    frame.box("paintedMetal", a + da, b + db, nFace + 0.0065, sa, sb, 0.013, { color: C.impDark, texel: 3 });
+  }
+  frame.box("blackGloss", a, b, nFace + 0.0065, size - 2 * ring - 0.02, size - 2 * ring - 0.02, 0.007, { color: C.impBlack });
+}
+
 /**
  * Build every static part of one cabin into ctx.kit (+ colliders, + one light descriptor).
  * Returns { light } — the descriptor the ride animates.
@@ -190,7 +252,7 @@ export function buildCabinStatic(ctx, cab, seed = 1) {
   const HI = G.halfIn;
 
   // ---- shell (black backing everywhere; panels sit 3 cm proud of it) --------------------------
-  B("blackGloss", [-HB, 0, 0], [HB, G.floorT, G.depth], { color: C.impDark, texel: 0.5 }); // floor plate
+  B("impFloor", [-HB, 0, 0], [HB, G.floorT, G.depth], { color: C.impDark, texel: 0.5 }); // floor: the lobbies' dark deck plate
   B("paintedMetal", [HI + 0.03, 0, 0], [HB, G.boxH, G.depth], { color: C.impBlack, texel: 0.5 }); // R wall core
   B("paintedMetal", [-HB, 0, 0], [-HI - 0.03, G.boxH, G.depth], { color: C.impBlack, texel: 0.5 }); // L wall core
   B("paintedMetal", [-HB, 0, G.inD1 + 0.03], [HB, G.boxH, G.depth], { color: C.impBlack, texel: 0.5 }); // back core
@@ -200,7 +262,7 @@ export function buildCabinStatic(ctx, cab, seed = 1) {
   B("paintedMetal", [-HB, 0, 0], [-G.clearHW, G.boxH, G.inD0 - 0.03], { color: C.impBlack, texel: 0.5 });
   B("paintedMetal", [-G.clearHW, G.clearH, 0], [G.clearHW, G.boxH, G.inD0 - 0.03], { color: C.impBlack, texel: 0.5 });
 
-  // ---- ceiling: grey slab with a recessed centre light channel ----------------------------------
+  // ---- ceiling: grey slab with a recessed channel holding a housed, louvred fixture ------------------
   const ch = 0.35; // channel half width
   const chTop = G.ceil + 0.25;
   B("impPanel", [-HB, G.ceil, 0], [-ch, G.boxH, G.depth], { color: C.impGrey, texel: 0.8 });
@@ -214,54 +276,63 @@ export function buildCabinStatic(ctx, cab, seed = 1) {
   B("paintedMetal", [ch - 0.03, G.ceil, c0], [ch, chTop, c1], { color: C.impBlack });
   B("paintedMetal", [-ch, G.ceil, c0], [ch, chTop, c0 + 0.03], { color: C.impBlack });
   B("paintedMetal", [-ch, G.ceil, c1 - 0.03], [ch, chTop, c1], { color: C.impBlack });
-  B("emitCoolSoft", [-ch + 0.08, chTop - 0.03, c0 + 0.08], [ch - 0.08, chTop - 0.01, c1 - 0.08], { uv: "keep" }); // diffuser
-  for (let k = 0; k < 7; k++) {
-    const dz = c0 + 0.2 + ((c1 - c0 - 0.4) * k) / 6;
-    B("paintedMetal", [-ch + 0.02, G.ceil + 0.05, dz - 0.012], [ch - 0.02, G.ceil + 0.08, dz + 0.012], { color: C.impMid, texel: 2 }); // grille ribs
+  // fixture: dark housing hung in the channel, a narrow diffuser under it, louvre fins below that
+  B("blackGloss", [-0.3, chTop - 0.12, c0 + 0.05], [0.3, chTop, c1 - 0.05], { color: C.impDark });
+  B("emitWhite", [-0.13, chTop - 0.135, c0 + 0.1], [0.13, chTop - 0.12, c1 - 0.1], {}); // diffuser
+  B("paintedMetal", [-0.3, chTop - 0.135, c0 + 0.05], [-0.13, chTop - 0.12, c1 - 0.05], { color: C.impDark }); // housing cheeks
+  B("paintedMetal", [0.13, chTop - 0.135, c0 + 0.05], [0.3, chTop - 0.12, c1 - 0.05], { color: C.impDark });
+  const finU0 = chTop - 0.18;
+  const finU1 = chTop - 0.135;
+  for (let dz = c0 + 0.1; dz <= c1 - 0.1 + 1e-6; dz += 0.07) {
+    B("paintedMetal", [-0.29, finU0, dz - 0.004], [0.29, finU1, dz + 0.004], { color: C.impDark, texel: 2 }); // louvre fin
   }
+  B("paintedMetal", [-0.32, finU0 - 0.02, c0 + 0.05], [-0.29, finU0, c1 - 0.05], { color: C.impMid, texel: 2 }); // fin rails
+  B("paintedMetal", [0.29, finU0 - 0.02, c0 + 0.05], [0.32, finU0, c1 - 0.05], { color: C.impMid, texel: 2 });
   // perimeter ceiling seam (dark cove)
   B("paintedMetal", [-HI, G.ceil - 0.02, G.inD0], [HI, G.ceil, G.inD0 + 0.05], { color: C.impBlack });
   B("paintedMetal", [-HI, G.ceil - 0.02, G.inD1 - 0.05], [HI, G.ceil, G.inD1], { color: C.impBlack });
   B("paintedMetal", [-HI, G.ceil - 0.02, G.inD0], [-HI + 0.05, G.ceil, G.inD1], { color: C.impBlack });
   B("paintedMetal", [HI - 0.05, G.ceil - 0.02, G.inD0], [HI, G.ceil, G.inD1], { color: C.impBlack });
 
-  // ---- floor border frame + threshold + hazard sill -------------------------------------------
+  // ---- floor border frame + sill plate between lobby floor and cabin floor ----------------------
   const fb = G.floorT;
   B("paintedMetal", [-HI, fb, G.inD0], [-HI + 0.12, fb + 0.012, G.inD1], { color: C.impMid, texel: 1.5 });
   B("paintedMetal", [HI - 0.12, fb, G.inD0], [HI, fb + 0.012, G.inD1], { color: C.impMid, texel: 1.5 });
   B("paintedMetal", [-HI, fb, G.inD1 - 0.12], [HI, fb + 0.012, G.inD1], { color: C.impMid, texel: 1.5 });
-  B("paintedMetal", [-HI, fb, G.inD0], [-G.clearHW, fb + 0.012, G.inD0 + 0.12], { color: C.impMid, texel: 1.5 });
-  B("paintedMetal", [G.clearHW, fb, G.inD0], [HI, fb + 0.012, G.inD0 + 0.12], { color: C.impMid, texel: 1.5 });
-  B("paintedMetal", [-G.clearHW, fb, G.inD0], [G.clearHW, fb + 0.02, G.inD0 + 0.06], { color: C.impMid, texel: 1.5 }); // inner sill
-  B("paintedMetal", [-1.32, 0, -0.3], [1.32, 0.02, 0.0], { color: C.impMid, texel: 1.5 }); // lobby threshold plate
-  B("hazard", [-1.32, 0, -0.38], [1.32, 0.012, -0.3], { texel: 4 }); // hazard sill on the lobby floor
+  B("paintedMetal", [-HI, fb, 0.26], [-G.clearHW, fb + 0.012, 0.38], { color: C.impMid, texel: 1.5 });
+  B("paintedMetal", [G.clearHW, fb, 0.26], [HI, fb + 0.012, 0.38], { color: C.impMid, texel: 1.5 });
+  // sill: mid-grey gloss plate 4 cm high spanning from 0.38 m into the lobby to the inner reveal
+  // (reads against both dark floors), light edge lines on both long edges, black leaf guide slot
+  B("blackGloss", [-1.32, 0, -0.38], [1.32, 0.04, 0.26], { color: C.impMid, texel: 1 });
+  B("impPanel", [-1.32, 0.04, -0.38], [1.32, 0.047, -0.35], { color: C.impWhite, texel: 2 });
+  B("impPanel", [-1.32, 0.04, 0.23], [1.32, 0.047, 0.26], { color: C.impWhite, texel: 2 });
+  B("paintedMetal", [-1.2, 0.04, G.leafD - 0.06], [1.2, 0.046, G.leafD + 0.06], { color: C.impBlack, texel: 2 });
 
   // ---- wall panel fields -----------------------------------------------------------------------
-  panelField(kit, C, W.rWall, G.inD0 + 0.14, G.inD1 - 0.14, rand, { cols: 4, ventCol: 2, gearCol: 0 });
-  panelField(kit, C, W.lWall, G.inD0 + 0.14, G.inD1 - 0.14, rand, { cols: 4, ventCol: 1, gearCol: 3 });
+  panelField(kit, C, W.rWall, G.inD0 + 0.14, G.inD1 - 0.14, rand, { cols: 4, ventCol: 2, gearCol: 0, midRow: ["inset", "plain", "vent", "lamps"] });
+  panelField(kit, C, W.lWall, G.inD0 + 0.14, G.inD1 - 0.14, rand, { cols: 4, ventCol: 1, gearCol: 3, midRow: ["lamps", "plain", "inset", "vent"] });
   const placard = (a, b, v0, v1) => Math.abs((a + b) / 2) < 0.1 && v0 > 1.0 && v1 < 2.5;
-  panelField(kit, C, W.back, -HI + 0.14, HI - 0.14, rand, { cols: 3, ventCol: 1, gearCol: -1, skip: placard });
+  panelField(kit, C, W.back, -HI + 0.14, HI - 0.14, rand, { cols: 3, ventCol: 1, gearCol: -1, skip: placard, midRow: ["vent", "plain", "lamps"] });
   // door wall inner strips beside the reveal
-  panelField(kit, C, W.frontInner, -HI + 0.14, -1.32, rand, { cols: 1, ventCol: -1, gearCol: -1 });
-  panelField(kit, C, W.frontInner, 1.32, HI - 0.14, rand, { cols: 1, ventCol: -1, gearCol: -1 });
+  panelField(kit, C, W.frontInner, -HI + 0.14, -1.32, rand, { cols: 1, ventCol: -1, gearCol: -1, midRow: ["inset"] });
+  panelField(kit, C, W.frontInner, 1.32, HI - 0.14, rand, { cols: 1, ventCol: -1, gearCol: -1, midRow: ["plain"] });
   // head-height light line recessed in the seam between the middle and top panel rows, all three walls
   const sU0 = 2.352;
   const sU1 = 2.373;
   B("emitWhite", [-HI + 0.16, sU0, G.inD1 + 0.008], [HI - 0.16, sU1, G.inD1 + 0.024], {});
   B("emitWhite", [HI + 0.008, sU0, G.inD0 + 0.16], [HI + 0.024, sU1, G.inD1 - 0.16], {});
   B("emitWhite", [-HI - 0.024, sU0, G.inD0 + 0.16], [-HI - 0.008, sU1, G.inD1 - 0.16], {});
-  // back-wall placard: darker panel, black inset plate, lift name + id, blue accent line
+  // back-wall deck readout: mid-grey bezel, matte black plate (a glossy one mirrors the cabin light right
+  // over the digit), DECK label, lift id, blue accent line; digit + travel arrows are network lamps
   {
     const f = cab.frames.back;
     const cw = (HI * 2 - 0.28 - 0.05) / 3;
     W.back.box(-cw / 2, cw / 2, 1.325, 2.35, 0.0, 0.03, "impPanel", { color: C.impGrey, texel: 1.0 });
-    W.back.box(-0.38, 0.38, 1.46, 2.22, -0.016, 0.0, "paintedMetal", { color: C.impBlack, texel: 2 });
-    W.back.box(-0.4, 0.4, 1.44, 1.46, -0.02, 0.0, "paintedMetal", { color: C.impMid });
-    W.back.box(-0.4, 0.4, 2.22, 2.24, -0.02, 0.0, "paintedMetal", { color: C.impMid });
-    decal(f, "turbolift", 0, 2.06, 0.0175, 0.56);
-    decal(f, "t" + Math.min(4, Math.max(1, cab.deck)), 0, 1.79, 0.0175, 0.2);
-    W.back.box(-0.3, 0.3, 1.575, 1.587, -0.022, -0.014, "emitBlue", {});
-    for (let k = 0; k < 6; k++) W.back.box(-0.3 + k * 0.12, -0.28 + k * 0.12, 1.515, 1.53, -0.02, -0.014, k === 3 ? "emitAmber" : "emitBlue", {});
+    W.back.box(-0.4, 0.4, G.plqU - 0.37, G.plqU + 0.37, -0.012, 0.0, "liftMatte", { color: C.impMid });
+    W.back.box(-0.38, 0.38, G.plqU - 0.35, G.plqU + 0.35, -0.018, -0.012, "liftMatte", { color: C.impBlack });
+    decal(f, "deck", -0.27, G.plqU + 0.26, 0.0185, 0.14);
+    decal(f, "t" + Math.min(4, Math.max(1, cab.deck)), 0.27, G.plqU - 0.27, 0.0185, 0.13);
+    W.back.box(-0.3, 0.3, G.plqU - 0.31, G.plqU - 0.302, -0.02, -0.018, "emitBlue", {});
   }
 
   // ---- corner posts with blue-white light strips ------------------------------------------------
@@ -281,30 +352,40 @@ export function buildCabinStatic(ctx, cab, seed = 1) {
     }
   }
 
-  // ---- handrail at 1.02 m on the back wall ----------------------------------------------------
+  // ---- grab rails at 1.02 m: full width between the corner posts, bracketed every ≤ 0.8 m ----------
   {
-    const axis = Math.abs(cab.R.x) > 0.5 ? "x" : "z";
-    // painted (dielectric) rails: bare metal would only mirror the dark interior and read black
-    const rp = cab.P(0, 1.02, G.inD1 - 0.08);
-    kit.cyl("paintedMetal", rp.x, rp.y, rp.z, 0.022, 2.7, axis, { color: C.impHullLight, segments: 14, texel: 2 });
-    for (const rr of [-1.25, 0, 1.25]) {
-      B("paintedMetal", [rr - 0.02, 0.985, G.inD1 - 0.09], [rr + 0.02, 1.05, G.inD1], { color: C.impDark });
-    }
-    // matching short rails on both side walls (grab points either side of the doors)
-    for (const sr of [-1, 1]) {
-      const sp = cab.P(sr * (HI - 0.08), 1.02, 2.6);
-      kit.cyl("paintedMetal", sp.x, sp.y, sp.z, 0.02, 1.6, axis === "x" ? "z" : "x", { color: C.impHullLight, segments: 12, texel: 2 });
-      for (const dd of [1.9, 3.3]) B("paintedMetal", [sr * (HI - 0.09), 0.985, dd - 0.02], [sr * HI, 1.05, dd + 0.02], { color: C.impDark });
-    }
+    const rU = 1.02;
+    const axisR = Math.abs(cab.R.x) > 0.5 ? "x" : "z"; // world axis of the cabin's r direction
+    const axisD = axisR === "x" ? "z" : "x";
+    const rail = (p0, p1, axis) => {
+      const mid = p0.clone().add(p1).multiplyScalar(0.5);
+      kit.cyl("paintedMetal", mid.x, mid.y, mid.z, 0.022, p0.distanceTo(p1), axis, { color: C.impHullLight, segments: 14, texel: 2 });
+    };
+    // bracket: wall plate + arm from the wall face (at local n = 0, proud negative) to the rail centre
+    const bracket = (wall, h, n1) => {
+      wall.box(h - 0.035, h + 0.035, rU - 0.055, rU + 0.055, -0.01, 0.0, "blackGloss", { color: C.impDark });
+      wall.box(h - 0.013, h + 0.013, rU - 0.016, rU + 0.016, n1, -0.01, "paintedMetal", { color: C.impDark, texel: 3 });
+    };
+    const postIn = HI - 0.12; // inner face of the corner posts
+    // back wall
+    rail(cab.P(-postIn, rU, G.inD1 - 0.08), cab.P(postIn, rU, G.inD1 - 0.08), axisR);
+    for (const rr of [-1.44, -0.72, 0, 0.72, 1.44]) bracket(W.back, rr, -0.08);
+    // left wall: front post to back post
+    rail(cab.P(-(HI - 0.08), rU, G.inD0 + 0.12), cab.P(-(HI - 0.08), rU, G.inD1 - 0.12), axisD);
+    for (const dd of [0.38, 1.2, 2.0, 2.8, 3.62]) bracket(W.lWall, dd, -0.08);
+    // right wall: from the deck-select housing to the back post
+    rail(cab.P(HI - 0.08, rU, G.panelD + 0.24), cab.P(HI - 0.08, rU, G.inD1 - 0.12), axisD);
+    for (const dd of [G.panelD + 0.3, 2.3, 3.0, 3.62]) bracket(W.rWall, dd, -0.08);
   }
 
-  // ---- inner door reveal (heavy frame seen from inside) + header --------------------------------
+  // ---- inner door reveal (heavy frame seen from inside) + header + lit reveal strips ---------------
   const rvN0 = G.inD0;
   const rvN1 = G.inD0 + 0.06;
-  B("paintedMetal", [G.clearHW, 0, rvN0], [1.32, G.ceil, rvN1], { color: C.impMid, texel: 1.5 });
-  B("paintedMetal", [-1.32, 0, rvN0], [-G.clearHW, G.ceil, rvN1], { color: C.impMid, texel: 1.5 });
-  B("paintedMetal", [-1.32, G.clearH, rvN0], [1.32, G.ceil, rvN1], { color: C.impMid, texel: 1.5 });
+  B("blackGloss", [G.clearHW, 0, rvN0], [1.32, G.ceil, rvN1], { color: C.impMid, texel: 1.5 });
+  B("blackGloss", [-1.32, 0, rvN0], [-G.clearHW, G.ceil, rvN1], { color: C.impMid, texel: 1.5 });
+  B("blackGloss", [-1.32, G.clearH, rvN0], [1.32, G.ceil, rvN1], { color: C.impMid, texel: 1.5 });
   B("paintedMetal", [-1.32, G.clearH + 0.02, rvN1], [1.32, G.clearH + 0.04, rvN1 + 0.012], { color: C.impBlack }); // header slot for the status lamp
+  for (const s of [-1, 1]) B("emitWhite", [s * (G.clearHW - 0.008), 0.35, rvN0 + 0.015], [s * G.clearHW, 2.75, rvN0 + 0.045], {});
   decal(cab.frames.frontInner, "standClear", 0, G.clearH + 0.135, rvN1 - G.inD0 + 0.002, 0.62);
 
   // ---- deck-select panel housing (right-hand wall, centre 1.2 m) --------------------------------
@@ -313,62 +394,92 @@ export function buildCabinStatic(ctx, cab, seed = 1) {
     const a = G.panelD;
     // housing n 0..0.07, bezel to 0.075; the interactable face (network.js) is a mesh at n 0.075..0.083,
     // so everything that must read on the face sits at n ≥ 0.084
-    f.box("paintedMetal", a, 1.21, 0.035, 0.36, 0.72, 0.07, { color: C.impBlack, texel: 2 });
-    f.box("paintedMetal", a, 1.21, 0.0725, 0.34, 0.7, 0.005, { color: C.impDark, texel: 2 }); // bezel
-    f.box("darkGloss", a + 0.06, 0.985, 0.086, 0.2, 0.1, 0.006, {}); // small display bezel
-    f.box("screenImp1", a + 0.06, 0.985, 0.091, 0.18, 0.08, 0.004, { uv: "keep" }); // small display
-    decal(f, "deckSelect", a, 1.51, 0.0765, 0.28);
+    f.box("blackGloss", a, 1.21, 0.035, 0.44, 0.72, 0.07, { color: C.impBlack });
+    f.box("paintedMetal", a, 1.21, 0.0725, 0.42, 0.7, 0.005, { color: C.impDark, texel: 2 }); // bezel
+    for (let k = 0; k < 4; k++) pushButton(f, C, G.btnA, G.btnU0 - k * G.btnStep, 0.083, 0.068);
+    f.box("blackGloss", G.dispA, 1.3, 0.0845, 0.1, 0.16, 0.003, { color: C.impBlack }); // readout well
+    f.box("blackGloss", G.dispA, 0.985, 0.086, 0.18, 0.1, 0.006, { color: C.impBlack }); // small display bezel
+    f.box("screenImp1", G.dispA, 0.985, 0.091, 0.16, 0.08, 0.004, { uv: "keep" }); // small display
+    decal(f, "deckSelect", a, 1.515, 0.0765, 0.3);
     decal(f, "t" + Math.min(4, Math.max(1, cab.deck)), a, 1.67, 0.032, 0.14);
-    for (let k = 0; k < 4; k++) decal(f, "d" + (k + 1), a - 0.04, 1.36 - k * 0.1, 0.0845, 0.07);
+    for (let k = 0; k < 4; k++) decal(f, "d" + (k + 1), a - 0.165, G.btnU0 - k * G.btnStep, 0.0845, 0.05);
     // tiny fixed indicators along the bottom of the face
-    f.box("emitBlue", a - 0.11, 0.925, 0.086, 0.02, 0.012, 0.004, {});
-    f.box("emitRedImp", a - 0.08, 0.925, 0.086, 0.02, 0.012, 0.004, {});
-    f.box("emitAmber", a - 0.05, 0.925, 0.086, 0.02, 0.012, 0.004, {});
+    f.box("emitBlue", a - 0.13, 0.925, 0.086, 0.02, 0.012, 0.004, {});
+    f.box("emitRedImp", a - 0.1, 0.925, 0.086, 0.02, 0.012, 0.004, {});
+    f.box("emitAmber", a - 0.07, 0.925, 0.086, 0.02, 0.012, 0.004, {});
   }
 
-  // ---- lobby side: heavy frame, lips, lintel with indicator housing, call panel -----------------
+  // ---- lobby side: heavy jambs with panel lines, lit reveals, header track, lintel + hood, call panel
   {
     const f = cab.frames.lobby;
-    const post0 = G.doorHW;
-    const post1 = 1.5;
-    const fd0 = -0.27; // frame front (10-11 cm proud of the lobby wall face at -0.16)
-    B("paintedMetal", [post0, 0, fd0], [post1, G.lintelU, -G.wallT], { color: C.impMid, texel: 1.5 });
-    B("paintedMetal", [-post1, 0, fd0], [-post0, G.lintelU, -G.wallT], { color: C.impMid, texel: 1.5 });
-    B("paintedMetal", [-post1, G.doorH, fd0], [post1, G.lintelU, -G.wallT], { color: C.impMid, texel: 1.5 }); // lintel
-    // black lips cover the leaf edges / pocket slots (clear opening 2.28 × 2.94 from the lobby)
-    B("paintedMetal", [G.clearHW, 0, -0.21], [post0 + 0.001, G.doorH, -G.wallT], { color: C.impBlack });
-    B("paintedMetal", [-post0 - 0.001, 0, -0.21], [-G.clearHW, G.doorH, -G.wallT], { color: C.impBlack });
-    B("paintedMetal", [-post0, G.doorH - 0.06, -0.21], [post0, G.doorH + 0.001, -G.wallT], { color: C.impBlack });
-    // recessed post grooves + vertical light strips
+    const PO = G.postOuter;
+    const fd0 = -0.27; // inner jamb band front (11 cm proud of the lobby wall face at -0.16)
+    const fd1 = -0.24; // outer band front
+    const grooveU = [1.0, 1.9, 2.8]; // horizontal panel lines across both bands
+    const grooveH = 0.025;
+    const segs = (u0, u1, fn) => {
+      let cur = u0;
+      for (const g of grooveU) {
+        if (g > cur && g + grooveH < u1) {
+          fn(cur, g);
+          cur = g + grooveH;
+        }
+      }
+      fn(cur, u1);
+    };
     for (const s of [-1, 1]) {
-      B("paintedMetal", [s * 1.31, 0.35, fd0 - 0.004], [s * 1.39, 2.95, fd0 + 0.03], { color: C.impBlack });
-      // diffuser-mapped emitter: bright core, soft edges (a flat emitWhite bar blows out at 1 m)
-      B("emitCoolSoft", [s * 1.337, 0.4, fd0 - 0.01], [s * 1.363, 2.9, fd0 + 0.0], { uv: "keep" });
-      B("paintedMetal", [s * 1.22, 0.0, fd0 - 0.02], [s * 1.28, 0.3, fd0], { color: C.impDark }); // foot blocks
+      const R0 = s * G.clearHW;
+      const R1 = s * 1.39;
+      const R2 = s * 1.45;
+      const R3 = s * PO;
+      // groove backings, each 1.5 cm behind its band's face (the vertical groove floor carries the strip)
+      B("paintedMetal", [R0, 0.32, fd0 + 0.015], [R1, G.doorH, -G.wallT], { color: C.impBlack, texel: 1 });
+      B("paintedMetal", [R1, 0.32, fd1 - 0.005], [R2, G.doorH, -G.wallT], { color: C.impBlack, texel: 1 });
+      B("paintedMetal", [R2, 0.32, fd1 + 0.015], [R3, G.doorH, -G.wallT], { color: C.impBlack, texel: 1 });
+      segs(0.32, G.doorH, (u0, u1) => {
+        B("blackGloss", [R0, u0, fd0], [R1, u1, -G.wallT], { color: C.impMid, texel: 1.5 }); // inner band (gloss)
+        B("impPanel", [R2, u0, fd1], [R3, u1, -G.wallT], { color: C.impMid, texel: 1.5 }); // outer band (matte)
+      });
+      // vertical groove between the bands carries the frame light strip (diffuser-mapped emitter)
+      B("emitCoolSoft", [s * 1.407, 0.4, fd1 - 0.017], [s * 1.433, 2.9, fd1 - 0.005], { uv: "keep" });
+      // lit reveal: a thin white strip on the jamb's inner face so the reveal is never a black slit
+      B("emitWhite", [s * (G.clearHW - 0.008), 0.35, -0.205], [R0, 2.85, -0.175], {});
+      // foot block with a light cap line
+      B("blackGloss", [R0, 0, -0.29], [R3, 0.3, -G.wallT], { color: C.impDark, texel: 1.5 });
+      B("paintedMetal", [R0, 0.3, -0.292], [R3, 0.32, -G.wallT], { color: C.impHullLight, texel: 2 });
     }
-    // indicator hood above the lintel: projects G.hoodD off the wall (6 cm beyond the frame face) so the
-    // readout stays in front of any lobby-side header trim; matte face (a glossy one only mirrors the lobby)
+    // header track across the opening: black channel with a lighter running rail on its lower lip
+    B("blackGloss", [-G.clearHW, 2.9, -0.22], [G.clearHW, G.doorH + 0.001, -G.wallT], { color: C.impBlack });
+    B("paintedMetal", [-G.clearHW, 2.885, -0.225], [G.clearHW, 2.905, -0.2], { color: C.impMid, texel: 2 });
+    // lintel: two bands (mid over the door, dark above) with a groove between, TURBOLIFT plate on the dark band
+    B("blackGloss", [-PO, G.doorH, fd0], [PO, 3.12, -G.wallT], { color: C.impMid, texel: 1.5 });
+    B("paintedMetal", [-PO, 3.12, fd1 - 0.01], [PO, 3.145, -G.wallT], { color: C.impBlack, texel: 1 }); // groove floor
+    B("impPanel", [-PO, 3.145, fd1], [PO, G.lintelU, -G.wallT], { color: C.impMid, texel: 1.5 });
+    decal(f, "turbolift", 0, 3.2225, -fd1 - G.wallT + 0.002, 0.56);
+    // indicator hood above the lintel: projects G.hoodD off the wall (9 cm beyond the jamb face) so the
+    // readout stays in front of any lobby-side trim; matte black face (a glossy one only mirrors the lobby)
     const hd = -G.hoodD;
-    B("paintedMetal", [-0.6, G.lintelU, hd + 0.01], [0.6, G.lintelU + 0.3, -G.wallT], { color: C.impBlack, texel: 2 });
-    B("paintedMetal", [-0.56, G.lintelU + 0.03, hd + 0.002], [0.56, G.lintelU + 0.27, hd + 0.01], { color: C.impDark, texel: 2 });
-    B("paintedMetal", [-0.54, G.lintelU + 0.05, hd - 0.001], [0.54, G.lintelU + 0.25, hd + 0.002], { color: C.impBlack, texel: 2 });
-    B("paintedMetal", [-0.62, G.lintelU + 0.28, hd - 0.012], [0.62, G.lintelU + 0.3, -G.wallT], { color: C.impDark }); // cap (keeps the 3.6 m clearance)
-    B("paintedMetal", [-0.62, G.lintelU - 0.01, hd - 0.012], [0.62, G.lintelU + 0.01, -G.wallT], { color: C.impDark }); // sill
-    for (const s of [-1, 1]) B("paintedMetal", [s * 0.6, G.lintelU + 0.01, hd - 0.006], [s * 0.62, G.lintelU + 0.28, -G.wallT], { color: C.impDark }); // cheeks
-    decal(f, "turbolift", 0, G.doorH + 0.19, fd0 * -1 - G.wallT + 0.002, 0.7);
+    B("blackGloss", [-0.6, G.lintelU, hd + 0.01], [0.6, G.lintelU + 0.3, -G.wallT], { color: C.impBlack, texel: 2 });
+    B("liftMatte", [-0.56, G.lintelU + 0.03, hd + 0.002], [0.56, G.lintelU + 0.27, hd + 0.01], { color: C.impDark });
+    B("liftMatte", [-0.54, G.lintelU + 0.05, hd - 0.001], [0.54, G.lintelU + 0.25, hd + 0.002], { color: C.impBlack });
+    B("blackGloss", [-0.62, G.lintelU + 0.28, hd - 0.012], [0.62, G.lintelU + 0.3, -G.wallT], { color: C.impDark }); // cap (keeps the 3.6 m clearance)
+    B("blackGloss", [-0.62, G.lintelU - 0.01, hd - 0.012], [0.62, G.lintelU + 0.01, -G.wallT], { color: C.impDark }); // sill
+    for (const s of [-1, 1]) B("blackGloss", [s * 0.6, G.lintelU + 0.01, hd - 0.006], [s * 0.62, G.lintelU + 0.28, -G.wallT], { color: C.impDark }); // cheeks
 
-    // call panel: housing on the wall, 0.35 m clear of the frame
-    // housing n 0..0.06, bezel to 0.065, interactable face mesh 0.065..0.073 (network.js), labels ≥ 0.0745
+    // call panel: heavy housing on the wall, 0.35 m clear of the jamb, recessed lit call button
+    // housing n 0..0.07, bezel to 0.075, interactable face mesh 0.075..0.083 (network.js), details ≥ 0.084
     const a = G.callA;
-    f.box("paintedMetal", a, G.callU, 0.03, 0.34, 0.5, 0.06, { color: C.impBlack, texel: 2 });
-    f.box("paintedMetal", a, G.callU, 0.0625, 0.32, 0.48, 0.005, { color: C.impDark, texel: 2 }); // bezel
-    f.box("paintedMetal", a, G.callU + 0.32, 0.01, 0.34, 0.1, 0.02, { color: C.impBlack, texel: 2 }); // label plate
-    decal(f, "turbolift", a, G.callU + 0.32, 0.0205, 0.3);
-    decal(f, "call", a, G.callU - 0.115, 0.0745, 0.1);
-    decal(f, "deck", a - 0.08, G.callU + 0.17, 0.0745, 0.09);
-    decal(f, "d" + Math.min(4, Math.max(1, cab.deck)), a + 0.06, G.callU + 0.17, 0.0745, 0.06);
-    f.box("emitBlue", a - 0.12, G.callU - 0.2, 0.076, 0.02, 0.012, 0.004, {});
-    f.box("emitRedImp", a - 0.09, G.callU - 0.2, 0.076, 0.02, 0.012, 0.004, {});
+    f.box("blackGloss", a, G.callU, 0.035, 0.36, 0.6, 0.07, { color: C.impBlack });
+    f.box("paintedMetal", a, G.callU, 0.0725, 0.34, 0.58, 0.005, { color: C.impDark, texel: 2 }); // bezel
+    f.box("blackGloss", a, G.callU + 0.36, 0.012, 0.36, 0.1, 0.024, { color: C.impBlack }); // label plate
+    f.box("paintedMetal", a, G.callU + 0.36, 0.0245, 0.34, 0.08, 0.001, { color: C.impDark, texel: 2 });
+    decal(f, "turbolift", a, G.callU + 0.36, 0.0255, 0.3);
+    pushButton(f, C, a, G.callU - 0.06, 0.083, 0.13);
+    decal(f, "call", a, G.callU - 0.185, 0.0845, 0.1);
+    decal(f, "deck", a - 0.06, G.callU + 0.17, 0.0845, 0.09);
+    decal(f, "d" + Math.min(4, Math.max(1, cab.deck)), a + 0.07, G.callU + 0.17, 0.0845, 0.06);
+    f.box("emitBlue", a - 0.11, G.callU - 0.235, 0.086, 0.02, 0.012, 0.004, {});
+    f.box("emitRedImp", a - 0.08, G.callU - 0.235, 0.086, 0.02, 0.012, 0.004, {});
   }
 
   // ---- colliders (static) ----------------------------------------------------------------------
@@ -377,14 +488,14 @@ export function buildCabinStatic(ctx, cab, seed = 1) {
   COL([-HB, 0, G.inD1], [HB, G.boxH, G.depth], "lift-wall");
   COL([G.clearHW, 0, 0], [HB, G.boxH, G.inD0 + 0.06], "lift-wall");
   COL([-HB, 0, 0], [-G.clearHW, G.boxH, G.inD0 + 0.06], "lift-wall");
-  COL([G.clearHW, 0, -0.27], [1.5, G.lintelU, -G.wallT], "lift-frame");
-  COL([-1.5, 0, -0.27], [-G.clearHW, G.lintelU, -G.wallT], "lift-frame");
+  COL([G.clearHW, 0, -0.29], [G.postOuter, G.lintelU, -G.wallT], "lift-frame");
+  COL([-G.postOuter, 0, -0.29], [-G.clearHW, G.lintelU, -G.wallT], "lift-frame");
 
-  // ---- light: one point in the ceiling channel; the ride animates it --------------------------------
-  const lp = cab.P(0, G.ceil - 0.15, 2.0);
-  const light = { type: "point", pos: [lp.x, lp.y, lp.z], color: 0xdfe8ff, intensity: 9, distance: 6.5, decay: 2, priority: 0.85 };
+  // ---- light: one point deep and low in the cabin (never reaches the lobby floor); the ride animates it
+  const lp = cab.P(0, G.lightU, G.lightD);
+  const light = { type: "point", pos: [lp.x, lp.y, lp.z], color: 0xdfe8ff, intensity: 8, distance: 4.0, decay: 2, priority: 0.4 };
   ctx.lights.push(light);
   cab.light = light;
-  cab.lightBase = { pos: [lp.x, lp.y, lp.z], color: 0xdfe8ff, intensity: 9 };
+  cab.lightBase = { pos: [lp.x, lp.y, lp.z], color: 0xdfe8ff, intensity: 8 };
   return { light };
 }

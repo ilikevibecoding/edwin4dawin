@@ -21,16 +21,32 @@ export default {
     "sys-lifts-cabin": { pos: [0, FLOOR4, 183.6], yaw: 180, pitch: -4 },
     "sys-lifts-panel": { pos: [-0.6, FLOOR4, 183.2], yaw: -90, pitch: -6 },
   },
-  // Module-local materials (§10): leaf = shared wall panel clone so vertex colours + wear match the
-  // lobbies; lamp = unlit HDR colour per instance (drives every indicator from one InstancedMesh);
-  // face = console glass for the two interactable plates (cloned per plate for the hover tint);
-  // decal = the stencil label atlas (1 canvas texture).
+  // Module-local materials (§10): leaf = gunmetal (metallic, mid roughness, vertex-tinted stiles/rails
+  // so panel lines and bevels catch the light); inset = clean painted plate (shared impPanel clone) for
+  // the recessed leaf fields; lamp = unlit HDR colour per instance (drives every indicator from one
+  // InstancedMesh); face = console glass for the two interactable plates (cloned per plate for the
+  // hover tint); decal = the stencil label atlas (1 canvas texture).
   materials(shared) {
     const panel = shared.impPanel || shared.painted;
-    const leaf = panel.clone();
-    leaf.name = "liftLeaf";
+    const metalMaps = shared.metal || {};
+    const leaf = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      vertexColors: true,
+      normalMap: metalMaps.normalMap || null,
+      normalScale: new THREE.Vector2(0.5, 0.5),
+      roughness: 0.45,
+      metalness: 0.7,
+      envMapIntensity: 0.9,
+      name: "liftLeaf",
+    });
+    const inset = panel.clone();
+    inset.name = "liftInset";
     return {
       liftLeaf: leaf,
+      liftInset: inset,
+      // clean matte for the dark readout/indicator plates and the hood face: no wear or roughness maps
+      // (which mottle on near-black tints) and no gloss (which mirrors the cabin light over the digit)
+      liftMatte: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.88, metalness: 0, envMapIntensity: 0.35, name: "liftMatte" }),
       liftLamp: new THREE.MeshBasicMaterial({ color: 0xffffff, name: "liftLamp" }),
       liftFace: new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.3, metalness: 0.25, envMapIntensity: 1.0, name: "liftFace" }),
       liftDecal: makeLabelMaterial(),

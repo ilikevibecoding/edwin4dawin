@@ -19,7 +19,7 @@ export const TIMING = {
 };
 
 // lamp slots per cabin
-const L = { btn0: 0, seg0: 4, ready: 11, transit: 12, lintelSeg0: 13, up0: 20, down0: 22, call: 24, callInd: 25, header: 26, strip: 27, bar0: 28, count: 34 };
+const L = { btn0: 0, seg0: 4, ready: 11, transit: 12, lintelSeg0: 13, up0: 20, down0: 22, call: 24, callInd: 25, header: 26, strip: 27, bar0: 28, seam0: 34, plqSeg0: 36, plqUp0: 43, plqDown0: 45, count: 47 };
 const SEGS = "abcdefg";
 const DIGITS = { 0: "abcdef", 1: "bc", 2: "abged", 3: "abgcd", 4: "fgbc", 5: "afgcd", 6: "afgedc", 7: "abc", 8: "abcdefg", 9: "abcdfg", "-": "g" };
 // linear HDR lamp colours (bloom threshold is 1.15, so lit lamps sit well above it)
@@ -32,6 +32,9 @@ const COLORS = {
   green: [0.5, 1.8, 0.9],
   dimWhite: [0.3, 0.33, 0.38],
   dimRed: [0.34, 0.06, 0.05],
+  seam: [0.8, 1.15, 1.9], // blue-white meeting-edge seam
+  digit: [0.16, 0.36, 1.05], // 7-segment digits: just under the bloom threshold so the glyph stays crisp
+  digitAmber: [1.05, 0.6, 0.14],
 };
 const smooth = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 const finiteOrNull = (v) => (Number.isFinite(v) ? v : null);
@@ -46,37 +49,44 @@ const Y_PI = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0),
 
 // One door leaf in leaf-local space: x from the meeting edge outward, y up from the sill, z through
 // the leaf. Detail on both faces so the left leaf is the same geometry turned 180° about y.
+// Two geometries: the gunmetal body (stiles, rails and the recessed core) and the painted insets that
+// sit 7 mm below the frame — a turbolift leaf, not a wall panel. The light seam along the meeting edge
+// is a lamp instance (network.update) so it can change colour.
+export const LEAF_INSETS = [
+  [0.44, 1.22],
+  [1.26, 2.04],
+  [2.08, 2.62],
+];
 export function buildLeafGeometry(C) {
-  const parts = [];
-  const add = (cx, cy, cz, sx, sy, sz, color) => {
+  const body = [];
+  const inset = [];
+  const add = (list, cx, cy, cz, sx, sy, sz, color) => {
     const g = new THREE.BoxGeometry(sx, sy, sz).toNonIndexed();
     g.translate(cx, cy, cz);
     worldUVs(g, 1.0);
     setVertexColor(g, color);
-    parts.push(g);
+    list.push(g);
   };
   const W = G.leafW;
-  const H = G.doorH - 0.02;
+  const H = G.leafH;
   const T = G.leafT;
-  add(W / 2, H / 2, 0, W, H, T - 0.04, C.impBlack); // core (shows in the seams)
+  const x0 = 0.09; // meeting stile
+  const x1 = W - 0.06; // outer stile
+  add(body, (x0 + x1) / 2, H / 2, 0, x1 - x0, H, T - 0.03, C.impDark); // recessed core (shows in the gaps)
+  add(body, x0 / 2, H / 2, 0, x0, H, T, C.impGrey); // meeting stile
+  add(body, (x1 + W) / 2, H / 2, 0, W - x1, H, T, C.impGrey); // outer stile
+  add(body, (x0 + x1) / 2, 0.21, 0, x1 - x0, 0.42, T, C.impGrey); // kick rail
+  add(body, (x0 + x1) / 2, (2.64 + H) / 2, 0, x1 - x0, H - 2.64, T, C.impGrey); // top rail
+  for (const y of [1.24, 2.06]) add(body, (x0 + x1) / 2, y, 0, x1 - x0, 0.04, T, C.impGrey); // horizontal panel lines
   for (const s of [-1, 1]) {
-    const z = s * (T / 2 - 0.01);
-    const x0 = 0.035; // dark meeting edge
-    const x1 = W;
-    for (const [y0, y1] of [
-      [0.32, 1.0],
-      [1.03, 2.1],
-      [2.13, H],
-    ]) {
-      add((x0 + x1) / 2, (y0 + y1) / 2, z, x1 - x0, y1 - y0, 0.02, C.impGrey);
-    }
-    add((x0 + x1) / 2, 0.155, s * (T / 2 - 0.015), x1 - x0, 0.29, 0.02, C.impMid); // kick, recessed 5 mm
-    add(x0 + 0.12, 1.565, s * (T / 2 + 0.002), 0.05, 1.3, 0.006, C.impBlack); // slim grip channel by the meeting edge
-    add(x0 + 0.12, 1.565, s * (T / 2 + 0.006), 0.012, 1.3, 0.006, C.impMid); // its inner rib
+    const z = s * (T / 2 - 0.015 + 0.004);
+    for (const [y0, y1] of LEAF_INSETS) add(inset, (0.16 + W - 0.16) / 2, (y0 + y1) / 2, z, W - 0.32, y1 - y0, 0.008, C.impGrey);
   }
-  const geo = mergeGeometries(parts, false);
-  geo.computeBoundingSphere();
-  return geo;
+  const bodyGeo = mergeGeometries(body, false);
+  const insetGeo = mergeGeometries(inset, false);
+  bodyGeo.computeBoundingSphere();
+  insetGeo.computeBoundingSphere();
+  return { body: bodyGeo, inset: insetGeo };
 }
 
 export class LiftNetwork {
@@ -99,13 +109,18 @@ export class LiftNetwork {
     const C = ctx.PALETTE;
     const n = cabins.length;
 
-    // ---- door leaves ----------------------------------------------------------------------------
-    this.leaves = new THREE.InstancedMesh(buildLeafGeometry(C), mats.liftLeaf, n * 2);
+    // ---- door leaves: gunmetal bodies + painted insets, same instance matrices -------------------
+    const leafGeo = buildLeafGeometry(C);
+    this.leaves = new THREE.InstancedMesh(leafGeo.body, mats.liftLeaf, n * 2);
     this.leaves.name = "lift_leaves";
-    this.leaves.frustumCulled = false;
-    this.leaves.castShadow = true;
-    this.leaves.receiveShadow = true;
-    ctx.group.add(this.leaves);
+    this.insets = new THREE.InstancedMesh(leafGeo.inset, mats.liftInset, n * 2);
+    this.insets.name = "lift_leaf_insets";
+    for (const m of [this.leaves, this.insets]) {
+      m.frustumCulled = false;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      ctx.group.add(m);
+    }
 
     // ---- lamps (buttons, digits, chevrons, status strips, ride sweep bars) --------------------------
     const lampCount = n * L.count;
@@ -131,9 +146,9 @@ export class LiftNetwork {
       this.placeLamps(cab);
       for (let k = 0; k < 2; k++) this.colliders.push({ min: new THREE.Vector3(), max: new THREE.Vector3(), tag: "lift-door" });
       // interactable faces: real meshes with their own material so the hover tint shows
-      const callFace = this.makeFace(cab.frames.lobby, G.callA, G.callU, 0.069, 0.3, 0.44, mats.liftFace);
+      const callFace = this.makeFace(cab.frames.lobby, G.callA, G.callU - 0.01, 0.079, 0.3, 0.5, mats.liftFace);
       callFace.name = `lift_${cab.id}_call`;
-      const panelFace = this.makeFace(cab.frames.rWall, G.panelD, 1.17, 0.079, 0.3, 0.54, mats.liftFace);
+      const panelFace = this.makeFace(cab.frames.rWall, G.panelD, 1.18, 0.079, 0.4, 0.56, mats.liftFace);
       panelFace.name = `lift_${cab.id}_panel`;
       cab.faces = [callFace, panelFace];
       this.interactables.push(
@@ -185,20 +200,28 @@ export class LiftNetwork {
   placeLamps(cab) {
     const base = cab.index * L.count;
     const fr = cab.frames;
-    for (let k = 0; k < 4; k++) this.lamp(base + L.btn0 + k, fr.rWall, G.panelD - 0.1, 1.36 - k * 0.1, 0.089, 0.05, 0.05, 0.012);
-    this.sevenSeg(base + L.seg0, fr.rWall, G.panelD + 0.06, 1.3, 0.087, 0.07, 0.12, 0.013, 0.006);
-    this.lamp(base + L.ready, fr.rWall, G.panelD + 0.06, 1.15, 0.087, 0.07, 0.018, 0.006);
-    this.lamp(base + L.transit, fr.rWall, G.panelD + 0.06, 1.11, 0.087, 0.07, 0.018, 0.006);
+    // deck buttons: lit rings (the static cap covers the centre, the bezel ring surrounds it)
+    for (let k = 0; k < 4; k++) this.lamp(base + L.btn0 + k, fr.rWall, G.btnA, G.btnU0 - k * G.btnStep, 0.0845, 0.055, 0.055, 0.002);
+    this.sevenSeg(base + L.seg0, fr.rWall, G.dispA, 1.3, 0.087, 0.07, 0.12, 0.013, 0.006);
+    this.lamp(base + L.ready, fr.rWall, G.dispA, 1.15, 0.087, 0.07, 0.018, 0.006);
+    this.lamp(base + L.transit, fr.rWall, G.dispA, 1.11, 0.087, 0.07, 0.018, 0.006);
+    // lintel hood readout
     const lintelB = G.lintelU + 0.15;
     const hoodN = G.hoodD - G.wallT + 0.005; // 4 mm proud of the hood's black face plate
     this.sevenSeg(base + L.lintelSeg0, fr.lobby, 0, lintelB, hoodN, 0.13, 0.2, 0.022, 0.006);
     this.chevron(base + L.up0, fr.lobby, -0.34, lintelB, hoodN, true);
     this.chevron(base + L.down0, fr.lobby, 0.34, lintelB, hoodN, false);
-    this.lamp(base + L.call, fr.lobby, G.callA, G.callU - 0.01, 0.079, 0.09, 0.09, 0.012);
-    this.lamp(base + L.callInd, fr.lobby, G.callA, G.callU + 0.1, 0.077, 0.14, 0.02, 0.008);
+    // back-wall readout plate (plate face at n 0.018)
+    this.sevenSeg(base + L.plqSeg0, fr.back, 0, G.plqU, 0.022, 0.16, 0.26, 0.028, 0.006);
+    this.chevron(base + L.plqUp0, fr.back, -0.24, G.plqU, 0.022, true);
+    this.chevron(base + L.plqDown0, fr.back, 0.24, G.plqU, 0.022, false);
+    // call panel: lit ring around the recessed call button + status bar
+    this.lamp(base + L.call, fr.lobby, G.callA, G.callU - 0.06, 0.0845, 0.116, 0.116, 0.002);
+    this.lamp(base + L.callInd, fr.lobby, G.callA, G.callU + 0.08, 0.085, 0.16, 0.02, 0.004);
     this.lamp(base + L.header, fr.frontInner, 0, G.clearH + 0.03, 0.07, 0.5, 0.016, 0.008);
     this.lamp(base + L.strip, fr.lobby, 0, G.doorH + 0.05, 0.112, 1.0, 0.02, 0.006);
     for (let k = 0; k < 6; k++) this.hideLamp(base + L.bar0 + k);
+    for (let k = 0; k < 2; k++) this.hideLamp(base + L.seam0 + k); // placed per frame with the leaves
   }
   hideLamp(i) {
     _m.makeScale(0, 0, 0);
@@ -438,13 +461,21 @@ export class LiftNetwork {
       cab.open = this.doorValue(cab, t);
       const moving = Math.abs(cab.open - cab.door.to) > 0.01;
 
-      // leaves + colliders
+      // leaves (body + insets share matrices), meeting-edge light seams, colliders
       const x = cab.open * G.leafTravel;
       _q.setFromRotationMatrix(cab.basis);
-      _m.compose(cab.P(x, 0.025, G.leafD), _q, ONE);
+      _m.compose(cab.P(x, G.leafLift, G.leafD), _q, ONE);
       this.leaves.setMatrixAt(cab.index * 2, _m);
-      _m.compose(cab.P(-x, 0.025, G.leafD), _q.multiply(Y_PI), ONE);
+      this.insets.setMatrixAt(cab.index * 2, _m);
+      const seamU = G.leafLift + G.leafH / 2;
+      _m.compose(cab.P(x + 0.045, seamU, G.leafD), _q, _s.set(0.012, G.leafH - 0.3, G.leafT + 0.006));
+      this.lamps.setMatrixAt(base + L.seam0, _m);
+      _m.compose(cab.P(-x - 0.045, seamU, G.leafD), _q, _s);
+      this.lamps.setMatrixAt(base + L.seam0 + 1, _m);
+      _q.multiply(Y_PI);
+      _m.compose(cab.P(-x, G.leafLift, G.leafD), _q, ONE);
       this.leaves.setMatrixAt(cab.index * 2 + 1, _m);
+      this.insets.setMatrixAt(cab.index * 2 + 1, _m);
       const cr = this.colliders[cab.index * 2];
       const cl = this.colliders[cab.index * 2 + 1];
       let bb = cab.aabb(x, 0, G.leafD - G.leafT / 2, x + G.leafW, G.doorH, G.leafD + G.leafT / 2);
@@ -478,27 +509,38 @@ export class LiftNetwork {
         this.setColor(base + L.btn0 + k, c, kk);
       }
       if (cab.fault) this.setDigit(base + L.seg0, "-", COLORS.red, blink);
-      else this.setDigit(base + L.seg0, String(deckNow), inRide ? COLORS.amber : COLORS.blue);
+      else this.setDigit(base + L.seg0, String(deckNow), inRide ? COLORS.digitAmber : COLORS.digit);
       this.setColor(base + L.ready, cab.open > 0.5 && !inRide ? COLORS.green : COLORS.off);
       this.setColor(base + L.transit, inRide && ride.transit ? COLORS.amber : picking ? COLORS.white : COLORS.off, inRide ? blink : 1);
-      // lintel: digit + travel chevrons
-      this.setDigit(base + L.lintelSeg0, String(deckNow), inRide ? COLORS.amber : COLORS.blue);
+      // lintel hood + back-wall plate: deck digit + travel chevrons
+      this.setDigit(base + L.lintelSeg0, String(deckNow), inRide ? COLORS.amber : COLORS.blue); // read from 4–5 m: let it bloom
+      this.setDigit(base + L.plqSeg0, String(deckNow), inRide ? COLORS.digitAmber : COLORS.digit);
       const goingUp = inRide ? ride.to < ride.from : arriving ? this.lastArrival.up : null;
       const upOn = goingUp === true && (inRide || arriving);
       const downOn = goingUp === false && (inRide || arriving);
       const chevK = arriving ? blink : 0.7 + 0.3 * slowBlink;
-      this.setColor(base + L.up0, upOn ? COLORS.blue : COLORS.off, upOn ? chevK : 1);
-      this.setColor(base + L.up0 + 1, upOn ? COLORS.blue : COLORS.off, upOn ? chevK : 1);
-      this.setColor(base + L.down0, downOn ? COLORS.blue : COLORS.off, downOn ? chevK : 1);
-      this.setColor(base + L.down0 + 1, downOn ? COLORS.blue : COLORS.off, downOn ? chevK : 1);
+      for (const [up0, down0] of [
+        [L.up0, L.down0],
+        [L.plqUp0, L.plqDown0],
+      ]) {
+        this.setColor(base + up0, upOn ? COLORS.blue : COLORS.off, upOn ? chevK : 1);
+        this.setColor(base + up0 + 1, upOn ? COLORS.blue : COLORS.off, upOn ? chevK : 1);
+        this.setColor(base + down0, downOn ? COLORS.blue : COLORS.off, downOn ? chevK : 1);
+        this.setColor(base + down0 + 1, downOn ? COLORS.blue : COLORS.off, downOn ? chevK : 1);
+      }
       // call panel
       const called = t - cab.callT < TIMING.hold;
       this.setColor(base + L.call, called ? COLORS.amber : inRide ? COLORS.red : COLORS.blue, called ? 0.6 + 0.4 * blink : 1);
       this.setColor(base + L.callInd, inRide ? COLORS.red : cab.open > 0.5 ? COLORS.green : moving ? COLORS.amber : COLORS.off, moving && !inRide ? blink : 1);
-      // inside header + lobby lintel strip: white open, amber moving, red riding/faulted
+      // inside header + lobby lintel strip: white open, amber moving, red riding/faulted; the leaf
+      // meeting-edge seams follow but idle blue-white
       const stripC = inRide || cab.fault ? COLORS.red : moving ? COLORS.amber : cab.open > 0.5 ? COLORS.white : COLORS.blue;
       this.setColor(base + L.header, stripC, moving ? 0.6 + 0.4 * blink : 1);
       this.setColor(base + L.strip, stripC, moving ? 0.6 + 0.4 * blink : 1);
+      const seamC = inRide || cab.fault ? COLORS.red : moving ? COLORS.amber : COLORS.seam;
+      const seamK = (moving ? 0.6 + 0.4 * blink : 1) * (1 - 0.7 * cab.open); // retracted edges glow softly in the reveal
+      this.setColor(base + L.seam0, seamC, seamK);
+      this.setColor(base + L.seam0 + 1, seamC, seamK);
 
       // ---- ride sweep: two rings of light running along the three walls + the cabin light follows ----
       const light = cab.light;
@@ -523,7 +565,7 @@ export class LiftNetwork {
         }
         if (light) {
           const u = envSum > 0 ? uMean / envSum : 1.5;
-          const lp = cab.P(0, u, 2.0);
+          const lp = cab.P(0, u, G.lightD);
           light.pos[0] = lp.x;
           light.pos[1] = lp.y;
           light.pos[2] = lp.z;
@@ -543,11 +585,15 @@ export class LiftNetwork {
           light.intensity = cab.lightBase.intensity;
         }
       }
-      if (light) light.priority = cab.dist < 14 ? 0.9 : 0.05;
+      // light pool priority: yields to the lobby's own lights (0.4) while the player is out in the room,
+      // wins a slot when they stand at the door or ride (the cabin must not go dark just because a
+      // neighbouring room fields a dozen descriptors), and drops out of contention far away
+      if (light) light.priority = cab.playerInside || cab.dist < 3.2 ? 0.75 : cab.dist < 14 ? 0.4 : 0.05;
       const showFaces = cab.dist < 40;
       for (const f of cab.faces) f.visible = showFaces;
     }
     this.leaves.instanceMatrix.needsUpdate = true;
+    this.insets.instanceMatrix.needsUpdate = true;
     this.lamps.instanceMatrix.needsUpdate = true;
     this.lamps.instanceColor.needsUpdate = true;
   }
@@ -628,8 +674,9 @@ export class LiftNetwork {
     this.stopListening();
     if (this.loop && this.loop.stop) this.loop.stop();
     this.loop = null;
-    this.ctx.group.remove(this.leaves, this.lamps, ...this.faces);
+    this.ctx.group.remove(this.leaves, this.insets, this.lamps, ...this.faces);
     this.leaves.geometry.dispose();
+    this.insets.geometry.dispose();
     this.lamps.geometry.dispose();
     for (const f of this.faces) {
       f.geometry.dispose();

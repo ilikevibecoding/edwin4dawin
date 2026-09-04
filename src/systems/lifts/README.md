@@ -38,39 +38,56 @@ export default {
    occupy it — no room bounds, no geometry, no colliders. The cabin shell fills it completely, so no
    light leaks either way.
 3. **Keep the lobby footprint clear.** `liftLobbyClearance(lift)` is the AABB the system uses on the
-   lobby side: 1.6 m to the viewer's left of the door centre, 2.3 m to the viewer's right (call panel),
-   3.6 m high, 0.4 m proud of the wall. Flush wall panelling (≤ 3 cm proud) may run behind it; consoles,
-   lockers, pipes, benches must stay outside. The lobby ceiling must be ≥ 3.6 m at that wall (the lintel
-   indicator housing tops out at 3.6 m). The floor in front of the door must be flat and at `pos[1]`:
-   the system lays a 2 cm threshold plate and a hazard sill 0.38 m into the lobby.
+   lobby side: 1.7 m to the viewer's left of the door centre, 2.4 m to the viewer's right (call panel),
+   3.6 m high, 0.4 m proud of the bounds face. Flush wall panelling (≤ 3 cm proud) may run behind it;
+   consoles, lockers, pipes, benches — and any door surround/header of the lobby's own — must stay
+   outside. The lobby ceiling must be ≥ 3.6 m at that wall (the lintel indicator hood tops out at
+   3.6 m). The floor in front of the door must be flat and at `pos[1]`: the system lays a 4 cm sill
+   plate 0.38 m into the lobby.
 
 ## 2. What the system builds (per lift)
 
 Everything is expressed in the cabin's local frame so a lift may face ±X or ±Z.
 
-- **Cabin shell** filling the reserved box: black cores + dark gloss floor plate, interior
+- **Cabin shell** filling the reserved box: black cores + the lobbies' dark `impFloor` deck plate, interior
   3.2 w × 3.6 d × 3.0 h; light-grey `impPanel` fields with black seams, kick plates, a vent and an
-  equipment panel per wall; head-height light line in the middle seam; four corner posts with
-  blue-white strips; grey ceiling with a recessed light channel (diffuser + grille ribs); floor border
-  frame; handrail at 1.02 m on the back wall + short rails on both side walls; back-wall placard
-  (`TURBOLIFT`, `T<deck>`).
+  equipment panel in the top row, a varied middle row (inset plate / louvred vent / indicator cluster /
+  plain — no two neighbours alike); head-height light line in the middle seam; four corner posts with
+  blue-white strips; grey ceiling with a recessed channel holding a housed fixture (dark housing,
+  narrow diffuser, louvre fins); floor border frame; grab rails at 1.02 m running post to post on the
+  back and left walls and from the deck-select housing to the back post on the right wall, brackets
+  every ≤ 0.8 m; back-wall **deck readout plate** (matte black: 7-segment deck digit + up/down arrows,
+  `DECK` label, `T<deck>` id). Dark plates that face the cabin light (readout, indicator clusters, vent
+  recesses, hood face) use the module's clean matte `liftMatte` — gloss mirrors the light over the digit
+  and the worn/painted maps mottle on near-black tints.
 - **Deck-select panel** on the cabin's right-hand wall (facing the doors from inside; +X for T4) at
-  1.2 m: four lit deck buttons `1–4`, a 7-segment deck readout, READY / TRANSIT lamps, a small screen.
+  1.2 m: four recessed deck buttons `1–4` with lit rings (current deck blue, target amber, fault red,
+  decks without a lobby dim red), a 7-segment deck readout, READY / TRANSIT lamps, a small screen.
   Interactable `lift-<id>-panel`, key `E`, label `Select deck`.
-- **Two sliding leaves** (1.24 m each, `THREE.InstancedMesh`) in the lobby's hole, sliding 1.22 m
-  sideways into the wall; **heavy frame** (posts to 3.3 m, lintel, black lips → clear opening
-  2.28 × 2.94, 0.11 m proud of the wall) with two vertical light strips and a hooded **lintel
-  indicator** (3.3–3.6 m, 0.34 m proud): 7-segment deck readout + up/down chevrons; a `TURBOLIFT`
-  decal above the door. Lobbies should not build their own surround or header there.
-- **Call panel** in the lobby, 0.35 m to the viewer's right of the frame at 1.2 m: lit call button,
-  status bar, `DECK <n>` label. Interactable `lift-<id>-call`, key `E`, label `Call turbolift`.
+- **Two sliding leaves** (1.24 m each, two `THREE.InstancedMesh`es: gunmetal body with stiles, rails
+  and horizontal panel lines + light-grey painted insets recessed 7 mm) in the lobby's hole; they slide
+  1.07 m sideways into the wall so 7 cm of leaf edge stays visible in the reveal when open (2.14 m clear
+  passage); a blue-white light seam runs down each meeting edge (amber while moving, red in transit);
+  a header track above the opening and a dark **sill plate** (4 cm, light edge lines, leaf guide slot)
+  bridging lobby and cabin floors.
+- **Heavy frame**: 0.46 m jambs (reveal 1.14 → 1.60 m either side) in two bands with horizontal panel
+  lines, a vertical light strip in the groove between the bands, a thin lit reveal strip on each jamb's
+  inner face, foot blocks; two-band lintel to 3.3 m with a `TURBOLIFT` plate and a hooded **lintel
+  indicator** (3.3–3.6 m, 0.34 m proud): 7-segment deck readout + up/down chevrons. Clear opening
+  2.28 × 2.9. Lobbies must not build their own surround or header there.
+- **Call panel** in the lobby, 0.35 m to the viewer's right of the jamb at 1.2 m (0.36 × 0.6 housing):
+  recessed call button with a lit ring, status bar, `DECK <n>` label, `TURBOLIFT` plate. Interactable
+  `lift-<id>-call`, key `E`, label `Call turbolift`.
 - **Colliders**: static `lift-wall` / `lift-frame` via `ctx.kit.collider`; two dynamic `lift-door`
   AABBs (returned as `colliders`, mutated in place every frame) so closed leaves block the player.
-- **Light**: one point descriptor per cabin in the ceiling channel (priority 0.9 when the player is
-  within 14 m, else 0.05); the ride animates its position/intensity.
-- **Draw calls**: kit merges (12 material keys, ~3.3k triangles for one cabin) + 2 InstancedMeshes
-  (leaves, lamps — shared by every cabin on the ship) + 2 small interactable face meshes per cabin
-  (hidden beyond 40 m, so at most one cabin's pair is ever drawn): ≤ 4 draw calls beyond the kit merges.
+- **Light**: one point descriptor per cabin, deep and low in the cabin (2.6 m in, 2.2 m up, distance
+  4 m) so it never pools on the lobby floor; priority 0.4 while the player is out in the lobby (the
+  room's own lights win), 0.75 when they stand at the door (< 3.2 m) or inside the cabin, 0.05 beyond
+  14 m; the ride animates its position/intensity.
+- **Draw calls**: kit merges (~14 material keys, ~4.5k triangles for one cabin) + 3 InstancedMeshes
+  (leaf bodies, leaf insets, lamps — shared by every cabin on the ship) + 2 small interactable face
+  meshes per cabin (hidden beyond 40 m, so at most one cabin's pair is ever drawn): ≤ 5 draw calls
+  beyond the kit merges.
 
 ## 3. Behaviour (all on the module clock `t`)
 
@@ -112,7 +129,7 @@ yaw facing them — where a rider stands after arriving).
 
 ## 5. Dev harness
 
-`?only=d4-lobby,sys-lifts`, views `sys-lifts-door`, `sys-lifts-door-open` (shoot with
-`SHOT_ADVANCE=2`), `sys-lifts-cabin`, `sys-lifts-panel`. `debugAPI.interact("lift-T4-panel")` then
+`?only=d4-lobby,d4-stairs,sys-doors,sys-lifts`, views `sys-lifts-door`, `sys-lifts-door-open` (carries
+`advance: 2` so the leaves are open), `sys-lifts-cabin`, `sys-lifts-panel`. `debugAPI.interact("lift-T4-panel")` then
 `debugAPI.pressKey("Digit2")` starts a ride; `debugAPI.api("sys-lifts").callTo(1)` from inside the
 cabin exercises the "unavailable" path while only Deck 4 exists.

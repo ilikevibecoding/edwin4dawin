@@ -24,10 +24,11 @@ export function liftCabinBox(lift) {
   return { min: [cx - hx, py, cz - hz], max: [cx + hx, py + high, cz + hz] };
 }
 
-// What the lifts system builds ON THE LOBBY SIDE of the wall (frame 1.5 m either side of the door
-// centre, indicator to 3.6 m, call panel to the viewer's right out to 2.2 m, all ≤ 0.4 m proud of the
-// wall). Keep this footprint free of props so nothing intersects the frame or the call panel.
-export const LIFT_LOBBY_CLEARANCE = { left: 1.6, right: 2.3, high: 3.6, proud: 0.4 };
+// What the lifts system builds ON THE LOBBY SIDE of the wall (jambs 1.6 m either side of the door
+// centre, indicator hood to 3.6 m, call panel to the viewer's right out to 2.31 m, sill plate 0.38 m
+// onto the lobby floor, all ≤ 0.4 m proud of the bounds face). Keep this footprint free of props so
+// nothing intersects the frame or the call panel.
+export const LIFT_LOBBY_CLEARANCE = { left: 1.7, right: 2.4, high: 3.6, proud: 0.4 };
 
 /**
  * AABB {min,max} in the lobby that the lifts system occupies (frame, lintel indicator, call panel).
