@@ -76,7 +76,7 @@ export const DECKS = [
       { id: "d3_quarters", kind: "room", builder: "quarters", name: "Crew Quarters", bounds: [[-34, 0, -30], [-2.9, 3.6, -8]], spawn: [-12, -19, -90] },
       { id: "d3_medbay", kind: "room", builder: "medbay", name: "Medical Bay", bounds: [[2.9, 0, -64], [26, 3.6, -42]], spawn: [12, -53, 90] },
       { id: "d3_rec", kind: "room", builder: "recreation", name: "Recreation Lounge", bounds: [[-26, 0, -64], [-2.9, 3.6, -42]], spawn: [-12, -53, -90] },
-      { id: "d3_armory", kind: "room", builder: "armory", name: "Armoury & Equipment Storage", bounds: [[-56, 0, -44], [-42.4, 3.6, -28]], spawn: [-48, -36, -90] },
+      { id: "d3_armory", kind: "room", builder: "armory", name: "Armoury & Equipment Storage", bounds: [[-56, 0, -44], [-42.4, 3.6, -28]], spawn: [-44.5, -36, 90] },
       { id: "d3_detention", kind: "room", builder: "detention", name: "Security & Detention Block", bounds: [[42.4, 0, -46], [62, 3.6, -26]], spawn: [50, -36, 90] },
       { id: "d3_escape", kind: "room", builder: "escape", name: "Emergency Escape Pod Bay", bounds: [[-14, 0, -86], [14, 4, -71]], spawn: [0, -76, 0] },
       { id: "d3_lifesupport", kind: "room", builder: "lifesupport", name: "Life Support Systems", bounds: [[-30, 0, -7], [-5.4, 4.5, 8]], spawn: [-14, 0, -90] },

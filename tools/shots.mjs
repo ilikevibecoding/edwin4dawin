@@ -157,20 +157,24 @@ if (!QUICK) {
     const r = await page.evaluate(async () => {
       const api = window.debugAPI;
       api.requestLaunch(3);
-      // bay opens at 0.25/s → ~4 s; the launch path spends its first seconds inside the bay
-      api.advanceTraffic(9, 0.05);
+      // bay opens at 0.25/s → ~4 s; the launch path then spends 14 s descending through the bay
+      api.advanceTraffic(8.5, 0.05);
       const snap = api.trafficSnapshot();
-      await api.setView("exterior_hangar");
-      return { counts: api.trafficCounts(), bay: snap.bay, first: snap.fighters.find((f) => f.s === "launching") };
-    });
-    await settle(3, 800);
-    await page.screenshot({ path: resolve(outDir, "tie_launch_exterior.png") });
-    await page.evaluate(async () => {
-      await window.debugAPI.setView("hangar_racks");
-      window.debugAPI.advanceTraffic(0.2, 0.05);
+      await api.setView("hangar_racks");
+      return { counts: api.trafficCounts(), bay: snap.bay, first: snap.fighters.filter((f) => f.s === "launching").sort((x, y) => x.st - y.st)[0] || null };
     });
     await settle(3, 800);
     await page.screenshot({ path: resolve(outDir, "tie_launch_interior.png") });
+    const r2 = await page.evaluate(async () => {
+      const api = window.debugAPI;
+      api.advanceTraffic(7.5, 0.05); // ~16 s after launch: the flight is just clearing the hull
+      const snap = api.trafficSnapshot();
+      await api.setView("exterior_hangar");
+      return { outside: snap.fighters.filter((f) => f.s === "launching").sort((x, y) => x.st - y.st)[0] || null };
+    });
+    r.outside = r2.outside;
+    await settle(3, 800);
+    await page.screenshot({ path: resolve(outDir, "tie_launch_exterior.png") });
     results.dynamic.traffic = r;
     console.log("traffic:", JSON.stringify(r.counts), "bay", r.bay);
   }

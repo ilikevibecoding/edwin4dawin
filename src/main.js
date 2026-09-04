@@ -24,6 +24,7 @@ import { DECKS } from "./interior/layout.js";
 const canvas = document.getElementById("view");
 const probe = document.createElement("canvas").getContext("webgl2");
 const reverseDepth = !!(probe && probe.getExtension("EXT_clip_control"));
+if (probe) probe.getExtension("WEBGL_lose_context")?.loseContext(); // the probe context is not needed again
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false, reverseDepthBuffer: reverseDepth, logarithmicDepthBuffer: !reverseDepth });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -79,7 +80,22 @@ async function init() {
   await nextFrame();
   player = new Player(camera, canvas, []);
   interior = createInterior({ scene, materials, player, hud, audio, traffic, exterior });
+  // Every deck that finishes building gets its shader programs compiled up front (parallel compile
+  // where the driver supports it) so the first look into a new room does not hitch. Streamed decks
+  // finish while the lift doors are still shut.
+  interior.onDeckBuilt(() => {
+    if (renderer.extensions.has("KHR_parallel_shader_compile")) renderer.compileAsync(scene, camera).catch(() => {});
+    else renderer.compile(scene, camera);
+  });
   interior.ensureDeckBuilt("bridge");
+  // reserved-system wiring: the shuttle bay pad is the ship's docking port, the hangar apron its
+  // landing zone (no landing gameplay yet; future phases find them registered)
+  {
+    const sb = interior.sectors.get("d5_shuttlebay");
+    const hg = interior.sectors.get("d5_hangar");
+    systems.docking.registerPort("shuttle_pad", sb.worldCenter.clone().setY(sb.floorY), new THREE.Vector3(0, 0, 1));
+    systems.landingZones.register({ id: "hangar_apron", worldPos: hg.worldCenter.clone().setY(hg.floorY), approach: new THREE.Vector3(0, -1, 0), radius: 20 });
+  }
 
   hud.setLoading(0.9, "Powering post-processing…");
   await nextFrame();
@@ -87,6 +103,7 @@ async function init() {
   interactions = new Interactions({ camera, interactables: [], lighting: null, space, player, hud, audio });
   director = new CameraDirector({ camera, canvas, player, interior, exterior, space, hud, post, scene, audio });
   director.onModeChange = (mode) => {
+    systems.cameraTransition.setPhase(mode === "exterior" ? "orbit" : "interior");
     interactions.enabled = mode === "interior";
     audio.setZone(mode === "exterior" ? "exterior" : zoneFor(interior.currentSector));
   };
@@ -360,6 +377,21 @@ const debugAPI = {
   trafficSnapshot() {
     return traffic.snapshot();
   },
+  /** Timestamped ship state for network sync: doors, lift, alert, bay door and fighters. */
+  snapshot() {
+    return { t: Date.now(), interior: interior.snapshot(), traffic: traffic.snapshot() };
+  },
+  applySnapshot(snap) {
+    if (snap.interior) interior.applySnapshot(snap.interior);
+    if (snap.traffic) traffic.applySnapshot(snap.traffic);
+  },
+  /** NPC / gameplay anchors registered by the rooms (kind: "seat" | "stand" | "patrol" ...). */
+  markers(kind = null, sectorId = null) {
+    return interior.markers(kind, sectorId).map((m) => ({ ...m, world: m.world ? m.world.toArray().map((v) => +v.toFixed(2)) : null }));
+  },
+  door(a, b) {
+    return interior.door(a, b);
+  },
   trafficCounts() {
     return traffic.counts();
   },
@@ -514,7 +546,7 @@ function frame() {
   } else interior.setExteriorView(false);
   traffic.group.visible = showExterior || (hangar && hangar.visible);
   traffic.update(dt, t);
-  systems.update(dt);
+  systems.update(dt, { player, camera, director, interior, traffic, exterior, space });
   space.update(dt);
   audio.setListener(camera.position);
   audio.update(dt);

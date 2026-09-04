@@ -124,6 +124,19 @@ export class Turbolift {
     return true;
   }
 
+  /** Network-friendly ride state. */
+  snapshot() {
+    return { state: this.state, from: this.from, to: this.to, timer: +this.timer.toFixed(2) };
+  }
+  /** Adopt a remote ride state (the local sequence continues from there). */
+  applySnapshot(s) {
+    if (!s) return;
+    this.from = s.from;
+    this.to = s.to;
+    this.timer = s.timer || 0;
+    this.state = s.state || "idle";
+  }
+
   update(dt) {
     const interior = this.interior;
     const cur = interior.currentSector;

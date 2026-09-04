@@ -508,6 +508,7 @@ export function impConsole(kit, ctx, { x, z, y = 0, yaw = 0, w = 1.8, d = 0.8, h
 
 /** Black operator chair facing -Z (rotated by yaw). */
 export function impChair(kit, ctx, { x, z, y = 0, yaw = 0 }) {
+  if (ctx && ctx.marker) ctx.marker({ kind: "seat", pos: [x, y, z], yaw });
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
   const local = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
   const add = (mat, geo, lx, ly, lz, extra = {}) => {
