@@ -45,6 +45,7 @@ export class ModeManager {
     this.camera.fov = FOV.interior;
     this.camera.updateProjectionMatrix();
     this.interior.root.visible = true;
+    if (this.exterior.setMode) this.exterior.setMode("interior");
     if (pose) {
       if (pose.zone) this.interior.setActiveZone(pose.zone);
       this.player.colliders = this.interior.colliders();
@@ -67,6 +68,7 @@ export class ModeManager {
     if (document.pointerLockElement) document.exitPointerLock();
     this.interior.root.visible = false;
     this.exterior.group.visible = true;
+    if (this.exterior.setMode) this.exterior.setMode("exterior");
     this.camera.near = NEAR.exterior;
     this.camera.fov = FOV.exterior;
     this.camera.updateProjectionMatrix();
@@ -156,6 +158,7 @@ export class ModeManager {
             // leaving through the well: keep the lit hangar visible up the shaft (exterior peek)
             if (tr.wp.crossY !== undefined && this.interior.peek) this.interior.peek("hangar", ["hangar"]);
             else this.interior.root.visible = false;
+            if (this.exterior.setMode) this.exterior.setMode("exterior");
             this.camera.near = NEAR.exterior;
             this.camera.updateProjectionMatrix();
           }
@@ -214,6 +217,7 @@ export class ModeManager {
         if (!tr.crossed && this.camera.position.z > slabFace - 60) {
           tr.crossed = true;
           this.interior.root.visible = true;
+          if (this.exterior.setMode) this.exterior.setMode("interior");
           this.interior.update(0, this.player);
           this.camera.near = NEAR.interior;
           this.camera.updateProjectionMatrix();

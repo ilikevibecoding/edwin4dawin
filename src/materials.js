@@ -130,6 +130,7 @@ export function buildMaterials() {
     emitBlueSoft: new THREE.MeshStandardMaterial({ color: 0x06101e, emissive: PALETTE.impBlue, emissiveMap: diffuser, emissiveIntensity: 1.8, roughness: 0.5, metalness: 0 }),
     emitRedSoft: new THREE.MeshStandardMaterial({ color: 0x100404, emissive: new THREE.Color("#ff3a2a"), emissiveMap: diffuser, emissiveIntensity: 2.0, roughness: 0.5, metalness: 0 }),
     emitWhiteSoft: new THREE.MeshStandardMaterial({ color: 0x101214, emissive: new THREE.Color("#e8f0ff"), emissiveMap: diffuser, emissiveIntensity: 1.7, roughness: 0.5, metalness: 0 }),
+    emitAmberSoft: new THREE.MeshStandardMaterial({ color: 0x1a1004, emissive: PALETTE.impAmber, emissiveMap: diffuser, emissiveIntensity: 1.6, roughness: 0.5, metalness: 0 }),
     // Satin black Imperial console / trim panel (dielectric so it still shades under dim light)
     satinBlack: new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.42, metalness: 0.25, envMapIntensity: 0.9 }),
     emitRed: new THREE.MeshStandardMaterial({

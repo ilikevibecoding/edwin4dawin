@@ -131,7 +131,11 @@ export class LightPool {
       if (!f) {
         slot.current += (0 - slot.current) * k;
         l.intensity = slot.current;
-        if (slot.current < 1e-3) l.intensity = 0;
+        if (slot.current < 1e-3) {
+          l.intensity = 0;
+          // an idle shadow spot still renders a shadow pass: shrink its range so nothing is a caster
+          if (l.isSpotLight) l.distance = 0.01;
+        }
         continue;
       }
       l.position.copy(this._worldPos(f));

@@ -5,17 +5,21 @@
 // greebles.js / turrets.js / engines.js / exteriorLights.js (armour plates, city blocks, trench machinery,
 // turrets, hatches, docking pads, window rows, running lights).
 //
-// Lighting: exterior materials carry their own sun + fill terms (see hullShader.js) so the interior never
-// receives stray sunlight and no shadow map is needed; n8ao supplies the contact shadows between plates.
+// Lighting: in "exterior" mode a shadow-casting DirectionalLight fitted to the ship's bounding box lights
+// the hull (tower and superstructure throw real shadows) and the materials' own sun term is zeroed; in
+// "interior" mode the light is off and the materials' sun term (see hullShader.js) lights the chunks seen
+// through windows, so the interior never receives it. Shaped ambient fills keep shadows from crushing;
+// n8ao supplies the contact shadows between plates.
 import * as THREE from "three";
 import { HULL, TOWER, HANGAR, ENGINES, ROOMS, roomFloorY } from "../config/shipSpec.js";
 import { makeHullPlating, makeHullDetail, makeMachinery, makeWindowStrips, makeDetailAtlas } from "./hullTextures.js";
-import { makeSun, exteriorPatch, sunPatch } from "./hullShader.js";
+import { makeSun, exteriorPatch, sunPatch, SUN_COLOR, SUN_INTENSITY } from "./hullShader.js";
 import { panelWithHoles, rng } from "../kit.js";
-import { TRENCH_HALF, TRENCH_DEPTH, dorsal, ventral, merge, box, boxMM, worldUV, macroColor, finish, Soup, atlasQuad } from "./util.js";
-import { terraceDescriptors, buildHullPlates, buildHullFittings, buildDockingPads, padRects, buildSuperstructure, buildTrench } from "./greebles.js";
+import { TRENCH_HALF, TRENCH_DEPTH, dorsal, ventral, merge, box, boxMM, worldUV, macroColor, finish, Soup } from "./util.js";
+import { SPINE, terraceDescriptors, buildHullPlates, buildHullFittings, buildDockingPads, padRects, buildSuperstructure, buildTrench } from "./greebles.js";
 import { buildTurrets, turretRects } from "./turrets.js";
 import { buildEngines, sternHeatTint } from "./engines.js";
+import { buildVentral } from "./ventral.js";
 import { createWindowRows, buildRunningLights } from "./exteriorLights.js";
 
 export { sunPatch };
@@ -92,6 +96,36 @@ function buildWedge() {
   return { top: top.geometry(), bottom: bottom.geometry(), stern: stern.geometry(), trench: trench.geometry(), lips: lips.geometry() };
 }
 
+// Dorsal spine ridge: a low trapezoidal rib along the centreline from near the bow to the first terrace,
+// crossed by bulkhead blocks at irregular pitch. Its two long slopes take the sun differently from the
+// deck, so the wedge reads as a roof with a ridge from 1–5 km whatever the sun's bearing.
+function buildSpine() {
+  const rand = rng(9001);
+  const { halfBase: hb, halfTop: ht, height: h, z0, z1 } = SPINE;
+  const s = new Soup();
+  const N = 16;
+  const section = (z) => {
+    const k = Math.max(0, Math.min(1, (z - z0) / 60, (z1 - z) / 12)); // tapers to nothing at both ends
+    const yc = dorsal(0, z) + h * k;
+    return { bl: [-hb, dorsal(-hb, z) - 0.2, z], br: [hb, dorsal(hb, z) - 0.2, z], tl: [-ht * k, yc, z], tr: [ht * k, yc, z] };
+  };
+  let prev = section(z0);
+  for (let i = 1; i <= N; i++) {
+    const cur = section(z0 + ((z1 - z0) * i) / N);
+    s.quad(prev.bl, cur.bl, cur.tl, prev.tl); // port slope (-x, +y)
+    s.quad(prev.tl, cur.tl, cur.tr, prev.tr); // top (+y)
+    s.quad(prev.br, prev.tr, cur.tr, cur.br); // starboard slope (+x, +y)
+    prev = cur;
+  }
+  const parts = [s.geometry()];
+  for (let z = z0 + 90; z < z1 - 40; z += 55 + rand() * 90) {
+    const d = 4 + rand() * 4;
+    parts.push(box(0, dorsal(0, z) - 0.2 + (h + 1.1) / 2, z, hb * 2 + 2, h + 1.1, d));
+    if (rand() < 0.5) parts.push(box(0, dorsal(0, z) + h + 1.5, z, 4, 1.6, d + 3));
+  }
+  return merge(parts);
+}
+
 // Terrace block with a sloped front face: top, front slope, back wall, two side walls (base is inside the hull).
 function terraceGeometry(t) {
   const s = new Soup();
@@ -148,7 +182,9 @@ export function buildExterior(scene) {
     vertexColors: true,
     roughness: 1,
     metalness: 1,
-    envMapIntensity: 0.25,
+    // the environment map is a capture of the lit interior: kept to a faint sheen so it cannot flatten the
+    // sun / shadow modelling (the shaped fills in hullShader.js carry the ambient)
+    envMapIntensity: 0.06,
   });
   const hullMat = exteriorPatch(new THREE.MeshStandardMaterial(platingParams()), sun, { worldTexel: 1 / 24, detail: detailLayer });
   const plateMat = exteriorPatch(new THREE.MeshStandardMaterial({ ...platingParams(), color: 0xf6f6f6 }), sun, { worldTexel: 1 / 24, detail: detailLayer });
@@ -162,22 +198,32 @@ export function buildExterior(scene) {
     vertexColors: true,
     roughness: 1,
     metalness: 1,
-    envMapIntensity: 0.2,
+    envMapIntensity: 0.05,
   });
   const darkMat = exteriorPatch(new THREE.MeshStandardMaterial(machineryParams()), sun, { worldTexel: 1 / 12 });
   const engineMat = exteriorPatch(new THREE.MeshStandardMaterial({ ...machineryParams(), side: THREE.DoubleSide }), sun, { worldTexel: 1 / 12 });
-  const greebleMat = exteriorPatch(new THREE.MeshStandardMaterial({ color: 0xb6bac0, roughness: 0.68, metalness: 0.22, envMapIntensity: 0.25 }), sun);
-  const greebleDark = exteriorPatch(new THREE.MeshStandardMaterial({ color: 0x62666e, roughness: 0.78, metalness: 0.35, envMapIntensity: 0.2 }), sun);
-  const atlasMat = exteriorPatch(
-    new THREE.MeshStandardMaterial({ map: atlas.map, emissiveMap: atlas.emissiveMap, emissive: 0xffffff, emissiveIntensity: 1.7, roughness: 0.7, metalness: 0.15, envMapIntensity: 0.2 }),
-    sun,
-  );
-  const windowMat = new THREE.MeshStandardMaterial({ map: windowsTex, emissiveMap: windowsTex, emissive: 0xffffff, emissiveIntensity: 1.6, alphaTest: 0.5, roughness: 0.5, metalness: 0, fog: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  // detail-layer materials read vertex colours: instance colours and the baked layers' per-vertex tints
+  const greebleMat = exteriorPatch(new THREE.MeshStandardMaterial({ color: 0xb6bac0, roughness: 0.68, metalness: 0.22, envMapIntensity: 0.06, vertexColors: true }), sun);
+  // dark grey (not black) fittings with panel lines: the plating map at an 8 m tile, darkened by colour
+  const greebleDark = exteriorPatch(new THREE.MeshStandardMaterial({ ...platingParams(), color: 0x8a8e96, envMapIntensity: 0.05 }), sun, { worldTexel: 1 / 8 });
+  const atlasParams = () => ({ map: atlas.map, emissiveMap: atlas.emissiveMap, emissive: 0xffffff, emissiveIntensity: 1.5, roughness: 0.7, metalness: 0.15, envMapIntensity: 0.05, vertexColors: true });
+  const atlasMat = exteriorPatch(new THREE.MeshStandardMaterial(atlasParams()), sun);
+  const windowMat = new THREE.MeshStandardMaterial({ map: windowsTex, emissiveMap: windowsTex, emissive: 0xffffff, emissiveIntensity: 1.5, alphaTest: 0.5, roughness: 0.5, metalness: 0, fog: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  // flat decals that lie on hull surfaces: offset in depth instead of raised, so no slivers z-fight or
+  // sparkle. The slope factor stays at one pixel-depth so nearby real geometry is never swallowed; the dark
+  // channels take two more depth units than the paint plates, so where they cross the channel wins.
+  const flat = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 };
+  const flatDeep = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 };
+  const paintMat = exteriorPatch(new THREE.MeshStandardMaterial({ ...platingParams(), ...flat, color: 0xf4f4f4 }), sun, { worldTexel: 1 / 24, detail: detailLayer });
+  // the machinery map is trench-dark; lifted here so recessed channels read as dark grey, not black
+  const darkFlatMat = exteriorPatch(new THREE.MeshStandardMaterial({ ...machineryParams(), ...flatDeep, color: new THREE.Color(1.9, 1.9, 1.9) }), sun, { worldTexel: 1 / 12 });
+  const atlasFlatMat = exteriorPatch(new THREE.MeshStandardMaterial({ ...atlasParams(), ...flatDeep }), sun);
+  const rimLightMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.15, 1.4, 1.75), fog: false });
   const engineCore = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
   const engineGlow = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
   const tractorMat = new THREE.MeshBasicMaterial({ color: 0x4d9dff, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.FrontSide, fog: false });
-  const materials = { hullMat, darkMat, greebleMat, greebleDark, plateMat, windowMat, engineGlow, engineCore, hullUvMat, engineMat, atlasMat };
-  const mats = { hull: hullMat, plate: plateMat, hullUv: hullUvMat, dark: darkMat, engine: engineMat, greeble: greebleMat, greebleDark, atlas: atlasMat, windows: windowMat, engineCore, engineGlow };
+  const materials = { hullMat, darkMat, greebleMat, greebleDark, plateMat, paintMat, darkFlatMat, atlasFlatMat, rimLightMat, windowMat, engineGlow, engineCore, hullUvMat, engineMat, atlasMat };
+  const mats = { hull: hullMat, plate: plateMat, paint: paintMat, hullUv: hullUvMat, dark: darkMat, darkFlat: darkFlatMat, engine: engineMat, greeble: greebleMat, greebleDark, atlas: atlasMat, atlasFlat: atlasFlatMat, rimLight: rimLightMat, windows: windowMat, engineCore, engineGlow };
 
   const rand = rng(4242);
   const addMesh = (geo, mat, name, parent = group) => {
@@ -188,16 +234,15 @@ export function buildExterior(scene) {
     return m;
   };
 
-  // ---------------- base hull (always visible)
+  // ---------------- base hull (always visible): both planes, the trench lips and the dorsal spine ridge
   const wedge = buildWedge();
-  addMesh(merge([finish(wedge.top), finish(wedge.bottom)]), hullMat, "hull");
+  addMesh(merge([finish(wedge.top), finish(wedge.bottom), finish(wedge.lips), finish(buildSpine(), 1 / 12)]), hullMat, "hull");
   addMesh(finish(wedge.stern, 1 / 12, { base: 0.72, tint: sternHeatTint }), darkMat, "sternWall");
   addMesh(finish(wedge.trench, 1 / 12, { trench: true }), darkMat, "trenchWall");
-  addMesh(finish(wedge.lips), hullMat, "trenchLips");
 
-  // ---------------- superstructure terraces (sloped fronts)
+  // ---------------- superstructure terraces (sloped fronts) + command tower, one mesh (one shadow pass)
   const terraces = terraceDescriptors();
-  addMesh(finish(merge(terraces.map(terraceGeometry))), hullMat, "terraces");
+  const towerParts = [finish(merge(terraces.map(terraceGeometry)))];
 
   // ---------------- command tower
   const { neck, slab, domes, spire } = TOWER;
@@ -211,7 +256,7 @@ export function buildExterior(scene) {
   const face = panelWithHoles(faceW, faceH, 1.2, holes);
   face.translate(0, cy, slab.z0 + 0.6);
   towerGeos.push(face);
-  addMesh(finish(merge(towerGeos)), hullMat, "tower");
+  towerParts.push(finish(merge(towerGeos)));
   // window bay linings (dark) so the interior glass sits in a recess
   const bays = [];
   for (const o of openings) {
@@ -222,6 +267,11 @@ export function buildExterior(scene) {
     bays.push(boxMM([o.x0 - 0.5, o.y1, slab.z0], [o.x1 + 0.5, o.y1 + 0.5, slab.z0 + d]));
   }
   // recessed dark window channels along the slab faces (the lit rows sit inside them)
+  const band = {
+    x: Math.max(...openings.map((o) => Math.max(Math.abs(o.x0), Math.abs(o.x1)))) + 6,
+    y0: Math.min(...openings.map((o) => o.y0)) - 1.6,
+    y1: Math.max(...openings.map((o) => o.y1)) + 1.6,
+  };
   {
     const sY = (slab.y0 + slab.y1) / 2;
     const bands = [
@@ -234,17 +284,37 @@ export function buildExterior(scene) {
       bays.push(boxMM([slab.halfX - 0.3, ya, slab.z0 + 4], [slab.halfX + 0.15, yb, slab.z1 - 4]));
       bays.push(boxMM([-slab.halfX + 4, ya, slab.z1 - 0.3], [slab.halfX - 4, yb, slab.z1 + 0.15]));
     }
+    // forward face: two sparse wing channels per side (the third row is gone)
     for (const sx of [-1, 1]) {
-      for (const [ya, yb] of [
-        [slab.y0 + 7.25, slab.y0 + 10.75],
-        [slab.y0 + 15.5, slab.y0 + 21.5],
-        [slab.y1 - 7.25, slab.y1 - 3.75],
-      ]) {
-        bays.push(boxMM([Math.min(sx * 53, sx * 129), ya, slab.z0 - 0.15], [Math.max(sx * 53, sx * 129), yb, slab.z0 + 0.3]));
-      }
+      bays.push(boxMM([Math.min(sx * 62, sx * 122), slab.y0 + 7.25, slab.z0 - 0.15], [Math.max(sx * 62, sx * 122), slab.y0 + 10.75, slab.z0 + 0.3]));
+      bays.push(boxMM([Math.min(sx * 74, sx * 114), slab.y0 + 15.5, slab.z0 - 0.15], [Math.max(sx * 74, sx * 114), slab.y0 + 21.5, slab.z0 + 0.3]));
     }
+    // wide recessed viewport band around the real openings (holes stay exactly the openings + bezel)
+    const bandPanel = panelWithHoles(
+      band.x * 2,
+      band.y1 - band.y0,
+      0.5,
+      openings.map((o) => ({ x: (o.x0 + o.x1) / 2, y: (o.y0 + o.y1) / 2 - (band.y0 + band.y1) / 2, w: o.x1 - o.x0 + 1.6, h: o.y1 - o.y0 + 1.6 })),
+    );
+    bandPanel.translate(0, (band.y0 + band.y1) / 2, slab.z0 - 0.2);
+    bays.push(bandPanel);
   }
   addMesh(finish(merge(bays), 1 / 4, { base: 0.6 }), darkMat, "windowBays");
+  // raised brow over the viewport band, sill under it, and the trim where the neck meets the slab
+  {
+    const trim = [
+      box(0, band.y1 + 1.2, slab.z0 - 1.7, band.x * 2 + 6, 2.4, 3.4), // brow
+      box(0, band.y0 - 0.7, slab.z0 - 1.0, band.x * 2 + 3, 1.4, 2.0), // sill
+      boxMM([-neck.halfX - 2.6, slab.y0 - 3.2, neck.z0 - 2.6], [neck.halfX + 2.6, slab.y0, neck.z1 + 2.6]), // neck collar
+      boxMM([-neck.halfX - 1.2, slab.y0 - 9, neck.z0 - 1.2], [neck.halfX + 1.2, slab.y0 - 3.2, neck.z1 + 1.2]), // collar step
+      boxMM([-slab.halfX - 0.9, slab.y0 - 0.6, slab.z0 - 0.9], [slab.halfX + 0.9, slab.y0 + 1.1, slab.z0 + 0.3]), // forward ledge
+      boxMM([-slab.halfX - 0.9, slab.y0 - 0.6, slab.z0 - 0.9], [-slab.halfX, slab.y0 + 1.1, slab.z1 + 0.9]), // port ledge
+      boxMM([slab.halfX, slab.y0 - 0.6, slab.z0 - 0.9], [slab.halfX + 0.9, slab.y0 + 1.1, slab.z1 + 0.9]), // starboard ledge
+      boxMM([-slab.halfX - 0.9, slab.y0 - 0.6, slab.z1], [slab.halfX + 0.9, slab.y0 + 1.1, slab.z1 + 0.9]), // aft ledge
+    ];
+    towerParts.push(finish(merge(trim), 1 / 12));
+  }
+  addMesh(merge(towerParts), hullMat, "towerTerraces");
 
   // shield domes on pedestals (spherical UVs so the plating seams wrap the sphere) + comms spire
   {
@@ -332,36 +402,8 @@ export function buildExterior(scene) {
     keelGeos.push(skirt);
   }
   addMesh(finish(merge(keelGeos)), hullMat, "keelBlock");
-  // secondary bay door outline (reserved, closed): proud dark plate with the painted door stamp
-  const sb = HANGAR.secondaryBayDoor;
-  addMesh(finish(boxMM([sb.x0 - 1, k.y - 0.7, sb.z0 - 1], [sb.x1 + 1, k.y + 1, sb.z1 + 1]), 1 / 6, { base: 0.6 }), darkMat, "secondaryBayFrame");
-  {
-    const door = atlasQuad(sb.x1 - sb.x0, sb.z1 - sb.z0, atlas.cells.bayDoor);
-    door.rotateX(Math.PI / 2);
-    door.translate((sb.x0 + sb.x1) / 2, k.y - 0.75, (sb.z0 + sb.z1) / 2);
-    addMesh(door, atlasMat, "secondaryBayDoor");
-  }
-  // well throat lining through the plate thickness plus a 0.25 m curb above the hangar deck
-  const throatTop = HANGAR.deckY + 0.25;
-  const throat = [
-    boxMM([HANGAR.well.x0 - 0.6, k.y, HANGAR.well.z0 - 0.6], [HANGAR.well.x0, throatTop, HANGAR.well.z1 + 0.6]),
-    boxMM([HANGAR.well.x1, k.y, HANGAR.well.z0 - 0.6], [HANGAR.well.x1 + 0.6, throatTop, HANGAR.well.z1 + 0.6]),
-    boxMM([HANGAR.well.x0 - 0.6, k.y, HANGAR.well.z0 - 0.6], [HANGAR.well.x1 + 0.6, throatTop, HANGAR.well.z0]),
-    boxMM([HANGAR.well.x0 - 0.6, k.y, HANGAR.well.z1], [HANGAR.well.x1 + 0.6, throatTop, HANGAR.well.z1 + 0.6]),
-  ];
-  addMesh(finish(merge(throat), 1 / 6, { base: 0.5 }), darkMat, "wellThroat");
-  // hazard rim and approach lights around the well mouth
-  {
-    const rim = merge([
-      atlasQuad(wellW + 8, 3, atlas.cells.hazard).rotateX(Math.PI / 2).translate((HANGAR.well.x0 + HANGAR.well.x1) / 2, k.y - 0.05, HANGAR.well.z0 - 2.2),
-      atlasQuad(wellW + 8, 3, atlas.cells.hazard).rotateX(Math.PI / 2).translate((HANGAR.well.x0 + HANGAR.well.x1) / 2, k.y - 0.05, HANGAR.well.z1 + 2.2),
-      atlasQuad(wellD, 3, atlas.cells.hazard).rotateZ(Math.PI / 2).rotateX(Math.PI / 2).translate(HANGAR.well.x0 - 2.2, k.y - 0.05, (HANGAR.well.z0 + HANGAR.well.z1) / 2),
-      atlasQuad(wellD, 3, atlas.cells.hazard).rotateZ(Math.PI / 2).rotateX(Math.PI / 2).translate(HANGAR.well.x1 + 2.2, k.y - 0.05, (HANGAR.well.z0 + HANGAR.well.z1) / 2),
-      atlasQuad(wellD + 8, 2, atlas.cells.edgeLights).rotateZ(Math.PI / 2).rotateX(Math.PI / 2).translate(HANGAR.well.x0 - 5, k.y - 0.05, (HANGAR.well.z0 + HANGAR.well.z1) / 2),
-      atlasQuad(wellD + 8, 2, atlas.cells.edgeLights).rotateZ(Math.PI / 2).rotateX(Math.PI / 2).translate(HANGAR.well.x1 + 5, k.y - 0.05, (HANGAR.well.z0 + HANGAR.well.z1) / 2),
-    ]);
-    addMesh(rim, atlasMat, "wellRim");
-  }
+  // the keel's dark fittings (secondary bay frame, well throat, well collar with its lit rim, decals) are
+  // built by buildVentral
   // faint field sheet across the mouth, facing down: read from below the ship, invisible from the deck
   // (the hangar's own emitter cones carry the effect inside)
   const field = new THREE.PlaneGeometry(wellW - 0.4, wellD - 0.4).toNonIndexed();
@@ -390,6 +432,7 @@ export function buildExterior(scene) {
   buildEngines(ctx);
   buildTurrets(ctx);
   buildDockingPads(ctx);
+  buildVentral(ctx);
   const cells = buildHullPlates(ctx);
   buildHullFittings(ctx, cells);
   buildSuperstructure(ctx);
@@ -405,13 +448,13 @@ export function buildExterior(scene) {
       windowRows.add(sLen, yy === sY + 2 ? 5 : 2.5, [slab.halfX + 0.25, yy, sZ], [0, Math.PI / 2, 0]);
       windowRows.add(slab.halfX * 2 - 8, yy === sY + 2 ? 5 : 2.5, [0, yy, slab.z1 + 0.25], [0, 0, 0]);
     }
+    // sparse wing windows: two short rows per side inside their recessed channels
     for (const sx of [-1, 1]) {
-      windowRows.add(74, 2.5, [sx * 91, slab.y0 + 9, slab.z0 - 0.25], [0, Math.PI, 0]);
-      windowRows.add(74, 5, [sx * 91, slab.y0 + 18.5, slab.z0 - 0.25], [0, Math.PI, 0]);
-      windowRows.add(74, 2.5, [sx * 91, slab.y1 - 5.5, slab.z0 - 0.25], [0, Math.PI, 0]);
+      windowRows.add(58, 2.5, [sx * 92, slab.y0 + 9, slab.z0 - 0.25], [0, Math.PI, 0]);
+      windowRows.add(38, 5, [sx * 94, slab.y0 + 18.5, slab.z0 - 0.25], [0, Math.PI, 0]);
     }
-    // short lit strip over the bridge windows, just under the slab roof line
-    windowRows.add(100, 2.5, [0, slab.y1 - 2.4, slab.z0 - 0.25], [0, Math.PI, 0]);
+    // short lit strip above the brow, just under the slab roof line
+    windowRows.add(60, 2.5, [0, slab.y1 - 3.2, slab.z0 - 0.25], [0, Math.PI, 0]);
   }
   windowRows.build(windowMat, group);
   const running = buildRunningLights(ctx);
@@ -424,15 +467,99 @@ export function buildExterior(scene) {
   const baseMeshes = [];
   group.traverse((o) => o.isMesh && !lodSet.has(o) && baseMeshes.push(o));
   const sphere = new THREE.Sphere();
-  const stats = { visibleDetail: 0, culledInside: 0 };
+  const stats = { visibleDetail: 0, culledInside: 0, mode: "exterior" };
+
+  // ---------------- shadow flags
+  // Every lit mesh receives; casters are the masses that throw readable shadows (hull with its spine,
+  // terraces and tower, domes, keel block, reactor bulb, engines, city blocks, turrets, raised plates).
+  // Flat stamps, glows, window strips and hair-thin fittings only receive, so the shadow pass is a dozen
+  // draws.
+  const CASTERS = new Set(["hull", "towerTerraces", "domesSpire", "keelBlock", "reactorBulb", "engines", "cityBlocks", "turrets", "plates"]);
+  const casters = [];
+  group.traverse((o) => {
+    if (!o.isMesh || !o.material.isMeshStandardMaterial) return;
+    o.receiveShadow = true;
+    if (CASTERS.has(o.name)) casters.push(o);
+  });
+  // casting is an exterior-mode thing: inside, the pooled spots must not spend shadow passes on the hull
+  const setCasting = (on) => {
+    for (const m of casters) m.castShadow = on;
+  };
+
+  // ---------------- real sun for the exterior: shadow-casting directional light fitted to the ship
+  const sunLight = new THREE.DirectionalLight(SUN_COLOR, SUN_INTENSITY);
+  sunLight.name = "exteriorSun";
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(4096, 4096);
+  // ~0.45 m texels over a 1.7 km footprint: a metre of slope-scaled bias plus a normal offset of a texel
+  sunLight.shadow.bias = -0.0005;
+  sunLight.shadow.normalBias = 1.4;
+  group.add(sunLight, sunLight.target);
+  const shipBox = new THREE.Box3();
+  for (const m of baseMeshes) if (m.geometry.attributes.position) shipBox.expandByObject(m);
+  shipBox.expandByScalar(12);
+  const shipCenter = shipBox.getCenter(new THREE.Vector3());
+  const shipRadius = shipBox.getSize(new THREE.Vector3()).length() / 2;
+  const corners = [];
+  for (let i = 0; i < 8; i++) corners.push(new THREE.Vector3(i & 1 ? shipBox.max.x : shipBox.min.x, i & 2 ? shipBox.max.y : shipBox.min.y, i & 4 ? shipBox.max.z : shipBox.min.z));
+  const lightView = new THREE.Matrix4();
+  const lightUp = new THREE.Vector3(0, 1, 0);
+  const cornerV = new THREE.Vector3();
+  const lastFit = new THREE.Vector3();
+  function fitShadow(dir) {
+    if (lastFit.distanceToSquared(dir) < 1e-6 && sunLight.shadow.camera.far > 1) return;
+    lastFit.copy(dir);
+    sunLight.position.copy(shipCenter).addScaledVector(dir, shipRadius + 40);
+    sunLight.target.position.copy(shipCenter);
+    // same view convention as DirectionalLightShadow (camera at the light looking at the target, +Y up)
+    lightView.lookAt(sunLight.position, shipCenter, lightUp).setPosition(sunLight.position).invert();
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (const c of corners) {
+      cornerV.copy(c).applyMatrix4(lightView);
+      minX = Math.min(minX, cornerV.x);
+      maxX = Math.max(maxX, cornerV.x);
+      minY = Math.min(minY, cornerV.y);
+      maxY = Math.max(maxY, cornerV.y);
+      minZ = Math.min(minZ, cornerV.z);
+      maxZ = Math.max(maxZ, cornerV.z);
+    }
+    const cam = sunLight.shadow.camera;
+    cam.left = minX - 4;
+    cam.right = maxX + 4;
+    cam.bottom = minY - 4;
+    cam.top = maxY + 4;
+    cam.near = Math.max(1, -maxZ - 20);
+    cam.far = -minZ + 20;
+    cam.updateProjectionMatrix();
+  }
+  fitShadow(sun.dir.value);
+
+  // "exterior": the real light casts shadows and the shader sun term is zeroed so nothing is lit twice.
+  // "interior": the light is off (the interior never receives it) and the sun term returns for the hull
+  // chunks seen through windows. The camera modes call this; setInteriorView / the group's visible=true
+  // setter mirror it as a fallback so the state always follows the mode changes.
+  function setMode(mode) {
+    const ext = mode !== "interior";
+    stats.mode = ext ? "exterior" : "interior";
+    sunLight.visible = ext;
+    setCasting(ext);
+    if (ext) sun.color.value.setScalar(0);
+    else sun.color.value.copy(SUN_COLOR).multiplyScalar(SUN_INTENSITY);
+  }
+  setMode("exterior");
 
   // ---------------- interior window culling
   // From inside only the chunks that can be seen through the room's windows are drawn: forward windows
   // (tower slab) look down the dorsal hull toward the bow, belly windows (hangar deck) look down through
   // the well. Chunks are matched by mesh name so anything unlisted stays visible.
   const HIDE_INSIDE = {
-    forward: /^(sternWall|trenchWall|keelBlock|secondaryBay|wellThroat|wellRim|tractorField|domesSpire|engine|stern|trench(Units|Pipes|Ribs|Bays|Windows|Ducts))/,
-    belly: /^(sternWall|trenchWall|terraces|tower|windowBays|windowRows|domesSpire|engine|stern|trench(Units|Pipes|Ribs|Bays|Windows|Ducts)|dockingPads|city|bays|machineryBlocks|gantries|sensorDomes|antennaMasts|dishes|buttresses|wallBoxes|wallPipes|smallPlates|windowBezels|heavyTurret)/,
+    forward: /^(sternWall|trenchWall|keelBlock|keelDark|wellRimLight|tractorField|ventral|reactor|plates_paint|domesSpire|engine|stern|trench(Units|Ribs|Bays))/,
+    belly: /^(sternWall|trenchWall|towerTerraces|terraceRecess|windowBays|windowRows|domesSpire|engine|stern|trench(Units|Ribs|Bays)|dockingPads|city|bays|gantries|sensorDomes|dishes|smallPlates|plates|hatches|wallVents|turrets|ventral|reactor|wellRimLight)/,
   };
   let culled = null; // Set of meshes hidden for the current interior view; null = draw everything
   const applyCulling = () => {
@@ -454,11 +581,13 @@ export function buildExterior(scene) {
         culled = null;
         applyCulling();
       }
+      if (v) setMode("exterior");
     },
   });
 
   function update(camPos, sunWorld) {
     if (sunWorld) sun.dir.value.copy(sunWorld);
+    if (sunLight.visible) fitShadow(sun.dir.value);
     let vis = 0;
     for (const e of lodMeshes) {
       let bs;
@@ -493,7 +622,8 @@ export function buildExterior(scene) {
       });
     }
     applyCulling();
+    setMode("interior");
   }
 
-  return { group, detail, materials, sun, update, setInteriorView, stats, openings };
+  return { group, detail, materials, sun, sunLight, update, setInteriorView, setMode, stats, openings };
 }
