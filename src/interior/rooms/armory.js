@@ -5,7 +5,8 @@
 // with red warning beacons at the cage line; restricted stencils everywhere. Deck-local, floor y = 0.
 import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
-import { roomShell, wallScreen, crate, wallSegment, impChair } from "../imperial.js";
+import { roomShell, wallScreen, crate, wallSegment, impChair, railing } from "../imperial.js";
+import { signPlate } from "../corridor.js";
 import { pointLight, wallFrame } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
@@ -68,12 +69,13 @@ function weaponRack(kit, ctx, { x, z, yaw = 0, n = 7, seed = 1, heavy = false })
   const pitch = heavy ? 0.42 : 0.21;
   const w = n * pitch + 0.2;
   const h = 2.2;
+  // light back board and a real (0.05 thick) down-light so the black silhouettes read against it
   F.box("paintedMetal", 0, h / 2, 0.05, w, h, 0.1, { color: PALETTE.impDark, texel: 1.5 });
-  F.box("impPanel1", 0, h / 2 + 0.05, 0.105, w - 0.1, h - 0.3, 0.012, { color: PALETTE.impMid, uv: "keep" });
+  F.box("impPanel1", 0, h / 2 + 0.05, 0.105, w - 0.1, h - 0.3, 0.012, { color: PALETTE.impLight, uv: "keep" });
   F.box("paintedMetal", 0, 0.08, 0.2, w, 0.16, 0.4, { color: PALETTE.impBlack, texel: 2 });
   F.box("hazard", 0, 0.165, 0.2, w - 0.04, 0.01, 0.38, { texel: 3 });
   F.box("paintedMetal", 0, h - 0.06, 0.2, w + 0.04, 0.1, 0.42, { color: PALETTE.impBlack, texel: 2 });
-  F.box("emitWhiteSoft", 0, h - 0.115, 0.22, w - 0.2, 0.012, 0.16, { uv: "keep" });
+  F.box("emitWhiteSoft", 0, h - 0.135, 0.22, w - 0.2, 0.05, 0.16, { uv: "keep" });
   F.box("paintedMetal", 0, 1.35, 0.26, w - 0.08, 0.05, 0.05, { color: PALETTE.impMid, texel: 2 });
   // standing weapons: local +X (barrel) → up; a slot lamp under each
   const up = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
@@ -178,16 +180,20 @@ function cageWall(kit, x, z0, z1, gaps, H) {
   for (const [a, b] of spans) {
     const len = b - a;
     const zc = (a + b) / 2;
-    // top and bottom rails, mid rail, then bars every 0.15
+    // top and bottom rails, mid rails, painted bars every 0.28 (open enough to see the racks), and a
+    // security mesh below the lower mid rail
     kit.box("paintedMetal", x, 0.06, zc, 0.1, 0.12, len, { color: PALETTE.impBlack, texel: 2 });
     kit.box("paintedMetal", x, H - 0.08, zc, 0.1, 0.16, len, { color: PALETTE.impBlack, texel: 2 });
-    kit.box("metal", x, 1.1, zc, 0.06, 0.05, len, { color: PALETTE.impMid, texel: 2 });
-    kit.box("metal", x, 2.3, zc, 0.06, 0.05, len, { color: PALETTE.impMid, texel: 2 });
-    const n = Math.max(1, Math.round(len / 0.15));
+    kit.box("paintedMetal", x, 1.1, zc, 0.06, 0.05, len, { color: PALETTE.impMid, texel: 2 });
+    kit.box("paintedMetal", x, 2.3, zc, 0.06, 0.05, len, { color: PALETTE.impMid, texel: 2 });
+    const n = Math.max(1, Math.round(len / 0.28));
     for (let i = 0; i <= n; i++) {
       const z = a + (i / n) * len;
-      kit.cyl("metal", x, H / 2, z, 0.016, H - 0.2, "y", { color: PALETTE.steel, segments: 6 });
+      kit.cyl("paintedMetal", x, H / 2, z, 0.018, H - 0.2, "y", { color: PALETTE.impMid, segments: 6, texel: 3 });
     }
+    const mg = new THREE.PlaneGeometry(len - 0.02, 0.96);
+    mg.rotateY(Math.PI / 2);
+    kit.add("crew_mesh", mg, { pos: [x, 0.6, zc], uv: "scale", uvScale: [(len - 0.02) / 0.4, 0.96 / 0.4] });
     kit.collider([x - 0.06, 0, a], [x + 0.06, H, b], "cage");
   }
   // posts at every span edge
@@ -219,9 +225,11 @@ export function buildArmory(kit, ctx) {
   ctx.light(pointLight(0xe8f0ff, 10, 11, [-52.0, H - 0.6, -31.5]));
   ctx.light(pointLight(0xf4f6ff, 9, 10, [-45.0, H - 0.6, -40.0]));
   ctx.light(pointLight(0xf4f6ff, 9, 10, [-45.0, H - 0.6, -32.0]));
-  const redA = ctx.light(pointLight(0xff3020, 5, 7, [cageX, 3.0, -42.0]));
-  const redB = ctx.light(pointLight(0xff3020, 5, 7, [cageX, 3.0, -30.0]));
-  // pulsing red beacons on the cage-end posts (material clone so other rooms keep steady red)
+  // red beacons flank the counter (z -39.5 / -32.5) so the red identity is in frame from the door
+  const beaconZ = [-39.5, -32.5];
+  const redA = ctx.light(pointLight(0xff3020, 5, 7, [cageX, 3.0, beaconZ[0]]));
+  const redB = ctx.light(pointLight(0xff3020, 5, 7, [cageX, 3.0, beaconZ[1]]));
+  // pulsing red beacons on the cage posts (material clone so other rooms keep steady red)
   const alert = ctx.materials.crew_alert;
   ctx.anim((dt, t) => {
     const k = 0.55 + 0.45 * Math.sin(t * 2.4);
@@ -229,7 +237,7 @@ export function buildArmory(kit, ctx) {
     redA.intensity = redA.userData.baseIntensity * (0.4 + k * 0.8);
     redB.intensity = redB.userData.baseIntensity * (0.4 + k * 0.8);
   });
-  for (const z of [-42.0, -30.0]) {
+  for (const z of beaconZ) {
     kit.box("paintedMetal", cageX, 3.05, z, 0.3, 0.1, 0.3, { color: PALETTE.impBlack, texel: 2 });
     kit.cyl("paintedMetal", cageX, 3.02, z, 0.11, 0.06, "y", { color: PALETTE.impBlack, segments: 14 });
     kit.add("crew_alert", new THREE.SphereGeometry(0.1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [cageX, 3.05, z], uv: "keep" });
@@ -240,24 +248,33 @@ export function buildArmory(kit, ctx) {
   // ------------------------------------------------------------------ cage with the counter hatch and an open gate
   const gate = [counterZ + 1.5, counterZ + 2.6];
   cageWall(kit, cageX, min[2] + 0.2, max[2] - 0.2, [[counterZ - 1.4, counterZ + 1.4], gate], H);
-  // bars above the counter hatch (from 1.9 m up) with a lit lintel
+  // counter hatch: a deep black lintel carrying the lit RESTRICTED plate toward the visitor, a thin dim
+  // strip under it, and bars above (from 2.35 m up)
   {
     const len = 2.8;
-    kit.box("paintedMetal", cageX, 1.85, counterZ, 0.12, 0.1, len, { color: PALETTE.impBlack, texel: 2 });
+    const lintelY0 = 1.8;
+    const lintelY1 = 2.35;
+    kit.box("paintedMetal", cageX, (lintelY0 + lintelY1) / 2, counterZ, 0.14, lintelY1 - lintelY0, len, { color: PALETTE.impBlack, texel: 2 });
     kit.box("paintedMetal", cageX, H - 0.08, counterZ, 0.1, 0.16, len, { color: PALETTE.impBlack, texel: 2 });
-    for (let i = 0; i <= Math.round(len / 0.15); i++) {
-      const z = counterZ - len / 2 + (i / Math.round(len / 0.15)) * len;
-      kit.cyl("metal", cageX, (1.9 + H) / 2, z, 0.016, H - 1.9 - 0.05, "y", { color: PALETTE.steel, segments: 6 });
+    const nb = Math.round(len / 0.28);
+    for (let i = 0; i <= nb; i++) {
+      const z = counterZ - len / 2 + (i / nb) * len;
+      kit.cyl("paintedMetal", cageX, (lintelY1 + H) / 2, z, 0.018, H - lintelY1 - 0.05, "y", { color: PALETTE.impMid, segments: 6, texel: 3 });
     }
-    kit.box("emitWhiteSoft", cageX + 0.08, 1.82, counterZ, 0.03, 0.03, len - 0.3, { uv: "keep" });
-    kit.collider([cageX - 0.06, 1.85, counterZ - len / 2], [cageX + 0.06, H, counterZ + len / 2], "hatchbars");
+    kit.box("emitWhiteDim", cageX + 0.08, lintelY0 - 0.005, counterZ, 0.03, 0.015, len - 0.3, { uv: "keep" });
+    signPlate(kit, ctx, { side: "xmin", u: max[2] - counterZ, v: (lintelY0 + lintelY1) / 2, w: 2.4, h: 0.42, text: "Restricted", sub: "Authorised personnel only", accent: "#ff3a2a", bounds: [[cageX + 0.07, 0, min[2]], [max[0], H, max[2]]] });
+    kit.collider([cageX - 0.07, lintelY0, counterZ - len / 2], [cageX + 0.14, H, counterZ + len / 2], "hatchbars");
     // open gate leaf swung into the cage side
     const gz = gate[0];
     const gw = gate[1] - gate[0];
     kit.box("paintedMetal", cageX - gw / 2, 0.06, gz, gw, 0.12, 0.08, { color: PALETTE.impBlack, texel: 2 });
     kit.box("paintedMetal", cageX - gw / 2, 2.35, gz, gw, 0.1, 0.08, { color: PALETTE.impBlack, texel: 2 });
-    kit.box("metal", cageX - gw / 2, 1.1, gz, gw, 0.05, 0.05, { color: PALETTE.impMid, texel: 2 });
-    for (let i = 0; i <= 7; i++) kit.cyl("metal", cageX - 0.05 - (i / 7) * (gw - 0.1), 1.2, gz, 0.014, 2.3, "y", { color: PALETTE.steel, segments: 6 });
+    kit.box("paintedMetal", cageX - gw / 2, 1.1, gz, gw, 0.05, 0.05, { color: PALETTE.impMid, texel: 2 });
+    for (let i = 0; i <= 4; i++) kit.cyl("paintedMetal", cageX - 0.05 - (i / 4) * (gw - 0.1), 1.2, gz, 0.016, 2.3, "y", { color: PALETTE.impMid, segments: 6, texel: 3 });
+    {
+      const mg = new THREE.PlaneGeometry(gw - 0.12, 0.96);
+      kit.add("crew_mesh", mg, { pos: [cageX - gw / 2, 0.6, gz], uv: "scale", uvScale: [(gw - 0.12) / 0.4, 0.96 / 0.4] });
+    }
     kit.box("paintedMetal", cageX - gw + 0.06, 1.0, gz, 0.1, 0.3, 0.08, { color: PALETTE.impDark, texel: 2 });
     kit.box("emitGreen", cageX - gw + 0.06, 1.0, gz + 0.045, 0.03, 0.03, 0.006);
     kit.collider([cageX - gw - 0.02, 0, gz - 0.05], [cageX + 0.02, 2.4, gz + 0.05], "gateleaf");
@@ -289,6 +306,21 @@ export function buildArmory(kit, ctx) {
     impChair(kit, ctx, { x: cageX - 1.0, z: counterZ, yaw: -Math.PI / 2 });
     wallSign(kit, ctx, { side: "xmax", u: counterZ - min[2], v: 3.25, w: 1.6, cell: SIGN.ARMOURY, lit: true });
     floorSign(kit, SIGN.RESTRICTED, cageX + 1.6, counterZ, 1.8, Math.PI / 2, false);
+    // queue rail 1.2 m out from the counter face with a gap at the hatch, and a visitor-facing issue
+    // status board on the cage beside the hatch
+    const qx = cageX + 0.45 + 1.2;
+    railing(kit, qx, counterZ - 2.6, qx, counterZ - 0.5, 0, { h: 0.95 });
+    railing(kit, qx, counterZ + 0.5, qx, counterZ + 2.6, 0, { h: 0.95 });
+    {
+      const bz = counterZ - 2.3;
+      kit.box("paintedMetal", cageX + 0.1, 1.75, bz, 0.08, 0.86, 1.36, { color: PALETTE.impBlack, texel: 2 });
+      kit.box("darkGloss", cageX + 0.145, 1.75, bz, 0.01, 0.76, 1.26);
+      const sg = new THREE.PlaneGeometry(1.2, 0.7);
+      sg.rotateY(Math.PI / 2);
+      kit.add("impScreen3", sg, { pos: [cageX + 0.152, 1.75, bz], uv: "keep" });
+      kit.box("leds", cageX + 0.152, 1.27, bz, 0.006, 0.03, 1.0, { uv: "keep" });
+      kit.box("emitRed", cageX + 0.152, 2.24, bz, 0.006, 0.03, 0.5);
+    }
   }
 
   // ------------------------------------------------------------------ visitor side: bench, return lockers, roster screens

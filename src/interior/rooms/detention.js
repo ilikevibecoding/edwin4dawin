@@ -16,6 +16,12 @@ const DET_PAINTS = [
   [PALETTE.impMid, 0.35],
   [PALETTE.impDark, 0.25],
 ];
+// guard-station anteroom: a lighter mix so it reads as the white zone against the red block
+const ANTE_PAINTS = [
+  [PALETTE.impLight, 0.45],
+  [PALETTE.impGrey, 0.35],
+  [PALETTE.impMid, 0.2],
+];
 const DET_STYLES = { panel: 0.66, vent: 0.1, greeble: 0.1, strip: 0.05, screen: 0.02, conduit: 0.07 };
 const CELL_H = 3.6;
 
@@ -103,29 +109,41 @@ export function buildDetention(kit, ctx) {
   const cellBackN = -30.4;
   const cellW = (chamberX0 - guardX1) / 3;
 
+  // the long walls are built in two runs each: the anteroom run in the light mix, the service-passage
+  // run in the block mix (no doors on either, so the split is safe)
+  const wallCommon = { rows: [0, 0.5, 1.6, 2.6, H], styles: DET_STYLES, theme: { accent: "emitRed", accent2: "emitRed", screenMats: ["impScreen1"] } };
   roomShell(kit, ctx, {
     floor: { color: 0x6a6a70 },
     ceiling: false,
-    walls: { rows: [0, 0.5, 1.6, 2.6, H], paints: DET_PAINTS, styles: DET_STYLES, theme: { accent: "emitRed", accent2: "emitRed", screenMats: ["impScreen1"] } },
+    skip: ["zmin", "zmax"],
+    walls: { ...wallCommon, paints: DET_PAINTS },
+    wall: { xmin: { paints: ANTE_PAINTS } },
   });
-  // dark ceiling with red strips over the corridor and passages, white over the guard station
+  impWall(kit, ctx, "zmin", { ...wallCommon, paints: ANTE_PAINTS, from: [min[0], min[2]], to: [guardX1, min[2]], noDoors: true, seed: ctx.seed + 21, tag: "zmin" });
+  impWall(kit, ctx, "zmin", { ...wallCommon, paints: DET_PAINTS, from: [guardX1, min[2]], to: [max[0], min[2]], noDoors: true, seed: ctx.seed + 22, tag: "zmin" });
+  impWall(kit, ctx, "zmax", { ...wallCommon, paints: DET_PAINTS, from: [max[0], max[2]], to: [guardX1, max[2]], noDoors: true, seed: ctx.seed + 23, tag: "zmax" });
+  impWall(kit, ctx, "zmax", { ...wallCommon, paints: ANTE_PAINTS, from: [guardX1, max[2]], to: [min[0], max[2]], noDoors: true, seed: ctx.seed + 24, tag: "zmax" });
+  // dark ceiling with red strips over the corridor and passages; the guard station gets a mid-grey
+  // slab and four white strips so it reads as the white anteroom against the red block
   kit.boxMM("paintedMetal", [min[0] - 0.2, H, min[2] - 0.2], [max[0] + 0.2, H + 0.12, max[2] + 0.2], { color: PALETTE.impDark, texel: 1.5 });
+  kit.boxMM("impPanel1", [min[0] - 0.2, H - 0.02, min[2] - 0.2], [guardX1 - 0.3, H + 0.01, max[2] + 0.2], { color: PALETTE.impGrey, uv: "world", texel: 0.5 });
   for (let x = min[0] + 1.0; x < max[0] - 0.5; x += 2.0) kit.box("paintedMetal", x, H - 0.03, (min[2] + max[2]) / 2, 0.08, 0.06, max[2] - min[2] - 0.4, { color: PALETTE.impBlack, texel: 2 });
   for (let z = min[2] + 1.0; z < max[2] - 0.5; z += 2.0) kit.box("paintedMetal", (min[0] + max[0]) / 2, H - 0.03, z, max[0] - min[0] - 0.4, 0.06, 0.08, { color: PALETTE.impBlack, texel: 2 });
   const strip = (mat, x0, z0, x1, z1) => {
     kit.boxMM("paintedMetal", [Math.min(x0, x1) - 0.14, H - 0.1, Math.min(z0, z1) - 0.14], [Math.max(x0, x1) + 0.14, H, Math.max(z0, z1) + 0.14], { color: PALETTE.impBlack, texel: 2 });
-    kit.boxMM(mat, [Math.min(x0, x1), H - 0.11, Math.min(z0, z1)], [Math.max(x0, x1), H - 0.09, Math.max(z0, z1)]);
+    kit.boxMM(mat, [Math.min(x0, x1), H - 0.11, Math.min(z0, z1)], [Math.max(x0, x1), H - 0.09, Math.max(z0, z1)], { uv: "keep" });
   };
   strip("emitRedSoft", guardX1 + 0.4, -36.04, chamberX0 - 0.4, -35.96);
   strip("emitRedSoft", guardX1 + 0.6, -43.84, max[0] - 0.6, -43.76);
   strip("emitRedSoft", guardX1 + 0.6, -28.24, max[0] - 0.6, -28.16);
-  strip("emitWhiteSoft", 43.4, -33.0, 47.6, -32.92);
-  strip("emitWhiteSoft", 43.4, -39.0, 47.6, -38.92);
-  // black rubber deck in the corridor and the chamber, hazard edge lines along the corridor
+  for (const z of [-30.0, -33.0, -39.0, -42.0]) strip("emitStrip", 43.4, z - 0.07, 47.6, z + 0.07);
+  // black rubber deck in the corridor and the chamber, dim red light channels along the corridor edges
   kit.boxMM("rubber", [guardX1, 0, corrZ0], [chamberX0, 0.012, corrZ1], { color: PALETTE.rubber });
   kit.boxMM("rubber", [chamberX0, 0, cellBackS], [max[0] - 0.2, 0.012, cellBackN], { color: PALETTE.rubber });
-  kit.boxMM("hazard", [guardX1, 0, corrZ0 + 0.1], [chamberX0, 0.014, corrZ0 + 0.26], { texel: 4 });
-  kit.boxMM("hazard", [guardX1, 0, corrZ1 - 0.26], [chamberX0, 0.014, corrZ1 - 0.1], { texel: 4 });
+  for (const z of [corrZ0 + 0.18, corrZ1 - 0.18]) {
+    kit.boxMM("paintedMetal", [guardX1, 0, z - 0.05], [chamberX0, 0.016, z + 0.05], { color: PALETTE.impBlack, texel: 2 });
+    kit.boxMM("emitRedDim", [guardX1 + 0.1, 0.016, z - 0.012], [chamberX0 - 0.1, 0.024, z + 0.012]);
+  }
 
   // ------------------------------------------------------------------ lights (6)
   ctx.light(pointLight(0xff3a2a, 12, 13, [52.2, H - 0.5, -36.0]));
@@ -161,7 +179,8 @@ export function buildDetention(kit, ctx) {
     kit.box("paintedMetal", (faceX + guardX1) / 2, H / 2, z, guardX1 - faceX + 0.2, H, 0.05, { color: PALETTE.impBlack, texel: 2 });
   }
   for (const z of [corrZ0 - 0.45, corrZ1 + 0.45]) {
-    kit.box("hazard", faceX - 0.02, 1.5, z, 0.03, 3.0, 0.3, { texel: 3 });
+    // plain black flanking bands with a red lamp at the top (the hazard wraps were noise)
+    kit.box("paintedMetal", faceX - 0.02, 1.5, z, 0.03, 3.0, 0.3, { color: PALETTE.impBlack, texel: 2 });
     kit.box("paintedMetal", faceX - 0.06, 3.2, z, 0.12, 0.2, 0.3, { color: PALETTE.impBlack, texel: 2 });
     kit.box("emitRed", faceX - 0.125, 3.2, z, 0.01, 0.12, 0.2);
   }
@@ -185,20 +204,37 @@ export function buildDetention(kit, ctx) {
       // force field set into the opening (fz = the corridor face plane), dark jambs and lintel, emitter
       // studs, keypad + status lamp on the pier, cell number sign, hazard strip on the corridor deck
       const fz = faceZ - dirZ * 0.02;
-      const fg = new THREE.PlaneGeometry(fieldW, 2.6);
-      kit.add("crew_cellField", fg, { pos: [xc, 1.3, fz + dirZ * 0.1], rot: [0, south ? 0 : Math.PI, 0], uv: "scale", uvScale: [fieldW / 1.2, 2.6 / 1.2] });
-      kit.collider([xc - fieldW / 2, 0, faceZ - 0.12], [xc + fieldW / 2, 2.6, faceZ + 0.12], "field");
+      // cell 4 stands open (field down, green lamp) with the cleaning trolley's mop bucket left inside
+      const open = n === 4;
+      if (!open) {
+        const fg = new THREE.PlaneGeometry(fieldW, 2.6);
+        kit.add("crew_cellField", fg, { pos: [xc, 1.3, fz + dirZ * 0.1], rot: [0, south ? 0 : Math.PI, 0], uv: "scale", uvScale: [fieldW / 1.2, 2.6 / 1.2] });
+        kit.collider([xc - fieldW / 2, 0, faceZ - 0.12], [xc + fieldW / 2, 2.6, faceZ + 0.12], "field");
+      }
       for (const s of [-1, 1]) kit.box("paintedMetal", xc + s * (fieldW / 2 + 0.06), 1.3, fz + dirZ * 0.1, 0.12, 2.6, 0.2, { color: PALETTE.impBlack, texel: 2 });
       kit.box("paintedMetal", xc, 2.66, fz + dirZ * 0.1, fieldW + 0.24, 0.14, 0.2, { color: PALETTE.impBlack, texel: 2 });
-      kit.box("emitRed", xc, 2.58, fz + dirZ * 0.06, fieldW - 0.1, 0.02, 0.02);
-      kit.box("emitRed", xc, 0.03, fz + dirZ * 0.06, fieldW - 0.1, 0.02, 0.02);
-      for (let k = 0; k < 5; k++) for (const s of [-1, 1]) kit.box("emitRed", xc + s * (fieldW / 2 - 0.01), 0.4 + k * 0.5, fz + dirZ * 0.1, 0.03, 0.06, 0.03);
+      const emitterMat = open ? "rubber" : "emitRed";
+      kit.box(emitterMat, xc, 2.58, fz + dirZ * 0.06, fieldW - 0.1, 0.02, 0.02, { color: PALETTE.rubber });
+      kit.box(emitterMat, xc, 0.03, fz + dirZ * 0.06, fieldW - 0.1, 0.02, 0.02, { color: PALETTE.rubber });
+      for (let k = 0; k < 5; k++) for (const s of [-1, 1]) kit.box(emitterMat, xc + s * (fieldW / 2 - 0.01), 0.4 + k * 0.5, fz + dirZ * 0.1, 0.03, 0.06, 0.03, { color: PALETTE.rubber });
       const px = xc + fieldW / 2 + 0.3;
       kit.box("paintedMetal", px, 1.35, fz - dirZ * 0.03, 0.2, 0.3, 0.06, { color: PALETTE.impDark, texel: 2 });
       for (let k = 0; k < 4; k++) kit.box("rubber", px - 0.05 + (k % 2) * 0.1, 1.42 - Math.floor(k / 2) * 0.09, fz - dirZ * 0.065, 0.05, 0.05, 0.01, { color: PALETTE.rubber });
-      kit.box(n === 4 ? "emitGreen" : "emitRed", px, 1.25, fz - dirZ * 0.065, 0.1, 0.03, 0.01);
-      signQuad(kit, SIGN.CELL1 + n, [xc - fieldW / 2 - 0.35, 2.15, fz - dirZ * 0.012], [0, south ? 0 : Math.PI, 0], 0.5, true);
+      kit.box(open ? "emitGreen" : "emitRed", px, 1.25, fz - dirZ * 0.065, 0.1, 0.03, 0.01);
+      signQuad(kit, SIGN.CELL1 + n, [xc - fieldW / 2 - 0.35, 2.15, fz - dirZ * 0.012], [0, south ? 0 : Math.PI, 0], 0.7, true);
       kit.boxMM("hazard", [xc - fieldW / 2, 0.012, Math.min(faceZ, faceZ - dirZ * 0.5)], [xc + fieldW / 2, 0.02, Math.max(faceZ, faceZ - dirZ * 0.5)], { texel: 3 });
+      if (open) {
+        const mx = xc + 0.55;
+        const mz = faceZ + dirZ * 0.75;
+        kit.cyl("paintedMetal", mx, 0.19, mz, 0.2, 0.38, "y", { color: PALETTE.impAmber, segments: 14, texel: 2 });
+        kit.cyl("paintedMetal", mx, 0.39, mz, 0.21, 0.03, "y", { color: PALETTE.impBlack, segments: 14, texel: 2 });
+        kit.cyl("darkGloss", mx, 0.36, mz, 0.17, 0.01, "y", { segments: 14 });
+        // mop leaning on the jamb: handle tilted, head resting in the bucket
+        const lean = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), dirZ * -0.28);
+        kit.add("metal", new THREE.CylinderGeometry(0.014, 0.014, 1.4, 6), { pos: [mx, 0.95, mz - dirZ * 0.2], quat: lean, color: PALETTE.impMid });
+        kit.box("fabric", mx, 0.34, mz + dirZ * 0.02, 0.16, 0.14, 0.16, { color: PALETTE.impLight, uv: "world", texel: 3 });
+        kit.collider([mx - 0.22, 0, mz - 0.22], [mx + 0.22, 0.42, mz + 0.22], "bucket");
+      }
       // cell interior: bench shelf along the back wall, sanitary unit, red ceiling light, drain, grime
       const bz = back - dirZ * 0.4;
       kit.box("paintedMetal", xc, 0.42, bz, cellW - 0.5, 0.08, 0.7, { color: PALETTE.impMid, texel: 2 });
@@ -314,21 +350,21 @@ export function buildDetention(kit, ctx) {
       }
     }
     frame.box("leds", mu, 1.05, 0.05, 3.6, 0.03, 0.01, { uv: "keep" });
+    wallSign(kit, ctx, { side: "zmax", u: mu, v: 3.33, w: 1.6, cell: SIGN.GUARD, lit: true });
     impConsole(kit, ctx, { x: 45.4, z: -29.2, yaw: Math.PI, w: 2.4, d: 0.85, screens: [1, 3, 1], chair: true, seed: ctx.seed + 71, lampMat: "emitRed" });
     // a second console facing the door: ident check, with a chair
     impConsole(kit, ctx, { x: 46.2, z: -39.6, yaw: Math.PI / 2, w: 1.6, d: 0.75, screens: [3, 1], chair: true, seed: ctx.seed + 72, lampMat: "emitRed" });
     // scanner arch across the approach to the cell corridor (posts clear of the walking line)
     for (const s of [-1, 1]) {
-      kit.box("paintedMetal", 47.6, 1.4, -36 + s * 1.75, 0.3, 2.8, 0.3, { color: PALETTE.impDark, texel: 1.5 });
-      kit.box("hazard", 47.6, 0.3, -36 + s * 1.75, 0.32, 0.6, 0.32, { texel: 3 });
+      kit.box("paintedMetal", 47.6, 1.4, -36 + s * 1.75, 0.3, 2.8, 0.3, { color: PALETTE.impBlack, texel: 1.5 });
       kit.box("leds", 47.45, 1.6, -36 + s * 1.75, 0.006, 1.2, 0.08, { uv: "keep", rot: [0, 0, Math.PI / 2] });
       kit.collider([47.45, 0, -36 + s * 1.75 - 0.15], [47.75, 2.8, -36 + s * 1.75 + 0.15], "archpost");
     }
-    kit.box("paintedMetal", 47.6, 2.95, -36, 0.4, 0.3, 3.8, { color: PALETTE.impDark, texel: 1.5 });
+    kit.box("paintedMetal", 47.6, 2.95, -36, 0.4, 0.3, 3.8, { color: PALETTE.impBlack, texel: 1.5 });
     kit.box("emitRed", 47.6, 2.79, -36, 0.2, 0.02, 3.2);
     kit.box("darkGloss", 47.4, 3.0, -36, 0.02, 0.2, 1.2);
     signQuad(kit, SIGN.DETENTION, [47.39, 3.0, -36], [0, -Math.PI / 2, 0], 1.0, true);
-    kit.boxMM("hazard", [47.3, 0.012, -37.6], [47.9, 0.02, -34.4], { texel: 3 });
+    kit.boxMM("paintedMetal", [47.3, 0.012, -37.6], [47.9, 0.02, -34.4], { color: PALETTE.impBlack, texel: 2 });
     // weapons locker + holding bench with cuff rings on the south wall
     lockerBank(kit, ctx, { x: 45.0, z: min[2], yaw: 0, n: 4, w: 0.5, h: 2.0, d: 0.5, seed: ctx.seed + 73, color: PALETTE.impDark, lamp: "emitRed" });
     const bx = 43.6;
@@ -377,8 +413,9 @@ export function buildDetention(kit, ctx) {
     lockerBank(kit, ctx, { x: 57.0, z: max[2], yaw: Math.PI, n: 6, w: 0.5, h: 2.0, d: 0.5, seed: ctx.seed + 84, color: PALETTE.impDark, lamp: "emitRed" });
     impConsole(kit, ctx, { x: 60.8, z: -27.4, yaw: Math.PI, w: 1.4, d: 0.7, screens: [1], chair: true, seed: ctx.seed + 85, lampMat: "emitRed" });
     cableTray(kit, ctx, "zmax", 0.4, max[0] - guardX1 - 0.4, 3.1);
-    kit.boxMM("hazard", [guardX1 + 0.3, 0.012, cellBackN + 0.2], [max[0] - 0.3, 0.02, cellBackN + 0.36], { texel: 4 });
-    kit.boxMM("hazard", [guardX1 + 0.3, 0.012, cellBackS - 0.36], [max[0] - 0.3, 0.02, cellBackS - 0.2], { texel: 4 });
+    // plain black kick lines along the cell backs (the passages carry no hazard striping)
+    kit.boxMM("paintedMetal", [guardX1 + 0.3, 0.012, cellBackN + 0.2], [max[0] - 0.3, 0.02, cellBackN + 0.36], { color: PALETTE.impBlack, texel: 2 });
+    kit.boxMM("paintedMetal", [guardX1 + 0.3, 0.012, cellBackS - 0.36], [max[0] - 0.3, 0.02, cellBackS - 0.2], { color: PALETTE.impBlack, texel: 2 });
     floorGrime(kit, 55, -28.2, 6.0, 1.6, 0.0);
     floorGrime(kit, 55, -43.8, 6.0, 1.6, 0.0);
   }

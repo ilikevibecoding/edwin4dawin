@@ -8,12 +8,14 @@ import { roomShell, wallScreen, impConsole, pipeRun, wallSegment } from "../impe
 import { pointLight, wallFrame } from "../builders.js";
 import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
-import { ensureCrewMaterials, SIGN, wallSign, floorSign, floorGrime, scuffRun, wallGrime, cableTray, cableDroop, ventGrille, gauge, intercom, stool, wallShelf } from "./crewProps.js";
+import { ensureCrewMaterials, SIGN, wallSign, floorSign, floorGrime, scuffRun, wallGrime, cableTray, cableDroop, ventGrille, gauge, intercom, stool, wallShelf, propFrame } from "./crewProps.js";
 
+// clinical but not blown out: the white share is held under half so the bacta glow and the green
+// lines still register against the walls
 const WHITE_PAINTS = [
-  [PALETTE.impWhite, 0.78],
-  [PALETTE.impLight, 0.18],
-  [PALETTE.impGrey, 0.04],
+  [PALETTE.impWhite, 0.45],
+  [PALETTE.impLight, 0.4],
+  [PALETTE.impGrey, 0.15],
 ];
 
 /** Scanner boom built around a pivot (post top). k: kit-like target (sector kit or a mini kit). */
@@ -41,8 +43,9 @@ function medBed(kit, ctx, { x, z, seed, arm = true, animate = false, occupied = 
   // pedestal, frame, mattress, pillow, blanket
   kit.box("paintedMetal", x, 0.24, zc, 0.55, 0.48, 1.5, { color: PALETTE.impDark, texel: 1.5 });
   kit.box("paintedMetal", x, 0.03, zc, 0.7, 0.06, 1.7, { color: PALETTE.impBlack, texel: 2 });
-  kit.box("emitBlue", x, 0.1, zc + 0.755, 0.4, 0.02, 0.01);
-  kit.box("impPanel", x, 0.55, zc, W + 0.06, 0.1, L, { color: PALETTE.impGrey, uv: "keep" });
+  kit.box("emitBlueDim", x, 0.1, zc + 0.755, 0.4, 0.02, 0.01);
+  // mid-grey frame so the white mattress reads as the light thing on the bed
+  kit.box("impPanel", x, 0.55, zc, W + 0.06, 0.1, L, { color: PALETTE.impMid, uv: "keep" });
   kit.box("fabric", x, 0.66, zc, W - 0.06, 0.12, L - 0.1, { color: PALETTE.impWhite, uv: "world", texel: 2 });
   kit.box("fabric", x, 0.75, zc - L / 2 + 0.3, 0.5, 0.08, 0.32, { color: PALETTE.impWhite, uv: "world", texel: 2 });
   if (occupied) {
@@ -174,9 +177,20 @@ export function buildMedbay(kit, ctx) {
   const rand = rng(ctx.seed + 13);
 
   roomShell(kit, ctx, {
-    ceiling: { lights: false, spacing: 4.6, along: "x", paints: [[PALETTE.impWhite, 0.7], [PALETTE.impLight, 0.3]] },
+    // three strips across the 22 m depth (spacing 7.5) instead of five: the strips light the room,
+    // they should not be the room
+    ceiling: { lights: false, spacing: 7.5, along: "x", paints: [[PALETTE.impLight, 0.55], [PALETTE.impWhite, 0.3], [PALETTE.impGrey, 0.15]] },
     walls: { rows: [0, 0.5, 1.7, 2.7, H], paints: WHITE_PAINTS, styles: { panel: 0.72, vent: 0.08, greeble: 0.08, strip: 0.06, screen: 0.04, conduit: 0.02 }, theme: { accent2: "emitGreen", screenMats: ["impScreen1", "impScreen2"] } },
   });
+  // identity line: a green band along the ward wall above the monitors
+  {
+    const seg = wallSegment(ctx.bounds, "zmin");
+    const { frame } = wallFrame(kit, seg.from, seg.to, 0);
+    const u0 = 0.6;
+    const u1 = max[0] - min[0] - 0.6;
+    frame.box("paintedMetal", (u0 + u1) / 2, 2.7, 0.02, u1 - u0, 0.1, 0.04, { color: PALETTE.impBlack, texel: 2 });
+    frame.box("emitGreen", (u0 + u1) / 2, 2.7, 0.042, u1 - u0 - 0.1, 0.035, 0.006, { uv: "keep" });
+  }
   // light grey inlays: ward strip and the sterile zone, with a green edge line
   kit.boxMM("impPanel", [5.6, 0, -63.4], [21.6, 0.012, -58.6], { color: PALETTE.impGrey, uv: "world", texel: 0.5 });
   kit.boxMM("impPanel", [10.8, 0, -49.6], [18.4, 0.012, -43.6], { color: PALETTE.impGrey, uv: "world", texel: 0.5 });
@@ -187,41 +201,37 @@ export function buildMedbay(kit, ctx) {
     [[18.4, 0.012, -49.65], [18.45, 0.02, -43.6]],
   ]) kit.boxMM("emitGreen", a, b);
 
-  // ------------------------------------------------------------------ lights (6): cold white + blue-green at the tanks
+  // ------------------------------------------------------------------ lights (6): cold white (held at 7-8) + blue-green at the tanks
   const cold = 0xdcecff;
-  ctx.light(pointLight(cold, 12, 14, [9.5, H - 0.6, -60.0]));
-  ctx.light(pointLight(cold, 12, 14, [17.5, H - 0.6, -60.0]));
-  ctx.light(pointLight(0xf4f8ff, 14, 12, [14.6, H - 0.9, -46.6]));
-  ctx.light(pointLight(cold, 9, 12, [6.5, H - 0.6, -47.5]));
-  ctx.light(pointLight(cold, 9, 12, [21.0, H - 0.6, -46.0]));
+  ctx.light(pointLight(cold, 7.5, 14, [9.5, H - 0.6, -60.0]));
+  ctx.light(pointLight(cold, 7.5, 14, [17.5, H - 0.6, -60.0]));
+  ctx.light(pointLight(0xf4f8ff, 8, 12, [14.6, H - 0.9, -46.6]));
+  ctx.light(pointLight(cold, 7, 12, [6.5, H - 0.6, -47.5]));
+  ctx.light(pointLight(cold, 7, 12, [21.0, H - 0.6, -46.0]));
   ctx.light(pointLight(0x3fc4ff, 7, 9, [22.4, 1.9, -53.2]));
+
+  // privacy screen: a 1.2 m frosted head-end pane on two posts (translucent, so the beds still read
+  // through it from the door)
+  const privacyScreen = (sx, zc) => {
+    kit.box("crew_frost", sx, 1.45, zc, 0.02, 1.5, 1.2, { uv: "keep" });
+    kit.box("paintedMetal", sx, 2.21, zc, 0.05, 0.04, 1.28, { color: PALETTE.impMid, texel: 2 });
+    kit.box("paintedMetal", sx, 0.69, zc, 0.05, 0.04, 1.28, { color: PALETTE.impMid, texel: 2 });
+    for (const dz of [-0.62, 0.62]) kit.cyl("metal", sx, 1.12, zc + dz, 0.02, 2.24, "y", { color: PALETTE.steel, segments: 8 });
+    for (const dz of [-0.62, 0.62]) kit.cyl("metal", sx, 0.02, zc + dz, 0.12, 0.04, "y", { color: PALETTE.impBlack, segments: 12 });
+    kit.collider([sx - 0.15, 0, zc - 0.7], [sx + 0.15, 2.2, zc + 0.7], "screen");
+  };
 
   // ------------------------------------------------------------------ ward: four beds, monitors, privacy screens
   const bedXs = [7.6, 11.6, 15.6, 19.6];
   bedXs.forEach((x, i) => {
     medBed(kit, ctx, { x, z: -61.2, seed: ctx.seed * 5 + i * 17, arm: i !== 3, animate: i === 1, occupied: i === 2 });
     wallScreen(kit, ctx, { side: "zmin", u: x - min[0], v: 2.1, w: 0.9, h: 0.55, screen: 1 });
-    if (i < 3) {
-      // privacy screen between beds: frosted white panel on two posts
-      const sx = x + 2.0;
-      kit.box("impPanel", sx, 1.45, -61.0, 0.03, 1.5, 1.6, { color: PALETTE.impWhite, uv: "keep" });
-      kit.box("paintedMetal", sx, 1.45, -61.0, 0.05, 1.56, 0.05, { color: PALETTE.impMid, texel: 2 });
-      for (const dz of [-0.78, 0.78]) kit.cyl("metal", sx, 0.7, -61.0 + dz, 0.02, 1.4, "y", { color: PALETTE.steel, segments: 8 });
-      for (const dz of [-0.78, 0.78]) kit.cyl("metal", sx, 0.02, -61.0 + dz, 0.12, 0.04, "y", { color: PALETTE.impBlack, segments: 12 });
-      kit.collider([sx - 0.15, 0, -61.9], [sx + 0.15, 2.2, -60.1], "screen");
-    }
+    if (i < 3) privacyScreen(x + 2.0, -61.55);
   });
   // second row of three beds facing the same way (heads at z ≈ -56.4), one occupied
   [7.6, 11.6, 15.6].forEach((x, i) => {
     medBed(kit, ctx, { x, z: -55.3, seed: ctx.seed * 7 + i * 19, arm: i !== 1, animate: false, occupied: i === 0 });
-    if (i < 2) {
-      const sx = x + 2.0;
-      kit.box("impPanel", sx, 1.45, -55.1, 0.03, 1.5, 1.6, { color: PALETTE.impWhite, uv: "keep" });
-      kit.box("paintedMetal", sx, 1.45, -55.1, 0.05, 1.56, 0.05, { color: PALETTE.impMid, texel: 2 });
-      for (const dz of [-0.78, 0.78]) kit.cyl("metal", sx, 0.7, -55.1 + dz, 0.02, 1.4, "y", { color: PALETTE.steel, segments: 8 });
-      for (const dz of [-0.78, 0.78]) kit.cyl("metal", sx, 0.02, -55.1 + dz, 0.12, 0.04, "y", { color: PALETTE.impBlack, segments: 12 });
-      kit.collider([sx - 0.15, 0, -56.0], [sx + 0.15, 2.2, -54.2], "screen");
-    }
+    if (i < 2) privacyScreen(x + 2.0, -55.65);
   });
   // reception / triage desk facing the door, with a chair and a datapad rack
   impConsole(kit, ctx, { x: 8.6, z: -50.2, yaw: Math.PI / 2, w: 2.0, d: 0.8, screens: [1, 2, 1], chair: true, seed: ctx.seed + 17, lampMat: "emitGreen" });
@@ -281,7 +291,7 @@ export function buildMedbay(kit, ctx) {
   {
     const seg = wallSegment(ctx.bounds, "zmin");
     const { frame } = wallFrame(kit, seg.from, seg.to, 0);
-    for (const x of [9.6, 17.6]) frame.add("decal", new THREE.PlaneGeometry(0.34, 0.34), x - min[0], 2.6, 0.004, { uv: "keep", uvRect: decalRect(4) });
+    for (const x of [9.6, 17.6]) frame.add("decal", new THREE.PlaneGeometry(0.34, 0.34), x - min[0], 2.42, 0.004, { uv: "keep", uvRect: decalRect(4) });
     wallShelf(frame, 22.6 - min[0], 1.3, 1.6, 0.3);
     for (let k = 0; k < 6; k++) frame.cylV("crew_white", 22.0 - min[0] + k * 0.24, 1.42, 0.15, 0.05, 0.2, { color: k % 2 ? PALETTE.impWhite : PALETTE.impBlue, segments: 10 });
     frame.collider(21.8 - min[0], 23.4 - min[0], 1.1, 1.7, 0, 0.32, "shelf");
@@ -462,21 +472,24 @@ export function buildMedbay(kit, ctx) {
     frame.box("paintedMetal", max[0] - 7.6, 1.25, 0.21, 0.24, 0.05, 0.01, { color: PALETTE.impBlack, texel: 2 });
   }
 
-  // ------------------------------------------------------------------ door wall: sign, roster screen, wheelchair-style gurney parked
+  // ------------------------------------------------------------------ door wall: sign, roster screens; gurney parked mid-ward
   wallSign(kit, ctx, { side: "xmin", u: max[2] - (-53), v: 3.3, w: 1.8, cell: SIGN.MEDICAL, lit: true });
   wallScreen(kit, ctx, { side: "xmin", u: max[2] - (-47.5), v: 1.9, w: 1.4, h: 0.8, screen: 2 });
   wallScreen(kit, ctx, { side: "xmin", u: max[2] - (-58.5), v: 1.9, w: 1.4, h: 0.8, screen: 1 });
   {
-    // gurney against the door wall (out of the door approach)
-    const gx = 4.3;
-    const gz = -59.5;
-    kit.box("metal", gx, 0.8, gz, 0.7, 0.06, 1.9, { color: PALETTE.steel, texel: 1 });
-    kit.box("fabric", gx, 0.87, gz, 0.6, 0.08, 1.8, { color: PALETTE.impWhite, uv: "world", texel: 2 });
+    // gurney left parked mid-ward between the second bed row and the sterile zone, a little askew
+    const g = propFrame(kit, 12.0, -52.0, 0.32);
+    g.box("metal", 0, 0.8, 0, 0.7, 0.06, 1.9, { color: PALETTE.steel, texel: 1 });
+    g.box("fabric", 0, 0.87, 0, 0.6, 0.08, 1.8, { color: PALETTE.impWhite, uv: "world", texel: 2 });
+    g.box("fabric", 0, 0.93, -0.65, 0.4, 0.06, 0.28, { color: PALETTE.impWhite, uv: "world", texel: 2 });
+    g.box("fabric", 0, 0.925, 0.35, 0.56, 0.03, 0.9, { color: PALETTE.impLight, uv: "world", texel: 2 });
     for (const dz of [-0.7, 0.7]) {
-      kit.box("paintedMetal", gx, 0.4, gz + dz, 0.5, 0.74, 0.08, { color: PALETTE.impDark, texel: 2 });
-      for (const s of [-1, 1]) kit.cyl("rubber", gx + s * 0.28, 0.08, gz + dz, 0.08, 0.05, "x", { color: PALETTE.rubber, segments: 12 });
+      g.box("paintedMetal", 0, 0.4, dz, 0.5, 0.74, 0.08, { color: PALETTE.impDark, texel: 2 });
+      for (const s of [-1, 1]) g.cyl("rubber", s * 0.28, 0.08, dz, 0.08, 0.05, "x", { color: PALETTE.rubber, segments: 12 });
     }
-    kit.collider([gx - 0.36, 0, gz - 0.96], [gx + 0.36, 0.92, gz + 0.96], "gurney");
+    for (const s of [-1, 1]) g.cyl("metal", s * 0.36, 1.05, 0, 0.014, 1.5, "z", { color: PALETTE.steel, segments: 6 });
+    g.box("emitBlueDim", 0, 0.5, 0.75, 0.3, 0.02, 0.01);
+    g.collider(-0.42, -1.0, 0.42, 1.0, 1.1, "gurney");
     // stacked supply crates opposite
     kit.box("impPanel1", 4.3, 0.35, -46.4, 0.9, 0.7, 0.9, { color: PALETTE.impWhite, uv: "keep" });
     kit.box("paintedMetal", 4.3, 0.06, -46.4, 0.94, 0.12, 0.94, { color: PALETTE.impBlack, texel: 2 });
@@ -497,7 +510,7 @@ export function buildMedbay(kit, ctx) {
     const seg = wallSegment(ctx.bounds, "zmin");
     const { frame } = wallFrame(kit, seg.from, seg.to, 0);
     frame.box("impPanel1", 21.2 - min[0], 2.2, -0.02, 1.16, 0.96, 0.03, { color: PALETTE.impGrey, uv: "keep" });
-    frame.add("decal", new THREE.PlaneGeometry(0.3, 0.3), 22.0 - min[0], 2.6, 0.004, { uv: "keep", uvRect: decalRect(6) });
+    frame.add("decal", new THREE.PlaneGeometry(0.3, 0.3), 22.0 - min[0], 2.42, 0.004, { uv: "keep", uvRect: decalRect(6) });
   }
   if (ctx.audioZone) ctx.audioZone({ kind: "medical", pos: [14, 1.5, -53], radius: 10 });
 }

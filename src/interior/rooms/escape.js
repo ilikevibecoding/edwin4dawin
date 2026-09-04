@@ -5,11 +5,11 @@
 // Deck-local metres, floor y = 0.
 import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
-import { roomShell, wallScreen, crate, pipeRun, wallSegment } from "../imperial.js";
+import { roomShell, wallScreen, crate, pipeRun, wallSegment, railing } from "../imperial.js";
 import { pointLight, wallFrame } from "../builders.js";
 import { Kit, rng, panelWithHoles, fitUVs, insideOut } from "../../kit.js";
 import { decalRect } from "../../textures.js";
-import { ensureCrewMaterials, SIGN, signRect, wallSign, signQuad, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, intercom, lockerBank, propFrame } from "./crewProps.js";
+import { ensureCrewMaterials, SIGN, signRect, numeralRect, wallSign, signQuad, floorGrime, scuffRun, wallGrime, cableTray, cableDroop, ventGrille, intercom, lockerBank, propFrame } from "./crewProps.js";
 
 const ESC_PAINTS = [
   [PALETTE.impGrey, 0.45],
@@ -23,42 +23,139 @@ const HATCH_X = [-10, -6, -2, 2, 6, 10];
 const HATCH_V = 1.75; // hatch centre height
 const HATCH_R = 1.0;
 
-/**
- * One pod hatch in the zmin wall frame at u. The wall has a 2.8 x 3.0 opening here; we fill it with a
- * recessed plate, a short tube and the round hatch door with a lit viewport, then dress the outside.
- */
-function podHatch(kit, ctx, frame, u, index, seed) {
-  const rand = rng(seed);
-  const armed = index === 3 ? false : rand() < 0.85; // one hatch is down for maintenance
-  // recess plate flush with the wall face, round hole
-  const plate = panelWithHoles(2.8, 3.0, 0.12, [{ x: 0, y: HATCH_V - 1.7, r: HATCH_R + 0.06 }]);
-  fitUVs(plate, 2.8, 3.0);
-  frame.add("impPanel1", plate, u, 1.7, -0.08, { color: PALETTE.impGrey, uv: "keep" });
-  // tube through the wall, dark inside
-  const tube = insideOut(new THREE.CylinderGeometry(HATCH_R + 0.06, HATCH_R + 0.06, 0.7, 40, 1, true));
-  tube.rotateX(Math.PI / 2);
-  frame.add("metal", tube, u, HATCH_V, -0.37, { color: PALETTE.gunmetal, uv: "scale", uvScale: [8, 1] });
-  // the hatch door: thick disc set 0.45 m back, with a hub, spokes, dog clamps and a rim ring
-  const doorN = -0.45;
-  frame.cylN("impPanel", u, HATCH_V, doorN, HATCH_R, 0.16, { color: PALETTE.impLight, segments: 40, uv: "scale", uvScale: [6, 1] });
+const DOOR_N = -0.45; // hatch door plane, set back into the tube
+
+/** Hub, spokes, dog clamps (rotated per seed), rim ring, lit viewport and pod numeral on a door face. */
+function doorFace(frame, u, doorN, index, armed, clampRot) {
   frame.add("paintedMetal", new THREE.TorusGeometry(HATCH_R - 0.05, 0.035, 8, 40), u, HATCH_V, doorN + 0.09, { color: PALETTE.impDark, texel: 2 });
   for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     frame.box("paintedMetal", u + Math.cos(a) * 0.6, HATCH_V + Math.sin(a) * 0.6, doorN + 0.1, 0.6, 0.07, 0.04, { color: PALETTE.impMid, texel: 2, spin: a });
   }
   for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const a = (i / 4) * Math.PI * 2 + clampRot;
     frame.box("metal", u + Math.cos(a) * (HATCH_R - 0.12), HATCH_V + Math.sin(a) * (HATCH_R - 0.12), doorN + 0.12, 0.16, 0.1, 0.08, { color: PALETTE.steel, spin: a });
   }
   frame.cylN("paintedMetal", u, HATCH_V, doorN + 0.11, 0.34, 0.06, { color: PALETTE.impDark, segments: 24, texel: 2 });
   frame.add("paintedMetal", new THREE.TorusGeometry(0.3, 0.025, 8, 28), u, HATCH_V, doorN + 0.14, { color: armed ? PALETTE.impRed : PALETTE.impMid, texel: 2 });
   // viewport: glass over the lit pod interior (amber cabin light, a dark seat silhouette)
-  frame.cylN("emitAmber", u, HATCH_V, doorN + 0.125, 0.22, 0.01, { segments: 24 });
+  frame.cylN("emitAmberDim", u, HATCH_V, doorN + 0.125, 0.22, 0.01, { segments: 24 });
   frame.box("rubber", u, HATCH_V - 0.05, doorN + 0.132, 0.16, 0.2, 0.01, { color: PALETTE.rubber });
   frame.box("rubber", u, HATCH_V + 0.1, doorN + 0.132, 0.08, 0.08, 0.01, { color: PALETTE.rubber });
   frame.add("crew_glass", new THREE.CircleGeometry(0.22, 24), u, HATCH_V, doorN + 0.15, { uv: "keep" });
-  // hatch rim on the wall face: hazard ring and a cast collar with bolts
-  frame.add("hazard", new THREE.TorusGeometry(HATCH_R + 0.16, 0.055, 8, 48), u, HATCH_V, 0.02, { uv: "scale", uvScale: [28, 1] });
+  // pod number stencilled on the door in the gap between the two upper spokes
+  frame.add("crew_numeral", new THREE.PlaneGeometry(0.36, 0.36), u, HATCH_V + 0.64, doorN + 0.085, { uv: "keep", uvRect: numeralRect(index + 1), color: PALETTE.impBlack });
+}
+
+/** Closed hatch door: thick light disc set back into the tube. */
+function closedDoor(frame, u, index, armed, clampRot) {
+  frame.cylN("impPanel", u, HATCH_V, DOOR_N, HATCH_R, 0.16, { color: PALETTE.impLight, segments: 40, uv: "scale", uvScale: [6, 1] });
+  doorFace(frame, u, DOOR_N, index, armed, clampRot);
+}
+
+/**
+ * Open hatch: the plug door has been drawn out of the tube and swung 90 degrees on a hinge at its rim
+ * (side `hs`), so it stands out from the wall beside the opening; the boarding tube behind is lit and
+ * the pod's crash seat is visible against the warm cabin wall.
+ */
+function openHatch(kit, ctx, frame, u, index, clampRot, hs = -1) {
+  const hu = u + hs * (HATCH_R + 0.14); // hinge line just outside the rim collar
+  const hn = 0.08; // hinge stands just proud of the plate
+  const cn = hn + HATCH_R + 0.02; // door centre, swung out into the room
+  // hinge pin and knuckles
+  frame.cylV("metal", hu, HATCH_V, hn, 0.05, 2.2, { color: PALETTE.steel, segments: 12 });
+  for (const dv of [-0.85, 0.85]) frame.box("paintedMetal", hu, HATCH_V + dv, hn - 0.03, 0.2, 0.16, 0.18, { color: PALETTE.impDark, texel: 2 });
+  // the disc lies in the plane u = hu; its room face (hub, spokes) now faces hs*u, its pod face -hs*u
+  frame.cylU("impPanel", hu, HATCH_V, cn, HATCH_R, 0.16, { color: PALETTE.impLight, segments: 40, uvScale: [6, 1] });
+  const toFace = frame.quat(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), hs * (Math.PI / 2))); // local n -> hs*u
+  const f = (d) => hu + hs * d;
+  frame.add("paintedMetal", new THREE.TorusGeometry(HATCH_R - 0.05, 0.035, 8, 40), f(0.09), HATCH_V, cn, { quat: toFace, color: PALETTE.impDark, texel: 2 });
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    frame.box("paintedMetal", f(0.1), HATCH_V - Math.sin(a) * 0.6, cn + Math.cos(a) * 0.6, 0.04, 0.07, 0.6, { color: PALETTE.impMid, texel: 2, tilt: a });
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + clampRot;
+    frame.box("metal", f(0.12), HATCH_V - Math.sin(a) * (HATCH_R - 0.12), cn + Math.cos(a) * (HATCH_R - 0.12), 0.08, 0.1, 0.16, { color: PALETTE.steel, tilt: a });
+  }
+  frame.cylU("paintedMetal", f(0.11), HATCH_V, cn, 0.34, 0.06, { color: PALETTE.impDark, segments: 24, texel: 2 });
+  frame.add("paintedMetal", new THREE.TorusGeometry(0.3, 0.025, 8, 28), f(0.14), HATCH_V, cn, { quat: toFace, color: PALETTE.impMid, texel: 2 });
+  frame.add("crew_glass", new THREE.CircleGeometry(0.22, 24), f(0.15), HATCH_V, cn, { quat: toFace, uv: "keep" });
+  frame.add("crew_numeral", new THREE.PlaneGeometry(0.36, 0.36), f(0.085), HATCH_V + 0.64, cn, { quat: toFace, uv: "keep", uvRect: numeralRect(index + 1), color: PALETTE.impBlack });
+  // pod side of the door: rubber seal ring, pressure boss and the backs of the dog clamps
+  frame.add("rubber", new THREE.TorusGeometry(HATCH_R - 0.08, 0.04, 8, 40), f(-0.085), HATCH_V, cn, { quat: toFace, color: PALETTE.rubber });
+  frame.cylU("paintedMetal", f(-0.1), HATCH_V, cn, 0.3, 0.05, { color: PALETTE.impDark, segments: 24, texel: 2 });
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + clampRot;
+    frame.box("metal", f(-0.1), HATCH_V - Math.sin(a) * (HATCH_R - 0.2), cn + Math.cos(a) * (HATCH_R - 0.2), 0.04, 0.08, 0.12, { color: PALETTE.steel, tilt: a });
+  }
+  // lit boarding tube: dim amber ring light half-way in, warm cabin wall at the far end
+  const back = DOOR_N - 1.0;
+  frame.add("emitAmberDim", new THREE.TorusGeometry(HATCH_R + 0.02, 0.025, 8, 40), u, HATCH_V, DOOR_N - 0.4, {});
+  frame.cylN("emitWarmSoft", u, HATCH_V, back, HATCH_R + 0.06, 0.04, { segments: 40, uv: "keep" });
+  frame.add("paintedMetal", new THREE.TorusGeometry(HATCH_R - 0.02, 0.05, 8, 40), u, HATCH_V, back + 0.05, { color: PALETTE.impDark, texel: 2 });
+  // crash seat facing the door: pedestal, pan, backrest, headrest, red harness straps, status panel
+  frame.box("paintedMetal", u, HATCH_V - 0.85, back + 0.5, 0.5, 0.6, 0.4, { color: PALETTE.impDark, texel: 2 });
+  frame.box("rubber", u, HATCH_V - 0.52, back + 0.5, 0.64, 0.12, 0.54, { color: PALETTE.rubber });
+  frame.box("rubber", u, HATCH_V - 0.02, back + 0.2, 0.64, 0.9, 0.14, { color: PALETTE.rubber });
+  frame.box("rubber", u, HATCH_V + 0.58, back + 0.2, 0.32, 0.26, 0.14, { color: PALETTE.rubber });
+  for (const s of [-1, 1]) frame.box("paintedMetal", u + s * 0.17, HATCH_V + 0.02, back + 0.28, 0.07, 0.82, 0.02, { color: PALETTE.impRed, texel: 2, spin: s * 0.22 });
+  frame.box("darkGloss", u, HATCH_V + 0.86, back + 0.1, 0.5, 0.18, 0.06);
+  frame.add("impScreen2", new THREE.PlaneGeometry(0.44, 0.12), u, HATCH_V + 0.86, back + 0.135, { uv: "keep" });
+  for (let k = 0; k < 3; k++) frame.box(k < 2 ? "emitGreen" : "emitAmber", u - 0.14 + k * 0.14, HATCH_V - 0.2, back + 0.28, 0.06, 0.03, 0.01);
+  // the swung door blocks the deck beside the hatch
+  const x = hu + ctx.bounds[0][0];
+  const z0 = ctx.bounds[0][2];
+  kit.collider([x - 0.16, 0, z0], [x + 0.16, 3.0, z0 + cn + HATCH_R + 0.05], "hatchdoor");
+}
+
+/** Wheeled tool cart: drawer body, top tray with tools, a toolbox, castors. */
+function toolCart(kit, x, z, yaw, seed) {
+  const rand = rng(seed);
+  const C = propFrame(kit, x, z, yaw);
+  C.box("paintedMetal", 0, 0.5, 0, 0.8, 0.72, 0.5, { color: PALETTE.impMid, texel: 2 });
+  for (let k = 0; k < 3; k++) {
+    C.box("paintedMetal", 0, 0.28 + k * 0.2, 0.255, 0.7, 0.16, 0.01, { color: k === 1 ? PALETTE.impRed : PALETTE.impDark, texel: 2 });
+    C.box("metal", 0, 0.28 + k * 0.2, 0.27, 0.3, 0.025, 0.02, { color: PALETTE.steel });
+  }
+  C.box("paintedMetal", 0, 0.88, 0, 0.86, 0.04, 0.56, { color: PALETTE.impBlack, texel: 2 });
+  for (const s of [-1, 1]) C.box("paintedMetal", s * 0.42, 0.92, 0, 0.02, 0.06, 0.56, { color: PALETTE.impBlack, texel: 2 });
+  C.box("paintedMetal", 0.15, 0.98, -0.05, 0.42, 0.16, 0.26, { color: PALETTE.impRed, texel: 2 });
+  C.box("metal", 0.15, 1.08, -0.05, 0.16, 0.03, 0.03, { color: PALETTE.steel });
+  for (let k = 0; k < 4; k++) {
+    C.cyl("metal", -0.3 + rand() * 0.14, 0.92, -0.18 + k * 0.11, 0.012, 0.28 + rand() * 0.14, "x", { color: k % 2 ? PALETTE.steel : PALETTE.gunmetal, segments: 6 });
+  }
+  C.box("darkGloss", -0.22, 0.925, 0.16, 0.22, 0.03, 0.14);
+  C.box("emitGreen", -0.22, 0.945, 0.16, 0.05, 0.01, 0.03);
+  for (const [dx, dz] of [[-0.32, -0.18], [0.32, -0.18], [-0.32, 0.18], [0.32, 0.18]]) C.cyl("rubber", dx, 0.07, dz, 0.07, 0.05, "x", { color: PALETTE.rubber, segments: 10 });
+  C.cyl("metal", 0.44, 0.75, 0, 0.015, 0.4, "z", { color: PALETTE.steel, segments: 8 });
+  for (const dz of [-0.2, 0.2]) C.box("metal", 0.42, 0.75, dz, 0.06, 0.02, 0.02, { color: PALETTE.steel });
+  C.collider(-0.45, -0.3, 0.5, 0.3, 1.1, "cart");
+}
+
+/**
+ * One pod hatch in the zmin wall frame at u. The wall has a 2.8 x 3.0 opening here; we fill it with a
+ * recessed plate, a short tube and the round hatch door with a lit viewport, then dress the outside.
+ * `open`: door swung aside, tube lit, seat visible. `service`: hatch down, launch panel cover off.
+ */
+function podHatch(kit, ctx, frame, u, index, seed, { open = false, service = false } = {}) {
+  const rand = rng(seed);
+  const armed = service ? false : rand() < 0.85;
+  const clampRot = rand() * (Math.PI / 2);
+  // recess plate flush with the wall face, round hole
+  const plate = panelWithHoles(2.8, 3.0, 0.12, [{ x: 0, y: HATCH_V - 1.7, r: HATCH_R + 0.06 }]);
+  fitUVs(plate, 2.8, 3.0);
+  frame.add("impPanel1", plate, u, 1.7, -0.08, { color: PALETTE.impMid, uv: "keep" });
+  // tube through the wall, black inside (the open hatch shows the whole boarding tube)
+  const tubeLen = open ? 1.0 - DOOR_N : 0.7;
+  const tube = insideOut(new THREE.CylinderGeometry(HATCH_R + 0.06, HATCH_R + 0.06, tubeLen, 40, 1, true));
+  tube.rotateX(Math.PI / 2);
+  frame.add("metal", tube, u, HATCH_V, -0.02 - tubeLen / 2, { color: PALETTE.impBlack, uv: "scale", uvScale: [8, 1] });
+  // the hatch door: thick disc set 0.45 m back, with a hub, spokes, dog clamps and a rim ring
+  if (open) openHatch(kit, ctx, frame, u, index, clampRot);
+  else closedDoor(frame, u, index, armed, clampRot);
+  // hatch rim on the wall face: thin hazard ring and a cast collar with bolts
+  frame.add("hazard", new THREE.TorusGeometry(HATCH_R + 0.145, 0.035, 8, 48), u, HATCH_V, 0.02, { uv: "scale", uvScale: [28, 1] });
   frame.add("paintedMetal", new THREE.TorusGeometry(HATCH_R + 0.06, 0.05, 8, 48), u, HATCH_V, 0.0, { color: PALETTE.impDark, texel: 2 });
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2 + Math.PI / 12;
@@ -76,27 +173,45 @@ function podHatch(kit, ctx, frame, u, index, seed) {
   wallGrime(kit, ctx, "zmin", u, 0.45, 1.6, 0.5);
   // launch panel to the right of the hatch (between hatches): tilted console face on a wall box
   const pu = u + 2.0;
+  const x = u + ctx.bounds[0][0];
+  const z0 = ctx.bounds[0][2];
   frame.box("paintedMetal", pu, 1.35, 0.1, 0.72, 1.3, 0.2, { color: PALETTE.impDark, texel: 2 });
-  frame.box("paintedMetal", pu, 1.35, 0.21, 0.66, 1.22, 0.02, { color: PALETTE.impMid, texel: 2 });
-  frame.box("darkGloss", pu, 1.78, 0.225, 0.54, 0.3, 0.01);
-  frame.add(armed ? "impScreen2" : "impScreen3", new THREE.PlaneGeometry(0.5, 0.26), pu, 1.78, 0.232, { uv: "keep" });
-  // guarded launch button (red mushroom under a cage), arming key and a lever
-  frame.cylN("paintedMetal", pu - 0.15, 1.35, 0.25, 0.1, 0.06, { color: PALETTE.impBlack, segments: 16, texel: 2 });
-  frame.cylN(armed ? "emitRed" : "rubber", pu - 0.15, 1.35, 0.285, 0.07, 0.03, { segments: 16, color: PALETTE.rubber });
-  for (const s of [-1, 1]) frame.box("metal", pu - 0.15 + s * 0.11, 1.35, 0.3, 0.02, 0.24, 0.12, { color: PALETTE.steel });
-  frame.box("metal", pu - 0.15, 1.35 + 0.12, 0.3, 0.24, 0.02, 0.12, { color: PALETTE.steel });
-  frame.box("paintedMetal", pu + 0.17, 1.4, 0.24, 0.18, 0.28, 0.04, { color: PALETTE.impBlack, texel: 2 });
-  frame.box("metal", pu + 0.17, 1.46, 0.3, 0.03, 0.14, 0.08, { color: PALETTE.steel, tilt: -0.5 });
-  frame.box("rubber", pu + 0.17, 1.52, 0.33, 0.05, 0.05, 0.05, { color: PALETTE.impRed });
-  for (let k = 0; k < 4; k++) frame.box(k < (armed ? 3 : 1) ? "emitGreen" : "emitRed", pu - 0.24 + k * 0.16, 1.0, 0.228, 0.06, 0.03, 0.006);
-  frame.add("crew_sign", new THREE.PlaneGeometry(0.5, 0.125), pu, 0.86, 0.228, { uv: "keep", uvRect: signRect(SIGN.ESCAPE) });
+  if (service) {
+    // cover off: black cavity with boards, lamps and loose cables; the cover leans on the wall beside it
+    frame.box("paintedMetal", pu, 1.35, 0.13, 0.62, 1.18, 0.02, { color: PALETTE.impBlack, texel: 2 });
+    frame.box("leds", pu - 0.12, 1.55, 0.145, 0.28, 0.6, 0.01, { uv: "keep" });
+    frame.box("leds", pu + 0.16, 1.0, 0.145, 0.2, 0.36, 0.01, { uv: "keep" });
+    for (let k = 0; k < 3; k++) frame.box(k === 1 ? "emitRed" : "emitGreen", pu + 0.1 + k * 0.08, 1.72, 0.15, 0.04, 0.04, 0.01);
+    for (let k = 0; k < 3; k++) frame.box("paintedMetal", pu - 0.2 + k * 0.2, 0.84, 0.16, 0.12, 0.08, 0.04, { color: PALETTE.gunmetal, texel: 2 });
+    const a = frame.pos(pu - 0.2, 1.9, 0.17);
+    const b = frame.pos(pu + 0.22, 0.86, 0.26);
+    cableDroop(kit, [a.x, a.y, a.z], [b.x, b.y, b.z], 0.2, 0.012, PALETTE.impRed);
+    const c = frame.pos(pu + 0.12, 1.9, 0.17);
+    const d = frame.pos(pu + 0.62, 0.12, 0.5);
+    cableDroop(kit, [c.x, c.y, c.z], [d.x, d.y, d.z], 0.15, 0.012, PALETTE.rubber);
+    frame.box("paintedMetal", pu + 0.78, 0.58, 0.22, 0.66, 1.22, 0.02, { color: PALETTE.impMid, texel: 2, tilt: -0.34 });
+    frame.box("darkGloss", pu + 0.78, 0.99, 0.09, 0.54, 0.3, 0.01, { tilt: -0.34 });
+    toolCart(kit, x + 2.3, z0 + 1.05, 0.4, seed + 5);
+  } else {
+    frame.box("paintedMetal", pu, 1.35, 0.21, 0.66, 1.22, 0.02, { color: PALETTE.impMid, texel: 2 });
+    frame.box("darkGloss", pu, 1.78, 0.225, 0.54, 0.3, 0.01);
+    frame.add(armed ? "impScreen2" : "impScreen3", new THREE.PlaneGeometry(0.5, 0.26), pu, 1.78, 0.232, { uv: "keep" });
+    // guarded launch button (red mushroom under a cage), arming key and a lever
+    frame.cylN("paintedMetal", pu - 0.15, 1.35, 0.25, 0.1, 0.06, { color: PALETTE.impBlack, segments: 16, texel: 2 });
+    frame.cylN(armed ? "emitRed" : "rubber", pu - 0.15, 1.35, 0.285, 0.07, 0.03, { segments: 16, color: PALETTE.rubber });
+    for (const s of [-1, 1]) frame.box("metal", pu - 0.15 + s * 0.11, 1.35, 0.3, 0.02, 0.24, 0.12, { color: PALETTE.steel });
+    frame.box("metal", pu - 0.15, 1.35 + 0.12, 0.3, 0.24, 0.02, 0.12, { color: PALETTE.steel });
+    frame.box("paintedMetal", pu + 0.17, 1.4, 0.24, 0.18, 0.28, 0.04, { color: PALETTE.impBlack, texel: 2 });
+    frame.box("metal", pu + 0.17, 1.46, 0.3, 0.03, 0.14, 0.08, { color: PALETTE.steel, tilt: -0.5 });
+    frame.box("rubber", pu + 0.17, 1.52, 0.33, 0.05, 0.05, 0.05, { color: PALETTE.impRed });
+    for (let k = 0; k < 4; k++) frame.box(k < (armed ? 3 : 1) ? "emitGreen" : "emitRed", pu - 0.24 + k * 0.16, 1.0, 0.228, 0.06, 0.03, 0.006);
+    frame.add("crew_sign", new THREE.PlaneGeometry(0.5, 0.125), pu, 0.86, 0.228, { uv: "keep", uvRect: signRect(SIGN.ESCAPE) });
+  }
   intercom(frame, pu, 2.35, 0.0);
   // conduit from the panel up to the ceiling tray
   frame.box("paintedMetal", pu, 2.85, 0.04, 0.1, 1.6, 0.06, { color: PALETTE.impBlack, texel: 2 });
   frame.box("paintedMetal", pu, 2.35 + 0.2, 0.07, 0.14, 0.06, 0.1, { color: PALETTE.gunmetal, texel: 2 });
   // threshold: hazard pad and a pod-side kick plate; the pad doubles as the hatch's walk-up mark
-  const x = u + ctx.bounds[0][0];
-  const z0 = ctx.bounds[0][2];
   kit.boxMM("hazard", [x - 1.35, 0, z0 + 0.1], [x + 1.35, 0.012, z0 + 0.35], { texel: 4 });
   kit.boxMM("paintedMetal", [x - 1.4, 0, z0 + 0.35], [x + 1.4, 0.008, z0 + 1.6], { color: PALETTE.impBlack, texel: 2 });
   // grime around the threshold
@@ -104,8 +219,8 @@ function podHatch(kit, ctx, frame, u, index, seed) {
   return armed;
 }
 
-/** Floor chevron pointing along `dir` ([dx,dz] unit), lit amber inlay in a dark channel. */
-function chevron(kit, x, z, dir, size = 0.9, mat = "emitAmber") {
+/** Floor chevron pointing along `dir` ([dx,dz] unit), dim amber inlay in a dark channel. */
+function chevron(kit, x, z, dir, size = 0.9, mat = "emitAmberDim") {
   const yaw = Math.atan2(dir[0], dir[1]); // 0 → points toward +z
   const F = propFrame(kit, x, z, yaw);
   // arms run from the tip (local +z) back to the outer corners (±x, -z)
@@ -219,12 +334,11 @@ export function buildEscape(kit, ctx) {
   {
     const seg = wallSegment(ctx.bounds, "zmin");
     const { frame } = wallFrame(kit, seg.from, seg.to, 0);
-    HATCH_X.forEach((x, i) => podHatch(kit, ctx, frame, x - min[0], i, ctx.seed * 3 + i * 17));
-    // the big lit sign over the middle, cable tray along the top of the wall, pipes above it
+    // pod 2 stands open for boarding drill; pod 4 is down with its launch panel cover off
+    HATCH_X.forEach((x, i) => podHatch(kit, ctx, frame, x - min[0], i, ctx.seed * 3 + i * 17, { open: i === 1, service: i === 3 }));
+    // the big lit sign over the middle (no glare bars), cable tray along the top of the wall, pipes above it
     frame.add("crew_signLit", new THREE.PlaneGeometry(3.0, 0.75), 14, 3.55, 0.03, { uv: "keep", uvRect: signRect(SIGN.ESCAPE) });
     frame.box("paintedMetal", 14, 3.55, 0.02, 3.2, 0.9, 0.03, { color: PALETTE.impBlack, texel: 2 });
-    frame.box("emitAmber", 14, 3.08, 0.03, 3.2, 0.02, 0.02);
-    frame.box("emitAmber", 14, 3.98, 0.03, 3.2, 0.02, 0.02);
   }
   cableTray(kit, ctx, "zmin", 0.4, 27.6, 3.85);
   pipeRun(kit, [[min[0] + 0.3, H - 0.3, min[2] + 0.6], [max[0] - 0.3, H - 0.3, min[2] + 0.6]], 0.09, PALETTE.impMid);
@@ -237,14 +351,17 @@ export function buildEscape(kit, ctx) {
   for (const s of [-1, 1]) {
     for (let x = 2.2; x < 12; x += 2.4) chevron(kit, s * x, -82.0, [s, 0], 0.8);
   }
-  // muster boxes: a painted outline in front of each hatch where its crew assembles
+  // muster boxes: a thin white painted outline in front of each hatch where its crew assembles
   for (const x of HATCH_X) {
     const [x0, x1, z0, z1] = [x - 1.3, x + 1.3, -84.3, -82.9];
-    kit.boxMM("hazard", [x0, 0, z0], [x1, 0.01, z0 + 0.1], { texel: 4 });
-    kit.boxMM("hazard", [x0, 0, z1 - 0.1], [x1, 0.01, z1], { texel: 4 });
-    kit.boxMM("hazard", [x0, 0, z0], [x0 + 0.1, 0.01, z1], { texel: 4 });
-    kit.boxMM("hazard", [x1 - 0.1, 0, z0], [x1, 0.01, z1], { texel: 4 });
+    const line = (a, b) => kit.boxMM("paintedMetal", a, b, { color: PALETTE.impWhite, texel: 2 });
+    line([x0, 0, z0], [x1, 0.008, z0 + 0.05]);
+    line([x0, 0, z1 - 0.05], [x1, 0.008, z1]);
+    line([x0, 0, z0], [x0 + 0.05, 0.008, z1]);
+    line([x1 - 0.05, 0, z0], [x1, 0.008, z1]);
   }
+  // queue rails either side of the evacuation lane, open at both ends
+  for (const s of [-1, 1]) railing(kit, s * 2.0, -80.4, s * 2.0, -74.8, 0, { h: 1.0 });
   // lane edges: hazard stripes along the centre lane and the cross lane
   kit.boxMM("hazard", [-1.5, 0, -82.7], [-1.32, 0.01, -72.0], { texel: 4 });
   kit.boxMM("hazard", [1.32, 0, -82.7], [1.5, 0.01, -72.0], { texel: 4 });
