@@ -5,6 +5,22 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 
 ## Unreleased
 
+## iter06 — wave 2 builders and lead fixes (deployed as 32aab3d85421-20260904T180514Z)
+- Lighting: CSM sun carries physical irradiance (sun:sky 5:1 on a horizontal white; was 1:1 with 2.5x the
+  blue), saturated zenith, warm haze band, neutral overcast, ground-bounce term in the IBL probe; bloom
+  threshold raised; per-material IBL hack removed. Water reflectances re-tuned to the neutral irradiance.
+- Aircraft loop 2: static parts merged per material (119 meshes / 374 calls -> 25 / 75), cockpit eye and
+  slim frame with headliner, registration on the rear fuselage, propeller blur disc + visible spinner,
+  night lights driven by a single emissive mesh, exhaust/oil/seam wear, closed-section propeller blades.
+- Composition: Isla Garza re-authored (990 x 630 m, elongated along the view, spit, lagoon) and aerial-a
+  camera placed so horizon 0.249, island bbox IoU 0.944, bridge start (0.40, 0.51), aircraft (0.80, 0.74)
+  match the reference measurements; reference boat channel routed into the lower-left water.
+- Wakes: wake map v-axis mismatch fixed (wakes were mirrored about the camera and never under their
+  boats), 2048 px wake map, continuous foam core with fainter V arms.
+- Shadows/performance: correct frustum culling for city/vegetation tiles (world-space spheres were being
+  re-transformed per instance), props/lamps chunked and batched, boats in one BatchedMesh, per-cascade
+  caster routing; aerial-a 1407 calls / 7.0 M tris (iter04) -> 428 / 1.31 M including shadow passes.
+
 ## iter05 — wave 1 builders (five isolated worktrees, merged after review)
 - Aircraft: cabin built as an inset of the fuselage loft (no interior poke-through), two-shell physically
   based glass (alpha 0.12, Fresnel reflection, interior visible), correct registration on both sides,
@@ -54,3 +70,4 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 | build id | gh-pages commit | live link | notes |
 |---|---|---|---|
 | 03aacefc4377-20260904T101257Z | 7557979bb140b196590ad9bb5f77ca49ef23e291 | https://raw.githack.com/ilikevibecoding/edwin4dawin/gh-pages/play.html | verified: build id matched, loaded in 9 s, flew |
+| 32aab3d85421-20260904T180514Z | c3a351f8276056fc04dd89dc766a8c5550d032a6 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/c3a351f8276056fc04dd89dc766a8c5550d032a6/play.html | verified: build id matched, loaded in 12.4 s, water takeoff to 67 m in 30 s (deterministic, identical to local), no console errors; 177 draw calls / 0.79 M tris in the water-landing view |

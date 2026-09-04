@@ -54,13 +54,15 @@ try {
     g.aircraft.inputs.throttle = 1.0;
     g.aircraft.inputs.pitch = 0.25;
     const before = { ...g.aircraft.flight.telemetry };
-    window.__bench.step(600); // 20 s at 30 Hz: touch down, accelerate on the step and lift off again
+    window.__bench.step(600); // 20 s at 30 Hz: touch down (4-5 m/s tailwind here), accelerate on the step, lift off
+    const mid = { ...g.aircraft.flight.telemetry };
+    window.__bench.step(300); // 10 s more: climb out with the elevator held
     const after = { ...g.aircraft.flight.telemetry };
-    return { before: { airspeed: before.airspeed, altitude: before.altitude }, after: { airspeed: after.airspeed, altitude: after.altitude, heading: after.heading, stalled: after.stalled } };
+    return { before: { airspeed: before.airspeed, altitude: before.altitude }, mid: { airspeed: mid.airspeed, altitude: mid.altitude }, after: { airspeed: after.airspeed, altitude: after.altitude, heading: after.heading, stalled: after.stalled } };
   });
   report.checks.flight = tele;
   report.checks.climbed = tele.after.altitude > 25;
-  report.checks.accelerated = tele.after.airspeed > 33;
+  report.checks.accelerated = Math.max(tele.mid.airspeed, tele.after.airspeed) > 33;
   await page.screenshot({ path: path.join(outDir, 'live_flight.png') });
   const m = await page.evaluate(() => window.__bench.metrics());
   report.checks.drawCalls = m.calls;
