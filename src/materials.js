@@ -235,11 +235,13 @@ function addImperialMaterials(mats, std) {
   const holoTex = makeHoloGrid(256, 157);
 
   // --- exterior
-  // armour plating; vertex colour carries per-plate paint variation
-  mats.hull = std(hullTex, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.5, fog: false });
-  mats.hull2 = std(hullTex2, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.5, fog: false });
-  // recessed base surface under the plates, trench walls, engine housings
-  mats.hullDark = std(hullTex, { normalScale: new THREE.Vector2(0.6, 0.6), envMapIntensity: 0.3, roughness: 1.2, fog: false });
+  // armour plating; vertex colour carries per-plate paint variation. Matte painted finish: the maps
+  // hold roughness ~0.58 / metalness ~0.22, scaled here to ≥ 0.7 / ≤ 0.35, and the environment
+  // reflection is nearly off (metallic faces picked up the sun + room probe as a white skyline).
+  mats.hull = std(hullTex, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.18, roughness: 1.3, metalness: 0.9, fog: false });
+  mats.hull2 = std(hullTex2, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.18, roughness: 1.3, metalness: 0.9, fog: false });
+  // recessed base surface under the plates, stern face, engine housings, detail boxes
+  mats.hullDark = std(hullTex, { normalScale: new THREE.Vector2(0.6, 0.6), envMapIntensity: 0.15, roughness: 1.4, metalness: 0.8, fog: false });
   // superstructure faces: dark plating with thousands of lit windows
   mats.city = new THREE.MeshStandardMaterial({
     map: hullTex.map,
@@ -252,9 +254,9 @@ function addImperialMaterials(mats, std) {
     emissiveIntensity: 1.6,
     vertexColors: true,
     color: 0xffffff,
-    roughness: 1,
-    metalness: 1,
-    envMapIntensity: 0.4,
+    roughness: 1.3,
+    metalness: 0.9,
+    envMapIntensity: 0.15,
     fog: false,
   });
   mats.cityDense = mats.city.clone();

@@ -3,11 +3,99 @@
 // a finer sub-plate cut than the shared hull plate, so plates next to each other do not repeat the
 // same tile.
 import * as THREE from "three";
-import { TexGen, mulberry32, fbm, vnoise, vnoise2 } from "../textures.js";
+import { TexGen, mulberry32, fbm, vnoise, vnoise2, makeCanvas, toTexture } from "../textures.js";
 
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (t) => t * t * (3 - 2 * t);
+
+/** Metres covered by one trench-wall tile (16 panels of 3 m). */
+export const TRENCH_TILE = 48;
+
+/**
+ * Trench inner wall: 3 m panels in staggered rows with recessed seams, every third or so set back and
+ * darker, vertical grime, and sparse 0.8 m window strips (about 5 % of the panels lit) on an emissive
+ * map. Base tone is a dark warm-neutral grey so the wall reads as a wall behind the machinery, not a
+ * void. Tile = TRENCH_TILE metres.
+ */
+export function makeExtTrenchWall(size = 512, seed = 223) {
+  const t = new TexGen(size, size);
+  const rand = mulberry32(seed);
+  const n = TRENCH_TILE / 3; // panels per tile
+  const rowOff = [];
+  for (let r = 0; r < n; r++) rowOff.push(rand() < 0.5 ? 0 : 0.5);
+  t.each((u, v, i) => {
+    const row = Math.min(n - 1, Math.floor(v * n));
+    const su = u * n + rowOff[row];
+    const col = Math.floor(su) % n;
+    const uu = su - Math.floor(su);
+    const vv = v * n - row;
+    const ed = Math.min(uu, 1 - uu, vv, 1 - vv);
+    const batch = (vnoise(col * 0.37 + 0.11, row * 0.53 + 0.29, 3, seed + 9) - 0.5) * 0.07;
+    let lum = 0.31 + batch + (fbm(u, v, { octaves: 4, freq: 6, seed }) - 0.5) * 0.04;
+    let rough = 0.84;
+    let hgt = 0.55;
+    const seam = 0.06;
+    if (ed < seam) {
+      const k = smooth(1 - ed / seam);
+      hgt -= 0.36 * k;
+      lum *= 1 - 0.45 * k;
+      rough += 0.1 * k;
+    } else if (vnoise(col * 0.71 + 0.13, row * 0.37 + 0.41, 5, seed + 3) > 0.66) {
+      // set-back panel
+      hgt -= 0.2;
+      lum *= 0.8;
+    }
+    // vertical grime runs
+    const streak = fbm(u * 3, v * 0.25, { octaves: 3, freq: 9, seed: seed + 5 });
+    lum *= 1 - 0.14 * smooth(clamp01((streak - 0.55) * 3));
+    t.setColor(i, lum * 0.97, lum, lum * 1.06);
+    t.rough[i] = clamp01(rough);
+    t.metal[i] = 0.08;
+    t.height[i] = hgt;
+  });
+  const set = t.bake({ normalStrength: 2.0 });
+  set.metalnessMap = set.roughnessMap;
+  // emissive window strips: 0.8 × 0.5 m panes in short runs on ~5 % of the panels
+  const ec = makeCanvas(size, size);
+  const ctx = ec.getContext("2d");
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, size, size);
+  const ppm = size / TRENCH_TILE;
+  const cellPx = size / n;
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (rand() > 0.05) continue;
+      const x0 = ((((c - rowOff[r]) % n) + n) % n) * cellPx;
+      const y = r * cellPx + cellPx * 0.42;
+      const run = 1 + Math.floor(rand() * 3);
+      const k = rand();
+      ctx.fillStyle = k < 0.8 ? "#ffe2b8" : k < 0.93 ? "#9fc8ff" : "#ffb070";
+      for (let w = 0; w < run; w++) ctx.fillRect(x0 + (0.35 + w * 1.15) * ppm, y, 0.8 * ppm, 0.5 * ppm);
+    }
+  }
+  set.emissiveMap = toTexture(ec, { srgb: true, anisotropy: 4 });
+  return set;
+}
+
+/**
+ * Engine exhaust disc: radial gradient, desaturated bright core → mid blue → transparent rim, so the
+ * bells read as a hot throat with falloff instead of a flat saturated disc.
+ */
+export function makeExtEngineGlow(size = 256) {
+  const c = makeCanvas(size, size);
+  const ctx = c.getContext("2d");
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  // #e0f4ff core → #4a8dff mid → transparent, each pulled 30 % toward grey
+  g.addColorStop(0, "rgba(232,246,255,1)");
+  g.addColorStop(0.22, "rgba(190,222,255,0.98)");
+  g.addColorStop(0.5, "rgba(112,160,240,0.85)");
+  g.addColorStop(0.78, "rgba(80,120,200,0.4)");
+  g.addColorStop(1, "rgba(60,90,160,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return toTexture(c, { srgb: true, wrap: false });
+}
 
 /** Worn armour plate: finer irregular sub-plates, scratches, soot streaks trailing aft (+v), rivets. */
 export function makeExtHullWorn(size = 512, seed = 211) {
@@ -144,6 +232,11 @@ export function ensureExtMaterials(materials) {
   materials.ext_window = materials.exteriorLight.clone();
   materials.ext_window.emissiveIntensity = 1.4;
   materials.ext_window.color = new THREE.Color(0x0a0c10);
+  // docking-bay rim: exteriorLight at 0.6× so the bay reads as a lit opening, not a glowing frame
+  materials.ext_dockLight = materials.exteriorLight.clone();
+  materials.ext_dockLight.emissiveIntensity = 1.8;
+  // painted-armour finish shared with the hull sets: matte (roughness ≥ 0.7 after the map, metalness
+  // ≤ 0.35 after the map) and almost no environment reflection
   const worn = makeExtHullWorn(512, 211);
   materials.ext_hullWorn = new THREE.MeshStandardMaterial({
     map: worn.map,
@@ -151,12 +244,33 @@ export function ensureExtMaterials(materials) {
     metalnessMap: worn.metalnessMap,
     normalMap: worn.normalMap,
     normalScale: new THREE.Vector2(1.0, 1.0),
-    roughness: 1,
-    metalness: 1,
+    roughness: 1.3,
+    metalness: 0.9,
     vertexColors: true,
     color: 0xffffff,
-    envMapIntensity: 0.5,
+    envMapIntensity: 0.18,
     fog: false,
   });
+  const wall = makeExtTrenchWall(512, 223);
+  materials.ext_trenchWall = new THREE.MeshStandardMaterial({
+    map: wall.map,
+    roughnessMap: wall.roughnessMap,
+    metalnessMap: wall.metalnessMap,
+    normalMap: wall.normalMap,
+    normalScale: new THREE.Vector2(0.8, 0.8),
+    roughness: 1,
+    metalness: 1,
+    emissive: 0xffffff,
+    emissiveMap: wall.emissiveMap,
+    emissiveIntensity: 1.3,
+    color: 0xffffff,
+    envMapIntensity: 0.15,
+    fog: false,
+  });
+  // engine exhaust: gradient disc recessed in the throat (normal blending so the dark bell shows
+  // through the rim) + a faint additive bloom disc just outside the mouth
+  const glowTex = makeExtEngineGlow(256);
+  materials.ext_engineGlow = new THREE.MeshBasicMaterial({ map: glowTex, color: new THREE.Color(1.6, 1.6, 1.6), transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: true });
+  materials.ext_engineBloom = new THREE.MeshBasicMaterial({ map: glowTex, color: new THREE.Color("#6f9fe6"), transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
   return materials;
 }

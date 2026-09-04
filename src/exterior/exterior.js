@@ -8,9 +8,14 @@ import { buildSuperstructure } from "./superstructure.js";
 import { buildEngines } from "./engines.js";
 import { TOWER, HANGAR, HULL, ENGINES } from "./dims.js";
 
-// lod 0 (fine detail: greebles, hatches, pipes, lights) / lod 1 (plates, grooves) per hull chunk;
-// `fine` toggles the superstructure / engine / detail fine groups by distance to their centre.
-export const LOD_DISTANCES = { greebles: 1700, plates: 4200, fine: 2000 };
+// lod 0 (fine detail: greebles, hatches, pipes, lights) / lod 1 (plates, grooves) / lod 2 (the far
+// skin that stands in for the plates) / lod 3 (coarse landmarks: cluster blocks, galleries, soot
+// fans) per hull chunk; `fine` toggles the superstructure / engine / detail fine groups by distance
+// to their centre. Fine greebles go at 1100 m: beyond that they only stipple the plating into a sandy
+// texture, while the landmarks stay to 1800 m so the clusters still read as knots at the medium
+// station; the plates go at 2000 m for the same reason (the far station sits 2.2–3.3 km from the
+// chunks and sees the smooth patchwork skin instead).
+export const LOD_DISTANCES = { greebles: 1100, landmarks: 1800, plates: 2000, fine: 2000 };
 
 export function buildExterior(scene, materials) {
   const group = new THREE.Group();
@@ -60,7 +65,9 @@ export function buildExterior(scene, materials) {
   const stations = {
     exterior_far: { pos: [-1750, 680, -1950], look: [0, 60, 0] },
     exterior_medium: { pos: [-1100, 520, 300], look: [0, 60, 200] },
-    exterior_front: { pos: [220, 190, -1550], look: [0, 40, 0] },
+    // front: 40 % closer than the old [220, 190, -1550] on the same ray (the ship filled ~15 % of the
+    // frame); the look point sits forward of midships so the bow tip 130 m ahead stays in frame
+    exterior_front: { pos: [132, 130, -930], look: [0, 20, -250] },
     exterior_close: { pos: [-420, 260, 560], look: [-80, 120, 520] },
     exterior_tower: { pos: [-260, 240, 330], look: [0, 185, 620] },
     exterior_bridge: { pos: [40, 196, 470], look: [0, 184, 592] },
@@ -110,9 +117,12 @@ export function buildExterior(scene, materials) {
       for (const cg of chunkGroups) {
         tmp.set(0, 0, cg.userData.centerZ);
         const d = tmp.distanceTo(cameraPos);
+        const plates = d < LOD_DISTANCES.plates * scale;
         for (const child of cg.children) {
           if (child.userData.lod === 0) set(child, d < LOD_DISTANCES.greebles * scale);
-          else if (child.userData.lod === 1) set(child, d < LOD_DISTANCES.plates * scale);
+          else if (child.userData.lod === 1) set(child, plates);
+          else if (child.userData.lod === 2) set(child, !plates);
+          else if (child.userData.lod === 3) set(child, d < LOD_DISTANCES.landmarks * scale);
         }
       }
       for (const f of fineGroups) set(f.group, f.center.distanceTo(cameraPos) < LOD_DISTANCES.fine * scale);
@@ -145,7 +155,9 @@ export function buildExterior(scene, materials) {
       const inside = mode === "interior";
       fill.intensity = inside ? 0.12 : 0.55;
       hemi.intensity = inside ? 0.08 : 0.35;
-      sun.intensity = inside ? 2.0 : 2.1;
+      // from a room the sunlit faces of the city ahead are seen head-on; a little less sun keeps that
+      // skyline grey through the bridge / observation glass
+      sun.intensity = inside ? 1.6 : 2.1;
     },
     dims: { TOWER, HANGAR, HULL, ENGINES },
   };
