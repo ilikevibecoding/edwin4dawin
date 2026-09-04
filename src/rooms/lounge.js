@@ -137,6 +137,27 @@ export function buildLounge(kit, ctx, room) {
   }
   kit.cyl("impGloss", 3.95, 1.16, 1.5, 0.05, 0.2, "y", { segments: 10 });
   kit.cyl(accentKey, 3.95, 1.27, 1.5, 0.02, 0.02, "y", { segments: 8 });
+  // two more groups on the entry axis so the floor by the door is not bare: a round table with four
+  // stools N of the axis, and a lounge group (two facing benches over a low table) S of it; the walk
+  // from the door to the bar weaves between them
+  const g1X = -8.4;
+  const g1Z = -1.5;
+  roundTable(kit, g1X, g1Z, 0.62, { h: 0.76, accentKey });
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    stool(kit, g1X + Math.cos(a) * 1.05, g1Z + Math.sin(a) * 1.05, { h: 0.5, pad: "fabric", padColor: i % 2 ? PAD : PAD_ALT });
+  }
+  kit.cyl("impMetal", g1X, 0.002, g1Z, 1.55, 0.004, "y", { color: PALETTE.impCharcoal, segments: 40 });
+  for (const [dx, dz] of [[-0.25, 0.15], [0.2, -0.2], [0.05, 0.3]]) kit.cyl("impMetal", g1X + dx, 0.822, g1Z + dz, 0.04, 0.09, "y", { color: PALETTE.impGrey, segments: 10 });
+  const g2X = -3.6;
+  const g2Z = 1.7;
+  table(kit, g2X, g2Z, 1.4, 0.7, 0, { h: 0.46, accentKey });
+  bench(kit, g2X, g2Z - 1.15, 2.2, Math.PI, { pad: "fabric", padColor: PAD, accentKey });
+  bench(kit, g2X, g2Z + 1.15, 2.2, 0, { pad: "fabric", padColor: PAD, accentKey });
+  kit.boxMM("fabric", [g2X - 1.6, 0.002, g2Z - 1.8], [g2X + 1.6, 0.014, g2Z + 1.8], { color: CARPET, texel: 1.5 });
+  kit.cyl("impMetal", g2X - 0.3, 0.52, g2Z + 0.1, 0.04, 0.09, "y", { color: PALETTE.impGrey, segments: 10 });
+  kit.cyl("impGloss", g2X + 0.35, 0.56, g2Z - 0.15, 0.05, 0.2, "y", { segments: 10 });
+  kit.cyl(accentKey, g2X + 0.35, 0.67, g2Z - 0.15, 0.02, 0.02, "y", { segments: 8 });
 
   // --- W wall: plaques either side of the door, sconces, unit glyphs over the door
   for (const s of [-1, 1]) {
@@ -174,6 +195,8 @@ export function buildLounge(kit, ctx, room) {
   pendant(kit, 0.6, -3.9, h, 0.24, accentKey);
   pendant(kit, 2.3, -2.3, h, 0.24, accentKey);
   pendant(kit, 3.8, 1.6, h, 0.22, accentKey);
+  pendant(kit, g1X, g1Z, h, 0.3, accentKey);
+  pendant(kit, g2X, g2Z, h, 0.26, accentKey);
   for (const s of [-1, 1]) pendant(kit, s * 1.75, 5.6, h, 0.26, accentKey);
 
   // --- animation: the rotating game piece and the course marker sliding along the chart
@@ -187,13 +210,13 @@ export function buildLounge(kit, ctx, room) {
 
   // --- lights (8): amber keys over the bar and its lit under-counter, warm keys over the clusters and
   // the booth rows, a cooler key on the chart seating, blue holo glow under the game table
-  kit.light({ type: "point", pos: [9.6, h - 0.7, 0], color: 0xffbf80, intensity: lux(h - 0.7, 2.8), distance: 12, priority: 0.5 });
+  kit.light({ type: "point", pos: [9.6, h - 0.7, 0], color: 0xffbf80, intensity: lux(h - 0.7, 3.6), distance: 13, priority: 0.5 });
   kit.light({ type: "point", pos: [bar.frontX - 0.7, 0.5, 0], color: 0xffb56b, intensity: 4.5, distance: 9, priority: 0.47 });
-  kit.light({ type: "point", pos: [1.5, h - 0.8, -3.0], color: 0xffd0a0, intensity: lux(h - 0.8, 3.2), distance: 13, priority: 0.48 });
-  kit.light({ type: "point", pos: [-7.5, h - 1.0, -7.0], color: 0xffc898, intensity: lux(h - 1.0, 2.3), distance: 12, priority: 0.42 });
-  kit.light({ type: "point", pos: [1.5, h - 1.0, -7.0], color: 0xffc898, intensity: lux(h - 1.0, 2.3), distance: 12, priority: 0.41 });
-  kit.light({ type: "point", pos: [0, h - 1.0, 5.5], color: 0xf0e6dc, intensity: lux(h - 1.0, 2.3), distance: 11, priority: 0.44 });
-  kit.light({ type: "point", pos: [-9.0, h - 1.0, 0], color: 0xffd0a0, intensity: lux(h - 1.0, 2.6), distance: 12, priority: 0.4 });
+  kit.light({ type: "point", pos: [1.5, h - 0.8, -3.0], color: 0xffd0a0, intensity: lux(h - 0.8, 5.2), distance: 14, priority: 0.48 });
+  kit.light({ type: "point", pos: [-7.5, h - 1.0, -7.0], color: 0xffc898, intensity: lux(h - 1.0, 4.2), distance: 13, priority: 0.42 });
+  kit.light({ type: "point", pos: [1.5, h - 1.0, -7.0], color: 0xffc898, intensity: lux(h - 1.0, 4.2), distance: 13, priority: 0.41 });
+  kit.light({ type: "point", pos: [0, h - 1.0, 5.5], color: 0xf0e6dc, intensity: lux(h - 1.0, 4.2), distance: 12, priority: 0.44 });
+  kit.light({ type: "point", pos: [-7.0, h - 0.9, 0.2], color: 0xffd0a0, intensity: lux(h - 0.9, 5.2), distance: 14, priority: 0.4 });
   kit.light({ type: "point", pos: [gameX, 1.5, gameZ], color: 0x5fa8ff, intensity: 2.2, distance: 5, priority: 0.3 });
 }
 
