@@ -109,7 +109,9 @@ export class BuildingBatches {
   /** tile grid origin chosen so the downtown district falls inside a single tile */
   private readonly tileOx = -3400;
   private readonly tileOz = -4520;
-  private readonly tiles: { mesh: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number }[] = [];
+  /** `lodR` is the horizontal half-diagonal of the tile (the shadow-distance metric); `center`, `r`
+   *  and `height` bound the buildings in world space and are only used for culling. */
+  private readonly tiles: { mesh: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodR: number }[] = [];
   shadowDistance = 3200;
 
   constructor(nightUniform: THREE.IUniform<number>) {
@@ -163,7 +165,8 @@ export class BuildingBatches {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       this.group.add(mesh);
-      this.tiles.push({ mesh, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y });
+      const lodR = Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2;
+      this.tiles.push({ mesh, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodR });
     }
   }
 
@@ -172,7 +175,7 @@ export class BuildingBatches {
    *  Tiles that only cast leave the camera layer so the main pass skips them. */
   updateLod(camX: number, camZ: number, cull: ViewCull): void {
     for (const t of this.tiles) {
-      const d = Math.max(0, Math.hypot(t.center.x - camX, t.center.z - camZ) - t.r);
+      const d = Math.max(0, Math.hypot(t.center.x - camX, t.center.z - camZ) - t.lodR);
       const inView = cull.boxInView(t.box);
       const cast = d < this.shadowDistance && cull.casterInView(t.center, t.r, t.height);
       t.mesh.castShadow = cast;

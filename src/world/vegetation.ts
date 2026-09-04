@@ -501,7 +501,9 @@ type Archetype = 0 | 1 | 2 | 3 | 4;
 
 interface Plant { x: number; y: number; z: number; s: number; rot: number; tint: THREE.Color; arche: Archetype; seed: number; squash: number; trunk: number; }
 
-interface Tile { near: THREE.InstancedMesh; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; n: number; d: number; }
+/** `lodCenter` / `lodR` describe the planted footprint (the LOD distance metric); `box`, `center`, `r`
+ *  and `height` bound the drawn plants and cards and are only used for culling. */
+interface Tile { near: THREE.InstancedMesh; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; }
 
 const TILE = 900;
 const NEAR_DISTANCE = 650;
@@ -706,9 +708,12 @@ export class Vegetation {
       far.castShadow = false;
       far.customDepthMaterial = cardDepth;
       far.matrixAutoUpdate = false;
-      // world-space tile bounds: plant positions grown by the largest crown (2.6 x scale sideways,
-      // 3.7 x scale up: the card of a plant reaches trunk + crown + half a card above its base)
+      // LOD metric: the planted footprint grown by the largest crown radius (2.6 x scale)
       const maxS = list.reduce((a, p) => Math.max(a, p.s), 0);
+      const lod = box.getBoundingSphere(new THREE.Sphere());
+      lod.radius += maxS * 2.6;
+      // world-space culling bounds: plant positions grown by the largest crown sideways and by
+      // 3.7 x scale up (the card of a plant reaches trunk + crown + half a card above its base)
       box.min.x -= maxS * 2.6; box.max.x += maxS * 2.6;
       box.min.z -= maxS * 2.6; box.max.z += maxS * 2.6;
       box.min.y -= 1; box.max.y += maxS * 3.7;
@@ -717,7 +722,7 @@ export class Vegetation {
       far.boundingSphere = sphere.clone();
       far.visible = false;
       this.group.add(near, far);
-      this.tiles.push({ near, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, n: count, d: 0 });
+      this.tiles.push({ near, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0 });
     };
     for (const t of byTile.values()) {
       if (t.crown.length) build(t.crown, crownGeo, crownMat);
@@ -736,7 +741,7 @@ export class Vegetation {
    *  Tiles outside the view are not drawn; tiles whose shadow cannot reach the view do not cast. */
   updateLod(camX: number, camZ: number, cull: ViewCull): void {
     const tiles = this.tiles;
-    for (const t of tiles) t.d = Math.max(0, Math.hypot(t.center.x - camX, t.center.z - camZ) - t.r);
+    for (const t of tiles) t.d = Math.max(0, Math.hypot(t.lodCenter.x - camX, t.lodCenter.z - camZ) - t.lodR);
     // in-place insertion sort by distance: the order barely changes between frames, so this is
     // linear and allocation-free (the budget below is spent nearest-first)
     for (let i = 1; i < tiles.length; i++) {
