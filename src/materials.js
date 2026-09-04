@@ -12,6 +12,12 @@ import {
   makeDecalSheet,
   makeGrate,
   makeDiffuser,
+  makeHullPlate,
+  makeImperialFloor,
+  makeImperialPanel,
+  makeCityLights,
+  makeImperialScreen,
+  makeHoloGrid,
 } from "./textures.js";
 
 export const PALETTE = {
@@ -30,6 +36,22 @@ export const PALETTE = {
   fabricOrange: new THREE.Color("#d8722f"),
   teal: new THREE.Color("#4fd8cc"),
   warm: new THREE.Color("#ffc78a"),
+  // --- Imperial set
+  impWhite: new THREE.Color("#d5d8dd"),
+  impLight: new THREE.Color("#b4b8bf"),
+  impGrey: new THREE.Color("#8a8f97"),
+  impMid: new THREE.Color("#585d66"),
+  impDark: new THREE.Color("#2c2f35"),
+  impBlack: new THREE.Color("#0f1114"),
+  impRed: new THREE.Color("#ff2f22"),
+  impBlue: new THREE.Color("#4a9dff"),
+  impAmber: new THREE.Color("#ffb347"),
+  impGreen: new THREE.Color("#4cff88"),
+  hullGrey: new THREE.Color("#a9aeb5"),
+  hullLight: new THREE.Color("#c3c7cd"),
+  hullDark: new THREE.Color("#5f646b"),
+  hullBlack: new THREE.Color("#23262b"),
+  engineBlue: new THREE.Color("#6fb4ff"),
 };
 
 export function buildMaterials() {
@@ -194,5 +216,127 @@ export function buildMaterials() {
     metalness: 0,
   });
 
+  addImperialMaterials(mats, std);
   return mats;
+}
+
+// ---------------------------------------------------------------------------
+// Imperial Star Destroyer materials (exterior hull + interior). Exterior materials have fog off:
+// the interior uses a short exponential fog that would otherwise swallow a 1,600 m hull.
+// ---------------------------------------------------------------------------
+function addImperialMaterials(mats, std) {
+  const hullTex = makeHullPlate(1024, 131);
+  const hullTex2 = makeHullPlate(1024, 197);
+  const floorTex = makeImperialFloor(1024, 137);
+  const panelTex = makeImperialPanel(512, 139);
+  const panelTex2 = makeImperialPanel(512, 173);
+  const cityTex = makeCityLights(512, 141);
+  const cityTexDense = makeCityLights(512, 149, 0.06);
+  const holoTex = makeHoloGrid(256, 157);
+
+  // --- exterior
+  // armour plating; vertex colour carries per-plate paint variation
+  mats.hull = std(hullTex, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.5, fog: false });
+  mats.hull2 = std(hullTex2, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.5, fog: false });
+  // recessed base surface under the plates, trench walls, engine housings
+  mats.hullDark = std(hullTex, { normalScale: new THREE.Vector2(0.6, 0.6), envMapIntensity: 0.3, roughness: 1.2, fog: false });
+  // superstructure faces: dark plating with thousands of lit windows
+  mats.city = new THREE.MeshStandardMaterial({
+    map: hullTex.map,
+    roughnessMap: hullTex.roughnessMap,
+    metalnessMap: hullTex.metalnessMap,
+    normalMap: hullTex.normalMap,
+    normalScale: new THREE.Vector2(0.7, 0.7),
+    emissive: 0xffffff,
+    emissiveMap: cityTex,
+    emissiveIntensity: 1.6,
+    vertexColors: true,
+    color: 0xffffff,
+    roughness: 1,
+    metalness: 1,
+    envMapIntensity: 0.4,
+    fog: false,
+  });
+  mats.cityDense = mats.city.clone();
+  mats.cityDense.emissiveMap = cityTexDense;
+  // engine exhaust: bright blue-white core
+  mats.engineGlow = new THREE.MeshBasicMaterial({ color: new THREE.Color("#9fd0ff").multiplyScalar(2.2), fog: false, toneMapped: true });
+  mats.engineGlowOuter = new THREE.MeshBasicMaterial({ color: new THREE.Color("#3f7fe0"), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+  // small emissive running lights / window strips on the exterior
+  mats.exteriorLight = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: new THREE.Color("#ffe9c4"), emissiveIntensity: 3.0, roughness: 0.6, metalness: 0, fog: false });
+  mats.exteriorRed = new THREE.MeshStandardMaterial({ color: 0x110404, emissive: new THREE.Color("#ff3a2a"), emissiveIntensity: 3.0, roughness: 0.6, metalness: 0, fog: false });
+  // bridge / observation windows seen from outside (dark, faint interior glow)
+  mats.exteriorGlass = new THREE.MeshStandardMaterial({ color: 0x0a0d12, emissive: new THREE.Color("#3a4a66"), emissiveIntensity: 0.5, roughness: 0.15, metalness: 0.6, envMapIntensity: 1.0, fog: false });
+
+  // --- interior
+  // black polished deck
+  mats.floorGloss = std(floorTex, { normalScale: new THREE.Vector2(0.7, 0.7), envMapIntensity: 1.1 });
+  // clean white/grey panels (tint from vertex colours), two wear variants
+  mats.impPanel = std(panelTex, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.7 });
+  mats.impPanel1 = std(panelTex2, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.7 });
+  // emitters
+  const emit = (hex, intensity, extra = {}) =>
+    new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: new THREE.Color(hex), emissiveIntensity: intensity, roughness: 0.5, metalness: 0, ...extra });
+  mats.emitWhite = emit("#f2f6ff", 2.6);
+  mats.emitWhiteSoft = emit("#f2f6ff", 2.4, { emissiveMap: makeDiffuser(256, 21) });
+  mats.emitBlue = emit("#4a9dff", 2.6);
+  mats.emitAmber = emit("#ffb347", 2.2);
+  mats.emitGreen = emit("#4cff88", 2.0);
+  mats.emitRedSoft = emit("#ff3a2a", 1.6, { emissiveMap: makeDiffuser(256, 23) });
+  // hologram: additive, double-sided, grid texture
+  mats.holo = new THREE.MeshBasicMaterial({
+    color: new THREE.Color("#5aa8ff"),
+    map: holoTex,
+    transparent: true,
+    opacity: 0.55,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  // detention cell / hangar containment field
+  mats.forceField = new THREE.MeshBasicMaterial({
+    color: new THREE.Color("#3f8cff"),
+    map: holoTex,
+    transparent: true,
+    opacity: 0.22,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  // Imperial console screens: blue tactical / engineering / navigation, plus a red alert variant
+  const imp = [
+    makeImperialScreen(512, 256, 151, "#4a9dff", "#ff4136", 0),
+    makeImperialScreen(512, 256, 152, "#4a9dff", "#ffb347", 1),
+    makeImperialScreen(512, 256, 153, "#6ab4ff", "#ff4136", 2),
+    makeImperialScreen(512, 256, 154, "#ff5040", "#ffb347", 0),
+    makeImperialScreen(512, 256, 155, "#ffb347", "#ff4136", 1),
+  ];
+  mats.impScreens = imp.map(
+    (tex) =>
+      new THREE.MeshStandardMaterial({
+        color: 0x000000,
+        emissive: 0xffffff,
+        emissiveMap: tex,
+        emissiveIntensity: 1.4,
+        roughness: 0.15,
+        metalness: 0.0,
+        envMapIntensity: 1.0,
+      }),
+  );
+  mats.impScreens.forEach((m, i) => (mats["impScreen" + i] = m));
+  // TIE fighter: dark solar panels and grey hull
+  mats.tieHull = new THREE.MeshStandardMaterial({ color: new THREE.Color("#8d949c"), roughness: 0.55, metalness: 0.35, fog: false });
+  mats.tiePanel = new THREE.MeshStandardMaterial({ color: new THREE.Color("#1a1d22"), roughness: 0.45, metalness: 0.6, fog: false });
+  mats.tieGlass = new THREE.MeshStandardMaterial({ color: new THREE.Color("#0b0f16"), roughness: 0.1, metalness: 0.7, emissive: new THREE.Color("#1a2a44"), emissiveIntensity: 0.6, fog: false });
+  // interior window glass (bridge): nearly clear, slight blue tint, faint reflection
+  mats.bridgeGlass = new THREE.MeshPhysicalMaterial({
+    color: 0x8fa8c0,
+    roughness: 0.12,
+    metalness: 0,
+    transparent: true,
+    opacity: 0.08,
+    depthWrite: false,
+    envMapIntensity: 0.25,
+    side: THREE.DoubleSide,
+  });
 }

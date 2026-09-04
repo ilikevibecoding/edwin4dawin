@@ -1139,3 +1139,456 @@ export function makeClouds(w = 1024, h = 512, seed = 111) {
   ctx.putImageData(img, 0, 0);
   return toTexture(c, { srgb: true, wrap: true });
 }
+
+// ---------------------------------------------------------------------------
+// Imperial Star Destroyer set
+// ---------------------------------------------------------------------------
+
+// Exterior armour plating: light grey with panel seams, faint streaking, soot pooling in the seams,
+// paint variation per plate (vertex colour supplies the per-instance tint on top). One tile covers one
+// large plate (~12 m) split into a few sub-plates so both near and far reads carry seams.
+export function makeHullPlate(size = 1024, seed = 131) {
+  const t = new TexGen(size, size);
+  const rand = mulberry32(seed);
+  // irregular sub-plate cuts: 3 columns x 2..3 rows with jittered edges
+  const cuts = [0, 0.28 + rand() * 0.1, 0.62 + rand() * 0.1, 1];
+  const rowsPerCol = cuts.slice(0, 3).map(() => 2 + Math.floor(rand() * 2));
+  const rowCuts = rowsPerCol.map((n) => {
+    const r = [0];
+    for (let k = 1; k < n; k++) r.push(k / n + (rand() - 0.5) * 0.08);
+    r.push(1);
+    return r;
+  });
+  const hatches = [];
+  for (let i = 0; i < 5; i++) hatches.push([rand(), rand(), 0.03 + rand() * 0.05]);
+  const streaks = [];
+  for (let i = 0; i < 14; i++) streaks.push([rand(), rand() * 0.6, 0.15 + rand() * 0.4, 0.004 + rand() * 0.01]);
+  t.each((u, v, i) => {
+    let col = 0;
+    while (u > cuts[col + 1]) col++;
+    const rc = rowCuts[col];
+    let row = 0;
+    while (v > rc[row + 1]) row++;
+    const pu = (u - cuts[col]) / (cuts[col + 1] - cuts[col]);
+    const pv = (v - rc[row]) / (rc[row + 1] - rc[row]);
+    const ed = Math.min(pu, 1 - pu, pv, 1 - pv);
+    const n1 = fbm(u, v, { octaves: 4, freq: 4, seed: seed });
+    const n2 = fbm(u, v, { octaves: 5, freq: 18, seed: seed + 3 });
+    // per sub-plate tone shift (manufacturing batch variation)
+    const plateTone = (vnoise(col * 0.37 + 0.13, row * 0.61 + 0.29, 3, seed + 9) - 0.5) * 0.09;
+    let lum = 0.78 + plateTone + (n1 - 0.5) * 0.06 + (n2 - 0.5) * 0.04;
+    let rough = 0.58 + (n2 - 0.5) * 0.18;
+    let metal = 0.22 + (n1 - 0.5) * 0.15;
+    let hgt = 0.55;
+    // seams (in plate-space, so the wider plates get proportionally wider seams)
+    const seam = 0.012;
+    if (ed < seam) {
+      const k = smooth(1 - ed / seam);
+      hgt -= 0.4 * k;
+      lum *= 1 - 0.55 * k;
+      rough += 0.25 * k;
+      metal = lerp(metal, 0.1, k);
+    }
+    // soot / grime pooling near seams and along the lower edge of each plate
+    const grime = clamp01(1 - ed / 0.08) * (0.4 + 0.6 * fbm(u, v, { octaves: 3, freq: 9, seed: seed + 11 }));
+    lum *= 1 - grime * 0.22;
+    rough += grime * 0.15;
+    // rain-streak style weathering running along v
+    for (const [sx, sy, sl, sw] of streaks) {
+      const dx = Math.abs(u - sx);
+      if (dx < sw && v > sy && v < sy + sl) {
+        const k = (1 - dx / sw) * (1 - (v - sy) / sl) * 0.5;
+        lum *= 1 - k * 0.3;
+        rough += k * 0.1;
+      }
+    }
+    // small round hatches / ports
+    for (const [hx, hy, hr] of hatches) {
+      const d = Math.hypot(u - hx, v - hy);
+      if (d < hr) {
+        const k = smooth(clamp01((hr - d) / (hr * 0.35)));
+        hgt -= 0.12 * k;
+        lum *= 1 - 0.18 * k;
+        if (d > hr * 0.82) {
+          hgt += 0.1;
+          lum *= 0.8;
+        }
+      }
+    }
+    // fine speckle: chipped paint showing darker primer, mostly near seams
+    const chip = fbm(u, v, { octaves: 6, freq: 40, seed: seed + 17 });
+    if (chip > 0.72 && ed < 0.15) {
+      const k = clamp01((chip - 0.72) * 8);
+      lum *= 1 - k * 0.35;
+      metal = lerp(metal, 0.6, k);
+      rough -= k * 0.2;
+    }
+    t.setColor(i, lum * 0.98, lum * 1.0, lum * 1.03);
+    t.rough[i] = clamp01(rough);
+    t.metal[i] = clamp01(metal);
+    t.height[i] = hgt;
+  });
+  return finish(t.bake({ normalStrength: 2.4 }));
+}
+
+// Interior deck: near-black polished plating with large tiles, fine seams, and a faint brushed
+// sheen. Used for the bridge walkway, corridors and most rooms (the Imperial black floor).
+export function makeImperialFloor(size = 1024, seed = 137) {
+  const t = new TexGen(size, size);
+  const tiles = 3;
+  t.each((u, v, i) => {
+    const pu = (u * tiles) % 1;
+    const pv = (v * tiles) % 1;
+    const ed = edgeDist(pu, pv);
+    const n1 = fbm(u, v, { octaves: 4, freq: 6, seed });
+    const n2 = vnoise2(u, v, 28, 400, seed + 5);
+    let lum = 0.19 + (n1 - 0.5) * 0.05 + (n2 - 0.5) * 0.03;
+    let rough = 0.28 + (n1 - 0.5) * 0.12 + (n2 - 0.5) * 0.06;
+    let metal = 0.55;
+    let hgt = 0.5 + (n2 - 0.5) * 0.02;
+    const seam = 0.01;
+    if (ed < seam) {
+      const k = smooth(1 - ed / seam);
+      hgt -= 0.3 * k;
+      lum *= 1 - 0.5 * k;
+      rough += 0.35 * k;
+      metal = 0.2;
+    }
+    // scuffed traffic lanes: slightly rougher, lighter bands
+    const lane = smooth(clamp01(1 - Math.abs(pv - 0.5) / 0.25));
+    rough += lane * 0.08 * fbm(u, v, { octaves: 3, freq: 12, seed: seed + 7 });
+    lum += lane * 0.015;
+    t.setColor(i, lum * 0.97, lum, lum * 1.06);
+    t.rough[i] = clamp01(rough);
+    t.metal[i] = clamp01(metal);
+    t.height[i] = hgt;
+  });
+  return finish(t.bake({ normalStrength: 1.8 }));
+}
+
+// Clean Imperial wall panel: near-white multiplier texture (vertex colour tints it) with a
+// bevelled edge, a hairline seam, faint grime in the corners and very little chipping. Two variants
+// via the seed.
+export function makeImperialPanel(size = 512, seed = 139) {
+  const t = new TexGen(size, size);
+  const rand = mulberry32(seed);
+  const smudges = [];
+  for (let i = 0; i < 5; i++) smudges.push([rand(), rand(), 0.08 + rand() * 0.18, rand() * 0.5 + 0.3]);
+  t.each((u, v, i) => {
+    const ed = edgeDist(u, v);
+    const n1 = fbm(u, v, { octaves: 4, freq: 5, seed });
+    const n2 = fbm(u, v, { octaves: 5, freq: 22, seed: seed + 3 });
+    let lum = 0.9 + (n1 - 0.5) * 0.05 + (n2 - 0.5) * 0.025;
+    let rough = 0.5 + (n2 - 0.5) * 0.14;
+    let metal = 0.08;
+    let hgt = 0.55;
+    // bevel + seam
+    const bevel = 0.03;
+    if (ed < bevel) {
+      const k = smooth(ed / bevel);
+      hgt = 0.15 + 0.4 * k;
+      lum *= 0.85 + 0.15 * k;
+    }
+    if (ed < 0.006) {
+      lum *= 0.45;
+      rough = 0.8;
+      hgt = 0.05;
+    }
+    // hand smudges (slightly darker, glossier)
+    for (const [sx, sy, sr, sk] of smudges) {
+      const d = Math.hypot(u - sx, (v - sy) * 1.6);
+      if (d < sr) {
+        const k = smooth(1 - d / sr) * 0.35 * sk;
+        lum *= 1 - k * 0.12;
+        rough -= k * 0.25;
+      }
+    }
+    // corner grime
+    const grime = clamp01(1 - ed / 0.1) * fbm(u, v, { octaves: 3, freq: 8, seed: seed + 11 });
+    lum *= 1 - grime * 0.1;
+    rough += grime * 0.1;
+    t.setColor(i, lum, lum * 1.005, lum * 1.02);
+    t.rough[i] = clamp01(rough);
+    t.metal[i] = clamp01(metal);
+    t.height[i] = hgt;
+  });
+  return finish(t.bake({ normalStrength: 2.2 }));
+}
+
+// Emissive map for the superstructure / trench faces: thousands of tiny lit windows and running
+// lights on black. Tiled over the "city" blocks it sells the scale of the ship at every distance.
+export function makeCityLights(size = 512, seed = 141, density = 0.035) {
+  const c = makeCanvas(size, size);
+  const ctx = c.getContext("2d");
+  const rand = mulberry32(seed);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, size, size);
+  const cell = 6;
+  const n = size / cell;
+  for (let y = 0; y < n; y++) {
+    // rows of windows follow deck lines: every 3rd row is a deck
+    const deckRow = y % 3 === 1;
+    for (let x = 0; x < n; x++) {
+      const p = deckRow ? density * 6 : density * 0.3;
+      if (rand() > p) continue;
+      const k = rand();
+      ctx.fillStyle = k < 0.78 ? "#ffe9c4" : k < 0.9 ? "#9fc8ff" : k < 0.96 ? "#ffb070" : "#ff4a3a";
+      const w = 1 + Math.floor(rand() * 2);
+      ctx.fillRect(x * cell + 2, y * cell + 2, w, 1 + Math.floor(rand() * 2));
+    }
+  }
+  return toTexture(c, { srgb: true, anisotropy: 4 });
+}
+
+// Imperial console UI: monochrome blue (or red / amber) readouts on black — hex-cell grids, target
+// rings, text-like blocks, scrolling bars. Distinct from the freighter's teal screens.
+export function makeImperialScreen(w = 512, h = 256, seed = 151, accent = "#4a9dff", warn = "#ff4136", style = 0) {
+  const c = makeCanvas(w, h);
+  const ctx = c.getContext("2d");
+  const rand = mulberry32(seed);
+  ctx.fillStyle = "#020408";
+  ctx.fillRect(0, 0, w, h);
+  const rgba = (hex, a) => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${a})`;
+  };
+  // faint grid
+  ctx.strokeStyle = rgba(accent, 0.07);
+  ctx.lineWidth = 1;
+  for (let x = 0; x < w; x += 12) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+  for (let y = 0; y < h; y += 12) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+  const pad = 12;
+  // header rule + title block
+  ctx.fillStyle = accent;
+  ctx.fillRect(pad, pad, w - pad * 2, 2);
+  ctx.fillRect(pad, pad + 6, 50 + rand() * 60, 8);
+  ctx.fillStyle = rgba(accent, 0.45);
+  for (let k = 0; k < 4; k++) ctx.fillRect(w - pad - 100 + k * 25, pad + 6, 18, 8);
+  if (style === 0) {
+    // tactical: large ring with sweep + contacts on the left, data column on the right
+    const cx = w * 0.28;
+    const cy = h * 0.56;
+    const R = Math.min(w, h) * 0.32;
+    ctx.strokeStyle = rgba(accent, 0.4);
+    ctx.lineWidth = 1.5;
+    for (const rr of [R, R * 0.66, R * 0.33]) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(cx - R, cy);
+    ctx.lineTo(cx + R, cy);
+    ctx.moveTo(cx, cy - R);
+    ctx.lineTo(cx, cy + R);
+    ctx.stroke();
+    const grad = ctx.createConicGradient ? ctx.createConicGradient(seed % 6, cx, cy) : null;
+    if (grad) {
+      grad.addColorStop(0, rgba(accent, 0.35));
+      grad.addColorStop(0.25, rgba(accent, 0));
+      grad.addColorStop(1, rgba(accent, 0));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let k = 0; k < 7; k++) {
+      const a = rand() * Math.PI * 2;
+      const d = R * (0.2 + rand() * 0.75);
+      ctx.fillStyle = rand() < 0.25 ? warn : accent;
+      ctx.fillRect(cx + Math.cos(a) * d - 2, cy + Math.sin(a) * d - 2, 4, 4);
+    }
+    let y = pad + 30;
+    const x0 = w * 0.58;
+    while (y < h - pad - 10) {
+      ctx.fillStyle = rand() < 0.12 ? warn : rgba(accent, 0.8);
+      ctx.fillRect(x0, y, 30 + rand() * 60, 5);
+      ctx.fillStyle = rgba(accent, 0.35);
+      ctx.fillRect(x0 + 100, y, 20 + rand() * (w - x0 - 130), 5);
+      y += 11;
+    }
+  } else if (style === 1) {
+    // engineering: stacked horizontal bar gauges + a waveform
+    let y = pad + 28;
+    for (let k = 0; k < 6; k++) {
+      ctx.fillStyle = rgba(accent, 0.25);
+      ctx.fillRect(pad, y, w - pad * 2, 10);
+      const f = 0.2 + rand() * 0.75;
+      ctx.fillStyle = f > 0.85 ? warn : accent;
+      ctx.fillRect(pad, y, (w - pad * 2) * f, 10);
+      ctx.fillStyle = rgba(accent, 0.6);
+      ctx.fillRect(pad, y + 13, 20 + rand() * 40, 4);
+      y += 26;
+    }
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const gy = h - pad - 40;
+    for (let i = 0; i <= 60; i++) {
+      const px = pad + (i / 60) * (w - pad * 2);
+      const py = gy + Math.sin(i * 0.5 + seed) * 12 + (rand() - 0.5) * 8;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  } else {
+    // navigation: hex cells with a course line and waypoints
+    const s = 14;
+    ctx.strokeStyle = rgba(accent, 0.22);
+    ctx.lineWidth = 1;
+    for (let gy = pad + 30; gy < h - pad; gy += s * 1.5) {
+      for (let gx = pad; gx < w - pad; gx += s * Math.sqrt(3)) {
+        const ox = ((gy / (s * 1.5)) | 0) % 2 ? (s * Math.sqrt(3)) / 2 : 0;
+        ctx.beginPath();
+        for (let k = 0; k < 6; k++) {
+          const a = (Math.PI / 3) * k + Math.PI / 6;
+          const px = gx + ox + Math.cos(a) * s * 0.95;
+          const py = gy + Math.sin(a) * s * 0.95;
+          if (k === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+    }
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let px = pad + 20;
+    let py = h * 0.7;
+    ctx.moveTo(px, py);
+    for (let k = 0; k < 5; k++) {
+      px += (w - pad * 2 - 40) / 5;
+      py = h * (0.3 + rand() * 0.5);
+      ctx.lineTo(px, py);
+      ctx.fillStyle = k === 2 ? warn : accent;
+      ctx.fillRect(px - 3, py - 3, 6, 6);
+    }
+    ctx.stroke();
+  }
+  // footer readouts
+  ctx.fillStyle = rgba(accent, 0.55);
+  for (let k = 0; k < 6; k++) ctx.fillRect(pad + k * ((w - pad * 2) / 6), h - pad - 6, (w - pad * 2) / 6 - 8, 4);
+  // scanlines
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  for (let yy = 0; yy < h; yy += 3) ctx.fillRect(0, yy, w, 1);
+  return toTexture(c, { srgb: true, wrap: false });
+}
+
+// Hologram / force-field grid: additive blue lines with soft falloff, tiled.
+export function makeHoloGrid(size = 256, seed = 157) {
+  const c = makeCanvas(size, size);
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = "rgba(120,180,255,0.9)";
+  ctx.lineWidth = 1;
+  const step = size / 8;
+  for (let k = 0; k <= 8; k++) {
+    ctx.beginPath();
+    ctx.moveTo(k * step, 0);
+    ctx.lineTo(k * step, size);
+    ctx.moveTo(0, k * step);
+    ctx.lineTo(size, k * step);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "rgba(120,180,255,0.12)";
+  const rand = mulberry32(seed);
+  for (let k = 0; k < 40; k++) ctx.fillRect(Math.floor(rand() * 8) * step, Math.floor(rand() * 8) * step, step, step);
+  return toTexture(c, { srgb: true, anisotropy: 4 });
+}
+
+// Hangar deck markings: yellow / white lane lines, chevrons and bay numbers on transparent, meant to
+// be laid as a decal quad over the deck plating. Returns a non-repeating texture.
+export function makeHangarMarkings(w = 2048, h = 1024, seed = 163) {
+  const c = makeCanvas(w, h);
+  const ctx = c.getContext("2d");
+  const rand = mulberry32(seed);
+  ctx.clearRect(0, 0, w, h);
+  const yellow = "rgba(232,190,60,0.85)";
+  const white = "rgba(220,224,230,0.8)";
+  const red = "rgba(220,60,50,0.85)";
+  // outer boundary
+  ctx.strokeStyle = yellow;
+  ctx.lineWidth = 14;
+  ctx.strokeRect(40, 40, w - 80, h - 80);
+  // centre launch lane: two white lines with chevrons
+  ctx.strokeStyle = white;
+  ctx.lineWidth = 10;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.35, 80);
+  ctx.lineTo(w * 0.35, h - 80);
+  ctx.moveTo(w * 0.65, 80);
+  ctx.lineTo(w * 0.65, h - 80);
+  ctx.stroke();
+  ctx.fillStyle = white;
+  for (let y = 140; y < h - 140; y += 140) {
+    ctx.beginPath();
+    ctx.moveTo(w * 0.5 - 60, y + 50);
+    ctx.lineTo(w * 0.5, y);
+    ctx.lineTo(w * 0.5 + 60, y + 50);
+    ctx.lineTo(w * 0.5 + 60, y + 70);
+    ctx.lineTo(w * 0.5, y + 20);
+    ctx.lineTo(w * 0.5 - 60, y + 70);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // parking bays either side: dashed boxes with numbers
+  ctx.setLineDash([30, 20]);
+  ctx.lineWidth = 8;
+  ctx.font = "bold 90px 'Helvetica Neue', Arial, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  let n = 1;
+  for (const bx of [0.06, 0.78]) {
+    for (let k = 0; k < 4; k++) {
+      const x = w * bx;
+      const y = 90 + k * ((h - 180) / 4);
+      const bw = w * 0.16;
+      const bh = (h - 180) / 4 - 30;
+      ctx.strokeStyle = yellow;
+      ctx.strokeRect(x, y, bw, bh);
+      ctx.fillStyle = k === 1 && bx > 0.5 ? red : yellow;
+      ctx.fillText(String(n).padStart(2, "0"), x + bw / 2, y + bh / 2);
+      n++;
+    }
+  }
+  ctx.setLineDash([]);
+  // hazard hatching around the central opening
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(w * 0.37, h * 0.12, w * 0.26, h * 0.76);
+  ctx.clip();
+  ctx.strokeStyle = "rgba(232,190,60,0.7)";
+  ctx.lineWidth = 12;
+  for (let x = -h; x < w + h; x += 60) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + h, h);
+    ctx.stroke();
+  }
+  ctx.restore();
+  // wear: knock back random patches
+  ctx.globalCompositeOperation = "destination-out";
+  for (let k = 0; k < 300; k++) {
+    ctx.globalAlpha = 0.15 + rand() * 0.35;
+    ctx.beginPath();
+    ctx.ellipse(rand() * w, rand() * h, 10 + rand() * 60, 4 + rand() * 20, rand() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  return toTexture(c, { srgb: true, wrap: false, anisotropy: 8 });
+}
