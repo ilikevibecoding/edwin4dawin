@@ -5,6 +5,20 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 
 ## Unreleased
 
+## iter07 — wave 3 builders and lead fixes (deployed as a73e7fb62028-20260904T202825Z)
+- Water loop 2: physical absorption (red dies within a metre), bay/ocean reflectances re-derived, sediment
+  and caustics, horizon-haze de-whitened sky reflection, glitter as a world-anchored multi-octave slope
+  field (small stable glints instead of a blown column), surf/whitecap streaks; night wedge artefact gone.
+- Sky/clouds loop 2: short-tail sky gradient with a saturated blue-cyan horizon key and a narrow warm haze
+  band, domain-warped Worley cloud cells (1-4 km) with clear sky between them, thickness AO and base
+  mottling, 42 km horizon fade; presets re-tuned (scattered 0.34, clear 0.24, cloudy 0.66).
+- Flight physics/camera: published-inertia values, roll 147 -> 51 deg/s, elevator authority with q-based
+  hinge factor and Cm_q -36, adverse aileron yaw, power-on pitch-up, floats on the visual keel with 5500
+  N.s/m heave damping, bow wheels + structure contacts + crash reset, camera shake 0.35 m -> <= 0.10 m,
+  input slew 0.22 s; 18-check deterministic harness (all pass) in bench/scripts/flighttest.mjs.
+- Lead: aerial-a aircraft attitude corrected to the reference (approaching the camera, seen from above the
+  starboard bow); whole-aircraft reference bbox added to the reference package; paler livery yellow.
+
 ## iter06 — wave 2 builders and lead fixes (deployed as 32aab3d85421-20260904T180514Z)
 - Lighting: CSM sun carries physical irradiance (sun:sky 5:1 on a horizontal white; was 1:1 with 2.5x the
   blue), saturated zenith, warm haze band, neutral overcast, ground-bounce term in the IBL probe; bloom
@@ -71,3 +85,4 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 |---|---|---|---|
 | 03aacefc4377-20260904T101257Z | 7557979bb140b196590ad9bb5f77ca49ef23e291 | https://raw.githack.com/ilikevibecoding/edwin4dawin/gh-pages/play.html | verified: build id matched, loaded in 9 s, flew |
 | 32aab3d85421-20260904T180514Z | c3a351f8276056fc04dd89dc766a8c5550d032a6 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/c3a351f8276056fc04dd89dc766a8c5550d032a6/play.html | verified: build id matched, loaded in 12.4 s, water takeoff to 67 m in 30 s (deterministic, identical to local), no console errors; 177 draw calls / 0.79 M tris in the water-landing view |
+| a73e7fb62028-20260904T202825Z | e05ebaf37fcf09e9154c1746c85c7d9f6ea2f30c | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/e05ebaf37fcf09e9154c1746c85c7d9f6ea2f30c/play.html | verified: build id matched, loaded in 15.3 s, water takeoff to 81 m in 30 s (new flight model), no console errors; 174 draw calls / 0.79 M tris in the water-landing view |
