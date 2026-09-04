@@ -31,7 +31,7 @@ const timings = {};
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById("view");
 const TOUCH = isTouchDevice();
-const MOBILE = TOUCH || Math.min(window.innerWidth, window.innerHeight) < 620;
+const MOBILE = TOUCH; // render profile follows the input class, not the window size
 if (TOUCH) document.body.classList.add("touch");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, MOBILE ? 1.0 : 1.5));
