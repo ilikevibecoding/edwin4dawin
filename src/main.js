@@ -95,7 +95,7 @@ scene.environmentIntensity = 0.25;
   const spaceEnv = pmrem.fromCubemap(cubeRT.texture).texture;
   for (const k of ["hull", "hullDark"]) {
     materials[k].envMap = spaceEnv;
-    materials[k].envMapIntensity = 0.6;
+    materials[k].envMapIntensity = 0.35;
     materials[k].needsUpdate = true;
   }
   cubeRT.dispose();
@@ -546,6 +546,8 @@ function frame() {
     lifts.update(dt, player.position);
     audio.listener = player.position;
     if (envFrames++ % 240 === 5) captureEnvironment();
+  } else {
+    rooms.updateAnimators(dt, t);
   }
   space.update(dt);
   space.root.position.copy(camera.position);
