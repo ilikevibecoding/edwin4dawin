@@ -32,7 +32,7 @@ const TIER = {
   high: { shadowMap: 2048, envSamples: 512, trees: 210, motes: 900, shafts: 14, pixelRatio: 1.5, corridor: 1 },
   ultra: { shadowMap: 4096, envSamples: 1024, trees: 380, motes: 1800, shafts: 22, pixelRatio: 2, corridor: 1.6 },
 }[quality];
-const TIMES = ['day', 'dusk', 'night'];
+const TIMES = ['day', 'dusk', 'night', 'overcast'];
 const startTime = TIMES.includes(params.get('time')) ? params.get('time') : 'day';
 
 const bootLabel = document.getElementById('boot-label');
@@ -164,13 +164,14 @@ async function boot() {
     timeOfDay = name;
     skyRig.setTimeOfDay?.(name, { scene });
     post.setTimeOfDay?.(name);
-    vehicle.setLights(name !== 'day');
+    // lamps for the hours that are dark, not for every hour that is not noon
+    vehicle.setLights(name === 'dusk' || name === 'night');
     fleet.setTimeOfDay?.(name);
     camp.setTimeOfDay?.(name);
     hud.setStatus(`${name.charAt(0).toUpperCase()}${name.slice(1)}`);
     return timeOfDay;
   }
-  vehicle.setLights(startTime !== 'day');
+  vehicle.setLights(startTime === 'dusk' || startTime === 'night');
 
   // --- input ---------------------------------------------------------------
   // Browsers will not start audio before a gesture, so the first one of any

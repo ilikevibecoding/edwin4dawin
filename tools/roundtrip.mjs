@@ -33,7 +33,7 @@ const order = arg('order', 'dusk,night,day').split(',');
 const skip = new RegExp(
   arg(
     'skip',
-    '\\.u\\.uTime$|\\.pos$|:headlightBeam\\.|\\.u\\.uCenter$|\\.u\\.uWheel|\\.u\\.uTrack|\\.u\\.uBeamPos$|\\.u\\.uBeamDir$',
+    '\\.uTime$|\\.pos$|:headlightBeam\\.|\\.u\\.uCenter$|\\.u\\.uWheel|\\.u\\.uTrack|\\.u\\.uBeamPos$|\\.u\\.uBeamDir$',
   ),
 );
 

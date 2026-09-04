@@ -7,13 +7,14 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { raysOf, sunDirection } from './sky.js';
 
 // ---------------------------------------------------------------------------
 // Post stack, in the order light actually goes through a camera:
 //
 //   scene (linear HDR) -> ambient occlusion -> screen-space reflections
-//   -> firefly guard -> bloom -> ACES + sRGB
-//   -> lens grade (vignette, chromatic aberration, grain) -> SMAA
+//   -> firefly guard -> crepuscular rays -> bloom -> ACES + sRGB
+//   -> lens grade (heat shimmer, vignette, chromatic aberration, grain) -> SMAA
 //
 // Bloom runs before tone mapping on purpose: that is what makes a hot
 // highlight bloom softly instead of smearing a clipped white blob.
@@ -42,11 +43,15 @@ const TIERS = {
     // the stack — and dropping it would change what the harness shows the
     // agents working on the other files.
     smaa: true,
+    // Crepuscular rays: depth taps per pixel along the line to the sun. One
+    // fullscreen pass, and it only runs in the hours that have rays.
+    raySamples: 10,
   },
   high: {
     // 16 AO samples is three's own GTAOPass default, i.e. exactly today's cost.
     aoSamples: 16,
     pdSamples: 8,
+    raySamples: 18,
     // No SSR here by default. This tier is what `?quality=` resolves to when it
     // is absent, so it is what the master loop's own capture harness renders,
     // and SSR is not a cheap pass: a second geometry pass over every classified
@@ -68,6 +73,7 @@ const TIERS = {
     ssr: { steps: 40, refine: 5, blurTaps: 4, maxDistance: 30, thickness: 0.5 },
     ssrOptIn: { steps: 40, refine: 5, blurTaps: 4, maxDistance: 30, thickness: 0.5 },
     smaa: true,
+    raySamples: 32,
   },
 };
 
@@ -638,6 +644,147 @@ class SsrPass extends Pass {
 
 const _clearCol = new THREE.Color();
 
+// ---------------------------------------------------------------------------
+// Crepuscular rays.
+//
+// The forest's light shafts were columns of lit air under gaps in a canopy,
+// and they were geometry: billboards gated by the shadow map. What a low sun
+// does over a plain full of dust is a different thing — the whole sky is the
+// source, and what you see is the *shadows* of the acacias and the truck cast
+// through the air towards you, radiating from the sun. That is a screen-space
+// effect by nature: for every pixel, walk towards the sun's projection and
+// count how much of the way is open sky. Where a tree stands between the pixel
+// and the sun the count drops, and a dark ray fans out from it.
+//
+// Depth is the only thing sampled, so the cost is the tier's tap count of
+// depth reads per pixel, and the pass is skipped entirely in any hour with the
+// gain at zero or with the sun behind the camera. Runs in HDR before bloom, so
+// the rays roll off through ACES with everything else rather than being drawn
+// on top of the tone-mapped frame.
+// ---------------------------------------------------------------------------
+
+const raysFragment = /* glsl */ `
+uniform sampler2D tDiffuse;
+uniform sampler2D tDepth;
+uniform vec4 uSun;
+uniform vec2 uAspect;
+uniform vec3 uColor;
+uniform float uDecay;
+uniform float uReach;
+uniform float uSpread;
+varying vec2 vUv;
+
+float igNoise( vec2 p ) {
+  return fract( 52.9829189 * fract( dot( p, vec2( 0.06711056, 0.00583715 ) ) ) );
+}
+
+void main() {
+  vec4 src = texture2D( tDiffuse, vUv );
+  float uGain = uSun.z;
+  vec2 toSun = uSun.xy - vUv;
+  // radial falloff from the sun, measured in a square frame so it is a circle
+  float dist = length( toSun * uAspect );
+  float fall = exp( -dist * uSpread );
+  if ( fall * uGain < 0.002 ) { gl_FragColor = src; return; }
+
+  // Dithered start, so the tap count does not draw bands.
+  float jitter = igNoise( gl_FragCoord.xy );
+  vec2 step = toSun * uReach / float( RAY_SAMPLES );
+  vec2 uv = vUv + step * jitter;
+  float illum = 1.0;
+  float acc = 0.0;
+  float norm = 0.0;
+  for ( int i = 0; i < RAY_SAMPLES; i ++ ) {
+    uv += step;
+    vec2 cuv = clamp( uv, 0.0, 1.0 );
+    float d = texture2D( tDepth, cuv ).x;
+    float sky = step( 0.99999, d );
+    // outside the frame there is no information; count it as half open
+    float inside = step( 0.0, uv.x ) * step( uv.x, 1.0 ) * step( 0.0, uv.y ) * step( uv.y, 1.0 );
+    acc += mix( 0.5, sky, inside ) * illum;
+    norm += illum;
+    illum *= uDecay;
+  }
+  float open = acc / max( norm, 1e-4 );
+  // The pixel's own sky counts too: a ray is brightest on the sky it is drawn
+  // over and fades as it lands on the ground in front of you.
+  float self = step( 0.99999, texture2D( tDepth, vUv ).x );
+  float amt = open * fall * uGain * mix( 0.55, 1.0, self );
+  vec3 col = src.rgb + uColor * amt;
+  gl_FragColor = vec4( max( col, 0.0 ), src.a );
+}`;
+
+class RaysPass extends Pass {
+  constructor(camera, samples) {
+    super();
+    this.camera = camera;
+    this.needsSwap = true;
+    this.depthTexture = null;
+    this.sunDir = new THREE.Vector3(0, 1, 0);
+    this.gain = 0;
+    this.material = new THREE.ShaderMaterial({
+      name: 'CrepuscularRays',
+      defines: { RAY_SAMPLES: samples },
+      uniforms: {
+        tDiffuse: { value: null },
+        tDepth: { value: null },
+        // xy: the sun's screen position; z: gain after the visibility fade.
+        // Packed because all three move with the camera, not the hour, and
+        // the round-trip probe reads every scalar uniform as hour state.
+        uSun: { value: new THREE.Vector4(0.5, 0.5, 0, 0) },
+        uAspect: { value: new THREE.Vector2(1, 1) },
+        uColor: { value: new THREE.Color(0xffffff) },
+        uDecay: { value: 0.94 },
+        uReach: { value: 0.7 },
+        uSpread: { value: 1.6 },
+      },
+      vertexShader: ssrVertex,
+      fragmentShader: raysFragment,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this._quad = new FullScreenQuad(this.material);
+    this._p = new THREE.Vector3();
+  }
+
+  setSize(w, h) {
+    this.material.uniforms.uAspect.value.set(w / Math.max(h, 1), 1);
+  }
+
+  dispose() {
+    this.material.dispose();
+    this._quad.dispose();
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    const u = this.material.uniforms;
+    // The sun's projection. A point far out along the light direction; if it
+    // is behind the camera the projection folds back into the frame and is a
+    // lie, so the pass stands down, and it fades as the sun leaves the frame
+    // rather than cutting.
+    const cam = this.camera;
+    const p = this._p.copy(this.sunDir).multiplyScalar(2000).add(cam.position);
+    p.project(cam);
+    const behind = p.z > 1 || !Number.isFinite(p.x) || !Number.isFinite(p.y);
+    const off = behind ? 2 : Math.max(Math.abs(p.x), Math.abs(p.y));
+    const vis = 1 - THREE.MathUtils.smoothstep(off, 1.0, 1.9);
+    const gain = this.gain * vis;
+    if (!this.depthTexture || gain < 0.002) {
+      // Nothing to draw. The composer swaps after a pass that asks it to, so
+      // declining the swap leaves the frame where it is at no cost at all.
+      this.needsSwap = false;
+      return;
+    }
+    this.needsSwap = true;
+    u.uSun.value.set(p.x * 0.5 + 0.5, p.y * 0.5 + 0.5, gain, 0);
+    u.tDiffuse.value = readBuffer.texture;
+    u.tDepth.value = this.depthTexture;
+    renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+    if (this.clear) renderer.clear();
+    this._quad.render(renderer);
+  }
+}
+
 const GradeShader = {
   name: 'GradeShader',
   uniforms: {
@@ -688,6 +835,16 @@ const GradeShader = {
     // Specular highlights on paint and water should go white, not stay tinted.
     uHiDesat: { value: 0.45 },
     uResolution: { value: new THREE.Vector2(1, 1) },
+    // Heat shimmer. A refraction, not a blur: the frame is re-sampled through
+    // a slowly boiling displacement field a pixel or two across, weighted by
+    // how much hot air the ray crossed — it builds with distance along the
+    // ground and dies within a few degrees above the horizon, where the air
+    // the ray passed through is no longer the layer the sun is cooking.
+    tDepth: { value: null },
+    uHeat: { value: 0 },
+    // x, y: camera near and far; z: where the horizon crosses the frame in
+    // uv. Camera state, packed for the same reason as the rays' uSun.
+    uHeatView: { value: new THREE.Vector4(0.1, 900, 0.5, 0) },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -702,6 +859,9 @@ const GradeShader = {
     uniform float uKnee, uShoulder;
     uniform vec3 uLift, uGain;
     uniform vec2 uResolution;
+    uniform sampler2D tDepth;
+    uniform float uHeat;
+    uniform vec4 uHeatView;
     varying vec2 vUv;
 
     const vec3 LUMA = vec3( 0.2126, 0.7152, 0.0722 );
@@ -712,8 +872,43 @@ const GradeShader = {
       return fract( ( p.x + p.y ) * p.x );
     }
 
+    // Smooth value noise for the shimmer field; the hash above is white and
+    // would scramble pixels rather than bend them.
+    float vhash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453123 ); }
+    float vnoise( vec2 p ) {
+      vec2 i = floor( p ), f = fract( p );
+      vec2 u = f * f * ( 3.0 - 2.0 * f );
+      return mix( mix( vhash( i ), vhash( i + vec2( 1.0, 0.0 ) ), u.x ),
+                  mix( vhash( i + vec2( 0.0, 1.0 ) ), vhash( i + vec2( 1.0, 1.0 ) ), u.x ), u.y );
+    }
+
     void main() {
       vec2 uv = vUv;
+
+      if ( uHeat > 0.0 ) {
+        vec2 uNearFar = uHeatView.xy;
+        float uHorizon = uHeatView.z;
+        float d = texture2D( tDepth, vUv ).x;
+        // view distance from window depth; the denominator is bounded away
+        // from zero for any depth in [0, 1]
+        float ndc = d * 2.0 - 1.0;
+        float dist = ( 2.0 * uNearFar.x * uNearFar.y ) / max( uNearFar.y + uNearFar.x - ndc * ( uNearFar.y - uNearFar.x ), 1e-3 );
+        float sky = step( 0.99999, d );
+        // the ground: builds with the path through the hot layer
+        float path = smoothstep( 18.0, 110.0, dist );
+        // the sky: only the first degrees over the horizon, which is where a
+        // mirage lives — the trees and the skyline wobble, the zenith does not
+        float dy = vUv.y - uHorizon;
+        float band = exp( -max( dy, 0.0 ) * 26.0 ) * smoothstep( -0.42, -0.04, dy );
+        float w = uHeat * mix( path * exp( -max( dy, 0.0 ) * 10.0 ), band, sky );
+        vec2 hp = vec2( vUv.x * 46.0 * uResolution.x / uResolution.y, vUv.y * 46.0 - uTime * 1.9 );
+        vec2 n = vec2( vnoise( hp ), vnoise( hp + vec2( 17.3, 9.1 ) + uTime * 0.7 ) ) - 0.5;
+        n += ( vec2( vnoise( hp * 2.3 + 4.0 ), vnoise( hp * 2.3 + 31.0 ) ) - 0.5 ) * 0.5;
+        // about two pixels at full weight, whatever the resolution
+        vec2 amp = vec2( 2.4 ) / uResolution;
+        uv = clamp( vUv + n * amp * w * 2.0, vec2( 0.001 ), vec2( 0.999 ) );
+      }
+
       vec2 c = uv - 0.5;
       float r2 = dot( c, c );
 
@@ -813,63 +1008,69 @@ const GradeShader = {
 
 const GRADES = {
   day: {
-    // Lifted from 1.34 with the foliage highlight fix. A multiscatter GGX term
-    // was contributing between a third and a half of every lit crown pixel, in
-    // the sun's colour rather than the leaf's; removing it was correct and cost
-    // the frame most of a stop, because a canopy is most of a wide shot. The
-    // hero measured 0.243 mean before and 0.183 after, which is a moodier scene
-    // than the one that was tuned, not a better one.
-    exposure: 1.52,
-    bloom: { strength: 0.26, radius: 0.6, threshold: 0.92 },
+    // Down from the forest's 1.52. A 58-degree sun over straw and pale earth
+    // puts twice the light on the ground the canopy floor had, and the frame
+    // wants to read as bright without the road going to plaster.
+    exposure: 1.02,
+    bloom: { strength: 0.2, radius: 0.55, threshold: 1.1 },
     clamp: 14.0,
-    ao: { intensity: 0.95, radius: 0.62, scale: 1.15, distanceExponent: 1.5, thickness: 1.0 },
+    // Hard light, hard occlusion: contact shadows under a high sun are short
+    // and dark, so the AO is tighter and a little stronger than the dusk one.
+    ao: { intensity: 1.0, radius: 0.58, scale: 1.2, distanceExponent: 1.5, thickness: 1.0 },
     ssr: 1.0,
+    // Heat shimmer at full; there is no other hour it belongs in.
+    heat: 1.0,
     grade: {
-      vignette: 0.21,
+      vignette: 0.18,
       vignetteSoft: 0.66,
-      grain: 0.03,
-      aberration: 0.00055,
-      lift: [0.022, 0.028, 0.043],
-      gain: [1.02, 1.0, 0.968],
-      saturation: 1.09,
-      sCurve: 0.2,
-      hiDesat: 0.45,
-      sharpen: 0.32,
-      midPivot: 0.34,
-      midContrast: 0.14,
-      // Barely engaged. Day already clips less than a tenth of a per cent; this
-      // is here so a specular on wet rock rolls off rather than stepping.
-      knee: 0.88,
-      shoulder: 0.5,
+      grain: 0.028,
+      aberration: 0.0005,
+      // Warm through and through. The forest split cool into the shadows
+      // because its shade was sky-lit under green; savanna shade is lit by red
+      // earth from below and blue sky from above, and the earth wins near the
+      // ground where the shadows are. So the lift is warm-neutral, and the
+      // gain leans a touch amber.
+      lift: [0.028, 0.026, 0.03],
+      gain: [1.03, 1.005, 0.96],
+      saturation: 1.04,
+      sCurve: 0.18,
+      // Lower than the forest's 0.45: the sky is a third of every frame now
+      // and bleaching its top end is what was turning the blue to white.
+      hiDesat: 0.3,
+      sharpen: 0.3,
+      midPivot: 0.36,
+      midContrast: 0.12,
+      knee: 0.86,
+      shoulder: 0.55,
     },
   },
   dusk: {
-    exposure: 1.62,
-    bloom: { strength: 0.38, radius: 0.72, threshold: 0.74 },
+    exposure: 1.3,
+    // A lower threshold than noon so the sun-side haze and the lit seed heads
+    // glow a little; the strength is held so the glow is a rim, not a wash.
+    bloom: { strength: 0.34, radius: 0.7, threshold: 0.86 },
     clamp: 12.0,
-    ao: { intensity: 1.0, radius: 0.68, scale: 1.2, distanceExponent: 1.5, thickness: 1.0 },
+    ao: { intensity: 0.95, radius: 0.68, scale: 1.15, distanceExponent: 1.5, thickness: 1.0 },
     ssr: 1.0,
+    heat: 0.3,
     grade: {
-      vignette: 0.24,
+      vignette: 0.22,
       vignetteSoft: 0.62,
-      grain: 0.034,
+      grain: 0.032,
       aberration: 0.0007,
-      // warm into the highlights, deep blue into the shadows: the whole point
-      // of this hour is that the two ends of the frame disagree about colour
-      // Teal rather than violet. A blue lift with the green left behind it puts
-      // red and blue above green on everything dark and neutral, and a black
-      // tyre came back at hue 294 — the split tone was inventing a magenta the
-      // scene does not contain.
-      lift: [0.02, 0.038, 0.058],
-      gain: [1.02, 1.005, 0.985],
-      // 1.16 on top of a key this warm was not "saturated dusk", it was one
-      // hue: the paint, the dirt and the bark all landed on the same orange and
-      // the frame stopped having materials in it. Back up a little now the key
-      // and the fill disagree, because the saturation is buying hue separation
-      // rather than piling more of the same hue on.
-      saturation: 1.14,
+      // Warm into the highlights, blue into the shadows: the whole point of
+      // this hour is that the two ends of the frame disagree about colour.
+      // Blue with the green *kept*: a lift with green under both red and blue
+      // put every dark neutral on the magenta axis, and a black tyre once came
+      // back at hue 294.
+      lift: [0.022, 0.034, 0.046],
+      gain: [1.02, 1.0, 0.985],
+      // Restrained. The key is oranger than the forest's, the sky is amber and
+      // the fog is lit dust — the frame is already one warm hue, and the grade
+      // has to buy separation, not pile more of the same on.
+      saturation: 1.02,
       sCurve: 0.22,
-      hiDesat: 0.38,
+      hiDesat: 0.4,
       sharpen: 0.3,
       midPivot: 0.3,
       midContrast: 0.16,
@@ -877,8 +1078,39 @@ const GRADES = {
       shoulder: 0.75,
     },
   },
+  overcast: {
+    exposure: 1.15,
+    bloom: { strength: 0.12, radius: 0.5, threshold: 1.4 },
+    clamp: 12.0,
+    // Soft light is all occlusion: with no key to speak of, the AO is what
+    // says where things meet, so it runs wider and at full.
+    ao: { intensity: 1.05, radius: 0.8, scale: 1.1, distanceExponent: 1.4, thickness: 1.0 },
+    ssr: 0.9,
+    heat: 0,
+    grade: {
+      vignette: 0.16,
+      vignetteSoft: 0.7,
+      grain: 0.034,
+      aberration: 0.0005,
+      // Silver: a neutral lift, a fractionally cool gain, and the saturation
+      // held under one — the desaturation that says cloud, applied once, here,
+      // rather than to every material.
+      lift: [0.03, 0.031, 0.033],
+      gain: [0.995, 1.0, 1.01],
+      saturation: 0.82,
+      sCurve: 0.12,
+      hiDesat: 0.5,
+      sharpen: 0.3,
+      midPivot: 0.4,
+      midContrast: 0.1,
+      knee: 0.9,
+      shoulder: 0.4,
+    },
+  },
   night: {
-    exposure: 1.8,
+    // Was 1.8 over a forest floor. Pale earth and straw are three times the
+    // albedo, and at the old exposure the moonlit plain read as a grey noon.
+    exposure: 1.15,
     // The emissives, and nothing else.
     //
     // This threshold is read against the linear buffer, before exposure, and
@@ -901,6 +1133,7 @@ const GRADES = {
     // A wet trail at night is mostly reflection — the lamps are the only light
     // there is, and what you see of the road is what it bounces back at you.
     ssr: 1.25,
+    heat: 0,
     grade: {
       // Barely any. A night frame is already dark in the corners and a vignette
       // on top of that is how the "eighty per cent black" failure happens.
@@ -923,7 +1156,7 @@ const GRADES = {
       // they all measured within five degrees of hue 220 no matter what the
       // lights were doing. The mode has a blue sky, blue fog and a blue key
       // already; it does not need the grade to add a fourth.
-      lift: [0.058, 0.066, 0.084],
+      lift: [0.04, 0.046, 0.06],
       // Near neutral, on purpose.
       //
       // The cool of a night frame belongs in the *lift*, which is weighted by
@@ -1037,6 +1270,12 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
   const sanitize = new ShaderPass(SanitizeShader);
   composer.addPass(sanitize);
 
+  // --- crepuscular rays ----------------------------------------------------
+  const rays = new RaysPass(camera, tier.raySamples);
+  rays.depthTexture = gtao.depthTexture;
+  rays.setSize(size.x, size.y);
+  composer.addPass(rays);
+
   // --- bloom ---------------------------------------------------------------
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.26, 0.6, 0.92);
   composer.addPass(bloom);
@@ -1052,6 +1291,8 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
   // and its grain are both measured in pixels, so feeding them the CSS size put
   // a two-pixel kernel and half-frequency grain on every ultra frame.
   grade.setSize = (w, h) => grade.uniforms.uResolution.value.set(w, h);
+  grade.uniforms.tDepth.value = gtao.depthTexture;
+  grade.uniforms.uHeatView.value.set(camera.near, camera.far, 0.5, 0);
   composer.addPass(grade);
 
   // --- antialias -----------------------------------------------------------
@@ -1088,7 +1329,15 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
       screenSpaceRadius: false,
     });
     if (ssr) ssr.material.uniforms.uStrength.value = g.ssr ?? 1;
+    const r = raysOf(name);
+    rays.gain = r.gain;
+    rays.material.uniforms.uColor.value.set(r.color);
+    rays.material.uniforms.uSpread.value = r.spread ?? 1.6;
+    rays.material.uniforms.uReach.value = r.reach ?? 0.7;
+    rays.material.uniforms.uDecay.value = r.decay ?? 0.94;
+    rays.sunDir.copy(sunDirection(name));
     const u = grade.uniforms;
+    u.uHeat.value = g.heat ?? 0;
     u.uVignette.value = g.grade.vignette;
     u.uVignetteSoft.value = g.grade.vignetteSoft;
     u.uGrain.value = g.grade.grain;
@@ -1108,10 +1357,13 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
 
   setTimeOfDay(mode);
 
+  const _fwd = new THREE.Vector3();
+  const _hz = new THREE.Vector3();
+
   return {
     composer,
     quality,
-    passes: { renderPass, sanitize, gtao, ssr, bloom, output, grade, smaa },
+    passes: { renderPass, sanitize, gtao, ssr, rays, bloom, output, grade, smaa },
     sceneStats,
     setSize,
     setTimeOfDay,
@@ -1123,6 +1375,20 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
       if (ssr) ssr.time = t;
     },
     render(dt) {
+      // Where the horizon crosses the frame, for the shimmer band: the level
+      // direction ahead of the camera, projected. Done here rather than in
+      // `update` because the camera can move while the sim is paused — every
+      // capture does exactly that — and the band has to follow it. Straight
+      // down or up has no level direction, and no horizon either.
+      camera.updateMatrixWorld();
+      camera.getWorldDirection(_fwd);
+      _hz.set(_fwd.x, 0, _fwd.z);
+      let horizon = -1;
+      if (_hz.lengthSq() >= 1e-4) {
+        _hz.normalize().add(camera.position).project(camera);
+        if (Number.isFinite(_hz.y)) horizon = THREE.MathUtils.clamp(_hz.y * 0.5 + 0.5, -1, 2);
+      }
+      grade.uniforms.uHeatView.value.set(camera.near, camera.far, horizon, 0);
       composer.render(dt);
     },
     /** Re-find the reflective surfaces, for anything built after boot. */
@@ -1136,7 +1402,7 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
     },
     /** Debug helper: turn individual stages on and off from the console. */
     toggle(name, on) {
-      const p = { ao: gtao, bloom, grade, smaa, sanitize, ssr }[name];
+      const p = { ao: gtao, bloom, grade, smaa, sanitize, ssr, rays }[name];
       if (name === 'ssr') ssrWanted = !!on;
       if (p) p.enabled = on;
       // SSR marches the G-buffer the AO pass renders, so switching AO off takes

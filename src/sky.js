@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DUSK, FOG, NIGHT, PALETTE, SUN } from './palette.js';
+import { DUSK, FOG, NIGHT, OVERCAST, PALETTE, SUN } from './palette.js';
 import { motePattern } from './textures/nature.js';
 
 // ---------------------------------------------------------------------------
@@ -23,10 +23,10 @@ void main() {
 }`;
 
 const skyFragment = /* glsl */ `
-uniform vec3 uZenith, uHorizon, uHaze, uGround, uSunColor, uCloudCol;
+uniform vec3 uZenith, uHorizon, uHaze, uGround, uSunColor, uCloudCol, uAnti;
 uniform vec3 uSunDir;
 uniform float uSunDisc, uGlow, uAureole, uHazeFalloff, uCloud, uExposure;
-uniform float uZenithPow, uStars, uMoonDetail, uMilkyWay;
+uniform float uZenithPow, uStars, uMoonDetail, uMilkyWay, uAntiGain, uWarm;
 uniform vec2 uDisc;
 varying vec3 vDir;
 
@@ -80,7 +80,7 @@ vec3 starGrid( vec2 o, float px, float cells, float fill, float radius, float ga
   // magnitudes: cubed so the field is mostly faint with a few genuinely bright
   float mag = h4 * h4 * h4;
   vec3 tint = mix( vec3( 1.0, 0.90, 0.78 ), vec3( 0.74, 0.84, 1.0 ), h1 );
-  return tint * s * ( 0.035 + mag * 0.40 ) * gain;
+  return tint * s * ( 0.02 + mag * 0.34 ) * gain;
 }
 
 void main() {
@@ -97,11 +97,25 @@ void main() {
   float c = clamp( dot( d, uSunDir ), -1.0, 1.0 );
   float cp = max( c, 0.0 );
 
+  // Open-sky gradient across the azimuth, which a forest sky never needed.
+  // The sun's half of the sky warms towards the horizon band well outside the
+  // aureole, and the far half carries the earth's shadow: a rose-violet band
+  // sitting on a blue-grey base. This is what makes the dusk read as a
+  // gradient the eye can follow rather than a hot spot on a flat dome.
+  float side = smoothstep( -1.0, 1.0, c );
+  col = mix( col, uHaze, haze * side * uWarm );
+  float anti = pow( max( -c, 0.0 ), 2.5 ) * haze;
+  col = mix( col, uAnti, anti * uAntiGain );
+
   if ( uStars > 0.0 ) {
     vec2 o = octEncode( d );
     float px = length( fwidth( o ) );
-    vec3 sf = starGrid( o, px, 210.0, 0.26, 0.16, 1.0 )
-            + starGrid( o + 7.3, px, 96.0, 0.11, 0.22, 1.55 );
+    // Thinned for an open sky. Under a canopy a tenth of the dome was visible
+    // and the density read as a sky; over a plain the same field is snow.
+    // Thinned again after the plain: at a capture's pixel pitch every star is
+    // floored to a whole pixel, so the count is what reads, not the radius.
+    vec3 sf = starGrid( o, px, 210.0, 0.045, 0.16, 0.8 )
+            + starGrid( o + 7.3, px, 96.0, 0.022, 0.22, 1.35 );
     // The Milky Way is a soft band round a tilted great circle. It is what stops
     // the upper sky reading as an even wash of dots.
     vec3 axis = normalize( vec3( 0.42, 0.52, -0.74 ) );
@@ -145,138 +159,187 @@ void main() {
   }
   col += discCol * disc * uSunDisc;
 
-  // below the horizon the environment should read as dark forest floor
+  // below the horizon the dome reads as the plain, so nothing that peeks under
+  // the terrain's edge is sky-blue
   col = mix( col, uGround, smoothstep( 0.0, -0.10, h ) );
 
   col = clamp( col * uExposure, vec3( 0.0 ), vec3( 80.0 ) );
   gl_FragColor = vec4( col, 1.0 );
 }`;
 
+// Two ways to turn a hex into a linear radiance, and the difference matters.
+//
+// `lin` converts twice: `new Color(hex)` already lands in linear under three's
+// colour management, and `convertSRGBToLinear` on top of that darkens and
+// saturates it again. The night rig was tuned against that and is kept on it.
+// `rad` converts once, so the hex you read is the sRGB the sky will show at
+// unit exposure, which is the only way to author a gradient by eye.
 const lin = (hex, mul = 1) => new THREE.Color(hex).convertSRGBToLinear().multiplyScalar(mul);
+const rad = (hex, mul = 1) => new THREE.Color(hex).multiplyScalar(mul);
+
+/**
+ * The colour the sky shader shows at the horizon away from the sun: this is
+ * what the far ground has to fog to, or the plain and the sky meet in a seam.
+ */
+function horizonOf(sky, k = 0.52) {
+  return sky.horizon.clone().lerp(sky.haze, k);
+}
 
 // ---------------------------------------------------------------------------
-// The three hours.
+// The four hours.
 //
-// Each entry is a complete lighting rig, not a tint on the previous one. The
-// day rig is the one twelve iterations landed on and is reproduced exactly;
-// the other two are built from their own key/fill ratio.
+// Each entry is a complete lighting rig, not a tint on the previous one. They
+// were rebuilt for open country: a forest rig is a corridor problem — get the
+// key through the canopy, keep the fog under the treeline — and a savanna rig
+// is the opposite one, a sky that is most of the frame and a horizon that is
+// forty kilometres away.
 // ---------------------------------------------------------------------------
+
+const DAY_SKY = {
+  // Equatorial noon. Deep blue overhead falling to a pale, warm, dusty band,
+  // and the band reaches higher than it did over the forest because the air
+  // here has soil in it.
+  zenith: rad(0x1f5cbc, 0.7),
+  horizon: rad(0x9cb8dc, 0.6),
+  // Held under white: the band was clipping to paper at the ridge line, and a
+  // dust haze is a colour, not a highlight.
+  haze: rad(0xe6d2ae, 0.82),
+  anti: rad(0xc9c3bc, 0.6),
+  antiGain: 0.0,
+  warm: 0.12,
+  ground: rad(0x5a3a22, 0.35),
+  sunColor: rad(0xfff0d8),
+  cloudCol: rad(0xf2f0ea, 0.9),
+  sunDisc: 46.0,
+  envDisc: 8.0,
+  glow: 5.0,
+  envGlow: 3.0,
+  aureole: 0.42,
+  hazeFalloff: 14.0,
+  cloud: 0.5,
+  zenithPow: 0.42,
+  disc: [0.99955, 0.99988],
+  stars: 0,
+  milkyWay: 0,
+  moonDetail: 0,
+};
+
+const DUSK_SKY = {
+  zenith: rad(DUSK.skyTop, 0.62),
+  horizon: rad(0xf0b478, 0.58),
+  haze: rad(DUSK.haze, 0.9),
+  anti: rad(DUSK.antiSun, 0.66),
+  antiGain: 0.9,
+  warm: 0.3,
+  ground: rad(DUSK.ground, 0.9),
+  sunColor: rad(DUSK.sunLow, 1.1),
+  cloudCol: rad(DUSK.cloud, 0.7),
+  sunDisc: 26.0,
+  envDisc: 5.0,
+  glow: 8.5,
+  envGlow: 2.4,
+  // A low sun scatters through far more air, so the aureole is most of the
+  // sky rather than a ring: this is the term that makes dusk read as dusk.
+  aureole: 0.7,
+  hazeFalloff: 10.0,
+  cloud: 0.7,
+  zenithPow: 0.5,
+  disc: [0.99930, 0.99978],
+  // None. With the disc still fifteen degrees up there are no stars, and the
+  // few that were here read as white specks over the amber.
+  stars: 0,
+  milkyWay: 0,
+  moonDetail: 0,
+};
+
+const OVERCAST_SKY = {
+  zenith: rad(OVERCAST.skyTop, 0.36),
+  horizon: rad(OVERCAST.skyHorizon, 0.54),
+  haze: rad(OVERCAST.haze, 0.62),
+  anti: rad(OVERCAST.haze, 0.62),
+  antiGain: 0.0,
+  warm: 0.0,
+  ground: rad(OVERCAST.ground, 0.7),
+  sunColor: rad(0xe4e4e2, 0.6),
+  // Darker than the sky it sits in, so the fbm deck reads as cloud bases
+  // rather than vanishing into a white card.
+  cloudCol: rad(OVERCAST.cloud, 0.6),
+  sunDisc: 0.0,
+  envDisc: 0.0,
+  glow: 0.5,
+  envGlow: 0.3,
+  aureole: 0.25,
+  hazeFalloff: 6.0,
+  cloud: 1.0,
+  zenithPow: 0.8,
+  disc: [0.9995, 0.9999],
+  stars: 0,
+  milkyWay: 0,
+  moonDetail: 0,
+};
 
 const MODES = {
   day: {
     key: { az: SUN.azimuth, el: SUN.elevation, color: PALETTE.sunColor, intensity: SUN.intensity },
-    sky: {
-      zenith: lin(0x1d5aa2, 1.7),
-      horizon: lin(0xbcc4c2, 1.4),
-      // Was 0xecd0a4, a saturated warm tan. Six tenths of that over a blue
-      // zenith mixes to grey-lavender, which is what the sky above the treeline
-      // has been reading as — an overcast colour under a hard sun.
-      haze: lin(0xe6dcc8, 1.62),
-      ground: lin(0x1c231b, 0.6),
-      sunColor: lin(PALETTE.sunColorLow),
-      cloudCol: lin(0xd9dbe6),
-      sunDisc: 46.0,
-      envDisc: 8.0,
-      glow: 5.5,
-      envGlow: 3.2,
-      aureole: 0.55,
-      // the haze band has to stay near the horizon; at 8.5 it reached far enough
-      // up that most of the visible sky was pale warm grey rather than blue
-      hazeFalloff: 15.0,
-      cloud: 0.7,
-      zenithPow: 0.42,
-      disc: [0.99955, 0.99988],
-      stars: 0,
-      milkyWay: 0,
-      moonDetail: 0,
-    },
-    hemi: { sky: 0x68827d, ground: PALETTE.bounce, intensity: 0.42 },
-    rim: { color: PALETTE.shadowTint, intensity: 0.45 },
-    fill: { color: PALETTE.sunColor, intensity: 16, angle: 0.55, throw: 14, az: 252, el: 21 },
-    fog: { color: PALETTE.fogColor, density: FOG.density },
+    sky: DAY_SKY,
+    // Open sky over red earth. The sky half is no longer canopy-filtered — it is
+    // a real pale blue, held down because the PMREM already carries the sky —
+    // and the ground half is the ochre the whole plain bounces back, which is
+    // what warms every underside and shadowed flank in the frame.
+    hemi: { sky: 0x93a9c2, ground: PALETTE.bounce, intensity: 0.5 },
+    rim: { color: PALETTE.shadowTint, intensity: 0.38 },
+    // The bounce card stays. A 58-degree sun leaves a door skin at half the
+    // irradiance of the bonnet and open ground does not fill it; the card is
+    // the earth doing so, so it is earth-coloured now.
+    fill: { color: 0xffd9b0, intensity: 13, angle: 0.55, throw: 14, az: 252, el: 21 },
+    fog: { color: horizonOf(DAY_SKY), density: FOG.density, sunGain: 0.35, sunPow: 5.0, height: 0.016, heightMix: 1.0 },
     // A multiplier on each material's authored value, so day is a no-op.
     envIntensity: 1.0,
-    shadow: { radius: 1.5, bias: -0.00012, normalBias: 0.035, intensity: 1.0 },
-    shafts: { color: PALETTE.sunColorLow, gain: 1.0 },
-    motes: { color: 0xffe8cc, opacity: 0.3, beam: 0, size: 1, density: 1, cap: 0.3 },
+    shadow: { radius: 1.2, bias: -0.00012, normalBias: 0.035, intensity: 1.0 },
+    // Columns of lit dust, faint. Under a canopy these were the shot; on a plain
+    // at noon they are barely there, which is right.
+    shafts: { color: PALETTE.dustLit, gain: 0.28, width: 1.7 },
+    motes: { color: PALETTE.dustLit, opacity: 0.09, beam: 0, size: 0.8, density: 0.5, cap: 0.12 },
     beams: { gain: 0, glare: 0 },
+    rays: { color: 0xffe6c0, gain: 0.0 },
     groundIndirect: 1.0,
     surfaces: { dash: 1, film: 1, glass: 1 },
   },
 
   dusk: {
-    // A sun genuinely on the horizon cannot reach the truck: a 24 m conifer at
-    // the edge of a 25 m clearing throws a 200 m shadow at 6 degrees, so the
-    // whole corridor is in shade and there is no key at all. Twenty-four is the
-    // lowest elevation that still lands on the flanks, and the shadow term is
-    // held back from full so the canopy dapple cannot take it away either.
-    // Thirty-three, not twenty-four. Twenty-four is the honest elevation for
-    // this sky but a 24 m conifer at the edge of the clearing shades the whole
-    // corridor at that angle, so the key never lands on the truck and the hour
-    // reads only in the backdrop. The sky's own dusk comes from the aureole and
-    // the horizon band rather than from where the disc is, so it survives being
-    // lifted far enough to clear the canopy.
-    key: { az: 296, el: 38, color: DUSK.sun, intensity: 7.2 },
-    sky: {
-      zenith: lin(DUSK.skyTop, 1.05),
-      horizon: lin(DUSK.skyHorizon, 1.25),
-      haze: lin(DUSK.haze, 1.55),
-      ground: lin(DUSK.ground, 0.9),
-      sunColor: lin(DUSK.sunLow),
-      cloudCol: lin(DUSK.cloud, 0.75),
-      sunDisc: 30.0,
-      envDisc: 6.0,
-      glow: 7.5,
-      envGlow: 2.6,
-      // A low sun scatters through far more air, so the aureole is most of the
-      // sky rather than a ring: this is the term that makes dusk read as dusk.
-      // It is also what the PMREM integrates, and at 1.35 the environment was a
-      // uniformly orange dome that put the same wash on every surface in the
-      // scene — which is a different thing from a warm sky behind a subject.
-      aureole: 1.05,
-      hazeFalloff: 6.5,
-      cloud: 0.85,
-      zenithPow: 0.60,
-      disc: [0.99948, 0.99985],
-      stars: 0.22,
-      milkyWay: 0,
-      moonDetail: 0,
-    },
-    // Traded up against the environment below: the hemisphere is diffuse only,
-    // the environment is diffuse *and* specular, and it is the specular half
-    // that was chalking the flank.
-    hemi: { sky: DUSK.hemiSky, ground: DUSK.bounce, intensity: 0.85 },
-    rim: { color: DUSK.shadowTint, intensity: 0.5 },
-    // Cool, and deliberately so. With the key under the horizon on the far side
-    // the near flank is lit by nothing but sky, and a *warm* fill under a warm
-    // key is how the first pass turned every surface in the frame the same
-    // orange — the truck's green paint came back brown. The whole appeal of
-    // this hour is that the two sources disagree, so the fill is given the
-    // colour of the half of the sky the sun is not in.
-    // Forty-eight, the azimuth the night sweep found, not the day rig's 252.
-    // The day fill sits opposite a key that already lands on the doors, so it
-    // only has to open the shadow; here the key is round the far side and the
-    // fill is the only thing on the camera-side flank at all. At 252 it was
-    // behind that flank and doubling its intensity changed the door skin by
-    // less than a value of 255 — a light on the wrong side of a surface is not
-    // a dim light, it is no light.
-    fill: { color: 0x93add4, intensity: 22, angle: 0.6, throw: 13, az: 48, el: 18 },
-    fog: { color: DUSK.fog, density: 0.0072 },
-    // The chalky flank was here.
-    //
-    // Dusk kept nearly the whole of the day's environment intensity while the
-    // diffuse key dropped under the horizon, so the ratio inverted: the paint's
-    // clearcoat was returning more reflected sky than the paint underneath was
-    // returning light, and an added sheen over a dark diffuse is exactly what
-    // chalk is. The door skin measured saturation 0.14 against the day's 0.55.
-    // The same term is why the glass read as pink plastic rather than as a
-    // window with an interior behind it.
-    envIntensity: 0.62,
-    shadow: { radius: 2.1, bias: -0.00016, normalBias: 0.045, intensity: 0.72 },
-    shafts: { color: 0xff9a4e, gain: 1.5 },
-    motes: { color: 0xffd0a0, opacity: 0.26, beam: 0.5, size: 0.85, density: 0.8, cap: 0.24 },
-    beams: { gain: 0.6, glare: 0.35 },
-    groundIndirect: 0.78,
+    // Genuinely low. The forest held this at 38 degrees because a 24 m conifer
+    // shaded the whole corridor at anything lower; there is no canopy to clear
+    // on a plain, so the key is where a golden-hour key is, and the shadows
+    // stretch across the road the way the hour wants.
+    key: { az: 296, el: 15, color: DUSK.sun, intensity: 5.2 },
+    sky: DUSK_SKY,
+    // The hemisphere is diffuse only, the environment is diffuse *and*
+    // specular, and it is the specular half that chalks a flank.
+    hemi: { sky: DUSK.hemiSky, ground: DUSK.bounce, intensity: 0.9 },
+    rim: { color: DUSK.shadowTint, intensity: 0.45 },
+    // Cool, and deliberately so. With the key round the far side the near flank
+    // is lit by nothing but sky, and a *warm* fill under a warm key is how a
+    // first pass turned every surface the same orange. The whole appeal of this
+    // hour is that the two sources disagree, so the fill has the colour of the
+    // half of the sky the sun is not in, from the camera-side azimuth.
+    fill: { color: 0x93add4, intensity: 21, angle: 0.6, throw: 13, az: 48, el: 18 },
+    // Dustier than noon, and the dust is lit: distance towards the sun goes to
+    // amber, away from it to the rose of the haze band.
+    fog: { color: horizonOf(DUSK_SKY, 0.35), density: 0.0021, sunGain: 0.5, sunPow: 3.0, height: 0.02, heightMix: 1.0 },
+    // The chalky flank was here: dusk kept nearly the whole of the day's
+    // environment while the key dropped, so the clearcoat returned more sky
+    // than the paint underneath returned light. And lower again for the plain:
+    // this environment is an amber dome, and at 0.62 every shadow in the frame
+    // was the same amber as the key. The hemisphere above is the blue half.
+    envIntensity: 0.5,
+    shadow: { radius: 2.0, bias: -0.00016, normalBias: 0.045, intensity: 0.82 },
+    shafts: { color: 0xffa354, gain: 1.1, width: 2.4 },
+    // Larger and fainter than the first pass: at 0.3 and under a pixel each,
+    // the lit dust read as white specks over the sky rather than as haze.
+    motes: { color: 0xffcf98, opacity: 0.16, beam: 0.5, size: 1.4, density: 0.9, cap: 0.16 },
+    beams: { gain: 0.55, glare: 0.3 },
+    rays: { color: 0xffb56a, gain: 1.4, spread: 1.2, reach: 0.7, decay: 0.94 },
+    groundIndirect: 0.8,
     surfaces: { dash: 1.35, film: 0.6, glass: 0.65 },
   },
 
@@ -294,11 +357,14 @@ const MODES = {
     // and the standing water in them come up as the brightest thing in the
     // frame. That is the shot. Sixty lit the near flank better and looked like
     // an underexposed afternoon.
-    key: { az: 140, el: 43, color: NIGHT.moon, intensity: 2.1 },
+    key: { az: 140, el: 43, color: NIGHT.moon, intensity: 1.6 },
     sky: {
       zenith: lin(NIGHT.skyTop, 1.0),
       horizon: lin(NIGHT.skyHorizon, 1.0),
       haze: lin(NIGHT.haze, 1.15),
+      anti: lin(NIGHT.haze, 1.0),
+      antiGain: 0.0,
+      warm: 0.0,
       ground: lin(NIGHT.ground, 1.0),
       sunColor: lin(NIGHT.moon),
       cloudCol: lin(NIGHT.cloud, 0.9),
@@ -313,11 +379,14 @@ const MODES = {
       cloud: 0.30,
       zenithPow: 0.55,
       disc: [0.999905, 0.999975],
-      stars: 1.0,
+      // Down from 0.8 with the field thinned twice: a wide campground framing
+      // has half its frame in sky, and at a capture's pitch the count is what
+      // reads. The Milky Way carries the sense of a dark-sky night instead.
+      stars: 0.5,
       milkyWay: 0.5,
       moonDetail: 1.0,
     },
-    hemi: { sky: NIGHT.hemiSky, ground: NIGHT.bounce, intensity: 0.44 },
+    hemi: { sky: NIGHT.hemiSky, ground: NIGHT.bounce, intensity: 0.36 },
     // A cool counter-key from behind the camera. At 0.16 it did nothing at all
     // and the truck's near flank was a single flat value; this is what puts an
     // edge on the roof line and the tyre shoulders on the shadow side.
@@ -333,20 +402,24 @@ const MODES = {
     // second flat wash; at fourteen degrees it rakes along the door skins and
     // the flank finally has a gradient across it.
     fill: { color: 0x9db5d8, intensity: 15, angle: 0.6, throw: 13, az: 48, el: 14 },
-    fog: { color: NIGHT.fog, density: 0.0082 },
+    // Thinner than the forest's 0.0082: a moonlit plain has kilometres of
+    // visibility, and the fog's job here is only to put the far acacias under
+    // the horizon band rather than to close the corridor.
+    fog: { color: NIGHT.fog, density: 0.0046, sunGain: 0.0, sunPow: 3.0, height: 0.02, heightMix: 1.0 },
     // Traded down against the hemisphere above. The environment is a render of
     // the night sky and is therefore as saturated as the night sky; the
     // hemisphere is a colour I can set. Same total ambient, more of it from the
     // term whose hue is under control.
     envIntensity: 0.72,
     shadow: { radius: 2.4, bias: -0.00018, normalBias: 0.05, intensity: 0.88 },
-    shafts: { color: 0x9dbbe8, gain: 0.55 },
+    shafts: { color: 0x9dbbe8, gain: 0.45, width: 1.4 },
     // Dust you can see across the whole frame needs a light source filling the
     // whole frame; at night there is none, so the field is thinned to a third
     // and shrunk, and what is left only shows where the lamps reach it. Before
     // this the motes read as a snowstorm of blown white specks.
     motes: { color: 0x6f83a6, opacity: 0.055, beam: 1.0, size: 0.5, density: 0.34, cap: 0.1 },
     beams: { gain: 2.1, glare: 1.0 },
+    rays: { color: 0x9dbbe8, gain: 0.0 },
     // Up from 0.4. Under the headlamps the trail's relief swings the full range
     // of N.L in the space of a few centimetres, so the lit facets clip and the
     // ones tilted away have nothing on them at all; a little more indirect on
@@ -354,6 +427,27 @@ const MODES = {
     // pool reading as a textured surface rather than as noise.
     groundIndirect: 0.62,
     surfaces: { dash: 2.1, film: 0.2, glass: 0.24 },
+  },
+
+  overcast: {
+    // One big soft source. The key is kept — a directional with no shadow is a
+    // flat wash, and even under cloud there is a brighter side to the sky — but
+    // it is dim, near-white, and its shadow is wide and faint. Everything else
+    // is carried by the hemisphere, which is the cloud deck.
+    key: { az: SUN.azimuth, el: 62, color: OVERCAST.sun, intensity: 2.6 },
+    sky: OVERCAST_SKY,
+    hemi: { sky: OVERCAST.hemiSky, ground: OVERCAST.bounce, intensity: 1.45 },
+    rim: { color: OVERCAST.shadowTint, intensity: 0.25 },
+    fill: { color: 0xe8ecf0, intensity: 8, angle: 0.55, throw: 14, az: 252, el: 21 },
+    fog: { color: horizonOf(OVERCAST_SKY), density: 0.0026, sunGain: 0.0, sunPow: 3.0, height: 0.014, heightMix: 1.0 },
+    envIntensity: 1.1,
+    shadow: { radius: 4.0, bias: -0.00016, normalBias: 0.05, intensity: 0.38 },
+    shafts: { color: 0xffffff, gain: 0.0, width: 1.0 },
+    motes: { color: 0xd8d2c8, opacity: 0.08, beam: 0, size: 1, density: 0.5, cap: 0.2 },
+    beams: { gain: 0, glare: 0 },
+    rays: { color: 0xffffff, gain: 0.0 },
+    groundIndirect: 1.0,
+    surfaces: { dash: 1.1, film: 0.85, glass: 0.85 },
   },
 };
 
@@ -530,6 +624,9 @@ function makeSkyMaterial(cfg, sunDir) {
       uGround: { value: cfg.ground.clone() },
       uSunColor: { value: cfg.sunColor.clone() },
       uCloudCol: { value: cfg.cloudCol.clone() },
+      uAnti: { value: cfg.anti.clone() },
+      uAntiGain: { value: cfg.antiGain },
+      uWarm: { value: cfg.warm },
       uSunDir: { value: sunDir.clone() },
       uSunDisc: { value: cfg.sunDisc },
       uGlow: { value: cfg.glow },
@@ -560,6 +657,9 @@ function applySkyUniforms(material, cfg, sunDir, { env = false } = {}) {
   u.uGround.value.copy(cfg.ground);
   u.uSunColor.value.copy(cfg.sunColor);
   u.uCloudCol.value.copy(cfg.cloudCol);
+  u.uAnti.value.copy(cfg.anti);
+  u.uAntiGain.value = cfg.antiGain;
+  u.uWarm.value = cfg.warm;
   u.uSunDir.value.copy(sunDir);
   u.uSunDisc.value = env ? cfg.envDisc : cfg.sunDisc;
   u.uGlow.value = env ? cfg.envGlow : cfg.glow;
@@ -575,9 +675,146 @@ function applySkyUniforms(material, cfg, sunDir, { env = false } = {}) {
   u.uDisc.value.set(cfg.disc[0], cfg.disc[1]);
 }
 
-/** Sample the sky shader on the CPU for a rough horizon colour. */
-export function horizonColor() {
-  return new THREE.Color(0xbfd0d6);
+/** The sky's own horizon colour for the current hour, in linear. */
+export function horizonColor(mode = currentMode) {
+  return horizonOf(modeOf(mode).sky);
+}
+
+// ---------------------------------------------------------------------------
+// Atmospheric perspective.
+//
+// three's fog is a single colour at a single density over the whole volume,
+// which is a corridor's fog. A plain wants two more things from it: the dust
+// is a *layer*, densest at the ground and thinning with height, so a hilltop
+// forty metres up sits in clearer air than the road under it; and the dust is
+// *lit*, so the same distance goes to amber towards the sun and to the rose of
+// the horizon band away from it. Both are added to three's own fog chunk so
+// every built-in material in the scene — the terrain, the campground, the
+// fleet, the roadside — picks them up without any of those files changing.
+//
+// The uniforms ride on `ShaderLib` as typed arrays. `cloneUniforms` copies a
+// typed array by reference where it would clone a Vector or Color, so the one
+// array here is the value every material's program reads, and updating it in
+// place updates the whole scene for the cost of writing four floats. A
+// ShaderMaterial that includes the fog chunks without these uniforms gets GLSL's
+// zero defaults, and every term below is written so that zero is stock fog.
+// ---------------------------------------------------------------------------
+
+const HAZE = {
+  // rgb: colour of sunlit dust; w: how far towards it the fog goes at the sun
+  sun: new Float32Array([0, 0, 0, 0]),
+  // xyz: sun direction in *view* space; w: the lobe's exponent
+  dir: new Float32Array([0, 0, 1, 1]),
+  // x: 1 / scale height of the layer; y: how much of the layer to use;
+  // z: world y the layer is referenced to (the road under the truck);
+  // w: the camera's far plane, where the ground has to have gone to sky
+  params: new Float32Array([0, 0, 0, 0]),
+};
+
+let hazeInstalled = false;
+
+function installHazeFog() {
+  if (hazeInstalled) return;
+  hazeInstalled = true;
+
+  for (const key of Object.keys(THREE.ShaderLib)) {
+    const u = THREE.ShaderLib[key].uniforms;
+    if (!u || !u.fogColor) continue;
+    u.uHazeSun = { value: HAZE.sun };
+    u.uHazeDir = { value: HAZE.dir };
+    u.uHazeParams = { value: HAZE.params };
+  }
+
+  THREE.ShaderChunk.fog_pars_vertex = /* glsl */ `
+#ifdef USE_FOG
+	varying float vFogDepth;
+	varying vec3 vFogView;
+#endif`;
+  THREE.ShaderChunk.fog_vertex = /* glsl */ `
+#ifdef USE_FOG
+	vFogDepth = - mvPosition.z;
+	vFogView = mvPosition.xyz;
+#endif`;
+  THREE.ShaderChunk.fog_pars_fragment = /* glsl */ `
+#ifdef USE_FOG
+	uniform vec3 fogColor;
+	uniform vec4 uHazeSun;
+	uniform vec4 uHazeDir;
+	uniform vec4 uHazeParams;
+	varying float vFogDepth;
+	varying vec3 vFogView;
+	#ifdef FOG_EXP2
+		uniform float fogDensity;
+	#else
+		uniform float fogNear;
+		uniform float fogFar;
+	#endif
+#endif`;
+  // Every guard here is against a NaN, because one NaN pixel is a black frame
+  // once bloom has spread it: the direction is divided by a floored length, the
+  // layer integral is taken in closed form with its own removable singularity
+  // handled, the exponent is clamped so exp() cannot overflow to inf (and inf
+  // times the zero it is then multiplied by is NaN), and the sun lobe's pow()
+  // never sees a zero base against a zero exponent.
+  THREE.ShaderChunk.fog_fragment = /* glsl */ `
+#ifdef USE_FOG
+	float hzDist = length( vFogView );
+	vec3 hzDir = vFogView / max( hzDist, 1e-4 );
+	// column 1 of the view matrix is world up expressed in view space, so this
+	// is the ray's world-space vertical component
+	float hzRayY = dot( hzDir, viewMatrix[ 1 ].xyz );
+	float hzB = uHazeParams.x;
+	float hzT = clamp( hzRayY * hzB * hzDist, -20.0, 60.0 );
+	float hzInt = abs( hzT ) > 1e-3 ? ( 1.0 - exp( -hzT ) ) / hzT : 1.0 - 0.5 * hzT;
+	float hzLayer = exp( -clamp( ( cameraPosition.y - uHazeParams.z ) * hzB, -6.0, 20.0 ) ) * hzInt;
+	float hzDens = mix( 1.0, clamp( hzLayer, 0.0, 40.0 ), uHazeParams.y );
+	#ifdef FOG_EXP2
+		float hzK = fogDensity * hzDens * hzDist;
+		float fogFactor = 1.0 - exp( - hzK * hzK );
+	#else
+		float fogFactor = smoothstep( fogNear, fogFar, vFogDepth * hzDens );
+	#endif
+	// The far plane cuts the plain off at a hard line unless the air has taken
+	// it first. Whatever the density, the last stretch before the far plane goes
+	// to sky. (An unpatched material reads w = 0 and gets no wall at all.)
+	float hzFar = uHazeParams.w > 1.0 ? uHazeParams.w : 1e9;
+	fogFactor = max( fogFactor, smoothstep( hzFar * 0.55, hzFar * 0.92, hzDist ) );
+	float hzSun = pow( max( dot( hzDir, uHazeDir.xyz ), 0.0 ), max( uHazeDir.w, 1.0 ) );
+	vec3 hzCol = mix( fogColor, uHazeSun.rgb, hzSun * uHazeSun.w );
+	gl_FragColor.rgb = mix( gl_FragColor.rgb, hzCol, fogFactor );
+#endif`;
+}
+
+const _hzQ = new THREE.Quaternion();
+const _hzV = new THREE.Vector3();
+
+function applyHaze(cfg) {
+  const f = cfg.fog;
+  const c = _hzV.set(0, 0, 0);
+  if (f.sunGain > 0) {
+    // The lit dust is the sky's haze colour lifted, not a separate hue: the sun
+    // side of the horizon band is exactly what the far ground is sitting under.
+    const s = cfg.sky.haze;
+    c.set(s.r, s.g, s.b).multiplyScalar(1.35);
+  }
+  HAZE.sun[0] = c.x;
+  HAZE.sun[1] = c.y;
+  HAZE.sun[2] = c.z;
+  HAZE.sun[3] = f.sunGain ?? 0;
+  HAZE.dir[3] = f.sunPow ?? 3;
+  HAZE.params[0] = f.height ?? 0;
+  HAZE.params[1] = f.heightMix ?? 0;
+}
+
+/** Per frame: the sun in view space, and the ground level the layer sits on. */
+function updateHaze(camera, sunDir, groundY) {
+  camera.getWorldQuaternion(_hzQ).invert();
+  _hzV.copy(sunDir).applyQuaternion(_hzQ);
+  HAZE.dir[0] = _hzV.x;
+  HAZE.dir[1] = _hzV.y;
+  HAZE.dir[2] = _hzV.z;
+  HAZE.params[2] = groundY;
+  HAZE.params[3] = camera.far || 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -590,6 +827,11 @@ export function horizonColor() {
 export function sunDirection(mode = currentMode) {
   const k = modeOf(mode).key;
   return dirFrom(k.az, k.el);
+}
+
+/** The crepuscular-ray settings for an hour, read by the post chain. */
+export function raysOf(mode = currentMode) {
+  return modeOf(mode).rays || { color: 0xffffff, gain: 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -610,55 +852,72 @@ export function sunDirection(mode = currentMode) {
 
 const HUE_NIGHT = 0x7ea2dc;
 const HUE_NIGHT_DEEP = 0x3d5c8c;
-const HUE_DUSK = 0xffab74;
-const HUE_DUSK_COOL = 0x8592b4;
+const HUE_DUSK = 0xffa862;
+const HUE_DUSK_COOL = 0x8590b8;
+// Overcast has one hue: the cloud deck. Every term that was a sun or a sky
+// converges on it, and the ratios between them flatten.
+const HUE_GREY = 0xc4c8cc;
+const HUE_GREY_DEEP = 0x8a9098;
 
 // `hue` recolours while keeping the base's own lightness, so materials that
 // deliberately differ in strength keep differing.
 const RETUNE = {
   // --- vehicle: graded analytic reflection --------------------------------
-  uBwSky: { dusk: { hue: HUE_DUSK_COOL, mul: 0.85 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.30 } },
-  uBwRim: { dusk: { hue: HUE_DUSK, sat: 0.75, mul: 0.75 }, night: { hue: HUE_NIGHT, mul: 0.58 } },
-  uBwGround: { dusk: { mul: 0.8 }, night: { hue: HUE_NIGHT_DEEP, sat: 0.5, mul: 0.4 } },
-  uBwWall: { dusk: { mul: 0.8 }, night: { hue: HUE_NIGHT_DEEP, sat: 0.5, mul: 0.4 } },
-  uBwStrength: { dusk: { mul: 1.0 }, night: { mul: 1.0 } },
-  uBwAmbient: { dusk: { mul: 0.85 }, night: { mul: 0.42 } },
+  uBwSky: {
+    dusk: { hue: HUE_DUSK_COOL, mul: 0.85 },
+    night: { hue: HUE_NIGHT_DEEP, mul: 0.30 },
+    overcast: { hue: HUE_GREY, sat: 0.9, mul: 1.05 },
+  },
+  uBwRim: {
+    dusk: { hue: HUE_DUSK, sat: 0.75, mul: 0.75 },
+    night: { hue: HUE_NIGHT, mul: 0.58 },
+    overcast: { hue: HUE_GREY, sat: 0.9, mul: 0.5 },
+  },
+  uBwGround: { dusk: { mul: 0.8 }, night: { hue: HUE_NIGHT_DEEP, sat: 0.5, mul: 0.4 }, overcast: { sat: 0.6, hue: 0x8a7e70, mul: 0.9 } },
+  uBwWall: { dusk: { mul: 0.8 }, night: { hue: HUE_NIGHT_DEEP, sat: 0.5, mul: 0.4 }, overcast: { sat: 0.6, hue: 0x8a7e70, mul: 0.9 } },
+  uBwStrength: { dusk: { mul: 1.0 }, night: { mul: 1.0 }, overcast: { mul: 0.9 } },
+  uBwAmbient: { dusk: { mul: 0.85 }, night: { mul: 0.42 }, overcast: { mul: 1.1 } },
 
   // --- vehicle: cabin inter-reflection ------------------------------------
-  uCbGain: { dusk: { mul: 0.6 }, night: { mul: 0.3 } },
-  uCbFloor: { dusk: { mul: 0.6 }, night: { mul: 0.3 } },
-  uCbSpec: { dusk: { mul: 0.8 }, night: { mul: 0.5 } },
-  uCbColor: { dusk: { hue: 0xffb98a, sat: 0.7 }, night: { hue: 0xffd9a8, sat: 0.55 } },
+  uCbGain: { dusk: { mul: 0.6 }, night: { mul: 0.3 }, overcast: { mul: 0.85 } },
+  uCbFloor: { dusk: { mul: 0.6 }, night: { mul: 0.3 }, overcast: { mul: 0.85 } },
+  uCbSpec: { dusk: { mul: 0.8 }, night: { mul: 0.5 }, overcast: { mul: 0.7 } },
+  uCbColor: { dusk: { hue: 0xffb98a, sat: 0.7 }, night: { hue: 0xffd9a8, sat: 0.55 }, overcast: { hue: HUE_GREY, sat: 0.7 } },
 
   // --- cabin daylight model ------------------------------------------------
   // Nothing comes through the screen at night, so the cab is lit by the dash
   // and by whatever the headlamps throw back off the trail. Gains collapse and
   // the aperture colours go cool, which is what leaves the instrument backlight
   // as the only warm thing in the frame.
-  uClGain: { dusk: { mul: 0.5 }, night: { mul: 0.17 } },
-  uClSide: { dusk: { mul: 0.5 }, night: { mul: 0.15 } },
-  uClUp: { dusk: { mul: 0.55 }, night: { mul: 0.2 } },
-  uClSun: { dusk: { mul: 0.55 }, night: { mul: 0.08 } },
-  uClFill: { dusk: { mul: 0.6 }, night: { mul: 0.28 } },
-  uClSpec: { dusk: { mul: 0.8 }, night: { mul: 0.45 } },
-  uClColor: { dusk: { hue: 0xffb173, sat: 0.85 }, night: { hue: HUE_NIGHT, sat: 0.8 } },
-  uClSideColor: { dusk: { hue: 0xa08098, sat: 0.7 }, night: { hue: HUE_NIGHT_DEEP, sat: 0.7 } },
-  uClSunColor: { dusk: { hue: HUE_DUSK }, night: { hue: HUE_NIGHT, sat: 0.7 } },
+  uClGain: { dusk: { mul: 0.5 }, night: { mul: 0.17 }, overcast: { mul: 0.8 } },
+  uClSide: { dusk: { mul: 0.5 }, night: { mul: 0.15 }, overcast: { mul: 0.8 } },
+  uClUp: { dusk: { mul: 0.55 }, night: { mul: 0.2 }, overcast: { mul: 1.0 } },
+  uClSun: { dusk: { mul: 0.55 }, night: { mul: 0.08 }, overcast: { mul: 0.25 } },
+  uClFill: { dusk: { mul: 0.6 }, night: { mul: 0.28 }, overcast: { mul: 0.9 } },
+  uClSpec: { dusk: { mul: 0.8 }, night: { mul: 0.45 }, overcast: { mul: 0.7 } },
+  uClColor: { dusk: { hue: 0xffb173, sat: 0.85 }, night: { hue: HUE_NIGHT, sat: 0.8 }, overcast: { hue: HUE_GREY, sat: 0.8 } },
+  uClSideColor: { dusk: { hue: 0xa08098, sat: 0.7 }, night: { hue: HUE_NIGHT_DEEP, sat: 0.7 }, overcast: { hue: HUE_GREY_DEEP, sat: 0.7 } },
+  uClSunColor: { dusk: { hue: HUE_DUSK }, night: { hue: HUE_NIGHT, sat: 0.7 }, overcast: { hue: HUE_GREY, sat: 0.8 } },
 
-  // --- forest --------------------------------------------------------------
-  uSunTint: { dusk: { hue: HUE_DUSK, sat: 0.8, mul: 0.95 }, night: { hue: HUE_NIGHT, mul: 0.3 } },
-  uDirect: { dusk: { mul: 0.9 }, night: { mul: 0.55 } },
-  uSky: { dusk: { hue: HUE_DUSK_COOL, mul: 1.0 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.3 } },
-  uGnd: { dusk: { hue: 0xa2734d, sat: 0.7, mul: 0.8 }, night: { hue: 0x35404a, mul: 0.24 } },
-  uRim: { dusk: { hue: HUE_DUSK, mul: 1.3 }, night: { hue: HUE_NIGHT, mul: 0.3 } },
-  uHazeCol: { dusk: { hue: 0xc47a54, mul: 0.9 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.42 } },
-  uHazeCol2: { dusk: { hue: 0xd28a5e, mul: 0.9 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.42 } },
+  // --- vegetation ----------------------------------------------------------
+  uSunTint: {
+    dusk: { hue: HUE_DUSK, sat: 0.8, mul: 0.95 },
+    night: { hue: HUE_NIGHT, mul: 0.3 },
+    overcast: { hue: HUE_GREY, sat: 0.9, mul: 0.45 },
+  },
+  uDirect: { dusk: { mul: 0.9 }, night: { mul: 0.55 }, overcast: { mul: 0.45 } },
+  uSky: { dusk: { hue: HUE_DUSK_COOL, mul: 1.0 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.3 }, overcast: { hue: HUE_GREY, sat: 0.9, mul: 1.5 } },
+  uGnd: { dusk: { hue: 0xa2734d, sat: 0.7, mul: 0.8 }, night: { hue: 0x35404a, mul: 0.24 }, overcast: { sat: 0.5, hue: 0x8a7e70, mul: 1.0 } },
+  uRim: { dusk: { hue: HUE_DUSK, mul: 1.4 }, night: { hue: HUE_NIGHT, mul: 0.3 }, overcast: { hue: HUE_GREY, mul: 0.4 } },
+  // The far trees fog to the same lit dust the terrain does.
+  uHazeCol: { dusk: { hue: 0xc98a5a, mul: 1.1 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.42 }, overcast: { hue: 0xb8b2a8, sat: 0.9, mul: 1.6 } },
+  uHazeCol2: { dusk: { hue: 0xd89a66, mul: 1.1 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.42 }, overcast: { hue: 0xbfb9ae, sat: 0.9, mul: 1.6 } },
 
   // --- puddles and airborne dust ------------------------------------------
-  uSunCol: { dusk: { hue: HUE_DUSK, mul: 0.95 }, night: { hue: HUE_NIGHT, mul: 0.14 } },
-  uShadeCol: { dusk: { hue: 0x9a6a4a, mul: 0.8 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.35 } },
-  uSkyTop: { dusk: { hue: HUE_DUSK_COOL, mul: 0.75 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.13 } },
-  uSkyLow: { dusk: { hue: HUE_DUSK, mul: 0.85 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.2 } },
+  uSunCol: { dusk: { hue: HUE_DUSK, mul: 0.95 }, night: { hue: HUE_NIGHT, mul: 0.14 }, overcast: { hue: HUE_GREY, sat: 0.9, mul: 0.45 } },
+  uShadeCol: { dusk: { hue: 0x9a6a4a, mul: 0.8 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.35 }, overcast: { hue: HUE_GREY_DEEP, sat: 0.8, mul: 1.2 } },
+  uSkyTop: { dusk: { hue: HUE_DUSK_COOL, mul: 0.75 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.13 }, overcast: { hue: HUE_GREY_DEEP, sat: 0.9, mul: 1.2 } },
+  uSkyLow: { dusk: { hue: HUE_DUSK, mul: 0.85 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.2 }, overcast: { hue: HUE_GREY, sat: 0.9, mul: 1.1 } },
 };
 
 const _hslA = { h: 0, s: 0, l: 0 };
@@ -734,6 +993,9 @@ export function createSky(
   const sunDir = dirFrom(cfg.key.az, cfg.key.el);
 
   const softShadows = installPcss(renderer, tier.pcss, tier.shadowExtent);
+  // Before any material compiles: this is the first thing boot builds.
+  installHazeFog();
+  applyHaze(cfg);
 
   // PMREM resolution, not a blur radius.
   //
@@ -773,23 +1035,63 @@ export function createSky(
   applySkyUniforms(envSkyMaterial, cfg.sky, sunDir, { env: true });
   const envSky = new THREE.Mesh(new THREE.SphereGeometry(500, 32, 16), envSkyMaterial);
   envScene.add(envSky);
-  // a dark green ground disc so the underside of the truck reflects forest,
-  // not blue sky — this is what keeps the chrome from looking like a studio
-  const groundMat = new THREE.MeshBasicMaterial({ color: 0x2b3323, side: THREE.BackSide });
+
+  // The environment is a savanna.
+  //
+  // Every material's ambient and reflection response reads from this scene, so
+  // what is under the horizon here is what the underside of the truck, the
+  // shadow side of a tyre and the lower half of a chrome bumper all think the
+  // world is. It was a dark green forest floor ringed with trunks; it is a lit
+  // straw plain now, with a ring of flat-topped acacia silhouettes standing on
+  // the horizon so a reflection has a skyline to break on, and a warm dark band
+  // just under the horizon where the plain runs out into haze.
+  const envGround = { day: 0xa8874e, dusk: 0x3a2416, night: 0x07080a, overcast: 0x6e665a };
+  const envGroundNear = { day: 0x7e5a36, dusk: 0x22150d, night: 0x040507, overcast: 0x4a4540 };
+  const envTree = { day: 0x2b2a1c, dusk: 0x140d09, night: 0x040507, overcast: 0x3d3d38 };
+  const groundMat = new THREE.MeshBasicMaterial({ color: envGround.day, side: THREE.BackSide });
   const groundDisc = new THREE.Mesh(
     new THREE.SphereGeometry(400, 24, 12, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5),
     groundMat,
   );
   envScene.add(groundDisc);
-  // a few dark trunks around the horizon give metals something to break up on
-  const trunkMat = new THREE.MeshBasicMaterial({ color: 0x18211a, side: THREE.DoubleSide });
-  for (let i = 0; i < 18; i++) {
-    const a = (i / 18) * Math.PI * 2 + Math.sin(i) * 0.1;
-    const r = 120 + Math.sin(i * 3.1) * 30;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(18 + (i % 3) * 8, 130), trunkMat);
-    m.position.set(Math.cos(a) * r, 40, Math.sin(a) * r);
-    m.lookAt(0, 40, 0);
-    envScene.add(m);
+  // The nearer ground, darker: what a bumper sees straight down is earth in
+  // the truck's own shadow, not the lit plain out at the horizon.
+  const groundNearMat = new THREE.MeshBasicMaterial({ color: envGroundNear.day, side: THREE.BackSide });
+  const groundNear = new THREE.Mesh(
+    new THREE.SphereGeometry(390, 24, 8, 0, Math.PI * 2, Math.PI * 0.68, Math.PI * 0.32),
+    groundNearMat,
+  );
+  envScene.add(groundNear);
+  const treeMat = new THREE.MeshBasicMaterial({ color: envTree.day, side: THREE.DoubleSide });
+  const crownGeo = new THREE.CircleGeometry(1, 14);
+  const trunkGeo = new THREE.PlaneGeometry(1, 1);
+  for (let i = 0; i < 22; i++) {
+    const a = (i / 22) * Math.PI * 2 + Math.sin(i * 2.3) * 0.13;
+    const r = 130 + ((i * 37) % 11) * 12;
+    const h = 7 + ((i * 13) % 7) * 0.9;
+    const w = h * (1.3 + ((i * 7) % 5) * 0.22);
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    // umbrella crown: a wide ellipse, flat on top, sitting on a thin trunk
+    const crown = new THREE.Mesh(crownGeo, treeMat);
+    crown.scale.set(w * 0.5, h * 0.17, 1);
+    crown.position.set(x, h * 0.86, z);
+    crown.lookAt(0, h * 0.86, 0);
+    envScene.add(crown);
+    const trunk = new THREE.Mesh(trunkGeo, treeMat);
+    trunk.scale.set(0.35 + h * 0.02, h * 0.8, 1);
+    trunk.position.set(x, h * 0.4, z);
+    trunk.lookAt(0, h * 0.4, 0);
+    envScene.add(trunk);
+  }
+  // a couple of distant koppies, so one side of the horizon is not the other
+  for (let i = 0; i < 3; i++) {
+    const a = 0.9 + i * 2.1;
+    const kop = new THREE.Mesh(crownGeo, treeMat);
+    kop.scale.set(90 + i * 40, 9 + i * 3, 1);
+    kop.position.set(Math.cos(a) * 320, 2, Math.sin(a) * 320);
+    kop.lookAt(0, 2, 0);
+    envScene.add(kop);
   }
 
   let envRT = pmrem.fromScene(envScene, envSigma, 0.1, envFar, { size: envSize });
@@ -1038,8 +1340,9 @@ export function createSky(
 
   function regenerateEnv() {
     applySkyUniforms(envSkyMaterial, cfg.sky, sunDir, { env: true });
-    groundMat.color.set(modeName === 'night' ? 0x0a0f0b : modeName === 'dusk' ? 0x241d18 : 0x2b3323);
-    trunkMat.color.set(modeName === 'night' ? 0x05080a : modeName === 'dusk' ? 0x140f10 : 0x18211a);
+    groundMat.color.set(envGround[modeName] ?? envGround.day);
+    groundNearMat.color.set(envGroundNear[modeName] ?? envGroundNear.day);
+    treeMat.color.set(envTree[modeName] ?? envTree.day);
     const next = pmrem.fromScene(envScene, envSigma, 0.1, envFar, { size: envSize });
     const old = envRT;
     envRT = next;
@@ -1047,6 +1350,8 @@ export function createSky(
     scene.environment = env;
     if (old) old.dispose();
   }
+
+  let groundY = 0;
 
   const rig = {
     sky,
@@ -1075,10 +1380,12 @@ export function createSky(
         attached = true;
         walkScene(modeName, sunDir);
       }
+      updateHaze(camera, sunDir, groundY);
       beams.update(camera, modeName);
     },
     /** Keep the shadow frustum tight around whatever we are looking at. */
     follow(target) {
+      groundY = target.y;
       fill.target.position.copy(target);
       fill.position.copy(target).addScaledVector(fillDir, fillThrow);
       sun.target.position.copy(target);
@@ -1125,6 +1432,7 @@ export function createSky(
         target.fog.color.set(cfg.fog.color);
         target.fog.density = cfg.fog.density;
       }
+      applyHaze(cfg);
       target.environmentIntensity = cfg.envIntensity;
 
       regenerateEnv();
@@ -1264,11 +1572,15 @@ export function createLightShafts(sunDir, { count = 14, area = 60, origin = new 
   // the gate lands inside it — and the scale on top of that piled twenty-two
   // of them into a single orange mass.
 
+  // Wider and longer than the canopy shafts they replace, and fainter per
+  // metre: on a plain a lit column of dust is tens of metres across and the
+  // structure comes from the acacias and the truck breaking it, not from gaps
+  // in a canopy. The mode's `width` scales them again on top of this.
   for (let i = 0; i < count; i++) {
-    const len = 26 + Math.random() * 22;
-    const wide = 1.4 + Math.random() * 3.4;
+    const len = 34 + Math.random() * 30;
+    const wide = 2.6 + Math.random() * 5.0;
     const geo = new THREE.PlaneGeometry(wide, len, 1, 1);
-    const strength = 0.16 + Math.random() * 0.16;
+    const strength = 0.11 + Math.random() * 0.12;
     const mat = new THREE.ShaderMaterial({
       name: 'sunShaft',
       vertexShader: shaftVert,
@@ -1319,9 +1631,11 @@ export function createLightShafts(sunDir, { count = 14, area = 60, origin = new 
       const c = modeOf(name);
       dir.copy(sunDirection(name));
       group.visible = c.shafts.gain > 0.001;
+      const width = c.shafts.width ?? 1;
       for (let i = 0; i < uniformsList.length; i++) {
         uniformsList[i].uColor.value.set(c.shafts.color);
         uniformsList[i].uIntensity.value = baseIntensity[i] * c.shafts.gain;
+        group.children[i].scale.x = width;
       }
     },
     update(t, camera, center = camera.position) {

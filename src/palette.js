@@ -2,9 +2,13 @@
 // One cohesive art direction for the whole demo. Every module pulls colours
 // from here so the four beauty shots read as the same game.
 //
-// Mood: late golden hour, damp Pacific-Northwest logging trail. Warm low sun
-// raking through cool blue-green shade, a single saturated body colour on the
-// truck, everything else desaturated earth.
+// Mood: East-African savanna. A high hard equatorial sun over red-ochre earth
+// and straw grass, flat-topped acacias, the horizon lost in warm dust rather
+// than grey air, and a golden hour that is the whole point of the game.
+//
+// The Pacific-Northwest keys (dirt*, bark*, leaf*, pineNeedle, fern, moss) are
+// kept so nothing breaks while the vegetation and terrain rebuild against the
+// savanna set below them; they are the ones to migrate off.
 // ---------------------------------------------------------------------------
 
 export const PALETTE = {
@@ -55,29 +59,69 @@ export const PALETTE = {
   fern: 0x53743a,
   moss: 0x5c7038,
 
+  // --- savanna: earth -------------------------------------------------------
+  // Laterite. Iron-rich, so red rather than brown, and it is the colour of the
+  // whole frame's bounce light: every shadowed underside in the scene picks it
+  // up. The graded murram road is the same soil packed and paled by traffic.
+  earth: 0x9a5a34,
+  earthLight: 0xc07e4e,
+  earthDark: 0x5e3520,
+  murram: 0xb8825a, // the graded road surface, dust-pale on the crown
+  murramDark: 0x7a5033, // ruts and the damp under the crown
+  // --- savanna: grass -------------------------------------------------------
+  // Dry season. Straw is the mid tone of the plain; the light end is what the
+  // sun does to a seed head, the dark end is the base of a tussock and the
+  // burnt patches. Green is the riverine strip and new growth after a burn.
+  straw: 0xc9a458,
+  strawLight: 0xe8cf8a,
+  strawDark: 0x8a6a35,
+  strawSeed: 0xf2dfa8, // seed heads, the rim-lit fringe at dusk
+  grassGreen: 0x7c8a3c,
+  grassBurnt: 0x3b2f22,
+  // --- savanna: acacia -------------------------------------------------------
+  acaciaLeaf: 0x5a6b2e,
+  acaciaLeafSun: 0x9aa84e,
+  acaciaLeafShade: 0x2c361a,
+  acaciaBark: 0x6a5a48,
+  acaciaBarkDark: 0x3a2f24,
+  thorn: 0xd9cfb0, // the pale spines and dead twigs
+  baobab: 0x8a7462,
+  termite: 0xb27a4c, // mound clay, a little redder than the earth around it
+  // --- savanna: campground ---------------------------------------------------
+  canvas: 0x9c8f6a, // safari tent
+  canvasShade: 0x5a5140,
+  fire: 0xff9a2e,
+  lantern: 0xffc773,
+
   // --- atmosphere ----------------------------------------------------------
-  sunColor: 0xffe2c6, // 0xffd2a1 was r:b 1.58 — it tinted every material terracotta
-  sunColorLow: 0xff9d52,
-  skyTop: 0x4c7fb5,
-  skyHorizon: 0xc8b39a,
-  // Airlight inside a forest corridor, not open-country haze. 0x97a69c measured
-  // about 0.31 linear, five to seven times a shaded crown and six times the
-  // ramp the foliage materials now converge to — so the terrain washed out to a
-  // pale plate while the trees standing on it stayed dark, and the two read as
-  // different scenes. Halved in linear, which puts a 150 m hillside just under
-  // the near forest instead of well above it. Blue still under green, or nothing
-  // past 100 m reads as forest however saturated the trees themselves are.
-  fogColor: 0x6c776f,
-  fogDeep: 0x5c7076,
-  bounce: 0x5a6b48, // green bounce from the canopy floor
-  shadowTint: 0x2c3d4a,
+  // Equatorial noon, high and white with a touch of warmth. The old 0xffe2c6
+  // was a late-afternoon key.
+  sunColor: 0xfff1de,
+  sunColorLow: 0xffa858,
+  skyTop: 0x3f7ac4,
+  skyHorizon: 0xd8cbb4,
+  // Open-country airlight. Warm and light, because the dust that scatters it
+  // is the earth below it lifted into the air; what it must never be is grey.
+  // The far ground goes *to* this, so it is also the colour the sky wears at the
+  // horizon (sky.js keeps the two in step).
+  fogColor: 0xd6bfa0,
+  fogDeep: 0xc8ab88,
+  haze: 0xe4cfae, // sunlit dust, brighter than the airlight
+  hazeDeep: 0xb59a7c, // the far side of the sky, away from the sun
+  dust: 0xd0a878, // kicked-up dust in shade
+  dustLit: 0xf0d6a8, // and in the sun
+  bounce: 0x9a6a44, // red-ochre bounce off the earth, into every underside
+  shadowTint: 0x5a6d8c, // open-sky fill in the shadows: blue, but not cobalt
 };
 
 export const SUN = {
   // Direction the light travels *from*, in world space (normalised in sky.js).
   azimuth: 35, // degrees
-  elevation: 47, // compromise: clears most of the gap, still rakes vertical panels
-  intensity: 8.8,
+  // Equatorial. High enough that shadows pool under things rather than
+  // stretching from them, low enough that a vertical panel still reads. The
+  // 47 this replaces was a compromise with a conifer canopy that is gone.
+  elevation: 58,
+  intensity: 9.4,
 };
 
 // ---------------------------------------------------------------------------
@@ -104,14 +148,15 @@ export const NIGHT = {
   moonLow: 0x8aa3d0,
   skyTop: 0x070d1f,
   skyHorizon: 0x18253d,
-  // Air over the treeline still scatters moonlight, and that band is the only
-  // thing that puts a silhouette on the far conifers.
+  // Air over the plain still scatters moonlight, and that band is the only
+  // thing that puts a silhouette on the far acacias.
   haze: 0x243651,
   ground: 0x04060a,
   cloud: 0x2c3a54,
   // Fog has to sit *under* the horizon band or the distance glows and the
-  // silhouette goes with it.
-  fog: 0x101a28,
+  // silhouette goes with it. A shade warmer than the forest's: the dust is
+  // still in the air at night and it is still ochre.
+  fog: 0x141a26,
   // Deliberately less saturated than the sky it stands for.
   //
   // The sky dome is the blue in this mode and it should stay that blue. But at
@@ -123,13 +168,20 @@ export const NIGHT = {
   // materials in it. Pulling the red up in the ambient alone lets each surface
   // keep a share of its own albedo without touching the look of the sky.
   hemiSky: 0x35435c,
-  bounce: 0x1a1e18,
+  // Was a green-grey canopy floor. The ground is pale earth and straw now, and
+  // what it bounces up under a blue moon is a dull warm grey.
+  bounce: 0x211c17,
   shadowTint: 0x283245,
   starWarm: 0xffe6c8,
   starCool: 0xc4d8ff,
   // What the truck's own lamps put back into the air and onto the dirt.
   lamp: 0xffe3b8,
   lampCool: 0xfff0d8,
+  // The campground's fire and lanterns. Listed here so the grade knows what it
+  // must not crush and so the campground can light with the same tungsten.
+  fire: 0xff8a26,
+  fireCore: 0xffd08a,
+  lantern: 0xffc773,
 };
 
 // Dusk had a green hole in it.
@@ -147,26 +199,55 @@ export const NIGHT = {
 // towards the blue-green a forest at dusk actually reflects. The hue spread
 // between key and fill is the point of this hour and it survives; what does not
 // survive is both ends agreeing to have no green.
+//
+// Savanna golden hour. The sun is genuinely low now — there is no canopy to
+// clear — so the key is oranger and the sky runs amber at the horizon through
+// rose to a violet-blue zenith, with the earth's shadow climbing the far side.
+// The fog is the one term that changes character most: forest dusk fogged to a
+// neutral grey because the air under a canopy is unlit; here the dust is in
+// full sun until the disc is gone, so distance goes to lit amber.
 export const DUSK = {
-  sun: 0xffab6e,
-  sunLow: 0xff7f42,
-  skyTop: 0x2b3f66,
-  skyHorizon: 0xffa066,
-  haze: 0xffb886,
-  ground: 0x120f0d,
-  cloud: 0xffbe98,
-  fog: 0x4c4d54,
-  hemiSky: 0x6d809c,
-  bounce: 0x5a4c36,
-  shadowTint: 0x435070,
+  sun: 0xffa458,
+  sunLow: 0xff742c,
+  skyTop: 0x2e4c84,
+  skyHorizon: 0xffb066,
+  haze: 0xffc079,
+  // The Belt of Venus: the rose-violet band on the anti-solar horizon, over the
+  // blue-grey of the earth's own shadow. Sky only — it is never fed to a
+  // material, which is where a violet with green at the bottom did its damage.
+  antiSun: 0xb48ca2,
+  ground: 0x1a120c,
+  cloud: 0xffc9a0,
+  fog: 0xa8845e,
+  hemiSky: 0x7a86a6,
+  bounce: 0x7a5232,
+  shadowTint: 0x4a5a82,
+};
+
+// Overcast. Soft, flat, silver: one big source overhead, nothing warm in it,
+// the savanna colours desaturated but not grey — straw under cloud is a pale
+// khaki, not a monochrome. The shadow terms are all close to the key so there
+// is almost no hue separation, which is the point of the mode.
+export const OVERCAST = {
+  sun: 0xe6e8ea,
+  skyTop: 0x9aa1a8,
+  skyHorizon: 0xcbc8c1,
+  haze: 0xd5cfc4,
+  ground: 0x2a2622,
+  cloud: 0xb8bbbf,
+  fog: 0xbfb9ae,
+  hemiSky: 0xb5bac0,
+  bounce: 0x74604c,
+  shadowTint: 0x7a828c,
 };
 
 export const FOG = {
   near: 18,
-  far: 190,
-  // 0.0062 put 49% haze over the trail at 130 m, which flattened the two-track
-  // well before the trees needed it
-  density: 0.0052,
+  // Atmospheric perspective over kilometres, not a corridor. At 0.0052 the old
+  // forest fog put half the frame in haze at 130 m; this puts a tenth on the
+  // far treeline at 200 m and does not own the distance until 600.
+  far: 900,
+  density: 0.0017,
 };
 
 export const WORLD = {
