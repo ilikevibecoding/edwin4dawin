@@ -4,11 +4,11 @@
 // diagnostic screen wall, medicine cabinets, wash station and privacy screens. Cold white light.
 import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
-import { roomShell, wallScreen, impConsole, impChair, pipeRun, wallSegment } from "../imperial.js";
+import { roomShell, wallScreen, impConsole, pipeRun, wallSegment } from "../imperial.js";
 import { pointLight, wallFrame } from "../builders.js";
 import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
-import { ensureCrewMaterials, SIGN, signRect, wallSign, floorSign, floorGrime, scuffRun, wallGrime, cableTray, cableDroop, ventGrille, gauge, intercom, stool, wallShelf } from "./crewProps.js";
+import { ensureCrewMaterials, SIGN, wallSign, floorSign, floorGrime, scuffRun, wallGrime, cableTray, cableDroop, ventGrille, gauge, intercom, stool, wallShelf } from "./crewProps.js";
 
 const WHITE_PAINTS = [
   [PALETTE.impWhite, 0.78],
@@ -211,6 +211,49 @@ export function buildMedbay(kit, ctx) {
       kit.collider([sx - 0.15, 0, -61.9], [sx + 0.15, 2.2, -60.1], "screen");
     }
   });
+  // second row of three beds facing the same way (heads at z ≈ -56.4), one occupied
+  [7.6, 11.6, 15.6].forEach((x, i) => {
+    medBed(kit, ctx, { x, z: -55.3, seed: ctx.seed * 7 + i * 19, arm: i !== 1, animate: false, occupied: i === 0 });
+    if (i < 2) {
+      const sx = x + 2.0;
+      kit.box("impPanel", sx, 1.45, -55.1, 0.03, 1.5, 1.6, { color: PALETTE.impWhite, uv: "keep" });
+      kit.box("paintedMetal", sx, 1.45, -55.1, 0.05, 1.56, 0.05, { color: PALETTE.impMid, texel: 2 });
+      for (const dz of [-0.78, 0.78]) kit.cyl("metal", sx, 0.7, -55.1 + dz, 0.02, 1.4, "y", { color: PALETTE.steel, segments: 8 });
+      for (const dz of [-0.78, 0.78]) kit.cyl("metal", sx, 0.02, -55.1 + dz, 0.12, 0.04, "y", { color: PALETTE.impBlack, segments: 12 });
+      kit.collider([sx - 0.15, 0, -56.0], [sx + 0.15, 2.2, -54.2], "screen");
+    }
+  });
+  // reception / triage desk facing the door, with a chair and a datapad rack
+  impConsole(kit, ctx, { x: 8.6, z: -50.2, yaw: Math.PI / 2, w: 2.0, d: 0.8, screens: [1, 2, 1], chair: true, seed: ctx.seed + 17, lampMat: "emitGreen" });
+  kit.box("paintedMetal", 8.6, 1.0, -48.9, 0.6, 0.06, 0.4, { color: PALETTE.impMid, texel: 2 });
+  kit.box("paintedMetal", 8.6, 0.5, -48.9, 0.1, 1.0, 0.1, { color: PALETTE.impDark, texel: 2 });
+  for (let k = 0; k < 4; k++) kit.box("darkGloss", 8.4 + k * 0.13, 1.14, -48.9, 0.02, 0.22, 0.16);
+  kit.box("emitBlue", 8.6, 1.032, -48.9, 0.5, 0.006, 0.3);
+  kit.collider([8.25, 0, -49.15], [8.95, 1.3, -48.65], "rack");
+  // body scanner booth: round plinth, twin posts, an emitter ring hovering at chest height
+  {
+    const bx = 8.0;
+    const bz = -45.6;
+    kit.cyl("paintedMetal", bx, 0.06, bz, 1.0, 0.12, "y", { color: PALETTE.impDark, segments: 28, texel: 1.5 });
+    kit.cyl("impPanel1", bx, 0.125, bz, 0.9, 0.012, "y", { color: PALETTE.impLight, segments: 28, uv: "keep" });
+    kit.add("emitBlue", new THREE.TorusGeometry(0.95, 0.015, 6, 40), { pos: [bx, 0.125, bz], rot: [Math.PI / 2, 0, 0] });
+    for (const s of [-1, 1]) {
+      kit.box("paintedMetal", bx + s * 0.95, 1.3, bz, 0.16, 2.4, 0.3, { color: PALETTE.impGrey, texel: 1.5 });
+      kit.box("paintedMetal", bx + s * 0.95, 0.35, bz, 0.22, 0.6, 0.36, { color: PALETTE.impBlack, texel: 2 });
+      kit.box("leds", bx + s * 0.93, 1.6, bz + 0.16, 0.06, 0.8, 0.006, { uv: "keep", rot: [0, 0, Math.PI / 2] });
+    }
+    kit.box("paintedMetal", bx, 2.55, bz, 2.06, 0.22, 0.34, { color: PALETTE.impDark, texel: 1.5 });
+    kit.box("emitWhiteSoft", bx, 2.435, bz, 1.7, 0.012, 0.2, { uv: "keep" });
+    kit.add("paintedMetal", new THREE.TorusGeometry(0.62, 0.05, 8, 32), { pos: [bx, 1.35, bz], rot: [Math.PI / 2, 0, 0], color: PALETTE.impMid, texel: 2 });
+    kit.add("emitGreen", new THREE.TorusGeometry(0.62, 0.02, 6, 32), { pos: [bx, 1.3, bz], rot: [Math.PI / 2, 0, 0] });
+    kit.box("darkGloss", bx + 1.05, 1.4, bz + 0.22, 0.02, 0.3, 0.2);
+    const bg = new THREE.PlaneGeometry(0.16, 0.24);
+    bg.rotateY(Math.PI / 2);
+    kit.add("impScreen2", bg, { pos: [bx + 1.062, 1.4, bz + 0.22], uv: "keep" });
+    kit.collider([bx - 1.05, 0, bz - 0.2], [bx - 0.85, 2.7, bz + 0.2], "boothpost");
+    kit.collider([bx + 0.85, 0, bz - 0.2], [bx + 1.05, 2.7, bz + 0.2], "boothpost");
+    floorSign(kit, SIGN.MEDICAL, bx, bz + 1.5, 1.6, 0, false);
+  }
   // IV stand by the occupied bed + a monitor trolley by the first
   {
     const x = 15.6 - 0.75;
@@ -346,31 +389,47 @@ export function buildMedbay(kit, ctx) {
       frame.add(m, new THREE.PlaneGeometry(1.5, 0.78), max[0] - gx + dx, 1.95 + dy, 0.067, { uv: "keep" });
     }
     frame.box("leds", max[0] - gx, 0.93, 0.05, 2.4, 0.03, 0.01, { uv: "keep" });
-    // medicine cabinets x 17..25: glass fronts, shelves of vials, a lit cross above
+    // medicine cabinets x 17..25: open-fronted glass cases over drawer units, lit shelves of vials
     for (let c = 0; c < 4; c++) {
       const cx = 17.6 + c * 1.9;
       const u = max[0] - cx;
-      frame.box("paintedMetal", u, 1.2, 0.25, 1.7, 2.3, 0.5, { color: PALETTE.impDark, texel: 1.5 });
-      frame.box("impPanel", u, 1.2, 0.5, 1.6, 2.2, 0.02, { color: PALETTE.impWhite, uv: "keep" });
-      // glass door over an open interior with shelves
-      frame.box("paintedMetal", u, 1.5, 0.3, 1.5, 1.5, 0.4, { color: PALETTE.impBlack, texel: 2 });
+      const cw = 1.7;
+      const cd = 0.5;
+      // carcass: back, two sides, top and the plinth; the case interior stays open
+      frame.box("impPanel", u, 1.55, 0.03, cw, 1.6, 0.06, { color: PALETTE.impLight, uv: "keep" });
+      for (const s of [-1, 1]) frame.box("paintedMetal", u + s * (cw / 2 - 0.03), 1.2, cd / 2, 0.06, 2.4, cd, { color: PALETTE.impDark, texel: 1.5 });
+      frame.box("paintedMetal", u, 2.37, cd / 2, cw + 0.04, 0.08, cd + 0.04, { color: PALETTE.impBlack, texel: 2 });
+      frame.box("paintedMetal", u, 2.3, cd / 2, cw - 0.1, 0.08, cd - 0.04, { color: PALETTE.impDark, texel: 2 });
+      frame.box("emitWhiteSoft", u, 2.255, cd / 2, cw - 0.3, 0.012, cd - 0.14, { uv: "keep" });
+      // drawer unit below the case (solid white front with pulls)
+      frame.box("paintedMetal", u, 0.4, cd / 2, cw - 0.06, 0.8, cd - 0.02, { color: PALETTE.impDark, texel: 1.5 });
+      for (let dr = 0; dr < 2; dr++) {
+        frame.box("impPanel", u, 0.22 + dr * 0.38, cd + 0.006, cw - 0.16, 0.34, 0.012, { color: PALETTE.impWhite, uv: "keep" });
+        frame.box("paintedMetal", u, 0.22 + dr * 0.38, cd + 0.02, 0.4, 0.025, 0.02, { color: PALETTE.impBlack, texel: 2 });
+      }
+      frame.box("hazard", u, 0.025, cd / 2, cw - 0.06, 0.05, cd, { texel: 3 });
+      frame.box("metal", u, 0.82, cd / 2, cw - 0.02, 0.04, cd + 0.02, { color: PALETTE.steel, texel: 1 });
+      // three lit glass shelves of vials and packs
       for (let s = 0; s < 3; s++) {
-        const y = 0.95 + s * 0.45;
-        frame.box("impPanel", u, y, 0.3, 1.46, 0.02, 0.38, { color: PALETTE.impLight, uv: "keep" });
+        const y = 0.95 + s * 0.44;
+        frame.box("impPanel", u, y, cd / 2, cw - 0.14, 0.025, cd - 0.1, { color: PALETTE.impLight, uv: "keep" });
+        frame.box("emitBlue", u, y + 0.4, 0.08, cw - 0.4, 0.008, 0.02);
         const nb = 5 + Math.floor(rand() * 4);
         for (let b = 0; b < nb; b++) {
           const bu = u - 0.62 + (b / (nb - 1)) * 1.24;
           const bh = 0.12 + rand() * 0.14;
           const col = [PALETTE.impWhite, PALETTE.impBlue, PALETTE.impLight, PALETTE.impRed][Math.floor(rand() * 4)];
-          frame.cylV("crew_white", bu, y + bh / 2 + 0.01, 0.32, 0.03 + rand() * 0.02, bh, { color: col, segments: 8 });
+          if (rand() < 0.7) frame.cylV("crew_white", bu, y + bh / 2 + 0.013, 0.28, 0.03 + rand() * 0.02, bh, { color: col, segments: 8 });
+          else frame.box("crew_white", bu, y + 0.06, 0.28, 0.16, 0.1, 0.12, { color: rand() < 0.5 ? PALETTE.impWhite : PALETTE.impBlue });
         }
       }
-      frame.box("emitWhiteSoft", u, 2.22, 0.3, 1.4, 0.02, 0.3, { uv: "keep" });
-      frame.add("crew_glass", new THREE.PlaneGeometry(1.5, 1.5), u, 1.5, 0.505, { uv: "keep" });
-      frame.box("metal", u + 0.1, 1.5, 0.52, 0.02, 0.3, 0.02, { color: PALETTE.steel });
-      frame.box("emitBlue", u - 0.6, 0.55, 0.512, 0.3, 0.02, 0.006);
-      frame.box(c % 2 ? "emitGreen" : "emitBlue", u + 0.6, 0.55, 0.512, 0.04, 0.02, 0.006);
-      frame.collider(u - 0.85, u + 0.85, 0, 2.3, 0, 0.52, "medcabinet");
+      // glass front with a thin frame, a handle and status lamps
+      frame.add("crew_glass", new THREE.PlaneGeometry(cw - 0.14, 1.5), u, 1.55, cd + 0.005, { uv: "keep" });
+      frame.box("paintedMetal", u, 2.31, cd + 0.005, cw - 0.1, 0.03, 0.03, { color: PALETTE.impMid, texel: 2 });
+      frame.box("paintedMetal", u, 0.8, cd + 0.005, cw - 0.1, 0.03, 0.03, { color: PALETTE.impMid, texel: 2 });
+      frame.box("metal", u + 0.55, 1.5, cd + 0.03, 0.02, 0.3, 0.02, { color: PALETTE.steel });
+      frame.box(c % 2 ? "emitGreen" : "emitBlue", u - 0.6, 0.86, cd + 0.03, 0.04, 0.02, 0.006);
+      frame.collider(u - cw / 2, u + cw / 2, 0, 2.4, 0, cd + 0.04, "medcabinet");
     }
     // Imperial medical emblem: lit cross over the cabinets
     const eu = max[0] - 20.45;
@@ -441,6 +500,4 @@ export function buildMedbay(kit, ctx) {
     frame.add("decal", new THREE.PlaneGeometry(0.3, 0.3), 22.0 - min[0], 2.6, 0.004, { uv: "keep", uvRect: decalRect(6) });
   }
   if (ctx.audioZone) ctx.audioZone({ kind: "medical", pos: [14, 1.5, -53], radius: 10 });
-  void impChair;
-  void signRect;
 }

@@ -5,8 +5,8 @@
 // door.
 import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
-import { roomShell, wallScreen, impConsole, wallSegment } from "../imperial.js";
-import { pointLight, wallFrame } from "../builders.js";
+import { roomShell, wallScreen, impConsole, wallSegment, IMP_THEME } from "../imperial.js";
+import { pointLight, wallFrame, ceilingFrame, panelGrid } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect, GRATE_TILE } from "../../textures.js";
 import { ensureCrewMaterials, SIGN, signRect, wallSign, lockerBank, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, intercom, stool, wallShelf } from "./crewProps.js";
@@ -126,9 +126,30 @@ export function buildQuarters(kit, ctx) {
   const aisleZ = -19;
 
   roomShell(kit, ctx, {
-    ceiling: { lights: false, spacing: 100, along: "x", paints: [[PALETTE.impGrey, 0.6], [PALETTE.impMid, 0.4]] },
+    ceiling: false,
     walls: { rows: [0, 0.5, 2.1, 2.9, H], styles: { panel: 0.7, vent: 0.1, greeble: 0.08, strip: 0.04, screen: 0.03, conduit: 0.05 }, paints: [[PALETTE.impLight, 0.55], [PALETTE.impWhite, 0.25], [PALETTE.impGrey, 0.14], [PALETTE.impMid, 0.06]] },
   });
+  // night ceiling: large dark panels (cheap) and one dim blue strip over the aisle instead of the
+  // white strips impCeiling would add
+  {
+    const f = ceilingFrame(kit, min[0], min[2], H);
+    panelGrid(f, max[0] - min[0], max[2] - min[2], {
+      rowH: 2.2,
+      panelW: 2.2,
+      kick: false,
+      topPipes: false,
+      seed: ctx.seed * 17 + 3,
+      collide: false,
+      styles: { panel: 0.86, greeble: 0.06, vent: 0.08 },
+      paints: [[PALETTE.impGrey, 0.55], [PALETTE.impMid, 0.45]],
+      ...IMP_THEME,
+      accent: "emitBlue",
+      decals: false,
+    });
+    const L = max[0] - min[0] - 1.2;
+    kit.box("paintedMetal", (min[0] + max[0]) / 2, H - 0.06, aisleZ, L + 0.2, 0.1, 0.42, { color: PALETTE.impDark, texel: 2 });
+    kit.box("emitBlue", (min[0] + max[0]) / 2, H - 0.1, aisleZ, L, 0.03, 0.07, { uv: "keep" });
+  }
 
   // ------------------------------------------------------------------ lights (6): blue night + amber bays + wash
   for (const x of [-8.5, -18.5, -28.5]) ctx.light(pointLight(0x3d6fe8, 9, 17, [x, H - 0.5, aisleZ]));

@@ -204,8 +204,9 @@ export function ensureCrewMaterials(ctx) {
   });
   // matte white armour / medical plastics (vertex tinted)
   m.crew_white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.42, metalness: 0.05, vertexColors: true, envMapIntensity: 0.6 });
-  // pulsing amber beacon emitter (escape pod bay), animated by the room
+  // pulsing amber beacon emitter (escape pod bay) and red alert domes (armoury), animated by the rooms
   m.crew_beacon = m.emitAmber.clone();
+  m.crew_alert = m.emitRed.clone();
   // detention cell containment field: own texture copy so the UV scroll does not touch holograms
   m.crew_cellField = m.forceField.clone();
   m.crew_cellField.map = m.forceField.map.clone();
@@ -219,35 +220,49 @@ export function ensureCrewMaterials(ctx) {
     const c = makeCanvas(w, h);
     const g = c.getContext("2d");
     const rand = rng(419);
-    g.fillStyle = "#020308";
+    g.fillStyle = "#04060e";
     g.fillRect(0, 0, w, h);
-    // nebula haze
-    const grad = g.createRadialGradient(w * 0.7, h * 0.4, 10, w * 0.7, h * 0.4, w * 0.6);
-    grad.addColorStop(0, "rgba(60,90,160,0.35)");
-    grad.addColorStop(0.5, "rgba(40,50,110,0.12)");
-    grad.addColorStop(1, "rgba(0,0,0,0)");
-    g.fillStyle = grad;
-    g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 420; i++) {
+    // nebula: two soft lobes (blue and a warmer magenta) so the screen reads as space from afar
+    const lobe = (cx, cy, r, c0, c1) => {
+      const grad = g.createRadialGradient(cx, cy, 4, cx, cy, r);
+      grad.addColorStop(0, c0);
+      grad.addColorStop(0.55, c1);
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, w, h);
+    };
+    lobe(w * 0.68, h * 0.38, w * 0.5, "rgba(90,130,220,0.75)", "rgba(50,70,160,0.3)");
+    lobe(w * 0.5, h * 0.7, w * 0.35, "rgba(170,90,170,0.45)", "rgba(80,40,110,0.18)");
+    lobe(w * 0.85, h * 0.8, w * 0.25, "rgba(70,150,200,0.4)", "rgba(30,60,120,0.15)");
+    for (let i = 0; i < 520; i++) {
       const x = rand() * w;
       const y = rand() * h;
-      const r = rand() < 0.08 ? 1.6 : rand() < 0.5 ? 1.0 : 0.6;
-      const b = 0.5 + rand() * 0.5;
+      const r = rand() < 0.06 ? 2.2 : rand() < 0.5 ? 1.3 : 0.8;
+      const b = 0.6 + rand() * 0.4;
       g.fillStyle = `rgba(${200 + rand() * 55},${210 + rand() * 45},255,${b})`;
       g.beginPath();
       g.arc(x, y, r, 0, Math.PI * 2);
       g.fill();
     }
-    // a planet limb low-left
-    const pg = g.createRadialGradient(w * 0.1, h * 1.25, h * 0.55, w * 0.1, h * 1.25, h * 0.95);
-    pg.addColorStop(0, "rgba(110,150,200,0.95)");
-    pg.addColorStop(0.7, "rgba(60,90,150,0.85)");
+    // a planet limb low-left with a lit atmosphere rim
+    const pg = g.createRadialGradient(w * 0.12, h * 1.3, h * 0.5, w * 0.12, h * 1.3, h * 1.02);
+    pg.addColorStop(0, "rgba(120,165,215,1)");
+    pg.addColorStop(0.72, "rgba(70,105,170,0.95)");
+    pg.addColorStop(0.9, "rgba(140,190,255,0.7)");
     pg.addColorStop(1, "rgba(20,30,60,0)");
     g.fillStyle = pg;
     g.beginPath();
-    g.arc(w * 0.1, h * 1.25, h * 0.95, 0, Math.PI * 2);
+    g.arc(w * 0.12, h * 1.3, h * 1.02, 0, Math.PI * 2);
     g.fill();
-    // ship silhouette: a distant wedge
+    // cloud bands on the planet
+    g.strokeStyle = "rgba(220,235,255,0.25)";
+    g.lineWidth = 6;
+    for (let k = 0; k < 4; k++) {
+      g.beginPath();
+      g.arc(w * 0.12, h * 1.3, h * (0.62 + k * 0.09), Math.PI * 1.15, Math.PI * 1.75);
+      g.stroke();
+    }
+    // ship silhouette: a distant wedge with a lit engine dot
     g.fillStyle = "#0a0c12";
     g.beginPath();
     g.moveTo(w * 0.58, h * 0.62);
@@ -255,8 +270,11 @@ export function ensureCrewMaterials(ctx) {
     g.lineTo(w * 0.72, h * 0.66);
     g.closePath();
     g.fill();
+    g.fillStyle = "rgba(160,200,255,0.9)";
+    g.fillRect(w * 0.716, h * 0.6, 3, 3);
     const tex = toTexture(c, { srgb: true, wrap: false });
-    m.crew_starScreen = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.25, roughness: 0.12, metalness: 0 });
+    // rough + no env reflection: the dark field must not pick up the room's grey env mirror
+    m.crew_starScreen = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.9, roughness: 0.75, metalness: 0, envMapIntensity: 0 });
   }
   return m;
 }
@@ -516,6 +534,36 @@ export function wallShelf(frame, u, v, w, depth = 0.3) {
 /** Quaternion helper for props built around a yaw. */
 export function yawQuat(yaw) {
   return new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+}
+
+/**
+ * Local prop frame rotated by yaw about (x, y, z): at(lx,ly,lz) → world Vector3; add / box / cyl build
+ * through the kit in local coordinates; collider(lx0, lz0, lx1, lz1, h, tag) is the rotated AABB.
+ */
+export function propFrame(kit, x, z, yaw = 0, y = 0) {
+  const q = yawQuat(yaw);
+  const origin = new THREE.Vector3(x, y, z);
+  const at = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(origin);
+  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+    const p = at(lx, ly, lz);
+    return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: extra.quat || q, ...extra });
+  };
+  const box = (mat, lx, ly, lz, sx, sy, sz, extra = {}) => add(mat, new THREE.BoxGeometry(sx, sy, sz), lx, ly, lz, extra);
+  // cylinder along a local axis ("x" | "y" | "z")
+  const cyl = (mat, lx, ly, lz, r, len, axis = "y", extra = {}) => {
+    const g = new THREE.CylinderGeometry(r, r, len, extra.segments || 12, 1, extra.open || false);
+    if (axis === "x") g.rotateZ(Math.PI / 2);
+    else if (axis === "z") g.rotateX(Math.PI / 2);
+    const { segments, open, ...rest } = extra;
+    return add(mat, g, lx, ly, lz, { uv: "scale", uvScale: [2 * Math.PI * r, len], ...rest });
+  };
+  const collider = (lx0, lz0, lx1, lz1, h, tag, y0 = 0) => {
+    const c = [at(lx0, 0, lz0), at(lx1, 0, lz0), at(lx0, 0, lz1), at(lx1, 0, lz1)];
+    const xs = c.map((p) => p.x);
+    const zs = c.map((p) => p.z);
+    kit.collider([Math.min(...xs), y + y0, Math.min(...zs)], [Math.max(...xs), y + h, Math.max(...zs)], tag);
+  };
+  return { q, at, add, box, cyl, collider };
 }
 
 export { X_AXIS };
