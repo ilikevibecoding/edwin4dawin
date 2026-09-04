@@ -26,7 +26,7 @@ Units are metres. Ship forward is **-Z**, up is **+Y**, ship origin is the hull 
 | --- | --- |
 | Length | 1600 m (bow z = -800, stern z = +800) |
 | Beam | 900 m at the stern, wedge outline to a point at the bow |
-| Main hull | dorsal shallow pyramid to a centreline ridge (60 m at the stern), deeper ventral keel (-95 m) |
+| Main hull | dorsal shallow pyramid to a centreline ridge (60 m at the stern), ventral keel (-68 m) with the hangar keel block as the lowest point (-82 m) |
 | Side trench | equatorial greebled channel, 18 m tall, both flanks, full length |
 | Superstructure | terraced block z 150..560, x ±160, three terraces to y = 130 |
 | Command tower | neck x ±45, z 480..560, y 130..250; bridge slab x ±135, z 470..590, y 250..290 |

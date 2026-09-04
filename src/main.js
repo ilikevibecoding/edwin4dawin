@@ -17,7 +17,7 @@ import { createReservedSystems } from "./systems/reserved.js";
 import { createAudio } from "./audio/ambience.js";
 import { PerfMonitor } from "./perf.js";
 import { createTouchControls, isTouchDevice } from "./touch.js";
-import { LEGACY_WING, ROOMS } from "./config/shipSpec.js";
+import { LEGACY_WING, ROOMS, HULL, HANGAR } from "./config/shipSpec.js";
 
 // ---------------------------------------------------------------------------
 // Renderer / scene
@@ -472,6 +472,20 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// From below the keel and within ~900 m of the well, the lit hangar is shown through the opening so the
+// exterior and the interior read as one ship (fighters drop out of a real bay).
+const wellCentre = new THREE.Vector3((HANGAR.well.x0 + HANGAR.well.x1) / 2, HANGAR.deckY, (HANGAR.well.z0 + HANGAR.well.z1) / 2);
+function updateWellPeek() {
+  const want = modes.mode === "exterior" && camera.position.y < HULL.keelPlate.y + 4 && camera.position.distanceTo(wellCentre) < 900;
+  if (want && interior.peeking !== "hangar") {
+    interior.peek("hangar", ["hangar"]);
+    pool.setFixtures(interior.fixtures(), interior.spotFixtures());
+  } else if (!want && interior.peeking) {
+    interior.unpeek(modes.mode !== "exterior");
+    pool.setFixtures(interior.fixtures(), interior.spotFixtures());
+  }
+}
+
 const timer = new THREE.Timer();
 let envCaptured = false;
 
@@ -490,6 +504,7 @@ function frame() {
   }
 
   modes.update(dt);
+  updateWellPeek();
   if (modes.mode === "interior") {
     player.update(dt);
     interior.update(dt, player);

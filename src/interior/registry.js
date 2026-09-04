@@ -258,6 +258,29 @@ export function buildInterior({ scene, materials }) {
     if (api.onZoneChange) api.onZoneChange(zoneId);
   }
 
+  // Exterior "portal" view: show one zone's listed spaces (e.g. the hangar through the belly well) while
+  // another zone stays the active one. unpeek() restores the streamed state.
+  let peeked = null;
+  function peek(zoneId, spaceIds) {
+    const zone = buildZone(zoneId);
+    if (peeked && peeked.zone === zoneId) return;
+    peeked = { zone: zoneId, spaces: spaceIds };
+    root.visible = true;
+    for (const z of Object.values(zones)) z.group.visible = z.id === zoneId;
+    for (const sp of zone.spaces) sp.group.visible = spaceIds.includes(sp.id);
+    lifts.group.visible = false;
+  }
+  function unpeek(rootVisible) {
+    if (!peeked) return;
+    const zone = zones[peeked.zone];
+    for (const sp of zone.spaces) sp.group.visible = true;
+    peeked = null;
+    for (const z of Object.values(zones)) z.group.visible = z.id === state.zone;
+    applyVisibility(state.visible);
+    lifts.group.visible = true;
+    root.visible = rootVisible;
+  }
+
   function spaceAt(pos) {
     const zone = zones[state.zone];
     if (!zone) return null;
@@ -318,7 +341,14 @@ export function buildInterior({ scene, materials }) {
     },
     fixtures() {
       const z = zones[state.zone];
-      return z ? [...z.fixtures, ...lifts.fixtures] : [...lifts.fixtures];
+      const own = z ? [...z.fixtures, ...lifts.fixtures] : [...lifts.fixtures];
+      if (peeked && peeked.zone !== state.zone) own.push(...zones[peeked.zone].fixtures);
+      return own;
+    },
+    peek,
+    unpeek,
+    get peeking() {
+      return peeked ? peeked.zone : null;
     },
     spotFixtures() {
       const z = zones[state.zone];

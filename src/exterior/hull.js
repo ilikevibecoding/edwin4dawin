@@ -407,9 +407,9 @@ export function buildExterior(scene) {
     boxMM([HANGAR.well.x0 - 0.6, k.y, HANGAR.well.z1], [HANGAR.well.x1 + 0.6, throatTop, HANGAR.well.z1 + 0.6]),
   ];
   addMesh(finish(merge(throat), 1 / 6, { base: 0.5 }), darkMat, "wellThroat");
-  const field = new THREE.PlaneGeometry(wellW, wellD);
-  field.rotateX(Math.PI / 2);
-  field.translate((HANGAR.well.x0 + HANGAR.well.x1) / 2, k.y + 0.5, (HANGAR.well.z0 + HANGAR.well.z1) / 2);
+  // thin slab rather than a plane: reads from above and below and avoids the software rasteriser's
+  // large-triangle seam on a single quad
+  const field = box((HANGAR.well.x0 + HANGAR.well.x1) / 2, k.y + 0.5, (HANGAR.well.z0 + HANGAR.well.z1) / 2, wellW - 0.4, 0.3, wellD - 0.4).toNonIndexed();
   const tractor = addMesh(field, tractorMat, "tractorField");
 
   // ---------------- instanced detail layers
@@ -672,7 +672,7 @@ export function buildExterior(scene) {
       if (e.mesh.visible) vis++;
     }
     stats.visibleDetail = vis;
-    tractor.material.opacity = 0.16 + 0.08 * Math.sin(performance.now() * 0.0016);
+    tractor.material.opacity = 0.07 + 0.035 * Math.sin(performance.now() * 0.0016);
   }
 
   // Which exterior parts to draw from inside: everything for "forward"/"belly" windows, nothing otherwise

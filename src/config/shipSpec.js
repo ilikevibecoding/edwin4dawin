@@ -9,7 +9,7 @@ export const HULL = {
   sternZ: 800,
   beam: 900, // full width at the stern
   dorsalRidge: 60, // centreline height above the trench plane at the stern
-  ventralKeel: -95, // centreline depth below the trench plane at the stern
+  ventralKeel: -68, // centreline depth below the trench plane at the stern (keeps the keel block the lowest point)
   trenchHeight: 18,
   // ventral keel block under the hangar: its flat underside is the hangar deck, the well opens through it
   keelPlate: { x: 60, z0: 340, z1: 580, y: -82 },
