@@ -108,6 +108,16 @@ export class PilotHook {
     void fighter;
     void state;
   }
+  /**
+   * Optional flight override while on patrol: return { position, quaternion } (world) to take control
+   * of the craft for this tick, or null to keep the scripted patrol loop.
+   */
+  steer(fighter, dt, traffic) {
+    void fighter;
+    void dt;
+    void traffic;
+    return null;
+  }
 }
 
 class Fighter {
@@ -264,21 +274,38 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
       bay.requested = k > 0 || bay.requested;
       return k;
     },
-    /** Network-friendly state (positions / quaternions / states). */
+    /** Network-friendly state: timestamp, bay door, per-fighter state / time-in-state / pose / velocity. */
     snapshot() {
-      return { bay: +bay.openness.toFixed(3), fighters: fighters.map((f) => ({ id: f.id, s: f.state, p: f.position.toArray().map((v) => +v.toFixed(2)), q: f.quaternion.toArray().map((v) => +v.toFixed(4)) })) };
+      return {
+        t: Date.now(),
+        bay: +bay.openness.toFixed(3),
+        bayRequested: bay.requested ? 1 : 0,
+        fighters: fighters.map((f) => ({ id: f.id, s: f.state, st: +f.stateTime.toFixed(2), p: f.position.toArray().map((v) => +v.toFixed(2)), q: f.quaternion.toArray().map((v) => +v.toFixed(4)), v: f.velocity.toArray().map((v) => +v.toFixed(2)) })),
+      };
     },
+    /**
+     * Apply a remote snapshot. Local simulation pauses while snapshots keep arriving (remoteTimeout
+     * seconds since the last one) and resumes on its own if they stop. Fires pilot.onState on changes.
+     */
     applySnapshot(snap) {
       bay.openness = snap.bay;
+      if (snap.bayRequested !== undefined) bay.requested = !!snap.bayRequested;
       for (const s of snap.fighters) {
         const f = fighters[s.id];
         if (!f) continue;
-        f.state = s.s;
+        if (f.state !== s.s) {
+          f.state = s.s;
+          f.stateTime = s.st || 0;
+          if (f.pilot) f.pilot.onState(f, s.s);
+        } else if (s.st !== undefined) f.stateTime = s.st;
         f.position.fromArray(s.p);
-        f.quaternion.fromArray(s.q);
+        f.quaternion.fromArray(s.q).normalize(); // rounded components drift off unit length
+        if (s.v) f.velocity.fromArray(s.v);
       }
       api.remote = true;
+      api.remoteAge = 0;
     },
+    remoteTimeout: 2,
     counts() {
       const c = {};
       for (const f of fighters) c[f.state] = (c[f.state] || 0) + 1;
@@ -286,6 +313,11 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
     },
     schedulerEnabled: true,
     update(dt, t) {
+      // remote authority lapses when snapshots stop arriving
+      if (api.remote) {
+        api.remoteAge = (api.remoteAge || 0) + dt;
+        if (api.remoteAge > api.remoteTimeout) api.remote = false;
+      }
       // --- scheduler: keep 3 aloft, cycle one every ~18 s
       if (api.schedulerEnabled && !api.remote) {
         api.sched = (api.sched || 0) + dt;
@@ -295,7 +327,9 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
           if ((c.patrol || 0) + (c.launching || 0) < 3) api.requestLaunch(1);
           else if ((c.patrol || 0) > 2) api.requestRecall(1);
         }
-        // pilots may override
+      }
+      // pilots decide independently of the scheduler (an NPC squadron can run with it disabled)
+      if (!api.remote) {
         for (const f of fighters) {
           if (!f.pilot) continue;
           const cmd = f.pilot.decide(f, dt, api);
@@ -350,6 +384,20 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
               }
             }
           } else if (f.state === "patrol") {
+            const steered = f.pilot ? f.pilot.steer(f, dt, api) : null;
+            if (steered) {
+              f.velocity.copy(steered.position).sub(f.position).divideScalar(Math.max(dt, 1e-3));
+              f.position.copy(steered.position);
+              if (steered.quaternion) f.quaternion.copy(steered.quaternion);
+              if (f.pendingReturn && bay.openness > 0.9) {
+                f.pendingReturn = false;
+                f.path = returnPath(f);
+                f.pathTime = 0;
+                setState(f, "returning");
+                emit("tie_flyby", f);
+              }
+              continue;
+            }
             f.phase = (f.phase + (dt * LOOP_SPEED) / loopLength) % 1;
             const p = loop.getPointAt(f.phase);
             const tan = loop.getTangentAt(f.phase);

@@ -33,7 +33,8 @@ export class Door {
     this.target = 0;
     this.state = "closed";
     this.manual = !!this.style.manual;
-    this.locked = false;
+    this.locked = false; // locked doors close and ignore proximity (security / gameplay)
+    this.holdState = null; // true = held open, false = held shut, null = normal
     this.leaves = [];
     this.group = new THREE.Group();
     this.group.name = "door_" + def.a + "_" + def.b;
@@ -158,8 +159,24 @@ export class Door {
     this.leafCollider = { min: [Math.min(ax, bx), 0, Math.min(az, bz)], max: [Math.max(ax, bx), h, Math.max(az, bz)], enabled: true, tag: "door" };
   }
 
+  /** One-shot request; proximity logic takes over again next frame unless the door is manual / held. */
   setOpen(open) {
     this.target = open ? 1 : 0;
+  }
+  /** Lock (and by default close) the door: it stays shut until unlock(). Emits "door_locked". */
+  lock(close = true) {
+    this.locked = true;
+    if (close) this.target = 0;
+    if (this.onEvent) this.onEvent("door_locked", this.worldCenter);
+  }
+  unlock() {
+    this.locked = false;
+    if (this.onEvent) this.onEvent("door_unlocked", this.worldCenter);
+  }
+  /** Hold the door open (true) or shut (false) regardless of the player; null releases the hold. */
+  hold(open) {
+    this.holdState = open === null || open === undefined ? null : !!open;
+    if (this.holdState !== null) this.target = this.holdState ? 1 : 0;
   }
 
   get isOpen() {
@@ -173,7 +190,9 @@ export class Door {
   /** @param playerPos world position (feet). `active` false when neither sector is visible. */
   update(dt, playerPos, active) {
     if (!this.style.leaves) return;
-    if (!this.manual && active && !this.locked) {
+    if (this.holdState !== null) this.target = this.holdState ? 1 : 0;
+    else if (this.locked) this.target = 0;
+    else if (!this.manual && active) {
       const dx = playerPos.x - this.worldCenter.x;
       const dz = playerPos.z - this.worldCenter.z;
       const dy = playerPos.y - (this.worldCenter.y - this.def.h / 2);
@@ -190,6 +209,7 @@ export class Door {
       this.state = dir > 0 ? "opening" : "closing";
       if (prev !== this.state && this.onEvent) this.onEvent(dir > 0 ? "door_open" : "door_close", this.worldCenter);
       this.openness = THREE.MathUtils.clamp(this.openness + dir * dt * this.style.speed, 0, 1);
+      if (Math.abs(this.openness - this.target) < 1e-6) this.openness = this.target; // land exactly so the state settles
       // ease: fast start, soft stop
       const e = this.openness < 0.5 ? 2 * this.openness * this.openness : 1 - Math.pow(-2 * this.openness + 2, 2) / 2;
       const travel = (this.def.w / 2 + 0.06) * e;

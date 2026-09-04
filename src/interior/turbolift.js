@@ -124,6 +124,19 @@ export class Turbolift {
     return true;
   }
 
+  /** Network-friendly ride state. */
+  snapshot() {
+    return { state: this.state, from: this.from, to: this.to, timer: +this.timer.toFixed(2) };
+  }
+  /** Adopt a remote ride state (the local sequence continues from there). */
+  applySnapshot(s) {
+    if (!s) return;
+    this.from = s.from;
+    this.to = s.to;
+    this.timer = s.timer || 0;
+    this.state = s.state || "idle";
+  }
+
   update(dt) {
     const interior = this.interior;
     const cur = interior.currentSector;
@@ -196,6 +209,8 @@ export class Turbolift {
         if (interior.materials.lift_streak) interior.materials.lift_streak.emissiveIntensity = 2.6;
         this.audio.event("lift_arrive", dest);
         this.hud.setStatus(`${interior.deckById(this.to).def.name}.`);
+        // memory: decks two or more stops away are released (they rebuild on demand)
+        interior.trimDecks(2);
         if (this.onArrive) this.onArrive(this.to);
       }
       return;

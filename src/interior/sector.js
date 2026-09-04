@@ -20,6 +20,7 @@ export class Sector {
     this.lights = [];
     this.anims = [];
     this.interactables = [];
+    this.markers = []; // NPC / gameplay anchors: { id, kind, pos: [x,y,z] (deck-local), yaw }
     this.audioZones = [];
     this.neighbors = new Set(); // sector ids reachable through a door
     this.links = new Set(); // sector ids reachable through an open portal (co-visible)
@@ -87,6 +88,12 @@ export class Sector {
       audioZone(spec) {
         sector.audioZones.push(spec);
       },
+      /** Register an NPC / gameplay anchor in deck-local coordinates: { id?, kind, pos:[x,y,z], yaw? }. */
+      marker(m) {
+        const id = m.id || `${sector.id}_${m.kind || "stand"}_${sector.markers.length}`;
+        sector.markers.push({ id, kind: m.kind || "stand", pos: [...m.pos], yaw: m.yaw || 0, data: m.data || null });
+        return id;
+      },
       // convenience: register an extra collider in deck-local coordinates
       collider(min, max, tag) {
         kit.collider(min, max, tag);
@@ -119,6 +126,38 @@ export class Sector {
     this.buildMs = performance.now() - t0;
     interior.group.add(this.group);
     return this;
+  }
+
+  /**
+   * Free the sector's geometry (materials and textures are shared and stay). The sector rebuilds on
+   * demand the next time it is shown, so decks far from the player can be unloaded.
+   */
+  dispose() {
+    if (!this.built) return;
+    this.group.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+    });
+    if (this.group.parent) this.group.parent.remove(this.group);
+    this.group = new THREE.Group();
+    this.group.name = "sector_" + this.def.id;
+    this.group.position.set(...this.deck.origin);
+    this.group.visible = false;
+    this.colliders = [];
+    this.lights = [];
+    this.anims = [];
+    this.interactables = [];
+    this.markers = [];
+    this.audioZones = [];
+    this.built = false;
+    this.visible = false;
+  }
+
+  /** World position of a marker (or null). */
+  markerWorld(id) {
+    const m = this.markers.find((x) => x.id === id);
+    if (!m) return null;
+    const o = this.deck.origin;
+    return new THREE.Vector3(m.pos[0] + o[0], m.pos[1] + o[1], m.pos[2] + o[2]);
   }
 
   setVisible(v) {

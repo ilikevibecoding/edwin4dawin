@@ -186,18 +186,21 @@ export function impCeiling(kit, ctx, opts = {}) {
   const along = opts.along || (w >= d ? "x" : "z");
   const span = along === "x" ? w : d;
   const across = along === "x" ? d : w;
-  const n = Math.max(1, Math.round(across / (opts.spacing || 4.5)));
+  // opts.strips === false drops the strips entirely; opts.stripMat swaps the emitter (e.g. a dim or
+  // coloured one) so rooms can own their light hierarchy without rebuilding the ceiling
+  const n = opts.strips === false ? 0 : Math.max(1, Math.round(across / (opts.spacing || 4.5)));
+  const stripMat = opts.stripMat || "emitStrip";
   for (let i = 0; i < n; i++) {
     const c = (i + 0.5) / n;
     const L = span - 1.2;
     if (along === "x") {
       const z = z0 + c * d;
       kit.box("paintedMetal", x0 + w / 2, y - 0.06, z, L + 0.2, 0.1, 0.42, { color: PALETTE.impDark, texel: 2 });
-      kit.box("emitStrip", x0 + w / 2, y - 0.1, z, L, 0.03, 0.14, { uv: "keep" });
+      kit.box(stripMat, x0 + w / 2, y - 0.1, z, L, 0.03, 0.14, { uv: "keep" });
     } else {
       const x = x0 + c * w;
       kit.box("paintedMetal", x, y - 0.06, z0 + d / 2, 0.42, 0.1, L + 0.2, { color: PALETTE.impDark, texel: 2 });
-      kit.box("emitStrip", x, y - 0.1, z0 + d / 2, 0.14, 0.03, L, { uv: "keep" });
+      kit.box(stripMat, x, y - 0.1, z0 + d / 2, 0.14, 0.03, L, { uv: "keep" });
     }
   }
   // real lights: a budgeted grid (forward renderer — every light costs every pixel). Big rooms get
@@ -505,6 +508,7 @@ export function impConsole(kit, ctx, { x, z, y = 0, yaw = 0, w = 1.8, d = 0.8, h
 
 /** Black operator chair facing -Z (rotated by yaw). */
 export function impChair(kit, ctx, { x, z, y = 0, yaw = 0 }) {
+  if (ctx && ctx.marker) ctx.marker({ kind: "seat", pos: [x, y, z], yaw });
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
   const local = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
   const add = (mat, geo, lx, ly, lz, extra = {}) => {

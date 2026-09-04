@@ -26,9 +26,26 @@ page.on("console", (m) => {
   if (m.type() === "error" && !/GPU stall|ReadPixels/.test(m.text())) errors.push(m.text().slice(0, 300));
 });
 await page.goto(base, { waitUntil: "load" });
-await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 240000 });
-// stop rendering while we simulate (software GL frames would slow the walk loops)
-await page.evaluate(() => (window.debugAPI.directRender = true));
+const ready = async () => {
+  await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 240000 });
+  // stop rendering while we simulate (software GL frames would slow the walk loops)
+  await page.evaluate(() => (window.debugAPI.directRender = true));
+};
+await ready();
+// A dev-server hot reload (someone editing src/) destroys the page context mid-run; instead of
+// dying, wait for the app to come back and repeat the step. Steps are idempotent (each teleports).
+const rawEvaluate = page.evaluate.bind(page);
+page.evaluate = async (fn, arg) => {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await rawEvaluate(fn, arg);
+    } catch (e) {
+      if (attempt >= 3 || !/Execution context was destroyed|Target closed|navigation/.test(String(e.message))) throw e;
+      console.log("page reloaded (dev server); waiting for the app and retrying the step");
+      await ready();
+    }
+  }
+};
 
 const report = { base, decks: {}, lift: [], traffic: null, reserved: null, errors, failures: [] };
 const fail = (msg) => {

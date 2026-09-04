@@ -8,7 +8,7 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { PALETTE } from "../../materials.js";
-import { roomShell, impWall, impChair, wallScreen, pipeRun, wallSegment, IMP_STYLES, IMP_PAINTS, IMP_PAINTS_DARK, IMP_THEME } from "../imperial.js";
+import { roomShell, impWall, impChair, wallScreen, pipeRun, wallSegment, IMP_PAINTS_DARK, IMP_THEME } from "../imperial.js";
 import { pointLight, wallFrame, ceilingFrame, panelGrid } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
@@ -20,6 +20,12 @@ const DOOR_W = 1.0;
 const DOOR_H = 2.1;
 const MAROON = new THREE.Color("#4a1c1c");
 const OLIVE = new THREE.Color("#4b4f3f");
+// corridor faces: two tones only, no louvre / screen cells (grilles are placed by hand at the top)
+const CORR_PAINTS = [
+  [PALETTE.impLight, 0.72],
+  [PALETTE.impGrey, 0.28],
+];
+const CORR_STYLES = { panel: 0.92, vent: 0, greeble: 0.04, strip: 0.04, screen: 0, conduit: 0 };
 
 export function buildOfficers(kit, ctx) {
   const [min, max] = ctx.bounds; // [-24, 0, -7] .. [-5.4, 3.6, 7]
@@ -38,6 +44,8 @@ export function buildOfficers(kit, ctx) {
   ]);
   // warm cabin lamp material (softer than the shared amber)
   ctx.materials.officers_warm ||= new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color("#ffd9a8"), emissiveIntensity: 1.9, roughness: 0.5, metalness: 0 });
+  // frosted light boxes / ceiling panels: large areas, so kept well under white
+  ctx.materials.officers_warm_soft ||= new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color("#ffd9a8"), emissiveIntensity: 1.15, roughness: 0.5, metalness: 0 });
   const sheets = sheetAtlas(ctx, "briefing_sheets");
 
   // --- plan
@@ -55,12 +63,12 @@ export function buildOfficers(kit, ctx) {
   const wash = { xa: min[0], xb: C2 - half, za: north[0], zb: north[1], doorX: -20.7, doorW: 1.2 };
   const ward = { xa: min[0], xb: C2 - half, za: south[0], zb: south[1], doorX: -20.7, doorW: 1.8 };
 
-  // outer shell: dark panels inside the private spaces, standard light Imperial on the lobby-door wall
+  // outer shell: dark panels inside the private spaces, the calm two-tone corridor finish on the lobby-door wall
   const dark = { paints: IMP_PAINTS_DARK, styles: { panel: 0.8, vent: 0.06, greeble: 0.04, strip: 0.1, screen: 0, conduit: 0 } };
   roomShell(kit, ctx, {
     ceiling: false,
     walls: { panelW: 1.2 },
-    wall: { zmin: dark, zmax: dark, xmin: dark },
+    wall: { zmin: dark, zmax: dark, xmin: dark, xmax: { paints: CORR_PAINTS, styles: CORR_STYLES } },
   });
 
   // --- partitions (faces: [+N side, -N side] of a→b, N = (-dz, 0, dx))
@@ -103,8 +111,8 @@ export function buildOfficers(kit, ctx) {
   doorFrame(kit, ctx, labels, ward.doorX, -ZS, ward.doorW, 2.5 - 0.12, +1, 6, { wide: true });
   // spine mouth header: beam with a white strip and the quarters' directory sign
   kit.boxMM("paintedMetal", [XE - half - 0.02, 2.7, -1.35], [XE + half + 0.02, 2.95, 1.35], { color: PALETTE.impDark, texel: 1.5 });
-  kit.boxMM("emitWhiteSoft", [XE + half + 0.021, 2.74, -1.2], [XE + half + 0.035, 2.78, 1.2], { uv: "keep" });
-  kit.boxMM("emitWhiteSoft", [XE - half - 0.035, 2.74, -1.2], [XE - half - 0.021, 2.78, 1.2], { uv: "keep" });
+  kit.boxMM("emitWhiteDim", [XE + half + 0.021, 2.74, -1.2], [XE + half + 0.035, 2.78, 1.2], { uv: "keep" });
+  kit.boxMM("emitWhiteDim", [XE - half - 0.035, 2.74, -1.2], [XE - half - 0.021, 2.78, 1.2], { uv: "keep" });
   for (const s of [-1, 1]) {
     kit.boxMM("paintedMetal", [XE - half - 0.03, 0, s > 0 ? 1.2 : -1.35], [XE + half + 0.03, 2.72, s > 0 ? 1.35 : -1.2], { color: PALETTE.impGrey, texel: 1.5 });
     kit.collider([XE - half - 0.03, 0, s > 0 ? 1.2 : -1.35], [XE + half + 0.03, 2.72, s > 0 ? 1.35 : -1.2], "jamb");
@@ -126,9 +134,9 @@ export function buildOfficers(kit, ctx) {
   {
     const f = ceilingFrame(kit, min[0], min[2], H);
     panelGrid(f, max[0] - min[0], max[2] - min[2], { rowH: 1.4, panelW: 1.4, kick: false, topPipes: false, seed: ctx.seed * 17 + 21, collide: false, styles: { panel: 0.88, greeble: 0.04, vent: 0.08 }, paints: [[PALETTE.impGrey, 0.55], [PALETTE.impMid, 0.35], [PALETTE.impDark, 0.1]], ...IMP_THEME, decals: false });
-    const strip = (x0, z0, x1, z1) => {
+    const strip = (x0, z0, x1, z1, mat = "emitWhiteDim") => {
       kit.boxMM("paintedMetal", [Math.min(x0, x1) - 0.16, H - 0.1, Math.min(z0, z1) - 0.16], [Math.max(x0, x1) + 0.16, H, Math.max(z0, z1) + 0.16], { color: PALETTE.impDark, texel: 2 });
-      kit.boxMM("emitWhiteSoft", [Math.min(x0, x1), H - 0.12, Math.min(z0, z1)], [Math.max(x0, x1), H - 0.09, Math.max(z0, z1)], { uv: "keep" });
+      kit.boxMM(mat, [Math.min(x0, x1), H - 0.12, Math.min(z0, z1)], [Math.max(x0, x1), H - 0.09, Math.max(z0, z1)], { uv: "keep" });
     };
     strip(-6.65 - 0.06, min[2] + 0.8, -6.65 + 0.06, max[2] - 0.8); // entry corridor
     strip(spineFrom + 0.7, -0.06, spineTo - 0.4, 0.06); // spine
@@ -137,10 +145,10 @@ export function buildOfficers(kit, ctx) {
       const cx = (c.xa + c.xb) / 2;
       const cz = (c.za + c.zb) / 2;
       kit.box("paintedMetal", cx, H - 0.08, cz, 1.5, 0.16, 1.5, { color: PALETTE.impBlack, texel: 2 });
-      kit.box("officers_warm", cx, H - 0.165, cz, 1.3, 0.01, 1.3, { uv: "keep" });
+      kit.box("officers_warm_soft", cx, H - 0.165, cz, 1.3, 0.01, 1.3, { uv: "keep" });
     }
     // washroom: cool strip; wardroom: two warm panels
-    strip(wash.xa + 0.6, (wash.za + wash.zb) / 2 - 0.06, wash.xb - 0.6, (wash.za + wash.zb) / 2 + 0.06);
+    strip(wash.xa + 0.6, (wash.za + wash.zb) / 2 - 0.06, wash.xb - 0.6, (wash.za + wash.zb) / 2 + 0.06, "emitWhiteSoft");
     for (const dx of [-1.5, 1.5]) {
       const cx = (ward.xa + ward.xb) / 2 + dx;
       const cz = (ward.za + ward.zb) / 2;
@@ -149,13 +157,16 @@ export function buildOfficers(kit, ctx) {
     }
   }
 
-  // --- lights (6): whites in the corridors, warm point lights sitting in the partitions between cabin pairs
-  ctx.light(pointLight(0xe8f0ff, 3.6, 8.0, [-6.65, H - 0.5, 0]));
-  ctx.light(pointLight(0xe8f0ff, 3.8, 9.0, [-16.0, H - 0.5, 0]));
-  ctx.light(pointLight(0xffb877, 6.0, 8.0, [C1, 2.7, (north[0] + north[1]) / 2 + 0.6]));
-  ctx.light(pointLight(0xffb877, 6.0, 8.0, [C1, 2.7, (south[0] + south[1]) / 2 - 0.6]));
-  ctx.light(pointLight(0xdfe8ff, 4.0, 6.5, [(wash.xa + wash.xb) / 2, 2.8, (wash.za + wash.zb) / 2]));
-  ctx.light(pointLight(0xffb877, 5.2, 7.0, [(ward.xa + ward.xb) / 2, 2.4, (ward.za + ward.zb) / 2]));
+  // --- lights (6): a cool white at each end of the spine (the west one spills into the washroom and
+  // wardroom, the east one into the entry corridor) and one warm practical inside every cabin, hung
+  // between the door and the bunk so the far wall and the bed read lit from the corridor
+  ctx.light(pointLight(0xe8f0ff, 4.4, 11.0, [-8.4, H - 0.45, 0]));
+  ctx.light(pointLight(0xf1ede4, 4.2, 10.5, [-20.4, H - 0.45, 0]));
+  for (const c of [cab1, cab2, cab3, cab4]) {
+    const sz = c.corridor === "zmin" ? 1 : -1;
+    const near = sz > 0 ? c.za : c.zb;
+    ctx.light(pointLight(0xffc48a, 6.4, 7.5, [(c.xa + c.xb) / 2, 2.5, near + sz * 2.5]));
+  }
   if (ctx.audioZone) ctx.audioZone({ id: "officers_hum", pos: [-16, 1.2, 0], radius: 10, loop: "hum_low" });
 }
 
@@ -189,7 +200,7 @@ function partition(kit, ctx, a, b, H, { seed = 1, openingsAt = [], faces = ["lig
       if (flip) [u0, u1] = [L - u1, L - u0];
       return { type: "door", u0, u1, v0: 0, v1: h };
     });
-  const style = (k) => (k === "light" ? { styles: IMP_STYLES, paints: IMP_PAINTS } : { styles: DARK_STYLES, paints: IMP_PAINTS_DARK });
+  const style = (k) => (k === "light" ? { styles: CORR_STYLES, paints: CORR_PAINTS } : { styles: DARK_STYLES, paints: IMP_PAINTS_DARK });
   const o = T / 2;
   impWall(kit, ctx, "zmin", { from: [a[0] + nx * o, a[1] + nz * o], to: [b[0] + nx * o, b[1] + nz * o], height: H, noDoors: true, openings: ops(false), seed: seed * 7 + 1, tag: "partition", panelW: 1.15, ...style(faces[0]) });
   impWall(kit, ctx, "zmin", { from: [b[0] - nx * o, b[1] - nz * o], to: [a[0] - nx * o, a[1] - nz * o], height: H, noDoors: true, openings: ops(true), seed: seed * 7 + 2, tag: "partition", panelW: 1.15, ...style(faces[1]) });
@@ -213,7 +224,7 @@ function doorFrame(kit, ctx, labels, x, zWall, w, h, corridorDir, label, { wide 
   // lintel light on the corridor face and a soft one inside
   const zc = corridorDir > 0 ? z1 + 0.008 : z0 - 0.008;
   const zi = corridorDir > 0 ? z0 - 0.008 : z1 + 0.008;
-  kit.box("emitWhiteSoft", x, h + 0.07, zc, w - 0.1, 0.03, 0.012, { uv: "keep" });
+  kit.box("emitWhiteDim", x, h + 0.07, zc, w - 0.1, 0.03, 0.012, { uv: "keep" });
   kit.box("officers_warm", x, h + 0.07, zi, w - 0.1, 0.03, 0.012, { uv: "keep" });
   // threshold strip and the plate above the lintel on the corridor side
   kit.box("paintedMetal", x, 0.006, zWall, w + 0.24, 0.012, T + 0.06, { color: PALETTE.impBlack, texel: 2 });
@@ -290,6 +301,14 @@ function cabin(kit, ctx, labels, c, variant) {
     frame.box("paintedMetal", length / 2, 3.3, 0.12, length - 0.1, 0.16, 0.24, { color: PALETTE.impDark, texel: 2 });
     frame.box("officers_warm", length / 2, 3.216, 0.19, length - 0.4, 0.012, 0.08, { uv: "keep" });
   }
+  // frosted light box on the far wall above the shelf: the lit rectangle that reads through the door
+  {
+    const lbx = mx(1.12);
+    const lbz = farZ - sz * 0.1;
+    kit.box("paintedMetal", lbx, 2.12, lbz, 1.5, 0.44, 0.08, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("officers_warm_soft", lbx, 2.12, lbz - sz * 0.045, 1.36, 0.3, 0.01, { uv: "keep" });
+    kit.box("paintedMetal", lbx, 2.12, lbz - sz * 0.05, 1.36, 0.02, 0.012, { color: PALETTE.impDark, texel: 3 });
+  }
   // wall shelf above the bunk on the far wall with personal items
   {
     const sy = 1.45;
@@ -345,9 +364,11 @@ function cabin(kit, ctx, labels, c, variant) {
     impChair(kit, ctx, { x: sx > 0 ? dxA - 0.45 : dxB + 0.45, z: scz + (rand() - 0.5) * 0.3, yaw: -sx * Math.PI / 2 + (rand() - 0.5) * 0.5 });
     wallScreen(kit, ctx, { side: eastWest, u: sx > 0 ? scz - c.za : c.zb - scz, v: 1.85, w: 1.0, h: 0.6, screen: (variant + 2) % 5, bounds });
   }
-  // locker beside the door on the corridor wall (free side), with a mirror strip and a decal
+  // locker on the corridor wall in the corner by the desk (out of the sightline through the door,
+  // which looks diagonally across the cabin), with a mirror strip and a decal
+  const W = Math.abs(c.xb - c.xa);
   {
-    const lx = c.doorX + sx * (DOOR_W / 2 + 0.12 + 0.45);
+    const lx = mx(W - 0.61);
     const lz0 = mz(0.02);
     const lz1 = mz(0.62);
     kit.boxMM("paintedMetal", [lx - 0.4, 0, Math.min(lz0, lz1)], [lx + 0.4, 2.05, Math.max(lz0, lz1)], { color: PALETTE.impDark, texel: 1.5 });
@@ -358,16 +379,16 @@ function cabin(kit, ctx, labels, c, variant) {
     kit.box("emitBlue", lx - 0.2, 1.9, face + sz * 0.004, 0.06, 0.02, 0.006);
     kit.add("decal", new THREE.PlaneGeometry(0.24, 0.24).rotateY(sz > 0 ? 0 : Math.PI), { pos: [lx - 0.2, 1.55, face + sz * 0.004], uv: "keep", uvRect: decalRect([0, 14, 2, 9][variant]) });
     kit.collider([lx - 0.4, 0, Math.min(lz0, lz1)], [lx + 0.4, 2.05, Math.max(lz0, lz1)], "locker");
-    // boots / a kit bag on the floor beside the locker
+    // boots / a kit bag on the floor beside the locker (door side)
     if (variant % 2 === 0) {
-      kit.box("rubber", lx + sx * 0.6, 0.06, mz(0.3), 0.12, 0.12, 0.3, { color: PALETTE.impBlack });
-      kit.box("rubber", lx + sx * 0.75, 0.06, mz(0.32), 0.12, 0.12, 0.3, { color: PALETTE.impBlack });
+      kit.box("rubber", lx - sx * 0.6, 0.06, mz(0.3), 0.12, 0.12, 0.3, { color: PALETTE.impBlack });
+      kit.box("rubber", lx - sx * 0.75, 0.06, mz(0.32), 0.12, 0.12, 0.3, { color: PALETTE.impBlack });
     } else {
-      kit.add("fabric", new RoundedBoxGeometry(0.55, 0.32, 0.3, 2, 0.08), { pos: [lx + sx * 0.75, 0.16, mz(0.35)], color: PALETTE.impMid, uv: "world", texel: 2 });
+      kit.add("fabric", new RoundedBoxGeometry(0.55, 0.32, 0.3, 2, 0.08), { pos: [lx - sx * 0.75, 0.16, mz(0.35)], color: PALETTE.impMid, uv: "world", texel: 2 });
     }
-    // duty tunic on a wall hook beyond the locker: boxy grey-green jacket, black belt, rank plaque, cap on a peg
+    // duty tunic on a wall hook between the door and the locker: boxy grey-green jacket, black belt, rank plaque, cap on a peg
     {
-      const ux = lx + sx * 1.15;
+      const ux = lx - sx * 1.25;
       const uz = mz(0.16);
       kit.box("metal", ux, 1.98, mz(0.18), 0.04, 0.08, 0.06, { color: PALETTE.steel });
       const cloth = variant % 2 ? OLIVE : PALETTE.impMid;
@@ -626,25 +647,23 @@ function entryCorridor(kit, ctx, labels, XE, H) {
   kit.box("fabric", fx + 0.26, 0.47, -5.0, 0.44, 0.06, 1.7, { color: PALETTE.impBlack, uv: "world", texel: 2 });
   // directory over the spine mouth
   signAt(kit, labels, 7, { x: fx + 0.03, y: 3.15, z: 0, yaw: Math.PI / 2, h: 0.17 });
-  // floor runner along the corridor with recessed white studs
+  // floor runner along the corridor (plain: the studs read as a runway)
   kit.box("rubber", (XE + T / 2 + max[0]) / 2, 0.004, 0, 1.2, 0.008, max[2] - min[2] - 1.0, { color: PALETTE.rubber, texel: 1.5 });
-  for (let k = 0; k < 9; k++) {
-    const z = min[2] + 1.0 + k * 1.5;
-    for (const s of [-1, 1]) kit.cyl("emitWhiteSoft", (XE + T / 2 + max[0]) / 2 + s * 0.55, 0.009, z, 0.035, 0.004, "y", { segments: 10, uv: "keep" });
-  }
   // wall-base conduit on the partition side from the cabinet toward the mouth
   pipeRun(kit, [[fx + 0.1, 0.25, 4.5], [fx + 0.1, 0.25, 1.5]], 0.03, PALETTE.steel);
+  // small return-air grilles high on the partition face either side of the mouth
+  {
+    // xmin-style frame: normal +x into the corridor, u runs from zmax to zmin
+    const { frame } = wallFrame(kit, [fx, max[2]], [fx, min[2]], 0);
+    for (const z of [-4.2, 3.0]) ventGrille(frame, max[2] - z, 3.05, 0.8, 0.28);
+  }
   void H;
 }
 
 function spineCorridor(kit, ctx, labels, x0, x1, H) {
   const [min] = ctx.bounds;
-  // floor runner with studs
+  // plain floor runner
   kit.box("rubber", (x0 + 0.3 + x1) / 2, 0.004, 0, x1 - x0 - 0.6, 0.008, 1.2, { color: PALETTE.rubber, texel: 1.5 });
-  for (let k = 0; k < 10; k++) {
-    const x = x0 + 1.0 + k * 1.55;
-    for (const s of [-1, 1]) kit.cyl("emitWhiteSoft", x, 0.009, s * 0.55, 0.035, 0.004, "y", { segments: 10, uv: "keep" });
-  }
   // end wall (xmin) between the washroom and wardroom doors: screen over a low bench
   const bx = x0 + 0.42;
   wallScreen(kit, ctx, { side: "xmin", u: ctx.bounds[1][2] - 0, v: 1.75, w: 1.4, h: 0.8, screen: 2 });
@@ -653,10 +672,18 @@ function spineCorridor(kit, ctx, labels, x0, x1, H) {
   kit.boxMM("emitWhiteSoft", [bx + 0.3, 0.1, -0.6], [bx + 0.31, 0.12, 0.6], { uv: "keep" });
   kit.collider([x0, 0, -0.8], [bx + 0.3, 0.46, 0.8], "bench");
   datapad(kit, bx - 0.1, 0.46, 0.3, 0.4, 3);
-  // wall-base white guide strips along both spine walls (faces at z = ±1.2)
+  // dim wall-base guide strips along both spine walls (faces at z = ±1.2) and a few return-air grilles
+  // high on the corridor faces (the panel grid places none there)
   for (const s of [-1, 1]) {
     const zf = s * 1.2;
-    kit.boxMM("emitWhiteSoft", [x0 + 0.5, 0.14, Math.min(zf - s * 0.012, zf - s * 0.024)], [x1 - 0.3, 0.16, Math.max(zf - s * 0.012, zf - s * 0.024)], { uv: "keep" });
+    kit.boxMM("emitWhiteDim", [x0 + 0.5, 0.14, Math.min(zf - s * 0.012, zf - s * 0.024)], [x1 - 0.3, 0.16, Math.max(zf - s * 0.012, zf - s * 0.024)], { uv: "keep" });
+  }
+  {
+    // north face (z = +1.2) looks -z: zmax-style frame, u from x1 down to x0; south face: zmin-style, u from x0
+    const n = wallFrame(kit, [x1, 1.2], [x0, 1.2], 0).frame;
+    const sth = wallFrame(kit, [x0, -1.2], [x1, -1.2], 0).frame;
+    for (const x of [-10.2, -15.0, -19.2]) ventGrille(n, x1 - x, 3.05, 0.8, 0.28);
+    for (const x of [-11.8, -18.4]) ventGrille(sth, x - x0, 3.05, 0.8, 0.28);
   }
   void H;
   void labels;

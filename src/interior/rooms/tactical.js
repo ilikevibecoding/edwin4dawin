@@ -374,22 +374,28 @@ export function buildTactical(kit, ctx) {
   platform(kit, ctx, { x0: wx1, z0: gz1, x1: max[0], z1: max[2], y: PL, thickness: PL, edge: false });
   platform(kit, ctx, { x0: wx0, z0: min[2], x1: wx1, z1: wz0, y: PL, thickness: PL, edge: false });
   platform(kit, ctx, { x0: wx0, z0: wz1, x1: wx1, z1: max[2], y: PL, thickness: PL, edge: false });
-  // platform noses: black step edge with a recessed white light line on the riser (no hazard paint)
-  const nose = (x0, z0, x1, z1) => {
+  // platform noses: black step edge; the edges over the well carry a hazard band on the platform top
+  // (`inward` = unit step from the edge onto the platform); the gangway edges stay plain
+  const nose = (x0, z0, x1, z1, inward = null) => {
     const alongX = x1 - x0 > z1 - z0;
-    if (alongX) {
-      kit.boxMM("paintedMetal", [x0, PL - 0.06, z0 - 0.03], [x1, PL + 0.005, z1 + 0.03], { color: PALETTE.impBlack, texel: 2 });
-      kit.boxMM("emitWhiteSoft", [x0 + 0.1, PL - 0.16, z0 - 0.012], [x1 - 0.1, PL - 0.13, z1 + 0.012], { uv: "keep" });
-    } else {
-      kit.boxMM("paintedMetal", [x0 - 0.03, PL - 0.06, z0], [x1 + 0.03, PL + 0.005, z1], { color: PALETTE.impBlack, texel: 2 });
-      kit.boxMM("emitWhiteSoft", [x0 - 0.012, PL - 0.16, z0 + 0.1], [x1 + 0.012, PL - 0.13, z1 - 0.1], { uv: "keep" });
+    if (alongX) kit.boxMM("paintedMetal", [x0, PL - 0.06, z0 - 0.03], [x1, PL + 0.005, z1 + 0.03], { color: PALETTE.impBlack, texel: 2 });
+    else kit.boxMM("paintedMetal", [x0 - 0.03, PL - 0.06, z0], [x1 + 0.03, PL + 0.005, z1], { color: PALETTE.impBlack, texel: 2 });
+    if (inward) {
+      const [ix, iz] = inward;
+      const a = [x0 + ix * 0.04 + (alongX ? 0.1 : 0), z0 + iz * 0.04 + (alongX ? 0 : 0.1)];
+      const b = [x1 + ix * 0.2 + (alongX ? -0.1 : 0), z1 + iz * 0.2 + (alongX ? 0 : -0.1)];
+      kit.boxMM("hazard", [Math.min(a[0], b[0]), PL + 0.006, Math.min(a[1], b[1])], [Math.max(a[0], b[0]), PL + 0.014, Math.max(a[1], b[1])], { texel: 3 });
     }
   };
-  nose(wx0, min[2], wx0, max[2]);
-  nose(wx1, min[2], wx1, gz0);
-  nose(wx1, gz1, wx1, max[2]);
-  nose(wx0, wz0, wx1, wz0);
-  nose(wx0, wz1, wx1, wz1);
+  nose(wx0, min[2], wx0, wz0);
+  nose(wx0, wz0, wx0, wz1, [-1, 0]);
+  nose(wx0, wz1, wx0, max[2]);
+  nose(wx1, min[2], wx1, wz0);
+  nose(wx1, wz0, wx1, gz0, [1, 0]);
+  nose(wx1, gz1, wx1, wz1, [1, 0]);
+  nose(wx1, wz1, wx1, max[2]);
+  nose(wx0, wz0, wx1, wz0, [0, -1]);
+  nose(wx0, wz1, wx1, wz1, [0, 1]);
   nose(wx1, gz0, max[0], gz0);
   nose(wx1, gz1, max[0], gz1);
   // steps down into the well (two on the display side, one each fore / aft)
@@ -397,7 +403,7 @@ export function buildTactical(kit, ctx) {
   stairs(kit, ctx, { x: wx0 + 0.6, z: cz + 3.5, y0: 0, y1: PL, axis: "x", dir: -1, w: 1.6, stringers: false });
   stairs(kit, ctx, { x: cx, z: wz0 + 0.6, y0: 0, y1: PL, axis: "z", dir: -1, w: 1.8, stringers: false });
   stairs(kit, ctx, { x: cx, z: wz1 - 0.6, y0: 0, y1: PL, axis: "z", dir: 1, w: 1.8, stringers: false });
-  // blue guide strips along the well floor at the platform bases and along the gangway
+  // blue guide strips on the well floor at the platform bases (the well edge only; the gangway is plain)
   const guide = (x0, z0, x1, z1) => kit.boxMM("emitBlue", [x0, 0.004, z0], [x1, 0.03, z1]);
   guide(wx0 + 0.02, wz0 + 0.02, wx0 + 0.07, cz - 4.4);
   guide(wx0 + 0.02, cz - 2.6, wx0 + 0.07, cz + 2.6);
@@ -408,23 +414,20 @@ export function buildTactical(kit, ctx) {
   guide(cx + 1.0, wz1 - 0.07, wx1 - 0.02, wz1 - 0.02);
   guide(wx1 - 0.07, wz0 + 0.02, wx1 - 0.02, gz0 - 0.02);
   guide(wx1 - 0.07, gz1 + 0.02, wx1 - 0.02, wz1 - 0.02);
-  guide(wx1 - 0.02, gz0 + 0.02, max[0] - 0.3, gz0 + 0.07);
-  guide(wx1 - 0.02, gz1 - 0.07, max[0] - 0.3, gz1 - 0.02);
-  // gangway deck: hazard threshold at the well edge and scuffs in front of the door
-  kit.boxMM("hazard", [wx1 - 0.02, 0.006, gz0 + 0.1], [wx1 + 0.12, 0.012, gz1 - 0.1], { texel: 3 });
+  // gangway deck: scuffs in front of the door
   floorScuffs(kit, max[0] - 1.6, cz, { n: 7, len: 1.2, yaw: Math.PI / 2, seed: 41 });
 
   // --- holo table
   holoTable(kit, ctx, cx, cz, labels);
 
-  // --- standing console ring in the well (gap toward the gangway)
+  // --- standing console ring in the well (gap toward the gangway): three station types
   for (const deg of [30, 150, 210, 270, 330]) {
     const a = (deg * Math.PI) / 180;
     const r = 3.35;
     const x = cx + Math.sin(a) * r;
     const z = cz + Math.cos(a) * r;
     const yaw = faceYaw(x, z, cx, cz);
-    impConsole(kit, ctx, { x, z, yaw, w: 1.7, d: 0.75, h: 1.0, screens: deg === 270 ? [0, 3, 0] : [0, 2], seed: ctx.seed + deg, lampMat: "emitBlue" });
+    ringStation(kit, ctx, { x, z, yaw, deg, seed: ctx.seed + deg });
     // floor conduit from the console underside to the table plinth
     const ux = Math.sin(a);
     const uz = Math.cos(a);
@@ -440,9 +443,9 @@ export function buildTactical(kit, ctx) {
     impConsole(kit, ctx, { x, z: min[2] + 1.6, y: PL, yaw: Math.PI, w: 1.9, d: 0.8, screens: [0, 1], chair: true, seed: ctx.seed + 11 + Math.round(x) });
     impConsole(kit, ctx, { x, z: max[2] - 1.6, y: PL, yaw: 0, w: 1.9, d: 0.8, screens: [0, 2], chair: true, seed: ctx.seed + 17 + Math.round(x) });
   }
-  // door-side platforms: a standing station on each, facing the table
-  impConsole(kit, ctx, { x: max[0] - 2.6, z: min[2] + 2.6, y: PL, yaw: faceYaw(max[0] - 2.6, min[2] + 2.6, cx, cz), w: 1.6, d: 0.75, h: 1.0, screens: [1, 0], seed: ctx.seed + 23 });
-  impConsole(kit, ctx, { x: max[0] - 2.6, z: max[2] - 2.6, y: PL, yaw: faceYaw(max[0] - 2.6, max[2] - 2.6, cx, cz), w: 1.6, d: 0.75, h: 1.0, screens: [0, 4], seed: ctx.seed + 29 });
+  // door-side platforms: a standing station on each, facing the table (one with the raised readout)
+  impConsole(kit, ctx, { x: max[0] - 2.6, z: min[2] + 2.6, y: PL, yaw: faceYaw(max[0] - 2.6, min[2] + 2.6, cx, cz), w: 1.6, d: 0.75, h: 1.0, screens: [1, 0], tall: true, seed: ctx.seed + 23 });
+  impConsole(kit, ctx, { x: max[0] - 2.6, z: max[2] - 2.6, y: PL, yaw: faceYaw(max[0] - 2.6, max[2] - 2.6, cx, cz), w: 1.5, d: 0.75, h: 0.92, screens: [0, 4], seed: ctx.seed + 29, lampMat: "emitAmber" });
 
   // --- 6 m segmented video wall on the xmin wall (5 × 3 tiles), header sign, readout ledge
   videoWall(kit, ctx, labels);
@@ -525,6 +528,45 @@ export function buildTactical(kit, ctx) {
 // ---------------------------------------------------------------------------
 // Pieces
 // ---------------------------------------------------------------------------
+/**
+ * Standing station of the console ring, three types keyed by the ring angle: plotters flanking the
+ * gangway (low slab, amber lamps, readout pad on a side arm), fleet-control stations (taller body with
+ * the raised rear readout) and the director's station opposite the door (widest, three screens, grab rail).
+ */
+function ringStation(kit, ctx, { x, z, yaw, deg, seed }) {
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const local = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, 0, z));
+  const add = (mat, geo, lx, ly, lz, extra = {}, tiltX = 0) => {
+    const p = local(lx, ly, lz);
+    const qq = tiltX ? q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tiltX)) : q;
+    return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: qq, ...extra });
+  };
+  if (deg === 30 || deg === 330) {
+    impConsole(kit, ctx, { x, z, yaw, w: 1.6, d: 0.75, h: 0.92, screens: [2, 0], seed, lampMat: "emitAmber" });
+    // readout pad on an arm bolted to the cheek away from the gangway
+    const ax = -0.86;
+    add("metal", new THREE.BoxGeometry(0.1, 0.03, 0.14), ax + 0.03, 0.56, -0.1, { color: PALETTE.impBlack });
+    add("metal", new THREE.CylinderGeometry(0.022, 0.022, 0.66, 8), ax, 0.88, -0.1, { color: PALETTE.impMid });
+    const tilt = -0.35;
+    add("paintedMetal", new THREE.BoxGeometry(0.4, 0.28, 0.04), ax, 1.26, -0.06, { color: PALETTE.impBlack, texel: 3 }, tilt);
+    add("impScreen4", new THREE.PlaneGeometry(0.34, 0.22), ax, 1.26 + 0.021 * Math.sin(-tilt), -0.06 + 0.021 * Math.cos(tilt), { uv: "keep" }, tilt);
+    add("emitAmber", new THREE.BoxGeometry(0.06, 0.02, 0.01), ax + 0.15, 1.26 - 0.15 + 0.03 * Math.sin(-tilt), -0.06 + 0.03 * Math.cos(tilt), {}, tilt);
+  } else if (deg === 150 || deg === 210) {
+    impConsole(kit, ctx, { x, z, yaw, w: 1.9, d: 0.8, h: 1.08, screens: [3, 0], tall: true, seed, lampMat: "emitBlue" });
+    // blue status bar across the top of the riser and a cable loom down its back
+    add("emitBlue", new THREE.BoxGeometry(1.5, 0.02, 0.02), 0, 1.94, -0.34);
+    add("rubber", new THREE.CylinderGeometry(0.03, 0.03, 0.9, 8), 0.3, 1.4, -0.47, { color: PALETTE.impBlack });
+  } else {
+    impConsole(kit, ctx, { x, z, yaw, w: 2.3, d: 0.8, h: 1.0, screens: [0, 3, 1], seed, lampMat: "emitBlue" });
+    // grab rail along the operator edge and a lit strip up each cheek
+    add("metal", new THREE.CylinderGeometry(0.02, 0.02, 2.0, 10).rotateZ(Math.PI / 2), 0, 0.9, 0.56, { color: PALETTE.steel });
+    for (const s of [-1, 1]) {
+      add("metal", new THREE.BoxGeometry(0.04, 0.04, 0.2), s * 0.95, 0.9, 0.47, { color: PALETTE.impBlack });
+      add("emitBlue", new THREE.BoxGeometry(0.012, 0.5, 0.03), s * 1.16, 0.5, -0.1);
+    }
+  }
+}
+
 function holoTable(kit, ctx, cx, cz, labels) {
   const R = 1.75;
   // plinth, kick recess, drum body, top slab, blue rim
