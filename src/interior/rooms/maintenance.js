@@ -6,9 +6,9 @@ import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
 import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
-import { impWall, impCeiling, wallScreen, equipmentRack, crate, pipeRun, railing, wallSegment } from "../imperial.js";
+import { impWall, impCeiling, impConsole, wallScreen, equipmentRack, crate, pipeRun, railing, platform, wallSegment } from "../imperial.js";
 import { pointLight, wallFrame } from "../builders.js";
-import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, COOL, HAZARD_TEXEL, cableTray, wallVent, wallStencil, floorStencil, floorLine, hazardBorder, floorBorder, oilStain, workLight, warningLamp, craneRail, cabinet, shelfFrame, workbench, gratedTrench, emitMat, loader, palletJack, toolChest, weldScreen, hose, lockerRow, pipeManifold, jobBoardMat } from "./engProps.js";
+import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, COOL, HAZARD_TEXEL, cableTray, wallVent, wallStencil, floorStencil, floorLine, hazardBorder, floorBorder, oilStain, workLight, warningLamp, craneRail, cabinet, shelfFrame, workbench, gratedTrench, emitMat, loader, palletJack, toolChest, weldScreen, hose, lockerRow, pipeManifold, jobBoardMat, bannerMat, workCart, hoseReel, rollupHatch } from "./engProps.js";
 
 export function buildMaintenance(kit, ctx) {
   const [min, max] = ctx.bounds; // [2.9, 0, -64] .. [48, 9, -36]
@@ -274,9 +274,10 @@ export function buildMaintenance(kit, ctx) {
     weldMat.emissiveIntensity = 0.4 + k * 6;
   });
 
-  // ---------------------------------------------------------------- parts racks and tool boards (xmax wall)
-  for (const [z0, z1] of [[-62.4, -54.2], [-45.8, -37.6]]) {
-    const heights = shelfFrame(kit, max[0] - 1.6, z0, max[0] - 0.1, z1, { levels: 3, levelH: 1.55 });
+  // ---------------------------------------------------------------- far wall (xmax): parts rack under a mezzanine
+  // landing (south), lit tool boards (centre), a big roll-up cargo hatch (north)
+  for (const [z0, z1] of [[-62.4, -54.2]]) {
+    const heights = shelfFrame(kit, max[0] - 1.6, z0, max[0] - 0.1, z1, { levels: 2, levelH: 1.55 });
     const levels = [0, ...heights.slice(0, -1)];
     for (const ly of levels) {
       for (let z = z0 + 0.8; z < z1 - 0.6; z += 1.5 + rand() * 0.9) {
@@ -288,9 +289,13 @@ export function buildMaintenance(kit, ctx) {
     }
     floorBorder(kit, max[0] - 1.9, z0 - 0.1, max[0] - 0.05, z1 + 0.1, { w: 0.1 });
   }
-  // tool boards between the racks with hung tools and a status screen
+  // lit tool boards in the centre of the far wall: pale shadow boards with hung tools under a light bar
   for (const [z, seed] of [[-51.6, 1], [-48.4, 2]]) {
-    kit.box("paintedMetal", max[0] - 0.06, 1.7, z, 0.06, 1.6, 2.4, { color: PALETTE.impMid, texel: 2 });
+    kit.box("paintedMetal", max[0] - 0.06, 1.7, z, 0.06, 1.6, 2.4, { color: PALETTE.impLight, texel: 2 });
+    kit.box("paintedMetal", max[0] - 0.05, 1.7, z, 0.04, 1.72, 2.52, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("paintedMetal", max[0] - 0.22, 2.66, z, 0.44, 0.1, 2.5, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("emitWhiteSoft", max[0] - 0.24, 2.6, z, 0.3, 0.02, 2.3, { uv: "keep" });
+    kit.box("emitAmberDim", max[0] - 0.44, 2.66, z, 0.01, 0.06, 2.3, { uv: "keep" });
     const rr = rng(ctx.seed + seed);
     for (let i = 0; i < 9; i++) {
       const tz = z - 1.0 + i * 0.25;
@@ -306,12 +311,53 @@ export function buildMaintenance(kit, ctx) {
   kit.box("paintedMetal", max[0] - 0.12, 5.4, -50, 0.12, 1.1, 7.0, { color: PALETTE.impBlack, texel: 2 });
   kit.box("bay_sign", max[0] - 0.19, 5.4, -50, 0.02, 0.8, 6.6, { uv: "keep" });
   kit.box("paintedMetal", max[0] - 0.22, 5.4, -50, 0.02, 0.5, 6.2, { color: PALETTE.impBlack, texel: 2 });
-  for (const [z0, z1] of [[-62.4, -54.2], [-45.8, -37.6]]) {
+  bannerMat(ctx, "mnt_bay", { text: "Maintenance & Repair", sub: "Bay 04 · Deck 4 Engineering · Lifts A B · Crane 1", accent: "#ffb347", ratio: 12.4 });
+  kit.add("mnt_bay", new THREE.PlaneGeometry(6.2, 0.5), { pos: [max[0] - 0.236, 5.4, -50], rot: [0, -Math.PI / 2, 0], uv: "keep" });
+  for (const [z0, z1] of [[-62.4, -54.2]]) {
     kit.boxMM("paintedMetal", [max[0] - 1.7, 4.75, z0], [max[0] - 0.1, 4.95, z1], { color: PALETTE.impDark, texel: 2 });
     kit.boxMM("emitWhiteSoft", [max[0] - 1.5, 4.72, z0 + 0.2], [max[0] - 0.3, 4.75, z1 - 0.2], { uv: "keep" });
   }
   wallVent(kit, ctx, "xmax", 8, 6.0, 2.6, 1.0);
-  wallVent(kit, ctx, "xmax", 20, 6.0, 2.6, 1.0);
+  wallVent(kit, ctx, "xmax", 20, 7.3, 2.6, 1.0);
+  // roll-up cargo hatch where the second parts rack stood (the far wall was one rack rhythm end to end)
+  rollupHatch(kit, ctx, "xmax", -42 - min[2], { w: 6.4, h: 4.8, label: "Hatch 04-N", sub: "Cargo Transfer · Closed" });
+  floorBorder(kit, max[0] - 3.6, -45.8, max[0] - 0.05, -38.2, { w: 0.12 });
+  floorStencil(kit, max[0] - 2.2, -42, 1.4, 14, -Math.PI / 2, 0.006);
+  // mezzanine landing over the south rack: a platform on the corner with a supervisor console, a
+  // cabinet and a lit board, a ladder down to the deck, a small amber light over it
+  {
+    const my = 3.6;
+    const mx0 = 44.2;
+    const mz1 = -56.2;
+    platform(kit, ctx, { x0: mx0, z0: min[2] + 0.05, x1: max[0] - 0.05, z1: mz1, y: my, mat: "paintedMetal" });
+    for (const z of [-59.4, mz1 - 0.35]) {
+      kit.box("paintedMetal", mx0 + 0.15, (my - 0.3) / 2, z, 0.3, my - 0.3, 0.3, { color: PALETTE.impDark, texel: 2 });
+      kit.box("paintedMetal", mx0 + 0.15, 0.1, z, 0.5, 0.2, 0.5, { color: PALETTE.impBlack, texel: 2 });
+      kit.collider([mx0, 0, z - 0.16], [mx0 + 0.3, my, z + 0.16], "mezzpost");
+    }
+    kit.boxMM("paintedMetal", [mx0, my - 0.34, min[2] + 0.05], [mx0 + 0.3, my - 0.3, mz1], { color: PALETTE.impBlack, texel: 2 });
+    kit.boxMM("emitAmberDim", [mx0 + 0.02, my - 0.35, min[2] + 0.4], [mx0 + 0.28, my - 0.34, mz1 - 0.4], { uv: "keep" });
+    railing(kit, mx0 + 0.1, min[2] + 0.1, mx0 + 0.1, mz1 - 0.1, my, { collide: false });
+    railing(kit, mx0 + 0.1, mz1 - 0.1, max[0] - 1.1, mz1 - 0.1, my, { collide: false });
+    impConsole(kit, ctx, { x: 46.0, z: -60.4, y: my, yaw: Math.PI / 2, w: 2.0, d: 0.8, screens: [4, 1], chair: true, seed: ctx.seed + 91, lampMat: "emitAmber" });
+    cabinet(kit, max[0] - 0.36, -62.6, { yaw: -Math.PI / 2, y: my, w: 1.2, h: 1.9, d: 0.6, seed: ctx.seed + 92, screen: 4 });
+    {
+      const seg = wallSegment(ctx.bounds, "xmax");
+      const { frame } = wallFrame(kit, seg.from, seg.to, 0);
+      const u = -59.0 - min[2];
+      frame.box("paintedMetal", u, my + 2.05, 0.05, 2.9, 1.5, 0.1, { color: PALETTE.impBlack, texel: 2 });
+      frame.add("mnt_jobs", new THREE.PlaneGeometry(2.6, 1.3), u, my + 2.05, 0.106, { uv: "keep" });
+      frame.box("emitAmberDim", u, my + 1.22, 0.09, 2.4, 0.03, 0.01, { uv: "keep" });
+    }
+    // ladder on the north edge
+    const lx = max[0] - 0.6;
+    for (const s of [-1, 1]) kit.cyl("metal", lx + s * 0.25, my / 2 + 0.55, mz1 + 0.05, 0.022, my + 1.1, "y", { color: PALETTE.steel, segments: 8 });
+    for (let y = 0.3; y < my + 0.9; y += 0.3) kit.box("metal", lx, y, mz1 + 0.05, 0.5, 0.03, 0.03, { color: PALETTE.steel });
+    for (const y of [1.2, 2.6]) kit.box("paintedMetal", lx, y, mz1 - 0.15, 0.6, 0.04, 0.3, { color: PALETTE.impDark, texel: 2 });
+    kit.box("hazard", lx, 0.05, mz1 + 0.5, 0.9, 0.01, 0.9, { texel: HAZARD_TEXEL });
+    kit.collider([lx - 0.35, 0, mz1 - 0.1], [lx + 0.35, my, mz1 + 0.15], "ladder");
+    ctx.light(pointLight(AMBER, 6, 9, [46.0, my + 1.9, -60.4]));
+  }
   equipmentRack(kit, ctx, { side: "xmax", u: -63.2 - min[2], w: 1.4, h: 3.0, seed: ctx.seed + 33, lit: "emitAmber" });
 
   // ---------------------------------------------------------------- droid alcoves (zmax wall)
@@ -387,10 +433,38 @@ export function buildMaintenance(kit, ctx) {
   // aisle markings
   floorLine(kit, min[0] + 0.5, -52.6, max[0] - 2.0, -52.6, { w: 0.14, color: PALETTE.impAmber });
   floorLine(kit, min[0] + 0.5, -47.4, max[0] - 2.0, -47.4, { w: 0.14, color: PALETTE.impAmber });
-  for (let i = 0; i < 5; i++) floorStencil(kit, 10 + i * 8, -50, 1.4, i % 2 ? 2 : 3, Math.PI / 2, 0.006);
+  // (yaw -π/2 reads upright to a viewer at the door; the decal ink is near-black, so each sits on a
+  // pale painted patch with a dark border — on the dark deck the lettering was lost)
+  for (let i = 0; i < 5; i++) {
+    const sz = i < 2 ? 1.9 : 1.5;
+    kit.box("paintedMetal", 10 + i * 8, 0.002, -50, sz + 0.44, 0.004, sz + 0.44, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("paintedMetal", 10 + i * 8, 0.004, -50, sz + 0.24, 0.005, sz + 0.24, { color: PALETTE.impLight, texel: 2 });
+    floorStencil(kit, 10 + i * 8, -50, sz, i % 2 ? 2 : 3, -Math.PI / 2, 0.008);
+  }
   floorStencil(kit, 22, -56.5, 1.2, 7, 0.1);
   floorStencil(kit, 26, -44.5, 1.2, 1, -0.2);
   floorStencil(kit, 38, -57, 1.4, 5, 0.4);
+  // by the door, inside the door camera's view (x 8–11.5, between the trenches and the lifts —
+  // anything closer to the door wall is outside its frustum): a tool-crib bay south of the aisle
+  // (marked box, service cart, hose reel whose air line crosses the aisle under a cable bridge to
+  // the barrel job) and a staging corner north of it (tool chest, pallet jack with a crate)
+  floorBorder(kit, 8.3, -57.6, 11.4, -53.6, { w: 0.12 });
+  floorLine(kit, 8.3, -55.7, 11.4, -55.7, { w: 0.08, color: PALETTE.impAmber });
+  floorStencil(kit, 9.3, -56.7, 1.0, 12, -Math.PI / 2, 0.006);
+  workCart(kit, 11.0, -54.9, { yaw: Math.PI / 2 + 0.25, seed: ctx.seed + 95 });
+  hoseReel(kit, 9.6, -54.1, { yaw: Math.PI / 2, out: [[11.0, -53.75], [12.1, -53.25], [12.4, -52.8], [12.4, -47.0], [12.9, -46.0], [13.3, -44.8]] });
+  kit.box("paintedMetal", 12.4, 0.035, -50, 0.56, 0.07, 5.9, { color: PALETTE.impBlack, texel: 2 });
+  for (const s of [-1, 1]) floorLine(kit, 12.4 + s * 0.2, -52.9, 12.4 + s * 0.2, -47.1, { w: 0.07, color: PALETTE.impAmber, y: 0.071 });
+  floorBorder(kit, 8.3, -46.4, 10.9, -42.8, { w: 0.12 });
+  toolChest(kit, 10.4, -45.8, { yaw: -0.35, seed: ctx.seed + 98 });
+  palletJack(kit, 12.2, -44.6, Math.PI / 2 + 0.3);
+  crate(kit, ctx, { x: 11.7, y: 0.15, z: -44.5, sx: 0.9, sy: 0.6, sz: 0.9, yaw: 0.3, seed: ctx.seed + 99 });
+  // second staging bay against the door wall for anyone walking in
+  floorBorder(kit, min[0] + 1.1, -46.5, min[0] + 5.0, -40.5, { w: 0.12 });
+  floorStencil(kit, min[0] + 3.0, -41.4, 1.1, 13, -Math.PI / 2, 0.006);
+  palletJack(kit, min[0] + 3.4, -44.4, Math.PI / 2 + 0.15);
+  crate(kit, ctx, { x: min[0] + 2.6, z: -44.5, y: 0.15, sx: 1.0, sy: 0.7, sz: 0.9, yaw: 0.15, seed: ctx.seed + 96 });
+  workCart(kit, min[0] + 2.7, -42.2, { yaw: -Math.PI / 2 + 0.3, seed: ctx.seed + 97, color: PALETTE.impDark });
   // north-east quadrant: a parked loader delivering a spare, a parts trolley and staged crates
   loader(kit, ctx, 35, -42.5, { yaw: Math.PI / 2 + 0.25, seed: ctx.seed + 61, carry: (x, y, z, yaw) => crate(kit, ctx, { x, y, z, sx: 1.0, sy: 0.8, sz: 1.0, yaw, seed: ctx.seed + 62 }) });
   palletJack(kit, 41.5, -43.5, Math.PI + 0.4);
@@ -398,7 +472,7 @@ export function buildMaintenance(kit, ctx) {
   crate(kit, ctx, { x: 30.5, z: -39.6, sx: 1.6, sy: 1.1, sz: 1.4, yaw: -0.15, seed: ctx.seed + 64 });
   crate(kit, ctx, { x: 30.6, y: 1.1, z: -39.5, sx: 1.2, sy: 0.7, sz: 1.1, yaw: 0.1, seed: ctx.seed + 65 });
   oilStain(kit, 37.5, -44.5, 0.7, ctx.seed + 66);
-  floorStencil(kit, 36, -46.2, 1.2, 9, Math.PI / 2);
+  floorStencil(kit, 36, -46.2, 1.2, 9, -Math.PI / 2);
   floorBorder(kit, 29.5, -40.5, 31.6, -38.6, { w: 0.1 });
 
   // ---------------------------------------------------------------- overhead: crane, trays, lights
