@@ -44,6 +44,10 @@ export function ensureCrewMaterials(mats) {
   mats.crewPaintWhite = new THREE.MeshStandardMaterial({ color: 0xdfe3e8, roughness: 0.6, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   // polished mirror / chrome: fully metallic, reflects the environment map
   mats.crewMirror = new THREE.MeshStandardMaterial({ color: 0xdde4ee, roughness: 0.03, metalness: 1.0, envMapIntensity: 1.6 });
+  // pale hygienic gloss deck (medbay): the gloss deck's seams / smear maps over a light dielectric base
+  // instead of its charcoal colour map, vertex-tinted like the other floors
+  const g = mats.impGloss;
+  mats.crewGlossLight = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughnessMap: g ? g.roughnessMap : null, normalMap: g ? g.normalMap : null, normalScale: new THREE.Vector2(0.5, 0.5), roughness: 2.4, metalness: 0.08, envMapIntensity: 0.6 });
   for (const k of ["bactaFluid", "crewEmit", "crewEmitSoft"]) NO_SHADOW_KEYS.add(k);
   return mats;
 }
