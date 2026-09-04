@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kestrel — Ship Interior</title>
+    <title>ISD Redoubt — Imperial Star Destroyer</title>
     <link rel="icon" href="data:," />
-    <script type="module" crossorigin src="./assets/index-DzlYIY62.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index--89lguj_.css">
+    <script type="module" crossorigin src="./assets/index-sv7oKNZP.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Dfb_mLYU.css">
   </head>
   <body>
     <canvas id="view"></canvas>
@@ -14,10 +14,17 @@
     <div id="hud">
       <div id="crosshair"></div>
       <div id="prompt" class="hidden"></div>
-      <div id="status">
-        <span id="status-tag">KESTREL</span>
-        <span id="status-text">Systems nominal. Cruising.</span>
+      <div id="room-toast"></div>
+      <div id="menu" class="hidden">
+        <div id="menu-title"></div>
+        <ul id="menu-list"></ul>
+        <div class="menu-foot">Esc cancel</div>
       </div>
+      <div id="status">
+        <span id="status-tag">ISD REDOUBT</span>
+        <span id="status-text">Holding station. All systems nominal.</span>
+      </div>
+      <div id="mode-hint"></div>
       <div id="stats" class="hidden"></div>
     </div>
 
@@ -25,12 +32,21 @@
       <div id="fade-text"></div>
     </div>
 
-    <div id="start">
+    <div id="loading">
       <div class="card">
-        <h1>KESTREL</h1>
-        <p class="sub">light freighter · in transit</p>
-        <p class="hint">Click to take the deck</p>
-        <p class="keys">WASD move · mouse look · E interact · Esc release</p>
+        <h1>REDOUBT</h1>
+        <p class="sub">Imperial I-class Star Destroyer · Kuat Drive Yards</p>
+        <div class="bar"><div id="loading-bar"></div></div>
+        <p id="loading-text">Generating hull plating…</p>
+      </div>
+    </div>
+
+    <div id="start" class="hidden" data-mode="exterior">
+      <div class="card">
+        <h1>REDOUBT</h1>
+        <p class="sub">Imperial I-class Star Destroyer · 1,600 m · holding orbit</p>
+        <p class="hint" id="start-hint">Click to take command</p>
+        <p class="keys" id="start-keys">Drag to orbit · wheel to zoom · F free-fly · Enter to board</p>
       </div>
     </div>
 
