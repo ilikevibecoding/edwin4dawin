@@ -1,0 +1,586 @@
+{
+  "tag": "greybox_core",
+  "date": "2026-09-04T07:28:57.961Z",
+  "url": "http://127.0.0.1:5173/",
+  "readyMs": 9829,
+  "boot": {
+    "materials": {
+      "imperialPanel": 138,
+      "wornMetal": 463,
+      "deckBlack": 538,
+      "deckGrey": 303,
+      "hullPlate": 2429,
+      "rubber": 17,
+      "fabric": 14,
+      "hazard": 13,
+      "hazardRed": 14,
+      "grate": 231,
+      "diffuser": 8,
+      "decals": 53,
+      "screens": 8,
+      "leds": 2
+    },
+    "space": 973,
+    "exterior": 51,
+    "boot": 5438,
+    "totalMs": 5438
+  },
+  "views": {
+    "ext_far": {
+      "calls": 86,
+      "triangles": 229636,
+      "lights": 2,
+      "objects": 58,
+      "geometries": 40,
+      "textures": 43,
+      "programs": 38,
+      "colliders": 0,
+      "heapMB": 226.5,
+      "frameMsSoftware": 433.53,
+      "roomsVisible": [],
+      "roomsBuilt": 0,
+      "roomTriangles": 0,
+      "buildTimes": {},
+      "setViewMs": 446,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "ext_mid": {
+      "calls": 86,
+      "triangles": 229636,
+      "lights": 2,
+      "objects": 58,
+      "geometries": 40,
+      "textures": 43,
+      "programs": 38,
+      "colliders": 0,
+      "heapMB": 227.3,
+      "frameMsSoftware": 449.99,
+      "roomsVisible": [],
+      "roomsBuilt": 0,
+      "roomTriangles": 0,
+      "buildTimes": {},
+      "setViewMs": 403,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "ext_tower": {
+      "calls": 84,
+      "triangles": 229632,
+      "lights": 2,
+      "objects": 58,
+      "geometries": 40,
+      "textures": 43,
+      "programs": 38,
+      "colliders": 0,
+      "heapMB": 228,
+      "frameMsSoftware": 552.83,
+      "roomsVisible": [],
+      "roomsBuilt": 0,
+      "roomTriangles": 0,
+      "buildTimes": {},
+      "setViewMs": 478,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "ext_close": {
+      "calls": 80,
+      "triangles": 229064,
+      "lights": 2,
+      "objects": 58,
+      "geometries": 40,
+      "textures": 43,
+      "programs": 38,
+      "colliders": 0,
+      "heapMB": 228.6,
+      "frameMsSoftware": 711.96,
+      "roomsVisible": [],
+      "roomsBuilt": 0,
+      "roomTriangles": 0,
+      "buildTimes": {},
+      "setViewMs": 744,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "ext_belly": {
+      "calls": 86,
+      "triangles": 229636,
+      "lights": 2,
+      "objects": 58,
+      "geometries": 40,
+      "textures": 43,
+      "programs": 38,
+      "colliders": 0,
+      "heapMB": 31.8,
+      "frameMsSoftware": 859.5,
+      "roomsVisible": [],
+      "roomsBuilt": 0,
+      "roomTriangles": 0,
+      "buildTimes": {},
+      "setViewMs": 878,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "bridge": {
+      "calls": 233,
+      "triangles": 499918,
+      "lights": 26,
+      "objects": 207,
+      "geometries": 166,
+      "textures": 60,
+      "programs": 64,
+      "colliders": 122,
+      "heapMB": 56.2,
+      "frameMsSoftware": 2221.76,
+      "roomsVisible": [
+        "bridge",
+        "cmd_corridor"
+      ],
+      "roomsBuilt": 10,
+      "roomTriangles": 365688,
+      "buildTimes": {
+        "tower": 328.5
+      },
+      "setViewMs": 2402,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "bridge_window": {
+      "calls": 210,
+      "triangles": 499238,
+      "lights": 26,
+      "objects": 207,
+      "geometries": 166,
+      "textures": 60,
+      "programs": 64,
+      "colliders": 122,
+      "heapMB": 57.1,
+      "frameMsSoftware": 2980.1,
+      "roomsVisible": [
+        "bridge",
+        "cmd_corridor"
+      ],
+      "roomsBuilt": 10,
+      "roomTriangles": 365688,
+      "buildTimes": {
+        "tower": 328.5
+      },
+      "setViewMs": 3967,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "cmd_corridor": {
+      "calls": 313,
+      "triangles": 502554,
+      "lights": 26,
+      "objects": 208,
+      "geometries": 184,
+      "textures": 60,
+      "programs": 64,
+      "colliders": 122,
+      "heapMB": 56.5,
+      "frameMsSoftware": 4572.66,
+      "roomsVisible": [
+        "cmd_corridor",
+        "bridge"
+      ],
+      "roomsBuilt": 10,
+      "roomTriangles": 365688,
+      "buildTimes": {
+        "tower": 328.5
+      },
+      "setViewMs": 5587,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "hangar": {
+      "calls": 167,
+      "triangles": 1118068,
+      "lights": 36,
+      "objects": 164,
+      "geometries": 285,
+      "textures": 61,
+      "programs": 75,
+      "colliders": 162,
+      "heapMB": 120.6,
+      "frameMsSoftware": 9389.02,
+      "roomsVisible": [
+        "hangar",
+        "fighter_maint",
+        "cargo_bay",
+        "repair_bay",
+        "flight_control"
+      ],
+      "roomsBuilt": 17,
+      "roomTriangles": 1222134,
+      "buildTimes": {
+        "tower": 328.5,
+        "hangar": 1498.7
+      },
+      "setViewMs": 13826,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "hangar_well": {
+      "calls": 216,
+      "triangles": 1386496,
+      "lights": 36,
+      "objects": 163,
+      "geometries": 286,
+      "textures": 61,
+      "programs": 76,
+      "colliders": 162,
+      "heapMB": 121.6,
+      "frameMsSoftware": 10091.3,
+      "roomsVisible": [
+        "hangar",
+        "fighter_maint",
+        "cargo_bay",
+        "repair_bay",
+        "flight_control"
+      ],
+      "roomsBuilt": 17,
+      "roomTriangles": 1222134,
+      "buildTimes": {
+        "tower": 328.5,
+        "hangar": 1498.7
+      },
+      "setViewMs": 10201,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "shuttle_bay": {
+      "calls": 112,
+      "triangles": 659778,
+      "lights": 10,
+      "objects": 85,
+      "geometries": 298,
+      "textures": 61,
+      "programs": 83,
+      "colliders": 52,
+      "heapMB": 121.4,
+      "frameMsSoftware": 8587.37,
+      "roomsVisible": [
+        "shuttle_bay"
+      ],
+      "roomsBuilt": 17,
+      "roomTriangles": 1222134,
+      "buildTimes": {
+        "tower": 328.5,
+        "hangar": 1498.7
+      },
+      "setViewMs": 3,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "reactor": {
+      "calls": 106,
+      "triangles": 684464,
+      "lights": 6,
+      "objects": 83,
+      "geometries": 323,
+      "textures": 62,
+      "programs": 95,
+      "colliders": 36,
+      "heapMB": 162.1,
+      "frameMsSoftware": 8127.14,
+      "roomsVisible": [
+        "reactor"
+      ],
+      "roomsBuilt": 23,
+      "roomTriangles": 1785570,
+      "buildTimes": {
+        "tower": 328.5,
+        "hangar": 1498.7,
+        "engineering": 864.8
+      },
+      "setViewMs": 8894,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "engineering": {
+      "calls": 130,
+      "triangles": 327766,
+      "lights": 6,
+      "objects": 97,
+      "geometries": 345,
+      "textures": 62,
+      "programs": 95,
+      "colliders": 39,
+      "heapMB": 162.4,
+      "frameMsSoftware": 6180.67,
+      "roomsVisible": [
+        "engineering"
+      ],
+      "roomsBuilt": 23,
+      "roomTriangles": 1785570,
+      "buildTimes": {
+        "tower": 328.5,
+        "hangar": 1498.7,
+        "engineering": 864.8
+      },
+      "setViewMs": 5398,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "hyperdrive": {
+      "calls": 106,
+      "triangles": 379590,
+      "lights": 8,
+      "objects": 83,
+      "geometries": 367,
+      "textures": 62,
+      "programs": 101,
+      "colliders": 30,
+      "heapMB": 163.7,
+      "frameMsSoftware": 4722.8,
+      "roomsVisible": [
+        "hyperdrive"
+      ],
+      "roomsBuilt": 23,
+      "roomTriangles": 1785570,
+      "buildTimes": {
+        "tower": 328.5,
+        "hangar": 1498.7,
+        "engineering": 864.8
+      },
+      "setViewMs": 2391,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "crew_corridor": {
+      "calls": 268,
+      "triangles": 619208,
+      "lights": 27,
+      "objects": 188,
+      "geometries": 495,
+      "textures": 63,
+      "programs": 113,
+      "colliders": 157,
+      "heapMB": 202.2,
+      "frameMsSoftware": 4796.84,
+      "roomsVisible": [
+        "crew_corridor",
+        "crew_connector",
+        "crew_corridor_fwd"
+      ],
+      "roomsBuilt": 34,
+      "roomTriangles": 2327284,
+      "buildTimes": {
+        "tower": 328.5,
+        "hangar": 1498.7,
+        "engineering": 864.8,
+        "crew": 537.5
+      },
+      "setViewMs": 4373,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "crew_quarters": {
+      "calls": 102,
+      "triangles": 294720,
+      "lights": 6,
+      "objects": 83,
+      "geometries": 507,
+      "textures": 63,
+      "programs": 113,
+      "colliders": 35,
+      "heapMB": 202.5,
+      "frameMsSoftware": 3601.62,
+      "roomsVisible": [
+        "crew_quarters"
+      ],
+      "roomsBuilt": 34,
+      "roomTriangles": 2327284,
+      "buildTimes": {
+        "tower": 328.5,
+        "hangar": 1498.7,
+        "engineering": 864.8,
+        "crew": 537.5
+      },
+      "setViewMs": 3514,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "mess": {
+      "calls": 102,
+      "triangles": 302998,
+      "lights": 6,
+      "objects": 83,
+      "geometries": 519,
+      "textures": 63,
+      "programs": 113,
+      "colliders": 34,
+      "heapMB": 202.1,
+      "frameMsSoftware": 3040.87,
+      "roomsVisible": [
+        "mess"
+      ],
+      "roomsBuilt": 34,
+      "roomTriangles": 2327284,
+      "buildTimes": {
+        "tower": 328.5,
+        "hangar": 1498.7,
+        "engineering": 864.8,
+        "crew": 537.5
+      },
+      "setViewMs": 2158,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "medbay": {
+      "calls": 102,
+      "triangles": 294814,
+      "lights": 6,
+      "objects": 81,
+      "geometries": 531,
+      "textures": 63,
+      "programs": 113,
+      "colliders": 34,
+      "heapMB": 202.7,
+      "frameMsSoftware": 2694.03,
+      "roomsVisible": [
+        "medbay"
+      ],
+      "roomsBuilt": 34,
+      "roomTriangles": 2327284,
+      "buildTimes": {
+        "tower": 328.5,
+        "hangar": 1498.7,
+        "engineering": 864.8,
+        "crew": 537.5
+      },
+      "setViewMs": 2325,
+      "fighters": {
+        "fighters": 0
+      }
+    },
+    "detention": {
+      "calls": 101,
+      "triangles": 318202,
+      "lights": 6,
+      "objects": 82,
+      "geometries": 542,
+      "textures": 63,
+      "programs": 113,
+      "colliders": 36,
+      "heapMB": 202.4,
+      "frameMsSoftware": 2609.17,
+      "roomsVisible": [
+        "detention"
+      ],
+      "roomsBuilt": 34,
+      "roomTriangles": 2327284,
+      "buildTimes": {
+        "tower": 328.5,
+        "hangar": 1498.7,
+        "engineering": 864.8,
+        "crew": 537.5
+      },
+      "setViewMs": 2304,
+      "fighters": {
+        "fighters": 0
+      }
+    }
+  },
+  "errors": [],
+  "longTasks": [
+    {
+      "t": 433306,
+      "dur": 1675
+    },
+    {
+      "t": 434982,
+      "dur": 2164
+    },
+    {
+      "t": 437148,
+      "dur": 2160
+    },
+    {
+      "t": 439309,
+      "dur": 2171
+    },
+    {
+      "t": 441481,
+      "dur": 2188
+    },
+    {
+      "t": 443671,
+      "dur": 3317
+    },
+    {
+      "t": 446989,
+      "dur": 2227
+    },
+    {
+      "t": 449217,
+      "dur": 2528
+    },
+    {
+      "t": 451751,
+      "dur": 2322
+    },
+    {
+      "t": 454074,
+      "dur": 2286
+    },
+    {
+      "t": 456364,
+      "dur": 2560
+    },
+    {
+      "t": 458925,
+      "dur": 1992
+    },
+    {
+      "t": 460918,
+      "dur": 2217
+    },
+    {
+      "t": 463140,
+      "dur": 2376
+    },
+    {
+      "t": 465519,
+      "dur": 2296
+    },
+    {
+      "t": 467818,
+      "dur": 2283
+    },
+    {
+      "t": 470104,
+      "dur": 2406
+    },
+    {
+      "t": 472511,
+      "dur": 2259
+    },
+    {
+      "t": 474773,
+      "dur": 3209
+    },
+    {
+      "t": 477982,
+      "dur": 2697
+    }
+  ]
+}

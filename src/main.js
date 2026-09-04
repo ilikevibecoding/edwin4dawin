@@ -83,6 +83,23 @@ scene.add(hemi);
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.25;
+{
+  // the hull reflects space (planet glow, star field), never the interior captures
+  const cubeRT = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType, generateMipmaps: false });
+  const cubeCam = new THREE.CubeCamera(1, 20000, cubeRT);
+  cubeCam.position.set(0, 300, -300);
+  exterior.group.visible = false;
+  space.root.position.copy(cubeCam.position);
+  cubeCam.update(renderer, scene);
+  exterior.group.visible = true;
+  const spaceEnv = pmrem.fromCubemap(cubeRT.texture).texture;
+  for (const k of ["hull", "hullDark"]) {
+    materials[k].envMap = spaceEnv;
+    materials[k].envMapIntensity = 0.6;
+    materials[k].needsUpdate = true;
+  }
+  cubeRT.dispose();
+}
 
 const audio = new AudioSystem();
 const fighters = createFighters({ scene, materials, audio });
