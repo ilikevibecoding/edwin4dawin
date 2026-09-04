@@ -1317,3 +1317,52 @@ input[type="range"]:focus-visible {
   letter-spacing: 0.04em;
   padding: 4px 6px;
 }
+
+/* ------------------------------------------------- viewport scaling ------
+   Panel widths and type sizes are authored in pixels against a ~1600 px wide
+   frame. On a 1280x720 window that leaves the 3D view as a narrow strip between
+   the panels, which is how the game actually gets played and recorded. Each
+   corner panel is scaled about its own anchor so the layout keeps its margins
+   and only the furniture shrinks. */
+#hud {
+  --ui: 1;
+}
+@media (max-width: 1560px) {
+  #hud { --ui: 0.86; }
+}
+@media (max-width: 1360px) {
+  #hud { --ui: 0.76; }
+}
+@media (max-width: 1180px) {
+  #hud { --ui: 0.68; }
+}
+@media (max-width: 980px) {
+  #hud { --ui: 0.58; }
+}
+#threats {
+  transform: scale(var(--ui));
+  transform-origin: top left;
+}
+#batteries {
+  transform: scale(var(--ui));
+  transform-origin: top right;
+}
+#engagement {
+  transform: scale(var(--ui));
+  transform-origin: bottom left;
+}
+#log {
+  transform: scale(var(--ui));
+  transform-origin: bottom right;
+}
+#mission {
+  transform: translateX(-50%) scale(var(--ui));
+  transform-origin: top center;
+}
+#banner {
+  transform: translate(-50%, -50%) scale(var(--ui));
+}
+#hint {
+  transform: translateX(-50%) scale(var(--ui));
+  transform-origin: bottom center;
+}

@@ -89,89 +89,114 @@ async function shot(label, seconds, perFrameBody) {
 
 /* ------------------------------------------------------------- storyboard */
 
+// A guided tour of the site, then a full engagement, then the night raid.
+// Camera vantages are ones verified clear of structures — an earlier cut put the
+// lens inside the shelter wall and the frame filled with corrugated panel.
+
 await page.evaluate(() => {
   const G = window.__GAME;
-  G.action('tod:sunset');
+  G.action('tod:day');
   G.action('scenario:SATURATION');
-  G.action('battery:SENTINEL');
+  G.action('battery:THAAD');
 });
 
 // 1. Briefing card.
-await shot('briefing', 1.6);
+await shot('briefing', 1.3);
 
-// 2. Deploy and walk the pad toward the Sentinel launcher.
+// 2. Deploy, then sprint across the apron toward the terminal battery.
 await page.evaluate(() => {
   const G = window.__GAME;
   G.action('deploy');
-  G.teleport(40, undefined, -40);
-  G.lookAt(4, 7, -96);
+  G.teleport(-26, undefined, 54);
+  G.lookAt(-64, 3.2, 22);
   G.game.player.allowKeyboard = true;
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ShiftLeft' }));
 });
-await shot(
-  'walk to sentinel',
-  3.2,
-  // Gentle look drift while walking so the shot has life.
-  `G.game.player.yaw += 0.0016;
-   G.game.player.pitch = -0.02 + Math.sin(t * 3.1) * 0.012;`
-);
-await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW' })));
+await shot('walk to patriot', 3.4, `G.game.player.pitch = -0.02 + Math.sin(t * 2.6) * 0.01;`);
+await page.evaluate(() => {
+  window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW' }));
+  window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ShiftLeft' }));
+});
 
-// 3. Take the console and start the scenario.
+// 3. Pan across the high-altitude launcher.
+await page.evaluate(() => {
+  const G = window.__GAME;
+  G.teleport(44, undefined, 2);
+  G.lookAt(72, 4.0, 12);
+});
+await shot('thaad', 2.6, `G.game.player.yaw -= 0.0022;`);
+
+// 4. The Sentinel test article and its gantry.
+await page.evaluate(() => {
+  const G = window.__GAME;
+  G.teleport(-14, undefined, -70);
+  G.lookAt(4, 6.5, -96);
+});
+await shot('sentinel', 2.6, `G.game.player.yaw += 0.0018;`);
+
+// 5. The radar installation, array turning.
+await page.evaluate(() => {
+  const G = window.__GAME;
+  G.teleport(-10, undefined, -40);
+  G.lookAt(-26, 4.5, -58);
+});
+await shot('radar', 2.2);
+
+// 6. Take the console; tracks come up on the scope and in the holo tank.
 await page.evaluate(() => {
   const G = window.__GAME;
   G.dock();
   G.startScenario('SATURATION', 'sunset', 'THAAD');
-  G.runFor(0.5);
-});
-await shot('console start', 2.0);
-
-// 4. Tracks come up on the scope.
-await page.evaluate(() => {
-  const G = window.__GAME;
   G.runUntil((s) => s.firm >= 2, 45);
 });
-await shot('tracks firm', 2.2);
+await shot('console tracks', 3.0);
 
-// 5. Commit rounds.
+// 7. Commit rounds. The high-altitude battery is committed by name, because the
+// auto-engage helper picks whichever battery has the best solution and the
+// launch shot has to be framed on a launcher that is actually going to fire.
 await page.evaluate(() => {
   const G = window.__GAME;
-  G.autoEngage(3);
+  G.action('battery:THAAD');
+  const t = G.game.radar.firmTracks().find((x) => !x.classified.includes('DECOY'));
+  if (t) {
+    G.game.selectTrack(t.id);
+    G.game.assign();
+    G.authorize();
+  }
 });
 await shot('commit', 1.6);
 
-// 6. Outside for the launch.
+// 8. Outside for the launch: eye level on the vehicle at ~40 m so the ignition,
+// the exhaust and the dust off the concrete are all in frame, then lead up.
 await page.evaluate(() => {
   const G = window.__GAME;
   G.undock();
-  G.teleport(16, undefined, 14);
-  G.lookAt(58, 22, -34);
-  G.runUntil((s) => s.interceptors.length > 0, 30);
+  G.teleport(30, undefined, -6);
+  G.lookAt(58, 5, -34);
+  G.runUntil((s) => s.interceptors.some((i) => i.battery === 'THAAD'), 40);
 });
 await shot(
   'launch',
-  2.6,
-  // Fixed on the launcher for the first second, then let the camera lead the
-  // round upward so the climb-out reads as one continuous move.
-  `const m = G.game.interceptors.active[0];
-   if (m && t > 0.35) {
-     const k = (t - 0.35) / 0.65;
-     G.lookAt(58 + (m.pos.x - 58) * k, 22 + (m.pos.y - 22) * k * 0.85, -34 + (m.pos.z + 34) * k);
+  3.0,
+  `const m = G.game.interceptors.active.find((x) => x.batteryId === 'THAAD') || G.game.interceptors.active[0];
+   if (m && t > 0.42) {
+     const k = (t - 0.42) / 0.58;
+     G.lookAt(58 + (m.pos.x - 58) * k, 5 + (m.pos.y - 5) * k * 0.8, -34 + (m.pos.z + 34) * k);
    } else {
-     G.lookAt(58, 22, -34);
+     G.lookAt(58, 5, -34);
    }`
 );
 
-// 7. Follow the climb.
+// 9. Follow the climb.
 await shot(
   'climb',
-  3.6,
-  `const m = G.game.interceptors.active[0];
+  3.4,
+  `const m = G.game.interceptors.active.find((x) => x.batteryId === 'THAAD') || G.game.interceptors.active[0];
    if (m) G.lookAt(m.pos.x, m.pos.y, m.pos.z);`
 );
 
-// 8. Hold on the intercept. Stop just short of closure so the kill lands inside
-// the shot rather than before it.
+// 10. Hold just short of closure so the kill lands inside the shot.
 await page.evaluate(() => {
   const G = window.__GAME;
   for (let i = 0; i < 900; i++) {
@@ -184,36 +209,62 @@ await page.evaluate(() => {
 await shot(
   'intercept',
   3.4,
-  // Follow whatever the round is chasing so the kill happens in frame.
   `const m = G.game.interceptors.active[0];
    const tgt = m && m.target ? m.target : G.game.threats.active[0];
    if (tgt) { G.lookAt(tgt.pos.x, tgt.pos.y, tgt.pos.z); window.__LASTKILL = tgt.pos.toArray(); }
    else if (window.__LASTKILL) G.lookAt(window.__LASTKILL[0], window.__LASTKILL[1], window.__LASTKILL[2]);`
 );
 
-// 9. Second engagement wave, seen from the pad.
+// 11. Second wave from the open apron.
 await page.evaluate(() => {
   const G = window.__GAME;
   G.autoEngage(3);
-  G.teleport(-20, undefined, 34);
+  G.teleport(10, undefined, 46);
   G.runUntil((s) => s.interceptors.length > 0, 30);
 });
 await shot(
   'second wave',
-  3.2,
+  3.0,
   `const m = G.game.interceptors.active[0];
    if (m) G.lookAt(m.pos.x, m.pos.y * 0.8, m.pos.z);`
 );
 
-// 10. Run the scenario out and land on the debrief.
+// 12. Night raid: the site under searchlights.
 await page.evaluate(() => {
   const G = window.__GAME;
-  for (let i = 0; i < 200 && G.snapshot().phase !== 'DEBRIEF'; i++) {
+  G.startScenario('NIGHT_RAID', 'night', 'SENTINEL');
+  G.teleport(6, undefined, 34);
+  // A shallow up-angle across the pad. Aiming steeply into the searchlight cones
+  // fills the frame with sky and puts the site out of shot, so this favours the
+  // site's own lighting, which is what the night preset is built around.
+  G.lookAt(-64, 46, -60);
+  G.runFor(2.0);
+});
+await shot('night site', 2.6, `G.game.player.yaw += 0.0018;`);
+
+// 13. Night launch and climb against the star field.
+await page.evaluate(() => {
+  const G = window.__GAME;
+  G.runUntil((s) => s.firm >= 1, 45);
+  G.autoEngage(3);
+  G.runUntil((s) => s.interceptors.length > 0, 30);
+});
+await shot(
+  'night launch',
+  3.4,
+  `const m = G.game.interceptors.active[0];
+   if (m) G.lookAt(m.pos.x, m.pos.y + 30, m.pos.z);`
+);
+
+// 14. Run the scenario out and land on the debrief.
+await page.evaluate(() => {
+  const G = window.__GAME;
+  for (let i = 0; i < 240 && G.snapshot().phase !== 'DEBRIEF'; i++) {
     G.autoEngage(3);
     G.runFor(0.6);
   }
 });
-await shot('debrief', 2.4);
+await shot('debrief', 2.3);
 
 const stats = await page.evaluate(() => window.__GAME.snapshot());
 console.log(`> ${frame} frames, result ${JSON.stringify(stats.stats)}`);
