@@ -1,8 +1,9 @@
 # Round 1 — consensus and disagreements
 
 Three critics, blind to one another, on the identical 97 + 7 frames of build
-`2f0f5ba` (`shots/round1/`, `shots/glass_r1/day/`). Reports: `critic_A.md`,
-`critic_B.md`, `critic_C.md`. Scores below are A / B / C.
+`2f0f5ba` (`shots/round1/`, `shots/glass_r1/day/` — full sets on the build
+machine; the frames this verdict rests on are committed as JPEG in `frames/`).
+Reports: `critic_A.md`, `critic_B.md`, `critic_C.md`. Scores below are A / B / C.
 
 ## Where the critics agree (all three)
 
