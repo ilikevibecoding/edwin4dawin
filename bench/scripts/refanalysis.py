@@ -11,7 +11,7 @@ dominant colours per region. Everything is normalised to [0,1] of width/height s
 resolution compare directly. Values that cannot be measured automatically (bridge endpoints, sun
 direction, camera) come from the annotation block and are flagged as such.
 """
-import json, sys, colorsys
+import json, os, sys, colorsys
 import numpy as np
 from PIL import Image
 
@@ -99,16 +99,31 @@ def analyse(path):
     ah = int(round(H * aw / W))
     small = np.asarray(img.resize((aw, ah), Image.LANCZOS), dtype=np.float32)
     hue, sat, val = rgb_to_hsv_arr(small)
-    # ---- horizon: first row (from the top) where the median saturation over the middle columns jumps (sky -> water/land)
+    # ---- horizon: first row (from the top) where the row medians over the middle columns switch from sky to
+    # water. Two signatures are accepted: (a) a saturation jump (clear blue water under a pale sky, as in the
+    # reference) and (b) a hazy horizon where the water is barely more saturated than the sky but the value
+    # starts a sustained descent (our renders: far water desaturated by aerial perspective). Signature (b) is
+    # rejected where a bright band sits just above the candidate row (the reference's hazy far skyline) or the
+    # saturation already jumps (then (a) decides), so the reference measurement is unchanged.
     col_lo, col_hi = int(aw * 0.15), int(aw * 0.85)
     row_sat = np.median(sat[:, col_lo:col_hi], axis=1)
     row_val = np.median(val[:, col_lo:col_hi], axis=1)
+    row_br = np.median(small[:, col_lo:col_hi, 2] - small[:, col_lo:col_hi, 0], axis=1)
     horizon = None
+    w = 6
     for y in range(int(ah * 0.08), int(ah * 0.7)):
-        win_above = row_sat[max(0, y - 6):y].mean()
-        win_below = row_sat[y:y + 6].mean()
-        if win_below - win_above > 0.12 and row_val[y:y + 6].mean() < row_val[max(0, y - 6):y].mean() + 0.2:
+        above, below, far_above = slice(max(0, y - w), y), slice(y, y + w), slice(max(0, y - 2 * w), max(0, y - w))
+        d_sat = row_sat[below].mean() - row_sat[above].mean()
+        d_val = row_val[above].mean() - row_val[below].mean()
+        d_br = row_br[below].mean() - row_br[above].mean()
+        if d_sat > 0.12 and d_val > -0.2:
             horizon = y
+            break
+        band = row_val[above].mean() - row_val[far_above].mean()
+        if d_val > 0.06 and -0.01 < d_sat < 0.06 and d_br > -3 and band < 0.03:
+            # the horizon proper is the brightest (haziest) row just above the descent
+            lo = max(0, y - w)
+            horizon = lo + int(np.argmax(row_val[lo:y + 1]))
             break
     if horizon is None:
         horizon = int(np.argmax(np.diff(row_sat[int(ah * 0.08):int(ah * 0.7)])) + ah * 0.08)
@@ -179,7 +194,17 @@ def analyse(path):
     island_box, island_area = None, 0.0
     island_mask = None
     if sizes_g:
-        big = int(np.argmax(sizes_g)) + 1
+        # the hero island is the largest canopy blob that stands clear of the horizon band; the far shore's
+        # vegetation strip (mainland / barrier island hugging the horizon) is not an island
+        order = sorted(range(1, len(sizes_g) + 1), key=lambda i: -sizes_g[i - 1])
+        big = order[0]
+        for i in order:
+            if sizes_g[i - 1] < aw * ah * 0.002:
+                break
+            top = np.where(labels_g == i)[0].min()
+            if top - horizon > ah * 0.12:
+                big = i
+                break
         island_mask = labels_g == big
         island_box = norm_box(bbox(island_mask), aw, ah)
         island_area = float(island_mask.sum() / (aw * ah))
@@ -221,6 +246,15 @@ def analyse(path):
         'clouds': dominant(small, cloud),
         'aircraftYellow': dominant(small, yellow),
     }
+    if os.environ.get('REFANALYSIS_DEBUG'):
+        # mask overlay for tuning the detectors: green = island canopy, blue = water, pale = skyline structures, red = horizon
+        dbg = small.copy() * 0.5
+        if island_mask is not None:
+            dbg[island_mask] = [40, 220, 40]
+        dbg[water] = dbg[water] * 0.5 + np.array([0, 0, 127])
+        dbg[struct_full] = [200, 200, 255]
+        dbg[horizon, :] = [255, 0, 0]
+        Image.fromarray(dbg.clip(0, 255).astype(np.uint8)).resize((aw * 2, ah * 2), Image.NEAREST).save(os.environ['REFANALYSIS_DEBUG'])
     return {
         'source': path,
         'resolution': [W, H],
