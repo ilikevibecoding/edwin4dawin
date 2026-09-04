@@ -1,7 +1,7 @@
 {
-  "updated": "2026-09-04T09:08:55.598Z",
-  "phase": "Phase 4 of 5: all builders merged; independent critics and verification running",
-  "summary": "All seven workstreams are merged into the integration branch. Now: harsh visual critics for each disaster, an independent verification pass (tests, multiplayer, determinism, permissions, save isolation, performance), then fixes, final baseline comparison, changelog, README and PR update.",
+  "updated": "2026-09-04T10:17:08.487Z",
+  "phase": "Phase 4 of 5: round-2 fixes for tornado and tsunami after critic review",
+  "summary": "Verification passed everything; the beam critic accepted with nits (fixed); tornado and tsunami critics rejected the presentation with concrete lists, so two round-2 builders are reworking them. After that: re-review, final test/bench pass, recording, changelog, PR.",
   "links": [
     {
       "label": "Pull request #17",
@@ -45,18 +45,18 @@
     },
     {
       "name": "Tsunami & flood",
-      "status": "merged",
-      "detail": "Wave front, journaled rising water, crest destruction with buoyant debris, drain; 12/12 lifecycle checks pass on the integration branch; replay hash 415f9ebc:70177 reproduced. Perf re-measurement pending once the VM is quiet."
+      "status": "critic REJECT -> round-2 builder running",
+      "detail": "Plumbing passed (fill/drain/journal/preview/reset/sound/player), presentation failed: smooth translucent crest with dry street under it, NPCs stuck underwater. Central fix already in: NPCs now swim whenever their body is in water (0 stuck of 25 in-water NPCs). Round-2 builder: solid blocky wave tied to the water body, foam, textured spray, deposited debris."
     },
     {
       "name": "Tornado",
-      "status": "merged",
-      "detail": "Deterministic wobbling track, Rankine wind field on debris/player/NPCs/animals, fragility-weighted ripping with orbiting debris, shader funnel + cloud deck + dust, storm lighting, church bell alarm, rope-out, path preview; 12/12 lifecycle checks pass; replay hash reproduced (f51c1ca6:334)."
+      "status": "critic REJECT -> round-2 builder running",
+      "detail": "Simulation/lifecycle/determinism passed (7/12), presentation failed: interiors gutted while facades stay, sunny sky above the funnel, smooth cone style. Round-2 builder: outside-in roof-first destruction, storm sky via the new override, chunky pixel funnel + dust skirt."
     },
     {
       "name": "Orbital beam",
-      "status": "merged",
-      "detail": "Charging ring station, motes, descending beam with shimmer, impact flash/shockwave/sparks/smoke/debris, deterministic crater (scorched floor, magma, ash rim, charred wood), cancel retracts; 12/12 lifecycle checks pass; replay hash f91885f7:7406 reproduced."
+      "status": "merged + critic ACCEPT (nits fixed)",
+      "detail": "Critic: ACCEPT WITH NITS. Fixed: station fades in, whiter/shorter flash, less smoke, roar not restarted on cancel, magma emits 13 (crater glows at night), magma burns the player, NPCs avoid and escape magma, debris frozen while paused."
     },
     {
       "name": "Chunk pipeline optimization",
@@ -65,8 +65,8 @@
     },
     {
       "name": "Critics + verification (visuals, tests, replay, multiplayer, perf)",
-      "status": "in progress",
-      "detail": "Three independent disaster critics (tsunami, tornado, beam) and one verification agent (build, unit tests, lifecycle/replay, multiplayer, cross-page determinism, permissions, save isolation, perf comparison) are running against the integrated build."
+      "status": "verification PASS; critics: 1 accept, 2 reject -> fixing",
+      "detail": "Verifier: build, 4/4 unit, 36/36 lifecycle, 8/8 multiplayer, cross-page determinism, permissions, save isolation all PASS; no perf regression in a same-load A/B (draw calls -65%/-43%, memory -6%). Found and fixed one bug (save exclusion set not cleared after reset)."
     }
   ],
   "metrics": [
@@ -100,6 +100,14 @@
   ],
   "screenshots": [
     {
+      "src": "img/storm_sky.png",
+      "caption": "New shared storm-sky override (dome, fog, sun and clouds blend to a deck colour) for the tornado (10:17 UTC)"
+    },
+    {
+      "src": "img/crater_glow_after.png",
+      "caption": "Beam crater after the critic fixes: magma pool lights the bowl at night (10:17 UTC)"
+    },
+    {
       "src": "img/beam_charge.png",
       "caption": "Ring station charging above the town (09:08 UTC)"
     },
@@ -130,14 +138,6 @@
     {
       "src": "img/eyes_horse_black.png",
       "caption": "Black-coat horse eye before/after (round 2) (07:57 UTC)"
-    },
-    {
-      "src": "img/eyes_round2.png",
-      "caption": "Eyes round 2: Abigail before/after in daylight and indoors (07:57 UTC)"
-    },
-    {
-      "src": "img/tsunami_aerial.png",
-      "caption": "Aerial view of the flooded town (07:56 UTC)"
     }
   ],
   "log": [
@@ -196,6 +196,10 @@
     {
       "time": "2026-09-04 09:08 UTC",
       "text": "Orbital beam merged (12/12 checks). All builders done; 3 disaster critics + 1 verifier launched."
+    },
+    {
+      "time": "2026-09-04 10:17 UTC",
+      "text": "Critics: beam ACCEPT WITH NITS, tornado REJECT, tsunami REJECT. Verifier PASS (1 bug found+fixed). Round-2 builders launched."
     }
   ],
   "issues": [
