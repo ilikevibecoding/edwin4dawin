@@ -877,10 +877,12 @@ export function buildGreebles(mats, opts = {}) {
       windowRow("tower", surf, pts, r, { w: 2.8, h: 1.2, skip: 0.2 });
     }
     // back face
-    dress("tower", SURF.bmBack, { seed: 181, margin: 2, palette: PAL.machinery, passes: [{ tier: "M", cell: 5, fill: 0.45, shapes: WALL_M, heightScale: 0.55, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: WALL_S, palette: PAL.small, heightScale: 0.6 }] });
+    // keep the observation deck's aft viewport band (ROOMS.observation south wall, y 190.9..194.5) clear
+    const obsPorts = (x, y) => Math.abs(x) < 21 && y > 188.8 && y < 197.2;
+    dress("tower", SURF.bmBack, { seed: 181, margin: 2, blocked: obsPorts, palette: PAL.machinery, passes: [{ tier: "M", cell: 5, fill: 0.45, shapes: WALL_M, heightScale: 0.55, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: WALL_S, palette: PAL.small, heightScale: 0.6 }] });
     {
       const pts = [];
-      for (const y of [BM.y0 + 7, BM.y0 + 15, BM.y0 + 23]) for (const d of seq(6, 2 * BM.halfX - 6, 7)) pts.push([y, -1 + d / BM.halfX]);
+      for (const y of [BM.y0 + 7, BM.y0 + 15, BM.y0 + 23]) for (const d of seq(6, 2 * BM.halfX - 6, 7)) if (!obsPorts(d - BM.halfX, y)) pts.push([y, -1 + d / BM.halfX]);
       windowRow("tower", SURF.bmBack, pts, r, { w: 2.8, h: 1.2, skip: 0.2 });
     }
     // front face: keep the bridge window casement clear; brow of sensor blocks along the top edge,

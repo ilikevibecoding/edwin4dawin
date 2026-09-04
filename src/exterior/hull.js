@@ -311,7 +311,14 @@ export function buildExterior(mats, opts = {}) {
     // other five faces
     kit.boxMM("hullPlate", [-bm.halfX, bm.y0, bm.z0 + 1], [bm.halfX, bm.y0 + 1, bm.z1], { color: IMP.hullDark, texel: TEXEL });
     kit.boxMM("hullPlate", [-bm.halfX, bm.y1 - 1, bm.z0 + 1], [bm.halfX, bm.y1, bm.z1], { color: IMP.hullLight, texel: TEXEL });
-    kit.boxMM("hullPlate", [-bm.halfX, bm.y0, bm.z1 - 1], [bm.halfX, bm.y1, bm.z1], { color: hullCol, texel: TEXEL });
+    // aft face: viewport band cut out for the observation deck (ROOMS.observation south wall, floor y 190)
+    {
+      const ob = ROOMS.observation;
+      const aftHole = { x: (ob.box[0] + ob.box[2]) / 2, y: 190 + 2.7 - cy, w: 33.0, h: 4.6 };
+      const aft = panelWithHoles(W, H, 1.0, [aftHole]);
+      worldUVs(aft, TEXEL);
+      kit.add("hullPlate", aft, { pos: [0, cy, bm.z1 - 0.5], uv: "keep", color: hullCol });
+    }
     kit.boxMM("hullPlate", [-bm.halfX, bm.y0, bm.z0 + 1], [-bm.halfX + 1, bm.y1, bm.z1], { color: hullCol, texel: TEXEL });
     kit.boxMM("hullPlate", [bm.halfX - 1, bm.y0, bm.z0 + 1], [bm.halfX, bm.y1, bm.z1], { color: hullCol, texel: TEXEL });
     // module trim: a stepped ledge along the front and sides, window rows on the flanks
