@@ -165,7 +165,7 @@ vec3 roofPalette(float k) {
     float office = (glassy || style == 11.0) ? 1.0 : 0.0;
     float lit = mix(step(thr, wHash), max(step(thr + 0.12, fHash) * step(0.2, wHash), step(thr + 0.5, wHash)), office);
     lit = min(lit, 1.0) * nightOn;
-    vec3 litCol = mix(vec3(0.78, 0.87, 1.0), vec3(1.0, 0.80, 0.52), step(1.0 - warmMix, hash11(wHash * 17.0 + seed)));
+    vec3 litCol = mix(vec3(0.78, 0.87, 1.0), vec3(1.0, 0.74, 0.42), step(1.0 - warmMix, hash11(wHash * 17.0 + seed)));
     if (style < 0.5) {
       // blue curtain wall: glass with thin mullions and a spandrel band per floor
       float mull = step(fx, 0.05) + step(0.95, fx) + step(fy, 0.05);

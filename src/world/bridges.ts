@@ -66,8 +66,10 @@ const DECK_FRAG = /* glsl */ `
   float along = vRoadUv.y;
   float n = fbm3(vWorldPosR.xz * 0.11);
   float n2 = vnoise(vWorldPosR.xz * 2.3);
-  // sun-bleached concrete pavement
-  vec3 conc = mix(vec3(0.50, 0.50, 0.475), vec3(0.62, 0.61, 0.58), n) * (0.95 + 0.10 * n2);
+  // sun-bleached concrete pavement; the shoulders outside the carriageway are a shade paler
+  float onShoulder = step(width * 0.5 + 0.005, abs(xm));
+  vec3 conc = mix(vec3(0.60, 0.60, 0.57), vec3(0.72, 0.71, 0.68), n) * (0.95 + 0.10 * n2);
+  vec3 shoulder = mix(vec3(0.66, 0.66, 0.63), vec3(0.78, 0.77, 0.74), n) * (0.96 + 0.08 * n2);
   // transverse pavement joints every 6 m, faint longitudinal joints at the lane edges
   float laneW = width / max(lanes, 1.0);
   float u = xm + width * 0.5;
@@ -80,6 +82,8 @@ const DECK_FRAG = /* glsl */ `
   float wheel = exp(-pow((abs(lp - laneW * 0.5) - laneW * 0.28) * 3.0, 2.0));
   conc *= 1.0 - 0.10 * wheel;
   conc *= 1.0 - 0.12 * smoothstep(0.6, 0.75, fbm3(vWorldPosR.xz * 0.03 + 8.0));
+  shoulder *= 1.0 - 0.15 * joint - 0.1 * smoothstep(0.6, 0.75, fbm3(vWorldPosR.xz * 0.03 + 8.0));
+  conc = mix(conc, shoulder, onShoulder);
   // markings: white edge lines, dashed white lane lines, yellow centre (double line or beside the median barrier)
   float laneEdge = smoothstep(0.14, 0.05, edgeDist) * step(0.5, k) * step(k, lanes - 1.5) * step(0.6, abs(xm));
   float dashes = laneEdge * step(fract(along / 12.0), 0.5);
@@ -226,34 +230,44 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     for (let i = 0; i <= n; i += 2) pts3.push(new THREE.Vector3(frames[i].x, frames[i].y, frames[i].z));
     if ((n & 1) === 1) pts3.push(new THREE.Vector3(frames[n].x, frames[n].y, frames[n].z));
 
-    // ------------------------------------------------------------ carriageway ribbon
-    // six-lane causeways get a concrete median barrier; narrower decks a painted centre line
+    // ------------------------------------------------------------ deck top: shoulders, kerbs and carriageway
+    // one ribbon of 5 strips per segment (shoulder / kerb face / carriageway / kerb face / shoulder), all shaded by the
+    // pavement material; six-lane causeways get a concrete median barrier, narrower decks a painted centre line
     const medianHalf = spec.lanes >= 6 ? 0.3 : 0;
+    const KERB = 0.15;
+    // section vertices left -> right: [across, up, normal kind] (0 = up, +1/-1 = toward the centre from that side)
+    const section: [number, number, number][] = [
+      [-hw, KERB, 0], [-chw, KERB, 0],
+      [-chw, KERB, 1], [-chw, 0.02, 1],
+      [-chw, 0.02, 0], [chw, 0.02, 0],
+      [chw, 0.02, -1], [chw, KERB, -1],
+      [chw, KERB, 0], [hw, KERB, 0],
+    ];
+    const SV = section.length;
     frames.forEach((f, i) => {
-      for (const side of [-1, 1]) {
-        dPos.push(f.x + f.rx * chw * side, f.y + 0.02, f.z + f.rz * chw * side);
-        dNrm.push(0, 1, 0);
-        dUv.push(side, f.s);
+      for (const [a, yv, nk] of section) {
+        dPos.push(f.x + f.rx * a, f.y + yv, f.z + f.rz * a);
+        if (nk === 0) dNrm.push(0, 1, 0);
+        else dNrm.push(f.rx * nk, 0, f.rz * nk);
+        dUv.push(a / chw, f.s);
         dInfo.push(spec.lanes, cw, medianHalf);
       }
       if (i > 0) {
-        const b = dCount + i * 2;
-        dIdx.push(b - 2, b - 1, b, b, b - 1, b + 1);
+        const p = dCount + (i - 1) * SV, c = dCount + i * SV;
+        for (let k = 0; k < SV; k += 2) dIdx.push(p + k, p + k + 1, c + k, c + k, p + k + 1, c + k + 1);
       }
     });
-    dCount += (n + 1) * 2;
+    dCount += (n + 1) * SV;
 
-    // ------------------------------------------------------------ girder + shoulders + parapets (one loft)
+    // ------------------------------------------------------------ girder + parapets (one loft)
     const g = GIRDER_DEPTH, ph = PARAPET_H;
     const profile: [number, number][] = [
-      [-chw, 0.0], [-chw, 0.15],                       // kerb
-      [-hw, 0.15],                                     // shoulder
+      [-hw, KERB],                                     // shoulder edge
       [-hw - 0.14, ph], [-hw - 0.5, ph],               // parapet inner face and top
       [-hw - 0.5, -0.4], [-hw - 0.22, -1.05],          // fascia and drip edge
       [-W * 0.31, -g], [W * 0.31, -g],                 // web and bottom flange
       [hw + 0.22, -1.05], [hw + 0.5, -0.4],
-      [hw + 0.5, ph], [hw + 0.14, ph], [hw, 0.15],
-      [chw, 0.15], [chw, 0.0],
+      [hw + 0.5, ph], [hw + 0.14, ph], [hw, KERB],
     ];
     loft(frames, profile, soup);
     if (medianHalf > 0) {
