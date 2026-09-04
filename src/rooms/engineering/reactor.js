@@ -28,12 +28,12 @@ export function build(ctx) {
   // the far wall is built without openings and the true opening is added to the forward wall by hand.
   ctx.shell({
     skipFloor: true,
-    walls: { zmin: false, zmax: { openings: [], panelW: 3.2, pilasterEvery: 12.7 }, xmin: { panelW: 3.2, pilasterEvery: 12.7 }, xmax: { panelW: 3.2, pilasterEvery: 12.7 } },
-    ceiling: { panelW: 3.6 },
+    walls: { zmin: false, zmax: { openings: [], panelW: 3.6, pilasterEvery: 12.7 }, xmin: { panelW: 3.6, pilasterEvery: 12.7 }, xmax: { panelW: 3.6, pilasterEvery: 12.7 } },
+    ceiling: { panelW: 4.0 },
     stripSpacing: 16,
     seed: 55,
   });
-  const fwd = windowWall(ctx, "zmin", [WINDOW], { extraDoors: [{ c0: -3, c1: 3, v1: 3.6 }], seed: 66, panelGridOpts: { panelW: 3.2, pilasterEvery: 12.7 } });
+  const fwd = windowWall(ctx, "zmin", [WINDOW], { extraDoors: [{ c0: -3, c1: 3, v1: 3.6 }], seed: 66, panelGridOpts: { panelW: 3.6, pilasterEvery: 12.7 } });
   {
     const f = fwd.frame;
     const u0 = wallU(ctx, "zmin", WINDOW.c0);
@@ -149,9 +149,9 @@ export function build(ctx) {
   // ---- containment rings every 5 m: dark torus, bolt ring (instanced), cyan slot ring
   kit.proto("bolt", "metal", new THREE.CylinderGeometry(0.16, 0.16, 0.3, 8).rotateZ(Math.PI / 2), { texel: 2 });
   for (let y = F + 2; y < C - 1; y += 5) {
-    kit.add("paintedMetal", new THREE.TorusGeometry(6.0, 0.55, 12, 64), { pos: [CX, y, CZ], rot: [Math.PI / 2, 0, 0], color: IMP.plateDark, uv: "scale", uvScale: [30, 3] });
+    kit.add("paintedMetal", new THREE.TorusGeometry(6.0, 0.55, 10, 48), { pos: [CX, y, CZ], rot: [Math.PI / 2, 0, 0], color: IMP.plateDark, uv: "scale", uvScale: [30, 3] });
     kit.add("paintedMetal", new THREE.TorusGeometry(6.0, 0.62, 6, 16), { pos: [CX, y, CZ], rot: [Math.PI / 2, 0, 0], color: IMP.black, uv: "scale", uvScale: [16, 2] });
-    kit.add("emitCyan", new THREE.TorusGeometry(6.55, 0.05, 6, 64), { pos: [CX, y + 0.3, CZ], rot: [Math.PI / 2, 0, 0], uv: "keep" });
+    kit.add("emitCyan", new THREE.TorusGeometry(6.55, 0.05, 6, 48), { pos: [CX, y + 0.3, CZ], rot: [Math.PI / 2, 0, 0], uv: "keep" });
     for (let i = 0; i < 16; i++) {
       const a = (i / 16) * Math.PI * 2 + (y % 10 === 2 ? 0 : Math.PI / 16);
       kit.place("bolt", { pos: [CX + Math.cos(a) * 6.6, y, CZ + Math.sin(a) * 6.6], rot: [0, -a, 0], color: IMP.steel });
@@ -194,7 +194,8 @@ export function build(ctx) {
   catwalk(kit, [x0 + 3.0, CZ - gw], [CX - o, CZ + gw], y0, { rails: ["zmin", "zmax"] });
   catwalk(kit, [CX + o, CZ - gw], [x1 - 3.0, CZ + gw], y0, { rails: ["zmin", "zmax"] });
   for (const t of [0.36, 0.7]) {
-    const zN = z0 + 3 + (CZ - o - z0 - 3) * t;
+    // the forward gantry's columns stand further in so they do not crowd the airlock spawn view
+    const zN = z0 + 3 + (CZ - o - z0 - 3) * (t + 0.16);
     const zS = CZ + o + (z1 - 3 - CZ - o) * t;
     const xW = x0 + 3 + (CX - o - x0 - 3) * t;
     const xE = CX + o + (x1 - 3 - CX - o) * t;
@@ -266,8 +267,8 @@ export function build(ctx) {
   // ---- lights (≤ 6): three cyan-white sources along the core axis, two work lights, one at the airlock
   const coreLights = [ctx.light(0x8fe8ff, 900, 80, [CX, F + 4, CZ]), ctx.light(0xa4ecff, 1100, 95, [CX, 10, CZ]), ctx.light(0x8fe8ff, 900, 90, [CX, 23, CZ])];
   const coreBase = coreLights.map((l) => l.intensity);
-  workLight(ctx, [CX, C, z0 + 4.5], { drop: 20, size: 1.6, intensity: 420, distance: 45 });
-  workLight(ctx, [CX, C, z1 - 4.5], { drop: 20, size: 1.6, intensity: 420, distance: 45 });
+  workLight(ctx, [CX, C, z0 + 4.5], { drop: 20, size: 1.6, intensity: 650, distance: 50 });
+  workLight(ctx, [CX, C, z1 - 4.5], { drop: 20, size: 1.6, intensity: 650, distance: 50 });
   ctx.light(0xe8f0ff, 90, 20, [CX, F + 4.6, z0 + 3]);
 
   ctx.animate((dt, t) => {
