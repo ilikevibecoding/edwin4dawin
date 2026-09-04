@@ -66,7 +66,7 @@ sun.shadow.camera.near = 1;
 sun.shadow.camera.far = 4000;
 scene.add(sun);
 scene.add(sun.target);
-const hemi = new THREE.HemisphereLight(0x7f8ea8, 0x1a1c22, 0.2);
+const hemi = new THREE.HemisphereLight(0x6e7d99, 0x232a38, 0.18);
 scene.add(hemi);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -86,6 +86,7 @@ const EXTERIOR_VIEW = { bridge: "all", observation: "all", lounge: "all", hangar
 
 // Interior: rooms, lifts, doors
 const zone = new ZoneManager(scene, mats);
+zone.exteriorVisible = new Set(Object.keys(EXTERIOR_VIEW));
 const player = new Player(camera, canvas, [], []);
 const lifts = new LiftSystem({ zone, mats, player, hud, audio, onArrive: (cluster) => audio.setZone(cluster) });
 const tInt0 = performance.now();
@@ -156,6 +157,9 @@ modes.onChange((mode) => {
   audio.setZone(mode === "exterior" ? "exterior" : zone.currentCluster || "tower");
   post.ao.configuration.aoRadius = mode === "exterior" ? 6 : 0.9;
   post.ao.configuration.intensity = mode === "exterior" ? 1.6 : 2.6;
+  // sunlit armour is mid-grey, not white: pull exposure down outside and let only real emitters bloom
+  renderer.toneMappingExposure = mode === "exterior" ? 0.74 : 1.0;
+  post.bloom.threshold = mode === "exterior" ? 1.35 : 1.15;
   perf.extra.mode = mode;
 });
 zone.onRoomChange = (room) => {
@@ -498,6 +502,7 @@ function frame() {
     exterior.group.visible = ev !== "none";
     greebles.group.visible = ev === "all";
     traffic.group.visible = ev !== "none";
+    space.root.visible = ev !== "none";
     sun.intensity = ev === "none" ? 0 : SUN_INTENSITY;
   }
   lightPool.assign(zone.lightDescs(), modes.mode === "interior" ? player.position : camera.position);

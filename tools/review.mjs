@@ -77,10 +77,10 @@ if (want("exterior")) {
   const poses = {
     close_turbolaser: [-150, 95, 470, -120, 84, 450],
     close_bridge_front: [40, 215, 540, 0, 200, 600],
-    close_trench: [-470, 10, 420, -440, 0, 500],
+    close_trench: [-440, 14, 430, -366, 0, 480],
     close_hangar_below: [0, -160, 200, 0, -40, 220],
     medium_stern: [200, 80, 1200, 0, 10, 800],
-    medium_bow_low: [-300, -120, -1300, 0, 0, -600],
+    medium_bow_low: [-260, -120, -900, 0, -10, -500],
     far_oblique: [-1500, 700, -2600, 0, 40, 0],
     far_belly: [900, -1100, 1400, 0, -40, 200],
   };

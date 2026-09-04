@@ -8,8 +8,8 @@ const MAX_R = 14000;
 
 export const EXTERIOR_PRESETS = {
   // key -> { target, theta (rad, around Y from +Z), phi (rad from +Y), radius }
-  reveal: { target: [0, 40, 60], theta: -2.35, phi: 1.22, radius: 2300, label: "Bow quarter" },
-  bow: { target: [0, 20, -300], theta: -2.9, phi: 1.32, radius: 1800, label: "Bow" },
+  reveal: { target: [0, 60, 80], theta: -2.35, phi: 1.2, radius: 1750, label: "Bow quarter" },
+  bow: { target: [0, 30, -250], theta: -2.75, phi: 1.3, radius: 1150, label: "Bow" },
   dorsal: { target: [0, 60, 150], theta: -2.5, phi: 0.7, radius: 1700, label: "Dorsal overview" },
   bridge: { target: [0, 196, 560], theta: 2.95, phi: 1.42, radius: 340, label: "Command tower" },
   hangar: { target: [0, -30, (HANGAR_WELL.z0 + HANGAR_WELL.z1) / 2], theta: 0.6, phi: 2.55, radius: 420, label: "Ventral hangar" },

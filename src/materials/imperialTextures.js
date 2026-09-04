@@ -159,64 +159,91 @@ export function makeDarkDeck(size = 1024, seed = 321) {
 export function makeHullPlate(size = 2048, seed = 331) {
   const t = new TexGen(size, size);
   const rand = mulberry32(seed);
-  // irregular plate grid: split each axis into segments of unequal length
-  const cutsU = [0];
-  const cutsV = [0];
-  while (cutsU[cutsU.length - 1] < 0.92) cutsU.push(cutsU[cutsU.length - 1] + 0.06 + rand() * 0.14);
-  cutsU.push(1);
-  while (cutsV[cutsV.length - 1] < 0.92) cutsV.push(cutsV[cutsV.length - 1] + 0.05 + rand() * 0.12);
-  cutsV.push(1);
-  const nU = cutsU.length - 1;
-  const nV = cutsV.length - 1;
-  const tones = new Float32Array(nU * nV);
-  const heights = new Float32Array(nU * nV);
-  for (let k = 0; k < tones.length; k++) {
-    tones[k] = 0.82 + (rand() - 0.5) * 0.16;
-    heights[k] = rand() < 0.25 ? -0.08 : rand() < 0.5 ? 0 : 0.04;
+  // Hierarchical plating: a few large primary plates per tile (12–24 m at 48 m/tile), each split into
+  // irregular sub-plates. Primary seams are wide with a bevel and a height step per plate; sub-seams
+  // are hairline. Tones vary per primary (some plates distinctly darker) and again per sub-plate.
+  const cuts = (min, span, stop) => {
+    const c = [0];
+    while (c[c.length - 1] < stop) c.push(c[c.length - 1] + min + rand() * span);
+    c[c.length - 1] = 1;
+    return c;
+  };
+  const PU = cuts(0.22, 0.26, 0.8);
+  const PV = cuts(0.2, 0.24, 0.8);
+  const nPU = PU.length - 1;
+  const nPV = PV.length - 1;
+  const primary = [];
+  for (let j = 0; j < nPV; j++) {
+    for (let i = 0; i < nPU; i++) {
+      const dark = rand() < 0.14;
+      const tone = dark ? 0.62 + rand() * 0.08 : 0.86 + (rand() - 0.5) * 0.14;
+      const hgt = rand() < 0.3 ? -0.1 : rand() < 0.5 ? 0.0 : 0.06;
+      // sub-plate cuts inside this primary (in local 0..1)
+      const su = cuts(0.18, 0.3, 0.75);
+      const sv = cuts(0.22, 0.34, 0.75);
+      const subTones = [];
+      for (let k = 0; k < (su.length - 1) * (sv.length - 1); k++) subTones.push(0.96 + (rand() - 0.5) * 0.07);
+      primary.push({ tone, hgt, su, sv, subTones, rough: 0.58 + (rand() - 0.5) * 0.1 });
+    }
   }
-  // some plates carry a row of small hatches / vents
   const hatches = [];
-  for (let k = 0; k < 40; k++) hatches.push([rand(), rand(), 0.008 + rand() * 0.02, 0.004 + rand() * 0.008]);
+  for (let k = 0; k < 34; k++) hatches.push([rand(), rand(), 0.006 + rand() * 0.016, 0.004 + rand() * 0.008]);
   const scorches = [];
-  for (let k = 0; k < 6; k++) scorches.push([rand(), rand(), 0.03 + rand() * 0.08]);
-  const find = (cuts, x) => {
+  for (let k = 0; k < 7; k++) scorches.push([rand(), rand(), 0.03 + rand() * 0.09]);
+  const find = (c, x) => {
     let lo = 0;
-    let hi = cuts.length - 2;
+    let hi = c.length - 2;
     while (lo < hi) {
       const mid = (lo + hi + 1) >> 1;
-      if (cuts[mid] <= x) lo = mid;
+      if (c[mid] <= x) lo = mid;
       else hi = mid - 1;
     }
     return lo;
   };
+  const primSeam = 0.005;
+  const subSeam = 0.0016;
   t.each((u, v, i) => {
-    const iu = find(cutsU, u);
-    const iv = find(cutsV, v);
-    const k = iv * nU + iu;
-    const du = Math.min(u - cutsU[iu], cutsU[iu + 1] - u);
-    const dv = Math.min(v - cutsV[iv], cutsV[iv + 1] - v);
-    const ed = Math.min(du, dv);
+    const iu = find(PU, u);
+    const iv = find(PV, v);
+    const P = primary[iv * nPU + iu];
+    const pu0 = PU[iu];
+    const pu1 = PU[iu + 1];
+    const pv0 = PV[iv];
+    const pv1 = PV[iv + 1];
+    const edP = Math.min(u - pu0, pu1 - u, v - pv0, pv1 - v);
+    // local coords inside the primary plate → sub-plate
+    const lu = (u - pu0) / (pu1 - pu0);
+    const lv = (v - pv0) / (pv1 - pv0);
+    const su = find(P.su, lu);
+    const sv = find(P.sv, lv);
+    const edS = Math.min((lu - P.su[su]) * (pu1 - pu0), (P.su[su + 1] - lu) * (pu1 - pu0), (lv - P.sv[sv]) * (pv1 - pv0), (P.sv[sv + 1] - lv) * (pv1 - pv0));
+    const subTone = P.subTones[sv * (P.su.length - 1) + su];
     const n1 = fbm(u, v, { octaves: 4, freq: 6, seed });
     const n2 = fbm(u, v, { octaves: 5, freq: 40, seed: seed + 2 });
-    let lum = tones[k] * (0.95 + (n1 - 0.5) * 0.12 + (n2 - 0.5) * 0.06);
-    // painted armour, not bare metal: the film hulls are matte light grey that takes sunlight as
-    // diffuse shading (a half-metal surface only mirrors black space and reads flat)
-    let rough = 0.6 + (n2 - 0.5) * 0.2 + (n1 - 0.5) * 0.1;
+    let lum = P.tone * subTone * (0.96 + (n1 - 0.5) * 0.1 + (n2 - 0.5) * 0.05);
+    // painted armour, not bare metal: matte light grey that takes sunlight as diffuse shading
+    let rough = P.rough + (n2 - 0.5) * 0.2 + (n1 - 0.5) * 0.08;
     let metal = 0.12;
-    let hgt = 0.5 + heights[k];
-    const seam = 0.0035;
-    if (ed < seam) {
-      const q = 1 - ed / seam;
-      hgt -= 0.4 * smooth(q);
-      lum *= 0.45;
+    let hgt = 0.5 + P.hgt;
+    if (edP < primSeam) {
+      const q = 1 - edP / primSeam;
+      hgt -= 0.45 * smooth(q);
+      lum *= 0.42;
       rough += 0.3;
-    } else if (ed < seam * 2.5) {
-      // bevel down into the seam
-      hgt -= 0.12 * smooth(1 - (ed - seam) / (seam * 1.5));
+    } else if (edP < primSeam * 3) {
+      hgt -= 0.14 * smooth(1 - (edP - primSeam) / (primSeam * 2));
+      lum *= 0.94;
+    } else if (edS < subSeam) {
+      const q = 1 - edS / subSeam;
+      hgt -= 0.16 * smooth(q);
+      lum *= 0.62;
+      rough += 0.15;
+    } else if (edS < subSeam * 2.5) {
+      hgt -= 0.04 * smooth(1 - (edS - subSeam) / (subSeam * 1.5));
     }
-    // streaks along v (soot trails) starting from seams
+    // soot trails running along v from seams
     const streak = Math.pow(fbm(u, v * 0.08, { octaves: 3, freq: 30, seed: seed + 11 }), 3);
-    lum *= 1 - streak * 0.25;
+    lum *= 1 - streak * 0.22;
     rough += streak * 0.15;
     // micro pitting
     const pit = worley(u, v, 90, seed + 4);
@@ -229,7 +256,7 @@ export function makeHullPlate(size = 2048, seed = 331) {
       if (Math.abs(u - hx) < hw && Math.abs(v - hy) < hh) {
         const inner = Math.abs(u - hx) < hw - 0.0015 && Math.abs(v - hy) < hh - 0.0015;
         hgt += inner ? 0.05 : -0.1;
-        lum *= inner ? 0.9 : 0.6;
+        lum *= inner ? 0.88 : 0.55;
         metal = 0.4;
       }
     }

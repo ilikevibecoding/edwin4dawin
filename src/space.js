@@ -88,7 +88,7 @@ const atmoFrag = /* glsl */ `
     vec3 nr = normalize(n - v * dot(n, v));
     float day = smoothstep(-0.55, 0.15, dot(nr, sunDir));
     // additive blend multiplies by alpha, so keep it at 1 or the falloff gets squared into a hairline
-    gl_FragColor = vec4(atmo * glow * strength * (0.15 + 0.85 * day), 1.0);
+    gl_FragColor = vec4(atmo * glow * strength * (0.04 + 0.96 * day), 1.0);
   }
 `;
 
@@ -292,7 +292,7 @@ export function buildSpace(scene) {
     g.add(body);
     // 15% shell: ~19 px of halo on a 1080p frame for the gas giant in a porthole; the peak at the
     // limb (~0.9 × strength) sits just over the disc's limb-darkened edge so the line reads as glow
-    const shellR = radius * 1.15;
+    const shellR = radius * 1.1;
     const limb = Math.sqrt(1 - (radius * radius) / (shellR * shellR));
     const atmoMat = new THREE.ShaderMaterial({
       uniforms: {
@@ -310,6 +310,7 @@ export function buildSpace(scene) {
       fog: false,
     });
     const shell = new THREE.Mesh(new THREE.SphereGeometry(shellR, 96, 64), atmoMat);
+    shell.visible = atmoStrength > 0.01; // airless moons get no rim
     g.add(shell);
     let ringMesh = null;
     if (ring) {
@@ -348,7 +349,7 @@ export function buildSpace(scene) {
     elevation: -40,
     // saturated amber: the halo has to differ from the cream disc or it reads as more disc
     atmo: "#ffae5c",
-    atmoStrength: 1.35,
+    atmoStrength: 0.9,
     brightness: 1.15,
     spin: 0.006,
     tilt: 0.28,
@@ -362,7 +363,7 @@ export function buildSpace(scene) {
     bearingDeg: 100,
     elevation: 40,
     atmo: "#58b8ff",
-    atmoStrength: 1.4,
+    atmoStrength: 1.0,
     brightness: 0.85,
     spin: 0.02,
     tilt: 0.1,
@@ -374,7 +375,7 @@ export function buildSpace(scene) {
     bearingDeg: -150,
     elevation: -20,
     atmo: "#8a8f99",
-    atmoStrength: 0.15,
+    atmoStrength: 0.0,
     brightness: 0.85,
     spin: 0.01,
     tilt: 0.05,
@@ -383,10 +384,10 @@ export function buildSpace(scene) {
     tex: makeMoon(512, 256, 143),
     radius: 240,
     dist: 2300,
-    bearingDeg: 190,
-    elevation: 90,
+    bearingDeg: 218,
+    elevation: 55,
     atmo: "#ff8a5a",
-    atmoStrength: 0.3,
+    atmoStrength: 0.0,
     brightness: 0.8,
     spin: 0.008,
     tilt: 0.3,

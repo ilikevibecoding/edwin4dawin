@@ -664,7 +664,7 @@ export function createTraffic({ mats, audio, zone } = {}) {
       // Exhaust flares grow with distance beyond 200 m and slide from the emitters toward the hull
       // centre, so a patrolling fighter still reads as a glowing speck from the exterior presets
       // (a 9 m craft is a few pixels at 1.7 km, and its own body would hide the engines from the front).
-      const far = Math.min(6, Math.max(1, d / 200));
+      const far = Math.min(3, Math.max(1, d / 250));
       const throttle = (f.s === "docked" || f.s === "lowering" || f.s === "raising" ? 0.35 : THREE.MathUtils.clamp(0.9 + f.speed / 60, 0.9, 2.2)) * far;
       const pull = 1 / far;
       for (let k = 0; k < 2; k++) {
