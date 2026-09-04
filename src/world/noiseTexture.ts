@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 
-/** Tileable 3D Perlin-Worley noise texture used to shape the volumetric clouds.
- *  R: perlin-worley base shape, G: worley erosion detail, B: high-frequency worley, A: perlin. */
+/** Tileable 3D noise texture used to shape the volumetric clouds.
+ *  R: perlin-worley base shape (lattice periods 4/8/16 cells),
+ *  G: low-frequency worley fbm (periods 4/8) used as the edge-erosion detail — deliberately smooth so the
+ *     raymarch step size (60–200 m) does not undersample it,
+ *  B: mid-frequency perlin fbm (periods 8/16) for wispy tops,
+ *  A: perlin fbm (periods 4/8/16). */
 export function createCloudNoiseTexture(size = 64): THREE.Data3DTexture {
   const N = size;
   const data = new Uint8Array(N * N * N * 4);
@@ -49,6 +53,7 @@ export function createCloudNoiseTexture(size = 64): THREE.Data3DTexture {
   };
 
   const remap = (v: number, a: number, b: number, c: number, d: number) => c + ((v - a) / (b - a)) * (d - c);
+  const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
   let i = 0;
   for (let z = 0; z < N; z++) for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
@@ -66,10 +71,16 @@ export function createCloudNoiseTexture(size = 64): THREE.Data3DTexture {
     const w3 = worley(u * 16, v * 16, w * 16, 16, 51);
     const wf = w1 * 0.625 + w2 * 0.25 + w3 * 0.125;
     const pw = remap(p, 0, 1, wf, 1); // perlin-worley
-    data[i++] = Math.round(Math.min(1, Math.max(0, pw)) * 255);
-    data[i++] = Math.round(Math.min(1, Math.max(0, wf)) * 255);
-    data[i++] = Math.round(Math.min(1, Math.max(0, w2 * 0.6 + w3 * 0.4)) * 255);
-    data[i++] = Math.round(Math.min(1, Math.max(0, p)) * 255);
+    // smooth erosion detail: two worley octaves only (different seeds so it does not track the shape)
+    const e1 = worley(u * 4, v * 4, w * 4, 4, 61);
+    const e2 = worley(u * 8, v * 8, w * 8, 8, 71);
+    const detail = e1 * 0.65 + e2 * 0.35;
+    // mid-frequency perlin (periods 8/16) for wispy tops
+    const pm = (perlin(u * 8, v * 8, w * 8, 8, 81) * 0.65 + perlin(u * 16, v * 16, w * 16, 16, 91) * 0.35) * 0.5 + 0.5;
+    data[i++] = Math.round(clamp01(pw) * 255);
+    data[i++] = Math.round(clamp01(detail) * 255);
+    data[i++] = Math.round(clamp01(pm) * 255);
+    data[i++] = Math.round(clamp01(p) * 255);
   }
 
   const tex = new THREE.Data3DTexture(data, N, N, N);

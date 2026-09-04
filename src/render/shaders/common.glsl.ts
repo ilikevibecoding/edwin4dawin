@@ -42,17 +42,34 @@ uniform float uNight;        // 0 day .. 1 night
 uniform float uTime;
 `;
 
-/** 2D cloud coverage field used for both the raymarched clouds' macro shape and the ground shadows. */
+/** 2D cloud coverage field used for both the raymarched clouds' macro shape and the ground shadows.
+ *  "Cloud space" = world xz + the wind offset, so the field itself is static and only drifts. */
 export const GLSL_CLOUD_FIELD = /* glsl */ `
-float cloudCoverage2D(vec2 wp) {
-  vec2 p = (wp + uCloudWind) * 0.00015 + uCloudSeed;
-  float c = fbm(p);
-  float c2 = fbm(p * 3.3 + 7.7);
-  float f = c * 0.7 + c2 * 0.3;
-  // coverage remaps the field so that low coverage leaves discrete cumulus masses
-  float thr = 0.7 - uCloudCoverage * 0.42;
-  return smoothstep(thr, thr + 0.2, f);
+float worley2(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  float d = 8.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 g = vec2(float(x), float(y));
+    vec2 r = g + hash22(i + g) - f;
+    d = min(d, dot(r, r));
+  }
+  return sqrt(d);
 }
+/** Macro cloud field in cloud space: x = coverage (0 clear .. 1 solid), y = "interior" (how deep inside a
+ *  mass; drives vertical development so large cells tower while small ones stay flat). */
+vec2 cloudFieldCS(vec2 cs) {
+  vec2 p = cs * 0.00015 + uCloudSeed;
+  float f = fbm(p) * 0.62 + fbm3(p * 3.1 + 7.7) * 0.38;
+  // cellular term breaks the fbm into separate cumulus masses (~2.6 km cells)
+  float cells = 1.0 - worley2(cs * (1.0 / 2600.0) + uCloudSeed * 0.37);
+  f = f * 0.76 + cells * 0.24;
+  float thr = 0.64 - uCloudCoverage * 0.44;
+  float cov = smoothstep(thr, thr + 0.2, f);
+  float interior = smoothstep(thr + 0.04, thr + 0.3, f);
+  return vec2(cov, interior);
+}
+float cloudCoverageCS(vec2 cs) { return cloudFieldCS(cs).x; }
+float cloudCoverage2D(vec2 wp) { return cloudCoverageCS(wp + uCloudWind); }
 /** Cloud shadow factor (1 = lit, ~0.35 = under a dense cloud) at a world position. */
 float cloudShadow(vec3 wp) {
   // project along the sun direction up to the cloud base
@@ -71,6 +88,10 @@ vec3 skyRadiance(vec3 dir) {
   float horizonMix = pow(1.0 - up, 14.0);
   float midMix = pow(1.0 - up, 3.5) * 0.22;
   vec3 col = mix(uZenithColor, uHorizonColor, clamp(horizonMix + midMix, 0.0, 1.0));
+  // bright, slightly warm haze band in the last few degrees above the horizon (sunlit humid air)
+  float hband = pow(1.0 - up, 30.0);
+  vec3 hazeWhite = mix(uHorizonColor, uSunHazeColor, 0.4) * 1.12;
+  col = mix(col, hazeWhite, hband * 0.55 * smoothstep(-0.05, 0.12, uSunDir.y));
   // slight brightening of the sky toward the sun (mie forward scatter), strongest near horizon
   float cosSun = dot(dir, uSunDir);
   float mie = pow(max(cosSun, 0.0), 8.0) * (0.08 + 0.5 * horizonMix);
