@@ -293,7 +293,7 @@ export class OrbitalBeam extends Disaster {
       intensity = 0.95 + 0.08 * Math.sin(this.visTime * 23) + 0.04 * Math.sin(this.visTime * 7.3);
       tipHot = 1.3;
       sphereR = maxSphere * (1 + 0.08 * pulse); sphereAlpha = 1;
-      sparkRate = 70 * (0.6 + 0.4 * p.intensity); smokeRate = 90 * (0.5 + 0.5 * p.intensity);
+      sparkRate = 70 * (0.6 + 0.4 * p.intensity); smokeRate = 70 * (0.5 + 0.5 * p.intensity);
     } else if (t < t4) {
       const u = t - t3;
       bottom = this.centerFloor;
@@ -397,7 +397,7 @@ export class OrbitalBeam extends Disaster {
     particles.vel[i * 3 + 1] = rim ? 2.5 + Math.random() * 3 : 1.5 + Math.random() * 1.5;
     particles.vel[i * 3] += (Math.random() - 0.5) * 0.6; particles.vel[i * 3 + 2] += (Math.random() - 0.5) * 0.6;
     particles.life[i] = particles.maxLife[i] = life;
-    particles.size[i] = rim ? 1.4 + Math.random() * 0.8 : 1.0;
+    particles.size[i] = rim ? 1.1 + Math.random() * 0.6 : 0.9;
     const g = 0.12 + Math.random() * 0.18;
     particles.color[i * 3] = g * 1.1; particles.color[i * 3 + 1] = g; particles.color[i * 3 + 2] = g * 0.95;
   }

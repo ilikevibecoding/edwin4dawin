@@ -94,7 +94,8 @@ export class CraterPlan {
         continue;
       }
       if (d > rNow) { allDone = false; break; }
-      const floorNow = Math.max(this.floor[i], Math.round(this.g - this.D * depthK * this.shape(d)));
+      // the bowl deepens towards this column's final (jittered) floor as depthK grows
+      const floorNow = Math.max(this.floor[i], Math.round(this.g - (this.g - this.floor[i]) * depthK));
       while (this.top[i] > floorNow) {
         if (m.budgetLeft <= 0) return false;
         const y = this.top[i];
