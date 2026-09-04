@@ -4,7 +4,7 @@
 import { defineRoom } from "../_shared/room.js";
 import { IMP, col } from "../_shared/palette.js";
 import { rail } from "../_shared/shell.js";
-import { console as consoleProp, crate, lockerBank, cabinet, wallScreen, floorLine, hazardStrip, pipe, placer } from "../_shared/props.js";
+import { console as consoleProp, crate, lockerBank, cabinet, wallScreen, floorLine, pipe, placer } from "../_shared/props.js";
 import * as A from "./props.js";
 
 const Y = 40;
@@ -61,20 +61,23 @@ function detail(ctx) {
   A.gateLeaf(kit, PALETTE, [GATE.x1 + 0.06, Y, cz + 0.1], [GATE.x1 + 0.06, Y, cz + 1.3], 2.3);
   // frame posts + header to the ceiling with a red light strip
   for (const x of [IX0 + 0.08, GATE.x0, GATE.x1, COUNTER.x0, COUNTER.x1, IX1 - 0.08]) kit.box("paintedMetal", x, Y + (CEIL - Y) / 2, cz, 0.14, CEIL - Y, 0.14, { color: black, texel: 2.5 });
-  kit.boxMM("paintedMetal", [IX0, top, cz - 0.12], [IX1, CEIL, cz + 0.12], { color: black, texel: 2.5 });
+  // header: dark grey at texel 4 (from the issue side it is the top-left fifth of the frame together
+  // with the aft channel's trough; black at texel 2.5 both read as one speckled black band)
+  kit.boxMM("paintedMetal", [IX0, top, cz - 0.12], [IX1, CEIL, cz + 0.12], { color: dark, texel: 4 });
   kit.boxMM("emitRedImp", [IX0 + 0.3, top + 0.1, cz - 0.125], [IX1 - 0.3, top + 0.14, cz - 0.12]);
   kit.boxMM("emitRedImp", [IX0 + 0.3, top + 0.1, cz + 0.12], [IX1 - 0.3, top + 0.14, cz + 0.125]);
   kit.boxMM("paintedMetal", [GATE.x0 - 0.07, Y + 2.3, cz - 0.1], [GATE.x1 + 0.07, Y + 2.4, cz + 0.1], { color: black });
   kit.box("emitBlue", (GATE.x0 + GATE.x1) / 2, Y + 2.35, cz - 0.105, 0.3, 0.04, 0.01);
-  // issue console behind the counter (operator faces the door over the screens)
-  consoleProp(kit, PALETTE, [-15.4, Y, 383.5], 0, { w: 1.8, d: 0.8, h: 1.15, screens: 2, seed: 64, screenMat: "screenImp1" });
+  // issue console behind the counter (operator faces the door over the screens); no screenMat so the
+  // two screens take the seeded picks, which for seed 64 are screenImp3 + screenImp1 (two layouts)
+  consoleProp(kit, PALETTE, [-15.4, Y, 383.5], 0, { w: 1.8, d: 0.8, h: 1.15, screens: 2, seed: 64 });
   // housed light channels either side of the cage header (the vestibule and issue-side fills hang under them)
   A.channelFixture(kit, PALETTE, -25.6, -12.4, 381.1, CEIL);
   A.channelFixture(kit, PALETTE, -25.6, -12.4, 383.3, CEIL);
 
   // ---- west wall: rifle racks, pistol lockers -------------------------------------------------------
-  A.rifleRack(kit, PALETTE, [IX0 + 0.1, Y, 385.6], HALF, { seed: 71 });
-  A.rifleRack(kit, PALETTE, [IX0 + 0.1, Y, 389.4], HALF, { seed: 72 });
+  A.rifleRack(kit, PALETTE, [IX0 + 0.1, Y, 385.6], HALF, { seed: 71, variantKind: 1 });
+  A.rifleRack(kit, PALETTE, [IX0 + 0.1, Y, 389.4], HALF, { seed: 72, variantKind: 2 });
   A.pistolLockers(kit, PALETTE, [IX0 + 0.21, Y, 392.7], HALF, { cols: 4, rows: 3, seed: 73 });
   wallScreen(kit, [IX0 + 0.09, Y + 3.2, 392.7], HALF, 1.6, 0.8, "screenImp3");
   cabinet(kit, PALETTE, [IX0 + 0.21, Y, 394.4], HALF, { w: 1.0, h: 1.8, d: 0.4, seed: 74 });
@@ -83,15 +86,15 @@ function detail(ctx) {
   lockerBank(kit, PALETTE, [IX1 - 0.26, Y, 385.6], -HALF, { count: 6, unit: 0.6, h: 2.0, d: 0.5, color: P("impDark") });
   A.openArmourLocker(kit, PALETTE, [IX1 - 0.29, Y, 388.0], -HALF);
   A.openArmourLocker(kit, PALETTE, [IX1 - 0.29, Y, 388.75], -HALF);
-  A.rifleRack(kit, PALETTE, [IX1 - 0.1, Y, 391.5], -HALF, { seed: 75, locked: false, empties: 1 });
+  A.rifleRack(kit, PALETTE, [IX1 - 0.1, Y, 391.5], -HALF, { seed: 75, locked: false, empties: 1, variantKind: 2 });
   A.maintenanceBench(kit, PALETTE, [IX1 - 0.44, Y, 395.2], -HALF, { len: 2.6, seed: 76 });
   wallScreen(kit, [IX1 - 0.09, Y + 3.2, 386.6], -HALF, 1.6, 0.8, "screenImp0");
   wallScreen(kit, [IX1 - 0.09, Y + 3.2, 391.5], -HALF, 1.6, 0.8, "screenImp1");
   A.benchLight(kit, PALETTE, [IX1 - 0.9, CEIL, 395.2], { w: 1.8, d: 0.34, stem: 1.2 });
 
   // ---- centre island: double-sided rifle rack + inspection table under a drop light ---------------
-  A.rifleRack(kit, PALETTE, [-19, Y, 388.6], 0, { seed: 77 });
-  A.rifleRack(kit, PALETTE, [-19, Y, 388.4], Math.PI, { seed: 78, empties: 3 });
+  A.rifleRack(kit, PALETTE, [-19, Y, 388.6], 0, { seed: 77, variantKind: 2 });
+  A.rifleRack(kit, PALETTE, [-19, Y, 388.4], Math.PI, { seed: 78, empties: 3, variantKind: 1 });
   kit.box("paintedMetal", -19, Y + 2.14, 388.5, 3.6, 0.1, 0.9, { color: black, texel: 2.5 });
   kit.box("emitRedImp", -19, Y + 2.2, 388.5, 3.2, 0.02, 0.06);
   A.maintenanceBench(kit, PALETTE, [-19, Y, 393.3], 0, { len: 2.4, seed: 79, pegboard: false });
@@ -109,8 +112,8 @@ function detail(ctx) {
   }
   crate(kit, PALETTE, [-14.6, Y, IZ1 - 0.42], Math.PI, { ...CR, w: 0.8, h: 0.8, d: 0.8, seed: 87 });
   wallScreen(kit, [-17.6, Y + 3.0, IZ1 - 0.09], Math.PI, 2.4, 0.9, "screenImp1");
-  hazardStrip(kit, [-22.4, IZ1 - 1.1], [-19.6, IZ1 - 0.95], Y);
-  hazardStrip(kit, [-13.8, IZ1 - 1.1], [-11.9, IZ1 - 0.95], Y);
+  A.hazardBand(kit, PALETTE, [-22.4, IZ1 - 1.1], [-19.6, IZ1 - 0.95], Y);
+  A.hazardBand(kit, PALETTE, [-13.8, IZ1 - 1.1], [-11.9, IZ1 - 0.95], Y);
 
   // ---- blast-shield test alcove (aft-west corner) --------------------------------------------------
   const AL = { x0: IX0, x1: -23.0, z0: 395.6, z1: IZ1 };
@@ -150,18 +153,23 @@ function detail(ctx) {
     }
   }
   kit.boxMM("paintedMetal", [AL.x0 + 0.02, Y + 2.9, AL.z0 + 0.25], [AL.x1, Y + 3.05, AL.z1 - 0.02], { color: dark, texel: 2.5 });
-  // hazard border + dark grate centre on the floor
+  // floor: 0.2 m painted amber/black border (half the old striped-texture width, matte paint instead of
+  // the glowing `hazard` map) around a dark grate centre
   const fz0 = AL.z0 + 0.3;
-  hazardStrip(kit, [AL.x0 + 0.1, fz0], [AL.x1 - 0.1, fz0 + 0.4], Y);
-  hazardStrip(kit, [AL.x0 + 0.1, AL.z1 - 0.5], [AL.x1 - 0.1, AL.z1 - 0.1], Y);
-  hazardStrip(kit, [AL.x0 + 0.1, fz0 + 0.4], [AL.x0 + 0.5, AL.z1 - 0.5], Y);
-  hazardStrip(kit, [AL.x1 - 0.5, fz0 + 0.4], [AL.x1 - 0.1, AL.z1 - 0.5], Y);
-  kit.boxMM("grate", [AL.x0 + 0.5, Y + 0.001, fz0 + 0.4], [AL.x1 - 0.5, Y + 0.009, AL.z1 - 0.5]);
-  // rig fires toward the aft target plate; rail across the north half of the opening
-  A.shieldRig(kit, PALETTE, [-24.9, Y, 396.6], 0);
+  A.hazardBand(kit, PALETTE, [AL.x0 + 0.1, fz0], [AL.x1 - 0.1, fz0 + 0.2], Y);
+  A.hazardBand(kit, PALETTE, [AL.x0 + 0.1, AL.z1 - 0.3], [AL.x1 - 0.1, AL.z1 - 0.1], Y);
+  A.hazardBand(kit, PALETTE, [AL.x0 + 0.1, fz0 + 0.2], [AL.x0 + 0.3, AL.z1 - 0.3], Y);
+  A.hazardBand(kit, PALETTE, [AL.x1 - 0.3, fz0 + 0.2], [AL.x1 - 0.1, AL.z1 - 0.3], Y);
+  kit.boxMM("paintedMetal", [AL.x0 + 0.3, Y, fz0 + 0.2], [AL.x1 - 0.3, Y + 0.004, AL.z1 - 0.3], { color: black });
+  kit.boxMM("grate", [AL.x0 + 0.34, Y + 0.005, fz0 + 0.24], [AL.x1 - 0.34, Y + 0.013, AL.z1 - 0.34]);
+  // rig throws its field between a ceiling emitter housing under the slab and a floor receptor, toward
+  // the aft target plate; rail across the north half of the opening
+  A.shieldRig(kit, PALETTE, [-24.9, Y, 396.6], 0, { fieldTop: 2.9 });
   A.targetPlate(kit, PALETTE, [-24.9, Y + 1.5, AL.z1 - 0.1], Math.PI, { w: 1.8, h: 1.8 });
   rail(kit, PALETTE, [AL.x1, Y, AL.z0 + 0.3], [AL.x1, Y, 397.6], Y, { h: 1.02 });
-  hazardStrip(kit, [AL.x1 - 0.05, AL.z0 + 0.3], [AL.x1 + 0.35, AL.z1 - 0.1], Y);
+  A.hazardBand(kit, PALETTE, [AL.x1 - 0.05, AL.z0 + 0.3], [AL.x1 + 0.15, AL.z1 - 0.1], Y);
+  // housed fixtures under the alcove slab either side of the field emitter (the slab read pitch black)
+  for (const z of [396.9, 398.9]) A.ceilingFixture(kit, PALETTE, -24.85, Y + 2.9, z, { w: 0.8, d: 0.7 });
   // what the alcove is: range-control console outside the rail (operator faces the rig), a status
   // screen on the partition, the header sign over the walkway, a caged red beacon on the partition top
   consoleProp(kit, PALETTE, [-22.2, Y, 396.75], HALF, { w: 1.2, d: 0.7, h: 1.15, screens: 1, seed: 95, screenMat: "screenImp3" });
@@ -176,19 +184,52 @@ function detail(ctx) {
   crate(kit, PALETTE, [-15.6, Y, 391.0], 0, { ...CR, seed: 91, color: P("impMid") });
   crate(kit, PALETTE, [-15.6, Y + 1.2, 391.0], 0.35, { ...CR, seed: 92, color: P("impGrey") });
   crate(kit, PALETTE, [-15.6, Y, 392.35], 0, { ...CR, seed: 93 });
-  A.crateTag(kit, PALETTE, [-15.6 + 0.62, Y + 0.6, 391.0], HALF, 96);
-  A.crateTag(kit, PALETTE, [-15.6, Y + 0.6, 391.0 - 0.62], Math.PI, 97);
+  // tag styles rotate (indicator field / manifest screen / stencil plate) so the two faces the racks
+  // view sees are not the same LED plate twice
+  A.crateTag(kit, PALETTE, [-15.6 + 0.62, Y + 0.6, 391.0], HALF, 96, 0);
+  A.crateTag(kit, PALETTE, [-15.6, Y + 0.6, 391.0 - 0.62], Math.PI, 97, 1);
   {
     const Pc = placer(kit, [-15.6, Y + 1.2, 391.0], 0.35);
-    A.crateTag(kit, PALETTE, Pc.world(0.62, 0.6, 0), 0.35 + HALF, 98);
-    A.crateTag(kit, PALETTE, Pc.world(0, 0.6, -0.62), 0.35 + Math.PI, 99);
+    A.crateTag(kit, PALETTE, Pc.world(0.62, 0.6, 0), 0.35 + HALF, 98, 2);
+    A.crateTag(kit, PALETTE, Pc.world(0, 0.6, -0.62), 0.35 + Math.PI, 99, 1);
   }
-  A.crateTag(kit, PALETTE, [-15.6 + 0.62, Y + 0.6, 392.35], HALF, 100);
+  A.crateTag(kit, PALETTE, [-15.6 + 0.62, Y + 0.6, 392.35], HALF, 100, 2);
+  // weapon cart parked in front of the open armour lockers, long side to the room (foreground anchor of
+  // the lockers view 2.7 m from its camera, scale reference)
+  A.weaponCart(kit, PALETTE, [-14.0, Y, 388.5], HALF, { seed: 102 });
+  // painted inspection-zone outline around the island rack (matte red paint, no emitter): the racks
+  // view's foreground floor carries a marking instead of reading bare
+  A.floorMarking(kit, PALETTE, [-21.1, 387.5], [-16.9, 389.6], Y, { seed: 103 });
 
-  // ---- ceiling fixtures (dark ceiling; housed recessed panels, 2 x 3) -----------------------------
-  for (const x of [-22.8, -15.2]) for (const z of [386.0, 391.0, 397.0]) A.ceilingFixture(kit, PALETTE, x, CEIL, z);
+  // ---- ceiling: black slab + 2.4 m dark-grey plates with fine world UVs (the shell's plated ceiling at
+  // texel 2.5 read as dark speckle; impDark plates read as black speckle seen face-on from the racks and
+  // lockers views, so the plates are impMid with a darker plate every so often, over black seams);
+  // housed recessed panels 3 x 3 + a pair in the vestibule ---------------------------------------------
+  kit.boxMM("paintedMetal", [X0, CEIL, Z0], [X1, CEIL + 0.5, Z1], { color: black, texel: 4 });
+  {
+    const pw = 2.4;
+    const nx = Math.round((IX1 - IX0) / pw);
+    const nz = Math.round((IZ1 - IZ0) / pw);
+    const plateDark = P("impMid");
+    const plateAlt = 0x474b52;
+    for (let i = 0; i < nx; i++) {
+      for (let j = 0; j < nz; j++) {
+        const px0 = IX0 + ((IX1 - IX0) * i) / nx + 0.02;
+        const px1 = IX0 + ((IX1 - IX0) * (i + 1)) / nx - 0.02;
+        const pz0 = IZ0 + ((IZ1 - IZ0) * j) / nz + 0.02;
+        const pz1 = IZ0 + ((IZ1 - IZ0) * (j + 1)) / nz - 0.02;
+        kit.boxMM("paintedMetal", [px0, CEIL - 0.03, pz0], [px1, CEIL, pz1], { color: (i * 7 + j * 3) % 11 === 0 ? plateAlt : plateDark, texel: 4 });
+      }
+    }
+  }
+  for (const x of [-22.8, -19.0, -15.2]) for (const z of [386.0, 391.0, 397.0]) A.ceilingFixture(kit, PALETTE, x, CEIL, z);
+  for (const x of [-23.8, -14.2]) A.ceilingFixture(kit, PALETTE, x, CEIL, 379.6);
+  // two small counter downlights in the ceiling strip between the cage header and the aft channel: from
+  // the issue camera the aft channel's emitter hides behind its own trough wall (24 deg elevation), so
+  // the top-left fifth of that view had no visible fixture; these sit at 40-45 deg left, 26-30 deg up
+  for (const x of [-20.6, -23.2]) A.ceilingFixture(kit, PALETTE, x, CEIL, 382.64, { w: 0.6, d: 0.5 });
 
-  // ---- lights (12 descriptors: 11 point + 1 spot) ---------------------------------------------------
+  // ---- lights (13 descriptors: 12 point + 1 spot) ---------------------------------------------------
   // Point lights fall off with 1/d^2, so anything within ~1 m of a fill blows out: every fill sits
   // >= 1.6 m below the ceiling (no specular disc on the black plating) and >= 1.5 m from any fixture
   // housing, hood or tall prop top. Fixtures are emissive dressing; the fills explain themselves by
@@ -208,6 +249,8 @@ function detail(ctx) {
   // range lamp: a cool spot from the hooded housing under the partition slab down the alcove onto the
   // grate and the target plate (a point fill there would have blown the lining 0.6 m away)
   lights.push({ type: "spot", pos: [-24.9, Y + 2.66, AL.z0 + 0.4], target: [-24.9, Y + 0.2, AL.z1 - 0.8], color: 0xe4ecff, intensity: 34, distance: 8, angle: 0.85, penumbra: 0.5, priority: 0.5 });
+  // small fill under the aft alcove panel (1.4 m below the slab) so the target plate and lining read
+  lights.push({ type: "point", pos: [-24.85, Y + 1.5, 398.5], color: 0xe4ecff, intensity: 5, distance: 5, priority: 0.4 });
   return {};
 }
 
@@ -221,8 +264,14 @@ export default defineRoom({
   spawn: { pos: [-19, Y, 380], yaw: 180 },
   views: {
     "d2-armory-door": { pos: [-19, Y, 379.3], yaw: 180, pitch: -2 },
-    "d2-armory-racks": { pos: [-14.2, Y, 386.0], yaw: 116, pitch: -3 },
-    "d2-armory-lockers": { pos: [-24.2, Y, 391.2], yaw: -80, pitch: -3 },
+    // 3 m off the island rack's north face and 22 deg off its normal (from 1 m north of the face plane
+    // the rack was seen nearly edge-on and the eight silhouettes overlapped into one): the long repeater
+    // stands clear of the standard rifles, the painted inspection zone carries the foreground
+    "d2-armory-racks": { pos: [-17.8, Y, 385.5], yaw: 155, pitch: -1 },
+    // from the middle of the room toward the east wall: locker bank left, open armour lockers centre
+    // with the weapon cart parked 2.7 m ahead of the camera, rifle rack right (was a 13 m sightline
+    // across the room with 45 % floor)
+    "d2-armory-lockers": { pos: [-16.6, Y, 387.6], yaw: -85, pitch: -1 },
     // on the alcove's centreline (the previous spot had the 2.4 m crate stack filling the left foreground)
     "d2-armory-alcove": { pos: [-20.6, Y, 397.7], yaw: 86, pitch: -2 },
     "d2-armory-issue": { pos: [-17.2, Y, 385.6], yaw: 18, pitch: -2 },
@@ -234,8 +283,9 @@ export default defineRoom({
     corniceColor: IMP.impDark,
     stripMat: "emitRedImp",
     floor: { color: IMP.impDark },
-    // plated (paintedMetal) ceiling: the painted-panel map's edge grime read as blotches on a black ceiling
-    ceiling: { channels: 0, color: IMP.impBlack, mat: "paintedMetal" },
+    // the room builds its own ceiling (slab + 2.4 m plates at texel 4): the shell's plated panels at
+    // texel 2.5 read as dark speckle, its painted panels as grime blotches
+    ceiling: false,
     lights: false,
     doorDressing: { accent: "emitRedImp" },
     // cable tray + pipe runs just under the cornice on all four walls (everything the room hangs on

@@ -65,15 +65,26 @@ export function cellFittings(kit, PALETTE, pos, yaw, { w = 3.3, seed = 1, varian
     Q.box("paintedMetal", bx, 0.45, 0.45, 1.9, 0.02, 0.72, { color: black, texel: 2.5 });
   }
   if (variant === "occupied") {
-    Q.box("paintedMetal", bx - m * 0.5, 0.58, 0.53, 0.7, 0.12, 0.5, { color: dark, texel: 2.5 }); // folded blanket
-    Q.box("paintedMetal", bx - m * 0.5, 0.65, 0.53, 0.6, 0.03, 0.4, { color: mid });
+    // the occupant's kit sits on the bunk's outer end and the floor in front of it, so it is what the
+    // corridor sees first through the bars: folded blanket with a light fold, a rumpled top sheet
+    Q.box("paintedMetal", bx - m * 0.5, 0.58, 0.53, 0.7, 0.12, 0.5, { color: dark, texel: 4 }); // folded blanket
+    Q.box("paintedMetal", bx - m * 0.5, 0.65, 0.53, 0.6, 0.03, 0.4, { color: grey });
+    Q.box("paintedMetal", bx + m * 0.25, 0.535, 0.4, 0.8, 0.03, 0.6, { color: C(PALETTE, "impWhite"), texel: 4, rot: [0, Q.yaw + m * 0.12, 0] }); // sheet
     Q.box("paintedMetal", bx + m * 0.9, 0.53, 0.33, 0.2, 0.02, 0.14, { color: black }); // datapad
     Q.box("emitBlue", bx + m * 0.9, 0.542, 0.33, 0.14, 0.002, 0.09);
     Q.box("paintedMetal", bx, 0.01, 1.1, 0.46, 0.02, 0.34, { color: grey }); // tray on the floor
     Q.cyl("metal", bx + m * 0.1, 0.06, 1.12, 0.04, 0.08, "y", { color: C(PALETTE, "impWhite"), segments: 10 });
+    Q.box("paintedMetal", bx - m * 0.12, 0.02, 1.08, 0.12, 0.02, 0.12, { color: mid }); // ration tin
+    for (const k of [-1, 1]) Q.box("paintedMetal", bx - m * 0.75 + k * 0.12, 0.08, 1.05, 0.1, 0.16, 0.28, { color: black, texel: 4 }); // boots
     Q.box("metal", bx - m * 0.9, 1.6, 0.03, 0.03, 0.03, 0.06, { color: steel }); // hook + hanging jacket
-    Q.box("paintedMetal", bx - m * 0.9, 1.2, 0.12, 0.42, 0.8, 0.16, { color: dark, texel: 2.5 });
+    Q.box("paintedMetal", bx - m * 0.9, 1.2, 0.12, 0.42, 0.8, 0.16, { color: dark, texel: 4 });
     Q.box("paintedMetal", bx - m * 0.9, 1.57, 0.12, 0.14, 0.08, 0.16, { color: black });
+    Q.box("paintedMetal", bx - m * 0.9, 1.2, 0.205, 0.3, 0.5, 0.01, { color: mid }); // jacket front panel
+    Q.box("emitAmber", bx - m * 0.9, 1.45, 0.212, 0.06, 0.02, 0.004); // detainee tag
+    // a second jacket-hook + towel further along, a cup on the sink
+    Q.box("metal", bx - m * 0.4, 1.6, 0.03, 0.03, 0.03, 0.06, { color: steel });
+    Q.box("paintedMetal", bx - m * 0.4, 1.3, 0.06, 0.26, 0.6, 0.04, { color: grey, texel: 4 }); // towel
+    Q.cyl("metal", sx - m * 0.12, 0.96, 0.32, 0.035, 0.08, "y", { color: C(PALETTE, "impWhite"), segments: 10 });
   }
   Q.collider([Math.min(bx - 1.0, bx + 1.0), 0, 0.05], [Math.max(bx - 1.0, bx + 1.0), 0.52, 0.85], "bunk");
   // sink block with basin and tap
@@ -89,10 +100,10 @@ export function cellFittings(kit, PALETTE, pos, yaw, { w = 3.3, seed = 1, varian
   Q.box("emitRedImp", 0, 2.2, 0.062, w - 1.0, 0.04, 0.006);
   Q.box("paintedMetal", 0, 2.75, 0.03, 0.9, 0.12, 0.06, { color: black });
   Q.box(plateMat, 0, 2.75, 0.062, 0.8, 0.05, 0.006);
-  // housed ceiling plate at the cell centre: hollow black housing, steel-grey lip, emitter set up inside
-  {
+  // two housed ceiling plates per cell (back half + corridor half): hollow black housing, steel-grey lip,
+  // emitter set up inside. One plate over the corridor half left the back of the cell reading black.
+  for (const cz of [0.75, 2.1]) {
     const cx = 0;
-    const cz = 1.8;
     const yb = ceilH - 0.12;
     Q.box("paintedMetal", cx, ceilH - 0.02, cz, 0.6, 0.02, 0.6, { color: black });
     for (const s of [-1, 1]) {
@@ -181,14 +192,15 @@ export function detaineeChair(kit, PALETTE, pos, yaw, { restraints = false } = {
   const black = C(PALETTE, "impBlack");
   const dark = C(PALETTE, "impDark");
   const steel = C(PALETTE, "steel");
-  Q.box("paintedMetal", 0, 0.02, 0, 0.56, 0.04, 0.56, { color: black, texel: 2.5 });
-  Q.box("paintedMetal", 0, 0.24, -0.02, 0.14, 0.4, 0.14, { color: dark, texel: 2.5 });
-  Q.box("paintedMetal", 0, 0.47, 0, 0.5, 0.06, 0.5, { color: dark, texel: 2.5 });
-  Q.box("paintedMetal", 0, 0.505, 0.02, 0.44, 0.02, 0.42, { color: C(PALETTE, "impMid") });
+  // base, column and seat frame as clean panel plates (black/dark paintedMetal still speckled at 2 m)
+  Q.box("impPanel", 0, 0.02, 0, 0.56, 0.04, 0.56, { color: black, uv: "keep" });
+  Q.box("impPanel", 0, 0.24, -0.02, 0.14, 0.4, 0.14, { color: dark, uv: "keep" });
+  Q.box("impPanel", 0, 0.47, 0, 0.5, 0.06, 0.5, { color: dark, uv: "keep" });
+  Q.box("impPanel", 0, 0.505, 0.02, 0.44, 0.02, 0.42, { color: C(PALETTE, "impMid"), uv: "keep" });
   // backrest on two struts, reclined 8 degrees
   const rq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.14, 0, 0)));
-  kit.add("paintedMetal", new THREE.BoxGeometry(0.46, 0.5, 0.05), { pos: Q.world(0, 0.8, -0.26), quat: rq, color: dark, texel: 2.5 });
-  kit.add("paintedMetal", new THREE.BoxGeometry(0.4, 0.42, 0.02), { pos: Q.world(0, 0.8, -0.22), quat: rq, color: C(PALETTE, "impMid") });
+  kit.add("paintedMetal", new THREE.BoxGeometry(0.46, 0.5, 0.05), { pos: Q.world(0, 0.8, -0.26), quat: rq, color: dark, texel: 4 });
+  kit.add("impPanel", new THREE.BoxGeometry(0.4, 0.42, 0.02), { pos: Q.world(0, 0.8, -0.22), quat: rq, color: C(PALETTE, "impMid"), uv: "keep" });
   for (const sx of [-1, 1]) Q.box("metal", sx * 0.2, 0.62, -0.24, 0.03, 0.3, 0.03, { color: steel });
   if (restraints) {
     for (const sx of [-1, 1]) {
@@ -315,13 +327,16 @@ export function weaponRack2(kit, PALETTE, pos, yaw) {
   Q.collider([-w / 2, 0, -0.06], [w / 2, 2.1, 0.36], "weapon-rack");
 }
 
-// Interrogation table: heavy dark slab on a single pedestal with a restraint bar.
+// Interrogation table: heavy dark slab on a single pedestal with a restraint bar. Slab and pedestal at
+// texel 4 with a clean panel plate let into the top (the worn-metal grain at 2.5 read as speckle).
 export function interrogationTable(kit, PALETTE, pos, yaw, { len = 2.0, w = 0.9, h = 0.78 } = {}) {
   const Q = placer(kit, pos, yaw);
   const black = C(PALETTE, "impBlack");
-  Q.box("paintedMetal", 0, h - 0.04, 0, len, 0.08, w, { color: C(PALETTE, "impDark"), texel: 2.5 });
-  Q.box("paintedMetal", 0, (h - 0.08) / 2, 0, 0.5, h - 0.08, 0.4, { color: black, texel: 2.5 });
-  Q.box("paintedMetal", 0, 0.04, 0, 1.0, 0.08, 0.7, { color: black });
+  Q.box("paintedMetal", 0, h - 0.04, 0, len, 0.08, w, { color: C(PALETTE, "impDark"), texel: 4 });
+  Q.box("impPanel", 0, h + 0.004, 0, len - 0.16, 0.01, w - 0.16, { color: C(PALETTE, "impMid"), uv: "keep" });
+  // pedestal + foot as clean panel plates (black paintedMetal speckled at the view's 2.5 m)
+  Q.box("impPanel", 0, (h - 0.08) / 2, 0, 0.5, h - 0.08, 0.4, { color: black, uv: "keep" });
+  Q.box("impPanel", 0, 0.04, 0, 1.0, 0.08, 0.7, { color: black, uv: "keep" });
   Q.cyl("metal", 0, h + 0.06, -0.25, 0.02, 0.6, "x", { color: C(PALETTE, "steel"), segments: 8 });
   for (const sx of [-0.3, 0.3]) Q.box("metal", sx, h + 0.03, -0.25, 0.04, 0.06, 0.04, { color: C(PALETTE, "steel") });
   Q.box("darkGloss", 0.55, h + 0.005, 0.2, 0.5, 0.01, 0.35);
@@ -339,24 +354,32 @@ export function wallPanel(kit, PALETTE, pos, yaw, seed = 5, { w = 0.5, h = 0.7 }
   Q.box("emitGreen", -w / 2 + 0.2, -h / 2 + 0.1, 0.082, 0.06, 0.06, 0.006);
 }
 
-// Checkpoint scanner pylon (front +Z faces the lane): dark post on a base plate with a tall blue
-// emitter slot, a sensor head and a status lamp on top.
+// Checkpoint scanner pylon (front +Z faces the lane): black post on a base plate with a tall blue
+// emitter slot on the lane face, light-grey panel plates on the flanks and back (the two bare black
+// posts framing the door view put a quarter of that frame under 20 % grey), a sensor head and a
+// status lamp on top.
 export function scanPylon(kit, PALETTE, pos, yaw, { h = 2.3, clear = true } = {}) {
   const Q = placer(kit, pos, yaw);
   const black = C(PALETTE, "impBlack");
   const dark = C(PALETTE, "impDark");
+  const mid = C(PALETTE, "impMid");
   Q.box("paintedMetal", 0, 0.04, 0, 0.7, 0.08, 0.7, { color: dark, texel: 2.5 });
-  Q.box("paintedMetal", 0, h / 2, 0, 0.44, h, 0.44, { color: black, texel: 2.5 });
-  Q.box("darkGloss", 0, h / 2 + 0.1, 0.221, 0.3, h - 0.5, 0.01);
-  Q.box("emitBlue", 0, h / 2 + 0.1, 0.228, 0.05, h - 0.8, 0.006);
+  Q.box("paintedMetal", 0, h / 2, 0, 0.44, h, 0.44, { color: black, texel: 4 });
+  // lane face: panel plate with a narrow dark-glass sensor slot and the blue emitter (from the door the
+  // lane faces are the only faces in view, so they carry the grey too)
+  Q.box("impPanel", 0, h / 2 + 0.1, 0.226, 0.36, h - 0.5, 0.012, { color: mid, uv: "keep" });
+  Q.box("darkGloss", 0, h / 2 + 0.1, 0.237, 0.16, h - 0.6, 0.01);
+  Q.box("emitBlue", 0, h / 2 + 0.1, 0.244, 0.05, h - 0.8, 0.006);
   Q.box("paintedMetal", 0, h + 0.05, 0.02, 0.5, 0.1, 0.5, { color: dark });
   Q.box(clear ? "emitGreen" : "emitRedImp", 0, h + 0.13, 0.02, 0.22, 0.06, 0.22);
-  for (const y of [0.45, 0.85]) Q.box("emitRedImp", -0.14, y, 0.226, 0.03, 0.03, 0.006);
-  // side faces: sensor slot + strip so the pylon reads as equipment from the flanks
+  for (const y of [0.45, 0.85]) Q.box("emitRedImp", -0.13, y, 0.238, 0.03, 0.03, 0.006);
+  // flanks: panel plate, sensor slot + strip so the pylon reads as equipment from the sides
   for (const sx of [-1, 1]) {
-    Q.box("darkGloss", sx * 0.221, h * 0.6, 0, 0.01, 1.2, 0.2);
-    Q.box("emitRedImp", sx * 0.228, h * 0.6, 0, 0.006, 1.0, 0.03);
+    Q.box("impPanel", sx * 0.226, h / 2 + 0.1, 0, 0.012, h - 0.5, 0.36, { color: mid, uv: "keep" });
+    Q.box("darkGloss", sx * 0.237, h * 0.6, 0, 0.01, 1.2, 0.2);
+    Q.box("emitRedImp", sx * 0.245, h * 0.6, 0, 0.006, 1.0, 0.03);
   }
+  Q.box("impPanel", 0, h / 2 + 0.1, -0.226, 0.36, h - 0.5, 0.012, { color: mid, uv: "keep" });
   Q.collider([-0.35, 0, -0.35], [0.35, h + 0.16, 0.35], "pylon");
 }
 
@@ -395,6 +418,39 @@ export function channelFixture(kit, PALETTE, axis, a, b, c, ceilY, { w = 0.45, m
     const s1 = a + (len * (i + 1)) / nSeg - 0.12;
     box(mat, (s0 + s1) / 2, ceilY - drop + 0.065, c, s1 - s0, 0.01, 0.14, {});
   }
+}
+
+// Evidence / cargo tag on a crate face (front +Z), two styles so a stack does not read as copies:
+//  0 seal plate: gloss plate, indicator field, red seal strip, white ID line
+//  1 stencil manifest: dark plate, three white text bars, a red class square, green release lamp.
+export function evidenceTag(kit, PALETTE, pos, yaw, seed = 5, style = 0) {
+  const Q = placer(kit, pos, yaw);
+  const rand = rng(seed);
+  if (style === 1) {
+    Q.box("paintedMetal", 0, 0, 0.005, 0.5, 0.34, 0.01, { color: C(PALETTE, "impDark"), texel: 4 });
+    for (let i = 0; i < 3; i++) Q.box("emitWhite", -0.08, 0.1 - i * 0.06, 0.012, 0.22 * (0.6 + rand() * 0.4), 0.018, 0.004);
+    Q.box("paintedMetal", 0.15, 0.07, 0.012, 0.12, 0.12, 0.004, { color: C(PALETTE, "impRed") });
+    Q.box("emitGreen", 0.15, -0.09, 0.012, 0.06, 0.03, 0.004);
+    Q.box("emitRedImp", -0.14, -0.09, 0.012, 0.16, 0.02, 0.004);
+    return;
+  }
+  Q.box("darkGloss", 0, 0, 0.005, 0.5, 0.34, 0.01);
+  indicatorField(Q, 0, 0.06, 0.012, 0.4, 0.14, seed, { weights: [0.5, 0.35, 0.1, 0.05] });
+  Q.box("emitRedImp", 0, -0.11, 0.012, 0.36, 0.03, 0.004);
+  Q.box("emitWhite", -0.1, -0.05, 0.012, 0.2, 0.012, 0.004);
+}
+
+// Force-field cell front: number/status plate on the corridor face of the partition end beside the pane
+// (front +Z): dark plate, cell number bar, three status lamps, a small readout screen.
+export function fieldPlate(kit, PALETTE, pos, yaw, { screen = "screenImp2" } = {}) {
+  const Q = placer(kit, pos, yaw);
+  Q.box("paintedMetal", 0, 0, 0.02, 0.2, 0.7, 0.04, { color: C(PALETTE, "impBlack"), texel: 4 });
+  Q.box("emitRedImp", 0, 0.29, 0.042, 0.14, 0.04, 0.004);
+  Q.box("emitWhite", 0, 0.22, 0.042, 0.1, 0.014, 0.004);
+  for (const [i, m] of ["emitRedImp", "emitAmber", "emitBlue"].entries()) Q.box(m, -0.06 + i * 0.06, 0.12, 0.042, 0.035, 0.035, 0.004);
+  Q.box("darkGloss", 0, -0.08, 0.042, 0.16, 0.22, 0.006);
+  Q.box(screen, 0, -0.08, 0.046, 0.14, 0.18, 0.004, { uv: "keep" });
+  Q.box("emitGreen", 0, -0.27, 0.042, 0.05, 0.03, 0.004);
 }
 
 // Alternating amber/black floor band (hazard marking without the `hazard` material key).

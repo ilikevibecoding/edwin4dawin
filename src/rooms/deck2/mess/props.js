@@ -26,18 +26,31 @@ export function servingCounter(kit, PALETTE, { x0, x1, zFront, depth = 0.8, y, h
   // matte plated top (painted-panel material in 1.25 m plates: smooth roughness, no worn-metal speckle,
   // so neither the fills nor the heat lamps mirror into a hotspot)
   kit.box("impPanel", cx, y + h + 0.02, cz, len + 0.06, 0.04, depth + 0.06, { color: steel, uv: "scale", uvScale: [Math.round(len / 1.25), 1] });
-  // food wells (dark recesses) with matte lids on most of them; one in three is an open, lit well
+  // food wells: steel rim plate around a dark recess; two in three are open with food blocks in 2–3
+  // colours and a serving spoon, every third is lidded (the flat grey "tray mats" read as slabs)
   const wells = Math.floor(len / 0.7);
+  const foods = [0x7a5a33, 0x5f7d3a, 0xc8b892, 0x9a3a2a, 0xd9a441];
+  const rand = rng(11);
   for (let i = 0; i < wells; i++) {
     const wx = x0 + 0.35 + (i + 0.5) * ((len - 0.7) / wells);
-    kit.box("paintedMetal", wx, y + h + 0.042, cz + 0.05, 0.5, 0.004, 0.36, { color: black });
-    if (i % 3 !== 1) {
-      kit.box("paintedMetal", wx, y + h + 0.07, cz + 0.05, 0.52, 0.05, 0.38, { color: steel, texel: 2.5 });
-      kit.box("paintedMetal", wx, y + h + 0.11, cz + 0.05, 0.12, 0.03, 0.04, { color: dark }); // lid handle
+    const wz = cz + 0.12; // aft of the sneeze-guard posts
+    kit.box("paintedMetal", wx, y + h + 0.05, wz, 0.56, 0.02, 0.42, { color: steel, texel: 2.5 }); // rim plate (dielectric: no lamp mirror)
+    kit.box("paintedMetal", wx, y + h + 0.064, wz, 0.48, 0.008, 0.34, { color: black }); // recess floor
+    for (const s of [-1, 1]) kit.box("paintedMetal", wx + s * 0.25, y + h + 0.08, wz, 0.02, 0.04, 0.38, { color: dark }); // rim walls
+    for (const s of [-1, 1]) kit.box("paintedMetal", wx, y + h + 0.08, wz + s * 0.18, 0.52, 0.04, 0.02, { color: dark });
+    if (i % 3 === 1) {
+      kit.box("paintedMetal", wx, y + h + 0.11, wz, 0.5, 0.03, 0.36, { color: steel, texel: 2.5 }); // lid
+      kit.box("paintedMetal", wx, y + h + 0.14, wz, 0.14, 0.03, 0.04, { color: dark }); // lid handle
     } else {
-      kit.box("paintedMetal", wx, y + h + 0.05, cz + 0.05, 0.5, 0.012, 0.36, { color: dark });
-      kit.box("emitAmber", wx, y + h + 0.052, cz + 0.05, 0.34, 0.01, 0.2);
+      const n = 2 + Math.floor(rand() * 2);
+      for (let k = 0; k < n; k++) {
+        const fx = wx - 0.21 + (k + 0.5) * (0.42 / n);
+        kit.box("paintedMetal", fx, y + h + 0.095 + rand() * 0.02, wz + (rand() - 0.5) * 0.06, 0.42 / n - 0.03, 0.05 + rand() * 0.03, 0.2 + rand() * 0.06, { color: foods[Math.floor(rand() * foods.length)], texel: 2.5 });
+      }
+      kit.box("metal", wx + 0.19, y + h + 0.11, wz - 0.06, 0.025, 0.015, 0.3, { color: steel }); // serving spoon
+      kit.cyl("metal", wx + 0.19, y + h + 0.11, wz - 0.24, 0.035, 0.012, "y", { color: steel, segments: 10 });
     }
+    kit.box("emitAmber", wx, y + h + 0.052, wz - 0.245, 0.2, 0.006, 0.012); // "hot" lamp ahead of the rim
   }
   kit.box("emitAmber", cx, y + h - 0.14, zFront - 0.02, len - 0.4, 0.02, 0.01);
   // tray rail on brackets
@@ -157,6 +170,9 @@ export function vat(kit, PALETTE, pos, yaw, { w = 2.6, h = 1.9, d = 1.2, seed = 
     // control column on the right
     Q.box("paintedMetal", w / 2 - 0.3, h / 2 + 0.1, d / 2 + 0.005, 0.44, h - 0.6, 0.01, { color: black });
     indicatorField(Q, w / 2 - 0.3, h - 0.55, d / 2 + 0.012, 0.36, 0.3, seed);
+    // programme screen on the column (the one appliance in the row with a display, readable from the queue)
+    Q.box("darkGloss", w / 2 - 0.3, 1.3, d / 2 + 0.014, 0.4, 0.28, 0.008);
+    Q.box("screenImp0", w / 2 - 0.3, 1.3, d / 2 + 0.02, 0.36, 0.24, 0.006, { uv: "keep" });
     Q.box("emitAmber", w / 2 - 0.3, 1.0, d / 2 + 0.012, 0.3, 0.03, 0.01);
     for (let i = 0; i < 3; i++) Q.cyl("metal", w / 2 - 0.42 + i * 0.12, 0.7, d / 2 + 0.04, 0.035, 0.05, "z", { color: steel, segments: 12 });
     // flue + pressure cap
@@ -168,10 +184,12 @@ export function vat(kit, PALETTE, pos, yaw, { w = 2.6, h = 1.9, d = 1.2, seed = 
   for (const hx of [-w / 4, w / 4]) {
     const isOpen = open && hx > 0;
     if (isOpen) {
-      // hatch throat + lit interior, door swung 100° out on its right-hand hinge
-      Q.cyl("paintedMetal", hx, 1.0, d / 2 - 0.1, 0.46, 0.2, "z", { color: black, segments: 24 });
-      Q.cyl("paintedMetal", hx, 1.0, d / 2 - 0.19, 0.3, 0.02, "z", { color: dark, segments: 24 });
-      Q.cyl("emitAmber", hx, 1.0, d / 2 - 0.18, 0.22, 0.01, "z", { segments: 20 });
+      // open hatch: black throat ring with a steel inner lip and a 0.3 m lit amber interior on its face
+      // (the old lit disc sat inside the solid throat and never showed), door swung 100° out on its hinge
+      Q.cyl("paintedMetal", hx, 1.0, d / 2 + 0.04, 0.46, 0.08, "z", { color: black, segments: 24 });
+      Q.cyl("metal", hx, 1.0, d / 2 + 0.11, 0.36, 0.06, "z", { color: steel, segments: 24, open: true });
+      Q.cyl("paintedMetal", hx, 1.0, d / 2 + 0.086, 0.35, 0.012, "z", { color: dark, segments: 24 });
+      Q.cyl("emitAmber", hx, 1.0, d / 2 + 0.094, 0.3, 0.008, "z", { segments: 24 });
       const hingeX = hx + 0.44;
       const ang = 1.75;
       const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Q.yaw + ang, 0));
@@ -205,20 +223,50 @@ export function vat(kit, PALETTE, pos, yaw, { w = 2.6, h = 1.9, d = 1.2, seed = 
 }
 
 // Extraction hood (world AABB) with filter grilles on the -Z face and two under-lights.
-export function hood(kit, PALETTE, min, max) {
-  kit.boxMM("paintedMetal", min, max, { color: C(PALETTE, "impMid"), texel: 2.5 });
-  kit.boxMM("paintedMetal", [min[0] + 0.1, min[1] - 0.02, min[2] + 0.1], [max[0] - 0.1, min[1], max[2] - 0.1], { color: C(PALETTE, "impBlack") });
-  kit.boxMM("paintedMetal", [min[0], min[1] - 0.05, min[2] - 0.05], [max[0], min[1] + 0.15, min[2]], { color: C(PALETTE, "impDark") });
+export function hood(kit, PALETTE, min, max, { lamps = [0.09, 0.33, 0.69, 0.93] } = {}) {
+  const black = C(PALETTE, "impBlack");
+  const dark = C(PALETTE, "impDark");
+  const mid = C(PALETTE, "impMid");
+  const grey = C(PALETTE, "impGrey");
+  const steel = C(PALETTE, "steel");
   const h = max[1] - min[1];
-  const cy = (min[1] + max[1]) / 2 + 0.05;
-  for (let x = min[0] + 0.6; x < max[0] - 0.5; x += 1.0) kit.box("grate", x, cy, min[2] - 0.006, 0.7, h - 0.5, 0.012);
-  // under-lights in a shallow black channel with lips, the tube set 3 cm up inside it (the bare emitter
-  // read as a white blob on the hood's underside from across the galley)
-  const uz = (min[2] + max[2]) / 2;
-  for (const x of [min[0] + (max[0] - min[0]) * 0.3, min[0] + (max[0] - min[0]) * 0.7]) {
-    for (const s of [-1, 1]) kit.box("paintedMetal", x, min[1] - 0.05, uz + s * 0.11, 1.5, 0.08, 0.03, { color: C(PALETTE, "impBlack") });
-    for (const s of [-1, 1]) kit.box("paintedMetal", x + s * 0.74, min[1] - 0.05, uz, 0.03, 0.08, 0.25, { color: C(PALETTE, "impBlack") });
-    kit.box("emitWhite", x, min[1] - 0.03, uz, 1.3, 0.01, 0.06);
+  const len = max[0] - min[0];
+  // dark core (fine world UVs) carrying clean panel plates on the end faces and the filter face: the
+  // worn-metal body read as a light speckled slab from the galley aisle
+  kit.boxMM("paintedMetal", min, max, { color: dark, texel: 4 });
+  kit.boxMM("impPanel", [min[0] - 0.03, min[1] + 0.1, min[2] + 0.08], [min[0], max[1] - 0.1, max[2] - 0.08], { color: mid, uv: "keep" });
+  kit.boxMM("impPanel", [max[0], min[1] + 0.1, min[2] + 0.08], [max[0] + 0.03, max[1] - 0.1, max[2] - 0.08], { color: mid, uv: "keep" });
+  const nF = Math.max(1, Math.round(len / 1.0));
+  for (let i = 0; i < nF; i++) {
+    const a = min[0] + (len * i) / nF + 0.03;
+    const b = min[0] + (len * (i + 1)) / nF - 0.03;
+    kit.boxMM("impPanel", [a, min[1] + 0.22, min[2] - 0.03], [b, max[1] - 0.1, min[2]], { color: mid, uv: "keep" });
+    // filter louvres: black recess with painted steel-grey slats (the metallic `grate` quads mirrored the
+    // galley fill into a white glare from the aisle)
+    const gw = b - a - 0.3;
+    const gh = h - 0.55;
+    const gy = (min[1] + max[1]) / 2 + 0.08;
+    kit.box("paintedMetal", (a + b) / 2, gy, min[2] - 0.045, gw, gh, 0.03, { color: black });
+    const nS = Math.floor(gh / 0.09);
+    for (let k = 0; k < nS; k++) kit.box("paintedMetal", (a + b) / 2, gy - gh / 2 + 0.07 + k * 0.09, min[2] - 0.07, gw - 0.06, 0.035, 0.02, { color: steel });
+  }
+  for (const y of [min[1] + 0.18, max[1] - 0.03]) kit.boxMM("metal", [min[0] - 0.04, y - 0.03, min[2] - 0.05], [max[0] + 0.04, y + 0.03, min[2]], { color: steel }); // edge rails
+  kit.boxMM("paintedMetal", [min[0] + 0.1, min[1] - 0.02, min[2] + 0.1], [max[0] - 0.1, min[1], max[2] - 0.1], { color: black });
+  kit.boxMM("paintedMetal", [min[0], min[1] - 0.05, min[2] - 0.05], [max[0], min[1] + 0.15, min[2]], { color: dark, texel: 2.5 });
+  // under-lights run ACROSS the hood in channels with 16 cm side walls and steel lips: from the aisle
+  // (looking along the hood) the sightline meets a side wall, never the tube; a grey reflector plate
+  // above a 5 cm tube gives the housing a dim rim and a narrow bright core
+  const z0 = min[2] + 0.18;
+  const z1 = max[2] - 0.18;
+  const zc = (z0 + z1) / 2;
+  const zl = z1 - z0;
+  for (const f of lamps) {
+    const x = min[0] + len * f;
+    for (const s of [-1, 1]) kit.box("paintedMetal", x + s * 0.12, min[1] - 0.08, zc, 0.03, 0.16, zl, { color: black, texel: 2.5 });
+    for (const s of [-1, 1]) kit.box("paintedMetal", x, min[1] - 0.08, zc + s * (zl / 2 - 0.015), 0.27, 0.16, 0.03, { color: black, texel: 2.5 });
+    for (const s of [-1, 1]) kit.box("paintedMetal", x + s * 0.135, min[1] - 0.165, zc, 0.06, 0.02, zl + 0.04, { color: steel });
+    kit.box("paintedMetal", x, min[1] - 0.025, zc, 0.2, 0.01, zl - 0.06, { color: grey });
+    kit.box("emitWhite", x, min[1] - 0.045, zc, 0.05, 0.01, zl - 0.12);
   }
 }
 
