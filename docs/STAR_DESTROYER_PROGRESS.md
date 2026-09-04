@@ -217,6 +217,12 @@ the build machine, JS heap 307 MB in Chromium (procedural texture canvases inclu
 1.36 s / 0.51 s / 0.45 s (tower / engineering / hangar) on the build machine's CPU, page ready in ~30 s
 there under software GL. Evidence frames: `docs/evidence/final/*.jpg`.
 
+Exterior re-review after wave 3 (independent critic, before/after frames): all five previous exterior
+complaints resolved; mid, close, tower, bridge face, belly, stern and bow PASS, far range PARTIAL
+(acceptable, weakest view). Overall exterior verdict: PASS. Suggested further polish: stronger key-to-fill
+ratio and contact shadows so the lit/shadow side registers at 3+ km; shaded engine bell interiors with
+glow spill onto the stern plating.
+
 ### Remaining limitations (honest list)
 
 - Frame rate was never measured on a real GPU here (software WebGL only): draw calls, triangles,
