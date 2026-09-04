@@ -42,6 +42,8 @@ export function buildInterior({ scene, materials }) {
   }
 
   const spaces = {}; // id -> { id, kind: 'room'|'corridor', spec, deck, zone, group, neighbors:Set, interactables, windows }
+  const doorLinks = new Map(); // "a|b" -> door record, for door-state-aware culling
+  const linkKey = (a, b) => (a < b ? a + "|" + b : b + "|" + a);
   const signs = [];
   const labelCache = new Map();
   function labelMaterial(name, accent) {
@@ -134,7 +136,8 @@ export function buildInterior({ scene, materials }) {
       const axis = facing === "+z" || facing === "-z" ? "x" : "z";
       const big = w >= 5;
       const doorH = Math.min(room.height - 0.1, h || lib.DOOR_H);
-      doors.add(kit, { id: `${room.id}-${i}`, x: cx, z: cz, y, width: w, height: doorH, axis, depth, zone: zone.id, blast: big, locked: !!room.restricted && false });
+      const door = doors.add(kit, { id: `${room.id}-${i}`, x: cx, z: cz, y, width: w, height: doorH, axis, depth, zone: zone.id, blast: big, locked: !!room.restricted && false });
+      if (nb && nb.id) doorLinks.set(linkKey(room.id, nb.id), door);
       // wayfinding: the room's name on a sign above the door, read from the far side of the doorway
       if (nb && nb.id && !room.legacy) {
         const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(1.6, w * 0.6), 0.24), labelMaterial(room.name, room.accent));
@@ -331,11 +334,17 @@ export function buildInterior({ scene, materials }) {
   // Portal culling. Closed doors block sight: a space draws itself, its direct neighbours (their doors
   // open as the player approaches) and the corridors joined to its corridors (junctions are open), but
   // never the rooms behind a second door.
+  // A neighbour behind a door is only drawn while that door is not fully closed.
+  function throughOpenDoor(a, b) {
+    const door = doorLinks.get(linkKey(a, b));
+    return !door || door.open > 0.001 || door.target > 0;
+  }
   function computeVisible(sp) {
     const vis = new Set();
     if (!sp) return vis;
     vis.add(sp.id);
     for (const n of sp.neighbors) {
+      if (!throughOpenDoor(sp.id, n)) continue;
       vis.add(n);
       const ns = spaces[n];
       if (!ns || ns.kind !== "corridor") continue;
@@ -437,11 +446,19 @@ export function buildInterior({ scene, materials }) {
       if (peeked && peeked.zone !== state.zone) for (const sp of zones[peeked.zone].spaces) if (sp.group.visible) for (const dyn of sp.dynamic) dyn.update && dyn.update(dt);
       const sp = spaceAt(player.position);
       const id = sp ? sp.id : null;
+      // recomputed every frame: door states change what can be seen (cheap: a few neighbour lookups)
+      const vis = computeVisible(sp || nearestSpace(player.position));
+      let changed = vis.size !== state.visible.size;
+      if (!changed) for (const v of vis) if (!state.visible.has(v)) {
+        changed = true;
+        break;
+      }
+      if (changed) {
+        state.visible = vis;
+        if (!peeked) applyVisibility(vis);
+      }
       if (id !== state.space) {
         state.space = id;
-        // between spaces (lift shaft, doorway gap): cull from the nearest space instead of drawing all
-        state.visible = computeVisible(sp || nearestSpace(player.position));
-        if (!peeked) applyVisibility(state.visible);
         if (api.onSpaceChange) api.onSpaceChange(sp);
       }
     },
