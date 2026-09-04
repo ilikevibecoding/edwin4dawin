@@ -1,22 +1,17 @@
 # Status — C: crew-engineering
 
-Branch: `cursor/sd-crew-engineering-f9bd` · Last push: dd9b0254 · 2026-09-04 09:45 UTC
-Run: `bc-5c9df309-dc4c-491e-8f9c-0acd3054f9bd` · Phase: 2
+Branch: `cursor/sd-crew-engineering-f9bd` · Last push: 3e1e2edb · 2026-09-04 14:30 UTC
+Run: `bc-5c9df309-dc4c-491e-8f9c-0acd3054f9bd` · Phase: 3
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
 
-Agent C owns Deck 2 (crew + operations, floor y +40) and Deck 3 (engineering, floor y +12):
-13 manifests on Deck 2 (9 rooms + lobby + 3 corridor arms) and 5 on Deck 3 (3 rooms + lobby + 1
-corridor), 18 modules total, all under `src/rooms/deck2/**` and `src/rooms/deck3/**`.
-**Phase 1 is pushed**: every module is a §7 manifest with a closed 1:1 shell (floor slab, panelled
-walls with black seams, kick, light strip, cornice, ceiling with light channels, door holes from the
-shared door table), 54 harness views, 0 registry warnings on a local shim of the §7/§8 contract.
-**Phase 2 detail is pushed for all 18 modules** (six subagents, one commit per room group). Full run
-of all 76 views with every module loaded: **0 registry warnings**, every module ≤ 16 calls / ≤ 103k
-tris / ≤ 14 light descriptors / ≤ 187 colliders / build ≤ 97 ms; whole frame peaks at 104 calls /
-294k tris with a 4-room active set. A blind critic pass over the 76 images is running; its findings
-get fixed next. Corridors still use my shell + generator; they switch to D's `corridorSegment` when
-`src/systems/corridor/corridor.js` lands.
+Agent C owns Deck 2 (crew + operations, floor y +40) and Deck 3 (engineering, floor y +12): 18 modules
+under `src/rooms/deck2/**` and `src/rooms/deck3/**` (13 + 5), all at **Phase 3**. Every room is fully
+detailed, went through a blind critic pass (15 PASS / 61 FIX on 76 views) and a fix round; the final
+full run (`p3_all`, all 18 loaded) has **0 registry warnings**, every module ≤ 16 draw calls / ≤ 118k
+tris / ≤ 14 light descriptors / ≤ 188 colliders / build ≤ 108 ms, whole frame ≤ 108 calls / 348k tris.
+A second critic pass is verifying the fixes. Still pending on others: A's scaffold (`src/core/registry.js`)
+to replace my local shim, D's doors/lifts (holes are dark voids) and D's corridor kit.
 
 ## Plan
 
@@ -104,7 +99,7 @@ Views: ≥ 3 per room, named `<roomId>-<what>` (e.g. `d2-mess-hall`, `d2-mess-ga
 | 4 | Mess hall/galley + armory + security/detention | `src/rooms/deck2/{mess,armory,security}/**` | done (cf4eece6) |
 | 5 | Life support + escape-pod bay | `src/rooms/deck2/{lifesupport,escape}/**` | done (14170d02) |
 | 6 | Engineering control, reactor chamber, hyperdrive room | `src/rooms/deck3/{engctl,reactor,hyperdrive}/**` | done (7f353bc1, b82c6224) |
-| critic | Blind visual critic: sees only screenshots + §1/§11 brief, reports per view | (none) | running on `p2_all` (76 images) |
+| critic | Blind visual critic: sees only screenshots + §1/§11 brief, reports per view | (none) | done: pass 1 on `p2_all` (15 PASS / 61 FIX, 10 fleet-wide patterns); pass 2 on `p3_all` running |
 
 Ports: C = 5173, subagents 5101–5106. Harness runs are serialised through `flock /tmp/c-shots.lock`.
 
@@ -162,31 +157,46 @@ Ports: C = 5173, subagents 5101–5106. Harness runs are serialised through `flo
 - `d3-hyperdrive`: 9 m motivator with end caps, 6 field coils, 3 cradles, top gantry + stair tower, 14
   coil banks with power trunks, aft housing bulkhead with blue rings, consoles, coolant tanks, ducts.
 
-Phase 2 numbers (`p2_all`, all 18 modules loaded, 76 views, 0 warnings):
+Phase 3 numbers (`p3_all`, all 18 modules loaded, 76 views, 0 warnings, after the critic fix round):
 
 | Module | calls | tris | lights | colliders | build ms |
 |---|---|---|---|---|---|
-| `d2-armory` | 15 | 21,920 | 8 | 47 | 47.5 |
-| `d2-briefing` | 16 | 34,204 | 9 | 37 | 52.9 |
-| `d2-cor-e` | 13 | 20,392 | 8 | 78 | 28 |
-| `d2-cor-n` | 13 | 15,300 | 6 | 59 | 15.8 |
-| `d2-cor-w` | 13 | 18,964 | 8 | 64 | 22.3 |
-| `d2-escape` | 13 | 51,912 | 14 | 73 | 49.1 |
-| `d2-lifesupport` | 15 | 58,772 | 12 | 54 | 58.5 |
-| `d2-lobby` | 12 | 11,012 | 8 | 19 | 14.7 |
-| `d2-medbay` | 16 | 61,500 | 10 | 114 | 63.7 |
-| `d2-mess` | 15 | 33,472 | 12 | 83 | 45.4 |
-| `d2-quarters` | 14 | 57,452 | 12 | 187 | 73 |
-| `d2-rec` | 15 | 33,804 | 11 | 70 | 39.6 |
-| `d2-security` | 15 | 35,556 | 12 | 94 | 37.3 |
-| `d3-cor` | 13 | 18,212 | 7 | 66 | 16.2 |
-| `d3-engctl` | 16 | 88,504 | 9 | 111 | 91.3 |
-| `d3-hyperdrive` | 14 | 80,940 | 11 | 106 | 81.1 |
-| `d3-lobby` | 13 | 12,456 | 7 | 22 | 12.7 |
-| `d3-reactor` | 15 | 102,452 | 13 | 131 | 96.4 |
+| `d2-armory` | 16 | 26,432 | 12 | 47 | 54.9 |
+| `d2-briefing` | 15 | 42,340 | 9 | 73 | 59 |
+| `d2-cor-e` | 14 | 26,304 | 8 | 75 | 34.4 |
+| `d2-cor-n` | 14 | 18,856 | 6 | 56 | 28.6 |
+| `d2-cor-w` | 14 | 26,208 | 8 | 69 | 36.1 |
+| `d2-escape` | 16 | 81,708 | 14 | 84 | 76.9 |
+| `d2-lifesupport` | 16 | 64,442 | 13 | 58 | 61.1 |
+| `d2-lobby` | 14 | 16,956 | 10 | 21 | 21.1 |
+| `d2-medbay` | 16 | 63,220 | 12 | 115 | 94.5 |
+| `d2-mess` | 16 | 47,268 | 13 | 88 | 59.9 |
+| `d2-quarters` | 15 | 68,376 | 14 | 188 | 70 |
+| `d2-rec` | 16 | 36,720 | 11 | 71 | 35.7 |
+| `d2-security` | 16 | 41,388 | 14 | 101 | 48 |
+| `d3-cor` | 14 | 22,296 | 7 | 65 | 19.5 |
+| `d3-engctl` | 16 | 97,504 | 9 | 112 | 100.5 |
+| `d3-hyperdrive` | 16 | 101,684 | 14 | 120 | 96 |
+| `d3-lobby` | 14 | 18,324 | 8 | 26 | 26.9 |
+| `d3-reactor` | 16 | 117,536 | 14 | 135 | 107.9 |
 
-Whole frame per view (active set = room + door neighbours): 36–104 draw calls, 12k–294k tris,
-12 pool lights. Sum of all 18 modules: 757k tris, 256 draw calls, 172 descriptors (never all live).
+Whole frame per view (active set = room + door neighbours, pool 12 point / 4 spot): 36–108 draw
+calls, 18k–348k tris. Sum of all 18 modules: 918k tris, 274 draw calls, 196 descriptors (never all
+live). Budget check: every module ≤ 16 / 120k / 14 / 400 / 250 ms — no exceptions.
+
+### Critic loop (blind: images + §1/§11 brief only)
+Pass 1 on `p2_all`: 15 PASS / 61 FIX. Ten fleet-wide patterns; the four that lived in my shared layer
+were fixed once (`e587688d`): bare emitters at 2.0–2.4 blown past the bloom threshold → 1.3–1.6 and
+housings; worn-metal texel 1 on big dark boxes read as "dirty concrete" → texel 2.5 + clean panelled
+pillar faces; one teal Kestrel screen everywhere → four procedural Imperial UI layouts
+(`_shared/screens.js`); missing door surrounds / bare upper walls → shell `doorDressing` and
+`serviceBand`. The per-room items went back to the six room subagents (commits `cb8c5a05`, `56b20cb8`,
+`812a805e`, `cdf340d6`, `7fae7f43`, `3e1e2edb`): housed fixtures everywhere with fills ≥ 1.2 m below
+emitters (root cause of the remaining blobs: fills 1.5 cm under their own emitters), state variants
+(bunks, tanks, cells, pods, appliances, racks, coil joints), placeholder geometry replaced (seats,
+consoles tops, holos, crates, posters), foreground anchors / re-framed cameras, style drift removed.
+The "blown white dot" in every image was the HUD crosshair, not geometry (hidden in the rig).
+Pass 2 on `p3_all`: running; findings go into the next fix round or the Remaining list below.
 
 Phase 1 numbers (local shim, all 18 modules loaded, streaming = room + door neighbours, light pool
 12 point / 4 spot):
@@ -234,12 +244,14 @@ Whole-frame per view (active set ≤ 6 rooms): 29–51 draw calls, 4k–56k tris
   critic's findings (running).
 
 ## Remaining
-1. Blind critic pass over the 76 `p2_all` images (running) → fix findings → re-shoot → push.
-2. Switch corridors to D's `corridorSegment` once `src/systems/corridor/corridor.js` exists; re-test
-   on the real registry once `src/core/registry.js` lands (drop the shim).
-3. Promote duplicated local props into `_shared/props.js` (barWall, statusBoard, doorPanel, stool,
-   zoneRect, floorLane, open stairs, bunk head/foot options) — only if a second pass needs them.
-4. Phase 3: final budgets table, zero warnings, status complete.
+1. Second critic pass (running) → fix any regressions / leftovers → re-shoot → push.
+2. Re-test on the real registry once `src/core/registry.js` lands (drop the shim); switch corridors to
+   D's `corridorSegment` once `src/systems/corridor/corridor.js` exists (my corridor generator keeps
+   its dressing either way).
+3. Optional: promote duplicated local props into `_shared/props.js` (barWall, statusBoard, doorPanel,
+   stool, zoneRect, floorLane, open stairs, bunk head/foot options, wallScreen portrait/uvRect).
+4. Interactables are not yet registered in my rooms (contract shape known; hooks for "use console",
+   "open locker" are cheap to add once A's Interactions wiring is in the registry).
 
 ## Blockers
 - None. Scaffold (`src/core/registry.js`) not landed yet; I test with a local uncommitted shim that
@@ -259,6 +271,10 @@ Whole-frame per view (active set ≤ 6 rooms): 29–51 draw calls, 4k–56k tris
   signage backs can be tinted per deck without another material key.
 - Fog: my rig uses FogExp2 0.006; the Kestrel value 0.03 would swallow the 77 m reactor chamber and
   the 54 m corridor arms — please pick the interior fog per room size or per deck.
+- Harness: hide `#crosshair` while shooting (`page.addStyleTag({content:"#crosshair{display:none}"})`)
+  — it shows as a 6 px white dot at (640, 360) in every screenshot and the critic read it as a bare bulb.
+- Light pool: my rooms push `type: "spot"` descriptors in escape, lifesupport, armory and reactor (≤ 4
+  each, within the 4-spot pool) — please keep the spot pool at 4 or tell me to convert them.
 
 ## Interface notes
 - Corridor widths are 5.0 m (not 4.0) so a 4.0 m blast door between lobby and corridor leaves 0.5 m
