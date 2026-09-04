@@ -54,11 +54,17 @@ export function buildHyperdrive(kit, ctx) {
     for (const cz of [UZ0 + 2.5, zc, UZ1 - 2.5]) saddle(kit, [ux, y + 0.25, cz], UR, AXY, "z", { w: 1.1, t: 0.3, plinth: [4.2, 0.3, 1.5] });
     // housing: main drum, ribs, end caps, glow slots under translucent covers
     kit.cyl("impMetal", ux, AXY, zc, UR, len, "z", { color: IMP.gunmetal, segments: 28, texel: 0.5 });
-    for (let rz = UZ0 + 0.9; rz < UZ1 - 0.5; rz += 1.5) kit.cyl("impPaintedMetal", ux, AXY, rz, UR + 0.16, 0.36, "z", { color: IMP.trim, segments: 28 });
+    // ribs take planar UVs: their 0.16 m annular faces are what the aisle view sees, and the polar
+    // cap UVs smeared the metal maps into radial wedges on them
+    for (let rz = UZ0 + 0.9; rz < UZ1 - 0.5; rz += 1.5) kit.cyl("impPaintedMetal", ux, AXY, rz, UR + 0.16, 0.36, "z", { color: IMP.trim, segments: 28, uv: "world", texel: 1 });
     for (const [ez, s] of [[UZ0, -1], [UZ1, 1]]) {
       // end cap: a shallower cylinder, a smaller dome leaving a flat annulus for the stencil, and
       // the conduit boss on the tip with a torus collar bedded onto the dome
-      kit.cyl("impPaintedMetal", ux, AXY, ez + s * 0.45, UR - 0.3, 0.9, "z", { color: IMP.wallDark, segments: 28, texel: 1 });
+      // planar (world) UVs: the polar cap UVs smeared the metal maps into wood-grain wedges on the
+      // 1.7 m end faces, which fill the top corners of the aisle view; the drum's own end annulus gets a
+      // matte ring for the same reason
+      kit.cyl("impPaintedMetal", ux, AXY, ez + s * 0.45, UR - 0.3, 0.9, "z", { color: IMP.wallDark, segments: 28, uv: "world", texel: 1 });
+      kit.add("impMatte", new THREE.RingGeometry(UR - 0.32, UR, 28), { pos: [ux, AXY, ez + s * 0.004], rot: [0, s > 0 ? 0 : Math.PI, 0], color: IMP.gunmetal, uv: "keep" });
       const dome = new THREE.SphereGeometry(1.15, 28, 10, 0, Math.PI * 2, 0, Math.PI / 2);
       dome.scale(1, 0.6, 1);
       dome.rotateX(s > 0 ? Math.PI / 2 : -Math.PI / 2);
@@ -85,11 +91,28 @@ export function buildHyperdrive(kit, ctx) {
     kit.collider([ux - 2.4, y, UZ0 - 1.9], [ux + 2.4, y + 5.5, UZ1 + 1.9], "motivator");
     // south cap: stub conduit from the boss into the cross manifold, with a tee body and collars
     conduit(kit, [ux, AXY, UZ1 + 1.8], [ux, AXY, XZ], 0.26, { rings: false });
-    kit.cyl("impPaintedMetal", ux, AXY, XZ, 0.44, 1.0, "x", { color: IMP.trim, segments: 16 });
+    // (world UVs: the tee's flat ends hang 1.5 m over the aisle view's eye and polar UVs smear them)
+    kit.cyl("impMetal", ux, AXY, XZ, 0.42, 1.0, "x", { color: IMP.steel, segments: 18, uv: "world", texel: 1 });
     collar(kit, [ux, AXY, XZ - 0.46], 0.26, "z");
-    for (const s of [-1, 1]) collar(kit, [ux + s * 0.62, AXY, XZ], 0.26, "x");
+    for (const s of [-1, 1]) {
+      // the manifold runs between the outer units only: their free tee ends get a bolted blanking
+      // flange and dome instead of a collar around nothing
+      if ((i === 0 && s < 0) || (i === unitX.length - 1 && s > 0)) {
+        kit.cyl("impMetal", ux + s * 0.56, AXY, XZ, 0.5, 0.12, "x", { color: IMP.steel, segments: 18, uv: "world", texel: 1 });
+        const cap = new THREE.SphereGeometry(0.34, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+        cap.scale(1, 0.55, 1);
+        cap.rotateZ(-s * Math.PI / 2);
+        kit.add("impMetal", cap, { pos: [ux + s * 0.62, AXY, XZ], color: IMP.gunmetal, uv: "scale", uvScale: [2, 1] });
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2;
+          kit.box("impMetal", ux + s * 0.64, AXY + Math.sin(a) * 0.42, XZ + Math.cos(a) * 0.42, 0.05, 0.08, 0.08, { color: IMP.trim, rot: [a, 0, 0] });
+        }
+      } else collar(kit, [ux + s * 0.62, AXY, XZ], 0.26, "x");
+    }
     // unit status: floor junction box at the front corner of the skid, cabled into the cap
-    junctionBox(kit, [ux + 1.9, y, UZ1 + 1.45], 0, { seed: 5 + i, display: i === 1 ? "screenGauges" : "screenBars" });
+    // (bar readouts + amber "ok" lamps throughout: the gauge display and green emitter would each be a
+    // draw call of their own in this room)
+    junctionBox(kit, [ux + 1.9, y, UZ1 + 1.45], 0, { seed: 5 + i, display: "screenBars", ok: "emitAmber" });
     pipeRun(kit, [[ux + 1.75, y + 1.5, UZ1 + 1.3], [ux + 1.75, y + 2.4, UZ1 + 1.3], [ux + 1.5, AXY - 0.7, UZ1 + 0.92]], 0.05, { mat: "impRubber", color: IMP.rubber, clamps: false });
     // conduit: from the top of the rear cap up to the ceiling manifold and down into the generator bank
     conduit(kit, [ux, AXY + UR - 0.4, UZ0 + 2.2], [ux, y + h - 1.2, UZ0 + 2.2], 0.36);
@@ -130,7 +153,7 @@ export function buildHyperdrive(kit, ctx) {
   floorDecal(kit, CX - 2.6, y, PL.z1 + 2.6, 1.2, 14);
   // marked lane from the south door to the pulpit with a glossy runner down the middle
   deckMark(kit, CX, y, (PL.z1 + 1.0 + z1 - 0.5) / 2, z1 - 0.5 - (PL.z1 + 1.0), 3.6, 0, Math.PI / 2);
-  kit.boxMM("impGloss", [CX - 0.8, y - 0.001, PL.z1 + 1.0], [CX + 0.8, y + 0.006, z1 - 0.5], { color: IMP.white, texel: 0.25 });
+  kit.boxMM("impGlossSoft", [CX - 0.8, y - 0.001, PL.z1 + 1.0], [CX + 0.8, y + 0.006, z1 - 0.5], { color: IMP.white, texel: 0.25 });
   // lanes from the west door and into both aisles
   deckMark(kit, (x0 + PL.x0) / 2, y, 592, PL.x0 - x0 - 1, 3.0, 0, 0);
 
@@ -164,7 +187,7 @@ export function buildHyperdrive(kit, ctx) {
     toolCart(kit, [sx + 2.3, y, sz0 - 0.9], 0.3, { seed: 4 });
     crate(kit, [sx + 2.4, y, sz1 + 0.6], [1.4, 1.0, 1.0], { seed: 12 });
     crate(kit, [sx + 2.4, y + 1.0, sz1 + 0.6], [1.2, 0.8, 0.9], { seed: 13, yaw: 0.15 });
-    junctionBox(kit, [sx - 3.2, y, sz0 - 0.6], Math.PI * 0.5, { seed: 9, h: 1.3, display: "screenGauges" });
+    junctionBox(kit, [sx - 3.2, y, sz0 - 0.6], Math.PI * 0.5, { seed: 9, h: 1.3, display: "screenBars", ok: "emitAmber" });
   }
 
   // ------------------------------------------------------------ coolant headers along both side walls
@@ -194,7 +217,7 @@ export function buildHyperdrive(kit, ctx) {
     // north wall: the field generator bank the conduits drop into, service bays between the cabinets
     const w = walls.north;
     const { frame } = wallFrame(kit, w.from, w.to, y);
-    for (let i = 0; i < unitX.length; i++) generatorCabinet(frame, w.u(unitX[i]), 3.4, 4.4, 1.35, 90 + i, { display: i === 1 ? "screenGauges" : "screenBars" });
+    for (let i = 0; i < unitX.length; i++) generatorCabinet(frame, w.u(unitX[i]), 3.4, 4.4, 1.35, 90 + i, { display: "screenBars" });
     for (const ax of aisleX) {
       gaugeCluster(frame, w.u(ax) - 1.1, 1.7, { n: 3, seed: 40 + Math.round(ax) });
       valveManifold(frame, w.u(ax) - 2.2, w.u(ax) + 2.2, 3.4, { n: 3, drop: 1.0, seed: 41 + Math.round(ax) });
@@ -218,7 +241,7 @@ export function buildHyperdrive(kit, ctx) {
     // east wall: energizer cabinets either side of the header drop, status screen up by the units
     const w = walls.east;
     const { frame } = wallFrame(kit, w.from, w.to, y);
-    wallScreen(frame, w.u(580), 2.0, 1.4, 0.8, "Gauges");
+    wallScreen(frame, w.u(580), 2.0, 1.4, 0.8, "Bars");
     relayCabinet(frame, w.u(585.5), 0, 3.0, 4.0, 98);
     relayCabinet(frame, w.u(592.5), 0, 3.0, 4.0, 99);
     frame.quad("impDecal", w.u(589.2), 1.7, 0.064, 0.7, 0.7, { uvRect: impDecalRect(3) });
@@ -245,6 +268,8 @@ export function buildHyperdrive(kit, ctx) {
   ceilingLight(kit, ctx, [CX, y + h, 588], 6, "x", { mat: "lightBandWarm", color: 0xdfe8ff, intensity: 40, distance: 18, priority: 2, drop: 2.5 });
   pointLightDesc(ctx, 0xffc27a, 16, 14, [x0 + 3, y + 4.0, 592], 0);
   pointLightDesc(ctx, 0xffc27a, 16, 14, [x1 - 4, y + 4.0, 592], 0);
+  // door end: the deck between the door and the platform kerb sat in shadow after the fixture dimming
+  pointLightDesc(ctx, 0xdfe8ff, 9, 13, [CX, y + 3.6, z1 - 4.5], 1);
 
   // ------------------------------------------------------------ views
   ctx.view("hyperdrive", CX, y + STD.eye, z1 - 2.2, 0, -2);
