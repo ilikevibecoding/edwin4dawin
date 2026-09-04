@@ -165,6 +165,19 @@ export function cove(ctx, side, { color = IMP.plateDark, stripMat = "emitWhiteSo
   frame.box("metal", L / 2, H - 0.03, c + 0.02, L, 0.06, 0.05, { color: IMP.steelDark });
 }
 
+/**
+ * Visible diffuser for the waist light band. panelGrid's own strip diffuser (n -0.075, 0.02 deep) sits inside
+ * its housing box (n -0.16..-0.04) and never shows, so we lay a continuous diffuser between the housing's
+ * two steel rails, broken at every opening that crosses the band (doors, alcoves, hatches, windows).
+ */
+export function waistStrip(frame, length, openings, { v0 = 1.6, v1 = 1.85, stripMat = "emitWhiteSoft", gaps = [] } = {}) {
+  const cut = openings.filter((o) => o.v0 < v1 - 0.01 && o.v1 > v0 + 0.01).map((o) => [o.u0 - 0.02, o.u1 + 0.02]);
+  for (const [u0, u1] of splitSpans([[0.02, length - 0.02]], [...cut, ...gaps])) {
+    if (u1 - u0 < 0.25) continue;
+    frame.box(stripMat, (u0 + u1) / 2, (v0 + v1) / 2, -0.02, u1 - u0, v1 - v0 - 0.06, 0.02, { uv: "keep" });
+  }
+}
+
 function splitSpans(spans, gaps) {
   let out = spans;
   for (const [g0, g1] of gaps) {
@@ -592,6 +605,12 @@ export function buildCorridor(ctx, cfg) {
     endWalls[C.endHi] = false;
   }
   ctx.shell({ skipFloor: true, ceiling: false, walls: endWalls, pilasterEvery: 0, seed: seedBase });
+  if (!cfg.skipEnds) {
+    for (const end of [C.endLo, C.endHi]) {
+      const e = ctx.wall(end);
+      waistStrip(e.frame, e.length, e.openings, { stripMat: cfg.stripMat || "emitWhiteSoft" });
+    }
+  }
 
   corridorFloor(ctx, C, { laneW: cfg.laneW || 2.2, deckColor: cfg.deckColor || IMP.plateDark });
   registerWallProtos(kit);
@@ -735,6 +754,7 @@ export function buildCorridor(ctx, cfg) {
       for (const a of W.pilasters) if (a > ba && a < bb) pilaster(sub, C.uOf(side, a) - u0, WALL_H, 0.28);
     }
     cove(ctx, side, { color: cfg.coveColor || IMP.plateDark, stripMat: cfg.stripMat || "emitWhiteSoft" });
+    waistStrip(W.frame, W.length, [...W.openings, ...extraOps], { stripMat: cfg.stripMat || "emitWhiteSoft" });
     for (const b of W.builds) b();
     for (const a of W.lamps) emergencyLamp(kit, W.frame, C.uOf(side, a), 2.75);
     // door signage: number + sector plate to the right of every door, deck sign flanking blast doors
@@ -880,6 +900,7 @@ export function buildLobby(ctx, cfg) {
     const bo = bayWallOpts(cfg.variant !== undefined ? cfg.variant : 0, family, seed);
     const rows = bo.rows.map((r) => (r === WALL_H ? wallH : r));
     panelGrid(f.frame, f.length, wallH, { openings: ops, pilasterEvery: 0, tag: ctx.id + ":" + side, accent, ...bo, rows });
+    waistStrip(f.frame, f.length, ops, { stripMat: cfg.stripMat || "emitWhiteSoft" });
     for (const u of (cfg.pilasters && cfg.pilasters[side]) || []) pilaster(f.frame, u, wallH, 0.28);
   }
   for (const b of builds) b();
