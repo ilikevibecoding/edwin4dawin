@@ -637,6 +637,12 @@ function updateSun() {
     sc.bottom = -S;
     sc.updateProjectionMatrix();
   }
+  // deep inside the hull nothing outside can be seen: skip the exterior, the sky and the sun's shadow pass
+  const seesOut = outside || [...cells.visibleIds].some((id) => VIEW_ROOMS.has(id));
+  if (exterior.group.visible !== seesOut) {
+    exterior.group.visible = seesOut;
+    space.root.visible = seesOut;
+  }
   // outside, only the rooms with openings to space can be seen: hide the rest of the interior
   if (outside !== interiorHiddenForExterior) {
     interiorHiddenForExterior = outside;
@@ -648,6 +654,8 @@ function updateSun() {
   }
 }
 let interiorHiddenForExterior = false;
+// rooms with real openings to space (viewports / the hangar mouth)
+const VIEW_ROOMS = new Set(["bridge", "observation", "hangar"]);
 
 function frame() {
   requestAnimationFrame(frame);
