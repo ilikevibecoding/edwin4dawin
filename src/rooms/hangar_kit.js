@@ -1281,14 +1281,14 @@ export function hgWallOpenings(room, doors, side) {
 
 /** Dark industrial ceiling: slab, cross beams, light troughs along z, round ducts. */
 export function hgCeiling(kit, x0, z0, x1, z1, y, opts = {}) {
-  const { beamStep = 12.5, beamAxis = "x", troughsX = [], ductsX = [], lightKey = "emitWhiteSoft", skip = null, beamH = 1.4 } = opts;
+  const { beamStep = 12.5, beamAxis = "x", troughsX = [], ductsX = [], lightKey = "emitWhiteSoft", skip = null, beamH = 1.4, slabColor = PALETTE.impCharcoal } = opts;
   const inSkip = (x, z) => skip && x > skip.x0 && x < skip.x1 && z > skip.z0 && z < skip.z1;
   // boxMM that ignores degenerate pieces (skip rectangles touching the room edge)
   const piece = (mat, min, max, o) => {
     if (max[0] - min[0] > 0.02 && max[2] - min[2] > 0.02) kit.boxMM(mat, min, max, o);
   };
   // slab (split around a skipped rectangle if given)
-  const slabOpts = { color: PALETTE.impCharcoal, texel: 0.2 };
+  const slabOpts = { color: slabColor, texel: 0.2 };
   if (!skip) kit.boxMM("impMetalRough", [x0, y, z0], [x1, y + 0.4, z1], slabOpts);
   else {
     piece("impMetalRough", [x0, y, z0], [x1, y + 0.4, skip.z0], slabOpts);
@@ -1463,8 +1463,8 @@ export function hgBollard(kit, x, z, key = "emitAmber") {
   kit.collider([x - 0.3, 0, z - 0.3], [x + 0.3, 1.35, z + 0.3], "bollard");
 }
 
-/** Pair of wheel chocks (instanced wedges) straddling a wheel at (x, z); `yaw` = wheel axis direction. */
-export function hgChocks(kit, x, z, yaw, gap = 0.7) {
+/** Pair of wheel chocks (instanced wedges) straddling a wheel / pad at (x, z); `yaw` = wheel axis direction, `y` = deck height. */
+export function hgChocks(kit, x, z, yaw, gap = 0.7, y = 0) {
   const q = yawQuat(yaw);
   const wedge = () => {
     const g = new THREE.BoxGeometry(0.42, 0.24, 0.22);
@@ -1472,8 +1472,8 @@ export function hgChocks(kit, x, z, yaw, gap = 0.7) {
     return g;
   };
   for (const s of [-1, 1]) {
-    const p = new THREE.Vector3(0, 0, s * gap).applyQuaternion(q).add(new THREE.Vector3(x, 0, z));
-    inst(kit, "hg_chock", "painted", wedge, [p.x, 0, p.z], q, PALETTE.yellow);
+    const p = new THREE.Vector3(0, 0, s * gap).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
+    inst(kit, "hg_chock", "painted", wedge, [p.x, p.y, p.z], q, PALETTE.yellow);
   }
 }
 
@@ -1486,6 +1486,112 @@ export function hgDeckCable(kit, pts, opts = {}) {
     if (a.distanceTo(b) < 0.05) continue;
     tube(kit, mat, a, b, r, { color, segments: 6 });
   }
+}
+
+/**
+ * Kit proxy that bakes a pose into everything added through it: lets a builder written for the origin
+ * (e.g. tie.js's kitbashTie) be merged into a room kit at (pos, yaw[, pitch, roll]). Only `add` is
+ * transformed (box / boxMM / cyl route through it); materials, colliders and lights pass straight through.
+ */
+export function placedKit(kit, pos, yaw = 0, pitch = 0, roll = 0) {
+  const M = new THREE.Matrix4().compose(new THREE.Vector3(pos[0], pos[1], pos[2]), new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, yaw, roll, "YXZ")), new THREE.Vector3(1, 1, 1));
+  const local = new THREE.Matrix4();
+  const proxy = {
+    materials: kit.materials,
+    noShadowKeys: kit.noShadowKeys,
+    add(mat, geo, opts = {}) {
+      const { pos: p = [0, 0, 0], rot = null, quat = null, ...rest } = opts;
+      const q = quat ? _q.copy(quat) : rot ? _q.setFromEuler(new THREE.Euler(rot[0], rot[1], rot[2])) : _q.identity();
+      local.compose(_p.set(p[0], p[1], p[2]), q, _s.set(1, 1, 1));
+      geo.applyMatrix4(local);
+      geo.applyMatrix4(M);
+      return kit.add(mat, geo, rest);
+    },
+    box(mat, cx, cy, cz, sx, sy, sz, opts = {}) {
+      return proxy.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: [cx, cy, cz], ...opts });
+    },
+    boxMM(mat, min, max, opts = {}) {
+      return proxy.box(mat, (min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2, max[0] - min[0], max[1] - min[1], max[2] - min[2], opts);
+    },
+    cyl(mat, cx, cy, cz, r, len, axis = "y", opts = {}) {
+      const g = new THREE.CylinderGeometry(opts.r2 !== undefined ? opts.r2 : r, r, len, opts.segments || 12, 1, opts.open || false);
+      const rot = axis === "x" ? [0, 0, Math.PI / 2] : axis === "z" ? [Math.PI / 2, 0, 0] : [0, 0, 0];
+      const { r2, open, segments, ...rest } = opts;
+      return proxy.add(mat, g, { pos: [cx, cy, cz], rot: opts.rot || rot, uv: "scale", uvScale: [2 * Math.PI * r * (opts.texel || 1), len * (opts.texel || 1)], ...rest });
+    },
+    collider: (min, max, tag) => kit.collider(min, max, tag),
+    light: (spec) => kit.light(spec),
+  };
+  return proxy;
+}
+
+/** Roll-cab tool chest: drawer stack on castors with a hazard base band, an open top drawer and a lamp. */
+export function hgToolChest(kit, x, z, yaw, opts = {}) {
+  const { seed = 1, color = PALETTE.impRed } = opts;
+  const rand = rng(seed);
+  const P = new Placer(kit, x, 0, z, yaw);
+  const w = 1.4;
+  const d = 0.7;
+  const h = 1.1;
+  P.box("impPanel2", 0, 0.2 + h / 2, 0, w, h, d, { color, uv: "world", texel: 1 });
+  P.box("impTrim", 0, 0.16, 0, w + 0.04, 0.12, d + 0.04, { color: PALETTE.impBlack });
+  P.box("chevronY", 0, 0.16, 0, w + 0.06, 0.08, d + 0.06, { texel: 2 });
+  P.box("impMetal", 0, 0.2 + h + 0.03, 0, w + 0.06, 0.06, d + 0.06, { color: PALETTE.impGreyDark });
+  const rows = 4;
+  for (let r = 0; r < rows; r++) {
+    const y = 0.32 + (r + 0.5) * ((h - 0.2) / rows);
+    P.box("impTrim", 0, y + (h - 0.2) / rows / 2 - 0.01, d / 2 + 0.005, w - 0.1, 0.02, 0.01, { color: PALETTE.impBlack });
+    P.box("impMetal", 0, y, d / 2 + 0.02, 0.5, 0.04, 0.04, { color: PALETTE.impGrey });
+  }
+  // open top drawer with a tray of tools
+  const openR = Math.floor(rand() * 2);
+  const oy = 0.32 + (rows - 1 - openR + 0.5) * ((h - 0.2) / rows);
+  P.box("impPanel2", 0, oy, d / 2 + 0.16, w - 0.12, (h - 0.2) / rows - 0.04, 0.3, { color, uv: "world", texel: 1 });
+  P.box("impTrim", 0, oy + 0.02, d / 2 + 0.16, w - 0.2, 0.02, 0.24, { color: PALETTE.impBlack });
+  for (let k = 0; k < 4; k++) P.box("impMetal", -0.45 + k * 0.3, oy + 0.05, d / 2 + 0.16, 0.05, 0.03, 0.2, { color: PALETTE.impGrey });
+  for (const [sx, sz] of [[-w / 2 + 0.15, -d / 2 + 0.12], [w / 2 - 0.15, -d / 2 + 0.12], [-w / 2 + 0.15, d / 2 - 0.12], [w / 2 - 0.15, d / 2 - 0.12]]) P.cyl("rubber", sx, 0.08, sz, 0.08, 0.06, "x", { color: PALETTE.impCharcoal, segments: 10 });
+  P.decal(IMP_DECAL.glyphs1, -0.4, 0.2 + h - 0.12, d / 2 + 0.012, 0.3);
+  P.box("emitAmber", w / 2 - 0.12, 0.2 + h - 0.1, d / 2 + 0.012, 0.06, 0.06, 0.01);
+  P.collider(-w / 2 - 0.05, 0, -d / 2 - 0.05, w / 2 + 0.05, h + 0.3, d / 2 + 0.35, "toolchest");
+}
+
+/**
+ * Grated maintenance pit set into the deck: recessed walls and floor, amber underlight strips along the
+ * floor edges, a grate at deck level (walkable: the pit is covered), hazard border and ladder rungs.
+ * The caller must leave the deck slab open over [x0, z0]..[x1, z1] (see the fighter bay's deck split).
+ */
+export function hgGratedPit(kit, x0, z0, x1, z1, depth = 1.7, opts = {}) {
+  const { lightKey = "emitAmber", edge = 0.3 } = opts;
+  const yF = -depth;
+  kit.boxMM("impMetalRough", [x0 - 0.1, yF - 0.12, z0 - 0.1], [x1 + 0.1, yF, z1 + 0.1], { color: PALETTE.impCharcoal, texel: 0.5 });
+  const wall = (a, b, c, d) => kit.boxMM("impPanel1", [a, yF, b], [c, 0, d], { color: PALETTE.impGreyDark, uv: "world", texel: 0.5 });
+  wall(x0 - edge, z0 - edge, x0, z1 + edge);
+  wall(x1, z0 - edge, x1 + edge, z1 + edge);
+  wall(x0, z0 - edge, x1, z0);
+  wall(x0, z1, x1, z1 + edge);
+  // underlight strips on the floor along both long edges, and a hooded lamp on each end wall
+  kit.boxMM(lightKey, [x0 + 0.08, yF + 0.02, z0 + 0.3], [x0 + 0.16, yF + 0.06, z1 - 0.3], { uv: "keep" });
+  kit.boxMM(lightKey, [x1 - 0.16, yF + 0.02, z0 + 0.3], [x1 - 0.08, yF + 0.06, z1 - 0.3], { uv: "keep" });
+  for (const z of [z0 + 0.02, z1 - 0.02]) {
+    kit.box("impTrim", (x0 + x1) / 2, yF + 0.9, z, 0.5, 0.2, 0.08, { color: PALETTE.impBlack });
+    kit.box(lightKey, (x0 + x1) / 2, yF + 0.86, z + (z < (z0 + z1) / 2 ? 0.02 : -0.02), 0.4, 0.06, 0.02);
+  }
+  // rungs down one end, a cable tray and a couple of tool trays on the floor
+  for (let y = yF + 0.35; y < -0.2; y += 0.35) kit.box("impMetal", x1 - 0.5, y, z1 - 0.05, 0.45, 0.04, 0.06, { color: PALETTE.impGrey });
+  kit.box("impTrim", (x0 + x1) / 2, yF + 0.08, (z0 + z1) / 2, 0.8, 0.16, 0.9, { color: PALETTE.impBlack, texel: 1 });
+  for (let k = 0; k < 3; k++) kit.box("impMetal", (x0 + x1) / 2 - 0.25 + k * 0.25, yF + 0.2, (z0 + z1) / 2, 0.06, 0.08, 0.5, { color: PALETTE.impGrey });
+  // grate at deck level (hangar_grate is alpha-tested and double-sided: the lit pit shows through) in a
+  // black angle frame
+  kit.boxMM("hangar_grate", [x0 - edge, 0.0, z0 - edge], [x1 + edge, 0.04, z1 + edge], { texel: 1 });
+  const fr = 0.12;
+  kit.boxMM("impTrim", [x0 - edge - fr, -0.01, z0 - edge - fr], [x0 - edge, 0.05, z1 + edge + fr], { color: PALETTE.impBlack, texel: 1 });
+  kit.boxMM("impTrim", [x1 + edge, -0.01, z0 - edge - fr], [x1 + edge + fr, 0.05, z1 + edge + fr], { color: PALETTE.impBlack, texel: 1 });
+  kit.boxMM("impTrim", [x0 - edge, -0.01, z0 - edge - fr], [x1 + edge, 0.05, z0 - edge], { color: PALETTE.impBlack, texel: 1 });
+  kit.boxMM("impTrim", [x0 - edge, -0.01, z1 + edge], [x1 + edge, 0.05, z1 + edge + fr], { color: PALETTE.impBlack, texel: 1 });
+  // walkable cover: a thin collider at deck level so the player crosses the pit
+  kit.collider([x0 - edge, -0.2, z0 - edge], [x1 + edge, 0.04, z1 + edge], "pit-grate");
+  kit.colliders[kit.colliders.length - 1].walkable = true;
+  hgHazardBorder(kit, x0 - edge - 0.6, z0 - edge - 0.6, x1 + edge + 0.6, z1 + edge + 0.6, 0.5, 0.04);
 }
 
 /** Ceiling fixture with louvre fins (a hooded, dim strip): the fixture reads as a light without blowing out. */

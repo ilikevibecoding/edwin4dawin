@@ -189,8 +189,9 @@ export function makeHangarGrate(size = 512, seed = 31) {
 // Kestrel ramp / hull tread: #c8781e chevrons on #1a1a1a, ~40 % coverage, worn at the edges.
 export function makeTreadChevron(size = 256, seed = 7) {
   const t = new TexGen(size, size);
-  const a = new THREE.Color("#c8781e");
-  const b = new THREE.Color("#1a1a1a");
+  // the albedo map is sRGB-tagged: feed sRGB components (THREE.Color would hand back linear ones)
+  const a = { r: 0xc8 / 255, g: 0x78 / 255, b: 0x1e / 255 };
+  const b = { r: 0x1a / 255, g: 0x1a / 255, b: 0x1a / 255 };
   const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
   const smooth = (x) => x * x * (3 - 2 * x);
   t.each((u, v, i) => {
@@ -234,7 +235,7 @@ export function ensureHangarMaterials(materials) {
   const ceilWarm = materials.emitWhiteSoft.clone();
   ceilWarm.emissive = new THREE.Color("#ffd9a8");
   ceilWarm.color = new THREE.Color("#ffd9a8").multiplyScalar(0.08);
-  ceilWarm.emissiveIntensity = 0.8;
+  ceilWarm.emissiveIntensity = 0.7;
   setDomain(ceilWarm, "interior");
   // cool-white flood lamp faces (shuttle bay) and warm interior spill panes (Kestrel door): dim glass
   const spillWarm = materials.emitAmber.clone();
