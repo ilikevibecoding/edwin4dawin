@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-04T08:55:14.364Z",
+  "updated": "2026-09-04T08:59:32.096Z",
   "phase": "Phase 3 of 5: parallel builders finishing, merging + verifying into the integration branch",
   "summary": "Plan: (1) baseline measured, (2) shared disaster foundation built, (3) 7 builder agents in isolated worktrees, (4) independent critics + verification agents, (5) final baseline comparison, changelog, PR. Nothing counts as done until it is merged, tested and measured in the actual game.",
   "links": [
@@ -50,8 +50,8 @@
     },
     {
       "name": "Tornado",
-      "status": "in progress",
-      "detail": "Builder committed the wind field, block ripping with orbiting debris, shader funnel, storm lighting, bell alarm, rope-out; finishing verification."
+      "status": "merged",
+      "detail": "Deterministic wobbling track, Rankine wind field on debris/player/NPCs/animals, fragility-weighted ripping with orbiting debris, shader funnel + cloud deck + dust, storm lighting, church bell alarm, rope-out, path preview; 12/12 lifecycle checks pass; replay hash reproduced (f51c1ca6:334)."
     },
     {
       "name": "Orbital beam",
@@ -91,6 +91,14 @@
   ],
   "screenshots": [
     {
+      "src": "img/tornado_plains.png",
+      "caption": "Tornado funnel approaching over the plains (08:59 UTC)"
+    },
+    {
+      "src": "img/tornado_street.png",
+      "caption": "Tornado tearing down main street: orbiting debris, NPCs fleeing (08:59 UTC)"
+    },
+    {
       "src": "img/cornelius.png",
       "caption": "Dark-skin NPC face after the brow polish (08:55 UTC)"
     },
@@ -121,14 +129,6 @@
     {
       "src": "img/mp_avatar.png",
       "caption": "Remote player avatar seen from another client (07:49 UTC)"
-    },
-    {
-      "src": "img/eyes_horse.png",
-      "caption": "Horse head before / after (round 1) (07:49 UTC)"
-    },
-    {
-      "src": "img/eyes_abigail.png",
-      "caption": "NPC eyes before (cyclops) / after (round 1) (07:49 UTC)"
     }
   ],
   "log": [
@@ -175,6 +175,10 @@
     {
       "time": "2026-09-04 08:55 UTC",
       "text": "Eye critic round 2: ACCEPT WITH NITS; nits applied (dark-coat horse eyes, cow wrap, dark-skin brows)."
+    },
+    {
+      "time": "2026-09-04 08:59 UTC",
+      "text": "Tornado integrated: 12/12 checks pass. Draw-call analysis: ~225 of ~360 calls are NPC body parts (debris is one instanced draw) -> far-NPC LOD planned."
     }
   ],
   "issues": [
