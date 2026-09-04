@@ -213,8 +213,10 @@ export class ZoneManager {
         }
       }
     } else {
-      // exterior / transition: clusters near the camera, hangar cluster when the camera is under the ship
+      // exterior / transition: only rooms that can be seen from outside (windows, the hangar well),
+      // when the camera is near their cluster
       for (const r of this.rooms.values()) {
+        if (this.exteriorVisible && !this.exteriorVisible.has(r.id)) continue;
         const c = CLUSTERS[r.cluster];
         const dx = cameraPos.x - c.center[0];
         const dy = cameraPos.y - c.center[1];
