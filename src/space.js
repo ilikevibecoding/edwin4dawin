@@ -4,6 +4,11 @@ import * as THREE from "three";
 import { makeStarSprite, makeNebula, makeGasGiant, makeOceanWorld, makeMoon, makeClouds, mulberry32 } from "./textures.js";
 
 const TURN_RATE = THREE.MathUtils.degToRad(1.3); // ship slowly banking: the sky slides past at 1.3 deg/s (a planet crosses the windshield in ~80 s)
+// Distance scale: the far field was laid out for a 25 m freighter. The Star Destroyer is 1600 m long
+// and exterior cameras sit up to ~9 km out, so everything out there is pushed 60x further (planets
+// ~120 km, stars ~260 km) and scaled to keep the same angular sizes.
+export const SPACE_SCALE = 60;
+const K = SPACE_SCALE;
 
 const planetVert = /* glsl */ `
   varying vec3 vN;
@@ -129,7 +134,7 @@ const ringFrag = /* glsl */ `
   }
 `;
 
-export function buildSpace(scene) {
+export function buildSpace(scene, { camera = null } = {}) {
   const root = new THREE.Group();
   root.name = "space";
   scene.add(root);
@@ -171,9 +176,9 @@ export function buildSpace(scene) {
         const s = Math.sqrt(1 - u * u);
         p.set(s * Math.cos(th), u, s * Math.sin(th));
       }
-      pos[i * 3] = p.x * cfg.r;
-      pos[i * 3 + 1] = p.y * cfg.r;
-      pos[i * 3 + 2] = p.z * cfg.r;
+      pos[i * 3] = p.x * cfg.r * K;
+      pos[i * 3 + 1] = p.y * cfg.r * K;
+      pos[i * 3 + 2] = p.z * cfg.r * K;
       // colour temperature spread
       const k = rand();
       const b = 0.55 + rand() * 0.45;
@@ -219,12 +224,12 @@ export function buildSpace(scene) {
   const sunDirLocal = new THREE.Vector3(-0.464, 0.375, 0.803).normalize();
   const sunTex = makeStarSprite(128);
   const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, color: 0xfff1d6, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-  sun.position.copy(sunDirLocal).multiplyScalar(4400);
-  sun.scale.setScalar(520);
+  sun.position.copy(sunDirLocal).multiplyScalar(4400 * K);
+  sun.scale.setScalar(520 * K);
   root.add(sun);
   const sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, color: 0xffb070, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
   sunHalo.position.copy(sun.position);
-  sunHalo.scale.setScalar(1600);
+  sunHalo.scale.setScalar(1600 * K);
   root.add(sunHalo);
 
   // --- nebulae
@@ -238,8 +243,8 @@ export function buildSpace(scene) {
     { tex: nebTexB, dir: [0.1, -0.6, 0.75], size: 2000, op: 0.45 },
   ]) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: cfg.tex, transparent: true, opacity: cfg.op, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, rotation: rand() * Math.PI * 2 }));
-    sp.position.set(cfg.dir[0], cfg.dir[1], cfg.dir[2]).normalize().multiplyScalar(4000);
-    sp.scale.set(cfg.size, cfg.size, 1);
+    sp.position.set(cfg.dir[0], cfg.dir[1], cfg.dir[2]).normalize().multiplyScalar(4000 * K);
+    sp.scale.set(cfg.size * K, cfg.size * K, 1);
     root.add(sp);
     nebulae.push(sp);
   }
@@ -252,8 +257,8 @@ export function buildSpace(scene) {
       const lat = gauss() * 0.06;
       p.copy(bandE1).multiplyScalar(Math.cos(phi) * Math.cos(lat)).addScaledVector(bandE2, Math.sin(phi) * Math.cos(lat)).addScaledVector(bandN, Math.sin(lat));
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0.07 + rand() * 0.05, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, rotation: rand() * Math.PI * 2 }));
-      sp.position.copy(p).multiplyScalar(4500);
-      const s = 1100 + rand() * 700;
+      sp.position.copy(p).multiplyScalar(4500 * K);
+      const s = (1100 + rand() * 700) * K;
       sp.scale.set(s, s * 0.6, 1);
       root.add(sp);
     }
@@ -264,6 +269,9 @@ export function buildSpace(scene) {
   function addPlanet({ tex, clouds = null, radius, dist, bearingDeg, elevation, atmo, atmoStrength = 1.2, brightness = 1.5, spin = 0.012, tilt = 0.2, ring = null }) {
     const g = new THREE.Group();
     const b = THREE.MathUtils.degToRad(bearingDeg);
+    radius *= K;
+    dist *= K;
+    elevation *= K;
     g.position.set(Math.sin(b) * dist, elevation, -Math.cos(b) * dist);
     const mat = new THREE.ShaderMaterial({
       uniforms: {
@@ -389,14 +397,13 @@ export function buildSpace(scene) {
   const dustCount = 260;
   const dustPos = new Float32Array(dustCount * 2 * 3);
   const dust = [];
+  // dust streaks live in a box around the camera (exterior modes only; the rig hides them inside)
+  const DUST_R = 260;
   const spawn = (i, zOverride = null) => {
-    let x, y, z;
-    do {
-      x = (rand() * 2 - 1) * 90;
-      y = (rand() * 2 - 1) * 60;
-      z = zOverride !== null ? zOverride : (rand() * 2 - 1) * 160;
-    } while (Math.abs(x) < 9 && y > -4 && y < 7); // keep them out of the hull volume
-    dust[i] = { x, y, z, len: 1.2 + rand() * 2.2 };
+    const x = (rand() * 2 - 1) * DUST_R;
+    const y = (rand() * 2 - 1) * DUST_R * 0.6;
+    const z = zOverride !== null ? zOverride : (rand() * 2 - 1) * DUST_R;
+    dust[i] = { x, y, z, len: 3 + rand() * 6 };
   };
   for (let i = 0; i < dustCount; i++) spawn(i);
   const dustGeo = new THREE.BufferGeometry();
@@ -407,17 +414,21 @@ export function buildSpace(scene) {
   dustLines.name = "dust";
   scene.add(dustLines);
   const updateDust = (dt) => {
-    const speed = 34;
+    if (!dustLines.visible) return;
+    const speed = 80;
+    const cx = camera ? camera.position.x : 0;
+    const cy = camera ? camera.position.y : 0;
+    const cz = camera ? camera.position.z : 0;
     for (let i = 0; i < dustCount; i++) {
       const d = dust[i];
       d.z += speed * dt;
-      if (d.z > 160) spawn(i, -160 + (d.z - 160));
-      dustPos[i * 6] = d.x;
-      dustPos[i * 6 + 1] = d.y;
-      dustPos[i * 6 + 2] = d.z;
-      dustPos[i * 6 + 3] = d.x;
-      dustPos[i * 6 + 4] = d.y;
-      dustPos[i * 6 + 5] = d.z - d.len;
+      if (d.z > DUST_R) spawn(i, -DUST_R + (d.z - DUST_R));
+      dustPos[i * 6] = cx + d.x;
+      dustPos[i * 6 + 1] = cy + d.y;
+      dustPos[i * 6 + 2] = cz + d.z;
+      dustPos[i * 6 + 3] = cx + d.x;
+      dustPos[i * 6 + 4] = cy + d.y;
+      dustPos[i * 6 + 5] = cz + d.z - d.len;
     }
     dustGeo.attributes.position.needsUpdate = true;
   };
@@ -467,5 +478,9 @@ export function buildSpace(scene) {
   }
 
   apply();
-  return { root, planets, layers, update, setTime, framePlanet, sunDirLocal, state };
+  /** Current sun direction in world space (unit vector toward the sun). */
+  function sunDirection(out = new THREE.Vector3()) {
+    return out.copy(sunWorld);
+  }
+  return { root, planets, layers, dust: dustLines, update, setTime, framePlanet, sunDirLocal, sunDirection, state };
 }

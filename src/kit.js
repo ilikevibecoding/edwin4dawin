@@ -1,5 +1,8 @@
 // Kit-bash helper: accumulates primitive geometry per material, assigns vertex colors and
 // consistent texel density UVs, then merges into one mesh per material (few draw calls).
+// Also carries everything a room builder produces besides static geometry: colliders, walkable
+// floors / ramps, light declarations (data, assigned to a shared pool at runtime), instanced props,
+// interactables and per-frame animated objects.
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
@@ -13,14 +16,21 @@ export class Kit {
     this.materials = materials;
     this.groups = new Map();
     this.colliders = [];
+    this.floors = [];
+    this.lights = [];
     this.meshes = [];
+    this.interactables = [];
+    this.updaters = [];
+    this.instances = new Map(); // key -> { geo, mat, items: [{ matrix, color }] }
+    this.extras = []; // ready-made Object3Ds to parent under the cell (Reflector, animated groups…)
+    this.noShadowKeys = new Set(["glass", "decal", "grate", "hangarGlass", "field"]);
   }
 
   /**
    * Add a geometry.
    * @param {string} mat material key
    * @param {THREE.BufferGeometry} geo geometry (consumed)
-   * @param {object} opts { pos:[x,y,z], rot:[rx,ry,rz] | quat, scale, color: THREE.Color|number, uv:'world'|'keep'|'scale', uvScale:[su,sv], texel: number }
+   * @param {object} opts { pos:[x,y,z], rot:[rx,ry,rz] | quat, color: THREE.Color|number, uv:'world'|'keep'|'scale', uvScale:[su,sv], texel: number, uvRect }
    */
   add(mat, geo, opts = {}) {
     const { pos = [0, 0, 0], rot = null, quat = null, color = 0xffffff, uv = "world", texel = 1.0, uvScale = null, uvRect = null } = opts;
@@ -59,15 +69,76 @@ export class Kit {
 
   // Cylinder along an axis. axis: 'x'|'y'|'z'
   cyl(mat, cx, cy, cz, r, len, axis = "y", opts = {}) {
-    const g = new THREE.CylinderGeometry(r, r, len, opts.segments || 12, 1, opts.open || false);
+    const g = new THREE.CylinderGeometry(opts.r2 !== undefined ? opts.r2 : r, r, len, opts.segments || 12, 1, opts.open || false);
     const rot = axis === "x" ? [0, 0, Math.PI / 2] : axis === "z" ? [Math.PI / 2, 0, 0] : [0, 0, 0];
     const circ = 2 * Math.PI * r;
     const texel = opts.texel || 1;
-    return this.add(mat, g, { pos: [cx, cy, cz], rot, uv: "scale", uvScale: [circ * texel, len * texel], ...opts, rot: opts.rot || rot });
+    const { r2, open, segments, ...rest } = opts;
+    return this.add(mat, g, { pos: [cx, cy, cz], rot, uv: "scale", uvScale: [circ * texel, len * texel], ...rest, rot: opts.rot || rot });
   }
 
+  // Collider AABB (room-local; the cell transforms it to world on build)
   collider(min, max, tag = "") {
     this.colliders.push({ min: new THREE.Vector3(...min), max: new THREE.Vector3(...max), tag });
+  }
+
+  /**
+   * Walkable floor: flat at height y over the XZ rect [x0,z0]-[x1,z1]. A ramp interpolates the height
+   * from y0 at `from` to y1 at `to` along axis 'x' or 'z'.
+   */
+  floor(x0, z0, x1, z1, y, tag = "floor") {
+    this.floors.push({ x0: Math.min(x0, x1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), z1: Math.max(z0, z1), y, tag });
+  }
+  ramp(x0, z0, x1, z1, axis, from, to, y0, y1, tag = "ramp") {
+    this.floors.push({ x0: Math.min(x0, x1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), z1: Math.max(z0, z1), y: Math.max(y0, y1), ramp: { axis, from, to, y0, y1 }, tag });
+  }
+  // Stairs as a run of small flat steps (the player's step-up handles the 0.18 m rises)
+  stairs(x0, z0, x1, z1, axis, from, to, y0, y1, steps = null) {
+    const rise = y1 - y0;
+    const n = steps || Math.max(1, Math.round(Math.abs(rise) / 0.18));
+    for (let i = 0; i < n; i++) {
+      const a = from + ((to - from) * i) / n;
+      const b = from + ((to - from) * (i + 1)) / n;
+      const y = y0 + (rise * (i + 1)) / n;
+      if (axis === "x") this.floor(Math.min(a, b), z0, Math.max(a, b), z1, y, "stair");
+      else this.floor(x0, Math.min(a, b), x1, Math.max(a, b), y, "stair");
+    }
+  }
+
+  /**
+   * Declare a light (data only). type 'point' | 'spot'; pos/target room-local; priority 0..1 (1 = key).
+   * The cell manager assigns visible cells' lights to a fixed pool, highest priority first.
+   */
+  light(spec) {
+    this.lights.push({ type: "point", intensity: 3, distance: 8, decay: 2, priority: 0.5, color: 0xffffff, shadow: false, ...spec });
+    return this.lights[this.lights.length - 1];
+  }
+
+  /**
+   * Instanced prop: many copies of one geometry/material pair (one draw call per key).
+   * geoFactory is called once per key. matrix is room-local; color tints via instanceColor.
+   */
+  instance(key, mat, geoFactory, matrix, color = 0xffffff) {
+    let e = this.instances.get(key);
+    if (!e) {
+      e = { geo: geoFactory(), mat, items: [] };
+      this.instances.set(key, e);
+    }
+    e.items.push({ matrix: matrix.clone(), color: color instanceof THREE.Color ? color.clone() : new THREE.Color(color) });
+  }
+
+  // Register an interactable { object, material, id, label, key, onActivate }
+  interactable(it) {
+    this.interactables.push(it);
+  }
+  // Register a per-frame update fn(dt, t)
+  onUpdate(fn) {
+    this.updaters.push(fn);
+  }
+  // Add a ready-made Object3D under the cell group
+  attach(obj) {
+    this.extras.push(obj);
+    return obj;
   }
 
   build(parent, { castShadow = true, receiveShadow = true } = {}) {
@@ -75,16 +146,37 @@ export class Kit {
       const merged = mergeGeometries(geos, false);
       if (!merged) continue;
       merged.computeBoundingSphere();
+      merged.computeBoundingBox();
       const material = this.materials[key];
       if (!material) throw new Error("Unknown material " + key);
       const mesh = new THREE.Mesh(merged, material);
       mesh.name = "kit_" + key;
-      mesh.castShadow = castShadow && !key.startsWith("emit") && key !== "glass" && key !== "decal" && key !== "grate";
+      mesh.castShadow = castShadow && !key.startsWith("emit") && !this.noShadowKeys.has(key);
       mesh.receiveShadow = receiveShadow && key !== "glass" && key !== "decal";
       parent.add(mesh);
       this.meshes.push(mesh);
     }
     this.groups.clear();
+    for (const [key, e] of this.instances) {
+      const material = this.materials[e.mat];
+      if (!material) throw new Error("Unknown material " + e.mat);
+      const im = new THREE.InstancedMesh(e.geo, material, e.items.length);
+      im.name = "inst_" + key;
+      for (let i = 0; i < e.items.length; i++) {
+        im.setMatrixAt(i, e.items[i].matrix);
+        im.setColorAt(i, e.items[i].color);
+      }
+      im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      im.castShadow = castShadow;
+      im.receiveShadow = receiveShadow;
+      im.computeBoundingSphere();
+      parent.add(im);
+      this.meshes.push(im);
+    }
+    this.instances.clear();
+    for (const o of this.extras) parent.add(o);
+    this.extras.length = 0;
     return this.meshes;
   }
 }
@@ -182,6 +274,10 @@ export function panelWithHoles(w, h, depth, holes) {
     const p = new THREE.Path();
     if (hole.r !== undefined) {
       p.absarc(hole.x, hole.y, hole.r, 0, Math.PI * 2, true);
+    } else if (hole.points) {
+      p.moveTo(hole.points[0][0], hole.points[0][1]);
+      for (let i = 1; i < hole.points.length; i++) p.lineTo(hole.points[i][0], hole.points[i][1]);
+      p.closePath();
     } else {
       const { x, y, w: hw, h: hh } = hole;
       p.moveTo(x - hw / 2, y - hh / 2);
@@ -193,6 +289,14 @@ export function panelWithHoles(w, h, depth, holes) {
     shape.holes.push(p);
   }
   const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: 24 });
+  geo.translate(0, 0, -depth / 2);
+  return geo;
+}
+
+// Convex polygon (array of [x,y]) extruded along +Z, centred on the extrusion axis.
+export function prism(points, depth) {
+  const shape = new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x, y)));
+  const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
   geo.translate(0, 0, -depth / 2);
   return geo;
 }

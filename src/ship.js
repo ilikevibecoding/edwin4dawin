@@ -720,29 +720,24 @@ function buildCorridor(kit, ctx) {
     kit.collider([hw - 0.2, 0, z - 0.15], [hw + 0.01, h, z + 0.15], "rib");
   }
 
-  // --- aft blast door at z = 0 (faces -Z into the corridor)
+  // --- aft blast door at z = 0 (faces -Z into the corridor). The opening is real: a sliding door
+  // (doors.js, spec id kestrel__hangar) sits in it and the boarding ramp runs down to the hangar deck.
   {
     const { frame, length } = wallFrame(kit, [hw, zAft], [-hw, zAft]);
     panelGrid(frame, length, h, { openings: [{ type: "door", u0: 0.55, u1: 2.25, v0: 0, v1: 2.35 }], rows: [0, 0.45, 2.35, h], seed: 707, topPipes: true, collide: false, tag: "aft" });
-    // door slab (recessed), sealed
-    frame.box("metal", hw, 1.175, -0.22, 1.7, 2.35, 0.1, { color: PALETTE.gunmetal, texel: 1 });
-    frame.box("metal", hw - 0.42, 1.175, -0.16, 0.8, 2.3, 0.04, { color: PALETTE.slate, texel: 1 });
-    frame.box("metal", hw + 0.42, 1.175, -0.16, 0.8, 2.3, 0.04, { color: PALETTE.slate, texel: 1 });
-    frame.box("hazard", hw - 0.04, 1.175, -0.13, 0.04, 2.3, 0.03, { texel: 4 });
-    frame.box("hazard", hw, 0.1, -0.13, 1.6, 0.14, 0.03, { texel: 4 });
-    // handles + latch box
-    frame.box("metal", hw - 0.25, 1.15, -0.08, 0.06, 0.4, 0.1, { color: PALETTE.orange });
-    frame.box("metal", hw + 0.25, 1.15, -0.08, 0.06, 0.4, 0.1, { color: PALETTE.orange });
-    frame.box("metal", hw, 2.0, -0.1, 0.5, 0.25, 0.08, { color: PALETTE.darkMetal });
-    frame.box("emitRed", hw, 2.0, -0.055, 0.3, 0.06, 0.02);
+    frame.box("hazard", hw, 2.42, -0.1, 1.9, 0.1, 0.03, { texel: 4 });
+    frame.box("metal", hw, 2.6, -0.1, 0.5, 0.25, 0.08, { color: PALETTE.darkMetal });
+    frame.box("emitRed", hw, 2.6, -0.055, 0.3, 0.06, 0.02);
     // frame
     frame.box("metal", hw - 0.9, 1.18, -0.06, 0.12, 2.5, 0.22, { color: PALETTE.darkMetal });
     frame.box("metal", hw + 0.9, 1.18, -0.06, 0.12, 2.5, 0.22, { color: PALETTE.darkMetal });
     frame.box("metal", hw, 2.4, -0.06, 1.92, 0.12, 0.22, { color: PALETTE.darkMetal });
-    // door sill: closes the trench where it runs under the slab
+    // door sill: closes the trench where it runs under the threshold
     kit.boxMM("hazard", [-0.8, -0.005, zAft - 0.06], [0.8, 0.012, zAft + 0.42], { texel: 3 });
     kit.boxMM("metal", [-0.7, -0.5, zAft - 0.08], [0.7, -0.005, zAft - 0.02], { color: PALETTE.darkMetal, texel: 1 });
-    kit.collider([-hw, 0, zAft - 0.3], [hw, h, zAft + 0.2], "aftdoor");
+    // wall segments either side of the opening still collide
+    kit.collider([-hw, 0, zAft - 0.3], [-0.85, h, zAft + 0.2], "aftwall");
+    kit.collider([0.85, 0, zAft - 0.3], [hw, h, zAft + 0.2], "aftwall");
   }
 
   // --- forward bulkhead at z = zFwd (faces +Z), with cockpit doorway
@@ -1621,10 +1616,12 @@ function colorGeo(geo, color, texel) {
 // ---------------------------------------------------------------------------
 // Public entry
 // ---------------------------------------------------------------------------
-export function buildShip(scene, materials) {
+export function buildShip(parent, materials, { position = new THREE.Vector3(), yaw = 0, extra = null } = {}) {
   const group = new THREE.Group();
-  group.name = "ship";
-  scene.add(group);
+  group.name = "kestrel";
+  group.position.copy(position);
+  group.rotation.y = yaw;
+  parent.add(group);
   // material aliases for individual screens
   const mats = { ...materials };
   materials.screens.forEach((m, i) => (mats["screen" + i] = m));
@@ -1637,6 +1634,7 @@ export function buildShip(scene, materials) {
   buildQuarters(kit, ctx);
   buildGalley(kit, ctx);
   buildBathroom(kit, ctx);
+  if (extra) extra(kit, ctx);
 
   const meshes = kit.build(group);
   for (const arr of Object.values(ctx.lights)) {
@@ -1652,7 +1650,33 @@ export function buildShip(scene, materials) {
     l.userData.baseIntensity = l.intensity;
     l.userData.baseColor = l.color.clone();
   }
-  return { group, meshes, colliders: kit.colliders, interactables: ctx.interactables, lights: ctx.lights };
+  // colliders / floors to world space (yaw about Y, then translate)
+  const cosY = Math.cos(yaw);
+  const sinY = Math.sin(yaw);
+  const toWorld = (v) => new THREE.Vector3(v.x * cosY + v.z * sinY, v.y, -v.x * sinY + v.z * cosY).add(position);
+  const colliders = kit.colliders.map((c) => {
+    const a = toWorld(c.min);
+    const b = toWorld(c.max);
+    return { min: new THREE.Vector3(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.min(a.z, b.z)), max: new THREE.Vector3(Math.max(a.x, b.x), Math.max(a.y, b.y), Math.max(a.z, b.z)), tag: c.tag };
+  });
+  // the cabin deck (local y = 0) is walkable over the whole interior footprint
+  const fa = toWorld(new THREE.Vector3(-5.5, 0, -25.5));
+  const fb = toWorld(new THREE.Vector3(5.2, 0, 0.3));
+  const floors = [{ x0: Math.min(fa.x, fb.x), x1: Math.max(fa.x, fb.x), z0: Math.min(fa.z, fb.z), z1: Math.max(fa.z, fb.z), y: position.y, tag: "kestrel-deck" }];
+  // extra floors / ramps declared by the shell builder (yaw must be 0 or 180°: AABBs stay axis-aligned)
+  for (const f of kit.floors) {
+    const a = toWorld(new THREE.Vector3(f.x0, f.y, f.z0));
+    const b = toWorld(new THREE.Vector3(f.x1, f.y, f.z1));
+    const wf = { x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x), z0: Math.min(a.z, b.z), z1: Math.max(a.z, b.z), y: f.y + position.y, tag: f.tag };
+    if (f.ramp) {
+      const r = f.ramp;
+      const pa = toWorld(new THREE.Vector3(r.axis === "x" ? r.from : 0, 0, r.axis === "z" ? r.from : 0));
+      const pb = toWorld(new THREE.Vector3(r.axis === "x" ? r.to : 0, 0, r.axis === "z" ? r.to : 0));
+      wf.ramp = { axis: r.axis, from: r.axis === "x" ? pa.x : pa.z, to: r.axis === "x" ? pb.x : pb.z, y0: r.y0 + position.y, y1: r.y1 + position.y };
+    }
+    floors.push(wf);
+  }
+  return { group, meshes, colliders, floors, interactables: ctx.interactables, lights: ctx.lights, kit };
 }
 
 export const SHIP_BOUNDS = COR;

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kestrel — Ship Interior</title>
+    <title>ISD Vindicator — Star Destroyer</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -13,11 +13,35 @@
     <div id="hud">
       <div id="crosshair"></div>
       <div id="prompt" class="hidden"></div>
+      <div id="room-name" class="hidden"><span id="room-deck"></span><span id="room-title"></span></div>
       <div id="status">
-        <span id="status-tag">KESTREL</span>
-        <span id="status-text">Systems nominal. Cruising.</span>
+        <span id="status-tag">VINDICATOR</span>
+        <span id="status-text">All stations report ready.</span>
+      </div>
+      <div id="mode-help">
+        <span id="mode-line"></span>
+      </div>
+      <div id="lift-menu" class="hidden">
+        <div class="lift-title">TURBOLIFT — SELECT DECK</div>
+        <div id="lift-options"></div>
       </div>
       <div id="stats" class="hidden"></div>
+      <div id="help" class="hidden">
+        <div class="help-card">
+          <h2>CONTROLS</h2>
+          <table>
+            <tr><td>WASD / Shift</td><td>walk / sprint</td></tr>
+            <tr><td>Mouse</td><td>look (click to lock)</td></tr>
+            <tr><td>E</td><td>interact</td></tr>
+            <tr><td>1–5</td><td>choose a deck inside a turbolift</td></tr>
+            <tr><td>V</td><td>exterior view ↔ back inside</td></tr>
+            <tr><td>F</td><td>exterior: orbit ↔ free flight (WASD, Q/E, wheel = speed)</td></tr>
+            <tr><td>1–9, 0</td><td>exterior: camera presets</td></tr>
+            <tr><td>F3</td><td>performance overlay</td></tr>
+            <tr><td>H</td><td>this card</td></tr>
+          </table>
+        </div>
+      </div>
     </div>
 
     <div id="fade">
@@ -26,10 +50,16 @@
 
     <div id="start">
       <div class="card">
-        <h1>KESTREL</h1>
-        <p class="sub">light freighter · in transit</p>
-        <p class="hint">Click to take the deck</p>
-        <p class="keys">WASD move · mouse look · E interact · Esc release</p>
+        <div class="crest"></div>
+        <h1>VINDICATOR</h1>
+        <p class="sub">IMPERIAL I-CLASS STAR DESTROYER · 1600 M</p>
+        <p class="hint" id="start-hint">Building ship…</p>
+        <div class="boards" id="boards">
+          <button data-board="bridge">Command Bridge</button>
+          <button data-board="kestrel">Hangar — aboard the Kestrel</button>
+          <button data-board="exterior">Exterior view</button>
+        </div>
+        <p class="keys">WASD move · Shift sprint · mouse look · E interact · V exterior/interior · H help · Esc release</p>
       </div>
     </div>
 
