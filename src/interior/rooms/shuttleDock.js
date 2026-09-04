@@ -11,7 +11,7 @@ import { Kit } from "../../kit.js";
 import { roomFloorY } from "../../config/shipSpec.js";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, bayWalls, crate, toolCart, pedestalConsole, shadowCasters,
-  cabinet, recessedBank, lightBar, pipeRun, stairTower, stairRun, beacons, bayCeiling, shuttleShape, SHUTTLE, fuelBowser,
+  cabinet, compactBank, lightBar, pipeRun, stairTower, stairRun, beacons, bayCeiling, shuttleShape, SHUTTLE, fuelBowser,
   ladder, doorSurround, displayWall, ensureLabels, ensureDiffuser, deckLabel, cableTray, BLACK,
 } from "../../hangar/machinery.js";
 
@@ -384,10 +384,11 @@ function catwalk(kit, ctx, lib, room, y0) {
 // ---------------------------------------------------------------- ceiling: light banks, ducts, pipe runs, trusses
 function ceiling(kit, P, room, yTop) {
   const { x0, x1, z0, z1 } = room;
-  // the six pad banks and the two lane-end banks carry the pooled point lights (see lights)
-  for (const sx of [-1, 1]) for (const z of [362, 380, 398]) recessedBank(kit, sx * 13, yTop, z, 7, 1.6, "emitDiffuser");
-  for (const z of [355, 405]) recessedBank(kit, 0, yTop, z, 8, 1.4, "emitDiffuser");
-  for (const z of [371, 389]) recessedBank(kit, 0, yTop, z, 5, 1.2, "emitDiffuser");
+  // compact high-bay fixtures at the eight pooled point lights (see lights): a 600 cd source blows anything
+  // within a metre of it white, so the housing is small and its plate flush (a 7 m bank read as a 7 m white
+  // slab); z between the bayCeiling ribs (every 3.3 m from z0)
+  for (const sx of [-1, 1]) for (const z of [362, 381.4, 398]) compactBank(kit, sx * 13, yTop, z, "emitDiffuser");
+  for (const z of [355, 405]) compactBank(kit, 0, yTop, z, "emitDiffuser");
   for (const s of [-1, 1]) {
     kit.boxMM("paintedMetal", [s * 24 - 0.7, yTop - 1.6, z0], [s * 24 + 0.7, yTop - 0.4, z1], { color: P.slate, uv: "world", texel: 0.6 });
     pipeRun(kit, s * 26.4, yTop - 1.0, (z0 + z1) / 2, z1 - z0, "z", 0.2, P.steel, 8);
@@ -434,13 +435,15 @@ function lights(ctx, lib, y0, yTop) {
   const cool = (i, d, p, c = 0xdfe8ff) => ctx.lights.cool.push(lib.pointLight(c, i, d, p));
   // (inverse-square: 22 m from the ceiling to the deck). The lights sit in the ceiling plane inside the recessed
   // bank housings: hung 1.2 m under the plate they lit it into four blown white halos
-  for (const sx of [-1, 1]) for (const z of [362, 380, 398]) cool(600, 70, [sx * 13, yTop + 0.04, z]);
+  for (const sx of [-1, 1]) for (const z of [362, 381.4, 398]) cool(600, 70, [sx * 13, yTop + 0.04, z]);
   cool(360, 50, [0, yTop + 0.04, 355]);
   cool(360, 50, [0, yTop + 0.04, 405]);
   // flood-mast heads light the pad ends, blue accents under the hull and at the nose
   for (const sx of [-1, 1]) for (const z of [365.5, 394.5]) cool(140, 30, [sx * 9.4, y0 + 6.2, z], 0xe8f0ff);
-  ctx.lights.teal.push(lib.pointLight(0x66b6ff, 110, 30, [0, y0 + 1.0, 380]));
-  ctx.lights.teal.push(lib.pointLight(0x66b6ff, 60, 18, [0, y0 + 3.0, 392]));
+  // (the nose accent stands on the deck 3 m ahead of the nose tip: at 60 cd 0.7 m off the tip it blew the
+  // nose faces white; under the hull the glow is what lights the gear and the pad between the struts)
+  ctx.lights.teal.push(lib.pointLight(0x66b6ff, 80, 30, [0, y0 + 1.0, 380]));
+  ctx.lights.teal.push(lib.pointLight(0x66b6ff, 24, 16, [0, y0 + 0.5, 394.5]));
   // catwalk and umbilical practicals, warm light at the crew kit by the ramp
   for (const z of [366, 394]) cool(60, 20, [-26.2, y0 + CAT_H + 2.4, z], 0xe8f0ff);
   for (const sx of [-1, 1]) ctx.lights.warm.push(lib.pointLight(0xffb347, 50, 18, [sx * 16, y0 + 4.5, 380]));

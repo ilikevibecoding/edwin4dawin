@@ -651,6 +651,16 @@ export function recessedBank(kit, cx, yCeil, cz, w, d, mat = "emitWhiteSoft", de
 }
 
 /**
+ * Compact high-bay fixture for a pooled point light sitting in the ceiling plane: a shallow housing with the
+ * diffuser flush with its rim. With the plate recessed, the housing walls under it are 0.3 m from a several
+ * hundred candela source and render as a blown white ring from anywhere in the room; flush, only the plate
+ * shows and the housing's outer faces turn away from the light.
+ */
+export function compactBank(kit, cx, yCeil, cz, mat = "emitWhiteSoft") {
+  recessedBank(kit, cx, yCeil, cz, 1.6, 1.2, mat, 0.3, 0.29);
+}
+
+/**
  * Visored flood fixture under a catwalk or beam: black housing with a lip on the room side and three small
  * diffusers, so it reads as a lamp cluster rather than a single blown plate. `face` is the direction the lip
  * faces (+1 → +x side lipped, -1 → -x side) when the fixture runs along z; set alongX for the other axis.
@@ -1075,10 +1085,10 @@ export function blastLeaves(ctx, mats, o) {
       const edge = -side * leafW / 2;
       k.box("paintedMetal", edge + side * 0.01, 0, 0, 0.02, thickness - 0.1, len - 0.4, { color: PALETTE.impAmber, uv: "world", texel: 1.2 });
       for (let z = -len / 2 + 2; z < len / 2 - 1; z += 4) k.box("paintedMetal", edge + side * 0.6, thickness * 0.15, z, 1.2, thickness * 0.5, 1.2, { color: PALETTE.gunmetal });
-      // the part that shows in the well: hazard chevrons on the top of the protruding strip and a lit amber
-      // edge line, so the leaves read as stowed door leaves from the far side of the opening (+2 draws each)
+      // the part that shows in the well: hazard chevrons on the top of the protruding strip, so the leaves read
+      // as stowed door leaves from the far side of the opening (+1 draw per leaf; the rooms next door see the
+      // hangar's draw list through their blast doors, and fighterMaint sits on its budget)
       k.box("hazard", edge + side * (protrude / 2 + 0.05), thickness / 2 + 0.005, 0, protrude - 0.1, 0.01, len - 0.4, { uv: "world", texel: 1.5 });
-      k.box("emitAmber", edge + side * 0.05, thickness / 2 + 0.01, 0, 0.08, 0.02, len - 0.6, { uv: "keep" });
       // ribs on the underside face the void
       for (let x = -leafW / 2 + 2; x < leafW / 2; x += 4) k.box("paintedMetal", x, -thickness / 2 - 0.1, 0, 0.6, 0.2, len - 0.2, { color: PALETTE.gunmetal, texel: 0.5 });
     });
@@ -1360,7 +1370,7 @@ export function pulsingMaterial(ctx, base, { min = 0.8, max = 2.4, rate = 1.2, n
  * well so the hanging fighter never sweeps the deck railings).
  */
 export function launchCradle(kit, ctx, mats, o) {
-  const { z, y, x0, x1, wallX, xStart = 0, speed = 0.22, variant = 3, name = "hangar.launchCradle", labelIdx = null, heading = 0 } = o;
+  const { z, y, x0, x1, wallX, xStart = 0, speed = 0.22, variant = 3, name = "hangar.launchCradle", labelIdx = null, heading = 0, lamp = null } = o;
   // truss rail: chords + Warren web, running flange under the bottom chord, hazard on the flange sides
   truss(kit, { axis: "x", from: -wallX, to: wallX, at: z, yTop: y + 2.4, yBot: y, panel: 4, chord: 0.5, web: 0.28, color: PALETTE.gunmetal, chordColor: PALETTE.slate });
   kit.boxMM("metal", [-wallX, y - 0.16, z - 0.9], [wallX, y, z + 0.9], { color: PALETTE.steel, uv: "world", texel: 1 });
@@ -1421,6 +1431,9 @@ export function launchCradle(kit, ctx, mats, o) {
     tieShape(k, f, { variant, engines: "emitAmber" });
   });
   g.position.set(xStart, y - 0.2, z);
+  // optional pooled light fixture for the yoke work lamps (a PointLight the room pushed to ctx.lights, flagged
+  // userData.moving so the pool re-reads its position): it rides along the rail with the carriage
+  if (lamp) lamp.position.set(xStart, y - 0.2 - 2.75, z);
   const state = { x: xStart, dir: 1, pause: 8 };
   const update = (dt) => {
     if (state.pause > 0) state.pause -= dt;
@@ -1430,6 +1443,7 @@ export function launchCradle(kit, ctx, mats, o) {
       if (state.x < x0) (state.x = x0), (state.dir = 1), (state.pause = 14);
     }
     g.position.x = state.x;
+    if (lamp) lamp.position.x = state.x;
   };
   update(0);
   const entry = { object: g, update, name, state };
@@ -1494,6 +1508,52 @@ export function doorSurround(kit, room, door, y0, opts = {}) {
     f.collider(-w / 2, w / 2, 0, h, 0, 0.1, "leaf");
   }
   if (threshold) f.box("hazard", 0, 0.005, n0 + depth + 0.45, w + 2 * fw, 0.01, 0.9, { uv: "world", texel: 1.5 });
+  return f;
+}
+
+/**
+ * The far side of a room door where it opens into a corridor of the same width: the DoorSystem's leaves fill
+ * the corridor end wall, so the surround is built on the corridor's side walls and ceiling instead. Two
+ * pilasters flush with the side walls (hazard on their door-facing jambs, a lamp pair and a raised plate on
+ * their corridor faces), a lintel between the shared wayfinding sign and the corridor ceiling carrying the
+ * hangar label and a hazard band, and a threshold on the corridor deck. `corridor` is the corridor box.
+ */
+export function corridorPortal(kit, room, door, y0, corridor, opts = {}) {
+  const [dx, dz, w, dir, hh] = door;
+  const h = hh || DOOR_H;
+  // the registry's sign hangs 0.34 m over the frame (0.24 m tall) and the corridor's ceiling light channels
+  // start 0.06 m under its 3 m ceiling, so the lintel is the band between those two
+  const { label: idx = 0, labelW = 1.4, pilaster = 0.34, depth = 0.42, ceilH = 3.0, signTop = h + 0.46, color = PALETTE.gunmetal } = opts;
+  // frame with n pointing OUT of the room, into the corridor
+  const U = dir === "-x" ? new THREE.Vector3(0, 0, 1) : dir === "+x" ? new THREE.Vector3(0, 0, -1) : dir === "-z" ? new THREE.Vector3(-1, 0, 0) : new THREE.Vector3(1, 0, 0);
+  const f = new Frame(kit, new THREE.Vector3(dx, y0, dz), U, UP);
+  const along = dir === "-x" || dir === "+x" ? corridor.z1 - corridor.z0 : corridor.x1 - corridor.x0;
+  const halfC = along / 2;
+  const n0 = WALL_T + 0.02;
+  const top = ceilH - 0.08;
+  for (const s of [-1, 1]) {
+    const u = s * (halfC - pilaster / 2);
+    f.box("paintedMetal", u, top / 2, n0 + depth / 2, pilaster, top, depth, { color, uv: "world", texel: 0.6 });
+    // hazard on the jamb face toward the opening, kick band and a raised plate with the lamp pair on the
+    // corridor face
+    f.box("hazard", s * (halfC - pilaster - 0.005), h * 0.5, n0 + depth / 2, 0.01, h - 0.3, depth - 0.1, { uv: "world", texel: 1.2 });
+    f.box("hazard", u, 0.3, n0 + depth + 0.005, pilaster - 0.08, 0.4, 0.01, { uv: "world", texel: 1.2 });
+    f.box("paintedMetal", u, h * 0.5 + 0.3, n0 + depth + 0.02, pilaster - 0.12, h - 1.0, 0.04, { color: PALETTE.darkMetal, texel: 1 });
+    f.box(BLACK, u, h - 0.35, n0 + depth + 0.05, pilaster - 0.12, 0.5, 0.08);
+    f.box("emitAmber", u, h - 0.24, n0 + depth + 0.095, pilaster - 0.2, 0.1, 0.01, { uv: "keep" });
+    f.box("emitBlue", u, h - 0.46, n0 + depth + 0.095, pilaster - 0.2, 0.1, 0.01, { uv: "keep" });
+    f.collider(u - pilaster / 2, u + pilaster / 2, 0, top, n0, n0 + depth + 0.1, "portalFrame");
+  }
+  // lintel above the sign slot: label plate across its corridor face, hazard band on its underside
+  const lin0 = signTop + 0.02;
+  const lh = top - lin0;
+  f.box("paintedMetal", 0, (lin0 + top) / 2, n0 + depth / 2, along, lh, depth, { color, uv: "world", texel: 0.6 });
+  f.box("hazard", 0, lin0 - 0.005, n0 + depth / 2, along - 2 * pilaster, 0.01, depth - 0.1, { uv: "world", texel: 1.2 });
+  const lw = Math.min(labelW, (lh - 0.06) * LABEL_ASPECT);
+  f.box(BLACK, 0, (lin0 + top) / 2, n0 + depth + 0.005, lw + 0.2, lh, 0.02);
+  frameLabel(f, 0, (lin0 + top) / 2, lw, idx, n0 + depth + 0.02);
+  // threshold band on the corridor deck (above the corridor's own runner plate)
+  f.box("hazard", 0, 0.02, n0 + depth + 0.4, along - 2 * pilaster - 0.1, 0.01, 0.7, { uv: "world", texel: 1.5 });
   return f;
 }
 

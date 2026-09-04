@@ -10,14 +10,17 @@ import { decalRect } from "../../textures.js";
 import * as THREE from "three";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, bayWalls, containerStack, crate, toolCart, shadowCasters,
-  pedestalConsole, cabinet, recessedBank, pipeRun, stairRun, beacons, cargoLift, monorail, craneTrolley, loaderVehicle,
-  pallet, bayCeiling, cableTray, doorSurround, ensureLabels, deckLabel, displayWall,
+  pedestalConsole, cabinet, recessedBank, compactBank, pipeRun, stairRun, beacons, cargoLift, monorail, craneTrolley, loaderVehicle,
+  pallet, bayCeiling, cableTray, doorSurround, ensureLabels, deckLabel, displayWall, floodFixture,
 } from "../../hangar/machinery.js";
 
 const MEZZ_H = 6; // storage mezzanine height above the deck
 const MEZZ_Z = 563; // mezzanine front edge
 const LANE = { x0: -4, x1: 4, z0: 522, z1: 549.5 }; // loader lane from the door
 const CROSS = { z0: 540, z1: 548.5 }; // cross lane under the crane rail
+// pooled ceiling lights and their fixtures: over the loader lane and the forward aisles, then along the cross
+// lane (x between the bayCeiling ribs, which run along z every 3.33 m from x0)
+const CEILING_LIGHTS = [[0, 530], [-15, 530], [15, 530], [0, 547.5], [-18.3, 547.5], [18.3, 547.5]];
 const ROWS = [9.6, 12.1, 16.8, 19.3, 24.0, 26.5]; // container row centres (mirrored)
 
 export function build(kit, ctx, room, lib) {
@@ -39,6 +42,7 @@ export function build(kit, ctx, room, lib) {
   mezzanine(kit, ctx, lib, room, y0, mats);
   craneRail(kit, ctx, mats, yTop);
   props(kit, P, room, y0);
+  lanePoles(kit, ctx, lib, P, y0);
   displayWall(shell.frames["+x"].frame, 544.25 - room.z0, 4.4, 4.2, 2.0, ["screen9", "screen7"], 3, { cols: 2 });
   ceiling(kit, P, room, yTop);
   lights(ctx, lib, y0, yTop);
@@ -212,17 +216,36 @@ function props(kit, P, room, y0) {
   pedestalConsole(kit, propFrame(kit, -19, y0, z0 + 1.0, 0), "screen6", { w: 1.4 });
 }
 
+// ---------------------------------------------------------------- lane light poles along the loader lane
+function lanePoles(kit, ctx, lib, P, y0) {
+  // slim poles just outside the amber lane edges, a flood head cantilevered toward the container faces: the
+  // ceiling banks 16 m up leave the lane-side faces of the forward blocks in shadow from the door
+  for (const sx of [-1, 1]) for (const z of [530, 538.6]) {
+    const x = sx * 5.6;
+    const hx = x + sx * 1.3;
+    kit.boxMM("paintedMetal", [x - 0.45, y0, z - 0.45], [x + 0.45, y0 + 0.2, z + 0.45], { color: P.gunmetal, uv: "world", texel: 0.8 });
+    kit.boxMM("hazard", [x - 0.46, y0 + 0.2, z - 0.46], [x + 0.46, y0 + 0.5, z + 0.46], { uv: "world", texel: 1.2 });
+    kit.box("paintedMetal", x, y0 + 3.5, z, 0.24, 6.6, 0.24, { color: P.slate, texel: 1 });
+    kit.boxMM("paintedMetal", [Math.min(x, hx), y0 + 6.5, z - 0.12], [Math.max(x, hx), y0 + 6.74, z + 0.12], { color: P.gunmetal, uv: "world", texel: 0.8 });
+    floodFixture(kit, hx, y0 + 6.3, z, "emitWhiteSoft", { w: 1.2, lip: 0.2 });
+    kit.box("emitBlue", x - sx * 0.125, y0 + 5.6, z, 0.01, 0.4, 0.08, { uv: "keep" });
+    kit.collider([x - 0.46, y0, z - 0.46], [x + 0.46, y0 + 6.8, z + 0.46], "lanePole");
+    ctx.lights.cool.push(lib.pointLight(0xdfe8ff, 140, 24, [hx, y0 + 6.0, z]));
+  }
+}
+
 // ---------------------------------------------------------------- ceiling: recessed banks over the lanes, trays, ducts, pipes
 function ceiling(kit, P, room, yTop) {
   const { x0, x1, z0, z1 } = room;
-  for (let z = 528; z < 566; z += 12) recessedBank(kit, 0, yTop, z, 6, 1.4, "emitWhiteSoft");
-  for (const sx of [-1, 1]) for (const z of [532, 553]) recessedBank(kit, sx * 18, yTop, z, 8, 1.2, "emitWhiteSoft");
+  // compact high-bay fixtures at the six pooled point lights (see lights); the housings are small because a
+  // 380 cd source blows anything within a metre of it white
+  for (const [x, z] of CEILING_LIGHTS) compactBank(kit, x, yTop, z, "emitWhiteSoft");
   for (const s of [-1, 1]) {
     pipeRun(kit, s * 28.6, yTop - 0.9, (z0 + z1) / 2, z1 - z0, "z", 0.18, P.steel, 8);
     pipeRun(kit, s * 28.6, yTop - 1.4, (z0 + z1) / 2, z1 - z0, "z", 0.12, P.orange, 8);
     cableTray(kit, s * 9, yTop - 1.2, (z0 + z1) / 2, z1 - z0 - 2, "z", 0.7);
   }
-  kit.boxMM("paintedMetal", [x0, yTop - 1.5, 558.5], [x1, yTop - 0.4, 559.9], { color: P.slate, uv: "world", texel: 0.6 });
+  kit.boxMM("paintedMetal", [x0, yTop - 1.5, 550.0], [x1, yTop - 0.4, 551.4], { color: P.slate, uv: "world", texel: 0.6 });
   pipeRun(kit, 0, yTop - 0.7, 525, x1 - x0, "x", 0.2, P.gunmetal, 8);
 }
 
@@ -230,8 +253,10 @@ function ceiling(kit, P, room, yTop) {
 function lights(ctx, lib, y0, yTop) {
   const cool = (i, d, p, c = 0xdfe8ff) => ctx.lights.cool.push(lib.pointLight(c, i, d, p));
   const warm = (i, d, p, c = 0xffb347) => ctx.lights.warm.push(lib.pointLight(c, i, d, p));
-  // (inverse-square: 14.5 m from the ceiling banks to the deck)
-  for (const x of [-20, 0, 20]) for (const z of [530, 545, 560]) cool(320, 42, [x, yTop - 1.5, z]);
+  // (inverse-square: 16 m from the ceiling to the deck). Over the lanes, not the blocks: the loader lane and
+  // the two forward aisles, then the cross lane a metre aft of the crane girder. In the ceiling plane inside
+  // the fixture housings: hung 1.5 m under the plate they lit it into white halos
+  for (const [x, z] of CEILING_LIGHTS) cool(380, 44, [x, yTop + 0.04, z]);
   for (const x of [-14, 14]) warm(55, 16, [x, y0 + MEZZ_H - 0.7, 566.5], 0xffc880);
   cool(80, 20, [0, y0 + 5.5, 523.5], 0xe8f0ff);
   for (const x of [-22, 22]) warm(60, 20, [x, y0 + MEZZ_H + 4, 566], 0xffc880);

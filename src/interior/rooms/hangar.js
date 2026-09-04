@@ -8,21 +8,21 @@
 // maintenance platforms at the racks; the traffic-control cab and cargo lifts on the aft deck; a travelling
 // gantry crane under a dark trussed ceiling with recessed light banks.
 import * as THREE from "three";
-import { HANGAR, roomFloorY } from "../../config/shipSpec.js";
+import { HANGAR, CORRIDORS, roomFloorY } from "../../config/shipSpec.js";
 import { decalRect } from "../../textures.js";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, grateFloor, grateScreen, bayWalls, containerStack,
   crate, toolCart, fuelBowser, pedestalConsole, cabinet, lightBar, recessedBank, floodFixture, truss, cableTray, pallet,
   pipeRun, stairTower, gantryCrane, blastLeaves, beacons, tractorEmitters, cargoLift, loaderVehicle, shadowCasters,
   RAIL_H, BLACK, ensureLabels, ensureDiffuser, frameLabel, deckLabel, launchCradle, doorSurround, wellShaft,
-  shimmerSheet, tieCradle, tieShape, ladder, displayWall, glassCab, clampRack,
+  shimmerSheet, tieCradle, tieShape, ladder, displayWall, glassCab, clampRack, corridorPortal,
 } from "../../hangar/machinery.js";
 
 const CAT_Y = -62; // service catwalks
 const PLAT_Y = -60; // maintenance platforms beside the racks
 const GIRDER = { y0: -50.2, y1: -48.6 }; // rack girders
 const CRANE_Y = -46.8; // crane bridge centre
-const RAIL = { y: -69.7, z: 466, x: -8 }; // launch-cradle drop rail (underside, z between the rack rows 456 / 472), carriage start
+const RAIL = { y: -69.7, z: 466, x: -4 }; // launch-cradle drop rail (underside, z between the rack rows 456 / 472), carriage start
 const CAB = { x0: 21.5, x1: 28.5, z0: 460, z1: 468 }; // flight-control cab on the starboard catwalk
 // traffic.js parks its craft in racks 0..5 (createTraffic count 6, racks ordered z-major then x); the two
 // aft racks stay free, so static kit fighters hang there "under maintenance"
@@ -170,6 +170,10 @@ function walls(kit, ctx, lib, room, shell, y0) {
   doorSurround(kit, room, shuttle, y0, { label: 2, labelW: 5 });
   doorSurround(kit, room, cargo, y0, { label: 3, labelW: 5 });
   doorSurround(kit, room, lift, y0, { label: 0, labelW: 3.2 });
+  // the same door from the lift corridor: its leaves fill the 3 m corridor end wall, so the corridor side
+  // gets pilasters on the side walls, a labelled lintel and lamps (the leaves are the DoorSystem's)
+  const liftCorridor = CORRIDORS.find((c) => c.id === "D-lift2");
+  if (liftCorridor) corridorPortal(kit, room, lift, y0, liftCorridor, { label: 0 });
   // crew ready room: a closed door beside the lift corridor
   doorSurround(kit, room, [-32, 485.5, 2.6, "-x", 3.0], y0, { label: 7, labelW: 2.4, leaf: true });
   // traffic display beside the ready room, deck status display on the starboard wall by the maintenance door
@@ -574,14 +578,15 @@ function lights(ctx, lib, y0, yTop) {
   // wash out as they did with floods hung 1 m under the catwalk grating.
   // (inverse-square: a 38 m drop to the deck needs ~2500 cd for a lit deck, so these are big numbers)
   for (const s of [-1, 1]) for (const z of [435, 465, 495]) cool(2600, 130, [s * 26, yTop + 0.04, z]);
-  // rack-row lights: one per rack pair, hovering over the well between the two rows 2 m under rack height.
-  // 14 m from either pod, they light the faces the deck sees (pod, pylons, the inner wing panels and the clamp
-  // arms) at ~2 cd/m^2 so the parked craft read as lit fighters against the dark ceiling; a light per rack
-  // never reached the deck viewer strongly enough to win a pool slot against the banks
-  for (const rz of HANGAR.rackZ) cool(400, 40, [0, HANGAR.rackY - 2, rz], 0xe6eeff);
-  // tractor glow: a blue light hovering in the beams above the well mouth (it also lights the fighter hanging
-  // from the launch cradle from above, 10 m away)
-  ctx.lights.teal.push(lib.pointLight(0x66b6ff, 170, 60, [0, -70, 465]));
+  // rack-row lights: one per rack pair, hovering over the well between the two rows 3.5 m above rack height
+  // (clear of the crane's slung load, whose top passes 6 m under them). 14 m from either pod, they light the
+  // faces the deck sees (pod, pylons, the inner wing panels and the clamp arms) at ~1.8 cd/m^2 so the parked
+  // craft read as lit fighters against the dark ceiling; a light per rack never reached the deck viewer
+  // strongly enough to win a pool slot against the banks
+  for (const rz of HANGAR.rackZ) cool(360, 40, [0, HANGAR.rackY + 3.5, rz], 0xe6eeff);
+  // tractor glow: a blue light hovering in the beams above the well mouth, 5 m clear of the launch-cradle rail
+  // (it also lights the fighter hanging from the cradle from above)
+  ctx.lights.teal.push(lib.pointLight(0x66b6ff, 170, 60, [0, -71, 461]));
   // one shadowed flood from the starboard girder down onto the starboard side deck (catwalk, platform and
   // stair tower throw the shadows). Every pooled spot is a full shadow pass over the zone, so this is the
   // only spot fixture in the bay; its range (distance x 1.6 in the pool) stops short of the cargo bay and the
@@ -608,9 +613,15 @@ function dynamics(kit, ctx, mats, y0, yTop, W) {
   // the bridge itself is at the top of the field of view
   gantryCrane(ctx, mats, { x0: -31.0, x1: 31.0, y: CRANE_Y, zMin: W.z0 + 10, zMax: W.z1 - 10, trolleyRange: [-7.5, 7.5], hookDrop: 11, load: true, speed: 0.6, zStart: 470, name: "hangar.crane" });
   // drop-rail launch cradle over the well: the carriage stays inside the opening (x -14.5..10, wing tips 1 m
-  // clear of the shaft lining); the fighter hangs slewed 57 degrees off the launch line so it reads in
-  // three-quarter view (viewport, pylons and both hexagonal wings) from the port deck
-  launchCradle(kit, ctx, mats, { z: RAIL.z, y: RAIL.y, x0: -14.5, x1: 10, xStart: RAIL.x, wallX: 32, variant: 3, labelIdx: 4, heading: 1.0 });
+  // clear of the shaft lining). The fighter hangs slewed 70 degrees off the launch line: the two fixed views
+  // (hangarDeck at (-26, 465), the lift door at (-30.6, 479.5)) are 30 degrees apart, and this heading shows
+  // the pod between both wings to each of them (17 degrees off the nose from the deck, 47 from the door)
+  // instead of a lone wing panel hiding the pod from the door. The yoke work lamps are a real pooled light
+  // riding with the carriage, so the hanging fighter is lit from its own cradle wherever the carriage is.
+  const yokeLamp = ctx.lib.pointLight(0xfff0dd, 60, 18, [RAIL.x, RAIL.y - 2.95, RAIL.z]);
+  yokeLamp.userData.moving = true;
+  ctx.lights.cool.push(yokeLamp);
+  launchCradle(kit, ctx, mats, { z: RAIL.z, y: RAIL.y, x0: -14.5, x1: 10, xStart: RAIL.x, wallX: 32, variant: 3, labelIdx: 4, heading: 1.22, lamp: yokeLamp });
   blastLeaves(ctx, mats, { well: W, y: y0 - 0.95, thickness: 0.9, protrude: 1.6, travel: 0.6, period: 34 });
   shimmerSheet(ctx, W, y0 - 0.42);
   tractorEmitters(kit, ctx, { positions: [[-4.5, 445], [4.5, 445], [-4.5, 465], [4.5, 465], [-4.5, 485], [4.5, 485]], yCeil: yTop, yTarget: y0 - 1.6, radius: 4.2 });

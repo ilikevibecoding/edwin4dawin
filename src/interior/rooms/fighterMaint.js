@@ -10,7 +10,7 @@ import { roomFloorY } from "../../config/shipSpec.js";
 import { decalRect } from "../../textures.js";
 import {
   propFrame, railing, deckStrip, deckDecal, bayWalls, crate, toolCart, fuelBowser, pedestalConsole, cabinet,
-  lightBar, recessedBank, cableTray, truss, pipeRun, tieWing, tieCradle, ladder, monorail, craneTrolley,
+  lightBar, compactBank, cableTray, truss, pipeRun, tieWing, tieCradle, ladder, monorail, craneTrolley,
   shadowCasters, bayCeiling, doorSurround, deckLabel, ensureLabels, displayWall, frameOutline, BLACK,
 } from "../../hangar/machinery.js";
 
@@ -113,7 +113,7 @@ function groundKit(kit, P, tf, y0) {
 
 // ---------------------------------------------------------------- fuel / power lines from ceiling reels to the pod
 function fuelLines(kit, P, tf, yTop) {
-  const reels = [[45.2, 469.8], [50.0, 462.0]];
+  const reels = [[44.4, 472.0], [50.0, 462.0]]; // (clear of the ceiling fixture at (48.2, 469.6))
   const targets = [tf.pos(0.5, CRADLE.podY + 1.85, -0.4), tf.pos(-0.6, CRADLE.podY + 1.85, 0.3)];
   reels.forEach(([rx, rz], i) => {
     kit.box("paintedMetal", rx, yTop - 0.7, rz, 1.6, 1.4, 0.6, { color: P.gunmetal, texel: 1 });
@@ -193,8 +193,9 @@ function consoles(kit, P, shell, room, y0) {
   lightBar(shell.frames["-x"].frame, 44, 78, 2.9, "emitWarmSoft");
   lightBar(shell.frames["+x"].frame, 2, 38, 2.9, "emitWarmSoft");
   lightBar(shell.frames["+x"].frame, 52, 78, 2.9, "emitWarmSoft");
-  // maintenance status display on the starboard wall opposite the door
-  displayWall(shell.frames["+x"].frame, 466 - z0, 4.6, 5.2, 2.2, ["screen7", "screen9", "screen8", "screen6"], 1, { cols: 2, lamp: "emitAmber" });
+  // maintenance status display on the starboard wall opposite the door (two screen materials, not four: each
+  // kit material is a draw call and this room renders the hangar's list through the blast door as well)
+  displayWall(shell.frames["+x"].frame, 466 - z0, 4.6, 5.2, 2.2, ["screen6", "screen8", "screen8", "screen6"], 1, { cols: 2, lamp: "emitAmber" });
   // crates and drums in the aft corner
   for (let i = 0; i < 3; i++) crate(kit, propFrame(kit, 36.5 + i * 1.5, y0, 448, 0.15 * i), { decal: [6, 11, 9][i] });
   crate(kit, propFrame(kit, 37.2, y0 + 0.8, 448, 0.1), { decal: 5, h: 0.7 });
@@ -214,8 +215,10 @@ function consoles(kit, P, shell, room, y0) {
 // ---------------------------------------------------------------- ceiling: recessed banks over the work, trusses, trays
 function ceiling(kit, P, room, yTop) {
   const { x0, x1, z0, z1 } = room;
-  recessedBank(kit, CRADLE.x, yTop, CRADLE.z, 6, 1.6, "emitWhiteSoft");
-  recessedBank(kit, JIG.x, yTop, JIG.z, 4, 1.2, "emitWhiteSoft");
+  // compact fixtures at the two pooled ceiling lights (see lights), beside the crane rail and clear of the
+  // bayCeiling ribs (every 3.2 m from z0) and its light strips (x 37.1 / 46.25 / 55.4)
+  compactBank(kit, CRADLE.x + 1.2, yTop, CRADLE.z + 4.1, "emitWhiteSoft");
+  compactBank(kit, JIG.x, yTop, JIG.z, "emitWhiteSoft");
   for (const z of [436, 484]) truss(kit, { axis: "x", from: x0, to: x1, at: z, yTop, yBot: yTop - 1.4, panel: 3.5, chord: 0.35, web: 0.18, color: P.gunmetal, chordColor: P.slate });
   cableTray(kit, x0 + 2.5, yTop - 1.1, (z0 + z1) / 2, z1 - z0 - 2, "z", 0.7);
   cableTray(kit, x1 - 2.5, yTop - 1.1, (z0 + z1) / 2, z1 - z0 - 2, "z", 0.7);
@@ -225,9 +228,10 @@ function ceiling(kit, P, room, yTop) {
 function lights(ctx, lib, y0, yTop, z0) {
   const warm = (i, d, p, c = 0xffb347) => ctx.lights.warm.push(lib.pointLight(c, i, d, p));
   for (const z of [432, 448, 480, 494]) for (const x of [39, 54]) warm(150, 34, [x, y0 + 7, z]);
-  ctx.lights.cool.push(lib.pointLight(0xe8f0ff, 300, 44, [CRADLE.x, yTop - 1.2, CRADLE.z]));
+  // (both in the ceiling plane inside their housings: hung a metre under the plate they lit it into halos)
+  ctx.lights.cool.push(lib.pointLight(0xe8f0ff, 300, 44, [CRADLE.x + 1.2, yTop + 0.04, CRADLE.z + 4.1]));
   ctx.lights.cool.push(lib.pointLight(0xe8f0ff, 120, 30, [40.5, y0 + 6, 461]));
-  warm(90, 24, [JIG.x, yTop - 1.4, JIG.z], 0xffc880);
+  warm(90, 24, [JIG.x, yTop + 0.04, JIG.z], 0xffc880);
   warm(60, 20, [46, y0 + 2.6, z0 + 1.6], 0xffd9a0);
   // shadowed spot from the far side of the cradle: pod, cradle and ladder shadows fall toward the door
   const sp = new THREE.SpotLight(0xfff0dd, 700 * lib.LIGHT_SCALE, 34, 0.6, 0.5, 1.8);
