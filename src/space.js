@@ -219,7 +219,8 @@ export function buildSpace(scene) {
   }
 
   // --- sun: aft-left-above the ship, so the planets ahead / abeam show their lit face to the windows
-  const sunDirLocal = new THREE.Vector3(-0.464, 0.375, 0.803).normalize();
+  // forward-port-high: rakes the dorsal armour from the bow so the terraces and tower throw long shadows
+  const sunDirLocal = new THREE.Vector3(-0.78, 0.42, -0.46).normalize();
   const sunTex = makeStarSprite(128);
   const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, color: 0xfff1d6, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
   sun.position.copy(sunDirLocal).multiplyScalar(4400 * SPACE_SCALE);
@@ -343,8 +344,8 @@ export function buildSpace(scene) {
     tex: makeGasGiant(1024, 512, 77),
     radius: 430,
     dist: 2150,
-    bearingDeg: 0,
-    elevation: -60,
+    bearingDeg: 150,
+    elevation: -40,
     // saturated amber: the halo has to differ from the cream disc or it reads as more disc
     atmo: "#ffae5c",
     atmoStrength: 1.35,
@@ -358,7 +359,7 @@ export function buildSpace(scene) {
     clouds: makeClouds(1024, 512, 111),
     radius: 300,
     dist: 1900,
-    bearingDeg: 60,
+    bearingDeg: 100,
     elevation: 40,
     atmo: "#58b8ff",
     atmoStrength: 1.4,
@@ -370,7 +371,7 @@ export function buildSpace(scene) {
     tex: makeMoon(512, 256, 99),
     radius: 95,
     dist: 1150,
-    bearingDeg: -62,
+    bearingDeg: -150,
     elevation: -20,
     atmo: "#8a8f99",
     atmoStrength: 0.15,
@@ -385,7 +386,7 @@ export function buildSpace(scene) {
     bearingDeg: 190,
     elevation: 90,
     atmo: "#ff8a5a",
-    atmoStrength: 0.7,
+    atmoStrength: 0.3,
     brightness: 0.8,
     spin: 0.008,
     tilt: 0.3,

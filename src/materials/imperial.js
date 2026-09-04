@@ -167,7 +167,7 @@ export function buildImperialMaterials() {
   const metal = makeWornMetal(1024, 23);
   const gloss = makeGlossDeck(1024, 311);
   const dark = makeDarkDeck(1024, 321);
-  const hull = makeHullPlate(2048, 331);
+  const hull = makeHullPlate(1024, 331);
   const hullDetail = makeHullDetail(512, 341);
   const grate = makeGrate(1024, 768, 61);
   const rubber = makeRubber(256, 53);
@@ -296,6 +296,188 @@ export function buildImperialMaterials() {
   return mats;
 }
 
+// ---------------------------------------------------------------------------
+// Exterior detail materials (greebles.js). Added by the exterior-detail workstream.
+// ---------------------------------------------------------------------------
+
+// Emissive whose colour comes from the vertex / instance colour, so one batched mesh can carry cool
+// white windows, warm floodlights and red / green running lights. `color` stays black: lights read as
+// pure emitters, never as lit plastic.
+function emitTintPatch(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <emissivemap_fragment>",
+      `#include <emissivemap_fragment>
+      #ifdef USE_COLOR
+        totalEmissiveRadiance *= vColor;
+      #endif`,
+    );
+  };
+  material.customProgramCacheKey = () => "impEmitTint";
+  return material;
+}
+export function makeEmitTint(intensity = 2.4) {
+  return emitTintPatch(new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveIntensity: intensity, roughness: 0.4, metalness: 0, vertexColors: true }));
+}
+
+// Weathering atlas (2x2 cells): 0 soot streak, 1 scorch blot, 2 soft paint / dust patch, 3 fine grime
+// streaks. RGB carries the soot tone, alpha the coverage; vertex colour tints the paint cell.
+export function weatherRect(i) {
+  const u = i % 2;
+  const v = 1 - Math.floor(i / 2);
+  return [u * 0.5 + 0.004, v * 0.5 + 0.004, u * 0.5 + 0.496, v * 0.5 + 0.496];
+}
+function makeWeatheringAtlas(size = 1024, seed = 4021) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  const half = size / 2;
+  let s = seed >>> 0;
+  const rnd = () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+  // value noise helpers on a small lattice
+  const lat = 64;
+  const grid = new Float32Array(lat * lat);
+  for (let i = 0; i < grid.length; i++) grid[i] = rnd();
+  const smooth = (t) => t * t * (3 - 2 * t);
+  const noise = (u, v, f) => {
+    const x = u * f;
+    const y = v * f;
+    const x0 = Math.floor(x);
+    const y0 = Math.floor(y);
+    const fx = smooth(x - x0);
+    const fy = smooth(y - y0);
+    const g = (a, b) => grid[(((b % lat) + lat) % lat) * lat + (((a % lat) + lat) % lat)];
+    return (g(x0, y0) * (1 - fx) + g(x0 + 1, y0) * fx) * (1 - fy) + (g(x0, y0 + 1) * (1 - fx) + g(x0 + 1, y0 + 1) * fx) * fy;
+  };
+  const fbm = (u, v, f, oct = 4) => {
+    let a = 0;
+    let amp = 0.5;
+    let sum = 0;
+    for (let o = 0; o < oct; o++) {
+      a += noise(u, v, f) * amp;
+      sum += amp;
+      f *= 2.03;
+      amp *= 0.5;
+    }
+    return a / sum;
+  };
+  const streaks = [];
+  for (let k = 0; k < 14; k++) streaks.push([rnd(), 0.05 + rnd() * 0.25, 0.01 + rnd() * 0.03, 0.4 + rnd() * 0.6]);
+  const fine = [];
+  for (let k = 0; k < 40; k++) fine.push([rnd(), rnd() * 0.3, 0.002 + rnd() * 0.006, 0.3 + rnd() * 0.7]);
+  for (let py = 0; py < size; py++) {
+    for (let px = 0; px < size; px++) {
+      const cell = (px < half ? 0 : 1) + (py < half ? 0 : 2);
+      const u = ((px % half) + 0.5) / half;
+      const v = ((py % half) + 0.5) / half;
+      let a = 0;
+      let lum = 0.06;
+      if (cell === 0) {
+        // soot streak: dark plume starting near v=0, thinning and breaking up toward v=1
+        for (const [sx, sy, sw, sl] of streaks) {
+          const dv = v - sy;
+          if (dv < 0 || dv > sl) continue;
+          const t = dv / sl;
+          const wob = (fbm(u * 3 + sx * 7, v * 2, 6) - 0.5) * 0.06 * t;
+          const dx = Math.abs(u - sx - wob) / (sw * (1 + t * 1.6));
+          if (dx < 1) a += (1 - dx * dx) * (1 - t) * (0.55 + 0.45 * fbm(u, v, 24));
+        }
+        a *= 0.85;
+        lum = 0.05 + 0.04 * fbm(u, v, 40);
+      } else if (cell === 1) {
+        // scorch blot: irregular radial burn, darkest at the centre, ragged edge, a faint bright ring
+        const dx = u - 0.5;
+        const dy = v - 0.5;
+        const ang = Math.atan2(dy, dx);
+        const rr = Math.hypot(dx, dy) / (0.36 + 0.09 * fbm(Math.cos(ang) + 1, Math.sin(ang) + 1, 3) + 0.05 * fbm(u, v, 12));
+        const core = Math.max(0, 1 - rr);
+        a = Math.pow(core, 0.7) * (0.75 + 0.25 * fbm(u, v, 30));
+        lum = 0.04 + 0.1 * (1 - core) + 0.05 * fbm(u, v, 50);
+        if (rr > 0.85 && rr < 1.05) {
+          a = Math.max(a, 0.18 * (1 - Math.abs(rr - 0.95) / 0.1));
+          lum = 0.7;
+        }
+      } else if (cell === 2) {
+        // soft patch: an irregular cloud, meant to be tinted per decal and used at low alpha
+        const dx = u - 0.5;
+        const dy = v - 0.5;
+        const rr = Math.hypot(dx, dy) / (0.42 + 0.08 * fbm(u * 2, v * 2, 5));
+        a = Math.max(0, 1 - rr * rr) * (0.6 + 0.4 * fbm(u, v, 9)) * 0.5;
+        lum = 1.0;
+      } else {
+        // fine grime: many hairline streaks running along v from small sources
+        for (const [sx, sy, sw, sl] of fine) {
+          const dv = v - sy;
+          if (dv < 0 || dv > sl) continue;
+          const t = dv / sl;
+          const dx = Math.abs(u - sx) / (sw * (1 + t));
+          if (dx < 1) a += (1 - dx) * (1 - t) * 0.7;
+        }
+        a = Math.min(1, a) * (0.7 + 0.3 * fbm(u, v, 30));
+        lum = 0.08 + 0.06 * fbm(u, v, 35);
+      }
+      // keep the cell borders clear so bilinear filtering never bleeds a neighbour in
+      const border = Math.min(u, 1 - u, v, 1 - v);
+      if (border < 0.02) a *= border / 0.02;
+      const i = (py * size + px) * 4;
+      const l8 = Math.round(Math.min(1, lum) * 255);
+      d[i] = l8;
+      d[i + 1] = l8;
+      d[i + 2] = Math.min(255, l8 + 2);
+      d[i + 3] = Math.round(Math.min(1, a) * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+// Adds the exterior-detail keys to a material set built by buildImperialMaterials(). Idempotent.
+export function addExteriorDetailMaterials(mats) {
+  if (mats.hullGreeble) return mats;
+  const metal = mats.impMetal.map ? { map: mats.impMetal.map, roughnessMap: mats.impMetal.roughnessMap, metalnessMap: mats.impMetal.metalnessMap, normalMap: mats.impMetal.normalMap } : makeWornMetal(1024, 23);
+  // painted hull machinery: light grey (tinted per instance), slightly rougher and less metallic than
+  // bare steel so it reads as armour plate rather than chrome under the sun
+  mats.hullGreeble = new THREE.MeshStandardMaterial({
+    map: metal.map,
+    roughnessMap: metal.roughnessMap,
+    metalnessMap: metal.metalnessMap,
+    normalMap: metal.normalMap,
+    normalScale: new THREE.Vector2(0.45, 0.45),
+    roughness: 0.95,
+    metalness: 0.42,
+    vertexColors: true,
+    color: 0xffffff,
+    envMapIntensity: 0.65,
+  });
+  mats.emitTint = makeEmitTint(2.4);
+  // anti-collision strobes: greebles.js toggles emissiveIntensity between 0 and this every flash
+  mats.emitStrobe = makeEmitTint(6.0);
+  mats.emitStrobe.userData.onIntensity = 6.0;
+  mats.weathering = new THREE.MeshStandardMaterial({
+    map: makeWeatheringAtlas(1024, 4021),
+    transparent: true,
+    depthWrite: false,
+    roughness: 0.92,
+    metalness: 0.05,
+    vertexColors: true,
+    color: 0xffffff,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
+    envMapIntensity: 0.2,
+  });
+  return mats;
+}
+
 // Keys whose meshes should not cast shadows (emitters, glass, decals, grates)
-export const NO_SHADOW_KEYS = new Set(["glass", "glassDark", "holo", "holoWire", "beam", "impDecal", "deckMarks", "impGrate", "lightBand", "lightBandWarm", "lightBandRed", "lightSoft", "leds", "blink", "blinkSparse", "blinkDense"]);
+export const NO_SHADOW_KEYS = new Set(["glass", "glassDark", "holo", "holoWire", "beam", "impDecal", "deckMarks", "impGrate", "lightBand", "lightBandWarm", "lightBandRed", "lightSoft", "leds", "blink", "blinkSparse", "blinkDense", "emitTint", "emitStrobe", "weathering"]);
 export const isEmissiveKey = (k) => k.startsWith("emit") || k.startsWith("screen") || k.startsWith("blink") || k.startsWith("lightBand") || k === "lightSoft" || k === "leds";

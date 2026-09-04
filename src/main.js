@@ -56,7 +56,7 @@ const tMats = performance.now() - tBuild0;
 const space = buildSpace(scene);
 
 // Sun: one directional light following the far-field sun, shadow frustum fitted per camera mode
-const sun = new THREE.DirectionalLight(0xfff1dc, 3.2);
+const sun = new THREE.DirectionalLight(0xfff1dc, 3.8);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.bias = -0.0006;
@@ -65,7 +65,7 @@ sun.shadow.camera.near = 1;
 sun.shadow.camera.far = 4000;
 scene.add(sun);
 scene.add(sun.target);
-const hemi = new THREE.HemisphereLight(0x6a7890, 0x1a1c22, 0.22);
+const hemi = new THREE.HemisphereLight(0x7f8ea8, 0x1a1c22, 0.2);
 scene.add(hemi);
 
 const pmrem = new THREE.PMREMGenerator(renderer);

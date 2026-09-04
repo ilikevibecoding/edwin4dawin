@@ -199,8 +199,10 @@ export function makeHullPlate(size = 2048, seed = 331) {
     const n1 = fbm(u, v, { octaves: 4, freq: 6, seed });
     const n2 = fbm(u, v, { octaves: 5, freq: 40, seed: seed + 2 });
     let lum = tones[k] * (0.95 + (n1 - 0.5) * 0.12 + (n2 - 0.5) * 0.06);
-    let rough = 0.58 + (n2 - 0.5) * 0.2 + (n1 - 0.5) * 0.1;
-    let metal = 0.55;
+    // painted armour, not bare metal: the film hulls are matte light grey that takes sunlight as
+    // diffuse shading (a half-metal surface only mirrors black space and reads flat)
+    let rough = 0.6 + (n2 - 0.5) * 0.2 + (n1 - 0.5) * 0.1;
+    let metal = 0.12;
     let hgt = 0.5 + heights[k];
     const seam = 0.0035;
     if (ed < seam) {
@@ -228,7 +230,7 @@ export function makeHullPlate(size = 2048, seed = 331) {
         const inner = Math.abs(u - hx) < hw - 0.0015 && Math.abs(v - hy) < hh - 0.0015;
         hgt += inner ? 0.05 : -0.1;
         lum *= inner ? 0.9 : 0.6;
-        metal = 0.7;
+        metal = 0.4;
       }
     }
     for (const [sx, sy, sr] of scorches) {
