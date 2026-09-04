@@ -68,6 +68,7 @@ export function buildVentral(ctx) {
   worldUV(channelGeo, 1 / 12);
   macroColor(channelGeo, { base: 1.0 });
   const flats = [channelGeo]; // every flat dark quad on the belly ends up in one mesh
+  const lit = []; // every emissive fitting on the belly shares the well rim's mesh
 
   // ---- machinery along the channel edges and the flank strips (boxes, drums, pipes), random pitch
   const unitGeo = box(0, 0.5, 0, 1, 1, 1);
@@ -136,6 +137,8 @@ export function buildVentral(ctx) {
       return g;
     };
     const collar = drape(new THREE.TorusGeometry(rBase + 1.2, 2.6, 10, 64).rotateX(Math.PI / 2).translate(x, yHull - 0.4, z));
+    // a thin lit ring under the collar so the bulb reads as a powered feature from 600 m
+    lit.push(drape(new THREE.TorusGeometry(rBase + 1.2, 0.35, 6, 64).rotateX(Math.PI / 2).translate(x, yHull - 3.1, z)));
     const uvParts = [collar];
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2 + 0.2;
@@ -209,11 +212,13 @@ export function buildVentral(ctx) {
     const off = 1.6;
     const yr = k.y - collarT - 0.12;
     const rim = merge([
+      ...lit,
       box(cx, yr, w.z0 - off, ww + off * 2 + t, 0.3, t),
       box(cx, yr, w.z1 + off, ww + off * 2 + t, 0.3, t),
       box(w.x0 - off, yr, cz, t, 0.3, wd + off * 2 - t),
       box(w.x1 + off, yr, cz, t, 0.3, wd + off * 2 - t),
     ]);
+    rim.computeBoundingSphere();
     const rimMesh = new THREE.Mesh(rim, mats.rimLight);
     rimMesh.name = "wellRimLight";
     group.add(rimMesh);
