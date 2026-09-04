@@ -48,7 +48,13 @@ export function ensureCrewMaterials(mats) {
   // instead of its charcoal colour map, vertex-tinted like the other floors
   const g = mats.impGloss;
   mats.crewGlossLight = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughnessMap: g ? g.roughnessMap : null, normalMap: g ? g.normalMap : null, normalScale: new THREE.Vector2(0.5, 0.5), roughness: 2.4, metalness: 0.08, envMapIntensity: 0.6 });
-  for (const k of ["bactaFluid", "crewEmit", "crewEmitSoft"]) NO_SHADOW_KEYS.add(k);
+  // viewport glazing that faces the sun (lounge bays): the shared glass is polished enough that the
+  // raking sun puts a blown-out glint on it; this variant keeps the tint but spreads the highlight
+  mats.crewGlass = mats.glass ? mats.glass.clone() : new THREE.MeshPhysicalMaterial({ color: 0x6d8a96, transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide });
+  mats.crewGlass.roughness = 0.55;
+  mats.crewGlass.specularIntensity = 0.3;
+  mats.crewGlass.envMapIntensity = 0.1;
+  for (const k of ["bactaFluid", "crewEmit", "crewEmitSoft", "crewGlass"]) NO_SHADOW_KEYS.add(k);
   return mats;
 }
 

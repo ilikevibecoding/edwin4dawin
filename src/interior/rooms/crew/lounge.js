@@ -257,7 +257,10 @@ function viewportWall(kit, ctx, w, y, h, bayZ) {
     // sill band below the bay with a steel ledge running outboard under the glass, blue under-lip
     trim(uc, 0.16, 0.084, BAY, 0.32, 0.168);
     frame.box("impPanel", uc, (0.32 + V0) / 2, 0.03, BAY - 0.1, V0 - 0.32 - 0.06, 0.06, { color: IMP.wallDark, uv: "keep" });
-    frame.box("impMetal", uc, V0 + 0.025, (0.2 - RUN) / 2, BAY - 0.1, 0.05, RUN + 0.2, { color: IMP.steel, texel: 1 });
+    // rubber-matted ledge: the low sun rakes in through the bays, and a polished steel ledge threw a
+    // blown-out glint at grazing angles (painted metal still flared); matting reads as non-slip trim
+    frame.box("impRubber", uc, V0 + 0.025, (0.2 - RUN) / 2, BAY - 0.1, 0.05, RUN + 0.2, { color: IMP.gunmetal, texel: 1 });
+    frame.box("impPaintedMetal", uc, V0 + 0.025, 0.17, BAY - 0.1, 0.06, 0.06, { color: IMP.steel, texel: 1 });
     frame.box("crewEmit", uc, V0 - 0.03, 0.19, BAY - 0.5, 0.015, 0.01, { color: 0x3a70ff });
     // head band panel + blast-shutter housing with a status lamp and an indicator strip
     frame.box("impPanel1", uc, (V1 + 0.45 + h - 0.22) / 2, 0.03, BAY - 0.1, h - 0.22 - V1 - 0.5, 0.06, { color: IMP.wallDark, uv: "keep" });
@@ -269,7 +272,7 @@ function viewportWall(kit, ctx, w, y, h, bayZ) {
     // the slanted pane and its casement: rails along the top and bottom edges, side rails and a mullion along the slope
     const pane = new THREE.PlaneGeometry(BAY - 0.3, S - 0.16);
     pane.rotateX(tilt);
-    frame.add("glass", pane, uc, (V0 + V1) / 2, -RUN / 2, { uv: "keep" });
+    frame.add("crewGlass", pane, uc, (V0 + V1) / 2, -RUN / 2, { uv: "keep" });
     frame.box("impMetal", uc, V1 - 0.03, -0.05, BAY - 0.2, 0.1, 0.1, { color: IMP.gunmetal, texel: 1, tilt });
     frame.box("impMetal", uc, V0 + 0.04, -RUN + 0.06, BAY - 0.2, 0.1, 0.1, { color: IMP.gunmetal, texel: 1, tilt });
     for (const du of [-(BAY / 2 - 0.12), 0, BAY / 2 - 0.12]) frame.box("impMetal", uc + du, (V0 + V1) / 2, -RUN / 2, du === 0 ? 0.06 : 0.1, S - 0.1, du === 0 ? 0.06 : 0.1, { color: IMP.gunmetal, texel: 1, tilt });
