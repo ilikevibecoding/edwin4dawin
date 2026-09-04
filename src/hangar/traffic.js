@@ -51,23 +51,27 @@ export class Pilot {
   update(_fighter, _dt) {}
 }
 
-/** Default pilot: timers seeded per fighter so the launches and returns stagger. */
+/**
+ * Default pilot: timers seeded per fighter so the launches and returns stagger. `t` counts seconds since
+ * the fighter last changed state, so a craft rests in the rack for `parkTime` after every recovery.
+ */
 export class ScriptedPilot extends Pilot {
   constructor(seed = 1) {
     super();
     this.t = 0;
-    this.parkTime = 6 + ((seed * 7.3) % 20);
+    this.last = null;
+    this.parkTime = 10 + ((seed * 7.3) % 24);
     this.patrolTime = 30 + ((seed * 11.7) % 45);
   }
   update(f, dt) {
-    this.t += dt;
-    if (f.state === "parked" && this.t > this.parkTime) {
-      f.requestLaunch();
-      this.t = 0;
-    } else if (f.state === "patrol" && !f.returnRequested && this.t > this.patrolTime) {
-      f.requestReturn();
+    if (this.last === null) this.last = f.state;
+    if (f.state !== this.last) {
+      this.last = f.state;
       this.t = 0;
     }
+    this.t += dt;
+    if (f.state === "parked" && this.t > this.parkTime) f.requestLaunch();
+    else if (f.state === "patrol" && !f.returnRequested && this.t > this.patrolTime) f.requestReturn();
   }
 }
 
@@ -85,19 +89,20 @@ export class FormationPilot extends Pilot {
     this.members = members;
     this.parkTime = parkTime;
     this.patrolTime = patrolTime;
-    this.t = 0;
+    this.t = 0; // seconds since the leader last changed state
+    this.last = null;
   }
   update(f, dt) {
     if (f !== this.members[0]) return; // the leader's tick drives the whole element
-    this.t += dt;
-    const all = (s) => this.members.every((m) => m.state === s);
-    if (all("parked") && this.t > this.parkTime) {
-      for (const m of this.members) m.requestLaunch();
-      this.t = 0;
-    } else if (all("patrol") && !this.members[0].returnRequested && this.t > this.patrolTime) {
-      for (const m of this.members) m.requestReturn();
+    if (this.last === null) this.last = f.state;
+    if (f.state !== this.last) {
+      this.last = f.state;
       this.t = 0;
     }
+    this.t += dt;
+    const all = (s) => this.members.every((m) => m.state === s);
+    if (all("parked") && this.t > this.parkTime) for (const m of this.members) m.requestLaunch();
+    else if (all("patrol") && !f.returnRequested && this.t > this.patrolTime) for (const m of this.members) m.requestReturn();
   }
 }
 
@@ -770,9 +775,12 @@ export class Fighter {
     _qr.setFromAxisAngle(FWD, -bank);
     this.mesh.quaternion.multiply(_qr);
   }
-  /** { id, state, t, lap?, ret? } — everything a peer needs to reproduce the pose with applyState(). */
+  /**
+   * { id, state, t, lap?, ret? } — everything a peer needs to reproduce the pose with applyState().
+   * Six decimals of phase progress keep the replay within a centimetre on the 10 km circuits.
+   */
   serialize() {
-    const st = { id: this.id, state: this.state, t: +this.t.toFixed(4) };
+    const st = { id: this.id, state: this.state, t: +this.t.toFixed(6) };
     if (this.lap) st.lap = this.lap;
     if (this.returnRequested) st.ret = 1;
     return st;
