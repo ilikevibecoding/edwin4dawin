@@ -85,7 +85,7 @@ const GESTURES = ["pointerdown", "keydown", "touchend", "click"];
 const DOOR_BY_ID = Object.fromEntries(DOORS.map((d) => [d.id, d]));
 
 // full-scale level of each ambience layer at profile value 1
-const LAYER_LEVEL = { hum: 0.08, air: 0.05, throb: 0.14, whine: 0.02, wind: 0.07, drone: 0.06, tone: 0.014, warm: 0.05 };
+const LAYER_LEVEL = { hum: 0.08, air: 0.05, throb: 0.14, whine: 0.045, wind: 0.16, drone: 0.06, tone: 0.02, warm: 0.05 };
 // reverb send levels per room size (small = 0.55 s IR, large = 2.6 s IR)
 const SPACES = {
   small: { small: 0.22, large: 0.0 },
@@ -93,7 +93,7 @@ const SPACES = {
   large: { small: 0.1, large: 0.3 },
   huge: { small: 0.05, large: 0.5 },
 };
-const EVENT_GAIN = { door_open: 0.35, door_close: 0.35, lift_start: 0.4, lift_arrive: 0.35, fighter_launch: 0.5, field_pass: 0.4, depart: 0.45, return: 0.45, dock: 0.45 };
+const EVENT_GAIN = { door_open: 0.35, door_close: 0.35, lift_start: 0.4, lift_arrive: 0.35, fighter_launch: 0.5, field_pass: 0.45, depart: 0.5, return: 0.5, dock: 0.5, alert: 0.25 };
 const EVENT_RANGE = { door_open: 45, door_close: 45, lift_start: 30, lift_arrive: 30, fighter_launch: 400, field_pass: 250, depart: 600, return: 600, dock: 200 };
 
 const GENERIC = { hum: 0.5, air: 0.5, cutoff: 400, throb: 0, whine: 0, wind: 0, drone: 0, tone: 0, warm: 0, beeps: "none", beepRate: 6, clanks: 0, swoosh: 0, space: "small", crowd: false };
@@ -207,7 +207,7 @@ export class AudioSystem {
     this._onKey = (e) => {
       if (e.code === "KeyM" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) this.mute();
     };
-    if (typeof window !== "undefined") window.addEventListener("keydown", this._onKey);
+    if (typeof document !== "undefined") document.addEventListener("keydown", this._onKey);
   }
 
   // ---------------------------------------------------------------------------------------------------
@@ -499,7 +499,11 @@ export class AudioSystem {
         this._later(
           () => {
             if (!alive()) return;
-            fn();
+            try {
+              fn();
+            } catch (err) {
+              console.warn("[audio] ambient voice failed:", err && err.message ? err.message : err);
+            }
             arm(rand(minS, maxS) * 1000);
           },
           ms,
@@ -703,8 +707,8 @@ export class AudioSystem {
   _voice(o) {
     if (!this.enabled) return null;
     const c = this.ctx;
-    if (!this._offline && c.state !== "running") {
-      if (o.entry) o.entry.reason = "suspended";
+    if (c.state === "closed" || (!this._offline && c.state !== "running")) {
+      if (o.entry) o.entry.reason = c.state;
       return null;
     }
     let g = clamp(num(o.gain, 0.3), 0, EVENT_MAX);
@@ -727,21 +731,22 @@ export class AudioSystem {
       if (o.entry) o.entry.reason = "voice cap";
       return null;
     }
+    pan = clamp(pan || 0, -0.85, 0.85);
     const amp = this._gain(g);
     let tail = amp;
     let panner = null;
     if (typeof c.createStereoPanner === "function") {
       panner = this._n(c.createStereoPanner());
-      panner.pan.value = clamp(pan || 0, -0.85, 0.85);
+      panner.pan.value = pan;
       amp.connect(panner);
       tail = panner;
     }
     tail.connect(this.voiceBus);
     if (o.entry) {
       o.entry.gain = +g.toFixed(3);
-      o.entry.pan = +(pan || 0).toFixed(2);
+      o.entry.pan = +pan.toFixed(2);
     }
-    return { input: amp, panner, t: c.currentTime, gain: g, pan: pan || 0 };
+    return { input: amp, panner, t: c.currentTime, gain: g, pan };
   }
 
   _claimVoice(dur) {
@@ -761,21 +766,23 @@ export class AudioSystem {
 
   _doorSlide(v, t, open, size) {
     const dur = 0.34 * size;
-    // pneumatic hiss
-    const bp = this._filter("bandpass", open ? 520 : 2100, 1.1, v.input);
+    // pneumatic hiss (band-pass loses broadband energy: small make-up gain)
+    const bp = this._filter("bandpass", open ? 520 : 2100, 1.1, this._gain(1.3, v.input));
     bp.frequency.setValueAtTime(open ? 520 : 2100, t);
     bp.frequency.exponentialRampToValueAtTime(open ? 2100 : 520, t + dur);
     const hg = this._gain(MIN, bp);
-    this._env(hg.gain, t, 0.04, 0.55, dur * 0.4, dur * 0.6);
+    this._env(hg.gain, t, 0.04, 0.85, dur * 0.4, dur * 0.6);
     this._noise("white", t, t + dur + 0.1, hg);
-    // servo whir
+    // servo whir (saw + octave square, both gliding with the slab)
     const lp = this._filter("lowpass", 700, 1, v.input);
     const sg = this._gain(MIN, lp);
-    this._env(sg.gain, t, 0.05, 0.14, dur * 0.6, 0.2);
+    this._env(sg.gain, t, 0.05, 0.22, dur * 0.6, 0.2);
     const so = this._osc("sawtooth", open ? 140 : 190, t, t + dur + 0.35, sg);
     so.frequency.exponentialRampToValueAtTime(open ? 190 : 140, t + dur);
-    if (open) this._click(v.input, t, 0.25);
-    else this._clankAt(v.input, t + dur + 0.02, 480 / size, 0.35, 0.25);
+    const sq = this._osc("square", open ? 280 : 380, t, t + dur + 0.35, this._gain(0.3, sg));
+    sq.frequency.exponentialRampToValueAtTime(open ? 380 : 280, t + dur);
+    if (open) this._click(v.input, t, 0.35);
+    else this._clankAt(v.input, t + dur + 0.02, 480 / size, 0.4, 0.25);
   }
 
   _doorBlast(v, open, size) {
@@ -889,7 +896,13 @@ export class AudioSystem {
     const t = v.t;
     const dur = 1.7;
     const out = this._gain(MIN, v.input);
-    this._env(out.gain, t, 0.07, 0.9, dur * 0.25, dur * 0.75);
+    // fast attack, then a gradual fade (−26 dB over the sweep) and a quick tail-off: the scream stays audible
+    // for the whole descent instead of vanishing a quarter of the way down
+    out.gain.setValueAtTime(MIN, t);
+    out.gain.exponentialRampToValueAtTime(0.9, t + 0.07);
+    out.gain.setValueAtTime(0.9, t + 0.4);
+    out.gain.exponentialRampToValueAtTime(0.045, t + dur - 0.1);
+    out.gain.exponentialRampToValueAtTime(MIN, t + dur);
     const shaper = this._n(c.createWaveShaper());
     shaper.curve = this._softClip();
     shaper.oversample = "2x";
@@ -922,9 +935,10 @@ export class AudioSystem {
     const c = this.ctx;
     const t = v.t;
     const dur = 0.5;
-    const g = this._gain(MIN, v.input);
-    this._env(g.gain, t, 0.01, 0.8, 0.05, dur - 0.06);
-    const bp = this._filter("bandpass", 3400, 0.8, g);
+    // the sparse, band-limited bursts need make-up gain to read as a real discharge
+    const g = this._gain(MIN, this._gain(2.5, v.input));
+    this._env(g.gain, t, 0.01, 1, 0.15, dur - 0.16);
+    const bp = this._filter("bandpass", 3400, 0.6, g);
     const hp = this._filter("highpass", 1600, 0.7, bp);
     const src = this._n(c.createBufferSource());
     src.buffer = this._gatedNoise(dur);
@@ -932,21 +946,22 @@ export class AudioSystem {
     src.start(t);
     src.stop(t + dur);
     const zg = this._gain(MIN, v.input);
-    this._env(zg.gain, t, 0.005, 0.35, 0.02, 0.16);
+    this._env(zg.gain, t, 0.005, 0.5, 0.02, 0.16);
     const zap = this._osc("sine", 2600, t, t + 0.2, zg);
     zap.frequency.exponentialRampToValueAtTime(380, t + 0.18);
-    this._thudAt(v.input, t, 130, 45, 0.12, 0.3);
+    this._thudAt(v.input, t, 130, 45, 0.12, 0.4);
   }
 
   /** Fly-by whoosh with a doppler-like slide; the pan sweeps across the listener. */
   _whoosh(v, arriving) {
     const t = v.t;
     const dur = 2.0;
+    // audible from the first moment (approach), peak as it passes, long tail as it recedes
     const g = this._gain(MIN, v.input);
-    g.gain.setValueAtTime(MIN, t);
-    g.gain.exponentialRampToValueAtTime(0.9, t + dur * 0.4);
+    g.gain.setValueAtTime(0.03, t);
+    g.gain.exponentialRampToValueAtTime(1, t + dur * 0.4);
     g.gain.exponentialRampToValueAtTime(MIN, t + dur);
-    const bp = this._filter("bandpass", 800, 1.3, g);
+    const bp = this._filter("bandpass", 800, 1.3, this._gain(2, g));
     if (arriving) {
       bp.frequency.setValueAtTime(280, t);
       bp.frequency.exponentialRampToValueAtTime(1000, t + dur * 0.45);
@@ -970,12 +985,12 @@ export class AudioSystem {
   /** Tractor clamp: thud + clank + hydraulic hiss. */
   _dock(v) {
     const t = v.t;
-    this._thudAt(v.input, t, 75, 38, 0.35, 1.0);
-    this._clankAt(v.input, t + 0.01, 320, 0.4, 0.3);
-    this._click(v.input, t, 0.4);
+    this._thudAt(v.input, t, 75, 38, 0.45, 1.0);
+    this._clankAt(v.input, t + 0.01, 320, 0.6, 0.35);
+    this._click(v.input, t, 0.5);
     const lp = this._filter("lowpass", 1400, 0.8, v.input);
     const hg = this._gain(MIN, lp);
-    this._env(hg.gain, t + 0.25, 0.15, 0.15, 0.1, 0.6);
+    this._env(hg.gain, t + 0.25, 0.15, 0.25, 0.1, 0.6);
     this._noise("white", t + 0.25, t + 1.2, hg);
   }
 
@@ -992,7 +1007,7 @@ export class AudioSystem {
     this._klaxon.active = true;
     const loop = () => {
       if (!this._klaxon.active || !this.enabled) return;
-      const v = this._voice({ gain: 0.18, pan: 0, dur: 1.1 });
+      const v = this._voice({ gain: EVENT_GAIN.alert, pan: 0, dur: 1.1 });
       if (v) {
         this._klaxonBurst(v.input, v.t, 520, 470);
         this._klaxonBurst(v.input, v.t + 0.56, 392, 354);
@@ -1030,10 +1045,12 @@ export class AudioSystem {
     if (!this._hooked) this._hook();
     const L = SYSTEMS.lighting;
     if (L && typeof L.alert === "number") {
-      if (L.alert > 0.5 && !this._klaxon.active) {
+      // follow the commanded state (alertTarget) so the klaxon starts / stops with the order, not the fade
+      const a = L.state && typeof L.state.alertTarget === "number" ? L.state.alertTarget : L.alert;
+      if (a >= 0.5 && !this._klaxon.active) {
         this._klaxon.until = 0;
         this._startKlaxon();
-      } else if (L.alert < 0.05 && this._klaxon.active) this._stopKlaxon();
+      } else if (a < 0.5 && this._klaxon.active) this._stopKlaxon();
     } else if (this._klaxon.active && now > this._klaxon.until) this._stopKlaxon();
     if (this._ride && now > this._ride.until) this.rideHum(false);
   }
