@@ -5,6 +5,7 @@
 // bridge template.
 import * as THREE from "three";
 import { makeCanvas, toTexture, mulberry32 } from "../../../textures.js";
+import { stripMaterials } from "../spine/strip.js";
 
 const S = 1024;
 const RED = "#ff2a1a";
@@ -352,9 +353,13 @@ export function makeObservationAtlas() {
 }
 
 // manifest.materials(shared) hook: one emissive material for every display in the module
+// The white emitter is the transit spaces' non-specular emitStrip (spine/strip.js) instead of the shared emitWhite:
+// seen along its length from the far end of the gallery, the ceiling channel strip piled up and mirrored the pool
+// points into a 13 × 28 px clipped patch (d1-observation-along, 75 px). Same material count: emitWhite leaves.
 export function observationMaterials() {
   const tex = makeObservationAtlas();
   return {
+    ...stripMaterials(),
     obsScreen: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.0, roughness: 0.42, metalness: 0, envMapIntensity: 0.4 }),
   };
 }

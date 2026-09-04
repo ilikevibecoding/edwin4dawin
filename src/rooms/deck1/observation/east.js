@@ -36,7 +36,7 @@ function counter(kit, y) {
   kit.boxMM("metal", [x0, y + 2.26, N_FACE + 0.46], [x1, y + 2.34, N_FACE + 0.52], { color: IMP.black, texel: 1 });
   for (let i = 0; i < 3; i++) {
     const cx = x0 + 1.5 + i * 3.0;
-    kit.boxMM("emitWhite", [cx - 0.5, y + 2.275, N_FACE + 0.3], [cx + 0.5, y + 2.305, N_FACE + 0.44]);
+    kit.boxMM("emitStrip", [cx - 0.5, y + 2.275, N_FACE + 0.3], [cx + 0.5, y + 2.305, N_FACE + 0.44]);
     kit.boxMM("impPanel", [cx - 0.42, y + 0.95, N_FACE + 0.02], [cx + 0.42, y + 2.05, N_FACE + 0.42], cBlack);
     kit.boxMM("impPanel", [cx - 0.38, y + 1.5, N_FACE + 0.42], [cx + 0.38, y + 2.0, N_FACE + 0.5], cDark);
     screen(kit, i === 1 ? "dispenser1" : "dispenser0", [cx - 0.26, y + 1.64, N_FACE + 0.5], [cx + 0.26, y + 1.9, N_FACE + 0.51]);

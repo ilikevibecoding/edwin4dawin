@@ -72,7 +72,9 @@ export function buildChartTable(kit, atlasMat, cells, cx, floorY, cz, { seed = 3
     const tilt = 0.32;
     const sy0 = 0.9;
     const sz0 = -0.09;
-    p.box("darkGloss", 0, sy0, sz0, facetW - 0.16, 0.035, 0.34, { tilt });
+    // rubber (matte), not darkGloss: tilted 18° toward the operator, the gloss slab mirrored a ceiling downlight
+    // as a 15 × 12 px clipped blob from the table camera; the LEDs and the mid-metal trim still read on the matte
+    p.box("rubber", 0, sy0, sz0, facetW - 0.16, 0.035, 0.34, { tilt, texel: 2 });
     {
       const [, ty, tz] = p.onSlope(0, 0.005, 0.165, tilt);
       p.box("metal", 0, sy0 + ty, sz0 + tz, facetW - 0.16, 0.02, 0.025, { color: IMP.mid, texel: 2, tilt });
@@ -214,9 +216,9 @@ export function buildChartDesk(kit, p, atlasMat, screenRect, { w = 2.6, d = 1.4,
   p.box("metal", 0, 0.7, d / 2 - 0.08, w - 0.4, 0.03, 0.04, { color: IMP.mid, texel: 2 });
   p.cyl("metal", 0, 0.2, d / 2 + 0.1, 0.018, w - 0.9, "x", { color: IMP.steel, segments: 8 });
   for (const s of [-1, 1]) p.box("metal", s * (w / 2 - 0.5), 0.2, d / 2, 0.03, 0.03, 0.2, { color: IMP.mid, texel: 2 });
-  // tilted display slab (dark gloss) with the inset display and a lighter frame
+  // tilted display slab (matte rubber — see the table rim above) with the inset display and a lighter frame
   const sy0 = 0.9;
-  p.box("darkGloss", 0, sy0, 0, w - 0.2, 0.05, d - 0.2, { tilt });
+  p.box("rubber", 0, sy0, 0, w - 0.2, 0.05, d - 0.2, { tilt, texel: 2 });
   const [sx, sy, sz] = p.onSlope(0, 0.026, 0, tilt);
   p.screenH(atlasMat, sx, sy0 + sy, sz, 2.0, 1.0, screenRect, tilt);
   // raised rim: four bars following the slope, 0.1 m proud of the slab

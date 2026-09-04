@@ -84,7 +84,7 @@ export function windowBand(kit, A, FLOOR) {
   for (let i = 0; i < n; i++) {
     const xa = A.x0 + i * pw + 0.3;
     const xb = A.x0 + (i + 1) * pw - 0.3;
-    kit.boxMM("emitWhite", [xa, A.y0 - 0.205, zRoom + 0.39], [xb, A.y0 - 0.193, zRoom + 0.4]);
+    kit.boxMM("emitStrip", [xa, A.y0 - 0.205, zRoom + 0.39], [xb, A.y0 - 0.193, zRoom + 0.4]);
     const x = (xa + xb) / 2;
     // heading/planet readout on the cap: bezel, face plate, 0.3 m atlas readout (two variants), status dot
     kit.boxMM("paintedMetal", [x - 0.2, A.y0 + 0.04, zRoom + 0.12], [x + 0.2, A.y0 + 0.17, zRoom + 0.3], { color: IMP.black, texel: 1 });

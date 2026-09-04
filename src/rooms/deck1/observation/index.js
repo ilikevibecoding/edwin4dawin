@@ -48,11 +48,11 @@ const manifest = {
       ceilY,
       seed: 53,
       panelW: 2.4,
-      strip: "emitWhite",
+      strip: "emitStrip",
       extra: { n: [win] },
       // the window band is the north wall's feature: no waist strip under it (fewer parallel light lines)
       walls: { n: { strip: null } },
-      ceiling: { axis: "x", inset: 0.25, channels: [{ at: 460.2, w: 0.5, emit: "emitWhite", emitW: 0.08 }, { at: 463.8, w: 0.5, emit: "emitWhite", emitW: 0.08 }] },
+      ceiling: { axis: "x", inset: 0.25, channels: [{ at: 460.2, w: 0.5, emit: "emitStrip", emitW: 0.08 }, { at: 463.8, w: 0.5, emit: "emitStrip", emitW: 0.08 }] },
     });
     for (const d of manifest.doors) doorReveal(kit, manifest, d, FLOOR);
 

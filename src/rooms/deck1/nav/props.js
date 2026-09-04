@@ -628,7 +628,9 @@ export function stencilPlate(kit, p, size, index, { plate = true } = {}) {
 export function beam(kit, min, max, { color = IMP.dark, flange = true, bolts = true } = {}) {
   kit.boxMM("paintedMetal", min, max, { color, texel: 1 });
   const alongX = max[0] - min[0] > max[2] - min[2];
-  if (flange) kit.boxMM("metal", [min[0] - 0.02, min[1] - 0.025, min[2] - 0.02], [max[0] + 0.02, min[1], max[2] + 0.02], { color: IMP.mid, texel: 1 });
+  // metalRough, not bare metal: the flange underside sits 0.65 m over the downlight points and the worn map's
+  // roughness-0.2 texels mirrored one as a 23 × 24 px clipped blob (d1-nav-corner); the flat lobe stays under 0.25
+  if (flange) kit.boxMM("metalRough", [min[0] - 0.02, min[1] - 0.025, min[2] - 0.02], [max[0] + 0.02, min[1], max[2] + 0.02], { color: IMP.mid, texel: 1 });
   if (bolts) {
     const L = alongX ? max[0] - min[0] : max[2] - min[2];
     for (let s = 0.6; s < L - 0.3; s += 1.2) {

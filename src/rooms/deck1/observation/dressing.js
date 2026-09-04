@@ -39,7 +39,7 @@ function ceilingWork(kit, ceilY, A) {
   const pw = (A.x1 - A.x0) / n;
   for (let i = 0; i < n; i++) {
     const x = A.x0 + (i + 0.5) * pw;
-    kit.boxMM("emitWhite", [x - 0.8, ceilY - 0.376, N_FACE + 0.75], [x + 0.8, ceilY - 0.364, N_FACE + 0.78]);
+    kit.boxMM("emitStrip", [x - 0.8, ceilY - 0.376, N_FACE + 0.75], [x + 0.8, ceilY - 0.364, N_FACE + 0.78]);
   }
   // short ribs every 4 m on both soffits (they stop well short of the channels at z 460.2 / 463.8)
   for (let x = -82; x <= -22; x += 4) {
@@ -163,7 +163,7 @@ function displayCase(kit, y) {
   kit.boxMM("metal", [x0, y + y1 + 0.04, z0], [x0 + 0.02, y + y1 + f, z1], { color: IMP.grey, texel: 1 });
   kit.boxMM("metal", [x0, y + y0 - f, z0], [x0 + 0.02, y + y0 - 0.04, z1], { color: IMP.grey, texel: 1 });
   kit.boxMM("obsScreen", [x1 - f - 0.005, y + 2.3, z0 + 0.05], [x1 - f, y + 2.7, z0 + 0.85], { uv: "keep", uvRect: cellRect("fleet") });
-  kit.boxMM("emitWhite", [x0 + 0.08, y + y1 - 0.03, z0 + 0.1], [x0 + 0.12, y + y1 - 0.01, z1 - 0.1]);
+  kit.boxMM("emitStrip", [x0 + 0.08, y + y1 - 0.03, z0 + 0.1], [x0 + 0.12, y + y1 - 0.01, z1 - 0.1]);
   kit.add("glass", new THREE.PlaneGeometry(z1 - z0, y1 - y0).rotateY(-Math.PI / 2), { pos: [x0 + 0.01, y + (y0 + y1) / 2, (z0 + z1) / 2], uv: "keep" });
   const mx = x0 + 0.26;
   const mz = z0 + 0.36; // hull origin: nose 2/3 of the length toward the room, stern 1/3 toward the wall
@@ -222,7 +222,7 @@ export function keyHousing(kit, pos, target) {
   kit.boxMM("paintedMetal", [pos[0] - 0.05, pos[1] - 0.16, N_FACE], [pos[0] + 0.05, pos[1] + 0.12, pos[2] - 0.05], { color: IMP.black, texel: 1 });
   kit.add("paintedMetal", new THREE.BoxGeometry(0.3, 0.28, 0.4), { pos: at(0.05), quat, color: IMP.black, texel: 1 });
   kit.add("metal", new THREE.CylinderGeometry(0.12, 0.12, 0.03, 20).rotateX(Math.PI / 2), { pos: at(0.265), quat, color: IMP.grey, texel: 1 });
-  kit.add("emitWhite", new THREE.CylinderGeometry(0.085, 0.085, 0.01, 20).rotateX(Math.PI / 2), { pos: at(0.285), quat });
+  kit.add("emitStrip", new THREE.CylinderGeometry(0.085, 0.085, 0.01, 20).rotateX(Math.PI / 2), { pos: at(0.285), quat });
 }
 
 // Framed plaque: dark plate, light-grey frame, thin polished-metal wireframe of a wedge-hulled ship (side
@@ -323,7 +323,7 @@ export function pendant(kit, x, ceilY, z) {
 export function soffitCan(kit, x, ceilY, z) {
   kit.cyl("paintedMetal", x, ceilY - 0.41, z, 0.09, 0.18, "y", { color: IMP.black, texel: 1, segments: 16 });
   kit.cyl("metal", x, ceilY - 0.505, z, 0.1, 0.012, "y", { color: IMP.grey, texel: 1, segments: 16 });
-  kit.cyl("emitWhite", x, ceilY - 0.512, z, 0.05, 0.006, "y", { segments: 16 });
+  kit.cyl("emitStrip", x, ceilY - 0.512, z, 0.05, 0.006, "y", { segments: 16 });
 }
 
 // door end (x -24..-20.3): intercom + panel decal on the east wall, junction cabinet north of the counter's end
