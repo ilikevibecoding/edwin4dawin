@@ -3,6 +3,7 @@
 // still block), cable trays, valve wheels, caged work lights, grated decks, octagon helpers and
 // grid-sampled walkable floors. Everything merges into the room's Kit.
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { Frame, pointLight } from "../lib.js";
 import { PALETTE } from "../../materials.js";
 import { GRATE_TILE, decalRect } from "../../textures.js";
@@ -392,14 +393,22 @@ export function station(kit, cx, y, cz, yaw, width, opts = {}) {
   return f;
 }
 
-// Operator chair in a frame at (u, n): pedestal, seat, back.
+// Operator chair in a frame at (u, n): pedestal, seat, tall back with a headrest, armrests. The back is
+// at n - 0.24 (away from the desk at n > 0).
 export function chair(f, u, n) {
   f.cylV("metal", u, 0.02, n, 0.28, 0.04, { color: PALETTE.darkMetal, segments: 14 });
   f.cylV("metal", u, 0.25, n, 0.04, 0.42, { color: PALETTE.gunmetal, segments: 8 });
   f.box("rubber", u, 0.48, n, 0.5, 0.08, 0.5, { color: PALETTE.rubber });
-  f.box("rubber", u, 0.78, n - 0.24, 0.48, 0.52, 0.06, { color: PALETTE.rubber });
-  f.box("metal", u, 0.55, n - 0.24, 0.1, 0.16, 0.05, { color: PALETTE.gunmetal });
-  f.collider(u - 0.3, u + 0.3, 0, 1.0, n - 0.3, n + 0.3, "chair");
+  f.box("satinBlack", u, 0.53, n, 0.52, 0.03, 0.52);
+  f.box("rubber", u, 0.88, n - 0.24, 0.46, 0.72, 0.07, { color: PALETTE.rubber, tilt: -0.12 });
+  f.box("satinBlack", u, 0.88, n - 0.29, 0.5, 0.76, 0.03, { tilt: -0.12 });
+  f.box("rubber", u, 1.32, n - 0.3, 0.3, 0.16, 0.08, { color: PALETTE.rubber });
+  f.box("metal", u, 0.58, n - 0.24, 0.1, 0.2, 0.06, { color: PALETTE.gunmetal });
+  for (const s of [-1, 1]) {
+    f.box("satinBlack", u + s * 0.27, 0.72, n - 0.02, 0.05, 0.04, 0.34);
+    f.box("metal", u + s * 0.27, 0.6, n + 0.08, 0.03, 0.2, 0.03, { color: PALETTE.gunmetal });
+  }
+  f.collider(u - 0.3, u + 0.3, 0, 1.0, n - 0.32, n + 0.3, "chair");
 }
 
 // Frame parallel to `f`, shifted `n` along its normal (to build on the face of a plate placed at n).
@@ -463,4 +472,174 @@ export function toolCluster(kit, x, y, z, seed = 1) {
     () => kit.cyl("metal", x + 0.3, y + 0.02, z - 0.16, 0.05, 0.04, "y", { color: PALETTE.steel, segments: 12 }),
   ];
   for (let i = 0; i < items.length; i++) if ((seed * 31 + i * 17) % 5 !== 0) items[i]();
+}
+
+// Matte painted floor line: lane markings are paint, not light (emissive strips bloom into flat bars).
+export function paintStrip(kit, x0, z0, x1, z1, y, color = PALETTE.impAmber) {
+  kit.boxMM("painted", [Math.min(x0, x1), y + 0.001, Math.min(z0, z1)], [Math.max(x0, x1), y + 0.007, Math.max(z0, z1)], { color, uv: "keep" });
+}
+
+// Rectangle outline of painted floor lines.
+export function paintRect(kit, x0, z0, x1, z1, y, w = 0.1, color = PALETTE.impAmber) {
+  paintStrip(kit, x0, z0, x1, z0 + w, y, color);
+  paintStrip(kit, x0, z1 - w, x1, z1, y, color);
+  paintStrip(kit, x0, z0, x0 + w, z1, y, color);
+  paintStrip(kit, x1 - w, z0, x1, z1, y, color);
+}
+
+// Glowing tube in a housing along a wall frame at height v: a satin-black channel with a soft emissive
+// tube under it and end caps. Reads as a light fitting washing the wall base instead of a flat bar.
+export function wallBaseTube(frame, u0, u1, v = 0.42, mat = "emitWarmSoft") {
+  const len = u1 - u0;
+  if (len < 0.4) return;
+  const uc = (u0 + u1) / 2;
+  frame.box("satinBlack", uc, v, 0.07, len, 0.09, 0.14);
+  frame.cylU(mat, uc, v - 0.04, 0.09, 0.022, len - 0.14, { segments: 8, uv: "keep" });
+  frame.box("metal", u0 + 0.03, v - 0.01, 0.07, 0.06, 0.12, 0.15, { color: PALETTE.gunmetal });
+  frame.box("metal", u1 - 0.03, v - 0.01, 0.07, 0.06, 0.12, 0.15, { color: PALETTE.gunmetal });
+}
+
+// Ceiling tube fitting hanging from yCeil at (x, z): housing, soft tube, two stems. Registers a warm
+// (or given) practical below it. Light fittings this far below the ceiling never blow a disc onto it.
+export function tubeFixture(kit, ctx, x, yCeil, z, len, axis = "x", opts = {}) {
+  const { drop = 0.7, intensity = 20, distance = 12, color = 0xffd6a0, mat = "emitWarmSoft", family = "warm" } = opts;
+  const y = yCeil - drop;
+  const along = axis === "x";
+  kit.box("satinBlack", x, y + 0.05, z, along ? len : 0.2, 0.1, along ? 0.2 : len);
+  kit.cyl(mat, x, y - 0.01, z, 0.03, len - 0.16, axis, { segments: 8, uv: "keep" });
+  for (const s of [-1, 1]) {
+    const sx = along ? x + s * (len / 2 - 0.12) : x;
+    const sz = along ? z : z + s * (len / 2 - 0.12);
+    kit.box("metal", sx, y, sz, along ? 0.06 : 0.22, 0.12, along ? 0.22 : 0.06, { color: PALETTE.gunmetal });
+    if (drop > 0.15) kit.cyl("metal", sx, (y + 0.1 + yCeil) / 2, sz, 0.014, yCeil - y - 0.1, "y", { color: PALETTE.steel, segments: 6 });
+  }
+  ctx.lights[family].push(pointLight(color, intensity, distance, [x, y - 0.25, z]));
+}
+
+// Rotating warning beacons: post-top amber domes in small cages whose glow sweeps (one cloned material
+// per room, animated through ctx.dynamic). Call add() per beacon and finish() once.
+export function beaconSet(kit, ctx, opts = {}) {
+  const { color = "#ff9a3a", period = 1.6 } = opts;
+  const mat = ctx.materials.emitOrange.clone();
+  mat.emissive = new THREE.Color(color);
+  mat.emissiveIntensity = 1.6;
+  const domes = [];
+  return {
+    add(x, y, z, r = 0.09) {
+      kit.cyl("metal", x, y - 0.05, z, r + 0.03, 0.06, "y", { color: PALETTE.gunmetal, segments: 10 });
+      const g = new THREE.SphereGeometry(r, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+      g.translate(x, y - 0.02, z);
+      domes.push(g);
+      for (let k = 0; k < 4; k++) {
+        const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+        kit.box("metal", x + Math.cos(a) * (r + 0.02), y + 0.04, z + Math.sin(a) * (r + 0.02), 0.012, 0.14, 0.012, { color: PALETTE.gunmetal });
+      }
+      kit.cyl("metal", x, y + 0.11, z, r + 0.03, 0.02, "y", { color: PALETTE.gunmetal, segments: 10 });
+    },
+    finish() {
+      if (!domes.length) return;
+      const mesh = new THREE.Mesh(mergeGeometries(domes, false), mat);
+      mesh.name = "beacons";
+      let t = 0;
+      ctx.dynamic.push({
+        object: mesh,
+        update(dt) {
+          t += dt;
+          const p = 0.5 + 0.5 * Math.sin((t / period) * Math.PI * 2);
+          mat.emissiveIntensity = 0.35 + 1.9 * p * p;
+        },
+      });
+    },
+  };
+}
+
+// Retractable cable reel on the ceiling with its cable hanging down to yEnd and a tool head at the end
+// (power feed / test lead hanging at eye level above a work area).
+export function cableDrop(kit, x, yCeil, z, yEnd, opts = {}) {
+  const { color = PALETTE.rubber, head = "plug", yaw = 0 } = opts;
+  kit.box("paintedMetal", x, yCeil - 0.08, z, 0.36, 0.16, 0.2, { color: PALETTE.darkMetal, texel: 2 });
+  kit.cyl("metal", x, yCeil - 0.3, z, 0.17, 0.14, "z", { color: PALETTE.gunmetal, segments: 14 });
+  kit.add("rubber", new THREE.TorusGeometry(0.13, 0.035, 6, 16), { pos: [x, yCeil - 0.3, z], color, uv: "scale", uvScale: [4, 1] });
+  kit.box("metal", x, yCeil - 0.5, z, 0.08, 0.06, 0.12, { color: PALETTE.darkMetal });
+  kit.cyl("rubber", x, (yCeil - 0.52 + yEnd) / 2, z, 0.014, yCeil - 0.52 - yEnd, "y", { color, segments: 6 });
+  const f = yawFrame(kit, x, yEnd, z, yaw);
+  if (head === "plug") {
+    f.box("satinBlack", 0, -0.1, 0, 0.09, 0.2, 0.09);
+    f.box("metal", 0, -0.22, 0, 0.05, 0.05, 0.05, { color: PALETTE.steel });
+    f.box("leds", 0, -0.08, 0.046, 0.05, 0.02, 0.004, { uv: "keep" });
+  } else {
+    // welding / diagnostic gun
+    f.box("painted", 0, -0.1, 0, 0.08, 0.2, 0.12, { color: PALETTE.orange, uv: "keep" });
+    f.box("metal", 0, -0.14, 0.12, 0.05, 0.05, 0.16, { color: PALETTE.gunmetal });
+    f.box("satinBlack", 0, -0.24, -0.02, 0.05, 0.1, 0.06);
+  }
+}
+
+// Cable reel: a spool of coiled cable on an A-frame stand, axis along the frame's U.
+export function cableReel(kit, x, y, z, yaw = 0, opts = {}) {
+  const { r = 0.55, w = 0.5, color = PALETTE.orange, cable = PALETTE.rubber } = opts;
+  const f = yawFrame(kit, x, y, z, yaw);
+  for (const s of [-1, 1]) {
+    f.cylU("painted", s * (w / 2 + 0.02), r + 0.1, 0, r, 0.04, { color, uv: "keep", segments: 20 });
+    f.box("metal", s * (w / 2 + 0.06), (r + 0.1) / 2, 0, 0.05, r + 0.1, 0.4, { color: PALETTE.gunmetal, texel: 2 });
+    f.box("metal", s * (w / 2 + 0.06), 0.04, 0, 0.06, 0.08, 0.7, { color: PALETTE.darkMetal, texel: 2 });
+  }
+  f.cylU("metal", 0, r + 0.1, 0, 0.05, w + 0.3, { color: PALETTE.steel, segments: 8 });
+  f.cylU("rubber", 0, r + 0.1, 0, r * 0.72, w - 0.02, { color: cable, segments: 16 });
+  f.box("metal", 0, r + 0.1, 0, w + 0.14, 0.03, 0.03, { color: PALETTE.steel });
+  f.collider(-w / 2 - 0.1, w / 2 + 0.1, 0, 2 * r + 0.15, -r - 0.05, r + 0.05, "reel");
+}
+
+// Portable welding screen: two feet, a tube frame and a dark-orange fabric panel, facing yaw.
+export function weldingScreen(kit, x, y, z, yaw = 0, opts = {}) {
+  const { w = 1.9, h = 1.8 } = opts;
+  const f = yawFrame(kit, x, y, z, yaw);
+  for (const s of [-1, 1]) {
+    f.box("metal", s * (w / 2 - 0.05), 0.04, 0, 0.06, 0.08, 0.7, { color: PALETTE.darkMetal, texel: 2 });
+    f.cylV("metal", s * (w / 2 - 0.05), 0.1 + h / 2, 0, 0.02, h, { color: PALETTE.steel, segments: 6 });
+    for (const n of [-0.3, 0.3]) f.cylU("rubber", s * (w / 2 - 0.05), 0.03, n, 0.03, 0.06, { color: PALETTE.rubber, segments: 8 });
+  }
+  f.cylU("metal", 0, 0.1 + h, 0, 0.02, w, { color: PALETTE.steel, segments: 6 });
+  f.box("fabric", 0, 0.16 + h / 2, 0, w - 0.14, h - 0.1, 0.02, { color: PALETTE.fabricOrange, texel: 1 });
+  f.collider(-w / 2, w / 2, 0, h + 0.1, -0.35, 0.35, "screen");
+}
+
+// Low parts tray / pallet with a load of small parts, facing yaw.
+export function partsTray(kit, x, y, z, yaw = 0, seed = 1) {
+  const f = yawFrame(kit, x, y, z, yaw);
+  f.box("paintedMetal", 0, 0.08, 0, 1.3, 0.16, 0.9, { color: PALETTE.gunmetal, texel: 2 });
+  f.box("metal", 0, 0.18, 0, 1.34, 0.04, 0.94, { color: PALETTE.steel, texel: 2 });
+  for (const s of [-1, 1]) f.box("painted", 0, 0.2, s * 0.44, 1.3, 0.12, 0.03, { color: PALETTE.orange, uv: "keep" });
+  for (const s of [-1, 1]) f.box("painted", s * 0.64, 0.2, 0, 0.03, 0.12, 0.9, { color: PALETTE.orange, uv: "keep" });
+  const items = [
+    () => f.cylU("metal", -0.3, 0.32, 0.1, 0.11, 0.6, { color: PALETTE.steel, segments: 12 }),
+    () => f.box("metal", 0.3, 0.3, -0.2, 0.5, 0.2, 0.3, { color: PALETTE.darkMetal, texel: 2 }),
+    () => f.cylV("metal", 0.4, 0.34, 0.25, 0.14, 0.28, { color: PALETTE.gunmetal, segments: 12 }),
+    () => f.box("painted", -0.35, 0.28, -0.25, 0.4, 0.14, 0.24, { color: PALETTE.tealPaint, uv: "keep" }),
+    () => f.add("metal", new THREE.TorusGeometry(0.2, 0.04, 6, 16), 0.05, 0.25, 0.28, { color: PALETTE.steel, uv: "scale", uvScale: [4, 1] }),
+    () => f.box("rubber", 0.0, 0.26, 0.0, 0.3, 0.1, 0.2, { color: PALETTE.rubber }),
+  ];
+  for (let i = 0; i < items.length; i++) if ((seed * 13 + i * 7) % 4 !== 0) items[i]();
+  f.collider(-0.68, 0.68, 0, 0.5, -0.48, 0.48, "tray");
+}
+
+// Wall-mounted tool board in a wall frame: satin-black pegboard with hooks and a row of hanging tools.
+export function toolBoard(frame, u, v, w = 1.6, h = 1.1, seed = 1) {
+  frame.box("satinBlack", u, v, 0.03, w, h, 0.05);
+  frame.box("metal", u, v + h / 2 - 0.02, 0.04, w, 0.04, 0.07, { color: PALETTE.steel });
+  const n = Math.max(3, Math.round(w / 0.24));
+  for (let k = 0; k < n; k++) {
+    const tu = u - w / 2 + 0.14 + k * ((w - 0.28) / (n - 1));
+    const kind = (k * 5 + seed) % 4;
+    frame.box("metal", tu, v + h / 2 - 0.1, 0.07, 0.1, 0.02, 0.04, { color: PALETTE.gunmetal });
+    if (kind === 0) frame.box("metal", tu, v + 0.1, 0.075, 0.04, 0.6, 0.03, { color: PALETTE.steel });
+    else if (kind === 1) {
+      frame.box("painted", tu, v + 0.2, 0.08, 0.06, 0.34, 0.05, { color: PALETTE.orange, uv: "keep" });
+      frame.cylV("metal", tu, -0.06 + v, 0.08, 0.012, 0.2, { color: PALETTE.steel, segments: 6 });
+    } else if (kind === 2) {
+      frame.cylV("metal", tu, v + 0.12, 0.08, 0.02, 0.5, { color: PALETTE.steel, segments: 6 });
+      frame.box("metal", tu, v + 0.36, 0.08, 0.1, 0.05, 0.05, { color: PALETTE.gunmetal });
+    } else frame.add("rubber", new THREE.TorusGeometry(0.12, 0.014, 6, 14), tu, v + 0.22, 0.08, { color: PALETTE.rubber, uv: "scale", uvScale: [4, 1] });
+  }
+  frame.add("decal", new THREE.PlaneGeometry(0.24, 0.24), u + w / 2 - 0.2, v - h / 2 + 0.2, 0.06, { uv: "keep", uvRect: decalRect([6, 14, 9][seed % 3]) });
 }
