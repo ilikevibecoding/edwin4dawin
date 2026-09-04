@@ -4,9 +4,11 @@
 // Vertex layout (see the world shader in terrain.js):
 //   position  Float32 x3   chunk-local block coordinates
 //   uv        Float32 x2   atlas coordinates
-//   aLight    Uint8   x2   normalized; stores the light sum k in 0..60 (k/255), shader rescales to k/60
-//   aShade    Uint16  x1   shade * SHADE_SCALE (exact for every AO-curve x face-shade product)
+//   aLight    Uint8   x2   light sum k in 0..60; the vertex shader maps it through LIGHT_TABLE (k/60 as float32)
+//   aShade    Uint8   x1   index into SHADE_TABLE (every AO-curve x face-shade product, as float32)
 //   index     Uint16 (Uint32 only when a chunk exceeds 65536 vertices)
+// The tables hold exactly the float32 values the old Float32 attributes carried, so the varyings are bit-identical
+// without depending on the precision of shader arithmetic.
 import * as THREE from 'three';
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH, ATLAS_TILES } from './constants.js';
 import { B, BLOCKS, SHAPE } from './blocks.js';
@@ -19,8 +21,19 @@ const pidx = (px, py, pz) => (px * PW + pz) * PH + py;
 const OX = PW * PH, OY = 1, OZ = PH;
 const DOFF = new Int32Array([OX, -OX, OY, -OY, OZ, -OZ]);
 
-export const SHADE_SCALE = 10000;
 const MAX_U16_VERTS = 65536;
+
+// Light lookup for the shader: entry k is the float32 value of k/60 (k = sum of four 0..15 samples).
+export const LIGHT_TABLE = new Float32Array(61);
+for (let k = 0; k <= 60; k++) LIGHT_TABLE[k] = k / 60;
+// Shade lookup: filled below with every distinct shade value the mesher emits (float32-rounded).
+const shadeValues = [];
+function shadeIndex(v) {
+  v = Math.fround(v);
+  let i = shadeValues.indexOf(v);
+  if (i < 0) i = shadeValues.push(v) - 1;
+  return i;
+}
 
 // Face templates. For each direction: 4 vertices (unit cube coords) in CCW order seen from outside,
 // then the tangent axes used for UV: u(x,y,z) and v(x,y,z) coefficient/offset forms.
@@ -65,8 +78,8 @@ const TS = tileUV(0)[2];
 // Per direction / per vertex constants for the cube hot path:
 //   FV{X,Y,Z}[d][k] vertex unit coords, FCU/FCV[d][k] uv fraction with inset applied,
 //   FS1/FS2[d][k] padded-index offsets of the two tangent neighbours used for smooth light + AO,
-//   FSQ[d][ao] quantized shade (AO curve x face shade), FSHQ[d] quantized plain face shade.
-const FVX = [], FVY = [], FVZ = [], FCU = [], FCV = [], FS1 = [], FS2 = [], FSQ = [], FSHQ = new Uint16Array(6);
+//   FSQ[d][ao] shade table index of (AO curve x face shade), FSHQ[d] shade table index of the plain face shade.
+const FVX = [], FVY = [], FVZ = [], FCU = [], FCV = [], FS1 = [], FS2 = [], FSQ = [], FSHQ = new Uint8Array(6);
 {
   const uv = [0, 0];
   for (let d = 0; d < 6; d++) {
@@ -84,14 +97,15 @@ const FVX = [], FVY = [], FVZ = [], FCU = [], FCV = [], FS1 = [], FS2 = [], FSQ 
       else { s1[k] = vv[0] ? OX : -OX; s2[k] = vv[1] ? OY : -OY; }
     }
     FVX.push(vx); FVY.push(vy); FVZ.push(vz); FCU.push(cu); FCV.push(cv); FS1.push(s1); FS2.push(s2);
-    const sq = new Uint16Array(4);
-    for (let ao = 0; ao < 4; ao++) sq[ao] = Math.round(AO_CURVE[ao] * f.shade * SHADE_SCALE);
+    const sq = new Uint8Array(4);
+    for (let ao = 0; ao < 4; ao++) sq[ao] = shadeIndex(AO_CURVE[ao] * f.shade);
     FSQ.push(sq);
-    FSHQ[d] = Math.round(f.shade * SHADE_SCALE);
+    FSHQ[d] = shadeIndex(f.shade);
   }
 }
-const SHADE_CROSS_Q = Math.round(0.9 * SHADE_SCALE);
-const SHADE_ONE_Q = SHADE_SCALE;
+const SHADE_CROSS_Q = shadeIndex(0.9);
+const SHADE_ONE_Q = shadeIndex(1.0);
+export const SHADE_TABLE = new Float32Array(shadeValues);
 
 // Block property lookup tables (rebuilt per build; BLOCKS is filled at startup by initBlocks()).
 const OPQ = new Uint8Array(256);
@@ -119,7 +133,7 @@ class GeoBuffer {
     this.pos = re(this.pos, Float32Array, cap * 3);
     this.uv = re(this.uv, Float32Array, cap * 2);
     this.light = re(this.light, Uint8Array, cap * 2);
-    this.shade = re(this.shade, Uint16Array, cap);
+    this.shade = re(this.shade, Uint8Array, cap);
     // 16-bit indices while every vertex index fits; upgraded to 32-bit only for huge chunks
     this.idx = re(this.idx, cap > MAX_U16_VERTS ? Uint32Array : Uint16Array, Math.ceil(cap * 1.5));
     this.cap = cap;
@@ -141,7 +155,7 @@ class GeoBuffer {
     }
     this.icount = i + 6;
   }
-  // Adds a quad. verts: 4 x [x,y,z,u,v,skyK,blkK,shadeQ] (light in 0..60 units, shade quantized)
+  // Adds a quad. verts: 4 x [x,y,z,u,v,skyK,blkK,shadeIdx] (light in 0..60 units, shade as table index)
   quad(verts, flip = false) {
     this.ensure(4);
     const v0 = this.vcount;
@@ -163,7 +177,7 @@ class GeoBuffer {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(this.pos.slice(0, n * 3), 3));
     g.setAttribute('uv', new THREE.BufferAttribute(this.uv.slice(0, n * 2), 2));
-    g.setAttribute('aLight', new THREE.BufferAttribute(this.light.slice(0, n * 2), 2, true));
+    g.setAttribute('aLight', new THREE.BufferAttribute(this.light.slice(0, n * 2), 2, false));
     g.setAttribute('aShade', new THREE.BufferAttribute(this.shade.slice(0, n), 1, false));
     let index;
     if (n <= MAX_U16_VERTS && this.idx.BYTES_PER_ELEMENT !== 2) { index = new Uint16Array(this.icount); index.set(this.idx.subarray(0, this.icount)); }
