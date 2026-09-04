@@ -57,6 +57,10 @@ for (const r of rooms) {
 check("every room resolves to itself", resolved === rooms.length, `${resolved}/${rooms.length}`);
 check("per-room budgets (calls/tris/lights)", budgetFails.length === 0, budgetFails.join("; ") || "all within budget");
 
+// ---- connectivity: every space reachable on foot from the bridge (doors, junctions, lifts)
+const conn = await page.evaluate(() => window.debugAPI.connectivity());
+check("every space reachable from the bridge", conn.unreachable.length === 0, conn.unreachable.length ? "unreachable: " + conn.unreachable.join(", ") : `${conn.reachable.length} spaces`);
+
 // ---- doors: approach a room door from the corridor side and confirm it opens, then leaves
 const doorTest = await page.evaluate(() => {
   const d = window.debugAPI;

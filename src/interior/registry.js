@@ -372,6 +372,35 @@ export function buildInterior({ scene, materials }) {
     },
     roomIds: ROOMS.map((r) => r.id),
     corridorIds: CORRIDORS.map((c) => c.id),
+    // Walkability graph check: every space must be reachable from the bridge through doors, junctions
+    // and lift landings. Builds all zones. Returns { reachable, unreachable, edges }.
+    connectivity(from = "bridge") {
+      for (const id of Object.keys(zones)) buildZone(id);
+      const adj = new Map(Object.keys(spaces).map((id) => [id, new Set(spaces[id].neighbors)]));
+      // lifts connect the space in front of each landing door
+      for (const l of Object.values(LIFTS)) {
+        const cx = (l.x0 + l.x1) / 2;
+        const cz = (l.z0 + l.z1) / 2;
+        const probe = { x: cx + (l.doorSide === "+x" ? 2.2 : l.doorSide === "-x" ? -2.2 : 0), z: cz + (l.doorSide === "+z" ? 2.2 : l.doorSide === "-z" ? -2.2 : 0) };
+        const landings = [];
+        for (const deck of l.decks) {
+          const hit = Object.values(spaces).find((sp) => sp.deck === deck && probe.x >= sp.spec.x0 - 0.05 && probe.x <= sp.spec.x1 + 0.05 && probe.z >= sp.spec.z0 - 0.05 && probe.z <= sp.spec.z1 + 0.05);
+          if (hit) landings.push(hit.id);
+        }
+        for (const a of landings) for (const b of landings) if (a !== b) adj.get(a).add(b);
+      }
+      const seen = new Set([from]);
+      const queue = [from];
+      while (queue.length) {
+        const id = queue.shift();
+        for (const n of adj.get(id) || []) if (!seen.has(n)) {
+          seen.add(n);
+          queue.push(n);
+        }
+      }
+      const unreachable = Object.keys(spaces).filter((id) => !seen.has(id));
+      return { reachable: [...seen], unreachable, edges: [...adj].map(([k, v]) => [k, [...v]]) };
+    },
   };
 
   // lifts switch zones halfway through a ride

@@ -332,6 +332,9 @@ const debugAPI = {
   rooms() {
     return ROOMS.map((r) => ({ id: r.id, name: r.name, deck: r.deck, built: !!interior.spaces[r.id] }));
   },
+  connectivity() {
+    return interior.connectivity("bridge");
+  },
   audioLog() {
     return audio.log.slice(-20);
   },
