@@ -237,7 +237,7 @@ export class DisasterManager {
     if (this.active) {
       try { this.active.render(dt, alpha, camera); } catch (e) { console.error('disaster render failed', e); this._disposeActive(); this.state = 'idle'; }
     }
-    this.debris.update(dt, camera);
+    if (this.state !== 'paused') this.debris.update(dt, camera);
     this._flushChunks();
   }
 

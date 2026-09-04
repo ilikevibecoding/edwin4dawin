@@ -306,6 +306,26 @@ export class NPCManager {
   }
 
   // Choose where a panicking NPC runs to.
+  onHazard(npc) {
+    const bx = Math.floor(npc.pos.x), by = Math.floor(npc.pos.y), bz = Math.floor(npc.pos.z);
+    return this.world.getBlock(bx, by - 1, bz) === B.MAGMA || this.world.getBlock(bx, by, bz) === B.MAGMA;
+  }
+  // nearest standable cell that is not on magma, searched in widening rings
+  escapeTarget(npc) {
+    const bx = Math.floor(npc.pos.x), by = Math.floor(npc.pos.y), bz = Math.floor(npc.pos.z);
+    for (let r = 2; r <= 16; r += 2) {
+      let best = null, bestD = Infinity;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + npc.rng.range(0, 0.5);
+        const s = findStand(this.world, bx + Math.round(Math.cos(a) * r), by, bz + Math.round(Math.sin(a) * r), 4);
+        if (!s || this.world.getBlock(s.x, s.y - 1, s.z) === B.MAGMA) continue;
+        const d = (s.x - bx) * (s.x - bx) + (s.z - bz) * (s.z - bz);
+        if (d < bestD) { bestD = d; best = s; }
+      }
+      if (best) return { x: best.x, y: best.y, z: best.z, kind: 'escape', dwell: 2 };
+    }
+    return null;
+  }
   evacuationTarget(npc) {
     const info = this.alertInfo, t = this.town, r = npc.rng;
     if (!info) return null;
@@ -495,8 +515,11 @@ export class NPCManager {
 
     if (npc.state === 'idle') {
       npc.idleTimer -= dt;
+      const hazard = !npc.waitingPath && this.onHazard(npc);
+      if (hazard) npc.idleTimer = 0; // never dwell on magma
       if (npc.idleTimer <= 0 && !npc.waitingPath) {
-        const target = npc.panic ? (this.evacuationTarget(npc) || this.chooseTarget(npc, hour, dayFactor)) : this.chooseTarget(npc, hour, dayFactor);
+        const target = hazard ? (this.escapeTarget(npc) || this.chooseTarget(npc, hour, dayFactor))
+          : npc.panic ? (this.evacuationTarget(npc) || this.chooseTarget(npc, hour, dayFactor)) : this.chooseTarget(npc, hour, dayFactor);
         if (npc.panic) this.shout(npc, this.alertInfo ? this.alertInfo.kind : 'generic', 0.25);
         if (!target) { npc.idleTimer = 3; return; }
         // already there? just dwell (and face the right way)

@@ -471,6 +471,7 @@ export class Game {
       case 'step': if (!ev.inWater) this.audio.step(BLOCKS[ev.block].sound); else this.audio.swim(); break;
       case 'land': this.audio.step(BLOCKS[ev.block].sound, null, 1.3); break;
       case 'fallhurt': this.audio.hurt(); this.audio.step('stone', null, 1.4); break;
+      case 'burn': this.audio.hurt(); break;
       case 'hurt': this.audio.hurt(); break;
       case 'death': this.hud.addMessage('You died!'); break;
       default: break;

@@ -179,7 +179,7 @@ export class OrbitalBeam extends Disaster {
     const fx = this.m.effects, pl = this.game.player;
     const dx = pl.pos.x - this.cx, dz = pl.pos.z - this.cz;
     const dist = Math.sqrt(dx * dx + dz * dz);
-    fx.flash(1.2, 0.5, [1, 0.95, 0.85]);
+    fx.flash(0.9, 0.45, [1, 0.97, 0.9]);
     fx.shake(0.9 * Math.max(0, 1 - dist / 200));
     fx.setEnvironment({ tint: [1.08, 0.98, 0.88], skyLightMul: 1, fogNearMul: 0.9 });
     this.game.audio.boom(this._pos, 2.5);
@@ -284,9 +284,11 @@ export class OrbitalBeam extends Disaster {
       tipHot = 0.6 * intensity;
       if (u > 2) dy = (u - 2) * (u - 2) * 7;
       stationAlpha = 1 - smooth((u - 3) / 2.8);
-      smokeRate = this.tick >= this.T2 ? 30 * (1 - smooth(u / 4)) : 0;
+      smokeRate = this.tick >= this.T2 ? 18 * (1 - smooth(u / 4)) : 0;
     } else if (t < t1) {
       const f = t / t1;
+      const arrive = smooth(t / 2.5);
+      stationAlpha = arrive; dy = (1 - arrive) * 12;
       power = 0.2 + 0.8 * f; heat = 0;
       sphereR = maxSphere * smooth(f) * (1 + 0.07 * pulse * f); sphereAlpha = 0.9 * smooth(f * 3);
       bottom = this.focusY; intensity = 0;
@@ -305,7 +307,7 @@ export class OrbitalBeam extends Disaster {
       intensity = 0.95 + 0.08 * Math.sin(this.visTime * 23) + 0.04 * Math.sin(this.visTime * 7.3);
       tipHot = 1.3;
       sphereR = maxSphere * (1 + 0.08 * pulse); sphereAlpha = 1;
-      sparkRate = 70 * (0.6 + 0.4 * p.intensity); smokeRate = 70 * (0.5 + 0.5 * p.intensity);
+      sparkRate = 70 * (0.6 + 0.4 * p.intensity); smokeRate = 42 * (0.5 + 0.5 * p.intensity);
     } else if (t < t4) {
       const u = t - t3;
       bottom = this.centerFloor;
@@ -314,7 +316,7 @@ export class OrbitalBeam extends Disaster {
       power = 1 - smooth((u - 1) / 2.5); heat = power;
       if (u > 3) dy = (u - 3) * (u - 3) * 5;
       stationAlpha = 1 - smooth((u - 5.5) / 4.5);
-      smokeRate = 60 * (1 - smooth((u - 1) / 9)); sparkRate = 40 * intensity;
+      smokeRate = 34 * (1 - smooth((u - 1) / 9)); sparkRate = 40 * intensity;
     } else { stationAlpha = 0; }
     this.lastBottom = bottom; this.lastIntensity = intensity; this.lastPower = power; this.lastSphere = sphereR;
 
@@ -436,7 +438,7 @@ export class OrbitalBeam extends Disaster {
       const f = t / t1;
       audio.loopSet('beamCharge', { freq: 55 + 270 * f * f, cutoff: 240 + 2400 * f, gain: paused ? 0 : (0.05 + 0.24 * f) * Math.pow(0.35 + 0.65 * prox, 1.5), pan });
     } else if (this.chargeLoop) { audio.loopStop('beamCharge', 0.6); this.chargeLoop = false; }
-    const roaring = intensity > 0.02;
+    const roaring = intensity > 0.02 && !this.stopping;
     if (roaring) {
       if (!this.roarLoop) { audio.loopStart('beamRoar', { kind: 'noise', filter: 'lowpass', cutoff: 500, q: 0.9, gain: 0 }); this.roarLoop = true; }
       const gain = paused ? 0 : 0.7 * intensity * Math.pow(clamp01(1 - camDist / 320), 1.2) * (0.6 + 0.4 * this.params.intensity);

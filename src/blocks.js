@@ -136,7 +136,7 @@ export function initBlocks() {
   // disaster aftermath blocks
   def(B.SCORCHED_STONE, 'scorched_stone', { tex: same('scorched_stone'), hardness: 1.5, drop: B.COBBLESTONE });
   def(B.ASH, 'ash', { tex: same('ash'), sound: 'sand', hardness: 0.4 });
-  def(B.MAGMA, 'magma_block', { tex: same('magma'), emit: 9, hardness: 1.5 });
+  def(B.MAGMA, 'magma_block', { tex: same('magma'), emit: 13, hardness: 1.5 });
   def(B.CHARRED_PLANKS, 'charred_planks', { tex: same('charred_planks'), sound: 'wood', hardness: 0.6 });
 
   for (let i = 0; i < 256; i++) if (!BLOCKS[i]) BLOCKS[i] = BLOCKS[B.AIR];

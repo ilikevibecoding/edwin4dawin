@@ -312,6 +312,12 @@ export class Player {
       if (this.foodTimer >= 80) { this.foodTimer = 0; if (this.health > 1) this.damage(1); }
     } else this.foodTimer = 0;
 
+    // standing on magma burns (1 damage every half second) unless sneaking, like Minecraft
+    if (this.onGround && !this.sneaking && this.world.getBlock(Math.floor(this.pos.x), Math.floor(this.pos.y - 0.01), Math.floor(this.pos.z)) === B.MAGMA) {
+      this.magmaTimer = (this.magmaTimer || 0) + 1;
+      if (this.magmaTimer >= 10) { this.magmaTimer = 0; this.damage(1); this.events.push({ type: 'burn' }); }
+    } else this.magmaTimer = 0;
+
     // void safety
     if (this.pos.y < -10) { this.damage(4); this.pos.y = 80; this.vel.set(0, 0, 0); }
   }

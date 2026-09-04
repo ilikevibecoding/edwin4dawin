@@ -84,6 +84,7 @@ export function findPath(world, sx, sy, sz, gx, gy, gz, maxNodes = 4000, avoid =
         if (closed.has(nk)) break;
         let cost = 1 + (sh !== cur.hgt ? 0.4 : 0);
         if (avoid && avoid(nx, ny, nz)) cost += 6;
+        if (world.getBlock(nx, ny - 1, nz) === B.MAGMA) cost += 25; // hazard: cross only if there is no other way
         const ng = cur.g + cost;
         if (ng < (gScore.get(nk) ?? Infinity)) {
           gScore.set(nk, ng);
