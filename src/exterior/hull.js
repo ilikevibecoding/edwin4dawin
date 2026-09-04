@@ -417,8 +417,42 @@ export function buildExterior(scene) {
   const lodMeshes = [];
   detail.near.traverse((o) => o.isMesh && lodMeshes.push({ mesh: o, range: 1900 }));
   detail.mid.traverse((o) => o.isMesh && lodMeshes.push({ mesh: o, range: 5200 }));
+  const lodSet = new Set(lodMeshes.map((e) => e.mesh));
+  const baseMeshes = [];
+  group.traverse((o) => o.isMesh && !lodSet.has(o) && baseMeshes.push(o));
   const sphere = new THREE.Sphere();
-  const stats = { visibleDetail: 0 };
+  const stats = { visibleDetail: 0, culledInside: 0 };
+
+  // ---------------- interior window culling
+  // From inside only the chunks that can be seen through the room's windows are drawn: forward windows
+  // (tower slab) look down the dorsal hull toward the bow, belly windows (hangar deck) look down through
+  // the well. Chunks are matched by mesh name so anything unlisted stays visible.
+  const HIDE_INSIDE = {
+    forward: /^(sternWall|trenchWall|keelBlock|secondaryBay|wellThroat|wellRim|tractorField|domesSpire|engine|stern|trench(Units|Pipes|Ribs|Bays|Windows|Ducts))/,
+    belly: /^(sternWall|trenchWall|terraces|tower|windowBays|windowRows|domesSpire|engine|stern|trench(Units|Pipes|Ribs|Bays|Windows|Ducts)|dockingPads|city|bays|machineryBlocks|gantries|sensorDomes|antennaMasts|dishes|buttresses|wallBoxes|wallPipes|smallPlates|windowBezels|heavyTurret)/,
+  };
+  let culled = null; // Set of meshes hidden for the current interior view; null = draw everything
+  const applyCulling = () => {
+    for (const m of baseMeshes) m.visible = !(culled && culled.has(m));
+    if (culled) for (const e of lodMeshes) if (culled.has(e.mesh)) e.mesh.visible = false;
+    stats.culledInside = culled ? culled.size : 0;
+  };
+  // The camera modes and main.js announce "back outside" with `exterior.group.visible = true`
+  // (mode change, start of the exit flight); route that through a setter so the culling is dropped at
+  // the same moment and the whole ship is there for the fly-out.
+  let groupVisible = group.visible;
+  Object.defineProperty(group, "visible", {
+    configurable: true,
+    enumerable: true,
+    get: () => groupVisible,
+    set: (v) => {
+      groupVisible = v;
+      if (v && culled) {
+        culled = null;
+        applyCulling();
+      }
+    },
+  });
 
   function update(camPos, sunWorld) {
     if (sunWorld) sun.dir.value.copy(sunWorld);
@@ -434,7 +468,7 @@ export function buildExterior(scene) {
       }
       sphere.copy(bs).applyMatrix4(e.mesh.matrixWorld);
       const d = sphere.center.distanceTo(camPos) - sphere.radius;
-      e.mesh.visible = d < e.range;
+      e.mesh.visible = d < e.range && !(culled && culled.has(e.mesh));
       if (e.mesh.visible) vis++;
     }
     stats.visibleDetail = vis;
@@ -443,10 +477,19 @@ export function buildExterior(scene) {
     if (group.visible) running.update(now * 0.001);
   }
 
-  // Which exterior parts to draw from inside: everything for "forward"/"belly" windows, nothing otherwise
+  // Which exterior parts to draw from inside: the chunks visible through "forward"/"belly" windows
+  // (see HIDE_INSIDE), everything for unknown window kinds, nothing when the room has no windows.
   function setInteriorView(windows) {
-    const any = windows && windows.length > 0;
-    group.visible = any;
+    const kinds = (windows || []).map((w) => (String(w).startsWith("forward") ? "forward" : String(w)));
+    group.visible = kinds.length > 0;
+    culled = null;
+    if (kinds.length && kinds.every((k) => HIDE_INSIDE[k])) {
+      culled = new Set();
+      group.traverse((o) => {
+        if (o.isMesh && kinds.every((k) => HIDE_INSIDE[k].test(o.name))) culled.add(o);
+      });
+    }
+    applyCulling();
   }
 
   return { group, detail, materials, sun, update, setInteriorView, stats, openings };
