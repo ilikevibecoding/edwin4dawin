@@ -62,6 +62,21 @@ function plateIndex(plates, cells = 32) {
   };
 }
 
+// Sparse decals (scuffs, patches) bucketed on a coarse wrapping grid so each texel only tests the few
+// that can reach it. `extent(item)` -> [u, v, halfW, halfH] of the item's footprint on the unit torus.
+function bucketGrid(items, n, extent) {
+  const cells = Array.from({ length: n * n }, () => []);
+  for (const it of items) {
+    const [x, y, rx, ry] = extent(it);
+    for (let by = Math.floor((y - ry) * n); by <= Math.floor((y + ry) * n); by++) {
+      for (let bx = Math.floor((x - rx) * n); bx <= Math.floor((x + rx) * n); bx++) {
+        cells[(((by % n) + n) % n) * n + (((bx % n) + n) % n)].push(it);
+      }
+    }
+  }
+  return (u, v) => cells[Math.min(n - 1, (v * n) | 0) * n + Math.min(n - 1, (u * n) | 0)];
+}
+
 export function makeHullPlating(size = 1024, seed = 301) {
   const t = new TexGen(size, size);
   const rand = mulberry32(seed);
@@ -84,6 +99,12 @@ export function makeHullPlating(size = 1024, seed = 301) {
   // long scuffs / tool scratches
   const scuffs = [];
   for (let i = 0; i < 30; i++) scuffs.push({ x: rand(), y: rand(), a: rand() < 0.7 ? (rand() - 0.5) * 0.25 : rand() * Math.PI, l: 0.02 + rand() * 0.09, w: 0.0008 + rand() * 0.0012, k: rand() });
+  for (const s of scuffs) {
+    s.ca = Math.cos(s.a);
+    s.sa = Math.sin(s.a);
+  }
+  const patchesAt = bucketGrid(patches, 16, (p) => [p.u, p.v, p.w, p.h]);
+  const scuffsAt = bucketGrid(scuffs, 16, (s) => [s.x, s.y, s.l + s.w, s.l + s.w]);
   const seam = 0.0045;
   t.each((u, v, i) => {
     const pi = lookup(u, v);
@@ -190,7 +211,7 @@ export function makeHullPlating(size = 1024, seed = 301) {
       }
     }
     // repaint patches (ignore seams)
-    for (const p of patches) {
+    for (const p of patchesAt(u, v)) {
       let du = Math.abs(u - p.u);
       let dv = Math.abs(v - p.v);
       if (du > 0.5) du = 1 - du;
@@ -207,15 +228,15 @@ export function makeHullPlating(size = 1024, seed = 301) {
     lum *= 1 - grime * 0.33;
     rough += grime * 0.22;
     // scuffs: bright ones expose primer, dark ones are rubbed-in dirt
-    for (const s of scuffs) {
+    for (const s of scuffsAt(u, v)) {
       let dx = u - s.x;
       let dy = v - s.y;
       if (dx > 0.5) dx -= 1;
       if (dx < -0.5) dx += 1;
       if (dy > 0.5) dy -= 1;
       if (dy < -0.5) dy += 1;
-      const along = dx * Math.cos(s.a) + dy * Math.sin(s.a);
-      const perp = -dx * Math.sin(s.a) + dy * Math.cos(s.a);
+      const along = dx * s.ca + dy * s.sa;
+      const perp = -dx * s.sa + dy * s.ca;
       if (Math.abs(along) < s.l && Math.abs(perp) < s.w) {
         const k = (1 - Math.abs(perp) / s.w) * 0.7;
         lum = lerp(lum, s.k > 0.5 ? 0.82 : 0.4, k);
