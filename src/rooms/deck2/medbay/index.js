@@ -7,7 +7,7 @@ import { defineRoom } from "../_shared/room.js";
 import { IMP } from "../_shared/palette.js";
 import { rail } from "../_shared/shell.js";
 import { console as consoleProp, chair, wallScreen, cabinet, pipe, floorLine, dropLight } from "../_shared/props.js";
-import { rod, vitalsBoard, vent, junctionBox, medBed, bayDivider, bactaTank, shelfUnit, arcCounter, counter, glassWall, operatingTable, surgeryLight, gurney, equipmentCart, ivStand, scrubBasin, bench, curtain, scanner, deskTerminal, datapad, hazardBand } from "./props.js";
+import { rod, vitalsBoard, vent, junctionBox, medBed, bayDivider, bactaTank, shelfUnit, arcCounter, counter, glassWall, operatingTable, surgeryLight, gurney, equipmentCart, ivStand, scrubBasin, bench, curtain, scanner, deskTerminal, datapad, hazardBand, supplyDolly } from "./props.js";
 
 const Y = 40;
 const CEIL = 45;
@@ -57,9 +57,9 @@ export default defineRoom({
   ceil: CEIL,
   spawn: { pos: [-48, Y, 370], yaw: 0 },
   views: {
-    "d2-medbay-door": { pos: [-47.9, Y, 370.5], yaw: -12, pitch: -3 },
+    "d2-medbay-door": { pos: [-48.1, Y, 368.6], yaw: -12, pitch: -2 },
     "d2-medbay-wards": { pos: [-54.8, Y, 368.2], yaw: 0, pitch: -4 },
-    "d2-medbay-tanks": { pos: [-45.5, Y, 365.5], yaw: -50, pitch: -2 },
+    "d2-medbay-tanks": { pos: [-44.35, Y, 364.55], yaw: -50, pitch: -1 },
     "d2-medbay-surgery": { pos: [-54.6, Y, 351.4], yaw: 4, pitch: -4 },
   },
   shell: {
@@ -69,8 +69,9 @@ export default defineRoom({
     corniceColor: IMP.impGrey,
     altChance: 0.1,
     floor: { color: IMP.impGrey },
-    // plain dark panel ceiling: the light comes from the suspended fixture grid below (no bare strips)
-    ceiling: { channels: 0, color: IMP.impDark },
+    // plain mid-grey panel ceiling: lit by the suspended fixture grid below (no bare strips); grey rather
+    // than dark so the fills leave soft discs around the bars instead of a black plane between them
+    ceiling: { channels: 0, color: IMP.impMid },
     // blue waist strip keeps emitWhite out of the room's 16 material keys (emitCoolSoft replaces it)
     stripMat: "emitBlue",
     lights: false,
@@ -148,6 +149,16 @@ export default defineRoom({
     wallScreen(kit, [wx0 + 0.06, Y + 2.7, 368.6], Math.PI / 2, 1.6, 0.9, SCR);
     cabinet(kit, PALETTE, [wx0 + 0.25, Y, 366.7], Math.PI / 2, { h: 1.8, color: IMP.impMid, seed: 51 });
     vent(kit, [wx0 + 0.02, Y + 4.1, 369.5], Math.PI / 2, 0.7, 0.4);
+    // intake zone marked on the deck between the desk and the ward mouth (foreground of the door view):
+    // white outline, blue chevrons at the ends, medical roundel in the middle
+    {
+      const [ix, iz, hw, hd] = [-48.3, 366.3, 1.0, 0.75];
+      for (const [a, b] of [[[-hw, -hd], [hw, -hd]], [[-hw, hd], [hw, hd]], [[-hw, -hd], [-hw, hd]], [[hw, -hd], [hw, hd]]]) floorLine(kit, [ix + a[0], Y, iz + a[1]], [ix + b[0], Y, iz + b[1]], 0.08, "paintedMetal", WHITE);
+      for (const sx of [-1, 1]) for (const k of [0, 1]) floorLine(kit, [ix + sx * (hw - 0.2 - k * 0.14), Y, iz - 0.4], [ix + sx * (hw - 0.2 - k * 0.14), Y, iz + 0.4], 0.05, "paintedMetal", BLUE);
+      kit.box("paintedMetal", ix, Y + 0.004, iz, 0.56, 0.006, 0.13, { color: WHITE });
+      kit.box("paintedMetal", ix, Y + 0.004, iz, 0.13, 0.006, 0.56, { color: WHITE });
+      kit.add("paintedMetal", new THREE.TorusGeometry(0.4, 0.035, 6, 32), { pos: [ix, Y + 0.004, iz], rot: [Math.PI / 2, 0, 0], color: WHITE });
+    }
 
     // ---------------------------------------------------------------- ward (z 352..366)
     // low spine between the east bed row and the corridor
@@ -271,7 +282,7 @@ export default defineRoom({
     // service kit at the drained tank: open access panel on the plinth, tool case, coiled hose
     {
       const z = TANK_Z[2];
-      kit.box("paintedMetal", TANK_X - 1.02, Y + 0.16, z + 0.45, 0.06, 0.24, 0.5, { color: IMP.impMid, rot: [0, 0.6, 0] });
+      kit.box("paintedMetal", TANK_X - 1.02, Y + 0.16, z - 0.55, 0.06, 0.24, 0.5, { color: IMP.impMid, rot: [0, 0.6, 0] });
       const [cx, cz] = [TANK_X - 0.3, z - 2.2]; // between the plinths of tanks 1 and 2, off the rail line
       kit.box("paintedMetal", cx, Y + 0.14, cz, 0.5, 0.28, 0.36, { color: DARK, texel: 2.5 });
       kit.box("paintedMetal", cx, Y + 0.29, cz, 0.52, 0.02, 0.38, { color: BLACK });
@@ -279,6 +290,9 @@ export default defineRoom({
       kit.add("metal", new THREE.TorusGeometry(0.28, 0.035, 8, 24), { pos: [TANK_X - 0.1, Y + 0.04, z + 1.7], rot: [Math.PI / 2, 0, 0], color: STEEL });
       kit.collider([cx - 0.28, Y, cz - 0.2], [cx + 0.28, Y + 0.3, cz + 0.2], "toolcase");
     }
+    // canister dolly parked in the corridor between the station and the tank consoles (foreground of
+    // the tanks view), handle toward the reception
+    supplyDolly(kit, [-42.5, Y, 361.7], Math.PI / 2 + 0.25, 73);
     pipe(kit, PALETTE, [wx1 - 0.3, Y + 4.5, 352.4], [wx1 - 0.3, Y + 4.5, 366.2], 0.1, { bracket: 2.4 });
     rail(kit, PALETTE, [-39.2, Y, 352.8], [-39.2, Y, 365.4], Y);
     for (const z of [356.8, 361.2]) {
@@ -314,8 +328,9 @@ export default defineRoom({
     glassWall(kit, [SX, Y, SZ - 0.14], [SX, Y, wz0], { h: 3.0 });
     hazardBand(kit, [-55.7, SZ + 0.1], [-53.9, SZ + 0.42], Y + 0.005);
     operatingTable(kit, [-54.8, Y, 345.0], 0);
-    dropLight(kit, PALETTE, [-54.8, CEIL, 345.0], { w: 2.2, d: 0.5, stem: FIX_STEM, mat: "emitCoolSoft" });
-    surgeryLight(kit, [-54.8, Y + 2.85, 345.0], CEIL - FIX_STEM - 0.1);
+    // theatre bar beside the pendant's own ceiling mount (mount 1.6 m west of the head)
+    dropLight(kit, PALETTE, [-53.4, CEIL, 345.0], { w: 2.2, d: 0.5, stem: FIX_STEM, mat: "emitCoolSoft" });
+    surgeryLight(kit, [-54.8, Y + 2.85, 345.0], CEIL);
     const nZ = wz0 + 0.25;
     cabinet(kit, PALETTE, [-58.9, Y, nZ], 0, { h: 1.8, color: IMP.impMid, seed: 101 });
     cabinet(kit, PALETTE, [-57.6, Y, nZ], 0, { h: 1.8, color: WHITE, seed: 102 });
@@ -385,25 +400,26 @@ export default defineRoom({
     // Suspended housed fixtures explain every fill: crosswise bars over the reception, ward aisle and
     // pharmacy; lengthwise bars down the corridor and between the tanks. Emitters at CEIL − 1.225.
     const fixture = (x, z, along = "x", len = 2.4) => dropLight(kit, PALETTE, [x, CEIL, z], { w: along === "x" ? len : 0.5, d: along === "x" ? 0.5 : len, stem: FIX_STEM, mat: "emitCoolSoft" });
-    for (const x of [-52.6, -46.0, -39.6]) fixture(x, 369.4);
+    for (const z of [369.4, 366.9]) for (const x of [-52.6, -46.0, -39.6]) fixture(x, z);
     for (const z of [353.75, 357.25, 360.75, 364.25]) fixture(-54.8, z, "x", 2.0);
-    for (const z of [353.4, 357.2, 361.0, 364.8]) fixture(-44.4, z, "z");
+    for (const x of [-47.8, -44.4]) for (const z of [353.4, 357.2, 361.0, 364.8]) fixture(x, z, "z");
     for (const z of [356.8, 361.2]) fixture(-39.7, z, "z", 2.0);
     for (const x of [-44.2, -40.0]) fixture(x, 344.6);
     fixture(-46.8, 350.6, "x", 2.0);
 
     // ---------------------------------------------------------------- lights (cool blue-white)
-    // fills hang 1.9 m below the ceiling: under the reception / surgery / pharmacy bars, between the
-    // ward bars (9 fills + 3 tank accents = 12 descriptors)
+    // fills hang 1.9 m below the ceiling, centred between the paired bar rows (reception, corridor)
+    // or under single bars (tanks, surgery, pharmacy); 10 fills + 3 tank accents = 13 descriptors
     const L = (x, z, intensity = 26, distance = 12, color = 0xdbe8ff, y = FILL_Y, priority = 0.5) => ctx.lights.push({ type: "point", pos: [x, y, z], color, intensity, distance, priority });
-    L(-46.0, 369.4, 28, 12);
-    L(-52.6, 369.4, 16, 9);
-    L(-39.6, 369.4, 18, 9);
+    L(-46.0, 368.15, 28, 12);
+    L(-52.6, 368.15, 16, 9);
+    L(-39.6, 368.15, 18, 9);
     L(-54.8, 355.5, 24, 11);
     L(-54.8, 362.5, 24, 11);
-    L(-44.4, 355.3, 26, 12);
-    L(-44.4, 362.9, 26, 12);
-    L(-54.8, 345.0, 26, 11, 0xf2f7ff, FILL_Y, 0.7);
+    L(-46.1, 355.3, 26, 12);
+    L(-46.1, 362.9, 26, 12);
+    L(-39.7, 359.0, 16, 9);
+    L(-53.6, 345.0, 26, 11, 0xf2f7ff, FILL_Y, 0.7);
     L(-42.1, 344.6, 26, 11);
     return {};
   },

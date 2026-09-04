@@ -4,8 +4,8 @@
 // Door: aft wall at x −22 (standard).
 import { defineRoom } from "../_shared/room.js";
 import { IMP } from "../_shared/palette.js";
-import { console as consoleProp, wallScreen, cabinet, lockerBank, table, pipe, duct, crate, dropLight } from "../_shared/props.js";
-import { vent, junctionBox, bunk, foldDesk, bootRack, laundryCart, noticeBoard, kitShelf, washCounter, handDryer, showers, washer, foldTable, wallBench, hookRail, footLocker, extinguisher, holoTable, wallCabinet, towelRack, duffel, BEDDING } from "./props.js";
+import { console as consoleProp, wallScreen, cabinet, table, pipe, duct, crate } from "../_shared/props.js";
+import { vent, junctionBox, bunk, foldDesk, bootRack, laundryCart, noticeBoard, kitShelf, washCounter, handDryer, showers, washer, foldTable, wallBench, hookRail, footLocker, extinguisher, holoTable, wallCabinet, towelRack, duffel, lockerPair, mouthCurtain, wetFloorKit, barLight, BEDDING } from "./props.js";
 
 const Y = 40;
 const CEIL = 44.6;
@@ -43,6 +43,25 @@ const MOD = SLOT + BAY;
 const N_MOD = 5;
 const END_Z = MOD0 + N_MOD * MOD; // 370.2: final divider
 
+// per-module dressing so no two bays read as mirrored copies: locker body colour + door states,
+// stool position, an optional privacy curtain across part of the mouth, a cleaning kit
+const DRESS = {
+  "-1": [
+    { color: GREY, doors: ["closed", "closed"], stool: "in" },
+    { color: IMP.impMid, doors: ["closed", "closed"], stool: "in", curtain: { side: 0, len: 2.0, color: 0x3b4658 } },
+    { color: GREY, doors: ["closed", "ajar"], stool: "none" },
+    { color: IMP.impMid, doors: ["open", "closed"], stool: "in" },
+    { color: DARK, doors: ["closed", "closed"], stool: "out" },
+  ],
+  "1": [
+    { color: GREY, doors: ["closed", "open"], stool: "in" },
+    { color: DARK, doors: ["closed", "closed"], stool: "out" },
+    { color: GREY, doors: ["closed", "closed"], stool: "in", mop: true },
+    { color: IMP.impMid, doors: ["closed", "closed"], stool: "in", curtain: { side: 1, len: 1.5, color: 0x4b5046 } },
+    { color: IMP.impMid, doors: ["ajar", "closed"], stool: "none" },
+  ],
+};
+
 export default defineRoom({
   id: "d2-quarters",
   name: "Crew Quarters",
@@ -55,7 +74,7 @@ export default defineRoom({
     "d2-quarters-door": { pos: [CX, Y, 370.6], yaw: 0, pitch: -3 },
     "d2-quarters-bunks": { pos: [-29.0, Y, 357.9], yaw: 120, pitch: 2 },
     "d2-quarters-aisle": { pos: [-22.6, Y, 346.0], yaw: 172, pitch: -2 },
-    "d2-quarters-wash": { pos: [-17.6, Y, 344.1], yaw: 45, pitch: -2 },
+    "d2-quarters-wash": { pos: [-18.66, Y, 343.04], yaw: 45, pitch: 0 },
   },
   shell: {
     panelW: 1.6,
@@ -81,19 +100,21 @@ export default defineRoom({
       const faceYaw = -s * (Math.PI / 2); // prop front toward the aisle
       // soffit over the bays (3.0 m) and the fascia above it along the mouth line; cove + edge strips
       mm("impPanel", [wallX, SOFFIT_Y, MOD0], [mouthX, SOFFIT_Y + 0.3, END_Z + 0.08], { color: GREY, texel: 0.5 });
-      mm("paintedMetal", [mouthX, SOFFIT_Y - 0.08, MOD0 - 0.02], [faceX, CEIL, END_Z + 0.1], { color: DARK, texel: 2.5 });
+      mm("paintedMetal", [mouthX, SOFFIT_Y - 0.08, MOD0 - 0.02], [faceX, CEIL, END_Z + 0.1], { color: DARK, texel: 4 });
+      // clean panel plate over the fascia's aisle face (the worn-metal core alone read as mottled)
+      mm("impPanel", [faceX, SOFFIT_Y + 0.08, MOD0 + 0.05], [faceX - s * 0.02, CEIL - 0.5, END_Z + 0.05], { color: DARK, texel: 0.5 });
       // edge line at the soffit level (thin, low output) — the "warm strip line" of the aisle
       mm("emitWarm", [faceX, SOFFIT_Y - 0.02, MOD0 + 0.2], [faceX - s * 0.008, SOFFIT_Y + 0.02, END_Z - 0.1]);
       // top cove: a continuous black trough with one housed 1.6 m diffuser per module (was a bare
       // 25 m strip that converged into a blown streak)
-      mm("paintedMetal", [faceX, CEIL - 0.44, MOD0], [faceX - s * 0.2, CEIL - 0.3, END_Z + 0.1], { color: BLACK, texel: 2.5 });
+      mm("paintedMetal", [faceX, CEIL - 0.44, MOD0], [faceX - s * 0.2, CEIL - 0.3, END_Z + 0.1], { color: BLACK, texel: 4 });
       for (let k = 0; k < N_MOD; k++) {
         const zc = MOD0 + k * MOD + MOD / 2;
         kit.box(FIX, faceX - s * 0.1, CEIL - 0.446, zc, 0.12, 0.012, 1.6, { uv: "keep" });
       }
       duct(kit, PALETTE, [faceX - s * 0.26, Y + 3.9, MOD0 + 0.3], [faceX - s * 0.26, Y + 3.9, END_Z - 0.2], 0.44, 0.34, { color: IMP.impMid });
       // corner post closing the soffit / fascia end at the aft strip
-      kit.box("paintedMetal", mouthX - s * 0.03, (Y + CEIL) / 2, END_Z + 0.05, 0.16, CEIL - Y, 0.16, { color: DARK, texel: 2.5 });
+      kit.box("paintedMetal", mouthX - s * 0.03, (Y + CEIL) / 2, END_Z + 0.05, 0.16, CEIL - Y, 0.16, { color: DARK, texel: 4 });
       // floor night-light along the mouth line (aisle side)
       mm("emitAmber", [mouthX - s * 0.03, Y, MOD0], [mouthX - s * 0.07, Y + 0.006, END_Z]);
       // high pipe along the outer wall above the stacks, running into the washroom wall and the final
@@ -103,7 +124,7 @@ export default defineRoom({
       const partition = (z) => {
         mm("impPanel", [wallX, Y, z], [mouthX, SOFFIT_Y, z + 0.08], { color: GREY, texel: 0.5 });
         mm("paintedMetal", [wallX, Y, z - 0.01], [mouthX, Y + 0.1, z + 0.09], { color: BLACK });
-        kit.box("paintedMetal", mouthX - s * 0.03, SOFFIT_Y / 2 - Y / 2 + Y, z + 0.04, 0.14, SOFFIT_Y - Y, 0.14, { color: DARK, texel: 2.5 });
+        kit.box("paintedMetal", mouthX - s * 0.03, SOFFIT_Y / 2 - Y / 2 + Y, z + 0.04, 0.14, SOFFIT_Y - Y, 0.14, { color: DARK, texel: 4 });
         coll([wallX, Y, z], [mouthX, SOFFIT_Y, z + 0.08], "partition");
       };
 
@@ -120,8 +141,9 @@ export default defineRoom({
         const pz0 = k > 0 ? sz0 + 0.08 : sz0;
         mm("impPanel", [CX + s * (PANEL - 0.05), Y, pz0], [CX + s * (PANEL + 0.05), SOFFIT_Y, sz1 - 0.08], { color: IMP.impWhite, texel: 0.5 });
         coll([CX + s * (PANEL - 0.05), Y, pz0], [CX + s * (PANEL + 0.05), SOFFIT_Y, sz1 - 0.08], "slot-panel");
-        lockerBank(kit, PALETTE, [CX + s * (MOUTH + 0.25), Y, sz0 + 0.72], faceYaw, { count: 2, unit: 0.6, h: 2.0, d: 0.5, color: k % 2 ? IMP.impMid : GREY });
-        foldDesk(kit, [panelX, Y, sz0 + 1.62], faceYaw, 40 + k * 2 + (s + 1) / 2);
+        const dress = DRESS[String(s)][k];
+        lockerPair(kit, [CX + s * (MOUTH + 0.25), Y, sz0 + 0.72], faceYaw, { color: dress.color, states: dress.doors, seed: 30 + k * 2 + (s + 1) / 2 });
+        foldDesk(kit, [panelX, Y, sz0 + 1.62], faceYaw, 40 + k * 2 + (s + 1) / 2, dress.stool);
         if (k % 2) wallScreen(kit, [panelX, Y + 2.5, sz0 + 0.72], faceYaw, 0.7, 0.4, k === 1 ? SCR3 : SCR, { tilt: 0.2 });
         else vent(kit, [panelX, Y + 2.55, sz0 + 0.72], faceYaw, 0.7, 0.3);
         junctionBox(kit, [panelX, Y + 2.35, sz0 + 1.62], faceYaw, 50 + k);
@@ -132,11 +154,18 @@ export default defineRoom({
         // slot dressing variants: a duffel dumped by the lockers / a towel over a locker door
         if (k % 3 === 0) duffel(kit, [CX + s * 2.25, Y, sz0 + 0.45], faceYaw + 0.4);
         if (k % 3 === 1) kit.box("fabric", CX + s * (MOUTH - 0.015), Y + 1.7, sz0 + 0.42, 0.03, 0.55, 0.3, { color: IMP.impWhite, texel: 2 });
-        // fascia kit over the slot / bay (vent, junction box, section lamp)
-        vent(kit, [faceX, Y + 3.5, (sz0 + sz1) / 2], faceYaw, 0.6, 0.3);
-        junctionBox(kit, [faceX, Y + 3.45, bc + 0.9], faceYaw, 60 + k);
-        kit.box("paintedMetal", faceX - s * 0.02, Y + 3.45, bc - 0.6, 0.04, 0.34, 0.34, { color: BLACK });
-        kit.box(FIX, faceX - s * 0.045, Y + 3.45, bc - 0.6, 0.012, 0.25, 0.25, { uv: "keep" });
+        // fascia kit over the slot / bay (vent, junction box, section lamp), proud of the panel plate
+        vent(kit, [faceX - s * 0.02, Y + 3.5, (sz0 + sz1) / 2], faceYaw, 0.6, 0.3);
+        junctionBox(kit, [faceX - s * 0.02, Y + 3.45, bc + 0.9], faceYaw, 60 + k);
+        kit.box("paintedMetal", faceX - s * 0.04, Y + 3.45, bc - 0.6, 0.04, 0.34, 0.34, { color: BLACK });
+        kit.box(FIX, faceX - s * 0.065, Y + 3.45, bc - 0.6, 0.012, 0.25, 0.25, { uv: "keep" });
+        // privacy curtain drawn across part of the mouth (two bays), cleaning kit left at one mouth
+        if (dress.curtain) {
+          const c = dress.curtain;
+          const zFrom = c.side === 0 ? bz0 + 0.12 : bz1 - 0.12;
+          mouthCurtain(kit, [CX + s * (MOUTH - 0.15), SOFFIT_Y - 0.12, zFrom], [0, 0, c.side === 0 ? 1 : -1], c.len, 2.55, c.color, 140 + k);
+        }
+        if (dress.mop) wetFloorKit(kit, [CX + s * 3.6, Y, bz1 - 0.85], Math.PI + 0.3, 150 + k);
 
         // bay: two facing 3-tier stacks, heads on the outer wall, a foot locker at each ladder end.
         // Per-bay bedding colour; one stripped tier and one sheet-only tier in the room; open lockers.
@@ -189,9 +218,14 @@ export default defineRoom({
           kit.box("emitAmber", CX + s * 3.3, Y + 2.33, z + dz * 0.024, 0.2, 0.03, 0.004);
           kit.box("paintedMetal", CX + s * 3.3, Y + 2.19, z + dz * 0.024, 0.16, 0.09, 0.004, { color: IMP.impGrey });
         }
-        // bay mouth: boot rack (even) or a stack of two foot lockers (odd) on the bz0 side, kit shelf on bz1
-        if (k % 2 === 0) bootRack(kit, [CX + s * 3.85, Y, bz0 + 0.2], 0, 4, 80 + k * 2 + (s + 1) / 2);
-        else for (const dy of [0, 0.45]) footLocker(kit, [CX + s * 3.85, Y + dy, bz0 + 0.24], 0, 84 + k * 2 + (s + 1) / 2 + dy);
+        // bay mouth on the bz0 side: boot rack of 3/4/5 pairs (even bays), a stacked pair of foot
+        // lockers (bay 1) or two side by side with the starboard one open (bay 3); kit shelf on bz1
+        if (k % 2 === 0) bootRack(kit, [CX + s * 3.85, Y, bz0 + 0.2], 0, k === 2 ? 3 : k === 4 ? 5 : 4, 80 + k * 2 + (s + 1) / 2);
+        else if (k === 1) for (const dy of [0, 0.45]) footLocker(kit, [CX + s * 3.85, Y + dy, bz0 + 0.24], 0, 84 + k * 2 + (s + 1) / 2 + dy);
+        else {
+          footLocker(kit, [CX + s * 3.5, Y, bz0 + 0.24], 0, 84 + k * 2 + (s + 1) / 2, 0.8, s > 0);
+          footLocker(kit, [CX + s * 4.4, Y, bz0 + 0.24], 0, 85 + k * 2 + (s + 1) / 2, 0.8);
+        }
         kitShelf(kit, [CX + s * 4.2, Y, bz1 - 0.22], Math.PI, { w: 1.2, h: 1.8, d: 0.4, seed: 90 + k * 2 + (s + 1) / 2 });
         if (k % 2 === 1) duffel(kit, [CX + s * 3.9, Y + 1.8, bz1 - 0.24], 0.15 * s, k === 1 ? DARK : BLACK);
         if ((k === 2 && s < 0) || (k === 4 && s > 0)) laundryCart(kit, [CX + s * 4.7, Y, bc + 0.6], 0.3 * s, 100 + k);
@@ -221,7 +255,11 @@ export default defineRoom({
     mm("paintedMetal", [CX - MOUTH + 0.3, SOFFIT_Y - 0.09, WASH_Z - 0.2], [CX + MOUTH - 0.3, SOFFIT_Y, WASH_Z - 0.03], { color: BLACK, texel: 2.5 });
     kit.box(FIX, CX, SOFFIT_Y - 0.096, WASH_Z - 0.115, 2 * MOUTH - 0.9, 0.012, 0.1, { uv: "keep" });
     mm("emitWarm", [CX - MOUTH + 0.3, SOFFIT_Y + 0.1, WASH_Z + 0.13], [CX + MOUTH - 0.3, SOFFIT_Y + 0.14, WASH_Z + 0.136]);
-    washCounter(kit, [CX, Y, wz0], 0, 4, 1.6);
+    // mirrors: darkGloss won the metal / darkGloss A-B shot (smooth dark reflection with a fill
+    // highlight; the worn `metal` map reads frosted)
+    washCounter(kit, [CX, Y, wz0], 0, 4, 1.6, () => "darkGloss");
+    // cleaning kit by the basin drain (foreground of the wash view)
+    wetFloorKit(kit, [-21.3, Y, 342.3], 0.8, 160);
     handDryer(kit, [CX - 3.65, Y + 1.2, wz0], 0);
     handDryer(kit, [CX + 3.65, Y + 1.2, wz0], 0);
     showers(kit, [CX - 8.1, Y, wz0], 0, 4, { pitch: 1.25, d: 1.4, seed: 17 });
@@ -230,7 +268,7 @@ export default defineRoom({
     wallBench(kit, [CX - 6.6, Y, WASH_Z - 0.22], Math.PI, 3.0);
     hookRail(kit, [CX - 6.6, Y + 1.75, WASH_Z - 0.001], Math.PI, 2.4, 36, true);
     hookRail(kit, [CX + 4.4, Y + 1.75, WASH_Z - 0.001], Math.PI, 1.6, 37, true);
-    for (const x of [CX - 6.5, CX - 1.6, CX + 3.3]) dropLight(kit, PALETTE, [x, CEIL, 342.4], { w: 2.0, d: 0.45, stem: FIX_STEM, mat: FIX });
+    for (const x of [CX - 6.5, CX - 1.6, CX + 3.3]) barLight(kit, [x, CEIL, 342.4], { w: 2.0, d: 0.45, stem: FIX_STEM, mat: FIX });
     // towel rail with hanging towels between the showers and the basins
     kit.box("metal", -26.7, Y + 1.2, wz0 + 0.06, 1.4, 0.04, 0.06, { color: STEEL });
     for (let i = 0; i < 4; i++) kit.box("fabric", -27.2 + i * 0.33, Y + 0.85, wz0 + 0.05, 0.26, 0.7, 0.03, { color: i % 2 ? IMP.impWhite : GREY, texel: 2 });
@@ -276,7 +314,7 @@ export default defineRoom({
     // ---------------------------------------------------------------- aisle fixtures
     // suspended crosswise bars over the slot centres and the aft strip (each fill hangs 1.3 m under its bar)
     const AISLE_Z = [345.7, 350.8, 355.9, 361.0, 366.1, 370.9];
-    for (const z of AISLE_Z) dropLight(kit, PALETTE, [CX, CEIL, z], { w: 2.4, d: 0.4, stem: FIX_STEM, mat: FIX });
+    for (const z of AISLE_Z) barLight(kit, [CX, CEIL, z], { w: 2.4, d: 0.4, stem: FIX_STEM, mat: FIX });
 
     // ---------------------------------------------------------------- lights (warm white, 14 descriptors)
     const L = (x, z, intensity = 20, distance = 10, color = 0xffe0bd, y = FILL_Y, priority = 0.5) => ctx.lights.push({ type: "point", pos: [x, y, z], color, intensity, distance, priority });
