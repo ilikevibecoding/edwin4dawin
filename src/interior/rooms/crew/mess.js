@@ -112,6 +112,27 @@ export function buildMess(kit, ctx) {
   trolley(kit, [18.0, y, aisleC - 2.55], Math.PI / 2, { load: "trays" });
   trolley(kit, [24.6, y, aisleC + 2.55], -Math.PI / 2, { load: "jugs" });
   trolley(kit, [21.0, y, 366.0], 0, { load: "trays" });
+  // tray return on the way back to the west door: two waste drums on a plinth with a rack of dirty
+  // trays between them, and a jug trolley parked in the row-end gap behind it
+  {
+    const rx = 14.7;
+    const rz = 357.85;
+    kit.box("impPaintedMetal", rx, y + 0.03, rz, 1.4, 0.06, 0.56, { color: IMP.trim, texel: 1 });
+    for (const dx of [-0.45, 0.45]) {
+      kit.add("impMetal", new THREE.CylinderGeometry(0.21, 0.19, 0.78, 14), { pos: [rx + dx, y + 0.45, rz], color: IMP.gunmetal, uv: "scale", uvScale: [1, 0.6] });
+      kit.add("impPaintedMetal", new THREE.CylinderGeometry(0.23, 0.23, 0.05, 14), { pos: [rx + dx, y + 0.865, rz], color: IMP.black, uv: "scale", uvScale: [1, 0.2] });
+      kit.box("impPaintedMetal", rx + dx, y + 0.9, rz, 0.3, 0.02, 0.1, { color: IMP.consoleDark, texel: 1 });
+      const dg = new THREE.PlaneGeometry(0.16, 0.16);
+      dg.rotateY(Math.PI);
+      kit.add("impDecal", dg, { pos: [rx + dx, y + 0.55, rz - 0.212], uv: "keep", uvRect: impDecalRect(dx < 0 ? 6 : 12) });
+    }
+    kit.box("impMetal", rx, y + 0.48, rz + 0.19, 0.04, 0.9, 0.04, { color: IMP.steel });
+    kit.box("impMetal", rx, y + 0.5, rz, 0.4, 0.03, 0.34, { color: IMP.steel, texel: 2 });
+    for (let t = 0; t < 7; t++) kit.box("impPaintedMetal", rx + (t % 2 ? 0.02 : -0.02), y + 0.53 + t * 0.03, rz + (t % 3 ? 0.01 : -0.02), 0.44, 0.03, 0.3, { color: t % 2 ? IMP.wallMid : IMP.wallDark, texel: 2 });
+    kit.box("impMetal", rx, y + 0.95, rz, 0.4, 0.02, 0.3, { color: IMP.steel, texel: 2 });
+    kit.collider([rx - 0.7, y, rz - 0.28], [rx + 0.7, y + 1.0, rz + 0.28], "trayReturn");
+  }
+  trolley(kit, [13.3, y, 359.3], Math.PI / 2, { load: "jugs" });
 
   // ---- lighting: cross-aisle fixtures + fills (dining), serving + galley -------------------------
   for (const [i, x] of cols.entries()) ceilingLight(kit, ctx, [x, y + h, aisleC], 5.0, "x", { mat: "lightBandWarm", color: WARM, intensity: 12, distance: 18, priority: i === 1 ? 2 : 1 });

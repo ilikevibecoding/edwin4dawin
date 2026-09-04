@@ -179,14 +179,18 @@ export function buildCrewQuarters(kit, ctx) {
   }
   // the day zone stands on a lighter wipe-clean deck patch with steel edging, which also carries a
   // large cog roundel and the deck code in the open floor north of the table; a chevron mat in front
-  // of the dispenser
-  kit.boxMM("impGlossSoft", [3.6, y + 0.002, 404.4], [8.4, y + 0.008, 415.6], { color: IMP.wallMid, texel: 0.25 });
+  // of the dispenser. crewGlossLight (white base under the gloss seam maps) instead of impGlossSoft:
+  // the gloss deck's colour map is charcoal, so a mid-grey tint on it read as dark as the deck around
+  // it and the black stencils on it were invisible
+  kit.boxMM("crewGlossLight", [3.6, y + 0.002, 404.4], [8.4, y + 0.008, 415.6], { color: 0x646a72, texel: 0.25 });
   kit.boxMM("impMetal", [3.6, y + 0.004, 404.3], [8.4, y + 0.01, 404.4], { color: IMP.steel });
   kit.boxMM("impMetal", [3.6, y + 0.004, 415.6], [8.4, y + 0.01, 415.7], { color: IMP.steel });
   kit.boxMM("impMetal", [8.4, y + 0.004, 404.3], [8.5, y + 0.01, 415.7], { color: IMP.steel });
   floorDecal(kit, 6.0, y + 0.006, 406.8, 1.8, 4, 0);
   floorDecal(kit, 4.6, y + 0.006, 409.2, 0.7, 0, -90);
-  floorDecal(kit, 4.1, y, 416.6, 0.9, 10, 90);
+  // dispenser mat: the chevrons are black ink, so they sit on a mid-grey tread plate to read on the deck
+  kit.box("impPaintedMetal", 4.1, y + 0.006, 416.6, 1.0, 0.012, 0.9, { color: IMP.wallMid, texel: 2 });
+  floorDecal(kit, 4.1, y + 0.009, 416.6, 0.9, 10, 90);
   table(kit, [6.0, y, 412.6], 0.9, 4.4, { tone: IMP.wallDark });
   bench(kit, [4.95, y, 412.6], 4.0, -Math.PI / 2);
   bench(kit, [7.05, y, 412.6], 4.0, Math.PI / 2);
@@ -199,21 +203,28 @@ export function buildCrewQuarters(kit, ctx) {
   crate(kit, [7.9, y, 401.4], [1.0, 0.7, 0.8], { seed: 4, tone: IMP.wallMid });
   crate(kit, [7.9, y + 0.7, 401.4], [0.8, 0.5, 0.7], { seed: 5, tone: IMP.gunmetal, collide: false });
   crate(kit, [6.6, y, 401.4], [0.9, 0.5, 0.8], { seed: 6, tone: IMP.consoleDark });
-  ceilingLight(kit, ctx, [5.6, y + h, 411.5], 7, "z", { intensity: 14, distance: 15, priority: 1, color: 0xdfe8ff });
+  ceilingLight(kit, ctx, [5.6, y + h, 411.5], 7, "z", { intensity: 16, distance: 15, priority: 1, color: 0xdfe8ff });
   // two more cool strips over the day zone: the glossy patch mirrors them and reads lit
   ceilingStrip(kit, [4.2, y + h, 410.0], 10.4, "z", { mat: "lightBand", w: 0.2 });
   ceilingStrip(kit, [7.4, y + h, 410.0], 10.4, "z", { mat: "lightBand", w: 0.2 });
   floorDecal(kit, 6.0, y + 0.006, 408.2, 0.9, 9, 0);
   floorDecal(kit, 4.2, y + 0.006, 418.6, 0.6, 13, -90);
+  // rubber runner along the east bench with a kit bag dropped at its end, and the deck code stencilled
+  // in the strip between the table and the patch edge, so the floor in front of the day-room view is
+  // not one bare slab
+  kit.boxMM("impRubber", [7.55, y + 0.008, 409.8], [8.3, y + 0.014, 414.4], { color: IMP.rubber });
+  kit.box("impFabric", 7.85, y + 0.15, 410.35, 0.5, 0.28, 0.34, { color: IMP.fabricOlive, uv: "world", texel: 2 });
+  kit.box("impPaintedMetal", 7.85, y + 0.3, 410.35, 0.3, 0.03, 0.08, { color: IMP.black, texel: 2 });
+  floorDecal(kit, 6.0, y + 0.006, 415.2, 0.7, 0, 0);
 
   // ---- washroom (south of the door) ------------------------------------------------------------
   const wx1 = 8.7;
   const wz0 = 422.3;
   partition(kit, [x0 + 0.25, wz0], [wx1, wz0], y, h - 0.05, { openings: [{ u0: 6.55 - x0 - 0.25, u1: 8.4 - x0 - 0.25, h: 2.3 }], tone: IMP.wallLight, seed: 31, tag: "washroom" });
   partition(kit, [wx1, wz0], [wx1, z1 - 0.25], y, h - 0.05, { tone: IMP.wallLight, seed: 32, tag: "washroom" });
-  // hygienic gloss floor inside
-  // soft gloss: plain gloss mirrored the ceiling bands into a blown-out pool along the washroom floor
-  kit.boxMM("impGlossSoft", [x0 + 0.4, y + 0.001, wz0 + 0.1], [wx1 - 0.1, y + 0.006, z1 - 0.4], { color: IMP.wallMid, texel: 0.25 });
+  // hygienic gloss floor inside (same light-base soft gloss as the day patch: one material for both;
+  // plain gloss mirrored the ceiling bands into a blown-out pool along the washroom floor)
+  kit.boxMM("crewGlossLight", [x0 + 0.4, y + 0.001, wz0 + 0.1], [wx1 - 0.1, y + 0.006, z1 - 0.4], { color: 0x5c626a, texel: 0.25 });
   {
     const w = walls.west;
     const { frame } = wallFrame(kit, w.from, w.to, y);
