@@ -3,9 +3,11 @@
 // wall of three big framed screens, a second row of plotting stations and two astrogation racks by the
 // entry, a plotting grid on the deck, an astrogation computer column ringed with amber lamps, a
 // hyperspace jump-lever pedestal, a plotting table with a hyperlane hologram (a blip travels the lane).
-// Accent amber; white key light over the arc, amber instrument light everywhere else; dark inlay lane.
+// Accent amber; one fixture temperature (warm amber-white) for the recessed ceiling slots, the key
+// over the arc and the fills, amber instrument practicals everywhere else; no floor lane — two
+// standing console pods hold the centreline between the door and the arc.
 import * as THREE from "three";
-import { PALETTE } from "../materials.js";
+import { PALETTE, setDomain } from "../materials.js";
 import { impRoomShell, impChair, impPillar, impWallGear, impWallLight, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { deckASetup, yawToward, behind, yawFrame, station, dataBank, sealedCabinet, wallScreen, indicatorRow, conduitRun, holoTable, projectorCone, wireSphereGeometry, wireGridGeometry, wireGraphGeometry, wireDestroyerGeometry, mergedLines, mergedMesh, datapad, cup, helmet, datapadRack } from "./deck_a_kit.js";
@@ -19,25 +21,30 @@ export function buildNavigation(kit, ctx, room) {
   const accentKey = "emitAmber";
   const dimKey = "emitAmberDim";
   const amber = new THREE.Color(room.accent || "#ffb347").getHex();
+  const WARM = 0xffd9b0; // fixture colour: warm amber-white
+  if (!M.deckA_navSlot) {
+    // recessed ceiling slot emitter in the room's warm temperature (the dim white slot's level)
+    const m = M.emitWhiteDim.clone();
+    m.emissive = new THREE.Color("#ffd2a0");
+    M.deckA_navSlot = setDomain(m, "interior");
+  }
 
-  // ---- shell: narrow panel columns, no light slots (the chart wall and instruments carry the light) --
+  // ---- shell: narrow panel columns; recessed warm slots in two troughs ----------------------------
   const walls = impRoomShell(kit, room, ctx.doors, {
     accentKey,
     seed: 5150,
     wall: { panelW: 1.35, features: { vent: 0.07, equipment: 0.1, conduit: 0.04, light: 0.0, screen: 0.1 }, altChance: 0.2 },
     walls: { S: { features: { vent: 0.05, equipment: 0.0, conduit: 0.0, light: 0.0, screen: 0.0 }, corniceLight: false } },
     floor: { lane: false },
-    ceiling: { troughs: 2, troughW: 0.5, beamStep: 3.4 },
+    ceiling: { troughs: 2, troughW: 0.5, beamStep: 3.4, lightKey: "deckA_navSlot" },
   });
-  // entry lane from the N door to the console arc: dark deck inlay with a faint amber hairline edge
-  kit.boxMM("impDeck", [-1.3, 0, -hz + 0.4], [1.3, 0.012, 0.9], { color: PALETTE.impGreyDark, texel: 0.7 });
-  for (const s of [-1, 1]) {
-    kit.boxMM("impTrim", [s * 1.34 - 0.04, 0.002, -hz + 0.4], [s * 1.34 + 0.04, 0.014, 0.9], { color: PALETTE.impBlack });
-    kit.boxMM(dimKey, [s * 1.34 - 0.01, 0.004, -hz + 0.4], [s * 1.34 + 0.01, 0.016, 0.9]);
-  }
-  kit.box("chevronY", 0, 0.005, 1.05, 2.6, 0.01, 0.3, { texel: 1.5 });
   // faint amber floor line along the chart wall
   kit.boxMM(dimKey, [-7.0, 0.002, hz - 0.72], [7.0, 0.014, hz - 0.68]);
+
+  // ---- two standing console pods on the centreline between the door and the arc, both worked from
+  // the entry side facing the chart wall (their sloped control surfaces read from the door) -------
+  station(kit, 0, 0, -5.6, 1.6, 0.85, { yaw: yawToward(0, -5.6, 0, 3), seed: 33, screens: ["scrAmber3", "scrWhite2"], accentKey, hoodKey: dimKey, height: 1.05, conduits: 1 });
+  station(kit, 0, 0, -1.4, 1.6, 0.85, { yaw: yawToward(0, -1.4, 0, 3), seed: 34, screens: ["scrAmber0", "scrBlue3"], accentKey, hoodKey: dimKey, height: 1.05, conduits: 1 });
 
   // ---- star-chart wall (S): one black surround, centre chart + two stacked flanking screens ------
   {
@@ -320,12 +327,12 @@ export function buildNavigation(kit, ctx, room) {
   impPillar(kit, -7.6, -7.2, h, { w: 0.5, accentKey });
   impPillar(kit, 7.6, -7.2, h, { w: 0.5, accentKey });
 
-  // ---- lights -----------------------------------------------------------------------------------
-  kit.light({ type: "spot", pos: [0, h - 0.3, 2.0], target: [0, 0.85, 2.0], color: 0xe6ecff, intensity: lux(h - 0.3 - 0.85, 3.2), distance: 12, angle: 0.85, penumbra: 0.5, shadow: true, priority: 0.95 });
-  kit.light({ type: "point", pos: [0, h - 0.6, -6.5], color: 0xe4ecff, intensity: lux(h - 0.6, 1.7), distance: 13, priority: 0.5 });
-  kit.light({ type: "point", pos: [-6.5, h - 0.6, -2.0], color: 0xe4ecff, intensity: lux(h - 0.6, 1.5), distance: 12, priority: 0.48 });
-  kit.light({ type: "point", pos: [6.5, h - 0.6, -2.0], color: 0xe4ecff, intensity: lux(h - 0.6, 1.5), distance: 12, priority: 0.47 });
-  kit.light({ type: "point", pos: [0, 2.6, hz - 2.2], color: amber, intensity: 14.0, distance: 14, priority: 0.6 });
+  // ---- lights: one temperature (warm amber-white) for the key and the fills, amber practicals ----
+  kit.light({ type: "spot", pos: [0, h - 0.3, 2.0], target: [0, 0.85, 2.0], color: WARM, intensity: lux(h - 0.3 - 0.85, 4.0), distance: 12, angle: 0.85, penumbra: 0.5, shadow: true, priority: 0.95 });
+  kit.light({ type: "point", pos: [0, h - 0.6, -6.0], color: WARM, intensity: lux(h - 0.6, 3.4), distance: 14, priority: 0.5 });
+  kit.light({ type: "point", pos: [-6.5, h - 0.6, -2.0], color: WARM, intensity: lux(h - 0.6, 3.0), distance: 13, priority: 0.48 });
+  kit.light({ type: "point", pos: [6.5, h - 0.6, -2.0], color: WARM, intensity: lux(h - 0.6, 3.0), distance: 13, priority: 0.47 });
+  kit.light({ type: "point", pos: [0, 2.6, hz - 2.2], color: amber, intensity: 16.0, distance: 14, priority: 0.6 });
   kit.light({ type: "point", pos: [-7.6, 2.4, 3.6], color: amber, intensity: 8.0, distance: 9, priority: 0.42 });
   kit.light({ type: "point", pos: [-6.4, 1.9, -3.4], color: amber, intensity: 6.0, distance: 7, priority: 0.4 });
   // amber console practical low over the bank's centre so the grey control surfaces read
