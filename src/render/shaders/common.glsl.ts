@@ -45,13 +45,13 @@ uniform float uTime;
 /** 2D cloud coverage field used for both the raymarched clouds' macro shape and the ground shadows. */
 export const GLSL_CLOUD_FIELD = /* glsl */ `
 float cloudCoverage2D(vec2 wp) {
-  vec2 p = (wp + uCloudWind) * 0.00023 + uCloudSeed;
+  vec2 p = (wp + uCloudWind) * 0.00016 + uCloudSeed;
   float c = fbm(p);
   float c2 = fbm(p * 3.1 + 7.7);
   float f = c * 0.78 + c2 * 0.22;
   // coverage remaps the field so that low coverage leaves discrete cumulus masses
-  float thr = 0.66 - uCloudCoverage * 0.42;
-  return smoothstep(thr, thr + 0.26, f);
+  float thr = 0.7 - uCloudCoverage * 0.42;
+  return smoothstep(thr, thr + 0.2, f);
 }
 /** Cloud shadow factor (1 = lit, ~0.35 = under a dense cloud) at a world position. */
 float cloudShadow(vec3 wp) {
@@ -68,8 +68,9 @@ export const GLSL_SKY = /* glsl */ `
 vec3 skyRadiance(vec3 dir) {
   float y = clamp(dir.y, -1.0, 1.0);
   float up = max(y, 0.0);
-  float horizonMix = pow(1.0 - up, 6.0);
-  vec3 col = mix(uZenithColor, uHorizonColor, horizonMix);
+  float horizonMix = pow(1.0 - up, 14.0);
+  float midMix = pow(1.0 - up, 3.5) * 0.22;
+  vec3 col = mix(uZenithColor, uHorizonColor, clamp(horizonMix + midMix, 0.0, 1.0));
   // slight brightening of the sky toward the sun (mie forward scatter), strongest near horizon
   float cosSun = dot(dir, uSunDir);
   float mie = pow(max(cosSun, 0.0), 6.0) * (0.12 + 0.55 * horizonMix);

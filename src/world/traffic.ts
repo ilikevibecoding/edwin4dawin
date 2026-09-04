@@ -177,6 +177,25 @@ function routePoint(pts: Vec2[], s: number, out: { x: number; z: number; dx: num
   }
 }
 
+function mergeStatic(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  let n = 0;
+  for (const g of geos) n += g.getAttribute('position').count;
+  const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3);
+  let o = 0;
+  for (const g of geos) {
+    const p = g.getAttribute('position'), nn = g.getAttribute('normal');
+    pos.set(p.array as Float32Array, o * 3);
+    if (nn) nrm.set(nn.array as Float32Array, o * 3);
+    o += p.count;
+    g.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  out.computeBoundingSphere();
+  return out;
+}
+
 // ------------------------------------------------------------------ cars
 
 interface CarRoute { pts: THREE.Vector3[]; length: number; lanes: number; width: number; }
@@ -222,14 +241,29 @@ export class Traffic {
         this.boats.push({ group: b.group, route: ch.pts, s: rng.range(0, len), dir: rng.chance(0.5) ? 1 : -1, speed, len: b.len, draft: b.draft, wake, phase: rng.range(0, 100) });
       }
     }
-    // moored boats (static, no wake)
+    // moored boats (static, no wake): merged into one mesh per material
+    const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
     for (const mb of moored) {
       const b = factory.build(rng.chance(0.4) ? 'sail' : rng.chance(0.5) ? 'speed' : rng.chance(0.5) ? 'console' : 'yacht', rng);
       const scale = clamp(mb.len / b.len, 0.6, 1.4);
       b.group.scale.setScalar(scale);
       b.group.position.set(mb.x, 0.05, mb.z);
       b.group.rotation.y = mb.rot + (rng.chance(0.5) ? Math.PI : 0);
-      this.group.add(b.group);
+      b.group.updateMatrixWorld(true);
+      b.group.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        const g = m.geometry.clone().applyMatrix4(m.matrixWorld);
+        const mat = m.material as THREE.Material;
+        let list = byMat.get(mat); if (!list) { list = []; byMat.set(mat, list); }
+        list.push(g.index ? g.toNonIndexed() : g);
+      });
+    }
+    for (const [mat, geos] of byMat) {
+      const merged = mergeStatic(geos);
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      this.group.add(mesh);
     }
     this.boatCount = this.boats.length + moored.length;
 

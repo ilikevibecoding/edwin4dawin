@@ -142,6 +142,8 @@ export class Bench {
       bridgeEnd: this.project(last[0], 7, last[1]),
     };
     for (const l of g.city.landmarkPositions) lm[`landmark:${l.name}`] = this.project(l.x, l.h, l.z);
+    const tb = g.map.bridges.find((x) => x.id === 'tortuga-bridge');
+    if (tb) lm.bridge2End = this.project(tb.pts[tb.pts.length - 1][0], 7, tb.pts[tb.pts.length - 1][1]);
     lm.horizonCentre = this.project(g.camera.position.x + Math.sin(0) * 50000, 0, g.camera.position.z - 50000);
     return lm;
   }

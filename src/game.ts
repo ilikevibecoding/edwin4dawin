@@ -141,13 +141,14 @@ export class Game {
     this.roads = network.segments;
     const roadMat = createRoadMaterial();
     this.registerLit(roadMat);
-    for (const m of buildRoadMeshes(this.map, this.roads, roadMat)) this.scene.add(m);
+    const roadRender: THREE.Material = this.params.debugRoads ? new THREE.MeshBasicMaterial({ color: 0xff2020 }) : roadMat;
+    for (const m of buildRoadMeshes(this.map, this.roads, roadRender)) this.scene.add(m);
 
     await this.tick(progress, 'Raising bridges', 0.46);
     const concrete = new THREE.MeshStandardMaterial({ color: 0xb8b4aa, roughness: 0.9 });
     const steel = new THREE.MeshStandardMaterial({ color: 0xd9dde2, roughness: 0.4, metalness: 0.6 });
     this.registerLit(concrete); this.registerLit(steel);
-    this.bridges = buildBridges(this.map, roadMat, concrete, steel);
+    this.bridges = buildBridges(this.map, roadRender, concrete, steel);
     this.scene.add(this.bridges.group);
 
     await this.tick(progress, 'Building the city', 0.52);

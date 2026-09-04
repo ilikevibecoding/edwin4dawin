@@ -38,10 +38,13 @@ export function loft(sections: Section[], radial = 28, closeEnds = true): THREE.
       uv.push(dist[i] / Math.max(total, 1e-6), t);
     }
   }
+  // winding depends on whether the stations advance along +X or -X; keep the normals outward either way
+  const forwardX = sections[S - 1].x >= sections[0].x;
   for (let i = 0; i < S - 1; i++) {
     for (let j = 0; j < radial; j++) {
       const a = i * (radial + 1) + j, b = a + radial + 1;
-      idx.push(a, a + 1, b, a + 1, b + 1, b);
+      if (forwardX) idx.push(a, a + 1, b, a + 1, b + 1, b);
+      else idx.push(a, b, a + 1, a + 1, b, b + 1);
     }
   }
   const g = new THREE.BufferGeometry();
@@ -65,7 +68,8 @@ export function loft(sections: Section[], radial = 28, closeEnds = true): THREE.
       uv.push(end === 0 ? 0 : 1, 0.5);
       const base = end * (radial + 1);
       for (let j = 0; j < radial; j++) {
-        if (end === 0) idx.push(centerIndex, base + j + 1, base + j);
+        const startCap = (end === 0) === forwardX;
+        if (startCap) idx.push(centerIndex, base + j + 1, base + j);
         else idx.push(centerIndex, base + j, base + j + 1);
       }
     }

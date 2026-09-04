@@ -11,6 +11,7 @@ function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContex
 
 function toTexture(c: HTMLCanvasElement, srgb: boolean, anisotropy = 8): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(c);
+  t.flipY = false; // canvas row 0 is texture v = 0 (fuselage top / wing trailing edge)
   t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
@@ -142,8 +143,8 @@ export function fuselageMaps(): PbrMaps {
   actx.save(); actx.translate(w * 0.72, h * 0.81); actx.scale(-1, 1); actx.fillText(LIVERY.registration, 0, 0); actx.restore();
   // small placard text and a sun logo on the fin area (u>0.9)
   actx.font = 'bold 34px Arial'; actx.fillStyle = '#22333a';
-  actx.fillText('BAHÍA VISTA AIR TAXI', w * 0.35, h * 0.21);
-  actx.save(); actx.translate(w * 0.35, h * 0.80); actx.scale(-1, 1); actx.fillText('BAHÍA VISTA AIR TAXI', 0, 0); actx.restore();
+  actx.fillText('BAHÍA VISTA AIR TAXI', w * 0.62, h * 0.31);
+  actx.save(); actx.translate(w * 0.62, h * 0.705); actx.scale(-1, 1); actx.fillText('BAHÍA VISTA AIR TAXI', 0, 0); actx.restore();
   // panel lines / rivets
   panels(hctx, actx, w, h, [0.085, 0.13, 0.19, 0.26, 0.33, 0.41, 0.5, 0.58, 0.66, 0.74, 0.82, 0.9], [0.12, 0.2, 0.3, 0.42, 0.5, 0.58, 0.7, 0.8, 0.88], 26);
   // door outlines (both sides at cabin u 0.3..0.42, v around 0.2..0.35 / 0.65..0.8)

@@ -37,8 +37,8 @@ export const BENCH_VIEWS: BenchView[] = [
   {
     id: 'aerial-a', name: 'Reference A — high aerial', description: 'Reference-style wide aerial over Isla Garza looking north: causeway receding NNE, downtown skyline upper-left, boats with wakes below, aircraft lower right.',
     time: 14.6, weather: 'scattered',
-    camera: { mode: 'fixed', pos: [430, 392, 3660], headingDeg: -7, pitchDeg: -12.5, fov: 42 },
-    plane: { fromCamera: { screenX: 0.795, screenY: 0.755, distance: 54 }, headingDeg: -22, pitchDeg: 3, bankDeg: -9, speed: 52, throttle: 0.75 },
+    camera: { mode: 'fixed', pos: [380, 470, 3950], headingDeg: -6, pitchDeg: -13, fov: 42 },
+    plane: { fromCamera: { screenX: 0.80, screenY: 0.76, distance: 78 }, headingDeg: -34, pitchDeg: 3, bankDeg: -10, speed: 52, throttle: 0.75 },
     presim: 40, clipInputs: { pitch: 0.05, roll: -0.05, yaw: 0 },
   },
   {
@@ -85,7 +85,7 @@ export const BENCH_VIEWS: BenchView[] = [
   },
   {
     id: 'sunset', name: 'Sunset flight', description: 'Low sun in the west over the bay, downtown silhouetted, warm haze and long water reflections.',
-    time: 18.75, weather: 'scattered',
+    time: 17.9, weather: 'scattered',
     camera: { mode: 'chase', fov: 50 },
     plane: { pos: [1400, 280, 600], headingDeg: 262, pitchDeg: 1, bankDeg: 0, speed: 55, throttle: 0.7 },
     presim: 30, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
@@ -105,6 +105,31 @@ export const BENCH_VIEWS: BenchView[] = [
     presim: 30, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
 ];
+
+/** Aircraft inspection views (used by the aircraft / glass / cockpit gauntlet loops). */
+BENCH_VIEWS.push(
+  {
+    id: 'plane-rear-quarter', name: 'Aircraft rear three-quarter', description: 'Fixed camera 14 m from the aircraft, rear-left-above, aircraft moored at the Garza marina in sunlight.',
+    time: 14.0, weather: 'clear',
+    camera: { mode: 'fixed', pos: [425.9, 4.25, 1892.3], headingDeg: 205, pitchDeg: -9, fov: 40 },
+    plane: { pos: [420, 2.02, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 0, throttle: 0.0 },
+    presim: 10, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
+  },
+  {
+    id: 'plane-front-quarter', name: 'Aircraft front three-quarter', description: 'Fixed camera 13 m ahead-right of the moored aircraft, low, showing cowl, propeller, windshield and floats.',
+    time: 10.0, weather: 'clear',
+    camera: { mode: 'fixed', pos: [415.6, 2.65, 1917.2], headingDeg: 20, pitchDeg: -3, fov: 40 },
+    plane: { pos: [420, 2.02, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 0, throttle: 0.0 },
+    presim: 10, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
+  },
+  {
+    id: 'glass-sun', name: 'Cockpit glass in direct sun', description: 'Close on the windshield and left side windows with the sun behind the camera; interior visible through the glass.',
+    time: 15.5, weather: 'clear',
+    camera: { mode: 'fixed', pos: [418.3, 3.05, 1911.3], headingDeg: 15, pitchDeg: -8, fov: 32 },
+    plane: { pos: [420, 2.02, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 0, throttle: 0.0 },
+    presim: 10, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
+  },
+);
 
 export function findView(id: string): BenchView | undefined {
   return BENCH_VIEWS.find((v) => v.id === id);

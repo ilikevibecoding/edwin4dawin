@@ -3,41 +3,49 @@ import { Rng, hash2 } from '../core/seed';
 import { perlin2, smoothstep } from '../core/noise';
 import { Zone, type WorldMap } from './map';
 
-/** Frond cut-out texture drawn procedurally (no external assets). */
+/** Palm atlas drawn procedurally (no external assets): fronds (cut-out) on the left half, bark on the right. */
 function frondTexture(): THREE.CanvasTexture {
-  const w = 128, h = 512;
+  const w = 256, h = 512;
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d')!;
   ctx.clearRect(0, 0, w, h);
+  // bark: ringed trunk texture in the right half
+  ctx.fillStyle = '#8a7458'; ctx.fillRect(w / 2, 0, w / 2, h);
+  for (let y = 0; y < h; y += 9) { ctx.fillStyle = y % 18 === 0 ? '#6e5a44' : '#9a8466'; ctx.fillRect(w / 2, y, w / 2, 4); }
+  for (let i = 0; i < 140; i++) { ctx.fillStyle = `rgba(40,30,20,${0.1 + Math.random() * 0.2})`; ctx.fillRect(w / 2 + Math.random() * w / 2, Math.random() * h, 3 + Math.random() * 6, 2); }
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, w / 2, h); ctx.clip();
+  ctx.translate(0, 0);
   // rachis
   ctx.strokeStyle = '#6b7a3a';
   ctx.lineWidth = 5;
-  ctx.beginPath(); ctx.moveTo(w / 2, h); ctx.lineTo(w / 2, 8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(w / 4, h); ctx.lineTo(w / 4, 8); ctx.stroke();
   // leaflets
+  const fw = w / 2;
   for (let i = 0; i < 46; i++) {
     const t = i / 46;
     const y = h - 20 - t * (h - 40);
-    const len = (w / 2 - 4) * (0.45 + 0.55 * Math.sin(Math.PI * Math.min(1, t * 1.15)));
+    const len = (fw / 2 - 4) * (0.45 + 0.55 * Math.sin(Math.PI * Math.min(1, t * 1.15)));
     const g = 60 + Math.round(40 * Math.sin(t * 7 + i));
     ctx.fillStyle = `rgb(${40 + (i % 3) * 8}, ${110 + g * 0.6}, ${40 + (i % 5) * 5})`;
     for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.moveTo(w / 2, y);
-      ctx.quadraticCurveTo(w / 2 + side * len * 0.5, y - 18, w / 2 + side * len, y - 34 + 6 * Math.sin(i));
-      ctx.quadraticCurveTo(w / 2 + side * len * 0.55, y - 6, w / 2, y + 4);
+      ctx.moveTo(fw / 2, y);
+      ctx.quadraticCurveTo(fw / 2 + side * len * 0.5, y - 18, fw / 2 + side * len, y - 34 + 6 * Math.sin(i));
+      ctx.quadraticCurveTo(fw / 2 + side * len * 0.55, y - 6, fw / 2, y + 4);
       ctx.fill();
     }
   }
+  ctx.restore();
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   return tex;
 }
 
-function palmGeometry(rng: Rng): { trunk: THREE.BufferGeometry; fronds: THREE.BufferGeometry } {
+function palmGeometry(rng: Rng): THREE.BufferGeometry {
   // trunk: gently curved tapered tube
-  const segs = 5, radial = 6;
+  const segs = 4, radial = 5;
   const pos: number[] = [], nrm: number[] = [], uv: number[] = [], idx: number[] = [];
   const lean = rng.range(0.02, 0.12), leanDir = rng.range(0, Math.PI * 2);
   for (let i = 0; i <= segs; i++) {
@@ -50,7 +58,7 @@ function palmGeometry(rng: Rng): { trunk: THREE.BufferGeometry; fronds: THREE.Bu
       const a = (j / radial) * Math.PI * 2;
       pos.push(cx + Math.cos(a) * r, y, cz + Math.sin(a) * r);
       nrm.push(Math.cos(a), 0, Math.sin(a));
-      uv.push(j / radial, t);
+      uv.push(0.55 + 0.4 * (j / radial), t);
     }
   }
   for (let i = 0; i < segs; i++) for (let j = 0; j < radial; j++) {
@@ -65,14 +73,14 @@ function palmGeometry(rng: Rng): { trunk: THREE.BufferGeometry; fronds: THREE.Bu
   // fronds: n bent strips radiating from the top (which is at (cx, 1, cz))
   const top = new THREE.Vector3(Math.cos(leanDir) * lean, 1.0, Math.sin(leanDir) * lean);
   const fp: number[] = [], fn: number[] = [], fu: number[] = [], fi: number[] = [];
-  const n = rng.int(8, 11);
+  const n = rng.int(7, 9);
   let v = 0;
   for (let k = 0; k < n; k++) {
     const a = (k / n) * Math.PI * 2 + rng.range(-0.2, 0.2);
     const droop = rng.range(0.35, 0.7);
     const len = rng.range(0.42, 0.58);
     const width = 0.13;
-    const segsF = 4;
+    const segsF = 3;
     for (let i = 0; i <= segsF; i++) {
       const t = i / segsF;
       // arc: rises slightly then droops
@@ -82,7 +90,7 @@ function palmGeometry(rng: Rng): { trunk: THREE.BufferGeometry; fronds: THREE.Bu
       const wx = -Math.sin(a) * width * (1 - t * 0.2), wz = Math.cos(a) * width * (1 - t * 0.2);
       fp.push(px - wx, yv, pz - wz, px + wx, yv, pz + wz);
       fn.push(0, 1, 0, 0, 1, 0);
-      fu.push(0, 1 - t, 1, 1 - t);
+      fu.push(0.0, 1 - t, 0.5, 1 - t);
       if (i > 0) {
         const b = v + i * 2;
         fi.push(b - 2, b, b - 1, b - 1, b, b + 1);
@@ -95,7 +103,26 @@ function palmGeometry(rng: Rng): { trunk: THREE.BufferGeometry; fronds: THREE.Bu
   fronds.setAttribute('normal', new THREE.Float32BufferAttribute(fn, 3));
   fronds.setAttribute('uv', new THREE.Float32BufferAttribute(fu, 2));
   fronds.setIndex(fi);
-  return { trunk, fronds };
+  return mergeWithUv([trunk, fronds]);
+}
+
+function mergeWithUv(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], col: number[] = [];
+  for (const g of geos) {
+    const ng = g.index ? g.toNonIndexed() : g;
+    const p = ng.getAttribute('position'), n = ng.getAttribute('normal'), u = ng.getAttribute('uv'), c = ng.getAttribute('color');
+    for (let i = 0; i < p.count; i++) {
+      pos.push(p.getX(i), p.getY(i), p.getZ(i)); nrm.push(n.getX(i), n.getY(i), n.getZ(i));
+      uv.push(u ? u.getX(i) : 0, u ? u.getY(i) : 0);
+      if (c) col.push(c.getX(i), c.getY(i), c.getZ(i)); else col.push(1, 1, 1);
+    }
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  out.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return out;
 }
 
 /** Lumpy canopy made of displaced icosphere puffs. */
@@ -135,13 +162,16 @@ function mergeNonIndexed(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return out;
 }
 
-function treeGeometry(rng: Rng): { trunk: THREE.BufferGeometry; canopy: THREE.BufferGeometry } {
+function treeGeometry(rng: Rng): THREE.BufferGeometry {
   const trunk = new THREE.CylinderGeometry(0.05, 0.09, 0.45, 5);
   trunk.translate(0, 0.225, 0);
+  const tc = new Float32Array(trunk.getAttribute('position').count * 3);
+  for (let i = 0; i < tc.length; i += 3) { tc[i] = 0.36; tc[i + 1] = 0.27; tc[i + 2] = 0.2; }
+  trunk.setAttribute('color', new THREE.BufferAttribute(tc, 3));
   const canopy = canopyGeometry(rng, rng.int(3, 4), rng.range(0.7, 0.9), 0);
-  canopy.scale(0.55, 0.55, 0.55);
-  canopy.translate(0, 0.72, 0);
-  return { trunk, canopy };
+  canopy.scale(0.62, 0.42, 0.62);
+  canopy.translate(0, 0.66, 0);
+  return mergeWithUv([trunk, canopy]);
 }
 
 function mangroveGeometry(rng: Rng): THREE.BufferGeometry {
@@ -205,18 +235,19 @@ export class Vegetation {
     const frondTex = frondTexture();
     const trunkMat = windMaterial(new THREE.MeshStandardMaterial({ color: 0x8a7458, roughness: 0.9 }), this.uTime, this.uWind);
     const frondMat = windMaterial(new THREE.MeshStandardMaterial({ map: frondTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.75, color: 0xffffff }), this.uTime, this.uWind);
-    const canopyMat = windMaterial(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 }), this.uTime, this.uWind);
+    const canopyMat = windMaterial(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, vertexColors: true }), this.uTime, this.uWind);
     const mangroveMat = windMaterial(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }), this.uTime, this.uWind);
     const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.95 });
-    this.materials.push(trunkMat, frondMat, canopyMat, mangroveMat, treeTrunkMat);
+    this.materials.push(frondMat, canopyMat, mangroveMat);
+    void trunkMat; void treeTrunkMat;
 
-    const palmVariants = [0, 1, 2, 3].map(() => palmGeometry(rng));
-    const treeVariants = [0, 1, 2, 3].map(() => treeGeometry(rng));
+    const palmVariants = [0, 1, 2].map(() => palmGeometry(rng));
+    const treeVariants = [0, 1, 2].map(() => treeGeometry(rng));
     const mangroveVariants = [0, 1, 2].map(() => mangroveGeometry(rng));
 
     const palms: Plant[] = [], trees: Plant[] = [], mangroves: Plant[] = [], shrubs: Plant[] = [];
-    const palmTints = ['#7fae4a', '#6b9c3d', '#8dbb55', '#5f8f36', '#9cc26a'];
-    const treeTints = ['#3f7a2e', '#4d8a34', '#2f6a25', '#5f9a3c', '#6a9e45', '#3a6f2c', '#7aa64a'];
+    const palmTints = ['#6f9c42', '#5f8f36', '#7fae4a', '#557f30', '#86ad4f'];
+    const treeTints = ['#35682a', '#3f7a2e', '#2c5a22', '#4d8a34', '#4a7d33', '#2f6127', '#5e8f3c', '#365f2c'];
     const mangroveTints = ['#2e5a26', '#35672c', '#294f22', '#3d6f31'];
 
     // jittered-grid sampling per zone
@@ -237,32 +268,33 @@ export class Vegetation {
         const clump = perlin2(jx / 140, jz / 140); // clumping so trees don't look evenly distributed
         if (zone === Zone.BEACH) {
           // palms on the dune line, none on the wet sand
-          if (height > 1.2 && h < 0.12 + 0.1 * clump) palms.push({ x: jx, y: height, z: jz, s: rng.range(7, 13), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 3) });
+          if (height > 1.2 && h < 0.09 + 0.08 * clump) palms.push({ x: jx, y: height, z: jz, s: rng.range(7, 13), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 2) });
         } else if (zone === Zone.PARK) {
-          const p = 0.16 + 0.2 * clump;
-          if (h < p * 0.75) trees.push({ x: jx, y: height, z: jz, s: rng.range(9, 17), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 3) });
-          else if (h < p) palms.push({ x: jx, y: height, z: jz, s: rng.range(8, 14), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 3) });
-          else if (h < p + 0.05) shrubs.push({ x: jx, y: height, z: jz, s: rng.range(2, 4), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 3) });
+          const garza = Math.hypot((jx - 300) / 900, (jz - 2400) / 500) < 1.0 ? 2.6 : 1.0;
+          const p = (0.09 + 0.14 * clump) * garza;
+          if (h < p * 0.75) trees.push({ x: jx, y: height, z: jz, s: rng.range(9, 17), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 2) });
+          else if (h < p) palms.push({ x: jx, y: height, z: jz, s: rng.range(8, 14), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 2) });
+          else if (h < p + 0.02) shrubs.push({ x: jx, y: height, z: jz, s: rng.range(2, 4), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 2) });
         } else if (zone === Zone.RES_LOW) {
-          const p = 0.13 + 0.08 * clump;
-          if (h < p * 0.5) trees.push({ x: jx, y: height, z: jz, s: rng.range(8, 14), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 3) });
-          else if (h < p) palms.push({ x: jx, y: height, z: jz, s: rng.range(7, 12), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 3) });
+          const p = 0.07 + 0.05 * clump;
+          if (h < p * 0.5) trees.push({ x: jx, y: height, z: jz, s: rng.range(8, 14), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 2) });
+          else if (h < p) palms.push({ x: jx, y: height, z: jz, s: rng.range(7, 12), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 2) });
         } else if (zone === Zone.GOLF) {
           const p = 0.1 + 0.25 * smoothstep(0.1, 0.6, clump);
-          if (h < p * 0.7) trees.push({ x: jx, y: height, z: jz, s: rng.range(9, 16), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 3) });
-          else if (h < p) palms.push({ x: jx, y: height, z: jz, s: rng.range(8, 13), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 3) });
+          if (h < p * 0.7) trees.push({ x: jx, y: height, z: jz, s: rng.range(9, 16), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 2) });
+          else if (h < p) palms.push({ x: jx, y: height, z: jz, s: rng.range(8, 13), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 2) });
         } else if (zone === Zone.HOTEL || zone === Zone.RES_MID) {
-          if (h < 0.05) palms.push({ x: jx, y: height, z: jz, s: rng.range(8, 13), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 3) });
+          if (h < 0.05) palms.push({ x: jx, y: height, z: jz, s: rng.range(8, 13), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 2) });
         } else if (zone === Zone.DOWNTOWN) {
-          if (h < 0.02) palms.push({ x: jx, y: height, z: jz, s: rng.range(7, 11), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 3) });
+          if (h < 0.02) palms.push({ x: jx, y: height, z: jz, s: rng.range(7, 11), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 2) });
         } else if (zone === Zone.AIRPORT) {
-          if (h < 0.01) trees.push({ x: jx, y: height, z: jz, s: rng.range(6, 10), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 3) });
+          if (h < 0.01) trees.push({ x: jx, y: height, z: jz, s: rng.range(6, 10), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 2) });
         }
       }
     }
     this.counts = { palms: palms.length, trees: trees.length, mangroves: mangroves.length, shrubs: shrubs.length };
 
-    const tile = 3000;
+    const tile = 4000;
     const tiled = <T extends Plant>(list: T[]): Map<string, T[]> => {
       const m = new Map<string, T[]>();
       for (const p of list) {
@@ -297,10 +329,10 @@ export class Vegetation {
         }
       }
     };
-    build(palms, [{ geo: (v) => palmVariants[v].trunk, mat: trunkMat, tint: false }, { geo: (v) => palmVariants[v].fronds, mat: frondMat, tint: true }]);
-    build(trees, [{ geo: (v) => treeVariants[v].trunk, mat: treeTrunkMat, tint: false }, { geo: (v) => treeVariants[v].canopy, mat: canopyMat, tint: true }]);
+    build(palms, [{ geo: (v) => palmVariants[v], mat: frondMat, tint: true }]);
+    build(trees, [{ geo: (v) => treeVariants[v], mat: canopyMat, tint: true }]);
     build(mangroves, [{ geo: (v) => mangroveVariants[v], mat: mangroveMat, tint: true }]);
-    build(shrubs, [{ geo: (v) => treeVariants[v].canopy, mat: canopyMat, tint: true }], -0.3);
+    build(shrubs, [{ geo: (v) => treeVariants[v], mat: canopyMat, tint: true }], -0.3);
   }
 
   update(time: number, wind: number): void {

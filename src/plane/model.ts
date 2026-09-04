@@ -37,7 +37,7 @@ export class PlaneModel {
   readonly floatBowR = new THREE.Vector3(2.6, -2.0, 1.25);
   readonly wingTipL = new THREE.Vector3(0.2, 1.35, -7.3);
   readonly wingTipR = new THREE.Vector3(0.2, 1.35, 7.3);
-  readonly cockpitEye = new THREE.Vector3(1.05, 0.78, -0.35);
+  readonly cockpitEye = new THREE.Vector3(1.15, 0.62, -0.36);
   readonly exteriorMeshes: THREE.Mesh[] = [];
   readonly interiorMeshes: THREE.Object3D[] = [];
   readonly spanHalf = 7.3;
@@ -126,12 +126,12 @@ export class PlaneModel {
     // window posts
     for (const px of [1.72, 0.85, -0.45, -1.45]) {
       for (const side of [-1, 1]) {
-        const post = add(new THREE.BoxGeometry(0.06, 0.66, 0.05), paint);
+        const post = add(new THREE.BoxGeometry(0.06, 0.66, 0.05), interiorPlastic);
         post.position.set(px, 0.7, side * 0.74);
       }
     }
     // windshield centre post and frame
-    const centrePost = add(new THREE.BoxGeometry(0.9, 0.05, 0.05), paint);
+    const centrePost = add(new THREE.BoxGeometry(0.9, 0.05, 0.05), interiorPlastic);
     centrePost.position.set(2.16, 0.9, 0); centrePost.rotation.z = 0.5;
     // door handles / steps / fuel filler
     for (const side of [-1, 1]) {
@@ -221,28 +221,28 @@ export class PlaneModel {
     // ------------------------------------------------------------ tail
     const hstabSpec = { span: 2.55, rootChord: 1.05, tipChord: 0.7, sweep: -0.12, dihedral: 0, thickness: 0.09, twist: 0 };
     for (const side of [-1, 1]) {
-      const hs = add(wingGeometry(hstabSpec, 5), paint);
+      const hs = add(wingGeometry(hstabSpec, 5), wingPaint);
       hs.position.set(-4.25, 0.42, 0); hs.scale.z = side;
     }
     this.elevator = new THREE.Group();
     this.elevator.position.set(-4.25 - 0.7 * 1.0, 0.44, 0);
     this.root.add(this.elevator);
     for (const side of [-1, 1]) {
-      const el = new THREE.Mesh(plateGeometry(2.5, 0.42, 0.3, 0.05), paint);
+      const el = new THREE.Mesh(plateGeometry(2.5, 0.42, 0.3, 0.05), wingPaint);
       el.scale.z = side; el.castShadow = true;
       this.elevator.add(el); this.exteriorMeshes.push(el);
     }
     // vertical fin: a wing profile rotated upright
     const finSpec = { span: 1.55, rootChord: 1.5, tipChord: 0.75, sweep: -0.55, dihedral: 0, thickness: 0.09, twist: 0 };
-    const fin = add(wingGeometry(finSpec, 5), paint);
+    const fin = add(wingGeometry(finSpec, 5), wingPaint);
     fin.position.set(-4.35, 0.45, 0);
     fin.rotation.x = -Math.PI / 2;
-    const dorsal = add(new THREE.BoxGeometry(1.4, 0.32, 0.08), paint);
+    const dorsal = add(new THREE.BoxGeometry(1.4, 0.32, 0.08), wingPaint);
     dorsal.position.set(-3.4, 0.55, 0); dorsal.rotation.z = -0.25;
     this.rudder = new THREE.Group();
     this.rudder.position.set(-4.35 - 0.7 * 1.5 + 0.05, 0.45, 0);
     this.root.add(this.rudder);
-    const rud = new THREE.Mesh(plateGeometry(1.5, 0.6, 0.4, 0.05), paint);
+    const rud = new THREE.Mesh(plateGeometry(1.5, 0.6, 0.4, 0.05), wingPaint);
     rud.rotation.x = -Math.PI / 2; rud.castShadow = true;
     this.rudder.add(rud); this.exteriorMeshes.push(rud);
     this.strobe = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0 }));

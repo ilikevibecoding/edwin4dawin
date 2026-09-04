@@ -202,7 +202,7 @@ export function createLandmasses(): Landmass[] {
   });
 
   // Barrier island: long, thin, curving to a south-west pointing tip where the reference bridge lands.
-  const barrier: Vec2[] = [[2750, -8200], [2700, -6800], [2640, -5400], [2600, -4000], [2520, -2600], [2380, -1400], [2150, -600], [1900, -260]];
+  const barrier: Vec2[] = [[2750, -8200], [2700, -6800], [2640, -5400], [2600, -4000], [2520, -2600], [2400, -1500], [2250, -900], [2050, -500]];
   const barrierW = [280, 420, 460, 430, 380, 330, 240, 90];
   L.push({
     id: 'barrier', bx: 2500, bz: -4200, br: 5200,
@@ -243,6 +243,9 @@ export function createLandmasses(): Landmass[] {
     },
     beach: 80, height: 2.8, seabed: 0.014, shelf: 6, rocky: true,
   });
+
+  // Isla Tortuga: low island where the reference bridge lands before continuing to the barrier tip.
+  L.push({ id: 'tortuga', bx: 1180, bz: -830, br: 900, sd: (x, z) => sdIsland(x, z, 1180, -830, 520, 300, 0.35, 51, 0.2), beach: 55, height: 2.3, seabed: 0.012, shelf: 3.5 });
 
   // Port island (hard seawalls) in the north-west of the bay, off downtown.
   L.push({ id: 'port', bx: -1150, bz: -3050, br: 1300, sd: (x, z) => sdBox(x, z, -1150, -3050, 950, 300, 0.04, 30), beach: 0, height: 3.0, seabed: 0.06, shelf: 6 });
@@ -302,7 +305,7 @@ export function createDistricts(): District[] {
   add({ id: 'hotel-mid', zone: Zone.HOTEL, cx: 2600, cz: -3800, hw: 300, hh: 1300, rot: -0.03, gridX: 130, gridZ: 105, density: 0.85, hMin: 25, hMax: 130 });
   add({ id: 'barrier-res', zone: Zone.RES_LOW, cx: 2650, cz: -6900, hw: 350, hh: 1200, rot: 0.0, gridX: 90, gridZ: 110, density: 0.7, hMin: 4, hMax: 12 });
   add({ id: 'barrier-golf', zone: Zone.GOLF, cx: 2680, cz: -5300, hw: 420, hh: 520, rot: 0.0, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
-  add({ id: 'garza-res', zone: Zone.RES_LOW, cx: 150, cz: 2380, hw: 500, hh: 220, rot: 0.08, gridX: 110, gridZ: 120, density: 0.55, hMin: 4, hMax: 10 });
+  add({ id: 'garza-res', zone: Zone.RES_LOW, cx: -120, cz: 2420, hw: 260, hh: 180, rot: 0.08, gridX: 110, gridZ: 120, density: 0.5, hMin: 4, hMax: 9 });
   add({ id: 'garza-park', zone: Zone.PARK, cx: 1000, cz: 2330, hw: 300, hh: 240, rot: 0.3, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
   add({ id: 'southkey-res', zone: Zone.RES_LOW, cx: 2200, cz: 5300, hw: 700, hh: 500, rot: 0.25, gridX: 100, gridZ: 120, density: 0.6, hMin: 4, hMax: 10 });
   add({ id: 'southkey-golf', zone: Zone.GOLF, cx: 1300, cz: 6300, hw: 550, hh: 420, rot: -0.3, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
@@ -311,6 +314,7 @@ export function createDistricts(): District[] {
   add({ id: 'stadium-lot', zone: Zone.LOT, cx: -2900, cz: -2000, hw: 330, hh: 260, rot: 0.0, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
   add({ id: 'bayfront-park', zone: Zone.PARK, cx: -2050, cz: -4300, hw: 170, hh: 380, rot: 0.02, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
   add({ id: 'finger-res', zone: Zone.RES_LOW, cx: 1820, cz: -2340, hw: 330, hh: 760, rot: 0.02, gridX: 0, gridZ: 0, density: 0.7, hMin: 4, hMax: 9 });
+  add({ id: 'tortuga-res', zone: Zone.RES_LOW, cx: 1180, cz: -830, hw: 420, hh: 230, rot: 0.35, gridX: 100, gridZ: 110, density: 0.55, hMin: 4, hMax: 10 });
   add({ id: 'isla-b-res', zone: Zone.RES_LOW, cx: -1350, cz: 2560, hw: 330, hh: 190, rot: 0.05, gridX: 100, gridZ: 100, density: 0.5, hMin: 4, hMax: 9 });
   add({ id: 'isla-n-res', zone: Zone.RES_LOW, cx: 700, cz: -4000, hw: 300, hh: 160, rot: -0.15, gridX: 100, gridZ: 100, density: 0.5, hMin: 4, hMax: 9 });
   add({ id: 'isla-n1-res', zone: Zone.RES_LOW, cx: -450, cz: -3900, hw: 270, hh: 150, rot: 0.1, gridX: 100, gridZ: 100, density: 0.5, hMin: 4, hMax: 9 });
@@ -325,7 +329,9 @@ export function createRoads(): RoadSpec[] {
   // Coastal highway on the southern chain (reference left edge) and across Garza.
   R.push({ id: 'south-hwy-mainland', cls: 'highway', width: 22, lanes: 4, traffic: 14, pts: [[-6000, 2650], [-4500, 2700], [-3400, 2720], [-2500, 2680]] });
   R.push({ id: 'garza-hwy', cls: 'highway', width: 22, lanes: 4, traffic: 14, pts: [[-1650, 2590], [-1050, 2540], [-620, 2520]] });
-  R.push({ id: 'garza-hwy-2', cls: 'highway', width: 22, lanes: 4, traffic: 14, pts: [[-420, 2500], [0, 2470], [400, 2440], [700, 2360], [1000, 2200]] });
+  R.push({ id: 'garza-hwy-2', cls: 'highway', width: 22, lanes: 4, traffic: 14, pts: [[-420, 2500], [-200, 2350], [-40, 2060]] });
+  R.push({ id: 'garza-east', cls: 'arterial', width: 14, lanes: 2, traffic: 5, pts: [[-200, 2350], [200, 2470], [600, 2420], [1000, 2200]] });
+  R.push({ id: 'tortuga-rd', cls: 'highway', width: 22, lanes: 4, traffic: 12, pts: [[980, -400], [1200, -720], [1480, -1050]] });
   // Downtown arterials
   R.push({ id: 'dt-bayshore', cls: 'arterial', width: 16, lanes: 4, traffic: 10, pts: [[-2200, -4600], [-2150, -4200], [-2100, -3700], [-2200, -3300], [-2500, -2900], [-2650, -2400], [-2700, -1800], [-2650, -1200]] });
   R.push({ id: 'dt-avenue', cls: 'arterial', width: 16, lanes: 4, traffic: 9, pts: [[-3400, -6000], [-3400, -4600], [-3350, -3500], [-3300, -2600], [-3350, -1500], [-3400, 0], [-3400, 1600], [-3400, 2700]] });
@@ -352,7 +358,8 @@ export function createRoads(): RoadSpec[] {
 export function createBridges(): BridgeSpec[] {
   const B: BridgeSpec[] = [];
   // Reference bridge: Garza north shore -> barrier tip, long low causeway with an arched channel span.
-  B.push({ id: 'garza-bridge', pts: [[700, 2050], [1150, 1230], [1500, 500], [1880, -260]], width: 22, deck: 7, archHeight: 24, archT: 0.62, archLength: 520, lanes: 4, traffic: 12 });
+  B.push({ id: 'garza-bridge', pts: [[-40, 2060], [330, 1250], [700, 300], [980, -400]], width: 22, deck: 7, archHeight: 24, archT: 0.55, archLength: 520, lanes: 4, traffic: 12 });
+  B.push({ id: 'tortuga-bridge', pts: [[1480, -1050], [1800, -600], [2050, -500]], width: 22, deck: 7, archHeight: 18, archT: 0.45, archLength: 380, lanes: 4, traffic: 12 });
   // Southern chain hops
   B.push({ id: 'garza-west', pts: [[-620, 2520], [-420, 2500]], width: 22, deck: 6, archHeight: 0, archT: 0.5, archLength: 0, lanes: 4, traffic: 14 });
   B.push({ id: 'islab-west', pts: [[-2500, 2680], [-2100, 2650], [-1650, 2590]], width: 22, deck: 7, archHeight: 18, archT: 0.45, archLength: 360, lanes: 4, traffic: 14 });
@@ -373,7 +380,7 @@ export function createBridges(): BridgeSpec[] {
 export function createMarinas(): MarinaSpec[] {
   return [
     { id: 'dt-marina', x: -2000, z: -4150, rot: Math.PI * 0.5, piers: 7, pierLen: 110 },
-    { id: 'garza-marina', x: 250, z: 2030, rot: 0, piers: 5, pierLen: 90 },
+    { id: 'garza-marina', x: 420, z: 2035, rot: 0, piers: 5, pierLen: 90 },
     { id: 'barrier-marina', x: 2080, z: -1400, rot: Math.PI * 0.5, piers: 6, pierLen: 100 },
     { id: 'south-marina', x: -2350, z: 2950, rot: Math.PI, piers: 4, pierLen: 80 },
     { id: 'southkey-marina', x: 1200, z: 5150, rot: -0.9, piers: 4, pierLen: 80 },
@@ -397,6 +404,8 @@ export function createChannels(): ChannelSpec[] {
     { id: 'intracoastal', pts: [[1800, -7600], [1900, -6200], [1950, -4500], [2000, -3200], [1950, -1800], [1850, -800], [1700, 200]], width: 110, depth: 6, boats: 8, speed: 9 },
     // reference channel under the Garza bridge arch and toward the mouth
     { id: 'garza-channel', pts: [[-1000, 3300], [200, 3250], [1000, 3100], [1900, 2400], [2600, 1400], [3400, 400]], width: 90, depth: 7, boats: 9, speed: 12 },
+    { id: 'arch-channel', pts: [[-1200, 1200], [-300, 1000], [500, 750], [1400, 300], [2400, -100]], width: 100, depth: 8, boats: 6, speed: 11 },
+    { id: 'ref-boats', pts: [[-500, 3650], [200, 3450], [900, 3150], [1600, 2750]], width: 40, depth: 4, boats: 3, speed: 15 },
     // south-west flats route
     { id: 'flats-route', pts: [[-2100, 3400], [-1200, 3500], [-300, 3600], [700, 3700], [1500, 4100]], width: 40, depth: 3, boats: 5, speed: 10 },
     // bay crossing pleasure route
@@ -494,7 +503,7 @@ export class WorldMap implements WorldMapData {
   /** Regional water depth (positive metres) ignoring shore shelves. */
   regionalDepth(x: number, z: number): number {
     // bay is shallow and turquoise; deepens towards the mouth and the ocean.
-    let depth = 3.4 + 1.2 * fbm2(x / 1500, z / 1500, 3);
+    let depth = 3.0 + 2.6 * (0.5 + 0.5 * fbm2(x / 1100, z / 1100, 3)) + 1.2 * fbm2(x / 350 + 4.0, z / 350, 2);
     // ocean beyond the barrier island / south key: continental shelf ramp
     const oceanEdge = 3050 + 200 * fbm2(z / 4000, 0.5, 2);
     const east = x - oceanEdge;
@@ -599,7 +608,8 @@ export class WorldMap implements WorldMapData {
             zone = Zone.INDUSTRIAL;
             veg = 10;
           } else {
-            const ramp = smoothstep(0, lm.beach, inland);
+            const beachW = lm.beach * (0.55 + 0.9 * (0.5 + 0.5 * perlin2(x / 240 + 1.7, z / 240 - 4.1)));
+            const ramp = smoothstep(0, beachW, inland);
             h = 0.25 + (lm.height - 0.25) * ramp + 0.6 * landNoise * ramp + 0.12 * perlin2(x / 18, z / 18);
             // dunes on ocean-facing beaches of the barrier island / south key
             if (lm.id === 'barrier' || lm.id === 'southkey') {

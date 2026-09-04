@@ -187,7 +187,7 @@ export class BuildingBatches {
   }
 }
 
-const PASTELS = ['#f4efe6', '#f7f3ea', '#efe4d2', '#f2d4c2', '#f5c9b0', '#cfe6e2', '#bfe3ec', '#f7e2a8', '#e9d5f0', '#f1b8c4', '#d9ead3', '#ffffff', '#e8e8e4', '#d6d3cc'];
+const PASTELS = ['#f4efe6', '#f7f3ea', '#efe4d2', '#efe0d3', '#f0dccb', '#dfe9e6', '#d9e6ea', '#f3e9c9', '#e9e0ea', '#ecd6d8', '#e2eadb', '#ffffff', '#e8e8e4', '#d6d3cc', '#f2f2ef', '#e6e2da'];
 const TOWER_TINTS = ['#dfe6ea', '#cfd8dc', '#e8e0d4', '#f2f2f0', '#b9c6cf', '#d8cfc2', '#c9d6d9', '#efe9df'];
 
 export interface CityBuild {

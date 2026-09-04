@@ -23,9 +23,9 @@ const KEYS: Key[] = [
   { el: -8, sun: [0.05, 0.05, 0.1], sunI: 0.0, zen: [0.004, 0.008, 0.022], hor: [0.03, 0.03, 0.06], haze: [0.02, 0.022, 0.04], sunHaze: [0.06, 0.03, 0.03], amb: 0.1 },
   { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.047, zen: [0.02, 0.04, 0.11], hor: [0.42, 0.22, 0.2], haze: [0.22, 0.16, 0.2], sunHaze: [0.9, 0.35, 0.18], amb: 0.25 },
   { el: 4, sun: [1.0, 0.5, 0.22], sunI: 0.437, zen: [0.08, 0.17, 0.42], hor: [0.9, 0.5, 0.35], haze: [0.55, 0.42, 0.42], sunHaze: [1.0, 0.55, 0.3], amb: 0.5 },
-  { el: 14, sun: [1.0, 0.72, 0.42], sunI: 0.75, zen: [0.14, 0.3, 0.68], hor: [0.85, 0.7, 0.6], haze: [0.62, 0.6, 0.62], sunHaze: [1.0, 0.75, 0.5], amb: 0.75 },
-  { el: 30, sun: [1.0, 0.92, 0.8], sunI: 0.938, zen: [0.2, 0.42, 0.85], hor: [0.72, 0.8, 0.9], haze: [0.6, 0.7, 0.84], sunHaze: [0.95, 0.88, 0.78], amb: 0.95 },
-  { el: 90, sun: [1.0, 0.97, 0.92], sunI: 1.0, zen: [0.22, 0.44, 0.88], hor: [0.7, 0.8, 0.92], haze: [0.58, 0.7, 0.86], sunHaze: [0.92, 0.9, 0.85], amb: 1.0 },
+  { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.75, zen: [0.10, 0.24, 0.62], hor: [0.80, 0.66, 0.58], haze: [0.58, 0.56, 0.6], sunHaze: [1.0, 0.75, 0.5], amb: 0.75 },
+  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.13, 0.32, 0.78], hor: [0.60, 0.74, 0.90], haze: [0.55, 0.68, 0.86], sunHaze: [0.95, 0.9, 0.82], amb: 0.95 },
+  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.11, 0.30, 0.80], hor: [0.58, 0.73, 0.92], haze: [0.52, 0.66, 0.86], sunHaze: [0.9, 0.9, 0.88], amb: 1.0 },
 ];
 
 function mixKey(el: number): Key {
@@ -41,10 +41,10 @@ function mixKey(el: number): Key {
 export interface WeatherPreset { coverage: number; hazeDensity: number; hazeHeight: number; windSpeed: number; turbulence: number; cloudBase: number; cloudTop: number; rain: number; sunDim: number; }
 
 export const WEATHER: Record<Weather, WeatherPreset> = {
-  clear: { coverage: 0.22, hazeDensity: 2.6e-5, hazeHeight: 1400, windSpeed: 5, turbulence: 0.25, cloudBase: 1500, cloudTop: 2500, rain: 0, sunDim: 1 },
-  scattered: { coverage: 0.42, hazeDensity: 3.4e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 2700, rain: 0, sunDim: 0.97 },
-  cloudy: { coverage: 0.72, hazeDensity: 5.5e-5, hazeHeight: 1100, windSpeed: 10, turbulence: 0.7, cloudBase: 1000, cloudTop: 2500, rain: 0, sunDim: 0.72 },
-  storm: { coverage: 0.94, hazeDensity: 9.0e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 2600, rain: 1, sunDim: 0.4 },
+  clear: { coverage: 0.2, hazeDensity: 1.5e-5, hazeHeight: 1400, windSpeed: 5, turbulence: 0.25, cloudBase: 1500, cloudTop: 2500, rain: 0, sunDim: 1 },
+  scattered: { coverage: 0.34, hazeDensity: 1.9e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 2700, rain: 0, sunDim: 0.97 },
+  cloudy: { coverage: 0.68, hazeDensity: 3.2e-5, hazeHeight: 1100, windSpeed: 10, turbulence: 0.7, cloudBase: 1000, cloudTop: 2500, rain: 0, sunDim: 0.72 },
+  storm: { coverage: 0.92, hazeDensity: 5.5e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 2600, rain: 1, sunDim: 0.4 },
 };
 
 /** Sun position for Bahía Vista (latitude 25.8N, declination +10). */

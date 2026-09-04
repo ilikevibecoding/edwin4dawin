@@ -49,15 +49,15 @@ vec3 waveNormal(vec2 wp, float depth, float dist) {
   float f2 = 1.0 - smoothstep(150.0, 900.0, dist);
   float f3 = 1.0 - smoothstep(40.0, 300.0, dist);
   vec2 g = vec2(0.0);
-  // long swell (open water)
+  // each layer contributes a slope (dimensionless); noised() derivatives are O(1) per cell
   vec3 n0 = noised(wp * 0.018 + wd * t * 0.35);
-  g += n0.yz * 0.018 * 0.9 * sea;
+  g += n0.yz * 0.05 * sea;
   vec3 n1 = noised(wp * 0.075 + wd * t * 0.7 + 3.1);
-  g += n1.yz * 0.075 * 0.22 * (0.4 + 0.6 * shallow) * f1;
+  g += n1.yz * 0.12 * (0.4 + 0.6 * shallow) * f1;
   vec3 n2 = noised(wp * 0.21 - wp2 * t * 0.4 + wd * t * 0.9 + 7.7);
-  g += n2.yz * 0.21 * 0.09 * (0.5 + 0.5 * shallow) * f2;
+  g += n2.yz * 0.10 * (0.5 + 0.5 * shallow) * f2;
   vec3 n3 = noised(wp * 0.7 + wd * t * 1.6 + 11.3);
-  g += n3.yz * 0.7 * 0.028 * f3;
+  g += n3.yz * 0.07 * f3;
   float wind = 0.5 + 0.5 * clamp(uWindSpeed / 12.0, 0.0, 1.5);
   g *= wind;
   return normalize(vec3(-g.x, 1.0, -g.y));
@@ -65,7 +65,7 @@ vec3 waveNormal(vec2 wp, float depth, float dist) {
 vec3 seabedAlbedo(vec2 wp, float depth) {
   vec2 uv = (wp + vec2(uWorldSize * 0.5)) / uWorldSize;
   float n2 = fbm3(wp * 0.045);
-  vec3 sand = vec3(0.72, 0.66, 0.50);
+  vec3 sand = mix(vec3(0.72, 0.66, 0.50), vec3(0.86, 0.82, 0.68), 1.0 - smoothstep(0.2, 1.4, depth));
   vec3 grass = vec3(0.16, 0.24, 0.13);
   float sg = smoothstep(0.55, 0.75, fbm3(wp * 0.012 + 3.0)) * smoothstep(0.6, 1.6, depth) * (1.0 - smoothstep(5.0, 9.0, depth));
   vec3 c = mix(sand, grass, sg) * (0.9 + 0.2 * n2);
@@ -109,11 +109,13 @@ const WATER_FRAG_MAIN = /* glsl */ `
 
   // --- foam: shoreline, surf lines, whitecaps and wakes
   float foamNoise = fbm3(vWorldPos.xz * 0.35 + vec2(uWaveTime * 0.25, -uWaveTime * 0.15));
-  float shoreFoam = (1.0 - smoothstep(0.0, 0.9, depth)) * smoothstep(0.35, 0.75, foamNoise + 0.25 * sin(uWaveTime * 1.4 + depth * 6.0));
-  float surf = smoothstep(0.85, 1.0, sin(depth * 2.4 - uWaveTime * 1.3 + fbm3(vWorldPos.xz * 0.02) * 4.0)) * smoothstep(3.5, 1.2, depth) * smoothstep(0.6, 1.4, depth) * smoothstep(0.45, 0.6, foamNoise);
+  float shoreFoam = (1.0 - smoothstep(0.0, 0.55, depth)) * smoothstep(0.5, 0.8, foamNoise + 0.2 * sin(uWaveTime * 1.4 + depth * 6.0) + 0.15 * fbm3(vWorldPos.xz * 0.02));
+  float surf = smoothstep(0.9, 1.0, sin(depth * 2.4 - uWaveTime * 1.3 + fbm3(vWorldPos.xz * 0.02) * 4.0)) * smoothstep(3.0, 1.2, depth) * smoothstep(0.6, 1.4, depth) * smoothstep(0.5, 0.65, foamNoise) * smoothstep(3.0, 6.0, uWindSpeed);
   float whitecap = smoothstep(0.78, 0.9, vnoise(vWorldPos.xz * 0.05 + uWindDir * uWaveTime * 0.8)) * smoothstep(6.0, 14.0, uWindSpeed) * smoothstep(3.0, 8.0, depth) * (1.0 - smoothstep(800.0, 3000.0, dist));
   float foam = clamp(shoreFoam + surf * 0.8 + whitecap * 0.6 + wake.r, 0.0, 1.0);
   vec3 foamCol = vec3(0.86, 0.9, 0.9);
+  float waveShade = 0.85 + 0.3 * clamp(dot(wn, normalize(uSunDirW + vec3(0.0, 0.6, 0.0))), 0.0, 1.0);
+  body *= waveShade;
   diffuseColor.rgb = mix(body, foamCol, foam);
   // roughness: mirror-like water, rough foam, rougher with distance to suppress sparkle aliasing
   roughnessFactor = mix(mix(0.06, 0.22, smoothstep(300.0, 6000.0, dist)), 0.85, foam);

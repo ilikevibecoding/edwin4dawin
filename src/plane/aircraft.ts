@@ -29,6 +29,7 @@ export class Aircraft {
     this.flight.omega.set(0, 0, 0);
     this.flight.rpm = throttle;
     this.inputs.throttle = throttle;
+    this.flight.step(this.inputs, 0);
     this.syncModel();
   }
 

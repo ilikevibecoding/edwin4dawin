@@ -97,6 +97,8 @@ void main() {
   c = c * uGain + uLift * (1.0 - smoothstep(0.0, 0.6, c));
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = mix(vec3(l), c, uSaturation);
+  // gentle contrast around mid grey
+  c = mix(c, c * c * (3.0 - 2.0 * min(c, vec3(1.0))), 0.18);
   c = aces(c);
   vec2 q = vUv - 0.5;
   float vig = 1.0 - uVignette * smoothstep(0.35, 0.95, length(q) * 1.35);
@@ -158,7 +160,7 @@ export class PostPipeline {
       fragmentShader: COMPOSITE_FRAG,
       uniforms: {
         tColor: { value: null }, tBloom0: { value: null }, tBloom1: { value: null }, tBloom2: { value: null },
-        uBloom: { value: 0.22 }, uExposure: { value: 1.0 }, uSaturation: { value: 1.08 }, uVignette: { value: 0.28 },
+        uBloom: { value: 0.2 }, uExposure: { value: 0.92 }, uSaturation: { value: 1.16 }, uVignette: { value: 0.25 },
         uLift: { value: new THREE.Vector3(0.0, 0.006, 0.012) }, uGain: { value: new THREE.Vector3(1.03, 1.0, 0.97) },
         uResolution: { value: new THREE.Vector2(1, 1) }, uGrain: { value: 0.004 }, uTime: { value: 0 },
       },

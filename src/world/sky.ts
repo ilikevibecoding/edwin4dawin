@@ -21,7 +21,7 @@ in vec2 vUv;
 
 float cloudDensity(vec3 p, float cov) {
   float hf = (p.y - uCloudBase) / (uCloudTop - uCloudBase);
-  float top = 0.35 + cov * 0.6;
+  float top = 0.45 + cov * 0.5;
   float vert = smoothstep(0.0, 0.08, hf) * (1.0 - smoothstep(top * 0.55, top, hf));
   if (vert <= 0.0) return 0.0;
   vec3 q = (p + vec3(uCloudWind.x, 0.0, uCloudWind.y)) * (1.0 / 1650.0);
@@ -97,9 +97,9 @@ void main() {
       float jitter = hash12(gl_FragCoord.xy) * dt;
       float t = t0 + jitter;
       float cosSun = dot(dir, uSunDir);
-      float phase = hg(cosSun, 0.42) * 0.75 + hg(cosSun, -0.18) * 0.35 + 0.25;
-      vec3 ambient = mix(uHorizonColor, uZenithColor, 0.35) * 1.15;
-      vec3 sunLight = uSunColor * 0.62;
+      float phase = hg(cosSun, 0.5) * 0.9 + hg(cosSun, -0.2) * 0.3 + 0.12;
+      vec3 ambient = mix(uHorizonColor, uZenithColor, 0.45) * 1.05;
+      vec3 sunLight = uSunColor * 2.6;
       float sigma = 0.011;
       float wsum = 0.0;
       meanDist = 0.0;
@@ -112,9 +112,9 @@ void main() {
           if (dens > 0.001) {
             float hf = clamp((p.y - uCloudBase) / (uCloudTop - uCloudBase), 0.0, 1.0);
             float lt = lightMarch(p, cov);
-            float powder = 1.0 - exp(-dens * 4.0);
-            vec3 amb = ambient * mix(0.45, 1.0, hf);
-            vec3 scat = sunLight * lt * phase * mix(0.6, 1.0, powder) + amb * mix(0.7, 1.0, lt);
+            float powder = 1.0 - exp(-dens * 6.0);
+            vec3 amb = ambient * mix(0.42, 1.0, hf);
+            vec3 scat = sunLight * lt * phase * mix(0.5, 1.0, powder) + amb * mix(0.55, 1.0, lt);
             float a = 1.0 - exp(-dens * sigma * dt);
             cloudCol += transmittance * a * scat;
             meanDist += transmittance * a * t;

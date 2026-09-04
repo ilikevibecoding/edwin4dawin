@@ -163,7 +163,7 @@ const ROAD_FRAG_MAIN = /* glsl */ `
 `;
 
 /** One merged mesh per road class. */
-export function buildRoadMeshes(map: WorldMap, segments: RoadSegment[], material: THREE.MeshStandardMaterial): THREE.Mesh[] {
+export function buildRoadMeshes(map: WorldMap, segments: RoadSegment[], material: THREE.Material): THREE.Mesh[] {
   const pos: number[] = [], uv: number[] = [], info: number[] = [], idx: number[] = [], nrm: number[] = [];
   let vcount = 0;
   const clsId = (c: RoadClass) => (c === 'highway' || c === 'causeway' ? 3 : c === 'arterial' ? 2 : c === 'runway' ? 5 : c === 'taxiway' ? 6 : 1);
@@ -189,7 +189,7 @@ export function buildRoadMeshes(map: WorldMap, segments: RoadSegment[], material
       }
       if (i > 0) {
         const b = vcount + i * 2;
-        idx.push(b - 2, b, b - 1, b - 1, b, b + 1);
+        idx.push(b - 2, b - 1, b, b, b - 1, b + 1);
       }
     }
     vcount += (steps + 1) * 2;

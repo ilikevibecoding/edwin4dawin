@@ -93,7 +93,7 @@ export function buildBridges(map: WorldMap, roadMaterial: THREE.Material, concre
       }
       if (i > 0) {
         const b = dCount + i * 2;
-        dIdx.push(b - 2, b, b - 1, b - 1, b, b + 1);
+        dIdx.push(b - 2, b - 1, b, b, b - 1, b + 1);
       }
       // slab + railings as boxes between consecutive samples
       if (i > 0) {

@@ -147,8 +147,8 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, out float ro
   } else if (zone == 17) {
     c = vec3(0.86, 0.82, 0.68) * (0.92 + 0.16 * n2);
   } else if (zone == 2) {
-    vec3 dry = vec3(0.85, 0.79, 0.64);
-    vec3 wet = vec3(0.58, 0.53, 0.43);
+    vec3 dry = vec3(0.76, 0.70, 0.56);
+    vec3 wet = vec3(0.52, 0.47, 0.39);
     float wetness = 1.0 - smoothstep(0.25, 0.9, h);
     c = mix(dry, wet, wetness) * (0.92 + 0.16 * n2) * (0.95 + 0.1 * n1);
     // tide lines

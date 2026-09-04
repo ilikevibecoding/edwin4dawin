@@ -1,0 +1,43 @@
+{
+  "scale": {
+    "0": "missing, broken, invisible or unusable",
+    "1-2": "placeholder, primitive, obvious duplicate, or so incorrect it destroys the illusion",
+    "3-4": "exists but has incorrect proportions, flat materials, weak lighting, obvious repetition, incorrect animation or another problem visible in ordinary play",
+    "5-6": "functional and acceptable for a prototype; a viewer immediately sees it is below the reference",
+    "7-8": "polished and convincing in normal play; focused comparison still reveals meaningful differences in geometry, material response, scale, detail, animation or integration",
+    "9": "extremely close to the reference; differences are minor, need focused inspection and never give the game away in ordinary gameplay",
+    "10": "reference-equivalent under the tested condition; cannot be identified as weaker in a blind comparison. Must be justified test by test."
+  },
+  "targets": { "critical": 9.0, "ordinary": 8.5 },
+  "categories": [
+    { "id": 1, "name": "Overall composition", "critical": true },
+    { "id": 2, "name": "Aircraft silhouette", "critical": true },
+    { "id": 3, "name": "Aircraft geometry", "critical": true },
+    { "id": 4, "name": "Aircraft scale", "critical": true },
+    { "id": 5, "name": "Aircraft materials", "critical": true },
+    { "id": 6, "name": "Cockpit and glass", "critical": true },
+    { "id": 7, "name": "Buildings and skyline", "critical": true },
+    { "id": 8, "name": "Terrain and coastlines", "critical": true },
+    { "id": 9, "name": "Water color and depth", "critical": true },
+    { "id": 10, "name": "Water reflections", "critical": false },
+    { "id": 11, "name": "Boat wakes and water interaction", "critical": false },
+    { "id": 12, "name": "Vegetation", "critical": false },
+    { "id": 13, "name": "Bridge and infrastructure accuracy", "critical": true },
+    { "id": 14, "name": "Cloud volume", "critical": true },
+    { "id": 15, "name": "Atmospheric perspective", "critical": true },
+    { "id": 16, "name": "Sunlight and exposure", "critical": true },
+    { "id": 17, "name": "Shadow quality", "critical": false },
+    { "id": 18, "name": "Reflections and specular response", "critical": false },
+    { "id": 19, "name": "Color grading", "critical": false },
+    { "id": 20, "name": "Motion and temporal stability", "critical": true },
+    { "id": 21, "name": "Flight physics and camera behavior", "critical": true },
+    { "id": 22, "name": "Object density and world believability", "critical": true },
+    { "id": 23, "name": "Detail consistency across distance", "critical": false },
+    { "id": 24, "name": "Lack of repetition", "critical": false },
+    { "id": 25, "name": "Lack of visual artifacts", "critical": true },
+    { "id": 26, "name": "UI readability", "critical": false },
+    { "id": 27, "name": "FPS and frame-time stability", "critical": true }
+  ],
+  "grid": "8x8, columns A-H left to right, rows 1-8 top to bottom; cell A1 is the top-left corner",
+  "views": ["aerial-a", "cockpit-city", "bridge-low", "skyline-high", "island-pass", "harbor", "water-landing", "sunset", "cloudy", "night", "plane-rear-quarter", "plane-front-quarter", "glass-sun"]
+}

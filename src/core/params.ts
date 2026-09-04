@@ -26,6 +26,7 @@ export interface Params {
   autostart: boolean;
   grid: boolean;
   debug: boolean;
+  debugRoads: boolean;
 }
 
 export function readParams(): Params {
@@ -55,5 +56,6 @@ export function readParams(): Params {
     autostart: q.get('autostart') === '1' || q.get('bench') !== null,
     grid: q.get('grid') === '1',
     debug: q.get('debug') === '1',
+    debugRoads: q.get('debugroads') === '1',
   };
 }

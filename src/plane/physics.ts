@@ -76,6 +76,7 @@ export class FlightModel {
   up(out: THREE.Vector3): THREE.Vector3 { return out.set(0, 1, 0).applyQuaternion(this.quaternion); }
 
   step(inputs: FlightInputs, dt: number): void {
+    if (dt <= 0) { this.updateTelemetry(inputs); return; }
     const sub = Math.max(1, Math.ceil(dt / (1 / 120)));
     const h = dt / sub;
     for (let i = 0; i < sub; i++) this.substep(inputs, h);

@@ -61,6 +61,7 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
   transparent: true,
   depthTest: false,
   depthWrite: false,
+  side: THREE.DoubleSide,
   blending: THREE.NormalBlending,
 });
 
@@ -84,6 +85,7 @@ export const CONTRAIL_MATERIAL = new THREE.ShaderMaterial({
   uniforms: { uStrength: { value: 0.7 } },
   transparent: true,
   depthWrite: false,
+  side: THREE.DoubleSide,
 });
 
 /** Fixed-capacity trail of quads following an emitter. Positions are in world space. */
