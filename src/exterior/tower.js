@@ -8,12 +8,15 @@ import * as THREE from "three";
 import { panelWithHoles } from "../kit.js";
 import { PALETTE } from "../materials.js";
 import { TOWER } from "../spec.js";
-import { plateField, shade, mixC, plateTone, fieldNoise, TEXEL, EMIT } from "./hull_util.js";
+import { plateField, shade, mixC, C, plateTone, fieldNoise, TEXEL, EMIT } from "./hull_util.js";
 import { hexa } from "./superstructure.js";
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const Q = (from, to) => new THREE.Quaternion().setFromUnitVectors(from, to);
 const Z = V(0, 0, 1);
+// gradient helpers must never feed pow() a negative base: one NaN vertex colour in an additive mesh
+// gets into the scene env-map capture and PMREM spreads it over every reflective surface
+const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
 export function buildTower(ctx) {
   const { chunks, rand } = ctx;
@@ -224,6 +227,31 @@ export function buildTower(ctx) {
     // viewport glass 1 m inside the face (shared with the bridge / observation interiors)
     at("far", "viewGlass").addGeometry(new THREE.PlaneGeometry(vp.hw * 2 + 1, vp.y1 - vp.y0 + 0.4), { pos: [0, (vp.y0 + vp.y1) / 2, b.z0 + FACE_T / 2], uv: "keep" });
     for (const s of [-1, 1]) at("far", "viewGlass").addGeometry(new THREE.PlaneGeometry(gv.x1 - gv.x0, gv.y1 - gv.y0 + 0.2), { pos: [(s * (gv.x0 + gv.x1)) / 2, (gv.y0 + gv.y1) / 2, b.z0 + FACE_T / 2], uv: "keep" });
+    // lit-interior panes between the glass (z0 + 0.5) and the interior walls (z0 + 1): one additive,
+    // front-facing plane per window, cool white brighter at the ceiling line, each window a little
+    // different. Additive, so the rooms' own consoles and lights still show through the glow; front
+    // side only, so from inside the bridge / gallery they are culled and the view out stays open.
+    {
+      const glowZ = b.z0 + 0.75;
+      const fwd = V(0, 0, -1);
+      const pane = at("far", "exta_pane");
+      const litPane = (x0, x1, y0, y1, tone, top, bottom) => {
+        const c = C(tone);
+        pane.grid(V(x1, y0, glowZ), V(x0, y0, glowZ), V(x0, y1, glowZ), V(x1, y1, glowZ), 1, 2, (p) => c.clone().multiplyScalar(bottom + (top - bottom) * Math.pow(clamp01((p.y - y0) / (y1 - y0)), 1.6)), 1, fwd);
+      };
+      for (let i = 0; i < vp.count; i++) {
+        const x = -vp.hw + vw / 2 + i * (vw + vp.pillar);
+        const k = 0.85 + 0.3 * rand();
+        litPane(x - vw / 2 - 0.15, x + vw / 2 + 0.15, vp.y0 - 0.15, vp.y1 + 0.15, 0xdce8ff, 1.15 * k, 0.5 * k);
+      }
+      for (const s of [-1, 1]) {
+        for (let i = 0; i < gv.count; i++) {
+          const x = s * (gv.x0 + gw * (i + 0.5));
+          const k = 0.8 + 0.35 * rand();
+          litPane(x - gw / 2 + 0.3, x + gw / 2 - 0.3, gv.y0 - 0.1, gv.y1 + 0.1, 0xffe6c4, 0.85 * k, 0.4 * k);
+        }
+      }
+    }
     // corner pilasters, layered plate steps framing the viewport strip, proud plates on the outer
     // light bands, brow (to the pilasters) and sill
     {
@@ -265,12 +293,41 @@ export function buildTower(ctx) {
       // brow runs pilaster to pilaster; the sill stays on the frame
       far.box(0, bandA[1] + 1.5, b.z0 - 1.8, (xPil - pilW / 2) * 2 - 0.4, 3.0, 3.6, D, TEXEL * 3, { skip: new Set(["+z"]) });
       far.box(0, bandA[0] - 0.6, b.z0 - 0.9, frame[0].hx * 2 + 2, 1.2, 1.8, D, TEXEL * 3, { skip: new Set(["+z"]) });
-      // floodlights under the brow and on the sill wash the viewport band when the face is in shadow
+      // four recessed floods per row — housings let into the brow underside / sill top with a cool
+      // lens — each throwing an additive wash down (up) the dark band so the strip reads lit when the
+      // face is in shadow, without the LED-strip rows of point lights
       const em = at("far", "exta_emit");
-      const dim = EMIT.white.clone().multiplyScalar(0.45);
-      for (let x = -vp.hw - 4; x <= vp.hw + 4; x += 5.5) {
-        em.box(x, bandA[1] - 0.25, b.z0 - 2.9, 0.7, 0.5, 0.9, dim, 1, { skip: new Set(["+y"]) });
-        em.box(x, bandA[0] + 0.25, b.z0 - 1.2, 0.7, 0.5, 0.7, dim, 1, { skip: new Set(["-y"]) });
+      const rec = at("mid", "hullGreeble");
+      const wash = at("far", "exta_pool");
+      const lens = C(0xdce8ff).multiplyScalar(2.2);
+      const washC = C(0xdce8ff).multiplyScalar(0.09);
+      const zWash = b.z0 - 0.12;
+      const fan = (x, yFrom, yTo, w0, w1) => {
+        // soft pool on the band face from the flood (width w0) to yTo (width w1): the colour falls off
+        // both along the throw and towards the sides, and is black on every edge, so it reads as
+        // light on the plating rather than as a shape
+        const span = yTo - yFrom;
+        const wAt = (y) => w0 + (w1 - w0) * Math.abs((y - yFrom) / span);
+        const col = (p) => {
+          const t = clamp01(Math.abs((p.y - yFrom) / span));
+          const along = t < 0.1 ? t / 0.1 : Math.pow(clamp01(1 - (t - 0.1) / 0.9), 1.8);
+          const side = clamp01(1 - Math.pow((2 * Math.abs(p.x - x)) / wAt(p.y), 2));
+          return washC.clone().multiplyScalar(along * side);
+        };
+        const ya = yFrom;
+        const yb = yTo;
+        wash.grid(V(x - wAt(ya) / 2, ya, zWash), V(x + wAt(ya) / 2, ya, zWash), V(x + wAt(yb) / 2, yb, zWash), V(x - wAt(yb) / 2, yb, zWash), 6, 5, col, 1, V(0, 0, -1));
+      };
+      for (const fx of [-0.78, -0.26, 0.26, 0.78]) {
+        const x = fx * vp.hw;
+        // brow row: housing hangs 0.5 m below the brow underside, lens on its lower face
+        rec.box(x, bandA[1] - 0.25, b.z0 - 2.3, 2.8, 0.5, 1.9, T, TEXEL * 2, { skip: new Set(["+y"]) });
+        em.box(x, bandA[1] - 0.5, b.z0 - 2.3, 1.7, 0.16, 0.9, lens, 1, { skip: new Set(["+y"]) });
+        fan(x, bandA[1] - 0.5, bandA[0] + 1.6, 2.4, 11);
+        // sill row: housing stands on the sill, lens on its upper face
+        rec.box(x, bandA[0] + 0.25, b.z0 - 1.05, 2.8, 0.5, 1.5, T, TEXEL * 2, { skip: new Set(["-y"]) });
+        em.box(x, bandA[0] + 0.5, b.z0 - 1.05, 1.7, 0.16, 0.8, lens, 1, { skip: new Set(["-y"]) });
+        fan(x, bandA[0] + 0.5, bandA[1] - 1.6, 2.4, 11);
       }
       // gallery deck: a light at each end of the observation windows
       for (const s of [-1, 1]) em.box(s * (gv.x1 + 3), (gv.y0 + gv.y1) / 2, b.z0 - 0.4, 0.8, 0.8, 0.8, EMIT.amber, 1, { skip: new Set(["+z"]) });

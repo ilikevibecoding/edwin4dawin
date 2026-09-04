@@ -20,7 +20,7 @@ export const TEXEL = 1 / 26; // one plating tile per 26 m (plates 3–8 m in the
 export const LOD_NEAR = 1000;
 export const LOD_MID = 3000;
 
-const NO_SHADOW = new Set(["engineGlow", "engineCore", "glowDisc", "cityLights", "viewGlass", "exta_glow", "exta_emit", "exta_pool"]);
+const NO_SHADOW = new Set(["engineGlow", "engineCore", "glowDisc", "cityLights", "viewGlass", "field", "exta_glow", "exta_emit", "exta_pool", "exta_pane"]);
 const isEmitKey = (k) => k.startsWith("extEmit") || k.startsWith("emit");
 /** Vertex colours for the exta_emit material (unlit, HDR: same output as the extEmit* emissives). */
 export const EMIT = {
@@ -730,7 +730,7 @@ export function channel(chunks, rand, { zA, zB, xc, halfW, depth, yAt, up = true
  */
 // tuned with the scene hemisphere fill at 0.8 so the belly plating sits at ~15–20 % grey after ACES
 // (never below 8 %): ext_belly / ext_hangar_mouth are the reference frames
-const SHINE = new THREE.Color(0x5a5f68);
+const SHINE = new THREE.Color(0x636972);
 const SHINE_CHUNK = /* glsl */ `
 #include <emissivemap_fragment>
 {
@@ -806,5 +806,8 @@ export function ensureExtMaterials(materials) {
   materials.exta_emit = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
   // additive, steady (no engine flicker): floodlight pools washing the belly plating
   materials.exta_pool = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
+  // additive, front side only: lit-interior panes behind the bridge glass (they brighten the view into
+  // the rooms from outside and are back-face culled from inside, so the view out stays open)
+  materials.exta_pane = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.FrontSide });
   for (const k of ["exta_plate2", "exta_machinery", "exta_greeble", "exta_heat", ...Object.values(SHINE_VARIANT)]) if (!materials.exteriorKeys.includes(k)) materials.exteriorKeys.push(k);
 }

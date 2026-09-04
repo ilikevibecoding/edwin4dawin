@@ -1,9 +1,10 @@
-// Engines (workstream EXT-A): the stern engine housing (chamfered block whose aft face carries a soot
-// gradient around every nozzle), the three main bells and the four secondary bells built as surfaces of
-// revolution — gimbal collar, necked throat, deep flared nozzle with a heat-tempering ramp along the
-// axis, dark inner bell tinted by the glow toward the throat, additive glow sheet + bright core + halo
-// + faint plume, stiffener rings, longitudinal coolant ribs — and the pipework / manifolds linking
-// the bells across the housing face.
+// Engines (workstream EXT-A, lighting revised by EXT-C): the stern engine housing (chamfered block
+// whose aft face carries a soot gradient and an additive blue spill around every nozzle), the three
+// main bells and the four secondary bells built as surfaces of revolution — gimbal collar, necked
+// throat, deep flared nozzle with a heat-tempering ramp along the axis, inner bell lined with an
+// additive blue sheet so the walls read lit, an unlit radial-falloff core disc (never clipping to
+// white), halo + ~2 L plume, stiffener rings, longitudinal coolant ribs — and the pipework /
+// manifolds linking the bells across the housing face.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { ENGINES } from "../spec.js";
@@ -61,6 +62,7 @@ export function buildEngines(ctx) {
   const H = HOUSING;
   const zF = e.z + H.depth; // housing aft face
   const at = (lvl, key) => chunks.batch(e.z + 30, lvl, key);
+  const bells = [...e.main.map((b) => ({ ...b, main: true })), ...e.secondary.map((b) => ({ ...b, main: false }))];
 
   // ------------------------------------------------------------------ housing
   {
@@ -72,6 +74,22 @@ export function buildEngines(ctx) {
     const M = PALETTE.hullMid;
     hexa(far, b, t, mixC(M, D, 0.35), TEXEL, { skipBottom: true, skipTop: true });
     far.grid(t[0], t[1], t[2], t[3], 56, 10, (p) => shade(mixC(M, PALETTE.hullLight, 0.2), 1 - 0.72 * engineSoot(p.x, p.y)), TEXEL, Z);
+    // blue spill from the nozzles on the sooted face: an additive gradient around every bell, clipped
+    // to the housing by building it as a second grid over the same face 0.35 m proud
+    {
+      const spill = (x, y) => {
+        let s = 0;
+        for (const n of bells) {
+          const R0 = n.r * 0.8 + 2;
+          const R1 = n.r * 2.1;
+          s += (n.main ? 0.11 : 0.07) * (1 - smooth(R0, R1, Math.hypot(x - n.x, y - n.y)));
+        }
+        return Math.min(s, 0.14);
+      };
+      const zS = zF + 0.35;
+      const g = t.map((p) => V(p.x, p.y, zS));
+      at("far", "exta_pool").grid(g[0], g[1], g[2], g[3], 84, 14, (p) => blue.clone().multiplyScalar(spill(p.x, p.y)), 1, Z);
+    }
     const trim = at("far", "hullTrim");
     trim.box(0, H.y1 - 4.5, zF + 0.6, (H.hw - 5) * 2 + 1, 3, 1.4, T, TEXEL * 3, { skip: new Set(["-z"]) });
     trim.box(0, H.y0 + 5.5, zF + 0.6, (H.hw - 5) * 2 + 1, 3, 1.4, T, TEXEL * 3, { skip: new Set(["-z"]) });
@@ -84,7 +102,6 @@ export function buildEngines(ctx) {
   }
 
   // ------------------------------------------------------------------ bells
-  const bells = [...e.main.map((b) => ({ ...b, main: true })), ...e.secondary.map((b) => ({ ...b, main: false }))];
   for (const b of bells) {
     const L = b.main ? e.length : e.length * 0.6;
     const r = b.r;
@@ -98,7 +115,7 @@ export function buildEngines(ctx) {
     // whole opening into a flat sheet)
     const wallIn = b.main ? 0.7 : 0.4;
     const inner = prof.filter((p) => p.t >= 0.24 * L - 1e-6).map((p) => ({ r: p.r - wallIn, t: p.t }));
-    at("far", "hullGreeble").lathe(inner, o, IDENT, segs, { inside: true, colorAt: (i, f) => mixC(shade(T, 0.85), blue, 0.3 * Math.pow(1 - f, 3)), texel: TEXEL * 3 });
+    at("far", "hullGreeble").lathe(inner, o, IDENT, segs, { inside: true, colorAt: (i, f) => mixC(shade(T, 0.85), blue, 0.45 * Math.pow(1 - f, 2)), texel: TEXEL * 3 });
     // interior stiffener rings, slightly embedded in the wall so nothing is coplanar
     {
       const rings = at("mid", "hullTrim");
@@ -107,11 +124,25 @@ export function buildEngines(ctx) {
         rings.addGeometry(new THREE.TorusGeometry(R, b.main ? 0.45 : 0.3, 8, segs), { pos: [b.x, b.y, e.z + f * L], color: shade(T, 0.7), texel: TEXEL * 3 });
       }
     }
-    // throat: a white core disc (under half the lip radius, so the dark throat ring around it and
-    // the bell walls stay visible from any angle) and a blue disc filling the rest of the throat
-    at("far", "engineCore").disc(V(b.x, b.y, e.z + 0.24 * L + 0.5), Z, r * 0.44, segs, 0xffffff);
-    at("far", "engineGlow").disc(V(b.x, b.y, e.z + 0.24 * L + 0.3), Z, r * 0.71 - 0.2, segs, 0xffffff);
-    // additive glow: sheet lining the bell, a hot core cone, a faint plume past the lip
+    // throat: an opaque, unlit gradient disc — pale core at ~60 % (0xdfeeff, so it never clips to
+    // hard white under ACES), falling off radially through blue to a dark rim where it meets the
+    // inner wall. Built as a centre disc plus two annuli so the falloff is a curve, not a line.
+    {
+      const core = at("far", "exta_emit");
+      const zT = e.z + 0.24 * L + 0.4;
+      const cC = C(0xdfeeff);
+      const rT = r * 0.71 - 0.2;
+      const stops = [
+        [0, cC.clone().multiplyScalar(1.05)],
+        [0.3, cC.clone().multiplyScalar(0.62)],
+        [0.55, blue.clone().multiplyScalar(0.3)],
+        [1.0, blue.clone().multiplyScalar(0.08)],
+      ];
+      core.disc(V(b.x, b.y, zT), Z, rT * stops[1][0], segs, stops[0][1], 1, { colorOut: stops[1][1] });
+      for (let i = 1; i < stops.length - 1; i++) core.disc(V(b.x, b.y, zT), Z, rT * stops[i + 1][0], segs, stops[i][1], 1, { rIn: rT * stops[i][0], colorOut: stops[i + 1][1] });
+    }
+    // additive glow (flickers with exta_glow): a sheet lining the inner wall so the bell reads lit
+    // from the throat out, a hot core cone, a long faint plume past the lip
     const glow = at("far", "exta_glow");
     const cone = (f0, f1, r0, r1, c0, pow, n = 6) => {
       const p = [];
@@ -121,17 +152,19 @@ export function buildEngines(ctx) {
       }
       glow.lathe(p, o, IDENT, segs, { colorAt: (i, f) => C(c0).clone().multiplyScalar(Math.pow(1 - f, pow)) });
     };
-    // the sheets stay in the throat third of the bell: seen obliquely, additive layers stack up, so
-    // anything lining the whole bell turns the opening into a flat haze and hides the walls / rings
-    cone(0.25, 0.55, 0.7, 0.8, blue.clone().multiplyScalar(0.22), 2.0);
-    cone(0.25, 0.5, 0.42, 0.28, C(0xffffff).multiplyScalar(0.55), 2.0);
-    // plume past the lip and the halo in the lip plane both sit between an aft camera and the
-    // opening (two additive layers each), so they must stay faint or the whole bell reads as haze
-    cone(1.0, 1.4, 1.0, 0.55, blue.clone().multiplyScalar(0.015), 2.0);
-    // soft additive disc around the core (its bright centre is inside the core disc, only the soft
-    // rim shows) + a dim vertex-gradient halo just behind the lip
-    at("far", "glowDisc").addGeometry(new THREE.PlaneGeometry(r * 1.0, r * 1.0), { pos: [b.x, b.y, e.z + 0.27 * L], uv: "keep" });
-    glow.disc(V(b.x, b.y, e.z + L + 1.5), Z, r * 1.25, segs, blue.clone().multiplyScalar(0.025), 1, { colorOut: 0x000000 });
+    // the wall sheet follows the bell profile 0.3 m inside the inner wall; its falloff is steep (most of
+    // the light in the throat third) so obliquely stacked layers never flatten the opening into haze
+    {
+      const p = [];
+      for (let f = 0.25; f <= 0.97; f += 0.09) p.push({ r: r * bellR(f) - wallIn - 0.3, t: L * f });
+      glow.lathe(p, o, IDENT, segs, { colorAt: (i, f) => blue.clone().multiplyScalar(0.015 + 0.24 * Math.pow(1 - f, 2.2)) });
+    }
+    cone(0.25, 0.5, 0.42, 0.28, C(0xffffff).multiplyScalar(0.45), 2.0);
+    // plume: ~2 L long, faint (two additive layers between an aft camera and the opening)
+    cone(1.0, 3.0, 1.0, 0.32, blue.clone().multiplyScalar(0.035), 1.6, 8);
+    // dim vertex-gradient halo just behind the lip (the old additive glowDisc sprite over the core is
+    // gone: at alpha 1 it was what pushed the centre to clipped white)
+    glow.disc(V(b.x, b.y, e.z + L + 1.5), Z, r * 1.25, segs, blue.clone().multiplyScalar(0.04), 1, { colorOut: 0x000000 });
     // lip ring, gimbal collar at the housing face, stiffener rings
     const trim = at("far", "hullTrim");
     trim.addGeometry(new THREE.TorusGeometry(r * 1.035 + 0.15, b.main ? 1.0 : 0.6, 10, segs), { pos: [b.x, b.y, e.z + L], color: T, texel: TEXEL * 3 });

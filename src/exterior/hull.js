@@ -462,21 +462,6 @@ function buildStern(ctx) {
 // ventral features: hangar mouth well, docking recess, reactor bulb
 // ---------------------------------------------------------------------------
 /**
- * Additive floodlight pool on the ventral plate: a fan that follows yB (the plate is sloped in z),
- * bright centre fading to black at the rim, hung just under the tallest slab so no plate cuts it.
- */
-function ventralPool(batch, cx, cz, R, color, { dy = 0.95, segs = 20 } = {}) {
-  const black = new THREE.Color(0x000000);
-  const c0 = batch.vertex(cx, yB(cz) - dy, cz, 0, -1, 0, 0, 0, C(color));
-  const rim = [];
-  for (let s = 0; s <= segs; s++) {
-    const a = (s / segs) * Math.PI * 2;
-    const z = cz + R * Math.sin(a);
-    rim.push(batch.vertex(cx + R * Math.cos(a), yB(z) - dy, z, 0, -1, 0, 0, 0, black));
-  }
-  for (let s = 0; s < segs; s++) batch.face(c0, rim[s + 1], rim[s]);
-}
-/**
  * Additive wash strip along the edge a→b (each [x, z]), spreading in direction (nx, nz): black at the
  * edge, `color` at `peak` m, black again at `end` m — no hard line anywhere. Follows yB.
  */
@@ -529,6 +514,19 @@ function buildHangarMouth(ctx) {
     hexa(wall, b, b.map((p) => V(p.x, yF, p.z)), mixC(D, M, 0.3), MACH, { skipTop: true });
   }
   ventralFrame(chunks, o.x1 + th, o.z0 - th, o.z1 + th, 3.2, 0.9, mixC(PALETTE.hullDark, PALETTE.hullMid, 0.3));
+  // containment field across the mouth just inside the well (the hangar builder's own field sits at
+  // the floor above): an additive 0x4f8fff sheet at ~0.15, a touch brighter mid-span, with the shared
+  // scrolling hex-lattice material laid over it, read from below as a blue film closing the opening
+  {
+    const yF = (z) => yB(z) - 0.3;
+    const sheet = chunks.batch(zm, "far", "exta_pool");
+    const fc = C(0x4f8fff);
+    const cx = (o.x0 + o.x1) / 2;
+    const dome = (p) => clamp01(1 - Math.pow((2 * (p.x - cx)) / (o.x1 - o.x0), 2)) * clamp01(1 - Math.pow((2 * (p.z - zm)) / (o.z1 - o.z0), 2));
+    sheet.grid(V(o.x0, yF(o.z0), o.z0), V(o.x1, yF(o.z0), o.z0), V(o.x1, yF(o.z1), o.z1), V(o.x0, yF(o.z1), o.z1), 4, 6, (p) => fc.clone().multiplyScalar(0.12 + 0.06 * dome(p)), 1, DOWN);
+    const fld = chunks.batch(zm, "far", "field");
+    fld.quad(V(o.x0, yF(o.z0) - 0.08, o.z0), V(o.x1, yF(o.z0) - 0.08, o.z0), V(o.x1, yF(o.z1) - 0.08, o.z1), V(o.x0, yF(o.z1) - 0.08, o.z1), 0xffffff, 1 / 12, DOWN);
+  }
   // approach lights: white pairs along the sides, red across the fore / aft bars
   const em = chunks.batch(zm, "far", "exta_emit");
   for (let z = o.z0 + 5; z < o.z1; z += 10) for (const s of [-1, 1]) em.box(s * (o.x1 + th + 1.7), yB(z) - 1.25, z, 1.2, 0.6, 1.2, EMIT.white, 1);
@@ -581,9 +579,12 @@ function buildReactorBulb(ctx) {
   const { hullLight: L, hullMid: M, hullDark: D } = PALETTE;
   const yPlate = yB(r.z);
   const far = chunks.batch(r.z, "far", "hullPlate");
-  // only the part below the plate: theta from the cut latitude to the lower pole
+  // only the part below the plate: theta from the cut latitude to the lower pole. Albedo in the
+  // ventral plate's own tone (the plate paints from mixC(L, M, 0.5)) so the bulb is part of the belly,
+  // not a brighter ball hung under it.
   const theta0 = Math.acos((yPlate - r.yCenter) / r.r) - 0.08;
-  far.addGeometry(new THREE.SphereGeometry(r.r, 64, 40, 0, Math.PI * 2, theta0, Math.PI - theta0), { pos: [r.x, r.yCenter, r.z], colorFn: (x, y) => shade(L, 0.88 + 0.12 * clamp01((yPlate - y) / r.r)) });
+  const bulbTone = mixC(L, M, 0.5);
+  far.addGeometry(new THREE.SphereGeometry(r.r, 64, 40, 0, Math.PI * 2, theta0, Math.PI - theta0), { pos: [r.x, r.yCenter, r.z], colorFn: (x, y) => shade(bulbTone, 0.86 + 0.14 * clamp01((yPlate - y) / r.r)) });
   // collar following the sloped plate
   const collar = chunks.batch(r.z, "far", "hullPlate1");
   const R0 = BULB_R + 2.8;
@@ -620,15 +621,15 @@ function buildReactorBulb(ctx) {
   trim.tube(V(r.x, yPole + 1.5, r.z), V(r.x, yPole - 3.5, r.z), 7, 5.5, 24, D, TEXEL * 3, { cap1: true });
   const em = chunks.batch(r.z, "far", "exta_emit");
   em.box(r.x, yPole - 4.0, r.z, 1.4, 1.0, 1.4, EMIT.red, 1);
-  // floodlights on the collar's underside ring the bulb so it reads against the unlit belly
-  const pool = chunks.batch(r.z, "mid", "exta_pool");
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2 + Math.PI / 12;
-    const R = (R0 + R1) / 2;
-    em.box(r.x + R * Math.cos(a), yB(r.z + R * Math.sin(a)) - 3.6 - 0.3, r.z + R * Math.sin(a), 1.2, 0.6, 1.2, EMIT.white, 1, { skip: new Set(["+y"]) });
-    // and the pool each one throws on the plating outboard of the collar
-    const Rp = R0 + 7;
-    ventralPool(pool, r.x + Rp * Math.cos(a), r.z + Rp * Math.sin(a), 12, C(0xfff2dc).multiplyScalar(0.16));
+  // dim emissive collar strip (dashed, two lit segments in four) instead of a ring of floodlights:
+  // it reads as a lit service gallery around the bulb without the "UFO" pools on the plating
+  const strip = C(0xfff1dc).multiplyScalar(0.9);
+  for (let i = 0; i < nSeg; i++) {
+    if (i % 4 >= 2) continue;
+    const a0 = (i / nSeg) * Math.PI * 2 + 0.004;
+    const a1 = ((i + 1) / nSeg) * Math.PI * 2 - 0.004;
+    const nrm = V(Math.cos((a0 + a1) / 2), 0, Math.sin((a0 + a1) / 2));
+    em.quad(pt(a0, R0 + 0.12, 1.3), pt(a1, R0 + 0.12, 1.3), pt(a1, R0 + 0.12, 2.0), pt(a0, R0 + 0.12, 2.0), strip, 1, nrm);
   }
   // four gusset fins between the plate and the sphere
   for (let i = 0; i < 4; i++) {

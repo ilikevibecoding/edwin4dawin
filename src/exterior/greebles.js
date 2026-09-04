@@ -56,8 +56,34 @@ function windowBand() {
   g.computeBoundingSphere();
   return g;
 }
+/**
+ * Additive glow fan for a running light (exta_pool, vertex colours): unit radius in the local xz
+ * plane, hung just past the lamp's top so it draws over it, `color` × k at the centre, black at the rim.
+ */
+function glowFan(color, k, segs = 12) {
+  const g = new THREE.BufferGeometry();
+  const c = new THREE.Color(color).multiplyScalar(k);
+  const pos = [];
+  const col = [];
+  const nor = [];
+  const y = 0.95;
+  for (let s = 0; s < segs; s++) {
+    const a0 = (s / segs) * Math.PI * 2;
+    const a1 = ((s + 1) / segs) * Math.PI * 2;
+    pos.push(0, y, 0, Math.cos(a1), y, Math.sin(a1), Math.cos(a0), y, Math.sin(a0));
+    col.push(c.r, c.g, c.b, 0, 0, 0, 0, 0, 0);
+    nor.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+  }
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(new Array(segs * 6).fill(0), 2));
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+  return g;
+}
 
-// One InstancedMesh per entry (25). band = LOD tier; plain = no per-instance colour (emissive / lights).
+// One InstancedMesh per entry (27). band = LOD tier; plain = no per-instance colour (emissive / lights).
 // Machinery uses exta_greeble (a light painted equipment-panel set in the plate tone) so it reads by
 // its shadow; only the vents keep the dark worn-metal hullGreeble (throats / recesses may be dark).
 const SET_DEFS = [
@@ -71,6 +97,8 @@ const SET_DEFS = [
   { key: "seam", geo: SHAPES.seamStrip, mat: "hullPlate1", band: "large", shadow: false },
   { key: "lightW", geo: SHAPES.lightSmall, mat: "extEmitWhite", band: "large", plain: true, shadow: false },
   { key: "lightR", geo: SHAPES.lightSmall, mat: "extEmitRed", band: "large", plain: true, shadow: false },
+  { key: "glowW", geo: () => glowFan(0xfff1dc, 0.6), mat: "exta_pool", band: "large", plain: true, shadow: false },
+  { key: "glowR", geo: () => glowFan(0xff4a30, 0.5), mat: "exta_pool", band: "large", plain: true, shadow: false },
   { key: "boxStack", geo: SHAPES.boxStack, mat: "exta_greeble", band: "medium" },
   { key: "tankH", geo: SHAPES.tankH, mat: "exta_greeble", band: "medium" },
   { key: "tankV", geo: SHAPES.tankV, mat: "exta_greeble", band: "medium" },
@@ -417,6 +445,29 @@ function edgeLights(ctx, surf, { uFn, step, redEvery = 3, scale = 1.25, lift = 0
     if (put(ctx, surf, k % redEvery === redEvery - 1 ? "lightR" : "lightW", u, v, { scale: scale * rr(rand, 0.8, 1.15), lift, pad: 0.2, tint: 1 })) k++;
   }
 }
+/**
+ * Running lights in pairs along a rail u = uFn(v) (ventral plate): two lamps `gap` metres apart across
+ * the rail at each station, every `redEvery`-th station red, each lamp under a 2–3 m additive glow fan
+ * so the belly reads as lit navigation rails instead of random white pinpoints.
+ */
+function railLights(ctx, surf, { uFn, step, gap = 3.2, redEvery = 4, glowR = 2.6, v0 = surf.v0, v1 = surf.v1, prob = 0.85 }) {
+  let k = 0;
+  const rand = ctx.rand;
+  for (let v = v0 + step * rr(rand, 0.3, 0.7); v < v1; v += step * rr(rand, 0.75, 1.3)) {
+    if (rand() > prob) continue;
+    const u = uFn(v);
+    if (u === null) continue;
+    const red = k % redEvery === redEvery - 1;
+    let placed = 0;
+    for (const s of [-1, 1]) {
+      const uu = u + (s * gap) / 2;
+      if (!put(ctx, surf, red ? "lightR" : "lightW", uu, v, { scale: 1.2, pad: 0.3, tint: 1 })) continue;
+      put(ctx, surf, red ? "glowR" : "glowW", uu, v, { scale: [glowR, 1.2, glowR], tint: 1, check: false, register: false });
+      placed++;
+    }
+    if (placed) k++;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Pick tables per surface class
@@ -606,8 +657,11 @@ function bottomPlate(ctx) {
     },
   };
   plateDetail(ctx, surf, { seamLane: 40, seamCross: 56, seamProb: 0.7, large: 0.09, medium: 0.15, small: 0.14, rows: 25 });
-  edgeLights(ctx, surf, { uFn: (v) => 0.62 * hullHalfWidth(v) - 5, step: 60, v0: -860 });
-  edgeLights(ctx, surf, { uFn: (v) => -(0.62 * hullHalfWidth(v) - 5), step: 60, v0: -860 });
+  // navigation rails: paired running lights with glow fans along the plate edges and two inboard lines
+  for (const s of [-1, 1]) {
+    railLights(ctx, surf, { uFn: (v) => s * (0.62 * hullHalfWidth(v) - 9), step: 70, v0: -840 });
+    railLights(ctx, surf, { uFn: (v) => s * 0.3 * hullHalfWidth(v), step: 95, v0: -700, prob: 0.75 });
+  }
   return surf;
 }
 
