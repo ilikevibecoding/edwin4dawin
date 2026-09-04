@@ -91,7 +91,7 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
     const sps = [];
     // in exterior view only the rooms seen through real openings (hangar bay, bridge, observation
     // gallery) need real lights
-    const ids = api.exteriorView ? EXTERIOR_VISIBLE.filter((id) => sectors.get(id).built) : visibleSet;
+    const ids = api.exteriorView ? EXTERIOR_VISIBLE.filter((id) => sectors.get(id).built && sectors.get(id).group.visible) : visibleSet;
     const ref = api.exteriorView ? player.camera.position : player.position;
     for (const id of ids) {
       for (const l of sectors.get(id).lights) {

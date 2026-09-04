@@ -188,21 +188,27 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
 
   // Paths are two legs so the slow, visible part inside the bay (rack → lane → throat → just below
   // the hull, ~65 m) gets its own time budget instead of ~2 s of a 1.3 km arc-length curve.
+  // Three legs out: a slow taxi from the rack to a hover point over the lane (10 s, all of it above the
+  // deck and visible from the entry), the drop through the throat (8 s), then the run to the patrol loop.
   function launchPath(f) {
     const r = f.rack.pos;
     const t1 = throat(r.x * 0.35, r.z);
+    const hover = new THREE.Vector3(t1.x, HANGAR.deckY + 9, t1.z);
     const exit = new THREE.Vector3(t1.x, HANGAR.module.bottomY - 30, t1.z + 10);
-    const inside = new THREE.CatmullRomCurve3([r.clone(), new THREE.Vector3(r.x * 0.55, HANGAR.deckY + 8, r.z), new THREE.Vector3(t1.x, HANGAR.deckY + 1, t1.z), t1, exit], false, "centripetal");
+    const taxi = new THREE.CatmullRomCurve3([r.clone(), new THREE.Vector3(r.x * 0.7, HANGAR.deckY + 14, r.z + 2), new THREE.Vector3(r.x * 0.35, HANGAR.deckY + 10, r.z + 1), hover], false, "centripetal");
+    const drop = new THREE.CatmullRomCurve3([hover, new THREE.Vector3(t1.x, HANGAR.deckY + 1, t1.z), t1, exit], false, "centripetal");
     const outside = new THREE.CatmullRomCurve3([exit, new THREE.Vector3(t1.x * 3, HANGAR.module.bottomY - 120, t1.z + 160), new THREE.Vector3(t1.x * 6 - 200, -220, 450), loop.getPoint(0)], false, "centripetal");
-    return { legs: [{ curve: inside, duration: 14, ease: "in" }, { curve: outside, duration: 14, ease: "accel" }] };
+    return { legs: [{ curve: taxi, duration: 10, ease: "in" }, { curve: drop, duration: 8, ease: "in" }, { curve: outside, duration: 14, ease: "accel" }] };
   }
   function returnPath(f) {
     const r = f.rack.pos;
     const t1 = throat(r.x * 0.35, r.z);
+    const hover = new THREE.Vector3(t1.x, HANGAR.deckY + 9, t1.z);
     const entry = new THREE.Vector3(t1.x, HANGAR.module.bottomY - 30, t1.z + 10);
     const outside = new THREE.CatmullRomCurve3([f.position.clone(), new THREE.Vector3(f.position.x * 0.5, -260, 700), new THREE.Vector3(t1.x * 3, -140, 260), entry], false, "centripetal");
-    const inside = new THREE.CatmullRomCurve3([entry, t1, new THREE.Vector3(t1.x, HANGAR.deckY + 1, t1.z), new THREE.Vector3(r.x * 0.55, HANGAR.deckY + 8, r.z), r.clone()], false, "centripetal");
-    return { legs: [{ curve: outside, duration: 16, ease: "decel" }, { curve: inside, duration: 16, ease: "out" }] };
+    const rise = new THREE.CatmullRomCurve3([entry, t1, new THREE.Vector3(t1.x, HANGAR.deckY + 1, t1.z), hover], false, "centripetal");
+    const taxi = new THREE.CatmullRomCurve3([hover, new THREE.Vector3(r.x * 0.35, HANGAR.deckY + 10, r.z + 1), new THREE.Vector3(r.x * 0.7, HANGAR.deckY + 14, r.z + 2), r.clone()], false, "centripetal");
+    return { legs: [{ curve: outside, duration: 16, ease: "decel" }, { curve: rise, duration: 8, ease: "out" }, { curve: taxi, duration: 10, ease: "out" }] };
   }
   // evaluate a multi-leg path at time t → { p, tan, done }
   function evalPath(path, t) {
