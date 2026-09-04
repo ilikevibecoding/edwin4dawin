@@ -155,13 +155,14 @@ b = await pose();
 check("well lip stops the player (no floor over the well)", near(b.y, DECK + 0.42, 0.06) && b.z < 430.45 && b.z > 429.4, b);
 await shot("walk_wellLip");
 
-// 9. port deck by the cradled fighter: level deck, the cradle skid blocks the way to the pod
+// 9. port deck by the cradled fighter: level deck, the cradle skid blocks the way to the pod (the cradle
+// stands at (-25.8, 470) turned 60 degrees off the wall, so its skid's bounding box reaches z 464.85 at x -25)
 await teleport(-25, 463, 180, -2);
 a = await pose();
 check("deck height at the cradle bay", near(a.y, DECK, 0.05), a);
 await walk("KeyW", 3); // facing +z, into the cradle
 b = await pose();
-check("cradle collider blocks the pod", near(b.y, DECK, 0.05) && b.z > 464.6 && b.z < 465.4, b);
+check("cradle collider blocks the pod", near(b.y, DECK, 0.05) && b.z > 464.2 && b.z < 465.0, b);
 
 // 10. lift corridor into the hangar: the door-side pilasters narrow the corridor end to 2.3 m but leave the
 // lane open (the door opens on approach), while a pilaster itself blocks the corner
