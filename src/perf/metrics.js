@@ -53,8 +53,7 @@ export function createMetrics(renderer, scene) {
   function visibleObjects() {
     let n = 0;
     let instances = 0;
-    scene.traverse((o) => {
-      if (!o.visible) return;
+    scene.traverseVisible((o) => {
       if (o.isMesh || o.isPoints || o.isSprite || o.isLine) {
         n++;
         if (o.isInstancedMesh) instances += o.count;

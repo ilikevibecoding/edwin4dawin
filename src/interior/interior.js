@@ -218,6 +218,11 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
       if (!currentSector) return;
       const s = locate(player.position);
       if (s && s !== currentSector) setCurrent(s);
+      else {
+        // door proximity / state changes alter the visible set without a sector change
+        const vis = computeVisible(currentSector);
+        if (!sameSet(vis, visibleSet)) applyVisibility();
+      }
       if (collidersDirty) rebuildColliders();
       // light pool: re-rank by distance twice a second, sync animated values every frame
       pool.timer += dt;
@@ -341,6 +346,10 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
     return deckById(id).built;
   }
 
+  // A sector behind a door is only visible while that door is not fully closed or the player is
+  // close enough that it is about to open (pre-warm), so a corridor lined with shut doors renders
+  // only itself. Open portals (style "open") are always co-visible, transitively.
+  const DOOR_PREWARM = 9;
   function computeVisible(sector) {
     const vis = new Set();
     const closure = (id) => {
@@ -349,8 +358,28 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
       for (const l of sectors.get(id).links) closure(l);
     };
     closure(sector.id);
-    for (const id of [...vis]) for (const n of sectors.get(id).neighbors) closure(n);
+    const p = player.position;
+    for (const id of [...vis]) {
+      const s = sectors.get(id);
+      if (!s.doors.length) {
+        // deck doors not built yet: fall back to the plain graph
+        for (const n of s.neighbors) closure(n);
+        continue;
+      }
+      for (const d of s.doors) {
+        if (d.def.style === "open") continue;
+        const other = d.def.a === id ? d.def.b : d.def.a;
+        if (vis.has(other)) continue;
+        const near = Math.hypot(p.x - d.worldCenter.x, p.z - d.worldCenter.z) < DOOR_PREWARM && Math.abs(p.y - (d.worldCenter.y - d.def.h / 2)) < 3;
+        if (d.openness > 0.001 || near) closure(other);
+      }
+    }
     return vis;
+  }
+  function sameSet(a, b) {
+    if (a.size !== b.size) return false;
+    for (const x of a) if (!b.has(x)) return false;
+    return true;
   }
 
   function applyVisibility() {
