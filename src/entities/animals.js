@@ -43,6 +43,8 @@ function paintHead(ctx, canvas, type, coat, dark) {
   ['top', 'bottom', 'right', 'front', 'left', 'back'].forEach((f, i) => {
     const r = uv[f];
     ctx.drawImage(canvas, (i * 3) % 8, (i * 5) % 8, r[2], r[3], r[0], r[1], r[2], r[3]);
+    // calm the coat noise on the side faces so small eye details stay readable (coat is the flat base colour)
+    if (f === 'left' || f === 'right') { ctx.fillStyle = coat; ctx.globalAlpha = 0.55; ctx.fillRect(r[0], r[1], r[2], r[3]); ctx.globalAlpha = 1; }
   });
   const px = (r, x, y, col, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(r[0] + x, r[1] + y, w, h); };
   switch (type) {
@@ -52,8 +54,8 @@ function paintHead(ctx, canvas, type, coat, dark) {
       // near-black eye would vanish, so the eye gets a soft dark grey, a bright glint and a lash line LIGHTER
       // than the coat. Two small nostrils sit together on the bottom row of the muzzle.
       const darkCoat = luminance(coat) < 0.18;
-      const EYE = darkCoat ? '#2c2622' : '#14100c', HI = darkCoat ? '#d8d0c8' : '#8a7a70';
-      const LASH = darkCoat ? shade(coat, 1.8) : shade(coat, 0.5), NOSTRIL = shade(coat, 0.8);
+      const EYE = darkCoat ? '#3e3632' : '#14100c', HI = darkCoat ? '#d8d0c8' : '#8a7a70';
+      const LASH = darkCoat ? shade(coat, 2.4) : shade(coat, 0.5), NOSTRIL = shade(coat, 0.8);
       px(uv.left, 4, 1, EYE, 3, 2); px(uv.left, 4, 1, HI); px(uv.left, 4, 0, LASH, 3, 1);
       px(uv.right, 2, 1, EYE, 3, 2); px(uv.right, 4, 1, HI); px(uv.right, 2, 0, LASH, 3, 1);
       px(uv.front, 2, 4, NOSTRIL, 2, 1);
@@ -65,7 +67,7 @@ function paintHead(ctx, canvas, type, coat, dark) {
       const EYE = '#1a1410', HI = '#e8e8e8';
       px(uv.front, 0, 2, EYE, 2, 2); px(uv.front, 1, 2, HI);
       px(uv.front, 6, 2, EYE, 2, 2); px(uv.front, 6, 2, HI);
-      px(uv.left, 0, 2, EYE, 2, 2); px(uv.right, 4, 2, EYE, 2, 2);
+      px(uv.left, 0, 2, EYE, 1, 2); px(uv.right, 5, 2, EYE, 1, 2);
       break;
     }
     case 'pig': {

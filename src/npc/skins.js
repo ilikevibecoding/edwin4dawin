@@ -80,7 +80,8 @@ export function paintSkin(outfit) {
   // (white on the outside, iris toward the nose, one skin pixel between the eyes). Both irises share one colour.
   const F = R.headFront;
   const irisPick = rng.pick(IRIS_COLORS);
-  const browTone = rng.pick([0.76, 0.78, 0.8]);
+  const browPick = rng.pick([0.76, 0.78, 0.8]);
+  const browTone = luminance(skin) < DARK_SKIN_LUMINANCE ? browPick - 0.12 : browPick; // darker brow ridge on dark skins
   const iris = luminance(skin) < DARK_SKIN_LUMINANCE ? IRIS_DARK : irisPick;
   const eyePixels = [
     { x: F[0] + 2, y: F[1] + 4, color: EYE_WHITE }, { x: F[0] + 3, y: F[1] + 4, color: iris },
