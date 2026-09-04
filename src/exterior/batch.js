@@ -20,11 +20,16 @@ export class Batcher {
     this.meshes = [];
   }
 
-  /** Add a geometry already placed in world space. uvScale re-projects planar UVs when given. */
+  /**
+   * Add a geometry already placed in world space. uvScale re-projects planar UVs when given. `color`
+   * may be a THREE.Color, a hex number or a linear [r, g, b] array (the `grey()` helper) — THREE.Color
+   * ignores arrays, which used to leave every array-toned batch white.
+   */
   add(mat, geo, color = 0xffffff, uvScale = null) {
     if (geo.index) geo = geo.toNonIndexed();
     if (!geo.attributes.normal) geo.computeVertexNormals();
     if (uvScale) planarUVs(geo, uvScale);
+    if (Array.isArray(color)) color = _c.clone().setRGB(color[0], color[1], color[2]);
     if (color !== null) setVertexColor(geo, color);
     else if (!geo.attributes.color) setVertexColor(geo, 0xffffff);
     for (const key of Object.keys(geo.attributes)) if (!["position", "normal", "uv", "color"].includes(key)) geo.deleteAttribute(key);

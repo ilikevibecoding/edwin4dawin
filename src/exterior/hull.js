@@ -10,7 +10,17 @@ import { rng, setVertexColor } from "../kit.js";
 import { vnoise, vnoise2 } from "../textures.js";
 import { HULL, halfWidth, dorsalH, ventralH, CHUNKS, chunkIndex, chunkCenterZ, HANGAR, REACTOR, CITY } from "./dims.js";
 import { Batcher, instancedMesh, frameItem, grey, planarUVs } from "./batch.js";
-import { ensureExtMaterials } from "./exttex.js";
+import { ensureExtMaterials, TRENCH_TILE } from "./exttex.js";
+
+/**
+ * Trench inner-wall x at z: `trenchInset` inside the hull edge, but never less than 30 % of the
+ * half-width, so the two walls converge to the bow tip instead of crossing (which left the tip
+ * see-through). Everything that sits against the wall (bevels, lips, machinery) uses this.
+ */
+export function trenchWallX(z) {
+  const w = halfWidth(z);
+  return Math.max(w - HULL.trenchInset, w * 0.3);
+}
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -115,61 +125,73 @@ function buildSkin(side, rows = 52) {
         tris.push(...(side > 0 ? t.map((tr) => [tr[0], tr[2], tr[1]]) : t));
       }
     }
-    // bevels both sides: plateau edge -> trench lip (at y = ±T, x = w - inset)
+    // bevels both sides: plateau edge -> trench lip (at y = ±T, x = trench wall)
+    const tx0 = trenchWallX(z0);
+    const tx1 = trenchWallX(z1);
     for (const s of [-1, 1]) {
-      const ins = HULL.trenchInset;
-      const t = quad([s * sp * w0, y0, z0], [s * (w0 - ins), side * T, z0], [s * (w1 - ins), side * T, z1], [s * sp * w1, y1, z1]);
+      const t = quad([s * sp * w0, y0, z0], [s * tx0, side * T, z0], [s * tx1, side * T, z1], [s * sp * w1, y1, z1]);
       // winding so normals point outward (up for dorsal, down for ventral); flip for -x / ventral
       const flip = (s > 0) === (side > 0);
       bevel.push(...(flip ? t.map((tr) => [tr[0], tr[2], tr[1]]) : t));
       // lip: horizontal ledge from the bevel edge outward to the trench wall face line (small overhang)
-      const l = quad([s * (w0 - ins), side * T, z0], [s * (w0 + 1.5), side * T, z0], [s * (w1 + 1.5), side * T, z1], [s * (w1 - ins), side * T, z1]);
+      const l = quad([s * tx0, side * T, z0], [s * (w0 + 1.5), side * T, z0], [s * (w1 + 1.5), side * T, z1], [s * tx1, side * T, z1]);
       lips.push(...(flip ? l.map((tr) => [tr[0], tr[2], tr[1]]) : l));
     }
   }
   return { plateau: trisToGeometry(tris, 0.02), bevel: trisToGeometry(bevel, 0.02), lip: trisToGeometry(lips, 0.05) };
 }
 
-/** Trench wall: vertical band at x = ±(w - inset) between y = -T and +T, plus the stern face. */
+/** Cross-section outline (x, y) of the hull at z, clockwise from the port dorsal plateau edge. */
+function sectionOutline(z) {
+  const w = halfWidth(z);
+  const tx = trenchWallX(z);
+  const T = HULL.trenchHalf;
+  return [
+    [-HULL.plateauDorsal * w, dorsalH(z)],
+    [HULL.plateauDorsal * w, dorsalH(z)],
+    [tx, T],
+    [tx, -T],
+    [HULL.plateauVentral * w, -ventralH(z)],
+    [-HULL.plateauVentral * w, -ventralH(z)],
+    [-tx, -T],
+    [-tx, T],
+  ];
+}
+
+/** Flat cap through the cross-section at z, facing ±z, with world-space UVs. */
+function sectionCap(z, facing, uvScale = 0.02) {
+  const shape = new THREE.Shape(sectionOutline(z).map(([x, y]) => new THREE.Vector2(x, y)));
+  const g = new THREE.ShapeGeometry(shape);
+  if (facing < 0) g.rotateY(Math.PI); // ShapeGeometry faces +z; the bow cap must face -z
+  g.translate(0, 0, z);
+  const nonIdx = g.index ? g.toNonIndexed() : g;
+  nonIdx.computeVertexNormals();
+  const p = nonIdx.attributes.position;
+  const uv = nonIdx.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, p.getX(i) * uvScale, p.getY(i) * uvScale);
+  return nonIdx;
+}
+
+/**
+ * Trench inner wall: continuous vertical band at x = ±trenchWallX(z) between y = -T and +T from the
+ * bow tip to the stern (the walls converge at the tip, so with the bow cap the tip is closed), plus
+ * the stern face and the bow cap.
+ */
 function buildTrenchAndStern(rows = 52) {
   const T = HULL.trenchHalf;
-  const ins = HULL.trenchInset;
   const tris = [];
   for (let i = 0; i < rows; i++) {
     const z0 = HULL.bowZ + ((HULL.sternZ - HULL.bowZ) * i) / rows;
     const z1 = HULL.bowZ + ((HULL.sternZ - HULL.bowZ) * (i + 1)) / rows;
-    const w0 = halfWidth(z0) - ins;
-    const w1 = halfWidth(z1) - ins;
+    const w0 = trenchWallX(z0);
+    const w1 = trenchWallX(z1);
     for (const s of [-1, 1]) {
       const t = quad([s * w0, -T, z0], [s * w0, T, z0], [s * w1, T, z1], [s * w1, -T, z1]);
       tris.push(...(s > 0 ? t : t.map((tr) => [tr[0], tr[2], tr[1]])));
     }
   }
-  // stern face: polygon through the cross-section at z = sternZ
-  const z = HULL.sternZ;
-  const w = halfWidth(z);
-  const pts = [
-    [-HULL.plateauDorsal * w, dorsalH(z)],
-    [HULL.plateauDorsal * w, dorsalH(z)],
-    [w - ins, T],
-    [w - ins, -T],
-    [HULL.plateauVentral * w, -ventralH(z)],
-    [-HULL.plateauVentral * w, -ventralH(z)],
-    [-(w - ins), -T],
-    [-(w - ins), T],
-  ];
-  const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
-  const stern = new THREE.ShapeGeometry(shape);
-  stern.translate(0, 0, z);
-  const nonIdx = stern.index ? stern.toNonIndexed() : stern;
-  const p = nonIdx.attributes.position;
-  nonIdx.computeVertexNormals();
-  // world UVs for the stern
-  const uv = nonIdx.attributes.uv;
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, p.getX(i) * 0.02, p.getY(i) * 0.02);
-  // trench wall tiling: 14 px city-light cells at 1/0.015 = 67 m per tile → 0.4–0.8 m windows in rows
-  // every ~5.5 m, i.e. galleries of windows rather than static
-  return { trench: trisToGeometry(tris, 0.015), stern: nonIdx };
+  // wall tiling: TRENCH_TILE metres per tile of 3 m panels (planar UVs from the dominant axis: z / y)
+  return { trench: trisToGeometry(tris, 1 / TRENCH_TILE), stern: sectionCap(HULL.sternZ, 1), bowCap: sectionCap(HULL.bowZ, -1) };
 }
 
 /**
@@ -184,7 +206,9 @@ function buildSternChamfers(batch) {
     const sp = side > 0 ? HULL.plateauDorsal : HULL.plateauVentral;
     const y = side * (side > 0 ? dorsalH(z) : ventralH(z));
     const len = 2 * sp * w - 6;
-    batch.rbox("hullDark", 0, y - side * 1.0, z - 1.0, len, 4.2, 4.2, Math.PI / 4, 0, 0, PALETTE.hullDark.clone().multiplyScalar(0.9), 0.05);
+    // the 45° face looks almost straight at the sun (cos 0.95 vs 0.65 on the plateau): dark paint keeps
+    // it from drawing a bright rail along the corner
+    batch.rbox("hullDark", 0, y - side * 1.0, z - 1.0, len, 4.2, 4.2, Math.PI / 4, 0, 0, PALETTE.hullDark.clone().multiplyScalar(0.55), 0.05);
     // segmented dark band on the face just below the corner, broken by lighter frame blocks
     for (let x = -len / 2 + 8; x < len / 2 - 8; x += 46) {
       batch.box("hullDark", x + 17, y - side * 6.5, z + 0.6, 34, 3.4, 1.2, PALETTE.hullBlack, 0.05);
@@ -228,13 +252,13 @@ export function makeSurface(side, part) {
       const H = Hf(z);
       if (isPlateau) return out.set((2 * u - 1) * sp * w, side * H, z);
       const x0 = s * sp * w;
-      const x1 = s * (w - HULL.trenchInset);
+      const x1 = s * trenchWallX(z);
       return out.set(x0 + (x1 - x0) * u, side * (H - (H - T) * u), z);
     },
     width(z) {
       const w = halfWidth(z);
       if (isPlateau) return 2 * sp * w;
-      return Math.hypot((1 - sp) * w - HULL.trenchInset, Hf(z) - T);
+      return Math.hypot(trenchWallX(z) - sp * w, Hf(z) - T);
     },
     hint: isPlateau ? new THREE.Vector3(0, side, 0) : new THREE.Vector3(s * 0.7, side, 0),
   };
@@ -261,6 +285,26 @@ export function regionTone(x, z, side, isPlateau, u) {
 }
 
 /**
+ * Heat discolouration 0..1 at (x, z): the last ~60 m of both plateaus aft of the engine block, and a
+ * scorched ring around the reactor collar on the ventral plateau. Noisy so it reads as blotches.
+ */
+export function heatAt(x, z, side, isPlateau) {
+  let h = smoothstep(688, 752, z) * (0.5 + 0.5 * vnoise((z + 800) / 300, (x + 500) / 300, 9, 91));
+  if (side < 0 && isPlateau) {
+    const d = Math.hypot(x - REACTOR.x, z - REACTOR.z);
+    h = Math.max(h, (1 - smoothstep(REACTOR.r * 0.85, REACTOR.r * 1.6, d)) * (0.45 + 0.55 * vnoise((z + 800) / 140, (x + 500) / 140, 11, 93)));
+  }
+  return h;
+}
+
+/** Plate paint colour from a grey tone k: warm-dark scorch where heatAt() says so. */
+export function plateColor(x, z, side, isPlateau, k) {
+  const h = heatAt(x, z, side, isPlateau);
+  if (h <= 0) return grey(k, 1.02);
+  return [k * (1 - 0.2 * h), k * (1 - 0.3 * h), k * 1.02 * (1 - 0.42 * h)];
+}
+
+/**
  * Hierarchical plating over one parametric surface. Columns form a binary tree in u: a column splits
  * (with a jittered ratio) at the z where its physical width exceeds `maxW`, so the seams radiate from
  * the bow and branch as the hull widens. Rows along z are staggered per column, each panel is cut
@@ -272,7 +316,7 @@ export function regionTone(x, z, side, isPlateau, u) {
  * Some row seams are widened into cross grooves, so the pattern reads as a two-dimensional
  * patchwork. Emits per-chunk plate instances, groove instances and plate anchors for the detail pass.
  */
-export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed = 0.5, zStart = HULL.bowZ + 1, zEnd = HULL.sternZ - 0.5, bucket = chunkIndex, grooveDepth = 2, toneScale = 1, segmented = true, crossChance = 0.26 } = {}) {
+export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed = 0.5, zStart = HULL.bowZ + 1, zEnd = HULL.sternZ - 0.5, bucket = chunkIndex, grooveDepth = 2, toneScale = 1, segmented = true, crossChance = 0.26, minSplit = 1, subSeam = 0.15 } = {}) {
   const zSplitFor = (du) => {
     if (du * surf.width(zEnd) <= maxW) return Infinity;
     let a = zStart;
@@ -290,7 +334,6 @@ export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed 
   const plainHalf = (depth) => (depth <= grooveDepth + 2 ? 0.5 : 0.35);
   const rowSeam = 0.55;
   const crossSeam = 0.95;
-  const subSeam = 0.15;
   const grooveTone = grey(0.38, 1.04);
 
   // column boundaries: { id, depth, zs (where the seam starts), segLen, phase }
@@ -363,13 +406,13 @@ export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed 
     const th = raised ? thickness * 1.7 : thickness * (0.88 + rand() * 0.24);
     const top = _c.clone().addScaledVector(_n, th - embed);
     _c.addScaledVector(_n, th / 2 - embed);
-    // tone: region × panel batch × sub-plate × replacement
-    let k = panel.tone * (1 + (rand() - 0.5) * 0.03);
+    // tone: region × panel batch × per-plate albedo jitter (±6 %) × replacement / primered plates
+    let k = panel.tone * (1 + (rand() - 0.5) * 0.12);
     const rr = rand();
     if (rr < 0.025) k *= 1.09; // fresh replacement plate
-    else if (rr < 0.045) k *= 0.86; // primered / darker plate
+    else if (rr < 0.075) k *= 0.78 + rand() * 0.1; // primered / darker plate (2–3 per 100 m)
     if (raised) k *= 0.97;
-    const c = grey(k, 1.02);
+    const c = plateColor(_c.x, _c.z, surf.side, surf.isPlateau, k);
     // texture variety: flip half the plates 180° about the normal
     const flip = rand() < 0.5 ? -1 : 1;
     const ax = flip < 0 ? _ex.clone().negate() : _ex.clone();
@@ -409,6 +452,11 @@ export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed 
     if (nu * nz === 1 && W > 9 && L > 9) {
       if (rand() < 0.5 && W > 9) nu = 2;
       else nz = 2;
+    }
+    // forced sub-plate pass (ventral plateau: its 30 m panels read as slabs from the hangar station)
+    if (minSplit > 1) {
+      if (W > 11) nu = Math.max(nu, minSplit);
+      if (L > 11) nz = Math.max(nz, minSplit);
     }
     const uCuts = [u0];
     for (let i = 1; i < nu; i++) uCuts.push(u0 + (u1 - u0) * (jog && nu === 2 ? jog : i / nu + (rand() - 0.5) * 0.24));
@@ -456,134 +504,343 @@ export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed 
   rec(0, 1, null, null, 0, zStart);
 }
 
-/** Ventral hangar module: a box hanging under the ventral plateau with the bay opening in its floor. */
-function buildHangarModule(materials) {
+/**
+ * Far-range skin for one chunk: a coarse vertex-coloured mesh at plate-top height over the plateau and
+ * both bevels of one side, carrying the regionTone patchwork (plus the heat tint). Shown instead of
+ * the ~1,300 plates + grooves of the chunk beyond LOD_DISTANCES.plates, where the plate seams only
+ * alias into a sandy stipple.
+ */
+function buildFarSkin(side, z0, z1, thickness, embed) {
+  const geos = [];
+  const lift = thickness - embed;
+  for (const part of ["plateau", "bevelL", "bevelR"]) {
+    const surf = makeSurface(side, part);
+    const nx = part === "plateau" ? 14 : 3;
+    const nz = 6;
+    const pos = [];
+    const col = [];
+    const idx = [];
+    for (let i = 0; i <= nz; i++) {
+      const z = z0 + ((z1 - z0) * i) / nz;
+      for (let j = 0; j <= nx; j++) {
+        const u = j / nx;
+        surf.at(u, z, _c);
+        _c.y += side * lift * (part === "plateau" ? 1 : 0.7);
+        pos.push(_c.x, _c.y, _c.z);
+        const k = regionTone(_c.x, _c.z, side, surf.isPlateau, u) * 0.98;
+        col.push(...plateColor(_c.x, _c.z, side, surf.isPlateau, k));
+      }
+    }
+    for (let i = 0; i < nz; i++) {
+      for (let j = 0; j < nx; j++) {
+        const a = i * (nx + 1) + j;
+        const b = a + 1;
+        const c = a + nx + 1;
+        const d = c + 1;
+        idx.push(a, c, b, b, c, d);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx);
+    const ng = g.toNonIndexed();
+    ng.computeVertexNormals();
+    // wind toward the outside (dorsal up / ventral down; the bevel normals share the side's y sign)
+    if (ng.attributes.normal.getY(0) * side < 0) {
+      for (const attr of [ng.attributes.position, ng.attributes.color]) {
+        for (let i = 0; i < attr.count; i += 3) {
+          const x = attr.getX(i + 1);
+          const y = attr.getY(i + 1);
+          const zz = attr.getZ(i + 1);
+          attr.setXYZ(i + 1, attr.getX(i + 2), attr.getY(i + 2), attr.getZ(i + 2));
+          attr.setXYZ(i + 2, x, y, zz);
+        }
+      }
+      ng.computeVertexNormals();
+    }
+    planarUVs(ng, 0.02);
+    geos.push(ng);
+  }
+  return geos;
+}
+
+/**
+ * Soot streaks over the plating: thin dark strips trailing aft from a seam, 2–3 per 100 m per side on
+ * each plateau (denser toward the stern), into the chunk groove lists (LOD with the plates).
+ */
+function buildStreaks(rand, chunks) {
+  for (const side of [1, -1]) {
+    const sp = side > 0 ? HULL.plateauDorsal : HULL.plateauVentral;
+    for (let z = HULL.bowZ + 60; z < HULL.sternZ - 40; z += 26 + rand() * 30) {
+      const hw = halfWidth(z) * sp - 8;
+      if (hw < 8) continue;
+      const x = (rand() * 2 - 1) * hw;
+      const skipC = makeSurface(side, "plateau").skip;
+      if (skipC(x, z) || skipC(x, z + 30)) continue;
+      const len = 22 + rand() * 40;
+      const w = 2.5 + rand() * 4;
+      const tone = regionTone(x, z, side, true, 0.5) * (0.5 + rand() * 0.12);
+      const H = side > 0 ? dorsalH : ventralH;
+      const y0 = side * (H(z) + (side > 0 ? 1.55 : 1.35));
+      const y1 = side * (H(z + len) + (side > 0 ? 1.55 : 1.35));
+      const dir = new THREE.Vector3(0, y1 - y0, len).normalize();
+      const up = new THREE.Vector3(0, side, 0);
+      const across = new THREE.Vector3(1, 0, 0);
+      _c.set(x, (y0 + y1) / 2, z + len / 2);
+      chunks[chunkIndex(z + len / 2)].grooves.push(frameItem(_c, across, up, dir, w, 0.08, len, grey(tone, 0.98)));
+    }
+  }
+}
+
+/**
+ * Ventral hangar module: a shallow plated housing under the ventral plateau with the bay mouth in its
+ * floor. The floor is laid as plates on a regular grid at the ventral sub-plate pitch (the mouth edges
+ * fall on grid lines) over a dark base, so it belongs to the plate field instead of reading as a slab
+ * in a frame. The mouth itself is a lit recess: a flush reinforced rim, a short flared skirt whose inner
+ * faces carry light strips and 0.6 m markers, a liner just behind the interior's well walls (the
+ * backdrop while the bay doors are shut and the well is hidden — otherwise the mouth looked straight
+ * through the hull) and a warm point light down in the well so its side walls read from below.
+ */
+function buildHangarModule(materials, rand) {
   const g = new THREE.Group();
   g.name = "hangarModule";
   const m = HANGAR.module;
   const o = HANGAR.opening;
   const yTop = -ventralH(m.z0) + 0.5; // sits just inside the plateau
   const yBot = m.bottomY;
-  // floor plate with the opening: extruded rectangle with a hole (in XZ)
+  // dark base plate with the mouth cut out (shows through the plate seams), 0.5 m inside the plate bottoms
   const shape = new THREE.Shape([new THREE.Vector2(-m.x, m.z0), new THREE.Vector2(m.x, m.z0), new THREE.Vector2(m.x, m.z1), new THREE.Vector2(-m.x, m.z1)]);
   shape.holes.push(new THREE.Path([new THREE.Vector2(-o.x, o.z0), new THREE.Vector2(-o.x, o.z1), new THREE.Vector2(o.x, o.z1), new THREE.Vector2(o.x, o.z0)]));
   const plate = new THREE.ExtrudeGeometry(shape, { depth: 1.2, bevelEnabled: false });
   // extrude is along +z in shape space; rotate so the shape lies in XZ with thickness along -Y
   plate.rotateX(Math.PI / 2);
-  plate.translate(0, yBot + 1.2, 0);
-  const uv = plate.attributes.uv;
-  const pos = plate.attributes.position;
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) * 0.02, pos.getZ(i) * 0.02);
-  const floor = new THREE.Mesh(plate, materials.hull);
-  setVertexColor(plate, PALETTE.hullGrey);
-  floor.castShadow = true;
-  floor.receiveShadow = true;
-  g.add(floor);
-  // side walls of the module (from the plateau down to the bottom) + the opening rim (hazard-lit lip,
-  // bay-door rails — the doors themselves belong to the hangar interior): one batched mesh each
+  plate.translate(0, yBot + 1.7, 0);
+  planarUVs(plate, 0.02);
+  setVertexColor(plate, PALETTE.hullGrey.clone().multiplyScalar(0.66));
+  const base = new THREE.Mesh(plate, materials.hullDark);
+  base.castShadow = true;
+  base.receiveShadow = true;
+  g.add(base);
+  // floor plates: 8 × 12 grid (11 × 11.7 m cells; the mouth is exactly 4 × 6 cells), some split in two
+  const cols = 8;
+  const rows = 12;
+  const cw = (2 * m.x) / cols;
+  const rl = (m.z1 - m.z0) / rows;
+  const plates = [];
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      let x0 = -m.x + i * cw;
+      let x1 = x0 + cw;
+      let z0 = m.z0 + j * rl;
+      let z1 = z0 + rl;
+      const xc0 = (x0 + x1) / 2;
+      const zc0 = (z0 + z1) / 2;
+      const inX = Math.abs(xc0) < o.x;
+      const inZ = zc0 > o.z0 && zc0 < o.z1;
+      if (inX && inZ) continue; // the mouth
+      // the cells beside the mouth give up a 3 m strip to the flush rim
+      if (inZ && Math.abs(xc0) < o.x + cw) {
+        if (xc0 > 0) x0 = o.x + 3.3;
+        else x1 = -(o.x + 3.3);
+      } else if (inX && Math.abs(zc0) < o.z1 + rl) {
+        if (zc0 > 0) z0 = o.z1 + 3.3;
+        else z1 = -(o.z1 + 3.3);
+      }
+      const xc = (x0 + x1) / 2;
+      const w = x1 - x0 - 0.6;
+      const L = z1 - z0;
+      const k = regionTone(xc, (z0 + z1) / 2, -1, true, 0.5) * (1 + (rand() - 0.5) * 0.12);
+      const nz = L > 9 && rand() < 0.4 ? 2 : 1;
+      for (let q = 0; q < nz; q++) {
+        const zq = z0 + (q + 0.5) * (L / nz);
+        plates.push({ m: _m.compose(_v.set(xc, yBot + 0.5, zq), _q.identity(), _s.set(w, 1.6, L / nz - 0.6)).clone(), c: plateColor(xc, zq, -1, true, k * (1 + (rand() - 0.5) * 0.06)) });
+      }
+    }
+  }
+  const plateGeo = new THREE.BoxGeometry(1, 1, 1);
+  g.add(instancedMesh(plateGeo, materials.hull2, plates, { castShadow: true, name: "hangarPlates" }));
+  // side walls of the module (from the plateau down to the bottom) in the plate tone family, with
+  // rib / panel steps so the housing reads as machinery from below
   const wallH = yTop - yBot;
   const wallY = (yTop + yBot) / 2;
   const walls = new Batcher(materials);
-  walls.box("hullDark", 0, wallY, m.z0 - 1, 2 * m.x + 2, wallH, 2, PALETTE.hullDark, 0.05);
-  walls.box("hullDark", 0, wallY, m.z1 + 1, 2 * m.x + 2, wallH, 2, PALETTE.hullDark, 0.05);
-  walls.box("hullDark", -m.x - 1, wallY, (m.z0 + m.z1) / 2, 2, wallH, m.z1 - m.z0 + 4, PALETTE.hullDark, 0.05);
-  walls.box("hullDark", m.x + 1, wallY, (m.z0 + m.z1) / 2, 2, wallH, m.z1 - m.z0 + 4, PALETTE.hullDark, 0.05);
-  // ribs / panel steps on the module walls so the box reads as machinery from below
-  for (let z = m.z0 + 10; z < m.z1 - 6; z += 12) for (const s of [-1, 1]) walls.box("hullDark", s * (m.x + 2.4), wallY - 2, z, 1.2, wallH - 8, 3, PALETTE.hullBlack, 0.05);
-  for (let x = -m.x + 8; x < m.x - 6; x += 11) for (const s of [-1, 1]) walls.box("hullDark", x, wallY - 2, s > 0 ? m.z1 + 2.4 : m.z0 - 2.4, 3, wallH - 8, 1.2, PALETTE.hullBlack, 0.05);
-  walls.build(g, { name: "hangarModuleWalls" });
-  const rim = new THREE.Group();
-  const rimBatch = new Batcher(materials);
-  for (const [x0, z0, x1, z1] of [
-    [-o.x - 3, o.z0 - 3, o.x + 3, o.z0],
-    [-o.x - 3, o.z1, o.x + 3, o.z1 + 3],
-    [-o.x - 3, o.z0, -o.x, o.z1],
-    [o.x, o.z0, o.x + 3, o.z1],
-  ]) {
-    rimBatch.box("hullDark", (x0 + x1) / 2, yBot - 0.8, (z0 + z1) / 2, x1 - x0, 1.6, z1 - z0, PALETTE.hullBlack, 0.05);
+  const wallTone = PALETTE.hullGrey.clone().multiplyScalar(0.7);
+  walls.box("hullDark", 0, wallY, m.z0 - 1, 2 * m.x + 2, wallH, 2, wallTone, 0.05);
+  walls.box("hullDark", 0, wallY, m.z1 + 1, 2 * m.x + 2, wallH, 2, wallTone, 0.05);
+  walls.box("hullDark", -m.x - 1, wallY, (m.z0 + m.z1) / 2, 2, wallH, m.z1 - m.z0 + 4, wallTone, 0.05);
+  walls.box("hullDark", m.x + 1, wallY, (m.z0 + m.z1) / 2, 2, wallH, m.z1 - m.z0 + 4, wallTone, 0.05);
+  for (let z = m.z0 + 10; z < m.z1 - 6; z += 12) for (const s of [-1, 1]) walls.box("hullDark", s * (m.x + 2.4), wallY - 1, z, 1.2, wallH - 4, 3, PALETTE.hullDark, 0.05);
+  for (let x = -m.x + 8; x < m.x - 6; x += 11) for (const s of [-1, 1]) walls.box("hullDark", x, wallY - 1, s > 0 ? m.z1 + 2.4 : m.z0 - 2.4, 3, wallH - 4, 1.2, PALETTE.hullDark, 0.05);
+  // --- the mouth: reinforced rim (darker, a quarter metre proud of the plates), flared skirt, liner, light
+  const rimTone = PALETTE.hullGrey.clone().multiplyScalar(0.5);
+  for (const s of [-1, 1]) {
+    walls.box("hullDark", s * (o.x + 1.5), yBot + 0.25, 0, 3, 1.6, o.z1 - o.z0 + 6, rimTone, 0.05);
+    walls.box("hullDark", 0, yBot + 0.25, s * (o.z1 + 1.5), 2 * o.x, 1.6, 3, rimTone, 0.05);
   }
-  rimBatch.build(rim, { name: "hangarRim", castShadow: false });
-  // running lights around the rim
+  // skirt: four panels leaning 15° outward, 6.5 m down the slant, from the rim's outer edge
+  const th = 0.26;
+  const H = 6.5;
+  const skirtTone = PALETTE.hullGrey.clone().multiplyScalar(0.58);
+  const inner = 3.0; // rim width: the skirt's top inner edge sits at the rim's outer edge
+  const topX = o.x + inner;
+  const topZ = o.z1 + inner;
+  const yT = yBot - 0.3;
+  const cx = topX + 0.5 * Math.cos(th) + (H / 2) * Math.sin(th);
+  const cyS = yT - (H / 2) * Math.cos(th) + 0.5 * Math.sin(th);
+  const cz = topZ + 0.5 * Math.cos(th) + (H / 2) * Math.sin(th);
+  for (const s of [-1, 1]) {
+    walls.rbox("hullDark", s * cx, cyS, 0, 1.0, H, 2 * topZ + 3, 0, 0, s * th, skirtTone, 0.05);
+    walls.rbox("hullDark", 0, cyS, s * cz, 2 * topX + 3, H, 1.0, -s * th, 0, 0, skirtTone, 0.05);
+    for (const t of [-1, 1]) walls.box("hullDark", s * (topX + 1.4), yT - H * 0.48, t * (topZ + 1.4), 2.4, H * 0.96, 2.4, PALETTE.hullDark, 0.05);
+  }
+  // liner behind the interior's well walls (x ±21.9 / z ±34.9, y -46..-30): 1.1 m further out, from
+  // the module bottom to just under the door slot, so a shut bay shows panelled walls, not the void
+  const lx = o.x + 1.1;
+  const lz = o.z1 + 1.1;
+  const yL1 = HANGAR.deckY - 1.6;
+  const yL0 = yBot + 0.2;
+  const linerTone = PALETTE.hullGrey.clone().multiplyScalar(0.46);
+  for (const s of [-1, 1]) {
+    walls.box("hullDark", s * (lx + 0.3), (yL0 + yL1) / 2, 0, 0.6, yL1 - yL0, 2 * lz + 1.2, linerTone, 0.05);
+    walls.box("hullDark", 0, (yL0 + yL1) / 2, s * (lz + 0.3), 2 * lx, yL1 - yL0, 0.6, linerTone, 0.05);
+  }
+  walls.build(g, { name: "hangarModuleWalls" });
+  // light strips on the skirt's inner faces (two per face) and the liner (three per wall)
+  const lit = new Batcher(materials);
+  for (const sl of [1.6, 4.3]) {
+    const px = topX + sl * Math.sin(th) - 0.1 * Math.cos(th);
+    const py = yT - sl * Math.cos(th) - 0.1 * Math.sin(th);
+    const pz = topZ + sl * Math.sin(th) - 0.1 * Math.cos(th);
+    for (const s of [-1, 1]) {
+      lit.rbox("ext_window", s * px, py, 0, 0.16, 0.35, 2 * topZ - 4, 0, 0, s * th, 0xffffff, 0.05);
+      lit.rbox("ext_window", 0, py, s * pz, 2 * topX - 4, 0.35, 0.16, -s * th, 0, 0, 0xffffff, 0.05);
+    }
+  }
+  for (const y of [-43.5, -39.5, -35.5]) {
+    for (const s of [-1, 1]) {
+      lit.box("ext_window", s * (lx - 0.06), y, 0, 0.1, 0.3, 2 * lz - 6, 0xffffff, 0.05);
+      lit.box("ext_window", 0, y, s * (lz - 0.06), 2 * lx - 6, 0.3, 0.1, 0xffffff, 0.05);
+    }
+  }
+  lit.build(g, { name: "hangarStrips", castShadow: false });
+  // 0.6 m marker lights along the skirt's bottom edge, every 5 m
   const lights = [];
-  for (let z = o.z0 + 3; z < o.z1; z += 6) for (const s of [-1, 1]) lights.push([s * (o.x + 1.5), yBot - 1.7, z]);
-  for (let x = -o.x + 3; x < o.x; x += 6) for (const s of [-1, 1]) lights.push([x, yBot - 1.7, s > 0 ? o.z1 + 1.5 : o.z0 - 1.5]);
-  const lg = new THREE.BoxGeometry(1.2, 0.3, 1.2);
+  const sm = H - 0.7;
+  const mx = topX + sm * Math.sin(th) - 0.3 * Math.cos(th);
+  const my = yT - sm * Math.cos(th) - 0.3 * Math.sin(th);
+  const mz = topZ + sm * Math.sin(th) - 0.3 * Math.cos(th);
+  for (let z = -topZ + 4; z < topZ - 3; z += 5) for (const s of [-1, 1]) lights.push([s * mx, my, z]);
+  for (let x = -topX + 4; x < topX - 3; x += 5) for (const s of [-1, 1]) lights.push([x, my, s * mz]);
+  const lg = new THREE.BoxGeometry(0.6, 0.6, 0.6);
   const lm = new THREE.InstancedMesh(lg, materials.exteriorRed, lights.length);
   lights.forEach((p, i) => lm.setMatrixAt(i, _m.compose(_v.set(...p), _q.identity(), _s.set(1, 1, 1))));
   lm.instanceMatrix.needsUpdate = true;
-  rim.add(lm);
-  g.add(rim);
+  lm.name = "hangarMarkers";
+  g.add(lm);
+  // warm light down in the well: lights the interior's well walls and the skirt from inside the recess
+  const wl = new THREE.PointLight(0xffdcb0, 110, 90, 2);
+  wl.position.set(0, -40, 0);
+  wl.name = "hangarWellLight";
+  g.add(wl);
   return g;
 }
 
 /**
- * Reactor bulb under the ventral plateau: plated sphere (planar UVs so the armour texture does not
- * stretch), junction collar where it meets the plateau, lit equatorial band, latitude bands, meridian
- * ribs, vent ports and a pole fitting.
+ * Reactor bulb under the ventral plateau: a dark base sphere plated with staggered rows of tangent
+ * armour panels (~11 m, seams showing the base between them — plate seams, not a lat/long grid), a
+ * 12 m junction collar at 1.1× the bulb's radius at the plateau (ribbed, with a flange at the plateau
+ * and a lip at its foot), a lit gallery ring below the equator and a pole fitting.
  */
-function buildReactor(materials, group) {
+function buildReactor(materials, group, rand) {
   const yTop = -ventralH(REACTOR.z);
   const r = REACTOR.r;
   const cy = yTop - r * 0.45;
   const geo = new THREE.SphereGeometry(r, 48, 32);
   geo.translate(REACTOR.x, cy, REACTOR.z);
   planarUVs(geo, 0.02);
-  setVertexColor(geo, PALETTE.hullGrey.clone().multiplyScalar(0.95));
-  const bulb = new THREE.Mesh(geo, materials.hull);
+  setVertexColor(geo, PALETTE.hullGrey.clone().multiplyScalar(0.6));
+  const bulb = new THREE.Mesh(geo, materials.hullDark);
   bulb.castShadow = true;
   bulb.receiveShadow = true;
   bulb.name = "reactorBulb";
   group.add(bulb);
-  const band = new THREE.CylinderGeometry(r * 0.985, r * 0.985, 6, 48, 1, true);
-  band.translate(REACTOR.x, cy - r * 0.1, REACTOR.z);
+  // --- collar: 12 m ring at 1.1 × the junction radius, hanging from the plateau over the top of the bulb
+  const fit = new Batcher(materials);
+  const rj = Math.sqrt(r * r - (yTop - cy) * (yTop - cy)); // bulb radius at the plateau plane
+  const rc = rj * 1.1;
+  const collarH = 12;
+  const collarTone = PALETTE.hullGrey.clone().multiplyScalar(0.72);
+  fit.cyl("hullDark", REACTOR.x, yTop - collarH / 2, REACTOR.z, rc, rc, collarH, "y", collarTone, 64, 0.02, true);
+  fit.cyl("hullDark", REACTOR.x, yTop - 0.8, REACTOR.z, rc + 2.8, rc + 2.8, 1.6, "y", PALETTE.hullDark, 64, 0.05); // flange at the plateau
+  fit.cyl("hullDark", REACTOR.x, yTop - collarH - 0.7, REACTOR.z, rc + 1.4, rc + 1.4, 1.4, "y", PALETTE.hullDark, 64, 0.05); // foot lip
+  for (let k = 0; k < 28; k++) {
+    const a = (k / 28) * Math.PI * 2;
+    fit.rbox("hullDark", REACTOR.x + Math.cos(a) * (rc + 0.5), yTop - collarH / 2, REACTOR.z + Math.sin(a) * (rc + 0.5), 1.4, collarH - 2.4, 1.8, 0, -a, 0, PALETTE.hullDark, 0.05);
+  }
+  fit.cyl("hullDark", REACTOR.x, cy - r - 1.5, REACTOR.z, 9, 12, 5, "y", PALETTE.hullDark, 24, 0.05);
+  fit.cyl("hullDark", REACTOR.x, cy - r - 5, REACTOR.z, 4, 6, 4, "y", PALETTE.hullBlack, 16, 0.05);
+  fit.build(group, { name: "reactorFittings" });
+  // lit gallery ring just below the equator, standing on the plates
+  const bandY = cy - r * 0.1;
+  const band = new THREE.CylinderGeometry(r + 0.7, r + 0.7, 3.2, 64, 1, true);
+  band.translate(REACTOR.x, bandY, REACTOR.z);
   planarUVs(band, 0.015);
   setVertexColor(band, PALETTE.hullBlack);
   const bandMesh = new THREE.Mesh(band, materials.cityDense);
   bandMesh.name = "reactorBand";
   group.add(bandMesh);
-  // collar at the plateau junction (two steps), latitude bands, pole fitting: one batched mesh
-  const fit = new Batcher(materials);
-  const rj = Math.sqrt(r * r - (yTop - cy) * (yTop - cy)); // bulb radius at the plateau plane
-  fit.cyl("hullDark", REACTOR.x, yTop - 2.6, REACTOR.z, rj + 3.5, rj + 4.5, 5.2, "y", PALETTE.hullDark, 48, 0.05);
-  fit.cyl("hullDark", REACTOR.x, yTop - 7.2, REACTOR.z, rj + 0.8, rj + 2.2, 4.4, "y", PALETTE.hullBlack, 48, 0.05);
-  for (let k = 0; k < 16; k++) {
-    const a = (k / 16) * Math.PI * 2;
-    fit.rbox("hullDark", REACTOR.x + Math.cos(a) * (rj + 2.6), yTop - 5.2, REACTOR.z + Math.sin(a) * (rj + 2.6), 3, 9, 4.2, 0, -a, 0, PALETTE.hullDark, 0.05);
-  }
-  for (const [lat, thick] of [
-    [-0.42, 0.9],
-    [-0.78, 0.7],
-    [-1.12, 0.6],
-  ]) {
-    const ring = new THREE.TorusGeometry(r * Math.cos(lat) + 0.2, thick, 6, 64);
-    ring.rotateX(Math.PI / 2);
-    ring.translate(REACTOR.x, cy + r * Math.sin(lat), REACTOR.z);
-    fit.add("hullDark", ring, PALETTE.hullDark, 0.1);
-  }
-  fit.cyl("hullDark", REACTOR.x, cy - r - 1.5, REACTOR.z, 9, 12, 5, "y", PALETTE.hullDark, 24, 0.05);
-  fit.cyl("hullDark", REACTOR.x, cy - r - 5, REACTOR.z, 4, 6, 4, "y", PALETTE.hullBlack, 16, 0.05);
-  fit.build(group, { name: "reactorFittings" });
-  // meridian ribs + ring of vent ports (instanced boxes in the bulb's local frame)
-  const items = [];
-  for (let k = 0; k < 12; k++) {
-    const a = (k / 12) * Math.PI * 2;
-    // rib: a thin box tangent to the sphere at the equator-ish latitude, leaning outward
-    const lat = -0.55;
-    const rr = REACTOR.r * Math.cos(lat);
-    const yy = cy + REACTOR.r * Math.sin(lat);
-    _v.set(REACTOR.x + Math.cos(a) * rr, yy, REACTOR.z + Math.sin(a) * rr);
+  // service slots on the collar: short lit strips between every fourth pair of ribs
+  const slots = [];
+  for (let k = 0; k < 28; k += 4) {
+    const a = ((k + 0.5) / 28) * Math.PI * 2;
+    _v.set(REACTOR.x + Math.cos(a) * (rc + 0.15), yTop - collarH * 0.55, REACTOR.z + Math.sin(a) * (rc + 0.15));
     _q.setFromEuler(new THREE.Euler(0, -a, 0));
-    _s.set(2.2, 26, 1.6);
-    items.push({ m: _m.compose(_v, _q, _s).clone(), c: grey(0.5) });
-    const lat2 = -0.2;
-    const r2 = REACTOR.r * Math.cos(lat2) + 0.4;
-    _v.set(REACTOR.x + Math.cos(a + 0.26) * r2, cy + REACTOR.r * Math.sin(lat2), REACTOR.z + Math.sin(a + 0.26) * r2);
-    _q.setFromEuler(new THREE.Euler(0, -a - 0.26, 0));
-    _s.set(1.4, 5, 7);
-    items.push({ m: _m.compose(_v, _q, _s).clone(), c: grey(0.22) });
+    _s.set(0.3, 0.5, 5);
+    slots.push({ m: _m.compose(_v, _q, _s).clone(), c: null });
   }
-  const rm = instancedMesh(new THREE.BoxGeometry(1, 1, 1), materials.hullDark, items, { name: "reactorDetail" });
-  group.add(rm);
+  group.add(instancedMesh(new THREE.BoxGeometry(1, 1, 1), materials.ext_window, slots, { name: "reactorSlots" }));
+  // --- plates: staggered rows of tangent panels from under the collar down to the pole fitting; the
+  // gallery ring takes the place of one row. Panel tone = the ventral plate tone, a few dark vent
+  // panels and fresh replacements, and a little heat toward the collar.
+  const items = [];
+  const latTop = Math.asin((yTop - collarH - 1.2 - cy) / r);
+  const latBand0 = Math.asin((bandY + 2.0 - cy) / r);
+  const latBand1 = Math.asin((bandY - 2.0 - cy) / r);
+  const latBot = -1.28;
+  const rowsAbove = 2;
+  const rowsBelow = 7;
+  const rowList = [];
+  for (let i = 0; i < rowsAbove; i++) rowList.push([latTop + ((latBand0 - latTop) * i) / rowsAbove, latTop + ((latBand0 - latTop) * (i + 1)) / rowsAbove]);
+  for (let i = 0; i < rowsBelow; i++) rowList.push([latBand1 + ((latBot - latBand1) * i) / rowsBelow, latBand1 + ((latBot - latBand1) * (i + 1)) / rowsBelow]);
+  const east = new THREE.Vector3();
+  const north = new THREE.Vector3();
+  let row = 0;
+  for (const [la0, la1] of rowList) {
+    const lat = (la0 + la1) / 2;
+    const h = r * (la0 - la1) - 0.7;
+    const circ = 2 * Math.PI * r * Math.cos(lat);
+    const n = Math.max(6, Math.round(circ / 11));
+    const off = (row++ % 2) * 0.5;
+    const w = circ / n - 0.7;
+    const heat = smoothstep(latTop - 0.3, latTop, lat);
+    for (let k = 0; k < n; k++) {
+      const lon = ((k + off) / n) * Math.PI * 2;
+      _n.set(Math.cos(lon) * Math.cos(lat), Math.sin(lat), Math.sin(lon) * Math.cos(lat));
+      east.set(-Math.sin(lon), 0, Math.cos(lon));
+      north.crossVectors(_n, east).normalize();
+      _c.set(REACTOR.x, cy, REACTOR.z).addScaledVector(_n, r + 0.25);
+      let kk = regionTone(_c.x, _c.z, -1, false, 0.5) * (1 + (rand() - 0.5) * 0.12) * 0.96;
+      const rr = rand();
+      if (rr < 0.05) kk *= 0.5; // vent panel
+      else if (rr < 0.09) kk *= 1.08; // fresh replacement
+      const c = [kk * (1 - 0.16 * heat), kk * (1 - 0.24 * heat), kk * 1.02 * (1 - 0.34 * heat)];
+      items.push(frameItem(_c.clone(), east.clone(), _n.clone(), north.clone(), w, 0.8, Math.max(2, h), c));
+    }
+  }
+  const pm = instancedMesh(new THREE.BoxGeometry(1, 1, 1), materials.hull, items, { castShadow: true, name: "reactorPlates" });
+  group.add(pm);
+  return items.length;
 }
 
 export function buildHull(materials) {
@@ -601,37 +858,49 @@ export function buildHull(materials) {
     skin.add("hullDark", lip, PALETTE.hullBlack);
     skin.build(group, { name: side > 0 ? "dorsal_skin" : "ventral_skin" });
   }
-  const { trench, stern } = buildTrenchAndStern();
-  setVertexColor(trench, PALETTE.hullBlack);
-  const trenchMesh = new THREE.Mesh(trench, materials.cityDense);
+  ensureExtMaterials(materials);
+  const { trench, stern, bowCap } = buildTrenchAndStern();
+  const trenchMesh = new THREE.Mesh(trench, materials.ext_trenchWall);
   trenchMesh.name = "trench";
+  trenchMesh.castShadow = true;
   trenchMesh.receiveShadow = true;
   group.add(trenchMesh);
-  setVertexColor(stern, PALETTE.hullDark.clone().multiplyScalar(0.8));
+  // stern face in the plates' own tone family (it used to be a darker blue-grey that read as a
+  // second, bolted-on ship) and the bow cap closing the tip
+  const sternTone = PALETTE.hullGrey.clone().multiplyScalar(0.64);
+  setVertexColor(stern, sternTone);
+  setVertexColor(bowCap, sternTone);
   const sternMesh = new THREE.Mesh(stern, materials.hullDark);
   sternMesh.name = "stern";
   sternMesh.castShadow = true;
   sternMesh.receiveShadow = true;
   group.add(sternMesh);
+  const bowMesh = new THREE.Mesh(bowCap, materials.hullDark);
+  bowMesh.name = "bowCap";
+  group.add(bowMesh);
   const chamfers = new Batcher(materials);
   buildSternChamfers(chamfers);
   chamfers.build(group, { name: "sternChamfers" });
 
   // --- hierarchical plating per chunk (clean plates on the shared hull sets, worn plates on ext_hullWorn)
-  ensureExtMaterials(materials);
   const chunks = Array.from({ length: CHUNKS }, () => ({ plates: [], worn: [], grooves: [], anchors: [] }));
   const surfaces = [];
   for (const side of [1, -1]) {
     for (const part of ["plateau", "bevelL", "bevelR"]) {
       const surf = makeSurface(side, part);
       surfaces.push(surf);
-      platingFor(surf, rand, chunks, { maxW: part === "plateau" ? 32 : 28, thickness: side > 0 ? 2.0 : 1.8, grooveDepth: 2 });
+      // ventral plateau: forced 2 × 2 sub-plate pass with wider sub-seams so its plate scale matches
+      // the dorsal from the (closer) hangar station
+      const ventralPlateau = side < 0 && part === "plateau";
+      platingFor(surf, rand, chunks, { maxW: part === "plateau" ? 32 : 28, thickness: side > 0 ? 2.0 : 1.8, grooveDepth: 2, minSplit: ventralPlateau ? 2 : 1, subSeam: ventralPlateau ? 0.42 : 0.15 });
     }
   }
+  buildStreaks(rand, chunks);
   const plateGeo = new THREE.BoxGeometry(1, 1, 1);
   setVertexColor(plateGeo, 0xffffff);
   const chunkGroups = [];
   let plateCount = 0;
+  const chunkLen = (HULL.sternZ - HULL.bowZ) / CHUNKS;
   for (let i = 0; i < CHUNKS; i++) {
     const cg = new THREE.Group();
     cg.name = "chunk_" + i;
@@ -640,14 +909,20 @@ export function buildHull(materials) {
     cg.add(pm);
     if (chunks[i].worn.length) cg.add(instancedMesh(plateGeo, materials.ext_hullWorn, chunks[i].worn, { name: "platesWorn", lod: 1 }));
     if (chunks[i].grooves.length) cg.add(instancedMesh(plateGeo, materials.hullDark, chunks[i].grooves, { name: "grooves", lod: 1 }));
+    // far skin (lod 2): replaces the plates beyond the plate LOD distance
+    const far = new Batcher(materials);
+    const z0 = HULL.bowZ + i * chunkLen;
+    const z1 = z0 + chunkLen;
+    for (const side of [1, -1]) for (const g of buildFarSkin(side, z0, z1, side > 0 ? 2.0 : 1.8, 0.5)) far.add(i % 2 ? "hull2" : "hull", g, null);
+    for (const m of far.build(cg, { name: "farSkin", castShadow: false, lod: 2 })) m.visible = false;
     plateCount += chunks[i].plates.length + chunks[i].worn.length;
     group.add(cg);
     chunkGroups.push(cg);
   }
 
   // --- hangar module + reactor bulb
-  group.add(buildHangarModule(materials));
-  buildReactor(materials, group);
+  group.add(buildHangarModule(materials, rand));
+  plateCount += buildReactor(materials, group, rand);
 
   return { group, chunkGroups, surfaces, anchors: chunks.map((c) => c.anchors), stats: { plates: plateCount, greebles: 0 } };
 }
