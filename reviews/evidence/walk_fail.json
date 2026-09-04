@@ -1,0 +1,386 @@
+{
+ "summary": {
+  "doors": {
+   "total": 4,
+   "passed": 0,
+   "failed": [
+    "hg_cargo from hangar",
+    "hg_cargo from cargo_bay",
+    "hg_lobby from hangar",
+    "hg_lobby from hangar_lobby"
+   ],
+   "gaps": [
+    "hg_lobby from hangar",
+    "hg_lobby from hangar_lobby"
+   ],
+   "spawnBlocked": []
+  },
+  "blockers": [
+   "hg_cargo/hangar: computer,computer,cart,cart,cart"
+  ],
+  "lifts": {
+   "total": 0,
+   "passed": 0,
+   "failed": []
+  },
+  "stairs": {
+   "total": 0,
+   "passed": 0,
+   "failed": []
+  },
+  "errors": []
+ },
+ "results": {
+  "doors": [
+   {
+    "door": "hg_cargo",
+    "kind": "arch",
+    "from": "hangar",
+    "to": "cargo_bay",
+    "start": [
+     37,
+     -40,
+     -40
+    ],
+    "startRoom": "hangar",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": false,
+    "travelled": 0,
+    "stuck": {
+     "at": [
+      36.88,
+      -40,
+      -40
+     ],
+     "room": "hangar",
+     "past": null,
+     "note": "walked 14 m without entering cargo_bay",
+     "hits": [
+      "stair_side[37.2,-40,-40.8→37.4,-30.8,-31.2]",
+      "cart[38.07,-40,-40.39→38.87,-39,-39.76]"
+     ]
+    },
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": null,
+    "simSeconds": 2.8,
+    "ms": 6985,
+    "shot": "/workspace/shots/validator/01_door_hg_cargo_from_hangar.png",
+    "laneScan": {
+     "door": "hg_cargo",
+     "from": "hangar",
+     "axisAcross": "z",
+     "span": [
+      -50,
+      -30
+     ],
+     "passable": [
+      -49.5,
+      -48.5,
+      -47.5,
+      -45.5,
+      -41.5,
+      -33.5,
+      -32.5,
+      -31.5,
+      -30.5
+     ],
+     "blockedLanes": [
+      -46.5,
+      -44.5,
+      -43.5,
+      -42.5,
+      -40.5,
+      -39.5,
+      -38.5,
+      -37.5,
+      -36.5,
+      -35.5,
+      -34.5
+     ]
+    }
+   },
+   {
+    "door": "hg_cargo",
+    "kind": "arch",
+    "from": "cargo_bay",
+    "to": "hangar",
+    "start": [
+     43,
+     -40,
+     -40
+    ],
+    "startRoom": "cargo_bay",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": false,
+    "travelled": 0,
+    "stuck": {
+     "at": [
+      39.19,
+      -40,
+      -39.87
+     ],
+     "room": "hangar",
+     "past": null,
+     "note": "walked 14 m without entering hangar",
+     "hits": [
+      "cart[38.07,-40,-40.39→38.87,-39,-39.76]",
+      "cart[38.22,-40,-40.76→39.02,-39,-40.13]"
+     ]
+    },
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": null,
+    "simSeconds": 2.8,
+    "ms": 14,
+    "shot": "/workspace/shots/validator/02_door_hg_cargo_from_cargo_bay.png",
+    "laneScan": {
+     "door": "hg_cargo",
+     "from": "cargo_bay",
+     "axisAcross": "z",
+     "span": [
+      -50,
+      -30
+     ],
+     "passable": [
+      -49.5,
+      -48.5,
+      -47.5,
+      -46.5,
+      -45.5,
+      -41.5,
+      -39.5,
+      -38.5,
+      -34.5,
+      -33.5,
+      -32.5,
+      -31.5,
+      -30.5
+     ],
+     "blockedLanes": [
+      -44.5,
+      -43.5,
+      -42.5,
+      -40.5,
+      -37.5,
+      -36.5,
+      -35.5
+     ]
+    }
+   },
+   {
+    "door": "hg_lobby",
+    "kind": "blast",
+    "from": "hangar",
+    "to": "hangar_lobby",
+    "start": [
+     0,
+     -40,
+     -87
+    ],
+    "startRoom": "hangar",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 6,
+    "reached": false,
+    "travelled": 0,
+    "stuck": null,
+    "gap": {
+     "at": [
+      0,
+      -40,
+      -90.68
+     ],
+     "afterFall": {
+      "y": -56.1,
+      "onGround": false
+     }
+    },
+    "fell": {
+     "y": -56.1,
+     "onGround": false
+    },
+    "path": [],
+    "toSpawn": null,
+    "simSeconds": 1.4,
+    "ms": 32,
+    "shot": "/workspace/shots/validator/03_door_hg_lobby_from_hangar.png"
+   },
+   {
+    "door": "hg_lobby",
+    "kind": "blast",
+    "from": "hangar_lobby",
+    "to": "hangar",
+    "start": [
+     0,
+     -40,
+     -93
+    ],
+    "startRoom": "hangar_lobby",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": false,
+    "travelled": 0,
+    "stuck": null,
+    "gap": {
+     "at": [
+      0,
+      -40,
+      -91.5
+     ],
+     "afterFall": {
+      "y": -56.1,
+      "onGround": false
+     }
+    },
+    "fell": {
+     "y": -56.1,
+     "onGround": false
+    },
+    "path": [],
+    "toSpawn": null,
+    "simSeconds": 0.3,
+    "ms": 1,
+    "shot": "/workspace/shots/validator/04_door_hg_lobby_from_hangar_lobby.png"
+   }
+  ],
+  "blockers": [
+   {
+    "door": "hg_cargo",
+    "room": "hangar",
+    "kind": "arch",
+    "built": true,
+    "box": {
+     "x0": 38,
+     "x1": 39.7,
+     "z0": -49.9,
+     "z1": -30.1
+    },
+    "hits": [
+     {
+      "tag": "computer",
+      "min": [
+       39.11,
+       -40,
+       -45.1
+      ],
+      "max": [
+       39.75,
+       -37.6,
+       -41.9
+      ]
+     },
+     {
+      "tag": "computer",
+      "min": [
+       39.11,
+       -40,
+       -38.1
+      ],
+      "max": [
+       39.75,
+       -37.6,
+       -34.9
+      ]
+     },
+     {
+      "tag": "cart",
+      "min": [
+       38.07,
+       -40,
+       -40.39
+      ],
+      "max": [
+       38.87,
+       -39,
+       -39.76
+      ]
+     },
+     {
+      "tag": "cart",
+      "min": [
+       38.22,
+       -40,
+       -40.76
+      ],
+      "max": [
+       39.02,
+       -39,
+       -40.13
+      ]
+     },
+     {
+      "tag": "cart",
+      "min": [
+       38.36,
+       -40,
+       -41.13
+      ],
+      "max": [
+       39.16,
+       -39,
+       -40.51
+      ]
+     }
+    ]
+   },
+   {
+    "door": "hg_cargo",
+    "room": "cargo_bay",
+    "kind": "arch",
+    "built": true,
+    "box": {
+     "x0": 40.3,
+     "x1": 42,
+     "z0": -49.9,
+     "z1": -30.1
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_lobby",
+    "room": "hangar",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -2.9,
+     "x1": 2.9,
+     "z0": -89.7,
+     "z1": -88
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_lobby",
+    "room": "hangar_lobby",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -2.9,
+     "x1": 2.9,
+     "z0": -92,
+     "z1": -90.3
+    },
+    "hits": []
+   }
+  ],
+  "lifts": [],
+  "stairs": [],
+  "errors": []
+ }
+}

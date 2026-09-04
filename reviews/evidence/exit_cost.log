@@ -1,0 +1,13 @@
+exit from hangar: cam 140,-170,-10 peek=false rooms visible hangar|fighter_maint|cargo_bay|repair_bay|flight_control
+   with interior rooms: 636 calls, 2487k tris, 16 lights, 440 objects
+   interior hidden:     327 calls, 630k tris, 2 lights, 290 objects
+   => wasted: 309 calls, 1857k tris
+exit from engineering: cam 260,20,700 peek=false rooms visible reactor|engineering
+   with interior rooms: 344 calls, 1112k tris, 14 lights, 275 objects
+   interior hidden:     283 calls, 615k tris, 2 lights, 236 objects
+   => wasted: 61 calls, 497k tris
+exit from crew: cam 120,130,-330 peek=false rooms visible crew_corridor|crew_connector|crew_corridor_fwd
+   with interior rooms: 535 calls, 1134k tris, 12 lights, 450 objects
+   interior hidden:     403 calls, 630k tris, 2 lights, 369 objects
+   => wasted: 132 calls, 504k tris
+exit=0

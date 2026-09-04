@@ -1,0 +1,22 @@
+PASS traffic API present (fighters, requestLaunch/Recall, setController, on, snapshot/apply) {"n":16,"racked":12,"maint":4,"rec":true,"fns":true,"snap":true,"patrol":4081}
+PASS 16 fighters: 12 racked + 4 on maintenance cradles n=16 racked=12 maintenance=4
+PASS patrol loop ~3-4.5 km 4081 m
+PASS launch cycle completes (states) lowering>launching>patrol>returning>ascending>docking>racked
+PASS events fire in order launch, field_pass:out, depart, return, field_pass:in, dock launch field_pass:out depart return field_pass:in dock
+PASS fighter re-docks exactly at its rack slot {"st":"racked","dx":0,"dz":0,"y":-16}
+PASS pooled mesh follows the record while flying and is released when racked 
+PASS never more than 4 fighters drawn (pool size) violations=0, max airborne=2
+PASS patrol lasts 60-90 s at ~40-60 m/s 75 s, speed 55.1-55.1 m/s
+PASS no sample below the belly is inside the hull (layout.insideHull) 0 inside of 42 samples
+PASS vertical clearance over/under the wedge ≥ 40 m (layout.topY/ventralY) min 72.2 m
+PASS passes the bridge tower flank at a safe distance (≥ 40 m, ≤ 250 m from the block) 178 m from the bridge block face
+PASS patrol spline ≥ 40 m from every hull piece (800 samples) min 50.2 m at u=0.94
+PASS launch / recovery legs stay in the well footprint down to y -108, then ≥ 40 m from the hull 0 strays, min 40.1 m
+PASS scheduler launches automatically (~every 35 s, 2 in flight in steady state) {"launches":5,"maxAir":2,"minAir":2,"states":{"racked":10,"patrol":2,"maintenance":4}}
+PASS requestRecall shortens the patrol and emits 'recall' patrol end 391.5 → 364.8
+PASS setController overrides the scripted pose (and releases cleanly) {"pos":[500,400,300],"obj":true,"restored":true}
+PASS snapshot/apply replays to identical poses (motion is a pure function of the clock) 
+PASS fighters.update is cheap (< 50 µs per step, heap growth < 2 MB over 3000 steps) {"perStepUs":8.5,"heapDeltaKB":0}
+fighter stats: {"fighters":16,"airborne":2,"states":{"racked":10,"launching":1,"patrol":1,"maintenance":4},"tieTriangles":3598,"clock":403.8,"patrolLength":4081}
+19/19 checks passed
+exit=0

@@ -1,0 +1,47 @@
+ready in 23645 ms
+
+== doors: 2 × 2 directions
+FAIL hg_cargo         arch   hangar            → cargo_bay          {"at":[36.88,-40,-40],"room":"hangar","past":null,"note":"walked 14 m without entering cargo_bay","hits":["stair_side[37.2,-40,-40.8→37.4,-30.8,-31.2]","cart[38.07,-40,-40.39→38.87,-39,-39.76]"]} | 
+     lane scan hg_cargo from hangar: span z -50..-30 → passable lanes -49.5, -48.5, -47.5, -45.5, -41.5, -33.5, -32.5, -31.5, -30.5; blocked lanes -46.5, -44.5, -43.5, -42.5, -40.5, -39.5, -38.5, -37.5, -36.5, -35.5, -34.5
+FAIL hg_cargo         arch   cargo_bay         → hangar             {"at":[39.19,-40,-39.87],"room":"hangar","past":null,"note":"walked 14 m without entering hangar","hits":["cart[38.07,-40,-40.39→38.87,-39,-39.76]","cart[38.22,-40,-40.76→39.02,-39,-40.13]"]} | 
+     lane scan hg_cargo from cargo_bay: span z -50..-30 → passable lanes -49.5, -48.5, -47.5, -46.5, -45.5, -41.5, -39.5, -38.5, -34.5, -33.5, -32.5, -31.5, -30.5; blocked lanes -44.5, -43.5, -42.5, -40.5, -37.5, -36.5, -35.5
+FAIL hg_lobby         blast  hangar            → hangar_lobby       {"y":-56.1,"onGround":false} GAP {"at":[0,-40,-90.68],"afterFall":{"y":-56.1,"onGround":false}} | 
+FAIL hg_lobby         blast  hangar_lobby      → hangar             {"y":-56.1,"onGround":false} GAP {"at":[0,-40,-91.5],"afterFall":{"y":-56.1,"onGround":false}} | 
+
+== static: geometry within 2 m in front of each door (both sides)
+WARN hg_cargo         side hangar             5 collider(s): computer[39.11,-40,-45.1→39.75,-37.6,-41.9]; computer[39.11,-40,-38.1→39.75,-37.6,-34.9]; cart[38.07,-40,-40.39→38.87,-39,-39.76]; cart[38.22,-40,-40.76→39.02,-39,-40.13]; cart[38.36,-40,-41.13→39.16,-39,-40.51]
+1 door sides have colliders in their 2 m approach
+
+== summary
+{
+ "doors": {
+  "total": 4,
+  "passed": 0,
+  "failed": [
+   "hg_cargo from hangar",
+   "hg_cargo from cargo_bay",
+   "hg_lobby from hangar",
+   "hg_lobby from hangar_lobby"
+  ],
+  "gaps": [
+   "hg_lobby from hangar",
+   "hg_lobby from hangar_lobby"
+  ],
+  "spawnBlocked": []
+ },
+ "blockers": [
+  "hg_cargo/hangar: computer,computer,cart,cart,cart"
+ ],
+ "lifts": {
+  "total": 0,
+  "passed": 0,
+  "failed": []
+ },
+ "stairs": {
+  "total": 0,
+  "passed": 0,
+  "failed": []
+ },
+ "errors": []
+}
+exit=1

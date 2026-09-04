@@ -1,0 +1,13 @@
+ext_tower: cam -220,260,-60 peek=true rooms bridge|tactical|nav_station|observation
+   with rooms: 538 calls 1239k tris 16 lights | rooms hidden: 330 calls 608k tris 2 lights
+   noise floor (same state, two frames): {"differing":5189,"pct":2.252,"maxDelta":231,"bbox":[0,0,639,358]}
+   rooms visible vs hidden:              {"differing":9286,"pct":4.03,"maxDelta":231,"bbox":[0,0,639,346]}
+ext_close: cam -90,230,90 peek=true rooms bridge|tactical|nav_station|observation
+   with rooms: 515 calls 1207k tris 16 lights | rooms hidden: 307 calls 576k tris 2 lights
+   noise floor (same state, two frames): {"differing":3617,"pct":1.57,"maxDelta":173,"bbox":[0,0,566,349]}
+   rooms visible vs hidden:              {"differing":6685,"pct":2.901,"maxDelta":204,"bbox":[0,0,628,355]}
+ext_mid: cam 900,380,700 peek=false rooms -
+   with rooms: 195 calls 551k tris 2 lights | rooms hidden: 195 calls 551k tris 2 lights
+   noise floor (same state, two frames): {"differing":8500,"pct":3.689,"maxDelta":255,"bbox":[0,0,639,359]}
+   rooms visible vs hidden:              {"differing":17054,"pct":7.402,"maxDelta":255,"bbox":[0,0,639,359]}
+exit=0

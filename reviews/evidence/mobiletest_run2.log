@@ -1,0 +1,13 @@
+PASS touch mode detected 
+PASS mobile quality profile pixelRatio=0.66 level=1
+PASS start card dismissed by tap 
+PASS touch drag orbits the exterior camera dtheta=1.20
+PASS BOARD button enters the interior 
+PASS virtual stick walks the player dz=-2.16
+PASS look drag turns the player dyaw=0.67
+PASS lift menu opens 
+PASS menu entry tap starts the turbolift ride dest=hangar_lobby
+PASS EXTERIOR button leaves the interior 
+PASS buttons fit in portrait 
+11/11 checks passed
+exit=0

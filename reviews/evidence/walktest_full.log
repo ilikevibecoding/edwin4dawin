@@ -1,0 +1,207 @@
+ready in 27095 ms
+
+== doors: 33 × 2 directions
+PASS br_corr          blast  bridge            → cmd_corridor       through in 7.5 m (door open at 0.5 m, unblocked at 6 m) | spawn ok (1.5 m)
+PASS br_corr          blast  cmd_corridor      → bridge             through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (4.5 m)
+PASS br_tac           slide  bridge            → tactical           through in 5 m (door open at 0.5 m, unblocked at 3 m) [override: outer ledge x -14..-12 (3 m in front is the crew pit)] | spawn ok (15.5 m)
+PASS br_tac           slide  tactical          → bridge             through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn walk deflected, 12.95 m short at -12.55,210,196.81
+PASS br_nav           slide  bridge            → nav_station        through in 5 m (door open at 0.5 m, unblocked at 3 m) [override: outer ledge x 12..14 (3 m in front is the crew pit)] | spawn walk deflected, 0.41 m short at 24.67,210,199.75
+PASS br_nav           slide  nav_station       → bridge             through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn walk deflected, 12.95 m short at 12.55,210,196.81
+PASS tac_corr         slide  tactical          → cmd_corridor       through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (24 m)
+PASS tac_corr         slide  cmd_corridor      → tactical           through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (4.5 m)
+PASS nav_corr         slide  nav_station       → cmd_corridor       through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (24 m)
+PASS nav_corr         slide  cmd_corridor      → nav_station        through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (4.5 m)
+PASS obs_corr         slide  observation       → cmd_corridor       through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (73 m)
+PASS obs_corr         slide  cmd_corridor      → observation        through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (4.5 m)
+PASS corr_lift_t      blast  cmd_corridor      → lift_lobby_tower   through in 4 m (door open at 0.5 m, unblocked at 2 m) | spawn ok (2.5 m)
+PASS corr_lift_t      blast  lift_lobby_tower  → cmd_corridor       through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (1.5 m)
+PASS corr_intel       secure cmd_corridor      → intelligence       through in 6 m (door open at 0.5 m, unblocked at 4 m) | spawn ok (6 m)
+PASS corr_intel       secure intelligence      → cmd_corridor       through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (49.5 m)
+PASS corr_brief       slide  cmd_corridor      → briefing           through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (6.5 m)
+PASS corr_brief       slide  briefing          → cmd_corridor       through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (22 m)
+PASS corr_comms       slide  cmd_corridor      → comms              through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (6.5 m)
+PASS corr_comms       slide  comms             → cmd_corridor       through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (22 m)
+PASS corr_off         slide  cmd_corridor      → officers_quarters  through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (6.5 m)
+PASS corr_off         slide  officers_quarters → cmd_corridor       through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (49 m)
+PASS hg_shuttle       blast  hangar            → shuttle_bay        through in 8 m (door open at 0.5 m, unblocked at 6 m) | spawn ok (8 m)
+PASS hg_shuttle       blast  shuttle_bay       → hangar             through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | SPAWN WALK FELL {"ok":false,"dist":151.99,"gap":[-3.95,-40,49.39],"fell":{"y":-56.1,"onGround":false},"walked":20,"y":-56.1}
+PASS hg_maint_a       arch   hangar            → fighter_maint      through in 6.5 m (door open at - m, unblocked at - m) | spawn ok (30.5 m)
+PASS hg_maint_a       arch   fighter_maint     → hangar             through in 4 m (door open at - m, unblocked at - m) | spawn walk blocked 20.29 m short at -31.59,-40,-59.78 by cradle[-34.5,-40,-61.4→-27.5,-39.05,-60.1]
+PASS hg_maint_b       arch   hangar            → fighter_maint      through in 6.5 m (door open at - m, unblocked at - m) | spawn ok (29.5 m)
+PASS hg_maint_b       arch   fighter_maint     → hangar             through in 4 m (door open at - m, unblocked at - m) | spawn walk blocked 40.94 m short at -34.1,-40,-39.27 by cart[-34.63,-40,-40.5→-34.04,-39,-39.71]; cart[-34.25,-40,-40.38→-33.66,-39,-39.59]; cart[-33.86,-40,-40.26→-33.28,-39,-39.47]
+FAIL hg_cargo         arch   hangar            → cargo_bay          {"at":[36.88,-40,-40],"room":"hangar","past":null,"note":"walked 14 m without entering cargo_bay","hits":["stair_side[37.2,-40,-40.8→37.4,-30.8,-31.2]","cart[38.07,-40,-40.39→38.87,-39,-39.76]"]} | 
+FAIL hg_cargo         arch   cargo_bay         → hangar             {"at":[39.19,-40,-39.87],"room":"hangar","past":null,"note":"walked 14 m without entering hangar","hits":["cart[38.07,-40,-40.39→38.87,-39,-39.76]","cart[38.22,-40,-40.76→39.02,-39,-40.13]"]} | 
+PASS hg_repair        arch   hangar            → repair_bay         through in 6.5 m (door open at - m, unblocked at - m) | spawn ok (20 m)
+PASS hg_repair        arch   repair_bay        → hangar             through in 4 m (door open at - m, unblocked at - m) | spawn walk deflected, 58.39 m short at 24,-40,-57.78
+FAIL hg_lobby         blast  hangar            → hangar_lobby       {"y":-56.1,"onGround":false} GAP {"at":[0,-40,-90.68],"afterFall":{"y":-56.1,"onGround":false}} | 
+FAIL hg_lobby         blast  hangar_lobby      → hangar             {"y":-56.1,"onGround":false} GAP {"at":[0,-40,-91.5],"afterFall":{"y":-56.1,"onGround":false}} | 
+PASS hg_fc            open   hangar            → flight_control     through in 4 m (door open at - m, unblocked at - m) [override: gap in the glass front (z -11.2..-10), gallery level y -22] | spawn ok (4.5 m)
+PASS hg_fc            open   flight_control    → hangar             through in 4 m (door open at - m, unblocked at - m) [override: gap in the glass front (z -11.2..-10)] | spawn walk blocked 71.18 m short at 32.4,-32,-45.75 by railing[31.92,-32,-46→32.08,-30.9,-40.8]; railing[32,-32,-46.23→37.3,-30.9,-46.07]; column[31.4,-40,-46.6→32,-22,-46]
+PASS eng_lobby_corr   blast  eng_lobby         → eng_corridor       through in 7.5 m (door open at 0.5 m, unblocked at 6 m) | spawn ok (2.5 m)
+PASS eng_lobby_corr   blast  eng_corridor      → eng_lobby          through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (3.5 m)
+PASS eng_corr_ctrl    blast  eng_corridor      → engineering        through in 7.5 m (door open at 0.5 m, unblocked at 6 m) | spawn ok (3.5 m)
+PASS eng_corr_ctrl    blast  engineering       → eng_corridor       through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (2.5 m)
+PASS eng_corr_hyper   blast  eng_corridor      → hyperdrive         through in 7.5 m (door open at 0.5 m, unblocked at 6 m) | spawn ok (3.5 m)
+PASS eng_corr_hyper   blast  hyperdrive        → eng_corridor       through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (53.5 m)
+PASS eng_corr_life    blast  eng_corridor      → life_support       through in 7.5 m (door open at 0.5 m, unblocked at 6 m) | spawn ok (3.5 m)
+PASS eng_corr_life    blast  life_support      → eng_corridor       through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (53.5 m)
+PASS eng_ctrl_reactor blast  engineering       → reactor            through in 7 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (5.5 m)
+PASS eng_ctrl_reactor blast  reactor           → engineering        through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn walk blocked 19.67 m short at 0,-10,294.67 by console[-0.95,-10,293.5→0.95,-8.9,294.35]
+PASS crew_lobby_corr  blast  crew_lobby        → crew_corridor      through in 7.5 m (door open at 0.5 m, unblocked at 6 m) | spawn ok (2.5 m)
+PASS crew_lobby_corr  blast  crew_corridor     → crew_lobby         through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (3.5 m)
+PASS crew_corr_q      slide  crew_corridor     → crew_quarters      through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (3.5 m)
+PASS crew_corr_q      slide  crew_quarters     → crew_corridor      through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (48 m)
+PASS crew_corr_mess   slide  crew_corridor     → mess               through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (3.5 m)
+PASS crew_corr_mess   slide  mess              → crew_corridor      through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (18.5 m)
+PASS crew_corr_conn   open   crew_corridor     → crew_connector     through in 4 m (door open at - m, unblocked at - m) | spawn ok (18.5 m)
+PASS crew_corr_conn   open   crew_connector    → crew_corridor      through in 4 m (door open at - m, unblocked at - m) | spawn ok (2.5 m)
+PASS crew_corr_lounge slide  crew_corridor     → lounge             through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (3.5 m)
+PASS crew_corr_lounge slide  lounge            → crew_corridor      through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (18.5 m)
+PASS crew_corr_med    slide  crew_corridor     → medbay             through in 4.5 m (door open at 0.5 m, unblocked at 3 m) | spawn ok (3.5 m)
+PASS crew_corr_med    slide  medbay            → crew_corridor      through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (48 m)
+PASS conn_fwd         open   crew_connector    → crew_corridor_fwd  through in 4 m (door open at - m, unblocked at - m) | spawn ok (2.5 m)
+PASS conn_fwd         open   crew_corridor_fwd → crew_connector     through in 4 m (door open at - m, unblocked at - m) | spawn ok (18.5 m)
+PASS fwd_armory       secure crew_corridor_fwd → armory             through in 6 m (door open at 0.5 m, unblocked at 4 m) | spawn ok (2.5 m)
+PASS fwd_armory       secure armory            → crew_corridor_fwd  through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (48 m)
+PASS fwd_det          secure crew_corridor_fwd → detention          through in 6 m (door open at 0.5 m, unblocked at 4 m) | spawn ok (2.5 m)
+PASS fwd_det          secure detention         → crew_corridor_fwd  through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (12.5 m)
+PASS fwd_pods         blast  crew_corridor_fwd → escape_pods        through in 7.5 m (door open at 0.5 m, unblocked at 6 m) | spawn ok (2.5 m)
+PASS fwd_pods         blast  escape_pods       → crew_corridor_fwd  through in 4 m (door open at 0.5 m, unblocked at 0.5 m) | spawn ok (34.5 m)
+INFO hg_fc generic door-centre approach from hangar (no override): blocked: {"at":[40.03,-22,-10],"room":"hangar","past":null,"note":"walked 14 m without entering flight_control","hits":["glass[40.35,-22,-10→40.9,-18,-0.25]"]}
+INFO hg_fc generic door-centre approach from flight_control (no override): blocked: {"at":[41.22,-22,-10],"room":"flight_control","past":null,"note":"walked 14 m without entering hangar","hits":["glass[40.35,-22,-10→40.9,-18,-0.25]"]}
+INFO br_tac generic door-centre approach from bridge (no override): blocked: {"at":[-11.75,210,187.5],"room":"bridge","past":null,"note":"walked 14 m without entering tactical","hits":["railing[-12.23,210,176.15→-12.07,211.1,201.85]"]}
+INFO br_nav generic door-centre approach from bridge (no override): blocked: {"at":[11.75,210,187.5],"room":"bridge","past":null,"note":"walked 14 m without entering nav_station","hits":["railing[12.07,210,176.15→12.23,211.1,201.85]"]}
+
+== static: geometry within 2 m in front of each door (both sides)
+WARN br_tac           side bridge             1 collider(s): railing[-12.23,210,176.15→-12.07,211.1,201.85]
+WARN br_nav           side bridge             1 collider(s): railing[12.07,210,176.15→12.23,211.1,201.85]
+WARN corr_off         side officers_quarters  2 collider(s): partition[47.88,210,212.25→48.13,214,214.55]; partition[50.88,210,212.25→51.13,214,214.55]
+WARN hg_cargo         side hangar             5 collider(s): computer[39.11,-40,-45.1→39.75,-37.6,-41.9]; computer[39.11,-40,-38.1→39.75,-37.6,-34.9]; cart[38.07,-40,-40.39→38.87,-39,-39.76]; cart[38.22,-40,-40.76→39.02,-39,-40.13]; cart[38.36,-40,-41.13→39.16,-39,-40.51]
+WARN hg_fc            side hangar             1 collider(s): chair[37.65,-22,-8.8→38.31,-20.8,-8.2]
+WARN hg_fc            side flight_control     8 collider(s): flight_control:zmin[40.25,-22,-19.95→51.75,-18,-19.7]; flight_control:zmax[40.25,-22,-0.3→51.75,-18,-0.05]; glass[40.35,-22,-19.75→40.9,-18,-11.2]; glass[40.35,-22,-10→40.9,-18,-0.25]; console[41.45,-22,-17.85→42.3,-20.9,-15.35]; console[41.45,-22,-14.85→42.3,-20.9,-12.35]; console[41.45,-22,-8.85→42.3,-20.9,-6.35]; console[41.45,-22,-5.85→42.3,-20.9,-3.35]
+WARN crew_corr_conn   side crew_connector     3 collider(s): crew_connector:xmin[-2.95,6,-134.62→-2.7,9.9,-130.25]; crew_connector:xmax[2.7,6,-143.5→2.95,9.9,-130.25]; cabinet[2.35,6.32,-132.5→2.75,7.62,-131.65]
+WARN conn_fwd         side crew_connector     2 collider(s): crew_connector:xmin[-2.95,6,-169.75→-2.7,9.9,-156.5]; crew_connector:xmax[2.7,6,-169.75→2.95,9.9,-156.5]
+8 door sides have colliders in their 2 m approach
+
+== turbolifts
+PASS lift_lobby_tower:0 → crew_lobby       enter=true ride=5.65s (14 ms wall) arrived=crew_lobby inCab=true out=true pos=-3,6,-110.65 yaw=180 clusters=tower|crew
+PASS lift_lobby_tower:0 → hangar_lobby     enter=true ride=5.65s (2152 ms wall) arrived=hangar_lobby inCab=true out=true pos=-3,-40,-111.35 yaw=360 clusters=tower|hangar
+PASS lift_lobby_tower:0 → eng_lobby        enter=true ride=5.65s (1192 ms wall) arrived=eng_lobby inCab=true out=true pos=-3,-10,250.65 yaw=360 clusters=tower|engineering
+PASS lift_lobby_tower:1 → crew_lobby       enter=true ride=5.65s (836 ms wall) arrived=crew_lobby inCab=true out=true pos=3,6,-110.65 yaw=180 clusters=tower|crew
+PASS lift_lobby_tower:1 → hangar_lobby     enter=true ride=5.65s (998 ms wall) arrived=hangar_lobby inCab=true out=true pos=3,-40,-111.35 yaw=360 clusters=tower|hangar
+PASS lift_lobby_tower:1 → eng_lobby        enter=true ride=5.65s (878 ms wall) arrived=eng_lobby inCab=true out=true pos=3,-10,250.65 yaw=360 clusters=tower|engineering
+PASS crew_lobby:0 → lift_lobby_tower enter=true ride=5.65s (0 ms wall) arrived=lift_lobby_tower inCab=true out=true pos=-3,210,223.35 yaw=180 clusters=tower|crew
+PASS crew_lobby:0 → hangar_lobby     enter=true ride=5.65s (1464 ms wall) arrived=hangar_lobby inCab=true out=true pos=-3,-40,-111.35 yaw=360 clusters=crew|hangar
+PASS crew_lobby:0 → eng_lobby        enter=true ride=5.65s (1216 ms wall) arrived=eng_lobby inCab=true out=true pos=-3,-10,250.65 yaw=360 clusters=crew|engineering
+PASS crew_lobby:1 → lift_lobby_tower enter=true ride=5.65s (770 ms wall) arrived=lift_lobby_tower inCab=true out=true pos=3,210,223.35 yaw=180 clusters=crew|tower
+PASS crew_lobby:1 → hangar_lobby     enter=true ride=5.65s (1462 ms wall) arrived=hangar_lobby inCab=true out=true pos=3,-40,-111.35 yaw=360 clusters=crew|hangar
+PASS crew_lobby:1 → eng_lobby        enter=true ride=5.65s (1729 ms wall) arrived=eng_lobby inCab=true out=true pos=3,-10,250.65 yaw=360 clusters=crew|engineering
+PASS hangar_lobby:0 → lift_lobby_tower enter=true ride=5.65s (1727 ms wall) arrived=lift_lobby_tower inCab=true out=true pos=-3,210,223.35 yaw=180 clusters=hangar|tower
+PASS hangar_lobby:0 → crew_lobby       enter=true ride=5.65s (1108 ms wall) arrived=crew_lobby inCab=true out=true pos=-3,6,-110.65 yaw=180 clusters=hangar|crew
+PASS hangar_lobby:0 → eng_lobby        enter=true ride=5.65s (855 ms wall) arrived=eng_lobby inCab=true out=true pos=-3,-10,250.65 yaw=0 clusters=hangar|engineering
+PASS hangar_lobby:1 → lift_lobby_tower enter=true ride=5.65s (613 ms wall) arrived=lift_lobby_tower inCab=true out=true pos=3,210,223.35 yaw=180 clusters=hangar|tower
+PASS hangar_lobby:1 → crew_lobby       enter=true ride=5.65s (931 ms wall) arrived=crew_lobby inCab=true out=true pos=3,6,-110.65 yaw=180 clusters=hangar|crew
+PASS hangar_lobby:1 → eng_lobby        enter=true ride=5.65s (668 ms wall) arrived=eng_lobby inCab=true out=true pos=3,-10,250.65 yaw=0 clusters=hangar|engineering
+PASS eng_lobby:0 → lift_lobby_tower enter=true ride=5.65s (663 ms wall) arrived=lift_lobby_tower inCab=true out=true pos=-3,210,223.35 yaw=180 clusters=engineering|tower
+PASS eng_lobby:0 → crew_lobby       enter=true ride=5.65s (1634 ms wall) arrived=crew_lobby inCab=true out=true pos=-3,6,-110.65 yaw=180 clusters=engineering|crew
+PASS eng_lobby:0 → hangar_lobby     enter=true ride=5.65s (1960 ms wall) arrived=hangar_lobby inCab=true out=true pos=-3,-40,-111.35 yaw=0 clusters=engineering|hangar
+PASS eng_lobby:1 → lift_lobby_tower enter=true ride=5.65s (495 ms wall) arrived=lift_lobby_tower inCab=true out=true pos=3,210,223.35 yaw=180 clusters=engineering|tower
+PASS eng_lobby:1 → crew_lobby       enter=true ride=5.65s (808 ms wall) arrived=crew_lobby inCab=true out=true pos=3,6,-110.65 yaw=180 clusters=engineering|crew
+PASS eng_lobby:1 → hangar_lobby     enter=true ride=5.65s (686 ms wall) arrived=hangar_lobby inCab=true out=true pos=3,-40,-111.35 yaw=0 clusters=engineering|hangar
+
+== stairs
+PASS bridge pit port, aft flight (z 200): walkway → pit → walkway (start room bridge)
+      ok   down to x -8                                     end [-8,208.6,200] room bridge y 208.6 (expect 208.6) range 208.6..210
+      ok   back up to x -2                                  end [-2,210,200] room bridge y 210 (expect 210) range 208.6..210
+PASS bridge pit port, forward flight (z 181.2) (start room bridge)
+      ok   down to x -8                                     end [-8,208.6,181.2] room bridge y 208.6 (expect 208.6) range 208.6..210
+      ok   back up to x -2                                  end [-2,210,181.2] room bridge y 210 (expect 210) range 208.6..210
+PASS bridge pit starboard, aft flight (z 200) (start room bridge)
+      ok   down to x 8                                      end [8,208.6,200] room bridge y 208.6 (expect 208.6) range 208.6..210
+      ok   back up to x 2                                   end [2,210,200] room bridge y 210 (expect 210) range 208.6..210
+PASS bridge pit starboard, forward flight (z 181.2) (start room bridge)
+      ok   down to x 8                                      end [8,208.6,181.2] room bridge y 208.6 (expect 208.6) range 208.6..210
+      ok   back up to x 2                                   end [2,210,181.2] room bridge y 210 (expect 210) range 208.6..210
+PASS hangar stair tower (36,-30) → landing → gallery → flight control booth (start room hangar)
+      ok   flight A up to the landing (z -41)               end [36,-32,-41] room hangar y -32 (expect -32) range -40..-32
+      ok   across the landing to x 33.2                     end [33.29,-32,-41.12] room hangar y -32 (expect -32) range -32..-32
+      ok   flight B up to the tower head (z -28.5)          end [33.29,-22,-28.62] room hangar y -22 (expect -22) range -31.5..-22
+      ok   forward on the tower head to z -27 (clear of the stair-head railing) end [33.29,-22,-27.12] room hangar y -22 (expect -22) range -22..-22
+      ok   onto the gallery x 38                            end [38.09,-22,-27.12] room hangar y -22 (expect -22) range -22..-22
+      ok   along the gallery to the glass gap (z -10.6)     end [38.09,-22,-10.72] room hangar y -22 (expect -22) range -22..-22
+      ok   through the gap into the booth (x 42)            end [42.09,-22,-10.72] room flight_control y -22 (expect -22) range -22..-22
+      ok   back out onto the gallery                        end [38.09,-22,-10.72] room hangar y -22 (expect -22) range -22..-22
+PASS hangar stair tower down: gallery → landing → deck (start room hangar)
+      ok   flight B down to the landing (z -42)             end [33.2,-32,-42] room hangar y -32 (expect -32) range -32..-22
+      ok   across to x 36                                   end [36,-32,-42] room hangar y -32 (expect -32) range -32..-32
+      ok   flight A down to the deck (z -30)                end [36,-40,-30] room hangar y -40 (expect -40) range -40..-32
+PASS reactor west switchback → catwalk ring (start room reactor)
+      ok   flight 1 up to the landing (z 352.5)             end [-14.5,-5,352.5] room reactor y -5 (expect -5) range -10..-5
+      ok   across the landing to x -17                      end [-17,-5,352.5] room reactor y -5 (expect -5) range -5..-5
+      ok   flight 2 up to the bridge (z 343)                end [-17,0,343] room reactor y 0 (expect 0) range -5..0
+      ok   onto the west ring (x -10)                       end [-10,0,343] room reactor y 0 (expect 0) range 0..0
+PASS reactor east switchback → catwalk ring (start room reactor)
+      ok   flight 1 up to the landing (z 352.5)             end [19.5,-5,352.5] room reactor y -5 (expect -5) range -10..-5
+      ok   across the landing to x 17                       end [17,-5,352.5] room reactor y -5 (expect -5) range -5..-5
+      ok   flight 2 up to the bridge (z 343)                end [17,0,343] room reactor y 0 (expect 0) range -5..0
+      ok   onto the east ring (x 10)                        end [10,0,343] room reactor y 0 (expect 0) range 0..0
+PASS reactor west switchback down (start room reactor)
+      ok   flight 2 down to the landing (z 352.5)           end [-17,-5,352.5] room reactor y -5 (expect -5) range -5..0
+      ok   across to x -14.5                                end [-14.5,-5,352.5] room reactor y -5 (expect -5) range -5..-5
+      ok   flight 1 down to the floor (z 342)               end [-14.5,-10,342] room reactor y -10 (expect -10) range -10..-5
+PASS briefing tiers: door → top tier → front row → back (start room briefing)
+      ok   two-step stair onto tier 0 (z 216.5)             end [-22.5,210.6,216.5] room briefing y 210.6 (expect 210.6) range 210..210.6
+      ok   down to tier 1 (z 219.1)                         end [-22.5,210.3,219.1] room briefing y 210.3 (expect 210.3) range 210.3..210.6
+      ok   down to the floor tier (z 221.7)                 end [-22.5,210,221.7] room briefing y 210 (expect 210) range 210..210.3
+      ok   back up to the door (z 213)                      end [-22.5,210,213] room briefing y 210 (expect 210) range 210..210.6
+
+== summary
+{
+ "doors": {
+  "total": 66,
+  "passed": 62,
+  "failed": [
+   "hg_cargo from hangar",
+   "hg_cargo from cargo_bay",
+   "hg_lobby from hangar",
+   "hg_lobby from hangar_lobby"
+  ],
+  "gaps": [
+   "hg_lobby from hangar",
+   "hg_lobby from hangar_lobby"
+  ],
+  "spawnBlocked": [
+   "bridge via br_tac: undefined m short",
+   "nav_station via br_nav: undefined m short",
+   "bridge via br_nav: undefined m short",
+   "hangar via hg_shuttle: FELL",
+   "hangar via hg_maint_a: 20.29 m short",
+   "hangar via hg_maint_b: 40.94 m short",
+   "hangar via hg_repair: undefined m short",
+   "hangar via hg_fc: 71.18 m short",
+   "engineering via eng_ctrl_reactor: 19.67 m short"
+  ]
+ },
+ "blockers": [
+  "br_tac/bridge: railing",
+  "br_nav/bridge: railing",
+  "corr_off/officers_quarters: partition,partition",
+  "hg_cargo/hangar: computer,computer,cart,cart,cart",
+  "hg_fc/hangar: chair",
+  "hg_fc/flight_control: flight_control:zmin,flight_control:zmax,glass,glass,console,console,console,console",
+  "crew_corr_conn/crew_connector: crew_connector:xmin,crew_connector:xmax,cabinet",
+  "conn_fwd/crew_connector: crew_connector:xmin,crew_connector:xmax"
+ ],
+ "lifts": {
+  "total": 24,
+  "passed": 24,
+  "failed": []
+ },
+ "stairs": {
+  "total": 10,
+  "passed": 10,
+  "failed": []
+ },
+ "errors": []
+}
+exit=1

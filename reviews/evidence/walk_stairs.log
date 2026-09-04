@@ -1,0 +1,69 @@
+ready in 20015 ms
+
+== stairs
+PASS bridge pit port, aft flight (z 200): walkway → pit → walkway (start room bridge)
+      ok   down to x -8                                     end [-8,208.6,200] room bridge y 208.6 (expect 208.6) range 208.6..210
+      ok   back up to x -2                                  end [-2,210,200] room bridge y 210 (expect 210) range 208.6..210
+PASS bridge pit port, forward flight (z 181.2) (start room bridge)
+      ok   down to x -8                                     end [-8,208.6,181.2] room bridge y 208.6 (expect 208.6) range 208.6..210
+      ok   back up to x -2                                  end [-2,210,181.2] room bridge y 210 (expect 210) range 208.6..210
+PASS bridge pit starboard, aft flight (z 200) (start room bridge)
+      ok   down to x 8                                      end [8,208.6,200] room bridge y 208.6 (expect 208.6) range 208.6..210
+      ok   back up to x 2                                   end [2,210,200] room bridge y 210 (expect 210) range 208.6..210
+PASS bridge pit starboard, forward flight (z 181.2) (start room bridge)
+      ok   down to x 8                                      end [8,208.6,181.2] room bridge y 208.6 (expect 208.6) range 208.6..210
+      ok   back up to x 2                                   end [2,210,181.2] room bridge y 210 (expect 210) range 208.6..210
+FAIL hangar stair tower (36,-30) → landing → gallery → flight control booth (start room hangar)
+      ok   flight A up to the landing (z -41)               end [36,-32,-41] room hangar y -32 (expect -32) range -40..-32
+      ok   across the landing to x 33.2                     end [33.29,-32,-41.12] room hangar y -32 (expect -32) range -32..-32
+      ok   flight B up to the tower head (z -28.5)          end [33.29,-22,-28.62] room hangar y -22 (expect -22) range -31.5..-22
+      BAD  onto the gallery x 38                            end [34.18,-22,-28.57] room hangar y -22 (expect -22) range -22..-22 BLOCKED {"at":[34.18,-22,-28.57],"hits":["stair_side[34.4,-32,-40.8→34.6,-20.8,-28.8]","railing[34.5,-22,-28.73→39.75,-20.9,-28.57]"]}
+PASS hangar stair tower down: gallery → landing → deck (start room hangar)
+      ok   flight B down to the landing (z -42)             end [33.2,-32,-42] room hangar y -32 (expect -32) range -32..-22
+      ok   across to x 36                                   end [36,-32,-42] room hangar y -32 (expect -32) range -32..-32
+      ok   flight A down to the deck (z -30)                end [36,-40,-30] room hangar y -40 (expect -40) range -40..-32
+PASS reactor west switchback → catwalk ring (start room reactor)
+      ok   flight 1 up to the landing (z 352.5)             end [-14.5,-5,352.5] room reactor y -5 (expect -5) range -10..-5
+      ok   across the landing to x -17                      end [-17,-5,352.5] room reactor y -5 (expect -5) range -5..-5
+      ok   flight 2 up to the bridge (z 343)                end [-17,0,343] room reactor y 0 (expect 0) range -5..0
+      ok   onto the west ring (x -10)                       end [-10,0,343] room reactor y 0 (expect 0) range 0..0
+PASS reactor east switchback → catwalk ring (start room reactor)
+      ok   flight 1 up to the landing (z 352.5)             end [19.5,-5,352.5] room reactor y -5 (expect -5) range -10..-5
+      ok   across the landing to x 17                       end [17,-5,352.5] room reactor y -5 (expect -5) range -5..-5
+      ok   flight 2 up to the bridge (z 343)                end [17,0,343] room reactor y 0 (expect 0) range -5..0
+      ok   onto the east ring (x 10)                        end [10,0,343] room reactor y 0 (expect 0) range 0..0
+PASS reactor west switchback down (start room reactor)
+      ok   flight 2 down to the landing (z 352.5)           end [-17,-5,352.5] room reactor y -5 (expect -5) range -5..0
+      ok   across to x -14.5                                end [-14.5,-5,352.5] room reactor y -5 (expect -5) range -5..-5
+      ok   flight 1 down to the floor (z 342)               end [-14.5,-10,342] room reactor y -10 (expect -10) range -10..-5
+PASS briefing tiers: door → top tier → front row → back (start room briefing)
+      ok   two-step stair onto tier 0 (z 216.5)             end [-22.5,210.6,216.5] room briefing y 210.6 (expect 210.6) range 210..210.6
+      ok   down to tier 1 (z 219.1)                         end [-22.5,210.3,219.1] room briefing y 210.3 (expect 210.3) range 210.3..210.6
+      ok   down to the floor tier (z 221.7)                 end [-22.5,210,221.7] room briefing y 210 (expect 210) range 210..210.3
+      ok   back up to the door (z 213)                      end [-22.5,210,213] room briefing y 210 (expect 210) range 210..210.6
+
+== summary
+{
+ "doors": {
+  "total": 0,
+  "passed": 0,
+  "failed": [],
+  "gaps": [],
+  "spawnBlocked": []
+ },
+ "blockers": [],
+ "lifts": {
+  "total": 0,
+  "passed": 0,
+  "failed": []
+ },
+ "stairs": {
+  "total": 10,
+  "passed": 9,
+  "failed": [
+   "hangar stair tower (36,-30) → landing → gallery → flight control booth"
+  ]
+ },
+ "errors": []
+}
+exit=1

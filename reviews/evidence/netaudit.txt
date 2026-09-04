@@ -1,0 +1,15 @@
+{
+ "total": 92,
+ "byOrigin": {
+  "http://127.0.0.1:5173": {
+   "n": 92,
+   "types": {
+    "document": 1,
+    "script": 90,
+    "stylesheet": 1
+   }
+  }
+ }
+}
+foreign requests: 0 []
+netaudit exit=0

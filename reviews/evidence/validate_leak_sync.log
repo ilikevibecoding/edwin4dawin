@@ -1,0 +1,21 @@
+
+== leak check (build → render → release, per cluster)
+WARN hangar: geometries before 277 → built 453 → released 321 → built 492 → released 335 (leaked 44, 58); textures 77→81; heap 83.5→86.6→88 MB
+WARN engineering: geometries before 335 → built 396 → released 339 → built 404 → released 343 (leaked 4, 8); textures 81→85; heap 88→135.8→136.6 MB
+PASS crew: geometries before 343 → built 516 → released 343 → built 516 → released 343 (leaked 0, 0); textures 85→89; heap 90.6→141.5→142.3 MB
+   interior group children after releases: room_bridge:54 room_tactical:28 room_nav_station:28 room_observation:19 room_cmd_corridor:35 room_lift_lobby_tower:27 room_intelligence:27 room_briefing:24 room_comms:34 room_officers_quarters:25
+
+== sync
+snapshot: 1132 bytes; doors {"br_corr":{"o":1,"t":1},"br_tac":{"o":1,"t":1},"eng_ctrl_reactor":{"o":0.77,"t":1}}; lift null; traffic fighters 16; alert 1
+PASS sync apply on a fresh page: doors match=true, fighter state mismatches 0, max pos error 0.0000 m (after +5 s: 0.0000 m, clocks 14.100 vs 14.117, tolerance 1.01 m, state mismatches 0), clock 9.100 → 9.117, alert 1 → 1
+   applied door records (before any tick): {"br_corr":{"openness":1,"target":1,"slabMoved":0,"colliderEnabled":true},"br_tac":{"openness":1,"target":1,"slabMoved":0,"colliderEnabled":true},"eng_ctrl_reactor":"not built"}
+   after one tick: {"br_corr":{"openness":1,"slabMoved":0,"colliderEnabled":true},"br_tac":{"openness":0.977,"slabMoved":2.7,"colliderEnabled":false}}
+   WARN doors logically open but slabs unmoved / collider still enabled after apply: br_corr, br_tac
+
+== console: {"debug":4,"warning":10}; three.js messages 6
+   [.WebGL-0x24e400110800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+   THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.
+   [.WebGL-0x24e400110800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+
+all sections passed
+exit=0

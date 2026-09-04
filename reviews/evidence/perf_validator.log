@@ -1,0 +1,21 @@
+ext_far            87 calls   356k tris   2 lights   59 objs  157.9 MB  2560.41 ms(sw)  setView 4786 ms
+ext_mid           195 calls   551k tris   2 lights  167 objs   82.2 MB  3292.11 ms(sw)  setView 2429 ms
+ext_tower         538 calls  1239k tris  16 lights  431 objs   86.1 MB  7372.98 ms(sw)  setView 3804 ms
+ext_close         515 calls  1207k tris  16 lights  431 objs   83.9 MB  9179.44 ms(sw)  setView 9964 ms
+ext_belly         247 calls   628k tris   2 lights  245 objs   84.3 MB  9496.47 ms(sw)  setView 10609 ms
+bridge            411 calls  1144k tris  16 lights  318 objs   90.2 MB  14266.15 ms(sw)  setView 17303 ms
+bridge_window     383 calls  1143k tris  16 lights  318 objs   87.6 MB  13309.61 ms(sw)  setView 13768 ms
+cmd_corridor      427 calls   826k tris  16 lights  318 objs   91.2 MB  13667.97 ms(sw)  setView 13264 ms
+hangar            354 calls  1876k tris  16 lights  317 objs  140.4 MB  15193.97 ms(sw)  setView 19393 ms
+hangar_well       447 calls  2255k tris  16 lights  317 objs  141.7 MB  14599.19 ms(sw)  setView 13286 ms
+shuttle_bay       183 calls  1021k tris  10 lights  162 objs  142.5 MB  14312.08 ms(sw)  setView 12956 ms
+reactor           176 calls   903k tris  14 lights  185 objs  190.1 MB  16396 ms(sw)  setView 19681 ms
+engineering       197 calls   908k tris  14 lights  185 objs  190.4 MB  15310.1 ms(sw)  setView 11994 ms
+hyperdrive        188 calls   720k tris   9 lights  199 objs  191.4 MB  13243.14 ms(sw)  setView 13388 ms
+crew_corridor     380 calls   928k tris  12 lights  293 objs  243.5 MB  13146.55 ms(sw)  setView 14162 ms
+crew_quarters     181 calls   682k tris  10 lights  162 objs    246 MB  12238.91 ms(sw)  setView 9986 ms
+mess              171 calls   515k tris  10 lights  157 objs  247.1 MB  8928.77 ms(sw)  setView 6699 ms
+medbay            247 calls   740k tris  10 lights  197 objs  244.8 MB  6685.8 ms(sw)  setView 4221 ms
+detention         169 calls   724k tris  10 lights  150 objs  244.9 MB  5208.9 ms(sw)  setView 2908 ms
+written perf/validator.json + .md
+exit=0

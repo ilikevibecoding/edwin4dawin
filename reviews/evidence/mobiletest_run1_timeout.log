@@ -1,0 +1,29 @@
+PASS touch mode detected 
+PASS mobile quality profile pixelRatio=0.66 level=1
+PASS start card dismissed by tap 
+PASS touch drag orbits the exterior camera dtheta=1.20
+PASS BOARD button enters the interior 
+PASS virtual stick walks the player dz=-2.00
+PASS look drag turns the player dyaw=0.67
+PASS lift menu opens 
+node:internal/modules/run_main:122
+    triggerUncaughtException(
+    ^
+
+page.screenshot: Timeout 30000ms exceeded.
+Call log:
+  - taking page screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+
+    at /workspace/tools/mobiletest.mjs:99:12 {
+  log: [
+    '  - taking page screenshot',
+    '  - waiting for fonts to load...',
+    '  - fonts loaded'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v22.14.0
+exit=1

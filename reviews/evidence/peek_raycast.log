@@ -1,0 +1,140 @@
+ext_tower {
+ "camera": [
+  -220,
+  260,
+  -60
+ ],
+ "peek": true,
+ "visible": [
+  "bridge",
+  "tactical",
+  "nav_station",
+  "observation"
+ ],
+ "samples": 234,
+ "interiorFirst": 5,
+ "exteriorFirst": 229,
+ "miss": 0,
+ "firstHits": {
+  "exterior kit_hullDark z=170.6": 30,
+  "exterior kit_hullDark z=170.9": 170,
+  "exterior kit_hull z=170.6": 5,
+  "exterior kit_hullDark z=168.8": 18,
+  "exterior kit_hullDark z=168.9": 6,
+  "INTERIOR kit_paintedMetal z=170.3": 5
+ },
+ "examples": [
+  {
+   "at": [
+    -32.5,
+    210.5
+   ],
+   "hitZ": 170.9,
+   "mat": "MeshStandardMaterial",
+   "color": "#ffffff",
+   "next": "INTERIOR z=172.0"
+  },
+  {
+   "at": [
+    -32.5,
+    212
+   ],
+   "hitZ": 170.9,
+   "mat": "MeshStandardMaterial",
+   "color": "#ffffff",
+   "next": "INTERIOR z=178.3"
+  },
+  {
+   "at": [
+    -32.5,
+    213.5
+   ],
+   "hitZ": 170.9,
+   "mat": "MeshStandardMaterial",
+   "color": "#ffffff",
+   "next": "INTERIOR z=186.0"
+  },
+  {
+   "at": [
+    -32.5,
+    215
+   ],
+   "hitZ": 170.9,
+   "mat": "MeshStandardMaterial",
+   "color": "#ffffff",
+   "next": "INTERIOR z=189.0"
+  }
+ ]
+}
+ext_close {
+ "camera": [
+  -90,
+  230,
+  90
+ ],
+ "peek": true,
+ "visible": [
+  "bridge",
+  "tactical",
+  "nav_station",
+  "observation"
+ ],
+ "samples": 234,
+ "interiorFirst": 15,
+ "exteriorFirst": 219,
+ "miss": 0,
+ "firstHits": {
+  "exterior kit_hullDark z=170.3": 31,
+  "exterior kit_hullDark z=170.9": 150,
+  "exterior kit_hullDark z=168.8": 18,
+  "INTERIOR kit_plate z=170.7": 10,
+  "exterior kit_hullDark z=168.9": 6,
+  "exterior kit_hullDark z=169.3": 6,
+  "exterior kit_hull z=170.3": 3,
+  "INTERIOR kit_paintedMetal z=170.1": 5,
+  "exterior kit_hullDark z=170.4": 5
+ },
+ "examples": [
+  {
+   "at": [
+    -32.5,
+    210.5
+   ],
+   "hitZ": 170.9,
+   "mat": "MeshStandardMaterial",
+   "color": "#ffffff",
+   "next": "INTERIOR z=172.0"
+  },
+  {
+   "at": [
+    -32.5,
+    212
+   ],
+   "hitZ": 170.9,
+   "mat": "MeshStandardMaterial",
+   "color": "#ffffff",
+   "next": "INTERIOR z=177.6"
+  },
+  {
+   "at": [
+    -32.5,
+    213.5
+   ],
+   "hitZ": 170.9,
+   "mat": "MeshStandardMaterial",
+   "color": "#ffffff",
+   "next": "INTERIOR z=185.5"
+  },
+  {
+   "at": [
+    -32.5,
+    215
+   ],
+   "hitZ": 170.9,
+   "mat": "MeshStandardMaterial",
+   "color": "#ffffff",
+   "next": "INTERIOR z=191.1"
+  }
+ ]
+}
+exit=0

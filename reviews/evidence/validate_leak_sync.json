@@ -1,0 +1,276 @@
+{
+ "readyMs": 15014,
+ "leak": {
+  "hangar": {
+   "before": {
+    "geometries": 277,
+    "textures": 77,
+    "programs": 108,
+    "heapMB": 83.5,
+    "built": 10
+   },
+   "rounds": [
+    {
+     "built": {
+      "geometries": 453,
+      "textures": 80,
+      "programs": 147,
+      "heapMB": 137.2,
+      "built": 17
+     },
+     "after": {
+      "geometries": 321,
+      "textures": 79,
+      "programs": 167,
+      "heapMB": 86.6,
+      "built": 10
+     }
+    },
+    {
+     "built": {
+      "geometries": 492,
+      "textures": 82,
+      "programs": 181,
+      "heapMB": 139.4,
+      "built": 17
+     },
+     "after": {
+      "geometries": 335,
+      "textures": 81,
+      "programs": 181,
+      "heapMB": 88,
+      "built": 10
+     }
+    }
+   ],
+   "leakedGeometriesPerRound": [
+    44,
+    58
+   ],
+   "heapDeltaMBPerRound": [
+    3.1,
+    4.5
+   ]
+  },
+  "engineering": {
+   "before": {
+    "geometries": 335,
+    "textures": 81,
+    "programs": 181,
+    "heapMB": 88,
+    "built": 10
+   },
+   "rounds": [
+    {
+     "built": {
+      "geometries": 396,
+      "textures": 82,
+      "programs": 228,
+      "heapMB": 136.7,
+      "built": 16
+     },
+     "after": {
+      "geometries": 339,
+      "textures": 83,
+      "programs": 228,
+      "heapMB": 135.8,
+      "built": 10
+     }
+    },
+    {
+     "built": {
+      "geometries": 404,
+      "textures": 84,
+      "programs": 243,
+      "heapMB": 137.6,
+      "built": 16
+     },
+     "after": {
+      "geometries": 343,
+      "textures": 85,
+      "programs": 243,
+      "heapMB": 136.6,
+      "built": 10
+     }
+    }
+   ],
+   "leakedGeometriesPerRound": [
+    4,
+    8
+   ],
+   "heapDeltaMBPerRound": [
+    47.8,
+    48.6
+   ]
+  },
+  "crew": {
+   "before": {
+    "geometries": 343,
+    "textures": 85,
+    "programs": 243,
+    "heapMB": 90.6,
+    "built": 10
+   },
+   "rounds": [
+    {
+     "built": {
+      "geometries": 516,
+      "textures": 86,
+      "programs": 275,
+      "heapMB": 143.7,
+      "built": 21
+     },
+     "after": {
+      "geometries": 343,
+      "textures": 87,
+      "programs": 275,
+      "heapMB": 141.5,
+      "built": 10
+     }
+    },
+    {
+     "built": {
+      "geometries": 516,
+      "textures": 88,
+      "programs": 275,
+      "heapMB": 144.7,
+      "built": 21
+     },
+     "after": {
+      "geometries": 343,
+      "textures": 89,
+      "programs": 275,
+      "heapMB": 142.3,
+      "built": 10
+     }
+    }
+   ],
+   "leakedGeometriesPerRound": [
+    0,
+    0
+   ],
+   "heapDeltaMBPerRound": [
+    50.9,
+    51.7
+   ]
+  },
+  "interiorChildren": [
+   "room_bridge:54",
+   "room_tactical:28",
+   "room_nav_station:28",
+   "room_observation:19",
+   "room_cmd_corridor:35",
+   "room_lift_lobby_tower:27",
+   "room_intelligence:27",
+   "room_briefing:24",
+   "room_comms:34",
+   "room_officers_quarters:25"
+  ]
+ },
+ "sync": {
+  "bytes": 1132,
+  "readyMs2": 34053,
+  "doorMatch": true,
+  "doorsA": {
+   "br_corr": {
+    "o": 1,
+    "t": 1
+   },
+   "br_tac": {
+    "o": 1,
+    "t": 1
+   },
+   "eng_ctrl_reactor": {
+    "o": 0.77,
+    "t": 1
+   }
+  },
+  "doorsB": {
+   "br_corr": {
+    "o": 1,
+    "t": 1
+   },
+   "br_tac": {
+    "o": 1,
+    "t": 1
+   },
+   "eng_ctrl_reactor": {
+    "o": 0.77,
+    "t": 1
+   }
+  },
+  "doorsBeforeApply": {},
+  "fighterStateMismatch": 0,
+  "maxPosErr": 0,
+  "maxPosErrAfter5s": 0,
+  "stateMismatchAfter5s": 0,
+  "clockA": 9.100200000002985,
+  "clockB": 9.116866666669653,
+  "clockA5": 14.100200000003056,
+  "clockB5": 14.116866666669724,
+  "alertA": 1,
+  "alertB": 1,
+  "liftInSnapshot": null,
+  "slabState": {
+   "br_corr": {
+    "openness": 1,
+    "target": 1,
+    "slabMoved": 0,
+    "colliderEnabled": true
+   },
+   "br_tac": {
+    "openness": 1,
+    "target": 1,
+    "slabMoved": 0,
+    "colliderEnabled": true
+   },
+   "eng_ctrl_reactor": "not built"
+  },
+  "slabAfterTick": {
+   "br_corr": {
+    "openness": 1,
+    "slabMoved": 0,
+    "colliderEnabled": true
+   },
+   "br_tac": {
+    "openness": 0.977,
+    "slabMoved": 2.7,
+    "colliderEnabled": false
+   }
+  },
+  "staleDoorVisuals": [
+   "br_corr",
+   "br_tac"
+  ],
+  "ok": true
+ },
+ "console": {
+  "total": 14,
+  "byType": {
+   "debug": 4,
+   "warning": 10
+  },
+  "warnings": [
+   "[.WebGL-0x24e400110800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+   "[.WebGL-0x24e400110800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "[.WebGL-0x24e400110800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+   "[.WebGL-0x24e400110800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed."
+  ],
+  "errors": [],
+  "three": [
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed."
+  ]
+ },
+ "pageErrors": []
+}

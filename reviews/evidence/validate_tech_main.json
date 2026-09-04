@@ -1,0 +1,932 @@
+{
+ "readyMs": 26631,
+ "boot": {
+  "readyMs": 26631,
+  "boot": {
+   "materials": {
+    "imperialPanel": 201,
+    "wornMetal": 1202,
+    "deckBlack": 1300,
+    "deckGrey": 524,
+    "hullPlate": 5545,
+    "rubber": 45,
+    "fabric": 21,
+    "hazard": 26,
+    "hazardRed": 17,
+    "grate": 592,
+    "diffuser": 30,
+    "decals": 167,
+    "screens": 19,
+    "leds": 5
+   },
+   "space": 2056,
+   "exterior": 406,
+   "boot": 12689,
+   "totalMs": 12689
+  },
+  "materialsSumMs": 9694,
+  "longTasks": [
+   {
+    "t": 12752,
+    "dur": 413
+   },
+   {
+    "t": 13166,
+    "dur": 13451
+   },
+   {
+    "t": 26627,
+    "dur": 1205
+   },
+   {
+    "t": 27834,
+    "dur": 1275
+   },
+   {
+    "t": 29110,
+    "dur": 1721
+   }
+  ],
+  "heapMB": 96.9,
+  "geometries": 86,
+  "textures": 43,
+  "programs": 43,
+  "roomsBuilt": 5
+ },
+ "transitions": [
+  {
+   "label": "default_view",
+   "camBefore": [
+    1300,
+    420,
+    900
+   ],
+   "wallMs": 172355,
+   "frames": 34,
+   "avgFrameMs": 5223,
+   "nanFrames": 0,
+   "blackFrames": 0,
+   "blackWhileFaded": 0,
+   "blackUnfaded": [],
+   "lumRange": [
+    4.7,
+    48.5
+   ],
+   "modes": "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEIIIII",
+   "after": {
+    "room": "bridge",
+    "player": [
+     0,
+     210.3,
+     176.5
+    ],
+    "cam": [
+     0,
+     212,
+     176.5
+    ],
+    "yawDeg": 0,
+    "fade": 0,
+    "status": "Main Command Bridge — Imperial I-class Star Destroyer Redoubt",
+    "visible": [
+     "bridge"
+    ],
+    "built": [
+     "tower"
+    ]
+   },
+   "ok": true,
+   "shot": "/workspace/shots/validator/t01_board_default_view.png"
+  },
+  {
+   "cluster": "tower",
+   "from": {
+    "room": "bridge",
+    "cluster": "tower"
+   },
+   "wallMs": 47074,
+   "label": "exit_tower",
+   "frames": 10,
+   "avgFrameMs": 5230,
+   "nanFrames": 0,
+   "blackFrames": 0,
+   "blackWhileFaded": 0,
+   "blackUnfaded": [],
+   "lumRange": [
+    23.2,
+    34.7
+   ],
+   "modes": "IIIEEEEEEE",
+   "after": {
+    "cam": [
+     60,
+     225,
+     60
+    ],
+    "target": [
+     0,
+     214,
+     172
+    ],
+    "status": "Exterior view — you were in the command tower. Enter to board again.",
+    "peek": true,
+    "visible": [
+     "bridge",
+     "tactical",
+     "nav_station",
+     "observation"
+    ]
+   },
+   "minRoomDistance": {
+    "m": 115.3,
+    "room": "nav_station"
+   },
+   "cameraInsideHull": false,
+   "ok": true,
+   "shot": "/workspace/shots/validator/t02_exit_tower.png"
+  },
+  {
+   "label": "from_ext_far",
+   "camBefore": [
+    2600,
+    900,
+    1900
+   ],
+   "wallMs": 178530,
+   "frames": 57,
+   "avgFrameMs": 3188,
+   "nanFrames": 0,
+   "blackFrames": 0,
+   "blackWhileFaded": 0,
+   "blackUnfaded": [],
+   "lumRange": [
+    4.7,
+    48.9
+   ],
+   "modes": "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEIIIIII",
+   "after": {
+    "room": "bridge",
+    "player": [
+     0,
+     210,
+     176.5
+    ],
+    "cam": [
+     0,
+     211.7,
+     176.5
+    ],
+    "yawDeg": 0,
+    "fade": 0,
+    "status": "Main Command Bridge — Imperial I-class Star Destroyer Redoubt",
+    "visible": [
+     "bridge",
+     "cmd_corridor"
+    ],
+    "built": [
+     "tower"
+    ]
+   },
+   "ok": true,
+   "shot": "/workspace/shots/validator/t03_board_from_ext_far.png"
+  },
+  {
+   "cluster": "hangar",
+   "from": {
+    "room": "hangar",
+    "cluster": "hangar"
+   },
+   "wallMs": 59066,
+   "label": "exit_hangar",
+   "frames": 9,
+   "avgFrameMs": 7383,
+   "nanFrames": 0,
+   "blackFrames": 0,
+   "blackWhileFaded": 0,
+   "blackUnfaded": [],
+   "lumRange": [
+    33.4,
+    51.2
+   ],
+   "modes": "IIIEEEEEE",
+   "after": {
+    "cam": [
+     140,
+     -170,
+     -10
+    ],
+    "target": [
+     0,
+     -50,
+     -10
+    ],
+    "status": "Exterior view — you were in the ventral hangar deck. Enter to board again.",
+    "peek": false,
+    "visible": [
+     "hangar",
+     "fighter_maint",
+     "cargo_bay",
+     "repair_bay",
+     "flight_control"
+    ]
+   },
+   "minRoomDistance": {
+    "m": 143.9,
+    "room": "cargo_bay"
+   },
+   "cameraInsideHull": false,
+   "ok": true,
+   "shot": "/workspace/shots/validator/t04_exit_hangar.png"
+  },
+  {
+   "label": "after_exit_hangar",
+   "camBefore": [
+    140,
+    -170,
+    -10
+   ],
+   "wallMs": 227404,
+   "frames": 35,
+   "avgFrameMs": 6688,
+   "nanFrames": 0,
+   "blackFrames": 0,
+   "blackWhileFaded": 0,
+   "blackUnfaded": [],
+   "lumRange": [
+    4.6,
+    51.1
+   ],
+   "modes": "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEIIIIII",
+   "after": {
+    "room": "bridge",
+    "player": [
+     0,
+     210,
+     176.5
+    ],
+    "cam": [
+     0,
+     211.7,
+     176.5
+    ],
+    "yawDeg": 0,
+    "fade": 0,
+    "status": "Main Command Bridge — Imperial I-class Star Destroyer Redoubt",
+    "visible": [
+     "bridge",
+     "cmd_corridor"
+    ],
+    "built": [
+     "tower",
+     "hangar"
+    ]
+   },
+   "ok": true,
+   "shot": "/workspace/shots/validator/t05_board_after_exit_hangar.png"
+  },
+  {
+   "cluster": "engineering",
+   "from": {
+    "room": "engineering",
+    "cluster": "engineering"
+   },
+   "wallMs": 55396,
+   "label": "exit_engineering",
+   "frames": 8,
+   "avgFrameMs": 7914,
+   "nanFrames": 0,
+   "blackFrames": 0,
+   "blackWhileFaded": 0,
+   "blackUnfaded": [],
+   "lumRange": [
+    34,
+    175.8
+   ],
+   "modes": "IIIEEEEE",
+   "after": {
+    "cam": [
+     260,
+     20,
+     700
+    ],
+    "target": [
+     0,
+     0,
+     480
+    ],
+    "status": "Exterior view — you were in the aft engineering section. Enter to board again.",
+    "peek": false,
+    "visible": [
+     "engineering",
+     "reactor"
+    ]
+   },
+   "minRoomDistance": {
+    "m": 402.8,
+    "room": "reactor"
+   },
+   "cameraInsideHull": false,
+   "ok": true,
+   "shot": "/workspace/shots/validator/t06_exit_engineering.png"
+  },
+  {
+   "label": "after_exit_engineering",
+   "camBefore": [
+    260,
+    20,
+    700
+   ],
+   "wallMs": 184406,
+   "frames": 35,
+   "avgFrameMs": 5424,
+   "nanFrames": 0,
+   "blackFrames": 0,
+   "blackWhileFaded": 0,
+   "blackUnfaded": [],
+   "lumRange": [
+    4.5,
+    177
+   ],
+   "modes": "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEIIIIII",
+   "after": {
+    "room": "bridge",
+    "player": [
+     0,
+     210,
+     176.5
+    ],
+    "cam": [
+     0,
+     211.7,
+     176.5
+    ],
+    "yawDeg": 0,
+    "fade": 0,
+    "status": "Main Command Bridge — Imperial I-class Star Destroyer Redoubt",
+    "visible": [
+     "bridge"
+    ],
+    "built": [
+     "tower",
+     "hangar",
+     "engineering"
+    ]
+   },
+   "ok": true,
+   "shot": "/workspace/shots/validator/t07_board_after_exit_engineering.png"
+  },
+  {
+   "cluster": "crew",
+   "from": {
+    "room": "crew_corridor",
+    "cluster": "crew"
+   },
+   "wallMs": 27039,
+   "label": "exit_crew",
+   "frames": 8,
+   "avgFrameMs": 3863,
+   "nanFrames": 0,
+   "blackFrames": 0,
+   "blackWhileFaded": 0,
+   "blackUnfaded": [],
+   "lumRange": [
+    31.6,
+    107.1
+   ],
+   "modes": "IIIEEEEE",
+   "after": {
+    "cam": [
+     120,
+     130,
+     -330
+    ],
+    "target": [
+     0,
+     40,
+     -150
+    ],
+    "status": "Exterior view — you were in the mid-hull crew deck. Enter to board again.",
+    "peek": false,
+    "visible": [
+     "crew_corridor",
+     "crew_connector",
+     "crew_corridor_fwd"
+    ]
+   },
+   "minRoomDistance": {
+    "m": 181.7,
+    "room": "escape_pods"
+   },
+   "cameraInsideHull": false,
+   "ok": true,
+   "shot": "/workspace/shots/validator/t08_exit_crew.png"
+  },
+  {
+   "label": "after_exit_crew",
+   "camBefore": [
+    120,
+    130,
+    -330
+   ],
+   "wallMs": 171668,
+   "frames": 34,
+   "avgFrameMs": 5202,
+   "nanFrames": 0,
+   "blackFrames": 0,
+   "blackWhileFaded": 0,
+   "blackUnfaded": [],
+   "lumRange": [
+    4.7,
+    36.4
+   ],
+   "modes": "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEIIIII",
+   "after": {
+    "room": "bridge",
+    "player": [
+     0,
+     210,
+     176.5
+    ],
+    "cam": [
+     0,
+     211.7,
+     176.5
+    ],
+    "yawDeg": 0,
+    "fade": 0,
+    "status": "Main Command Bridge — Imperial I-class Star Destroyer Redoubt",
+    "visible": [
+     "bridge"
+    ],
+    "built": [
+     "tower",
+     "hangar",
+     "engineering",
+     "crew"
+    ]
+   },
+   "ok": true,
+   "shot": "/workspace/shots/validator/t09_board_after_exit_crew.png"
+  }
+ ],
+ "streaming": {
+  "start": {
+   "heapMB": 239.8,
+   "geometries": 527,
+   "textures": 82,
+   "programs": 325,
+   "built": 10,
+   "clusters": [
+    "tower"
+   ],
+   "roomTriangles": 493456
+  },
+  "perCluster": {
+   "hangar": {
+    "ensureMs": 1399,
+    "buildTimes": 1399.3
+   },
+   "engineering": {
+    "ensureMs": 909,
+    "buildTimes": 909.1
+   },
+   "crew": {
+    "ensureMs": 1379,
+    "buildTimes": 1378.8
+   },
+   "tower": {
+    "ensureMs": 1054,
+    "buildTimes": 1053.8
+   }
+  },
+  "rooms": {
+   "bridge": {
+    "buildMs": 226.1,
+    "triangles": 92360,
+    "lights": 8,
+    "colliders": 170,
+    "meshes": 38
+   },
+   "tactical": {
+    "buildMs": 121.5,
+    "triangles": 39658,
+    "lights": 5,
+    "colliders": 47,
+    "meshes": 18
+   },
+   "nav_station": {
+    "buildMs": 95.1,
+    "triangles": 45326,
+    "lights": 7,
+    "colliders": 50,
+    "meshes": 16
+   },
+   "observation": {
+    "buildMs": 62.4,
+    "triangles": 34754,
+    "lights": 4,
+    "colliders": 42,
+    "meshes": 15
+   },
+   "cmd_corridor": {
+    "buildMs": 159.8,
+    "triangles": 121582,
+    "lights": 8,
+    "colliders": 94,
+    "meshes": 27
+   },
+   "lift_lobby_tower": {
+    "buildMs": 19.2,
+    "triangles": 11826,
+    "lights": 3,
+    "colliders": 12,
+    "meshes": 24
+   },
+   "intelligence": {
+    "buildMs": 64.8,
+    "triangles": 27808,
+    "lights": 7,
+    "colliders": 35,
+    "meshes": 14
+   },
+   "briefing": {
+    "buildMs": 55.8,
+    "triangles": 34934,
+    "lights": 7,
+    "colliders": 72,
+    "meshes": 12
+   },
+   "comms": {
+    "buildMs": 147.1,
+    "triangles": 60676,
+    "lights": 8,
+    "colliders": 70,
+    "meshes": 14
+   },
+   "officers_quarters": {
+    "buildMs": 69.8,
+    "triangles": 24532,
+    "lights": 7,
+    "colliders": 72,
+    "meshes": 14
+   },
+   "hangar": {
+    "buildMs": 358.9,
+    "triangles": 168962,
+    "lights": 8,
+    "colliders": 517,
+    "meshes": 48
+   },
+   "fighter_maint": {
+    "buildMs": 315,
+    "triangles": 171570,
+    "lights": 8,
+    "colliders": 213,
+    "meshes": 20
+   },
+   "cargo_bay": {
+    "buildMs": 143.8,
+    "triangles": 86770,
+    "lights": 6,
+    "colliders": 124,
+    "meshes": 24
+   },
+   "repair_bay": {
+    "buildMs": 191.6,
+    "triangles": 112436,
+    "lights": 7,
+    "colliders": 98,
+    "meshes": 20
+   },
+   "shuttle_bay": {
+    "buildMs": 331.5,
+    "triangles": 173520,
+    "lights": 8,
+    "colliders": 124,
+    "meshes": 27
+   },
+   "hangar_lobby": {
+    "buildMs": 32.5,
+    "triangles": 30180,
+    "lights": 4,
+    "colliders": 25,
+    "meshes": 24
+   },
+   "flight_control": {
+    "buildMs": 19.4,
+    "triangles": 16348,
+    "lights": 3,
+    "colliders": 19,
+    "meshes": 15
+   },
+   "eng_lobby": {
+    "buildMs": 11.1,
+    "triangles": 12590,
+    "lights": 3,
+    "colliders": 13,
+    "meshes": 24
+   },
+   "eng_corridor": {
+    "buildMs": 133.8,
+    "triangles": 127638,
+    "lights": 7,
+    "colliders": 105,
+    "meshes": 28
+   },
+   "engineering": {
+    "buildMs": 114.4,
+    "triangles": 61300,
+    "lights": 6,
+    "colliders": 68,
+    "meshes": 17
+   },
+   "reactor": {
+    "buildMs": 312,
+    "triangles": 202138,
+    "lights": 6,
+    "colliders": 261,
+    "meshes": 18
+   },
+   "hyperdrive": {
+    "buildMs": 152.1,
+    "triangles": 148950,
+    "lights": 7,
+    "colliders": 64,
+    "meshes": 16
+   },
+   "life_support": {
+    "buildMs": 175.4,
+    "triangles": 144996,
+    "lights": 7,
+    "colliders": 68,
+    "meshes": 19
+   },
+   "crew_lobby": {
+    "buildMs": 10.6,
+    "triangles": 13262,
+    "lights": 3,
+    "colliders": 12,
+    "meshes": 24
+   },
+   "crew_corridor": {
+    "buildMs": 155.8,
+    "triangles": 112540,
+    "lights": 4,
+    "colliders": 83,
+    "meshes": 27
+   },
+   "crew_quarters": {
+    "buildMs": 137.1,
+    "triangles": 142706,
+    "lights": 8,
+    "colliders": 271,
+    "meshes": 29
+   },
+   "mess": {
+    "buildMs": 71.7,
+    "triangles": 58376,
+    "lights": 8,
+    "colliders": 64,
+    "meshes": 25
+   },
+   "lounge": {
+    "buildMs": 67.4,
+    "triangles": 66706,
+    "lights": 8,
+    "colliders": 129,
+    "meshes": 26
+   },
+   "medbay": {
+    "buildMs": 129.6,
+    "triangles": 79174,
+    "lights": 8,
+    "colliders": 62,
+    "meshes": 43
+   },
+   "crew_connector": {
+    "buildMs": 74.7,
+    "triangles": 38866,
+    "lights": 2,
+    "colliders": 39,
+    "meshes": 27
+   },
+   "crew_corridor_fwd": {
+    "buildMs": 238.2,
+    "triangles": 112226,
+    "lights": 4,
+    "colliders": 87,
+    "meshes": 27
+   },
+   "armory": {
+    "buildMs": 85.1,
+    "triangles": 87522,
+    "lights": 8,
+    "colliders": 50,
+    "meshes": 38
+   },
+   "detention": {
+    "buildMs": 148.7,
+    "triangles": 76662,
+    "lights": 8,
+    "colliders": 125,
+    "meshes": 19
+   },
+   "escape_pods": {
+    "buildMs": 251.9,
+    "triangles": 88204,
+    "lights": 8,
+    "colliders": 60,
+    "meshes": 32
+   }
+  },
+  "all4": {
+   "heapMB": 327.8,
+   "geometries": 288,
+   "textures": 80,
+   "programs": 325,
+   "built": 34,
+   "clusters": [
+    "hangar",
+    "engineering",
+    "crew",
+    "tower"
+   ],
+   "roomTriangles": 2827098
+  },
+  "beforeTrim": {
+   "heapMB": 251.1,
+   "geometries": 777,
+   "textures": 88,
+   "programs": 329,
+   "built": 34,
+   "clusters": [
+    "hangar",
+    "engineering",
+    "crew",
+    "tower"
+   ],
+   "roomTriangles": 2827098
+  },
+  "afterTrim": {
+   "heapMB": 243.5,
+   "geometries": 559,
+   "textures": 86,
+   "programs": 329,
+   "built": 21,
+   "clusters": [
+    "crew",
+    "tower"
+   ],
+   "roomTriangles": 1369700
+  },
+  "unvisitedBuiltClusterSurvivesTrim": {
+   "cluster": "hangar",
+   "stillBuilt": true,
+   "clusters": [
+    "crew",
+    "tower",
+    "hangar"
+   ]
+  },
+  "trimOk": true
+ },
+ "fighters": {
+  "launched": 6,
+  "samples": 473,
+  "states": {
+   "launching": 36,
+   "lowering": 16,
+   "patrol": 349,
+   "returning": 16,
+   "ascending": 40,
+   "docking": 16
+  },
+  "patrolSamples": 349,
+  "roomViolations": [],
+  "roomViolationCount": 0,
+  "stats": {
+   "fighters": 16,
+   "airborne": 1,
+   "states": {
+    "racked": 11,
+    "patrol": 1,
+    "maintenance": 4
+   },
+   "tieTriangles": 3598,
+   "clock": 155.7,
+   "patrolLength": 4081
+  },
+  "patrolInsideHull": 0,
+  "hullHits": [],
+  "ok": true
+ },
+ "sync": {
+  "bytes": 1250,
+  "readyMs2": 201393,
+  "doorMatch": true,
+  "doorsA": {
+   "br_corr": {
+    "o": 1,
+    "t": 1
+   },
+   "br_tac": {
+    "o": 1,
+    "t": 1
+   },
+   "eng_ctrl_reactor": {
+    "o": 0.56,
+    "t": 1
+   }
+  },
+  "doorsB": {
+   "br_corr": {
+    "o": 1,
+    "t": 1
+   },
+   "br_tac": {
+    "o": 1,
+    "t": 1
+   },
+   "eng_ctrl_reactor": {
+    "o": 0.56,
+    "t": 1
+   }
+  },
+  "doorsBeforeApply": {},
+  "fighterStateMismatch": 0,
+  "maxPosErr": 0,
+  "maxPosErrAfter5s": 260.3102,
+  "clockA": 157.800200000001,
+  "clockB": 157.8168666666677,
+  "alertA": 1,
+  "alertB": 1,
+  "liftInSnapshot": null,
+  "slabState": {
+   "br_corr": {
+    "openness": 1,
+    "target": 1,
+    "slabMoved": 0,
+    "colliderEnabled": true
+   },
+   "br_tac": {
+    "openness": 1,
+    "target": 1,
+    "slabMoved": 0,
+    "colliderEnabled": true
+   },
+   "eng_ctrl_reactor": "not built"
+  },
+  "slabAfterTick": {
+   "br_corr": {
+    "openness": 1,
+    "slabMoved": 0,
+    "colliderEnabled": true
+   },
+   "br_tac": {
+    "openness": 0.977,
+    "slabMoved": 2.7,
+    "colliderEnabled": false
+   }
+  },
+  "staleDoorVisuals": [
+   "br_corr",
+   "br_tac"
+  ],
+  "ok": false
+ },
+ "console": {
+  "total": 17,
+  "byType": {
+   "debug": 4,
+   "warning": 13
+  },
+  "warnings": [
+   "[.WebGL-0x29bc000f0800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+   "[.WebGL-0x29bc000f0800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "[.WebGL-0x29bc000f0800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+   "[.WebGL-0x29bc000f0800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed."
+  ],
+  "errors": [],
+  "three": [
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+   "THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed."
+  ]
+ },
+ "pageErrors": []
+}

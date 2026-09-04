@@ -1,0 +1,45 @@
+== boot: ready 26631 ms · boot.total 12689 ms · materials 9694 ms · space 2056 ms · exterior 406 ms · heap 96.9 MB · geometries 86 · textures 43 · programs 43
+   materials breakdown: {"imperialPanel":201,"wornMetal":1202,"deckBlack":1300,"deckGrey":524,"hullPlate":5545,"rubber":45,"fabric":21,"hazard":26,"hazardRed":17,"grate":592,"diffuser":30,"decals":167,"screens":19,"leds":5}
+   long tasks: [{"t":12752,"dur":413},{"t":13166,"dur":13451},{"t":26627,"dur":1205},{"t":27834,"dur":1275},{"t":29110,"dur":1721}]
+
+== transitions
+PASS board default_view: 164969 ms wall, 34 frames (avg 5223 ms), NaN 0, black 0 (unfaded 0), lum 4.7..48.5, lands in bridge at 0,210.3,176.5 yaw 0, cam 0,212,176.5; modes EEEEEEEEEEEEEEEEEEEEEEEEEEEEEIIIII
+PASS exit from tower (bridge): 33892 ms wall, 10 frames, NaN 0, black unfaded 0; camera 60,225,60 → nearest room nav_station at 115.3 m, insideHull=false; visible bridge|tactical|nav_station|observation
+PASS board from_ext_far: 168967 ms wall, 57 frames (avg 3188 ms), NaN 0, black 0 (unfaded 0), lum 4.7..48.9, lands in bridge at 0,210,176.5 yaw 0, cam 0,211.7,176.5; modes EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEIIIIII
+PASS exit from hangar (hangar): 37628 ms wall, 9 frames, NaN 0, black unfaded 0; camera 140,-170,-10 → nearest room cargo_bay at 143.9 m, insideHull=false; visible hangar|fighter_maint|cargo_bay|repair_bay|flight_control
+PASS board after_exit_hangar: 212436 ms wall, 35 frames (avg 6688 ms), NaN 0, black 0 (unfaded 0), lum 4.6..51.1, lands in bridge at 0,210,176.5 yaw 0, cam 0,211.7,176.5; modes EEEEEEEEEEEEEEEEEEEEEEEEEEEEEIIIIII
+PASS exit from engineering (engineering): 37895 ms wall, 8 frames, NaN 0, black unfaded 0; camera 260,20,700 → nearest room reactor at 402.8 m, insideHull=false; visible engineering|reactor
+PASS board after_exit_engineering: 172899 ms wall, 35 frames (avg 5424 ms), NaN 0, black 0 (unfaded 0), lum 4.5..177, lands in bridge at 0,210,176.5 yaw 0, cam 0,211.7,176.5; modes EEEEEEEEEEEEEEEEEEEEEEEEEEEEEIIIIII
+PASS exit from crew (crew_corridor): 17064 ms wall, 8 frames, NaN 0, black unfaded 0; camera 120,130,-330 → nearest room escape_pods at 181.7 m, insideHull=false; visible crew_corridor|crew_connector|crew_corridor_fwd
+PASS board after_exit_crew: 157371 ms wall, 34 frames (avg 5202 ms), NaN 0, black 0 (unfaded 0), lum 4.7..36.4, lands in bridge at 0,210,176.5 yaw 0, cam 0,211.7,176.5; modes EEEEEEEEEEEEEEEEEEEEEEEEEEEEEIIIII
+
+== streaming
+start (tower only): {"heapMB":239.8,"geometries":527,"textures":82,"programs":325,"built":10,"clusters":["tower"],"roomTriangles":493456}
+ensureCluster(hangar): 1399 ms (buildTimes 1399.3)
+ensureCluster(engineering): 909 ms (buildTimes 909.1)
+ensureCluster(crew): 1379 ms (buildTimes 1378.8)
+ensureCluster(tower): 1054 ms (buildTimes 1053.8)
+all four built: {"heapMB":327.8,"geometries":288,"textures":80,"programs":325,"built":34,"clusters":["hangar","engineering","crew","tower"],"roomTriangles":2827098}
+before trim: {"heapMB":251.1,"geometries":777,"textures":88,"programs":329,"built":34,"clusters":["hangar","engineering","crew","tower"],"roomTriangles":2827098}
+after trimClusters(2): {"heapMB":243.5,"geometries":559,"textures":86,"programs":329,"built":21,"clusters":["crew","tower"],"roomTriangles":1369700}  → PASS (clusters ≤ 2, heap and geometries drop)
+unvisited built cluster survives trimClusters(2): {"cluster":"hangar","stillBuilt":true,"clusters":["crew","tower","hangar"]}
+rooms over the 400 ms build budget: none
+rooms over the triangle budget: fighter_maint 172k, shuttle_bay 174k
+
+== fighters
+PASS fighters: 473 flying samples over 120 s ({"launching":36,"lowering":16,"patrol":349,"returning":16,"ascending":40,"docking":16}), 349 patrol samples; room-box violations 0; patrol samples inside the hull 0
+
+== sync
+snapshot: 1250 bytes; doors {"br_corr":{"o":1,"t":1},"br_tac":{"o":1,"t":1},"eng_ctrl_reactor":{"o":0.56,"t":1}}; lift null; traffic fighters 16; alert 1
+FAIL sync apply on a fresh page: doors match=true, fighter state mismatches 0, max pos error 0.0000 m (after +5 s: 260.3102 m), clock 157.800 → 157.817, alert 1 → 1
+   applied door records (before any tick): {"br_corr":{"openness":1,"target":1,"slabMoved":0,"colliderEnabled":true},"br_tac":{"openness":1,"target":1,"slabMoved":0,"colliderEnabled":true},"eng_ctrl_reactor":"not built"}
+   after one tick: {"br_corr":{"openness":1,"slabMoved":0,"colliderEnabled":true},"br_tac":{"openness":0.977,"slabMoved":2.7,"colliderEnabled":false}}
+   WARN doors logically open but slabs unmoved / collider still enabled after apply: br_corr, br_tac
+
+== console: {"debug":4,"warning":13}; three.js messages 9
+   [.WebGL-0x29bc000f0800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+   THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.
+   [.WebGL-0x29bc000f0800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+
+FAILED: sync
+exit=1

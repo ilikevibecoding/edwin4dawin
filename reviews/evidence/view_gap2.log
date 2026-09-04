@@ -1,0 +1,6 @@
+ready in 16546 ms
+boot {"materials":{"imperialPanel":287,"wornMetal":653,"deckBlack":703,"deckGrey":328,"hullPlate":2656,"rubber":20,"fabric":25,"hazard":16,"hazardRed":17,"grate":280,"diffuser":12,"decals":56,"screens":11,"leds":2},"space":1457,"exterior":232,"boot":7146,"totalMs":7146}
+int_0_-40_-93.6_180_-38: 181 calls, 485k tris, 6 lights, 194 objs, 2337.88 ms/frame (software GL), rooms hangar_lobby -> /workspace/shots/validator/int_0_-40_-93.6_180_-38.png
+int_0_-40_-86.4_0_-38: 294 calls, 1340k tris, 14 lights, 255 objs, 2963.34 ms/frame (software GL), rooms hangar|fighter_maint|cargo_bay|repair_bay|flight_control -> /workspace/shots/validator/int_0_-40_-86.4_0_-38.png
+no page errors
+exit=0

@@ -1,0 +1,5432 @@
+{
+ "summary": {
+  "doors": {
+   "total": 66,
+   "passed": 62,
+   "failed": [
+    "hg_cargo from hangar",
+    "hg_cargo from cargo_bay",
+    "hg_lobby from hangar",
+    "hg_lobby from hangar_lobby"
+   ],
+   "gaps": [
+    "hg_lobby from hangar",
+    "hg_lobby from hangar_lobby"
+   ],
+   "spawnBlocked": [
+    "bridge via br_tac: undefined m short",
+    "nav_station via br_nav: undefined m short",
+    "bridge via br_nav: undefined m short",
+    "hangar via hg_shuttle: FELL",
+    "hangar via hg_maint_a: 20.29 m short",
+    "hangar via hg_maint_b: 40.94 m short",
+    "hangar via hg_repair: undefined m short",
+    "hangar via hg_fc: 71.18 m short",
+    "engineering via eng_ctrl_reactor: 19.67 m short"
+   ]
+  },
+  "blockers": [
+   "br_tac/bridge: railing",
+   "br_nav/bridge: railing",
+   "corr_off/officers_quarters: partition,partition",
+   "hg_cargo/hangar: computer,computer,cart,cart,cart",
+   "hg_fc/hangar: chair",
+   "hg_fc/flight_control: flight_control:zmin,flight_control:zmax,glass,glass,console,console,console,console",
+   "crew_corr_conn/crew_connector: crew_connector:xmin,crew_connector:xmax,cabinet",
+   "conn_fwd/crew_connector: crew_connector:xmin,crew_connector:xmax"
+  ],
+  "lifts": {
+   "total": 24,
+   "passed": 24,
+   "failed": []
+  },
+  "stairs": {
+   "total": 10,
+   "passed": 10,
+   "failed": []
+  },
+  "errors": []
+ },
+ "results": {
+  "doors": [
+   {
+    "door": "br_corr",
+    "kind": "blast",
+    "from": "bridge",
+    "to": "cmd_corridor",
+    "start": [
+     0,
+     210,
+     203
+    ],
+    "startRoom": "bridge",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 6,
+    "reached": true,
+    "travelled": 7.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 1.82,
+     "walked": 1.5,
+     "y": 210
+    },
+    "end": [
+     0,
+     210,
+     207.18
+    ],
+    "simSeconds": 1.5,
+    "ms": 6268
+   },
+   {
+    "door": "br_corr",
+    "kind": "blast",
+    "from": "cmd_corridor",
+    "to": "bridge",
+    "start": [
+     0,
+     210,
+     209
+    ],
+    "startRoom": "cmd_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 5,
+     "walked": 4.5,
+     "y": 210
+    },
+    "end": [
+     0,
+     210,
+     205
+    ],
+    "simSeconds": 0.8,
+    "ms": 5
+   },
+   {
+    "door": "br_tac",
+    "kind": "slide",
+    "from": "bridge",
+    "to": "tactical",
+    "start": [
+     -13,
+     210,
+     187.5
+    ],
+    "startRoom": "bridge",
+    "override": "outer ledge x -14..-12 (3 m in front is the crew pit)",
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 15.69,
+     "walked": 15.5,
+     "y": 210
+    },
+    "end": [
+     -15.51,
+     210,
+     187.5
+    ],
+    "simSeconds": 1,
+    "ms": 3
+   },
+   {
+    "door": "br_tac",
+    "kind": "slide",
+    "from": "tactical",
+    "to": "bridge",
+    "start": [
+     -17,
+     210,
+     187.5
+    ],
+    "startRoom": "tactical",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": false,
+     "dist": 18.03,
+     "notReached": {
+      "at": [
+       -12.55,
+       210,
+       196.81
+      ],
+      "remaining": 12.95,
+      "note": "deflected along obstacles; spawn not reached on a straight line"
+     },
+     "walked": 19.5,
+     "y": 210
+    },
+    "end": [
+     -12.99,
+     210,
+     187.5
+    ],
+    "simSeconds": 0.9,
+    "ms": 2
+   },
+   {
+    "door": "br_nav",
+    "kind": "slide",
+    "from": "bridge",
+    "to": "nav_station",
+    "start": [
+     13,
+     210,
+     187.5
+    ],
+    "startRoom": "bridge",
+    "override": "outer ledge x 12..14 (3 m in front is the crew pit)",
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": false,
+     "dist": 15.69,
+     "notReached": {
+      "at": [
+       24.67,
+       210,
+       199.75
+      ],
+      "remaining": 0.41,
+      "note": "deflected along obstacles; spawn not reached on a straight line"
+     },
+     "walked": 17,
+     "y": 210
+    },
+    "end": [
+     15.51,
+     210,
+     187.5
+    ],
+    "simSeconds": 1,
+    "ms": 1
+   },
+   {
+    "door": "br_nav",
+    "kind": "slide",
+    "from": "nav_station",
+    "to": "bridge",
+    "start": [
+     17,
+     210,
+     187.5
+    ],
+    "startRoom": "nav_station",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": false,
+     "dist": 18.03,
+     "notReached": {
+      "at": [
+       12.55,
+       210,
+       196.81
+      ],
+      "remaining": 12.95,
+      "note": "deflected along obstacles; spawn not reached on a straight line"
+     },
+     "walked": 19.5,
+     "y": 210
+    },
+    "end": [
+     12.99,
+     210,
+     187.5
+    ],
+    "simSeconds": 0.9,
+    "ms": 4
+   },
+   {
+    "door": "tac_corr",
+    "kind": "slide",
+    "from": "tactical",
+    "to": "cmd_corridor",
+    "start": [
+     -24.5,
+     210,
+     203
+    ],
+    "startRoom": "tactical",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 24.58,
+     "walked": 24,
+     "y": 210
+    },
+    "end": [
+     -24.5,
+     210,
+     207.01
+    ],
+    "simSeconds": 0.9,
+    "ms": 3
+   },
+   {
+    "door": "tac_corr",
+    "kind": "slide",
+    "from": "cmd_corridor",
+    "to": "tactical",
+    "start": [
+     -24.5,
+     210,
+     209
+    ],
+    "startRoom": "cmd_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 5.01,
+     "walked": 4.5,
+     "y": 210
+    },
+    "end": [
+     -24.5,
+     210,
+     204.99
+    ],
+    "simSeconds": 0.9,
+    "ms": 1
+   },
+   {
+    "door": "nav_corr",
+    "kind": "slide",
+    "from": "nav_station",
+    "to": "cmd_corridor",
+    "start": [
+     24.5,
+     210,
+     203
+    ],
+    "startRoom": "nav_station",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 24.58,
+     "walked": 24,
+     "y": 210
+    },
+    "end": [
+     24.5,
+     210,
+     207.01
+    ],
+    "simSeconds": 0.9,
+    "ms": 2
+   },
+   {
+    "door": "nav_corr",
+    "kind": "slide",
+    "from": "cmd_corridor",
+    "to": "nav_station",
+    "start": [
+     24.5,
+     210,
+     209
+    ],
+    "startRoom": "cmd_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 5.01,
+     "walked": 4.5,
+     "y": 210
+    },
+    "end": [
+     24.5,
+     210,
+     204.99
+    ],
+    "simSeconds": 0.9,
+    "ms": 2
+   },
+   {
+    "door": "obs_corr",
+    "kind": "slide",
+    "from": "observation",
+    "to": "cmd_corridor",
+    "start": [
+     -73.5,
+     210,
+     203
+    ],
+    "startRoom": "observation",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 73.53,
+     "walked": 73,
+     "y": 210
+    },
+    "end": [
+     -73.5,
+     210,
+     207.01
+    ],
+    "simSeconds": 0.9,
+    "ms": 7
+   },
+   {
+    "door": "obs_corr",
+    "kind": "slide",
+    "from": "cmd_corridor",
+    "to": "observation",
+    "start": [
+     -73.5,
+     210,
+     209
+    ],
+    "startRoom": "cmd_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 5.01,
+     "walked": 4.5,
+     "y": 210
+    },
+    "end": [
+     -73.5,
+     210,
+     204.99
+    ],
+    "simSeconds": 0.9,
+    "ms": 1
+   },
+   {
+    "door": "corr_lift_t",
+    "kind": "blast",
+    "from": "cmd_corridor",
+    "to": "lift_lobby_tower",
+    "start": [
+     0,
+     210,
+     209
+    ],
+    "startRoom": "cmd_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 2,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 3,
+     "walked": 2.5,
+     "y": 210
+    },
+    "end": [
+     0,
+     210,
+     213
+    ],
+    "simSeconds": 0.8,
+    "ms": 1
+   },
+   {
+    "door": "corr_lift_t",
+    "kind": "blast",
+    "from": "lift_lobby_tower",
+    "to": "cmd_corridor",
+    "start": [
+     0,
+     210,
+     215
+    ],
+    "startRoom": "lift_lobby_tower",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 2,
+     "walked": 1.5,
+     "y": 210
+    },
+    "end": [
+     0,
+     210,
+     211
+    ],
+    "simSeconds": 0.8,
+    "ms": 0
+   },
+   {
+    "door": "corr_intel",
+    "kind": "secure",
+    "from": "cmd_corridor",
+    "to": "intelligence",
+    "start": [
+     -50,
+     210,
+     209
+    ],
+    "startRoom": "cmd_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 4,
+    "reached": true,
+    "travelled": 6,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 6.57,
+     "walked": 6,
+     "y": 210
+    },
+    "end": [
+     -50,
+     210,
+     213.43
+    ],
+    "simSeconds": 1.2,
+    "ms": 6
+   },
+   {
+    "door": "corr_intel",
+    "kind": "secure",
+    "from": "intelligence",
+    "to": "cmd_corridor",
+    "start": [
+     -50,
+     210,
+     215
+    ],
+    "startRoom": "intelligence",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 50.04,
+     "walked": 49.5,
+     "y": 210
+    },
+    "end": [
+     -50,
+     210,
+     211
+    ],
+    "simSeconds": 0.8,
+    "ms": 13
+   },
+   {
+    "door": "corr_brief",
+    "kind": "slide",
+    "from": "cmd_corridor",
+    "to": "briefing",
+    "start": [
+     -22.5,
+     210,
+     209
+    ],
+    "startRoom": "cmd_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 7,
+     "walked": 6.5,
+     "y": 210.3
+    },
+    "end": [
+     -22.5,
+     210,
+     213.01
+    ],
+    "simSeconds": 0.9,
+    "ms": 1
+   },
+   {
+    "door": "corr_brief",
+    "kind": "slide",
+    "from": "briefing",
+    "to": "cmd_corridor",
+    "start": [
+     -22.5,
+     210,
+     215
+    ],
+    "startRoom": "briefing",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 22.59,
+     "walked": 22,
+     "y": 210
+    },
+    "end": [
+     -22.5,
+     210,
+     210.96
+    ],
+    "simSeconds": 0.8,
+    "ms": 1
+   },
+   {
+    "door": "corr_comms",
+    "kind": "slide",
+    "from": "cmd_corridor",
+    "to": "comms",
+    "start": [
+     22.5,
+     210,
+     209
+    ],
+    "startRoom": "cmd_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 7,
+     "walked": 6.5,
+     "y": 210
+    },
+    "end": [
+     22.5,
+     210,
+     213.01
+    ],
+    "simSeconds": 0.9,
+    "ms": 1
+   },
+   {
+    "door": "corr_comms",
+    "kind": "slide",
+    "from": "comms",
+    "to": "cmd_corridor",
+    "start": [
+     22.5,
+     210,
+     215
+    ],
+    "startRoom": "comms",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 22.59,
+     "walked": 22,
+     "y": 210
+    },
+    "end": [
+     22.5,
+     210,
+     211
+    ],
+    "simSeconds": 0.8,
+    "ms": 1
+   },
+   {
+    "door": "corr_off",
+    "kind": "slide",
+    "from": "cmd_corridor",
+    "to": "officers_quarters",
+    "start": [
+     49.5,
+     210,
+     209
+    ],
+    "startRoom": "cmd_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 7,
+     "walked": 6.5,
+     "y": 210
+    },
+    "end": [
+     49.5,
+     210,
+     213.01
+    ],
+    "simSeconds": 0.9,
+    "ms": 1
+   },
+   {
+    "door": "corr_off",
+    "kind": "slide",
+    "from": "officers_quarters",
+    "to": "cmd_corridor",
+    "start": [
+     49.5,
+     210,
+     215
+    ],
+    "startRoom": "officers_quarters",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 49.54,
+     "walked": 49,
+     "y": 210
+    },
+    "end": [
+     49.5,
+     210,
+     211
+    ],
+    "simSeconds": 0.8,
+    "ms": 8
+   },
+   {
+    "door": "hg_shuttle",
+    "kind": "blast",
+    "from": "hangar",
+    "to": "shuttle_bay",
+    "start": [
+     0,
+     -40,
+     67
+    ],
+    "startRoom": "hangar",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 6,
+    "reached": true,
+    "travelled": 8,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 8.32,
+     "walked": 8,
+     "y": -40
+    },
+    "end": [
+     0,
+     -40,
+     71.68
+    ],
+    "simSeconds": 1.6,
+    "ms": 6466
+   },
+   {
+    "door": "hg_shuttle",
+    "kind": "blast",
+    "from": "shuttle_bay",
+    "to": "hangar",
+    "start": [
+     0,
+     -40,
+     73
+    ],
+    "startRoom": "shuttle_bay",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": false,
+     "dist": 151.99,
+     "gap": [
+      -3.95,
+      -40,
+      49.39
+     ],
+     "fell": {
+      "y": -56.1,
+      "onGround": false
+     },
+     "walked": 20,
+     "y": -56.1
+    },
+    "end": [
+     0,
+     -40,
+     69
+    ],
+    "simSeconds": 0.8,
+    "ms": 18,
+    "shot": "/workspace/shots/validator/01_door_hg_shuttle_from_shuttle_bay.png"
+   },
+   {
+    "door": "hg_maint_a",
+    "kind": "arch",
+    "from": "hangar",
+    "to": "fighter_maint",
+    "start": [
+     -37,
+     -40,
+     -40
+    ],
+    "startRoom": "hangar",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": true,
+    "travelled": 6.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 29.95,
+     "walked": 30.5,
+     "y": -40
+    },
+    "end": [
+     -43.5,
+     -40,
+     -40
+    ],
+    "simSeconds": 1.3,
+    "ms": 11
+   },
+   {
+    "door": "hg_maint_a",
+    "kind": "arch",
+    "from": "fighter_maint",
+    "to": "hangar",
+    "start": [
+     -43,
+     -40,
+     -40
+    ],
+    "startRoom": "fighter_maint",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": false,
+     "dist": 41,
+     "blockedAt": [
+      -31.59,
+      -40,
+      -59.78
+     ],
+     "remaining": 20.29,
+     "hits": [
+      "cradle[-34.5,-40,-61.4→-27.5,-39.05,-60.1]"
+     ],
+     "walked": 41.5,
+     "y": -40
+    },
+    "end": [
+     -39,
+     -40,
+     -40
+    ],
+    "simSeconds": 0.8,
+    "ms": 20
+   },
+   {
+    "door": "hg_maint_b",
+    "kind": "arch",
+    "from": "hangar",
+    "to": "fighter_maint",
+    "start": [
+     -37,
+     -40,
+     10
+    ],
+    "startRoom": "hangar",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": true,
+    "travelled": 6.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 29.95,
+     "walked": 29.5,
+     "y": -40
+    },
+    "end": [
+     -43.5,
+     -40,
+     10
+    ],
+    "simSeconds": 1.3,
+    "ms": 14
+   },
+   {
+    "door": "hg_maint_b",
+    "kind": "arch",
+    "from": "fighter_maint",
+    "to": "hangar",
+    "start": [
+     -43,
+     -40,
+     10
+    ],
+    "startRoom": "fighter_maint",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": false,
+     "dist": 90.45,
+     "blockedAt": [
+      -34.1,
+      -40,
+      -39.27
+     ],
+     "remaining": 40.94,
+     "hits": [
+      "cart[-34.63,-40,-40.5→-34.04,-39,-39.71]",
+      "cart[-34.25,-40,-40.38→-33.66,-39,-39.59]",
+      "cart[-33.86,-40,-40.26→-33.28,-39,-39.47]"
+     ],
+     "walked": 54,
+     "y": -40
+    },
+    "end": [
+     -39,
+     -40,
+     10
+    ],
+    "simSeconds": 0.8,
+    "ms": 23
+   },
+   {
+    "door": "hg_cargo",
+    "kind": "arch",
+    "from": "hangar",
+    "to": "cargo_bay",
+    "start": [
+     37,
+     -40,
+     -40
+    ],
+    "startRoom": "hangar",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": false,
+    "travelled": 0,
+    "stuck": {
+     "at": [
+      36.88,
+      -40,
+      -40
+     ],
+     "room": "hangar",
+     "past": null,
+     "note": "walked 14 m without entering cargo_bay",
+     "hits": [
+      "stair_side[37.2,-40,-40.8→37.4,-30.8,-31.2]",
+      "cart[38.07,-40,-40.39→38.87,-39,-39.76]"
+     ]
+    },
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": null,
+    "simSeconds": 2.8,
+    "ms": 2,
+    "shot": "/workspace/shots/validator/02_door_hg_cargo_from_hangar.png"
+   },
+   {
+    "door": "hg_cargo",
+    "kind": "arch",
+    "from": "cargo_bay",
+    "to": "hangar",
+    "start": [
+     43,
+     -40,
+     -40
+    ],
+    "startRoom": "cargo_bay",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": false,
+    "travelled": 0,
+    "stuck": {
+     "at": [
+      39.19,
+      -40,
+      -39.87
+     ],
+     "room": "hangar",
+     "past": null,
+     "note": "walked 14 m without entering hangar",
+     "hits": [
+      "cart[38.07,-40,-40.39→38.87,-39,-39.76]",
+      "cart[38.22,-40,-40.76→39.02,-39,-40.13]"
+     ]
+    },
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": null,
+    "simSeconds": 2.8,
+    "ms": 3,
+    "shot": "/workspace/shots/validator/03_door_hg_cargo_from_cargo_bay.png"
+   },
+   {
+    "door": "hg_repair",
+    "kind": "arch",
+    "from": "hangar",
+    "to": "repair_bay",
+    "start": [
+     37,
+     -40,
+     48
+    ],
+    "startRoom": "hangar",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": true,
+    "travelled": 6.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 20.4,
+     "walked": 20,
+     "y": -40
+    },
+    "end": [
+     43.5,
+     -40,
+     48
+    ],
+    "simSeconds": 1.3,
+    "ms": 9
+   },
+   {
+    "door": "hg_repair",
+    "kind": "arch",
+    "from": "repair_bay",
+    "to": "hangar",
+    "start": [
+     43,
+     -40,
+     48
+    ],
+    "startRoom": "repair_bay",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": false,
+     "dist": 145.41,
+     "notReached": {
+      "at": [
+       24,
+       -40,
+       -57.78
+      ],
+      "remaining": 58.39,
+      "note": "deflected along obstacles; spawn not reached on a straight line"
+     },
+     "walked": 146.5,
+     "y": -40
+    },
+    "end": [
+     39,
+     -40,
+     48
+    ],
+    "simSeconds": 0.8,
+    "ms": 42
+   },
+   {
+    "door": "hg_lobby",
+    "kind": "blast",
+    "from": "hangar",
+    "to": "hangar_lobby",
+    "start": [
+     0,
+     -40,
+     -87
+    ],
+    "startRoom": "hangar",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 6,
+    "reached": false,
+    "travelled": 0,
+    "stuck": null,
+    "gap": {
+     "at": [
+      0,
+      -40,
+      -90.68
+     ],
+     "afterFall": {
+      "y": -56.1,
+      "onGround": false
+     }
+    },
+    "fell": {
+     "y": -56.1,
+     "onGround": false
+    },
+    "path": [],
+    "toSpawn": null,
+    "simSeconds": 1.4,
+    "ms": 2,
+    "shot": "/workspace/shots/validator/04_door_hg_lobby_from_hangar.png"
+   },
+   {
+    "door": "hg_lobby",
+    "kind": "blast",
+    "from": "hangar_lobby",
+    "to": "hangar",
+    "start": [
+     0,
+     -40,
+     -93
+    ],
+    "startRoom": "hangar_lobby",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": false,
+    "travelled": 0,
+    "stuck": null,
+    "gap": {
+     "at": [
+      0,
+      -40,
+      -91.5
+     ],
+     "afterFall": {
+      "y": -56.1,
+      "onGround": false
+     }
+    },
+    "fell": {
+     "y": -56.1,
+     "onGround": false
+    },
+    "path": [],
+    "toSpawn": null,
+    "simSeconds": 0.3,
+    "ms": 1,
+    "shot": "/workspace/shots/validator/05_door_hg_lobby_from_hangar_lobby.png"
+   },
+   {
+    "door": "hg_fc",
+    "kind": "open",
+    "from": "hangar",
+    "to": "flight_control",
+    "start": [
+     37,
+     -22,
+     -10.6
+    ],
+    "startRoom": "hangar",
+    "override": "gap in the glass front (z -11.2..-10), gallery level y -22",
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 5.04,
+     "walked": 4.5,
+     "y": -22
+    },
+    "end": [
+     41,
+     -22,
+     -10.6
+    ],
+    "simSeconds": 0.8,
+    "ms": 2
+   },
+   {
+    "door": "hg_fc",
+    "kind": "open",
+    "from": "flight_control",
+    "to": "hangar",
+    "start": [
+     43,
+     -22,
+     -10.6
+    ],
+    "startRoom": "flight_control",
+    "override": "gap in the glass front (z -11.2..-10)",
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": false,
+     "dist": 97.86,
+     "blockedAt": [
+      32.4,
+      -32,
+      -45.75
+     ],
+     "remaining": 71.18,
+     "hits": [
+      "railing[31.92,-32,-46→32.08,-30.9,-40.8]",
+      "railing[32,-32,-46.23→37.3,-30.9,-46.07]",
+      "column[31.4,-40,-46.6→32,-22,-46]"
+     ],
+     "walked": 62,
+     "y": -32
+    },
+    "end": [
+     39,
+     -22,
+     -10.6
+    ],
+    "simSeconds": 0.8,
+    "ms": 15
+   },
+   {
+    "door": "eng_lobby_corr",
+    "kind": "blast",
+    "from": "eng_lobby",
+    "to": "eng_corridor",
+    "start": [
+     0,
+     -10,
+     259
+    ],
+    "startRoom": "eng_lobby",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 6,
+    "reached": true,
+    "travelled": 7.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 2.82,
+     "walked": 2.5,
+     "y": -10
+    },
+    "end": [
+     0,
+     -10,
+     263.18
+    ],
+    "simSeconds": 1.5,
+    "ms": 3314
+   },
+   {
+    "door": "eng_lobby_corr",
+    "kind": "blast",
+    "from": "eng_corridor",
+    "to": "eng_lobby",
+    "start": [
+     0,
+     -10,
+     265
+    ],
+    "startRoom": "eng_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 4,
+     "walked": 3.5,
+     "y": -10
+    },
+    "end": [
+     0,
+     -10,
+     261
+    ],
+    "simSeconds": 0.8,
+    "ms": 0
+   },
+   {
+    "door": "eng_corr_ctrl",
+    "kind": "blast",
+    "from": "eng_corridor",
+    "to": "engineering",
+    "start": [
+     0,
+     -10,
+     267
+    ],
+    "startRoom": "eng_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 6,
+    "reached": true,
+    "travelled": 7.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 3.82,
+     "walked": 3.5,
+     "y": -10
+    },
+    "end": [
+     0,
+     -10,
+     271.18
+    ],
+    "simSeconds": 1.5,
+    "ms": 1
+   },
+   {
+    "door": "eng_corr_ctrl",
+    "kind": "blast",
+    "from": "engineering",
+    "to": "eng_corridor",
+    "start": [
+     0,
+     -10,
+     273
+    ],
+    "startRoom": "engineering",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 3,
+     "walked": 2.5,
+     "y": -10
+    },
+    "end": [
+     0,
+     -10,
+     269
+    ],
+    "simSeconds": 0.8,
+    "ms": 1
+   },
+   {
+    "door": "eng_corr_hyper",
+    "kind": "blast",
+    "from": "eng_corridor",
+    "to": "hyperdrive",
+    "start": [
+     -54,
+     -10,
+     267
+    ],
+    "startRoom": "eng_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 6,
+    "reached": true,
+    "travelled": 7.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 3.82,
+     "walked": 3.5,
+     "y": -10
+    },
+    "end": [
+     -54,
+     -10,
+     271.18
+    ],
+    "simSeconds": 1.5,
+    "ms": 1
+   },
+   {
+    "door": "eng_corr_hyper",
+    "kind": "blast",
+    "from": "hyperdrive",
+    "to": "eng_corridor",
+    "start": [
+     -54,
+     -10,
+     273
+    ],
+    "startRoom": "hyperdrive",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 54.08,
+     "walked": 53.5,
+     "y": -10
+    },
+    "end": [
+     -54,
+     -10,
+     269
+    ],
+    "simSeconds": 0.8,
+    "ms": 2
+   },
+   {
+    "door": "eng_corr_life",
+    "kind": "blast",
+    "from": "eng_corridor",
+    "to": "life_support",
+    "start": [
+     54,
+     -10,
+     267
+    ],
+    "startRoom": "eng_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 6,
+    "reached": true,
+    "travelled": 7.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 3.82,
+     "walked": 3.5,
+     "y": -10
+    },
+    "end": [
+     54,
+     -10,
+     271.18
+    ],
+    "simSeconds": 1.5,
+    "ms": 1
+   },
+   {
+    "door": "eng_corr_life",
+    "kind": "blast",
+    "from": "life_support",
+    "to": "eng_corridor",
+    "start": [
+     54,
+     -10,
+     273
+    ],
+    "startRoom": "life_support",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 54.08,
+     "walked": 53.5,
+     "y": -10
+    },
+    "end": [
+     54,
+     -10,
+     269
+    ],
+    "simSeconds": 0.8,
+    "ms": 3
+   },
+   {
+    "door": "eng_ctrl_reactor",
+    "kind": "blast",
+    "from": "engineering",
+    "to": "reactor",
+    "start": [
+     0,
+     -10,
+     297
+    ],
+    "startRoom": "engineering",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 7,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 6,
+     "walked": 5.5,
+     "y": -10
+    },
+    "end": [
+     0,
+     -10,
+     304
+    ],
+    "simSeconds": 1.4,
+    "ms": 1
+   },
+   {
+    "door": "eng_ctrl_reactor",
+    "kind": "blast",
+    "from": "reactor",
+    "to": "engineering",
+    "start": [
+     0,
+     -10,
+     303
+    ],
+    "startRoom": "reactor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": false,
+     "dist": 24,
+     "blockedAt": [
+      0,
+      -10,
+      294.67
+     ],
+     "remaining": 19.67,
+     "hits": [
+      "console[-0.95,-10,293.5→0.95,-8.9,294.35]"
+     ],
+     "walked": 9,
+     "y": -10
+    },
+    "end": [
+     0,
+     -10,
+     299
+    ],
+    "simSeconds": 0.8,
+    "ms": 1
+   },
+   {
+    "door": "crew_lobby_corr",
+    "kind": "blast",
+    "from": "crew_lobby",
+    "to": "crew_corridor",
+    "start": [
+     0,
+     6,
+     -119
+    ],
+    "startRoom": "crew_lobby",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 6,
+    "reached": true,
+    "travelled": 7.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 2.82,
+     "walked": 2.5,
+     "y": 6
+    },
+    "end": [
+     0,
+     6,
+     -123.18
+    ],
+    "simSeconds": 1.5,
+    "ms": 997
+   },
+   {
+    "door": "crew_lobby_corr",
+    "kind": "blast",
+    "from": "crew_corridor",
+    "to": "crew_lobby",
+    "start": [
+     0,
+     6,
+     -125
+    ],
+    "startRoom": "crew_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 4,
+     "walked": 3.5,
+     "y": 6
+    },
+    "end": [
+     0,
+     6,
+     -121
+    ],
+    "simSeconds": 0.8,
+    "ms": 1
+   },
+   {
+    "door": "crew_corr_q",
+    "kind": "slide",
+    "from": "crew_corridor",
+    "to": "crew_quarters",
+    "start": [
+     -48.5,
+     6,
+     -127
+    ],
+    "startRoom": "crew_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 4.02,
+     "walked": 3.5,
+     "y": 6
+    },
+    "end": [
+     -48.5,
+     6,
+     -131.01
+    ],
+    "simSeconds": 0.9,
+    "ms": 1
+   },
+   {
+    "door": "crew_corr_q",
+    "kind": "slide",
+    "from": "crew_quarters",
+    "to": "crew_corridor",
+    "start": [
+     -48.5,
+     6,
+     -133
+    ],
+    "startRoom": "crew_quarters",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 48.59,
+     "walked": 48,
+     "y": 6
+    },
+    "end": [
+     -48.5,
+     6,
+     -129
+    ],
+    "simSeconds": 0.8,
+    "ms": 10
+   },
+   {
+    "door": "crew_corr_mess",
+    "kind": "slide",
+    "from": "crew_corridor",
+    "to": "mess",
+    "start": [
+     -18.5,
+     6,
+     -127
+    ],
+    "startRoom": "crew_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 4.02,
+     "walked": 3.5,
+     "y": 6
+    },
+    "end": [
+     -18.5,
+     6,
+     -131.01
+    ],
+    "simSeconds": 0.9,
+    "ms": 1
+   },
+   {
+    "door": "crew_corr_mess",
+    "kind": "slide",
+    "from": "mess",
+    "to": "crew_corridor",
+    "start": [
+     -18.5,
+     6,
+     -133
+    ],
+    "startRoom": "mess",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 18.74,
+     "walked": 18.5,
+     "y": 6
+    },
+    "end": [
+     -18.5,
+     6,
+     -129
+    ],
+    "simSeconds": 0.8,
+    "ms": 2
+   },
+   {
+    "door": "crew_corr_conn",
+    "kind": "open",
+    "from": "crew_corridor",
+    "to": "crew_connector",
+    "start": [
+     0,
+     6,
+     -127
+    ],
+    "startRoom": "crew_corridor",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 19,
+     "walked": 18.5,
+     "y": 6
+    },
+    "end": [
+     0,
+     6,
+     -131
+    ],
+    "simSeconds": 0.8,
+    "ms": 2
+   },
+   {
+    "door": "crew_corr_conn",
+    "kind": "open",
+    "from": "crew_connector",
+    "to": "crew_corridor",
+    "start": [
+     0,
+     6,
+     -133
+    ],
+    "startRoom": "crew_connector",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 3,
+     "walked": 2.5,
+     "y": 6
+    },
+    "end": [
+     0,
+     6,
+     -129
+    ],
+    "simSeconds": 0.8,
+    "ms": 0
+   },
+   {
+    "door": "crew_corr_lounge",
+    "kind": "slide",
+    "from": "crew_corridor",
+    "to": "lounge",
+    "start": [
+     18.5,
+     6,
+     -127
+    ],
+    "startRoom": "crew_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 4.02,
+     "walked": 3.5,
+     "y": 6
+    },
+    "end": [
+     18.5,
+     6,
+     -131.01
+    ],
+    "simSeconds": 0.9,
+    "ms": 2
+   },
+   {
+    "door": "crew_corr_lounge",
+    "kind": "slide",
+    "from": "lounge",
+    "to": "crew_corridor",
+    "start": [
+     18.5,
+     6,
+     -133
+    ],
+    "startRoom": "lounge",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 18.74,
+     "walked": 18.5,
+     "y": 6
+    },
+    "end": [
+     18.5,
+     6,
+     -129
+    ],
+    "simSeconds": 0.8,
+    "ms": 3
+   },
+   {
+    "door": "crew_corr_med",
+    "kind": "slide",
+    "from": "crew_corridor",
+    "to": "medbay",
+    "start": [
+     48.5,
+     6,
+     -127
+    ],
+    "startRoom": "crew_corridor",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": true,
+    "travelled": 4.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 4.02,
+     "walked": 3.5,
+     "y": 6
+    },
+    "end": [
+     48.5,
+     6,
+     -131.01
+    ],
+    "simSeconds": 0.9,
+    "ms": 1
+   },
+   {
+    "door": "crew_corr_med",
+    "kind": "slide",
+    "from": "medbay",
+    "to": "crew_corridor",
+    "start": [
+     48.5,
+     6,
+     -133
+    ],
+    "startRoom": "medbay",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 48.59,
+     "walked": 48,
+     "y": 6
+    },
+    "end": [
+     48.5,
+     6,
+     -129
+    ],
+    "simSeconds": 0.8,
+    "ms": 3
+   },
+   {
+    "door": "conn_fwd",
+    "kind": "open",
+    "from": "crew_connector",
+    "to": "crew_corridor_fwd",
+    "start": [
+     0,
+     6,
+     -167
+    ],
+    "startRoom": "crew_connector",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 3,
+     "walked": 2.5,
+     "y": 6
+    },
+    "end": [
+     0,
+     6,
+     -171
+    ],
+    "simSeconds": 0.8,
+    "ms": 0
+   },
+   {
+    "door": "conn_fwd",
+    "kind": "open",
+    "from": "crew_corridor_fwd",
+    "to": "crew_connector",
+    "start": [
+     0,
+     6,
+     -173
+    ],
+    "startRoom": "crew_corridor_fwd",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 19,
+     "walked": 18.5,
+     "y": 6
+    },
+    "end": [
+     0,
+     6,
+     -169
+    ],
+    "simSeconds": 0.8,
+    "ms": 1
+   },
+   {
+    "door": "fwd_armory",
+    "kind": "secure",
+    "from": "crew_corridor_fwd",
+    "to": "armory",
+    "start": [
+     -48.5,
+     6,
+     -175
+    ],
+    "startRoom": "crew_corridor_fwd",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 4,
+    "reached": true,
+    "travelled": 6,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 2.62,
+     "walked": 2.5,
+     "y": 6
+    },
+    "end": [
+     -48.5,
+     6,
+     -179.43
+    ],
+    "simSeconds": 1.2,
+    "ms": 1
+   },
+   {
+    "door": "fwd_armory",
+    "kind": "secure",
+    "from": "armory",
+    "to": "crew_corridor_fwd",
+    "start": [
+     -48.5,
+     6,
+     -181
+    ],
+    "startRoom": "armory",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 48.59,
+     "walked": 48,
+     "y": 6
+    },
+    "end": [
+     -48.5,
+     6,
+     -177
+    ],
+    "simSeconds": 0.8,
+    "ms": 4
+   },
+   {
+    "door": "fwd_det",
+    "kind": "secure",
+    "from": "crew_corridor_fwd",
+    "to": "detention",
+    "start": [
+     -12.5,
+     6,
+     -175
+    ],
+    "startRoom": "crew_corridor_fwd",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 4,
+    "reached": true,
+    "travelled": 6,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 2.62,
+     "walked": 2.5,
+     "y": 6
+    },
+    "end": [
+     -12.5,
+     6,
+     -179.43
+    ],
+    "simSeconds": 1.2,
+    "ms": 1
+   },
+   {
+    "door": "fwd_det",
+    "kind": "secure",
+    "from": "detention",
+    "to": "crew_corridor_fwd",
+    "start": [
+     -12.5,
+     6,
+     -181
+    ],
+    "startRoom": "detention",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 12.85,
+     "walked": 12.5,
+     "y": 6
+    },
+    "end": [
+     -12.5,
+     6,
+     -177
+    ],
+    "simSeconds": 0.8,
+    "ms": 1
+   },
+   {
+    "door": "fwd_pods",
+    "kind": "blast",
+    "from": "crew_corridor_fwd",
+    "to": "escape_pods",
+    "start": [
+     34.5,
+     6,
+     -175
+    ],
+    "startRoom": "crew_corridor_fwd",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 6,
+    "reached": true,
+    "travelled": 7.5,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 2.86,
+     "walked": 2.5,
+     "y": 6
+    },
+    "end": [
+     34.5,
+     6,
+     -179.18
+    ],
+    "simSeconds": 1.5,
+    "ms": 1
+   },
+   {
+    "door": "fwd_pods",
+    "kind": "blast",
+    "from": "escape_pods",
+    "to": "crew_corridor_fwd",
+    "start": [
+     34.5,
+     6,
+     -181
+    ],
+    "startRoom": "escape_pods",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 0.5,
+    "reached": true,
+    "travelled": 4,
+    "stuck": null,
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": {
+     "ok": true,
+     "dist": 34.63,
+     "walked": 34.5,
+     "y": 6
+    },
+    "end": [
+     34.5,
+     6,
+     -177
+    ],
+    "simSeconds": 0.8,
+    "ms": 2
+   },
+   {
+    "door": "hg_fc",
+    "kind": "open",
+    "from": "hangar",
+    "to": "flight_control",
+    "start": [
+     37,
+     -22,
+     -10
+    ],
+    "startRoom": "hangar",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": false,
+    "travelled": 0,
+    "stuck": {
+     "at": [
+      40.03,
+      -22,
+      -10
+     ],
+     "room": "hangar",
+     "past": null,
+     "note": "walked 14 m without entering flight_control",
+     "hits": [
+      "glass[40.35,-22,-10→40.9,-18,-0.25]"
+     ]
+    },
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": null,
+    "simSeconds": 2.8,
+    "ms": 41,
+    "note": "door-centre approach without override"
+   },
+   {
+    "door": "hg_fc",
+    "kind": "open",
+    "from": "flight_control",
+    "to": "hangar",
+    "start": [
+     43,
+     -22,
+     -10
+    ],
+    "startRoom": "flight_control",
+    "override": null,
+    "built": true,
+    "opened": "permanent",
+    "openAt": null,
+    "unblockedAt": null,
+    "reached": false,
+    "travelled": 0,
+    "stuck": {
+     "at": [
+      41.22,
+      -22,
+      -10
+     ],
+     "room": "flight_control",
+     "past": null,
+     "note": "walked 14 m without entering hangar",
+     "hits": [
+      "glass[40.35,-22,-10→40.9,-18,-0.25]"
+     ]
+    },
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": null,
+    "simSeconds": 2.8,
+    "ms": 1,
+    "note": "door-centre approach without override"
+   },
+   {
+    "door": "br_tac",
+    "kind": "slide",
+    "from": "bridge",
+    "to": "tactical",
+    "start": [
+     -11,
+     210,
+     187.5
+    ],
+    "startRoom": "bridge",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": false,
+    "travelled": 0,
+    "stuck": {
+     "at": [
+      -11.75,
+      210,
+      187.5
+     ],
+     "room": "bridge",
+     "past": null,
+     "note": "walked 14 m without entering tactical",
+     "hits": [
+      "railing[-12.23,210,176.15→-12.07,211.1,201.85]"
+     ]
+    },
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": null,
+    "simSeconds": 2.8,
+    "ms": 6993,
+    "note": "door-centre approach without override"
+   },
+   {
+    "door": "br_nav",
+    "kind": "slide",
+    "from": "bridge",
+    "to": "nav_station",
+    "start": [
+     11,
+     210,
+     187.5
+    ],
+    "startRoom": "bridge",
+    "override": null,
+    "built": true,
+    "opened": true,
+    "openAt": 0.5,
+    "unblockedAt": 3,
+    "reached": false,
+    "travelled": 0,
+    "stuck": {
+     "at": [
+      11.75,
+      210,
+      187.5
+     ],
+     "room": "bridge",
+     "past": null,
+     "note": "walked 14 m without entering nav_station",
+     "hits": [
+      "railing[12.07,210,176.15→12.23,211.1,201.85]"
+     ]
+    },
+    "gap": null,
+    "fell": null,
+    "path": [],
+    "toSpawn": null,
+    "simSeconds": 2.8,
+    "ms": 1,
+    "note": "door-centre approach without override"
+   }
+  ],
+  "blockers": [
+   {
+    "door": "br_corr",
+    "room": "bridge",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -1.9,
+     "x1": 1.9,
+     "z0": 204,
+     "z1": 205.7
+    },
+    "hits": []
+   },
+   {
+    "door": "br_corr",
+    "room": "cmd_corridor",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -1.9,
+     "x1": 1.9,
+     "z0": 206.3,
+     "z1": 208
+    },
+    "hits": []
+   },
+   {
+    "door": "br_tac",
+    "room": "bridge",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": -13.7,
+     "x1": -12,
+     "z0": 186.1,
+     "z1": 188.9
+    },
+    "hits": [
+     {
+      "tag": "railing",
+      "min": [
+       -12.23,
+       210,
+       176.15
+      ],
+      "max": [
+       -12.07,
+       211.1,
+       201.85
+      ]
+     }
+    ]
+   },
+   {
+    "door": "br_tac",
+    "room": "tactical",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": -16,
+     "x1": -14.3,
+     "z0": 186.1,
+     "z1": 188.9
+    },
+    "hits": []
+   },
+   {
+    "door": "br_nav",
+    "room": "bridge",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": 12,
+     "x1": 13.7,
+     "z0": 186.1,
+     "z1": 188.9
+    },
+    "hits": [
+     {
+      "tag": "railing",
+      "min": [
+       12.07,
+       210,
+       176.15
+      ],
+      "max": [
+       12.23,
+       211.1,
+       201.85
+      ]
+     }
+    ]
+   },
+   {
+    "door": "br_nav",
+    "room": "nav_station",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": 14.3,
+     "x1": 16,
+     "z0": 186.1,
+     "z1": 188.9
+    },
+    "hits": []
+   },
+   {
+    "door": "tac_corr",
+    "room": "tactical",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": -25.9,
+     "x1": -23.1,
+     "z0": 204,
+     "z1": 205.7
+    },
+    "hits": []
+   },
+   {
+    "door": "tac_corr",
+    "room": "cmd_corridor",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": -25.9,
+     "x1": -23.1,
+     "z0": 206.3,
+     "z1": 208
+    },
+    "hits": []
+   },
+   {
+    "door": "nav_corr",
+    "room": "nav_station",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": 23.1,
+     "x1": 25.9,
+     "z0": 204,
+     "z1": 205.7
+    },
+    "hits": []
+   },
+   {
+    "door": "nav_corr",
+    "room": "cmd_corridor",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": 23.1,
+     "x1": 25.9,
+     "z0": 206.3,
+     "z1": 208
+    },
+    "hits": []
+   },
+   {
+    "door": "obs_corr",
+    "room": "observation",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": -74.9,
+     "x1": -72.1,
+     "z0": 204,
+     "z1": 205.7
+    },
+    "hits": []
+   },
+   {
+    "door": "obs_corr",
+    "room": "cmd_corridor",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": -74.9,
+     "x1": -72.1,
+     "z0": 206.3,
+     "z1": 208
+    },
+    "hits": []
+   },
+   {
+    "door": "corr_lift_t",
+    "room": "cmd_corridor",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -1.9,
+     "x1": 1.9,
+     "z0": 210,
+     "z1": 211.7
+    },
+    "hits": []
+   },
+   {
+    "door": "corr_lift_t",
+    "room": "lift_lobby_tower",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -1.9,
+     "x1": 1.9,
+     "z0": 212.3,
+     "z1": 214
+    },
+    "hits": []
+   },
+   {
+    "door": "corr_intel",
+    "room": "cmd_corridor",
+    "kind": "secure",
+    "built": true,
+    "box": {
+     "x0": -50.9,
+     "x1": -49.1,
+     "z0": 210,
+     "z1": 211.7
+    },
+    "hits": []
+   },
+   {
+    "door": "corr_intel",
+    "room": "intelligence",
+    "kind": "secure",
+    "built": true,
+    "box": {
+     "x0": -50.9,
+     "x1": -49.1,
+     "z0": 212.3,
+     "z1": 214
+    },
+    "hits": []
+   },
+   {
+    "door": "corr_brief",
+    "room": "cmd_corridor",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": -23.9,
+     "x1": -21.1,
+     "z0": 210,
+     "z1": 211.7
+    },
+    "hits": []
+   },
+   {
+    "door": "corr_brief",
+    "room": "briefing",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": -23.9,
+     "x1": -21.1,
+     "z0": 212.3,
+     "z1": 214
+    },
+    "hits": []
+   },
+   {
+    "door": "corr_comms",
+    "room": "cmd_corridor",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": 21.1,
+     "x1": 23.9,
+     "z0": 210,
+     "z1": 211.7
+    },
+    "hits": []
+   },
+   {
+    "door": "corr_comms",
+    "room": "comms",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": 21.1,
+     "x1": 23.9,
+     "z0": 212.3,
+     "z1": 214
+    },
+    "hits": []
+   },
+   {
+    "door": "corr_off",
+    "room": "cmd_corridor",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": 48.1,
+     "x1": 50.9,
+     "z0": 210,
+     "z1": 211.7
+    },
+    "hits": []
+   },
+   {
+    "door": "corr_off",
+    "room": "officers_quarters",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": 48.1,
+     "x1": 50.9,
+     "z0": 212.3,
+     "z1": 214
+    },
+    "hits": [
+     {
+      "tag": "partition",
+      "min": [
+       47.88,
+       210,
+       212.25
+      ],
+      "max": [
+       48.13,
+       214,
+       214.55
+      ]
+     },
+     {
+      "tag": "partition",
+      "min": [
+       50.88,
+       210,
+       212.25
+      ],
+      "max": [
+       51.13,
+       214,
+       214.55
+      ]
+     }
+    ]
+   },
+   {
+    "door": "hg_shuttle",
+    "room": "hangar",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -9.9,
+     "x1": 9.9,
+     "z0": 68,
+     "z1": 69.7
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_shuttle",
+    "room": "shuttle_bay",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -9.9,
+     "x1": 9.9,
+     "z0": 70.3,
+     "z1": 72
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_maint_a",
+    "room": "hangar",
+    "kind": "arch",
+    "built": true,
+    "box": {
+     "x0": -39.7,
+     "x1": -38,
+     "z0": -49.9,
+     "z1": -30.1
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_maint_a",
+    "room": "fighter_maint",
+    "kind": "arch",
+    "built": true,
+    "box": {
+     "x0": -42,
+     "x1": -40.3,
+     "z0": -49.9,
+     "z1": -30.1
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_maint_b",
+    "room": "hangar",
+    "kind": "arch",
+    "built": true,
+    "box": {
+     "x0": -39.7,
+     "x1": -38,
+     "z0": 0.1,
+     "z1": 19.9
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_maint_b",
+    "room": "fighter_maint",
+    "kind": "arch",
+    "built": true,
+    "box": {
+     "x0": -42,
+     "x1": -40.3,
+     "z0": 0.1,
+     "z1": 19.9
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_cargo",
+    "room": "hangar",
+    "kind": "arch",
+    "built": true,
+    "box": {
+     "x0": 38,
+     "x1": 39.7,
+     "z0": -49.9,
+     "z1": -30.1
+    },
+    "hits": [
+     {
+      "tag": "computer",
+      "min": [
+       39.11,
+       -40,
+       -45.1
+      ],
+      "max": [
+       39.75,
+       -37.6,
+       -41.9
+      ]
+     },
+     {
+      "tag": "computer",
+      "min": [
+       39.11,
+       -40,
+       -38.1
+      ],
+      "max": [
+       39.75,
+       -37.6,
+       -34.9
+      ]
+     },
+     {
+      "tag": "cart",
+      "min": [
+       38.07,
+       -40,
+       -40.39
+      ],
+      "max": [
+       38.87,
+       -39,
+       -39.76
+      ]
+     },
+     {
+      "tag": "cart",
+      "min": [
+       38.22,
+       -40,
+       -40.76
+      ],
+      "max": [
+       39.02,
+       -39,
+       -40.13
+      ]
+     },
+     {
+      "tag": "cart",
+      "min": [
+       38.36,
+       -40,
+       -41.13
+      ],
+      "max": [
+       39.16,
+       -39,
+       -40.51
+      ]
+     }
+    ]
+   },
+   {
+    "door": "hg_cargo",
+    "room": "cargo_bay",
+    "kind": "arch",
+    "built": true,
+    "box": {
+     "x0": 40.3,
+     "x1": 42,
+     "z0": -49.9,
+     "z1": -30.1
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_repair",
+    "room": "hangar",
+    "kind": "arch",
+    "built": true,
+    "box": {
+     "x0": 38,
+     "x1": 39.7,
+     "z0": 40.1,
+     "z1": 55.9
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_repair",
+    "room": "repair_bay",
+    "kind": "arch",
+    "built": true,
+    "box": {
+     "x0": 40.3,
+     "x1": 42,
+     "z0": 40.1,
+     "z1": 55.9
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_lobby",
+    "room": "hangar",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -2.9,
+     "x1": 2.9,
+     "z0": -89.7,
+     "z1": -88
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_lobby",
+    "room": "hangar_lobby",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -2.9,
+     "x1": 2.9,
+     "z0": -92,
+     "z1": -90.3
+    },
+    "hits": []
+   },
+   {
+    "door": "hg_fc",
+    "room": "hangar",
+    "kind": "open",
+    "built": true,
+    "box": {
+     "x0": 38,
+     "x1": 39.7,
+     "z0": -19.9,
+     "z1": -0.1
+    },
+    "hits": [
+     {
+      "tag": "chair",
+      "min": [
+       37.65,
+       -22,
+       -8.8
+      ],
+      "max": [
+       38.31,
+       -20.8,
+       -8.2
+      ]
+     }
+    ]
+   },
+   {
+    "door": "hg_fc",
+    "room": "flight_control",
+    "kind": "open",
+    "built": true,
+    "box": {
+     "x0": 40.3,
+     "x1": 42,
+     "z0": -19.9,
+     "z1": -0.1
+    },
+    "hits": [
+     {
+      "tag": "flight_control:zmin",
+      "min": [
+       40.25,
+       -22,
+       -19.95
+      ],
+      "max": [
+       51.75,
+       -18,
+       -19.7
+      ]
+     },
+     {
+      "tag": "flight_control:zmax",
+      "min": [
+       40.25,
+       -22,
+       -0.3
+      ],
+      "max": [
+       51.75,
+       -18,
+       -0.05
+      ]
+     },
+     {
+      "tag": "glass",
+      "min": [
+       40.35,
+       -22,
+       -19.75
+      ],
+      "max": [
+       40.9,
+       -18,
+       -11.2
+      ]
+     },
+     {
+      "tag": "glass",
+      "min": [
+       40.35,
+       -22,
+       -10
+      ],
+      "max": [
+       40.9,
+       -18,
+       -0.25
+      ]
+     },
+     {
+      "tag": "console",
+      "min": [
+       41.45,
+       -22,
+       -17.85
+      ],
+      "max": [
+       42.3,
+       -20.9,
+       -15.35
+      ]
+     },
+     {
+      "tag": "console",
+      "min": [
+       41.45,
+       -22,
+       -14.85
+      ],
+      "max": [
+       42.3,
+       -20.9,
+       -12.35
+      ]
+     },
+     {
+      "tag": "console",
+      "min": [
+       41.45,
+       -22,
+       -8.85
+      ],
+      "max": [
+       42.3,
+       -20.9,
+       -6.35
+      ]
+     },
+     {
+      "tag": "console",
+      "min": [
+       41.45,
+       -22,
+       -5.85
+      ],
+      "max": [
+       42.3,
+       -20.9,
+       -3.35
+      ]
+     }
+    ]
+   },
+   {
+    "door": "eng_lobby_corr",
+    "room": "eng_lobby",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -1.9,
+     "x1": 1.9,
+     "z0": 260,
+     "z1": 261.7
+    },
+    "hits": []
+   },
+   {
+    "door": "eng_lobby_corr",
+    "room": "eng_corridor",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -1.9,
+     "x1": 1.9,
+     "z0": 262.3,
+     "z1": 264
+    },
+    "hits": []
+   },
+   {
+    "door": "eng_corr_ctrl",
+    "room": "eng_corridor",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -2.9,
+     "x1": 2.9,
+     "z0": 268,
+     "z1": 269.7
+    },
+    "hits": []
+   },
+   {
+    "door": "eng_corr_ctrl",
+    "room": "engineering",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -2.9,
+     "x1": 2.9,
+     "z0": 270.3,
+     "z1": 272
+    },
+    "hits": []
+   },
+   {
+    "door": "eng_corr_hyper",
+    "room": "eng_corridor",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -55.9,
+     "x1": -52.1,
+     "z0": 268,
+     "z1": 269.7
+    },
+    "hits": []
+   },
+   {
+    "door": "eng_corr_hyper",
+    "room": "hyperdrive",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -55.9,
+     "x1": -52.1,
+     "z0": 270.3,
+     "z1": 272
+    },
+    "hits": []
+   },
+   {
+    "door": "eng_corr_life",
+    "room": "eng_corridor",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": 52.1,
+     "x1": 55.9,
+     "z0": 268,
+     "z1": 269.7
+    },
+    "hits": []
+   },
+   {
+    "door": "eng_corr_life",
+    "room": "life_support",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": 52.1,
+     "x1": 55.9,
+     "z0": 270.3,
+     "z1": 272
+    },
+    "hits": []
+   },
+   {
+    "door": "eng_ctrl_reactor",
+    "room": "engineering",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -2.9,
+     "x1": 2.9,
+     "z0": 298,
+     "z1": 299.7
+    },
+    "hits": []
+   },
+   {
+    "door": "eng_ctrl_reactor",
+    "room": "reactor",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -2.9,
+     "x1": 2.9,
+     "z0": 300.3,
+     "z1": 302
+    },
+    "hits": []
+   },
+   {
+    "door": "crew_lobby_corr",
+    "room": "crew_lobby",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -1.9,
+     "x1": 1.9,
+     "z0": -121.7,
+     "z1": -120
+    },
+    "hits": []
+   },
+   {
+    "door": "crew_lobby_corr",
+    "room": "crew_corridor",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": -1.9,
+     "x1": 1.9,
+     "z0": -124,
+     "z1": -122.3
+    },
+    "hits": []
+   },
+   {
+    "door": "crew_corr_q",
+    "room": "crew_corridor",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": -49.9,
+     "x1": -47.1,
+     "z0": -129.7,
+     "z1": -128
+    },
+    "hits": []
+   },
+   {
+    "door": "crew_corr_q",
+    "room": "crew_quarters",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": -49.9,
+     "x1": -47.1,
+     "z0": -132,
+     "z1": -130.3
+    },
+    "hits": []
+   },
+   {
+    "door": "crew_corr_mess",
+    "room": "crew_corridor",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": -19.9,
+     "x1": -17.1,
+     "z0": -129.7,
+     "z1": -128
+    },
+    "hits": []
+   },
+   {
+    "door": "crew_corr_mess",
+    "room": "mess",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": -19.9,
+     "x1": -17.1,
+     "z0": -132,
+     "z1": -130.3
+    },
+    "hits": []
+   },
+   {
+    "door": "crew_corr_conn",
+    "room": "crew_corridor",
+    "kind": "open",
+    "built": true,
+    "box": {
+     "x0": -2.9,
+     "x1": 2.9,
+     "z0": -129.7,
+     "z1": -128
+    },
+    "hits": []
+   },
+   {
+    "door": "crew_corr_conn",
+    "room": "crew_connector",
+    "kind": "open",
+    "built": true,
+    "box": {
+     "x0": -2.9,
+     "x1": 2.9,
+     "z0": -132,
+     "z1": -130.3
+    },
+    "hits": [
+     {
+      "tag": "crew_connector:xmin",
+      "min": [
+       -2.95,
+       6,
+       -134.62
+      ],
+      "max": [
+       -2.7,
+       9.9,
+       -130.25
+      ]
+     },
+     {
+      "tag": "crew_connector:xmax",
+      "min": [
+       2.7,
+       6,
+       -143.5
+      ],
+      "max": [
+       2.95,
+       9.9,
+       -130.25
+      ]
+     },
+     {
+      "tag": "cabinet",
+      "min": [
+       2.35,
+       6.32,
+       -132.5
+      ],
+      "max": [
+       2.75,
+       7.62,
+       -131.65
+      ]
+     }
+    ]
+   },
+   {
+    "door": "crew_corr_lounge",
+    "room": "crew_corridor",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": 17.1,
+     "x1": 19.9,
+     "z0": -129.7,
+     "z1": -128
+    },
+    "hits": []
+   },
+   {
+    "door": "crew_corr_lounge",
+    "room": "lounge",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": 17.1,
+     "x1": 19.9,
+     "z0": -132,
+     "z1": -130.3
+    },
+    "hits": []
+   },
+   {
+    "door": "crew_corr_med",
+    "room": "crew_corridor",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": 47.1,
+     "x1": 49.9,
+     "z0": -129.7,
+     "z1": -128
+    },
+    "hits": []
+   },
+   {
+    "door": "crew_corr_med",
+    "room": "medbay",
+    "kind": "slide",
+    "built": true,
+    "box": {
+     "x0": 47.1,
+     "x1": 49.9,
+     "z0": -132,
+     "z1": -130.3
+    },
+    "hits": []
+   },
+   {
+    "door": "conn_fwd",
+    "room": "crew_connector",
+    "kind": "open",
+    "built": true,
+    "box": {
+     "x0": -2.9,
+     "x1": 2.9,
+     "z0": -169.7,
+     "z1": -168
+    },
+    "hits": [
+     {
+      "tag": "crew_connector:xmin",
+      "min": [
+       -2.95,
+       6,
+       -169.75
+      ],
+      "max": [
+       -2.7,
+       9.9,
+       -156.5
+      ]
+     },
+     {
+      "tag": "crew_connector:xmax",
+      "min": [
+       2.7,
+       6,
+       -169.75
+      ],
+      "max": [
+       2.95,
+       9.9,
+       -156.5
+      ]
+     }
+    ]
+   },
+   {
+    "door": "conn_fwd",
+    "room": "crew_corridor_fwd",
+    "kind": "open",
+    "built": true,
+    "box": {
+     "x0": -2.9,
+     "x1": 2.9,
+     "z0": -172,
+     "z1": -170.3
+    },
+    "hits": []
+   },
+   {
+    "door": "fwd_armory",
+    "room": "crew_corridor_fwd",
+    "kind": "secure",
+    "built": true,
+    "box": {
+     "x0": -49.9,
+     "x1": -47.1,
+     "z0": -177.7,
+     "z1": -176
+    },
+    "hits": []
+   },
+   {
+    "door": "fwd_armory",
+    "room": "armory",
+    "kind": "secure",
+    "built": true,
+    "box": {
+     "x0": -49.9,
+     "x1": -47.1,
+     "z0": -180,
+     "z1": -178.3
+    },
+    "hits": []
+   },
+   {
+    "door": "fwd_det",
+    "room": "crew_corridor_fwd",
+    "kind": "secure",
+    "built": true,
+    "box": {
+     "x0": -13.9,
+     "x1": -11.1,
+     "z0": -177.7,
+     "z1": -176
+    },
+    "hits": []
+   },
+   {
+    "door": "fwd_det",
+    "room": "detention",
+    "kind": "secure",
+    "built": true,
+    "box": {
+     "x0": -13.9,
+     "x1": -11.1,
+     "z0": -180,
+     "z1": -178.3
+    },
+    "hits": []
+   },
+   {
+    "door": "fwd_pods",
+    "room": "crew_corridor_fwd",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": 33.1,
+     "x1": 35.9,
+     "z0": -177.7,
+     "z1": -176
+    },
+    "hits": []
+   },
+   {
+    "door": "fwd_pods",
+    "room": "escape_pods",
+    "kind": "blast",
+    "built": true,
+    "box": {
+     "x0": 33.1,
+     "x1": 35.9,
+     "z0": -180,
+     "z1": -178.3
+    },
+    "hits": []
+   }
+  ],
+  "lifts": [
+   {
+    "lobby": "lift_lobby_tower",
+    "cab": 0,
+    "dest": "crew_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     -3,
+     210,
+     223.35
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 14,
+    "rideFinished": true,
+    "arrivedRoom": "crew_lobby",
+    "arrivedPos": [
+     -3,
+     6,
+     -110.65
+    ],
+    "yaw": 180,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     -3,
+     6,
+     -113.85
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "tower",
+     "crew"
+    ],
+    "ms": 15
+   },
+   {
+    "lobby": "lift_lobby_tower",
+    "cab": 0,
+    "dest": "hangar_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     -3,
+     210,
+     223.35
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 2152,
+    "rideFinished": true,
+    "arrivedRoom": "hangar_lobby",
+    "arrivedPos": [
+     -3,
+     -40,
+     -111.35
+    ],
+    "yaw": 360,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     -3,
+     -40,
+     -108.15
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "tower",
+     "hangar"
+    ],
+    "ms": 2154
+   },
+   {
+    "lobby": "lift_lobby_tower",
+    "cab": 0,
+    "dest": "eng_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     -3,
+     210,
+     223.35
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 1192,
+    "rideFinished": true,
+    "arrivedRoom": "eng_lobby",
+    "arrivedPos": [
+     -3,
+     -10,
+     250.65
+    ],
+    "yaw": 360,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     -3,
+     -10,
+     253.85
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "tower",
+     "engineering"
+    ],
+    "ms": 1193
+   },
+   {
+    "lobby": "lift_lobby_tower",
+    "cab": 1,
+    "dest": "crew_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     3,
+     210,
+     223.35
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 836,
+    "rideFinished": true,
+    "arrivedRoom": "crew_lobby",
+    "arrivedPos": [
+     3,
+     6,
+     -110.65
+    ],
+    "yaw": 180,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     3,
+     6,
+     -113.85
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "tower",
+     "crew"
+    ],
+    "ms": 836
+   },
+   {
+    "lobby": "lift_lobby_tower",
+    "cab": 1,
+    "dest": "hangar_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     3,
+     210,
+     223.35
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 998,
+    "rideFinished": true,
+    "arrivedRoom": "hangar_lobby",
+    "arrivedPos": [
+     3,
+     -40,
+     -111.35
+    ],
+    "yaw": 360,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     3,
+     -40,
+     -108.15
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "tower",
+     "hangar"
+    ],
+    "ms": 999
+   },
+   {
+    "lobby": "lift_lobby_tower",
+    "cab": 1,
+    "dest": "eng_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     3,
+     210,
+     223.35
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 878,
+    "rideFinished": true,
+    "arrivedRoom": "eng_lobby",
+    "arrivedPos": [
+     3,
+     -10,
+     250.65
+    ],
+    "yaw": 360,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     3,
+     -10,
+     253.85
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "tower",
+     "engineering"
+    ],
+    "ms": 878
+   },
+   {
+    "lobby": "crew_lobby",
+    "cab": 0,
+    "dest": "lift_lobby_tower",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     -3,
+     6,
+     -110.65
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 0,
+    "rideFinished": true,
+    "arrivedRoom": "lift_lobby_tower",
+    "arrivedPos": [
+     -3,
+     210,
+     223.35
+    ],
+    "yaw": 180,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     -3,
+     210,
+     220.15
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "tower",
+     "crew"
+    ],
+    "ms": 2186
+   },
+   {
+    "lobby": "crew_lobby",
+    "cab": 0,
+    "dest": "hangar_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     -3,
+     6,
+     -110.65
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 1464,
+    "rideFinished": true,
+    "arrivedRoom": "hangar_lobby",
+    "arrivedPos": [
+     -3,
+     -40,
+     -111.35
+    ],
+    "yaw": 360,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     -3,
+     -40,
+     -108.15
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "crew",
+     "hangar"
+    ],
+    "ms": 1477
+   },
+   {
+    "lobby": "crew_lobby",
+    "cab": 0,
+    "dest": "eng_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     -3,
+     6,
+     -110.65
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 1216,
+    "rideFinished": true,
+    "arrivedRoom": "eng_lobby",
+    "arrivedPos": [
+     -3,
+     -10,
+     250.65
+    ],
+    "yaw": 360,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     -3,
+     -10,
+     253.85
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "crew",
+     "engineering"
+    ],
+    "ms": 1216
+   },
+   {
+    "lobby": "crew_lobby",
+    "cab": 1,
+    "dest": "lift_lobby_tower",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     3,
+     6,
+     -110.65
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 770,
+    "rideFinished": true,
+    "arrivedRoom": "lift_lobby_tower",
+    "arrivedPos": [
+     3,
+     210,
+     223.35
+    ],
+    "yaw": 180,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     3,
+     210,
+     220.15
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "crew",
+     "tower"
+    ],
+    "ms": 771
+   },
+   {
+    "lobby": "crew_lobby",
+    "cab": 1,
+    "dest": "hangar_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     3,
+     6,
+     -110.65
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 1462,
+    "rideFinished": true,
+    "arrivedRoom": "hangar_lobby",
+    "arrivedPos": [
+     3,
+     -40,
+     -111.35
+    ],
+    "yaw": 360,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     3,
+     -40,
+     -108.15
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "crew",
+     "hangar"
+    ],
+    "ms": 1463
+   },
+   {
+    "lobby": "crew_lobby",
+    "cab": 1,
+    "dest": "eng_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     3,
+     6,
+     -110.65
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 1729,
+    "rideFinished": true,
+    "arrivedRoom": "eng_lobby",
+    "arrivedPos": [
+     3,
+     -10,
+     250.65
+    ],
+    "yaw": 360,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     3,
+     -10,
+     253.85
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "crew",
+     "engineering"
+    ],
+    "ms": 1729
+   },
+   {
+    "lobby": "hangar_lobby",
+    "cab": 0,
+    "dest": "lift_lobby_tower",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     -3,
+     -40,
+     -111.35
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 1727,
+    "rideFinished": true,
+    "arrivedRoom": "lift_lobby_tower",
+    "arrivedPos": [
+     -3,
+     210,
+     223.35
+    ],
+    "yaw": 180,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     -3,
+     210,
+     220.15
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "hangar",
+     "tower"
+    ],
+    "ms": 4247
+   },
+   {
+    "lobby": "hangar_lobby",
+    "cab": 0,
+    "dest": "crew_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     -3,
+     -40,
+     -111.35
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 1108,
+    "rideFinished": true,
+    "arrivedRoom": "crew_lobby",
+    "arrivedPos": [
+     -3,
+     6,
+     -110.65
+    ],
+    "yaw": 180,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     -3,
+     6,
+     -113.85
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "hangar",
+     "crew"
+    ],
+    "ms": 1108
+   },
+   {
+    "lobby": "hangar_lobby",
+    "cab": 0,
+    "dest": "eng_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     -3,
+     -40,
+     -111.35
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 855,
+    "rideFinished": true,
+    "arrivedRoom": "eng_lobby",
+    "arrivedPos": [
+     -3,
+     -10,
+     250.65
+    ],
+    "yaw": 0,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     -3,
+     -10,
+     253.85
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "hangar",
+     "engineering"
+    ],
+    "ms": 855
+   },
+   {
+    "lobby": "hangar_lobby",
+    "cab": 1,
+    "dest": "lift_lobby_tower",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     3,
+     -40,
+     -111.35
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 613,
+    "rideFinished": true,
+    "arrivedRoom": "lift_lobby_tower",
+    "arrivedPos": [
+     3,
+     210,
+     223.35
+    ],
+    "yaw": 180,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     3,
+     210,
+     220.15
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "hangar",
+     "tower"
+    ],
+    "ms": 613
+   },
+   {
+    "lobby": "hangar_lobby",
+    "cab": 1,
+    "dest": "crew_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     3,
+     -40,
+     -111.35
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 931,
+    "rideFinished": true,
+    "arrivedRoom": "crew_lobby",
+    "arrivedPos": [
+     3,
+     6,
+     -110.65
+    ],
+    "yaw": 180,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     3,
+     6,
+     -113.85
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "hangar",
+     "crew"
+    ],
+    "ms": 932
+   },
+   {
+    "lobby": "hangar_lobby",
+    "cab": 1,
+    "dest": "eng_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     3,
+     -40,
+     -111.35
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 668,
+    "rideFinished": true,
+    "arrivedRoom": "eng_lobby",
+    "arrivedPos": [
+     3,
+     -10,
+     250.65
+    ],
+    "yaw": 0,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     3,
+     -10,
+     253.85
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "hangar",
+     "engineering"
+    ],
+    "ms": 668
+   },
+   {
+    "lobby": "eng_lobby",
+    "cab": 0,
+    "dest": "lift_lobby_tower",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     -3,
+     -10,
+     250.65
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 663,
+    "rideFinished": true,
+    "arrivedRoom": "lift_lobby_tower",
+    "arrivedPos": [
+     -3,
+     210,
+     223.35
+    ],
+    "yaw": 180,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     -3,
+     210,
+     220.15
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "engineering",
+     "tower"
+    ],
+    "ms": 683
+   },
+   {
+    "lobby": "eng_lobby",
+    "cab": 0,
+    "dest": "crew_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     -3,
+     -10,
+     250.65
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 1634,
+    "rideFinished": true,
+    "arrivedRoom": "crew_lobby",
+    "arrivedPos": [
+     -3,
+     6,
+     -110.65
+    ],
+    "yaw": 180,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     -3,
+     6,
+     -113.85
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "engineering",
+     "crew"
+    ],
+    "ms": 1634
+   },
+   {
+    "lobby": "eng_lobby",
+    "cab": 0,
+    "dest": "hangar_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     -3,
+     -10,
+     250.65
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 1960,
+    "rideFinished": true,
+    "arrivedRoom": "hangar_lobby",
+    "arrivedPos": [
+     -3,
+     -40,
+     -111.35
+    ],
+    "yaw": 0,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     -3,
+     -40,
+     -108.15
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "engineering",
+     "hangar"
+    ],
+    "ms": 1961
+   },
+   {
+    "lobby": "eng_lobby",
+    "cab": 1,
+    "dest": "lift_lobby_tower",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     3,
+     -10,
+     250.65
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 495,
+    "rideFinished": true,
+    "arrivedRoom": "lift_lobby_tower",
+    "arrivedPos": [
+     3,
+     210,
+     223.35
+    ],
+    "yaw": 180,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     3,
+     210,
+     220.15
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "engineering",
+     "tower"
+    ],
+    "ms": 495
+   },
+   {
+    "lobby": "eng_lobby",
+    "cab": 1,
+    "dest": "crew_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     3,
+     -10,
+     250.65
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 808,
+    "rideFinished": true,
+    "arrivedRoom": "crew_lobby",
+    "arrivedPos": [
+     3,
+     6,
+     -110.65
+    ],
+    "yaw": 180,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     3,
+     6,
+     -113.85
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "engineering",
+     "crew"
+    ],
+    "ms": 808
+   },
+   {
+    "lobby": "eng_lobby",
+    "cab": 1,
+    "dest": "hangar_lobby",
+    "ok": true,
+    "entered": true,
+    "cabDoorOpenness": 1,
+    "inCabPos": [
+     3,
+     -10,
+     250.65
+    ],
+    "rideSimS": 5.65,
+    "rideWallMs": 686,
+    "rideFinished": true,
+    "arrivedRoom": "hangar_lobby",
+    "arrivedPos": [
+     3,
+     -40,
+     -111.35
+    ],
+    "yaw": 0,
+    "inDestCab": true,
+    "destDoorTarget": 1,
+    "walkedOut": true,
+    "outPos": [
+     3,
+     -40,
+     -108.15
+    ],
+    "destDoorOpenness": 1,
+    "clustersAfter": [
+     "engineering",
+     "hangar"
+    ],
+    "ms": 686
+   }
+  ],
+  "stairs": [
+   {
+    "name": "bridge pit port, aft flight (z 200): walkway → pit → walkway",
+    "start": [
+     -2,
+     210,
+     200
+    ],
+    "startRoom": "bridge",
+    "legs": [
+     {
+      "leg": "down to x -8",
+      "end": [
+       -8,
+       208.6,
+       200
+      ],
+      "room": "bridge",
+      "expectY": 208.6,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 208.6,
+      "maxY": 210,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "back up to x -2",
+      "end": [
+       -2,
+       210,
+       200
+      ],
+      "room": "bridge",
+      "expectY": 210,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 208.6,
+      "maxY": 210,
+      "gap": null,
+      "blocked": null
+     }
+    ],
+    "ok": true,
+    "ms": 661,
+    "shot": "/workspace/shots/validator/06_stairs_bridge_pit_port_aft_flight_z_200_walkway.png"
+   },
+   {
+    "name": "bridge pit port, forward flight (z 181.2)",
+    "start": [
+     -2,
+     210,
+     181.2
+    ],
+    "startRoom": "bridge",
+    "legs": [
+     {
+      "leg": "down to x -8",
+      "end": [
+       -8,
+       208.6,
+       181.2
+      ],
+      "room": "bridge",
+      "expectY": 208.6,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 208.6,
+      "maxY": 210,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "back up to x -2",
+      "end": [
+       -2,
+       210,
+       181.2
+      ],
+      "room": "bridge",
+      "expectY": 210,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 208.6,
+      "maxY": 210,
+      "gap": null,
+      "blocked": null
+     }
+    ],
+    "ok": true,
+    "ms": 2,
+    "shot": "/workspace/shots/validator/07_stairs_bridge_pit_port_forward_flight_z_181_2_.png"
+   },
+   {
+    "name": "bridge pit starboard, aft flight (z 200)",
+    "start": [
+     2,
+     210,
+     200
+    ],
+    "startRoom": "bridge",
+    "legs": [
+     {
+      "leg": "down to x 8",
+      "end": [
+       8,
+       208.6,
+       200
+      ],
+      "room": "bridge",
+      "expectY": 208.6,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 208.6,
+      "maxY": 210,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "back up to x 2",
+      "end": [
+       2,
+       210,
+       200
+      ],
+      "room": "bridge",
+      "expectY": 210,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 208.6,
+      "maxY": 210,
+      "gap": null,
+      "blocked": null
+     }
+    ],
+    "ok": true,
+    "ms": 1,
+    "shot": "/workspace/shots/validator/08_stairs_bridge_pit_starboard_aft_flight_z_200_.png"
+   },
+   {
+    "name": "bridge pit starboard, forward flight (z 181.2)",
+    "start": [
+     2,
+     210,
+     181.2
+    ],
+    "startRoom": "bridge",
+    "legs": [
+     {
+      "leg": "down to x 8",
+      "end": [
+       8,
+       208.6,
+       181.2
+      ],
+      "room": "bridge",
+      "expectY": 208.6,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 208.6,
+      "maxY": 210,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "back up to x 2",
+      "end": [
+       2,
+       210,
+       181.2
+      ],
+      "room": "bridge",
+      "expectY": 210,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 208.6,
+      "maxY": 210,
+      "gap": null,
+      "blocked": null
+     }
+    ],
+    "ok": true,
+    "ms": 1,
+    "shot": "/workspace/shots/validator/09_stairs_bridge_pit_starboard_forward_flight_z_18.png"
+   },
+   {
+    "name": "hangar stair tower (36,-30) → landing → gallery → flight control booth",
+    "start": [
+     36,
+     -40,
+     -30
+    ],
+    "startRoom": "hangar",
+    "legs": [
+     {
+      "leg": "flight A up to the landing (z -41)",
+      "end": [
+       36,
+       -32,
+       -41
+      ],
+      "room": "hangar",
+      "expectY": -32,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -40,
+      "maxY": -32,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "across the landing to x 33.2",
+      "end": [
+       33.29,
+       -32,
+       -41.12
+      ],
+      "room": "hangar",
+      "expectY": -32,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -32,
+      "maxY": -32,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "flight B up to the tower head (z -28.5)",
+      "end": [
+       33.29,
+       -22,
+       -28.62
+      ],
+      "room": "hangar",
+      "expectY": -22,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -31.5,
+      "maxY": -22,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "forward on the tower head to z -27 (clear of the stair-head railing)",
+      "end": [
+       33.29,
+       -22,
+       -27.12
+      ],
+      "room": "hangar",
+      "expectY": -22,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -22,
+      "maxY": -22,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "onto the gallery x 38",
+      "end": [
+       38.09,
+       -22,
+       -27.12
+      ],
+      "room": "hangar",
+      "expectY": -22,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -22,
+      "maxY": -22,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "along the gallery to the glass gap (z -10.6)",
+      "end": [
+       38.09,
+       -22,
+       -10.72
+      ],
+      "room": "hangar",
+      "expectY": -22,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -22,
+      "maxY": -22,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "through the gap into the booth (x 42)",
+      "end": [
+       42.09,
+       -22,
+       -10.72
+      ],
+      "room": "flight_control",
+      "expectY": -22,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -22,
+      "maxY": -22,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "back out onto the gallery",
+      "end": [
+       38.09,
+       -22,
+       -10.72
+      ],
+      "room": "hangar",
+      "expectY": -22,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -22,
+      "maxY": -22,
+      "gap": null,
+      "blocked": null
+     }
+    ],
+    "ok": true,
+    "ms": 191,
+    "shot": "/workspace/shots/validator/10_stairs_hangar_stair_tower_36_30_landing_gallery.png"
+   },
+   {
+    "name": "hangar stair tower down: gallery → landing → deck",
+    "start": [
+     33.2,
+     -22,
+     -27
+    ],
+    "startRoom": "hangar",
+    "legs": [
+     {
+      "leg": "flight B down to the landing (z -42)",
+      "end": [
+       33.2,
+       -32,
+       -42
+      ],
+      "room": "hangar",
+      "expectY": -32,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -32,
+      "maxY": -22,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "across to x 36",
+      "end": [
+       36,
+       -32,
+       -42
+      ],
+      "room": "hangar",
+      "expectY": -32,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -32,
+      "maxY": -32,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "flight A down to the deck (z -30)",
+      "end": [
+       36,
+       -40,
+       -30
+      ],
+      "room": "hangar",
+      "expectY": -40,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -40,
+      "maxY": -32,
+      "gap": null,
+      "blocked": null
+     }
+    ],
+    "ok": true,
+    "ms": 7,
+    "shot": "/workspace/shots/validator/11_stairs_hangar_stair_tower_down_gallery_landing_.png"
+   },
+   {
+    "name": "reactor west switchback → catwalk ring",
+    "start": [
+     -14.5,
+     -10,
+     342
+    ],
+    "startRoom": "reactor",
+    "legs": [
+     {
+      "leg": "flight 1 up to the landing (z 352.5)",
+      "end": [
+       -14.5,
+       -5,
+       352.5
+      ],
+      "room": "reactor",
+      "expectY": -5,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -10,
+      "maxY": -5,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "across the landing to x -17",
+      "end": [
+       -17,
+       -5,
+       352.5
+      ],
+      "room": "reactor",
+      "expectY": -5,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -5,
+      "maxY": -5,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "flight 2 up to the bridge (z 343)",
+      "end": [
+       -17,
+       0,
+       343
+      ],
+      "room": "reactor",
+      "expectY": 0,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -5,
+      "maxY": 0,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "onto the west ring (x -10)",
+      "end": [
+       -10,
+       0,
+       343
+      ],
+      "room": "reactor",
+      "expectY": 0,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 0,
+      "maxY": 0,
+      "gap": null,
+      "blocked": null
+     }
+    ],
+    "ok": true,
+    "ms": 3594,
+    "shot": "/workspace/shots/validator/12_stairs_reactor_west_switchback_catwalk_ring.png"
+   },
+   {
+    "name": "reactor east switchback → catwalk ring",
+    "start": [
+     19.5,
+     -10,
+     342
+    ],
+    "startRoom": "reactor",
+    "legs": [
+     {
+      "leg": "flight 1 up to the landing (z 352.5)",
+      "end": [
+       19.5,
+       -5,
+       352.5
+      ],
+      "room": "reactor",
+      "expectY": -5,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -10,
+      "maxY": -5,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "across the landing to x 17",
+      "end": [
+       17,
+       -5,
+       352.5
+      ],
+      "room": "reactor",
+      "expectY": -5,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -5,
+      "maxY": -5,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "flight 2 up to the bridge (z 343)",
+      "end": [
+       17,
+       0,
+       343
+      ],
+      "room": "reactor",
+      "expectY": 0,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -5,
+      "maxY": 0,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "onto the east ring (x 10)",
+      "end": [
+       10,
+       0,
+       343
+      ],
+      "room": "reactor",
+      "expectY": 0,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 0,
+      "maxY": 0,
+      "gap": null,
+      "blocked": null
+     }
+    ],
+    "ok": true,
+    "ms": 2,
+    "shot": "/workspace/shots/validator/13_stairs_reactor_east_switchback_catwalk_ring.png"
+   },
+   {
+    "name": "reactor west switchback down",
+    "start": [
+     -17,
+     0,
+     343
+    ],
+    "startRoom": "reactor",
+    "legs": [
+     {
+      "leg": "flight 2 down to the landing (z 352.5)",
+      "end": [
+       -17,
+       -5,
+       352.5
+      ],
+      "room": "reactor",
+      "expectY": -5,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -5,
+      "maxY": 0,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "across to x -14.5",
+      "end": [
+       -14.5,
+       -5,
+       352.5
+      ],
+      "room": "reactor",
+      "expectY": -5,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -5,
+      "maxY": -5,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "flight 1 down to the floor (z 342)",
+      "end": [
+       -14.5,
+       -10,
+       342
+      ],
+      "room": "reactor",
+      "expectY": -10,
+      "yOk": true,
+      "roomOk": true,
+      "minY": -10,
+      "maxY": -5,
+      "gap": null,
+      "blocked": null
+     }
+    ],
+    "ok": true,
+    "ms": 5,
+    "shot": "/workspace/shots/validator/14_stairs_reactor_west_switchback_down.png"
+   },
+   {
+    "name": "briefing tiers: door → top tier → front row → back",
+    "start": [
+     -22.5,
+     210,
+     213
+    ],
+    "startRoom": "briefing",
+    "legs": [
+     {
+      "leg": "two-step stair onto tier 0 (z 216.5)",
+      "end": [
+       -22.5,
+       210.6,
+       216.5
+      ],
+      "room": "briefing",
+      "expectY": 210.6,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 210,
+      "maxY": 210.6,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "down to tier 1 (z 219.1)",
+      "end": [
+       -22.5,
+       210.3,
+       219.1
+      ],
+      "room": "briefing",
+      "expectY": 210.3,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 210.3,
+      "maxY": 210.6,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "down to the floor tier (z 221.7)",
+      "end": [
+       -22.5,
+       210,
+       221.7
+      ],
+      "room": "briefing",
+      "expectY": 210,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 210,
+      "maxY": 210.3,
+      "gap": null,
+      "blocked": null
+     },
+     {
+      "leg": "back up to the door (z 213)",
+      "end": [
+       -22.5,
+       210,
+       213
+      ],
+      "room": "briefing",
+      "expectY": 210,
+      "yOk": true,
+      "roomOk": true,
+      "minY": 210,
+      "maxY": 210.6,
+      "gap": null,
+      "blocked": null
+     }
+    ],
+    "ok": true,
+    "ms": 2437,
+    "shot": "/workspace/shots/validator/15_stairs_briefing_tiers_door_top_tier_front_row_b.png"
+   }
+  ],
+  "errors": []
+ }
+}
